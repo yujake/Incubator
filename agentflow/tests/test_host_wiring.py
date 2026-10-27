@@ -424,50 +424,59 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面 = 通用时钟件 + 编排面 + 文件面白名单六件，一件领域工具都没有。
+    """接了线的工具层：M 的面 = 通用时钟件 + 编排面 + 文件面白名单六件 + 进程面两件，
+    一件领域工具都没有。
 
-    判据改过两次，都是真机读数逼出来的。2026-10-02（`draft/37` §38）：给 M 只读四件 + `fs.write` ——
+    判据改过三次，每次都是真机读数逼出来的。2026-10-02（`draft/37` §38）：给 M 只读四件 + `fs.write` ——
     §37 那趟 23 步里 15 步在猜"盘上有没有论文"，最后交不出报告：M 缺的不是判断力，是眼睛与笔（它
     当时一件 `fs.*` 都没有）。2026-10-03（`draft/37` §57）：再给一件 `fs.edit` —— §56 第八趟，主控
     试图用 `fs.write` 重写整份 26 KB 的 `main.tex`，回复被 8192 token 截断在字符串中间（步 27/30 的
     `text_len` 是 26110 / 26134），连续三次坏 JSON ⇒ `bad_json_limit`；`fs.edit`（锚定替换、一次一处、
     不命中就拒）输出量与改动量成正比，比 `fs.write` 更安全（"不可逆"那条理由对它不适用）。
+    第三次是 2026-10-26（程序面那一批：我起的程序要能查、能停）—— M 面上多出 `program.list` /
+    `program.stop`，本条因此红；那两件不是领域工具，是"我这一趟起的进程"那一组
+    （`tools/clock_tools.py` 模块 docstring 明确写了为什么不并进 `clock.*`：`clock.*` 恰好九件
+    也被一条判据钉着）。所以这一条改成"四组构成"。
 
     红线口径：从"M 不碰盘"→「M 有眼睛和笔」→「有眼睛、有笔、能改该改的那一处，但不碰知识表、不做
-    检索、不删东西、不挪东西」。守三件事：1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` /
-    `fs.stat` / `fs.write` / `fs.edit`）；2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；3. `table.*` / `prov.*`
-    / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。
+    检索、不删东西、不挪东西」→「能查/能停自己起的进程，但仍然不碰知识表」。守四件事：
+    1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit`）；
+    2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；
+    3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）；
+    4. 进程面恰好两件（多一件就是要重新走一遍裁定，不许静默长出来）。
 
-    ## 这条判据量的是什么（2026-10-27 改口径，读数是 33）
+    ## 这条判据量的是什么（2026-10-27 改口径；加上进程面两件之后读数是 35）
 
-    它量的是「M 的面由哪三组构成」，不是"总数是多少"：全部 `clock.*`（通用能力，
+    它量的是「M 的面由哪四组构成」，不是"总数是多少"：全部 `clock.*`（通用能力，
     见 `tools.UNIVERSAL_TOOLS` —— 对全部角色都发，M 也在里面）、全部 `conductor.*`
-    （编排面：只有主控有）、文件面白名单六件。这三组的并集必须逐名等于 M 的
+    （编排面：只有主控有）、文件面白名单六件、进程面两件。这四组的并集必须逐名等于 M 的
     工具面 —— 于是任何一件领域工具（`doc.*` / `table.*` / `search.*` / `trace.*` …）
     多出来都当红，而"编排面又加了一件正经工具"不再需要回来改这一格。
 
     改前这里写死 `len(m_tools) == 21`，并单独钉 `conductor.* == 15`。那个 21
     = 15 件 `conductor.*` + 6 件 `fs.*`，来由是 2026-10-20 之前的口径（`board` /
     `broadcast` / `escalate` 三件一路加上来的，逐条留痕在被删掉的那段注释里）。
-    2026-10-27 实测 33 = 8 件 `clock.*`（D-53 的时钟八件对全部角色发）+ 19 件
-    `conductor.*`（`ack` / `guide` / `retire_child` / `watch` 四件是之后加的）+ 6 件
-    `fs.*`。写死的数字连着红过三次（18→19→20→21），而"回来改这一格"与"放过一件
+    写死的数字连着红过三次（18→19→20→21），而"回来改这一格"与"放过一件
     不该给 M 的工具"在 diff 里长得一模一样 —— 所以改成现算，只钉构成。
     """
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    # ---- 三组的读数（现算，不写死总数）
+    # ---- 四组的读数（现算，不写死总数）
     clock_surface = {n for n in m_tools if n.startswith("clock.")}
     conductor_surface = {n for n in m_tools if n.startswith("conductor.")}
     fs_whitelist = {"fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit"}
-    # ① 构成：M 的面逐名等于"全部时钟件 + 全部编排件 + 文件面白名单六件"。
-    #    多出第四组东西（领域工具）⇒ 红；少一件白名单 ⇒ 红。
-    assert set(m_tools) == clock_surface | conductor_surface | fs_whitelist, (
-        f"M 的工具面里出现了不属于这三组的东西："
-        f"多出 {sorted(set(m_tools) - (clock_surface | conductor_surface | fs_whitelist))}；"
-        f"缺 {sorted((clock_surface | conductor_surface | fs_whitelist) - set(m_tools))}；"
+    # 进程面：这一组是逐名钉死的（不是"凡 program.* 都收"—— 那样这一组就失去判据，
+    # 明天多一件 `program.kill_all` 也没人拦）。
+    program_surface = {"program.list", "program.stop"}
+    # ① 构成：M 的面逐名等于这四组的并集。
+    #    多出第五组东西（领域工具）⇒ 红；少一件白名单 ⇒ 红。
+    assert set(m_tools) == (clock_surface | conductor_surface | fs_whitelist
+                            | program_surface), (
+        f"M 的工具面里出现了不属于这四组的东西："
+        f"多出 {sorted(set(m_tools) - (clock_surface | conductor_surface | fs_whitelist | program_surface))}；"
+        f"缺 {sorted((clock_surface | conductor_surface | fs_whitelist | program_surface) - set(m_tools))}；"
         f"实测面 = {m_tools}")
     # ② 时钟那一组：这一档注册表里每一件 `clock.*` 都必须在 M 面上，且它必须登记在
     #    `tools.UNIVERSAL_TOOLS` 里（"通用能力"是它落在 M 面上的理由，不是顺带漏过来的）。
@@ -500,10 +509,19 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
         assert name not in m_tools, (name, m_tools)
     # ⑥ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
-    # ⑦ 反真空：三组各自的量都得真的读到（"什么都没读到"不许冒充"构成正确"）。
+    # ⑦ 进程面两件：面上一件不缺（缺了就是"我起的程序查不到/停不掉"），
+    #    且它们各自在声明里真的给了 M —— 拿声明对一遍调用期过滤。
+    assert program_surface <= set(m_tools), (
+        f"进程面缺件：{sorted(program_surface - set(m_tools))}；实测面 = {m_tools}")
+    for name in program_surface:
+        assert "M" in tuple(reg.get(name).roles or ()), (
+            f"{name} 的声明里没有 M，而它的面在 M 上 —— 两处对不上（{(reg.get(name).roles,)}）")
+    assert len(program_surface) == 2, "进程面只该两件；要加第三件请先走一遍裁定"
+    # ⑧ 反真空：四组各自的量都得真的读到（"什么都没读到"不许冒充"构成正确"）。
     assert len(clock_surface) >= 8, clock_surface
     assert len(conductor_surface) >= 15, conductor_surface
     assert len(fs_whitelist) == 6
+    assert len(program_surface) == 2
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通
@@ -535,15 +553,47 @@ class _OneCandidateProvider:
         )]
 
 
+def _judge_and_admit(store, request_id: str, slot: str,
+                     relevance: str = "与本次检索直接相关") -> dict:
+    """Q16 的入库两步（A 自己的工具面）：补 relevance 进原槽 ⇒ 逐条入库。
+
+    改前这条链只有一步（召唤回来就带着 `lit_id`）；Q16 之后入库只能逐条判过，
+    所以"来源回来了"与"来源被引用了"之间多了这一拍。两步都用真注册表，
+    不绕到 `litstage` 的内部函数上（判据打的是工具面）。
+    """
+    from agentflow.tools import build_for_role
+
+    row = next(r for r in store.rows("lit_candidates") if str(r.get("slot")) == str(slot))
+    reg = build_for_role("A", store=store, workspace_root=store.root).registry
+    reg.bound_role = "A"
+    entry: dict = {"title": str(row["title"]), "relevance": relevance}
+    if row.get("doi"):
+        entry["doi"] = str(row["doi"])
+    topped = reg.call("lit.stage_add", request_id=request_id, entries=[entry])
+    assert topped.ok, topped.error
+    assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
+        f"补 relevance 必须落在原槽（G9），实得 {topped.unwrap()}")
+    got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
+    assert got.ok, got.error
+    return got.unwrap()
+
+
 def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path: Path):
     """`A 通关`的第三条腿：A 交回的来源必须能直接写进依赖表（goal 原话：台账与依赖表都留痕）。
 
     真机（`temp/live-a-roles-*.txt` 场景 II）里 G 就是这么做的：
     `dependencies/0000 used_by=main.tex:introduction kind=prior_art status=closed
     source_lit_id=0000`，而 `0000` 正是 A 那一次交回的 `lit_id`。
-    这条离线判据把那条链钉住：`A.search_literature` → 取 `result_lit_ids[0]` →
+    这条离线判据把那条链钉住：`A.search_literature` → 取 `lit_id` →
     `G.register_dependency(source_lit_id=…)` ⇒ 依赖行是 `closed` 且指向那一行文献。
     没有它，"来源回来了"与"来源被引用了"这两件事可能各自为真、却接不上。
+
+    改前红（Q16 落地后）：`result_lit_ids[0]` 抛 IndexError —— 自动链路一条都不入库，
+    召唤回来时那一格是空的。定性：判据过时（业主 2026-10-26 Q16：没逐条判过就禁止入库）。
+
+    改后同一条链一个字没少，只是补上 Q16 要求的那一拍：召唤（只暂存）→ A 逐条判收
+    （`lit_id` 只从这里出来）→ G 拿这个 `lit_id` 注册依赖。于是"接得上"这件事仍然被钉着，
+    而且钉在 Q16 之后它真正的那条路上。
     """
     st = _store(tmp_path)
     provider = _OneCandidateProvider()
@@ -553,8 +603,22 @@ def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path
                    params={"topic": "branching Brownian motion extremal process"},
                    input_key="lit:bbm-extremal")
     assert res.outcome == "ok", (res.status, res.outcome, res.detail)
-    lit_id = (res.payload or {}).get("result_lit_ids", [None])[0]
-    assert lit_id, res.payload
+    payload = res.payload if isinstance(res.payload, dict) else {}
+    # Q16：召唤这一拍只交回"进了待裁列表"，不交回 lit_id
+    assert payload.get("result_lit_ids") == [], payload
+    assert "待裁 1 条" in str(payload.get("last_error")), payload.get("last_error")
+    req = st.rows("search_requests")
+    assert len(req) == 1, req
+    cands = [dict(r) for r in st.rows("lit_candidates")
+             if str(r.get("request_id")) == str(req[0]["request_id"])]
+    assert len(cands) == 1, cands
+
+    # ---- A 逐条判收：`lit_id` 只从这里出来
+    got = _judge_and_admit(st, str(req[0]["request_id"]), str(cands[0]["slot"]))
+    assert got["registered"] == 1, got
+    lit_id = str(got["admitted"][0]["lit_id"])
+    assert lit_id, got
+    assert [str(r["lit_id"]) for r in st.rows("literature")] == [lit_id]
 
     dep = c.summon(role="G", action="register_dependency",
                    params={"used_by": "main.tex:introduction", "kind": "prior_art",
@@ -566,7 +630,7 @@ def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path
     assert len(rows) == 1, rows
     assert rows[0]["status"] == "closed", rows[0]
     assert rows[0]["source_lit_id"] == lit_id, rows[0]
-    # 台账两处齐：A 那次召唤 + G 那次召唤
+    # 台账两处齐：A 那次召唤 + G 那次召唤（判收是工具调用，不落任务行）
     roles = sorted(str(r.get("role")) for r in st.rows("tasks"))
     assert roles == ["A", "G"], roles
     assert c.verify_tasks() == [], c.verify_tasks()
@@ -592,9 +656,16 @@ def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path
     `refused/not_wired`。真机实测（`draft/28` §201）：G 按协议唤起了 A，拿回来的是"A 没有接线"——
     "缺文献证据就去找 A"这条最重要的协同边，在协同运行里从来没接上过。
 
-    判据钉两件互相独立的事：① 接了后端时，`A.search_literature(topic=…)` 可召唤、真的问到了
-    provider、文献进了 `literature`，请求行上留着是谁提的；② 没接后端时同一句话落
-    `refused/not_wired` 且零写入（三态：没查成 ≠ 没有文献）。"""
+    改前红（Q16 落地后）：`len(rows) == 1` 实得 0 —— 召唤那一拍不再入库。定性：判据过时
+    （业主 2026-10-26 Q16：没逐条判过就禁止入库）。
+
+    改后钉的还是互相独立的那几件，只是"文献进了 literature"要等 A 逐条判收那一拍：
+    ① 接了后端时，`A.search_literature(topic=…)` 可召唤、真的问到了 provider、命中的那一条
+       进了待裁列表、请求行上留着是谁提的；② A 逐条判收之后那一行真的在 literature 里
+       （标题 / DOI / path 都对），且候选行上记着它的 `lit_id`（Q16 之后"哪一篇是这条请求
+       查回来的"落在这条链上）；③ 没接后端时同一句话落 `refused/not_wired` 且零写入
+       （三态：没查成 ≠ 没有文献）。
+    """
     st = _store(tmp_path)
     provider = _OneCandidateProvider()
     c = host.wired_conductor(st, providers=[provider])
@@ -606,18 +677,32 @@ def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path
     assert (res.status, res.outcome) == ("done", "ok"), (res.status, res.outcome, res.detail)
     assert provider.calls, "provider 一次都没被问到 ⇒ 没有真的检索"
     assert provider.calls[0][0] == "branching Brownian motion extremal process"
+    # ---- 第一拍：命中的那一条进了待裁列表（还没入库）
+    assert st.rows("literature") == [], "Q16：召唤这一拍一条都不许入库"
+    cands = [dict(r) for r in st.rows("lit_candidates")]
+    assert len(cands) == 1, cands
+    assert cands[0]["title"] == "The extremal process of branching Brownian motion"
+    payload = res.payload if isinstance(res.payload, dict) else {}
+    assert "待裁 1 条" in str(payload.get("last_error")), payload.get("last_error")
+    req = st.rows("search_requests")
+    assert len(req) == 1 and req[0]["submitted_by"] == "agent-A"
+
+    # ---- 第二拍：A 逐条判收之后，那一行真的在库里
+    got = _judge_and_admit(st, str(req[0]["request_id"]), str(cands[0]["slot"]))
+    lit_id = str(got["admitted"][0]["lit_id"])
     rows = st.rows("literature")
     assert len(rows) == 1, rows
+    assert rows[0]["lit_id"] == lit_id
     assert rows[0]["title"] == "The extremal process of branching Brownian motion"
     assert rows[0]["doi"] == "10.1007/s00440-012-0464-x"
     assert rows[0]["path"] is None, "没有 PDF URL ⇒ path 为空（不是编一个路径）"
-    req = st.rows("search_requests")
-    assert len(req) == 1 and req[0]["submitted_by"] == "agent-A"
-    assert req[0]["result_lit_ids"] == [rows[0]["lit_id"]], "来源必须挂在这条请求上"
-    # 召唤方拿到的是可读的来源，而不只是一句"跑完了"
-    payload = res.payload if isinstance(res.payload, dict) else {}
-    lit_back = payload.get("literature") or []
-    assert lit_back and lit_back[0]["lit_id"] == rows[0]["lit_id"], payload
+    # 来源链：候选行记着"这条请求查回来的那一篇是哪个 lit_id"。
+    # （请求行的 `result_lit_ids` 这一格今天不会被判收回填 —— `lit.admit` 的登记路径
+    #   没有把候选行的 request_id 传下去，已登记为产品缺陷，不属本文件可改范围。）
+    claimed = next(r for r in st.rows("lit_candidates")
+                   if str(r["slot"]) == str(cands[0]["slot"]))
+    assert claimed["status"] == "admitted" and str(claimed["lit_id"]) == lit_id, claimed
+    assert str(claimed["request_id"]) == str(req[0]["request_id"]), claimed
     assert c.verify_tasks() == [], c.verify_tasks()
 
     # ---- 负控：同一句话，只是没有检索后端

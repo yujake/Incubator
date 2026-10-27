@@ -136,19 +136,31 @@ def test_run_agent_without_a_key_is_not_checked_and_makes_no_request(tmp_path: p
 
 def test_run_agent_drives_a_child_action_through_the_llm_loop(tmp_path: pathlib.Path, monkeypatch,
                                                               capsys):
-    """正控（产品路径）：`--drive D.consider` ⇒ M 召唤 D 时 D 也走 LLM 循环，台账成链。"""
+    """正控（产品路径）：`--drive D.consider` ⇒ M 召唤 D 时 D 也走 LLM 循环，台账成链。
+
+    2026-10-26 起这一条多一步：业主裁定「最终 final 时应该是 M 下整棵树都已销号」
+    （`agent_loop` 的结构完整性闸，判据 `tests/test_cascade_retire_closes_the_tree.py`）。
+    于是"派了子就收工"的剧本会被受控拒绝，而且一拒就是三拍补救（每拍一次模型调用，
+    实测 5 次调用才以 `final_refused`（退出码 5）收尾）—— 那不是缺陷，是收工门在
+    正常工作：M 没有销号这一支，树就不干净。所以剧本按新契约补一步
+    `conductor.retire_child`（名册名 `D1`：第一次召唤的 D 在名册上的名字），
+    final 才落得下来。销号之后这一趟只花 3 次模型调用（派活 / 销号 / 收工）。
+    """
     monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
     reset_cache()
     SCRIPTS.clear()
     SCRIPTS.update({
         "M": [json.dumps({"summon": {"role": "D", "task": "派活：把这件事办掉",
                                      "params": {"qid": "q-1"}}}, ensure_ascii=False),
+              json.dumps({"tool": "conductor.retire_child",
+                          "args": {"child_name": "D1", "reason": "D 交完了"},
+                          "why": "收工之前把这一支销号"}, ensure_ascii=False),
               json.dumps({"final": "交付：D 已跑过", "evidence": []}, ensure_ascii=False)],
         "D": [json.dumps({"note": "我先记一句", "evidence": []}, ensure_ascii=False),
               json.dumps({"final": "D 的结论", "evidence": []}, ensure_ascii=False)],
     })
     rc = cli.cmd_run_agent(_args(tmp_path, role="M", task="把这件事交给 D", drive=["D.consider"],
-                                 max_steps=3, rounds=1, report_every=1))
+                                 max_steps=5, rounds=1, report_every=1))
     out = capsys.readouterr().out
     assert rc == 0, out
     st = Store(tmp_path / "ws")
@@ -163,6 +175,14 @@ def test_run_agent_drives_a_child_action_through_the_llm_loop(tmp_path: pathlib.
     assert {str(e.get("role")) for e in ends} >= {"M", "D"}, "D 没有跑自己的循环"
     # D 是走 LLM 循环的：它的循环记录落在 runs/ 下
     assert list((tmp_path / "ws" / "runs").glob("D-*.json")), "D 的循环产出没有落盘"
+    # 剧本里那个名册名不是"测试知道答案"：销号真的落到了名册上，名字与状态都要对。
+    from agentflow.secretary import Secretary
+
+    rostered, problems = Secretary("M", root=st.root, store=st).roster_rows("t-000001")
+    assert not problems, problems
+    assert [(r.get("name"), r.get("role"), bool(r.get("retired"))) for r in rostered] == [
+        ("D1", "D", True)], rostered
+
 
 
 def test_a_bad_drive_spec_is_a_usage_error(tmp_path: pathlib.Path, capsys):

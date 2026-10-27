@@ -38,7 +38,7 @@
 DSH 的 `SystemPrompt` 构造器还会注册一段 `harness:identity`（order -1000，文本是
 "你是由 DeepSeek Harness 驱动的 AI 代理"这一类框架自述），由 `includeHarnessIdentity`
 （默认 true）控制。本框架今天那句"你在一套多智能体协同框架里工作"写在
-`agent_prompts.AGENT_IDENTITY` 的正文里，所以这里把开关默认取 False（不写第二句）。
+`agent_prompts` 的 `AGENT_IDENTITY` 那一段正文里，所以这里把开关默认取 False（不写第二句）。
 要改成 DSH 的形状（框架自述与角色身份分开成两段）时，把它打开即可 —— 参数已经在这里了。
 """
 from __future__ import annotations

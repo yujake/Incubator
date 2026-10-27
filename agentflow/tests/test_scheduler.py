@@ -5,11 +5,19 @@
 所有"真并发"的判据都用两个数一起说：`T_serial = n × sleep`：串行执行会花多少（下界，只多不少 ——
 串行还要加上每次落台账的开销）。
 - 阈值取 `T_serial × 0.85`：留 15% 余量给"机器慢、CI 抖动"。为什么不用 `0.5` 这种"看起来更安全"的阈值：3 个任务里只要有两个真的同时跑，总额就会掉到 `2 × sleep`（=
-`T_serial × 0.667`）。取 0.85 意味着"三个都并发"才过 —— 这正是要判的东西（"写集不相交的 calls 必须真的同时跑"）。余量 15% 对应`0.3s × 3 = 0.9s` 上的 `0.135s`，
-而实测单次调用开销约 20~60ms（两次 `store.tx` + fsync），所以余量足够。实测参考（本机，3 个各睡 0.3s 的不相交任务）：0.44s（= `T_serial × 0.49`）。反方向（2 个写集相交、
-各睡 0.3s）：0.66s ≥ `T_serial × 0.85 = 0.51s`，即相交的一对确实没有并发。除了时间还有一条结构性判据：运行窗口
-`[start, end)` 是否重叠（`scheduler.ConcurrencyProbe.overlapped`）。时间会因机器负载失真，窗口重叠不会 —— 所以"真并发"以窗口为准，
-时间作为粗筛（防"窗口记错了但其实是串行"）。
+`T_serial × 0.667`）。取 0.85 意味着"三个都并发"才过 —— 这正是要判的东西（"写集不相交的 calls 必须真的同时跑"）。
+- 2026-10-26：两条正控的 `sleep` 从 `0.3`/`0.4` 提到 `3.0`（阈值形式一个字没改）。为什么：余量是
+  `0.15 × n × sleep`，而每拍有一笔固定的台账成本（一次召唤 4 笔事务：落 running 行 / 终态行 /
+  `usage_ledger`+`counters` 记账 / tokens 回写，其中三笔排在 `tasks` 同一张表的锁上）。写这段时
+  那条成本是 20~60ms，`sleep=0.3` 的 0.135s 余量勉强够；今天本机实测每拍 0.2~0.6s、负载下 1s+，
+  余量被它吃光 ⇒ 三个真的并发也照样红，而 `probe.peak` / `rec.peak` 一直是 3
+  （读数见 `agentflow/temp/d_fixed_cost.py` 与 `agentflow/temp/d_sleep_scale.py`）。`sleep=3.0` 时余量 3.4~4.2s：
+  同一台机器同一时刻实测 `elapsed` 3.45~4.20s，阈值 7.65s。这不是放宽 —— 串行仍是 9s，
+  仍远超阈值；变的只是"固定成本占余量的比例"。
+- 反方向（2 个写集相交的一对必须串行、同角色不给实例必须串行）仍用 `T_serial × 0.85`：
+  固定成本只会让耗时更长 ⇒ 那个方向不受影响。除了时间还有一条结构性判据：运行窗口
+  `[start, end)` 是否重叠（`scheduler.ConcurrencyProbe.overlapped`）。时间会因机器负载失真，窗口重叠不会 ——
+  所以"真并发"以窗口为准，时间作为粗筛（防"窗口记错了但其实是串行"）。
 
 ## 假角色为什么继承真实类
 
@@ -251,13 +259,14 @@ def _e_task(claim="c1", *, sleep=0.3) -> SC.TaskCall:
 
 
 def test_disjoint_calls_really_run_concurrently(tmp_path):
-    """真并发正控：3 个写集不相交的 call，各睡 0.3s。
+    """真并发正控：3 个写集不相交的 call，各睡 3.0s。
 
-    判据：总耗时 < `T_serial × 0.85`（= 0.765s），且两个独立来源的
-    峰值并发都等于 3。串行会是 0.9s+（还要加落台账的开销），
-    所以这条断言能真的区分两者。
+    判据：总耗时 < `T_serial × 0.85`（= 7.65s），且两个独立来源的
+    峰值并发都等于 3。串行会是 9s+（还要加落台账的开销），
+    所以这条断言能真的区分两者。`sleep` 为什么是 3.0 而不是 0.3：见模块头
+    （每拍固定的台账成本已与 0.3s 同量级，会把 15% 的余量吃光）。
     """
-    sleep = 0.3
+    sleep = 3.0
     rec = _Recorder()
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
@@ -320,9 +329,10 @@ def test_same_role_two_instances_really_run_concurrently(tmp_path):
     数据面本来就支持（B 的写入按行领取 + 租约），卡住的是编排面把角色当成了实例键。
 
     判据：两个 `instance` 不同的 E ⇒ 同一波、真并发（耗时 < 串行的 0.85 倍、
-    峰值 = 2）；同时断言台账里两条任务各自独立。
+    峰值 = 2）；同时断言台账里两条任务各自独立。`sleep=3.0` 的取舍同
+    `test_disjoint_calls_really_run_concurrently`（理由与读数在模块头）。
     """
-    sleep = 0.4
+    sleep = 3.0
     rec = _Recorder()
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)

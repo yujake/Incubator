@@ -115,10 +115,18 @@ def _roster(env: dict[str, Any], task_id: str, *, role: str = "D",
 
 def _item(env: dict[str, Any], *, to: str, summary: str, kind: str = "notice",
           expects: str = "ack", role: str = "M") -> str:
-    """在 `to` 名下开一条板项（`queued`）。"""
+    """在 `to` 名下开一条要 ack 的板项（`queued`）。
+
+    为什么带 `input_key="v-verdict@…"`：D12（业主 2026-10-27）之后，信息型板项
+    （`notice` / `message` 的普通项）"渲染即收口"——`mark_item_seen` 那一拍就写
+    `done`+`acked`（`Conductor._settle_if_informational`）。这一份判据问的是
+    "`conductor.ack` 这只手 + 销号门的板项闸"，所以夹具要用仍然要模型自己 ack
+    的那一档（`ACK_REQUIRED_ITEM_PREFIXES` 里的 `v-verdict@`），否则它一标 seen 就
+    已经收口了，那只手与那道闸都无从观测。
+    """
     return env["cond"].open_item(kind=kind, role=role, expects=expects, action=kind,
                                  summary=summary, called_by="M", parent_task_id=to,
-                                 depth=2)
+                                 depth=2, input_key=f"v-verdict@{summary}@v1")
 
 
 def _registry(store: Store, cond: Conductor) -> ToolRegistry:
@@ -532,7 +540,12 @@ def _final_gate_problems(env: dict[str, Any], monkeypatch: pytest.MonkeyPatch, *
         done = _call_retire(env, name=name, reason="板清了，销号")
         assert done.data["state"] == "retired", done.data
 
-    run = _run_m(env, monkeypatch, [_final_reply()])
+    # Q12（2026-10-26）之后被拒不再"同一拍收工"：这一步之后还有补救拍，所以脚本要按
+    # `AgentLoop.max_final_refused + 1` 份给（3 拍补救 + 最后一拍收尾）。断言一条没改：
+    # 只改了喂给替身网关的回复条数（改前给 1 份 ⇒ 第二次要回复时脚本已空、返回 `{}`，
+    # 于是这一趟会以 `bad_json_limit` 收场，`stop_reason` 与 `run.steps[-1]` 两条断言
+    # 读到的是协议连击而不是这封拒信 —— 那是夹具跟不上控制流，不是判据放宽）。
+    run = _run_m(env, monkeypatch, [_final_reply()] * 4)
     ends = _run_end_events(env["root"])
     if not ends:
         return ["盘上没有 agent_run_end（这一趟没跑起来）"]
@@ -578,7 +591,9 @@ def _woken_final_problems(env: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
         fake.advance(5)
         assert CLK.pending_wakes(str(env["root"]), owner)["count"] == 1, (
             "夹具前提：到期唤醒没造出来 ⇒ 这条判据测不到'被唤醒的回合'")
-        run = _run_m(env, monkeypatch, [_final_reply()])
+        # 与 `_final_gate_problems` 同一条 Q12 口径：被拒之后还有补救拍，脚本给满
+        # （3 拍补救 + 最后一拍收尾），断言与改前逐条相同。
+        run = _run_m(env, monkeypatch, [_final_reply()] * 4)
     finally:
         CLK.reset()
     ends = _run_end_events(env["root"])

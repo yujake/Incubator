@@ -198,7 +198,7 @@ export function Home() {
   const allLines = chatData === null ? [] : chatData.lines;
   const sid = chatData === null ? "" : chatData.sid;
   // `team` 那一档默认折起来（D-62）：它收的是"不是对你说的话"—— 主控的公共频道广播
-  // （`to=#public`，发给树上的人）、别的角色发给主控的私聊、别的角色的交付。改前主控的
+  // （`to=ALL`，发给树上的人）、别的角色发给主控的私聊、别的角色的交付。改前主控的
   // 广播按发信人落进了「主控」那一档，于是派活通告被印成"主控对你说的话"。
   // 折起来不等于藏掉：勾上这个开关就把它们放出来，上面那行读数还会写现在折着几条。
   const lines = team ? allLines : allLines.filter((l) => l.who !== "team");

@@ -32,6 +32,8 @@ from pathlib import Path
 from . import schema as S
 from . import conceptrows as CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from . import tty
+from .canonical import json_default
+from .stop_reasons import STOP_REASONS
 from .console import pin_utf8
 from .store import Store, StoreError
 from .verify import verify_all
@@ -2685,56 +2687,22 @@ def _parse_drive(items) -> tuple[dict, str]:
 
 #: 单趟 `run-agent` 的退出码分类表（业主 2026-10-19 重排；`--help`、`cmd_run_agent` 的
 #: docstring、`_run_agent_exit_code` 的 docstring 三处同口径，逐档都对得上这里）。
-#: 为什么是一张表而不是一串 `if`：这是防漏，不是风格 —— 新增一个 `stop_reason` 时若有人忘了来这张
-#: 表登记，它就落进 `EXIT_CODE_WHEN_UNKNOWN`（= 1，行为异常），一次当场可见的异常；写成 `if` 链时
-#: 新取值会静默落到最后的 `return 1`（1 曾经就是"其余"这一档）。判据
-#: `tests/test_run_agent_exit_code_table.py` 从源码里现扫 `stop_reason` 的取值集合与这张表对拍，少一条就红。
+#:
+#: 表体不在这里写：它与界面徽标同源于 :data:`agentflow.stop_reasons.STOP_REASONS`
+#: （Q23，2026-10-26）。改前它与 `webui.server._STOP_BADGES` 各写一份，`final_refused`
+#: 只进了这一边，界面于是显示一个空徽标；反方向还多一格 `max_steps`。现在这里只投影
+#: `live=True` 的那一列，新增一档时两张表不可能再漏一边。
+#:
+#: 为什么是一张表而不是一串 `if`：这是防漏，不是风格 —— 新增一个 `stop_reason` 时若
+#: 有人忘了来这张表登记，它就落进 `EXIT_CODE_WHEN_UNKNOWN`（= 1，行为异常），一次
+#: 当场可见的异常；写成 `if` 链时新取值会静默落到最后的 `return 1`（1 曾经就是"其余"
+#: 这一档）。判据 `tests/test_run_agent_exit_code_table.py` 从源码里现扫 `stop_reason`
+#: 的取值集合与这张表对拍，少一条就红。
 #: 六档：0 正常完成（给了 `final`）· 1 行为异常 · 2 研究启动失败（连跑都没开始）· 3 等待用户
-#: （`--resume` 接着跑）· 4 正常且中途停止 —— 用户叫停（强停与优雅停同档）＋ 预算耗尽 · 5 正常且自行停止但没有 final。
+#: （`--resume` 接着跑）· 4 正常且中途停止 —— 用户叫停（强停与优雅停同档）＋ 预算耗尽 · 5
+#: 正常且自行停止但没有 final。
 EXIT_CODE_BY_STOP: dict[str, int] = {
-    # ---- 0 正常完成（给了 final）
-    "final": 0,
-    # ---- 3 等待用户（人答完 --resume 接着跑）
-    "waiting_for_user": 3,
-    # ---- 2 研究启动失败（连跑都没开始）：一步模型都没调就交回去了
-    "checkpoint_mismatch": 2,      # 拿 A 的进度续 B（两件事混成一条）
-    "no_checkpoint": 2,            # 检查点读不到、会话记录也重建不出任何一步
-    "already_finished": 2,         # 上一趟已 final ⇒ 续跑没有意义
-    "resume_no_transcript": 2,     # 会话记录里重建不出那一步 ⇒ 不许从第 1 步重跑
-    # ---- 4 系统行为正常且中途停止：有人（用户 / 父 / 钱）把它叫停，不是它自己想停
-    "budget": 4,                   # 预算耗尽（优雅停，可 --resume）
-    "stop_file": 4,                # 停机开关（优雅停：做完第 N 步再收工）
-    "force_stop": 4,               # 停机开关 + force（强停，同样不等待收尾地收工）
-    "ask_cancelled": 4,            # 问用户的等待被当前轮次的取消信号中止
-    # `interrupted_by_parent`：父角色对某一个孩子当前那一轮下的 `stopctl.request_interrupt`
-    #   默认理由码（`stopctl.INTERRUPT_REASON`）。归 4 而不是 5：停意是外面叫的
-    #   （父是受权的叫停者，与"用户叫停"同一族），不是这个循环自己判定该收工；
-    #   而且这一档也写了收尾说明、可 `--resume`。若归 5，读的人会以为是它自己决定
-    #   收工、于是去等召唤者的下一步，而其实是召唤者叫它停的。
-    "interrupted_by_parent": 4,
-    # ---- 5 系统行为正常且自行停止，但没有 final
-    "no_progress_limit": 5,        # 同调用 + 同读数连击到上限：这一趟没有新事实
-    # `escalated`：交给召唤者、本趟自行收工（语义由另一条线落地；这里先登记，
-    #   因为它属于"它自己决定停"这一族 —— 与 `no_progress_limit` 同档，不是异常）。
-    "escalated": 5,
-    # `final_refused`（D-68，业主 2026-10-26「最终 final 时应该是 M 下整棵树都已销号，
-    #   否则不记 final」）：收工门判整棵树没销干净 ⇒ `run.final` 留空、一个字节都不写、
-    #   循环自己 break（`agent_loop.py` 里 `run.stop_reason = "final_refused"`）。
-    #   归 5 而不是 1：门按设计挡住了，没有任何东西坏掉 —— 它属于"这一趟自己判定收工、
-    #   但没有 final"那一族（与 `no_progress_limit` 同档）。归 1 会让读的人去查
-    #   "模型/接线出了什么故障"，而实际下一步是"先销号，再 `--resume` 重发 final"。
-    "final_refused": 5,
-    # ---- 1 行为异常（只留给"真出事"）
-    "not_wired": 1,                # 没接线（没有 key / 没进登记表）
-    "model_auth_failed": 1,        # 模型没认这把 key
-    "model_timeout": 1,            # 模型没返回（超时）
-    "model_unreachable": 1,        # 没连上模型（网络 / DNS）
-    "model_output_limit": 1,       # 思考吃光输出预算
-    "bad_json_limit": 1,           # 坏 JSON 连击
-    "bad_args_limit": 1,           # 坏参数连击
-    # `no_notify`：收工不带 notify 表、连打回三次（L-05e 之后循环不再产生它 ——
-    #   它已降级成读数；这一格留给旧会话记录，取值本身仍是"协议不遵"⇒ 异常）。
-    "no_notify": 1,
+    reason: row[0] for reason, row in STOP_REASONS.items() if row[3]
 }
 
 #: 没登记的 `stop_reason` 一律归这里。不许改成 0：那会把"新增了一档而没人归类"
@@ -3650,10 +3618,8 @@ def cmd_doctor(args) -> int:
     #
     # 这一档问的是"找到的那个检查器会不会拒绝假命题"（一个只打印版本、永远 0 退出的回显器
     # 在 `provers` 那一档里是"可用"，在这里必须是 `unusable`：反控没失败）。
-    # 2026-10-25：Mathlib 那一轴改前有两个探测地址（`toolchain._import_mathlib_probe`
-    # 的 umbrella 编译 与 第 ⑤ 步的图论编译），doctor 为此编译两次（本机实测 18.9s + 12.4s）。
-    # 现在合成一处：把自检读数里的 `mathlib` 那一格原样交给 `toolchain_report`，
-    # 于是"doctor 给的 Mathlib 读数"与"收工门/首屏那一格"读的是同一份。
+    # Mathlib 那一轴只有一处探测地址：把自检读数里的 `mathlib` 那一格原样交给
+    # `toolchain_report`，于是"doctor 给的 Mathlib 读数"与"收工门/首屏那一格"读的是同一份。
     sc = LT.lean_selfcheck_reading(root=Path(getattr(args, "root", None) or DEFAULT_ROOT))
     rep = TC.toolchain_report(mathlib_reading=(sc.get("mathlib") or None))
     rep["lean_selfcheck"] = sc
@@ -3889,6 +3855,15 @@ def cmd_stop(args) -> int:
         if mine:
             print("[stop] 优雅停止：正在跑的那一趟会在下一步之前收工"
                   "（E 的实验子进程也会被终止）；多轮自主跑在每轮之间收工")
+        # G4（业主 2026-10-26「停机开关也要能杀程序」）：优雅停对程序那一半是
+        # 「提醒 + 宽限」—— 逐条请它自己收尾，宽限窗口过了还在跑的只点名、不杀。
+        # 有代理在跑时它自己也会做同一件事（同一份实现 `stopctl.stop_programs`），
+        # 重复调用是幂等的（第二次报 `already_exited`）。
+        progs = stopctl.stop_programs(root, force=False, why=str(state.get("reason") or "user"))
+        print(f"[stop] {progs['notice']}")
+        if not progs.get("checked"):
+            print("[stop] 注意：程序状态没查成 ⇒ 别把这一步读成「没有在跑的程序」",
+                  file=sys.stderr)
         return 0 if mine else 3
     killed = stopctl.kill_registered(root)
     print(f"[stop] 强制停止：按登记杀了 {killed['killed']}/{len(killed['requested'])} 个进程"
@@ -3898,6 +3873,19 @@ def cmd_stop(args) -> int:
     if killed.get("kept"):
         # `draft/37` §140：杀不成就把登记留着 —— 否则 `--status` 会报"0 个活进程"（假绿）。
         print(f"[stop] 这些进程没杀掉，登记保留（`--status` 会照实报它们在册）：{killed['kept']}")
+    # G4（业主 2026-10-26）：强停对程序那一半是「强杀」—— 这棵树名下的每一条程序进程
+    # 连同它的子进程一起收掉，程序行按 `killed` 收口，读数逐项点名。
+    # 为什么落在这里：`agentflow stop --force` 连代理那一趟都杀了，于是"由那一趟在循环头
+    # 顺手停程序"这条路过不去（杀的是同一个进程树），只剩命令行这一处能动手。
+    # 顺序：排在上面的退出码 2 之前 —— "代理一个都没杀掉"不妨碍"程序照样要停"。
+    progs = stopctl.stop_programs(root, force=True, why=str(state.get("reason") or "user"))
+    print(f"[stop] {progs['notice']}")
+    for entry in progs.get("programs") or ():
+        print(f"  - {entry.get('program') or '（程序名没读到）'} pid={entry.get('pid')}"
+              f" 档={entry.get('status')}"
+              + (f"（{entry.get('note')}）" if entry.get("note") else ""))
+    if not progs.get("checked"):
+        print("[stop] 注意：程序状态没查成 ⇒ 别把这一步读成「没有在跑的程序」", file=sys.stderr)
     if killed["requested"] and not killed["killed"]:
         print("[stop] 注意：一个都没杀掉（受限环境常见：taskkill 被拒、os.kill 也被拒）——"
               "读数里给了原话，不要把它读成「停住了」。停机开关仍然有效："
@@ -3986,7 +3974,9 @@ def cmd_stats(args) -> int:
                  for name, _help in STATS_KINDS if name != "all"}
         readout = RO.merge_readouts(parts)
         if as_json:
-            print(json.dumps(readout, ensure_ascii=False, indent=2))
+            # `default=json_default`：`--json` 这一档的读数由各 role 的读口给出，
+            # 其中一格塞进 dataclass / Path 就会让整条命令抛 TypeError 而不是印出读数。
+            print(json.dumps(readout, ensure_ascii=False, indent=2, default=json_default))
         else:
             for name in RO.ALL_DATA_KEYS:
                 print("=" * 72)
@@ -4004,7 +3994,7 @@ def cmd_stats(args) -> int:
 
     readout = _stats_readout(kind, root, args)
     if as_json:
-        print(json.dumps(readout, ensure_ascii=False, indent=2))
+        print(json.dumps(readout, ensure_ascii=False, indent=2, default=json_default))
     else:
         for line in RO.render_readout(kind, readout):
             print(line)
@@ -4355,7 +4345,7 @@ def build_parser() -> argparse.ArgumentParser:
     #: `metavar` 是"首屏能读"的一半：二十多个名字全塞进 usage 行会折成三行，
     #: 而真正想让人看的是下面那四组。子命令清单仍在 `choices` 里（判据读的就是它）。
     #:
-    #: 抬头改的是 `_positionals` 那一组的 `title`（默认 `positional arguments`）：
+    #: 抬头改的是 argparse 的 positionals 组那一节的 `title`（默认 `positional arguments`）：
     #: 顶层没有别的位置参数，那一组里只有这个 subparsers action，所以改它就是改那一节的
     #: 抬头。为什么不给 `add_subparsers` 传 `title=`：那会新建一个组并把它追加到
     #: "options" 之后，于是最重要的那一节会被挤到 `--help` 的最下面。
@@ -4931,7 +4921,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _print_subcommand_help(parser: argparse.ArgumentParser, name: str) -> None:
     """把某个旧命令自己的 `--help` 原样打出来（组页要接在它前面时用）。
 
-    为什么读 `_name_parser_map` 而不是再 `build_parser()` 一次：那会造出第二份 parser，
+    为什么读现成那一份 parser 的子命令表（`choices`）而不是再 `build_parser()` 一次：那会造出第二份 parser，
     而"组页后面接的真是那条命令的 help"这件事必须拿同一份对象才算数。
     """
     action = _subparsers_action(parser)

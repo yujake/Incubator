@@ -149,7 +149,7 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
   三种都是「读不到」，不是「没签」。
 
 `ledger_kind` 同样是三态：台账行在就写它的 `kind`；台账行读不到（或那一行的 `kind`
-是空的）就写 `未读到`。渲染器最后这一道（`_ledger_cell` / `_reviewed_cell`）保证
+是空的）就写 `未读到`。渲染器最后这一道（`_ledger_kind_cell` / `_reviewed_print_cell`）保证
 这三格永远不会印成空白 —— 空白会被读成"没问题"，而这三态里没有一档是"没问题"。
 
 ### 落差读数（D-69 ②：先让它看得见，不拦门）

@@ -1660,17 +1660,22 @@ class _Core:
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                       plan: Mapping[str, Any], proof_manuscript: str = "") -> dict:
-        """把这一轮的 `proof` 落成可复核的一行 `statements`（P3-6 的第一半）。
-        `_apply_round` 的 proof 分支只写一段 `detail` 与 `history.product_detail`，而 `product_detail` 的唯一出现点是 `step.py` 的写入 —— 
-        全仓没有任何读者。M 读不到、V 审不到、盘上也找不到（policy 第 2 条要求的 `reports/attack-<plan_id>.md` 同样没人写）。
-        等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）改前这里逐字写 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路 ⇒这一行不许自报更高等级"。那条理由今天不
-        成立（`F→V` 的边在位、M 会按`specs/m.py` 派 V），而写死的后果是真机读数：`projects/mp2` 的 `stmt:000003` 凭据齐全（`proof_text` 1909 字 ＋ V 签「成
-        立」＋ sha 相符）却落在 `heuristic`。
-        现在按 `_proof_tier` 现算：「V 那一签在盘上且盖的正是这一版正文 ⇒`proof_review`；否则 `heuristic`」。这不是"自报"：判据读的是
-        `verifications/<命题号>.jsonl`（V 的账本），F 写不了那里一个字节。`bits` 仍留空（五位里第 3 位的 owner 是 V，不替别人签）。
-        幂等（2026-10-19 晚补：复用那一支同时负责「升档」）同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），不再登记第二行 —— 重复登记会把 
-        `statement_rows` / `reviewed_proof_rows` 的读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
-        所以复用那一支顺带核一次档位 —— 盘上那一行是弱档、而它现在已经够 `proof_review` ⇒ 就地升档（一行 update，走同一个写入闸；返回值里 `promoted=True` 让这件事在台账上看得见。
+        """把这一轮的 `proof` 交给 B 的登记正路（P3-6 的第一半）。
+
+        2026-10-26（D8）：改前这一格在 F 进程里直接开一笔 `statements` 事务，落下来的行
+        `created_by=agent-F`、`bits={}`、依赖 0 行、非平凡度台账不存在、定理名还是派活
+        工作名。原因是那笔事务的 `note` 是 `f.step:proof:<sid>`（不是 `tool:` 记号），
+        绕过了通用写口那道闸。现在 F 不再持有 `statements` 的写权限：内容与手稿交给
+        `B.register_statement`，五元位、依赖边、非平凡度、洗定理名都在那一笔里完成。
+
+        等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）按 `_proof_tier` 现算：
+        「V 那一签在盘上且盖的正是这一版正文 ⇒ `proof_review`；否则 `heuristic`」。
+        这不是"自报"：判据读的是 `verifications/<命题号>.jsonl`（V 的账本），F 写不了
+        那里一个字节。新的一行还没有命题号 ⇒ 只能按 `heuristic` 交，V 签完之后再交一次
+        由 B 的同一笔登记升档。
+
+        幂等：同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），
+        不再登记第二行 —— B 的查重会判"已在册"，这一格只如实回报复用。
 
         ## `proof_manuscript` 这一格（2026-10-26，死结 1 / 死结 2 的接线）
 
@@ -1725,92 +1730,155 @@ class _Core:
         except Exception as exc:  # noqa: BLE001 - 读不到就当"没有可复用的"，但要说出来
             existing = []
             self._log(f"statements 读不到：{type(exc).__name__}: {exc}")
+        existing_row: dict[str, Any] = {}
         for row in existing:
             if (str(row.get("statement_full") or "").strip() == full.strip()
                     and str(row.get("proof_text") or "").strip() == body.strip()):
-                got_id = str(row.get("stmt_id") or "")
-                reused = self._promote_if_understated(row, plan=plan, sid=sid, cites=cites,
-                                                      got_id=got_id)
-                # 复用那一支也是一次"登记"：登记那一刻手上的稿同样要如实带出去
-                # （`manuscript_received.source`），否则读的人分不清"这一笔没收到稿"
-                # 与"收到了、只是复用了既有那一行"。
-                reused["manuscript_received"] = manuscript_received
-                return reused
-        # `derived_from` 只认本表内的裸编号（`require_id` 不接 `stmt:` 前缀）：
-        # 所以只有真的在册的 `stmt:` 引用才进这一格，其余（`exp:`/`lit:`）留在 `cites` 里。
-        known = {str(r.get("stmt_id") or "") for r in existing}
+                existing_row = dict(row)
+                break
+        if existing_row:
+            tier = self._proof_tier(str(existing_row.get("stmt_id") or ""), body)
+        else:
+            tier = {"kind": "heuristic",
+                    "why": "这一条还没有命题号 ⇒ V 的 `verifications/<号>.jsonl` 读不到，"
+                           "按最弱一档登记（V 签完之后再交一次会升档）"}
+        return self._hand_proof_to_b(
+            full=full, text=text, body=body, sid=sid, plan=plan,
+            manuscript_text=manuscript_text, manuscript_received=manuscript_received,
+            cites=cites, tier=tier, existing_row=existing_row)
+
+    def _hand_proof_to_b(self, *, full: str, text: str, body: str, sid: str,
+                         plan: Mapping[str, Any], manuscript_text: str,
+                         manuscript_received: dict[str, Any], cites: list[str],
+                         tier: Mapping[str, Any],
+                         existing_row: Mapping[str, Any] | None = None) -> dict:
+        """把这一笔证明交给 B 的登记正路（`B.register_statement`），F 自己不写 `statements`。
+
+        为什么改成这样（2026-10-26，D8）：改前这里直接开一笔 `statements` 事务
+        （`note=f"f.step:proof:{sid}"`，不是 `tool:` 记号），于是绕过了通用写口那道闸；
+        落下来的行 `created_by=agent-F`、`bits={}`、依赖 0 行、非平凡度台账不存在、
+        定理名还是派活工作名。这四样本来都在 B 的 `register_statement` 那一笔里：
+        五元位（`evidencebits.bits_of`）、读手稿 `## 依赖` 落依赖边、判非平凡度
+        （`Secretary.judge_statement`）、洗定理名（`Secretary.wash_statement`）。
+        所以 F 的出口只负责"把内容与稿交出去"，不再持有这张表的写权限。
+
+        `kind` 一律按 `conjecture` 交（首次登记）：B-2 的裁定是"没有引文的自产命题
+        必须从猜想注册"，从猜想升成定理级的那一步由 V 的签与 B 的再登记完成。
+        已有行沿用盘上的 `kind`，免得把 V 已经升上去的档位写回猜想。
+
+        `line_range` 的 `label` 指向 F 自己那份手稿（`reports/f-proof-plan-<计划号>.md`）：
+        `own_result` 的出处不是"文献第几页"，这是它自己的稿。
+        """
+        row_now = dict(existing_row or {})
+        plan_id = str(plan.get("plan_id") or "")
+        try:
+            known = {str(r.get("stmt_id") or "") for r in self.store.rows("statements")}
+        except Exception:  # noqa: BLE001 - 读不到就当"没有在册 id"，只影响 derived_from
+            known = set()
         deps = sorted({c.split(":", 1)[1].split("#", 1)[0].strip()
                        for c in cites if c.startswith("stmt:")} & known)
+        label = (f"reports/f-proof-plan-{plan_id}.md" if plan_id
+                 else "F 的证明正文（proof_text）")
+        # 旧行（D8 之前由 F 直写）的 `line_range` 常常是 `{start: null, end: null, label: ""}`：
+        # `own_result` 的出处那一栏等于没给 ⇒ B 的登记会按 `missing_own_source` 拒收。
+        # 这一格给的只是"这份稿在哪"，不是页码，所以按手稿路径补一个 label 是如实的。
+        line_range = dict(row_now.get("line_range") or {})
+        if not (line_range.get("start") or str(line_range.get("label") or "").strip()):
+            line_range = {"label": label}
+        kind_now = str(row_now.get("kind") or "conjecture") or "conjecture"
+        if (row_now and str(row_now.get("created_by") or "") != "secretary-B"
+                and str(tier.get("kind") or "") != "proof_review"):
+            # 旧行（D8 之前 F 直写、没有 V 签）：B-2 只放行"从猜想注册"。
+            # 这里不把它的 kind 写回猜想，只是让这一笔能过 B-2 的门（B 的查重会认出同一行）。
+            kind_now = "conjecture"
         try:
-            with self.store.tx("statements", actor=self.actor,
-                               note=f"f.step:proof:{sid}") as tx:
-                stmt_id = tx.alloc_id("stmt")
-                tier = self._proof_tier(stmt_id, body)
-                row = S.Statement(
-                    stmt_id=stmt_id,
-                    origin="own_result",
-                    kind="lemma",
-                    label=f"F 攻坚 {plan.get('plan_id')} 子目标 {sid}",
-                    statement_text=text,
-                    statement_full=full,
-                    proof_text=body,
-                    # 档位由 `verifications/<命题号>.jsonl` 现算（见 `_proof_tier`）：
-                    # 有那一签且盖的正是这一版 ⇒ proof_review；没有才退 heuristic。
-                    evidence_kind=str(tier["kind"]),
-                    status="active",
-                    quote_verified=None,
-                    quote_reason=("这一条是 F 自己写的论证，不是从文献里摘的 ⇒ 没有逐字比对的对象；"
-                                  f"等级按 V 的账本现算 = `{tier['kind']}`（{tier['why']}）"),
-                    derived_from=deps,
-                    created_at=self._stamp(),
-                    created_by=self.actor,
-                )
-                row.validate()
-                tx.upsert("statements", row.to_dict(), note=f"f.step:proof:{sid}")
-        except Exception as exc:  # noqa: BLE001 - 写不进 statements 要说出来，不许当成写过了
-            return {"ok": False, "kind": "statement_write_failed", "statement_id": "",
-                    "reused": False, "promoted": False, "manuscript_received": manuscript_received,
+            from ..agent_b import AgentB
+
+            reviewer = AgentB(self.store, extractor=None, extract_text=None)
+            got = reviewer.register_statement(
+                statement_full=full,
+                statement_text=str(row_now.get("statement_text") or text),
+                proof_text=body,
+                proof_manuscript=str(manuscript_text or ""),
+                kind=kind_now,
+                label=f"F 攻坚 {plan_id} 子目标 {sid}",
+                origin="own_result",
+                evidence_kind=str(tier.get("kind") or "heuristic"),
+                quote_verified=None,
+                quote_reason=("这一条是 F 自己写的论证，不是从文献里摘的 ⇒ 没有逐字比对的对象；"
+                              f"等级按 V 的账本现算 = `{tier.get('kind')}`（{tier.get('why')}）"),
+                line_range=line_range,
+                derived_from=deps,
+            )
+        except Exception as exc:  # noqa: BLE001 - 交不出去要说出来，不许当成登记过了
+            return {"ok": False, "kind": "statement_handoff_failed", "statement_id": "",
+                    "reused": bool(row_now), "promoted": False,
+                    "manuscript_received": manuscript_received,
                     "why": f"{type(exc).__name__}: {exc}", "cites": cites}
-        return {"ok": True, "statement_id": stmt_id, "reused": False, "promoted": False,
-                "evidence_kind": str(tier["kind"]), "tier_why": str(tier["why"]),
+
+        stmt_id = str(got.get("stmt_id") or "")
+        if not got.get("ok") or not stmt_id:
+            if row_now and str(got.get("kind") or "") == "duplicate_statement":
+                # 同一份命题与证明已经在册（B 的查重把它判成"不新建"）：这不是失败。
+                # 这一支不写任何东西，只把既有那一行如实回报。
+                return {"ok": True, "statement_id": str(row_now.get("stmt_id") or ""),
+                        "reused": True, "promoted": False,
+                        "evidence_kind": str(row_now.get("evidence_kind") or tier.get("kind") or ""),
+                        "tier_why": str(tier.get("why") or ""),
+                        "manuscript_received": manuscript_received, "why": "",
+                        "cites": cites, "handoff_reading": dict(got)}
+            return {"ok": False, "kind": "statement_handoff_refused",
+                    "refused_kind": str(got.get("kind") or ""),
+                    "statement_id": stmt_id, "reused": False, "promoted": False,
+                    "manuscript_received": manuscript_received,
+                    "why": str(got.get("error") or got.get("reason") or got.get("kind") or ""),
+                    "cites": cites}
+
+        reused = bool(got.get("new_row") is False or got.get("duplicate_reading")
+                      or got.get("merged") or got.get("upgraded") or row_now)
+        promoted = bool(got.get("upgraded"))
+        judge_note = ""
+        if not reused:
+            # 非平凡度：与 B 的循环在 `own.register_statement` 那一笔做的同一步
+            # （`AgentLoop._statement_filing_tier` → `Secretary.judge_statement`）。
+            # 放在登记成功之后：台账那一行的 `statement_full` 要与盘上这一条逐字相同。
+            judge_note = self._judge_nontriviality(
+                full=full, text=text, body=body, stmt_id=stmt_id)
+        landed: dict[str, Any] = {}
+        try:
+            landed = next((dict(r) for r in self.store.rows("statements")
+                           if str(r.get("stmt_id") or "") == stmt_id), {})
+        except Exception:  # noqa: BLE001 - 读不到就用返回值里那一份
+            landed = dict(got.get("row") or {})
+        return {"ok": True, "statement_id": stmt_id, "reused": reused, "promoted": promoted,
+                "evidence_kind": str(landed.get("evidence_kind")
+                                     or got.get("evidence_kind") or tier.get("kind") or ""),
+                "tier_why": str(tier.get("why") or ""), "row": landed,
+                "handoff_reading": dict(got), "nontriviality_note": judge_note,
                 "manuscript_received": manuscript_received, "why": "", "cites": cites}
 
-    def _promote_if_understated(self, row: Mapping[str, Any], *, plan: Mapping[str, Any],
-                                sid: str, cites: list[str], got_id: str) -> dict:
-        """复用既有那一行时顺带核档位：够 `proof_review` 却登记成弱档 ⇒ 就地升档。
+    def _judge_nontriviality(self, *, full: str, text: str, body: str,
+                             stmt_id: str = "") -> str:
+        """让 B 的秘书判一次非平凡度；返回空串 = 判了（或不需要判），非空 = 没判成的原因。
 
-        为什么这条路径必要：V 的那一签「几乎总是晚于 F 落行」（mp2：21:06 落行、
-        21:09 才签）。没有这一支，一条已经够格的强结果会永远停在 `heuristic` ——
-        那也是"证明齐全、V 也签了，却只落 heuristic"这个缺陷的下半截。
-        写的是「同一行」（不是第二行），走的是「同一个写入闸」：凭据不够时闸会当场
-        拒收，所以这一支写不出假档。升档失败（例如闸拒了）如实返回 `promoted=False`
-        ＋理由，绝不静默当作升过了。
+        这一步不能省：`out/secretary/nontriviality.jsonl` 的那一行只在
+        `Secretary.judge_statement` 跑过之后才由 `append_nontriviality` 追加。
+        F 把登记交给 B 之后，若不再走这一步，新登记的命题会重新落成"账本里没有"。
+
+        `stmt_id` 是刚登记下来的号（2026-10-26，D16）：台账按号与命题行关联，
+        正文以后改了档位也还读得到。
         """
-        from .. import verifications as VR
-
-        ek = str(row.get("evidence_kind") or "")
-        if ek == VR.PROOF_REVIEW_KIND:
-            return {"ok": True, "statement_id": got_id, "reused": True, "promoted": False,
-                    "evidence_kind": ek, "why": "", "cites": cites}
-        tier = self._proof_tier(got_id, str(row.get("proof_text") or ""))
-        if tier["kind"] != VR.PROOF_REVIEW_KIND:
-            return {"ok": True, "statement_id": got_id, "reused": True, "promoted": False,
-                    "evidence_kind": ek, "tier_why": str(tier["why"]), "why": "",
-                    "cites": cites}
-        promoted = dict(row)
-        promoted["evidence_kind"] = VR.PROOF_REVIEW_KIND
         try:
-            with self.store.tx("statements", actor=self.actor,
-                               note=f"f.step:proof:{sid}:promote") as tx:
-                tx.upsert("statements", promoted, note=f"f.step:proof:{sid}:promote")
-        except Exception as exc:  # noqa: BLE001 —— 升不了档要说出来（不许当成升过了）
-            return {"ok": True, "statement_id": got_id, "reused": True, "promoted": False,
-                    "evidence_kind": ek, "tier_why": str(tier["why"]),
-                    "why": f"升档失败（{type(exc).__name__}: {exc}）—— 这一行仍是 {ek}",
-                    "cites": cites}
-        return {"ok": True, "statement_id": got_id, "reused": True, "promoted": True,
-                "evidence_kind": VR.PROOF_REVIEW_KIND, "tier_why": str(tier["why"]),
-                "why": "", "cites": cites}
+            from ..secretary import for_role_wired
+
+            sec = for_role_wired("B", root=self.store.root, store=self.store)
+            if sec is None:
+                return "B 的秘书不可达 ⇒ 非平凡度没判（账本里不会有这一行）"
+            sec.judge_statement(statement_full=full, statement=text, proof_text=body,
+                                stmt_id=stmt_id, task_id="")
+        except Exception as exc:  # noqa: BLE001 - 判不了要说出来，不许静默当作判过了
+            return f"非平凡度没判成（{type(exc).__name__}: {exc}）"
+        return ""
 
     def _round_line(self, *, plan: Mapping[str, Any], round_no: int, kind: str,
                     product: Mapping[str, Any], status: str, basis: str,

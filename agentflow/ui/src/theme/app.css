@@ -550,6 +550,17 @@ h3 {
   border-color: var(--dsw-alias-state-warn-primary);
 }
 
+/* 疑似停滞（业主 2026-10-26 第二条）：画在三态徽标旁边的小标记。
+   它不改三态那一枚 —— 那一枚仍然说它自己在跑，这一枚说的是"最近一步离现在多久"。
+   颜色走警示那一档，但刻意给一层底色：停滞是"疑似"，不是判不了的结论
+   （悬停给秒数与那一句理由，文案由 `rosterTree.stalledTag` 给）。 */
+.roster-stalled {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  font-weight: 600;
+}
+
 /* 顶部那一行三态合计。 */
 .roster-states {
   margin: var(--sp-1) 0;

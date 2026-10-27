@@ -64,10 +64,24 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "攻坚台账 `reports/attack-<plan_id>.md` 写盘失败（`_report_append`）："
         "执行了、没写成 ⇒ 执行失败；而且它**不许**让整轮崩掉，返回值只说"
         "「这一行没落盘」，由调用方在 `detail` 里如实写出来",
-    ("agent_f/core.py", "statement_write_failed"):
+    # 注（2026-10-26，H3）：这里原本还有一条 `statement_write_failed`。`R2b-⑬`
+    # 把 `_proof_outlet` 那两个手写分支并成了一条（写盘失败与"假 proof_review 拒收"
+    # 现在都走 `statement_handoff_failed` / `statement_handoff_refused` 那两档），
+    # 盘上再也扫不到这个名字 ⇒ 按本文件"登记过期就删"的规矩退役这条登记。
+    # 这不是放宽：告警方向没变 —— 今天若有谁再手写一个 `ok=False` 而没登记，
+    # 它照样落进 `missing`。
+    ("agent_f/core.py", "statement_handoff_failed"):
         "论证落 `statements` 失败（`_proof_outlet` 的事务里抛了，含 store 写入期那道"
         "「假 proof_review 拒收」）：这是「写不进表」，不是「这次调用不成立」——"
         "同一条纪律：F 的论证没有出口要如实说，而不是把参数问题推给调用方",
+    ("agent_f/core.py", "statement_handoff_failed"):
+        "把证明交给 B 的登记那一笔时抛了（`_hand_proof_to_b` 里 `B.register_statement` "
+        "的异常，含 B 的秘书不可达）：这是「这一跳没做成」，不是「F 的参数不对」⇒ "
+        "执行失败，不许冒充一次拒绝",
+    ("agent_f/core.py", "statement_handoff_refused"):
+        "B 的登记按它自己的判据拒了这一笔（`must_start_as_conjecture` / "
+        "`dependency_section_*` 等）：拒绝是兜底方给的，不是 F 的调用不成立 ⇒ "
+        "原样带回它的理由，不折成 F 的 `refused`",
     # `agent_c/path_shape.py` 的 `_no_spine()`（2026-10-22 登记）：它是子结果，
     # 不是动作的终态 payload —— `{"ok": False, "nodes": [], "edges": [], "length": 0}`
     # 在那一支里的意思逐字是"这条候选路径没算出一条承重脊"（没走到根 / 成环 / 超深度 /
@@ -86,6 +100,49 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以 `author_script`
     # 那一族只登记 `judge_failed` / `bad_source` / `write_failed` 这三档；
     # 扫出来多一条或少一条都会红。
+    # ---- 2026-10-26（H3）补登的五个模块：都是"子结果 / 读数格"，不是动作的终态拒绝。
+    # 它们全是新模块（L 的形式化入口、E 的报告读数、F 的手稿出口、D 的逐行记录面）
+    # 落地时带进来的，判据在它们落地的同一天就该登记 —— 这一批补的是登记，不是口径。
+    ("agent_l/formalize.py", ""):
+        "子结果，不是拒绝：`_pick_statement` / `_path_choice` / `_checked_row` 那十一处"
+        "`{\"ok\": False, ...}` 说的是「这一条候选（声明 / 证明路径）不成立」，"
+        "调用方 `formalize` 拿它去拼 `self._refusal(...)` —— 那一条才走 `refusals.refuse`，"
+        "受控理由与 `refusal_reason` 都在那一侧。所以这里没有一次独立的拒绝可记。"
+        "不走 `refuse` 的理由同 `agent_c/path_shape.py` 那一格：会给一条正常的"
+        "「换一条证明路径」的读数贴上 `refusal_reason=invalid_params`。",
+    ("agent_f/manuscript.py", ""):
+        "子结果：`proof_manuscript()` 的 `{\"ok\": False, ...}` 是「这份手稿没写成」"
+        "（写盘 OSError 那一支），`preview_dependencies()` 的 `out` 是「这一节读不出"
+        "依赖边」的读数；两者都被 `agent_f/core.py` 折进 `detail` / `history`，"
+        "从不冒充动作的终态拒绝，也没有受控 `kind` 可记",
+    ("agent_f/core.py", ""):
+        "子结果：手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给调用方"
+        "看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 payload，"
+        "只在 detail 里留一句",
+    ("agent_d/write_report.py", ""):
+        "读数格：`rec` 是逐行登记的记录（`{\"statement_id\": ..., \"ok\": False, ...}`），"
+        "落进报告的表格里；它不是动作的返回值，也不会被台账当成一次拒绝",
+    ("agent_e/run_experiment.py", ""):
+        "读数格：`report` 是「这一趟的报告落没落盘」的局部读数"
+        "（`{\"path\": \"\", \"bytes\": 0, \"sha256\": \"\", \"ok\": False, ...}`），"
+        "只被折进 `observations` 与 `notes`；动作本身的拒绝走 `refuse`（那一族都带 `kind`）",
+}
+
+
+#: 同一 `(模块, kind)` 出现多次时的处数（不在表里的默认 1 处）。
+#:
+#: 2026-10-26（H3）把这条能力从"在判据体里手写一行覆盖"改成一张显式表：有两个以上
+#: 同 `(模块, kind)` 的模块都在这里点名，计数逐条来自盘上实测。为什么需要它：
+#: 登记表是 `(模块, kind)` → 理由，一个模块里同一种子结果出现十一处也只写一条理由；
+#: 不给处数的话，"十一处里删掉三处"这种改动没有任何东西看得见 —— 而那张表声称的
+#: 正是"每一处都在册"。两个方向都照旧：盘上比表里多 ⇒ `missing` 红，表里比盘上多
+#: ⇒ `stale` 红（豁免腐烂）。
+_REPEAT_COUNTS: dict[tuple[str, str], int] = {
+    # L 的形式化入口：十一条"这一条候选不成立"的子结果（`_pick_statement` 五条、
+    # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串。
+    ("agent_l/formalize.py", ""): 11,
+    # `proof_manuscript()` 的写盘失败一条 + `preview_dependencies()` 的读数一条。
+    ("agent_f/manuscript.py", ""): 2,
 }
 
 
@@ -174,7 +231,7 @@ def test_every_hand_rolled_failure_is_registered_and_the_table_is_not_stale():
             live[(rel, kind)] += 1
     assert scanned >= 8, f"只扫到 {scanned} 个角色动作模块 ⇒ 扫描面接错了"
 
-    want = Counter(dict.fromkeys(_FAILURES_NOT_REFUSALS, 1))
+    want = Counter({pair: _REPEAT_COUNTS.get(pair, 1) for pair in _FAILURES_NOT_REFUSALS})
     # 注：这里原本还有一行把 `package_build_failed` 覆盖成 2（"渲染失败 / 编译失败两处"）。
     # `R2b-⑬` 把那两个手写分支合并成了一条（阶段名走 payload 的 `stage` 那一格），
     # 所以这一档现在只剩一处，覆盖行随之删除。这不是放宽判据：`want` 仍逐条来自登记表，

@@ -533,6 +533,8 @@ export interface StatementRow {
   nontriviality_label: string;
   nontriviality_meaning: string;
   nontriviality_tri: string;
+  nontriviality_word: string;
+  nontriviality_matched_by: string;
   formal_paths: FormalPath[];
   bit_numeric: string;
   bit_proof: string;
@@ -669,7 +671,7 @@ export interface LedgerVerifyRow {
   by_task_id_tri: string;
 }
 
-/** 出处：manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个键；`revises`/`kind`/`ref_problems` 是「有就带上」的三栏）。 */
+/** 出处：manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个必填键；`revises`/`kind`/`ref_problems`/`to_task_id`/`to_task_ids` 是「有就带上」的几栏）。 */
 export interface HandoffRow {
   id: string;
   to: string;
@@ -688,6 +690,10 @@ export interface HandoffRow {
   revises?: string;
   kind?: string;
   ref_problems?: Record<string, string>;
+  to_task_id: string;
+  to_task_ids: string[];
+  sender_label: string;
+  to_label: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -762,6 +768,7 @@ export interface TaskRow {
   seen_by: string;
   seen_step: number | null;
   keep_alive: boolean;
+  settled_at_parent_exit: boolean;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -908,6 +915,9 @@ export interface RosterNode {
   task_found: boolean;
   state: string;
   state_reason: string;
+  stalled: boolean;
+  stalled_sec: number | null;
+  stalled_reason: string;
   in_flight: number | null;
   inbox: RosterInbox;
   tasks: RosterTask[];

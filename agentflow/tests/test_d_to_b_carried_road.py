@@ -23,6 +23,17 @@ D→B 在代码里没有任何直接调用点：D 只能用 `summon` 派 B，arg
 | 权限面 | D→B 的边在册、D 的写集里没有 `statements` / `dependencies`（B 仍是唯一写者） | —— |
 
 全部 tmp 工作区、零模型钱（F 那一轮用一个假缝；V 那一笔用一个按剧本回答的替身）。
+
+## 2026-10-26 之后多出来的那一组依赖行（D8）
+
+F 的出口改成了 `B.register_statement`，于是 F 自己那一轮递交时 B 就已经读过同一份稿、
+把依赖边落好了 —— 盘上因此多一组 `used_by = stmt:<F 的命号>` 的行，而它仍然只有 B 能写。
+这改变了两件读数的含义，所以两条判据跟着改（都是变严，不是放宽）：
+
+- "F 那一侧不写依赖台账"：改成点名那一组行是谁落的（`used_by` 是 F 的命号、
+  `label` 指着手稿依赖段），而不是断言盘上一行都没有；
+- "D 交付这一笔落了边"：判据 a 先把 F 那一组行清掉（真实可达：F 登记时手上没有稿），
+  让 D 的携带成为唯一可能落边的动作 —— 否则 `deps_written>=1` 会因为边早就在而真空绿。
 """
 from __future__ import annotations
 
@@ -179,6 +190,11 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
 
     改前红：D 的交付路径里没有任何一处调 `AgentB.register_statement` ⇒ 这条断言
     一条都成立不了（`dependencies` 0 行）。
+
+    2026-10-26 起 F 的出口也是 `B.register_statement`（D8）⇒ F 那一轮递交时 B 已经
+    落过这条边了。所以先把那几行清掉（真实可达的状态：F 登记时手上没有稿），让
+    "D 携带"成为唯一可能落边的动作 —— 否则 `deps_written>=1` 会因为"边早就在"而
+    变成真空绿，而这条判据要证的正是"D 这一笔自己把边落出来了"。
     """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
@@ -186,7 +202,14 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
     f_stmt = str(proof["statement_id"])
     assert pathlib.Path(store.root, str(proof["manuscript_path"])).is_file(), proof
     assert proof.get("manuscript_washed") is True, proof
-    assert store.rows("dependencies") == [], "F 那一侧不写依赖台账（作者只写内容）"
+    # F 那一侧不写依赖台账（作者只写内容）：盘上这一行是 B 在 F 递交时读稿落的
+    # （`used_by` 正是 F 那条命号、`label` 指着手稿依赖段的第几行）。
+    author_side = [dict(r) for r in store.rows("dependencies")]
+    assert {str(r.get("used_by")) for r in author_side} == {f"stmt:{f_stmt}"}, author_side
+    assert all("手稿依赖段" in str(r.get("label") or "") for r in author_side), author_side
+    with store.tx("dependencies", actor="test") as tx:
+        for row in author_side:
+            tx.delete("dependencies", row["dep_id"], note="判据夹具：清掉 F 那一轮落的边")
 
     d = _d_with_b(store)
     d.write_report()
@@ -226,15 +249,20 @@ def test_the_delivery_reading_is_written_into_d_report(tmp_path: pathlib.Path) -
 
 
 def test_without_b_the_delivery_says_so_instead_of_pretending(tmp_path: pathlib.Path) -> None:
-    """三态：直调 `AgentD(store)`（没有 `b=`）⇒ 携带单照生成，但读数说没递。"""
+    """三态：直调 `AgentD(store)`（没有 `b=`）⇒ 携带单照生成，但读数说没递。
+
+    判据是"这一笔一条边都没落"，所以比的是携带前后那本台账一字未变 —— 盘上本来就有
+    的那一行是 F 递交时 B 落的（D8），与 D 这一笔无关。
+    """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
     _run_f_proof(store)
+    before = [dict(r) for r in store.rows("dependencies")]
     d = AgentD(store, config={"workspace_root": store.root})
     d.write_report()
     assert d.last_delivery.get("checked") is False, d.last_delivery
     assert "没有 B 的入口" in str(d.last_delivery.get("why") or ""), d.last_delivery
-    assert store.rows("dependencies") == [], store.rows("dependencies")
+    assert [dict(r) for r in store.rows("dependencies")] == before, store.rows("dependencies")
 
 
 # ------------------------------------------------------------------ b 必走（代码行为）
@@ -272,11 +300,12 @@ def test_stubbing_the_d_to_b_call_out_turns_a_red(tmp_path: pathlib.Path,
     """c 反真空：把 D→B 这条调用打桩成空 ⇒ a 必红。
 
     打桩点就是 D 的代码里那一笔（`AgentD._deliver_carried_to_b`）：返回"什么都没递"，
-    于是 `dependencies` 一行不落、`_a_holds` 取反。它证明 a 绿的来源正是这条调用。
+    于是携带前后那本台账一字未变、`_a_holds` 取反。它证明 a 绿的来源正是这条调用。
     """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
     _run_f_proof(store)
+    before = [dict(r) for r in store.rows("dependencies")]
     monkeypatch.setattr(AgentD, "_deliver_carried_to_b",
                         lambda self, rows: {"checked": True, "rows": len(rows or []),
                                             "delivered": 0, "results": [],
@@ -284,7 +313,7 @@ def test_stubbing_the_d_to_b_call_out_turns_a_red(tmp_path: pathlib.Path,
     d = _d_with_b(store)
     d.write_report()
     assert _a_holds(store, d.last_delivery) is False, d.last_delivery
-    assert store.rows("dependencies") == [], store.rows("dependencies")
+    assert [dict(r) for r in store.rows("dependencies")] == before, store.rows("dependencies")
 
 
 # ------------------------------------------------------------------ 端到端（F→D→B→V）

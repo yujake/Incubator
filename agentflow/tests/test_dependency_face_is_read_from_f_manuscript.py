@@ -20,6 +20,14 @@
   （依赖面就在手稿里、B 按它入库；引了却交不出那一节 = 这份手稿不合格）；一条引用都没有的
   自足证明不适用这一条（`deps_missing=not_applicable`，不拒收）。
 
+## 一条链在 2026-10-26 之后多了一处落点（D8）
+
+F 的出口改成了 `B.register_statement`（"把内容与稿交出去"，F 不再持有 `statements`
+的写权限），于是 F 自己那一轮递交时 B 就已经读过那份稿、并按那一节落了行。这不是
+"多落了不该落的边"：落边的仍然只有 B（收方读稿），作者一个字节都没写 `dependencies`。
+但它确实让盘上多了一组 `used_by = stmt:<F 的命号>` 的行，所以下面两条判据按
+`used_by` 分组，一组是判据、另一组点名。
+
 ## 七条判据（含两条负控的两半）与各自的"改前红"
 
 改前（HEAD）：`AgentF` 没有 `proof_manuscript` / `preview_dependencies`（F 那侧一行手稿都
@@ -210,6 +218,10 @@ def test_f_manuscript_section_is_read_by_b_and_lands_a_dependency(store: Store) 
 
     改前红：`AgentF` 没有 `proof_manuscript`（F 那侧一行手稿都不写）⇒ 第一句
     `AttributeError`；`AgentB.register_statement` 也不收 `proof_manuscript` ⇒ `TypeError`。
+
+    2026-10-26（D8，F 的出口改成 B 的登记正路）之后盘上会多一组行：F 自己那一轮
+    递交时 B 就已经读过同一份稿。所以这一条按 `used_by` 分组 —— 本笔的两行是判据，
+    多出来的那两行也点名（谁落的、来源是哪几条），而不是把"恰好 N 条"放宽成"至少 N 条"。
     """
     _library(store)
     out = _run_proof_round(store, [f"stmt:{THEOREM_A}", f"stmt:{THEOREM_B}"])
@@ -235,8 +247,17 @@ def test_f_manuscript_section_is_read_by_b_and_lands_a_dependency(store: Store) 
     got = _register(store, text)
     assert got.get("ok") is True, got
     stmt_id = str(got["stmt_id"])
-    rows = _deps(store)
-    assert len(rows) == 2, rows
+    # 2026-10-26（D8）之后 F 的出口就是 `B.register_statement`：F 自己那一轮已经把同一份稿
+    # 交给 B、并让 B 按那一节落了行（`used_by = stmt:<F 的命号>`）。所以先按 `used_by` 分组
+    # —— 这条判据钉的是"这一笔（`stmt:<新命号>`）读出的那两行"，多出来的那两行点名，不静默略过。
+    rows = [r for r in _deps(store) if str(r.get("used_by")) == f"stmt:{stmt_id}"]
+    assert len(rows) == 2, _deps(store)
+    author_side = [r for r in _deps(store) if str(r.get("used_by")) != f"stmt:{stmt_id}"]
+    assert {str(r.get("used_by")) for r in author_side} == {f"stmt:{out['statement_id']}"}, \
+        author_side
+    assert len(author_side) == 2, author_side
+    assert {str(r.get("source_stmt_id")) for r in author_side} == {THEOREM_A, THEOREM_B}, \
+        author_side
     by_source = {r["source_stmt_id"]: r for r in rows}
     assert sorted(by_source) == sorted([THEOREM_A, THEOREM_B]), by_source
     for source, row in by_source.items():
@@ -445,10 +466,16 @@ def test_three_paths_in_one_manuscript_make_three_dependency_rows(store: Store) 
 
 def test_stub_the_parser_out_and_the_positive_control_turns_red(
         store: Store, monkeypatch) -> None:
-    """⑦-a 反真空：把"解析依赖段"打桩成空 ⇒ a 必红（a 的绿是那条解析带来的）。"""
+    """⑦-a 反真空：把"解析依赖段"打桩成空 ⇒ a 必红（a 的绿是那条解析带来的）。
+
+    盘上那一组行是 F 自己那一轮递交时落下的（D8），所以这一条比的是"这一笔有没有
+    新增"—— 判据仍然是"零新增"，不是"盘上一行都没有"（后者已经被多落的那一组行
+    变成了永远假）。
+    """
     _library(store)
     out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
     manuscript = (store.root / str(out["manuscript_path"])).read_text(encoding="utf-8")
+    before = _deps(store)          # F 那一轮落的那一行（与本笔无关）
     # 惰性 import：改前这一条先红在"F 那侧不写手稿"上
     from agentflow import depsection as DS
 
@@ -456,9 +483,9 @@ def test_stub_the_parser_out_and_the_positive_control_turns_red(
                         lambda text: {"checked": True, "present": False, "heading_line": 0,
                                       "rows": [], "problems": [], "refused": "", "reason": ""})
     got = _register(store, manuscript)
-    # 解析被打桩成"没有这一段" ⇒ 一行依赖都落不出来（a 的"两行"在这里是红的）；
+    # 解析被打桩成"没有这一段" ⇒ 这一笔一行依赖都落不出来（a 的"两行"在这里是红的）；
     # 而"有引用、没段"这一档现在是整笔拒收，理由码也在这里如实读出来。
-    assert _deps(store) == [], _deps(store)
+    assert _deps(store) == before, _deps(store)
     assert got.get("ok") is False, got
     assert got.get("kind") == "dependency_section_missing", got
 

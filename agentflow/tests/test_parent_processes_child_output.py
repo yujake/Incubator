@@ -162,7 +162,13 @@ def test_green_when_the_parent_uses_the_child_output(tmp_path: pathlib.Path):
     assert verdict["status"] == "green", verdict
     # 证据落在"哪一步、什么效应、指到了哪个字面量"上（不只是"算它处理了"）
     ev = run.summon_consumption["productions"][0]["evidence"]
-    assert ev["step"] == 1 and ev["shape"] == "tool", ev
+    # 步号不再写死成 1：它是这一趟的步计数器给的读数，而派活那一回合之后计数器
+    # 会为被召唤的一支多走一格（实测：父的 steps 是 0=summon / 2=fs.read / 3=final）。
+    # 判据要钉的是"证据指到的就是我读那份报告的那一步"，所以拿那一步自己的 index 比 ——
+    # 写死 1 会在任何编号口径变化时假红，而它守的那件事一个字都没变。
+    read_step = next(s for s in run.steps if s.result.get("tool") == "fs.read")
+    assert ev["step"] == read_step.index, (ev, read_step.index)
+    assert ev["shape"] == "tool", ev
     assert REPORT in ev["refs"], ev
     # 收工那一行（`agent_run_end`）读得到这四个数
     end = [e for e in _ends(st) if str(e.get("role")) == "D"][-1]

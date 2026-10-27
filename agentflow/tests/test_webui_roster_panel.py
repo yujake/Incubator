@@ -261,9 +261,13 @@ def test_the_endpoint_returns_the_whole_tree_with_parents_and_absolute_ids(
     nodes = {str(n["task_id"]): n for n in body["nodes"]}
     assert set(nodes) == {"t-000001", "t-000002", "t-000003", "t-000005"}, sorted(nodes)
     assert body["roots"] == ["t-000001"] and body["count"] == len(nodes), body["roots"]
-    # 名册名就是 `secretary.roster_add` 给的那三个（D1 / C1 / F1），根没有名册名。
+    # 名册名就是 `secretary.roster_add` 给的那三个（D1 / C1 / F1）。
+    # 根不在任何人的名册里 ⇒ 它的 role / name 由读侧补成主控（业主 2026-10-26
+    # 「顶层能不能标 M 啊，unknown 很怪」）：这是读侧给顶层定的身份，不是名册分配的
+    # 名字，所以 `roster_add` 改不了它（逐条判据在 `tests/test_the_root_is_named_m.py`）。
     assert nodes["t-000002"]["name"] == "D1", nodes["t-000002"]
-    assert nodes["t-000001"]["name"] == "", "根不在任何人的名册里 ⇒ 名册名是空串"
+    assert (nodes["t-000001"]["role"], nodes["t-000001"]["name"]) == ("M", "M"), \
+        nodes["t-000001"]
     assert [str(k["task_id"]) for k in nodes["t-000002"]["children"]] == \
         ["t-000003", "t-000005"], nodes["t-000002"]["children"]
     # 深度是"这棵树里的距离"（根 = 1），角色与状态来自两张不同的盘上事实。

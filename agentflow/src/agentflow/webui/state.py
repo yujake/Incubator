@@ -641,7 +641,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",
      (("status", "ReportTri"), ("text", "string"))),
     # 裁定 5a：这里曾经还有一对 `CheckpointSpend` / `Checkpoint`（W0 留的、没有
-    # reader 的两条声明）。B 线的 `readers.CheckpointView` / `CheckpointSpendView`
+    # reader 的两条声明）。B 线的 `readers.py` 里声明的 `CheckpointView` / `CheckpointSpendView`
     # 才是带真读数的那一对（字段出自 `agent_loop.save_run_checkpoint` 与
     # `llmseam.SeamSpend.to_dict`），两对并存只会让读 `types.ts` 的人猜该用哪一个 ——
     # 所以这一对删掉，检查点那一族只留 B 的那一份。
@@ -672,15 +672,12 @@ def type_decls(
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
     自己那一行里 —— 本批之后生成器不必再被碰。
 
-    为什么它在这里、且带两个入参（2026-10-26 清洁，去重）：
-    `readers.py` / `writes.py` 里那两份 `type_decls()` 与这里这一份是同一段渲染代码
-    抄了三遍（只差喂进去的表），改一处的排版不会让另外两处跟着变 —— 那正是
-    "同名多实现"最贵的形态。现在渲染只有这一份；另外两处是薄转发
-    （`state.type_decls(<自己的表>, ())`），`scripts/lint_rules.py` 的 R003 因此把它们
-    认成转发而不是独立实现。
+    为什么它在这里、且带两个入参：渲染只有这一份，`readers.py` / `writes.py` 里的
+    同名函数是薄转发（`state.type_decls(<自己的表>, ())`）—— 改排版一处三处一起变，
+    `scripts/lint_rules.py` 的 R003 因此把它们认成转发而不是独立实现。
 
     `types` / `aliases` 给了才覆盖本模块那两张表：默认值让 `emit_types` 的
-    `state.type_decls()` 与改前逐字节相同。
+    `state.type_decls()` 与只传零个入参时逐字节相同。
     """
     use_types = _TS_TYPES if types is None else types
     use_aliases = _TS_ALIASES if aliases is None else aliases

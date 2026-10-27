@@ -58,6 +58,12 @@ M_TOOL_FACE = {
     # 消项（D-68，业主 2026-10-26：「就做手，不兜底」）：收件人自己把名下板项确认掉。
     # M 也是某一行的收件人（它的父是用户那一趟），所以它同样得拿到这只手。
     "conductor.ack",
+    # 自己给自己落一条 work 项（D12，业主 2026-10-27：「如果 message 是要求做事，
+    # 智能体需自己写任务塞进 task_board」）。M 同样收消息（用户/父/子都往它板上落项），
+    # 所以它也要有这条手 —— 写的是 `tasks` 的一行板项（簿记），与 `conductor.ack`
+    # 同一类，不是文件面的写。`ORCHESTRATION_TOOLS` 因此把它算进编排面：
+    # 只读角色（C/H/V）拿不到它（它们收到"要办事"的消息只能上行/等指导）。
+    "conductor.post_task",
     # 时钟五件（D-53，业主「把时钟做成系统原生工具」）：`clock_tools` 的 `roles` 是
     # "全部角色 + 主控"，所以 M 的面里本来就有这五件 —— 这一格在 D-53 落地那一批里
     # 漏登记了（盘上实测：M 的面有它们、这个集合里没有 ⇒ 相等断言当场红）。
@@ -73,6 +79,12 @@ M_TOOL_FACE = {
     # 计时器返回」）：`clock_tools` 的 `roles` 是"全部角色 + 主控"，所以 M 的面里本来
     # 就有它 —— 这里补的是声明（相等断言要它）。
     "clock.wait_any",
+    # 程序两件（G2 第 ③ 条 / G8，业主 2026-10-26「启动的程序必须属于这一趟、也必须
+    # 停得掉」）：`program.list` 是"我名下还挂着什么"的读数，`program.stop` 是那只手。
+    # 两件都在编排面：起进程与停进程改的是这一趟的编排状态，不是文件面的写。
+    # 判据要的方向没变：只读角色（C/H/V）拿不到 `program.stop`（见下面
+    # `ORCHESTRATION_TOOLS` 的补登记），而 `program.list` 是读数，谁都能看。
+    "program.list", "program.stop",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
@@ -95,6 +107,13 @@ ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")} - {
 #: `tests/test_universal_tools_are_for_everyone.py`）。所以这里按同一份受控集合减掉，
 #: 而不是再手写一份名单 —— 手写的话，下一个通用工具落地时这条判据会假红一次。
 ORCHESTRATION_TOOLS -= set(UNIVERSAL_TOOLS)
+#: 2026-10-26（G8）：`program.stop` 是编排权，不是读数。
+#:
+#: 它不是 `conductor.` 前缀（那一族按前缀机械派生），所以上面两行扫不到它 —— 而它
+#: 与 `conductor.stop` 是同一件事的另一半：一个停代理、一个停程序。`program.list`
+#: 刻意不进这张表：它是"我名下还挂着什么"的读数，与 `conductor.ledger` 同族，
+#: 只读角色（C/H/V）本来就该看得见（`program.list` 的 `roles` 里确实有它们）。
+ORCHESTRATION_TOOLS |= {"program.stop"}
 
 
 class _FakeE:
@@ -783,8 +802,7 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     assert name not in writes, (name, writes)
     # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单。
     assert "conductor.broadcast" in hand_line, hand_line
-    # 2026-10-26：`conductor.guide` 同样是写工具（链尾一条板项 + 每一跳一行转发台账；
-    # 业主取消的那条"各级父各一条"已删，它仍是写工具）。
+    # 2026-10-26：`conductor.guide` 同样是写工具（链尾一条板项 + 每一跳一行转发台账）。
     assert "conductor.guide" in hand_line, hand_line
     # 2026-10-26（D-59）：`conductor.retire_child` 也是写工具（落名册三份台账 + 一条消边）。
     assert "conductor.retire_child" in hand_line, hand_line

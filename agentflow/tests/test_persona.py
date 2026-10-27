@@ -121,7 +121,7 @@ def test_the_harness_identity_slot_is_optional_and_ordered_before_the_persona():
     """框架自述那一段是可选的（默认不注册）；注册了要排在身份之前（order -1000）。
 
     退化会坏成什么：本框架今天那句"你在一套多智能体协同框架里工作"写在
-    `agent_prompts.AGENT_IDENTITY` 里 ⇒ 若这里默认注册，同一件事会说两遍；
+    `agent_prompts` 的 `AGENT_IDENTITY` 那一段里 ⇒ 若这里默认注册，同一件事会说两遍；
     若注册了却排在身份之后，模型先读到"你是谁"再读到"你在什么之上"，
     而 DSH 的顺序是反的（框架 → 部署 persona → 工具与政策）。
     """

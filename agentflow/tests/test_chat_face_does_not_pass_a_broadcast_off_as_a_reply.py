@@ -4,7 +4,7 @@
 
 对话页的档位此前只按"发信人是不是 M"分（`readers._chat_line` 的
 `who = "conductor" if from == M else "team"`）。于是 M 的 `#public` 广播
-（`agent_loop.PUBLIC`，语义是"发给树上的人"，见 `agent_loop.public_visibility` 逐条写的
+（`agent_loop.ALL`，语义是"发给树上的人"，见 `agent_loop.public_visibility` 逐条写的
 可见面）与 M 对用户的私聊回答落进同一档，页面把一条广播印成"主控对你说的话"。
 `channel` 只被拼进标题当装饰（`M → #public（public）`），读者从那一行看不出这条不是
 说给他的。
@@ -64,7 +64,7 @@ BROADCAST_TITLE_WORDS = ("广播", "全树", "public")
 def _broadcast(sender: str = "M") -> dict[str, Any]:
     """一条公共频道广播（`to` / `channel` 两个字段与 `send_message` 的落库形态一致）。"""
     return {"kind": "agent_message", "msg_id": "m000001", "from": sender,
-            "to": AL.PUBLIC, "channel": "public",
+            "to": AL.ALL, "channel": "public",
             "body": "派活：研究方向一……（全树可见）"}
 
 

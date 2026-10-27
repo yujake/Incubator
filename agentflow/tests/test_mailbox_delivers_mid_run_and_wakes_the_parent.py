@@ -218,11 +218,14 @@ def test_a_notice_arriving_mid_run_is_delivered_once_and_marked_seen(
     assert total == 1, (f"同一条 notice 在提示词里出现了 {total} 次（要求恰好一次）",
                         [p.count(marker) for p in gate.prompts])
 
-    # state 推进：queued → seen，seen_by = 读它的那个实例，seen_step = 那一步。
+    # state 推进：queued → seen → done。D12（业主 2026-10-27）之后 notice 是信息型：
+    # 被拼进提示词那一拍就已经办完了（"seen 就是 ack"，`Conductor._settle_if_informational`），
+    # 所以终态是 `done` + `item_close="acked"`，而不是停在 `seen` 等模型再调 `conductor.ack`。
     # `seen_step` 是"读它的那一步"= 1（第 0 步的回复是 invalid，那条 notice 是在
     # 第 0 次调用期间到达的，所以它的第一次投递点落在第 1 步的 `ask_step` 之前）。
     row = _row(st, made[0])
-    assert row["item_state"] == "seen", row
+    assert row["item_state"] == "done", row
+    assert row["item_close"] == "acked", row
     assert row["seen_by"] == me, row
     assert int(row["seen_step"]) == 1, row
 
@@ -245,7 +248,8 @@ def test_over_the_limit_delivers_the_first_n_and_keeps_the_rest(
         tmp_path: pathlib.Path) -> None:
     """判据 2：超上限 ⇒ 按到达序投前 `MAILBOX_LIMIT` 条，其余下一次，一条不丢。
 
-    "一条不丢"的机器形态：全部 10 条的 `item_state` 最后都是 `seen`，且"还有 K 项
+    "一条不丢"的机器形态：全部 10 条最后都 `done`（D12 起 notice 被渲染那一拍就收口，
+    见 `Conductor._settle_if_informational` —— 改前是"全部 `seen`"），且"还有 K 项
     没渲染"这句话出现在受窗口限制的那一次提示词里（积压必须是可读的事实）。
     """
     st, cond, ws = _ws(tmp_path)
@@ -274,9 +278,11 @@ def test_over_the_limit_delivers_the_first_n_and_keeps_the_rest(
         assert item not in first, ("超上限的项不该出现在受窗口限制的那一次投递里", first)
         assert item in second, ("超上限的项没在下一次投递里补上 ⇒ 丢了一条", second)
     assert f"还有 {n - limit} 项没渲染" in first, first[-800:]
-    # 一条不丢：全部 seen。
-    left = [i for i in made if _row(st, i)["item_state"] != "seen"]
-    assert not left, ("这些项到最后还是 queued（丢了）", left)
+    # 一条不丢：全部收口（信息型渲染即收口 ⇒ 终态是 done/acked；改前这里要的是"全部 seen"）。
+    left = [i for i in made if _row(st, i)["item_state"] != "done"]
+    assert not left, ("这些项到最后还没收口（丢了 / 停在 queued 或 seen）", left)
+    assert all(_row(st, i)["item_close"] == "acked" for i in made), (
+        [(_row(st, i)["task_id"], _row(st, i)["item_close"]) for i in made])
 
 
 def test_the_opening_message_no_longer_carries_board_or_inbox(
@@ -399,7 +405,10 @@ def test_a_due_timer_wakes_the_waiting_parent_with_the_tree_reading(
              if str(r.get("kind") or "") == "notice"
              and str(r.get("input_key") or "") == f"clock:{timer.timer_id}"]
     assert len(items) == 1, items
-    assert items[0]["item_state"] == "seen", ("到点项没被投到（唤醒与投递必须一起）", items[0])
+    # 到点项既是"被投到了"又是"被消费了"：D12 起 notice 的 seen 就是 ack，
+    # 于是终态是 done/acked（改前它永远停在 seen，且没有任何人 ack 它）。
+    assert items[0]["item_state"] == "done", ("到点项没被投到 / 没被收口", items[0])
+    assert items[0]["item_close"] == "acked", items[0]
     # ④ 唤醒写进了 append-only 事件与收工读数。
     wakes = _events(ws, "agent_wake")
     assert len(wakes) == 1 and wakes[0]["wake_ids"] == ["wk-000001"], wakes

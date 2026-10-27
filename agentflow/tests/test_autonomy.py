@@ -119,7 +119,7 @@ def test_three_rounds_report_each_round_and_stop_on_rounds(tmp_path: pathlib.Pat
 
     public = _public_messages(root, reader="H", sid="t")
     assert len(public) == 3, [m["subject"] for m in public]
-    assert all(m["from"] == "D" and m["to"] == autonomy.PUBLIC for m in public)
+    assert all(m["from"] == "D" and m["to"] == autonomy.ALL for m in public)
 
     body = public[0]["body"]
     for needle in ("第 1/3 轮", "本轮结论", "本轮唤起过", "本轮留言给", "剩余预算"):

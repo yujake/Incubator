@@ -736,11 +736,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `message.send` → `message` 形状）、公共频道两种拼法说清一次、打转提醒改成"同一个调用"、
+#: `message.send` → `message` 形状）、公共频道只说一种写法、打转提醒改成"同一个调用"、
 
 
 
-#: `ask_user` 改成"停在原地等（`waiting_for_user`）"、`#public` 补框架通报的例外
+#: `ask_user` 改成"停在原地等（`waiting_for_user`）"、公共频道补框架通报的例外
 
 
 
@@ -1272,11 +1272,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 循环协议里 `#public` 那一段此前只写"你自己要带台账号（框架替你带）"，读起来像"一定发得出去"；
+#: 循环协议里公共频道那一段此前只写"你自己要带台账号（框架替你带）"，读起来像"一定发得出去"；
 
 
 
-#: 而代码是"没有台账号就受控拒绝"（`agent_loop.py`：`to == PUBLIC and not my_task_id` ⇒
+#: 而代码是"没有台账号就受控拒绝"（`agent_loop.py`：`to == ALL and not my_task_id` ⇒
 
 
 
@@ -2579,7 +2579,147 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 所以这一版只有那七格提示词变；errorstats 新增的错误类目不进提示词
 #: （agent_prompts 不 import errorstats，盘上也没有「错误类目表」这个渲染点）。
 #:
-PROMPT_VERSION = "p209"
+#: p209 → p210（2026-10-26 第七批 / p210 收口）：十一格全换。这一版把今晚落在段上与
+#: 工具面上的九笔一起收进来（G6 / G8 / G9 三条 lane 的收工笔都并进本版 —— p210 还没
+#: 对外冻过，所以不连抬两个版本号），逐笔写出处：
+#:   ① 公共频道只剩一种写法：`#public` 改成 `ALL`。落点：LOOP_PROTOCOL 的公聊那一段、
+#:      HANDOFF_PROTOCOL 的收件人那一条、`faculties_text` 的「能讨论」「能互动」两格、
+#:      `_COLLAB_NAMES_TEXT` 的别名那句，以及 PARENT_ROSTER 与循环协议顶上的两处注释。
+#:      出处：ALL 那一批（commit `5bd7e58c`）。为什么：同一频道两个名字 ⇒ 提示词教两个、
+#:      解码器收两个，模型就会各试一次；判据
+#:      `test_prompt_never_teaches_a_handoff_target_the_decoder_rejects` 两侧都钉着它。
+#:   ② 模板里的具体台账号换成占位 `t-NNNNNN`。落点：LOOP_PROTOCOL 两处（私聊写法那一行的
+#:      `to` 例子与收工那条 JSON 的 `notify`）、HANDOFF_PROTOCOL 的收件人写法、
+#:      `_COLLAB_NAMES_TEXT` 的「绝对编号如 …」那一句，以及 `specs/m.py` 的 policy 与
+#:      `conductor.guide` 的收件人说明、summary 里那几处（`wait_for` 的三种写法、链尾、
+#:      交接手稿的收件人例子）。出处：Q25（commit `83142773`）；
+#:      判据 `test_the_prompt_template_carries_no_concrete_task_id`。为什么：`t-000003`
+#:      是某一趟的号，写进模板等于给了一个可以照抄的具体值。
+#:   ③ 两件新工具 `program.list` / `program.stop`（`tools/clock_tools.py` 的独立分组，
+#:      刻意不进 `clock.` 那九件）。`tools_lines` 对每个角色都渲染「名字 + 摘要 + 必填参数
+#:      + 副作用」⇒ 十一个角色各多一行 `program.list`；`program.stop` 是 `write_local`，
+#:      只读的 C/H/V 按结构性过滤拿不到它 ⇒ 另八个角色多第二行。出处：`draft/159` 的
+#:      程序闸那一节（G2 销号前检测 / G4 强停）。
+#:   ④ `conductor.post_task`（给自己落一条 work 板项）：同一行渲染，落点与 ③ 同。它声明的
+#:      roles 是十一个角色 + 主控，而 Q15 的裁定（2026-10-26，取 (a)）把它登记进
+#:      `tools/__init__.py` 的 `UNIVERSAL_TOOLS` ⇒ 十一个角色都拿到它，只读的 C/H/V 也不例外
+#:      （它们同样是"收到要求做事的消息"的那一批，而给自己落一条 work 项是那条口径下唯一
+#:      合法的落项手）。所以 C / H / V 三格各多一行 —— 这是 ③ 之外的第二处「十一格全换」。出处：
+#:      D12（`draft/159` 的交叉回归那一节）＋ Q15；判据
+#:      `test_a_message_that_asks_for_work_becomes_a_work_item` 与
+#:      `test_universal_tools_are_for_everyone.py::test_f_post_task_is_a_universal_tool_so_the_declaration_matches_the_surface`。
+#:   ⑤ `conductor.ack` 多一格可选参数 `close`（`acked` / `completed`）、`returns` 多一格
+#:      `close`、summary 补「close 与 expects 必须配对」那两句；`conductor.retire_child` 的
+#:      `returns` 多 `kept` / `cascade_reading` 两格、summary 跟着改；`conductor.state` 的
+#:      `returns` 多 `programs` 一格、summary 补那一段读数。三件的摘要进 `tools_lines`
+#:      ⇒ 也进提示词；`returns` 与参数说明只进 function-calling 的声明。出处：`close` 与
+#:      post_task 同批（D12）；`kept` / `cascade_reading` 是 Q13 收工（commit `2a9c281c`）；
+#:      `programs` 是 `draft/159` 的程序闸第 ③ 条。
+#:   ⑥ `lit.*` 六格的措辞按三态口径重写（`lit.stage_list` / `lit.admit` / `lit.admit_all` /
+#:      `lit.stage_add` / `lit.stage_reject` / `lit.stage_withdraw`）：从「五态 + 一键迁移」
+#:      改成「三态（pending / admitted / rejected）+ 逐条判、整批提交」。出处：Q16 收工
+#:      （commit `b85af6bc`）；判据 `test_lit_declarations_speak_three_state`。
+#:   ⑦ `clock.periodic_start` 的 `returns=` 补一格 `patrol_checklist`（巡查报醒会带哪四类
+#:      异常、各几条，以及一段样例报醒文本）。`returns=` 不进段（p205 那一版的口径），
+#:      所以这一笔单独不换摘要；它只让 golden 的 `declarations` 多一格，并把
+#:      `tests/test_tools_returns_declaration.py` 从红转绿 —— 那一格此前是「给了但没声明」，
+#:      docstring 里逐字写着「等下一次重冻再一并补上」。出处：巡查那一批；判据
+#:      `test_patrol_wake_carries_the_anomaly_checklist`。
+#:   ⑧ `lit.stage_add` / `lit.stage_withdraw` 的摘要按 G9 的 (丁) 改写：`stage_add` 补一句
+#:      「同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去
+#:      （`updated[]`），不发新号」；`stage_withdraw` 把「撤掉后可再 stage_add 补位（新条
+#:      进新序号）」改成「撤掉是终态判断：只是缺 relevance 时别撤 …… 撤了之后再登记会
+#:      另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块」。为什么：真机
+#:      `projects/mp3-r4` 实测 5 条 admitted 对应 5 条被取代的槽（先撤再把同一篇重登记），
+#:      `reports/lit-r-000001.md` 因此同一批题名既在「已入库」又在「未入库」；而后来
+#:      `r-000005` 的 5 条 admitted 是 stage 时就带了 relevance ⇒ 零重复，病灶范围收窄到
+#:      「先由自动链路暂存（无 relevance）、A 后来判收」这个交叉点。落点：`tools/search_tools.py`
+#:      的两处 summary（`tools_lines` 渲染 ⇒ 进提示词）⇒ A 那一格摘要要重算，其余十格不动；
+#:      `lit.stage_add` / `lit.stage_list` 的 `returns=` 也各多一格（`updated[]` /
+#:      `duplicate_rows`+`duplicate_groups`），但 `returns=` 不进段 ⇒ 只进 golden 的
+#:      `declarations`。判据：`test_pending_list_is_three_state.py::test_c…`（改成钉
+#:      「补 relevance 用原槽」）＋ `test_search_tools_stage_admit.py` 末尾两条（含"身份瞎了
+#:      就两槽"的负控）。不抬版本号：p210 还没对外冻过，这一笔并进本版。
+#:   ⑨ `specs/b.py` 的 policy 新增两条（业主原话逐字，`draft/161` 的 C1 两段）：第一条
+#:      「入库前先逐条判：每条写一句 relevance（为什么与本次检索相关），判收的带受控
+#:      reason_code；还有待裁的条目时整批提交会被拒」—— 它把"入库前逐条判"落成 B 的活；
+#:      第二条「收录定理与证明时要改写成你能读懂的自然语言（完整句、步骤间用衔接词、
+#:      难懂的一步展开），不要照抄；这一条没有机器闸，由你自己负责。改写过之后 V 那一签
+#:      不算数，要再派 V 签一次」。两条都没有机器闸（没有哪处代码能判"这段是不是照抄"）
+#:      ⇒ 只能写进 B 的政策里让它自己负责。落点只有 B 那一格：伙伴表印的是 duty 与第一条
+#:      boundary，policy 只进自己那一格。出处：`draft/161` 的 C1（G6 收工那一批）。
+#:
+#: 不进段的几笔（同批、同盘上，逐条记在这里，免得读的人以为漏记）：G8 的 `clock.run_as` 与
+#: `agent_loop` 装配里那个 `with`（改的是"这条程序归谁"的进程归属，不是任何角色的段）；
+#: `schema.py` 的新受控档与那几条新判据同理 —— 读数就是 D / E / F / G / L 五格逐字未动。
+#:
+#: 逐格的旧值 → 新值（旧值 = p209 冻结表；新值 = 三条 lane 全部收工之后、冻结这一次的
+#: 现算值。⑧ / ⑨ 是在 13:05 那一版之后并进来的 ⇒ A / B 两格又变了一次，下表记最终值）：
+#:   A 7a8ddf0d→a02e9b5d / B 4fd7572d→12c1ccac / C 81215a32→0934cade /
+#:   D d46dcc3a→682d422d / E f1036188→1b8b2e4f / F 9684cb81→bf10c061 /
+#:   G 96e718db→b30cc02b / H 304b9028→8bb8629d / L 03858b46→fed4e587 /
+#:   M 7b886073→61204a21 / V eec84b9d→55e0a1ae。
+#: 十一格是 `temp/_p210_digests.py` 的现算值（它导入 `tests/test_agent_prompts.py` 的
+#: `_surface_digest`，口径只有那一处），不是手抄。
+#:
+#: p210 → p211（2026-10-26 第八批 / K1 收口）：十一格全换。本批只做两件事 ——
+#: 把四处「提示词正文缺句/多句」补齐或删掉，把工具说明的压缩批次重新压回门槛内。
+#:
+#: ① D 的渲染提示词里还印着 `conductor.summon`（判据 G1/G2 红）。落点不在 policy 而在
+#:    工具面：`conductor.post_task`（2026-10-26 起是 `UNIVERSAL_TOOLS`，十一格都渲染）
+#:    的 summary 末句写着「要让别人办一件事，走 `conductor.summon`」。D 没有那件工具
+#:    （它只有循环的 `summon` 形状），照做只会 `unknown_tool` ⇒ 末句改成「走派活那一件
+#:    工具」，不再点名任何一件（各角色的派活入口本来就不同）。判据
+#:    `test_d_e_f_specs_have_no_stale_design.py::test_g1_g2_d_does_not_name_conductor_summon`。
+#: ② M 的形式化义务句里那句「只做数值实验不算完成」被上一批的改写吃掉了（改成了
+#:    「只做了 evidence_kind 不是 proof 的数值实验不算完成」）⇒ 判据钉的那句字面量没了。
+#:    改回「只做数值实验不算完成那一条 —— 只做了 …，或 … 只给支持性数值，都是把这条
+#:    要求降级了」，语义比原来更全（两种降级都点名）。落点 `specs/m.py` 的 policy。
+#:    判据 `test_lean_modes_matrix.py::test_m_and_l_carry_the_formal_obligation_and_h_the_third_tier`。
+#: ③ PAPER_PACK 第五节的「完成定义」被写成了带强调标记的形式（`收工门` 与 `全过` 之间夹着
+#:    两个星号）—— 那两个星号把判据要的字面量 `收工门八格全过` 切断了（判据
+#:    `test_paper_pack.py::test_the_paper_section_goes_to_the_roles_that_touch_the_paper`
+#:    对 M/G/H 三格都钉这一句）。去掉那两个星号，句子一个字没改。
+#:    这一句是「格数以读数为准、不写死条数」那条口径的落点，仍不许写成「五条」。
+#: ④ PAPER_PACK 第一节的 `source/` 那条只说「只读基线…要改就改 `out/paper/main.tex`」，
+#:    而判据要的「可改、该改」那一句在上一批改写里丢了 ⇒ 改成「可改、该改的是
+#:    `out/paper/main.tex`」（同一句，只把「要改就改」换成判据要的那个说法）。
+#:    另补一处同批红：(七) 第一条 `.tex` 的读数只写了 `unreadable` / `UnsupportedFormat`，
+#:    而判据 `test_the_paper_pack_section_carries_the_four_required_facts` 要的
+#:    `unsupported_format` 是真存在的那一格 —— `agent_a/ingest_local.py` 在
+#:    `counts.unreadable` 非零时返回的就是 `kind="unsupported_format"`（`locallib` 记
+#:    `unreadable`、note 里是 `UnsupportedFormat`，两件事同时成立）。句子改成三样都写。
+#:    注意：`prompt_text_problems()` 第六条的「PAPER_PACK 不许出现 unsupported_format」
+#:    与这条判据互相矛盾（它的理由「那个串在本仓从来没有产生过」与 `ingest_local` 的
+#:    实测不符）—— 本批不动那条自检（它是判据，改它属人审范围），这一处以判据为准。
+#: ⑤ 工具说明压缩批次回涨到基线的 82.37%（要求 ≤75%，超 636 字符）⇒ 按「只压冗余表述、
+#:    不删语义」重压 30 件，落到 6452 字符 = 74.75%。逐件理由：
+#:    · 六件回涨最大的按「同一句解释出现两次」合并：`fs.write` / `fs.edit` 的保留产物闸
+#:      原本各写一份完整清单（谁、哪三类文件、受控码、为什么）⇒ 清单只留在 `fs.write`，
+#:      `fs.edit` 改成「同 fs.write」；`table.get` / `table.list` 的 route / proof_routes
+#:      那两句原本逐字重复（连两个举例都各写一遍）⇒ 举例只留一次；`attack.create_plan`
+#:      去掉「（怎么算做成了）」这个举例；`conductor.role_spec` 去掉「也不给它今天的」这类
+#:      重复修饰。
+#:    · `conductor.closing` 的八格名单在论文段（PAPER_PACK 第五节）里已逐格写着，而这一件
+#:      只有 M 拿得到、M 也拿得到论文段 ⇒ 摘要里不再抄第二份，改成指向那段，并保留
+#:      `substance` 那一条的 `statements` 判据（只压重复，不压判据）。
+#:    · 其余按「可省的举例」：`conductor.ensure_project` 的四态名、`conductor.state` 的
+#:      进程四分类、`doc.compose_claim` 的六个生命周期字段名（参数面上都在）、
+#:      `conductor.ledger` 与 `conductor.state` 重复的计数口径句、`search.download` 的
+#:      「这条路」、`text.extract` 的强调标记与「自带的」、`review.report` 的「不碰 claims」
+#:      那半句（`review_document` 的摘要里同一句还在）等。
+#:    · 一条没删的是「做什么 / 不做什么 / 失败时给什么」三件；`tests/fixtures/
+#:      tool_declaration_baseline.json` 的 needle 面（34 件 60 条）改前改后逐条相同。
+#:
+#: 逐格的旧值 → 新值：
+#:   A a02e9b5d→b905f740 / B 12c1ccac→bde265b3 / C 0934cade→ec81ba2d /
+#:   D 682d422d→2a3dc40a / E 1b8b2e4f→f2d86a4b / F bf10c061→9917ca15 /
+#:   G b30cc02b→7a56ebf7 / H 8bb8629d→44cfc11e / L fed4e587→5bfea9b0 /
+#:   M 61204a21→0b46a39a / V 55e0a1ae→f36bb01a。
+#: 十一格是那一支重算探针（当时写在 temp 下，已随 scratch 清理；口径只取
+#: `tests/test_agent_prompts.py::_surface_digest` 那一处）的现算值，不是手抄。
+#:
+PROMPT_VERSION = "p212"
 
 
 
@@ -2685,12 +2825,12 @@ LOOP_PROTOCOL = """\
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。
 
 3) 说一句话（不要求对方立刻做事，只是把信息传过去）：
-   {"message": {"to": "<名册名或绝对编号（如 D1 / t-000003）>", "subject": "<短标题>", "body": "<正文>",
+   {"message": {"to": "<名册名或绝对编号（如 D1 / t-NNNNNN）>", "subject": "<短标题>", "body": "<正文>",
                 "reply_to": "<可选：你在回哪一条留言>"}}
    `reply_to` 写收件箱里那个编号（摘要每行开头 `[编号]` 那个）—— 它是"**回一条已经存在的
    对话**"：那条对话成立过，所以**不必再要求协作边**（这正是"旁的角色先开口、你再回"的落法）。
    新开一个话题（不是回信）时才要求你与他之间至少有**一条协作边**。
-   to 也可以是 "#public"：那是一条**公共频道**的消息 —— 它的可见面是**你名下的直接
+   to 也可以写 ALL：那是一条**公共频道（公告栏）**的消息 —— 它的可见面是**你名下的直接
    子代理**（业主 T20/T21）：只有它们会在收件箱里看到它，你自己要带台账号（框架替你带），
    而同级的兄弟、你的父、别的支都**看不到**（例外：框架自己发的通报 —— 叫停广播那类
    `by_framework` 的消息 —— 是对所有角色可见的，见下面规则里那条）。**这一趟还没落台账时
@@ -2702,7 +2842,7 @@ LOOP_PROTOCOL = """\
    受控拒绝 `public_is_not_a_conversation`，那一步一发都没落盘（读数带
    `board_kind="bulletin"`）—— 公聊进的是**角色级**收件箱，"公告里点名"会被那个角色的
    所有实例当成对自己的指令。要指定收件人就用下面那条私聊写法。
-   要"发给某一个同伴看"就**私下指名**（`to` 写它的名册名，如 `D1`；或它的绝对编号，如 `t-000003`），或者写一份交接手稿交给它
+   要"发给某一个同伴看"就**私下指名**（`to` 写它的名册名，如 `D1`；或它的绝对编号，如 `t-NNNNNN`），或者写一份交接手稿交给它
    —— 手稿是 `handoff` 形状，它**不是一件工具**。
    发出去之后框架会给你一条**回执**（三种，别把它读成一个布尔）：`queued` = 收件人有 LLM
    循环、下次进循环时会读到；`no_reader` = 没有任何进程会读它（收件人是确定性动作、
@@ -2711,8 +2851,6 @@ LOOP_PROTOCOL = """\
    看到 `no_reader` 就换一条路，别等一个不会来的回音。
    私聊（指名某个角色）只在你与他之间至少有**一条协作边**（你能唤起他，或他能唤起你）时允许；
    旁的角色想跟你私下说话，他会先在公共频道开口。
-   公共频道有两个写法：`message` 这一形状写 `"#public"`、`handoff` / `notify` 那两个形状
-   写 `"ALL"` —— 两个名字指的是同一个频道，框架两个都收（`ALL_RECIPIENT_TOKENS`）。
    什么时候该用它（不是"派不动活时的替代品"）：你手上有一条**对方之后会用到的信息**，
    而你现在不需要他做事 —— 例如你查证出的约束（"只在 n<=5 时成立"）、
    一条反例、一个必须遵守的口径、或"这批材料里哪个字段不可信"。
@@ -2851,7 +2989,7 @@ LOOP_PROTOCOL = """\
   名字拼错就照它给的正确名字重写一次。
 - 派活先过秘书：`alarms` 预筛报警、`wash`/`changes` 洗过的格式、`assessment` 该不该派；`refused` 非空即被拒，`fail_open` 为真是没查成。
 - 收工那条 JSON 里的 `notify` 表是**交接留痕**（见上面的形状）：它同时决定"谁收到这份手稿"，
-  所以 `to` 必须是名册名（如 `D1`）、绝对编号（如 `t-000003`）、角色名或 `ALL` —— 写错或留空，这张表就不算数、这一趟没有手稿
+  所以 `to` 必须是名册名（如 `D1`）、绝对编号（如 `t-NNNNNN`）、角色名或 `ALL` —— 写错或留空，这张表就不算数、这一趟没有手稿
   （不会发给别人，但也没人收到）。拿不准就给 `ALL`（广播）。
 - 你永远不许把"没查到 / 没接线 / 被拒绝"写成"没有问题"或"不存在"（三态纪律），
   也不许编造一个没出现过的 id 当证据。"""
@@ -2980,7 +3118,7 @@ PARENT_ROSTER_TEXT = """\
 
 
 
-#: 它们的正文已经在那里了 —— 可见面（`#public` 只到你名下的直接子代理；私聊要一条协作边；
+#: 它们的正文已经在那里了 —— 可见面（公共频道只到你名下的直接子代理；私聊要一条协作边；
 
 
 
@@ -4801,7 +4939,7 @@ PAPER_PACK = """\
   一段段写出来（散文体、章节自己排、`\\cite` 与定理环境随正文定）；审阅型工作区里它是
   盘上已有的那份正文，**该改的是 G**。**你不写正文**：你读正文与回执 → 核对 → 把不对的地方落成 finding（H）或派回 G（M）；落笔只由 G 做。
 - `source/`（审阅型工作区里的基线稿）是**只读基线**：它是用来做前后对比的，
-  一个字节都不许改；要改就改 `out/paper/main.tex`。
+  一个字节都不许改；可改、该改的是 `out/paper/main.tex`。
 - 交付物的定义只有一句话：**读者拿到的应当是一篇更好的论文**。核验、证据等级、台账表
   都是手段与附录 —— 把它们堆成主产物，等于交了一份勘误记录，那不是交付。
 - 每次改动都要留下"依据"（引文片段 / 实验 id / 检查器原话 / 论文内部矛盾在哪），
@@ -4873,7 +5011,7 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门**八格**全过才算交付，任何一格没过就不许说"完成"）：八格是 `paper` / `contradictions` /
+五、完成定义（收工门八格全过才算交付，任何一格没过就不许说"完成"）：八格是 `paper` / `contradictions` /
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
 同样以它的当次读数为准。
@@ -4928,8 +5066,8 @@ PAPER_PACK = """\
 七、摄取与派活的三条纪律（2026-10-03 加，`draft/37` §48 的真机读数逼出来的）
 
 - **登记要指到论文本体**：`pattern` 指到那份稿件本身（通常是 `*.pdf` —— `.tex` 不在可抽取
-  格式内：它会被登记成 `unreadable`，note 是 `UnsupportedFormat: 不支持的扩展名`，
-  **不是**"读到了正文"），**不要**用一个通配把所有文件扫进来：
+  格式内：它会被登记成 `unreadable`，`kind=unsupported_format`，note 是
+  `UnsupportedFormat: 不支持的扩展名`，**不是**"读到了正文"），**不要**用一个通配把所有文件扫进来：
   第三趟真机用 `pattern="*"` + `limit=5`，于是 5 份配套 md 先被吃掉，
   论文本体一次都没进台账，后面每一跳引的都是配套文档。通配之前先想清楚
   "我要的是哪一份"，把 `pattern` 与 `limit` 一起给定。
@@ -6060,7 +6198,7 @@ def faculties_text(role: str, registry: Any) -> str:
 
 
 
-        "能讨论": "message（公共频道 to=#public / 私聊）+ 唤起伙伴；结论要落盘",
+        "能讨论": "message（公共频道 to=ALL / 私聊）+ 唤起伙伴；结论要落盘",
 
 
 
@@ -6068,7 +6206,7 @@ def faculties_text(role: str, registry: Any) -> str:
 
 
 
-        "能互动": "把要确认或要汇报的写成 message（to=#public）或写进 final",
+        "能互动": "把要确认或要汇报的写成 message（to=ALL）或写进 final",
 
 
 
@@ -8534,7 +8672,7 @@ _COLLAB_NAMES_TEXT = (
 
 
     "（框架的原话：「绝对编码不是父子之间的指称」）—— 但这条只管这四个入口："
-    "`message` 与 `handoff` 的 `to` **两种写法都收**（名册名，或绝对编号如 `t-000003`："
+    "`message` 与 `handoff` 的 `to` **两种写法都收**（名册名，或绝对编号如 `t-NNNNNN`："
     "框架把它翻成收件人，原写法留在 `roster_addressing` 里供对账），所以发消息不必先查名册。\n"
 
 
@@ -9842,8 +9980,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 HANDOFF_PROTOCOL = """\
 交接手稿（交接工作前的标准动作，也是"派活依据"与"溯源"落在盘上的那条通道）。
 
-- 写给谁：`to` 取名册名（如 `D1`）、绝对编号（如 `t-000003`）、角色名，或 `M`；**给所有人写 `to="ALL"`**（走公共频道；写 `"#public"` 也收，
-  两个名字是同一个频道 —— `message` 那一形状习惯写 `#public`，这里写 `ALL`）。
+- 写给谁：`to` 取名册名（如 `D1`）、绝对编号（如 `t-NNNNNN`）、角色名，或 `M`；**给所有人写 `to="ALL"`**（走公共频道）。
 - 编号：**由脚本分配**（从 `0000` 起顺次，你不需要也不许自己编号）；一份交接就是
   工作区根 `manuscripts/handoffs.jsonl` 里的一行（追加式账本，一行一份，不覆盖）。
 - 形状：`{"handoff": {"to": "F", "summary": "...", "body": "...", "why": "...", "refs": ["0003"]}}`
@@ -10553,7 +10690,15 @@ def prompt_text_problems() -> list[str]:
                         "（public_is_not_a_conversation）")
 
     # 四、受控词表：任务结果的六档必须逐档在段里出现（少一档模型就会把 cancelled 当重派）。
+    #
+    # D22 的例外（2026-10-26）：`FRAMEWORK_ONLY_OUTCOMES` 那一档（`cut_off_by_parent`）不进这一条
+    # 判据 —— 它不是模型能声明的档，而是父代理退场时由框架写进子行的那一格。把它写进
+    # LOOP_PROTOCOL 就是改提示词正文（要连带 `PROMPT_VERSION` 与十格摘要一起动，属人审范围），
+    # 而这一条判据要守的是"模型认得的档"，不是"台账里出现过的档"。豁免逐条列：
+    # 只放过登记过的那几个，其余一档都不放过（否则这一段会退化成永远通过）。
     for code in _S.TASK_OUTCOMES:
+        if code in _S.FRAMEWORK_ONLY_OUTCOMES:
+            continue
         if f"`{code}`" not in loop:
             problems.append(f"LOOP_PROTOCOL 的 outcome 那一段缺受控取值 {code}"
                             f"（schema.TASK_OUTCOMES）")
@@ -10568,13 +10713,18 @@ def prompt_text_problems() -> list[str]:
         if f"`{key}`" not in loop and f"\"{key}\"" not in loop and f"{key}" not in loop:
             problems.append(f"LOOP_PROTOCOL 里找不到形状 {key} 的写法")
 
-    # 六、本地材料的真实读数：`.tex` 落的是 unreadable + UnsupportedFormat，不是一个叫
-    # unsupported_format 的状态码（那个串在本仓从来没有产生过）。
-    if "unsupported_format" in PAPER_PACK:
-        problems.append("PAPER_PACK 又写上了不存在的状态码 unsupported_format"
-                        "（locallib 记的是 unreadable，note 里是 UnsupportedFormat）")
+    # 六、本地材料的真实读数：`.tex` 落的是 unreadable + UnsupportedFormat，并且那条
+    # 动作的 `kind` 就叫 `unsupported_format`（`agent_a/ingest_local.py` 在 `counts.unreadable`
+    # 非零时返回的就是它）。改前这一条写着"那个串在本仓从来没有产生过"并把出现当成错 ——
+    # 与代码不符（2026-10-27 由 `test_paper_pack` 的 needle 撞出来）。
+    # 现在守的是同一件事的两半：三样都要写全（`unreadable` / `UnsupportedFormat` /
+    # `kind=unsupported_format`），且不许写成".tex 读到了正文"。
     if "UnsupportedFormat" not in PAPER_PACK:
         problems.append("PAPER_PACK 没写 .tex 的真实读数（UnsupportedFormat → unreadable）")
+    if "unsupported_format" not in PAPER_PACK:
+        problems.append("PAPER_PACK 没写那条动作的 kind（unsupported_format）—— 三样要写全")
+    if "读到了正文" in PAPER_PACK and "不是" not in PAPER_PACK.split("读到了正文", 1)[0][-12:]:
+        problems.append("PAPER_PACK 把 .tex 说成读到了正文 —— 那是 unreadable，不是抽到正文")
 
     return problems
 

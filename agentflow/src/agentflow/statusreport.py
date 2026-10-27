@@ -114,14 +114,25 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     live = SC.live_pids(root)
     loops = SC.running_loops(root)
     tasks = _rows(store, "tasks")
-    # 只数实例行（`kind == ""`）：`tasks` 从业主 A1=甲 起同时装板项行（`kind` 非空：
-    # message/notice/report/delegation），而板项行的 `status` 永远是 `pending`。
-    # 不看出身地按 status 数（D14 的实测：28 行里 26 行是板项）会把报告写成"在飞 19"，
-    # 而真在飞只有 2。三个同族读侧（`conductor._children_of` / `active_children` /
-    # `stats`）都带这一条过滤，这一处此前漏了。
+    # 这一行是什么（哪根轴）、它活不活，只有秘书一处判（`secretary.row_axis` /
+    # `secretary.is_live_agent`，2026-10-26 Q27）—— 这里不再自己看 `kind`，只说
+    # "哪几根轴算在飞"：
+    # - 代理轴（`is_live_agent`）= 此刻还没收的代理行；
+    # - 顶趟轴（`row_axis == ROW_AXIS_ROOT`）= 用户发起的那一趟本身。它保留在这张读数里
+    #   （F1 的裁定：`M.run` 是真实且有用的那一行，它同时是"谁在派活"的身份行），
+    #   所以要再看一眼 `status`：`row_axis` 把"顶趟"整档给出、不分收没收（收工之后那一行
+    #   仍然是顶趟行），而"在飞"只认同一次读数。这一格口径的三处落点必须一起改：
+    #   这里、下面 `calibers["running_tasks"]`、`tests/test_status_report.py` 那条判据。
+    # 两根轴之外都不进：板项行（`status` 恒为 `pending`，不是一次调用）、代理行的终态行
+    # （已经收工）。改前这三个过滤是本函数自己写的 `kind` + 状态词表，代价是
+    # "顶趟行算不算"与"板项行算不算"没有单一出处（D14 的实测：28 行里 26 行是板项，
+    # 报告写成"在飞 19"，而真在飞只有 2）。
+    from . import secretary as SEC
+
     running_tasks = [str(t.get("task_id") or "") for t in tasks
-                     if not str(t.get("kind") or "")
-                     and str(t.get("status") or "") in ("pending", "running")]
+                     if SEC.is_live_agent(t)
+                     or (SEC.row_axis(t) == SEC.ROW_AXIS_ROOT
+                         and str(t.get("status") or "") in SEC.LIVE_TASK_STATUSES)]
     # ---- 顶趟行（F1）：`tasks` 里多出来的那一类行（`role=M` / `action="run"` /
     # `called_by="user"`，由 `conductor.open_top_level_run` 开）。
     #
@@ -191,8 +202,10 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             # 不写清就会变成"同一屏里两个读数各说一件事"（`conductor.stats()` 的同一条纪律）。
             "calibers": {
                 "running_tasks":
-                    "tasks 里 status ∈ {pending, running} 的实例行（kind 为空；含顶趟行 "
-                    "action=run，不含板项行 message/notice/report/delegation）",
+                    "tasks 里『活着的代理行』+『还没收工的顶趟行 action=run』（含顶趟行、"
+                    "不含板项行 message/notice/report/delegation；"
+                    "判据只有 secretary.row_axis / secretary.is_live_agent 一处，"
+                    "2026-10-26 Q27）",
                 "child_count":
                     "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；"
                     "口径只有 secretary.Secretary.child_counts 一处）",

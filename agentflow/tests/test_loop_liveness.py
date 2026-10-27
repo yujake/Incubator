@@ -64,9 +64,46 @@ class _ChangingGateway(TAL.ScriptedGateway):
         return super().complete(prompt, scope=scope, system=system, **kw)
 
 
+class _BodyScript(TAL.ScriptedGateway):
+    """剧本只归本体：秘书那几发判断另给一份中性回答，不占本体的台词。
+
+    ## 为什么需要这一层（2026-10-26，秘书自调模型）
+
+    业主裁定「秘书处理将发出的信息时，要看内容是否与接受面相符」之后，每一步 `summon`
+    在出去之前都会多发一次秘书判断（`AgentLoop._outbound_hook` →
+    `Secretary.optimize_outbound(face=...)` → `Secretary.judge`，类别 `rearrange`），
+    而那名秘书用的是本体同一条缝、同一个网关（`agent_loop._secretary_for`）。
+
+    `ScriptedGateway` 按"第几次调用"取台词 ⇒ 那几发秘书调用把本体的剧本吃掉一半：
+    三步的剧本只剩一步半，`stalled_max` 于是读到 2（要求 3）、4（要求 7）——
+    这就是 D31 那两条改前红的读数。吃掉的是剧本，不是输赢。
+
+    这一层按调用方分派：本体的回合（`system` 是角色提示词）拿剧本，秘书那一格
+    （`system` 以「秘书」的判断面开头）拿一份判不成的中性回答 —— `judge` 于是退回
+    机械判据，与改前那发被它吃掉的剧本同一条收场。`self.prompts` / `self.systems`
+    只记本体的回合，所以"第 i 步用的是哪一条台词"仍然一一对应。
+
+    判据本身一字未动：三步同一条路仍然要求 `stalled_max >= 3`（见下面两条）。
+    """
+
+    #: 秘书那一格的回答：不是受控词表里的结论 ⇒ `judge` 落"判不成"，退回机械判据。
+    _NEUTRAL = "{}"
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        if "「秘书」的判断面" in str(system or ""):
+            return type("Reply", (), {"ok": True, "text": self._NEUTRAL, "tokens_in": 10,
+                                      "tokens_out": 10, "error_detail": "",
+                                      "error_kind": ""})()
+        return super().complete(prompt, scope=scope, system=system, **kw)
+
+
 def _run(tmp_path: pathlib.Path, replies: list[str], *, max_steps: int = 8):
     scripts = {"M": replies}
     st, cond, registry, gw, root = TAL._wired(tmp_path, scripts, max_steps=max_steps)
+    # 本体与它的秘书共用这一条缝：剧本按调用方分派，否则秘书那几发会吃掉本体的台词
+    # （见 `_BodyScript` 的 docstring）。
+    gw["M"] = _BodyScript(list(gw["M"].replies))
     return run_role("M", "别原地打转", store=st, registry=registry, conductor=cond,
                     seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
                                  sid="test-run"), workspace_root=str(root), sid="test-run",
@@ -183,53 +220,177 @@ def test_the_new_stop_reason_has_a_badge(reason: str):
     assert W._STOP_BADGES[reason][0] != "badge-fail", "它不是失败，是'这一趟没有往前走'"
 
 
-#: 徽标判据的"该有哪些格"只从一张表来：`cli.EXIT_CODE_BY_STOP`。
-#: 手抄一份名单会与那张表两处漂移，而"新加一档忘了登记徽标"正是这条要防的形态。
-def _badge_problems(badges: dict[str, tuple[str, str]]) -> list[str]:
-    """`EXIT_CODE_BY_STOP` 的每一档是否都在徽标表里、且形状像一条徽标。"""
-    from agentflow import cli as CLI
+#: 徽标表用过的全部样式名（页面 CSS 里四种都有定义）。新造一个没定义过的
+#: class 等于把这一档画成看不见的样式，而表本身照样绿 —— 所以它由判据钉住。
+_BADGE_CLASSES = frozenset({"badge-pass", "badge-unknown", "badge-pending", "badge-fail"})
 
+
+def _stop_table_problems(
+        entries: dict[str, tuple[int | None, str, str, bool]],
+        codes: dict[str, int],
+        badges: dict[str, tuple[str, str]],
+) -> list[str]:
+    """Q23 的结构判据：退出码表 == live 条目，徽标表 == 全部条目。
+
+    三件事逐条查，而不是比长度：
+    1. 退出码表逐字等于 `live=True` 的集合（两个方向）；
+    2. 徽标表逐字等于真身表的全部条目（两个方向）；
+    3. 徽标表比退出码表多出来的那些，逐格必须 `live=False`。
+
+    为什么不是 `len(徽标表) >= len(退出码表)`：改前两表各 22 格 —— 退出码表少了
+    `final_refused`、徽标表多了 `max_steps`，两处错误在长度上互相抵消，于是旧判据
+    亮绿。格数相等既不等于键集合相等，也不等于"在跑的档都有码、有码的档都解释
+    得出来"。
+    """
     out: list[str] = []
-    for reason in sorted(CLI.EXIT_CODE_BY_STOP):
-        got = badges.get(reason)
-        if got is None:
-            out.append(f"`{reason}` 在退出码表里（{CLI.EXIT_CODE_BY_STOP[reason]}），"
-                       f"但徽标表里没有它 ⇒ 界面会显示一个空徽标")
-            continue
+    live = {reason for reason, row in entries.items() if row[3]}
+    # 1) 退出码表只许装 live 条目，且 live 条目一个都不许漏。
+    for reason in sorted(live - set(codes)):
+        out.append(f"`{reason}` 标了 live=True，但退出码表里没有它 ⇒ 运行期读到它"
+                   f"只会落进未登记兜底")
+    for reason in sorted(set(codes) - live):
+        row = entries.get(reason)
+        if row is None:
+            out.append(f"`{reason}` 在退出码表里，但真身表里没有它 ⇒ 没有徽标，也"
+                       f"没有来源")
+        else:
+            out.append(f"`{reason}` 在退出码表里，但真身里它不是 live=True ⇒ 退出码表"
+                       f"混进了旧读数（它只该有徽标）")
+    # 2) 徽标表要解释得出来每一条（live 与旧读数都要）。
+    for reason in sorted(set(entries) - set(badges)):
+        out.append(f"`{reason}` 在真身表里，但徽标表里没有它 ⇒ 界面会显示一个空徽标")
+    for reason in sorted(set(badges) - set(entries)):
+        out.append(f"`{reason}` 只在徽标表里，真身表里没有它 ⇒ 无法证明它该不该有退出码")
+    # 3) 多出来的徽标项必须是 live=False（这是"旧读数可以只有徽标"的唯一许可）。
+    for reason in sorted(set(badges) - set(codes)):
+        row = entries.get(reason)
+        if row is not None and row[3]:
+            out.append(f"`{reason}` 只在徽标表里，但真身里它是 live=True ⇒ 一个还在"
+                       f"产生的档没有退出码")
+    # 4) 每格徽标与退出码的形状。
+    for reason in sorted(set(entries) & set(badges)):
+        code, klass, text, is_live = entries[reason]
+        got = badges[reason]
         if not (isinstance(got, tuple) and len(got) == 2):
             out.append(f"`{reason}` 的徽标不是 (class, 文案) 二元组：{got!r}")
-            continue
-        klass, text = got
-        if not str(klass).startswith("badge-") or not str(text).strip():
-            out.append(f"`{reason}` 的徽标形状不对：{got!r}")
+        else:
+            if got != (klass, text):
+                out.append(f"`{reason}` 的徽标与真身不一致：真身 {(klass, text)!r} / "
+                           f"徽标表 {got!r}")
+            if klass not in _BADGE_CLASSES:
+                out.append(f"`{reason}` 的徽标 class 是 {klass!r}，不在既有样式里："
+                           f"{sorted(_BADGE_CLASSES)}")
+            if not str(text).strip():
+                out.append(f"`{reason}` 的徽标文案是空的 ⇒ 界面会显示一个空徽标")
+        if is_live:
+            if not isinstance(code, int) or isinstance(code, bool):
+                out.append(f"`{reason}` 是 live=True，退出码却不是整数：{code!r}")
+            elif reason == "final":
+                if code != 0:
+                    out.append(f"`final` 的退出码是 {code}，必须是 0（正常完成）")
+            elif code not in (1, 2, 3, 4, 5):
+                out.append(f"`{reason}` 是 live=True，退出码是 {code}，必须是 1..5 的"
+                           f"整数（0 只留给 final）")
+            if reason in codes and codes[reason] != code:
+                out.append(f"`{reason}` 的退出码两处不一致：真身 {code!r} / 退出码表 "
+                           f"{codes[reason]!r}")
+        elif code is not None:
+            out.append(f"`{reason}` 是 live=False（旧读数），却带着退出码 {code!r} ⇒ "
+                       f"它不该进退出码表")
     return out
 
 
 def test_every_registered_stop_reason_has_a_badge() -> None:
-    """通用形态（2026-10-19 业主裁定）：退出码表的每一档都必须解释得出来。
+    """判据 a+b（2026-10-26 Q23）：两张投影表与真身逐格对得上。
 
-    改前这条判据只参数化了 `no_progress_limit` 一个值 —— 于是新增一档忘了加徽标时
-    它照样绿，而界面显示的是一个空徽标。现在"该有哪些格"从 `cli.EXIT_CODE_BY_STOP`
-    现取，口径只有一处。
+    改前这条只查"退出码表的每一格在徽标表里有没有"，是单向的；徽标表反向多出的
+    `max_steps` 与退出码表单向缺的 `final_refused` 同时存在，而两表格数相同，
+    于是旧判据的 `>=` 长度检查也没响。
+    2026-10-26 业主裁定：`live=False` 的旧读数只许有徽标、不许进退出码表。
     """
     from agentflow import cli as CLI
     from agentflow import webui as W
+    from agentflow.stop_reasons import STOP_REASONS
 
-    problems = _badge_problems(W._STOP_BADGES)
-    assert not problems, "有停止理由没有徽标：\n" + "\n".join(problems)
-    # 反真空：表与徽标表都得有量（否则"都没扫到"会冒充"都对得上"）。
+    problems = _stop_table_problems(STOP_REASONS, CLI.EXIT_CODE_BY_STOP, W._STOP_BADGES)
+    assert not problems, "停止理由的两张表与真身对不上：\n" + "\n".join(problems)
+
+    live = {reason for reason, row in STOP_REASONS.items() if row[3]}
+    assert set(CLI.EXIT_CODE_BY_STOP) == live, (
+        f"退出码表 − live：{sorted(set(CLI.EXIT_CODE_BY_STOP) - live)}；"
+        f"live − 退出码表：{sorted(live - set(CLI.EXIT_CODE_BY_STOP))}")
+    assert set(W._STOP_BADGES) == set(STOP_REASONS), (
+        f"徽标表 − 真身：{sorted(set(W._STOP_BADGES) - set(STOP_REASONS))}；"
+        f"真身 − 徽标表：{sorted(set(STOP_REASONS) - set(W._STOP_BADGES))}")
+    # 反真空：两表都得有量（否则"都没扫到"会冒充"都对得上"）；旧读数那一支
+    # 也必须真的被跑到，否则"只投影 live"这条规则没有被任何一格验证。
     assert len(CLI.EXIT_CODE_BY_STOP) >= 20, sorted(CLI.EXIT_CODE_BY_STOP)
     assert len(W._STOP_BADGES) >= len(CLI.EXIT_CODE_BY_STOP), sorted(W._STOP_BADGES)
+    legacy = set(W._STOP_BADGES) - set(CLI.EXIT_CODE_BY_STOP)
+    assert legacy, "徽标表里一格旧读数都没有 ⇒ live=False 那条投影规则没被验证"
+    assert all(STOP_REASONS[r][3] is False for r in legacy), sorted(legacy)
+    # b 的锚点：0 只属于 final；其余 live 档是 1..5 的正整数（None/0 都不许）。
+    assert CLI.EXIT_CODE_BY_STOP["final"] == 0
+    assert all(isinstance(v, int) and not isinstance(v, bool) and v in (1, 2, 3, 4, 5)
+               for k, v in CLI.EXIT_CODE_BY_STOP.items() if k != "final"), (
+        {k: v for k, v in CLI.EXIT_CODE_BY_STOP.items() if k != "final"})
+
+
+def test_an_unknown_stop_reason_still_renders_text() -> None:
+    """判据 c（正控）：未知 stop_reason 也有非空徽标文案（不是空串）。
+
+    为什么要有兜底：`_STOP_BADGES` 只解释登记过的档；旧会话记录、手工写坏的
+    checkpoint、以及下一个还没登记的 stop_reason 都会走到表外。表外的这一格
+    如果渲染成空串，界面看起来就是"这一趟没有理由"—— 那比"未知"更假。
+    """
+    from agentflow.webui.server import stop_badge
+
+    for probe in ("a_stop_reason_nobody_registered", ""):
+        klass, text = stop_badge(probe)
+        assert str(klass).startswith("badge-"), (probe, klass)
+        assert str(text).strip(), (probe, text)
+        assert "未知收场" in text, (probe, text)
+        if probe:
+            assert probe in text, "兜底文案要把原值留在括号里，读的人才知道去查哪个词"
 
 
 def test_negative_control_a_missing_badge_goes_red() -> None:
-    """负控：从徽标表里删掉一档 ⇒ 同一个判据必须看见（"忘了加徽标"真的会红）。"""
+    """判据 d（反真空）：从徽标表里删掉一档 ⇒ 判据 a 必红（live 与旧读数都试）。"""
+    from agentflow import cli as CLI
     from agentflow import webui as W
+    from agentflow.stop_reasons import STOP_REASONS
+
+    for victim in ("escalated", "max_steps"):
+        badges = dict(W._STOP_BADGES)
+        del badges[victim]
+        problems = _stop_table_problems(STOP_REASONS, CLI.EXIT_CODE_BY_STOP, badges)
+        assert any(victim in p for p in problems), (victim, problems)
+
+
+def test_negative_control_an_extra_entry_goes_red() -> None:
+    """判据 d（反方向）：多一格、少一个码、旧读数混进退出码表，三样都要红。
+
+    最后一条就是 `max_steps` 那一格的教训：它只在徽标表里时可以理解，
+    一旦被补进退出码表，就把"旧读数"伪装成一个运行期档。
+    """
+    from agentflow import cli as CLI
+    from agentflow import webui as W
+    from agentflow.stop_reasons import STOP_REASONS
 
     badges = dict(W._STOP_BADGES)
-    del badges["escalated"]
-    problems = _badge_problems(badges)
+    badges["a_stop_reason_only_in_the_badge_table"] = ("badge-unknown", "只有徽标")
+    problems = _stop_table_problems(STOP_REASONS, CLI.EXIT_CODE_BY_STOP, badges)
+    assert any("a_stop_reason_only_in_the_badge_table" in p for p in problems), problems
+
+    codes = dict(CLI.EXIT_CODE_BY_STOP)
+    del codes["escalated"]
+    problems = _stop_table_problems(STOP_REASONS, codes, W._STOP_BADGES)
     assert any("escalated" in p for p in problems), problems
+
+    codes = dict(CLI.EXIT_CODE_BY_STOP)
+    codes["max_steps"] = 5
+    problems = _stop_table_problems(STOP_REASONS, codes, W._STOP_BADGES)
+    assert any("max_steps" in p for p in problems), problems
 
 
 def test_notes_differing_only_by_a_step_prefix_still_count_as_repeats(tmp_path: pathlib.Path):

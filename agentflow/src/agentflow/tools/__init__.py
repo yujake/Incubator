@@ -410,6 +410,23 @@ UNIVERSAL_TOOLS: dict[str, UniversalTool] = {
         "指导与停止通知，所以它不是某个角色的活，是通用能力",
         frozenset({"tasks"}),
     ),
+    # 2026-10-26（Q15，判据 `tests/test_universal_tools_are_for_everyone.py::test_f_*`）：
+    # 这一件登记进来之前，它的 `roles` 声明是十一个角色，而 `for_role` 只发给七个
+    # （C/H/V 被只读约束剥掉、L 被 Lean 开关藏起来），注释里那句"由 UNIVERSAL_TOOLS
+    # 放行"是一句事实错误。裁定取 (a)：它是通用能力，不是"某个角色的活" ——
+    # 业主 2026-10-27 的口径是「收到要求做事的消息，自己写任务塞进 task_board」，
+    # 而只读角色 C/H/V 同样会收到那种消息（它们也有收件箱与板项），把它们排除在外
+    # 等于让它们读了"要你办一件事"却没有任何合法的落项口（通用写口
+    # `table.create(table="tasks")` 已被 `_tasks_write_refusal` 堵住）。
+    # 写集只有 `tasks` 的一行板项（`kind="delegation"` / `expects="work"`），在
+    # `BOOKKEEPING_TABLES` 之内 ⇒ 构造上合法，且收件人只能是调用者自己。
+    "conductor.post_task": UniversalTool(
+        "给自己落一条『要办的活』板项：收件人只能是调用者自己，只写 `tasks` 的一行 "
+        "（`kind=delegation` / `expects=work`，簿记表），不碰任何知识表。"
+        "业主 2026-10-27 逐字「如果 message 是要求做事，智能体需自己写任务塞进 "
+        "task_board」—— 会收到那种消息的角色包括只读角色 C/H/V，所以它是通用能力",
+        frozenset({"tasks"}),
+    ),
 }
 
 

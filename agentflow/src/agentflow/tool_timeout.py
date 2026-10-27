@@ -26,7 +26,7 @@
    :func:`lookup`（秒 → 毫秒）这一处边界上换算，别的地方一律毫秒（`TimeoutReason.timeout_ms`
    与模型可见文本都照 DSH 用毫秒）。
 
-## 谁被声明了（第一批：检索 / 下载 / 起子进程）
+## 谁被声明了（检索 / 下载 / 起子进程 / 形式化那三件）
 
 表是真身（:data:`TIMEOUT_TABLE`），逐条带自己的 code（DSH 的纪律：不许合并成一个哨兵）
 与 `checkpoint` 一格 —— 那一格说的是"这个处理函数现在到底会不会看信号"：
@@ -130,8 +130,10 @@ class TimeoutDecl:
         return self.seconds * _MS_PER_SEC
 
 
-#: 逐工具的限时表（真身）。第一批 = 检索 / 下载 / 起子进程那十件
-#: （`external in ("egress", "exec")`，实测清单见 `tests/test_the_tool_timeouts_are_cooperative.py`）。
+#: 逐工具的限时表（真身）。覆盖面 = 工具面上全部 `external in ("egress", "exec")` 的那些件
+#: （现读，清单由 `tests/test_the_tool_timeouts_are_cooperative.py` 对齐；2026-10-26 实测十件）。
+#: 不是"挑几件挂上"：少登记一件，那一件就永远不会被限时，而没有任何东西会红 ——
+#: 这正是那三件 `formal.*` 此前挂在外面的形态。
 #:
 #: 为什么只有这几件（DSH 同款口径）：`dsh-tool-web` 声明了 30s，而随附的
 #: `bash`/`read`/`write`/`edit` 有意不声明（`README.md:123`）⇒ "无统一默认"是本条裁定的
@@ -161,9 +163,27 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
         "框架内置的 LaTeX 编译（两遍 pdflatex）—— 长稿子分钟级起步，给它半小时；"
         "读者从 `draft/117` 起：旧路的 render/build/anchor 三条已退场"),
     # `verify.*` 两件在禁改区 `tools/verify_tools.py` 里 ⇒ 检查点只能由人加（如实标 pending）。
-    # 2026-10-23 晚：`verify.check_formal` 整条删除（E 不做形式化）⇒ 这一格从表里退场；
-    # 形式化那一件今天叫 `formal.check_formal`（L 的），它没有声明限时 —— 那要不要补
-    # 是一笔独立的裁定，不在这一轮。
+    # 2026-10-23 晚：`verify.check_formal` 整条删除（E 不做形式化）⇒ 那一格从表里退场。
+    # 形式化那三件今天叫 `formal.formalize` / `formal.check_formal` / `formal.record`（L 的），
+    # 三件都 `external=exec`（各自会起一次 Lean 检查器）—— 2026-10-26 补进表，见下面那三行。
+    #
+    # 那三条为什么是 1200 秒（同档 exec 的读数：`verify.run_experiment` 600、`doc.paper_compile` 1800）：
+    # 检查器自己那口钟缺省 600 秒（`agent_l/core.py` 的 `default_timeout`），而这三件的
+    # `timeout_sec` 形参还能由调用方加长 ⇒ 外层这口协作式的钟必须比内层晚响。反过来的话，
+    # 读数会从"检查器超时"变成"外层到点"，那是把一句真话换成一句错话。
+    # 检查点还没接在 handler 里（与 `search.download` / `ocr.run` 同一档，所以三条都写 `pending`）。
+    "formal.formalize": TimeoutDecl(
+        1200.0, "FORMALIZE_TIMEOUT", "pending",
+        "写一次 `.lean` 落盘 + 起一次检查器；内层那口钟缺省 600 秒（`agent_l/core.py` "
+        "的 `default_timeout`）⇒ 给两倍，让'检查器超时'这条读数先说话。检查点未接"),
+    "formal.check_formal": TimeoutDecl(
+        1200.0, "CHECK_FORMAL_TIMEOUT", "pending",
+        "只起一次检查器（给 `source` 或工作区里的 `.lean`）；理由与 `formal.formalize` 同一条："
+        "内层 600 秒 × 2。检查点未接"),
+    "formal.record": TimeoutDecl(
+        1200.0, "RECORD_TIMEOUT", "pending",
+        "读台账那一行 + 再起一次检查器 + 落一行 `experiments` ⇒ 与 `formal.check_formal` "
+        "同一量级（两倍内层那 600 秒）。检查点未接"),
     "verify.run_experiment": TimeoutDecl(
         600.0, "EXPERIMENT_TIMEOUT", "pending",
         "跑一段实验脚本；handler 在禁改区 verify_tools.py ⇒ 检查点要人加"),

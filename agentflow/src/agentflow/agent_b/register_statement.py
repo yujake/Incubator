@@ -96,7 +96,7 @@ from ..refusals import refuse as _refuse
 #: theorem / lemma / proposition 一律受控拒绝 `must_start_as_conjecture`。
 #:
 #: 为什么是一张白名单而不是"拒掉 theorem/lemma/proposition"：等级链的词表会变
-#: （`schema.KINDS` 加一个取值就是加一种"强于猜想"的说法），黑名单会在那种时候
+#: （加一个取值就是加一种"强于猜想"的说法），黑名单会在那种时候
 #: 静默放行 —— 白名单不会。
 CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
 
@@ -113,6 +113,98 @@ def _same_manuscript_text(left: Any, right: Any) -> bool:
         return str(value or "").replace("\r\n", "\n").strip()
 
     return _n(left) == _n(right)
+
+
+def verbatim_vs_source(*, proof_text: Any = None, row: Mapping | None = None,
+                       source_text: Any = "", source: str = "") -> dict:
+    """这一份证明正文与来源手稿的证明正文是不是逐字一致 —— 信息格，不是门。
+
+    ## 它为什么只能是读数（业主 2026-10-26 Q14）
+    收录时把定理与证明"消化"成自然语言是我们的口径（见 `agent_skills` 里 B 的
+    「消化」那一节），所以"与来源逐字一致"不可能同时是一道门：它一旦是门，消化本身
+    就被判红。逐字只对文献引文要求（`quote_verified` 的比对对象是 `quote_span` 或
+    原文那一段），对我们自己的证明不要求 —— 这一格把那个差别留在读数上。
+
+    ## 来源取哪一段
+    取 `depsection.proof_body` 切出来的那一节（与依赖面扫描同一个切法），并同时认
+    "整份手稿"这一种写法：有人交上来的就是整份稿（含抬头元信息与 `## 依赖` 表），那
+    也是逐字一致 —— 两种都算 same，`matched` 说明对上了哪一段。拿整份手稿当唯一对象
+    则会每一条都判"不是逐字"，那种恒假的读数比没有更坏。
+
+    ## 传参的两条路
+    `proof_text=` 传这一笔刚交上来的正文；或者 `row=` 传在册那一行、由它读
+    `proof_text` —— 两种读法算的是同一件事（判据只有这一处）。
+
+    ## 三态
+    `checked=False` = 这一笔没有可比对的来源正文（`same=None`，那是"没有对象"，
+    不是"不一致"）；`checked=True` = 比过了，`same` 就是结论。它不拦任何写入。
+    """
+    text = (str(proof_text) if proof_text is not None
+            else str((row or {}).get("proof_text") or ""))
+    whole = str(source_text or "")
+    src = _DS.proof_body(whole) if whole.strip() else ""
+    out: dict = {"checked": False, "same": None, "matched": "", "source": str(source or ""),
+                 "chars": len(text), "source_chars": len(src), "why": ""}
+    if not src.strip():
+        out["why"] = ("这一笔没有可比对的来源正文（没有手稿、也不是从文献引文来的）⇒ "
+                      "这一格是「没有对象」，不是「不一致」")
+        return out
+    out["checked"] = True
+    if _same_manuscript_text(text, src):
+        out["same"], out["matched"] = True, "proof_body"
+    elif _same_manuscript_text(text, whole):
+        out["same"], out["matched"] = True, "manuscript"
+    else:
+        out["same"] = False
+    out["why"] = (("与来源手稿逐字相同（只把换行归一，别的一字不改；对上的是 "
+                   + ("证明正文那一节" if out["matched"] == "proof_body" else "整份手稿") + "）")
+                  if out["same"] else
+                  "与来源手稿的证明正文不是逐字一致（可能是消化后的自然语言）—— "
+                  "这不是缺陷：判据只有一条，改写过就要重派 V 签")
+    return out
+
+
+def _rewrite_note(reading: Mapping) -> str:
+    """正文被改写之后要说的那一句话（三个回报点共用一份文案）。
+
+    口径（业主 2026-10-26 Q14）：改写过 ⇒ 旧签作废 ⇒ 派 V 重新签。这句话必须说清
+    三件事，否则读的人会自己编一个解释：
+
+    1. "这一签不算数"是读侧现算的结论（唯一判定口 `verifications.review_standing`，
+       拿现行正文的 sha 与台账里盖在旧正文上的那一签比），不是框架把签删了 ——
+       台账那一行不删、旧签仍可查，只是不再算数；
+    2. 真实动作名与形参：`V.verify_proof` 的 `statement_id`（必填）+ `proof_no`
+       （要审第几条证明；`#p1` 就是行上的 `proof_text`）；
+    3. 没查成（`unreadable`）既不许读成"签过"，也不许读成"没签过"。
+    """
+    got = dict(reading or {})
+    state = str(got.get("state") or "")
+    call = ("`V.verify_proof`（`statement_id` 必填；要审第几条证明就带 "
+            "`proof_no`）。")
+    where = ("读数是读侧现算的（`verifications.review_standing`：拿现行正文的 sha 与"
+             "台账里那一签比）；台账那一行不删、旧签仍然可查，只是不再算数。")
+    if state == "signed":
+        return "V 的签盖住的就是这一份正文（`review_standing=signed`）⇒ 不用重签。"
+    if state == "stale":
+        return ("正文被改写过 ⇒ 盖在旧正文上的那一签不算数"
+                "（`review_standing=stale`）⇒ 派 V 重新签：" + call + where)
+    if state == "rejected":
+        return ("正文被改写过 ⇒ 现行这一份最近那一签的结论不是「成立」"
+                "（`review_standing=rejected`）⇒ 派 V 重新签：" + call + where)
+    if state == "unsigned":
+        return "这一份正文还没有 V 的签（`review_standing=unsigned`）⇒ 派 V 签：" + call
+    return ("这一签现在算不算数没查成（`review_standing=unreadable`）⇒ 不当作签过、"
+            "也不当作没签过：先让台账读得出来，再派 V 重新签：" + call)
+
+
+def _canonical_rewrite_reading(attach: Mapping) -> dict:
+    """`_attach_proofs` 里算好的那一格读数摊到返回值上（键名与读侧同一个）。"""
+    reading = dict((attach or {}).get("review_standing") or {})
+    if not reading:
+        return {}
+    return {"review_standing": reading,
+            "resign_required": bool((attach or {}).get("resign_required"))}
+
 
 #: B-2 的拒收码（写侧与读侧共用这一个字面量，免得两处措辞分家）。
 #:
@@ -619,6 +711,18 @@ class _RegisterStatement:
                 merged = _bits_after_canonical_write(row, bits)
                 if merged:
                     row["bits"] = merged
+                # ---- 改写过 ⇒ 旧签不算数（业主 2026-10-26 Q14 的唯一硬机制）。
+                #
+                # 判据不在这里：`verifications.review_standing` 是唯一判定口（它拿
+                # 现行正文的 sha 与台账覆盖集比）。这一格只做两件写之外的事 —— 把结论
+                # 读出来、把"派 V 重新签"写进返回值。读数不是"框架把签删了"：台账
+                # 一行都不动，旧签仍可查，只是不再算数（读侧现算）。
+                rewritten = self._review_after_rewrite(
+                    getattr(store, "root", None), stmt_id=str(stmt_id),
+                    proof_text=raw_want)
+                out["review_standing"] = dict(rewritten)
+                out["resign_required"] = bool(rewritten.get("resign_required"))
+                out["rewrite_note"] = _rewrite_note(rewritten)
             have = {no: text for no, text in _VR.proof_list(row)}
             listed = [dict(p) if isinstance(p, Mapping) else p
                       for p in (row.get(_VR.PROOFS_KEY) or [])]
@@ -680,6 +784,49 @@ class _RegisterStatement:
                       note=f"agent_b.register_statement:proofs:{stmt_id}")
             out["written"] = True
             out["canonical_written"] = bool(canonical_changed)
+        return out
+
+    @staticmethod
+    def _review_after_rewrite(root: Any, *, stmt_id: str, proof_text: str) -> dict:
+        """正文被改写之后，那一签现在算不算数（唯一判定口：`verifications.review_standing`）。
+
+        ## 为什么不在这里判 sha
+        判据只有一处：`verifications.review_standing`（现行正文的 sha 与台账覆盖集的
+        sha 比，`verifications.py` 里那条 `stale` 分支）。这一格只做两件事 —— 把结论
+        翻成"要不要重签"，以及把"没查成"与"签过过期"分开。自己再比一次 sha 就是第二个
+        判据；两处一旦漂，"这一签算不算"会同时有两个答案，而没有任何东西会报。
+
+        ## `resign_required` 的三态（不折平）
+        `signed` ⇒ False（V 的签盖的就是这一份）；`stale` / `rejected` / `unsigned`
+        ⇒ True；`unreadable`（台账读不出来）⇒ True 且 `checked=False` —— 没查成不许
+        读成"签过了"，与 `verifications` 那边"签没落地 ⇒ `re_sign_required`"同一条口径。
+
+        ## 为什么这一格必须能被单独打桩
+        "改写过 ⇒ 旧签作废"这条机制的唯一出口就是它（判据 e 把这里换成"已签"，
+        b 必须当场红）。做成 `staticmethod` 就是为了让判据能在判定点上打桩，
+        而不是去打"读侧算不算" —— 后者是既有链，不该被这一批改动碰到。
+        """
+        out: dict = {"checked": False, "state": "unreadable", "resign_required": True,
+                     "verification_id": "", "proof_sha256": "",
+                     "canonical_changed": True, "why": ""}
+        sid = str(stmt_id or "").strip()
+        if root is None or not sid:
+            out["why"] = ("没有工作区根 / 没有命题号 ⇒ 查不到台账（这一格没查成，"
+                          "既不当作签过、也不当作没签过）")
+            return out
+        try:
+            got = dict(_VR.review_standing(root, statement_id=sid,
+                                           proof_text=str(proof_text or ""),
+                                           proof_no=1))
+        except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许折成"没签过"
+            out["why"] = (f"台账读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
+            return out
+        state = str(got.get("state") or "unreadable")
+        out.update(checked=bool(got.get("checked")), state=state,
+                   resign_required=state != "signed",
+                   verification_id=str(got.get("verification_id") or ""),
+                   proof_sha256=str(got.get("sha") or ""),
+                   why=str(got.get("why") or ""))
         return out
 
     @staticmethod
@@ -1016,6 +1163,12 @@ class _RegisterStatement:
         manuscript_wash: dict = _DS.manuscript_wash_reading(manuscript_text) if (
             manuscript_text.strip()) else {"washed": False, "actor": "", "filled": "", "mark": ""}
         manuscript_washed = bool(manuscript_wash.get("washed"))
+        #: 与来源是否逐字一致（信息格，不是门；业主 2026-10-26 Q14 的第 3 条）。
+        #: 这一格只回答"改没改" —— 处置在签那一侧：改写过 ⇒ 旧签不算数 ⇒ 派 V 重新签
+        #: （`_attach_proofs` 里那一段 `review_standing` / `resign_required`）。
+        proof_vs_source = verbatim_vs_source(proof_text=proof_text,
+                                             source_text=manuscript_text,
+                                             source=manuscript_source)
         # ---- 兜底审计（2026-10-27）：盘上那份稿不是框架渲染的 ---------------------
         #
         # 为什么这一条必须存在：上面那一整条链（F 的 proof 动作渲染 `## 依赖` → 秘书洗稿
@@ -1182,7 +1335,8 @@ class _RegisterStatement:
                     redelivery, deps_groups=deps_groups, manuscript=manuscript,
                     manuscript_refs=manuscript_refs, manuscript_source=manuscript_source,
                     manuscript_washed=manuscript_washed, manuscript_wash=manuscript_wash,
-                    proofs=proofs_listed, proof_text=proof_text, deps_reading=_deps_reading)
+                    proofs=proofs_listed, proof_text=proof_text, deps_reading=_deps_reading,
+                    proof_vs_source=proof_vs_source)
 
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
@@ -1548,6 +1702,7 @@ class _RegisterStatement:
                    "manuscript_source": manuscript_source,
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
+                   "proof_vs_source": dict(proof_vs_source),
                    "note": str(written.get("reason") or "")}
             #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
@@ -1612,6 +1767,7 @@ class _RegisterStatement:
                    "manuscript_source": manuscript_source,
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
+                   "proof_vs_source": dict(proof_vs_source),
                    "changes": list(written.get("changes") or []),
                    "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
@@ -1628,10 +1784,11 @@ class _RegisterStatement:
             if attach.get("canonical_written"):
                 out["canonical_written"] = True
                 out["canonical_history"] = list(attach.get("canonical_history") or [])
+                out.update(_canonical_rewrite_reading(attach))
                 out["note"] += ("这一笔还覆盖了 canonical 正文（`proof_text`）：旧正文整段"
                                 "留在行的 `proof_history` 里（sha / at / replaced_by 逐条"
-                                "可查）；盖在旧正文上的那一签读侧转 `stale`（待复核），"
-                                "写入不因 sha 不符被拒。")
+                                "可查）；写入不因 sha 不符被拒。"
+                                + str(attach.get("rewrite_note") or ""))
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
             if attach.get("refused"):
@@ -1685,17 +1842,19 @@ class _RegisterStatement:
                        "manuscript_source": manuscript_source,
                        "manuscript_washed": manuscript_washed,
                        "manuscript_wash": dict(manuscript_wash),
+                       "proof_vs_source": dict(proof_vs_source),
                        "note": ("这一条没有新建行（同一条命题已在册）。")}
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
                 if attach.get("canonical_written"):
                     out["canonical_written"] = True
                     out["canonical_history"] = list(attach.get("canonical_history") or [])
+                    out.update(_canonical_rewrite_reading(attach))
                     out["note"] += (
                         "这一笔带来的 canonical 正文已经写进 `proof_text`：旧正文整段留在"
                         "行的 `proof_history` 里（每条 `{text, sha, at, replaced_by}`，"
-                        "`sha` 能与签名台账的 `proof_sha256` 直接对上）；盖在旧正文上的"
-                        "那一签读侧转 `stale`（待复核），写入不因 sha 不符被拒。")
+                        "`sha` 能与签名台账的 `proof_sha256` 直接对上）；写入不因 sha 不符"
+                        "被拒。" + str(attach.get("rewrite_note") or ""))
                 if proofs_listed:
                     out["note"] += ("这一笔带来的证明清单也挂上去了：清单是追加式的，"
                                     "#p1 是行上的 `proof_text`，其余在 "
@@ -1737,8 +1896,7 @@ class _RegisterStatement:
             # 对调用方来说这是"这一次没有新行"，必须说出来（`ok=False` + `kind`），
             # 并把既有那一条的号给它 —— 否则它只会看到"没写成"而不知道东西在哪。
             #
-            # 2026-10-26：这段拒信改前写着"确实要另起一条才走 `force_new`（本动作不暴露它）"。
-            # 指一个本动作根本没有的参数，等于把模型送去撞 invalid_params —— 拒信要能把模型
+            # 拒信指一个本动作根本没有的参数，等于把模型送去撞 invalid_params —— 拒信要能把模型
             # 指回正路，指的必须是这条动作上真有的做法：同一条命题的第 2 份及以后的证明走
             # `proofs=[{proof_no: N, text: …}]`；确实是另一条命题就把差异写进
             # `statement_full`（正文按规范化比不同才会落新的一行）。
@@ -1797,6 +1955,12 @@ class _RegisterStatement:
                                   "父也办不了才轮到 A 上网搜或 B 自撰基本概念")}]
                         if (str(data.get("status") or "") == "pending_definition"
                             or int(written.get("pending_concepts") or 0)) else [])
+        #: 正文被改写时的签读数（`_attach_proofs` 的 `canonical_changed` 那一格算的）：
+        #: 只在真覆盖了 canonical 时出现 —— 老写法的返回值逐字不变。
+        rewrite_reading = (_canonical_rewrite_reading(attach)
+                           if attach.get("canonical_written") else {})
+        rewrite_note = (str(attach.get("rewrite_note") or "")
+                        if attach.get("canonical_written") else "")
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
                 "self_authored_review": self._self_authored_reading(self_authored),
@@ -1832,6 +1996,8 @@ class _RegisterStatement:
                 "manuscript_source": manuscript_source,
                 "manuscript_washed": manuscript_washed,
                 "manuscript_wash": dict(manuscript_wash),
+                #: 与来源是否逐字一致（信息格，不是门）：`same=None` = 没有可比对的那一份。
+                "proof_vs_source": dict(proof_vs_source),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
@@ -1848,9 +2014,11 @@ class _RegisterStatement:
                 #: 这一格时出现 —— 老写法的返回值逐字不变。
                 **({"proof_deps": dict(proof_deps)} if proof_deps else {}),
                 #: canonical 正文在"新建行"这一支上被 `_attach_proofs` 覆盖时（少见：
-                #: 秘书落下的 `proof_text` 与这一笔交来的不同），旧正文的留痕也一并给出来。
+                #: 秘书落下的 `proof_text` 与这一笔交来的不同），旧正文的留痕与那一签的
+                #: 现行读数（`review_standing` / `resign_required`）一并给出来。
                 **({"canonical_written": True,
-                    "canonical_history": list(attach.get("canonical_history") or [])}
+                    "canonical_history": list(attach.get("canonical_history") or []),
+                    **rewrite_reading}
                    if attach.get("canonical_written") else {}),
                 #: D-37：这一笔让 `kind` 跟着证据升了（依据逐字在里面）。只在真升时出现。
                 **({"kind_upgrade": dict(attach["kind_upgraded"])}
@@ -1887,7 +2055,8 @@ class _RegisterStatement:
                          + ("第 4 位（形式化通过）按 L 的 `experiments` 台账同步了："
                             f"逐条证明的状态 {attach.get('formal_paths')}"
                             "（键是证明号；汇总按任一路径通过就算通过）。"
-                            if attach.get("formal_synced") else ""))}
+                            if attach.get("formal_synced") else "")
+                         + rewrite_note)}
 
     # ------------------------------------------------- 收方读稿登记（D 携带来的那一份）
     #
@@ -1993,7 +2162,8 @@ class _RegisterStatement:
                                     manuscript_wash: Mapping[str, Any],
                                     proofs: Sequence[Mapping[str, Any]],
                                     proof_text: str,
-                                    deps_reading: Any) -> dict:
+                                    deps_reading: Any,
+                                    proof_vs_source: Mapping[str, Any] | None = None) -> dict:
         """收下 D 递来的那一份稿：命题行不动，只把依赖面写进 `dependencies`。
 
         `deps_groups` 是上面那块已经解析并逐条核过档位的步骤（外层 = 路径组）；
@@ -2025,6 +2195,8 @@ class _RegisterStatement:
                 "manuscript_source": manuscript_source,
                 "manuscript_washed": bool(manuscript_washed),
                 "manuscript_wash": dict(manuscript_wash),
+                #: 与来源是否逐字一致（信息格，不是门）：这一支不改正文，读数照给。
+                "proof_vs_source": dict(proof_vs_source or {}),
                 "deps_written": int(written.get("deps_written") or 0),
                 "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
                 #: 依赖面建起来没有（三态；与新建那一支同一份读数实现）。

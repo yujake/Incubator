@@ -22,7 +22,7 @@
 "一视同仁"这件事不靠例外表：`READONLY_CALL_EXCEPTIONS` 是"这个只读角色可以调这几个
 写工具"的逐条登记，它的语义就是"谁能用" —— 通用能力不该进那张表。
 
-## 五条判据（施工单 a–e）
+## 六条判据（施工单 a–f）
 
 a) 十一个角色都拿得到五件 `clock.*`，且例外表里没有 clock 条目；
 b) 通用工具一律不写知识表（登记写集 ⊆ 通信/簿记表，且实现算出的写集 ⊆ 登记写集）；
@@ -30,7 +30,11 @@ c) 负控：非通用的写工具（`table.update` / `fs.write` / `doc.build_doc
    只读角色仍然拿不到 —— 闸没有被整扇打开；
 d) 反真空：把"所有工具都是 universal"打桩 ⇒ b 必红；把通用集合清空 ⇒ a 必红；
 e) 据实与可达必须同时成立：`clock.timer_start` 是 `write_local`（真话），
-   而它对 C / H / V 仍然可用（真事）。
+   而它对 C / H / V 仍然可用（真事）；
+f) 声明面与发出的面双向对得上（Q15，2026-10-26）：`conductor.post_task` 进通用集合 ⇒
+   `roles` 声明的十一个角色里，凡没拿到的都必须有一个结构性理由（今天只有"被 Lean
+   开关藏起来"这一种），而 C / H / V 必须拿得到 —— 它们同样会收到"要求做事"的消息，
+   而"给自己落一条 work 项"是那条口径下唯一合法的落项手。
 
 ## 改前红的读数
 
@@ -362,3 +366,98 @@ def test_e_clock_timer_start_is_truthfully_write_local_and_still_available_to_re
     with pytest.MonkeyPatch.context() as m:
         m.setattr(T, "UNIVERSAL_TOOLS", {}, raising=True)
         assert "clock.timer_start" not in {s.name for s in reg.for_role("C")}
+
+
+# ================================================ f) 声明面 = 发出的面（Q15）
+#: Q15 的那一件：`conductor.post_task` 的 `roles` 声明是十一个角色，而改前只有七个拿到
+#: （C/H/V 被只读约束剥掉、L 被 Lean 开关藏起来）。改前的注释逐字写着"由
+#: `UNIVERSAL_TOOLS` 那条判据放行"，而那一句是事实错误 —— 那张表里没有它。
+#: 2026-10-26 的裁定是走 (a)：把 `conductor.post_task` 登记成通用能力（它只写 `tasks`，
+#: 在 `BOOKKEEPING_TABLES` 之内，构造上合法），于是声明与行为重新对齐。
+POST_TASK = "conductor.post_task"
+
+#: 三档"会收到要办的事"的只读角色：它们必须拿得到落项的手（(a) 的全部理由）。
+READ_ONLY_HANDS: tuple[str, ...] = ("C", "H", "V")
+
+
+def _surface_gap(reg) -> tuple[list[str], dict[str, str]]:
+    """声明与行为之间的差：`(没有理由的漂移, {角色: 结构性理由})`（Q15 的判据本体）。
+
+    两个方向各判一次：
+      - `行为 ⊆ 声明`：拿得到却没声明 ⇒ 权限面漏出去一格；
+      - `声明 ⊆ 行为 ∪ 结构性理由`：声明了却拿不到 ⇒ 要么它是通用能力却没登记，
+        要么声明本身就是空话。
+
+    结构性理由只认一种：角色被 Lean 开关藏起来（`leanscope.is_hidden`；声明没变，
+    两个面都是空的）。"只读角色 + 写工具"在这里不算理由 —— 裁定既然是"进通用集合"，
+    那 C/H/V 拿不到它就不是"结构性剥离"，而是行为面掉了。
+    """
+    T = _tools()
+    from agentflow import leanscope as LEANSCOPE
+
+    spec = reg.get(POST_TASK)
+    declared = set(spec.roles)
+    surface = {role: {s.name for s in reg.for_role(role)} for role in ELEVEN_ROLES}
+    drift: list[str] = []
+    for role in sorted(ELEVEN_ROLES):
+        if POST_TASK in surface[role] and role not in declared:
+            drift.append(f"{role} 拿得到 {POST_TASK}，而它的 `roles` 声明里没有这个角色")
+    explained: dict[str, str] = {}
+    for role in sorted(declared):
+        if POST_TASK in surface[role]:
+            continue
+        if LEANSCOPE.is_hidden(role):
+            explained[role] = "被 Lean 开关藏起来（两个面都是空的，与声明无关）"
+        else:
+            drift.append(
+                f"{role} 在 `roles` 声明里，却拿不到 {POST_TASK}"
+                "（没有任何结构性理由 —— 要么登记成通用能力，要么把声明收掉）")
+    return drift, explained
+
+
+def test_f_post_task_is_a_universal_tool_so_the_declaration_matches_the_surface(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据 f（Q15，改前红）：`conductor.post_task` 进通用集合 ⇒ 声明与行为双向对得上。
+
+    改前读数（同一份装配）：`roles` 声明 11 个，`for_role` 只发给
+    `['A', 'B', 'D', 'E', 'F', 'G', 'M']` 7 个 —— 差的是 C / H / V / L，
+    而那条注释还写着"由 `UNIVERSAL_TOOLS` 那条判据放行"（它不在那张表里）。
+    """
+    T = _tools()
+    reg = _registry(tmp_path)
+    spec = reg.get(POST_TASK)
+    # ① 它确实是一件通用能力，且登记的写集只落在簿记表上（否则"对十一个角色都发"是后门）。
+    assert T.is_universal_tool(POST_TASK), (
+        f"{POST_TASK} 没有登记成通用能力 —— 它的 `roles` 声明是十一个角色，"
+        "而只读角色 C/H/V 会被结构性剥掉（声明与行为分家，判定见 ②）")
+    assert T.universal_tool_tables(POST_TASK) == frozenset({"tasks"}), (
+        f"{POST_TASK} 登记写的表是 {T.universal_tool_tables(POST_TASK)!r}，"
+        f"而它只该写 `tasks` 的一行板项")
+    assert T.universal_tool_is_bookkeeping_only(POST_TASK)
+    exempt = {name for entries in T.READONLY_CALL_EXCEPTIONS.values() for name, _w in entries}
+    assert POST_TASK not in exempt, (
+        f"{POST_TASK} 出现在只读例外表里 —— 通用能力不许走例外表（两条独立的来源）")
+    # ② 双向：行为 ⊆ 声明，且声明 ⊆ 行为 ∪ 结构性理由。
+    drift, explained = _surface_gap(reg)
+    assert drift == [], (
+        f"{POST_TASK} 的声明面与发出的面对不上：\n  - " + "\n  - ".join(drift)
+        + f"\n（有结构性理由的缺席：{explained}；声明 {sorted(spec.roles)}）")
+    # ③ (a) 的落点：C / H / V 收到"要求做事"的消息时，也有落项的合法手。
+    for role in READ_ONLY_HANDS:
+        got = {s.name for s in reg.for_role(role)}
+        assert POST_TASK in got, (
+            f"只读角色 {role} 拿不到 {POST_TASK} —— 它同样会收到"
+            "「这条消息要求做事」的那一条，而那正是唯一合法的落项手")
+    # ④ 反真空：把它从通用集合里撤掉 ⇒ 同一双判据立刻说 C/H/V 漂移。
+    with monkeypatch.context() as m:
+        m.setattr(T, "UNIVERSAL_TOOLS",
+                  {k: v for k, v in T.UNIVERSAL_TOOLS.items() if k != POST_TASK},
+                  raising=True)
+        drift2, _explained2 = _surface_gap(reg)
+        assert drift2, (
+            f"把 {POST_TASK} 从 UNIVERSAL_TOOLS 撤掉，双向判据居然还是绿的 —— 它是橡皮图章")
+        flat = " ".join(drift2)
+        for role in READ_ONLY_HANDS:
+            assert role in flat, (
+                f"撤掉之后判据没有点名 {role}（它正是被剥掉的那一档）：{drift2}")
+

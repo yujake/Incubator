@@ -452,7 +452,7 @@ def test_e13_when_on_all_four_faces_show_l_and_the_tools_are_callable(
     #
     # 这一格刻意不要求检查器真的跑起来：本文件的 `_lean_env` 只动开关、不给
     # `AGENTFLOW_LEAN_BIN`（那是"真跑检查器"那一档的事，见
-    # `tests/test_l_faithfulness_and_report_matrix.py`）。所以这里的读数是
+    # `tests/test_l_report_and_seam_matrix.py`）。所以这里的读数是
     # "工具在面上、经 ToolRegistry.call 走得到 handler、返回受控理由" ——
     # 它要和"工具不在这个角色的可调用面里"（一句话就被拒，见文件三的 F16）分得开。
     reg = build_registry(store=st, workspace_root=ws).registry

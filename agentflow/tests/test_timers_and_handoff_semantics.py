@@ -177,7 +177,16 @@ def test_a_a_program_that_runs_is_on_the_clock_while_it_runs(tmp_path, bench) ->
     seen: dict[str, Any] = {}
 
     def watch() -> None:
-        time.sleep(0.25)
+        # 等在跑的那条表把 pid 挂上再取快照。固定 `sleep(0.25)` 是个假红源：
+        # Windows 起一个子进程要几百毫秒（机器忙时更久），而 pid 是 `Popen` 之后才补进
+        # 账里的 ⇒ 快照可能落在"表已登记、pid 还没挂"的那一小段上。这一条要钉的是
+        # "程序跑着的时候 pid 在账上"，不是"0.25 秒时它一定已经挂上"。
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            rows = list(CLK.programs(ws).get("rows") or ())
+            if rows and isinstance(rows[0].get("pid"), int):
+                break
+            time.sleep(0.02)
         seen.update(CLK.programs(ws))
 
     th = threading.Thread(target=watch, daemon=True)
@@ -431,8 +440,16 @@ def test_c_a_timer_does_not_block_work_in_hand(tmp_path, bench,
     child = _child(cond, me)
     CLK.start_timer(ws, reason="等 D 交回结论", wait_for=f"task:{child}",
                     task_id=me, role="M")
-    # 手上有活：父名下一条没消的板项（queued 就是"等着我处置"）
-    item = cond.open_item(kind="notice", role="M", expects="ack", action="notice",
+    # 手上有活：父名下一条没消的板项（queued 就是"等着我处置"）。
+    #
+    # 2026-10-26 口径同步：这一格必须是要办事的那种板项（`expects="work"`）。
+    # 改前它写的是 `kind="notice" / expects="ack"`，而那一批把"信息型板项"改成
+    # "渲染即 ack"（`Conductor.mark_item_seen` → `_settle_if_informational`）：
+    # 一条 notice 被读进第一步提示词的那一刻就 `done+acked` ⇒ `open_items_of` 变空
+    # ⇒ `_pending_work` 读成"没有活" ⇒ `_park_gate` 落进挂机档 ⇒ 这条用例的停机开关
+    # （挂在 `on_call` 上）永远不触发 ⇒ 空转到 CI 超时。它测的是"计时器不阻塞动作"，
+    # 与"那条板项是什么种类"无关，所以换成一条真的还没办的委托。
+    item = cond.open_item(kind="delegation", role="M", expects="work", action="run_once",
                           summary="有一件事要你处置", called_by="judge",
                           parent_task_id=me, depth=1, input_key="judge:busy")
     assert item, item
@@ -560,9 +577,14 @@ def test_d_nothing_to_do_and_no_timer_is_a_handoff(tmp_path, bench,
                                                    monkeypatch: pytest.MonkeyPatch) -> None:
     """④ 无事可做 + 一条计时器都没有 ⇒ 交差：向父报告，父记静默。
 
-    夹具：子代理显式要求"等待任意计时器返回"，而它名下一条计时器都没有
-    （父派它的时候没有给它派下级）。这一档的定义就是业主要的那一句：
+    夹具：子代理先起一条表并显式要求"等待任意计时器返回"，随后那条表被撤掉
+    （父派它的时候没有给它派下级，它自己也没别的活在等）。这一档的定义就是业主要的那一句：
     「如果已无事可做且无计时器，这意味着它交差了」。
+
+    2026-10-26 口径同步（业主：「这个需要存在的计时器数大于等于1」）：起意那一刻
+    必须至少有一条现存计时器（0 条时 `clock.wait_any` 直接受控拒绝，
+    码 `no_timers_to_wait`），所以这一条的"没有可等的东西"由"表被撤掉"造成，
+    不再是"起意时就一条都没有"。
 
     钉住四件：
     1. 零模型调用（它没有可问模型的事）；
@@ -576,7 +598,9 @@ def test_d_nothing_to_do_and_no_timer_is_a_handoff(tmp_path, bench,
     st, cond, ws = _ws(tmp_path, "handoff")
     parent = cond.open_top_level_run("M", TASK)
     child = _child(cond, parent)
+    parked = CLK.start_timer(ws, after_sec=60.0, reason="等一会儿", task_id=child, role="D")
     _arm_wait(ws, child, role="D")
+    CLK.cancel_timer(ws, parked.timer_id)      # 撤掉之后：没有可等的东西了
 
     def park_slice(self_: AgentLoop, *, seconds: float, purpose: str) -> dict[str, Any]:
         return {"checked": True, "asked_sec": 0.0}   # 不该走到这里
@@ -630,7 +654,11 @@ def test_d2_the_parent_records_the_silent_child(tmp_path, bench) -> None:
     gate = _Gate([_tool("clock.now")])
     loop = _loop(st, cond, ws, gate, parent)
     loop.my_task_id = parent
-    run = type("Run", (), {"silent_children": [], "notes": []})()
+    run = type("Run", (), {"silent_children": [], "notes": [],
+                           # `_note_child_handoff` 现在还会把"问过哪几个静默子"记进这一格
+                           # （2026-10-26 另一批加的读数）；替身 Run 必须带上它，
+                           # 否则这一条测的是替身的字段表而不是父侧的交接。
+                           "silent_children_asked": []})()
 
     got = loop._note_child_handoff({"wait_for": f"task:{child}", "wake_id": "wk-1"},
                                   run=run)

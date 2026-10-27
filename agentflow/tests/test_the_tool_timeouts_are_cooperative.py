@@ -249,6 +249,55 @@ def test_the_table_matches_the_egress_and_exec_tools() -> None:
     assert "raise_if_timed_out()" in src.read_text(encoding="utf-8"), "检查点没写进处理函数"
 
 
+def _egress_and_exec_tools() -> set[str]:
+    """工具面上 `external in (egress, exec)` 的那些名字（现读，不写死名单）。"""
+    reg = build_registry().registry
+    return {n for n in reg.names()
+            if str(getattr(reg.get(n), "external", "")) in ("egress", "exec")}
+
+
+def _not_registered(names: set[str]) -> list[str]:
+    """这些名字里没有限时声明的那些（`lookup` 是唯一入口，`None` = 没声明）。"""
+    return sorted(n for n in names if TT.lookup(n) is None)
+
+
+def test_every_egress_or_exec_tool_is_in_the_timeout_table() -> None:
+    """判据：每个会出网 / 起子进程的工具都必须在 `TIMEOUT_TABLE` 里登记。
+
+    名单从工具面现读，不写死：将来加一件 `external="exec"` 的工具，这一条自动要求它
+    登记 —— 不登记的那一件就永远不会被限时，而没有任何别的东西会红（`formal.*` 三件
+    2026-10-26 之前正是这个形态：表里没有、工具面上有、超时面永远轮不到它们）。
+
+    这一条只问"都登记了没有"这一个方向；反方向（表里不许有工具面上没有的名字）由同文件的
+    `test_the_table_matches_the_egress_and_exec_tools` 守，两条读的是同一份现读名单。
+    """
+    want = _egress_and_exec_tools()
+    assert want, "工具面上一件 egress/exec 都没有 ⇒ 这条判据是真空的（装配面变了？）"
+    missing = _not_registered(want)
+    assert not missing, (
+        "这些工具会出网/起子进程，却不在 `TIMEOUT_TABLE` 里 ⇒ 它们永远不会被限时："
+        + "、".join(missing))
+
+
+def test_the_registration_criterion_goes_red_when_three_rows_are_deleted(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：把表里三行删掉 ⇒ 同一个判据必须点名那三件（而不是永远绿）。
+
+    删哪三行也是现读的（`_egress_and_exec_tools` 的前三件），不写死名单：判据一旦
+    退化成"抄一份今天的清单"，这一条就是同义反复。
+    """
+    want = _egress_and_exec_tools()
+    registered = sorted(n for n in want if TT.lookup(n) is not None)
+    assert len(registered) >= 3, f"登记在表里的 egress/exec 不足三件：{registered}"
+    victims = registered[:3]
+    for name in victims:
+        monkeypatch.delitem(TT.TIMEOUT_TABLE, name, raising=True)
+    assert all(TT.lookup(n) is None for n in victims), "反真空没删掉那三行"
+    missing = _not_registered(want)
+    assert set(victims) <= set(missing), (
+        f"删掉 {victims} 之后判据没有点名它们，只报了 {missing} ⇒ 这条反真空没咬住")
+
+
 def test_the_declared_seconds_have_three_states() -> None:
     """三态：声明了 / 没声明 / 读不到 —— 后者不许被折成 0（0 是"立刻超时"）。
 

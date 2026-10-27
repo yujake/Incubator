@@ -380,7 +380,7 @@ def test_the_summary_bit_stays_true_while_any_proof_is_in_sync(tmp_path: pathlib
 def test_the_statement_row_declares_bits_as_an_object() -> None:
     """③ `StatementRow.bits` 不是 number；生成物与声明逐字节一致。
 
-    断点原文：`readers.StatementRow` 把 `bits` 声明成 `("bits","number")`（`ui/src/
+    断点原文：`readers.py` 里声明的 `StatementRow` 把 `bits` 声明成 `("bits","number")`（`ui/src/
     types.ts` 同），而它实际是 dict ⇒ 类型面读不出 `bits.reviewed`（运行时能读）。
     """
     decl = RD.type_decls()

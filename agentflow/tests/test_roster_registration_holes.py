@@ -9,6 +9,7 @@
 2. `status=failed` / `cancelled` 的那 29 次既不进名册、也不写 `roster_problem`
 （改前那个 `elif` 只覆盖"没有秘书"）⇒ 守卫的第三态被折平。外加两处地雷：`_do_handoff` 读 `_gate["candidates"]` 而 `_handoff_address` 的
 gate没有这个键（`KeyError`）；`to="ALL"` 的内部直调有调用点、全仓没有那个方法的 def（⇒ `AttributeError`）。
+后一处今天按"只有一种写法"收口：`ALL` 一律落公共频道留言（判据⑤），那个逐项开板项的方法仍然不许补回。
 
 ## 纪律（这几条是判据本身的一部分，别顺手放宽）
 
@@ -318,27 +319,40 @@ def test_a_handoff_to_a_roster_name_does_not_raise_key_error(
 
 # ---------------------------------------------------------------- 判据⑤
 
-def _all_direct_call_is_refused(out: dict[str, Any]) -> None:
-    """判据⑤：`to="ALL"` 的内部直调 ⇒ 受控拒绝（不是 `AttributeError`），且拒信指路。"""
-    assert out.get("ok") is False, out
-    assert str(out.get("refused") or "") == "broadcast_only", out
-    assert "conductor.broadcast" in str(out.get("error") or ""), out
-    assert "受控拒绝" in str(out.get("note") or ""), out
+def _all_goes_to_the_public_channel(out: dict[str, Any]) -> None:
+    """判据⑤：`to="ALL"` 的内部直调 ⇒ 落公共频道留言（不是逐项开板项的广播）。
+
+    只留一种写法之后 `ALL` 只有一种含义：公共频道。它落一条 `agent_message`
+    （`channel=公共频道`、带 `board_kind="bulletin"` 与回执三态），不按名册逐项开板项。
+    回执那一格照旧三态：这一趟名下没有子代理 ⇒ `no_reader`（"展开了"不等于"有人读"）。
+    """
+    assert str(out.get("refused") or "") == "", out
+    assert str(out.get("to") or "") == "ALL", out
+    assert str(out.get("message_sent") or "").startswith("m"), out
+    assert out.get("channel") == "公共频道", out
+    assert out.get("board_kind") == "bulletin", out
+    assert out.get("receipt") == "no_reader" and out.get("ok") is False, out
 
 
-def test_a_direct_all_call_is_refused_instead_of_raising(tmp_path: pathlib.Path):
-    """判据⑤：两支内部直调都改成受控拒绝（那个按名册逐项开板项的旧实现已删，不许补回）。
+def test_a_direct_all_call_lands_in_the_public_channel(tmp_path: pathlib.Path):
+    """判据⑤：两支内部直调都走公共频道（那个按名册逐项开板项的旧实现已删，不许补回）。
 
-    负控（反过来证明）：那个方法真的不存在 ⇒ 改回"调那个方法"必抛 `AttributeError`。
+    改前这两支各调一次一个全仓没有 `def` 的方法 ⇒ `AttributeError`（"没发出去"看起来像
+    "框架坏了"）。补回那个方法更糟：它会把"按角色名逐项展开"的老语义复活，与
+    `conductor.broadcast` 分叉。所以这里钉两件：① `to="ALL"` 只落公共频道留言；
+    ② 那个方法仍然不存在（负控：改回调用它必抛 `AttributeError`）。
     """
     env = _env(tmp_path)
     loop = env["loop"]
-    _all_direct_call_is_refused(loop._do_message({"to": "ALL", "subject": "题", "body": "文"}))
-    _all_direct_call_is_refused(
+    _all_goes_to_the_public_channel(loop._do_message({"to": "ALL", "subject": "题", "body": "文"}))
+    _all_goes_to_the_public_channel(
         loop._message_legacy({"subject": "题", "body": "文"}, "ALL", ""))
-    # 一条都没发、一个板项都没开（受控拒绝不是"发出去了"）
+    # 两条都落成了公共频道留言（不是"发出去了"那种没有落点的读数）
     events, _bad = SS.read_session(env["ws"], sid=SID)
-    assert [e for e in events if e.get("kind") == "agent_message"] == [], events
+    public = [e for e in events if e.get("kind") == "agent_message"]
+    assert len(public) == 2, events
+    assert [e.get("channel") for e in public] == ["public", "public"], public
+    assert [e.get("to") for e in public] == ["ALL", "ALL"], public
     # 负控：改回调用不存在的方法 ⇒ AttributeError（这正是改前那一版的形态）
     assert not hasattr(AgentLoop, "_message_my_children")
     with pytest.raises(AttributeError):

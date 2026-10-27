@@ -120,10 +120,10 @@ DUTIES: dict[str, dict[str, object]] = {
                "`conductor.retire_child` 写成「落到秘书那一侧的同一处」，那一句同样在承诺"
                "秘书会接住销号，不登记就是方向二的缺口",
     },
-    # p204（2026-10-27 收口）：指导下发改成「沿绝对编号链逐级由秘书转发」（业主 2026-10-26
-    # 逐字取消"让各级父代理知道该消息"）。提示词里那几句（十格 policy 的同一句、M 的处置那一条、
-    # 以及工具说明里"每一跳的秘书只看链头往下转"）都在承诺"秘书会接着往下转"，所以它必须有一条
-    # 职责认领。真身是 `Secretary.relay_out`，生产调用点在 `conductor_guide`。
+    # p204（2026-10-27 收口）：指导下发是「沿绝对编号链逐级由秘书转发」。提示词里那几句
+    # （十格 policy 的同一句、M 的处置那一条、以及工具说明里"每一跳的秘书只看链头往下转"）
+    # 都在承诺"秘书会接着往下转"，所以它必须有一条职责认领。
+    # 真身是 `Secretary.relay_out`，生产调用点在 `conductor_guide`。
     "guide_relay": {
         "code": "relay_out",
         "where": "secretary.py",
@@ -201,11 +201,11 @@ DUTIES: dict[str, dict[str, object]] = {
         "code": "judge_statement",
         "where": "secretary.py",
         "call": ("agent_loop.py 的 _statement_filing_refusal",
-                 "agent_loop.py 的 _do_tool（调 registry.call 之前）"),
+                 "agent_loop.py 的 _do_tool（调 registry.call 之后，登记成功再判）"),
         "visibility": "conditional",
         "roles": ("B",),
         "probe": ("入库前你的秘书", "太平凡", "statement_too_trivial"),
-        "why": "入库审美：B 调 `own.register_statement` 之前，它自己的秘书判一次「这条够不够格」"
+        "why": "入库审美：B 调 `own.register_statement` 登记成功之后，它自己的秘书判一次「这条够不够格」"
                "（三态：合格 / 太平凡 / 判不了；词表 `STATEMENT_VERDICTS`，与派活轴的 `DECISIONS` 分开）；"
                "**只有**『判了且判太平凡』才拦，判不了 / 没查成 / 判断炸了一律 fail-open（+ 留痕）——"
                "让『没查成』决定产出入库正是这一格要避开的那种错",

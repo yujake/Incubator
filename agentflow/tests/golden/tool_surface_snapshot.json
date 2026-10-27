@@ -1,16 +1,16 @@
 {
  "cli": {
-  "": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n各角色工具数：{'A': 49, 'B': 35, 'C': 34, 'D': 54, 'E': 36, 'F': 48, 'G': 50, 'H': 42, 'V': 26, 'L': 35, 'M': 34}\n只读角色写工具泄漏：{'C': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack', 'analysis.register_report'], 'H': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding', 'conductor.ack'], 'V': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack']}（!! 有泄漏）\n⚠️ 有工具的 roles 声明需要纠正（行为已被 for_role 拦下）：\n  [C] ［工具面重算］按业主裁定「方案 1」放行了 1 个**该角色自己的落库代理**：['analysis.register_report']（写面钉死在 READONLY_CALL_EXCEPTIONS['C'] 里）\n  [H] ［工具面重算］按业主裁定「方案 1」放行了 4 个**该角色自己的落库代理**：['review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes']（写面钉死在 RE\n  [V] ［工具面重算］按通用能力放行了 8 件写工具：['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'cl\n（用 --role A 查看具体清单）\n",
-  "--json": "{\n  \"tools\": [\n    \"analysis.register_report\",\n    \"attack.check_budget\",\n    \"attack.create_plan\",\n    \"attack.list_plans\",\n    \"attack.pick_next_subgoal\",\n    \"attack.status\",\n    \"attack.step\",\n    \"clock.alarm_start\",\n    \"clock.now\",\n    \"clock.periodic_start\",\n    \"clock.periodic_stop\",\n    \"clock.timer_cancel\",\n    \"clock.timer_list\",\n    \"clock.timer_purpose\",\n    \"clock.timer_start\",\n    \"clock.wait_any\",\n    \"conductor.acceptance\",\n    \"conductor.ack\",\n    \"conductor.board\",\n    \"conductor.broadcast\",\n    \"conductor.cancel\",\n    \"conductor.closing\",\n    \"conductor.ensure_project\",\n    \"conductor.escalate\",\n    \"conductor.guide\",\n    \"conductor.ledger\",\n    \"conductor.resume_brief\",\n    \"conductor.retire_child\",\n    \"conductor.role_spec\",\n    \"conductor.state\",\n    \"conductor.status_report\",\n    \"conductor.stop\",\n    \"conductor.summon\",\n    \"conductor.summon_many\",\n    \"conductor.watch\",\n    \"doc.build_document\",\n    \"doc.compose_claim\",\n    \"doc.list_documents\",\n    \"doc.paper_compile\",\n    \"doc.register_dependency\",\n    \"doc.scan_claim\",\n    \"doc.write_mapping\",\n    \"formal.check_formal\",\n    \"formal.formalize\",\n    \"formal.record\",\n    \"fs.delete\",\n    \"fs.edit\",\n    \"fs.list\",\n    \"fs.move\",\n    \"fs.read\",\n    \"fs.search\",\n    \"fs.stat\",\n    \"fs.write\",\n    \"graph.build\",\n    \"graph.neighbors\",\n    \"graph.relations_between\",\n    \"graph.stats\",\n    \"lit.admit\",\n    \"lit.admit_all\",\n    \"lit.overlap_check\",\n    \"lit.stage_add\",\n    \"lit.stage_list\",\n    \"lit.stage_reject\",\n    \"lit.stage_withdraw\",\n    \"manuscripts.list\",\n    \"manuscripts.read\",\n    \"ocr.backends\",\n    \"ocr.detect_text_layer\",\n    \"ocr.run\",\n    \"research.list_gaps\",\n    \"research.poll_waiting\",\n    \"research.set_status\",\n    \"research.submit_gap\",\n    \"research.write_note\",\n    \"review.list_findings\",\n    \"review.record_finding\",\n    \"review.report\",\n    \"review.review_document\",\n    \"review.scan_document\",\n    \"review.verify_fixes\",\n    \"search.dedup_check\",\n    \"search.download\",\n    \"search.ingest_local\",\n    \"search.literature\",\n    \"search.local\",\n    \"search.providers\",\n    \"search.register\",\n    \"search.shelf\",\n    \"search.walk_citations\",\n    \"table.count\",\n    \"table.create\",\n    \"table.delete\",\n    \"table.get\",\n    \"table.list\",\n    \"table.schema\",\n    \"table.search\",\n    \"table.update\",\n    \"text.extract\",\n    \"trace.chain\",\n    \"trace.children\",\n    \"trace.concept\",\n    \"trace.literature\",\n    \"trace.relation\",\n    \"verify.code_hash\",\n    \"verify.detect_verifier\",\n    \"verify.evidence_for\",\n    \"verify.list_experiments\",\n    \"verify.list_verifications\",\n    \"verify.read_proof\",\n    \"verify.run_experiment\",\n    \"verify.verify_proof\"\n  ],\n  \"count\": 111,\n  \"loaded_modules\": [\n    \"table_tools\",\n    \"clock_tools\",\n    \"fs_tools\",\n    \"search_tools\",\n    \"ocr_tools\",\n    \"text_tools\",\n    \"graph_tools\",\n    \"trace_tools\",\n    \"research_tools\",\n    \"verify_tools\",\n    \"attack_tools\",\n    \"doc_tools\",\n    \"review_tools\",\n    \"conductor_tools\",\n    \"manuscript_tools\",\n    \"analysis_tools\",\n    \"formal_tools\"\n  ],\n  \"skipped_modules\": [],\n  \"lean_off_modules\": [],\n  \"params_checked\": 111,\n  \"context_budget\": null\n}\n",
-  "--role A": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 A 可用工具（49 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  lit.admit                    [write_local] ⚠需审批  正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；超限整笔拒绝。**不清空\n  lit.admit_all                [write_local] ⚠需审批  **一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 literature（≤10 条），然后结算清空本委托的列\n  lit.overlap_check            [read]  **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥\n  lit.stage_add                [write_local] ⚠需审批  把广搜结果**追加**进本次委托的待新增列表（一次任意条，超过 10 条也允许）：槽位号自动分配、只增不复用。入库是另一\n  lit.stage_list               [read]  查待新增列表：默认**只看当前委托**（列表按委托重置）；status 五态（pending/withdrawn/rej\n  lit.stage_reject             [write_local] ⚠需审批  审内容后**拒收**某一槽：写受控理由码（rejected_off_topic / rejected_low_quali\n  lit.stage_withdraw           [write_local] ⚠需审批  撤掉某一槽：**序号不变、不物理删除**，写受控理由码（withdrawn_by_reviewer）+ 一句说明；撤掉后\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  search.dedup_check           [read]  **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的\n  search.download              [write_local] ⚠需审批  把候选的 `pdf_url` 下到工作区 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `f\n  search.ingest_local          [write_local] ⚠需审批  **不联网**：把本地目录里的 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。proven\n  search.literature            [read] ⚠需审批  按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（A 不必再跑一次判重）。mode=\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.providers             [read] ⚠需审批  列出可用检索源并**真实探测**各自是否可用（发一次极小请求；ABFLOW_SKIP_NETWORK=1 时标为未探测而\n  search.register              [write_local] ⚠需审批  登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 \n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  search.walk_citations        [read] ⚠需审批  由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  text.extract                 [write_local] ⚠需审批  **把一篇 PDF 自带的文字层转成同名 `.txt` 写进 `library/`**（入库，原 PDF 不动；页间插 \n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n",
-  "--role B": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 B 可用工具（35 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  ocr.backends                 [write_local] ⚠需审批  **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议\n  ocr.detect_text_layer        [read]  判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验\n  ocr.run                      [write_local] ⚠需审批  对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fa\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n",
-  "--role C": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 C 可用工具（34 个）：\n  analysis.register_report     [write_local] ⚠需审批  把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|co\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  graph.build                  [read]  从 store 三张表构建概念图索引，返回图规模与完整性体检读数。\n  graph.neighbors              [read]  返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超\n  graph.relations_between      [read]  返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。\n  graph.stats                  [read]  返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.chain                  [read]  把一条关系代号链的每一步表述串起来，缺号如实列出。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  trace.concept                [read]  L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。\n  trace.literature             [read]  L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。\n  trace.relation               [read]  L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。\n",
-  "--role D": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 D 可用工具（54 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  graph.build                  [read]  从 store 三张表构建概念图索引，返回图规模与完整性体检读数。\n  graph.neighbors              [read]  返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超\n  graph.relations_between      [read]  返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。\n  graph.stats                  [read]  返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  research.list_gaps           [read]  列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排\n  research.poll_waiting        [read]  复查等待中的查询请求：请求是否结束、result_lit_ids 是否都被 B 消化；返回就绪/未就绪分组。\n  research.set_status          [write_local] ⚠需审批  改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail）。\n  research.submit_gap          [write_local] ⚠需审批  把某研究问题的知识缺口提交给 A（建 search_requests 行 + request_id 进该问题等待集）。\n  research.write_note          [write_local] ⚠需审批  向某研究问题追加一条研究笔记（追加而非覆盖）。\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.chain                  [read]  把一条关系代号链的每一步表述串起来，缺号如实列出。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  trace.concept                [read]  L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。\n  trace.literature             [read]  L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。\n  trace.relation               [read]  L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。\n",
-  "--role E": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 E 可用工具（36 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
-  "--role F": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 F 可用工具（48 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.create_plan           [write_local] ⚠需审批  为一个难题立项（预算四类键缺一不可，不完整就拒绝；每条子目标必须给 testable（怎么算做成了）—— 没写就整笔拒 \n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  attack.step                  [write_local] ⚠需审批  推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
-  "--role G": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 G 可用工具（50 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.build_document           [write_local] ⚠需审批  写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.paper_compile            [write_local] ⚠需审批  把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写编译回执。正文由你\n  doc.register_dependency      [write_local] ⚠需审批  登记外部依赖（FC-23）：`closed` 前用真实数据核 `lit_id`/`experiment_id`/`stm\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  doc.write_mapping            [write_local] ⚠需审批  写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appen\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
-  "--role H": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 H 可用工具（42 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.record_finding        [write_local] ⚠需审批  把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`revi\n  review.report                [write_local] ⚠需审批  产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯\n  review.review_document       [write_local] ⚠需审批  审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_f\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  review.verify_fixes          [write_local] ⚠需审批  复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_round\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n",
-  "--role V": "工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 V 可用工具（26 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `m\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.list_verifications    [read]  列验证台账（只读，可按命题过滤）。\n  verify.read_proof            [read]  按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。\n  verify.verify_proof          [read]  把一份证明按写成后的样子整体重读（V 的唯一主动作）：三态结论 + 问题指到步号，并写 verifications/<命\n"
+  "": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n各角色工具数：{'A': 52, 'B': 38, 'C': 36, 'D': 57, 'E': 39, 'F': 51, 'G': 53, 'H': 44, 'V': 28, 'L': 38, 'M': 37}\n只读角色写工具泄漏：{'C': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'analysis.register_report'], 'H': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding', 'conductor.ack', 'conductor.post_task'], 'V': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack', 'conductor.post_task']}（!! 有泄漏）\n⚠️ 有工具的 roles 声明需要纠正（行为已被 for_role 拦下）：\n  [C] ［工具面重算］按业主裁定「方案 1」放行了 1 个**该角色自己的落库代理**：['analysis.register_report']（写面钉死在 READONLY_CALL_EXCEPTIONS['C'] 里）\n  [H] ［工具面重算］按业主裁定「方案 1」放行了 4 个**该角色自己的落库代理**：['review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes']（写面钉死在 RE\n  [V] ［工具面重算］按通用能力放行了 9 件写工具：['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'cl\n（用 --role A 查看具体清单）\n",
+  "--json": "{\n  \"tools\": [\n    \"analysis.register_report\",\n    \"attack.check_budget\",\n    \"attack.create_plan\",\n    \"attack.list_plans\",\n    \"attack.pick_next_subgoal\",\n    \"attack.status\",\n    \"attack.step\",\n    \"clock.alarm_start\",\n    \"clock.now\",\n    \"clock.periodic_start\",\n    \"clock.periodic_stop\",\n    \"clock.timer_cancel\",\n    \"clock.timer_list\",\n    \"clock.timer_purpose\",\n    \"clock.timer_start\",\n    \"clock.wait_any\",\n    \"conductor.acceptance\",\n    \"conductor.ack\",\n    \"conductor.board\",\n    \"conductor.broadcast\",\n    \"conductor.cancel\",\n    \"conductor.closing\",\n    \"conductor.ensure_project\",\n    \"conductor.escalate\",\n    \"conductor.guide\",\n    \"conductor.ledger\",\n    \"conductor.post_task\",\n    \"conductor.resume_brief\",\n    \"conductor.retire_child\",\n    \"conductor.role_spec\",\n    \"conductor.state\",\n    \"conductor.status_report\",\n    \"conductor.stop\",\n    \"conductor.summon\",\n    \"conductor.summon_many\",\n    \"conductor.watch\",\n    \"doc.build_document\",\n    \"doc.compose_claim\",\n    \"doc.list_documents\",\n    \"doc.paper_compile\",\n    \"doc.register_dependency\",\n    \"doc.scan_claim\",\n    \"doc.write_mapping\",\n    \"formal.check_formal\",\n    \"formal.formalize\",\n    \"formal.record\",\n    \"fs.delete\",\n    \"fs.edit\",\n    \"fs.list\",\n    \"fs.move\",\n    \"fs.read\",\n    \"fs.search\",\n    \"fs.stat\",\n    \"fs.write\",\n    \"graph.build\",\n    \"graph.neighbors\",\n    \"graph.relations_between\",\n    \"graph.stats\",\n    \"lit.admit\",\n    \"lit.admit_all\",\n    \"lit.overlap_check\",\n    \"lit.stage_add\",\n    \"lit.stage_list\",\n    \"lit.stage_reject\",\n    \"lit.stage_withdraw\",\n    \"manuscripts.list\",\n    \"manuscripts.read\",\n    \"ocr.backends\",\n    \"ocr.detect_text_layer\",\n    \"ocr.run\",\n    \"program.list\",\n    \"program.stop\",\n    \"research.list_gaps\",\n    \"research.poll_waiting\",\n    \"research.set_status\",\n    \"research.submit_gap\",\n    \"research.write_note\",\n    \"review.list_findings\",\n    \"review.record_finding\",\n    \"review.report\",\n    \"review.review_document\",\n    \"review.scan_document\",\n    \"review.verify_fixes\",\n    \"search.dedup_check\",\n    \"search.download\",\n    \"search.ingest_local\",\n    \"search.literature\",\n    \"search.local\",\n    \"search.providers\",\n    \"search.register\",\n    \"search.shelf\",\n    \"search.walk_citations\",\n    \"table.count\",\n    \"table.create\",\n    \"table.delete\",\n    \"table.get\",\n    \"table.list\",\n    \"table.schema\",\n    \"table.search\",\n    \"table.update\",\n    \"text.extract\",\n    \"trace.chain\",\n    \"trace.children\",\n    \"trace.concept\",\n    \"trace.literature\",\n    \"trace.relation\",\n    \"verify.code_hash\",\n    \"verify.detect_verifier\",\n    \"verify.evidence_for\",\n    \"verify.list_experiments\",\n    \"verify.list_verifications\",\n    \"verify.read_proof\",\n    \"verify.run_experiment\",\n    \"verify.verify_proof\"\n  ],\n  \"count\": 114,\n  \"loaded_modules\": [\n    \"table_tools\",\n    \"clock_tools\",\n    \"fs_tools\",\n    \"search_tools\",\n    \"ocr_tools\",\n    \"text_tools\",\n    \"graph_tools\",\n    \"trace_tools\",\n    \"research_tools\",\n    \"verify_tools\",\n    \"attack_tools\",\n    \"doc_tools\",\n    \"review_tools\",\n    \"conductor_tools\",\n    \"manuscript_tools\",\n    \"analysis_tools\",\n    \"formal_tools\"\n  ],\n  \"skipped_modules\": [],\n  \"lean_off_modules\": [],\n  \"params_checked\": 114,\n  \"context_budget\": null\n}\n",
+  "--role A": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 A 可用工具（52 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  lit.admit                    [write_local] ⚠需审批  正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条\n  lit.admit_all                [write_local] ⚠需审批  提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态\n  lit.overlap_check            [read]  **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥\n  lit.stage_add                [write_local] ⚠需审批  把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）：同一委托内同一篇只占一个槽 —— 命中未判的那\n  lit.stage_list               [read]  查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛：`pending` 待裁 / `admitte\n  lit.stage_reject             [write_local] ⚠需审批  审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected\n  lit.stage_withdraw           [write_local] ⚠需审批  撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  search.dedup_check           [read]  **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的\n  search.download              [write_local] ⚠需审批  把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetc\n  search.ingest_local          [write_local] ⚠需审批  **不联网**：把本地目录里的 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。proven\n  search.literature            [read] ⚠需审批  按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（A 不必再跑一次判重）。mode=\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.providers             [read] ⚠需审批  列出可用检索源并**真实探测**各自是否可用（发一次极小请求；ABFLOW_SKIP_NETWORK=1 时标为未探测而\n  search.register              [write_local] ⚠需审批  登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 \n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  search.walk_citations        [read] ⚠需审批  由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  text.extract                 [write_local] ⚠需审批  把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（入库，原 PDF 不动；页间插 `=====\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n",
+  "--role B": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 B 可用工具（38 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  ocr.backends                 [write_local] ⚠需审批  **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议\n  ocr.detect_text_layer        [read]  判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验\n  ocr.run                      [write_local] ⚠需审批  对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fa\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n",
+  "--role C": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 C 可用工具（36 个）：\n  analysis.register_report     [write_local] ⚠需审批  把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|co\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  graph.build                  [read]  从 store 三张表构建概念图索引，返回图规模与完整性体检读数。\n  graph.neighbors              [read]  返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超\n  graph.relations_between      [read]  返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。\n  graph.stats                  [read]  返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.chain                  [read]  把一条关系代号链的每一步表述串起来，缺号如实列出。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  trace.concept                [read]  L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。\n  trace.literature             [read]  L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。\n  trace.relation               [read]  L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。\n",
+  "--role D": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 D 可用工具（57 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  graph.build                  [read]  从 store 三张表构建概念图索引，返回图规模与完整性体检读数。\n  graph.neighbors              [read]  返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超\n  graph.relations_between      [read]  返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。\n  graph.stats                  [read]  返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  research.list_gaps           [read]  列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排\n  research.poll_waiting        [read]  复查等待中的查询请求：请求是否结束、result_lit_ids 是否都被 B 消化；返回就绪/未就绪分组。\n  research.set_status          [write_local] ⚠需审批  改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail）。\n  research.submit_gap          [write_local] ⚠需审批  把某研究问题的知识缺口提交给 A（建 search_requests 行 + request_id 进该问题等待集）。\n  research.write_note          [write_local] ⚠需审批  向某研究问题追加一条研究笔记（追加而非覆盖）。\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.chain                  [read]  把一条关系代号链的每一步表述串起来，缺号如实列出。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  trace.concept                [read]  L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。\n  trace.literature             [read]  L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。\n  trace.relation               [read]  L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。\n",
+  "--role E": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 E 可用工具（39 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
+  "--role F": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 F 可用工具（51 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.create_plan           [write_local] ⚠需审批  为一个难题立项（预算四类键缺一不可，不完整就拒；每条子目标必须给 testable，没写就整笔拒 subgoal_wit\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  attack.step                  [write_local] ⚠需审批  推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
+  "--role G": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 G 可用工具（53 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.broadcast          [write_local] ⚠需审批  给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  conductor.retire_child       [write_local] ⚠需审批  给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步\n  doc.build_document           [write_local] ⚠需审批  写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.paper_compile            [write_local] ⚠需审批  把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 \n  doc.register_dependency      [write_local] ⚠需审批  登记外部依赖（FC-23）：`closed` 前用真实数据核 `lit_id`/`experiment_id`/`stm\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  doc.write_mapping            [write_local] ⚠需审批  写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appen\n  fs.delete                    [write_local] ⚠需审批  删除文件；删目录必须显式 recursive=true（不许删工作区根）。\n  fs.edit                      [write_local] ⚠需审批  定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.move                      [write_local] ⚠需审批  移动或重命名（目标已存在时拒绝，不静默覆盖）。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  fs.write                     [write_local] ⚠需审批  写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  program.stop                 [write_local] ⚠需审批  停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"kill\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.create                 [write_local] ⚠需审批  新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。\n  table.delete                 [write_local] ⚠需审批  删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  table.update                 [write_local] ⚠需审批  部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n  verify.run_experiment        [write_local] ⚠需审批  在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'`\n",
+  "--role H": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 H 可用工具（44 个）：\n  attack.check_budget          [none]  检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。\n  attack.list_plans            [read]  列出全部攻坚计划（可按 problem_key 过滤）。\n  attack.pick_next_subgoal     [none]  按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。\n  attack.status                [read]  读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  doc.compose_claim            [none]  构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无\n  doc.list_documents           [read]  只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。\n  doc.scan_claim               [none]  对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  review.list_findings         [read]  只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。\n  review.record_finding        [write_local] ⚠需审批  把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`revi\n  review.report                [write_local] ⚠需审批  产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯\n  review.review_document       [write_local] ⚠需审批  审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_f\n  review.scan_document         [none]  对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。\n  review.verify_fixes          [write_local] ⚠需审批  复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_round\n  search.local                 [read]  **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。\n  search.shelf                 [read]  **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.code_hash             [read]  计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。\n  verify.detect_verifier       [read]  探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。\n  verify.evidence_for          [read]  查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checke\n  verify.list_experiments      [read]  按登记顺序列出实验记录（只读）。\n",
+  "--role V": "工具总数：114（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）\n\n角色 V 可用工具（28 个）：\n  clock.alarm_start            [write_local] ⚠需审批  定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板\n  clock.now                    [read]  读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工\n  clock.periodic_start         [write_local] ⚠需审批  起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_se\n  clock.periodic_stop          [write_local] ⚠需审批  停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）\n  clock.timer_cancel           [write_local] ⚠需审批  取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态\n  clock.timer_list             [read]  列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到\n  clock.timer_purpose          [write_local] ⚠需审批  给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念\n  clock.timer_start            [write_local] ⚠需审批  起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。\n  clock.wait_any               [write_local] ⚠需审批  等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍\n  conductor.ack                [write_local] ⚠需审批  把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task\n  conductor.escalate           [read]  把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑\n  conductor.post_task          [write_local] ⚠需审批  给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能\n  fs.list                      [read]  列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。\n  fs.read                      [read]  读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines\n  fs.search                    [read]  在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。\n  fs.stat                      [read]  查看路径的大小/类型/修改时间；文件另给 sha256。\n  manuscripts.list             [read]  列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论\n  manuscripts.read             [read]  按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。\n  program.list                 [read]  列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 /\n  table.count                  [read]  统计行数（可用 filter 做等值过滤）。\n  table.get                    [read]  按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `stateme\n  table.list                   [read]  列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_r\n  table.schema                 [read]  返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。\n  table.search                 [read]  在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。\n  trace.children               [read]  看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最\n  verify.list_verifications    [read]  列验证台账（只读，可按命题过滤）。\n  verify.read_proof            [read]  按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。\n  verify.verify_proof          [read]  把一份证明按写成后的样子整体重读（V 的唯一主动作）：三态结论 + 问题指到步号，并写 verifications/<命\n"
  },
  "declarations": {
   "analysis.register_report": {
@@ -74,7 +74,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）——你是只读角色，这是唯一写入口，不登记等于没发生。",
+   "summary": "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）—— 只读角色唯一写入口，不登记等于没发生。",
    "tags": [
     "analysis",
     "write",
@@ -169,7 +169,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "为一个难题立项（预算四类键缺一不可，不完整就拒绝；每条子目标必须给 testable（怎么算做成了）—— 没写就整笔拒 subgoal_without_testable，计划一行都不落）。同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id。",
+   "summary": "为一个难题立项（预算四类键缺一不可，不完整就拒；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同一 problem_key 已有未终结的计划返回已有 plan_id。",
    "tags": [
     "attack",
     "plan"
@@ -447,7 +447,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'periodic_id','every_sec','purpose','fires','next_at','stopped_reason','purpose_missing','purpose_prompt','state','to','task_id','role','created_at','last_fired_at','remaining_sec','until_sec','wait_for','wait_for_resolved','wait_state','stopped_at','last_message','clock_status'}",
+   "returns": "{'periodic_id','every_sec','purpose','fires','next_at','stopped_reason','purpose_missing','purpose_prompt','state','to','task_id','role','created_at','last_fired_at','remaining_sec','until_sec','wait_for','wait_for_resolved','wait_state','stopped_at','last_message','clock_status','patrol_checklist'}",
    "roles": [
     "A",
     "B",
@@ -802,6 +802,14 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "close": {
+      "description": "收口方式：acked（知道了，expects=ack 的项）/ completed（做完了，expects=work 的项，如 `conductor.post_task` 落的那一条）。缺省 acked",
+      "enum": [
+       "acked",
+       "completed"
+      ],
+      "type": "string"
+     },
      "item_ids": {
       "description": "要确认的板项编号（`tasks` 里的 task_id，可一次给多条）",
       "items": {
@@ -824,7 +832,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'checked','ok','state','acked','already_done','refused','unknown','missing','not_yours','refusal_codes','results','count','requested','by_task_id','note','reason'}；state 是 acked / partial / refused / nothing / unknown 之一；acked 是落成的编号，refused 每项给 item_id / code / reason（code 是 not_yours / no_such_item / not_board_item / ack_unbacked / state_error 之一），results 逐条给 item_id / ok / code / state_before / state_after / step / seen_backfilled",
+   "returns": "{'checked','ok','state','acked','already_done','refused','unknown','missing','not_yours','refusal_codes','results','count','requested','by_task_id','note','close','reason'}；state 是 acked / partial / refused / nothing / unknown 之一；acked 是落成的编号，refused 每项给 item_id / code / reason（code 是 not_yours / no_such_item / not_board_item / ack_unbacked / bad_close / state_error 之一），results 逐条给 item_id / ok / code / state_before / state_after / step / seen_backfilled",
    "roles": [
     "A",
     "B",
@@ -840,7 +848,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
+   "summary": "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close=\"acked\"；`conductor.post_task` 落的 work 项（expects=work）用 close=\"completed\"。这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
    "tags": []
   },
   "conductor.board": {
@@ -1014,7 +1022,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "只读：跑收工门（八格）—— 正文与 PDF 对得上（`out/paper/main.tex`）/ 无未裁决矛盾 / 承重结论有 T3 / 报告体例 / 无待答问题 / **实质产出**（`statements` 等表至少一张非空）/ 验收表机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）/ 产物台账与盘上一致（`ARTIFACTS.jsonl`）。每格三态，unknown 不是通过。`can_close` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』。还回 `review_acceptance`：内容级验收五条判据 + 五种辅助读数；给 `cap_usd` 才判成本上限。",
+   "summary": "只读：跑收工门（八格）；名单在论文段里逐格写着，这里不重抄。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`can_close` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』。另回 `review_acceptance`：内容级验收五条 + 辅助读数；给 `cap_usd` 才判成本上限。",
    "tags": []
   },
   "conductor.ensure_project": {
@@ -1059,7 +1067,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "冷启动 / 热启动：`start=auto|cold|warm`，返回四态（absent/empty/workspace/not_a_project）与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
+   "summary": "冷启动 / 热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
    "tags": []
   },
   "conductor.escalate": {
@@ -1136,7 +1144,7 @@
       "type": "string"
      },
      "to": {
-      "description": "收件人：绝对编号链（`t-000001->t-000005->t-000012`，也可写裸六位数 `000001->000005`）、名册名混写（`M->D1->F2`），或只写链尾（`t-000012` / `D1`，链由台账现算）",
+      "description": "收件人：绝对编号链（`t-NNNNNN->t-NNNNNN->t-NNNNNN`，也可写裸六位数 `000001->000005`）、名册名混写（`M->D1->F2`），或只写链尾（`t-NNNNNN` / `D1`，链由台账现算）",
       "maxLength": 512,
       "minLength": 1,
       "type": "string"
@@ -1154,7 +1162,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把 M 的一句话沿秘书链逐级转发到链上最后那一个代理：只写链尾也认（链由台账的父子关系现算）；写整条链（绝对编号 `t-000001->t-000005->t-000012`，或名册名混写 `M->D1->F2`）也认，内部一律先解析成绝对编号链。每一跳的秘书只看链头往下转，正文只到链尾：只有链尾那一跳的秘书开一条板项、把正文交给它服务的那个代理；中间的秘书只转发、不读内容。返回里的 hops 逐项给 hop / of / at / elapsed_us / delta_us / secretary_role / secretary_task_id / mode（forward 或 deliver）/ from / to / remaining_chain / content_read / item_id / relay_id；delivered_to 是列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它要先取 [0]）。",
+   "summary": "把 M 的一句话沿秘书链逐级转发到链上最后那一个代理：只写链尾也认（链由台账的父子关系现算）；写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名混写 `M->D1->F2`）也认，内部一律先解析成绝对编号链。每一跳的秘书只看链头往下转，正文只到链尾：只有链尾那一跳的秘书开一条板项、把正文交给它服务的那个代理；中间的秘书只转发、不读内容。返回里的 hops 逐项给 hop / of / at / elapsed_us / delta_us / secretary_role / secretary_task_id / mode（forward 或 deliver）/ from / to / remaining_chain / content_read / item_id / relay_id；delivered_to 是列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它要先取 [0]）。",
    "tags": []
   },
   "conductor.ledger": {
@@ -1189,7 +1197,57 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。`task_count` 与 tree 行数数 `tasks` 全量（含顶趟行）；召唤数看 `started_total`。不含建议。",
+   "summary": "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。不含建议。",
+   "tags": []
+  },
+  "conductor.post_task": {
+   "effect": "write_local",
+   "external": "none",
+   "name": "conductor.post_task",
+   "needs_approval": true,
+   "params": {
+    "additionalProperties": false,
+    "properties": {
+     "detail": {
+      "description": "补充：怎么算办完（可空）",
+      "maxLength": 400,
+      "type": "string"
+     },
+     "key": {
+      "description": "幂等键：同一件事重复落项时给同一个 key ⇒ 不再开第二条（可空）",
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+     },
+     "summary": {
+      "description": "要办什么（一句话；会渲染给未来的你自己）",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "summary"
+    ],
+    "type": "object"
+   },
+   "returns": "{'checked','ok','state','item_id','task_id','role','depth','kind','expects','called_by','input_key','existing','summary','reason'}；state 是 posted / existing / refused / unknown 之一；existing 非空 = 这个 key 已经落过项，item_id 是那一条（没有新开）",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "sandbox_required": false,
+   "side_effect": "write_local",
+   "summary": "给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close=\"completed\"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。",
    "tags": []
   },
   "conductor.resume_brief": {
@@ -1241,7 +1299,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'checked','state','retired','task_id','name','parent_task_id','branch','task_id_compat','addressed_by','open_items','missing','reason','note','retired_path','roster_retired','subtree','subtree_size','order','cascade','retired_count','unrostered','active_nodes','busy_task_ids','readings','child_count','active_child_count','target_state','target_state_label','blocking','refusal_code'}；open_items 是列表（没销成时才非空），每项给 task_id / kind / item_state / summary 四格 —— 那四条键名刻意不写进键集合：空列表时一个都观测不到，写进去会让『声明 ⊆ 实跑』在受控拒绝那一支假红；target_state 是目标此刻的三态（flying / standby / silent / unknown）—— 空串只有一个意思：三态还没读到（早拒支：没有台账号 / 没给 store / 台账或名册对照表读不成 / 名册里没这个名字 / 不是你的子代理 / 没点名 / 子树或活跃读数没读成），**不是**「它是静默的」；target_state_label 是它的中文标签（空串同此一条），blocking 是逐条『为什么还不能销』（kind=working / waiting / unknown；target_state 是空串时它也是空表）；refusal_code 的充要条件：静默闸（三态读数）说话的每一档必带 target_not_silent —— 在飞 / 待机 / 三态读不到 / 名下还有活跃子代理 / 子树里还有活跃节点（含写盘前逐节点复核）；其余每一档都不带、是空串：早拒支（三态还没读）与板项没清那一档（读到了三态，但拦它的是板项，不是「不静默」）；cascade 是按销号次序排的逐项读数（task_id / name / role / depth / state），order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点",
+   "returns": "{'checked','state','retired','task_id','name','parent_task_id','branch','task_id_compat','addressed_by','open_items','missing','reason','note','retired_path','roster_retired','subtree','subtree_size','order','cascade','retired_count','unrostered','kept','cascade_reading','active_nodes','busy_task_ids','readings','child_count','active_child_count','target_state','target_state_label','blocking','refusal_code'}；open_items 是列表（没销成时才非空），每项给 task_id / kind / item_state / summary 四格 —— 那四条键名刻意不写进键集合：空列表时一个都观测不到，写进去会让『声明 ⊆ 实跑』在受控拒绝那一支假红；target_state 是目标此刻的三态（flying / standby / silent / unknown）—— 空串只有一个意思：三态还没读到（早拒支：没有台账号 / 没给 store / 台账或名册对照表读不成 / 名册里没这个名字 / 不是你的子代理 / 没点名 / 子树或活跃读数没读成），**不是**「它是静默的」；target_state_label 是它的中文标签（空串同此一条），blocking 是逐条『为什么还不能销』（kind=working / waiting / unknown；target_state 是空串时它也是空表）；refusal_code 的充要条件：静默闸（三态读数）说话的每一档必带 target_not_silent —— 在飞 / 待机 / 三态读不到 / 名下还有活跃子代理 / 子树里还有活跃节点（含写盘前逐节点复核）；其余每一档都不带、是空串：早拒支（三态还没读）、程序闸那一档（读到了三态，但拦它的是「这一支还有程序在跑」，不是「不静默」）与板项没清那一档（读到了三态，但拦它的是板项，不是「不静默」）；cascade 是按销号次序排的逐项读数（task_id / name / role / depth / state），order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点；kept 是「这一笔没有销成的节点」逐条 {id, name, depth, why}（拒绝时 = 整支，成功时只剩没有名字可销的 unrostered 那几个）—— why 逐条说实话：谁还在跑、谁在待机、谁名下的板项没清、谁不在名册里；cascade_reading = {count, ids, levels, kept} 是同一件事的汇总（count/ids/levels 是这一笔真销成了的那几个与它们的层深，目标自己为 0）",
    "roles": [
     "A",
     "B",
@@ -1254,7 +1312,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。",
+   "summary": "给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。",
    "tags": []
   },
   "conductor.role_spec": {
@@ -1281,7 +1339,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "某角色的描述（不是它的工具面）：role、summonable（你能不能直接派它），外加职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给它的动作表，也不给它今天的工具名。派活前用它确认『这个角色是干什么的』；与声明层同源。",
+   "summary": "某角色的描述（不是它的工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给它的动作表与工具名。派活前用它确认它能不能做这件事；与声明层同源。",
    "tags": []
   },
   "conductor.state": {
@@ -1295,13 +1353,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'root','tables','conjectures','tasks','queues'}",
+   "returns": "{'root','tables','conjectures','tasks','queues','programs'}",
    "roles": [
     "M"
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；召唤数看 `conductor.ledger(view=\"stats\")` 的 `started_total`；`queues.literature.unprocessed` = 已注册未消化的篇数（`run_once` 一篇一次）。",
+   "summary": "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 已注册未消化的篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上的程序进程读数，巡查按它点异常清单。",
    "tags": []
   },
   "conductor.status_report": {
@@ -1377,7 +1435,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 在飞任务有界收尾 → 剩下的合成终态（记未知、不重试）→ 落续跑简报。`force=true` 直接停：立刻按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。",
+   "summary": "停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 有界收尾 → 合成终态（记未知、不重试）→ 续跑简报。`force=true` 直接停：按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。",
    "tags": []
   },
   "conductor.summon": {
@@ -1480,7 +1538,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例给每个 target 不同 `instance` 标签 ⇒ 允许同波并发；没标签时出现多次自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `concurrent_peak`。",
+   "summary": "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例要各自不同的 `instance` 标签才同波并发；没标签时自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `concurrent_peak`。",
    "tags": []
   },
   "conductor.watch": {
@@ -1756,7 +1814,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "none",
-   "summary": "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段（kind/status/proof_location/scope_caveat/allowed_use/frozen）。",
+   "summary": "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。",
    "tags": [
     "document",
     "compose"
@@ -1838,7 +1896,7 @@
    ],
    "sandbox_required": true,
    "side_effect": "write_local",
-   "summary": "把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写编译回执。正文由你自己写（fs.write 到那个落点）—— 这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
+   "summary": "把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write 到那个落点，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
    "tags": [
     "document",
     "paper",
@@ -2400,7 +2458,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次，可选要求 sha256 与读到的那一版一致。保留产物闸同样管这一件：reports/ 下 F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md` 对 F / D / M 一律拒写（reserved_framework_artifact），请走各自的渲染动作。",
+   "summary": "定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那一版一致。reports/ 下框架产物同 fs.write（对 F / D / M 拒写，reserved_framework_artifact），改走各自的渲染动作。",
    "tags": [
     "fs",
     "write",
@@ -2548,7 +2606,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。",
+   "summary": "读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。",
    "tags": [
     "fs",
     "read"
@@ -2691,7 +2749,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物（F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md`）对 F / D / M 一律拒写（受控码 reserved_framework_artifact）—— 那几份只有 F 的 proof 动作、D 的交付动作能渲染，请走各自的渲染动作。",
+   "summary": "写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。",
    "tags": [
     "fs",
     "write"
@@ -2880,13 +2938,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/no_target/mixed...) + 三个上限读数",
+   "returns": "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/no_target/mixed...) + 三个上限读数",
    "roles": [
     "A"
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；超限整笔拒绝。**不清空列表**（清空属于 lit.admit_all）。",
+   "summary": "正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。",
    "tags": [
     "lit",
     "admit"
@@ -2914,13 +2972,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
+   "returns": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、overlap_with、new_content 八格；refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；以上三个数组在「整批提交」口径下恒空（登记支不可达，理由见本工具声明上方那段注释），所以元素形状只在这里用散文说：它们与 `lit.admit` 同形，由那一条的声明照旧带引号声明、并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
    "roles": [
     "A"
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "**一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 literature（≤10 条），然后结算清空本委托的列表（全终态、不物理删），并写委托报告 reports/lit-<request_id>.md（已入库 + 未入库含受控理由，两块都要有）。",
+   "summary": "提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。",
    "tags": [
     "lit",
     "admit",
@@ -3050,13 +3108,13 @@
     ],
     "type": "object"
    },
-   "returns": "{'request_id','batch','count','staged'}；staged[] 每项是 {'slot','batch','title'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/bad_entry/store_error) 之一 + 明细",
+   "returns": "{'request_id','batch','count','staged','updated'}；staged[] 每项是 {'slot','batch','title'}；updated[] 每项是 {'slot','batch','title'} 再加一格补进去的字段名列表（那格空 = 这一条没有新内容可补，它已经在列表里）；失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/bad_entry/store_error) 之一 + 明细",
    "roles": [
     "A"
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把广搜结果**追加**进本次委托的待新增列表（一次任意条，超过 10 条也允许）：槽位号自动分配、只增不复用。入库是另一件事（lit.admit_all）。",
+   "summary": "把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）：同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去（updated[]），不发新号；槽位号只增不复用、注册即待裁。逐条入库是 lit.admit（每条要带 relevance）；全部判完之后由 lit.admit_all 提交整批收口。",
    "tags": [
     "lit",
     "stage",
@@ -3082,6 +3140,7 @@
       "type": "string"
      },
      "status": {
+      "description": "`cleared` / `withdrawn` 是历史档（读成 `rejected`），留着只为查历史",
       "enum": [
        "pending",
        "withdrawn",
@@ -3095,13 +3154,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'request_id','current_request_id','batch','status','count','counts','gaps','rows','total_all_delegations','note'}；counts 是 {'pending','withdrawn','rejected','admitted','cleared'} 五个计数；rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year','type_code','summary','url','added_at','relevance','lit_id','admitted_at','reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason','new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)",
+   "returns": "{'request_id','current_request_id','batch','status','count','counts','duplicate_rows','duplicate_groups','gaps','rows','total_all_delegations','note'}；duplicate_rows = 落在「同一身份多个槽位」里的行数（只报数，counts 不折算）；duplicate_groups[] 每项给身份与槽位表两格（键名 key / slots；没有重复时是空数组）；counts 的键是 `litstage.CANDIDATE_DECISIONS` 三档，另有两个历史档键（恒为 0 —— 它们已读成 rejected）；rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year','type_code','summary','url','added_at','relevance','lit_id','admitted_at','reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason','new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)",
    "roles": [
     "A"
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "查待新增列表：默认**只看当前委托**（列表按委托重置）；status 五态（pending/withdrawn/rejected/admitted/cleared），**撤掉的空槽位照样在列表里并带理由**。",
+   "summary": "查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛：`pending` 待裁 / `admitted` 入库 / `rejected` 拒收（词表真身在 `litstage.CANDIDATE_DECISIONS`）；盘上的历史档 `cleared` / `withdrawn` 读成 `rejected` + 受控理由码，按老名字也查得到那几条。撤掉的空槽位照样在列表里（`rejected` + 理由，序号不复用）。",
    "tags": [
     "lit",
     "stage",
@@ -3152,7 +3211,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "审内容后**拒收**某一槽：写受控理由码（rejected_off_topic / rejected_low_quality / overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。",
+   "summary": "审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。",
    "tags": [
     "lit",
     "stage",
@@ -3204,7 +3263,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "撤掉某一槽：**序号不变、不物理删除**，写受控理由码（withdrawn_by_reviewer）+ 一句说明；撤掉后可再 stage_add 补位（新条进新序号）。",
+   "summary": "撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块。",
    "tags": [
     "lit",
     "stage",
@@ -3251,7 +3310,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，别重复别人的结论。",
+   "summary": "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。",
    "tags": []
   },
   "manuscripts.read": {
@@ -3411,10 +3470,96 @@
    ],
    "sandbox_required": true,
    "side_effect": "write_local",
-   "summary": "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（绝不返回空文本假装成功）。可给已登记文献编号。",
+   "summary": "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本假装成功）。可给已登记文献编号。",
    "tags": [
     "ocr",
     "run"
+   ]
+  },
+  "program.list": {
+   "effect": "read",
+   "external": "none",
+   "name": "program.list",
+   "needs_approval": false,
+   "params": {
+    "additionalProperties": false,
+    "properties": {
+     "include_done": {
+      "description": "是否含已经收口的程序行（缺省否：只看还在跑的）",
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "returns": "{'checked','task_id','role','programs','count','running','unowned','unowned_count','unowned_shown','unowned_running','others','others_running','include_done','retire_ready','note','reason'}",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "sandbox_required": false,
+   "side_effect": "read",
+   "summary": "列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。所有角色都能用。",
+   "tags": [
+    "clock",
+    "program",
+    "read"
+   ]
+  },
+  "program.stop": {
+   "effect": "write_local",
+   "external": "none",
+   "name": "program.stop",
+   "needs_approval": true,
+   "params": {
+    "additionalProperties": false,
+    "properties": {
+     "all_programs": {
+      "description": "停我名下全部还在跑的程序（缺省否；与 timer_id 二选一）",
+      "type": "boolean"
+     },
+     "reason": {
+      "description": "为什么停（写进那条程序行的 note，供审计）",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "timer_id": {
+      "description": "要停的那一条（program.list 里的 tm-…；与 all_programs 二选一）",
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "returns": "{'checked','task_id','role','mode','requested','stopped','killed','already_exited','timeout','not_mine','not_found','count','items','still_alive','woken','note','session_event','reason','clock_status'}",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "L",
+    "M"
+   ],
+   "sandbox_required": false,
+   "side_effect": "write_local",
+   "summary": "停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"killed\" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。",
+   "tags": [
+    "clock",
+    "program",
+    "communication"
    ]
   },
   "research.list_gaps": {
@@ -3747,7 +3892,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）**覆盖不到**的那类用它；`evidence` 必填，只写这一张表。",
+   "summary": "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的那类用它；`evidence` 必填。",
    "tags": [
     "review",
     "write"
@@ -3812,7 +3957,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件，不碰 claims。",
+   "summary": "产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。",
    "tags": [
     "review",
     "write",
@@ -3934,7 +4079,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并**列出**未解决项。",
+   "summary": "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未解决项。",
    "tags": [
     "review",
     "write"
@@ -4014,7 +4159,7 @@
    ],
    "sandbox_required": true,
    "side_effect": "write_local",
-   "summary": "把候选的 `pdf_url` 下到工作区 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 这条路走完了。`ok=True` 但 `content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+   "summary": "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完了。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
    "tags": [
     "search",
     "download"
@@ -4616,7 +4761,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行时另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；算不出来时是空表 + proof_routes_problem 说为什么。",
+   "summary": "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
    "tags": [
     "table",
     "crud"
@@ -4691,7 +4836,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；算不出来时是空表 + proof_routes_problem 说为什么。",
+   "summary": "列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
    "tags": [
     "table",
     "crud"
@@ -4921,7 +5066,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "**把一篇 PDF 自带的文字层转成同名 `.txt` 写进 `library/`**（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色读那份 `.txt`，不要读 PDF（`fs.read` 拒收二进制）。。",
+   "summary": "把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色只读那份 `.txt`（`fs.read` 拒收 PDF）。",
    "tags": [
     "text",
     "extract",
@@ -5371,7 +5516,7 @@
    ],
    "sandbox_required": true,
    "side_effect": "write_local",
-   "summary": "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场受控拒绝，理由码 `formal_not_in_e`）。",
+   "summary": "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。",
    "tags": [
     "experiment",
     "evidence"
@@ -5433,7 +5578,8 @@
    "clock.timer_purpose",
    "clock.timer_start",
    "clock.wait_any",
-   "conductor.ack"
+   "conductor.ack",
+   "conductor.post_task"
   ],
   "H": [
    "clock.alarm_start",
@@ -5444,6 +5590,7 @@
    "clock.timer_start",
    "clock.wait_any",
    "conductor.ack",
+   "conductor.post_task",
    "review.record_finding",
    "review.report",
    "review.review_document",
@@ -5457,7 +5604,8 @@
    "clock.timer_purpose",
    "clock.timer_start",
    "clock.wait_any",
-   "conductor.ack"
+   "conductor.ack",
+   "conductor.post_task"
   ]
  },
  "roles": {
@@ -5474,6 +5622,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -5492,6 +5641,8 @@
    "lit.stage_withdraw",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "search.dedup_check",
    "search.download",
    "search.ingest_local",
@@ -5525,6 +5676,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -5539,6 +5691,8 @@
    "ocr.backends",
    "ocr.detect_text_layer",
    "ocr.run",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -5562,6 +5716,7 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "fs.list",
    "fs.read",
    "fs.search",
@@ -5572,6 +5727,7 @@
    "graph.stats",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "search.local",
    "search.shelf",
    "table.count",
@@ -5602,6 +5758,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.compose_claim",
    "doc.list_documents",
@@ -5620,6 +5777,8 @@
    "graph.stats",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "research.list_gaps",
    "research.poll_waiting",
    "research.set_status",
@@ -5654,6 +5813,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -5665,6 +5825,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -5698,6 +5860,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.compose_claim",
    "doc.list_documents",
@@ -5712,6 +5875,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "review.list_findings",
    "review.scan_document",
    "table.count",
@@ -5746,6 +5911,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.build_document",
    "doc.compose_claim",
@@ -5764,6 +5930,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "review.list_findings",
    "review.scan_document",
    "table.count",
@@ -5797,6 +5965,7 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "doc.compose_claim",
    "doc.list_documents",
    "doc.scan_claim",
@@ -5806,6 +5975,7 @@
    "fs.stat",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "review.list_findings",
    "review.record_finding",
    "review.report",
@@ -5838,6 +6008,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "formal.check_formal",
    "formal.formalize",
@@ -5852,6 +6023,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -5882,6 +6055,7 @@
    "conductor.escalate",
    "conductor.guide",
    "conductor.ledger",
+   "conductor.post_task",
    "conductor.resume_brief",
    "conductor.retire_child",
    "conductor.role_spec",
@@ -5896,7 +6070,9 @@
    "fs.read",
    "fs.search",
    "fs.stat",
-   "fs.write"
+   "fs.write",
+   "program.list",
+   "program.stop"
   ],
   "V": [
    "clock.alarm_start",
@@ -5910,12 +6086,14 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "fs.list",
    "fs.read",
    "fs.search",
    "fs.stat",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "table.count",
    "table.get",
    "table.list",
@@ -5941,6 +6119,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -5959,6 +6138,8 @@
    "lit.stage_withdraw",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "search.dedup_check",
    "search.download",
    "search.ingest_local",
@@ -5992,6 +6173,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -6006,6 +6188,8 @@
    "ocr.backends",
    "ocr.detect_text_layer",
    "ocr.run",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -6029,6 +6213,7 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "fs.list",
    "fs.read",
    "fs.search",
@@ -6039,6 +6224,7 @@
    "graph.stats",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "search.local",
    "search.shelf",
    "table.count",
@@ -6069,6 +6255,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.compose_claim",
    "doc.list_documents",
@@ -6087,6 +6274,8 @@
    "graph.stats",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "research.list_gaps",
    "research.poll_waiting",
    "research.set_status",
@@ -6121,6 +6310,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "fs.delete",
    "fs.edit",
@@ -6132,6 +6322,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -6165,6 +6357,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.compose_claim",
    "doc.list_documents",
@@ -6179,6 +6372,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "review.list_findings",
    "review.scan_document",
    "table.count",
@@ -6213,6 +6408,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "doc.build_document",
    "doc.compose_claim",
@@ -6231,6 +6427,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "review.list_findings",
    "review.scan_document",
    "table.count",
@@ -6264,6 +6462,7 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "doc.compose_claim",
    "doc.list_documents",
    "doc.scan_claim",
@@ -6273,6 +6472,7 @@
    "fs.stat",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "review.list_findings",
    "review.record_finding",
    "review.report",
@@ -6305,6 +6505,7 @@
    "conductor.ack",
    "conductor.broadcast",
    "conductor.escalate",
+   "conductor.post_task",
    "conductor.retire_child",
    "formal.check_formal",
    "formal.formalize",
@@ -6319,6 +6520,8 @@
    "fs.write",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -6349,6 +6552,7 @@
    "conductor.escalate",
    "conductor.guide",
    "conductor.ledger",
+   "conductor.post_task",
    "conductor.resume_brief",
    "conductor.retire_child",
    "conductor.role_spec",
@@ -6366,6 +6570,8 @@
    "fs.search",
    "fs.stat",
    "fs.write",
+   "program.list",
+   "program.stop",
    "table.count",
    "table.create",
    "table.delete",
@@ -6387,12 +6593,14 @@
    "clock.wait_any",
    "conductor.ack",
    "conductor.escalate",
+   "conductor.post_task",
    "fs.list",
    "fs.read",
    "fs.search",
    "fs.stat",
    "manuscripts.list",
    "manuscripts.read",
+   "program.list",
    "table.count",
    "table.get",
    "table.list",
@@ -6422,7 +6630,7 @@
   "clock.timer_start": "(*, after_sec: 'float | None' = None, reason: 'str' = '', wait_for: 'str' = '', max_wait_sec: 'float | None' = None, to: 'str' = 'self') -> 'ToolResult'",
   "clock.wait_any": "(*, purpose: 'str' = '') -> 'ToolResult'",
   "conductor.acceptance": "(project_dir: 'str' = '', rel_path: 'str' = '', max_chars: 'int' = 60, ids: 'list | None' = None) -> 'ToolResult'",
-  "conductor.ack": "(item_ids: 'list', note: 'str' = '') -> 'ToolResult'",
+  "conductor.ack": "(item_ids: 'list', note: 'str' = '', close: 'str' = 'acked') -> 'ToolResult'",
   "conductor.board": "(limit: 'int' = 20) -> 'ToolResult'",
   "conductor.broadcast": "(subject: 'str', body: 'str' = '') -> 'ToolResult'",
   "conductor.cancel": "(reason: 'str' = 'user', detail: 'str' = '') -> 'ToolResult'",
@@ -6431,6 +6639,7 @@
   "conductor.escalate": "(need: 'str', kind: 'str', evidence: 'list | None' = None) -> 'ToolResult'",
   "conductor.guide": "(*, to: 'str', text: 'str') -> 'ToolResult'",
   "conductor.ledger": "(view: 'str' = 'tree', root_task_id: 'str' = '') -> 'ToolResult'",
+  "conductor.post_task": "(summary: 'str', detail: 'str' = '', key: 'str' = '') -> 'ToolResult'",
   "conductor.resume_brief": "() -> 'ToolResult'",
   "conductor.retire_child": "(child_name: 'str' = '', task_id: 'str' = '', reason: 'str' = '', name: 'str' = '') -> 'ToolResult'",
   "conductor.role_spec": "(role_name: 'str') -> 'ToolResult'",
@@ -6474,6 +6683,8 @@
   "ocr.backends": "(refresh=False)",
   "ocr.detect_text_layer": "(path='', lit_id='')",
   "ocr.run": "(path='', pages=None, backend='auto', languages=None, dpi=200, max_pages=20, lit_id='')",
+  "program.list": "(*, include_done: 'bool' = False) -> 'ToolResult'",
+  "program.stop": "(*, timer_id: 'str' = '', all_programs: 'bool' = False, reason: 'str' = '') -> 'ToolResult'",
   "research.list_gaps": "(status: 'str | None' = None, limit: 'int' = 50) -> 'ToolResult'",
   "research.poll_waiting": "() -> 'ToolResult'",
   "research.set_status": "(question_id: 'str', status: 'str', notes: 'str | None' = None) -> 'ToolResult'",
@@ -6519,7 +6730,7 @@
  },
  "summary": {
   "context_budget": null,
-  "count": 111,
+  "count": 114,
   "lean_off_modules": [],
   "loaded_modules": [
    "table_tools",
@@ -6540,7 +6751,7 @@
    "analysis_tools",
    "formal_tools"
   ],
-  "params_checked": 111,
+  "params_checked": 114,
   "skipped_modules": [],
   "tools": [
    "analysis.register_report",
@@ -6569,6 +6780,7 @@
    "conductor.escalate",
    "conductor.guide",
    "conductor.ledger",
+   "conductor.post_task",
    "conductor.resume_brief",
    "conductor.retire_child",
    "conductor.role_spec",
@@ -6612,6 +6824,8 @@
    "ocr.backends",
    "ocr.detect_text_layer",
    "ocr.run",
+   "program.list",
+   "program.stop",
    "research.list_gaps",
    "research.poll_waiting",
    "research.set_status",

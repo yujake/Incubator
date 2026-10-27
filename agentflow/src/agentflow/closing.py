@@ -5959,7 +5959,12 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
         if row is not None:
             try:  # 档位是旁支台账里的读数（`secretary.nontriviality_of`）；取不到就当没判
                 from . import secretary as _SEC
-                tier = _SEC.nontriviality_of(root, str(row.get("statement_full") or ""))["level"]
+                # 2026-10-26（Q20）：按号读 —— D16 起这份台账靠 `stmt_id` 与命题行对上。
+                # 改前这里只传正文：正文被改过一个字之后 sha 对不上，这一栏就退化成"未判"，
+                # 于是"T3/T4 的框架被搬进附录"这一条静默不报，与页面那一栏分家。
+                # 正文同时改回 D2 的唯一读口（`_SB.body_of`，另两处早就是它）。
+                tier = _SEC.nontriviality_of(
+                    root, _SB.body_of(row), stmt_id=str(row.get("stmt_id") or ""))["level"]
             except Exception:  # noqa: BLE001 - 读数取不到不影响这条判据
                 tier = None
         in_body = (body + after).strip()
@@ -6001,7 +6006,10 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
         # 空则退回历史行的 `statement_text`）。
         text = _SB.body_of(row)
-        got = _SEC.nontriviality_of(root, text)
+        # 2026-10-26（Q20）：按号读 —— 与页面那一栏（`webui.readers._statement_tier_reading`）
+        # 同一个读法。改前只传正文，正文改一个字这一格就退化成"未判"：分布里"未判"虚高、
+        # T3/T4 清单空，而两栏对同一条命题说两句话。
+        got = _SEC.nontriviality_of(root, text, stmt_id=str(row.get("stmt_id") or ""))
         # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）。
         # 改前这两件事折叠在 0 上，于是"没人判过"与"基础定理"在读数里同形。
         level = got.get("level")
@@ -6012,6 +6020,9 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
             high.append({"stmt_id": str(row.get("stmt_id") or ""), "level": level,
                          "label": _SEC.nontriviality_label(level),
                          "basis": str(got.get("basis") or ""),
+                         # 命中方式（按号 / 读旧行的 sha 回退）：读的人要能与页面那一栏
+                         # 逐字核对同一个 `matched_by`（2026-10-26，Q20 判据 b）。
+                         "matched_by": str(got.get("matched_by") or ""),
                          "tri": str(got.get("tri") or "unknown")})
     return {
         "checked": bool(rows),
@@ -6062,7 +6073,10 @@ def t4_ladder_problems(root: str | Path) -> list[str]:
         text = _SB.body_of(row)
         if not text.strip():
             continue
-        level = _SEC.nontriviality_of(root, text).get("level")
+        # 2026-10-26（Q20）：按号读。改前只传正文，正文改一个字这一格就把这条命题当成
+        # "不是 T4"静默放过 —— 退化成未判在这里是整条判据失效，不是少一条提示。
+        level = _SEC.nontriviality_of(
+            root, text, stmt_id=str(row.get("stmt_id") or "")).get("level")
         # 2026-10-23：判不了是 `None`（改前是 0）；T0 是 0 但它是真的档位，
         # 与 T4 无关 —— 所以这里判的是"是不是第 4 档"，不是"有没有读数"。
         if level != 4:

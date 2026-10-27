@@ -41,11 +41,29 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "ROLE-SPECS-APPENDIX.md"
 
+
+def _load_gate():
+    """按路径加载 `tools/verify_role_specs.py`（`tools/` 不是包，机器上也不装它）。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_role_specs_gate_for_appendix", REPO / "tools" / "verify_role_specs.py")
+    assert spec and spec.loader, "加载不了 tools/verify_role_specs.py（判据失去对象）"
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+G = _load_gate()
+
 #: 附录里必须有 `.4` 节的十一个角色（A–H + V + L + M）。少一节就是"漏写"，不是"这个角色没有工具面"。
 EXPECTED_ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "L", "M")
 
 #: 每节第一行那句"现读于 …"的形态（防有人把节改回手抄而不标日期与版本）。
-_READ_ON = re.compile(r"\*\*现读于 (\d{4}-\d{2}-\d{2})（p(\d+)，`AGENTFLOW_LEAN_ENABLED=1`）\*\*")
+#: 版本号允许写成"待抬"：抬版本之前写死一个数字就是假读数，所以本批写的是 `p210 待抬`。
+_READ_ON = re.compile(
+    r"\*\*现读于 (\d{4}-\d{2}-\d{2})（p(\d+)(?:\s*待抬)?，`AGENTFLOW_LEAN_ENABLED=1`）\*\*")
 
 #: 模块组：`` `clock.*` 9（`now` `timer_start` …） `` 或 `` `conductor.*` 19 ``。
 _GROUP = re.compile(r"`([a-z]+)\.\*` (\d+)(?:（((?:`[a-z_0-9]+`[ ]?)+)）)?")
@@ -104,35 +122,21 @@ def _groups(section: str, marker: str) -> tuple[int, dict[str, set[str]]]:
 
 
 @pytest.fixture(scope="module")
-def live():
-    """现算：角色 → (side_effect 分布, external 分布, 需审批数, 逐件名)。"""
-    sys.path.insert(0, str(REPO / "src"))
-    import tempfile  # noqa: PLC0415
+def face():
+    """唯一量法：`tools/verify_role_specs.py::live_tool_face()`（本文件不再自己装配）。
 
-    from agentflow import store as _store  # noqa: PLC0415
-    from agentflow.tools import ROLES, build_registry  # noqa: PLC0415
+    这一份此前是本文件里的第三份实现（`live` 与 `live_all` 两个 fixture 各算一遍注册表）。
+    三份实现就是三处口径：口径一旦分叉，红的是判据而不是"哪一处漂了"。
+    """
+    got, why = G.live_tool_face(root=REPO)
+    assert got is not None, why
+    return got
 
-    with tempfile.TemporaryDirectory(prefix="appendix_live_") as td:
-        st = _store.Store(Path(td))
-        st.init()
-        reg = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES)).registry
-        by_role: dict[str, dict] = {}
-        for role in EXPECTED_ROLES:
-            specs = [reg.get(n) for n in sorted(x.name for x in reg.for_role(role))]
-            se: dict[str, int] = {}
-            ext: dict[str, int] = {}
-            for s in specs:
-                se[s.side_effect] = se.get(s.side_effect, 0) + 1
-                ext[str(s.external)] = ext.get(str(s.external), 0) + 1
-            by_role[role] = {
-                "total": len(specs),
-                "se": se,
-                "ext": ext,
-                "appr": sum(1 for s in specs if s.needs_approval),
-                "names": {s.name for s in specs},
-            }
-        all_names = set(reg.names())
-    return by_role, all_names
+
+@pytest.fixture(scope="module")
+def live(face):
+    """角色 → (side_effect 分布, external 分布, 需审批数, 逐件名)。"""
+    return face["by_role"], set(face["names"])
 
 
 def test_every_role_section_is_marked_as_a_live_reading(live):
@@ -244,63 +248,28 @@ def test_a_one_off_number_is_caught(live):
 
 
 @pytest.fixture(scope="module")
-def live_all():
-    """现算全表：handler 形态、两根分布、需审批，以及"砍掉三件 formal.*"之后的 Lean 关口径。"""
-    import functools  # noqa: PLC0415
-    import tempfile  # noqa: PLC0415
+def live_all(face):
+    """全表读数（handler 形态 / 两根分布 / 需审批 / Lean 关口径 / 泄漏）—— 全部是 `face` 的投影。
 
-    sys.path.insert(0, str(REPO / "src"))
-    from agentflow import store as _store  # noqa: PLC0415
-    from agentflow.tools import ROLES, build_registry  # noqa: PLC0415
-
-    with tempfile.TemporaryDirectory(prefix="appendix_all_") as td:
-        st = _store.Store(Path(td))
-        st.init()
-        reg = build_registry(store=st, workspace_root=td, roles=tuple(ROLES)).registry
-        specs = [reg.get(n) for n in sorted(reg.names())]
-    forms: dict[str, int] = {}
-    for s in specs:
-        h = s.handler
-        if isinstance(h, functools.partial):
-            key = "partial"
-        elif getattr(h, "__name__", "") == "<lambda>":
-            key = "lambda"
-        elif getattr(h, "__closure__", None):
-            key = "closure"
-        else:
-            key = "function"
-        forms[key] = forms.get(key, 0) + 1
-
-    def _counts(items):
-        se: dict[str, int] = {}
-        ext: dict[str, int] = {}
-        for s in items:
-            se[s.side_effect] = se.get(s.side_effect, 0) + 1
-            ext[str(s.external)] = ext.get(str(s.external), 0) + 1
-        return se, ext, sum(1 for s in items if s.needs_approval)
-
-    se_on, ext_on, appr_on = _counts(specs)
-    # Lean 关着时唯一少的就是 `formal_tools` 那三件（`leanscope` 决定装不装那个模块）。
-    lean_off = [s for s in specs if not s.name.startswith("formal.")]
-    se_off, ext_off, appr_off = _counts(lean_off)
-    # 只读角色面里的写工具（`cli tools` 的"只读角色写工具泄漏"那一行数的就是它们）。
-    leak_counts = {
-        r: sum(1 for x in reg.for_role(r) if reg.get(x.name).side_effect == "write_local")
-        for r in ("C", "H", "V")
-    }
+    此前这里自己又装配一遍注册表：本文件于是有第三份"怎么量"，而它与
+    `tools/verify_role_specs.py` 那份没有任何东西保证同口径。
+    """
+    off = face["lean_off"]
     return {
-        "total": len(specs),
-        "forms": forms,
-        "se": se_on,
-        "ext": ext_on,
-        "appr": appr_on,
-        "off_total": len(lean_off),
-        "off_se": se_off,
-        "off_ext": ext_off,
-        "off_appr": appr_off,
-        "names": {s.name for s in specs},
-        "by_role": {r: len(reg.for_role(r)) for r in EXPECTED_ROLES},
-        "leak_counts": leak_counts,
+        "total": face["total"],
+        "forms": face["forms"],
+        "se": face["se"],
+        "ext": face["ext"],
+        "appr": face["appr"],
+        "off_total": off["total"],
+        "off_se": off["se"],
+        "off_ext": off["ext"],
+        "off_appr": off["appr"],
+        "names": set(face["names"]),
+        "by_role": dict(face["counts_by_role"]),
+        "leak_counts": dict(face["leaks"]),
+        "shared_total": face["shared_total"],
+        "shared_names": set(face["shared_names"]),
     }
 
 
@@ -362,6 +331,20 @@ def test_r01_handler_forms_and_the_two_gauge_row_match_the_registry(live_all):
     assert n, "§R0.1 的 B 口径那一格解析不出"
     assert int(n.group(1)) == want["total"], f"B 口径写 {n.group(1)}，实测 {want['total']}"
     assert int(n.group(2)) == want["off_total"], f"Lean 关写 {n.group(2)}，实测 {want['off_total']}"
+
+    # 八角色共有面：正文 §0.2 已把这张表删掉改成指路，所以它只有这一个落点 ——
+    # 落在这里就得在这里判，否则"删掉重复"等于"把那个数删得一个出处都没有"。
+    m = re.search(r"\*\*八角色共有\*\*（A–H 的交集）：(\d+) 件 —— ", sec)
+    assert m, "§R0.1 的'八角色共有'那一行解析不出（判据失去对象）"
+    assert int(m.group(1)) == want["shared_total"], (
+        f"八角色共有写 {m.group(1)} 件，实测 {want['shared_total']}")
+    total, listed = _groups(sec, "八角色共有")
+    assert total == want["shared_total"], f"共有的分组合计 {total}，实测 {want['shared_total']}"
+    for mod, names in listed.items():
+        live_names = {n.split(".", 1)[1] for n in want["shared_names"] if n.startswith(mod + ".")}
+        assert names == live_names, (
+            f"共有的 `{mod}.*` 清单少了 {sorted(live_names - names)}"
+            f"／多了 {sorted(names - live_names)}")
 
 
 def test_r03_right_column_matches_the_registry(live_all):

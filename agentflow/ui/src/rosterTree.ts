@@ -291,6 +291,12 @@ function asNode(value: unknown): RosterNode | null {
     // 而不是把它当成"静默" —— 那正是这一批要修的那个读数的反面）。
     state: asAgentState(value["state"]),
     state_reason: asText(value["state_reason"]),
+    // 疑似停滞（业主 2026-10-26 第二条）：旧后端不给这三格 ⇒ `stalled=false` 且秒数
+    // `null`（那一枚标记不画）。这不是"没有停滞"的结论，只是"这一份读数没给这一格" ——
+    // 所以秒数的缺省是 `null`，不是 0（0 会被读成"刚刚还走过一步"）。
+    stalled: value["stalled"] === true,
+    stalled_sec: asNumber(value["stalled_sec"]),
+    stalled_reason: asText(value["stalled_reason"]),
     task_found: value["task_found"] === true,
     in_flight: asNumber(value["in_flight"]),
     inbox: asInbox(value["inbox"]),
@@ -606,6 +612,39 @@ export function kidsStateText(kids: TreeRow[]): string {
  * 名下有未收口的活），只写两个字读的人分不出是哪一套 —— 括注等于把口径钉在字面上。
  */
 export const ACTIVE_TEXT = "活跃（非静默）";
+
+/** 疑似停滞那一枚标记的文案与悬停说明（`null` = 这个节点不标）。
+ *
+ * 业主 2026-10-26 第二条裁定（真机证据在 `projects/mp3-r3` 的 B1 / t-000006：
+ * 81 分钟里只有 4 个 step，状态却一直是 `running`）：
+ * 一个任务仍是 `running`、可最近 N 分钟没有新步 ⇒ 页面必须看得见这件事。
+ *
+ * 三条口径：
+ * 1. 它不改三态那一枚徽标：`state` 仍是 `flying`（"疑似"不是"查过了它是死的"），
+ *    所以这一格只画在徽标旁边，措辞里也不替它下结论；
+ * 2. 绝不说"静默"：停滞（这一拍没动静）与静默（无工作 ∧ 无计时器 ∧ 无活跃子）
+ *    是两件事，混起来会让它可以被销号 —— 而销号不可逆；
+ * 3. `stalled_sec` 是 `number | null`：`null` 是没读到（不折成 0 分钟）。
+ */
+export function stalledTag(node: RosterNode): { text: string; title: string } | null {
+  if (node.stalled !== true) {
+    return null;
+  }
+  const sec = typeof node.stalled_sec === "number" && Number.isFinite(node.stalled_sec)
+    ? node.stalled_sec
+    : null;
+  const mins = sec === null ? null : Math.floor(sec / 60);
+  const reason = typeof node.stalled_reason === "string" ? node.stalled_reason : "";
+  const why = reason !== ""
+    ? reason
+    : (mins === null ? "（后端没给停滞秒数）" : `最近一步在 ${mins} 分钟之前`);
+  const head = "疑似停滞（最近 N 分钟没有新步）";
+  const tail = sec === null ? "；秒数没读到" : `；已经 ${mins} 分钟（stalled_sec=${sec}）`;
+  return {
+    text: mins === null ? "疑似停滞" : `疑似停滞 ${mins} 分钟`,
+    title: `${head}${tail}；${why}。这一格不改三态：它仍然在 running 行上，也不能据此销号`,
+  };
+}
 
 /** 合计读不到时那一行文字。刻意**一个数字都没有**：`0` 会被读成"全都收工了"，
  * 而这一档说的是"没查成"。判据逐字断言这一行里没有数字（`states.checked=false`）。

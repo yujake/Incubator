@@ -91,8 +91,7 @@ def _persist_analysis_report(
 @tool(
     "analysis.register_report",
     (
-        "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）——你是只读角色，"
-        "这是唯一写入口，不登记等于没发生。"
+        "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）—— 只读角色唯一写入口，不登记等于没发生。"
     ),
     {
         "type": "object",

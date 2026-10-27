@@ -95,12 +95,30 @@ Z就不能再派子代理。」补的下一句是：「12是只管直接子，�
   `max_chain_depth=4`（链上 5 个代理）把链截断
   （理论上界 = 主控档 100 乘以链上每一跳的 25，实际由 `max_concurrency` 与
   `max_tasks_per_run` 卡住）。
+
+## 拒信的形状：四样在前，解释在后（Q31）
+
+模型看到的拒信不是台账里那一段全文，而是 `agent_loop._do_summon` 交给它的
+`_clip(res.detail, 400)`：写到第 400 字之后的句子，台账里看着「说了」，模型一个字
+也读不到 —— 比"没说"更坏，因为读台账的人会以为它知道。
+
+所以每一条拒信都按同一个形状拼（`refusal_detail`，四样见 `REFUSAL_SLOTS`）：
+
+1. 判定：凭什么拒 —— 现算读数（哪个上限、此刻读数多少、那个数从哪来）；
+2. 正路：照着就能走的那条路 —— 工具名与真实形参名；
+3. 前提：那条路的前提 —— 不满足时会怎样（受控码）；
+4. 禁令：不要再做什么。
+
+四样必须在 `REFUSAL_HEAD_CHARS`（= 400，就是那个窗口）以内；附加解释放在
+`REFUSAL_TAIL_HEAD`（说明）之后，允许被截。判据不看某一句话的措辞，只看形状
+（`refusal_shape_problems` + `tests/test_every_refusal_fits_what_the_model_sees.py`）：
+四样齐不齐、顺序对不对、四样那一段在不在窗口内、过一遍真的 `_clip` 之后还全在不在。
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from . import capabilities as C
 from . import schema as S
@@ -317,7 +335,138 @@ def direct_children_limit_for(policy: Policy, frm: str) -> int:
 fanout_limit_for = direct_children_limit_for
 
 
-# ---------------------------------------------------------------- 拒绝
+# ---------------------------------------------------------------- 拒绝的形状
+
+#: 模型真正能看到的拒信窗口（字）。`agent_loop._do_summon` 把拒绝报文交给模型时是
+#: `_clip(res.detail, 400)`：写到第 400 字之后的句子，台账里看着「说了」，模型一个
+#: 字也读不到 —— 那是本项目最忌的形态（说了等于没说，而且读不出来）。
+#:
+#: 所以拒信分两段：前面是模型必须看到的四样（本常量给它的上限），后面是附加解释
+#: （允许被切）。批量的那条路更窄（`summon_many` 的 `_clip(r.detail, 200)`）：
+#: 闸门拒信按 400 排，200 那一档掉的是附加解释与明细，不是四样。
+REFUSAL_HEAD_CHARS = 400
+
+#: 拒信的四样，顺序固定：判定 / 正路 / 前提 / 禁令（业主 2026-10-26 的 Q31 口径）。
+#:
+#:   ① 判定：凭什么拒 —— 现算读数（哪个上限、此刻读数多少、那个数从哪来）；
+#:   ② 正路：照着就能走的那条路 —— 工具名与真实形参名（没有可调的工具时明说）；
+#:   ③ 前提：那条路的前提 —— 不满足时会怎样（受控码）；
+#:   ④ 禁令：不要再做什么。
+#:
+#: 每一项的取值是它的词头。词头不是为了好看：判据按词头量「四样齐不齐、顺序对不对」
+#: （`refusal_shape_problems`），不按某一条报文的措辞量。四个词头与拼装顺序只有这一份，
+#: `refusal_detail` 的四个形参就按这个顺序排。
+REFUSAL_SLOTS: tuple[tuple[str, str], ...] = (
+    ("判定：", "判定依据：现算读数（哪个上限、此刻是多少、那个数从哪来）"),
+    ("正路：", "照着就能走的那条路：工具名 + 真实形参名"),
+    ("前提：", "那条路的前提：不满足时会怎样（受控码）"),
+    ("禁令：", "不要再做什么"),
+)
+
+#: 词头的派生视图（拼装与判据都读它，不另抄一份字面量）。
+REFUSAL_SLOT_HEADS: tuple[str, ...] = tuple(head for head, _ in REFUSAL_SLOTS)
+
+#: 附加解释的词头：它之前的全部内容就是「模型必须看到的那一段」。
+REFUSAL_TAIL_HEAD = "说明："
+
+#: 「禁令」那一段必须带一个禁令词（形状底线：不能把禁令写成一个陈述句）。
+REFUSAL_BAN_MARKERS: tuple[str, ...] = ("不要", "别", "不许")
+
+#: 扇出拒信的判定里最多逐个点几格。名单可以很长（主控档 100 格），而头部只有一个窗口：
+#: 头部只点前几格（静默的排在前面，它们才是可行动的），其余在台账 `fanout_seats_of` 里。
+#: 把全量名单塞进头部 = 用一个读数把窗口撑爆，前提与禁令又被挤出去（Q31 的形态）。
+FANOUT_SEAT_LABELS_IN_HEAD = 3
+
+
+def refusal_detail(*, measure: str, route: str, premise: str, ban: str,
+                   why: str = "") -> str:
+    """按拒信形状拼一条交给模型与台账的拒绝报文。
+
+    四个形参就是四样（顺序见 `REFUSAL_SLOTS`），`why` 是允许被截的附加解释。
+
+    为什么必须有一个拼装口、而不是各条自写：形状是所有拒信的共同约束，自写就会漂。
+    Q31 实测的那一处正是漂出来的：扇出那条 580 字，判定与工具名在前 400 字里，而
+    「只可对静默的」这条前提与收尾全在 400 之后 —— 台账里写着，模型一个字没看到。
+    拼装口把顺序与词头定死，判据再独立量一遍成品（`refusal_shape_problems`）：
+    两道都要 —— 只有拼装口的话，绕过它手拼一条报文就没有人看得见。
+    """
+    bodies = (measure, route, premise, ban)
+    parts = [f"{head}{str(body).strip('；。 ')}"
+             for (head, _), body in zip(REFUSAL_SLOTS, bodies)]
+    text = "；".join(parts)
+    tail = str(why).strip("；。 ")
+    return f"{text}；{REFUSAL_TAIL_HEAD}{tail}" if tail else text
+
+
+def refusal_head(detail: str) -> str:
+    """模型必须看到的那一段：开头到 `REFUSAL_TAIL_HEAD` 为止（没有附加解释就是整段）。"""
+    text = str(detail or "")
+    idx = text.find(REFUSAL_TAIL_HEAD)
+    return text if idx < 0 else text[:idx]
+
+
+def refusal_shape_problems(detail: str, *,
+                           budget: int = REFUSAL_HEAD_CHARS) -> tuple[str, ...]:
+    """按拒信形状量一段报文：返回问题清单（空元组 = 合格）。
+
+    量的是形状，不是措辞：四样齐不齐、顺序对不对、四样那一段在不在窗口内，外加两条
+    能机械判的内容底线（判定里要有一个数字 = 现算读数；禁令里要有一个禁令词）。
+    它不判断「正路指得对不对」—— 那是各条闸自己的判据（触深与扇出各有一份，
+    见 `tests/test_depth_exceeded_says_escalate_to_parent.py` 那一族）。
+
+    为什么留成一个纯函数：拼装口（`refusal_detail`）与判据量的是同一件事，
+    两处各写一套就会漂成「拼的时候算 400、量的时候算 500」。
+    """
+    text = str(detail or "")
+    if not text.strip():
+        return ("拒信是空的：形状判据没有对象",)
+
+    problems: list[str] = []
+    heads = [head for head, _ in REFUSAL_SLOTS]
+    idx: list[int] = []
+    for head in heads:
+        count = text.count(head)
+        if count == 0:
+            problems.append(f"缺「{head}」这一样")
+            idx.append(-1)
+        elif count > 1:
+            problems.append(f"「{head}」出现了 {count} 次（形状判据量不出顺序）")
+            idx.append(text.find(head))
+        else:
+            idx.append(text.find(head))
+
+    present = [i for i in idx if i >= 0]
+    if present != sorted(present):
+        problems.append(f"四样的顺序不对（要求 {' → '.join(heads)}，实际出现位置 {present}）")
+
+    tails = text.count(REFUSAL_TAIL_HEAD)
+    tail = text.find(REFUSAL_TAIL_HEAD)
+    if tails > 1:
+        problems.append(f"「{REFUSAL_TAIL_HEAD}」出现了 {tails} 次（只许有一个附加解释的入口）")
+    if tail >= 0 and present and tail < max(present):
+        problems.append("附加解释排在某一样之前（顺序必须是四样在前、说明在后）")
+
+    # 四样各自的正文：到下一个词头（或附加解释）为止。
+    bounds = sorted([i for i in present] + ([tail] if tail >= 0 else []) + [len(text)])
+    for head, start in zip(heads, idx):
+        if start < 0:
+            continue
+        after = start + len(head)
+        end = next((b for b in bounds if b > start), len(text))
+        body = text[after:end]
+        if not body.strip():
+            problems.append(f"「{head}」后面没有内容")
+            continue
+        if head == heads[0] and not any(ch.isdigit() for ch in body):
+            problems.append("「判定：」里一个数字都没有 —— 现算读数没有落进报文")
+        if head == heads[-1] and not any(m in body for m in REFUSAL_BAN_MARKERS):
+            problems.append("「禁令：」里没有禁令词（不要 / 别 / 不许）")
+
+    head_len = len(refusal_head(text))
+    if head_len > budget:
+        problems.append(
+            f"四样那一段 {head_len} 字 > 窗口 {budget} 字（多出来的模型读不到）")
+    return tuple(problems)
 
 
 @dataclass(frozen=True)
@@ -374,6 +523,13 @@ class Decision:
     #: （所有者 2026-10-08：单时刻，不是累计；返回即腾出名额。
     #: 业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）。
     direct_children: int = 0
+    #: 占住那几格的是谁（`Conductor.fanout_seats_of` 的 `seats`，逐格
+    #: `task_id` / `name` / `role` / `state` / `state_label` / `retirable` / `why`）。
+    #:
+    #: 它不是判据，是拒绝报文里那份名单的来源：触顶那一刻父要知道"被谁占着"与
+    #: "其中谁已经可以销号腾位"。空元组 = 这一层没读到名单（纯策略判据、或台账读不成），
+    #: 报文照旧给数量 —— 不许把"没读到名单"说成"没有可销的"。
+    direct_children_seats: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
     #: 当前正在运行的任务数（瞬时）。
     running: int = 0
     #: 本次 run 已经发生的召唤总数。
@@ -415,19 +571,44 @@ def check_action(role: str, action: str, *, registry: Any = None) -> Refusal | N
     """
     known = C.roles_in(registry)
     if role not in known:
-        return Refusal("unknown_role", f"角色 {role!r} 不在 {known} 里", "role")
+        return Refusal(
+            "unknown_role",
+            refusal_detail(
+                measure=f"角色 {role!r} 不在 {known} 里（名单共 {len(known)} 个）",
+                route="把 to 换成名单里的一个名字（名单来自 capabilities.roles_in，"
+                      "别凭记忆写）",
+                premise="只有名单里的名字才谈得上边与动作 —— 拼错一个字母就是这一档，"
+                        "不是「这个角色没有这个本事」",
+                ban="别用同一个拼写重试",
+            ),
+            "role",
+        )
     if role == S.CONDUCTOR_ROLE:
         # 主控只能被召唤这件事本身，它没有"动作"。
         return Refusal(
             "unknown_action",
-            "主控 M 没有 Agent 动作（它的动作是 summon 本身，由 Conductor 实现）",
+            refusal_detail(
+                measure=f"主控 {S.CONDUCTOR_ROLE} 有 0 个 Agent 动作"
+                        "（它的动作是 summon 本身，由 Conductor 实现）",
+                route="把活派给具体角色：`conductor.summon` 的 `target_role` 填"
+                      " A–H / L / V 之一",
+                premise="主控自己的「动作」就是派活这一件事 —— 它不替任何角色干"
+                        "它那一格的活",
+                ban=f"别再给 {S.CONDUCTOR_ROLE} 填动作名",
+            ),
             "action",
         )
     if C.find_action(role, action, registry=registry) is None:
         known = [s.action for s in C.actions_for(role, registry=registry)]
         return Refusal(
             "unknown_action",
-            f"{role} 没有动作 {action!r}（它有：{known}）",
+            refusal_detail(
+                measure=f"{role} 没有动作 {action!r}（它有 {len(known)} 个：{known}）",
+                route="用清单里的那个动作名重派 —— 动作名逐字照抄，别自己起名",
+                premise="动作名不在清单里时边与参数都无从核起：这不是「它做不了」，"
+                        "是「没有这个动作」",
+                ban="别把同一件活换个动作名再试",
+            ),
             "action",
         )
     return None
@@ -532,9 +713,16 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if _lean_hidden(d.to):
         return Refusal(
             "forbidden_edge",
-            (f"{d.to} 只在 Lean 形式化开关打开时存在（reason=lean_off / lean_unreadable）："
-             f"这一档没有『召唤 {d.to}』这件事 —— 要用它就把开关打开，"
-             "否则改派别的角色（这一档下不要为形式化花钱）"),
+            refusal_detail(
+                measure=(f"{d.to} 只在 Lean 形式化开关打开时存在"
+                         "（reason=lean_off / lean_unreadable）—— 这一档的角色名单里"
+                         f"{d.to} 出现 0 次"),
+                route=("要用它就把开关打开；不开就改派别的角色"
+                       "（这一档下不要为形式化花钱）"),
+                premise=(f"这一档没有『召唤 {d.to}』这件事：不是名字拼错了，"
+                         "是这一档这条路不存在"),
+                ban="别在开关关着时反复试这条边",
+            ),
             "edge",
         )
     # 2026-10-22 晚（业主最终协作面裁定接线时实测的那条缝）：开关关着时隐藏的角色
@@ -545,20 +733,60 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if _lean_hidden(d.frm):
         return Refusal(
             "forbidden_edge",
-            (f"{d.frm} 只在 Lean 形式化开关打开时存在（reason=lean_off / lean_unreadable）："
-             f"这一档没有『{d.frm} 召唤 {d.to}』这件事 —— 要用它就把开关打开，"
-             "否则改派别的角色（这一档下不要为形式化花钱）"),
+            refusal_detail(
+                measure=(f"{d.frm} 只在 Lean 形式化开关打开时存在"
+                         "（reason=lean_off / lean_unreadable）—— 这一档的角色名单里"
+                         f"{d.frm} 出现 0 次"),
+                route=("要用它就把开关打开；不开就改派别的角色"
+                       "（这一档下不要为形式化花钱）"),
+                premise=(f"这一档没有『{d.frm} 召唤 {d.to}』这件事：不是名字拼错了，"
+                         "是这一档这条路不存在"),
+                ban="别在开关关着时反复试这条边",
+            ),
             "edge",
         )
-    if d.to in (C.NON_SUMMONABLE if registry is None
-                else frozenset(r for r in registry.roles()
-                                if not registry.get(r).summonable)):
-        return Refusal("forbidden_edge", f"{d.to} 是不可召唤的（没有『召唤主控』这件事）", "edge")
+    non_summonable = (C.NON_SUMMONABLE if registry is None
+                      else frozenset(r for r in registry.roles()
+                                     if not registry.get(r).summonable))
+    if d.to in non_summonable:
+        return Refusal(
+            "forbidden_edge",
+            refusal_detail(
+                measure=(f"{d.to} 是不可召唤的（没有『召唤主控』这件事）—— "
+                         f"这一档不可召唤的角色有 {len(non_summonable)} 个"),
+                route=("没有能召唤主控的工具：要让主控做事，把结论或请求交回它"
+                       "（它在自己那一层派活）"),
+                premise="主控只由运行期（CLI / 人或父流程）唤起，任何代理都召不动它",
+                ban="别再把这个名字填进 to",
+            ),
+            "edge",
+        )
     known = C.roles_in(registry)
     if d.to not in known:
-        return Refusal("unknown_role", f"角色 {d.to!r} 不存在", "role")
+        return Refusal(
+            "unknown_role",
+            refusal_detail(
+                measure=(f"角色 {d.to!r} 不存在（名册里 {len(known)} 个角色："
+                         f"{sorted(known)}）"),
+                route=(f"用名册名重派（{sorted(S.ROLES)} 或主控 {S.CONDUCTOR_ROLE}）；"
+                       "名字从名册读数取，别凭记忆拼"),
+                premise="目标必须在名册里，边表才谈得上「这条边存不存在」",
+                ban="别用同一个拼写重试",
+            ),
+            "role",
+        )
     if d.frm not in known:
-        return Refusal("unknown_role", f"召唤方 {d.frm!r} 不是合法角色", "role")
+        return Refusal(
+            "unknown_role",
+            refusal_detail(
+                measure=f"召唤方 {d.frm!r} 不是合法角色（名册里 {len(known)} 个）",
+                route="这一格不是你选的参数：把这条拒信连同 task_id 交给父代理处理",
+                premise="召唤方是运行期按台账号解析出来的；它不在名册里说明接线坏了，"
+                        "重派也还是这一句",
+                ban="别自己去改召唤方再试",
+            ),
+            "role",
+        )
     allowed = C.edges_for(d.frm, registry=registry)
     if d.to not in allowed:
         # 2026-10-13（来自无 Lean T2 的两趟真机）：这句话必须可行动。
@@ -575,11 +803,22 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
         # 它是读数不是新规则：能到就说能到（说得出名字），不能到就还是原来那句话。
         via = sorted(r for r in allowed
                      if d.to in C.edges_for(r, registry=registry))
-        hint = (f"；改派 {'、'.join(via)} —— 它能替你派 {d.to}（政策指定的绕路，别再重试这条边）"
-                if via else "")
+        if via:
+            route = (f"改派 {'、'.join(via)} —— 它能替你派 {d.to}"
+                     "（政策指定的绕路，别再重试这条边）")
+        else:
+            route = ("没有一跳能替你派它：把这件事交给你的父代理（`conductor.escalate`），"
+                     "或改派一个政策允许的目标")
         return Refusal(
             "forbidden_edge",
-            f"{d.frm} → {d.to} 不在策略允许的边里（{d.frm} 只能召唤 {sorted(allowed)}）{hint}",
+            refusal_detail(
+                measure=(f"{d.frm} → {d.to} 不在策略允许的边里（{d.frm} 只能召唤 "
+                         f"{sorted(allowed)}，共 {len(allowed)} 条）"),
+                route=route,
+                premise=("边是结构闸门：换参数、换动作都还是这条边，"
+                         "同一对角色重试只会得到同一句「不」"),
+                ban="别再重试这条边",
+            ),
             "edge",
         )
 
@@ -589,14 +828,40 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     # 不跟着改名；这里的 depth 一律指台账跳数，与直接子数无关。
     # 报文按业主的数法（第几个代理）点明，同时把台账读数一起给出 —— 两种数法差一，
     # 只写一种会让读的人再差一（业主原话：「Z就不能再派子代理」）。
+    #
+    # 2026-10-26 业主加的那一条（逐字见
+    # `tests/test_depth_exceeded_says_escalate_to_parent.py` 的模块头）：触深那一刻的拒信
+    # 必须点明"这件事该上报父代理去协调，不要再自己派"。四样缺一不可，与上面第 [5] 步
+    # 扇出那条同一个形状（别各写一套）：
+    # ① 深度现算（`max_agents_on_chain` 读 policy，不写死 5；两种数法都给）；
+    # ② 方向（上报父代理去协调 —— 不是"你再想想怎么派"，更不是"交给同级伙伴"：
+    #    同一层再派一次还是同一句"不"，那句指路等于没指）；
+    # ③ 工具与真实形参名（`conductor.escalate` 的 `need` / `kind` / `evidence`，
+    #    取值与形参名都取自真身：`conductor.ESCALATE_KINDS` 与工具声明）；
+    # ④ 禁令（不要再自己派）。
+    # 整段还刻意压在 400 字以内：循环给模型看的是 `_clip(res.detail, 400)`
+    # （`agent_loop._do_summon`），写到 400 字之外的句子模型永远读不到 —— 提示词里
+    # 有跟没有一样，而台账里看着是"说了"。
     if d.depth > policy.max_chain_depth:
-        agents = max_agents_on_chain(policy)      # 链上最多几个代理（业主数法）
+        hops = int(policy.max_chain_depth)        # 台账数法：跳数上限（现读 policy）
+        agents = max_agents_on_chain(policy)      # 业主数法：链上最多几个代理（现算）
         return Refusal(
             "depth_exceeded",
-            f"已经到第 {agents} 个代理（业主原话里的 Z）了，链上最多 {agents} 个代理 "
-            f"⇒ 不能再派第 {agents + 1} 个。台账数法：本次 depth={d.depth} 超过 "
-            f"max_chain_depth={policy.max_chain_depth}（主控的召唤 = 1，链上代理个数 = 跳数 + 1）。"
-            "这是结构闸门，不是成本闸门 —— 换个做法（自己收口或交给同级伙伴），不要再往深里派",
+            refusal_detail(
+                measure=(f"已经到第 {agents} 个代理（业主原话里的 Z），链上最多 {agents} 个"
+                         f"代理 ⇒ 不能再派第 {agents + 1} 个。台账数法：本次 depth={d.depth}"
+                         f" 超过 max_chain_depth={hops}；业主数法（现算）："
+                         f"max_agents_on_chain(policy) = {hops} + 1 = {agents}"),
+                route=("这件事该上报父代理去协调，不要再自己派 —— 调 "
+                       "`conductor.escalate(need=\"要父代理协调什么，≤300 字\", "
+                       "kind=\"reroute\", evidence=[\"台账 id\"])`：收件人 = 运行期解析出的"
+                       "召唤者，这一趟以 stop_reason=escalated 收工，父名下会多一条"
+                       "能读到的留言"),
+                premise="只在被召唤起来的那一趟可用；顶层没有父会吃 not_caller",
+                ban=("别再换角色、换参数、拆成两件（都还是同一句『不』）；"
+                     "同时确认自己没有把同一件事换个名字再派出去"),
+                why="这是结构闸门，不是成本闸门。",
+            ),
             "max_chain_depth",
         )
 
@@ -607,8 +872,16 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if d.key and d.key in set(d.ancestry):
         return Refusal(
             "cycle_detected",
-            f"({d.key[0]}, {d.key[1]}, {d.key[2]!r}) 已出现在祖先链上 —— "
-            "同一件事在链上问第二遍就是活锁，不是进展",
+            refusal_detail(
+                measure=(f"({d.key[0]}, {d.key[1]}, {d.key[2]!r}) 已出现在祖先链上"
+                         f"（链上已有 {len(d.ancestry)} 跳）—— 同一件事在链上问第二遍"
+                         "就是活锁，不是进展"),
+                route=("确实是同一件事 ⇒ 用链上已返回的结论收口，别再派；换了内容 ⇒ "
+                       "换一个 input_key 再派（新的一件事才配新的 key）"),
+                premise="判重键是 (role, action, input_key) 三格；参数里那些每轮都不同的数"
+                        "不算新内容",
+                ban="别把同一件事换个名字重派",
+            ),
             "cycle",
         )
 
@@ -632,20 +905,69 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     limit = direct_children_limit_for(policy, d.frm)
     if d.direct_children >= limit:
         # 报文要能同时读出"此刻在飞几个"与"上限是多少"，以及那个上限是从哪来的；
-        # 还要说清"返回就腾位置"—— 否则模型会以为这一趟到此为止（T1 第 19 趟实测：
-        # 它读到"到上限了"之后把 25 步全花在别处，因为报文没说怎么办）。
+        # 还要说清"返回就腾位置"与"另一条立刻可走的路：销号静默子代理"—— 否则模型
+        # 会以为这一趟到此为止（T1 第 19 趟实测：它读到"到上限了"之后把 25 步全花在
+        # 别处，因为报文没说怎么办）。
+        #
+        # 2026-10-26 业主加的那一条（逐字见 `tests/test_retiring_a_silent_child_frees_a_fanout_seat.py`
+        # 的模块头）：触顶的拒信必须点名"可销号静默子代理腾出名额"。四样缺一不可：
+        # ① 上限现算（`direct_children_limit_for`，不写死 12 / 25 / 100）；
+        # ② 工具与参数逐字（`conductor.retire_child`，正路指称是名册名 `child_name`）；
+        # ③ 前提（只可对静默的；在飞 / 待机 / 读不到的会被 `target_not_silent` 拒）；
+        # ④ 当前占位读数（数量 + 名单：谁已静默可销、谁还在飞 / 待机）。
         if d.frm in DIRECT_CHILDREN_LIMIT_BY_ROLE:
-            origin = ("DIRECT_CHILDREN_LIMIT_BY_ROLE 里主控那一档，"
-                      f"policy.max_direct_children={policy.max_direct_children}")
+            origin = "DIRECT_CHILDREN_LIMIT_BY_ROLE 的主控档"
+            origin_note = (f"这一档的上限取自 {origin}（不是 policy.max_direct_children="
+                           f"{policy.max_direct_children}）；")
         else:
             origin = "policy.max_direct_children"
+            origin_note = ""
+        # 静默的排在前面：它们是这一条拒信里唯一可行动的那几格。
+        ordered = sorted(d.direct_children_seats or (),
+                         key=lambda s: 0 if (isinstance(s, Mapping)
+                                             and (str(s.get("state") or "") == "silent"
+                                                  or bool(s.get("retirable")))) else 1)
+        seats: list[str] = []
+        silent: list[str] = []
+        for raw in ordered:
+            seat = dict(raw) if isinstance(raw, Mapping) else {}
+            label = str(seat.get("name") or seat.get("task_id") or "（没有编号）")
+            state = str(seat.get("state") or "")
+            label_state = f"{label}={seat.get('state_label') or state or '未读到'}"
+            if state == "silent" or bool(seat.get("retirable")):
+                silent.append(label)
+            seats.append(label_state)
+        more = ""
+        if len(seats) > FANOUT_SEAT_LABELS_IN_HEAD:
+            more = f"…另 {len(seats) - FANOUT_SEAT_LABELS_IN_HEAD} 格在台账里"
+        if seats:
+            listed = "、".join(seats[:FANOUT_SEAT_LABELS_IN_HEAD])
+            shown_silent = "、".join(silent[:FANOUT_SEAT_LABELS_IN_HEAD])
+            reading = (f"此刻占住这 {d.direct_children} 格的是：{listed}{more}"
+                       f"；其中已静默、销号即腾位的有 {len(silent)} 个"
+                       + (f"（{shown_silent}）" if silent else "（一个都没有）"))
+        else:
+            reading = f"此刻占位 {d.direct_children} 个（名单没读到）"
         return Refusal(
             "fanout_exceeded",
-            f"该任务此刻在飞 {d.direct_children} 个直接子，达到发起方 {d.frm} 的直接子上限 {limit}"
-            f"（{origin}）。这一格只数直接子，不管隔着几层的子（孙辈算它们自己父的格）—— "
-            "这也是单时刻口径：直接子一返回就腾出名额 —— "
-            "先等已派出去的那些回来（读 `out/tasks/*.json` 或 `conductor.state` 看谁还没回），"
-            "下一轮再派；同时确认自己没有把同一件事重复派出去",
+            refusal_detail(
+                measure=(f"在飞 {d.direct_children} 个直接子，达到 {d.frm} 的"
+                         f"直接子上限 {limit}（现算：direct_children_limit_for(policy, "
+                         f"{d.frm!r})，取自 {origin}）。{reading}"),
+                route=("销号静默子代理腾出名额：调 `conductor.retire_child`"
+                       "（`child_name=\"<名册名>\"`、`reason=\"为什么销它\"`）"),
+                premise=("只可对静默的（无工作 ∧ 无计时器 ∧ 无活跃子代理）；在飞 / 待机 / "
+                         "读不到的吃 `refusal_code=target_not_silent` —— "
+                         "别拿销号当停止用"),
+                ban=("同时确认自己没有把同一件事重复派出去；"
+                     "别把「没读到」读成「没有可销的」"),
+                why=(f"{origin_note}销号不可逆、名字永久不复用；"
+                     "销号之后同一父的下一次 summon 立刻重算占位、当场就能派进去；"
+                     "直接子一返回就腾出名额（单时刻口径：这一格只数直接子，"
+                     "不管隔着几层的子，孙辈算它们自己父的格）；名册名从 "
+                     "`{\"roster\": {\"of\": \"self\"}}` 读（如 `D1`）；"
+                     "一个已静默的都没有时，剩下这些只能等它返回，或先让它停。"),
+            ),
             "max_direct_children",
         )
 
@@ -653,7 +975,13 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if d.running >= policy.max_concurrency:
         return Refusal(
             "concurrency_exceeded",
-            f"当前有 {d.running} 个任务在跑，达到 max_concurrency={policy.max_concurrency}",
+            refusal_detail(
+                measure=(f"当前有 {d.running} 个任务在跑，达到 "
+                         f"max_concurrency={policy.max_concurrency}"),
+                route="等已在跑的那几件返回（名额随终态自动回来），下一轮再派",
+                premise="这一格是全局并发：换父任务、换目标角色都还是同一个数",
+                ban="别在名额没回来时重试",
+            ),
             "max_concurrency",
         )
 
@@ -661,7 +989,13 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if d.total >= policy.max_tasks_per_run:
         return Refusal(
             "budget_exceeded",
-            f"本次 run 已发生 {d.total} 次召唤，达到 max_tasks_per_run={policy.max_tasks_per_run}",
+            refusal_detail(
+                measure=(f"本次 run 已发生 {d.total} 次召唤，达到 "
+                         f"max_tasks_per_run={policy.max_tasks_per_run}"),
+                route="收口这一趟（把结论写进 final），下一趟再派 —— 这一格按 run 重置",
+                premise="这是生命周期总量，与此刻在飞几个无关",
+                ban="别把同一件事再派一次（总量不会因为重试而变多）",
+            ),
             "max_tasks_per_run",
         )
 
@@ -676,11 +1010,27 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     # `budget={"max_tokens": …}` 通道）在同一轮一起删。
     if d.usd_left is not None:
         if d.usd_left <= 0:
-            return Refusal("budget_exceeded", f"花销预算已耗尽（剩余 {d.usd_left}）", "usd_budget")
+            return Refusal(
+                "budget_exceeded",
+                refusal_detail(
+                    measure=(f"花销预算已耗尽（剩余 {d.usd_left}，"
+                             f"policy.usd_budget={policy.usd_budget}）"),
+                    route=("收口这一趟（把已有结论写进 final）；额度由人抬，"
+                           "换个角色重试也一样"),
+                    premise="这是全局总账（usage_ledger）的口径，不是你这一父的额度",
+                    ban="别再派新的活（再派只会被同一句拒）",
+                ),
+                "usd_budget",
+            )
         if d.usd_wanted is not None and d.usd_wanted > d.usd_left:
             return Refusal(
                 "budget_exceeded",
-                f"本次预计需要 {d.usd_wanted} USD，剩余 {d.usd_left}",
+                refusal_detail(
+                    measure=f"本次预计需要 {d.usd_wanted} USD，剩余 {d.usd_left}",
+                    route="把这件活拆小，或换一件更便宜的（同一件、更贵的参数照样过不去）",
+                    premise="判的是钱，不是 token：花得起的那一次才放行",
+                    ban="别原样重试（剩余一分没变）",
+                ),
                 "usd_budget",
             )
 
@@ -688,8 +1038,13 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     if d.deadline_hit:
         return Refusal(
             "deadline_exceeded",
-            f"墙钟截止已过（wall_clock_sec={policy.wall_clock_sec}）—— 新召唤一律拒绝，"
-            "已在跑的走协作式取消",
+            refusal_detail(
+                measure=f"墙钟截止已过（wall_clock_sec={policy.wall_clock_sec}）",
+                route=("收口这一趟（把已有结论写进 final）；新召唤一律拒绝，"
+                       "已在跑的走协作式取消"),
+                premise="这是环境限制，不是策略：换角色、换边、换参数都还是同一句「不」",
+                ban="别再派新的",
+            ),
             "wall_clock",
         )
 

@@ -815,7 +815,9 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     # 本文件即 __main__，因此上面定义的名字（extract_text / page_count / …）
     # 直接可用，不要再 `from .extract import ...`，否则会加载出第二份模块实例。
     import json
+    import shutil
     import sys
+    import tempfile
     from dataclasses import asdict, is_dataclass
 
     try:  # Windows 控制台/管道下强制 utf-8，避免中文输出报编码错
@@ -823,8 +825,12 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     except Exception:  # 有些 stdout 替身没有 reconfigure；切编码失败不该让自检本身挂掉
         pass
 
-    DEMO = Path(__file__).resolve().parents[2] / "demo" / "selftest"
-    DEMO.mkdir(parents=True, exist_ok=True)
+    # 2026-10-26：自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
+    # 为什么（实测读数）：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
+    # `python -m agentflow.extract` 就让 `git status -- demo/selftest` 冒出两行 M
+    # （HEAD 那次提交 1ab029f 里正是这两份被顺手提交的）。按 HEAD 还原只是遮：
+    # 再跑一次又脏一次，而"自检不许改仓库"要的是根本不写进去。
+    DEMO = Path(tempfile.mkdtemp(prefix="agentflow_extract_selftest_"))
     pdf_path = DEMO / "sample.pdf"
     blank_path = DEMO / "blank.pdf"
 
@@ -994,3 +1000,5 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     print("=" * 72)
     print("SELF-CHECK DONE")
+    # 产物不留在盘上：它是这一次自检的证据，不是仓库的内容（见上面 DEMO 的注释）。
+    shutil.rmtree(DEMO, ignore_errors=True)

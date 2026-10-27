@@ -16,7 +16,8 @@ AST 级接字符串常量与 docstring。配负控：把一句这样的路径塞
 （`docs/FORMAL-TOOLCHAIN.md`、`DEVELOPMENT.md`）。`docs/` 下三份历史登记/归档（一次真机运行的证据块、一份暂停公告、一份问题登记册）里仍留着那些路径 ——
 它们是"当时这台机器的读数"的逐字记录，改写它们等于改历史证据。这一残渣不是"看不见"：`_RESIDUE_REGISTER` 把（文件, 次数）逐条钉住，任何新增都会红。（`draft/` 与
 `temp/` 下原本也逐条钉着十来份；2026-10 业主裁定把它们移出索引⇒ 这一面按 `git ls-files` 取、取不到它们，登记随之减掉 —— 理由与留档见`_RESIDUE_REGISTER` 上方那段注释。
-判据强度没变：扫描面一个字没动。）
+判据强度没变：扫描面一个字没动。2026-10-26 起登记面多一条 `tests/conftest.py`：那是测试面唯一的
+`LOCAL_LEAN` 取值点（13 份测试文件各写一句本机 Lean 绝对路径的形态已收成一处，见那里的注释）。）
 """
 from __future__ import annotations
 
@@ -71,10 +72,16 @@ _MACHINE_ENV_PATH = re.compile(
 #: 没动（`_scan_set` / `_tracked_files` 都现算）。减掉的 16 条原样留档：`agentflow/docs/INDEX.md`（1）、
 #: `draft/` 下 11 份（22/23/24/25/26/27/28/31/35/37/38）、`temp/` 下 4 份（`B8a-evidence.md` /
 #: `auditE-lean-probe.json` / `run_gates.py` / `w5_p1_probe.py`）。留下的三条仍被跟踪、命中处是 "历史证据 / 实验输入"（理由见模块 docstring）。
+#:
+#: 2026-10-26（B 类）：第四条是测试面唯一的 `LOCAL_LEAN` 取值点 —— 改前 13 份测试文件各写一句
+#: 同样的本机 Lean 绝对路径（`...\_env\lean470\...\lean.exe`），已全部改成调
+#: `tests/conftest.py` 的 `lean_path()`（环境变量 `AGENTFLOW_LEAN_BIN` 优先、缺省才退回）。
+#: 口径没放宽：退回落点只剩这一处，别处再写一句同样的绝对路径仍然会红。
 _RESIDUE_REGISTER: dict[str, int] = {
     "agentflow/docs/NOAI-SUSPENSION-2026-09-25.md": 1,
     "agentflow/docs/PROPOSALS.md": 3,
     "agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt": 1,
+    "agentflow/tests/conftest.py": 1,
 }
 
 

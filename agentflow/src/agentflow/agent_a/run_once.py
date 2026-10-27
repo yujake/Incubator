@@ -43,7 +43,7 @@ def _declined_reason_counts(rows: Iterable[dict]) -> dict[str, int]:
 
 
 def _hits_reading(hits: int, rows: Sequence[dict], *, registered: int) -> str:
-    """「检索到几条、入库几条、其余为什么没入」的一句话读数。
+    """「检索到几条、入库几条、几条还待裁、其余为什么没入」的一句话读数。
 
     为什么它必须进 `last_error`：`search_requests.outcome` 的词表是禁改区契约
     （`schema.SEARCH_OUTCOMES`），里面没有"找到了但一条都没入库"这一档 ——
@@ -53,11 +53,17 @@ def _hits_reading(hits: int, rows: Sequence[dict], *, registered: int) -> str:
 
     读数里必须有"命中数"与"理由码分布"两格：只给一个总数答不出"是被挡了
     还是丢了"，只给理由分布答不出"一共找回几条"。
+
+    2026-10-26（Q16）起多一格 `待裁 N 条`：A 的自动链路不再能整批入库
+    （候选没有 `relevance` 就进不了库），于是"入库 0 条"最常见的原因是
+    "这几条还在等 A 逐条判" —— 不写这一格，它就会与"全被重叠闸挡掉"同形。
     """
     declined = _declined_reason_counts(rows)
     distribution = ("、".join(f"{code}={n}" for code, n in sorted(declined.items()))
                     or "无（候选行还停在 pending）")
-    return (f"检索命中 {int(hits)} 条、入库 {int(registered)} 条；"
+    waiting = sum(1 for row in rows if L.judged_state(row) == "pending")
+    return (f"检索命中 {int(hits)} 条、入库 {int(registered)} 条、待裁 {waiting} 条"
+            f"（待裁的还没逐条判过：没有 relevance 进不了库）；"
             f"未入库理由分布：{distribution}")[:480]
 
 
@@ -191,15 +197,33 @@ class _RunOnce:
                 plan = L.admission_plan(
                     self.store, request_id=req["request_id"], slots=slots,
                     on_over_cap="truncate", duplicate_branch_ok=True,
+                    # 2026-10-26（Q16）：这条路是"整批提交"（一次把这一轮暂存的全部候选
+                    # 搬进 literature），所以它要走同一道提交闸。而它暂存的候选
+                    # 没有 relevance（自动链路读不懂"为什么相关"）⇒ 闸会整批拒，
+                    # 一条也进不了库 —— 这是业主口径要的效果，不是回退：入库只能
+                    # 逐条判过（A 的模型动作），自动链路只负责把它们暂存进列表。
+                    require_judged=True,
                 )
             admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
 
-            # ---- 阶段 1（无锁）：只给「要入库的那些」下载到 staging。
-            # 没通过入库判断的候选不下载：它们是"待审/已挡"的行，下载一份不会带来
+            # ---- 阶段 1（无锁）：给「要入库的那些」下载到 staging。
+            # 没通过入库判断的候选不下载：它们是"待裁/已挡"的行，下载一份不会带来
             # 任何新信息，只会让 staging 里多出一堆永远不会被引用的字节。
+            #
+            # 2026-10-26（Q16）那一个例外：这一篇已经在库里、只是缺文件的候选照样下载。
+            # 理由是两件事：入库（要逐条判过）与"给已登记的那一行补上字节"（`draft/30`
+            # §T0-10 的补下载）不是同一件事 —— 后者不新增任何 literature 行、也不改任何
+            # 候选行的状态。不把这一档捞出来，Q16 落地就会顺手砍掉补下载这条路。
+            lit_rows_now = self.store.rows("literature")
+            known_slots: set[str] = set()
+            for entry, slot in zip(fresh_entries, slots):
+                hit, _key = D.find_existing_literature(
+                    lit_rows_now, entry["title"], entry["year"], entry["doi"])
+                if hit is not None:
+                    known_slots.add(str(slot))
             downloads = 0
             for entry, slot in zip(fresh_entries, slots):
-                if slot not in admit_slots:
+                if slot not in admit_slots and str(slot) not in known_slots:
                     entry["download"] = {"status": "skipped", "error": "not_admitted",
                                          "http_status": None, "bytes": 0, "sha256": None}
                     continue
@@ -218,11 +242,18 @@ class _RunOnce:
                 new_ids: list[str] = []
                 lit_id_by_slot: dict[str, str] = {}
                 fail_by_slot: dict[str, str] = {}
-                for slot in admit_slots:
+                # 只有"判过要入库的"能新建 literature 行；"已在库、来补文件"的那一批
+                # 只走判重分支（见下面 `existing is None ⇒ continue`）。
+                walk_slots = ([s for s in admit_slots]
+                              + [str(s) for s in slots
+                                 if str(s) not in admit_slots and str(s) in known_slots])
+                for slot in walk_slots:
                     entry = entry_by_slot[slot]
                     existing, hit_key = D.find_existing_literature(
                         lit_rows, entry["title"], entry["year"], entry["doi"]
                     )
+                    if existing is None and slot not in admit_slots:
+                        continue
                     if existing is not None:
                         # 同一篇被另一个请求（或另一个 A 实例）先登记了：只追加来源，不新建行
                         src = set(existing.get("source_request_ids") or [])
@@ -248,8 +279,16 @@ class _RunOnce:
                                 "previous": {"status": old_dl.get("status"),
                                              "error": old_dl.get("error")},
                             }
-                            result.downloaded += 1
-                            if str(dl_clean.get("status")) == "content_mismatch":
+                            # 计数口径与下面新建行那一支逐字一致：只有 `status == "ok"`
+                            # 才进 `downloaded`，其余带字节的那一档（`content_mismatch`）
+                            # 只进 `download_suspect`。改前这里无条件 `downloaded += 1`
+                            # 再额外加一格 suspect，于是"下到了网页"同时出现在两个计数里
+                            # —— "下到论文"那个数字被一次可疑补下载抬高了（B3）。
+                            # `_attach_staged` 只认两档带字节的状态（`ok` / `content_mismatch`），
+                            # 所以这个二分与那一处是同一份口径。
+                            if str(dl_clean.get("status")) == "ok":
+                                result.downloaded += 1
+                            else:
                                 result.download_suspect += 1
                         elif tried:
                             existing["download"] = {
@@ -317,7 +356,11 @@ class _RunOnce:
                     result.registered += 1
 
                 # ---- 结算候选行：入库成功的落 admitted；被重叠/登记挡掉的落 rejected；
-                # 超配额的落 cleared(over_cap)。「绝不物理删」（可追）。
+                # 超配额的落 rejected(over_cap)。「绝不物理删」（可追）。
+                # 注意 2026-10-26（Q16）之后最常见的结局不在这三类里：整批被判据
+                # 拦下（候选没有 relevance ⇒ `missing_relevance`）时，一行都不结算，
+                # 它们留在 pending 等 A 逐条判 —— 那一档由 `_hits_reading` 的
+                # 「待裁 N 条」如实报出来。
                 if plan is not None:
                     for slot in admit_slots:
                         if slot not in lit_id_by_slot:

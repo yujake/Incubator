@@ -106,9 +106,27 @@ def test_project_plan_says_what_it_would_do_without_writing(tmp_path: Path):
 def test_an_offline_a_run_registers_candidates_without_network(tmp_path: Path):
     """离线跑一轮 A（`--provider fixture`）：README §0 的"只想验证链路"那条路。
 
-    判据：退出码 0、登记数 > 0、判重也真的发生了（fixture 里故意有重复候选）。
-    这条同时证明"不给 provider 时不会静默用 fixture"的反面：fixture 必须显式指定。
+    改前红（Q16 落地后）：`got["registered"] > 0` 实得 0、`got["duplicated"] > 0` 实得 0 ——
+    `run_once` 走 `admission_plan(require_judged=True)`，自动链路一条都不入库，
+    重复候选也就轮不到判重那一支。定性：判据过时。裁定出处（业主 2026-10-26 Q16）：
+    「如果 A 没全读过（数没全更新为入库和拒收），禁止提交待新增列表入库」。
+
+    改后仍守原来那件事（这条命令真的能跑、且链路真的动了）：
+    ① 退出码 0、请求被处理、队列清空（R1 原是 `queue_pending == 0`）；
+    ② 入库 0 条是 Q16 之后的正确读数（这条断言同时是 Q16 的回退判据：
+       自动链路哪天又开始自己入库，这一条会当场红）；
+    ③ "查到了几条、几条待裁"落在委托报告上（业主第 3 条口径：报告是交付物）——
+       `待裁（N 条）` 与 `已入库（0 篇）` 两块都要在，N ≥ 1；
+    ④ 判重不再发生在自动链路上，但那条同名同 DOI 的重复候选不许被静默丢掉：
+       它在待裁列表里占两行（两个槽位）。
+
+    JSON 那一侧能读的只有 `registered=0` / `outcome=no_results`：`schema` 的
+    `SEARCH_OUTCOMES` 里没有"找到了但待裁"这一档（禁改区契约），而 `ARunResult`
+    没有把待裁条数摆出来（已登记为读数缺口，不属本文件可改范围）。所以这条判据
+    去读报告 —— 那是"待裁 N 条"今天的唯一落点。
     """
+    import re
+
     root = tmp_path / "ws"
     assert _run(["--root", str(root), "init"])[0] == 0
     # fixture 素材要在 `init` 之后放：`init` 会拒绝往非空目录里建工作区
@@ -121,9 +139,22 @@ def test_an_offline_a_run_registers_candidates_without_network(tmp_path: Path):
     code, out = _run(["--root", str(root), "run-a", "--provider", "fixture"])
     assert code == 0, out[-800:]
     got = json.loads(out[out.index("{"):])
-    assert got["registered"] > 0, got
-    assert got["duplicated"] > 0, got
+    assert got["processed"] >= 1, got
     assert got["queue_pending"] == 0, got
+    # ② Q16：自动链路一条都不入库
+    assert got["registered"] == 0, got
+
+    # ③④ 委托报告：已入库 0 篇、待裁 N 条，重复候选还在列表里
+    report = root / "reports" / f"lit-{got['request_id']}.md"
+    assert report.exists(), f"没有委托报告：{report}（业主第 3 条：报告是交付物）"
+    text = report.read_text(encoding="utf-8")
+    assert "## 已入库（0 篇）" in text, text
+    assert "## 待裁（" in text, text
+    pending_n = int(re.search(r"盘点：pending=(\d+)", text).group(1))
+    assert pending_n >= 1, text
+    assert text.count("还停在 pending") == pending_n, "待裁那一块必须逐条点名"
+    # fixture 里故意有两条同名同 DOI 的候选（判重把这一对留在这里，不许静默合并掉）
+    assert text.count("《Commutativity in abelian groups》") == 2, text
 
 
 def test_run_agent_without_a_key_says_so_and_exits_2(tmp_path: Path, monkeypatch):

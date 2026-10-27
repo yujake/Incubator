@@ -33,7 +33,7 @@ class _Provider:
         self.candidates = list(candidates)
 
     def search(self, topic, mode, description, limit):
-        """按 `providers.Provider` 的协议返回候选。"""
+        """按 `providers.SearchProvider` 的协议返回候选。"""
         return list(self.candidates)
 
 

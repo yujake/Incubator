@@ -169,14 +169,21 @@ def test_the_handler_signature_really_takes_providers():
 
 
 def test_state_one_no_providers_uses_the_role_wiring_and_says_so(store):
-    """第一态：不给 `providers` ⇒ 按角色级接线查，今天的行为不变，读数如实说"没点名"。"""
+    """第一态：不给 `providers` ⇒ 按角色级接线查，今天的行为不变，读数如实说"没点名"。
+
+    2026-10-26（Q16）读数变化：两条候选不再当场入库（自动链路整批被提交闸拦下），
+    所以 `registered` 从 2 变 0、`outcome` 从 ok 变 no_results + `last_error` 里
+    "待裁 2 条"。这一条判据问的是选源与逐源读数，与入库无关。
+    """
     alpha = _StubProvider("alpha", [_cand("Alpha paper", "10.1/alpha", "alpha")])
     beta = _StubProvider("beta", [_cand("Beta paper", "10.2/beta", "beta")])
     a = _agent(store, alpha, beta)
 
     out = a.search_literature(topic="abelian group", mode="topical")
 
-    assert out["outcome"] == "ok" and out["registered"] == 2, out
+    assert out["registered"] == 0 and out["outcome"] == "no_results", out
+    assert "待裁 2 条" in str(store.rows("search_requests")[0]["last_error"] or ""), \
+        store.rows("search_requests")[0]
     # 判据：`providers_requested=None` 才是"没点名"。若有人把它折成"默认等于角色接线"，
     # 这一格会变成 ["alpha","beta"]，这条立即红（折平三态的那条路被钉住）。
     assert out["providers_requested"] is None, out["providers_requested"]
@@ -203,7 +210,8 @@ def test_state_two_named_sources_are_all_asked_and_each_reading_is_there(store):
     out = a.search_literature(topic="abelian group", mode="topical",
                               providers=["beta", "alpha"])
 
-    assert out["outcome"] == "ok" and out["registered"] == 2, out
+    # Q16：两条候选停在待裁（不再当场入库）—— 这一条问的是选源与逐源读数。
+    assert out["registered"] == 0 and out["outcome"] == "no_results", out
     assert out["providers_requested"] == ["beta", "alpha"], out["providers_requested"]
     # 反折叠：点名了就不该再报"没点名"。
     assert out["providers_requested"] is not None
@@ -229,8 +237,10 @@ def test_state_two_reports_a_failed_source_without_swallowing_the_other(store):
     out = a.search_literature(topic="abelian group", mode="topical",
                               providers=["good", "bad"])
 
-    assert out["outcome"] == "ok", "有源交了货就不该整条落失败"
-    assert out["registered"] == 1, out
+    # Q16：命中停在待裁 ⇒ 这一轮不进 outcome=ok 那一支（也没入库），
+    # 但"有源交了货"仍不许被读成整条检索失败。
+    assert out["outcome"] != "search_failed", "有源交了货就不该整条落失败"
+    assert out["registered"] == 0, out
     rows = {r["name"]: r for r in out["sources"]}
     assert set(rows) == {"good", "bad"}, rows
     assert rows["good"]["delivered"] is True and rows["good"]["count"] == 1, rows["good"]
@@ -348,7 +358,7 @@ def test_the_claim_side_asks_the_sources_named_on_the_row(store):
 
     res = a.run_once()
 
-    assert res.processed == 1 and res.registered == 1, res.to_dict()
+    assert res.processed == 1 and res.registered == 0, res.to_dict()  # Q16：停在待裁
     assert _row_blind_problems(asked=[p.name for p in (alpha, beta) if p.calls],
                                named=["beta"], wired=["alpha", "beta"],
                                sources=res.sources) == [], res.to_dict()
@@ -624,7 +634,9 @@ def test_the_declared_returns_are_the_keys_the_implementation_really_returns(sto
     spec = _spec()
     a = _agent(store, _StubProvider("alpha", [_cand("Alpha paper", "10.1/alpha", "alpha")]))
     out = a.search_literature(topic="abelian group", mode="topical")
-    assert out["outcome"] == "ok", out
+    # Q16 之后"成功路径"不再以入库为标志（命中停在待裁），但返回的键集合一样要逐键比对：
+    # 这一条问的是声明与实现同不同形，不是入没入库。
+    assert out["ok"] is True, out
 
     declared = _declared_return_keys(spec)
     assert declared, f"returns 那一格不再有逐键清单，机器读不到声明：{spec.returns!r}"

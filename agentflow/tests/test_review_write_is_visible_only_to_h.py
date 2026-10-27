@@ -20,7 +20,7 @@ import pathlib
 import pytest
 
 from agentflow.store import Store
-from agentflow.tools import build_registry
+from agentflow.tools import UNIVERSAL_TOOLS, build_registry
 
 
 def _names_for(role: str, tmp_path: pathlib.Path) -> list[str]:
@@ -65,15 +65,35 @@ def test_hs_visible_write_set_is_pinned(tmp_path: pathlib.Path) -> None:
     不碰 `documents`、不碰任何知识表），逐字理由在
     `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]` 那一行。
     判据本身没改：仍然是"只许这几件，多一件就红"（子集断言的方向没动）。
+
+    2026-10-26 第二次跟上事实（D-53 / D-68 / D-12 那三批）：H 的写面多了九件，
+    而它们全都来自 `tools.UNIVERSAL_TOOLS` —— 时钟七件（自己给自己挂计时器）与
+    `conductor.ack` / `conductor.post_task`（确认自己名下的板项、给自己落一条板项）。
+    这不是"H 的专属写面放宽"：那三批裁定的口径是"每一个角色都有这只手"，真身与
+    硬约束在 `tests/test_universal_tools_are_for_everyone.py`。所以这里把口径改成
+    「review 四件（H 专属）+ 通用集合里的写件」，而不是把九个名字抄进来：
+    抄的话，下一个通用工具落地时这条判据会假红一次，而判据守的东西（H 专属写面
+    不许长出新的一件）一个字没变。
     """
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
     reg = build_registry(store=st, workspace_root=ws).registry
     # 与 `READONLY_CALL_EXCEPTIONS["H"]` 逐条一致（四件，都是 H 自己的落库代理）
-    allowed = {"review.review_document", "review.verify_fixes", "review.report",
-               "review.record_finding"}
+    pin = {"review.review_document", "review.verify_fixes", "review.report",
+           "review.record_finding"}
     specs = {str(getattr(s, "name", s)): s for s in reg.for_role("H")}
-    writes = [n for n, s in specs.items()
-              if str(getattr(s, "side_effect", "")) not in ("none", "read")]
-    assert set(writes) <= allowed, f"H 的可见写面出现了未登记的件：{sorted(set(writes) - allowed)}"
+    writes = {n for n, s in specs.items()
+              if str(getattr(s, "side_effect", "")) not in ("none", "read")}
+    # 通用能力里的写件（时钟七件 + ack + post_task）：它们对每个角色都一样，
+    # 不由这张表守；这条减法的输入是受控集合本身，不是手写名单。
+    universal_writes = {n for n in writes
+                        if n in UNIVERSAL_TOOLS
+                        and str(getattr(specs[n], "side_effect", "")) not in ("none", "read")}
+    allowed = pin | universal_writes
+    assert set(writes) <= allowed, (
+        f"H 的可见写面出现了未登记的件：{sorted(writes - allowed)}"
+        f"（登记面 = review 四件 {sorted(pin)} + 通用写件 {sorted(universal_writes)}）")
+    # 反真空：两条来路都必须真的接上 —— 只算 review 或只算通用，这条判据都会漏一半。
+    assert pin <= writes, f"H 的专属写面缺了登记过的件：{sorted(pin - writes)}"
+    assert universal_writes, "通用写件一件都没算进来（减法接错了）"

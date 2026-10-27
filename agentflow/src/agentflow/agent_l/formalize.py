@@ -145,6 +145,7 @@ from typing import Any, Mapping, Sequence
 from .. import statementbody as _SB
 from .. import verifications as _VR   # 证明号 / 证明清单 / 正文 sha 的口径各只有一处
 from ..agent_e._support import ExperimentError
+from ..canonical import json_default
 from ._support import (
     DECLARATION_NAME_RX,
     FORMAL_DIR,
@@ -1039,11 +1040,17 @@ def _coverage_detail(reason: str, coverage: Mapping[str, Any]) -> str:
 
 
 def _jsonl_bytes(rows: Sequence[Mapping[str, Any]]) -> bytes:
-    """`steps.jsonl` 的字节（UTF-8、无 BOM、行尾 `\\n`；每行恰好 `STEP_ROW_KEYS` 四格）。"""
+    """`steps.jsonl` 的字节（UTF-8、无 BOM、行尾 `\\n`；每行恰好 `STEP_ROW_KEYS` 四格）。
+
+    `default=json_default`：这一行是步骤台账的落盘字节，`lean_lines` / `how` 今天是
+    纯字符串，但它们是调用方给的 Mapping 里的值 —— 一旦有人把 `Path` 或 dataclass 塞进
+    来，改前这里会抛 `TypeError` 并把整条形式化动作打断，而盘上留下的是一份写到一半的
+    台账。纯 JSON 载荷不走 `default`，既有字节不变。
+    """
     lines: list[str] = []
     for row in rows:
         shaped = {key: row.get(key) for key in STEP_ROW_KEYS}
-        lines.append(json.dumps(shaped, ensure_ascii=False, sort_keys=True))
+        lines.append(json.dumps(shaped, ensure_ascii=False, sort_keys=True, default=json_default))
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 

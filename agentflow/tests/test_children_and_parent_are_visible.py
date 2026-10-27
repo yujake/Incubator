@@ -207,6 +207,12 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     st, cond, reg, ws, me, kids, _other = _tree(tmp_path)
     notice = cond.open_item(kind="notice", role="D", expects="ack", summary="某个子代理已收工",
                             called_by="B", parent_task_id=me, depth=3, input_key="notice@B:1")
+    # D12（业主 2026-10-27）：notice 是信息型 ⇒ 被渲染那一拍就收口（seen 即 ack）。
+    # "工作项轴看得到它"这一句因此不能拿它当素材了 —— 它渲染完就不再是"未消的项"。
+    # 所以另开一条仍然要模型自己 ack 的项（`v-verdict@`），由它去证明工作项轴是活的。
+    pending = cond.open_item(kind="notice", role="D", expects="ack", summary="V 判有毛病：补第 2 步",
+                             called_by="V", parent_task_id=me, depth=3,
+                             input_key="v-verdict@判据@v1")
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
     loop = _loop(cond, reg, ws, st, gate)
     for n, kid in enumerate(kids, start=1):
@@ -217,9 +223,14 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     for kid, name in zip(kids, ("B1", "B2")):
         assert name in line, (line, kids)
         assert kid not in line, ("E17：名册摘要里不许出现台账号", line, kid)
-    assert str(notice) in {str(r["task_id"]) for r in cond.open_items_of(me)}, (
-        "工作项轴必须看得到它（它是要我消的项）：", cond.open_items_of(me))
-    assert str(notice) not in cond._children_of(me), (
+    # 信息型的那一条：渲染过 ⇒ 已收口（它不再占"未消项"这个槽）。
+    consumed = next(r for r in st.rows("tasks") if str(r.get("task_id")) == str(notice))
+    assert (str(consumed.get("item_state")), str(consumed.get("item_close"))) == (
+        "done", "acked"), consumed
+    # 要办的那一条：工作项轴必须看得到它。
+    assert str(pending) in {str(r["task_id"]) for r in cond.open_items_of(me)}, (
+        "工作项轴必须看得到还没办的那一项：", cond.open_items_of(me))
+    assert str(pending) not in cond._children_of(me), (
         "代理轴不许看到它：", cond._children_of(me))
 
 

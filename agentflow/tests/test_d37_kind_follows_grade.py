@@ -35,7 +35,7 @@ V 的台账里判「成立」、`bits.evidence.reviewed_by_proof` 是 `{"1": tru
 
 于是本文件有三处随 D-69 改口径（改的都是"什么时候写"，不是"凭什么写"）：
 
-- ② 签完之后盘上已经是 `theorem`（并在同一笔里留下 `_kind_upgrade`）。改前那一句
+- ② 签完之后盘上已经是 `theorem`（并在同一笔里留下升档痕迹）。改前那一句
   "签完之后、再登记之前盘上还是猜想"作废 —— 它正是 D-69 要堵的那个窗口；
 - ④ 删掉台账那一签之后，读侧回到 `conjecture`（依据没了），但盘上的名字不撤销：
   全仓没有降档路径（降档要写清为什么降，那是另一个决定）。这一条因此量的是
@@ -239,7 +239,7 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     要求提交方自己声明 `kind="theorem"`（证据在盘上，名字就该跟着证据走）。
 
     D-69 之后，签那一刻就已经抬上去了（同一个事务里）；"再交一次"只补 `evidence_kind`
-    那一格。所以这里两段都量：签字那一笔留下了 `_kind_upgrade`，再交一次仍然只动
+    那一格。所以这里两段都量：签字那一笔留下了升档痕迹，再交一次仍然只动
     `evidence_kind`（不重复抬 kind）。
     """
     filed = _file(store)

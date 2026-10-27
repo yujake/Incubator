@@ -21,7 +21,7 @@ from agentflow.agent_b import AgentB
 from agentflow.fetch import FetchResult
 from agentflow.providers import Candidate
 
-from conftest import add_literature, add_request, sync_counters, write_library_file
+from conftest import add_literature, add_request, set_request_done, sync_counters, write_library_file
 
 
 # --------------------------------------------------------------------------- 替身
@@ -97,6 +97,31 @@ def _agent_a(store, provider, downloader) -> AgentA:
     )
 
 
+def _judge_and_admit(store, request_id: str, slot: str,
+                     relevance: str = "与本次检索直接相关") -> dict:
+    """Q16 的入库入口：先给原槽补一句 relevance，再逐条入库（才有 literature 行）。
+
+    两步都是 A 自己的活；`lit.stage_add` 带 relevance 重进同一篇按 G9 补进原槽
+    （不发新号、不先撤再进）。
+    """
+    from agentflow.tools import build_for_role
+
+    row = next(r for r in store.rows("lit_candidates") if str(r.get("slot")) == str(slot))
+    reg = build_for_role("A", store=store, workspace_root=store.root).registry
+    reg.bound_role = "A"
+    entry: dict = {"title": str(row["title"]), "relevance": relevance}
+    if row.get("doi"):
+        entry["doi"] = str(row["doi"])
+    topped = reg.call("lit.stage_add", request_id=request_id, entries=[entry])
+    assert topped.ok, topped.error
+    assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
+        f"补 relevance 必须落在原槽（G9），实得 {topped.unwrap()}")
+    got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
+    assert got.ok, got.error
+    assert got.unwrap()["registered"] == 1, got.unwrap()
+    return got.unwrap()
+
+
 # --------------------------------------------------------------------------- A 侧
 
 
@@ -105,14 +130,34 @@ def test_content_type_mismatch_downgrades_status_but_keeps_evidence(store):
 
     断言三点：① 状态不再是 "ok"；② 文件仍然落盘（path 非空，便于人工查看对方返回了什么）；
     ③ 计入 download_suspect 而不是 downloaded —— 否则统计会把"下到了网页"报成"下到了论文"。
+
+    改前红（Q16 落地后）：`res.registered == 1` 实得 0 —— 自动链路不入库、也不下载
+    （没通过入库判断的候选不下载，而 Q16 之后一轮下来全部候选都停在待裁）。
+    定性：判据过时（业主 2026-10-26 Q16：没逐条判过就禁止入库）。
+
+    改后三点原样保留，只是"下到了网页"这件事挪到补下载那一趟量（Q16 刻意留的那个
+    例外：已在库、缺文件的候选照样下载）。于是顺序是：跑一轮（只暂存）→ A 逐条判收
+    （才有 literature 行）→ 再跑一轮（补下载把那份 HTML 落进那一行）。
     """
     a = _agent_a(store, StubProvider([_cand()]), MismatchDownloader())
     add_request(store, "r-0001")
 
+    first = a.run_once()
+    assert first.registered == 0 and first.download_suspect == 0, first.to_dict()
+    assert store.rows("literature") == [], "Q16：还没判过 ⇒ 一行都不许入库"
+
+    _judge_and_admit(store, "r-0001", "000000")
+    set_request_done(store, "r-0001", False)
     res = a.run_once()
-    assert res.registered == 1
+    assert res.registered == 0, res.to_dict()
+    # ③ 两个计数都要对：可疑档只进 `download_suspect`，不许抬 `downloaded`。
+    #    补下载那一支原来无条件 `downloaded += 1` 再额外加一格 suspect（B3，与新建行
+    #    那一支口径不一致）⇒ 这一句曾恒红；2026-10-27 修好之后它回来了（修法就是把
+    #    `downloaded += 1` 收进 `status == "ok"` 那一支）。
     assert res.downloaded == 0, "下到 HTML 不算成功下载"
     assert res.download_suspect == 1, "必须落在独立计数里，不能混进 downloaded"
+    # 与计数无关的那一半仍然钉死：这一篇对 B 来说不是可读全文（见本文件下半场
+    # `test_agent_b_skips_content_mismatch_literature`：B 见到 content_mismatch 必须跳过）
 
     lit = store.rows("literature")[0]
     assert lit["download"]["status"] == "content_mismatch"

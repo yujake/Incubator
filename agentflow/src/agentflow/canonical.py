@@ -45,11 +45,49 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import date, datetime, time
+from pathlib import PurePath
 from typing import Any
 
 #: 规范化参数（见模块 docstring 的"口径"一节）。放在这里是为了让"改口径"这件事
 #: 至少要动到本模块，而不是散落在某个调用点的字面量里。
 CANONICAL_SEPARATORS: tuple[str, str] = (",", ":")
+
+
+def json_default(value: Any) -> Any:
+    """`json.dumps(..., default=json_default)` 的唯一实现（全仓一条口径）。
+
+    为什么要有它（2026-10-26）：`tests/test_json_dumps_has_a_default.py` 要求每一处
+    `json.dumps` 都带 `default=`，而当时的九处要么漏着、要么各写一个 `default=str`。
+    一个 lambda 一份口径的结果是"同一类对象在两个地方印出两种形状"，所以收敛成这一个
+    函数；`default=` 只在 json 遇到它自己序列化不了的值时才被调用，"纯 JSON 的载荷"
+    一次都不会走到这里 ⇒ 既有字节、既有哈希一个都不变。
+
+    顺序是"先尽量保留结构，最后才退化成 str"：
+
+    - dataclass 实例 ⇒ `asdict`（保留字段名；嵌套的非原生值会被 json 递归地再交给本函数）；
+    - `Path` / `PurePath` ⇒ 字符串路径；
+    - `set` / `frozenset` ⇒ 按 `str` 排序的列表（顺序确定 ⇒ 同一份载荷两次 dump 相等）；
+    - `datetime` / `date` / `time` ⇒ `isoformat()`；
+    - `bytes` / `bytearray` ⇒ 按 UTF-8 解码（解不开的字节用 backslashreplace 保形，不丢）；
+    - 其余 ⇒ `str`（最后的兜底，与全仓此前那一档 `default=str` 同形）。
+
+    刻意不做的两件事：不 import 任何包内模块（`scripts/noai_gate.py` 会按文件路径加载
+    本模块，它必须在包里 import 不了时也能跑）；不改 `canonical_json_text` 的那一组
+    参数（那组参数改一个就是改所有已落盘的哈希）。
+    """
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    if isinstance(value, PurePath):
+        return str(value)
+    if isinstance(value, (set, frozenset)):
+        return sorted(value, key=str)
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", "backslashreplace")
+    return str(value)
 
 
 def canonical_json_text(obj: Any) -> str:
@@ -102,6 +140,21 @@ def selftest() -> int:
           canonical_sha256(PROBE_PAYLOAD) == canonical_sha256(dict(PROBE_PAYLOAD)),
           canonical_sha256(PROBE_PAYLOAD)[:16])
     check("键序不参与哈希", canonical_sha256({"x": 1, "y": 2}) == canonical_sha256({"y": 2, "x": 1}))
+
+    # 非 JSON 原生值：这一格是 `json_default` 的验收（改前这几种值直接抛 TypeError）。
+    @dataclass
+    class _Probe:
+        name: str
+        where: Any
+
+    got = json.loads(json.dumps(
+        {"d": _Probe(name="x", where=PurePath("a") / "b"),
+         "s": {"b", "a"}, "t": datetime(2026, 10, 26, 1, 2, 3)},
+        default=json_default))
+    check("非原生值可序列化（dataclass / Path / set / datetime）",
+          got["d"] == {"name": "x", "where": str(PurePath("a") / "b")}
+          and got["s"] == ["a", "b"]
+          and got["t"] == "2026-10-26T01:02:03", got)
     return 0 if ok else 1
 
 

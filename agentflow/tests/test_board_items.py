@@ -51,9 +51,16 @@ def test_a_new_item_starts_queued_and_is_not_an_instance_row(tmp_path: pathlib.P
 
 
 def test_the_state_machine_only_moves_forward(tmp_path: pathlib.Path):
-    """正控：`queued → claimed → seen → done/acked` 四步各自都能落盘。"""
+    """正控：`queued → claimed → seen → done/acked` 四步各自都能落盘。
+
+    这一项刻意用「要你办事」那一档的 `input_key`（`v-verdict@…`）：信息型
+    （`notice` / `message` 的普通项）自 D12 起渲染即收口，`mark_item_seen`
+    那一拍就写 `done`+`acked`（见 `Conductor._settle_if_informational`），
+    于是"四步各自落盘"这件事在它身上观测不到。
+    """
     st, c = _cond(tmp_path)
-    tid = c.open_item(kind="message", role="M", expects="ack", summary="只是让你知道")
+    tid = c.open_item(kind="message", role="M", expects="ack", summary="只是让你知道",
+                      input_key="v-verdict@判据@v1")
     assert c.claim_item(tid, by_task_id="t-0002")[0] == "claimed"
     assert c.mark_item_seen(tid, by_task_id="t-0002", step=3)[0] == "seen"
     row = _item(st, tid)
@@ -67,7 +74,8 @@ def test_the_state_machine_only_moves_forward(tmp_path: pathlib.Path):
 def test_skipping_a_state_is_refused_and_writes_nothing(tmp_path: pathlib.Path):
     """负控：`queued → done`（跳过 claimed/seen）⇒ 拒绝，且状态不变、零写入。"""
     st, c = _cond(tmp_path)
-    tid = c.open_item(kind="message", role="M", expects="ack", summary="x")
+    tid = c.open_item(kind="message", role="M", expects="ack", summary="x",
+                      input_key="v-verdict@判据@v1")
     got, problem = c.close_item(tid, close="acked")
     assert got == "ack_unbacked" and "空口 ack" in problem, (got, problem)
     assert _item(st, tid)["item_state"] == "queued", _item(st, tid)

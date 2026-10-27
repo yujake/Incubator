@@ -25,6 +25,7 @@ import pathlib
 import pytest
 
 from agentflow import host as H
+from agentflow import leanscope
 from agentflow.agentspec import BuilderDeps, AgentSpec, builtin_registry
 
 HOST_SRC = pathlib.Path(H.__file__)
@@ -81,7 +82,16 @@ def thin_shells(src: str) -> list[str]:
 
 
 def test_every_role_is_built_through_its_spec() -> None:
-    """主判据：九个角色都有 `build`，`needs`/`peers` 都指向真实存在的东西。"""
+    """主判据：每个角色都有 `build`，`needs`/`peers` 都指向真实存在的东西。
+
+    反真空那一条读的是"角色表读数"而不是一个写死的数字：业主 2026-10-22 起，L 的
+    存在性由 Lean 开关决定（`leanscope.LEAN_ONLY_ROLES` + `AgentRegistry.roles()`
+    的 docstring：「由开关决定存在性的角色在开关关着时不出现在这份读数里」），
+    而本套件跑在 Lean 开着那一档（`conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）
+    ⇒ 读数是 11（A–H + V + M + L），钉死的 10 在这一档上必红。改成
+    "等于这一档的可见面"比原来更严：少一个基础角色、或 L 的开关关系被改坏，
+    两种都会红，而原来的写法只认一个数字。
+    """
     reg = builtin_registry()
     fields = set(BuilderDeps.__dataclass_fields__)
     bad: list[str] = []
@@ -96,7 +106,11 @@ def test_every_role_is_built_through_its_spec() -> None:
             if peer not in reg.roles():
                 bad.append(f"{role}：peers 里的 {peer!r} 不在注册表里")
     assert not bad, "角色声明与装配期契约对不上：\n  - " + "\n  - ".join(bad)
-    assert len(reg.roles()) == 10, "反真空：十个角色（A–H + V + M）"
+    expected = len(leanscope.visible_roles(reg._specs))
+    assert len(reg.roles()) == expected, (
+        f"角色表读数 {len(reg.roles())} ≠ 这一档的可见面 {expected}"
+        f"（`leanscope.LEAN_ONLY_ROLES` 里的角色在开关关着时不算存在）")
+    assert len(reg.roles()) >= 10, "反真空：A–H + V + M 十个基础角色一个都不许少"
 
 
 def test_the_builder_only_delegates() -> None:

@@ -1298,7 +1298,9 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     # 运行方式：在 src/ 下执行 `python -m agentflow.llm`（或设 PYTHONPATH=src 后在任意目录执行）
     # （本文件即 __main__，因此模块级名字 RuleExtractor/LLMExtractor 等可直接用，
     #   不要再 `from .llm import ...`，否则会加载出第二份模块实例。）
+    import shutil
     import sys
+    import tempfile
     from dataclasses import asdict, is_dataclass
     from pathlib import Path
 
@@ -1315,8 +1317,12 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
         page_count,
     )
 
-    DEMO = Path(__file__).resolve().parents[2] / "demo" / "selftest"
-    DEMO.mkdir(parents=True, exist_ok=True)
+    # 2026-10-26：自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
+    # 为什么（实测读数）：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
+    # `python -m agentflow.llm` 就让 `git status -- demo/selftest` 冒出两行 M。
+    # 按 HEAD 还原只是遮：再跑一次又脏一次（`tests/test_demo_selftest_leaves_the_repo_clean.py`
+    # 记的就是这次事故），要治就得不写进去。
+    DEMO = Path(tempfile.mkdtemp(prefix="agentflow_llm_selftest_"))
     pdf_path = DEMO / "sample.pdf"
     blank_path = DEMO / "blank.pdf"
 
@@ -1468,4 +1474,6 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     print("=" * 72)
     print("SELF-CHECK DONE")
+    # 产物不留在盘上：它是这一次自检的证据，不是仓库的内容（见上面 DEMO 的注释）。
+    shutil.rmtree(DEMO, ignore_errors=True)
 

@@ -1213,6 +1213,9 @@ _CRLF_RE = re.compile(r"CRLF\s*=\s*(\d+)")
 
 _LINTER_MOD = None
 
+#: 按路径加载的 `tools/verify_role_specs.py`（唯一量法 `live_tool_face()` 住在那里）。
+_ROLE_SPECS_GATE = None
+
 
 def _linter():
     """按路径加载 `scripts/lint_rules.py`（`scripts/` 不是包，不能普通 import）。"""
@@ -1271,15 +1274,37 @@ def schema_table_count() -> int:
     return len(_schema.TABLES)
 
 
+def _role_specs_gate():
+    """按路径加载 `tools/verify_role_specs.py`（`tools/` 不是包，不能普通 import）。
+
+    为什么这里要它的 `live_tool_face()`：本函数此前是"工具面怎么量"的第四份实现
+    （起子进程跑 `cli tools` 再逐个正则解析）。现在它是那份唯一实现的投影加交叉校验：
+    数从 `live_tool_face()` 取，子进程那一趟仍然要跑 —— 因为 `LIVE-READINGS` 块里
+    写着的复跑命令就是它，判据与被判对象必须还是同一条命令。
+    """
+    global _ROLE_SPECS_GATE
+    if _ROLE_SPECS_GATE is None:
+        spec = importlib.util.spec_from_file_location(
+            "_role_specs_gate_for_release_all", REPO / "tools" / "verify_role_specs.py")
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        _ROLE_SPECS_GATE = mod
+    return _ROLE_SPECS_GATE
+
+
 def cli_tools_readings() -> dict[str, int]:
     """`python -m agentflow.cli tools` 报出来的那一行（工具总数 / 已装模块 / 逐角色）。
 
     2026-10 扩键（拆分那一批）：`DEVELOPMENT-SPEC.md` 的 `LIVE-READINGS` 块把这三个数
     也钉住了 —— 判据只增不减：原来那 11 个键照旧逐键比对，这里多出 12 个。
 
-    为什么量法走子进程而不是进程内重建：文档里那一行写的命令就是这条命令，
-    判据与被判的对象必须是同一条命令（"量法不同"正是本项目最贵的那类缺陷）。
-    解析失败不许折成"没问题"：读不到就 assert，红的是"判据失去对象"。
+    量法两条腿，缺一不可：
+    - 数从 `tools/verify_role_specs.py::live_tool_face()` 取（全仓唯一那份"怎么量"）；
+    - 子进程那一趟仍然要跑，并且必须与它相等 —— 文档里那一行的复跑命令就是
+      `cli tools`，所以"判据"与"被判的对象"仍得是同一条命令。两者不等 ⇒ 是口径分叉，
+     这里直接红，而不是把两个数中的一个悄悄当成答案。
     """
     env = dict(os.environ)
     why_path = str(REPO / "src")
@@ -1295,10 +1320,20 @@ def cli_tools_readings() -> dict[str, int]:
     assert total and modules and roles_line, (
         "`python -m agentflow.cli tools` 的输出里读不到那三格（判据失去对象，不是'没问题'）："
         f"\n{out[-600:]}")
-    roles = {r.lower(): int(n) for r, n in re.findall(r"'([A-Z])':\s*(\d+)", roles_line.group(1))}
-    assert roles, f"逐角色那一格解析不出角色（判据失去对象）：{roles_line.group(1)!r}"
-    got = {"cli_tools_total": int(total.group(1)), "cli_tools_modules": int(modules.group(1))}
-    got.update({f"cli_tools_role_{r}": n for r, n in roles.items()})
+    cli_roles = {r: int(n) for r, n in re.findall(r"'([A-Z])':\s*(\d+)", roles_line.group(1))}
+    assert cli_roles, f"逐角色那一格解析不出角色（判据失去对象）：{roles_line.group(1)!r}"
+
+    face, why = _role_specs_gate().live_tool_face(root=REPO)
+    assert face is not None, why
+    assert (int(total.group(1)), int(modules.group(1))) == (face["total"], face["modules"]), (
+        "`cli tools` 与唯一量法（`live_tool_face()`）在这两个数上分叉了："
+        f"命令给 {int(total.group(1))}/{int(modules.group(1))}，"
+        f"进程内装配给 {face['total']}/{face['modules']} ⇒ 先修口径，再谈文档")
+    assert cli_roles == dict(face["counts_by_role"]), (
+        "`cli tools` 与唯一量法在逐角色数上分叉了："
+        f"命令给 {cli_roles}，进程内装配给 {dict(face['counts_by_role'])}")
+    got = {"cli_tools_total": face["total"], "cli_tools_modules": face["modules"]}
+    got.update({f"cli_tools_role_{r.lower()}": n for r, n in face["counts_by_role"].items()})
     return got
 
 
@@ -2406,6 +2441,30 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                    "token）/ gates_readout（收工门八格三态一张表，现算不读缓存）/ scan（四条"
                    "读数共用的那一次读盘）/ READOUT_DATA_KEYS（每张表的键集，判据从它取）/ "
                    "render_text（人读的呈现）",
+    # 2026-10-26（B 类补登：这四条是各 lane 新落的顶层模块，判据逐名点名）：
+    # 命题同一性的机械上半段 —— 终判归秘书（一次模型调用），这一层只做
+    # "够不够格当命题"与"两条正文有多像"的确定性读数，故与任何角色无关。
+    "propositionkey.py": "命题同一性与同种证明的候选读数（纯函数、确定性、零模型调用）："
+                         "judgeable（够不够格当一条命题）/ proposition_key（规范键）/ "
+                         "prose_similarity（两段正文的相似度读数）；终判在 "
+                         "secretary.Secretary.adjudicate_proposition（三态，按正文 sha256 缓存）",
+    # F 手稿依赖段的唯一解析点：作者只写内容、登记由收方（B）读稿产生
+    # （与 V 读 F 的手稿再签字同构）⇒ 解析若有两份，"台账上是第 2 条、
+    # 读出来是第 1 条"这类错没有任何东西会报。
+    "depsection.py": "F 手稿依赖段的唯一解析点 + 引用档位的唯一判据："
+                     "SECTION_HEADING / COLUMN_KEYS / parse_dependency_section / "
+                     "citation_levels / citation_level_allowed / read_manuscript / "
+                     "manuscript_relpath —— secretary、B 的入库、D 的汇报与 F 的手稿四处共用",
+    # 形态读数（D-54，只报不拦）：判重仍归 secretary，这一层只回答
+    # "一条定理有没有被拆成多条独立命题"，故与任何角色都无关。
+    "statementfission.py": "形态读数：同一条定理是否被拆成多条独立命题（D-54，只报不拦）："
+                           "proof_numbers / suspected_splits（并查集把同一条并起来）/ "
+                           "describe / summary；判重仍在 secretary",
+    # 停止理由的单一真身（Q23，2026-10-26）：退出码表与徽标表各写一份时，
+    # 两处的错恰好被 len() 比较抵消 —— 收成一张表才判得出来。
+    "stop_reasons.py": "停止理由的单一真身（Q23）：reason -> (退出码, 徽标 class, "
+                       "徽标文案, live)；cli.EXIT_CODE_BY_STOP 只投影 live=True，"
+                       "webui.server._STOP_BADGES 投影全部（含只有徽标的旧读数 max_steps）",
     # 2026-10-22（多证明模型 S1）：`used_by` 里那个 `#pN` 尾巴的唯一解析点 ——
     # 一条定理可以有多条证明，每条证明各有一条自己的依赖链；两份解析就会让
     # 台账上是第 2 条、读出来是第 1 条这种错静默发生。

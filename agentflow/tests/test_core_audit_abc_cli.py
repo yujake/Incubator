@@ -508,6 +508,10 @@ def test_agent_a_selftest_negative_control_can_fail(monkeypatch, capsys) -> None
 
     没有这条，"自检永远返回 0"也能通过上面那条正向断言 —— 而"永远通过的自检"
     比没有自检更坏（它会签发一个假的绿灯）。
+
+    2026-10-26 补一条：取不到任何任务时，库里一行文献都没有（这是 Q16 之后的常态），
+    自检只许把它报成失败项，不许自己抛 `IndexError` —— 旧版正是在这里
+    `lits[0]` 取空表，把"有一条判据不成立"变成"整个入口崩掉"。
     """
     from agentflow import agent_a as A
 
@@ -515,6 +519,7 @@ def test_agent_a_selftest_negative_control_can_fail(monkeypatch, capsys) -> None
     assert agent_a._selftest() == 1
     out = capsys.readouterr().out
     assert "[FAIL]" in out
+    assert "IndexError" not in out, out[-1200:]
 
 
 def test_agent_a_module_runs_as_a_script_with_nonempty_output() -> None:
@@ -523,6 +528,29 @@ def test_agent_a_module_runs_as_a_script_with_nonempty_output() -> None:
     assert r.returncode == 0, r.stdout + r.stderr
     assert "[PASS]" in r.stdout and "自检" in r.stdout
     assert "[FAIL]" not in r.stdout
+
+
+def test_agent_a_selftest_on_an_empty_workspace_exits_zero_and_never_indexes(
+    tmp_path: Path,
+) -> None:
+    """空工作区上跑自检入口：退出码 0，且输出里没有 IndexError。
+
+    为什么单独一条（2026-10-26，Q16 之后）：`literature` 是空表变成常态之后，自检里
+    那句 `lits[0]` 就是"空列表当非空用"—— 实测 `python -m agentflow.agent_a` 退出码 1、
+    输出末尾逐字 `[FAIL] 自检执行中断：IndexError: list index out of range`，而
+    `scripts/release_check.py` 第 2 项与 `docs/ROLE-SPECS.md` 都把"退出码 0"写成契约。
+    `tmp_path` 是真正空的工作区（自检自己造临时工作区，不该依赖调用者的当前目录）。
+    """
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONPATH": str(_SRC)}
+    r = subprocess.run([sys.executable, "-m", "agentflow.agent_a"], cwd=str(tmp_path),
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       env=env, timeout=600)
+    out = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, out[-1200:]
+    assert "IndexError" not in out, out[-1200:]
+    assert "[PASS]" in out and "[FAIL]" not in out, out[-1200:]
+    # 反真空的另一半：真在工作区里落下东西也算失败（自检只许动它自己的临时目录）。
+    assert list(tmp_path.iterdir()) == [], [p.name for p in tmp_path.iterdir()]
 
 
 # =========================================================================== agent_b

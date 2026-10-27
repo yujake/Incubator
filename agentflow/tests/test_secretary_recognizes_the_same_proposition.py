@@ -453,7 +453,7 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     assert history[0].get("sha") == VR.proof_sha(PROOF_A), history
     assert history[0].get("replaced_by") == VR.proof_sha(MERGED), history
     assert int(history[0].get("proof_no") or 0) == 1, "旧正文没记清是哪一份证明的旧稿"
-    # 合并与"直接覆盖"的区别：盘上有 `_proof_merge` 这一笔（谁合并、合并了哪几份）。
+    # 合并与"直接覆盖"的区别：盘上有合并痕迹这一笔（谁合并、合并了哪几份）。
     traces = list(row.get("_proof_merge") or [])
     assert traces and traces[-1].get("resign_required") is True, traces
     assert traces[-1].get("proof_no") == 1, traces

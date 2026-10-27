@@ -68,7 +68,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
 
 @tool(
     "manuscripts.list",
-    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，别重复别人的结论。",
+    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。",
     {"type": "object",
      "properties": {"to": {"type": "string", "description": "只看发给谁（A–H/M/ALL）"},
                     "sender": {"type": "string", "description": "只看谁写的"},

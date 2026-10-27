@@ -14,7 +14,7 @@
 
 | # | 这一档 | 必须读到什么 |
 |---|---|---|
-| ① | 本机那份真 Lean（`D:\\Incubator\\_env\\lean470\\...\\lean.exe`） | `usable`、版本 4.x、正样例过、反控失败、`sha256` 非空 |
+| ① | 本机那份真 Lean（`AGENTFLOW_LEAN_BIN` 指定；缺省退回 `tests/conftest.py` 的 `LOCAL_LEAN`） | `usable`、版本 4.x、正样例过、反控失败、`sha256` 非空 |
 | ② | 假 lean（只打印版本、永远 0 退出） | `unusable`，`problems` 含"反控没失败" |
 | ③ | 解释器不存在 | `unusable` 且 `checked=True`（"查了不可用" != "没查成"） |
 | ④ | 开关关着 | `state="off"`、`checked=True`，且「一次子进程都不起」 |
@@ -37,7 +37,11 @@ from agentflow import toolchain as TC
 #: 本机那份真 Lean 的落点（现场实测 2026-10-22：83,968 B、官方 4.7.0 Windows 布局）。
 #: 判据不把它写死在断言里，而是"在就用、不在就跳过并说明" —— 换一台机器跑这一批时，
 #: ① 会如实报"这一档没跑"，而 ②③④⑤ 与机器无关，照旧全跑。
-REAL_LEAN = pathlib.Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+REAL_LEAN = lean_path()
 #: 环境变量档能覆盖它（判据在别的机器上跑时不必改文件）。
 ENV_REAL_LEAN = "AGENTFLOW_SELFCHECK_REAL_LEAN"
 

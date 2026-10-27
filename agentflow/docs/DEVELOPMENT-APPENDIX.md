@@ -74,7 +74,7 @@
 | `tokenmeter.py` | **已存在**（`TokenMeter.charge` 记账 + `guard` **开工前**守卫；**重试按次计费**；`tokens_for`/`usd_for` 供 `summon` 把 `tasks.tokens` 派生自台账） |
 | `claimanatomy.py` | **已存在**（`CLAIM_FIELDS` 的字段数按命令当次读；**观测 2026-09-27 ⇒ 19**，而 `G3` 之前这里写的是 12）+ `validate_claim` 三态 + `validate_document_claims` + `consolidate_issues` + `revision_hash`；**它是断言解剖学的唯一判据来源**，`doc_tools.scan_claim` 已改为纯适配层转发 |
 | `gates.py` | **已存在**（H 的 `G1–G15` 门引擎；`GATES` 声明表门号齐全、每门可单独查询；观测 2026-09-27 ⇒ 15；四态结论 `pass`/`fail`/`unknown`/`not_applicable`；`GateResult.__post_init__` **结构强制"零发现必须自证"**） |
-| `.noai-paths` | **已存在**（**43** 条条目 / **40** 条唯一路径 / 7 个分组；观测 2026-10-12 —— 批 R61 把 `tests/golden/*.json` 拆成逐文件四条 ⇒ 40/37 → 43/40）。台账条目数 / 欠签 / `stale` 计数**都不写定值**（每签一个字就变） |
+| `.noai-paths` | **已存在**。三个数**不在这里写定值**：现值住 `docs/DEVELOPMENT-SPEC.md` §0.2 的 `LIVE-READINGS` 块（键 `noai_paths_glob` / `noai_paths_unique` / `noai_paths_categories`，由 `tests/test_release_all.py::test_development_md_manifest_and_pytest_counts_match_the_repo` 逐处对账）。本行只留历史：观测 2026-10-12 时是 **43** 条条目 / **40** 条唯一路径 / 7 个分组（批 R61 把 `tests/golden/*.json` 拆成逐文件四条 ⇒ 40/37 → 43/40；**冻结基线，不再更新**）。台账条目数 / 欠签 / `stale` 计数**都不写定值**（每签一个字就变） |
 | `AGENTS.md` | **已存在**（含 `NOAI-MANIFEST` 区块，与 `.noai-paths` **逐条一致**，实测退出码 0） |
 | `scripts/noai_gate.py` | **已存在**（退出码 0/1/2 三档，三个方向都跑过） |
 | `scripts/release_check.py` | **已存在**（八项检查；docstring 自陈 `authored_by: AI agent，尚未经人逐行走查`、`required_approvals: 2（尚未取得）`） |

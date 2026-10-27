@@ -21,7 +21,7 @@ from typing import Any
 from agentflow import schema as S
 from agentflow import capabilities as C
 from agentflow import sessions as SS
-from agentflow.agent_loop import (PUBLIC, LlmBackend, inbox_digest, note_path,
+from agentflow.agent_loop import (ALL, LlmBackend, inbox_digest, note_path,
                                  notebook_digest, read_messages, run_role, send_message,
                                  write_note)
 from agentflow.conductor import Conductor, LocalBackend
@@ -94,7 +94,7 @@ def test_public_channel_reaches_the_speakers_own_team(tmp_path: pathlib.Path):
             "error": None, "started_at": "2026-10-09T00:00:00+08:00", "ended_at": None,
             "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
         }, note=f"start:{role}.run_once")
-    msg_id, problem = send_message(root, sender="C", to=PUBLIC, subject="口径",
+    msg_id, problem = send_message(root, sender="C", to=ALL, subject="口径",
                                   body="我把'度数'定义成去重后的邻居数", sid="t",
                                    from_task_id=speaker)
     assert problem == "" and msg_id == f"m{S.format_id(1)}"

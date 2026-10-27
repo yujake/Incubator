@@ -7,13 +7,17 @@
 > 右栏、`A.4`–`M.4`、`M.4` 的编排面条数、`S3` 第 1 行）；**2026-10-25 又按同一条命令重算了一遍**
 > （总数 94 → **107**、Lean 关着时 104；`A.4`–`M.4` 的条数与逐件清单、`R0.1`–`R0.3`、`S3` 第 1 行），
 > 其余节仍是 2026-10-18 的读数。
-> ⚠️ **2026-10-27（p206）：本文件的实测面已整片现读重算** —— `R0.1`（handler 形态 / 两套口径）、
-> `R0.3`（对 `INVENTORY.md` 那张表的右栏五格）、`S3` 第 1 行（`cli tools` 的原样输出）、
-> `A.4`–`M.4`（含新增的 `L.4`，五格 = 总数 / `side_effect` / `external` / 需审批 / 逐件清单）
-> 全部按 `build_registry(...)` / `python -m agentflow.cli tools` 现算，每处标着"现读于 2026-10-27（p206）"。
-> 当前总数 **111 / Lean 关 108**（`clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` /
-> `clock.wait_any` 四件进册；只读角色 C/H/V 的泄漏清单里也各多四件 `clock.*`）。
-> **没有跟着重算的是**：`R0.2`（9 件自注册面的逐条对账）、`A.10`–`M.10`（自检入口当次读数）、
+> ⚠️ **2026-10-26（`p210 待抬`）：本文件的实测面又整片现读重算了一遍** —— `R0.1`（handler 形态 /
+> 两套口径 / 八角色共有面）、`R0.2` 标题、`R0.3`（对 `INVENTORY.md` 那张表的右栏五格）、
+> `S3` 第 1 行（`cli tools` 的输出）、`A.4`–`M.4`（五格 = 总数 / `side_effect` / `external` /
+> 需审批 / 逐件清单）全部按 `build_registry(...)` / `python -m agentflow.cli tools` 现算。
+> **这一次的数值槽不再手抄**：它们由 `python tools/verify_role_specs.py --write` 从同一次装配
+> 生成（幂等；只写数值槽与这一行日期，散文一个字不动）⇒ 下一次再进一件工具，只需要人写
+> 正文 §R0 表的那一行契约，其余数字跑一条命令就全部跟上。
+> 上一版那一批读数（`2026-10-27（p206）` 那几行）是别人的留痕，日期与数字一律照原样留着。
+> 当前总数 **112 / Lean 关 109**（`conductor.post_task` 进册；Q15 裁定（2026-10-26）之后它登记进
+> `UNIVERSAL_TOOLS` ⇒ 只读角色 C/H/V 也拿得到它：那三个角色的条数各加 1、只读泄漏清单各少一件）。
+> **没有跟着重算的是**：`R0.2` 正文（9 件自注册面的逐条对账）、`A.10`–`M.10`（自检入口当次读数）、
 > `M.4.2` / `M.4.3` / `M.8`、`S1` / `S2` —— 那几节仍是各自标注日期的留痕，读它们时以那一行的日期为准。
 > 判据：`tests/test_role_specs_appendix_is_live.py` 把 `R0.1` / `R0.3` / `S3` 第 1 行与 `A.4`–`M.4`
 > 一起对账 —— 每一处都得等于现算值，少一件、多一件、或谁把它改回手抄，都会红。
@@ -25,9 +29,9 @@
 
 ---
 
-## R0.1 [附录·实测] 111 个工具的公共事实（机械读数，现读于 2026-10-27（p206））
+## R0.1 [附录·实测] 114 个工具的公共事实（机械读数，现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`））
 
-**handler 的形态**（现读于 2026-10-27（p206））：`functools.partial` **107** / `lambda` **4** / 具名闭包 **0**（共 111）。
+**handler 的形态**（现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`））：`functools.partial` **110** / `lambda` **4** / 具名闭包 **0**（共 114）。
 
 ```powershell
 python -c "import collections,functools,tempfile,pathlib;from agentflow.store import Store;from agentflow.tools import ROLES,build_registry;d=pathlib.Path(tempfile.mkdtemp());st=Store(d);st.init();r=build_registry(store=st,workspace_root=d,roles=tuple(ROLES)).registry;c=collections.Counter('partial' if isinstance(s.handler,functools.partial) else ('lambda' if getattr(s.handler,'__name__','')=='<lambda>' else ('closure' if getattr(s.handler,'__closure__',None) else 'function')) for s in r._specs.values());print(dict(c))"
@@ -38,20 +42,26 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 口径 | 命令 | 工具数 | 备注 |
 |---|---|---:|---|
 | A 口径（不含 store） | `build_registry(store=None, workspace_root='.', roles=schema.ROLES)` | 比 B 口径少"需要 store 才能注册"的那一族 | **本文与正文一律用 B 口径** |
-| B 口径（含 store 的完整装配） | `python -m agentflow.cli tools` | **111**（Lean 关着时 108） | 权威读数 |
+| B 口径（含 store 的完整装配） | `python -m agentflow.cli tools` | **114**（Lean 关着时 111） | 权威读数 |
+
+**八角色共有**（A–H 的交集）：25 件 —— `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`）。
+
+> 上表那一行是这个数在文档里的**唯一落点**：正文 §0.2 只给复跑命令，L.4 只说"与它逐件相同"。
+> 它由 `tools/verify_role_specs.py --write` 现算重写；判据是附录判据里那一条逐格对账。
 
 > ⚠️ **历史读数（留档，不构成判据）**：2026-09-26 那次装配是 **55** 个工具 / 11 个模块；
 > 当时手抄的分布是 `side_effect {'read':32,'write_local':18,'none':5}`、
 > `external {'none':49,'egress':4,'exec':2}`、需审批 21 / 55，且还有一个 `network: 2` 的取值。
 > **那个取值现在不存在**（`agentspec.EFFECT == ("none","read","write_local")`），
 > 所以任何"`network` 有几个"的问题都已经**没有取值可答**。
-> 2026-10-21 那一次是 **94**；2026-10-25 是 **107**；2026-10-27（本版，p206）是 **111**
-> （`clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `clock.wait_any` 是 107 之后进来的那四笔）。
+> 2026-10-21 那一次是 **94**；2026-10-25 是 **107**；2026-10-27（p206）是 **111**；
+> 2026-10-26（本版，`p210 待抬`）是 **112**（`conductor.post_task` 进册；当时只读角色 C/H/V 被剥所以
+> 它们的条数不变 —— 同一批的 Q15 裁定把它登记进 `UNIVERSAL_TOOLS` 之后，C/H/V 各加 1）。
 
 **自注册面（9 件，不过 `build_registry` 的角色校验）**：9 个 `graph.*`（`agent_c.register_tools`）
-—— **`cli tools` 的 111 里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
+—— **`cli tools` 的装配面里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
 另两处同名面**不另算条数**：`agent_d._fallback_trace_tools` 的 3 个 `trace.*` 替身只在 D
-自己构造的注册表里生效（111 里的同名三件来自 `tools/trace_tools.py`，`roles=("C","D")`）；
+自己构造的注册表里生效（装配面里的同名三件来自 `tools/trace_tools.py`，`roles=("C","D")`）；
 `review_tools` 的 4 件写侧自 2026-10-17 起由装配器自动 `include_writers=True` 装进主表
 （`roles=("H",)`）。
 
@@ -65,7 +75,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## R0.2 [附录·实测] 不经 `build_registry` 的那批工具的逐条对账（2026-10-18 记 14 件；2026-10-21 复核 ⇒ 9 件；2026-10-27 复核 ⇒ 仍是这 9 件，与总数 111 无关）
+## R0.2 [附录·实测] 不经 `build_registry` 的那批工具的逐条对账（2026-10-18 记 14 件；2026-10-21 复核 ⇒ 9 件；2026-10-27 复核 ⇒ 仍是这 9 件，与总数 114 无关）
 
 正文 §R0.2 已经把这张表写全（来源 / 位置 / 数量 / 工具 / `side_effect` / `roles` / 是否过角色校验）。
 本节只登记**当次复核结论**（下面三条是 2026-10-18 的读数；14 → 9 的那次复核见正文 §R0.2）：
@@ -91,11 +101,11 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 | 项 | `INVENTORY.md`（abflow） | 本文实测（agentflow，2026-10-27 p206） | 是否一致 |
 |---|---|---|---|
-| 工具总数 | 55 | **111**（`python -m agentflow.cli tools`；Lean 关着时 108） | ⚠️ |
-| 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A49 B35 C34 D54 E36 F48 G50 H42 V26 L35 M34`（同一命令读"各角色工具数"那一行） | ⚠️ |
-| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **111 口径**：`read 55 / write_local 51 / none 5`；`external`：`none 101 / egress 5 / exec 5`（非 `none` 共 10 件；Lean 关着时 `read 54 / write_local 49 / none 5`、`none 101 / egress 5 / exec 2` ⇒ 7 件） | ⚠️ |
-| 需审批 | 17 / 55 | **55 / 111** | ⚠️ |
-| 只读角色泄漏 | 0 | **29 件**：`H` 12 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 8 件通用能力：`clock.*` 的七件写工具 + `conductor.ack`）+ `C` 9 件（`analysis.register_report` 一件落库代理 + 同样那 8 件通用能力）+ `V` 8 件（只有那 8 件通用能力） | ⚠️ |
+| 工具总数 | 55 | **114**（`python -m agentflow.cli tools`；Lean 关着时 111） | ⚠️ |
+| 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A52 B38 C36 D57 E39 F51 G53 H44 V28 L38 M37`（同一命令读"各角色工具数"那一行） | ⚠️ |
+| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **114 口径**：`read 56 / write_local 53 / none 5`；`external`：`none 104 / egress 5 / exec 5`（非 `none` 共 10 件；Lean 关着时 `read 55 / write_local 51 / none 5`、`none 104 / egress 5 / exec 2` ⇒ 7 件） | ⚠️ |
+| 需审批 | 17 / 55 | **57 / 114** | ⚠️ |
+| 只读角色泄漏 | 0 | **32 件**：`H` 13 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 9 件通用能力：`clock.*` 的七件写工具 + `conductor.ack` + `conductor.post_task`）+ `C` 10 件（`analysis.register_report` 一件落库代理 + 同样那 9 件通用能力）+ `V` 9 件（只有那 9 件通用能力） | ⚠️ |
 | 零测试工具 | 7 个（`table.list` `table.count` `table.schema` `table.search` `fs.list` `search.register` `search.download`） | 用"工具名字符串是否出现在 `tests/`"口径，**本次未复算** | ⚠️ |
 | `INVENTORY` 未覆盖的 schema 对象 | 无 `Task`/`UsageEntry`/`EvalResult` | **有**（`schema.EvalResult`） | ❌ **INVENTORY 落后** |
 
@@ -105,18 +115,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## A.4 [附录·实测] 工具面明细（49 件）
+## A.4 [附录·实测] 工具面明细（52 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role A`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role A`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **49** |
-| `side_effect` | `read 23 / write_local 26 / none 0` |
-| `external` | `none 45 / egress 4`（`search.download` / `search.literature` / `search.providers` / `search.walk_citations`） |
-| 需审批 | **29** |
+| 总数 | **52** |
+| `side_effect` | `read 24 / write_local 28 / none 0` |
+| `external` | `none 48 / egress 4`（`search.download` / `search.literature` / `search.providers` / `search.walk_citations`） |
+| 需审批 | **31** |
 
-**逐件清单（按模块，共 49）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `manuscripts.*` 2（`list` `read`） · `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `text.*` 1（`extract`） · `trace.*` 1（`children`）。
+**逐件清单（按模块，共 52）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `text.*` 1（`extract`） · `trace.*` 1（`children`）。
 
 > 本节自 2026-10-27 起**五格一律现读**；旧版那几张手抄逐件表已漂过（写过 `network`、写过 "26 个工具"），所以这里只写"现读命令 + 分组清单"，不再手抄会变的分份数。
 
@@ -126,18 +136,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## B.4 [附录·实测] 工具面明细（35 件）
+## B.4 [附录·实测] 工具面明细（38 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role B`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role B`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **35** |
-| `side_effect` | `read 16 / write_local 19 / none 0` |
-| `external` | `none 34 / egress 1`（`ocr.run`） |
-| 需审批 | **19** |
+| 总数 | **38** |
+| `side_effect` | `read 17 / write_local 21 / none 0` |
+| `external` | `none 37 / egress 1`（`ocr.run`） |
+| 需审批 | **21** |
 
-**逐件清单（按模块，共 35）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
+**逐件清单（按模块，共 38）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
 
 > 本节自 2026-10-27 起五格一律现读（旧版手抄表已折成下面那行历史读数）。
 
@@ -147,22 +157,22 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## C.4 [附录·实测] 工具面明细（34 件）
+## C.4 [附录·实测] 工具面明细（36 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role C`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role C`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **34** |
-| `side_effect` | `read 25 / write_local 9 / none 0` |
-| `external` | `none 34` |
-| 需审批 | **9** |
+| 总数 | **36** |
+| `side_effect` | `read 26 / write_local 10 / none 0` |
+| `external` | `none 36` |
+| 需审批 | **10** |
 
-**逐件清单（按模块，共 34）**：`analysis.*` 1（`register_report`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 2（`ack` `escalate`） · `fs.*` 4（`list` `read` `search` `stat`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
+**逐件清单（按模块，共 36）**：`analysis.*` 1（`register_report`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
 
 > **C 的计数有两层，别把第二层加进 `cli tools`**：`cli tools --role C` 报的是走 `build_registry` 那一层；`agent_c.register_tools` 自注册的 9 个 `graph.*`（`hottest` `paths` `cold` `gaps` `svc_neighbors` `svc_relations_between` `contradictions` `structural_duplicates` `check_conflict`）**不在它的计数里**，也不进 `build_registry` 的角色校验（见 §R0.2）。旧版本节写"21 = 第一层 19 + 自注册 9"，那道算术不成立（19+9≠21）。
 
-**C 拿不到**：另 77 件 —— `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `conductor.*` 17 · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 7（`dedup_check` `download` `ingest_local` `literature` `providers` `register` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `verify.*` 8（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `list_verifications` `read_proof` `run_experiment` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
+**C 拿不到**：另 78 件 —— `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `conductor.*` 17 · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `program.*` 1（`stop`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 7（`dedup_check` `download` `ingest_local` `literature` `providers` `register` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `verify.*` 8（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `list_verifications` `read_proof` `run_experiment` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
 
 > 历史读数：21 → 23 → 30 → **34**（2026-10-21 / 10-25 那两次重算的链；逐条旧叙述已折成这一行，本节自 2026-10-27 起五格一律现读）。
 
@@ -170,18 +180,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## D.4 [附录·实测] 工具面明细（54 件）
+## D.4 [附录·实测] 工具面明细（57 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role D`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role D`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **54** |
-| `side_effect` | `read 29 / write_local 20 / none 5` |
-| `external` | `none 54` |
-| 需审批 | **20** |
+| 总数 | **57** |
+| `side_effect` | `read 30 / write_local 22 / none 5` |
+| `external` | `none 57` |
+| 需审批 | **22** |
 
-**逐件清单（按模块，共 54）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
+**逐件清单（按模块，共 57）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
 
 > 本节自 2026-10-27 起五格一律现读（旧版手抄表已折成下面那行历史读数）。
 
@@ -191,18 +201,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## E.4 [附录·实测] 工具面明细（36 件）
+## E.4 [附录·实测] 工具面明细（39 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role E`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role E`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **36** |
-| `side_effect` | `read 18 / write_local 18 / none 0` |
-| `external` | `none 35 / exec 1`（`verify.run_experiment`） |
-| 需审批 | **18** |
+| 总数 | **39** |
+| `side_effect` | `read 19 / write_local 20 / none 0` |
+| `external` | `none 38 / exec 1`（`verify.run_experiment`） |
+| 需审批 | **20** |
 
-**逐件清单（按模块，共 36）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `evidence_for` `list_experiments` `run_experiment`）。
+**逐件清单（按模块，共 39）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `evidence_for` `list_experiments` `run_experiment`）。
 
 > **`verify.check_formal` 不在 E 的工具面里**：它的 `roles` 现读是**空集**（形式化入口归 L 的 `formal.check_formal`），E 自己的 Lean 侧写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF`，受控拒绝码 `formal_moved_to_l`）。E 的写面只有 `experiments` 一张表。
 
@@ -212,18 +222,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## F.4 [附录·实测] 工具面明细（48 件）
+## F.4 [附录·实测] 工具面明细（51 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role F`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role F`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **48** |
-| `side_effect` | `read 23 / write_local 20 / none 5` |
-| `external` | `none 47 / exec 1`（`verify.run_experiment`） |
-| 需审批 | **20** |
+| 总数 | **51** |
+| `side_effect` | `read 24 / write_local 22 / none 5` |
+| `external` | `none 50 / exec 1`（`verify.run_experiment`） |
+| 需审批 | **22** |
 
-**逐件清单（按模块，共 48）**：`attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
+**逐件清单（按模块，共 51）**：`attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
 
 > **F 自己的写面只有 `attack_plans`**：其余写工具都是共用的（`fs.*` 的四件 + `table.*` 的三件 + `conductor.broadcast` 一类），`statements` 与 `dependencies` **都不在** F 的写集里 —— 命题由秘书 / B 登记，依赖边由 B 读 F 的证明手稿落（`specs/f.py` 的 `write_set` 是这一格的真身）。
 
@@ -233,18 +243,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## G.4 [附录·实测] 工具面明细（50 件）
+## G.4 [附录·实测] 工具面明细（53 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role G`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role G`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **50** |
-| `side_effect` | `read 23 / write_local 22 / none 5` |
-| `external` | `none 48 / exec 2`（`doc.paper_compile` / `verify.run_experiment`） |
-| 需审批 | **22** |
+| 总数 | **53** |
+| `side_effect` | `read 24 / write_local 24 / none 5` |
+| `external` | `none 51 / exec 2`（`doc.paper_compile` / `verify.run_experiment`） |
+| 需审批 | **24** |
 
-**逐件清单（按模块，共 50）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
+**逐件清单（按模块，共 53）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
 
 > 本节自 2026-10-27 起五格一律现读（旧版手抄表已折成下面那行历史读数）。
 
@@ -254,60 +264,60 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## H.4 [附录·实测] 工具面明细（42 件）
+## H.4 [附录·实测] 工具面明细（44 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role H`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role H`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **42** |
-| `side_effect` | `read 25 / write_local 12 / none 5` |
-| `external` | `none 42` |
-| 需审批 | **12** |
+| 总数 | **44** |
+| `side_effect` | `read 26 / write_local 13 / none 5` |
+| `external` | `none 44` |
+| 需审批 | **13** |
 
-**逐件清单（按模块，共 42）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 2（`ack` `escalate`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `detect_verifier` `evidence_for` `list_experiments`）。
+**逐件清单（按模块，共 44）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `detect_verifier` `evidence_for` `list_experiments`）。
 
 > **H 的 `write_local` 分两族，别混算**：① `READONLY_CALL_EXCEPTIONS['H']` 里登记的 4 件**落库代理**（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）；② `UNIVERSAL_TOOLS` 里的通用能力（`clock.*` 的写工具 + `conductor.ack`，十一个角色全体都有，业主 2026-10-26：「通用能力根本不该出现谁能用这个说法」）。`cli tools` 的"只读角色写工具泄漏"那一行把两族都打出来并标 `!! 有泄漏` —— **那是声明面的读数**；行为面由 `for_role` 挡住：H 仍拿不到 `fs.*` / `table.*` 的任何写工具。
 
-**H 拿不到**：另 69 件 —— `analysis.*` 1（`register_report`） · `attack.*` 2（`create_plan` `step`） · `conductor.*` 17 · `doc.*` 4（`build_document` `paper_compile` `register_dependency` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `search.*` 7（`dedup_check` `download` `ingest_local` `literature` `providers` `register` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `trace.*` 4（`chain` `concept` `literature` `relation`） · `verify.*` 4（`list_verifications` `read_proof` `run_experiment` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
+**H 拿不到**：另 70 件 —— `analysis.*` 1（`register_report`） · `attack.*` 2（`create_plan` `step`） · `conductor.*` 17 · `doc.*` 4（`build_document` `paper_compile` `register_dependency` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `program.*` 1（`stop`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `search.*` 7（`dedup_check` `download` `ingest_local` `literature` `providers` `register` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `trace.*` 4（`chain` `concept` `literature` `relation`） · `verify.*` 4（`list_verifications` `read_proof` `run_experiment` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
 
 > 历史读数：31 → 38 → **42**（2026-10-21 / 10-25 那两次重算的链；逐条旧叙述已折成这一行，本节自 2026-10-27 起五格一律现读）。
 
 ---
 
-## V.4 [附录·实测] 工具面明细（26 件）
+## V.4 [附录·实测] 工具面明细（28 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role V`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role V`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **26** |
-| `side_effect` | `read 18 / write_local 8 / none 0` |
-| `external` | `none 26` |
-| 需审批 | **8** |
+| 总数 | **28** |
+| `side_effect` | `read 19 / write_local 9 / none 0` |
+| `external` | `none 28` |
+| 需审批 | **9** |
 
-**逐件清单（按模块，共 26）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 2（`ack` `escalate`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 3（`list_verifications` `read_proof` `verify_proof`）。
+**逐件清单（按模块，共 28）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 3（`list_verifications` `read_proof` `verify_proof`）。
 
 > **V 的 `write_local` 不是落库代理**：全部是 `UNIVERSAL_TOOLS` 里的通用能力（`clock.*` 的写工具 + `conductor.ack`），业主 2026-10-26 口径。V 一件 `READONLY_CALL_EXCEPTIONS` 都没有 —— 它唯一的产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表。
 
-**V 拿不到**：另 85 件 —— `analysis.*` 1（`register_report`） · `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `conductor.*` 17 · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `trace.*` 4（`chain` `concept` `literature` `relation`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）（逐件见正文 §R0 全表；本节只给条数）。
+**V 拿不到**：另 86 件 —— `analysis.*` 1（`register_report`） · `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `conductor.*` 17 · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 4（`delete` `edit` `move` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `program.*` 1（`stop`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`） · `table.*` 3（`create` `delete` `update`） · `text.*` 1（`extract`） · `trace.*` 4（`chain` `concept` `literature` `relation`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）（逐件见正文 §R0 全表；本节只给条数）。
 
 > 历史读数：15 → 22 → **26**（2026-10-21 / 10-25 那两次重算的链；逐条旧叙述已折成这一行，本节自 2026-10-27 起五格一律现读）。
 
 ---
 
-## L.4 [附录·实测] 工具面明细（35 件）
+## L.4 [附录·实测] 工具面明细（38 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role L`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role L`
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **35** |
-| `side_effect` | `read 16 / write_local 19 / none 0` |
-| `external` | `none 32 / exec 3`（`formal.check_formal` / `formal.formalize` / `formal.record`） |
-| 需审批 | **20** |
+| 总数 | **38** |
+| `side_effect` | `read 17 / write_local 21 / none 0` |
+| `external` | `none 35 / exec 3`（`formal.check_formal` / `formal.formalize` / `formal.record`） |
+| 需审批 | **22** |
 
-**逐件清单（按模块，共 35）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 4（`ack` `broadcast` `escalate` `retire_child`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
+**逐件清单（按模块，共 38）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 5（`ack` `broadcast` `escalate` `post_task` `retire_child`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
 
 > **L 的工具面 = 通用能力 + 三件 `formal.*`**：`formal.formalize` / `formal.check_formal` / `formal.record` 只挂给 L（`formal_tools._ROLES_L == ("L",)`）；写集只有 `experiments` 一格（`record` 落 `method="formal"` 的行），刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。**Lean 关着时这一节是 0 件**（`leanscope.LEAN_ONLY_ROLES` 决定这个角色存不存在，不是它的工具被剥）。
 
@@ -315,20 +325,20 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## M.4 [附录·实测] 工具面明细（34 件）
+## M.4 [附录·实测] 工具面明细（37 件）
 
-**现读于 2026-10-27（p206，`AGENTFLOW_LEAN_ENABLED=1`）**：`python -m agentflow.cli tools --role M`
+**现读于 2026-10-26（p210，`AGENTFLOW_LEAN_ENABLED=1`）**：`build_registry(...).for_role("M")`（`cli tools --role` 的 choices 里没有 M）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **34** |
-| `side_effect` | `read 16 / write_local 18 / none 0` |
-| `external` | `none 34` |
-| 需审批 | **18** |
+| 总数 | **37** |
+| `side_effect` | `read 17 / write_local 20 / none 0` |
+| `external` | `none 37` |
+| 需审批 | **20** |
 
-**逐件清单（按模块，共 34）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 19 · `fs.*` 6（`edit` `list` `read` `search` `stat` `write`）。
+**逐件清单（按模块，共 37）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 20 · `fs.*` 6（`edit` `list` `read` `search` `stat` `write`） · `program.*` 2（`list` `stop`）。
 
-> **M 的 34 件是三层相加**，拆开写才看得出哪一层在变：编排面 / 通用时钟 / 文件面白名单。**没有** `fs.delete` / `fs.move`（一个真删、一个换位置，都不可逆），也不碰任何表。
+> **M 的工具面是三层相加**，拆开写才看得出哪一层在变：编排面 / 通用时钟 / 文件面白名单。**没有** `fs.delete` / `fs.move`（一个真删、一个换位置，都不可逆），也不碰任何表。三个拆项各是几件，见正文 §M.4 标题里那个等号右边（与本节同一批数，都由 `--write` 现算重写）。
 
 **M 拿不到**：另 77 件 —— `analysis.*` 1（`register_report`） · `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 2（`delete` `move`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `manuscripts.*` 2（`list` `read`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`） · `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `text.*` 1（`extract`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`） · `verify.*` 8（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `list_verifications` `read_proof` `run_experiment` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
 
@@ -1001,7 +1011,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 ---
 
-## A.10–M.10 [附录·实测] 全部自检入口与当次读数（现读于 2026-10-27（p206））
+## A.10–M.10 [附录·实测] 全部自检入口与当次读数（现读于 2026-10-26（p210））
 
 **口径**：Lean 关（出厂默认 `AGENTFLOW_LEAN_ENABLED` 未设 / 设为 0）。Lean 开着时 `agent_e`
 多一段"未查 1 段"并多数几项，所以这一张表只在**关着**的那一档可比；两档的差写在正文 §E.4。
@@ -1013,14 +1023,14 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 
 | 入口 | 当次读数（尾部逐字） | 退出码 | 行数 |
 |---|---|---:|---:|
-| `agent_a` | `[agent_a 自检] 24/24 项通过` | **0** | 26 |
+| `agent_a` | `[agent_a 自检] 29/29 项通过` | **0** | 31 |
 | `agent_b` | `[agent_b 自检] 19/19 项通过` | **0** | 21 |
 | `agent_c` | `自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败` | **0** | 243 |
 | `agent_d` | `SELF-CHECK DONE（agent_d）` | **0** | 58 |
-| `agent_e` | `SELF-CHECK DONE（agent_e）：22 项通过 / 0 项失败` | **0** | 35 |
+| `agent_e` | `SELF-CHECK DONE（agent_e）：22 项通过 / 0 项失败` | **0** | 37 |
 | `agent_f` | `SELF-CHECK DONE（agent_f）：失败 0 项` | **0** | 42 |
 | `agent_g` | `SELF-CHECK DONE（agent_g）` | **0** | 47 |
-| `agent_h` | `SELF-CHECK DONE（agent_h）` | **0** | 83 |
+| `agent_h` | `SELF-CHECK DONE（agent_h）` | **0** | 85 |
 | `agent_v` | `SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败` | **0** | 18 |
 | `pipeline` | `SELF-CHECK DONE（pipeline）` | **0** | 48 |
 | `llm` | `SELF-CHECK DONE` | **0** | 41 |
@@ -1126,7 +1136,7 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 
 | # | 命令 | 当次实测输出（摘要） | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：111（已装模块 17…）`；`各角色工具数：{'A': 49, 'B': 35, 'C': 34, 'D': 54, 'E': 36, 'F': 48, 'G': 50, 'H': 42, 'V': 26, 'L': 35, 'M': 34}`；`只读角色写工具泄漏：{'C': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack', 'analysis.register_report'], 'H': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding', 'conductor.ack'], 'V': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack']}（!! 有泄漏）`（现读于 2026-10-27（p206）；Lean 关着时是 `工具总数：108`） | 0 |
+| 1 | `python -m agentflow.cli tools` | `工具总数：114（已装模块 17…）`；`各角色工具数：{'A': 52, 'B': 38, 'C': 36, 'D': 57, 'E': 39, 'F': 51, 'G': 53, 'H': 44, 'V': 28, 'L': 38, 'M': 37}`；`只读角色写工具泄漏：{'C': ['analysis.register_report', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task'], 'H': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes'], 'V': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task']}（!! 有泄漏）`（现读于 2026-10-26；Lean 关着时是 `工具总数：111`） | 0 |
 | 2 | `python -m agentflow.cli tools --role E` | 正常输出 E 的工具清单（**不再是 `invalid choice`**） | 0 |
 | 3 | `python -m pytest --collect-only -q` | `5433/5461 tests collected (28 deselected) in 8.28s` | 0 |
 | 4 | `python -m agentflow.agent_a` | `[agent_a 自检] 24/24 项通过` | 0 |

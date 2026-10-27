@@ -69,7 +69,7 @@ from typing import Any, Mapping
 from . import sessions as SS
 from . import stopctl
 from . import agent_loop as AL
-from .agent_loop import PUBLIC, LoopRun, run_role, send_message
+from .agent_loop import ALL, LoopRun, run_role, send_message
 from .llmseam import LlmSeam
 
 #: （已删除） 原本这里是 `STOP_TOKEN = "STOP"` 的字面匹配旁路。
@@ -449,7 +449,7 @@ def _publish_report(session_root: Path, *, role: str, report: RoundReport, round
     # 行使广播权（业主 T20 管的是后者）—— 它没有"发给我的子代理"这个语义，
     # 所以按框架档走（全角色可见，与改前逐字相同）。代理自己发的公聊必须
     # 带台账号；两处的区别写在 `agent_loop.public_visibility` 的 docstring 里。
-    _msg_id, problem = send_message(session_root, sender=role, to=PUBLIC, subject=subject,
+    _msg_id, problem = send_message(session_root, sender=role, to=ALL, subject=subject,
                                     body=body, sid=sid, by_framework=True)
     report.report_sent = problem
     notes: list[str] = []

@@ -768,17 +768,20 @@ def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathli
 
 
 def test_handoff_accepts_all_like_message_and_notify(tmp_path: pathlib.Path):
-    """判据（主控 2026-10-06 裁定 (a)）：`handoff` 的 `to` 也收 `ALL`，三通道同一份词表。
+    """判据（主控 2026-10-06 裁定 (a)）：`handoff` 的 `to` 也收 `ALL`，三通道同一份判据。
 
     改前红：`_decode_shape({"handoff": {"to": "ALL", …}})` 拒，而拒信自己教的正是 `ALL`（"给所有人写
-    to="ALL""），`JSON_TAIL` 里的骨架也写 `<伙伴/M/ALL>`；`message` / `notify` 两条路却两种写法都收。
+    to="ALL""），`JSON_TAIL` 里的骨架也写 `<伙伴/M/ALL>`；`message` / `notify` 两条路却都收。
     于是模型照提示词写 `ALL` 被拒、被拒后拿到的改法还是 `ALL` —— 同一步可能连撞两次（"提示词教了框架
     不收的字面量"那一形态，`tests/test_agent_prompts.py` 那条判据的 A 面就在这里）。
 
-    四条一起判：① `to="ALL"` 与 `to="#public"` 都被收，且都归一成手稿通道的规范形 `ALL`；
-    ② 反负控：`to="Z"`（真不存在的收件人）仍拒 —— 不许把"放宽"做成"什么都收"；③ 三通道同一份等价
-    关系：`_is_all_recipient` 判 `ALL`/`#public`/`all` 为真、`_known_recipient` 认角色与主控，
-    `handoff`/`message`/`notify` 都调它们；④ 小写角色名归一成大写（与 `notify` 的口径一致）。"""
+    "两种写法"收口之后（2026-10-27）：公共频道只剩 `ALL` 一种写法，三条通道归一成同一个值。
+
+    四条一起判：① `to="ALL"` / `"#public"`（旧数据写法，读侧折算）/ `"all"` 都被收，且都归一成 `ALL`；
+    ② 反负控：`to="Z"`（真不存在的收件人）仍拒 —— 不许把"放宽"做成"什么都收"；③ 三通道同一份判据：
+    `_is_all_recipient` 判 `ALL`/`#public`/`all` 为真、`_known_recipient` 认角色与主控，
+    `handoff`/`message`/`notify` 都调它们，且归一函数只有一个规范形 `ALL`；
+    ④ 小写角色名归一成大写（与 `notify` 的口径一致）。"""
     from agentflow.agent_loop import (_decode_shape, _is_all_recipient,  # noqa: PLC0415
                                      _known_recipient, _recipient_for_channel, clean_notify)
 
@@ -792,14 +795,15 @@ def test_handoff_accepts_all_like_message_and_notify(tmp_path: pathlib.Path):
     _, _, bad = _decode_shape({"handoff": {"to": "Z", "summary": "s", "body": "b"}})
     assert bad and "收件人" in bad, f"不存在的收件人居然被收了：{bad!r}"
     assert _decode_shape({"handoff": {"to": "", "summary": "s", "body": "b"}})[2], "空 to 也要拒"
-    # 3 —— 词表只有一处：三个通道的"给所有人"归一到同一个判据上
+    # 3 —— 判据只有一处：三个通道的"给所有人"归一到同一个值上
     assert {_is_all_recipient(t) for t in ("ALL", "#public", "all")} == {True}
     assert _is_all_recipient("Z") is False
     assert _known_recipient("F") and _known_recipient("M") and not _known_recipient("Z")
-    assert _recipient_for_channel("ALL") == "#public"            # 留言通道的规范形
-    assert _recipient_for_channel("ALL", all_as="ALL") == "ALL"  # 手稿/notify 的规范形
+    assert _recipient_for_channel("ALL") == "ALL"                # 唯一的规范形
+    assert _recipient_for_channel("#public") == "ALL"            # 旧写法读侧折算
+    assert _recipient_for_channel("f") == "F"                    # 角色名一律大写
     assert clean_notify({"to": "#public", "summary": "s", "body": "b"})["to"] == "ALL"
-    assert _decode_shape({"message": {"to": "ALL", "body": "x"}})[1]["to"] == "#public"
+    assert _decode_shape({"message": {"to": "ALL", "body": "x"}})[1]["to"] == "ALL"
     # 4
     assert _decode_shape({"handoff": {"to": "f", "summary": "s", "body": "b"}})[1]["to"] == "F"
 
@@ -868,7 +872,7 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     # task」之后，`<动作名>` / `A-H` 两条替换没有对象了，换掉它们的是 `role` / `task` 那两条。
     fixed = (JSON_TAIL.replace("{...}", "{}").replace("<工具名>", "table.list")
              .replace("<伙伴表里的角色名>", "A").replace("<一件可判定的活>", "把这一条走一遍")
-             .replace("<伙伴或 #public>", "#public").replace("<结论>", "做完了")
+             .replace("<伙伴或 ALL>", "ALL").replace("<结论>", "做完了")
              .replace("<伙伴/M/ALL>", "A").replace("<markdown 正文>", "正文")
              .replace("<前面的编号>", "0000")
              .replace("...", "x"))

@@ -161,11 +161,14 @@ import contextlib
 import contextvars
 import json
 import os
+import signal
 import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
+
+from .canonical import json_default
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
@@ -199,10 +202,15 @@ TIMER_KINDS: tuple[str, ...] = ("timer", "alarm", "periodic", "program")
 #: 把后两档折进第一档会让"超时"与"跑完了但退出码非 0"长得一样。
 PROGRAM_OUTCOMES: tuple[str, ...] = ("exited", "failed", "timed_out", "killed")
 
-#: 目的的来源受控词表（业主 2026-10-27 的第二条裁定）：
-#: `given` = 调用方显式给的；`target_task` = 从被等对象的 task 文本自动填的；
-#: `unavailable` = 两边都没有（此时 `purpose_missing` 为真，沿用既有追问语义）。
-PURPOSE_SOURCES: tuple[str, ...] = ("given", "target_task", "unavailable")
+#: 目的的来源受控词表（业主 2026-10-27 的第二条裁定）。四档，不许折平：
+#: `given` = 调用方显式给的；`target_task` = 从被等对象（那条子代理）的 task 文本自动填的；
+#: `program` = 等程序那一条没给目的时，用程序名 + 命令行摘要自动填的
+#: （业主同日第一条裁定：运行一个程序会自动起一条计时器，它当然也该有话可念）；
+#: `unavailable` = 三条自动填的路都拿不到东西（此时 `purpose_missing` 为真，沿用既有追问语义）。
+#:
+#: 四档都要真落盘（`Timer.to_dict` 的 `purpose_source` 键）：只活在读数里的话，
+#: "为什么这一条没目的"在盘上就退化成一句空串。
+PURPOSE_SOURCES: tuple[str, ...] = ("given", "target_task", "program", "unavailable")
 
 #: 从被等对象那一边抄目的时的截断长度（业主定死 200 字）。
 PURPOSE_FROM_TARGET: int = 200
@@ -213,8 +221,13 @@ ARGV_EXCERPT: int = 200
 #: 周期性条目状态的受控词表。三个都是终态，不许回退。
 PERIODIC_STATES: tuple[str, ...] = ("running", "stopped", "until_reached", "cancelled")
 
-#: `wait_for` 的两种指称：等某个代理（名册名 / `agent:<名>`）、等某件活（绝对编号 / `task:<号>`）。
-WAIT_FOR_KINDS: tuple[str, ...] = ("agent", "task")
+#: `wait_for` 的三种指称（业主 2026-10-26："等别人"必须明确到等名册上的谁
+#: 或等哪条程序）：
+#: - `agent`：名册名（`agent:<名>` / 裸名字）；
+#: - `task`：绝对编号（`task:<号>` / 裸编号）；
+#: - `program`：某条程序计时器的句柄（`program:<tm-号>`，或直接给 `start_program`
+#:   返回的那个 Timer 对象）。
+WAIT_FOR_KINDS: tuple[str, ...] = ("agent", "task", "program")
 
 #: 到点判定的五种触发。它们可以同时成立（等时间 + 等谁，先到者报醒）；
 #: `program_exit` 是程序计时器那一档：程序结束（成功/失败/超时/被杀）就是它到点。
@@ -253,6 +266,67 @@ class ClockParamError(ClockError):
 
 class ClockNotFound(ClockError):
     """台账里没有这个收件人 / 没有这个计时器。"""
+
+
+#: "等谁"解析不到一个具体对象的机器码（业主 2026-10-26：
+#: 「"等别人"必须要明确到等名册上的谁……或者等哪条程序」）。
+#:
+#: 它是`ClockNotFound` 的子类：工具层那边按 `ClockNotFound` 折成 `not_found` 的口径
+#: （`tools/clock_tools.py` 的 except 段不归这一批改），所以码本身写在拒信第一句，
+#: 读的人与判据都按这一串认。记进 `errorstats` 码表（见那里的登记行）。
+WAITER_NOT_RESOLVABLE: str = "waiter_not_resolvable"
+
+
+class ClockWaiterNotResolvable(ClockNotFound):
+    """`wait_for` 解析不到一个具体的等待对象（散文 / 查无此人 / 不是程序句柄）。
+
+    与 `ClockNotFound` 的差别只在语义：那个是"你要找的那一条不存在"，
+    这个是"你这句写法根本不指向任何一条"—— 后者要教人重写一次，所以拒信里
+    必须把两条正路逐字给出来（`waiter_refusal()` 是唯一拼法）。
+    """
+
+
+class ClockNoTimersToWait(ClockParamError):
+    """起意"等任意计时器返回"，而名下一条现存计时器都没有（码 `no_timers_to_wait`）。
+
+    它是参数/前置条件不成立，不是"没查成"也不是"查无此人"：拒信由
+    `no_timers_refusal()` 拼，逐字给两条正路（先起一条表 / 按交差收工）。
+    """
+
+
+#: "起意等任意计时器返回"时一条计时器都没有的机器码（业主 2026-10-26：
+#: 「这个需要存在的计时器数大于等于1」）。
+NO_TIMERS_TO_WAIT: str = "no_timers_to_wait"
+
+
+def waiter_refusal(value: Any, *, why: str = "") -> str:
+    """`wait_for` 解析不到时的拒信（逐字两条正路；判据按这两句认）。
+
+    为什么拒信要写成"两条正路"而不是"参数不合法"：这句话是模型下一次重写的唯一依据。
+    业主原话是「必须要明确到等名册上的谁……或者等哪条程序」—— 于是正路也只有两条：
+    名册上的那一位（名册名或绝对编号）与某一条程序（`clock.start_program` 的句柄）。
+    """
+    detail = f"（{why}）" if str(why or "").strip() else ""
+    return (
+        f"{WAITER_NOT_RESOLVABLE}：wait_for={value!r} 没有指向一个具体的等待对象{detail}。"
+        "两条正路：① 写名册上的谁——名册名或绝对编号"
+        "（例如 wait_for=\"A1\" 或 wait_for=\"t-000002\"；父代理与子代理都一样），"
+        "必须能在名册里解析到唯一一个台账号；"
+        "② 等某条程序——用 clock.start_program(...) 拿到的那个句柄"
+        "（wait_for=\"program:<那个 timer_id>\"）。"
+        "不支持\"别人\"/\"外部\"/\"等结果\"这类散文：时钟按名字或编号找人，猜不出你指谁。")
+
+
+def no_timers_refusal(*, role: str = "") -> str:
+    """`request_wait_any` 在一条计时器都没有时的拒信（逐字两条正路）。"""
+    who = f"（{role}）" if str(role or "").strip() else ""
+    return (
+        f"{NO_TIMERS_TO_WAIT}：你名下现在一条计时器都没有{who} —— "
+        "\"等待任意计时器返回\"要求现存计时器数 >= 1（业主 2026-10-26），"
+        "没有可等的东西就不该挂在这一档上。两条正路："
+        "① 先起一条表：等子写 wait_for=<名册名或绝对编号>，等程序用 "
+        "clock.start_program(...)，等时间用 after_sec=…；"
+        "② 或者按交差收工：无事可做 + 无计时器 = 交差（父代理那一侧会把你记为静默）。")
 
 
 class ClockStateError(ClockError):
@@ -353,10 +427,28 @@ iso = _iso
 # ---------------------------------------------------------------- 申请形状的两半
 
 
+def _looks_like_task_id(text: str) -> bool:
+    """这一串像不像一个绝对编号（`t-000012` 或老的 `t000012`）。
+
+    为什么要把带横杠的那种也认进来：业主 2026-10-26 说的"绝对编号"就是指名册里
+    印出来的那个形（`t-000002`），而改前只认 `t000012` —— 于是"等 t-000002"会被
+    当成一个名册名去查，然后以"查无此人"被拒。大写开头的（`T1`）仍按名册名走：
+    编号一律小写 `t`，大写 `T1` 只可能是人起的名字。
+    """
+    if not text or text[0] != "t":
+        return False
+    body = text[1:]
+    if body.startswith("-"):
+        body = body[1:]
+    return bool(body) and body.isdigit()
+
+
 def parse_wait_for(value: Any) -> tuple[str, str]:
     """把 `wait_for` 的写法解析成 `(指称, 代号)`。解析失败 => `ClockParamError`。
 
-    认这几种写法（业主 2026-10-25：「值形如名册名 / 绝对编号 / `task:<号>` / `agent:<名>`」）：
+    认这几种写法（业主 2026-10-26：「"等别人"必须要明确到等名册上的谁……或者等哪条程序」；
+    名册名 / 绝对编号两种写法是业主 2026-10-25 那条「值形如名册名 / 绝对编号 /
+    `task:<号>` / `agent:<名>`」的原文）：
 
     | 写法 | 指称 | 代号 |
     |---|---|---|
@@ -364,20 +456,39 @@ def parse_wait_for(value: Any) -> tuple[str, str]:
     | `t000012`（绝对编号） | `task` | `t000012` |
     | `agent:D1` | `agent` | `D1` |
     | `D1`（名册名） | `agent` | `D1` |
+    | `program:tm-000003` | `program` | `tm-000003` |
+    | `tm-000003`（裸句柄号） | `program` | `tm-000003` |
+    | `start_program(...)` 返回的 Timer 对象 | `program` | 它的 `timer_id` |
 
     为什么这里只解析不核实存在：核实要读台账/名册，那是工具层的事（本模块不拖 Store
-    进来）。存在性由注册进来的探针答（`set_target_probe`），三态见 `TARGET_STATES`。
+    进来）。存在性由注册进来的探针答（`set_target_probe`），三态见 `TARGET_STATES`；
+    程序那一条不需要探针 —— 它就在本模块的簿记里（`target_state` 的 `program` 分支）。
+
+    散文（`别人` / `外部` / `等结果`）在这里会当"名册名"往下走，在核实处被拒
+    （`ClockWaiterNotResolvable`，拒信由 `waiter_refusal()` 拼，给两条正路）：
+    解析层不知道名册里有什么，它没有资格判"这个名字不存在"。
     """
+    if not isinstance(value, str):
+        handle = str(getattr(value, "timer_id", "") or "")
+        if handle:
+            # `clock.start_program(...)` 的返回值本身就是句柄：直接给对象也算点名叫到。
+            return "program", handle
     text = str(value or "").strip()
     if not text:
         raise ClockParamError(
-            "wait_for 是空串 —— 等谁必须点名（名册名 / 绝对编号 / task:<号> / agent:<名>）")
+            "wait_for 是空串 —— 等谁必须点名（名册名 / 绝对编号 / task:<号> / "
+            "agent:<名> / program:<程序句柄>）")
     low = text.lower()
     if low.startswith("task:"):
         kind, ref = "task", text[5:].strip()
     elif low.startswith("agent:"):
         kind, ref = "agent", text[6:].strip()
-    elif low.startswith("t") and text[1:].isdigit():
+    elif low.startswith("program:"):
+        kind, ref = "program", text[8:].strip()
+    elif low.startswith("tm-"):
+        # 程序计时器的句柄号（`start_program` 的 `timer_id`）：它只可能是程序那一条。
+        kind, ref = "program", text
+    elif _looks_like_task_id(text):
         kind, ref = "task", text
     else:
         kind, ref = "agent", text
@@ -422,10 +533,14 @@ def human_sec(seconds: float | None) -> str:
 #: 到点消息里"目的未填"那一格的逐字写法（业主定死；判据按它认出缺目的那一趟）。
 PURPOSE_MISSING_TEXT: str = "（目的未填）"
 
-#: 缺目的时的追问句（逐字；到点消息、工具读数、唤醒标记三处读同一份）。
+#: 缺目的时的追问句（逐字；到点消息、工具读数、唤醒标记、每步提示词四处读同一份）。
+#:
+#: 补法里点两样：`entry_id` 是那件工具真正收的参数名（写 `timer_id=` 会让模型的补写调用
+#: 受控失败），`timer_id` 是盘上那一格的键名（读的人按它去 `out/clock/state.json` 对得上）。
 PURPOSE_PROMPT: str = (
     "你起的这一次等待还没写目的 —— 补一句目的（例如「等待20分钟+周期性巡查」），"
-    "否则到点那条报醒里就没有目的可念；补法：clock.timer_purpose(purpose=…)")
+    "否则到点那条报醒里就没有目的可念；补法："
+    "clock.timer_purpose(entry_id=<那一条的 timer_id>, purpose=…)")
 
 
 def near_seconds(value: float | None) -> float | None:
@@ -469,11 +584,280 @@ def retire_hint(name: Any) -> str:
             "到点后由时钟把消息发给收件人，不再由调用方自己睡")
 
 
+# ---------------------------------------------------------------- 异常清单（巡查报醒）
+#
+# 业主 2026-10-26：「这个是M定期巡查需要特别注意的异常行为，M可通过发送指导意见干预」。
+#
+# 于是"巡查时间到"那句话不许只有目的 / 间隔 / 第几次：它还要带一份当拍现算的异常清单。
+# 只叫醒而不告诉 M 要看什么，那一拍就只是闹钟；清单里四类的口径见 `patrol_text`。
+#
+# 分工与 `set_due_handler` / `set_target_probe` 同一条切法：本模块只负责"把清单拼进报醒"
+# 这一半。清单里每一条事实（停滞 / 静默 / 未消板项 / 被拦的结项原因）都要读台账、板项
+# 与名册，那是工具层的事，经 `set_patrol_probe` 接进来 —— 本模块不拖 Store 进来。
+
+# 停滞那一段的阈值从哪来：读口给的那一格（`stalled` 里 `threshold_sec`）。本模块刻意不写
+# 自己的 N —— 判据的真身在 `conductor.agent_state`（`STALLED_AFTER_SEC` 加
+# `out/steps/<台账号>.json` 那一刻），报醒只负责把它的 `stalled_sec` 与阈值念出来。
+# 两处各写一个 N 的代价很具体：同一个子在巡查里"停滞"、在页面读数里"没停滞"。
+
+#: 四类都空时那一格的逐字写法（业主 2026-10-26：不许不写，不写就分不清"没有"与"没查"）。
+PATROL_CLEAN_TEXT: str = "本轮无异常"
+
+#: 干预指引那一句的逐字开头。判据按它认出"这一拍给了 M 一条可执行的下一步"。
+PATROL_GUIDE_HEAD: str = "可发指导意见"
+
+#: 异常清单的读口：`probe(workspace, task_id) -> dict`。
+#:
+#: 键集见 `patrol_anomalies`；三态由它自己的 `checked` / `reason` 给。工具层在装配期
+#: 用 `set_patrol_probe` 把它接上（与 `set_due_handler` 同一处：`clock_tools.register`）。
+_PATROL_PROBE: Callable[[str, str], Mapping[str, Any]] | None = None
+
+
+def set_patrol_probe(probe: Callable[[str, str], Mapping[str, Any]] | None
+                     ) -> Callable[[str, str], Mapping[str, Any]] | None:
+    """接上"当拍现算的异常清单"读口，返回被替换掉的那一个。
+
+    签名是 `probe(workspace, task_id) -> dict`，必须回这五格：
+
+    - `checked`：这一次查成没查成（读不成台账 / 没有主控实例 => False）；
+    - `reason`：没查成的理由（读数要能读出"为什么这一拍没有清单"）；
+    - `at`：当拍时刻（ISO；读不到时钟就是空串）；
+    - `stalled` / `silent` / `open_items` / `refusals`：四类各一格，每格是
+      `{"checked", "count", "rows", "reason"}`（`open_items` 另带 `ack` / `work`）。
+
+    为什么放在工具层：这四类要读台账、板项与名册，而本模块的纪律是"能被判据单独喂假时钟、
+    单独检查读数"，不为一个查询把 Store 拖进来（与 `set_target_probe` 逐字同一条理由）。
+    """
+    global _PATROL_PROBE
+    previous = _PATROL_PROBE
+    _PATROL_PROBE = probe
+    return previous
+
+
+def _patrol_cell(blank: Mapping[str, Any], raw: Any, *, name: str) -> dict[str, Any]:
+    """把读口给的一格规整成 `{checked, count, rows, reason}`（缺格 => 没查成，不是 0）。
+
+    缺格折成 0 会把"这一格没读"读成"这一类没有" —— 那正好是这一批要分开的那两件事。
+    """
+    if not isinstance(raw, Mapping):
+        return {**dict(blank), "checked": False,
+                "reason": f"读口没给 {name} 那一格 => 这一类没查成"}
+    cell = {**dict(blank), **dict(raw)}
+    cell["rows"] = [dict(r) for r in (cell.get("rows") or ()) if isinstance(r, Mapping)]
+    if cell.get("count") is None and bool(cell.get("checked", True)):
+        cell["count"] = len(cell["rows"])
+    return cell
+
+
+def patrol_anomalies(workspace: str | Path, *, task_id: str = "") -> dict[str, Any]:
+    """当拍现算的异常清单（唯一入口；读口由工具层在装配期接上）。
+
+    返回的键集固定（判据与 `patrol_text` 都按它读）：
+
+    ```
+    {"checked", "reason", "at", "task_id",
+     "stalled":     {"checked", "count", "rows", "reason"},
+     "silent":      {...},
+     "open_items":  {"checked", "count", "ack", "work", "rows", "reason"},
+     "refusals":    {...}}
+    ```
+
+    三态：`checked=False` 加 `reason` 就是"这一拍没查成"（读口没接 / 读口抛了 / 读口说
+    没查成）。这一档绝不退回"四类都是 0"：那会把"没查"折成"没有"，而这一拍的全部价值
+    正好在分得开这两件事。同理，某一格没给出来时那一类单独记"没查成"（`_patrol_cell`），
+    其余三类照常报。
+
+    为什么它是唯一入口：反真空判据要把"异常清单这一步"打桩成返回空，而在别处再算一份
+    清单就没有那个桩可打 —— 桩打不到，判据证明的只是"打桩坏了"。
+    """
+    reading = now()
+    stamp = _iso(reading.wall) if reading.wall is not None else ""
+    blank: dict[str, Any] = {"checked": False, "count": None, "reason": "", "rows": []}
+    out: dict[str, Any] = {"checked": False, "reason": "", "at": stamp,
+                           "task_id": str(task_id or ""),
+                           "stalled": dict(blank), "silent": dict(blank),
+                           "open_items": {**blank, "ack": None, "work": None},
+                           "refusals": dict(blank)}
+    probe = _PATROL_PROBE
+    if probe is None:
+        out["reason"] = "没有接上异常清单的读口（set_patrol_probe 还没接）=> 这一拍没查成"
+        return out
+    try:
+        got = dict(probe(str(Path(workspace).resolve()), str(task_id or "")) or {})
+    except Exception as exc:  # noqa: BLE001 - 读口炸了是"没查成"，不是"没有异常"
+        out["reason"] = f"异常清单读口抛了 {type(exc).__name__}: {exc}"
+        return out
+    if not got.get("checked"):
+        out["reason"] = str(got.get("reason") or "读口说这一次没查成（没给理由）")
+        return out
+    out["checked"] = True
+    out["at"] = str(got.get("at") or stamp)
+    out["stalled"] = _patrol_cell(blank, got.get("stalled"), name="stalled")
+    out["silent"] = _patrol_cell(blank, got.get("silent"), name="silent")
+    out["refusals"] = _patrol_cell(blank, got.get("refusals"), name="refusals")
+    items = _patrol_cell({**blank, "ack": None, "work": None},
+                         got.get("open_items"), name="open_items")
+    out["open_items"] = items
+    return out
+
+
+def _patrol_ids(cell: Mapping[str, Any]) -> list[str]:
+    """一格里的绝对编号（去重、保序）。"""
+    out: list[str] = []
+    for row in cell.get("rows") or ():
+        tid = str((row or {}).get("task_id") or "")
+        if tid and tid not in out:
+            out.append(tid)
+    return out
+
+
+def _first_sentence(text: Any, *, limit: int = 160) -> str:
+    """一句话的首句（拒信要的是"首句"，不是整段）。空 => 空串。"""
+    body = " ".join(str(text or "").split())
+    if not body:
+        return ""
+    for mark in ("。", "；", "！"):
+        head = body.split(mark, 1)[0]
+        if head:
+            body = head
+            break
+    return body[:limit]
+
+
+def patrol_text(anomalies: Mapping[str, Any]) -> str:
+    """把一份异常读数拼成报醒里那一段（唯一一份拼法）。
+
+    四类各占一句，每句都带"条数"两个字（判据按它认出"这一类查过了"）：
+
+        ① 停滞子：`status=running` 而超过阈值没有新步（点名绝对编号 + stalled_sec）
+        ② 静默未销号的子：无工作、无计时器、无活跃子，却不是 retired（给销号指路）
+        ③ 未消板项：`item_state != done` 的条数，按 expect 分 ack / work
+        ④ 被拦的结项原因：最近一次 final_refused / 板项闸的拒信首句
+
+    四类都空 => 末尾逐字写 `本轮无异常`。有异常子（① / ② 非空）=> 末尾给一句可执行的
+    干预指引，并点名那个子的绝对编号（业主：「M可通过发送指导意见干预」）。
+    某一类读不到 => 那一类写"条数读不到（理由）"，不许折成 0。
+    """
+    cells = {key: (anomalies.get(key) if isinstance(anomalies.get(key), Mapping) else {})
+             for key in ("stalled", "silent", "open_items", "refusals")}
+
+    def _count_of(cell: Mapping[str, Any], label: str) -> str:
+        if not cell.get("checked", True) or cell.get("count") is None:
+            return f"{label} 条数读不到（{str(cell.get('reason') or '没查成')}）"
+        return f"{label} 条数 {int(cell.get('count') or 0)}"
+
+    stalled = cells["stalled"]
+    silent = cells["silent"]
+    items = cells["open_items"]
+    refusals = cells["refusals"]
+
+    bits: list[str] = []
+    if not stalled.get("checked", True) or stalled.get("count") is None:
+        bits.append(_count_of(stalled, "① 停滞子"))
+    elif int(stalled.get("count") or 0):
+        threshold = stalled.get("threshold_sec")
+        named = "、".join(
+            f"{str(r.get('task_id') or '?')}（{str(r.get('role') or '?')}"
+            f"，stalled_sec={int(float(r.get('stalled_sec') or 0))}"
+            + (f"，阈值 {int(threshold)} 秒" if threshold else "")
+            + (f"，最近一步在 {str(r.get('last_step_at') or '')}" if r.get("last_step_at") else "")
+            + "）"
+            for r in (stalled.get("rows") or ()))
+        bits.append(f"① 停滞子 条数 {int(stalled['count'])}：{named}")
+    else:
+        bits.append("① 停滞子 条数 0")
+
+    if not silent.get("checked", True) or silent.get("count") is None:
+        bits.append(_count_of(silent, "② 静默未销号的子"))
+    elif int(silent.get("count") or 0):
+        named = "、".join(
+            f"{str(r.get('task_id') or '?')}（{str(r.get('role') or '?')}"
+            f"，{str(r.get('why') or '无工作、无计时器、无活跃子，却还在册')}；"
+            "要销号它吗 —— 走 conductor.retire_child）"
+            for r in (silent.get("rows") or ()))
+        bits.append(f"② 静默未销号的子 条数 {int(silent['count'])}：{named}")
+    else:
+        bits.append("② 静默未销号的子 条数 0")
+
+    if not items.get("checked", True) or items.get("count") is None:
+        bits.append(_count_of(items, "③ 未消板项"))
+    else:
+        ack = int(items.get("ack") or 0)
+        work = int(items.get("work") or 0)
+        other = items.get("other")
+        other = (int(other) if other is not None
+                 else max(0, int(items["count"]) - ack - work))
+        extra = f" / 未标 expect {other}" if other else ""
+        line = (f"③ 未消板项 条数 {int(items['count'])}"
+                f"（待 ack {ack} / 待 work {work}{extra}）")
+        ids = _patrol_ids(items)
+        bits.append(f"{line}：{'、'.join(ids)}" if ids else line)
+
+    if not refusals.get("checked", True) or refusals.get("count") is None:
+        bits.append(_count_of(refusals, "④ 被拦的结项原因"))
+    elif int(refusals.get("count") or 0):
+        rows = list(refusals.get("rows") or ())
+        head = rows[0] if rows else {}
+        text = _first_sentence(head.get("text"))
+        kind = str(head.get("kind") or "final_refused")
+        where = f"（{kind}" + (f"，{str(head.get('at') or '')}" if head.get("at") else "") + "）"
+        bits.append(f"④ 被拦的结项原因 条数 {int(refusals['count'])}（最近一条）："
+                    f"{text or '读不到拒信原文'}{where}")
+    else:
+        bits.append("④ 被拦的结项原因 条数 0")
+
+    at = str(anomalies.get("at") or "")
+    head = f"异常清单（当拍现算 {at or '时刻读不到'}）："
+    all_checked = all(bool(cells[k].get("checked", True)) for k in cells)
+    has_any = any(int(cells[k].get("count") or 0) for k in cells if cells[k].get("checked", True))
+    if all_checked and not has_any:
+        return f"{head}{'；'.join(bits)} => {PATROL_CLEAN_TEXT}"
+
+    body = f"{head}{'；'.join(bits)}"
+    targets = _patrol_ids(stalled) + [t for t in _patrol_ids(silent) if t not in _patrol_ids(stalled)]
+    if targets:
+        body = (f"{body}。干预指引：{PATROL_GUIDE_HEAD}给上面点名的那个子 —— 走既有的名册"
+                f"寻址（名册名或绝对编号都行）与秘书链：用 message 到 {'、'.join(targets)}，"
+                "正文只到链尾；发过之后它的下一步应该变：再读 conductor.tree / clock.now 时，"
+                "上面点名那个子的步号要比现在大、或它的 status 转成终态；两样都没变就是没送到"
+                "或它没听，再发一次，或按 ② 的指路把它销号")
+    elif has_any:
+        body = (f"{body}。处置指路：③ 的项逐条用 conductor.ack 确认（板项闸认的是"
+                "item_state=done），④ 那一句就是下一次 final 会被拦的原因，先把整棵树销号"
+                "再收工；这一拍没有异常子，所以不点名任何子")
+    return body
+
+
+def patrol_section(workspace: str | Path, *, task_id: str = "",
+                   anomalies: Mapping[str, Any] | None = None) -> str:
+    """这一拍报醒里要附的那一段（清单没查成 => 明说没查成，绝不写"本轮无异常"）。
+
+    `anomalies` 给了就直接用（调用方刚算过一份，别为了拼文本再读一遍会话/台账）。
+
+    两处 try 是同一个理由：这一段的任何失败都不许把"到点报醒"本身带走 —— 那一拍是
+    M 唯一会醒来的凭据，清单坏掉只该少一段文字，不该少一次唤醒。
+    """
+    try:
+        got = dict(anomalies) if isinstance(anomalies, Mapping) else \
+            patrol_anomalies(workspace, task_id=task_id)
+    except Exception as exc:  # noqa: BLE001 - 清单算不出来是"没查成"
+        got = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+    if not got.get("checked"):
+        # 逐字不出现「本轮无异常」：那一句是"四类都空"的专用读数，这里能 grep 到它
+        # 就等于把"没查成"伪装成了"没有异常"（而"没有"与"没查"正是要分开的那两件事）。
+        return (f"异常清单没查成（{str(got.get('reason') or '读口没给理由')}）"
+                " => 这一拍没有清单可报（没查到与没有是两件事）")
+    try:
+        return patrol_text(got)
+    except Exception as exc:  # noqa: BLE001 - 拼不出来也不许吞掉这次唤醒
+        return f"异常清单拼不出来（{type(exc).__name__}: {exc}）=> 这一拍没有清单可报"
+
+
 def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
                 fired_at: Any, every_sec: float | None = None,
                 fires: int | None = None, feedback: str = "",
                 feedback_label: str = "", waited_target: str = "",
-                woke_reason: str = "") -> str:
+                woke_reason: str = "", patrol_section: str = "") -> str:
     """到点那条消息的唯一拼法（业主 2026-10-25 定死格式）。
 
     一次性：
@@ -489,6 +873,10 @@ def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
     `（目的未填）` 并追问补一句。
 
     三样（目的 / 等待时间 / 时间到）必须在同一句里 —— 判据断言的是这句原文。
+
+    周期性巡查那一档还多一段：`patrol_section`（当拍现算的异常清单 + 干预指引，唯一的
+    拼法是 `patrol_text`）。它在末尾另起一句，不改上面三样的任何一个字节；空串 => 输出与
+    没有这一格时完全一样（判据的"改前红"就靠这一条成立）。
     """
     body = str(purpose or "").strip()
     missing = not body
@@ -511,8 +899,15 @@ def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
         tail = (f"。等的是 {str(waited_target).strip()}，它还没交/没说"
                 "（到点先报你，接着等就再起一条）")
     if missing:
-        return f"{head}{tail}。{PURPOSE_PROMPT}"
-    return f"{head}{tail}"
+        said = f"{head}{tail}。{PURPOSE_PROMPT}"
+    else:
+        said = f"{head}{tail}"
+    section = str(patrol_section or "").strip()
+    if section:
+        # 分隔符按前一句的收尾挑：已经有句末标点就不再补一个"。"。
+        sep = "" if said.endswith(("。", "；", "：")) else "。"
+        return f"{said}{sep}{section}"
+    return said
 
 
 # ---------------------------------------------------------------- 时钟实现
@@ -761,6 +1156,27 @@ def target_state(workspace: str | Path, kind: str, ref: str) -> tuple[str, str, 
     """
     if kind not in WAIT_FOR_KINDS:
         raise ClockParamError(f"wait_for 的指称只认 {WAIT_FOR_KINDS}，收到 {kind!r}")
+    if kind == "program":
+        # 程序那一条不需要探针：它就在本模块的簿记里（`state` 变了就是"程序结束了"）。
+        # 三态同族：簿记读不成 => `unjudgeable`（不是"程序还在跑"）。
+        try:
+            bucket = book(workspace)
+        except ClockError as exc:
+            return ("unjudgeable", f"program:{ref}",
+                    f"时钟簿记读不成（{exc}）=> 判不了那条程序跑完没有")
+        timer = bucket.get(str(ref))
+        if timer is None:
+            # 簿记里没有那一条：与"台账里已经没有这一行"同一口径（收口是唯一不挂死的解释）。
+            return ("closed", f"program:{ref}",
+                    f"程序计时器 {ref} 不在簿记里 ⇒ 按收口处置")
+        if timer.kind != "program":
+            return ("unjudgeable", f"program:{ref}",
+                    f"{ref} 存在，但它是 kind={timer.kind!r} 而不是 program ⇒ 等错了东西")
+        if str(timer.state) == "pending":
+            return ("open", f"program:{ref}",
+                    f"程序 {timer.program or ref} 还在跑（{timer.timer_id}）")
+        return ("closed", f"program:{ref}",
+                f"程序 {timer.program or ref} 结束了（{timer.outcome or timer.state}）")
     return _judge_target(_probe_read(workspace, kind, ref), kind, ref)
 
 
@@ -790,8 +1206,17 @@ class Timer:
     note: str = ""
     #: 等谁（原样保留调用方给的写法）。空 = 这一条等的是时间。
     wait_for: str = ""
-    #: 起表时把 `wait_for` 解析成的具体对象（`task:t000012` / `agent:D1`）。
+    #: 起表时把 `wait_for` 解析成的具体对象（`task:t000012` / `agent:D1` / `program:tm-…`）。
     wait_for_resolved: str = ""
+    #: "等谁"的结构化落盘（业主 2026-10-26 第 ② 条）：
+    #: `{"kind": "roster"|"program", "name": <名册名/程序名>, "task_id": … 或 "program_id": …}`。
+    #: 空表 = 这一条等的是时间（不是"等谁"）。
+    #:
+    #: 为什么不能只留 `wait_for` 那一串人话：读侧（时间线、页面、父代理的读数）要回答
+    #: "在等 A1（t-000002）"或"在等程序 exp1"，而 `wait_for="A1"` 这一串既没有编号也
+    #: 分不出是名册名还是别的什么。唤醒的那一刻这一格被清空（见 `fire_due`）——
+    #: "还在等谁"与"等过了"必须分得开，留着它会让一条已经醒了 3 次的表看起来还在等。
+    waiting_on: dict[str, Any] = field(default_factory=dict)
     #: 等谁的上限（秒）。`wait_for` 那一半没有钟点，这一格是"最多等多久"的闸。
     max_wait_sec: float | None = None
     #: 上一次判定时对被等对象的读数（三态之一；空 = 没判过 / 等的是时间）。
@@ -922,14 +1347,40 @@ class Timer:
         }
 
     def to_dict(self) -> dict[str, Any]:
+        """落盘那一份（`out/clock/state.json` 的一行）。
+
+        ## `purpose` 这一格为什么必须落盘，且为什么它是单一来源
+
+        业主 2026-10-26 的真机读数是「timers 20 条，purpose 全为 None」，而同一次运行的
+        到点消息里却有話可念（「时间到：认领检索请求 r-000004｜等了 2 分钟 27 秒」）。
+        错位不在自动填，在两处取值口径：`purpose` 是 `@dataclass` 之外的一个
+        `@property`（读的是 `reason` 字段），于是 `asdict` 不吐它 ⇒ 盘上那一行
+        只有 `reason`，谁按行读 `row.get("purpose")` 都拿到 None，而 `fire_due` 用的是
+        内存里的属性、念得出话。
+
+        现在落两格：`reason`（原始字段）与 `purpose`（它的规范化视图）——
+        视图这一句就是 `self.purpose`，与 `due_message` / `fire_due` / 三态读数用的是
+        同一个访问器，于是"内存里念的"与"盘上读的"结构上不可能分家。
+        读侧统一走 `purpose_of()`（先 `purpose` 再 `reason`），不许多拼一份。
+        """
         got = asdict(self)
         got.pop("after_sec", None)
+        #: 规范化视图：与 `self.purpose` 同源（同一个属性），不是第二份可漂的副本。
+        got["purpose"] = self.purpose
         return got
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "Timer":
+        """从盘上那一行还原。`purpose` 是派生视图，不进字段表（只做"老行"的对账）。"""
         fields = {f for f in cls.__dataclass_fields__ if f != "after_sec"}
-        return cls(**{k: v for k, v in dict(raw).items() if k in fields})
+        got = {k: v for k, v in dict(raw).items() if k in fields}
+        if not str(got.get("reason") or "").strip():
+            # 手改过 / 老写入方只写了 `purpose` 的行：把那一句话认回 `reason`，
+            # 否则这一条会在内存里变成"目的未填"，而盘上明明有一句。
+            legacy = str(raw.get("purpose") or "").strip()
+            if legacy:
+                got["reason"] = legacy
+        return cls(**got)
 
     def due_datetime(self) -> datetime | None:
         try:
@@ -1081,6 +1532,8 @@ class Timer:
             "waited_sec": self.waited_seconds(got),
             "wait_for": self.wait_for,
             "wait_for_resolved": self.wait_for_resolved,
+            "waiting_on": dict(self.waiting_on or {}),
+            "waiting_on_text": waiting_on_text(self.waiting_on),
             "wait_state": self.wait_state,
             "max_wait_sec": self.max_wait_sec,
             "triggered_by": self.triggered_by,
@@ -1105,11 +1558,78 @@ class Timer:
         }
 
 
+def purpose_of(entry: Any) -> str:
+    """一条计时器 / 周期性巡查 / 盘上那一行的目的 —— 全仓唯一的取值口。
+
+    为什么要有这一个函数（业主 2026-10-26 的真机读数逼出来的）：真机上同一个目的有两个
+    读者，一个念得出来、一个读到 None ——
+    `fire_due` 走内存里的 `Timer.purpose`（属性，读 `reason`），
+    而读数侧按 `state.json` 的行读 `row.get("purpose")`，那一格当时根本不存在。
+    两个读者各写一份取法，迟早分家。所以只留这一处：
+
+    - `Timer` / `Periodic`：`purpose` 属性（前者是 `reason` 的视图，后者是字段本身）；
+    - 盘上那一行（`Mapping`）：先 `purpose`（`Timer.to_dict` 落的规范化视图），
+      没有就退回 `reason`（`purpose` 是后加的键，老行只有 `reason`）；
+    - 都没有 / `None` => 空串（不是 "None"、不是编一句）。
+
+    空串只表示"这一条真的没写目的"，`purpose_missing` 就是按它判的。
+    """
+    if entry is None:
+        return ""
+    if isinstance(entry, Mapping):
+        return str(entry.get("purpose") or entry.get("reason") or "").strip()
+    return str(getattr(entry, "purpose", "") or getattr(entry, "reason", "") or "").strip()
+
+
+def waiting_on_text(waiting_on: Any) -> str:
+    """`waiting_on` 的人话读数（业主 2026-10-26 第 ② 条：读侧要能读出"在等谁"）。
+
+    - 名册上的人：「在等 A1（t-000002）」；只给了编号时名字那一格是空的，
+      这时只念编号（不编一个名字出来）；
+    - 某条程序：「在等程序 exp1（tm-000003）」；
+    - 空表（等的是时间）或读不成 => 空串（不是"在等 None"）。
+    """
+    row = dict(waiting_on) if isinstance(waiting_on, Mapping) else {}
+    kind = str(row.get("kind") or "")
+    name = str(row.get("name") or "").strip()
+    if kind == "program":
+        pid = str(row.get("program_id") or row.get("timer_id") or "").strip()
+        label = name or pid
+        if not label:
+            return ""
+        return f"在等程序 {label}（{pid}）" if pid and pid != label else f"在等程序 {label}"
+    if kind == "roster":
+        tid = str(row.get("task_id") or "").strip()
+        label = name or tid
+        if not label:
+            return ""
+        return f"在等 {label}（{tid}）" if tid and tid != label else f"在等 {label}"
+    return ""
+
+
+def _waiter_handle_hint(workspace: str | Path) -> str:
+    """拒信的后半句：这个工作区现在有哪些程序句柄可以等（没有就说"一条都没有"）。
+
+    为什么要列出来：拒信是模型重写那一次的唯一依据。只说"句柄不对"它还是猜不出来；
+    列出 `tm-…（lean，pending）` 它就能直接照抄一个。
+    三态：簿记读不成 => 空串（不编一份清单）。
+    """
+    try:
+        rows = [t for t in book(workspace).all() if str(getattr(t, "kind", "")) == "program"]
+    except ClockError:
+        return ""
+    if not rows:
+        return ("\n（这个工作区现在一条程序计时器都没有：先 clock.start_program(...) "
+                "拿到句柄，再拿它当 wait_for）")
+    shown = "、".join(f"{t.timer_id}（{t.program or '没记名字'}，{t.state}）" for t in rows[-5:])
+    return f"\n这个工作区现有的程序句柄：{shown}"
+
+
 def _atomic_json(path: Path, doc: Mapping[str, Any]) -> None:
     """原子写一份 JSON（同目录 tmp + os.replace）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    text = json.dumps(dict(doc), ensure_ascii=False, indent=2)
+    text = json.dumps(dict(doc), ensure_ascii=False, indent=2, default=json_default)
     tmp.write_text(text + "\n", encoding="utf-8", newline="")
     os.replace(tmp, path)
 
@@ -1195,8 +1715,8 @@ class Periodic:
         return max(0.0, (nxt - got.wall).total_seconds())
 
     def last_message(self, reading: Reading | None = None) -> str:
-        """上一次报醒那句话（周期性巡查的定死格式）。"""
-        return due_message(purpose=self.purpose, waited_sec=None,
+        """上一次报醒那句话（周期性巡查的定死格式；目的走唯一取值口）。"""
+        return due_message(purpose=purpose_of(self), waited_sec=None,
                            created_at=None, fired_at=None,
                            every_sec=self.every_sec, fires=self.fires)
 
@@ -1358,7 +1878,8 @@ class TimerBook:
         self.save()
         return timer, "cancelled"
 
-    def set_purpose(self, entry_id: str, purpose: str) -> tuple[Any, str]:
+    def set_purpose(self, entry_id: str, purpose: str,
+                    *, source: str = "given") -> tuple[Any, str]:
         """给一条已受理的计时器/周期性巡查补上目的。返回 `(条目或 None, 结果)`。
 
         结果与 `cancel` 同一族纪律：`filled`（这一次填上了）/ `already_filled`
@@ -1366,9 +1887,18 @@ class TimerBook:
         为什么"早有目的"不覆盖：补目的是补空白，不是改历史 —— 覆盖掉会让"到点消息
         里念的那句目的"与"起表时写的那句"对不上，而两条都进过审计。
 
-        填上之后 `purpose_source` 记成 `given`（这是有人显式写进去的一句，不是从被等
-        对象的 task 抄来的）：于是读数能回答"这句目的到底从哪来"。
+        `source` 记的是"这句目的到底从哪来"，必须落在 `PURPOSE_SOURCES` 里：
+
+        - `given`（缺省）：有人显式写进去的一句（模型补的 / 调用方给的）；
+        - `target_task`：这句是被等对象那一条子代理的 task 原文，只是名册那一行
+          当时还没写成，于是由派活的那一处（`Conductor.arm_child_waiter`）把载荷里
+          的同一句交过来。它仍然是"从被等对象的 task 抄来的"，不是人给的一句
+          —— 记成 `given` 会让"目的自动填到底成没成"这件事在读数上漂掉。
         """
+        want_source = str(source or "given").strip() or "given"
+        if want_source not in PURPOSE_SOURCES:
+            raise ClockParamError(
+                f"purpose_source 必须是 {PURPOSE_SOURCES} 之一，收到 {want_source!r}")
         want = str(entry_id or "")
         timer = self._timers.get(want)
         if timer is not None:
@@ -1377,7 +1907,7 @@ class TimerBook:
             if not timer.purpose_missing:
                 return timer, "already_filled"
             timer.reason = str(purpose or "").strip()
-            timer.purpose_source = "given"
+            timer.purpose_source = want_source
             self.save()
             return timer, "filled"
         periodic = self._periodics.get(want)
@@ -1468,11 +1998,12 @@ def _new_timer(workspace: str | Path, *, kind: str, reason: str, to: str,
             f"时钟读不到（{reading.reason or '两个来源都不可用'}）=> 到点判不了，"
             "这一条不排（不许折成 0）")
     wait_kind, wait_ref, resolved, wait_state = "", "", "", ""
+    waiting_on: dict[str, Any] = {}
     if kind == "timer":
         if after_sec is not None and target:
             raise ClockParamError(
                 "after_sec 与 wait_for 只能选一个：等时间给 after_sec（多久之后），"
-                "等谁给 wait_for（名册名 / 绝对编号 / task:<号> / agent:<名>）；"
+                "等谁给 wait_for（名册名 / 绝对编号 / program:<程序句柄>）；"
                 "两个都给就不知道按哪一个判到了，这一条不排")
         if after_sec is None and not target:
             raise ClockParamError(
@@ -1481,19 +2012,49 @@ def _new_timer(workspace: str | Path, *, kind: str, reason: str, to: str,
                 "例如 M 的巡视写 after_sec=1200 + reason=周期性巡查")
     if target:
         wait_kind, wait_ref = parse_wait_for(target)
-        probe = _probe_read(workspace, wait_kind, wait_ref)
-        wait_state, resolved, why = _judge_target(probe, wait_kind, wait_ref)
-        if probe.get("checked") and not probe.get("found"):
-            raise ClockNotFound(
-                f"等的东西不存在：{target}（按 {wait_kind}:{wait_ref} 去台账/名册里找过，"
-                f"没有这一行 —— {probe.get('why') or '查过了、没有'}）；"
-                "别等一个不存在的东西，先确认它的名字或编号")
-        if not body:
-            from_target = " ".join(str(probe.get("task_text") or "").split())
-            if from_target:
-                # 业主 2026-10-27：等子代理的目的自动用名册/台账里那一行 task 填。
-                body = from_target[:PURPOSE_FROM_TARGET]
-                purpose_source = "target_task"
+        if wait_kind == "program":
+            # 等程序：句柄必须是本工作区簿记里一条真的程序计时器（业主 2026-10-26：
+            # 「等哪条程序」也是"点名"的一种，散文在这里同样要拒）。
+            handle = book(workspace).get(str(wait_ref))
+            if handle is None or str(getattr(handle, "kind", "")) != "program":
+                raise ClockWaiterNotResolvable(
+                    waiter_refusal(target, why=(f"{wait_ref} 不是本工作区簿记里的程序计时器"))
+                    + _waiter_handle_hint(workspace))
+            resolved = f"program:{handle.timer_id}"
+            wait_state = ("open" if str(handle.state) == "pending" else "closed")
+            waiting_on = {"kind": "program",
+                          "name": str(handle.program or handle.timer_id),
+                          "program_id": str(handle.timer_id),
+                          "timer_id": str(handle.timer_id)}
+            if not body:
+                from_program = " ".join(str(handle.purpose or "").split())
+                if from_program:
+                    # 被等的那条程序自己写了目的 ⇒ 抄它（比程序名摘要更贴切）。
+                    body = from_program[:PURPOSE_FROM_TARGET]
+                    purpose_source = "program"
+        else:
+            probe = _probe_read(workspace, wait_kind, wait_ref)
+            wait_state, resolved, why = _judge_target(probe, wait_kind, wait_ref)
+            if probe.get("checked") and not probe.get("found"):
+                # 查过了、没有这一行 ⇒ 受控拒绝（业主 2026-10-26：等谁必须指名道姓）。
+                # 查不成（`checked=False`）不在这里拒：那不是"不存在"，是三态里的 unknown，
+                # 这一条照样受理，`wait_state="unjudgeable"` 如实写着。
+                raise ClockWaiterNotResolvable(
+                    waiter_refusal(target, why=str(probe.get("why") or "查过了、没有这一行")))
+            task_ref = ""
+            if str(resolved or "").startswith("task:"):
+                task_ref = str(resolved)[5:]
+            elif wait_kind == "task":
+                task_ref = str(wait_ref)
+            name_ref = str(wait_ref) if wait_kind == "agent" else str(probe.get("name") or "")
+            waiting_on = {"kind": "roster", "name": name_ref, "task_id": task_ref,
+                          "resolved": str(resolved or "")}
+            if not body:
+                from_target = " ".join(str(probe.get("task_text") or "").split())
+                if from_target:
+                    # 业主 2026-10-27：等子代理的目的自动用名册/台账里那一行 task 填。
+                    body = from_target[:PURPOSE_FROM_TARGET]
+                    purpose_source = "target_task"
     if kind == "timer":
         if after_sec is not None:
             step = float(after_sec)
@@ -1536,6 +2097,7 @@ def _new_timer(workspace: str | Path, *, kind: str, reason: str, to: str,
         state="pending",
         wait_for=target,
         wait_for_resolved=(resolved if target else ""),
+        waiting_on=waiting_on,
         max_wait_sec=cap,
         wait_state=wait_state,
         event_seq=(_event_seq() if target else 0),
@@ -1549,7 +2111,12 @@ def start_timer(workspace: str | Path, *, reason: str = "",
                 after_sec: float | None = None, wait_for: str = "",
                 max_wait_sec: float | None = None, to: str = "self",
                 task_id: str = "", role: str = "") -> Timer:
-    """起一个一次性计时器：等一段时间（`after_sec`）或等谁收口（`wait_for`），二选一。"""
+    """起一个一次性计时器：等一段时间（`after_sec`）或等谁收口（`wait_for`），二选一。
+
+    `wait_for` 必须指名道姓（业主 2026-10-26）：名册上的谁（名册名 / 绝对编号）或
+    某条程序（`clock.start_program(...)` 的句柄）。解析不到 ⇒ `ClockWaiterNotResolvable`
+    （码 `waiter_not_resolvable`，拒信逐字给两条正路），不是"起一条永远不醒的表"。
+    """
     timer = _new_timer(workspace, kind="timer", reason=reason, to=to,
                        task_id=task_id, role=role, after_sec=after_sec,
                        wait_for=wait_for, max_wait_sec=max_wait_sec)
@@ -1602,12 +2169,18 @@ def start_periodic(workspace: str | Path, *, every_sec: float, purpose: str = ""
     resolved, wait_state = "", ""
     if target:
         wait_kind, wait_ref = parse_wait_for(target)
+        if wait_kind == "program":
+            # 周期性巡查等的是"谁收口 ⇒ 停巡查"；程序那一条的收口已经在计时器账上，
+            # 让它当巡查的停止条件会把两档混成一个。明确拒，并指路（等程序用 timer_start）。
+            raise ClockParamError(
+                f"周期性巡查不能等程序：{target} —— 等程序请用 clock.timer_start"
+                "（wait_for=\"program:<句柄>\"，程序退出时那一条会报醒）；"
+                "周期性巡查的 wait_for 只等名册上的谁（名册名 / 绝对编号）")
         probe = _probe_read(workspace, wait_kind, wait_ref)
         wait_state, resolved, why = _judge_target(probe, wait_kind, wait_ref)
         if probe.get("checked") and not probe.get("found"):
-            raise ClockNotFound(
-                f"等的东西不存在：{target}（按 {wait_kind}:{wait_ref} 找过，没有这一行 —— "
-                f"{probe.get('why') or '查过了、没有'}）；别等一个不存在的东西")
+            raise ClockWaiterNotResolvable(
+                waiter_refusal(target, why=str(probe.get("why") or "查过了、没有这一行")))
     reading = now()
     if reading.status == "unknown" or reading.wall is None:
         raise ClockUnreadable(
@@ -1649,27 +2222,54 @@ def periodics(workspace: str | Path) -> list[Periodic]:
 
 
 def set_purpose(workspace: str | Path, entry_id: str,
-                purpose: str) -> tuple[Any, str]:
-    """给一条已受理的等待补上目的（同一个编号，不是新建一条）。"""
+                purpose: str, *, source: str = "given") -> tuple[Any, str]:
+    """给一条已受理的等待补上目的（同一个编号，不是新建一条）。
+
+    `source` 缺省 `given`（有人显式写的一句）。派活那一处的兜底支传
+    `source="target_task"`：那一句来自被等对象那件活的 task 原文，不是人给的目的
+    （见 `TimerBook.set_purpose`）。
+    """
     body = str(purpose or "").strip()
     if not body:
         raise ClockParamError(
             "补的目的还是空的 —— 补目的就是为了让到点那条报醒里有话可念，"
             "别拿空串去填它")
-    return book(workspace).set_purpose(entry_id, body)
+    return book(workspace).set_purpose(entry_id, body, source=source)
 
 
-def timers_missing_purpose(workspace: str | Path) -> list[dict[str, Any]]:
-    """还没写目的的待发条目（读数用：谁的报醒里会没有目的）。"""
+def timers_missing_purpose(workspace: str | Path, *,
+                           for_task_id: str = "") -> list[dict[str, Any]]:
+    """还没写目的的待发条目（读数用：谁的报醒里会没有目的）。
+
+    每行带 `id` / `kind` / `task_id` / `to` / `role` / `state` / `prompt`：
+
+    - `for_task_id` 非空时只留"归这个台账号的"那几条（`task_id` 或 `to` 等于它）——
+      每步提示词那一处（`agent_loop._prompt`）必须按它筛，否则每个代理都会被别人的
+      缺目的刷屏，而"刷屏"与"没人管"在读数上一样糟；
+    - `prompt` 就是 `PURPOSE_PROMPT`（唯一一份追问句，工具读数 / 到点消息 /
+      每步提示词三处读的是同一个常量）。
+    """
+    want = str(for_task_id or "").strip()
     rows: list[dict[str, Any]] = []
     bucket = book(workspace)
     for timer in bucket.pending():
-        if timer.purpose_missing:
-            rows.append({"id": timer.timer_id, "kind": timer.kind, "prompt": PURPOSE_PROMPT})
+        if not timer.purpose_missing:
+            continue
+        if want and want not in (str(timer.task_id or ""), str(timer.to or "")):
+            continue
+        rows.append({"id": timer.timer_id, "kind": timer.kind,
+                     "task_id": str(timer.task_id or ""), "to": str(timer.to or ""),
+                     "role": str(timer.role or ""), "state": str(timer.state or ""),
+                     "prompt": PURPOSE_PROMPT})
     for periodic in bucket.running_periodics():
-        if periodic.purpose_missing:
-            rows.append({"id": periodic.periodic_id, "kind": "periodic",
-                         "prompt": PURPOSE_PROMPT})
+        if not periodic.purpose_missing:
+            continue
+        if want and want not in (str(periodic.task_id or ""), str(periodic.to or "")):
+            continue
+        rows.append({"id": periodic.periodic_id, "kind": "periodic",
+                     "task_id": str(periodic.task_id or ""), "to": str(periodic.to or ""),
+                     "role": str(periodic.role or ""), "state": str(periodic.state or ""),
+                     "prompt": PURPOSE_PROMPT})
     return rows
 
 
@@ -1736,6 +2336,73 @@ def program_message(*, program: str, outcome: str, exit_code: int | None,
     return "｜".join(bits)
 
 
+def program_purpose(*, program: str, argv: Iterable[Any] | None = None) -> str:
+    """等程序那一条的自动目的（业主 2026-10-27 第一条裁定 + 第二条的同一口径）。
+
+    为什么程序这一档也要自动填：程序计时器是框架自己起的（`program_span` 的调用点
+    大多不传 purpose），而到点消息的格式对每一档都一样 —— 不填，那一句就只能是
+    「程序跑完了：lean.EXE｜耗时 0 秒｜退出码 0」，读的人看不出"等它是为了什么"。
+    填法两半：程序名（只取基名，路径进摘要）+ 命令行摘要（`argv_digest`，截断到
+    `ARGV_EXCERPT`）；两样都没有 => 空串（那一档退回 `unavailable` + 追问）。
+    """
+    raw = str(program or "").strip()
+    name = ""
+    if raw:
+        try:
+            name = Path(raw).name or raw
+        except (OSError, ValueError):  # pragma: no cover - 坏路径退回原文
+            name = raw
+    digest = argv_digest(argv)
+    if not name and not digest:
+        return ""
+    body = f"等程序跑完：{name or digest}"
+    if digest and digest != name:
+        body = f"{body}（{digest}）"
+    return body[:PURPOSE_FROM_TARGET]
+
+
+def _calling_identity() -> tuple[str, str]:
+    """这一趟调用是谁：`(台账号, 角色)`；取不到 => `("", "")`。
+
+    三个来源，按"离这次起程序有多近"排序：
+
+    1. 这一趟 run（`current_run_identity`）：`AgentLoop.run` 在装配之前挂上
+       （`clock.run_as`），于是装配期起的程序也有归属 —— 真机 `mp3-r4` 的
+       `tm-000001`（`toolchain._version_of`）就是补这一档（同一局 13 条程序计时器里
+       唯一空的那一条）；
+    2. 这一次工具调用（`conductor.calling_as` 挂在 ContextVar 上的两格）：
+       七个落点从工具层之下进来时走这一格；工具路径上它与第 1 档同号；
+    3. 都没有 => `("", "")`：程序照跑，账上归属留空 —— 空就是"没记上"，绝不猜
+       （`is_my_program` 那一侧把空一律判成"不是我的"）。
+
+    ## 为什么 run 那一档排在 `calling_as` 前面
+
+    召唤线程是 `copy_context()` 起的（`conductor.py:6152`），父的 `calling_as` 会一起
+    被复制进去：子代理装配期若读 `calling_as`，就会把"父的号"写成"子起的程序"的归属
+    —— 错归属比空归属危险（`program.stop` 会因此放行"父停子的程序"）。
+    `run_as` 是"这一趟"自己挂的，所以它赢。工具路径上两者同号 ⇒ 逐字节相同
+    （判据：`tests/test_g8_a_program_belongs_to_the_run.py` 的 a/b/f 三条）。
+
+    ## 为什么是懒 import
+
+    `conductor` 模块级就 `from . import clock`，所以 `clock` 顶层 import 它会成环；
+    函数内 import 是安全的（本仓 `table_tools._caller_task_id` 与 `stopctl` 同一条写法）。
+    取不到（模块没装好 / 上下文坏了）不算错：程序照跑，账上归属留空 —— 空就是
+    "没记上"，绝不猜（`is_my_program` 那一侧把空一律判成"不是我的"）。
+    """
+    run_task, run_role = current_run_identity()
+    if run_task or run_role:
+        return run_task, run_role
+    try:
+        from .conductor import current_caller_role, current_task_id
+    except Exception:  # noqa: BLE001 - 取不到身份不该拦住程序登记
+        return "", ""
+    try:
+        return str(current_task_id() or ""), str(current_caller_role() or "")
+    except Exception:  # noqa: BLE001 - 见 docstring 最后一段
+        return "", ""
+
+
 def start_program(workspace: str | Path, *, program: str, argv: Iterable[Any] | None = None,
                   where: str = "", purpose: str = "", to: str = "self",
                   task_id: str = "", role: str = "",
@@ -1745,22 +2412,42 @@ def start_program(workspace: str | Path, *, program: str, argv: Iterable[Any] | 
     与时间/等谁那两档的差别只有一处：它没有 due —— 到点就是"程序结束"这件事，
     由 `finish_program` 写。所以它不会因为时钟读不到而被拒（登记用的是事件，不是钟点）；
     时钟读不到时 `created_at` 留空（不是编一个 1970）。
+
+    目的（第四档）：没给 `purpose` 就用 `program_purpose`（程序名 + 命令行摘要）自动填，
+    `purpose_source="program"`；显式给了是 `given`；两样都拿不到才是 `unavailable`
+    （此时 `purpose_missing` 为真、追问照旧）。四档都真落盘（`Timer.to_dict`）。
+
+    归属（业主 2026-10-26 的 G1）：`task_id` / `role` 没给时从这一趟的调用上下文现取
+    （`_calling_identity`）。为什么必须写进去：`program.stop` 只许碰"自己起的"，
+    而"自己起的"唯一的结构判据就是这两格相等 —— 账上不记，那个判据就一条都匹配不到
+    （改前真机账上 1420 条程序计时器，`task_id` / `role` 全为空串）。
     """
     reading = now()
     stamp = _iso(reading.wall) if reading.wall is not None else ""
+    body = str(purpose or "").strip()
+    source = "given" if body else "program"
+    if not body:
+        body = program_purpose(program=program, argv=argv)
+        if not body:
+            source = "unavailable"
+    owner_task, owner_role = str(task_id or ""), str(role or "")
+    if not owner_task or not owner_role:
+        ctx_task, ctx_role = _calling_identity()
+        owner_task = owner_task or ctx_task
+        owner_role = owner_role or ctx_role
     timer = Timer(
         timer_id="",
         kind="program",
-        reason=str(purpose or "").strip(),
+        reason=body,
         to=str(to or "self"),
-        task_id=str(task_id or ""),
-        role=str(role or ""),
+        task_id=owner_task,
+        role=owner_role,
         workspace=str(Path(workspace).resolve()),
         created_at=stamp,
         due_at="",
         clock_token=str(getattr(_CLOCK, "token", "") or ""),
         state="pending",
-        purpose_source=("given" if str(purpose or "").strip() else "unavailable"),
+        purpose_source=source,
         program=str(program or ""),
         argv_digest=argv_digest(argv),
         pid=(int(pid) if pid is not None else None),
@@ -1819,9 +2506,525 @@ def finish_program(workspace: str | Path, timer_id: str, *, outcome: str = "exit
     timer.message = program_message(program=timer.program, outcome=outcome,
                                    exit_code=timer.exit_code,
                                    elapsed_sec=timer.elapsed_sec,
-                                   purpose=timer.purpose)
+                                   purpose=purpose_of(timer))
     bucket.save()
     return timer, "fired"
+
+
+# ---------------------------------------------------------------- 停程序（G1）
+
+#: 停一条程序时给它的宽限秒数：先让它自己收尾，过了这个窗口才真杀。
+#:
+#: 为什么是常量而不是工具的参数（业主 2026-10-26 的 G1 施工单：「先 terminate、
+#: 超时再 kill（给宽限秒数常量）」）：宽限是"这一刀的手感"，不是每一次调用该重新
+#: 商量的口径。模型多给一个参数就多一种把宽限调成 0 的写法 —— 那是把"优雅"变成
+#: "直接砍"，而读数上两者长得一样。
+PROGRAM_STOP_GRACE_SEC: float = 3.0
+
+#: 宽限与等待窗口里的轮询间隔（每一拍都进主时钟的等待账）。
+PROGRAM_STOP_POLL_SEC: float = 0.1
+
+#: 真杀之后最多再等它从进程表上消失多久；等不到就如实报 `timeout`。
+PROGRAM_STOP_WAIT_SEC: float = 5.0
+
+#: "停一条程序"的受控读数（`stop_program` 的 `result` 只取这几档，一档都不许折平）：
+#:
+#: - `killed`：真的把它停掉了（进程没了，那条程序计时器按 `outcome="killed"` 收口）；
+#: - `already_exited`：它本来就结束了（幂等那一档：查过了、不是第二次杀成功，行不改）；
+#: - `timeout`：杀不动 —— 窗口过了它还在跑（账上那条保持 pending，"它还在跑"必须读得出来）；
+#: - `not_mine`：不是这一趟起的（受控拒绝；别人的与账上没有归属的都在这一档）；
+#: - `not_found`：查过了、没有可停的那一条（编号不存在 / 不是程序计时器 / 账上没有 pid）。
+#:
+#: 为什么 `timeout` 与 `killed` 不许合并：合并之后"我杀了它"与"我没杀掉它"在读数上
+#: 一样，而那正是这一批要修的东西（昨晚 15 个野进程是被"看起来杀了"留下的）。
+PROGRAM_STOP_RESULTS: tuple[str, ...] = ("killed", "already_exited", "timeout",
+                                         "not_mine", "not_found")
+
+
+def program_owner(timer: Timer) -> dict[str, Any]:
+    """这条程序账上记的归属：`task_id` / `role` / `to` 三格 + `attributed`。
+
+    `attributed=False` 是"账上没记归属"（改前 1420 条全部如此），不是"零号"、
+    也不是"大家共有的"。两种读数在别的格子上长得一样，所以它单列一格。
+    """
+    task_id = str(timer.task_id or "")
+    return {"task_id": task_id, "role": str(timer.role or ""),
+            "to": str(timer.to or ""), "attributed": bool(task_id)}
+
+
+def is_my_program(timer: Timer, *, task_id: str = "", role: str = "") -> bool:
+    """这条程序计时器是不是"我这一趟起的"（结构判据，不许靠名字猜）。
+
+    判据与 `agent_loop._is_my_waiter` 同族，只多一条"没有归属就不归任何人"：
+
+    1. `kind` 必须是 `program`（别的计时器不是"我起的程序"）；
+    2. 我有台账号 ⇒ 只认 `timer.task_id == 我的台账号`（账上归属为空的旧行一律不算：
+       空归属的存量一行都不能被读成"谁的"，否则每个人都会看见、也会动到别人的程序）；
+    3. 我连台账号都没有 ⇒ 才退到"角色相等"（与 `_is_my_waiter` 的退路同一档）。
+       这一档只用来读（`program.list`），停程序那一侧不接受它（见 `stop_program`）。
+    """
+    if not bool(getattr(timer, "is_program", False)):
+        return False
+    mine = str(task_id or "")
+    if mine:
+        return str(timer.task_id or "") == mine
+    who = str(role or "")
+    return bool(who) and str(timer.role or "") == who
+
+
+def not_mine_refusal(timer: Timer, *, task_id: str, role: str = "") -> str:
+    """不是这一趟起的程序时那句逐字拒信（判据按这几句认）。
+
+    为什么逐字写死：这句话是模型下一次重试的唯一依据 —— "不是你的"必须点名
+    "这条归谁（有没有归属）"与"你只能停自己起的"，否则它会换个编号再试一次。
+    """
+    owner = program_owner(timer)
+    who = (f"它归台账号 {owner['task_id']!r}" if owner["attributed"]
+           else "账上没记它的归属（空归属的旧行不归任何人）")
+    me = f"台账号 {task_id!r}" if str(task_id or "") else \
+        f"角色 {role!r}（这一趟没有台账号）"
+    return (f"not_mine：{timer.timer_id}（{timer.program or '没记程序名'}）不是"
+            f"{me}起的程序 —— {who}。停程序只许碰自己起的：先用 program.list 看我名下"
+            "还在跑的那几条（它只列我的），再按编号停。")
+
+
+def process_alive(pid: int) -> bool:
+    """这个 pid 还活着吗（唯一判法在 `stopctl.alive`，本模块不另写一份）。
+
+    为什么不在这里写 `os.kill(pid, 0)`：Windows 上那不是探活，它会
+    `TerminateProcess`（把被探测的进程杀掉）；`tasklist` 在受限环境里又拿不到读数。
+    `stopctl.alive` 两条路都实测过（`OpenProcess(SYNCHRONIZE)` +
+    `WaitForSingleObject`）。探不了时它说"不活着" —— 调用方据此不杀，绝不假装杀过。
+
+    代价写在明处：探不了的那一档，`stop_program` 会落成 `already_exited`（不杀是安全
+    方向，但"没查成"与"它已经自己走了"在这一格分不开 —— 探活是唯一判法，它没有三态口）。
+    """
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid_int <= 0:
+        return False
+    try:
+        from . import stopctl as SC
+    except Exception:  # noqa: BLE001 - 连探活模块都读不到：按"不活着"处置
+        return False
+    try:
+        return bool(SC.alive(pid_int))
+    except Exception:  # noqa: BLE001 - 见 docstring 最后一句
+        return False
+
+
+def _exit_code_of(pid: int) -> int | None:
+    """被杀进程的退出码（读得到就给，读不到就是 None —— 不是 0）。
+
+    两种平台各一条路，都不用 subprocess（`program_census` 会把 clock.py 里新出现的
+    起进程点报成"程序在跑而账上没有计时器"）：
+
+    - Windows：`OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` +
+      `GetExitCodeProcess`；`STILL_ACTIVE`（259）说明它其实还在跑 ⇒ None。
+      句柄一关进程对象就没了 ⇒ 这条常常读不到，那是诚实的 None。
+    - POSIX：只有自家子进程收得到（`waitpid(WNOHANG)`）；不是自家子进程的
+      `ChildProcessError` ⇒ None（"读不到"与"退出码是 0"必须分得开）。
+    """
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return None
+    if pid_int <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.OpenProcess.restype = ctypes.c_void_p
+            k32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            k32.CloseHandle.argtypes = [ctypes.c_void_p]
+            handle = k32.OpenProcess(0x1000, 0, pid_int)   # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                code = ctypes.c_ulong()
+                if not k32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code)):
+                    return None
+                value = int(code.value)
+            finally:
+                k32.CloseHandle(ctypes.c_void_p(handle))
+            return None if value == 259 else value   # 259 = STILL_ACTIVE
+        except Exception:  # noqa: BLE001 - 读不到就是 None
+            return None
+    try:
+        got, status = os.waitpid(pid_int, os.WNOHANG)
+    except (ChildProcessError, OSError):
+        return None
+    if got != pid_int:
+        return None
+    return int(os.waitstatus_to_exitcode(status)) if hasattr(os, "waitstatus_to_exitcode") \
+        else None
+
+
+def _terminate_pid(pid: int) -> dict[str, Any]:
+    """第一刀：请它自己停。如实报"这一刀走了哪条路、有没有真的发出去"。
+
+    ## Windows 上"优雅"到底指什么（业主 2026-10-26 的裁定）
+
+    本平台没有"发给 console 子进程的请停信号"：`os.kill` 在这里就是
+    `TerminateProcess`，与 kill 是同一个系统调用 —— 所以 Windows 上"先请停再强杀"
+    在信号语义上没有任何差别。这一批里"优雅"指的是时机与告知，不是信号语义：
+
+    1. 先落一条"有人喊停"的账（这一条程序计时器的 note 与 `program.stop` 的读数），
+       并且先给它一个宽限窗口让它自己退出（有的程序会看自己的哨兵文件、或收到自己的
+       停机条件就收尾）；
+    2. 只有宽限窗口过了、它还在，才真动手；动手那一刻读数里写着 `force_kill`。
+    3. 真要发 CTRL_BREAK 必须有进程组（`CREATE_NEW_PROCESS_GROUP`）——今天七个起程序
+       的落点都没有开进程组（只有网页端的 detached 起法开了），所以这一档不假装发过：
+       `sent=False` 逐字写着"没发"。
+
+    POSIX 上这一刀是真信号（SIGTERM），收尾机会就落在这一步里。
+    """
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return {"sent": False, "via": "", "why": f"pid 不是整数：{pid!r}"}
+    if os.name != "nt":
+        try:
+            os.kill(pid_int, signal.SIGTERM)
+            return {"sent": True, "via": "SIGTERM", "why": ""}
+        except OSError as exc:
+            return {"sent": False, "via": "SIGTERM", "why": f"{type(exc).__name__}: {exc}"}
+    return {"sent": False, "via": "",
+            "why": ("Windows 上没有可发给 console 子进程的请停信号（这一档由宽限窗口"
+                    "承担：先等它自己退，过了窗口才强杀）")}
+
+
+def _terminate_process_handle(pid: int, *, exit_code: int = 9) -> dict[str, Any]:
+    """最后一刀（只在没有作业对象时用）：`TerminateProcess`，只收根进程。"""
+    try:
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = ctypes.c_void_p
+        k32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        k32.TerminateProcess.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = k32.OpenProcess(0x0001, 0, int(pid))   # PROCESS_TERMINATE
+        if not handle:
+            return {"killed": False, "via": "TerminateProcess",
+                    "why": f"OpenProcess 失败（错误码 {ctypes.get_last_error()}）"}
+        try:
+            ok = bool(k32.TerminateProcess(ctypes.c_void_p(handle), int(exit_code)))
+            why = "" if ok else f"TerminateProcess 失败（错误码 {ctypes.get_last_error()}）"
+        finally:
+            k32.CloseHandle(ctypes.c_void_p(handle))
+        return {"killed": ok, "via": "TerminateProcess", "why": why,
+                "note": "这条路只收根进程：它已经生出来的子孙不在这一刀里"}
+    except Exception as exc:  # noqa: BLE001 - 杀不成要如实报，不许假装
+        return {"killed": False, "via": "TerminateProcess",
+                "why": f"{type(exc).__name__}: {exc}"}
+
+
+def _force_kill_pid(pid: int) -> dict[str, Any]:
+    """第二刀：真收掉它（Windows 优先走作业对象，一次收掉整棵传递树）。"""
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return {"killed": False, "via": "", "why": f"pid 不是整数：{pid!r}"}
+    if os.name != "nt":
+        try:
+            os.kill(pid_int, signal.SIGKILL)
+            return {"killed": True, "via": "SIGKILL", "why": ""}
+        except OSError as exc:
+            return {"killed": False, "via": "SIGKILL", "why": f"{type(exc).__name__}: {exc}"}
+    job_why = ""
+    try:
+        from . import jobobject as JO
+
+        if JO.available():
+            job = JO.create_job(f"agentflow-program-stop-{pid_int}")
+            try:
+                placed = JO.assign_tree(job, pid_int)
+                ok = bool(JO.terminate(job, exit_code=9))
+                left = JO.assigned_pids(job)
+                return {"killed": ok or not process_alive(pid_int), "via": "job",
+                        "why": "", "assigned": list(placed.get("assigned") or ()),
+                        "failed": list(placed.get("failed") or ()),
+                        "left": list(left.get("pids") or ())}
+            finally:
+                try:
+                    JO.close(job)
+                except Exception:  # noqa: BLE001 - 关句柄失败不该带走调用方
+                    pass
+        job_why = f"作业对象用不了：{JO.unavailable_reason()}"
+    except Exception as exc:  # noqa: BLE001 - 这条路走不通就退回下一刀（读数里留着）
+        job_why = f"作业对象那条路失败：{type(exc).__name__}: {exc}"
+    got = dict(_terminate_process_handle(pid_int))
+    if job_why:
+        got["job_attempt"] = job_why
+    return got
+
+
+def _wait_until_gone(pid: int, seconds: float, *, purpose: str) -> float:
+    """等这个 pid 从进程表上消失，返回实际等了多久（不抛）。
+
+    每一拍都走 `await_io`（主时钟的等待账是"所有等一会儿"的唯一入口，也是
+    `raw_wait_census` 的判据：clock.py 里不许出现裸 `time.sleep`）。轮询次数由
+    `PROGRAM_STOP_POLL_SEC` 与窗口长度算出来 —— 装上假时钟时 `await_io` 不真睡，
+    光靠单调计数会把这里变成忙转，所以圈数也要有上限。
+    """
+    limit = max(0.0, float(seconds))
+    step = max(0.01, float(PROGRAM_STOP_POLL_SEC))
+    rounds = max(1, int(limit / step) + 2)
+    started = time.monotonic()
+    for _ in range(rounds):
+        if not process_alive(int(pid)):
+            break
+        left = limit - (time.monotonic() - started)
+        if left <= 0:
+            break
+        await_io(min(step, left), purpose, kind="program_stop",
+                 where="clock._wait_until_gone", waited_for=f"pid:{int(pid)}")
+    return max(0.0, time.monotonic() - started)
+
+
+def _elapsed_of(timer: Timer) -> float | None:
+    """这条程序从登记到现在过了多久（读不到时钟 => None，不是 0）。"""
+    got = now()
+    if got.status == "unknown" or got.wall is None:
+        return None
+    try:
+        created = _parse_iso(timer.created_at)
+    except ClockError:
+        return None
+    return max(0.0, (got.wall - created).total_seconds())
+
+
+def _wake_waiters(workspace: str | Path, timer_id: str) -> dict[str, Any]:
+    """把"等这条程序"的那几条表推一次到点（走既有的 `fire_due`，不另拼一条报醒）。
+
+    为什么不是在 `finish_program` 里直接投递：收口与投递是两件事（一条程序计时器收口
+    之后可能根本没人等它），而投递的唯一实现在到点动作那一处（`_deliver_due`：落
+    mailbox 项 + 唤醒标记）。这里只是"别等到下一步才推"。
+    """
+    out: dict[str, Any] = {"checked": False, "watching": 0, "woken": 0,
+                           "wake_ids": [], "reason": ""}
+    wanted = f"program:{str(timer_id)}"
+    try:
+        bucket = book(workspace)
+        watching = [t for t in bucket.all()
+                    if t.state == "pending"
+                    and str(t.wait_for_resolved or t.wait_for or "") == wanted]
+    except ClockStateError as exc:
+        out["reason"] = f"等它的那几条表读不成（{exc}）"
+        return out
+    out["watching"] = len(watching)
+    try:
+        report = fire_due(workspace)
+    except Exception as exc:  # noqa: BLE001 - 推不成是"没查成"，不许折成"没人等它"
+        out["reason"] = (f"到点动作没推成（{type(exc).__name__}: {exc}）⇒ "
+                         "等它的那几条保持 pending，下一次步进会再推")
+        return out
+    out["checked"] = bool(report.get("checked", True))
+    ids = {str(t.timer_id) for t in watching}
+    woken = [r for r in (report.get("fired") or ()) if str(r.get("timer_id")) in ids]
+    out["woken"] = len(woken)
+    out["wake_ids"] = [str(r.get("wake_id") or "") for r in woken if r.get("wake_id")]
+    if not out["checked"]:
+        out["reason"] = f"时钟读不到 ⇒ 判不了 due（{report.get('reason') or '没查成'}）"
+    elif watching and not woken:
+        out["reason"] = "等它的那几条还在 pending（到点动作没接上或被推迟）⇒ 这一刀没把它们叫醒"
+    return out
+
+
+def _stop_one_program(workspace: str | Path, timer_id: str, *, task_id: str,
+                      role: str, grace_sec: float, wait_sec: float,
+                      reason: str) -> dict[str, Any]:
+    """停一条（`stop_program` 的真身：逐条读数与四档判据都在这里）。"""
+    out: dict[str, Any] = {
+        "checked": True, "timer_id": str(timer_id), "result": "not_found",
+        "program": "", "argv_digest": "", "pid": None, "state": "", "outcome": "",
+        "elapsed_sec": None, "exit_code": None, "mine": False,
+        "task_id": "", "role": "", "owner": {}, "terminate": {}, "force_kill": {},
+        "waited_sec": 0.0, "still_alive": [], "watching": 0, "woken": 0,
+        "wake_ids": [], "reason": "",
+    }
+    bucket = book(workspace)      # 读不成抛 ClockStateError：由工具层报 checked=False
+    timer = bucket.get(str(timer_id))
+    if timer is None:
+        out["reason"] = f"没有 {timer_id} 这一条程序计时器（不是'已经结束了'）"
+        return out
+    if not timer.is_program:
+        out["state"] = timer.state
+        out["reason"] = (f"{timer_id} 是 kind={timer.kind!r} 的条目，不是程序计时器 —— "
+                         "停程序只认 kind='program' 那一条（等时间/等谁的表用 clock.timer_cancel）")
+        return out
+    out.update({"program": timer.program, "argv_digest": timer.argv_digest,
+                "pid": timer.pid, "state": timer.state, "outcome": timer.outcome,
+                "elapsed_sec": timer.elapsed_sec, "exit_code": timer.exit_code,
+                "task_id": str(timer.task_id or ""), "role": str(timer.role or ""),
+                "owner": program_owner(timer),
+                "mine": is_my_program(timer, task_id=task_id, role=role)})
+    if not out["mine"]:
+        out["result"] = "not_mine"
+        out["reason"] = not_mine_refusal(timer, task_id=task_id, role=role)
+        return out
+    if timer.state != "pending":
+        out["result"] = "already_exited"
+        out["reason"] = (f"{timer_id} 早就收口了（state={timer.state}, "
+                         f"outcome={timer.outcome or '没记'}）—— 查过了，不是第二次杀掉；"
+                         "这一行一个字都不改（幂等）")
+        return out
+    try:
+        pid = int(timer.pid or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid <= 0:
+        out["reason"] = ("这一条账上没有 pid（attach_program_pid 没补上）⇒ 没有可停的对象；"
+                         "程序行保持 pending，它还在不在看 program.list 的 running 那一格")
+        return out
+    if not process_alive(pid):
+        out["result"] = "already_exited"
+        out["reason"] = (f"pid {pid} 已经不在进程表上了 —— 查过了、它自己走掉的；"
+                         "账上那条还是 pending（收口归起它的 program_span，这一刀不改行）")
+        return out
+    # ---- 第一刀 + 宽限窗口（"优雅"= 时机与告知，见 `_terminate_pid` 的 docstring）
+    terminate = _terminate_pid(pid)
+    out["terminate"] = terminate
+    waited = _wait_until_gone(pid, float(grace_sec),
+                              purpose="停程序：宽限期里等它自己收尾")
+    # ---- 第二刀：只有还活着才动手（读数里写着走了哪条路）
+    force: dict[str, Any] = {}
+    if process_alive(pid):
+        force = _force_kill_pid(pid)
+        out["force_kill"] = force
+        waited += _wait_until_gone(pid, float(wait_sec),
+                                   purpose="停程序：真杀之后等它从进程表上消失")
+    out["waited_sec"] = round(waited, 3)
+    if process_alive(pid):
+        out["result"] = "timeout"
+        out["still_alive"] = [pid]
+        out["state"] = timer.state
+        out["reason"] = (f"pid {pid} 在 {float(grace_sec):g}+{float(wait_sec):g} 秒里没有消失"
+                         f"（杀不动：{force.get('why') or terminate.get('why') or '原因没有读数'}）"
+                         "—— 账上那条保持 pending、程序行不改：它还在跑这件事必须读得出来")
+        return out
+    # ---- 真没了：按 killed 收口（走既有的 finish_program），再推一次等它的人
+    elapsed = _elapsed_of(timer)
+    exit_code = _exit_code_of(pid)
+    note_bits = [f"被点名停下（program.stop，操作者台账号 {task_id or '（没给）'}）"]
+    if str(reason or "").strip():
+        note_bits.append(str(reason).strip())
+    if terminate.get("via"):
+        note_bits.append(f"第一刀 {terminate['via']}")
+    elif terminate.get("why"):
+        note_bits.append(f"第一刀没发（{terminate['why']}）")
+    if force.get("via"):
+        note_bits.append(f"第二刀 {force['via']}")
+    closed, state = finish_program(workspace, timer_id, outcome="killed",
+                                   exit_code=exit_code, elapsed_sec=elapsed,
+                                   note="；".join(note_bits))
+    out.update({"result": "killed", "state": getattr(closed, "state", ""),
+                "outcome": getattr(closed, "outcome", ""),
+                "elapsed_sec": getattr(closed, "elapsed_sec", None),
+                "exit_code": getattr(closed, "exit_code", None),
+                "finish_state": state})
+    out["reason"] = program_message(program=timer.program, outcome="killed",
+                                    exit_code=out["exit_code"],
+                                    elapsed_sec=out["elapsed_sec"],
+                                    purpose=timer.purpose)
+    wake = _wake_waiters(workspace, timer_id)
+    out.update({"watching": int(wake.get("watching") or 0),
+                "woken": int(wake.get("woken") or 0),
+                "wake_ids": list(wake.get("wake_ids") or ()),
+                "wake_checked": bool(wake.get("checked")),
+                "wake_reason": str(wake.get("reason") or "")})
+    return out
+
+
+def stop_program(workspace: str | Path, timer_id: str, *, task_id: str,
+                 role: str = "", grace_sec: float = PROGRAM_STOP_GRACE_SEC,
+                 wait_sec: float = PROGRAM_STOP_WAIT_SEC,
+                 reason: str = "") -> dict[str, Any]:
+    """停掉一条"我这一趟起的"程序：先宽限、再真杀，然后按 `killed` 收口并唤醒等它的人。
+
+    业主 2026-10-26 的 G1（逐字）：「重点完善子代理杀自己发出去的程序进程的工具」。
+
+    ## 这个函数做四件，缺一件就等于没做
+
+    1. 受控拒绝：不是这一趟起的（别人的 / 账上没有归属的）⇒ `result="not_mine"`，
+       一个进程都不碰（`is_my_program` 是唯一判据，`not_mine_refusal` 是唯一拒信）；
+    2. 先 terminate、超时再 kill：宽限 `PROGRAM_STOP_GRACE_SEC` 秒（`_terminate_pid`），
+       过了窗口还在才 `_force_kill_pid`（Windows 上优先走作业对象，一次收整棵树）；
+    3. 等它真的消失（`_wait_until_gone`，上限 `PROGRAM_STOP_WAIT_SEC`）——
+       等不到就 `result="timeout"` 并点名还在跑的 pid，账上那条保持 pending；
+    4. 收口 + 唤醒：真没了才 `finish_program(outcome="killed", elapsed_sec=…,
+       exit_code=…)`，再推一次 `fire_due` 把等它的那几条叫醒。
+
+    ## 不抛异常
+
+    这四档是读数，不是异常（`PROGRAM_STOP_RESULTS`）。唯一的抛出是簿记读不成
+    （`ClockStateError`）—— 那是"没查成"，由工具层折成 `checked=False`，
+    绝不折成"没有这一条"。
+
+    ## 已知边界（两条，都不假装）
+
+    - pid 复用：这个 pid 是起进程那一刻记下的，且只在 pending 的账上；账上那条如果
+      已经被别的进程占着同一个 pid，这一刀还是会落下去 —— pid 级杀法没有更强的
+      身份校验（`Popen` 对象早就不在手上了）。
+    - Windows 上的"优雅"是时机而不是信号语义（见 `_terminate_pid`）。
+    """
+    grace = max(0.0, float(grace_sec))
+    wait = max(0.0, float(wait_sec))
+    out = _stop_one_program(workspace, str(timer_id), task_id=str(task_id or ""),
+                            role=str(role or ""), grace_sec=grace, wait_sec=wait,
+                            reason=str(reason or ""))
+    out["grace_sec"] = round(grace, 3)
+    out["wait_sec"] = round(wait, 3)
+    return out
+
+
+def programs_owned(workspace: str | Path, *, task_id: str = "",
+                   role: str = "", include_done: bool = False) -> dict[str, Any]:
+    """这个工作区的程序按归属分桶（`program.list` 的读侧，判据也读这里）。
+
+    四桶，一格都不折平：
+
+    - `mine`：我这一趟起的（`is_my_program` 为真；`include_done` 决定含不含已收口的）；
+    - `unowned`：账上没有归属的（改前存量的形态：`task_id` 空）—— 它们不归任何人，
+      既不算我的，也不许被 `program.stop` 杀掉；单列出来是为了让人看见"存量还在"；
+    - `others`：别人的（有归属、但不是我的）—— 只给条数，不给 pid（别人的程序不该
+      在我的读数里被点名）；
+    - 三态：簿记读不成 => `checked=False`（"没查成"不是"没有程序在跑"）。
+    """
+    out: dict[str, Any] = {"checked": False, "mine": [], "unowned": [], "others": 0,
+                           "others_running": 0, "count": 0, "running": 0,
+                           "reason": ""}
+    try:
+        rows = [t for t in book(workspace).all() if t.is_program]
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        out["reason"] = f"程序计时器读不成：{type(exc).__name__}: {exc}"
+        return out
+    if not include_done:
+        rows = [t for t in rows if t.state == "pending"]
+    mine: list[Timer] = []
+    unowned: list[Timer] = []
+    others = 0
+    others_running = 0
+    for timer in rows:
+        if not str(timer.task_id or ""):
+            unowned.append(timer)
+        elif is_my_program(timer, task_id=task_id, role=role):
+            mine.append(timer)
+        else:
+            others += 1
+            if timer.state == "pending":
+                others_running += 1
+    out.update({"checked": True, "mine": mine, "unowned": unowned,
+                "others": others, "others_running": others_running,
+                "count": len(rows),
+                "running": sum(1 for t in rows if t.state == "pending"),
+                "reason": ""})
+    return out
 
 
 class ProgramSpan:
@@ -2180,10 +3383,37 @@ def request_wait_any(workspace: str | Path, *, task_id: str, role: str = "",
     """记一条"等待任意计时器返回"（业主 2026-10-27：「可启动计时器等待任意计时器返回」）。
 
     返回那一条读数。同一个台账号只留最新的一条（再要一次就是"继续等"，不叠账）。
+
+    ## 前置判据：现存计时器数 >= 1（业主 2026-10-26）
+
+        「当然他可以起计时器叫"等任意计时器返回"，这个需要存在的计时器数大于等于1」
+
+    一条都没有 ⇒ 受控拒绝（码 `no_timers_to_wait`，拒信由 `no_timers_refusal()` 拼：
+    要么先起一条表，要么按交差收工）。为什么拒而不是"受理并记 requested=false"：
+    两种结局并存会让读侧又要分第三档，而"无事可做 + 无计时器 = 交差"是业主已经拍过
+    的既有口径 —— 那一档不该再从 wait_any 这条路进来。
+
+    "名下"的判据与 `wait_any_reading` 逐字相同（`task_id == 我` 或 `to == 我`）：
+    两处各写一套，就会出现"受理时算有、读数时算没有"的分家。
+    程序计时器常常 `task_id=""`（框架自己起的），那种表不算谁的 —— 等它要按
+    `wait_for="program:<句柄>"` 点名（见 `parse_wait_for`）。
     """
     tid = str(task_id or "").strip()
     if not tid:
         raise ClockParamError("等待任意计时器返回要一个台账号：不知道该让谁挂机")
+    try:
+        bucket = book(workspace)
+        live = [t for t in bucket.all()
+                if str(t.state) == "pending"
+                and tid in (str(t.task_id or ""), str(t.to or ""))]
+        live += [p for p in bucket.all_periodics()
+                 if str(p.state) == "running"
+                 and tid in (str(p.task_id or ""), str(p.to or ""))]
+    except ClockError:
+        # 簿记读不成是"没查成"，不是"没有计时器"：不许把它折成受控拒绝。
+        raise
+    if not live:
+        raise ClockNoTimersToWait(no_timers_refusal(role=role))
     doc, error = _load_wait_any(workspace)
     if error:
         raise ClockStateError(error)
@@ -2403,6 +3633,18 @@ def record_handoff(workspace: str | Path, *, task_id: str, parent_task_id: str =
         _atomic_json(handoff_path(workspace), doc)
     except OSError as exc:
         raise ClockStateError(f"交差账写不成：{type(exc).__name__}: {exc}") from None
+    # 交差也是一次"被时钟观测到的动静"（业主 2026-10-26：「被等的那一位交差/汇报时，
+    # 时钟要唤醒等待者」）。父代理不会交差 —— 它给子发的是指导意见（走 `delivery`）——
+    # 所以这两条路各记一格：等子靠 handoff，等父靠 delivery。
+    try:
+        observe_event("handoff", task_id=tid,
+                      from_task_id=tid,
+                      to_task_id=str(parent_task_id or ""),
+                      role=str(role or ""),
+                      content=(f"交差：{reason}" if str(reason or "").strip() else "交差"))
+    except ClockError:
+        # 观测窗记不下不该让"交差"这件事本身失败（交差已经落盘了）。
+        pass
     return {**row, "duplicate": False, "checked": True, "reason": ""}
 
 
@@ -2501,11 +3743,81 @@ def using_workspace(workspace: str | Path):
         _CURRENT_WORKSPACE.reset(tok)
 
 
+#: "这一趟 run 的号与角色"（业主 2026-10-27 的 G8：装配期起的程序也要有归属）。
+#:
+#: ## 为什么需要这一格
+#:
+#: `calling_as`（`conductor.py:2234`）只包住 `registry.call`（`agent_loop.py:9616`），
+#: 于是装配期起的程序取不到号：真机 `projects/mp3-r4` 的 `tm-000001`
+#: （`note="toolchain._version_of"`、`task_id=""`、`role=""`）正是
+#: `agent_loop.py:6740` 拼提示词那一步起的。这不是少一格读数：`is_my_program`（`clock.py`
+#: 的同名函数）把空归属一律判成"不是我的" ⇒ `program.stop` 对那一族结构性不可停。
+#: 这一格回答的是"这一趟是谁"，不是"这一次工具调用是谁"（工具路径上两者同号）。
+#:
+#: 同一局真机的收场读数（14:00 停，44 条计时器）：13 条程序计时器里 12 条有号，
+#: 全是工具路径起的（`agent_e._run_script` ×8、`papercompile.compile_paper` ×4）；
+#: 唯一空的那一条就是装配期这条 `toolchain._version_of` —— 这一格补的正是它。
+#:
+#: ## 为什么另起两个 ContextVar，不去挂 `conductor._CURRENT_TASK_ID`
+#:
+#: 复用会让 `current_task_id()` 在装配期就有值 ⇒ `conductor._owner_task_id`、
+#: `tools/table_tools._caller_task_id`、`secretary` 这些"读当前编号"的地方在装配期
+#: 读到另一层语义。与 `_CURRENT_WORKSPACE` 同一条纪律：这一格只有时钟读。
+#:
+#: ## 为什么它比 `calling_as` 优先（顺序见 `_calling_identity`）
+#:
+#: 工具路径上两个来源是同一个号（`agent_loop.py:9616` 传的就是 `self.my_task_id`）
+#: ⇒ 谁优先在工具路径上逐字节相同。差别只在召唤线程：`conductor.start_summon`
+#: （`conductor.py:6152`）用 `copy_context()` 起线程，会把父的 `calling_as`
+#: 复制进去 —— 子代理的装配期程序若读 `calling_as` 就会被记成父的；那是"错归属"，
+#: 比空归属危险（`program.stop` 会因此放行"父停子的程序"）。真机今天没炸只因为
+#: `agent_prompts._toolchain_readings` 是 `lru_cache`、根角色永远先跑。
+#: 所以这一格必须赢：它回答"谁这一趟在跑"，而继承来的那个号回答"谁起的这个线程"。
+#:
+#: ## 已知缺口（不许留成暗坑）
+#:
+#: 作用域目前只包住装配那两行（`agent_loop.run` 的 `facts` 里那两次工具链读数）。
+#: `run_as` 出作用域之后起的程序（循环正文、收尾那几个落点）仍然是空归属 ——
+#: 它们要么在工具层之下由 `calling_as` 兜住，要么本来就没人拥有（`agentflow stop`
+#: 那种 CLI 入口）。要连"收尾期"一起覆盖就得把作用域包到整趟 `run()`，那要重排
+#: 那一段几百行缩进，收益只多那几个收尾落点 —— 业主 2026-10-27 裁定：先不包。
+_CURRENT_RUN_TASK_ID: "contextvars.ContextVar[str]" = contextvars.ContextVar(
+    "agentflow_run_task_id", default="")
+_CURRENT_RUN_ROLE: "contextvars.ContextVar[str]" = contextvars.ContextVar(
+    "agentflow_run_role", default="")
+
+
+@contextlib.contextmanager
+def run_as(task_id: str, role: str = ""):
+    """在 `with` 里把"这一趟 run 是谁"挂上（挂法与 `using_workspace` 同形）。
+
+    进作用域 set、出作用域 reset（异常也复位）。空号也照样挂（`task_id=""`）：
+    空就是"这一趟没有号"，读数留空 —— 不猜一个。
+    """
+    token = _CURRENT_RUN_TASK_ID.set(str(task_id or ""))
+    token_role = _CURRENT_RUN_ROLE.set(str(role or ""))
+    try:
+        yield
+    finally:
+        _CURRENT_RUN_TASK_ID.reset(token)
+        _CURRENT_RUN_ROLE.reset(token_role)
+
+
+def current_run_identity() -> tuple[str, str]:
+    """这一趟 run 的 `(号, 角色)`；不在任何 run 里 ⇒ `("", "")`（没挂点，不是"零号"）。"""
+    return _CURRENT_RUN_TASK_ID.get(), _CURRENT_RUN_ROLE.get()
+
+
 # ---------------------------------------------------------------- 被时钟观测到的事件
 
-#: 三类"必须被时钟观测到"的事件（业主 2026-10-25）：
+#: 五类"必须被时钟观测到"的事件：
 #: 子代理给父发消息、子代理收工提交、父给子答复（子挂机等父时同一个形）。
-EVENT_KINDS: tuple[str, ...] = ("message", "submit", "reply")
+#: 2026-10-26 增两档（业主：「等父也要真的能醒」）：
+#: - `handoff`：有人交差（`record_handoff`）—— 父代理不交差，所以它不能覆盖"等父"；
+#: - `delivery`：一条话被投递（发件人 -> 收件人）。它与 `message` 的分工：
+#:   `message` 认的是"谁产生了这条话"，`delivery` 认的是"这一趟投递真的发生了"，
+#:   于是"等父/等子"两种方向都不必依赖发件人那一侧的措辞。
+EVENT_KINDS: tuple[str, ...] = ("message", "submit", "reply", "handoff", "delivery")
 
 #: 事件内容的截断长度（进到点消息的那一段摘要，不是全文）。
 EVENT_EXCERPT: int = 300
@@ -2600,15 +3912,27 @@ def observe_message(rec: Mapping[str, Any]) -> ObservedEvent | None:
     subject = str(rec.get("subject") or "")
     content = f"{subject}：{body}" if subject else body
     kind = "reply" if str(rec.get("reply_to") or "") else "message"
-    return observe_event(
+    sender = str(rec.get("from_task_id") or "")
+    recipient = str(rec.get("to") or "")
+    event = observe_event(
         kind,
-        task_id=str(rec.get("from_task_id") or ""),
-        from_task_id=str(rec.get("from_task_id") or ""),
-        to_task_id=str(rec.get("to") or ""),
+        task_id=sender,
+        from_task_id=sender,
+        to_task_id=recipient,
         role=str(rec.get("from") or ""),
         content=content,
         message_id=str(rec.get("msg_id") or ""),
     )
+    # 投递这一侧再记一格（业主 2026-10-26：「等父也要真的能醒」）：`message` 认的是
+    # "谁说的"，而"等父"要认的是"父给我投来了一条话" —— 父不交差（那是 handoff），
+    # 它只会发消息；两档分开记，读的人（与判据）能看见投递这件事真的发生过。
+    try:
+        observe_event("delivery", task_id=sender, from_task_id=sender,
+                      to_task_id=recipient, role=str(rec.get("from") or ""),
+                      content=content, message_id=str(rec.get("msg_id") or ""))
+    except ClockError:  # pragma: no cover - 受控词表刚加这一档，这里只做防御
+        pass
+    return event
 
 
 def observe_work(rec: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -2686,6 +4010,7 @@ def waiters(workspace: str | Path) -> dict[str, Any]:
         row = timer.row(reading)
         rows.append({k: row[k] for k in (
             "timer_id", "purpose", "purpose_missing", "wait_for", "wait_for_resolved",
+            "waiting_on", "waiting_on_text",
             "wait_state", "state", "park_state", "parked_at", "parked_sec",
             "parked_steps", "parked_calls", "woke_reason", "feedback", "message")})
     parked = [r for r in rows if r["park_state"] == "parked"]
@@ -2854,7 +4179,10 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
                 label = "它交的是" if events[-1].kind == "submit" else "它说的是"
             timer.feedback = feedback
             timer.message = due_message(
-                purpose=timer.purpose, waited_sec=timer.waited_seconds(reading),
+                # 到点这句念的目的走 `purpose_of`（唯一取值口）—— 与盘上那一行
+                # `purpose` 是同一个来源，于是"内存里念的"与"从 state.json 读回来的"
+                # 结构上不会分家（真机那次的错位就是两处各取一套）。
+                purpose=purpose_of(timer), waited_sec=timer.waited_seconds(reading),
                 created_at=timer.created_at,
                 fired_at=_iso(reading.wall) if reading.wall is not None else "",
                 feedback=feedback, feedback_label=label,
@@ -2883,6 +4211,12 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
             timer.fired_at = _iso(reading.wall) if reading.wall is not None else ""
             timer.woke_at = timer.fired_at
             _unregister_parked(timer.timer_id)
+            # 醒了就不再"在等谁"：`waiting_on` 清空（业主 2026-10-26 第 ②/③ 条）。
+            # 为什么要清而不是留着："还在等 A1"与"等 A1 等到了"必须分得开 —— 留着它，
+            # 一条已经醒了三条的表在读数上仍然挂着，父代理那边的销号闸也永远有话拦；
+            # 而"等过谁"这件事已经由 `wait_for` / `wait_for_resolved` / `message` 三格留档。
+            woke_from = dict(timer.waiting_on or {})
+            timer.waiting_on = {}
             timer.mailbox_item_id = str(got.get("mailbox_item_id") or "")
             timer.wake_id = str(got.get("wake_id") or "")
             timer.note = str(got.get("note") or "")
@@ -2898,6 +4232,11 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
                 "triggered_by": timer.triggered_by,
                 "woke_reason": timer.woke_reason,
                 "wait_for": timer.wait_for,
+                # 醒的那一句里带上"刚被清掉的那一格"：读的人看得出它等的是谁，
+                # 而盘上 `waiting_on` 已经是空表（"还在等"与"等到了"分得开）。
+                "waiting_on": dict(timer.waiting_on or {}),
+                "woke_from": woke_from,
+                "woke_from_text": waiting_on_text(woke_from),
                 "purpose": timer.purpose,
                 "purpose_missing": timer.purpose_missing,
                 "waited_sec": timer.waited_seconds(reading),
@@ -3054,9 +4393,14 @@ class PeriodicShot:
             wait_for=per.wait_for,
             wait_for_resolved=per.wait_for_resolved,
             wait_state=per.wait_state,
-            message=due_message(purpose=per.purpose, waited_sec=None,
+            message=due_message(purpose=purpose_of(per), waited_sec=None,
                                 created_at=None, fired_at=None,
-                                every_sec=per.every_sec, fires=per.fires),
+                                every_sec=per.every_sec, fires=per.fires,
+                                # 业主 2026-10-26：巡查的报醒要带当拍现算的异常清单。
+                                # 在这里算而不是在 `Periodic` 上算：这一拍是"现场"，
+                                # 而 `Periodic` 是那条巡查的账（它的 row 只回显上一句）。
+                                patrol_section=patrol_section(per.workspace,
+                                                              task_id=per.task_id)),
         )
 
 
@@ -3656,9 +5000,16 @@ __all__ = [
     "CENSUS_FORMS",
     "ClockError",
     "ClockNotFound",
+    "ClockNoTimersToWait",
     "ClockParamError",
     "ClockStateError",
     "ClockUnreadable",
+    "ClockWaiterNotResolvable",
+    "NO_TIMERS_TO_WAIT",
+    "WAITER_NOT_RESOLVABLE",
+    "no_timers_refusal",
+    "waiter_refusal",
+    "waiting_on_text",
     "DUE_TRIGGERS",
     "EVENT_BUFFER",
     "EVENT_EXCERPT",
@@ -3670,6 +5021,10 @@ __all__ = [
     "PROGRAM_ALLOWED_RAW",
     "PROGRAM_OUTCOMES",
     "PROGRAM_SPAWN_CALLS",
+    "PROGRAM_STOP_GRACE_SEC",
+    "PROGRAM_STOP_POLL_SEC",
+    "PROGRAM_STOP_RESULTS",
+    "PROGRAM_STOP_WAIT_SEC",
     "PURPOSE_FROM_TARGET",
     "PURPOSE_SOURCES",
     "ProgramSpan",
@@ -3707,6 +5062,7 @@ __all__ = [
     "consume_wakes",
     "coverage",
     "current",
+    "current_run_identity",
     "current_workspace",
     "due_message",
     "due_timers",
@@ -3725,12 +5081,19 @@ __all__ = [
     "pending_wakes",
     "periodics",
     "iso",
+    "is_my_program",
+    "not_mine_refusal",
+    "process_alive",
     "process_started",
     "program_census",
     "program_message",
+    "program_owner",
     "program_span",
     "programs",
+    "programs_owned",
     "programs_running",
+    "program_purpose",
+    "purpose_of",
     "raw_wait_census",
     "read_handoffs",
     "mark_handoff_seen",
@@ -3747,6 +5110,7 @@ __all__ = [
     "reset_books",
     "reset_observed_events",
     "reset_waits",
+    "run_as",
     "set_census_roots",
     "set_default_workspace",
     "set_due_handler",
@@ -3758,6 +5122,7 @@ __all__ = [
     "start_timer",
     "state_path",
     "stop_periodic",
+    "stop_program",
     "target_state",
     "timers",
     "timers_missing_purpose",

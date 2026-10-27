@@ -24,20 +24,25 @@
 判据（`schema.reason` FC-01）：`reason` 必须来自受控枚举，
 且枚举里必须至少有一个"未执行"值。
 
-### 0.2 工具面的三条公共事实（现读，2026-10-27）
+### 0.2 工具面的公共事实：读数只有一个落点
 
-> ⚠️ 本节只有**读数**，没有"历史快照"。旧版本在这里手抄过一次装配结果（55 个工具），
-> 那份读数早已过期且**没有判据盯着它**；现已改成"命令 + 当次读数"的形态。
+> **本节不抄数。** 工具总数、逐角色条数、两根轴的分布、需审批数都是"会变的分份数"；
+> 它们的当次值只住在 [`DEVELOPMENT-SPEC.md`](DEVELOPMENT-SPEC.md) §0.2 的 `LIVE-READINGS` 块里
+> （键名 `cli_tools_total` / `cli_tools_modules` / `cli_tools_role_*`），
+> 判据逐键现算：`tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo`。
+> 复跑：`python -m agentflow.cli tools`（命令与前置见 §0.3）。
+>
+> 仍然写在本文里的数字只有两类，各有自己的落点与判据：
+> 1. **逐个工具的契约与三列事实**（`side_effect` / 审批 / `roles`）→ §R0 全表；判据按行对账注册表
+>    （行集合不重不漏 + 三列逐行相等）。
+> 2. **实测快照**（每角色五格 + 逐件清单 + 拿不到什么）→ 附录 §R0.1 / §R0.3 / §S3 / 各角色 §X.4，
+>    每节第一行标着观测日期；判据 `tests/test_role_specs_appendix_is_live.py` 逐格现算。
+>
+> 旧版本在这里手抄过整张装配结果（含总数 55 那次），那份读数过期很多批且**没有判据盯着**——
+> 它正是"同一个数字抄在几处，读者分不出哪一处是当次值"的样本。现在这一节只留指路。
 
-| 事实 | 现读数 | 复跑命令 |
-|---|---|---|
-| 工具总数（完整装配 = 含 `store`） | **111**（Lean 开：已装模块 17 个）/ **108**（Lean 关：16 个 —— `formal_tools` 一件都不装） | `python -m agentflow.cli tools`（首行"工具总数"） |
-| 全部 8 个角色（A–H）**共有**的工具 | **23** 件：`clock.now` `clock.timer_start` `clock.timer_list` `clock.timer_cancel` `clock.alarm_start` `clock.periodic_start` `clock.periodic_stop` `clock.timer_purpose` `clock.wait_any` `conductor.ack` `conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read` `trace.children`（**L 也恰好拿到这同一批 23 件**；它另外多 12 件，见 §L.4） | 见下方"交集"命令 |
-| 只读角色（C/H/V）工具面里的写工具 | **29** 件：`C` 9 件（`analysis.register_report` 这件**落库代理** + 8 件通用工具 `clock.timer_start` / `clock.timer_cancel` / `clock.alarm_start` / `clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `clock.wait_any` / `conductor.ack`）+ `H` 12 件（4 件**落库代理** `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 同样那 8 件通用工具）+ `V` 8 件（只有那 8 件通用工具） | `python -m agentflow.cli tools`（末段"只读角色写工具泄漏"） |
-| `side_effect` 分布（111 口径 = Lean 开） | `read 55 / write_local 51 / none 5`（Lean 关、108 口径：`read 54 / write_local 49 / none 5`） | 同上 |
-| 第二根轴 `external`（111 口径 = Lean 开） | `none 101 / egress 5 / exec 5` ⇒ 非 `none` 共 **10** 件（Lean 关、108 口径：`none 101 / egress 5 / exec 2` ⇒ **7** 件；差的那 3 件是 L 的 `formal.*`） | 同上 |
-
-**交集那一条的复跑命令**（A–H 十件里的头八个角色取交集）：
+**八角色共有面（A–H 的交集）** 的件数与逐件清单在附录 §R0.1 的"八角色共有"那一行（现算）。
+它的复跑命令（与那一行同一条量法）：
 
 ```powershell
 cd D:\Incubator\agentflow; $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'
@@ -52,16 +57,17 @@ python -c "import tempfile,pathlib;from agentflow.store import Store;from agentf
 > 逐条登记了这四个**该角色自己的落库代理**（`review.review_document` / `review.verify_fixes` /
 > `review.report` / `review.record_finding`；写面钉死在 `review_findings` / `documents.status`）。
 >
-> ⚠️ **只读角色那另外 7 件写工具是"通用能力"，也不是泄漏**（业主 2026-10-26：「通用能力根本不该出现
+> ⚠️ **只读角色那另外 9 件写工具是"通用能力"，也不是泄漏**（业主 2026-10-26：「通用能力根本不该出现
 > 谁能用这个说法」）：`clock.timer_start` / `clock.timer_cancel` / `clock.alarm_start` /
-> `clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `conductor.ack`
-> 都在 `tools/__init__.py` 的 `UNIVERSAL_TOOLS` 里，`roles` 是十一个角色全体。
+> `clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `clock.wait_any` /
+> `conductor.ack` / `conductor.post_task` 都在 `tools/__init__.py` 的 `UNIVERSAL_TOOLS` 里，
+> `roles` 是十一个角色全体（`conductor.post_task` 是 Q15 裁定之后进来的那一件）。
 > 它们的硬约束（只许写通信与簿记类的东西，不碰知识表）由工具层与
 > `tests/test_universal_tools_are_for_everyone.py` 判。
 >
 > `cli tools` 会把上面两族都打出来并标"!! 有泄漏"——那一行是**声明面的读数**，行为面已被 `for_role`
-> 拦下：H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V 那一栏只有那 7 件通用写工具；C 那一栏是
-> `analysis.register_report` 一件落库代理 + 那 7 件通用写工具**（见上表第 3 行）。
+> 拦下：H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V 那一栏只有那 9 件通用写工具；C 那一栏是
+> `analysis.register_report` 一件落库代理 + 那 9 件通用写工具**（逐件清单见附录 §R0.3 的"只读角色泄漏"那一行）。
 
 ### 0.3 复跑命令（本文所有工具数字的出处）
 
@@ -72,19 +78,14 @@ python -m agentflow.cli tools              # 全部角色的条数 + 两根轴�
 python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 ```
 
-**现读输出（2026-10-27，`AGENTFLOW_LEAN_ENABLED=1` 下复跑，尾部逐字）**：
-
-```
-工具总数：111（已装模块 17：table_tools, clock_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools, manuscript_tools, analysis_tools, formal_tools）
-
-各角色工具数：{'A': 49, 'B': 35, 'C': 34, 'D': 54, 'E': 36, 'F': 48, 'G': 50, 'H': 42, 'V': 26, 'L': 35, 'M': 34}
-只读角色写工具泄漏：{'C': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack', 'analysis.register_report'], 'H': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding', 'conductor.ack'], 'V': ['clock.timer_start', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_purpose', 'clock.timer_cancel', 'clock.wait_any', 'conductor.ack']}（!! 有泄漏）
-```
-
-> **同一个命令在 Lean 关着时**（`AGENTFLOW_LEAN_ENABLED` 未设 / 设为 0）：`工具总数：108`
-> （模块 16 个，`formal_tools` 不装配），`各角色工具数` 里没有 `L` 这一格（不是 0，
-> 是**不存在** —— `leanscope.LEAN_ONLY_ROLES` 决定它的存在性）。
-> 两个读数都要能复跑：本文件凡写"111"的地方都指 Lean 开，凡写"108"的地方都指 Lean 关。
+> **本节不再粘贴那次输出。** 粘贴块是同一个读数的第二份：它自己不会说"我过期了"，
+> 而读者会把它当成当次值（旧版本这里粘过 `工具总数：111` 与那张逐角色表，进一件工具就全过期）。
+> 要当次值：跑上面那条命令；要看带日期的实测快照：附录 §R0.1 / §R0.3 / §S3。
+> 当次值唯一落点：`docs/DEVELOPMENT-SPEC.md` §0.2 的 `LIVE-READINGS`（有逐键判据）。
+>
+> **Lean 关着时**（`AGENTFLOW_LEAN_ENABLED` 未设 / 设为 0）少三件 `formal.*`（`formal_tools` 不装配），
+> 且 `各角色工具数` 里没有 `L` 这一格（不是 0，是**不存在** —— `leanscope.LEAN_ONLY_ROLES` 决定它的存在性）。
+> 两个口径的数都写在 §R0 标题与附录 §R0.1 的"B 口径"那一行（都由判据现算），本节不另抄。
 >
 > 2026-10-27：107/104 → **110/107**。差的那 3 件是 `clock.periodic_start` /
 > `clock.periodic_stop` / `clock.timer_purpose`（D-53 晚班的时钟八件收口），
@@ -94,6 +95,17 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 > 第三条裁定的后半个动作：「直到它认为无事可做时，可启动计时器等待任意计时器返回」）——
 > 它同样在 `UNIVERSAL_TOOLS` 里登记（写集空：只写 `out/clock/wait_any.json` 这份意图账）
 > ⇒ 十一个角色的工具数**各加 1**，只读角色那三行的泄漏清单里也各多一件。
+>
+> 2026-10-26：111/108 → **112/109**。多的是 `conductor.post_task`（业主 2026-10-27 逐字：
+> 「如果 message 是要求做事，智能体需自己写任务塞进 task_board」）—— 它的 `roles` 声明是
+> 十一个角色全体，但只读角色 C/H/V 会按只读约束被剥掉 ⇒ 那三个角色的条数**不变**，
+> 其余角色各加 1；`conductor.*` 一族从 19 件变 20 件。
+> （本批读数按机器时间标 `2026-10-26（p210 待抬）`；上面那两笔是别人的留痕，日期与版本号照原样留着。）
+>
+> 2026-10-26（Q15 裁定，取 (a)）：工具总数不变（`conductor.post_task` 早就进册），变的是它的
+> 可达性 —— 它登记进 `UNIVERSAL_TOOLS`（写集只有 `tasks`，簿记表）⇒ 只读角色 C/H/V 也拿得到
+> 它，那三个角色的工具数各加 1（35→36 / 43→44 / 27→28）。上面那一段说"那三个角色的条数不变"
+> 是 Q15 裁定之前的读数，此处更正。`L` 在 Lean 开时本来就有它，条数不变。
 
 > **行尾（实测，不是约定）**：本文件与附录都是 **LF** ——
 > `python -c "import pathlib;print(pathlib.Path('docs/ROLE-SPECS.md').read_bytes().count(b'\r\n'))"` ⇒ `0`。
@@ -104,7 +116,7 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 > | 口径 | 命令 | 工具数 |
 > |---|---|---:|
 > | **A 口径（不含 store）** | `build_registry(store=None, workspace_root='.', roles=schema.ROLES)` | 见 `cli tools` 的注释；**本文一律用 B 口径** |
-> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | **111**（Lean 开）/ **108**（Lean 关） |
+> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | 见 §R0 标题（Lean 开 / 关两个数都在那里，由判据现算） |
 >
 > **引用工具条数时若不写口径，这个数字就是噪声**（`X-5` 同族）。
 > 逐角色的 `.4` 小节不再手抄"29/41/22…"这类会变的分份数 —— 每节给出的都是
@@ -315,20 +327,24 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（111 个，逐条；Lean 关着时 108 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（114 个，逐条；Lean 关着时 111 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
 > `#` 列是**历史行号**（`paper_package` 退场、`search.walk_citations` 落地、以及第 61 号
 > `verify.check_formal` 整条删除都刻意**不补位**：本文别处按行号引用过旧号，补位会让那些引用
-> 静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 111。
+> 静默指到别的工具上）⇒ `#` 不连续，行数以本表实际行数为准（不是最大的那个编号）。
 >
 > 第 61 号 `verify.check_formal` 已**整条删除**（不是把 `roles` 收成 `()`）：形式化入口归 L 的
 > `formal.*`，桥接层只剩同名纯函数（`src/agentflow/tools/verify_tools.py` 顶部逐字记着这件事）。
 > 这一行退场时没有补位 ⇒ 表里没有 61 号（第 9 / 11 / 15 / 16 号同理，都是退场的旧行）；
-> 编号排到 115 而总数是 111：115 − 五个空号（9 / 11 / 15 / 16 / 61）+ 一次重号 = 111。
+> 编号只增不补位 ⇒ 最大编号与行数差着"五个空号（9 / 11 / 15 / 16 / 61）再减一次重号"那么多。
 > 那一处重号是 81 号被 `text.extract` 与 `conductor.status_report` 共用 —— 同样是"不补位"纪律
 > 的产物，不是笔误的漏改（改它会挪动本文别处的旧引用）。
+>
+> **标题里的那两个数由 `tools/verify_role_specs.py --write` 现算重写**（Lean 开 / 关两档），
+> 本表只负责"逐条"：新增一件工具要人写的就是**这里的一行** —— 条数、附录五格、LIVE-READINGS
+> 的键值全部自动跟上（判据 `tests/test_role_specs_complete.py::test_adding_one_tool_costs_exactly_one_row`）。
 
 | # | 工具 | summary | `side_effect` | 审批 | roles | 参数 | 返回结构 | 测试 | 已知问题 |
 |---:|---|---|---|---|---|---|---|---|---|
@@ -443,29 +459,30 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 110 | `conductor.retire_child` | 给一个**已交差、此刻静默**的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire`），本工具只做「父发起 → 秘书落实」。**只有静默可销**（业主 2026-10-26：「销号可以也只可针对静默子代理」）—— 静默 = 无工作 ∧ 无任何计时器 ∧ 无活跃子代理；**在飞 / 待机 / 读不到**三档一律拒（在飞 ⇒ 它还在干活，销号等于把它手上的活扔掉；待机 ⇒ 它挂的计时器还会把它叫醒；读不到 ⇒ 判不了，不许读成"它不在飞"），拒信带 `refusal_code=target_not_silent` 与逐条 `blocking`（`kind=working` / `waiting` / `unknown`）。**销号前置**：它名下的板项必须已清干净（`queued` / `seen` 都算没清），不清就拒。级联：它名下那一支从最深的开始一起销（先叶子后父），子树里只要有任一节点非静默 ⇒ 整笔受控拒绝并在 `active_nodes` / `busy_task_ids` 里点名是谁卡在哪件任务上。销号 ≠ 停止（要它立刻停下来用叫停 / 停止） | `write_local` | **是** | A B D E F G L M | child_name, reason, task_id | `{checked,state,retired,task_id,name,parent_task_id,branch,task_id_compat,addressed_by,open_items,missing,reason,note,retired_path,roster_retired,subtree,subtree_size,order,cascade,retired_count,unrostered,active_nodes,busy_task_ids,readings,child_count,active_child_count,target_state,target_state_label,blocking,refusal_code}`；`state` 是 `retired` / `refused` / `unknown` 之一，`target_state` 是三态（`flying` / `standby` / `silent` / `unknown`） | `tests/test_a_parent_retires_its_finished_child.py`、`tests/test_retire_only_for_the_silent.py` | 2026-10-26 新增（D-59：名册只增不减 —— `Secretary.retire` 早写好了，父代理没有任何动作叫它）：三态都在 `ok(...)` 里（`fail` 会把 `data` 整个丢掉，于是"为什么不能销"就没了）；`child_name` 是名册名，`task_id` 只收绝对编号（旧写法，读数里标 `task_id_compat`）；`roles` 从**边表**派生（能当父的那几个），不是手写名单；`conductor.ack` 是它的前置。2026-10-27 改口径：旧文案只有"还在飞 ⇒ 拒"这一档，把**待机**与**读不到**折进了同一个拒绝 ⇒ "它还会醒过来"与"我不知道"在拒信上长得一样；现在三档分开说，各给一条不同的下一步，并各自在 `target_state` / `blocking` / `refusal_code` 上留读数 |
 | 111 | `conductor.ack` | 把自己名下**已经读过、已经办完**的板项确认掉（消项）：逐条从 `seen` 或 `queued` 推到 `done`，落 `by_task_id` 与步号，并 append-only 记一条事件。只许 ack **收件人是自己的**项（别人的项 ⇒ 受控拒绝 `not_yours`，一条都不写） | `write_local` | **是** | A B C D E F G H V L M | **item_ids**；note | `{checked,ok,state,acked,already_done,refused,unknown,missing,not_yours,refusal_codes,results,count,requested,by_task_id,note,reason}`；`state` 是 `acked` / `partial` / `refused` / `nothing` / `unknown` 之一 | `tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py` | 2026-10-26 新增（D-68 业主：「就做手，不兜底。在销号时，如果 task_board 没清，发提醒，不准直接销号」）：**"我是谁"不在工具形状里** —— 收件人 = 这一趟的台账号（做成参数等于让模型自己声明"这些项归我"，那正是本件唯一要挡住的事）；`partial` 与 `refused` 必须分得开（下一步该做的事相反）；`roles` 十一个角色全体（`UNIVERSAL_TOOLS`） |
 | 115 | `clock.wait_any` | 记一条「等待任意计时器返回」的意图（业主 2026-10-27 第三条裁定的后半个动作，逐字：「直到它认为无事可做时，可启动计时器"等待任意计时器返回"」）：手上没事了、谁先回来都行 ⇒ 记下之后这一拍不调模型；到任一计时器返回、或等的那个人说了话，时钟把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。它是**显式意图**，不是"有计时器"这件事实本身；手上有活要接着做就别起这个意图（计时器不阻塞动作）。已无事可做且一条计时器都没有时起它，等于交差（框架向父代理报告） | `write_local` | **是** | A B C D E F G H V L M | purpose | `{'checked','task_id','role','wait_id','purpose','requested','waiting','pending','pending_count','woke','woke_count','intents','reason','clock_status'}` | `tests/test_clock_governs_all_timed_work.py` | 2026-10-27 第二批新增（第九件 `clock.*`）：改前只有框架内部入口 `clock.request_wait_any`、模型面上没有这一格 ⇒ 模型没法表达"我等一等"这个意图；写集空（只写 `out/clock/wait_any.json` 这份意图账，不写任何表）；没有台账号 ⇒ 受控拒绝 `no_task`（不是"没有计时器"），账读不成 / 写不成 ⇒ `checked=false` + 原话（三态纪律） |
+| 116 | `conductor.post_task` | 给自己落一条「要办的活」板项（`kind="delegation"` + `expects="work"`）：把"这条消息要求做事"变成板上一条可追踪的 work 项，办完用 `conductor.ack`（`close="completed"`）收口，没办完它一直在板上、销号门也看得见它 | `write_local` | **是** | A B C D E F G H V L M | **summary**；detail, key | `{checked,ok,state,item_id,task_id,role,depth,kind,expects,called_by,input_key,existing,summary,reason}`；`state` 是 `posted` / `existing` / `refused` / `unknown` 之一，`existing` 非空 = 这个 `key` 已经落过项 | `tests/test_a_message_that_asks_for_work_becomes_a_work_item.py` | 2026-10-26 新增（业主 2026-10-27 逐字：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」）：**"我是谁"不在工具形状里** —— 收件人只能是调用者自己（要让别人办一件事走 `conductor.summon`），`key` 是幂等键（同一件事给同一个 key ⇒ 不再开第二条）；Q15 的裁定（2026-10-26，取 (a)）：`roles` 声明是十一个角色全体，而它只写 `tasks` 的一行板项（簿记表）⇒ 登记进 `tools/__init__.py` 的 `UNIVERSAL_TOOLS`，对十一个角色都发（含只读角色 C/H/V —— 它们同样会收到"要求做事"的消息，而"给自己落一条 work 项"是那条口径下唯一合法的落项手）。改前只发给 A B D E F G M：C/H/V 被只读约束剥掉、L 被 Lean 开关藏起来，而注释声称"由 `UNIVERSAL_TOOLS` 放行"是一句事实错误。逐角色条数因此 +1（C 36 / H 44 / V 28；L 在 Lean 开时不变）；判据 `tests/test_universal_tools_are_for_everyone.py::test_f_post_task_is_a_universal_tool_so_the_declaration_matches_the_surface` |
+| 117 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：`program` / `pid` / `argv` 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 `alive`（pid 现在还在不在）。空归属的旧账单列在 `unowned` 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：`retire_ready=false` 就说明我还有程序在跑，先 `program.stop` | `read` | 否 | A B C D E F G H V L M | 无必填；`include_done` | `{checked,task_id,role,programs,count,running,unowned,unowned_count,unowned_shown,unowned_running,others,others_running,include_done,retire_ready,note,reason}` | `tests/test_a_program_i_started_is_a_program_i_can_stop.py` | 2026-10-26 新增（G1，业主 2026-10-26 逐字：「重点完善子代理杀自己发出去的程序进程的工具（由于计时器监控着那些程序，我想实现起来不会太难），以及注销前检测的能力」）：两件的分工就是这句话的两半 —— 这一件是「注销前检测」；**不叫 `clock.program_list`**：`clock.*` 恰好九件那条判据（`CLOCK_NINE`）原样成立，程序两件的轴是「我起的进程」而不是「计时」；空归属那一桶只点名 —— 它既不算我的，也不会被 `program.stop` 停掉（三态：簿记读不成 ⇒ `checked=false`，不是「没有程序在跑」） |
+| 118 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 `outcome="killed"` 收口，并唤醒正在等它的人。只许碰自己起的（别人的与账上没有归属的旧行 ⇒ `not_mine`，一个进程都不碰）；已经结束的 ⇒ `already_exited`（幂等）；杀不动的 ⇒ `timeout` 并点名还在跑的 pid（账上那条保持 `pending`）；编号不存在 ⇒ `not_found`。给 `timer_id` 停一条，给 `all_programs=true` 停我名下全部 | `write_local` | **是** | A B D E F G L M | 无必填；`timer_id`, `all_programs`, `reason` | `{checked,task_id,role,mode,requested,stopped,killed,already_exited,timeout,not_mine,not_found,count,items,still_alive,woken,note,session_event,reason,clock_status}`；`mode` 是 `one`（停一条）/ `all`（停全部），逐条结果在 `items[].result` 里（受控词表 `clock.PROGRAM_STOP_RESULTS`） | `tests/test_a_program_i_started_is_a_program_i_can_stop.py`、`tests/test_a_running_program_is_not_left_behind.py`、`tests/test_stop_switch_kills_programs.py` | 2026-10-26 新增（G1 的另一半：「杀自己发出去的那个进程」）：**都不抛异常**，五档读数逐条给；`roles` 声明是十一个角色，而只读角色按副作用被剥掉 ⇒ 面上是 A/B/D/E/F/G/L/M（`conductor.post_task` 改前同形，Q15 之后它走 (a) 进了 `UNIVERSAL_TOOLS`；本件仍是声明面十一个、实际面八个）；`program.stop` 只管「我起的」，停机（`conductor.stop` / 强停）是另一个授权面（G4），两者刻意不合并 |
 
-### R0.1 111 个工具的公共事实（现读；Lean 关着时 108 个）
+### R0.1 工具面的公共事实（逐格现读见附录 §R0.1）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑 `validate_params`，非法即 `fail(kind="param_error")`，**不会进 handler**。
-- `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；通用能力另走一档（`UNIVERSAL_TOOLS` 的 8 件写工具，十一个角色全体都有，见 §0.2 那张表下面第二条注记）。
-- handler 形态（111）：`functools.partial` **107** / `lambda` **4** / 具名闭包 **0** ⇒ 那 4 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
-- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**111**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
-- **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。此外 V 还拿到 `trace.children`、9 件 `clock.*` 与 `conductor.ack`（后 11 件是通用能力，见 §0.2）。12 + 3 + 11 = 26，与 `cli tools` 的 `'V': 26` 对得上。
+- `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；通用能力另走一档（`UNIVERSAL_TOOLS` 里那批写工具，十一个角色全体都有，见 §0.2 下面第二条注记）。
+- handler 形态：逐个数（partial / lambda / 具名闭包 / 共几件）见附录 §R0.1 那一句 —— 那里现算，本节不抄。要点不变：`lambda` 那几个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
+- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools` 少"需要 store 才能注册"的那一族；**本文一律用 B 口径**（两个口径的数见 §R0 标题与附录 §R0.1）。
+- **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。此外 V 还拿到 `trace.children`、9 件 `clock.*` 与 `conductor.ack`（后 11 件是通用能力，见 §0.2）。三档相加就是 V 的全部工具面（逐件与总数见附录 §V.4，那里现算）。
 
 复跑：`python -m agentflow.cli tools`（条数 + 两根轴）与 `python tools/verify_role_specs.py`（逐角色对账）。
 
-### R0.2 不在 `build_registry` 那 111 里的 **9** 个工具（**必须单列**）
+### R0.2 不在 `build_registry` 装配里的 **9** 个工具（**必须单列**）
 
 | 来源 | 数量 | 工具 | `side_effect` | 是否过角色校验 |
 |---|---:|---|---|---|
 | `agent_c.register_tools` | 9 | `graph.hottest` `paths` `cold` `gaps` `svc_neighbors` `svc_relations_between` `contradictions` `structural_duplicates` `check_conflict` | 全 `read` | **否** |
 
-> 这 9 件**不在 `cli tools` 的 111 里** ⇒ 别把它们加进"某角色的工具数"（Lean 关着时那个读数是 108）。
-> 另两处"自注册面"**不另算条数**（它们的名字已经在 111 里）：`agent_d._fallback_trace_tools` 的
-> 3 个替身只在 D 自己构造的注册表里生效，而 111 里的 `trace.relation`/`trace.concept`/`trace.literature`
+> 这 9 件**不在 `cli tools` 的装配里** ⇒ 别把它们加进"某角色的工具数"。
+> 另两处"自注册面"**不另算条数**（它们的名字已经在装配面里）：`agent_d._fallback_trace_tools` 的
+> 3 个替身只在 D 自己构造的注册表里生效，而装配面里的 `trace.relation`/`trace.concept`/`trace.literature`
 > 来自 `tools/trace_tools.py` 的正常注册（`roles=("C","D")`）；`review_tools` 的 4 件写侧
-> 自 2026-10-17（业主裁定「方案 1」）起由装配器自动 `include_writers=True` 装进主表
-> （`roles=("H",)`，见 §H.4）。
 > 自 2026-10-17（业主裁定「方案 1」）起由装配器自动 `include_writers=True` 装进主表
 > （`roles=("H",)`，见 §H.4）。
 > ⚠️ 那 3 个替身的 `roles=("agent-C","agent-D")` **带 `agent-` 前缀**（不是 `"C"`/`"D"`），而 `install_d_tools` 又直接构造注册表 ⇒ `for_role("C")`/`for_role("D")` **永远拿不到它们** —— 正是 `build_registry` 专门加断言要拦的那类错误。
@@ -502,15 +519,15 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
 | 发起第二次检索（"我再多找几篇"） | A 的 `run_once` / `run` 只**消费**队列（`capabilities.CAPABILITIES`）；`search_literature` 也只在**被召唤方点名主题**时才查一次 —— "该不该再找、找什么"这个决定不在 A 手里 | **D**（`D → A`）/ **F**（`F → A`），或任何有到 A 的边的角色直接 `summon(A.search_literature, topic=…)` |
 
-### A.4 工具面（49 个，实测）
+### A.4 工具面（52 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role A` ⇒ `side_effect` read 23 / write_local 22 / none 0；`external` none 41 / egress 4 / exec 0；需审批 25 件。逐件明细（分组清单 + 拿不到什么）见附录 §A.4。
+**现读**：`python -m agentflow.cli tools --role A`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §A.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 > A 拿不到的组：`research.*`（D 的决策）、`ocr.*`（B 的解析）、`graph.*` 全部与
 > `trace.*` 里 C/D 的检索那三件（`trace.relation` / `trace.concept` / `trace.literature`）、
 > `verify.*`（E/F/G/H/V）、`doc.*`/`review.*`、`attack.*`、`conductor.*` 的编排面。
 > A 手里有的那几件不在这些组里：`conductor.broadcast`（它能召唤 B）、`conductor.escalate`、
-> 通用能力的 `conductor.ack` 与 5 件 `clock.*`、以及 `trace.children`（看自己的一层下级，
+> 通用能力的 `conductor.ack` 与那批 `clock.*`、以及 `trace.children`（看自己的一层下级，
 > 十个可召唤角色全体都有，见 §R0 第 102 行）。
 
 ### A.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §A.5）
@@ -628,9 +645,9 @@ A 的"没有结果"逐个列：
 | 发检索请求（"这里缺证据，帮我再找"） | B 的动作里没有"提交请求"；它只能**接受** `reprocess_requests` | **D**（`submit_gaps`）/ **C**（`gaps(submit_requests=True)`，由编排层调） |
 | 审校自己的抽取质量 | 自己审自己无法区分"发现"与"掩盖" | **H**（只读） |
 
-### B.4 工具面（35 个，实测）
+### B.4 工具面（38 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role B` ⇒ `side_effect` read 16 / write_local 15 / none 0；`external` none 30 / egress 1 / exec 0；需审批 15 件。逐件明细（分组清单 + 拿不到什么）见附录 §B.4。
+**现读**：`python -m agentflow.cli tools --role B`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §B.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### B.5 状态机（**只留主转移表**；其余约束表/反例表/第二三个状态机见附录 §B.5）
 
@@ -745,9 +762,9 @@ B 的"没有结果"逐个列：
 | 决定要不要把缺口变成检索请求 | 候选缺口是**产出**，不是**决定** | **D**（`submit_gaps`）/ 编排层（`gaps(submit_requests=True)`） |
 | 写报告以外的东西 | C 的写集只有 `analysis_reports` | — |
 
-### C.4 工具面（34 个，实测）
+### C.4 工具面（36 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role C` ⇒ `side_effect` read 25 / write_local 5 / none 0；`external` none 30；需审批 5 件（4 件是通用能力：3 件 `clock.*` + `conductor.ack`）。逐件明细（分组清单 + 拿不到什么）见附录 §C.4。
+**现读**：`python -m agentflow.cli tools --role C`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §C.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### C.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §C.5）
 
@@ -870,9 +887,9 @@ C 的产出有两类，状态语义完全不同。
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（54 个，实测）
+### D.4 工具面（57 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role D` ⇒ `side_effect` read 29 / write_local 16 / none 5；`external` none 50；需审批 16 件。逐件明细（分组清单 + 拿不到什么）见附录 §D.4。
+**现读**：`python -m agentflow.cli tools --role D`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §D.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### D.5 状态机（**全项目唯一在代码里有显式迁移表的状态机** —— `tools/research_tools.py` 的 `LEGAL_TRANSITIONS`）（**只留主转移表**；其余约束表/反例表/第二三个状态机见附录 §D.5）
 
@@ -988,9 +1005,9 @@ C 的产出有两类，状态语义完全不同。
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
-### E.4 工具面（36 个，实测）
+### E.4 工具面（39 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role E` ⇒ `side_effect` read 18 / write_local 14 / none 0；`external` none 31 / exec 1；需审批 14 件。逐件明细（分组清单 + 拿不到什么）见附录 §E.4。
+**现读**：`python -m agentflow.cli tools --role E`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §E.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### E.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §E.5）
 
@@ -1084,12 +1101,13 @@ C 的产出有两类，状态语义完全不同。
 | F-4 | **C/D/F 的推理未接线时如实记 `no_change`，绝不假装做了** | `attack.step` 的 `summary` 逐字 |
 | F-5 | 到终止条件时交 `best_partial`：**不是失败，也不是成功** | `status="stalled"` |
 | F-6 | 数值实验**不许关闭子目标**（FC-22） | 自检实测："数值实验**不许**关闭子目标（FC-22）" |
+| F-7 | **写证明手稿**（`reports/f-proof-<命题号>.md`），末尾带 `## 依赖` 四列表（引文 / 命题号 / 第几步 / 路径组）；手稿要过秘书洗稿才算可交（缺那一节就补空的、有引用的核号、洗不干净打回）（2026-10-27 口径） | `agent_f.manuscript.proof_manuscript` / `depsection.render_dependency_section`；`tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py` |
 
 ### F.3 明确不负责
 
 | 不做什么 | 为什么不由 F 做 | 该由谁做 |
 |---|---|---|
-| 自己"想数学" | `attack.step` 的 `summary` 逐字："C/D/F 的推理**未接线**" —— 本轮的 F 是**确定性调度器**，不是推理者 | 由 `SubagentBackend` 承担（**未接线**） |
+| 自己"想数学" | **（2026-10-27 口径）推理就是 F 的工作方式，不是开关** —— 业主 2026-10-26 裁定逐字：「没有默认开，这个就是F的工作方式，没有开关的说法。」旧文字那句"本轮的 F 是**确定性调度器**，不是推理者"已作废；缺缝时 F 要**明说缺缝**，不许落回"未接线"的死胡同 | **F 自己**（`agent_f.core._seam_missing_round`；`tests/test_f_reasoning_is_its_working_mode.py`） |
 | 写知识表 | F 的写集是 `{attack_plans, search_requests, reprocess_requests}` —— `statements` 与 `dependencies` **都不在**（2026-10-26 收口批：命题只经秘书 / B 登记；依赖边由 B 读 F 的证明手稿落），概念 / 关系 / 命题一张都不碰 | **B**（概念 / 关系 / 命题的常规登记） |
 | 把 `supported_not_proved` 说成 `resolved` | FC-22：无任何 `proof` 时计划状态**只能**是 `supported_not_proved` | schema 硬拦（自检实测："计划状态随之变成 `supported_not_proved`（无任何 proof）"） |
 | 无限重试 | `TERMINAL_STATUSES` 含 `stalled`；`stalled` 不可重入 | `tools.attack_tools.TERMINAL_STATUSES` |
@@ -1100,9 +1118,9 @@ C 的产出有两类，状态语义完全不同。
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（48 个，实测）
+### F.4 工具面（51 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role F` ⇒ `side_effect` read 23 / write_local 16 / none 5；`external` none 43 / exec 1；需审批 16 件。逐件明细（分组清单 + 拿不到什么）见附录 §F.4。
+**现读**：`python -m agentflow.cli tools --role F`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §F.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### F.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §F.5）
 
@@ -1228,9 +1246,9 @@ C 的产出有两类，状态语义完全不同。
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（50 个，实测）
+### G.4 工具面（53 个，实测）
 
-**现读**（2026-10-25）：`python -m agentflow.cli tools --role G` ⇒ `side_effect` read 23 / write_local 18 / none 5；`external` none 44 / exec 2；需审批 18 件。逐件明细（分组清单 + 拿不到什么）见附录 §G.4。
+**现读**：`python -m agentflow.cli tools --role G`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §G.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 **逐个工具的契约（本批新增的那一件，按实跑如实写）**
 
@@ -1369,9 +1387,9 @@ C 的产出有两类，状态语义完全不同。
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |
 
-### H.4 工具面（42 个，实测）
+### H.4 工具面（44 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role H` ⇒ `side_effect` read 25 / write_local 8 / none 5；`external` none 38；需审批 8 件（4 件是落库代理、4 件是通用能力 —— 见 §0.2 那两条注记）。逐件明细（分组清单 + 拿不到什么）见附录 §H.4。
+**现读**：`python -m agentflow.cli tools --role H`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §H.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### H.5 状态机（**只留主转移表**；其余约束表/反例表/第二三个状态机见附录 §H.5）
 
@@ -1478,9 +1496,9 @@ C 的产出有两类，状态语义完全不同。
 | 拿"看不出来"冒充"审过了" | "检查器自己没跑成"不是三个结论之一：它是**没查成**，不许折平（`verifications.parse_verdict` 的 docstring 逐字） | —（结构性禁止） |
 | 靠"再问 F 一句"补齐判断所需的信息 | 那会把冷启动绕过去；判不了就写 `看不出来`（`specs/v.py` 的 `policy` 逐字） | — |
 
-### V.4 工具面（26 个，实测）
+### V.4 工具面（28 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role V` ⇒ `side_effect` read 18 / write_local 4 / none 0；`external` none 22；需审批 4 件（全是通用能力：3 件 `clock.*` + `conductor.ack` —— V 的写面里**没有**任何落库代理）。逐件明细（分组清单 + 拿不到什么）见附录 §V.4。
+**现读**：`python -m agentflow.cli tools --role V`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §V.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 ### V.5 状态机（**只留主转移表**；其余约束表/反例表/第二三个状态机见附录 §V.5）
 
@@ -1611,23 +1629,22 @@ C 的产出有两类，状态语义完全不同。
 | 替调用方编一个"这个证明号是谁选的" | `path_source` 只收 `B` / `C` / `L` 三值，空 = 没交代；"谁选的路径"与"谁验的"必须分开 | **B / C / L**（三选一，但必须写明） |
 | 决定"验的是哪一份证明"却不给号 | 一个定理有多条证明路径时，不给号就一个字节都不写（`proof_path_unspecified`） | 调用方（`proof_no`） |
 
-### L.4 工具面（Lean 开时 35 个 / 关时 0 个，实测）
+### L.4 工具面（Lean 开时 38 个 / 关时 0 个，实测）
 
-**现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L` ⇒ **31** 件；
-`side_effect` **read 16 / write_local 15 / none 0**；`external` **none 28 / exec 3**（`formal.formalize` / `formal.check_formal` / `formal.record`）；**需审批 16 件**。
+**现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单见附录 §L.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 **构成**（逐件复跑同一命令）：
 
 - **3 件 `formal.*`**：`formal.formalize`（`write_local`）/ `formal.check_formal`（`read`）/ `formal.record`（`write_local`）—— 三件都带 `external="exec"`，`roles=("L",)` 只挂给 L；
-- **19 件 A–H 共有的件**（与 §0.2 那张"共有工具"表逐件相同）：`clock.now` `clock.timer_start` `clock.timer_list` `clock.timer_cancel` `clock.alarm_start` `conductor.ack` `conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read` `trace.children`；
-- **9 件共用写工具**：`fs.delete` `fs.edit` `fs.move` `fs.write` `table.create` `table.delete` `table.update` `conductor.broadcast` `conductor.retire_child`。
+- **A–H 共有面那一批**（与附录 §R0.1 的"八角色共有"那一行逐件相同）：通用时钟与 `conductor.ack`/`conductor.escalate`、只读族 `fs.*` / `table.*` / `manuscripts.*` 与 `trace.children` —— 逐件清单只在附录 §R0.1 有一份。
+- **共用写工具那一批**：`fs.delete` / `fs.edit` / `fs.move` / `fs.write` / `table.create` / `table.delete` / `table.update` / `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task`（逐件见附录 §L.4）。
 
 **Lean 关着时是 0 件**：`AGENTFLOW_LEAN_ENABLED=0` 下同一个命令给出 `for_role("L") == []` —— 不是"能拿到 0 个工具"，而是"L 不存在"（`leanscope.is_hidden`）。
-复跑：`python -c "import sys;sys.path.insert(0,'src');import os;os.environ['AGENTFLOW_LEAN_ENABLED']='1';from agentflow.tools import build_registry;r=build_registry().registry;print(len(r.for_role('L')))"`（不带 `store` 的 A 口径 ⇒ `15`；B 口径 ⇒ `23`）。
+复跑：`python -m agentflow.cli tools --role L`（Lean 开档；Lean 关档 L 这一格不存在，不是 0）。
 
 > ⚠️ **写集与工具面是两根轴，不许互相冒充**：`write_set == {"experiments"}` 是**并发判据**的输入，
 > 也是"L 不碰 `statements`"的声明；`for_role` 的结构性拦截**只针对只读角色**（C / H / V），
-> 所以 L 真的拿得到 10 件写工具（`fs.*` 4 + `table.*` 3 + `conductor.broadcast` + `formal.*` 2）。
+> 所以 L 真的拿得到写工具：`fs.*` 4 + `table.*` 3 + `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task` + `formal.*` 2，另加通用能力的 `clock.*` 与 `conductor.ack`（逐件见附录 §L.4，那里现算）。
 > "L 只写 `experiments`"这件事由**动作面**（`record` 是它唯一的落表动作）+ 写集声明承担，
 > **不由工具层承担** —— E 今天就是同一个口径，把它写成"L 拿不到写工具"是一句假话。
 
@@ -1650,7 +1667,7 @@ C 的产出有两类，状态语义完全不同。
 | `收到 → 取台账` | 没给号，但 `claim` 与台账某一行正文**逐字相同且唯一** | ✅（`statement_source` 如实说明用的是哪一条来源；转述过的 `claim` 认不出来 ⇒ 受控拒绝） |
 | `收到 → 拒绝` | 号不在册 / 那一行没有正文 | ✅ 受控拒绝（`statement_not_found` / `statement_body_empty`），一行都不写 |
 | `取台账 → 自检闸` | 每次调用都过一遍（同一实例只问一次自检读数） | ✅ |
-| `自检闸 → 拒绝` | 自检不是 `usable` | ✅ `unknown` + `lean_selfcheck_off` / `_unusable` / `_unknown`；**不写盘、不起检查器** |
+| `自检闸 → 拒绝` | 自检不是 `usable` | ✅ `unknown` + `lean_selfcheck_off` / `lean_selfcheck_unusable` / `lean_selfcheck_unknown`；**不写盘、不起检查器** |
 | `自检闸 → 写盘` | 声明名合法（`DECLARATION_NAME_RX`）且路径在工作区内 | ✅（`code/formal/<名字>.lean`，多路径时 `#p2` 起落 `..._p<n>.lean`） |
 | `写盘 → 检查器` | 落盘成功 | ✅（真跑；`exit_code` 与 `verifier_output` 原样带回） |
 | `检查器 → verified` | 检查器说通过且没有 `sorry`、没有多余公理、声明名对得上 | ✅ |
@@ -1757,7 +1774,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 1. **自检闸本体（`leantoolchain` 的四步）**：
    `$env:PYTHONPATH='src'; $env:AGENTFLOW_LEAN_ENABLED='1'; python -c "from agentflow.leantoolchain import selfcheck; r=selfcheck(); print(r['state'], r['checked'], r['problems'])"`。
    当次读数（2026-10-23，本机）：**没设 `AGENTFLOW_LEAN_BIN` 时** ⇒ `unusable True [...]`（五档都没找到 lean）；
-   **把 `AGENTFLOW_LEAN_BIN` 指到本机那一版**（`D:\Incubator\_env\lean470\lean-4.7.0-windows\bin`）⇒ `usable True []`，
+   **把 `AGENTFLOW_LEAN_BIN` 指到本机那一版**（本机那个 `bin` 目录由 `AGENTFLOW_LEAN_BIN` 指定，不在文档里写死绝对路径）⇒ `usable True []`，
    版本 `4.7.0`、`version_ok True`、`ok True`。
    这正是 L 的 `lean_selfcheck_unusable` 与 `usable` 两档的真机读数 —— 关着（`off`）是第三档。
 2. **判据矩阵（形式化面 + 协作面 + 隔离面）**：
@@ -1787,7 +1804,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 |---|---|---|
 | M-1 | **单件召唤的入口**：`summon(role, action, params, by, parent_task_id, input_key, budget, token, lineage)`（批量的那条是 `conductor.summon_many`，见 §R0 的第 79 行与 §M 的"批量入口"） | `conductor.summon` |
 | M-2 | 过策略：角色/动作存在性、边、深度、扇出、循环、并发、总量、预算、墙钟 | `policy.check_action` / `policy.check` |
-| M-3 | 写台账（**每个 start 恰好一个 end**） | `Conductor._write_row` / `conductor.finish` |
+| M-3 | 写台账（**每个 start 恰好一个 end**） | `conductor.finish` |
 | M-4 | 派给 backend（`LocalBackend` / `SubagentBackend`） | `conductor.SubagentBackend` |
 | M-5 | **拒绝也落台账**（`status="done", outcome="refused"`） | `conductor.Conductor._refuse` |
 | M-6 | 波浪调度（写集不相交的并发） | `Conductor.run_plan` → `scheduler.run_waves`（`conductor.Conductor.run_plan`） |
@@ -1810,9 +1827,9 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 工具面（34 个，实测）= 编排面 19 个 + 通用时钟 9 个 + 文件面白名单 6 个
+### M.4 工具面（37 个，实测）= 编排面 20 个 + 通用时钟 9 个 + 文件面白名单 6 个
 
-**现读**（`build_registry(...).for_role("M")`：`cli tools --role` 只收十个可召唤角色，不收 M）⇒ `side_effect` read 16 / write_local 14 / none 0；`external` none 30；需审批 14 件。逐件明细（分组清单 + 拿不到什么）见附录 §M.4。
+**现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 
 #### M.4.1 M 能召唤的 7 个角色 × 它们的动作（54 个可召唤动作）
 

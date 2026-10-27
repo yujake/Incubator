@@ -1,9 +1,9 @@
 {
- "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 86 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。",
- "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 95 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
- "n_tools": 95,
- "n_cohort": 86,
- "baseline_summary_chars": 8932,
+ "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
+ "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
+ "n_tools": 114,
+ "n_cohort": 85,
+ "baseline_summary_chars": 8631,
  "max_ratio": 0.75,
  "compression_cohort": [
   "analysis.register_report",
@@ -83,7 +83,6 @@
   "trace.concept",
   "trace.literature",
   "trace.relation",
-  "verify.check_formal",
   "verify.code_hash",
   "verify.detect_verifier",
   "verify.evidence_for",
@@ -94,17 +93,37 @@
   "verify.verify_proof"
  ],
  "added_after_compression": {
-  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。",
+  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。",
   "tools": [
+   "clock.alarm_start",
+   "clock.now",
+   "clock.periodic_start",
+   "clock.periodic_stop",
+   "clock.timer_cancel",
+   "clock.timer_list",
+   "clock.timer_purpose",
+   "clock.timer_start",
+   "clock.wait_any",
+   "conductor.ack",
    "conductor.escalate",
+   "conductor.guide",
+   "conductor.post_task",
+   "conductor.retire_child",
+   "conductor.watch",
    "doc.write_mapping",
+   "formal.check_formal",
+   "formal.formalize",
+   "formal.record",
    "lit.admit",
    "lit.admit_all",
    "lit.overlap_check",
    "lit.stage_add",
    "lit.stage_list",
    "lit.stage_reject",
-   "lit.stage_withdraw"
+   "lit.stage_withdraw",
+   "program.list",
+   "program.stop",
+   "trace.children"
   ]
  },
  "declarations": {
@@ -3941,55 +3960,6 @@
    "tags": [],
    "handler_name": "functools.partial"
   },
-  "verify.check_formal": {
-   "params": {
-    "type": "object",
-    "properties": {
-     "claim": {
-      "type": "string"
-     },
-     "script_path": {
-      "type": "string",
-      "description": "工作区内待检查的 .lean 脚本；给了 source 时以 source 为准"
-     },
-     "source": {
-      "type": "string",
-      "description": "Lean 源码全文（与 script_path 二选一）"
-     },
-     "checker_name": {
-      "type": "string",
-      "description": "要核对的声明名（公理审计与声明名核对都要求它；不给时取文件名词干）"
-     },
-     "imports": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     },
-     "timeout_sec": {
-      "type": "number",
-      "minimum": 1
-     }
-    },
-    "required": [
-     "claim"
-    ],
-    "additionalProperties": false
-   },
-   "returns": "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None（一个键都不给 —— 失败分支不承诺上面那套键）",
-   "side_effect": "read",
-   "external": "exec",
-   "roles": [
-    "E",
-    "F",
-    "G"
-   ],
-   "tags": [
-    "experiment",
-    "formal"
-   ],
-   "handler_name": "functools.partial"
-  },
   "verify.code_hash": {
    "params": {
     "type": "object",
@@ -4263,6 +4233,994 @@
     "proof"
    ],
    "handler_name": "functools.partial"
+  },
+  "clock.alarm_start": {
+   "summary": "定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "到点时刻（ISO；naive 按 UTC 解释；必须晚于现在）"
+     },
+     "wait_for": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "可选：等谁（名册名 / 编号 / task:<号> / agent:<名>）。与 at 两个里面先到的那个报醒"
+     },
+     "max_wait_sec": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 315360000,
+      "description": "等谁的上限（只在给了 wait_for 时有意义）"
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "目的（缺了不报错，读数会追问）"
+     },
+     "to": {
+      "type": "string",
+      "description": "收件人：self（缺省，叫我这一趟）或 tasks 表的台账号"
+     }
+    },
+    "required": [
+     "at"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'timer_id','kind','state','to','task_id','role','reason','after_sec','due_at','at','remaining_sec','created_at','clock_status','wait_for','wait_for_resolved','wait_state','max_wait_sec','park_state','parked_at','parked_sec','parked_steps','parked_calls','purpose','purpose_missing','purpose_prompt'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "alarm",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.now": {
+   "summary": "读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "include_wakes": {
+      "type": "boolean",
+      "description": "是否一并读唤醒标记（缺省是）"
+     },
+     "include_waits": {
+      "type": "boolean",
+      "description": "是否一并读等待账与原始等待普查（缺省是）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'clock','status','wall','monotonic','source','reason','task_id','role','elapsed_sec','elapsed_from','pending_wakes','wakes_checked','wakes_reason','waits_checked','waits_reason','waits_outside_clock','waits_outside_where','waits_exempt','waits_exempt_count','waits_master_clock_count','waits_on_primitives','waits_on_primitives_ungoverned','waits_recorded','waits_recorded_sec','covers_all_timed_work','purpose_pending','parked','parked_sec','parked_steps','parked_calls','waiters','waiters_checked','running','active','observed_events','observed_total','programs','programs_checked','programs_outside_clock','programs_outside_where','programs_files_scanned'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "time",
+    "read"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.periodic_start": {
+   "summary": "起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成\"睡 20 分钟\"）。到点消息逐字是\"巡查时间到：目的｜每 20 分钟一次（第 N 次）\"。目的忘了填不报错。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "every_sec": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 315360000,
+      "description": "每一拍隔多久（必须为正；1200 = 20 分钟）"
+     },
+     "purpose": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "目的（例：周期性巡查）。缺了不报错，读数会追问"
+     },
+     "until_sec": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 315360000,
+      "description": "整条巡查最多跑多久（缺省 = 一直跑到被停）"
+     },
+     "wait_for": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "可选：等谁收口。它一收口本条巡查就停，stopped_reason 会点名是谁"
+     },
+     "to": {
+      "type": "string",
+      "description": "收件人：self（缺省，叫我这一趟）或 tasks 表的台账号"
+     }
+    },
+    "required": [
+     "every_sec"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'periodic_id','every_sec','purpose','fires','next_at','stopped_reason','purpose_missing','purpose_prompt','state','to','task_id','role','created_at','last_fired_at','remaining_sec','until_sec','wait_for','wait_for_resolved','wait_state','stopped_at','last_message','clock_status','patrol_checklist'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "periodic",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.periodic_stop": {
+   "summary": "停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态（查过了，不是第二次停成功）。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "periodic_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "clock.periodic_start 返回的编号（pd-…）"
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "为什么停（会写进 stopped_reason，供审计）"
+     }
+    },
+    "required": [
+     "periodic_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','periodic_id','stopped','state','stopped_reason','reason','periodic','running_count','clock_status'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "periodic",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.timer_cancel": {
+   "summary": "取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 cancelled=false + 它当前的状态（查过了，不是第二次取消）。编号是 tm- 那一种；周期性巡查不归这一件（它用 clock.periodic_stop(periodic_id=pd-…)）。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "timer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "clock.timer_start / alarm_start 返回的编号"
+     }
+    },
+    "required": [
+     "timer_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','timer_id','cancelled','state','reason','timer','pending_count','clock_status'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "timer",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.timer_list": {
+   "summary": "列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）与到点项编号；同时列周期性巡查（`periodics` / `periodic_count`）、挂机等待者（`waiters` / `waiters_parked`）与唤醒标记的读数。挂机等待者回答「谁在等、等什么」，所以这一件也是「这一拍会不会被挂起」的读口。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "include_done": {
+      "type": "boolean",
+      "description": "是否含已到点/已取消的（缺省是）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','clock','status','wall','monotonic','timers','count','periodics','periodic_count','waiters','waiters_parked','pending_count','fired_count','cancelled_count','pending_wakes','wakes_checked','observed_events','reason'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "timer",
+    "read"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.timer_purpose": {
+   "summary": "给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念，purpose_missing 转 false。计时器（tm-…）与周期性巡查（pd-…）都认。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "entry_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "要补目的的编号：clock.timer_start 的 tm-… 或 periodic_start 的 pd-…"
+     },
+     "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "目的（例：等待20分钟+周期性巡查）"
+     }
+    },
+    "required": [
+     "entry_id",
+     "purpose"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','entry_id','filled','state','purpose','purpose_missing','reason','entry','clock_status'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "timer",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.timer_start": {
+   "summary": "起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是\"时间到：目的｜等了多久（起于…，到于…）\"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "after_sec": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 315360000,
+      "description": "多少秒之后到点（与 wait_for 二选一）"
+     },
+     "wait_for": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "等谁：名册名 / 绝对编号（t000012）/ task:<号> / agent:<名>。被等对象收口时报醒（与 after_sec 二选一）"
+     },
+     "max_wait_sec": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 315360000,
+      "description": "等谁的上限：最多等多久（到点也报醒）。只在给了 wait_for 时有意义"
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "目的（例：等待20分钟+周期性巡查）。缺了不报错，读数会追问；会进到点项的那句话里"
+     },
+     "to": {
+      "type": "string",
+      "description": "收件人：self（缺省，叫我这一趟）或 tasks 表的台账号"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'timer_id','kind','state','to','task_id','role','reason','after_sec','due_at','at','remaining_sec','created_at','clock_status','wait_for','wait_for_resolved','wait_state','max_wait_sec','park_state','parked_at','parked_sec','parked_steps','parked_calls','purpose','purpose_missing','purpose_prompt'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "timer",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "clock.wait_any": {
+   "summary": "等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "purpose": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "等这一趟是为了什么（可省；省了读数里 purpose 为空，不影响受理）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','task_id','role','wait_id','purpose','requested','waiting','pending','pending_count','woke','woke_count','intents','reason','clock_status'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "timer",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.ack": {
+   "summary": "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close=\"acked\"；`conductor.post_task` 落的 work 项（expects=work）用 close=\"completed\"。这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "item_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "minLength": 4,
+       "maxLength": 12
+      },
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "要确认的板项编号（`tasks` 里的 task_id，可一次给多条）"
+     },
+     "note": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "一句为什么（逐字落进那一条事件，可空）"
+     },
+     "close": {
+      "type": "string",
+      "enum": [
+       "acked",
+       "completed"
+      ],
+      "description": "收口方式：acked（知道了，expects=ack 的项）/ completed（做完了，expects=work 的项，如 `conductor.post_task` 落的那一条）。缺省 acked"
+     }
+    },
+    "required": [
+     "item_ids"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','state','acked','already_done','refused','unknown','missing','not_yours','refusal_codes','results','count','requested','by_task_id','note','close','reason'}；state 是 acked / partial / refused / nothing / unknown 之一；acked 是落成的编号，refused 每项给 item_id / code / reason（code 是 not_yours / no_such_item / not_board_item / ack_unbacked / bad_close / state_error 之一），results 逐条给 item_id / ok / code / state_before / state_after / step / seen_backfilled",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.guide": {
+   "summary": "把 M 的一句话沿秘书链逐级转发到链上最后那一个代理：只写链尾也认（链由台账的父子关系现算）；写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名混写 `M->D1->F2`）也认，内部一律先解析成绝对编号链。每一跳的秘书只看链头往下转，正文只到链尾：只有链尾那一跳的秘书开一条板项、把正文交给它服务的那个代理；中间的秘书只转发、不读内容。返回里的 hops 逐项给 hop / of / at / elapsed_us / delta_us / secretary_role / secretary_task_id / mode（forward 或 deliver）/ from / to / remaining_chain / content_read / item_id / relay_id；delivered_to 是列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它要先取 [0]）。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "收件人：绝对编号链（`t-NNNNNN->t-NNNNNN->t-NNNNNN`，也可写裸六位数 `000001->000005`）、名册名混写（`M->D1->F2`），或只写链尾（`t-NNNNNN` / `D1`，链由台账现算）"
+     },
+     "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 800,
+      "description": "指导正文（800 字以内；只有链尾那一个代理读得到）"
+     }
+    },
+    "required": [
+     "to",
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','status','to','chain','chain_text','names','roles','to_role','delivered_to','hops','item_id','relay_id','refused','error','skipped','text','note'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.post_task": {
+   "summary": "给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close=\"completed\"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "要办什么（一句话；会渲染给未来的你自己）"
+     },
+     "detail": {
+      "type": "string",
+      "maxLength": 400,
+      "description": "补充：怎么算办完（可空）"
+     },
+     "key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "幂等键：同一件事重复落项时给同一个 key ⇒ 不再开第二条（可空）"
+     }
+    },
+    "required": [
+     "summary"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','state','item_id','task_id','role','depth','kind','expects','called_by','input_key','existing','summary','reason'}；state 是 posted / existing / refused / unknown 之一；existing 非空 = 这个 key 已经落过项，item_id 是那一条（没有新开）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.retire_child": {
+   "summary": "给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "child_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "子代理的名册名（如 `D1`；来自 {\"roster\": {\"of\": \"self\"}}）"
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "为什么销它（一句话，逐字落进名册与销号名单）"
+     },
+     "task_id": {
+      "type": "string",
+      "minLength": 6,
+      "maxLength": 8,
+      "description": "旧的兼容写法：子代理的绝对编号（新写的一律用 child_name）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','state','retired','task_id','name','parent_task_id','branch','task_id_compat','addressed_by','open_items','missing','reason','note','retired_path','roster_retired','subtree','subtree_size','order','cascade','retired_count','unrostered','kept','cascade_reading','active_nodes','busy_task_ids','readings','child_count','active_child_count','target_state','target_state_label','blocking','refusal_code'}；open_items 是列表（没销成时才非空），每项给 task_id / kind / item_state / summary 四格 —— 那四条键名刻意不写进键集合：空列表时一个都观测不到，写进去会让『声明 ⊆ 实跑』在受控拒绝那一支假红；target_state 是目标此刻的三态（flying / standby / silent / unknown）—— 空串只有一个意思：三态还没读到（早拒支：没有台账号 / 没给 store / 台账或名册对照表读不成 / 名册里没这个名字 / 不是你的子代理 / 没点名 / 子树或活跃读数没读成），**不是**「它是静默的」；target_state_label 是它的中文标签（空串同此一条），blocking 是逐条『为什么还不能销』（kind=working / waiting / unknown；target_state 是空串时它也是空表）；refusal_code 的充要条件：静默闸（三态读数）说话的每一档必带 target_not_silent —— 在飞 / 待机 / 三态读不到 / 名下还有活跃子代理 / 子树里还有活跃节点（含写盘前逐节点复核）；其余每一档都不带、是空串：早拒支（三态还没读）、程序闸那一档（读到了三态，但拦它的是「这一支还有程序在跑」，不是「不静默」）与板项没清那一档（读到了三态，但拦它的是板项，不是「不静默」）；cascade 是按销号次序排的逐项读数（task_id / name / role / depth / state），order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点；kept 是「这一笔没有销成的节点」逐条 {id, name, depth, why}（拒绝时 = 整支，成功时只剩没有名字可销的 unrostered 那几个）—— why 逐条说实话：谁还在跑、谁在待机、谁名下的板项没清、谁不在名册里；cascade_reading = {count, ids, levels, kept} 是同一件事的汇总（count/ids/levels 是这一笔真销成了的那几个与它们的层深，目标自己为 0）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "L",
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.watch": {
+   "summary": "看任意一支任务树的行为：从 task_id（或某个角色在台账里的实例行）向下走，每个节点给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。depth 缺省（或 0）= 整棵树；主控能想追几层追几层。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 8,
+      "description": "从哪一行开始向下看（缺省=我这一趟）"
+     },
+     "role_name": {
+      "type": "string",
+      "description": "看某个角色在台账里的每一行（task_id 优先；不给 task_id 时才用它）"
+     },
+     "depth": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64,
+      "description": "含根向下看几层；0 或缺省 = 全树"
+     },
+     "window": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "description": "每个节点给最近几步（缺省 5）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','roots','depth_requested','depth_reached','window','rows','count','truncated','session','silent_children','child_wait_invariant'}；每个节点里有 {'task_id','role','level','status','outcome','recent_steps','refusals','products','last_handoff'}；silent_children 是这一支里交过差的子代理编号（父据此把它们记为静默），child_wait_invariant 是不变量『活跃子代理 ⇒ 必有一条等它的计时器』的读侧判据（by_parent 逐父给 active_children / waited / unwaited / problems）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "formal.check_formal": {
+   "summary": "把一段 Lean 源码（`source`）或工作区里的 `.lean`（`script_path`）交给检查器真跑一次。前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈。查了没通过（compile_error / uses_sorry / extra_axioms / decl_mismatch）与没查成是两件事",
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim": {
+      "type": "string"
+     },
+     "script_path": {
+      "type": "string",
+      "description": "工作区里的 .lean 文件（与 source 二选一）"
+     },
+     "source": {
+      "type": "string",
+      "description": "Lean 源码全文（与 script_path 二选一）"
+     },
+     "declaration_name": {
+      "type": "string",
+      "description": "要核对的声明名。不给时由桥接层取**源码里唯一那条**具名声明的全名（`namespace` 前缀一并拼上：`LProbe.add_zero_probe`）；0 条或多条 ⇒ 受控拒绝（`param_error`，候选名逐个列出），不替调用方挑一条 —— 挑错了等于把声明名核对这条判据关掉"
+     },
+     "imports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "timeout_sec": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "claim"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path'}；受控拒绝那一支（路径越界 / 桥接层受控失败）：data 上多出 refused / refusal_reason 两格，status 落 unknown；失败（未接线）：ok=False + kind(not_wired)",
+   "side_effect": "read",
+   "external": "exec",
+   "roles": [
+    "L"
+   ],
+   "tags": [
+    "formal",
+    "lean"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "formal.formalize": {
+   "summary": "把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / `exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数",
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim": {
+      "type": "string",
+      "description": "被形式化的那条命题（自然语言原文，用于台账与回报）"
+     },
+     "source": {
+      "type": "string",
+      "description": "Lean 源码全文：至少一条具名 theorem / lemma"
+     },
+     "declaration_name": {
+      "type": "string",
+      "description": "源码里要核的那条声明名（也是盘上文件名）；不给时取第一条 theorem / lemma 的名字"
+     },
+     "statement_id": {
+      "type": "string",
+      "description": "被形式化的那一条命题在 `statements` 表里的编号：给了就按它读正文与 proof_text（不存在 / 没有正文 ⇒ 受控拒绝）；不给时只认「claim 与台账正文逐字相同且唯一」这一种来源"
+     },
+     "proof_no": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "验的是这条命题的第几份证明（1 = canonical；2 起在同行的 `proofs` 清单里）。号不在册 ⇒ proof_path_not_found；有两条以上而不给号 ⇒ proof_path_unspecified（一个字节都不写）"
+     },
+     "path_source": {
+      "type": "string",
+      "enum": [
+       "B",
+       "C",
+       "L"
+      ],
+      "description": "这个路径是谁选的：B 指定 / 照 C 的建议 / L 自己决定。它记「谁选的」，与「谁验的」（这一行的 recorded_by = L）分开"
+     },
+     "imports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "这次检查要加载的库（不给就不注入任何库）"
+     },
+     "timeout_sec": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "claim",
+     "source"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path','path','sha256','bytes','declaration_name','written','proof_no','proof_sha256','path_id','path_source','statement_id','statement_source','coverage','faithfulness','steps_path','refused','checker_status','checker_reason','b_library','report'}；失败（未接线）：ok=False + kind(not_wired)",
+   "side_effect": "write_local",
+   "external": "exec",
+   "roles": [
+    "L"
+   ],
+   "tags": [
+    "formal",
+    "lean",
+    "write"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "formal.record": {
+   "summary": "把一次形式化检查登记成 `experiments` 表的一行（`method=\"formal\"`）：先按 `statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**检查器，把现跑得到的 status / verified / checker / output_sha256 写进那一行。调用方给的读数只用于对账：与现跑不一致 ⇒ 受控拒绝 `reading_mismatch`，一行都不写。它**不动** `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签",
+   "params": {
+    "type": "object",
+    "properties": {
+     "statement_id": {
+      "type": "string",
+      "description": "台账里那条命题的编号（这一行绑定到它；不在台账里就拒绝）"
+     },
+     "code_path": {
+      "type": "string",
+      "description": "工作区里的 `.lean` 相对路径（`code/formal/<名>.lean`）"
+     },
+     "declaration_name": {
+      "type": "string",
+      "description": "要核的声明名（不给时取源码里唯一那条）"
+     },
+     "imports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "timeout_sec": {
+      "type": "number"
+     },
+     "status": {
+      "type": "string",
+      "description": "调用方看到的读数（只对账，不采信）：verified/failed/unknown"
+     },
+     "verified": {
+      "type": "boolean",
+      "description": "调用方看到的读数（只对账，不采信）"
+     },
+     "checker": {
+      "type": "string",
+      "description": "调用方看到的检查器标签（`lean 4.7.0`）。记进那一行的 `observations.checker_claimed` 并与现跑那一台对账：写了版本号而对不上 ⇒ 受控拒绝 `reading_mismatch`；不写版本号（只写 `lean`）不拒 —— 那是泛称，不是更强的声称"
+     },
+     "proof_no": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "这一行绑的是第几份证明（1 = canonical，2 起在 `proofs` 清单里）。号不在册 / 有两条以上而不给号 ⇒ 受控拒绝，一行都不写"
+     },
+     "path_id": {
+      "type": "string",
+      "description": "C 给这条路径的显示名（`p<证明号>g<组号>`）。只做标记，不当键：五元位第 4 位的键只能是证明号"
+     },
+     "path_source": {
+      "type": "string",
+      "enum": [
+       "B",
+       "C",
+       "L"
+      ],
+      "description": "这个路径是谁选的（B 指定 / 照 C 的建议 / L 自己决定）"
+     },
+     "verifier_output": {
+      "type": "string",
+      "description": "调用方看到的检查器原话（只对账，不采信）"
+     },
+     "exit_code": {
+      "type": "integer"
+     },
+     "for_question_id": {
+      "type": "string"
+     },
+     "notes": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement_id",
+     "code_path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'recorded','experiment_id','statement_id','method','claim','claim_key','status','verified','checker','output_sha256','code_hash','path','evidence_kind','result','negation_kind','exit_code','verifier_output','statement_evidence_kind_before','statement_evidence_kind_after','verification_required','detail','problems','reason','proof_no','path_id','proof_sha256','path_source','refused','refusal_reason'}；失败（未接线）：ok=False + kind(not_wired)",
+   "side_effect": "write_local",
+   "external": "exec",
+   "roles": [
+    "L"
+   ],
+   "tags": [
+    "formal",
+    "lean",
+    "write",
+    "experiment"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "program.list": {
+   "summary": "列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。所有角色都能用。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "include_done": {
+      "type": "boolean",
+      "description": "是否含已经收口的程序行（缺省否：只看还在跑的）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','task_id','role','programs','count','running','unowned','unowned_count','unowned_shown','unowned_running','others','others_running','include_done','retire_ready','note','reason'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "program",
+    "read"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "program.stop": {
+   "summary": "停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome=\"killed\" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "timer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "要停的那一条（program.list 里的 tm-…；与 all_programs 二选一）"
+     },
+     "all_programs": {
+      "type": "boolean",
+      "description": "停我名下全部还在跑的程序（缺省否；与 timer_id 二选一）"
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "为什么停（写进那条程序行的 note，供审计）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','task_id','role','mode','requested','stopped','killed','already_exited','timeout','not_mine','not_found','count','items','still_alive','woken','note','session_event','reason','clock_status'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "L",
+    "M"
+   ],
+   "tags": [
+    "clock",
+    "program",
+    "communication"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "trace.children": {
+   "summary": "看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 8,
+      "description": "要看谁的直接下级（缺省=我自己；非 M 角色只许填自己）"
+     },
+     "depth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12,
+      "description": "想看几层。普通代理固定按 1 层给（更深的层要 M 才能看）；只有 M 调 conductor.watch 时才按传入值走"
+     },
+     "window": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "description": "每个子任务给最近几步（缺省 5）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','me','depth_requested','depth_granted','one_layer_only','children','count','deeper','session'}；每个子任务里有 {'task_id','role','status','outcome','recent_steps','refusals','products','last_handoff'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "L"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
   }
  },
  "contract_amendments": [
@@ -4298,14 +5256,549 @@
     "verify.verify_proof"
    ],
    "key": "returns",
-   "reason": "多证明模型（业主 2026-10-22）：`verify_proof` 的 `checked=False` 理由码从 4 个扩到 9 个 —— 新增 `bad_proof_no` / `no_such_proof` / `proof_text_mismatch` / `ledger_unwritable` / `ledger_row_lost`（证明号越界 / 那一号证明不在台账行上 / 签名钉的正文与当前 `proof_text` 不符 / 台账写不进去 / 写完又读丢了）。这五档都必须与 `unparsable` 分开：合成一档会让「没查成」的处置全部变成同一个动作。声明面的这一次演进此前只改了实现，没在基线里记账 ⇒ 契约判据红了（判据是对的）。",
+   "reason": "多证明模型（业主 2026-10-22）：`verify_proof` 的 `checked=False` 理由码从 4 个扩到 9 个 —— 新增 `bad_proof_no` / `no_such_proof` / `proof_text_mismatch` / `ledger_unwritable` / `ledger_row_lost`（证明号越界 / 那一号证明不在台账行上 / 签名钉的正文与当前 `proof_text` 不符 / 台账写不进去 / 写完又读丢了）。这五档都必须与 `unparsable` 分开：合成一档会让「没查成」的处置全部变成同一个动作。声明面的这一次演进此前只改了实现，没在基线里记账 ⇒ 契约判据红了（判据是对的）。2026-10-26 并账：这一条原来只记到 2026-10-22 那一版，此后引用核实那一档又扩了同一格（`returns` 是整格一个标量，旧账的 to 已经不是现值）；判据的正控只认「退回一步就落在 from 上」，两次演进它表达不了，所以并成一条从 2026-10-20基线一步记到现值。旧 reason 原文保留在前段。补记的理由：多证明模型（业主 2026-10-22 / 2026-10-27 引用核实那一档）：新增 exhaustion_review / checks / missing / signer / proof_authors / report_path / citations / citation_checks / citation_gate / review_write；reason 词表扩到 bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost；引用核实有一条不合格（citation_gate.why 点名）或 citation_gate.problem 非空（依赖台账读不出来）⇒ 这一签不许落地。",
    "date": "2026-10-22",
    "edits": [
     {
      "op": "set_scalar",
      "path": "returns",
      "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
-     "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
+     "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
+    }
+   ],
+   "date_amended": "2026-10-26"
+  },
+  {
+   "tools": [
+    "lit.stage_add"
+   ],
+   "key": "returns",
+   "reason": "G9（业主 2026-10-27 裁定）：待新增列表要能「补 relevance 不换槽」，且重复登记要**报数**而不是被读侧悄悄少算。`lit.stage_add` 多一格 `updated[]`（同一委托内同一篇命中未判的槽时补进去的那几格字段名；空 = 这一条没有新内容），`lit.stage_list` 多一格 `duplicate_rows` / `duplicate_groups`（同一身份占多槽的行数与分组）。两者都只**加**读数，不改任何既有键的语义；`counts` 的分子分母一个字没动。",
+   "date": "2026-10-27",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'request_id','batch','count','staged'}；staged[] 每项是 {'slot','batch','title'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/bad_entry/store_error) 之一 + 明细",
+     "to": "{'request_id','batch','count','staged','updated'}；staged[] 每项是 {'slot','batch','title'}；updated[] 每项是 {'slot','batch','title'} 再加一格补进去的字段名列表（那格空 = 这一条没有新内容可补，它已经在列表里）；失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/bad_entry/store_error) 之一 + 明细"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "lit.stage_list"
+   ],
+   "key": "returns",
+   "reason": "G9（业主 2026-10-27 裁定）：待新增列表要能「补 relevance 不换槽」，且重复登记要**报数**而不是被读侧悄悄少算。`lit.stage_add` 多一格 `updated[]`（同一委托内同一篇命中未判的槽时补进去的那几格字段名；空 = 这一条没有新内容），`lit.stage_list` 多一格 `duplicate_rows` / `duplicate_groups`（同一身份占多槽的行数与分组）。两者都只**加**读数，不改任何既有键的语义；`counts` 的分子分母一个字没动。",
+   "date": "2026-10-27",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'request_id','current_request_id','batch','status','count','counts','gaps','rows','total_all_delegations','note'}；counts 是 {'pending','withdrawn','rejected','admitted','cleared'} 五个计数；rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year','type_code','summary','url','added_at','relevance','lit_id','admitted_at','reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason','new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)",
+     "to": "{'request_id','current_request_id','batch','status','count','counts','duplicate_rows','duplicate_groups','gaps','rows','total_all_delegations','note'}；duplicate_rows = 落在「同一身份多个槽位」里的行数（只报数，counts 不折算）；duplicate_groups[] 每项给身份与槽位表两格（键名 key / slots；没有重复时是空数组）；counts 的键是 `litstage.CANDIDATE_DECISIONS` 三档，另有两个历史档键（恒为 0 —— 它们已读成 rejected）；rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year','type_code','summary','url','added_at','relevance','lit_id','admitted_at','reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason','new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "attack.create_plan"
+   ],
+   "key": "returns",
+   "reason": "2026-10-27 统一四条立项分支的键集合（成功 / 判重命中 / 预算被拒 / 缺 testable）。被拒那两支配 missing（缺哪几类预算键）/ kind / error / refusal_reason / subgoal_id，成功的两支这几格是空串或空表。理由：声明只有一套键，两套键之间必然有一格「声明了却永远不出现」或「出现了却没声明」。原话见 tools/attack_tools.py 的声明段注释。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'ok','created','plan_id','duplicate','status','budget','subgoals','reason'}",
+     "to": "{'ok','created','plan_id','duplicate','status','budget','subgoals','reason','missing','kind','error','refusal_reason','subgoal_id'}（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，而 status / subgoals 是空读数）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.broadcast",
+    "conductor.escalate",
+    "fs.delete",
+    "fs.edit",
+    "fs.list",
+    "fs.move",
+    "fs.read",
+    "fs.search",
+    "fs.stat",
+    "fs.write",
+    "manuscripts.list",
+    "manuscripts.read",
+    "table.count",
+    "table.create",
+    "table.delete",
+    "table.get",
+    "table.list",
+    "table.schema",
+    "table.search",
+    "table.update"
+   ],
+   "key": "roles",
+   "reason": "L（Lean 形式化者，2026-10-22 新设）要读文件、读表、读 manuscripts、登记关系并收发消息，所以 fs.* 八件、table.* 八件、manuscripts.* 两件、conductor.broadcast 与 conductor.escalate 的 roles 各追加 'L'。这一格是权限面：判据只要求「改了要逐项登记」，不判「该不该给」——后者由 specs/l.py 与 tools/formal_tools.py 的 roles 声明守着。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "append_item",
+     "path": "roles",
+     "item": "L"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.ledger"
+   ],
+   "key": "returns",
+   "reason": "2026-10-27 p209 的「交差」那批读数进了 ledger：多三格 silent_children / silent_children_checked / silent_children_reason —— 「这一趟收到哪几个子代理的交差」与「这一趟有没有查成」是两件事，第三格就是三态里的「没查成」（异常时留类名与原文）。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'view','rows','stats','issues','verify','relays','relay_pending','relay_note','task_count'}；relays[] 每项含 role / wants_role / wants_action / refusal_reason / at / fulfilled / fulfilled_by_task（逐项键名见 `_relay_requests` 的字面量）",
+     "to": "{'view','rows','stats','issues','verify','relays','relay_pending','relay_note','task_count','silent_children','silent_children_checked','silent_children_reason'}；relays[] 每项含 role / wants_role / wants_action / refusal_reason / at / fulfilled / fulfilled_by_task（逐项键名见 `_relay_requests` 的字面量）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.role_spec"
+   ],
+   "key": "params",
+   "reason": "角色名册从 A–H 长到含 V 与 L，role_spec 的参数说明跟上真名册（A–H / V / L）：这一格是读声明面的人唯一能看到的「有哪些角色」。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/role_name/description",
+     "from": "角色名（A–H）",
+     "to": "角色名（A–H / V / L）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.state"
+   ],
+   "key": "returns",
+   "reason": "G2 第 ③ 条（业主 2026-10-26）：conductor.state 多一格 programs —— 盘上的程序进程读数。收工与停车要看它，原来它不在状态读数里，于是「起过什么程序、还活着没有」无处可查。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'root','tables','conjectures','tasks','queues'}",
+     "to": "{'root','tables','conjectures','tasks','queues','programs'}"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.status_report"
+   ],
+   "key": "returns",
+   "reason": "不变量「活跃子代理 ⇒ 必有一条等它的计时器」的读侧判据（Conductor.child_wait_invariant）进了状态报告：child_wait_invariant 逐趟给 by_parent / unwaited / problems。2026-10-27 补线之前它只在测试里活。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'ok','md','json','tables','manuscripts','in_flight','attack_rounds','interjections','next_steps','note'}",
+     "to": "{'ok','md','json','tables','manuscripts','in_flight','attack_rounds','interjections','next_steps','child_wait_invariant','note'}；child_wait_invariant 是不变量『活跃子代理 ⇒ 必有一条等它的计时器』的读侧判据（逐趟给 by_parent / unwaited / problems）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.summon"
+   ],
+   "key": "params",
+   "reason": "召唤的参数说明从「被召唤的角色（A–H）」改成「角色代号（能不能派它、你有哪些出边，见伙伴表）」：能派谁由出边决定，写死一串角色名既不完整、也会随名册增长而过期。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/target_role/description",
+     "from": "被召唤的角色（A–H）",
+     "to": "被召唤的角色代号（能不能派它、你有哪些出边，见伙伴表）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "conductor.summon_many"
+   ],
+   "key": "params",
+   "reason": "同上一条（targets[].target_role 那一格）：被召唤的角色代号，能派谁见伙伴表。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/targets/items/properties/target_role/description",
+     "from": "被召唤的角色（A–H）",
+     "to": "被召唤的角色代号（能不能派它、你有哪些出边，见伙伴表）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "doc.write_mapping"
+   ],
+   "key": "params",
+   "reason": "数值实验定理那一行的证据面：rows[] 每行多六格候选 evidence_kind / evidence_path / evidence_sha256 / numeric_evidence / exhaustion_note / v_signature（证明栏是程序的那几行必填），让映射表能指回 E 写的那份 exhaustion.md 与 V 签的 sha256。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/evidence_kind",
+     "value": {
+      "type": "string",
+      "enum": [
+       "proof",
+       "report"
+      ],
+      "description": "这一行的正文是哪一本：proof（F 的证明）/ report（E 的报告）。数值实验定理那一行填 report"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/evidence_path",
+     "value": {
+      "type": "string",
+      "description": "正文在仓库里的相对路径（如 out/experiments/000000/exhaustion.md）"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/evidence_sha256",
+     "value": {
+      "type": "string",
+      "description": "那份文件字节的 sha256（不是文本归一化之后的）"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/exhaustion_note",
+     "value": {
+      "type": "string",
+      "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/numeric_evidence",
+     "value": {
+      "type": "string",
+      "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/rows/items/properties/v_signature",
+     "value": {
+      "type": "object",
+      "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"
+     }
+    }
+   ]
+  },
+  {
+   "tools": [
+    "doc.write_mapping"
+   ],
+   "key": "returns",
+   "reason": "同一批：返回值点名 numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填 ——缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False），不再只在文档里写。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）",
+     "to": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "lit.admit"
+   ],
+   "key": "returns",
+   "reason": "cleared[] 的语义写清：它是「没进去的那几条」这个读数格，不是状态名。旧读法把它当状态，与 lit.stage_list 的 counts 混为一谈。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/no_target/mixed...) + 三个上限读数",
+     "to": "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/no_target/mixed...) + 三个上限读数"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "lit.admit_all"
+   ],
+   "key": "returns",
+   "reason": "同一批：cleared[] 是读数格不是状态名；并补一句「整批提交」口径下 admitted[] / refused[] / cleared[] 恒空（登记支不可达，理由在工具声明上方那段注释），所以元素形状只在这里用散文说 —— 它们与 lit.admit 同形，机器判据在那一件身上（探针真跑：收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
+     "to": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、overlap_with、new_content 八格；refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；以上三个数组在「整批提交」口径下恒空（登记支不可达，理由见本工具声明上方那段注释），所以元素形状只在这里用散文说：它们与 `lit.admit` 同形，由那一条的声明照旧带引号声明、并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "lit.stage_list"
+   ],
+   "key": "params",
+   "reason": "待新增列表的 status 列举多两档历史档 cleared / withdrawn（读成 rejected）：参数说明跟上，否则读声明的人会以为这两个值不合法。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "add_key",
+     "path": "params/properties/status/description",
+     "value": "`cleared` / `withdrawn` 是历史档（读成 `rejected`），留着只为查历史"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "review.review_document"
+   ],
+   "key": "returns",
+   "reason": "被审的正文换成论文本体（read_paper_body：out/paper/main.tex，退到 main.pdf 的文本层）：返回值多一格 paper_body（本次审的正文 sha256 / 来源 / documents_row），可追溯；documents 只是它的登记行。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated'}",
+     "to": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body'}"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "review.verify_fixes"
+   ],
+   "key": "returns",
+   "reason": "同上：复验也要点名「这一轮审的是哪一份正文」（paper_body），否则无法区分「正文换了」与「发现都没了」。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count'}",
+     "to": "{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count','paper_body'}"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "table.create"
+   ],
+   "key": "params",
+   "reason": "主键改由台账分配（知识实体是六位十进制如 000000，过程记录是 r-/p-/t- 前缀号）：参数说明从「可省略（省略则自动分配）」改成「整格别写」，手写主键有受控拒绝。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/row/description",
+     "from": "行内容；主键可省略（省略则自动分配）",
+     "to": "行内容；主键整格别写（由台账分配：知识实体是六位十进制如 000000，过程记录是 r-/p-/t- 前缀号）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "table.create"
+   ],
+   "key": "returns",
+   "reason": "返回值写清两件事：meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）；被兜底接管那一档 data 是对象（backstop / routed_to / routed_from / state / what_happened / row / id / requested_id / dropped_keys / refused_by_backstop）。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
+     "to": "data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "table.delete"
+   ],
+   "key": "returns",
+   "reason": "同一批：布尔标量那一档不变，补一句「被兜底接管那一档 data 是对象（同上）」——兜底路径的返回形状原来没有声明，读的人只能猜。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "data=是否真的删掉了（**布尔标量，无键集合**）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。",
+     "to": "data=是否真的删掉了（布尔标量）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。被兜底接管那一档 data 是对象（同上）。"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "table.get"
+   ],
+   "key": "params",
+   "reason": "ID 从 4 位改成 6 位十进制（如 000000 / r-000001），旧数据里的 4 位号仍可读：参数说明跟上真格式，否则调用方会按过期位数拼主键。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/id/description",
+     "from": "主键值（4 位字符串，或 r-NNNN）",
+     "to": "主键值（6 位十进制字符串如 `000000`，或 `r-000001`；旧数据里的 4 位号仍可读）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "table.update"
+   ],
+   "key": "returns",
+   "reason": "同一批：meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）；被兜底接管那一档 data 是对象（backstop / state / what_happened / row / refused_by_backstop …）。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
+     "to": "data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "verify.detect_verifier"
+   ],
+   "key": "roles",
+   "reason": "E 的 Lean 侧清场（2026-10-23 晚裁定）：探测检查器不再发给 E（它不再做形式化），roles 从 ('E','F','G','H') 收成 ('F','G','H')。E 的工具面按名枚举里不许有它，由 tests/test_e_has_no_lean_side.py 与 tests/test_l_report_and_seam_matrix.py 守着。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "remove_item",
+     "path": "roles",
+     "item": "E"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "verify.run_experiment"
+   ],
+   "key": "params",
+   "reason": "把两种用途拆开：形式化的 imports / run_name 两格随 Lean 侧归 L 一起删掉（script_path 也不再要求 .lean）；穷举证明的凭据 design / enumeration / exhaustive / search_space 四格加进来 —— 缺任一块，这一条实验只能落 cross_check。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "add_key",
+     "path": "params/properties/design",
+     "value": {
+      "type": "string",
+      "description": "穷举证明的第 ② 块凭据：程序设计思路 —— 要解决什么、按什么结构搜、为什么覆盖全域。原样写进 out/experiments/<实验号>/exhaustion.md 的「程序设计思路」那一段。穷举那一档缺它（或缺 enumeration / exhaustive 任一格）⇒ 这条实验只能落 cross_check（有数值实验支持，不构成证明）"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/enumeration",
+     "value": {
+      "type": "string",
+      "description": "穷举证明的第 ③ 块凭据：穷举论证 —— 搜索空间多大、这个数是怎么算出来的、用了哪些对称性/剪枝、为什么这些剪枝不丢解、边界怎么处理。原样写进 exhaustion.md 的「穷举论证」那一段。缺它 ⇒ 报告三块不齐、这一条落 cross_check 并点名缺「穷举论证」"
+     }
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/exhaustive",
+     "value": {
+      "type": "boolean",
+      "description": "穷尽的判据：只认布尔 true。这一格与 design / enumeration 一起构成穷举证明的凭据，缺一格就落 cross_check。缺省（不给）与 false 都不算 true；\"true\" / 1 也不算 —— 那几档一律落 cross_check（说不清不许读成说过了）"
+     }
+    },
+    {
+     "op": "remove_key",
+     "path": "params/properties/imports",
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "formal：这次检查要加载的库（不给时用检查器的默认值）"
+     }
+    },
+    {
+     "op": "remove_key",
+     "path": "params/properties/run_name",
+     "value": {
+      "type": "string",
+      "description": "formal：要核对的声明名（不给时取 .lean 文件的名词干）"
+     }
+    },
+    {
+     "op": "set_scalar",
+     "path": "params/properties/script_path/description",
+     "from": "工作区内的相对路径（formal 时必须是 .lean）",
+     "to": "工作区内的相对路径"
+    },
+    {
+     "op": "add_key",
+     "path": "params/properties/search_space",
+     "value": {
+      "type": "string",
+      "description": "搜索空间的文字描述（可选）：多大、这个数是怎么算出来的。判定读的是 search_bound（穷举那一档给了证书就必须给）；这一格进 observations.search_space，与脚本自报的同名键不一致时以调用方为准、并在 notes 里留一句。三种都没有 ⇒ 缺搜索空间，落 cross_check"
+     }
+    }
+   ]
+  },
+  {
+   "tools": [
+    "verify.run_experiment"
+   ],
+   "key": "returns",
+   "reason": "同一批：signed_by / proof_authors / report_path / report_sha256 / report_bytes / report_blocks / report_problems 进了返回值 —— 穷举签名的签字主体（V）与 E 写的那份 exhaustion.md 的读数是返回值的一部分，不是旁注。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
+     "to": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
+    }
+   ]
+  },
+  {
+   "tools": [
+    "verify.verify_proof"
+   ],
+   "key": "params",
+   "reason": "proof_text 从必填改成可省：不给（或给空串）时从 statements 里取 proof_no 指的那一份，取到的正文由返回里的 proof_sha256 / proof_chars 给出读数。",
+   "date": "2026-10-26",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/proof_text/description",
+     "from": "待审的证明全文；不给时从 statements 取",
+     "to": "待审的证明全文。可以不给：不给（或给空串）时从 statements 里取 `proof_no` 指的那一份，取到的正文由返回里的 proof_sha256 / proof_chars 给出读数"
+    },
+    {
+     "op": "remove_item",
+     "path": "params/required",
+     "item": "proof_text"
     }
    ]
   }
@@ -4388,7 +5881,6 @@
   "trace.concept": 47,
   "trace.literature": 53,
   "trace.relation": 55,
-  "verify.check_formal": 301,
   "verify.code_hash": 42,
   "verify.detect_verifier": 44,
   "verify.evidence_for": 86,
@@ -4444,19 +5936,27 @@
   "table.delete": [
    "concepts"
   ],
-  "verify.check_formal": [
-   "imports",
-   "script_path",
-   "source"
-  ],
   "verify.code_hash": [
    "sha256"
   ],
   "verify.read_proof": [
    "sha256"
   ],
-  "verify.run_experiment": [
-   "formal"
-  ]
- }
+  "verify.run_experiment": []
+ },
+ "removed_after_compression": {
+  "tools": [
+   "verify.check_formal"
+  ],
+  "reason": "2026-10-23 晚裁定：E 的 Lean 侧整条清场，verify.check_formal 不是收成 roles=()而是整条删除；形式化入口变成 L 的 formal.formalize / formal.check_formal / formal.record，桥接层的函数实体 VT.check_formal 仍在（L 经它取检查器原话）。这一条登记的是「这一行从声明面退场」，不是「契约可以随便少一件」：守它的判据是 tests/test_e_has_no_lean_side.py 与 tests/test_l_report_and_seam_matrix.py::test_f16_...。",
+  "date": "2026-10-26"
+ },
+ "retired_needles": [
+  {
+   "tool": "verify.run_experiment",
+   "needle": "formal",
+   "date": "2026-10-26",
+   "reason": "这条 needle 的来源断言（assert \"formal\" in <声明面>）随 E 的形式化侧清场一起退场（2026-10-23 晚裁定），同一收集口径再也收不出它 ——退役的是那条断言，不是说明里的字（summary 里那串字还在）。"
+  }
+ ]
 }

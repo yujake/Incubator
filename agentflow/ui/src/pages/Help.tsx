@@ -340,7 +340,9 @@ export function Help() {
         <div class="readings">
           <b>绝对编号</b>：<span class="mono">task_id</span> 是这一套的主键（形如
           <span class="mono">t-000002</span>）；名册名 <span class="mono">name</span> 一经退役永久不复用，
-          根不在任何人的名册里 ⇒ 它的名字是空串（面板写"顶层·无名册名"）。
+          根不在任何人的名册里 ⇒ 它的名字固定是主控（读侧补成
+          <span class="mono">M</span>，那一格不是名册分配的，<span class="mono">roster_add</span>
+          改不了它）。
         </div>
         <div class="readings">
           <b>收件箱</b>：<span class="mono">data/tasks.json</span> 里

@@ -3,7 +3,7 @@
 十个角色的 system prompt 里，工具声明是最大的一块静态文本（实测 G 的工具面 4 237 字符 / 提示词 37 093 字符，而 function-calling 的声明 JSON 是 26 117 字符 = 70.4%）。那一批只压 `summary` 一格
 —— 参数 schema、`returns`、`side_effect`、`roles` 都是契约，一个字没动；`summary` 从「一段长文」压到「一两句」，保留做什么 / 什么时候用 / 关键约束，删掉为什么这么设计、历史沿革、长例子与重复
 `returns` 的返回键清单。
-判据守的是「压缩那一批的说明不得回涨」：86 件的名单冻结在基线 `compression_cohort`，比例只在 cohort 上算（现总量 ≤ 基线 75%）。2026-10-20 新增的 8 件（`lit.stage_add` / `lit.stage_list` /
+判据守的是「压缩那一批的说明不得回涨」：85 件的名单冻结在基线 `compression_cohort`，比例只在 cohort 上算（现总量 ≤ 基线 75%）。2026-10-20 新增的 8 件（`lit.stage_add` / `lit.stage_list` /
 `lit.stage_withdraw` / `lit.stage_reject` / `lit.overlap_check` / `lit.admit` / `lit.admit_all` / `conductor.escalate`）没被压过，
 算进分子分母等于要求新工具自带压缩配额（全库口径 84.1% 会红）。这口径不是放宽：分母 `baseline_summary_chars` 必须逐件等于 `summary_lens_before` 之和，少算一件 `cohort_ratio` 直接抛 `ValueError`。
 四条判据各自只证明一件事：① `test_declaration_contracts_are_unchanged` 与 `tests/fixtures/tool_declaration_baseline.json` 里压缩前那份逐键比（`params` / `returns` /
@@ -12,6 +12,11 @@
 `test_every_asserted_literal_survives` 要求 `assert X in <声明面>` 的每条 needle 都还在（不可字面量化的两条由 `test_tool_summary_readings.py` 等守着）。
 契约会合法演进：本轮枚举新增 `lit_candidates`（16 → 17 张表），`table.count` / `create` / `delete` / `get` / `list` / `search` / `update` 七件的 `params` 各变两处，
 处置是把基线重冻并留 `reason` + 逐项编辑清单（内容寻址：差异要变成 `value_edits` 并与某条 `amendments` 的 `tools` / `key` / `edits` 逐项相等，改另一个枚举值或只动「N 张表之一」都对不上）。
+2026-10-26 又重冻过一次（人逐格看过才写的）：`verify.check_formal` 按 2026-10-23 晚的裁定整条退场（真身迁到
+`formal.check_formal`），它那条登记与它的 needle / cohort 名额一起退出，退场理由另记在 `removed_after_compression`；
+20 件新工具（`clock.*` 九件、`conductor.*` 五件、`formal.*` 三件、`program.*` 两件、`trace.children`）登记为
+`added_after_compression`；26 件老工具的 46 处契约演进各补一条带 `reason` 的 `contract_amendments`。
+`MAX_RATIO` 一个字没动 —— 台账只记「改了什么、为什么」，不负责把门槛调松。
 每条负控打在同一条判据函数上：改参数名 / 删 `returns` 键 ⇒ ① 红（`test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red`）；偷改 `table.create` 枚举 ⇒
 ① 红（`test_negative_control_a_silent_table_enum_edit_goes_red`）；塞回 200 字论述 ⇒ ② 红（`test_negative_control_putting_a_long_essay_back_goes_red`）；
 删掉 `lit.admit` 那一行 ⇒ ③ 红（`test_negative_control_an_unregistered_new_tool_goes_red`）；删一条 needle ⇒ ④
@@ -670,8 +675,13 @@ def test_every_asserted_literal_survives(current: dict[str, dict], frozen: dict)
 
 
 def test_the_two_semantic_pins_hold(current: dict[str, dict]) -> None:
-    """语义钉子：`verify.check_formal` 的「真跑」还在；`search.download` 的失败类别与 A 手册相等。"""
-    cf = current["verify.check_formal"]["summary"]
+    """语义钉子：`verify.check_formal` 的「真跑」还在；`search.download` 的失败类别与 A 手册相等。
+
+    这一颗钉子跟着工具走过一次：2026-10-23 晚的裁定把形式化入口从 E 挪到 L，
+    `verify.check_formal` 整条删除、真身是 `formal.check_formal`。钉的是「说明里写着它真跑检查器」
+    这件事，不是某个名字 —— 名字换了，钉子跟着换，判据强度不变（「未接线」那一半照旧反着钉）。
+    """
+    cf = current["formal.check_formal"]["summary"]
     assert "真跑" in cf, "`verify.check_formal` 的说明不再写「真跑」⇒ 模型会以为它只是登记"
     assert "未接线" not in cf, "它已经接线了，说明里不许再写「未接线」"
 

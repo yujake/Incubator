@@ -50,6 +50,25 @@
 `clock.request_wait_any`，模型面上没有这一格；工具只写意图与交回读数，挂机与否的判定仍在
 `agent_loop._park_gate` 一处 (工具不做控制流)。
 
+## 程序两件（G1，业主 2026-10-26）
+
+| 工具 | 作用 |
+|---|---|
+| `program.list` | 我这一趟起的程序还在跑的有哪几个（pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的） |
+| `program.stop` | 停掉我名下的一个（或全部）：先宽限、再真杀，然后按 `outcome="killed"` 收口并唤醒等它的人 |
+
+为什么不叫 `clock.program_list` / `clock.program_stop`（业主原话是"名称你来定"）：
+`clock.*` 恰好九件是一条被钉住的判据（`tests/test_clock_governs_all_timed_work.py`
+的 `CLOCK_NINE`，写死只读角色 C/H/V 面上也是九件）。程序这两件的轴不是"计时"而是
+"我起的进程"：`program.stop` 是 `write_local`，只读角色按副作用就该拿不到它
+（`tools/__init__.py` 的 `UNIVERSAL_TOOLS` 不在本批可改范围），挂进 `clock.` 会让那条
+"恰好九件"的判据只剩改宽这一条路。分一个组，那条判据原样成立。
+
+业主原话（唯一权威）：`「重点完善子代理杀自己发出去的程序进程的工具（由于计时器监控着那些
+程序，我想实现起来不会太难），以及注销前检测的能力」`。两件的分工就是这句话的两半：
+`program.list` 是"注销前检测"（交差/销号之前先看自己还有没有程序在跑），
+`program.stop` 是"杀自己发出去的那个进程"（计时器那条账一并收口，等它的人被叫醒）。
+
 ## 到点消息的格式（业主定死，唯一拼法在 `clock.due_message`）
 
     时间到：<目的>｜等了 <时长>（起于 <HH:MM:SS>，到于 <HH:MM:SS>）
@@ -118,15 +137,23 @@ from dataclasses import replace
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .. import clock as C
 from .. import schema as S
-from ..conductor import current_caller_role, current_task_id
+from ..conductor import clock_waiters, current_caller_role, current_task_id
+from . import READ_ONLY_ROLES
 from .base import ToolRegistry, ToolResult, fail, ok, tool
 
 #: 九件工具挂给全部角色 + 主控。业主口径是"通用工具"，不是某一角色的专有能力。
 _ROLES_ALL: tuple[str, ...] = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
+
+#: 写工具能挂的角色面：只读角色（C/H/V）不声明 —— 与 `conductor_tools.conductor_broadcast`
+#: 同一个口径。声明了再让 `for_role` 剥掉会被 `cli tools` 报成"声明错误"
+#: （`role_filter_notes` 非空），而那份说明里逐字写着"行为上已被拦下，但声明本身应改"。
+#: 只读角色本来也起不了程序（它们没有写工具），所以"停程序"对它们无处可用。
+_ROLES_WRITE: tuple[str, ...] = tuple(r for r in S.ROLES if r not in READ_ONLY_ROLES) \
+    + (S.CONDUCTOR_ROLE,)
 
 #: 到点消息的逐字前缀：一次性的是 `时间到：`，周期性巡查的是 `巡查时间到：`。
 #:
@@ -398,6 +425,237 @@ def _target_probe(workspace: str, kind: str, ref: str) -> dict[str, Any]:
     out["closed"] = closed
     out["why"] = f"{ref} → {task_id}：{why2}"
     return out
+
+
+# ---------------------------------------------------------------- 异常清单的读口
+#
+# 业主 2026-10-26（逐字）：「这个是M定期巡查需要特别注意的异常行为，M可通过发送指导意见干预」。
+#
+# 这一段把"当拍现算的异常清单"从账上读出来，交给 `clock.patrol_text` 拼进巡查报醒。
+# 三条纪律：
+#
+# 1. 复用不复制：静默与停滞两类只用 `conductor.agent_state`（经 `retire_integrity` 那份
+#    唯一实现一次算完整棵树，`stalled` / `stalled_sec` 就是它那两格），未消板项只用
+#    `Conductor.open_items_by_parent`（`open_items_of(tid)` 就是它按父取的那一格），
+#    不在这里写第二份判据；
+# 2. 三态：每一类各有 `checked` / `reason`，查不成的写"条数读不到"，绝不折成 0；
+# 3. 停滞不另定阈值：阈值与"最近一步"都在 `agent_state` 那一侧（`STALLED_AFTER_SEC` /
+#    `out/steps/<台账号>.json`），这里只把它的 `stalled_sec` 与阈值一起念出来。
+
+
+def _borrowed_conductor(store: Any) -> Any:
+    """借这个工作区"已经存在"的主控实例；没有就 `None`（绝不顺手建一个空壳）。"""
+    try:
+        from .conductor_tools import cached_conductor
+
+        return cached_conductor(store)
+    except Exception:  # noqa: BLE001 - 借不到就按"没有主控"如实报
+        return None
+
+
+def _stalled_cell(nodes: Sequence[Mapping[str, Any]],
+                  wait: Mapping[str, Any]) -> dict[str, Any]:
+    """① 停滞子：直接读 `retire_integrity` 节点上那两格（`stalled` / `stalled_sec`）。
+
+    判据本体只有一处：`conductor.agent_state`（经 `retire_integrity` 的 `agent_states`
+    一次算完整棵树），输入是 `out/steps/<台账号>.json` 那一刻与阈值
+    `conductor.STALLED_AFTER_SEC`。这里不写第二份 —— 不在 clock 里另算一遍"最近一步
+    多久以前"，也不自己定一个 N。
+
+    三态：步进落痕读不成（`wait["stall_checked"]` 为假）=> 这一格 `checked=False`
+    （"判不了停滞"），绝不折成 0（0 说的是"查过了，一个停滞的都没有"）。
+    """
+    if not wait.get("stall_checked"):
+        return {"checked": False, "count": None, "rows": [],
+                "reason": str(wait.get("stall_reason")
+                              or "步进落痕读不成 => 停滞判不了（不是「没有停滞」）")}
+    try:
+        threshold = float(wait.get("stall_threshold_sec") or 0.0) or None
+    except (TypeError, ValueError):
+        threshold = None
+    beats = dict(wait.get("stall_by_task") or {})
+    rows: list[dict[str, Any]] = []
+    for node in nodes:
+        if not node.get("stalled"):
+            continue
+        tid = str(node.get("task_id") or "")
+        beat = dict(beats.get(tid) or {})
+        rows.append({"task_id": tid, "role": str(node.get("role") or ""),
+                     "status": str(node.get("status") or ""),
+                     "stalled_sec": node.get("stalled_sec"),
+                     "last_step_at": str(beat.get("at") or ""),
+                     "last_step_no": beat.get("step")})
+    return {"checked": True, "count": len(rows), "rows": rows, "reason": "",
+            "threshold_sec": threshold}
+
+
+def _open_items_cell(box: Any, tree: Mapping[str, Any],
+                     root_task_id: str) -> dict[str, Any]:
+    """③ 未消板项：这一支名下的板项行里 `item_state != done` 的条数，按 expect 分两档。"""
+    try:
+        by_parent = dict(box.open_items_by_parent())
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        return {"checked": False, "count": None, "ack": None, "work": None,
+                "rows": [], "reason": f"未消板项读不成：{type(exc).__name__}: {exc}"}
+    mine = {str(root_task_id or "")}
+    for key in ("nodes", "dirty"):
+        for node in tree.get(key) or ():
+            tid = str((node or {}).get("task_id") or "")
+            if tid:
+                mine.add(tid)
+    rows: list[dict[str, Any]] = []
+    for parent, items in by_parent.items():
+        if str(parent or "") not in mine:
+            continue
+        for item in items or ():
+            item = dict(item or {})
+            rows.append({"task_id": str(item.get("task_id") or ""),
+                         "expects": str(item.get("expects") or ""),
+                         "item_state": str(item.get("item_state") or ""),
+                         "kind": str(item.get("kind") or "")})
+    ack = sum(1 for r in rows if r["expects"] == "ack")
+    work = sum(1 for r in rows if r["expects"] == "work")
+    return {"checked": True, "count": len(rows), "ack": ack, "work": work,
+            "other": len(rows) - ack - work, "rows": rows, "reason": ""}
+
+
+def _refusal_cell(root: Path) -> dict[str, Any]:
+    """④ 被拦的结项原因：这一段工作区里最近一次 `final_refused` 的拒信首句。
+
+    读的是会话记录（唯一落点：`agent_loop` 在 `shape == "final"` 那一支把
+    `{"final_refused": {...}}` 落进这一步的结果，并可能以 `stop_reason="final_refused"`
+    收这一趟）。`count` 是这一段里被拦过的总次数，`rows` 只放最近那一条（报醒要的是
+    "最近一次"和它的首句，不是整份拒信）。
+    """
+    from .. import sessions as SS
+
+    try:
+        sids = [str(x.get("sid") or "") for x in SS.list_sessions(root)]
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        return {"checked": False, "count": None, "rows": [],
+                "reason": f"会话目录读不成：{type(exc).__name__}: {exc}"}
+    if not [s for s in sids if s]:
+        return {"checked": True, "count": 0, "rows": [],
+                "reason": "这一段工作区还没有会话记录 => 没被拦过（查过了）"}
+    hits: list[dict[str, Any]] = []
+    bad = 0
+    for sid in sids:
+        if not sid:
+            continue
+        events, problems = SS.read_session(root, sid=sid)
+        bad += len(problems)
+        for event in events:
+            kind = str(event.get("kind") or "")
+            stamp = str(event.get("ts") or "")
+            if kind == "agent_step":
+                result = event.get("result")
+                result = dict(result) if isinstance(result, Mapping) else {}
+                gate = result.get("final_refused")
+                if isinstance(gate, Mapping):
+                    hits.append({"kind": "final_refused",
+                                 "text": str(gate.get("why") or result.get("why") or ""),
+                                 "at": stamp,
+                                 "task_id": str(gate.get("root") or "")})
+            elif kind == "agent_run_end" \
+                    and str(event.get("stop_reason") or "") == "final_refused":
+                notes = [str(x) for x in (event.get("notes") or ()) if str(x or "").strip()]
+                text = next((n for n in notes if "还没销号" in n), notes[0] if notes else "")
+                hits.append({"kind": "final_refused", "text": text, "at": stamp,
+                             "task_id": str(event.get("task_id") or "")})
+    if bad and not hits:
+        return {"checked": False, "count": None, "rows": [],
+                "reason": f"会话有 {bad} 行读不出来、且没读到任何拒信"}
+    if not hits:
+        return {"checked": True, "count": 0, "rows": [], "reason": ""}
+    hits.sort(key=lambda r: str(r.get("at") or ""))
+    latest = dict(hits[-1])
+    latest["text"] = str(latest.get("text") or "")
+    latest["occurrences"] = len(hits)
+    return {"checked": True, "count": len(hits), "rows": [latest], "reason": ""}
+
+
+def _patrol_probe(workspace: str, task_id: str = "") -> dict[str, Any]:
+    """`clock.set_patrol_probe` 的读口：当拍现算的四类异常（装配期由 `register` 接上）。
+
+    口径与三态：
+
+    - 没有 store / 没有主控实例 / 名下的树读不成 => 整份 `checked=false` 加理由
+      （报醒会写"异常清单没查成"，绝不写"本轮无异常"）；
+    - 每一类各自带 `checked` / `count` / `rows` / `reason`（`open_items` 另带 ack / work）；
+    - ② 静默未销号的子取 `retire_integrity` 的 `nodes` 里 `state == "silent"` 的那些：
+      `retire_integrity` 的 `nodes` 按定义就是"还在册"（已销号的落 `dirty`），所以
+      "不是 retired"这一条由它保证，这里不另判一次。
+    """
+    root = Path(str(workspace))
+    reading = C.now()
+    stamp = C.iso(reading.wall) if reading.wall is not None else ""
+    blank: dict[str, Any] = {"checked": False, "count": None, "rows": [], "reason": ""}
+    out: dict[str, Any] = {"checked": False, "reason": "", "at": stamp, "task_id": str(task_id),
+                           "stalled": dict(blank), "silent": dict(blank),
+                           "open_items": {**blank, "ack": None, "work": None},
+                           "refusals": dict(blank)}
+    # ④ 与台账无关（它读会话），先读：台账坏了也不该让这一格跟着变成"没有"。
+    out["refusals"] = _refusal_cell(root)
+    store = _binding(workspace).get("store")
+    if store is None:
+        out["reason"] = "这个工作区没有绑定 store => 台账读不成（不许读成「本轮无异常」）"
+        return out
+    box = _binding(workspace).get("conductor") or _borrowed_conductor(store)
+    if box is None:
+        out["reason"] = ("没有主控实例 => 名下的树、未消板项与销号读数都读不了"
+                         "（这不是「本轮无异常」）")
+        return out
+    me = str(task_id or "")
+    if not me:
+        out["reason"] = "这条巡查没有台账号 => 不知道要看哪一棵树（不猜）"
+        return out
+    try:
+        tree = box.retire_integrity(me)
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        out["reason"] = f"名下的树没读成：{type(exc).__name__}: {exc}"
+        return out
+    if not tree.get("checked"):
+        out["reason"] = f"名下的树没读成（{str(tree.get('reason') or '没给理由')}）"
+        return out
+    nodes = [dict(n) for n in (tree.get("nodes") or ()) if isinstance(n, Mapping)]
+    silent_rows = [{"task_id": str(n.get("task_id") or ""),
+                    "role": str(n.get("role") or ""),
+                    "status": str(n.get("status") or ""),
+                    "why": "无工作、无计时器、无活跃子，却还留在册上"}
+                   for n in nodes if str(n.get("state") or "") == "silent"]
+    out["silent"] = {"checked": True, "count": len(silent_rows), "rows": silent_rows,
+                     "reason": ""}
+    # 停滞那一格要的那份读数是 `clock_waiters` 里的 `stall_*`（与 `retire_integrity`
+    # 同一次三态的三个输入之一）。再读一次是刻意的：它带 `stall_checked`（三态位），
+    # 而 `retire_integrity` 的节点上只有结论、没有"这一次判没判得成"。
+    try:
+        wait = clock_waiters(root)
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        wait = {"stall_checked": False,
+                "stall_reason": f"时钟/步进落痕读数抛了 {type(exc).__name__}: {exc}"}
+    out["stalled"] = _stalled_cell(nodes, wait)
+    out["open_items"] = _open_items_cell(box, tree, me)
+    out["checked"] = True
+    return out
+
+
+def _patrol_reading(workspace: str | Path, *, task_id: str = "") -> dict[str, Any]:
+    """`clock.periodic_start` 交回去的那一格：这一条巡查的报醒会带什么（含一份样例文本）。
+
+    为什么起表时就要给：M 只有在起表那一刻看得见"到点那一条会带哪几类清单"，才谈得上
+    判断这条巡查值不值得一直跳。三态与 `clock.patrol_anomalies` 同源（同一份读数）。
+    """
+    got = C.patrol_anomalies(workspace, task_id=task_id)
+    counts: dict[str, Any] = {}
+    for key in ("stalled", "silent", "open_items", "refusals"):
+        cell = got.get(key) if isinstance(got.get(key), Mapping) else {}
+        counts[key] = {"checked": bool(cell.get("checked")),
+                       "count": cell.get("count")}
+    return {"checked": bool(got.get("checked")),
+            "reason": str(got.get("reason") or ""),
+            "at": str(got.get("at") or ""),
+            "counts": counts,
+            "wake_sample": C.patrol_section(workspace, task_id=task_id, anomalies=got)}
 
 
 def _open_mailbox_item(store: Any, timer: C.Timer, recipient: Mapping[str, Any],
@@ -926,13 +1184,23 @@ def clock_alarm_start(store: Any, root: Any, conductor: Any, *, at: str,
     returns=("{'periodic_id','every_sec','purpose','fires','next_at','stopped_reason',"
              "'purpose_missing','purpose_prompt','state','to','task_id','role','created_at',"
              "'last_fired_at','remaining_sec','until_sec','wait_for','wait_for_resolved',"
-             "'wait_state','stopped_at','last_message','clock_status'}"),
+             "'wait_state','stopped_at','last_message','clock_status','patrol_checklist'}"),
     tags=("clock", "periodic", "communication"),
 )
 def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: float,
                          purpose: str = "", until_sec: float | None = None,
                          wait_for: str = "", to: str = "self") -> ToolResult:
-    """起周期性巡查。every_sec 不是正数 / 收件人不存在 => 受控失败，零写入。"""
+    """起周期性巡查。every_sec 不是正数 / 收件人不存在 => 受控失败，零写入。
+
+    交回去的读数是 `_periodic_payload` 加一格 `patrol_checklist`：这一条巡查每一次报醒会
+    带哪四类异常、各自几条，以及一段"样例报醒文本"（`wake_sample`）。起表那一刻就让 M
+    看见"到点它会收到什么"，否则这条巡查值不值得一直跳就只能靠猜。
+
+    `patrol_checklist` 这一格进 `returns=` 声明（2026-10-26 的 p210 重冻一并补上）：那一份声明
+    此前被 `tests/golden/tool_surface_snapshot.json` 逐字钉住（FC-27 禁改区，重冻要两名
+    reviewer），所以它一直是"给了但没声明"的那一档；重冻之后声明与实现同形，
+    `tests/test_tools_returns_declaration.py` 两向都验。
+    """
     workspace = _resolve_root(root, store)
     _bind(workspace, store, conductor)
     try:
@@ -949,7 +1217,10 @@ def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: fl
         return fail(str(exc), kind="not_found", checked=True)
     except C.ClockStateError as exc:
         return fail(str(exc), kind="unreadable", checked=False)
-    return ok(_periodic_payload(periodic), periodic_id=periodic.periodic_id)
+    payload = _periodic_payload(periodic)
+    payload["patrol_checklist"] = _patrol_reading(
+        workspace, task_id=str(recipient["task_id"]))
+    return ok(payload, periodic_id=periodic.periodic_id)
 
 
 @tool(
@@ -1076,35 +1347,46 @@ def clock_timer_purpose(store: Any, root: Any, *, entry_id: str,
     tags=("clock", "timer", "read"),
 )
 def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> ToolResult:
-    """读计时器与唤醒标记。读不成 => checked=False（不是"没有计时器"）。"""
+    """读计时器与唤醒标记。读不成 => checked=False（不是"没有计时器"）。
+
+    四条分支（正常 / 读不出计时器 / 读不出挂机等待者 / 读不出周期性巡查）的顶层键集合
+    逐字相同（2026-10-26，与 `attack.create_plan` 2026-10-27 统一那四条分支同法）：
+    读不出的那一格给空值，不删声明 —— 缺键会让调用方读 `data["periodics"]` 时拿到
+    KeyError，而"这一格读不出来"本来是一句能说清的话。哪几格没读成由 `checked` 与
+    `reason` 交代；空值（`[]` / `0` / `null`）只表示"这一格没有数据"，不表示
+    "查过了、什么都没有"。
+
+    判据：`tests/test_clock_timer_list_branches_agree.py`。
+    """
     workspace = _resolve_root(root, store)
     reading = C.now()
+    checked = True
+    problems: list[str] = []
     try:
         all_timers = C.timers(workspace)
     except C.ClockStateError as exc:
-        return ok({
-            "checked": False, "clock": "agentflow.clock", "status": reading.status,
-            "wall": reading.to_dict()["wall"], "monotonic": reading.monotonic,
-            "timers": [], "count": 0, "pending_count": 0, "fired_count": 0,
-            "cancelled_count": 0, "pending_wakes": 0, "wakes_checked": False,
-            "reason": str(exc),
-        })
+        all_timers, checked = [], False
+        problems.append(f"计时器读不成：{exc}")
     shown = [t for t in all_timers if include_done or t.state == "pending"]
     rows = [t.row(reading) for t in shown]
     wakes = C.read_wakes(workspace)
     try:
         park = C.waiters(workspace)
+    except C.ClockStateError as exc:
+        # `parked` 给 None 不给 0：0 是"查过了、没人挂在时钟上"那个结论（三态）。
+        park, checked = {"waiters": [], "parked": None}, False
+        problems.append(f"挂机等待者读不成：{exc}")
+    try:
         periodic_rows = [p.row(reading) for p in C.periodics(workspace)]
     except C.ClockStateError as exc:
-        return ok({
-            "checked": False, "clock": "agentflow.clock", "status": reading.status,
-            "wall": reading.to_dict()["wall"], "monotonic": reading.monotonic,
-            "timers": rows, "count": len(rows), "periodics": [], "waiters": [],
-            "pending_wakes": 0, "wakes_checked": False, "reason": str(exc),
-        })
+        periodic_rows, checked = [], False
+        problems.append(f"周期性巡查读不成：{exc}")
     observed = C.observed_events()
+    reason = str(wakes.get("reason") or "")
+    if problems:
+        reason = "；".join(problems + ([reason] if reason else []))
     return ok({
-        "checked": True,
+        "checked": checked,
         "clock": "agentflow.clock",
         "status": reading.status,
         "wall": reading.to_dict()["wall"],
@@ -1113,15 +1395,15 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
         "count": len(rows),
         "periodics": periodic_rows,
         "periodic_count": len(periodic_rows),
-        "waiters": park["waiters"],
-        "waiters_parked": park["parked"],
+        "waiters": list(park.get("waiters") or []),
+        "waiters_parked": park.get("parked"),
         "pending_count": sum(1 for t in all_timers if t.state == "pending"),
         "fired_count": sum(1 for t in all_timers if t.state == "fired"),
         "cancelled_count": sum(1 for t in all_timers if t.state == "cancelled"),
         "pending_wakes": int(wakes.get("count") or 0) if wakes.get("checked") else 0,
         "wakes_checked": bool(wakes.get("checked")),
         "observed_events": observed["counts"],
-        "reason": str(wakes.get("reason") or ""),
+        "reason": reason,
     })
 
 
@@ -1263,6 +1545,284 @@ def clock_wait_any(store: Any, root: Any, *, purpose: str = "") -> ToolResult:
 
 
 #: 工具与它需要的装配期依赖（`register` 只按位置把依赖绑上去）。
+# ---------------------------------------------------------------- 程序两件（G1）
+
+#: `program.list` 里 `unowned` 那一桶最多逐项列几条。
+#:
+#: 为什么要上限：改前的存量是 1420 条空归属的程序计时器（真机读数），`include_done=true`
+#: 一读就会把这一千多行塞进模型的上下文。条数（`unowned_count`）永远是全量实数，
+#: 只截断逐项清单，并单列 `unowned_shown` 让人看得见"列了几条、一共几条"。
+UNOWNED_SHOWN: int = 50
+
+#: 程序那一行的读数格：`program_row()` 的格 + 这一批加的三格现场读数。
+#:
+#: `age_sec`：从登记到现在过了多久（`Timer.waited_seconds`，读不到时钟时是 null）。
+#: `alive`：这个 pid 现在还在不在（`process_alive`，三态：没有 pid 时是 null ——
+#: "没有 pid"与"进程没了"必须分得开，否则"账上少一格"会被读成"它已经退出了"）。
+#: `owner`：这一条归谁（`program_owner`：台账号 / 角色 / 有没有归属）。
+
+
+def _program_line(timer: C.Timer) -> dict[str, Any]:
+    """一行程序读数（`program.list` 的 items 就是它的数组）。"""
+    row = dict(timer.program_row())
+    row["age_sec"] = timer.waited_seconds()
+    pid = timer.pid
+    row["alive"] = (C.process_alive(int(pid))
+                    if isinstance(pid, int) and int(pid) > 0 else None)
+    row["owner"] = C.program_owner(timer)
+    return row
+
+
+def _program_note(mine: Sequence[Mapping[str, Any]], unowned: Sequence[Mapping[str, Any]],
+                  others_running: int, *, unowned_count: int = 0,
+                  unowned_shown: int = 0) -> str:
+    """`program.list` 的那句读数（交差/销号前自查要能一句话看懂）。"""
+    running = [r for r in mine if str(r.get("state") or "") == "pending"]
+    bits: list[str] = []
+    if running:
+        pids = "、".join(str(r.get("pid")) for r in running)
+        bits.append(f"我名下还有 {len(running)} 个程序在跑（pid {pids}）—— "
+                    "交差或销号之前先 program.stop（或者说明它们为什么该继续跑）")
+    else:
+        bits.append("我名下没有还在跑的程序（查过了，不是没查成）")
+    if unowned_count:
+        bits.append(f"；另：账上有 {unowned_count} 条没有归属的旧程序行"
+                    "（改前那批：它们不归任何人，既不算我的，也不会被我停掉）")
+        if unowned_shown < unowned_count:
+            bits.append(f"（这里只逐项列了前 {unowned_shown} 条）")
+    if others_running:
+        bits.append(f"；别人的程序在跑的有 {others_running} 个（不列细节）")
+    return "".join(bits)
+
+
+@tool(
+    "program.list",
+    "列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / "
+    "已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。"
+    "空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。"
+    "这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。"
+    "所有角色都能用。",
+    {"type": "object",
+     "properties": {
+         "include_done": {"type": "boolean",
+                          "description": "是否含已经收口的程序行（缺省否：只看还在跑的）"},
+     },
+     "required": [], "additionalProperties": False},
+    side_effect="read",
+    roles=_ROLES_ALL,
+    returns=("{'checked','task_id','role','programs','count','running','unowned',"
+             "'unowned_count','unowned_shown','unowned_running','others','others_running',"
+             "'include_done','retire_ready','note','reason'}"),
+    tags=("clock", "program", "read"),
+)
+def program_list(store: Any, root: Any, *, include_done: bool = False) -> ToolResult:
+    """我名下的程序读数（三态：簿记读不成 => checked=False，不是"没有程序在跑"）。"""
+    workspace = _resolve_root(root, store)
+    task_id = str(current_task_id() or "")
+    role = str(current_caller_role() or "")
+    try:
+        got = C.programs_owned(workspace, task_id=task_id, role=role,
+                               include_done=bool(include_done))
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        got = {"checked": False, "mine": [], "unowned": [], "others": 0,
+               "others_running": 0, "count": 0, "running": 0,
+               "reason": f"程序计时器读不成：{type(exc).__name__}: {exc}"}
+    mine = [_program_line(t) for t in (got.get("mine") or ())]
+    unowned_all = [_program_line(t) for t in (got.get("unowned") or ())]
+    unowned = unowned_all[:UNOWNED_SHOWN]
+    running = sum(1 for r in mine if str(r.get("state") or "") == "pending")
+    unowned_running = sum(1 for r in unowned_all if str(r.get("state") or "") == "pending")
+    checked = bool(got.get("checked"))
+    return ok({
+        "checked": checked,
+        "task_id": task_id,
+        "role": role,
+        "programs": mine,
+        "count": len(mine),
+        "running": running,
+        "unowned": unowned,
+        "unowned_count": len(unowned_all),
+        "unowned_shown": len(unowned),
+        "unowned_running": unowned_running,
+        "others": int(got.get("others") or 0),
+        "others_running": int(got.get("others_running") or 0),
+        "include_done": bool(include_done),
+        # 注销前检测的那一格：三态（None = 没查成，绝不折成"可以销号"）。
+        "retire_ready": (None if not checked else running == 0),
+        "note": ("" if not checked else
+                 _program_note(mine, unowned, int(got.get("others_running") or 0),
+                               unowned_count=len(unowned_all),
+                               unowned_shown=len(unowned))),
+        "reason": str(got.get("reason") or ""),
+    })
+
+
+#: `program.stop` 那一份 `data` 的唯一形状（受控拒绝、找不到、真停，三档共用）。
+#: 声明（`returns=`）与实现在这里只有一处来源，`test_tools_returns_declaration` 两向都验。
+def _program_stop_payload(**kw: Any) -> dict[str, Any]:
+    """把逐条读数与汇总装成同一份形状（每一档都给全键，缺的那档是 0 / 空表）。"""
+    items = list(kw.get("items") or ())
+    counts = {code: sum(1 for r in items if str(r.get("result") or "") == code)
+              for code in C.PROGRAM_STOP_RESULTS}
+    killed = int(counts.get("killed") or 0)
+    still_alive: list[int] = []
+    for row in items:
+        for pid in (row.get("still_alive") or ()):
+            if int(pid) not in still_alive:
+                still_alive.append(int(pid))
+    woken = sum(int(r.get("woken") or 0) for r in items)
+    bits = [f"我杀了 {killed} 个自己的程序"]
+    if counts.get("already_exited"):
+        bits.append(f"{counts['already_exited']} 个早就结束了（already_exited：查过了，不是第二次杀掉）")
+    if counts.get("timeout"):
+        bits.append(f"{counts['timeout']} 个杀不动（timeout：还在跑的 pid "
+                    + "、".join(str(p) for p in still_alive) + "）")
+    if counts.get("not_mine"):
+        bits.append(f"{counts['not_mine']} 个不是我的（not_mine：一个进程都没碰）")
+    if counts.get("not_found"):
+        bits.append(f"{counts['not_found']} 个查不到可停的对象（not_found）")
+    if woken:
+        bits.append(f"等它们的 {woken} 条计时器已经被叫醒")
+    return {
+        "checked": bool(kw.get("checked", True)),
+        "task_id": str(kw.get("task_id") or ""),
+        "role": str(kw.get("role") or ""),
+        "mode": str(kw.get("mode") or ""),
+        "requested": list(kw.get("requested") or ()),
+        "stopped": killed,
+        "killed": killed,
+        "already_exited": int(counts.get("already_exited") or 0),
+        "timeout": int(counts.get("timeout") or 0),
+        "not_mine": int(counts.get("not_mine") or 0),
+        "not_found": int(counts.get("not_found") or 0),
+        "count": len(items),
+        "items": items,
+        "still_alive": still_alive,
+        "woken": woken,
+        "note": "" if not items else "；".join(bits),
+        "session_event": str(kw.get("session_event") or ""),
+        "reason": str(kw.get("reason") or ""),
+        "clock_status": str(kw.get("clock_status") or ""),
+    }
+
+
+def _program_stop_session(workspace: str | Path, *, task_id: str, role: str,
+                          note: str, items: Sequence[Mapping[str, Any]]) -> str:
+    """把这一刀的读数落一条会话事件（`run.notes` 的旁路，见模块 docstring）。
+
+    为什么落会话：`run.notes` 只有 `agent_loop` 能写（它不在本批可改范围），而这件事
+    必须在审计面上有一行 —— 会话文件是框架唯一的叙事审计面。写不成如实返回原因，
+    不许静默（"我杀了 N 个"这句话没有落盘与"杀了但没说"在读数上必须分得开）。
+    """
+    try:
+        from ..conductor import current_session
+
+        session_root, sid = current_session()
+    except Exception as exc:  # noqa: BLE001 - 取不到会话身份：如实报，不静默
+        return f"没落成（会话身份取不到：{type(exc).__name__}: {exc}）"
+    if not str(session_root or ""):
+        return "没落（这一趟没有会话根：读数在工具返回与程序行的 note 里）"
+    try:
+        from .. import sessions as SS
+
+        _path, problem = SS.append(str(session_root), {
+            "kind": "agent_program_stop", "role": str(role or ""),
+            "task_id": str(task_id or ""), "note": str(note or ""),
+            "count": len(list(items or ())),
+            "results": [str(r.get("result") or "") for r in (items or ())],
+            "timer_ids": [str(r.get("timer_id") or "") for r in (items or ())],
+            "still_alive": [int(p) for r in (items or ())
+                            for p in (r.get("still_alive") or ())],
+        }, sid=(sid or None))
+    except Exception as exc:  # noqa: BLE001 - 落不成是"没写成"，不许折成"没发生"
+        return f"没落成（{type(exc).__name__}: {exc}）"
+    return "" if not problem else f"没落成（{problem}）"
+
+
+@tool(
+    "program.stop",
+    "停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条"
+    "程序计时器按 outcome=\"killed\" 收口，并唤醒正在等它的人。"
+    "只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。"
+    "已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名"
+    "还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。"
+    "给 timer_id 停一条，给 all_programs=true 停我名下全部。"
+    "只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。",
+    {"type": "object",
+     "properties": {
+         "timer_id": {"type": "string", "minLength": 1, "maxLength": 64,
+                      "description": ("要停的那一条（program.list 里的 tm-…；"
+                                      "与 all_programs 二选一）")},
+         "all_programs": {"type": "boolean",
+                          "description": "停我名下全部还在跑的程序（缺省否；与 timer_id 二选一）"},
+         "reason": {"type": "string", "maxLength": 200,
+                    "description": "为什么停（写进那条程序行的 note，供审计）"},
+     },
+     "required": [], "additionalProperties": False},
+    side_effect="write_local",
+    roles=_ROLES_WRITE,
+    returns=("{'checked','task_id','role','mode','requested','stopped','killed',"
+             "'already_exited','timeout','not_mine','not_found','count','items',"
+             "'still_alive','woken','note','session_event','reason','clock_status'}"),
+    tags=("clock", "program", "communication"),
+)
+def program_stop(store: Any, root: Any, *, timer_id: str = "",
+                 all_programs: bool = False, reason: str = "") -> ToolResult:
+    """停一条（或我名下全部）程序。四档读数见 `C.PROGRAM_STOP_RESULTS`，不抛异常。"""
+    workspace = _resolve_root(root, store)
+    _bind(workspace, store)
+    reading = C.now()
+    task_id = str(current_task_id() or "")
+    role = str(current_caller_role() or "")
+    payload = partial(_program_stop_payload, task_id=task_id, role=role,
+                      clock_status=reading.status)
+    if not task_id:
+        # 没有台账号 = 这一趟不知道自己是谁。空归属的程序不许被任何一趟当成自己的，
+        # 所以这一档是受控拒绝，而不是"退到角色相等去停"（那是把别人的进程算成我的）。
+        data = payload(checked=False, mode="", requested=[],
+                       reason=("停程序要一个台账号：这一趟不知道自己是谁 ⇒ "
+                               "既分不出哪些是我起的，也不许按角色去猜（不是「没有可停的程序」）"))
+        return fail(data["reason"], kind="no_task", **data)
+    if bool(timer_id) == bool(all_programs):
+        data = payload(checked=True, mode="", requested=[],
+                       reason=("timer_id（停一条）与 all_programs（停全部）只能选一个："
+                               "两个都不给就不知道停哪条，两个都给就不知道是哪一个意思"))
+        return fail(data["reason"], kind="bad_request", **data)
+    mode = "one" if timer_id else "all"
+    requested: list[str] = []
+    items: list[dict[str, Any]] = []
+    try:
+        if timer_id:
+            requested = [str(timer_id)]
+            items = [C.stop_program(workspace, str(timer_id), task_id=task_id,
+                                    role=role, reason=reason)]
+        else:
+            got = C.programs_owned(workspace, task_id=task_id, role=role,
+                                   include_done=False)
+            if not got.get("checked"):
+                data = payload(checked=False, mode=mode, requested=[],
+                               reason=str(got.get("reason") or "程序计时器读不成"))
+                return fail(data["reason"], kind="unreadable", **data)
+            running = [t for t in (got.get("mine") or ())
+                       if str(getattr(t, "state", "")) == "pending"]
+            requested = [str(t.timer_id) for t in running]
+            items = [C.stop_program(workspace, str(t.timer_id), task_id=task_id,
+                                    role=role, reason=reason) for t in running]
+    except C.ClockStateError as exc:
+        data = payload(checked=False, mode=mode, requested=requested,
+                       reason=f"时钟簿记读不成：{exc}")
+        return fail(data["reason"], kind="unreadable", **data)
+    data = payload(checked=True, mode=mode, requested=requested, items=items,
+                   reason=("我名下没有还在跑的程序 ⇒ 没有可停的（查过了，不是没查成）"
+                           if not items else ""))
+    if items:
+        problem = _program_stop_session(workspace, task_id=task_id, role=role,
+                                        note=data["note"], items=items)
+        data["session_event"] = problem or "written"
+    return ok(data, **data)
+
+
+#: 工具与它需要的装配期依赖（`register` 只按位置把依赖绑上去）。
 _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
     (clock_now, ("store", "root")),
     (clock_timer_start, ("store", "root", "conductor")),
@@ -1273,6 +1833,8 @@ _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
     (clock_timer_list, ("store", "root")),
     (clock_timer_cancel, ("store", "root")),
     (clock_wait_any, ("store", "root")),
+    (program_list, ("store", "root")),
+    (program_stop, ("store", "root")),
 )
 
 #: 会话写路径的旁路钩子只装一次（装配会跑很多遍：每角色一份注册表）。
@@ -1329,9 +1891,14 @@ def register(registry: ToolRegistry, *, store: Any = None, root: Any = None,
     2. 把"等谁"的读口接到 `clock.set_target_probe`：台账/名册里那东西收口了没有；
     3. 把这一趟的工作区与 store 绑进运行期表：到点动作需要它写 mailbox 项；
     4. 把会话写路径的旁路钩子接上（消息/答复/回合 -> 时钟观测）。
+
+    外加一件（业主 2026-10-26）：把异常清单的读口接到 `clock.set_patrol_probe`，
+    于是"巡查时间到"那句报醒带的是当拍现算的四类异常，而不是一句空话。
     """
     C.set_due_handler(_deliver_due)
     C.set_target_probe(_target_probe)
+    # 异常清单的读口（业主 2026-10-26）：巡查到点那句报醒要带当拍现算的四类异常。
+    C.set_patrol_probe(_patrol_probe)
     workspace = _resolve_root(root if root else workspace_root, store)
     _bind(workspace, store, conductor)
     # 进程缺省工作区：`program_span` 落在工具层之下（agent_e / cancellation /

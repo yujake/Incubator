@@ -56,8 +56,16 @@ def test_check_formal_declares_exec_and_needs_approval(reg) -> None:
     """`axes-4` 的正控：三件套必须等于 `(read, exec, True)`。
 
     这条读的是声明，不是文档 —— 改 `declared_external` 会让它红。
+
+    2026-10-26：工具名从 `verify.check_formal` 改为 `formal.check_formal`。形式化
+    那条路整组归 L（`tools/formal_tools.py` 模块头："L 的三件工具：`formal.formalize`
+    / `formal.check_formal` / `formal.record`；桥接层仍然只有一份"），`verify_tools.py`
+    自己那张表也早已按新名字写（"`formal.check_formal` | `read` + `external="exec"`
+    | `True`（需要审批）"）。旧名字在注册表里已不存在，所以这一条此前读到 `KeyError`
+    而不是三件套 —— 它守的东西（第二根轴是 `exec`，因此需要审批）一个字都没变，
+    变的只是那个键；改键不改期望值，期望值一格没松。
     """
-    sp = reg._specs["verify.check_formal"]
+    sp = reg._specs["formal.check_formal"]
     assert (sp.side_effect, sp.external, sp.needs_approval) == ("read", "exec", True)
 
 

@@ -500,6 +500,20 @@ def test_stubbing_the_cascade_makes_d_red(
     assert problems, "只销自己之后 (d) 仍然绿 ⇒ 这条判据证明不了级联"
 
 
+def _stub_orphan_gate_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """把孤儿闸打桩成"永远看不到没销的子"（`Secretary._children_left_behind`）。
+
+    为什么 f) 需要这一步（2026-10-26，Q13）：那条闸是另一道防线 ——
+    "父先销、把静默的子留到以后"现在会被它受控拒绝（见
+    `tests/test_cascade_retire_closes_the_tree.py` 的 (g)/(h)），所以把级联反序
+    之后，工具在第一项就被秘书拒了，走不到"次序对不对"那条断言。
+    这一条要守的恰恰是次序本身（(d) 的次序断言是不是橡皮图章），所以把另一道
+    防线关掉、只留次序那一条判据承担它该承担的那件事。
+    """
+    monkeypatch.setattr(Secretary, "_children_left_behind",
+                        lambda self, tid: {"checked": True, "rows": [], "reason": ""})
+
+
 def test_stubbing_the_cascade_to_shallow_first_makes_d_order_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """f) 反真空：把"级联"打桩成从最浅到最深 ⇒ (d) 的次序断言必红。
@@ -513,6 +527,7 @@ def test_stubbing_the_cascade_to_shallow_first_makes_d_order_red(
     _finish(env, c)
     calls = _spy_retire(monkeypatch)
     _stub_cascade(monkeypatch, mode="shallow_first")
+    _stub_orphan_gate_off(monkeypatch)
     problems = _d_problems(env, calls)
     assert problems, "从最浅到最深之后 (d) 的次序断言仍然绿 ⇒ 次序这件事没人看着"
     assert any("次序" in p for p in problems), problems

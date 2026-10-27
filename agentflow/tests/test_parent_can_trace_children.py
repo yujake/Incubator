@@ -235,8 +235,7 @@ def test_04_the_deep_watch_request_goes_up_the_existing_channel(tmp_path: pathli
     assert esc[-1].get("to_task_id") == fx["top"], esc[-1]
 
     # M 看完之后的指导沿秘书链逐级下来（业主 2026-10-26：只走秘书链、逐级转发）：
-    # 正文只交给链尾那一跳的代理；链上其余各跳（M 自己与 d1）一条板项都不该多出来
-    # —— 改前这里恰好相反（"各级父各一条板项"），业主已明确取消那一支。
+    # 正文只交给链尾那一跳的代理；链上其余各跳（M 自己与 d1）一条板项都不该多出来。
     # 发送方身份必须挂上（生产路径由 `AgentLoop._do_tool` 的 `calling_as` 挂）：
     # 没有身份就拼不出"从谁到 d2"那条链，工具会如实报 `no_identity`（没查成）。
     with _as(fx["ws"], fx["top"], "M"):
@@ -256,7 +255,7 @@ def test_04_the_deep_watch_request_goes_up_the_existing_channel(tmp_path: pathli
                for i in fx["cond"].open_items_of(fx["d2"])), data["item_id"]
     for other in (fx["d1"], fx["top"]):
         assert fx["cond"].open_items_of(other) == [], (
-            "中间各跳的代理本人不许拿到内容（各级父知情已取消）", other,
+            "中间各跳的代理本人不许拿到内容", other,
             fx["cond"].open_items_of(other))
 
 

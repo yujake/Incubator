@@ -68,6 +68,17 @@ OTHER_ROLES = tuple(role for role in (*S.ROLES, S.CONDUCTOR_ROLE) if role != ROL
 ROLE_NAME = re.compile(r"(?<![A-Za-z0-9_])L(?![A-Za-z0-9_])")
 
 
+#: 「伙伴表里那一行」的判据：`L：` 的左边不许再贴着字母。
+#:
+#: 为什么不能写成 `"L：" in text`：公共频道那条说明逐字写着 ``to 也可以写 ALL：…``
+#: （`ALL` 那套写法合并之后才有的句子），而 `"ALL："` 里就含一个 `"L："`
+#: —— 子串匹配于是把「广播关键字后面跟一个全角冒号」判成「主控的伙伴表里还留着 L」。
+#: 实测（`agentflow/temp/_g3_probe_lean_l.py`，Lean 关那一档）：M 的提示词 64209 字里
+#: `ROLE_NAME` 的命中数是 0，`"L："` 却是 True，`"ALL："` 在盘上。
+#: 这个边界把 `ALL：` 排除、把真的伙伴表行（`- L：…` / `L：…`）留全 —— 判据没有放松。
+ROW_L = re.compile(r"(?<![A-Za-z0-9_])L：")
+
+
 def _reload_switch() -> None:
     """配置重载：清掉 `agent_prompts` 那个 `lru_cache` 的开关读数。
 
@@ -202,7 +213,7 @@ def _isolation_violations() -> list[str]:
         elif "lean" not in got.detail:
             bad.append(f"{frm} → L 的拒绝理由里没点名 Lean 开关：{got.detail!r}")
     m_text = _prompt("M", build.registry)
-    if "L：" in m_text or ROLE_NAME.search(m_text):
+    if ROW_L.search(m_text) or ROLE_NAME.search(m_text):
         bad.append("主控的伙伴表里还留着 L 这一行")
 
     # ---- 6. 读数：画像文件与接线态
@@ -352,7 +363,7 @@ def test_off_the_readouts_do_not_list_l(monkeypatch: pytest.MonkeyPatch) -> None
     _reload_switch()
     profiles = AP.profiles_markdown(registry=build_registry().registry)
     assert not ROLE_NAME.search(profiles), "画像文件里还有 L"
-    assert "L：" not in profiles, "画像文件里还有 `L：` 这一行"
+    assert not ROW_L.search(profiles), "画像文件里还有 `L：` 这一行"
     from agentflow.host import _Builder
 
     wiring = sorted(_Builder().status())
@@ -407,7 +418,7 @@ def test_on_no_isolation_leaks_into_the_other_roles(monkeypatch: pytest.MonkeyPa
     assert ROLE_NAME.search(m_text), "开着时主控的提示词里一处 L 都没有了（开档被灭了）"
     assert "`formal`：**L** 签" in m_text, (
         "开着时主控读不到五元位第 4 位的 owner 读数了")
-    assert "L：" not in m_text, "主控的伙伴表里又给 L 留了一行（L 与主控没有边）"
+    assert not ROW_L.search(m_text), "主控的伙伴表里又给 L 留了一行（L 与主控没有边）"
     b_text = _prompt("B")
     assert f"- {ROLE_L}：" in b_text, "开着时 B 的伙伴表里没有 L 那一行（唯一入边消失了）"
 

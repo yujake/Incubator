@@ -19,7 +19,7 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-from agentflow.agent_loop import (PUBLIC, AgentLoop, public_visibility, read_messages,
+from agentflow.agent_loop import (ALL, AgentLoop, public_visibility, read_messages,
                                   send_message)
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
@@ -59,7 +59,7 @@ def _loop(ws: pathlib.Path, st: Store, cond: Conductor, reg: Any, *, task_id: st
 
 def test_public_visibility_reads_the_sender_instance():
     """正控①（纯函数）：带编号 ⇒ 只有它的直接子级可见；别人一概不可见。"""
-    msg = {"from": "M", "from_task_id": "t-0001", "to": PUBLIC}
+    msg = {"from": "M", "from_task_id": "t-0001", "to": ALL}
     assert public_visibility(msg, parent_task_id="t-0001") == (True, "instance")
     assert public_visibility(msg, parent_task_id="t-0002") == (False, "not_my_parent")
     assert public_visibility(msg, parent_task_id="") == (False, "not_my_parent")
@@ -72,7 +72,7 @@ def test_an_old_message_falls_back_to_the_role_level_with_a_reading():
     也不许一律不可见（丢历史）—— 回退到"父的角色 == 发信人"，并把 `role_fallback`
     这个读数写在行上。连父角色都不知道 ⇒ 不可见（读数 `unknown_parent`）。
     """
-    old = {"from": "M", "to": PUBLIC}
+    old = {"from": "M", "to": ALL}
     assert public_visibility(old, parent_role="M") == (True, "role_fallback")
     assert public_visibility(old, parent_role="D") == (False, "unknown_parent")
     assert public_visibility(old, parent_task_id="t-0001") == (False, "unknown_parent")
@@ -104,7 +104,7 @@ def test_a_public_message_without_a_task_id_is_refused_with_nothing_written(
     """负控①：这一趟没有台账号 ⇒ 受控拒绝，且一行都不落。"""
     st, cond, reg, ws, me = _env(tmp_path)
     loop = _loop(ws, st, cond, reg, task_id="")      # 没有台账号
-    got = loop._do_message({"to": PUBLIC, "subject": "广播", "body": "随便说点什么"})
+    got = loop._do_message({"to": ALL, "subject": "广播", "body": "随便说点什么"})
     assert got.get("ok") is False and got.get("refused") == "no_task_id", got
     assert "可见面" in str(got.get("error") or ""), got
     events, _ = __import__("agentflow.sessions", fromlist=["x"]).read_session(ws, sid=SID)
@@ -116,20 +116,20 @@ def test_the_receipt_says_who_will_read_it(tmp_path: pathlib.Path):
     """正控③ + 反真空②：公聊的回执按"我名下有几个直接子代理"给三态。"""
     st, cond, reg, ws, me = _env(tmp_path)
     loop = _loop(ws, st, cond, reg, task_id=me)
-    none_yet = loop._do_message({"to": PUBLIC, "subject": "广播", "body": "没人听"})
+    none_yet = loop._do_message({"to": ALL, "subject": "广播", "body": "没人听"})
     assert none_yet["receipt"] == "no_reader", none_yet
     assert "没有直接子代理" in none_yet["note"], none_yet
 
     _child(cond, me, role="D", key="s6a@a")
     _child(cond, me, role="E", key="s6a@b")
-    some = loop._do_message({"to": PUBLIC, "subject": "广播", "body": "有人听"})
+    some = loop._do_message({"to": ALL, "subject": "广播", "body": "有人听"})
     assert some["receipt"] == "queued", some
     assert "2 个直接子代理" in some["note"], some
 
     # 看不见子代理（没有 conductor 句柄）⇒ `unknown`，不许猜成 `queued`
     blind = _loop(ws, st, cond, reg, task_id=me)
     blind.conductor = None
-    unknown = blind._do_message({"to": PUBLIC, "subject": "广播", "body": "判不了"})
+    unknown = blind._do_message({"to": ALL, "subject": "广播", "body": "判不了"})
     assert unknown["receipt"] == "unknown", unknown
     assert "不许折成" in unknown["note"], unknown
     assert st is not None

@@ -234,7 +234,7 @@ def test_the_underscored_advertised_name_reaches_the_same_action_and_nothing_els
 
     ## 剧本为什么是三条回复（第二条会"多花"一次调用）
 
-    顺控是先负后正：负控那一步（`own_not_registered_thing`）名字不在注册表里 ⇒`_statement_filing_refusal` 那一道不触发（它的第一句就是
+    顺控是先负后正：负控那一步（`own_not_registered_thing`）名字不在注册表里 ⇒`_statement_filing_tier` 那一道不触发（它的第一句就是
     `name != own.register_statement⇒ None`），所以那一步就是干净的一步。紧接着的正控会多花一次模型调用
     ——入库前秘书那句"太平凡吗"（`secretary.judge_statement`）走的是同一个网关，它吃掉剧本里的第 3 条（`_final`）；`_Scripted` 的"取完重复最后一条"于是让循环下一步照样拿到
     `_final`。反过来读这第 3 条回复：它被吃掉本身就是读数 ——带下划线的那个名字走的是同一件 `own.register_statement`（连同它入库前的闸门），不是另一条旁路。

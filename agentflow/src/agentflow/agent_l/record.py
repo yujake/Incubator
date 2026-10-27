@@ -61,7 +61,7 @@ output_sha256` —— 那四格是读数，必须出现在调用契约里；本�
   两格 —— 它们是同一行写前写后的读数，逐字相等是这个动作的不变量，
   而它是机器可判的（判据：`tests/test_l_collab_and_secretary.py`）。
 
-## 三态与落库口径（与 E 的 `_run_formal` 逐条同源）
+## 三态与落库口径（与 E 保留下来的那份形式化实现逐条同源）
 
 `experiments` 那一行的 `result` / `evidence_kind` / `negation_kind` / `exit_code`
 按检查器的三态映射（同一套映射，不是第二份口径）：

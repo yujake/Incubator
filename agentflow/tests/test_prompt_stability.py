@@ -583,6 +583,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p209", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p209（2026-10-26 第六批）：table.create 的 summary 由「自动分配主键（search_requests 用 r-NNNN）」改成「主键由台账分配（这一格整格别写）」（D4 的 hand_filled_id 那一批），该工具只在 A/B/D/E/F/G/L 七格面上 ⇒ 七格提示词变；键集与 p208 相同（15 键）。"},
+    {"version": "p210", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p210（2026-10-26/27 收口批）：本批九笔合并抬一格 —— ① 旧的公聊写法与 `ALL` 合成一套（写法本身已废，见 deprecated-forms 台账）（LOOP_PROTOCOL / HANDOFF_PROTOCOL / faculties_text 两格 / COLLAB_NAMES / PARENT_ROSTER，commit 5bd7e58c）；② 提示词里的台账号改成占位形 `t-NNNNNN`（Q25）；③ 程序两件 `program.list` / `program.stop` 进工具面（draft/159 的 G1/G2）；④ `conductor.post_task` 进 `UNIVERSAL_TOOLS`（Q15 裁定 (a)，C/H/V 也拿到）；⑤ `conductor.ack` 加 `close`、`retire_child` 加 `kept` / `cascade_reading`、`conductor.state` 加 `programs`（D12 / Q13 / draft/159）；⑥ `lit.*` 六格改成三态口径（Q16）；⑦ `clock.periodic_start` 的 `returns=` 补 `patrol_checklist`（巡查批）；⑧ `lit.stage_add` / `lit.stage_withdraw` 两句摘要按「补 relevance 用原槽」改写（G9）；⑨ `specs/b.py` 新增两条 policy（入库前逐条判 relevance；定理与证明改写成自然语言、改写过 V 要再签）。facts 键集仍 15 格、键名与条数一格未动（这一格记的是「事实落点没动」，动的是段文本本身）。"},
+    # p210 → p211（2026-10-26 K1 收口）：本批只动段文本与工具说明的正文，一格事实的落点
+    # 都没挪（`STEP_VOLATILE_FACTS` 仍是那 15 格、键名一个没换）⇒ `count` / `keys_sha256`
+    # 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p211", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p211（2026-10-26 K1 收口）：本批只动段文本与工具说明，facts 落点一格没动 ⇒ count / keys_sha256 与上一格同值（仍是 PS.volatile_facts_digest() 的现算值，不手抄）。动的是四处正文与一批摘要：① conductor.post_task 的 summary 末句不再点名 conductor.summon（D 面上没有那件工具，判据 G1/G2）；② specs/m.py 的 policy 补回判据要的「只做数值实验不算完成」，并把两种降级都点名；③ PAPER_PACK 第五节去掉「八格」两边的强调标记（判据要 `收工门八格全过`）、第一节把「要改就改」改成「可改、该改」、(七) 第一条补上 `.tex` 那一格真实存在的 `kind=unsupported_format` 读数；④ 30 件工具 summary 按「只压冗余表述、不删语义」重压，压缩批次从 7109（82.37%）落到 6452 字符 = 基线的 74.75%（门槛 75%）。逐件理由见 agent_prompts.PROMPT_VERSION 上方 p211 那一格。"},
+    {"version": "p212", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p212（2026-10-27 收尾）：两笔文字口径 —— ① `conductor.closing` 的 summary 补回「收工门（八格）」这一句（判据要点名格数，改写法要同步改本条，不许让它静默变真空）；② PAPER_PACK 的两处实话（摄取那条写明 `kind=unsupported_format`；`source/` 那条改成「可改、该改的是」。）。facts 键集仍 15 格、键名一格未动。"},
 )
 
 

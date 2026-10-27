@@ -11,7 +11,7 @@
 - 最后：迁移那一笔删掉老表、这一层的镜像与折叠随之退役（那时 `legacy_present`
   报 `False`，视图只剩 `statements`）。
 
-## 契约（三条，改这一层的人必须一起守）
+## 契约（四条，改这一层的人必须一起守）
 
 1. 一个身份一个号：过渡期写进去的概念行，`statements.stmt_id` 与老的
    `concepts.concept_id` 是同一个号。没有这一条，"两处同号合并"就无从谈起
@@ -24,6 +24,13 @@
    "只有一边"。`counts` 里 `statements` / `legacy` / `merged` / `legacy_only` 四个数
    分开给 —— "两边都有"与"只有一边"是不同的读数（前者说明镜像在工作，
    后者说明还有老写侧没搬完）。
+4. 写经秘书（2026-10-26，D14）：这一层不再自己 `tx.upsert("statements", …)`，
+   而是调 `Secretary.write_concept_row`（见 :func:`_concept_secretary`）。
+   五元位、洗名（`wash_working_name`）、概念同一性（`propositionkey.same_concept`）
+   三件事因此与秘书那条路是同一份实现 —— 这一层里不许出现第二份。
+   为什么这条必须是契约而不是一句说明：真机 `projects/mp3-r3` 的 30 条概念行
+   正是"绕过了它"的形态（`created_by=agent-B`、`bits` 空、非平凡度无记录），
+   而盘上一切正常。
 
 ## 为什么镜像不用自己发号（一个容易被忽略的细节）
 
@@ -677,42 +684,81 @@ def mirror_gaps(store: Any) -> dict[str, Any]:
 def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
                   aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
                   doc_id: str = "", actor: str = "agent-B", mirror: bool = False,
-                  origin: str = "", self_authored: bool = False) -> dict[str, Any]:
-    """在已开的事务里写一条概念行（新标准那一行 + 可选的老表镜像）。
+                  origin: str = "", self_authored: bool = False,
+                  out: dict[str, Any] | None = None) -> dict[str, Any]:
+    """在已开的事务里写一条概念行（经秘书那一笔：新标准那一行 + 可选的老表镜像）。
 
     为什么要有"事务内"这一档：B 的写入是一笔事务（命题 + 概念 + 依赖一起落，
     `Secretary.record_statement`），而 `upsert` 自己开事务 —— 事务不能嵌套
-    （文件锁不可重入）。所以把"写哪两张表、怎么写"抽成这一个函数，
+    （文件锁不可重入）。所以把"写哪两张表、怎么写"收成这一格，
     `upsert`（单独写一条概念）与秘书那一笔都调它，口径只有一处。
 
-    `origin` / `self_authored` 原样交给 :func:`concept_statement`（口径只在那里面，
-    这里不抄第二份）。`proof_text` 保留在签名里只为兼容既有调用点：
-    概念行不许带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
+    2026-10-26（D14）：这一格不再自己 `tx.upsert("statements", …)`，而是调
+    `Secretary.write_concept_row`（见 :func:`_concept_secretary` 的 docstring：
+    真机 mp3-r3 的 30 条概念行 `bits` 空、`created_by=agent-B`，就是绕过了它）。
+    于是五元位、洗名、概念同一性三件事与秘书那条路是同一份实现，`conceptrows`
+    里一份判据都不留。
+
+    `origin` / `self_authored` 原样交给秘书那一层（口径在 :func:`concept_statement`，
+    这里不抄第二份）。`proof_text` 保留在签名里只为兼容既有调用点并让那句拒绝留在
+    唯一一处：概念行不许带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
 
     `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
-    硬写会以"未知表"整笔失败）⇒ 这里自己判、把判断收进这一处，
-    与 `upsert` / `upsert_legacy_shaped` 同一口径（调用方不必知道过渡到哪一步了）。
+    硬写会以"未知表"整笔失败）⇒ 判断收在秘书那一格（与 `upsert` /
+    `upsert_legacy_shaped` 同一口径，调用方不必知道过渡到哪一步了）。
     事务的表声明仍然由调用方负责：要镜像时得声明 `LEGACY_TABLE`，
     统一走 `tables_for_concept_write(...)`。
+
+    `out` 是可选读数口（秘书那一笔把 `label_washed` 与 `concept_identity` 写进去）：
+    判词必须能被调用方与判据读到 —— "这一笔问了同一性、判的是哪一个"不该只活在返回值
+    那个行 dict 里（那里没有它的一格）。
     """
-    row = concept_statement(stmt_id=stmt_id, label=label, definition=definition,
-                            aliases=aliases, source_lit_id=source_lit_id,
-                            proof_text=proof_text, doc_id=doc_id, actor=actor,
-                            origin=origin, self_authored=self_authored)
-    row.validate()
-    data = row.to_dict()
-    tx.upsert("statements", data, note="concept_upsert")
-    if mirror and LEGACY_TABLE in S.TABLES:
-        crow = S.Concept(
-            concept_id=stmt_id, name=str(label or ""), definition=str(definition or ""),
-            related_concepts=[], normalized_name=T.normalize(str(label or "")),
-            aliases=[str(a) for a in (aliases or []) if str(a).strip()],
-            definition_source_lit_id=str(source_lit_id or "") or None,
-            created_at=S.now_iso(), updated_at=S.now_iso())
-        crow.validate()
-        tx.upsert(LEGACY_TABLE, crow.to_dict(), note="concept_upsert:mirror")
-    push_counters(tx, stmt_id)   # 一个号空间、两个计数器（见 push_counters 的 docstring）
-    return data
+    return _concept_secretary(tx).write_concept_row(
+        tx, stmt_id=stmt_id, label=label, definition=definition, aliases=aliases,
+        source_lit_id=source_lit_id, doc_id=doc_id, origin=origin,
+        self_authored=self_authored, mirror=mirror, proof_text=proof_text, out=out)
+
+
+def _concept_secretary(tx: Any) -> Any:
+    """这一笔概念写要经的那名秘书（`Secretary.write_concept_row` 的唯一入口）。
+
+    ## 为什么这一层不再自己写 `statements`（2026-10-26，D14）
+    真机读数（`projects/mp3-r3`，36 行 statements）：30 条概念行全部
+    `created_by=agent-B`、`bits` 空、非平凡度一条记录都没有 —— 因为这一层的三处
+    `tx.upsert("statements", …)` 绕过了秘书那一笔。秘书那一笔要做的三件事
+    （五元位 / 洗名 `wash_working_name` / 概念同一性 `propositionkey.same_concept`）
+    于是全都没跑，而盘上看起来"行都在"（同一批里秘书落的那一条 theorem 有 `bits`，
+    正路是好的，坏的是这三个写口）。
+
+    所以写这一格收回秘书：`conceptrows` 里不再有第二份同一性或洗名实现 ——
+    判据住在 `Secretary._same_concept_candidate` 与 `secretary.wash_working_name`。
+
+    ## 角色从哪来（`created_by` 必须记真实作者）
+    `created_by` 不许折成一个常量：写侧的身份从 `tx.actor`（`agent-B` / `agent-D`…）
+    读出来，认不出才是 B（概念行是 B 的写集）。`tx` 是我们唯一拿得到的东西，
+    而 `Tx` 只给 `_store` —— 所以这里用 `getattr(tx, "_store", None)` 取根，
+    拿不到就退成 `store=None`（秘书照旧能算五元位与同一性，只是不落旁支台账）。
+
+    ## 为什么显式写 `seam=None`（而不是留空）
+    这一名秘书从不对命题判词：概念这一档的同一性是确定性的（`propositionkey.same_concept`，
+    零模型调用），非平凡度是"不适用"（`NOT_APPLICABLE_KINDS`，同样零调用）。
+    所以这里刻意不装缝 —— 装了缝反而让"零调用"变成一句口头承诺而不是结构事实
+    （判据 `tests/test_one_concept_is_one_row.py` 与
+    `tests/test_concept_rows_have_no_tier.py` 的 (c) 都钉着它）。
+    写明 `seam=None` 是给装配面那道护栏看的（`test_no_construction_site_forgets_the_seam_again`）：
+    每一处装配点都必须说清"这一名秘书有没有判断面"，而这一处说的是"不需要"。
+    将来谁把判命题的活挂到这一名秘书下面，`judge` 会当场报"没有装配模型缝"（可见地失败，
+    不是静默退回机械判据）。
+    """
+    from . import secretary as SEC   # 惰性：不让并表过渡层与秘书互相 choke 在 import 期
+
+    store = getattr(tx, "_store", None)
+    root = getattr(store, "root", "") or ""
+    actor = str(getattr(tx, "actor", "") or "").strip()
+    role = actor.rsplit("-", 1)[-1].upper() if "-" in actor else ""
+    if not (len(role) == 1 and role.isalpha()):
+        role = "B"
+    return SEC.for_role(role, root=root, store=store, seam=None)
 
 
 def _apply_merge_tombstone(row: dict[str, Any], legacy_row: Mapping[str, Any]) -> None:
@@ -758,6 +804,14 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
     - 新标准里没有 ⇒ 建一条（空定义自动落待补档）。
 
     返回写进新标准的那一行 dict（调用方可以拿去当读数）。
+
+    2026-10-26（D14）：这两支（新建 / 改既有）都不再自己 `tx.upsert("statements", …)`，
+    而是调 `Secretary.write_concept_row` —— 五元位、洗名、概念同一性三件事因此与秘书
+    那条路是同一份实现。这一层只保留"过渡语义"：同号（契约 1）、老表墓碑
+    （`merged_into` ⇒ `superseded`）、以及定义到达/清空时那两格状态迁移
+    （算好 `status` / `quote_reason` 传进去，由秘书那一格写进同一行）。
+    `actor` 只为兼容既有调用点留在签名里：写侧身份现在由秘书从 `tx.actor` 读
+    （见 :func:`_concept_secretary`），`created_by` 因此记的是"谁经这一笔写的"。
     """
     cid = str(legacy_row.get("concept_id") or "")
     if not cid:
@@ -766,48 +820,44 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
     definition = str(legacy_row.get("definition") or "")
     aliases = [str(a) for a in (legacy_row.get("aliases") or []) if str(a).strip()]
     source_lit = str(legacy_row.get("definition_source_lit_id") or "")
+    secretary = _concept_secretary(tx)
     existing = tx.find("statements", stmt_id=cid)
     if existing is None:
-        row = concept_statement(stmt_id=cid, label=label, definition=definition,
-                                aliases=aliases, source_lit_id=source_lit, actor=actor)
-        data = row.to_dict()
-        if str(legacy_row.get("merged_into") or ""):
-            # 老表的墓碑在新标准里也要立起来（新建那一支同样要 —— 第一次同步就碰到
-            # 一条已经被合并的老行是常事：迁移历史数据时全是这种）
-            _apply_merge_tombstone(data, legacy_row)
-        obj = S.row_from_dict("statements", data)
-        obj.validate()
-        data = obj.to_dict()
-        tx.upsert("statements", data, note="concept_sync:create")
-        push_counters(tx, cid)   # 一个号空间、两个计数器（见 push_counters）
-        return data
-    updated = dict(existing)
-    updated["label"] = label
-    updated["statement_text"] = definition
-    updated["statement_full"] = definition
-    updated["aliases"] = aliases
-    updated["source_lit_id"] = source_lit or None
+        # 老表的墓碑在新标准里也要立起来（第一次同步就碰到一条已经被合并的老行是常事：
+        # 迁移历史数据时全是这种）⇒ 先算出那两格，再交给秘书那一笔写。
+        tomb: dict[str, Any] = {}
+        _apply_merge_tombstone(tomb, legacy_row)
+        return secretary.write_concept_row(
+            tx, stmt_id=cid, label=label, definition=definition, aliases=aliases,
+            source_lit_id=source_lit, status=str(tomb.get("status") or ""),
+            quote_reason=str(tomb.get("quote_reason") or ""))
+    # 改既有那一行：只动"从老表推得出来的那几格"，新标准独有的那几格由秘书那一格
+    # 原样保留（`existing` 传进去，它只改 label / 正文 / aliases / source_lit）。
+    status = ""
+    quote_reason = ""
     merge_into = str(legacy_row.get("merged_into") or "")
     if merge_into:
         # 老表的墓碑（`merged_into`）在新标准里没有同名列，但有语义等价的一档：
         # `superseded`（"被后来的一条取代"）。不映射的话，一次真的合并会在新标准那一边
         # 完全看不见 —— 下游（C 的链、收工门）会继续把被合并的那条当可用命题。
-        _apply_merge_tombstone(updated, legacy_row)
+        tomb = {"status": str(existing.get("status") or ""),
+                "quote_reason": str(existing.get("quote_reason") or "")}
+        _apply_merge_tombstone(tomb, legacy_row)
+        status = str(tomb.get("status") or "")
+        quote_reason = str(tomb.get("quote_reason") or "")
     elif definition.strip():
-        if str(updated.get("status") or "") == "pending_definition":
-            updated["status"] = "active"
-            updated["quote_reason"] = ("定义已到（同步自老表）⇒ 回到 active；"
-                                       + str(updated.get("quote_reason") or ""))
-    elif str(updated.get("status") or "") == "active":
+        if str(existing.get("status") or "") == "pending_definition":
+            status = "active"
+            quote_reason = ("定义已到（同步自老表）⇒ 回到 active；"
+                            + str(existing.get("quote_reason") or ""))
+    elif str(existing.get("status") or "") == "active":
         # 反向：老表把定义清空了 ⇒ 新标准那一行不能继续假装有定义
-        updated["status"] = "pending_definition"
-        updated["quote_reason"] = f"定义被清空（同步自老表）⇒ 回到 {PENDING_SEARCH}"
-    obj = S.row_from_dict("statements", updated)
-    obj.validate()
-    data = obj.to_dict()
-    tx.upsert("statements", data, note="concept_sync:update")
-    push_counters(tx, cid)   # 一个号空间、两个计数器（见 push_counters）
-    return data
+        status = "pending_definition"
+        quote_reason = f"定义被清空（同步自老表）⇒ 回到 {PENDING_SEARCH}"
+    return secretary.write_concept_row(
+        tx, stmt_id=cid, label=label, definition=definition, aliases=aliases,
+        source_lit_id=source_lit, existing=existing,
+        status=status, quote_reason=quote_reason)
 
 
 def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",

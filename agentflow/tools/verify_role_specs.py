@@ -104,8 +104,120 @@ def project_root(start: Path | None = None) -> Path:
     return here.parents[1]
 
 
+#: 观测日期与版本号（写进附录每节第一行与标题里那行日期）。
+#: 版本号刻意写"待抬"而不是一个数字：本批的版本还没抬，写死一个数字就是假读数
+#: （抬版本那一步会把它改成真值）。日期用机器时间，不抄别人那一行的日期。
+#: 2026-10-26（p210 收口）：`PROMPT_VERSION` 已抬到 `p210` ⇒ 这里按本注释前一句改成真值
+#: （`tests/test_role_specs_appendix_is_live.py` 的两档都收，但写着"待抬"就是一句假读数）。
+DATE_STAMP = "2026-10-26"
+VERSION_STAMP = "p210"
+
+
+def _counts(items: list) -> tuple[dict[str, int], dict[str, int], int]:
+    """一组 ToolSpec 的两根轴分布 + 需审批数。"""
+    se: dict[str, int] = {}
+    ext: dict[str, int] = {}
+    for s in items:
+        se[str(s.side_effect)] = se.get(str(s.side_effect), 0) + 1
+        ext[str(s.external)] = ext.get(str(s.external), 0) + 1
+    return se, ext, sum(1 for s in items if s.needs_approval)
+
+
+def live_tool_face(*, root: Path) -> tuple[dict | None, str]:
+    """真的装配一次注册表，返回工具面的全部读数；取不到时返回 `(None, 原因)`。
+
+    ## 这一个函数是"同一件事怎么量"的唯一实现
+
+    在本单（`p210 待抬`）之前，同一批读数有四处各自现算：本文件的 `live_tool_counts()`、
+    `tests/test_role_specs_complete.py` 的 `_registered_tool_names()`、附录判据的
+    `live` / `live_all` 两个 fixture、以及 `tests/test_release_all.py` 里解析 CLI 输出那一段。
+    四处现算就是四处口径：口径一旦分叉，红的是判据，而不是"哪一处漂了"。
+    现在它们全部投影自本函数的返回值，`--write` 也投影自它 —— 文档里的数与判据里的数
+    因此只有一个真身（装配出来的 `ToolRegistry`）。
+
+    返回的键：`total` / `modules` / `loaded` / `names` / `roles` / `counts_by_role` /
+    `by_role`（每个角色的 `total` / `se` / `ext` / `appr` / `names`）/ `se` / `ext` / `appr` /
+    `forms` / `leaks` / `shared_names` / `shared_total` / `lean_off`（`total` / `se` / `ext` / `appr`）。
+    """
+    try:
+        sys.path.insert(0, str(root / "src"))
+        import functools
+        import tempfile
+
+        from agentflow import schema as S
+        from agentflow.store import Store
+        from agentflow.tools import _MODULES, ROLES, SIDE_EFFECTS_WRITE, build_registry
+    except Exception as exc:  # noqa: BLE001 - 任何 import 失败都是"没查成"
+        return None, f"装配不了工具层（{type(exc).__name__}: {exc}）⇒ 对账没做"
+    try:
+        d = Path(tempfile.mkdtemp(prefix="role-specs-face-"))
+        st = Store(d)
+        st.init()
+        built = build_registry(store=st, workspace_root=d, strict=True)
+        reg = built.registry
+        roles = tuple(ROLES) + (S.CONDUCTOR_ROLE,)
+        names = sorted(reg.names())
+        by_role: dict[str, dict] = {}
+        for r in roles:
+            specs = [reg.get(n) for n in sorted(x.name for x in reg.for_role(r))]
+            se, ext, appr = _counts(specs)
+            by_role[r] = {
+                "total": len(specs), "se": se, "ext": ext, "appr": appr,
+                "names": {s.name for s in specs},
+            }
+        specs = [reg.get(n) for n in names]
+        se, ext, appr = _counts(specs)
+        side_by_name = {s.name: str(s.side_effect) for s in specs}
+        ext_by_name = {s.name: str(s.external) for s in specs}
+        forms: dict[str, int] = {}
+        for s in specs:
+            h = s.handler
+            if isinstance(h, functools.partial):
+                key = "partial"
+            elif getattr(h, "__name__", "") == "<lambda>":
+                key = "lambda"
+            elif getattr(h, "__closure__", None):
+                key = "closure"
+            else:
+                key = "function"
+            forms[key] = forms.get(key, 0) + 1
+        # Lean 关档 = 砍掉 formal.*（`leanscope.LEAN_ONLY_TOOL_MODULES` 只装不装那一件事）。
+        off = [s for s in specs if not s.name.startswith("formal.")]
+        off_se, off_ext, off_appr = _counts(off)
+        # A–H 八角色的交集（"共有面"）：写作面与 L 的"多出来那批"都由它派生。
+        eight = [by_role[r]["names"] for r in ("A", "B", "C", "D", "E", "F", "G", "H")]
+        shared = set.intersection(*eight) if eight else set()
+        leaks = {
+            r: len([n for n in by_role[r]["names"] if reg.get(n).side_effect in SIDE_EFFECTS_WRITE])
+            for r in ("C", "H", "V")
+        }
+    except Exception as exc:  # noqa: BLE001 - 装配期抛异常同样是"没查成"
+        return None, f"装配注册表失败（{type(exc).__name__}: {exc}）⇒ 对账没做"
+    return {
+        "total": len(specs),
+        "modules": len(built.loaded),
+        "loaded": list(built.loaded),
+        "names": names,
+        "roles": list(roles),
+        "counts_by_role": {r: by_role[r]["total"] for r in roles},
+        "by_role": by_role,
+        "se": se, "ext": ext, "appr": appr,
+        "side_by_name": side_by_name, "ext_by_name": ext_by_name,
+        "forms": forms,
+        "leaks": leaks,
+        "shared_names": sorted(shared),
+        "shared_total": len(shared),
+        "lean_off": {"total": len(off), "se": off_se, "ext": off_ext, "appr": off_appr},
+        "modules_declared": len(_MODULES),
+    }, ""
+
+
 def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
-    """真的装配一次注册表，返回 `({角色: 工具数}, "")`；取不到时返回 `(None, 原因)`。
+    """每角色的工具条数 `({角色: 条数}, "")`；取不到时 `(None, 原因)`。
+
+    `live_tool_face()` 的投影：本函数不再自己装配，所以两处读数不可能分叉。
+    返回值含主控 `M`（`cli tools` 的"各角色工具数"那一行也含它）。
+
     ## `H-8`：这道门此前从来没有做过它自己声称的那个对账
     实测（`draft/28` 的 `H-8`）：把副本里 `§D 工具面（37 个，实测）` 改成 `999 个`、`§H 工具面（22 个，实测）` 改成 `1 个`，本门照样 `[OK] … 工具条数 [37]`/
     `[OK] … 工具条数 [1]`、退出码 0。旧实现只检查"标题里能不能读出一个数字"，而 `docs/INDEX.md:16` 与
@@ -115,24 +227,10 @@ def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
     这是刻意保留的：本脚本在"包烂到 import 不了"时仍然要能跑（那正是最需要它的时候），所以对账只在函数内部按需 import，不 import 顶层的 `agentflow`，失败时如实报"没查成"。
     - 角色数一致 ⇒ 逐角色比对标题里的数字。
     """
-    try:
-        sys.path.insert(0, str(root / "src"))
-        import importlib
-        import tempfile
-
-        from agentflow.store import Store
-        from agentflow.tools import ROLES, build_registry
-    except Exception as exc:  # noqa: BLE001 - 任何 import 失败都是"没查成"
-        return None, f"装配不了工具层（{type(exc).__name__}: {exc}）⇒ 对账没做"
-    try:
-        d = Path(tempfile.mkdtemp(prefix="role-specs-live-"))
-        st = Store(d)
-        st.init()
-        built = build_registry(store=st, workspace_root=d, strict=True)
-        counts = {r: len(built.registry.for_role(r)) for r in ROLES}
-    except Exception as exc:  # noqa: BLE001 - 装配期抛异常同样是"没查成"
-        return None, f"装配注册表失败（{type(exc).__name__}: {exc}）⇒ 对账没做"
-    return counts, ""
+    face, why = live_tool_face(root=root)
+    if face is None:
+        return None, why
+    return dict(face["counts_by_role"]), ""
 
 
 def live_roles(*, root: Path) -> tuple[tuple[str, ...] | None, str]:
@@ -293,6 +391,257 @@ def check(doc: Path, *, roles: tuple[str, ...] | None = None,
     }
 
 
+# ------------------------------------------------------------------ 写：把数值槽重写成现算值
+#
+# 为什么"写"也要做成一条命令：读者要的是"这些数字现在是几"，而它每进一件工具就会变
+# 一次。若每次靠人逐格改，改漏一处不会红（判据只盯着它盯的那几格），而改对一处
+# 也不证明其余几处对 —— 于是文档退化成"部分可信"。这里把全部数值槽的写作者从人
+# 换成同一次装配：`--write` 幂等，跑两遍第二遍没有 diff。
+#
+# 只写两类东西，散文一个字不碰：
+#   1. 数值槽：标题里的条数、表格里的读数、逐件清单/拿不到的分组与合计、LIVE-READINGS
+#      的 `cli_tools_*` 那几个键；
+#   2. 那几节第一行的观测日期与版本号（`DATE_STAMP` / `VERSION_STAMP`）。
+# 手写散文里的口径、理由、历史留痕一律原样留着 —— 它们不是读数。
+
+_SE_ORDER = ("read", "write_local", "none")
+_EXT_ORDER = ("none", "egress", "exec")
+#: 一个模块组最多列几个名字（超过就只给条数：附录第 30 行那句"大组只判条数"）。
+_LISTED_MAX = 9
+#: `DEVELOPMENT-SPEC.md` 里那一块读数的界标与键名形态。
+_DEV_SPEC_REL = Path("docs") / "DEVELOPMENT-SPEC.md"
+_APPENDIX_REL = Path("docs") / "ROLE-SPECS-APPENDIX.md"
+_LIVE_KEY_RE = re.compile(r"^(cli_tools_[a-z_]+)(\s*)=(\s*)(\d+)(.*)$")
+
+
+def _pairs_text(counter: dict[str, int], order: tuple[str, ...]) -> str:
+    return " / ".join(f"{k} {int(counter.get(k, 0))}" for k in order)
+
+
+def _ext_text(counter: dict[str, int]) -> str:
+    non_zero = [k for k in _EXT_ORDER if int(counter.get(k, 0))]
+    return _pairs_text(counter, tuple(non_zero)) if non_zero else "none 0"
+
+
+def _groups_of(names: set[str]) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for full in sorted(names):
+        mod, _, short = full.partition(".")
+        out.setdefault(mod, []).append(short)
+    return out
+
+
+def _group_line(names: set[str]) -> str:
+    """`clock.*` 9（`a` `b` …） · `conductor.*` 20 —— 与附录判据的 `_GROUP` 逐字兼容。"""
+    parts: list[str] = []
+    for mod, shorts in sorted(_groups_of(names).items()):
+        if len(shorts) <= _LISTED_MAX:
+            listed = " ".join(f"`{s}`" for s in shorts)
+            parts.append(f"`{mod}.*` {len(shorts)}（{listed}）")
+        else:
+            parts.append(f"`{mod}.*` {len(shorts)}")
+    return " · ".join(parts)
+
+
+def _readon_line(role: str) -> str:
+    """每一节第一行那句"现读于 …"，带一条能跑的复跑命令。
+
+    主控 M 是特例：`cli tools --role` 的 choices 里没有 M（它只收十个可召唤角色），
+    所以 M 那一节给的是进程内那条 `for_role("M")`，与正文 §M.4 的说法一致。
+    """
+    head = (f"**现读于 {DATE_STAMP}（{VERSION_STAMP}，`AGENTFLOW_LEAN_ENABLED=1`）**：")
+    if role == "M":
+        return head + '`build_registry(...).for_role("M")`（`cli tools --role` 的 choices 里没有 M）'
+    return head + f"`python -m agentflow.cli tools --role {role}`"
+
+
+def _role_title(role: str, face: dict) -> str:
+    """正文里 `### X.4 工具面（…）` 那一行。三个特例写在明处，其余同形。"""
+    own = face["by_role"][role]
+    if role == "L":
+        return f"### L.4 工具面（Lean 开时 {own['total']} 个 / 关时 0 个，实测）"
+    if role == "M":
+        groups = _groups_of(own["names"])
+        return (f"### M.4 工具面（{own['total']} 个，实测）= 编排面 "
+                f"{len(groups.get('conductor', []))} 个 + 通用时钟 "
+                f"{len(groups.get('clock', []))} 个 + 文件面白名单 "
+                f"{len(groups.get('fs', []))} 个")
+    return f"### {role}.4 工具面（{own['total']} 个，实测）"
+
+
+def refresh_role_specs(text: str, face: dict) -> tuple[str, int]:
+    """重写 `docs/ROLE-SPECS.md` 里的数值槽（§R0 标题 + 11 个 `.4` 标题）。"""
+    lines = text.splitlines()
+    out: list[str] = []
+    hits = 0
+    for ln in lines:
+        new = ln
+        m = re.match(r"^## R0\. 全局工具总表（\d+ 个，逐条；Lean 关着时 \d+ 个", ln)
+        if m:
+            new = (f"## R0. 全局工具总表（{face['total']} 个，逐条；Lean 关着时 "
+                   f"{face['lean_off']['total']} 个 —— 三件 `formal.*` 不装配）")
+        else:
+            m = re.match(r"^### ([A-Z])\.4 工具面（", ln)
+            if m and m.group(1) in face["by_role"]:
+                new = _role_title(m.group(1), face)
+        if new != ln:
+            hits += 1
+        out.append(new)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else ""), hits
+
+
+def refresh_appendix(text: str, face: dict) -> tuple[str, int]:
+    """重写附录里的数值槽：11 节五格与两张清单、§R0.1、§R0.2 标题、§R0.3 五格、§S3 第 1 行。"""
+    lines = text.splitlines()
+    out: list[str] = []
+    role: str | None = None
+    hits = 0
+    for ln in lines:
+        new = ln
+        m = re.match(r"^## ([A-Z])\.4 ", ln)
+        if m and m.group(1) in face["by_role"]:
+            role = m.group(1)
+            own = face["by_role"][role]
+            new = f"## {role}.4 [附录·实测] 工具面明细（{own['total']} 件）"
+        elif ln.startswith("## "):
+            role = None
+            if ln.startswith("## R0.1 "):
+                new = (f"## R0.1 [附录·实测] {face['total']} 个工具的公共事实"
+                       f"（机械读数，现读于 {DATE_STAMP}（{VERSION_STAMP}，"
+                       f"`AGENTFLOW_LEAN_ENABLED=1`））")
+            elif ln.startswith("## R0.2 "):
+                new = re.sub(r"与总数 \d+ 无关", f"与总数 {face['total']} 无关", ln)
+        elif role is not None:
+            own = face["by_role"][role]
+            if ln.startswith("**现读于 "):
+                new = _readon_line(role)
+            elif ln.startswith("| 总数 |"):
+                new = f"| 总数 | **{own['total']}** |"
+            elif ln.startswith("| `side_effect` |"):
+                new = f"| `side_effect` | `{_pairs_text(own['se'], _SE_ORDER)}` |"
+            elif ln.startswith("| `external` |"):
+                others = sorted(n for n in own["names"]
+                                if str(face["ext_by_name"].get(n, "none")) != "none")
+                tail = ("（" + " / ".join(f"`{n}`" for n in others) + "）") if others else ""
+                new = f"| `external` | `{_ext_text(own['ext'])}`{tail} |"
+            elif ln.startswith("| 需审批 |"):
+                new = f"| 需审批 | **{own['appr']}** |"
+            elif ln.startswith("**逐件清单（按模块，共"):
+                new = f"**逐件清单（按模块，共 {own['total']}）**：{_group_line(own['names'])}。"
+            elif re.match(rf"^\*\*{role} 拿不到\*\*", ln):
+                missing = set(face["names"]) - own["names"]
+                new = (f"**{role} 拿不到**：另 {len(missing)} 件 —— {_group_line(missing)}"
+                       "（逐件见正文 §R0 全表；本节只给条数）。")
+        if role is None and ln.startswith("**handler 的形态**"):
+            forms = face["forms"]
+            new = (f"**handler 的形态**（现读于 {DATE_STAMP}（{VERSION_STAMP}，"
+                   f"`AGENTFLOW_LEAN_ENABLED=1`））：`functools.partial` "
+                   f"**{forms.get('partial', 0)}** / `lambda` **{forms.get('lambda', 0)}** / "
+                   f"具名闭包 **{forms.get('closure', 0)}**（共 {face['total']}）。")
+        elif role is None and ln.startswith("**八角色共有**"):
+            new = (f"**八角色共有**（A–H 的交集）：{face['shared_total']} 件 —— "
+                   f"{_group_line(set(face['shared_names']))}。")
+        elif role is None and ln.startswith("| B 口径（含 store 的完整装配）"):
+            new = (f"| B 口径（含 store 的完整装配） | `python -m agentflow.cli tools` | "
+                   f"**{face['total']}**（Lean 关着时 {face['lean_off']['total']}） | 权威读数 |")
+        elif role is None and re.match(r"^\| 工具总数 \|", ln):
+            new = (f"| 工具总数 | 55 | **{face['total']}**（`python -m agentflow.cli tools`；"
+                   f"Lean 关着时 {face['lean_off']['total']}） | ⚠️ |")
+        elif role is None and re.match(r"^\| 各角色工具数 \|", ln):
+            cells = ln.strip().strip("|").split("|")
+            if len(cells) >= 4:
+                spelled = " ".join(f"{r}{n}" for r, n in face["counts_by_role"].items())
+                cells[2] = f" `{spelled}`（同一命令读\"各角色工具数\"那一行） "
+                new = "|" + "|".join(cells) + "|"
+        elif role is None and re.match(r"^\| `side_effect` 分布 \|", ln):
+            off = face["lean_off"]
+            non_none = sum(v for k, v in face["ext"].items() if k != "none")
+            off_non_none = sum(v for k, v in off["ext"].items() if k != "none")
+            new = (f"| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；"
+                   f"`external`：`none 44 / egress 4 / exec 2` | **{face['total']} 口径**："
+                   f"`{_pairs_text(face['se'], _SE_ORDER)}`；`external`："
+                   f"`{_pairs_text(face['ext'], _EXT_ORDER)}`（非 `none` 共 {non_none} 件；"
+                   f"Lean 关着时 `{_pairs_text(off['se'], _SE_ORDER)}`、"
+                   f"`{_pairs_text(off['ext'], _EXT_ORDER)}` ⇒ {off_non_none} 件） | ⚠️ |")
+        elif role is None and re.match(r"^\| 需审批 \|", ln):
+            new = f"| 需审批 | 17 / 55 | **{face['appr']} / {face['total']}** | ⚠️ |"
+        elif role is None and re.match(r"^\| 1 \| `python -m agentflow\.cli tools` \|", ln):
+            leaks = "{" + ", ".join(
+                f"'{r}': [{', '.join(repr(n) for n in sorted(w))}]"
+                for r, w in (
+                    (r, {n for n in face["by_role"][r]["names"]
+                         if face["side_by_name"].get(n) == "write_local"})
+                    for r in ("C", "H", "V"))) + "}"
+            dict_text = "{" + ", ".join(
+                f"'{r}': {n}" for r, n in face["counts_by_role"].items()) + "}"
+            verdict = "空 = 正常" if not any(face["leaks"].values()) else "!! 有泄漏"
+            new = (f"| 1 | `python -m agentflow.cli tools` | `工具总数：{face['total']}"
+                   f"（已装模块 {face['modules']}…）`；`各角色工具数：{dict_text}`；"
+                   f"`只读角色写工具泄漏：{leaks}（{verdict}）`（现读于 {DATE_STAMP}；"
+                   f"Lean 关着时是 `工具总数：{face['lean_off']['total']}`） | 0 |")
+        if new != ln:
+            hits += 1
+        out.append(new)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else ""), hits
+
+
+def refresh_dev_spec(text: str, face: dict) -> tuple[str, int]:
+    """重写 `docs/DEVELOPMENT-SPEC.md` 的 `LIVE-READINGS` 块里 `cli_tools_*` 那几个键。"""
+    lines = text.splitlines()
+    out: list[str] = []
+    hits = 0
+    keys = {"cli_tools_total": face["total"], "cli_tools_modules": face["modules"]}
+    keys.update({f"cli_tools_role_{r.lower()}": n for r, n in face["counts_by_role"].items()})
+    for ln in lines:
+        new = ln
+        m = _LIVE_KEY_RE.match(ln)
+        if m and m.group(1) in keys:
+            comment = m.group(5)
+            # 计数写在注释里的那两行：注释也一起改成不带数字的说法，否则它必然漂。
+            if m.group(1) == "cli_tools_total":
+                comment = ("  # `python -m agentflow.cli tools` 首行\"工具总数：N\""
+                           "（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，"
+                           "本块钉的是 Lean 开档）")
+            elif m.group(1) == "cli_tools_role_a":
+                comment = "  # `python -m agentflow.cli tools` 的\"各角色工具数\"逐角色格（键名 = 角色小写）"
+            elif m.group(1) == "cli_tools_modules":
+                comment = "  # 同一行\"已装模块 N\""
+            else:
+                comment = ""
+            new = f"{m.group(1):<23}= {keys[m.group(1)]}{comment}"
+        elif "CLI 缺省 shell（Lean 关）是" in ln:
+            new = ln.split("CLI 缺省 shell（Lean 关）是")[0] + \
+                "CLI 缺省 shell（Lean 关）少三件 `formal.*`（`lean_scope` 决定装不装那个模块）"
+        if new != ln:
+            hits += 1
+        out.append(new)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else ""), hits
+
+
+def write_readings(*, root: Path, face: dict) -> list[tuple[str, int]]:
+    """把三份文档的数值槽重写成 `face` 的现算值；返回 `[(相对路径, 改了几处)]`。
+
+    幂等：同一份 `face` 跑两遍，第二遍每一项都是 0 处改动。
+    只碰数值槽与那几节第一行的观测日期，散文与历史留痕一个字不动。
+    """
+    docs = [
+        (DOC_REL, refresh_role_specs),
+        (_APPENDIX_REL, refresh_appendix),
+        (_DEV_SPEC_REL, refresh_dev_spec),
+    ]
+    changed: list[tuple[str, int]] = []
+    for rel, fn in docs:
+        path = root / rel
+        if not path.is_file():
+            continue
+        old = path.read_text(encoding="utf-8")
+        new, hits = fn(old, face)
+        if new != old:
+            path.write_text(new, encoding="utf-8", newline="\n")
+        changed.append((rel.as_posix(), hits))
+    return changed
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="核对 docs/ROLE-SPECS.md 的结构完整性")
     ap.add_argument("--root", default=None, help="仓库根（默认自动探测）")
@@ -301,6 +650,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--roles", default=None,
                     help="期望的角色集合，逗号分隔（默认 A,B,C,D,E,F,G,H,M —— 不给时行为与原版一字不变）")
     ap.add_argument("--json", action="store_true", help="以 JSON 输出")
+    ap.add_argument(
+        "--write", action="store_true",
+        help=("把三份文档里的数值槽重写成这一次的现算值（幂等）：正文 §R0 标题与 11 个 `.4` 标题、"
+              "附录 §R0.1/§R0.2 标题/§R0.3 五格/§S3 第 1 行/11 节五格与两张清单、"
+              f"`{_DEV_SPEC_REL.as_posix()}` 的 `cli_tools_*` 键。只碰数值槽与观测日期，"
+              "散文与历史留痕一个字不动。写完照常跑一次门并返回它的退出码 —— "
+              "写完之后仍然红，说明有判据要的东西不在数值槽里（例如 §R0 表少一行）。"),
+    )
     ap.add_argument(
         "--no-live", action="store_true",
         help=("跳过『与现场装配对账』这一步（`H-8`）。默认做：包 import 不进来时"
@@ -320,6 +677,13 @@ def main(argv: list[str] | None = None) -> int:
     doc = Path(args.doc) if args.doc else DOC_REL
     if not doc.is_absolute():
         doc = root / doc
+    if args.write:
+        face, why = live_tool_face(root=root)
+        if face is None:
+            print(f"[unknown] {why}", file=sys.stderr)
+            return 2
+        for rel, hits in write_readings(root=root, face=face):
+            print(f"[write] {rel}: {hits} 处")
     live: dict[str, int] | None = None
     live_reason = ""
     live_role_list: tuple[str, ...] | None = None

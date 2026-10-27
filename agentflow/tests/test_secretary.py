@@ -597,7 +597,11 @@ def test_closure_reminders_are_produced_at_the_top_level_finish(tmp_path: pathli
     assert [x["task_id"] for x in got["reminded"]] == ["r-0001"], got
     assert got["by_state"] == {"unclaimed": 1} and got["by_to"] == {"M": 1}, got
     detail = _run_row(st, busy_tid)["detail"]
-    assert "闭环提醒 1 条" in detail and "unclaimed" in detail, detail
+    # 两栏写法（2026-10-26 Q18）：在跑的子代理那一栏是 0（这一局只有一条队列请求），
+    # 待办项那一栏点名 r-0001。改前这一句是 `闭环提醒 1 条（unclaimed 1 条）` —— 一个数，
+    # 读者分不出"在跑的子"与"没人接手的项"。
+    assert "在跑的子代理 0 个" in detail and "待办项 1 条" in detail, detail
+    assert "unclaimed" in detail and "r-0001" in detail, detail
     # 每条进决定台账：最后两行是"摘要 + 逐条"，逐条那行带 task_id/state/to
     tail = s.decisions()[-2:]
     assert [r["duty"] for r in tail] == [3, 3], tail

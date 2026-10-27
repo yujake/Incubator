@@ -16,9 +16,9 @@
 本文件把「谁在活着的那条路上调它」做成源码级判据：一张表（`WIRED`）+ 一个走一遍
 AST 就能算出来的可达集 + 一个反向核对（发现的空集必须等于 `KNOWN_ORPHANS`）。
 
-## 边的三种形态（少算一种就会误报 ORPHAN）
+## 边的四种形态（少算一种就会误报 ORPHAN）
 
-真机里"被调用"不只是 `f(...)` 这一种写法。本仓实测有三种，三种都要算边：
+真机里"被调用"不只是 `f(...)` 这一种写法。本仓实测有四种，四种都要算边：
 
 1. 调用：`f(...)` / `obj.f(...)`；
 2. 裸引用：`sessions.set_append_hook(_observe_session_event)`、`clock.set_due_handler(_deliver_due)`
@@ -26,25 +26,42 @@ AST 就能算出来的可达集 + 一个反向核对（发现的空集必须等�
    （它唯一的入口就是这个挂点）；
 3. 工厂默认值：`sleep = sleep or self._default_sleep` —— 引用之后经 `self._sleep(...)` 调用。
    只算调用会把 `fetch._default_sleep` 判成孤儿。
+4. 字符串接缝（2026-10-26，F1a）：`getattr(cond, "open_retire_question", None)` —— 名字是
+   一个字符串字面量，源码里没有任何调用边能连到那份定义。第二实参是字面量时按那个
+   名字记一条边（种类 `getattr`），解析走紧口径：按文件指不到唯一一份就一个都不给、
+   只留一条 problem（否则一条 `getattr(args, "run")` 能替三十个死 `run` 作证）。
 
 ## 入口集（真机可达的起点）
 
 - `cli.py` 里 `cmd_*` 那些子命令处理器（`set_defaults(func=cmd_xxx)` 是 argparse 的挂点，
   静态看不见）；
 - `host.py` 的全部函数（装配线本身）；
-- 带 `tool` 装饰器的函数（模型按名字从注册表里取，静态也看不见）。
+- 带 `tool` 装饰器的函数（模型按名字从注册表里取，静态也看不见）；
+- 模块级派发表点名的那些函数（2026-10-26，F1a）：`readers.ROUTES` 这种
+  `("GET", "/api/state", "handle_state")` 三元组表、`readers.HANDLERS.update({...})` /
+  `writes.HANDLERS` 这种"名字 → 函数对象"登记表。`routes.handler_for` 是按字符串取函数
+  的（`table.get(name)`），源码里一条调用边都没有 ⇒ 不种的话 B/C 两条线的 HTTP 处理器
+  在图上全是孤儿。实测补之前 `webui/readers.py` 只有 7 个 def 可达（≈60 个里的 7 个），
+  于是"这一片到底接上没有"这件事在这个判据上读不出来。
 
-三者都是"真机入口"，但它们都不是"静态可解析的调用边" ⇒ 必须显式种进可达集，否则整片
-工具体会被判成不可达。
+  两种形状都按结构认，不按表名认（表名叫什么靠不住，而形状只有那两种）：
+  路由表 = 容器里每一行都是"至少两格、每格都是字符串"的元组；处理器登记表 = 字典、
+  键全是字符串、值是裸名字（或字符串）。`__all__` 与 `_TS_TYPES` 都不长这样 ——
+  声明面不是调用面，把 `__all__` 当种子等于让"申明了就活着"。
 
 ## 误差方向（这一条必须写清，否则判据会骗人）
 
 - 边按 (文件, 限定名) 收，不再只按名字（2026-10-27 晚第二处修，理由见下面"图的边"那一节）；
   一个调用点上的名字解析不出唯一一份文件时会退回按名字，并记一条 problem
   （`resolution_problems`），台账里每一个名字都不许走到那一档；
-- 经 `getattr(名字)` / 字符串表 / 反射得到的边看不见 ⇒ 会误报 ORPHAN。所以
-  每条 `KNOWN_ORPHANS` 都带一句理由，且台账必须与实测集合相等：有人真把它接上，
-  这一条会红（接线事件要人看见），有人新造一条孤儿，这一条也会红。
+- 两条路的方向不同，两条都要写清（2026-10-26，F1a）：
+  漏报（会误报 ORPHAN）—— 经反射 / 运行时拼出来的名字（`getattr(obj, name)` 里 `name`
+  是变量）仍然看不见；字符串接缝只收"第二实参是字面量"那一半。
+  漏报的反面（会误报 WIRED）—— 派发表按形状认（路由表 / 登记表），一张"长得像表、
+  其实不是派发表"的字面量会给它点名的函数发一张假入口。这一档的兜底是台账：每条
+  `KNOWN_ORPHANS` 都带一句理由，且台账必须与实测集合相等 —— 有人真把它接上，这一条会红
+  （接线事件要人看见），有人新造一条孤儿，这一条也会红；名字对不上时先查"它是不是被
+  哪张假表种进去了"，而不是先把台账改宽。
 """
 from __future__ import annotations
 
@@ -97,21 +114,152 @@ def _module_files(base: pathlib.PurePosixPath, module: str) -> list[str]:
     return [f"{text}.py", f"{text}/__init__.py"]
 
 
+#: 字符串接缝记的边（`getattr(obj, "名字")`）：这类边是"按名字查一次"，不是"调用同一份
+#: 定义"。它们按同一套名字解析走，但解析不出唯一一份时不借可达性（见 `_resolve` 的
+#: `strict`），否则一个 `getattr(args, "run")` 就能把全树三十份 `run` 一起点亮。
+_STRING_SEAM_KINDS: frozenset[str] = frozenset({"getattr"})
+
+
+def _is_str(node: ast.AST) -> bool:
+    """这个节点是不是一个字符串常量。"""
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _module_table_nodes(stmt: ast.stmt) -> list[ast.expr]:
+    """一条模块级语句里、那些"可能是派发表"的字面量容器（元组 / 列表 / 字典）。
+
+    只认三种写法：赋值右侧、类型注解赋值右侧、以及 `X.update({...})` 的实参
+    （`readers.HANDLERS.update({...})` 就是第三种）。刻意不下钻普通调用：
+    `ROUTES = compose(a, b, c)` 这种"算出来的表"由它自己那段源码给出落点，
+    这一层不替它猜。
+    """
+    cand: list[ast.expr] = []
+    if isinstance(stmt, ast.Assign):
+        cand = [stmt.value]
+    elif isinstance(stmt, ast.AnnAssign):
+        cand = [stmt.value] if stmt.value is not None else []
+    elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+        cand = list(stmt.value.args)
+    return [c for c in cand if isinstance(c, (ast.Tuple, ast.List, ast.Dict))]
+
+
+def _route_rows(container: ast.expr) -> list[str]:
+    """路由子表（`("GET", "/api/state", "handle_state")` 这种三元组）里点名的名字。
+
+    形状判据（少一条就会把 `__all__` 那种"声明面"当成派发表）：容器里每一行都是一个
+    元组 / 列表，每一行至少两格，且每一格都是字符串常量。`__all__` 是"一串字符串"、
+    `_TS_TYPES` 是"字符串键 → 元组"，两者都不长这样，于是都不会被误当成派发表 ——
+    声明面不是调用面，把它当种子等于让"申明了就活着"。
+    """
+    rows = container.elts if isinstance(container, (ast.Tuple, ast.List)) else []
+    if not rows:
+        return []
+    names: list[str] = []
+    for row in rows:
+        if not isinstance(row, (ast.Tuple, ast.List)) or len(row.elts) < 2:
+            return []
+        if not all(_is_str(e) for e in row.elts):
+            return []
+        names.extend(str(e.value) for e in row.elts)
+    return names
+
+
+def _handler_rows(container: ast.expr) -> list[str]:
+    """处理器登记表（`{"handle_state": handle_state}`）里点名的名字。
+
+    形状判据：字典、键全是字符串、值全是"裸名字"或字符串。值是别的东西（比如
+    `_TS_TYPES` 那种"字符串键 → 元组"）就说明它不是登记表。
+    """
+    if not isinstance(container, ast.Dict) or not container.keys:
+        return []
+    names: list[str] = []
+    for key, value in zip(container.keys, container.values):
+        if not _is_str(key):
+            return []
+        if isinstance(value, ast.Name):
+            names.append(value.id)
+        elif _is_str(value):
+            names.append(str(value.value))
+        else:
+            return []
+    return names
+
+
+def _action_rows(container: ast.expr) -> list[str]:
+    """动作表（`ACTIONS = (ActionSpec(...), ...)`）里点名的那些名字。
+
+    形状判据：容器里每一行都是一次调用，且每一行都带字符串字面量实参。
+    `ActionSpec("G", "revise", "改一条…", ..., handler_name="revise")` 这种表是角色动作的
+    真机派发表：`capabilities` 从它派生 `CAPABILITIES`，`host.build_role_registry` 按
+    `handler_name` 找到实现类上的那个方法。源码里没有一条调用边能连到那些方法 ——
+    实测（2026-10-26，F1a）：不种它时 `agent_g/revise.py:_Revise.revise`、
+    `agent_h/review.py:_Review.review` 这些动作实现在图上都是孤儿，而它们是真机入口。
+    """
+    rows = container.elts if isinstance(container, (ast.Tuple, ast.List)) else []
+    if not rows:
+        return []
+    names: list[str] = []
+    for row in rows:
+        if not isinstance(row, ast.Call):
+            return []
+        got = [str(e.value) for e in list(row.args) + [k.value for k in row.keywords]
+               if _is_str(e)]
+        if not got:
+            return []
+        names.extend(got)
+    return names
+
+
+#: 三档派发表。值 = 这个名字解析不出唯一一份时的口径（`entries()` 用）：
+#: - `routes` / `handlers`：表在一个已知模块里点了一个函数的名（`HANDLERS.get(name)`），
+#:   所以"按文件指不到唯一一份"就是这张表坏了 ⇒ 紧口径：种不进去，只留 problem；
+#: - `actions`：表点的是"角色动作的实现方法名"，而实现类落在哪个文件不由表说
+#:   （`host.build_role_registry` 按角色装配），静态不知道 ⇒ 只能按名字（所有同名定义
+#:   都算入口）。这是过近似的那一侧，代价写在模块 docstring 的「误差方向」里。
+_DISPATCH_KINDS: dict[str, bool] = {"routes": True, "handlers": True, "actions": False}
+
+
+def _table_entries(container: ast.expr) -> tuple[str, list[str]] | None:
+    """一个模块级字面量容器是哪种派发表、点名的那些名字（认不出就返回 None）。"""
+    if isinstance(container, ast.Dict):
+        got = _handler_rows(container)
+        return ("handlers", got) if got else None
+    got = _route_rows(container)
+    if got:
+        return ("routes", got)
+    got = _action_rows(container)
+    return ("actions", got) if got else None
+
+
 class _Collect(ast.NodeVisitor):
-    """一遍 AST 收四样：定义点、调用边、裸引用边、`from ... import` 的落点表。"""
+    """一遍 AST 收五样：定义点、调用边、裸引用边、`from ... import` 的落点表、派发表。"""
 
     def __init__(self, rel: str) -> None:
         self.rel = rel
         self.stack: list[str] = []
         self.defs: list[dict] = []
-        self.edges: list[tuple[str, str, int, str]] = []   # (caller_qual, callee, line, kind)
+        self.edges: list[tuple[str, str, int, str, tuple[str, ...]]] = []
+        # (caller_qual, callee, line, kind, 别名指到的候选文件)
         self.imports: dict[str, list[str]] = {}            # 本地名 -> 候选文件
+        self.tables: list[tuple[int, str, list[str]]] = []  # (行号, 档, 点名的那些名字)
 
     def _qual(self) -> str:
         return ".".join(self.stack) or "<module>"
 
     def _enter(self, name: str) -> None:
         self.stack.append(name)
+
+    def visit_Module(self, node: ast.Module) -> None:
+        # 模块级派发表（2026-10-26 F1a）：入口那一侧的一张表 —— 见模块 docstring「入口集」
+        # 的第 4 条。这里只收"点名的名字"，解析（名字 → 定义点）留给 `entries()`：
+        # 名字可能指到别的文件（`routes._OWN` 的第三元素是 `server.py` 上的方法名）。
+        for stmt in node.body:
+            for container in _module_table_nodes(stmt):
+                got = _table_entries(container)
+                if got:
+                    kind, names = got
+                    self.tables.append((int(container.lineno), kind, list(names)))
+        self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self.defs.append({"rel": self.rel, "line": node.lineno, "name": node.name,
@@ -130,30 +278,61 @@ class _Collect(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         base = _import_base(self.rel, node.level or 0)
+        module = node.module or ""
         for alias in node.names:
-            self.imports[alias.asname or alias.name] = _module_files(base, node.module or "")
+            # 两档候选（2026-10-26 F1a，第二处修）：`from .pkg import 名字` 里的"名字"
+            # 可能是 `pkg` 里的一个定义，也可能是 `pkg` 下的一个子模块。
+            # 只按前者记时，`from . import stopctl as SC` 会指到包的 `__init__.py`，
+            # 于是 `SC.acquire(...)` 按文件解析不出来、退回按名字 —— 而"退回按名字"
+            # 正是本文件第一处修要挡掉的那个漏报方向（同名借用可达性）。
+            cands = list(_module_files(base, module))
+            cands.extend(_module_files(base / module.replace(".", "/") if module else base,
+                                       alias.name))
+            self.imports[alias.asname or alias.name] = cands
         self.generic_visit(node)
+
+    def _alias_files(self, node: ast.expr) -> tuple[str, ...]:
+        """`X.attr` 里 `X` 是 `from . import mod as X` 那种别名时，那个别名指到的候选文件。
+
+        这一格是 alias 那条接缝的另一半（2026-10-26，F1a）：`from . import clock as CLK`
+        之后写 `CLK.start_timer(...)`，源码里那条边的名字是 `start_timer`，而
+        `import` 表里记的键是别名 `CLK` —— 两个名字对不上，于是按文件永远解析不出来，
+        每次都退回按名字。把别名指到的文件带在边上，`_resolve` 才真的按文件解析。
+        """
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):
+            return tuple(self.imports.get(node.id, ()))
+        return ()
 
     def visit_Call(self, node: ast.Call) -> None:
         name = None
+        hint: tuple[str, ...] = ()
         if isinstance(node.func, ast.Name):
             name = node.func.id
         elif isinstance(node.func, ast.Attribute):
             name = node.func.attr
+            hint = self._alias_files(node.func.value)
         if name:
-            self.edges.append((self._qual(), name, node.lineno, "call"))
+            self.edges.append((self._qual(), name, node.lineno, "call", hint))
+        # 字符串接缝（2026-10-26 F1a）：`getattr(cond, "open_retire_question", None)` 这一档
+        # 是"按名字取一个函数、再调它"，静态看不见落点。第二实参是字符串字面量时按那个
+        # 名字记一条边 —— 这是"这个名字在真机上被查了一次"的唯一书面证据。
+        if isinstance(node.func, ast.Name) and node.func.id == "getattr" \
+                and len(node.args) >= 2 and _is_str(node.args[1]):
+            self.edges.append((self._qual(), str(node.args[1].value),  # type: ignore[attr-defined]
+                               node.lineno, "getattr", ()))
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
         # 裸引用（`f` 作为值被传出去）。`Load` 才算：`Store` 是赋值目标，不是边。
         if isinstance(node.ctx, ast.Load):
-            self.edges.append((self._qual(), node.id, node.lineno, "ref"))
+            self.edges.append((self._qual(), node.id, node.lineno, "ref", ()))
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         # `obj.attr` 里 attr 作为值被取出（`self._default_sleep` / `SS.set_append_hook`）。
         if isinstance(node.ctx, ast.Load):
-            self.edges.append((self._qual(), node.attr, node.lineno, "ref"))
+            self.edges.append((self._qual(), node.attr, node.lineno, "ref",
+                               self._alias_files(node.value)))
         self.generic_visit(node)
 
 
@@ -165,19 +344,29 @@ def _graph_of(pairs: list[tuple[str, ast.Module]]) -> dict:
     那几步（收边、种入口、闭包）真的跑一遍，而不是用例自己手搭一份图再自证。
     """
     defs: dict[str, list[dict]] = {}
-    out_edges: dict[tuple[str, str], set[str]] = {}
+    out_edges: dict[tuple[str, str], dict[str, tuple[str, tuple[str, ...]]]] = {}
     in_edges: dict[str, list[tuple[str, str, int, str]]] = {}
     imports: dict[str, dict[str, list[str]]] = {}
+    dispatch: dict[str, list[tuple[int, str, list[str]]]] = {}   # 文件 -> [(行号, 档, 名字)]
     for rel, tree in pairs:
         got = _Collect(rel)
         got.visit(tree)
         for d in got.defs:
             defs.setdefault(d["name"], []).append(d)
-        for caller, callee, line, kind in got.edges:
-            out_edges.setdefault((rel, caller), set()).add(callee)
+        for caller, callee, line, kind, hint in got.edges:
+            slot = out_edges.setdefault((rel, caller), {})
+            old = slot.get(callee)
+            # 同一个名字既是普通调用、又被字符串接缝查过时，记"普通"那一档：两档的
+            # 解析宽严不同（字符串接缝不借可达性），宽的优先 —— 否则一条紧挨着的调用
+            # 会被另一条 getattr 的紧口径拖死。
+            if old is None or (old[0] in _STRING_SEAM_KINDS and kind not in _STRING_SEAM_KINDS):
+                slot[callee] = (kind, hint)
             in_edges.setdefault(callee, []).append((rel, caller, line, kind))
         imports[rel] = dict(got.imports)
-    return {"defs": defs, "out": out_edges, "in": in_edges, "imports": imports}
+        if got.tables:
+            dispatch[rel] = list(got.tables)
+    return {"defs": defs, "out": out_edges, "in": in_edges, "imports": imports,
+            "dispatch": dispatch}
 
 
 @functools.lru_cache(maxsize=1)
@@ -187,9 +376,25 @@ def graph() -> dict:
                       for path in sorted(SRC.rglob("*.py"))])
 
 
-def _resolve(g: dict, caller_rel: str, name: str) -> tuple[set[tuple[str, str]], str]:
-    """把一个调用点上的名字解析成 `(文件, 限定名)` 定义点；退回按名字时返回一句 problem。"""
+def _resolve(g: dict, caller_rel: str, name: str, *, strict: bool = False,
+             files: tuple[str, ...] = ()) -> tuple[set[tuple[str, str]], str]:
+    """把一个调用点上的名字解析成 `(文件, 限定名)` 定义点；解析不出唯一一份时返回一句 problem。
+
+    `files`：调用点自己带来的候选文件（`CLK.start_timer` 里 `CLK` 指向的那几份）。
+    它排在最前面，因为它是调用点自己给出来的证据；没有它时 `import` 表只能按
+    被调的名字查，而别名写法（`from . import clock as CLK`）里被调的名字是 `start_timer`、
+    `import` 表的键是 `CLK`，两者对不上 ⇒ 每次都退回按名字。
+
+    `strict=True` 是字符串接缝那一档的紧口径（2026-10-26 F1a）：按文件指不到唯一一份
+    就一个都不给，只留 problem。理由：`getattr(obj, "run", None)` 是"按名字查一次"，
+    查的是哪个 `run` 静态不知道；把全树三十份 `run` 一起点亮，等于让一条
+    `getattr(args, "run")` 替三十个死函数作证 —— 那是本文件最贵的那种坏法。
+    """
     rows = g["defs"].get(name, [])
+    for candidate in files:
+        there = {(d["rel"], d["qual"]) for d in rows if d["rel"] == candidate}
+        if there:
+            return there, ""
     here = {(d["rel"], d["qual"]) for d in rows if d["rel"] == caller_rel}
     if here:
         return here, ""
@@ -202,14 +407,22 @@ def _resolve(g: dict, caller_rel: str, name: str) -> tuple[set[tuple[str, str]],
         return everywhere, ""
     if not everywhere:
         return set(), ""
-    return everywhere, (
-        f"{caller_rel} 里的调用点 {name!r} 有 {len(everywhere)} 个同名定义点，"
-        f"按文件指不到唯一一份，退回按名字：{sorted(everywhere)}"
-    )
+    problem = (f"{caller_rel} 里的调用点 {name!r} 有 {len(everywhere)} 个同名定义点，"
+               f"按文件指不到唯一一份，退回按名字：{sorted(everywhere)}")
+    if strict:
+        return set(), problem.replace("退回按名字", "按紧口径一个都不给")
+    return everywhere, problem
 
 
 def entries(g: dict) -> set[tuple[str, str]]:
-    """真机入口集（见模块 docstring 那三条），元素是 `(文件, 限定名)`。"""
+    """真机入口集（见模块 docstring 那四条），元素是 `(文件, 限定名)`。
+
+    第 4 条（模块级派发表，2026-10-26 F1a）在 `g["dispatch"]` 里：那里面是"表里点名的
+    名字"，名字 → 定义点的解析仍走 `_resolve`，宽严按表的档位给（`_DISPATCH_KINDS`）。
+    为什么要从表里种：`routes.handler_for` / `HANDLERS.get(name)` 是"按字符串取函数"，
+    源码里没有任何调用边能连到 `readers.handle_state` 那一片 —— 不种的话整个 B 线
+    读侧（一百来个 def）在图上都是孤儿（实测补之前 7/103 可达）。
+    """
     seeds: set[tuple[str, str]] = set()
     for name, rows in g["defs"].items():
         for d in rows:
@@ -219,11 +432,17 @@ def entries(g: dict) -> set[tuple[str, str]]:
                 seeds.add((d["rel"], d["qual"]))
             elif any("tool" in deco for deco in d["decos"]):
                 seeds.add((d["rel"], d["qual"]))
+    for rel, tables in g.get("dispatch", {}).items():
+        for _line, kind, names in tables:
+            strict = _DISPATCH_KINDS.get(kind, True)
+            for name in names:
+                targets, _problem = _resolve(g, rel, name, strict=strict)
+                seeds.update(targets)
     return seeds
 
 
 def _walk(g: dict) -> tuple[set[tuple[str, str]], list[tuple[str, str, str, str]]]:
-    """从入口集顺边闭包；顺手把"退回按名字"的解析 problem 收下来（每个图只算一遍）。"""
+    """从入口集顺边闭包；顺手把"解析不出唯一一份"的那些调用点收下来（每个图只算一遍）。"""
     cached = g.get("_walk")
     if cached is not None:
         return cached
@@ -235,8 +454,9 @@ def _walk(g: dict) -> tuple[set[tuple[str, str]], list[tuple[str, str, str, str]
         if (rel, qual) in seen:
             continue
         seen.add((rel, qual))
-        for callee in sorted(g["out"].get((rel, qual), ())):
-            targets, problem = _resolve(g, rel, callee)
+        for callee, (kind, hint) in sorted(g["out"].get((rel, qual), {}).items()):
+            targets, problem = _resolve(g, rel, callee,
+                                        strict=kind in _STRING_SEAM_KINDS, files=hint)
             if problem:
                 problems.append((rel, qual, callee, problem))
             for target in targets:
@@ -329,7 +549,7 @@ WIRED: dict[str, str] = {
     "adjudicate_proposition": "Secretary.record_statement",
     "append_proposition_verdict": "Secretary.adjudicate_proposition",
     "proposition_verdict_of": "Secretary.adjudicate_proposition（缓存读回）",
-    # 13（续）证明的路子说明：写侧 `record_statement` 落 `_proof_routes`，
+    # 13（续）证明的路子说明：写侧 `record_statement` 落 `secretary.PROOF_ROUTES_KEY`，
     # 读侧 2026-10-27 起接在 `table_tools._with_proof_routes`（`table.get` /
     # `table.list` 的 statements 行带 `route` 与 `proof_routes` 两格）。
     # 改前这两只是孤儿：写进去之后全仓 0 个非测试调用点读回来。
@@ -408,6 +628,13 @@ WIRED_BY_REGISTRY: dict[str, str] = {
 #: - `handoffs_reading` → `conductor.watch` / `conductor.ledger` 的 `silent_children`；
 #: - `child_wait_invariant` → `conductor.watch` / `conductor.status_report` 的同一名格子。
 #: 每一格的"读数里真有它 + 打桩成空就红"由 `tests/test_wiring_readouts.py` 钉住。
+#:
+#: 2026-10-26（F1a 第 ③ 条，补两条种子来源之后重跑）：台账仍然是空的。补的是入口那一侧
+#: （模块级派发表）与字符串接缝（`getattr` 字面量 / `import ... as` 别名），它们只影响
+#: "什么算活着的起点/边"，不影响"台账里这几个名字该不该在里面"—— 补完之后可达定义点
+#: 从 3868 涨到 4123（全树 4859 个），`webui/readers.py` 从 7/103 涨到 101/103，
+#: 而台账与实测两个方向仍然相等。误判的那些名字没有进这张表：它们本来就是活的，
+#: 只是当时的图看不见那条线（清单在 `agentflow/temp/F1A-wiring-gained.md`）。
 KNOWN_ORPHANS: dict[str, str] = {}
 
 #: 这三个是"只作为读数被读、从不参与控制流"的属性。它们不算孤儿（属性读取算边），
@@ -615,6 +842,187 @@ def test_a_name_that_resolves_to_two_files_is_recorded_as_a_problem() -> None:
     ])
     assert resolution_problems(unique) == [], resolution_problems(unique)
     assert is_live(unique, "solo_fn", rel="probe_unique.py") is True
+
+
+def test_a_module_level_dispatch_table_seeds_the_functions_it_names() -> None:
+    """反真空（入口集第 4 条，2026-10-26 F1a）：模块级派发表点名的函数必须被种成入口。
+
+    这一段是"表的两种形状"的判据本体，两侧都断：
+
+    - 路由表（`("GET", "/a", "handle_a")`）：字符串常量点到一个同文件定义 ⇒ 可达；
+    - 处理器登记表（`{"handle_b": handle_b}`）：键是名字、值是函数对象 ⇒ 可达；
+    - 动作表（`(Spec("G", "revise", ...),)`）：值是一个角色动作的实现方法名 ⇒ 同名定义
+      都算入口（过近似那一侧，理由见 `_DISPATCH_KINDS`）。
+
+    三条都要有一条反侧：把表里的那个名字改掉 / 把表去掉，同一份定义必须重新变成孤儿 ——
+    否则这三条只是在核"有 def 就算活"。
+    """
+    named = _graph_of([
+        ("probe_tables.py", ast.parse(
+            "def handle_a():\n    return 1\n\n"
+            "def handle_b():\n    return 2\n\n"
+            "ROUTES = (('GET', '/a', 'handle_a'),)\n"
+            "HANDLERS = {'handle_b': handle_b}\n")),
+    ])
+    assert is_live(named, "handle_a", rel="probe_tables.py") is True, (
+        "路由表点了 handle_a 却没把它种成入口", sorted(entries(named)))
+    assert is_live(named, "handle_b", rel="probe_tables.py") is True, (
+        "登记表点了 handle_b 却没把它种成入口", sorted(entries(named)))
+
+    # 反侧：表还在，但表里写的名字不在树上 ⇒ 两格都读成死（种子的牙在这一侧）。
+    renamed = _graph_of([
+        ("probe_tables.py", ast.parse(
+            "def handle_a():\n    return 1\n\n"
+            "def handle_b():\n    return 2\n\n"
+            "ROUTES = (('GET', '/a', 'handle_nowhere'),)\n"
+            "HANDLERS = {'handle_nobody': 'handle_elsewhere'}\n")),
+    ])
+    assert is_live(renamed, "handle_a", rel="probe_tables.py") is False
+    assert is_live(renamed, "handle_b", rel="probe_tables.py") is False
+    assert not entries(renamed), sorted(entries(renamed))
+
+    # 声明面不许当派发表：`__all__` 那种"一串字符串"不是调用面。
+    declared = _graph_of([
+        ("probe_decl.py", ast.parse(
+            "def exported():\n    return 1\n\n"
+            "__all__ = ['exported']\n")),
+    ])
+    assert is_live(declared, "exported", rel="probe_decl.py") is False, (
+        "`__all__` 被当成派发表了 —— 申明了就算活着，这一条判据从此不量接线")
+
+
+def test_an_action_table_puts_every_same_named_implementation_on_the_graph() -> None:
+    """反真空（动作表那一档）：`handler_name` 同名多份时按名字算入口，且这一档是宽的。
+
+    为什么它必须是宽的：`host.build_role_registry` 按角色装配实现类，而
+    `ActionSpec.handler_name` 只说"方法叫什么"，不说"在哪个文件" —— 静态指不到唯一一份。
+    紧口径在这里会把真实现判成孤儿（实测：`agent_g/revise.py:_Revise.revise`、
+    `agent_h/review.py:_Review.review` 这些动作实现在补种子之前都是孤儿）。
+
+    反侧：把动作表去掉，同名两份必须都读成死 —— 否则这条判据是空的。
+    """
+    with_table = _graph_of([
+        ("probe_specs.py", ast.parse(
+            "class Spec:\n"
+            "    def __init__(self, *args: object, **kw: object) -> None:\n"
+            "        pass\n\n"
+            "ACTIONS = (Spec('G', 'revise', '改一条', handler_name='revise'),)\n")),
+        ("probe_impl_a.py", ast.parse("def revise():\n    return 'a'\n")),
+        ("probe_impl_b.py", ast.parse("def revise():\n    return 'b'\n")),
+    ])
+    assert is_live(with_table, "revise", rel="probe_impl_a.py") is True, (
+        "动作表点的名字没被种成入口", sorted(entries(with_table)))
+    assert is_live(with_table, "revise", rel="probe_impl_b.py") is True
+
+    without = _graph_of([
+        ("probe_specs.py", ast.parse(
+            "class Spec:\n"
+            "    def __init__(self, *args: object, **kw: object) -> None:\n"
+            "        pass\n")),
+        ("probe_impl_a.py", ast.parse("def revise():\n    return 'a'\n")),
+        ("probe_impl_b.py", ast.parse("def revise():\n    return 'b'\n")),
+    ])
+    assert is_live(without, "revise", rel="probe_impl_a.py") is False
+    assert is_live(without, "revise", rel="probe_impl_b.py") is False
+
+
+def test_a_getattr_string_literal_is_an_edge() -> None:
+    """反真空（字符串接缝，2026-10-26 F1a）：`getattr(obj, "名字")` 里那个字面量要算边。
+
+    `getattr(cond, "open_retire_question", None)` 这种写法在源码里没有调用边 ——
+    不把第二实参当边，那一头就是孤儿（而它是真机上唯一会执行到的入口）。
+
+    两条反侧，缺一条这一档就会骗人：
+    - 名字是变量（`getattr(obj, name)`）时不算边（那种名字静态看不见，硬算就是编）；
+    - 同名多定义时紧口径一个都不给、只留一条 problem（否则一条
+      `getattr(args, "run")` 能替全树三十份 `run` 作证）。
+    """
+    literal = _graph_of([
+        ("probe_seam.py", ast.parse("def target_fn():\n    return 1\n")),
+        ("cli.py", ast.parse(
+            "def cmd_probe(args):\n"
+            "    return getattr(object(), 'target_fn', None)\n")),
+    ])
+    assert is_live(literal, "target_fn", rel="probe_seam.py") is True, (
+        "`getattr(..., 'target_fn')` 的字符串没被当成边", resolution_problems(literal))
+
+    variable = _graph_of([
+        ("probe_seam.py", ast.parse("def target_fn():\n    return 1\n")),
+        ("cli.py", ast.parse(
+            "def cmd_probe(args):\n"
+            "    name = 'target_fn'\n"
+            "    return getattr(object(), name, None)\n")),
+    ])
+    assert is_live(variable, "target_fn", rel="probe_seam.py") is False, (
+        "名字是变量时也算成了边 —— 这一档会替运行时才知道的调用作证")
+
+    ambiguous = _graph_of([
+        ("probe_a.py", ast.parse("def dup_fn():\n    return 1\n")),
+        ("probe_b.py", ast.parse("def dup_fn():\n    return 2\n")),
+        ("cli.py", ast.parse(
+            "def cmd_probe(args):\n"
+            "    return getattr(object(), 'dup_fn', None)\n")),
+    ])
+    assert is_live(ambiguous, "dup_fn", rel="probe_a.py") is False, (
+        "字符串接缝在同名多定义时借了可达性 ⇒ 一条 getattr 替多份定义作证")
+    assert is_live(ambiguous, "dup_fn", rel="probe_b.py") is False
+    notes = [note for note in resolution_problems(ambiguous) if note[2] == "dup_fn"]
+    assert notes and "按紧口径一个都不给" in notes[0][3], (
+        f"紧口径没留 problem ⇒ 这种解析失败会静默过去：{resolution_problems(ambiguous)}")
+
+
+def test_a_from_import_alias_points_at_the_submodule() -> None:
+    """反真空（别名那一档，2026-10-26 F1a）：`from . import mod as M; M.f(...)` 要按文件解析。
+
+    改前这一条两种写法都走不通：`from . import helper as H` 被记成"包里的一个名字"
+    （候选是 `__init__.py`），而 `H.helper()` 这条边的名字是 `helper`、`import` 表的键
+    是 `H` —— 两个名字对不上，于是永远退回按名字。退回按名字的后果不是"少一条边"，
+    而是"同名的那份死函数也借到可达性"（漏报）。下面第四条断言钉的就是那一半。
+    """
+    g = _graph_of([
+        ("mod.py", ast.parse(
+            "from . import helper as H\n\n"
+            "def run_it():\n"
+            "    return H.helper()\n")),
+        ("helper.py", ast.parse("def helper():\n    return 'real'\n")),
+        ("decoy.py", ast.parse("def helper():\n    return 'decoy'\n")),
+        ("cli.py", ast.parse(
+            "from . import mod as M\n\n\n"
+            "def cmd_probe(args):\n"
+            "    return M.run_it()\n")),
+    ])
+    assert is_live(g, "helper", rel="helper.py") is True, (
+        "`H.helper()` 没按别名指到 helper.py", sorted(reachable(g)))
+    assert is_live(g, "helper", rel="decoy.py") is False, (
+        "同名的那份（decoy.py）借到了可达性 —— 别名那条边又退回按名字了")
+
+
+def test_every_route_table_handler_is_a_live_entry() -> None:
+    """④ 的另一半（2026-10-26 F1a）：路由表 / 登记表点名的那批处理器必须全在图上。
+
+    为什么要这一条：`readers.ROUTES` / `readers.HANDLERS` 是 HTTP 那一侧唯一的入口
+    声明。补种子之前这张图只认得出 `webui/readers.py` 里 7 个 def（一份 103 个 def 的
+    文件）、`webui/` 下 32 个 `handle_*` 一个都不可达，于是"这一片接上没有"这件事在这个
+    判据上读不出来。补之后 101/103（剩下那两个是给契约判据用的类型表
+    `ts_fields` / `type_decls`，它们不是 HTTP 入口）、`handle_*` 30/32 —— 差的那两个是
+    `WebHandler.handle_one_request` / `handle_unknown`，它们是 `socketserver` 的基类回调
+    （标准库按继承调，源码里没有调用点），也不在任何路由表里，所以不在这条判据的范围内。
+
+    这条判据自己也要能被打破：任何一条路由表被改成"算出来的表达式"（不再有字面量
+    可种），或某个处理器被从表里删掉，这里就会红 —— 三态写在断言里，不折成"没查成"。
+    """
+    g = graph()
+    kinds = {"routes", "handlers"}
+    named = [name for tables in g["dispatch"].values()
+             for _line, kind, names in tables if kind in kinds for name in names]
+    handlers = [name for name in named if name.startswith("handle_")]
+    assert len(handlers) >= 20, (
+        f"路由表 / 登记表里只认出 {len(handlers)} 个处理器 ⇒ 这两张表已经不按字面量写了，"
+        f"这一条判据读不懂它们（认出的是：{sorted(set(handlers))}）")
+    dead = sorted({name for name in handlers if not is_live(g, name)})
+    assert not dead, (
+        "这些处理器在路由表里点了名、却不在接线图上（表说它有入口，图说它是死的）："
+        f"{dead}")
 
 
 def test_the_clock_module_is_on_the_assembly_list() -> None:

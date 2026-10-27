@@ -45,7 +45,11 @@ from agentflow import schema as S
 from agentflow.store import Store
 
 #: 本机那一版真 Lean（与 `tests/test_l_formalizes_what_b_says.py` 同一口径）。
-LEAN = pathlib.Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
 
 #: 台账里那条命题的编号（B 的 `stmt_id` 形态：六位数字）。

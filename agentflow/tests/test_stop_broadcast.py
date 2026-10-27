@@ -25,7 +25,7 @@ from typing import Any
 
 from agentflow import schema as S
 from agentflow import sessions as SS
-from agentflow.agent_loop import (LlmBackend, PUBLIC, inbox_digest, mark_delivered,
+from agentflow.agent_loop import (LlmBackend, ALL, inbox_digest, mark_delivered,
                                   read_messages, run_role)
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
@@ -91,7 +91,7 @@ def test_the_boss_can_broadcast_a_stop_notice_on_the_public_channel(tmp_path):
     S6-a 之后多钉一格：那一条带发信人的台账号（`from_task_id`）—— 公聊的
     可见面就靠它判，没有它这一条谁也认不出来（`_do_message` 那一层会受控拒绝）。
     """
-    note = {"message": {"to": PUBLIC, "subject": "叫停",
+    note = {"message": {"to": ALL, "subject": "叫停",
                         "body": "用户叫停：请各自收工，并把你自己起的子进程停掉。"}}
     st, cond, registry, gw, root = _wired(tmp_path, [json.dumps(note, ensure_ascii=False),
                                                      json.dumps({"final": "已广播", "evidence": []},
@@ -104,7 +104,7 @@ def test_the_boss_can_broadcast_a_stop_notice_on_the_public_channel(tmp_path):
     assert run.stop_reason == "final", run.to_dict()
     msgs = [e for e in _events(root, "bc") if e.get("kind") == "agent_message"]
     assert len(msgs) == 1, msgs
-    assert msgs[0]["to"] == PUBLIC and msgs[0]["from"] == "M", msgs[0]
+    assert msgs[0]["to"] == ALL and msgs[0]["from"] == "M", msgs[0]
     assert "子进程" in str(msgs[0]["body"]), msgs[0]
     boss = [r for r in st.rows("tasks") if str(r.get("role")) == "M"
             and str(r.get("action")) == "run"]
@@ -119,7 +119,7 @@ def test_only_the_senders_children_receive_the_broadcast(tmp_path):
     任何角色随手 `to=#public` 就等于全树广播。现在：子级收得到、别的角色收不到、
     孙级也收不到（要全树就逐层向下转发，级联是收件人的动作）。
     """
-    note = {"message": {"to": PUBLIC, "subject": "叫停", "body": "停"}}
+    note = {"message": {"to": ALL, "subject": "叫停", "body": "停"}}
     st, cond, registry, gw, root = _wired(tmp_path, [json.dumps(note, ensure_ascii=False),
                                                      json.dumps({"final": "已广播", "evidence": []},
                                                                 ensure_ascii=False)])
@@ -134,19 +134,19 @@ def test_only_the_senders_children_receive_the_broadcast(tmp_path):
     # 子代理 D 按"我父是谁"读 ⇒ 收得到（可见面 = 发信人的直接子代理）
     mine, problems = read_messages(root, "D", sid="bc", parent_task_id=boss)
     assert not problems, problems
-    assert [m for m in mine if m.get("to") == PUBLIC], "子代理必须收得到父的广播"
+    assert [m for m in mine if m.get("to") == ALL], "子代理必须收得到父的广播"
     assert mine[0].get("visibility") == "instance", mine[0]
 
     # 不是它子级的读者收不到：孙级（父是 D）、以及不知道自己父是谁的读者
     below, _ = read_messages(root, "E", sid="bc", parent_task_id=child)
-    assert not [m for m in below if m.get("to") == PUBLIC], "孙级不该直接收到（要逐层向下）"
+    assert not [m for m in below if m.get("to") == ALL], "孙级不该直接收到（要逐层向下）"
     stranger, _ = read_messages(root, "A", sid="bc", parent_task_id="")
-    assert not [m for m in stranger if m.get("to") == PUBLIC], "没有父的读者不该收到"
+    assert not [m for m in stranger if m.get("to") == ALL], "没有父的读者不该收到"
 
     # 逐层向下：D 自己发一条公聊 ⇒ 只有它的子级 E 收得到，M 反过来收不到
     from agentflow.agent_loop import send_message
 
-    _mid, problem = send_message(root, sender="D", to=PUBLIC, subject="转发", body="往下传",
+    _mid, problem = send_message(root, sender="D", to=ALL, subject="转发", body="往下传",
                                 sid="bc", from_task_id=child)
     assert not problem, problem
     from_child, _ = read_messages(root, "E", sid="bc", parent_task_id=child)
@@ -159,9 +159,9 @@ def test_only_the_senders_children_receive_the_broadcast(tmp_path):
     assert not problems and fresh, (fresh, problems)
     assert not mark_delivered(root, "D", fresh, sid="bc")
     after, _ = read_messages(root, "D", sid="bc", parent_task_id=boss)
-    assert bool([m for m in after if m.get("to") == PUBLIC][0].get("delivered"))
+    assert bool([m for m in after if m.get("to") == ALL][0].get("delivered"))
     bystander, _ = read_messages(root, "A", sid="bc", parent_task_id="")
-    assert not [m for m in bystander if m.get("to") == PUBLIC], bystander
+    assert not [m for m in bystander if m.get("to") == ALL], bystander
     assert grand and S.ROLES
 
 
@@ -175,7 +175,7 @@ def test_a_broadcast_does_not_interrupt_a_running_loop(tmp_path):
     """
     from agentflow import stopctl
 
-    note = {"message": {"to": PUBLIC, "subject": "叫停", "body": "停"}}
+    note = {"message": {"to": ALL, "subject": "叫停", "body": "停"}}
     st, cond, registry, gw, root = _wired(tmp_path, [json.dumps(note, ensure_ascii=False),
                                                      json.dumps({"final": "已广播", "evidence": []},
                                                                 ensure_ascii=False)])

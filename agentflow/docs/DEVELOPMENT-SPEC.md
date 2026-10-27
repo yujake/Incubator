@@ -30,6 +30,11 @@
 >    **不许估。** 本文正文因此**只写命令与键名**，定值一律住 §0.2 的 `LIVE-READINGS` 块。
 > 3. **不许把"未落地/未核实"写成"已落地"**。凡只是从文档读到、没在代码里核实的，
 >    标 `（据 X，未在代码中核实）`。
+>
+> **本批（2026-10-27）新设计住哪**：**§16**。它把本批 745 条新增符号归成 **13 个机制簇**，
+> 每簇三格（**规则** / **落点** / **判据**），索引表在 **§16.0**。判据本体是
+> `tests/test_new_designs_are_in_the_spec.py`：逐簇核"落点里的符号真的在盘上"与"现算格里的数字真的相等"，
+> 并各带一条反真空（改错一个字母 / 改大一个数，判据必红）。
 
 ---
 
@@ -69,7 +74,7 @@ $env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...imp
 
 ```text
 LIVE-READINGS:BEGIN
-# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell（Lean 关）是 108/16
+# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell（Lean 关）少三件 `formal.*`（`lean_scope` 决定装不装那个模块）
 # 名字 = 数字        # 含义 + 复跑命令 + 观测时刻
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
@@ -84,25 +89,25 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 111  # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径；Lean 开 = 111，Lean 关 = 108 —— 三件 `formal.*` 不装配。判据在 Lean 开的档里跑）
-cli_tools_modules       = 17   # 同一行"已装模块 N"
-cli_tools_role_a        = 49   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
-cli_tools_role_b        = 35
-cli_tools_role_c        = 34
-cli_tools_role_d        = 54
-cli_tools_role_e        = 36
-cli_tools_role_f        = 48
-cli_tools_role_g        = 50
-cli_tools_role_h        = 42
-cli_tools_role_v        = 26
-cli_tools_role_l        = 35
-cli_tools_role_m        = 34
+cli_tools_total        = 114  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
+cli_tools_modules      = 17  # 同一行"已装模块 N"
+cli_tools_role_a       = 52  # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
+cli_tools_role_b       = 38
+cli_tools_role_c       = 36
+cli_tools_role_d       = 57
+cli_tools_role_e       = 39
+cli_tools_role_f       = 51
+cli_tools_role_g       = 53
+cli_tools_role_h       = 44
+cli_tools_role_v       = 28
+cli_tools_role_l       = 38
+cli_tools_role_m       = 37
 webui_modules           = 10   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
 webui_routes            = 31   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
 webui_routes_get        = 23   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 15    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+webui_test_files        = 16   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
 LIVE-READINGS:END
 ```
 
@@ -503,8 +508,8 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 
 | 数 | 量的是什么 | 当次值 |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **45** |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **42** |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **46** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **43** |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
@@ -512,9 +517,9 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 **前两格与类别数**的复跑命令逐字如下（它们就是 `LIVE-READINGS` 的 `noai_paths_*` 三个键）：
 
 ```powershell
-(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 43
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 46
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
-  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 40
+  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 43
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
   ForEach-Object { if ($_.Line -match '\[category:\s*([a-z\-]+)\]') { $matches[1] } } |
   Select-Object -Unique).Count                                                          # ⇒ 7
@@ -1228,7 +1233,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **45** 条条目 / **42** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1357,7 +1362,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 | FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
 |---|---|---|---|---|
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **45** 条条目 / **42** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
 
 ---
 
@@ -1641,4 +1646,210 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 §13 说的是"想让模型做的事写提示词、不许它做的事写判据"；
 §15 说的是"**判据本身也不许冒充能力**"。两条合起来才是完整口径：
 **提示词管方向，判据管下限，读数只是测出来的水位 —— 水位不是河。**
+
+---
+
+## [规范] §16 2026-10-27 新设计的十三个机制簇（收进规范）
+
+> **为什么必须有这一节**：本批改动（`git diff b83362c~1..HEAD -- agentflow/src`）在 44 个文件里
+> 新增了 **745** 条符号（func / const / class / tool / toolname，机器清单见 `agentflow/temp/_inventory_master.md`），
+> 而在这之前**一条都没有进规范** —— 判据住在 `tests/` 里，可"这个设计该长什么样"只能靠读代码。
+> 业主的判词是「新设计未被规范收录」：判据绿不等于规范在，**规范不在，下一个人就无法判断自己该照哪个口径改**。
+>
+> **本节怎么读**：745 条不是 745 个设计，而是 **13 个机制簇**（簇是按"一条规则能否把它们的共同点说完"切的，
+> 不是按文件切的 —— 一个簇可以横跨五六个文件，一个文件也可以落在两个簇里）。每簇三格，缺一格判据就红：
+>
+> - **规则**：一句可执行的话。"要做得好"不是规则，"等待只有 `after_sec` 或 `wait_for` 两半，两个都给就受控拒绝"才是。
+> - **落点**：符号名（**刻意不写行号**：本仓并行施工，行号几十分钟就漂；符号名由判据核存在性，比行号强）。
+> - **判据**：哪个测试守它 + 哪些数字可以现算。"没法机器核"的条目在 §16.14 逐条写明指路，**不许写成数字**。
+>
+> **本节的判据本体**：`tests/test_new_designs_are_in_the_spec.py`。它做四件事：
+> ① `§16.0` 的索引表与 `§16.1–§16.13` 的节必须一一对上（少一节 / 多一节都红）；
+> ② 每簇**落点**里点名的 `file::symbol` 必须在盘上真的存在（改错一个字母就红）；
+> ③ 每簇**判据**里点名的 `tests/x.py::test_...` 必须真的有那个用例；
+> ④ **现算**格里写的每个数必须等于当次现算值（文档说 4 而代码是 5 ⇒ 红）。
+> 两条反真空：把某个符号改错一个字母、把某个数改大 1，判据都必须红。
+>
+> **与旧口径的关系**：本节各条按 2026-10-27 的口径写。凡旧文字与新口径冲突的，**就地改成新口径并标日期**
+> （本批改了 `ROLE-SPECS.md` §F.2 / §F.3 两处，见 §16.14）。本节**不改**任何功能代码、不动 golden / `PROMPT_VERSION`。
+
+### [规范] §16.0 索引表：簇 → 段落 → 判据
+
+> 这张表就是"新设计清单"。它按**机制簇**列，不按最初那 11 条列 —— 那 11 条只覆盖了其中三簇，
+> 业主的判词是「远不止这些」。新增一簇要同时改三处：本表、§16.N 那一节、判据文件里那张现算表（若它有现算格）。
+
+| 簇 | 名称 | 段落 | 判据文件 |
+|---|---|---|---|
+| C1 | 时钟族：九件工具、计时申请形状、程序计时器、挂机与交差 | §16.1 | `tests/test_timers_and_handoff_semantics.py`、`tests/test_clock_governs_all_timed_work.py`、`tests/test_clock_is_a_native_tool.py`、`tests/test_park_is_a_real_stop.py` |
+| C2 | 三态与销号族：在飞 / 待机 / 静默 / 未读到，静默才可销号 | §16.2 | `tests/test_three_states_flying_standby_silent.py`、`tests/test_retire_only_for_the_silent.py`、`tests/test_child_count_and_active_cascade_retire.py`、`tests/test_retire_ready_is_a_reading_not_an_action.py`、`tests/test_information_items_are_acked_when_read.py` |
+| C3 | 会话循环族：等谁、唤醒、收工门 | §16.3 | `tests/test_park_is_a_real_stop.py`、`tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py`、`tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py` |
+| C4 | 并发调度族：可抢占的派活与波次收口 | §16.4 | `tests/test_summon_is_preemptible.py`、`tests/test_delegation_may_reuse_an_active_child.py`、`tests/test_e13_concurrency.py` |
+| C5 | 消息与板项族：绝对编号链、公告栏、ack 与落点 | §16.5 | `tests/test_guide_goes_down_the_secretary_chain.py`、`tests/test_the_public_channel_is_the_senders_children.py`、`tests/test_board_items_reach_the_prompt.py`、`tests/test_summons_and_numbered_addressing.py`、`tests/test_broadcast_reaches_my_children.py`、`tests/test_a_message_that_asks_for_work_becomes_a_work_item.py`、`tests/test_information_items_are_acked_when_read.py` |
+| C6 | 依赖面族：手稿四列表 → 秘书洗稿 → D 携带 → B 读稿登记 | §16.6 | `tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py`、`tests/test_dependency_wiring_is_live.py`、`tests/test_d_to_b_carried_road.py`、`tests/test_b_manuscript_must_be_framework_rendered.py`、`tests/test_d_carried_missing_reading.py` |
+| C7 | 引用核实族：六档与挡签 | §16.7 | `tests/test_v_checks_fs_citations.py`、`tests/test_signing_never_lies.py`、`tests/test_quote_verification_leaves_evidence.py`、`tests/test_verify_quote_levels.py` |
+| C8 | 命题同一性族：条件→结论一致、洗定理名、概念按定义项 | §16.8 | `tests/test_one_concept_is_one_row.py`、`tests/test_secretary_recognizes_the_same_proposition.py`、`tests/test_the_secretary_washes_internal_work_names.py`、`tests/test_one_theorem_many_proofs_is_not_three_theorems.py`、`tests/test_suspected_split_proposition.py` |
+| C9 | 非平凡度族：按证明花的力气分 T0–T4 | §16.9 | `tests/test_nontriviality_is_judged_by_effort.py`、`tests/test_secretary_rates_nontriviality.py`、`tests/test_nontriviality_reading_is_read_only.py`、`tests/test_b_nontriviality_language_is_tiers.py` |
+| C10 | 形式化入口族：只有用户指定 ⇒ M→B，`B→L` 唯一入边，F 不立 formal 子目标 | §16.10 | `tests/test_f_formal_subgoal_owner_l.py`、`tests/test_f_has_no_formal_entry.py`、`tests/test_f_reasoning_is_its_working_mode.py`、`tests/test_lean_switch_points_at_l.py` |
+| C11 | 权限面与写口族：`statements` 只经 B、手填 ID 拒、通用写口只写簿记、保留产物 | §16.11 | `tests/test_statements_are_registered_by_b.py`、`tests/test_hand_filled_ids_are_refused.py`、`tests/test_universal_tools_are_for_everyone.py`、`tests/test_fs_reserved_framework_artifacts.py`、`tests/test_set_fields_are_normalized_on_write.py`、`tests/test_direct_write_is_routed_to_the_secretary.py`、`tests/test_tasks_write_port_refuses_forgeries.py`、`tests/test_a_concept_row_is_registered_by_the_secretary.py` |
+| C12 | 读数与用户端族：名册三态读数、书目面、聊天行 ID、预热三态、错误两轴 | §16.12 | `tests/test_webui_three_state_reading.py`、`tests/test_webui_readers.py`、`tests/test_library_face_only_counts_admitted_works.py`、`tests/test_chat_lines_carry_the_absolute_id.py`、`tests/test_chat_page_shows_who_and_which_id.py`、`tests/test_cache_warm_button_is_honest.py`、`tests/test_the_root_is_named_m.py` |
+| C13 | 清洁与判据基础设施族：死函数台账、绿灯不造假、仓库不更脏 | §16.13 | `tests/test_clean_invariant.py`、`tests/test_green_is_not_faked.py`、`tests/test_demo_selftest_leaves_the_repo_clean.py`、`tests/test_repo_survey_does_not_get_worse.py` |
+
+### [规范] §16.1 C1 时钟族：九件工具、计时申请形状、程序计时器、挂机与交差
+
+**规则**：全系统只有一处取时口与一本计时台账 —— 要等什么只能写成 `after_sec`（等时间）或 `wait_for`（等谁：名册名 / 绝对编号 / `task:<号>` / `agent:<名>`）两半之一（两半都给、或一个都不给 ⇒ 受控拒绝），目的缺了照常受理但读数标 `purpose_missing` 并在到点消息里追问，到点那条消息必须同时带**目的 + 现场时长 + 时间到**（唯一拼法 `clock.due_message`），程序在跑就自动有一条 `kind="program"` 计时器、计时器**不阻塞**动作、无事可做才 `clock.wait_any`、真挂机是"挂在时钟上"（零步零调用）、无事可做且一条计时器都没有就是**交差**。
+
+- 补充：目的有四个来源（`clock.PURPOSE_SOURCES`）：显式给的（`given`）、从被等对象的 task 抄的（`target_task`）、程序计时器按程序名自动填的（`program`）、三路都拿不到的（`unavailable`，此时 `purpose_missing` 为真）。四档都要真的落进 `Timer.to_dict` 的 `purpose_source` —— 只活在读数里的话，"为什么这一条没目的"在盘上就退化成一句空串（2026-10-27 口径）。
+- 补充：九件是 `clock.now` / `timer_start` / `timer_list` / `timer_cancel` / `alarm_start` / `periodic_start` / `periodic_stop` / `timer_purpose` / `wait_any`；它们十一个角色全体都有（`tools.UNIVERSAL_TOOLS` 里登记，不经只读角色的例外表）。
+- 补充：老的、不依赖时钟的计时入口一律退场，写出旧名字得到的是指路而不是"未注册的工具"（`clock.RETIRED_TIMING_TOOLS` + `clock.retire_hint`）。
+- 补充："主时钟控制了所有计时类工作"这句话是机器判据不是声明：`clock.raw_wait_census` 用 AST 点出没走 `await_io` / `note_wait` 的原始等待，`clock.program_census` 点出"起进程却没进程序计时器"的地方；两者读不成都是 `checked=false`，不许折成 0 处。
+- **落点**：`src/agentflow/clock.py::TIMER_KINDS`、`src/agentflow/clock.py::PROGRAM_OUTCOMES`、`src/agentflow/clock.py::PURPOSE_SOURCES`、`src/agentflow/clock.py::PARK_STATES`、`src/agentflow/clock.py::due_message`、`src/agentflow/clock.py::program_span`、`src/agentflow/clock.py::finish_program`、`src/agentflow/clock.py::record_handoff`、`src/agentflow/clock.py::read_handoffs`、`src/agentflow/clock.py::request_wait_any`、`src/agentflow/clock.py::wait_any_reading`、`src/agentflow/clock.py::raw_wait_census`、`src/agentflow/clock.py::program_census`、`src/agentflow/clock.py::await_io`、`src/agentflow/clock.py::note_wait`、`src/agentflow/clock.py::RETIRED_TIMING_TOOLS`、`src/agentflow/tools/clock_tools.py::clock_timer_start`、`src/agentflow/tools/clock_tools.py::clock_periodic_start`、`src/agentflow/tools/clock_tools.py::clock_timer_purpose`、`src/agentflow/tools/clock_tools.py::clock_wait_any`、`src/agentflow/tools/clock_tools.py::clock_now`、`src/agentflow/tools/__init__.py::UNIVERSAL_TOOLS`、`src/agentflow/autonomy.py::_pump_and_read_clock`、`src/agentflow/agent_e/core.py::_note_process_wait`、`src/agentflow/cancellation.py::_note_process_wait`、`src/agentflow/fetch.py::_default_sleep`、`src/agentflow/modelgw.py::_default_sleep`、`src/agentflow/jobobject.py::_grace_wait`
+- **判据**：`tests/test_timers_and_handoff_semantics.py::test_b_the_purpose_is_filled_from_the_target_task`、`tests/test_timers_and_handoff_semantics.py::test_a_a_program_that_runs_is_on_the_clock_while_it_runs`、`tests/test_timers_and_handoff_semantics.py::test_c_a_timer_does_not_block_work_in_hand`、`tests/test_timers_and_handoff_semantics.py::test_c3_wait_any_wakes_when_any_timer_returns`、`tests/test_timers_and_handoff_semantics.py::test_d_nothing_to_do_and_no_timer_is_a_handoff`、`tests/test_clock_governs_all_timed_work.py::test_g_due_message_has_all_three_parts`、`tests/test_clock_governs_all_timed_work.py::test_l_readonly_roles_get_all_nine_clock_tools`、`tests/test_clock_governs_all_timed_work.py::test_e_waits_outside_clock_is_zero_and_a_raw_sleep_turns_it_red`；现算：`clock.TIMER_KINDS` = 4、`clock.PROGRAM_OUTCOMES` = 4、`clock.PURPOSE_SOURCES` = 4、`clock.PARK_STATES` = 3、`tools.UNIVERSAL_TOOLS[clock.*]` = 9
+
+### [规范] §16.2 C2 三态与销号族：在飞 / 待机 / 静默 / 未读到，静默才可销号
+
+**规则**：一个子代理只有四个状态词 —— `flying`（在飞）/ `standby`（待机：有活没在跑，名下有计时器）/ `silent`（静默：无工作 ∧ 无计时器）/ `unknown`（未读到，**不许折成静默**），`active` 只等于"非静默"、`active_child_count` 就是非静默数；销号只可针对**静默**，在飞 / 待机 / 读不到一律 `target_not_silent` 并给逐条 `blocking`（"待机"要列出那几个计时器），而"有活跃子代理 ⇒ 必有一个等它的计时器"是让 `silent` 定义良好的那条不变量（由父派活时自动起表保证、由 `conductor.child_wait_invariant` 判定）。
+
+- **落点**：`src/agentflow/conductor.py::AGENT_STATES`、`src/agentflow/conductor.py::ACTIVE_AGENT_STATES`、`src/agentflow/conductor.py::agent_state`、`src/agentflow/conductor.py::agent_states`、`src/agentflow/conductor.py::retire_state_of`、`src/agentflow/conductor.py::retire_blocking`、`src/agentflow/conductor.py::retire_refusal`、`src/agentflow/conductor.py::retire_integrity`、`src/agentflow/conductor.py::retire_ready`、`src/agentflow/conductor.py::child_wait_invariant`、`src/agentflow/conductor.py::arm_child_waiter`、`src/agentflow/conductor.py::RETIRE_REFUSAL_TARGET_NOT_SILENT`、`src/agentflow/conductor.py::clock_waiters`、`src/agentflow/tools/conductor_tools.py::conductor_retire_child`、`src/agentflow/tools/conductor_tools.py::RETIRE_CHILD_STATES`、`src/agentflow/secretary.py::retire`、`src/agentflow/readouts.py::roster_readout`
+- **判据**：`tests/test_three_states_flying_standby_silent.py::test_d_a_finished_agent_without_timers_reads_silent`、`tests/test_three_states_flying_standby_silent.py::test_g_an_unreadable_clock_is_unknown_not_silent`、`tests/test_three_states_flying_standby_silent.py::test_the_four_state_words_are_one_vocabulary`、`tests/test_retire_only_for_the_silent.py::test_b_a_flying_child_is_refused_by_the_silent_gate`、`tests/test_retire_only_for_the_silent.py::test_d_an_unreadable_clock_is_refused_fail_closed`、`tests/test_retire_only_for_the_silent.py::test_f_stubbing_the_state_judgement_makes_b_c_d_red`、`tests/test_child_count_and_active_cascade_retire.py::test_a_two_counts_are_named_and_counted_separately`、`tests/test_information_items_are_acked_when_read.py::test_c_a_child_with_only_wake_notices_can_be_retired`、`tests/test_information_items_are_acked_when_read.py::test_c2_a_child_with_an_unacked_verdict_is_still_refused`、`tests/test_timers_and_handoff_semantics.py::test_e_every_active_child_has_a_waiter`；现算：`conductor.AGENT_STATES` = 4、`conductor.ACTIVE_AGENT_STATES` = 2、`conductor.RETIRE_REFUSAL_TARGET_NOT_SILENT` = target_not_silent
+
+### [规范] §16.3 C3 会话循环族：等谁、唤醒、收工门
+
+**规则**：等待是循环的一个分支而不是一次轮询 —— 挂机期间这一趟**零步零模型调用**（判据数 `agent_step` 事件），唤醒只由"计时器到点 / 被等的对象真说了话 / 子代理全部回来"这三种事实触发（读不到唤醒就明说读不到，不许猜），而收工门（`final`）在整棵树还有未销号节点时**拒绝落账**，且这一条对"被唤醒的那一趟"不给豁免。
+
+- 补充：唤醒是两份落盘一起给的 —— 一条可审计的板项 + 一条可读的唤醒标记（`clock.record_wake` 是唯一的标记落点）。
+- **落点**：`src/agentflow/agent_loop.py::_park_gate`、`src/agentflow/agent_loop.py::_park_slice`、`src/agentflow/agent_loop.py::_wait_any_reading`、`src/agentflow/agent_loop.py::_wake_pending`、`src/agentflow/agent_loop.py::_final_gate_reading`、`src/agentflow/agent_loop.py::_settle_children_at_exit`、`src/agentflow/agent_loop.py::_children_round_trip`、`src/agentflow/agent_loop.py::_take_child_results`、`src/agentflow/agent_loop.py::_do_handoff`、`src/agentflow/agent_loop.py::MONITOR_TURN_SHAPES`、`src/agentflow/agent_loop.py::MONITOR_TURN_TOOLS`、`src/agentflow/agent_loop.py::PARK_EVENT`、`src/agentflow/agent_loop.py::_pending_work`、`src/agentflow/secretary.py::deliver_local`
+- **判据**：`tests/test_park_is_a_real_stop.py::test_a_parked_parent_takes_no_model_calls_and_no_steps`、`tests/test_park_is_a_real_stop.py::test_a_wake_that_ends_the_park_costs_no_model_call`、`tests/test_park_is_a_real_stop.py::test_the_park_branch_is_load_bearing`、`tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py::test_a_final_with_an_unretired_node_is_not_recorded`、`tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py::test_a_woken_turn_gets_no_exemption_from_the_gate`、`tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py::test_the_monitor_turn_only_lets_watch_guide_supplement_and_close`；现算：`agent_loop.MONITOR_TURN_SHAPES` = 5、`agent_loop.MONITOR_TURN_TOOLS` = 2、`agent_loop.PARK_EVENT` = agent_park
+
+### [规范] §16.4 C4 并发调度族：可抢占的派活与波次收口
+
+**规则**：一批派活一次发出、按写集分波并发跑，父代理在子代理还在跑的时候**也拿到回合**（单条 `summon` 与 `summon_many` 返回的是同一个句柄形状，折叠回来的结果与阻塞式那一趟等价），并且"一次派活"的每一个可结算结果都只由句柄交回一次（`take_settled` 拿走的不再回来）—— 抢占是循环的形态，不是给某个角色开的特权。
+
+- 补充："同一角色在跑、且这条派活与它手上那件不冲突" ⇒ 允许复用那个在跑的实例，而不是并排再开一个。
+- **落点**：`src/agentflow/scheduler.py::CallTicket`、`src/agentflow/scheduler.py::WaveHandle`、`src/agentflow/scheduler.py::start_waves`、`src/agentflow/scheduler.py::take_settled`、`src/agentflow/scheduler.py::wait_any`、`src/agentflow/conductor.py::summon_begin`、`src/agentflow/conductor.py::start_summon`、`src/agentflow/conductor.py::summon_preemptible`、`src/agentflow/conductor.py::SummonHandle`、`src/agentflow/conductor.py::SummonStart`、`src/agentflow/conductor.py::open_handle`、`src/agentflow/agent_loop.py::PREEMPTIBLE_DISPATCH`、`src/agentflow/tools/conductor_tools.py::conductor_summon_many`
+- **判据**：`tests/test_summon_is_preemptible.py::test_the_parent_gets_a_turn_while_three_long_children_are_still_running`、`tests/test_summon_is_preemptible.py::test_without_preemption_the_first_two_criteria_go_red`、`tests/test_summon_is_preemptible.py::test_the_single_summon_returns_a_handle_and_folds_back_like_a_batch`、`tests/test_delegation_may_reuse_an_active_child.py`、`tests/test_e13_concurrency.py`；现算：`agent_loop.PREEMPTIBLE_DISPATCH` = True
+
+### [规范] §16.5 C5 消息与板项族：绝对编号链、公告栏、ack 与落点
+
+**规则**：三件事各有**唯一落点**，不许互相代替 —— ① 姓名/编号只经名册解析（"按角色名发给一个不在自己名册里的人"是受控拒绝，不是就近投递）；② 跨层的指导沿**绝对编号链**逐跳由秘书转发、**正文只到链尾**（中间几跳不读正文，收据带逐跳时刻）；③ `ALL` 是**公告栏**不是对话（可见面 = 发信人的直接子代理，公告里点名又带指令语气 ⇒ 受控拒绝 `public_is_not_a_conversation`，一步一发都不落盘）。而"板上挂着一项"就是一条消息的落点：开项只有 `conductor.open_item` 一个口，`kind ∈ ("delegation","message","report","notice")`、`expects ∈ ("ack","work")`，**信息型（notice / message）读到即收口**（`seen` 就是 ack，`_settle_if_informational` 三条件缺一条就不动它）；**收到"要求做事"的消息时，收件人自己落一条 `kind="delegation"` + `expects="work"` 的板项**（`conductor.post_task`：收件人只能是调用者自己、`key` 是幂等键、四态 `posted` / `existing` / `refused` / `unknown`），办完用 `conductor.ack` 的 `close="completed"` 收口 —— 于是"这条消息要办的事"从一句会被读丢的话变成板上一条可追踪、销号门也看得见的活项（业主 2026-10-27 逐字：「如果 message 是要求做事，智能体需自己写任务塞进 task_board」）。
+
+- 补充：`CLOSED_ITEM_STATES`（`done` / `block`）是时钟与销号两边共用的"这一项已经收口"读数。
+- 补充：`conductor.post_task` 是 2026-10-27 晚进册的那一件（工具总数因此 111 → 112，读数重算见 §16.14 第五节）；它与 `table.create(table="tasks")` 那条野路的关系是"正路 vs 被堵住的旁路"（`_tasks_write_refusal` 只许给自己落项、不许伪造收口或已读）。
+- **落点**：`src/agentflow/conductor.py::absolute_chain`、`src/agentflow/conductor.py::chain_of`、`src/agentflow/conductor.py::chain_text`、`src/agentflow/conductor.py::parse_chain_address`、`src/agentflow/conductor.py::resolve_chain`、`src/agentflow/conductor.py::CHAIN_SEPARATOR`、`src/agentflow/conductor.py::CHAIN_MAX_HOPS`、`src/agentflow/conductor.py::CHAIN_HOP_ROSTER`、`src/agentflow/conductor.py::CHAIN_DELIVERY_STATES`、`src/agentflow/conductor.py::CHAIN_REFUSAL_REASONS`、`src/agentflow/conductor.py::open_item`、`src/agentflow/conductor.py::mark_item_seen`、`src/agentflow/conductor.py::_settle_if_informational`、`src/agentflow/conductor.py::INFORMATIONAL_ITEM_KINDS`、`src/agentflow/conductor.py::ACK_REQUIRED_ITEM_PREFIXES`、`src/agentflow/conductor.py::ack_items`、`src/agentflow/schema.py::ITEM_KINDS`、`src/agentflow/schema.py::ITEM_EXPECTS`、`src/agentflow/schema.py::ITEM_STATES`、`src/agentflow/schema.py::ITEM_CLOSES`、`src/agentflow/tools/conductor_tools.py::conductor_guide`、`src/agentflow/tools/conductor_tools.py::conductor_ack`、`src/agentflow/tools/conductor_tools.py::ACK_STATES`、`src/agentflow/tools/conductor_tools.py::conductor_escalate`、`src/agentflow/tools/conductor_tools.py::conductor_post_task`、`src/agentflow/tools/conductor_tools.py::POST_TASK_STATES`、`src/agentflow/tools/clock_tools.py::CLOSED_ITEM_STATES`、`src/agentflow/secretary.py::relay_in`、`src/agentflow/secretary.py::relay_out`、`src/agentflow/secretary.py::relay_path`、`src/agentflow/secretary.py::RELAY_LEDGER`、`src/agentflow/agent_prompts.py::collab_board_text`
+- **判据**：`tests/test_a_message_that_asks_for_work_becomes_a_work_item.py::test_a_a_message_that_asks_for_work_becomes_a_work_item`、`tests/test_a_message_that_asks_for_work_becomes_a_work_item.py::test_c_the_hand_only_posts_to_itself`、`tests/test_a_message_that_asks_for_work_becomes_a_work_item.py::test_d_stubbing_the_post_makes_a_red`、`tests/test_information_items_are_acked_when_read.py::test_a_a_clock_wake_notice_is_closed_on_the_tick_it_is_rendered`、`tests/test_information_items_are_acked_when_read.py::test_b_a_work_item_is_not_acked_by_being_read`、`tests/test_information_items_are_acked_when_read.py::test_a3_a_notice_that_was_never_rendered_stays_queued`、`tests/test_guide_goes_down_the_secretary_chain.py::test_a_the_guide_walks_the_secretary_chain_and_only_the_tail_reads_it`、`tests/test_guide_goes_down_the_secretary_chain.py::test_f_leaking_the_body_to_every_hop_makes_a_red`、`tests/test_guide_goes_down_the_secretary_chain.py::test_e_the_patrol_tools_report_the_absolute_chain_for_every_node`、`tests/test_the_public_channel_is_the_senders_children.py::test_public_visibility_reads_the_sender_instance`、`tests/test_the_public_channel_is_the_senders_children.py::test_a_public_message_without_a_task_id_is_refused_with_nothing_written`、`tests/test_board_items_reach_the_prompt.py::test_a_board_item_reaches_the_prompt_and_is_marked_seen`、`tests/test_board_items_reach_the_prompt.py::test_another_instances_items_never_enter_my_prompt`、`tests/test_summons_and_numbered_addressing.py::test_a_roster_name_addresses_the_role_inbox`、`tests/test_broadcast_reaches_my_children.py::test_broadcast_opens_one_ack_item_per_child`、`tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py::test_the_hand_does_not_need_a_seen_first`；现算：`schema.ITEM_KINDS` = 4、`schema.ITEM_EXPECTS` = 2、`schema.ITEM_STATES` = 5、`conductor.CHAIN_DELIVERY_STATES` = 3、`conductor.CHAIN_MAX_HOPS` = 64、`conductor_tools.POST_TASK_STATES` = 4
+
+### [规范] §16.6 C6 依赖面族：手稿四列表 → 秘书洗稿 → D 携带 → B 读稿登记
+
+**规则**：一条依赖边的唯一来源是**证明手稿末尾那一节 `## 依赖` 的四列表**（列 `quote` / `stmt_id` / `step` / `path_group`：引文、命题号、第几步、路径组），走的是**同一条链**：F 写手稿 → 秘书洗稿（缺那一节就补空的、有引用的核号、洗不干净就打回，洗过才盖 `wash` 标记）→ D 携带（正文按 sha256 交出去）→ B 读稿登记（四态来源 `param` / `carried` / `disk` / `none`；读不到就明说读不到，不许当"没有依赖"）—— 并且**能进依赖列的引用只有 `proof_review` 级及以上**（低于它 ⇒ 受控拒绝，不是降级采信）。
+
+- 补充：手写的证明手稿与研究报告都被框架产物表挡下（保留产物不许智能体自己写盘），"洗过"是文件上的标记而不是一句声明。
+- **落点**：`src/agentflow/depsection.py::COLUMN_KEYS`、`src/agentflow/depsection.py::SECTION_HEADING`、`src/agentflow/depsection.py::SECTION_PROOF`、`src/agentflow/depsection.py::CITATION_LEVELS`、`src/agentflow/depsection.py::CITATION_MIN_LEVEL`、`src/agentflow/depsection.py::SOURCE_PARAM`、`src/agentflow/depsection.py::SOURCE_CARRIED`、`src/agentflow/depsection.py::SOURCE_DISK`、`src/agentflow/depsection.py::SOURCE_NONE`、`src/agentflow/depsection.py::parse_dependency_section`、`src/agentflow/depsection.py::render_dependency_section`、`src/agentflow/depsection.py::wash_dependency_section`、`src/agentflow/depsection.py::manuscript_wash_reading`、`src/agentflow/depsection.py::mark_washed`、`src/agentflow/depsection.py::read_manuscript`、`src/agentflow/depsection.py::manuscript_relpath`、`src/agentflow/agent_f/manuscript.py::proof_manuscript`、`src/agentflow/agent_f/manuscript.py::publish_manuscript`、`src/agentflow/agent_f/manuscript.py::render_dependency_section`、`src/agentflow/agent_f/manuscript.py::dependency_rows`、`src/agentflow/agent_f/manuscript.py::citable_statements`、`src/agentflow/agent_f/manuscript.py::manuscript_path`、`src/agentflow/agent_b/register_statement.py::_receive_carried_manuscript`、`src/agentflow/agent_b/register_statement.py::_deps_reading`、`src/agentflow/agent_b/register_statement.py::_manuscript_deps_after_write`、`src/agentflow/agent_d/write_report.py::_carried_manuscripts`、`src/agentflow/agent_d/write_report.py::_carried_missing_reading`、`src/agentflow/agent_d/write_report.py::_deliver_carried_to_b`、`src/agentflow/secretary.py::record_manuscript_dependency_face`、`src/agentflow/secretary.py::wash_dependency_face`、`src/agentflow/secretary.py::record_proof_deps`、`src/agentflow/secretary.py::DEPS_MISSING_STATES`、`src/agentflow/refusals.py::EMPTY_PROOF_TEXT`、`src/agentflow/tools/fs_tools.py::RESERVED_ARTIFACT_KIND`
+- **判据**：`tests/test_dependency_face_is_read_from_f_manuscript.py::test_f_manuscript_section_is_read_by_b_and_lands_a_dependency`、`tests/test_dependency_face_is_read_from_f_manuscript.py::test_three_paths_in_one_manuscript_make_three_dependency_rows`、`tests/test_dependency_face_is_read_from_f_manuscript.py::test_a_broken_row_is_refused_with_the_line_and_the_missing_column`、`tests/test_f_secretary_washes_dependencies.py::test_the_wash_happens_before_the_outlet_and_marks_the_manuscript`、`tests/test_f_secretary_washes_dependencies.py::test_a_below_proof_review_source_is_caught_here_not_at_b`、`tests/test_dependency_wiring_is_live.py::test_the_whole_chain_f_write_d_carry_b_read_v_sign`、`tests/test_d_to_b_carried_road.py::test_the_washed_flag_travels_with_the_file`、`tests/test_d_carried_missing_reading.py::test_a_missing_carried_sheet_is_a_reading_not_a_silence`、`tests/test_b_manuscript_must_be_framework_rendered.py::test_a_handwritten_manuscript_is_refused_by_name`；现算：`depsection.COLUMN_KEYS` = 4、`depsection.CITATION_LEVELS` = 2、`depsection.CITATION_MIN_LEVEL` = proof_review、`secretary.DEPS_MISSING_STATES` = 3
+
+### [规范] §16.7 C7 引用核实族：六档与挡签
+
+**规则**：一条引用被核成六档之一 —— `consistent` / `weaker` / `stronger` / `unrelated` / `inadmissible` / `unknown`，**可签的只有 {`consistent`, `weaker`}**（另外四档一律挡签，`unknown` 不是"待定"而是"没核成，不许签"）；核实**不要求逐字**（业主：「正常写证明就是不会逐字的」——同一句话换个写法仍可 `consistent`），但"把弱证据当强证据用"必须落 `stronger`、跨证据等级取材必须落 `inadmissible`。
+
+- 补充：六档是**证据面的判据**，不是措辞判据：行里还留着摘要（`CITATION_DIGEST_CHARS`）与证据地板（`CITATION_EVIDENCE_FLOOR`），挡签的理由必须能指到档位。
+- 补充：`quote_verified` 的逐字回验仍然存在，但它是 B 那一侧的第一道自动幻觉防线；"逐字不中"不等于"引用不成立"，语义那一档由六档判。
+- **落点**：`src/agentflow/verifications.py::CITATION_VERDICTS`、`src/agentflow/verifications.py::CITATION_SIGNABLE`、`src/agentflow/verifications.py::CITATION_BLOCKING`、`src/agentflow/verifications.py::CITATION_CHECK_KEYS`、`src/agentflow/verifications.py::CITATION_EVIDENCE_FLOOR`、`src/agentflow/verifications.py::CITATION_DIGEST_CHARS`、`src/agentflow/verifications.py::citation_gate`、`src/agentflow/verifications.py::apply_citation_gate`、`src/agentflow/verifications.py::citation_blocks`、`src/agentflow/verifications.py::signing_gate_problem`、`src/agentflow/verifications.py::admissible_evidence_kinds`、`src/agentflow/verifications.py::evidence_kind_admissible`、`src/agentflow/verifications.py::dep_note`、`src/agentflow/verifications.py::DEP_NOTE_KEYS`、`src/agentflow/agent_v/core.py::_citation_admissibility`、`src/agentflow/agent_v/core.py::_citation_checks`、`src/agentflow/agent_v/core.py::_citation_material`、`src/agentflow/agent_h/_support.py::h_free_toolbox_accepts`
+- **判据**：`tests/test_v_checks_fs_citations.py::test_a_consistent_use_signs_even_though_the_words_differ`、`tests/test_v_checks_fs_citations.py::test_a_verbatim_quote_used_more_strongly_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_a_cross_check_citation_is_inadmissible_and_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_an_unknown_citation_lands_as_undetermined_and_does_not_sign`、`tests/test_v_checks_fs_citations.py::test_signs_bit3_refuses_a_row_whose_citation_check_blocks`、`tests/test_v_checks_fs_citations.py::test_the_allowed_level_set_is_computed_from_the_shared_evidence_order`、`tests/test_signing_never_lies.py::test_unsigned_is_a_checked_conclusion_not_an_unchecked_ledger`、`tests/test_quote_verification_leaves_evidence.py::test_a_quote_that_is_not_on_that_page_is_false_with_a_named_reason`；现算：`verifications.CITATION_VERDICTS` = 6、`verifications.CITATION_SIGNABLE` = 2、`verifications.CITATION_BLOCKING` = 4、`verifications.CITATION_CHECK_KEYS` = 4
+
+### [规范] §16.8 C8 命题同一性族：条件→结论一致、洗定理名、概念按定义项
+
+**规则**：两条命题是不是同一条，按"**条件 → 结论 一致**"判（不是按字面、也不是按编号），记不住就落 `unknown`、**`unknown` 永不合并**；落库前秘书要把定理名洗成人话（内部工作名如「F 攻坚 000000 子目标 s1」一律洗掉，洗不出就退回而不是留空）；概念行同一性按**定义项**判（同一被定义项换了标签仍是一条概念）；而"这条定理走哪条路证出来的"属于**证明层**，不进命题名。
+
+- 补充：三条落点都在秘书那一侧 —— 判定、合并、洗名，各有一处；判定要过一次模型（`test_the_same_text_twice_costs_one_call` 数的是这一次），洗名**不花模型钱**（规则表 + 截断）。
+- **落点**：`src/agentflow/propositionkey.py::same_concept`、`src/agentflow/propositionkey.py::candidates_for`、`src/agentflow/propositionkey.py::concept_keys`、`src/agentflow/propositionkey.py::defined_term`、`src/agentflow/propositionkey.py::concept_similarity`、`src/agentflow/propositionkey.py::BASIS_CONCEPT_TERM`、`src/agentflow/propositionkey.py::BASIS_CONCEPT_LABEL`、`src/agentflow/propositionkey.py::CONCEPT_GENERIC_TERMS`、`src/agentflow/secretary.py::wash_working_name`、`src/agentflow/secretary.py::_strip_working_names`、`src/agentflow/secretary.py::_same_concept_candidate`、`src/agentflow/secretary.py::_merge_into_concept`、`src/agentflow/secretary.py::adjudicate_proposition`、`src/agentflow/secretary.py::append_proposition_verdict`、`src/agentflow/secretary.py::proposition_verdicts_path`、`src/agentflow/secretary.py::PROPOSITION_VERDICTS`、`src/agentflow/secretary.py::CONCEPT_IDENTITY_KINDS`
+- **判据**：`tests/test_secretary_recognizes_the_same_proposition.py::test_two_phrasings_of_one_proposition_become_one_row_with_proof_two`、`tests/test_secretary_recognizes_the_same_proposition.py::test_unjudgeable_texts_are_unknown_and_never_merged`、`tests/test_secretary_adjudication_is_wired.py::test_a_wired_secretary_really_issues_one_proposition_identity_call`、`tests/test_one_concept_is_one_row.py::test_a2_the_same_defined_term_under_another_label_is_one_concept`、`tests/test_one_concept_is_one_row.py::test_c_stubbing_the_criterion_to_different_turns_a_red`、`tests/test_the_secretary_washes_internal_work_names.py::test_a_the_real_mp3_work_name_never_becomes_the_theorem_name`、`tests/test_the_secretary_washes_internal_work_names.py::test_b_legitimate_theorem_names_are_not_touched_at_all`、`tests/test_one_theorem_many_proofs_is_not_three_theorems.py::test_a_the_route_leaves_the_label_and_lands_on_the_proof`、`tests/test_suspected_split_proposition.py::test_too_short_texts_are_unknown_and_never_folded_into_different`；现算：`secretary.PROPOSITION_VERDICTS` = 3、`secretary.CONCEPT_IDENTITY_KINDS` = 1、`propositionkey.BASIS_CONCEPT_TERM` = concept_defined_term
+
+### [规范] §16.9 C9 非平凡度族：按证明花的力气分 T0–T4
+
+**规则**：一条命题的非平凡度分五档 `T0`–`T4`，判据是**证明花了多少力气**（体量 / 步骤数 / 引理数 / 用到几个工具簇 / 有没有绕路），不是"值不值得做"那两个旧问题 —— 旧的两问**不再作判据**（判据文件里有一条专测它）；读数与判定分开：`proof_effort_readings` 只读，`nontriviality_from_effort` 把读数折成档，判不出就写 `unknown` 而不退回 `T1`。
+
+- 补充：档位边界住在 `EFFORT_TIER_BANDS`（五档，`(下限, 上限, 档名)` 三元组），工具簇跨度住在 `EFFORT_TOOL_CLUSTERS`，"绕路"靠步号不连续（`_step_numbers` 那张表在依赖面那一侧）看出来。
+- **落点**：`src/agentflow/secretary.py::EFFORT_TIER_BANDS`、`src/agentflow/secretary.py::EFFORT_TOOL_CLUSTERS`、`src/agentflow/secretary.py::nontriviality_from_effort`、`src/agentflow/secretary.py::proof_effort_readings`、`src/agentflow/secretary.py::effort_tier_label`、`src/agentflow/secretary.py::PROOF_BODY_CAP`、`src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT`、`src/agentflow/depsection.py::proof_steps`、`src/agentflow/depsection.py::proof_body`
+- **判据**：`tests/test_nontriviality_is_judged_by_effort.py::test_c_a_big_proof_with_many_lemmas_and_two_clusters_is_t2_or_above`、`tests/test_nontriviality_is_judged_by_effort.py::test_d_a_three_line_proof_that_only_uses_definitions_stays_t0`、`tests/test_nontriviality_is_judged_by_effort.py::test_e_the_two_old_questions_are_not_criteria`、`tests/test_nontriviality_is_judged_by_effort.py::test_f_zeroed_effort_readings_break_the_big_proof_case`、`tests/test_secretary_rates_nontriviality.py::test_the_five_levels_are_declared_with_the_owner_semantics`、`tests/test_secretary_rates_nontriviality.py::test_unknown_is_not_a_tier`、`tests/test_nontriviality_reading_is_read_only.py::test_counts_keep_unjudged_apart_from_t1`、`tests/test_b_nontriviality_language_is_tiers.py::test_b_source_has_no_trivial_wording_outside_history_comments`；现算：`secretary.EFFORT_TIER_BANDS` = 5、`secretary.EFFORT_TOOL_CLUSTERS` = 8
+
+### [规范] §16.10 C10 形式化入口族：只有用户指定 ⇒ M→B，`B→L` 唯一入边，F 不立 formal 子目标
+
+**规则**：形式化**不是流水线的一环**：只有用户指定时才走，入口是 `M` 交给 `B`、由 `B` 判成本后逐条派 `L`（`B→L` 是 L 的**唯一**入边，`L→C` 是它唯一的出边），F 不许立 `formal` 子目标（`FORMAL_IS_NOT_F_TODO`）、不许把 formal 的方法派给 E（`FORMAL_OWNER` = `L`），F 的推理**就是它的工作方式**（没有开关；缺缝要明说"缺缝"，不许落"未接线"的死胡同）。
+
+- 补充：Lean 关着时这条协作面整条看不见 —— `formal.*` 不装配、`B→L` 与 `L→C` 都被 policy 判 `forbidden_edge`（理由串点名 `lean_off`），但**声明面**（`capabilities`）照样有 L 那三件动作。
+- 补充：论文对应表那一侧也是同一个口径 —— Lean 那一行按开关换形状（`LEAN_FILE_ROW` / `LEAN_FILE_ROW_NO_LEAN`），台账 kind 与"谁签过"分两格写，读不出就写读不出。
+- **落点**：`src/agentflow/agent_f/core.py::FORMAL_OWNER`、`src/agentflow/agent_f/core.py::E_METHODS`、`src/agentflow/agent_f/core.py::FORMAL_EDGE_MISSING_REASON`、`src/agentflow/agent_f/core.py::_is_formal_subgoal`、`src/agentflow/agent_f/core.py::_formal_not_in_f_round`、`src/agentflow/agent_f/core.py::_formal_dispatch_facts`、`src/agentflow/agent_f/core.py::_seam_missing_round`、`src/agentflow/agent_f/core.py::_wash_manuscript`、`src/agentflow/agent_f/create_plan.py::FORMAL_IS_NOT_F_TODO`、`src/agentflow/agent_f/_support.py::UNWIRED_OWNERS`、`src/agentflow/agent_prompts.py::_reaches_proof_review`、`src/agentflow/agent_prompts.py::conductor_tool_count`、`src/agentflow/agent_prompts.py::prompt_text_problems`、`src/agentflow/specs/g.py::LEAN_FILE_ROW`、`src/agentflow/specs/g.py::LEAN_FILE_ROW_NO_LEAN`、`src/agentflow/papermapping.py::CONJECTURE_KIND`、`src/agentflow/papermapping.py::THEOREM_ENV_KINDS`、`src/agentflow/papermapping.py::LEDGER_KIND_FIELD`、`src/agentflow/papermapping.py::REVIEWED_FIELD`、`src/agentflow/papermapping.py::kind_gap_reading`、`src/agentflow/attackround.py::PROOF_EXIT_CRITERIA`
+- **判据**：`tests/test_f_formal_subgoal_owner_l.py::test_create_plan_refuses_a_formal_subgoal_whichever_way_it_is_written`、`tests/test_f_formal_subgoal_owner_l.py::test_f_does_not_dispatch_an_owner_l_subgoal_to_e`、`tests/test_f_formal_subgoal_owner_l.py::test_no_edge_reaches_l_except_from_b`、`tests/test_f_has_no_formal_entry.py::test_a_f_tool_surface_has_no_lean_or_formal_tool`、`tests/test_f_has_no_formal_entry.py::test_b_the_rendered_prompt_makes_no_formal_promise`、`tests/test_f_reasoning_is_its_working_mode.py::test_unwired_owners_does_not_contain_f`、`tests/test_f_reasoning_is_its_working_mode.py::test_a_f_round_never_lands_the_not_wired_dead_end`；现算：`agent_f.core.FORMAL_OWNER` = L、`agent_f.core.E_METHODS` = 3、`agent_f.core.FORMAL_EDGE_MISSING_REASON` = formal_edge_missing、`agent_f.create_plan.FORMAL_IS_NOT_F_TODO` = formal_is_not_f_todo、`papermapping.THEOREM_ENV_KINDS` = 2
+
+### [规范] §16.11 C11 权限面与写口族：`statements` 只经 B、手填 ID 拒、通用写口只写簿记、保留产物
+
+**规则**：写面只有四条硬事实 —— ① `statements` **只经** `B` 的 `register_statement` 落（别的角色直写是受控拒绝且一行都不落，`no_caller_role` 不是后门）；② **手填 ID 一律拒绝**（编号由台账分配；写错前缀的拒信要点名正确的那一个）；③ 通用能力那一批（`UNIVERSAL_TOOLS`）只许写**簿记表**（`BOOKKEEPING_TABLES`），碰知识表（`KNOWLEDGE_TABLES`）在运行期就被拒；④ 框架自有产物（证明手稿 / 研究报告）**不许智能体手写**（`RESERVED_ARTIFACT_*`），要改走正路。
+
+- 补充：集合型字段在写入期归一化（顺序与去重不留两套口径），`tasks` 不许种到别人名下、`item_state` 不许伪造 —— 这两条由板项状态机（只许前进、`done` 之前必须 `seen`、`acked` 只配 `ack`）与 `ack` 的"只许 ack 收件人是自己的项"一起守。
+- 补充：`tasks` 的写路只有两条 —— `conductor.post_task`（给自己落一条活项）与框架自己的收口路径（`conductor.ack` / `mark_item_seen` / `open_item`）；通用写口的 `table.create(table="tasks")` / `table.update(table="tasks")` 由 `_tasks_write_refusal` 受控拒绝（`TASKS_POSTED_BY_THEIR_OWNER`：收件人只能是自己、不许伪造 `item_state`），"种到别人名下"在结构上办不到。
+- **落点**：`src/agentflow/tools/__init__.py::UNIVERSAL_TOOLS`、`src/agentflow/tools/__init__.py::UniversalTool`、`src/agentflow/tools/__init__.py::BOOKKEEPING_TABLES`、`src/agentflow/tools/__init__.py::KNOWLEDGE_TABLES`、`src/agentflow/tools/__init__.py::is_universal_tool`、`src/agentflow/tools/__init__.py::universal_tool_is_bookkeeping_only`、`src/agentflow/tools/__init__.py::universal_tool_tables`、`src/agentflow/tools/__init__.py::stale_universal_tools`、`src/agentflow/tools/__init__.py::_check_universal_tools_are_registered`、`src/agentflow/tools/table_tools.py::_hand_typed_id_refusal`、`src/agentflow/tools/table_tools.py::_tasks_write_refusal`、`src/agentflow/tools/table_tools.py::TASKS_POSTED_BY_THEIR_OWNER`、`src/agentflow/tools/table_tools.py::_with_proof_routes`、`src/agentflow/tools/fs_tools.py::RESERVED_ARTIFACT_KIND`、`src/agentflow/tools/fs_tools.py::RESERVED_ARTIFACT_TABLE`、`src/agentflow/tools/fs_tools.py::_reserved_artifact`、`src/agentflow/tools/fs_tools.py::_reserved_refusal`、`src/agentflow/schema.py::normalize_set_fields`、`src/agentflow/schema.py::id_allocator_kind`、`src/agentflow/schema.py::looks_like_prefixed_id`、`src/agentflow/capabilities.py::_assembled_groups`、`src/agentflow/capabilities.py::_candidates_impl`、`src/agentflow/conductor.py::claim_item`、`src/agentflow/conductor.py::mark_item_seen`
+- **判据**：`tests/test_tasks_write_port_refuses_forgeries.py::test_b_posting_on_somebody_elses_board_is_refused`、`tests/test_tasks_write_port_refuses_forgeries.py::test_c_forging_a_closed_item_is_refused`、`tests/test_tasks_write_port_refuses_forgeries.py::test_d_forging_a_seen_item_is_refused`、`tests/test_tasks_write_port_refuses_forgeries.py::test_f_the_gate_is_a_permission_surface_not_a_param_check`、`tests/test_statements_are_registered_by_b.py::test_f_direct_write_is_refused_with_the_code_and_lands_nothing`、`tests/test_statements_are_registered_by_b.py::test_every_non_b_role_is_refused_and_b_still_registers`、`tests/test_a_concept_row_is_registered_by_the_secretary.py::test_stubbing_the_route_back_to_a_direct_write_turns_the_reading_red`、`tests/test_hand_filled_ids_are_refused.py::test_a_hand_filled_relation_id_is_refused_with_the_actionable_sentence`、`tests/test_hand_filled_ids_are_refused.py::test_every_table_key_is_ledger_allocated`、`tests/test_universal_tools_are_for_everyone.py::test_b_no_universal_tool_writes_a_knowledge_table`、`tests/test_universal_tools_are_for_everyone.py::test_d3_a_universal_entry_that_writes_knowledge_tables_is_refused_at_runtime`、`tests/test_fs_reserved_framework_artifacts.py::test_a_f_cannot_hand_write_his_proof_manuscript`、`tests/test_fs_reserved_framework_artifacts.py::test_the_table_names_match_the_one_definition`、`tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py::test_acking_somebody_elses_item_is_refused_by_code_not_yours`；现算：`tools.UNIVERSAL_TOOLS` = 13、`tools.BOOKKEEPING_TABLES` = 1、`tools.KNOWLEDGE_TABLES` = 9
+
+### [规范] §16.12 C12 读数与用户端族：名册三态读数、书目面、聊天行 ID、预热三态、错误两轴
+
+**规则**：用户端只许**读**，且每一块读数都是三态 —— 名册面的"在飞 / 待机 / 静默 / 未读到"由后端算完再下发（前端不许自己拿一个旧布尔冒充），书目面**只数已准入的**（没有台账是 `unknown` 不是 0），每条聊天行都带**绝对编号与它的来源**（行里没有就写"没有"，不许留空猜），预热按钮的三态（计划 / 运行 / 完成或失败）与写权限开关分开报（关着就说关着），而错误统计是**两根轴**：真错误（`ERROR_CATEGORY_NAMES`）与过程读数（`PROCESS_CATEGORIES`）不许合并成一个总数。
+
+- 补充：`webui/writes.py` 是"这个服务此刻许不许写"的唯一判据，页面上的禁用态与后端的拒绝必须同源。
+- **落点**：`src/agentflow/readouts.py::roster_readout`、`src/agentflow/readouts.py::ROSTER_DATA_KEYS`、`src/agentflow/webui/readers.py::CHAT_PUBLIC`、`src/agentflow/webui/readers.py::library_face`、`src/agentflow/webui/readers.py::handle_library`、`src/agentflow/webui/readers.py::ADMISSION_BASIS_CANDIDATE`、`src/agentflow/webui/readers.py::PROBLEM_ADMISSION_UNDECIDABLE`、`src/agentflow/webui/cacheface.py::warm_job`、`src/agentflow/webui/cacheface.py::WARM_JOB_STATES`、`src/agentflow/webui/cacheface.py::handle_cache_status`、`src/agentflow/webui/writes.py::writes_allowed`、`src/agentflow/webui/writes.py::WRITES_OFF_REASON`、`src/agentflow/webui/server.py::handle_errors`、`src/agentflow/webui/server.py::handle_errors_categories`、`src/agentflow/webui/state.py::type_decls`、`src/agentflow/errorstats.py::ALL_CATEGORIES`、`src/agentflow/errorstats.py::ERROR_CATEGORY_NAMES`、`src/agentflow/errorstats.py::PROCESS_CATEGORIES`、`src/agentflow/errorstats.py::process_categories`
+- **判据**：`tests/test_webui_three_state_reading.py::test_active_is_computed_from_the_definition_not_copied_from_a_lying_cell`、`tests/test_webui_three_state_reading.py::test_an_unread_tally_says_unreadable_with_the_reason_and_never_a_zero`、`tests/test_webui_readers.py::test_every_face_carries_tri_and_reason`、`tests/test_library_face_only_counts_admitted_works.py::test_c_a_missing_or_broken_table_is_unknown_and_never_zero`、`tests/test_chat_lines_carry_the_absolute_id.py::test_every_line_carries_the_absolute_id_keys`、`tests/test_chat_lines_carry_the_absolute_id.py::test_a_line_without_an_id_says_so_instead_of_pretending`、`tests/test_chat_page_shows_who_and_which_id.py::test_the_chat_page_really_reads_the_id_and_its_source`、`tests/test_cache_warm_button_is_honest.py::test_a_a_service_without_the_write_switch_says_so_and_the_page_disables`、`tests/test_the_root_is_named_m.py::test_the_root_state_is_the_same_three_state_as_every_other_node`、`tests/test_the_root_is_named_m.py::test_the_real_workspace_root_is_m`；现算：`readouts.ROSTER_DATA_KEYS` = 9、`errorstats.ALL_CATEGORIES` = 26、`errorstats.PROCESS_CATEGORIES` = 3
+
+### [规范] §16.13 C13 清洁与判据基础设施族：死函数台账、绿灯不造假、仓库不更脏
+
+**规则**：这一批收的是"让判据自己可信"的四件事 —— ① **死私有函数必须有台账条目**（`test_clean_invariant`：扫出来的孤儿要么被删、要么在登记表里说清为什么留着）；② **绿灯不许造假**（`test_green_is_not_faked`：不许 `assert True` 这类恒真断言、每个判据文件里至少有一条非打桩的正控、新判据不许被 skip 掉、反真空用例必须真的碰到它的对象）；③ **跑完自检要留下干净的仓库**（`test_demo_selftest_leaves_the_repo_clean`）；④ **仓库体检不许变差**（`test_repo_survey_does_not_get_worse`：比分母是当次的旧债，只许少不许多）。
+
+- 补充：`_chain_cells` 与 `_unknown_tool_problems` 与 `child_counts_reading` 是这三件事各自在代码里的一个读数口 —— 它们都只读，且"读不到"与"读到 0"分得开。
+- **落点**：`src/agentflow/closing.py::child_counts_reading`、`src/agentflow/closing.py::mapping_gaps`、`src/agentflow/agenttrace.py::_chain_cells`、`src/agentflow/agent_skills.py::_unknown_tool_problems`
+- **判据**：`tests/test_clean_invariant.py::test_no_dead_private_function_without_a_ledger_entry`、`tests/test_clean_invariant.py::test_each_watched_concept_has_exactly_one_implementation`、`tests/test_green_is_not_faked.py::test_no_assert_is_forever_true`、`tests/test_green_is_not_faked.py::test_every_criterion_file_has_a_non_stubbed_case`、`tests/test_green_is_not_faked.py::test_no_new_criterion_can_be_skipped_away`、`tests/test_green_is_not_faked.py::test_every_anti_vacuum_case_touches_its_subject`、`tests/test_demo_selftest_leaves_the_repo_clean.py`、`tests/test_repo_survey_does_not_get_worse.py`（数字格：无 —— 这一簇的可核面是四个落点符号与上面八份判据，理由见 §16.14）
+
+### [规范] §16.14 收尾：没法机器核的条目、就地更正、与旧文档的关系
+
+**一、哪些条目没法机器核（写成"指路 + 判据文件位置"，刻意不写数字）**：
+
+| 条目 | 为什么机器核不了 | 指路 |
+|---|---|---|
+| C1 "计时器不阻塞动作"、"挂机是零步零调用" | 这是**行为**，要真跑一圈循环才看得见（不是文档里的一个数） | `tests/test_park_is_a_real_stop.py::test_a_parked_parent_takes_no_model_calls_and_no_steps`、`tests/test_timers_and_handoff_semantics.py::test_c_a_timer_does_not_block_work_in_hand` |
+| C5 "正文只到链尾" | 同上：中间几跳的收件箱里有没有正文，只有在真跑一条五跳链之后才量得出来 | `tests/test_guide_goes_down_the_secretary_chain.py::test_a2_a_five_hop_chain_leaves_three_intermediate_agents_at_zero`、`...::test_f_leaking_the_body_to_every_hop_makes_a_red` |
+| C5 "公告里点名 + 指令语气 ⇒ 拒" | 判"是不是指令语气"有一次语义判定，不是词表比对 | `src/agentflow/agent_prompts.py` 的公共频道那一段 + `tests/test_the_public_channel_is_the_senders_children.py` |
+| C7 "不要求逐字（同一句话换写法仍可 `consistent`）" | "意思一样"不可枚举；能机器核的是**档位与挡签** | `tests/test_v_checks_fs_citations.py::test_a_consistent_use_signs_even_though_the_words_differ` |
+| C8 "条件 → 结论 一致" | 判一条命题是不是同一条要过一次模型；机器核的是它的**后果**（合并成一行 / `unknown` 不合并） | `tests/test_secretary_recognizes_the_same_proposition.py` |
+| C9 "按花的力气" | 五档的**边界**可核，"这次算不算绕路"不行 | `tests/test_nontriviality_is_judged_by_effort.py` |
+| C13 三条基础设施判据 | 它们守的是"别的判据可不可信"，没有自己的读数 | `tests/test_clean_invariant.py`、`tests/test_green_is_not_faked.py` |
+
+> 这一栏本身就是三态纪律的一次落地：**"核不了"要写"核不了"，不写一个看起来精确的数字。**
+
+**二、就地更正（旧口径 → 新口径，均标 `（2026-10-27 口径）`）**：
+
+- `docs/ROLE-SPECS.md` §F.2：补 F-7 一条（**写证明手稿 + 末尾 `## 依赖` 四列表**）。旧表六条职责里没有"手稿"这件事，
+  而今天 F 的产出、秘书洗稿、D 携带、B 读稿登记整条链都从那份手稿开始 —— 不写进去，读者会以为依赖边是"某处自动生成的"。
+- `docs/ROLE-SPECS.md` §F.3：把"自己'想数学'"那一行的旧理由改掉。旧文字说"本轮的 F 是**确定性调度器**，不是推理者"，
+  业主 2026-10-26 已裁定逐字「没有默认开，这个就是F的工作方式，没有开关的说法」⇒ 推理是 F 的工作方式，
+  判据 `tests/test_f_reasoning_is_its_working_mode.py`（它还守着"那个开关的字面量全仓清零"）。
+
+**三、没有旧版文字可改的簇**：C1–C7、C9、C11–C13 在这三份规范里此前**一条都没有**（不是"写得不对"，是"没写"）——
+这就是业主那句「新设计未被规范收录」的字面含义。它们只新增，不需更正；C8、C10 各有一处旧文字，已在上表更正。
+
+**四、这一节不做的事**：不改任何功能代码、不改 `specs/*`、不动 golden / `PROMPT_VERSION` / 缓存；
+本节引用的 745 条符号清单是输入（`agentflow/temp/_inventory_master.md`），**不在本批改动范围内**。
+
+**五、本批欠一次"读数重算"（按 §15.3 第 4 步，单独一次、附逐格 diff、交人审）**：
+
+`conductor.post_task` 进册（2026-10-27 晚）之后，工具总数 **111 → 112**，逐角色数与本文件 §0.2 的
+`LIVE-READINGS` 块、`ROLE-SPECS.md` §0.2 / §R0 表与各角色 `.4` 标题、`ROLE-SPECS-APPENDIX.md`
+§R0.1 / §A.4–§M.4 / §S3 都还是**旧口径**。机器读数（复跑见下）：
+
+```powershell
+# 声明面的差集：HEAD 的 @tool 声明 110 件 → 工作树 111 件，多出来的只有 conductor.post_task
+git diff HEAD -- src/agentflow/tools | Select-String '^\+\s*"conductor\.post_task"'
+# 装配面的读数：112 件（Lean 开），conductor.* 一族 20 件
+python -m agentflow.cli tools
+```
+
+因此 `tests/test_role_specs_complete.py` 与 `tests/test_role_specs_appendix_is_live.py` 里
+那几条"文档计数 vs 现场装配"的用例**现在是红的**，红的理由是**读数过期**，不是本节的规则写错 ——
+这两件事必须分开说：把"设计没进规范"和"读数没重算"混成一个红，接下来的人就不知道该改哪一处。
+本批不动那些数，理由正是 §15.3 第 4 步：重算读数是**一次单独的改动**，要逐格 diff 交人审，
+不许夹在"把设计写进规范"这一批里悄悄滑过去（`P-读数-2`：不许自己批准自己）。
 

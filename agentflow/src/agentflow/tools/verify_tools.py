@@ -772,8 +772,7 @@ def _verify_detect_verifier():
 @tool(
     "verify.run_experiment",
     (
-            "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；"
-            "崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场受控拒绝，理由码 `formal_not_in_e`）。"
+            "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。"
             ),
     {
            "type": "object",

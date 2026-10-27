@@ -93,13 +93,22 @@ def test_the_readings_say_opened_but_not_read(tmp_path: pathlib.Path):
     assert readings.get("seen") == 0 and readings.get("acked") == 0, got
     assert readings.get("checked") is True, got
 
-    # 其中一个真的被读进过某一步 ⇒ 再读一次板，读数要跟着变（判据不是"当时打了 0"）
+    # 其中一个真的被读进过某一步 ⇒ 再读一次板，读数要跟着变（判据不是"当时打了 0"）。
+    # D12（业主 2026-10-27）：广播落在 `kind="message"` 上 ⇒ 信息型，被渲染那一拍
+    # 就收口（"seen 就是 ack"，`Conductor._settle_if_informational`）。于是它有两条
+    # 可观测的后果：行上是 `done`+`acked`，而板上"未消的项"里不再有它。
     item = str(got["items"][0])
     _state, why = cond.mark_item_seen(item, by_task_id=kid_a, step=1)
     assert not why, why
-    pairs = {str(x["task_id"]): x for x in cond.board_view(limit=50)["open_items"]}
-    assert str(pairs[item].get("item_state")) == "seen", pairs[item]
-    assert str(pairs[item].get("seen_by")) == kid_a, pairs[item]
+    rows = {str(r["task_id"]): r for r in st.rows("tasks")}
+    assert str(rows[item].get("item_state")) == "done", rows[item]
+    assert str(rows[item].get("item_close")) == "acked", rows[item]
+    assert str(rows[item].get("seen_by")) == kid_a, rows[item]
+    after = cond.board_readings()
+    assert after["by_state"]["done"] == 1, after
+    assert after["by_close"]["acked"] == 1, after
+    left = {str(x["task_id"]) for x in cond.board_view(limit=50)["open_items"]}
+    assert item not in left, ("已经收口的信息型项还挂在板上（会永久积压并卡销号门）", left)
     assert kid_b and st is not None
 
 

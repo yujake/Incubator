@@ -13,13 +13,14 @@
    "两个模块各持一套判据"；不抢占的代价论证见 `DESIGN-INTERACTIONS.md` §5 待决问题 3。
 
 拆包（`goal-7f5116c1` M6/M7）不许改变 import 面：原来能在 `agentflow.agent_a` 下 import 到的名字
-（含私有名，也包括住在 `core.py` 的 `_selftest` / `selftest`）逐个再导出；动作各自在
-`agent_a/<动作>.py`，自检入口在同目录 `__main__.py`。
+（含私有名，也包括 `_selftest`）逐个再导出；动作各自在 `agent_a/<动作>.py`，自检入口在同目录
+`__main__.py`，自检本体在 `agent_a/selftest.py`（2026-10-26 从 `core.py` 搬出来：自检既不是
+动作也不是装配，而 `core.py` 那一段把文件撑过了 `src_files_gt800_lines` 的基线）。
 """
 from __future__ import annotations
 
 from .core import AgentA
-from .core import (_selftest,
+from .selftest import (_selftest,
 )
 from ._support import (ARunResult, AgentBrief, AgentSpec, Any, ClaimOutcome, D, Iterable, Path, 
     S, SPEC, Store, StoreError, T, X, annotations, dataclass, lease_expired, make_lease, 

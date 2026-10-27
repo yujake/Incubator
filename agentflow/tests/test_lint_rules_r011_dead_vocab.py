@@ -69,17 +69,32 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     所以本条现在分两半判：`reserved` 栏非真空由 `reproduction_report` / `prior_art`
     钉住；`proposition` 必须出现在栏一附里（照样打印、照样带理由），且两栏都不许
     出现 `unclaimed`（那一档才是要变红的那一档，一条都没放松）。
+
+    ## 2026-10-26：`prior_art` 也挪进栏一附（同一个机制，第二次）
+
+    旧期望把 `prior_art` 钉在 `reserved`。这一批 `src/agentflow/depsection.py:182`
+    有了 `"prior_art": "prior_art"` —— 那是依赖小节解析的读侧别名表（把正文里的词
+    映射到 `Dependency.kind`），不是产出点，而普查按字面量判读写，分不出这两件事
+    ⇒ 它按 `proposition` / `lemma` / `dataset` 同样的口径落进栏一附。
+    现在 `reserved` 栏的非真空由 `reproduction_report` 一件钉住（它仍然没有产出点），
+    `prior_art` 与 `proposition` 一起落栏一附，两栏都照旧不许出现 `unclaimed`，
+    且每一条都必须带着登记表里那段理由打印出来 —— 这三件事一条都没放松。
     """
     got = L.rule_R011_dead_vocab(ROOT)
     reserved = " ".join(f.message for f in got if "[栏一 reserved]" in f.message)
     registered = " ".join(f.message for f in got if "[栏一附]" in f.message)
     unclaimed = " ".join(f.message for f in got if "[栏二 unclaimed]" in f.message)
-    for name in ("reproduction_report", "prior_art"):
-        assert name in reserved, f"{name} 不在 reserved 栏：{reserved}"
+    # 栏一 reserved 的非真空：`reproduction_report` 今天仍无产出点。
+    assert "reproduction_report" in reserved, f"reproduction_report 不在 reserved 栏：{reserved}"
+    assert "reproduction_report" not in unclaimed, (
+        f"reproduction_report 被挪进了 unclaimed 栏：{unclaimed}")
+    # `proposition` / `prior_art` 今天落栏一附（同形不同义的读侧字面量）：
+    # 仍然必须在报告里被点名、带理由，且两栏都不许出现 unclaimed。
+    for name in ("proposition", "prior_art"):
+        assert name in registered, f"{name} 不在栏一附里：{registered}"
         assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
-    # `proposition` 今天落栏一附（同形不同义的读侧字面量）：仍然必须在报告里被点名。
-    assert "proposition" in registered, f"proposition 不在栏一附里：{registered}"
-    assert "proposition" not in unclaimed, f"proposition 被挪进了 unclaimed 栏：{unclaimed}"
+    assert "（死取值" in registered or "预留" in registered, (
+        "栏一附没带上登记表里那段理由 —— 打印出来才算数")
 
 
 def test_r011_has_no_trace_of_the_deleted_finding_kind() -> None:

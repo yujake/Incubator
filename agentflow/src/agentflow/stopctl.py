@@ -395,7 +395,8 @@ def history_path(root: str | Path) -> Path:
 
 
 def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop_file",
-                 explicit: str | Path | None = None, remove: bool = True) -> dict[str, Any]:
+                 explicit: str | Path | None = None, remove: bool = True,
+                 programs: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """消费掉这一把开关：把"谁在什么时候为什么叫停、被哪一趟用掉"记进历史，然后撤掉它。
 
     ## 为什么必须撤（`draft/37` §140 的 bug，实测 `temp/_stop_probe.py`）
@@ -427,6 +428,13 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
 
     历史行落在 `runs/stop-history.jsonl`（append-only）：`{…开关负载…, consumed_at,
     consumed_by_sid, level, removed}`；`agentflow stop --status` 在开关不在时会把它读出来。
+
+    ## `programs`（G4，2026-10-26 新增的那一格读数）
+
+    停机对程序做了什么（`stop_programs` 的读数：强停杀了哪几个、优雅停在宽限里点了谁的名、
+    或者"程序状态没查成"）随这一笔一起落盘。此前这一格里只有"停了哪一趟"，没有
+    "这一停对程序做了什么" —— 而那正是昨晚那 15 个野进程在审计面上完全看不见的原因。
+    不给（`None`）就一个字节都不多写：与"特意写了空"分开。
     """
     path = stop_path(root, explicit)
     state = read_stop(root, explicit=explicit)
@@ -438,6 +446,8 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     record = dict(state)
     record.update({"consumed_at": _now_iso(), "consumed_by_sid": str(sid or ""),
                    "level": str(level or "stop_file"), "removed": bool(remove)})
+    if isinstance(programs, Mapping) and programs:
+        record["programs"] = dict(programs)
     try:
         hist = history_path(root)
         hist.parent.mkdir(parents=True, exist_ok=True)
@@ -717,6 +727,441 @@ def kill_registered(root: str | Path, *, role: str = "",
             "killed": sum(1 for r in results if r["killed"]),
             "kept": kept, "failed": failed,
             "excluded": int(exclude_pid) if exclude_pid is not None else None}
+
+
+# ---------------------------------------------------------------- 停机与程序（G4）
+#
+# 业主 2026-10-26 的原话（逐字）：「停机开关也要能杀程序（优雅停是提醒，强停是强杀）」。
+#
+# 背景（真机读数）：昨晚机器上跑出 15 个野 python 进程（智能体起的"研究程序"），停机开关
+# 只让代理收工 —— 那些程序继续跑，把 CPU 打满。改前本模块里没有任何一处"停机时碰过程序"：
+# 两档开关都只写开关、消费开关、杀"登记在 `runs/*.pid` 里的代理进程"（`kill_registered`），
+# 而程序是记在时钟簿记里的另一份账（`clock.start_program` 的 `kind="program"` 行）。
+#
+# 两档语义刻意不合并（合并之后"提醒了它、它没理"与"我把它砍了"在读数上长得一样，
+# 那正是昨晚留下的那一族错）：
+#
+# | 档 | 对程序做什么 | 收口 |
+# |---|---|---|
+# | 优雅停 `force=False` | 每条先 `terminate`（`clock._terminate_pid`：POSIX 是真 SIGTERM；Windows 上没有可发给 console 子进程的请停信号，见那里的实测），再给一个共享的宽限窗口 | 窗口过了还在跑的只点名，一根手指都不动 |
+# | 强停 `force=True` | 每条立刻收掉（`clock._force_kill_pid`：作业对象一次收整棵树） | `finish_program(outcome="killed")` + 推一次等它的人 |
+#
+# 两档共用同一条三态纪律：程序读数没查成（`conductor.programs_reading` 的
+# `checked=False`）⇒ 读数里逐字写"没查成"，绝不许折成"没有在跑的程序"。
+
+#: 优雅停给程序的宽限（秒）。
+#:
+#: 为什么是 5 秒，不是 0、也不是 30：
+#:
+#: - 0 秒等于"优雅停一上来就强杀"——那会把跑了一半的实验结果文件丢掉（业主对优雅停的
+#:   定义就是"提醒，不是砍"）；
+#: - 30 秒会让"按下停机"这一步本身比大多数程序的一步还长，而业主按停机的那一刻要的是
+#:   "停"；
+#: - 5 秒是这些"研究程序"把一行结果刷盘、把半个产物收成完整文件的量级：E 的实验脚本
+#:   每 0.2 秒看一次停机开关（见本模块顶上的 docstring 第 ③ 条），其它程序要靠这一档
+#:   自己收尾也只是几秒的事。过了 5 秒还在跑的就是"不理会的"，它的名字会进读数。
+#:
+#: 为什么是常量而不是每次调用的参数：宽限是"这一刀的手感"，不是每一次都该重新商量的
+#: 口径；多一个参数就多一种把宽限写 0 的调用，而读数上"优雅"与"直接砍"长得一样。
+STOP_PROGRAM_GRACE_SEC: float = 5.0
+
+#: 宽限窗口里的轮询间隔（每一拍都走 `clock.await_io`，进主时钟的等待账）。
+STOP_PROGRAM_POLL_SEC: float = 0.2
+
+#: 强停之后最多再等它从进程表上消失多久；等不到就如实报"还在跑"。
+STOP_PROGRAM_WAIT_SEC: float = 5.0
+
+#: 逐条程序的处理档（一档都不许折平）：
+#:
+#: - `killed`：强停把它收掉了（账上 pending 的那一行按 `outcome="killed"` 收口）；
+#: - `killed_orphan`：强停收掉了进程，但账上那一行早就收口了（收口之后进程还在跑的那一类
+#:   —— 昨晚 15 个野进程大半是这一档），行一个字都不改；
+#: - `still_running`：优雅停的宽限窗口过了它还在跑（只点名，不杀）；
+#: - `exited_in_grace`：优雅停的宽限窗口里它不在了（自己走的，或看见开关之后收尾的）；
+#: - `already_exited`：查的时候它就不在了 / 账上早已收口（幂等那一档：查过了，不是又杀成一次）；
+#: - `no_pid`：账上说在跑，但没有 pid（`attach_program_pid` 没补上）⇒ 没有可停的对象，点名；
+#: - `failed`：动了手，窗口过了仍然在（杀不动）。
+PROGRAM_STOP_STATUSES: tuple[str, ...] = ("killed", "killed_orphan", "still_running",
+                                          "exited_in_grace", "already_exited", "no_pid",
+                                          "failed")
+
+
+def _program_knife(pid: int, *, force: bool) -> dict[str, Any]:
+    """停一条程序的"刀"：`force=True` 是真杀，否则只请它自己停。
+
+    为什么单独一层（这一层是反真空判据的落点）：判据要把"动手"这一步打桩掉，用来证明
+    "程序真的没了"这个结论是这一步换来的，而不是别处顺手做的。打桩在这里即打掉全部
+    动手路径。
+
+    两条路都是 G1 已经落地的助手，本模块不另写一份：
+    `clock._force_kill_pid`（Windows 上作业对象一次收整棵树；POSIX 是 SIGKILL）与
+    `clock._terminate_pid`（POSIX 是真 SIGTERM；Windows 上如实说"没有可发的请停信号"
+    —— 那一档的"优雅"由宽限窗口承担，见 `clock._terminate_pid` 的实测）。
+
+    助手不在（改了名/还没落地）时：强停退回本模块既有的两条（`_kill_via_job` →
+    `kill_tree`），优雅停如实报"这一刀没发出去"—— 绝不假装发过。
+    """
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return {"killed": False, "sent": False, "via": "", "why": f"pid 不是整数：{pid!r}"}
+    from . import clock as _CLK
+
+    fn = getattr(_CLK, "_force_kill_pid" if force else "_terminate_pid", None)
+    if callable(fn):
+        try:
+            got = dict(fn(pid_int) or {})
+        except Exception as exc:  # noqa: BLE001 - 杀不成要如实报，不许假装
+            return {"killed": False, "sent": False, "via": "",
+                    "why": f"{type(exc).__name__}: {exc}"}
+        got.setdefault("via", "")
+        got.setdefault("why", "")
+        if force:
+            got.setdefault("killed", False)
+            got["sent"] = False
+        else:
+            got.setdefault("sent", False)
+        return got
+    if force:
+        got = _kill_via_job(pid_int)
+        if not bool(got.get("killed")):
+            fallback = dict(kill_tree(pid_int))
+            if got.get("via"):
+                fallback["job_attempt"] = got
+            got = fallback
+        return {"killed": bool(got.get("killed")), "sent": False,
+                "via": str(got.get("via") or ""),
+                "why": str(got.get("detail") or got.get("why") or ""),
+                "fallback": True}
+    return {"killed": False, "sent": False, "via": "",
+            "why": ("clock._terminate_pid 不在（G1 的助手改了名/没落地）⇒ 这一刀没发出去："
+                    "优雅停只剩宽限窗口这一档（先等它自己退）")}
+
+
+def _wait_gone_many(pids: "list[int]", seconds: float, *, purpose: str) -> float:
+    """等这一批 pid 全部从进程表上消失（一个共享的窗口），返回实际等了多久。
+
+    为什么是一个共享窗口而不是"一个 pid 一个窗口"：15 个程序各等 5 秒就是 75 秒 ——
+    那让"停机"这一步本身变成了一个新的卡顿。宽限是对这一批说的，不是逐条排队。
+
+    每一拍都走 `clock.await_io`（主时钟的等待账是"所有等一会儿"的唯一入口，也是
+    `raw_wait_census` 的判据）；等待账写不进去时也不许让"等"这件事失效，所以照旧
+    轮询到窗口结束 —— 只是那一拍的时长没人记账。
+    """
+    from . import clock as _CLK
+
+    todo = [int(p) for p in pids if int(p or 0) > 0]
+    limit = max(0.0, float(seconds))
+    step = max(0.01, float(STOP_PROGRAM_POLL_SEC))
+    started = time.monotonic()
+    while todo:
+        todo = [p for p in todo if alive(p)]
+        if not todo:
+            break
+        left = limit - (time.monotonic() - started)
+        if left <= 0:
+            break
+        try:
+            _CLK.await_io(min(step, left), purpose, kind="stop_program",
+                          where="stopctl._wait_gone_many")
+        except Exception:  # noqa: BLE001 - 等待账不是判据，但它也不许变成裸睡
+            break
+    return max(0.0, time.monotonic() - started)
+
+
+def _programs_of(root: str | Path, *, task_ids: "set[str] | None" = None) -> dict[str, Any]:
+    """这一棵树（或某一支）名下"现在有谁在跑"的读数 —— 复用 `conductor.programs_reading`。
+
+    为什么不在这里现读 `clock.programs()`：那一份读数已经分好了三档，而停机要动的恰好是
+    第三档 —— `orphans.finished_but_alive`（账上早已收口、进程还在跑）。昨晚那 15 个野
+    进程大半落在这一格里（宿主退了、账上收口了、进程还活着），只读 `state=="pending"`
+    会一个都看不见，然后停机报"没有在跑的程序"。
+
+    三态照旧：读不成 ⇒ `checked=False` + `reason`（不是"没有程序在跑"）。
+    """
+    try:
+        from . import conductor as _COND
+    except Exception as exc:  # noqa: BLE001 - 模块都导不进来 ⇒ 判不了
+        return {"checked": False, "reason": f"程序读数没查成（conductor 没导进来：{type(exc).__name__}）"}
+    try:
+        return dict(_COND.programs_reading(root, task_ids=task_ids) or {})
+    except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+        return {"checked": False, "reason": f"程序读数没查成：{type(exc).__name__}: {exc}"}
+
+
+def _program_name(row: Mapping[str, Any]) -> str:
+    """点名用的一格：`python(pid 1234)`（程序名读不到就写"程序名没读到"，不编一个）。"""
+    program = str(row.get("program") or "").strip() or "（程序名没读到）"
+    pid = row.get("pid")
+    try:
+        return f"{program}(pid {int(pid)})"
+    except (TypeError, ValueError):
+        return f"{program}(pid 没读到)"
+
+
+def stop_programs(root: str | Path, *, force: bool, grace_sec: float = STOP_PROGRAM_GRACE_SEC,
+                  wait_sec: float = STOP_PROGRAM_WAIT_SEC,
+                  task_ids: "set[str] | None" = None, why: str = "",
+                  exclude_pid: int | None = None) -> dict[str, Any]:
+    """停机对程序的那一半（业主 2026-10-26）：优雅停提醒 + 宽限，强停立刻杀。
+
+    ## 两档语义（不许混）
+
+    - `force=False`（优雅停）：每条在跑的程序先 `terminate` 一次，然后给一个共享的宽限
+      窗口 `grace_sec`（缺省 `STOP_PROGRAM_GRACE_SEC`）；窗口过了还在跑的，如实点名
+      "宽限内没退出"，一根手指都不动 —— 强杀只在强停那一档发生。
+    - `force=True`（强停）：每条立刻收掉（含子进程/整棵传递树），然后按
+      `outcome="killed"` 收口（走既有的 `finish_program`）、推一次等它的人；读数逐项
+      点名"强停杀了 N 个程序：<程序>(pid)"。
+
+    ## 作用面（与开关同宽）
+
+    - `task_ids=None`：全工作区（整棵树）—— 包括账上没有归属的那些（恰恰是"野"的那一批）；
+    - `task_ids={...}`：只动落在这一支台账号里的（子树开关）。
+
+    ## 三态
+
+    程序读数没查成（`conductor.programs_reading` 的 `checked=False`）⇒ 返回
+    `checked=False` 与一句"程序状态没查成"，不许折成"没有在跑的程序"。
+
+    ## 幂等（同一趟里投两次）
+
+    已经收口/已经不在的每一条都报 `already_exited`（不是"又杀成一次"），不抛异常。
+
+    ## 不碰自己
+
+    `exclude_pid`（缺省是本进程）的那一条一律不动：停机不该把"读开关的这一个"杀掉，
+    否则这一趟的读数与审计全丢。
+
+    返回的读数（`programs` 逐条、`killed` / `still_running` / `already_exited` 是条数、
+    `notice` 是那句进 `run.notes` 与人话读数的话）。
+    """
+    want_force = bool(force)
+    grace = max(0.0, float(grace_sec))
+    wait = max(0.0, float(wait_sec))
+    me = int(os.getpid()) if exclude_pid is None else int(exclude_pid)
+    out: dict[str, Any] = {
+        "checked": False, "force": want_force, "grace_sec": round(grace, 3),
+        "wait_sec": round(wait, 3), "scope": sorted(task_ids) if task_ids else [],
+        "programs": [], "count": 0, "running": 0, "killed": 0, "still_running": 0,
+        "already_exited": 0, "no_pid": 0, "failed": 0, "skipped": 0,
+        "waited_sec": 0.0, "left": [], "notice": "", "reason": "",
+    }
+    read = _programs_of(root, task_ids=task_ids)
+    if not read.get("checked"):
+        out["reason"] = str(read.get("reason") or "程序计时器没读成")
+        out["notice"] = (f"停机（{'强停' if want_force else '优雅停'}）：程序状态没查成"
+                         f"（{out['reason']}）⇒ 这一格没查成，别把它读成「没人在跑」")
+        return out
+    out["checked"] = True
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for bucket in ("running", "unowned"):
+        for raw in (read.get(bucket) or ()):
+            if not isinstance(raw, Mapping):
+                continue
+            row = dict(raw)
+            key = str(row.get("timer_id") or "") or f"pid:{row.get('pid')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+    out["running"] = len(rows)
+    entries: list[dict[str, Any]] = []
+    # 幂等那一档（同一趟里投第二次 force）：账上早已按 killed 收口、进程也早就不在的那些
+    # 逐条报 `already_exited` —— "查过了、不是又杀成一次"。只挑 `outcome="killed"` 那一族，
+    # 不把工作区里历史上一堆正常跑完的程序都翻出来点名。
+    for raw in (read.get("rows") or ()):
+        if not isinstance(raw, Mapping):
+            continue
+        row = dict(raw)
+        if str(row.get("state") or "") == "pending" or bool(row.get("alive")):
+            continue
+        if str(row.get("outcome") or "") != "killed":
+            continue
+        key = str(row.get("timer_id") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append({
+            "timer_id": key, "program": str(row.get("program") or ""),
+            "pid": row.get("pid"), "state": str(row.get("state") or ""),
+            "task_id": str(row.get("task_id") or ""), "status": "already_exited",
+            "note": (f"账上早已按 killed 收口（state={row.get('state')}）而进程也不在了 —— "
+                     "查过了、不是又杀成一次（幂等）"),
+            "knife": {},
+        })
+    out["already_exited"] = len(entries)
+    victims: list[dict[str, Any]] = []
+    for row in rows:
+        tid = str(row.get("timer_id") or "")
+        pid: int | None = None
+        try:
+            raw_pid = row.get("pid")
+            pid = int(raw_pid) if raw_pid is not None else None
+        except (TypeError, ValueError):
+            pid = None
+        state = str(row.get("state") or "")
+        entry: dict[str, Any] = {
+            "timer_id": tid, "program": str(row.get("program") or ""), "pid": pid,
+            "state": state, "task_id": str(row.get("task_id") or ""),
+            "status": "", "note": "", "knife": {},
+        }
+        entries.append(entry)
+        if pid is None or pid <= 0:
+            entry["status"] = "no_pid"
+            entry["note"] = ("账上说它在跑，但没有 pid（attach_program_pid 没补上）"
+                             "⇒ 没有可停的对象；它还在不在看 clock.program_list")
+            continue
+        if pid == me:
+            entry["status"] = "already_exited"
+            entry["note"] = "这一条的 pid 就是读开关的这一个进程 ⇒ 不动（停机不许把自己杀掉）"
+            out["skipped"] += 1
+            continue
+        if not bool(row.get("alive")):
+            entry["status"] = "already_exited"
+            entry["note"] = (f"pid {pid} 已经不在进程表上了 —— 查过了、它自己走掉的；"
+                             f"账上那一行 state={state or '没记'}")
+            continue
+        victims.append({"entry": entry, "pid": pid, "state": state, "row": row})
+    if not victims:
+        out["programs"] = entries
+        out["already_exited"] = sum(1 for e in entries if e["status"] == "already_exited")
+        out["no_pid"] = sum(1 for e in entries if e["status"] == "no_pid")
+        out["notice"] = (f"停机（{'强停' if want_force else '优雅停'}）："
+                         "这一次名下没有在跑的程序")
+        done = [e for e in entries
+                if e["status"] == "already_exited" and str(e.get("state") or "") != "pending"]
+        if done:
+            out["notice"] += (f"；账面各有 {len(done)} 条早已收口、进程也不在："
+                              + "、".join(_program_name(e) for e in done)
+                              + "（already_exited：查过了，不是又杀成一次）")
+        nopid = [e for e in entries if e["status"] == "no_pid"]
+        if nopid:
+            out["notice"] += (f"；另有 {len(nopid)} 条账上没有 pid，停不了："
+                              + "、".join(_program_name(e) for e in nopid))
+        return out
+    waited = 0.0
+    if want_force:
+        for v in victims:
+            entry = v["entry"]
+            knife = _program_knife(v["pid"], force=True)
+            entry["knife"] = knife
+            gone_waited = _wait_gone_many([v["pid"]], wait,
+                                          purpose="停机强停：等这一条从进程表上消失")
+            waited = max(waited, gone_waited)
+            if alive(v["pid"]):
+                entry["status"] = "failed"
+                entry["note"] = (f"强停没能把它收掉（pid {v['pid']} 还在；"
+                                 f"走了 {knife.get('via') or '没走成'}："
+                                 f"{knife.get('why') or '原因没有读数'}）")
+                continue
+            entry["status"] = "killed" if v["state"] == "pending" else "killed_orphan"
+            bits = [f"强停杀掉的（{why or '停机开关'}）"]
+            if knife.get("via"):
+                bits.append(f"走了 {knife['via']}")
+            if v["state"] == "pending":
+                try:
+                    closed, how, wake = _finish_killed(root, str(entry["timer_id"]),
+                                                       note="；".join(bits))
+                    entry["finished"] = how
+                    entry["exit_code"] = getattr(closed, "exit_code", None)
+                    entry["woken"] = int(wake.get("woken") or 0)
+                    entry["watching"] = int(wake.get("watching") or 0)
+                except Exception as exc:  # noqa: BLE001 - 收口失败要如实报，不许丢
+                    entry["finished"] = f"{type(exc).__name__}: {exc}"
+                entry["note"] = "；".join(bits)
+            else:
+                entry["note"] = (f"账上早已收口（state={v['state']}）而进程还在 ⇒ "
+                                 "强停收掉了进程，那一行一个字都没改")
+    else:
+        open_pids: list[int] = []
+        for v in victims:
+            knife = _program_knife(v["pid"], force=False)
+            v["entry"]["knife"] = knife
+            v["entry"]["note"] = (f"已经请它自己收尾（{knife.get('via')}）"
+                                  if knife.get("sent")
+                                  else f"这一拍没有可发的请停信号（{knife.get('why') or '没读数'}）")
+            open_pids.append(v["pid"])
+        waited = _wait_gone_many(open_pids, grace, purpose="优雅停：宽限窗口里等程序自己收尾")
+        for v in victims:
+            entry = v["entry"]
+            if alive(v["pid"]):
+                entry["status"] = "still_running"
+                entry["note"] = (f"宽限内没退出（等了 {round(waited, 1)} 秒 / 窗口 "
+                                 f"{grace:g} 秒）—— 优雅停不杀它，要杀请走强停")
+            else:
+                entry["status"] = "exited_in_grace"
+                entry["note"] = (f"宽限窗口里它不在了（{round(waited, 1)} 秒）—— "
+                                 "优雅停只提醒、不杀；这一行由等它的那一趟按自己的结局收口")
+    out["waited_sec"] = round(waited, 3)
+    out["programs"] = entries
+    out["killed"] = sum(1 for e in entries if e["status"] in ("killed", "killed_orphan"))
+    out["still_running"] = sum(1 for e in entries if e["status"] == "still_running")
+    out["already_exited"] = sum(1 for e in entries if e["status"] == "already_exited")
+    out["no_pid"] = sum(1 for e in entries if e["status"] == "no_pid")
+    out["failed"] = sum(1 for e in entries if e["status"] == "failed")
+    out["left"] = [int(e["pid"]) for e in entries
+                   if e["status"] in ("still_running", "failed") and e.get("pid")]
+    out["notice"] = _program_stop_notice(out)
+    return out
+
+
+def _finish_killed(root: str | Path, timer_id: str, *,
+                   note: str) -> "tuple[Any, str, dict[str, Any]]":
+    """按 `outcome="killed"` 收口一条程序计时器，并推一次等它的人（G1 的既有路）。
+
+    两条都是 `clock` 的既有实现：收口走 `finish_program`（结局/耗时/退出码/到点那句话），
+    叫醒走 `_wake_waiters`（它内部推 `fire_due`，落 mailbox 项 + 唤醒标记）。
+    `_wake_waiters` 不在（改过名）时只收口 —— 读数里那两格就报 0，不假装叫醒过。
+    """
+    from . import clock as _CLK
+
+    closed, how = _CLK.finish_program(root, str(timer_id), outcome="killed", note=note)
+    wake: dict[str, Any] = {"checked": False, "watching": 0, "woken": 0,
+                            "reason": "clock._wake_waiters 不在 ⇒ 只收口、没推"}
+    fn = getattr(_CLK, "_wake_waiters", None)
+    if callable(fn):
+        try:
+            wake = dict(fn(root, str(timer_id)) or {})
+        except Exception as exc:  # noqa: BLE001 - 叫醒失败不许把"已收口"这件事带走
+            wake = {"checked": False, "watching": 0, "woken": 0,
+                    "reason": f"叫醒等它的人时出错（{type(exc).__name__}: {exc}）"}
+    return closed, how, wake
+
+
+def _program_stop_notice(out: Mapping[str, Any]) -> str:
+    """把一次停机对程序的处置拼成一句人话（进 `run.notes` 与停机审计的 `programs` 读数）。
+
+    逐字要点（判据按这几句认）：强停点名"强停杀了 N 个程序：<程序>(pid)"；优雅停
+    点名"宽限内没退出"且明说"没杀它们"；没查成就写"没查成"。
+    """
+    entries = [e for e in (out.get("programs") or ()) if isinstance(e, Mapping)]
+    lead = "强停" if out.get("force") else "优雅停"
+    killed = [e for e in entries if e.get("status") == "killed"]
+    orphans = [e for e in entries if e.get("status") == "killed_orphan"]
+    still = [e for e in entries if e.get("status") == "still_running"]
+    gone = [e for e in entries if e.get("status") == "exited_in_grace"]
+    failed = [e for e in entries if e.get("status") == "failed"]
+    bits: list[str] = []
+    if killed:
+        bits.append(f"强停杀了 {len(killed)} 个程序：" + "、".join(_program_name(e) for e in killed))
+    if orphans:
+        bits.append(f"强停还收掉了 {len(orphans)} 个（账上早已收口、进程还在）："
+                    + "、".join(_program_name(e) for e in orphans))
+    if still:
+        bits.append(f"{len(still)} 个程序在 {float(out.get('grace_sec') or 0):g} 秒宽限内没退出："
+                    + "、".join(_program_name(e) for e in still)
+                    + " —— 没杀它们（要杀请用强停）")
+    if gone:
+        bits.append(f"{len(gone)} 个程序在宽限内自己退出了："
+                    + "、".join(_program_name(e) for e in gone))
+    if failed:
+        bits.append(f"强停没能收掉 {len(failed)} 个："
+                    + "、".join(_program_name(e) for e in failed) + "（读数里给了原话）")
+    if not bits:
+        return f"停机（{lead}）：这一次名下没有在跑的程序"
+    return f"停机（{lead}）：" + "；".join(bits)
 
 
 # ---------------------------------------------------------------- 内部

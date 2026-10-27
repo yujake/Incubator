@@ -103,15 +103,18 @@ def reg(store):
     return registry
 
 
-# ---------------------------------------------------------------- 1. 命中但全被拒
+# ---------------------------------------------------------------- 1. 命中但全没入库
 
 
-def test_hits_that_are_all_rejected_do_not_read_as_a_bare_no_results(store):
-    """1. 三条候选全被重叠闸拒 ⇒ 读数里要有命中 3 / 入库 0 / 理由码分布。
+def test_hits_that_all_stay_pending_do_not_read_as_a_bare_no_results(store):
+    """1. 三条命中一条都没入库 ⇒ 读数里要有命中 3 / 入库 0 / 待裁 3 与理由分布。
 
-    改前读数：请求行 `outcome="no_results"`、`last_error=null`，而同一次
-    `lit_candidates` 的三行全是 `rejected` + `overlap_without_new_content`
-    —— 与"一条都没检索到"在盘上完全同形。
+    改前读数（2026-10-26 Q16 之前）：请求行 `outcome="no_results"`、`last_error=null`，
+    而同一次 `lit_candidates` 的三行全被本地重叠闸拒收 —— "找到了、全被挡"与
+    "一条都没检索到"在盘上完全同形。
+    Q16 之后的那一档更靠前：自动链路暂存的候选没有 relevance，提交闸整批拦下，
+    三条停在 pending（待裁）。所以这一条现在守的是"待裁 3 条"那一格：
+    没有它，"命中 3 条、一条没入库"仍然只留一个 `registered=0`。
     """
     add_literature(store, "000000", title="Floquet theory for periodic differential equations",
                    doi="10.9999/floquet", processed=True)
@@ -126,24 +129,27 @@ def test_hits_that_are_all_rejected_do_not_read_as_a_bare_no_results(store):
     row = _request(store)
     assert row["done"] is True
     last_error = str(row["last_error"] or "")
-    assert last_error, "命中 3 条、全被重叠闸拒，却只留下 outcome=no_results 与 last_error=null"
+    assert last_error, "命中 3 条、一条没入库，却只留下 outcome=no_results 与 last_error=null"
     assert "命中 3 条" in last_error, last_error
     assert "入库 0 条" in last_error, last_error
-    assert "overlap_without_new_content=3" in last_error, last_error
+    assert "待裁 3 条" in last_error, last_error
     # 反真空：候选行上的真相还在（这条判据读的确实是同一次的三条）
     rows = [r for r in store.rows("lit_candidates") if r["request_id"] == RID]
-    assert len(rows) == 3 and all(r["status"] == "rejected" for r in rows), rows
-    assert all(r["reason_code"] == "overlap_without_new_content" for r in rows)
+    assert len(rows) == 3 and all(r["status"] == "pending" for r in rows), rows
+    assert all(not r["reason_code"] for r in rows), rows
 
 
 # ---------------------------------------------------------------- 2. 一键迁移的定位栏
 
 
 def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, reg):
-    """2. 一键迁移的行必须有定位栏（候选 url）并标"本次无全文"；B 读得出它在哪。
+    """2. 入库的那一行必须有定位栏（候选 url）并标"本次无全文"；B 读得出它在哪。
 
     改前读数：literature 行 `path=null`、`download={"status":"skipped",
     "error":"no_local_path"}`；B 领取后只能写 `no_local_file`，说不出这篇从哪来。
+
+    Q16 之后路径变了（`lit.admit_all` 不再搬库，逐条 `lit.admit` 才是入库口），
+    但这一条守的东西一个字没变：不管从哪条入库路径进来的行，都得带上候选行的 url。
     """
     url = "https://example.invalid/locate-me.pdf"
     staged = reg.call("lit.stage_add", request_id=RID, entries=[{
@@ -151,10 +157,15 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
         "year": 2011, "type_code": "J", "url": url, "relevance": "与本次检索相关",
     }])
     assert staged.ok, staged.error
+    slot = staged.unwrap()["staged"][0]["slot"]
 
-    got = reg.call("lit.admit_all", request_id=RID)
+    got = reg.call("lit.admit", slots=[slot], request_id=RID)
     assert got.ok, got.error
     lit_id = got.unwrap()["admitted"][0]["lit_id"]
+    # 判完之后 `admit_all` 只收口（Q16 的提交闸就是这条边界）
+    settled = reg.call("lit.admit_all", request_id=RID)
+    assert settled.ok, settled.error
+    assert settled.unwrap()["registered"] == 0, settled.unwrap()
 
     row = next(r for r in store.rows("literature") if r["lit_id"] == lit_id)
     dl = dict(row.get("download") or {})
@@ -242,6 +253,11 @@ def test_an_all_empty_relevance_is_recorded_as_a_reading_and_does_not_block(stor
 
     改前读数：`report_violations(report) == []`，报告里只有一句
     "（A 未写相关性说明）"，看不出缺的是哪几条、也没有任何机器读数。
+
+    2026-10-26（Q16）: 这一档从"读事故"升级成"拦门的理由"。同一次调用（两条都没有
+    relevance）现在会被提交闸整批拒，两条停在 pending；`lit.admit` 逐条也拒
+    （`missing_relevance`）。报告因此必须把这两条列进 `## 待裁`：那是"还差什么才能入库"
+    的唯一落点。
     """
     staged = reg.call("lit.stage_add", request_id=RID, entries=[
         {"title": "No relevance one", "doi": "10.60/one", "provider": "stub",
@@ -252,22 +268,27 @@ def test_an_all_empty_relevance_is_recorded_as_a_reading_and_does_not_block(stor
     assert staged.ok, staged.error
 
     got = reg.call("lit.admit_all", request_id=RID)
-    assert got.ok, got.error
-    data = got.unwrap()
-    # 只记读数、不拦门：入库照常完成
-    assert data["registered"] == 2, data
+    assert not got.ok, "没有 relevance 的两条居然整批入库了"
+    assert got.meta["kind"] == "undecided_items", got.meta
+    assert "还有 2 条没判" in str(got.error), got.error
+    assert len(store.rows("literature")) == 0
 
-    text = Path(data["report_path"]).read_text(encoding="utf-8")
-    violations = L.report_violations(text)
-    assert len(violations) == 1, violations
-    assert "relevance" in violations[0], violations
-    assert "不拦门" in violations[0], violations
+    # 逐条也不许进（同一件事，另一个入口）
+    slots = [item["slot"] for item in staged.unwrap()["staged"]]
+    one = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
+    assert one.ok and one.unwrap()["refused"][0]["code"] == "missing_relevance", one.unwrap()
+
+    # 报告（由 `write_report` 现算，判据读它的三块）
+    written = L.write_report(store, RID)
+    text = Path(written["path"]).read_text(encoding="utf-8")
+    assert "## 待裁（2 条）" in text, text
     # 点名缺哪几条，而不是一句谁都对得上的兜底
     assert "A 未写相关性说明" not in text
-    tail = text.split("- 缺相关性说明的条目", 1)
+    tail = text.split("## 待裁", 1)
     assert len(tail) == 2, text
-    for row in store.rows("lit_candidates"):
-        assert f"`lit:{row['lit_id']}`" in tail[1], text
+    for slot in slots:
+        assert f"槽位 {slot}" in tail[1], (slot, text)
+    assert written["not_admitted"] == 0 and written["undecided"] == 2, written
 
 
 # ---------------------------------------------------------------- 6. 默认检索态逐源三态
@@ -278,6 +299,9 @@ def test_the_default_search_state_reports_every_source_status(store):
 
     改前读数：`sources=[]`，于是"两个源被限流"与"接线上的源全都 0 命中"
     在动作读数上同形（都只剩 `outcome=no_results`）。
+
+    Q16 之后这里多一格读数：`res.registered` 不再是 1（自动链路不再整批入库，
+    命中的那一条停在待裁）—— 但这一条判据问的是 sources[] 的三档，与入库无关。
     """
     add_request(store, RID, topic="spectral sequences")
     hit = _StubProvider("alpha", [_cand("Spectral sequences of filtered complexes",
@@ -288,7 +312,9 @@ def test_the_default_search_state_reports_every_source_status(store):
 
     res = _agent(store, hit, empty, limited, broken).run_once()
 
-    assert res.registered == 1, res.to_dict()
+    assert res.registered == 0, res.to_dict()
+    # 命中的那一条确实进了列表（它没丢，只是还没判）
+    assert L.list_candidates(store, request_id=RID)["counts"]["pending"] == 1
     assert res.providers_requested == [], "第一态是'没点名'，不是'点名了没人接上'"
     by_name = {str(s["name"]): s for s in res.sources}
     assert set(by_name) == {"alpha", "beta", "gamma", "delta"}, by_name
@@ -304,9 +330,13 @@ def test_the_default_search_state_reports_every_source_status(store):
 
 
 def test_a_failed_source_with_hits_is_not_written_as_a_clean_success(store):
-    """7. 一个源失败、另一个源有命中 ⇒ `last_error` 非空且点名失败的源。
+    """7. 一个源失败、另一个源有命中 ⇒ 不许读成一次干净的成功，且要点名失败的源。
 
     改前读数：`outcome="ok"` + `last_error=null`，失败只进 `tx.info` 的事件流。
+    Q16 之后读数又变一格：命中的那一条停在待裁（没入库），所以这一轮不进
+    `outcome=ok` 那一支 —— 请求留在"退避重试"上（`done=False`、`outcome=None`，
+    因为还可能有源补交货），而 `last_error` 里逐字留着失败源的名字。
+    这一条判据问的是"有没有把有源失败读成干净成功"，三个读数都答得出。
     """
     add_request(store, RID, topic="spectral sequences")
     good = _StubProvider("alpha", [_cand("Spectral sequences of filtered complexes",
@@ -315,12 +345,12 @@ def test_a_failed_source_with_hits_is_not_written_as_a_clean_success(store):
 
     res = _agent(store, good, bad).run_once()
 
-    assert res.registered == 1, res.to_dict()
+    assert res.registered == 0, res.to_dict()
     row = _request(store)
-    assert row["outcome"] == "ok"
+    assert row["outcome"] != "ok", "有源失败、一条都没入库，却被读成了干净成功"
+    assert row["done"] is False, row
     last_error = str(row["last_error"] or "")
     assert last_error, "有源失败却有命中，last_error 却是 null"
-    assert "1 个源失败" in last_error, last_error
     assert "beta" in last_error, last_error
 
 

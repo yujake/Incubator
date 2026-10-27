@@ -17,6 +17,23 @@ E4 的三条演练（本文件逐条落地）：
 | 1 | 收工带 `notify` | 账本多一行、编号 0000、收件人留言里带 `[手稿 0000]` |
 | 2 | 收工不带 `notify` | 打回重填（不是代填）：这一步是 `invalid`，警告里有四件事；连续 3 次 ⇒ `no_notify` |
 | 3 | 收工带错字段 | 打回并点名那个字段；连续两次的警告里多一句"先说明你上一次为什么没按格式填" |
+
+## 2026-10-26（D-68）：主控的 `final` 现在要过结构完整性闸
+
+业主逐字：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。于是本文件里
+凡是"主控派完活 ⇒ final"的判据都两向都测：
+
+| 方向 | 脚本 | 期望 |
+|---|---|---|
+| 不做（树没清就收工） | 派活之后直接 `final` | 不记 final（`final_refused`），拒信点名还在册的编号与处置路径 |
+| 做了（先销号再收工） | 派活 → `conductor.retire_child` → `final` | 记 final，留痕照旧 |
+
+Q12 之后被拒还有三个补救拍（`AgentLoop.max_final_refused`），所以"不记 final"那一向
+读到的是停止理由 `final_refused` —— 它绝不是成功：`run.final` 是空串、没有手稿，
+收尾那句还要点名"补救了 N 拍仍不完整"。
+
+夹具里那一支没有未消项（D-68 起派活通知不落收件人的板），所以这棵树是
+"`conductor.retire_child` 一销就清"；`conductor.ack` 那条路在没有未消项时没有对象。
 """
 from __future__ import annotations
 
@@ -33,26 +50,78 @@ from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 from agentflow.tools import build_registry
 
+#: `_run` 交给角色的那件事名：脚本靠它认"这一步是主控还是子代理"。
+M_TASK = "收工演练"
+
 
 class _Scripted:
-    """一份"会照着 replies 说"的假模型（每一步一句 JSON）。"""
+    """一份"会照着 replies 说"的假模型（每一步一句 JSON）。
+
+    `replies` 的项可以是 dict（按序号取，取完就停在最后一项），也可以是
+    `(prompt, store) -> dict` 的函数。为什么要把这一档留出来：派活会把子代理也叫起来，
+    而它用的是同一个替身网关 —— 主控与子代理的每一步混在同一条流里，按序号喂一定会
+    喂错人（实测：主控第 2 步想让它销号，那条 JSON 被喂给了子代理那一趟）。
+    """
 
     spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
 
-    def __init__(self, replies: list[dict[str, Any]]) -> None:
+    def __init__(self, replies: list[Any]) -> None:
         self.replies = replies
         self.prompts: list[str] = []
+        #: `_run` 填进来：脚本要按盘上的台账决定下一步（销干净才收工）。
+        self.store: Store | None = None
 
     def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
                  **kw: Any) -> Any:
         self.prompts.append(prompt)
         got = self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
+        if callable(got):
+            got = got(prompt, self.store)
         return type("Reply", (), {"ok": True, "text": json.dumps(got, ensure_ascii=False),
                                   "tokens_in": 10, "tokens_out": 10,
                                   "error_detail": "", "error_kind": ""})()
 
 
-def _run(tmp_path, replies, *, role: str = "D", max_steps: int = 6):
+def _retire_then_final(dispatch: dict[str, Any], final: dict[str, Any], *,
+                       retire: bool = True) -> list[Any]:
+    """脚本：先派活，再把名下的子代理逐个销号，销干净才发 `final`（D-68 的两向）。
+
+    `retire=True` 是"先销号再收工"（应记 final），`retire=False` 是"树没清就收工"
+    （应被拒并点名）。两向共用同一份派活与同一句 final，差别只在那一只手上 ——
+    否则"被拒"那一向证不了"拒的是收工这件事"，它可能只是脚本写错了。
+
+    为什么不是一份逐步写死的列表：见 `_Scripted` 的 docstring（子代理与主控共用这个网关）。
+    销号按台账里的绝对编号点（`task_id` 是 `conductor.retire_child` 收的兼容写法）：
+    名册名要另读一份文件，而这一趟只有一个父，编号就在 `tasks` 那一行上。
+    """
+    named: list[str] = []
+
+    def _step(prompt: str, store: Store | None) -> dict[str, Any]:
+        if not prompt.startswith(f"你的任务：{M_TASK}"):
+            # 子代理那一趟：它自己收工（D-68 管的是主控名下那一棵树，不是它）。
+            return {"final": "子代理：这一趟的活做完了"}
+        rows = [dict(r) for r in (store.rows("tasks") if store is not None else [])]
+        agents = [r for r in rows if not str(r.get("kind") or "")]
+        mine = next((r for r in agents if not str(r.get("parent_task_id") or "")), None)
+        kids = ([] if mine is None else
+                [r for r in agents
+                 if str(r.get("parent_task_id") or "") == str(mine.get("task_id"))])
+        if not kids:
+            return dict(dispatch)                      # 第一步：派活（此刻名下还没有子）
+        pending = [k for k in kids if str(k.get("task_id")) not in named]
+        if retire and pending:
+            task_id = str(pending[0].get("task_id"))
+            named.append(task_id)
+            return {"tool": "conductor.retire_child",
+                    "args": {"task_id": task_id, "reason": "板清了，收工前销号"},
+                    "why": "收工前把名下已经落定的子代理逐个销号（结构完整性闸）"}
+        return dict(final)
+
+    return [_step]
+
+
+def _run(tmp_path, replies, *, role: str = "D", max_steps: int = 6,
+         task: str = M_TASK):
     ws = tmp_path / "ws"
     (ws / "data").mkdir(parents=True, exist_ok=True)
     st = Store(ws)
@@ -64,9 +133,10 @@ def _run(tmp_path, replies, *, role: str = "D", max_steps: int = 6):
                          max_steps=max_steps, store=st, sid="n1")
     cond = Conductor(st, backend=backend)
     backend.conductor = cond
+    gw.store = st
     reg = build_registry(store=st, conductor=cond).registry
     backend.registry = reg
-    run = run_role(role, "收工演练", store=st, registry=reg, conductor=cond,
+    run = run_role(role, task, store=st, registry=reg, conductor=cond,
                    seam=LlmSeam(role=role, session_root=ws, gateway=gw, price=(0.0, 0.0), sid="n1"),
                    session_root=ws, workspace_root=str(ws), sid="n1",
                    max_steps=max_steps, from_env=False)
@@ -269,22 +339,67 @@ def test_the_conductor_must_leave_a_trail_when_it_dispatches(tmp_path):
     """M 派活必须留痕：`summon` 带 `notify` ⇒ 账本一行、收件人是被派的那个角色。
 
     `to` 缺省 = 被派的角色（"给谁派了活"与"手稿发给谁"不许因为要填两遍而分家）。
+
+    D-68（业主 2026-10-26）之后这一条两向都测，因为"记 final"的门槛变了：
+
+    - 树没清就收工：同一份脚本只把那只手关掉 ⇒ 不记 final（`stop_reason` 是
+      `final_refused`、`run.final` 是空串），拒信点名还在册的编号与处置路径。
+      改前这一向读到的是 `final` —— 现在它读到拒绝，而且是点名的那种拒绝；
+    - 先销号再收工：派完活用 `conductor.retire_child` 把那棵树清掉再 final ⇒ 记 final，
+      留痕（账本一行 + 收件箱 + 这一步的读数）一处不少。
+
+    两向共用同一份派活与同一句 final：差别只在"有没有销号"，于是"被拒"证得了
+    "拒的是收工那件事"，而不是"脚本写错了"。
     """
-    ws, run = _run(tmp_path, [
-        {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
-                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
-                    "why": "把猜想立起来",
-                    "notify": {"summary": "派 D 登记这条猜想",
-                               "body": "## 派什么活\n登记猜想。\n## 依据\nlit:0000\n"}}},
-        {"final": "派完了"},
-    ], role="M")
+    dispatch = {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
+                           "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
+                           "why": "把猜想立起来",
+                           "notify": {"summary": "派 D 登记这条猜想",
+                                      "body": "## 派什么活\n登记猜想。\n## 依据\nlit:0000\n"}}}
+    final = {"final": "派完了"}
+
+    # ---- 不做：树没清就 final ⇒ 不记 final（这不是成功，下面是把它钉成拒绝的四处读数）
+    cap = int(AgentLoop.max_final_refused)
+    refused_ws, refused_run = _run(tmp_path / "refused",
+                                   _retire_then_final(dispatch, final, retire=False),
+                                   role="M", max_steps=cap + 3)
+    assert refused_run.stop_reason == "final_refused", refused_run.to_dict()
+    assert refused_run.final == "", refused_run.to_dict()
+    assert refused_run.final_refused_beats == cap, refused_run.to_dict()
+    why = "\n".join(str(n) for n in refused_run.notes)
+    kids = [str(r.get("task_id")) for r in _ws_rows(refused_ws, "tasks")
+            if str(r.get("parent_task_id") or "") and not str(r.get("kind") or "")]
+    assert kids and all(k in why for k in kids), (kids, refused_run.notes)
+    assert "还没销号" in why and "conductor.retire_child" in why, refused_run.notes
+    assert "不记 final" in why, refused_run.notes
+    # 被拒的那几步真的带着拒信（不是"没记 final 但什么都没说"）：
+    # 补救窗口是 cap 拍，加上最后那一拍收尾 ⇒ 一共 cap + 1 次被拒的 final。
+    assert [s.shape for s in refused_run.steps] == ["summon"] + ["final"] * (cap + 1), \
+        [s.shape for s in refused_run.steps]
+    assert all("final_refused" in (s.result or {}) for s in refused_run.steps[1:]), \
+        [s.result for s in refused_run.steps[1:]]
+    # 派活那一刻的留痕不受这道闸影响（它管的是收工，不是派活与手稿）
+    assert [r["to"] for r in MS.rows(refused_ws)] == ["D"], MS.rows(refused_ws)
+    assert refused_run.handoffs == [S.format_id(0)], refused_run.to_dict()
+
+    # ---- 做了：先销号再 final ⇒ 照常收工，留痕在三处都在
+    ws, run = _run(tmp_path / "retired", _retire_then_final(dispatch, final), role="M")
     assert run.stop_reason == "final", run.to_dict()
+    assert run.final == "派完了", run.final
+    assert run.final_refused_beats == 0, run.to_dict()
     assert run.notify_rejections == 0, run.to_dict()
     assert run.handoffs == [S.format_id(0)], run.to_dict()
     rows = MS.rows(ws)
     assert rows[0]["to"] == "D", rows[0]
     assert "登记这条猜想" in rows[0]["summary"], rows[0]
     assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
+    # 销号真的发生过（不是只在 final 里说了一句）：那一步的形状是工具、结果是 retired
+    assert [s.shape for s in run.steps] == ["summon", "tool", "final"], \
+        [s.shape for s in run.steps]
+    assert run.steps[1].payload.get("name") == "conductor.retire_child", run.steps[1].payload
+    assert run.steps[1].result.get("ok") is True, run.steps[1].result
+    assert (run.steps[1].result.get("data") or {}).get("state") == "retired", \
+        run.steps[1].result
 
 
 def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path):
@@ -293,14 +408,18 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     为什么这里不打回、收工侧却打回：用户要的是"派活强制留痕" —— 派生比"打回三次、
     什么都不留"更接近那个目标；而派生行写的是框架手上已有的事实（谁派了谁做什么、参数、
     为什么），不是替模型编它想说的话。收工侧仍然是"打回重填、不代填"（用户在那里的原话）。
+
+    D-68 之后收工那一步要先销号（见 `_retire_then_final`）：`final_refused_beats == 0`
+    在这一条里是反真空的一格 —— 树没清的话它会等于 `AgentLoop.max_final_refused`，
+    收工也就不是 final 了。
     """
-    ws, run = _run(tmp_path, [
+    ws, run = _run(tmp_path, _retire_then_final(
         {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来"}},
-        {"final": "派完了"},
-    ], role="M")
+        {"final": "派完了"}), role="M")
     assert run.stop_reason == "final", run.to_dict()
+    assert run.final_refused_beats == 0, run.to_dict()
     assert run.notify_rejections == 0, ("派生不是打回", run.to_dict())
     rows = MS.rows(ws)
     assert [r["to"] for r in rows] == ["D"], rows
@@ -336,15 +455,18 @@ def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
     `MS.rows(ws)[0]["summary"] == "补上留痕再派"`（第二次才成）。
     改后：派活真的发生（`tasks` 1 行），手稿来自框架据派活派生（note 里写明），
     形状问题落进 `run.notes` —— 而"谁是派生、谁是执笔"两个标记仍然分得开。
+
+    步骤序列里多出来的那一步是 D-68 的销号（`"tool"`）：收工之前那棵树要清掉，
+    而"派活 → 销号 → 收工"三步各是各的证据，不许并成一步。
     """
-    ws, run = _run(tmp_path, [
+    ws, run = _run(tmp_path, _retire_then_final(
         {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来",
                     "notify": {"to": "D"}}},          # 缺 summary / body
-        {"final": "派完了"},
-    ], role="M")
-    assert [s.shape for s in run.steps] == ["summon", "final"], [s.shape for s in run.steps]
+        {"final": "派完了"}), role="M")
+    assert [s.shape for s in run.steps] == ["summon", "tool", "final"], \
+        [s.shape for s in run.steps]
     # 只数派活那一行：`action == "message"` 那一行是通知投到那个实例板上的 ack 项
     # （该有的第二半，理由与上一处逐字相同）。
     assert len([r for r in _ws_rows(ws, "tasks")
@@ -356,11 +478,16 @@ def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
     assert "执笔" in rows[0]["note"] or "秘书" in rows[0]["note"], rows[0]["note"]
     assert any("notify" in n for n in run.notes), run.notes
     assert run.stop_reason == "final", run.to_dict()
+    assert run.final_refused_beats == 0, run.to_dict()
 
 
 def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_path):
-    """`summon_many` 一波算一次派活、写一行；`to` 缺省 ⇒ `ALL`（多目标）。"""
-    ws, run = _run(tmp_path, [
+    """`summon_many` 一波算一次派活、写一行；`to` 缺省 ⇒ `ALL`（多目标）。
+
+    D-68 之后这一趟要两个子代理都销掉才收得了工：脚本按台账逐个销，
+    所以"两步销号 + 一步收工"在这里同时是"整棵树都清过"的证据。
+    """
+    ws, run = _run(tmp_path, _retire_then_final(
         {"summon_many": {"targets": [
             {"role": "D", "task": "派活：把这条猜想立起来并登记",
              "params": {"statement": "甲", "testable": "n≤3"}, "instance": "a"},
@@ -369,9 +496,13 @@ def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_
              "instance": "b"}],
             "why": "两条并行",
             "notify": {"summary": "派两条活", "body": "## 派什么活\n甲 + 乙。\n"}}},
-        {"final": "派完了"},
-    ], role="M")
+        {"final": "派完了"}), role="M")
     assert run.stop_reason == "final", run.to_dict()
+    assert run.final_refused_beats == 0, run.to_dict()
+    retires = [s for s in run.steps if s.shape == "tool"]
+    assert len(retires) == 2, [s.shape for s in run.steps]
+    assert [s.shape for s in run.steps] == ["summon_many", "tool", "tool", "final"], \
+        [s.shape for s in run.steps]
     rows = MS.rows(ws)
     assert len(rows) == 1, rows
     assert rows[0]["to"] == "ALL", rows[0]

@@ -31,7 +31,7 @@ from agentflow import agent_loop as AL
 from agentflow import manuscripts as MS
 from agentflow import sessions as SS
 from agentflow import userio as U
-from agentflow.agent_loop import AgentLoop, LoopRun, PUBLIC, read_interjections, read_messages
+from agentflow.agent_loop import AgentLoop, LoopRun, ALL, read_interjections, read_messages
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
@@ -441,7 +441,7 @@ def _public_is_a_bulletin(env: dict[str, Any]) -> None:
     loop, ws, cond = env["loop"], env["ws"], env["cond"]
 
     # ① 点名 + 指令 ⇒ 受控拒绝，且一条都不落
-    bad = loop._do_message({"to": PUBLIC, "subject": "安排",
+    bad = loop._do_message({"to": ALL, "subject": "安排",
                             "body": "F1 请立刻把实验跑完，然后把结果回我"})
     assert bad.get("ok") is False, bad
     assert str(bad.get("refused") or "") == "public_is_not_a_conversation", bad
@@ -451,7 +451,7 @@ def _public_is_a_bulletin(env: dict[str, Any]) -> None:
         assert _board(cond, tid) == [], ("公告不许开板项", tid, _board(cond, tid))
 
     # ② 不点名的公告 ⇒ 照发，且记录上标着 `bulletin`（"公告"与"对话"在盘上分得开）
-    ok = loop._do_message({"to": PUBLIC, "subject": "本轮口径",
+    ok = loop._do_message({"to": ALL, "subject": "本轮口径",
                            "body": "文献已入册；实验按计划推进"})
     assert ok.get("message_sent"), ok
     assert ok.get("board_kind") == "bulletin", ok
@@ -480,7 +480,7 @@ def test_negctl_without_the_addressee_check_the_directive_is_posted(
     """负控④：把"点名 + 指令"的判据摘掉 ⇒ 那条指令照样发出去 ⇒ 判据④必红。"""
     env = _env(tmp_path)
     monkeypatch.setattr(AgentLoop, "_public_addressee", lambda self, payload: "")
-    got = env["loop"]._do_message({"to": PUBLIC, "subject": "安排",
+    got = env["loop"]._do_message({"to": ALL, "subject": "安排",
                                    "body": "F1 请立刻把实验跑完，然后把结果回我"})
     assert got.get("message_sent"), ("坏实现应当把这条指令发出去", got)
     with pytest.raises(AssertionError):
@@ -499,7 +499,7 @@ def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
     `_message_by_channel` 里那一句（判据本体），摘掉它这条就红（负控在同文件里）。
     """
     loop, ws = env["loop"], env["ws"]
-    got = loop._do_message({"to": PUBLIC, "subject": "叫停",
+    got = loop._do_message({"to": ALL, "subject": "叫停",
                             "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
     assert got.get("message_sent"), ("框架通报被公告栏判据挡住了", got)
     assert got.get("board_kind") == "bulletin", got
@@ -535,7 +535,7 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
         notices[0]
 
     # ② 框架公告：`by_framework=True` ⇒ 连"不是它子代理"的角色也看得到
-    AL.send_message(ws, sender="M", to=PUBLIC, subject="叫停", body="请各自收工",
+    AL.send_message(ws, sender="M", to=ALL, subject="叫停", body="请各自收工",
                     sid=SID, by_framework=True)
     seen, _ = read_messages(ws, "E", sid=SID, parent_task_id=env["uncle"], parent_role="E")
     assert [m for m in seen if m.get("channel") == "public"], (
@@ -568,7 +568,7 @@ def test_negctl_without_the_framework_exemption_the_stop_notice_is_refused(
     """
     env = _env(tmp_path)
     monkeypatch.setattr(AgentLoop, "_public_framework_exempt", lambda self, payload: False)
-    got = env["loop"]._do_message({"to": PUBLIC, "subject": "叫停",
+    got = env["loop"]._do_message({"to": ALL, "subject": "叫停",
                                    "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
     assert str(got.get("refused") or "") == "public_is_not_a_conversation", (
         "坏实现应当把这条框架通报当成『公告栏里的指令』拒掉", got)
@@ -605,6 +605,7 @@ AGENT_LOOP_SEND_SITES: dict[str, str] = {
     "_message_by_channel": "公告栏/角色级（公告判据 + 准入判据在这条路上）",
     "_do_handoff": "手稿通知（名册名/编号走 `_handoff_address`，角色名走手稿台账的收件人面）",
     "_request_relay": "请代唤（`_roster_gate`：父的绝对编号 / 主控 M）",
+    "_hand_off": "交差（`clock.record_handoff` 那一笔的通知：送到父代理的收件箱，owner 2026-10-27 第四条）",
     "ask_parent_for_definitions": "定义报文（同上）",
     "run": "步数上报（`_roster_gate`：父的绝对编号）",
     "selftest": "自检脚本（不跑在运行期）",

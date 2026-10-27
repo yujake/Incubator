@@ -63,6 +63,12 @@ ROLE_L = "L"
 #: 那些与角色无关 —— 真读数见下面 `_counts()` 报的两列（role_L 与 raw_L）。
 ROLE_NAME = re.compile(r"(?<![A-Za-z0-9_])L(?![A-Za-z0-9_])")
 
+#: 「伙伴表里那一行」的判据：`L：` 的左边不许再贴着字母（`ALL：` 不算）。
+#: 同一个坑在 `tests/test_l_is_isolated_when_lean_is_off.py` 里也踩过：公共频道那条
+#: 说明逐字写着 ``to 也可以写 ALL：…``，它的尾巴就是 `L：` ⇒ 子串匹配会把广播关键字
+#: 判成"伙伴表里还有 L 那一行"（实测 Lean 关那一档：`ROLE_NAME` 命中 0，`"L："` 为真）。
+ROW_L = re.compile(r"(?<![A-Za-z0-9_])L：")
+
 #: "把 E 当形式化入口"的两种形状：`E.xxx` 这种动作/工具名，以及"形式化…E"这种挨着写的。
 E_TOKEN = re.compile(r"`E\.[a-z_]")
 E_AFTER_FORMAL = re.compile(r"形式化[^。\nL]{0,8}E(?![A-Za-z0-9_])")
@@ -252,7 +258,7 @@ def test_off_leaves_no_trace_of_l(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not bad, f"关着时仍有角色的提示词里留着 L 的痕迹：{bad}"
     for role in counts:
         text = _prompt(role, registry)
-        assert "L：" not in text, f"{role} 的伙伴表里还有 `L：` 那一行"
+        assert not ROW_L.search(text), f"{role} 的伙伴表里还有 `L：` 那一行"
         assert "形式化那一岗是 L" not in text, f"{role} 的提示词里还点着 L 那一岗"
     # 反真空：这一档的文本不是空的（十个角色加起来远大于 0，且 L 那一岗确实不在）
     assert sum(len(_prompt(r, registry)) for r in counts) > 20000, "关着时提示词被清空了"

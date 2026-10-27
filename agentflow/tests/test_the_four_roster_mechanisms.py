@@ -367,6 +367,14 @@ def test_the_negative_controls_really_turn_the_readings_red(tmp_path: pathlib.Pa
     ② 关 descendants ⇒ 孙代消失；
     ③ 关退役（不写销号）⇒ `member_retired` 那条拒信不会出现；
     ④ 关面（去掉 surface）⇒ 面外路径不再被拦。
+
+    ③ 为什么另起一个"名下没有任何子代理"的名字（2026-10-26）：这一条原本拿 ② 里刚
+    挂了孙的那个名字去演退役，而"先销父、把子留到以后"正是 Q13 的孤儿闸要禁的那件事
+    （`Secretary.retire` 的孤儿闸排在静默闸之后、正是接住这一档）。于是 ③ 量到的是
+    孤儿闸的拒信（`refusal_code` 为空、`cascade.kept` 点名那个孙），不是退役闸放不放行
+    —— 关掉退役视图之后它照样绿，判据失去了分辨率。所以 ③ 用一个没有子代理的名字：
+    它只考"退役写没写、寻址闸读不读名册"这一件事。带子代理的那一档由
+    `tests/test_cascade_retire_closes_the_tree.py` 的 (g) / (h) 两条各自钉住。
     """
     env = _env(tmp_path)
     child, name = _add_child(env)
@@ -388,7 +396,13 @@ def test_the_negative_controls_really_turn_the_readings_red(tmp_path: pathlib.Pa
                          env["sec"].roster_view(owner=env["me"])["rows"]}
 
     # ③ 退役关掉（让视图不再标 retired ⇒ 寻址闸门不再拒）
-    got = env["loop"]._do_retire({"name": name})
+    #
+    # 目标换成一个没有子代理的名字：`name`（上面那个子）在 ② 里刚挂了孙，
+    # 而"先销父、把子留到以后"正是 Q13 的孤儿闸要禁的那件事 —— 用它演退役，
+    # 量到的是孤儿闸的拒信（`refusal_code` 为空、`cascade.kept` 点名那个孙），
+    # 不是退役闸放不放行（docstring 里那一段是这条的理由，改之前它就是这么红的）。
+    _leaf, leaf_name = _add_child(env, "D")
+    got = env["loop"]._do_retire({"name": leaf_name})
     assert got.get("action") == "retired", got
     real_view = SEC.Secretary.roster_view
 
@@ -401,7 +415,7 @@ def test_the_negative_controls_really_turn_the_readings_red(tmp_path: pathlib.Pa
         return out
 
     monkeypatch.setattr(SEC.Secretary, "roster_view", _view_without_retired)
-    reopened = env["loop"]._do_message({"to": name, "subject": "题", "body": "文"})
+    reopened = env["loop"]._do_message({"to": leaf_name, "subject": "题", "body": "文"})
     assert str(reopened.get("refused") or "") != "member_retired", (
         "视图不再标 retired 之后仍然拒 ⇒ 那一条拒信不读名册", reopened)
     monkeypatch.undo()

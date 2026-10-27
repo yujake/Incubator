@@ -101,10 +101,17 @@ def _reads() -> dict:
 
 
 def _write_then_read() -> dict:
-    """一步 [写, 读]：读那一条必须看得见刚写进去的内容（顺序不可换）。"""
+    """一步 [写, 读]：读那一条必须看得见刚写进去的内容（顺序不可换）。
+
+    落点刻意是 `reports/` 而不是 `data/`：2026-10-26 起 `data/` 是框架账本区
+    （表、计数、事件日志与锁都住在那里，`fs.write` 对它一律回
+    `reserved_framework_ledger` 受控拒绝，见 `tests/test_fs_reserved_ledger_paths.py`）。
+    这一条考的是"写先、读后"，不是"文件工具能不能写账本区"—— 所以夹具换到一个
+    普通落点，写这一条就真的能落下，读那一条才有东西可读。
+    """
     return {"tool_calls": [
-        _call("fs_write", {"path": "data/probe.txt", "content": WRITTEN}, "c1"),
-        _call("fs_read", {"path": "data/probe.txt"}, "c2"),
+        _call("fs_write", {"path": "reports/probe.txt", "content": WRITTEN}, "c1"),
+        _call("fs_read", {"path": "reports/probe.txt"}, "c2"),
     ]}
 
 
@@ -226,7 +233,7 @@ def test_write_then_read_keeps_order_and_the_read_sees_the_write(tmp_path: pathl
     # 顺序：写的步号在前、读的步号在后（同一条路径上顺序执行，没有重排）
     assert run.steps[0].index < run.steps[1].index, run.to_dict()
     # 写真的落了盘
-    assert (root / "data" / "probe.txt").read_text(encoding="utf-8") == WRITTEN
+    assert (root / "reports" / "probe.txt").read_text(encoding="utf-8") == WRITTEN
     # 读看到的就是刚写进去的那一份（顺序换了这条必红）
     assert WRITTEN in str(run.steps[1].result), run.steps[1].result
     recs = _call_records(root)

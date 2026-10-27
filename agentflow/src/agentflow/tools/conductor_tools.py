@@ -34,7 +34,8 @@ from ..conductor import (AGENT_STATE_SILENT, AGENT_STATE_UNKNOWN,
                          DEFAULT_FANOUT_WAIT_SEC, ESCALATE_KINDS,
                          RETIRE_REFUSAL_TARGET_NOT_SILENT, Conductor, NotWiredError,
                          SummonResult, current_caller_role, current_session,
-                         current_task_id, retire_refusal)
+                         current_task_id, program_span_text, programs_refusal,
+                         retire_refusal)
 from . import (READ_ONLY_ROLES, UNIVERSAL_TOOLS, ToolError, ToolRegistry, ToolResult, fail,
                is_universal_tool, ok, tool)
 
@@ -294,9 +295,7 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例给每个 target "
-    "不同 `instance` 标签 ⇒ 允许同波并发；没标签时出现多次自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `"
-    "concurrent_peak`。",
+    "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例要各自不同的 `instance` 标签才同波并发；没标签时自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `concurrent_peak`。",
     {
         "type": "object",
         "properties": {
@@ -437,8 +436,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
 @tool(
     "conductor.ledger",
-    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。`task_count` "
-    "与 tree 行数数 `tasks` 全量（含顶趟行）；召唤数看 `started_total`。不含建议。",
+    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。不含建议。",
     {
         "type": "object",
         "properties": {
@@ -506,8 +504,7 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
 
 @tool(
     "conductor.stop",
-    "停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 在飞任务有界收尾 → 剩下的合成终态（记未知、不重试）→ 落续跑简报。`"
-    "force=true` 直接停：立刻按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。",
+    "停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 有界收尾 → 合成终态（记未知、不重试）→ 续跑简报。`force=true` 直接停：按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。",
     {
         "type": "object",
         "properties": {
@@ -538,7 +535,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     `draft/37` §128 加的两件（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，还要写个强制停止是直接杀掉"）：
     
     1. 「先落停机开关」（`stopctl`）—— 它是唯一能打断"在飞工作"的通道：卡在等待循环里的子进程（E 的实验脚本）每 0.2 s 看一次它，于是会被立刻终止（实测
-    30 s → 0.36 s）； 2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到。 2026-10-08 晚改
+    30 s → 0.36 s）； 2. `notify=True` 时在「公共频道广播」一条叫停（`ALL`）：A–H 每个角色都收得到。 2026-10-08 晚改
     回留言（所有者 T18：「插话只有 M 可能受到用户的插话」）： D07 当年把它改成集体插话的理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"，而那句话今天已经不
     成立 —— 步边界的 `_hear()` 会把新留言并进这一步的结果（`agent_loop._hear`，判据见 `draft/85` §5 的表），所以留言同样"下一步
     就看到"，而且它在盘上有收件人、可 ack（`draft/85` §2.1）。body 里仍然点明"收到广播不等于被叫停，开关才算"，免得同伴误判。
@@ -546,7 +543,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     `force=True` 是"直接杀掉"：不等待收尾，并按进程登记把子进程连子孙一起杀（「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
     """
     from .. import stopctl
-    from ..agent_loop import PUBLIC, send_message
+    from ..agent_loop import ALL, send_message
 
     c = _conductor()
     root = Path(str(getattr(getattr(c, "store", None), "root", "") or "."))
@@ -574,7 +571,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
         # 而"听不到叫停的子孙会继续烧钱跑实验"是安全件。S4 的"沿边逐层下发"落地后
         # 这一档退休（`draft/86` §14.6 写明了这处冲突与处置）。
         ij_id, problem = send_message(
-            root, sender=S.CONDUCTOR_ROLE, to=PUBLIC, subject="叫停",
+            root, sender=S.CONDUCTOR_ROLE, to=ALL, subject="叫停",
             body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
                   "并把你已经起的子进程停掉（实验脚本、检查器进程等）。"
                   "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
@@ -611,6 +608,11 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
         # 「直接杀掉」那一半：按登记把子进程连子孙一起杀，「排除自己」
         # （杀掉自己的进程树会让这次工具调用永远回不去）。
         killed = stopctl.kill_registered(root, exclude_pid=os.getpid())
+        # G4（业主 2026-10-26「停机开关也要能杀程序（优雅停是提醒，强停是强杀）」）：
+        # 强停对程序那一半也得有人做。那一份读数挂在下面已声明的 `killed_children` 里
+        # （顶层键集合一个字都没动 —— 工具面的 `returns=` 冻结在快照里，多一个顶层键
+        # 就是改工具面，而这一单不许碰 `tests/golden/*`）。
+        killed["programs"] = stopctl.stop_programs(root, force=True, why=str(code))
     brief = _write_resume_brief(c)
     # 业主 2026-10-13：「优雅停止就是主控用这个操作…」+「接收到停的时候，剩余任务委托状态
     # 自动变成 block」—— 这一条是 M 的优雅停止操作，所以「整趟」还没终态的任务与委托
@@ -682,8 +684,7 @@ def conductor_cancel(_conductor, reason: str = "user", detail: str = "") -> Tool
 
 @tool(
     "conductor.ensure_project",
-    "冷启动 / 热启动：`start=auto|cold|warm`，返回四态（absent/empty/workspace/not_a_project）与 mode。`cold`"
-    " 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
+    "冷启动 / 热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
     {
         "type": "object",
         "properties": {
@@ -858,13 +859,11 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
 
 @tool(
     "conductor.state",
-    "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；召唤数看 `"
-    "conductor.ledger(view=\"stats\")` 的 `started_total`；`queues.literature.unprocessed` = "
-    "已注册未消化的篇数（`run_once` 一篇一次）。",
+    "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 已注册未消化的篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上的程序进程读数，巡查按它点异常清单。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
-    returns="{'root','tables','conjectures','tasks','queues'}",
+    returns="{'root','tables','conjectures','tasks','queues','programs'}",
 )
 def conductor_state(_conductor, ) -> ToolResult:
     """工具体：只读状态视图（给主控判断用，不含建议）。
@@ -874,6 +873,15 @@ def conductor_state(_conductor, ) -> ToolResult:
     不是召唤）。它与同一屏里 `tables["tasks"]`（`store.rows("tasks")` 的行数）是
     同一个量；要"我派了几次活"就看 `conductor.ledger(view="stats")` 的
     `started_total`（那一格不计顶趟）。
+
+    ## `programs` 那一格（G2 第 ③ 条，业主 2026-10-26）
+    「无主进程读数（M 用）」：盘上还有哪些程序在跑、它是谁的、账与进程对不对得上。
+    两类是要 M 的巡查点名的异常：`no_timer`（起了却一条计时器都没有 —— 那台程序在账上
+    完全不存在）与 `finished_but_alive`（账说收口了、进程还在）。三类读数分开给，
+    因为处置不同：有主的等它自己的父去停，无主的谁也不知道是谁的，账说谎的要先把它收口。
+
+    它是读数，不是门（业主原话那一条：这一格是给巡查用的）—— 拦销号与拦收工的是
+    `conductor.retire_child` 与 `_final_gate_reading`，不是这里。
     """
     c = _conductor()
     store_ = c.store
@@ -888,16 +896,50 @@ def conductor_state(_conductor, ) -> ToolResult:
         for row in store_.rows("conjectures"):
             key = str(row.get("status") or "?")
             conjectures[key] = conjectures.get(key, 0) + 1
+    from ..conductor import programs_reading as _programs_reading
+
+    progs = _programs_reading(getattr(store_, "root", "") or ".")
+    orphans = dict(progs.get("orphans") or {})
+
+    def _named(rows: list, limit: int = 8) -> list[str]:
+        """逐条点名（人话那一份；机器读的那一份在 `*_rows` 里）。"""
+        return [program_span_text(dict(r)) for r in rows[:limit] if isinstance(r, Mapping)]
+
+    programs: dict[str, Any] = {
+        "checked": bool(progs.get("checked")),
+        # 两档都在跑，处置不同，分开给（业主 2026-10-27 追裁：别折成一档）：
+        # `running` 有主 —— 叫它的父先停；`unowned` 无主（旧账没记归属）—— 只有 M 能处置。
+        "running": int(progs.get("running_count") or 0),
+        "unowned": int(progs.get("unowned_count") or 0),
+        "orphans": int(progs.get("orphan_count") or 0),
+        "running_rows": [dict(r) for r in (progs.get("running") or ())],
+        "unowned_rows": [dict(r) for r in (progs.get("unowned") or ())],
+        "no_timer": [dict(r) for r in (orphans.get("no_timer") or ())],
+        "finished_but_alive": [dict(r) for r in (orphans.get("finished_but_alive") or ())],
+        # 异常清单（M 的巡查直接念这两格）：三档各念各的 —— 无主那一档即使连 pid 都没有
+        # 也要点名（它连账都差点没进）。
+        "owned_named": _named(list(progs.get("running") or ())),
+        "unowned_named": _named(list(progs.get("unowned") or ())),
+        "orphan_named": (_named(list(orphans.get("no_timer") or ()))
+                         + _named(list(orphans.get("finished_but_alive") or ()))),
+        # 处置路径也分开写：同一句"还有程序在跑"对两档指的不是同一件事。
+        "handling": {
+            "running": "有主的在跑：叫它名下那个父先停（program.stop）或等它退出，再销号/收工",
+            "unowned": "无主的在跑：旧账没记归属，没有哪一支认领它 —— 只能 M 来处理",
+            "orphans": "账与进程对不上：先把它收口 / 杀掉，再查为什么没进账",
+        },
+        "reason": str(progs.get("reason") or ""),
+    }
+    programs["named"] = (list(programs["owned_named"]) + list(programs["unowned_named"])
+                         + list(programs["orphan_named"]))
     data = {"root": str(getattr(store_, "root", "")), "tables": tables,
             "conjectures": conjectures, "tasks": len(c.tree()),
-            "queues": _queue_backlog(store_)}
+            "queues": _queue_backlog(store_), "programs": programs}
     return ok(data, **data)
 
 @tool(
     "conductor.role_spec",
-    "某角色的描述（不是它的工具面）：role、summonable（你能不能直接派它），外加职责 / 交付物 / 边界 / "
-    "政策 / 立场 / 签名错六格；不给它的动作表，也不给它今天的工具名。派活前用它确认『这个角色是干什么的』；"
-    "与声明层同源。",
+    "某角色的描述（不是它的工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给它的动作表与工具名。派活前用它确认它能不能做这件事；与声明层同源。",
     {
         "type": "object",
         "properties": {"role_name": {"type": "string", "description": "角色名（A–H / V / L）"}},
@@ -1118,11 +1160,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）—— 正文与 PDF 对得上（`out/paper/main.tex`）/ 无未裁决矛盾 / 承重结论有 T3 / 报告体例 / 无待答问题 / "
-    "**实质产出**（`statements` 等表至少一张非空）/ 验收表机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）/ "
-    "产物台账与盘上一致（`ARTIFACTS.jsonl`）。每格三态，unknown 不是通过。`can_close` 由你交的判据（`goal`/`goal_met`/`"
-    "task_list`）决定，不交 ⇒ `false` + 『没人判过』。还回 `review_acceptance`：内容级验收五条判据 + 五种辅助读数；给 `"
-    "cap_usd` 才判成本上限。",
+    "只读：跑收工门（八格）；名单在论文段里逐格写着，这里不重抄。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`can_close` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』。另回 `review_acceptance`：内容级验收五条 + 辅助读数；给 `cap_usd` 才判成本上限。",
     {
         "type": "object",
         "properties": {
@@ -1554,6 +1592,10 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
     "一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。"
     "销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，"
     "先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。"
+    "第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序"
+    "（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / "
+    "已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；"
+    "程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。"
     "第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的"
     "（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、"
     "待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒"
@@ -1585,6 +1627,7 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
              "'task_id_compat','addressed_by',"
              "'open_items','missing','reason','note','retired_path','roster_retired',"
              "'subtree','subtree_size','order','cascade','retired_count','unrostered',"
+             "'kept','cascade_reading',"
              "'active_nodes','busy_task_ids','readings','child_count',"
              "'active_child_count','target_state','target_state_label','blocking',"
              "'refusal_code'}；"
@@ -1599,10 +1642,16 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
              "target_state 是空串时它也是空表）；"
              "refusal_code 的充要条件：静默闸（三态读数）说话的每一档必带 target_not_silent —— "
              "在飞 / 待机 / 三态读不到 / 名下还有活跃子代理 / 子树里还有活跃节点（含写盘前逐节点复核）；"
-             "其余每一档都不带、是空串：早拒支（三态还没读）与板项没清那一档（读到了三态，"
+             "其余每一档都不带、是空串：早拒支（三态还没读）、程序闸那一档（读到了三态，"
+             "但拦它的是「这一支还有程序在跑」，不是「不静默」）与板项没清那一档（读到了三态，"
              "但拦它的是板项，不是「不静默」）；"
              "cascade 是按销号次序排的逐项读数（task_id / name / role / depth / state），"
-             "order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点"),
+             "order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点；"
+             "kept 是「这一笔没有销成的节点」逐条 {id, name, depth, why}（拒绝时 = 整支，"
+             "成功时只剩没有名字可销的 unrostered 那几个）—— why 逐条说实话：谁还在跑、"
+             "谁在待机、谁名下的板项没清、谁不在名册里；"
+             "cascade_reading = {count, ids, levels, kept} 是同一件事的汇总"
+             "（count/ids/levels 是这一笔真销成了的那几个与它们的层深，目标自己为 0）"),
 )
 def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                            task_id: str = "", reason: str = "",
@@ -1624,6 +1673,10 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
        —— 有就整笔拒绝并点名"谁卡在哪件任务上"；
     6. 三态读数（`Conductor.retire_state_of`）：板项闸先说话（最具体的那一条），
        然后才是静默闸 —— 在飞 / 待机 / 读不到三档各自拒绝；
+       6' 程序读数（`Conductor.programs_in_subtree`，G2）：这一支名下还有在跑的程序 ⇒
+       受控拒绝，拒信点名 program / pid / 已跑秒数并只指一条正路（先 `program.stop`，
+       或等它自己结束）；读数没查成 ⇒ 同样拒（fail-closed）。它排在静默闸之前，因为
+       三态读不出"一台程序还在跑"（无主的程序计时器在三态里没有位置）；
     7. 逐项核：未消的板项（每一项都要核）、`retire_ready` 的三分支、名册名、
        整支每个节点的三态（写盘之前，一次快照）；
     8. 全过 ⇒ 按第 4 步的次序从最深的开始逐项交给秘书（一次也不许反序）。
@@ -1688,6 +1741,14 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         "subtree": [], "subtree_size": 0, "order": [], "cascade": [],
         "retired_count": 0, "unrostered": [], "active_nodes": [],
         "busy_task_ids": [], "readings": {},
+        # 级联的机器读数（Q13）：`kept` 是"这一笔没销、还占着名册的那几个"，
+        # `cascade_reading` 是同一件事的汇总（count / ids / levels / kept）。
+        # 为什么另开两格而不是改 `cascade` 的形状：`cascade` 是逐项读数列表、
+        # `tests/test_child_count_and_active_cascade_retire.py` 按列表逐项断言，
+        # 改形状会打红一条已经 committed 的判据；而 `kept` 要回答的问题
+        # （"谁因为什么没销"）与 `cascade`（"销了哪些、按什么次序"）不是同一件事。
+        "kept": [],
+        "cascade_reading": {"count": 0, "ids": [], "levels": [], "kept": []},
         "child_count": None, "active_child_count": None,
         # 销号前置的读数（业主 2026-10-26：「销号可以也只可针对静默子代理」）：
         # 目标此刻的三态、逐条 blocking、以及受控拒绝的机器码。这三格在 `returns=`
@@ -1695,6 +1756,18 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         "target_state": "", "target_state_label": "", "blocking": [],
         "refusal_code": "",
     }
+
+    # 这三格必须在 `_out` 定义之前就存在：`_out` 是唯一的盖章出口，它每一档都把
+    # 级联读数盖上去（`kept` / `cascade_reading` 在 `returns=` 里声明了，任何一条
+    # 返回路径少一格都是"声明了却没给"）。`written` 就是"这一笔真销成了的那几个"，
+    # 逐项追加；拒绝路径上一个都不该有它。
+    kept_why: dict[str, str] = {}
+    kept_default = ""
+    written: list[dict[str, Any]] = []
+    #: 这一笔"算它已经不在册"的节点（本笔销成的 + 之前就已销号的）。`kept` 只在
+    #: 这个集合之外取 —— "已销号"不是"没销"，把它算进 `kept` 会让父去处置一个
+    #: 早就不在册的编号。
+    settled_ids: set[str] = set()
 
     def _out(state: str, why: str, *, checked: bool = True,
              missing: list[str] | None = None, **extra: Any) -> ToolResult:
@@ -1705,6 +1778,9 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         data["reason"] = str(why or "")
         if missing:
             data["missing"] = list(missing) + list(data["missing"])
+        # 级联读数：这一档销成了哪几个、没销成的是谁与为什么。放在 `data.update`
+        # 之前盖，是为了让 `extra` 里同名的格子（如果有）说话。
+        _seal_cascade(_kept(kept_why, kept_default), written)
         data.update(extra)
         return ok(data, **data)
 
@@ -1724,6 +1800,43 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             return {"checked": False, "child_count": None, "active_child_count": None,
                     "reason": "名册读数不是对象"}
         return got
+
+    #: 逐节点的名册名（建 `plans` 时填；`kept` 的措辞与点名都从这里取）
+    names_of: dict[str, str] = {}
+
+    def _kept(why_of: Mapping[str, str] | None = None,
+              default: str = "") -> list[dict[str, Any]]:
+        """这一笔没有销成的节点：逐条 `{"id","name","depth","why"}`（业主 Q13）。
+
+        口径只有一条：`order` 里每一个这一笔没有销成的节点。级联是"整笔不销或整支
+        销完"（第 5/6/7 步任何一项不过就一处不动），所以拒绝时它等于整支；成功时
+        它只剩没名字可销的那几个（`unrostered`）。`why` 逐条说实话 —— 谁还在跑、
+        谁在待机、谁名下的板项没清、谁不在名册里 —— 而不是一句"被拒绝了"。
+
+        为什么单独开这一格：`cascade` 说的是"销了哪些、按什么次序"，
+        `kept` 说的是"没销的那些为什么没销"。父下一步要处置的正是后者，
+        而它此前只散在 `reason` 那句人话与 `missing` 那张字符串表里（机器读不出来）。
+        """
+        got = dict(why_of or {})
+        depths = dict(data["readings"].get("depth_of") or {})
+        # 已经销成的那些不在 `kept` 里：`kept` 的口径是"这一笔没销的"，
+        # 而不是"这一支一共有哪些"。拒绝路径上 `written` 是空的 ⇒ 它等于整支；
+        # 成功路径上它只剩 `unrostered` 那几个（没有名字可销的）。
+        return [{"id": node, "name": names_of.get(node, ""),
+                 "depth": int(depths.get(node) or 0),
+                 "why": str(got.get(node) or default)}
+                for node in (data["order"] or []) if node not in settled_ids]
+
+    def _seal_cascade(kept: list[dict[str, Any]],
+                      written: list[dict[str, Any]]) -> None:
+        """把这一笔的级联读数盖上（每一档返回路径都要有这两格）。"""
+        data["kept"] = [dict(x) for x in kept]
+        data["cascade_reading"] = {
+            "count": len(written),
+            "ids": [str(w.get("task_id") or "") for w in written],
+            "levels": [int(w.get("depth") or 0) for w in written],
+            "kept": [dict(x) for x in kept],
+        }
 
     mine = str(current_task_id() or "")
     if not mine:
@@ -1809,6 +1922,20 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     data["order"] = order
     data["subtree"] = order
     data["subtree_size"] = len(order)
+    # `kept` 的逐条读数要用层深（0 = 目标自己），只读一次、存在读数里
+    data["readings"]["depth_of"] = dict(depth_of)
+    kept_default = "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+    # 逐节点的名册名：要早于静默闸与活跃闸攒出来 —— 那两道闸的拒信也要点名，
+    # 而它们的 `kept` 里要是只有编号、没有名字，父就没法照着去处置。
+    for node in order:
+        if node == tid:
+            continue
+        try:
+            nm, _why_nm = sec.name_of(owner=str(parent_of.get(node) or ""), task_id=node)
+        except Exception:  # noqa: BLE001 —— 名字读不到只影响措辞，不影响判定
+            nm = ""
+        if nm:
+            names_of[node] = nm
     # ---- 活跃读数（含"在等"的向上继承）：子树里只要还有一个活跃节点就整笔拒绝
     try:
         act = c.active_in_subtree(tid)
@@ -1886,6 +2013,37 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                      "（没读的东西不许跟着名字一起销掉）"),
                     missing=[f"{r['task_id']}（{r['kind']}/{r['item_state']}）" for r in listed],
                     open_items=listed)
+    # ---- 程序闸（G2，业主 2026-10-26 第 ① 条：「注销前检测的能力」）
+    #
+    # 读的是整支（含目标自己）的程序进程；判据与 `Secretary.retire` 同一份
+    # （`Conductor.programs_in_subtree`），措辞同一个出处（`conductor.programs_refusal`）。
+    #
+    # "还在跑"这一档排在板项闸之后、静默闸之前：板项闸是最具体的那一条（父下一步要
+    # 逐条 ack）；而静默闸读不出"一台程序还在跑" —— 无主的程序计时器（`task_id` 空）
+    # 在三态里没有位置，"账上说收口了、进程还在"那一档连计时器都不是。先在程序这一格
+    # 说话，父拿到的就是"杀哪个 pid"，而不是"它挂在一条读不到到点时刻的计时器上"
+    # （改前实测就是这个措辞）。
+    #
+    # "读不成"那一档排在所有闸之后（见下面那个兜底出口）：时钟坏了时静默闸与这一闸都
+    # 读不成，而"读不到它是不是静默"是更根本的那一句 —— 既有口径由静默闸先说，
+    # 这一闸只保证静默闸放行之后仍然不销（fail-closed）。
+    try:
+        progs = c.programs_in_subtree(tid)
+    except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+        progs = {"checked": False, "running": [], "running_count": 0,
+                 "unowned": [], "unowned_count": 0, "orphan_count": 0,
+                 "orphans": {"no_timer": [], "finished_but_alive": []},
+                 "reason": f"{type(exc).__name__}: {exc}"}
+    if progs.get("checked") and int(progs.get("running_count") or 0) > 0:
+        pref = programs_refusal(progs, lead=f"{data['name'] or tid}（{tid}）")
+        kept_why[tid] = pref["why"]
+        kept_default = ("随整支一起不销：这一支里还有程序在跑"
+                        "（整笔受控拒绝，一处都没动）")
+        return _out("refused", pref["why"], missing=list(pref["missing"]),
+                    refusal_code=pref["code"],
+                    target_state=str(probe.get("state") or ""),
+                    target_state_label=str(probe.get("state_label") or ""),
+                    blocking=list(pref["blocking"]))
     # ---- 静默闸（本批新增）：只有静默可销。三档各有各的下一步，所以拒信必须分开说。
     if not probe.get("silent"):
         # "真正在跑的在下级的下级"那一小档交给子树活跃闸去说：那份拒信逐个点名整支的
@@ -1895,6 +2053,11 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             ref = retire_refusal(probe, tid=tid, name=data["name"], names=kid_names)
             unreadable = (str(probe.get("state") or "") == AGENT_STATE_UNKNOWN
                           or not probe.get("checked"))
+            # `kept` 逐条说实话：目标自己那一行说它为什么不是静默的，其余说
+            # "随整支一起不销"（级联不许绕过任何一个非静默节点）。
+            kept_why[tid] = ref["why"]
+            kept_default = ("随整支一起不销：它自己不是静默的（整笔受控拒绝，"
+                            "一处都没动）")
             return _out("unknown" if unreadable else "refused",
                         ref["why"], checked=not unreadable,
                         missing=list(ref["missing"]),
@@ -1915,6 +2078,12 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             if a.get("note"):
                 one += f"；{a['note']}"
             named.append(one)
+        # `kept` 的逐条理由与上面那份点名一一对应（同一个遍历、同一句实话）：
+        # 活跃的那些说"它还在跑、卡在哪一件"，其余的节点说"随整支一起不销"。
+        kept_why.update({str(a.get("task_id") or ""): one
+                         for a, one in zip(data["active_nodes"], named)})
+        kept_default = ("随整支一起不销：这一支里还有活跃节点（整笔受控拒绝，"
+                        "一处都没动 —— 先等那些节点交差再来销）")
         if branch == "active":
             return _out("refused",
                         (f"{tid} 还在飞（status={row.get('status') or 'unknown'}）⇒ 等它交差再销；"
@@ -1937,6 +2106,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     if branch == "waiting_with_children":
         # 读到这一步说明 `retire_ready` 与活跃读数不一致（前者说名下还有活跃子代理、
         # 后者说一个都读不到活跃）。两边都是"查过了"的结论 ⇒ 按保守的那一侧拒绝。
+        kept_why[tid] = f"{tid} 名下还有活跃子代理 ⇒ 它还在干活"
+        kept_default = "随整支一起不销：它的父名下还有活跃子代理（整笔受控拒绝）"
         return _out("refused",
                     (f"{tid} 名下还有活跃子代理 ⇒ 它还在干活；先处置那些子代理再销它"),
                     missing=[f"{tid} 名下还有活跃子代理"],
@@ -1954,6 +2125,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         return _out(state, f"{tid} 的名册名没读到（{why}）⇒ 不猜一个名字去销",
                     checked=state == "refused", missing=["名册名"])
     data["name"] = name
+    names_of[tid] = name
     # ---- 子树逐项核（先读后写）：任何一项不过 ⇒ 整笔不动，一个字节都不落盘
     ready_by_parent: dict[str, dict[str, Any]] = {}
 
@@ -1999,6 +2171,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             # 已经销过号的（或不在这个父名下）不在可销清单里 ⇒ 跳过，不算失败。
             plan["state"] = "already"
             plan["why"] = "不在它父那一层的可销清单里（已经销过号）"
+            settled_ids.add(node)
             continue
         plan["branch"] = str(layer["branch_of"].get(node) or "")
         kid_open = [r for r in rows
@@ -2024,6 +2197,10 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                                        "why": plan["why"]})
             continue
         plan["name"] = kid_name
+    # 逐节点的名册名收集完（`_kept` 的点名用；`already` / `unrostered` 那几档没有名字，
+    # 它们的 `why` 已经在 `plan["why"]` 里说清）
+    names_of.update({str(p["task_id"]): str(p["name"]) for p in plans if p.get("name")})
+    kept_why.update({str(p["task_id"]): str(p["why"]) for p in plans if p.get("why")})
     if blocked:
         return _out("refused",
                     (f"{tid} 这一支里还有 {len(blocked)} 项不让销 ⇒ 整笔不销、一处都不动："
@@ -2062,6 +2239,9 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             if str(cell.get("state") or "") == AGENT_STATE_SILENT:
                 continue
             ref = retire_refusal(cell, tid=node, name=str(plan.get("name") or ""))
+            kept_why[node] = ref["why"]
+            kept_default = ("随整支一起不销：级联里每个节点都必须是静默的"
+                            "（整笔受控拒绝，一处都没动）")
             return _out("refused",
                         (f"级联里 {ref['why']} ⇒ 整笔不销、一处都不动"
                          "（级联永远是先子后父，且每个节点都必须是静默的）"),
@@ -2069,8 +2249,17 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                         target_state=ref["state"],
                         target_state_label=ref["state_label"],
                         blocking=list(ref["blocking"]))
+    # ---- 程序闸的兜底出口（三态那一档）：走到这里说明板项 / 三态 / 活跃 / 整支静默
+    # 都放行了，而"这一支还有没有程序在跑"没查成 ⇒ 仍然不销。排在这里的理由写在上面
+    # 那一段（时钟坏了时由静默闸先说，这一闸保证静默闸放行之后也不许把"没查成"读成
+    # "没有在跑的程序"）。它是最后一个读侧出口：后面紧接着就是写盘。
+    if not progs.get("checked"):
+        return _out("unknown",
+                    (f"这一支的程序读数没查成（{progs.get('reason') or '没查成'}）⇒ "
+                     "读不到它名下还有没有程序在跑，不许销（fail-closed）；"
+                     "这一格不是『一个都没有』"),
+                    checked=False, missing=["程序读数"])
     # ---- 从最深的开始逐项交给秘书（次序 = `order`，一次也不许反序）
-    written: list[dict[str, Any]] = []
     for plan in plans:
         if plan["state"] != "ready":
             data["cascade"].append(dict(plan))
@@ -2127,6 +2316,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                         checked=False,
                         missing=[f"{plan['name']} action={action or '（空）'}"])
         written.append(dict(plan))
+        settled_ids.add(str(plan["task_id"]))
         data["cascade"].append(dict(plan, state="retired", why=why))
         data["retired_count"] = len(written)
     after = _counts(sec)
@@ -2168,6 +2358,9 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
     "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，"
     "落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项"
     "（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。"
+    "close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含"
+    "`conductor.post_task` 之外的信息型项）用 close=\"acked\"；"
+    "`conductor.post_task` 落的 work 项（expects=work）用 close=\"completed\"。"
     "这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，"
     "而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
     {"type": "object",
@@ -2178,6 +2371,10 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
                       "description": "要确认的板项编号（`tasks` 里的 task_id，可一次给多条）"},
          "note": {"type": "string", "maxLength": 300,
                   "description": "一句为什么（逐字落进那一条事件，可空）"},
+         "close": {"type": "string", "enum": list(S.ITEM_CLOSES),
+                   "description": ("收口方式：acked（知道了，expects=ack 的项）/ "
+                                   "completed（做完了，expects=work 的项，如 "
+                                   "`conductor.post_task` 落的那一条）。缺省 acked")},
      },
      "required": ["item_ids"],
      "additionalProperties": False},
@@ -2189,13 +2386,14 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
     roles=tuple(S.ROLES) + (S.CONDUCTOR_ROLE,),
     returns=("{'checked','ok','state','acked','already_done','refused','unknown',"
              "'missing','not_yours','refusal_codes','results','count','requested',"
-             "'by_task_id','note','reason'}；state 是 acked / partial / refused / "
+             "'by_task_id','note','close','reason'}；state 是 acked / partial / refused / "
              "nothing / unknown 之一；acked 是落成的编号，refused 每项给 "
              "item_id / code / reason（code 是 not_yours / no_such_item / "
-             "not_board_item / ack_unbacked / state_error 之一），results 逐条给 "
+             "not_board_item / ack_unbacked / bad_close / state_error 之一），results 逐条给 "
              "item_id / ok / code / state_before / state_after / step / seen_backfilled"),
 )
-def conductor_ack(_conductor: Any, item_ids: list, note: str = "") -> ToolResult:
+def conductor_ack(_conductor: Any, item_ids: list, note: str = "",
+                  close: str = "acked") -> ToolResult:
     """工具体：收件人自己把名下板项推到 done（判定与写盘都在 `Conductor.ack_items`）。
 
     ## 为什么"我是谁"不在工具形状里
@@ -2214,8 +2412,13 @@ def conductor_ack(_conductor: Any, item_ids: list, note: str = "") -> ToolResult
         "acked": [], "already_done": [], "refused": [], "unknown": [],
         "missing": [], "not_yours": [], "refusal_codes": [], "results": [],
         "count": 0, "requested": len(ids), "by_task_id": "", "note": str(note or ""),
-        "reason": "",
+        "close": str(close or "acked"), "reason": "",
     }
+    if data["close"] not in S.ITEM_CLOSES:
+        data.update(checked=True, state="refused",
+                    refusal_codes=["bad_close"],
+                    reason=f"收口方式必须是 {S.ITEM_CLOSES} 之一，收到 {close!r}")
+        return ok(data, **data)
     mine = str(current_task_id() or "")
     data["by_task_id"] = mine
     if not mine:
@@ -2228,7 +2431,7 @@ def conductor_ack(_conductor: Any, item_ids: list, note: str = "") -> ToolResult
         return ok(data, **data)
     cond = _conductor()
     try:
-        got = cond.ack_items(ids, by_task_id=mine, note=note)
+        got = cond.ack_items(ids, by_task_id=mine, note=note, close=data["close"])
     except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写：这一档只能如实说不知道
         data["reason"] = f"ack 时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道"
         return ok(data, **data)
@@ -2246,6 +2449,145 @@ def conductor_ack(_conductor: Any, item_ids: list, note: str = "") -> ToolResult
                           else f"{n} 条成、{len(data.get('refused') or [])} 条没成"
                           if data["state"] == "partial"
                           else "一条都没确认（逐条理由见 refused）")
+    return ok(data, **data)
+
+
+POST_TASK_STATES: tuple[str, ...] = ("posted", "existing", "refused", "unknown")
+
+
+@tool(
+    "conductor.post_task",
+    "给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、"
+    "收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，"
+    "智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息"
+    "读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项："
+    "办完用 `conductor.ack`（`close=\"completed\"`）收口，没办完它就一直在板上、"
+    "销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。",
+    {"type": "object",
+     "properties": {
+         "summary": {"type": "string", "minLength": 1, "maxLength": 200,
+                     "description": "要办什么（一句话；会渲染给未来的你自己）"},
+         "detail": {"type": "string", "maxLength": 400,
+                    "description": "补充：怎么算办完（可空）"},
+         "key": {"type": "string", "minLength": 1, "maxLength": 64,
+                 "description": ("幂等键：同一件事重复落项时给同一个 key ⇒ 不再开第二条"
+                                 "（可空）")},
+     },
+     "required": ["summary"],
+     "additionalProperties": False},
+    side_effect="write_local",
+    # 所有角色 + 主控：每个会收到消息的代理都可能读到"要求做事"的那一条。
+    # 写的只有 `tasks` 的一行板项（簿记表），与 `conductor.ack` 同一类 ⇒ 登记在
+    # `tools/__init__.py` 的 `UNIVERSAL_TOOLS` 里，由那条判据发给十一个角色
+    # （含只读角色 C/H/V：它们同样会收到"要求做事"的消息，而"给自己落一条活"是
+    # 那条口径下唯一合法的落项手；通用写口 `table.create(table="tasks")` 已被
+    # `_tasks_write_refusal` 堵住）。2026-10-26 之前这一格是"声明十一个、发出七个"
+    # 且注释声称由 `UNIVERSAL_TOOLS` 放行，而那张表里并没有它 —— 双向量见
+    # `tests/test_universal_tools_are_for_everyone.py::test_f_*`。
+    roles=tuple(S.ROLES) + (S.CONDUCTOR_ROLE,),
+    returns=("{'checked','ok','state','item_id','task_id','role','depth','kind','expects',"
+             "'called_by','input_key','existing','summary','reason'}；"
+             "state 是 posted / existing / refused / unknown 之一；existing 非空 = "
+             "这个 key 已经落过项，item_id 是那一条（没有新开）"),
+)
+def conductor_post_task(_conductor: Any, summary: str, detail: str = "",
+                        key: str = "") -> ToolResult:
+    """工具体：给自己开一条 work 板项（判定在 `Conductor.open_item`，这里只做三件事）。
+
+    ## 为什么"给谁"不是参数
+    收件人只能是调用者自己（`current_task_id()`，生产里由 `AgentLoop._do_tool` 的
+    `calling_as` 挂上）。把它做成参数等于让模型去替别人落项 —— 而"别人办一件事"的
+    正路是 `conductor.summon`（那条路会建行、发号、挂名册）。同族的
+    `table.create(table="tasks")` 那条野路已由 `tools/table_tools.py` 的
+    `_tasks_write_refusal` 堵住（只许给自己、不许伪造收口 / 已读）。
+
+    ## 形状为什么是 `kind="delegation"` + `expects="work"`
+    `schema.ITEM_KINDS` 没有 "work" 这一档（`delegation` / `message` / `report` /
+    `notice`），而"要办的一件活"在词表里就是 `delegation`；`expects="work"` 才是
+    "什么算做完"的那一格（`ITEM_EXPECTS` 的另一档是 `ack` = 只要一个回执）。
+    收口因此必须用 `item_close="completed"`（`schema.Task.validate` 的交叉校验），
+    工具面走 `conductor.ack` 的 `close="completed"`。
+
+    ## 三态
+    没有 conductor / 没有台账号 / 台账里没有我这一行 ⇒ `refused`（一个字节都不写，
+    并说清缺什么）；开项抛异常 ⇒ `unknown`（落没落盘不知道，不折成"没落"）；
+    同一个 key 已经落过 ⇒ `existing`（不新开，并把那一条的编号端出来）。
+    """
+    data: dict[str, Any] = {
+        "checked": False, "ok": False, "state": "unknown", "item_id": "",
+        "task_id": "", "role": "", "depth": 0, "kind": "delegation",
+        "expects": "work", "called_by": "", "input_key": "", "existing": "",
+        "summary": str(summary or ""), "reason": "",
+    }
+    body = str(summary or "").strip()
+    if not body:
+        data.update(checked=True, state="refused",
+                    reason="summary 是空的 ⇒ 不知道要办什么，一个字节都不写")
+        return ok(data, **data)
+    cond = _conductor()
+    mine = str(current_task_id() or "")
+    data["task_id"] = mine
+    if cond is None or not callable(getattr(cond, "open_item", None)):
+        data.update(checked=True, state="refused",
+                    reason="这一趟没有 conductor 句柄 ⇒ 打不开板项（不是『已经记下了』）")
+        return ok(data, **data)
+    data["called_by"] = str(current_caller_role() or "")
+    if not mine:
+        data.update(checked=True, state="refused",
+                    reason=("这一趟没有台账号 ⇒ 不知道这条活该挂在谁名下"
+                            "（板项的收件人 = 调用者自己，不猜一个号）"))
+        return ok(data, **data)
+    try:
+        row = cond._task(mine) or {}
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        data.update(checked=True, state="unknown",
+                    reason=f"台账读不成（{type(exc).__name__}: {exc}）⇒ 不知道我的角色与深度")
+        return ok(data, **data)
+    if not row:
+        data.update(checked=True, state="refused",
+                    reason=f"台账里没有 {mine} 这一行 ⇒ 没有收件人，这一条活落不下去")
+        return ok(data, **data)
+    role = str(row.get("role") or "") or data["called_by"]
+    data["role"] = role
+    data["depth"] = int(row.get("depth") or 1) + 1
+    data["input_key"] = f"post-task@{mine}" + (f":{str(key).strip()}" if str(key or "").strip()
+                                               else "")
+    # 幂等：同一个 key 已经落过项 ⇒ 不新开（重复落项会让"还剩几件没办"这个读数失真）
+    if str(key or "").strip():
+        try:
+            prior = [r for r in cond._board_rows()
+                     if str(r.get("input_key") or "") == data["input_key"]
+                     and str(r.get("parent_task_id") or "") == mine]
+        except Exception:  # noqa: BLE001 —— 读不成就不做幂等判断（宁可多一条，不假装已存在）
+            prior = []
+        alive = [r for r in prior if str(r.get("item_state") or "") != "done"]
+        if alive:
+            data.update(checked=True, ok=True, state="existing",
+                        item_id=str(alive[0].get("task_id") or ""),
+                        existing=str(alive[0].get("task_id") or ""),
+                        reason=(f"{key!r} 已经落过一条没消的项（{alive[0].get('task_id')}）"
+                                "⇒ 没有再开第二条"))
+            return ok(data, **data)
+    try:
+        item_id = cond.open_item(
+            kind="delegation", role=role, expects="work", action="post_task",
+            summary=body, called_by=data["called_by"], parent_task_id=mine,
+            depth=data["depth"], input_key=data["input_key"])
+    except Exception as exc:  # noqa: BLE001 —— 落没落盘不知道，不折成"没落"
+        data.update(checked=True, state="unknown",
+                    reason=f"开项时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道")
+        return ok(data, **data)
+    text = str(detail or "").strip()
+    if text:
+        try:
+            cond.set_item_detail(item_id, text[:400])
+        except Exception as exc:  # noqa: BLE001 —— 说明没写进去不影响这一条项存在
+            data["reason"] = (f"项开成了（{item_id}），但补充说明没写进去"
+                              f"（{type(exc).__name__}: {exc}）")
+    data.update(checked=True, ok=True, state="posted", item_id=str(item_id),
+                reason=(data.get("reason")
+                        or f"已落一条 work 项 {item_id}（expects=work）：办完用 "
+                           "`conductor.ack`（close=\"completed\"）收口"))
     return ok(data, **data)
 
 
@@ -2286,6 +2628,11 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # 发提醒，不准直接销号」。改前模型只能在回复里说"已处理"，而盘上那条项永远停在
     # `seen`（真机 sylow3：45 条 seen + 3 条 queued）—— 本件是那一端的唯一动作。
     (conductor_ack, ('_conductor',)),
+    # 自己给自己落一条 work 项（D12，业主 2026-10-27）：「如果 message 是要求做事，
+    # 智能体需自己写任务塞进 task_board」。改前没有任何合法工具能做这件事
+    # （`conductor.summon` 只造子任务、`conductor.ack` 只收口），而通用写口
+    # `table.create(table="tasks")` 是敞开的 —— 那条野路已由 `_tasks_write_refusal` 堵住。
+    (conductor_post_task, ('_conductor',)),
 )
 
 
@@ -2441,7 +2788,7 @@ def conductor_watch(_conductor: Any, store: Any, *, task_id: str = "",
 @tool(
     "conductor.guide",
     "把 M 的一句话沿秘书链逐级转发到链上最后那一个代理：只写链尾也认（链由台账的"
-    "父子关系现算）；写整条链（绝对编号 `t-000001->t-000005->t-000012`，或名册名"
+    "父子关系现算）；写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名"
     "混写 `M->D1->F2`）也认，内部一律先解析成绝对编号链。每一跳的秘书只看链头往下"
     "转，正文只到链尾：只有链尾那一跳的秘书开一条板项、把正文交给它服务的那个代理；"
     "中间的秘书只转发、不读内容。"
@@ -2452,9 +2799,9 @@ def conductor_watch(_conductor: Any, store: Any, *, task_id: str = "",
     {"type": "object",
      "properties": {
          "to": {"type": "string", "minLength": 1, "maxLength": 512,
-                "description": ("收件人：绝对编号链（`t-000001->t-000005->t-000012`，"
+                "description": ("收件人：绝对编号链（`t-NNNNNN->t-NNNNNN->t-NNNNNN`，"
                                 "也可写裸六位数 `000001->000005`）、名册名混写（`M->D1->F2`），"
-                                "或只写链尾（`t-000012` / `D1`，链由台账现算）")},
+                                "或只写链尾（`t-NNNNNN` / `D1`，链由台账现算）")},
          "text": {"type": "string", "minLength": 1, "maxLength": 800,
                   "description": "指导正文（800 字以内；只有链尾那一个代理读得到）"},
      },

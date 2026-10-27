@@ -36,7 +36,7 @@ import test_agent_faculties as TAF
 import test_children_and_parent_are_visible as TCP
 
 from agentflow import agent_loop as AL
-from agentflow.agent_loop import PUBLIC, board_digest, read_messages, run_role
+from agentflow.agent_loop import ALL, board_digest, read_messages, run_role
 from agentflow.llmseam import LlmSeam
 
 #: 收工那一格（D 不是主控 ⇒ 每个终态都要给 notify，否则 run.notes 里挂一条 `notify_problem`）。
@@ -166,7 +166,7 @@ def test_the_public_channel_uses_the_same_receipt_rule(tmp_path: pathlib.Path):
                                                  my_task_id=me, depth=2)
     first = run.steps[0].result
     assert first.get("receipt") == "queued" and first.get("ok") is True, first
-    assert run.messages_sent == [PUBLIC], run.to_dict()
+    assert run.messages_sent == [ALL], run.to_dict()
     assert run.messages_refused == [], run.to_dict()
 
 

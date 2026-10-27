@@ -1439,9 +1439,7 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到工作区 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`"
-    "http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ "
-    "这条路走完了。`ok=True` 但 `content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完了。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
     {
            "type": "object",
            "properties": {
@@ -1553,8 +1551,7 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
 
 @tool(
     "search.register",
-    "登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 "
-    "library/<lit_id>/。",
+    "登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。",
     {
            "type": "object",
            "properties": {
@@ -1604,8 +1601,8 @@ def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=N
 #      序号不复用、记录不物理删除；拒收走 `lit.stage_reject`；
 #   ④ 与本地库重叠度高的：只有给了 `new_content` 才许入库（`lit.overlap_check` 的读数）；
 #   ⑤ 待新增列表支持增/删/查、可多次追加（第 2 批序号接着第 1 批）；
-#   ⑥ 列表按「委托」重置（默认视图只看当前委托）+ 一键迁移 `lit.admit_all`（迁移后清空、
-#      写委托报告 `reports/lit-<request_id>.md`：已入库一块 + 未入库（含受控理由）一块）。
+#   ⑥ 列表按「委托」重置（默认视图只看当前委托）+ 提交整批 `lit.admit_all`（判完之后收口、
+#      结算不物理删、写委托报告 `reports/lit-<request_id>.md`：已入库 / 未入库 / 待裁三块）。
 #
 # 判据的真身全在 `agentflow/litstage.py`（上限、阈值、状态机、报告结构只有那一处）；
 # 这七件只做两件事：把参数校验交给 schema、把结论翻成 `ToolResult`。
@@ -1682,13 +1679,20 @@ def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> b
 def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     """把一条待新增候选走现有的 `search.register` 登记路径落成 literature 行。
 
-    两条入口（`lit.admit` 逐条入库与 `lit.admit_all` 一键迁移）共用这一份。
-    它们原来各有一段逐字相同的闭包：改一处漏一处，"一键迁移出来的行没有
+    两条入口（`lit.admit` 逐条入库与 `lit.admit_all` 提交整批）共用这一份。
+    它们原来各有一段逐字相同的闭包：改一处漏一处，"收进库的行没有
     定位栏、B 一用就是 unreadable"就会在原地复发。
 
     登记之后补写定位栏（`_mark_candidate_locator`）：登记路径自己只认
     `path`（library 下的相对路径），而候选行手上只有 url —— 两件事分开写，
     谁也不冒充谁。
+
+    2026-10-27（B1，Q16 暴露的读数回退）：`request_id` 必须从候选行带过来。
+    改前这里写死 `request_id=None`，于是判收造出的 literature 行
+    `source_request_ids == []`、请求行的 `result_lit_ids` 也永不回填 ——
+    `closing.py` 用前者判"这一篇是不是检索来的"，两份报告直接打印后者，
+    两处读数因此都缺一格。候选行上本来就有这个号（`litstage` 造行时写死的），
+    所以这不是"多要一个参数"，是把它手上已有的那份事实传下去。
     """
     res = _h_register(
         ctx,
@@ -1698,7 +1702,7 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
         path=None,
         doi=row.get("doi"),
         year=row.get("year"),
-        request_id=None,
+        request_id=str(row.get("request_id") or "") or None,
     )
     if not res.ok:
         return {"lit_id": None, "reason": res.error}
@@ -1777,6 +1781,7 @@ def _h_lit_stage_add(
         "batch": got["batch"],
         "count": got["count"],
         "staged": got["staged"],
+        "updated": got["updated"],
     })
 
 
@@ -1791,9 +1796,12 @@ def _h_lit_stage_list(
     「默认视图只看当前委托」（业主 2026-10-20 第 1 条）：`request_id` 不给 ⇒ 取
     "最近一次暂存的那次委托"；要看旧委托请显式给号，`request_id="*"` 表示全查。
 
-    `status` 五选一：`pending` / `withdrawn` / `rejected` / `admitted` / `cleared`（不传 = 全查）。
-    `withdrawn` 的那些行就是"空槽位"：序号不复用、题名与 `withdrawn_reason` 都留着 ——
-    于是"第 3 号被撤了哪一篇、为什么"查得出来（这正是"撤掉 ≠ 删掉"的落点）。
+    `status` 按三态查：`pending` 待裁 / `admitted` 入库 / `rejected` 拒收
+    （2026-10-26 Q16 起状态只有这三档；盘上的历史档 `cleared` / `withdrawn`
+    由 `litstage.fold_legacy` 在读侧折成 `rejected` + 受控理由码，按老名字查
+    仍然查得到那几条）。所以列表里"撤掉的空槽位"显示为 `rejected` +
+    `reason_code=withdrawn_by_reviewer`：序号不复用、题名与理由都留着 ——
+    于是"第 3 号被撤了哪一篇、为什么"查得出来（"撤掉 ≠ 删掉"）。
     """
     from ..litstage import list_candidates
 
@@ -1808,6 +1816,8 @@ def _h_lit_stage_list(
         "status": got["status"],
         "count": got["count"],
         "counts": got["counts"],
+        "duplicate_rows": got["duplicate_rows"],
+        "duplicate_groups": got["duplicate_groups"],
         "gaps": got["gaps"],
         "rows": got["rows"],
         "total_all_delegations": got["total_all_delegations"],
@@ -1872,10 +1882,15 @@ def _h_lit_admit(
     overlap_ok: bool | None = None,
 ) -> Any:
     """``lit.admit``：正式入库（逐条）—— 「条数上限 + 重叠检查」都过了才走现有登记路径。
+    ## 2026-10-26（Q16）新加的一条硬判据：没有 relevance 的槽位不许入库
+    判过的证据就是那一句"为什么与本次检索相关"（`lit.stage_add` 时写进候选行）。
+    缺它就拒（`missing_relevance`，行保持原样）：`lit.admit` 是逐条判决的入口，
+    不是"批量搬库"的入口 —— 批量搬库那条路（`lit.admit_all`）已经被"还有待裁就整批拒"
+    挡住了。
     ## 两个上限（业主口径 ①，超了「整笔拒绝」）
     - 本次调用 ≤ ``MAX_ADMIT_PER_CALL = 10`` 条；- 该委托累计已入库 + 本次 ≤ ``MAX_ADMIT_PER_DELEGATION = 10`` 条。
     ## 逐条拒收（业主口径 ②④）
-    - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒；- DOI 与本地库某一行「完全相同」 ⇒ 视为重复，拒（这一档 `new_content` 救不了）；- 标题词集
+    - 这一条已经判过（`litstage.judged_state != "pending"`）⇒ 拒；- DOI 与本地库某一行「完全相同」 ⇒ 视为重复，拒（这一档 `new_content` 救不了）；- 标题词集
     Jaccard ≥ 0.60 且「没有」 `new_content` ⇒ 拒（行上写的 `new_content` 优先，`items[].new_content` / 调用级 `new_content` 兜底）。
     `overlap_ok=True` 「不替代」 `new_content`：它只如实记下"调用方表过态"，真正的放行仍要有那句新内容。`overlap_ok=False` 则直接拒这一条。
     ## 入库走的是现有路径
@@ -1932,7 +1947,7 @@ def _h_lit_admit(
 
     def _registrar(row: Mapping[str, Any]) -> dict:
         # 判据只有一份：与 `lit.admit_all` 共用 `_registrar_from_candidate`
-        # （那里也补写定位栏，于是"逐条入库"与"一键迁移"落出来的行同形）。
+        # （那里也补写定位栏，于是"逐条入库"与"提交整批"落出来的行同形）。
         return _registrar_from_candidate(ctx, row)
 
     try:
@@ -1942,12 +1957,14 @@ def _h_lit_admit(
         return _stage_fail(exc)
     if got.get("whole_call_refused"):
         # 整笔拒绝也要让模型读到读数（`fail` 的 meta 就是给这个用的）。
+        # `undecided` 是 2026-10-26（Q16）那一档的机器读数：逐条点名的槽位 + 题名，
+        # 与拒信正文同一个来源（`litstage.undecided`），所以模型照 meta 也能一条条去判。
         return fail(got.get("reason") or "入库被拒", kind=got.get("kind") or "over_cap",
                     request_id=got.get("request_id"), batch=got.get("batch"),
                     call_size=got.get("call_size"), call_limit=got.get("call_limit"),
                     delegation_admitted=got.get("delegation_admitted"),
                     delegation_limit=got.get("delegation_limit"),
-                    refused=got.get("refused"))
+                    refused=got.get("refused"), undecided=got.get("undecided"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],
@@ -1973,15 +1990,19 @@ def _h_lit_admit_all(
     request_id: str | None = None,
     new_content: str = "",
 ) -> Any:
-    """``lit.admit_all``：「一键迁移」 —— 把本委托待审且过筛的行一次迁进 literature，然后清空。
+    """``lit.admit_all``：「提交整批」 —— 本委托判完之后收口的一次入库 + 报告，然后清空。
+
+    2026-10-26（Q16）起它前面多了一道提交闸：本委托只要还有一条没判，整批一条都不许
+    入库，拒信逐条点名（`槽位 + 题名前 40 字`）并给做法。所以"一键把没读过的都塞进去"
+    这条路没有了 —— 逐条判（`lit.admit` 的条目带 relevance / `lit.stage_reject` 判拒）
+    是唯一的入库方式，本工具是"判完收口"。
+
+    业主 2026-10-20 第 2 条那四件事仍在，顺序固定（实现见 `litstage.admit_all`）：
     
-    业主 2026-10-20 第 2 条，四件事顺序固定（实现见 `litstage.admit_all`）：
-    
-    1. 取本委托所有 `pending` 行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content`⇒ 拒收；超配额 ⇒ 这一条不入库）； 2. 通过的走
-    「现有登记路径」（与 `search.register` 同一条）； 3. 「结算清空本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
-    `cleared(over_cap / not_screened)` + `cleared_at` ⇒ 迁移后本委托没有 `pending` 残留，下一次委托看不到本委托的
-    行（`request_id` 已经换了）。「不物理删」； 4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+未入
-    库一块（含受控理由）—— 这是交付物，不是可选（业主第 3 条）。
+    1. 取本委托还没判的行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content` ⇒ 拒收；超配额 ⇒ 这一条不入库）； 2. 通过的走
+    「现有登记路径」（与 `search.register` 同一条）； 3. 「结算本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
+    `rejected(over_cap / not_screened)` ⇒ 结算后本委托没有 `pending` 残留，下一次委托看不到本委托的
+    行（`request_id` 已经换了）。「不物理删」； 4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库 / 未入库 / 待裁三块。
     
     它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
     """
@@ -1992,7 +2013,7 @@ def _h_lit_admit_all(
 
     def _registrar(row: Mapping[str, Any]) -> dict:
         # 判据只有一份：与 `lit.admit_all` 共用 `_registrar_from_candidate`
-        # （那里也补写定位栏，于是"逐条入库"与"一键迁移"落出来的行同形）。
+        # （那里也补写定位栏，于是"逐条入库"与"提交整批"落出来的行同形）。
         return _registrar_from_candidate(ctx, row)
 
     try:
@@ -2001,8 +2022,9 @@ def _h_lit_admit_all(
     except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
         return _stage_fail(exc)
     if not got.get("ok"):
-        return fail(got.get("reason") or "一键迁移被拒", kind=got.get("kind") or "over_cap",
-                    request_id=got.get("request_id"), refused=got.get("refused"))
+        return fail(got.get("reason") or "整批提交被拒", kind=got.get("kind") or "over_cap",
+                    request_id=got.get("request_id"), refused=got.get("refused"),
+                    undecided=got.get("undecided"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],
@@ -2084,8 +2106,10 @@ def _lit_overlap_check(ctx, title, doi=None):
 
 @tool(
     "lit.stage_add",
-    "把广搜结果**追加**进本次委托的待新增列表（一次任意条，超过 10 条也允许）："
-    "槽位号自动分配、只增不复用。入库是另一件事（lit.admit_all）。",
+    "把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）："
+    "同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去"
+    "（updated[]），不发新号；槽位号只增不复用、注册即待裁。逐条入库是 lit.admit"
+    "（每条要带 relevance）；全部判完之后由 lit.admit_all 提交整批收口。",
     {
         "type": "object",
         "properties": {
@@ -2103,8 +2127,10 @@ def _lit_overlap_check(ctx, title, doi=None):
     side_effect="write_local",
     roles=("A",),
     returns=(
-        "{'request_id','batch','count','staged'}；"
+        "{'request_id','batch','count','staged','updated'}；"
         "staged[] 每项是 {'slot','batch','title'}；"
+        "updated[] 每项是 {'slot','batch','title'} 再加一格补进去的字段名列表"
+        "（那格空 = 这一条没有新内容可补，它已经在列表里）；"
         "失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/"
         "bad_entry/store_error) 之一 + 明细"
     ),
@@ -2117,15 +2143,19 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
 
 @tool(
     "lit.stage_list",
-    "查待新增列表：默认**只看当前委托**（列表按委托重置）；status 五态"
-    "（pending/withdrawn/rejected/admitted/cleared），**撤掉的空槽位照样在列表里并带理由**。",
+    "查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛："
+    "`pending` 待裁 / `admitted` 入库 / `rejected` 拒收（词表真身在 `litstage.CANDIDATE_DECISIONS`）；"
+    "盘上的历史档 `cleared` / `withdrawn` 读成 `rejected` + 受控理由码，按老名字也查得到那几条。"
+    "撤掉的空槽位照样在列表里（`rejected` + 理由，序号不复用）。",
     {
         "type": "object",
         "properties": {
             "request_id": {"type": "string", "maxLength": 40,
                            "description": "哪一次委托（不给 = 当前委托；*= 全部委托）"},
             "batch": {"type": "integer", "minimum": 1, "maximum": 100000},
-            "status": {"type": "string", "enum": list(S.CANDIDATE_STATUSES)},
+            "status": {"type": "string", "enum": list(S.CANDIDATE_STATUSES),
+                       "description": "`cleared` / `withdrawn` 是历史档（读成 `rejected`），"
+                                      "留着只为查历史"},
         },
         "required": [],
         "additionalProperties": False,
@@ -2133,9 +2163,12 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
     side_effect="read",
     roles=("A",),
     returns=(
-        "{'request_id','current_request_id','batch','status','count','counts','gaps','rows',"
-        "'total_all_delegations','note'}；"
-        "counts 是 {'pending','withdrawn','rejected','admitted','cleared'} 五个计数；"
+        "{'request_id','current_request_id','batch','status','count','counts','duplicate_rows',"
+        "'duplicate_groups','gaps','rows','total_all_delegations','note'}；"
+        "duplicate_rows = 落在「同一身份多个槽位」里的行数（只报数，counts 不折算）；"
+        "duplicate_groups[] 每项给身份与槽位表两格（键名 key / slots；没有重复时是空数组）；"
+        "counts 的键是 `litstage.CANDIDATE_DECISIONS` 三档，另有两个历史档键"
+        "（恒为 0 —— 它们已读成 rejected）；"
         "rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year',"
         "'type_code','summary','url','added_at','relevance','lit_id','admitted_at',"
         "'reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason',"
@@ -2151,8 +2184,10 @@ def _lit_stage_list(ctx, request_id=None, batch=None, status=None):
 
 @tool(
     "lit.stage_withdraw",
-    "撤掉某一槽：**序号不变、不物理删除**，写受控理由码（withdrawn_by_reviewer）+ 一句说明；"
-    "撤掉后可再 stage_add 补位（新条进新序号）。",
+    "撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；"
+    "序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 "
+    "lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，"
+    "报告上同一篇会同时出现在已入库与未入库两块。",
     {
         "type": "object",
         "properties": {
@@ -2178,7 +2213,7 @@ def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
 
 @tool(
     "lit.stage_reject",
-    "审内容后**拒收**某一槽：写受控理由码（rejected_off_topic / rejected_low_quality / "
+    "审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / "
     "overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。",
     {
         "type": "object",
@@ -2205,8 +2240,9 @@ def _lit_stage_reject(ctx, slot, reason_code, note=""):
 
 @tool(
     "lit.admit",
-    "正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；"
-    "超限整笔拒绝。**不清空列表**（清空属于 lit.admit_all）。",
+    "正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），"
+    "然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。"
+    "不清空列表（结算属于 lit.admit_all）。",
     {
         "type": "object",
         "properties": {
@@ -2232,7 +2268,8 @@ def _lit_stage_reject(ctx, slot, reason_code, note=""):
         "'registered','report','report_path'}；"
         "admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind',"
         "'overlap_with','new_content'}；"
-        "refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；"
+        "refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}"
+        "（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；"
         "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
         "失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/"
         "no_target/mixed...) + 三个上限读数"
@@ -2247,9 +2284,10 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
 
 @tool(
     "lit.admit_all",
-    "**一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 literature（≤10 条），"
-    "然后结算清空本委托的列表（全终态、不物理删），并写委托报告 reports/lit-<request_id>.md"
-    "（已入库 + 未入库含受控理由，两块都要有）。",
+    "提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、"
+    "结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md"
+    "（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库："
+    "拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。",
     {
         "type": "object",
         "properties": {
@@ -2263,13 +2301,28 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
     },
     side_effect="write_local",
     roles=("A",),
+    # 2026-10-26（G12）：`admitted[]` / `refused[]` / `cleared[]` 三个数组的元素形状改成散文
+    # （不再带引号），顶层 15 键与 `report` 的 6 键照旧带引号（它们是可达的，一格没动）。
+    # 为什么：Q16 的提交闸只在本委托"一条未判都没有"时放行，而那一刻已经没有要入的行
+    # ⇒ 本工具在"整批提交"口径下不再逐条登记（登记支不可达），三个数组恒空。键列表里
+    # 留着它们的元素键，等于让"声明 ⊆ 实跑"这条判据在一个永不出现的形状上恒红
+    # （`tests/test_tools_returns_declaration.py` 的 `MAX_SKIPPED = 0` 不许把它读成跳过）。
+    # 这不是放宽判据：同一套元素形状与 `lit.admit` 同形，由那一条的声明照旧带引号声明，
+    # 并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）。
+    # 这条支不可达不是我一个人这么说，项目自己写在
+    # `tests/test_search_tools_stage_admit.py::test_the_whole_list_is_refused_until_every_item_is_judged`
+    # 里：逐条 `lit.admit` 之后 `lit.admit_all` 以 `registered == 0` 收口。
     returns=(
         "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit',"
         "'delegation_admitted','delegation_limit','admitted','refused','cleared','registered',"
         "'report','report_path'}；"
-        "admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind',"
-        "'overlap_with','new_content'}；"
-        "refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；"
+        "admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、"
+        "overlap_with、new_content 八格；"
+        "refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格"
+        "（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；"
+        "以上三个数组在「整批提交」口径下恒空（登记支不可达，理由见本工具声明上方那段注释），"
+        "所以元素形状只在这里用散文说：它们与 `lit.admit` 同形，由那一条的声明照旧带引号声明、"
+        "并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）；"
         "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
         "失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)"
     ),
@@ -2289,7 +2342,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_search_dedup_check, ('ctx',)),
     (_search_ingest_local, ('ctx',)),
     (_search_register, ('ctx',)),
-    # ---- 待新增文献列表（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告 ----
+    # ---- 待新增文献列表（业主 2026-10-20 口径）：按委托暂存 → 审 → 提交整批 → 报告 ----
     (_lit_overlap_check, ('ctx',)),
     (_lit_stage_add, ('ctx',)),
     (_lit_stage_list, ('ctx',)),
@@ -2486,8 +2539,7 @@ def register(
         ),
         ToolSpec(
             name="search.walk_citations",
-            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `"
-            "search.dedup_check` / register。",
+            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `search.dedup_check` / register。",
             params={
                 "type": "object",
                 "properties": {

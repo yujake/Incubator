@@ -38,7 +38,10 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 这两个数字当场减半（22 → 11、18 → 9）—— 不是因为代码变了，而是因为原来的
     # 数法是 `ast.walk` 每层函数各数一遍（嵌套的 `ok(...)` 被外层与内层各走到一次）。
     # 真实处数一直是 11 / 9；跟着改的是条数法本身（`scan` 现在按 `(行, 列)` 去重）。
-    "trace_tools.py": 11,
+    # 2026-10-26（H3）：11 → 12 —— 新的一件是 `trace.children`（沿树看一层），
+    # 它的 `ok(...)` 实参同样是运行时拼的 dict（键由 `Conductor.trace_children`
+    # 那一侧决定），静态扫描读不出来。数字来自盘上实测。
+    "trace_tools.py": 12,
     # `verify_tools.py` 同族：5 里那 2 处是 `register` 的嵌套 helper 被重复数的，
     # 真实处数是 3。
     #
@@ -69,7 +72,16 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 而 `test_tools_returns_declaration.py` 的"给了却没声明"那一半正是靠透传才咬得住
     # —— 硬写字面量会让它以后新加的键永远不可能"出现在 `data` 里"，那条判据对这一件
     # 工具就永远看不见缺口了。两害相权：保透传 + 在这里如实登记处数。
-    "conductor_tools.py": 13,
+    #
+    # 2026-10-26（H3）：13 → 31。这一批新增的五件编排工具都是同一种形态
+    # （`conductor.ack` / `conductor.guide` / `conductor.post_task` /
+    # `conductor.retire_child` / `conductor.watch`），每一件里 `ok(...)` 的实参是
+    # 运行时拼出来的 dict（键由 `Conductor` / `Secretary` 那一侧决定），静态扫描
+    # 读不出键集合 —— 与 `conductor_board` / `conductor_broadcast` / `conductor_escalate`
+    # 那三格完全同族。数字来自盘上实测（`scan` 的 `(行, 列)` 去重口径）。
+    # 它们不是"新长的豁免"：`returns=` 有没有把实跑键集说全，由
+    # `tests/test_tools_returns_declaration.py` 逐工具真跑钉住。
+    "conductor_tools.py": 31,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
@@ -85,6 +97,11 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 数字来自盘上实测；它们都是"看不清的分支"（ok 里没有 await/return 那种显式键）。
     "cache_tools.py": 2,
     "formal_tools.py": 3,
+    # 2026-10-26（H3）：时钟九件落地时这一栏没有登记 —— 盘上实测 4 处
+    # （`clock_alarm_start` / `clock_periodic_start` / `clock_timer_start` /
+    # `clock_wait_any` 各一处，`ok(reading)` 的键由 `Clock` 那一侧决定）。
+    # 这一格与上面 conductor / trace 两格同族：补的是登记，不是口径。
+    "clock_tools.py": 4,
 }
 
 #: 看得见的 `ok({...})` 调用点下界（判据不许真空：扫描器坏掉时必须先是红）。

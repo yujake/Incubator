@@ -168,7 +168,9 @@ def test_the_roster_never_uses_a_task_id_as_an_item_key(
     ids = [str(n["task_id"]) for n in face["nodes"]]
     assert orphan not in ids, ("只写任务号的行被当成了一个名册项", ids)
     assert any(orphan in line for line in face["diagnostics"]), face["diagnostics"]
-    assert [str(n["name"]) for n in face["nodes"]] == ["", "G1"], face["nodes"]
+    # 根那一行是 `M`（读侧给顶层定的身份，业主 2026-10-26），第二个才是名册给的 G1：
+    # 那条只写任务号的行没有变成一个编号节点，也没有变成一个叫 t-999999 的名册项。
+    assert [str(n["name"]) for n in face["nodes"]] == ["M", "G1"], face["nodes"]
     # 同一个名字的两条行折成一项（身份是名字，不是它接过哪几件活）。
     folded = _fold_roster([{"kind": "add", "owner": "t-1", "name": "G1", "role": "G",
                             "task_id": "t-2"},

@@ -4,10 +4,13 @@
 `agent_a/__main__.py`。拆包时自检块被搬进了 `_support.py`，于是它还在但永不被执行
 —— 而 `python -m` 退出码 0 这条契约写在 `docs/ROLE-SPECS.md` 与
 `scripts/release_check.py` 第 2 项里。这个文件把那一段块逐字搬回来。
+
+自检本体在 `agent_a/selftest.py`（2026-10-26 从 `core.py` 搬出来：那一块把 core 撑过了
+`src_files_gt800_lines` 的基线，而自检既不是动作也不是装配）。这个文件只负责入口。
 """
 from __future__ import annotations
 
-from .core import _selftest
+from .selftest import _selftest
 
 if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块（release_check 第 2 项会跑它）
     import sys

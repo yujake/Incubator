@@ -217,8 +217,14 @@ def test_the_retry_budget_is_read_from_the_plan_not_hardcoded(store: Store):
 
 # ============================================================ P3-6：proof 的出口
 
-def test_a_proof_round_lands_a_statement_and_a_report_line(store: Store):
-    """判据：`proof` 之后，`statements` 有一行、`reports/attack-<plan_id>.md` 有一行。"""
+def test_a_proof_round_hands_the_statement_to_b(store: Store):
+    """判据：`proof` 之后，`statements` 那一行是 B 的登记落下来的，不是 F 直写的。
+
+    改前红：改前 `_proof_outlet` 在 F 进程里自己 upsert，落下来的行
+    `created_by=agent-F`、`kind=lemma`、`bits={}`、label 还是「F 攻坚 …」。
+    现在同一笔走 B 的 `register_statement`：五元位算出来了、定理名被洗过、
+    首次登记按 B-2 从猜想起步。
+    """
     llm = FakeLLM(_proof_round("这是第一步"))
     f = _f(store, llm=llm)
     pid = _new_plan(f)
@@ -227,11 +233,14 @@ def test_a_proof_round_lands_a_statement_and_a_report_line(store: Store):
     stmts = store.rows("statements")
     assert len(stmts) == 1, stmts
     row = stmts[0]
-    assert row["origin"] == "own_result" and row["kind"] == "lemma", row
+    assert row["origin"] == "own_result", row
+    assert row["created_by"] == "secretary-B", row["created_by"]
+    assert row["kind"] == "conjecture", row          # B-2：没有 V 签先按猜想登记
     assert "这是第一步" in row["proof_text"], row
-    # 等级不许自报更高：V 没签过 ⇒ 只能 heuristic，而且五元位是空的
+    # 等级不许自报更高：V 没签过 ⇒ 只能 heuristic；五元位由 B 那一笔算出来（不是空对象）
     assert row["evidence_kind"] == "heuristic", row
-    assert not dict(row.get("bits") or {}), row
+    assert dict(row.get("bits") or {}), row
+    assert "F 攻坚" not in str(row.get("label") or ""), row["label"]
     assert row["quote_reason"], row
 
     report = Path(store.root) / "reports" / f"attack-{pid}.md"
@@ -244,10 +253,13 @@ def test_a_proof_round_lands_a_statement_and_a_report_line(store: Store):
     rec = store.rows("attack_plans")[0]["history"][-1]
     assert rec["statement_id"] == row["stmt_id"] and rec["report_path"] == f"reports/attack-{pid}.md", rec
     assert out["statement_id"] == row["stmt_id"] and out["report_path"] in out["reason"], out
+    # F 仍拿得到号：这一轮的 evidence 就是 B 的登记发出来的那个 `stmt:<号>`
+    # （D8 的"同步往返一次再拿号"，不是"不拿号"）。
+    assert rec.get("evidence") == [f"stmt:{row['stmt_id']}"], rec
 
 
-def test_the_proof_outlet_is_what_writes_the_statement(store: Store, monkeypatch):
-    """负控：把出口按改前的形态注回去（不写 statements）⇒ 同一组断言必须红。
+def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeypatch):
+    """负控：把出口摘掉 ⇒ 盘上一行都没有（这一笔的登记只由那一条出口发起）。
 
     桩的形参要带 `proof_manuscript`：2026-10-26 起登记那一笔同时收到手稿正文
     （判据见 `tests/test_dependency_wiring_is_live.py` 的 a0）。不带就是 `TypeError`，

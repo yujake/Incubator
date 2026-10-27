@@ -276,9 +276,13 @@ def _module_js(tmp: pathlib.Path) -> pathlib.Path:
     assert TREE_TS.is_file(), (
         f"{TREE_TS.relative_to(REPO)} 不在盘上：名册树「画哪些行」没有可判的纯函数")
     out = tmp / "rosterTree.mjs"
+    # `encoding="utf-8"` 不是装饰：node 按 UTF-8 往 stdout 写，而 `text=True` 不给编码时
+    # Python 用本机 locale（中文 Windows = GBK）去解它 ⇒ 读线程抛 UnicodeDecodeError、
+    # `proc.stdout` 变成空串，于是这一整个文件在那种机器上 6 条全红，红的却与被测代码
+    # 毫无关系（判据自己的环境脆弱）。同 `tests/test_webui_three_state_reading.py` 的口径。
     proc = subprocess.run([node, "-e", _TRANSPILE_JS, str(TYPESCRIPT_LIB),
                            str(TREE_TS), str(out)],
-                          capture_output=True, text=True, timeout=180)
+                          capture_output=True, text=True, encoding="utf-8", timeout=180)
     assert proc.returncode == 0, (
         "把 rosterTree.ts 转成 ESM 失败（exit "
         f"{proc.returncode}）：{((proc.stderr or '') + (proc.stdout or ''))[:800]}")
@@ -298,7 +302,7 @@ def _run(face: Mapping[str, Any], tmp: pathlib.Path, *, mode: str = "tree") -> d
     runner = tmp / "runner.mjs"
     runner.write_text(_RUNNER_JS, encoding="utf-8")
     proc = subprocess.run([node, str(runner), str(module), str(payload), mode],
-                          capture_output=True, text=True, timeout=180)
+                          capture_output=True, text=True, encoding="utf-8", timeout=180)
     assert proc.returncode == 0, (
         f"前端那个纯函数在真读数上跑不起来（exit {proc.returncode}）："
         f"{((proc.stderr or '') + (proc.stdout or ''))[:1200]}")

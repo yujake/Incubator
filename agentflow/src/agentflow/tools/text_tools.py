@@ -218,8 +218,7 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
 
 @tool(
     "text.extract",
-    "**把一篇 PDF 自带的文字层转成同名 `.txt` 写进 `library/`**（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）"
-    "。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色读那份 `.txt`，不要读 PDF（`fs.read` 拒收二进制）。。",
+    "把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色只读那份 `.txt`（`fs.read` 拒收 PDF）。",
     {
         "type": "object",
         "properties": {

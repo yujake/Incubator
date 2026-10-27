@@ -88,7 +88,7 @@ import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { useFace } from "../live";
-import { ACTIVE_TEXT, STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stateSummary, taskLine } from "../rosterTree";
+import { ACTIVE_TEXT, STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stalledTag, stateSummary, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
 import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
 import { Badge } from "./Badge";
@@ -146,9 +146,15 @@ function isOpen(node: RosterNode): boolean {
   return depth <= DEFAULT_OPEN_DEPTH;
 }
 
-/** 名册名那几档的空值（根不在任何人的名册里；名字一经退役永久不复用）。 */
+/** 名册名那一格：名字一经退役永久不复用；根不在任何人的名册里。
+ *
+ * 兜底只在旧后端 / 缺那一格时走到 —— 正常路径不该走到这里：根节点的 `name` 与 `role`
+ * 由读侧补成主控（`readers.roster_face` 的 `_roster_root_identity`），所以根那一行
+ * 在页面上就叫 `M`。兜底写 `M（顶层）`，不写"这一格读坏了"那种措辞
+ * （业主 2026-10-26：「顶层能不能标 M 啊，unknown 很怪」）。
+ */
 function nameText(node: RosterNode): string {
-  return node.name === "" ? "（顶层·无名册名）" : node.name;
+  return node.name === "" ? "M（顶层）" : node.name;
 }
 
 /** 三态徽标（在飞 / 待机 / 静默 / 未读到）：文案与词表来自 `rosterTree.STATE_TEXT`，
@@ -172,6 +178,23 @@ function stateTitle(node: RosterNode): string {
 function stateBadge(node: RosterNode) {
   const state = asAgentState(node.state);
   return <Badge kind={`roster-state-${state}`} text={STATE_TEXT[state]} title={stateTitle(node)} />;
+}
+
+/** 疑似停滞那一枚小标记（业主 2026-10-26 第二条裁定）：画在三态徽标旁边。
+ *
+ * 为什么是"旁边一枚"而不是改那一枚：三态那一格回答"它现在属于哪一档"，而停滞回答
+ * "它最近一步是什么时候"——两个问题，两枚标记。把停滞折进三态（例如判成静默）会让
+ * 它可以被销号，而销号不可逆；所以这一格只加不改（`state` 仍是 `flying`）。
+ *
+ * 文案与悬停文字都来自 `rosterTree.stalledTag`（纯函数，判据能直接跑）：
+ * 悬停给秒数与那一句理由，颜色走 `roster-stalled` 那一档。
+ */
+function stalledBadge(node: RosterNode) {
+  const tag = stalledTag(node);
+  if (tag === null) {
+    return null;
+  }
+  return <Badge kind="roster-stalled" text={tag.text} title={tag.title} />;
 }
 
 /** 子那几格：绝对编号 + 名册名（读不到名册名就只给编号）。 */
@@ -448,6 +471,10 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             )}
             {/* 三态徽标：在飞 / 待机 / 静默 / 未读到（文案与颜色都跟着这一档走，悬停给原因）。 */}
             {stateBadge(node)}
+            {/* 疑似停滞（业主 2026-10-26 第二条）：紧挨着三态徽标的小标记 ——
+                三态说"它属于哪一档"，这一枚说"它最近一步离现在多久"。只加不改：
+                三态那枚不动，所以"它仍然在跑"与"它已经很久没动静"同时看得见。 */}
+            {stalledBadge(node)}
             {/* 这一格是**任务面**读数：台账里 `status ∈ pending/running` 的活有几件。
                 它不是代理三态 —— 挂机（待机）的代理名下那件活仍然是 running，所以
                 它既不是「在飞 N 个」，也不能并进「活跃（非静默）」。 */}

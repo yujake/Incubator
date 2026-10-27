@@ -627,6 +627,45 @@ ROUTED_CODES: tuple[str, ...] = (
 _NOT_ROUTABLE_KEYS: frozenset[str] = frozenset(
     {"bits", "verification_id", "reviewed_by", "created_by"})
 
+#: `statements` 的登记归属（2026-10-26，D8）：只有 B 的 `register_statement` 能写。
+#:
+#: 为什么不是"路由到秘书就够"：路由把调用方的角色原样传给秘书，而非 B 的角色会被
+#: 秘书按它自己的判据拒（`not_statement_writer`）—— 那道拒是"兜底方拒"，读数上分不清
+#: "这次直写本来就该拒"与"兜底方今天不可用"。这一档的语义是前者：`statements` 的
+#: 每一格都带语义（五元位 / 依赖面 / 非平凡度 / 定理名），而它们只长在 B 的那一笔上。
+STATEMENTS_REGISTERED_BY_B = "statements_are_registered_by_b"
+
+#: 这一档的拒信（逐字，见 D8 的裁定）：说清四样与出口，不把模型劝到墙角。
+STATEMENTS_BY_B_REFUSAL = (
+    "证明内容写进 statements 只能经 B 的 `register_statement`（它同时算五元位、读 "
+    "`## 依赖` 落依赖边、判非平凡度、洗定理名）。你这一笔直写会让这四样全空 —— "
+    "请把手稿与命题交给 B。"
+)
+
+
+def _statements_are_registered_by_b(role: str) -> bool:
+    """这一次写 `statements` 的是不是 B 的登记那一笔（反真空的判据只有这一处）。
+
+    空串 = 没有角色挂点（脚本 / 单测 / 直接调 handler），**不是"非 B"**。这一档刻意
+    fail-open，理由三段：
+
+    1. 三态纪律：`conductor.current_caller_role()` 的空串是"没有挂点 / 没查"，不是
+       "查过了、结论是不是 B"。把空串判成非 B，等于把"没查"折成"查过且不合格"。
+    2. 放行的只是这一格，兜底仍然 fail-closed：干净载荷会走 `_route_to_secretary`，
+       用 `role=""` 调 `Secretary.record_statement`，被 `not_statement_writer` 拒
+       （`routed_to_backstop.secretary_refused`）；带 `bits` 的载荷在
+       `_NOT_ROUTABLE_KEYS` 那一档被拒（`direct_write_refused`）。两条都 0 行 ——
+       所以"这里放行"不等于"能写"。
+    3. 谁会走这一条：脚本、单测、直接调 `table_create` / `table_update` 的夹具
+       （`ToolContext.actor` 恒为 `"tool"`，没有发起人这一格）。生产里
+       `AgentLoop._do_tool` 用 `calling_as` 包住每一次工具调用，F / A / C / D / E / G /
+       H / M / V 都会拿到可读角色并在这一格被拒；把空串也拒会误伤内部播种，
+       且与 `test_statement_write_is_the_secretarys_only.py` 里"带 bits ⇒
+       direct_write_refused"的既有读数分家。
+    """
+    got = str(role or "")
+    return not got or got == "B"
+
 
 def _wild_road_reason(table: str, why: str) -> str:
     """野路（兜底方也接不住）时的拒信正文：只说"这一笔为什么不能落"，不指路。
@@ -699,6 +738,109 @@ def _caller_task_id() -> str:
 #: 等于让 `table.list("tasks")` 变回那条绕过路径。为什么留父那一行：它是"我这一趟
 #: 从哪来"，本来就在提示词里（`{{parent_task_id}}`），读它不增加任何可见面。
 _TASKS_VISIBLE_CHILD_DEPTH = 1
+
+# ---------------------------------------------------------------- `tasks` 的写侧判据
+#
+# 这一节堵的是"通用写口能伪造任务台账"这个权限面缺口（D12，2026-10-27 实测）。
+#
+# 背景：`store.direct_write_refusal` 只拒 `statements` 与 `lit_candidates`（store.py:251），
+# `tasks` 不在其中 —— 于是 `table.create(table="tasks")` 对任何角色都是敞开的。
+# 改前实测（那一趟的一次性写宽探针，已随 temp 清理；D 角色，全部 ok=True）：
+#
+#     [1_给自己一条 work]            id=t-000004
+#     [2_种到别人名下]               id=t-000005   ← 把一条 delegation 种进 E 的板，called_by 写成自己
+#     [3_直接写成 done]              id=t-000006   ← 绕过状态机伪造一条"已收口"
+#     [4_kind=notice+expects=ack]    id=t-000007
+#
+# 为什么这不是"参数校验"而是权限面：一条伪造的板项会让销号门的"板项没清"读数失真
+# （`conductor_retire_child` 读的就是"名下还有几条 item_state != done"），也会让
+# `Conductor._set_item` 的两条不变量（只许往后走 / 没 seen 不许 done）整个失效 ——
+# 而盘上那一行看起来完全合法。
+#
+# 三条判据各有一个机器码（理由码进 `kind=`，拒信进 `error`）：
+#   a) 板项只能由它的收件人自己落（`parent_task_id` 必须是调用者的台账号）；
+#   b) 新行 / 补丁不许伪造收口（`item_state` 只许 queued，`item_close` 只许空）；
+#   c) 不许绕过投递写"已读"（`item_state="seen"` 与 `seen_by` / `seen_step` 都拒）。
+# 收口唯一的路仍是 `Conductor._set_item`（`conductor.ack` 与 `mark_item_seen` 的那两条）。
+TASKS_POSTED_BY_THEIR_OWNER = "tasks_are_posted_by_their_owner"
+TASKS_CLOSE_ONLY_THROUGH_THE_MACHINE = "tasks_close_only_through_the_item_state_machine"
+TASKS_SEEN_ONLY_THROUGH_DELIVERY = "tasks_seen_only_through_delivery"
+
+
+def _tasks_write_refusal(*, table: str, row: Mapping[str, Any],
+                         op: str) -> ToolResult | None:
+    """`tasks` 行的通用写口判据：返回 None = 放行，否则是受控拒绝的 `ToolResult`。
+
+    `op` 只用于措辞（`create` / `update`）：两条路判的是同一件事 ——
+    "这一笔改动替你改的是谁的任务台账"。
+
+    三态纪律：判据只看调用上下文（`_caller_task_id` / `_caller_role`）与载荷。
+    没有调用上下文（脚本 / 单测里没挂 `calling_as`）⇒ 一律拒（fail-closed）：
+    "不知道是谁"不能读成"谁都可以"。
+    """
+    if str(table) != "tasks":
+        return None
+    payload = dict(row or {})
+    me = _caller_task_id()
+    role = _caller_role()
+    where = "table.create" if op == "create" else "table.update"
+    if not me:
+        return fail(
+            (f"{TASKS_POSTED_BY_THEIR_OWNER}：`{where}(table=\"tasks\")` 需要知道是哪一趟代理"
+             "在写 —— 这一次没有调用上下文（没有台账号）⇒ 拒。"
+             "任务台账的写者只有两条正路：`conductor.post_task`（给自己落一条活）与框架自己的"
+             "收口路径（`conductor.ack` / `mark_item_seen` / `open_item`）。"),
+            table="tasks", kind=TASKS_POSTED_BY_THEIR_OWNER)
+    # ---- a) 只许给自己落项
+    if "parent_task_id" in payload:
+        owner = str(payload.get("parent_task_id") or "")
+        if op == "create" or owner:
+            if owner != me:
+                return fail(
+                    (f"{TASKS_POSTED_BY_THEIR_OWNER}：`parent_task_id` 是"
+                     f"{owner or '（空）'}，不是你（{me}）⇒ 板项的收件人只能是调用者自己。"
+                     "要让别人办一件事，走 `conductor.summon`（那条正路会自己建行、自己发号）。"),
+                    table="tasks", kind=TASKS_POSTED_BY_THEIR_OWNER)
+    elif op == "create":
+        return fail(
+            (f"{TASKS_POSTED_BY_THEIR_OWNER}：建 `tasks` 行必须写 `parent_task_id`（收件人 = 你自己 "
+             f"{me}）—— 没有收件人的行是另一类东西（顶层运行由 `conductor` 发号），"
+             "不是这里能建的。"),
+            table="tasks", kind=TASKS_POSTED_BY_THEIR_OWNER)
+    called_by = str(payload.get("called_by") or "")
+    if called_by and role and called_by != role:
+        return fail(
+            (f"{TASKS_POSTED_BY_THEIR_OWNER}：`called_by` 是 {called_by!r}，而你这一趟是 "
+             f"{role!r} ⇒ 板项的『谁开的』不许写成别人。"),
+            table="tasks", kind=TASKS_POSTED_BY_THEIR_OWNER)
+    row_role = str(payload.get("role") or "")
+    if row_role and role and row_role != role:
+        return fail(
+            (f"{TASKS_POSTED_BY_THEIR_OWNER}：这一行的 `role` 是 {row_role!r}，而你这一趟是 "
+             f"{role!r} ⇒ 只能给自己落项（给别人落项不是这条路的语义）。"),
+            table="tasks", kind=TASKS_POSTED_BY_THEIR_OWNER)
+    # ---- c) 不许绕过投递写"已读"
+    state = str(payload.get("item_state") or "")
+    if state == "seen" or payload.get("seen_by") or payload.get("seen_step") not in (None, ""):
+        return fail(
+            (f"{TASKS_SEEN_ONLY_THROUGH_DELIVERY}：`{where}` 不许写『已读』"
+             "（`item_state=\"seen\"` / `seen_by` / `seen_step`）—— 那个读数只由投递那一拍"
+             "（`Conductor.mark_item_seen`）写：谁在第几步读到的，是要被读的人自己说的。"),
+            table="tasks", kind=TASKS_SEEN_ONLY_THROUGH_DELIVERY)
+    # ---- b) 不许伪造收口
+    if str(payload.get("item_close") or ""):
+        return fail(
+            (f"{TASKS_CLOSE_ONLY_THROUGH_THE_MACHINE}：`{where}` 不许写 `item_close`"
+             "（`acked` / `completed`）—— 收口只有一处：`Conductor._set_item`，"
+             "工具面走 `conductor.ack`。"),
+            table="tasks", kind=TASKS_CLOSE_ONLY_THROUGH_THE_MACHINE)
+    if state and state != "queued":
+        return fail(
+            (f"{TASKS_CLOSE_ONLY_THROUGH_THE_MACHINE}：新行 / 补丁里的 `item_state` 只许 "
+             f"\"queued\"，收到 {state!r} —— 收口、接手、投递三档都只由状态机写"
+             "（`_set_item`），通用写口不许替它走。"),
+            table="tasks", kind=TASKS_CLOSE_ONLY_THROUGH_THE_MACHINE)
+    return None
 
 
 def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
@@ -882,6 +1024,13 @@ def _direct_write_disposal(ctx: TableContext, *, table: str, op: str,
         # 提交块那一段：只有 delete 的那一笔放行）。`lit_candidates` 是唯一的例外 ——
         # 它的"删掉"必须表现为"撤掉"，所以走下面的兜底。
         return None
+    if name == "statements" and not _statements_are_registered_by_b(_caller_role()):
+        # F 与其余非 B 角色对这张表的直写一律受控拒绝：它们没有"五元位 / 依赖面 /
+        # 非平凡度 / 洗名"那四件活，路由到秘书也只会被秘书的角色判据拒一次。
+        # 位置在 `_NOT_ROUTABLE_KEYS` 之前：带 `bits` 的载荷也归这一档（它同样是直写）。
+        return fail(f"{STATEMENTS_REGISTERED_BY_B}：{STATEMENTS_BY_B_REFUSAL}",
+                    table=name, kind=STATEMENTS_REGISTERED_BY_B,
+                    actor_role=_caller_role())
     keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
     if op and str(op) == "update" and idf and str(idf) in keys and str(payload.get(idf)) != str(id):
         # 改主键 = 把 delete+create 伪装成 update（所有外键都指向旧代号）⇒ 不接管。
@@ -1179,7 +1328,7 @@ def _route_to_lit_backstop(ctx: TableContext, *, entry: str, intent: str,
 def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
     """`statements` 行的读侧派生格：这一份证明走的是哪条路（读侧接线点）。
 
-    为什么必须有这一格：路子住在 `_proof_routes` 里（由 `Secretary.record_statement`
+    为什么必须有这一格：路子住在 `secretary.PROOF_ROUTES_KEY` 里（由 `Secretary.record_statement`
     写进那一行，键名带下划线），而它在任何工具读数上都没有被翻出来过 ——
     `secretary.proof_routes_of` / `proof_route_of` 这两只读侧唯一口径全仓 0 个非测试
     调用点（`docs/WIRING-AUDIT-2026-10-27.md` 第四节第一行）。后果不是"少一格"：
@@ -1210,9 +1359,7 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
 
 @tool(
     "table.list",
-    "列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时"
-    "另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；"
-    "算不出来时是空表 + proof_routes_problem 说为什么。",
+    "列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1267,9 +1414,7 @@ def table_list(
 
 @tool(
     "table.get",
-    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行时"
-    "另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；"
-    "算不出来时是空表 + proof_routes_problem 说为什么。",
+    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
     _obj({"table": _TABLE_PROP, "id": {
         "type": "string",
         "description": (f"主键值（{S.ID_DIGITS} 位十进制字符串如 `000000`，"
@@ -1342,6 +1487,12 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     hand_filled = _hand_typed_id_refusal(table, dict(row or {}), idf)
     if hand_filled is not None:
         return hand_filled
+    # ---- `tasks` 台账的写侧判据（D12）：不许伪造"谁开的项 / 已收口 / 已读过"。
+    # 位置在兜底路由之前：这张表没有兜底方（`store.direct_write_refusal` 不拒它），
+    # 路由层对它什么也不做，所以这条判据必须自己说话。
+    tasks_refused = _tasks_write_refusal(table=table, row=dict(row or {}), op="create")
+    if tasks_refused is not None:
+        return tasks_refused
     # ---- 直写兜底（2026-10-24 业主裁定）：这两张表不由通用写口直写 —— 请求转交正路执行。
     # 判据只有一处（见 `_direct_write_disposal`）：能兜底的由兜底方办、兜不了的才拒。
     refused = _direct_write_disposal(ctx, table=table, op="create",
@@ -1428,6 +1579,12 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     # 秘书会按 `verifications` 里那一签决定升不升档（升档就地改那一行、不新建）。
     if not patch:
         return fail("patch 不能为空（空 patch 只会更新 updated_at，通常是调用方写错了）", table=table, id=id, kind="param_error")
+    # ---- `tasks` 台账的写侧判据（D12）：与 `table.create` 同一处判据、同一组理由码。
+    # 这一格堵的是同一形状的第二个口子：update 可以把一行直接改成 `item_state="done"`，
+    # 而那条路的语义是"绕过状态机伪造收口"，与 create 写的 done 是同一件事。
+    tasks_refused = _tasks_write_refusal(table=table, row=dict(patch or {}), op="update")
+    if tasks_refused is not None:
+        return tasks_refused
     refused = _direct_write_disposal(ctx, table=table, op="update",
                                      payload=dict(patch or {}), id=id, idf=idf)
     if refused is not None:

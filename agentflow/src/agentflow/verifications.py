@@ -1560,8 +1560,7 @@ def _kind_upgrade_from_signature(row: Mapping[str, Any], *, root: str | Path,
 
     ## 为什么它在签名这一笔里（断链在哪）
     D-37 已经有"kind 该不该跟着证据升"的唯一判据（`evidencebits.kind_following_grade`，
-    纯读），但它的两个写侧落点都不在"V 签字"这条路上：
-    `secretary._promote_governance` 只在"同一份内容再交一次"时才跑，
+    纯读），但它的写侧落点都不在"V 签字"这条路上：
     `agent_b.register_statement` 的那一格只在第 4 位（形式化）同步出变化时才跑。
     于是真机 sylow3 那种形态 —— V 的台账里判「成立」、`bits.evidence.reviewed_by_proof`
     是 `{"1": true}`，而 `statements` 那一行的 `kind` 仍是 `conjecture` —— 没有任何一步会
@@ -1669,7 +1668,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         "append_state": "not_attempted",
         #: 调用方是不是必须重签：只有"这一签没有落在台账上"（追加失败 / 已撤回）才为真。
         "re_sign_required": False,
-        #: D-69：这一签有没有把 `kind` 抬上去（形状与秘书那一支的 `_kind_upgrade` 相同）：
+        #: D-69：这一签有没有把 `kind` 抬上去（形状与秘书那一支的升档痕迹相同）：
         #: `{}` = 没抬（起点不是 conjecture / 凭据不够 / 位算不出来），那三档都不改盘。
         "kind_upgrade": {},
         #: 抬档的读数原话（「因 V 判成立而抬档：conjecture→theorem（依据 …）」）；
@@ -2497,7 +2496,7 @@ def unverified_statement_refs(root: str | Path,
     """攻坚计划的 `history` 里点名了哪些 `statement_id`、而 `verifications` 里没有对应行。
 
     ## 为什么这一条落在「攻」那一格（2026-10-19，接 V 的回路的收工侧）
-    F 把论证落成 `statements` 一行后，`statement_id` 进 `attack_plans.history`（`agent_f/step.py`
+    F 的论证由 B 登记成 `statements` 一行、拿到 `statement_id` 之后，那一号进 `attack_plans.history`（`agent_f/step.py`
     的 P3-6 落点），M 在 `attack.status` 里看得见；但看得见不等于有人审 —— 那一栏可以一直是
     "F 交了、没人签"而收工门照样绿（「攻」只问计划推进了没有）。这一条把两件事接上：history 里
     有 `statement_id` ⇒ `verifications` 里必须有它的一行（`verify_proof` 的产物）；没有 ⇒

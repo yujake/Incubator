@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""证明的"路子"必须回到读者眼前：写侧落 `_proof_routes`，读侧必须有人把它翻出来。
+"""证明的"路子"必须回到读者眼前：写侧落 `secretary.PROOF_ROUTES_KEY`，读侧必须有人把它翻出来。
 
 ## 这一份补的是哪一根线（`docs/WIRING-AUDIT-2026-10-27.md` 第四节第一行）
 
 审计实测：`secretary.proof_route_of` / `proof_routes_of` 是孤儿 —— 全仓 0 个非测试
-调用点。路子由 `Secretary.record_statement` 写进 statements 那一行的 `_proof_routes`
+调用点。路子由 `Secretary.record_statement` 写进 statements 那一行的 `secretary.PROOF_ROUTES_KEY`
 （业主 2026-10-24：「路线写在证明这一层」），写完就再没有人读回来。于是：
 
     写侧有那句话，读侧没有那一格；模型读得到行，读不到"这份证明走的是哪条路"。
@@ -21,7 +21,7 @@
 2. `test_table_list_carries_the_proof_route`：`table.list` 的每一行同样带着（两条读侧
    工具共用同一只派生函数 —— 只接一处会让"按 id 取"与"列表取"各说一半）。
 3. `test_the_route_cell_is_empty_when_the_writer_writes_nothing`（反真空）：把写侧打桩
-   成不写 `_proof_routes` ⇒ 读侧那两格为空。这一条钉的是"那两格真的是从写入的东西
+   成不写 `secretary.PROOF_ROUTES_KEY` ⇒ 读侧那两格为空。这一条钉的是"那两格真的是从写入的东西
    算出来的"，而不是某个恒真的常量。
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ from agentflow.tools.base import ToolRegistry
 FULL = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在且两两共轭。"
 LABEL = "Sylow I（存在性）"
 PROOF = "证明：由类方程直接得。"
-#: 这条路子（写侧会把它洗进 `_proof_routes` 的 `"1"` 那一格）。
+#: 这条路子（写侧会把它洗进 `secretary.PROOF_ROUTES_KEY` 的 `"1"` 那一格）。
 ROUTE = "路线二：由类方程直接数，不经过群作用"
 
 
@@ -88,7 +88,7 @@ def _own() -> dict[str, Any]:
 
 
 def _record(st: Store) -> str:
-    """走生产写路：`record_statement` 落一行 statements（带 `_proof_routes`）。"""
+    """走生产写路：`record_statement` 落一行 statements（带 `secretary.PROOF_ROUTES_KEY`）。"""
     sec = for_role_wired("B", root=st.root, store=st, seam=_RouteSeam())
     got = sec.record_statement(_own(), role="B")
     assert got.get("created") is True, got
@@ -149,7 +149,7 @@ def test_table_list_carries_the_proof_route(tmp_path: pathlib.Path) -> None:
 
 def test_the_route_cell_is_empty_when_the_writer_writes_nothing(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空：把写侧打桩成不写 `_proof_routes` ⇒ 读侧那两格为空。
+    """反真空：把写侧打桩成不写 `secretary.PROOF_ROUTES_KEY` ⇒ 读侧那两格为空。
 
     这一条钉的是"那两格真的是从写入的东西算出来的"：如果它们来自某个恒真的常量
     （或来自行上别的东西），打桩之后仍然会有值 —— 那判据 1 就什么都没在量。

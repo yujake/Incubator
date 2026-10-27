@@ -33,10 +33,10 @@
 | e `test_e_only_admitted_candidates_are_listed_and_no_ledger_is_not_zero` | 只认 admitted（3 admitted + 2 pending ⇒ 只显示 3 条）；无候选台账 ⇒ `count is None` + reason 写「候选台账」；判不出的那篇留 `admission_undecidable` | 同上 |
 | f `test_f_the_two_judgments_are_not_vacuous` | 反真空：把反查打桩成空 ⇒ d 必红；把「只算入库」打桩成全收 ⇒ e 必红 | 同上 |
 
-## 为什么把 d / e 的断言抽成 `_x_problems` 纯函数
+## 为什么把 d / e 的断言抽成 `_d_problems` / `_e_mixed_problems` 一族纯函数
 
 f 那两条反真空不能靠"把判据文件抄一份改一改"来实现：那样注射的是另一条判据。
-所以 d / e 各自只有一行 `assert _x_problems(view) == []`，而 f 拿同一批纯函数跑
+所以 d / e 各自只有一行 `assert _d_problems(view) == []` 这样的断言，而 f 拿同一批纯函数跑
 被注射过的读数 —— 打桩生效时它们必须吐出问题。这就是「这条判据不是在真空里绿」。
 
 ## 为什么字段名一律从 `readers.ts_fields()` 取

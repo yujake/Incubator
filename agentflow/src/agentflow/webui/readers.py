@@ -77,6 +77,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .. import manuscripts as _MS
 from .. import sessions as SS
 from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
                          agent_states, clock_waiters, most_active_state, state_counts)
@@ -90,8 +91,10 @@ __all__ = [
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
     "LIBRARY_NO_LEDGER_REASON", "LIBRARY_STATE_COMPUTED", "LIBRARY_STATE_UNKNOWN",
-    "MISSING_TYPES", "NONTRIVIALITY_UNJUDGED_WORD", "PENDING_ENDPOINTS",
+    "MISSING_TYPES", "NONTRIVIALITY_NOT_APPLICABLE_WORD", "NONTRIVIALITY_UNJUDGED_WORD",
+    "PENDING_ENDPOINTS",
     "PROBLEM_ADMISSION_UNDECIDABLE", "PROBLEM_ADMITTED_WITHOUT_ROW",
+    "PROBLEM_BULK_ADMISSION_SUSPECTED",
     "PROBLEM_DOWNLOAD_CLAIMED_ABSENT",
     "PROBLEM_LITERATURE_UNREADABLE", "PROBLEM_USES_UNREADABLE", "ROUTES",
     "ROSTER_INBOX_ITEMS",
@@ -892,6 +895,17 @@ CODE_CONSISTENCY_REVOKED = "revoked"
 #: 非平凡度"判不了"在页面上的写法（不是 T0 —— 2026-10-23 起 T0 是一档真的档位）。
 NONTRIVIALITY_UNJUDGED_WORD = "未判"
 
+#: 非平凡度"不适用"在页面上的写法（概念 / 定义行没有证明正文，判档这一问对它不成立）。
+#:
+#: 2026-10-26（D15'）：这一格与 :data:`NONTRIVIALITY_UNJUDGED_WORD` 必须是两个词。
+#: "判不了"说的是"该判而没判"（没缝 / 缺正文 / 正文被截断），处置是"再去判一次"；
+#: "不适用"说的是"这一问对它不成立"（`kind="concept"` / `"definition"` 没有证明正文），
+#: 再判一次也不会有别的结论。词只有一个来源：`nontriviality_of` 的 `tri` 三档 +
+#: 档位那五档（T0–T4）—— 页面上因此是"三个词"（档位 / 不适用 / 未判），不许折平。
+#: 真机读数（`projects/mp3-r3`）：30 条概念行的非平凡度一条记录都没有，而读侧对
+#: "没有记录"与"不需要记录"都只印一个"未判"。
+NONTRIVIALITY_NOT_APPLICABLE_WORD = "不适用"
+
 #: 档位号 → hover 里那句说明（逐条对着 `secretary.NONTRIVIALITY_LEVELS` 与它上面那张
 #: 语义表；档位只有 0..4 这五个取值，`nontriviality_label` 负责 T0 这四个字符）。
 _NONTRIVIALITY_MEANINGS: dict[int, str] = {
@@ -970,17 +984,33 @@ def _ledger_verify_consistency(row: Mapping[str, Any]) -> str:
 
 
 def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]:
-    """一条命题当前的非平凡度：`{level, label, meaning, tri}`。
+    """一条命题当前的非平凡度：`{level, label, meaning, tri, word, matched_by}`。
 
-    读口只有一处：`secretary.nontriviality_of`（按含完整假设的正文 sha 折叠旁支台账
-    `out/secretary/nontriviality.jsonl`）。这里只做两件事：把 hover 那句说明补上、
-    把"判不了"写成 `level=None` + 空 `label`。
+    读口只有一处：`secretary.nontriviality_of`（按 `stmt_id` 折叠旁支台账
+    `out/secretary/nontriviality.jsonl`；旧行才回退到正文 sha）。这里只做四件事：
+    把这一行的号传下去、把 hover 那句说明补上、把"判不了"写成 `level=None` + 空
+    `label`、把"不适用"与"判不了"写成两个词。
 
-    `tri` 是这一格自己的三态：`computed`（读到一档）/ `unknown`（台账里没有这一条，
-    或者记的是"判不了"）。页面据此显示 :data:`NONTRIVIALITY_UNJUDGED_WORD`
-    —— 不是 T0（折平就把"没人判过"冒充成一条基础定理）。
+    ## 按号，不按正文（2026-10-26，D16）
+    命题行的身份是 `stmt_id`。改前这里传的是 `SB.body_of(row)`，台账按正文 sha 关联
+    ⇒ 正文改一个字，档位就读成"未判"。现在号从行上取、原样传给读口；`matched_by`
+    跟着回来，读的人能分辨这一档是按号命中的，还是读旧行时按 sha 回退的。
 
-    `meaning` 在判不了时是空串：hover 里编一句"这是 T0"正是要防的那种假话。
+    ## 三个词（2026-10-26，D15'）
+    `word` 是页面上印出来的那一个词，取值只有三类：
+
+    | 结局 | `tri` | `word` |
+    |---|---|---|
+    | 读到一档 | `computed` | `T0`…`T4`（`secretary.nontriviality_label` 给的，不自己拼） |
+    | 这一问对它不成立（概念 / 定义行没有证明正文） | `not_applicable` | :data:`NONTRIVIALITY_NOT_APPLICABLE_WORD` |
+    | 该判而没判（台账里没有 / 记的是判不了 / 读不出来） | `unknown` | :data:`NONTRIVIALITY_UNJUDGED_WORD` |
+
+    为什么必须分开：`level` / `label` 在这后两档上长得一样（都是 `None` + 空串），
+    折平就把"再判一次就会有结论"与"再判一次也不会有结论"印成同一个词 ——
+    真机 `projects/mp3-r3` 的 30 条概念行正是这样：它们结构上不需要判，
+    而页面与它们的读数都只说"未判"。
+
+    `meaning` 在不是 `computed` 时是空串：hover 里编一句"这是 T0"正是要防的那种假话。
 
     代价：一条命题读一遍旁支台账（`nontriviality_of` 的读法就是逐行扫）。命题行在
     真机上是个位数（p9b 7 行）、台账是几十行，一次请求的可接受代价就在这里。
@@ -990,21 +1020,36 @@ def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[st
     from .. import statementbody as SB
 
     body = SB.body_of(row)
+    stmt_id = str(row.get("stmt_id") or "")
     level: int | None = None
     label = ""
     tri = "unknown"
+    matched_by = ""
     try:
         from ..secretary import nontriviality_of
 
-        got = nontriviality_of(root, body)
+        got = nontriviality_of(root, body, stmt_id=stmt_id)
         raw = got.get("level")
         level = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
         label = str(got.get("label") or "") if level is not None else ""
-        tri = "computed" if (level is not None and label) else "unknown"
+        matched_by = str(got.get("matched_by") or "")
+        if got.get("tri") == TRI_NOT_APPLICABLE:
+            # 「不适用」不是「判不了」：`level`/`label` 都是空，只有一个可判的标记
+            # （`applicable=False`）能把两者分开 —— 它就是这一格的 `tri`。
+            tri = TRI_NOT_APPLICABLE
+        else:
+            tri = "computed" if (level is not None and label) else "unknown"
     except Exception:  # noqa: BLE001 - 读数层：取不到就是"判不了"，不是 T0
-        level, label, tri = None, "", "unknown"
+        level, label, tri, matched_by = None, "", "unknown", ""
     meaning = _NONTRIVIALITY_MEANINGS.get(level, "") if level is not None else ""
-    return {"level": level, "label": label, "meaning": meaning, "tri": tri}
+    if tri == "computed":
+        word = label
+    elif tri == TRI_NOT_APPLICABLE:
+        word = NONTRIVIALITY_NOT_APPLICABLE_WORD
+    else:
+        word = NONTRIVIALITY_UNJUDGED_WORD
+    return {"level": level, "label": label, "meaning": meaning, "tri": tri, "word": word,
+            "matched_by": matched_by}
 
 
 def _bit_word(value: Any) -> str:
@@ -1089,6 +1134,13 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
         got["nontriviality_label"] = tier["label"]
         got["nontriviality_meaning"] = tier["meaning"]
         got["nontriviality_tri"] = tier["tri"]
+        # 页面直接印这一个词：`T0`…`T4` / `不适用` / `未判`（三个词，见
+        # :func:`_statement_tier_reading`）。`label` 仍只装档位名 —— 让 `不适用`
+        # 借那一格会抹掉"这一行有没有档位"这个判据。
+        got["nontriviality_word"] = tier["word"]
+        # 这一档是按号命中的、还是读旧行时按 sha 回退的（2026-10-26，D16）：
+        # 读的人要能分辨"正文改了档位还在"与"按文本碰巧对上"，两件事不许折平。
+        got["nontriviality_matched_by"] = tier["matched_by"]
         got.update(_bit_readings(row))
         try:
             per = EB.formal_by_proof(row)
@@ -1354,8 +1406,9 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     行形状变了，判定一个字没改（这一层仍然只是搬运）：
 
     - 命题行：`quote_state`（引文五档，含 `no_evidence`）、`nontriviality` /
-      `nontriviality_label` / `nontriviality_meaning` / `nontriviality_tri`
-      （非平凡度：判不了是 `None` + 空 label，页面写"未判"，不是 T0）、
+      `nontriviality_label` / `nontriviality_meaning` / `nontriviality_tri` /
+      `nontriviality_word`（非平凡度：判不了是 `None` + 空 label，页面写"未判"，
+      不是 T0；概念 / 定义行是 `tri="not_applicable"`，页面写"不适用" —— 2026-10-26）、
       `formal_paths`（第 4 位逐路径：`[{proof_no, state}]`）、
       `grade` / `grade_label`（五元位派生的等级）；
     - 关系行：`quote_state`（同一个读口，引文那一卡按五档计数）；
@@ -1592,6 +1645,83 @@ def _report_style(root: Path, project_dir: str = "") -> dict[str, Any]:
             "sections": [str(s) for s in data["sections"]]}
 
 
+# ============================================ 4.4 交接手稿的「发 / 收」怎么显示（Q2）
+# 业主 2026-10-26（Q2）逐字：「交接手稿『发 / 收』两栏只显示角色名（M / ALL / A），
+# 要显示绝对编码」。真机读数（`projects/mp3-r3/manuscripts/handoffs.jsonl`）：14 个行键里
+# 发信人的编号本来就有（`task_id` 就是发信人的台账号），收件人的编号改前从来没记过
+# （`to_task_id` / `to_task_ids` 是 2026-10-26 才补的写侧格子，见 `manuscripts.write`）。
+#
+# 于是读侧只做展示，三档不许折平（折平之后"没有编号"会变成"有一个看起来像编号的东西"，
+# 而那个东西是猜的）：
+#
+# | 盘上有什么 | 页面写什么 |
+# |---|---|
+# | `to_task_id`（具体收件人） | `A（t-000002）` |
+# | `to_task_ids` 非空（`to=ALL`） | `ALL（t-000002、t-000003）` |
+# | `to_task_ids` 是空列表 | `ALL（广播；无直接子代理）` |
+# | 两格都没有（改前落的那一批） | `A（旧账无号）` / `ALL（广播；旧账无编号）` |
+#
+# 为什么角色名与编号各留一格（`sender` / `to` 一个字都不改写）：那两格是台账的键
+# （`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它们），把它们改写成
+# `A（t-000002）` 就等于把台账的口径搞脏；渲染另起两格，页面读那两格。
+#: 这一行没记下编号时写的那句（改前落的那批行都在这一档：不假装有，也不报错）。
+HANDOFF_NO_CODE_WORD = "旧账无号"
+#: 广播行没记下编号时写的那句（与"具体收件人没有编号"分开：它同时还说了"这是广播"）。
+HANDOFF_NO_BROADCAST_WORD = "广播；旧账无编号"
+#: 广播行记下了编号、但发信人此刻一个直接子代理都没有（写了空列表也是结论，照实说）。
+HANDOFF_EMPTY_BROADCAST_WORD = "广播；无直接子代理"
+#: 广播面那个收件人写法 —— 唯一来源是 `manuscripts.ALL`，这里只读它，不另写一份字面量。
+HANDOFF_BROADCAST = _MS.ALL
+
+
+def handoff_sender_label(row: Mapping[str, Any]) -> str:
+    """发件人那一格：`M（t-000001）`（发信人的台账号就在 `task_id` 那一格）。
+
+    为什么"发"这一栏也要编号：改前它只印 `sender`，读起来像角色级的公告；
+    而台账里 `task_id` 一直有值 —— 缺的只是把它摆到同一格里。
+    """
+    who = str(row.get("sender") or "")
+    code = str(row.get("task_id") or "").strip()
+    return f"{who}（{code or HANDOFF_NO_CODE_WORD}）"
+
+
+def handoff_to_label(row: Mapping[str, Any]) -> str:
+    """收件人那一格：具体收件人 `A（t-000002）`；`ALL` 按它自己的记法（编号列表）。
+
+    判据是"收件人是不是广播"（`to == ALL`，写法只有一个来源
+    :data:`HANDOFF_BROADCAST`）：具体收件人的编号在 `to_task_id`（字符串），
+    广播面的编号列表在 `to_task_ids`（列表）—— 两种形状不混用，混了之后
+    "一个实例"与"一批实例"就读不开了。
+    """
+    who = str(row.get("to") or "")
+    if who.upper() == HANDOFF_BROADCAST:
+        if "to_task_ids" not in row:
+            return f"{who}（{HANDOFF_NO_BROADCAST_WORD}）"
+        codes = [str(x) for x in (row.get("to_task_ids") or []) if str(x).strip()]
+        return f"{who}（{'、'.join(codes) if codes else HANDOFF_EMPTY_BROADCAST_WORD}）"
+    code = str(row.get("to_task_id") or "").strip() if "to_task_id" in row else ""
+    return f"{who}（{code or HANDOFF_NO_CODE_WORD}）"
+
+
+def _handoff_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """交接行补两格给人看的「发 / 收」，并把两个编号格归一成"永远给得出"的形状。
+
+    为什么要归一：声明面（`HandoffRow`）里那两格是必填的，而盘上它们是"有就带上"
+    （改前的旧行两格都没有）。归一成 `""` / `[]` 之后，"没有编号"这件事仍然由
+    :func:`handoff_sender_label` / :func:`handoff_to_label` 说清 —— 它们按盘上的原样
+    算，所以"那一格在不在"这条三态在渲染里没有丢。
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        one = dict(row)
+        one["sender_label"] = handoff_sender_label(one)
+        one["to_label"] = handoff_to_label(one)
+        one.setdefault("to_task_id", "")
+        one.setdefault("to_task_ids", [])
+        out.append(one)
+    return out
+
+
 def artifacts_face(root: str | Path, store: Any = None, *,
                    run_dir: str | Path | None = None,
                    project_dir: str = "") -> dict[str, Any]:
@@ -1600,7 +1730,9 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     - `ledger`：`artifacts.read_ledger`（行键 9 个：`at/path/sha256/bytes/producer/`
       `kind/task_id/exit_code/note`）；另给 `ledger_verify`（`artifacts.verify_entries`，
       逐行"盘上现在的 sha 与台账里记的一样吗"）；
-    - `handoffs`：`manuscripts.read_rows`（行键见 `tests/conftest.py` 的夹具）；
+    - `handoffs`：`manuscripts.read_rows`（行键见 `tests/conftest.py` 的夹具），另补
+      `sender_label` / `to_label` 两个给人看的格子（`A（t-000002）` 那种形态，见
+      :func:`handoff_to_label`）—— 角色名与编号各占一格，谁也不覆盖谁；
     - `checks` / `style`：`out/paper/ACCEPTANCE-CHECKS.json` 与 `out/review/REPORT-STYLE.json`；
     - `secretary`：`out/secretary/*.jsonl`；
     - `products`：六件产物（见 :func:`run_products`）；
@@ -1643,7 +1775,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     # ---- 交接手稿
     try:
         got_ms, ms_bad = MS.read_rows(root_p)
-        out["handoffs"] = got_ms
+        out["handoffs"] = _handoff_rows(got_ms)
         ms_path = MS.handoffs_path(root_p)
         ms_state = "ok" if got_ms else ("absent" if not Path(ms_path).is_file()
                                         else "empty")
@@ -2353,12 +2485,13 @@ CHAT_LINES_MAX = 300
 #: 说给谁听"，不是"发信人是不是主控"（见 :func:`_chat_message_who`）。
 CHAT_WHO = ("user", "conductor", "team")
 
-#: 公共频道的落库字面量（与 `agent_loop.PUBLIC` 同一个字符串；`send_message` 按它把
-#: `channel` 写成 `"public"`）。
+#: 公共频道在 `to` 那一格的落库写法（`send_message` 按它把 `channel` 写成 `"public"`）。
+#: 它是唯一的写法：旧行里那个 legacy 字面量由 `channel == "public"` 那一半认出来
+#: （历史行同样带着 `channel`），这一层不产生新写法、也不需要第二份词表。
 #:
 #: 为什么不 import 写侧那一格：`readers` 读的是盘上的字面量，不是写侧的常量；为了一个
 #: 字符串把整个 `agent_loop` 拉进只读层不值得（同 `_ROSTER_DIR` 的口径）。
-CHAT_PUBLIC = "#public"
+CHAT_PUBLIC = "ALL"
 
 
 def _chat_clip(raw: Any, limit: int = CHAT_LINE_CLIP) -> tuple[str, bool]:
@@ -2457,7 +2590,7 @@ def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, st
     判据是收信人，不是发信人（D-62，业主 2026-10-24：「看M对话public形式为什么也会直接
     让用户可见」）：
 
-    - `to == #public`（或 `channel == "public"`）⇒ `team`：公共频道的语义是"发给树上的人"
+    - `to == ALL`（或 `channel == "public"`）⇒ `team`：公共频道的语义是"发给树上的人"
       （`agent_loop.public_visibility` 逐条写了可见面：框架通报全树可见，代理自己发的只对
       直接父/直接子可见），它不是"对用户说的话"。发信人是主控也一样 —— 改前那一版只按
       "发信人是不是 M"分档，于是主控的派活通告被印成主控对用户的回答，`channel` 只被拼进
@@ -2468,7 +2601,7 @@ def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, st
       它们不是对用户说的话，页面把这一档默认折起来（见 `CHAT_WHO`）。
 
     标题要说清去向：广播那一行写成「主控广播 → 全树（public）」，不许写成
-    `M → #public（public）` 那种"看了也不知道这一条是发给谁的"形态。
+    `M → 某个人（public）` 那种"看了也不知道这一条是发给谁的"形态。
     """
     from .. import userio as U
 
@@ -2510,13 +2643,13 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     | `agent_interjection`（`from` = 用户） | `user` | 插话正文 |
     | `user_question` | `conductor` | 主控问的话 + 选项 + qid |
     | `agent_message`（主控 → 用户，私聊） | `conductor` | 主控对用户的回答 |
-    | `agent_message`（公共频道 `#public`，谁发的都一样） | `team` | 一段广播（标题写"主控广播 → 全树（public）"） |
+    | `agent_message`（公共频道 `ALL`，谁发的都一样） | `team` | 一段广播（标题写"主控广播 → 全树（public）"） |
     | `agent_message`（其余私聊） | `team` | `谁 → 谁（频道）` |
     | `agent_run_end`（role=M，有 final） | `conductor` | 主控这一趟的交付 |
     | `agent_run_end`（别的角色，有 final） | `team` | 那个角色的交付 |
 
     分档判据是"这句话说给谁听"，不是"发信人是不是主控"（D-62）：公共频道的广播
-    （`to=#public`）发给的是树上的人，它不进 `conductor` 那一档 —— 改前那一版只按发信人
+    （`to=ALL`）发给的是树上的人，它不进 `conductor` 那一档 —— 改前那一版只按发信人
     分档，把主控的派活通告印成了"主控对你说的话"。逐档判据见 :func:`_chat_message_who`
     与 :func:`_chat_delivery_who`。
 
@@ -2633,7 +2766,7 @@ def chat_face(root: str | Path, sid: str = "", *,
 
     分档那一格（D-62，业主 2026-10-24）：`who` 判的是"这句话说给谁听"，不是"发信人是
     谁"。`conductor` 只收说给用户听的那几条（主控私聊回答 / `ask` 反问 / 收工交付）；
-    主控的公共频道广播（`to=#public`）归 `team` —— 它发给的是树上的人，把它摆在
+    主控的公共频道广播（`to=ALL`）归 `team` —— 它发给的是树上的人，把它摆在
     "主控对你说的话"那一档等于对读者撒谎。`team` 那一档页面默认折叠。
     """
     root_p = Path(str(root))
@@ -3002,6 +3135,25 @@ def _roster_states_of(nodes: Sequence[Mapping[str, Any]], *,
             "labels": dict(AGENT_STATE_LABELS)}
 
 
+def _roster_root_identity(role: str, name: str) -> tuple[str, str]:
+    """根节点的身份：它不在任何人的名册里，名字固定是主控（业主 2026-10-26）。
+
+    业主原话：「顶层能不能标 M 啊，unknown 很怪」—— 改前页面在这一格显示
+    「（顶层·无名册名）」加一枚 `unknown` 角色徽标，而那两格空串并不是"读坏了"：
+    根是顶趟那一股，它确实不在任何人的名册里（名册只记"某个父名下有哪些子"）。
+
+    所以读侧把它补成主控：`role` / `name` 两格空串 ⇒ `schema.CONDUCTOR_ROLE`
+    （同一个常量，不另写一份字面量）。这是读侧给顶层定的身份，不是名册分配的名字：
+    `roster_add` 改不了它（它只写 `<父>.jsonl` 里属于某个父的那些项，而根不是谁的子）。
+
+    只补空串：写侧真给了名字就照写侧，本层不覆盖盘上事实。调用方只在根节点上调它
+    （判据：`parent_task_id` 是空串、`depth == 1`）；子节点的空名仍然按原样交给页面。
+    """
+    from ..schema import CONDUCTOR_ROLE as M  # noqa: PLC0415 - 只取一个常量，不为它动模块级 import
+
+    return (str(role or M), str(name or M))
+
+
 def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 inbox_items: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
     """`GET /api/roster` 的读模型：当前工作区整棵名册树（只读、三态）。
@@ -3013,18 +3165,30 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | 字段 | 盘上来源 |
     |---|---|
     | `task_id`（节点键） | 这一项"建项那件活"的绝对编号（只在名册项一行都读不到活编号时降级成 `<父>/<名>`）；它只是页面用的键，身份是 `owner` + `name` |
-    | `name`（名册名） | `<父>.jsonl` 里这一项的 `name`（根不在任何人的名册里 ⇒ 空串） |
-    | `role` | 同一行的 `role`（读不到 ⇒ 台账 `tasks` 的 `role`） |
+    | `name`（名册名） | `<父>.jsonl` 里这一项的 `name`（根不在任何人的名册里 ⇒ 读侧补成主控，见下） |
+    | `role` | 同一行的 `role`（读不到 ⇒ 台账 `tasks` 的 `role`；根同样补成主控） |
     | `parent_task_id` | 父节点键（父那一份名册里接走父的那个名册项的节点键） |
-    | `parent_name` | 父节点的 `name`（现算，不另存） |
+    | `parent_name` | 父节点的 `name`（现算，不另存；父是根时它就是下一条补出来的那个名字） |
     | `children[]` | 这一项名下那些名册项（各带 `task_id` 节点键 + `name` + `role` + `retired`） |
     | `tasks[]` | 这个子代理接过的每一件活：`task_id` / `role` / `status` / `started_at` / `ended_at` / `task_found` / `brief` / `detail`（调用流水来自 `<父>-index.jsonl`，状态与时间来自 `data/tasks.json`） |
     | `retired` / `retired_branch` | 折叠后的 `retired` / 那一行的 `branch` |
     | `brief` / `brief_source` / `surface` | 这一项的 `brief` / `brief_source` / `surface` |
     | `status` / `task_found` / `in_flight` | 最近一件活的状态 / 它的活是否都在台账里 / 这一项名下有几件在飞（`pending`+`running`） |
     | `state` / `state_reason` | 三态（在飞 / 待机 / 静默 / 未读到），判定只有 `conductor.agent_state` 一处；`state_reason` 是"为什么判成这一格"的那句人话（`unknown` 时必有） |
+    | `stalled` / `stalled_sec` / `stalled_reason` | 疑似停滞（`conductor.agent_state` 的同一格）：最近一步离现在多少秒（`out/steps/<台账号>.json` 的落痕）。`state` 仍是 `flying` —— 停滞不改三态，也绝不许因此销号（停滞不等于静默） |
     | `inbox` | 这一项名下所有活收到的板项行（见 :func:`_roster_inbox`） |
     | `depth` | 名册链现算：根 = 1（口径写在下面） |
+
+    ## 根的名字固定是主控（业主 2026-10-26：「顶层能不能标 M 啊，unknown 很怪」）
+    根（`parent_task_id` 是空串、`depth == 1`）不在任何人的名册里 —— 名册只记
+    "某个父名下有哪些子"，而根不是谁的子 —— 所以盘上读不到它的 `name` 与 `role`
+    （两格都是空串）。这不是"读坏了"，但页面照原样画出来是「（顶层·无名册名）」
+    加一枚 `unknown` 角色徽标，读的人以为这一格没查到。
+
+    所以这一层把那两格补成主控（:func:`_roster_root_identity`，常量取
+    `schema.CONDUCTOR_ROLE`）：根的名字是 `M`、角色也是 `M`。这是读侧给顶层定的
+    身份，不是名册分配的名字，不能靠 `roster_add` 改（它只写 `<父>.jsonl` 里属于某个
+    父的那些项）。子节点一律不补名：它们的名字只可能来自名册，空串就是"名册上没有"。
 
     ## 两份形状，同一份读（业主 2026-10-24）
     业主原话：「名册按树展开，不只是简单按层展开。」⇒ 这个读数里有两份形状，
@@ -3516,13 +3680,42 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 if str(cell.get("state") or "") == state and str(cell.get("reason") or ""):
                     state_reason = str(cell.get("reason") or "")
                     break
+        # 疑似停滞（`conductor.agent_state` 的同一格）：一个节点接过好几件活 ⇒ 只要有一件
+        # "在飞却没动静"就标出来，秒数取最大的那一件（最久没动的）。它不是第四档：
+        # `state` 照旧是 flying，销号门也照旧按"在飞"拒绝 —— 停滞不等于静默。
+        stalled = False
+        stalled_sec: float | None = None
+        stalled_reason = ""
+        if not states_problem and state == "flying":
+            for one in state_ids:
+                cell = three.get(one) or {}
+                if not cell.get("stalled"):
+                    continue
+                sec = cell.get("stalled_sec")
+                if stalled_sec is None or (isinstance(sec, (int, float)) and sec > stalled_sec):
+                    stalled_sec = sec if isinstance(sec, (int, float)) else stalled_sec
+                if not stalled_reason:
+                    stalled_reason = str(cell.get("stalled_reason") or "")
+                stalled = True
+        # 根（`parent_task_id` 是空串）不在任何人的名册里 ⇒ 它的 role / name 那两格
+        # 盘上是空串，补成主控（见 :func:`_roster_root_identity` 与 docstring 那一节）。
+        # 子节点一律不补：它们的空名照原样交给页面（那是"名册上没有"，不是"它是主控"）。
+        node_role = str(row.get("role") or current.get("role") or "")
+        node_name = str(row.get("name") or "")
+        if not parent_tid:
+            node_role, node_name = _roster_root_identity(node_role, node_name)
+        # 父的名字现算（不另存）：父是这一棵树的根时，它就是上面补出来的那一个 ——
+        # 否则"根叫 M"与"它的子说父没有名册名"会互相打脸。
+        parent_name = str(parent_row.get("name") or "")
+        if parent_tid and parent_tid in roots:
+            _, parent_name = _roster_root_identity("", parent_name)
         node: dict[str, Any] = {
             "task_id": tid,
-            "name": str(row.get("name") or ""),
-            "role": str(row.get("role") or current.get("role") or ""),
+            "name": node_name,
+            "role": node_role,
             "depth": int(depth),
             "parent_task_id": str(parent_tid),
-            "parent_name": str(parent_row.get("name") or ""),
+            "parent_name": parent_name,
             "children": [{"task_id": k,
                           "name": str((node_row.get(k) or {}).get("name") or ""),
                           "role": str((node_row.get(k) or {}).get("role") or ""),
@@ -3541,6 +3734,12 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             # 三态（`conductor.agent_state` 是唯一实现）+ 那一句"为什么是这一档"。
             "state": state,
             "state_reason": state_reason,
+            # 疑似停滞（业主 2026-10-26 第二条）：`state` 仍是 flying；这一格只是
+            # "它最近一步离现在多久"，页面上画在徽标旁边。`stalled_sec` 是 `number | null`
+            # （null = 这一格没读到，不是 0）。
+            "stalled": stalled,
+            "stalled_sec": stalled_sec,
+            "stalled_reason": stalled_reason,
             "task_found": bool(task_readings) and all(tr["task_found"] for tr in task_readings),
             "in_flight": (live if out["tasks_tri"] == TRI_COMPUTED else None),
             "inbox": _roster_inbox(inbox_rows, tasks_tri=out["tasks_tri"],
@@ -3856,11 +4055,21 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
       # 2026-10-23（业主：命题要标注非平凡度、第 4 位按路径显示、引文读数分档）：
-      # 这十格都是读模型的现算读数（`_statement_readings`），不是 `schema.Statement`
+      # 这十一格都是读模型的现算读数（`_statement_readings`），不是 `schema.Statement`
       # 的字段。`nontriviality` 是 `number | null` —— `null` 是"未判"，不是 T0。
+      # 2026-10-26（D15'）多一格 `nontriviality_word`：页面直接印的那个词
+      # （`T0`…`T4` / `不适用` / `未判`）。`nontriviality_tri` 多第三个取值
+      # `not_applicable`（概念 / 定义行没有证明正文 ⇒ 判档这一问对它不成立）。
+      # 词不借 `nontriviality_label` 那一格：`label` 只装档位名，否则"有没有档位"
+      # 这个判据就被一个显示词抹掉了。
       ("quote_state", "string"),
       ("nontriviality", "number | null"), ("nontriviality_label", "string"),
       ("nontriviality_meaning", "string"), ("nontriviality_tri", "string"),
+      ("nontriviality_word", "string"),
+      # 2026-10-26（D16）再一格 `nontriviality_matched_by`：档位是靠哪一格对上命题行的
+      # （`stmt_id` 按号 / `sha256` 旧行回退 / 空串 = 没判过）。它是台账的来历读数，
+      # 不是显示词；页面不印它，但"按号命中"与"靠正文 sha 回退"必须分得开。
+      ("nontriviality_matched_by", "string"),
       ("formal_paths", "FormalPath[]"),
       # 2026-10-23 第二批（业主：五元位每一位一格）：前四格是第 1/2/3/5 位各自的
       # 状态词（`evidencebits.BIT_STATES` 那四档），第 4 位不在这里 —— 它是二维的，
@@ -3960,14 +4169,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("HandoffRow",
-     "manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个键；"
-     "`revises`/`kind`/`ref_problems` 是「有就带上」的三栏）",
+     "manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个必填键；"
+     "`revises`/`kind`/`ref_problems`/`to_task_id`/`to_task_ids` 是「有就带上」的几栏）",
      (("id", "string"), ("to", "string"), ("sender", "string"), ("summary", "string"),
       ("body", "string"), ("refs", "string[]"), ("sha256", "string"),
       ("sid", "string"), ("task_id", "string"), ("format", "string"),
       ("bytes", "number"), ("path", "string"), ("note", "string"),
       ("created_at", "string"), ("revises?", "string"), ("kind?", "string"),
       ("ref_problems?", "Record<string, string>"),
+      # 收件人的绝对编码（Q2，2026-10-26）：`to_task_id` = 具体收件人的台账号，
+      # `to_task_ids` = 广播面（`to=ALL`）的编号列表。写侧只在这一行真有编号时才落
+      # 这两个键 ⇒ 读模型把它们归一成"永远给得出"（缺 ⇒ 空串 / 空列表），而
+      # 「旧账无号」那一档由下面两格说清（`handoff_to_label` 按盘上的原样算）。
+      ("to_task_id", "string"), ("to_task_ids", "string[]"),
+      ("sender_label", "string"), ("to_label", "string"),
       # 手稿号是裸号（编号空间就是账本行号）⇒ 拿它当事件口令会误命中，
       # 所以这一栏的 `by_task_id_tri` 是 `not_applicable`（见 `_LEDGER_ROW_TOKENS`）。
       ("by_role", "string"), ("by_role_source", "string"),
@@ -4015,6 +4230,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("kind", "string"), ("expects", "string"), ("item_state", "string"),
       ("item_close", "string"), ("seen_by", "string"), ("seen_step", "number | null"),
       ("keep_alive", "boolean"),
+      # 2026-10-26（D22 的连带）：父代理退场结算写成的那一格（`schema.child_ending`
+      # 的三档里只有"被父退场掐断"那一档为真）。它是 `Task` 的列，盘上有它就得上
+      # 声明 —— 否则契约 C 会报"后端有而 types.ts 没有"，而那一格正是剪断与交付
+      # 分不开的地方（跨 lane 的连带，由 Q2 这一批顺手补上）。
+      ("settled_at_parent_exit", "boolean"),
       # 任务行的编号就是它自己的 `task_id`（按它反查，命中的是这一趟自己的收尾事件）。
       # 角色这一格照业主的口径只认 `created_by`（Task 没有那一栏）⇒ 空串。
       ("by_role", "string"), ("by_role_source", "string"),
@@ -4118,6 +4338,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 三态（在飞 / 待机 / 静默 / 未读到）与"为什么是这一档"的那一句人话。
       # 判定只有 `conductor.agent_state` 一处；`state_reason` 在 `unknown` 时必有。
       ("state", "string"), ("state_reason", "string"),
+      # 疑似停滞（业主 2026-10-26 第二条）：`state` 仍是 flying 的那一格旁边多一个读数
+      # —— 最近一步离现在多少秒。`stalled_sec` 是 `number | null`（null = 没读到，不是 0）。
+      ("stalled", "boolean"), ("stalled_sec", "number | null"),
+      ("stalled_reason", "string"),
       ("in_flight", "number | null"), ("inbox", "RosterInbox"),
       # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
       ("tasks", "RosterTask[]"),
@@ -4280,7 +4504,9 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
 
     所以这一档三件事一起给：
     1. `nodes` 照给（`task_id` / `role` / `parent_task_id` / `depth` / `status`），
-       每个节点带 `registered=False` 与 `name=""`（它确实没有名册名）；
+       每个节点带 `registered=False` 与 `name=""`（它确实没有名册名）；唯一的例外是
+       根那一行：与名册那一侧同一条口径，它的 `role` / `name` 空串补成主控
+       （见 :func:`_roster_root_identity`）；
     2. `coverage.unrostered` 点名这些编号（"名册上没有它们"是结论，不是缺省）；
     3. `answer` 仍然是 `"unknown"`（名册那一格没读到），但 `reason` 里说清
        "下面这棵树来自台账，不是名册" —— 三态不折平，页面上却看得见人。
@@ -4327,9 +4553,19 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
         kids = [{"name": "", "role": str(k.get("role") or ""), "task_id": str(k.get("task_id")),
                  "retired": False} for k in kid_rows]
         status = str(row.get("status") or "")
+        node_depth = depth(tid)
+        # 与名册那一侧同一条口径：根（`depth == 1`）的 role / name 空串补成主控。
+        # 这一档其余节点的 `name` 仍然是空串 —— 它们确实没有名册名（台账里没有名字）。
+        node_role = str(row.get("role") or "")
+        node_name = ""
+        if node_depth == 1:
+            node_role, node_name = _roster_root_identity(node_role, node_name)
+        parent_name = ""
+        if parent and parent in roots:
+            _, parent_name = _roster_root_identity("", parent_name)
         nodes.append({
-            "task_id": tid, "name": "", "role": str(row.get("role") or ""),
-            "parent_task_id": parent, "parent_name": "",
+            "task_id": tid, "name": node_name, "role": node_role,
+            "parent_task_id": parent, "parent_name": parent_name,
             "children": kids, "retired": False, "retired_branch": "",
             # 这一档整棵树都来自台账：子数就是台账子数，名册项数恒为 0，
             # 于是每一个子都"没落名册"（它们确实不在任何名册文件里）。
@@ -4352,7 +4588,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
                       "open_total": None, "other": None, "by_state": {}, "by_kind": {},
                       "items": [], "more": 0,
                       "reason": "名册没读到 ⇒ 这一档按台账兜底，收件箱未查"},
-            "depth": depth(tid), "registered": False,
+            "depth": node_depth, "registered": False,
         })
         for kid in kids:
             walk(kid["task_id"])
@@ -4420,6 +4656,18 @@ PROBLEM_LITERATURE_UNREADABLE = "literature_unreadable"
 PROBLEM_USES_UNREADABLE = "uses_unreadable"
 PROBLEM_ADMITTED_WITHOUT_ROW = "admitted_without_row"
 PROBLEM_DOWNLOAD_CLAIMED_ABSENT = "download_claimed_but_absent"
+#: 2026-10-26（Q16 第 ⑥ 条）：同一秒入库条数超过阈值的读数。信息格，不是门 ——
+#: 它不进 `_library_admission`、不改任何一条显示与否，只把"这一批看起来是整批搬进来的"
+#: 这件事留痕（真机 `projects/mp3-r3` 正是 10 条落在同一秒、`relevance` 48/48 全空）。
+PROBLEM_BULK_ADMISSION_SUSPECTED = "bulk_admission_suspected"
+
+#: "同一秒入库超过几条"算疑似批量（Q16 第 ⑥ 条那个 N）。
+#:
+#: 为什么是 5 而不是 10：一次 `lit.admit` 至多 10 条，所以同一秒 6..10 条在合法情形下
+#: 也可能出现（一次调用结算十行）。但 Q16 之后每一条合法的入库都必须带 `relevance`，
+#: 于是"条数 > 5 且其中至少一条没有 relevance"这两个条件一起才说明是整批搬进来的。
+#: 单看条数会把合法的一次批量入库也点成嫌疑，那会让这条读数变成噪音（噪音等于没有读数）。
+SUSPECT_BULK_ADMITTED_PER_SECOND = 5
 
 
 def _library_table(root_p: Path, table: str) -> tuple[list[dict], str, str]:
@@ -4516,9 +4764,16 @@ def _library_admission(row: Mapping[str, Any], *,
     """这一篇算不算「正式入库」：`(admitted, basis)`，`None` = 判不出。
 
     唯一判据：候选台账（`lit_candidates`）里这一篇那一行的 `status == "admitted"`
-    （schema 原话：「admitted —— 已正式入库：`lit_id` 必须非空」）。同一张词表上的
-    另外四档 `pending` / `withdrawn` / `rejected` / `cleared` 一律按「没入库」处置 ——
-    它们与 `admitted` 分得开，正是这张表存在的理由。
+    （schema 原话：「admitted —— 已正式入库：`lit_id` 必须非空」）。同一张词表上
+    另外两档现行值 `pending` / `rejected` 一律按「没入库」处置 —— 它们与 `admitted`
+    分得开，正是这张表存在的理由。
+
+    2026-10-26（Q16）之后状态只有三态：盘上的历史档 `withdrawn` / `cleared` 由
+    `litstage.fold_legacy` 折成 `rejected`（+ `withdrawn_by_reviewer` / `over_cap`），
+    所以它们本来就不是 `admitted`，这一格一个字都没改（业主 Q16 第 ④ 条：
+    入库判据仍然只读 `status == "admitted"`）。这里刻意不引入"没有 relevance
+    就不算入库"的读法：提交闸问的是「A 判过没有」，这一面问的是「它在不在库里」，
+    两个问题；把后者改严会让真机上那 33 条已登记的文献从文献库页上消失。
 
     没有候选行 ⇒ 判不出（返回 `None`）：调用方不显示它，并在 `problems` 里留一条
     `admission_undecidable`。业主 2026-10-24 的裁定：不退回 `literature.matched`
@@ -4532,6 +4787,39 @@ def _library_admission(row: Mapping[str, Any], *,
     if not isinstance(cand, Mapping):
         return None, ""
     return (str(cand.get("status") or "") == "admitted"), ADMISSION_BASIS_CANDIDATE
+
+
+def _bulk_admission_problems(cand_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
+    """同一秒入库条数超过阈值 ⇒ 一条 `bulk_admission_suspected` 读数（Q16 第 ⑥ 条）。
+
+    这一格只是信息：它不参与 `_library_admission`、不改变任何一条显示与否，
+    所以"文献库该显示几篇"与有没有它无关。它有存在的价值，是因为真机上那条可疑的
+    路径（A 的自动链路整批 truncate）留下的痕迹只有两处：`admitted_at` 落同一秒、
+    `relevance` 一片空。单看任何一处都不足以说"这是整批搬进来的"，两处一起才是。
+
+    两个条件同时成立才记（阈值 > 5 且组里至少一条没有 relevance）：一次合法的
+    `lit.admit` 也能在同一秒结算 10 行，但那 10 行今天必须各带一句 relevance。
+    """
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    for row in cand_rows:
+        if str(row.get("status") or "") != "admitted":
+            continue
+        at = str(row.get("admitted_at") or "").strip()
+        if at:
+            groups.setdefault(at, []).append(row)
+    out: list[dict[str, str]] = []
+    for at, group in sorted(groups.items()):
+        if len(group) <= SUSPECT_BULK_ADMITTED_PER_SECOND:
+            continue
+        bare = [row for row in group if not str(row.get("relevance") or "").strip()]
+        if not bare:
+            continue
+        out.append({"code": PROBLEM_BULK_ADMISSION_SUSPECTED,
+                    "detail": (f"{at} 这一秒入库 {len(group)} 条，其中 {len(bare)} 条没有 "
+                               "relevance ⇒ 疑似批量入库（一次通过上限的整批搬入）。"
+                               "这不是门：它不改本面任何一条的显示，只是留痕 —— "
+                               "判定该不该在库里仍然只看 status=admitted")})
+    return out
 
 
 def _library_uses(*, statements: Sequence[Any],
@@ -4763,6 +5051,11 @@ def library_face(root: str | Path) -> dict[str, Any]:
         add_problem(PROBLEM_ADMITTED_WITHOUT_ROW,
                     "候选台账说这几篇已入库，而 literature 表里没有它们的行："
                     + "、".join(dangling))
+
+    # 2026-10-26（Q16 第 ⑥ 条）：同一秒整批入库的读数。信息格，不是门 ——
+    # 它加在、也只加在 `problems` 里，`works` 与 `count` 一个字都不改。
+    for item in _bulk_admission_problems(cand_rows):
+        add_problem(item["code"], item["detail"])
 
     data.update({"works": works, "count": len(works),
                  "rows_total": len(lit_rows), "undecidable": len(undecidable)})

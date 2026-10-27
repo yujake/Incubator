@@ -87,6 +87,8 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ..canonical import json_default
+
 __all__ = ["HANDLERS", "ROUTES", "WARM_JOB_FILE",
            "WARM_JOB_STATES", "WARM_LEANS", "handle_cache_status", "handle_cache_warm",
            "warm_job", "writes_allowed"]
@@ -223,7 +225,8 @@ def _write_record(root: Path, payload: Mapping[str, Any]) -> tuple[bool, str]:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2) + "\n",
+        tmp.write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2,
+                                  default=json_default) + "\n",
                        encoding="utf-8", newline="\n")
         os.replace(tmp, path)
     except OSError as exc:

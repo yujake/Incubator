@@ -683,8 +683,8 @@ STATE_UNKNOWN_OBJECT = "unknown_object"
 def model_kind(llm: Any) -> str:
     """这个对象是哪一类模型（唯一判据）。
     
-    - `seam`：标准缝（`llmseam.LlmSeam` 一族）⇒ 走它的真 API `ask_json`；- `client`：裸 client（`llm.Client`
-    那一族）⇒ 走 `.complete` 并自行解析 JSON；- `none`：没接线（`None`）；- `unknown`：认不出。
+    - `seam`：标准缝（`llmseam.LlmSeam` 一族）⇒ 走它的真 API `ask_json`；- `client`：裸 client（有
+    `.complete` 的那一族）⇒ 走 `.complete` 并自行解析 JSON；- `none`：没接线（`None`）；- `unknown`：认不出。
     
     ## 为什么必须收成一处
     

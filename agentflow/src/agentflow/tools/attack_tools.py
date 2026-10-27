@@ -411,9 +411,7 @@ def _attack_pick_next_subgoal(subgoals):
 @tool(
     "attack.create_plan",
     (
-            "为一个难题立项（预算四类键缺一不可，不完整就拒绝；每条子目标必须给 "
-            "testable（怎么算做成了）—— 没写就整笔拒 subgoal_without_testable，"
-            "计划一行都不落）。同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id。"
+            "为一个难题立项（预算四类键缺一不可，不完整就拒；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同一 problem_key 已有未终结的计划返回已有 plan_id。"
             ),
     {
            "type": "object",

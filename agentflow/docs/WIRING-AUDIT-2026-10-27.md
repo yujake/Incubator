@@ -85,7 +85,7 @@ attack_plans.history 里带走 deps_refused 与那条 finding（下一轮提示�
 
 | 缺口 | 位置 | 差哪一根线 |
 |---|---|---|
-| `proof_route_of` / `proof_routes_of` 全仓 0 个非测试调用点 | `secretary.py:6866 / :6844` | `_proof_routes` 被 `record_statement:5038` 写进 statements 行之后，没有任何读侧调它回到人眼前。应该在哪调：`table.get` / `table.list` 的读数，或 M 的 `conductor.ledger(view="tree")` 每一行带一格 |
+| `proof_route_of` / `proof_routes_of` 全仓 0 个非测试调用点 | `secretary.py:6866 / :6844` | `secretary.PROOF_ROUTES_KEY` 那一格被 `record_statement:5038` 写进 statements 行之后，没有任何读侧调它回到人眼前。应该在哪调：`table.get` / `table.list` 的读数，或 M 的 `conductor.ledger(view="tree")` 每一行带一格 |
 | 挂机没有循环层支 | `agent_loop.py:5622-5637` | `_deliver_mailbox` 之后、`ask_step` 之前要有一层：本趟有 `wait_for` 的 pending waiter 且无到期唤醒 ⇒ 不调模型，改为按 `max_wait_sec` / 下一个 `due_at` 睡到最近的事件（并且 `parked_steps` 必须保持 0） |
 | F 的秘书没带缝（新） | `agent_f/core.py:1409` | `for_role("F", …)` 换成 `for_role_wired("F", …)`（B 与 `table_tools` 已经这么做了）；否则这一位秘书永远判不了命题 |
 | 转发链的发送方秘书没带缝（新） | `tools/conductor_tools.py:2309` | 同上。转发本身不需要模型，但"这一位秘书将来要判东西"时它结构上判不了 |
@@ -134,8 +134,8 @@ attack_plans.history 里带走 deps_refused 与那条 finding（下一轮提示�
 
 检查对象是这一批新增的六件 + 一件待工具化。方法同前：定义点 → 非测试调用点
 （AST 列 `file:line`，只读盘不 import）→ 能不能从 `cli.py` / `host.py` / `@tool`
-三处入口走到 → 跑一次探针贴读数。探针脚本 `temp/probe_six.py`，读数落在
-`temp/probe_six.out`：假时钟 + 替身模型 + tmp 工作区，零模型钱。
+三处入口走到 → 跑一次探针贴读数。探针脚本是那一趟写在 temp 下的一次性脚本（已随 scratch 清理），
+读数落在同一次运行的输出里：假时钟 + 替身模型 + tmp 工作区，零模型钱。
 
 | # | 项 | 定义点 | 非测试调用点（AST） | 可达 | 探针读数 | 结论 |
 |---|---|---|---|---|---|---|

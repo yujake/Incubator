@@ -75,6 +75,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ..stop_reasons import STOP_REASONS
 from . import routes, sse
 from .state import _esc, _text
 from .writes import answer
@@ -128,58 +129,34 @@ _HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
 
 #: 停止理由 → 徽标词汇：三态加一档「停在等待用户」。
 #:
-#: 为什么它在 HTTP 层：旧壳 `webui/views.py` 退场之后（裁定 P1 的 W5 清仓），这张表
-#: 在生产路径上已经没有读者了 —— 前端 `ui/src/pages/Run.tsx` 原样显示 `stop_reason`
-#: 的文本，没有徽标表。它留在包命名空间里，是因为 `tests/test_loop_liveness.py` 拿
-#: `W._STOP_BADGES` 当"新停止理由必须登记"的落点。这条残留与"SPA 一侧该不该照它
-#: 做一张徽标表"一起写在 W5 报告里交主控裁（改前端不在本批的写面里）。
-_STOP_BADGES = {
-    "final": ("badge-pass", "跑完"),
-    "budget": ("badge-unknown", "预算用尽"),
-    # 2026-10-19 补齐：`cli.EXIT_CODE_BY_STOP` 里每一档都要在这里解释得出来，
-    # 否则界面把它显示成一个空徽标，而"为什么这一趟没跑完"当场无人能读。
-    # 判据 `tests/test_loop_liveness.py::test_every_registered_stop_reason_has_a_badge`
-    # 是从那张表现取全部取值逐条核（新增一档忘了加徽标 ⇒ 红），所以下面这几格
-    # 不是"顺手多写"，是被判据逼出来的：`stop_file` / `force_stop` / `ask_cancelled`
-    # （用户叫停那一族，退出码 4）、研究启动失败那四格（退出码 2）、`no_notify`（旧读数）。
-    "stop_file": ("badge-unknown", "用户叫停（开关文件）"),
-    "force_stop": ("badge-unknown", "用户强停"),
-    "ask_cancelled": ("badge-unknown", "问用户的等待被取消"),
-    # 研究启动失败（退出码 2）：连跑都没开始。它不是"这一趟坏了"，但也不是跑完了。
-    "checkpoint_mismatch": ("badge-fail", "检查点指纹不符"),
-    "no_checkpoint": ("badge-fail", "检查点读不到"),
-    "resume_no_transcript": ("badge-fail", "续跑重建不出记录"),
-    "already_finished": ("badge-unknown", "上一趟已收工"),
-    # 裁定 12-K 之后循环不再产生它（步数只上报、不收工），这一格留着是给历史读数
-    # 用的：旧会话记录里真有 `max_steps` 的趟，徽标表要把它们解释得出来。
-    # 与"读它去决定行为"是两件事 —— 决策点上那一格已经删了（`agent_loop._emit_settlement`）。
-    "max_steps": ("badge-unknown", "步数用尽（旧读数）"),
-    "not_wired": ("badge-fail", "没接线"),
-    "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
-    "bad_args_limit": ("badge-fail", "坏参数连击"),
-    # L-05e 之后循环不再产生它（收工没按格式填 notify 已降级成读数）；留给旧会话记录。
-    "no_notify": ("badge-fail", "收工没按格式留痕（旧读数）"),
-    # 2026-10-12 T2 真机读数加的两格：它们与上面两格都是"停下了"，但归因不同 ——
-    # "坏 JSON/坏参数"是模型说错了话，"模型超时/输出吃光"是我们没拿到能用的回答。
-    "model_timeout": ("badge-fail", "模型没返回（超时）"),
-    "model_output_limit": ("badge-fail", "思考吃光输出预算"),
-    # 2026-10-15 T5 第 8 趟 `t5h` 的真机读数加的两格：同一族"归因不同、处置不同"。
-    # 本机 DNS 失效那三次原先落成 `bad_json_limit`（"坏 JSON 连击"）—— 那句话是假的；
-    # `auth_failed` 原先也要等三次连击才停，而换 key 才是唯一可行动的路。
-    "model_unreachable": ("badge-fail", "没连上模型（网络/DNS）"),
-    "model_auth_failed": ("badge-fail", "模型没认这把 key"),
-    # `draft/37` §136：同调用 + 同读数连着到上限 ⇒ 这一趟停在"没有新事实"。
-    # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
-    "no_progress_limit": ("badge-unknown", "原地打转"),
-    "waiting_for_user": ("badge-pending", "停在等用户"),
-    # S-H（裁定 14）：父叫停了这一个子代理当前那一轮。
-    # 刻意不是 `badge-fail`：它不是出错，是"上级喊停"（与 `no_progress_limit` 同一档读数）。
-    "interrupted_by_parent": ("badge-unknown", "被父叫停"),
-    # 上行（业主 2026-10-19「父子天然双向」）：`conductor.escalate` 把卡住的那件事
-    # 写进了父的收件箱，这一趟以 `stop_reason="escalated"` 收工（退出码 5）。
-    # 刻意不是 `badge-fail`：需求送到了、台账有留痕、父下一趟读得到 —— 这是成功的中断。
-    "escalated": ("badge-pending", "已上报召唤者"),
+#: 表体不在这里写：它与 `cli.EXIT_CODE_BY_STOP` 同源于
+#: :data:`agentflow.stop_reasons.STOP_REASONS`（Q23，2026-10-26）。改前这里手写一份，
+#: `final_refused` 只进了退出码表（5），界面于是显示一个空徽标；反过来这里多一格
+#: `max_steps`（旧读数）。现在这里投影全部条目，退出码表只投影 `live=True` 的那些，
+#: 两表多出来的那一格必须是 `live=False`，判据双向钉住。
+#:
+#: 它留在 HTTP 层是因为两个既有读法都在这里：`agentflow.webui._STOP_BADGES`
+#: （`tests/test_loop_liveness.py` 与 `tests/test_the_roster_and_the_interrupt.py` 读它）
+#: 与 `W._STOP_BADGES` 这个落点。生产路径上今天没有读者 —— 前端
+#: `ui/src/pages/Run.tsx` 原样显示 `stop_reason` 的文本，不读这张表；旧壳
+#: `webui/views.py` 在 W5 退场后，这张表只剩判据与 :func:`stop_badge` 这一个渲染入口。
+_STOP_BADGES: dict[str, tuple[str, str]] = {
+    reason: (row[1], row[2]) for reason, row in STOP_REASONS.items()
 }
+
+
+def stop_badge(reason: str) -> tuple[str, str]:
+    """把一个 `stop_reason` 渲染成徽标 `(class, 文案)`，未知也一定有文案。
+
+    为什么兜底文案里带上原值：只写「未知」会让读的人不知道去查哪个词；把原值留在
+    括号里，界面上的空徽标就成了一条可检索的读数。空字符串也走这一支（旧会话记录
+    里确实有还没定论的趟）—— 它渲染成「未知收场（空）」，而不是一个空徽标。
+    """
+    key = str(reason or "")
+    got = _STOP_BADGES.get(key)
+    if got is not None:
+        return got
+    return ("badge-unknown", f"未知收场（{key or '空'}）")
 
 
 def _error_page(code: int, title: str, why: str, *, fragment: str = "") -> str:

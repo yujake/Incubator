@@ -528,14 +528,18 @@ def test_j_observed_events_counts_all_three_kinds(tmp_path, monkeypatch) -> None
     assert counts["submit"] >= 1, counts
     assert counts["reply"] >= 1, counts
 
-    # 反真空：把"投事件"打桩成空 => 三档全 0，上面三条必红。
+    # 反真空：把"投事件"打桩成空 => 各档全 0，上面三条必红。
     C.reset_observed_events()
     with monkeypatch.context() as m:
         m.setattr(C, "observe_event", lambda *a, **k: None, raising=True)
         send_message(root, sender="D", to="M", subject="说话", body="我还在做",
                      from_task_id=child)
-    assert C.observed_events()["counts"] == {"message": 0, "submit": 0, "reply": 0}, \
-        "把投事件打桩成空之后计数还在涨 —— 反真空不成立"
+    # 键集按词表现取（2026-10-26 词表加了 handoff / delivery 两档：写死三档的断言
+    # 会在"加了新事件种类而计数没跟着归零"这件事上沉默，而那正是这一条要防的）。
+    after = dict(C.observed_events()["counts"])
+    assert set(after) == set(C.EVENT_KINDS), (sorted(after), list(C.EVENT_KINDS))
+    assert all(int(v) == 0 for v in after.values()), \
+        f"把投事件打桩成空之后计数还在涨 —— 反真空不成立：{after}"
 
 
 # ============================================================ 老计时工具退场

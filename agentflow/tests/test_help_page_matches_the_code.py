@@ -641,11 +641,32 @@ FIELD_CLAIMS: tuple[FieldClaim, ...] = (
 )
 
 #: 页面点名但不是"读到器的键"的那几个名字（各有自己的出处，故单列）。
+#:
+#: 这一栏是第 3 层的出口，所以它自己也有一条判据（`test_every_registered_non_field_name_...`）：
+#: 每个名字都必须在 `src/agentflow` 里真有一处出处。没有那一半，往这里加一行就能把
+#: 一个写错的键名放行 —— 那是橡皮章，不是登记表。
 NON_FIELD_NAMES: dict[str, str] = {
     "cap_usd": "验收端点的查询参数（GET /api/acceptance?cap_usd=），不是读模型的键",
     "stop_reason": "agent_loop 的运行记录字段（cli.EXIT_CODE_BY_STOP 就是按它归的档）",
     "usage_ledger": "台账表名（TokenMeter 的累计账落点），不是某个读模型的键",
+    "roster_add": (
+        "秘书的名册登记方法 `secretary.Secretary.roster_add`（只写 `<父>.jsonl` 里属于"
+        "某个父的那些项，而根不是谁的子 ⇒ 它改不了根那一格）。它是方法名，不是任何"
+        "读模型的键 —— 2026-10-26 裁定：说明页那一句没写错（`webui/readers.py` 的"
+        "`RosterNode` 段 docstring 逐字写着同一件事），是第 3 层把\"方法名\"当成"
+        "\"键名\"量了；单列在这里，而不是把页面改歪"),
 }
+
+
+def non_field_hits(name: str) -> list[str]:
+    """`name` 在 `src/agentflow` 里出现在哪些文件（按路径排序；空 = 这个名字没有出处）。"""
+    pat = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])")
+    root = REPO / "src" / "agentflow"
+    out: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if pat.search(path.read_text(encoding="utf-8", errors="replace")):
+            out.append(path.relative_to(REPO).as_posix())
+    return out
 
 
 def _bit_name_problems(raw: str) -> list[str]:
@@ -823,3 +844,36 @@ def test_wrong_numbers_wrong_commands_and_wrong_keys_all_turn_red() -> None:
     got = _field_problems(wrong_key)
     assert got, "键名改歪了，判据却一声不吭"
     assert any("open_totl" in p for p in got), got
+
+
+# ====================================================================== 5 登记表本身
+#: `NON_FIELD_NAMES` 必须非空：它是第 3 层唯一的出口，空表就说明"页面点名的每一处
+#: 都是读到器的键"—— 而本页至少点名了几个方法名 / 表名（见那张表）。
+def test_every_registered_non_field_name_has_a_home_in_the_code() -> None:
+    """第 5 层：`NON_FIELD_NAMES` 里每个名字都必须在 `src/agentflow` 里真有一处出处。
+
+    为什么第 3 层需要这一层配着：那一层的判定是"页面上的蛇形名字必须在
+    `_all_declared()` 里"，而 `NON_FIELD_NAMES` 正是可以往 `_all_declared()` 里加词的
+    那个口子。没有本层，往口子里加一行就能放行一个写歪的键名（橡皮章）。
+
+    2026-10-26 的现场：说明页那一段写 `roster_add`，第 3 层报"契约里没有这个键名"。
+    裁定的过程是"先查它是不是真东西"，而不是"先把它删掉"：`secretary.Secretary.roster_add`
+    真实存在（`src/agentflow/secretary.py`），`webui/readers.py` 的 `RosterNode` 段
+    docstring 逐字写着同一件事（根那一格的名字不是名册分配的，`roster_add` 改不了它）
+    ⇒ 页面没写错，错在第 3 层把方法名当键名量。本层就是那次裁定的机器化：
+    名字得真有出处 ⇒ 它才是"不是键名的代码符号"，而不是"页面写歪了"。
+    """
+    problems = [
+        f"{name!r} 在 src/agentflow 里找不到出处（登记理由：{why}）\n"
+        "  两种可能：① 页面写歪了（那就改页面，不是加登记）；"
+        "② 那个符号被删了（那就删这一行登记，别让它继续放行）"
+        for name, why in NON_FIELD_NAMES.items() if not non_field_hits(name)
+    ]
+    assert problems == [], problems
+    # 反真空：登记表不许退化成空表（空表 = 第 3 层那句话没有对象）。
+    assert NON_FIELD_NAMES, "NON_FIELD_NAMES 是空的 ⇒ 这一层没有输入"
+    # 反真空（两侧）：同一套扫描，喂一个真名字必须读到，喂一个编出来的名字必须读不到。
+    # 没有这一半，"找不到出处"可以因为扫描永远返回空而永远不报。
+    assert non_field_hits("roster_add"), "扫描读不到已知真有的名字 ⇒ 它恒返回空"
+    assert non_field_hits("roster_add_typo_zz") == [], "扫描连编出来的名字也读得到"
+

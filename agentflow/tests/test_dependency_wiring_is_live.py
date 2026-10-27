@@ -415,8 +415,10 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_CARRIED, got
     assert _carried_holds(got, store, cited=THEOREM_A), got
-    rows = _deps(store)
-    assert {str(r.get("used_by")) for r in rows} == {f"stmt:{got['stmt_id']}"}, rows
+    # 只核 B 新登记那一条的依赖面：F 那一轮现在也经 B 的登记落自己的依赖边
+    # （D8：命题只经 B 的 `register_statement` 写），所以整张表里会有两组。
+    rows = [r for r in _deps(store) if str(r.get("used_by")) == f"stmt:{got['stmt_id']}"]
+    assert rows, _deps(store)
     assert {int(r.get("path_group")) for r in rows} == {1}, rows
     reading = got.get("deps_missing") or {}
     assert reading.get("manuscript_source") == SRC_CARRIED, reading
@@ -663,9 +665,10 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_CARRIED, got
     b_stmt = str(got["stmt_id"])
-    rows = _deps(store)
-    assert len(rows) >= 1, rows
-    assert {str(r["used_by"]) for r in rows} == {f"stmt:{b_stmt}"}, rows
+    # 只核 B 新登记那一条的依赖面：F 那一轮现在也经 B 的登记落自己的依赖边
+    # （D8：命题只经 B 的 `register_statement` 写），所以整张表里会有两组。
+    rows = [r for r in _deps(store) if str(r.get("used_by")) == f"stmt:{b_stmt}"]
+    assert len(rows) >= 1, _deps(store)
     assert {int(r["path_group"]) for r in rows} == {1}, rows
     assert {str(r["source_stmt_id"]) for r in rows} == {THEOREM_A, THEOREM_B}, rows
     assert (got.get("deps_missing") or {}).get("state") == "present", got

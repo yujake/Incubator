@@ -469,11 +469,20 @@ def _fresh_build() -> tuple[int, str]:
     为什么直接起 `node node_modules/vite/bin/vite.js build` 而不走 `pnpm -C ui build`：
     pnpm 在 Windows 上是 `.CMD`（`subprocess` 不套 shell 起不动），而且 pnpm 11 会在跑
     脚本前先跑一次 `install`（那是另一件事）。两者真正执行的都是这一条命令。
+
+    为什么 `encoding="utf-8"` 不是装饰：内容比对走 `_tree_hashes`（文件哈希），与 stdout
+    无关，所以缺了它比对照样成立 —— 坏掉的是这一格的诊断。node / vite 按 UTF-8 往
+    stdout / stderr 写，而 `text=True` 不给编码时 Python 用本机 locale（中文 Windows =
+    GBK）去解它：读线程抛 UnicodeDecodeError、`proc.stdout` / `proc.stderr` 变成空串，
+    于是构建真失败时 `tail` 是空串，skip 理由那句「构建这一步没查成（exit 1）⇒ …：」
+    后面什么都接不上 —— 那正是把"没查成"写成"查过了"的形态（`P16`）。同
+    `tests/test_roster_tree_renders_all_nodes.py` 与 `tests/test_webui_three_state_reading.py`
+    那两处判据的口径（它们同样要起 node 读它的输出）。
     """
     node = shutil.which("node")
     vite = UI / "node_modules" / "vite" / "bin" / "vite.js"
     proc = subprocess.run([str(node), str(vite), "build"], cwd=str(UI),
-                          capture_output=True, text=True, timeout=900)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
     tail = ((proc.stderr or "") + (proc.stdout or "")).strip().splitlines()
     return proc.returncode, " / ".join(tail[-4:])
 

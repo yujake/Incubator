@@ -13,7 +13,7 @@
 | D9 | L 判"漏一步"⇒ B 的收件箱里真有一条汇报（点名 stmt_id 与失败类型）；检查器自己那一档（源码编译不过）不汇报（负控） | 改前没有 `agent_l` / `proofreport`，`formalize` 的失败只落在返回值里，一条消息都没有 ⇒ B 的收件箱是空的 |
 | D10 | B 覆盖 canonical（旧文进 `proof_history`）之后重新过 V ⇒ 旧签转 stale、新签是新号；L 再形式化那一版 ⇒ 12/12 之外那一档真的变成 verified | 前半（canonical / 新旧签）改前就有，是正控；红的是与 L 相连的那两格（L 判失败与新证明形式化 ⇒ 改前 ImportError） |
 | D11 | `severity="research"` ⇒ D 收到研究请求；`normal` ⇒ 一条都不写（负控）；两跳都绕不开边表 | 改前 `B` 的出边是 `('C','H','V')`、也没有 `escalate_proof_research` ⇒ AttributeError 红 |
-| F16 | E 的工具面没有 `verify.check_formal`，但 `verify_tools.check_formal` 的函数实体仍在且可调用 | 改前 `_verify_check_formal` 的 `roles` 是 `_ROLES_WRITE`（E/F/G）⇒ "E 的工具面上没有它"当场红；函数实体一直在 |
+| F16 | E 的工具面没有 `verify.check_formal`，但 `verify_tools.check_formal` 的函数实体仍在且可调用 | 改前 `verify.check_formal` 那件工具的 `roles` 是 `_ROLES_WRITE`（E/F/G）⇒ "E 的工具面上没有它"当场红；函数实体一直在 |
 
 ## 真 Lean 与零模型
 
@@ -58,7 +58,11 @@ SID = "t"
 STEPS = 12
 
 #: 本机那一版真 Lean（绝对路径；PATH 上的 lean 可能是另一个东西）。
-LEAN = pathlib.Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
 
 

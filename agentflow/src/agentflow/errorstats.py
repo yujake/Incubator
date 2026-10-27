@@ -110,6 +110,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from . import schema as S
+from .canonical import json_default
 
 #: 没有记下角色时用的名字。空串不许静默并进某个角色（那会把一个未知算到已知头上）。
 UNKNOWN_ROLE = "（未记角色）"
@@ -234,6 +235,21 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("unknown_role", "unknown_tool",
      "src/agentflow/schema.py:2495（词表）/ src/agentflow/policy.py:302,433（产出）"),
     ("direct_write_refused", "direct_write", "src/agentflow/store.py:248（DIRECT_WRITE_REFUSED）"),
+    # ---- 时钟的两条"前置条件不成立"（p210，业主 2026-10-26）
+    #
+    # 归 `not_in_roster`：`waiter_not_resolvable` 的语义就是"这一句 wait_for 在名册
+    # （或程序簿记）里解析不到唯一一台账号"—— 与"不在你的名册里"是同一类东西，
+    # 只是被拒的是"等"而不是"说"。单独成码是为了让"散文式 wait_for 又出现了"
+    # 在读数上数得出来。
+    ("waiter_not_resolvable", "not_in_roster",
+     "src/agentflow/clock.py:310（WAITER_NOT_RESOLVABLE / `_new_timer` 的等谁核对；"
+     "拒信由 `waiter_refusal()` 拼）"),
+    # 归 `controlled_refusal`：它不是"没查成"也不是"查无此人"，是"现在没有可等的东西"
+    # （业主：「这个需要存在的计时器数大于等于1」）。与 `invalid_params` 同族：这次调用
+    # 不成立，重写一次就能过（先起一条表，或按交差收工）。
+    ("no_timers_to_wait", "controlled_refusal",
+     "src/agentflow/clock.py:330（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
+     "拒信由 `no_timers_refusal()` 拼）"),
     # ---- 直写兜底（业主 2026-10-24：「不应该是提醒智能体要走秘书，而是自动将直写请求
     # 路由到秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
     # 结局码逐条登记在 `ROUTED_CODES`（字面量），拼装只允许拼出那张表里的东西。
@@ -928,5 +944,10 @@ def render_text(stats: ErrorStats) -> list[str]:
 
 
 def stats_json(stats: ErrorStats) -> str:
-    """机器可读一行（`--json` 用）。"""
-    return json.dumps(stats.as_dict(), ensure_ascii=False, indent=2)
+    """机器可读一行（`--json` 用）。
+
+    `default=json_default`：`as_dict()` 今天全是纯 JSON 值，但它是 `--json` 那条出口的
+    唯一形态 —— 这一格一旦有非原生值（`sources` 里塞进一个 `Path` 就会），改前是
+    `TypeError` 而不是读数。纯 JSON 载荷不走 `default`，既有输出逐字不变。
+    """
+    return json.dumps(stats.as_dict(), ensure_ascii=False, indent=2, default=json_default)

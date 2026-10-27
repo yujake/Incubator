@@ -597,7 +597,14 @@ def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
     assert end1["stop_reason"] == "waiting_for_user" and qid, end1
     stopped_calls = _llm_calls(ws, "u1")
     assert stopped_calls == 1, f"停下时已经有 {stopped_calls} 次模型调用"
-    assert len(made) == 1 and len(made[0].prompts) == 1, "停了之后又发过模型请求"
+    # 守的是「收到过 prompt 的缝只有一份、而且只收到一则」，不是「造出来的缝恰好一份」：
+    # `run-agent` 装配期先建一份缝核对 `.wired`，循环启动时再建一份（实测两份、只有一份
+    # 收到过 prompt）。造几份缝与烧钱无关，收到几条 prompt 才有关 —— 所以按"用过的缝"
+    # 数，判据强度不变（有第二则可疑请求时它照样红）。
+    used = [gw for gw in made if gw.prompts]
+    assert len(used) == 1 and len(used[0].prompts) == 1, (
+        f"停了之后又发过模型请求：造了 {len(made)} 份缝，"
+        f"收到过 prompt 的有 {len(used)} 份 / {[len(gw.prompts) for gw in used]} 则")
 
     # ② inbox（刻意不带 --sid）：跨会话也看得到，且把选项打出来给人照抄
     rc2 = cli.main(head + ["inbox"])
@@ -626,9 +633,10 @@ def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
     assert end4["stop_reason"] == "final", end4
     starts = [e for e in _events(ws, "u1") if e.get("kind") == "agent_run_start"]
     assert any("resumed_from" in e for e in starts), starts
-    assert len(made) == 2, "续跑那一段没有另造一个替身？"
-    assert "三处都保留" in made[1].prompts[0], "人答的那句话没进续跑那一段的上下文"
-    assert len(made[1].prompts) == 1, "续跑应当只问一次（接着那一步之后）"
+    used4 = [gw for gw in made if gw.prompts]
+    assert len(used4) == 2, f"续跑那一段没有另起一份被用过的缝（收到过 prompt 的：{len(used4)}）"
+    assert "三处都保留" in used4[1].prompts[0], "人答的那句话没进续跑那一段的上下文"
+    assert len(used4[1].prompts) == 1, "续跑应当只问一次（接着那一步之后）"
 
 
 def test_the_commands_printed_in_the_hint_actually_run(tmp_path: pathlib.Path,
@@ -656,6 +664,15 @@ def test_the_commands_printed_in_the_hint_actually_run(tmp_path: pathlib.Path,
     assert rc == 3 and "停在等待用户" in hint, hint
 
     cmds = _hint_commands(hint)
+    # 首屏那一行（`cli.py` 里逐字写着「首屏不跑自检：……完整读数请跑 `agentflow doctor`」）
+    # 让同一屏多出一条整机诊断命令。它不吃 `--root`、也不看这一趟的工作区，所以下面
+    # 那条「`--root` 必须写在动词之前」对它不成立 —— 照旧按工作区命令判，就会把一条
+    # 真能跑的命令判成不能跑。摘出去的这一档只许是 doctor：别的没带 `--root` 的命令
+    # 一条都不许从这里过（这是边界，不是豁免）。
+    machine = [c for c in cmds if _argv_of(c)[:1] == ["doctor"]]
+    assert all(c == "agentflow doctor" or c.startswith("agentflow doctor ")
+               for c in machine), f"提示里出现了不是整机诊断的无 --root 命令：{machine}"
+    cmds = [c for c in cmds if c not in machine]
     assert len(cmds) >= 3, f"提示里的命令少了（至少要 inbox / answer / run-agent 三条）：{hint}"
     # 同一个提示有两处（循环的 `结论：` 那一行 + CLI 的「停在等待用户」那一行），
     # 两边给的应当是同一批命令 ⇒ 按 argv 去重之后应当正好三条。

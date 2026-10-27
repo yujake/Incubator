@@ -38,13 +38,13 @@ def _run(tmp_path: pathlib.Path, replies: list[str], *, max_steps: int = 8):
 
 def test_to_all_is_the_public_channel(tmp_path: pathlib.Path):
     """正控：`{"message": {"to": "ALL"}}` 与 `#public` 等价（同一个概念两个写法归一）。"""
-    from agentflow.agent_loop import PUBLIC
+    from agentflow.agent_loop import ALL
 
     run = _run(tmp_path, [_reply({"message": {"to": "ALL", "subject": "结论", "body": "见手稿 0001"}}),
                           _reply({"final": "发完了"})])
     assert run.stop_reason == "final", run.to_dict()
     assert not run.bad_json and not run.bad_args, run.to_dict()
-    assert run.messages_sent == [PUBLIC], run.to_dict()
+    assert run.messages_sent == [ALL], run.to_dict()
 
 
 def test_a_wrong_value_is_a_correction_not_a_shape_drift(tmp_path: pathlib.Path):

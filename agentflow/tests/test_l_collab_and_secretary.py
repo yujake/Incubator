@@ -40,7 +40,11 @@ from agentflow import capabilities as C
 from agentflow import schema as S
 
 #: 本机那一版真 Lean（绝对路径；PATH 上的 lean 可能是另一个东西）。
-LEAN = pathlib.Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
 
 #: 被形式化的那条命题（B 登记的原文）。

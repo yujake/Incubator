@@ -1025,8 +1025,7 @@ def _ocr_detect_text_layer(ctx, path="", lit_id=""):
 
 @tool(
     "ocr.run",
-    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（绝不返回空文本假装成功）。"
-    "可给已登记文献编号。",
+    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本假装成功）。可给已登记文献编号。",
     {
            "type": "object",
            "properties": {

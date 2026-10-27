@@ -14,6 +14,10 @@ A 作废 ⇒ 引 A 的 B 的五位一并失效 ⇒ 引 B 的 C 也一样，且�
 来源已经验证过的（我方的预备定理级/正式定理、逐字核过的引用命题），引用它时如实呈现、不重验。
 这一层把它做成一个干净集合：不在集合里的引用（还在猜想 / 已作废 / 没逐字核过）要小心 ——
 而 `attackround.inherit_defects`（I11）正是拿这个集合判"这一步有没有继承缺陷"。
+
+"逐字核过"这一档在 D1（2026-10-22 第二版）之后还多一个前提：盘上要指得出核的是哪一段
+（`quote_span`）。"自称通过、而拿不出区间"不是第三种"核过"，它连凭据都没有 —— 读侧
+把它单独读成 `no_evidence`，引用学分不给它（见 `evidencebits.QUOTE_NO_EVIDENCE`）。
 """
 from __future__ import annotations
 
@@ -30,9 +34,20 @@ def _own(stmt_id: str, *, deps: list[str] | None = None, graded: bool = False) -
     return row
 
 
-def _citation(stmt_id: str, *, verified: bool = True) -> dict:
+#: 引文核过的那一段在盘上的位置（`quote_span` 的形状见 `quoteevidence` 的区间口径）。
+SPAN = "p2:norm[4:44]"
+
+
+def _citation(stmt_id: str, *, verified: bool = True, span: str = SPAN) -> dict:
+    """一条引用命题的行：`verified=True` 时默认带着"核的是哪一段"这件证据。
+
+    D1（2026-10-22 第二版）之后"自称通过"不够：`quote_verified=True` 而 `quote_span`
+    为空的行走 `no_evidence`，引用学分是 0。所以"验证过的引用命题"这个夹具必须带上
+    区间，否则它测的不是 I4，而是"没有证据也算通过"那条已经废掉的口径。
+    """
     return {"stmt_id": stmt_id, "origin": "external_lit", "source_lit_id": "0009",
-            "quote_verified": verified, "quote_reason": "已逐字比对" if verified else "还没核"}
+            "quote_verified": verified, "quote_span": span if verified else "",
+            "quote_reason": "已逐字比对" if verified else "还没核"}
 
 
 # ============================================================ I1 级联
@@ -105,15 +120,26 @@ def test_i1_a_root_outside_the_rows_is_unknown_not_no_dependencies():
 # ============================================================ I4 干净集合
 
 def test_i4_the_clean_set_has_two_sources_with_reasons():
-    """I4：干净集合的两类来源（我方已过审的命题 / 逐字核过的引用命题），理由逐条留下。"""
+    """I4：干净集合的两类来源（我方已过审的命题 / 逐字核过的引用命题），理由逐条留下。
+
+    D1（2026-10-22 第二版）之后"核过"要指得出证据：`quote_verified=True` 而盘上
+    没有 `quote_span` 的那一行读成 `no_evidence` —— 它的"通过"复现不出来，所以
+    引用学分不给它。于是这一条两向一起测：带区间的引用命题进集合（第二类来源仍然
+    在），自称通过而拿不出区间的不进、且理由点名"证据不在盘上"。改前这一条只测
+    正向（只要 `quote_verified` 为真就给学分），那正是真机 13 行拿到学分的那条读法。
+    """
     rows = [_own("0001"), _own("0002", deps=["0001"], graded=True),
-            _citation("0003", verified=True), _citation("0004", verified=False)]
+            _citation("0003", verified=True), _citation("0004", verified=False),
+            _citation("0005", verified=True, span="")]
     got = EB.clean_statement_ids(rows)
     assert set(got["clean"]) == {"0002", "0003"}, got
     assert "预备定理级" in got["reasons"]["0002"], got["reasons"]
     assert "lit:0009" in got["reasons"]["0003"], got["reasons"]
     assert "不许当依据" in got["reasons"]["0004"], got["reasons"]
     assert "引用它要小心" in got["reasons"]["0001"], got["reasons"]
+    # 反真空：0005 与 0003 只差区间那一格 —— 抹掉区间，引用学分当场收回。
+    assert "0005" not in got["clean"], got
+    assert "证据不在盘上" in got["reasons"]["0005"], got["reasons"]
 
 
 def test_i4_a_voided_statement_is_never_clean():

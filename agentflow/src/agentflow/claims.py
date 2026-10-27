@@ -140,7 +140,7 @@ NO_CLAIM_MARKERS: tuple[str, ...] = (
     "unknown at this time", "无法作答", "无可奉告",
 )
 
-#: 行首列表标记（与 `evidence._BULLET` 同一形态；这里带上"是哪一种"的判据）。
+#: 行首列表标记（这里带上"是哪一种"的判据）。
 _LINE_MARK = re.compile(r"^\s*(?P<mark>[-*\u2022\u00b7]|\d{1,3}\s*[.、)）])\s*")
 #: 形如 `## 证据` / `# 报告` 的标题行：结构行，不是断言。
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s")

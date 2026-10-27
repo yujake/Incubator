@@ -43,7 +43,11 @@ from agentflow import leantoolchain as LT
 from agentflow.tools import verify_tools as VT
 
 #: 本机那份真 Lean（现场实测 2026-10-22：官方 4.7.0 Windows 布局）。
-LEAN = pathlib.Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+LEAN = lean_path()
 #: 环境变量档能覆盖它（判据在别的机器上跑时不必改文件，与自检那一批同一个名字）。
 ENV_REAL_LEAN = "AGENTFLOW_SELFCHECK_REAL_LEAN"
 #: 这一批判据要等一次真编译：`import` 那条链路冷启动实测 7–11 秒，给 300 秒是余量。

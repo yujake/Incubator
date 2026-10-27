@@ -2148,8 +2148,7 @@ def _doc_scan_claim(claim):
 @tool(
     "doc.compose_claim",
     (
-            "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。"
-            "可带生命周期字段（kind/status/proof_location/scope_caveat/allowed_use/frozen）。"
+            "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。"
             ),
     {
            "type": "object",
@@ -2677,8 +2676,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
     registry.register(
         ToolSpec(
             name="doc.paper_compile",
-            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写编译回执。正文由你自己写（fs.write 到那个落点）"
-            "—— 这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
+            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write 到那个落点，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
             params={
                 "type": "object",
                 "properties": {

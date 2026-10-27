@@ -454,7 +454,8 @@ def test_the_three_states_of_the_reading_are_not_flat(tmp_path: pathlib.Path):
     assert ambiguous["candidates"] == ["F1", "F2"], ambiguous
     unique = AL.roster_addresses(sec, to=PARENT_ROLE, owner=me, my_task_id=me)
     assert (unique["checked"], unique["how"]) == (True, "parent"), unique
-    # 公共频道 / 用户不是"给某个代理发消息"⇒ 不归名册管（`_emit_settlement` 同一条边界）
-    for token in (AL.PUBLIC, "ALL", "user"):
+    # 公共频道 / 用户不是"给某个代理发消息"⇒ 不归名册管（`_emit_settlement` 同一条边界）。
+    # 公共频道只有一个写法（`AL.ALL`），旧写法只在读侧折算出同一个值，所以这里不重复列它。
+    for token in (AL.ALL, "user"):
         out = AL.roster_addresses(sec, to=token, owner=me, my_task_id=me)
         assert (out["checked"], out["how"]) == (True, "outside_roster"), (token, out)

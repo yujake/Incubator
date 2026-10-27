@@ -52,12 +52,19 @@ from . import textutil as T
 from .store import Store
 
 __all__ = [
+    "CANDIDATE_DECISIONS",
     "MAX_ADMIT_PER_CALL",
     "MAX_ADMIT_PER_DELEGATION",
     "OVERLAP_HIGH_JACCARD",
     "OVERLAP_KINDS",
     "REPORT_DIR",
+    "UNDECIDED_TITLE_CHARS",
     "LitStageError",
+    "candidate_identity",
+    "fold_legacy",
+    "judged_state",
+    "undecided",
+    "undecided_reason",
     "title_terms",
     "title_jaccard",
     "overlap_check",
@@ -113,6 +120,141 @@ OVERLAP_KINDS: tuple[str, ...] = ("doi_exact", "title_jaccard")
 #: （它们是另外的角色、另外的循环）。写在 `reports/` 下之后，任何带 `fs.read` 的角色
 #: 都读得到，它也就成了台账之外唯一一份"这次检索进了哪几篇、挡了哪几篇与为什么"的证据。
 REPORT_DIR: str = "reports"
+
+#: 「待新增文献列表」现行的决策词表：三态（业主 2026-10-26 Q16 口径：
+#: 「待裁 / 入库 / 拒收」，注册即待裁）。
+#:
+#: 与 `schema.CANDIDATE_STATUSES`（五个值）的关系必须说清，否则这里就是第二份唯一真源：
+#:
+#: - `schema.CANDIDATE_STATUSES` 是「磁盘上读得进来的取值集合」—— 它必须容得下两个历史档
+#:   （`withdrawn` / `cleared`），否则老工作区的行连写回都写不回去（那是数据毁灭，不是迁移），
+#:   而那个文件是 FC-27 禁改区；
+#: - 本词表是「现在这台状态机能写、能判」的三态：本模块只写这三个值，两个历史档一律经
+#:   `fold_legacy` 在读侧折进来（`cleared` ⇒ `rejected` + `over_cap`，
+#:   `withdrawn` ⇒ `rejected` + `withdrawn_by_reviewer`）。于是写侧再也不会产出第四态。
+CANDIDATE_DECISIONS: tuple[str, ...] = ("pending", "admitted", "rejected")
+
+#: 历史档 ⇒ `(折成哪一态, 默认理由码, 事实在哪个字段里)`：读侧折算的唯一实现。
+#:
+#: `over_cap` 这一条是业主 Q16 第 ① 条点名的：「`cleared`（配额满）必须折进
+#: rejected + reason_code=over_cap，不留第四态」。`withdrawn` 走同一台机器：
+#: 「撤掉」与「拒收」的差别从此落在受控理由码上（`withdrawn_by_reviewer`），
+#: 不再多占一个状态格 —— 状态格只有一个轴：这一条判过没有。
+_LEGACY_CANDIDATE: dict[str, tuple[str, str, str]] = {
+    "cleared": ("rejected", "over_cap", "clear_reason"),
+    "withdrawn": ("rejected", "withdrawn_by_reviewer", "withdrawn_reason"),
+}
+
+#: 提交闸拒信里题名截前多少字（业主 Q16 第 ③ 条：`<slot + 标题前 40 字>`）。
+UNDECIDED_TITLE_CHARS: int = 40
+
+
+def fold_legacy(row: Mapping[str, Any]) -> dict:
+    """把一行历史档折成三态（读侧唯一的折算点；不改盘上的行，返回副本）。
+
+    折出来的行把"当初为什么走到这一档"搬进 `reject_reason`：`cleared` 的那句在
+    `clear_reason` 里、`withdrawn` 的那句在 `withdrawn_reason` 里 —— 折完之后
+    行仍然说得出理由，而不是变成一个只有状态码的空壳。理由码保留行上已有的受控取值
+    （`over_cap` / `not_screened` 这些是当初真的发生的事），只有当它缺失或不受控时
+    才退回该档的默认码。
+    """
+    out = dict(row)
+    legacy = _LEGACY_CANDIDATE.get(str(out.get("status") or ""))
+    if legacy is None:
+        return out
+    status, default_code, field = legacy
+    out["status"] = status
+    code = str(out.get("reason_code") or "")
+    out["reason_code"] = code if code in S.CANDIDATE_REASON_CODES else default_code
+    if not str(out.get("reject_reason") or "").strip():
+        out["reject_reason"] = (str(out.get(field) or "").strip()
+                               or _code_label(out["reason_code"]))
+    return out
+
+
+def judged_state(row: Mapping[str, Any]) -> str:
+    """这一条判过没有：`pending` / `admitted` / `rejected`（先折算历史档）。
+
+    判据（业主 Q16 原话「A 确实读过、逐篇决定过」）落在三档上：
+
+    - `rejected` ⇒ 判过。拒收本身就是决定，不论是人判的（`rejected_off_topic` …）
+      还是确定性判据判的（`over_cap` / `not_screened`）—— 后两者由机器做，A 不需要读；
+    - `admitted` 且 `relevance` 非空 ⇒ 判过。那一句「为什么与本次检索相关」就是
+      "我读过这一篇"的证据（`schema.LitCandidate.relevance` 的口径原本就是它）；
+    - `admitted` 但 `relevance` 空 ⇒ 没判过。这是本判据最要紧的一格：入库了却
+      写不出为什么相关的行，没有任何"读过"的证据 —— 真机 `projects/mp3-r3` 的 33 条
+      正是这个形状（同一秒整批入库、`relevance` 48/48 全空）。它不改入库判据
+      （`webui/readers._library_admission` 照旧只读 `status == "admitted"`）：
+      文献库面问「这一篇在不在库里」，提交闸问「A 判过没有」，两个问题。
+    - 其余（`pending`、以及认不出的状态）⇒ 没判过。"认不出"不许折成"判过"。
+    """
+    folded = fold_legacy(row)
+    status = str(folded.get("status") or "")
+    if status == "admitted":
+        return "admitted" if str(folded.get("relevance") or "").strip() else "pending"
+    if status in ("pending", "rejected"):
+        return status
+    return "pending"
+
+
+def undecided(rows: Sequence[Mapping[str, Any]]) -> list[dict]:
+    """还没判的那些条：`[{slot, title, status, why}]`（提交闸唯一的读数来源）。
+
+    `why` 区分两档，因为做法不同：待裁的 `pending` 要一轮判；"入库了但没有
+    relevance"的那一档要补那一句（或判拒），它不是"还没开始"。
+    """
+    waiting: list[dict] = []
+    for row in rows:
+        if judged_state(row) != "pending":
+            continue
+        folded = fold_legacy(row)
+        why = ("这一条还没有 relevance（没写「为什么与本次检索相关」），"
+               "而它已经挂着 lit_id —— 入库发生了、读过的证据不在，按没判算"
+               if str(folded.get("lit_id") or "").strip() else
+               "这一条还停在 pending（没判过）")
+        waiting.append({"slot": str(row.get("slot") or ""),
+                        "title": str(row.get("title") or ""),
+                        "status": str(folded.get("status") or ""),
+                        "why": why})
+    waiting.sort(key=lambda item: item["slot"])
+    return waiting
+
+
+def _decision_counts(rows: Sequence[Mapping[str, Any]]) -> dict:
+    """按三态数一遍（`{"pending": n, "admitted": n, "rejected": n}`，键恒在这三个）。
+
+    它是拒信与报告里"数没全更新为入库和拒收"那句话的读数来源：业主 Q16 的判据
+    问的就是这个数（`pending` 必须是 0）。
+    """
+    counts = {s: 0 for s in CANDIDATE_DECISIONS}
+    for row in rows:
+        counts[judged_state(row)] += 1
+    return counts
+
+
+def undecided_reason(waiting: Sequence[Mapping[str, Any]],
+                     request_id: str = "") -> str:
+    """提交闸的拒信原文：逐条点名 + 做法（业主 Q16 第 ③ 条）。
+
+    为什么拒信要逐条点名而不是报一个数：「还有 14 条没判」这句谁都对得上，
+    而 A 手上要做的是"去判哪一条"。所以每条给 `槽位 + 题名前 40 字`，
+    与 `lit.stage_list` 的 `slot/title` 两格逐字对得上（它照着念就能判）。
+    """
+    slots = "、".join(
+        f"{item['slot']}《{T.clip(str(item.get('title') or ''), UNDECIDED_TITLE_CHARS)}》"
+        for item in waiting)
+    scope = f"本次委托（{request_id}）" if request_id else "本委托"
+    return (
+        f"还有 {len(waiting)} 条没判：{slots} ⇒ 整批不许提交入库。"
+        f"{scope}的待新增列表必须逐条判过（判过的证据：判收的带一句 relevance，"
+        "判拒的带 relevance + 受控 reason_code）才能提交。"
+        "做法：逐条来 —— 判收的用 `lit.admit`（这一条的 relevance 要有值：缺就用 "
+        "`lit.stage_add` 带 relevance 重进**同一篇**，同一委托内同一 DOI 只占一个槽，"
+        "补进原槽、不发新号）；判拒的用 `lit.stage_reject`"
+        "（受控理由码 + 一句为什么）。已经挂着 lit_id 却没有 relevance 的那几条，"
+        "用 `lit.stage_reject` 判拒（受控理由码），或把这一篇重新 `lit.stage_add` "
+        "并带上 relevance 再判 —— 撤掉与拒收都只换状态、不删行。"
+    )
 
 
 class LitStageError(RuntimeError):
@@ -287,6 +429,56 @@ def _resolve_request(store: Store | None, request_id: str | None) -> str:
     return rid
 
 
+def candidate_identity(title: Any, doi: Any) -> str:
+    """一条候选在一次委托内的身份：规范化 DOI 优先，DOI 空才退回规范化标题。
+
+    为什么 DOI 优先，而不是"标题与 DOI 一起比"：同一篇在两次检索里交回的题名
+    可能差一个连字符或副标题位置（真机 `mp3-r4` 的 000001 与 000004 就是
+    `Cartan‐type` 与 `Cartan-type`），而 DOI 是同一串 —— 身份若把标题也算进去，
+    这种"同一篇"就会漏配，于是又长出一个槽位。DOI 空时才退回标题（与
+    `dedup.literature_keys` 的次序一致：DOI → 标题+年 → 仅标题，这里只用"能拿到的那一级"）。
+
+    这不是判重键（判重键仍是 `dedup.literature_keys` / `find_existing_literature`），
+    也不跨委托：它只回答"这一次委托的待新增列表里，这一篇是不是已经有一个槽"。
+    """
+    key = D.normalize_doi(doi)
+    if key:
+        return "doi:" + key
+    return "title:" + T.normalize(str(title or ""))
+
+
+def _top_up(row: dict, raw: Mapping[str, Any]) -> list[str]:
+    """把这一条 entry 里非空的那几格补进已有的 pending 槽；返回真写了的字段名。
+
+    只补"这次给了、那一槽还没有或值不同"的格：空串/None 不覆盖已有值 ——
+    否则一次"只带 relevance 的重进"会把摘要、URL 洗成空（那些格是当初广搜带回来的）。
+    返回字段名列表（不是布尔）是给调用方留读数：`fields` 空 = 这一条没有新内容，
+    它早就已经在列表里了（这正是"A 又登了一次同一篇"该看到的那句话）。
+    """
+    wrote: list[str] = []
+    pairs: tuple[tuple[str, Any, int], ...] = (
+        ("relevance", raw.get("relevance"), 400),
+        ("summary", raw.get("summary"), 1200),
+        ("url", raw.get("url") if raw.get("url") is not None else raw.get("pdf_url"), 0),
+        ("year", raw.get("year"), 0),
+        ("type_code", raw.get("type_code") if raw.get("type_code") else raw.get("type"), 0),
+        ("provider", raw.get("provider"), 0),
+    )
+    for name, value, cap in pairs:
+        if value is None:
+            continue
+        if isinstance(value, str):
+            if not value.strip():
+                continue
+            value = T.clip(value.strip(), cap) if cap else value.strip()
+        current = row.get(name)
+        if str(current if current is not None else "") == str(value):
+            continue
+        row[name] = value
+        wrote.append(name)
+    return wrote
+
+
 def stage_entries(
     store: Store | None,
     entries: Iterable[Mapping[str, Any]],
@@ -337,6 +529,14 @@ def stage_entries(
         if the_batch < 1:
             raise LitStageError(f"batch 必须是 >= 1 的整数，收到 {batch!r}", kind="bad_batch")
         staged: list[dict] = []
+        updated: list[dict] = []
+        # 同一委托内同一篇只占一个槽（G9 修法 ①）：身份命中一个还没判过的槽 ⇒
+        # 把这一条新给的内容补进那一槽，不发新号。判过的槽（rejected / admitted）不并：
+        # 它们要留着"当初为什么拒/撤"的记录，合并会把那一段历史抹掉。
+        open_slots: dict[str, dict] = {}
+        for r in same:
+            if str(r.get("status")) == "pending":
+                open_slots.setdefault(candidate_identity(r.get("title"), r.get("doi")), dict(r))
         for raw in items:
             title = str(raw.get("title") or "").strip()
             if not title:
@@ -345,6 +545,19 @@ def stage_entries(
                     kind="bad_entry",
                     detail={"entry": {k: raw.get(k) for k in ("doi", "provider")}},
                 )
+            ident = candidate_identity(title, raw.get("doi"))
+            open_row = open_slots.get(ident)
+            if open_row is not None:
+                wrote = _top_up(open_row, raw)
+                if wrote:
+                    S.LitCandidate(**{k: open_row[k] for k in open_row
+                                      if k in S.LitCandidate.__dataclass_fields__}).validate()
+                    tx.upsert("lit_candidates", open_row, note=note)
+                updated.append({"slot": str(open_row.get("slot") or ""),
+                                "batch": int(open_row.get("batch") or 0),
+                                "title": str(open_row.get("title") or ""),
+                                "fields": wrote})
+                continue
             slot = tx.alloc_id("candidate")
             row = S.LitCandidate(
                 slot=slot,
@@ -366,7 +579,15 @@ def stage_entries(
             row.validate()
             tx.upsert("lit_candidates", row.to_dict(), note=note)
             staged.append({"slot": slot, "batch": the_batch, "title": title})
-    return {"request_id": rid, "batch": the_batch, "count": len(staged), "staged": staged}
+            # 刻意不把刚建的这一槽放进 `open_slots`：同一次调用内"条目数 == 新槽数"
+            # 这个约定不能破。理由在代码外：`agent_a/run_once.py` 用
+            # `zip(fresh_entries, slots)` 配对"哪一条候选下的载、登记的哪一篇"
+            # （`entry_by_slot = dict(zip(slots, fresh_entries))`）—— 若一次调用里两条
+            # 同身份的 entry 并成一个槽，那个 zip 就整体错位一格，下载与登记会配上
+            # 另一篇的元数据（静默、且看起来成功）。跨调用的重复才是真机要治的形态
+            # （r-000001：自动链路一批、A 补 relevance 另一批）。
+    return {"request_id": rid, "batch": the_batch, "count": len(staged),
+            "staged": staged, "updated": updated}
 
 
 def _scoped_rows(rows: Sequence[Mapping[str, Any]], rid: str) -> list[dict]:
@@ -398,9 +619,18 @@ def list_candidates(
 ) -> dict:
     """按委托 / batch / status 查待新增列表。空槽位照样出现在列表里。
 
-    "空槽位"指 `status="withdrawn"` 的那些行：它们没有被物理删除（序号不复用），
-    所以题名、`withdrawn_reason`、`added_at` 全都还在 —— 于是"第 3 号被撤了哪一篇、
-    为什么"是查得出来的。这正是业主口径 ③ 的落点：撤掉 ≠ 删掉。
+    返回的每一行都是三态折算后的（`litstage.fold_legacy`）：盘上的 `cleared`
+    读成 `rejected` + `reason_code=over_cap`，`withdrawn` 读成 `rejected` +
+    `withdrawn_by_reviewer`，理由搬进 `reject_reason`。所以列表视图里永远只有
+    `pending` / `admitted` / `rejected` 三档（业主 2026-10-26 Q16）。
+
+    空槽位（原来叫 `withdrawn`、现在折成 `rejected` + `withdrawn_by_reviewer`）
+    并没有被物理删除（序号不复用），所以题名、理由、`added_at` 全都还在 —— 于是
+    "第 3 号被撤了哪一篇、为什么"是查得出来的。这正是业主口径 ③ 的落点：撤掉 ≠ 删掉。
+
+    `status` 过滤同时认两种形态：折算后的三态（`pending`/`admitted`/`rejected`）
+    与盘上的历史档名（`cleared` / `withdrawn`，照原样查得到那几条）—— 后者是为了
+    "查历史"这条路不因为折算而断（老工作区里按 `cleared` 查仍然查得出那 14 条）。
 
     默认视图只按当前委托过滤（业主 2026-10-20 第 1 条）；要看旧委托请显式给
     `request_id`（`request_id="*"` 表示全查，用于审计"历史有没有残留"）。
@@ -420,13 +650,20 @@ def list_candidates(
     scoped = _scoped_rows(all_rows, rid)
     if batch is not None:
         scoped = [r for r in scoped if int(r.get("batch") or 0) == int(batch)]
-    rows = sorted(([r for r in scoped if str(r.get("status") or "") == status]
-                   if status is not None else scoped), key=lambda r: str(r.get("slot") or ""))
+    if status is not None:
+        rows = [fold_legacy(r) for r in scoped
+                if str(r.get("status") or "") == status
+                or judged_state(r) == status]
+    else:
+        rows = [fold_legacy(r) for r in scoped]
+    rows.sort(key=lambda r: str(r.get("slot") or ""))
     # 计数按委托过滤后、状态过滤前那一份算：调用方问"这一批还有几篇 pending"时
     # 需要同时看到全部态，否则 status=admitted 那一次查询会把"总数 12"读成"总数 9"。
+    # 键集合仍是 `schema.CANDIDATE_STATUSES` 那五个（`lit.stage_list` 的冻结声明
+    # 就是这么写的），但两个历史档永远是 0：它们已经折进 `rejected`。
     counts = {s: 0 for s in S.CANDIDATE_STATUSES}
     for r in scoped:
-        s = str(r.get("status") or "")
+        s = judged_state(r)
         if s in counts:
             counts[s] += 1
     slots = [str(r.get("slot") or "") for r in rows]
@@ -434,8 +671,19 @@ def list_candidates(
     if slots:
         have = {int(s) for s in slots}
         gaps = [S.format_id(n) for n in range(min(have), max(have) + 1) if n not in have]
+    waiting = undecided(scoped)
+    # 同一委托内同一篇占多个槽的读数（G9 修法 ②：只报数，不动 counts 的分子分母）。
+    groups: dict[str, list[str]] = {}
+    for r in scoped:
+        groups.setdefault(candidate_identity(r.get("title"), r.get("doi")), []).append(
+            str(r.get("slot") or ""))
+    dup_groups = sorted(
+        ({"key": k, "slots": sorted(v)} for k, v in groups.items() if len(v) > 1),
+        key=lambda g: g["slots"][0])
     return {
         "request_id": rid,
+        "duplicate_rows": sum(len(g["slots"]) for g in dup_groups),
+        "duplicate_groups": dup_groups,
         "current_request_id": current_request_id(store),
         "batch": batch,
         "status": status,
@@ -445,10 +693,13 @@ def list_candidates(
         "rows": rows,
         "total_all_delegations": len(all_rows),
         "note": (
-            "默认只返回**当前委托**的行（`request_id` = 最近一次暂存的那次委托）；"
-            "查历史请显式给 request_id（`*` = 全部）。`withdrawn` 的行是空槽位："
-            "序号不复用、题名与理由都留着；`rejected` 是审内容后拒收；"
-            "`admitted` 已回填 lit_id；`cleared` 是迁移结算时被清空的残留（带 cleared_at）。"
+            "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；"
+            "查历史请显式给 request_id（`*` = 全部）。状态只有三档："
+            "`pending` 待裁 / `admitted` 入库 / `rejected` 拒收；"
+            "历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 "
+            "rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。"
+            f"本委托还有 {len(waiting)} 条没判：只要还大于 0，`lit.admit_all` "
+            "就整批拒绝（`lit.admit` 逐条入库不受它拦）。"
         ),
     }
 
@@ -464,38 +715,54 @@ def _one(store: Store, slot: str) -> dict:
     )
 
 
-def _terminal(store: Store, slot: str, *, status: str, code: str, note: str,
+def _terminal(store: Store, slot: str, *, code: str, note: str,
               slot_field: str, actor: str, tx_note: str) -> dict:
-    """把某一槽写成终态（withdrawn / rejected）：受控理由码 + 一行散文（可为空 ⇒ 用标签）。"""
+    """把某一槽写成判过的那一档：`status="rejected"` + 受控理由码 + 一行散文。
+
+    为什么不再有"写成 withdrawn"这条分支（2026-10-26 Q16）：状态只有三态
+    （待裁 / 入库 / 拒收），"撤掉"与"拒收"的差别现在落在受控理由码上
+    （`withdrawn_by_reviewer` 还是 `rejected_low_quality`），不再多占一个状态格。
+    `slot_field` 保留原样：`lit.stage_withdraw` 仍然把那一句同时写进
+    `withdrawn_reason`（老读者按那一列查"撤了什么"照旧查得到），
+    `reject_reason` 两边都写满 —— 折完之后行仍然说得出理由。
+
+    可改的条件是 `judged_state(row) == "pending"`，不是"status 字面是 pending"：
+    历史链路整批入库、`relevance` 空着的那几条（真机 33 条就是这个形状）也算
+    "没判过"，于是它们还能被逐条判拒 —— 否则那种行会永远卡在"写不进 relevance、
+    又不许判拒"里，提交闸对它所在的那次委托就成了永久关闭。
+    """
     with store.tx("lit_candidates", actor=actor, note=tx_note) as tx:
         row = next((r for r in tx.rows("lit_candidates") if str(r.get("slot")) == str(slot)), None)
         if row is None:
             raise LitStageError(f"待新增列表里没有槽位 {slot!r}", kind="unknown_slot",
                                 detail={"slot": slot})
-        if str(row.get("status")) != "pending":
+        if judged_state(row) != "pending":
             raise LitStageError(
-                f"槽位 {slot!r} 现在是 status={row.get('status')!r}，只有 pending 能改成 "
-                f"{status}",
+                f"槽位 {slot!r} 已经判过了（{judged_state(row)}，盘上 status="
+                f"{row.get('status')!r}）⇒ 只有还没判的那一槽能改成 rejected",
                 kind="not_pending", detail={"slot": slot, "status": row.get("status")},
             )
         row = dict(row)
-        row["status"] = status
+        row["status"] = "rejected"
         row["reason_code"] = code
         row[slot_field] = str(note or "").strip() or _code_label(code)
+        row["reject_reason"] = row[slot_field]
         S.LitCandidate(**{k: row[k] for k in row
                           if k in S.LitCandidate.__dataclass_fields__}).validate()
         tx.upsert("lit_candidates", row, note=tx_note)
-    return {"slot": str(slot), "status": status, "reason_code": code,
+    return {"slot": str(slot), "status": "rejected", "reason_code": code,
             "reason": row[slot_field], "title": row.get("title"),
             "request_id": row.get("request_id"), "batch": row.get("batch")}
 
 
 def withdraw(store: Store | None, slot: str, reason_code: str, note: str = "",
              *, actor: str = "agent-A") -> dict:
-    """撤掉某一槽：写 `withdrawn_reason` + `reason_code`、状态置 `withdrawn`，不物理删除。
+    """撤掉某一槽：状态落 `rejected` + 受控理由码（`withdrawn_by_reviewer`），不物理删除。
 
     撤掉之后可以再 `stage_add` 补位 —— 但新条进的是新序号（旧号不复用），
     所以列表里会同时看到"第 3 号（撤掉，理由…）"与"第 13 号（补进来的那条）"。
+    那一句同时写进 `withdrawn_reason` 与 `reject_reason`：前者是老读者查
+    "撤了什么"的那一列，后者是三态里"拒收的理由"那一列。
 
     `reason_code` 必须是 `schema.CANDIDATE_REASON_CODES` 里的受控取值
     （业主 2026-10-20 第 3 条：报告里的理由只认受控取值，不许自由发挥）。
@@ -503,18 +770,20 @@ def withdraw(store: Store | None, slot: str, reason_code: str, note: str = "",
     if store is None:
         raise LitStageError("未配置 store：撤不掉（不是「已经撤过了」）", kind="no_store")
     code = _check_code(reason_code)
-    return _terminal(store, slot, status="withdrawn", code=code, note=note,
-                     slot_field="withdrawn_reason", actor=actor, tx_note="lit.stage_withdraw")
+    return _terminal(store, slot, code=code, note=note,
+                     slot_field="withdrawn_reason", actor=actor,
+                     tx_note="lit.stage_withdraw")
 
 
 def reject(store: Store | None, slot: str, reason_code: str, note: str = "",
            *, actor: str = "agent-A") -> dict:
-    """审内容后拒收：写 `reject_reason` + `reason_code`、状态置 `rejected`，不物理删除。"""
+    """审内容后拒收：状态落 `rejected` + 受控理由码 + `reject_reason`，不物理删除。"""
     if store is None:
         raise LitStageError("未配置 store：拒收不了（不是「已经拒过了」）", kind="no_store")
     code = _check_code(reason_code)
-    return _terminal(store, slot, status="rejected", code=code, note=note,
+    return _terminal(store, slot, code=code, note=note,
                      slot_field="reject_reason", actor=actor, tx_note="lit.stage_reject")
+
 
 
 # --------------------------------------------------------------------------- 入库
@@ -551,8 +820,22 @@ def admission_plan(
     cap: int | None = None,
     on_over_cap: str = "refuse_all",
     duplicate_branch_ok: bool = False,
+    require_judged: bool = False,
 ) -> dict:
-    """入库前的那一笔判断：条数上限 + 重叠检查 + 逐条该不该进（一行都不写）。
+    """入库前的那一笔判断：提交闸 + 条数上限 + 重叠检查 + 逐条该不该进（一行都不写）。
+
+    这是"入库这个动作"的唯一入口判据：`lit.admit` / `lit.admit_all` / A 的自动链路
+    三条路都从这里过，谁也不许在调用点上各判一次（判据两份必然漂，而漂的形态是
+    "工具说拒了、实现却写进去了"）。
+
+    ## 提交闸（业主 2026-10-26 Q16 第 ③ 条）
+
+    `require_judged=True` 的那两条路（`lit.admit_all` 与 A 的自动链路）是"整批提交"：
+    本委托只要还有一条没判，整批一条都不许入库，拒信逐条点名（`undecided_reason`）。
+    "判过"的定义只此一处：`judged_state`（`pending` 与"入库了却写不出 relevance"都算没判）。
+
+    逐条入库（`lit.admit`，`require_judged=False`）不受这条闸拦 —— 它就是判决本身：
+    它要过的是下面那条"每一条入库都必须带 relevance"的逐条判据。
 
     ## 两档超限处置（`on_over_cap`）
 
@@ -560,12 +843,20 @@ def admission_plan(
       一条都不入。为什么整笔：如果前 10 条进了、第 11 条被挡，调用方会读成
       "第 11 条被审掉了"，而真相是"这一次调用根本不成立"。
     - `"truncate"`（`lit.admit_all` / A 的自动链路用）：按槽位号顺序把前 N 条
-      通过检查的收进来，其余进 `cleared`（`reason_code="over_cap"`）——
+      通过检查的收进来，其余落 `rejected` + `reason_code="over_cap"` ——
       一键迁移的语义是"把通过的都迁走"，不是"有一条超限就全不动"。
+      落盘处不再是第四态 `cleared`（业主 Q16 第 ① 条：配额满必须折进
+      rejected + over_cap），但 `plan["cleared"]` 这个键名沿用下来：
+      它是"没进去的那几条"这一个读数格，不是状态名（`lit.admit` 的 `returns=`
+      已经把它钉在冻结声明里，改名要人重冻快照）。
 
     ## 逐条拒收（业主口径 ②④）
 
-    - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒（`already_terminal`）；
+    - 这一条已经判过（`judged_state != "pending"`）⇒ 拒（`already_terminal`）；
+    - 这一条没有 relevance（行上没有、调用级也没给）⇒ 拒（`missing_relevance`），
+      行保持原样：没写"为什么与本次检索相关"就等于没读过它（Q16 第 ② 条）。
+      "入库了但 relevance 空"的历史行也走这一格 —— 它先要补上那一句才谈得上入库；
+      补不上就判拒（`lit.stage_reject`），别把它折成"入库了"。
     - DOI 与本地库某一行完全相同 ⇒ 视为重复，拒（`duplicate_doi`）。
       `duplicate_branch_ok=True` 时不拒、而是标 `existing_duplicate`：那是
       A 的自动链路要的语义 —— 现有登记路径的判重分支会命中它、只追加
@@ -585,7 +876,8 @@ def admission_plan(
     limit = _cap_of(cap)
     rid = _resolve_request(store, request_id)
     rows = _rows(store)
-    scoped = [r for r in rows if str(r.get("request_id") or "") == rid]
+    scoped = [fold_legacy(r) for r in rows
+              if str(r.get("request_id") or "") == rid]
     if slots is None:
         if batch is None:
             raise LitStageError(
@@ -593,14 +885,14 @@ def admission_plan(
                 kind="no_target",
             )
         wanted = [str(r.get("slot")) for r in sorted(scoped, key=lambda r: str(r.get("slot") or ""))
-                  if int(r.get("batch") or 0) == int(batch) and str(r.get("status")) == "pending"]
+                  if int(r.get("batch") or 0) == int(batch) and judged_state(r) == "pending"]
     else:
         wanted = []
         for raw in slots:
             s = str(raw or "").strip()
             if s and s not in wanted:
                 wanted.append(s)
-        if not wanted:
+        if not wanted and not require_judged:
             raise LitStageError("slots 是空的：没有要入库的东西", kind="no_target")
     by_slot = {str(r.get("slot") or ""): r for r in scoped}
     unknown = [s for s in wanted if s not in by_slot]
@@ -613,19 +905,33 @@ def admission_plan(
             kind="unknown_slot", detail={"slots": unknown, "request_id": rid},
         )
     batches = {int(by_slot[s].get("batch") or 0) for s in wanted}
-    already = sum(1 for r in scoped if str(r.get("status")) == "admitted")
+    already = sum(1 for r in scoped if judged_state(r) == "admitted")
 
     items: list[dict] = []
     refused: list[dict] = []
     over_cap: list[dict] = []
     for slot in wanted:
         row = by_slot[slot]
-        status = str(row.get("status") or "")
-        if status != "pending":
+        state = judged_state(row)
+        if state != "pending":
             refused.append(_refusal(slot, row.get("title"), (
-                f"status={status}，只有 pending（待审）能入库"
-                + ("（撤掉的槽位要补位请再 stage_add，新条进新序号）" if status == "withdrawn" else "")
+                f"这一条已经判过了（{state}）⇒ 不许再判它一次"
+                + ("（拒收是终态：这一篇若其实要收，`lit.stage_add` 带 relevance 重进会"
+                   "另发一个新槽 —— 旧槽的拒收记录保留、报告会把它列进未入库；"
+                   "所以只是缺 relevance 时别先撤，直接补进原槽）"
+                   if state == "rejected" else "")
             ), "already_terminal"))
+            continue
+        relevance = str(row.get("relevance") or "").strip()
+        if not relevance:
+            refused.append(_refusal(slot, row.get("title"), (
+                "这一条没有 relevance（没写「为什么与本次检索相关」）⇒ 不许入库："
+                "判过的证据就是那一句。"
+                "做法：判拒就用 `lit.stage_reject`（受控理由码）；要收就用 `lit.stage_add` "
+                f"带 relevance 重进**同一篇**（同一委托内同一 DOI 只占一个槽：补进 "
+                f"{slot} 这一槽，不发新号）。**不要先撤掉再重进** —— 撤掉之后再登记就是"
+                "另一个槽位，报告上同一批题名会同时出现在「已入库」与「未入库」两块。"
+            ), "missing_relevance"))
             continue
         ov = overlap_check(store, str(row.get("title") or ""), row.get("doi"))
         nc = str(row.get("new_content") or "").strip() or str(new_content or "").strip()
@@ -662,6 +968,17 @@ def admission_plan(
         "refused": refused,
         "cleared": over_cap,
     }
+    if require_judged:
+        # 提交闸（Q16 第 ③ 条）：整批提交的那两条路，本委托只要还有一条没判，
+        # 一条都不许入库。判据只有 `undecided` 那一处（打桩成恒空 ⇒ 本闸失效，
+        # 见 tests/test_pending_list_is_three_state.py 的反真空那一条）。
+        waiting = undecided(scoped)
+        if waiting:
+            return {**base, "ok": False, "kind": "undecided_items",
+                    "whole_call_refused": True,
+                    "reason": undecided_reason(waiting, rid),
+                    "undecided": waiting, "counts": _decision_counts(scoped),
+                    "call_size": 0, "admitted": []}
     if on_over_cap == "refuse_all":
         if call_size > limit:
             return {**base, "ok": False, "kind": "over_cap_call", "whole_call_refused": True,
@@ -695,8 +1012,12 @@ def admission_plan(
 def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[dict]:
     """把一批终态决定写回候选行（`tx` 由调用方给 —— 让它能与登记同处一个事务）。
 
-    `decisions` 的每一项：`{slot, status, lit_id?, reason_code?, note?, overlap_*}`
-    （`status` 取 `admitted` / `rejected` / `cleared` / `withdrawn`）。
+    `decisions` 的每一项：`{slot, status, lit_id?, reason_code?, note?, overlap_*}`。
+    `status` 只认三态（`admitted` / `rejected`，以及"还没判完"的 `pending`）；
+    历史档名（`cleared` / `withdrawn`）照收，但落盘前折成 `rejected` +
+    受控理由码（`over_cap` / `withdrawn_by_reviewer`）—— 业主 Q16 第 ① 条：
+    配额满必须折进 rejected + over_cap，不留第四态。折法用的是 `fold_legacy`
+    同一张表（一份判据，两个方向都读它）。
 
     为什么把它做成"拿 tx 进来"的函数：A 的自动链路（`agent_a.run_once`）里，
     "写 literature 行"与"回填候选行"必须在同一个事务里 —— 否则崩在中间会留下
@@ -712,7 +1033,13 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
         if not row:
             continue
         status = str(d.get("status") or "")
-        if status not in S.CANDIDATE_STATUSES:
+        legacy = _LEGACY_CANDIDATE.get(status)
+        if legacy is not None:
+            # 历史档名：折成 rejected，理由码默认用该档那一个（行上已有受控码则保留）。
+            status = legacy[0]
+            if not str(d.get("reason_code") or "").strip():
+                d = {**d, "reason_code": legacy[1]}
+        if status not in CANDIDATE_DECISIONS:
             continue
         row["status"] = status
         code = str(d.get("reason_code") or "")
@@ -725,15 +1052,11 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
             for k in ("overlap_score", "overlap_kind", "overlap_with"):
                 if d.get(k) not in (None, ""):
                     row[k] = d[k]
-            if str(d.get("new_content") or "").strip():
-                row["new_content"] = str(d["new_content"]).strip()
-        elif status == "withdrawn":
-            row["withdrawn_reason"] = note or _code_label(code)
+            for k in ("new_content", "relevance"):
+                if str(d.get(k) or "").strip():
+                    row[k] = str(d[k]).strip()
         elif status == "rejected":
             row["reject_reason"] = note or _code_label(code)
-        elif status == "cleared":
-            row["cleared_at"] = S.now_iso()
-            row["clear_reason"] = note or _code_label(code)
         S.LitCandidate(**{k: row[k] for k in row
                           if k in S.LitCandidate.__dataclass_fields__}).validate()
         tx.upsert("lit_candidates", row, note=f"lit.settle:{status}")
@@ -744,28 +1067,38 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
 
 def _decisions_from(plan: Mapping[str, Any], lit_ids: Mapping[str, str],
                     failures: Mapping[str, str]) -> list[dict]:
-    """把 `admission_plan` 的结论 + 登记结果翻成 `apply_settlement` 要的决定。"""
+    """把 `admission_plan` 的结论 + 登记结果翻成 `apply_settlement` 要的决定。
+
+    两个"不落终态"的码必须在这里筛掉，否则会把一次可重试的拒绝写成终态：
+    `already_terminal`（这一条早就判过）与 `missing_relevance`（这一条还没写
+    "为什么相关" —— 它得留在 pending，等补上证据或判拒）。
+    """
     out: list[dict] = []
     for item in plan.get("admitted") or []:
         slot = str(item["slot"])
         lit_id = str(lit_ids.get(slot) or "")
         if lit_id:
             ov = item.get("overlap") or {}
+            row = item.get("row") or {}
             out.append({"slot": slot, "status": "admitted", "lit_id": lit_id,
                         "overlap_score": ov.get("overlap_score"),
                         "overlap_kind": ov.get("overlap_kind"),
                         "overlap_with": ov.get("overlap_with"),
+                        "relevance": str(row.get("relevance") or ""),
                         "new_content": item.get("new_content")})
         else:
             out.append({"slot": slot, "status": "rejected", "reason_code": "registration_failed",
                         "note": failures.get(slot) or "登记路径没有给出 lit_id"})
     for r in plan.get("refused") or []:
-        if str(r.get("code")) == "already_terminal":
+        if str(r.get("code")) in ("already_terminal", "missing_relevance"):
             continue
         out.append({"slot": str(r["slot"]), "status": "rejected",
                     "reason_code": str(r.get("code") or ""), "note": str(r.get("why") or "")})
     for c in plan.get("cleared") or []:
-        out.append({"slot": str(c["slot"]), "status": "cleared",
+        # 配额满那一档：落 rejected + over_cap（Q16 第 ① 条），不再写 `cleared`。
+        # plan 里那个键名沿用 `cleared`（冻结声明里就是它），但它的含义是
+        # "这一批没进去的那几条"。
+        out.append({"slot": str(c["slot"]), "status": "rejected",
                     "reason_code": str(c.get("code") or "over_cap"),
                     "note": str(c.get("why") or "")})
     return out
@@ -887,54 +1220,68 @@ def admit_all(
     actor: str = "agent-A",
     write_report_file: bool = True,
 ) -> dict:
-    """一键迁移（业主 2026-10-20 第 2 条）：把本委托 `pending` 且过审的行一次迁进 literature。
+    """一键迁移 / 提交整批（业主 2026-10-20 第 2 条 + 2026-10-26 Q16 第 ③ 条的提交闸）。
 
-    ## 它做四件事，顺序不能换
+    ## 提交闸先跑（Q16）：本委托还有一条没判 ⇒ 整批一条都不许入库
 
-    1. 取本委托所有 `pending` 行（槽位顺序），过 `admission_plan(on_over_cap="truncate")`：
+    `require_judged=True` 的那一笔判据在 `admission_plan` 里，拒信逐条点名
+    （`槽位 + 题名前 40 字`）并给做法。所以"无脑一键迁移"这条路没有了：
+    逐条判（`lit.admit` 用带 relevance 的那几条 / `lit.stage_reject` 判拒）
+    是唯一的入库方式，`lit.admit_all` 是"判完之后收口 + 写报告"。
+
+    ## 闸过了之后它做三件事，顺序不能换
+
+    1. 取本委托还没判的行（槽位顺序），过 `admission_plan(on_over_cap="truncate")`：
        DOI 重复 / 高重叠无 `new_content` / `overlap_ok=False` 的逐条拒收；
-       超配额的进 `cleared(over_cap)`（一键迁移不整笔拒绝 —— 它的语义是"把通过的都迁走"）；
+       超配额的落 `rejected(over_cap)`（不再是第四态 `cleared`）；
     2. 通过的那些走现有登记路径（`registrar`）落 literature；
-    3. 结算清空本委托：成功的落 `admitted`、被拒的落 `rejected(理由码)`、
-       剩下的落 `cleared(over_cap)` + `cleared_at` —— 于是"迁移后 `stage_list(本委托)`
+    3. 结算本委托：成功的落 `admitted`、被拒的落 `rejected(理由码)`、其余落
+       `rejected(over_cap / not_screened)` —— 于是"迁移后 `stage_list(本委托)`
        没有 `pending` 残留"，下一次委托也看不到本委托的行（`request_id` 已经换了）；
-    4. 写委托报告（`reports/lit-<request_id>.md`）：已入库一块 + 未入库一块（含受控理由）。
+    4. 写委托报告（`reports/lit-<request_id>.md`）：已入库 / 未入库 / 待裁三块。
 
     "不许物理删"是结构性的：本函数只改 `status` 与那几格证据，一次 `delete` 都没有。
     """
     if store is None:
         raise LitStageError("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
     rid = _resolve_request(store, request_id)
-    rows = [r for r in _rows(store) if str(r.get("request_id") or "") == rid]
+    rows = [fold_legacy(r) for r in _rows(store)
+            if str(r.get("request_id") or "") == rid]
     pending_slots = [str(r.get("slot")) for r in sorted(rows, key=lambda r: str(r.get("slot") or ""))
-                     if str(r.get("status")) == "pending"]
+                     if judged_state(r) == "pending"]
+    # 提交闸跑在这两处之前：即使一条 pending 都没有也要跑 —— 否则"已经判完"
+    # 与"还没判完但一行 pending 都不剩（入库了却没有 relevance）"在盘上同形，
+    # 而后者正是真机那 33 条的形状。
+    plan = admission_plan(store, request_id=rid, slots=pending_slots, new_content=new_content,
+                          cap=cap, on_over_cap="truncate", require_judged=True)
+    if not plan.get("ok"):
+        return {**plan, "admitted": [], "registered": 0, "report": None, "report_path": None}
     if not pending_slots:
-        rep = write_report(store, rid) if write_report_file else None
+        rep = write_report(store, rid, rows=rows) if write_report_file else None
         return {
             "ok": True, "kind": "", "whole_call_refused": False,
-            "reason": "本委托没有待审的行（列表已经是全终态）",
-            "request_id": rid, "call_size": 0, "call_limit": _cap_of(cap),
-            "delegation_admitted": sum(1 for r in rows if str(r.get("status")) == "admitted"),
+            "reason": "本委托没有待判的行（三态都落定了）",
+            "request_id": rid, "call_size": 0, "call_limit": plan["call_limit"],
+            "delegation_admitted": _decision_counts(rows)["admitted"],
             "delegation_limit": MAX_ADMIT_PER_DELEGATION,
             "admitted": [], "refused": [], "cleared": [], "registered": 0,
             "report": rep, "report_path": (rep or {}).get("path"),
         }
 
-    plan = admission_plan(store, request_id=rid, slots=pending_slots, new_content=new_content,
-                          cap=cap, on_over_cap="truncate")
     lit_ids, failures, got_all = _register(plan, registrar)
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
         apply_settlement(tx, decisions)
-        # 结算之后再扫一遍：任何还停在本委托 pending 上的行都落 cleared（`not_screened`），
-        # 这样"迁移后本委托没有 pending"是一条结构性事实，而不是"我们相信它没有"。
+        # 结算之后再扫一遍：任何还停在本委托 pending 上的行都落 rejected +
+        # `not_screened`（不再是第四态 `cleared`），这样"迁移后本委托没有 pending"
+        # 是一条结构性事实，而不是"我们相信它没有"。
         leftover = [dict(r) for r in tx.rows("lit_candidates")
                     if str(r.get("request_id") or "") == rid
-                    and str(r.get("status")) == "pending"]
+                    and judged_state(r) == "pending"]
         if leftover:
             apply_settlement(tx, [
-                {"slot": str(r["slot"]), "status": "cleared", "reason_code": "not_screened",
-                 "note": "一键迁移结算时仍未审完，随本次委托一并清空（保留可追）"}
+                {"slot": str(r["slot"]), "status": "rejected", "reason_code": "not_screened",
+                 "note": "一键迁移结算时仍未判完，随本次委托一并判拒（行保留、可追）"}
                 for r in leftover
             ])
         settled = [dict(r) for r in tx.rows("lit_candidates")
@@ -986,19 +1333,29 @@ def report_path(store: Store, request_id: str) -> Path:
 
 def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                     *, generated_at: str = "") -> str:
-    """委托报告正文：两块都必须有（业主 2026-10-20 第 3 条）。
+    """委托报告正文：三块都必须有（业主 2026-10-26 Q16 加第三块「待裁」）。
 
     - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ 一句"为什么与本次
       检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）；
     - `## 未入库`：每篇的槽位 / 标题 / 受控理由码（`schema.CANDIDATE_REASON_CODES`）
-      + 一行散文（撤掉 / 拒收 / 重叠度高无新内容 / 超配额 …）。
+      + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）。历史档（`cleared` /
+      `withdrawn`）在这里按折算后的 `rejected` 出现；
+    - `## 待裁`：还没判的每一条（`undecided`）—— 这一块是 Q16 的要害：没有它，
+      "A 还没读的那几条"在报告上与"根本没检索到"同形，而它们下一步的动作完全不同。
 
-    两块即使没有行也各留一行 `（无）`：否则"这一块是空的"与"这一块被忘了写"在
-    报告上同形，而判据要问的正是"两块都在不在"。
+    三块即使没有行也各留一行 `（无）`：否则"这一块是空的"与"这一块被忘了写"在
+    报告上同形，而判据要问的正是"三块都在不在"。
+
+    一条"入库了却没写 relevance"的历史行会同时出现在前两块之外的第二块（待裁）与
+    第一块（已入库）里：已入库说它在库里，待裁说它没有判过的证据 —— 那不是重复
+    计数，是两个不同的问题（Q16 的提交闸读的正是后者）。
     """
     stamp = generated_at or S.now_iso()
-    admitted = [r for r in rows if str(r.get("status")) == "admitted"]
-    other = [r for r in rows if str(r.get("status")) in ("withdrawn", "rejected", "cleared")]
+    folded = [fold_legacy(r) for r in rows]
+    admitted = [r for r in folded if str(r.get("status")) == "admitted"]
+    other = [r for r in folded if str(r.get("status")) == "rejected"]
+    waiting = undecided(rows)
+    counts = _decision_counts(rows)
     # 已入库的篇数按去重后的 lit_id 计数，不是按行数：两条候选行都可能判重命中
     # 同一个 literature 行（`source_request_ids` 累积到同一行），按行数报
     # "已入库 2 篇"而库里只多了一篇，那是假读数。lit_id 才是"库里多了几篇"的单位。
@@ -1008,9 +1365,11 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         "",
         f"- 委托：`{request_id}`",
         f"- 生成时间：{stamp}",
-        "- 盘点：" + "、".join(
-            f"{s}={sum(1 for r in rows if str(r.get('status')) == s)}"
-            for s in S.CANDIDATE_STATUSES),
+        # 盘点只数三态（历史的 cleared / withdrawn 已经折进 rejected）：
+        # 报五个格的计数会把"盘上有第四态"这件事重新写回报告里。
+        "- 盘点：" + "、".join(f"{s}={counts[s]}" for s in CANDIDATE_DECISIONS)
+        + "（三态；历史的 cleared 折进 rejected+over_cap、withdrawn 折进 "
+          "rejected+withdrawn_by_reviewer）",
         "",
         f"## 已入库（{len(admitted_ids)} 篇）",
         "",
@@ -1035,21 +1394,39 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
             missing_relevance.append(lit_id)
     if missing_relevance:
         # 一行点名缺哪几条（同时是 `report_violations` 的机器读数入口：
-        # 已入库的行全缺相关性说明时它记一条 violation，只记读数、不拦门）。
+        # 已入库的行全缺相关性说明时它记一条 violation，同时 `## 待裁` 块会把
+        # 这几条逐条列出来 —— Q16 之后它们不再只是读数，而是提交闸不放行的原因）。
         lines.append("- 缺相关性说明的条目（" + str(len(missing_relevance)) + " 篇）："
                      + "、".join(f"`lit:{lit_id}`" for lit_id in missing_relevance)
-                     + " —— 只记读数，不拦门")
+                     + " —— 这几条在 `## 待裁` 块里，判完（补 relevance 或判拒）才放行")
     lines += ["", f"## 未入库（{len(other)} 篇）", ""]
     if not other:
         lines.append("（无）")
+    # 同一篇的另一槽位（G9 修法 ②）：只标注，不删行、不改这一块的篇数 ——
+    # 删掉会让"库里明明有"与"报告说没入库"的差异看不见；改篇数就是读侧悄悄少算一篇。
+    admitted_ident: dict[str, str] = {}
+    for r in admitted:
+        admitted_ident.setdefault(
+            candidate_identity(r.get("title"), r.get("doi")),
+            str(r.get("lit_id") or ""))
     for r in other:
         code = str(r.get("reason_code") or "(未登记理由码)")
-        detail = (str(r.get("withdrawn_reason") or "").strip()
-                  or str(r.get("reject_reason") or "").strip()
+        detail = (str(r.get("reject_reason") or "").strip()
+                  or str(r.get("withdrawn_reason") or "").strip()
                   or str(r.get("clear_reason") or "").strip())
         code_text = S.CANDIDATE_REASON_LABELS.get(code, code)
+        twin = admitted_ident.get(candidate_identity(r.get("title"), r.get("doi")), "")
+        tail = (f"（同一篇已在 `lit:{twin}` —— 这是它的另一个槽位，属重复登记；条数不因此改）"
+                if twin else "")
         lines.append(f"- 槽位 {r.get('slot')} 《{r.get('title')}》 — 理由：{code}"
-                     f"（{code_text}）" + (f"；{detail}" if detail else ""))
+                     f"（{code_text}）" + (f"；{detail}" if detail else "") + tail)
+    lines += ["", f"## 待裁（{len(waiting)} 条）", ""]
+    if not waiting:
+        lines.append("（无）")
+    for item in waiting:
+        lines.append(f"- 槽位 {item['slot']} "
+                     f"《{T.clip(str(item.get('title') or ''), UNDECIDED_TITLE_CHARS)}》"
+                     f" — {item['why']}")
     lines.append("")
     return "\n".join(lines)
 
@@ -1069,21 +1446,25 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="")
     # 与报告标题同一口径：去重后的 lit_id（两条候选命中同一行时只算一篇）。
+    counts = _decision_counts(body_rows)
     admitted = len({str(r.get("lit_id") or "") for r in body_rows
-                    if str(r.get("status")) == "admitted"} - {""})
-    other = sum(1 for r in body_rows if str(r.get("status")) in ("withdrawn", "rejected", "cleared"))
+                    if judged_state(r) == "admitted"} - {""})
     return {
         "path": path.as_posix(),
         "rel_path": f"{REPORT_DIR}/{path.name}",
         "chars": len(text),
         "admitted": admitted,
-        "not_admitted": other,
+        "not_admitted": counts["rejected"],
+        "undecided": counts["pending"],
         "request_id": rid,
     }
 
 
 def report_violations(text: str) -> list[str]:
-    """委托报告的判据：两块都在、都非空、未入库的理由都是受控取值。
+    """委托报告的判据：三块都在、都非空、未入库的理由都是受控取值。
+
+    第三块（`## 待裁`）是 2026-10-26 Q16 加的：没有它，"A 还没判的那几条"
+    在报告上只剩"未入库 0 篇"这一句 —— 而那与"这一批什么都没检索到"同形。
 
     返回违规描述列表（空 = 通过）。由 `tests/test_search_tools_stage_admit.py` 的正控
     与负控直接打它 —— 负控若不走同一条判据，就证明不了"去掉一块会红"。
@@ -1102,7 +1483,7 @@ def report_violations(text: str) -> list[str]:
             continue
         if current:
             sections[current] += line + "\n"
-    for name in ("已入库", "未入库"):
+    for name in ("已入库", "未入库", "待裁"):
         hit = next((k for k in sections if k.startswith(name)), None)
         if hit is None:
             bad.append(f"缺 `## {name}` 块（这一块是交付物的一部分，不是可选）")

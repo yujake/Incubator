@@ -103,6 +103,7 @@ from typing import Any, Iterable, Mapping
 
 from . import agent_prompts as AP
 from . import leanscope as LEANSCOPE
+from .canonical import json_default
 
 __all__ = [
     "ACTIVE_NAME",
@@ -674,7 +675,7 @@ def record_active_run(*, root: Path | str | None = None, sid: str = "",
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=json_default) + "\n",
                        encoding="utf-8", newline="\n")
         os.replace(tmp, path)
     except OSError as exc:

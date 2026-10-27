@@ -173,12 +173,26 @@ def test_programs_outside_clock_is_on_the_coverage_readout(tmp_path, bench,
 
 def test_wait_any_hands_back_every_intent_in_the_workspace(tmp_path, bench,
                                                            monkeypatch) -> None:
-    """③ `clock.wait_any` 的 `intents` 是那一本全量意图账（不只是自己那一条）。"""
+    """③ `clock.wait_any` 的 `intents` 是那一本全量意图账（不只是自己那一条）。
+
+    2026-10-26 起这条路多了一道前置判据：名下现存计时器数必须 >= 1
+    （`clock.py::request_wait_any` 的 docstring 逐字引业主：「当然他可以起计时器
+    叫『等任意计时器返回』，这个需要存在的计时器数大于等于1」；一条都没有 ⇒
+    受控拒绝 `no_timers_to_wait`）。旧夹具直接调 `wait_any` —— 名下零条表 ——
+    于是它读到的是那道闸的拒信，而不是 `intents` 那一格。所以夹具先按产品自己的
+    说法起一条表（`CLK.start_timer(task_id=我)`），再问 `wait_any`：这道闸
+    一个字节都没有放松，多出来的只是"受理的前提被夹具满足了"。
+    """
     st, cond, ws = _ws(tmp_path, "waitany-read")
     reg = _reg(st, cond, ws)
     me = cond.open_top_level_run("M", TASK)
     other = _child(cond, me)
+    # 两条意图都按那道闸的前提造：谁要"等任意计时器返回"，名下就得先有一条表。
+    CLK.start_timer(ws, reason="判据：D 名下先有一条表", after_sec=60.0,
+                    task_id=other, role="D")
     CLK.request_wait_any(ws, task_id=other, role="D", purpose="别人的等待意图")
+    CLK.start_timer(ws, reason="判据：M 名下先有一条表", after_sec=60.0,
+                    task_id=me, role="M")
 
     with calling_as(me, "M"):
         got = reg.call("clock.wait_any", role="M", purpose="我这一趟的等待意图")

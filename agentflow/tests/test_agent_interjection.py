@@ -237,6 +237,6 @@ def test_a_stop_broadcast_is_a_message_not_an_interjection(tmp_path):
             break
     assert not bad, bad
     msgs = [e for e in events if e.get("kind") == "agent_message"]
-    assert msgs and msgs[0]["to"] == "#public" and msgs[0]["from"] == "M", msgs
+    assert msgs and msgs[0]["to"] == "ALL" and msgs[0]["from"] == "M", msgs
     assert "子进程" in str(msgs[0].get("body")), msgs[0]
     assert [e for e in events if e.get("kind") == "agent_interjection"] == []

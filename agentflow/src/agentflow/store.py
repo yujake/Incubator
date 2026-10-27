@@ -262,10 +262,12 @@ def direct_write_refusal(table: str) -> str:
     之路，见 `tx()` 里 `_refuse_fake_proof_review` 的注释）；两处都调这一个函数 ⇒ 关掉它的负控对两层同时生效
     （判据见 `tests/test_statement_write_is_the_secretarys_only.py`）。
     ## 为什么不是"凡直写就拒"：这两张表的合法写者不止秘书一个，且都是人写过的代码路径：
-    `agent_b/resolve_structural_duplicate`（合并要标 `superseded`）、`agent_f/core._proof_outlet`（证明结果与档位）、
+    `agent_b/resolve_structural_duplicate`（合并要标 `superseded`）、
     `conceptrows.write_concept`（B 的抽取产出）、`doc_tools.register_dependency`（G 登记依赖）、`paperledger`（论文
-    台账映射）、`migrate_concepts`（迁移）—— 它们各有自己的判据（`F.step` / `B` 的动作 / `Dependency.validate`），
+    台账映射）、`migrate_concepts`（迁移）—— 它们各有自己的判据（B 的登记那一笔 / `Dependency.validate`），
     且都不叫 `tool:*`；把闸口开在"所有写者"上等于让这些路径 fail-closed，那是权限面的改动，不是本条能决定的。
+    2026-10-26（D8）：命题行只经 B 的 `register_statement` 登记，F 的证明出口不再直写这张表；
+    `tools/table_tools.py` 的 `statements_are_registered_by_b` 守这一条。
     ## 第二个用户：`lit_candidates`（业主 2026-10-20 的待新增文献列表）拒的是同一件事 —— 模型的通用写口直接改
     一张"每一格都带语义"的表；合法写者也全是人写过的代码路径（`agent_a/run_once` 的自动入库、`tools/search_tools.py`
     的四支 `lit.*` 工具），它们的 `tx` 记号都不是 `tool:*`。与秘书那两张表唯一的差别是拒信指向的路不同（不是
@@ -346,11 +348,17 @@ def direct_write_refusal(table: str) -> str:
 #: `secretary` = 由秘书那条路接管（它有"谁可以交命题内容"的判据，路由不替它放宽）；
 #: `literal` = 由那条正路的实现本身接管（没有第三层，就是工具层调的那一个函数）。
 #:
-#: ## 仍然拒（刻意不进这张表）
+#: ## 不进这张表（而且这几张表上并没有拒信）
 #: - 迁移 / 账本类表：`counters`（发号器，不在 `schema.TABLES` 里）、`tasks`（召唤台账）、
-#:   `usage_ledger`、`eval_results` —— 它们的写者是框架自己的收口路径，通用写口本来
-#:   就不该碰，兜底也不接管（"路由"只对"有正路可走"的写有意义，对"根本没有这条正路"
-#:   的写只剩拒）。
+#:   `usage_ledger`、`eval_results` —— 它们的写者是框架自己的收口路径，所以这里不给它们
+#:   兜底方（"路由"只对"有正路可走"的写有意义）。
+#:   注意这一句不是"通用写口会被拒"：`direct_write_refusal` 只拒 `lit_candidates` 与
+#:   `statements`，这几张表在通用写口上本来没有拒信。2026-10-27 实测（D12）：
+#:   `table.create(table="tasks")` 直接放行并落行，且能写 `item_state="done"` 伪造收口、
+#:   能把板项种到别人名下 —— 那是一条权限面缺口，不是"有拒信只是没路由"。
+#:   `tasks` 那一侧的判据今天在工具层：`tools/table_tools.py::_tasks_write_refusal`
+#:   （只许给自己落项、不许伪造收口 / 已读）。`counters` / `usage_ledger` / `eval_results`
+#:   仍然敞着 —— 那是另一张单子，不许被这句话掩盖。
 #: - 载荷带 `bits` / `verification_id` / `reviewed_by` / `created_by` 的形态（见
 #:   `tools/table_tools.py::_NOT_ROUTABLE_KEYS`）：那是写入期现算的派生面与别人的签名面，
 #:   接管它等于把"绕开推导"洗成"系统代劳"。
@@ -1135,7 +1143,7 @@ class Store:
                 # ---- 写入期闸：`evidence_kind="proof_review"` 必须有 V 那一签。
                 # 为什么落在这一层（`tx` 的提交块）而不是 `schema.Statement.validate`：那条判据要读盘上的
                 # `verifications/<命题号>.jsonl`，而 `validate` 是字段级、手上没有工作区根；只有 `Store` 既有
-                # `self.root`、又是所有写者的必经之路（`agent_b.register_statement` / F 的 `_proof_outlet` /
+                # `self.root`、又是所有写者的必经之路（`agent_b.register_statement` /
                 # `table.create`·`table.update` 全落在这里）。落在某一条动作里只能管住那一条动作，而"绕开那条
                 # 动作"正是本仓踩过的形态。`rebuild` 刻意不走这里（读历史不是改历史）：存量里已有的假
                 # `proof_review` 由审计期 `verify._check_13` 的 `proof_review_without_verification` 点名。

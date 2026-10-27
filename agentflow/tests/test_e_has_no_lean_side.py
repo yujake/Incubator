@@ -14,7 +14,7 @@
 | 2 | E 的工具面按名枚举：无 `verify.check_formal` / 无 `formal.*` / 无 `verify.detect_verifier` | `tools/verify_tools.py` 的 `roles` |
 | 3 | `run_experiment(method="formal")` 受控拒绝，理由是「E 不做形式化」（新理由码） | `agent_e/run_experiment.py` |
 | 3b | E 的渲染提示词里不出现「已停用 / 写死关闭 / formal_moved_to_l」，且 E 与「形式化」不同句 | `specs/e.py` 的文案 |
-| 4 | 全仓代码没有那四个已删符号（`_record`+`_formal` / `lean_side`+`_reading` / `e_lean_side`+`_hard_off` / `E_LEAN_SIDE`+`_HARD_OFF`） | 四个符号的引用 |
+| 4 | 全仓代码没有那四个已删符号（清单见 `_DEAD_SYMBOLS`：四个名字在本文件里按段拼起来写） | 四个符号的引用 |
 | 5 | L 仍能形式化：三件工具 + 继承的 `_CheckFormal` + 真 lean 正控 | `agent_l/` 与 `tools/formal_tools.py` |
 | 6 | 反真空：把 `check_formal` 加回 E 的动作表 ⇒ 判据 1 必红 | 尺子本身 |
 
@@ -87,7 +87,11 @@ SENT_SPLIT = re.compile(r"[。！？\n]")
 
 #: 本机那一版真 Lean（与 `tests/test_l_faithfulness_is_measurable.py` 同一口径：
 #: 套件把机器设置钉掉之后，只有绝对路径这一档还能起真检查器）。
-LEAN = Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+#: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
+#: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
+from conftest import lean_path
+
+LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
 
 
@@ -299,10 +303,10 @@ def test_3b_the_e_prompt_never_mentions_a_disabled_lean_side(lean_on) -> None:
 def test_4_no_code_reference_to_the_deleted_symbols() -> None:
     """判据 4：全仓代码里没有那四个符号（grep 0 处）。
 
-    改前红（2026-10-23 实测，改之前逐字）：`_record`+`_formal` 在 `agent_e/core.py` /
-    `agent_e/run_experiment.py` / `agent_l/record.py` / `formalgw.py` 与四个测试文件里
-    共 13 处；`lean_side`+`_reading` 6 处（全在 `agent_e/`）；`e_lean_side`+`_hard_off` /
-    `E_LEAN_SIDE`+`_HARD_OFF` 各 18 处（含 `leanscope.py` 的 docstring 与 `tests/`）。
+    改前红（2026-10-23 实测，改之前逐字）：`_DEAD_SYMBOLS` 里那四个已删符号的读数分别是 ——
+    形式化的记录实现 13 处（`agent_e/core.py` / `agent_e/run_experiment.py` /
+    `agent_l/record.py` / `formalgw.py` 与四个测试文件）；Lean 侧读数 6 处（全在
+    `agent_e/`）；E 侧写死关闭的小写名与常量名各 18 处（含 `leanscope.py` 的 docstring 与 `tests/`）。
 
     扫代码根（`src` / `tests` / `scripts` / `tools`），不扫 `docs/*.md`：文档里的历史叙述
     由业主统一处理（施工单要求列清单），本判据管的是「还有没有活着的引用」。

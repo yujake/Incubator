@@ -50,7 +50,7 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
     秘书）时私聊已是受控拒绝（fail-closed，业主口径），而"回执三态"是角色通道那一档的读数。
     主控按角色名派活/通知是名册上的 `outside_roster` 那一档，所以这里的判据一个字没变。
     """
-    from agentflow.agent_loop import AgentLoop, PUBLIC
+    from agentflow.agent_loop import AgentLoop, ALL
     from agentflow.conductor import Conductor, LocalBackend
 
     ws = _ws(tmp_path)
@@ -72,7 +72,7 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
     # 与改前逐字相同）。S6-a（业主 T20/T21 附二 乙）：公聊的可见面 = 发信人的直接子代理。
     bare = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
                      conductor=cond, store=st, sid="rcpt", auto_secretary=False)
-    got_pub = bare._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
+    got_pub = bare._do_message({"to": ALL, "subject": "s", "body": "b"})
     assert got_pub["ok"] is False and got_pub["refused"] == "no_task_id", got_pub
     assert "可见面" in got_pub["error"], got_pub
 
@@ -84,7 +84,7 @@ def test_an_invisible_wiring_table_never_becomes_an_optimistic_receipt(tmp_path:
     所以"看不见接线表"这一条读数从公共频道那一档量：给 `#public` 发一条，而看不见我名下
     有多少直接子代理 ⇒ 回执 `unknown`。判据本体没换（`_receipt_for` 的三态），只换了入口。
     """
-    from agentflow.agent_loop import AgentLoop, PUBLIC
+    from agentflow.agent_loop import AgentLoop, ALL
 
     ws = _ws(tmp_path)
     st = Store(ws)
@@ -92,7 +92,7 @@ def test_an_invisible_wiring_table_never_becomes_an_optimistic_receipt(tmp_path:
                      conductor=None, store=st, sid="rcpt2", auto_secretary=False)
     # 台账号只需要"有"：这一条量的是回执，不是名册（名册那一档另有判据）。
     loop.my_task_id = "t-invisible"
-    got = loop._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
+    got = loop._do_message({"to": ALL, "subject": "s", "body": "b"})
     assert got["receipt"] == "unknown", got
     assert "不许折成" in got["note"], got
 

@@ -1146,6 +1146,16 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 因此变成 3 个（> 1）⇒ 它们不再是"只有文本提及"的 token，本表必须同步删掉。
     # 这不是放宽判据：口径仍是"真符号出现 ≤ 1 次的提及要逐条登记"，
     # 变的是这两个 token 的真符号数（读数：拆包后各 3 个）。
+    # —— 2026-10-26（清悬空引用那一单）：六条新登记，理由逐条写在下面 ——
+    # 这一批先按"改名了就改指真名、符号没了就改成自然语言"逐处改过；剩下这六条
+    # 要么引用落在禁改区（一个字节就是改权限面声明或提示词摘要），要么是
+    # "已删符号的留痕必须点名它"。
+    "_TASKS_VISIBLE_CHILD_DEPTH",  # 真符号只有一次出现点（`tools/table_tools.py` 的定义处）；引用处是 `AGENTS.md` 的 FC-27 manifest 那一行，与 `.noai-paths` 是双份清单之一，AI 不许动
+    "_AGENT_SPECS",                # 真符号只有一次出现点（`agent_prompts.py` 的定义处）；引用是定义下一行的注释。该文件是提示词摘要冻结区：改一个字符就改摘要、作废已落的缓存 ⇒ 只能登记，不能改文本
+    "_NO_TOOLCHAIN",               # 已改名的族名（真身 `_NO_TOOLCHAIN_FORMAL`）：两处注释在说"没拿到读数时那句诚实说法"的同一形态；引用处 `agent_prompts.py` 同样是提示词摘要冻结区，不许动
+    "_action" + "_summary",        # 已删的只读小函数（按段拼写：字面量本身不许出现在树里，否则会被 deprecated-forms 判据当成"已删符号还有落点"）：`docs/FC27-PENDING-2026-10-21.md` 那一段保留说明自己写着"不删也不改指路"（FC-27 走查记录要逐字可查 reviewer 当时批准的是哪几个函数），`specs/l.py` 那一处是墓碑句、属 FC-27 禁改区 ⇒ 两处都不能换成正名
+    "_tool" + "_summary",          # 同上（与上面那一条成对出现、同两处）
+    "_import_mathlib_probe",       # 2026-10-25 合并时删掉的 umbrella 探针：`toolchain.py` 的注释在讲"改前那两处探测"，`tests/test_mathlib_reading_has_one_source.py` 的判据 ② 就是断言它不存在 —— 留痕必须点名被删的东西，否则"删了什么、凭什么删"不可查
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
@@ -1171,6 +1181,19 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
      "负控夹具里那个「点名的文件不存在」的假名字（判据要求它被报出来）"),
     ("tests/sub/test_x.py",
      "形态示例：`tools/run_each_test_file.py` 在讲「子目录形态会被逐文件门判绿」"),
+    # —— 2026-10-26（清悬空引用那一单）：四份已删判据的名字，引用都是"出处/实例"，不是笔误 ——
+    ("tests/test_agent_e_formal_path.py",
+     "已删的 E 正式化路径判据：`tools/run_each_test_file.py` 把它当「14 passed / 1 skipped」的真实实例"
+     "逐字引用（逐文件门只知道过 1、不知道那一条没跑过），`tests/test_run_each_test_file.py` 与"
+     "`test_formalgw_no_axioms_shortcircuit.py` 拿它当同一口径的出处；它随 E 的 Lean 侧清理而删，"
+     "名字得留着，否则那个实例无出处"),
+    ("test_agent_e_formal_path.py",
+     "同一份文件的裸名写法：`tests/test_mechanical_rewrite_guards.py` 拿它当 CRLF 方向相反的举例"),
+    ("tests/test_e_lean_side_is_hard_off.py",
+     "被 `tests/test_e_has_no_lean_side.py` 接替的那份判据：`test_e_has_no_lean_memory_left.py` 与"
+     "`test_tools_returns_declaration.py` 按判据编号引它的口径（编号是那份文件的，不是接替者的）"),
+    ("test_e_lean_side_is_hard_off.py",
+     "同一份的裸名写法（`test_e_has_no_lean_memory_left.py` 里几处同口径的出处）"),
 )
 
 

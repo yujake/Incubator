@@ -2593,12 +2593,77 @@ TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed", "block")
 #: 召唤的终局类型（回答"这次召唤到底给出了什么"）：ok（完成并产出了预期产出）· no_result（完成
 #: 但确实没有结果，如"检索无命中"，这是一个有效结论）· not_applicable（完成，但该动作在当前状态
 #: 下不适用）· refused（框架拒绝执行：越权/超预算/超深度/检测到循环）· failed（执行中异常）·
-#: cancelled（被取消）。`refused` 单列是刻意的："我们没做"与"做了没成"是最容易被混为一谈的一对
+#: cancelled（被取消）· cut_off_by_parent（父代理退场时它还在跑，由父的退场结算写成终态 ——
+#: 结果未知，不许记成 ok）。`refused` 单列是刻意的："我们没做"与"做了没成"是最容易被混为一谈的一对
 #: （引文校验、OCR、D 溯源、C 预算截断四处都踩过），拒绝是策略的决定、失败是执行的结果。
 #: 别与 `SEARCH_OUTCOMES` 串了（两套命名空间只差一个字母）：本词表（`tasks.outcome`）用单数
 #: `no_result`，那里（`search_requests.outcome`）用复数 `no_results`。两处必须成对读 —— "错一个
 #: 字母"在两边都只会得到一句"不在词表里"，而不会告诉你串了哪一套（见 `SEARCH_OUTCOMES` 上面那段）。
-TASK_OUTCOMES = ("ok", "no_result", "not_applicable", "refused", "failed", "cancelled")
+TASK_OUTCOMES = ("ok", "no_result", "not_applicable", "refused", "failed", "cancelled",
+                 "cut_off_by_parent")
+
+#: 一个子代理的结局（三档，见 :func:`child_ending`）。它是"这个子到底怎么结束的"这一问的
+#: 唯一答案面 —— 正常交付 / 被父代理退场掐断 / 被叫停。三档各有各的台账落点：
+#: `delivered` 用子自己报的 `status`/`outcome`；`cut_off_by_parent` 落
+#: `done` + `cut_off_by_parent` + `settled_at_parent_exit=True`；`stopped` 落
+#: `cancelled` + `cancelled`（或 `refused`，当它是"因超预算/超截止被拒"那一档）。
+CHILD_ENDINGS = ("delivered", "cut_off_by_parent", "stopped")
+
+#: 三档的命名常量：`child_ending()` 的三个分支各返回其中一档（不是再写一遍字面量）。
+#:
+#: 为什么要这一层（2026-10-26）：改前 `CHILD_ENDINGS` 全仓 0 读者 —— 三档在
+#: `child_ending()` 里各写一遍字面量，于是"词表说三档"与"判定点给三档"只是碰巧一致：
+#: 词表改一个字母、加一档、删一档，判定点一个字节都不会跟着变，也没有任何判据会红。
+#: 现在是解包：`CHILD_ENDINGS` 被改短/改长，`schema.py` 的导入期当场抛
+#: `ValueError`（不是静默漂移）；词表与分支的"一一对应"（不许有档没人产、也不许产出
+#: 词表外的档）由 `tests/test_child_endings_are_a_closed_set.py` 穷举判。
+CHILD_DELIVERED, CHILD_CUT_OFF_BY_PARENT, CHILD_STOPPED = CHILD_ENDINGS
+
+#: 只有框架能写、角色自己不许声明的 outcome（在 `TASK_OUTCOMES` 里，但 handler 说
+#: "我这一趟是 cut_off_by_parent" 不算数）。
+#:
+#: 为什么必须有这一格：那一档说的是"父代理退场时它还在跑"，只有父的退场结算那一步
+#: 知道这件事。若 handler 也能声明它，就等于给了一条凭空把一行写成"被掐断"的路
+#: —— 而那一行可能根本没跑过，读侧却会把它的产出当作"未并入"丢掉（与伪造终态同族）。
+FRAMEWORK_ONLY_OUTCOMES = ("cut_off_by_parent",)
+
+
+def child_ending(*, status: str = "", outcome: str | None = None,
+                 stop_code: str = "", cut_off: bool = False) -> dict:
+    """一个子代理的结局 —— 三档只在这一处判（唯一判定点）。
+
+    为什么必须有这一处（业主 2026-10-26 的 D22）：改前"一个子的结局"散在四个写者手里
+    ——子自己交付（`Conductor._end_from_payload`）、子读到取消（`summon_run` 的
+    `except CancelRequested`）、`dispose()`、以及父退场那一处；各自拼自己的
+    `status`/`outcome` 字面量，于是"被父退场掐断"这一档在台账上根本没有位置
+    （父退场时一个字段都不写，子行留在 `running`，或在自己的线程里照常写成 `done`/`ok`
+    —— 两种都和"正常交付"长得一模一样）。三档从同一处判出来之后，"这个子是被谁结束的"
+    只需要读一个函数。
+
+    参数（都是事实，不是判断）：
+    `cut_off`：父代理退场时它还在跑（真值 = 这一档，优先于其余两档）；
+    `stop_code`：叫停的理由码（`user` / `budget` / `dispose` …）；给了非空串 = 被叫停；
+    `status` / `outcome`：子自己报的那两格（`delivered` 档原样透传，一个字节都不改写）。
+
+    返回 `{"ending", "status", "outcome", "settled_at_parent_exit", "why"}`。调用方只许
+    按这四格写台账，不许在调用点另拼 `status`/`outcome` 字面量。
+    `ending` 的取值只来自 :data:`CHILD_ENDINGS`（三个分支各返回其中一档；词表与分支的
+    一一对应由 `tests/test_child_endings_are_a_closed_set.py` 穷举判）。
+    """
+    if cut_off:
+        return {"ending": CHILD_CUT_OFF_BY_PARENT, "status": "done",
+                "outcome": "cut_off_by_parent", "settled_at_parent_exit": True,
+                "why": "父代理退场时它还在跑 ⇒ 这一行由父的退场结算写成终态：结果未知，不是 ok"}
+    if str(stop_code or "") or str(status or "") == "cancelled":
+        # `refused` 那一档要保住：`status=cancelled` 时 `outcome=refused` 是"因超预算/超截止
+        # 被拒"，与"被取消"语义不同（`validate` 允许两者，见下面对 cancelled 的判据）。
+        kept = "refused" if str(outcome or "") == "refused" else "cancelled"
+        return {"ending": CHILD_STOPPED, "status": "cancelled", "outcome": kept,
+                "settled_at_parent_exit": False,
+                "why": f"被叫停（{str(stop_code or '') or 'cancelled'}）"}
+    return {"ending": CHILD_DELIVERED, "status": str(status or "done"),
+            "outcome": str(outcome or "no_result"), "settled_at_parent_exit": False,
+            "why": "子代理自己交了差"}
 
 #: 框架拒绝执行的具体理由（受控词表）。`outcome="refused"` 必须带其中之一。
 #:
@@ -2702,6 +2767,19 @@ class Task:
     #: 派活参数（业主 A6=丙）：父声明"这个实例做完一件还待命"。只对 `kind == "delegation"` 有意义。
     keep_alive: bool = False
 
+    # ---- D22（业主 2026-10-26）：这一行是不是"父代理退场时被结算的"
+    #
+    # 为什么必须是一格显式的标记（而不是让读的人去比 `detail` 的措辞）：`outcome` 里
+    # 那一个 `cut_off_by_parent` 档回答"它怎么结束的"，这一格回答"是谁写的这一行"
+    # ——父退场时子代理可能还活着，它会晚些时候在自己的线程里写自己的终态；两件事
+    # 必须分得开，否则"被掐断"与"自己交差"在台账上又会长得一样（那正是 D22）。
+    #
+    # 位置在最后一位（不是美观问题）：`to_dict()` 是 `asdict`（键序 = 字段序），而
+    # `_write_new_row` 与 `finish` 都把行补齐到全字段 —— 新键追加在末尾才让 `rebuild()`
+    # 之后 `tasks.json` 逐字节一致（I-9 的那两条判据守这件事）。
+    #: `True` = 这一行的终态是父代理退场时结算的（子当时还在跑，结果未知）。
+    settled_at_parent_exit: bool = False
+
     def validate(self) -> None:
         if not str(self.task_id or "").strip():
             raise ValueError("task_id 不能为空")
@@ -2778,6 +2856,28 @@ class Task:
             raise ValueError(
                 "status=cancelled 时 outcome 必须是 'cancelled'（被取消）"
                 "或 'refused'（因超预算/超截止被拒）—— 二者语义不同，但都属于'没做完'"
+            )
+        # ---- D22：父退场掐断那一档的两格必须成对（不许只有一半）
+        #
+        # 为什么两个方向都判：`outcome=cut_off_by_parent` 是"它怎么结束的"，`settled_at_parent_exit`
+        # 是"谁写的这一行"。只判一个方向的话，会出现"写着被掐断、却没有标记"（读侧按标记筛
+        # 就漏掉它）与"标了记、却写成 ok"（读侧按 outcome 筛就把它当成正常交付）两种半笔。
+        if self.outcome == "cut_off_by_parent":
+            if self.status != "done":
+                raise ValueError(
+                    "outcome=cut_off_by_parent 的 status 必须是 'done' —— 它不是"
+                    "失败（代码没崩）、也不是取消（没人叫停），而是父代理退场时它还"
+                    "在跑；终态该落在 done 上、由 outcome 说明结果未知"
+                )
+            if not self.settled_at_parent_exit:
+                raise ValueError(
+                    "outcome=cut_off_by_parent 必须同时置 settled_at_parent_exit=True ——"
+                    "后者是'这一行由父的退场结算写成'的唯一标记"
+                )
+        if self.settled_at_parent_exit and self.outcome != "cut_off_by_parent":
+            raise ValueError(
+                f"settled_at_parent_exit=True 时 outcome 必须是 'cut_off_by_parent'，"
+                f"收到 {self.outcome!r} —— 标了记却写着别的结局，读侧按哪一格筛都会漏"
             )
         if self.parent_task_id is not None:
             if not str(self.parent_task_id).strip():

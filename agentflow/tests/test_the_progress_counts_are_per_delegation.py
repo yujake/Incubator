@@ -19,9 +19,20 @@
 from __future__ import annotations
 
 import pathlib
+import re
 
 from agentflow import agent_loop as AL
 from agentflow import agent_prompts as AP
+
+#: 判停那一句在散文里的词表：`连着` + 若干字（可能夹着加粗的星号）+ 数字 + `次同样的调用`。
+#:
+#: 为什么要留出那"若干字"：p207（2026-10-27，提交 `9147277`）把 `PARENT_STOP` 里那一句
+#: 重写成「连着（加粗）5 次同样的调用 + 同样的读数」这一趟才以 `no_progress_limit` 收工
+#: —— 判停那一档补上了"同样的读数"这个限定（裁定 10丙 的另一半），措辞也加粗了。
+#: 逐字找"连着 5 次"于是再也找不到：散文没有丢掉那个数字，丢的是旧判据认识的写法。
+#: 同一次提交里 `agent_prompts.prompt_text_problems()` 已经把口径钉成
+#: `f"{stop} 次同样的调用"`（本文件的那条判据是唯一没跟上的读者）。
+_STOP_CLAUSE = re.compile(r"连着[^\n]{0,16}?(\d+)\s*次同样的调用")
 
 
 def test_the_two_thresholds_are_three_and_five() -> None:
@@ -38,9 +49,24 @@ def test_the_prompt_says_the_same_number_as_the_code() -> None:
 
     为什么值得一条判据：这个数写在两处（`agent_loop` 的参数与提示词里的散文），
     而"改了一处忘了另一处"是本项目的经典形态（改前那句散文写的就是 6）。
+
+    ## 2026-10-26（p207 抬版本）之后：按词表现取，不再逐字找"连着 5 次"
+    改前这一条找的是 `f"连着 {max_dead_loop} 次"`（逐字），而 p207 把那一句改成
+    「连着（加粗）5 次同样的调用 + 同样的读数」这一趟才以 `no_progress_limit` 收工：
+    数字还在、而且判停的条件说得更严（同样的调用 + 同样的读数），只是写法变了。
+    所以这里改成从那一句里现取数字（`_STOP_CLAUSE` 允许中间夹着加粗标记），
+    并补上改前漏掉的两条 —— 判停那一句必须写明"同样的读数"（判停不只是"同一个调用"），
+    并且必须与理由码 `no_progress_limit` 同句。它守的仍然是同一件事：
+    散文里那个数等于代码里的 `max_dead_loop`，且旧的那个 6 不许回来。
     """
     text = "\n".join(_prompt_texts())
-    assert f"连着 {AL.AgentLoop.max_dead_loop} 次" in text, text[:400]
+    found = _STOP_CLAUSE.search(text)
+    assert found, f"散文里找不到「连着…次同样的调用」那一句：{text[:400]}"
+    assert int(found.group(1)) == AL.AgentLoop.max_dead_loop, (
+        found.group(0), AL.AgentLoop.max_dead_loop)
+    line = next((ln for ln in text.splitlines() if found.group(0) in ln), found.group(0))
+    assert "同样的读数" in line, line
+    assert "no_progress_limit" in line, line
     assert "连着 6 次" not in text, "散文里还留着旧的 6：改了一处忘了另一处"
     assert f"连着第 {AL.AgentLoop.dead_loop_nudge} 次" in text, "提醒那一档的 3 也要在散文里"
 

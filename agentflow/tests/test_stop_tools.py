@@ -57,7 +57,7 @@ def test_graceful_stop_writes_the_switch_and_broadcasts_the_reminder(tmp_path: p
     不再是集体插话 —— 插话收窄成"只有用户 → M"。留言同样"下一步就看到"：
     步边界的 `_hear()` 会把它并进这一步的结果。
     """
-    from agentflow.agent_loop import PUBLIC, read_interjections, read_messages
+    from agentflow.agent_loop import ALL, read_interjections, read_messages
 
     ws, st, _c, reg = _wired(tmp_path)
     res = reg.call("conductor.stop", role="M", reason="user")

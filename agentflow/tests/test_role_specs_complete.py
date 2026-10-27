@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import importlib.util
 import json
 import os
@@ -671,32 +672,16 @@ def test_unknown_role_in_census_would_be_caught(tmp_path):
 
 
 def _registered_tool_names() -> list[str]:
-    """从真实装配里取全部工具名（与 `cli tools` 用的是同一条路径）。
+    """从唯一量法取全部工具名（`tools/verify_role_specs.py::live_tool_face()`）。
 
-    为什么不解析 `cli tools` 的 stdout：那个命令默认只打印各角色的条数，
-    要拿 55 个名字得逐个角色跑一次并解析。直接调 `build_registry` 更直接，
-    而且它与 `cli.cmd_tools:335` 是同一个调用（含 `roles=tuple(ROLES)`）。
+    这里此前是本文件自己的第二份"怎么量"（直接 `build_registry` 再 `names()`）——
+    与门里 `live_tool_counts()` 那一段、附录判据的两个 fixture、`release_all` 判据里
+    解析 CLI 的那一段并排存在。四处现算就是四处口径，所以现在它们全部投影自同一个函数
+    （`live_tool_face()` 里那句装配一次，其余都是它的投影）。
     """
-    import tempfile
-    sys.path.insert(0, str(REPO / "src"))
-    from agentflow import store as _store  # noqa: PLC0415
-    from agentflow.tools import ROLES, build_registry  # noqa: PLC0415
-
-    with tempfile.TemporaryDirectory(prefix="role_specs_reg_") as td:
-        st = _store.Store(Path(td))
-        st.init()
-        #  这里与下面两处此前各有一句 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
-        # （2026-10-15 删）。它做了两件事，两件都不该做：
-        #   ① 对本进程已经打开的 stdout 编码没有任何作用（那时它已经定了）；
-        #   ② 污染父进程的 `os.environ`，于是同一趟 pytest 里后跑的测试起子进程时
-        #      会继承它 —— 子进程吐 UTF-8、父进程仍按 GBK 解。
-        # 真机后果（全量跑里唯一那条"只在全量跑里红"的用例）：`tests/test_temp_root_pin.py`
-        # 的端到端负控 `_readerthread` 抛 `UnicodeDecodeError: 'gbk' codec can't decode
-        # byte 0xa2 in position 584` ⇒ `proc.stdout` 变成 `None` ⇒ 断言里 `+` 抛 TypeError。
-        # 编码的唯一正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或
-        # `encoding=`）；会话级改环境变量是把"谁先跑"变成别人红绿的条件。
-        build = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES))
-        return sorted(build.registry.names())
+    face, why = G.live_tool_face(root=REPO)
+    assert face is not None, why
+    return list(face["names"])
 
 
 def test_every_registered_tool_has_a_contract_row_in_role_specs():
@@ -734,8 +719,10 @@ def test_tool_count_in_the_gate_matches_the_live_census():
 # ============================================================ §R0 三列 ↔ 实时注册表
 
 
-def _r0_rows() -> list[dict[str, str]]:
-    """解析 §R0 的 55 行表，取出机械可比的三列：`side_effect` / 审批 / roles。
+def _r0_rows(path: Path | None = None) -> list[dict[str, str]]:
+    """解析 §R0 的逐条表，取出机械可比的三列：`side_effect` / 审批 / roles。
+
+    `path` 缺省是真实文档；本文件的验收判据会在临时副本上解析同一张表。
 
     只解析这三列是刻意的：它们是机器可判定的（注册表里有同名事实）。
     其余列（summary / 参数 / 返回结构 / 已知问题）是人写给人看的，
@@ -746,7 +733,7 @@ def _r0_rows() -> list[dict[str, str]]:
     把子小节的表一起扫进来会得到一条名叫 `agent_c.py:2538-2737` 的假工具，
     然后在下游 `registry.get()` 上炸。第一版就是这么错的，所以这里按"表头 + 连续 `|` 行"取。
     """
-    lines = DOC.read_text(encoding="utf-8").splitlines()
+    lines = (path or DOC).read_text(encoding="utf-8").splitlines()
     start = next(i for i, ln in enumerate(lines) if ln.startswith("| # | 工具 |"))
     rows: list[dict[str, str]] = []
     for line in lines[start + 1:]:
@@ -862,3 +849,111 @@ def rows_to_check(reg, rows: list[dict[str, str]]) -> list[dict[str, str]]:
         if problems:
             out.append({r["tool"]: "；".join(problems)})
     return out
+
+
+# ============================================================ 验收：再加一件工具要改几处
+
+
+def _face_with_one_more(face: dict, name: str) -> dict:
+    """把一次真实装配改造成"多了一件写工具"的那一份（与 `conductor.post_task` 同形）。
+
+    形态：写工具、`external="none"`、`roles` 十一个角色全体，但只读角色 C/H/V 会被
+    `for_role` 剥掉 ⇒ 那三个角色的条数不变、泄漏清单也不变。这样既覆盖"加一件"对
+    两根轴、需审批、逐件清单的全部影响，也覆盖"只读角色被剥"那一档。
+    """
+    fake = copy.deepcopy(face)
+    fake["names"] = sorted(list(face["names"]) + [name])
+    fake["total"] = face["total"] + 1
+    fake["se"]["write_local"] = fake["se"].get("write_local", 0) + 1
+    fake["ext"]["none"] = fake["ext"].get("none", 0) + 1
+    fake["appr"] = face["appr"] + 1
+    fake["forms"]["partial"] = fake["forms"].get("partial", 0) + 1
+    fake["side_by_name"][name] = "write_local"
+    fake["ext_by_name"][name] = "none"
+    off = fake["lean_off"]
+    off["total"] = face["lean_off"]["total"] + 1
+    off["se"]["write_local"] = off["se"].get("write_local", 0) + 1
+    off["ext"]["none"] = off["ext"].get("none", 0) + 1
+    off["appr"] = face["lean_off"]["appr"] + 1
+    for role in face["roles"]:
+        if role in ("C", "H", "V"):
+            continue
+        entry = fake["by_role"][role]
+        entry["total"] += 1
+        entry["se"]["write_local"] = entry["se"].get("write_local", 0) + 1
+        entry["ext"]["none"] = entry["ext"].get("none", 0) + 1
+        entry["appr"] += 1
+        entry["names"] = set(entry["names"]) | {name}
+    fake["counts_by_role"] = {r: fake["by_role"][r]["total"] for r in face["roles"]}
+    # A–H 的交集不变（与 post_task 一样：它落不到只读角色手上）。
+    return fake
+
+
+def test_adding_one_tool_costs_exactly_one_row(tmp_path):
+    """验收判据：再进一件工具，机器替人做完全部数值，人要写的就是 §R0 表的一行。
+
+    ## 为什么这条判据要存在
+
+    "下次加一件工具要改几处"此前是一句承诺，没有任何东西判它。承诺不算凭据，
+    所以这里把"加一件"真的造出来，在文档的临时副本上跑一遍，问三件事：
+
+    ① `check()` 必须红 —— 证明门真的在看那个数（不是把数字当摆设）；
+    ② `write_readings()` 之后 `check()` 必须绿 —— 证明全部数值槽都自动跟上了；
+    ③ 此时文档里仍然没有那件新工具的契约行 ⇒ 剩下要人写的只有 `§R0 表的一行`；
+       把那一行补上之后，行集合与注册表重新一致（这一步是机械模拟，不含散文）。
+
+    判据只读写临时副本；真实文档一个字节都不动。
+    """
+    face, why = G.live_tool_face(root=REPO)
+    assert face is not None, why
+    name = "conductor.fake_probe"
+    fake = _face_with_one_more(face, name)
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    for rel in (G.DOC_REL, G._APPENDIX_REL, G._DEV_SPEC_REL):
+        (docs / rel.name).write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+    copy_doc = docs / G.DOC_REL.name
+    roles = tuple(G.EXPECTED_ROLES)
+
+    # ① 门必须红：装配多了一件，而文档还写着旧数。
+    before = G.check(copy_doc, live_counts=fake["counts_by_role"], live_role_list=roles)
+    assert before["verdict"] == "incomplete", (
+        f"装配多了一件而文档没改，门却判 {before['verdict']} ⇒ 它没在看那个数")
+    red = " ".join(before["reason"].split())
+    assert "与实测不符" in red, f"红得不是那件事（读数是别的毛病）：{before['reason'][:300]}"
+
+    # ② 一条命令把全部数值槽写成这一次的现算值。
+    changed = dict(G.write_readings(root=tmp_path, face=fake))
+    assert changed[G.DOC_REL.as_posix()] > 0, f"标题一个都没重写：{changed}"
+    after = G.check(copy_doc, live_counts=fake["counts_by_role"], live_role_list=roles)
+    assert after["verdict"] == "ok", after["reason"]
+
+    # 附带：附录与 LIVE-READINGS 也跟上了（否则"其余数值全部自动跟上"是假的）。
+    appendix = (docs / G._APPENDIX_REL.name).read_text(encoding="utf-8")
+    for role in ("A", "L", "M"):
+        want = fake["by_role"][role]["total"]
+        assert f"工具面明细（{want} 件）" in appendix, f"附录 §{role}.4 没跟上（应为 {want} 件）"
+    dev = (docs / G._DEV_SPEC_REL.name).read_text(encoding="utf-8")
+    assert re.search(rf"(?m)^cli_tools_total\s*=\s*{fake['total']}\b", dev), \
+        "LIVE-READINGS 的 cli_tools_total 没跟上"
+    assert re.search(rf"(?m)^cli_tools_role_a\s*=\s*{fake['counts_by_role']['A']}\b", dev), \
+        "LIVE-READINGS 的 cli_tools_role_a 没跟上"
+
+    # ③ 只剩"§R0 表的一行"要人写：数值全对，名字还不在表里。
+    text = copy_doc.read_text(encoding="utf-8")
+    assert f"`{name}`" not in text, (
+        "数值槽之外还多写了一处不该由机器写的东西（契约行必须人来写："
+        "机器把它写出来就等于自证）")
+    missing = [n for n in fake["names"] if n not in {r["tool"] for r in _r0_rows(copy_doc)}]
+    assert missing == [name], f"缺的契约行不止那一件：{missing}"
+
+    # 把那一行补上（机械模拟人写的那一行），行集合必须与注册表重新一致。
+    lines = text.splitlines()
+    last = max(i for i, ln in enumerate(lines) if ln.startswith("| 116 |"))
+    lines.insert(last + 1,
+                 f"| 117 | `{name}` | 判据夹具造的那一件 | `write_local` | **是** | "
+                 f"{' '.join(fake['roles'])} | **x** | — | — | — |")
+    copy_doc.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert sorted(r["tool"] for r in _r0_rows(copy_doc)) == fake["names"], (
+        "补上那一行之后行集合仍与注册表不一致 ⇒ 人写的东西不止那一行")

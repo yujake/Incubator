@@ -2151,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p209"
+_FROZEN_PROMPT_VERSION = "p212"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2160,7 +2160,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 # 2026-10-25（p201 收口批）：十一格全换 —— 今晚十几条 lane 的段变更（M 的 27 条过时清理、
 # D/E/F 与 G/H/V/L 两批审计、S1 摘掉 system 的 inbox/board 两格、S2 的出口按角色现算、
 # 以及共用段那几处）改了既有角色段也改了共用段，逐组理由写在 `agent_prompts.PROMPT_VERSION`
-# 上方那一段。十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 上方那一段。十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-26（p202 收口批）：十一格全换。根因只有一条 —— `judge.JUDGE_PROBLEMS` 多了一个
 # 失败码 `judge_unknown_tool`，而那份词表被逐项拼进每个角色的 `THREE_STATE` 段
 # （`"、".join(J.JUDGE_PROBLEMS)`）⇒ 加一个码等于改十一个角色的提示词。另两笔在段上的落点：
@@ -2170,7 +2170,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   A 1022e25d→d8819279 / B f7d38a5c→407bf1ee / C 630ad84f→72ace081 / D 07409c4a→110f7eb7 /
 #   E 3121e244→f46e5f64 / F 835fa4ca→46bd35c5 / G e59dbbf8→a1d7077d / H ad1e532a→e9bdf211 /
 #   L dac10e41→b60b8d3f / M 38b381b9→16bf19ba / V 0afe4946→33b5d66b。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-26（p203 收口批）：只有 F 那一格换值 —— 业主裁定「依赖面写在自己那份证明手稿里、
 # 由 B 读稿登记」⇒ `specs/f.py` 的 policy 多一条（`## 依赖` 四列表；缺段而正文有引用则整笔
 # 拒收 `dependency_section_missing`）。同批的另两笔（B 的 `register_statement` 多一格可选参数
@@ -2179,7 +2179,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   A d8819279→d8819279 / B 407bf1ee→407bf1ee / C 72ace081→72ace081 / D 110f7eb7→110f7eb7 /
 #   E f46e5f64→f46e5f64 / F 46bd35c5→91335ce5 / G a1d7077d→a1d7077d / H e9bdf211→e9bdf211 /
 #   L b60b8d3f→b60b8d3f / M 16bf19ba→16bf19ba / V 33b5d66b→33b5d66b。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p204 收口批）：十一格全换，两笔一起动。
 # ① 时钟八件的形写进各角色的政策（十格各加一条；M 那一格把申请形状、wait_for 三种指称、
 #    补目的、到点消息的例子、旧计时工具退役并进它已有的挂机那一条）；
@@ -2192,7 +2192,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   D 110f7eb7→7126df90 / E f46e5f64→e44a6a90 / F 91335ce5→7cd0c83a /
 #   G a1d7077d→689286fc / H e9bdf211→f8bf823d / L b60b8d3f→75204093 /
 #   M 16bf19ba→08567b14 / V 33b5d66b→19ba4aa7。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p205 收口批）：十一格全换，两笔一起动。
 # ① 新工具 `clock.wait_any` 进 `tools_lines` 那一行（名 + 摘要 + 必填参数 + 副作用），
 #    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
@@ -2203,7 +2203,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   D 7126df90→446f2a2d / E e44a6a90→1ea126e2 / F 7cd0c83a→7005c3d7 /
 #   G 689286fc→b7255c30 / H f8bf823d→c82d132c / L 75204093→1f73dd53 /
 #   M 08567b14→96bc2568 / V 19ba4aa7→01ef0b27。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p206 收口批）：十一格全换，三笔一起动。
 # ① 工具面 returns / summary 十一处进 `tools_lines` 那一行（attack.create_plan /
 #    clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any /
@@ -2217,7 +2217,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   D 446f2a2d→8885d099 / E 1ea126e2→ee9f1962 / F 7005c3d7→8303429f /
 #   G b7255c30→71b47d56 / H c82d132c→2db09be8 / L 1f73dd53→1e3825c7 /
 #   M 96bc2568→03495fae / V 01ef0b27→6ec461ac。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p207 收口批）：十一格全换，十四段一起动（逐段理由写在
 # `agent_prompts.PROMPT_VERSION` 上方 p207 那一格）：
 # ① 形状 2 的 `params` 改成"结构化数据、不是动作参数表"，并写明这一形没有 `action`（S2）；
@@ -2240,7 +2240,7 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   D 8885d099→c5788d65 / E ee9f1962→87f0a6ca / F 8303429f→70d94543 /
 #   G 71b47d56→6d9c53cf / H 2db09be8→304b9028 / L 1e3825c7→30ba4ea1 /
 #   M 03495fae→8dbe22d6 / V 6ec461ac→ef388571。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p208 收口批）：只有五格换值（D / F / G / M / V），另六格逐字未动
 # （逐格理由写在 `agent_prompts.PROMPT_VERSION` 上方 p208 那一格）：
 # ① F：`specs/f.py` 的 `boundary` 新增第 8 条（形式化不是 F 的活、不许由 F 发起，
@@ -2259,19 +2259,57 @@ _FROZEN_PROMPT_VERSION = "p209"
 #   D c5788d65→71c77599 / E 87f0a6ca→87f0a6ca / F 70d94543→ce2a0e5a /
 #   G 6d9c53cf→def9b6b2 / H 304b9028→304b9028 / L 30ba4ea1→30ba4ea1 /
 #   M 8dbe22d6→7b886073 / V ef388571→eec84b9d。
-# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
+# 2026-10-26（p210 收口批）：十一格全换，九笔一起动（逐笔出处写在
+# `agent_prompts.PROMPT_VERSION` 上方 p210 那一格）：
+# ① 公共频道只剩一种写法（`#public` → `ALL`），落点是十一格共用的段；
+# ② 模板里的具体台账号换成占位 `t-NNNNNN`，同样落在共用段上（含 `specs/m.py` 的 policy）；
+# ③ 两件新工具 `program.list` / `program.stop`，`tools_lines` 对每个角色都渲染 ⇒ 每格各多行；
+# ④ `conductor.post_task`（Q15 裁定之后进了 `UNIVERSAL_TOOLS`）⇒ 连只读的 C / H / V 也各多一行；
+# ⑤ `conductor.ack` 的 `close` 与 `conductor.retire_child` / `conductor.state` 的声明与摘要；
+# ⑥ `lit.*` 六格按三态口径重写（摘要进 `tools_lines`）；
+# ⑦ `clock.periodic_start` 的 `returns=` 补 `patrol_checklist` —— `returns=` 不进段，
+#    所以这一笔单独不换摘要，它只表现在 golden 的 `declarations` 上；
+# ⑧ G9 的 lit 两处 summary（`stage_add` 的"同一篇只占一个槽"、`stage_withdraw` 的
+#    "撤掉是终态判断"）⇒ A 那一格再变一次；
+# ⑨ `specs/b.py` 的 policy 新增两条（`draft/161` 的 C1：入库前逐条判 relevance、
+#    定理与证明要改写成自然语言）⇒ B 那一格再变一次。
+# ③ ④ 两笔对十一个角色各多一行，这是"十一格无一幸免"的直接读数（与"只动某岗段落"对照）。
+# 逐格的旧值 → 新值（新值 = 三条 lane 全部收工之后、冻结这一次的现算值）：
+#   A 7a8ddf0d→a02e9b5d / B 4fd7572d→12c1ccac / C 81215a32→0934cade /
+#   D d46dcc3a→682d422d / E f1036188→1b8b2e4f / F 9684cb81→bf10c061 /
+#   G 96e718db→b30cc02b / H 304b9028→8bb8629d / L 03858b46→fed4e587 /
+#   M 7b886073→61204a21 / V eec84b9d→55e0a1ae。
+# 十一格是 `agentflow/temp/_p210_digests.py` 的现算值（它导入本文件的 `_surface_digest`，
+# 摘要口径只有一处），不是手抄。
+# 2026-10-26（p211 收口批 / K1）：十一格全换。本批只做两件事 —— 补齐四处提示词正文的
+# 缺句/多句（D 面上还印着 `conductor.summon`、M 丢了「只做数值实验不算完成」、论文段丢了
+# 「收工门八格全过」与「可改、该改」，另补一处 `.tex` 的 `unsupported_format` 读数）＋
+# 把工具说明的压缩批次重压回 ≤75%（30 件，六件回涨最大的按「同一句解释出现两次」合并）。
+# 逐笔出处写在 `agent_prompts.PROMPT_VERSION` 上方 p211 那一格。
+# 十一格全换的原因：① 的落点是 `conductor.post_task` 的 summary，而它是 `UNIVERSAL_TOOLS`
+# ⇒ 十一格各少一个 `conductor.summon`；② `specs/m.py` 的 policy 只进 M 那一格；
+# ③ ④ 只在 PAPER_PACK（只进 M / G / H）；⑤ 的 30 件 summary 全在 `tools_lines` 那一行，
+# 而 `tools_lines` 对每个角色都渲染 ⇒ 剩下的格子也跟着变。
+# 逐格的旧值 → 新值：
+#   A a02e9b5d→b905f740 / B 12c1ccac→bde265b3 / C 0934cade→ec81ba2d /
+#   D 682d422d→2a3dc40a / E 1b8b2e4f→f2d86a4b / F bf10c061→9917ca15 /
+#   G b30cc02b→7a56ebf7 / H 8bb8629d→44cfc11e / L fed4e587→5bfea9b0 /
+#   M 61204a21→0b46a39a / V 55e0a1ae→f36bb01a。
+# 十一格是那一支重算探针（当时写在 temp 下，口径只取本文件的 `_surface_digest` 一处）
+# 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "7a8ddf0d7b1e7bc02e849c1233fcac9078d22395f7a70c626a317daca6946bb4",
-    "B": "4fd7572d300ba5117b4119553e1f43f527962e2e23d423f191e1a24ac34f08e2",
-    "C": "81215a320cfa3cec177956b8819fc73742739906ac86240299c94c517e3c1a4d",
-    "D": "d46dcc3a07240b66692ac3461cbfd898017be8f193405c7b793907e86a1b5889",
-    "E": "f103618848e1d6c58f46d9134094b5e0a4c0b6f233cb1a09ea9027c022d2843c",
-    "F": "9684cb8193146e2efe477c428edd52aac4ce76c3a5b9ba066a765854cb10927e",
-    "G": "96e718db106ea8597a97901755fbcc18251779adacb6b4dcbfd393b377955d0c",
-    "H": "304b9028ac74245eebdce4236832ddc6e90eb1e5d93f7de2ad37fe1dc4659314",
-    "L": "03858b464c9144c4f7ac686c83f3f02be79aeac9a0220f85eb4639a971d07195",
-    "M": "7b8860739fb75fb66f317c3c9917815638510dba47622400d2440a4215abe900",
-    "V": "eec84b9d297772fd92dd2f19d82d8a859176bcbafa784ee8c46b2038d40395bd",
+    "A": "b905f7402ddf47077838d04ec8411be4aefd67a75d99f787a228fced9942248b",
+    "B": "bde265b31508dbc075ffa83bbfaf6f3276dcb61f0d7664c8670ca0cb8571e5b5",
+    "C": "ec81ba2db87e57b8edeb080d152838bfcb51e2b8ad24736b6672cd6f72015541",
+    "D": "2a3dc40a64629e1dd91b25b8f8f65b510d45f182dbd0aa2618e4400cce80f164",
+    "E": "f2d86a4ba5399ff4b2c129a5d44860648d0dd9e56c373246dc65406eb015285e",
+    "F": "9917ca152ae241f90382bc4c6384e9fb94c76a31aa0f491f54843d0a06730c17",
+    "G": "7a56ebf7b149206803db0c4191fa64d462d27abdb1eb41ba44c70db56a07f006",
+    "H": "44cfc11e144e4b81e34e10b671d519cfbd16c1f6debdea3fa6e2757af7a3bd2c",
+    "L": "5bfea9b061a823dde5126fa5fcd716aad2427d8a6cd8cd27620d43bb81f3899d",
+    "M": "663cba168d44b99e0ddc46f16449800aa5e962a3f4e7424454fda641b7ac326a",
+    "V": "f36bb01ab08590c5526305e39f225696859959f515efc7f4eab2aeb7958046eb",
 }
 
 

@@ -137,6 +137,23 @@ def _pin_settings_path() -> str:
 
 PINNED_SETTINGS_PATH = _pin_settings_path()
 
+#: 真 Lean 的缺省落点（本机那一版的固定路径）。全测试面只有这一处写绝对值 ——
+#: `tests/test_settings.py` 的残渣登记面（`_RESIDUE_REGISTER`）会对新增的本机绝对路径报红，
+#: 而改前有 13 份测试文件各写一句同样的本机路径（都是 `_env/lean470` 那一棵树下的 `lean`）：
+#: 换一台机器要改 13 处，登记面也要跟着长 13 条。收成这一处之后，"本机路径"只剩一份。
+LOCAL_LEAN = Path(r"D:\Incubator\_env\lean470\lean-4.7.0-windows\bin\lean.exe")
+
+
+def lean_path() -> Path:
+    """真 Lean 的落点：环境变量 `AGENTFLOW_LEAN_BIN` 优先，没设才退回 `LOCAL_LEAN`。
+
+    口径与产品那根梯子同形（`settings.py` 的环境变量档 / `toolchain.py` 的查找梯子）：
+    环境变量是"换一台机器"的唯一开关，本机路径只是缺省。判据自己也别替用例决定跑不跑 ——
+    调用方拿到路径后仍然自己 `is_file()` 判断并如实 skip（跳过不等于通过）。
+    """
+    got = os.environ.get("AGENTFLOW_LEAN_BIN", "").strip()
+    return Path(got) if got else LOCAL_LEAN
+
 #: 判据套件跑在「Lean 形式化开着」那一档（产品缺省是关的，业主 2026-10-12：「默认设置中 Lean 关闭帮用户 在无严苛要求时省钱」）。为什么套件与产品缺省不同：这一套判据守的是形式化那条路的接线（桥接层
 #: `formalgw` / `verify_tools`、E 的动作与受控理由、提示词里的"怎么写"那段、收工门的承重格、`runflow` 的
 #: Lean 段、两份冻结快照里的形式化声明）。产品缺省关掉它只是"默认不烧那笔钱"，不是"这条路没有了" ——

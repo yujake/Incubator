@@ -171,15 +171,29 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
     #: 真正到主控（= 后端）那一侧的每一次召唤：判据 ②③ 看的是这一份，不是读数自报。
     seen: list[dict[str, Any]] = []
     original_summon = cond.summon
+    original_begin = cond.summon_begin
 
     def spy(role: str, action: str, params: Mapping[str, Any], **kw: Any) -> Any:
-        seen.append({"role": role, "action": action, "params": dict(params or {}),
-                     "input_key": str(kw.get("input_key") or "")})
+        """只做一件事：让这一趟仍走阻塞那一档（`_patched_on_instance` 认的正是这一格）。
+
+        记录不写在这里：单条派活与整批派活最后都从 `summon_begin` 出去，而
+        `summon` 内部也会调它 ⇒ 两处都记会把同一件事记两遍（实测 1 次读成 2 次）。
+        """
         return original_summon(role, action, params, **kw)
 
+    def begin_spy(role: str, action: str, params: Mapping[str, Any], **kw: Any) -> Any:
+        """派出手续的唯一出口：单条走 `summon` → 这里，整批走 `run_plan` →
+        `scheduler` → `conductor.summon_begin` → 这里（D-64 起整批不再经过 `summon`）。
+
+        记在这一处才盖得住两条路：改在 `summon` 上只能看见单条那一支，
+        整批派活会静默地一次都记不到（判据 ② 因此看不见后端收到了什么）。
+        """
+        seen.append({"role": role, "action": action, "params": dict(params or {}),
+                     "input_key": str(kw.get("input_key") or "")})
+        return original_begin(role, action, params, **kw)
+
     cond.summon = spy          # type: ignore[method-assign]
-    # 批量那一支走 `run_plan`，而它内部逐个调 `summon` ⇒ 同一个 spy 同时覆盖两条路
-    # （再包一次 `run_plan` 会把每一项记两遍：实测 2 个 target 读成 4 次）。
+    cond.summon_begin = begin_spy  # type: ignore[method-assign]
     run = run_role("M", "派一环", store=st, registry=built.registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=gates["M"],
                                 price=(0.0, 0.0), sid=SID),
@@ -620,9 +634,18 @@ def test_a_batch_is_proposed_and_then_dispatched_washed(tmp_path: pathlib.Path):
     last = accepted["steps"][1]
     audit = last.get("wash") or {}
     assert audit.get("accepted") is True and audit.get("executed_with") == "washed", last
+    # 整批 2 个 target 一个不少地派了出去（`summon_begin` 是单条与整批共用的出口）。
     assert len(accepted["seen"]) == 2, accepted["seen"]
-    assert accepted["seen"][0]["params"].get("statement_text") == " 一个短名 ", accepted["seen"]
-    assert "stmt_text" not in accepted["seen"][0]["params"], accepted["seen"]
+    dispatched = [dict(x.get("params") or {}) for x in accepted["seen"]]
+    # 同波并发 ⇒ 到达序不保证，按内容判：恰好一份带着洗过的真名键，且它的值逐字未动。
+    washed = [p for p in dispatched if "statement_text" in p]
+    assert len(washed) == 1, dispatched
+    assert washed[0]["statement_text"] == " 一个短名 ", dispatched
+    # 别名键一份都不许出现在真正发出去的那份载荷里（"读数说 washed"不算，发出去的才算）。
+    assert [p for p in dispatched if "stmt_text" in p] == [], dispatched
+    # `task` 是按形状并进 `params` 的（不是洗出来的键）：两份各带自己那句活。
+    assert sorted(str(p.get("task") or "") for p in dispatched) == sorted(
+        ["把命题入库", "把第二条也入库"]), dispatched
 
 
 # --------------------------------------------------------------------------------------

@@ -882,7 +882,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "to": {"type": "string",
-                   "description": "伙伴角色名 / `#public` / `ALL`（我名下所有子代理）/ "
+                   "description": "伙伴角色名 / `ALL`（公共频道：我名下所有子代理）/ "
                                   "名册名（如 D1：我名下的子代理，或我父的名册名）"},
             "subject": {"type": "string"},
             "body": {"type": "string"},
@@ -900,7 +900,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "to": {"type": "string",
-                   "description": "交给谁：A–H / M / V；给所有人写 ALL（与 #public 等价）"},
+                   "description": "交给谁：A–H / M / V；公共频道（我名下所有子代理）写 ALL"},
             "summary": {"type": "string",
                         "description": "一句话：它就是留言里那句 `[手稿 NNNN] <summary>`"},
             "body": {"type": "string",

@@ -108,7 +108,7 @@ JSON_TAIL = (
     '{"summon": {"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>", "params": {...}}}\n'
     '{"summon_many": {"targets": [{"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>",'
     ' "instance": "<可选>"}], "why": "<为什么一次派这一批>"}}\n'
-    '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
+    '{"message": {"to": "<伙伴或 ALL>", "subject": "...", "body": "..."}}\n'
     # 骨架里的字段名用协议的首选名（2026-10-07 修）：这里原写 `"title"` + `"brief"`，
     # 而 `HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的一律用 `summary`" —— 骨架是
     # 每一步都发的那份文档、模型照抄它，两边口径相反却因为解码器三个名字都收而没有任何
@@ -136,12 +136,25 @@ JSON_TAIL = (
     '{"final": "<结论>", "evidence": ["<你实际用到的 id>"]}'
 )
 
-#: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
-PUBLIC = "#public"
+#: 公共频道（公告栏）。`message.to` 写它 = 发给树上的人（说话，而不是派活）。
+#: 它是唯一的写法：旧数据里那个 legacy 写法只在 :func:`_legacy_all` 一处折算。
+ALL = "ALL"
+
+
+def _legacy_all(token: Any) -> str:
+    """读旧数据时把 legacy 写法折算成 `ALL`。
+
+    只为读旧数据，不再产生新写法：历史会话里落过那个 legacy 字面量的 `to`
+    （旧实现按它判公共频道），读侧折过来就够；写侧一律写 `ALL`，
+    本模块再没有第二种写法，也没有任何"两种写法等价"的分支。
+    """
+    want = str(token or "").strip()
+    return ALL if want.lower() == "#public" else want
+
 
 #: 公聊里"这条其实是在对某个具体代理下指令"的指令语气词表
 #: （判据本体 `AgentLoop._public_addressee`；受控词表，加一个取值就是放宽一整格）。
-#: 为什么需要这一格：业主 2026-10-19 第 5 条 —— `#public` 若保留，它是公告栏，
+#: 为什么需要这一格：业主 2026-10-19 第 5 条 —— 公共频道若保留，它是公告栏，
 #: 不是对话；"公告栏里点名某人下指令"正是绕开名册的那条路（它进的是收件箱，
 #: 而收件箱是按角色收的 ⇒ 同角色的所有实例都会读到）。
 PUBLIC_DIRECTIVE_MARKS: tuple[str, ...] = (
@@ -563,6 +576,78 @@ def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) ->
             f"{same_reading} 次，{what}）—— 读数还在变，所以这不是原地打转。"
             f"但连着问同一件事三次之后，先问自己一句：它还会给你新东西吗？"
             f"不会再给就换做法，或者把「卡在哪」写进 final 收工。")
+
+
+#: 拒因的"谁在拒"那一格（Q17）：受控拒因码 → 判停用的稳定键。
+def _refusal_key(result: Any) -> str:
+    """这一步"被什么拒了"的稳定键（空串 = 这一步没被拒）。
+
+    ## 键只装"谁在拒"，绝不装读数
+
+    这是 Q17 的读数纪律：同一道闸在不同拍里给出的键必须逐字相同，否则
+    "同一拒因连续 N 次"永远累计不起来（判停就成了摆设）。所以键里只有受控拒因码
+    （`refused` / `refusal_reason`）与工具层的结构化档（`meta.kind`）——
+    "拒的时候局面是什么样"（子数、在册数、候选项）留在 `refusal_reading` 那一格，
+    由 `_refusal_beat` 拿去做"一模一样的拒"的第二半判据。
+
+    ## 四个来源，按优先级
+
+    1. `refused`：框架闸给的理由码（`children_running` / `monitor_turn_restricted` /
+       `not_in_roster` / `no_owner`…）；
+    2. `refusal_reason`：受控词表那一档（召唤被拒的 `forbidden_edge`、动作 `refuse(...)`
+       的 `invalid_params`…）；
+    3. `ok=False` 且带 `meta.kind`：工具层的结构化档（`role_denied` / `param_error` /
+       `unknown_tool` / `tool_error`…）。工具层把 handler 的 `refuse(...)` 摊平成
+       `{tool, ok, data, error, meta}`，细一档的原因只剩 `meta.kind` 这一处可读；
+    4. 都没有 ⇒ 空串（这不是拒因：坏 JSON / 没回复 / 超时各走自己那一档）。
+
+    `final_refused`（D-68 收工门）刻意键成空串：Q12 已经给它自己的上限
+    （`max_final_refused`），两套账同时记同一件事，读数就说不清是哪一套停的。
+
+    边界：逐项被拒的批量（`summon_many` 的 `results[].refusal_reason`）不算"这一步被拒"
+    —— 那一步本身派出了活，被拒的是其中几项，它们有自己的读数（`summons_refused`）。
+    """
+    if not isinstance(result, Mapping):
+        return ""
+    if result.get("final_refused"):
+        return ""
+    code = str(result.get("refused") or result.get("refusal_reason") or "")
+    if not code:
+        meta = result.get("meta")
+        if result.get("ok") is False and isinstance(meta, Mapping):
+            code = str(meta.get("kind") or "")
+    if not code:
+        return ""
+    kind = str(result.get("kind") or "")
+    return f"{code}|{kind}" if kind else str(code)
+
+
+def _refusal_nudge_line(*, streak: int, limit: int, key: str, what: str) -> str:
+    """「同一个拒因」连着第 N 次的那一句提醒（Q17；与 `_dead_loop_line` 同族）。
+
+    为什么这一档必须存在：拒信只说"这一次为什么被拒"，它说不了"你已经撞了三下同一道闸"。
+    模型读到的是同一条处置路径 —— 没有这一句，它只会在同一处再撞两下，然后被框架
+    直接收工（那两笔模型调用买不到任何新做法）。
+    """
+    return (f"【同一个拒因】{what}被同一道闸连着拒了第 {streak} 次（拒因键 {key}）——"
+            "这几步的处置路径一模一样，再问一次还是同一个答案。"
+            f"连续 {limit} 次同样的拒因这一趟会以 `no_progress_limit` 收工："
+            "在收工之前把拒信点名的那件事真的办掉，或者换一条路。")
+
+
+def _refusal_stop_line(*, streak: int, limit: int, key: str, what: str) -> str:
+    """同一拒因到上限时那一句收工语（进 `run.final`）。
+
+    为什么不新造一档 `stop_reason`：停止理由是同一张表上的三件事（退出码 / 界面徽标 /
+    是否进退出码表，见 `stop_reasons.STOP_REASONS`），新造一档要同时动那张表与它的两个
+    投影；而 `no_progress_limit` 的语义（循环自己判定该收工、没有 final）本来就盖住它。
+    于是拒因写在正文这一句与 `refusal_key` 读数里，`stop_reason` 沿用既有那一档。
+    """
+    return (f"同一个拒因连续 {streak} 次 ⇒ 收工（拒因键 {key}；上限 {limit} 次，"
+            "与「原地打转」那一档同一处阈值）："
+            f"{what}被同一道闸拒了 {streak} 次，每一次的处置路径都一样 —— "
+            "再问一次买不到新答案。拒信点名的清单与路径就在上面几步的结果里；"
+            "把它真的办掉之后再来收工（`--resume` 可以接着跑）。")
 
 
 def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
@@ -1029,7 +1114,7 @@ def _message_landed(result: Mapping[str, Any]) -> bool:
 
     为什么不能只看 `shape == "message"`（2026-10-22 查实的那条缺陷）：受控拒绝
     （`not_in_roster` / `not_an_edge` / `member_retired` / `public_is_not_a_conversation`
-    / `no_task_id` / `broadcast_only`）同样产出一行 `shape == "message"` 的步，而它
+    / `no_task_id`）同样产出一行 `shape == "message"` 的步，而它
     一条都没落盘。旧实现按形状数，于是 D 发给 E 的那一条被 `not_in_roster` 拒掉时，
     回执照报 `messages_sent == ["E"]`，而 E 的收件箱是空的 —— 回执把"尝试过"读成了
     "发成了"（`tests/test_a_message_receipt_never_lies.py` 守这一条）。
@@ -1217,6 +1302,28 @@ class LoopRun:
     dead_loop_nudges: int = 0
     stalled_nudges: int = 0
     dead_loop_stopped: bool = False
+    #: ---- 同一拒因（Q17，2026-10-26）
+    #:
+    #: 被闸拒的步在改前进不了活性记账：收工门（`children_running`）与 D-68 那两道闸
+    #: 都在"条目执行"之前 `continue`，而 `same_call` / `dead` 的更新点在执行之后。
+    #: 真机形态：同一趟 215 次一模一样的收工被拒、217 次模型调用、31 秒，
+    #: `dead_loop_stopped=False`，最后靠孩子后端超时收场。
+    #:
+    #: 四格各答一件事（与 `dead_loop_*` 分开报，谁也没冒充谁）：
+    #: - `refusal_key`：拒因键。稳定：只装"谁在拒"（`_refusal_key` 的口径），不装读数；
+    #: - `refusal_reading`：那一步的读数（`_call_reading` 那一份规范化 JSON）。键相同而它
+    #:   变了 = 同一道闸、不同局面（子数在减、在册数在变）⇒ 那是进展，streak 从头数；
+    #: - `refusal_streak`：当前连击（"连着几次"）；
+    #: - `refusal_max` / `refusal_stopped`：这一趟的最长连击 / 是不是因为这一档停的。
+    #:   2026-10-26（F1a 第 ② 条）：这两格刻意不进 `to_dict()` —— 它们除了测试以外
+    #:   全仓 0 个读者，而"是哪一档停的"这件事由 `refusal_key` + `refusal_streak` 与
+    #:   `dead_loop_max` 三格就能复算（`stop_reason` 两档同为 `no_progress_limit`）。
+    #:   留着"交付面上一格没人读的数"就是把"看起来交出去了"当成"交出去了"。
+    refusal_key: str = ""
+    refusal_reading: str = ""
+    refusal_streak: int = 0
+    refusal_max: int = 0
+    refusal_stopped: bool = False
     #: 最近一次计数清零发生在第几步（裁定 12-F：计数按委托记账，"这一次委托从哪算起"要可复核）。
     counters_reset_at: int = 0
     #: 这一趟压了几次历史（S-B；读数，不是判据）：0 = 一次都没压。
@@ -1276,6 +1383,12 @@ class LoopRun:
     #: 于是"缺留痕"这件事在台账上的形态是"这一趟被打回了几次、最后是不是以 `no_notify` 收的"。
     #: 只报一个 stop_reason 看不出"它试了几次"。
     notify_rejections: int = 0
+    #: 这一趟为"D-68 收工门（整棵树销号）"让出的补救拍数（Q12，2026-10-26）。
+    #:
+    #: 为什么它必须与 `stop_reason` 并排读：0 有两种含义 —— "收工一次就过"（正控那一趟）
+    #: 与"还没让出补救拍就被别的原因收工了"（协议连击 / 预算 / 叫停）；`>0` 才是
+    #: "拒过、并且真的又给了它几拍去销号"。只报 stop_reason 看不出"它有没有被给过机会"。
+    final_refused_beats: int = 0
     #: 这一趟按 notify 表真的落成的手稿编号（按发生顺序）。空列表 + `stop_reason="final"`
     #: 只对主控成立（M 向用户回复不做这套）。
     handoffs: list[str] = field(default_factory=list)
@@ -1290,6 +1403,19 @@ class LoopRun:
     #:   它就是父的读数里"+1"的那一格，与 `activity_snapshot` 的 `handoffs` 同源。
     handed_off: dict[str, Any] = field(default_factory=dict)
     silent_children: list[str] = field(default_factory=list)
+    #: 这一趟为哪几个静默子代理开过"要不要销号"的问询（按开过的顺序）。
+    #:
+    #: 与 `silent_children` 分开的理由：交差"收到"是读数（可能被同一批唤醒重复计），
+    #: 而问询"开过"是一次写（同一条唤醒被重复消费时不该在板上堆第二张单子）。
+    #: 板项那一侧另有 `input_key` 的幂等（`retire-ask@<子编号>`），两层各管一件事。
+    silent_children_asked: list[str] = field(default_factory=list)
+    #: 这一趟退场时真的被结算成 `cut_off_by_parent` 的那几个子代理编号（按结算顺序）。
+    #:
+    #: 为什么是"真的被结算成的"而不是"退场时还在跑的"：两者不是同一件事 —— 有的子行可能
+    #: 已经被优雅停止那一支翻成了 `block`（它有自己的档，不许混），有的行可能读/写不成。
+    #: 父行那一句"我退出时掐断了 N 个还在跑的子：…"与判据 (b) 读的都是这一格，
+    #: 于是"打标记那一步被打桩掉"时，子行没有标记、父行也不会点名（反真空那条同时红）。
+    cut_off_children: list[str] = field(default_factory=list)
     #: 这一趟每次派活产生了哪些子产出（`_call_productions` 的条目，按发生顺序）：
     #: `{kind, counted, task_id, role, step, status, outcome, handoff_id, outputs,
     #:   disposition, evidence?, recon_only?, waiver?}`。
@@ -1417,7 +1543,7 @@ class LoopRun:
         每一条 `{to, refused, receipt, error, how}`：
         - `to`：模型写下的收件人（与 `messages_sent` 同一格口径，便于对账）；
         - `refused`：受控拒绝的理由码（`not_in_roster` / `not_an_edge` / `member_retired` /
-          `public_is_not_a_conversation` / `no_task_id` / `broadcast_only` …）；空串表示
+          `public_is_not_a_conversation` / `no_task_id` …）；空串表示
           那一步没有理由码，此时看 `error` 里那句说明（它照样没落成）；
         - `receipt`：那一步的回执态（没落成时通常是 `unknown`，不许读成"送到了"）；
         - `error`：那一步给模型/人读的那句话（没有 `error` 时取 `note`）；
@@ -1449,10 +1575,12 @@ class LoopRun:
         `blocked_remaining` / `bad_json_streak` / `bad_args` / `bad_args_streak` /
         `no_reply` / `no_reply_streak` / `dead_loop_max` / `same_call_max` /
         `stalled_max` / `dead_loop_nudges` / `stalled_nudges` / `dead_loop_stopped` /
+        `refusal_key` / `refusal_reading` / `refusal_streak` /
         `counters_reset_at` / `compactions` / `mailbox_items` / `mailbox_msgs` /
         `mailbox_delivered` / `monitor_turns` / `wakes` / `wake_ids` / `wake_events` /
-        `clock_pumps` / `clock_fired` / `park` / `waiting_for` / `resumed_from` /
-        `notify_rejections` / `handoffs` / `summons` / `summons_refused` /
+        `clock_pumps` / `clock_fired` / `park` / `handed_off` / `silent_children` /
+        `silent_children_asked` / `cut_off_children` / `waiting_for` / `resumed_from` /
+        `notify_rejections` / `final_refused_beats` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
         `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
@@ -1460,7 +1588,12 @@ class LoopRun:
 
         （D-52/D-53 那九格此前漏在这份清单外：`mailbox_*` / `monitor_turns` /
         `wake*` / `clock_*` —— 判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
-        要求两个方向都相等，所以"加了键没补文档"会当场红。这里补齐的是文档，不是行为。）
+        要求两个方向都相等，所以"加了键没补文档"会当场红。这里补齐的是文档，不是行为。
+        2026-10-27：`handed_off` / `silent_children` 两格（p209 的"交差"那一批加进
+        `to_dict` 时漏了这一行文档）同样按这条判据补上。
+        2026-10-26（F1a 第 ② 条）：同一条判据的反方向也走了一次 —— `refusal_max` /
+        `refusal_stopped` 两格从 `to_dict()` 里去掉（全仓 0 个非测试读者，能由
+        `refusal_key` + `refusal_streak` + `dead_loop_max` 复算），于是这份清单也短两格。）
 
         `summons` 与 `summons_refused` 是同一件事的两半，判据都在
         :func:`_summon_landed`：前者只记真的开出了子任务的召唤，后者逐条点名"尝试过但
@@ -1488,6 +1621,13 @@ class LoopRun:
             # 两档分开报（裁定 10丙）：提醒了几次 / 有没有因此判停 / 账从第几步算起。
             "dead_loop_nudges": self.dead_loop_nudges, "stalled_nudges": self.stalled_nudges,
             "dead_loop_stopped": self.dead_loop_stopped,
+            # 同一拒因那一档（Q17）：拒因键 / 那一步的读数 / 当前连击。三格与
+            # `dead_loop_*` 分开报 —— 两档都写 `no_progress_limit` 收工，只有这几个数
+            # 分得清是哪一档停的（谁也没冒充谁）。最长连击与"是不是因它停的"两格
+            # 不进这里：它们没有读者，能复算（见字段说明，2026-10-26 F1a 第 ② 条）。
+            "refusal_key": self.refusal_key,
+            "refusal_reading": self.refusal_reading,
+            "refusal_streak": self.refusal_streak,
             "counters_reset_at": self.counters_reset_at,
             # S-B：这一趟压了几次（0 = 一次都没压；与"没启用"那一档合起来读）。
             "compactions": self.compactions,
@@ -1507,8 +1647,14 @@ class LoopRun:
             "park": dict(self.park),
             "handed_off": dict(self.handed_off),
             "silent_children": list(self.silent_children),
+            "silent_children_asked": list(self.silent_children_asked),
+            "cut_off_children": list(self.cut_off_children),
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
-            "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
+            "notify_rejections": self.notify_rejections,
+            # D-68 收工门的补救拍数（Q12，2026-10-26）：与 `notify_rejections` 并列 ——
+            # 两格都是"收工被打回了几次"，一格管留痕表，一格管整棵树销号。
+            "final_refused_beats": self.final_refused_beats,
+            "handoffs": list(self.handoffs),
             "summons": self.summons,
             # 召回收执的另一半（2026-10-22）：尝试过但没派出去的那几条逐条点名，
             # 与 `summons` 同一份判据（`_summon_landed`）。
@@ -1607,9 +1753,10 @@ def read_interjections(session_root: Path, role: str, *, sid: str | None = None,
         iid = str(e.get("interjection_id") or "")
         if not iid or iid in seen:
             continue
-        to = str(e.get("to") or "ALL")
-        if to in ("ALL", "#public", role):
-            out.append(dict(e))
+        to = _legacy_all(e.get("to") or ALL)
+        if to in (ALL, role):
+            # 读出来的行也只写一种写法（旧行里那个 legacy 字面量在上面那一行折算了）
+            out.append({**dict(e), "to": to})
     return out, problems
 
 
@@ -1684,10 +1831,10 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
     for i, event in enumerate(events, 1):
         if event.get("kind") != "agent_message":
             continue
-        to = str(event.get("to"))
+        to = _legacy_all(event.get("to"))
         reading = "private"
         if to != role:
-            if to != PUBLIC:
+            if to != ALL:
                 continue
             visible, reading = public_visibility(event, parent_task_id=parent_task_id,
                                                  parent_role=parent_role)
@@ -1703,7 +1850,7 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
             # 要么误判"已消费"（三态塌成一态）。身份读不出来就如实报坏行。
             problems.append(f"第 {i} 条 agent_message 没有 msg_id ⇒ 这一条的身份读不出来")
             continue
-        out.append({**event, "msg_id": msg_id, "delivered": msg_id in delivered,
+        out.append({**event, "to": to, "msg_id": msg_id, "delivered": msg_id in delivered,
                     "visibility": reading})
     return out, problems
 
@@ -1760,7 +1907,7 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
                  reply_to: str = "", sid: str | None = None, from_task_id: str = "",
                  by_framework: bool = False,
                  extra: Mapping[str, Any] | None = None) -> tuple[str, str]:
-    """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。
+    """发一条消息（append-only）。`to=ALL` 是公共频道。返回 `(msg_id, 问题)`。
 
     编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法"数一数有多少条 `agent_message` 再加一"在正常
     append-only 会话里与 max+1 恰好相等，但只要一条坏行占号、或将来做了删除/搬迁就会撞上已用过的号 ——而
@@ -1771,15 +1918,19 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     键，并进同一条记录（不给 ⇒ 与从前逐字节相同），今天只有 `conductor.escalate` 用它带
     `escalation{need,kind,evidence}`；不另发一条事件，因为收件箱是按 `agent_message` 收的（:func:
     `read_messages` 只认这一种 kind），"父收到了"与"父拿到细节"必须是同一条。
+
+    `to` 先过 :func:`_legacy_all`：旧调用点若还传着那个 legacy 写法，落盘的仍是 `ALL`
+    —— 盘上只有一种写法（旧行由读侧折算，见 `read_messages`）。
     """
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
     nums = [int(m[1:]) for m in used if m[:1] == "m" and m[1:].isdigit()]
     msg_id = f"m{S.format_id((max(nums) + 1) if nums else 1)}"
+    to = _legacy_all(to)
     rec: dict[str, Any] = {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
         "subject": subject, "body": body, "reply_to": reply_to,
-        "channel": "public" if to == PUBLIC else "private",
+        "channel": "public" if to == ALL else "private",
     }
     if str(from_task_id or ""):
         rec["from_task_id"] = str(from_task_id)
@@ -1991,11 +2142,30 @@ PARK_EVENT: str = "agent_park"
 #: 挂机的一拍最多睡多久（秒）。第一拍取 `PARK_SLICE_MIN_SEC`，之后翻倍到本上界。
 #:
 #: 为什么要有上下界：下界 0.5 秒让"事件唤醒"（子代理发来一条留言）不会因为父代理正
-#: 睡在一个长拍里而晚到整整一拍；上界 300 秒与 `CHILD_RETURN_WAIT_SEC` 同一档
-#:（停机开关也是这样被看到的：循环头每一拍读一次开关，最迟一拍之后收工）。
-#: 这不是轮询：每一拍都记进主时钟的等待账（`kind="park"`），期间不调模型、不落回合。
+#: 睡在一个长拍里而晚到整整一拍；上界 300 秒与 `CHILD_RETURN_WAIT_SEC` 同一档。
+#: 停机开关不靠这一格被看到：这一拍内部还会切成不超过 `PARK_STOP_POLL_SEC` 的小片，
+#: 每片之后读一次开关（Q21，见那一条的说明）。这不是轮询：每一片都记进主时钟的
+#: 等待账（`kind="park"`），期间不调模型、不落回合。
 PARK_SLICE_MIN_SEC: float = 0.5
 PARK_SLICE_MAX_SEC: float = 300.0
+
+#: 挂机期间多久看一次停机开关（秒）：这一拍里每一片的上限，也是"叫停之后这一趟多久
+#: 收工"那个数的来源（Q21，2026-10-26）。
+#:
+#: 为什么要有这一格：改前 `_park_slice` 只睡一次，片长按上面的退避翻倍到 300 秒；
+#: 而停机判定 `_stop_applies` 只在循环头被 `_user_stop_reason` 调一次。于是开关落在
+#: 300 秒那一片里时，这一趟要睡满才可能看到它（探针 `agentflow/temp/_q21_probe.py` 的改前读数：
+#: 开关之后又睡了 300.0 秒）；更糟的形态是开关投在模型调用的回调里 —— 挂机不调模型，
+#: 开关永不出现，空转到 CI 超时（`tests/test_timers_and_handoff_semantics.py` 那一段
+#: 注释记过那一次）。业主的口径是"叫停 5 秒内这一趟收工"。现在把等待切成不超过本值的
+#: 小片，片后即读：命中就当场退出这一片，由下一拍的循环头走既有的收尾
+#: （`stop_reason` 仍是 `stop_file` / `force_stop` 那两档，不新造）。
+#:
+#: 为什么是 5 秒：它与 `CHILD_EXIT_DRAIN_SEC` 同一档（收工时等孩子也是这么久），
+#: 比它短只是更频繁地读一个文件（`stopctl.read_stop`：一次存在性检查 + 一次 JSON 读），
+#: 比它长就破了业主那个 5 秒的数。这一格只改"多久读一次"，不改退避：每一拍的睡眠总量
+#: 仍是上面那条退避算出来的（0.5, 1, 2, 4, 8, ...），片只是它的细分。
+PARK_STOP_POLL_SEC: float = 5.0
 
 #: 可抢占派活（D-64）：派完在"这一步"里最多等多久（秒）。
 #:
@@ -2019,6 +2189,9 @@ CHILD_STEP_WAIT_SEC: float = 180.0
 #: 返场（那是生产性的回合），什么都没有时最迟 5 分钟返场一次（那是"定期"）。
 #: 为什么不能是 0：还有子在跑又没有任何新事实时，立刻问模型只会买到一句
 #: "我还在等"；而循环的步数没有硬闸（裁定 12-K），那是无限烧钱。
+#: Q33（2026-10-26）：这一条只对"不欠返场"的拍成立。派活之后那一拍欠模型一个回合，
+#: 它不等（`_should_wait_for_children` 只读返场判据）—— 否则业主口径的"派完立刻给
+#: 一个回合"实际是"派完最多等 5 分钟再问"。
 CHILD_RETURN_WAIT_SEC: float = 300.0
 
 #: 收工时还在跑的孩子最多再等多久（秒）。到点就如实留痕、不再等 ——
@@ -2684,7 +2857,7 @@ def _decode_shape(data: Mapping[str, Any], *,
     而那在读数上与"父还没表态"完全一样。两个名字的真身只在 `secretary`（唯一来源，
     本处延迟导入）：这里不解码它们的内容，只保证它们活得过去。
 
-    `roster`（2026-10-22，业主「按编号沟通」）：`message.to` 除了角色名 / M / `#public`
+    `roster`（2026-10-22，业主「按编号沟通」）：`message.to` 除了角色名 / M / `ALL`
     之外还认名册名（`B1`）与绝对台账号 —— 判据与解析都走调用方给的 `roster`
     （真身是 `roster_addresses`，本处不另写一份形状判断），解析出来的角色才进 `to`
     （收件箱按角色收），原写法与解析结果留在 `roster_addressing` 里供回执对账。
@@ -2812,12 +2985,10 @@ def _decode_shape(data: Mapping[str, Any], *,
         # `to` 的合法集合 = 八个角色 ∪ 主控 M ∪ 公共频道。M 必须在内（2026-09-30 真机修）：框架自己的
         # 代唤通道 `_request_relay` 就用 `to=S.CONDUCTOR_ROLE`（= "M"），而这里原来只认 `S.ROLES`（A–H，
         # 不含 M）⇒ 提示词教角色"直接发给 M"、角色照做却被判 `invalid`（场景 G 白扔一步：那条只该主控看到的
-        # 申请被广播），而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。`ALL` 也认（2026-10-05）：
-        # 手稿通道约定"给所有人写 `to="ALL"`"（文件名 `…toALL.md`），原来只认 `#public` ⇒ M 写
-        # `{"message": {"to": "ALL", …}}` 被判不合法、连三次 ⇒ `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
-        # `ALL` / `#public` 的等价只在 `_is_all_recipient` 一处定义，`message` / `handoff` / `notify` 三条通道
-        # 都从那里取 —— 不许各写一份。
-        to = _recipient_for_channel(written)      # 留言通道的"给所有人"规范形是 `#public`
+        # 申请被广播），而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。
+        # 公共频道只有一个写法 `ALL`（`message` / `handoff` / `notify` 三条通道都从
+        # `_is_all_recipient` 那一处判 —— 不许各写一份）。
+        to = _recipient_for_channel(written)      # 归一成 `ALL` / 大写角色名
         if not _known_recipient(to):
             # 2026-10-22（业主「按编号沟通」）：`_known_recipient` 之外还认名册名与
             # 绝对台账号 —— 判据与解析都在 `roster_addresses`（经 `roster` 传进来），
@@ -2831,7 +3002,7 @@ def _decode_shape(data: Mapping[str, Any], *,
             role = str(marker.get("role") or "")
             if not role:
                 return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                                f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
+                                f"{S.CONDUCTOR_ROLE}、也不是公共频道 {ALL}")
             # 原写法 + 解析结果（读数要能对回原稿）。`to` 已经是收件箱认得的角色：
             # 收件箱按角色收，把 B1 原样写进 `to` 只会得到一条没有进程读得到的留言
             # （业主 2026-10-22 的原话）。读数格在 `_decode_roster_outcome` 里造，
@@ -2859,12 +3030,11 @@ def _decode_shape(data: Mapping[str, Any], *,
         if not isinstance(value, Mapping):
             return "", {}, "handoff 必须是一个对象"
         to = str(value.get("to") or "")
-        # `ALL` 与 `#public` 等价（2026-10-06 修，主控裁定 (a)）：`message` / `notify`
-        # 两条路早就两种写法都收（`_known_recipient`），只有这里只收 `#public` ——
-        # 而拒信自己教的正是 `ALL`（"给所有人写 to="ALL""），`JSON_TAIL` 里的骨架
-        # 也写 `<伙伴/M/ALL>`。于是模型照提示词写 `ALL` 会被拒，被拒后拿到的改法还是
-        # `ALL`，同一步能连撞两次（这正是"提示词教了一个框架不收的字面量"。
-        # 判据与归一都走唯一那份词表：`_known_recipient` / `_recipient_for_channel`。
+        # 公共频道只有一个写法 `ALL`（`_known_recipient` / `_recipient_for_channel` 是它
+        # 唯一那份判据）。改前这里只收另一条通道习惯用的那个写法，而拒信自己教的正是
+        # `ALL`、`JSON_TAIL` 的骨架也写 `<伙伴/M/ALL>` ⇒ 模型照提示词写 `ALL` 会被拒，
+        # 被拒后拿到的改法还是 `ALL`，同一步能连撞两次（那正是"提示词教了一个框架不收的
+        # 字面量"）。现在三条通道认的是同一件事，也就没有第二份词表可写。
         #
         # D-63（2026-10-24 业主：「现在怎么还有to谁的写法？已经是名册机制了！」）：
         # 名册名 / 绝对编号也是这一格的合法写法 —— 与 `message` 共用同一个解析落点
@@ -2880,8 +3050,7 @@ def _decode_shape(data: Mapping[str, Any], *,
             role = str(marker.get("role") or "")
             if not role:
                 return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                                f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"，"
-                                "两种写法等价）")
+                                f"{S.CONDUCTOR_ROLE}、也不是 {ALL}（给所有人写 to=\"ALL\"）")
             to = role
             roster_marker = marker
         summary = (str(value.get("summary") or "").strip()
@@ -2897,7 +3066,7 @@ def _decode_shape(data: Mapping[str, Any], *,
         refs = value.get("refs") or []
         if not isinstance(refs, (list, tuple)):
             return "", {}, "handoff 的 refs 必须是编号数组"
-        ret = {"to": _recipient_for_channel(to, all_as="ALL"), "summary": summary,
+        ret = {"to": _recipient_for_channel(to), "summary": summary,
                "body": body,
                "refs": [str(x) for x in refs],
                # `R2b-⑲`：带了这一格 ⇒ 走秘书的 `handoff_revise`（订正某一号，
@@ -3047,21 +3216,23 @@ def _with_notify(payload: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, A
     return {**payload, "notify": raw.get("notify")}
 
 
-#: 「给所有人」的两种写法（等价）。这是那条等价关系的唯一来源：
+#: 「给所有人」只有一个写法：`ALL`。这一格是它唯一的判据来源 ——
 #: `_is_all_recipient` / `_known_recipient` / `_recipient_for_channel` 三处都从这里取，
 #: `message` / `handoff` / `notify` 三条通道也都调它们 —— 不许再各写一份。
-#: 为什么会有两种：公共频道的落库形态是 `#public`（`_do_message` 按它判 `channel`），
-#: 而手稿文件名（`…toALL.md`）与 `notify` 的口径是 `ALL`。
-ALL_RECIPIENT_TOKENS: tuple[str, ...] = (PUBLIC, "ALL")
+#: 旧数据里那个 legacy 写法只在 `_legacy_all` 一处被折算（读侧兼容，写侧不再产生）。
 
 
 def _is_all_recipient(token: Any) -> bool:
-    """这个写法是不是"给所有人"（`ALL` / `#public`，大小写不敏感）。"""
-    return str(token or "").strip().upper() in {x.upper() for x in ALL_RECIPIENT_TOKENS}
+    """这个写法是不是"给所有人"（`ALL`，大小写不敏感；legacy 写法折算后也算）。
+
+    legacy 那一支走的是 `_legacy_all`（读旧数据用），所以判据本身只有一条：
+    `_legacy_all(token).upper() == ALL`。
+    """
+    return _legacy_all(token).upper() == ALL
 
 
 def _known_recipient(token: Any) -> bool:
-    """收件人写法认不认（大小写不敏感；`ALL` / `#public` 都算"给所有人"）。"""
+    """收件人写法认不认（大小写不敏感；`ALL` 算"给所有人"）。"""
     want = str(token or "").strip()
     return _is_all_recipient(want) or want.upper() in {r.upper() for r in (*S.ROLES,
                                                                           S.CONDUCTOR_ROLE)}
@@ -3079,13 +3250,14 @@ def message_admission(role: str, to: str, reply_to: str = "") -> str:
 
     `reply_to` 非空 ⇒ 放行：那是"回一条已经存在的对话"，协作边早在对方开口时成立过。
     """
-    if to == PUBLIC:
+    to = _legacy_all(to)
+    if to == ALL:
         return ""
     allowed = (to in AP.partners_out(role) or role in AP.partners_out(to) or bool(reply_to))
     if allowed:
         return ""
     return (f"{role} 与 {to} 之间没有协作边（{role} 能叫的是 {sorted(AP.partners_out(role))}）"
-            f"⇒ 私聊不成立；要么发到公共频道（to={PUBLIC}），要么先公开开口。")
+            f"⇒ 私聊不成立；要么发到公共频道（to={ALL}），要么先公开开口。")
 
 
 def _callable_members(secretary: Any, *, owner: str
@@ -3192,7 +3364,7 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     返回三态（不许折平）：`checked`（名册读成了没有，`False` 不等于"名册里没有这个人"）、`how`（这一条为什么这么投）、
     `kind`/`name`/`task_id`/`role`（解析到的成员）、`candidates`（同名多匹配时全部的候选名册名）、`callable`（「你能通
     话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 = 没拒）、`error`（给人/给模型读的那句拒信）。
-    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `#public` / `ALL` —— 公共频道有自己那一套可
+    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `ALL` —— 公共频道有自己那一套可
     见面判据，业主 T20/T21；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
     /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 私聊「不投递」：
     这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— 2026-10-22 按业主
@@ -3212,7 +3384,7 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     | `roster_name` | 写的是名册名（`D1`） | 那个实例 |
     | `role_fallback` | 写的是角色代号，而该角色在册恰好一个 | 那一个实例（兼容档） |
     | `role_dispatch` | 写的是角色代号、发信人是主控 M、而此刻在册 0 个 | 角色通道（派活/通知） |
-    | `channel` | `#public` / `ALL` / 用户 / 主控 M | 频道（不归名册管） |
+    | `channel` | `ALL` / 用户 / 主控 M | 频道（不归名册管） |
     | 空串 | 没有解析到任何收件人（含全部受控拒绝） | 无 |
 
     为什么必须有这一格：改前"按名册名发"与"按角色代号发"在回执上长得一样 ——
@@ -3229,7 +3401,7 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     token = str(to or "").strip()
     if _is_all_recipient(token) or token in ("user", "用户") or token == S.CONDUCTOR_ROLE:
         out.update(checked=True, how="outside_roster", addressed_by="channel",
-                   why=("`#public` / `ALL` / 用户 / 主控 M 不是'给名册上的某个代理发消息'："
+                   why=(f"`{ALL}` / 用户 / 主控 M 不是'给名册上的某个代理发消息'："
                         "公共频道另有可见面判据（业主 T20/T21），用户是频道外的读者，"
                         "而 M 是顶层发起方（名册上没有它的上级）—— 代唤协议逐字要求"
                         "任何角色都能把申请发给它"))
@@ -3336,16 +3508,15 @@ def _retired_member(out: dict[str, Any], member: Mapping[str, Any]) -> dict[str,
     return out
 
 
-def _recipient_for_channel(token: Any, *, all_as: str = PUBLIC) -> str:
-    """收件人归一成这条通道的规范写法；角色名一律大写。
+def _recipient_for_channel(token: Any) -> str:
+    """收件人归一成规范写法：`ALL`（大小写不敏感，legacy 写法也折成它）或大写角色名。
 
-    `all_as` 之所以是参数而不是写死：两条通道的消费者认的形态不同 ——
-    `_do_message` 按 `to == #public` 判 `channel`（留言通道要给 `#public`），
-    而手稿文件名与 `notify` 的口径是 `ALL`。等价关系仍在 `_is_all_recipient` 一处，
-    这里只是选一个规范写法，参数就是那处选择，并且必须在这句 docstring 里说明理由。
+    只归一，不判"能不能发"：等价/合法与否的真身是 `_is_all_recipient` / `_known_recipient`。
+    改前这里有一个 `all_as=` 参数，只为"两条通道认的写法不同"而存在 —— 现在只有 `ALL`
+    这一种写法，那个参数连同它服务的第二份口径一起删了。
     """
-    want = str(token or "").strip()
-    return str(all_as) if _is_all_recipient(want) else want.upper()
+    want = _legacy_all(token)
+    return ALL if want.upper() == ALL else want.upper()
 
 
 def notify_shape_problem(notify: Any) -> str:
@@ -3361,7 +3532,7 @@ def notify_shape_problem(notify: Any) -> str:
         return "notify.to 没填（要交给谁：A–H 或 M，给所有人写 ALL）"
     if not _known_recipient(to):
         return (f"notify.to={to!r} 不是角色（{list(S.ROLES)}）、也不是主控 {S.CONDUCTOR_ROLE}、"
-                f"也不是 {PUBLIC}（给所有人写 ALL）")
+                f"也不是公共频道 {ALL}")
     if not str(notify.get("summary") or "").strip():
         return "notify.summary 没填（一句话：交给对方什么 —— 它会被拼进那条留言）"
     if not str(notify.get("body") or "").strip():
@@ -3374,13 +3545,13 @@ def notify_shape_problem(notify: Any) -> str:
 
 
 def clean_notify(notify: Mapping[str, Any]) -> dict[str, Any]:
-    """把 `notify` 规范化（收件人大小写归一、`ALL`/`#public` 都写成 `ALL`、`refs` 转字符串数组）。
+    """把 `notify` 规范化（收件人归一成 `ALL` / 大写角色名、`refs` 转字符串数组）。
 
     收件人那一格调的是与 `message` / `handoff` 同一个归一函数（`_recipient_for_channel`）——
-    三条通道共用一处词表，谁也不许自己判一遍"哪些写法算给所有人"。
+    三条通道共用一处判据，谁也不许自己判一遍"哪些写法算给所有人"。
     """
     to = str(notify.get("to") or "").strip()
-    return {"to": _recipient_for_channel(to, all_as="ALL"),
+    return {"to": _recipient_for_channel(to),
             "summary": str(notify.get("summary") or "").strip(),
             "body": str(notify.get("body") or ""),
             "refs": [str(x) for x in (notify.get("refs") or [])],
@@ -3815,6 +3986,19 @@ class AgentLoop:
     #: 要调谁、只是那个 JSON 没写对" —— 后者交回工具层就能改对（DSH 的口径），
     #: 所以给它多一次机会，同时仍然保留上限（不设上限等于允许无限重说同一句）。
     max_bad_args: int = 3
+    #: D-68 收工门（整棵树销号）连着被拒几拍之后才收工（Q12，2026-10-26）。
+    #:
+    #: 为什么要有这一格：改前那道闸一被拒就 `break`（同一拍结束这一趟），
+    #: 而拒信里那句"再用 conductor.retire_child 逐个销号"没有下一拍可读 ——
+    #: 真机 projects/mp3-r3 的 M 那一趟 31 步、17 个节点在册、`retire_child` 零次。
+    #: 现在被拒之后还有回合（清单回给模型、由它自己销），这一格是那个补救窗口的上限：
+    #: 连着被拒 `max_final_refused` 拍仍未 complete ⇒ 才以 `final_refused` 收尾。
+    #:
+    #: 为什么是 3 而不是一个大数：这一格买的是"看清单 + 销号"的机会，不是"再想想"。
+    #: 它与 `max_bad_args` 同一个量级（都是"说对了要做什么、只是那件事还没办成"，交回去
+    #: 再给三次），并且刻意不接进 `max_steps` 那套口径 —— 那是"跑了多少步"的报数量，
+    #: 不是"补救几次"的判据（步数本来没有硬闸，钱由预算与墙钟管）。
+    max_final_refused: int = 3
     #: 收工时的 `notify` 表最多被打回几次。
     #:
     #: L-05e 之后这个数不再是判据（`draft/52` F 组 / P-10）：强制闸门已经降级成
@@ -4182,12 +4366,49 @@ class AgentLoop:
         # （`_opening_transcript`）。不把 system 里那份冻在开局：那会让 system 说假话（余额是旧的），
         # 而循环协议里逐字写着"预算耗尽时必须收工"。
         notebook = notebook_digest(self.session_root, self.role)
+        # 缺目的那一句问询（业主 2026-10-26：「purpose自动填充没做好，且问询没落地」）。
+        # 它只进"每步这一条 user 消息"，不碰 system prompt —— 后者要逐字节稳定
+        # （`_system_at_step` 守着前缀缓存），而这一句每拍都可能变。
+        ask = self._purpose_ask_note()
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
                 f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
+                f"{ask}"
                 f"{face_note}"
                 f"{JSON_TAIL}")
+
+    def _purpose_ask_note(self) -> str:
+        """缺目的的问询（"问询没落地"那一半的落点：必须出现在模型读到的那段话里）。
+
+        业主 2026-10-25 的裁定是"目的缺了不报错，只是让它追加目的"—— 于是这条问询
+        只要有一个地方没接上，缺目的就会静默地一路缺到到点那一刻（那时消息里只剩
+        「（目的未填）」）。真机 `projects/mp3-r3` 的读数正是这样：`purpose_missing`
+        在工具读数里一直有，而模型的提示词里一次都没出现过。
+
+        读的是 `clock.timers_missing_purpose(root, for_task_id=我的台账号)` —— 与
+        `clock.now` 的 `purpose_pending`、到点消息的 `PURPOSE_PROMPT` 是同一份读数与
+        同一个常量；按台账号筛，所以别人的缺目的不会刷到我这一拍上。
+
+        三态：读不成（时钟簿记坏了）⇒ 空串（这一拍不追问）—— 那一件事由
+        `clock.now` 的 `purpose_pending` 如实报"读不成"，不在这里编一句。
+        """
+        root = self._clock_root()
+        if not root:
+            return ""
+        try:
+            rows = CLK.timers_missing_purpose(root,
+                                              for_task_id=str(self.my_task_id or ""))
+        except Exception:  # noqa: BLE001 —— 追问读不成不该拦住这一拍
+            return ""
+        if not rows:
+            return ""
+        lines = ["- %s（%s）：clock.timer_purpose(entry_id=%s, purpose=…)"
+                 % (str(r.get("id") or ""), str(r.get("kind") or ""), str(r.get("id") or ""))
+                 for r in rows]
+        return ("【缺目的】你起的 %d 条等待还没写目的 —— %s\n"
+                "逐条补（补的是同一条表，不是新建一条）：\n%s\n"
+                % (len(rows), CLK.PURPOSE_PROMPT, "\n".join(lines)))
 
     def _wired_roles(self) -> list[str]:
         """后端登记表里真的能接活儿的角色（真身读数）。
@@ -4246,6 +4467,35 @@ class AgentLoop:
         if root:
             return root
         return str(getattr(self.store, "root", "") or "")
+
+    def _stamp_step(self, *, step: int) -> str:
+        """把"这一步开始了"落成盘上的步进落痕（停滞读数的写侧）。返回问题（空串 = 写成了）。
+
+        写的是 `<工作区>/out/steps/<台账号>.json`（一个代理一个文件，每步原子替换）。
+        为什么不在收工时写一次、也不写进台账：理由在 `conductor.STEPS_DIR` 与
+        `conductor.stamp_step` 的 docstring 里（台账没有"最近一步"这一列，而每步改它
+        会把锁竞争放大成代价；这一格只要一个几十字节的事实）。
+
+        三态：没有 conductor / 没有台账号 ⇒ 空串（这一趟本来就不在台账里，没有
+        可读的行要标停滞）；写不成 ⇒ 那一句问题（不是"写成了"）。
+        """
+        cond = self.conductor
+        tid = str(self.my_task_id or "")
+        if cond is None or not tid:
+            return ""
+        root = str(getattr(getattr(cond, "store", None), "root", "") or "")
+        if not root:
+            root = self._clock_root()
+        if not root:
+            return "没有工作区根 ⇒ 这一步没有落痕（停滞那一格会读成「没有证据」）"
+        from .conductor import stamp_step as _stamp   # 惰性：避免模块级循环导入
+
+        try:
+            _path, problem = _stamp(root, task_id=tid, role=str(self.role or ""),
+                                    step=int(step), sid=str(self.sid or ""))
+        except Exception as exc:  # noqa: BLE001 —— 落痕写不成不许拦住这一步
+            return f"{type(exc).__name__}: {exc}"
+        return str(problem or "")
 
     def _pump_clock(self, *, step: int, when: str,
                     run: "AgentLoop.LoopRun") -> dict[str, Any]:
@@ -4373,7 +4623,61 @@ class AgentLoop:
             f"子代理 {ref} 交差了 ⇒ 记为静默（交差编号 "
             f"{str((got.get('row') or {}).get('handoff_id') or '（没记）')}；"
             f"本趟收到 {len(run.silent_children)} 个子代理的交差）")
+        # ---- 收工交付时自动问询父代理"要不要销号它"（业主 2026-10-26 第三条裁定）
+        #
+        # 业主逐字：「M 以及其它父代理都没有销号无用的静默子代理的意识，这个可以在
+        # 子代理收工交付时系统自动问询是否销号」。
+        #
+        # 为什么挂在这一处：这里正是父代理把交差的子代理"记为静默"的那一刻（交差账
+        # 上有它那一行），于是"它已静默"这句话有盘上证据 —— 问询读的就是那份三态，
+        # 不是照手交差就开一张单子。只问一次（`first`）：同一条唤醒被重复消费时不再
+        # 往板上堆第二张单子（`open_retire_question` 那边还有 input_key 的幂等）。
+        #
+        # 只问不销：本处一个字节都不碰名册，`conductor.retire_child` 仍是唯一入口，
+        # 而且它自己那道"只对静默生效"的闸一个字没改。
+        if ref not in run.silent_children_asked:
+            run.silent_children_asked.append(ref)
+            ask = self._ask_retire_silent_child(ref)
+            if ask.get("opened"):
+                run.notes.append(
+                    f"销号问询已落在名下（板项 {ask.get('item_id')}）："
+                    f"子代理 {ref} 已静默 —— 要不要销号由父这一步决定"
+                    "（不销也行，它会在名册上一直挂着）")
+            elif str(ask.get("why") or ""):
+                run.notes.append(f"销号问询没落成：{ask['why']}")
         return ref
+
+    def _ask_retire_silent_child(self, ref: str) -> dict[str, Any]:
+        """"要不要销号这个已静默的子代理"那一条问询的挂载点（业主 2026-10-26）。
+
+        判定与落盘都在 `Conductor.open_retire_question`（它先读三态，只有真的静默
+        才开这一条）；这一层只做"这一趟有没有地方落它"与"落不成的如实回报"。
+
+        三态：没有 conductor / 没有台账号 ⇒ `checked=False` + 理由（不是"问过了"）；
+        conductor 上没有那一格（老装配）⇒ 同样如实说；开成功 ⇒ `opened=True` 与板项编号。
+        """
+        blank: dict[str, Any] = {"checked": False, "opened": False, "item_id": "",
+                                 "silent": False, "why": "", "reason": ""}
+        cond = self.conductor
+        mine = str(self.my_task_id or "")
+        if cond is None or not mine:
+            blank["why"] = ("这一趟没有 conductor 或台账号 ⇒ 没有地方落这条问询"
+                            "（不是「问过了」）")
+            return blank
+        look = getattr(cond, "open_retire_question", None)
+        if not callable(look):
+            blank["why"] = "conductor 没有 open_retire_question（这一格没接上）"
+            return blank
+        try:
+            got = look(parent_task_id=mine, child_task_id=str(ref),
+                       parent_role=str(self.role or ""))
+        except Exception as exc:  # noqa: BLE001 —— 问询没开成不许带走唤醒消费
+            blank["why"] = f"问询没开成（{type(exc).__name__}: {exc}）"
+            return blank
+        if not isinstance(got, Mapping):
+            blank["why"] = "问询的读数不是对象（这一格没接上）"
+            return blank
+        return dict(got)
 
     def _tree_reading(self) -> str:
         """这一支的最新树形读数（谁在飞 / 谁排队 / 谁交差 / 谁失败）—— 现读，三态。
@@ -4513,8 +4817,38 @@ class AgentLoop:
                                  f"{_clip(payload.get('final') or '（没留下结论）', 300)}")
         return "\n".join(lines)
 
+    def _should_wait_for_children(self, *, back: Mapping[str, Any],
+                                  consumed_wake: bool) -> bool:
+        """这一拍等不等子 —— 只喂返场判据（`_return_reading`）的同一个结论，别的条件一个不加。
+
+        ## 为什么它必须单独一处（Q33，2026-10-26）
+
+        改前 `wait` 只有一条条件（"这一拍没消费到唤醒"），于是"派活之后欠模型一拍"
+        与"这一拍先等子"是两句话：欠返场的那一拍照旧先等满 `child_return_wait_sec`
+        （缺省 300 秒）才问模型 —— 业主口径的"派完立刻给一个回合"实际是"派完最多等
+        5 分钟再问"。
+
+        现在这条表达式只喂进一个判据的结论：`back["owed"]`（`_return_reading` 给的
+        "这一拍欠模型一个回合"）。欠 ⇒ 不等子（那一拍先把模型叫起来，让它看到
+        "活派出去了、还在跑"）；不欠 ⇒ 照旧等 —— `CHILD_RETURN_WAIT_SEC` 是"等子
+        回话"的正常成本，一个字没取消。
+
+        另外两条不是新判据，是把既有的两格待接口径搬到这里：
+        - 这一拍消费到了唤醒 ⇒ 那段话已经进上下文，本来就不等（改前就在这一处）；
+        - 返场判据读不成（`checked=False`）⇒ 照常问模型（`_park_gate` 的同一口径：
+          不把"没查成"当成"没在等"），于是这一拍也不该先白睡掉 300 秒。
+
+        "每批只返场一次"没有变：判据给过之后 `owed` 就是 False（`beat_given` 从
+        `run.steps` 读"那次派活已经不是最后一步"），下一拍起照旧等。
+        """
+        if consumed_wake:
+            return False
+        if not bool(back.get("checked", True)):
+            return False
+        return not bool(back.get("owed"))
+
     def _children_round_trip(self, *, step: int, run: "AgentLoop.LoopRun",
-                             wait: bool) -> dict[str, Any]:
+                             wait: bool, skip_reason: str = "") -> dict[str, Any]:
         """返场点：把已经回来的孩子取走、渲染成一段增量；还没回来的等一小段。
 
         ## 为什么它挂在 `_deliver_mailbox` 上（而不是另开一个投递点）
@@ -4528,9 +4862,17 @@ class AgentLoop:
         `wait=True` 时最多等 `child_return_wait_sec` 秒，但只要有孩子落定、
         或者时钟唤醒到点，就立刻返场（那是生产性的回合）。等待本身走句柄的
         条件变量（`WaveHandle.wait_any` / `SummonHandle.wait`），不是空转。
+
+        ## 返场那一拍不等子（Q33，2026-10-26）
+
+        `wait` 由 `_should_wait_for_children` 给，而那一位唯一的输入是返场判据
+        （`_return_reading`）的结论：这一拍欠模型一个回合 ⇒ 不等子，直接把模型叫起来，
+        让它看到"活派出去了、还在跑"。`skip_reason` 只在这一拍没等时进读数
+        （`return` = 为了返场没等，`wake` = 被叫醒的那一拍本来就不等）——
+        于是"这一拍等了 N 秒"与"这一拍为了返场没等"落在同一个格子里，分得开。
         """
         running_before = self._children_running()
-        waited = {"reason": "none", "waited_sec": 0.0}
+        waited = {"reason": str(skip_reason or "none"), "waited_sec": 0.0}
         if wait and running_before:
             waited = self._wait_for_children(timeout=float(self.child_return_wait_sec))
         settled: list[Any] = []
@@ -4613,22 +4955,126 @@ class AgentLoop:
         于是"可抢占"不许变成"不等子就收口"。这一道闸只认我自己派出去、还没回来
         的那些（台账里别人的行不在我的判断范围内：那是 D-68 那一条收工门的事）。
         两道门各管一件事，顺序上这一道先响（它更具体：点名到编号）。
+
+        2026-10-26 补：拒信里带一格停滞读数（"其中 M 个已停滞超过 N 分钟"）。
+        理由与 D-68 那道门同一句：结不了项的那一半正是这些"显示在飞、实际没动静"
+        的活，父要知道自己是该"再等一次返场"还是"该处置它"。停滞不改判据 ——
+        这一道门的放行条件一个字没动。
         """
         running = self._children_running()
         if not running:
             return ""
         return (f"收工被拒（children_running）：你名下还有 {len(running)} 项派出去的活"
-                f"没回来（{'、'.join(running)}）。可抢占不等于不等孩子 —— 它们回来之后"
+                f"没回来（{'、'.join(running)}）"
+                + self._stalled_children_note(running)
+                + "。可抢占不等于不等孩子 —— 它们回来之后"
                 "结果会在下一次返场时投给你。现在可以：`conductor.watch` 看它们到哪一步、"
                 "`conductor.guide` 给它们一句指导、补派新活，或者先推进手上别的事；"
                 "它们回齐了再 final。")
+
+    def _stalled_children_note(self, tids: Sequence[str]) -> str:
+        """这一批在飞的子里有几个已停滞（结项拒信里那一格）；读不成也如实说。
+
+        口径只有一处（`Conductor.activity_snapshot` 的 `stalled` 那一格，判定在
+        `conductor.agent_state`）：这一层只挑出"在这批编号里"的那几个，不另判一遍。
+
+        三态：没有 conductor / 没有 `activity_snapshot` ⇒ 空串（这一趟本来就没有
+        可读的台账）；读不成 ⇒ 一句带括号的说明（不是"没有停滞的子"）。
+        """
+        cond = self.conductor
+        look = getattr(cond, "activity_snapshot", None) if cond is not None else None
+        if not callable(look):
+            return ""
+        try:
+            snap = dict(look())
+        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"没有停滞"
+            return f"（停滞读数没读成：{type(exc).__name__}: {exc} ⇒ 不是「没有停滞的子」）"
+        if not snap.get("checked"):
+            return (f"（停滞读数没读成：{str(snap.get('reason') or '没查成')} ⇒ "
+                    "不是「没有停滞的子」）")
+        by_task = dict(snap.get("by_task") or {})
+        stalled = [str(t) for t in tids if (by_task.get(str(t)) or {}).get("stalled")]
+        from .conductor import STALLED_AFTER_SEC as _STALLED   # 惰性：避免模块级循环导入
+        mins = int(_STALLED // 60)
+        if not stalled:
+            return f"；其中 0 个已停滞（阈值 {mins} 分钟）"
+        return (f"；其中 {len(stalled)} 个已停滞超过 {mins} 分钟"
+                f"（{'、'.join(stalled[:6])}）"
+                " —— 停滞不等于静默：它们仍要等交差才能销号")
+
+    def _write_children_cut_off(self, tids: Sequence[str], *, run: "AgentLoop.LoopRun",
+                                waited_sec: float = 0.0) -> dict[str, Any]:
+        """把"父退场时还在跑的那几个子"结算成 `cut_off_by_parent`（唯一写字那一步）。
+
+        为什么它是单独一步（而不是并进 `_settle_children_at_exit`）：反真空要能把它整步
+        打桩掉，而"打桩掉之后子行没有标记、父行也不点名"必须同时成立（判据 e）。
+        于是"哪些编号真的被结算了"由它的返回值决定，`run.cut_off_children` 也只从它取。
+
+        档位不在这里判：`status` / `outcome` / 那一格标记由
+        `schema.child_ending(cut_off=True)` 一处给（D22 的"三档同一个判定点"）。
+        这一处只做三件只有它能做的事：
+          1. 逐条写终态 —— `conductor.finish` 是幂等的（先到先得），子线程晚到的自己那一笔
+             会被幂等分支挡住，于是"被掐断"不会被子后来的交付改写；
+          2. 分三档报读数：写成了 / 台账里已经是别人的终态（不动它）/ 没写成（留原因）；
+          3. 交出写成的那几个编号（父行点名与判据 b 读的就是它）。
+
+        返回 `{written, already_terminal, problems}`；任何一档都不许静默丢。
+        """
+        out: dict[str, Any] = {"written": [], "already_terminal": [], "problems": []}
+        cond = self.conductor
+        if cond is None:
+            out["problems"].append(
+                "退场结算没做：这一趟没有 conductor（子行的终态没人写，它们会留在 running）")
+            return out
+        ending = S.child_ending(cut_off=True)
+        detail = (f"父代理退场时它还在跑（已经又等了 {float(waited_sec):.1f}s）⇒ 这一行由"
+                  "父的退场结算写成终态：结果未知，不是 ok（它的产出没有并入父这一趟）")
+        # 花销必须从账本抄回这一行（与 `finish_top_level_run` 同一条纪律）：`tasks.tokens/usd`
+        # 由 `usage_ledger` 派生，写 0 而账本里有数 ⇒ `verify_all` 报
+        # `usage_task_total_mismatch`（"两处对同一次召唤给出不同数字"）。抄不回来就留 0 并
+        # 记一条 note —— 抄账是旁路，不许把"结算"这一步带走。
+        meter = getattr(cond, "meter", None)
+        for tid in [str(t) for t in tids if str(t)]:
+            tokens, usd = 0, 0.0
+            if meter is not None:
+                try:
+                    tokens = int(meter.tokens_for(tid))
+                    usd = float(meter.usd_for(tid))
+                except Exception as exc:  # noqa: BLE001 —— 抄不回来见上面那段
+                    out["problems"].append(
+                        f"{tid}：花销没抄回来（{type(exc).__name__}: {exc}）⇒ 这一行记 0")
+            try:
+                res = cond.finish(tid, status=ending["status"], outcome=ending["outcome"],
+                                  detail=detail, tokens=tokens, usd=usd)
+            except Exception as exc:  # noqa: BLE001 —— 一条写不成不许带走其余几条
+                out["problems"].append(
+                    f"{tid}：退场结算没写成（{type(exc).__name__}: {exc}）")
+                continue
+            got = str(getattr(res, "outcome", None) or "")
+            if got == "cut_off_by_parent":
+                out["written"].append(tid)
+            else:
+                # 幂等分支：这一行已经是终态（例如优雅停止那一支把它翻成了 block）。
+                # 那是它自己的档 —— 不改写，也不并进"被掐断"（判据 d 守这一条）。
+                out["already_terminal"].append(
+                    f"{tid}（已是 {getattr(res, 'status', '') or '?'}/{got or '无 outcome'}）")
+        # 写在"谁写谁记"那一处：`run.cut_off_children` 只有一个赋值点（就是这里），
+        # 父行点名与判据 (b) 都读它 —— 于是"打桩掉这一步"时它保持空（判据 e 的机器形态）。
+        run.cut_off_children = list(out["written"])
+        return out
 
     def _settle_children_at_exit(self, *, run: "AgentLoop.LoopRun") -> None:
         """退场：还挂着的孩子最多再等 `child_exit_drain_sec` 秒，然后如实留痕。
 
         为什么不是无限等：一次收工（预算用完 / 叫停 / 协议连击）不许被一个后台
-        handler 拖住；那些孩子是台账里真实的行，会在后台跑完并各自落终态 ——
-        这一趟要给的是"我走的时候它们还没回来"这句话，不是假装它没发生。
+        handler 拖住；那些孩子是台账里真实的行 —— 改前这一句只写读数、一个字段都不落
+        到子行上，于是"被父退场掐断"与"自己正常交付"在台账上长得一模一样（D22）。
+        现在它做三件事，顺序不能换：
+          1. 先结算（`_write_children_cut_off`：写子行的终态 + 标记）；
+          2. 再留痕（`run.notes` 那一句点名到编号）；
+          3. 最后落事件（`agent_children` 的 `why="exit"`，`settled` 那格写的是真被结算的）。
+        `run.cut_off_children` 只从第 1 步的返回值取 —— 这样"打标记那一步被打桩掉"时，
+        子行没有标记、父行也不点名（反真空的机器形态）。
         """
         running = self._children_running()
         if not running:
@@ -4642,14 +5088,25 @@ class AgentLoop:
         if not left:
             self._child_handles = []
             return
+        settled = self._write_children_cut_off(left, run=run, waited_sec=waited)
+        written = len(run.cut_off_children)
         note = (f"收工时还有 {len(left)} 项派出去的活没回来（{'、'.join(left)}）；"
-                f"已经又等了 {waited:.1f}s。它们不在这条进程的调用栈上，会在后台跑完并各自"
-                "落终态 —— 这一趟没有等它们收口（如实记，不假装它们回来了）")
+                f"已经又等了 {waited:.1f}s，其中 {written} 项已由父的退场结算写成终态"
+                f"（outcome=cut_off_by_parent、settled_at_parent_exit=True："
+                "它们当时还在跑，结果未知 —— 不假装它们回来了）")
+        if settled["already_terminal"]:
+            note += ("；另有 " + "、".join(settled["already_terminal"])
+                     + " 已经在台账里落了别人的终态（那是它们自己的档，这一处不改写）")
         run.notes.append(note)
+        run.notes.extend(f"退场结算：{p}" for p in settled["problems"])
         SS.append(self.session_root, {
             "kind": "agent_children", "role": self.role,
             "task_id": str(self.my_task_id or ""), "step": -1,
-            "settled": [], "running": list(left), "waited_sec": round(waited, 3),
+            "settled": list(run.cut_off_children), "running": list(left),
+            "settled_at_parent_exit": list(run.cut_off_children),
+            "kept": list(settled["already_terminal"]),
+            "problems": list(settled["problems"]),
+            "waited_sec": round(waited, 3),
             "why": "exit", "checked": True,
         }, sid=self.sid)
 
@@ -4670,8 +5127,17 @@ class AgentLoop:
         纪律）。为什么：这一步的提示词还没发出去，此刻承认送达就是把"没发出去"记成
         "读过了"。
 
-        返回 `{text, item_ids, msg_ids, wake_ids, monitor, checked, problems}`：
-        `run()` 把 id 并进待标记的那两个队列，并在成功调用之后落定。
+        返回 `{text, item_ids, msg_ids, wake_ids, monitor, checked, children,
+        problems}`：`run()` 把 id 并进待标记的那两个队列，并在成功调用
+        之后落定。其中一格是 Q33 加的读数：`children["wait"]` 说这一拍实际等没等
+        ——`wait.reason == "return"` 就是"这一拍为了返场没等"。
+
+        2026-10-26（F1a 第 ② 条，判据是"写了没人读"）：改前这里还多一格
+        `return_beat`（返场判据这一拍给没给），投递读数与 `agent_children` 事件里各
+        一份，全仓 0 个生产读者 —— 它说的那件事由 `wait.reason` 逐字说清（`return`
+        那一档就是"欠返场所以没等"）。两处副本一起删掉；"判据说欠、但这一拍还是等了"
+        那一态由反真空判据（`tests/test_the_return_beat_does_not_wait_for_children.py`
+        的 e 条）直接读 `_return_reading` 的 `owed` 来构造，不再靠这个副本。
         """
         self._pump_clock(step=step, when="turn", run=run)
         wakes = self._take_wakes(step=step, run=run)
@@ -4681,8 +5147,22 @@ class AgentLoop:
         # 位置在这一处的理由：唤醒已经消费完（有唤醒就是监控回合，不再等孩子，
         # 否则"被叫醒看全树"会先被一个 5 分钟的等待拖住），而信箱还没读
         # （孩子回来的结果与板项、留言拼成同一条增量，才有同一个去重面）。
+        #
+        # 等不等子不在这里判（Q33，2026-10-26）：`wait` 由 `_should_wait_for_children`
+        # 给，而那一位只读返场判据（`_return_reading`）的结论 —— 这一拍欠模型一个
+        # 回合就不等，直接问（改前是"没消费到唤醒就等满 300 秒"，于是派完到第一个
+        # 模型回合之间最多隔 5 分钟）。判据给过之后照旧等，见那一处的 docstring。
+        wakes_reading = self._wake_readings(
+            [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())])
+        back = self._return_reading(parked=self._park_reading(),
+                                    wakes=wakes_reading, run=run)
+        # 这一格只喂下面 `skip_reason` 那一支（不进任何读数：见本函数 docstring 末段）。
+        return_beat = bool(back.get("owed"))
+        wait = self._should_wait_for_children(back=back,
+                                              consumed_wake=bool(wakes.get("consumed")))
         children = self._children_round_trip(
-            step=step, run=run, wait=not bool(wakes.get("consumed")))
+            step=step, run=run, wait=wait,
+            skip_reason="" if wait else ("return" if return_beat else "wake"))
         if children.get("settled") or children.get("running"):
             SS.append(self.session_root, {
                 "kind": "agent_children", "role": self.role,
@@ -4700,8 +5180,10 @@ class AgentLoop:
             run.notes.append(
                 f"第 {step} 步返场：子代理回来 {len(children.get('settled') or ())} 条，"
                 f"还在跑 {len(children.get('running') or ())} 条"
-                f"（等待 {float((children.get('wait') or {}).get('waited_sec') or 0):.1f}s，"
-                f"原因 {(children.get('wait') or {}).get('reason') or 'none'}）")
+                + ("（这一拍为了返场没等子：返场判据给过之后才等）"
+                   if str((children.get("wait") or {}).get("reason") or "") == "return" else
+                   f"（等待 {float((children.get('wait') or {}).get('waited_sec') or 0):.1f}s，"
+                   f"原因 {(children.get('wait') or {}).get('reason') or 'none'}）"))
         got = mailbox_digest(
             self.conductor, self.session_root, self.role,
             my_task_id=str(self.my_task_id or ""), sid=self.sid,
@@ -4845,6 +5327,12 @@ class AgentLoop:
         再按那个时刻封顶 —— 于是"到点"不会被一个长拍压过去，而"事件唤醒"最迟一拍
         就能被读到。每一拍都记进主时钟的等待账（`kind="park"`），不是空转。
 
+        这一拍睡到一半被叫停时（Q21）：`_park_slice` 的每一片之后都读过停机开关，
+        命中就带着 `stopped=True` 提前返回。这里只把这件事变成读数
+        （`run.notes` 一句"在挂机中被叫停（等了 X 秒）" + `run.park` 的
+        `stopped_in_park` / `stopped_sec`），收尾仍由下一拍的循环头做
+        （`_user_stop_reason` → 既有的 `stop_file` / `force_stop` 两档）。
+
         睡完不在这里判断"醒了没有"：下一拍照旧从 `_deliver_mailbox` 开始（推时钟、
         消费唤醒、读信箱），判定只在一处（`_park_gate`）。
         """
@@ -4864,25 +5352,121 @@ class AgentLoop:
             seconds = min(seconds, max(0.05, min(horizon)))
         seconds = max(0.05, min(seconds, PARK_SLICE_MAX_SEC))
         problem = ""
+        slept: dict[str, Any] = {}
         try:
-            self._park_slice(seconds=seconds, purpose=self._park_purpose(rows))
+            got = self._park_slice(seconds=seconds, purpose=self._park_purpose(rows))
+            slept = dict(got) if isinstance(got, Mapping) else {}
         except Exception as exc:  # noqa: BLE001 —— 睡不下去要如实说，不许静默空转
             problem = f"{type(exc).__name__}: {exc}"
-        run.park["asked_sec"] = round(asked + (0.0 if problem else seconds), 6)
+        stopped = bool(slept.get("stopped")) and not problem
+        waited = 0.0 if problem else seconds
+        piece = 0.0
+        if stopped:
+            # 这一片没睡满：只记真睡了的那一段（`_park_slice` 报的是它自己请的秒数）；
+            # `piece` 是"叫停之后又等了多久"的上界（开关落在这一片里 ⇒ 最多一片）。
+            waited = min(seconds, max(0.0, float(slept.get("asked_sec") or seconds)))
+            piece = min(waited, max(0.0, float(slept.get("piece_sec") or waited)))
+        run.park["asked_sec"] = round(asked + waited, 6)
         run.park["slice_sec"] = min(PARK_SLICE_MAX_SEC, max(seconds, seconds * 2.0))
         run.park["parked_turns"] = int(run.park.get("parked_turns") or 0) + 1
-        return {"waited_sec": 0.0 if problem else seconds, "asked_sec": run.park["asked_sec"],
-                "reason": problem}
+        note = ""
+        if stopped:
+            note = (f"在挂机中被叫停（等了 {piece:.1f} 秒）：开关落在这一片里，这一片"
+                    f"睡完之后读到它（这一拍一共等了 {waited:.1f} 秒）⇒ 立刻从挂机里"
+                    "退出来，由下一拍的循环头走既有的停机收尾")
+            run.notes.append(note)
+            run.park["stopped_in_park"] = int(run.park.get("stopped_in_park") or 0) + 1
+            run.park["stopped_sec"] = round(
+                float(run.park.get("stopped_sec") or 0.0) + piece, 6)
+        return {"waited_sec": waited, "asked_sec": run.park["asked_sec"],
+                "stopped": stopped, "note": note,
+                "reason": note or problem}
 
     def _park_slice(self, *, seconds: float, purpose: str) -> dict[str, Any]:
-        """挂机的一拍真睡（唯一落点，进主时钟的等待账）。
+        """挂机的一拍真睡（唯一落点，进主时钟的等待账），并且每片之后看一次停机开关。
 
         为什么单独一个方法：判据要把它换成"替身缝"（推进假时钟、半路投一条留言），
         于是挂机这条控制流可以零真时间、零模型钱地跑完 —— 与 `fetch._default_sleep`
         同一档的缝。假时钟在装的时候它按 `clock.await_io` 的既有口径不真睡（账照记、
         `skipped` 计数 +1）。
+
+        为什么要在这里切片（Q21，2026-10-26）：停机判定 `_stop_applies` 只在循环头被
+        `_user_stop_reason` 调一次，而挂机这一拍睡完才回循环头 —— 改前这一片最长
+        `PARK_SLICE_MAX_SEC`（300 秒），于是"叫停"最多要等 300 秒；更糟的形态是开关
+        投在模型调用的回调里：挂机不调模型 ⇒ 开关永不出现 ⇒ 空转。现在把这一拍切成
+        不超过 `PARK_STOP_POLL_SEC` 的小片、每片之后读一次开关：命中就带着
+        `stopped=True` 提前返回，调用方（`_park_sleep_once`）落读数，下一拍的循环头
+        走既有的收尾。片只是这一拍的细分，拍的总量仍由退避决定（判据 c 钉这一条）。
+
+        只读不撤（见 `_park_stop_reading`）：撤与收尾是循环头那次 `_user_stop_reason`
+        的事，它才分得清 `remove` 与 `consume_at_end`（树根收尾才撤）。在这里顺手撤掉，
+        同一棵树里还没读到的循环下一刻就读成"没人叫停"了。
+
+        返回 `{"checked", "asked_sec", "stopped", "stop_reason", "piece_sec", "why"}`；
+        `asked_sec` 是这一片真的请了多少秒（被叫停时它小于入参 `seconds`），
+        `piece_sec` 是"叫停之后又等了多久"的那一格的上界（开关落在这一片里，
+        这一片睡完才读到 ⇒ 最多一片，即 `PARK_STOP_POLL_SEC`）。
         """
-        return CLK.await_io(seconds, purpose, kind="park", where="agent_loop.park")
+        total = max(0.0, float(seconds))
+        waited = 0.0
+        while total - waited > 1e-9:
+            piece = min(PARK_STOP_POLL_SEC, total - waited)
+            CLK.await_io(piece, purpose, kind="park", where="agent_loop.park")
+            waited += piece
+            hit = self._park_stop_reading()
+            if hit.get("stop"):
+                return {"checked": bool(hit.get("checked", True)),
+                        "asked_sec": round(waited, 6), "stopped": True,
+                        "stop_reason": str(hit.get("stop_reason") or ""),
+                        "piece_sec": round(piece, 6),
+                        "why": str(hit.get("why") or "")}
+        return {"checked": True, "asked_sec": round(waited, 6), "stopped": False,
+                "stop_reason": "", "piece_sec": 0.0, "why": ""}
+
+    def _park_stop_reading(self) -> dict[str, Any]:
+        """挂机一片之后那一次"停机开关"的读（Q21）：返回
+        `{"checked", "stop", "stop_reason", "why"}`。
+
+        与循环头 `_user_stop_reason` 读的是同一把开关、同一份"管不管我"的判据
+        （`stopctl.read_stop` + `_stop_applies`）。差别只有两条，且都是刻意的：
+
+        1. 只读不撤：`_stop_applies` 给的 `remove` / `consume_at_end` 在这里一个字都
+           不用 —— 撤与收尾是循环头那一次的事（它分得清"子树那一支的根读时即撤"与
+           "全工作区树根收尾才撤"）。在这里撤掉，等于把还没读到的兄弟/子孙的开关吃掉；
+        2. 不查父叫停我这一轮的那份中断信号（`stopctl.read_interrupt`）：那份是一次性
+           信号、读到即消费，在片里消费掉它，循环头就再也读不到了（"叫停了却没收工"）。
+           Q21 的范围只是工作区那把开关。
+
+        三态：读不成 ⇒ `checked=False` 且 `stop=False`（判不了不停），与 `_stop_applies`
+        的"判不了 ≠ 适用"同一条纪律。
+        """
+        try:
+            from . import stopctl
+        except Exception as exc:  # noqa: BLE001 —— 模块都导不进来 ⇒ 判不了
+            return {"checked": False, "stop": False, "stop_reason": "",
+                    "why": f"stopctl 没导进来（{type(exc).__name__}）⇒ 判不了"}
+        state: Any = None
+        try:
+            # 与 `_user_stop_reason` 同一个顺序：显式给的路径先看，没有再读工作区那份。
+            if self.stop_file and Path(self.stop_file).exists():
+                state = stopctl.read_stop(self.session_root, explicit=self.stop_file)
+                if state is None:
+                    return {"checked": True, "stop": False, "stop_reason": "",
+                            "why": "显式给的停机开关路径上没有开关"}
+            if state is None:
+                state = stopctl.read_stop(self.session_root)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没叫停"
+            return {"checked": False, "stop": False, "stop_reason": "",
+                    "why": f"停机开关读不成（{type(exc).__name__}: {exc}）⇒ 判不了"}
+        if state is None:
+            return {"checked": True, "stop": False, "stop_reason": "", "why": ""}
+        verdict = self._stop_applies(state)
+        if not verdict.get("stop"):
+            return {"checked": True, "stop": False, "stop_reason": "",
+                    "why": str(verdict.get("why") or "")}
+        return {"checked": True, "stop": True,
+                "stop_reason": stopctl.stop_reason_of(state),
+                "why": str(verdict.get("why") or "")}
 
     def _wait_any_reading(self) -> dict[str, Any]:
         """本趟"等待任意计时器返回"的读数（业主 2026-10-27 第三条裁定）。
@@ -4947,6 +5531,154 @@ class AgentLoop:
         out["why_text"] = "；".join(out["why"]) or "这一拍没有新投递、没有未消项、没有待消费的子产出"
         return out
 
+    def _return_reading(self, *, parked: Mapping[str, Any], wakes: Mapping[str, Any],
+                        run: "AgentLoop.LoopRun",
+                        work: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """要不要返场这一件事的唯一判据（`_park_gate` 的第 ③ / ④ 两支都从这里取结论）。
+
+        ## 为什么要有这一处（Q22，2026-10-26）
+
+        D-64 的口径是"派活是可抢占的：派完下一拍要给模型一次回合"；p206 的口径是
+        "无事可做就挂在时钟上"。改前这两条口径正面相撞，撞点不是某一条判据写错了，
+        而是"返场"这件事没有落点：`_pending_work` 的三条判据（新投递 / 未消项 /
+        待消费的子产出）按定义都不含"我刚派出去、此刻还在跑的那一批"，于是派活之后
+        的每一拍都读成"无事可做"，第 ④ 支把整个派活窗口挂掉（真机探针逐拍读数：
+        6 拍零回合、`asked_sec=31.5 / 整趟 46 秒`；真机缺省参数下 6 拍上到半小时量级）。
+        第 ③ 支的形态同族：孩子回来那一拍按 p206 跳过（那一档本身是对的），而下一拍又
+        因为"还有一条 waiter 在飞"落回第 ④ 支去睡 —— 那一批的产出已经在上下文里，
+        却要再等一个 `PARK_SLICE` 才被读到。
+
+        ## 输入三样（业主 2026-10-26 第四条裁定）
+
+        1. 这一拍有没有新事：`work`（`_pending_work` 的读数，原样带进来）；
+        2. 我是不是在等我这一趟刚派出去的活：`parked` 的 waiter 与 `self._child_handles`
+           这条结构账的交集。为什么只认结构账、不认 `wait_for` 的表象：模型自己起的那条
+           `wait_for=task:<历史子>` 长得一模一样（`tests/test_park_is_a_real_stop.py`
+           第 3 条就是它），但那是"等别人"，不是"等我自己刚派的"；
+        3. 那些子此刻什么状态：`_children_running()` 的现读（句柄那一层，不是台账快照）。
+
+        ## 两个调用点（Q33，2026-10-26）
+
+        这一处判据有两个读者，读的都是同一个结论 `owed`：
+
+        - `_deliver_mailbox`（投递之前）：那一拍"等不等子"就由它决定
+          （`_should_wait_for_children` 只读这里的 `owed`）；
+        - `_park_gate`（投递之后）：那一拍"调不调模型"由它决定（第 ③b 支）。
+
+        两个读者的输入差一格：`_deliver_mailbox` 调得早，投递读数（`work`）还没算出来，
+        于是 `work` 省掉（`new_work` 那一格只是读数，判 `owed` 一个字都不读它）。
+        `owed` 的三个来源（结构账 / `run.steps` / `return_owed`）两边读的是同一份，
+        中间只可能有一件事变：孩子在投递这一步里落定 —— 那只会把"欠"读成"不欠"
+        （不会反过来），于是返场那一拍要么先发生（改后），要么带着已落定的产出问模型，
+        不会出现"该返场却没返场还多睡一觉"。
+
+        ## 输出
+
+        - `owed_batch`：这一批我派的子此刻还在跑，而派活之后还没有过一拍模型回合
+          （`run.steps` 里最近一步仍是那次派活 ⇒ 这一批一次回合都没给过）；
+        - `owed_wake`：上一拍是"等谁"的唤醒、而那条唤醒点名的正是我派的子 —— 那一拍
+          按第 ③ 支跳过（不调模型），于是这一拍必须补上模型回合；
+        - `owed = owed_batch or owed_wake`：这一拍不算"无事可做"，要返场。
+
+        "这一批已经给过回合"由 `run.park["return_given"]` 记（写侧在 `_park_gate` 尾部）：
+        给了就销账，于是每批只返场一次，之后照旧按 p206 挂机。
+
+        三态：句柄账读不成 ⇒ `checked=False`（读不成不许折成"没有欠的那一拍"）。
+        """
+        out: dict[str, Any] = {
+            "checked": True, "owed": False, "owed_batch": False, "owed_wake": False,
+            "why": "", "own": [], "own_running": [], "task_waiters": [],
+            "own_waiters": [], "all_task_waiters": False, "woke_own": [],
+            "woke_children": [], "new_work": bool((work or {}).get("busy")),
+            "return_owed": [], "batch_step": -1,
+        }
+        # ---- 这一趟派出去、句柄还挂着的那些子（"这一批是我这一趟刚派的"的唯一证据）
+        own: list[str] = []
+        try:
+            for rec in list(self._child_handles):
+                handle = rec.get("handle")
+                if handle is None:
+                    continue
+                if str(rec.get("kind") or "") == "summon_many":
+                    for row in handle.dispatched() or ():
+                        tid = str((row or {}).get("task_id") or "")
+                        if tid and tid not in own:
+                            own.append(tid)
+                else:
+                    tid = str(getattr(handle, "task_id", None) or "")
+                    if tid and tid not in own:
+                        own.append(tid)
+            running_now = set(self._children_running())
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out.update(checked=False,
+                       why=(f"派活句柄账读不成（{type(exc).__name__}: {exc}）"
+                            "⇒ 这一格不判返场（读不成不是「不欠回合」）"))
+            return out
+        out["own"] = list(own)
+        out["own_running"] = [tid for tid in own if tid in running_now]
+        # ---- 这一拍的 waiter 是不是"全都在等子"（第 ④ 支"挂着等谁"那一半的前提）
+        bad_waiter = False
+        task_waiters: list[str] = []
+        for row in parked.get("waiters") or ():
+            raw = str(row.get("wait_for_resolved") or row.get("wait_for") or "")
+            try:
+                kind, ref = CLK.parse_wait_for(raw)
+            except Exception:  # noqa: BLE001 —— 解析不了就不把它算成"等子"
+                bad_waiter = True
+                continue
+            if str(kind) != "task":
+                bad_waiter = True
+                continue
+            task_waiters.append(str(ref))
+        out["task_waiters"] = task_waiters
+        out["all_task_waiters"] = bool(task_waiters) and not bad_waiter
+        out["own_waiters"] = [tid for tid in task_waiters if tid in own]
+        all_own = bool(out["all_task_waiters"]) and len(out["own_waiters"]) == len(task_waiters)
+        # ---- 这一批派出去之后给过模型回合没有（`run.steps` 里最近一步还是不是那次派活）
+        steps = list(getattr(run, "steps", ()) or ())
+        batch_step = -1
+        for i, step in enumerate(steps):
+            if str(getattr(step, "shape", "") or "") not in ("summon", "summon_many"):
+                continue
+            result = getattr(step, "result", None)
+            if not isinstance(result, Mapping):
+                continue
+            if result.get("preempted") or result.get("preemptible"):
+                batch_step = i
+        out["batch_step"] = batch_step
+        beat_given = batch_step >= 0 and batch_step < len(steps) - 1
+        out["owed_batch"] = bool(all_own and out["own_running"] and not beat_given)
+        if out["owed_batch"]:
+            out["why"] = (f"派活之后还没给过模型回合：这一批 {len(out['own_running'])} 项"
+                          f"还在跑（{'、'.join(out['own_running'][:6])}），这一拍的 waiter "
+                          "全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走")
+        # ---- 上一拍是"等谁"的唤醒、点名的正是我派的子 ⇒ 这一拍补上那个回合
+        owed_ids = [str(x) for x in (run.park.get("return_owed") or ()) if str(x)]
+        out["return_owed"] = owed_ids
+        out["owed_wake"] = bool(owed_ids)
+        if out["owed_wake"] and not out["owed_batch"]:
+            out["why"] = (f"上一拍是等谁的唤醒（{'、'.join(owed_ids[:4])} 回来）—— 那一拍"
+                          "按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型"
+                          "（不许再睡一拍）")
+        # ---- 这一拍消费到的唤醒点的是不是我派的子（第 ③ 支据此记那一笔"欠"）
+        known = set(own) | {str(x) for x in (run.park.get("own_children") or ()) if str(x)}
+        woke_own: list[str] = []
+        for row in wakes.get("park") or ():
+            raw = str(row.get("wait_for") or "")
+            try:
+                kind, ref = CLK.parse_wait_for(raw)
+            except Exception:  # noqa: BLE001 —— 解析不了就不算"我派的子"
+                continue
+            if str(kind) == "task" and str(ref) in known and str(ref) not in woke_own:
+                woke_own.append(str(ref))
+        out["woke_own"] = woke_own
+        out["woke_children"] = woke_own
+        out["owed"] = bool(out["owed_batch"] or out["owed_wake"])
+        if not out["owed"] and not out["why"]:
+            out["why"] = ("不欠模型回合：这一批已经给过回合，或者这一拍挂着的不是这一趟"
+                          "派的活（那是等别人，按 p206 挂机）")
+        return out
+
     def _park_gate(self, *, step: int, run: "AgentLoop.LoopRun",
                    mailbox: Mapping[str, Any]) -> dict[str, Any]:
         """这一拍调不调模型 —— 挂机/交差那一支的唯一判据（`_deliver_mailbox` 之后调）。
@@ -4970,6 +5702,13 @@ class AgentLoop:
         5. 其余（手上有活 / 读数读不成）⇒ 照常 `ask_step`。计时器在后台继续走，到点只落
            唤醒标记 —— 这一条就是"计时器不阻塞动作"。
 
+        第 ③ 与第 ④ 两支还有一个共同的入口：返场（Q22，2026-10-26）。判据只有一处
+        （`_return_reading`）：这一拍要等的那一批是不是我这一趟刚派出去、此刻还在跑的子，
+        而派活之后还没给过模型回合（或者上一拍是它们的唤醒、被第 ③ 支跳过了）⇒ 这一拍
+        不算"无事可做"，先问模型一次。给过就记进 `run.park["return_given"]`，之后照旧
+        按下面第 ④ 支挂机 —— 于是 D-64 的"派完下一拍给一个回合"与 p206 的"无事可做就
+        挂机"落在同一处判据上，而不是两条口径各说各话。
+
         改前（2026-10-27 早些时候）：只要本趟有 parked waiter 就不调模型（真桩读数
         `parked_steps=0` 是这么来的）；它的后果是"父代理一边等子、一边手上有活也停住"，
         与业主这一句正好相反。判据 ③a 钉的就是这一条（起表 + 有活 ⇒ 仍要调模型）。
@@ -4981,6 +5720,7 @@ class AgentLoop:
         parked = self._park_reading()
         want = self._wait_any_reading()
         work = self._pending_work(mailbox)
+        back = self._return_reading(parked=parked, work=work, wakes=wakes, run=run)
         pending_timers = list(want.get("pending") or ())
         out: dict[str, Any] = {"skip_model": False, "decision": "run", "woke_reason": "",
                                "waited_sec": 0.0, "reason": "",
@@ -4991,8 +5731,12 @@ class AgentLoop:
                                "work_reason": str(work.get("why_text") or ""),
                                "waiters": [str(w.get("timer_id") or "")
                                            for w in parked["waiters"]],
+                               "reentry": bool(back.get("owed")),
+                               "reentry_reason": str(back.get("why") or ""),
+                               "own_children": list(back.get("own_running") or ()),
                                "checked": bool(wakes["checked"] and parked["checked"]
-                                               and want["checked"] and work["checked"])}
+                                               and want["checked"] and work["checked"]
+                                               and back.get("checked", True))}
         if not out["checked"]:
             why = (parked.get("reason") or want.get("reason")
                    or wakes.get("reason") or work.get("why_text") or "没查成")
@@ -5024,13 +5768,29 @@ class AgentLoop:
             run.park["woke_turns"] = int(run.park.get("woke_turns") or 0) + 1
             run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
             run.park["woke_reasons"] = list(run.park.get("woke_reasons") or []) + [reason]
+        elif back.get("owed") and not work.get("busy"):
+            # ③b 返场（Q22）：第 ③ 支与第 ④ 支的结论都从这一处判据取（`_return_reading`）。
+            # 这一拍之所以"不是无事可做"只有两种来路：这一批是我这一趟刚派出去、此刻还在
+            # 跑的子（派活之后还没给过模型回合），或者上一拍是"等谁"的唤醒、那条唤醒点名的
+            # 正是我派的子（第 ③ 支按 p206 跳过了那一拍，产出就悬在上下文里）。
+            # 两种都给且只给一拍：给了之后 `run.park["return_given"]` 点名这一批，判据就
+            # 不再成立，下一拍起照旧按第 ④ 支挂机（"无事可做 ⇒ 挂机"一个字没丢）。
+            reason = str(back.get("why") or "")
+            out.update(skip_model=False, decision="run", reason=reason)
+            run.notes.append(f"返场（Q22）：{reason}")
         elif parked["count"] and not work.get("busy"):
             # ④ 有计时器在等 + 本趟确实无事可做 ⇒ 挂机
             slept = self._park_sleep_once(run=run, parked=parked)
+            note = ""
+            if back.get("own_waiters") and not back.get("owed"):
+                # 这一批确实是我派的、确实还在跑，而返场判据这一拍已经不成立了
+                # （那一拍给过）—— 把这句话写进读数，免得读的人再把它当成 Q22 的形态。
+                note = ("（这一批我派出去的子还在跑；返场那一拍已经按判据给过，"
+                        "从这一拍起按挂机口径等）")
             out.update(skip_model=True, decision="park",
                        waited_sec=float(slept.get("waited_sec") or 0.0),
                        reason=(str(slept.get("reason") or "") or
-                               "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看"))
+                               "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note))
             run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
         elif parked["count"]:
             # ⑤ 有计时器在等，但手上有活 ⇒ 照常调模型（"计时器不阻塞动作"）
@@ -5059,6 +5819,29 @@ class AgentLoop:
                     if not dropped.get("checked"):
                         run.notes.append(
                             f"等待意图没撤成：{dropped.get('reason') or '没查成'}")
+        # ---- 返场账（Q22）：这一批"欠模型一拍"的记与销都只在这一处。
+        #
+        # 记：这一拍消费到的"等谁"唤醒点名的正是我这一趟派的子 ⇒ 下一拍要返场。第 ③ 支
+        # 那一拍本身按 p206 不调模型，于是这一笔账是它与"回来之后下一拍必须问模型"之间
+        # 唯一的连接（没有它，那一拍会被第 ④ 支接去睡觉）。
+        # 销：任何一次真的问了模型的拍都算还过 —— 每批只还一次，之后照旧挂机。
+        own_known = {str(x) for x in (run.park.get("own_children") or ()) if str(x)}
+        own_known |= {str(x) for x in (back.get("own") or ()) if str(x)}
+        if own_known:
+            run.park["own_children"] = sorted(own_known)
+        if out["skip_model"] and str(out["decision"]) == "woke" and back.get("woke_own"):
+            run.park["return_owed"] = list(back["woke_own"])
+        elif not out["skip_model"]:
+            run.park["return_owed"] = []
+        if not out["skip_model"]:
+            own_running = {str(x) for x in (back.get("own_running") or ()) if str(x)}
+            if own_running:
+                given = {str(x) for x in (run.park.get("return_given") or ()) if str(x)}
+                run.park["return_given"] = sorted(given | own_running)
+            if back.get("owed"):
+                run.park["reentry_turns"] = int(run.park.get("reentry_turns") or 0) + 1
+                run.park["reentry_reasons"] = list(
+                    run.park.get("reentry_reasons") or []) + [str(back.get("why") or "")]
         run.park["decision"] = str(out["decision"])
         run.park["waiters"] = [
             {"timer_id": str(w.get("timer_id") or ""), "wait_for": str(w.get("wait_for") or ""),
@@ -5576,7 +6359,8 @@ class AgentLoop:
         （真机 `projects/sylow3`：50 个实例行、48 条板项、0 条销号落痕）。
 
         返回 `{"checked","applicable","complete","root","nodes","dirty","count",
-        "total","root_open_items","why","reason"}`：
+        "total","root_open_items","stalled","stalled_count","states","programs",
+        "programs_ok","why","reason"}`：
 
         - `applicable`：这道闸对这一趟有没有对象 —— 只有主控 M 有（其余角色名下没有
           "整棵树"这回事），所以非 M 一律 `applicable=False, complete=True`（放行，且
@@ -5584,10 +6368,19 @@ class AgentLoop:
         - `checked`：台账读到没有。读不成 ⇒ `checked=False` 但这一趟照旧放行
           （没有台账的那一趟本来就不在这道闸的射程里：`run_role` 拿不到 conductor 时
           连台账号都没有），同时把"这一格没查成"写进 `run.notes` —— 不许静默；
-        - `complete`：这一支全部销号了没有（`nodes` 与 `dirty` 都空）；
+        - `complete`：这一支全部销号了没有（`nodes` 与 `dirty` 都空），并且这一支名下
+          没有还在跑的程序（`programs_ok`）。两条轴各自给读数，合起来才是"可以收工"；
         - `nodes` / `dirty` / `count` / `total` / `root_open_items`：判据本体在
           `Conductor.retire_integrity`（这一层只做"要不要拦"与"怎么说"）；
-        - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 处置路径）。
+        - `stalled` / `stalled_count` / `states`：疑似停滞的那几个编号 / 几个，以及三态
+          合计。它是读数（拒信要点名"名下有 N 个在飞子，其中 M 个已停滞超过 N 分钟"），
+          不改 `complete`，也不许被读成"可以销"——见 `conductor.agent_state`；
+        - `programs` / `programs_ok`：这一支（含我自己那一行）还在跑的程序（G2 第 ② 条）。
+          `programs_ok=False` ⇒ `complete=False`（有主的程序还在跑就不记 final）；
+          `programs.checked=False`（程序那一格没查成）不拦收工，但 `run.notes` 与这里都
+          必须写"没查成"；无主程序与"账说收口了而进程还在"的那两类只点名、不拦
+          （业主第 ③ 条：无主进程读数是读数，不是门）；
+        - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 还在跑的程序 + 处置路径）。
 
         为什么只有这一处：业主那句说的是"不记 final"，而 `final` 落盘的唯一入口是
         `run()` 里 `shape == "final"` 那一支 —— 门放在别处就成了"记了 final 又提醒"。
@@ -5596,6 +6389,20 @@ class AgentLoop:
             "checked": True, "applicable": False, "complete": True,
             "root": str(self.my_task_id or ""), "nodes": [], "dirty": [],
             "count": 0, "total": 0, "root_open_items": 0, "why": "", "reason": "",
+            # 停滞读数（业主 2026-10-26 第二条）：`retire_integrity` 的同名格原样透传，
+            # 拒信里那一句"其中 M 个已停滞超过 N 分钟"就从这两格来。
+            "stalled": [], "stalled_count": 0, "states": None,
+            # 程序读数（G2 第 ② 条，业主 2026-10-26：「注销前检测的能力」）：
+            # 这一支名下（含我自己那一行）还有没有程序在跑。`retire_integrity` 的同名格
+            # 原样透传（它读的是 `Conductor.programs_in_subtree`，与销号门同一份）。
+            # 为什么另开两格而不是把它并进 `complete`：`complete` 数的是名册项
+            # （"整棵树都已销号"），程序不是名册项；两条轴的处置也不同 —— 名册没清要
+            # ack + retire_child，程序没停要 program.stop / 等它退出。折成一格会让拒信
+            # 只说得出其中一件事。
+            "programs": {"checked": False, "running": [], "running_count": 0,
+                         "unowned": [], "unowned_count": 0,
+                         "orphans": {}, "orphan_count": 0, "reason": ""},
+            "programs_ok": True,
         }
         if str(self.role) != S.CONDUCTOR_ROLE:
             reading["reason"] = "不是主控那一趟 ⇒ 名下没有整棵树可销（这道闸对它没有对象）"
@@ -5648,6 +6455,52 @@ class AgentLoop:
                 run.notes.append(f"收工前的销号完整性没查成（{reading.get('reason')}）")
             return reading
         reading["complete"] = bool(reading.get("complete"))
+        # ---- 程序读数（G2 第 ② 条，业主 2026-10-26：「注销前检测的能力」）
+        #
+        # 三件事，顺序不能换：
+        #   ① 读不成 ⇒ 不拦收工（程序那一格没有"一定在跑"的证据），但必须留痕：
+        #      "没查成"不许折成"没有在跑的程序"（三态纪律）；
+        #   ② 有主的、还在跑的 ⇒ 这一次 final 不算完（`programs_ok=False`）：销号不可逆，
+        #      而程序还在跑这件事一旦名字销掉就再没有谁与它相关了（昨晚十五个野进程的形态）；
+        #   ③ 无主的 / 账说收口了而进程还在的 ⇒ 只点名、不拦：它们不属于这一支，
+        #      "不许收工"管不到它们（业主第 ③ 条：无主进程读数是读数，不是门）。
+        progs = dict(reading.get("programs") or {})
+        running = [dict(r) for r in (progs.get("running") or ())]
+        unowned = [dict(r) for r in (progs.get("unowned") or ())]
+        orphans = dict(progs.get("orphans") or {})
+        stray = ([dict(x) for x in (orphans.get("no_timer") or ())]
+                 + [dict(x) for x in (orphans.get("finished_but_alive") or ())])
+        program_text = ""
+        if not progs.get("checked"):
+            if run is not None:
+                run.notes.append(
+                    "收工前的程序读数没查成"
+                    f"（{str(progs.get('reason') or '没查成')}）⇒ 不知道这一支还有没有"
+                    "程序在跑（这一格不是『没有在跑的程序』）")
+        else:
+            from .conductor import program_span_text as _program_text  # 惰性：循环导入
+            if running:
+                reading["programs_ok"] = False
+                program_text = ("；这一支还有 " + str(len(running)) + " 个程序在跑："
+                                + "、".join(_program_text(r) for r in running[:6])
+                                + (f" 等 {len(running)} 个" if len(running) > 6 else ""))
+                if run is not None:
+                    run.notes.append(
+                        f"收工前这一支还有 {len(running)} 个程序在跑："
+                        + "、".join(_program_text(r) for r in running[:6])
+                        + " ⇒ 不记 final（程序还在跑，销号会把它留在后面）")
+            if unowned or stray:
+                # 读数（不拦）：无主程序与"账说收口了而进程还在"的那两类，M 的巡查
+                # 要在异常清单里点名它们（业主第 ③ 条）。
+                extra = ([_program_text(r) for r in unowned[:6]]
+                         + [str(x.get("program") or "（程序名没读到）") for x in stray[:6]])
+                if run is not None:
+                    run.notes.append(
+                        f"收工读数：盘上另有 {len(unowned)} 个无主程序、"
+                        f"{len(stray)} 条账与进程对不上（{'、'.join(extra)}）—— "
+                        "读数，不拦收工；巡查时按它点名")
+        if not reading["programs_ok"]:
+            reading["complete"] = False
         if reading["complete"]:
             return reading
         nodes = [dict(n) for n in (reading.get("nodes") or [])]
@@ -5656,13 +6509,39 @@ class AgentLoop:
             f"{n.get('task_id')}（{n.get('role') or '?'}，名下 {int(n.get('open_items') or 0)}"
             " 条未消项）" for n in nodes[:6])
         more = f"等 {len(nodes)} 个" if len(nodes) > 6 else ""
-        why = (f"还没销号：{reading.get('root') or mine} 名下整棵树还有 "
-               f"{int(reading.get('count') or 0)}/{int(reading.get('total') or 0)} 个代理在册"
-               + (f"（{named}{more}）" if named else "")
-               + (f"；另有 {len(dirty)} 个已销号节点名下还有未消项" if dirty else "")
-               + " ⇒ 先用 `conductor.ack` 把各节点名下的未消项确认掉，"
-               "再用 `conductor.retire_child` 逐个销号；整棵树都销号之前不记 final"
-               "（结构完整性闸）")
+        # ---- 停滞读数（业主 2026-10-26 第二条裁定）
+        #
+        # 拒信要点名"名下有 N 个在飞子，其中 M 个已停滞超过 N 分钟"：结不了项的那一半
+        # 正是这些"显示在飞、实际没动静"的子代理，父看到这一句才知道下一步是"等它"
+        # 还是"处置它"。停滞不等于静默：这一句只进拒信，不改 `complete`、也不许因此
+        # 销号（销号的唯一判据仍是"静默"，见 `conductor.agent_state`）。
+        from .conductor import STALLED_AFTER_SEC as _STALLED   # 惰性：避免模块级循环导入
+        flying = int(dict(reading.get("states") or {}).get("flying") or 0)
+        stalled_ids = [str(x) for x in (reading.get("stalled") or ())]
+        stall_text = ""
+        if flying:
+            stall_text = (f"；名下有 {flying} 个在飞的子代理，其中 {len(stalled_ids)} 个"
+                          f"已停滞超过 {int(_STALLED // 60)} 分钟"
+                          + (f"（{'、'.join(stalled_ids[:6])}）" if stalled_ids else ""))
+        roster_dirty = bool(nodes or dirty)
+        if not roster_dirty and program_text:
+            # 名册清干净了、只剩程序那一格：指路只指程序那一条，不把 ack / retire_child
+            # 再念一遍（那两条这时候没有对象）。
+            why = (f"还没收工：{reading.get('root') or mine} 名下"
+                   + program_text.lstrip("；")
+                   + " ⇒ 先 `program.stop` 停掉它们再收工，或等它们自己结束；"
+                   "程序还在跑之前不记 final（结构完整性闸）")
+        else:
+            why = (f"还没销号：{reading.get('root') or mine} 名下整棵树还有 "
+                   f"{int(reading.get('count') or 0)}/{int(reading.get('total') or 0)} 个代理在册"
+                   + (f"（{named}{more}）" if named else "")
+                   + (f"；另有 {len(dirty)} 个已销号节点名下还有未消项" if dirty else "")
+                   + stall_text + program_text
+                   + " ⇒ 先用 `conductor.ack` 把各节点名下的未消项确认掉，"
+                   "再用 `conductor.retire_child` 逐个销号"
+                   + ("、用 `program.stop` 停掉还在跑的程序" if program_text else "")
+                   + "；整棵树都销号、程序都停下之前不记 final"
+                   "（结构完整性闸）")
         reading["why"] = why
         return reading
 
@@ -5843,6 +6722,15 @@ class AgentLoop:
         # 一种"看起来成功"（模型会照它去沟通）。
         parent_fact = self.parent_task_id or (
             f"（没读成：{self.parent_problem}）" if self.parent_problem else "")
+        # G8（业主 2026-10-27 裁定）：装配期起的程序也要记在这一趟名下。
+        # 装配期唯一会 spawn 的是这两次工具链读数（`toolchain._version_of` → `lean --version`；
+        # 真机 `projects/mp3-r4` 的 `tm-000001` 空号就是它，而同一局另外 12 条工具路径起的
+        # 程序全都有号）。所以 `with` 只包这两行、不包整趟：包整趟要重排这一段几百行缩进，
+        # 只多覆盖"收尾期"那几个落点（`clock._CURRENT_RUN_TASK_ID` 的 docstring 里写着这个缺口）。
+        # `run_as` 只有时钟读 ⇒ `current_task_id()` 的语义一个字节都不变，工具路径逐字节不变。
+        with CLK.run_as(str(self.my_task_id or ""), self.role):
+            _toolchain_facts = AP.toolchain_facts_text()
+            _toolchain_formal = AP.toolchain_formal_text()
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      parent_task_id=parent_fact, children=children_text,
                      board=board,
@@ -5858,8 +6746,8 @@ class AgentLoop:
                      # `toolchain_formal` 是同一批读数的第二种用法（怎么写），
                      # 只发给手上真有 `formal.*` 的角色（业主裁定 G；2026-10-22 之后
                      # 受众由 `agent_prompts._FORMAL_ENTRY_TOOLS` 现算，今天只有 L）。
-                     toolchain_facts=AP.toolchain_facts_text(),
-                     toolchain_formal=AP.toolchain_formal_text(),
+                     toolchain_facts=_toolchain_facts,
+                     toolchain_formal=_toolchain_formal,
                      # 派活上限（业主裁定 A）：数字从这一次 run 的 Policy 现算，
                      # 不写死 —— `cli.py` 就传过 `wall_clock_sec`，写死的数字在
                      # 覆盖过的 run 里是谎话。没有 conductor 时退回默认 Policy（那一档
@@ -5975,6 +6863,12 @@ class AgentLoop:
         counters_reset_at = start_step        # 最近一次清零发生在第几步（可复核"这一次委托从哪算起"）
         #: 这一步收到的插话（叫停类要在这一步做完之后落一条"有没有改变做法"的读数）。
         pending_interjections: dict[str, Any] | None = None
+        #: D-68 收工门被拒之后用来分辨"试过没有"的那一份读数（Q12，2026-10-26）。
+        #:
+        #: 第一封拒信原样留一份：收尾时要拿它比"在册节点少了没有"—— 少了 = 它动过
+        #: 销号工具、只是没销干净；一个没少 = 它一次都没试（mp3-r3 那一趟就是这个形态：
+        #: 17/17 在册、`retire_child` 零次）。两种形态的下一步处置相反，所以必须分得开。
+        first_refusal: dict[str, Any] | None = None
         #: 步数上报（业主 2026-10-10 裁定 12-K 逐字：「步数上限不做为硬标准，不设机器闸，
         #: 但向父代理报告步数超限行为，由父代理决定继续放行还是刹停」）⇒
         #: `max_steps` 从"循环自己收工的理由"变成报告阈值：跨过它只落一条上报，
@@ -6119,12 +7013,25 @@ class AgentLoop:
                         prev_key, prev_reading, prev_stall = "", "", ""
                         same_call, stalled = 0, 0
                         counters_reset_at = step
+                        # Q17 的同一拒因 streak 按同一句理由清零（新指令不是"同一个循环"）。
+                        # `refusal_max` 不清：它是这一趟的最长连击，与 `dead_loop_max` 同族。
+                        run.refusal_key, run.refusal_reading = "", ""
+                        run.refusal_streak = 0
                 # ---- S-B（裁定 7乙 + 8乙 + 12-I=甲）：步边界上的压缩判定。
                 #
                 # 位置与理由：读插话之后、`ask_step` 之前 —— 这一步的提示词是下一句就要发出去的，
                 # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
                 # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
                 messages = self._maybe_compact(messages, step=step, run=run)
+                # ---- 步进落痕（停滞读数的写侧，业主 2026-10-26 第二条裁定）
+                #
+                # 位置在这一步的步边界、`ask_step` 之前：停滞那一格问的正是"它最近一步
+                # 是什么时候"，所以每一步都要落一次（只在收工时写的读数永远回答成
+                # "没在走"）。写不成只影响那一格的可信度，不许拦住这一步 —— 于是问题
+                # 只进 `run.notes`，不抛、也不参与任何判定。
+                stamp_problem = self._stamp_step(step=step)
+                if stamp_problem:
+                    run.notes.append(f"步进落痕：{stamp_problem}")
                 # ---- 信箱投递点（D-52）：每一次 `ask_step` 之前投一次增量。
                 #
                 # 为什么必须在压缩之后：压缩会把历史换掉（`surface_op` 的位置 span），
@@ -6315,7 +7222,7 @@ class AgentLoop:
                     # （走 `bad_args` 那一档，与"工具参数不是合法 JSON"同一类），
                     # 后者才是"没按协议说"（`bad_json` 那一档）。
                     # 第 5 趟有一整段因为 `{"message":{"to":"ALL"}}` 被算进后者：连着三次
-                    # ⇒ 60 秒整段作废，而它离"把 to 改成 #public"只差一个词。
+                    # ⇒ 60 秒整段作废，而它离"把 to 改成 ALL"只差一个词。
                     recognized = (next((str(k) for k in data if str(k) in SHAPES), "")
                                   if isinstance(data, Mapping) else "")
                     if recognized:
@@ -6422,6 +7329,18 @@ class AgentLoop:
                     refused_result: dict[str, Any] = {
                         "ok": False, "refused": "children_running", "error": hold,
                         "detail": hold, "running": self._children_running()}
+                    # ---- Q17：被闸拒的这一步也要进"同一拒因"的 streak
+                    #
+                    # 位置是这一支修法的要害：改前这一支在活性记账之前 `continue`，
+                    # 于是同一个"收工被拒"连着 215 次也不算数（判停永不触发）。
+                    # 现在先问唯一那处判据，再把它的提醒并进这一步的结果 ——
+                    # 于是模型下一步读到"连着第几次"，落盘的那一份与当时那份逐字相同。
+                    refusal_verdict = self._refusal_beat(
+                        run, refused_result, step=step,
+                        brief=_call_brief(shape, payload))
+                    if refusal_verdict.get("remark"):
+                        refused_result = {**refused_result,
+                                          "框架提醒": str(refusal_verdict["remark"])}
                     run.steps.append(LoopStep(step, shape, payload,
                                               _for_record(refused_result), cache=step_cache))
                     SS.append(self.session_root, {
@@ -6435,6 +7354,12 @@ class AgentLoop:
                         step, payload, name=shape, content=_spoken_half(step, payload)))
                     messages.append(tool_message(step, _result_half(refused_result),
                                                  name=shape))
+                    if refusal_verdict.get("stop"):
+                        # 到上限：这一步已经落全（steps / 事件 / messages 都在上面），
+                        # 收工读数由判据自己写好；这里只补那一条"为什么停"的会话事件并 break。
+                        self._land_refusal_stop(run, step=step,
+                                                brief=_call_brief(shape, payload))
+                        break
                     continue
                 # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）：除主控外收工必须填这张表
                 # （`to`/`summary`/`body`），填错/没填就打回并附格式说明；主控 M 的 `final` 是给用户的回复，
@@ -6447,21 +7372,83 @@ class AgentLoop:
                 #
                 # ---- D-68（业主 2026-10-26 逐字）：「最终 final 时应该是 M 下整棵树都已销号，
                 # 否则不记 final」。这是结构完整性闸，不是建议：闸不过就一个字节都不写
-                # （`run.final` 留空、不落手稿、`stop_reason="final_refused"`），
-                # 并把"哪些节点还在册、各自名下还有多少未消项"的清单交回给模型与盘上。
+                # （`run.final` 留空、不落手稿），并把"哪些节点还在册、各自名下还有多少未消项"
+                # 的清单交回给模型与盘上。
                 # 位置必须在 notify / 手稿之前：一份写着"我做完了"的交接手稿与一次被拒的
                 # 收工互相矛盾，而"记了 final 又提醒"正是业主要挡的那一档（不记 final）。
+                # Q12（2026-10-26）之后"闸不过"与"这一趟结束"不再是同一件事：被拒 ⇒ 还有
+                # 补救拍（下面那一支），连着被拒满 `max_final_refused` 才以 `final_refused` 收尾。
                 final_gate = self._final_gate_reading(run)
                 if final_gate.get("applicable") and not final_gate.get("complete"):
                     why = str(final_gate.get("why") or "还有节点没销号 ⇒ 不记 final")
                     run.notes.append(why)
                     # 清单进这一步的结果：模型下一轮读得到（有几种工具能处置它）；
                     # 落盘的那一份在 `agent_run_end.notes` 与 `runs/*.json` 的 steps 里。
-                    run.steps.append(LoopStep(step, shape, payload,
-                                              {"final_refused": dict(final_gate),
-                                               "why": why}, cache=step_cache))
-                    run.stop_reason = "final_refused"
-                    break
+                    # 键集照旧是 `final_refused` + `why` 两格：改前怎么读，现在还怎么读。
+                    refusal: dict[str, Any] = {"final_refused": dict(final_gate), "why": why}
+                    run.steps.append(LoopStep(step, shape, payload, refusal, cache=step_cache))
+                    if first_refusal is None:
+                        first_refusal = dict(final_gate)
+                    # ---- Q12（业主 2026-10-26）：被拒之后还有回合，销号由模型自己决定
+                    #
+                    # 改前这一支 `run.stop_reason="final_refused"` 之后紧接着 `break` ——
+                    # 同一拍就结束这一趟，而上一行注释写着"模型下一轮读得到"。真机读数
+                    # （projects/mp3-r3，M 那一趟 31 步）：拒信点名 17/17 个节点在册、
+                    # 处置路径写着 `conductor.retire_child`，而它这一趟一次都没调过 ——
+                    # 不是不肯做，是没有下一拍可做。
+                    #
+                    # 现在的形态与上面 D-64（还有子代理没回来）那一支逐字同构：落 note、
+                    # 落这一步的结果、把拒信真的塞进消息序列，然后 `continue`。差别只在
+                    # 上限：那一支等的是"孩子一定会落定"，而这一支等的是"模型自己动手销"，
+                    # 后者可能一直不动手，所以必须有一个补救窗口（`max_final_refused`）。
+                    #
+                    # 为什么是"给回合"而不是"框架替它销"：销号是一次有对象的写（销错节点
+                    # 不可逆），谁该被销只有它自己按板项与静默读数判得出来。框架能做的只有
+                    # 两件：把清单交到它手上、不许它在树没清时记 final —— 两件都还在。
+                    if run.final_refused_beats >= self.max_final_refused:
+                        # ---- 补救窗口用尽：这才是"以 final_refused 结束"的那一刻
+                        #
+                        # 收尾读数必须分辨两种形态（Q12 的第三条）：
+                        #   · 动过销号工具、只是没销干净（在册数少了）⇒ 下一步是继续催；
+                        #   · 一拍都没动手（在册数一个没少）⇒ 下一步要先问它卡在哪。
+                        # 判据是"在册节点数变了没有"这个结构读数，不去猜它调过哪件工具
+                        # （按工具名匹配会把"换了个写法"判成"没试"，而那种误判恰好最贵）。
+                        was = int((first_refusal or {}).get("count") or 0)
+                        now = int(final_gate.get("count") or 0)
+                        if now < was:
+                            seen = f"在册从 {was} 个减到 {now} 个：它动过销号工具，只是没销干净"
+                        elif now > 0:
+                            seen = f"在册仍是 {now} 个，一个都没少：它一次都没试过销号"
+                        else:
+                            seen = "在册节点已清空，卡在已销号节点名下的未消项（见上面那句 why）"
+                        run.stop_reason = "final_refused"
+                        run.notes.append(
+                            f"收工被拒之后补救了 {run.final_refused_beats} 拍仍不完整"
+                            f"（{seen}）⇒ 这一趟以 `final_refused` 收尾、不记 final。"
+                            f"补救上限是 `max_final_refused={self.max_final_refused}`，"
+                            "三盏灯（整棵树销号 / 未消项 / 静默判定）的读数都在上面那句 why 里")
+                        break
+                    run.final_refused_beats += 1
+                    # 拒信真的进下一步的 prompt（这一支改前连 `messages.append` 都没有）：
+                    # `_result_half` 与其余每一支同一个拼法，于是"当时那份"与"续跑重建那份"
+                    # 逐字相同（`resume_messages` 认的是下面那条 `agent_step` 事件）。
+                    remedy = (f"（补救拍 {run.final_refused_beats}/{self.max_final_refused}："
+                              "这一趟还没有收工。按上面的路径处置完之后可以再发一次 final；"
+                              f"连着被拒满 {self.max_final_refused} 拍才会以 `final_refused` 收尾）")
+                    messages.append(assistant_message(step, payload, name=shape,
+                                                      content=_spoken_half(step, payload)))
+                    messages.append(tool_message(step, _result_half(refusal) + remedy,
+                                                 name=shape))
+                    # 事件与消息同时落（S-C 的配对纪律）：只落一边会让续跑重建出来的序列
+                    # 与当时那一份不等 —— 那也是"这一步模型到底看见了什么"唯一可复核的地方。
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step,
+                        "shape": shape, "payload": dict(payload),
+                        "result": dict(_for_record(refusal)),
+                        "heuristic_tokens": step_node_tokens(step, payload, refusal),
+                        "prompt_cache": dict(step_cache),
+                    }, sid=self.sid)
+                    continue
                 notify_problem = self.notify_reading(payload)
                 notify = payload.get("notify")
                 step_result: dict[str, Any] = {}
@@ -6568,6 +7555,7 @@ class AgentLoop:
             #      （`accepted` 真/假进这一步的结果），编号在台账里核过。
             washed_payload = secretary_note.pop("_washed_payload", None)
             wash_plan = secretary_note.pop("wash_proposal", None)
+            face_note = secretary_note.pop("_recipient_face", None)
             accept_field, reject_field = _proposal_fields()
             dispatch_notify: dict[str, Any] | None = None
             wash_audit: dict[str, Any] | None = None
@@ -6580,6 +7568,27 @@ class AgentLoop:
                           "detail": ("秘书洗格式：这一趟派活连『派给谁/做什么』都不全 ⇒ 受控拒绝"
                                      f"（{secretary_note['wash'].get('reason') or ''}）"),
                           "washed": False}
+            elif isinstance(face_note, Mapping) and face_note.get("fits") is False:
+                # 内容与收件面不符（业主 2026-10-26）：秘书在发出口把这份稿子退回本体。
+                # 一个字节都不写盘（手稿一行没写、留言一条没发）—— 判据在
+                # `Secretary.judge_recipient_face`，这里只照它的结论处置。
+                # 拒信与秘书台账那一行（`secretary_decision`）是同一次判断的两份落点：
+                # 这一份给本体下一步照着改，那一份事后可复核。
+                code = str(face_note.get("refused") or "")
+                result = {"ok": False, "outcome": "refused", "refused": code,
+                          # `refusal_reason` 只有秘书给了才写：多件派活那一档是
+                          # `invalid_params`（任务台账那张受控词表里的取值），公告那一档
+                          # 沿用投递闸的 `public_is_not_a_conversation`（它从来只在读数里用，
+                          # 不是那张词表的成员 —— 两个落点不互相冒充）。
+                          "refusal_reason": str(face_note.get("refusal_reason") or ""),
+                          "error": str(face_note.get("reason") or ""),
+                          "targets": list(face_note.get("targets") or ()),
+                          "named": str(face_note.get("named") or ""),
+                          "note": ("这一条没有落盘：秘书在发出口把稿子退回了本体"
+                                   "（受控拒绝不是「稍后再试」）。"),
+                          "washed": False}
+                run.notes.append(
+                    "秘书看了内容与收件面：不符 ⇒ 这一条被退回（" + (code or "未给码") + "）")
             elif isinstance(wash_plan, Mapping) and wash_plan.get("outcome"):
                 # ② 有差异 ⇒ 不执行。这一格的 `ok` 是 False：确实什么都没派出去；
                 # 而 `outcome` 说清"它不是失败，是在等父表态"（受控词表只有这几个值）。
@@ -6671,6 +7680,14 @@ class AgentLoop:
                             "从下一步起放开（许可的名单写在提示词里；放开这件事必须留痕）")
                 else:
                     result = self._execute(shape, payload)
+                    # 2026-10-26（G1）：`program.stop` / `program.list` 那一族的读数进 run.notes。
+                    # 为什么在这里：工具层没有"写 run.notes"的通道（run 只活在循环这一层），
+                    # 而"我杀了 N 个自己的程序"必须让人在跑完之后看得到 —— 它是一条会改变机器状态的读数。
+                    if shape == "tool" and str(payload.get("name") or "").startswith("program."):
+                        _program_note = ((result.get("data") or {}).get("note")
+                                         if isinstance(result, dict) else "")
+                        if _program_note:
+                            run.notes.append(str(_program_note))
                 if dispatch_notify is not None:
                     # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
                     # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
@@ -6726,6 +7743,13 @@ class AgentLoop:
             stall_key = _stall_key(shape, payload, result)
             stalled = stalled + 1 if (stall_key and stall_key == prev_stall) else 1
             prev_stall = stall_key
+            # ---- 同一拒因的 streak（Q17）：判据只有一处（`_refusal_beat`），这里只消费结论
+            #
+            # 位置与 `dead` / `stalled` 并列：都是"这一步产生的新事实"的读数。
+            # 判据本体在读工那一支之外、`run()` 结束后那一处；正常步、被闸拒的步、
+            # 被 final 拒的步走的是同一个函数 —— 于是"换个闸又是同一个死循环"不必再修一次。
+            refusal_verdict = self._refusal_beat(run, result, step=step,
+                                                 brief=_call_brief(shape, payload))
             # ---- 插话读数（`draft/39` §3.11 二 D07 第 3 条）：谁在第几步收到、有没有改变做法。
             self._record_interjection_effect(run, pending_interjections, step=step,
                                              shape=shape, payload=payload)
@@ -6738,6 +7762,10 @@ class AgentLoop:
             run.stalled_nudges = nudged_stalls
             run.counters_reset_at = counters_reset_at
             remarks: list[str] = []
+            if refusal_verdict.get("remark"):
+                # 同一拒因的提醒（Q17）：与下面两条提醒同一条通道（进这一步的 `框架提醒`），
+                # 于是"当时那一份"与"续跑重建那一份"仍然逐字一致。
+                remarks.append(str(refusal_verdict["remark"]))
             if same_call == self.dead_loop_nudge:
                 # 点名（不改结论、不停循环）：提醒写进这一步的结果里 ——
                 # `_step_line` 读的就是它，于是"当时那一份"与"续跑重建那一份"逐字一致。
@@ -6835,6 +7863,15 @@ class AgentLoop:
             # 为什么不继续问模型：前面已经在第 `dead_loop_nudge` 次点过名，
             # 它连着又重复了 `max_dead_loop - dead_loop_nudge` 次同样的调用 ——
             # 剩下的步数买不到新读数，只会买更多同样的调用。
+            #
+            # Q17（2026-10-26）：同一拒因那一档的停在这一条之前。两档都写
+            # `no_progress_limit`，但"谁停的"由各自的读数说（`refusal_stopped` /
+            # `dead_loop_stopped`）—— 拒因这一档更具体（它点名是哪道闸），所以先判它；
+            # 反过来会让一次"被闸拒了 5 次"的收工被写成"原地打转"。
+            if refusal_verdict.get("stop"):
+                self._land_refusal_stop(run, step=step,
+                                        brief=_call_brief(shape, payload))
+                break
             if dead >= self.max_dead_loop:
                 run.stop_reason = "no_progress_limit"
                 run.dead_loop_stopped = True
@@ -7048,6 +8085,7 @@ class AgentLoop:
             "handed_off": dict(run.handed_off),
             "silent_children": list(run.silent_children),
             "silent_children_count": len(run.silent_children),
+            "silent_children_asked": list(run.silent_children_asked),
             # 提示词缓存的收工读数（`LoopRun.prompt_cache`）：与 `spend` 并列 ——
             # "花了多少"与"靠前缀缓存省了多少"是同一笔钱的两面，分开落才核得动。
             "prompt_cache": dict(run.prompt_cache),
@@ -7095,6 +8133,83 @@ class AgentLoop:
         # 盘上就只剩"开关没了"，没有任何东西说明"该停"。
         self._consume_stop_at_teardown()
         return run
+
+    def _refusal_beat(self, run: "AgentLoop.LoopRun", result: Any, *,
+                      step: int, brief: str) -> dict[str, Any]:
+        """Q17 唯一的那一处判据：同一拒因连着 N 次 ⇒ 收工（三个入口共用它）。
+
+        ## 为什么判据必须在这一处（不是"在那一支补一行计数器"）
+
+        被拒的步在改前绕过了活性记账：收工门（`children_running`）与 D-68 那两道闸都在
+        "条目执行"之前 `continue`，而 `same_call` / `dead` 的更新点在执行之后（真机：
+        215 次一模一样的收工被拒、217 次模型调用、31 秒，`dead_loop_stopped=False`，
+        最后靠孩子后端超时收场）。所以修法不是给那一支补一行：正常步、被闸拒的步、
+        被 final 拒的步都走进这个函数，阈值（`max_dead_loop`，不新造数）、提醒档
+        （`dead_loop_nudge`）、收工语与读数全在这里；三个调用点只消费它的结论。
+
+        ## 两个条件，与 `dead` 同形
+
+        `key` 是"谁在拒"（`_refusal_key`：稳定，不含读数）；`reading` 是"拒的时候局面
+        是什么样"（`_call_reading` 那一份规范化 JSON）。只有两个都相同才算"一模一样
+        的拒" —— 与 `dead = same_call if (key == prev_key and reading == prev_reading)`
+        同族。子数在减、在册数在变、被拒的对象换了 ⇒ 那是进展或换做法，streak 必须从头数
+        （否则"等孩子的正当返场"会被判成死循环，那是这一条最贵的误伤）。
+
+        ## 它自己写"停"，调用点只 `break`
+
+        到上限时这一函数直接把 `run.stop_reason` / `run.final` / `run.notes` 写好并返回
+        `stop=True`：收工语只有一份，谁也不许在自己那一支里再拼一句（两份迟早分叉）。
+        `dead_loop_stopped` 一个字都不动 —— 两档各报各的"是不是因我停的"。
+
+        返回：`{}`（这一步没被拒）/ `{"key","streak","reading","remark"}`（记上了，继续）/
+        `{"key","streak","reading","stop": True}`（到上限，已写好收工读数）。
+        """
+        key = _refusal_key(result)
+        if not key:
+            # 不是拒因 ⇒ 这一串断了。三态：清成"没在被拒"，不留下上一次的键
+            # （否则读数会把两段不相邻的拒绝说成一段连续的）。
+            run.refusal_key, run.refusal_reading, run.refusal_streak = "", "", 0
+            return {}
+        reading = _call_reading(result if isinstance(result, Mapping) else {})
+        if key == run.refusal_key and reading == run.refusal_reading:
+            run.refusal_streak += 1
+        else:
+            run.refusal_key, run.refusal_reading = key, reading
+            run.refusal_streak = 1
+        run.refusal_max = max(int(run.refusal_max), int(run.refusal_streak))
+        limit = int(self.max_dead_loop)
+        if run.refusal_streak >= limit:
+            run.refusal_stopped = True
+            run.stop_reason = "no_progress_limit"
+            run.final = _refusal_stop_line(streak=run.refusal_streak, limit=limit,
+                                           key=key, what=brief)
+            run.notes.append(
+                f"同一拒因连着 {run.refusal_streak} 次（键 {key}）⇒ 第 {step} 步之后"
+                "以 no_progress_limit 收工；判据只有一处（_refusal_beat），"
+                "上限与「原地打转」那一档同一个数")
+            return {"key": key, "streak": run.refusal_streak, "reading": reading,
+                    "stop": True}
+        if run.refusal_streak == int(self.dead_loop_nudge):
+            # 提醒档（与 `_dead_loop_line` 同一套两段式）：只点名、不改结论。
+            return {"key": key, "streak": run.refusal_streak, "reading": reading,
+                    "remark": _refusal_nudge_line(streak=run.refusal_streak, limit=limit,
+                                                  key=key, what=brief)}
+        return {"key": key, "streak": run.refusal_streak, "reading": reading}
+
+    def _land_refusal_stop(self, run: "AgentLoop.LoopRun", *, step: int,
+                           brief: str) -> None:
+        """收工那一条会话事件（Q17）：与"原地打转"那条同形，落"为什么停"。
+
+        为什么由调用点调、而不是在 `_refusal_beat` 里顺手写掉：这一句话必须读在
+        "被拒的那一步"之后（步事件与收工读数同一趟顺序，读会话的人才对得上号）。
+        """
+        SS.append(self.session_root, {
+            "kind": "agent_note", "role": self.role,
+            "note": (f"同一拒因：{brief} 连着 {int(run.refusal_streak)} 次同一个拒因"
+                     f"（{run.refusal_key}）⇒ 第 {step} 步之后以 no_progress_limit 收工"),
+            "refusal_key": run.refusal_key,
+            "refusal_streak": int(run.refusal_streak),
+        }, sid=self.sid)
 
     # -------------------------------------------------------------- 执行
     def _block_remaining(self, run: "AgentLoop.LoopRun", why: str) -> None:
@@ -7191,6 +8306,12 @@ class AgentLoop:
 
         `ack` 走 `close_item(close="acked")` —— 于是"通知了"与"通知到了"
         在 `stop_edge_readings` 里分得开（`acked_at` 非空才算传到）。
+
+        "这一项已经 `done`"不在这里判（2026-10-26 Q29）：改前那句
+        `item_state == "done"` 是"同一终态重复设置"在状态机外面的第四份实现。
+        现在只把现态交给迁移图的判词读数（`Conductor.item_move`，`_set_item` 内部的
+        同一个判决来源），`same` 就什么都不做 —— 落痕因此只写一次（Q24：`same` 等价于
+        `_set_item` 的 `changed=False`，零写入）。
         """
         cond = self.conductor
         if cond is None:
@@ -7206,7 +8327,11 @@ class AgentLoop:
             return ""
         if not str(row.get("input_key") or "").startswith("stop-notice@"):
             return ""
-        if str(row.get("item_state") or "") == "done":
+        # 幂等命中由迁移图的判词说（2026-10-26 Q29 删掉的第四份实现）：`item_move` 对
+        # (现态, "done") 的答复就是 `_set_item` 内部会得到的那个答复，`same` 与它的
+        # `changed=False` 是同一件事。于是这一拍什么都不用做 —— 不写落痕、不追加事件、
+        # 不报错；不在 `same` 上才推 `close_item` 并落 `stop-acked:<子>@<时间>`。
+        if cond.item_move(str(row.get("item_state") or ""), "done") == cond.ITEM_MOVE_SAME:
             return ""
         close = getattr(cond, "close_item", None)
         if not callable(close):
@@ -7358,7 +8483,8 @@ class AgentLoop:
                     "why": f"这把开关只管 {root_tid} 那一支，我不在那一支里"}
         return {"stop": True, "remove": mine == root_tid, "why": ""}
 
-    def _arm_stop_teardown(self, reason: str, *, explicit: str = "") -> None:
+    def _arm_stop_teardown(self, reason: str, *, explicit: str = "",
+                           programs: Mapping[str, Any] | None = None) -> None:
         """记下「这一趟收工时该由我撤」的那把全工作区开关（业主裁定：删是整棵树的事）。
 
         只有树根会走到这里 —— `_stop_applies` 只在「全工作区 + `_is_tree_root()`」时
@@ -7367,9 +8493,14 @@ class AgentLoop:
 
         `explicit` 原样带着：这一趟读的是 `--stop-file` 给的路径，收尾要撤的也必须是它
         —— 工作区里可能同时有 `.agentflow-stop` 与一个显式路径，撤错文件等于没撤。
+
+        `programs`（G4，2026-10-26）：停机对程序做了什么（`stopctl.stop_programs` 的读数）。
+        收工那一笔审计要带着它 —— 否则"停完之后那几个程序是被杀了还是还在跑"在
+        `runs/stop-history.jsonl` 上又只剩一句"停了这一趟"。
         """
         self._stop_to_consume_at_end = {"reason": str(reason or "stop_file"),
-                                        "explicit": str(explicit or "")}
+                                        "explicit": str(explicit or ""),
+                                        "programs": dict(programs or {})}
 
     def _consume_stop_at_teardown(self) -> str:
         """树根收工时撤掉那把全工作区开关；返回一句读数（空串 = 没什么要报的）。
@@ -7395,7 +8526,8 @@ class AgentLoop:
             record = stopctl.consume_stop(
                 self.session_root, sid=self.sid,
                 level=str(pending.get("reason") or "stop_file"),
-                explicit=explicit, remove=True)
+                explicit=explicit, remove=True,
+                programs=dict(pending.get("programs") or {}) or None)
         except Exception as exc:  # noqa: BLE001 —— 撤开关失败不许带走这一趟的产出
             note = (f"收工撤停机开关失败（{type(exc).__name__}: {exc}）"
                     "⇒ 开关可能还在盘上，下一趟会被它再停一次")
@@ -7418,6 +8550,68 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 —— 连读数都写不成也不许带走这一趟
             pass
         return note
+
+    def _stop_programs_for_stop(self, reason: str, *, state: Mapping[str, Any]) -> dict[str, Any]:
+        """停机对程序的那一半（G4，2026-10-26）：这一棵树名下的程序按两档处置。
+
+        业主原话（逐字）：「停机开关也要能杀程序（优雅停是提醒，强停是强杀）」。
+        背景：昨晚机器上跑出 15 个野 python 进程（智能体起的"研究程序"），停机开关只让
+        代理收工 —— 那些程序继续跑、把 CPU 打满。改前本方法不存在，`_user_stop_reason`
+        判定"该停"之后直接返回理由码，程序那一侧一个字节都没碰过。
+
+        ## 为什么落在这一层
+
+        判定"该停"只有一处（`_stop_applies`），消费开关也只在循环头这一处；
+        停机对代理的那一半（收工、翻 block、通知子代理）已经由循环头负责，对程序的那一半
+        此前没有人做。两档语义、逐条读数与"查不成就如实说没查成"全在
+        `stopctl.stop_programs` 里（唯一实现，这里不重写判据）。
+
+        ## 作用面与开关同宽
+
+        全工作区开关 ⇒ 全部程序（含账上没有归属的那些 —— 那恰恰是"野"的那一批）；
+        子树开关 ⇒ 只动 `conductor.subtree_postorder` 给的那一支的台账号里的。
+        判不了那一支（台账里没有那一行 / 读不成）⇒ 只动那一支的根自己那一条：
+        宁可漏，不许把别人的程序杀掉。
+
+        ## 同一棵树里每个成员读到都会做一次，这是刻意的
+
+        全工作区开关的意思是"整棵树停"，所以谁先读到谁都可以动手（不能靠"树根先到"——
+        树根可能正卡在一步里，而野进程每多跑一秒都是真实的 CPU）。重复做是安全的：
+        `stop_programs` 对已经收口的每一条都报 `already_exited`，一个进程都不碰。
+
+        ## 不抛
+
+        程序那一半坏掉不许把"这一趟已经停了"这件事带走：异常折成一句读数，由调用方
+        放进 `run.notes`（"没查成"要读得出来）。
+        """
+        try:
+            from . import stopctl as _SC
+        except Exception as exc:  # noqa: BLE001 —— 模块导不进来也算"没查成"
+            return {"checked": False,
+                    "notice": (f"停机（{reason}）：程序那一半没走成（stopctl 没导进来："
+                               f"{type(exc).__name__}）⇒ 这一格没查成，别把它读成「没人在跑」")}
+        task_ids: set[str] | None = None
+        try:
+            scope = _SC.stop_scope(state)
+            root_tid = str(scope.get("root_task_id") or "")
+            if scope.get("scope") == "subtree" and root_tid:
+                order: dict[str, Any] = {}
+                cond = self.conductor
+                look = getattr(cond, "subtree_postorder", None)
+                if callable(look):
+                    try:
+                        order = dict(look(root_tid) or {})
+                    except Exception as exc:  # noqa: BLE001 —— 判不了那一支就退到最窄的那一档
+                        order = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+                branch = [str(t) for t in (order.get("order") or ()) if str(t)]
+                task_ids = set(branch) if order.get("checked") and branch else {root_tid}
+            return _SC.stop_programs(self.session_root, force=bool(state.get("force")),
+                                     task_ids=task_ids, why=reason)
+        except Exception as exc:  # noqa: BLE001 —— 程序那一半坏掉不许带走这一趟的收工
+            return {"checked": False,
+                    "notice": (f"停机（{reason}）：程序那一半没走成"
+                               f"（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
+                               "别把它读成「没人在跑」")}
 
     def _user_stop_reason(self, run: "AgentLoop.LoopRun") -> str:
         """人叫停了吗（`draft/37` §125）。返回停止原因（空串 = 没叫停，继续跑）。
@@ -7474,16 +8668,22 @@ class AgentLoop:
                     run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                     return ""
                 reason = "force_stop" if bool(state.get("force")) else "stop_file"
+                # G4：停机对程序的那一半（强停杀掉、优雅停提醒 + 宽限并点名）。
+                # 读数进 `run.notes`，同一份随这一笔审计落 `runs/stop-history.jsonl`。
+                programs = self._stop_programs_for_stop(reason, state=state)
+                if str(programs.get("notice") or ""):
+                    run.notes.append(str(programs["notice"]))
                 if verdict.get("consume_at_end"):
                     # 全工作区 + 我是树根：读的这一刻不删（兄弟/子孙还没读到），
                     # 只记下"这一趟收工时该我撤"——见 `_consume_stop_at_teardown`。
-                    self._arm_stop_teardown(reason, explicit=self.stop_file)
+                    self._arm_stop_teardown(reason, explicit=self.stop_file, programs=programs)
                 else:
                     try:
                         from . import stopctl
 
                         stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
-                                             explicit=self.stop_file, remove=verdict["remove"])
+                                             explicit=self.stop_file, remove=verdict["remove"],
+                                             programs=programs)
                     except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
                         pass
                 return reason
@@ -7500,15 +8700,19 @@ class AgentLoop:
                 run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                 return ""
             reason = "force_stop" if bool(state.get("force")) else "stop_file"
+            # G4：停机对程序的那一半（与上面显式路径那一支同一份实现、同一份读数）。
+            programs = self._stop_programs_for_stop(reason, state=state)
+            if str(programs.get("notice") or ""):
+                run.notes.append(str(programs["notice"]))
             if verdict.get("consume_at_end"):
                 # 全工作区 + 我是树根：读时不删，收尾才删（见 `_stop_applies`）。
-                self._arm_stop_teardown(reason)
+                self._arm_stop_teardown(reason, programs=programs)
             else:
                 try:
                     from . import stopctl
 
                     stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
-                                         remove=verdict["remove"])
+                                         remove=verdict["remove"], programs=programs)
                 except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
                     pass
             return reason
@@ -8219,8 +9423,10 @@ class AgentLoop:
                 f"还在 0 分的项：{how or '（无，五项都进分了）'} —— 补哪一项就升档；"
                 "证明正文写在 proof_text 里，多份证明写在 proofs=[{proof_no, text}]")
 
-    def _statement_filing_tier(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
-        """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；判太平凡就落 T0，不再拒收。
+    def _statement_filing_tier(self, name: str, args: Mapping[str, Any], *,
+                               stmt_id: str = "",
+                               statement_full: str = "") -> dict[str, Any] | None:
+        """B 登记成功之后，问它自己的秘书"这条太平凡吗"；判太平凡就落 T0，不再拒收。
 
         业主 2026-10-23 的裁定（逐字要点）：「B 侧收录命题时被"太平凡"拦截了很多次……
         可以让秘书不再因"太平凡"拦收录，只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
@@ -8230,9 +9436,11 @@ class AgentLoop:
 
         三件事分开写在这里：
         1. 只在三个条件同时成立时才问秘书：本角色是 B、工具是它这一趟被派的那件入库动作
-           （`own.register_statement`）、秘书装配了判断面。三者缺一 ⇒ `None`（什么都不加）。
-        2. 秘书没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ 什么都不加（"没查成"
-           不等于"太平凡"，也不等于"合格"；台账里那一行仍会落，见 `judge` 的 `_record_judge`）。
+           （`own.register_statement`）、秘书装配了判断面。三者缺一 ⇒ `None`（什么都不加；
+           拿到号时改回"未判 + 原因"，见 `_unjudged_filing_tier`）。
+        2. 这一问在登记之后跑（2026-10-26，D16）：`stmt_id` 是那一条在 `statements` 里的号，
+           `statement_full` 是落盘行上的正文（逐字，不用调用方入参）。判档失败只落
+           `unknown` + 原因，不回滚登记 —— "没查成"不许决定产出入库。
         3. 判了且判「太平凡」⇒ 返回一格读数（不是拒绝）：`tier="T0"`、`downgraded=True`、
            秘书的原话与依据。调用方（`_do_tool`）把它并进这次工具调用的结果，于是
            "这一条进了 T0"在模型与台账上都看得见。
@@ -8246,10 +9454,14 @@ class AgentLoop:
             return None
         sec = getattr(self, "secretary", None)
         if sec is None or not hasattr(sec, "judge_statement"):
-            return None
+            return AgentLoop._unjudged_filing_tier(
+                "这一趟没有可用的秘书 ⇒ 档位未判（登记不受影响）", stmt_id=stmt_id)
         try:
             got = sec.judge_statement(
-                statement_full=str(args.get("statement_full") or args.get("statement") or ""),
+                # 落盘行上的正文优先（逐字同一）；没有那一份才退回调用方入参。
+                statement_full=str(statement_full
+                                   or args.get("statement_full")
+                                   or args.get("statement") or ""),
                 statement=str(args.get("statement") or ""),
                 source=str(args.get("source_lit_id") or args.get("source") or ""),
                 # ---- 证明正文必须转（2026-10-24，业主裁定 B2 的写侧接缝）
@@ -8266,6 +9478,10 @@ class AgentLoop:
                 # `[{proof_no, text}]`（第 2 份及以后的正文可能只在这一栏里）。
                 proof_text=str(args.get("proof_text") or ""),
                 proofs=args.get("proofs"),
+                # 概念行没有证明正文：这一格必须与 `record_statement` 里那条
+                # `not_applicable` 走同一个判据（`judge_statement` 的 kind 早退）。
+                kind=str(args.get("kind") or ""),
+                stmt_id=stmt_id,
                 task_id=str(getattr(self, "my_task_id", "") or ""),
             )
         except Exception as exc:  # noqa: BLE001 —— 判断炸了不许把入库这条路堵死
@@ -8274,13 +9490,15 @@ class AgentLoop:
             try:
                 sec.note_decision(
                     duty=0, decision="", fail_open=True,
-                    reason=f"入库前的审美判断炸了：{type(exc).__name__}: {exc}",
-                    target=str(name), after="照旧入库（fail-open）")
+                    reason=f"入库后的审美判断炸了：{type(exc).__name__}: {exc}",
+                    target=str(name), after="登记照旧（判档 fail-open）")
             except Exception:  # noqa: BLE001 —— 连留痕都写不成时不再往上抛（同上）
                 pass
-            return None
+            return AgentLoop._unjudged_filing_tier(
+                f"判档炸了：{type(exc).__name__}: {exc}", stmt_id=stmt_id)
         if not got.get("checked"):
-            return None
+            return AgentLoop._unjudged_filing_tier(
+                str(got.get("reason") or "判档没查成"), stmt_id=stmt_id)
         from . import secretary as _SEC
 
         if not _SEC._is_trivial_verdict(got.get("decision")):
@@ -8317,6 +9535,28 @@ class AgentLoop:
             "judge": "statement_aesthetic",
         }
 
+    @staticmethod
+    def _unjudged_filing_tier(reason: str, *, stmt_id: str = "") -> dict[str, Any] | None:
+        """登记成功而判档没成时的读数：未判 + 原因（2026-10-26，D16）。
+
+        为什么不是 `None`：登记已经落盘，若这一格什么也不给，"这一条没判过"与
+        "判过、只是不需要降档读数"在模型眼前就分不开。只有拿到号时才这么回；
+        旧调用（测试直接调 `_statement_filing_tier`、不给号）仍走 `None` 的老形状。
+
+        这一格不写台账：读侧对"没有这一行"本来就回 `unknown`；这里补的是模型看得见的
+        那一份原因，绝不在登记之后再把行撤掉或改成拒绝。
+
+        为什么是静态方法、且经类名调：判据把这个方法挂在 `types.SimpleNamespace` 上
+        （只带 role / secretary / my_task_id 三格），那一格上没有第二条方法。
+        """
+        if not str(stmt_id or "").strip():
+            return None
+        return {"tier": "", "label": "", "nontriviality": None,
+                "nontriviality_tri": "unjudged", "matched_by": "",
+                "downgraded": False, "decision": "",
+                "reason": str(reason or "")[:300],
+                "judged_by": "secretary", "judge": "statement_aesthetic"}
+
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """执行一步工具调用。
 
@@ -8348,19 +9588,6 @@ class AgentLoop:
         if name not in known and f"own.{raw}" in known:
             name, aliased_from = f"own.{raw}", raw
         args = dict(payload.get("args") or {})
-        # ---- B 的入库口：先过秘书那一关（业主 2026-10-14 裁决第 12 条前半 +
-        #      2026-10-23 的收场方式：判「太平凡」落 T0，不再拒收）
-        #
-        # 位置在这一层而不是工具层：这一格要本体自己的缝（`self.secretary`）与
-        # `my_task_id`，而工具层两样都没有；而且"这一条落哪一档"必须与别的读数同形
-        # （并进这一次工具调用的结果），所以它得在 `registry.call` 之前、同一个返回面上。
-        #
-        # `name in known` 那一句是必要的（不是防御性写法）：注册表里没有这个名字时
-        # 这一步的结果是 `unknown_tool`，而秘书的这一次判断要花一次模型调用 ——
-        # 为一次不会发生的入库去问它，等于让"名字写错了"顺手扣一笔钱。
-        filing_tier: dict[str, Any] | None = None
-        if name in known:
-            filing_tier = self._statement_filing_tier(name, args)
         # ---- 读写面（S1n-b，业主 T23）：子代理只能读写父切割给它的面。
         #
         # 判据在这一层（不是工具层）：`self.surface` 是这一趟的面（绝对路径），
@@ -8420,11 +9647,37 @@ class AgentLoop:
                "error": res.error or "", "meta": dict(res.meta or {})}
         if aliased_from:
             out["aliased_from"] = aliased_from
-        # 入库前那一趟判断的档位读数（业主 2026-10-23：平凡 ⇒ 落 T0，不拒收）。
-        # 只在这一步真的把那条命题交下去了之后才挂（拒绝 / 没调成时它没有对象可言）。
-        if filing_tier:
-            out["tier"] = dict(filing_tier)
-            out["meta"]["statement_tier"] = dict(filing_tier)
+        # ---- B 的入库口：登记之后再过秘书那一关（2026-10-26，D16）
+        #
+        # 位置仍在这一层而不是工具层：这一格要本体自己的缝（`self.secretary`）与
+        # `my_task_id`，而工具层两样都没有；"这一条落哪一档"也必须与别的读数同形
+        # （并进这一次工具调用的结果）。
+        #
+        # 为什么移到 `registry.call` 之后：台账按号与命题行关联，而号是秘书在登记事务
+        # 里现发的（`record_statement` 的 `tx.alloc_id`）—— 登记之前没有号，只能按正文
+        # sha 兜，正文一改档位就读成"未判"（真机 mp3-r3 第 1 行 316 字）。所以先让登记
+        # 落盘，再从返回里取 `stmt_id` 与落盘行的正文来判。
+        #
+        # 判档失败只落 unknown（见 `_unjudged_filing_tier`），不回滚、不改 ok：登记已经
+        # 发生，"没查成"不许决定产出入库（与秘书的 fail-open 同一条纪律）。
+        #
+        # `out.get("ok")` 那一句是必要的：工具被拒 / 名字写错时没有号，也没有对象可判；
+        # 而且秘书这一次判断要花一次模型调用，为一次不会发生的入库去问它等于白扣钱。
+        if name in known and out.get("ok"):
+            data = out.get("data")
+            landed = dict(data.get("row") or {}) if isinstance(data, Mapping) else {}
+            stmt_id = str((data.get("stmt_id") if isinstance(data, Mapping) else "")
+                          or landed.get("stmt_id") or "")
+            try:
+                filing_tier = self._statement_filing_tier(
+                    name, args, stmt_id=stmt_id,
+                    statement_full=str(landed.get("statement_full") or ""))
+            except Exception as exc:  # noqa: BLE001 —— 判档炸了不许碰已经落盘的登记
+                filing_tier = AgentLoop._unjudged_filing_tier(
+                    f"判档没成（{type(exc).__name__}: {exc}）", stmt_id=stmt_id)
+            if filing_tier:
+                out["tier"] = dict(filing_tier)
+                out["meta"]["statement_tier"] = dict(filing_tier)
         # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
         # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"
         # 只是台账上的一个状态，而 §14.13 的正控要求"A 那边真的有人被找"。
@@ -8984,7 +10237,7 @@ class AgentLoop:
         | 名册名 / 绝对编号（解析成父或子） | 手稿写它的角色，通知投那个实例的板项 |
         | 角色名 | 手稿写那个角色；通知按协作边准入（`message_admission`） |
         | 角色名 = 我自己 | 自记一笔（不是代理之间的通信）⇒ 放行 |
-        | `ALL` / `#public` / 用户 / 主控 | `outside_roster`（公告栏与频道外读者，不归名册管） |
+        | `ALL` / 用户 / 主控 | `outside_roster`（公告栏与频道外读者，不归名册管） |
         | 解析不到的名册名 / 编号 | 受控拒绝 `handoff_is_role_addressed`（台账没有实例地址面） |
         为什么角色名那一档用协作边而不是名册：`notify`（每个终态都要有）正是靠它把"手稿编号 + 一句话"交给下一个角色；
         按名册拒掉会把整条交付链掐死，而"按角色名随便发"由协作边那份判据（`_address_of` / `message_admission`）守着。
@@ -8994,7 +10247,7 @@ class AgentLoop:
         `addressing`（挪进 `roster_probe`）—— 缺陷 1 就是这一支把"B 不在你的名册里 ⇒ 受控拒绝"
         与 `ok=true` 留在同一个字典里。失败那几支不经过它：那两条拒信本来就该带着理由码。
         """
-        token = str(to or "").strip()
+        token = _legacy_all(str(to or "").strip())
         base: dict[str, Any] = {"checked": True, "how": "", "to": token, "kind": "",
                                 "name": "", "task_id": "", "role": "", "brief": "",
                                 "candidates": [], "callable": "", "refused": "",
@@ -9084,25 +10337,6 @@ class AgentLoop:
                       "addressing": addr,
                       "candidates": [str(x) for x in (addr.get("candidates") or [])]}
 
-    def _all_recipient_refusal(self, to: str = "ALL") -> dict[str, Any]:
-        """`to="ALL"` 走到内部直调那一支时的受控拒绝（那个按名册逐项开板项的旧实现已删）。
-
-        为什么是拒绝而不是补回那个方法：广播的语义今天由 `conductor.broadcast`（名下直接子代理，每人一条
-        ack 板项）与 `public_visibility`（公共频道的可见面）承担；`to="ALL"` 在解码层已经归一成 `#public`（
-        `_decode_shape` → `_recipient_for_channel`）⇒ 能走到这里只剩内部直调。改前这两支各调一次一个全仓没有
-        def 的方法 ⇒ `AttributeError`："没发出去"看起来像"框架坏了"，而它不是一种可处置的拒绝。补回那个方法
-        更糟：它会把"按角色名逐项展开"的老语义复活，与 `conductor.broadcast` 分叉。
-
-        所以这里如实拒：理由码 `broadcast_only` + 一句话指路（拒信里带工具名）。
-        """
-        return {"message": "未发出", "to": str(to or "ALL"), "ok": False,
-                "receipt": "unknown", "refused": "broadcast_only",
-                "error": ("给名下子代理广播用 `conductor.broadcast`；"
-                          "`to=\"ALL\"` 在解码层已归一成 `#public`"),
-                "note": ("这一条受控拒绝：那个按名册逐项开板项的旧实现已删（语义由 "
-                         "`conductor.broadcast` 与 `public_visibility` 承担）⇒ "
-                         "一条都没发、一个板项都没开（受控拒绝不是「稍后再试」）")}
-
     def _message_legacy(self, payload: Mapping[str, Any], to: str,
                         reply_to: str) -> dict[str, Any]:
         """按名字发的那条老路（`_do_message` 已不再回退到这里：名册不可用是受控拒绝）。
@@ -9111,12 +10345,15 @@ class AgentLoop:
         那一档不再投放（见 `roster_addresses` 的 `roster_unavailable`）。函数与它逐字保留
         旧行为，因为「回退必须是逐字的老行为」这条纪律仍然成立：判据要能拿它对照
         （`tests/test_roster_registration_holes.py` 直接打它，量 `to="ALL"` 那一支）。
+
+        `to="ALL"` 今天只有一种含义（公共频道），所以它不再是一支"内部直调的广播"
+        —— 改前那条 `broadcast_only` 拒信是"两种写法"的产物：解码层把 `ALL` 归一成
+        另一种写法，于是直调里的 `ALL` 就只剩内部调用。只剩一种写法之后，`ALL` 一律走
+        公共频道（`_message_by_channel`），逐项开板项的广播语义仍然只归 `conductor.broadcast`。
         """
-        if to and to != PUBLIC and to != "ALL" and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
-                                                             "user", "用户"):
+        if to and not _is_all_recipient(to) and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
+                                                           "user", "用户"):
             return self._message_by_name(payload, to)
-        if to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):
-            return self._all_recipient_refusal(to)
         return self._message_by_channel(payload, to, reply_to)
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -9197,10 +10434,8 @@ class AgentLoop:
         elif how in ("parent", "child"):
             # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读 T20）
             out = self._message_to_member(payload, addr)
-        elif to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):
-            out = self._all_recipient_refusal(to)
         else:
-            # `#public` / 用户 / `ALL`（没有秘书那一档）：原来的通道逐字不动
+            # `ALL`（公共频道）/ 用户：原来的通道逐字不动
             out = self._message_by_channel(payload, to, reply_to)
         out["addressing"] = addr
         return out
@@ -9253,9 +10488,9 @@ class AgentLoop:
 
         `_do_message` 不走这里（判据在 `roster_addresses`）；它今天只有两个调用点：
         `_message_legacy`（判据拿来逐字对照旧行为的那条路）与判据文件对这条实现本身的
-        直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 的内部直调已改成
-        受控拒绝（见 `_all_recipient_refusal`，那个按名册逐项开板项的旧实现已删，
-        语义由 `conductor.broadcast` 承担）。
+        直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 不进这里：它只有
+        一种含义（公共频道，见 `_message_by_channel`），逐项开板项的广播语义归
+        `conductor.broadcast`（那个旧实现已删，不许补回）。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
@@ -9274,24 +10509,29 @@ class AgentLoop:
 
     def _message_by_channel(self, payload: Mapping[str, Any], to: str,
                             reply_to: str) -> dict[str, Any]:
-        """`#public` / 用户 / `ALL` 那一档：留言落 `send_message`（append-only），准入逐字不动。
+        """`ALL` / 用户 那一档：留言落 `send_message`（append-only），准入逐字不动。
 
         S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
-        控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态：随手 `to=#public` 就等于全树广播）。谁能走到这一支：只有
-        `#public` / `ALL` / 用户（以及名册名已翻成角色的 `via_roster` 那一档）；给某个代理的私聊走 `roster_addresses` +
+        控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态：随手发一条公聊就等于全树广播）。谁能走到这一支：只有
+        `ALL` / 用户（以及名册名已翻成角色的 `via_roster` 那一档）；给某个代理的私聊走 `roster_addresses` +
         `_message_to_member`。名册不可用那一档已经不再回退到这里（2026-10-22：fail-closed，私聊受控拒绝）。
         这一支刻意不加名册校验：公共频道不是"给某个代理发消息" —— 它有自己的可见面判据（我名下的直接子代理）。
-        公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：`#public` 保留，但它是公告栏—— 一条公聊
+        公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：公共频道保留，但它是公告栏—— 一条公聊
         里若点名了名册上的某个成员（名册名 / 绝对编号）并且带指令语气（`PUBLIC_DIRECTIVE_MARKS`）或显式收件人写法（
         `@F1` / `F1：` / `to=F1` / `给 F1`），它就是"对某个具体代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`；
         其余公聊照发，但记录上带 `board_kind="bulletin"`。为什么必须机械可判：公聊进的是角色级收件箱（`to == role` 才
         进），所以"公告栏里点名某人"会被那个角色的所有实例读到。
+
+        这一档的判据只有一处：`is_all = (to == ALL)` —— 台账号闸、公告栏判据、`channel` 读数、
+        `board_kind` 与回执面全从它取（改前这五处各自跟一个常量比一遍，等于同一件事五份判据）。
         """
+        to = _legacy_all(to)
+        is_all = to == ALL
         # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
         not_allowed = message_admission(self.role, to, reply_to)
         if not_allowed:
             return {"message": "未发出", "to": to, "ok": False, "error": not_allowed}
-        if to == PUBLIC and not str(self.my_task_id or ""):
+        if is_all and not str(self.my_task_id or ""):
             return {"message": "未发出", "to": to, "ok": False, "refused": "no_task_id",
                     "error": ("这一趟没有台账号 ⇒ 不发公共频道：它的可见面是"
                               "『发信人的直接子代理』，没有发信人编号就没人能判断"
@@ -9299,24 +10539,21 @@ class AgentLoop:
                     "receipt": "unknown"}
         # 公告栏判据（见 docstring）：点名 + 指令语气 ⇒ 这不是公告，是对某个代理下指令。
         #
+        # 判据本体只有一处（`_public_face_refusal`）：这一支与秘书的发出口都调它 ——
+        # 改前它只住在这里，于是同一份内容走 `handoff(to=ALL)` 就绕过去了
+        # （2026-10-26 真机手稿 000000）。
+        #
         # 一句明确的口径：框架通报（`by_framework=True`，叫停那一路）与用户插话
         # 不受这条判据限制 —— 它们不是"代理在对话"，是框架/人代表全树说话
         # （听不到叫停的子孙会继续烧钱跑实验）。豁免落在 `_public_framework_exempt`
         # 这一格、且是显式的：摘掉它，同文件的
         # `test_framework_notice_and_user_interjection_still_get_through` 当场红。
-        board_kind = "bulletin" if to == PUBLIC else ""
+        board_kind = "bulletin" if is_all else ""
         by_framework = self._public_framework_exempt(payload)
-        if to == PUBLIC and not by_framework:
-            named = self._public_addressee(payload)
-            if named:
-                return {"message": "未发出", "to": to, "ok": False, "receipt": "unknown",
-                        "refused": "public_is_not_a_conversation", "board_kind": board_kind,
-                        "error": (f"这是在公告栏里点名 {named} 下指令 ⇒ 受控拒绝："
-                                  f"{PUBLIC} 是公告栏，不是对话（公告不构成对某个具体代理的指令）。"
-                                  "要指定收件人请用名册编号发一条私聊"
-                                  "（`message.to` 写名册名或绝对编号）。"),
-                        "note": ("这一条没有落盘：公聊进的是角色级收件箱，"
-                                 "点名会让那个角色的所有实例都读到 —— 那不是对话")}
+        face_refusal = self._public_face_refusal(payload, to=to)
+        if face_refusal:
+            return {"message": "未发出", "to": to, "ok": False, "receipt": "unknown",
+                    "board_kind": board_kind, **face_refusal}
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to,
                                        subject=str(payload.get("subject") or ""),
                                        body=str(payload.get("body") or ""),
@@ -9326,7 +10563,7 @@ class AgentLoop:
                                        extra={"board_kind": board_kind} if board_kind else None)
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
-        where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
+        where = "公共频道" if is_all else f"给 {to} 的私聊"
         # 回执三态（`draft/85` §5 的 D76 / `draft/86` §4.2）："写进盘了"不等于"有人读"。
         #
         # 真机读数（`draft/89` §2）：128 个会话 579 条留言里只有 8 条被标记读过，
@@ -9337,7 +10574,7 @@ class AgentLoop:
         # 公聊那一档（S6-a）：读者就是我名下的直接子代理 ⇒ 一个都没有时
         # 如实回 `no_reader`（"展开了"绝不等于"有人读到了"）。
         receipt, reader_note = self._receipt_for(
-            to, child_count=(self._my_children_count() if to == PUBLIC else None))
+            to, child_count=(self._my_children_count() if is_all else None))
         return {"message_sent": msg_id, "to": to, "channel": where,
                 "board_kind": board_kind,
                 "receipt": receipt, "ok": receipt != "no_reader",
@@ -9377,7 +10614,7 @@ class AgentLoop:
         return ""
 
     def _public_framework_exempt(self, payload: Mapping[str, Any]) -> bool:
-        """公告栏判据的显式豁免位（口径只有一句，写在 `_message_by_channel` 的判据本体里）。
+        """公告栏判据的显式豁免位（口径只有一句，写在 `_public_face_refusal` 的判据本体里）。
 
         取的是框架自己落的那一格（`by_framework`），不是模型能写出来的东西：
         `_decode_shape` 的 `message` 白名单只带 `to` / `subject` / `body` / `reply_to`
@@ -9385,6 +10622,72 @@ class AgentLoop:
         （`conductor_tools` 的叫停）走 `send_message(by_framework=True)` 那条直路。
         """
         return bool(payload.get("by_framework"))
+
+    def _public_face_refusal(self, payload: Mapping[str, Any], *,
+                             to: str = "") -> dict[str, Any]:
+        """公告栏判据的唯一一份实现：`public_is_not_a_conversation` 只在这里产生。
+
+        返回 `{}` = 放行；非空 = 那条受控拒绝（`refused` / `named` / `error` / `note` 四格）。
+
+        判据三条（机械可判，判点本体在 `_public_addressee`，这里不抄第二份）：
+        `to` 是公共频道（`ALL`，legacy 写法也算）＋ 正文点名了名册成员 ＋ 指令语气
+        ⇒ 这不是公告，是对某个具体代理下指令。
+
+        两处调用点（2026-10-26 之前只有前一处，于是 `handoff(to=ALL)` 不过这道判据 ——
+        同一份内容换个通道就绕过去了，真机手稿 000000 就是那么出去的）：
+        - `_message_by_channel`：投递前；
+        - `_recipient_face` → `Secretary.judge_recipient_face`：秘书发出口，两条通道共用。
+
+        框架通报（`by_framework=True`）不受它限制：叫停那一路必然点名 + 用指令语气，
+        豁免落在 `_public_framework_exempt`，摘掉它同文件的负控当场红。
+        """
+        want = str(to) if str(to) else str(payload.get("to") or "")
+        if not _is_all_recipient(want):
+            return {}
+        if self._public_framework_exempt(payload):
+            return {}
+        named = self._public_addressee(payload)
+        if not named:
+            return {}
+        return {"refused": "public_is_not_a_conversation", "named": named,
+                "error": (f"这是在公告栏里点名 {named} 下指令 ⇒ 受控拒绝："
+                          f"{ALL} 是公告栏，不是对话（公告不构成对某个具体代理的指令）。"
+                          "要指定收件人请用名册编号发一条私聊"
+                          "（`message.to` 写名册名或绝对编号）。"),
+                "note": ("这一条没有落盘：公聊进的是角色级收件箱，"
+                         "点名会让那个角色的所有实例都读到 —— 那不是对话")}
+
+    def _recipient_face(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """发出口要判"内容与收件面相符"时读的那一份面（`Secretary.judge_recipient_face` 的输入）。
+
+        三格：名册成员（父 ∪ 子，`_callable_members`）、公告里点名了谁（`_public_addressee`）、
+        公告那条拒信本体（`_public_face_refusal`）。三条判据本体都在本模块，这一格只把它们
+        读成一份 `secretary.py` 用得上的读数 —— 与 `admission=message_admission` 同一种注入，
+        秘书那一侧不抄第二份判据。
+
+        三态：名册读不成 ⇒ `checked=False` + `problem`（秘书据此报"这一格判不了"，不是
+        "相符"）。任何异常都折成这一档：读数没接上时既不许把一条稿子放过去，也不许凭空拦它。
+        """
+        face: dict[str, Any] = {"checked": False, "problem": "", "members": [],
+                                "named": "", "public_refusal": {}}
+        try:
+            members, problem = _callable_members(self.secretary,
+                                                 owner=str(self.my_task_id or ""))
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"名册是空的"
+            face["problem"] = f"名册读不成（{type(exc).__name__}: {exc}）"
+            return face
+        face["members"] = [dict(m) for m in members]
+        if problem:
+            face["problem"] = str(problem)
+            return face
+        try:
+            face["named"] = self._public_addressee(payload)
+            face["public_refusal"] = self._public_face_refusal(payload)
+        except Exception as exc:  # noqa: BLE001 —— 判不了 ⇒ 这一格没查成（不替它判）
+            face["problem"] = f"公告判据没跑成（{type(exc).__name__}: {exc}）"
+            return face
+        face["checked"] = True
+        return face
 
     def _my_children_count(self) -> int | None:
         """我名下直接子实例的个数（`None` = 这一格没读成，不许当 0）。"""
@@ -9412,7 +10715,8 @@ class AgentLoop:
         - `"unknown"`：看不见接线表 / 看不见我名下的子代理 ⇒ 如实说不知道，
           不许按乐观猜成 `queued`（本仓的三态纪律）。
         """
-        if to == PUBLIC:
+        to = _legacy_all(to)
+        if to == ALL:
             if child_count == 0:
                 return "no_reader", ("我名下没有直接子代理 ⇒ 这条公共频道留言不会有任何"
                                      "进程读它（业主 T21：公聊的可见面就是我的直接子代理）")
@@ -9449,13 +10753,24 @@ class AgentLoop:
         try:
             # `admission` 是依赖注入：秘书要判 `message` 的协作边，判据本体在
             # 本模块（`message_admission`）—— 传进去而不是让 `secretary.py` 自己抄一份。
+            # `face` 同一种注入（业主 2026-10-26「秘书处理将发出的信息时，要看内容是否与
+            # 接受面相符」）：名册与公告那两条判据本体也都在本模块，秘书只拿读数。
+            face_note = (self._recipient_face(payload)
+                         if shape in ("handoff", "message") else {})
             got = self.secretary.optimize_outbound(shape, dict(payload),
                                                    admission=message_admission,
+                                                   face=face_note,
                                                    base=str(self.workspace_root or ""))
             out["alarms"] = list(got.get("alarms") or [])
             out["fail_open"] = bool(got.get("fail_open"))
             if got.get("problem"):
                 out["problem"] = str(got["problem"])
+            # ---- 发出口的第二件事：内容与收件面相符吗（秘书判的结论原样带出去）。
+            # `_recipient_face` 是钩子与循环之间的承载键（与 `_washed_payload` 同族）：
+            # 循环取完就 pop，按它决定这一步执不执行；角色读到的是循环按它摆出来的
+            # `refused` / `error` 那两格。
+            if isinstance(got.get("face"), Mapping):
+                out["_recipient_face"] = dict(got["face"])
             # ---- S1g：洗格式的读数 + 真正要发出去的那一份。
             #
             # `_washed_payload` 用一个下划线打头的键承载（本模块内部用）：
@@ -9491,6 +10806,10 @@ class AgentLoop:
                     out["reach_reason"] = str(got["surface"].get("reach_reason") or "")
             if wash.get("refused"):
                 # 硬拒：一次派活连"派给谁/做什么"都不全 ⇒ 不执行、不评估、不协商。
+                return out
+            if (out.get("_recipient_face") or {}).get("fits") is False:
+                # 内容与收件面不符（业主 2026-10-26）⇒ 这一条不出去：不评估、不协商 ——
+                # 那两件事判的是"这活该怎么派"，而这份稿子在写盘之前就被退回了本体。
                 return out
         except Exception as exc:  # noqa: BLE001 - fail-open：秘书坏了不许打断本体
             out["fail_open"] = True
@@ -9694,7 +11013,6 @@ class AgentLoop:
         # 没有这一格（照旧按角色名 / M / ALL 写）时逐字走改前的路。
         _marker = payload.get("roster_addressing")
         written = str(_marker.get("written") or "") if isinstance(_marker, Mapping) else ""
-        channel = PUBLIC if to == "ALL" else to
         # `summary` 是这一形状的正名（它就是进留言的那一句话）；`brief` / `title` 是旧名，
         # 仍然接受 —— 旧调用点、旧提示词与模型的历史习惯都不至于因此写不进去。
         one_line = (str(payload.get("summary") or "").strip()
@@ -9705,15 +11023,17 @@ class AgentLoop:
         # （判据与理由见 `_handoff_address`：手稿的收件人面是角色，名册给的是实例）。
         # 拒绝发生在写任何东西之前：半份状态（手稿写了、人没收到）比没写更贵。
         _addr, _gate = self._handoff_address(written or to)
+        # 手稿那一行的收件人 = 名册解析出的角色（台账的口径）；`ALL` 走公共频道。
+        # 这一格只算一次（改前门口算一遍、写完再算一遍，两处一漂就会出现"回执里的
+        # 收件人不是落库那个收件人"）。
+        manuscript_to = str(_addr.get("manuscript_to") or to)
+        channel = ALL if _is_all_recipient(to) else manuscript_to
         if _gate:
             return {"handoff": "未写成", "ok": False, "to": channel,
                     "refused": _gate["refused"], "candidates": (_gate.get("candidates") or []),
                     "addressing": _addr, "error": _gate["error"],
                     "note": ("这一条受控拒绝：手稿一行没写、留言一条没发"
                              "（受控拒绝不是「稍后再试」）")}
-        # 手稿那一行的收件人 = 名册解析出的角色（台账的口径）；`ALL` 走公共频道。
-        manuscript_to = str(_addr.get("manuscript_to") or to)
-        channel = PUBLIC if _is_all_recipient(to) else manuscript_to
         if self.secretary is None:
             return {
                 "handoff": "未写成", "ok": False,
@@ -9732,10 +11052,29 @@ class AgentLoop:
                     task_id=self.my_task_id,          # ← 一实例一秘书：每行都要能对回实例
                     reason=why, note=str(payload.get("note") or ""))
             else:
+                # 收件人的绝对编码（2026-10-26，Q2「发 / 收两栏要显示绝对编码」）：
+                # 从「解析处」一路带进行里，读侧只做展示，不许自己拼。
+                #   具体收件人 ⇒ `_handoff_address` 已经解析出来的那个实例的 `task_id`；
+                #   广播（`ALL`）⇒ 发信人此刻的直接子代理编号（`_callable_members` 这一份
+                #   名册读数的同一批人，不是另算一份）。记列表而不是 `"*"`：`"*"` 是一句
+                #   盘上对不了账的话，编号逐个可以在名册上核。
+                # 名册读不成 ⇒ 两格都不落（`None` / 空串）：缺这一格与"写了、但没有"必须分开。
+                _broadcast = _is_all_recipient(to)
+                _codes: list[str] | None = None
+                if _broadcast:
+                    _members, _why = _callable_members(
+                        self.secretary, owner=str(self.my_task_id or ""))
+                    _codes = (None if _why else
+                              sorted({str(m.get("task_id") or "") for m in _members
+                                      if str(m.get("kind") or "") == "child"
+                                      and not m.get("retired")
+                                      and str(m.get("task_id") or "")}))
                 rec = self.secretary.handoff_add(
                     to=manuscript_to, summary=one_line, body=str(payload.get("body") or ""),
                     refs=list(payload.get("refs") or []), sid=self.sid or "",
                     task_id=self.my_task_id,          # ← 同上（真机 593 行缺这一格）
+                    to_task_id="" if _broadcast else str(_addr.get("task_id") or ""),
+                    to_task_ids=_codes,
                     note=str(payload.get("note") or ""))
         except Exception as exc:  # noqa: BLE001 - 执笔失败必须报错留痕，不许静默放行
             return {"handoff": "未写成", "ok": False,
@@ -10782,7 +12121,11 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     if top_tid:
         try:
             conductor.finish_top_level_run(top_tid, stop_reason=str(run.stop_reason or ""),
-                                          detail=str(run.final or "")[:200])
+                                          detail=str(run.final or "")[:200],
+                                          # D22：只传原料（编号列表）；"掐断了 N 个…"那句
+                                          # 措辞与计数在 `finish_top_level_run` 一处组装
+                                          # （父行只有那一个组装点）。
+                                          cut_off_children=list(run.cut_off_children))
         except Exception as exc:  # noqa: BLE001 - 收行失败不许带走这一趟的产出
             log = getattr(conductor, "_log", None)
             if callable(log):

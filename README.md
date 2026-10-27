@@ -112,9 +112,9 @@ This exercises the whole record path without touching the network.
 python -m agentflow.cli --root workspace demo
 ```
 
-> `cli demo` is the **offline smoke test**: kept reachable, needs no model key, and never touches
-> the network. The main path is the one entry point documented in §One Entry Point; the demo stays
-> as the end-to-end check that the record path works with no provider at all.
+> `cli demo` is the **old path**（旧路径）: the **offline smoke test**, kept reachable, needs no model
+> key, and never touches the network. The main path is the one entry point documented in §One Entry
+> Point; the demo stays as the end-to-end check that the record path works with no provider at all.
 
 ### 4. Start a research run
 
@@ -561,8 +561,8 @@ See the repository root for license information.
 这一节是**机器会核对的读数**——每个数字都有判据盯着，改它必须同时改判据认的那个来源。
 
 ```
-agentflow/.noai-paths            禁改区清单（**45** 条 glob / **42** 条唯一路径，**7** 个分组）
-agentflow/src/agentflow/tools/   **18** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
+agentflow/.noai-paths            禁改区清单（**46** 条 glob / **43** 条唯一路径，**7** 个分组）
+agentflow/src/agentflow/tools/   **19** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
 ```
 
 两个工具面读数，口径不同、不许互换：**95** 是 Lean 关着时各角色面的并集（`python -m agentflow.cli tools` 那一档，

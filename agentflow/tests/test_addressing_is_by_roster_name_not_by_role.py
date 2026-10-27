@@ -244,7 +244,10 @@ def test_d_a_lone_role_code_still_works_and_is_marked_as_a_fallback(
 
 def test_e_the_public_channel_is_still_a_channel_not_a_person(
         tmp_path: pathlib.Path) -> None:
-    """判据 e（负控）：`to=#public` 仍走频道语义，读数 `addressed_by=channel`。
+    """判据 e（负控）：`to=#public`（旧数据写法）仍走频道语义，读数 `addressed_by=channel`。
+
+    判据 e 量的仍是"频道不是人"：写法归一成唯一那个 `ALL` 之后落盘的 `to` 就是 `ALL`
+    （旧写法只在读侧折算，不再产生新写法）—— 所以输入仍喂旧写法，断言看归一后的结果。
 
     改前红：红在读数那一格；改后的正控是"它仍然落 `agent_message`（公告栏），
     而不是被寻址判据拦下来或被当成某个代理的私聊"。
@@ -260,7 +263,7 @@ def test_e_the_public_channel_is_still_a_channel_not_a_person(
     assert str(addr.get("how") or "") == "outside_roster", addr
     events = _messages(env["ws"])
     assert len(events) == 1, events
-    assert str(events[0].get("to")) == "#public", events[0]
+    assert str(events[0].get("to")) == "ALL", events[0]
     assert str(events[0].get("channel")) == "public", events[0]
     for kid in env["kids"]:
         assert _board(cond, kid) == [], ("公告栏不是私聊：不许给谁开板项", kid)

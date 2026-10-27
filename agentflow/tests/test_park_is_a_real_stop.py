@@ -211,7 +211,8 @@ def test_a_parked_parent_takes_no_model_calls_and_no_steps(
 
     monkeypatch.setattr(AgentLoop, "_deliver_mailbox", capped_mailbox)
     gate = _Gate([_tool("clock.now")], on_call=no_model_call_while_parked)
-    run = _loop(st, cond, ws, gate, me).run(TASK, summoned_by="user", my_task_id=me, depth=1)
+    loop = _loop(st, cond, ws, gate, me)
+    run = loop.run(TASK, summoned_by="user", my_task_id=me, depth=1)
     assert run.stop_reason == "stop_file", run.to_dict()
     assert gate.prompts == [], ("挂着机还在问模型（改前的形态）", len(gate.prompts))
     assert run.steps == [], [s.shape for s in run.steps]
@@ -225,7 +226,9 @@ def test_a_parked_parent_takes_no_model_calls_and_no_steps(
     assert int(last["parked_calls"]) == 0, ("挂机期间这一趟居然调了模型", last)
     assert float(last["parked_sec"]) > 0.0, ("挂机时长没有走", last)
     # 真正的睡走的是主时钟的等待账（`clock.await_io`）：假时钟下不真睡，账照记。
-    real_slice(None, seconds=3.0, purpose="判据：挂机那一拍要走时钟的账")  # type: ignore[arg-type]
+    # Q21（2026-10-26）起 `_park_slice` 每一片之后要读一次停机开关，所以这里给的是
+    # 一个真的循环（`self`）—— 断言一个字没动：它钉的仍是"账照记、不真睡"。
+    real_slice(loop, seconds=3.0, purpose="判据：挂机那一拍要走时钟的账")
     booked = [r for r in CLK.waits()["rows"] if str(r.get("kind") or "") == "park"]
     assert booked, CLK.waits()["rows"]
     assert booked[0]["where"] == "agent_loop.park", booked[0]

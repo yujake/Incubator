@@ -417,8 +417,12 @@ export function Artifacts() {
             empty="交接台账 0 条（读到了，里面是空的）。"
             columns={[
               { key: "id", title: "编号" },
-              { key: "sender", title: "发" },
-              { key: "to", title: "收" },
+              // 2026-10-26（Q2）：这两列原来直接印 `sender` / `to`，于是页面上只有
+              // `M` / `ALL` / `A` 这种角色名。现在印读侧算好的 `sender_label` /
+              // `to_label`（`M（t-000001）` / `A（t-000002）`；旧行是 `（旧账无号）`）——
+              // 角色名与编号各占一格，页面只负责显示，不自己拼编号。
+              { key: "sender", title: "发", render: (r) => plain(r.sender_label) },
+              { key: "to", title: "收", render: (r) => plain(r.to_label) },
               { key: "summary", title: "摘要", render: (r) => plain(r.summary) },
               { key: "refs", title: "引用" },
               { key: "sid", title: "会话", render: (r) => cell(r.sid) },

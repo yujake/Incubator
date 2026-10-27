@@ -21,9 +21,11 @@ from pathlib import Path
 
 from . import conceptrows as _CR
 from . import dedup as D
+from . import litstage as L
 from . import schema as S
 from .agent_a import AgentA
 from .agent_b import AgentB
+from .canonical import json_default
 from .store import Store
 from .verify import verify_all
 
@@ -208,6 +210,133 @@ class FixtureDownloader:
         )
 
 
+# ---------------------------------------------------------------- 逐条判决（演示替身）
+
+
+def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
+                              candidates: dict[str, Any] | None = None) -> dict:
+    """演示替身：替 A 把「待新增列表」里的每一条逐条判过（2026-10-26 Q16 之后入库的唯一定路）。
+
+    为什么演示里必须有这一步：A 的自动链路只负责把检索到的候选暂存进列表（注册即待裁），
+    入库必须先逐条判过 —— 判过的证据就是那一句 `relevance`（为什么与本次检索相关），
+    而没有逐条判完之前整批提交会被拒（`lit.admit_all` 的提交闸）。
+    真机 `projects/mp3-r3` 那次就是反例：33 条同一秒整批入库、`relevance` 一条都没写。
+
+    演示里没有模型，所以"读"这个动作由演示脚本替：先把这一条的 PDF 取下来（
+    `AgentA._stage_download`，与产品里同一条下载路径），再代写那一句 relevance，
+    然后逐条判 —— 判收的走 `lit.admit`（并把取到的字节搬进 `library/<lit_id>/`），
+    判拒的用受控理由码（同一篇的重复副本），行留着、不物理删。
+
+    返回 `{request_id: {admitted, rejected}}`（读数，交给演示日志）。
+    """
+    import tempfile as _tempfile
+
+    from .providers import Candidate
+    from .tools import build_for_role
+
+    registry = build_for_role("A", store=store, workspace_root=store.root).registry
+    registry.bound_role = "A"
+    out: dict[str, dict[str, int]] = {}
+    staging = Path(_tempfile.mkdtemp(prefix="demo-judge-"))
+    try:
+        for rid in sorted({str(r.get("request_id") or "")
+                           for r in store.rows("lit_candidates")}):
+            waiting = [r for r in store.rows("lit_candidates")
+                       if str(r.get("request_id") or "") == rid
+                       and L.judged_state(r) == "pending"]
+            if not waiting:
+                continue
+            # A 的那一句证据先落在行上（产品里是 A 读过之后自己写；演示里由这里代写）。
+            with store.tx("lit_candidates", actor="demo", note="demo.judge") as tx:
+                for row in tx.rows("lit_candidates"):
+                    if str(row.get("request_id") or "") != rid:
+                        continue
+                    if str(row.get("relevance") or "").strip():
+                        continue
+                    row["relevance"] = (
+                        "演示替身：逐条读过的记录 —— 这一条的题名与本次检索的主题同族"
+                        "（产品里这一句由 A 写过再入库）")
+                    tx.upsert("lit_candidates", row, note="demo.judge")
+            counts = {"admitted": 0, "rejected": 0}
+            admitted_ids: list[str] = []
+            for row in waiting:
+                slot = str(row.get("slot") or "")
+                # "读过"这一步在演示里的落地：真的把这一条的 PDF 取下来。
+                # 字节要从当次 provider 交回的 Candidate 取（`pdf_url` 只活在它上面，
+                # 候选行上那一格 `url` 是给 B 的定位符）—— 找不到就退回按行重建，
+                # 退化的那一档只会让这一条没有全文，不会让它变成"读过"。
+                cand = (candidates or {}).get(str(row.get("title") or ""))
+                if cand is None:
+                    cand = Candidate(title=str(row.get("title") or ""), year=row.get("year"),
+                                     doi=row.get("doi"),
+                                     type_code=str(row.get("type_code") or "Z"),
+                                     summary=str(row.get("summary") or ""),
+                                     pdf_url=str(row.get("url") or "") or None,
+                                     provider=str(row.get("provider") or ""))
+                dl = agent._stage_download(cand, staging)
+                res = registry.call("lit.admit", slots=[slot], request_id=rid)
+                if res.ok and (res.unwrap().get("admitted") or []):
+                    lit_id = str(res.unwrap()["admitted"][0]["lit_id"])
+                    rel_path, dl_clean = agent._attach_staged(lit_id, dict(dl))
+                    if rel_path:
+                        with store.tx("literature", actor="demo", note="demo.judge") as tx:
+                            got = tx.find("literature", lit_id=lit_id)
+                            if got is not None:
+                                got["path"] = rel_path
+                                got["download"] = dl_clean
+                                tx.upsert("literature", got, note="demo.judge")
+                    counts["admitted"] += 1
+                    admitted_ids.append(lit_id)
+                    continue
+                code = ""
+                if res.ok:
+                    code = str(((res.unwrap().get("refused") or [{}])[0] or {}).get("code") or "")
+                reason = code if code in S.CANDIDATE_REASON_CODES else "duplicate_doi"
+                registry.call("lit.stage_reject", slot=slot, reason_code=reason,
+                              note="演示替身：逐条判过 —— 这一条不入库（理由见理由码）")
+                counts["rejected"] += 1
+                if reason == "duplicate_doi":
+                    # 同一篇被别的请求先登记了：判拒是对的，但它仍然是"这一问找到的那一篇"
+                    # （产品的判重分支就是这么记的：复用既有 lit_id、只追加来源）。
+                    hit, _key = D.find_existing_literature(
+                        store.rows("literature"), str(row.get("title") or ""),
+                        row.get("year"), row.get("doi"))
+                    if hit is not None:
+                        dup_id = str(hit.get("lit_id") or "")
+                        admitted_ids.append(dup_id)
+                        # 同一篇被多个请求命中：来源要累积到那一行上（可追溯）。
+                        with store.tx("literature", actor="demo", note="demo.judge") as tx:
+                            got_dup = tx.find("literature", lit_id=dup_id)
+                            if got_dup is not None:
+                                src = set(got_dup.get("source_request_ids") or [])
+                                src.add(rid)
+                                got_dup["source_request_ids"] = sorted(src)
+                                tx.upsert("literature", got_dup, note="demo.judge")
+            # 判完之后收口（提交闸在这一步才放行；它同时写委托报告）。
+            registry.call("lit.admit_all", request_id=rid)
+            # 这一问最终入库了哪几篇要写回请求行：Q16 之后入库不在 `run_once` 里发生，
+            # 于是 `result_lit_ids` 也得在这里补上（否则请求行永远说"一篇都没找到"）。
+            if admitted_ids:
+                with store.tx("search_requests", actor="demo", note="demo.judge") as tx:
+                    got_req = tx.find("search_requests", request_id=rid)
+                    if got_req is not None:
+                        got_req["result_lit_ids"] = S.sorted_unique(
+                            [i for i in (list(got_req.get("result_lit_ids") or [])
+                                         + admitted_ids) if i])
+                        # 这一问最终有文献落库 ⇒ 终局是 ok，而 run_once 那一刻写下的
+                        # "命中 N 条、入库 0 条（待裁）"读数已经过期，不许留在盘上。
+                        if got_req["result_lit_ids"]:
+                            got_req["outcome"] = "ok"
+                            got_req["last_error"] = None
+                        tx.upsert("search_requests", got_req, note="demo.judge")
+            out[rid] = counts
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    if out:
+        log("    " + json.dumps(out, ensure_ascii=False, default=str))
+    return out
+
+
 # ---------------------------------------------------------------- 主流程
 
 
@@ -260,6 +389,10 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
 
     # ---------------- 2. A 智能体：搜索 + 下载 + 登记 ----------------
     providers = [FixtureProvider(cpath)]
+    # 演示里"读过"要拿得到字节：把这一轮 provider 交回的 Candidate 按题名留一份
+    # （`pdf_url` 只活在它上面；Q16 之后入库被推迟到逐条判决那一步）。
+    cand_by_title = {getattr(c, "title", ""): c
+                     for c in providers[0].search("", "topical", "", 100)}
     agent_a = AgentA(
         st,
         providers=providers,
@@ -270,6 +403,9 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     )
     out_a = agent_a.run()
     log(f"\n[2] A 智能体跑完：{json.dumps(out_a, ensure_ascii=False, default=str)}")
+    judged = _judge_pending_candidates(st, log, agent=agent_a, candidates=cand_by_title)
+    log("\n[2b] 待新增列表逐条判决（演示替身）："
+        + json.dumps(judged, ensure_ascii=False, default=json_default))
 
     # ---------------- 3. B 智能体：整理 ----------------
     agent_b = AgentB(

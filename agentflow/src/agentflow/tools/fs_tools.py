@@ -223,7 +223,12 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
     return candidate
 
 
-# ---------------------------------------------------------------- 保留路径（框架渲染的产物）
+# ---------------------------------------------------------------- 保留路径（框架账本区 + 框架渲染的产物）
+#
+# 这一节的两半共用一张表（`RESERVED_ARTIFACT_TABLE`）：角色是 `*` 的几行管框架账本区
+# （`data/` / `locks/` / `events.jsonl`，路径级、没有任何角色豁免），其余几行管框架渲染的
+# 手稿（文件名级、只看表上那三个角色）。四个写口（`fs.write` / `fs.edit` / `fs.delete` /
+# `fs.move`）都只经 `_reserved_refusal` 这一处取结论，不在各自的函数体里各写一遍。
 #
 # 真机读数（2026-10-26，sylow 那一趟）：F 用 `fs.write` 直接写了
 # `reports/f-proof-sylow1.md`（自由格式、没有四列依赖表、没有洗稿元信息），D 手写了
@@ -258,23 +263,63 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 # 仍然是最推荐的落点（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir` 缺省都是它，
 # 兜底读盘也只按它找），但它已经不再是豁免条件 —— 换个目录不该换来一条绕过口。
 
+# ---- 框架账本区：文件口不许把表口架空（2026-10-26，P3）----------------------------
+#
+# 真机实证（Q10 审计，零模型钱）：`fs.write(path="data/usage_ledger.json", overwrite=True)`
+# 把账本从 10.51 美元整份抹成 0；`data/events.jsonl` 里该表的记录数 8 仍写 8 ——
+# 一个字节的痕迹都没留；随后 `verify` 一声不响。`data/counters.json` 同样被整份覆盖
+# （实测写进去的是 {"lit":0}）。改前这条路的实质是：`fs.*` 直接落在文件系统上，
+# 而表口的三层（表属性枚举 / 直写弃置 / 事务里的工具身份闸）一层都不经过 ——
+# 文件口把表口整个架空了，于是 Q10 另外两个方案（关表口）在结构上都是戏。
+#
+# 所以"保留"从三个手稿文件名扩成路径级：
+#   - `data/` 整个目录：表快照、计数、事件日志、锁（`Store.locks` 落在 `data/.locks`）；
+#   - `locks/`：锁目录换个位置仍然受管（同一本账换个目录不该换来一条绕过口）；
+#   - `events.jsonl`：事件日志是重建的唯一输入，出现在任何目录下都是同一本账。
+# 这三条对角色是 `*`：没有任何角色例外，也没有"没挂角色"这一档
+# （脚本直调、模块自检同样拒 —— 框架自己的写入走 `Store`，不走 `fs.*`）。
+#
+# 拒信只说不许、不说"该往哪写"：模型对 `data/` 没有一条合法正路（表口的写入由框架
+# 自己的落盘路径完成），指一条空气路只会让它换着写法重试到 `no_progress_limit`。
+#
+# 权限面变更的声明：本文件不在 `.noai-paths` 里（`scripts/noai_gate.py --paths` 判 clean），
+# 但这一段判的是"谁能写哪里" —— 按 FC-27 的口径它属于权限面变更：作者只做实现与判据，
+# 合入前需要人逐行走查一次这段判据与四个写口的接入位置。
+
 #: 手稿 / 报告的推荐落点目录名（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir`
 #: 缺省都是它）。它只出现在拒信里当指路，不参与判据：判据只看文件名（见
 #: :func:`_reserved_artifact` 与 D6 那段注释）。
 _RESERVED_DIR = "reports"
 
-#: 保留路径表：`(角色, 规则)` 逐行。规则三档（都只作用在文件名上）：
+#: 保留路径表：`(角色, 规则)` 逐行，判据的唯一落点。规则四档，每档只比较一个字符串：
 #:
-#: - `prefix:f-proof-`   F 的证明手稿（`depsection.MANUSCRIPT_STMT_PREFIX` 与
-#:                       `MANUSCRIPT_PLAN_PREFIX` 都以此开头，两个时刻一起拦）；
-#: - `contains:RESEARCH` D 的跨趟研究手稿（`depsection.D_REPORT_NAMES`）；
-#: - `suffix:-research.md` D 的每问题工作稿（`depsection.D_WORKING_SUFFIX`）。
+#: - `exact:`   整条相等（路径级：挡目录本身，递归删与整棵移动走的就是这一档）；
+#: - `prefix:`  以它开头（路径级：挡目录下面的文件；规则里带 `/`，于是 `data/` 这一条
+#:              不会把 `database.json` 一起吞掉）；
+#: - `suffix:`  末段相等（文件名级与路径级共用：`x/events.jsonl` 命中，`myevents.jsonl` 不命中）；
+#: - `contains:`子串（只用在文件名级，D 的 `RESEARCH` 那一条）。
 #:
-#: 三行角色各自的理由见上面那段（F 写内容 / D 交研究稿 / M 是主控）。
+#: 角色列决定按哪条判据读：
+#:
+#: - 角色 `*`：按整条工作区相对路径判（`_reserved_ledger`），框架账本区，没有角色豁免；
+#: - 具体角色：按文件名判（`_reserved_artifact`），框架渲染的手稿，只对表上角色生效。
+#:
+#: 手稿那几行的理由见上面那段（F 写内容 / D 交研究稿 / M 是主控）；账本区那几行的理由见
+#: 2026-10-26 那一段（文件口不许把表口架空）。目录要两行才挡得住：`exact:data` 挡目录本身，
+#: `prefix:data/` 挡它下面的每一份 —— 只有前缀那一行时，`fs.delete("data", recursive=True)`
+#: 会整棵删掉账本；只有精确那一行时，改一份表照样过得去。
+#:
 #: 这张表是判据的唯一落点：清空它（判据的反真空那一条就是这么打桩的）⇒
 #: 下面那条闸对任何路径都不再生效，于是"保留路径被拒绝"这件事必须由一条会红
 #: 的判据证明，而不是靠这段注释自证。
 RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
+    # 框架账本区（路径级；角色 `*` = 无豁免）。顺序在抛错上也有意义：先账本、后手稿。
+    ("*", "exact:data"),
+    ("*", "prefix:data/"),
+    ("*", "exact:locks"),
+    ("*", "prefix:locks/"),
+    ("*", "suffix:events.jsonl"),
+    # 框架渲染的手稿（文件名级；只对表上角色生效）。
     ("F", "prefix:f-proof-"),
     ("D", "contains:RESEARCH"),
     ("D", "suffix:-research.md"),
@@ -292,6 +337,20 @@ RESERVED_ARTIFACT_MESSAGE = (
     "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
     "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
     f"；推荐落点是 {_RESERVED_DIR}/，但换到别的目录同样受这一道闸管"
+)
+
+#: 受控码：这一笔写的是框架账本区（表 / 事件日志 / 锁），不是角色产物。
+RESERVED_LEDGER_KIND = "reserved_framework_ledger"
+
+#: 账本区的拒信（逐字）：说清"这是什么地方、为什么不是你的落点"，且不给去处。
+#: 为什么不指路：模型对 `data/` 没有合法正路，指一条空气路只会换来换着写法重试
+#: （最后撞在 `no_progress_limit` 上），而真正的正路是"这件事本身不该由模型做"。
+#: 后半句把三条绕行口一次点名（换名字 / 换目录 / 整份覆盖），因为它们都长得很像"重试"。
+RESERVED_LEDGER_MESSAGE = (
+    "拒绝 {path}：这是框架账本区（data/ 下的表、计数与事件日志，以及锁），不是你的落点 —— "
+    "这里的每一份文件都由框架自己的落盘路径写（表事务、计数与事件日志是同一笔），"
+    "文件工具这一侧没有一条正路：不要换名字、换目录或整份覆盖重试，"
+    "那些写下去也不会进任何一张表，也没有谁会读到它们。"
 )
 
 
@@ -328,8 +387,45 @@ def _rule_matches(rule: str, name: str) -> bool:
     return False
 
 
+def _path_rule_matches(rule: str, rel: str) -> bool:
+    """`RESERVED_ARTIFACT_TABLE` 里角色为 `*` 的一行是否命中整条相对路径 `rel`。
+
+    与 `_rule_matches` 分开是刻意的：那一条判的是文件名（`prefix:f-proof-` 里没有分隔符，
+    按裸字符串前缀判正好），这一条判的是路径，前缀必须带 `/` 分段 —— 否则
+    `data/` 这条规则会把 `database.json` 一起吞掉。大小写不敏感：Windows 上
+    `DATA/usage_ledger.json` 与 `data/usage_ledger.json` 是同一份文件，判据必须同结论。
+    """
+    text = str(rule or "")
+    kind, _sep, needle = text.partition(":")
+    if not needle:
+        return False
+    low = str(rel or "").replace("\\", "/").casefold()
+    want = needle.replace("\\", "/").casefold()
+    if kind == "exact":
+        return low == want
+    if kind == "prefix":
+        return low.startswith(want)
+    if kind == "suffix":
+        return low == want or low.endswith("/" + want)
+    return False
+
+
+def _reserved_ledger(rel: str) -> bool:
+    """`rel`（工作区内相对路径）是不是框架账本区。
+
+    只看表里角色为 `*` 的那几行，不看角色：账本区没有任何角色例外，"没挂角色上下文"
+    也不是例外（`_caller_role()` 为空说明调用方不在角色调用里 —— 脚本或判据直调；
+    框架自己的落盘走 `Store`，不走 `fs.*`，所以拒绝它不会挡住任何正当写入）。
+    """
+    return any(who == "*" and _path_rule_matches(rule, rel)
+               for who, rule in RESERVED_ARTIFACT_TABLE)
+
+
 def _reserved_artifact(rel: str, role: str) -> bool:
-    """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架产物。
+    """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架手稿。
+
+    这一条只管手稿那一半（表里角色是具体字母的那几行）；账本区那一半是
+    :func:`_reserved_ledger`，两者的结论由 :func:`_reserved_refusal` 合并成一处。
 
     两层判据，缺一不命中：① 文件名以 `.md` 结尾（手稿是 markdown：`depsection` 读的
     就是它）；② `(角色, 规则)` 那一行命中文件名。表外角色（G/L 的排版产物、M 的
@@ -354,7 +450,18 @@ def _reserved_artifact(rel: str, role: str) -> bool:
 
 
 def _reserved_refusal(rel: str, role: str) -> ToolResult | None:
-    """保留路径的受控拒绝（不在表内 ⇒ None，调用方照旧往下走）。"""
+    """保留路径的统一拒绝（不在保留表里 ⇒ None，调用方照旧往下走）。
+
+    这一处是"保留"的唯一结论：四个写口（`fs.write` / `fs.edit` / `fs.delete` /
+    `fs.move`）都只调它，接入点只决定"在哪一步拒"（越早越好，且必须在任何写入、
+    删除、改名之前）。先账本区、后手稿：账本区的拒信不提任何去处（模型对 `data/`
+    没有合法正路），手稿的拒信仍然指向各自的渲染动作。
+    """
+    if _reserved_ledger(rel):
+        return fail(
+            RESERVED_LEDGER_MESSAGE.format(path=rel),
+            path=rel, kind=RESERVED_LEDGER_KIND,
+        )
     if not _reserved_artifact(rel, role):
         return None
     return fail(
@@ -582,8 +689,7 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
 
 @tool(
     "fs.read",
-    "读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `max_lines` 取那一段，`"
-    "meta.next_line` 是下一段起点（EOF 为 null）。",
+    "读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -770,10 +876,7 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物"
-    "（F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md`）对 F / D / M 一律拒写"
-    "（受控码 reserved_framework_artifact）—— 那几份只有 F 的 proof 动作、D 的交付动作"
-    "能渲染，请走各自的渲染动作。",
+    "写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -798,8 +901,9 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     `os.replace` 之后只有"旧内容"或"新内容"两种可能，判断因此是确定的。
     """
     target = _resolve(ctx, path)
-    # 保留路径闸在最前面（`保持零写入`：连"已存在"那条分支都不该先给它）：
-    # F 的证明手稿 / D 的研究手稿由框架渲染，手写会把依赖面与携带单整条链跳过。
+    # 保留路径闸在最前面（零写入：连"已存在"那条分支都不该先给它）：
+    # 框架账本区（data/ / locks/ / events.jsonl）与框架渲染的手稿（F 的证明稿、D 的
+    # 研究稿）都由这一处判 —— 手写会把依赖面 / 携带单 / 账本整条链跳过。
     denied = _reserved_refusal(_rel(ctx, target), _caller_role())
     if denied is not None:
         return denied
@@ -866,9 +970,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次，可选要求 sha256 与读到的那一版一致。"
-    "保留产物闸同样管这一件：reports/ 下 F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md` "
-    "对 F / D / M 一律拒写（reserved_framework_artifact），请走各自的渲染动作。",
+    "定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那一版一致。reports/ 下框架产物同 fs.write（对 F / D / M 拒写，reserved_framework_artifact），改走各自的渲染动作。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -903,7 +1005,8 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     """
     target = _resolve(ctx, path)
     # 保留路径闸同样在最前面（`fs.edit` 能改正文，等于绕过同一条保留表）：
-    # 与 `fs.write` 共用一个判据（`_reserved_artifact`），不是两份表。
+    # 与 `fs.write` 共用 `_reserved_refusal` 这一个入口（账本区 + 手稿两半都在里面），
+    # 不是两份表、也不是每个口各判一遍。
     denied = _reserved_refusal(_rel(ctx, target), _caller_role())
     if denied is not None:
         return denied
@@ -1010,6 +1113,11 @@ def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResu
     `fs.delete("reports")` 与 `fs.delete("reports/old.md")` 在参数上只差几个字符，
     而后果差一个目录树；要求显式开关，就等于要求调用方在参数里表达出"我知道这是目录"。
     工作区根被无条件拒绝：删掉它等于删掉整个项目的数据。
+
+    保留路径闸与 `fs.write` / `fs.edit` 是同一处（`_reserved_refusal`）：账本区
+    （`data/` 整目录、`locks/`、`events.jsonl`）与框架渲染的手稿都不许经删除这条路
+    绕过 —— 删一份表与整份覆盖它，在账本上是同一件事（`rebuild` 之后它会以一行
+    没有任何事件来源的状态复活，而事件日志里一个字都没有）。
     """
     target = _resolve(ctx, path)
     if target == ctx.root or target.parent == target:
@@ -1019,6 +1127,9 @@ def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResu
             kind="refuse_root",
             deleted=False,
         )
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    if denied is not None:
+        return denied
     if not target.exists() and not target.is_symlink():
         return ok(False, path=_rel(ctx, target), found=False, deleted=False)
 
@@ -1061,11 +1172,19 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
     目标存在时拒绝而不是覆盖：`shutil.move` 在 POSIX 上会直接把目标目录挪进去
     （`mv a b` 当 b 是目录时变成 `b/a`），在 Windows 上又是另一套行为 ——
     与其在两种平台上给出两种结果，不如让调用方自己先删或先改名。
+
+    保留路径闸两头都查（`src` 与 `dst`，同一处 `_reserved_refusal`）：把一份表挪走
+    （`src` 落在账本区）与把一个文件挪进账本区（`dst` 落在账本区）在账本上是同一件事
+    —— 前者让表消失、后者让一本账外文件顶着表的名字出现，两种都没有事件来源。
     """
     s = _resolve(ctx, src)
     d = _resolve(ctx, dst)
     if s == ctx.root or d == ctx.root:
         return fail("拒绝移动工作区根", src=_rel(ctx, s), dst=_rel(ctx, d), kind="refuse_root")
+    for target in (s, d):
+        denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+        if denied is not None:
+            return denied
     if not s.exists() and not s.is_symlink():
         return fail(f"源不存在：{_rel(ctx, s)}", src=_rel(ctx, s), kind="not_found")
     if s == d:

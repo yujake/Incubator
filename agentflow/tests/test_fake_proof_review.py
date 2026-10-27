@@ -364,6 +364,8 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     assert first["evidence_kind"] == "heuristic", first   # 还没有签 ⇒ 不许自报强档
     stmt_id = first["statement_id"]
     row = next(r for r in ws.rows("statements") if str(r.get("stmt_id")) == stmt_id)
+    # B-2：首次登记没有 V 签 ⇒ 必须从猜想进；改前 F 直写 lemma（跳过这一阶段）。
+    assert row["kind"] == "conjecture", row
 
     _sign(ws, stmt_id, proof_text=str(row["proof_text"]))
 
@@ -374,6 +376,9 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     after = [r for r in ws.rows("statements") if str(r.get("stmt_id")) == stmt_id]
     assert len(after) == 1, after                          # 升档不是登记第二行
     assert after[0]["evidence_kind"] == "proof_review", after[0]
+    # B-2 的升档那条路：首次按 conjecture 登记（没有 V 签），V 签完再交一次
+    # 之后 kind 跟着证据升离 conjecture。改前 F 一进门就写 lemma（跳过 conjecture 阶段）。
+    assert str(after[0].get("kind")) != "conjecture", after[0]
 
 
 def test_fs_outlet_does_not_promote_without_a_signature(ws: Store):

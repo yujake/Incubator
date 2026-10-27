@@ -31,6 +31,12 @@
 `task_id` / `sid` / `sha256` / `bytes`。其中 `to` / `summary` / `body` 三者必填
 （`summary` 是进留言的那一句话：`[手稿 NNNN] <summary>`；`body` 是 markdown 正文）。
 
+收件人的绝对编码另占两格（2026-10-26，Q2「发 / 收两栏只显示角色名」）：
+`to_task_id`（具体收件人 ⇒ 它的台账号）与 `to_task_ids`（`to=ALL` ⇒ 发信人此刻的
+直接子代理编号）。`task_id` 那一格本来就是发信人的台账号。两格都是「有就带上」：
+改前落的那一批行一个都没有，读侧照实写「旧账无号」，不许拿角色名拼一个编号出来
+（拼出来的那个数字看起来像证据，其实是猜）。
+
 旧格式（`<编号>-<From>to<To>.md`）仍然读得回来（`read` / `list_all` 有旧文件回退），
 但不计入 `manuscript_rows`：新口径数的是"行"，旧文件在读数明细里另列一栏
 （既不假装没有，也不冒充新格式）。
@@ -335,11 +341,18 @@ def rows_for_task(root: str | Path, task_id: str, *, sender: str = "") -> list[d
 def write(root: str | Path, *, sender: str, recipient: str, title: str = "", body: str,
           refs: Iterable[str] = (), summary: str = "", task_id: str = "",
           sid: str = "", note: str = "", revises: str = "",
+          to_task_id: str = "", to_task_ids: Iterable[str] | None = None,
           timeout: float = 30.0) -> dict[str, Any]:
     """追加一份交接手稿，返回它的那一行（含 `id`）。
 
     拒绝（抛 `ValueError`，「零写入」）：发件人/收件人不是合法角色、没有一句话说明、
     正文为空。"空手稿"必须被拒：它是"我交接了"的假证据，而这一层存在的全部意义就是可溯源。
+
+    `to_task_id` / `to_task_ids`（2026-10-26，Q2）：收件人的绝对编码，由调用方给
+    （具体收件人 ⇒ 它的台账号；`to=ALL` ⇒ 发信人此刻的直接子代理编号列表）。为什么是
+    调用方给而不是这里现算：这一层不知道名册，算出来只能是猜；而解析处
+    （`agent_loop._do_handoff` → `_handoff_address`）手里本来就有那个实例的 `task_id`。
+    "编号在写侧就落进行里"是这一条的全部要点 —— 读侧只做展示，不许自己拼。
 
     `refs` 不再拒写（D10，`draft/52:103`）：立不住的引用被记进 `ref_problems`
     并可由 :func:`ref_readings` 读出来（详见那里的说明）。形状仍然管：
@@ -427,6 +440,16 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
             if ref_problems:
                 # 同一条纪律：只有真的有问题时才多这一个键。
                 rec["ref_problems"] = dict(ref_problems)
+            # 收件人的绝对编码（Q2，2026-10-26）：两格分形状，谁也不顶替谁 ——
+            # `to_task_id` 是"那一个实例"（字符串），`to_task_ids` 是"广播面"（列表）。
+            # 混成一格之后「发给一个实例」与「发给一批实例」在读侧就分不开了。
+            # 同一条"有就带上"的纪律：缺键 = 这一行没记下编号（改前的旧行、以及写的时候
+            # 名册读不成的那一批），读侧照实写「旧账无号」，不拿角色名拼一个出来。
+            to_code = str(to_task_id or "").strip()
+            if to_code:
+                rec["to_task_id"] = to_code
+            if to_task_ids is not None:
+                rec["to_task_ids"] = [str(x).strip() for x in to_task_ids if str(x).strip()]
             line = json.dumps(rec, ensure_ascii=False, sort_keys=True, default=str)
             with handoffs_path(root).open("a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
@@ -480,6 +503,10 @@ def revise(root: str | Path, *, mid: str, title: str = "", summary: str = "", bo
     note_text = f"手稿订正：订正 {old_id}" + (f"（为什么：{why}）" if why else "")
     if str(note or "").strip():
         note_text = f"{note_text}；{str(note).strip()}"
+    # 收件人的绝对编码跟着那一条交接走（订正的是同一份交接，收件人没有变）：
+    # 旧行有就原样带过来，旧行没有就不许凭空补一个 —— 补一个看起来像编号的东西，
+    # 比留着「旧账无号」更糟（那是把猜的结果写成了证据）。
+    codes = {name: old[name] for name in ("to_task_id", "to_task_ids") if name in old}
     return write(
         root,
         sender=str(sender or "").strip() or str(old.get("sender") or ""),
@@ -492,6 +519,7 @@ def revise(root: str | Path, *, mid: str, title: str = "", summary: str = "", bo
         note=note_text,
         revises=old_id,
         timeout=timeout,
+        **codes,
     )
 
 

@@ -9,6 +9,9 @@ enum、不重冻快照 ⇒ 一个计数都不变。同一个类，每角色一�
 | 2 | 委派评估 | 发件方 | :meth:`Secretary.assess_delegation`（收件方真做得到吗 + 该不该派） |
 | 4 | 委托加工 | 收件方 | :meth:`Secretary.rework_inbound`（按本角色定位改说法，不加码不减码） |
 | 3 | 闭环提醒 | 收件方 | :meth:`Secretary.remind_closure`（未接手 / 未反馈；经 M） |
+职责 1 另有一件同样是"看"的事（业主 2026-10-26 逐字：「秘书处理将发出的信息时，要看内容是否
+与接受面相符」）：:meth:`Secretary.judge_recipient_face` —— 公告栏里点名并下指令、或一份稿子里
+装了多件派活 ⇒ 这一条退回本体，一个字节都不写盘（判据机械可判、零模型调用）。
 两条实质性红线（`draft/53` §2）：格式补不全、或加工后发现实质缺陷 ⇒ 与对方协商、不静默修
 （:meth:`Secretary.negotiate` ≤2 轮 + 台账留痕）—— 它从不替本体表态。手稿通道的增/改/查也在
 这里（`draft/55` §3）：`handoff_add` / `handoff_revise` / `handoff_query`，智能体侧只留"查"。
@@ -160,6 +163,27 @@ def nontriviality_label(level: Any) -> str:
     """档位号 → 显示名（`0 -> "T0"` … `4 -> "T4"`；判不了 ⇒ 空串）。"""
     got = _nontriviality_level(level)
     return _NONTRIVIALITY_LABELS.get(got, "") if got is not None else ""
+
+
+#: 没有"证明正文"这一档、因而不做力气判档的那几档 kind（"不适用"的适用范围，唯一一处）。
+#:
+#: 为什么它与 :data:`CONCEPT_IDENTITY_KINDS` 分开住（2026-10-26）：那一格管"同一性按定义项
+#: 判"（只有 `concept` 一档 —— `definition` 行的标签常常是空的，拿它当键会把一堆不相关的
+#: 定义并到同一行），这一格管"有没有证明正文可判"（概念与定义都没有）。两件事折成一张表
+#: 会让"并错了"与"判错了"互相牵制，而它们的处置完全不同：前者是多一行还是少一行，
+#: 后者是多一档读数还是少一档读数。
+NOT_APPLICABLE_KINDS: tuple[str, ...] = ("concept", "definition")
+
+#: "不适用"那一格的理由（写进台账的 `basis`，也是页面上那句说明的出处，唯一一处）。
+#:
+#: 业主 2026-10-26 的口径：概念行的非平凡度不是"未判"，是"不适用（无证明）"。
+#: 前者说的是"该判而没判"，后者说的是"这一问对它不成立"—— 两个词不许折平。
+NONTRIVIALITY_NOT_APPLICABLE_BASIS = "不适用：概念行没有证明正文，不做力气判档"
+
+
+def _is_not_applicable_kind(kind: Any) -> bool:
+    """这个 kind 有没有"证明正文"这一档（概念/定义都没有 ⇒ 判档这一格不适用）。"""
+    return str(kind or "").strip().lower() in NOT_APPLICABLE_KINDS
 
 
 def _is_trivial_verdict(decision: Any) -> bool:
@@ -645,6 +669,95 @@ def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
     if str(facts.get("status") or "") in ("pending", "running"):
         return "running"
     return "idle"
+
+
+# ---------------------------------------------------------------- 台账行分轴（Q18，2026-10-26）
+#
+# 业主 2026-10-26 的裁定：一条 `tasks` 行到底是"在跑的子代理"、"板项"还是"顶趟行"，
+# 这个判断只许有一处。改前它是三处各写一遍：conductor 的扇出轴（`_in_flight_children_of`）
+# 与未消项轴（`open_items_by_parent`）各一份，秘书的闭环轴写的是第三份 —— 而且没读 `kind`。
+# 代价是真机 `projects/mp3-r3`：30 条板项行（`status` 恒为 `pending`）被数成"running 5 条"
+# （`MAX_REMINDERS` 截断），而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
+#
+# 落点为什么在秘书而不在 conductor：本轮只许改秘书的收件箱一族（加收工 detail 的组装处）。
+# conductor 那几处的内联判法留给下一批收（清单写进交付说明，不在这里顺手改）。
+#
+# Q27（2026-10-26 晚）：上面那一处判据同时回答了两个问题 —— "这一行是什么"（轴）与
+# "它还活不活"。要"所有代理行（含终态）"的读点拿不到它（终态代理行被折进 `other`），
+# 要"活着的代理"的读点又得自己再写一遍 `status ∈ {pending, running}`。所以拆成两件：
+# `row_axis(row)` 只回答轴（五档与 Q18 的 `task_row_axis` 逐字同形），
+# `is_live_agent(row)` 只回答"是不是一个活着的代理"（= 轴是 agent）。判据仍然只有这一处，
+# 读点调哪一个由它问的问题决定，不许再内联 `kind` / `status`。
+#: 代理行：`kind` 为空、不是顶趟行、`status` 还没终态。
+ROW_AXIS_AGENT = "agent"
+#: 板项行：`kind` 非空且 `item_state != "done"`（还没收口）。
+ROW_AXIS_ITEM_OPEN = "item_open"
+#: 板项行：`kind` 非空且已经收口（`item_state == "done"`）。
+ROW_AXIS_ITEM_CLOSED = "item_closed"
+#: 顶趟行：`open_top_level_run` 开的那一行（`action="run"`、没有父）。
+ROW_AXIS_ROOT = "root"
+#: 其余（代理行的历史终态行等）：两根轴都不进。
+ROW_AXIS_OTHER = "other"
+#: 顶趟行的动作哨兵（`conductor.open_top_level_run` 与 `_open_consume_root` 写的）。
+TOP_LEVEL_ACTION = "run"
+#: "还没终态"的两档（`schema.TASK_STATUSES` 里的活档；与 conductor 的扇出判据同一批）。
+LIVE_TASK_STATUSES = ("pending", "running")
+
+
+def row_axis(row: Mapping[str, Any]) -> str:
+    """一行 `tasks` 落在哪根轴上（唯一判据，2026-10-26 Q18；Q27 起只管轴）。
+
+    三件事实按这个次序定：
+
+    1. `kind` 非空 ⇒ 板项行（`conductor.open_item` 建的行：`notice` / `message` /
+       `report` / `delegation`）。板项行的 `status` 永远是 `pending`（`open_item` 写死、
+       `_set_item` 只改 `item_state`）⇒ 拿 `status` 判"在跑"必然把它们算进去。
+       "收口了没有"由 `item_state == "done"` 回答：它和"这是哪根轴"是两个问题，
+       但都只在这里判（改前收口与否根本没进读数，已 ack 的板项也照样算在跑）。
+    2. `kind` 为空、`action == "run"` 且没有父 ⇒ 顶趟行：它是"用户发起的那一趟"本身，
+       不是谁的子代理（`open_top_level_run` 与队列认领的树根都是这个形态）。
+       为什么形状这么写：真机那 18 条代理行里 16 条 `action` 是空串、1 条 `run_once`
+       —— "action 属跑活的那几档"的白名单会把 16 条真代理漏掉，那是反向的谎。
+       所以这里只排顶趟哨兵，而且要求"没有父"：父派给它一次 `A.run` 那种真子代理
+       带着 `parent_task_id`，不许被一起排掉。
+    3. 其余 `kind` 为空的行：`status` 在活档 ⇒ 代理行；否则 ⇒ 别的（历史终态行）。
+       终态行不是"被排除的候选"，它已经收过工了，两根轴都不进、也不进任何一个计数。
+
+    读不成不是"没有行"：异常由调用方折成三态，本函数只认拿到的那一行。
+
+    与 Q18 的 `task_row_axis` 逐字同形（五档、同输入同输出）—— 这一批只是改名并把
+    "活不活"那一问搬进 :func:`is_live_agent`，读数一个都不许动。判据见
+    `tests/test_the_axis_and_liveness_are_asked_separately.py`。
+    """
+    if str(row.get("kind") or ""):
+        if str(row.get("item_state") or "") == "done":
+            return ROW_AXIS_ITEM_CLOSED
+        return ROW_AXIS_ITEM_OPEN
+    if (str(row.get("action") or "") == TOP_LEVEL_ACTION
+            and not str(row.get("parent_task_id") or "")):
+        return ROW_AXIS_ROOT
+    if str(row.get("status") or "") in LIVE_TASK_STATUSES:
+        return ROW_AXIS_AGENT
+    return ROW_AXIS_OTHER
+
+
+def is_live_agent(row: Mapping[str, Any]) -> bool:
+    """这一行是不是"一个活着的代理"（唯一判据，2026-10-26 Q27）。
+
+    与 :func:`row_axis` 的分工：轴回答"这一行是什么"（板项 / 顶趟 / 代理 / 别的），
+    这一问回答"它还算不算在跑"。两者此前挤在同一个返回值里，于是要"所有代理行
+    （含终态）"的读点拿不到、要"活着的代理"的读点只能自己再写一遍
+    `kind == "" and status in {pending, running}` —— 而自己写的那几份就是 Q18 之前
+    板项被数成"在跑的子代理"的来源。
+
+    判法只有一句：轴是 `agent` 就是活着的代理（活档的判定在 :func:`row_axis` 的
+    第 3 步，这里不重复写状态词表）。顶趟行、板项行、终态代理行都不是。
+
+    改前它的三处调用方各写一遍判据，其中两处（`conductor._in_flight_children_of`
+    与 `statusreport.collect`）连"哪一行是板项"都要自己判 `kind`；迁移的判据见
+    `tests/test_the_axis_and_liveness_are_asked_separately.py`。
+    """
+    return row_axis(row) == ROW_AXIS_AGENT
 
 
 def _diagnose_line(problem: str) -> dict[str, Any]:
@@ -1238,6 +1351,142 @@ RELAY_ID_PREFIX = "R-"
 def relay_path(root: str | Path) -> Path:
     """转发台账的落点：`out/secretary/relay.jsonl`。"""
     return Path(root).joinpath(*SECRETARY_DIR, RELAY_LEDGER)
+
+
+# ---------------------------------------------------------------- 发出口：内容与收件面相符吗
+#
+# 业主原话（2026-10-26，逐字）：「秘书处理将发出的信息时，要看内容是否与接受面相符，这条显然
+# 该拆两条单独派活，这是秘书没有意识，未向 M 提醒」。
+#
+# 现场（`projects/mp3-r3` 的真机手稿 000000）：一条 `handoff(to=ALL)` 的正文里装着两件派活
+# （给 A、给 D），秘书照发 —— 而同一段内容若走 `message` 会被 `public_is_not_a_conversation`
+# 拒（公告栏里点名 + 指令语气），`handoff` 这条路不过那道判据 ⇒ 换个通道就绕过去了。
+#
+# 这里加的不是一套新码、也不是一条新通道：判断落在秘书本来就有的发出口
+# （:meth:`Secretary.optimize_outbound` + :meth:`Secretary.note_decision` 那一条
+# `secretary_decision` 台账），用的也是既有码（`invalid_params` 与
+# `public_is_not_a_conversation`）；名册与公告那两条判据本体由调用方注入
+# （与 `admission=message_admission` 同一种做法，本文件不抄第二份）。
+
+#: 「这一条在讲派活」的机械线索词（受控词表，只有一个取值）。
+DISPATCH_VERB = "派活"
+
+#: 「点名之后跟一句说明」的括号写法（派活清单在正文里就是这种形态）。
+_TARGET_OPENERS: dict[str, str] = {"（": "）", "(": ")", "【": "】", "[": "]", "〔": "〕"}
+
+#: :func:`dispatch_targets` 认的两条线索名（进读数：判据要能回答"凭什么说它是派活对象"）。
+CLUE_VERB = "紧跟派活动词"
+CLUE_NOTE = "名字后跟一句括注"
+
+#: 内容与收件面不符时那一行台账的结论。沿用 `DECISIONS` 里既有的两档，不新造词：
+#: 一份稿子里装了多件派活 ⇒ 建议按收件人重排；公告里点名并下指令 ⇒ 建议改派成私聊。
+DECISION_REARRANGE = "建议重排"
+DECISION_READDRESS = "建议改派"
+
+
+def _dispatch_clue(body: str, token: str) -> tuple[int, str]:
+    """这个写法在正文里有没有落在"派活对象"位置上的形态；返回 `(第一次命中的下标, 线索名)`。
+
+    整词判据：左右不许再粘 ASCII 字母/数字/下划线（`A1` 里的 `A`、`ACC` 里的 `A` 都不算命中，
+    否则正文里每一个 `A` 都会变成"点名"）。两条位置线索（任一成立即可）：
+
+    - :data:`CLUE_NOTE`：名字后面紧跟一个括注，且括注里不是空的（`A（派活：检索文献）`）；
+    - :data:`CLUE_VERB`：名字紧跟在「派活」/「派给」后面（可带「给」与冒号，`派活：A`）。
+
+    没有命中返回 `(-1, "")`。
+    """
+    want = str(token or "")
+    if not want:
+        return -1, ""
+    pattern = re.compile(r"(?<![0-9A-Za-z_])" + re.escape(want) + r"(?![0-9A-Za-z_])")
+    for hit in pattern.finditer(body):
+        start, end = hit.span()
+        j = end
+        while j < len(body) and body[j] in " \t\u3000":
+            j += 1
+        if j < len(body) and body[j] in _TARGET_OPENERS:
+            close = body.find(_TARGET_OPENERS[body[j]], j + 1)
+            note = body[j + 1: close if close >= 0 else len(body)]
+            if note.strip():
+                return start, CLUE_NOTE
+        if re.search(r"(?:派活|派给)\s*给?\s*[:：]?\s*$", body[:start]):
+            return start, CLUE_VERB
+    return -1, ""
+
+
+def dispatch_targets(text: Any,
+                     members: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """正文里被点名、且落在"派活对象"位置上的那些名册成员（确定性：不调模型、不花钱）。
+
+    ## 判据（三条，全部机械可判）
+    1. 正文里出现 :data:`DISPATCH_VERB`（「派活」）—— 没有这个字样，这一段就不当派活清单读；
+    2. 名册成员的三种写法各算一种指称：名册名 / 绝对编号 / 角色代号（`A`…`M`），整词匹配
+       （判据见 :func:`_dispatch_clue`）；
+    3. 命中的位置还必须落在"派活对象"的位置上（:data:`CLUE_NOTE` 或 :data:`CLUE_VERB`）。
+
+    返回按第一次出现排序的 `[{key, token, name, role, kind, clue, at}]`；`key` 是成员身份
+    （`task_id` 优先），同一成员的两种写法（`A1` 与角色代号 `A`）折成一个对象 ——
+    于是"同一件事写了两遍"不会被数成两件派活。
+
+    角色代号那一格要单独说一句：同一个角色在名册上有两个实例（`A1` / `A2`）时，正文里的
+    `A（派活：…）` 指的不是某一个实例 —— 它折成 `role:A` 这一个指称。不这么折的话，
+    一个 `A（…）` 会被数成两个对象（每个 A 实例各算一个），于是一次正常的派活被误拒。
+
+    ## 误判方向（写在这里，因为这条判据靠结构线索，不靠语义）
+    - 漏判（宁漏不误拒的那一侧）：正文用散文写的（"这两件事分别交给检索组与研究组"）、
+      或只写"派 B 去查"而不出现「派活」/「派给」的，判不出来 —— 这一格不猜语义。
+    - 误判：一条真正的公告若逐个点名并各带一句括注（"这一轮 A（查文献）、D（做分析）各干一段"），
+      而正文别处又出现了「派活」两个字，会被读成两件派活 ⇒ 退回本体。方向是有意的：
+      这条闸的处置只是"按收件人拆开重发一步"，代价一步；而放过去一次就是一次
+      "一条稿子里塞几件活"的静默越界（业主点名的正是那个形态）。
+    - 名册读不成（`members` 是空表）⇒ 返回空表：那是"这一格没查成"，由调用方按三态处理，
+      不许当成"已经相符"。
+    """
+    body = str(text or "")
+    if DISPATCH_VERB not in body:
+        return []
+    rows = [dict(m) for m in (members or ()) if isinstance(m, Mapping)]
+    by_key: dict[str, dict[str, Any]] = {}
+    #: `(写法, 指称键)`：名册名 / 绝对编号各指一个成员；角色代号按"同角色是否唯一"折
+    #: （见 docstring 里那一句）。
+    tokens: list[tuple[str, str]] = []
+    role_keys: dict[str, list[str]] = {}
+    for m in rows:
+        key = str(m.get("task_id") or m.get("name") or m.get("role") or "")
+        if not key:
+            continue
+        by_key.setdefault(key, m)
+        for token in (str(m.get("name") or ""), str(m.get("task_id") or "")):
+            if token:
+                tokens.append((token, key))
+        role = str(m.get("role") or "")
+        if role:
+            role_keys.setdefault(role, []).append(key)
+    for role, keys in role_keys.items():
+        tokens.append((role, keys[0] if len(keys) == 1 else f"role:{role}"))
+    hits: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for token, key in tokens:
+        if (token, key) in seen:
+            continue
+        seen.add((token, key))
+        at, clue = _dispatch_clue(body, token)
+        if not clue:
+            continue
+        m = by_key.get(key) or {}
+        hits.append({"key": key, "token": token, "at": at, "clue": clue,
+                     "name": str(m.get("name") or ""),
+                     "role": str(m.get("role") or ""),
+                     "kind": str(m.get("kind") or "")})
+    hits.sort(key=lambda t: (int(t.get("at") or 0), t["key"]))
+    found: list[dict[str, Any]] = []
+    taken: set[str] = set()
+    for hit in hits:
+        if hit["key"] in taken:
+            continue
+        taken.add(hit["key"])
+        found.append(hit)
+    return found
 
 
 class Secretary:
@@ -1907,8 +2156,15 @@ class Secretary:
     def judge_statement(self, *, statement_full: str, statement: str = "",
                         source: str = "", basis_hint: str = "",
                         proof_text: str = "", proofs: list | None = None,
-                        task_id: str = "") -> dict[str, Any]:
+                        task_id: str = "", kind: str = "",
+                        stmt_id: str = "") -> dict[str, Any]:
         """B 的秘书专属：这条待入库的命题落在非平凡性的哪一档（业主 2026-10-14 裁决第 12 条前半）。
+
+        ## 号（2026-10-26，D16）
+        `stmt_id` 是这条命题在 `statements` 里的号。判档发生在登记之后，调用方把手上
+        那个号传下来，台账那一行才能按号与命题行对上 —— 按正文 sha 关联会把"改了一个字"
+        读成"没判过"（真机 mp3-r3 第 1 行 316 字就是这样对不上的）。缺省空串只为概念行
+        的幂等补写与测试；生产面那两个触发点（B 循环、F 交稿）都必须传。
 
         原话：「第十二条作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有资格入库，且让 B 在挑定理和
         命题提交入库时要有审美。」为什么是"秘书"而不是"又一条机器判据"：平凡与否不是字符串能判的事
@@ -1941,7 +2197,18 @@ class Secretary:
         而 `agent_loop._statement_filing_tier` 这一趟只转交命题正文（那一行不在本文件，
         见 `_statement_filing_tier` 的调用点）——所以正文里自带证明小节时（真机上 B 有时
         整段写进 `statement_full`），读数照样读得到；真读不到就是"缺证明正文"那一支。
+        ## 概念 / 定义行：判档这一格"不适用"（2026-10-26，D15'）
+        判据是"这份证明花了多大力气"，而概念行没有证明正文（`conceptrows.concept_statement`
+        明令 `proof_text` 留空）⇒ 四项读数一项都取不到。所以 `kind` 落在
+        :data:`NOT_APPLICABLE_KINDS` 里时这一问在取材料之前就早退：不发调用、不判力气，
+        只落一条可判的"不适用"（台账里 `applicable: false`，见
+        :meth:`not_applicable_nontriviality`）。
+        这一支放在角色那一关之前：概念的"力气"这一问对本体不成立，与哪一名的秘书无关。
         """
+        if _is_not_applicable_kind(kind):
+            return self.not_applicable_nontriviality(
+                statement_full=statement_full, kind=kind, task_id=task_id,
+                stmt_id=stmt_id)
         if str(self.role) != "B":
             return {"checked": False, "decision": "", "basis": [],
                     "reason": f"这一问只属于 B 的秘书（本条秘书属于 {self.role!r}）⇒ 这一格没查成",
@@ -2103,12 +2370,76 @@ class Secretary:
                     append_nontriviality(root, statement_full=body_full,
                                          level=level, basis=basis_note,
                                          role=str(self.role or ""), task_id=str(task_id or ""),
+                                         stmt_id=stmt_id,
                                          effort=readings, text_truncated=bool(text_truncated))
                 except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
                     got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
             # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
             self._statement_verdicts[key] = dict(got)
         return got
+
+    def not_applicable_nontriviality(self, *, statement_full: str, kind: str = "",
+                                     task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
+        """概念 / 定义行的档位读数：`不适用`（`level=None` + 台账里 `applicable=False`）。
+
+        ## 号（2026-10-26，D16）
+        落行带 `stmt_id`（概念行在 `write_concept_row` 里已经有号）；幂等比对仍按正文
+        （同一段定义只落一行），但那一行与命题行的关系靠号，不靠文本。
+
+        ## 为什么它不是"未判"（2026-10-26，业主的口径）
+        "未判"说的是"该判而没判"（没缝 / 超时 / 缺证明正文 / 正文被截断），它的处置是
+        "下次再判一次"；"不适用"说的是"这一问对它不成立"——概念行没有证明正文，四项力气
+        读数一项都取不到，再判一次也不会有别的结论。两件事折成同一个词，读的人就会把
+        "结构上不需要判"读成"漏判了"（真机 mp3-r3：30 条概念行的非平凡度一条记录都没有，
+        而读侧对"没有记录"与"不需要记录"都只印一个"未判"）。
+
+        ## 落什么
+        台账那一行：`nontriviality: null` + `label: ""` +
+        `basis: "不适用：概念行没有证明正文，不做力气判档"` + `applicable: false`。
+        最后那一格是给读侧的判据：:func:`nontriviality_of` 据它把 `tri` 读成
+        `not_applicable`（而不是 `unknown`），于是页面能把两个词分开印。
+
+        ## 为什么空正文也照落这一行
+        `judge_statement` 对 0 字命题是受控拒绝（不落台账），因为那说明"调用方给错了栏"。
+        概念行不同：待补定义的概念（`pending_definition`）本来就有一段空正文，而它的
+        "不适用"与定义到没到无关（有没有定义，它都没有证明）。所以这一支按正文 sha 落行，
+        空正文的 sha 与所有待补概念共用那一行 —— 它们读出来的词也确实一样。
+
+        ## 幂等（同一段正文只落一行）
+        这一档的结论不随时间变（"有没有证明正文"是结构事实），所以已经落过的那一段
+        正文不再追加：台账是 append-only，同一句话抄第二遍只会让它变长而不增加任何读数
+        （而 `nontriviality_of` 是逐行扫的，长度就是页面一次请求的代价）。
+        反过来，这一段正文还没有那一行时照落 —— 存量概念行（改前直写进来的那些）
+        因此会在它下一次经秘书那一笔时被补上这一格，不需要一次全库迁移。
+        """
+        out: dict[str, Any] = {
+            "checked": True, "decision": "", "applicable": False,
+            "basis": [NONTRIVIALITY_NOT_APPLICABLE_BASIS],
+            "reason": (f"kind={kind or '（空）'!r} 没有证明正文 ⇒ 判档这一格不适用"
+                       "（不是「判不了」：它是结构上不需要判，不是该判而没判）"),
+            "nontriviality": NONTRIVIALITY_UNJUDGED, "label": "",
+            "nontriviality_tri": "not_applicable",
+            "nontriviality_basis": NONTRIVIALITY_NOT_APPLICABLE_BASIS,
+            "effort": {}, "effort_score": 0, "text_truncated": False,
+            "cost": {"ledger": "", "reason": "没发调用（概念行没有证明正文 ⇒ 判档不适用）"},
+        }
+        root = getattr(self, "root", None)
+        if root is None:
+            return out
+        try:
+            prior = nontriviality_of(root, statement_full, stmt_id=stmt_id)
+            if prior.get("tri") == "not_applicable":
+                out["recorded"] = False      # 已经有那一行 ⇒ 不重复追加（读数不变）
+                return out
+            append_nontriviality(root, statement_full=statement_full, level=None,
+                                 basis=NONTRIVIALITY_NOT_APPLICABLE_BASIS,
+                                 role=str(self.role or ""), task_id=str(task_id or ""),
+                                 stmt_id=stmt_id,
+                                 effort={}, text_truncated=False, applicable=False)
+            out["recorded"] = True
+        except Exception as exc:  # noqa: BLE001 - 落盘失败不影响读数本身
+            out["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
+        return out
 
     def last_judge_cost(self, kind: str) -> dict[str, Any]:
         """上一次该类别判断的花销归因（主控裁定 A5 的第 ③ 条）。
@@ -2182,8 +2513,128 @@ class Secretary:
                 out.append(f"message 的 `{field}` 要是非空字符串（缺了不替它编内容）")
         return out
 
+    #: 发出口这条判据管的两条通道（其余形状没有"内容 ↔ 收件面"这件事：
+    #: `summon_many` 本来就是一次派 N 件，`summon` 的收件人是 `role` 一格）。
+    FACE_SHAPES: tuple[str, str] = ("handoff", "message")
+
+    def _face_text(self, shape: str, payload: Mapping[str, Any]) -> str:
+        """这一条真正会被读的那一段正文（`handoff` 的 summary+body；`message` 的 subject+body）。
+
+        为什么是这两段而不是整个载荷：收件人读到的是正文，JSON 的键名不是内容。
+        旧名（`brief` / `title`）与正名 `summary` 一样算，判据认的是它会怎么被读。
+        """
+        body = payload.get("body") if isinstance(payload, Mapping) else ""
+        if str(shape) == "message":
+            head = str(payload.get("subject") or "")
+        else:
+            head = str(payload.get("summary") or payload.get("brief")
+                       or payload.get("title") or "")
+        return f"{head}\n{body or ''}"
+
+    def split_dispatch_reason(self, shape: str, tokens: Sequence[str]) -> str:
+        """「这一条里有 N 件派活」那一句拒信 —— 拆分方案逐字写全（给谁一条、怎么发）。
+
+        业主点名的形态是一条稿子里装着给 A 与给 D 两件活，所以拒信必须回得出
+        "给 A 一条、给 D 一条"这个形状，而不是一句"请重写"。收件人写法用原稿里的那个
+        （`A` / `A1` 都行：它认得自己写的那一个）。
+        """
+        names = [str(t) for t in tokens]
+        count = len(names)
+        if count < 2:
+            return ""
+        if count == 2:
+            options = f"`{shape}(to={names[0]})` 与 `{shape}(to={names[1]})`"
+        else:
+            options = ("、".join(f"`{shape}(to={t})`" for t in names[:-1])
+                       + f" 与 `{shape}(to={names[-1]})`")
+        given = "、".join(f"给 {t}" for t in names)
+        return (f"这一条里有 {count} 件派活（{given}），一份稿子只能交给一个收件人 ⇒ "
+                f"请按收件人拆成 {count} 条：{options}"
+                "（或直接用 `summon` 的台账，不要在稿子里抄一遍）。")
+
+    def judge_recipient_face(self, shape: str, payload: Mapping[str, Any], *,
+                             face: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """发出口的第二件事（业主 2026-10-26）：这一份内容与它的收件面相符吗。
+
+        它与 :meth:`judge` 那一族是同一件事的两半：:meth:`judge` 判"这活该怎么派"
+        （要叫模型），这一格判"这份稿子的内容与收件面配不配"（纯机械、零模型调用）。
+        判断落在发出口，所以两条通道（`handoff` 手稿 / `message` 投递）共用一份，
+        不再各写一道 if 链。
+
+        两档（都得由 :meth:`optimize_outbound` 在写盘之前问）：
+
+        - 公告栏里点名并下指令 ⇒ 不符：`to` 是公共频道而正文点名了名册成员、又带指令语气，
+          那是对一个具体代理下指令，不是公告（判据本体是 `_public_addressee` +
+          `PUBLIC_DIRECTIVE_MARKS`，由调用方注入，本文件不抄第二份）；
+        - 一份稿子里装了多件派活 ⇒ 不符：正文里有两个以上名册成员落在"派活对象"的位置上
+          （判据见 :func:`dispatch_targets`），而一次派活只能有一个收件人。
+
+        返回（三态不许折平，`fits` 就是那一格）：
+
+        | 结局 | 返回 |
+        |---|---|
+        | 相符 | `fits=True` + `targets` / `named` 读数 |
+        | 不符 | `fits=False` + `refused`（既有码）+ `reason`（给本体读的改法） |
+        | 判不了 | `fits=None` + `reason`（名册读不成 / 不是这两条通道）⇒ 放行并留痕 |
+
+        `refused` 用的是既有码：公告那一档沿用 `public_is_not_a_conversation`（与
+        `message` 那条路同一个词，它同时是那条投递闸的读数取值），多件派活那一档用
+        `refusals.PRECONDITION_REASON`（`invalid_params` = 这次调用本身不成立）。
+        判据不新造理由码。两档的 `refusal_reason` 因此不一样：后者是任务台账那张受控词表里
+        的取值，前者不是（公告那条码从来只在读数里用）—— 照各自的既有落点写，不互相冒充。
+        """
+        out: dict[str, Any] = {"checked": False, "fits": None, "refused": "",
+                               "refusal_reason": "", "reason": "", "targets": [],
+                               "named": "", "shape": str(shape), "to": "", "decision": ""}
+        if str(shape) not in self.FACE_SHAPES:
+            out["reason"] = (f"{shape} 不在发出口这条判据的面上（"
+                             "一次派活只能有一个收件人，说的是 handoff / message）")
+            return out
+        body = payload if isinstance(payload, Mapping) else {}
+        out["to"] = str(body.get("to") or body.get("role") or "")
+        got = dict(face) if isinstance(face, Mapping) else {}
+        if not got:
+            out["reason"] = ("收件面没接上（调用方没有注入名册与公告那两条判据）"
+                             "⇒ 这一格判不了（没查成不是相符）")
+            return out
+        if not got.get("checked"):
+            out["reason"] = (f"收件面没读成（{got.get('problem') or '名册不可用'}）"
+                             "⇒ 这一格判不了（没查成不是相符）")
+            return out
+        out["checked"] = True
+        out["named"] = str(got.get("named") or "")
+        public = got.get("public_refusal")
+        public = dict(public) if isinstance(public, Mapping) else {}
+        if str(public.get("refused") or ""):
+            out.update(fits=False, refused=str(public["refused"]),
+                       reason=str(public.get("error") or ""),
+                       decision=DECISION_READDRESS)
+            return out
+        members = [m for m in (got.get("members") or ()) if isinstance(m, Mapping)]
+        if not members:
+            # 名册读成了，可上面一个人都没有（顶层还没派过活）⇒ 正文里点名谁都对不上，
+            # 这一格判不了。三态：它不是"相符"（那是把没查成折成查过了）。
+            out["reason"] = ("名册上没有一个可通话的人 ⇒ 正文里的派活对象一个都对不上，"
+                             "这一格判不了（没查成不是相符）")
+            return out
+        tokens = dispatch_targets(self._face_text(shape, body), members)
+        if len(tokens) >= 2:
+            shown = [str(t["token"]) for t in tokens]
+            out.update(fits=False, targets=shown, refused=R.PRECONDITION_REASON,
+                       refusal_reason=R.PRECONDITION_REASON,
+                       reason=self.split_dispatch_reason(str(shape), shown),
+                       decision=DECISION_REARRANGE)
+            return out
+        out.update(fits=True, targets=[str(t["token"]) for t in tokens],
+                   reason=("收件面相符：正文里没有第二个落在『派活对象』位置上的人"
+                           if not tokens else
+                           f"收件面相符：正文里只点到 {tokens[0]['token']} 一个派活对象"))
+        return out
+
     def optimize_outbound(self, shape: str, payload: Mapping[str, Any], *,
-                          admission: Any = None, base: str = "") -> dict[str, Any]:
+                          admission: Any = None, base: str = "",
+                          face: Mapping[str, Any] | None = None
+                          ) -> dict[str, Any]:
         """职责 1：格式与内容优化（发件前）。
 
         不改变实质主张：不替本体承诺、不改结论、不加证据（`draft/53` §2 的"不许做"）。所以这里的产物是
@@ -2193,6 +2644,9 @@ class Secretary:
         - 第二段是判断（只有 :meth:`should_engage` 说该介入时才走）：错名映到哪一个候选（:meth:`judge` 的
           `tool_name` 一类，一次模型调用 + 台账）。判断没查成 ⇒ 结论仍是预筛那一份，且台账里
           `judge.checked=False` 写明。
+        另加一件同样是判断的事（业主 2026-10-26）：内容与收件面相符吗 ——
+        :meth:`judge_recipient_face`（`face=` 是它要的收件面读数，由调用方注入；判据本体不在这里）。
+        判"不符"的那一档是受控拒绝：这一条一份稿子都不出去，拒信与结论一起进返回值与台账。
         fail-open：超时/自己出错 ⇒ 原样放行 + 台账留痕（`fail_open=True`）。
         """
         original = dict(payload)
@@ -2242,14 +2696,19 @@ class Secretary:
             action = str(washed.get("action") or "")
             params = (washed.get("params") if isinstance(washed.get("params"), Mapping) else {})
             tool = str(washed.get("name") or washed.get("tool") or "")
+            # ---- 发出口的第二件事（业主 2026-10-26）：这一份内容与它的收件面相符吗。
+            # 纯机械、零模型调用；`face=` 是收件面读数（名册成员 + 公告里点名了谁），
+            # 由调用方注入 —— 与 `admission=` 同一种做法，判据本体不在这里。
+            face_reading = self.judge_recipient_face(shape, washed, face=face)
+            face_refused = face_reading.get("fits") is False
             if shape == "message":
                 # `R8`：`message` 是跨智能体的结构化交互 ⇒ 秘书接管（所有者裁定逐字
                 # "如果有些形状涉及到结构化交互，则需要秘书接管"）。接管 = 预筛报警 +
                 # 建议 + 台账（不替代 `_do_message` 的硬闸，也不改载荷）。
                 #
                 # 为什么这一支不跑上面那条委派预筛：`message` 没有 `action`/`params`/`tool`
-                # 三件，而预筛会把 `to` 当角色名去查能力表 —— 对 `to=#public` 会报出两条
-                # "读不到 #public 的角色定位"的假警（频道名不是角色）。它的整个预筛面
+                # 三件，而预筛会把 `to` 当角色名去查能力表 —— 对公共频道收件人（`ALL`）会报出
+                # 两条"读不到这个收件人的角色定位"的假警（频道名不是角色）。它的整个预筛面
                 # 就是下面这两格：共用准入判据 + 两个必填字段。
                 alarms = self._message_alarms(body, admission=admission)
             else:
@@ -2268,11 +2727,18 @@ class Secretary:
             decision = ("已优化" if not alarms else "建议重排")
             if judged.get("checked"):
                 decision = str(judged.get("decision") or decision)
+            # 内容与收件面不符时，结论沿用 `DECISIONS` 里既有的那一档
+            # （建议重排 = 按收件人拆开；建议改派 = 改成给那一个人的私聊）。
+            if face_refused:
+                decision = str(face_reading.get("decision") or decision)
             changes = list(wash.get("changes") or ())
             # ---- 台账那一行（一次调用一行；两段式的三档各带自己的 `decision`/`kind`）
             proposal_arg: str | None = None
             fingerprint = ""
             reason = "；".join(alarms) or "没有触发预筛报警（原样放行）"
+            if face_refused:
+                # 这一条不出去了：台账里的那一句就是退回本体的理由（逐字含拆分方案 / 改法）。
+                reason = str(face_reading.get("reason") or reason)
             if plan["outcome"]:
                 # 第一段：请示。编号由本秘书在锁内发（`proposal=""` 那一档）；
                 # 同一份载荷已经请示过 ⇒ 复用那个编号（`proposal="<id>"` 那一档），
@@ -2300,13 +2766,25 @@ class Secretary:
                 decision = DECISION_REJECTED
                 proposal_arg = plan["proposal_id"]
                 reason = "按原稿执行（parent 拒绝了秘书的格式洗）"
+            judge_cell = dict(judged)
+            if face_reading.get("checked"):
+                # 这一格与 `judge` 是同一行里的两件不同的事：判"这活该怎么派"叫了模型，
+                # 判"内容与收件面配不配"没叫。`fits` 三态（True / False / None）必须原样落盘，
+                # 否则"没查成"与"相符"在纸上长得一样。
+                judge_cell.update({"checked": True,
+                                   "fits": face_reading.get("fits"),
+                                   "targets": list(face_reading.get("targets") or ()),
+                                   "named": str(face_reading.get("named") or ""),
+                                   "reason": str(face_reading.get("reason") or "")})
+                if face_reading.get("decision"):
+                    judge_cell["decision"] = str(face_reading["decision"])
             rec = self.note_decision(
                 duty=1,
                 kind=KIND_PROPOSAL if plan["outcome"] else KIND_OPTIMIZED,
                 decision=decision,
                 reason=reason,
                 basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
-                target={"to": to, "action": action}, judge=judged,
+                target={"to": to, "action": action}, judge=judge_cell,
                 before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                 # S1g：洗过的那一份与原稿并列落账（`before`/`after` + 逐格 `changes`）。
                 # 只有一份摆在那里时，"模型说错了"与"秘书替它补对了"在纸上分不开。
@@ -2328,9 +2806,20 @@ class Secretary:
             ret = {"problem": "；".join(alarms), "payload": original, "after": washed,
                    "wash": wash, "changes": changes,
                    "washed": bool(wash.get("washed")), "refused": False,
-                   "alarms": alarms, "judge": judged, "engaged": bool(engage),
+                   "alarms": alarms, "judge": judge_cell, "engaged": bool(engage),
                    "surface": self.surface_readings(shape, washed, base=base),
                    "fail_open": False, "seq": rec.get("seq")}
+            if face_reading.get("checked"):
+                # 只在真的判过时才给这一格：老载荷（不是 handoff / message、或收件面没接上）
+                # 的键集因此一个字节不变。
+                ret["face"] = dict(face_reading)
+            if face_refused:
+                # 受控拒绝：这一条一份稿子都不出去（循环据此不执行 `_do_handoff`）。
+                # 三个键一起给，是因为读的人不同：`problem` 给日志、`face` 给台账、
+                # 那一句拒信（`reason`）是给本体下一步照着改的。
+                ret.update({"problem": str(face_reading.get("reason") or ""),
+                            "refused": True})
+                return ret
             if plan["outcome"] or plan["problem"] or plan["accepted"] is not None:
                 # 只在真的进了第二段时给这一格：老载荷的键集因此一个字节不变
                 # （没差异的那条路不是"两段式"，多一格会让人以为它也请示过）。
@@ -2890,18 +3379,48 @@ class Secretary:
                     "fail_open": True}
 
     def inbox_todos(self, *, limit: int = 20) -> dict[str, Any]:
-        """F-05 的消费端：把"还没有处理 / 还没有反馈"的委托摆出来（只读）。
+        """F-05 的消费端：把"还没有处理 / 还没有反馈"的东西摆出来（只读，两栏）。
 
-        `draft/53` §10 的口径：F-05 待办/待核队列的生产端是机器（`search_requests` / `reprocess_requests` 的
-        pending，以及降级/待核那些三态行），消费端是各角色自己的秘书（自己的收件箱）+ M 的秘书（全局）。本方法
-        只做"摆出来"这一半，判断归 :meth:`remind_closure`。三态（R002 的口径）：`checked=False` + `reason` 表示
-        "这一格没读成"（没有 store / 表读不出来），与 `todos=[]`（读成了、确实没有待办）分开报。返回值：
-        `{"checked", "reason", "todos": [...], "count", "by_kind"}`，每条 `todo` 是 `{"kind", "id", "who", "state", "since"}` —— `state` 说的是"为什么它算待办"（`pending` 没做完 / `unclaimed` 没人接 / `running` 没有终态）。
+        ## 两栏（业主 2026-10-26 Q18：不许混成一句）
+        | 栏 | 装什么 | 截断 |
+        |---|---|---|
+        | `running_agents` | 此刻真的在跑的子代理（数量 + 全部编号） | 永不截断 |
+        | `pending_items` | 等着接手 / 等着收口的待办项（板项 + 队列请求） | 吃 `limit` 与 :data:`MAX_REMINDERS`，截断量写进 `truncated` |
+
+        一行 `tasks` 落在哪一栏由两处判据决定，两处都在本模块：轴归 :func:`row_axis`
+        （代理行 / 板项行 / 顶趟行 / 其它），"还算不算在跑"归 :func:`is_live_agent`
+        （2026-10-26 Q27 把这两问拆开；改前它们是同一个返回值）。改前这一段自己判，
+        而且只看 `status ∈ {pending, running}` 与 `action != "run"`
+        —— 板项行（`status` 恒为 `pending`）于是被写成 `state="running"`：真机
+        `projects/mp3-r3` 的 30 条板项被数成"running 5 条"（`MAX_REMINDERS` 截断），
+        而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
+
+        `draft/53` §10 的口径不变：生产端是机器（`search_requests` / `reprocess_requests`
+        的 pending + 那些三态行），消费端是各角色自己的秘书 + M 的秘书（全局）；本方法
+        只做"摆出来"这一半，判断归 :meth:`remind_closure`。
+
+        ## 三态与"少了几行"
+        `checked=False` + `reason` 是"这一格没读成"（没有 store / 表读不出来），与
+        `todos=[]`（读成了、确实没有待办）分开报。两个 `excluded_*` 是"确实有行、但两根轴
+        都不进"的显式读数（顶趟行 / 已收口的板项行）—— 少了几行要能被读出来，否则
+        "少了几行"会被读成"本来就没有"（静默漂移的另一种形态）。
+
+        ## 返回
+        `{"checked","reason","running_agents":{"count","ids","rows"},
+        "pending_items":{"count","ids","by_kind","rows"},"todos","count","by_kind",
+        "excluded_top_level","excluded_item_closed","truncated":{"shown","total","more"}}`。
+        两栏的 `count` / `ids` 都是截断前的真数；`todos` 是两栏的合并视图（既有读点兼容），
+        每条 `todo` 是 `{"kind","id","who","state","since","axis"}`。
         """
         if self.store is None:
             return {"checked": False, "reason": "没有 store ⇒ 收件箱这一格没读成",
-                    "todos": [], "count": 0, "by_kind": {}}
-        todos: list[dict[str, Any]] = []
+                    "todos": [], "count": 0, "by_kind": {},
+                    "running_agents": {"count": 0, "ids": [], "rows": []},
+                    "pending_items": {"count": 0, "ids": [], "by_kind": {}, "rows": []},
+                    "excluded_top_level": 0, "excluded_item_closed": 0,
+                    "truncated": {"shown": 0, "total": 0, "more": 0}}
+        agents: list[dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         problems: list[str] = []
         for table, kind in (("search_requests", "search_request"),
                             ("reprocess_requests", "reprocess_request")):
@@ -2914,38 +3433,68 @@ class Secretary:
                 if row.get("done"):
                     continue
                 who = str(row.get("claimed_by") or "")
-                todos.append({
+                items.append({
                     "kind": kind,
                     "id": str(row.get("request_id") or ""),
                     "who": who or S.CONDUCTOR_ROLE,
                     "state": "pending" if who else "unclaimed",
                     "since": str(row.get("timestamp") or ""),
                     "attempts": int(row.get("attempts") or 0),
+                    # 队列请求是"排队等接手"，不是在跑的子代理 ⇒ 归待办栏。
+                    "axis": ROW_AXIS_ITEM_OPEN,
                 })
         excluded_top = 0
+        excluded_closed = 0
         try:
             for row in self.store.rows("tasks"):
-                if str(row.get("status") or "") not in ("pending", "running"):
-                    continue
-                # 顶趟行（`action="run"`，F1 加的）不算待办：它是"用户发起的那一趟
-                # 正在跑"，不是"有人提交了却没人接手"——后者才是这份收件箱要摆出来的东西。
-                # 排除了几行要留在读数里（`excluded_top_level`），否则"少了几行"会被读成
-                # "本来就没有"（静默漂移的另一种形态）。
-                if str(row.get("action") or "") == "run":
+                axis = row_axis(row)
+                # "活着的代理"是另一问（`is_live_agent`，2026-10-26 Q27）：轴只说这一行
+                # 是什么，"它还算不算在跑"由那个判据回答 —— 这里不许再写成 `axis == agent`，
+                # 否则拆分就退化成两个名字指向同一句话（判据 d 钉的就是这件事）。
+                if is_live_agent(row):
+                    agents.append({"kind": "task", "id": str(row.get("task_id") or ""),
+                                   "who": str(row.get("role") or ""), "state": "running",
+                                   "since": str(row.get("started_at") or ""),
+                                   "axis": ROW_AXIS_AGENT})
+                elif axis == ROW_AXIS_ITEM_OPEN:
+                    # 板项还没收口：`state` 用既有的 "pending"（没做完），不许再说 "running"
+                    # —— 它没有在跑任何东西，是等着人消它。
+                    items.append({"kind": "task", "id": str(row.get("task_id") or ""),
+                                  "who": str(row.get("role") or ""), "state": "pending",
+                                  "since": str(row.get("started_at") or ""),
+                                  "axis": ROW_AXIS_ITEM_OPEN})
+                elif axis == ROW_AXIS_ITEM_CLOSED:
+                    excluded_closed += 1
+                elif axis == ROW_AXIS_ROOT:
+                    # 顶趟行是"用户发起的那一趟"本身：既不进待办栏，也不进在跑栏，
+                    # 但排除了几行要留在读数里，否则"少了几行"会被读成"本来就没有"。
                     excluded_top += 1
-                    continue
-                todos.append({"kind": "task", "id": str(row.get("task_id") or ""),
-                              "who": str(row.get("role") or ""), "state": "running",
-                              "since": str(row.get("started_at") or "")})
+                # 其余（代理行的历史终态行等）：两根轴都不进，也不计数 ——
+                # 它们不是"被排除的候选"，是已经收过工的旧行。
         except Exception as exc:  # noqa: BLE001 - 同上
             problems.append(f"tasks: {type(exc).__name__}: {exc}")
-        todos = todos[:max(1, int(limit))]
+        total = len(agents) + len(items)
+        todos = (items + agents)[:max(1, int(limit))]
+        shown = len(todos)
         by_kind: dict[str, int] = {}
         for t in todos:
             by_kind[t["kind"]] = by_kind.get(t["kind"], 0) + 1
+        pending_by_kind: dict[str, int] = {}
+        for it in items:
+            pending_by_kind[it["kind"]] = pending_by_kind.get(it["kind"], 0) + 1
         return {"checked": not problems, "reason": "；".join(problems),
+                "running_agents": {"count": len(agents),
+                                   "ids": [str(x["id"]) for x in agents],
+                                   "rows": agents},
+                "pending_items": {"count": len(items),
+                                  "ids": [str(x["id"]) for x in items],
+                                  "by_kind": pending_by_kind,
+                                  "rows": items},
+                "todos": todos, "count": shown, "by_kind": by_kind,
                 "excluded_top_level": excluded_top,
-                "todos": todos, "count": len(todos), "by_kind": by_kind}
+                "excluded_item_closed": excluded_closed,
+                "truncated": {"shown": shown, "total": total,
+                              "more": max(0, total - shown)}}
 
     #: `pending_inbox` 认的既有标记（不许新造字段/词表/工具）。
     PENDING_KINDS = ("missing_bit", "missing_proof", "unverified_quote")
@@ -3071,56 +3620,144 @@ class Secretary:
         """职责 3：闭环提醒（收件方盯自己的收件箱；经 M）。
 
         判据只有"有没有处理、有没有反馈"两条事实（`draft/53` §2 的"不许做"：
-        不替本体做事、不伪造反馈）。异步、不阻塞本体；
-        一次最多 :data:`MAX_REMINDERS` 条（默认 5，避免刷屏）。
+        不替本体做事、不伪造反馈）。异步、不阻塞本体。
 
-        `items=None` ⇒ 自己读待办（:meth:`inbox_todos`，F-05 的消费端）；
-        给了就按给的那一份判 —— "谁盯哪个收件箱"由调用方决定（M 的秘书看全局）。
+        `items=None` ⇒ 自己读收件箱（:meth:`closure_reading`，F-05 的消费端）：
+        待办项一次最多 :data:`MAX_REMINDERS` 条，在跑的子代理全列不截（业主
+        2026-10-26 Q18：截断只作用于待办项 —— 在跑的子必须一个不少地点名）。
+        给了 `items` ⇒ 按给的那一份判（一律当待办项那一栏，吃 `MAX_REMINDERS`）——
+        "谁盯哪个收件箱"由调用方决定（M 的秘书看全局）；要报在跑的子代理就读自己的
+        收件箱，别在这里另判一次（判据只有 :func:`row_axis` / :func:`is_live_agent` 一处）。
         """
         if items is None:
-            got = self.inbox_todos()
-            items = list(got["todos"])
-            if not got["checked"]:
-                # 读不成不是"没有待办"：如实留痕，绝不当成清零。
-                self.note_decision(duty=3, kind=KIND_NOTICE, decision="已提醒",
-                                   reason=f"待办那一格没读成：{got['reason']}",
-                                   basis=["tasks / search_requests / reprocess_requests"],
-                                   target={"role": self.role}, fail_open=True,
-                                   error=str(got["reason"]))
-                return []
+            return list(self.closure_reading()["reminded"])
+        given = list(items)
         out: list[dict[str, Any]] = []
-        for it in list(items)[:MAX_REMINDERS]:
-            task_id = str(it.get("task_id") or it.get("id") or "")
-            state = str(it.get("state") or "")
-            if state in ("handled", "feedback_seen", "closed"):
-                continue
-            if not state:
-                state = "unknown"
-            out.append({"task_id": task_id, "state": state,
-                        "kind": str(it.get("kind") or ""),
-                        "to": str(it.get("by") or it.get("who") or S.CONDUCTOR_ROLE),
-                        "note": "这一条委托没有终态 / 没有反馈 ⇒ 提醒本体（经 M）"})
-        if out:
+        for it in given[:MAX_REMINDERS]:
+            one = self._reminder_of(it)
+            if one is not None:
+                out.append(one)
+        self._note_closure(out, running_count=0, pending_count=len(given))
+        return out
+
+    def closure_reading(self) -> dict[str, Any]:
+        """职责 3 的收尾读数（唯一组装点，2026-10-26 Q18）：两栏真数 + 每条提醒。
+
+        返回 `{"checked","reason","count","running_agents","pending_items",
+        "reminded","by_state","by_to","truncated"}`：
+
+        - `running_agents` / `pending_items`：两栏截断前的真数与全部编号；
+        - `reminded`：这一次真的要点名的那些（两栏合并，每条带 `axis`）—— 待办项吃
+          :data:`MAX_REMINDERS`，在跑的子代理全列不截；
+        - `by_state` / `by_to`：只统计待办项，而且是全部待办行（不只是点名的那些）——
+          "谁没接手 / 谁没有终态"这句话说的是待办项；在跑的子代理是另一栏（那一栏的
+          `state` 恒为 `running`），把它们混进同一张分组表，正是改前那句"running 5 条"
+          的来源；只数点名的那几条又会让"待办项 10 条 / pending 5 条"这种加不上的数出现；
+        - `truncated`：两栏各自的 `{shown, total, more}`（在跑栏的 `more` 恒为 0）。
+
+        三态与改前逐字一致：读不成 ⇒ `checked=False` + 理由，并落一条 `fail_open=True`
+        的台账（"没读成"绝不当成"没有未闭环"）。
+        """
+        got = self.inbox_todos()
+        if not got["checked"]:
+            # 读不成不是"没有待办"：如实留痕，绝不当成清零。
             self.note_decision(duty=3, kind=KIND_NOTICE, decision="已提醒",
-                               reason=f"{len(out)} 条未闭环（留痕 ≠ 被处理）",
-                               basis=["tasks: 无终态行 / sessions: 无 task_end"],
-                               target={"role": self.role}, fail_open=False)
-            # 逐条落台账（2026-10-04 主控裁定的第 1 条："每条进决定台账"）：
-            # 只落一行摘要的话，"提醒了谁、什么事、什么状态"在纸上查不到 ——
-            # 而这一层唯一能自证的就是台账（`draft/55` §5.3）。
+                               reason=f"待办那一格没读成：{got['reason']}",
+                               basis=["tasks / search_requests / reprocess_requests"],
+                               target={"role": self.role}, fail_open=True,
+                               error=str(got["reason"]))
+            return {"checked": False, "reason": str(got["reason"]), "count": 0,
+                    "running_agents": {"count": 0, "ids": []},
+                    "pending_items": {"count": 0, "ids": [], "named": 0},
+                    "reminded": [], "by_state": {}, "by_to": {},
+                    "truncated": {"running_agents": {"shown": 0, "total": 0, "more": 0},
+                                  "pending_items": {"shown": 0, "total": 0, "more": 0}}}
+        agent_rows = [dict(x) for x in (got["running_agents"]["rows"] or ())]
+        item_rows = [dict(x) for x in (got["pending_items"]["rows"] or ())]
+        #: 待办项的截断只在这里发生；在跑栏一个都不减。
+        named_items = item_rows[:MAX_REMINDERS]
+        # 两样东西分清楚：`shaped` 是两栏全部行的形状（`by_state` / `by_to` 按它数，
+        # 于是"待办项 10 条"与"pending 10 条"说的是同一批东西，不会一个 10 一个 5）；
+        # `out` 是这一次真的点名的那些（待办项吃 MAX_REMINDERS，在跑的子代理全列）。
+        shaped = [x for x in (self._reminder_of(it) for it in (agent_rows + item_rows))
+                  if x is not None]
+        out = shaped[:len(agent_rows) + len(named_items)]
+        by_state: dict[str, int] = {}
+        by_to: dict[str, int] = {}
+        for one in shaped:
+            if one["axis"] != ROW_AXIS_AGENT:
+                state = str(one["state"] or "unknown")
+                by_state[state] = by_state.get(state, 0) + 1
+            to = str(one["to"] or S.CONDUCTOR_ROLE)
+            by_to[to] = by_to.get(to, 0) + 1
+        self._note_closure(out, running_count=len(agent_rows),
+                           pending_count=len(item_rows))
+        return {"checked": True, "reason": "", "count": len(out),
+                "running_agents": {"count": len(agent_rows),
+                                   "ids": [str(x.get("id") or "") for x in agent_rows]},
+                "pending_items": {"count": len(item_rows),
+                                  "ids": [str(x.get("id") or "") for x in item_rows],
+                                  "named": len(named_items)},
+                "reminded": out, "by_state": by_state, "by_to": by_to,
+                "truncated": {
+                    "running_agents": {"shown": len(agent_rows),
+                                       "total": len(agent_rows), "more": 0},
+                    "pending_items": {"shown": len(named_items),
+                                      "total": len(item_rows),
+                                      "more": max(0, len(item_rows) - len(named_items))}}}
+
+    def _reminder_of(self, it: Mapping[str, Any]) -> dict[str, Any] | None:
+        """一条待办 → 一条提醒（`state` 已经处理过的那几档返回 None）。
+
+        `axis` 由来源决定：收件箱给的行带着 :func:`row_axis` 的结论；调用方直接给的
+        那一份没有轴 ⇒ 一律当待办项（不在这一层另判"算不算在跑的子代理"）。
+        """
+        state = str(it.get("state") or "")
+        if state in ("handled", "feedback_seen", "closed"):
+            return None
+        axis = ROW_AXIS_AGENT if str(it.get("axis") or "") == ROW_AXIS_AGENT \
+            else ROW_AXIS_ITEM_OPEN
+        if axis == ROW_AXIS_AGENT:
+            note = "这一条子代理还没有终态（在跑）⇒ 提醒本体（经 M）"
+        else:
+            note = "这一条委托没有终态 / 没有反馈 ⇒ 提醒本体（经 M）"
+        return {"task_id": str(it.get("task_id") or it.get("id") or ""),
+                "state": state or "unknown",
+                "kind": str(it.get("kind") or ""),
+                "to": str(it.get("by") or it.get("who") or S.CONDUCTOR_ROLE),
+                "note": note, "axis": axis}
+
+    def _note_closure(self, out: Sequence[Mapping[str, Any]], *,
+                      running_count: int, pending_count: int) -> None:
+        """把这一轮闭环提醒落台账（摘要 + 逐条），并记下"该不该叫秘书"的读数。
+
+        摘要保留"留痕 ≠ 被处理"这句（它挡的是"提醒过了就当办过了"），只把条数拆成两栏
+        —— 改前那句只有一个数，读者分不出"在跑的子"与"没接手的项"。
+        逐条落台账仍是 2026-10-04 主控裁定的第 1 条：只落一行摘要的话，"提醒了谁、
+        什么事、什么状态"在纸上查不到，而这一层唯一能自证的就是台账（`draft/55` §5.3）。
+        """
+        if out:
+            self.note_decision(
+                duty=3, kind=KIND_NOTICE, decision="已提醒",
+                reason=(f"{len(out)} 条未闭环（在跑的子代理 {running_count} 个、"
+                        f"待办项 {pending_count} 条；留痕 ≠ 被处理）"),
+                basis=["tasks: 代理行无终态 / 板项未收口",
+                       "queue: 请求没人接手"],
+                target={"role": self.role}, fail_open=False)
             for one in out:
                 self.note_decision(
                     duty=3, kind=KIND_NOTICE, decision="已提醒",
                     reason=f"未闭环：{one['state']}（{one['task_id'] or '无 id'}）",
-                    basis=["tasks: 无终态行 / sessions: 无 task_end"],
+                    basis=["tasks: 代理行无终态 / 板项未收口",
+                           "queue: 请求没人接手"],
                     target={"task_id": one["task_id"], "state": one["state"],
-                            "kind": one["kind"], "to": one["to"]},
+                            "kind": one["kind"], "to": one["to"],
+                            "axis": one["axis"]},
                     fail_open=False)
             # 闭环提醒是异步的（`draft/55` §5.2）：不阻塞本体，所以这一格只记
             # "该不该叫秘书"的读数（要不要真叫由调用方按 `should_engage` 走）。
         self._last_closure_engage = self.should_engage(alarms=[], duplicates=0,
                                                       overdue=len(out), novel=False)
-        return out
 
     def negotiate(self, *, with_role: str, point: str,
                   rounds: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
@@ -3147,17 +3784,26 @@ class Secretary:
     # ------------------------------------------------------------ 手稿通道（增 / 改 / 查）
 
     def handoff_add(self, *, to: str, summary: str, body: str, refs: Iterable[str] = (),
-                    task_id: str = "", sid: str = "", note: str = "") -> dict[str, Any]:
+                    task_id: str = "", sid: str = "", note: str = "",
+                    to_task_id: str = "", to_task_ids: Iterable[str] | None = None,
+                    ) -> dict[str, Any]:
         """增：替本体执笔一行交接手稿（`manuscripts.write`）。
 
         这一格不许 fail-open：写失败必须报错留痕（`draft/55` §5.2）。
         静默放行的后果是"手稿缺行"，而缺行与"没交接"在账本上长得一样 ——
         那会让下一次"这条是不是已经交接过"判错。所以这里 `raise` 之后再留痕。
+
+        `to_task_id` / `to_task_ids`（2026-10-26，Q2「发 / 收两栏要显示绝对编码」）：
+        收件人的绝对编码，原样转发给 `manuscripts.write`。本方法不算它 ——
+        解析只发生在 `agent_loop._do_handoff` 那一处（它手里已经有 `_handoff_address`
+        解析出来的 `task_id`，广播面还有 `_callable_members` 给的子代理编号）；
+        秘书在这里再算一次就是第二份解析，而两份解析漂了不会有任何东西会响。
         """
         try:
             rec = MS.write(self.root, sender=self.role, recipient=str(to).upper(),
                            summary=str(summary), body=str(body), refs=list(refs),
-                           task_id=str(task_id), sid=str(sid), note=str(note))
+                           task_id=str(task_id), sid=str(sid), note=str(note),
+                           to_task_id=str(to_task_id), to_task_ids=to_task_ids)
         except Exception as exc:
             self.note_decision(duty=1, kind=KIND_HANDOFF, decision="已执笔",
                                reason="手稿执笔失败（这一格不许静默放行）",
@@ -3938,13 +4584,13 @@ class Secretary:
         """把"这一次判定"与"这条路子"落到命题行上（只加读数键，不动 schema）。
 
         ## 两格，各管一件事
-        - `_proof_routes = {证明号: 一句话}`：这条路线的说明。业主 2026-10-24：
+        - `PROOF_ROUTES_KEY` 那一格 = {证明号: 一句话}：这条路线的说明。业主 2026-10-24：
           「路线写在证明这一层」—— 它从此不住在 label 里，也不再丢（洗名不是丢信息）。
         - `_proposition_adjudication = {verdict, basis, ...}`：这一条是凭哪一次判定落成
           现在这样的。判 different / unknown 的也要落：只落 same 的记录，读的人就分不出
           "判过了、不同"与"没人判过"（三态纪律在盘上也要分得开）。
         这两个键都不在 `schema.Statement` 里 —— store 落的是 JSON 行，`row_from_dict` 只取
-        它认识的键（与 `_proposition_matches` / `proof_history` 同一做法），所以不必动 schema。
+        它认识的键（与命题并表痕迹 / `proof_history` 同一做法），所以不必动 schema。
         """
         out = dict(row)
         if str(route or "").strip():
@@ -4288,8 +4934,9 @@ class Secretary:
         "凭据不够"与"不该升"都不写库：前者留在重复读数那一支，并把 `proof_review_gap` 的原话附进 `reason`。只允许
         弱 → 强（`verifications.WEAKER_THAN_PROOF_REVIEW` → `proof_review` 或 `proof`）：反方向（把 `proof_review` 降成
         `heuristic`）不在这一格 —— 降档是另一个决定，它需要的不是"同一份内容再交一次"这件事，而是写清为什么降（`quote_reason`）。
-        ## 只动档位与留痕，不动 bits（与 F 的 `_promote_if_understated` 同一口径）：`agent_f/core._promote_if_understated`
-        在攻坚那一侧做的是同一件事（复用既有行时就地升到 `proof_review`），它也只改 `evidence_kind`。五元位的
+        ## 只动档位与留痕，不动 bits（与 B 的登记那一笔同一口径）：`agent_f/core._proof_outlet`
+        在攻坚那一侧现在把同一份内容再交给 B 的 `register_statement`（V 签完之后那一笔把档位升到
+        `proof_review`），它也只改 `evidence_kind`。五元位的
         第 3 位（`reviewed`）是 V 的签名面，由 `verifications.bit3_payload(那一行)` 现读，不在这一格里抄进来 ——
         抄进来就有第二份"谁审过了"的账，而两份账迟早会分家。
 
@@ -4300,8 +4947,8 @@ class Secretary:
         里一条盖住现行正文、判「成立」的签，要么是第 4 位逐条里一条 `verified`。
         只抬 `conjecture → theorem / lemma`（`body.kind` 只在两档之间选落点），作者写下的
         别的 kind 一个字不动；`bits` 仍然一个字节不写（五元位由现算派生，不抄第二份账）。
-        升档依据落 `_kind_upgrade`（from / to / basis / grade / by / at），与 `_evidence_kind_upgrade`
-        同一套留痕形态。证据不够时这一行不改，`reason` 里附 `_kind_follow_note` 的原话
+        升档依据落升档痕迹那一格（from / to / basis / grade / by / at），与证据档升档
+        那一格同一套留痕形态。证据不够时这一行不改，`reason` 里附 `_kind_follow_note` 的原话
         （"还差什么"），不许折成"已经升了"。
         """
         from . import evidencebits as EB   # 惰性：D-37 的 kind 口径只有一处
@@ -4327,7 +4974,7 @@ class Secretary:
             if target in EB.KIND_UPGRADE_TARGETS and target != before_kind:
                 row["kind"] = target
                 # 留痕：只改 kind 的那一笔也要读得出来"凭什么"（与
-                # `_evidence_kind_upgrade` 同一套：from / to / 依据 / 谁 / 何时）。
+                # 与证据档升档那一格同一套：from / to / 依据 / 谁 / 何时）。
                 row["_kind_upgrade"] = {
                     "from": before_kind, "to": target,
                     "basis": str(kind_read.get("basis") or ""),
@@ -4445,14 +5092,6 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else S.TABLES["statements"]["id_kind"])
             cid = tx.alloc_id(concept_kind)
-            # 内部工作名不许当概念名（D1 的同一条判据，落点在这条"定义待补"的支路上）：
-            # 这一支没有 `statement_full` 可抽，所以洗出来只可能是"删掉首尾的工作名之后
-            # 剩下的那一截"，或者第四级那一个待命名标签（那两级的读数在 `why` 里）。
-            working = wash_working_name(name, kind="concept", stmt_id=cid)
-            if working:
-                name = str(working["to"])
-                out["canonical_name"] = name
-                out["label_washed"] = dict(working, stmt_id=cid)
             # `origin` 按来源分档（本批缺陷一的第二处）：交来的概念有出处 ⇒ external_lit；
             # 没有出处 ⇒ 我们自己定义的新概念（own_result，推断，不要求调用方另声明）。
             src_lit = str(body.get("source_lit_id") or "")
@@ -4464,20 +5103,188 @@ class Secretary:
                 out.update(refused="concept_origin_refused", reason=problem)
                 return out
             # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
-            data = CR.write_concept(tx, stmt_id=cid, label=name, definition="",
-                                    aliases=body.get("aliases") or [],
-                                    source_lit_id=src_lit,
-                                    doc_id=str(body.get("doc_id") or ""),
-                                    actor=f"secretary-{self.role}",
-                                    origin=concept_origin,
-                                    self_authored=(concept_origin == "own_result"),
-                                    mirror=bool(legacy.get("present")))
+            data = self.write_concept_row(tx, stmt_id=cid, label=name, definition="",
+                                          aliases=body.get("aliases") or [],
+                                          source_lit_id=src_lit,
+                                          doc_id=str(body.get("doc_id") or ""),
+                                          origin=concept_origin,
+                                          self_authored=(concept_origin == "own_result"),
+                                          mirror=bool(legacy.get("present")), out=out)
         out.update(checked=True, created=True, stmt_id=cid, row=data,
                    tables=tables, mirrored=bool(legacy.get("present")), pending_concepts=1,
+                   nontriviality_not_applicable=True,
                    reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据；"
                            "概念行不带 `proof_text`（概念不参与等级链，"
                            "要补的是定义，不是证明）"))
         return out
+
+    def _concept_bits(self, *, origin: str, source_lit_id: str = "") -> dict[str, Any]:
+        """概念行的五元位（唯一实现：`evidencebits.bits_of(..., kind="concept")`）。
+
+        为什么概念行也要算这一格（2026-10-26，真机 mp3-r3）：那 30 条概念行是直写进来的，
+        `bits` 全空 —— 而同一批里秘书落的那一条（000002 theorem）有 `bits`。空 `bits` 不是
+        "这一行没有证据"，是"没有人替它算过"：读侧（`evidencebits.bits_from_row`、
+        `clean_statement_ids`、页面那一格五元位）都拿它当"五位一件没做"读。
+
+        `kind="concept"` 是必须传的那一格：`derive_grade` 对概念短路成
+        `not_applicable`，而 `Statement.validate` 会带着这一行的 kind 重算一次等级并核对
+        —— 不传 kind 算出来的 "conjecture" 会被校验端当场拒（口径与
+        `agent_b.register_statement._statement_bits` 同一句）。
+        """
+        from . import evidencebits as EB   # 惰性：位的唯一实现
+
+        bits = EB.bits_of(origin=str(origin or "own_result"),
+                          source_lit_id=str(source_lit_id or ""),
+                          # 概念行没有证明这一档（`conceptrows.concept_statement` 明令
+                          # `proof_text` 留空）⇒ 第 2 位只能是 False，凭据一格为空。
+                          proof=False, proof_process="", quote_verified=None, kind="concept")
+        problems = list(EB.bits_shape_problems(bits, kind="concept"))
+        if problems:
+            raise ValueError("概念行的五元位形状不合规（判据取自 evidencebits."
+                             "bits_shape_problems）：" + "；".join(problems))
+        return bits
+
+    def write_concept_row(self, tx: Any, *, stmt_id: str, label: str,
+                          definition: str = "", aliases: Iterable[str] = (),
+                          source_lit_id: str = "", doc_id: str = "",
+                          origin: str = "", self_authored: bool = False,
+                          mirror: bool = False,
+                          existing: Mapping[str, Any] | None = None,
+                          status: str = "", quote_reason: str = "",
+                          proof_text: str = "",
+                          out: dict[str, Any] | None = None) -> dict[str, Any]:
+        """在已开的事务里写一条概念行：洗名 + 五元位 + 概念同一性都由这一处做（2026-10-26，D14）。
+
+        ## 为什么是"秘书的一个专用方法"，而不是调 `record_statement`
+        `record_statement` 自己开事务（`store.tx`），而概念行的写侧全都在一笔已经打开的
+        事务里（`_record_pending_concept`、`conceptrows.write_concept`、
+        `conceptrows.sync_from_legacy`）—— 事务不能嵌套（文件锁不可重入）。而且
+        `record_statement` 会先跑一次命题同一性判定（可能发一次模型调用），而
+        "锁里不许有网络等待"是本仓的硬规矩；概念这一档本来也一次调用都不发。
+        所以这里是"同一个写入方、同一套判据、不开新事务"的那一格：
+        `record_statement` 与 `conceptrows` 的过渡写口都调它，读侧与写侧的判据因此只有一份。
+
+        ## 三件事在这里做（真机 mp3-r3 那 30 条概念行缺的正是这三件）
+        1. 五元位：`_concept_bits` 现算（概念行算出来的等级是 `not_applicable`）。
+           改前 `conceptrows` 直写，`bits` 是 `{}` —— 于是"五位一位都没做"这条读数
+           对 30 行全部成立，而它们其实是同一个缺省值；
+        2. 洗名：`wash_working_name`（D1 的唯一实现，零模型调用）。洗过就把 `from`/`to`/`why`
+           放进 `out["label_washed"]`（静默改名是不许的）；
+        3. 概念同一性：`_same_concept_candidate`（`propositionkey.same_concept` 的唯一调用点）。
+           判词进 `out["concept_identity"]`。
+
+        ## 判到"同一个概念"时为什么不在这里拦下这一笔
+        概念行的号在上游就发出去了（`agent_b.run_once` 从 `concept` 计数器发号、
+        `conceptrows.upsert` 从 `stmt` 计数器发号），这一层只拿得到"已经发出的号"。
+        拦下 = 那个号没有行，`verify` 的 `id_gap` 当场报警（"分配了 ID 但未建成行"），
+        而老表那一份镜像已经写了 ⇒ 新标准与老表分家。所以这一层给的是判词（`duplicate`
+        / `same_as`），处置权留在调用方；"同一个概念不落第二行"的正路是
+        `record_statement` 的 `_merge_into_concept`（它在发号之前判）。
+
+        ## 既有行为一个字不动
+        升档（定义到了 ⇒ `pending_definition` 回 `active`）与合并（老表的墓碑
+        `merged_into` ⇒ `superseded` + 理由）都由调用方算好 `status` / `quote_reason`
+        传进来（`conceptrows` 那一层的过渡语义）；这一格只负责把它们写进同一行 ——
+        `existing` 给了就是改那一行（新标准独有的 `proof_text` / `doc_id` / 已算出的
+        `bits` / `created_at` 一格不覆盖）。
+
+        `proof_text` 只是因为"概念行不许带证明文本"那句拒绝必须留在唯一一处
+        （`concept_statement`）才出现在签名里：这一层不判它，新建那一支原样转发下去，
+        由构造口当场 `ValueError`（改一条既有行时它不参与 —— 那种行本来就没有这一格）。
+        """
+        from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
+        from . import textutil as T       # 惰性：查重键的唯一实现
+
+        sid = str(stmt_id or "")
+        name = str(label or "")
+        full = str(definition or "")
+        alias_list = [str(a) for a in (aliases or ()) if str(a).strip()]
+        lit = str(source_lit_id or "")
+        # ---- 洗名（D1 的唯一实现；没命中就一个字节都不动）
+        working = wash_working_name(name, statement_full=full, kind="concept", stmt_id=sid)
+        if working:
+            name = str(working["to"])
+            if out is not None:
+                out["canonical_name"] = name
+                out["label_washed"] = dict(working, stmt_id=sid)
+        if existing is None:
+            data = CR.concept_statement(stmt_id=sid, label=name, definition=full,
+                                        aliases=alias_list, source_lit_id=lit,
+                                        doc_id=doc_id, actor=f"secretary-{self.role}",
+                                        origin=origin, self_authored=self_authored,
+                                        # 概念行不许带证明文本：判据与那句解释的唯一出处
+                                        # 就在 `concept_statement` 里（传了非空值它当场
+                                        # `ValueError`，这一层不另写一份判据）。
+                                        proof_text=proof_text
+                                        ).to_dict()
+            data["bits"] = self._concept_bits(
+                origin=str(data.get("origin") or ""), source_lit_id=lit)
+            creator = "create"
+        else:
+            data = dict(existing)
+            # 只改"从老表推得出来的那几格"：新标准独有的 `proof_text` / `doc_id` /
+            # `created_at` / 已算好的 `bits` 一格不覆盖（老行里根本没有它们）。
+            data["label"] = name
+            data["statement_text"] = full
+            data["statement_full"] = full
+            data["aliases"] = alias_list
+            data["source_lit_id"] = lit or None
+            if not dict(data.get("bits") or {}):
+                # 老行本来没有五元位（这次才是它第一次经秘书的手）⇒ 补上一份；
+                # 已经有了的那一份不整份重算（签名那一族的凭据会被同步抹掉）。
+                data["bits"] = self._concept_bits(
+                    origin=str(data.get("origin") or ""), source_lit_id=lit)
+            creator = "sync"
+        if str(status or "").strip():
+            data["status"] = str(status)
+        if str(quote_reason or "").strip():
+            data["quote_reason"] = str(quote_reason)
+        # ---- 概念同一性（唯一判据；改一条既有行时把自己排除在命中之外）
+        identity = self._same_concept_candidate(tx, label=name, full=full, exclude_id=sid)
+        hit = dict(identity.get("hit") or {})
+        if out is not None:
+            out["concept_identity"] = {
+                "state": str(identity.get("state") or ""),
+                "basis": str(identity.get("basis") or ""),
+                "same_as": str(hit.get("stmt_id") or ""),
+                "candidates": [str(x) for x in (identity.get("candidates") or [])],
+                "reason": str(identity.get("reason") or ""),
+            }
+        elif hit:
+            # 判到"同一个概念"而调用方没要读数（`conceptrows` 那三个写口就是这样）⇒
+            # 落到秘书自己的台账上：这一笔判过、判的是哪一行必须在盘上留得住，
+            # 否则这一层判了等于没判（改前连判据都没有，见 `_concept_secretary`）。
+            try:
+                self.note_decision(
+                    duty=2, decision="concept_duplicate",
+                    reason=str(identity.get("reason") or ""),
+                    basis=[str(identity.get("basis") or "")],
+                    target={"concept": sid, "same_as": str(hit.get("stmt_id") or "")},
+                    fail_open=False)
+            except Exception as exc:  # noqa: BLE001 —— 留痕失败不带走这一笔写
+                self._log(f"概念同一性留痕没写成：{type(exc).__name__}: {exc}")
+        obj = S.row_from_dict("statements", data)
+        obj.validate()
+        data = obj.to_dict()
+        tx.upsert("statements", data, note=f"secretary:concept_{creator}")
+        if mirror and CR.LEGACY_TABLE in S.TABLES:
+            # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号。
+            # 落刀之后那张表不存在 ⇒ 这里自己判（与 `tables_for_concept_write` 同一口径）。
+            crow = S.Concept(
+                concept_id=sid, name=name, definition=full, related_concepts=[],
+                normalized_name=T.normalize(name), aliases=alias_list,
+                definition_source_lit_id=lit or None,
+                created_at=S.now_iso(), updated_at=S.now_iso())
+            crow.validate()
+            tx.upsert(CR.LEGACY_TABLE, crow.to_dict(), note="secretary:concept_mirror")
+        CR.push_counters(tx, sid)   # 一个号空间、两个计数器（见 push_counters）
+        # 概念/定义行的档位读数：不适用（没有证明正文）。改前这一行不存在 ——
+        # 真机 mp3-r3 的 30 条概念行在 `out/secretary/nontriviality.jsonl` 里一条
+        # 记录都没有，而读侧把"没有记录"与"不需要记录"都印成同一个"未判"。
+        # 两支都调（新建与同步）：那一格是幂等的（同一段正文只落一行），于是存量概念行
+        # 会在它下一次经秘书那一笔时被补上，不需要一次全库迁移。
+        self.judge_statement(statement_full=full, kind="concept", stmt_id=sid)
+        return data
 
     #: 扫出来的引用前缀 ⇒ `(STEP_SOURCE_KEYS` 里那一步的键名, `kind` 缺省)。
     #: 键名而不是来源字段名：`_resolve_dep_steps` 读的是 `st.get(key)`
@@ -4628,7 +5435,7 @@ class Secretary:
 
         adj = dict(adjudication or {})
         # ---- 洗定理名（业主 2026-10-24）：「Sylow 三定理（路线一：…）」⇒「Sylow 三定理」。
-        # 落点是 label；被洗掉的路线进证明那一层（见下面 `_proof_routes` 那一格）。
+        # 落点是 label；被洗掉的路线进证明那一层（见下面 `PROOF_ROUTES_KEY` 那一格）。
         # 这里只动"写进这一行的那份 body 副本"：调用方交上来的原文一个字不改
         # （`out["label_washed"]` 留着 from / to 两格，静默改名是不许的）。
         if adj.get("checked") and str(adj.get("canonical_name") or "").strip():
@@ -4683,6 +5490,12 @@ class Secretary:
                 return out
             body = dict(body)
             body["origin"] = _resolved
+            if not dict(body.get("bits") or {}):
+                # 五元位由这一层现算（2026-10-26，D14）：改前概念行只在调用方自己带了
+                # `bits` 时才有它，而 B 的 pipeline 那条路（`conceptrows` 的三个写口）
+                # 从来不带 ⇒ 真机 mp3-r3 的 30 条概念行 `bits` 全空。这一格与
+                # `write_concept_row` 用的是同一个 `_concept_bits`（判据不看调用方是谁）。
+                body["bits"] = self._concept_bits(origin=_resolved, source_lit_id=_src)
         legacy = CR.legacy_present(self.store)
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
                            "documents",
@@ -4849,6 +5662,14 @@ class Secretary:
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=data, tables=written, deps_written=len(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts)
+        if _is_not_applicable_kind(kind):
+            # 概念/定义行的档位读数：不适用（没有证明正文）。落在这里而不是上面的
+            # `judge_statement` 那一格，是因为这一支的命题正文通过了查重与同一性判定
+            # （`kind="concept"` 的那一条走 `_merge_into_concept`，零模型调用），
+            # 走的不是 `judge_statement` 那条路；两处落的是同一句话，
+            # 唯一的口径在 `not_applicable_nontriviality`。
+            out["nontriviality"] = self.not_applicable_nontriviality(
+                statement_full=full, kind=kind, stmt_id=stmt_id)
         return out
 
     def _resolve_write_steps(self, tx: Any, body: Mapping[str, Any],
@@ -5088,7 +5909,7 @@ class Secretary:
         return hits
 
     def _same_concept_candidate(self, tx: Any, *, label: str,
-                                full: str) -> dict[str, Any]:
+                                full: str, exclude_id: str = "") -> dict[str, Any]:
         """在册的概念行里找"同一个概念"：定义项相同就命中（确定性、零模型调用）。
 
         判据只有一处（`propositionkey.same_concept`：标签相同，或正文里被定义的那个
@@ -5098,6 +5919,9 @@ class Secretary:
           反过来"标签相同"对命题也不是同一性判据）；
         - 跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 里的行（被否证 / 被取代的概念不是
           合并的落点）；
+        - 跳过 `exclude_id` 那一行（改一条既有的概念行时，它自己一定会命中自己 ——
+          那一格问的是"另有一行是不是同一个概念"，把自己算进命中会把每次同步都读成
+          发现了一条重复）；
         - 两侧都抽不出定义项的跳过（`unknown` 不是命中，也不是"不同"）；
         - 多条命中时取"标签那一档优先、同档取号最小"（确定性：同一次登记不能因为行的
           物理顺序不同而并进不同的一条）。
@@ -5109,9 +5933,12 @@ class Secretary:
         hits: list[dict[str, Any]] = []
         saw_different = False
         unknown_why: list[str] = []
+        skip_id = str(exclude_id or "")
         for r in tx.rows("statements"):
             sid = str(r.get("stmt_id") or "")
             if not sid or not _is_concept_kind(r.get("kind")):
+                continue
+            if skip_id and sid == skip_id:
                 continue
             if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
                 continue
@@ -5379,7 +6206,7 @@ class Secretary:
         # label 用的是那条在册行的。所以这里两件都要做：
         # ① 在册那一条的名字如果与洗过的名字不同 ⇒ 顺手把它洗掉（真机 sylow4 的三行正是
         #    这么来的：第一条带着"（路线一：…）"落了盘，后来的两份证明并进来时把它洗净）；
-        # ② 这一笔自己的路线说明落到"第 N 份证明"上（`_proof_routes`），不丢。
+        # ② 这一笔自己的路线说明落到"第 N 份证明"上（`PROOF_ROUTES_KEY`），不丢。
         route = str(adj.get("route") or "").strip() if adj.get("checked") else ""
         canonical = str(adj.get("canonical_name") or "").strip() if adj.get("checked") else ""
         if canonical and str(row.get("label") or "") != canonical:
@@ -5514,7 +6341,7 @@ class Secretary:
         - 旧正文整段留痕：进 `proof_history`，元素形状与 canonical 覆盖那一支逐字相同
           （`{text, sha, at, replaced_by}`）再加一格 `proof_no` —— 否则一条命题有多份
           证明时，"这一版是哪一份的旧稿"读不出来；
-        - `_proof_merge` 记下这一笔合并了哪几份、相似度、谁做的。有界，只留最近 20 条。
+        - 合并痕迹那一格记下这一笔合并了哪几份、相似度、谁做的。有界，只留最近 20 条。
 
         ## 为什么"合并"与"直接覆盖"必须分开（业主原话：重拿 V 签）
         直接覆盖只是改稿（`stale` 是读数）；合并是"两份同种证明合成一份"，它的正确性
@@ -6426,6 +7253,77 @@ class Secretary:
             return {"checked": False, "rows": [],
                     "reason": f"{type(exc).__name__}: {exc}"}
 
+    def settle_retired_row(self, task_id: str, *, name: str = "",
+                           reason: str = "") -> dict[str, Any]:
+        """销号落定台账那一行：还在飞的（`status ∈ {pending, running}`）⇒ 写终态 `cancelled`。
+
+        ## 为什么销号必须动台账（业主 2026-10-26：「确实保证这个机制跑得通」）
+        扇出名额的分子是"父名下 `status ∈ {pending, running}` 的直接子"
+        （`Conductor._in_flight_children_of`，业主 2026-10-08 的单时刻口径）。销号改前只写
+        名册 / 对照表 / 销号名单三份 jsonl —— 台账那一行一个字节都不动，于是
+        「销号一个静默子代理腾出名额」这句话在盘上是空话：占位数不变，下一次 `summon`
+        照旧 `fanout_exceeded`。这一笔就是那句承诺的落点：销号 = 让它从"占位"里退出。
+
+        ## 为什么只有"还在飞的"才写
+        绝大多数静默子代理早就落了终态（`done` / `failed` / `cancelled` 带 `ended_at`），
+        它们本来就不占名额 —— 那些行一个字节都不动（谁什么时候交了差是历史，不许改写）。
+        真正需要落终态的是"父已记为静默、而台账行还没收口"的那一档（交差之后收尾没走完 /
+        可抢占派活的后台线程被掐断 / 进程退出），它占着名额却永远不会自己返回。
+
+        ## 三态与代价
+        读不成 / 写不成 ⇒ `checked=False` + `reason`，调用方（`retire`）据此拒绝整笔销号
+        （先写这一笔、再写名册：反过来的顺序会让"名册已销、台账没落终态"这种半笔无路可退）。
+
+        与"它自己刚好收了尾"的赛跑：闸门看过之后、这一笔落下之前它自己落了终态 ⇒ 这里
+        读到的是终态、一行不动；反过来（这一笔先落）由 `Task` 的"终态先到先得"兜住 ——
+        两笔都是终态，读者看到的是先落的那一笔，谁也不改写历史。
+
+        返回 `{"checked","was_occupying","status_before","status_after","task_id","reason"}`。
+        """
+        tid = str(task_id or "")
+        out: dict[str, Any] = {"checked": False, "was_occupying": False,
+                               "status_before": "", "status_after": "", "task_id": tid,
+                               "reason": ""}
+        if not tid:
+            out["reason"] = "没有编号 ⇒ 不知道落定哪一行"
+            return out
+        if self.store is None:
+            out["reason"] = "没有 store ⇒ 读不到台账（没查成，不是『它不占名额』）"
+            return out
+        try:
+            rows = [r for r in self.store.rows("tasks")
+                    if str(r.get("task_id") or "") == tid]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["reason"] = f"台账读不成（{type(exc).__name__}: {exc}）"
+            return out
+        row = dict(rows[0]) if rows else {}
+        status = str(row.get("status") or "")
+        out["status_before"] = status
+        if not row:
+            out["reason"] = f"台账里没有 {tid} 这一行（查过了、确实没有）"
+            return out
+        if status not in ("pending", "running"):
+            # 已经收口：不占名额，也不许改写历史。
+            out.update({"checked": True, "status_after": status})
+            return out
+        why = ("销号退场：" + (str(reason or "").strip() or "父决定销号"))
+        row["status"] = "cancelled"
+        row["outcome"] = "cancelled"
+        row["ended_at"] = S.now_iso()
+        row["detail"] = ((str(row.get("detail") or "").strip() + "；") if str(row.get("detail") or "").strip() else "") \
+            + f"销号退场（{name or tid}）：这一行由销号落定终态，腾出扇出名额（{why[:120]}）"
+        try:
+            S.Task(**{k: v for k, v in row.items()
+                      if k in S.Task.__dataclass_fields__}).validate()
+            with self.store.tx("tasks", actor=f"secretary-{self.role}",
+                               note=f"retire:settle:{tid}") as tx:
+                tx.upsert("tasks", row, note=f"retire:settle:{tid}")
+        except Exception as exc:  # noqa: BLE001 —— 写不成 ⇒ 名额没腾出来，必须如实说
+            out["reason"] = f"台账那一行没落成终态（{type(exc).__name__}: {exc}）"
+            return out
+        out.update({"checked": True, "was_occupying": True, "status_after": "cancelled"})
+        return out
+
     def retire(self, *, owner: str, name: str, by_task_id: str = "",
                reason: str = "") -> dict[str, Any]:
         """退役（业主 §1.9 的三分支，`draft/90` §1.9 逐字）。返回：
@@ -6442,6 +7340,34 @@ class Secretary:
         - `waiting_no_children` ⇒ `retired`：写退役事件 + 销号名单 + 对照表标退役 +
           `conductor.note_edge_release`（父侧那一笔幂等落痕）；
         - 未登记 / 读不成 / 已销号 ⇒ `refused`（没读成 ≠ 可以退役）。
+
+        `cascade` 那一格（Q13）在每一档都有：`{"count","ids","levels","kept"}` ——
+        `count` 是这一笔实际销掉了几个（`retired` 这一档恒为 1：这里只销一个名字），
+        `ids` / `levels` 是它们的编号与相对层深（目标自己恒为 0），`kept` 是
+        "这一笔没销、还占着名册的那几个"，逐条 `{"id","name","why"}`。给这一格的
+        理由是：回执要说清"我没销它是为了什么"，而 `why` 那句话是给人读的、
+        `kept` 那几行是给下一步判断用的。
+
+        ## 程序闸（G2，业主 2026-10-26：「注销前检测的能力」）
+        销号之前先读一次"这一支还有没有程序在跑"（`conductor.programs_in_subtree` 那一格，
+        与 `conductor.retire_child` 读的是同一份），有就受控拒绝、一个字节都不落盘。
+        为什么它排在静默闸之前：静默闸的三样（无工作 / 无计时器 / 无活跃子）都读不出
+        "一台程序还在跑" —— 无主的程序计时器（`task_id` 空）在三态里一句话都没有，
+        而"账上说收口了、进程还在"那一档连计时器都不是。拒信的措辞只有
+        `conductor.programs_refusal` 一处：点名 program / pid / 已跑秒数，并只指一条正路
+        （先 `program.stop` 停掉它们再销，或等它们自己结束）。`program.stop`
+        由 G1 那条单落地（本批只引用它的名字，判据不依赖它存在）。
+
+        ## 孤儿闸（业主 2026-10-26：「最终 final 时应该是 M 下整棵树都已销号」）
+        目标自己静默、但它名下还有没销号的静默子代理 ⇒ 受控拒绝，一个字节都不落盘。
+        为什么这一闸必须存在：销号只发给"直接子代理"，一支的子代理只有它这一个父能销；
+        父先销了、名字永久不复用（业主 B1）、不会再有下一轮，那些子代理就再也没有任何
+        代理有权限销它们（别的代理都不是它们的父）⇒ `Conductor.retire_integrity` 永远
+        不 complete、`final` 被结构完整性闸永久拒。正路是 `conductor.retire_child`：
+        它从最深的开始把这一支一起销号，销完就没有"留下没销的子"了。
+        这一闸排在静默闸之后：父非静默时（名下有在飞/待机的子）由静默闸先说话、
+        带 `refusal_code`；父静默而子只是"没销"时才是这一闸接住。它不误伤级联那条路
+        —— 级联先深后浅，轮到父时子的名册项已经标了 retired。
 
         ## 静默是什么意思（与 `conductor.agent_state` 同一份定义）
         无工作 ∧ 无任何计时器 ∧ 无活跃子代理。销号是不可逆的（名字永久不复用，业主 B1），
@@ -6468,6 +7394,39 @@ class Secretary:
         if self._is_retired(owner, str(name)):
             return {"ok": False, "action": "refused", "report": {},
                     "why": [f"{name} 已经销号过（业主 B1）"]}
+        # ---- 程序闸（G2，业主 2026-10-26 第 ① 条：「注销前检测的能力」）
+        #
+        # 这一闸挡的是"名字销了、程序还在跑"：昨晚盘上有十五个野 python 进程，谁起的、
+        # 谁该停都读不出来，而销号之后连"这台程序是谁的"这个线索也没有了。
+        #
+        # 为什么"还在跑"这一档排在静默闸之前：静默闸读的是"无工作 ∧ 无计时器 ∧ 无活跃子"，
+        # 而一台程序可以在三样都读成"没有"的情况下继续跑 —— 无主的程序计时器（`task_id`
+        # 空：框架自己的八个 `program_span` 调用点一个都不传台账号）在时钟读数里是一条不挂
+        # 名字的流水，在三态里一句话都没有；而"账上说收口了、进程还在"那一档连计时器都
+        # 不是。所以"它名下还有程序在跑"这句话必须由读得到程序的那一格先说：静默闸的拒信
+        # 会把一台程序读成"一条挂着到点时刻的计时器"（到点时刻读不到），父照着那句话
+        # 处置不了它。
+        #
+        # 为什么"读不成"那一档反过来排在静默闸之后：时钟簿记坏掉时，静默闸与这一闸都读
+        # 不成，而"读不到它是不是静默"是更根本的那一句（它连三态都定不了）。让静默闸按
+        # 既有口径先说话，这一闸在后面兜底：静默闸放行了而程序那一格没查成 ⇒ 仍然不销
+        # （fail-closed，把"没查成"折成"没有在跑的程序"正是这一闸最该挡的那一次折叠）。
+        from .conductor import programs_refusal as _programs_refusal
+
+        try:
+            progs = cond.programs_in_subtree(tid)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
+            progs = {"checked": False, "running_count": 0, "running": [],
+                     "reason": f"{type(exc).__name__}: {exc}"}
+        if progs.get("checked") and int(progs.get("running_count") or 0) > 0:
+            ref = _programs_refusal(progs, lead=f"{name}（{tid}）")
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [ref["why"]], "reading": dict(progs),
+                    "blocking": list(ref["blocking"]),
+                    "missing": list(ref["missing"]),
+                    # 空串：拦它的不是静默闸（三态那一格），而是"账上还有进程在跑"。
+                    "refusal_code": ref["code"],
+                    "programs": list(ref["programs"])}
         # ---- 静默闸（业主 2026-10-26：「销号可以也只可针对静默子代理」）
         #
         # 落点与理由：销号是不可逆的那一类动作（名字永久不复用，业主 B1），而"它还会不会
@@ -6515,6 +7474,14 @@ class Secretary:
                     "target_state": AGENT_STATE_UNKNOWN, "blocking": []}
         if not gate.get("silent"):
             return _refused_not_silent(gate)
+        # ---- 程序闸的兜底那一档：静默闸放行了，而程序那一格没查成 ⇒ 仍然不销。
+        # 排在这里的理由见上面那一段（时钟坏了时"读不到它是不是静默"是更根本的那一句）。
+        if not progs.get("checked"):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [(f"{name}（{tid}）这一支的程序读数没查成"
+                             f"（{progs.get('reason') or '没查成'}）⇒ 不知道它名下还有没有"
+                             "程序在跑，不许销（fail-closed）；这一格不是『一个都没有』")],
+                    "reading": dict(progs)}
         try:
             ready = cond.retire_ready(owner)
         except Exception as exc:  # noqa: BLE001
@@ -6551,6 +7518,67 @@ class Secretary:
             return {"ok": False, "action": "reported", "report": {"children": briefs},
                     "why": [f"{name} 名下还有活跃子代理 ⇒ 不退役（它还在干什么活见 report）"],
                     "reading": reading}
+        # ---- 孤儿闸（Q13，业主 2026-10-26：「最终 final 时应该是 M 下整棵树都已销号」）
+        #
+        # 这一闸只挡一件事：先销父、把静默的子留到以后。它必须存在，因为那种销法
+        # 会永久孤儿化——销号只发给"直接子代理"（`_do_retire` 与 `conductor.retire_child`
+        # 都只认自己名册里的那一层），一支的子代理只有它这一个父能销；父一销号，名字
+        # 永久不复用（业主 B1）、不会再有下一轮，那些子代理就再也没有任何代理有权限销它们。
+        # 于是 `Conductor.retire_integrity` 永远不 complete、`final` 被结构完整性闸永久拒
+        # —— 这就是"深树永远清不完"的真身。
+        #
+        # 为什么放在静默闸之后：静默闸说的是"它自己能不能销"（在飞/待机/读不到三档
+        # 各有各的下一步，且各带 `refusal_code`），而这一闸说的是"销了它会不会留下孤儿"。
+        # 父非静默时（名下有活跃子）根本走不到这里，所以两闸不会抢话；反过来，父静默、
+        # 子也静默（子只是"没销"而不是"还在跑"）时，静默闸放行，这一闸接住。
+        #
+        # 为什么级联那条路不会被它误伤：级联是"先深后浅"，轮到 A1 时 B1 的名册项已经
+        # 标了 retired（`retire` 先写台账、再写名册，两处都落完才返回），所以这里读到的
+        # `retired` 为真、`rows` 为空、放行。判据见
+        # `tests/test_cascade_retire_closes_the_tree.py::test_a_the_cascade_path_does_not_trip_the_orphan_gate`。
+        left = self._children_left_behind(tid)
+        if not left.get("checked"):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [(f"{name}（{tid}）名下还有没有未销的子代理这一格读不成"
+                             f"（{left.get('reason')}）⇒ 不知道销它会不会留下孤儿，"
+                             "不许销（fail-closed）")],
+                    "reading": reading,
+                    "cascade": {"count": 0, "ids": [], "levels": [], "kept": []}}
+        if left.get("rows"):
+            rows_left = list(left["rows"])
+            named = "、".join(f"{r['name']}（{r['id'] or '编号未读到'}）"
+                              for r in rows_left[:8])
+            more = f" 等 {len(rows_left)} 个" if len(rows_left) > 8 else ""
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [(f"还没销 {name}：它名下还有 {len(rows_left)} 个名册项没有销号"
+                             f"（{named}{more}）。为什么不许先销父、把子留到以后：销号只发给"
+                             "直接子代理，而这一支的子代理只有它这一个父能销 —— 父一旦销号，"
+                             "名字永久不复用（业主 B1）、不会再有下一轮，那些子代理就再也"
+                             "没有任何代理有权限销它们（别的代理都不是它们的父）⇒ 整棵树"
+                             "永远清不完、`final` 被结构完整性闸永久拒。正路只有一条：用 "
+                             f"`conductor.retire_child(child_name={name})` —— 那一件会从最深"
+                             "的开始把这一支一起销号（先叶子后父），销完这一支就没有"
+                             "「留下没销的子」了")],
+                    "reading": reading,
+                    "cascade": {"count": 0, "ids": [], "levels": [],
+                                "kept": [{"id": str(r["id"] or r["name"]),
+                                          "name": r["name"],
+                                          "why": "还在它名下的名册上、没销号（父一销号，"
+                                                 "就再没有任何代理有权限销它）"}
+                                         for r in rows_left]}}
+        # ---- 落定台账那一行（业主 2026-10-26：「确实保证这个机制跑得通」）
+        #
+        # 顺序是判据本身：先落台账、再写名册。反过来先写名册时，台账那一笔要是炸了，
+        # 盘上就是"名字已销、那一行还占着扇出名额"—— 重试会被"已经销号过"挡住，
+        # 名额永远回不来。这个方向失败时两处都还没动（可重试），而它成功时
+        # "销号即腾出名额"在盘上已经成立。
+        settled = self.settle_retired_row(tid, name=str(name), reason=str(reason))
+        if not settled.get("checked"):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [(f"{name}（{tid}）的台账那一行没落定终态"
+                             f"（{settled.get('reason') or '没查成'}）⇒ 名额没腾出来，"
+                             "整笔销号不作数（先写台账、再写名册，两处一起才算销号）")],
+                    "reading": reading, "slot_freed": False, "settle": dict(settled)}
         ok, why = cond.note_edge_release(owner, child_task_id=tid, attempt=1)
         if not ok and "已经记过" not in why:
             return {"ok": False, "action": "refused", "report": {}, "why": [why],
@@ -6584,9 +7612,21 @@ class Secretary:
             surface_note = (f"面 {slot} 已归还池里" if state == "空闲"
                             else f"面 {slot} 停在待释放（{why_s}）")
         return {"ok": True, "action": "retired", "report": {},
+                # 级联读数（Q13）：这一笔实际销掉的只有目标本身 —— 逐层收掉静默子树
+                # 那件事在 `conductor.retire_child`（先深后浅、整笔不销或整支销完）。
+                # 这一格在这里给，是为了让两个入口的回执同一套键（形那一入口的模型
+                # 也读得到"这一笔销了几个 / 还有谁没销"），而不是让"没级联"看起来像
+                # "级联了但没读出来"。
+                "cascade": {"count": 1, "ids": [tid], "levels": [0], "kept": []},
                 "why": [f"{name} 退役：{branch}（子已停 + 它名下无活跃子代理）"]
+                       + (["名额已腾出：它那一行还在飞（"
+                           f"{settled.get('status_before')}）⇒ 已落终态 "
+                           f"{settled.get('status_after')}，下一次 summon 重新算占位"]
+                          if settled.get("was_occupying") else [])
                        + ([surface_note] if surface_note else []),
-                "surface": slot, "reading": reading}
+                "surface": slot, "reading": reading,
+                "slot_freed": bool(settled.get("was_occupying")),
+                "settle": dict(settled)}
 
     # ------------------------------------------------------------ 链式转发（业主 2026-10-26 裁定）
     #
@@ -6869,6 +7909,43 @@ class Secretary:
         rows, _bad = self.retired_names(owner)
         return any(str(r.get("name") or "") == str(name) for r in rows)
 
+    def _children_left_behind(self, tid: str) -> dict[str, Any]:
+        """销 `tid` 之前：它名下还有哪些"只有它这一个父能销"的名册项。
+
+        返回 `{"checked","rows":[{"id","name","role"}],"reason"}` —— 三态：
+        `checked=False` 是"读不成"（调用方一律 fail-closed 不销），空 `rows` 才是
+        "一个都没落下"（那是查过了的结论）。
+
+        ## 为什么读名册而不读台账
+        能被销的对象只有名册项：`resolve_down` 只认名册名，`conductor.retire_child`
+        也只用名册名指称。所以"孤儿"的精确定义就是"还在这个父的名册上、没销号的那几个"
+        —— 台账里有行而名册里没名字的那一类（`unrostered`）本来就没有名字可销，
+        它在工具那一侧已经逐条点名，不归这一闸管。
+
+        ## 为什么读折叠后的 `retired` 而不是销号名单文件
+        `retire` 写盘是"先台账、再名册"（那一处的注释写了为什么），名册事件的
+        `retire` 那一行与销号名单是同一笔的两次落盘。读折叠状态就是读"这一项现在
+        算不算销过"，而级联"先深后浅"靠的正是这个格子在轮到父时已经变真。
+        """
+        out: dict[str, Any] = {"checked": True, "rows": [], "reason": ""}
+        try:
+            kids, bad = self.roster_rows(tid)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+            out["checked"] = False
+            out["reason"] = f"{type(exc).__name__}: {exc}"
+            return out
+        if bad:
+            out["checked"] = False
+            out["reason"] = f"它名下名册有 {len(bad)} 行读不出来"
+            return out
+        for kid in kids:
+            if bool(kid.get("retired")):
+                continue
+            name = str(kid.get("name") or "")
+            out["rows"].append({"id": str(kid.get("task_id") or ""), "name": name,
+                                "role": str(kid.get("role") or "")})
+        return out
+
     # ------------------------------------------------------------ 内部
 
     def _log(self, message: str) -> None:
@@ -6883,7 +7960,9 @@ class Secretary:
 #: 非平凡性档位的旁支台账（不新增表、不改 schema）：一行 = 一次判断。
 #: 为什么用旁支而不是 `statements` 的列：档位会随研究进展变（T4 造出梯子后要降到 T2/T3），
 #: 它是时间序列不是记录属性；append-only 的旁支天然保留"降档发生过"的完整历史。
-#: 键用 `statement_sha256` 而不是 `stmt_id`：判断发生在入库之前，那时还没有编号。
+#: 一行靠 `stmt_id` 与命题行对上（2026-10-26，D16）：判档发生在登记之后，号已经在手上。
+#: 旧行没有这一格、只有 `statement_sha256`；读侧只为读旧行留一条按 sha 的回退，
+#: 新行一律按号（见 :func:`nontriviality_of`）。
 NONTRIVIALITY_LEDGER = "nontriviality.jsonl"
 
 
@@ -6930,13 +8009,33 @@ def _level_from_row(row: Mapping[str, Any]) -> int | None:
 
 def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
                          basis: str = "", role: str = "", task_id: str = "",
+                         stmt_id: str = "",
                          effort: Mapping[str, Any] | None = None,
-                         text_truncated: bool = False) -> None:
+                         text_truncated: bool = False,
+                         applicable: bool = True) -> None:
     """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
     `level` 给 `None`（或缺省/坏值）⇒ 这一行记的是"判不了"：`nontriviality: null`
     且 `label` 空。判不了照旧落一行 —— 它也是读数（"没人判过"与"台账里没这一条"
     在盘上应当分得开）。
+
+    ## 为什么带号（2026-10-26，D16）
+    这一行说的是"哪个命题的档位"，而命题行的身份是 `stmt_id`。按正文 sha 关联会把
+    "改了一个字"读成"没判过"：真机 mp3-r3 的第 1 行（316 字）就是这样 —— 判档用的是
+    登记前的入参，落盘行与它不逐字相同，于是那一档从页面上消失。所以新行必须带号；
+    旧行没有这一格 ⇒ 读侧那条按 sha 的回退只为读旧行（见 :func:`nontriviality_of`）。
+
+    `stmt_id` 缺省是空串：只有概念行的幂等补写与测试直调会这样落行；生产面两处
+    （:meth:`Secretary.judge_statement` 与 :meth:`Secretary.not_applicable_nontriviality`）
+    都从调用方拿到号再传下来。
+
+    ## `applicable` 为什么是第四根轴（2026-10-26，D15'）
+    "判不了"与"不需要判"是两件事：前者说该判而没判（缺正文 / 被截断 / 没缝），
+    后者说这一问对这一行不成立（概念行没有证明正文）。改前它们只能靠 `basis` 那句话
+    分辨，于是读侧（`nontriviality_of` 与页面）把两者都读成"没有档位"、印同一个"未判"。
+    所以这一格显式落进台账：`applicable=False` 的那一行，`level` 恒为 `None`（不适用
+    不可能是某一档），`label` 恒为空串，读侧据它把 `tri` 读成 `not_applicable`。
+    老行没有这一格 ⇒ 按 `True` 读（与它们写下来时的语义一致）。
 
     ## `effort` 为什么也落下来（2026-10-24，B2）
     档位从这一天起是"证明花的力气"给的，而力气是四项读数 + 一个分数。只落档位的话，
@@ -6949,12 +8048,16 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
     """
     path = nontriviality_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    got = _nontriviality_level(level)
-    row = {"at": _now_iso(), "statement_sha256": _statement_sha(statement_full),
+    # 不适用的那一档不许同时带档位（两件事折进一行就等于把"不存在这一问"读成"判了"）
+    got = _nontriviality_level(level) if applicable else None
+    row = {"at": _now_iso(), "stmt_id": str(stmt_id or ""),
+           "statement_sha256": _statement_sha(statement_full),
            "statement_chars": len(str(statement_full or "")),
            # 刻度标记：读侧靠它区分"0 = T0"与旧行的"0 = 判不了"（见 NONTRIVIALITY_SCALE）
            "scale": NONTRIVIALITY_SCALE,
            "nontriviality": got, "label": nontriviality_label(got),
+           # 判档这一格对这一行适不适用（见上面那一段）；缺省 True = 与老行同一读法
+           "applicable": bool(applicable),
            "basis": str(basis or ""),
            "effort": dict(effort or {}), "text_truncated": bool(text_truncated),
            "role": str(role or ""), "task_id": str(task_id or "")}
@@ -6964,19 +8067,55 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
         handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
 
 
-def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
-    """这条命题当前的非平凡性档位（折叠旁支台账里同一个 sha 的最后一行）。
+def _row_matches_stmt_id(row: Mapping[str, Any], stmt_id: str) -> bool:
+    """按号关联的唯一判据：号非空且与这一行的 `stmt_id` 相同（空号永不命中）。
 
-    三态：读到 ⇒ `{"tri": "computed", "level": 0..4, "label": "T0".."T4", "basis": …}`；
-    没有记录 / 记的是判不了 ⇒ `{"tri": "unknown", "level": None, "label": "", …}`
-    （不是 1，也不是 0 —— 0 从 2026-10-23 起是 T0，一档真的档位）。
+    为什么单独一格：读侧"按号查"必须是一个能被打桩的判据（反真空判据把它打桩成
+    恒不命中，看"正文一改档位还在不在"那条会不会红）；而空号不许命中空号 ——
+    旧行没有 `stmt_id`，把它们当成"号为空的那一条"会让所有旧行并成一条。
+    """
+    want = str(stmt_id or "").strip()
+    if not want:
+        return False
+    return str(row.get("stmt_id") or "").strip() == want
+
+
+def nontriviality_of(root: str | Path, statement_full: str, *,
+                     stmt_id: str = "") -> dict[str, Any]:
+    """这条命题当前的非平凡性档位（折叠旁支台账里同一号 / 同一 sha 的最后一行）。
+
+    ## 三级命中（2026-10-26，D16）
+
+    | 级 | 判据 | `matched_by` |
+    |---|---|---|
+    | 1 | 行上的 `stmt_id` 等于传入的号 | `"stmt_id"` |
+    | 2 | 行上的 `statement_sha256` 等于正文的 sha | `"sha256"` |
+    | 3 | 都没有 | `""` |
+
+    第一级是命题行与档位之间唯一的关系真身：正文改一个字，号不变，档位照读得到。
+    第二级只为读旧行（那些行写在带号之前，盘上只有 sha）；它命中时 `matched_by`
+    必须说清这是回退 —— 否则"按文本兜底"会重新长成第二处真身。
+
+    三态（`tri` 的三个取值不许折平）：
+
+    | 结局 | 返回 |
+    |---|---|
+    | 读到一档 | `{"tri": "computed", "level": 0..4, "label": "T0".."T4", …}` |
+    | 该判而没判（没有记录 / 记的是判不了 / 旧刻度的 0） | `{"tri": "unknown", "level": None, "label": "", …}` |
+    | 这一问对它不成立（概念行的 `applicable: false`） | `{"tri": "not_applicable", "level": None, "label": "", "applicable": False, …}` |
+
+    `tri="unknown"` 与 `tri="not_applicable"` 在 `level` / `label` 上长得一样，区别只在
+    `applicable` 这一格：前者要人再去判一次，后者再判也不会有别的结论（2026-10-26）。
+    读侧（页面）据此印两个不同的词（`不适用` / `未判`）。
     """
     path = nontriviality_path(root)
     sha = _statement_sha(statement_full)
     if not path.is_file():
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
+                "applicable": True, "matched_by": "", "stmt_id": "",
                 "at": "", "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
-    last: dict[str, Any] = {}
+    by_id: dict[str, Any] = {}
+    by_sha: dict[str, Any] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -6985,16 +8124,32 @@ def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if str(row.get("statement_sha256") or "") == sha:
-            last = row
+        if _row_matches_stmt_id(row, stmt_id):
+            by_id = row
+        elif str(row.get("statement_sha256") or "") == sha:
+            # 只为读旧行：新行都有号，走上面那一支；这里命中时 matched_by 会说清。
+            by_sha = row
+    last = by_id or by_sha
+    matched_by = "stmt_id" if by_id else ("sha256" if by_sha else "")
     if not last:
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
+                "applicable": True, "matched_by": "", "stmt_id": "",
                 "at": "", "reason": "台账里没有这条命题的档位读数",
                 "effort": {}, "text_truncated": False}
-    level = _level_from_row(last)
-    return {"tri": "computed" if level is not None else "unknown", "level": level,
+    # 老行没有这一格 ⇒ 按"适用"读（它们写下来的时候只有"判了/判不了"两种）
+    applicable = bool(last.get("applicable", True))
+    level = _level_from_row(last) if applicable else None
+    if not applicable:
+        tri = "not_applicable"
+    elif level is not None:
+        tri = "computed"
+    else:
+        tri = "unknown"
+    return {"tri": tri, "level": level, "applicable": applicable,
             "label": nontriviality_label(level),
             "basis": str(last.get("basis") or ""), "at": str(last.get("at") or ""),
+            # 命中方式与那一行的号：读的人要能分辨"按号命中"与"读旧行的 sha 回退"。
+            "matched_by": matched_by, "stmt_id": str(last.get("stmt_id") or ""),
             # 力气读数与截断标记原样带出来（写侧落进台账的那两份）：
             # 读的人要能自己按同一张边界表复算这一档，而不是只能相信 basis 那句话。
             "effort": dict(last.get("effort") or {}),

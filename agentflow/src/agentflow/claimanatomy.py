@@ -231,7 +231,7 @@ class FieldSpec:
 #: 已经在硬拦的字段。§8.3 新增的 9 个字段一律 `required=False` ——
 #: 理由是磁盘上已有大量老 claim 行没有它们，把它们设成必填会让
 #: 全部历史稿件立刻变成非法（而 `schema.py` 是禁改区，我们无法同步迁移）。
-#: 它们由 `new_field_names()` 单列，由门（`gates.G10`）报 `warning` 提醒补齐。
+#: 它们由 `new_field_names()` 单列，由门（`gates` 里的 G10）报 `warning` 提醒补齐。
 CLAIM_FIELDS: dict[str, FieldSpec] = {
     # ---------------- §8.3 的 12 个字段 ----------------
     "claim_id": FieldSpec(
@@ -598,7 +598,7 @@ def required_field_names() -> tuple[str, ...]:
     为什么这个划分是保守的：§8.3 新增的 9 个字段不在这里。它们不是不重要，
     而是磁盘上已有大量老行没有它们；把它们设成必填会让全部历史稿件立刻非法，
     而"让历史数据非法"与"让新数据合规"是两件事，不该用同一个开关。
-    新增字段由 :func:`new_field_names` 单列，由 `gates.G10` 报 warning 提醒补齐。
+    新增字段由 :func:`new_field_names` 单列，由 `gates` 里的 G10 报 warning 提醒补齐。
     """
     return tuple(sorted(n for n, s in CLAIM_FIELDS.items() if s.required))
 

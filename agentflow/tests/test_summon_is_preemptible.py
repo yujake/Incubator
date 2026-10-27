@@ -300,9 +300,24 @@ def test_a_notice_that_arrives_mid_wait_is_delivered_at_the_next_return(
         f"{gate.prompts[2].count(marker)} 次（要求恰好一次）", gate.prompts[2][-1500:])
     assert gate.prompts[3].count(marker) == 1, (
         "同一条通报在被投到之后又投了一次", gate.prompts[3][-1500:])
-    # 三、板项状态机推进（投到即 seen），而不是一直 queued。
+    # 三、板项状态机推进（投到即收口），而不是一直 queued。
+    #
+    # D12（信息型板项"读进上下文即收口"，业主 2026-10-27；落点是
+    # `Conductor._settle_if_informational` 的三条：`kind ∈ INFORMATIONAL_ITEM_KINDS`、
+    # `input_key` 不在要模型自己 ack 的那几个前缀里、`expects == "ack"`）之后，
+    # "投到"这一步落成的状态是 `done` + `item_close="acked"`，不再是 `seen`
+    # —— `notice` 读进提示词就等于被消费了（同一条规则见
+    # `docs/DEVELOPMENT-SPEC.md` 的"板上挂着一项"那一段）。
+    #
+    # 改的只是读数的那一格，它守的事没变，而且更紧了：投到的那一刻
+    # `mark_item_seen` 真的跑过（`seen_by` / `seen_step` 都在，步号就是第 2 步那次返场），
+    # 并且这一项没有被留在打开状态。把 D12 那一拍退回去（只剩 seen），
+    # `item_close` 与 `item_state` 这两条会重新红。
     row = next(r for r in st.rows("tasks") if str(r.get("task_id")) == made[0])
-    assert str(row.get("item_state")) == "seen", row
+    assert str(row.get("seen_by")) == me, row
+    assert int(row.get("seen_step") or -1) == 2, row
+    assert str(row.get("item_state")) == "done", row
+    assert str(row.get("item_close")) == "acked", row
 
 
 # ---------------------------------------------------------------- c. 收工门

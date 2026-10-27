@@ -73,7 +73,7 @@ Mathlib）只是"退回裸 lean"，整次自检照旧可以由前四步给出 `u
 ## 为什么"关着时一次都不许碰 lean"
 
 业主 2026-10-12 的开关口径：`lean_enabled=false` 时全流程涉及 Lean 的都跟着关，
-连探测都不做（`formalgw.check_lean` 与 `toolchain._import_mathlib_probe` 已经各有一处
+连探测都不做（`formalgw.check_lean` 已经有一处
 同形的落点）。自检更贵（三步子进程），所以关着时它在「解析之前」就返回：
 不 spawn、不建临时目录、不算哈希。判据 `test_the_switch_off_means_off_and_no_process_is_started`
 把这三件事逐条钉住（把 `_run` 换成"一被调用就炸"的桩）。
@@ -783,8 +783,8 @@ def mathlib_reading(*, root: str | Path | None = None, env: Mapping[str, str] | 
 
     这一格「不」下"可用"的结论：`state` 只可能是 `absent` / `unknown`（未检出 / 没查成）。
     `usable` 与 `unusable` 只能由真编译给出，见 :func:`_mathlib_control` ——
-    盘面上 `Mathlib.olean` 在、而 `import Mathlib` 报 `unknown package 'Std'` 的那次
-    真机事故（`toolchain._import_mathlib_probe` 的 docstring 逐字记着）就是这么来的。
+    盘面上 `Mathlib.olean` 在、而 `import Mathlib` 报 `unknown package 'Std'` 的那一次
+    真机事故就是这么来的。
     """
     out = _empty_mathlib()
     src = dict(os.environ if env is None else env)

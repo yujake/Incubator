@@ -108,7 +108,11 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-27 第二批：110 → 111（`clock.wait_any` —— 业主第三条裁定的后半个动作
 #: 「可启动计时器等待任意计时器返回」）。它只写 `out/clock/wait_any.json` 这份意图账，
 #: 登记在 `tools.UNIVERSAL_TOOLS`（写集空），所以只读角色也拿得到。
-TOOL_COUNT = 111
+#: 2026-10-26 收货（G1）：112 → 114（`program.list` / `program.stop` —— 业主
+#: 「重点完善子代理杀自己发出去的程序进程的工具……以及注销前检测的能力」）。两件单独
+#: 成组、不并进 `clock.`：`clock.*` 恰好九件那条判据（`CLOCK_NINE`）原样成立，
+#: 而 `program.stop` 是写工具、只读角色按副作用本来就该拿不到它。
+TOOL_COUNT = 114
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -305,6 +309,16 @@ def tool_params() -> dict[str, dict]:
         # waiting=false / pending=[]`（三态里的"要求过等、而没有可等的东西"那一档，
         # 也正是"无事可做 ⇒ 交差"的判据输入）。键名读自实跑观测。
         "clock.wait_any": {"purpose": "探针：只验键集，等任意计时器返回"},
+        # ---- 程序两件（G1，2026-10-26）----
+        # `program.list` 的探针工作在"查成了、我名下没有程序在跑"那一支（夹具里没有
+        # 起过任何程序）：`retire_ready=true`、`unowned=[]`，键集合与有程序那一支相同。
+        "program.list": {},
+        # `program.stop` 给一个不存在的编号 ⇒ `not_found`（ok=True 的受控读数，
+        # 与 `clock.timer_cancel` 打不存在的号同一条三态纪律）。四档读数共用
+        # `_program_stop_payload` 那一份形状 ⇒ 键集合在这里照样验得全；真跑到
+        # killed / already_exited / not_mine / timeout 四档的判据在新文件
+        # `tests/test_a_program_i_started_is_a_program_i_can_stop.py`。
+        "program.stop": {"timer_id": "tm-000000"},
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
@@ -372,6 +386,13 @@ def tool_params() -> dict[str, dict]:
         # 字典，所以键集合在这里照样验得全；真跑到 acked / partial / not_yours 三支的
         # 判据在 `tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py` 的 a/b。
         "conductor.ack": {"item_ids": ["t-999999"], "note": "探针：只验键集，不真的消项"},
+        # 自己给自己落一条 work 项（D12，2026-10-27）：探针的身份 `t-probe` 在台账里
+        # 未必有那一行 ⇒ 落在 `state=refused`（"台账里没有我这一行"）那一支。那一支与
+        # 成功支、existing 支共用 `conductor_post_task` 里那一个字面量 `data` 字典，
+        # 所以声明的键集合在这里照样验得全；真跑到 posted / existing 两档的判据在
+        # `tests/test_a_message_that_asks_for_work_becomes_a_work_item.py` 与
+        # `tests/test_tasks_write_port_refuses_forgeries.py`。
+        "conductor.post_task": {"summary": "探针：只验键集，不真的落项"},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -466,21 +487,33 @@ def tool_params() -> dict[str, dict]:
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
         # ---- 待新增文献列表（业主 2026-10-20）：七件各探一次 ----
-        # `_seed()` 在本委托 `r-000001` 下铺了 4 个槽：
-        #   000000（admit 探针用）/ 000001（withdraw）/ 000002（reject）/ 000003（admit_all 用）。
+        # `_seed()` 铺了两个委托，对应 Q16 之后「判到一半」与「全判完」这两个不同的形状：
+        #   `r-000001`：判到一半（000000 等 admit 探针来判、000003/000005 一直是待裁）；
+        #   `r-000002`：铺的时候就已判完（一条 admitted + 一条 rejected，零条待裁）。
+        # 为什么 admit_all 的探针必须吃 `r-000002`：Q16 起它是「整批提交 —— 本委托只要还有
+        # 一条没判，整批一条都不许入库」，所以它 ok=True 的那一刻只能是「本委托零条待裁」。
+        # 拿 `r-000001` 探它，得到的永远是受控拒绝（`undecided_items`），而那不是「没查成」
+        # 之外的东西 —— 判据会把它记成跳过，于是声明的键集合一个都没被验到。
         # 委托号一律显式给：默认视图是"当前委托"，而"当前"取决于探针的先后顺序 ——
         # 靠顺序决定参数会让这条判据在改动执行次序时静默换一条分支（同一族的老坑）。
+        # `lit.stage_list` 也要给（这一条不是在修红，是顺带合上这句纪律）：默认视图 =
+        # 槽位号最大那一行的委托，而探针跑到它时"当前"已经是 `lit.stage_add` 刚建的
+        # `r-900001`（槽位号更大）⇒ 默认视图只剩一行、没有同 DOI 的成对行。显式指
+        # `r-000001` 读的是 6 行 + 一个重复组：覆盖更宽，也不依赖探针先后。
+        # 说明：`duplicate_groups[]` 的两格键名在声明里是散文（没有引号）⇒ 这一改不是
+        # 为了补键集合；实测把它退回 `{}` 判据仍然绿（读数：`current='r-900001'`、6 格键
+        # 一个不少），区别只在读数是否稳定。
         "lit.overlap_check": {"title": "An unrelated paper about nothing in the library"},
         "lit.stage_add": {"request_id": "r-900001",
                           "entries": [{"title": "探针新增候选", "doi": "10.9001/probe",
                                        "provider": "stub", "relevance": "探针：只验键集"}]},
-        "lit.stage_list": {},
+        "lit.stage_list": {"request_id": "r-000001"},
         "lit.stage_withdraw": {"slot": "000001", "reason_code": "withdrawn_by_reviewer",
                                "note": "探针：内容与本次检索无关"},
         "lit.stage_reject": {"slot": "000002", "reason_code": "rejected_off_topic",
                              "note": "探针：与本次检索无关"},
         "lit.admit": {"slots": ["000000", "000004"], "request_id": "r-000001"},
-        "lit.admit_all": {"request_id": "r-000001"},
+        "lit.admit_all": {"request_id": "r-000002"},
         "table.count": {"table": "statements"},
         # 2026-10-19 晚：`create` / `update` 的探针样品从 `statements` 换成
         # `research_questions` —— `statements` / `dependencies` 已不由通用写口直写
@@ -593,6 +626,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 而它的键集合在三条返回路径上完全相同 ⇒ 这条探针照样能验"声明 ⊆ 实现"。
         "verify.verify_proof", "verify.list_verifications", "verify.read_proof",
         "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing", "conductor.status_report", "conductor.board",
+        # 自己给自己落一条 work 项（D12，2026-10-27）：探针落在 `state=refused` 那一支，
+        # 键名同样是那一个字面量 `data` 字典（见 `tool_params()` 里那一段注释）。
+        "conductor.post_task",
         # 广播（S6-b）：探针走"读成了、没有收件人"那一支（工作区里没有子代理），
         # 键集合与有收件人那一支逐字相同 ⇒ 这条探针验得了"声明 ⊆ 实现"。
         "conductor.broadcast",
@@ -624,6 +660,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 2026-10-27 第二批的第九件：探针走到"受理了、没有可等的东西"那一支
         # （`requested=true / waiting=false`），键名读自实跑观测。
         "clock.wait_any",
+        # 程序两件（G1，2026-10-26）：探针都真跑到了 ok 分支（列表是"查成了、没有
+        # 程序在跑"；停下是"查过了、没有这一条"），键名读自实跑观测。
+        "program.list", "program.stop",
     }
 )
 
@@ -996,14 +1035,18 @@ def _seed(store: Store, root: Path) -> None:
     probes.mkdir(parents=True, exist_ok=True)
     (probes / "honest.py").write_text(HONEST_PROBE, encoding="utf-8")
     # 待新增文献列表（业主 2026-10-20）：`lit.*` 的七件探针要有东西可动。
-    # 六个槽，每一支工具各吃一个，多出来的两个是"必须被拒"的样本：
+    # 第 1 个委托 `r-000001`（六个槽）是「判到一半」的形状 —— 它的槽位号最小，于是不会被
+    # 「当前委托」（= 槽位号最大那一行的委托）选中，`lit.stage_list` 的探针显式指着它。
     #   000000 → `lit.admit` 探针（会被准入）
     #   000001 → `lit.stage_withdraw` 探针（会被撤）
     #   000002 → `lit.stage_reject` 探针（会被拒）
-    #   000003 → `lit.admit_all` 探针（一键迁移会准入它）
+    #   000003 → 一直是待裁：它是「本委托还有未判的行」这个读数的稳定样本
+    #            （若把 `lit.admit_all` 的探针指回这个委托，提交闸必须因此拒绝 —— 见 ④ 的
+    #            反真空读数；这一条不靠探针先后顺序，因为 `lit.admit` 只判 000000/000004 两条）
     #   000004 → `lit.admit` 探针里的 DOI 重复样本（必须落 refused，于是
     #            `refused[]` 的嵌套键 `why`/`code`/`overlap` 才有观测对象）
-    #   000005 → `lit.admit_all` 探针里的 DOI 重复样本（同上，那一支单独一次调用）
+    #   000005 → 与 000004 同 DOI：`lit.stage_list` 的 `duplicate_groups[]` 要有一个非空组
+    #            （否则它声明的 `key`/`slots` 两格永远观测不到）；它自己也一直是待裁
     # 题名刻意互不相同、也不与本地那篇（`Commutativity in abelian groups`）重叠到
     # 阈值以上：否则"高重叠要 new_content"那条判据会在这里先开火，探针就落到另一条分支
     # —— 而声明的键集合写的是成功支（同 `attack.create_plan` 那条注释的道理）。
@@ -1024,6 +1067,50 @@ def _seed(store: Store, root: Path) -> None:
             )
             row.validate()
             tx.upsert("lit_candidates", row.to_dict(), note="fixture")
+    # 第 2 个委托 `r-000002`：铺的时候就已经判完（零条待裁），是 `lit.admit_all` 探针
+    # 唯一能走到 ok 分支的形状（Q16 的提交闸：本委托只要还有一条没判，整批都不许入库）。
+    # 两行刻意一条 admitted、一条 rejected：报告的两个块（已入库 / 未入库）都有真行可数，
+    # 于是探针验的是"判完之后收口"这条主路径，而不是"这个委托一条候选都没有"那种退化读数。
+    with store.tx("lit_candidates", actor="test", note="fixture") as tx:
+        for row in (
+            S.LitCandidate(
+                slot="000006", request_id="r-000002", batch=1, status="admitted",
+                title="Judged and admitted before the batch call", doi="10.9000/judged.one",
+                provider="stub", year=2021, type_code="J", summary="夹具里已判完的那两条之一",
+                relevance="夹具：判过了，与本次检索相关", lit_id="0000", admitted_at=TS,
+                added_at=TS,
+            ),
+            S.LitCandidate(
+                slot="000007", request_id="r-000002", batch=1, status="rejected",
+                title="Judged and rejected before the batch call", doi="10.9000/judged.two",
+                provider="stub", year=2021, type_code="J", summary="夹具里已判完的那两条之一",
+                relevance="夹具：判过了，与本次检索无关", reason_code="rejected_off_topic",
+                reject_reason="夹具：判过了、与本次检索无关", added_at=TS,
+            ),
+        ):
+            row.validate()
+            tx.upsert("lit_candidates", row.to_dict(), note="fixture")
+    # 夹具自检（G12）：上面两个委托的形状是 `lit.admit_all` 那条探针的前提，不是摆设。
+    #  - `r-000002` 必须是「已判完但有行」：把这两行搬走之后，探针照样 ok=True（一个
+    #    一条候选都没有的委托也是"判完了"），键集合也照样对得上 —— 于是判据绿着，却一次
+    #    都没回答"判完之后收口"这条主路径。那种绿就是本文件一直在防的真空。
+    #  - `r-000001` 必须还有待裁的行：它是"把探针指回旧参数就会红"这条反真空的另一半，
+    #    见 `lit.admit_all` 探针参数那里写的那段。
+    # 两行断言写在这里（而不是另开一条用例）：它们是夹具自己的形状，形状不对时每条用例的
+    # 读数都会跟着歪，越早红越好（同上面 `_ms["id"]` 那条断言的做法）。
+    from agentflow.litstage import list_candidates as _list_candidates
+
+    _batch_shape = _list_candidates(store, request_id="r-000002")["counts"]
+    assert _batch_shape["pending"] == 0 and _batch_shape["admitted"] == 1 \
+        and _batch_shape["rejected"] == 1, (
+        "夹具里的 r-000002 应当是「已经判完、且一收一拒」那一档（`lit.admit_all` 的探针"
+        f"只有在这个形状上才验得到主路径），实际 counts={_batch_shape}"
+    )
+    assert _list_candidates(store, request_id="r-000001")["counts"]["pending"] >= 2, (
+        "r-000001 必须留着待裁的行：没有它，把 `lit.admit_all` 的探针参数指回旧值也照样绿"
+        "（反真空会断），实际 counts="
+        f"{_list_candidates(store, request_id='r-000001')['counts']}"
+    )
     # 父子链（2026-10-24 业主裁定「普通代理能追一层，M能想追几层追几层」）：
     # `trace.children` / `conductor.watch` 要有一棵真的树才走得到返回数据的成功支。
     # 根与一个直接下级就够：前者验"看自己"，后者验"看下级"与嵌套键。
