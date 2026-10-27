@@ -5141,7 +5141,20 @@ class AgentLoop:
         """
         self._pump_clock(step=step, when="turn", run=run)
         wakes = self._take_wakes(step=step, run=run)
-        monitor = self._monitor_block(wakes=wakes, step=step)
+        # ---- 轮查那一拍不是监控回合（业主 2026-10-27 傍晚）：它的正文是 SOP，而 SOP 的
+        # 第 ③ 步是"结完这一轮才允许做别的（自由行动）"—— 监控回合的出口限定
+        # （`MONITOR_TURN_TOOLS` 只放 watch / guide / 补派 / 收口）会把第 ① 步
+        # `conductor.patrol` 与第 ② 步 `conductor.patrol_verdict` 一起拒掉，于是
+        # "到点立刻进自动审阅工具"在那条路上根本走不通。所以轮查的唤醒不进监控档；
+        # 它的正文由 `_patrol_wake_block` 原样投进这一拍的增量里（那一段就是
+        # `clock.due_message` 拼出来的东西，一个字都不重拼）。
+        # 同一拍里既有子代理唤醒又有轮查时，那一拍仍是监控回合（子代理那一条要的就是
+        # "被叫醒只看全树"），轮查的正文照旧在增量里，SOP 从下一拍起可执行。
+        patrol_block = self._patrol_wake_block(wakes)
+        monitor = self._monitor_block(
+            wakes={"consumed": [e for e in (wakes.get("consumed") or ())
+                                if isinstance(e, Mapping) and not CLK.is_patrol_timer(e)]},
+            step=step)
         # ---- 子代理返场（D-64）：与 D-52 同一条投递点
         #
         # 位置在这一处的理由：唤醒已经消费完（有唤醒就是监控回合，不再等孩子，
@@ -5193,7 +5206,7 @@ class AgentLoop:
             run.notes.append(str(p))
         item_ids = [x for x in got.get("item_ids") or () if x]
         msg_ids = [x for x in got.get("msg_ids") or () if x]
-        parts = [x for x in (monitor, str(children.get("text") or ""),
+        parts = [x for x in (monitor, patrol_block, str(children.get("text") or ""),
                              str(got.get("text") or "")) if x]
         if not parts:
             return {"text": "", "item_ids": [], "msg_ids": [],
@@ -5318,6 +5331,93 @@ class AgentLoop:
         tail = "、".join(b for b in bits if b) or "（没有可读的等谁）"
         return f"挂机等 {tail}：睡到下一个到点或唤醒（不调模型、不落回合）"
 
+    def _arm_patrol_timer(self) -> dict[str, Any]:
+        """挂机这一下：把下一轮轮查计时器挂上（业主 2026-10-27 傍晚）。
+
+        业主逐字：「20分钟计时 -> 时间到立刻进自动审阅工具 -> 审完后 M 自由行动 ->
+        M 无事可做后启动轮查计时」。
+
+        ## 挂点为什么在这里
+
+        "无事可做"在今天的代码里只有一处判得出来：`_park_gate` —— 它的第 ①/④ 两支
+        是唯一"这一拍真的不调模型、睡在时钟上"的地方（两者的共同落点是
+        `_park_sleep_once`）。所以挂点在它们调 `_park_sleep_once` 之前：
+
+        - 不在循环头挂：那里还分不清"手上有活"与"无事可做"，而第 ⑤ 支（有计时器但手上
+          有活）按业主口径是"计时器不阻塞动作"，那一拍不该动计时器账；
+        - 不是每一拍都挂：挂机的一拍可以短到 0.5 秒，不判重的话一分钟能挂出几十条；
+        - 唯一的"恰好一条"判据与非 M 不挂都落在 `clock.start_patrol_timer` 一处
+          （把规则写成代码的地方，判据也在那里断言），这一层只负责把读数带回
+          `run.park["patrol"]`：`mounted` = 这一拍真的挂了一条，`skipped="already"` = 常态。
+
+        三态：没有工作区根 / 没有台账号 / 簿记读不成 ⇒ `checked=False` 加理由，
+        "没查成"不算"已经有一条"（下一拍还会再问一次）。
+        """
+        root = self._clock_root()
+        me = str(self.my_task_id or "")
+        if not root or not me:
+            return {"checked": False, "mounted": False, "skipped": "no_root", "timer_id": "",
+                    "reason": ("没有工作区根或台账号 ⇒ 轮查计时器挂不上"
+                               "（这不是「已经有一条」）")}
+        try:
+            got = dict(CLK.start_patrol_timer(root, task_id=me, role=str(self.role or "")))
+        except Exception as exc:  # noqa: BLE001 - 挂不上不许拦住这一拍的挂机
+            return {"checked": False, "mounted": False, "skipped": "error", "timer_id": "",
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        got.setdefault("checked", False)
+        return got
+
+    def _patrol_left(self) -> float | None:
+        """下一条轮查计时器还有多少秒（读不到 ⇒ None：不封顶）。
+
+        为什么挂机的睡要拿它封顶：轮查不是"等谁"的那一档（它没有 `wait_for`），
+        所以它不在 `parked["waiters"]` 里 —— 不在这里显式加一道封顶，挂机的一拍
+        （最长 `PARK_SLICE_MAX_SEC`）就会把业主的"时间到立刻进自动审阅工具"读成
+        "最多晚 5 分钟"。封顶之后，那一拍睡到轮查到点就停，下一拍立刻推时钟。
+
+        读不成 / 没有轮查计时器 ⇒ None（这条路径上"不封顶"与"没有可等的时刻"同义，
+        而两者都不改变已有的封顶逻辑）。
+        """
+        root = self._clock_root()
+        if not root:
+            return None
+        try:
+            got = CLK.next_patrol(root)
+        except Exception:  # noqa: BLE001 - 读不成不封顶，下一拍还会再读一次
+            return None
+        left = got.get("remaining_sec") if got.get("checked") else None
+        try:
+            return float(left) if left is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _patrol_wake_block(self, wakes: Mapping[str, Any]) -> str:
+        """轮查那一拍要摆在 M 面前的那一段（SOP 正文 + 异常清单，原样搬过来）。
+
+        正文从哪来：`clock.record_wake` 落的那一条 `message` —— 它就是
+        `clock.due_message` 在轮查那一档拼出来的东西（SOP 四步 + `patrol_section`
+        的异常清单，唯一拼法在 `clock.py`）。这里只加一行抬头，不重新拼一份：
+        各拼一份迟早会漂，而漂了没有判据会红。
+
+        为什么它不并进监控回合那一段（`_monitor_block`）：监控回合的出口限定
+        （`MONITOR_TURN_TOOLS`）只放 watch / guide / 补派 / 收口，SOP 的第 ① 步
+        `conductor.patrol` 与第 ② 步 `conductor.patrol_verdict` 都会被它拒掉 ——
+        于是"到点立刻进自动审阅工具"在那条路上根本走不通（见 `_deliver_mailbox`）。
+        """
+        rows = [e for e in (wakes.get("consumed") or ())
+                if isinstance(e, Mapping) and CLK.is_patrol_timer(e)]
+        if not rows:
+            return ""
+        lines = ["【轮查的到点】这一段是时钟送来的规范动作（不是提醒：四步按顺序做）。"]
+        for event in rows:
+            body = str(event.get("message") or "").strip()
+            # 正文没落下来时只说"没有正文"，不在这里补一份 SOP —— 补的那一份与
+            # `clock.patrol_sop_text` 是两处拼法，而反真空判据要能的正是"正文空了
+            # 四步就不该出现"。
+            lines.append(body if body else
+                         "（这一拍没有正文可念：唤醒里的 message 是空的 ⇒ 本拍按没查成记）")
+        return "\n".join(lines)
+
     def _park_sleep_once(self, *, run: "AgentLoop.LoopRun",
                          parked: Mapping[str, Any]) -> dict[str, Any]:
         """挂机的一拍：睡到"下一个到点/唤醒"，返回这一拍的读数。
@@ -5348,6 +5448,12 @@ class AgentLoop:
             cap = row.get("max_wait_sec")
             if cap is not None:
                 horizon.append(max(0.0, float(cap) - float(row.get("waited_sec") or 0.0)))
+        # 轮查那一档也要封顶（业主 2026-10-27 傍晚：时间到立刻进自动审阅工具）。它没有
+        # `wait_for`（不是"等谁"），因此不在上面的 `rows` 里；不显式加这一道，最长的一拍
+        # （`PARK_SLICE_MAX_SEC`）就会把"立刻"读成"最多晚 5 分钟"。
+        patrol_left = self._patrol_left()
+        if patrol_left is not None:
+            horizon.append(max(0.0, float(patrol_left)))
         if horizon:
             seconds = min(seconds, max(0.05, min(horizon)))
         seconds = max(0.05, min(seconds, PARK_SLICE_MAX_SEC))
@@ -5713,8 +5819,20 @@ class AgentLoop:
         `parked_steps=0` 是这么来的）；它的后果是"父代理一边等子、一边手上有活也停住"，
         与业主这一句正好相反。判据 ③a 钉的就是这一条（起表 + 有活 ⇒ 仍要调模型）。
 
+        ## 轮查的挂点（2026-10-27 傍晚，业主：M 无事可做后启动轮查计时）
+
+        第 ① 与第 ④ 两支在睡之前先调 `_arm_patrol_timer`：这两支是全仓仅有的"这一拍真的
+        不调模型、要挂在时钟上"的地方，也就正好是"无事可做"唯一判得出来的那一处。
+        恰好一条与非 M 不挂的规则在 `clock.start_patrol_timer` 一处实现（这里只带读数）。
+
+        第 ② 支（交差）刻意不挂：按业主口径"无事可做且无计时器"就是交差，而轮查是"还有
+        计时器时怎么等"的那一档；另外 `clock.request_wait_any` 在零条计时器时会受控拒绝
+        （`no_timers_to_wait`），所以第 ② 支在 M 身上只有"起意之后那条表被撤掉"这一种
+        来路（见 `tests/test_timers_and_handoff_semantics.py` 的 d 条），不该被轮查掩盖。
+
         返回 `{skip_model, decision, woke_reason, waited_sec, reason, ...}`；`decision` 是
         `park` / `woke` / `handoff` / `run` 四档（进 `agent_park` 事件与 `run.park` 的读数）。
+        `patrol` 那一格只在挂机的两支里有（`mounted` / `skipped` 说清这一拍挂没挂、为什么）。
         """
         wakes = self._wake_readings(mailbox.get("wake_ids") or ())
         parked = self._park_reading()
@@ -5746,9 +5864,17 @@ class AgentLoop:
             run.notes.append(f"挂机读数：{reason}")
         elif want.get("waiting") and pending_timers:
             # ① 显式要求等 + 还有计时器 ⇒ 挂机
+            # ---- 无事可做、要挂机等的那一下：先把下一轮轮查计时器挂上（业主 2026-10-27
+            # 傍晚：「M 无事可做后启动轮查计时」）。恰好一条由 `clock.start_patrol_timer`
+            # 保证（`skipped="already"` 是常态）；这里只把读数带回 `run.park`。
+            patrol = self._arm_patrol_timer()
+            run.park["patrol"] = patrol
+            if patrol.get("mounted"):
+                run.notes.append(f"轮查：{patrol.get('reason')}")
             slept = self._park_sleep_once(run=run, parked=parked)
             out.update(skip_model=True, decision="park",
                        waited_sec=float(slept.get("waited_sec") or 0.0),
+                       patrol=patrol,
                        reason=(str(slept.get("reason") or "") or
                                f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
                                "（这一拍不调模型）"))
@@ -5780,6 +5906,11 @@ class AgentLoop:
             run.notes.append(f"返场（Q22）：{reason}")
         elif parked["count"] and not work.get("busy"):
             # ④ 有计时器在等 + 本趟确实无事可做 ⇒ 挂机
+            # ---- 第 ① 支同一句话：挂机的那一下才挂下一轮轮查计时器（不是每拍都挂）。
+            patrol = self._arm_patrol_timer()
+            run.park["patrol"] = patrol
+            if patrol.get("mounted"):
+                run.notes.append(f"轮查：{patrol.get('reason')}")
             slept = self._park_sleep_once(run=run, parked=parked)
             note = ""
             if back.get("own_waiters") and not back.get("owed"):
@@ -5789,6 +5920,7 @@ class AgentLoop:
                         "从这一拍起按挂机口径等）")
             out.update(skip_model=True, decision="park",
                        waited_sec=float(slept.get("waited_sec") or 0.0),
+                       patrol=patrol,
                        reason=(str(slept.get("reason") or "") or
                                "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note))
             run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1

@@ -2719,7 +2719,31 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 十一格是那一支重算探针（当时写在 temp 下，已随 scratch 清理；口径只取
 #: `tests/test_agent_prompts.py::_surface_digest` 那一处）的现算值，不是手抄。
 #:
-PROMPT_VERSION = "p212"
+#: p212 → p213（2026-10-27 收尾 / L1 巡查）：只换 M 那一格。
+#: 业主逐字：「M 不起巡查是因为太繁琐」＋「给M设计自动审阅工具……M要做的只是根据这些
+#: 信息对逐个活跃子代理给出"过"、指导意见（行为干预）」；同一批把轮查定成规范动作
+#: （`draft/168` §六）：20 分钟轮查计时 → 到点立刻 `conductor.patrol` → 逐个给
+#: `pass` / `guide` → 结完再自由行动 → 无事可做（要挂机等）时才挂下一个 20 分钟轮查
+#: 计时器。计时器与"到点返回 SOP 而不是提醒句"那一半归 L2，本批不动 `clock.py` /
+#: `clock_tools.py` / `agent_loop.py` 的挂机侧。
+#:
+#: ① `specs/m.py` 的 policy 多一条（99 字）：轮查是规范动作：到点跑 `conductor.patrol`
+#:    拿全，逐个给 `conductor.patrol_verdict`（过/指导）；结完再干别的；挂机等时才挂
+#:    下一个 20 分钟轮查计时器。政策只进它自己那一格 ⇒ 这一笔只动 M。
+#: ② 同处再一条（71 字）：要盯某一个子代理时用 `conductor.review_child` —— 给它绝对
+#:    编码，返回那一项的全部读数与整棵名册树。
+#: ③ M 的工具面多三件（`conductor.patrol` / `conductor.review_child` /
+#:    `conductor.patrol_verdict`），三件的 summary 进 `tools_lines` 那一行；三件的
+#:    `roles` 都是 `("M",)` ⇒ 其余十格的工具面一个字节没动。
+#: ⑷ 不进段的一笔：`tests/fixtures/prompt_cache_warm.json` 没有重落（重落要花模型钱，
+#:    业主没批）⇒ 缓存因此 stale，`PROMPT_VERSION` 一抬它本来就会报 stale（已知待办）。
+#:
+#: 逐格的旧值 → 新值（只有 M 动）：
+#:   A..L / V 与 p212 同值；M 663cba16→35b2542a。
+#: 十一格是同一支重算探针（`tests/test_agent_prompts.py::_surface_digest`，口径只那一处）
+#: 的现算值，不是手抄。
+#:
+PROMPT_VERSION = "p213"
 
 
 

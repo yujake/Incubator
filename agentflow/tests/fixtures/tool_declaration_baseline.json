@@ -1,7 +1,7 @@
 {
  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
  "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
- "n_tools": 114,
+ "n_tools": 117,
  "n_cohort": 85,
  "baseline_summary_chars": 8631,
  "max_ratio": 0.75,
@@ -93,7 +93,7 @@
   "verify.verify_proof"
  ],
  "added_after_compression": {
-  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。",
+  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。",
   "tools": [
    "clock.alarm_start",
    "clock.now",
@@ -123,7 +123,10 @@
    "lit.stage_withdraw",
    "program.list",
    "program.stop",
-   "trace.children"
+   "trace.children",
+   "conductor.patrol",
+   "conductor.review_child",
+   "conductor.patrol_verdict"
   ]
  },
  "declarations": {
@@ -5217,6 +5220,92 @@
     "H",
     "V",
     "L"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.patrol": {
+   "summary": "一次拿全每个活跃子代理（在飞 / 待机 / 未读到）的状态，按名册深度优先排好：绝对编码、按名册的绝对编码链、在执行的任务、任务看板（未做完的逐条 + 现在在做哪一项）、计时器（目的 / 等谁 / 已等多久 / 还剩多久）、最近一次指导，外加异常清单。看完对每一个只说「过」或给指导意见（`conductor.patrol_verdict`）；要盯某一个用 `conductor.review_child`。读不成时 `checked=false`（不会折成『没有活跃子代理』）。",
+   "params": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','root','count','order','by_state','items','anomalies','clock','reason'}；items 里每一项是 {code, chain, chain_text, name, role, state, state_label, state_reason, status, doing, board, timers, last_guidance, notes}；doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked, in_progress_id, in_progress_reason, open_count, items}；timers 是 {checked, count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing, waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id, reason}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.review_child": {
+   "summary": "细看一个活跃子代理：给它的绝对编码，返回 `conductor.patrol` 里那一项的全部信息（同一份实现），外加整棵名册树（带绝对编码，从里面挑号）。号不合法时受控拒绝并点名哪些号合法（`legal_codes` 上限 20 条 + `legal_total` 总数）：台账里没有 ⇒ `not_in_roster`；有但不活跃（已收工 / 已销号）⇒ `not_active` 并点明它在哪一档。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "绝对编码（如 `t-000007`），从 `tree` 或 `legal_codes` 里挑"
+     }
+    },
+    "required": [
+     "code"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','legal','code','item','tree','refused','reason','legal_codes','legal_total','target_state','target_state_label'}；item 的形状与 `conductor.patrol` 的 items 里那一项逐键相同（不合法时是空表）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conductor.patrol_verdict": {
+   "summary": "对一个活跃子代理下结论：`verdict=\"pass\"`（过）或 `verdict=\"guide\"`（指导意见，`text` 必填）。`pass` 在秘书台账里落一条痕（与转发同一本账）；`guide` 走的就是 `conductor.guide` 那一条秘书链（逐级转发、正文只到链尾），回执原样带出来（`relay_id` / `delivered_to` / `hops`）。号不合法或它此刻不活跃 ⇒ 受控拒绝并点名合法号与它在哪一档；被拒的结论不落成「巡过了」。",
+   "params": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "绝对编码（如 `t-000007`）"
+     },
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "pass",
+       "guide"
+      ],
+      "description": "pass = 过；guide = 给指导意见（要 text）"
+     },
+     "text": {
+      "type": "string",
+      "maxLength": 800,
+      "description": "指导正文（guide 时必填；只有链尾那一个代理读得到）"
+     }
+    },
+    "required": [
+     "code",
+     "verdict"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','status','verdict','code','state','target_state','target_state_label','refused','reason','error','chain','chain_text','delivered_to','hops','item_id','relay_id','trace','trace_problem','legal_codes','legal_total','text'}；status 是 passed / delivered / refused / unknown 之一；guide 的回执（relay_id / delivered_to / hops / item_id）原样带出",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
    ],
    "tags": [],
    "handler_name": "functools.partial",

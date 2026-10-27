@@ -89,7 +89,7 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total        = 114  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
+cli_tools_total        = 117  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
 cli_tools_modules      = 17  # 同一行"已装模块 N"
 cli_tools_role_a       = 52  # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b       = 38
@@ -101,7 +101,7 @@ cli_tools_role_g       = 53
 cli_tools_role_h       = 44
 cli_tools_role_v       = 28
 cli_tools_role_l       = 38
-cli_tools_role_m       = 37
+cli_tools_role_m       = 40
 webui_modules           = 10   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
 webui_routes            = 31   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
 webui_routes_get        = 23   # 同上，按 `x[0] == 'GET'` 计数

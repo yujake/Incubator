@@ -159,6 +159,12 @@ _ROLES_WRITE: tuple[str, ...] = tuple(r for r in S.ROLES if r not in READ_ONLY_R
 #:
 #: 判据按它认出"这是一条到点项"；两个字面量都在 `clock.due_message` 里，这里只是
 #: 给读的人与判据一个稳定的常量（不许在别处再拼一份前缀）。
+#:
+#: 2026-10-27（L2）：轮查计时器那一档还有第三个抬头 `clock.PATROL_DUE_HEAD`
+#: （逐字「轮查到点：」）。它刻意不进这张元组，理由与它为什么换抬头是同一条 ——
+#: 业主要那一档"不是一句提醒，而是一套动作"，于是它的正文根本不以"到点"二字开头；
+#: 把它并进来会让"按前缀认到点项"这条读法把一段 SOP 当成一条通知。
+#: 认轮查那一档的判据只有一处：`clock.is_patrol_timer`（读 `reason` 那一格）。
 DUE_PREFIX: str = "时间到："
 PATROL_PREFIX: str = "巡查时间到："
 DUE_PREFIXES: tuple[str, ...] = (DUE_PREFIX, PATROL_PREFIX)

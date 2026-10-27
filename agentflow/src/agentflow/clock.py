@@ -606,6 +606,39 @@ PATROL_CLEAN_TEXT: str = "本轮无异常"
 #: 干预指引那一句的逐字开头。判据按它认出"这一拍给了 M 一条可执行的下一步"。
 PATROL_GUIDE_HEAD: str = "可发指导意见"
 
+#: 轮查的间隔（业主 2026-10-27 傍晚定死的那一句里的「20分钟计时」）。
+#:
+#: 为什么它是一个常量而不是一个参数：业主给的是一个数（20 分钟），这个数的意义是
+#: "M 多久必须看一次全树"。做成参数就会变成每个工作区各调一个值 ⇒ "轮查"在不同工作区
+#: 里成了不同强度的动作，而没有任何判据读得出这个差别。
+PATROL_INTERVAL_SEC: float = 1200.0
+
+#: 轮查计时器写在目的那一格（`reason`／`purpose`）里的受控常量：这是"这一条是轮查"的
+#: 唯一标记（判据 `is_patrol_timer` 只读这一格）。
+#:
+#: 为什么不用一个新的 `kind`：`TIMER_KINDS` 是落盘契约（`out/clock/state.json` 的每一行
+#: 都带 `kind`，它还是 `Timer.__post_init__` 的校验输入）。加一档要同步四处：`_new_timer`
+#: 的分支、`Timer` 的校验、`PeriodicShot` 的转换、以及工具面读数与快照里的分组；
+#: 而轮查与一次性计时器在时间语义上没有一处不同（after_sec 到点即消耗、不自动重排）——
+#: 唯一的差别是"到点那一下的正文"（SOP，见 `patrol_sop_text`）。把差别放在 `reason` 上
+#: 恰好合适：目的那一格本来就是"这一条为什么存在"的唯一落点，而"轮查"就是它的目的。
+PATROL_REASON: str = "轮查"
+
+#: 轮查是主控的角色动作（值等于 `schema.CONDUCTOR_ROLE`）。
+#:
+#: 为什么这里写字面量而不是 `from .schema import CONDUCTOR_ROLE`：本模块的纪律是
+#: "不为一个查询把 Store / schema 拖进来"（与 `set_target_probe` 逐字同一条理由）。
+#: 两处一致由判据钉住：轮查那一份判据断言 `PATROL_ROLE == schema.CONDUCTOR_ROLE`，
+#: 漂了当场红，而不是等某个工作区里"轮查怎么不挂"。
+PATROL_ROLE: str = "M"
+
+#: 轮查那一档到点消息的抬头（逐字；判据按它认出"这一条是轮查的报醒"）。
+#:
+#: 为什么不沿用 `时间到：` / `巡查时间到：`：那两个前缀在业主口径里正是"只报一句到点了"
+#: 的形态，而轮查的正文是一套要执行的动作（见 `patrol_sop_text`）。换抬头不是换格式，
+#: 是为了让读的人（和人写的判据）一眼分得出"提醒"与"规范动作"。
+PATROL_DUE_HEAD: str = "轮查到点："
+
 #: 异常清单的读口：`probe(workspace, task_id) -> dict`。
 #:
 #: 键集见 `patrol_anomalies`；三态由它自己的 `checked` / `reason` 给。工具层在装配期
@@ -853,11 +886,170 @@ def patrol_section(workspace: str | Path, *, task_id: str = "",
         return f"异常清单拼不出来（{type(exc).__name__}: {exc}）=> 这一拍没有清单可报"
 
 
+# ------------------------------------------------------- 轮查：一个特殊计时器 + 一套动作
+#
+# 业主 2026-10-27 傍晚（唯一权威，逐字）：
+#
+#     「20分钟计时 -> 时间到立刻进自动审阅工具 -> 审完后 M 自由行动 -> M 无事可做后
+#       启动轮查计时。注意：20分钟间隔内接收到任何其它消息 M 一样会被唤醒（这与计时器
+#       不阻塞进程的设计一致，轮查也不阻塞进程，轮查只是个特殊计时器，到点后不是返回
+#       一句提醒，而是一套需执行的规范动作）」
+#
+# 两半各落在哪：特殊计时器这一半是 `start_patrol_timer` / `next_patrol` /
+# `is_patrol_timer`（本节），"到点那一下的正文是 SOP"这一半是 `patrol_sop_text`
+# 与 `due_message` 的 `patrol_sop` 那一格。异常清单那一半不在这里另写 —— 它仍然只有
+# `patrol_section` 一份（周期性巡查早就用它，轮查这一条读同一个落点）。
+
+
+def patrol_sop_text(*, interval_sec: float | None = PATROL_INTERVAL_SEC) -> str:
+    """轮查到点那一刻的正文：一套现在就要执行的规范动作（不是"时间到了"这种提醒句）。
+
+    为什么正文必须是 SOP：业主给的那一句里说得最重的是最后半句 ——「到点后不是返回一句
+    提醒，而是一套需执行的规范动作」。一句"时间到了"只告诉 M 一个它已经知道的事实
+    （它在 20 分钟前自己挂的表到点了），而 M 缺的是"接下来做什么"；那件事今天已经有工具
+    了（`conductor.patrol` / `conductor.patrol_verdict`，L1 落的三件），所以正文的任务是
+    把工具按顺序摆到它面前，四步一步不少：
+
+    ① 立刻调 `conductor.patrol`（一次拿全，不逐个 `review_child` 地去翻）；
+    ② 对每一个活跃子代理给结论：`pass`（过）或 `guide`（指导意见）；
+    ③ 结完这一轮，才允许做别的（自由行动）；
+    ④ 无事可做（要挂机等）时，挂上下一个轮查计时器。
+
+    第 ④ 步为什么还留在正文里、而框架其实会自动挂（`agent_loop._park_gate` 那一侧）：
+    这一句是给 M 的"不要手工再起一条"的交代 —— 挂点那一侧保证的是"恰好一条"，模型读了
+    SOP 又自己 `clock.timer_start(after_sec=1200, reason="轮查")` 一次，就变成两条、
+    两个 20 分钟的报醒错开半分钟，而"轮查"这件事按定义同一时刻只有一条在跑。
+
+    `interval_sec` 只用于正文里念间隔，不改任何计时行为（间隔的真身是
+    `PATROL_INTERVAL_SEC`，挂表那一处读的就是它）。
+
+    判据的"反真空"要能把它换成空串：`fire_due` 按名字调本函数（模块级），
+    打桩之后到点那条正文里四步必须一句不剩 —— 于是"正文里真有 SOP"这件事是机器证明的，
+    不是读代码读出来的。
+    """
+    every = human_sec(interval_sec if interval_sec is not None else PATROL_INTERVAL_SEC)
+    return (
+        f"【轮查】这是规范动作，不是提醒：按下面四步做完再干别的（每 {every}一次）。\n"
+        "① 立刻调 conductor.patrol：一次拿全活跃子代理（在飞 / 待机）、名册绝对编码链、"
+        "正在执行的任务、未做完的板项与现在在做哪项、计时器四格。\n"
+        "② 对每一个活跃子代理给结论：conductor.patrol_verdict(code, \"pass\") 说「过」，"
+        "或 conductor.patrol_verdict(code, \"guide\", text) 给指导意见"
+        "（guide 走既有秘书链，正文只到链尾）；那一轮里漏掉任何一个活跃号都算没做完。\n"
+        "③ 结完这一轮，才允许做别的（自由行动）。\n"
+        "④ 无事可做（要挂机等）时，挂上下一个轮查计时器：框架在挂机那一下自动挂好"
+        "（reason 是「轮查」的那一条），不要再手工起第二条。"
+    )
+
+
+def is_patrol_timer(entry: Any) -> bool:
+    """这一条是不是轮查计时器（只读目的那一格）。
+
+    收三种输入：`Timer`、盘上那一行、`record_wake` 落的唤醒事件 —— 三者都经
+    `purpose_of` 取值，于是"哪一条是轮查"全仓只有一个读法（与 `purpose_of` 同一条纪律：
+    各写一份取法迟早分家，而分家之后没有任何判据会红）。
+
+    `kind` 刻意不参与判定：轮查复用 `kind="timer"`，理由见 `PATROL_REASON`。
+    """
+    return purpose_of(entry).strip() == PATROL_REASON
+
+
+def next_patrol(workspace: str | Path) -> dict[str, Any]:
+    """下一条还没到的轮查计时器（三态）。
+
+    返回 `{"checked","pending","count","timer_id","due_at","remaining_sec","reason"}`。
+    `pending=False` 是"查过了、现在没有轮查计时器"，`checked=False` 是"没查成"——
+    挂下一轮那一处按前者决定"该挂"，后者只记一句"不知道"，两者不许折平。
+
+    为什么要有这一格读数（两个读者，一处实现）：
+
+    1. 挂点（`agent_loop._park_gate`）每一拍都要问"已经有一条了吗"；
+    2. 挂机的一拍还要用它把睡眠封顶在轮查到点那一刻 —— 业主的口径是"时间到立刻进
+       自动审阅工具"，而挂机的一拍最长 `PARK_SLICE_MAX_SEC`（300 秒），不封顶就会
+       把"立刻"读成"最多晚 5 分钟"。
+    """
+    out: dict[str, Any] = {"checked": False, "pending": False, "count": 0, "timer_id": "",
+                           "due_at": "", "remaining_sec": None, "reason": ""}
+    try:
+        rows = [t for t in book(workspace).pending() if is_patrol_timer(t)]
+    except (ClockStateError, OSError) as exc:
+        out["reason"] = f"计时器簿记读不成：{type(exc).__name__}: {exc}"
+        return out
+    out["checked"] = True
+    out["count"] = len(rows)
+    if not rows:
+        return out
+    rows.sort(key=lambda t: (str(t.due_at or ""), str(t.timer_id or "")))
+    head = rows[0]
+    out.update(pending=True, timer_id=str(head.timer_id or ""),
+               due_at=str(head.due_at or ""), remaining_sec=head.remaining_seconds(now()))
+    return out
+
+
+def start_patrol_timer(workspace: str | Path, *, task_id: str = "", role: str = "",
+                       to: str = "self") -> dict[str, Any]:
+    """挂下一轮轮查计时器 —— 恰好一条（业主 2026-10-27 傍晚：「无事可做后启动轮查计时」）。
+
+    两条规则，缺一条就会出两种相反的错：
+
+    1. 只有主控（`PATROL_ROLE`）才挂：轮查要执行的动作是 `conductor.patrol` /
+       `conductor.patrol_verdict`，那两件只有 M 有；子代理挂一条自己的"轮查"表既没有
+       可执行的动作，又会把"无事可做"这个读数搅浑（它会永远有一条计时器在跑）；
+    2. 已经有一条 pending 的轮查计时器就不再挂：挂点每一拍都会经过
+       （`_park_gate` 的第 ①/④ 两支），不判重的话一分钟能挂出几十条，而"轮查"这件事
+       按定义同一时刻只有一条在跑。
+
+    返回 `{"checked","mounted","skipped","timer_id","interval_sec","remaining_sec","reason"}`。
+    `mounted=False` 时 `skipped` 说清为什么（`role` / `already` / `unreadable` / `error`）：
+    读数要能把"没挂"与"不该挂"分开，否则挂点那一侧只能把三件事写成一句话。
+
+    三态：时钟读不到时 `start_timer` 抛 `ClockUnreadable`，这里折成 `checked=False`
+    （不是"已经有一条"）—— 挂点据此知道"这一拍不知道"，下一拍还会再问一次。
+    """
+    out: dict[str, Any] = {"checked": False, "mounted": False, "skipped": "",
+                           "timer_id": "", "interval_sec": float(PATROL_INTERVAL_SEC),
+                           "remaining_sec": None, "reason": ""}
+    who = str(role or "").strip()
+    if who != PATROL_ROLE:
+        out.update(checked=True, skipped="role",
+                   reason=(f"轮查计时器只挂给主控（{PATROL_ROLE}）："
+                           f"这一趟是 {who or '（没有角色）'} ⇒ 不挂"))
+        return out
+    known = next_patrol(workspace)
+    if not known.get("checked"):
+        out.update(checked=False, skipped="unreadable",
+                   reason=str(known.get("reason") or "计时器簿记读不成 ⇒ 不知道有没有"))
+        return out
+    if known.get("pending"):
+        out.update(checked=True, skipped="already",
+                   timer_id=str(known.get("timer_id") or ""),
+                   remaining_sec=known.get("remaining_sec"),
+                   reason=(f"已经有一条 pending 的轮查计时器 {known.get('timer_id')}"
+                           f"（还剩 {human_sec(known.get('remaining_sec')) or '读不到'}）"
+                           "⇒ 不再挂第二条"))
+        return out
+    try:
+        timer = start_timer(workspace, reason=PATROL_REASON, after_sec=PATROL_INTERVAL_SEC,
+                            to=str(to or "self"), task_id=str(task_id or ""), role=who)
+    except ClockUnreadable as exc:
+        out.update(checked=False, skipped="unreadable", reason=str(exc))
+        return out
+    except ClockError as exc:  # 参数/簿记坏掉：照实报，不假装挂上了
+        out.update(checked=False, skipped="error",
+                   reason=f"{type(exc).__name__}: {exc}")
+        return out
+    out.update(checked=True, mounted=True, timer_id=str(timer.timer_id or ""),
+               remaining_sec=timer.remaining_seconds(now()),
+               reason=(f"挂上了下一条轮查计时器 {timer.timer_id}"
+                       f"（每 {human_sec(PATROL_INTERVAL_SEC)}一次）"))
+    return out
+
+
 def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
                 fired_at: Any, every_sec: float | None = None,
                 fires: int | None = None, feedback: str = "",
                 feedback_label: str = "", waited_target: str = "",
-                woke_reason: str = "", patrol_section: str = "") -> str:
+                woke_reason: str = "", patrol_section: str = "",
+                patrol_sop: str = "") -> str:
     """到点那条消息的唯一拼法（业主 2026-10-25 定死格式）。
 
     一次性：
@@ -877,17 +1069,41 @@ def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
     周期性巡查那一档还多一段：`patrol_section`（当拍现算的异常清单 + 干预指引，唯一的
     拼法是 `patrol_text`）。它在末尾另起一句，不改上面三样的任何一个字节；空串 => 输出与
     没有这一格时完全一样（判据的"改前红"就靠这一条成立）。
+
+    ## 轮查那一档（`patrol_sop` 非空；业主 2026-10-27 傍晚）
+
+    正文 = 那一套要执行的动作（`patrol_sop_text` 的四步），不是"到点了"这种提醒句。
+    抬头换成 `轮查到点：` 而不是 `时间到：` / `巡查时间到：`：后两个前缀的语义是
+    "只有这一句"，而轮查要的恰好是相反的形态（一句抬头 + 四步 + 异常清单）。
+    三样（目的 / 等待时长 / 到于何时）一个字节都没丢 —— 它们是"这是哪条表、等了多久"的
+    唯一凭据，丢掉就分不清这一拍是 20 分钟前挂的那条还是刚补挂的。
+    `patrol_section` 照旧在最后一段（轮查与周期性巡查共用同一份清单，不另写第二份）。
+    `patrol_sop` 是空串时，本函数的输出与没有这一格时逐字相同（反真空判据要的就是这一条：
+    把正文换成空串，四步必须一句不剩）。
     """
     body = str(purpose or "").strip()
     missing = not body
     shown = PURPOSE_MISSING_TEXT if missing else body
+    section = str(patrol_section or "").strip()
+    sop = str(patrol_sop or "").strip()
+    start = _hhmmss(created_at if isinstance(created_at, datetime)
+                    else (_parse_iso(created_at) if created_at else None))
+    end = _hhmmss(fired_at if isinstance(fired_at, datetime)
+                  else (_parse_iso(fired_at) if fired_at else None))
+    if sop:
+        # 轮查那一档（唯一例外，业主 2026-10-27 傍晚）：正文 = 一套要执行的动作，
+        # 不是"到点了"这种提醒句。抬头仍然带齐三样（目的 / 等待时长 / 到于何时），
+        # 因为那三样是"这一条表是哪一条、等了多久"的唯一凭据；措辞刻意不用
+        # `时间到：` / `巡查时间到：` 这两个前缀 —— 它们是"只有这一句"的形态。
+        head = (f"{PATROL_DUE_HEAD}{shown}｜等了 {human_sec(waited_sec)}"
+                f"（起于 {start or '读不到'}，到于 {end or '读不到'}）")
+        said = f"{head}\n{sop}"
+        if missing:
+            said = f"{said}\n{PURPOSE_PROMPT}"
+        return f"{said}\n{section}" if section else said
     if every_sec is not None:
         head = f"巡查时间到：{shown}｜每 {human_sec(every_sec)}一次（第 {int(fires or 0)} 次）"
     else:
-        start = _hhmmss(created_at if isinstance(created_at, datetime)
-                        else (_parse_iso(created_at) if created_at else None))
-        end = _hhmmss(fired_at if isinstance(fired_at, datetime)
-                      else (_parse_iso(fired_at) if fired_at else None))
         head = (f"时间到：{shown}｜等了 {human_sec(waited_sec)}"
                 f"（起于 {start or '读不到'}，到于 {end or '读不到'}）")
     tail = ""
@@ -902,7 +1118,6 @@ def due_message(*, purpose: str, waited_sec: float | None, created_at: Any,
         said = f"{head}{tail}。{PURPOSE_PROMPT}"
     else:
         said = f"{head}{tail}"
-    section = str(patrol_section or "").strip()
     if section:
         # 分隔符按前一句的收尾挑：已经有句末标点就不再补一个"。"。
         sep = "" if said.endswith(("。", "；", "：")) else "。"
@@ -4178,6 +4393,10 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
             if events:
                 label = "它交的是" if events[-1].kind == "submit" else "它说的是"
             timer.feedback = feedback
+            # 轮查那一档（业主 2026-10-27 傍晚）：到点那一下的正文是 SOP 四步，不是
+            # "时间到了"。`patrol_sop_text` 与 `patrol_section` 都按名字调（模块级），
+            # 于是反真空判据能把其中任何一个换成空串、当场看正文少掉哪一半。
+            patrol = is_patrol_timer(timer)
             timer.message = due_message(
                 # 到点这句念的目的走 `purpose_of`（唯一取值口）—— 与盘上那一行
                 # `purpose` 是同一个来源，于是"内存里念的"与"从 state.json 读回来的"
@@ -4186,7 +4405,11 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
                 created_at=timer.created_at,
                 fired_at=_iso(reading.wall) if reading.wall is not None else "",
                 feedback=feedback, feedback_label=label,
-                waited_target=timer.wait_for, woke_reason=timer.woke_reason)
+                waited_target=timer.wait_for, woke_reason=timer.woke_reason,
+                patrol_sop=(patrol_sop_text() if patrol else ""),
+                # 异常清单不另写第二份：轮查与周期性巡查读同一个 `patrol_section`。
+                patrol_section=(patrol_section(timer.workspace, task_id=timer.task_id)
+                                if patrol else ""))
             try:
                 receipt = _DUE_HANDLER(timer)
             except DueDeferred as exc:
@@ -5027,6 +5250,10 @@ __all__ = [
     "PROGRAM_STOP_WAIT_SEC",
     "PURPOSE_FROM_TARGET",
     "PURPOSE_SOURCES",
+    "PATROL_DUE_HEAD",
+    "PATROL_INTERVAL_SEC",
+    "PATROL_REASON",
+    "PATROL_ROLE",
     "ProgramSpan",
     "WAIT_ANY_REL",
     "WOKE_REASONS",
@@ -5094,11 +5321,15 @@ __all__ = [
     "programs_running",
     "program_purpose",
     "purpose_of",
+    "is_patrol_timer",
+    "next_patrol",
+    "patrol_sop_text",
     "raw_wait_census",
     "read_handoffs",
     "mark_handoff_seen",
     "read_wakes",
     "read_wait_any",
+    "start_patrol_timer",
     "record_handoff",
     "record_wake",
     "request_wait_any",

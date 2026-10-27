@@ -112,7 +112,12 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 「重点完善子代理杀自己发出去的程序进程的工具……以及注销前检测的能力」）。两件单独
 #: 成组、不并进 `clock.`：`clock.*` 恰好九件那条判据（`CLOCK_NINE`）原样成立，
 #: 而 `program.stop` 是写工具、只读角色按副作用本来就该拿不到它。
-TOOL_COUNT = 114
+#: 2026-10-27（L1 巡查三件）：114 → 117（`conductor.patrol` / `conductor.review_child`
+#: / `conductor.patrol_verdict` —— 业主「给M设计自动审阅工具……M要做的只是根据这些
+#: 信息对逐个活跃子代理给出"过"、指导意见」）。三件都在编排面（`roles=("M",)`），
+#: 声明与实跑键集的判据见本文件那几条；行为判据在
+#: `tests/test_m_patrol_reads_every_active_child.py`。
+TOOL_COUNT = 117
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -393,6 +398,13 @@ def tool_params() -> dict[str, dict]:
         # `tests/test_a_message_that_asks_for_work_becomes_a_work_item.py` 与
         # `tests/test_tasks_write_port_refuses_forgeries.py`。
         "conductor.post_task": {"summary": "探针：只验键集，不真的落项"},
+        # 巡查三件（L1，2026-10-27）：探针都打在"查成了"那一支上（夹具里 `probe_child`
+        # 是一行 `running` 的子代理 ⇒ 它就是唯一的活跃子代理），键集合与"读不成"那一支
+        # 相同（三件工具的 `data` 都是同一个字面量 dict，三态在格子里、不在键上）。
+        "conductor.patrol": {},
+        "conductor.review_child": {"code": probe_child},
+        # `pass` 那一支不投递任何东西（只落一条痕），所以它是最省的一次探针。
+        "conductor.patrol_verdict": {"code": probe_child, "verdict": "pass"},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -663,6 +675,11 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 程序两件（G1，2026-10-26）：探针都真跑到了 ok 分支（列表是"查成了、没有
         # 程序在跑"；停下是"查过了、没有这一条"），键名读自实跑观测。
         "program.list", "program.stop",
+        # 巡查三件（L1，2026-10-27）：三件都真跑到了"查成了"那一支（夹具里
+        # `probe_child` 是唯一的活跃子代理）——`conductor.patrol` 列出一条、
+        # `conductor.review_child` 拿到那一项、`conductor.patrol_verdict(pass)` 落了
+        # 一条痕；键名读自实跑观测，三态在格子里不在键上。
+        "conductor.patrol", "conductor.review_child", "conductor.patrol_verdict",
     }
 )
 

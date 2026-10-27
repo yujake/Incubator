@@ -52,6 +52,12 @@ M_TOOL_FACE = {
     # 追几层"的那一半，`conductor.guide` 是"看完之后把指导意见沿树传下来"的那一半。
     # 一层那一半在 `trace.children`（A–H 都有，M 不需要）。
     "conductor.watch", "conductor.guide",
+    # 巡查三件（L1，业主 2026-10-27：「M 不起巡查是因为太繁琐」）：一次拿全每个活跃
+    # 子代理的每一格（`conductor.patrol`）、点名看一个（`conductor.review_child`）、
+    # 对那一个只说「过」或给指导意见（`conductor.patrol_verdict`，指导走的就是
+    # `conductor.guide` 那条秘书链）。判据在
+    # `tests/test_m_patrol_reads_every_active_child.py`。
+    "conductor.patrol", "conductor.review_child", "conductor.patrol_verdict",
     # 销号（D-59，业主 2026-10-26：「销号的发起在父代理，销号的实际动作在秘书侧」）：
     # 父代理侧唯一的发起入口。它落在编排面而不是文件面 —— 改的是名册/台账的编排状态。
     "conductor.retire_child",

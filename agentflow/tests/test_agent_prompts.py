@@ -2151,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p212"
+_FROZEN_PROMPT_VERSION = "p213"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2298,6 +2298,18 @@ _FROZEN_PROMPT_VERSION = "p212"
 #   M 61204a21→0b46a39a / V 55e0a1ae→f36bb01a。
 # 十一格是那一支重算探针（当时写在 temp 下，口径只取本文件的 `_surface_digest` 一处）
 # 的现算值，不是手抄。
+# 2026-10-27（p213 收尾 / L1 巡查）：只有 M 那一格换值，其余十格逐字未动。
+# 三笔都落在 M 自己的段上：① `specs/m.py` 的 policy 多了轮查的规范动作（99 字）——
+# 「轮查是规范动作：到点跑 `conductor.patrol` 拿全，逐个给 `conductor.patrol_verdict`
+# （过/指导）；结完再干别的；挂机等时才挂下一个 20 分钟轮查计时器。」；② 同处再一条
+# 点名 `conductor.review_child`（要细看某一个时给它绝对编码，返回那一项与整棵名册树）；
+# ③ M 的工具面多三件（`conductor.patrol` / `conductor.review_child` /
+# `conductor.patrol_verdict`，`roles` 都是 `("M",)`），三件的 summary 进 `tools_lines`
+# 那一行 ⇒ 只有 M 那一格跟着变。逐笔出处写在 `agent_prompts.PROMPT_VERSION` 上方 p213
+# 那一格。逐格的旧值 → 新值：
+#   M 663cba16→35b2542a（A–L / V 十格与 p212 同值）。
+# 十一格是 `temp/l1_digests.py`（不入库，导入本文件的 `_surface_digest`，摘要口径只有
+# 一处）的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "b905f7402ddf47077838d04ec8411be4aefd67a75d99f787a228fced9942248b",
     "B": "bde265b31508dbc075ffa83bbfaf6f3276dcb61f0d7664c8670ca0cb8571e5b5",
@@ -2308,7 +2320,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "7a56ebf7b149206803db0c4191fa64d462d27abdb1eb41ba44c70db56a07f006",
     "H": "44cfc11e144e4b81e34e10b671d519cfbd16c1f6debdea3fa6e2757af7a3bd2c",
     "L": "5bfea9b061a823dde5126fa5fcd716aad2427d8a6cd8cd27620d43bb81f3899d",
-    "M": "663cba168d44b99e0ddc46f16449800aa5e962a3f4e7424454fda641b7ac326a",
+    "M": "35b2542af9b1f4082153921b1acff63392bc8bfcd477b6cbba58c9772a07780f",
     "V": "f36bb01ab08590c5526305e39f225696859959f515efc7f4eab2aeb7958046eb",
 }
 
