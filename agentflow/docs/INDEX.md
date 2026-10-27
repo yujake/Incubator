@@ -30,6 +30,7 @@
 | [`USER-TEST.md`](USER-TEST.md) | 用户侧验收剧本 |
 | [`FORMAL-TOOLCHAIN.md`](FORMAL-TOOLCHAIN.md) | 证明检查器桥接层的接法与失败分类 |
 | [`FC27-PENDING-LEAN.md`](FC27-PENDING-LEAN.md) | 本批 Lean 改动的待批清单（**需要人审**，不由 AI 代签） |
+| [`FC27-SIGNING-GUIDE-2026-10-27.md`](FC27-SIGNING-GUIDE-2026-10-27.md) | **给人看的签字操作单**：本批 39 条受保护路径怎么签（`scripts/noai_batch_sign.py`）、三条硬边界、签完怎么验、工具会拒的六种情形（判据 `tests/test_fc27_signing_guide_is_usable.py`） |
 | [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) | 禁改区治理流程：谁能批、批几个、台账怎么写 |
 | [`KNOWN-UNWIRED.md`](KNOWN-UNWIRED.md) | 已知未接线：`src/agentflow/tools/` 下哪个 `*_tools.py` 没被 `tools/__init__.py` 的 `_MODULES` 装配（现读清单——改了装配就要回来改它） |
 | [`WIRING-AUDIT-2026-10-27.md`](WIRING-AUDIT-2026-10-27.md) | 2026-10-27 夜的**接线审计**：逐条「实现了但没接上」的落点与复跑命令（当次读数、带日期；判据本体在 `tests/test_wiring_edges.py`） |

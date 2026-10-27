@@ -1060,6 +1060,46 @@ def _symbol_count_skipped(p: pathlib.Path, tree: pathlib.Path) -> bool:
     return bool(rel.parts) and rel.parts[0] in _REF_SYMBOL_COUNT_SKIP_DIRS
 #: 豁免记号，逐字三个汉字。`test_the_quoted_references_in_comments_all_exist` 的
 #: docstring 里必须原样出现它，且那条规定由 `..._marker_is_alive` 断言。
+#: 允许"已删"的 `temp/` 引用（业主 2026-10-27 裁定：temp 可以被删）。
+#:
+#: 为什么需要这张表而不是直接豁免存在性：`temp/` 是易失工作区（`.gitignore` 第 450 行），
+#: 各条 lane 的探针跑完就该清；但"注释里引用一个已经不存在的文件"仍然是坏引用 ——
+#: 读的人按图索骥会找不到。两者的折中是：逐条登记，于是
+#:   · 已知的历史探针（本表）⇒ 不算问题；
+#:   · 新写的、指向一个不存在的 `temp/` 文件的引用 ⇒ 仍然红（这才是这条判据的价值）。
+#: 业主的原话是"允许 temp 被删"，不是"注释可以乱引"。
+_REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
+    "temp/_clock_bench.py",
+    "temp/_clock_bench_before.json",
+    "temp/_clock_digest.py",
+    "temp/_clock_scale.py",
+    "temp/_p210_digests.py",
+    "temp/_rbe1_same_closure.py",
+    "temp/golden_diff_p203.py",
+    "temp/golden_diff_p205.py",
+    "temp/l1_a10_counts.py",
+    "temp/l1_digests.py",
+    "temp/r_be2_after_reads.py",
+    "temp/r_be2_board_write_cost.py",
+    "temp/r_be2_cap_profile.py",
+    "temp/r_be2_cycle_test.py",
+    "temp/r_be2_import_cost.py",
+    "temp/r_be2_reads_per_beat2.py",
+    "temp/r_be2_static_cache.py",
+    "temp/rbe3_measure.py",
+    "temp/rbe3_measure_legacy.py",
+    "temp/rbe3_repro_wait.py",
+    "temp/rbe4_append_amp.py",
+    "temp/rbe4_canonical_equivalence.py",
+    "temp/rbe4_codetable_provenance.py",
+    "temp/rbe4_nested_mutation_scan2.py",
+    "temp/rbe4_prompt_digests.py",
+    "temp/rbe4_rows_cost.py",
+    "temp/rbe4_sessions_reads.py",
+    "temp/recompute_prompt_digests.py",
+)
+
+
 _REF_EXEMPT_MARK = "非指代"
 #: 允许带记号跳过的引用落在哪些文件里（`F9` 实测的两处，逐条登记）。
 #:
@@ -1581,9 +1621,13 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
         "`_REF_KNOWN_MENTION_TOKENS`，别把它写没："
         f"{res['dangling']}"
     )
-    assert res["missing"] == [], (
-        "注释/docstring 里引用的 temp/ 路径不存在（结论可能仍是真话，但引用是坏的）："
-        f"{res['missing']}"
+    missing_temp = sorted({str(m).split(": `", 1)[-1].strip("`") for m in res["missing"]})
+    assert missing_temp == sorted(_REF_KNOWN_MISSING_TEMP), (
+        "注释/docstring 里引用的 `temp/` 路径与登记表 `_REF_KNOWN_MISSING_TEMP` 不符。"
+        "业主 2026-10-27 允许 `temp/` 被删（它是易失工作区），但**逐条登记**："
+        "新写一条指向不存在的 temp 文件的引用要登记并写清它是什么，"
+        "登记过期的（文件又回来了）要删掉 —— 多一条、少一条都算不符。"
+        f"实测：{missing_temp} vs 登记：{sorted(_REF_KNOWN_MISSING_TEMP)}"
     )
     # ---- 第三族（`R7-㉒`）：点名的 `test_*.py` 必须真的存在，且"不存在"的那些逐条等额
     assert res["test_refs"] > 0, (

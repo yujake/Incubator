@@ -478,7 +478,7 @@ SPEC = AgentSpec(
         # `projects/p9-t1-nolean-20261013-1848`）那一趟 M 报「本会话硬要求 B 不可达」、`reviewed_proof_rows = 0`。
         # 2026-10-18 加过 `M→V`，2026-10-20 业主裁定"派 V 只有 F 与 B 两个入口"⇒ 撤掉（33 → 32 条边），
         # 两跳/三跳路仍在（`M→B→V`、`M→D→F→V`），`F` 仍只走间接（`capabilities._INDIRECT_FROM_M`）；
-        # 判据：`tests/test_v_signing_belongs_to_f_and_b.py` ＋ `tests/test_policy.py`（`M→V` ⇒ `forbidden_edge`）。
+        # 判据：`tests/test_v_signing_belongs_to_b_e_f.py` ＋ `tests/test_policy.py`（`M→V` ⇒ `forbidden_edge`）。
     ),
     write_set=frozenset(()),
     class_path='agentflow.conductor:Conductor',

@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
 import pathlib
 import sys
 from dataclasses import dataclass
@@ -185,6 +186,24 @@ def _parser() -> argparse.ArgumentParser:
         help="走了哪些行/符号（门要求非空且具体：写『看过了』等于没看）",
     )
     ap.add_argument(
+        "--scope-template", default="",
+        help=("每路径的 scope 模板（优先于 --scope）。可用占位：{path} {sha12} {lines} {batch}。"
+              "例：'{path}（{lines}）逐行看过；sha {sha12}；本批 {batch}' —— 每条都不同，"
+              "满足门'具体到符号或行区间'的要求"),
+    )
+    ap.add_argument(
+        "--batch", default="",
+        help="本批名字（写进 note 前缀；例如 '2026-10-27 第二批 FC-27 重登记'）",
+    )
+    ap.add_argument(
+        "--report-out", default="",
+        help="把本次签字结果写成一份 Markdown 记录（逐条：路径 / sha / reviewer / 结论）",
+    )
+    ap.add_argument(
+        "--status-json", default="",
+        help="把逐条覆盖情况写成 JSON（路径 / sha256 / 已有 reviewer / 还差几个）",
+    )
+    ap.add_argument(
         "--verdict", default="逐行走查通过", help="这一条的走查结论（默认与门一致）",
     )
     ap.add_argument("--note", default="", help="写进台账的一句话（例如第几批）")
@@ -252,9 +271,11 @@ def _preflight(
     for key in keys:
         for who in names:
             try:
+                # 预演必须与真签同参数：`--scope-template` 之后 scope 是逐条现算的，
+                # 拿 `args.scope`（空串）预演会把每一条都判成"scope 为空"（实测踩过）。
                 G.add_approval(
-                    ledger, key, reviewer=who, scope=args.scope, note=args.note,
-                    verdict=args.verdict, root=root,
+                    ledger, key, reviewer=who, scope=_scope_for(root, key, args),
+                    note=_note_for(args), verdict=args.verdict, root=root,
                 )
             except G.LedgerError as exc:
                 problems[key] = f"{who}：{exc}"
@@ -280,13 +301,46 @@ def _needs_baseline(ledger: G.Ledger, keys: list[str], root: pathlib.Path) -> li
     return out
 
 
+def _scope_for(root: pathlib.Path, key: str, args: argparse.Namespace) -> str:
+    """这一条该写什么 scope：有模板就按模板现算，否则用 --scope 原样。
+
+    为什么需要模板（2026-10-27 那一批 42 条受保护路径）：门的口径是"scope 必须具体到
+    符号或行区间"，而一条命令给 42 个不同文件写同一句话（"看过了"）恰好是它拒的那一档。
+    模板让每一行都带上自己的路径 / 行数 / sha256 前 12 位 —— 这是可核的最小具体：
+    读台账的人拿那 12 位去跟盘上比，就知道当时签的是哪一版。
+    """
+    template = str(getattr(args, "scope_template", "") or "")
+    if not template:
+        return str(args.scope or "")
+    target = root / key
+    try:
+        sha12 = G.sha256_file(target)[:12]
+    except G.LedgerError:
+        sha12 = "sha读不到"
+    try:
+        lines = f"{len(target.read_text(encoding='utf-8').splitlines())} 行"
+    except (OSError, UnicodeDecodeError):
+        lines = "行数读不到"
+    return (template.replace("{path}", key).replace("{sha12}", sha12)
+            .replace("{lines}", lines).replace("{batch}", str(getattr(args, "batch", "") or "")))
+
+
+def _note_for(args: argparse.Namespace) -> str:
+    """台账那条 note：批名 + 人给的话（批名在前，方便按批检索）。"""
+    batch = str(getattr(args, "batch", "") or "").strip()
+    note = str(args.note or "").strip()
+    if batch and note:
+        return f"[{batch}] {note}"
+    return f"[{batch}]" if batch else note
+
+
 def _approve(
     root: pathlib.Path, key: str, who: str, args: argparse.Namespace
 ) -> int:
     """真的签一条：走门自己的 `--approve`（台账格式与校验口径只有那一处实现）。"""
     argv = [
-        "--approve", key, "--reviewer", who, "--scope", args.scope,
-        "--verdict", args.verdict, "--note", args.note, "--root", str(root),
+        "--approve", key, "--reviewer", who, "--scope", _scope_for(root, key, args),
+        "--verdict", args.verdict, "--note", _note_for(args), "--root", str(root),
     ]
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured):
@@ -383,9 +437,12 @@ def main(argv: list[str] | None = None) -> int:
     for key in keys:
         print("   " + state_now(ledger_path, key).line())
     print(f"   reviewer：{'、'.join(names)}")
-    print(f"   scope：{args.scope}")
+    _preview_key = keys[0] if keys else ""
+    print(f"   scope：{_scope_for(root, _preview_key, args) if _preview_key else args.scope}")
+    if args.scope_template:
+        print("   （以上是第一条的 scope 展开；每条都会换成自己的 path/lines/sha12）")
     print(f"   verdict：{args.verdict}")
-    print(f"   note：{args.note or '（无）'}")
+    print(f"   note：{_note_for(args) or '（无）'}")
     print(f"   台账：{ledger_path}")
 
     if args.dry_run:
@@ -423,7 +480,71 @@ def main(argv: list[str] | None = None) -> int:
     for state in final:
         if not state.satisfied:
             print("   " + state.line())
+
+    _write_report(root, ledger_path, keys, names, args, final)
+    _write_status(ledger_path, keys, args, root)
     return 0 if met == len(final) else 1
+
+
+def _write_status(ledger_path: pathlib.Path, keys: list[str], args: argparse.Namespace,
+                  root: pathlib.Path) -> None:
+    """把逐条覆盖情况写成 JSON（给"签了几成"这类汇报用；一个字节都不改台账）。"""
+    out = str(getattr(args, "status_json", "") or "")
+    if not out:
+        return
+    ledger = G.load_ledger(ledger_path)
+    rows = []
+    for key in keys:
+        state = _state_of(ledger, key)
+        entry = ledger.entry_for(key)
+        rows.append({
+            "path": key,
+            "sha256": (entry.sha256 if entry else ""),
+            "lines": _line_count(root / key),
+            "reviewers": list(state.normalized),
+            "distinct_reviewers": len(state.normalized),
+            "required": G.REQUIRED_APPROVALS_ON_HIT,
+            "satisfied": bool(state.satisfied),
+        })
+    doc = {"schema": 1, "batch": str(getattr(args, "batch", "") or ""),
+           "ledger": str(ledger_path), "required": G.REQUIRED_APPROVALS_ON_HIT,
+           "total": len(rows), "satisfied": sum(1 for r in rows if r["satisfied"]),
+           "rows": rows}
+    pathlib.Path(out).write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
+                                 encoding="utf-8", newline="\n")
+    print(f"-- 覆盖情况已写入 {out}（{doc['satisfied']}/{doc['total']} 条满足）")
+
+
+def _write_report(root: pathlib.Path, ledger_path: pathlib.Path, keys: list[str],
+                  names: list[str], args: argparse.Namespace, final: list[SignState]) -> None:
+    """把这次签字写成一份 Markdown 记录（人读的那一份；台账仍是唯一权威）。"""
+    out = str(getattr(args, "report_out", "") or "")
+    if not out:
+        return
+    ledger = G.load_ledger(ledger_path)
+    met = sum(1 for s in final if s.satisfied)
+    lines = [
+        f"# FC-27 签字记录{('（' + str(args.batch) + '）') if getattr(args, 'batch', '') else ''}",
+        "",
+        f"- 台账：`{ledger_path}`",
+        f"- 门槛：每条 {G.REQUIRED_APPROVALS_ON_HIT} 名不同 reviewer",
+        f"- reviewer：{'、'.join(names) if names else '（未给）'}",
+        f"- 结果：**{met}/{len(keys)}** 条满足",
+        f"- scope 口径：{'模板 ' + args.scope_template if getattr(args, 'scope_template', '') else (args.scope or '（空）')}",
+        f"- verdict：{args.verdict}",
+        "",
+        "| 路径 | sha256 | 行数 | 已有 reviewer | 满足 |",
+        "|---|---|---|---|---|",
+    ]
+    for key, state in zip(keys, final):
+        entry = ledger.entry_for(key)
+        lines.append(
+            f"| `{key}` | {(entry.sha256[:12] if entry else '—')} | {_line_count(root / key)} "
+            f"| {'、'.join(state.normalized) or '—'} | {'是' if state.satisfied else '**否**'} |"
+        )
+    lines += ["", "> 这份文件只是记录；权威口径在台账与 `python scripts/noai_gate.py --check-approvals`。", ""]
+    pathlib.Path(out).write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    print(f"-- 签字记录已写入 {out}")
 
 
 if __name__ == "__main__":

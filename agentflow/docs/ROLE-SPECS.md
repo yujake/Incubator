@@ -220,7 +220,7 @@ D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、�
 **2026-10-20 再撤 `M→V`，回到 32**：业主裁定逐字「派 V 只有 F（自产证明）与 B（文献侧内容）
 两个入口；M 不再直连 V」。V 的两个入口一条未少（`F→V` / `B→V`），两跳与三跳路都在
 （`M→B→V` / `M→D→F→V`）。复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `32`。
-判据：`tests/test_v_signing_belongs_to_f_and_b.py`（M 不含 V、V 的入口集合恰是 {F,B}、
+判据：`tests/test_v_signing_belongs_to_b_e_f.py`（M 不含 V、V 的入口集合见上（`F` / `B`，2026-10-23 起另有 `E`）、
 M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加回 M ⇒ 红）＋
 `tests/test_policy.py`（M 的出边集合与 `forbidden_edge` 的指路）。
 **2026-10-22 加三条（`B→L` / `L→C` / `B→D`），边总数 32 → 35**：业主当晚的最终裁定逐字
