@@ -598,63 +598,62 @@ class WebStartupError(RuntimeError):
 
 
 def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
-    """这个端口上现在有没有东西在听；在听的话再问一句它是谁（`/api/state` 的 root）。
+    """这个端口上有没有"正在服务的东西"（三态：`free` / `busy` / `unknown`）。
 
-    ## 为什么需要这一步（2026-10-28 两次撞同一面墙）
+    ## 判据是"连得上"，不是"bind 得上"（2026-10-28 修）
 
-    Windows 的 `SO_REUSEADDR` 允许第二个 socket 绑同一个端口，而
-    `http.server.HTTPServer.allow_reuse_address = 1` 让 `ThreadingHTTPServer` 正好那样做
-    ⇒ 第二个服务"绑定成功"、永远收不到连接，却照样把 URL 打出来。真机现场：
-    一具两小时前的 `serve web` 尸体占着 8787（接受连接、一个字节不回），于是新服务空转。
+    改前只用裸 `bind` 探：Windows 上对一个还挂在 TIME_WAIT 的端口 bind 同样报
+    `WSAEADDRINUSE`，而那个端口上根本没有 listener —— 于是刚被杀掉的网页服务会让下一次
+    "开网页"空等四分钟才报错（真机：`/api/state` 明确"积极拒绝"，而这里说"已经被占用"）。
+    `SO_REUSEADDR` 不能用来区分这两件事：它连"另一个进程正在听"也一起放行（双绑静默成功）。
 
-    ## 三态
+    所以改成先连一次（那才是"有没有人在服务"）：
+    - 连上了 ⇒ `busy`；
+    - 被积极拒绝 ⇒ `free`（TIME_WAIT 是这一档：没人听，只是四条元组还没老化）；
+    - 超时 / 其它 ⇒ 退回裸 bind：bind 不上就 `busy`（fail-closed，宁可不绑也不双绑），
+      bind 得上就是 `free`。
 
-    * `free`    —— 这个端口现在绑得上（拿一个一次性 socket 真绑一次，立刻关掉）；
-    * `busy`    —— 绑不上（`WinError 10048` / `EADDRINUSE`）⇒ 确实被占；再尽力问一句是谁；
-    * `unknown` —— 探测本身没成（权限之类的意外错误）。不是 `free`。
-
-    ## 为什么判据是"绑得上/绑不上"，不是"连不连得上"（本机实测，2026-10-28）
-
-    ```
-    有人在听   : connect 成功        bare bind → WinError 10048
-    端口从来没人听过 : connect 超时(!)      bare bind → 成功
-    刚 listen 过又 close : connect 超时(!)  bare bind → 成功
-    ```
-
-    本机对"没人听"的端口是静默丢 SYN（不是 RST）⇒ 用 connect 判空会把每个空端口都读成
-    "有人在听、只是不健康"。而 bind 一次是确定性的：占着就 10048，空着就成功。
-
-    `root` / `pid` 是"尽力给"：读不出就是空串/0，绝不猜。
+    返回 `{"checked","state","root","pid","reason"}`；`root` / `pid` 来自对面 `/api/state`
+    的自述（读不出就是空串 / 0，不代表"没有占位者"）。
     """
-    import socket as _socket
+    import socket
 
-    out: dict[str, Any] = {"checked": True, "state": "unknown", "root": "", "pid": 0,
-                           "reason": "", "port": int(port)}
-    probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    out: dict[str, Any] = {"checked": True, "state": "free", "root": "", "pid": 0,
+                           "reason": ""}
     try:
-        # 刻意不设 SO_REUSEADDR：设了的话 Windows 上"占着"也能绑成功，判据就没了。
-        probe.bind((host, int(port)))
-        out.update(state="free", reason="端口绑得上 ⇒ 没人在听")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.4)
+            try:
+                probe.connect((host, int(port)))
+            except ConnectionRefusedError:
+                out["reason"] = "连接被拒绝（没有 listener；TIME_WAIT 也走这一档）"
+                return out
+            except (socket.timeout, TimeoutError):
+                out["reason"] = "连接超时 ⇒ 退回去用 bind 判"
+                out["state"] = "unknown"
+            except OSError as exc:
+                # Windows 的 10061 会翻成 ConnectionRefusedError，走不到这里；
+                # 其余（例如地址不可用）一律按"没查成"处置。
+                out["state"] = "unknown"
+                out["reason"] = f"连接探不了：{type(exc).__name__}: {exc}"
+                return out
+        if out["state"] == "unknown":
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as bindprobe:
+                try:
+                    bindprobe.bind((host, int(port)))
+                except OSError:
+                    out["state"] = "busy"
+                    return out
+                out["state"] = "free"
+                return out
+        out["state"] = "busy"
+        got = verify_serving(f"http://{host}:{int(port)}/", root="")
+        if isinstance(got, dict):
+            out["root"] = str(got.get("root") or "")
         return out
-    except OSError as exc:
-        if int(getattr(exc, "errno", 0) or 0) in (98, 10048):
-            out.update(state="busy", reason="端口绑不上（已被占用）")
-        else:
-            out.update(state="unknown", reason=f"探测没成：{type(exc).__name__}: {exc}")
-            return out
-    finally:
-        probe.close()
-    # 被占：尽力问一句占位者是谁（读不出也不影响"占了"这个结论）
-    try:
-        import urllib.request
-
-        url = f"http://{host}:{int(port)}/api/state"
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 - 本机自检
-            body = resp.read()
-        out["root"] = str((json.loads(body.decode("utf-8")) or {}).get("root") or "")
-    except Exception as exc:  # noqa: BLE001 - 读不出占位者是谁也要把"占了"说出来
-        out["reason"] = f"{out['reason']}；占位者读数失败：{type(exc).__name__}"
-    return out
+    except Exception as exc:  # noqa: BLE001 —— 探不了就是"没查成"
+        return {"checked": False, "state": "unknown", "root": "", "pid": 0,
+                "reason": f"{type(exc).__name__}: {exc}"}
 
 
 def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0) -> dict:
