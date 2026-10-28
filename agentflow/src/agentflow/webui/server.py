@@ -370,14 +370,43 @@ class WebHandler(BaseHTTPRequestHandler):
         - B/C 线的：各子表模块里的 `HANDLERS[name]`（签名 `(handler, params, query)`，
           第一个参数就是这个句柄）—— 于是那两条线加端点只改自己的模块，不必碰本文件。
         两边都没有 ⇒ 那是路由表与实现的漂移，回 500 并把名字说清（表驱动不该静默 404）。
+
+        ## 处理器抛了也必须有回话（2026-10-28 真机）
+
+        真机：`serve web` 在 8788 上把 URL 打了出来，而 `/api/state` 的请求被直接关掉
+        （客户端看到 `RemoteDisconnected: Remote end closed connection without response`，
+        裸 socket 探到的首行是空的）。原因就是这里没有兜底：处理器一抛，`BaseHTTPRequestHandler`
+        的 `handle_one_request` 只会 `close_connection`，于是"服务器活着、却什么都不说"。
+        那一档既看不见原因、也让 `verify_serving` 自证只能报"打不通"。
+
+        所以这里兜住：回 500 JSON（`{"ok": false, "kind": "handler_crashed", ...}`），
+        并把 traceback 逐行写进 stderr（人能从日志里读到是哪一行）。
         """
-        local = getattr(self, name, None)
-        if callable(local):
-            local(params, query)
-            return
-        sub = routes.handler_for(name)
-        if sub is not None:
-            sub(self, params, query)
+        try:
+            local = getattr(self, name, None)
+            if callable(local):
+                local(params, query)
+                return
+            sub = routes.handler_for(name)
+            if sub is not None:
+                sub(self, params, query)
+                return
+        except (BrokenPipeError, ConnectionResetError):
+            # 客户端自己断了：不是我们的错，也没有可回话的对象。
+            raise
+        except Exception as exc:  # noqa: BLE001 —— 兜底是为了"有回话 + 有日志"
+            import traceback
+
+            sys.stderr.write(f"[webui] 处理器 {name} 抛了："
+                             f"{type(exc).__name__}: {exc}\n")
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            try:
+                self._json(500, {"ok": False, "kind": "handler_crashed",
+                                 "handler": str(name),
+                                 "reason": f"{type(exc).__name__}: {exc}"})
+            except Exception:  # noqa: BLE001 —— 连回话都写不出去时只能放弃
+                pass
             return
         self._send(500, f"500 路由表登记了没有实现的处理器：{name}\n".encode("utf-8"),
                    "text/plain; charset=utf-8")
