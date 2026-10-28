@@ -2262,6 +2262,24 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                     checked=False, missing=["程序读数"])
     # ---- 从最深的开始逐项交给秘书（次序 = `order`，一次也不许反序）
     for plan in plans:
+        if plan["state"] == "unrostered":
+            # 2026-10-28（业主：「任何一位父代理做销号时实际上都是要用连锁销号，单个销号
+            # 会留下野孩子」）：名册里没有它 ⇒ 没有名字可销，但边可以认。不认这条边，
+            # 它就永远是 `retire_integrity` 里的"还在册"，而它既没有名字、也没有第二个父
+            # 能销它 ⇒ 整棵树永远收不了工（真机 `paper-rewrite-78c`：50 个代理行里 42 个
+            # 未登记名册，M 于是 3 次 `final_refused`）。
+            # `note_edge_release` 自己会核三条（子存在 / 父对 / 子不在跑），所以还在跑的
+            # 那一档照旧不认边（fail-closed），只在读数里说清为什么。
+            try:
+                mark, problem = c.note_edge_release(plan["parent"],
+                                                   child_task_id=plan["task_id"])
+            except Exception as exc:  # noqa: BLE001 —— 抛了不许把整笔带走
+                mark, problem = "", f"{type(exc).__name__}: {exc}"
+            plan["edge_released"] = bool(mark)
+            plan["why"] = (f"{plan.get('why') or ''}"
+                           f"；边已认：{mark or problem or '（没写）'}").strip("；")
+            data["cascade"].append(dict(plan))
+            continue
         if plan["state"] != "ready":
             data["cascade"].append(dict(plan))
             continue
