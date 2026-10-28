@@ -1146,6 +1146,17 @@ def _v_skills() -> tuple[Skill, ...]:
             tools=("fs.read", "table.get"),
             body="""# 复核一份证明
 
+## 结论是 `verify.verify_proof` 的**产出**，不是你的入参（2026-10-28 真机踩过）
+
+这件工具只收 `statement_id`（可选 `proof_no` / `proof_text` / `readonly_facts`）——
+**结论由它自己判**（它内部走你的判据缝），返回里就有 `verdict` / `defect_step` /
+`findings` / `unresolved_errors`。把 `verdict` / `findings` / `defect_step` 当参数传进去
+会被参数门拒成 `param_invalid`（真机：`projects/paper-rewrite-78c` 的 V 在 17:42 / 17:43
+连着两次这么写，两次都被同一道门拒）。
+
+要补一句**你自己的**看法：那走 `message`（给派活的人），或者写进退回的那段话里 ——
+不要塞进工具参数：那等于让被审的一方自己报结论。
+
 ## 三态（只有三个，没有第四个）
 
 - **成立**：每一步的依据都能在证明里或册子上找到；
