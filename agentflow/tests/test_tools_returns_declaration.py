@@ -546,7 +546,11 @@ def tool_params() -> dict[str, dict]:
     # 两个名字都在 `provider_enum` 里、且 `P.build_providers` 已被打桩成返回
     # `_StubProvider()`（所以逐个都解析成桩、不联网）。单源分支的覆盖没丢：
     # `tests/test_tools_search_ocr.py` 里那条 `test_single_provider_path_...` 守着它。
-    "search.literature": {"topic": "群", "mode": "topical",
+    # 2026-10-28（阶段 ③ 2C）：`mode` 从 `topical` 换成 `broad` —— `candidates[]` 多了一格
+    # `topic_selfcheck`，它的两片叶子 `state` / `note` 只有 broad 那一支才产生得出来
+    # （非 broad 时这一格诚实地是 `null`）。不改这一格，声明里那两个键就永远观测不到
+    # （判据会报「声明了但实现没给」），而那不是说谎，是探针没打在那一支上。
+    "search.literature": {"topic": "群", "mode": "broad",
                           "providers": ["fixture", "openalex"]},
         "search.local": {"query": "群"},
         # 引文走查（2026-10-15 加）：源必须是盘上已登记的那一篇 ——

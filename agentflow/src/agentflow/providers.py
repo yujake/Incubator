@@ -44,6 +44,10 @@ __all__ = [
     "dedup_key_of",
     "DEDUP_KEY_UNIDENTIFIED",
     "keyword_hit",
+    # 2026-10-28（阶段 ③ 2C）：broad 模式的主题相关性自检（只标不删）。
+    "TOPIC_SELFCHECK_STATES",
+    "topic_selfcheck",
+    "mark_topic_selfcheck",
     "query_applicability",
     "QUERY_APPLICABILITY_STATES",
     "QUERY_NOT_APPLICABLE_CJK",
@@ -2014,6 +2018,78 @@ def _precise_keep(topic: str, title: str, description: str) -> tuple[bool, str]:
     return False, note
 
 
+#: broad 模式「主题相关性自检」的三档（`mark_topic_selfcheck` 写进 `raw.topic_selfcheck`）。
+#: 三档都是一种处置，不是三档形容词：
+#:   related   —— 判得出、且判为相关 ⇒ 正常送去判官
+#:   off_topic —— 判得出、且判为不相关 ⇒ 别为它花判官那一次调用（真机 O-05 的噪声）
+#:   unknown   —— 判不了（topic 抽不出英文关键词 / 标题不是英文）⇒ 仍要 A 自己看一眼
+#: 把 unknown 折进 off_topic 就是「判不了」冒充「判过了」；折进 related 则等于没做自检。
+TOPIC_SELFCHECK_STATES: tuple[str, ...] = ("related", "off_topic", "unknown")
+
+
+def topic_selfcheck(topic: str, title: str, description: str = "") -> tuple[str, str]:
+    """broad 模式的逐条主题自检：返回 ``(state, note)``。
+
+    ## 为什么它复用 `_precise_keep`
+
+    "什么算跑题"这件事本仓已经有一处判据：`_precise_keep` —— precise 模式据此剔除
+    标题不含 topic 关键词的候选（降级链写在它的 docstring 里）。broad 模式不该另立一套：
+    同一个问题两个口径，迟早会出现"precise 删掉的、broad 认为相关"这种自相矛盾的读数。
+
+    差别只在处置：precise 把 `False` 变成"不返回"，broad 把它变成"标一下、仍然给 A 看"。
+
+    ## 三档怎么落
+
+    `_precise_keep` 的 `keep` 与 `filter_note` 已经把五种降级情形逐字写出来了，这里按它们归并：
+
+    * `keep=False` ⇒ 判得出、且判为不相关 ⇒ ``off_topic``（这正是 precise 会剔除的那一批）
+    * `keep=True` 且 note 是 `keyword_hit`，或带 `similarity≥0.2` 那条并列条件 ⇒ ``related``
+    * 其余 `keep=True`（`no_ascii_keywords;not_filtered` / `keyword_miss_but_title_not_ascii`
+      / `keyword_miss;similarity<0.2` 而标题抽不出英文词）⇒ 判不了 ⇒ ``unknown``
+
+    注意两个坑（第一版都踩过）：
+
+    1. 不能写成 `not keep` 兜底前先比 `note.startswith("keyword_miss;similarity=")`：
+       不相关那一档的 note 也长这样（`keyword_miss;similarity=0.05`），于是"明显跑题"
+       会被判成 related。必须先看 `keep`。
+    2. `_precise_keep` 对"判不了"也给 `True`（不过滤），所以"判不了"与"相关"在它那一侧
+       同值 —— 这里只能靠 `note` 把它们分开。
+    """
+    keep, note = _precise_keep(topic, title, description)
+    if not keep:
+        return "off_topic", note
+    if note.startswith("keyword_hit") or ">=0.2" in note:
+        return "related", note
+    return "unknown", note
+
+
+def mark_topic_selfcheck(
+    candidates: Iterable[Candidate], topic: str, *, description: str = "", mode: str = "broad",
+) -> list[Candidate]:
+    """给 broad 的候选逐条打 ``raw.topic_selfcheck``（只标不删）。
+
+    三条边界：
+
+    1. 只有 ``mode="broad"`` 做这一步：precise 已经剔除跑题的（`_precise_keep`），
+       topical 不做标题判决 —— 在它们上面再打一次标等于给同一件事立两个口径。
+    2. 一条候选都不删、顺序也不动：这个标的用途是"别为它花判官那一次调用"，
+       不是"少给 A 几条"。删掉它就等于 A 永远看不到"检索抓回了什么噪声"。
+    3. 不改原对象：返回新 `Candidate`（`raw` 也是复制出来的）。候选对象在同一趟里
+       还被 providers 的台账（`last_topicality`）与合并逻辑引用着，就地改会让
+       "台账说的"与"下游看到的"变成两份事实。
+    """
+    items = list(candidates)
+    if str(mode) != "broad":
+        return items
+    out: list[Candidate] = []
+    for candidate in items:
+        state, note = topic_selfcheck(topic, candidate.title, description)
+        raw = dict(candidate.raw) if isinstance(candidate.raw, Mapping) else {}
+        raw["topic_selfcheck"] = {"state": state, "note": note}
+        out.append(replace(candidate, raw=raw))
+    return out
+
+
 def _broad_sort_key(candidate: Candidate) -> tuple[int, int, str]:
     """broad 模式类型偏好：``M``/``J``（综述/教材）优先，``EB`` 次之，其余最后。
 
@@ -3065,10 +3141,14 @@ class MultiProvider:
                     )
         # 合并后的逐条台账。各子 provider 自己那一份留在它们各自的实例上
         # （`last_topicality`），这里给的是"这一跑合并结果里每一条的判决"。
+        # 2026-10-28（阶段 ③ 2C）：broad 的候选在交给调用方之前先过一遍主题自检
+        # （只标不删）。放在这里而不是各个 provider 里：合并之后才谈得上"这一批里
+        # 哪几条明显跑题"，per-provider 各标一次会得到互相矛盾的数。
+        marked = mark_topic_selfcheck(merged, topic, description=description, mode=mode)
         self.last_topicality = _record_topicality(
-            self.name, mode, topic, merged, description=description,
+            self.name, mode, topic, marked, description=description,
         )
-        return merged[:want]
+        return marked[:want]
 
 
 def _with_source(candidate: Candidate, source: str) -> Candidate:

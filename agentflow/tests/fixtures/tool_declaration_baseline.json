@@ -6094,6 +6094,21 @@
           "to": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out','coverage'}；coverage 是**整张文献表**的全文覆盖率 {'total','with_fulltext','rate','missing','no_location','checked'}（rate=with_fulltext/total，total=0 时给 null 而不是 0；**no_location 是「我们连可取全文的地址都没有 ⇒ 没去取」，不是「这篇不存在」**——有地址但还没取的篇落进 missing，不落进 no_location）；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）"
         }
       ]
+    },
+    {
+      "key": "returns",
+      "tools": [
+        "search.literature"
+      ],
+      "reason": "2026-10-28（阶段 ③ 第 2C 步）：broad 之后把「明显跑题」的候选标出来，省掉判官那一次调用。真机依据（draft/172 O-05）：pending 15 条里混着「Hodge theory and derived categories」「A heuristic for boundedness of ranks」这类噪声，判官那一步会为它们各花一次调用。于是 candidates[] 每项多一格 topic_selfcheck：{'state','note'}，state ∈ related / off_topic / unknown（只标不删；非 broad 模式为 null）。三态要点：unknown 是「机器判不了」（题面抽不出英文关键词 / 标题不是英文），把它折进 off_topic 就是「判不了」冒充「判过了」。机器侧真身是 providers.mark_topic_selfcheck（与 precise 的剔除判据 _precise_keep 同一处口径）。",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'provider','mode','topic','description','limit','count','new_count','existing_count','unknown_count','batch_duplicate_count','store_checked','store_read_error','existing_table_size','candidates','elapsed_s','diagnostics','warnings','providers_requested','sources','source_count','source_failures','source_refusals','cost'}；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing','existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel','cited_by_count'}；sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；cost 是 {'provider_calls','elapsed_s'}",
+          "to": "{'provider','mode','topic','description','limit','count','new_count','existing_count','unknown_count','batch_duplicate_count','store_checked','store_read_error','existing_table_size','candidates','elapsed_s','diagnostics','warnings','providers_requested','sources','source_count','source_failures','source_refusals','cost'}；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing','existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel','cited_by_count','topic_selfcheck'}；topic_selfcheck 是 broad 的主题自检 {'state','note'}（state ∈ related/off_topic/unknown；**unknown 是机器判不了、不是跑题**；非 broad 模式为 null）；sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；cost 是 {'provider_calls','elapsed_s'}"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

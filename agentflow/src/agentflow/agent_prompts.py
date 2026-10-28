@@ -2779,7 +2779,26 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: p215 同值。十一格是 `temp/_recompute_digests.py`（导入判据自己的 `_surface_digest`、
 #: 用 `build_registry().registry`）的现算值，不是手抄。
 #:
-PROMPT_VERSION = "p216"
+#: `p217`（2026-10-28，阶段 ③ 第 2C 步）：A 的主动性口径 + broad 的主题自检
+#:
+#: ① `specs/a.py` 的 `SPEC.brief.policy` 追加两段（A 自己的段 ⇒ 只动 A 那一格）：
+#:    一、「取不到全文不等于这篇不存在」＋ 429/404/400 三种处置 ＋ 取不到如实登记
+#:        「没取」＋ 批量再取走 `search.retry_pending`（真机：10 次下载里 404/429/400
+#:        各两次，而 A 把「没下来」归到「这篇找不到」）；
+#:    二、broad 的候选里 `topic_selfcheck.state=off_topic` 的别花判官调用，
+#:        `unknown` 是判不了、不是跑题（真机 O-05 的噪声：Hodge theory / boundedness of ranks）。
+#: ② 机器侧的落点：`providers.mark_topic_selfcheck`（broad 逐条标 related/off_topic/unknown，
+#:    只标不删）＋ `search.literature` 的 `candidates[].topic_selfcheck`
+#:    （声明在 `returns=` 里，`contract_amendments` 记了一笔）。
+#:    这两处不改提示词文本本身（`returns=` 会进 function-calling 的 description，
+#:    但那是工具面，属 `tools_lines` 之外的派生态；A 那一格本来就因为 policy 变了）。
+#: ③ 连带：十一格表（A 一格）+ `_FROZEN_PROMPT_VERSION` + `_VOLATILE_FACT_SETS` 追加一格。
+#: ④ `tests/fixtures/prompt_cache_warm.json` 本次重落了（业主给了 `--cap-usd 0.1` 的两条命令）。
+#:
+#: 逐格：只有 A 动；B–H / L / M / V 与 p216 同值。十一格是同一支重算探针
+#: （`temp/_recompute_digests.py`）的现算值，不是手抄。
+#:
+PROMPT_VERSION = "p217"
 
 
 

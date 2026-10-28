@@ -619,6 +619,13 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p216", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p216（2026-10-28，阶段 ③ 2B）：新增 search.retry_pending（roles 只有 A）⇒ A 的工具面多一行，十一格摘要只有 A 换值（temp/_recompute_digests.py 现算）。facts 键集仍 15 格、键名一格未动，count / keys_sha256 与上一格同值；本批 prompt_cache_warm.json 已重落（业主给了 --cap-usd 0.1 的两条命令），不留 stale 待办"},
+    # p216 → p217（2026-10-28，阶段 ③ 2C）：动的是 A 自己的 policy 两段（主动性口径 +
+    # broad 的 topic_selfcheck 口径），不是 facts 那一族 —— `STEP_VOLATILE_FACTS` 那 15 格
+    # 一格没挪、键名一个没换 ⇒ `count` / `keys_sha256` 与上一格同值，仍是
+    # `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p217", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p217（2026-10-28，阶段 ③ 2C）：specs/a.py 的 policy 追两段 —— ① 取不到全文 ≠ 这篇不存在（429 等冷却 / 404 换 landing / 400 换 PDF 路由；取不到如实登记；批量再取走 search.retry_pending）② broad 的 topic_selfcheck：off_topic 别花判官调用、unknown 是判不了。机器侧落点 providers.mark_topic_selfcheck（只标不删）+ search.literature 的 candidates[].topic_selfcheck。facts 键集仍 15 格，count / keys_sha256 与上一格同值；prompt_cache_warm.json 本批已重落"},
 )
 
 

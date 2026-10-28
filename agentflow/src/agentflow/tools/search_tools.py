@@ -847,6 +847,12 @@ def _h_literature(
                 mode=mode,
             )
     provider_label = "multi" if wanted else getattr(prov, "name", provider)
+    # 2026-10-28（阶段 ③ 2C）：broad 的候选在交给 A 之前过一遍主题自检（只标不删）。
+    # 为什么还要在工具层再标一次：单源那一支调的是 provider 本身（不经
+    # `MultiProvider`），多源那一支才走合并入口。两个入口、同一个口径
+    # （`P.mark_topic_selfcheck`），所以这里对两支都跑一遍 —— 它对已标过的候选是幂等的。
+    # 三态：related / off_topic / unknown（unknown = 机器判不了，别当 off_topic）。
+    candidates = P.mark_topic_selfcheck(candidates, topic, description=description, mode=mode)
     # 逐源读数两条路都给（同一形状）：多源来自 `MultiProvider` 的台账，
     # 单源来自 `_single_source_reading`（同样复用 providers 层那两处判据）。
     source_rows = (multi["sources"] if multi else
@@ -909,6 +915,12 @@ def _h_literature(
                 "sources": list((cand.raw or {}).get("providers") or []),
                 "channel": (cand.raw or {}).get("channel"),
                 "cited_by_count": (cand.raw or {}).get("cited_by_count"),
+                # 2026-10-28（阶段 ③ 2C）：broad 模式的主题自检结论（只标不删）。
+                # `providers.mark_topic_selfcheck` 已经把它挂进 `raw`；这里原样转出去 ——
+                # 它是 A 判断"要不要为这条花一次判官调用"的唯一机器读数。
+                # 三态：related / off_topic / unknown（`unknown` = 机器判不了，别当 off_topic）。
+                # 非 broad 模式没有这一格（`None`），不是「判过了、相关」。
+                "topic_selfcheck": (cand.raw or {}).get("topic_selfcheck"),
             }
         )
 
@@ -2922,7 +2934,10 @@ def register(
                 "candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language',"
                 "'summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing',"
                 "'existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel',"
-                "'cited_by_count'}；"
+                "'cited_by_count','topic_selfcheck'}；"
+                "topic_selfcheck 是 broad 的主题自检 {'state','note'}"
+                "（state ∈ related/off_topic/unknown；**unknown 是机器判不了、不是跑题**；"
+                "非 broad 模式为 null）；"
                 "sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；"
                 "cost 是 {'provider_calls','elapsed_s'}"
             ),

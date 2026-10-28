@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-28T12:39:05+08:00",
+  "generated_at": "2026-10-28T13:33:35+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -187,10 +187,10 @@
       "path": "src/agentflow/providers.py",
       "glob": "src/agentflow/providers.py",
       "category": "solver-core",
-      "sha256": "d5a596a2fde31d6c128a1cab88464632ad7c3d65a46532be7c883ed185ab936c",
+      "sha256": "bdc9cb54e67a151149518a24da05ef137548fc422c5b5278001e264e6ce8b1d3",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 501de420c69b 变为 d5a596a2fde3，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 d5a596a2fde3 变为 bdc9cb54e67a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -270,10 +270,10 @@
       "path": "src/agentflow/specs/a.py",
       "glob": "src/agentflow/specs/a.py",
       "category": "auth-audit",
-      "sha256": "b20c13e1235d727582ccbc603adaa569f2acdba6bba7ab4c4843cbf36aef845d",
+      "sha256": "4aeb9336000f8af6d425247c44a3708bdc7a5e13b475c01f652e3cae7a54d8be",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 773d6dee214c 变为 b20c13e1235d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 b20c13e1235d 变为 4aeb9336000f，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

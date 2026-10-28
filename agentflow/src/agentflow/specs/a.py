@@ -288,6 +288,29 @@ SPEC = AgentSpec(
             "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
             "（框架向父代理报告），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
+            # 2026-10-28（阶段 ③ 2C，业主要的三件事之一）：主动性口径。
+            # 真机依据（draft/172 §4 第 4 轮 O-04 / §8 第 3 轮）：search.download 10 次
+            # 成功 4 次，失败 6 次是 404 / 429 / 400 各两次 —— 每一类的正确处置不同，
+            # 而 A 当时把「没下来」归到「这篇找不到」，于是 27 篇只有元数据的文献被当成
+            # 「本来就没有」。这一句是提示词口径，不是判据；工具面的落点是
+            # `search.download` 的 `fetch_kind` 与 `search.retry_pending` 的四结局。
+            # 判据：tests/test_a_selfchecks_topic_and_hears_the_fetch_kind.py。
+            "**取不到全文不等于这篇不存在**：下载失败先读 `fetch_kind` / `kind` 再决定下一步 —— "
+            "`http_429` 等这个源的冷却过去（**同一个源在冷却时后面的行会自动跳过**，别换着地址瞎试）；"
+            "`http_404` 换 landing（那个直链就是死的）；`http_400` 换 PDF 路由（构造出来的链接走不通）；"
+            "`tls_cert` / `http_403` 换源；`network_error` 可以再试。"
+            "**取不到就如实登记「没取」**（`download.status=failed` ＋ `last_kind`），"
+            "不许写成「没有这篇」—— 我们没有拿到，与它不存在是两件事。"
+            "批量再取走 `search.retry_pending`：每行一次、四结局 got / failed / no_location / "
+            "cooled_down（`cooled_down` 是跳过、不是失败；`no_location` 是「行上没地址」，也不是「不存在」）。",
+            # 同上（2C 的第二半）：宽检索抓回来的噪声不该各花一次判官调用。
+            # 机器侧落点：`providers.mark_topic_selfcheck` 把 broad 的候选逐条标成
+            # related / off_topic / unknown（只标不删），经 `search.literature` 的
+            # `candidates[].topic_selfcheck` 交到你手上。
+            "宽检索（broad）回来的候选里，`topic_selfcheck.state=off_topic` 的那些是机器**判得出**跑题的："
+            "别为它们花判官的一次调用，直接在 `relevance` 里写「与本次检索无关」；"
+            "`unknown` 是机器**判不了**（例如题面是中文、标题是英文），仍要你自己看一眼 —— "
+            "别把 `unknown` 读成 `off_topic`。",
         ),
         signature_error="把一条候选被丢掉说成这篇文献不存在。",
         deliverable="search_requests 里每一条请求的终局（outcome）与 result_lit_ids。",
