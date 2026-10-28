@@ -69,6 +69,10 @@ def test_a_reused_pid_is_not_read_as_alive(tmp_path: pathlib.Path, bench,
     row = next(r for r in got["rows"] if str(r.get("timer_id")) == tid)
     assert row["pid_reused"] is True, row
     assert row["alive"] is False, row
+    # 2026-10-28：复用号也进点名单（"账与进程对不上"的第三格），M 的巡查看得见。
+    assert [str(x.get("timer_id")) for x in got["orphans"]["pid_reused"]] == [tid], \
+        got["orphans"]
+    assert got["orphan_count"] >= 1, got["orphan_count"]
 
 
 def test_a_genuinely_live_program_still_blocks(tmp_path: pathlib.Path, bench,

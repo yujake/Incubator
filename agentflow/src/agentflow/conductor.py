@@ -1250,7 +1250,7 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
         "checked": False, "reason": "", "rows": [],
         "running": [], "running_count": 0,
         "unowned": [], "unowned_count": 0,
-        "orphans": {"no_timer": [], "finished_but_alive": []},
+        "orphans": {"no_timer": [], "finished_but_alive": [], "pid_reused": []},
         "orphan_count": 0, "no_pid": [],
         "scope": sorted(scope) if scope is not None else [],
     }
@@ -1297,6 +1297,11 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
                 pid_reused = True
                 alive = False
         row["pid_reused"] = pid_reused
+        if pid_reused:
+            # 2026-10-28（业主：「收工必须所有人停、所有进程停」，同时不许为收工强停）：
+            # 这一档既不进闸（它不存在了）、也不能消失 —— 它进"账与进程对不上"那一组
+            # 的第三格，M 的巡查看得见"这个号被别人占了"。
+            out["orphans"]["pid_reused"].append(row)
         live = (state == "pending") or bool(alive)
         row["alive"] = alive
         row["live"] = live
@@ -1316,7 +1321,8 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
         "checked": True, "reason": "", "rows": rows,
         "running_count": len(out["running"]),
         "unowned_count": len(out["unowned"]),
-        "orphan_count": (len(unbooked) + len(out["orphans"]["finished_but_alive"])),
+        "orphan_count": (len(unbooked) + len(out["orphans"]["finished_but_alive"])
+                         + len(out["orphans"]["pid_reused"])),
     })
     out["orphans"]["no_timer"] = unbooked
     return out

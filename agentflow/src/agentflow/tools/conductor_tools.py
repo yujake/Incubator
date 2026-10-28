@@ -917,6 +917,8 @@ def conductor_state(_conductor, ) -> ToolResult:
         "unowned_rows": [dict(r) for r in (progs.get("unowned") or ())],
         "no_timer": [dict(r) for r in (orphans.get("no_timer") or ())],
         "finished_but_alive": [dict(r) for r in (orphans.get("finished_but_alive") or ())],
+        # 2026-10-28：第三类"账与进程对不上"—— 那个 pid 现在是别的程序（复用号）。
+        "pid_reused": [dict(r) for r in (orphans.get("pid_reused") or ())],
         # 异常清单（M 的巡查直接念这两格）：三档各念各的 —— 无主那一档即使连 pid 都没有
         # 也要点名（它连账都差点没进）。
         "owned_named": _named(list(progs.get("running") or ())),
