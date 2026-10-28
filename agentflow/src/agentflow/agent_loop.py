@@ -11418,6 +11418,73 @@ class AgentLoop:
 
 
 # ------------------------------------------------------------------ 后端
+
+#: 子循环的 `stop_reason` → 任务行的 `(status, outcome)`（唯一口径）。
+#:
+#: ## 为什么必须有这张表（D-09，2026-10-28 真机）
+#:
+#: `projects/paper-rewrite-78-backup` 那一趟里有三条子行是这样收的：
+#:
+#: ```
+#: t-000008 G  run.stop_reason=model_unreachable → tasks.outcome=ok
+#: t-000012 G  run.stop_reason=stop_file         → tasks.outcome=ok
+#: t-000015 G  run.stop_reason=stop_file         → tasks.outcome=ok
+#: ```
+#:
+#: 因为 `LlmBackend.call` 回的结果里既没有 `status` 也没有 `outcome`，而收行那一侧
+#: （`conductor._end`）对"status=done 且没声明 outcome"的处置是"按有产出处理 ⇒ ok"。
+#: 于是被用户叫停的、被断网打断的子代理，与真正交了差的子代理在台账上一模一样 ——
+#: 父代理读 `conductor.board` / `ledger` 时读不出差别。
+#:
+#: 顶趟那条路是对的（`Conductor.finish_top_level_run`：`stop_reason=="final"` 才算 ok），
+#: 这张表就是把它那条判据补到子循环这一侧，并按任务级词表（`TASK_OUTCOMES`）分三档：
+#: 被叫停 ⇒ `cancelled`；没连上/没接线 ⇒ `failed`（行上必须带原因）；跑完了没结论 ⇒
+#: `no_result`。只有 `final` 算 `ok`（判据 `tests/test_a_child_that_did_not_finish_is_not_recorded_ok.py`
+#: 遍历 `STOP_REASONS` 逐档钉住这一条）。
+#:
+#: 没登记的理由一律 `no_result` —— 缺省不许是 ok：将来有人加一档 stop_reason 又忘了
+#: 归类时，台账落"跑完了、没结论"，而不是凭空多一条"成功"。
+LOOP_STOP_TO_TASK_OUTCOME: dict[str, tuple[str, str]] = {
+    "final": ("done", "ok"),
+    # ---- 被叫停（用户 / 父 / 预算）：它没干完，但也不是它干坏了。
+    "stop_file": ("done", "cancelled"),
+    "force_stop": ("done", "cancelled"),
+    "budget": ("done", "cancelled"),
+    "interrupted_by_parent": ("done", "cancelled"),
+    "ask_cancelled": ("done", "cancelled"),
+    # ---- 没干成（连不上 / 没认 key / 吃光输出 / 坏 JSON·坏参数连击 / 没接线）：
+    #      这一族要 `failed` + `error`（`schema.Task.validate` 要求失败必须写原因）。
+    "model_unreachable": ("failed", "failed"),
+    "model_auth_failed": ("failed", "failed"),
+    "model_timeout": ("failed", "failed"),
+    "model_output_limit": ("failed", "failed"),
+    "bad_json_limit": ("failed", "failed"),
+    "bad_args_limit": ("failed", "failed"),
+    "not_wired": ("failed", "failed"),
+    # ---- 跑完了、但没给出结论。
+    "no_progress_limit": ("done", "no_result"),
+    "escalated": ("done", "no_result"),
+    "final_refused": ("done", "no_result"),
+    "waiting_for_user": ("done", "no_result"),
+    "max_steps": ("done", "no_result"),
+    "no_notify": ("done", "no_result"),
+    # ---- 这四档只活在 CLI 那一层（续跑/收工检查），子循环走不到；列在这里是为了让
+    #      "每一个登记过的 stop_reason 都有一档"成为一条可判定的性质。
+    "checkpoint_mismatch": ("done", "no_result"),
+    "no_checkpoint": ("done", "no_result"),
+    "already_finished": ("done", "no_result"),
+    "resume_no_transcript": ("done", "no_result"),
+}
+
+#: 没登记过的 `stop_reason` 落这一档：跑完了、没结论（不是 ok）。
+LOOP_STOP_DEFAULT_OUTCOME: tuple[str, str] = ("done", "no_result")
+
+
+def task_outcome_of_loop_stop(stop_reason: str) -> tuple[str, str]:
+    """子循环的停止理由 → 任务行的 ``(status, outcome)``（口径见上面那张表）。"""
+    return LOOP_STOP_TO_TASK_OUTCOME.get(str(stop_reason or ""), LOOP_STOP_DEFAULT_OUTCOME)
+
+
 @dataclass
 class LlmBackend:
     """把登记过的 (角色, 动作) 交给 LLM 循环，其余交给内层后端（`LocalBackend`）。
@@ -11550,10 +11617,20 @@ class LlmBackend:
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
                                       "path": artifact, "stop_reason": run.stop_reason,
                                       "task_id": run.prompt_audit.get("task_id", "")}, sid=self.sid)
+        # D-09（2026-10-28）：把这一趟到底干成没有写进结果的 status / outcome。
+        # 改前这两个键根本不在结果里 ⇒ 收行那一侧按"done 且没声明 outcome ⇒ ok"处置，
+        # 于是被叫停 / 被断网的子代理在台账上都是 ok（真机三条，见上面那张表）。
+        # 口径只在 `task_outcome_of_loop_stop` 一处。
+        child_status, child_outcome = task_outcome_of_loop_stop(run.stop_reason)
         out = {"llm_run_path": artifact, "final": run.final, "stop_reason": run.stop_reason,
+               "status": child_status, "outcome": child_outcome,
                "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
                # 优雅停止时"手上还剩什么"随结果回给父（父再往上报，M 汇总给用户）
                "blocked_remaining": dict(run.blocked_remaining)}
+        if child_status == "failed":
+            # 失败必须答得出为什么（`schema.Task.validate`）：`run.final` 里就是那句
+            # 停止通告（"连着 3 次没拿到可用的回复……"），它是这一档唯一的原话。
+            out["error"] = str(run.final or f"这一趟停在 {run.stop_reason}")
         if not artifact:
             out["llm_run"] = run.to_dict()      # 落盘失败时退回内联，绝不静默丢产出
         return out
