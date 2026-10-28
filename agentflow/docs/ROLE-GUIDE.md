@@ -11,7 +11,7 @@
 
 角色之间没有直连通路：想叫谁干活就走 conductor.summon（受 ALLOWED_EDGES 约束）；想给谁说句话就沿秘书链逐跳转发（中间各跳不看正文）。
 
-角色数 **11**｜动作总数 **64**｜工具面合计 **398** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
+角色数 **11**｜动作总数 **64**｜工具面合计 **406** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
 
 ## 角色 A
 
@@ -80,6 +80,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `lit.admit` | 正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。 | `write_local` | （无） |
 | `lit.admit_all` | 提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。 | `write_local` | （无） |
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
@@ -111,7 +112,7 @@
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色只读那份 `.txt`（`fs.read` 拒收 PDF）。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **44** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **45** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -203,6 +204,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。 | `write_local` | （无） |
@@ -220,7 +222,7 @@
 | `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **30** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **31** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -430,6 +432,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `conjecture.register_conjecture` | 登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里 | `write_local` | `statement`、`origin` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
@@ -458,7 +461,7 @@
 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。 | `read` | `lit_id` |
 | `trace.relation` | L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。 | `read` | `relation_id` |
 
-共 **45** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **46** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -541,6 +544,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。所有角色都能用。 | `read` | （无） |
@@ -559,7 +563,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **31** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **32** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -660,6 +664,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
 | `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
@@ -684,7 +689,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **43** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **44** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -780,6 +785,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `doc.build_document` | 写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存在，两闸都过才落库；out_path 越界拒绝）。 | `write_local` | `kind`、`title`、`claims` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
@@ -808,7 +814,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **45** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **46** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -1089,6 +1095,7 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `read` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `formal.check_formal` | 把一段 Lean 源码（`source`）或工作区里的 `.lean`（`script_path`）交给检查器真跑一次。前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈。查了没通过（compile_error / uses_sorry / extra_axioms / decl_mismatch）与没查成是两件事 | `read` | `claim` |
 | `formal.formalize` | 把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / `exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数 | `write_local` | `claim`、`source` |
 | `formal.record` | 把一次形式化检查登记成 `experiments` 表的一行（`method="formal"`）：先按 `statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**检查器，把现跑得到的 status / verified / checker / output_sha256 写进那一行。调用方给的读数只用于对账：与现跑不一致 ⇒ 受控拒绝 `reading_mismatch`，一行都不写。它**不动** `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签 | `write_local` | `statement_id`、`code_path` |
@@ -1106,7 +1113,7 @@
 | `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **30** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **31** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
@@ -1239,11 +1246,12 @@
 | `conductor.stop` | 停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 有界收尾 → 合成终态（记未知、不重试）→ 续跑简报。`force=true` 直接停：按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。 | `write_local` | （无） |
 | `conductor.summon` | 派活：把活交给某个角色（只写**是什么活**，怎么做由它定）。闸门在主控内部（边 / 动作表 / 参数接缝 / 上限 / 预算）；被拒也落台账并回 `refusal_reason`。 | `write_local` | `target_role`、`task` |
 | `conductor.summon_many` | 一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例要各自不同的 `instance` 标签才同波并发；没标签时自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `concurrent_peak`。 | `write_local` | `targets` |
+| `conductor.void_items` | 把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。 | `write_local` | `item_ids`、`why` |
 | `conductor.watch` | 看任意一支任务树的行为：从 task_id（或某个角色在台账里的实例行）向下走，每个节点给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。depth 缺省（或 0）= 整棵树；主控能想追几层追几层。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 
-共 **34** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **35** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 

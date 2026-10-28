@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-27T23:26:05+08:00",
+  "generated_at": "2026-10-28T09:11:50+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -219,10 +219,10 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "0cae0a34e559a74800af740346c943e9a87ccfa4d240ecd072bafd123c219d36",
+      "sha256": "a18a4a22b81de669f6c72d124f1157b858491598f0c8dc33a627d6899de266bc",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 b32f42378bff 变为 0cae0a34e559，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 0cae0a34e559 变为 a18a4a22b81d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

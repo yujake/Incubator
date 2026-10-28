@@ -81,7 +81,7 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 那三格完全同族。数字来自盘上实测（`scan` 的 `(行, 列)` 去重口径）。
     # 它们不是"新长的豁免"：`returns=` 有没有把实跑键集说全，由
     # `tests/test_tools_returns_declaration.py` 逐工具真跑钉住。
-    "conductor_tools.py": 31,
+    "conductor_tools.py": 37,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由

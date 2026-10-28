@@ -117,11 +117,13 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 信息对逐个活跃子代理给出"过"、指导意见」）。三件都在编排面（`roles=("M",)`），
 #: 声明与实跑键集的判据见本文件那几条；行为判据在
 #: `tests/test_m_patrol_reads_every_active_child.py`。
+#: 2026-10-28：118 → 119（`conductor.void_items` —— D-08 那个死锁的出口：只许把
+#: 「收件人已静默/退役」的 ack-only 通知作废，不许作废要交付的活）。
 #: 2026-10-27（R-BE4 D1 Phase A）：117 → 118（`conjecture.register_conjecture` —— D 的
 #: 主力动作此前只被 `capabilities` 读到、`build_registry` 从不装配，业主批准后进
 #: `tools._MODULES`）。它的探针在 `_PREREQS` 里先落一条同样的 statement，于是自己这一趟
 #: 走"命中既有行"那一支（`duplicate` / `duplicate_of` 两格都在）。
-TOOL_COUNT = 118
+TOOL_COUNT = 119
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -412,6 +414,9 @@ def tool_params() -> dict[str, dict]:
         # 字典，所以键集合在这里照样验得全；真跑到 acked / partial / not_yours 三支的
         # 判据在 `tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py` 的 a/b。
         "conductor.ack": {"item_ids": ["t-999999"], "note": "探针：只验键集，不真的消项"},
+        # 作废只验键集：给一个不存在的项号 ⇒ 落在 `refused=[{id,why}]` 那一支，
+        # 成功支与它共用同一个 `data` 字典，所以声明的键集合照样验得全。
+        "conductor.void_items": {"item_ids": ["t-999999"], "why": "探针：只验键集"},
         # 自己给自己落一条 work 项（D12，2026-10-27）：探针的身份 `t-probe` 在台账里
         # 未必有那一行 ⇒ 落在 `state=refused`（"台账里没有我这一行"）那一支。那一支与
         # 成功支、existing 支共用 `conductor_post_task` 里那一个字面量 `data` 字典，
@@ -713,6 +718,11 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
 
 #: 键名只能从代码读出来的那些工具（见 `EXECUTED_KEY_SOURCE` 的判据）。
 CODE_ONLY_KEY_SOURCE: dict[str, str] = {
+    # 2026-10-28（D-08）：作废只写台账那几行，探针拿不到 ok 分支（夹具里没有
+    # "已静默子代理 + 它名下 ack-only 通知"这一对），键名逐字读自 `conductor_void_items`
+    # 的 `data` 字典。
+    "conductor.void_items": "只写 tasks 那几行的 item_state/item_close/inputs；返回 voided/refused 两条清单，键名读自 `conductor_void_items` 的 data。",
+
     # 三件审校写工具：探针拿不到 ok 分支（夹具没有 documents 行）⇒ 键名读自实现。
     "review.review_document": "写 `review_findings` 行并改 `documents.status`；"
                              "返回值由 `_review_review_document_tool` 的 ok/fail 决定。",

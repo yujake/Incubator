@@ -92,6 +92,9 @@ M_TOOL_FACE = {
     # `ORCHESTRATION_TOOLS` 的补登记），而 `program.list` 是读数，谁都能看。
     "program.list", "program.stop",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
+    # 2026-10-28（D-08）：作废"收件人已静默/退役"的 ack-only 通知，
+    # 它是销号闸与收工闸之间那个死锁的唯一出口。
+    "conductor.void_items",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
 #:

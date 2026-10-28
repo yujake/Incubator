@@ -3146,6 +3146,83 @@ class Conductor:
             "seen_by": "", "seen_step": None, "keep_alive": bool(keep_alive),
         }
 
+    def void_items(self, item_ids: Sequence[str], *, by_task_id: str, why: str,
+                   ) -> dict[str, Any]:
+        """把"永远不会再被收件人处理"的板项作废（`item_close="expired"`）。
+
+        为什么必须有这一条（真机 `projects/paper-rewrite-78` 2026-10-28 02:48 实测）：
+        到点通知是 `expects="ack"` 的板项 —— 父不许代 ack（业主 2026-10-08 裁定），
+        而收件人（子代理）已经静默/退役 ⇒ 它永远不会被 ack。可另一头，销号闸要求
+        "名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
+        连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
+        出口只能是"作废"：它不是"知道了"，也不是"做完了"，而是"这条不会再被处理"。
+
+        三条硬边界（少一条就等于把这条路变成"父代 ack"）：
+        1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
+        2. 调用方必须已经证明收件人静默或已退役（本方法再核一次 `retire_state_of`，
+           不是静默就整批拒）—— 不许把在飞的活清掉；
+        3. 作废不经过状态机（`item_move` 描述的是"有人读过/办过"，作废恰恰是
+           "不会有人读"），但一律过 `schema.Task.validate`；来路写进 `inputs`
+           （`void:expired:<父台账号>:<理由>`），于是事后能回答"谁作废的、为什么"。
+
+        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"reason"}`（三态：读不成 ⇒
+        `checked=False`，不许折成"没有要作废的"）。
+        """
+        self._refuse_write_in_snapshot("作废板项（void_items）")
+        ids = [str(x) for x in item_ids if str(x).strip()]
+        if not ids:
+            return {"checked": True, "voided": [], "refused": [], "reason": "没有给要作废的项"}
+        # 边界 2：收件人必须静默/已退役。按父（我自己）判一次，逐项再核收件人。
+        out: dict[str, Any] = {"checked": True, "voided": [], "refused": [], "reason": ""}
+        with self.store.tx("tasks", actor="conductor", note="item:expired") as tx:
+            rows = {str(r.get("task_id")): r for r in tx.rows("tasks")}
+            for iid in ids:
+                row = rows.get(iid)
+                if row is None:
+                    out["refused"].append({"id": iid, "why": "没有这一项（不是'已经作废'）"})
+                    continue
+                if not self._is_board_item(row):
+                    out["refused"].append({"id": iid, "why": "不是板项（kind 为空）⇒ 不归作废管"})
+                    continue
+                if str(row.get("item_state") or "") == "done":
+                    out["refused"].append({"id": iid, "why": "已经是终态（重复作废不改任何格）"})
+                    continue
+                if str(row.get("expects") or "") != "ack":
+                    out["refused"].append({"id": iid,
+                                           "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
+                                                  "（只许作废'知道了就好'的通知）"})
+                    continue
+                owner = str(row.get("role") or "")
+                try:
+                    gate = self.retire_state_of(str(row.get("parent_task_id") or ""))
+                except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 不许作废（fail-closed）
+                    gate = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+                if not gate.get("checked"):
+                    out["refused"].append({"id": iid, "why": (
+                        f"收件人状态读不成（{gate.get('reason') or '没查成'}）⇒ 不知道它是不是静默，"
+                        "不许作废（fail-closed）")})
+                    continue
+                if not gate.get("silent"):
+                    out["refused"].append({"id": iid, "why": (
+                        f"{owner} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")})
+                    continue
+                new = dict(row)
+                new["item_state"] = "done"
+                new["item_close"] = "expired"
+                inputs = list(new.get("inputs") or [])
+                inputs.append(f"void:expired:{by_task_id}:{' '.join(str(why).split())[:120]}")
+                new["inputs"] = inputs
+                task = S.Task(**{k: v for k, v in new.items()
+                                 if k in S.Task.__dataclass_fields__})
+                task.validate()
+                tx.upsert("tasks", task.to_dict(), note="item:expired")
+                out["voided"].append(iid)
+        if out["refused"] and not out["voided"]:
+            out["reason"] = "一条都没作废（拒绝理由见 refused）"
+        elif out["refused"]:
+            out["reason"] = f"作废 {len(out['voided'])} 条、拒 {len(out['refused'])} 条"
+        return out
+
     def open_items_many(self, items: Sequence[Mapping[str, Any]], *,
                         details: Sequence[str] | None = None) -> list[str]:
         """一笔事务开 N 条工作项（广播 / 停止通知那一族）。返回的编号顺序与 `items` 一致。

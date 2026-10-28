@@ -2355,6 +2355,81 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
 
 
 @tool(
+    "conductor.void_items",
+    "把**永远不会再被收件人处理**的板项作废（item_close=expired）。"
+    "它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，"
+    "而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，"
+    "父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，"
+    "那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。"
+    "三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役"
+    "（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，"
+    "所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。",
+    {"type": "object",
+     "properties": {
+         "item_ids": {"type": "array",
+                      "items": {"type": "string", "minLength": 4, "maxLength": 12},
+                      "minItems": 1, "maxItems": 50,
+                      "description": "要作废的板项编号（tasks 里的 task_id，可一次给多条）"},
+         "why": {"type": "string", "minLength": 4, "maxLength": 300,
+                 "description": "为什么作废（必填：逐字写进那一条行的 inputs，事后要能复核）"},
+     },
+     "required": ["item_ids", "why"],
+     "additionalProperties": False},
+    side_effect="write_local",
+    roles=_PARENT_ROLES,
+    returns=("{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一"),
+)
+def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResult:
+    """作废"永远不会再被收件人处理"的板项（`item_close="expired"`）。
+
+    读写：只写 `tasks` 表里那几行的 `item_state` / `item_close` / `inputs` 三格；
+    一行都不新建、不删；每一条都过 `schema.Task.validate`。
+
+    实现：台账号从 `current_task_id()` 取（没有就拒，不猜一个父）→ 交给
+    `Conductor.void_items`（唯一实现：它自己再核"只许 expects=ack"与"收件人必须静默"，
+    两条都在那一处判，工具层不另立一份口径）。
+
+    三态：`checked=False` 表示没查成（没有台账号 / 读数不是对象 / 调用抛了），
+    不许读成"没有要作废的"。
+    """
+    ids = [str(x) for x in (item_ids or ())]
+    data: dict[str, Any] = {
+        "checked": False, "ok": False, "state": "unknown",
+        "voided": [], "refused": [], "count": 0, "requested": len(ids),
+        "by_task_id": "", "why": str(why or ""), "reason": "",
+    }
+    mine = str(current_task_id() or "")
+    data["by_task_id"] = mine
+    if not mine:
+        data["reason"] = ("这一趟没有台账号 ⇒ 不知道这次作废该记在谁头上；"
+                          "作废是一次有对象的写，不猜一个父")
+        return ok(data, **data)
+    if not data["why"].strip():
+        data.update(checked=True, state="refused",
+                    reason="why 必填：作废没有理由就不可复核（写进 inputs 的是这一句）")
+        return ok(data, **data)
+    if not ids:
+        data.update(checked=True, state="nothing", ok=True,
+                    reason="没给任何项 ⇒ 一个字节都不写")
+        return ok(data, **data)
+    try:
+        got = _conductor.void_items(ids, by_task_id=mine, why=str(why))
+    except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写，只能如实说不知道
+        data["reason"] = f"作废时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道"
+        return ok(data, **data)
+    if not isinstance(got, Mapping):
+        data["reason"] = "作废的读数不是对象 ⇒ 没查成"
+        return ok(data, **data)
+    voided = [str(x) for x in (got.get("voided") or ())]
+    refused = [dict(r) for r in (got.get("refused") or ()) if isinstance(r, Mapping)]
+    data.update(checked=bool(got.get("checked")), voided=voided, refused=refused,
+                count=len(voided),
+                state=("voided" if voided else ("refused" if refused else "nothing")),
+                ok=bool(voided), reason=str(got.get("reason") or ""))
+    return ok(data, **data)
+
+
+@tool(
     "conductor.ack",
     "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，"
     "落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项"
@@ -3783,6 +3858,9 @@ _TOOL_FUNCTIONS = _TOOL_FUNCTIONS + (
     (conductor_patrol, ('_conductor',)),
     (conductor_review_child, ('_conductor',)),
     (conductor_patrol_verdict, ('_conductor', 'store')),
+    # 作废只写台账里那几行（`item_close="expired"`）：判定与写盘都在
+    # `Conductor.void_items`，这里只把主控句柄绑上去。
+    (conductor_void_items, ('_conductor',)),
 )
 
 

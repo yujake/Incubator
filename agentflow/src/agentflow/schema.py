@@ -2581,7 +2581,16 @@ ITEM_EXPECTS: tuple[str, ...] = ("ack", "work")
 ITEM_STATES: tuple[str, ...] = ("queued", "claimed", "seen", "done", "block")
 #: `done` 的两种收口：`acked`（知道了）与 `completed`（做完了）必须分得开 ——
 #: 折平它就是把"光知道个信息"读成"交付了"。
-ITEM_CLOSES: tuple[str, ...] = ("acked", "completed")
+#: 板项收口的三档（2026-10-28 加 `expired`）。
+#:
+#: 为什么必须有第三档（真机 `projects/paper-rewrite-78` 2026-10-28 02:48 实测）：
+#: 子代理静默/退役后，它名下"只许本人 ack"的到点通知**永远不会有人 ack**，而销号闸
+#: 要求"名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
+#: 连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、**final 为空**。
+#: 出口只能是"作废"这一档：它不是"知道了"（acked），也不是"做完了"（completed），
+#: 而是"这条通知永远不会再被收件人处理"。折进前两档会让读数再也分不清这三件事 ——
+#: 那正是这套系统反复禁止的折平。
+ITEM_CLOSES: tuple[str, ...] = ("acked", "completed", "expired")
 
 #: 2026-10-13（业主：「接收到停的时候，剩余任务委托状态自动变成block」）：加 `block`
 #: 一档 —— 它说的是"停了、但这件活没做完"，与 `cancelled`（被取消）和 `failed`（崩了）
