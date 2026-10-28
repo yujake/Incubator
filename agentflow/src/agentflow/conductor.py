@@ -1237,9 +1237,21 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
         pid = row.get("pid")
         state = str(row.get("state") or "")
         alive = bool(_program_alive(pid)) if pid is not None else False
-        live = (state == "pending") or bool(alive)
+        # 2026-10-28：`live`（进闸的那一格）只认"账上说它还在跑"。
+        # 改前是 `live = (state == "pending") or alive` —— 于是"账上已收口、pid 探活为真"
+        # 也进闸，而本函数自己的 docstring 写着 `orphans`（含 `finished_but_alive`）
+        # "只进读数、不进任何闸"：同一份读数里两处口径打架。
+        # 真机（`projects/paper-rewrite-78c` 收工）：E1 的 extract_pdf.py 账上
+        # `state=fired / outcome=exited / exit_code=0 / 1.2 秒`，读数却 `live=true`
+        # ⇒ 挡住 E1 销号；而 `program.stop` 从 M 侧回「我名下没有还在跑的程序」
+        # （归属在 E1，父不能停）⇒ 销号闸解不开，整趟只能 `final_refused`。
+        # 另外 Windows 的 pid 会被复用：一个 1.2 秒就 exit_code=0 的脚本"pid 还活着"
+        # 多半根本不是它。所以这一格既挡人又不可靠 —— 它留在读数里（`alive` /
+        # `finished_but_alive` / `orphans`），不再挡销号与收工。
+        live = state == "pending"
         row["alive"] = alive
         row["live"] = live
+        row["finished_but_alive"] = bool(alive and state != "pending")
         row["owner"] = str(row.get("task_id") or "")
         row["elapsed_sec"] = _program_elapsed(row, now_dt)
         rows.append(row)
