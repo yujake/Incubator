@@ -2456,7 +2456,7 @@ def register(
 
 
 
-    _register_paper_tools(registry, workspace=workspace)
+    _register_paper_tools(registry, workspace=workspace, store=store)
 
 
 # ---------------------------------------------------------------- 正文编译（`doc.paper_compile`）
@@ -2600,7 +2600,7 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
 
 
 def _doc_write_mapping(workspace: Path | None, project: str,
-                       rows: Sequence[Mapping[str, Any]]) -> Any:
+                       rows: Sequence[Mapping[str, Any]], *, store: Any = None) -> Any:
     """`doc.write_mapping`：把对应表交给 `papermapping.write_package`（唯一写口）。
 
     三份产物（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`，外加正文里那一行
@@ -2610,10 +2610,39 @@ def _doc_write_mapping(workspace: Path | None, project: str,
 
     行的形状也走读侧同一份判据（`papermapping.parse_rows`）：坏行逐条带回、一行都不写。
     半张表比没有表更坏 —— 它会让人以为"表交过了"。
+
+    ## 成文门（业主 2026-10-28 口径，判据 `tests/test_g_cannot_write_a_paper_on_an_empty_research_base.py`）
+
+    业主逐字：「G写论文时能依赖的只有系统侧的研究成果（B侧原文或B侧有引用记录的其它角色的
+    手稿与参考文献），总之G写论文只能用研究产出，如果产出不足不可杜撰，应上报父代理要求
+    扩大研究面。」
+
+    这条写在这里而不是提示词里，是因为真机上模型读了"落定才成文"照写不误
+    （`projects/paper-rewrite-78-backup`：`statements 0 / relations 0 / documents 0` 的那一步
+    写出了 57KB 正文）。`researchbase.research_base` 是那条口径的唯一读数，本函数是它唯一的
+    闸门：产出不足 ⇒ 一个字节都不写，并把"怎么补、怎么上报"逐条交回去。
     """
     root = _paper_root(workspace, project)
     if not isinstance(root, Path):
         return root
+    # ---- 成文门：先问"有没有可依赖的研究成果"，再谈表。
+    from .. import researchbase as RB
+
+    base = RB.research_base(store)
+    state = str(base.get("state") or "")
+    if state != "ready":
+        if state == "unreadable":
+            return fail(
+                f"{base.get('reason')} ⇒ 成文**没查成**（不是「研究成果够用」，"
+                "也不是「没有成果」）：修好台账再来，表一个字节都没写",
+                kind="ledger_unreadable", written=False, research_base=base,
+                next_steps=list(base.get("next_steps") or []))
+        return fail(
+            f"研究成果不足以成文：{base.get('reason')}。"
+            "按业主 2026-10-28 的口径，**不许杜撰**，也不许拿工作区那份原稿 / A 的元数据行凑；"
+            "按 next_steps 补齐（或上报父代理要求扩大研究面）之后再回来写表 —— 表一个字节都没写",
+            kind="no_evidence_chain", written=False, research_base=base,
+            next_steps=list(base.get("next_steps") or []))
     payload = {"rows": [dict(r) for r in (rows or [])]}
     parsed, problems = PM.parse_rows(payload)
     if problems:
@@ -2662,7 +2691,8 @@ def _doc_write_mapping(workspace: Path | None, project: str,
     })
 
 
-def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
+def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
+                          store: Any = None) -> None:
     """把论文这一层的两条工具注册进 G 的工具面。
 
     一条工具、一件事：`doc.paper_compile`。它 `declared_external="exec"` 是刻意的 ——
@@ -2727,7 +2757,8 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
                 "required": ["project", "rows"],
                 "additionalProperties": False,
             },
-            handler=lambda project, rows: _doc_write_mapping(workspace, project, rows),
+            handler=lambda project, rows: _doc_write_mapping(workspace, project, rows,
+                                                             store=store),
             side_effect="write_local",
             roles=("G",),
             returns=(
@@ -2742,9 +2773,17 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
                 "on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ "
                 "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"
                 "json / md / appendix 是三个落点的绝对路径；"
+                # 2026-10-28 成文门（业主口径「G 只能用研究产出」）：失败要多两格 ——
+                # `research_base` 是那条读数的全文（三态 + 逐格计数 + 缺哪一格），
+                # `next_steps` 是"怎么补 / 怎么上报"的人话清单。
                 "失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ "
                 "mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ "
-                "io_error（写盘失败）/ bad_project（项目根不在工作区里）"
+                "io_error（写盘失败）/ bad_project（项目根不在工作区里）/ "
+                "no_evidence_chain（研究成果不足，**一个字节都没写**）/ "
+                "ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 "
+                "research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，"
+                "字段名只有一处真身，见 researchbase.research_base）"
+                "与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
             ),
             tags=("document", "paper", "write"),
         )

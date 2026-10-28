@@ -5776,14 +5776,14 @@
         "doc.write_mapping"
       ],
       "key": "returns",
-      "reason": "同一批：返回值点名 numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填 ——缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False），不再只在文档里写。",
+      "reason": "同一批：返回值点名 numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填 ——缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False），不再只在文档里写。 2026-10-28（成文门，业主逐字：「G写论文时能依赖的只有系统侧的研究成果（B侧原文或B侧有引用记录的其它角色的手稿与参考文献），总之G写论文只能用研究产出，如果产出不足不可杜撰，应上报父代理要求扩大研究面」）：doc.write_mapping 在写表之前先问 researchbase.research_base ——研究成果不足 ⇒ 受控拒绝（kind=no_evidence_chain，一个字节都不写）并交回 next_steps；台账读不到是另一档（kind=ledger_unreadable，没查成）。失败那一侧因此多两个键：research_base（读数全文，字段名见 researchbase.research_base）与 next_steps。（本条账按判据的口径就地把 to 推进到今天；同一条 (工具, key) 只留一条账 —— 再加一条会让上一条的 to 过期，那条判据会红。）",
       "date": "2026-10-26",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）",
-          "to": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）"
+          "to": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）/ no_evidence_chain（研究成果不足，**一个字节都没写**）/ ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，字段名只有一处真身，见 researchbase.research_base）与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
         }
       ]
     },

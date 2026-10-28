@@ -2758,6 +2758,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                        "`CATCH_FAILED` 而不是只跑第一条）+ `step_index_of`（步数按拆后条目记）/ "
                        "`action_of` / `outcome_of` / `digest_line`（汇总成一行回给模型）；"
                        "不读盘不写盘、不认识任何角色、不判准入",
+    # 2026-10-28（业主逐字：「G写论文时能依赖的只有系统侧的研究成果（B侧原文或B侧有引用记录的
+    # 其它角色的手稿与参考文献）……如果产出不足不可杜撰，应上报父代理要求扩大研究面」）：
+    # 成文门的那条读数的真身。为什么必须落在顶层：它读的是台账（`statements`），
+    # 而闸门在工具层（`tools/doc_tools.py::_doc_write_mapping`）、将来收工门那一格也要读
+    # 同一份口径 —— 挂进 `agent_g/` 会让"谁算错的那一方"出现两份实现，而这里的错法
+    # （把"没成果"读成"有成果"）恰好不会抛任何异常。
+    "researchbase.py": "G 能依赖的研究成果池（成文门的读数）：research_base（三态 "
+                       "ready/insufficient/unreadable + statements / with_proof / "
+                       "verified_quotes / cited_literature / cited_documents / missing / "
+                       "next_steps / reason）—— 判据只有两条：proof_text 非空或 "
+                       "quote_verified is True；闸门在 tools/doc_tools._doc_write_mapping",
 }
 
 

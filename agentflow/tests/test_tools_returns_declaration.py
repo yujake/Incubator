@@ -293,7 +293,30 @@ _PENDING_LITERATURE: dict = {
                  "url": "https://example.invalid/probe-retry.pdf"},
 }
 
-_PREREQS: dict[str, tuple[str, dict]] = {
+def _seed_a_proof_statement(registry: "ToolRegistry") -> None:
+    """给 `doc.write_mapping` 的探针铺一条带证明正文的命题（成文门的前置）。
+
+    为什么不加进 `_seed`：`formal.record` / `verify.*` 那一族探针靠"没有可绑的命题行"
+    落到受控拒绝那一支（见 `CODE_ONLY_KEY_SOURCE` 的注释），全局加一例会改掉它们的读数。
+    也不走 `table.create`：`statements` 不由通用写口直写（`store.direct_write_refusal`）。
+    """
+    from agentflow import schema as S
+
+    store = registry.probe_store
+    stmt = S.Statement(
+        stmt_id="9001", origin="own_result", kind="theorem", label="Theorem 0.1 (probe)",
+        statement_text="探针命题（短版）", statement_full="探针命题：若假设成立则结论成立。",
+        proof_text="Proof. 由定义直接得到。",
+        # `None` 要配一句理由（`Statement.validate`：没校验要说清为什么还没校验）
+        quote_verified=None, quote_reason="还没校验：探针没有可比全文",
+        evidence_kind="heuristic", status="active", created_at=S.now_iso())
+    stmt.validate()
+    with store.tx("statements", actor="probe", note="doc.write_mapping 探针的前置") as tx:
+        tx.upsert("statements", stmt.to_dict(), note="doc.write_mapping probe")
+
+
+#: 前置的两档：`(工具名, 参数)` = 先跑那次工具调用；直接给一个可调用 = 铺数据（不走工具）。
+_PREREQS: dict[str, Any] = {
     "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
     "conjecture.register_conjecture": ("conjecture.register_conjecture",
                                        dict(_CONJECTURE_PROBE)),
@@ -308,6 +331,11 @@ _PREREQS: dict[str, tuple[str, dict]] = {
         "table": "literature",
         "row": _PENDING_LITERATURE,
     }),
+    # 成文门（2026-10-28，业主口径「G 只能用研究产出」）：`doc.write_mapping` 现在要求
+    # 台账里有可依赖的研究成果（`proof_text` 非空或 `quote_verified=true`）才许写表。
+    # 夹具原来没有这样的命题行 ⇒ 门会正确地拒掉它，而这条判据问的是"声明 ⊆ 实跑"
+    # ⇒ 前置必须补上（见 `_seed_a_proof_statement` 的 docstring：为什么不加进 `_seed`）。
+    "doc.write_mapping": _seed_a_proof_statement,
 }
 
 
@@ -1343,6 +1371,10 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     # `build_registry` 的产物逐字节同源 —— 连 `default_budget` 那些装配期属性都不动。
     built.__class__ = _RoleGateBypassedRegistry
     reg = built
+    # 铺前置用的钩子要能写台账（`_seed_a_proof_statement`）：注册表自己不持 store
+    # （工具是闭包，store 绑在闭包里），所以把这一趟的 store 挂在探针注册表上 ——
+    # 只给本文件的前置钩子用，生产路径不看这一格。
+    reg.probe_store = store
     assert reg.bound_role is None
     assert _every_tool_has_a_role(reg) == [], (
         f"这些工具不属于任何角色（声明缺失，不是权限问题）：{_every_tool_has_a_role(reg)}"
@@ -1390,7 +1422,11 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
             # 业主 2026-10-10 裁定 9甲）。这不是取巧 —— 真实循环里模型也必须先读后改。
             pre = _PREREQS.get(name)
             if pre is not None:
-                registry.call(pre[0], **dict(pre[1]))
+                if callable(pre):
+                    # 直接铺前置（不是一次工具调用）：见 `_seed_a_proof_statement` 的理由。
+                    pre(registry)
+                else:
+                    registry.call(pre[0], **dict(pre[1]))
             res = registry.call(name, **kw)
             out[name] = Observation(name, res.ok, res.meta.get("kind"), res.error, res.data,
                                     dict(res.meta))
