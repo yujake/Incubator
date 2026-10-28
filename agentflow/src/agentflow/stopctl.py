@@ -574,6 +574,22 @@ def alive(pid: int) -> bool:
     return True
 
 
+def _registered_pids(root: str | Path) -> list[dict[str, Any]]:
+    """盘上登记过的**全部**进程（含已经死掉的；不探活、不过滤）。"""
+    out: list[dict[str, Any]] = []
+    d = pid_dir(root)
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.pid")):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 —— 读不懂的登记不算登记
+            continue
+        if isinstance(data, dict):
+            out.append(data)
+    return out
+
+
 def live_pids(root: str | Path, *, role: str = "") -> list[dict[str, Any]]:
     """登记在盘上、且「真的还活着」的进程（逐条带 `pid/role/sid/started_at`）。
 
@@ -1194,6 +1210,27 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     """
     running: list[dict[str, Any]] = []
     stale: list[str] = []
+    stale_rows: list[dict[str, Any]] = []
+    # 2026-10-28：会话面与进程面对齐。子循环跑在父进程里（线程），它们没有各自的
+    # pid 登记 ⇒ 只能按**会话**对齐：这个 sid 登记过的进程全都不在了 ⇒ 它名下"没关
+    # 的行"是死读数；只要还有一个活着、或者压根没登记 ⇒ 仍按在飞读（fail-closed）。
+    dead_sids: set[str] = set()
+    seen_sids: set[str] = set()
+    try:
+        for entry in _registered_pids(root):
+            sid_of = str(entry.get("sid") or "")
+            if not sid_of:
+                continue
+            seen_sids.add(sid_of)
+            if alive(int(entry.get("pid") or 0)):
+                continue
+            dead_sids.add(sid_of)
+        dead_sids -= {sid_of for sid_of in seen_sids
+                      if any(alive(int(e.get("pid") or 0))
+                             for e in _registered_pids(root)
+                             if str(e.get("sid") or "") == sid_of)}
+    except Exception:  # noqa: BLE001 —— 登记读不成就是"没查到"（不算已死）
+        dead_sids = set()
     from . import sessions as _SESS
 
     for info in _SESS.list_sessions(root):
@@ -1245,8 +1282,14 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             if key in closed_keys:
                 continue
             role, _, tid = key.partition("\x00")
-            running.append({"role": role, "sid": sid, "since": str(start.get("ts") or ""),
-                            "task_id": tid, "evidence": "会话面"})
+            row = {"role": role, "sid": sid, "since": str(start.get("ts") or ""),
+                   "task_id": tid, "evidence": "会话面"}
+            if sid in dead_sids:
+                stale_rows.append({**row, "why": (
+                    "这一趟登记的进程已经不在了（强杀 / 进程退出没写 agent_run_end）"
+                    "⇒ 这不是在飞")})
+                continue
+            running.append(row)
         for role, start in legacy_start.items():
             if role in legacy_closed:
                 continue
@@ -1258,6 +1301,7 @@ def running_loops(root: str | Path) -> dict[str, Any]:
         row["evidence"] = "进程面"
     return {"running": running, "live": live, "unreadable_sessions": stale,
             "answer": "有" if (running or live) else "没有",
+            "stale_rows": stale_rows,
             #: 读的人先看这一句：这一份读数有几成是"会话面"（弱证据）撑起来的。
             #: 真机 78c：3 条在飞全是会话面 —— 进程退出后没写 run_end 的残留。
             "evidence_note": ("在飞的行逐条带 evidence（会话面 / 进程面）；"
