@@ -1119,37 +1119,21 @@ def retire_refusal(reading: Mapping[str, Any], *, tid: str = "", name: str = "",
 # "没有在跑的程序" —— 三态纪律里最贵的那种折叠。
 
 
-#: pid 复用判定的容差（秒）：创建时刻比落账时刻晚这么多，就不是同一台进程。
+#: pid 复用判定的读数：这个 pid 现在挂着的进程映像名（小写、不含 .exe）。
 #:
-#: 为什么需要这一格（业主 2026-10-28 两条裁定合起来）：口径是「收工必须所有人停、所有
-#: 进程停」，所以闸不许放宽；但 Windows 的 pid 会被复用 —— 账上早已 `outcome=exited`
-#: 的那台脚本，探活探到的可能是另一台恰好占了这个号的新进程（真机
-#: `projects/paper-rewrite-78c`：`extract_pdf.py` 1.2 秒就 exit_code=0，读数却 `alive=true`
-#: ⇒ 销号闸被一个已经不存在的进程永久挡住；而业主又明令「不能为了着急收工强停」）。
-#: 正确的处置不是放松闸、也不是加停的权力，而是把这个读数测准。
-PID_REUSE_TOLERANCE_SEC: float = 2.0
+#: 为什么要它（业主 2026-10-28 两条裁定合起来）：口径是「收工必须所有人停、所有进程停」，
+#: 闸不许放宽；而 Windows 的 pid 会被复用 —— 账上早已 `outcome=exited` 的那台脚本退了之
+#: 后，这个号可能属于另一台新进程（真机 `projects/paper-rewrite-78c`：`extract_pdf.py`
+#: 1.2 秒就 exit_code=0，读数却 `alive=true`）；同时业主又明令「不能为了着急收工强停」。
+#: 所以只能把"活着"这个读数测准。
+#:
+#: 为什么用映像名而不是创建时刻：创建时刻要与计时器的 `at` 比，而 `at` 可能来自假时钟
+#: （判据里就这么用）⇒ 一比就把活进程判成复用号、把闸放松（2026-10-28 全量真机踩到）。
+#: 映像名与时钟无关：复用号上挂的通常是另一台程序。
+def _process_image_name(pid: Any) -> str | None:
+    """这个 pid 现在挂着的进程映像名（小写、去 .exe）；非 Windows / 读不到 ⇒ None。"""
+    import os
 
-
-def _parse_epoch(text: Any) -> float | None:
-    """ISO 时刻 → epoch 秒；读不成 ⇒ None（三态：不是 0）。"""
-    raw = str(text or "").strip()
-    if not raw:
-        return None
-    try:
-        from datetime import datetime
-
-        return datetime.fromisoformat(raw).timestamp()
-    except Exception:  # noqa: BLE001 —— 读不成就是"没读到"
-        return None
-
-
-def _process_created_at(pid: Any) -> float | None:
-    """这个 pid 那次进程的创建时刻（epoch 秒）；非 Windows / 读不到 ⇒ None。
-
-    为什么必须问创建时刻：`stopctl.alive(pid)` 只回答"这个号现在有没有主"，而 pid 会被
-    复用 —— 一台早退的脚本与一台刚起来的新进程在它眼里长得一样。读不到（权限 / 平台 /
-    刚退出）⇒ None，调用方按"没读到"处置（维持进闸，fail-closed）。
-    """
     if os.name != "nt":
         return None
     try:
@@ -1162,21 +1146,18 @@ def _process_created_at(pid: Any) -> float | None:
         if not handle:
             return None
         try:
-            created = wintypes.FILETIME()
-            exit_t = wintypes.FILETIME()
-            kernel_t = wintypes.FILETIME()
-            user_t = wintypes.FILETIME()
-            ok = k32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exit_t),
-                                     ctypes.byref(kernel_t), ctypes.byref(user_t))
-            if not ok:
+            size = wintypes.DWORD(1024)
+            buf = ctypes.create_unicode_buffer(1024)
+            ok = k32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+            if not ok or not buf.value:
                 return None
-            ticks = (int(created.dwHighDateTime) << 32) | int(created.dwLowDateTime)
-            if ticks <= 0:
-                return None
-            return ticks / 10_000_000.0 - 11_644_473_600.0
+            name = os.path.basename(buf.value).strip().lower()
+            if name.endswith(".exe"):
+                name = name[:-4]
+            return name or None
         finally:
             k32.CloseHandle(handle)
-    except Exception:  # noqa: BLE001 —— 探不成就是"没读到"
+    except Exception:  # noqa: BLE001 —— 读不到就是"没读到"
         return None
 
 
@@ -1302,12 +1283,17 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
         # 口径仍是「所有进程停才许收工」—— 这一格不放松闸，只把"活着"测准：
         # 创建时刻晚于计时器落账时刻 + 容差 ⇒ 那是复用号，不是账上那一台。
         # 创建时刻读不到 ⇒ 维持 alive 为真（fail-closed，回到进闸）。
+        # ---- pid 复用：判据是"这个号现在挂着的映像名与账上那台不同"。
+        # 只对账上已收口的那一档判（`state != "pending"`）：账上说还在跑的程序，
+        # 映像名对不上也不许降级（它可能就是另一份 python）。
+        # 读不到映像名 ⇒ 维持 alive 为真（fail-closed，回到进闸）。
         pid_reused = False
-        if alive:
-            made_at = _process_created_at(pid)
-            logged_at = _parse_epoch(row.get("at") or row.get("created_at"))
-            if (made_at is not None and logged_at is not None
-                    and made_at > logged_at + PID_REUSE_TOLERANCE_SEC):
+        if alive and state != "pending":
+            expect = str(row.get("program") or "").strip().lower()
+            if expect.endswith(".exe"):
+                expect = expect[:-4]
+            got_name = _process_image_name(pid)
+            if expect and got_name and got_name != expect:
                 pid_reused = True
                 alive = False
         row["pid_reused"] = pid_reused

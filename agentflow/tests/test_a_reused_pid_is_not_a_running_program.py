@@ -62,8 +62,8 @@ def test_a_reused_pid_is_not_read_as_alive(tmp_path: pathlib.Path, bench,
     """正题：复用号（创建时刻晚于落账）⇒ 不进闸，且读数点名。"""
     ws = _ws(tmp_path)
     tid = _fired_program(ws, os.getpid())
-    monkeypatch.setattr(CD, "_process_created_at",
-                        lambda pid: CD._parse_epoch(LOG_AT) + 3600.0, raising=True)
+    # 复用号：这个号现在挂着的是"另一台程序"
+    monkeypatch.setattr(CD, "_process_image_name", lambda pid: "chrome", raising=True)
     got = programs_reading(ws, task_ids=["t-000002"])
     assert got["running_count"] == 0, got["running"]
     row = next(r for r in got["rows"] if str(r.get("timer_id")) == tid)
@@ -76,8 +76,7 @@ def test_a_genuinely_live_program_still_blocks(tmp_path: pathlib.Path, bench,
     """正控：真活着（创建时刻早于落账）⇒ 照旧进闸（闸一个字没放宽）。"""
     ws = _ws(tmp_path)
     _fired_program(ws, os.getpid())
-    monkeypatch.setattr(CD, "_process_created_at",
-                        lambda pid: CD._parse_epoch(LOG_AT) - 3600.0, raising=True)
+    monkeypatch.setattr(CD, "_process_image_name", lambda pid: "python", raising=True)
     got = programs_reading(ws, task_ids=["t-000002"])
     assert got["running_count"] == 1, got["running"]
     row = next(r for r in got["rows"] if r.get("pid") == os.getpid())
@@ -89,6 +88,6 @@ def test_an_unreadable_creation_time_keeps_blocking(tmp_path: pathlib.Path, benc
     """反真空：创建时刻读不到 ⇒ 维持进闸（"没读到"不许折成"没在跑"）。"""
     ws = _ws(tmp_path)
     _fired_program(ws, os.getpid())
-    monkeypatch.setattr(CD, "_process_created_at", lambda pid: None, raising=True)
+    monkeypatch.setattr(CD, "_process_image_name", lambda pid: None, raising=True)
     got = programs_reading(ws, task_ids=["t-000002"])
     assert got["running_count"] == 1, got["running"]
