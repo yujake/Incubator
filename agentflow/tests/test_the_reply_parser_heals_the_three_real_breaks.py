@@ -61,10 +61,12 @@ def test_an_unclosed_string_is_not_papered_over():
         parse_llm_json('{"final": "写到一半就断了')
 
 
-def test_two_missing_braces_are_still_repaired_but_garbage_is_not():
-    """两层嵌套少两个括号也补；真正的垃圾仍然失败。"""
-    got = parse_llm_json('{"summon": {"role": "B", "task": "登记"')
+def test_only_the_outermost_single_brace_is_repaired():
+    """收窄（2026-10-28）：只补最外层缺一个花括号；缺两层 / 散文照旧拒。"""
+    got = parse_llm_json('{"summon": {"role": "B", "task": "登记"}')
     assert got["summon"]["role"] == "B", got
+    with pytest.raises(ExtractionError):
+        parse_llm_json('{"summon": {"role": "B", "task": "登记"')   # 缺两层
     with pytest.raises(ExtractionError):
         parse_llm_json("这不是 JSON，随便说了一句散文。")
 

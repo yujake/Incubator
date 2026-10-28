@@ -764,7 +764,13 @@ def _close_missing_brackets(text: str, *, max_close: int = 3) -> str | None:
         elif ch in "}]":
             if stack:
                 stack.pop()
-    if in_string or not stack or len(stack) > max_close:
+    if in_string or not stack:
+        return None
+    # ---- 只补最外层那一个左花括号这一形（2026-10-28 收窄）。
+    # 真机那 8 条逐条算过：未闭合的只有一个左花括号（外层对象少最外面那一层）。
+    # 别的形状（缺方括号、缺两层）不是同一类手滑，补它们等于猜结构；
+    # 判据 tests/test_core_audit_efgh.py 的负样本要的正是「少括号不补、直接拒」。
+    if stack != ["{"]:
         return None
     return text + "".join(closers[c] for c in reversed(stack))
 
