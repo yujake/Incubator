@@ -1504,6 +1504,8 @@ def test_an_invalid_reply_is_dumped_in_full_next_to_the_clipped_copy(tmp_path: p
     from agentflow.agent_loop import _dump_invalid_reply
 
     text = '{"tool": "fs.write", "args": {"content": "' + "x" * 3000 + '"}} extra'
-    rel = _dump_invalid_reply(str(tmp_path), "t2x", 26, text)
-    assert rel == "out/invalid/t2x-step26.txt", rel
+    # 2026-10-28：文件名多了角色那一段（同一 sid 下两个角色同一步号会互相覆盖；
+    # 判据 `tests/test_an_invalid_reply_names_its_role.py` 钉那一格）
+    rel = _dump_invalid_reply(str(tmp_path), "t2x", 26, text, "M")
+    assert rel == "out/invalid/t2x-M-step26.txt", rel
     assert (tmp_path / rel).read_text(encoding="utf-8") == text

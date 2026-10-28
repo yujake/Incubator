@@ -967,16 +967,24 @@ def _no_reply_line(step: int, problem: str, detail: str) -> str:
     return head + "然后照旧只回一行 JSON。骨架：\n" + JSON_TAIL
 
 
-def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str) -> str:
+def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str,
+                        role: str = "") -> str:
     """把解析不出来的整条回复原样落盘，返回工作区相对路径。
 
     为什么必须落盘（`draft/39` §6.28 的 D40）：`raw_reply` 被 `_clip(..., 600)` 剪过，
     而"坏在第 1608 个字符"恰好落在剪掉的那一段里 —— T2 第 6/8/10 三趟死在同一类失败上，
     每一次都只能靠猜（报错给了列号，证据却被剪掉了）。三态纪律在这一层的落点：
     "没解析出来"要留下可复核的原文，而不是一条摘要。
+
+    文件名必须带角色（2026-10-28）：同一段会话里所有角色共用一个 sid，而步号是
+    各角色自己的计数 ⇒ 两个角色在第 7 步都坏掉时，后写的会把前一份覆盖掉。真机
+    `projects/paper-rewrite-78c` 一次就有 14 个坏步落在 13 个文件名上（`B` 与 `V`
+    都在第 7 步坏过、`D` 与 `B` 都在第 9 步坏过）—— 事后要归因只能靠事件的 `raw_reply`
+    里的前 200 字猜，而这正是"证据被剪掉"的那个形态。
     """
     safe_sid = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(sid or "run")) or "run"
-    rel = f"out/invalid/{safe_sid}-step{step}.txt"
+    safe_role = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(role or "")) or "run"
+    rel = f"out/invalid/{safe_sid}-{safe_role}-step{step}.txt"
     try:
         path = Path(root or ".") / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -7329,7 +7337,8 @@ class AgentLoop:
                     bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
                                   "raw_reply": _clip(call.text, 600)}
                     # 整条原文落盘（D40）：报错给了列号，而被剪掉的那一段才是证据。
-                    dump = _dump_invalid_reply(self.workspace_root, self.sid, step, call.text or "")
+                    dump = _dump_invalid_reply(self.workspace_root, self.sid, step,
+                                               call.text or "", self.role)
                     if dump:
                         bad_result["raw_reply_path"] = dump
                     run.steps.append(LoopStep(step, "invalid", {}, bad_result,

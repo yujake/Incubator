@@ -769,6 +769,19 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
 
     # ---- 会话记录：判据层的 problem、工具层的拒信、代唤请示
     if ss_reading.get("checked"):
+        # 同一次失败在会话里落两条记录：`llm_call`（带网关原话）与它的 `agent_step`
+        # （`shape="invalid"`，正文只有一句码名）。两处都数会把一次断网关数成两次 ——
+        # 真机 2026-10-28 17:15（`projects/paper-rewrite-78c`）：`judge_no_reply` 页面
+        # 4、真实 2。去重键取"同 ts + 同角色 + 同类目"：那是这两条记录共享的全部身份，
+        # 并且只在这一格生效（不同失败照旧各算各的，见判据的反真空那一条）。
+        counted_from_llm: set[tuple[str, str, str]] = set()
+        for record in records:
+            if str(record.get("kind") or "") != "llm_call":
+                continue
+            found = primary_code(record.get("problem"), record.get("detail"))
+            if found is not None:
+                counted_from_llm.add((str(record.get("ts") or ""),
+                                      _role_name(record.get("role")), found[1]))
         for record in records:
             kind = str(record.get("kind") or "")
             role = _role_name(record.get("role"))
@@ -783,7 +796,12 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                 # 是同一件事，且它本身是逐条结局原话的拼串 —— 扫它会把同一件事数两遍。
                 found = primary_code(_step_text(record))
                 if found is not None and found[1] not in MULTI_CALL_CATEGORIES:
-                    _bump(role, *found)
+                    key = (str(record.get("ts") or ""), role, found[1])
+                    if key in counted_from_llm:
+                        # 同一次失败：`llm_call` 已经记过（它带着网关的原话）⇒ 不再计
+                        counted_from_llm.discard(key)
+                    else:
+                        _bump(role, *found)
                 # 拆分这件事的读数从结构字段取：一个被拆分的回合正好记一次。
                 if _is_split_step(record):
                     _bump(role, "multi_call", "steps_split")
