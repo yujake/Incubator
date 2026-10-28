@@ -1447,7 +1447,7 @@ def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolRe
 #: 为什么要分出来（2026-10-21，判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`）：
 #: 这两格是框架读数，不是这次上行的载荷；`returns=` 声明的就是 `data` 的键集合
 #: （同一张面的先例：`conductor.broadcast` 的 `returns` 与它的 `data` 逐键相同）。
-#: 读数一个字都没少：`ok(payload, **got)` 的 `**got` 把它们留在 `meta` 里，而 `meta`
+#: 读数一个字都没少：`ok(payload, got)` 的 `got` 把它们留在 `meta` 里，而 `meta`
 #: 整格都渲染进模型看到的那条工具结果（`agent_loop._flatten_one_level` 只摊平 `data`，
 #: `meta` 原样保留）⇒ 「模型不知道这两格存在」这个后果不会发生。
 #: 为什么不反向补进 `returns=`：那会让工具面与冻结快照
@@ -2413,7 +2413,13 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
                     reason="没给任何项 ⇒ 一个字节都不写")
         return ok(data, **data)
     try:
-        got = _conductor.void_items(ids, by_task_id=mine, why=str(why))
+        # 2026-10-28：`_conductor` 绑的是工厂（`register` 里 `_bound['_conductor'] =
+        # _conductor`），其余每一件 `conductor.*` 都写 `_conductor().xxx`，只有这一行漏了
+        # 那对括号 ⇒ 在一个函数对象上取属性，永远抛
+        # `AttributeError: 'function' object has no attribute 'void_items'`。
+        # 后果不是"这件工具不好用"：它是唯一设计来解「销号闸 ↔ 收工闸」互锁的出口，
+        # 它一炸，那一趟只能以 `final_refused` 收尾（真机 2026-10-28 实测）。
+        got = _conductor().void_items(ids, by_task_id=mine, why=str(why))
     except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写，只能如实说不知道
         data["reason"] = f"作废时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道"
         return ok(data, **data)
