@@ -1203,24 +1203,55 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             # 读不出来的会话 ⇒ 这一路判不了，如实说（"没查成"不许读成"没在跑"）
             stale.append(sid)
             continue
-        # 按角色各取一条链：某个角色的最后一条 start 之后有没有该角色的 end。
-        last_start: dict[str, dict[str, Any]] = {}
-        closed: set[str] = set()
+        # 按台账号配平（2026-10-28）：同一角色可以同时有好几趟在飞，而"该角色最后
+        # 一条 start 之后有没有 end"这种按角色的口径，会把"先起、还没结"的那一趟吞掉。
+        # 真机现场（`projects/paper-rewrite-78c` 17:44，逐条从会话里抄的）：
+        #   start t-000079 / start t-000080 / start t-000082 / end t-000080 /
+        #   end t-000079 / start t-000092 / end t-000092
+        # ⇒ 最后一条 start 是 t-000092、它自己已经 end ⇒ 旧口径判"V 没在跑"，
+        # 而 t-000082 一行 end 都没有。于是页面上两处读数打架：顶上"在飞"只列 M/D/F，
+        # 下面名册树里 V 的 t-000082 标着"在飞"。`agent_run_start` 与 `agent_run_end`
+        # 两条事件都带 `task_id` —— 精确的配对键一直在盘上，只是当年没读它。
+        # 老会话（没有 `task_id` 的那些）退回按角色配平，不许把老读数全丢。
+        open_rows: dict[str, dict[str, Any]] = {}
+        closed_keys: set[str] = set()
+        legacy_start: dict[str, dict[str, Any]] = {}
+        legacy_closed: set[str] = set()
         for e in events:
             role = str(e.get("role") or "")
             kind = e.get("kind")
+            tid = str(e.get("task_id") or "")
+            key = f"{role}\x00{tid}" if tid else ""
             if kind == "agent_run_start":
                 if e.get("resume_refused"):
                     # 被拒的续跑不是起点（它一步都没跑）：既不开启、也不关闭任何一趟
                     continue
-                last_start[role] = e
-                closed.discard(role)
+                if key:
+                    open_rows[key] = e
+                    closed_keys.discard(key)
+                else:
+                    legacy_start[role] = e
+                    legacy_closed.discard(role)
             elif kind == "agent_run_end":
-                closed.add(role)
-        for role, start in last_start.items():
-            if role in closed:
+                if key:
+                    closed_keys.add(key)
+                else:
+                    # 没有台账号的 end：它唯一能表达的关闭范围就是"该角色的那些"
+                    # （混合老会话里只剩这一条线索）。
+                    legacy_closed.add(role)
+                    for k in [k for k in open_rows if k.startswith(f"{role}\x00")]:
+                        closed_keys.add(k)
+        for key, start in open_rows.items():
+            if key in closed_keys:
                 continue
-            running.append({"role": role, "sid": sid, "since": str(start.get("ts") or "")})
+            role, _, tid = key.partition("\x00")
+            running.append({"role": role, "sid": sid, "since": str(start.get("ts") or ""),
+                            "task_id": tid})
+        for role, start in legacy_start.items():
+            if role in legacy_closed:
+                continue
+            running.append({"role": role, "sid": sid, "since": str(start.get("ts") or ""),
+                            "task_id": ""})
     live = live_pids(root)
     return {"running": running, "live": live, "unreadable_sessions": stale,
             "answer": "有" if (running or live) else "没有"}
