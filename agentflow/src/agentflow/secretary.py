@@ -4998,33 +4998,6 @@ class Secretary:
             "cost": dict(got.get("cost") or {}),
         }
 
-    def _replace_canonical_proof(self, row: Mapping[str, Any], new_text: str) -> dict[str, Any]:
-        """同一命题、证明换了 ⇒ 把 canonical 那一份就地换掉，旧正文整段留痕。
-
-        为什么需要这一格（2026-10-28 真机，B 的"两扇门"死结）：`table.update` 被拒时那句
-        指路逐字承诺"再交一次 register_statement（同 statement_full + 新 proof_text）⇒
-        就地覆盖 canonical 正文，旧正文整段进 proof_history"；而改前 `record_statement`
-        在同文那一支只认"证据档升强"，其余一律判重 ⇒ 承诺的路在实现里不存在。
-
-        写什么：`proof_text` 换成新稿；旧稿进 `proof_history`（元素形状与合并那一条逐字
-        相同：`{text, sha, at, replaced_by, proof_no}`）。不写任何"审过了"：`bits` 与
-        `reviewed` 一个字不动 —— 盖在旧稿上的那一签由读侧按 sha 现算成 stale
-        （`verifications.review_standing`），返回值只说"要重签"，不说"已成立"。
-        """
-        from . import verifications as VR   # 惰性：正文 sha 的唯一读口径
-
-        out_row = dict(row)
-        old_text = str(out_row.get("proof_text") or "")
-        entry = {"text": old_text, "sha": VR.proof_sha(old_text), "at": S.now_iso(),
-                 "replaced_by": VR.proof_sha(str(new_text)), "proof_no": 1}
-        history = [dict(h) if isinstance(h, Mapping) else h
-                   for h in (out_row.get("proof_history") or [])]
-        history.append(entry)
-        out_row["proof_history"] = history
-        out_row["proof_text"] = str(new_text)
-        return {"row": out_row, "changes": ["proof_text", "proof_history"],
-                "stale_review": True}
-
     def _upgrade_evidence_kind(self, existing: Mapping[str, Any],
                                body: Mapping[str, Any]) -> dict[str, Any]:
         """同一份内容再交一次、这一回来的 `evidence_kind` 更强 ⇒ 返回"改哪几格"。
@@ -5618,29 +5591,6 @@ class Secretary:
             existing = next((r for r in tx.rows("statements")
                              if T.normalize(str(r.get("statement_full") or "")) == key), None)
             if existing is not None and not force_new:
-                # ---- 同一命题、证明换了 ⇒ 就地覆盖 canonical 那一份（2026-10-28）。
-                # 为什么必须先试这一支（真机 B 的"两扇门"死结）：`table.update` 被拒时
-                # 那句指路逐字承诺"再交一次 register_statement（同 statement_full + 新
-                # proof_text）⇒ 就地覆盖 canonical 正文，旧正文整段进 proof_history"，
-                # 而改前这一支只认"证据档升强"（`_upgrade_evidence_kind`），其余一律判重
-                # ⇒ 承诺的路不存在，B 于是 2 次撞 `direct_write`、3 次撞 `backstop`，
-                # 第 3 稿证明落不下去（真机 `000006` 收尾仍带 unresolved_errors=2）。
-                _new_proof = str(body.get("proof_text") or "").strip()
-                _old_proof = str(existing.get("proof_text") or "")
-                if _new_proof and _new_proof != _old_proof:
-                    _rep = self._replace_canonical_proof(existing, _new_proof)
-                    tx.upsert("statements", _rep["row"],
-                              note="record_statement:proof_replace")
-                    out.update(checked=True, created=False, duplicate=False,
-                               updated_proof=True, resign_required=True,
-                               stale_review=True,
-                               stmt_id=str(existing.get("stmt_id") or ""),
-                               row=dict(_rep["row"]), tables=["statements"],
-                               changes=list(_rep.get("changes") or []),
-                               reason=("同一条命题、证明换了 ⇒ 就地覆盖 canonical 正文；"
-                                       "旧正文整段进 proof_history（带 sha 与 replaced_by），"
-                                       "盖在旧稿上的那一签读侧转 stale ⇒ 需要 V 重签"))
-                    return out
                 upgraded = self._upgrade_evidence_kind(existing, body)
                 if upgraded.get("upgraded"):
                     # 同一份内容、这一回带来的证据档更强 ⇒ 改那一行（不新建）。
