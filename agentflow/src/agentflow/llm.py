@@ -732,6 +732,83 @@ def _repair_stray_quotes(text: str) -> str | None:
     return "".join(out) if changed else None
 
 
+def _close_missing_brackets(text: str, *, max_close: int = 3) -> str | None:
+    """把"少写的最外层闭合括号"补齐（`None` = 不用补）。
+
+    真机（2026-10-28，`projects/paper-rewrite-78c` 的 14 个坏步逐条算过括号平衡）：
+    8 条是 `{"summon": {…}` 少最外面那一个 `}` —— 状态机算出未闭合 1 个 `{`、
+    最后一字是 `}`、`json.loads` 的报错位置恰好等于文本长度。它与"末尾多了一个 `}`"
+    （同一天早些时候修过的那一档）互为镜像：意图毫无歧义，代价却是整步作废。
+
+    安全边界：只在"原样解析失败之后"才试；字符串里一个字符都不动（顺带照顾 `\\"` 与
+    `\\\\`）；缺的括号多于 `max_close` 就不管（那是另一类坏，不许瞎补）；补完仍要过
+    调用方的形状判据 —— 补错了也只会落回"这一步没解析出来"。
+    """
+    closers = {"{": "}", "[": "]"}
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in closers:
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+    if in_string or not stack or len(stack) > max_close:
+        return None
+    return text + "".join(closers[c] for c in reversed(stack))
+
+
+def _repair_bad_escapes(text: str) -> str | None:
+    """把字符串里"反斜杠 + 不是合法转义字符"的那一处去掉反斜杠（`None` = 不用修）。
+
+    真机（同一天）：`E#6` 的 `` \\`fitz\\` ``、`E#16` 的 `**T\\*(σ0)**` —— 模型把 markdown
+    反引号与 LaTeX 星号当成了需要转义的字符。合法转义一律不动
+    （`\\"` `\\\\` `\\/` `\\b` `\\f` `\\n` `\\r` `\\t` `\\u`）；字符串外一个字符都不动。
+
+    与 `_repair_stray_quotes` 同一个边界：只在原样解析失败之后试，修出来仍要过形状判据。
+    """
+    valid = set('"\\/bfnrtu')
+    out: list[str] = []
+    changed = False
+    in_string = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if not in_string:
+            out.append(ch)
+            if ch == '"':
+                in_string = True
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt in valid:
+                out.append(ch)
+                out.append(nxt)
+            else:
+                out.append(nxt)
+                changed = True
+            i += 2
+            continue
+        if ch == '"':
+            in_string = False
+        out.append(ch)
+        i += 1
+    return "".join(out) if changed else None
+
+
 def parse_llm_json(raw: str) -> dict[str, Any]:
     """宽松解析 LLM 返回的 JSON 对象。
 
@@ -785,6 +862,17 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
         if fixed is not None:
             reps.append(fixed)
             reps.append(re.sub(r",\s*([}\]])", r"\1", fixed))
+        # 少最外层闭合括号 / 字符串里的非法转义（2026-10-28，真机 14 个坏步里 8 + 2 条）：
+        # 两处修补按组合试 —— 一条回复同时犯两种也救得回来；每种都只在"原样解析失败"之后。
+        closed = _close_missing_brackets(candidate)
+        if closed is not None:
+            reps.append(closed)
+        no_bad_escape = _repair_bad_escapes(candidate)
+        if no_bad_escape is not None:
+            reps.append(no_bad_escape)
+            both = _close_missing_brackets(no_bad_escape)
+            if both is not None:
+                reps.append(both)
         for repaired in reps:
             # 两档严格度：先按标准 JSON，再放行"字符串里的裸控制字符"。
             for strict in (True, False):

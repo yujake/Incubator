@@ -1194,10 +1194,18 @@ def _json_shape_hint(text: str) -> str:
     于是那句纠正消息可以点名它，而不是泛泛地说"不是 JSON 对象"。
     注意它只用于诊断：修补后的结果不会被当成模型的原意使用
     （那会让"多一个括号"这种错被静默接受）。
+
+    2026-10-28 追加一档：内联 XML 形态的工具调用（DeepSeek 的 `｜｜DSML｜｜` 标记）。
+    真机 `projects/paper-rewrite-78c` 的 `B#7`：回复尾部逐字是
+    `</｜｜DSML｜｜ parameter> … </｜｜DSML｜｜ calls>` —— 它根本不是 JSON，修补救不回来，
+    但对模型说清"你写成了 XML，只接受一行 JSON"能让下一回合改对（泛泛的"不是 JSON"
+    上一次就没让它改过来）。
     """
     from .llm import parse_llm_json
 
     t = str(text or "").strip()
+    if "｜｜DSML｜｜" in t or "DSML" in t or "</" in t and "invoke>" in t:
+        return "（诊断：这条回复是 XML 形态的工具调用；框架只接受一行 JSON —— 参照骨架重写）"
     for cand, why in ((t[:-1], "末尾多了一个 `}`"), (t + "}", "末尾少了一个 `}`")):
         if not cand or cand == t:
             continue
