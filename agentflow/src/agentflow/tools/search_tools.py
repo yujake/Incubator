@@ -197,13 +197,55 @@ def _shelf_extract() -> Any:
     return _SHELF_EXTRACT
 
 
+def _lit_file(ctx: _Ctx, rel: str) -> Path | None:
+    """把一条 literature 行的 `path` 解析成盘上的文件；读不到 ⇒ `None`。
+
+    ## 为什么需要它（2026-10-28，阶段 ③ 第 2A 步撞出来的真缺陷）
+
+    同一个字段 `literature.path` 有两个读取口径，而它们此前不一致：
+
+    * 写入侧早就有两个坐标系 —— `_adopt_file` 逐字写着「相对路径优先按
+      `library/` 解释（表里存的就是这个坐标系），不存在再按 workspace 解释
+      （例如 `downloads/xxx.pdf`）」；
+    * 读取侧（`search.shelf` / `search.local`）只走 `store.library_path`，
+      也就是只认 `library/`。
+
+    后果在真机上可量：projects/paper-rewrite-78 有 4 行被 `table.update`
+    改写成了 `downloads/lit-*.pdf`（事件日志 `tool:table.update` 四处），
+    文件真的在盘上，而书架只数到 1 本（`have_path=5` / `missing_files=4`
+    / `count=1`）—— 那几篇的正文既取不到、也就无法做逐字引文回验，而
+    没有任何一处会报错。
+
+    所以这里按写入侧同一套约定解析（先 `library/`，再 workspace），并且
+    两条路都把结果钉在工作区之内（`resolve()` 之后要求仍在根下）：
+    放宽的是"文件在哪"，不是"能读到工作区外面去"。
+    """
+    if not rel or ctx.store is None:
+        return None
+    try:
+        inside = ctx.store.library_path(rel)
+    except StoreError:
+        # 越出 library/ 的写法（`../` 之类）在这里被拒，但不代表它在
+        # workspace 那份坐标系里也非法 —— 下面那条路同样有边界检查。
+        inside = None
+    if inside is not None and inside.is_file():
+        return inside
+    base = Path(ctx.workspace)
+    try:
+        cand = (base / rel).resolve()
+        cand.relative_to(base.resolve())
+    except (OSError, ValueError):
+        return None
+    return cand if cand.is_file() else None
+
+
 def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
     """把一条 literature 行变成书架条目；`path` 不在盘上则返回 None（不是书架上的书）。"""
     rel = str(row.get("path") or "")
     if not rel or ctx.store is None:
         return None
-    abs_path = ctx.store.library_path(rel)
-    if abs_path is None or not Path(abs_path).is_file():
+    abs_path = _lit_file(ctx, rel)
+    if abs_path is None:
         return None
     dl = dict(row.get("download") or {})
     return {
@@ -211,7 +253,7 @@ def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
         "title": str(row.get("title") or ""),
         "path": rel,
         "abs_path": str(abs_path),
-        "bytes": int(dl.get("bytes") or Path(abs_path).stat().st_size),
+        "bytes": int(dl.get("bytes") or abs_path.stat().st_size),
         "pages": dl.get("pages"),
         "has_text_layer": dl.get("has_text_layer"),
         # 来源如实分两档：「人放到本地目录」进来的（`source_path` 有值）与
@@ -219,6 +261,70 @@ def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
         # 也决定"这篇文献从哪来"这条链会不会说假话。
         "origin": "local_ingest" if dl.get("source_path") else "downloaded",
         "sha256_12": str(dl.get("sha256") or "")[:12],
+    }
+
+
+#: 一行 literature 上可能记着「这篇的全文去哪拿」的字段。
+#: 业主裁定（2026-10-28）：`schema.Literature` 里没有 `pdf_url` / `landing_url`
+#: 这两格，真机那趟（projects/paper-rewrite-78）把定位链接记在 `download.url`
+#: 里，note 逐字写着「只登记了候选源给出的定位链接（url 这一格），没有下载字节；
+#: 要全文请按它重取」—— 那个 URL 就是 landing 定位，必须算作"有地址"。
+#: 判据 `tests/test_the_shelf_reports_fulltext_coverage.py` 里有一条负控专门钉它。
+_LOCATION_FIELDS: tuple[str, ...] = ("pdf_url", "landing_url")
+
+
+def _row_has_location(row: Mapping[str, Any]) -> bool:
+    """这一行有没有可取全文的定位（离线全文之外的地址）。
+
+    三态纪律：`False` 只说「行上没有地址」——它不是「这篇不存在」。
+    它说的是一句关于我们自己的话：没去取（连链接都没留下），处置是去检索，
+    而不是把这一篇从证据链里划掉。
+    """
+    for key in _LOCATION_FIELDS:
+        if str(row.get(key) or "").strip():
+            return True
+    dl = row.get("download")
+    if isinstance(dl, Mapping) and str(dl.get("url") or "").strip():
+        return True
+    return False
+
+
+def _shelf_coverage(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """``search.shelf`` 的 ``coverage`` 块：整张文献表的全文覆盖率。
+
+    为什么它必须自己数一遍（而不是从 `books` 那里拿 `len`）：`query` /
+    `lit_id` / `limit` 只筛"这一次要看哪几本"，而覆盖率是库级读数。用 `books`
+    数的话，A 一旦带 `lit_id` 查某一篇，覆盖率就变成 1/1 = 100% —— 缺口正好在
+    最需要它的时候被抹平（真机：32 篇里只有 5 篇有全文）。
+
+    五个数的口径（`draft/173` 阶段 ③ 第 2A 步）：
+      total         文献表行数
+      with_fulltext 真正在盘上、可离线引用的（与 `books` 同一判据 `_shelf_row`）
+      missing       total - with_fulltext（"没有离线全文"）
+      no_location   既没有 `path`、也没有任何定位的条数 —— 没去取 ≠ 不存在
+      rate          with_fulltext / total；total=0 时给 `None`（不许折成 0）
+    """
+    total = 0
+    with_fulltext = 0
+    no_location = 0
+    for row in rows:
+        total += 1
+        if _shelf_row(ctx, row) is not None:
+            with_fulltext += 1
+        elif not str(row.get("path") or "").strip() and not _row_has_location(row):
+            # 行上有 `path` 但文件不在盘上 ⇒ 它有定位（只是定位坏了），
+            # 那是 `missing_files` 那一档，不是"没去取"。
+            no_location += 1
+    return {
+        "total": total,
+        "with_fulltext": with_fulltext,
+        # total=0 ⇒ None：空表没有分母，"没有文献"与"覆盖率 0 成"是两件事。
+        "rate": (with_fulltext / total) if total else None,
+        "missing": total - with_fulltext,
+        "no_location": no_location,
+        # 这一块是查出来的读数（与"猜"分开）：读表失败时整件工具 ok=False，
+        # 根本不会给出一个 coverage（判据里有一条负控钉这条不对称）。
+        "checked": True,
     }
 
 
@@ -279,11 +385,19 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
             "downloaded": sum(1 for b in books if b["origin"] == "downloaded"),
             "truncated": truncated,
             "books": books,
+            # 整张表的覆盖率（2026-10-28，阶段 ③ 第 2A 步）：A 从这一天起看得见
+            # "32 篇里只有 5 篇能离线引用"这个缺口，而不是只知道书架上摆着哪几本。
+            "coverage": _shelf_coverage(ctx, rows),
             "note": (
                 "这是**离线**来源：这些文件的正文就在工作区里，"
                 "可以用 search.local 按主题取逐字摘录。"
                 "`missing_files` 是「行上写了 path、但文件不在盘上」的条数 —— "
                 "它不是 0 时，那些书**取不到正文**，不要当它们存在。"
+                "`coverage` 是**整张文献表**的全文覆盖率（与本次的 query/lit_id/limit 无关）："
+                "`with_fulltext`/`total` 是「离线能引用几成」，`rate` 在 total=0 时是 null；"
+                "`no_location` 是「我们连可取全文的地址都没有 ⇒ **没去取**」——"
+                "它**不是**「这篇不存在」，两者必须分开读："
+                "有地址但还没取的篇落进 `missing`，不落进 `no_location`。"
             ),
         }
     )
@@ -1382,7 +1496,11 @@ def _search_providers(ctx):
     roles=("A", "C", "H"),
     returns=(
             "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
-            "'truncated','books','note','query','filtered_out'}；"
+            "'truncated','books','note','query','filtered_out','coverage'}；"
+            "coverage 是**整张文献表**的全文覆盖率 {'total','with_fulltext','rate','missing',"
+            "'no_location','checked'}（rate=with_fulltext/total，total=0 时给 null 而不是 0；"
+            "**no_location 是「我们连可取全文的地址都没有 ⇒ 没去取」，不是「这篇不存在」**——"
+            "有地址但还没取的篇落进 missing，不落进 no_location）；"
             "books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages',"
             "'has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；"
             "失败：ok=False + kind(no_store/table_unreadable) + counted=False"

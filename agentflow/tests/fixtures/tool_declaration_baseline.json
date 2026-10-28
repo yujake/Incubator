@@ -6046,6 +6046,21 @@
           "item": "expired"
         }
       ]
+    },
+    {
+      "key": "returns",
+      "tools": [
+        "search.shelf"
+      ],
+      "reason": "2026-10-28（阶段 ③ 第 2A 步）：真机 projects/paper-rewrite-78 的读数是「literature 32 行、只有 5 行有本地全文（15.6%）、statements 22 条的 quote_verified 全是 None」，而 A 看不见这个缺口 —— search.shelf 只报「书架上摆着哪几本」，不报「文献表里一共几篇」。所以返回多一格 coverage：{'total','with_fulltext','rate','missing','no_location','checked'}（rate 在 total=0 时是 null，空表不是「覆盖率 0 成」）。no_location 的口径由业主 2026-10-28 当天裁定：literature 行上没有 pdf_url/landing_url 字段，真机把定位链接记在 download.url 里（note 逐字「只登记了候选源给出的定位链接……要全文请按它重取」） ⇒ 它算 landing 定位。于是真机读数 no_location=0、missing=27（27 篇是「有地址、没去取」，不是「这篇不存在」）；若只认行上的两个字段，no_location 会恒等于 missing（一个数说两件事）。",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out'}；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）",
+          "to": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out','coverage'}；coverage 是**整张文献表**的全文覆盖率 {'total','with_fulltext','rate','missing','no_location','checked'}（rate=with_fulltext/total，total=0 时给 null 而不是 0；**no_location 是「我们连可取全文的地址都没有 ⇒ 没去取」，不是「这篇不存在」**——有地址但还没取的篇落进 missing，不落进 no_location）；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）"
+        }
+      ]
     }
   ],
   "summary_lens_before": {
