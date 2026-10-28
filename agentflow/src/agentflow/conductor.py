@@ -3116,6 +3116,16 @@ class Conductor:
         （message / report / notice）没有"动作"这回事 ⇒ 用 kind 本身当哨兵值
         （`Task.validate` 要求 `action` 非空，而空串会让这一行读起来像"一次没有动作的召唤"）。
         """
+        # 幂等键（D-07）：`clock:<timer_id>` 只该有一行。真机证据是两条 notice 的
+        # input_key 完全相同、相隔 1 秒（到点投递被两个线程各投一次）。进程内那一半由
+        # `clock._FIRE_LOCK` 挡住，这一层是跨进程的兜底：同键已有行 ⇒ 复用，不新建。
+        # 只对 `clock:` 前缀做：那是时钟投递专用的键空间，语义就是"同一条计时器只投一次"；
+        # 别的 caller 传 input_key 还没有这条约束，一并去重会改掉它们已有的行为。
+        if str(input_key or "").startswith("clock:"):
+            existing = next((r for r in self._tasks()
+                             if str(r.get("input_key") or "") == str(input_key)), None)
+            if existing is not None:
+                return str(existing.get("task_id") or "")
         row = self._item_row(kind=kind, role=role, expects=expects, action=action,
                              summary=summary, called_by=called_by,
                              parent_task_id=parent_task_id, depth=depth,

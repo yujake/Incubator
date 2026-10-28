@@ -5142,6 +5142,20 @@ def _deliver_one(bucket: TimerBook, timer: Timer, reason: str, why: str,
     `why` 是 `due_reason` 的第二格（"为什么还没到"或"它收口了"）；投递这一段不读它，
     收着是为了让签名与 `due_reason` 的返回形状对得上，读的人不必回去猜。
     """
+    # ---- D-07：整段串行（读 pending → 调 handler → 标 fired → save）
+    # 为什么在函数入口就锁：`_deliver_one` 的两处调用方（全扫路径与事件消账）都会调它，
+    # 把锁放在这里就等于"无论谁把它叫起来，同一条计时器只有一个投递者"。
+    # 锁是可重入场景安全的（本函数内部不再次调用自己），代价是一次 store 事务的时长。
+    with _FIRE_LOCK:
+        # 认领：拿到锁之后再看一眼状态 —— 前一个持锁者可能已经把它投递掉了。
+        if str(getattr(timer, "state", "")) != "pending":
+            return False
+        return _deliver_one_locked(bucket, timer, reason, why, reading, report)
+
+
+def _deliver_one_locked(bucket: TimerBook, timer: Timer, reason: str, why: str,
+                        reading: Reading, report: dict[str, Any]) -> bool:
+    """`_deliver_one` 的持锁主体（真正的投递）。由 `_deliver_one` 在 `_FIRE_LOCK` 里调。"""
     if _DUE_HANDLER is None:
         report["deferred"].append({
             "timer_id": timer.timer_id,
@@ -5260,6 +5274,17 @@ _CLOSE: dict[str, Any] = {"count": 0, "latency_ms": None, "last": {},
                           "problems": []}
 
 _CLOSE_LOCK = threading.Lock()
+
+#: 到点消费的串行闸（D-07，真机 2026-10-28 实测）。
+#:
+#: 为什么必须有它：`_deliver_one` 的顺序是「先调 `_DUE_HANDLER`（它会开一条 mailbox
+#: 板项 = 一笔 store 事务），之后才 `state = "fired"` 并 `save()`」。中间那一整段
+#: 没有锁，于是两个线程同时 pump 时钟时都会看见 pending、都投递一次 ——
+#: 真机上的形态是两条 notice 的 `input_key` 完全相同（`clock:tm-000088`）、相隔 1 秒，
+#: 5 轮轮查里复现 2 轮。这把锁把「读 pending → 调 handler → 标 fired → save」圈成一段。
+#: 它是进程内的：跨进程那一半由投递的幂等键（`clock:<timer_id>`）兜底，见
+#: `Conductor.open_item` 的同键复用。
+_FIRE_LOCK = threading.Lock()
 
 #: 递归保护：`_DUE_HANDLER` 自己可能又发出一个事件（它写 mailbox 行），那一层只记账。
 _CLOSE_DEPTH: list[int] = [0]
