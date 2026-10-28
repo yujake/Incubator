@@ -608,6 +608,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p214", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p214（2026-10-27，R-BE4 的 D1 Phase A，业主批准）：把 D 的主力动作接进唯一的注册表 —— tools/__init__.py 的 _MODULES 加 conjecture_tools ⇒ conjecture.register_conjecture 由 build_registry 装配（它的 roles=(D,) ⇒ 十一格里只有 D 的 tools_lines 多一行，其余十格逐字未动，读数见 temp/rbe4_prompt_digests.py）。连带三处登记退场（capabilities 的 _TOOL_MODULE_EXTRAS / _KNOWN_UNMATCHED_ACTIONS / ACTION_ONLY_PARAMS），tool_surface_snapshot.json 的 summary.count 117 → 118（人重冻）。facts 键集仍 15 格、键名一格未动，count / keys_sha256 与上一格同值。已知待办同上一格：prompt_cache_warm.json 没重落 ⇒ 缓存 stale。"},
+    {"version": "p215", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p215（2026-10-28，D-06）：提示词示例把名册名写成像编码的 D1/D3 会被当成职责编码，改成 probe-a-1 这种标签，并明写 name 不是职责编码；键集自 p213 起未变（15）"},
 )
 
 

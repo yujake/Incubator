@@ -5435,7 +5435,7 @@
         ],
         "additionalProperties": false
       },
-      "returns": "{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}；`refused[]` 每项是 {'id','why'}，`state` 取 voided/refused/nothing/unknown 之一",
+      "returns": "{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一",
       "side_effect": "write_local",
       "roles": [
         "A",

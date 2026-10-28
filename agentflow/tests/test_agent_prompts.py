@@ -2151,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p214"
+_FROZEN_PROMPT_VERSION = "p215"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2317,17 +2317,17 @@ _FROZEN_PROMPT_VERSION = "p214"
 # 十一格是 `temp/rbe4_prompt_digests.py`（不入库，导入本文件的 `_surface_digest`）
 # 的现算值，不是手抄；连"只有 D 变"这件事也是它打出来的读数。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "b905f7402ddf47077838d04ec8411be4aefd67a75d99f787a228fced9942248b",
-    "B": "bde265b31508dbc075ffa83bbfaf6f3276dcb61f0d7664c8670ca0cb8571e5b5",
-    "C": "ec81ba2db87e57b8edeb080d152838bfcb51e2b8ad24736b6672cd6f72015541",
-    "D": "8cf1fb51ee65e62fc03f6761ed280f641e5c39938edc7fe1690bfdec27b3aa5e",
-    "E": "f2d86a4ba5399ff4b2c129a5d44860648d0dd9e56c373246dc65406eb015285e",
-    "F": "9917ca152ae241f90382bc4c6384e9fb94c76a31aa0f491f54843d0a06730c17",
-    "G": "7a56ebf7b149206803db0c4191fa64d462d27abdb1eb41ba44c70db56a07f006",
-    "H": "44cfc11e144e4b81e34e10b671d519cfbd16c1f6debdea3fa6e2757af7a3bd2c",
-    "L": "5bfea9b061a823dde5126fa5fcd716aad2427d8a6cd8cd27620d43bb81f3899d",
-    "M": "35b2542af9b1f4082153921b1acff63392bc8bfcd477b6cbba58c9772a07780f",
-    "V": "f36bb01ab08590c5526305e39f225696859959f515efc7f4eab2aeb7958046eb",
+    "A": "d05af4968af320cd8ee952908ede004a3e14097a2882157b14145ccd7181ab93",
+    "B": "336e6a60a4f1f7ff3f776fa7ca5625103949af073c57d462b2faed294aadd92f",
+    "C": "0e83598d7fcb07461ba817f611e48665b7ca43f4e2db4517e3007d69466bef50",
+    "D": "84f4241793e05a82f0a16b068aad290db2e4c26a308dd3b660b5b088998ceb9a",
+    "E": "1522d17074da681b747e441f53dd4698626d38213d0f24286f3601c543d49966",
+    "F": "24add73c26e69a778df84a86cd43e06836c2a3f67ce7440b157c225b7ed505b1",
+    "G": "c8e8bbbca7419c50bc01c33971f581a01a0d8a2fdaa086fe1ffcfbf237b872f8",
+    "H": "28da3b642450a020a6e702eb5ad5f241371f056d4cb66f796c053442dd4ed0d2",
+    "L": "43b147611271f1aa1305024add6fc94ade2a3628d3463c7f8ab99acf2263b790",
+    "M": "f3e029d552914302b2acb274c9900215fdfb09e8e046612b9ffabf509215bb93",
+    "V": "de15442a7877424dd9598266f8d16c68974915b42b4a78d2af38c0862e57f21e",
 }
 
 
