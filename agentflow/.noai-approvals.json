@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-28T14:35:16+08:00",
+  "generated_at": "2026-10-28T20:43:39+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -530,10 +530,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "6044e6153692a75fba813b19dd0819e0ad4340a30ede04dcde8945c1a28bab13",
+      "sha256": "bb6a67ae45f78f1c06049c1e15a4316f4901e0e90ee52fe5d30ff2ec4ced64c0",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 457ae88b776c 变为 6044e6153692，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 6044e6153692 变为 bb6a67ae45f7，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
