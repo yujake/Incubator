@@ -575,7 +575,7 @@ def alive(pid: int) -> bool:
 
 
 def _registered_pids(root: str | Path) -> list[dict[str, Any]]:
-    """盘上登记过的**全部**进程（含已经死掉的；不探活、不过滤）。"""
+    """盘上登记过的全部进程（含已经死掉的；不探活、不过滤）。"""
     out: list[dict[str, Any]] = []
     d = pid_dir(root)
     if not d.is_dir():
@@ -1212,7 +1212,7 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     stale: list[str] = []
     stale_rows: list[dict[str, Any]] = []
     # 2026-10-28：会话面与进程面对齐。子循环跑在父进程里（线程），它们没有各自的
-    # pid 登记 ⇒ 只能按**会话**对齐：这个 sid 登记过的进程全都不在了 ⇒ 它名下"没关
+    # pid 登记 ⇒ 只能按会话对齐：这个 sid 登记过的进程全都不在了 ⇒ 它名下"没关
     # 的行"是死读数；只要还有一个活着、或者压根没登记 ⇒ 仍按在飞读（fail-closed）。
     dead_sids: set[str] = set()
     seen_sids: set[str] = set()

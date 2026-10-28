@@ -10,9 +10,9 @@
 
 ## 三档（一条都不许折平）
 
-1. 会话里 start 之后没有 end，且**这个 sid 登记过的进程全都不在了** ⇒ `stale_rows`；
+1. 会话里 start 之后没有 end，且这个 sid 登记过的进程全都不在了 ⇒ `stale_rows`；
 2. 登记过、pid 还活着 ⇒ 照旧 `running`；
-3. **压根没登记** ⇒ 照旧 `running`（"没登记"不是"已死"，fail-closed；78c 当前就是这一档，
+3. 压根没登记 ⇒ 照旧 `running`（"没登记"不是"已死"，fail-closed；78c 当前就是这一档，
    它的 `runs/` 被优雅停清空了）。
 """
 from __future__ import annotations
