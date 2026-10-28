@@ -11,7 +11,7 @@
 
 角色之间没有直连通路：想叫谁干活就走 conductor.summon（受 ALLOWED_EDGES 约束）；想给谁说句话就沿秘书链逐跳转发（中间各跳不看正文）。
 
-角色数 **11**｜动作总数 **64**｜工具面合计 **406** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
+角色数 **11**｜动作总数 **64**｜工具面合计 **407** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
 
 ## 角色 A
 
@@ -99,6 +99,7 @@
 | `search.local` | **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
 | `search.providers` | 列出可用检索源并**真实探测**各自是否可用（发一次极小请求；ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。 | `read` | （无） |
 | `search.register` | 登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。 | `write_local` | `title`、`type_code`、`summary` |
+| `search.retry_pending` | 把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，冷却中的源跳过而不是判失败。 | `write_local` | （无） |
 | `search.shelf` | **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
 | `search.walk_citations` | 由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `search.dedup_check` / register。 | `read` | `lit_id` |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
@@ -112,7 +113,7 @@
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（入库，原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。不需 OCR、不联网 —— 扫描件走 `ocr.run`。别的角色只读那份 `.txt`（`fs.read` 拒收 PDF）。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **45** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **46** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 

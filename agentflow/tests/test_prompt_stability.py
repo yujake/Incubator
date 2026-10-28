@@ -611,6 +611,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p215", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p215（2026-10-28，D-06）：提示词示例把名册名写成像编码的 D1/D3 会被当成职责编码，改成 probe-a-1 这种标签，并明写 name 不是职责编码；键集自 p213 起未变（15）"},
+    # p215 → p216（2026-10-28，阶段 ③ 2B）：只动 A 的工具面（多一件
+    # `search.retry_pending`），`STEP_VOLATILE_FACTS` 那 15 格一格没挪、键名一个没换
+    # ⇒ `count` / `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()`
+    # 的现算值（不手抄）。这一格存在的理由不是"键集变了"，而是账本的口径：
+    # 版本抬了就记一格 —— 否则"哪一版改了工具面"在盘上没有读数。
+    {"version": "p216", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p216（2026-10-28，阶段 ③ 2B）：新增 search.retry_pending（roles 只有 A）⇒ A 的工具面多一行，十一格摘要只有 A 换值（temp/_recompute_digests.py 现算）。facts 键集仍 15 格、键名一格未动，count / keys_sha256 与上一格同值；本批 prompt_cache_warm.json 已重落（业主给了 --cap-usd 0.1 的两条命令），不留 stale 待办"},
 )
 
 

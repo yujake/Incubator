@@ -2151,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p215"
+_FROZEN_PROMPT_VERSION = "p216"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2316,8 +2316,16 @@ _FROZEN_PROMPT_VERSION = "p215"
 # 逐格的旧值 → 新值：D 2a3dc40a→8cf1fb51（A–C / E–H / L / M / V 十格与 p213 同值）。
 # 十一格是 `temp/rbe4_prompt_digests.py`（不入库，导入本文件的 `_surface_digest`）
 # 的现算值，不是手抄；连"只有 D 变"这件事也是它打出来的读数。
+# 2026-10-28（p216，阶段 ③ 2B）：只有 A 那一格换值 —— A 的工具面多一件
+# `search.retry_pending`（`roles=("A",)`），它的 summary 进 `tools_lines` 那一行，
+# 而那一行只渲染本角色的工具面 ⇒ 其余十格逐字节未动（重算读数：变化的格 = ['A']）。
+# 这一笔没有改任何手写段文：变的是派生态（工具面从注册表现算）。版本照样要抬 ——
+# 判据问的是"渲染出来的整份提示词变了没有"，它不区分手写段与派生态。
+# 逐格：A d05af496→e77c832a（B–H / L / M / V 十格与 p215 同值）。
+# 十一格是 `temp/_recompute_digests.py`（导入本文件的 `_surface_digest`、用
+# `build_registry().registry`，不带 store/workspace）的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "d05af4968af320cd8ee952908ede004a3e14097a2882157b14145ccd7181ab93",
+    "A": "e77c832a543cedd9112a7f9eeea620bdb4fece979be0d0b6cb43b7fe53fbed6f",
     "B": "336e6a60a4f1f7ff3f776fa7ca5625103949af073c57d462b2faed294aadd92f",
     "C": "0e83598d7fcb07461ba817f611e48665b7ca43f4e2db4517e3007d69466bef50",
     "D": "84f4241793e05a82f0a16b068aad290db2e4c26a308dd3b660b5b088998ceb9a",

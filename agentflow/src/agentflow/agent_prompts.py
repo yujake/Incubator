@@ -2758,7 +2758,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 逐格：只有 D 动（多一行 `conjecture.register_conjecture(<13 个参数名>)`）；
 #: A..H / L / V 与 p213 同值。十一格是同一支重算探针的现算值，不是手抄。
 #:
-PROMPT_VERSION = "p215"
+#: `p216`（2026-10-28，阶段 ③ 第 2B 步）：A 的工具面多一件 `search.retry_pending`
+#:
+#: ① 新增 `search.retry_pending`（`roles=("A",)`、`write_local` + `external="egress"`）：
+#:    把「有元数据、没全文」的文献逐条再取一次，四结局 got / failed / no_location /
+#:    cooled_down。它的 summary 进 `tools_lines` 那一行，而 `tools_lines` 只渲染
+#:    本角色的工具面 ⇒ 十一个角色里只有 A 那一格换值，其余十格逐字节不变
+#:    （重算读数：变化的格 = ['A']）。
+#: ② 这一笔没有改任何提示词段文：变的是一段派生态（工具面从注册表现算）。
+#:    版本号仍然要抬 —— `test_the_prompt_version_moves_with_the_sections` 的判据是
+#:    "段（渲染出来的整份提示词）变了，版本就必须跟着动"，它不区分"手写段"与"派生态"；
+#:    不抬的话，事后分不清这句"你这趟有 54 件工具"是哪一版说的。
+#: ③ 连带：`tests/test_agent_prompts.py` 的十一格表（A 一格）+ `_FROZEN_PROMPT_VERSION`，
+#:    以及 `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（工具面是
+#:    那一轴里的"会变的事实"，不追加它就抓不住"事实变了而缓存没重落"）。
+#: ④ `tests/fixtures/prompt_cache_warm.json` 本次重落了（业主 2026-10-28 给了
+#:    `--cap-usd 0.1` 的两条命令）⇒ 这一笔不留 stale 待办。
+#:
+#: 逐格：只有 A 动（多一行 `search.retry_pending(<2 个参数>)`）；B–H / L / M / V 与
+#: p215 同值。十一格是 `temp/_recompute_digests.py`（导入判据自己的 `_surface_digest`、
+#: 用 `build_registry().registry`）的现算值，不是手抄。
+#:
+PROMPT_VERSION = "p216"
 
 
 

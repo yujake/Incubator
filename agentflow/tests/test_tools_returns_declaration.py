@@ -123,7 +123,10 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 主力动作此前只被 `capabilities` 读到、`build_registry` 从不装配，业主批准后进
 #: `tools._MODULES`）。它的探针在 `_PREREQS` 里先落一条同样的 statement，于是自己这一趟
 #: 走"命中既有行"那一支（`duplicate` / `duplicate_of` 两格都在）。
-TOOL_COUNT = 119
+#: 2026-10-28（阶段 ③ 2B）：119 → 120（`search.retry_pending` —— 把「有元数据、
+#: 没全文」的文献逐条再取一次；四结局 got / failed / no_location / cooled_down）。
+#: 探针靠 `_PREREQS` 里那条 `table.create` 先落一行待取文献，于是主路径被真跑到。
+TOOL_COUNT = 120
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -277,10 +280,34 @@ _CONJECTURE_PROBE: dict = {
                  "criterion": "阶等于各素因子幂的乘积（Sylow 计数可判）",
                  "falsified_by": "找到一个阶不等于各素因子幂乘积的有限群"},
 }
+#: `search.retry_pending` 探针的前置行：有元数据、有定位、没有全文。
+#: 地址用 `example.invalid`（RFC 2606 保留域）—— 就算哪天夹具忘了给下载器打桩，
+#: 这一条也打不到真实主机。
+_PENDING_LITERATURE: dict = {
+    "title": "探针：只有元数据没有全文的文献",
+    "type": "J",
+    "summary": "判据探针用：这一行的地址永远取不到字节",
+    "path": None,
+    "processed": False,
+    "download": {"status": "skipped", "error": "no_local_path",
+                 "url": "https://example.invalid/probe-retry.pdf"},
+}
+
 _PREREQS: dict[str, tuple[str, dict]] = {
     "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
     "conjecture.register_conjecture": ("conjecture.register_conjecture",
                                        dict(_CONJECTURE_PROBE)),
+    # 批量重取（2026-10-28，阶段 ③ 2B）：先真落一行「有元数据、有下载地址、没全文」的
+    # literature —— 没有它，这一趟的 `rows[]` 会是空的，而 `rows[]` 的十二个键就
+    # 全成了"声明了却没给"的假红（探针必须打在主路径上，见本文件 docstring 的
+    # 「观测必须打在声明所描述的那一支上」）。
+    # 为什么用 `table.create` 而不是改 `_seed`：`_seed` 是每个工具的公共夹具，
+    # 往里加一条没全文的 literature 会改掉所有读那张表的探针（`search.local` /
+    # `trace.literature` / `table.count` …）的读数。
+    "search.retry_pending": ("table.create", {
+        "table": "literature",
+        "row": _PENDING_LITERATURE,
+    }),
 }
 
 
@@ -526,6 +553,9 @@ def tool_params() -> dict[str, dict]:
         # 夹具里 `_seed()` 铺的正是 `0000`；provider 由 `_StubProvider.walk_citations` 接住。
         "search.walk_citations": {"lit_id": "0000"},
         "search.shelf": {},
+        # 批量重取（2026-10-28，阶段 ③ 2B）：`limit` 只是把这一趟压小；
+        # 待取的那一行由 `_PREREQS` 里的 `table.create` 先落好。
+        "search.retry_pending": {"limit": 5},
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
         # ---- 待新增文献列表（业主 2026-10-20）：七件各探一次 ----
@@ -656,6 +686,12 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "search.providers",
         "search.register",
         "search.shelf",
+        # 批量重取（2026-10-28，阶段 ③ 2B）：探针真跑一次 —— 前置在 `_PREREQS` 里
+        # 用 `table.create` 落一行「有元数据、有下载地址、没全文」的 literature，
+        # 于是它这一趟真的走"逐行 attempt"那条主路径（`rows[]` 非空、四种结局的键
+        # 一次见全）。下载器是夹具里的桩（`ST.F.default_downloader` 被打过补丁），
+        # 所以这条探针不联网。
+        "search.retry_pending",
         "search.walk_citations",
         "table.count", "table.create", "table.delete", "table.get", "table.list", "table.schema",
         "table.search", "table.update",
@@ -801,6 +837,9 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "fs.write",
         "fs.edit",
         "search.register",
+        # 批量重取（2026-10-28，阶段 ③ 2B）：它会把 `path` / `download` 写回 literature
+        # ⇒ 与 `search.register` / `lit.admit*` 同档，排在读那张表的探针之后。
+        "search.retry_pending",
         "doc.build_document",
         "doc.register_dependency",
         "table.create",
@@ -894,6 +933,11 @@ class _StubDownloadResult:
         self.sha256 = "0" * 64
         self.path = Path(tempfile.gettempdir()) / "agentflow_returns_gate_stub.pdf"
         self.url = url
+        # 2026-10-28（阶段 ③ 2B）：`fetch.FetchResult` 的受控档也要在这个桩上有
+        # （`kind=None` = 干净成功）。`search.retry_pending` 是逐行读 kind 的
+        # （失败要按 429/404/403 分处置），缺了它这一格 AttributeError 会把探针
+        # 打成 `kind=unexpected` —— 那是"桩不满足真实契约"，不是工具缺陷。
+        self.kind = None
 
 
 class _StubDownloader:

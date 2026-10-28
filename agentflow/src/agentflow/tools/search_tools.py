@@ -1050,6 +1050,238 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
     return ok(data)
 
 
+# --------------------------------------------------------------------------- 批量重取
+
+#: `search.retry_pending` 一次最多碰几行（默认 10）。这一件真出网，而且每一行都可能
+#: 慢（本机实测 `tls_cert` 那类要 122 秒才判死），所以缺省取小、调用方自己抬。
+RETRY_PENDING_DEFAULT_LIMIT: int = 10
+
+
+def _row_location_url(row: Mapping[str, Any]) -> str:
+    """这一行「按哪个地址再去取一次」：行上的 pdf_url / landing_url，或下载台账里的 url。
+
+    顺序是有理由的：前两个是我们挑过的定位（provider 给的直链优先），
+    `download.url` 是"上一次试过的那个地址"（真机上它常是 DOI 落地页，
+    note 逐字写着「要全文请按它重取」）。三者都没有 ⇒ 这一行没有可重取的地址。
+    """
+    for key in _LOCATION_FIELDS:
+        url = str(row.get(key) or "").strip()
+        if url:
+            return url
+    dl = row.get("download")
+    if isinstance(dl, Mapping):
+        return str(dl.get("url") or "").strip()
+    return ""
+
+
+def _location_scope(row: Mapping[str, Any], url: str) -> str:
+    """这次重取打的「源」—— 冷却表的键（与 `providers` 的冷却表是同一张）。
+
+    取值顺序：
+    1) 行上记着来源（`download.url_source` 的 `name:…` 前缀）⇒ 用它，这就是
+       "按 provider 冷却退避"那一档；
+    2) 否则按主机归一到末两段（`onlinelibrary.wiley.com` → `wiley.com`）：
+       限流是对方服务器给的，同一出版商的不同子域共享配额。
+
+    为什么下载也要冷却：真机 `search.download` 10 次里 404/429/400 各两次。
+    429 之后继续打同一个站，只会把剩下几行一起拖成失败 —— 而它们本来是能取到的。
+    """
+    dl = row.get("download")
+    if isinstance(dl, Mapping):
+        src = str(dl.get("url_source") or "").strip()
+        if src:
+            name = src.split(":", 1)[0].strip().lower()
+            if name:
+                return name
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    parts = [p for p in host.split(".") if p]
+    if not parts:
+        return ""
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+
+def _save_retried_row(ctx: _Ctx, row: Mapping[str, Any], *,
+                      path: str | None, download: dict[str, Any]) -> None:
+    """把一次重取的结果写回 literature 行（`path` + `download` 两格）。
+
+    整行写回（`tx.upsert` 是整行替换）：只 patch 两格也要写整行，否则同一事务里
+    其它字段会被丢。行对象来自 `_literature_rows` 的快照，先 `dict(...)` 复制 ——
+    就地改会把 store 的进程内缓存也改掉（读快照的人会看到一份没落盘的新数据）。
+    """
+    payload = dict(row)
+    payload["path"] = path
+    payload["download"] = dict(download)
+    with ctx.store.tx("literature", actor=ctx.actor, note="search.retry_pending") as tx:
+        tx.upsert("literature", payload)
+
+
+def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id: str = "") -> Any:
+    """``search.retry_pending``：把「有元数据、没全文」的行逐条再取一次（每行最多一次）。
+
+    四种结局（每一种都是一种处置，不许互相折叠）：
+
+    ``got``          字节进了 ``library/`` 且 ``literature.path`` 已写回 ⇒ 现在可离线引用
+    ``failed``       请求发出去了，没拿到可用字节（``kind`` 是受控档：http_404 / tls_cert …）
+    ``no_location``  行上没有可重取的地址 ⇒ 我们没去取（不是「这篇不存在」）
+    ``cooled_down``  这个源正在冷却 ⇒ 跳过，不是失败（这一行下次还能再取）
+
+    为什么 `failed` 必须单独一档：把 404 折进 `no_location`，下游会读成"我们连地址都
+    没有"（进而"这大概不存在"），而事实是我们知道地址、对方不给 —— 两者的下一步
+    动作相反（前者去换源找地址，后者等冷却/换路由）。
+
+    写盘纪律：每次尝试都回写 ``download``（``last_kind`` / ``retry_attempts`` /
+    ``retried_at``），成功才写 ``path``。一次失败绝不把行从表里抹掉，也绝不给一个
+    指向不存在文件的 ``path``。
+    """
+    if ctx.store is None:
+        return fail(
+            "未配置 store：读不到文献表，也就说不出哪些行还缺全文"
+            "（「没有要重取的行」与「读不到表」是两件事，不许折叠成一个空清单）。",
+            kind="no_store",
+            checked=False,
+            counted=False,
+        )
+    rows, read_error = _literature_rows(ctx)
+    if read_error is not None:
+        return fail(
+            f"{read_error} ⇒ 重取**没做成**（不是「没有要重取的行」）。",
+            kind="table_unreadable",
+            checked=False,
+            counted=False,
+            read_error=read_error,
+        )
+
+    coverage_before = _shelf_coverage(ctx, rows)
+    pending: list[Mapping[str, Any]] = []
+    for row in rows:
+        if lit_id and str(row.get("lit_id") or "") != lit_id:
+            continue
+        # 「已经有了可离线引用的全文」不在这一件的职责里（那一行不需要再取）。
+        if _shelf_row(ctx, row) is None:
+            pending.append(row)
+    pending.sort(key=lambda r: str(r.get("lit_id") or ""))
+    scanned = len(pending)
+    todo = pending[: max(0, int(limit))]
+
+    downloader, _effective = _downloader_for(ctx, DEFAULT_MAX_DOWNLOAD_BYTES)
+    counts: dict[str, int] = {"got": 0, "failed": 0, "no_location": 0, "cooled_down": 0}
+    results: list[dict[str, Any]] = []
+    attempted = 0
+    for row in todo:
+        lid = str(row.get("lit_id") or "")
+        url = _row_location_url(row)
+        scope = _location_scope(row, url) if url else ""
+        item: dict[str, Any] = {
+            "lit_id": lid, "outcome": "", "source": scope or None, "url": url or None,
+            "kind": None, "http_status": None, "path": None, "bytes": None, "sha256": None,
+            "error": None, "cooldown_left_sec": None, "note": "",
+        }
+
+        if not url:
+            item["outcome"] = "no_location"
+            item["note"] = (
+                "行上没有可重取的地址 ⇒ 我们没去取。这不是「这篇不存在」："
+                "要全文得先换一个检索源，把这一篇的定位补齐。"
+            )
+            counts["no_location"] += 1
+            results.append(item)
+            continue
+
+        left = P._provider_cooling(scope) if scope else 0.0
+        if left > 0:
+            item["outcome"] = "cooled_down"
+            item["cooldown_left_sec"] = round(left, 1)
+            item["note"] = (
+                "这个源正在冷却（上一次 429 之后）⇒ 跳过，不是失败："
+                "这一行下次还能再取，不必换地址。"
+            )
+            counts["cooled_down"] += 1
+            results.append(item)
+            continue
+
+        # ---- 真发一次请求（每行只试一次：重试策略是"跳过冷却中的源"，不是原地重打）
+        attempted += 1
+        try:
+            res, elapsed = _timed(downloader.download, url, ctx.downloads_dir, lid or "retry")
+        except Exception as exc:  # noqa: BLE001 - 注入的下载器可能抛
+            res, elapsed = None, 0.0
+            item.update(
+                outcome="failed", kind="download_error",
+                error=f"{type(exc).__name__}: {exc}",
+                note="下载器抛了异常 ⇒ 这一行没取到（不是「这篇不存在」）。",
+            )
+        if res is not None:
+            item["kind"] = res.kind
+            item["http_status"] = res.http_status
+            item["bytes"] = res.bytes
+            item["sha256"] = res.sha256
+            item["error"] = res.error
+            landing_page = bool(res.ok and res.kind == "content_type_mismatch")
+            if res.ok and not landing_page:
+                rel_path, size, sha = _adopt_file(ctx, lid, str(res.path or ""), [])
+                if rel_path:
+                    item.update(outcome="got", path=rel_path, bytes=size, sha256=sha,
+                                note="字节已进 library/、path 已写回 ⇒ 现在可离线引用。")
+                    dl_old = dict(row.get("download") or {})
+                    _save_retried_row(ctx, row, path=rel_path, download={
+                        **dl_old, "status": "ok", "http_status": res.http_status,
+                        "bytes": size, "sha256": sha, "error": None, "url": url,
+                        "retry_attempts": int(dl_old.get("retry_attempts") or 0) + 1,
+                        "retried_at": S.now_iso(),
+                    })
+                else:
+                    item.update(
+                        outcome="failed", kind="adopt_failed",
+                        note="字节下来了、但搬不进 library/ ⇒ 这一行仍不可离线引用（不是「这篇不存在」）。",
+                    )
+            else:
+                item["outcome"] = "failed"
+                item["note"] = (
+                    "请求发出去了、没拿到可当全文的字节 ⇒ 这一行是没取到，不是「这篇不存在」。"
+                    "kind 是受控档：429 等冷却、404 换 landing、400 换 PDF 路由；"
+                    "content_type_mismatch 是拿到落地页，换 PDF 直链。"
+                )
+        if item["outcome"] != "got":
+            counts["failed"] += 1
+            dl_old = dict(row.get("download") or {})
+            _save_retried_row(ctx, row, path=row.get("path"), download={
+                **dl_old, "status": "failed", "error": str(item.get("error") or ""),
+                "kind": item.get("kind"), "last_kind": item.get("kind"),
+                "http_status": item.get("http_status"), "url": url,
+                "retry_attempts": int(dl_old.get("retry_attempts") or 0) + 1,
+                "retried_at": S.now_iso(),
+            })
+            if item.get("kind") == "http_429" and scope:
+                # 429 ⇒ 给这个源记一段冷却，后面的行不再打它（跳过，不是失败）。
+                P.start_provider_cooldown(scope)
+        else:
+            counts["got"] += 1
+        results.append(item)
+
+    # 重取之后重新数一遍覆盖率：这一件买到的是"缺口缩小了多少"，不是一个 got 计数。
+    rows_after, after_error = _literature_rows(ctx)
+    coverage_after = (_shelf_coverage(ctx, rows_after) if after_error is None
+                      else coverage_before)
+    return ok(
+        {
+            "checked": True,
+            "scanned": scanned,
+            "attempted": attempted,
+            "counts": counts,
+            "rows": results,
+            "stopped": "limit" if len(todo) < scanned else "done",
+            "coverage_before": coverage_before,
+            "coverage_after": coverage_after,
+            "note": (
+                "四种结局各是一种处置：got=现在可离线引用；failed=试过没拿到（kind 记原因，"
+                "**不等于这篇不存在**）；no_location=行上没地址 ⇒ 我们**没去取**（不是「不存在」）；"
+                "cooled_down=源在冷却 ⇒ **跳过**，下次还能取。"
+                "一次调用每行只试一次：重试策略是跳过冷却中的源，不是原地重打。"
+            ),
+        }
+    )
+
+
 def _literature_rows(ctx: _Ctx) -> tuple[list[dict], str | None]:
     """读文献表快照（无锁）。返回 ``(行, 读表失败原因)``。
 
@@ -1627,6 +1859,45 @@ def _search_dedup_check(ctx, title, year=None, doi=None):
     所以模型看到的签名与搬移前逐字相同。
     """
     return _h_dedup_check(ctx, title, year, doi)
+
+
+@tool(
+    "search.retry_pending",
+    "把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / "
+    "no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，"
+    "冷却中的源跳过而不是判失败。",
+    {
+           "type": "object",
+           "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            "lit_id": {"type": "string", "maxLength": 40},
+           },
+           "required": [],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+            "{'checked','scanned','attempted','counts','rows','stopped','coverage_before',"
+            "'coverage_after','note'}；"
+            "counts 是 {'got','failed','no_location','cooled_down'} 四个计数"
+            "（sum(counts) == len(rows)）；"
+            "rows[] 每项是 {'lit_id','outcome','source','url','kind','http_status','path',"
+            "'bytes','sha256','error','cooldown_left_sec','note'}"
+            "（outcome ∈ got/failed/no_location/cooled_down；"
+            "**no_location 是「行上没地址 ⇒ 没去取」，不是「这篇不存在」**；"
+            "cooled_down 是**跳过**、不是失败）；"
+            "coverage_before / coverage_after 与 search.shelf 的 coverage 同形"
+            "（{'total','with_fulltext','rate','missing','no_location','checked'}）；"
+            "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
+            "（**没数成**，不是「没有要重取的行」）"
+            ),
+    tags=("search", "download", "retry"),
+    external="egress",
+)
+def _search_retry_pending(ctx, limit=RETRY_PENDING_DEFAULT_LIMIT, lit_id=""):
+    """search.retry_pending 的工具体（注入的 ctx 由装配期用 `partial` 绑定）。"""
+    return _h_retry_pending(ctx, limit, lit_id)
 
 @tool(
     "search.ingest_local",
@@ -2458,6 +2729,8 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_search_local, ('ctx',)),
     (_search_download, ('ctx',)),
     (_search_dedup_check, ('ctx',)),
+    # 阶段 ③ 第 2B 步：批量重取「有元数据、没全文」的行（写盘 + 出网，只有 A 拿得到）。
+    (_search_retry_pending, ('ctx',)),
     (_search_ingest_local, ('ctx',)),
     (_search_register, ('ctx',)),
     # ---- 待新增文献列表（业主 2026-10-20 口径）：按委托暂存 → 审 → 提交整批 → 报告 ----

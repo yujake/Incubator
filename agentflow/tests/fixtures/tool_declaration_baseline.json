@@ -1,7 +1,7 @@
 {
   "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 119,
+  "n_tools": 120,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -93,7 +93,7 @@
     "verify.verify_proof"
   ],
   "added_after_compression": {
-    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。",
+    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。 2026-10-28（阶段 ③ 2B）：又加 1 件 —— `search.retry_pending`（把「有元数据、没全文」的文献逐条再取一次，四结局 got/failed/no_location/cooled_down）；同一口径：它从未压缩过，不进 compression_cohort，也不进比例的分母。",
     "tools": [
       "clock.alarm_start",
       "clock.now",
@@ -128,7 +128,8 @@
       "conductor.review_child",
       "conductor.patrol_verdict",
       "conjecture.register_conjecture",
-      "conductor.void_items"
+      "conductor.void_items",
+      "search.retry_pending"
     ]
   },
   "declarations": {
@@ -5451,6 +5452,38 @@
       "external": "none",
       "tags": [],
       "handler_name": "functools.partial"
+    },
+    "search.retry_pending": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "lit_id": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','scanned','attempted','counts','rows','stopped','coverage_before','coverage_after','note'}；counts 是 {'got','failed','no_location','cooled_down'} 四个计数（sum(counts) == len(rows)）；rows[] 每项是 {'lit_id','outcome','source','url','kind','http_status','path','bytes','sha256','error','cooldown_left_sec','note'}（outcome ∈ got/failed/no_location/cooled_down；**no_location 是「行上没地址 ⇒ 没去取」，不是「这篇不存在」**；cooled_down 是**跳过**、不是失败）；coverage_before / coverage_after 与 search.shelf 的 coverage 同形（{'total','with_fulltext','rate','missing','no_location','checked'}）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「没有要重取的行」）",
+      "side_effect": "write_local",
+      "external": "egress",
+      "roles": [
+        "A"
+      ],
+      "tags": [
+        "search",
+        "download",
+        "retry"
+      ],
+      "handler_name": "functools.partial",
+      "summary": "把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，冷却中的源跳过而不是判失败。",
+      "added_after_compression": true
     }
   },
   "contract_amendments": [
