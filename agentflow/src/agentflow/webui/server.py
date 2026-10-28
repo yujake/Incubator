@@ -69,6 +69,8 @@ import os
 import re
 import secrets
 import sys
+import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -584,6 +586,112 @@ class WebHandler(BaseHTTPRequestHandler):
 
 
 # ====================================================================== 服务
+#: 起服务那一层的受控拒绝（2026-10-28）：端口已被占、或绑完自证不通过。
+#: 它继承 `RuntimeError` 而不是 `SystemExit`：`serve()` 是库函数，调用方（CLI / 判据）
+#: 各自决定怎么收场；`run()` 把它翻成非零退出并打一行人话。
+class WebStartupError(RuntimeError):
+    """服务起不来（不是"起好了但没人来"）。`owner` 是端口占位者的读数（可能为空）。"""
+
+    def __init__(self, message: str, *, owner: Mapping[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.owner: dict[str, Any] = dict(owner or {})
+
+
+def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
+    """这个端口上现在有没有东西在听；在听的话再问一句它是谁（`/api/state` 的 root）。
+
+    ## 为什么需要这一步（2026-10-28 两次撞同一面墙）
+
+    Windows 的 `SO_REUSEADDR` 允许第二个 socket 绑同一个端口，而
+    `http.server.HTTPServer.allow_reuse_address = 1` 让 `ThreadingHTTPServer` 正好那样做
+    ⇒ 第二个服务"绑定成功"、永远收不到连接，却照样把 URL 打出来。真机现场：
+    一具两小时前的 `serve web` 尸体占着 8787（接受连接、一个字节不回），于是新服务空转。
+
+    ## 三态
+
+    * `free`    —— 这个端口现在绑得上（拿一个一次性 socket 真绑一次，立刻关掉）；
+    * `busy`    —— 绑不上（`WinError 10048` / `EADDRINUSE`）⇒ 确实被占；再尽力问一句是谁；
+    * `unknown` —— 探测本身没成（权限之类的意外错误）。不是 `free`。
+
+    ## 为什么判据是"绑得上/绑不上"，不是"连不连得上"（本机实测，2026-10-28）
+
+    ```
+    有人在听   : connect 成功        bare bind → WinError 10048
+    端口从来没人听过 : connect 超时(!)      bare bind → 成功
+    刚 listen 过又 close : connect 超时(!)  bare bind → 成功
+    ```
+
+    本机对"没人听"的端口是静默丢 SYN（不是 RST）⇒ 用 connect 判空会把每个空端口都读成
+    "有人在听、只是不健康"。而 bind 一次是确定性的：占着就 10048，空着就成功。
+
+    `root` / `pid` 是"尽力给"：读不出就是空串/0，绝不猜。
+    """
+    import socket as _socket
+
+    out: dict[str, Any] = {"checked": True, "state": "unknown", "root": "", "pid": 0,
+                           "reason": "", "port": int(port)}
+    probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    try:
+        # 刻意不设 SO_REUSEADDR：设了的话 Windows 上"占着"也能绑成功，判据就没了。
+        probe.bind((host, int(port)))
+        out.update(state="free", reason="端口绑得上 ⇒ 没人在听")
+        return out
+    except OSError as exc:
+        if int(getattr(exc, "errno", 0) or 0) in (98, 10048):
+            out.update(state="busy", reason="端口绑不上（已被占用）")
+        else:
+            out.update(state="unknown", reason=f"探测没成：{type(exc).__name__}: {exc}")
+            return out
+    finally:
+        probe.close()
+    # 被占：尽力问一句占位者是谁（读不出也不影响"占了"这个结论）
+    try:
+        import urllib.request
+
+        url = f"http://{host}:{int(port)}/api/state"
+        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 - 本机自检
+            body = resp.read()
+        out["root"] = str((json.loads(body.decode("utf-8")) or {}).get("root") or "")
+    except Exception as exc:  # noqa: BLE001 - 读不出占位者是谁也要把"占了"说出来
+        out["reason"] = f"{out['reason']}；占位者读数失败：{type(exc).__name__}"
+    return out
+
+
+def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0) -> dict:
+    """绑完自证：这一趟的端口真是自己在服务吗（三态，`ok` 才放行）。
+
+    `mismatch` = 200 但 root 不是这一趟 ⇒ 端口上答话的是别人（改前那种"绑上了却空转、
+    真正答话的是旧服务"的形态）；`unknown` = 连不上/不通 ⇒ 没查成，不许折成 ok。
+    """
+    import urllib.request
+
+    want = str(Path(root).resolve())
+    out: dict[str, Any] = {"checked": True, "state": "unknown", "code": 0, "root": "",
+                           "reason": "", "url": url}
+    target = url.rstrip("/") + "/api/state"
+    try:
+        with urllib.request.urlopen(target, timeout=timeout) as resp:  # noqa: S310 - 本机自检
+            out["code"] = int(getattr(resp, "status", 0) or 0)
+            body = resp.read()
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"打不通 {target}：{type(exc).__name__}: {exc}（没查成，不是通过）"
+        return out
+    if out["code"] != 200:
+        out["reason"] = f"{target} 回了 {out['code']}（不是 200）"
+        return out
+    try:
+        out["root"] = str((json.loads(body.decode("utf-8")) or {}).get("root") or "")
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"应答解不成 JSON：{type(exc).__name__}"
+        return out
+    if out["root"] != want:
+        out.update(state="mismatch",
+                   reason=f"答话的是 {out['root'] or '（空）'}，不是这一趟的 {want}")
+        return out
+    out.update(state="ok", reason="端口自证通过")
+    return out
+
+
 def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
           token: str = "", allow_writes: bool = False, settings_write: bool = True,
           static_root: str | Path | None = None,
@@ -633,8 +741,31 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
         "allow_writes": bool(allow_writes), "settings_write": bool(settings_write),
         "routes_table": tuple(routes_table) if routes_table is not None else (),
     })
-    srv = ThreadingHTTPServer((host, port), handler)
+    # ---- 起之前先问一句"这个端口上是不是已经有东西在听"（2026-10-28）。
+    # 为什么这一问不能省：Windows 的 SO_REUSEADDR 让第二个 bind 静默成功，于是下面那句
+    # `ThreadingHTTPServer(...)` 不报错、URL 照打、请求却永远进不来。`port=0` 不探
+    # （那是"让系统挑"，不构成撞车）。
+    owner: dict[str, Any] = {"checked": False, "state": "port_zero", "root": "", "pid": 0,
+                             "reason": "port=0：由系统挑空端口，不探测"}
+    if int(port):
+        owner = port_owner(host, int(port))
+        if owner.get("state") == "busy":
+            who = owner.get("root") or "（占位者没回话/读不出工作区）"
+            raise WebStartupError(
+                f"{host}:{port} 已经被占用（占位者工作区：{who}）⇒ 不绑。"
+                f"换 --port 0 让系统挑空端口，或先 `python -B temp/_web.py who --port {port}` "
+                f"看清是谁、`taskkill /PID <pid> /T /F` 收掉它", owner=owner)
+    srv = None
+    try:
+        srv = ThreadingHTTPServer((host, port), handler)
+    except OSError as exc:
+        # 探测说"空着"、但绑的那一刻被抢了（竞态）：照旧不许静默，翻成同一条受控拒绝。
+        raise WebStartupError(
+            f"{host}:{port} 绑不上：{type(exc).__name__}: {exc} ⇒ 不绑。"
+            f"换 --port 0 让系统挑空端口", owner=owner) from exc
     srv.daemon_threads = True
+    # 探测的读数挂上去：`run()` 的自证与判据都要读它（"探过没有"这件事必须看得见）
+    srv.startup_probe = owner
     return srv
 
 
@@ -667,9 +798,16 @@ def run(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(list(argv) if argv is not None else None)
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
-    srv = serve(root, host=args.host, port=args.port, token=token,
-                allow_writes=args.allow_writes,
-                settings_write=not args.no_settings_write)
+    try:
+        srv = serve(root, host=args.host, port=args.port, token=token,
+                    allow_writes=args.allow_writes,
+                    settings_write=not args.no_settings_write)
+    except WebStartupError as exc:
+        # 起不来就说出来（非零退出 + 一行人话）。改前这一支会把"绑上、打印 URL、空转"
+        # 当成成功：真机一次是端口上挂着两小时前的尸体，一次是 Windows 的双绑静默成功。
+        sys.stderr.write(f"[webui] 起不来：{exc}\n")
+        sys.stderr.flush()
+        return 1
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
@@ -692,6 +830,29 @@ def run(argv: Sequence[str] | None = None) -> int:
             webbrowser.open(url)
         except Exception as exc:  # noqa: BLE001 - 打不开浏览器不该拖垮服务
             sys.stderr.write(f"[webui] 打不开浏览器：{type(exc).__name__}: {exc}\n")
+    # ---- 绑完自证（2026-10-28）：在服务的必须是"这一趟"，不是端口上原来那个。
+    # 为什么不能省：Windows 的 SO_REUSEADDR 让第二个 bind 静默成功（这次的现场），于是
+    # "URL 打出来了"与"请求真的进这个进程"是两件事。打法：起服务之后从这个进程往自己
+    # 端口打一次 `/api/state`，`root` 对不上就不再假装在服务（`verify_serving` 三态）。
+    # 放进后台线程而不是挡住主线程：`serve_forever()` 必须在主线程上跑（Ctrl-C 才走得通），
+    # 而自证要等 accept 循环起来才有意义。
+    self_check: dict[str, Any] = {}
+
+    def _self_check() -> None:
+        deadline = time.monotonic() + 8.0
+        got: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            got = verify_serving(url, root=root)
+            if got.get("state") == "ok":
+                break
+            time.sleep(0.25)
+        self_check.update(got or {"state": "unknown", "reason": "自证没跑完"})
+        if got.get("state") != "ok":
+            sys.stderr.write(f"[webui] 绑完了但自证没过：{got.get('reason')} ⇒ 停止服务并退出 1\n")
+            sys.stderr.flush()
+            srv.shutdown()
+
+    threading.Thread(target=_self_check, name="webui-self-check", daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -711,4 +872,6 @@ def run(argv: Sequence[str] | None = None) -> int:
         srv.shutdown()
         srv.server_close()
         sse.detach()
+    if self_check and str(self_check.get("state") or "") != "ok":
+        return 1
     return 0
