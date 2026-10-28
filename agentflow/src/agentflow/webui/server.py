@@ -651,10 +651,20 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
                     return out
                 out["state"] = "free"
                 return out
-        out["state"] = "busy"
+        # 连上了不等于"在服务网页"：TIME_WAIT 里也连得上（真机 8788 全是 TimeWait、
+        # 零个 listener，`Get-NetTCPConnection` 可核）。所以再用一次 `/api/state` 自述：
+        # 真答得上来才判 busy，否则回 unknown（让真正的 bind + 起服务后的自证去决定）。
         got = verify_serving(f"http://{host}:{int(port)}/", root="")
-        if isinstance(got, dict):
+        if isinstance(got, dict) and str(got.get("state") or "") in ("ok", "mismatch"):
+            # "ok" = 在服务就是我们要的那个工作区；"mismatch" = 在服务、但根不是我们 ——
+            # 两种都算"有人在服务这个端口"，只有 "unknown"（答不上来）才判不了。
+            out["state"] = "busy"
             out["root"] = str(got.get("root") or "")
+            return out
+        out["state"] = "unknown"
+        out["reason"] = ("连得上但 /api/state 没有正答 ⇒ 判不了（"
+                         + str((got or {}).get("state") if isinstance(got, dict) else got)
+                         + "），交给起服务之后的自证")
         return out
     except Exception as exc:  # noqa: BLE001 —— 探不了就是"没查成"
         return {"checked": False, "state": "unknown", "root": "", "pid": 0,
@@ -1023,3 +1033,5 @@ def run(argv: Sequence[str] | None = None) -> int:
     if self_check and str(self_check.get("state") or "") != "ok":
         return 1
     return 0
+
+
