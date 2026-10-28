@@ -878,8 +878,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         description="agentflow 用户端：SPA 外壳（九个页面）+ 十个只读面 + 一趟详情与提交回答")
     ap.add_argument("--root", default="", help="工作区根（不给就用 DEFAULT_ROOT）")
     ap.add_argument("--host", default=DEFAULT_HOST, help=f"监听地址（默认 {DEFAULT_HOST}）")
-    ap.add_argument("--port", type=int, default=DEFAULT_PORT,
-                    help=f"监听端口（默认 {DEFAULT_PORT}；给 0 让系统挑）")
+    # 缺省 None = "调用方没给"（不是"给了 DEFAULT_PORT"）：`ensure_serving` 要靠这个
+    # 区分"按登记端口复用/新起"与"你指名要这个端口"。改前缺省写成 DEFAULT_PORT，
+    # 于是"没给"永远被读成"给了 8788" ⇒ 复用那一路永远走不到（2026-10-28 实测）。
+    ap.add_argument("--port", type=int, default=None,
+                    help=f"监听端口（缺省：用 webui.json 记下的那个，没有就用 "
+                         f"{DEFAULT_PORT}；给 0 让系统挑，且不登记）")
     ap.add_argument("--token", default="", help="共享口令（也可用 AGENTFLOW_WEB_TOKEN）")
     ap.add_argument("--open", action="store_true", help="起好之后用浏览器打开首页")
     ap.add_argument("--json", action="store_true",
@@ -896,12 +900,13 @@ def run(argv: Sequence[str] | None = None) -> int:
     # ---- 先算"复用还是新起"（2026-10-28，业主：为什么开网页还是那么累）。
     # `--port 0` 是显式的"让系统挑"，不复用也不登记；其余情况交给
     # `ensure_serving` 一处判（三条判据写在它的 docstring 里）。
-    plan = {"action": "start", "port": int(args.port), "url": "", "why": ""}
-    if not args.port:
-        planned = int(ensure_serving(root, host=args.host).get("port") or 0) or 0
+    explicit_port = args.port is not None
+    if explicit_port:
+        plan = {"action": "start", "port": int(args.port), "url": "",
+                "why": "显式给了端口"}
+    else:
         plan = ensure_serving(root, host=args.host)
-        plan["port"] = planned
-        if plan.get("action") == "reuse":
+    if plan.get("action") == "reuse":
             url_now = str(plan.get("url") or "")
             if args.json:
                 print(json.dumps({"url": url_now, "root": str(root),
@@ -929,7 +934,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
-    if not args.port and int(port):
+    if not explicit_port and int(port):
         problem = write_port_file(root, int(port), url)
         if problem and not args.json:
             print(f"[webui] 端口没记下来（下次还得重新挑）：{problem}", flush=True)
