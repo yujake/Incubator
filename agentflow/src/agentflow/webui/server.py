@@ -638,11 +638,16 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
                 out["reason"] = f"连接探不了：{type(exc).__name__}: {exc}"
                 return out
         if out["state"] == "unknown":
+            # 连接超时 + bind 失败：可能是 TIME_WAIT（没人听），也可能是别的进程在听但
+            # 回不了我们的连接。这一档判不了 —— 回 `unknown`，由起服务之后那一步
+            # `verify_serving` 自证（根对不上就不假装在服务），而不是在这里折成 busy
+            # 让人空等（真机：网页服务刚被杀掉，8788 被 TIME_WAIT 挡住四分钟）。
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as bindprobe:
                 try:
                     bindprobe.bind((host, int(port)))
-                except OSError:
-                    out["state"] = "busy"
+                except OSError as exc:
+                    out["reason"] = (f"连接超时且 bind 失败（{type(exc).__name__}）"
+                                     "⇒ 判不了，交给起服务之后的自证")
                     return out
                 out["state"] = "free"
                 return out
@@ -749,6 +754,8 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     if int(port):
         owner = port_owner(host, int(port))
         if owner.get("state") == "busy":
+            # 只有"明确有人服务"才拒；`unknown`（TIME_WAIT / 判不了）放行，
+            # 由 `run()` 的自证把"在服务的是不是这一趟"钉死。
             who = owner.get("root") or "（占位者没回话/读不出工作区）"
             raise WebStartupError(
                 f"{host}:{port} 已经被占用（占位者工作区：{who}）⇒ 不绑。"
