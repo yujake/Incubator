@@ -846,7 +846,7 @@ def write_port_file(root: str | Path, port: int, url: str = "") -> str:
         path.write_text(json.dumps({"port": int(port), "url": str(url),
                                     "pid": os.getpid(),
                                     "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")},
-                                   ensure_ascii=False, indent=2) + "\n",
+                                   ensure_ascii=False, default=str, indent=2) + "\n",
                         encoding="utf-8")
         return ""
     except Exception as exc:  # noqa: BLE001
@@ -955,7 +955,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             url_now = str(plan.get("url") or "")
             if args.json:
                 print(json.dumps({"url": url_now, "root": str(root),
-                                  "reused": True}, ensure_ascii=False),
+                                  "reused": True}, ensure_ascii=False, default=str),
                       flush=True)
             else:
                 print(f"agentflow 用户端（已在跑，复用）：{url_now}", flush=True)
