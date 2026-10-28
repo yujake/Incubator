@@ -1119,6 +1119,67 @@ def retire_refusal(reading: Mapping[str, Any], *, tid: str = "", name: str = "",
 # "没有在跑的程序" —— 三态纪律里最贵的那种折叠。
 
 
+#: pid 复用判定的容差（秒）：创建时刻比落账时刻晚这么多，就不是同一台进程。
+#:
+#: 为什么需要这一格（业主 2026-10-28 两条裁定合起来）：口径是「收工必须所有人停、所有
+#: 进程停」，所以闸不许放宽；但 Windows 的 pid 会被复用 —— 账上早已 `outcome=exited`
+#: 的那台脚本，探活探到的可能是另一台恰好占了这个号的新进程（真机
+#: `projects/paper-rewrite-78c`：`extract_pdf.py` 1.2 秒就 exit_code=0，读数却 `alive=true`
+#: ⇒ 销号闸被一个已经不存在的进程永久挡住；而业主又明令「不能为了着急收工强停」）。
+#: 正确的处置不是放松闸、也不是加停的权力，而是把这个读数测准。
+PID_REUSE_TOLERANCE_SEC: float = 2.0
+
+
+def _parse_epoch(text: Any) -> float | None:
+    """ISO 时刻 → epoch 秒；读不成 ⇒ None（三态：不是 0）。"""
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    try:
+        from datetime import datetime
+
+        return datetime.fromisoformat(raw).timestamp()
+    except Exception:  # noqa: BLE001 —— 读不成就是"没读到"
+        return None
+
+
+def _process_created_at(pid: Any) -> float | None:
+    """这个 pid 那次进程的创建时刻（epoch 秒）；非 Windows / 读不到 ⇒ None。
+
+    为什么必须问创建时刻：`stopctl.alive(pid)` 只回答"这个号现在有没有主"，而 pid 会被
+    复用 —— 一台早退的脚本与一台刚起来的新进程在它眼里长得一样。读不到（权限 / 平台 /
+    刚退出）⇒ None，调用方按"没读到"处置（维持进闸，fail-closed）。
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not handle:
+            return None
+        try:
+            created = wintypes.FILETIME()
+            exit_t = wintypes.FILETIME()
+            kernel_t = wintypes.FILETIME()
+            user_t = wintypes.FILETIME()
+            ok = k32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exit_t),
+                                     ctypes.byref(kernel_t), ctypes.byref(user_t))
+            if not ok:
+                return None
+            ticks = (int(created.dwHighDateTime) << 32) | int(created.dwLowDateTime)
+            if ticks <= 0:
+                return None
+            return ticks / 10_000_000.0 - 11_644_473_600.0
+        finally:
+            k32.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 —— 探不成就是"没读到"
+        return None
+
+
 def _program_alive(pid: Any) -> bool:
     """这个 pid 还活着吗（复用 `stopctl.alive`，不在本文件另写一份探活）。
 
@@ -1237,6 +1298,19 @@ def programs_reading(workspace: str | Path, *, task_ids: Iterable[str] | None = 
         pid = row.get("pid")
         state = str(row.get("state") or "")
         alive = bool(_program_alive(pid)) if pid is not None else False
+        # ---- pid 复用（2026-10-28）：`alive` 只认"那台进程确实是它"。
+        # 口径仍是「所有进程停才许收工」—— 这一格不放松闸，只把"活着"测准：
+        # 创建时刻晚于计时器落账时刻 + 容差 ⇒ 那是复用号，不是账上那一台。
+        # 创建时刻读不到 ⇒ 维持 alive 为真（fail-closed，回到进闸）。
+        pid_reused = False
+        if alive:
+            made_at = _process_created_at(pid)
+            logged_at = _parse_epoch(row.get("at") or row.get("created_at"))
+            if (made_at is not None and logged_at is not None
+                    and made_at > logged_at + PID_REUSE_TOLERANCE_SEC):
+                pid_reused = True
+                alive = False
+        row["pid_reused"] = pid_reused
         live = (state == "pending") or bool(alive)
         row["alive"] = alive
         row["live"] = live
