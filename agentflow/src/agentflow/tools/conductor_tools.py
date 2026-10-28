@@ -2124,9 +2124,37 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         return _out("unknown", f"名册对照表读不成（{type(exc).__name__}: {exc}）",
                     checked=False, missing=["名册对照表"])
     if not name:
-        state = "unknown" if ("读不出" in str(why) or "读不成" in str(why)) else "refused"
-        return _out(state, f"{tid} 的名册名没读到（{why}）⇒ 不猜一个名字去销",
-                    checked=state == "refused", missing=["名册名"])
+        # ---- 没有名册名（2026-10-29）：不猜名字，但认边。
+        # 这一类节点是"父派活时没给孩子落名册项"的产物：它没有名字可销，而
+        # `retire_integrity` 数的是"父没认过的代理行" ⇒ 不认这条边，收工闸永远差几个
+        # （真机 78c / 79 连续两趟都死在这里：交付物齐全也收不了工）。
+        # 三条前置闸（板项 / 程序 / 静默 / 活跃）都在上面过完了才走到这里。
+        if "读不出" in str(why) or "读不成" in str(why):
+            return _out("unknown", f"{tid} 的名册名没读到（{why}）⇒ 不猜", checked=False,
+                        missing=["名册名"])
+        try:
+            mark, problem = c.note_edge_release(mine, child_task_id=tid)
+        except Exception as exc:  # noqa: BLE001
+            mark, problem = "", f"{type(exc).__name__}: {exc}"
+        if not mark:
+            return _out("refused",
+                        (f"{tid} 没有名册名（{why}），而认这条边也没成"
+                         f"（{problem or '没写下'}）⇒ 不销（认边读不成不许折成销掉）"),
+                        checked=True, missing=["认边落痕"])
+        data.update(name="", retired=True, state="retired", branch="unrostered",
+                    edge_released=True, retired_count=1, retired_path="",
+                    roster_retired=False,
+                    cascade=[{"task_id": tid, "parent": mine, "name": "",
+                              "state": "unrostered", "edge_released": True,
+                              "why": f"没有名册名（{why}）⇒ 只认边收口"}],
+                    reason=(f"{tid} 没有名册名（{why}）⇒ 不做秘书销号，改为在 {mine} 的行上"
+                            f"认边（{mark}）；它从此不再算在册"),
+                    note=str(reason or ""))
+        data["readings"]["edge_release"] = mark
+        return _out("retired",
+                    (f"{tid} 已在 {mine} 名下认边收口（{mark}）—— 它没有名册名，所以销号"
+                     "名单里不会有它；收工闸读的是这条边"),
+                    retired=True, missing=[])
     data["name"] = name
     names_of[tid] = name
     # ---- 子树逐项核（先读后写）：任何一项不过 ⇒ 整笔不动，一个字节都不落盘
