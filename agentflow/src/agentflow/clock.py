@@ -2061,6 +2061,8 @@ class TimerBook:
         self._loaded = False
         #: 读盘失败的理由。非空 = 这一份簿记没查成，不许读成"没有计时器"。
         self.load_error = ""
+        #: 已经被压掉的终态条目总数（读数：不许静默丢历史，见 MAX_TERMINAL_KEPT）。
+        self._terminal_dropped: int = 0
         # ---- 内存派生索引（盘上的格式一个字节都不改，`load` 时重建）----
         #
         #: `target_key -> 等它的计时器编号集合`（`_target_key` 的键空间）。
@@ -2455,6 +2457,7 @@ class TimerBook:
                     f"有一条计时器读不成：{type(exc).__name__}: {exc}"
                 continue
             self._timers[timer.timer_id] = timer
+        self._terminal_dropped = int(doc.get("dropped_terminal") or 0)
         for raw in doc.get("periodics") or ():
             try:
                 periodic = Periodic.from_dict(raw)
@@ -2473,16 +2476,48 @@ class TimerBook:
         self._rebuild_index()
         return self
 
+    def terminal_dropped(self) -> int:
+        """已经被压掉的终态条目总数（读数：清了就要说得出来）。"""
+        return int(self._terminal_dropped)
+
+    def _prune_terminal(self) -> int:
+        """把终态计时器压到 `MAX_TERMINAL_KEPT` 条以内，返回这一趟丢了几条。
+
+        只动终态（`fired` / `cancelled`）：pending 一条都不许碰 —— 清掉一条 pending
+        等于让那个"还在等"的人永远醒不了，而这件事没有任何地方会报错。
+        丢的顺序是最老的先丢（按 `fired_at`，没有就按 `created_at`），于是留下的总是最近那批。
+        """
+        terminal = [t for t in self._timers.values()
+                    if str(getattr(t, "state", "")) in ("fired", "cancelled")]
+        over = len(terminal) - int(MAX_TERMINAL_KEPT)
+        if over <= 0:
+            return 0
+        terminal.sort(key=lambda t: (str(getattr(t, "fired_at", "") or ""),
+                                     str(getattr(t, "created_at", "") or ""),
+                                     str(getattr(t, "timer_id", ""))))
+        for timer in terminal[:over]:
+            self._timers.pop(timer.timer_id, None)
+        self._terminal_dropped += int(over)
+        # 索引与堆都是派生量：删了行就重算一次（终态本不在堆里，这一步只是保一致）
+        self._rebuild_index()
+        return int(over)
+
     def save(self) -> None:
         if self.load_error:
             # 读坏的那一份不许被"保存一次空表"覆盖掉（那会把证据抹掉）。
             raise ClockStateError(self.load_error)
         reading = now()
+        # 终态条目先压到上限内再落盘（D-05：state.json 不许随运行时长线性增长）。
+        # 压在 save 里而不是每次到点后压：save 本来就要遍历全表建 doc，
+        # 在这里做的代价是 O(终态数)，而终态数已被上面的上限钉住。
+        self._prune_terminal()
         doc = {
             "schema": SCHEMA,
             "saved_at": _iso(reading.wall) if reading.wall is not None else "",
             "clock_token": str(getattr(_CLOCK, "token", "") or ""),
             "next_seq": self._next_seq,
+            # 终态条目的上限与它清掉了多少（读数：清了就要说得出来）
+            "dropped_terminal": self._terminal_dropped,
             "timers": [t.to_dict() for t in
                        sorted(self._timers.values(), key=lambda t: (t.due_at, t.timer_id))],
             "periodics": [p.to_dict() for p in
@@ -5505,6 +5540,17 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
 
 #: 一次推进里，同一条周期性巡查最多补几拍（时钟被拨远时的上界，不是周期本身的上界）。
 MAX_CATCHUP_FIRES: int = 1000
+
+#: `state.json` 里最多留多少条终态计时器（fired / cancelled）。
+#:
+#: 为什么要有上限（真机 2026-10-28，projects/paper-rewrite-78，3 小时那一趟）：
+#: 50 分钟时 state.json 158 KB / 82 条（终态 72 = 88%），110 分钟 350 KB / 172 条；
+#: 斜率 1.6 KB/分钟 ⇒ 10 小时约 1 MB、24 小时约 2.4 MB。而 `save()` 每次都整份重写，
+#: 于是写放大随运行时长线性上升 —— 而这套东西的常态就是小时级、多子代理地跑。
+#: 终态条目只是历史（不进堆、不参与到点判定、不再被任何判据读），所以可以压。
+#: 200 条的取舍：一次 `conductor.patrol` 的读数窗口通常只看最近几十条；
+#: 而清掉多少条会记进 `dropped_terminal`（读数，不许静默丢）。
+MAX_TERMINAL_KEPT: int = 200
 
 
 def _remember_wait_state(bucket: TimerBook, timer: Timer,
