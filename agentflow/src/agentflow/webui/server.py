@@ -858,7 +858,16 @@ def run(argv: Sequence[str] | None = None) -> int:
             sys.stderr.flush()
             srv.shutdown()
 
-    threading.Thread(target=_self_check, name="webui-self-check", daemon=True).start()
+    def _self_check_with_context() -> None:
+        # 判据 `test_g8_a_program_belongs_to_the_run::test_d` 要求每一处起线程都带
+        # 执行上下文（抄一份当时的）：这里起的是服务侧自证探针，不带也对，但那条
+        # 判据是"扫落点"的 —— 按同一条纪律抄一份，不给它留豁免。
+        import contextlib
+
+        contextlib.copy_context().run(_self_check)
+
+    threading.Thread(target=_self_check_with_context, name="webui-self-check",
+                     daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
