@@ -154,6 +154,15 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
     "search.download": TimeoutDecl(
         180.0, "DOWNLOAD_TIMEOUT", "pending",
         "下 PDF 是这一层最慢的一件（分钟级是常态，所以给三分钟而不是三十秒）"),
+    # 2026-10-28（阶段 ③ 2B）：批量重取 —— 一次调用最多碰 `limit` 行（缺省 10），
+    # 每行都是一次下载（`search.download` 那一档单次就给三分钟）⇒ 给十分钟。
+    # 检查点接在每一行开始之前（`raise_if_timed_out()`）：到点就停在那里，
+    # 已经落盘的那些行不受影响（它们各自的事务已提交），只是这一次的汇总会被
+    # 换成超时结果 —— 与 `search.literature` 在"每个源那一次调用之前"设检查点同一条口径。
+    "search.retry_pending": TimeoutDecl(
+        600.0, "RETRY_PENDING_TIMEOUT", "handler",
+        "逐行重取：每行一次下载（单次三分钟是常态）× 缺省 10 行 ⇒ 十分钟；"
+        "检查点在每一行开始之前（到点即停，已落盘的行不回滚），与 `search.literature` 同一条口径"),
     "ocr.run": TimeoutDecl(
         300.0, "OCR_TIMEOUT", "pending",
         "首次构造 Reader 要下 ~100MB 模型（R010-b 的已知盲区）；给它五分钟"),

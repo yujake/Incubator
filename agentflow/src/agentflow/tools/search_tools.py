@@ -1179,7 +1179,14 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
     counts: dict[str, int] = {"got": 0, "failed": 0, "no_location": 0, "cooled_down": 0}
     results: list[dict[str, Any]] = []
     attempted = 0
+    # S-E 协作式截止的检查点（`tool_timeout.TIMEOUT_TABLE` 里 `search.retry_pending`
+    # 声明的是 `checkpoint="handler"`）：放在每一行开始之前。到点就抛，已落盘的
+    # 那些行不受影响（各自的事务已提交）；与 `search.literature` 在"每个源那一次
+    # 调用之前"设检查点是同一条口径。
+    from ..tool_timeout import raise_if_timed_out
+
     for row in todo:
+        raise_if_timed_out()
         lid = str(row.get("lit_id") or "")
         url = _row_location_url(row)
         scope = _location_scope(row, url) if url else ""
