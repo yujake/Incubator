@@ -1246,15 +1246,23 @@ def running_loops(root: str | Path) -> dict[str, Any]:
                 continue
             role, _, tid = key.partition("\x00")
             running.append({"role": role, "sid": sid, "since": str(start.get("ts") or ""),
-                            "task_id": tid})
+                            "task_id": tid, "evidence": "会话面"})
         for role, start in legacy_start.items():
             if role in legacy_closed:
                 continue
             running.append({"role": role, "sid": sid, "since": str(start.get("ts") or ""),
-                            "task_id": ""})
+                            "task_id": "", "evidence": "会话面"})
     live = live_pids(root)
+    for row in live:
+        # 进程面那一档：盘上登记着、且真的活着（这是比会话面更强的一份证据）
+        row["evidence"] = "进程面"
     return {"running": running, "live": live, "unreadable_sessions": stale,
-            "answer": "有" if (running or live) else "没有"}
+            "answer": "有" if (running or live) else "没有",
+            #: 读的人先看这一句：这一份读数有几成是"会话面"（弱证据）撑起来的。
+            #: 真机 78c：3 条在飞全是会话面 —— 进程退出后没写 run_end 的残留。
+            "evidence_note": ("在飞的行逐条带 evidence（会话面 / 进程面）；"
+                              "只有会话面证据的行，可能是强杀/退出后没写 agent_run_end "
+                              "的残留，不能只凭它就断定\"有人在跑\"")}
 
 
 def block_remaining_tasks(store: Any, *, task_id: str = "", why: str,
