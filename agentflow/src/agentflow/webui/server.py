@@ -979,7 +979,12 @@ def run(argv: Sequence[str] | None = None) -> int:
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
-    if not explicit_port and int(port):
+    # 端口只在自证通过之后才记下来（2026-10-28）：改前是在打印 URL 之前记的，于是
+    # 一次失败的启动（自证没过、退出 1）也会把那个端口写进 `webui.json`，下一次"开网页"
+    # 就照着一个死地址去绑。记录跟着"真的在服务"走。
+    def _remember_port() -> None:
+        if explicit_port or not int(port):
+            return
         problem = write_port_file(root, int(port), url)
         if problem and not args.json:
             print(f"[webui] 端口没记下来（下次还得重新挑）：{problem}", flush=True)
@@ -1061,6 +1066,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         sse.detach()
     if self_check and str(self_check.get("state") or "") != "ok":
         return 1
+    # 走到这里 = 自证过了（或没跑），端口这才算数。
+    _remember_port()
+    if args.json:
+        # 第二行：给"读到 URL 之后再确认一次"的调用方（第一行必须先打，launcher 要拿它）。
+        print(json.dumps({"verified": True, "url": url, "root": str(root)},
+                         ensure_ascii=False, default=str), flush=True)
     return 0
 
 
