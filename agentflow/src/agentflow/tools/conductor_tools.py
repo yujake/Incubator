@@ -2124,37 +2124,17 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         return _out("unknown", f"名册对照表读不成（{type(exc).__name__}: {exc}）",
                     checked=False, missing=["名册对照表"])
     if not name:
-        # ---- 没有名册名（2026-10-29）：不猜名字，但认边。
-        # 这一类节点是"父派活时没给孩子落名册项"的产物：它没有名字可销，而
-        # `retire_integrity` 数的是"父没认过的代理行" ⇒ 不认这条边，收工闸永远差几个
-        # （真机 78c / 79 连续两趟都死在这里：交付物齐全也收不了工）。
-        # 三条前置闸（板项 / 程序 / 静默 / 活跃）都在上面过完了才走到这里。
+        # ---- 没有名册名（2026-10-29 第二版，按业主口径改）。
+        # 业主 2026-10-29 逐字：「单独销号工具也是要确认下属所有子代理均销号后才允许
+        # 销号。为方便起见，只提供连锁销号工具，单独销号只作为连锁销号工具的具体实现」。
+        # 所以这里不许提前 return：目标自己没有名字，只是"它那一项换成认边落痕"，
+        # 它名下的子代照旧要先销（次序由 `order` 保证：从最深到最浅）。
+        # 提前返回会把整支的子代留在册 —— 那是"销一半"，比不销更坏。
         if "读不出" in str(why) or "读不成" in str(why):
             return _out("unknown", f"{tid} 的名册名没读到（{why}）⇒ 不猜", checked=False,
                         missing=["名册名"])
-        try:
-            mark, problem = c.note_edge_release(mine, child_task_id=tid)
-        except Exception as exc:  # noqa: BLE001
-            mark, problem = "", f"{type(exc).__name__}: {exc}"
-        if not mark:
-            return _out("refused",
-                        (f"{tid} 没有名册名（{why}），而认这条边也没成"
-                         f"（{problem or '没写下'}）⇒ 不销（认边读不成不许折成销掉）"),
-                        checked=True, missing=["认边落痕"])
-        data.update(name="", retired=True, state="retired", branch="unrostered",
-                    edge_released=True, retired_count=1, retired_path="",
-                    roster_retired=False,
-                    cascade=[{"task_id": tid, "parent": mine, "name": "",
-                              "state": "unrostered", "edge_released": True,
-                              "why": f"没有名册名（{why}）⇒ 只认边收口"}],
-                    reason=(f"{tid} 没有名册名（{why}）⇒ 不做秘书销号，改为在 {mine} 的行上"
-                            f"认边（{mark}）；它从此不再算在册"),
-                    note=str(reason or ""))
-        data["readings"]["edge_release"] = mark
-        return _out("retired",
-                    (f"{tid} 已在 {mine} 名下认边收口（{mark}）—— 它没有名册名，所以销号"
-                     "名单里不会有它；收工闸读的是这条边"),
-                    retired=True, missing=[])
+        data["name"] = ""
+        data["unrostered_target"] = str(why or "")
     data["name"] = name
     names_of[tid] = name
     # ---- 子树逐项核（先读后写）：任何一项不过 ⇒ 整笔不动，一个字节都不落盘
@@ -2197,6 +2177,10 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         if node == tid:
             plan["branch"] = branch
             plan["name"] = name
+            if not name:
+                # 目标自己没有名册名：它那一项换成认边落痕（子代已按 order 先销完）。
+                plan["state"] = "unrostered"
+                plan["why"] = ("它自己没有名册名 ⇒ 只认边收口（子代按从深到浅先销）")
             continue
         if node not in layer["branch_of"]:
             # 已经销过号的（或不在这个父名下）不在可销清单里 ⇒ 跳过，不算失败。
@@ -2308,6 +2292,17 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             plan["edge_released"] = bool(mark)
             plan["why"] = (f"{plan.get('why') or ''}"
                            f"；边已认：{mark or problem or '（没写）'}").strip("；")
+            if not mark:
+                # 认边没成 ⇒ 整笔不许算成功（否则"销了"是假的）
+                data["cascade"].append(dict(plan))
+                data["unrostered"].append({"task_id": plan["task_id"],
+                                           "parent": plan["parent"],
+                                           "why": f"认边没成：{problem or '没写下'}"})
+                continue
+            if str(plan["task_id"]) == tid:
+                # 目标自己那一项：把"认边收口"抬到顶层读数（读的人不用翻 cascade）
+                data["edge_released"] = True
+                data["branch"] = "unrostered"
             data["cascade"].append(dict(plan))
             continue
         if plan["state"] != "ready":
