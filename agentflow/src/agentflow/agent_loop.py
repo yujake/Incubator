@@ -7890,13 +7890,19 @@ class AgentLoop:
                                          if isinstance(result, dict) else "")
                         if _program_note:
                             run.notes.append(str(_program_note))
-                if dispatch_notify is not None:
+                if dispatch_notify:
                     # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
                     # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
-                    hand = self._do_handoff(dispatch_notify, board_item=False)
-                    if hand.get("ok"):
-                        run.handoffs.append(str(hand.get("id") or ""))
-                    result = {**result, "dispatch_handoff": hand}
+                    # 2026-10-28：派生支可能有多条（多目标 ⇒ 一个目标一条），逐条写；
+                    # 单条时 `dispatch_handoff` 的形状与改前逐字相同（判据都按 `.get("ok")` 读）。
+                    _hands = [self._do_handoff(_n, board_item=False) for _n in dispatch_notify]
+                    for _h in _hands:
+                        if _h.get("ok"):
+                            run.handoffs.append(str(_h.get("id") or ""))
+                    result = {**result, "dispatch_handoff": (
+                        _hands[0] if len(_hands) == 1 else
+                        {"ok": all(bool(_h.get("ok")) for _h in _hands),
+                         "count": len(_hands), "items": _hands})}
                 if wash_audit is not None:
                     result = {**result, "wash": wash_audit}
             # ---- 子产出的落点（业主裁定：父代理必须处理子代理的产出）
@@ -8968,17 +8974,22 @@ class AgentLoop:
         }, sid=self.sid)
         return _payload_line(step, shape, help_text), run.notify_rejections >= self.max_notify_rejections
 
-    def _dispatch_notify(self, payload: Mapping[str, Any]) -> tuple[str, dict[str, Any] | None]:
-        """主控派活时的留痕载荷：返回 `(问题, 交给 `_do_handoff` 的载荷 或 None)`。
+    def _dispatch_notify(self, payload: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+        """主控派活时的留痕载荷：返回 `(问题, 交给 `_do_handoff` 的载荷列表)`。
 
         两种来源（`draft/39` §6.4 四.1 的裁定；L-05e 之后都不再打回）：1. 模型填了 `notify` ⇒ 用它（`note`
-        标成"模型填的 notify"）；2. 没填、或填的形状不能用 ⇒ 框架据派活本身派生一份（`note` 标成"框架据派活
+        标成"模型填的 notify"）；2. 没填、或填的形状不能用 ⇒ 框架据派活本身派生（`note` 标成"框架据派活
         派生"），写的是"谁派了谁做什么、参数是什么、为什么"——这些是框架手上已有的事实。
 
         为什么形状不对也退回派生（L-05e）：旧口径是"填错就打回、那一次派活不发生"，但真机 5269 个
         `agent_step` 里这道闸门一次都没触发（`no_notify` 收场 0 次），而"因为一张表的格式让一次真的要发生的
         派活停下来"正是 #1 的形态。现在：派活照常发生，形状问题落进 `run.notes`，留痕退回派生那一份（"谁是派
-        生、谁是执笔"两个标记仍然分得开）。`to` 的缺省是被派的那个角色（多目标 ⇒ `ALL`）。
+        生、谁是执笔"两个标记仍然分得开）。
+
+        2026-10-28：返回值从"一个载荷"改成"一个列表" —— 派生那一支按目标拆条（多目标 ⇒ 每个孩子只收到
+        自己那一条；`to="ALL"` 的通报在公共频道里是"给直接子们"，那会让三个孩子各读另两路的派活全文）。
+        模型自己写了 `notify` 的那一支仍是一条（它可能就是要一份共同通报，不归框架替它决定）；缺省 `to` 仍是
+        "被派的那个角色"，多目标时不再折成 `ALL`，而是逐条填各自的角色。
         """
         notify = payload.get("notify")
         targets = self._dispatch_targets(payload)
@@ -8988,46 +8999,77 @@ class AgentLoop:
             return notify_shape_problem(notify), self._derived_dispatch_notify(payload, targets)
         patched = dict(notify)
         if not str(patched.get("to") or "").strip():
+            # 模型自己写的这一条缺省仍是"单目标 ⇒ 那个角色 / 多目标 ⇒ ALL"：
+            # 它写的是一段共同的话，可能是刻意的通报；归它决定。判据
+            # `tests/test_forced_notify.py::test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel`
+            # 钉的就是这一格（与"派生支按目标拆条"并存，两支各说各的）。
             patched["to"] = targets[0] if len(targets) == 1 else "ALL"
         problem = notify_shape_problem(patched)
         if problem:
             return problem, self._derived_dispatch_notify(payload, targets)
         from . import manuscripts as MS
 
-        for ref in list(patched.get("refs") or []):
+        for ref in list(patched.get("refs") or ()):
             why = MS.ref_problem(self.session_root, str(ref))
             if why:
                 return (f"notify.refs 里的 {ref!r} 立不住：{why}",
                         self._derived_dispatch_notify(payload, targets))
         clean = clean_notify(patched)
         clean["note"] = "留痕来源：模型填的 notify"
-        return "", clean
+        return "", [clean]
 
     def _derived_dispatch_notify(self, payload: Mapping[str, Any],
-                                 targets: list[str]) -> dict[str, Any]:
-        """没填 `notify` 时，从派活本身派生那一行留痕（事实是什么就写什么）。"""
-        lines = ["## 派了什么活", ""]
-        for t in (payload.get("targets") or [payload]) if "targets" in payload else [payload]:
-            if not isinstance(t, Mapping):
-                continue
-            lines.append(f"- {_dispatch_label(t)}：参数 "
-                         f"`{json.dumps(dict(t.get('params') or {}), ensure_ascii=False, default=str)}`"
-                         + (f"（instance={t.get('instance')}）" if t.get("instance") else ""))
+                                 targets: list[str]) -> list[dict[str, Any]]:
+        """没填 `notify` 时，从派活本身派生留痕：一个目标一条（事实是什么就写什么）。
+
+        ## 为什么按目标拆（2026-10-28 真机，业主：「明明应该是两次单独派活」）
+
+        `projects/paper-rewrite-78c` 第 13 步一次 `summon_many` 派了 A、D、D 三个目标，
+        派生出来的是一条 `to="ALL"` 的通报，正文把三条派活拼在一起（6147 字节）。
+        而 `ALL` 在公共频道的可见面是"发信人的直接子"（`public_visibility` 的
+        `instance` 那一档）⇒ 三个孩子各自读到的是另外两路的派活全文；页面又把 `to`
+        直译成 "ALL"，读起来像"发给所有人"。两头都不对：
+
+        - 留痕与派活不一一对应（三条互不相同的活共用一条通报，按任务号查不到自己那张）；
+        - 每个孩子读到不属于它的研究指令（A 是只读检索者，读到"方向A 的攻坚任务"）；
+
+        所以这一支按目标拆条：每条 `to=<该目标的角色>`、正文只含它自己那一条。
+        单目标照旧一条（老行为逐字不变）；模型自己写了 `notify` 的那一支不动 ——
+        它可能就是要一份共同通报，那不归框架替它决定。
+        """
+        items = [t for t in ((payload.get("targets") or []) if "targets" in payload
+                             else [payload]) if isinstance(t, Mapping)]
         why = str(payload.get("why") or "").strip()
-        if why:
-            lines += ["", "## 为什么派它", why]
-        lines += ["", "## 这一行是怎么来的",
-                  "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
-                  "谁派了谁做什么、参数、为什么），内容全部取自这一句派活；"
-                  "执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。"]
-        what = ", ".join(_dispatch_label(t)
-                         for t in ((payload.get("targets") or []) if "targets" in payload
-                                   else [payload]) if isinstance(t, Mapping))
-        return {"to": targets[0] if len(targets) == 1 else "ALL",
-                "summary": f"派活：{what or '（没有目标）'}",
-                "body": "\n".join(lines) + "\n", "refs": [], "why": why,
-                "note": ("留痕来源：框架据派活派生（模型这一句没填 notify）；"
-                         "执笔=本角色的秘书")}
+        out: list[dict[str, Any]] = []
+        for index, item in enumerate(items):
+            role = str(item.get("role") or "") or (
+                targets[index] if index < len(targets) else "")
+            lines = ["## 派了什么活", "",
+                     f"- {_dispatch_label(item)}：参数 "
+                     f"`{json.dumps(dict(item.get('params') or {}), ensure_ascii=False, default=str)}`"
+                     + (f"（instance={item.get('instance')}）" if item.get("instance") else "")]
+            if len(items) > 1:
+                lines += ["", f"## 这一批一共有 {len(items)} 条", "",
+                          "（这是**你这一条**的留痕；同批的其它条各投给各自的目标，"
+                          "不在这份里。）"]
+            if why:
+                lines += ["", "## 为什么派它", why]
+            lines += ["", "## 这一行是怎么来的",
+                      "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
+                      "谁派了谁做什么、参数、为什么），内容全部取自这一句派活；"
+                      "执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。"]
+            out.append({"to": role or "ALL",
+                        "summary": f"派活：{_dispatch_label(item)}",
+                        "body": "\n".join(lines) + "\n", "refs": [], "why": why,
+                        "note": ("留痕来源：框架据派活派生（模型这一句没填 notify）；"
+                                 "执笔=本角色的秘书")})
+        if out:
+            return out
+        return [{"to": (targets[0] if len(targets) == 1 else "ALL"),
+                 "summary": "派活：（没有目标）",
+                 "body": "## 派了什么活\n\n（这一句派活一个目标都没解析出来）\n",
+                 "refs": [], "why": why,
+                 "note": "留痕来源：框架据派活派生（模型这一句没填 notify）"}]
 
     @staticmethod
     def _dispatch_targets(payload: Mapping[str, Any]) -> list[str]:
