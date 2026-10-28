@@ -769,6 +769,101 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     return srv
 
 
+#: 端口登记文件名（放在工作区根下，跟 `budget.json` 一类同层）。
+#:
+#: 为什么要有它：改前每次起服务都让系统挑一个随机端口（`--port 0`），于是"开网页"这件事
+#: 每次都是四步 —— 挑端口、起进程、从输出里抓 URL、把 URL 抄给人；重启一次 URL 就变，
+#: 上一份链接立刻失效。业主 2026-10-28 原话是"为什么开网页还是那么累？优化"。
+#: 记下端口只是第一步，真正省事的是 `ensure_serving` 的复用：同一个工作区第二次起服务时
+#: 直接回"已经在服务它，地址就是这个"，不再起第二个进程。
+PORT_FILE_NAME = "webui.json"
+
+
+def recorded_port(root: str | Path) -> int | None:
+    """这个工作区上一次记下的端口；没记过 / 读不成 ⇒ None（三态，不是 0）。"""
+    path = Path(str(root)) / PORT_FILE_NAME
+    try:
+        got = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 —— 没有 / 坏掉都是"没读到"
+        return None
+    try:
+        port = int(got.get("port") or 0)
+    except (TypeError, ValueError):
+        return None
+    return port or None
+
+
+def write_port_file(root: str | Path, port: int, url: str = "") -> str:
+    """把这次用的端口记下来（写不成只返回原因，不拖垮服务）。"""
+    path = Path(str(root)) / PORT_FILE_NAME
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"port": int(port), "url": str(url),
+                                    "pid": os.getpid(),
+                                    "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")},
+                                   ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8")
+        return ""
+    except Exception as exc:  # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
+
+
+def free_port_near(host: str, start: int, *, span: int = 40) -> int:
+    """从 `start` 起找一个真能绑的空端口；找不到 ⇒ 0（让系统挑）。
+
+    用裸 bind 判空，不用"连一下看有没有人听"：Windows 上连一个没人听的端口是
+    超时而不是立刻拒绝（秒级），而且是 `SO_REUSEADDR` 让双绑静默成功的同一个坑
+    （判据 `tests/test_webui_startup_is_not_silent.py` 记着这两条）。
+    """
+    import socket
+
+    for port in range(int(start), int(start) + max(1, int(span))):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind((host, port))
+            except OSError:
+                continue
+        return port
+    return 0
+
+
+def ensure_serving(root: str | Path, *, host: str = DEFAULT_HOST,
+                   port: int = 0) -> dict[str, Any]:
+    """这一趟该"复用已在跑的那一个"还是"起一个新的"（只有这一处判）。
+
+    返回 `{"action": "reuse"|"start", "port": N, "url": ..., "why": ...}`。
+
+    判据三条：
+    - 给了显式端口 ⇒ `start`（调用方指名要哪个，不去猜它的意图）；
+    - 没给 ⇒ 读登记端口：那个端口上服务的就是这个工作区（`verify_serving` 三态里的
+      `ok`）⇒ `reuse`，不再起第二个；
+    - 登记端口被别的程序占着 / 服务的是别的工作区 ⇒ 从它往上找一个空端口再 `start`
+      （找不到就交回 0 让系统挑）。
+    """
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    if int(port):
+        return {"action": "start", "port": int(port),
+                "url": f"http://{shown}:{int(port)}/", "why": "显式给了端口"}
+    remembered = recorded_port(root)
+    if remembered:
+        url = f"http://{shown}:{remembered}/"
+        got = verify_serving(url, root=root)
+        if got.get("state") == "ok":
+            return {"action": "reuse", "port": remembered, "url": url,
+                    "why": "这个端口上服务的正是这个工作区（登记在 webui.json）"}
+        owner = port_owner(host, remembered)
+        if owner.get("state") == "busy":
+            alt = free_port_near(host, remembered + 1)
+            return {"action": "start", "port": alt,
+                    "url": (f"http://{shown}:{alt}/" if alt else ""),
+                    "why": (f"{remembered} 被占（工作区：{owner.get('root') or '读不出'}）"
+                            f"⇒ 换 {alt or '系统挑'}")}
+        return {"action": "start", "port": remembered, "url": url,
+                "why": "登记端口现在空着，继续用它"}
+    return {"action": "start", "port": int(DEFAULT_PORT),
+            "url": f"http://{shown}:{int(DEFAULT_PORT)}/", "why": "第一次开（没有登记）"}
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     """命令行入口：起服务；`--json` 只打印一行 `{"url": ...}` 便于后台任务取 URL。
 
@@ -798,9 +893,32 @@ def run(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(list(argv) if argv is not None else None)
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
+    # ---- 先算"复用还是新起"（2026-10-28，业主：为什么开网页还是那么累）。
+    # `--port 0` 是显式的"让系统挑"，不复用也不登记；其余情况交给
+    # `ensure_serving` 一处判（三条判据写在它的 docstring 里）。
+    plan = {"action": "start", "port": int(args.port), "url": "", "why": ""}
+    if not args.port:
+        planned = int(ensure_serving(root, host=args.host).get("port") or 0) or 0
+        plan = ensure_serving(root, host=args.host)
+        plan["port"] = planned
+        if plan.get("action") == "reuse":
+            url_now = str(plan.get("url") or "")
+            if args.json:
+                print(json.dumps({"url": url_now, "root": str(root),
+                                  "reused": True}, ensure_ascii=False),
+                      flush=True)
+            else:
+                print(f"agentflow 用户端（已在跑，复用）：{url_now}", flush=True)
+                print(f"工作区根：{root}", flush=True)
+            if args.open:
+                try:
+                    webbrowser.open(url_now)
+                except Exception:  # noqa: BLE001 —— 打不开浏览器不该改变结论
+                    pass
+            return 0
     try:
-        srv = serve(root, host=args.host, port=args.port, token=token,
-                    allow_writes=args.allow_writes,
+        srv = serve(root, host=args.host, port=int(plan.get("port") or 0),
+                    token=token, allow_writes=args.allow_writes,
                     settings_write=not args.no_settings_write)
     except WebStartupError as exc:
         # 起不来就说出来（非零退出 + 一行人话）。改前这一支会把"绑上、打印 URL、空转"
@@ -811,6 +929,10 @@ def run(argv: Sequence[str] | None = None) -> int:
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
+    if not args.port and int(port):
+        problem = write_port_file(root, int(port), url)
+        if problem and not args.json:
+            print(f"[webui] 端口没记下来（下次还得重新挑）：{problem}", flush=True)
     # `flush=True` 是「必须」的，不是洁癖：这两行之后进程就进 `serve_forever()` 永不返回，
     # 而 stdout 被管道/文件接走时是「块缓冲」（8 KB 才吐一次）⇒ 起后台任务的人
     # 永远等不到那一行 URL。实测撞到：`python -B -m agentflow.webui --port 0 --json`
