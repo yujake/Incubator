@@ -5911,22 +5911,36 @@ class AgentLoop:
             run.notes.append(f"挂机读数：{reason}")
         elif want.get("waiting") and pending_timers:
             # ① 显式要求等 + 还有计时器 ⇒ 挂机
-            # ---- 无事可做、要挂机等的那一下：先把下一轮轮查计时器挂上（业主 2026-10-27
-            # 傍晚：「M 无事可做后启动轮查计时」）。恰好一条由 `clock.start_patrol_timer`
-            # 保证（`skipped="already"` 是常态）；这里只把读数带回 `run.park`。
-            patrol = self._arm_patrol_timer()
-            run.park["patrol"] = patrol
-            if patrol.get("mounted"):
-                run.notes.append(f"轮查：{patrol.get('reason')}")
-            slept = self._park_sleep_once(run=run, parked=parked)
-            out.update(skip_model=True, decision="park",
-                       waited_sec=float(slept.get("waited_sec") or 0.0),
-                       patrol=patrol,
-                       reason=(str(slept.get("reason") or "") or
-                               f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
-                               "（这一拍不调模型）"))
-            run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
-            run.park["wait_any"] = True
+            # ---- 但"无事可做"是这一支的前提（业主口径：「如果已无事可做且无计时器，这意味
+            # 着它交差了」），所以先看这一拍有没有活：有新投递（留言 / 板项 / 子产出）或名下
+            # 有未消项 ⇒ 它有活，不挂，先给模型一拍。
+            # 为什么这一格以前缺（2026-10-28 真机）：第 ① 支从不看 `_pending_work`，而第 ④ 支
+            # 看（`elif parked["count"] and not work.get("busy")`）⇒ 同一件事在两条挂机支上
+            # 两套口径：隐式挂机会被新投递打断，显式"等任意计时器返回"不会。页面上因此出现
+            # "待机 + 未读 2"：留言被 `_deliver_mailbox` 投进上下文之后，模型要等到计时器
+            # 到点才有下一拍 —— 而业主的原话是"无事可做才挂"，"这一拍有新留言"正是有事可做。
+            if work.get("busy"):
+                out.update(skip_model=False, decision="run",
+                           reason=(f"它要求等任意计时器返回，但这一拍有活"
+                                   f"（{work.get('why_text')}）⇒ 不挂机，先给模型一拍"))
+                run.notes.append("等任意计时器时被打断：" + str(work.get("why_text") or ""))
+            else:
+                # ---- 无事可做、要挂机等的那一下：先把下一轮轮查计时器挂上（业主 2026-10-27
+                # 傍晚：「M 无事可做后启动轮查计时」）。恰好一条由 `clock.start_patrol_timer`
+                # 保证（`skipped="already"` 是常态）；这里只把读数带回 `run.park`。
+                patrol = self._arm_patrol_timer()
+                run.park["patrol"] = patrol
+                if patrol.get("mounted"):
+                    run.notes.append(f"轮查：{patrol.get('reason')}")
+                slept = self._park_sleep_once(run=run, parked=parked)
+                out.update(skip_model=True, decision="park",
+                           waited_sec=float(slept.get("waited_sec") or 0.0),
+                           patrol=patrol,
+                           reason=(str(slept.get("reason") or "") or
+                                   f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
+                                   "（这一拍不调模型）"))
+                run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+                run.park["wait_any"] = True
         elif want.get("requested") and not pending_timers:
             # ② 显式要求等 + 一条计时器都没有 ⇒ 无事可做 ⇒ 交差
             out.update(skip_model=True, decision="handoff",

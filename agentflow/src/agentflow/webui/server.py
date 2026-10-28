@@ -839,13 +839,19 @@ def run(argv: Sequence[str] | None = None) -> int:
     self_check: dict[str, Any] = {}
 
     def _self_check() -> None:
+        from .. import clock as _CLK
+
         deadline = time.monotonic() + 8.0
         got: dict[str, Any] = {}
         while time.monotonic() < deadline:
             got = verify_serving(url, root=root)
             if got.get("state") == "ok":
                 break
-            time.sleep(0.25)
+            # 等一等再试：这里不许裸 `time.sleep` —— 判据 `test_clock_governs_all_timed_work`
+            # 的普查扫全树、零例外；框架里"等一会儿"只有 `clock.await_io` 一个入口，
+            # 它把 purpose / kind / where 三样记进同一本等待账。
+            _CLK.await_io(0.25, "网页绑完自证：等 accept 循环起来再打一次",
+                          kind="poll", where="webui.server.run._self_check")
         self_check.update(got or {"state": "unknown", "reason": "自证没跑完"})
         if got.get("state") != "ok":
             sys.stderr.write(f"[webui] 绑完了但自证没过：{got.get('reason')} ⇒ 停止服务并退出 1\n")
