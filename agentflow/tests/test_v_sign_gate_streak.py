@@ -38,6 +38,7 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | c4 | V 的可见提示词/技能手册不出现洗稿/清洗相关字眼 | 提示词里写出"你的意见会被清洗" ⇒ 违反口径 ② |
 | c5 | V 的思考强度默认 High（既有设计） | 缺省被改成 low ⇒ 钉不住 |
 | c6/v10 | V 的审阅请求体 `temperature==1.0`；别的角色与秘书那一档仍是 0.2 | 摘掉 `AgentV._ask` 里的温度 ⇒ 请求体回到 0.2 |
+| c7/S6 | V 的思考强度默认 High 是既有默认（`modelgw.DEFAULT_REASONING_EFFORT` → `ModelSpec` → `spec_for`/`spec_from_env` → 请求体），读数是活的 | 把 `AGENTFLOW_MODEL_REASONING_EFFORT=low` 灌进同一道梯子 ⇒ 读数与请求体不跟着变 = 判据在量常量 |
 | z1/z2 | 反真空：把 streak 闸 / judge 摘掉 ⇒ a1 / b1 红 | 判据自己不能红 = 没测到东西 |
 
 全部 tmp 工作区、零真模型调用（V 的审阅与秘书的判断都用离线替身缝）。
@@ -802,6 +803,57 @@ def test_c6_vs_review_call_asks_at_temperature_one(tmp_path):
     LS.LlmSeam.for_secretary(owner_role="V", session_root=st.root,
                              gateway=gw2).ask("夹具：秘书")
     assert other[-1]["temperature"] == 0.2, other[-1]
+
+
+def test_c7_vs_thinking_effort_high_is_a_live_reading(tmp_path):
+    """S6 核实：V 的思考强度默认 High 落在哪几处，且这是一条活读数。
+
+    落点（都是现算，不读源码文本；行号会漂，符号名不会）：
+      · `modelgw.DEFAULT_REASONING_EFFORT = "high"` —— 唯一来源；
+      · `ModelSpec.reasoning_effort` 的缺省就是它（构造即过
+        `normalize_reasoning_effort`，词表外当场抛）；
+      · `spec_for` / `spec_from_env` 的第三档 = `effort or DEFAULT_REASONING_EFFORT`
+        （梯子：环境变量 > `settings.json` 的 `model.reasoning_effort` > 它）；
+      · `settings.MODEL_KEYS` 里有 `reasoning_effort`（面板那一格能写）；
+      · `specs/v.py` 里没有任何 thinking / reasoning / effort 的文句 —— V 不是"单独一档
+        High"，它是跟着机器这一档走。所以这条钉的是"机器那一档的默认读数"，不是 V 的 policy。
+    另：`llmseam.LlmSeam.reasoning_effort` 把它转抄进 `SeamCall`，
+    `modelgw.reasoning_body_fields` 把它序列化进请求体 —— 两处都是"如实转抄"，不另立缺省。
+
+    判据两半：
+      ① 读数：空环境 + 空设置下 `spec_for("V")` 是 high，且 V 的审阅请求体里是 high；
+      ② 负控：把 `AGENTFLOW_MODEL_REASONING_EFFORT=low` 灌进同一道梯子 ⇒ V 的读数与
+         请求体都跟着变 low。若这条判据量的只是"仓库某处写着 high"，这一半会红。
+    """
+    from agentflow import llmseam as LS
+    from agentflow import settings as SET
+
+    # ① 读数：默认档（不读真设置文件；只灌一把假 key，好让请求真的发出去）
+    spec, where = G.spec_for("V", path=tmp_path / "none.json", env={G.ENV_KEY: "k"})
+    assert where == "" and spec.reasoning_effort == "high", (where, spec.redacted())
+    assert "reasoning_effort" in SET.MODEL_KEYS, SET.MODEL_KEYS
+    bodies: list[dict] = []
+
+    def _transport(_url, _headers, data, _timeout):
+        bodies.append(json.loads(data.decode("utf-8")))
+        return 200, json.dumps({"choices": [{"message": {"content": "{}"}}]})
+
+    gw = G.ModelGateway(spec, transport=_transport, sleep=lambda _s: None, clock=lambda: 0.0)
+    LS.LlmSeam.for_role("V", session_root=tmp_path, gateway=gw).ask("夹具：审一遍")
+    assert bodies and bodies[-1].get("reasoning_effort") == "high", bodies[-1:]
+    # ② 负控：同一条梯子，环境变量压上来 ⇒ 读数与请求体一起变（证明它不是常量）
+    low, _ = G.spec_for("V", path=tmp_path / "none.json",
+                        env={G.ENV_KEY: "k", G.ENV_EFFORT: "low"})
+    assert low.reasoning_effort == "low", low.redacted()
+    bodies2: list[dict] = []
+
+    def _t2(_url, _headers, data, _timeout):
+        bodies2.append(json.loads(data.decode("utf-8")))
+        return 200, json.dumps({"choices": [{"message": {"content": "{}"}}]})
+
+    gw2 = G.ModelGateway(low, transport=_t2, sleep=lambda _s: None, clock=lambda: 0.0)
+    LS.LlmSeam.for_role("V", session_root=tmp_path, gateway=gw2).ask("夹具：审一遍")
+    assert bodies2 and bodies2[-1].get("reasoning_effort") == "low", bodies2[-1:]
 
 
 # ============================================================ z：反真空（v6）
