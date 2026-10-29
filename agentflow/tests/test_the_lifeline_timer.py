@@ -133,6 +133,35 @@ def test_only_the_lifeline_is_silent_and_own_timers_are_standby() -> None:
     assert [w["id"] for w in second["waiters"]], second
 
 
+def test_it_does_not_wake_its_own_running_loop() -> None:
+    """它自己的循环在跑 ⇒ 不另起一个同号循环（消息会进它自己的收件箱）。
+
+    这是 2026-10-29 两次挂死的根因：兜底表在本趟循环里被打掉，再 resume 就复制出
+    第二个自己，两个循环互相喂事件。判"它是不是在跑"用的是进程内登记
+    （`loop_started` / `loop_ended`），不读台账 status —— 起跑那一瞬那一行可能还没落。
+    """
+    ws = _workspace()
+    me = "t-000011"
+    seen: list[str] = []
+    CLK.set_lifeline_wake_handler(lambda tid: (seen.append(tid), {"reason": ""})[1])
+    try:
+        CLK.arm_lifeline(ws, task_id=me, role="D")
+        CLK.loop_started(me)
+        CLK.observe_event("message", task_id=me, from_task_id="t-000001", role="M",
+                          content="在跑时来的一条", message_id="m-live")
+        CLK.fire_due(ws)
+        assert seen == [], f"它自己在跑，却被叫了一次：{seen}"
+        assert len(CLK.lifeline_of(ws, me)) == 1, CLK.lifeline_of(ws, me)
+
+        CLK.loop_ended(me)
+        CLK.observe_event("message", task_id=me, from_task_id="t-000001", role="M",
+                          content="收工后来的一条", message_id="m-after")
+        CLK.fire_due(ws)
+        assert seen == [me], seen
+    finally:
+        CLK.loop_ended(me)
+        CLK.set_lifeline_wake_handler(None)
+
 def test_the_loop_start_entry_arms_exactly_one() -> None:
     """循环起跑处的入口 `_arm_lifeline_once`：挂上一条，第二次是 already。
 

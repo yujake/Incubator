@@ -6625,6 +6625,12 @@ def _renew_lifeline(timer: Timer) -> dict[str, Any]:
         out.update({"armed": False, "skipped": "error",
                     "reason": f"{type(exc).__name__}: {exc}"})
     handler = _LIFELINE_WAKE_HANDLER
+    if loop_is_live(str(timer.task_id or "")):
+        # 它自己的循环就在跑：那条消息会进它自己的收件箱，再叫一次就是复制一个自己
+        #（2026-10-29 实测的挂死根因）。续照旧做了，上面那一步已经完成。
+        out["wake_reason"] = ("它自己的循环在跑（进程内登记）⇒ 不另起一个同号循环；"
+                              "那条消息会进它自己的收件箱")
+        return out
     if handler is None:
         out["wake_reason"] = ("没有接叫醒钩子（set_lifeline_wake_handler 未接线）"
                               "：这次只是续上，没人被叫起来")
@@ -6648,6 +6654,40 @@ def set_lifeline_wake_handler(handler: Callable[[str], Any] | None):
     global _LIFELINE_WAKE_HANDLER
     _LIFELINE_WAKE_HANDLER = handler
     return handler
+
+
+#: 进程内"这个台账号此刻有活着的循环"的登记（业主 2026-10-29 第 2 条的落地形态）。
+#:
+#: 为什么要有它：兜底表是在这一趟循环里被打掉的。这时再去 resume，就会另起一个同号
+#: 循环 —— 两个自己互相喂事件，直到把进程挂死（实测两次超时）。判"它是不是在跑"不能
+#: 读台账 status：起跑那一瞬那一行可能还没落、或还是 pending，闸门因此看不见它。
+#: 进程内登记没有这个时序问题：循环开跑时登记、收工时注销。
+_LIVE_LOOPS: set[str] = set()
+
+
+def loop_started(task_id: str) -> str:
+    """登记"这个台账号的循环起来了"（起跑处调一次）。"""
+    tid = str(task_id or "").strip()
+    if tid:
+        _LIVE_LOOPS.add(tid)
+    return tid
+
+
+def loop_ended(task_id: str) -> str:
+    """注销（收工处调一次；幂等）。"""
+    tid = str(task_id or "").strip()
+    _LIVE_LOOPS.discard(tid)
+    return tid
+
+
+def loop_is_live(task_id: str) -> bool:
+    """这个台账号此刻有没有活着的循环（进程内读数）。"""
+    return str(task_id or "").strip() in _LIVE_LOOPS
+
+
+def live_loops() -> list[str]:
+    """当前在跑的台账号（读数用，按字典序）。"""
+    return sorted(_LIVE_LOOPS)
 
 
 #: 抑制标记：兜底表被"永久撤掉"（销号）时写进 `note`。
