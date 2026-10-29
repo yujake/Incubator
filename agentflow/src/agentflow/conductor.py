@@ -4344,6 +4344,20 @@ class Conductor:
                                "只有收件人自己能确认（替别人 ack 会让'它还没看'消失）")})
                 continue
             before = str(row.get("item_state") or "queued")
+            # 2026-10-29：收口方式与 expects 的配对必须在动盘之前校验。
+            # 改前 `close="acked"` 给一条 `expects="work"` 的项：seen 那笔已经落盘，
+            # 到 `_set_item(done)` 才被 `S.Task.validate()` 抛出来 ⇒ 工具回 unknown
+            # （"落没落盘不知道"），而盘上其实已经半笔写好。这是本仓最忌讳的形态：
+            # 半笔事务 + 读数说不知道。所以先判、再写；判不过就逐条拒，一个字节不动。
+            expects_of = str(row.get("expects") or "")
+            if (close == "acked" and expects_of != "ack") or \
+                    (close == "worked" and expects_of != "work"):
+                out["refused"].append({
+                    "item_id": tid, "code": "bad_close",
+                    "reason": (f"{tid} 的 expects={expects_of or '（空）'} 与 close={close!r} "
+                               "不配对（acked 只收 ack 类、completed 只收 work 类）⇒ "
+                               "这一条一个字都没动")})
+                continue
             # 已在终态的项不在这里另判一次（2026-10-26 Q24）：那只手是"同一终态重复
             # 设置"在状态机外面的第二份实现。改后照状态机的结论 —— `_set_item` 把它判成
             # 幂等命中（`changed=False`），那一支就在下面 `if not changed` 里。
