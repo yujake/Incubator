@@ -313,6 +313,14 @@ def test_i_the_silent_answer_is_the_same_in_every_reader(tmp_path: pathlib.Path)
     counts_standby = env["sec"].child_counts(owner=str(env["owner"]))
     assert int(counts_standby.get("active_child_count") or 0) == 1, counts_standby
 
+    # 第五处（页面那份读数，webui 层）：roster_face 里这个子代理必须也读成待机。
+    from agentflow.webui import readers as _R
+    face = _R.roster_face(str(env["root"]), limit=200)
+    nodes = list(face.get("nodes") or ())
+    mine = [n for n in nodes if str(n.get("task_id") or "") == child]
+    assert mine, f"roster_face 里没有 {child}（节点数 {len(nodes)}）"
+    assert str(mine[0].get("state") or "") == "standby", mine[0]
+
 def test_j_retiring_kills_the_lifeline_and_stops_the_rearm(tmp_path: pathlib.Path) -> None:
     """销号必须把兜底计时器销掉，并且停止自动重挂（业主 2026-10-29）。
 
