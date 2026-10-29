@@ -3401,9 +3401,34 @@ class Conductor:
                          f"{kind or '来信'} {item_id or '-'}）")
         return out
 
+    def wake_on_lifeline(self, task_id: str) -> dict[str, Any]:
+        """兜底表被打掉时把那个代理叫起来（同一个号继续）。
+
+        口径（业主 2026-10-29）：兜底表的作用是"保证一个代理不是真的死了、接住所有的事件"。
+        已销号 ⇒ 叫不醒（"彻底没有了"）；名册读不到 ⇒ 宁可叫它（与 `_is_retired_task` 同向）。
+        """
+        tid = str(task_id or "").strip()
+        if not tid:
+            return {"started": False, "task_id": "", "reason": "没有台账号 ⇒ 叫不起来"}
+        if self._is_retired_task(tid):
+            return {"started": False, "task_id": tid,
+                    "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
+        runner = getattr(self, "resume_runner", None)
+        if not callable(runner):
+            return {"started": False, "task_id": tid,
+                    "reason": "这一趟没有接执行侧（resume_runner 未接线）"}
+        try:
+            got = runner(tid, kind="lifeline")
+        except Exception as exc:  # noqa: BLE001 - 叫不醒要如实回，不许炸掉投递
+            return {"started": False, "task_id": tid,
+                    "reason": f"叫醒失败（{type(exc).__name__}: {exc}）"}
+        out = dict(got) if isinstance(got, Mapping) else {}
+        out.setdefault("started", False)
+        out["task_id"] = tid
+        return out
+
     def _is_retired_task(self, task_id: str) -> bool:
         """这个台账号对应的名册项是不是已销号。
-
         读不到 ⇒ 返回 False（方向取"宁可叫它"，因为"叫醒一个还在的代理"只花一次循环，
         而"把一个还在的代理当成已销号"会让它永远收不到信）。已销号那一档的权威读数在
         秘书的退役名单里（`Secretary.retired_names` / 销号名单文件）。

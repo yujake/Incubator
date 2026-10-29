@@ -410,6 +410,15 @@ def wired_conductor(store: Any, *, policy: Any = None, llm: Any = None,
             cond.resume_runner = cond.resume_dispatched
         except Exception:  # noqa: BLE001 —— 接线失败不许带走装配
             pass
+    # 兜底计时器被打掉 ⇒ 把那个代理叫起来（业主 2026-10-29：它"接住所有的事件"）。
+    # 时钟侧只留钩子（它不 import 编排层），钩子的实现就是上面那条执行侧；
+    # 已销号由 `wake_on_lifeline` 挡掉（"彻底没有了，叫不醒"）。
+    if cond is not None and hasattr(cond, "wake_on_lifeline"):
+        try:
+            from . import clock as _CLK
+            _CLK.set_lifeline_wake_handler(cond.wake_on_lifeline)
+        except Exception:  # noqa: BLE001 —— 接线失败不许带走装配
+            pass
     return cond
 
 
