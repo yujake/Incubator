@@ -2472,6 +2472,19 @@ V_VERDICT_REJECTED = "有毛病"
 V_VERDICT_ITEM_PREFIX = "v-verdict@"
 
 
+def _washed_text(sign: Mapping[str, Any]) -> str:
+    """台账那一行上秘书洗过的转达文本（没有这一格 / 没洗过 ⇒ 空串）。
+
+    为什么单独一格函数：`washed_relay` 在台账上是条件写入的（只有 `washed=True` 才写），
+    "没有这一格"与"有这一格但文本为空"都必须读成"没有洗过的转达"；两处调用
+    （读侧挑明细 / 交付那一侧的兜底）各写一遍正则式的取值迟早会漂。
+    """
+    relay = sign.get("washed_relay")
+    if not isinstance(relay, Mapping):
+        return ""
+    return str(relay.get("text") or "")
+
+
 def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                         *, limit: int = 8) -> tuple[str, list[dict[str, Any]], list[str]]:
     """我名下被 V 判「有毛病」的证明明细：`(文本, 明细, 问题)`。
@@ -2493,6 +2506,19 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     收工门 R10 同一个函数）：它答「这一份正文最近那一签是什么」。这里只做两件事 ——
     把 `state="rejected"` 的那些挑出来，再把那一签整行上的步号与 findings 读出来
     （`statement_review_reading` 只回编号，不回 `defect_step`）。
+
+    ## 两档进明细，`via` 说清是哪一档（业主 2026-10-29 的 B 段接到 C 段）
+
+    - `via="verdict"`：V 自己的结论写的是「有毛病」⇒ 逐字回到改前那一版；
+    - `via="secretary_fault"`：V 的结论词写的是「成立」，而秘书的三档语义判定说
+      「这一回复指出了缺陷」（`secretary_judge.axis == "fault"`，落在台账那一行上）。
+      这一档的 V 原文不进明细 —— 只有洗过的那一份（`washed_relay.text`）才算转达；
+      洗不出来就不出现在明细里，并进 `problems`（洗稿纪律：洗不出来不输出原文）。
+      为什么这一档必须递：语义判定存在的理由就是"V 的结论词与它说的话不一致"，
+      而「若 fault 则洗稿 → 洗过的意见到 F」是业主口径里的同一句话。只按结论词分档
+      会让这一整档洗了稿却送不出去，而盘上没有任何读数会说它没送到。
+    - 两档的 `verdict` 各自如实保留（`成立` 就是 `成立`）：交付那一侧按 `via` 决定
+      措辞，不许把 V 写「成立」的那一档说成「V 判有毛病」。
 
     ## 三态（不许把「没读成」折成「没有毛病」）
 
@@ -2522,9 +2548,13 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             problems.append(f"{sid}：第 3 位读数没读成（{type(exc).__name__}: {exc}）")
             continue
         problems.extend(f"{sid}：{p}" for p in (reading.get("problems") or []))
-        rejected = [e for e in (reading.get("proofs") or [])
-                    if str(e.get("state") or "") == "rejected"]
-        if not rejected:
+        proofs = [e for e in (reading.get("proofs") or []) if isinstance(e, Mapping)]
+        rejected = [e for e in proofs if str(e.get("state") or "") == "rejected"]
+        #: 秘书判了 fault 的那一档只可能落在 `holding` 上：fault 会把连续次数归零
+        #: （`verifications._hold_run_lengths`），所以它不可能是 `signed`；而结论词若是
+        #: 「有毛病」它已经在上面那一档里（不重复收）。
+        maybe_fault = [e for e in proofs if str(e.get("state") or "") == "holding"]
+        if not rejected and not maybe_fault:
             continue
         # 那一签的整行（步号 / findings）：唯一的读口是台账文件本身，不复制第二份。
         signed: dict[str, dict[str, Any]] = {}
@@ -2536,7 +2566,24 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                             "步号这一格没读出来")
         for r in led_rows:
             signed[str(r.get("verification_id") or "")] = dict(r)
-        for e in rejected:
+        faulted: list[Mapping[str, Any]] = []
+        for e in maybe_fault:
+            vid = str(e.get("verification_id") or "")
+            sign = signed.get(vid) or {}
+            if VR.secretary_axis(sign) != "fault":
+                continue
+            if not _washed_text(sign):
+                # C 段的纪律：洗不出来就不输出 V 的原文 ⇒ 这一条不转达，但要留一句
+                # 读数（"没送到"不许静默）。
+                problems.append(
+                    f"{e.get('label') or sid}：秘书判定这一回复指出了缺陷，但没洗出可转达的"
+                    "文本 ⇒ 这一条不转达（洗不出来不输出 V 的原文）")
+                continue
+            faulted.append(e)
+        if not rejected and not faulted:
+            continue
+        for e, via in ([(x, "verdict") for x in rejected]
+                       + [(x, "secretary_fault") for x in faulted]):
             vid = str(e.get("verification_id") or "")
             sign = signed.get(vid, {})
             steps = [int(f.get("step")) for f in (sign.get("findings") or [])
@@ -2568,8 +2615,10 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                 #: 业主 2026-10-29 的 C 段：V 的意见经秘书洗过之后那一份转达文本
                 #: （台账那一行的 `washed_relay.text`）。空 = 这一签没洗过（历史行 /
                 #: 洗不出来）—— 交付那一侧据此把"洗过"与"没洗过"分开写。
-                "washed": str(((sign.get("washed_relay") or {}).get("text")
-                               if isinstance(sign.get("washed_relay"), Mapping) else "") or ""),
+                "washed": _washed_text(sign),
+                #: 这一条是凭什么进明细的（见 docstring 那一节的两档）：交付那一侧
+                #: 按它决定措辞 —— 两档在板上不许长得一样。
+                "via": via,
             })
     details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
     if not details and not problems:
@@ -2577,13 +2626,32 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                 "要么一次都还没送 V）"), [], []
     lines: list[str] = []
     if details:
-        lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
-                     f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
+        n_fault = sum(1 for d in details if d.get("via") == "secretary_fault")
+        if n_fault:
+            # 这一档的措辞不许与"V 判有毛病"混同：V 自己的结论词可能写的是「成立」。
+            lines.append(
+                f"V 的意见要交回 F 的证明共 {len(details)} 条（其中 {n_fault} 条 V 自己的结论"
+                f"写的是「成立」、而秘书判定它的回复指出了缺陷；数据源 "
+                f"`verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
+        else:
+            lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
+                         f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
         for d in details[:max(1, int(limit))]:
             step = ("第 %s 步" % d["defect_step"]) if d.get("defect_step") else "步号没读到"
             # 渲染集合 = 投递集合：洗过的那一份也必须在这里出现（否则"板上是洗过的、
             # 开场事实是原文"—— 两份说法，而 F 只信它先读到的那一份）。
             what = str(d.get("washed") or (d.get("finding") or {}).get("detail") or "")
+            if d.get("via") == "secretary_fault":
+                lines.append(
+                    f"- {d['label']}：V 的结论写的是 {d['verdict']}，秘书判定它的回复指出了"
+                    f"缺陷（最近一签 {d['verification_id'] or '（没读到编号）'}，"
+                    f"{d['ledger']}）；错在{step}"
+                    + (f"（{what}）" if what else "") + "；"
+                    f"这一签盖的就是现在这一份（proof_text 与现文一致）："
+                    f"{'True' if d['in_sync'] else 'False'}；"
+                    f"下一步：补齐{step}之后把这一份重新送 V（`verify.verify_proof`）重签，"
+                    "不许绕开")
+                continue
             lines.append(
                 f"- {d['label']}：verdict={d['verdict']}、"
                 f"unresolved_errors={d['unresolved_errors']}、最近一签 "
@@ -2605,7 +2673,12 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
 def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = "F",
                        details: Sequence[Mapping[str, Any]] = (),
                        called_by: str = "V") -> dict[str, Any]:
-    """把 V 的「有毛病」判决写进收件人的收件板（业主 B-3：递到人，不只加读数）。
+    """把 V 的意见写进收件人的收件板（业主 B-3：递到人，不只加读数）。
+
+    「V 的意见」两档：V 自己判了「有毛病」的（`via="verdict"`），以及 V 的结论词写
+    「成立」而秘书三档语义判定说"这一回复指出了缺陷"的（`via="secretary_fault"`，
+    业主 2026-10-29 的 B 段接到 C 段）。两档都走同一条通道、同一个幂等键前缀，
+    措辞按 `via` 分开（见下面「两档明细」那一节）。
 
     ## 用的就是既有通道（不新造机制）
 
@@ -2634,6 +2707,12 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     `washed` 为空 ⇒ 逐字回到改前那一版（老调用点 / 洗不出来那一批），
     并对读的人写明"这一条是 V 的原话（没洗过）"——不许让"洗过"与"没洗过"
     在板上长得一样（那会让一次洗稿失败静默变成一次转达）。
+
+    ## 两档明细，两种措辞（`via`，见 `v_rejections_digest`）
+    `via="secretary_fault"` 的那一档：V 自己的结论词可能写的是「成立」，所以这一项
+    的第一句必须如实说"V 的意见指出缺陷（V 自己的结论写的是 X）"，不许套用
+    "V 判有毛病"的措辞 —— 那是假话，而板项是 F 唯一会读的那一份。
+    这一档的 `washed` 必须非空：洗不出来就不投递（不输出 V 的原文），并进 `problems`。
     """
     out: dict[str, Any] = {"checked": False, "role": role, "task_id": str(task_id or ""),
                            "opened": [], "existing": [], "problems": [], "reason": ""}
@@ -2667,20 +2746,45 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
         # 空 ⇒ 逐字回到改前那一版，并写明"这一条没洗过"（洗过与没洗过不许在板上长得一样）。
         washed = str(d.get("washed") or "").strip()
         what = washed or str((d.get("finding") or {}).get("detail") or "")
-        body = (f"V 判「有毛病」：{d['label']}（最近一签 "
-                f"{d.get('verification_id') or '（没读到编号）'}，"
-                f"unresolved_errors={d.get('unresolved_errors')}）\n"
-                + ("意见（秘书洗过的转达；V 的原文不转达）：\n" if washed
-                   else (f"错在{step}" + (f"：{what}" if what else "") + "\n"))
-                + (f"{what}\n" if washed and what else "")
-                + f"下一步该补的就是{step}；补完把这一份重新送 V"
-                f"（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
-                f"这一签盖的就是现在这一份（proof_text 与现文一致）："
-                f"{'True' if d.get('in_sync') else 'False'}")
+        via = str(d.get("via") or "verdict")
+        if via == "secretary_fault" and not washed:
+            # 第二道（第一道在读侧）：这一档没有洗过的文本 ⇒ 不投递。
+            # 理由就是 C 段那一句：洗不出来就不输出 V 的原文；这一档的"原文"里没有
+            # 一条 V 自己判过的缺陷，递过去只会变成一次未洗的转达。
+            out["problems"].append(
+                f"{d['label']}：秘书判了 fault 而这一条没有洗过的文本 ⇒ 不投递"
+                "（洗不出来不输出 V 的原文）")
+            continue
+        if via == "secretary_fault":
+            body = (f"V 的意见指出缺陷：{d['label']}（V 自己的结论写的是"
+                    f"「{d.get('verdict') or '（没读到）'}」；秘书判定它的回复指出了缺陷，"
+                    f"最近一签 {d.get('verification_id') or '（没读到编号）'}，"
+                    f"unresolved_errors={d.get('unresolved_errors')}）\n"
+                    + "意见（秘书洗过的转达；V 的原文不转达）：\n"
+                    + (f"{what}\n" if what else "")
+                    + f"下一步该补的就是{step}；补完把这一份重新送 V"
+                    f"（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
+                    f"这一签盖的就是现在这一份（proof_text 与现文一致）："
+                    f"{'True' if d.get('in_sync') else 'False'}")
+            summary = f"V 的意见指出缺陷：{d['label']}（错在{step}）"
+        else:
+            body = (f"V 判「有毛病」：{d['label']}（最近一签 "
+                    f"{d.get('verification_id') or '（没读到编号）'}，"
+                    f"unresolved_errors={d.get('unresolved_errors')}）\n"
+                    + ("意见（秘书洗过的转达；V 的原文不转达）：\n" if washed
+                       else (f"错在{step}" + (f"：{what}" if what else "") + "\n"
+                             # 洗过与没洗过不许在板上长得一样（见 docstring）。
+                             "（这一条是 V 的原话，没有经过秘书洗稿）\n"))
+                    + (f"{what}\n" if washed and what else "")
+                    + f"下一步该补的就是{step}；补完把这一份重新送 V"
+                    f"（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
+                    f"这一签盖的就是现在这一份（proof_text 与现文一致）："
+                    f"{'True' if d.get('in_sync') else 'False'}")
+            summary = f"V 判「有毛病」：{d['label']}（错在{step}）"
         try:
             item_id = conductor.open_item(
                 kind="notice", role=role, expects="ack", action="notice",
-                summary=f"V 判「有毛病」：{d['label']}（错在{step}）",
+                summary=summary,
                 called_by=called_by, parent_task_id=task_id,
                 # 板项是收件人的子行 ⇒ 深度 = 收件人深度 + 1（`verify` 的
                 # `task_depth_discontinuous` 判这一条，挂在自己名下也一样）。
