@@ -773,9 +773,17 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     它的生命周期，收尾在 :func:`run` 的 `finally` 里。判据自己起的服务器要自己收
     （`tests/test_webui_sse.py` 的 `_bound_server` 就是这么做的）。
     """
+    # 这一代是不是本函数开的：开了才由它接钩子，也才由它在 `server_close()` 时撤掉。
+    # 2026-10-29：撤钩子这件事原先只有 `run()` 里做，于是直接调 `serve()` 的判据
+    # 会把 `sse.attach()` 装的四个钩子留在这个进程里 ⇒ 后面任何用例的
+    # `sessions.append` 都走"发 SSE 事件"那条路，`observed_events()` 的计数不再增长，
+    # `test_clock_governs_all_timed_work` 的 test_h / test_h3 / test_j 于是"单跑绿、
+    # 跟缓存预热那一族一起跑就红"（二分实测：触发器是 test_cache_warm_button_is_honest.py）。
+    owns_hooks = False
     if not sse.serving():
         sse.begin_serving(heartbeat_sec=heartbeat_sec)
         sse.attach()
+        owns_hooks = True
     handler = type("BoundWebHandler", (WebHandler,), {
         "root": Path(str(root)), "token": token,
         "static_root": Path(str(static_root)) if static_root is not None
@@ -809,6 +817,21 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
             f"{host}:{port} 绑不上：{type(exc).__name__}: {exc} ⇒ 不绑。"
             f"换 --port 0 让系统挑空端口", owner=owner) from exc
     srv.daemon_threads = True
+    if owns_hooks:
+        # 谁开的谁撤：`server_close()` 是"这个服务器没了"的唯一时刻，钩子在那时撤掉，
+        # 于是直接调 `serve()` 再 `server_close()` 的判据不会把这个进程的写路径带坏。
+        _orig_close = srv.server_close
+
+        def _close_and_detach() -> None:
+            try:
+                sse.close_all()
+            finally:
+                try:
+                    sse.detach()
+                finally:
+                    _orig_close()
+
+        srv.server_close = _close_and_detach  # type: ignore[method-assign]
     # 探测的读数挂上去：`run()` 的自证与判据都要读它（"探过没有"这件事必须看得见）
     srv.startup_probe = owner
     return srv
