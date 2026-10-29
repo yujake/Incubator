@@ -341,7 +341,11 @@ SPEC = AgentSpec(
             # 非平凡度有啥关系？不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的
             # 力气就能判非平凡度」。因此这一格再换一次：判档位的素材从"会不会被用到 / 比已知
             # 强在哪"换成"这份证明花了多大力气"；旧那两问降级成可选说明（可以写，不作判据）。
-            # 判据本体在 `secretary.proof_effort_readings` 与 `secretary.EFFORT_TIER_BANDS`。
+            # 2026-10-29 业主再裁定（逐字）：「全交给模型判，5 个等级的自然语言描述应该还在吧」
+            # 「判档的还是 B 秘书」—— 档位由秘书（模型）按五档定义判；判档题面在
+            # `secretary._judge_system`（类别 `statement_aesthetic`），五档取值在
+            # `secretary.NONTRIVIALITY_LEVELS`。`secretary.proof_effort_readings` 数出来的几项
+            # 只是参考读数，不落格（原先那句点名的 `secretary.EFFORT_TIER_BANDS` 已删）。
             "收录要有审美，也要判档位：判到最低那一档就是 T0（基础定理或初步结论）——"
             "这不是拒绝，是分档。判不了的写「未判」并给出理由；"
             "档位只有 T0–T4 这五档 ＋「未判」，没有第六种说法。",
