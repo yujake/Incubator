@@ -186,16 +186,23 @@ def _outside_role_is_refused(env: dict[str, Any], role: str = OUTSIDE_ROLE
 
 
 def _retired_child_is_refused(env: dict[str, Any]) -> dict[str, Any]:
-    """判据④：退役的子 ⇒ 拒收（理由码可读），且不牵连另一个子。"""
+    """判据④：退役的子 ⇒ 拒收（理由码可读），且不牵连另一个子。
+
+    2026-10-29 业主：「已销号是彻底没有了。如果父代理想给销号子代理发消息，秘书要拦」
+    ⇒ 除"拒绝"之外还钉住"一个字节都不落箱"：拒收前后 tasks 行数必须一模一样。
+    """
     loop, cond = env["loop"], env["cond"]
     done = loop.secretary.retire(owner=env["me"], name="F1")
     assert done.get("ok") is True and done.get("action") == "retired", done
+    rows_before = len(cond._tasks())
     got = loop._do_message({"to": "F1", "subject": "题", "body": "文"})
 
     assert got.get("ok") is False, got
     assert str(got.get("refused") or "") == "member_retired", got
     text = str(got.get("error") or "")
     assert "退役" in text and "F1" in text, text
+    # 「彻底没有了」：投递连一行 tasks 都不许留下
+    assert len(cond._tasks()) == rows_before, "给已销号的成员发消息，箱里不许新增任何行"
     _no_side_effects(env, [env["f1"], env["f2"], env["pa"]])
     # 另一个子照旧可用（退役不牵连别人）
     ok = loop._do_message({"to": "F2", "subject": "题", "body": "文"})
