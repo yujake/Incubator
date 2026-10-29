@@ -531,3 +531,25 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     assert [k for k in keys3 if k not in declared] == [
         "secretary_judge", "sign_issuance", "wash_v_reply"], (
         f"返回键 {keys3}；声明 {sorted(declared)}")
+
+def test_e6_a_secretary_fault_still_names_the_step(tmp_path):
+    """e6（2026-10-29 第 12 轮）：秘书判 fault 那一档，板上"第几步"不许写"步号没读到"。
+
+    为什么会有这一条：V 的结论词写「成立」⇒ 台账行上没有 `defect_step`；而若 V 这次
+    findings 是空的（只在那句 `why` 里点名"第 2 步"），读侧原本只能写"步号没读到"——
+    可步号就在秘书洗过的文本里。这条钉兜底：读洗过的文本，不读模型的自觉。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_FAULT)],
+                  "wash_v_reply": [_wash_doc()]})
+    reply = json.dumps({"verdict": "成立", "defect_step": None, "why": RAW,
+                        "findings": []}, ensure_ascii=False)
+    _ask_v(st, seam, reply)
+    row = _ledger_row(st)
+    assert row["verdict"] == "成立", row
+    assert not (row.get("findings") or []), row
+    _text, details, _problems = AL.v_rejections_digest(st.root, [_row(st)])
+    faulted = [d for d in details if d.get("via") == "secretary_fault"]
+    assert faulted, details
+    assert faulted[0].get("defect_step") == 2, faulted[0]

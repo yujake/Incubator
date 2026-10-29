@@ -2591,6 +2591,16 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             defect = sign.get("defect_step")
             if isinstance(defect, int) and defect not in steps:
                 steps.insert(0, defect)
+            # 2026-10-29（秘书判 fault 那一档）：V 的结论词写「成立」⇒ 台账行上没有
+            # `defect_step`；而秘书洗过的文本里往往点名了"第 N 步"。不读它，板上就会写
+            # "步号没读到" —— 那句话是假的：步号就在洗过的文本里。只在没有缺陷步时兜底。
+            if not steps:
+                import re as _re
+                m = _re.search(r"第\s*(\d+)\s*步",
+                               str((sign.get("washed_relay") or {}).get("text") or ""))
+                if m:
+                    steps.append(int(m.group(1)))
+                    defect = int(m.group(1))
             first = next((dict(f) for f in (sign.get("findings") or [])
                           if isinstance(f, Mapping)
                           and isinstance(f.get("step"), int)), {})
