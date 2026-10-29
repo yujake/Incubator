@@ -1602,8 +1602,9 @@ def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
         "own.register_statement", {"statement_full": "x"})
     assert got is not None and got["tier"] == "T0", got
     assert "T0" in got["note"] and "拦收录" in got["note"], got["note"]
-    # 升档路径是"补哪一项力气读数"，旧那两问已经不作判据
-    assert "力气" in got["note"] and "补" in got["note"], got["note"]
+    # 2026-10-29 起注记的口径是"读数只作参考、档位由秘书判"，不再教"补哪一项就升档"
+    assert ("参考读数" in got["note"]) or ("缺「证明正文」" in got["note"]), got["note"]
+    assert "补哪一项就升档" not in got["note"], got["note"]
     assert "后面哪一步会用到它" not in got["note"], got["note"]
     assert got["reason"] == "两条判据都答不上", got
 

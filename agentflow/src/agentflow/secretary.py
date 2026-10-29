@@ -2248,7 +2248,7 @@ class Secretary:
         业主原话：「不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。
         于是这一趟的材料里多一格 `effort`：机器数好的四项读数（体量 / 步骤 / 引理 / 工具簇跨度）
         外加绕路与分数（:func:`proof_effort_readings`）。档位由分数落格
-        （:data:`EFFORT_TIER_BANDS`），`nontriviality_from_effort` 是唯一那个落格函数。
+        由秘书（模型）按五档定义判；`proof_effort_readings` 只是参考读数，不落格。
 
         三个"谁是权威"的取舍写在这里，读的人不用去猜：
         1. 读数完整 ⇒ 档位按读数给定；秘书自报的 `nontriviality` 只作交叉核对，
@@ -8218,7 +8218,7 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
     档位从这一天起是"证明花的力气"给的，而力气是四项读数 + 一个分数。只落档位的话，
     读的人（人、页面、复算脚本）无法判断"这一档是读数给的还是模型随口给的"——
     而后者正是改前那个形态。所以四项读数、分数与边界表里的那一档一起落进这一行：
-    复算的人拿同一张 :data:`EFFORT_TIER_BANDS` 一比就能确认这一档对不对。
+    复算的人拿 `proof_effort_readings` 的几项读数一比，就能看出秘书判档时手里有什么材料。
 
     `text_truncated` 同理落下来：它是"这一行判不了"的一个具体原因，与"缺某项读数"、
     "判了"三者在盘上必须分得开（三态纪律的第四格：输入不完整也是一种没查成）。

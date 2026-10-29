@@ -160,8 +160,6 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
         "src/agentflow/specs/b.py": "该删，已转持有方（FC-27 禁改区）",
         "tests/test_filing_tier_carries_the_proof.py":
             "判据读它：断言 note 里不再出现旧那两问（负控）",
-        "tests/test_secretary.py":
-            "判据读它：注释说明升档只补力气读数（旧那两问不作判据）",
     },
     "F6a_f_lands_statements": {
         "tests/test_f_hands_propositions_to_b.py":

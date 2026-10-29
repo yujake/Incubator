@@ -9620,7 +9620,7 @@ class AgentLoop:
     #: 五项力气读数 → 各自的加分台阶（唯一一处定义在 `secretary.proof_effort_readings`）。
     #:
     #: 为什么这张表住在这一层：note 是给模型看的指路牌（"补哪一项能升档"），而档位本身
-    #: 只由 `secretary.nontriviality_from_effort` 落格 —— 这里一个字都不算档位，
+    #: 由秘书（模型）按五档定义判 —— 这里一个字都不算档位，
     #: 只把"这一条哪几项还在 0 分"翻成一句人话。
     _EFFORT_UPGRADE_STEPS: tuple[tuple[str, str, str], ...] = (
         ("体量", "chars", "每 2000 字 +1"),
@@ -9644,7 +9644,7 @@ class AgentLoop:
         `proofs`；有力气读数时点名还在 0 分的那几项（每一项各 +1）。
         """
         head = ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
-                "秘书不再因「太平凡」拦收录）。档位按力气判（业主 2026-10-24）："
+                "秘书不再因「太平凡」拦收录）。档位由秘书按五档定义判（业主 2026-10-29）："
                 "五项读数 = 体量 / 步骤 / 引理 / 工具簇跨度 / 绕路")
         effort = got.get("effort")
         effort = dict(effort) if isinstance(effort, Mapping) else {}
