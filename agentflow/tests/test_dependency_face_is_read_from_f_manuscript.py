@@ -120,11 +120,30 @@ def _add_statement(store: Store, stmt_id: str, *, kind: str = "theorem",
 
 
 def _sign(store: Store, stmt_id: str) -> dict:
-    """V 对那一行的证明正文签「成立」（proof_review 的凭据是台账，不是自报）。"""
-    return VR.record_verification(
-        store.root, statement_id=stmt_id, proof_text=_PROOF_TEXT.format(sid=stmt_id),
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-        store=store, proof_no=1)
+    """V 对那一行的证明正文签「成立」（proof_review 的凭据是台账，不是自报）。
+
+    ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
+    同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次给出「成立」且秘书判定通过，
+    才轮到 V 的秘书落签（`verifications.sign_statement`）；第 1、2 次只落台账、第 3 位
+    不翻。而 `evidence_kind="proof_review"` 的凭据（`verifications.proof_review_gap`）
+    读的正是那份签住的读数 ⇒ 只签一次会让这一份夹具的 `_set_level` 被写入期闸整笔拒收。
+    所以签够次数，并先断"1 次不签"（新规矩的正控）。
+    """
+    text = _PROOF_TEXT.format(sid=stmt_id)
+    signed: dict = {}
+    for wanted in (1, 2, 3):
+        signed = VR.record_verification(
+            store.root, statement_id=stmt_id, proof_text=text,
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            store=store, proof_no=1)
+        holds = VR.consecutive_holds(store.root, stmt_id)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        writeback = dict(signed.get("statement_writeback") or {})
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert writeback.get("written") is False, (
+                f"连续 {wanted} 次「成立」就翻了第 3 位 ⇒ 2026-10-29 的口径没生效", writeback)
+    assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
+    return signed
 
 
 def _set_level(store: Store, stmt_id: str, level: str) -> None:

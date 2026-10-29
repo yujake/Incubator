@@ -91,9 +91,29 @@ def _row(store: Store, stmt_id: str = SID) -> dict:
 
 
 def _sign(store: Store, *, text: str, proof_no: int) -> dict:
-    return VR.record_verification(store.root, statement_id=SID, proof_text=text,
-                                  verdict=dict(_OK), verifier="agent-V", store=store,
-                                  proof_no=proof_no)
+    """V 对某一份证明签「成立」——签够 3 次（业主 2026-10-29 定稿的连续口径）。
+
+    ## 为什么是 3 次
+    V 的签不再"一次成立就签"：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次
+    给出「成立」且秘书判定通过，才轮到 V 的秘书落签（`verifications.sign_statement`）；
+    第 1、2 次只落台账、`bits.evidence` 不翻位。八条负控读的是"这一份签住了没有"，
+    所以夹具必须凑够票数。票按 `proof_no` 各数各的（不借光），逐次核台账上的
+    `consecutive_holds`，并先断"1 次不签"（新规矩的正控）。返回第 3 次那一行。
+    """
+    signed: dict = {}
+    for wanted in (1, 2, 3):
+        signed = VR.record_verification(
+            store.root, statement_id=SID, proof_text=text,
+            verdict=dict(_OK), verifier="agent-V", store=store, proof_no=proof_no)
+        holds = VR.consecutive_holds(store.root, SID, proof_no=proof_no)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        writeback = dict(signed.get("statement_writeback") or {})
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert writeback.get("written") is False, (
+                f"#{proof_no} 连续 {wanted} 次「成立」就翻位了 ⇒ 2026-10-29 的口径没生效",
+                writeback)
+    assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
+    return signed
 
 
 def _edit(store: Store, *, proof_no: int, text: str) -> dict:
@@ -302,7 +322,9 @@ def test_an_edited_proof_is_written_and_reads_stale_not_refused(tmp_path: pathli
     assert _proof(reading, 2)["in_sync"] is False, reading["proofs"]
     assert _proof(reading, 1)["state"] == "stale", reading["proofs"]
     assert reading["proofs_stale"] == [f"{SID}#p1", f"{SID}#p2"], reading
-    assert _ledger_rows(st) == 2, "② 改稿不许往台账里补行（那不是「签过一次」）"
+    # 两份证明各 3 票（连续 3 次才发签，业主 2026-10-29）⇒ 台账 6 行。
+    # 这是精确值：改稿不许往台账里补行（那不是「签过一次」）。
+    assert _ledger_rows(st) == 6, "② 改稿不许往台账里补行（那不是「签过一次」）"
     # 正控：两份都改回签名时那一份 ⇒ 立刻又是 signed（不需要重签）。
     _edit(st, proof_no=2, text=P2)
     _edit_proof_text(st, P1)
@@ -310,7 +332,7 @@ def test_an_edited_proof_is_written_and_reads_stale_not_refused(tmp_path: pathli
     assert _proof(reading2, 1)["state"] == "signed", reading2["proofs"]
     assert _proof(reading2, 2)["state"] == "signed", reading2["proofs"]
     assert reading2["proofs_stale"] == [], reading2
-    assert _ledger_rows(st) == 2, "② 改回正文之后台账仍应当只有那两行"
+    assert _ledger_rows(st) == 6, "② 改回正文之后台账仍应当只有那两批签（3 + 3 行）"
     assert signed1["verification_id"] != signed2["verification_id"], "夹具不成立：两签同一编号"
 
 

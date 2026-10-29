@@ -146,10 +146,28 @@ def _sync(store: Store, agent_b: AgentB) -> dict:
 
 
 def _sign(store: Store, *, sid: str, text: str, proof_no: int) -> dict:
-    """V 的签名写入口（不经模型）。"""
-    return VR.record_verification(store.root, statement_id=sid, proof_text=text,
-                                  verdict=dict(_OK), verifier="agent-V", store=store,
-                                  proof_no=proof_no)
+    """V 的签名写入口（不经模型）。
+
+    ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
+    同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次给出「成立」且秘书判定通过，
+    才轮到 V 的秘书落签（`verifications.sign_statement`）；第 1、2 次只落台账、第 3 位
+    不翻。逐条证明各自数自己的票（`consecutive_holds(..., proof_no=...)`），所以这里按
+    `proof_no` 签够次数，并先断"1 次不签"（新规矩的正控）。
+    """
+    signed: dict = {}
+    for wanted in (1, 2, 3):
+        signed = VR.record_verification(
+            store.root, statement_id=sid, proof_text=text,
+            verdict=dict(_OK), verifier="agent-V", store=store, proof_no=proof_no)
+        holds = VR.consecutive_holds(store.root, sid, proof_no=proof_no)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        writeback = dict(signed.get("statement_writeback") or {})
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert writeback.get("written") is False, (
+                f"#{proof_no} 连续 {wanted} 次「成立」就翻位了 ⇒ 2026-10-29 的口径没生效",
+                writeback)
+    assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
+    return signed
 
 
 def _two_path_fixture(tmp_path: pathlib.Path, *, verified_no: int = 1

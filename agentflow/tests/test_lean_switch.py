@@ -535,9 +535,20 @@ def test_the_closing_cell_says_not_applicable_instead_of_red(
                                  "quote_reason": "这一行只为这一格的读数而造，不涉及外部原文",
                                  "origin": "own_result"})
     # V 的审校是工作区里的文件（`verifications/<命题号>.jsonl`），不是台账表：
-    # 这里就用它自己的写入口落一行「成立」，再核收工门那一格读不读得到。
-    VR.record_verification(ws, statement_id="0000", proof_text="证明：一行",
-                           verdict={"verdict": "成立", "findings": []}, verifier="V")
+    # 这里就用它自己的写入口落行「成立」，再核收工门那一格读不读得到。
+    #
+    # 业主 2026-10-29 定稿：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次给出
+    # 「成立」且秘书判定通过，才轮到 V 的秘书落签；第 1、2 次只落台账、第 3 位不翻。
+    # 这一格数的是"签住的"那些行 ⇒ 必须签够次数，并先断"1 次不签"（新规矩的正控）。
+    for wanted in (1, 2, 3):
+        VR.record_verification(ws, statement_id="0000", proof_text="证明：一行",
+                               verdict={"verdict": "成立", "findings": []}, verifier="V")
+        holds = VR.consecutive_holds(ws, "0000")
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert holds["streak_ok"] is False, (
+                f"连续 {wanted} 次「成立」就够发签了 ⇒ 第 1、2 次只落台账的口径没生效", holds)
+    assert VR.consecutive_holds(ws, "0000")["streak_ok"] is True
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     rep = _Rep()
     CL._check_load_bearing(rep, st)

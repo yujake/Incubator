@@ -128,11 +128,39 @@ def _rewrite(store: Store, **patch) -> dict:
 
 def _sign(store: Store, *, text: str = P1,
           verdict: dict | None = None) -> dict:
-    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。"""
+    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）：签 1 次。
+
+    业主 2026-10-29 的口径下，1 次「成立」只是台账上的一票，不翻第 3 位 ——
+    要凑够次数用 `_sign_votes`。
+    """
     return VR.record_verification(
         store.root, statement_id=SID, proof_text=text,
         verdict=dict(verdict or _OK), verifier="agent-V", store=store,
         proof_no=1)
+
+
+def _sign_votes(store: Store, count: int, *, text: str = P1) -> list[dict]:
+    """同一份正文连签 `count` 次「成立」，逐次核台账上的连续次数与翻位结果。
+
+    ## 这一层为什么属于夹具（业主 2026-10-29 定稿）
+    同一份证明、同一版正文（同 `proof_sha256`）必须连续 3 次给出「成立」且秘书判定通过，
+    才轮到 V 的秘书落签（`verifications.sign_statement`）；第 1、2 次只落台账、
+    `bits.evidence` 不翻位。所以这里把新规矩本身当作正控来断：
+    `statement_writeback.written` 必须逐次等于 `consecutive_holds` 的 `streak_ok`
+    （次数只从台账现读，不另立一份计数）。
+    """
+    rows: list[dict] = []
+    for _ in range(int(count)):
+        row = _sign(store, text=text)
+        holds = VR.consecutive_holds(store.root, SID)
+        assert holds["checked"] is True, holds
+        wb = dict(row.get("statement_writeback") or {})
+        assert int(wb.get("streak") or 0) == int(holds["streak"]), (wb, holds)
+        assert bool(wb.get("written")) is bool(holds["streak_ok"]), (
+            f"连续 {holds['streak']}/{holds['need']} 次「成立」时 written="
+            f"{wb.get('written')!r} ⇒ 翻位没有跟着连续次数走", wb, holds)
+        rows.append(row)
+    return rows
 
 
 def _r10(store: Store) -> tuple[int, dict]:
@@ -154,9 +182,15 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
     first = _agent(st).register_statement(**OWN, proof_text=P1)
     assert first["ok"] is True, first
     sid = _row(st)["stmt_id"]
-    signed = _sign(st, text=P1)
-    assert str(signed.get("verification_id") or "").startswith("v-")
-    assert _r10(st)[0] == 1, "正控：签完之后这一条必须先计入 R10"
+    # 新规矩的正控（业主 2026-10-29）：只签 1 次只是台账上的一票 ⇒ 第 3 位不翻、R10 不计。
+    once = _sign_votes(st, 1, text=P1)
+    assert str(once[0].get("verification_id") or "").startswith("v-")
+    assert once[0]["statement_writeback"]["written"] is False, once[0]["statement_writeback"]
+    assert _r10(st)[0] == 0, "只签 1 次就计入 R10 ⇒ 连续 3 次才发签的口径没生效"
+    # 补到 3 次「成立」：第 3 次才轮到翻位。
+    signed = _sign_votes(st, 2, text=P1)[-1]
+    assert signed["statement_writeback"]["written"] is True, signed["statement_writeback"]
+    assert _r10(st)[0] == 1, "正控：连续 3 次「成立」之后这一条必须先计入 R10"
 
     edited = P1 + "\n3. 补一步（签完之后才改的）。"
     second = _agent(st).register_statement(**OWN, proof_text=edited)
@@ -228,7 +262,10 @@ def test_a_later_rejection_supersedes_the_earlier_ok_signature(tmp_path):
     """
     st = _ws(tmp_path)
     _put(st)
-    ok_sign = _sign(st, text=P1, verdict=_OK)
+    # 先凑够「连续 3 次成立」那一签（业主 2026-10-29：第 1、2 次只落台账）——
+    # 只有第 3 票才签住第 3 位，所以它是这一次的"成立签"。
+    oks = _sign_votes(st, 3, text=P1)
+    ok_sign = oks[-1]
     bad_sign = _sign(st, text=P1, verdict=_BAD)
     assert ok_sign["verification_id"] != bad_sign["verification_id"]
 
@@ -237,11 +274,16 @@ def test_a_later_rejection_supersedes_the_earlier_ok_signature(tmp_path):
     assert standing["state"] == "rejected", standing
     assert standing["ok"] is False and standing["in_sync"] is True, standing
     assert standing["verification_id"] == bad_sign["verification_id"], standing
-    old = [x for x in (standing.get("superseded") or [])
-           if x.get("verification_id") == ok_sign["verification_id"]]
-    assert len(old) == 1, standing.get("superseded")
+    # 更早的三票（含真的签住第 3 位的那一票）全部降为 superseded，一条都不许丢。
+    superseded = list(standing.get("superseded") or [])
+    assert [x.get("verification_id") for x in superseded] == \
+        [r["verification_id"] for r in oks], superseded
+    # 三票各自的"当年算第几票"也要如实：前两票没到门槛 ⇒ 它们当年没签住。
+    assert [x.get("signed_bit3") for x in superseded] == [False, False, True], superseded
+    old = [x for x in superseded if x.get("verification_id") == ok_sign["verification_id"]]
+    assert len(old) == 1, superseded
     assert old[0]["verdict"] == "成立" and old[0]["signed_bit3"] is True, old[0]
-    assert standing.get("superseded_total") == 1, standing
+    assert standing.get("superseded_total") == 3, standing
 
     reading = VR.statement_review_reading(st.root, _row(st))
     assert reading["reviewed"] is False, reading
@@ -249,7 +291,8 @@ def test_a_later_rejection_supersedes_the_earlier_ok_signature(tmp_path):
     assert reading["grade"] == "conjecture", reading
     first = reading["proofs"][0]
     assert first["state"] == "rejected" and first["reviewed"] is False, first
-    assert first["superseded"][0]["verification_id"] == ok_sign["verification_id"], first
+    assert [x["verification_id"] for x in first["superseded"]] == \
+        [r["verification_id"] for r in oks], first["superseded"]
     assert f"{SID}#p1:{ok_sign['verification_id']}" in reading["proofs_superseded"]
 
     n, detail = _r10(st)
@@ -275,7 +318,8 @@ def test_a_review_bit_without_a_locatable_signature_is_not_counted(tmp_path, mon
     # ① 正控
     st_ok = _ws(tmp_path / "ok")
     _put(st_ok)
-    signed = _sign(st_ok, text=P1)
+    # 连续 3 次「成立」才发签（业主 2026-10-29）：这里要的是"真的签住了"那一档。
+    signed = _sign_votes(st_ok, 3, text=P1)[-1]
     assert signed["statement_writeback"]["written"] is True
     n_ok, d_ok = _r10(st_ok)
     assert n_ok == 1, d_ok
@@ -296,7 +340,7 @@ def test_a_review_bit_without_a_locatable_signature_is_not_counted(tmp_path, mon
     # ③ 负控：台账有签，但签的是另一版
     st_stale = _ws(tmp_path / "stale")
     _put(st_stale)
-    _sign(st_stale, text=P1)
+    _sign_votes(st_stale, 3, text=P1)
     _rewrite(st_stale, proof_text=P1 + "\n3. 改过的一步。")
     n_stale, d_stale = _r10(st_stale)
     assert n_stale == 0, d_stale
@@ -323,7 +367,8 @@ def test_a_signed_concept_row_is_not_applicable_and_never_counts(tmp_path):
     """
     st = _ws(tmp_path)
     _put(st, kind="concept", proof_text=CONCEPT_PROOF, bits={})
-    signed = _sign(st, text=CONCEPT_PROOF, verdict=_OK)
+    # 概念行也要把次数凑够（口径与别的行同一条，概念不因此少一道闸）。
+    signed = _sign_votes(st, 3, text=CONCEPT_PROOF)[-1]
     assert signed["statement_writeback"]["written"] is True, signed
     row = _row(st)
     assert row["kind"] == "concept", row

@@ -46,25 +46,42 @@ def _ws(path: pathlib.Path) -> Store:
 
 
 def _add_statement(store: Store, stmt_id: str) -> dict:
-    """写一条在册命题（`proof_review` 档：不升档的话 B 会因为档位不够而拒，那是另一条闸）。"""
+    """写一条在册命题（`proof_review` 档：不升档的话 B 会因为档位不够而拒，那是另一条闸）。
+
+    ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
+    V 的签不再"一次成立就签"：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次
+    给出「成立」且秘书判定通过，才轮到 V 的秘书落签（`verifications.sign_statement`）。
+    第 1、2 次只落台账、`bits.evidence` 不翻位，而 `evidence_kind="proof_review"` 的
+    写入期闸（`store._refuse_fake_proof_review`）读的正是那份凭据 ⇒ 只签一次会让这一份
+    夹具在 `tx.upsert` 上被整笔拒收。所以这里签够次数，并先断"1 次不签"（新规矩的正控）。
+    """
+    proof = f"命题 {stmt_id} 的证明正文（判据夹具）。"
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",
-        proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+        proof_text=proof,
         evidence_kind="heuristic", status="active", quote_verified=None,
         quote_reason="判据夹具：自产命题，没有外部引文要比对",
         created_at=S.now_iso(), created_by="agent-B")
     row.validate()
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row.to_dict())
-    signed = VR.record_verification(
-        store.root, statement_id=stmt_id,
-        proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-        store=store, proof_no=1)
+    signed: dict = {}
+    for wanted in (1, 2, 3):
+        signed = VR.record_verification(
+            store.root, statement_id=stmt_id, proof_text=proof,
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            store=store, proof_no=1)
+        holds = VR.consecutive_holds(store.root, stmt_id)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        writeback = dict(signed.get("statement_writeback") or {})
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert writeback.get("written") is False, (
+                f"连续 {wanted} 次「成立」就翻了第 3 位 ⇒ 2026-10-29 的口径没生效", writeback)
     assert signed.get("checked") is True, signed
+    assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
     got["evidence_kind"] = "proof_review"

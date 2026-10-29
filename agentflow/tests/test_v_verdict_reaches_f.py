@@ -229,10 +229,27 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     assert len(rows) == 1 and str(rows[0].get("kind")) == "conjecture", rows
 
     # (c) 造一份"成立"签（走 V 的真写入路）⇒ 同一笔再交一次、kind 改回定理级 ⇒ 通过
+    #
+    # 业主 2026-10-29 定稿：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次给出
+    # 「成立」且秘书判定通过，才轮到 V 的秘书落签（`verifications.sign_statement`）；
+    # 第 1、2 次只落台账、第 3 位不翻。所以这里先断"1 次不签"（新规矩的正控），
+    # 再把次数凑够 —— `signs_bit3` 只认"够次数"的那一签，所以连续读数要一起递进去。
     sign = VR.record_verification(
         st.root, statement_id=sid, proof_text=PROOF,
         verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
-    assert sign["verdict"] == "成立" and VR.signs_bit3(sign), sign
+    holds1 = VR.consecutive_holds(st.root, sid)
+    assert holds1["checked"] is True and int(holds1["streak"]) == 1, holds1
+    assert VR.signs_bit3(sign, streak=holds1) is False, (
+        "签 1 次就签住了第 3 位 ⇒ 2026-10-29 的连续 3 次口径没生效", holds1)
+    sign = VR.record_verification(
+        st.root, statement_id=sid, proof_text=PROOF,
+        verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
+    sign = VR.record_verification(
+        st.root, statement_id=sid, proof_text=PROOF,
+        verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
+    holds3 = VR.consecutive_holds(st.root, sid)
+    assert int(holds3["streak"]) == VR.SIGN_STREAK_NEED and holds3["streak_ok"] is True, holds3
+    assert sign["verdict"] == "成立" and VR.signs_bit3(sign, streak=holds3), sign
     good = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review")))
     assert good.get("ok") is True, good
     reading = dict(good.get("self_authored_review") or {})

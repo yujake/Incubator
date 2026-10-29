@@ -78,10 +78,27 @@ def _statement(st: Store, stmt_id: str, proof: str) -> None:
 
 
 def _sign(root: pathlib.Path, stmt_id: str, proof: str) -> dict[str, Any]:
-    """走产品写路径签一条「成立」（与 V 真跑一次同一条路）。"""
+    """走产品写路径签一条「成立」（与 V 真跑一次同一条路）。
+
+    ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
+    V 的签不再"一次成立就签"：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次
+    给出「成立」且秘书判定通过，才轮到 V 的秘书落签（`verifications.sign_statement`）。
+    第 1、2 次只落台账、第 3 位不翻。所以这一份夹具签 3 次，并把新规矩的正控写进来：
+    连续次数没到门槛时 `streak_ok` 必须是假（次数只从台账现读，
+    `verifications.consecutive_holds` 是那唯一的读数）。
+    """
     verdict = VR.parse_verdict('{"verdict": "成立", "findings": []}')
-    return VR.record_verification(root, statement_id=stmt_id, proof_text=proof,
-                                  verdict=verdict, used_faces=("statements.read",))
+    got: dict[str, Any] = {}
+    for wanted in (1, 2, 3):
+        got = VR.record_verification(root, statement_id=stmt_id, proof_text=proof,
+                                     verdict=verdict, used_faces=("statements.read",))
+        holds = VR.consecutive_holds(root, stmt_id)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert holds["streak_ok"] is False, (
+                f"连续 {wanted} 次「成立」就够发签了 ⇒ 第 1、2 次只落台账的口径没生效", holds)
+    assert VR.consecutive_holds(root, stmt_id)["streak_ok"] is True
+    return got
 
 
 def _run_end(tmp_path: pathlib.Path, st: Store, cond: Any, registry: Any,

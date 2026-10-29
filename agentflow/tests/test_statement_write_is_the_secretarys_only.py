@@ -149,11 +149,29 @@ def _honest_problems(row: dict[str, Any]) -> list[str]:
 
 
 def _sign_off(st: Store, stmt_id: str, proof_text: str) -> dict[str, Any]:
-    """V 走查签字（`verifications.record_verification` 就是 `verify.verify_proof` 的写入口）。"""
+    """V 走查签字（`verifications.record_verification` 就是 `verify.verify_proof` 的写入口）。
+
+    ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
+    V 的签不再是"一次成立就签"：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次
+    给出「成立」且秘书判定通过，才轮到 V 的秘书落签（`verifications.sign_statement`）。
+    第 1、2 次只落台账、`bits.evidence` 不翻位。所以这一份夹具签 3 次，并把新规矩的
+    正控写进夹具本身：第 1 次必须不翻位（次数不够），第 3 次才翻位。
+    次数只从台账现读（`verifications.consecutive_holds`）—— 不另立一份计数。
+    """
     from agentflow import verifications as VR
 
-    return VR.record_verification(st.root, statement_id=stmt_id, proof_text=proof_text,
-                                  verdict={"verdict": "成立", "why": "逐行走查三步都成立"})
+    out: dict[str, Any] = {}
+    for wanted in (1, 2, 3):
+        out = VR.record_verification(
+            st.root, statement_id=stmt_id, proof_text=proof_text,
+            verdict={"verdict": "成立", "why": "逐行走查三步都成立"})
+        holds = VR.consecutive_holds(st.root, stmt_id)
+        assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
+        if wanted < VR.SIGN_STREAK_NEED:
+            assert holds["streak_ok"] is False, (
+                f"连续 {wanted} 次「成立」就够发签了 ⇒ 第 1、2 次只落台账的口径没生效", holds)
+    assert VR.consecutive_holds(st.root, stmt_id)["streak_ok"] is True
+    return out
 
 
 # ==================================================== ① 正控：一次工具调用 → 落盘
