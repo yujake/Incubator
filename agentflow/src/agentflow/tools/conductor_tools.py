@@ -1616,8 +1616,12 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
     "⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），"
     "而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、"
     "一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。"
-    "销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，"
-    "先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。"
+    "销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝"
+    "（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 "
+    "`conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能"
+    "代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，"
+    "那条项要等收件人自己 `conductor.ack` 才不算未消（唤醒不清板项，销号闸照旧挡）；叫不醒的 "
+    "ack-only 通知才轮得到 `conductor.void_items`。"
     "第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序"
     "（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / "
     "已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；"
@@ -2034,8 +2038,11 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                    "summary": str(r.get("detail") or "")[:80]} for r in open_rows[:8]]
         return _out("refused",
                     (f"{tid} 名下还有 {max(items_open, len(open_rows))} 条未消的板项 ⇒ "
-                     "task_board 没清，不许直接销号：先用 `conductor.ack` 把已办的那些确认掉、"
-                     "没办的先办，等它名下一条未消的项都不剩再来销 —— 否则不许销号"
+                     "task_board 没清，不许直接销号。逐条按它的 item_state 走：block 那一档先由"
+                     "主控 `conductor.wake_blocked` 唤醒（翻回 queued —— ack 对 block 行必被"
+                     "状态机拒，父也不能代收件人 ack）；queued / seen 那一档等收件人自己 "
+                     "`conductor.ack`，唤醒不会替它清板项；叫不醒的 ack-only 通知才轮到 "
+                     "`conductor.void_items`。等它名下一条未消的项都不剩再来销 —— 否则不许销号"
                      "（没读的东西不许跟着名字一起销掉）"),
                     missing=[f"{r['task_id']}（{r['kind']}/{r['item_state']}）" for r in listed],
                     open_items=listed)
@@ -2219,7 +2226,9 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         if kid_open:
             blocked.append(f"{node} 名下还有 {len(kid_open)} 条未消的板项"
                            f"（{[str(r.get('task_id') or '') for r in kid_open[:8]]}）"
-                           "—— 先用 `conductor.ack` 把它们收口")
+                           "—— block 那一档先由主控 `conductor.wake_blocked` 唤醒"
+                           "（ack 对 block 行必被状态机拒），其余等收件人自己 "
+                           "`conductor.ack` 收口")
             plan["state"] = "blocked"
             plan["why"] = blocked[-1]
             continue
@@ -2448,12 +2457,15 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
 @tool(
     "conductor.void_items",
     "把**永远不会再被收件人处理**的板项作废（item_close=expired）。"
-    "它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，"
-    "而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，"
+    "它只对一种情形成立、也只允许一种写法：收件人（子代理）叫不醒了（已销号，或兜底表被"
+    "永久抑制），而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，"
     "父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，"
     "那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。"
-    "三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役"
-    "（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，"
+    "这一档在 2026-10-29 之后收窄了：只是静默还不够 —— 一条消息、一次委托或一次 "
+    "`conductor.wake_blocked` 就会把它叫起来，那时它自己能 ack；叫得醒的一律拒。"
+    "三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须叫不醒"
+    "（静默但叫得醒 ⇒ 先把唤醒那一步走完，作废不是唤醒的替代品）；"
+    "作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，"
     "所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。",
     {"type": "object",
      "properties": {
@@ -2477,8 +2489,9 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     一行都不新建、不删；每一条都过 `schema.Task.validate`。
 
     实现：台账号从 `current_task_id()` 取（没有就拒，不猜一个父）→ 交给
-    `Conductor.void_items`（唯一实现：它自己再核"只许 expects=ack"与"收件人必须静默"，
-    两条都在那一处判，工具层不另立一份口径）。
+    `Conductor.void_items`（唯一实现：它自己再核"只许 expects=ack"与"收件人叫不醒"，
+    两条都在那一处判，工具层不另立一份口径 —— 注意"叫不醒"比"静默"严：静默但一条
+    消息就能叫醒的那一档会被拒，那是 2026-10-29 唤醒落地之后收窄的口径）。
 
     三态：`checked=False` 表示没查成（没有台账号 / 读数不是对象 / 调用抛了），
     不许读成"没有要作废的"。
@@ -2535,7 +2548,10 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     "`conductor.post_task` 之外的信息型项）用 close=\"acked\"；"
     "`conductor.post_task` 落的 work 项（expects=work）用 close=\"completed\"。"
     "这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，"
-    "而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
+    "而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。"
+    "唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 "
+    "state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— "
+    "而它对任何收件人都一样：block 项不会自己变成可 ack。",
     {"type": "object",
      "properties": {
          "item_ids": {"type": "array",

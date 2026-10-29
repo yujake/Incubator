@@ -3762,12 +3762,19 @@ class Conductor:
         而收件人（子代理）已经静默/退役 ⇒ 它永远不会被 ack。可另一头，销号闸要求
         "名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
         连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
-        出口只能是"作废"：它不是"知道了"，也不是"做完了"，而是"这条不会再被处理"。
+
+        出口是作废，但 2026-10-29 起它不是唯一的门（这条口径在代码里已经落地，见下面
+        那一段"deaf"判定）：静默的收件人现在会被一条消息 / 一次委托 / `wake_blocked`
+        叫醒，所以"它静默 ⇒ 它永远不会再处理这条通知"是旧口径。今天作废的正当性只剩
+        "这个号叫不醒了"（已销号 / 兜底表被永久抑制）—— 叫得醒的静默收件人要先唤醒它，
+        让它自己 ack。作废仍然不是"知道了"、也不是"做完了"，而是"这条不会再被处理"。
 
         三条硬边界（少一条就等于把这条路变成"父代 ack"）：
         1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
-        2. 调用方必须已经证明收件人静默或已退役（本方法再核一次 `retire_state_of`，
-           不是静默就整批拒）—— 不许把在飞的活清掉；
+        2. 调用方必须已经证明收件人叫不醒（已销号，或兜底表被永久抑制）：只是静默
+           不够 —— 一条消息或一次委托就会把它叫起来，那时它自己能 ack（本方法逐项核
+           `retire_state_of` 与 `lifeline_suppressed` / `_is_retired_task`，两个读数都
+           不是"叫不醒"就拒）—— 不许把还可能被叫醒的活清掉；
         3. 作废不经过状态机（`item_move` 描述的是"有人读过/办过"，作废恰恰是
            "不会有人读"），但一律过 `schema.Task.validate`；来路写进 `inputs`
            （`void:expired:<父台账号>:<理由>`），于是事后能回答"谁作废的、为什么"。
@@ -4033,7 +4040,11 @@ class Conductor:
     #:
     #: 判据里也不许补一句 `want == have ⇒ ok` 兜底：这张表是穷举的，缺哪一对由
     #: `tests/test_setting_the_same_terminal_state_is_idempotent.py` 当场报出来。
-    #: `block` 今天没有写入者，它的四条出边一律 `back`（"停在这里"的语义只靠这张表守着）。
+    #: `block` 不是"没有写入者"的状态：优雅停止由 `stopctl.block_remaining_tasks` 把它写下
+    #: （status 与名下板项两根轴一起翻），而"从 block 出去"在这张表里一律 `back`。
+    #: 唤醒走的是另一条路：`Conductor.wake_blocked` 直写两根轴（block → running / queued）
+    #: 并立刻 `S.Task.validate()` 自校。所以这张表守的是"状态机不许倒退"，
+    #: 它不守"停在这里就永远出不去" —— 那个说法在 2026-10-29 之后是旧口径。
     ITEM_MOVES: dict[tuple[str, str], str] = {
         # queued：起点，只能往前
         ("queued", "queued"): ITEM_MOVE_BACK,      # 非终态的同一格重复：不是幂等（每一步的读数会变）
@@ -4059,7 +4070,9 @@ class Conductor:
         ("done", "seen"): ITEM_MOVE_BACK,
         ("done", "done"): ITEM_MOVE_SAME,
         ("done", "block"): ITEM_MOVE_FORWARD,
-        # block：另一个终态。"从 block 出去"一律拒；同一格重复设置同样是幂等
+        # block：停在这里。写下它的是 `stopctl.block_remaining_tasks`，把一条停住的项翻回
+        # queued 的是 `Conductor.wake_blocked`（直写，不走这张表）。"从 block 出去"在这张表里
+        # 一律拒；同一格重复设置同样是幂等。
         ("block", "queued"): ITEM_MOVE_BACK,
         ("block", "claimed"): ITEM_MOVE_BACK,
         ("block", "seen"): ITEM_MOVE_BACK,

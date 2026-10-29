@@ -234,7 +234,10 @@ def test_g_the_graph_is_total_and_three_col_valued() -> None:
             continue
         assert Conductor.ITEM_MOVES[(state, state)] == Conductor.ITEM_MOVE_BACK, (
             f"{state} 的同一格被放宽成幂等（它会静默吞掉这一步的读数）")
-    # block 是只进不出的终态：它的四条出边一律拒（今天没有写入者，只靠这张表守着）
+    # block 是停住态：状态机里它的四条出边一律拒。这张表守的是"状态机不许倒退"，
+    # 不是"停在这里就出不去"—— 写下它的是 `stopctl.block_remaining_tasks`（2026-10-13 起），
+    # 把一条停住的项翻回 queued 的是 `Conductor.wake_blocked` 的直写（2026-10-29 起，
+    # 它不走这张表、写后自己 `S.Task.validate()` 复校）。所以"block 没有写入者"是旧口径。
     for state in S.ITEM_STATES:
         if state == "block":
             continue
