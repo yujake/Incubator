@@ -35,7 +35,8 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | c1/v5 | 洗稿：交付给 F 的 detail ≠ V 原文；findings 逐字可回溯 | 直接转发原文 ⇒ 洗稿等于没做 |
 | c2 | 洗不出来 ⇒ 受控拒绝、不输出原文 | 拒绝时顺手回原文 ⇒ 泄露 |
 | c3 | C 段交付面：板项 detail 用洗过的文本（kind/expects 不变） | 新增一档 kind ⇒ 命中冻结面 |
-| c4 | V 的可见提示词/技能手册不出现洗稿/清洗相关字眼 | 提示词里写出"你的意见会被清洗" ⇒ 违反口径 ② |
+| c4 | V 的可见文本不出现洗稿类字眼，且「转达」只留在共用段那两句 | 在冷启动/手册里写「你的意见会被转达/清洗」⇒ 违反口径 ② |
+| c8/v9 | V 的可见文本说清「你只产意见、签由秘书」「你看不到审阅之外」，且 draft/122 清单接进来并注明「这是嘱托，不是门」 | 删掉其中任一句 / 清单没接进来 / 没注明它是嘱托 ⇒ 红 |
 | c5 | V 的思考强度默认 High（既有设计） | 缺省被改成 low ⇒ 钉不住 |
 | c6/v10 | V 的审阅请求体 `temperature==1.0`；别的角色与秘书那一档仍是 0.2 | 摘掉 `AgentV._ask` 里的温度 ⇒ 请求体回到 0.2 |
 | c7/S6 | V 的思考强度默认 High 是既有默认（`modelgw.DEFAULT_REASONING_EFFORT` → `ModelSpec` → `spec_for`/`spec_from_env` → 请求体），读数是活的 | 把 `AGENTFLOW_MODEL_REASONING_EFFORT=low` 灌进同一道梯子 ⇒ 读数与请求体不跟着变 = 判据在量常量 |
@@ -164,8 +165,11 @@ class _ReviewSeam:
 
     def __init__(self, text: str) -> None:
         self.text = text
+        #: 真递出去的那份提示词（c8 用它判"可见面"，而不是自己拼一份）。
+        self.prompts: list[str] = []
 
-    def ask(self, _prompt: str, **_kw) -> _Call:
+    def ask(self, prompt: str = "", **_kw) -> _Call:
+        self.prompts.append(prompt)
         call = _Call()
         call.text = self.text
         call.ok = True
@@ -699,13 +703,19 @@ def _v_visible() -> dict[str, str]:
 
 
 def test_c4_vs_visible_surfaces_do_not_mention_washing(tmp_path):
-    """业主追加口径 ②：V 不知道秘书洗稿的存在。
+    """v9 的否定半边：V 不知道秘书洗稿的存在。
 
-    判据两半：
+    判据四半（第 3、4 半是 2026-10-29 S5 补的：`draft/126` §三 把"转达"也列进了禁词）：
     1. 硬禁词 `洗稿` / `清洗` 在 V 的三处可见面里 0 次；
     2. `wash` 这个拼写只允许出现在"派活先过秘书"那一句里（它指的是 `delegate`
        返回里的 `wash` 栏 —— 秘书给委托洗格式，与"V 的意见被洗"不是一件事）。
-       数量与上下文都钉住：再多一处、或搬出那一句，这条就红。
+       数量与上下文都钉住：再多一处、或搬出那一句，这条就红；
+    3. V 自己写的那两份文本（冷启动提示词 + 技能手册）里 `洗` / `转达` 都是 0 次：
+       "你的意见之后会怎样"不许出现在它的可见面上；
+    4. 系统提示词里 `转达` 只允许是共用段那两句（交给父代理转达 / 收工自查还没转达）——
+       那是全仓十一个角色共用的转达链，与"意见被处理"无关，`tests/test_agent_prompts.py`
+       也钉着它。这两句之外多出一处 `转达` ⇒ 红。
+
     另有正控：同一个 `wash_v_reply` 的措辞确实在别处（免得判据扫错了对象）。
     """
     visible = _v_visible()
@@ -713,7 +723,19 @@ def test_c4_vs_visible_surfaces_do_not_mention_washing(tmp_path):
         assert text, f"{name} 是空的 ⇒ 判据扫不到东西（假绿）"
         for word in ("洗稿", "清洗"):
             assert word not in text, (name, word)
+    # ③ V 自己写的那两份：连"洗"与"转达"都不许有
+    for name in ("cold_start", "skills"):
+        for word in ("洗", "转达"):
+            assert word not in visible[name], (
+                f"{name} 里出现了 {word!r} ⇒ V 从自己的可见面上就会想到"
+                "「我的意见之后会被处理」，而它不该知道这件事")
+    # ④ 系统提示词：`转达` 只剩共用段那两句（逐字核上下文）
     system = visible["system_prompt"]
+    assert system.count("转达") == 2, (
+        f"V 的系统提示词里 `转达` 出现 {system.count('转达')} 次（期望 2：共用段那两句）"
+        "⇒ 请核一遍新加的那一处是不是在说『你的意见会被转达』")
+    for shared in ("由父在步边界转达", "还没转达"):
+        assert shared in system, shared
     hits = [m for m in ("wash",) if m in system]
     assert hits == ["wash"], f"`wash` 在 V 的提示词里出现 {len(hits)} 种写法：{hits}"
     assert system.count("wash") == 1, "`wash` 出现了不止一处：请核一遍它是不是新加的"
@@ -725,6 +747,43 @@ def test_c4_vs_visible_surfaces_do_not_mention_washing(tmp_path):
     # 正控：这一条不是"全文都没有 wash"那种假绿
     assert "wash_v_reply" in json.dumps(
         {k: str(v) for k, v in SEC.Secretary.__dict__.items()}), "洗稿那个方法不见了"
+
+
+def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_path):
+    """v9 的肯定半边：V 的可见文本说清「你只产意见、签由秘书」与「你看不到审阅之外」。
+
+    "可见"取最硬的那个定义：真的递给模型的那份提示词（`AgentV.verify_proof` 实际发出去的
+    prompt，由替身缝抄一份），加上 V 的技能手册正文（`skills/V/` 落盘的那几份的正文）。
+    断言五类：
+      ① 签由秘书：两份都写「签由你的秘书……」；
+      ② 你看不到审阅之外（洗稿那件事对它是不可见面）；
+      ③ 审阅清单接进来了：H-1…H-5 / T-1…T-8 / N-1…N-4 / C-1…C-4 与"不归 F"都点名；
+      ④ 清单被注明"这是嘱托，不是门"，并指向 `docs/DEVELOPMENT-SPEC.md` §13；
+      ⑤ V 的提示词索引里点得到那份手册（`skills/V/产出-只产意见-签在秘书.md`）。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    seam = _ReviewSeam(json.dumps(_OK, ensure_ascii=False))
+    agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_LazyButApproving())
+    agent.verify_proof(SID, proof_text=PROOF)
+    sent = seam.prompts[0] if seam.prompts else ""
+    assert sent, "这一趟没有提示词 ⇒ 判据扫不到可见面（假绿）"
+    body = "\n".join(s.body for s in SK.skills_for("V"))
+    for name, text in (("冷启动提示词", sent), ("技能手册", body)):
+        # ① 「签由秘书」：两份都写「秘书判定并落盘」，且都点名"发不发签"这件事
+        assert "秘书判定并落盘" in text, (name, "「签由秘书」那一句不见了")
+        assert "发不发签" in text, (name, "没有点名『发不发签由秘书』")
+        assert "你看不到审阅之外的任何东西" in text, (name, "「看不到审阅之外」那一句不见了")
+        assert "这是嘱托，不是门" in text, (name, "清单没有注明『这是嘱托，不是门』")
+        assert "DEVELOPMENT-SPEC.md" in text and "§13" in text, (name, "没有指向 §13")
+        for mark in ("H-1", "H-5", "T-1", "T-8", "N-1", "N-4", "C-1", "C-4", "不归 F"):
+            assert mark in text, (name, mark)
+    # ⑤ 索引里点得到那份手册（正文按需读，索引是唯一入口）
+    system = AP.system_prompt("V", registry=build_registry().registry)
+    idx = SK.skill_path("V", "产出-只产意见-签在秘书")
+    assert idx in system, idx
+    # 反真空：这一份手册真的在 V 的手册清单里（不是只在别处写过一句话）
+    assert any(s.slug == "产出-只产意见-签在秘书" for s in SK.skills_for("V"))
 
 
 def test_c5_vs_thinking_default_is_high(tmp_path):

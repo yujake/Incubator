@@ -2157,7 +2157,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p217"
+_FROZEN_PROMPT_VERSION = "p218"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2334,18 +2334,33 @@ _FROZEN_PROMPT_VERSION = "p217"
 # （「取不到全文不等于这篇不存在」＋ 429/404/400 三种处置 ＋ broad 的 topic_selfcheck
 # 口径），那是 A 自己的段 ⇒ 其余十格逐字节未动（重算读数：变化的格 = ['A']）。
 # 逐格：A e77c832a→0fce9436（B–H / L / M / V 十格与 p216 同值）。
+# 2026-10-29（p218，V 签门槛 S5）：十一格全换，两件事一起落。
+# ① V 那一格是本笔改的：`agent_skills._v_skills()` 多一份手册（`skills/V/产出-只产意见-签在秘书.md`），
+#    它的索引行进 `system_prompt("V")`（V 的冷启动提示词里那一套口径的压缩版不进 system prompt，
+#    由 `tests/test_v_sign_gate_streak.py` 的 c4/c8 钉着）。
+# ② 另外十格不是本笔改的：p217 之后有两笔改动动了共用段（`LLM_LOOP` / `HANDOFF_PROTOCOL` /
+#    `PARENT_STOP` 那一类）而没有抬版本（2026-10-29 的 bd124e5 / dc6c2d5）。读数：把
+#    `git archive HEAD` 导到 temp、用同一支探针现算，在我这一笔之前十一格就已经全部与
+#    p217 的冻结表不同（V 当时是 1cc92a8c）⇒ 这一笔把版本抬到 p218、十一格一次重算到位。
+# 逐格旧值 → 新值（p217 → p218）：
+#   A 0fce9436→822362d2 / B 336e6a60→24dc2329 / C 0e83598d→03661adc /
+#   D 84f42417→44b6f5f2 / E 1522d170→79ea5bac / F 24add73c→90fd138a /
+#   G c8e8bbbc→d2ddd830 / H 28da3b64→ac8a5bde / L 43b14761→172c9cf0 /
+#   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
+# 十一格是 `D:\Incubator\temp\recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 环境变量与 `conftest.py` 逐条对齐）的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "0fce943612fb91d067df363399c523311f28e48164d4b78b93bfe2d88c369dd7",
-    "B": "336e6a60a4f1f7ff3f776fa7ca5625103949af073c57d462b2faed294aadd92f",
-    "C": "0e83598d7fcb07461ba817f611e48665b7ca43f4e2db4517e3007d69466bef50",
-    "D": "84f4241793e05a82f0a16b068aad290db2e4c26a308dd3b660b5b088998ceb9a",
-    "E": "1522d17074da681b747e441f53dd4698626d38213d0f24286f3601c543d49966",
-    "F": "24add73c26e69a778df84a86cd43e06836c2a3f67ce7440b157c225b7ed505b1",
-    "G": "c8e8bbbca7419c50bc01c33971f581a01a0d8a2fdaa086fe1ffcfbf237b872f8",
-    "H": "28da3b642450a020a6e702eb5ad5f241371f056d4cb66f796c053442dd4ed0d2",
-    "L": "43b147611271f1aa1305024add6fc94ade2a3628d3463c7f8ab99acf2263b790",
-    "M": "f3e029d552914302b2acb274c9900215fdfb09e8e046612b9ffabf509215bb93",
-    "V": "de15442a7877424dd9598266f8d16c68974915b42b4a78d2af38c0862e57f21e",
+    "A": "822362d286cd603f1222f7520b181656b4f8b751968aefe6fc687220ce2ca0d3",
+    "B": "24dc2329367c181686e8f2fa2b7367ecc7529fbf38832840ac774ca499f83dec",
+    "C": "03661adca70c0017f3d3ff3314725c1134ae2e28930b57c087add8a3028ce429",
+    "D": "44b6f5f2327feb5e20874b5cbb978546cbf6f0b1b0209cd8387368c8039c167a",
+    "E": "79ea5bac7bf56448d78fdc7f47b34049794e20e275f57ef9763dcb91eafe4e69",
+    "F": "90fd138a8c6c6415b6aecf8dec93040f66bd64313cedac3708794d7968615603",
+    "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
+    "H": "ac8a5bde4214a0596434cdfae3f13073b79fed4906cc8e867f8747625631cb71",
+    "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
+    "M": "5c4848b618fcb72c7d22a3e5f45d465e600c007516fdcd2ad54d047fe6fa49ac",
+    "V": "6b8ebdb44f10e66ecad7d4ae389d61a2de086e136c1ee55836f26d99ad849d7d",
 }
 
 

@@ -2798,7 +2798,26 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 逐格：只有 A 动；B–H / L / M / V 与 p216 同值。十一格是同一支重算探针
 #: （`temp/_recompute_digests.py`）的现算值，不是手抄。
 #:
-PROMPT_VERSION = "p217"
+#: 2026-10-29（p218，V 签门槛 S5）：V 那一格换值 —— `agent_skills._v_skills()` 多了一份
+#: 手册（`skills/V/产出-只产意见-签在秘书.md`，draft/122 的审阅清单正文 + 「签由秘书」+
+#: 「你看不到审阅之外」），而手册的索引行进 `system_prompt("V")`；V 的冷启动提示词
+#: （`verifications.cold_start_prompt`，V 真正的审阅入口）也加了同一套口径的压缩版 ——
+#: 那一段不在 system prompt 里，所以它不进这张表（它由 `tests/test_v_sign_gate_streak.py`
+#: 的 c4/c8 钉着）。
+#: 另十格也一起换了值：它们不是我这一笔改的 —— 在本笔之前、p217 之后，共用段
+#: （`LLM_LOOP` / `HANDOFF_PROTOCOL` / `PARENT_STOP` 那一类）被另外两笔改动动过而版本没抬
+#: （2026-10-29 的 bd124e5「wake_blocked 进 M 的工具面」与 dc6c2d5「block 的出口/作废口径」）。
+#: 读数：把 `git archive HEAD` 导到 temp、用同一支探针现算，十一格在我这一笔之前
+#: 就已经全部与 p217 的冻结表不同（V 那一格当时是 1cc92a8c）。所以这一笔把版本抬到 p218、
+#: 十一格一次重算到位；V 的差异（6b8ebdb4 vs 1cc92a8c）是本笔唯一由 V 这一侧引起的。
+#: 逐格旧值 → 新值（p217 → p218）：
+#:   A 0fce9436→822362d2 / B 336e6a60→24dc2329 / C 0e83598d→03661adc /
+#:   D 84f42417→44b6f5f2 / E 1522d170→79ea5bac / F 24add73c→90fd138a /
+#:   G c8e8bbbc→d2ddd830 / H 28da3b64→ac8a5bde / L 43b14761→172c9cf0 /
+#:   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
+#: 十一格是 `D:\Incubator\temp\recompute_digests.py`（与 conftest 的环境变量逐条对齐：
+#: Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）的现算值，不是手抄。
+PROMPT_VERSION = "p218"
 
 
 
