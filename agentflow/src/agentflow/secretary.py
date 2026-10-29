@@ -7554,6 +7554,17 @@ class Secretary:
         if cond is None:
             return {"ok": False, "action": "refused", "report": {},
                     "why": ["没有 store ⇒ 读不到台账（没读成，不是'不在跑'）"]}
+        # ---- 收工兜底（2026-10-29）：销号之前先把"台账有、名册没有"的那几条补上。
+        #
+        # 分工（业主 2026-10-29 的链路）：治本在登记侧（`Conductor._register_roster`：
+        # 撞名字时改发新号，不许因此丢一行）；兜底在这里 —— 收工/销号是"这一支要收口了"
+        # 的时刻，此刻名册还缺行，那些子代理连名字都没有，父根本无法按名册名去销它
+        # （79 那趟 11 个节点卡住就是这个形态）。补一行只写名册与对照表，不动台账、不动进程。
+        repaired = 0
+        try:
+            repaired, _repair_why = self.roster_repair(owner=str(owner))
+        except Exception as exc:  # noqa: BLE001 —— 兜底失败不许带走这次销号
+            repaired, _repair_why = 0, f"{type(exc).__name__}: {exc}"
         tid, problem = self.resolve_down(owner=owner, name=str(name))
         if problem:
             if self._is_retired(owner, str(name)):
