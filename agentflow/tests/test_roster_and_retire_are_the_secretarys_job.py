@@ -154,8 +154,18 @@ def test_retire_executes_and_remembers_the_name(tmp_path: pathlib.Path):
     again = sec.roster_add(owner=owner, role="D", task_id=later, brief="后来的那件",
                            want_name="D1")
     assert again["problem"] and "销号" in again["problem"], again
-    assert sec.roster_add(owner=owner, role="D", task_id=later,
-                          brief="后来的那件").get("name") == "D2", "序号不回收"
+    # 序号不回收：下一个新名字必须是"D 的最大已用序号 + 1"，而且绝不是 D1。
+    #
+    # 读数为什么是 D3 不是 D2（2026-10-29 的收工兜底上线之后）：`retire` 在解析名字之前
+    # 先跑 `roster_repair`，把"台账里有、名册里没有"的那条子行补登记 —— 这一条夹具里
+    # 没有 `roster_add` 过的 `later` 就是那样一行，它在退役那一刻拿到了 D2
+    # （`repaired=True`）。于是"下一个空号"是 D3。这条断言钉的仍是原意：
+    # 用过的名字（含已销号的 D1、被兜底占掉的 D2）一个都不回收。
+    repaired = [r for r in _lines(roster_path(tmp_path / "ws", owner)) if r.get("repaired")]
+    assert [(r["name"], r["task_id"]) for r in repaired] == [("D2", later)], repaired
+    nxt = sec.roster_add(owner=owner, role="D", task_id=later, brief="后来的那件")
+    assert nxt.get("name") == "D3" and nxt.get("name") != "D1", (
+        "序号回收了（销号的名字又被发出去）", nxt)
 
 
 def test_retire_of_an_unknown_name_is_refused(tmp_path: pathlib.Path):

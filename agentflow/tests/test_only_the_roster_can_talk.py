@@ -193,6 +193,11 @@ def test_negctl_skipping_the_registration_leaves_the_parent_blind(
 
     这一条证明"双向可见"不是被台账顺手带绿的：`roster_view(owner=父)` 的 `rows`
     只来自名册文件（`roster_add` 写的那一份），台账里有这一行不算数。
+
+    2026-10-29 的收工兜底上线之后，"跳过登记"必须把两条写路径都打掉：`summon` 在
+    `roster_add` 之后还会跑 `roster_repair`（把"台账里有、名册里没有"的行补上），
+    只打 `roster_add` 的话兜底会把这个子补进名册 ⇒ 负控不红（而那不是判据变强了，
+    是打桩点漏了一处）。
     """
     from agentflow import secretary as SEC
 
@@ -201,7 +206,12 @@ def test_negctl_skipping_the_registration_leaves_the_parent_blind(
         return {"name": "D1", "role": str(kw.get("role")), "task_id": str(kw.get("task_id")),
                 "problem": "（坏实现：跳过登记）"}
 
+    def no_repair(self: Any, *, owner: str) -> tuple[int, str]:
+        # 兜底自愈也不写（它是一条独立的写路径；两条都打掉才是"名册上一个字都没有"）
+        return 0, "（坏实现：跳过兜底补登记）"
+
     monkeypatch.setattr(SEC.Secretary, "roster_add", skip)
+    monkeypatch.setattr(SEC.Secretary, "roster_repair", no_repair)
     with pytest.raises(AssertionError):
         test_a_summon_registers_both_directions_with_absolute_ids(tmp_path)
 
