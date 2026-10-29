@@ -963,3 +963,34 @@ def test_z2_ignoring_the_secretary_axis_makes_a_fault_row_count(tmp_path, monkey
     for _i in range(3):
         _sign(st2, judge=fault)
     assert _row(st2)["bits"]["reviewed"] is False, "judge 接上了而 fault 仍然计入"
+
+# ============================================== a11 秘书判了缺陷：读数要说得出来
+def test_a11_a_secretary_fault_is_visible_in_the_standing(tmp_path: pathlib.Path) -> None:
+    """a11（业主 2026-10-29 第 5 轮）：V 的结论词写「成立」、秘书判 fault 的那一行，
+    `review_standing` 必须把这件事说出来。
+
+    为什么要有这一条：意见已经能送到 F（e1/e5 钉住），但 state 仍是 `holding`、
+    why 只说"已连续 0/3" —— 读的人看不出"这一份被秘书判了缺陷"，
+    会把它当"还没评够次数"。这条只要求读数说出来，不改六态词表（R10/收工门共读）。
+    """
+    st = Store(tmp_path / "ws")
+    st.init()
+    _sign(st, judge={"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                     "reason": "先夸后刺"})
+    got = VR.review_standing(st.root, statement_id=SID, proof_text=PROOF, proof_no=1)
+    assert got.get("secretary_axis") == "fault", got
+    assert got.get("secretary_fault") is True, got
+    assert "缺陷" in str(got.get("why") or ""), got.get("why")
+
+
+def test_a12_a_clean_axis_is_not_reported_as_fault(tmp_path: pathlib.Path) -> None:
+    """a12（负控）：判的是 clean ⇒ `secretary_fault` 必须是假，why 里不许出现"缺陷"。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    _sign(st, judge={"checked": True, "axis": "clean", "decision": "没问题",
+                     "reason": "未发现问题"})
+    got = VR.review_standing(st.root, statement_id=SID, proof_text=PROOF, proof_no=1)
+    assert got.get("secretary_axis") == "clean", got
+    assert got.get("secretary_fault") is False, got
+    assert "缺陷" not in str(got.get("why") or ""), got.get("why")
+

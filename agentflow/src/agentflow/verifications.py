@@ -2404,6 +2404,13 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: `state` / `ok` / `in_sync` 中的任何一个 —— 它只是让"这一签盖过的正文里有
         #: 「易证/显然」"这件事可见。老行没有这一格 ⇒ 空列表。
         "hard_ban_markers": [str(m) for m in (chosen.get("hard_ban_markers") or [])],
+        #: 秘书对这段回复的语义判定（业主 2026-10-29 第 5 轮）：`fault` 是"V 的结论词写
+        #: 成立、但秘书读出来它其实指出了缺陷"那一档。它不改六态词表（`state` 仍 `holding`，
+        #: 因为 R10 与收工门共读那个词表），只让这件事在读数里说得出来 ——
+        #: 否则读的人会把 `holding` 的"还差 3 次"当成"还没评够"，而实际是"被读出了缺陷"。
+        "secretary_axis": str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or ""),
+        "secretary_fault": (str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or "")
+                            == "fault"),
     })
     if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
@@ -2418,8 +2425,12 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         out.update(state="holding", in_sync=True,
                    why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）已连续 "
                         f"{chosen_run}/{SIGN_STREAK_NEED} 签「成立」（最近一签 "
-                        f"{out['verification_id']}，{out['ledger']}）⇒ **还差 "
-                        f"{SIGN_STREAK_NEED - chosen_run} 次**才发签：台账有行、第 3 位没翻"))
+                        f"{out['verification_id']}，{out['ledger']}）⇒ 还差 "
+                        f"{SIGN_STREAK_NEED - chosen_run} 次才发签：台账有行、第 3 位没翻"
+                        + ("；但秘书读出了缺陷（它判 fault：V 的结论词虽写「成立」，"
+                           "回复里其实指出了问题）—— 这一份要按缺陷处理，"
+                           "别把「还差几次」当成「还没评够」"
+                           if out.get("secretary_fault") else "")))
         return out
     if covering:
         out.update(state="rejected", in_sync=True,
