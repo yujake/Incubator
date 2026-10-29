@@ -516,6 +516,10 @@ def test_c2_wait_any_parks_even_with_timers(tmp_path, bench,
     # 挂机区间里这一趟没有产生回合（业主 2026-10-25 的判据仍然成立）
     last = dict(CLK.waiters(ws))
     assert int(last["parked_steps"]) == 0 and int(last["parked_calls"]) == 0, last
+    # 反真空（2026-10-29）：这一档是待机（它自己的表还没回来），不许有兜底表。
+    # 兜底表只属于"静默"；把它挂到待机/在飞上，就会在活跃期间被自己的投递反复命中
+    # （前三次挂死的自激就是这么来的）。
+    assert CLK.lifeline_of(ws, me) == [], CLK.lifeline_of(ws, me)
 
 
 def test_c3_wait_any_wakes_when_any_timer_returns(tmp_path, bench,
