@@ -2274,6 +2274,31 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                      "读不到它名下还有没有程序在跑，不许销（fail-closed）；"
                      "这一格不是『一个都没有』"),
                     checked=False, missing=["程序读数"])
+    # ---- 撤兜底计时器（业主 2026-10-29 第 7 条）：每个要被销的节点各撤一条。
+    #
+    # 为什么在写盘循环之前、且按节点逐个撤：销号之后那个号永久不复用，而兜底表
+    # 一旦留下，就等于"已销号却还能被叫醒"—— 那是不可逆的鬼读数。
+    # unrostered 那一档也要撤：它虽然没有名字可销，但边被认掉之后同样不该再被唤醒。
+    killed_lifelines: list[dict[str, Any]] = []
+    from .. import clock as CLK  # 局部 import：本模块顶层的同名导入在另一个函数作用域里
+    clock_root = str(getattr(getattr(c, "store", None), "root", "") or "")
+    for plan in plans:
+        if str(plan.get("state") or "") not in ("ready", "unrostered"):
+            continue
+        try:
+            one = CLK.kill_lifeline(clock_root, task_id=str(plan.get("task_id") or ""),
+                                    reason="级联销号：" + str(plan.get("name") or "无名字"))
+        except Exception as exc:  # noqa: BLE001 —— 撤不成要如实报，不许带走整笔
+            one = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+        killed_lifelines.append({"task_id": str(plan.get("task_id") or ""),
+                                 "checked": bool(one.get("checked")),
+                                 "reason": str(one.get("reason") or "")})
+        if not one.get("checked"):
+            return _out("refused",
+                        (f"{plan.get('task_id')}（{plan.get('name') or '无名字'}）的兜底计时器"
+                         f"没撤成（{one.get('reason') or '没查成'}）⇒ 整笔不销，重试即可"
+                         "（反方向会是『已销号却还会被叫醒』，不可逆）"),
+                        checked=True, missing=["兜底计时器"], lifeline=killed_lifelines)
     # ---- 从最深的开始逐项交给秘书（次序 = `order`，一次也不许反序）
     for plan in plans:
         if plan["state"] == "unrostered":
