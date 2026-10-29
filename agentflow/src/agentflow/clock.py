@@ -6576,6 +6576,10 @@ def arm_lifeline(workspace: str | Path, *, task_id: str, role: str = "",
         return {"armed": False, "skipped": "already", "task_id": want,
                 "timer_id": already[0]["timer_id"],
                 "reason": "这个台账号已经有一条兜底计时器了（不重复挂）"}
+    if lifeline_suppressed(workspace, want):
+        # 销过号的号不许再挂（业主 2026-10-29：已销号 = 彻底没有了）。
+        return {"armed": False, "skipped": "suppressed", "task_id": want, "timer_id": "",
+                "reason": "这个台账号已销号 ⇒ 兜底表永久抑制，不再挂"}
     timer = _new_lifeline_timer(workspace, task_id=want, role=str(role or ""),
                                 reason=str(reason or LIFELINE_REASON))
     bucket = book(workspace)
@@ -6644,3 +6648,63 @@ def set_lifeline_wake_handler(handler: Callable[[str], Any] | None):
     global _LIFELINE_WAKE_HANDLER
     _LIFELINE_WAKE_HANDLER = handler
     return handler
+
+
+#: 抑制标记：兜底表被"永久撤掉"（销号）时写进 `note`。
+#: 为什么要有它：被销号的代理可能还睡在自己的挂机里，醒来会按"被打掉就续"再挂一条，
+#: 于是盘上出现"号已销、计时器回来了"——那是不可逆的鬼读数，谁也没法复原。
+LIFELINE_SUPPRESSED: str = "suppressed:retired"
+
+
+def lifeline_suppressed(workspace: str | Path, task_id: str) -> bool:
+    """这个台账号的兜底表是不是被永久抑制了（销过号）。"""
+    want = str(task_id or "").strip()
+    if not want:
+        return False
+    for timer in book(workspace).all():
+        if not is_lifeline(timer):
+            continue
+        if str(timer.task_id or "") != want:
+            continue
+        if str(timer.note or "") == LIFELINE_SUPPRESSED:
+            return True
+    return False
+
+
+def kill_lifeline(workspace: str | Path, *, task_id: str, reason: str = "") -> dict[str, Any]:
+    """永久撤掉兜底表并落抑制标记（同一次原子写）。
+
+    这是销号那一步的时钟侧落点。顺序纪律：调用方在"台账还没动"之前先调它，
+    于是只可能出现"叫不醒了、名字还没销"（可重试），不可能出现"已销号但仍会醒"（不可逆）。
+    """
+    want = str(task_id or "").strip()
+    if not want:
+        return {"checked": False, "killed": [], "suppressed": False,
+                "reason": "没有台账号 ⇒ 撤不掉"}
+    bucket = book(workspace)
+    killed: list[str] = []
+    for timer in list(bucket.pending()):
+        if not is_lifeline(timer):
+            continue
+        if str(timer.task_id or "") != want:
+            continue
+        timer.state = "cancelled"
+        timer.note = LIFELINE_SUPPRESSED
+        if reason:
+            timer.feedback = str(reason)[:200]
+        bucket.sync_index(timer)
+        killed.append(str(timer.timer_id or ""))
+    if not killed:
+        # 没有待发的那条也要留痕：抑制是"这个号永久不复用"事实的一部分。
+        mark = _new_lifeline_timer(workspace, task_id=want, role="", reason=reason or LIFELINE_REASON)
+        mark.timer_id = bucket.allocate("tm")
+        mark.state = "cancelled"
+        mark.note = LIFELINE_SUPPRESSED
+        bucket.add(mark)
+        killed.append(str(mark.timer_id or ""))
+    try:
+        bucket.save()
+    except Exception as exc:  # noqa: BLE001 - 撤不掉必须让调用方看见
+        return {"checked": False, "killed": [], "suppressed": False,
+                "reason": f"落盘失败（{type(exc).__name__}: {exc}）"}
+    return {"checked": True, "killed": killed, "suppressed": True, "reason": ""}

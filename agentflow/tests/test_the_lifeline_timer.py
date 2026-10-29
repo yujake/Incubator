@@ -74,6 +74,23 @@ def test_a_finished_account_is_not_read_as_a_closed_target() -> None:
     assert reasons == [], reasons
 
 
+def test_killing_it_is_permanent() -> None:
+    """销号要把它撤掉，而且不许再长回来（"已销号 = 彻底没有了"）。
+
+    这是三态里唯一不可逆的一步：撤掉 + 抑制标记必须同一次原子写落盘；
+    此后 `arm_lifeline` 受控拒绝（skipped="suppressed"），连"被事件打断就续"那条路也走不通。
+    """
+    ws = _workspace()
+    me = "t-000005"
+    CLK.arm_lifeline(ws, task_id=me, role="D")
+    got = CLK.kill_lifeline(ws, task_id=me, reason="收工销号")
+    assert got["checked"] is True and got["suppressed"] is True, got
+    assert got["killed"], got
+    assert CLK.lifeline_of(ws, me) == []
+    assert CLK.lifeline_suppressed(ws, me) is True
+    again = CLK.arm_lifeline(ws, task_id=me, role="D")
+    assert again["armed"] is False and again["skipped"] == "suppressed", again
+
 def test_consuming_it_calls_the_wake_hook_once() -> None:
     """兜底表被打掉 = 有与我有关的东西来了 ⇒ 叫醒钩子被调一次（带台账号）。
 
