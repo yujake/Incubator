@@ -15,7 +15,7 @@
 
 机制：`serve()` 会 `sse.begin_serving()` + `sse.attach()`，把 `sessions.append` 换成一个
 "顺便发 SSE 事件"的闭包；而撤钩子原先只在 `run()` 的 finally 里做。**直接调 `serve()` 的
-判据**（本仓库有好几处）于是把钩子留在进程里 —— 之后所有用例的 `sessions.append` 都走
+判据（本仓库有好几处）于是把钩子留在进程里 —— 之后所有用例的 `sessions.append` 都走
 那条路，`observed_events()` 的计数不再增长，于是 clock 那三条读到"没有事件"。
 
 ## 这一组守什么
