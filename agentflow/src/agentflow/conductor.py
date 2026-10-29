@@ -3305,10 +3305,10 @@ class Conductor:
             runner = getattr(self, "resume_runner", None)
             if not callable(runner):
                 # 2026-10-29：机制已在（`resume_dispatched` 实现 + 判据覆盖），
-                # 但**接线必须显式**。理由是一条实测回归：一旦 `open_item` 默认把
+                # 但接线必须显式。理由是一条实测回归：一旦 `open_item` 默认把
                 # 终态收件人跑起来，"给静默子开一条 queued notice"就会把它叫成
                 # active，于是 `test_a_child_with_unread_board_items_is_refused`
-                # 的销号分支从 waiting_no_children 变成 active。按业主口径那**是**
+                # 的销号分支从 waiting_no_children 变成 active。按业主口径那是
                 # 新语义，但必须先一起改掉那一批判据 —— 不许靠默认值悄悄移。
                 out["reason"] = (f"{recipient} 已完成（status={status}）⇒ 该把它跑起来，"
                                  "但这一趟没有接执行侧（`resume_runner` 未接线）")
