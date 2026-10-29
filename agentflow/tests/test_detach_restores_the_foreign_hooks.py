@@ -21,11 +21,13 @@ test_h: assert [f["timer_id"] for f in fires] == [timer_id], fires
 """
 from __future__ import annotations
 
+import pathlib
+
 from agentflow import sessions as SS
 from agentflow.webui import sse
 
 
-def test_detach_restores_the_foreign_append_hook():
+def test_detach_restores_the_foreign_append_hook(tmp_path: pathlib.Path):
     """正题：attach/detach 之后，来宾挂上的 append 钩子必须还在。"""
     calls: list = []
 
@@ -37,13 +39,13 @@ def test_detach_restores_the_foreign_append_hook():
         sse.begin_serving(heartbeat_sec=0)
         sse.attach()
         sse.detach()
-        SS.append(".", {"kind": "probe", "role": "M"}, sid="s-probe")
+        SS.append(tmp_path, {"kind": "probe", "role": "M"}, sid="s-probe")
         assert calls, "detach 之后来宾钩子不再被调用 ⇒ 它被抹掉了（clock 的旁路就是这样丢的）"
     finally:
         SS.set_append_hook(None)
 
 
-def test_the_old_behaviour_would_drop_it():
+def test_the_old_behaviour_would_drop_it(tmp_path: pathlib.Path):
     """反真空：把 `_PREV` 清空再 detach（= 旧实现）⇒ 来宾钩子消失。"""
     calls: list = []
 
@@ -56,7 +58,7 @@ def test_the_old_behaviour_would_drop_it():
         sse.attach()
         sse._PREV.clear()          # 模拟"没有记账 ⇒ 一律设 None"
         sse.detach()
-        SS.append(".", {"kind": "probe", "role": "M"}, sid="s-probe-2")
+        SS.append(tmp_path, {"kind": "probe", "role": "M"}, sid="s-probe-2")
         assert not calls, "这次应当被抹掉 —— 否则第 1 条是恒真的假绿"
     finally:
         SS.set_append_hook(None)
