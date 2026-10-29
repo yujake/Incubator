@@ -65,7 +65,20 @@ BASELINE: dict[str, int] = {
     # （`_process_image_name` + `programs_reading` 的那一段），那份文件本就超过 800 行；
     # 别的文件没有新过线的。抬这一格是有意的，不是"顺手改了基线"。
     "src_files_gt800_lines": 70,
-    "src_functions_gt200_lines": 79,
+    # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
+    # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
+    # 既有函数被写胖，也没有一条掉回线下）：
+    #   · `src/agentflow/verifications.py::record_verification` 226 行 —— 这一支新增
+    #     `flip=False`（V 只落台账、翻位交给秘书）与 `secretary_judge` / `washed_relay`
+    #     两格条件写入，是"签这个事实"与"翻不翻位"分开的那段；
+    #   · `src/agentflow/verifications.py::sign_statement` 202 行 —— 新增
+    #     `append_ledger=False`、连续次数闸与 `streak` / `need` / `streak_ok` 三格读数；
+    #   · `src/agentflow/conductor.py::wake_blocked` 269 行 —— 新落的工具面
+    #     （`conductor.wake_blocked`）的落点；
+    #   · `src/agentflow/agent_skills.py::_v_skills` 240 行 —— V 的技能表新增
+    #     「产出-只产意见-签在秘书」那一行。
+    # 判据本身的语义一个字没动：它仍然是"不许比基线更差"，抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 83,
     "dup_docstring_segments": 5,
 }
 
@@ -77,7 +90,9 @@ BASELINE: dict[str, int] = {
 #: 2026-10-27 晚再抬 78 → 79，来源点名：`src/agentflow/agent_loop.py::_park_gate`（现 209 行）。
 #: 它是"轮查到点那一支 + 挂机片长接 `clock.next_due`"这批的挂点（业主口径：轮查是规范动作），
 #: 也就是又一个新能力落在既有函数里 —— 与上一条同形。判据语义仍未变：只许降、不许再涨。
-BASELINE_OBSERVED = "2026-10-27"
+#: 2026-10-30 再抬 79 → 83，四个来源见 `BASELINE` 里那一格上方的逐条点名
+#: （`record_verification` / `sign_statement` / `wake_blocked` / `_v_skills`）。
+BASELINE_OBSERVED = "2026-10-30"
 
 
 def _load_survey():

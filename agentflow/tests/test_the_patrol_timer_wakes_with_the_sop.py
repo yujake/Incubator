@@ -584,7 +584,14 @@ def test_g_the_patrol_timer_reuses_the_existing_columns(
     轮查复用 `kind="timer"`，标记只落在 `reason` 上（`PATROL_REASON`）。这一条钉的是
     "这一刀没改落盘契约"：词表多一档就等于改了 `out/clock/state.json` 的每一行。
     """
-    assert tuple(CLK.TIMER_KINDS) == ("timer", "alarm", "periodic", "program"), CLK.TIMER_KINDS
+    # 2026-10-30：词表比这一份判据首跑时多了一档 `lifeline`（程序存活线，随
+    # 「程序 / 停机」那一族落地）。那一档不是这一条要挡的东西 —— 这一条挡的是
+    # "轮查给自己加了一档 kind"。所以把词表按盘上实测补齐（精确相等，没有放宽），
+    # 并把原意单独钉一句：`patrol` 不许出现在 `TIMER_KINDS` 里。
+    assert tuple(CLK.TIMER_KINDS) == ("timer", "alarm", "periodic", "program",
+                                      "lifeline"), CLK.TIMER_KINDS
+    assert "patrol" not in tuple(CLK.TIMER_KINDS), (
+        "轮查给自己加了一档 `patrol` ⇒ 落盘契约被改宽了", CLK.TIMER_KINDS)
     assert tuple(CLK.TIMER_STATES) == ("pending", "fired", "cancelled"), CLK.TIMER_STATES
     _, cond, ws = _ws(tmp_path, "g")
     me = cond.open_top_level_run("M", TASK)

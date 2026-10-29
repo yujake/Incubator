@@ -49,10 +49,17 @@ _PROOF = """证明：由定义直接得到。
 
 
 def _judge(kind: str, context: Mapping[str, Any], *, task_id: str = "") -> dict[str, Any]:
-    """打桩判断面：判了，但自报档位留空（档位由力气读数落格，不靠模型自报）。"""
+    """打桩判断面：判了，并给出档位。
+
+    业主 2026-10-29 改了口径：「全交给模型判」「判档的还是 B 秘书」—— 机器力气读数
+    降为参考、不再裁定档位（`Secretary.judge_statement` 里那句「机器力气读数只作参考，
+    不拿来补一个档位」）。所以这一档替身必须像真的秘书那样把档位说出来；不给档位
+    （`nontriviality=None`）会被如实记成"未判"，而这一份判据要测的是"按 `stmt_id`
+    关联"，不是"没判也读得出档位"。给 0 档（T0）：这一段证明的力气读数本来就在 0 档。
+    """
     assert kind == "statement_aesthetic", kind
     return {"checked": True, "decision": "合格", "reason": "判了", "basis": [],
-            "nontriviality": None, "nontriviality_basis": ""}
+            "nontriviality": 0, "nontriviality_basis": "替身：按五档定义判这一段是 T0"}
 
 
 def _secretary(root: pathlib.Path) -> SEC.Secretary:

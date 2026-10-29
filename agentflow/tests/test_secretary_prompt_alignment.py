@@ -210,6 +210,31 @@ DUTIES: dict[str, dict[str, object]] = {
                "**只有**『判了且判太平凡』才拦，判不了 / 没查成 / 判断炸了一律 fail-open（+ 留痕）——"
                "让『没查成』决定产出入库正是这一格要避开的那种错",
     },
+    # 2026-10-29（业主定稿「V 签不再一次成立就签」）：V 的提示词新增了那条技能
+    # `skills/V/产出-只产意见-签在秘书.md`，正文逐字写着「你写「成立」不等于签上了：
+    # 签由秘书判定并落盘（连续三次成立才轮到它判）」—— 这是一句对角色的承诺，
+    # 所以按本文件的纪律必须有一条职责认领它（否则方向二会红：承诺没人接住）。
+    #
+    # 可见性为什么是 `conditional ("V",)` 而不是 `prompt`：发签决定只发生在 V 那一侧
+    # （`Secretary.decide_sign_issuance` 只对 V 的秘书有意义；别的角色的秘书不判发签）。
+    # 登记成 `prompt` 等于声明"十一个角色都该知道它"，那一条恰恰永远不会红 ——
+    # 与 `statement_aesthetic` 当年从 `prompt` 收窄成 `conditional ("B",)` 同一条理由。
+    "v_sign_issuance": {
+        "code": "decide_sign_issuance",
+        "where": "secretary.py",
+        "call": ("agent_v/core.py 的 AgentV._decide_sign_issuance",
+                 "agent_v/core.py 的 verify_proof（每条证明判完发签）"),
+        "visibility": "conditional",
+        "roles": ("V",),
+        # 探针取那一句里"谁发签"的判别式：V 读到的正是"签由秘书判定并落盘"。
+        # 刻意不写"连续三次成立"整串 —— 那一句的措辞随门槛口径变过一次，
+        # 而"签不在 V 手上"这条承诺比门槛的措辞活得久。
+        "probe": ("签由秘书判定并落盘", "你只产意见"),
+        "why": "发签决定权：V 只产审稿意见，同一份证明连续 3 次「成立」且秘书判定通过之后，"
+               "由 V 的秘书调 `verifications.sign_statement` 翻第 3 位（`bits.evidence`）——"
+               "V 必须知道签字不归它，否则它会把「我写了成立」读成「已经签上了」，"
+               "而第 3 位其实一次都没翻",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，
