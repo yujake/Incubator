@@ -44,6 +44,7 @@ from conftest import add_literature, sync_counters  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
+from agentflow import secretary as SEC  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
@@ -133,6 +134,66 @@ def _run_exhaustive(store: Store) -> dict:
 
 def _b(store: Store) -> AgentB:
     return AgentB(store, extractor=None, extract_text=None)
+
+
+class _Call:
+    """`llmseam.SeamCall` 的替身：`judge()` 只读 ok / problem / detail。"""
+
+    ok = True
+    problem = ""
+    detail = ""
+
+
+class _IssuingSeam:
+    """V 的秘书那一档的离线替身缝（只答两件事：V 的回复没问题 / 这一签发）。
+
+    2026-10-29 口径：签由 V 的秘书判、也由它落盘。没有这条缝时 `AgentV` 的
+    `signed_bit3` 恒为假 —— 那是装配缺失，不是这条判据要量的东西。
+    """
+
+    wired = True
+
+    def __init__(self) -> None:
+        self.kinds: list[str] = []
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "") -> tuple[dict, _Call]:
+        kind = note.split(":", 1)[-1]
+        self.kinds.append(kind)
+        if kind == "sign_issuance":
+            doc = {"decision": SEC.SIGN_ISSUE, "reason": "夹具：三次成立都干净 ⇒ 发签",
+                   "basis": ["夹具"]}
+        else:
+            doc = {"decision": SEC.V_REPLY_CLEAN, "reason": "夹具：照规则判 clean",
+                   "basis": ["夹具"]}
+        return dict(doc), _Call()
+
+
+def _v(store: Store) -> AgentV:
+    """V 和它的秘书（2026-10-29：V 只落台账，翻位是秘书那一侧的事）。"""
+    sec = SEC.Secretary("V", root=pathlib.Path(store.root), store=store,
+                        seam=_IssuingSeam(), enable_model=True)
+    return AgentV(store, workspace_root=store.root, secretary=sec)
+
+
+def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
+    """同一份正文连审到发签门槛，返回那几次的返回（最后一条才是签发的那一次）。
+
+    改前这条端到端判据审一次就断言 `signed_bit3=True`（旧口径：一次成立就签）。
+    2026-10-29 的新口径要求同一份正文连续 `SIGN_STREAK_NEED` 次「成立」且秘书判定通过
+    才落签 ⇒ 夹具按同一份正文连审，并在这里钉住"前几次不签"这条正控。
+    """
+    outs: list[dict] = []
+    for i in range(1, int(VR.SIGN_STREAK_NEED) + 1):
+        got = agent.verify_proof(sid, proof_text=text)
+        outs.append(got)
+        assert got.get("checked") is True, got
+        assert got.get("verdict") == "成立", got
+        assert got.get("signed_bit3") is (i == int(VR.SIGN_STREAK_NEED)), (
+            f"第 {i} 次会审的 signed_bit3={got.get('signed_bit3')!r} —— 门槛是连续 "
+            f"{int(VR.SIGN_STREAK_NEED)} 次「成立」且秘书判定通过（第 1、2 次只落台账），"
+            f"读到的发签决定：{got.get('sign_issuance')}", got)
+    return outs
 
 
 def _file(store: Store, *, column: str, kind: str = "theorem",
@@ -284,12 +345,16 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
 
-    # V 真会审一次（七项机械检查，不进模型）
-    signed = AgentV(store, workspace_root=store.root).verify_proof(sid, proof_text=column)
+    # V 真会审：同一份正文连审到发签门槛（2026-10-29：连续 3 次「成立」+ 秘书判定才签）
+    reviewed = _review_until_signed(_v(store), sid, column)
+    signed = reviewed[-1]
     assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
     assert signed.get("signed_bit3") is True, signed
     ledger = pathlib.Path(store.root) / VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
     assert ledger.is_file()
+    # 前三签都留在台账里（第 1、2 次只落台账，不许因为"没发签"就不落行）
+    rows, bad = VR.list_verifications(store.root, statement_id=sid, limit=None)
+    assert bad == [] and len(rows) == int(VR.SIGN_STREAK_NEED), (bad, rows)
 
     # 签完之后同一份内容再交一次 ⇒ 允许 proof
     gate = NP.filing_problems(origin="own_result", evidence_kind="proof", proof_text=column,

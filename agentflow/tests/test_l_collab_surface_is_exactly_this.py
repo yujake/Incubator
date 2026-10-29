@@ -177,6 +177,68 @@ def _inbox(ws: pathlib.Path, role: str) -> list[dict]:
     return [dict(m) for m in msgs]
 
 
+class _SecCall:
+    """`llmseam.SeamCall` 的替身：`Secretary.judge()` 只读 ok / problem / detail。"""
+
+    ok = True
+    problem = ""
+    detail = ""
+
+
+class _SecSeam:
+    """V 的秘书那一档的离线替身缝（只答两件事：V 的回复没问题 / 这一签发）。
+
+    2026-10-29 口径：签由 V 的秘书判、也由它落盘。没有这条缝时 `signed_bit3` 恒为假
+    —— 那是装配缺失，不是"这条链断了"。
+    """
+
+    wired = True
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "") -> tuple[dict, _SecCall]:
+        from agentflow import secretary as SEC
+
+        kind = note.split(":", 1)[-1]
+        if kind == "sign_issuance":
+            doc = {"decision": SEC.SIGN_ISSUE, "reason": "夹具：三次成立都干净 ⇒ 发签",
+                   "basis": ["夹具"]}
+        else:
+            doc = {"decision": SEC.V_REPLY_CLEAN, "reason": "夹具：照规则判 clean",
+                   "basis": ["夹具"]}
+        return dict(doc), _SecCall()
+
+
+def _v_agent(st: object, ws: pathlib.Path, replies: list[str]):
+    """V 和它的秘书（V 的结论走 `_Seam` 的剧本，秘书那一档走 `_SecSeam`；零模型钱）。"""
+    from agentflow import secretary as SEC
+    from agentflow.agent_v import AgentV
+
+    sec = SEC.Secretary("V", root=ws, store=st, seam=_SecSeam(), enable_model=True)
+    return AgentV(st, workspace_root=ws, llm=_Seam(replies), secretary=sec)
+
+
+def _reviews_until_signed(agent: object, sid: str, text: str) -> list[dict]:
+    """同一份正文连审到发签门槛，返回那几次的返回（最后一条才是签发的那一次）。
+
+    2026-10-29 口径：同一份正文（同 `proof_sha256`）必须连续 `SIGN_STREAK_NEED` 次
+    「成立」且秘书判定通过才落签；第 1、2 次只落台账。所以这里连审，并把"前几次不签"
+    钉成这条判据的正控（改前是一次成立就签）。
+    """
+    from agentflow import verifications as VR
+
+    need = int(VR.SIGN_STREAK_NEED)
+    outs: list[dict] = []
+    for i in range(1, need + 1):
+        got = agent.verify_proof(sid, proof_text=text)
+        outs.append(got)
+        assert got.get("checked") is True, got
+        assert got.get("signed_bit3") is (i == need), (
+            f"第 {i} 次审校的 signed_bit3={got.get('signed_bit3')!r} —— 2026-10-29 口径："
+            f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（第 1、2 次只落台账），"
+            f"读到的发签决定：{got.get('sign_issuance')}", got)
+    return outs
+
+
 # ============================================================ 1. 边表就是裁定说的那一个面
 #: 反真空用的坏表：A → L（裁定说只有 B 可以派 L）。
 _BAD_EDGES = {role: frozenset(targets) for role, targets in C.ALLOWED_EDGES.items()}
@@ -450,9 +512,12 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
 
     反真空：两次签名必须是两个号（`v-NNNN` 不同），且第二次签的正文是新的那一份
     （`review_standing` 读成 signed —— 旧签在新正文上是 stale）。
+
+    2026-10-29 口径：同一份正文要连续 `SIGN_STREAK_NEED` 次「成立」且秘书判定通过才发签
+    （第 1、2 次只落台账）⇒ 两段都按同一份正文连审，`_reviews_until_signed` 里钉住
+    "前几次不签"。
     """
     from agentflow import verifications as VR
-    from agentflow.agent_v import AgentV
     from agentflow.store import Store
 
     ws = tmp_path / "ws"
@@ -465,8 +530,8 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     sid = str(first.get("stmt_id") or "")
     assert sid, first
 
-    v = AgentV(st, workspace_root=ws,
-               llm=_Seam([_verdict_json("有毛病", step=LINKS + 1)]))
+    bad_replies = [_verdict_json("有毛病", step=LINKS + 1)] * int(VR.SIGN_STREAK_NEED)
+    v = _v_agent(st, ws, bad_replies)
     signed1 = v.verify_proof(sid, proof_text=old)
     assert signed1.get("checked") is True, signed1
     assert signed1.get("verdict") == "有毛病", signed1
@@ -480,9 +545,10 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     history = [dict(h) for h in (row.get("proof_history") or [])]
     assert [str(h.get("text") or "") for h in history] == [old], history
 
-    # ---- 重新得 V 签：新正文，新号，结论成立
-    v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")]))
-    signed2 = v2.verify_proof(sid, proof_text=new)
+    # ---- 重新得 V 签：新正文，新号，结论成立（连审到发签门槛）
+    v2 = _v_agent(st, ws, [_verdict_json("成立")] * int(VR.SIGN_STREAK_NEED))
+    reviewed = _reviews_until_signed(v2, sid, new)
+    signed2 = reviewed[-1]
     assert signed2.get("checked") is True, signed2
     assert signed2.get("verdict") == "成立", signed2
     assert str(signed2.get("verification_id") or "").startswith("v-"), signed2

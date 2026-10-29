@@ -68,7 +68,14 @@ def _ws(path: pathlib.Path) -> Store:
 
 def _add_statement(store: Store, stmt_id: str, *, label: str = "",
                    level: str = "proof_review") -> dict:
-    """写一条在册命题；要 `proof_review` 就先让 V 签，再升档（写入期有闸）。"""
+    """写一条在册命题；要 `proof_review` 就先让 V 签，再升档（写入期有闸）。
+
+    ## 为什么要签满 `SIGN_STREAK_NEED` 次（2026-10-29 口径）
+    写入期那道闸（`store` 的 `proof_review_without_evidence`）现在读的是"连续 3 次
+    「成立」且同一份正文"的签；改前它读的是"有一次「成立」"。所以夹具按同一份正文、
+    同一证明号连签，并在这里钉住"第 1、2 次不翻位、第 3 次才翻"这条正控 ——
+    `evidence_kind='proof_review'` 那一档的准入判据一个字都没放宽。
+    """
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=label or f"在册命题 {stmt_id}",
@@ -82,12 +89,18 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row.to_dict())
     if level == "proof_review":
-        signed = VR.record_verification(
-            store.root, statement_id=stmt_id,
-            proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
-            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
-        assert signed.get("checked") is True, signed
+        need = int(VR.SIGN_STREAK_NEED)
+        for i in range(1, need + 1):
+            signed = VR.record_verification(
+                store.root, statement_id=stmt_id,
+                proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+                verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+                store=store, proof_no=1)
+            assert signed.get("checked") is True, signed
+            written = bool((signed.get("statement_writeback") or {}).get("written"))
+            assert written is (i == need), (
+                f"第 {i} 次「成立」的翻位读数是 written={written!r} —— 2026-10-29 口径："
+                f"连续 {need} 次才发签，第 1..{need - 1} 次只落台账", signed)
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
     got["evidence_kind"] = level
@@ -333,6 +346,65 @@ class _VSeam:
         return SimpleNamespace(text=self.reply, problem="")
 
 
+class _SecCall:
+    """`llmseam.SeamCall` 的替身：`Secretary.judge()` 只读 ok / problem / detail。"""
+
+    ok = True
+    problem = ""
+    detail = ""
+
+
+class _SecSeam:
+    """V 的秘书那一档的离线替身缝（只答两件事：V 的回复没问题 / 这一签发）。
+
+    2026-10-29 口径：签由 V 的秘书判、也由它落盘。没有这条缝时 `signed_bit3` 恒为假
+    —— 那是装配缺失，不是这条端到端判据要量的东西。
+    """
+
+    wired = True
+
+    def __init__(self) -> None:
+        self.kinds: list[str] = []
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "") -> tuple[dict, _SecCall]:
+        from agentflow import secretary as _SEC
+
+        kind = note.split(":", 1)[-1]
+        self.kinds.append(kind)
+        if kind == "sign_issuance":
+            doc = {"decision": _SEC.SIGN_ISSUE, "reason": "夹具：三次成立都干净 ⇒ 发签",
+                   "basis": ["夹具"]}
+        else:
+            doc = {"decision": _SEC.V_REPLY_CLEAN, "reason": "夹具：照规则判 clean",
+                   "basis": ["夹具"]}
+        return dict(doc), _SecCall()
+
+
+def _v_with_secretary(store: Store, llm) -> AgentV:
+    """V 和它的秘书（2026-10-29：V 只落台账，翻位是秘书那一侧的事）。"""
+    from agentflow import secretary as _SEC
+
+    sec = _SEC.Secretary("V", root=pathlib.Path(store.root), store=store,
+                         seam=_SecSeam(), enable_model=True)
+    return AgentV(store, workspace_root=store.root, llm=llm, secretary=sec)
+
+
+def _v_reviews_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
+    """同一份正文连审到发签门槛（前几次不签，最后一次才签 —— 新口径的正控）。"""
+    outs: list[dict] = []
+    need = int(VR.SIGN_STREAK_NEED)
+    for i in range(1, need + 1):
+        got = agent.verify_proof(sid, proof_text=text)
+        outs.append(got)
+        assert got.get("checked") is True, got
+        assert got.get("signed_bit3") is (i == need), (
+            f"第 {i} 次审校的 signed_bit3={got.get('signed_bit3')!r} —— 2026-10-29 口径："
+            f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（第 1、2 次只落台账）；"
+            f"发签决定读数：{got.get('sign_issuance')}", got)
+    return outs
+
+
 def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> None:
     """端到端：F 真推一轮 → 稿 → D 直接交 B → 依赖行 → V 签字。
 
@@ -356,15 +428,20 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
                              "quote_verbatim": False,
                              "note": "由定理甲那一步，用法一致"}]}, ensure_ascii=False)
     v_llm = _VSeam(reply)
-    v = AgentV(store, workspace_root=store.root, llm=v_llm)
+    v = _v_with_secretary(store, v_llm)
     row = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == f_stmt)
-    signed = v.verify_proof(f_stmt, proof_text=str(row.get("proof_text") or ""))
+    # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签
+    reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""))
+    signed = reviewed[-1]
     assert signed.get("signed_bit3") is True, signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {THEOREM_A}, signed
     assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)
     assert problems == [] and ledger, (problems, ledger)
+    assert len(ledger) == int(VR.SIGN_STREAK_NEED), (
+        "前两次「成立」也必须落在台账里（只落台账、不翻位），"
+        f"读到 {len(ledger)} 行：{[r.get('verification_id') for r in ledger]}")
     assert str(ledger[-1].get("verdict")) == "成立", ledger[-1]
 
 
