@@ -19,7 +19,7 @@ B1（`t-000006`）81 分钟只走了 4 步、`status` 一直是 running，而 M 
 现在同一条报醒后面另起一句，带当拍现算的四类异常（每类给条数 + 点名绝对编号）：
 
     ① 停滞子：`status=running` 而超过 N 分钟没有新步（点名 + `stalled_sec`）
-    ② 静默未销号的子：无工作、无计时器、无活跃子，却还留在册上（给销号指路）
+    ② 静默未销号的子：已收工、没别的事（只在等与它有关的消息或委托），却还留在册上（给销号指路）
     ③ 未消板项：`item_state != done` 的条数，按 expect 分 ack / work
     ④ 被拦的结项原因：最近一次 `final_refused` / 板项闸的拒信首句
 
@@ -362,7 +362,7 @@ def test_f_periodic_start_shows_what_the_wake_will_carry(tmp_path) -> None:
     got = started.data["patrol_checklist"]
     assert got["checked"] is True, got
     assert got["counts"]["silent"]["count"] == 1, got
-    assert f"{child_id}（D，无工作、无计时器、无活跃子，却还留在册上" in got["wake_sample"], got
+    assert f"{child_id}（D，已收工、没别的事（只在等与它有关的消息或委托），却还留在册上" in got["wake_sample"], got
     # 三态：读口没接上时这一格必须如实说没查成（不许折成"四类都是 0"）。
     C.set_patrol_probe(None)
     try:

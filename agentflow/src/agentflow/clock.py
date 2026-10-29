@@ -369,7 +369,7 @@ def no_timers_refusal(*, role: str = "") -> str:
         "没有可等的东西就不该挂在这一档上。两条正路："
         "① 先起一条表：等子写 wait_for=<名册名或绝对编号>，等程序用 "
         "clock.start_program(...)，等时间用 after_sec=…；"
-        "② 或者按交差收工：无事可做 + 无计时器 = 交差（父代理那一侧会把你记为静默）。")
+        "② 或者按交差收工：干完活、又没有你在等的表 ⇒ 就停在这里（父代理那一侧把它记为静默；父的消息或你的表回来会把你叫起来）。")
 
 
 class ClockStateError(ClockError):
@@ -806,7 +806,7 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
     四类各占一句，每句都带"条数"两个字（判据按它认出"这一类查过了"）：
 
         ① 停滞子：`status=running` 而超过阈值没有新步（点名绝对编号 + stalled_sec）
-        ② 静默未销号的子：无工作、无计时器、无活跃子，却不是 retired（给销号指路）
+        ② 静默未销号的子：已收工、没别的事（只在等与它有关的消息或委托），却不是 retired（给销号指路）
         ③ 未消板项：`item_state != done` 的条数，按 expect 分 ack / work
         ④ 被拦的结项原因：最近一次 final_refused / 板项闸的拒信首句
 
@@ -848,7 +848,7 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
     elif int(silent.get("count") or 0):
         named = "、".join(
             f"{str(r.get('task_id') or '?')}（{str(r.get('role') or '?')}"
-            f"，{str(r.get('why') or '无工作、无计时器、无活跃子，却还在册')}；"
+            f"，{str(r.get('why') or '已收工、没别的事（只在等与它有关的消息或委托），却还在册')}；"
             "要销号它吗 —— 走 conductor.retire_child）"
             for r in (silent.get("rows") or ()))
         bits.append(f"② 静默未销号的子 条数 {int(silent['count'])}：{named}")

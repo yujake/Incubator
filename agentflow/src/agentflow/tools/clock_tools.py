@@ -627,7 +627,7 @@ def _patrol_probe(workspace: str, task_id: str = "") -> dict[str, Any]:
     silent_rows = [{"task_id": str(n.get("task_id") or ""),
                     "role": str(n.get("role") or ""),
                     "status": str(n.get("status") or ""),
-                    "why": "无工作、无计时器、无活跃子，却还留在册上"}
+                    "why": "已收工、没别的事（只在等与它有关的消息或委托），却还留在册上"}
                    for n in nodes if str(n.get("state") or "") == "silent"]
     out["silent"] = {"checked": True, "count": len(silent_rows), "rows": silent_rows,
                      "reason": ""}

@@ -1600,7 +1600,7 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
     "已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；"
     "程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。"
     "第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的"
-    "（无工作、无任何计时器、无活跃子代理）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、"
+    "（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、"
     "待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒"
     "（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。"
     "三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / "
@@ -1706,7 +1706,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     所以子树里只要还有活跃节点这一档就拒绝，并把它的状态与最近报告端回去。
 
     ## 只有静默可销（业主 2026-10-26：「销号可以也只可针对静默子代理」）
-    静默 = 无工作 ∧ 无任何计时器 ∧ 无活跃子代理。三档拒信各自点名它现在在哪一档、
+    静默 = 只挂着兜底计时器（已收工、没别的事）。三档拒信各自点名它现在在哪一档、
     为什么不能销：在飞 ⇒ 它还在干活（销号等于把它手上的活扔掉）；待机 ⇒ 它挂着 N 条
     计时器（逐条给目的与到点时刻），它还会醒过来；未读到 ⇒ 读不到它是不是静默，
     一律不许销（fail-closed）。拒信用 `refusal_code=target_not_silent` 与
@@ -3875,7 +3875,7 @@ def conductor_patrol_verdict(_conductor: Any, store: Any, *, code: str,
                 chain_text=str(item.get("chain_text") or ""))
     if state == AGENT_STATE_SILENT:
         data.update(status="refused", refused="target_not_active",
-                    reason=(f"{want} 此刻是静默（它已经收工：无工作、无计时器、"
+                    reason=(f"{want} 此刻是静默（它已经收工、没别的事：只在等与它有关的消息或委托、"
                             "无活跃子代理）⇒ 一个不活跃的子代理没有『过』可言："
                             "该销号就销号（`conductor.retire_child`）"))
         return _done()
