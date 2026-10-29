@@ -6607,13 +6607,40 @@ def _new_lifeline_timer(workspace: str | Path, *, task_id: str, role: str,
 def _renew_lifeline(timer: Timer) -> dict[str, Any]:
     """一条兜底计时器被打掉之后，立刻续一条新的（幂等：同一台账号恰好一条）。
 
-    失败不抛：续不上要能被读数看见（`armed=False` + 理由），而不是把一次投递搞崩。
+    除了续，还要叫醒它：兜底表被打掉就是有与我有关的东西来了（业主 2026-10-29 第 1、2 条）。
+    叫醒由运行期注入的钩子做（`set_lifeline_wake_handler`）—— 时钟不 import 编排层。
+    失败不抛：续不上、叫不醒都要能被读数看见，而不是把一次投递搞崩。
     """
     if not is_lifeline(timer):
-        return {"armed": False, "skipped": "not_lifeline"}
+        return {"armed": False, "skipped": "not_lifeline", "woke": False}
+    out: dict[str, Any] = {"armed": False, "skipped": "", "woke": False, "wake_reason": ""}
     try:
-        return arm_lifeline(timer.workspace, task_id=str(timer.task_id or ""),
-                            role=str(timer.role or ""))
+        out.update(arm_lifeline(timer.workspace, task_id=str(timer.task_id or ""),
+                                role=str(timer.role or "")))
     except Exception as exc:  # noqa: BLE001 - 续不上不许带走这次投递
-        return {"armed": False, "skipped": "error",
-                "reason": f"{type(exc).__name__}: {exc}"}
+        out.update({"armed": False, "skipped": "error",
+                    "reason": f"{type(exc).__name__}: {exc}"})
+    handler = _LIFELINE_WAKE_HANDLER
+    if handler is None:
+        out["wake_reason"] = ("没有接叫醒钩子（set_lifeline_wake_handler 未接线）"
+                              "：这次只是续上，没人被叫起来")
+        return out
+    try:
+        got = handler(str(timer.task_id or ""))
+    except Exception as exc:  # noqa: BLE001 - 叫不醒也要如实记
+        out["wake_reason"] = f"叫醒失败（{type(exc).__name__}: {exc}）"
+        return out
+    out["woke"] = True
+    out["wake_reason"] = str(got.get("reason") or "") if isinstance(got, Mapping) else ""
+    return out
+
+
+#: 兜底表被打掉时"把那个代理叫起来"的钩子（运行期注入；未接线时读数里写得出来）。
+_LIFELINE_WAKE_HANDLER: Callable[[str], Any] | None = None
+
+
+def set_lifeline_wake_handler(handler: Callable[[str], Any] | None):
+    """接上/摘掉叫醒钩子（照 `set_due_handler` 的形状；参数是台账号，返回读数）。"""
+    global _LIFELINE_WAKE_HANDLER
+    _LIFELINE_WAKE_HANDLER = handler
+    return handler

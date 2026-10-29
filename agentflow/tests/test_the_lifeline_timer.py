@@ -74,6 +74,26 @@ def test_a_finished_account_is_not_read_as_a_closed_target() -> None:
     assert reasons == [], reasons
 
 
+def test_consuming_it_calls_the_wake_hook_once() -> None:
+    """兜底表被打掉 = 有与我有关的东西来了 ⇒ 叫醒钩子被调一次（带台账号）。
+
+    时钟不 import 编排层：叫醒这件事由运行期注入的钩子做（`set_lifeline_wake_handler`）。
+    没接钩子时也必须留可读理由，不许静默地"只续不叫"。
+    """
+    ws = _workspace()
+    me = "t-000009"
+    seen: list[str] = []
+    CLK.set_lifeline_wake_handler(lambda tid: (seen.append(tid), {"reason": ""})[1])
+    try:
+        CLK.arm_lifeline(ws, task_id=me, role="D")
+        CLK.observe_event("message", task_id=me, from_task_id="t-000001", role="M",
+                          content="继续", message_id="m-9")
+        CLK.fire_due(ws)
+        assert seen == [me], seen
+        assert len(CLK.lifeline_of(ws, me)) == 1, CLK.lifeline_of(ws, me)
+    finally:
+        CLK.set_lifeline_wake_handler(None)
+
 def test_only_the_lifeline_is_silent_and_own_timers_are_standby() -> None:
     """只挂兜底计时器 ⇒ 静默；挂着模型自己起的表 ⇒ 待机（双向，防两档折平）。"""
     from agentflow import conductor as C
