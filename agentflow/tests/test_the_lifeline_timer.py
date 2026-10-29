@@ -74,6 +74,42 @@ def test_a_finished_account_is_not_read_as_a_closed_target() -> None:
     assert reasons == [], reasons
 
 
+def test_the_cross_process_boundary_is_written_down() -> None:
+    """业主 2026-10-29：不做自动唤醒/跨进程扫描，但"手上有活没结"的代理要能被动唤起。
+
+    完整口径两句，缺一句都会读歪：
+      · 停机之后再起进程，不许自动把盘上所有还挂着兜底表的代理拉起来 ——
+        M 那一侧的记忆还停在"全组停机"，自动唤醒会让 M 非常意外；
+      · 但那些代理是需要唤醒的：靠 M 发指令，或它接到别的指令后被动唤起。
+    断三件：
+      · 源码里留着这条边界（不做自动唤醒 / 靠 M 发指令 / 被动）；
+      · `clock` 没有任何"唤醒全部"的入口（没有扫描器就不会自动拉起全组）；
+      · 被动唤起那条路是活的：注销"在跑"登记之后，一条与它有关的事件仍然会叫醒它。
+    """
+    import inspect
+
+    src = inspect.getsource(CLK)
+    assert "不做自动唤醒" in src, "边界那句话被删掉了"
+    assert "M 侧发指令" in src and "被动" in src, "边界那句话被改写成了半边"
+    assert "听上级指挥" in src, "「由上级指挥、不许无脑全重启」那条裁定被删掉了"
+    for name in ("wake_all", "wake_all_lifelines", "sweep_lifelines"):
+        assert not hasattr(CLK, name), f"出现了自动唤醒的入口：{name}"
+
+    ws = _workspace()
+    me = "t-000012"
+    seen: list[str] = []
+    CLK.set_lifeline_wake_handler(lambda tid: (seen.append(tid), {"reason": ""})[1])
+    try:
+        CLK.arm_lifeline(ws, task_id=me, role="D")
+        CLK.loop_ended(me)          # 这一趟已经收工（不再是"在跑"）
+        CLK.observe_event("message", task_id=me, from_task_id="t-000001", role="M",
+                          content="接着做那件没结的活", message_id="m-resume")
+        CLK.fire_due(ws)
+        assert seen == [me], seen
+    finally:
+        CLK.set_lifeline_wake_handler(None)
+
+
 def test_killing_it_is_permanent() -> None:
     """销号要把它撤掉，而且不许再长回来（"已销号 = 彻底没有了"）。
 
