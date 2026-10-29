@@ -6843,12 +6843,13 @@ class AgentLoop:
         self.my_task_id = my_task_id
         self.depth = depth
         # 兜底计时器（业主 2026-10-29 第 3 条：通用设计，每个台账号一条）：
-        # 入口在 `_arm_lifeline_once`，但这一轮不在这里调——实测两处回归：
-        #   ① 它 is_park=True，`_park_reading` 会把它算成"在等谁" ⇒ 这一趟永远 park；
-        #   ② 它被打掉就调 `wake_on_lifeline` ⇒ `resume_dispatched` 另起同号循环 ⇒
-        #      起跑即自我唤醒，测试整个挂住（`test_timers_and_handoff_semantics` 超时）。
-        # 要接上它，得先给"叫醒"加一条"这一趟就是我、别叫我自己"的判据；在那之前
-        # 只保留入口 + 判据（`tests/test_the_lifeline_timer.py`），真机不自动挂。
+        # 入口在 `_arm_lifeline_once`；这里仍然不调 —— 第二次接线实测仍挂住
+        # （`test_timers_and_handoff_semantics` 超时）。已有的两条前提没能救下它：
+        #   ① `_park_reading` 已排除 lifeline（不会永远 park）；
+        #   ② `wake_on_lifeline` 已加"目标在跑就不叫"（2a5b969）。
+        # 说明还有第三条没找出来 —— 最可能是：起跑那一刻台账那一行还不是 running
+        # （或还没落行），于是"在跑就别叫"这条判据看不见它，`resume_dispatched`
+        # 照样另起一个同号循环。这条线索记在 `draft/113`，要先把台账行的时序摸清再接线。
         # 这一趟的收件人（父是谁）现算一次：它既是提示词里 `{{parent_task_id}}` 那一格，
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(

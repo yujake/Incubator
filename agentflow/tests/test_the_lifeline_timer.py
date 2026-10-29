@@ -133,6 +133,29 @@ def test_only_the_lifeline_is_silent_and_own_timers_are_standby() -> None:
     assert [w["id"] for w in second["waiters"]], second
 
 
+def test_the_loop_start_entry_arms_exactly_one() -> None:
+    """循环起跑处的入口 `_arm_lifeline_once`：挂上一条，第二次是 already。
+
+    这一条只钉入口本身（用鸭子类型的替身，不跑真循环）。它和"接进 run()"是两件事：
+    接进去之后 `test_timers_and_handoff_semantics` 仍然挂住（见 draft/113 的线索），
+    所以入口可用、接线待定 —— 判据把这两件事分开写，免得以后误以为接线也验过了。
+    """
+    from agentflow.agent_loop import AgentLoop
+
+    ws = _workspace()
+    fake = type("L", (), {})()
+    fake.my_task_id = "t-000007"
+    fake.role = "D"
+    fake.lifeline_reading = None
+    fake._clock_root = lambda: str(ws)
+
+    first = AgentLoop._arm_lifeline_once(fake)
+    assert first["armed"] is True, first
+    assert len(CLK.lifeline_of(ws, "t-000007")) == 1, CLK.lifeline_of(ws, "t-000007")
+    second = AgentLoop._arm_lifeline_once(fake)
+    assert second["skipped"] == "already", second
+    assert fake.lifeline_reading == second, fake.lifeline_reading
+
 def test_a_neighbours_event_does_not_wake_it() -> None:
     """射程：与它无关的事件不许把它叫醒（业主 2026-10-29 第 1 条）。
 
