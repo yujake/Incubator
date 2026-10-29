@@ -242,6 +242,35 @@ def _b_problems(env: dict[str, Any]) -> list[str]:
     return problems
 
 
+def test_h_the_ready_list_and_the_retire_agree(tmp_path: pathlib.Path) -> None:
+    """②-a：`retire_ready` 的分支判定与 `retire` 的实际回执必须同答案。
+
+    父是照着 `retire_ready` 的清单去销的；两者一旦分家，父就会"看到可销 → 去销被拒 →
+    再看还是可销"来回打转（`paper-rewrite-80` 的收工闸就是这么耗掉的，见 draft/114）。
+
+    判据：branch 不在（active / waiting_with_children）⇔ 销号回执不是 refused。
+    """
+    env = _a_env(tmp_path)
+    ctx = dict(env["silent"])
+    reading = env["cond"].retire_ready(str(env["owner"]))
+    rows = {str(r.get("task_id") or ""): r for r in (reading.get("ready") or ())}
+    row = rows.get(str(ctx["task_id"]))
+    assert row is not None, (
+        f"就绪清单里没有 {ctx['task_id']}（清单只列了 {sorted(rows)}；"
+        f"checked={reading.get('checked')}、reason={reading.get('reason')!r}）")
+    branch = str(row.get("branch") or "")
+
+    res = _call(env, child_name=str(ctx["name"]), reason="②-a：就绪清单说可以销")
+    data = _data_of(res)
+    ready_says = branch not in ("active", "waiting_with_children")
+    retire_says = data.get("state") != "refused"
+    assert ready_says == retire_says, (
+        f"两处读数分家：retire_ready 的 branch={branch!r}"
+        f"（说{'可销' if ready_says else '不可销'}），"
+        f"retire 的回执 state={data.get('state')!r}"
+        f"（{'放行' if retire_says else '拒绝'}）；拒因：{data.get('reason') or data.get('why')}")
+
+
 def test_b_a_flying_child_is_refused_by_the_silent_gate(tmp_path: pathlib.Path) -> None:
     """b) 在飞的子 ⇒ 拒 `target_not_silent` ＋ 拒信说"它还在干活"。
 
