@@ -1236,6 +1236,11 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
      "`test_tools_returns_declaration.py` 按判据编号引它的口径（编号是那份文件的，不是接替者的）"),
     ("test_e_lean_side_is_hard_off.py",
      "同一份的裸名写法（`test_e_has_no_lean_memory_left.py` 里几处同口径的出处）"),
+    # —— 2026-10-29（本仓"彻底删掉机械判档"那一笔之后）：已删判据的名字，引用是出处 ——
+    ("tests/test_nontriviality_is_judged_by_effort.py",
+     "已删的非平凡性机械判档判据：`src/agentflow/secretary.py` 的 `proof_effort_readings` 在讲"
+     "「这个读数被打了桩之后哪几条判据会跟着红」时逐字点名它的 (f) 当实例；它随机械判档整族"
+     "被删（档位只剩秘书一个来源），名字得留着，否则那个实例无出处"),
 )
 
 
