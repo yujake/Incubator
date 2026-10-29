@@ -320,6 +320,10 @@ def test_i_the_silent_answer_is_the_same_in_every_reader(tmp_path: pathlib.Path)
     mine = [n for n in nodes if str(n.get("task_id") or "") == child]
     assert mine, f"roster_face 里没有 {child}（节点数 {len(nodes)}）"
     assert str(mine[0].get("state") or "") == "standby", mine[0]
+    # 第六处 patrol（M 的巡视读数）本夹具覆盖不了：它的 items 来自"按名册深度优先的
+    # 活跃子代理树"，而这组夹具里没有真的 M 循环在跑（`_patrol_reading` 在这个盘上列 0 条，
+    # 实测三次：不带 here、带 here、带 calling_as 都是 0）。它要一个"M 循环 + 名册树"的
+    # 集成夹具，已记进 draft/115 ②-b，不在这里假装测过。
 
 def test_j_retiring_kills_the_lifeline_and_stops_the_rearm(tmp_path: pathlib.Path) -> None:
     """销号必须把兜底计时器销掉，并且停止自动重挂（业主 2026-10-29）。
