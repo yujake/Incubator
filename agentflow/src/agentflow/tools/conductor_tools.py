@@ -762,6 +762,28 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
             "created": created, "ingested": ingested}
     return ok(data, **data)
 
+def _states_reading(c: Any) -> dict[str, Any]:
+    """三态合计（业主 2026-10-29：`conductor.state` 此前零三态，是审计点名的漏点）。
+
+    返回 `checked` / `counts`（按 state 计数）/ `by_task`（逐号那一格）/ `reason`。
+    三态纪律：读不成 ⇒ `checked=False` + 理由，"没查成"不许折成"一条都没有"。
+    """
+    out: dict[str, Any] = {"checked": False, "counts": {}, "by_task": {}, "reason": ""}
+    try:
+        snap = dict(c.activity_snapshot())
+    except Exception as exc:  # noqa: BLE001 —— 读不成如实记
+        out["reason"] = f"{type(exc).__name__}: {exc}"
+        return out
+    by_task = {str(k): dict(v) for k, v in (snap.get("by_task") or {}).items()}
+    counts: dict[str, int] = {}
+    for cell in by_task.values():
+        key = str(cell.get("state") or "")
+        counts[key] = counts.get(key, 0) + 1
+    out.update({"checked": bool(snap.get("checked", True)), "counts": counts,
+                "by_task": by_task, "reason": str(snap.get("reason") or "")})
+    return out
+
+
 def _queue_backlog(store_: Any) -> dict[str, Any]:
     """两条请求队列里「还没人做」的读数（`draft/39` §6.45 的 D56）。
 
@@ -864,7 +886,7 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
-    returns="{'root','tables','conjectures','tasks','queues','programs'}",
+    returns="{'root','tables','conjectures','tasks','queues','programs','states'}",
 )
 def conductor_state(_conductor, ) -> ToolResult:
     """工具体：只读状态视图（给主控判断用，不含建议）。
@@ -937,7 +959,8 @@ def conductor_state(_conductor, ) -> ToolResult:
                          + list(programs["orphan_named"]))
     data = {"root": str(getattr(store_, "root", "")), "tables": tables,
             "conjectures": conjectures, "tasks": len(c.tree()),
-            "queues": _queue_backlog(store_), "programs": programs}
+            "queues": _queue_backlog(store_), "programs": programs,
+            "states": _states_reading(c)}
     return ok(data, **data)
 
 @tool(

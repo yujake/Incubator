@@ -353,6 +353,29 @@ def test_j_retiring_kills_the_lifeline_and_stops_the_rearm(tmp_path: pathlib.Pat
     assert again.get("armed") is False and again.get("skipped") == "suppressed", again
 
 
+def test_k_the_state_view_now_carries_the_three_states(tmp_path: pathlib.Path) -> None:
+    """③ `conductor.state` 必须带三态读数（审计点名的"零三态"漏点）。
+
+    M 的"现在什么情况"第一入口若没有三态，它就只能靠猜或另开一次工具调用；
+    而巡视与收工判断都建立在这份读数上。这里断三件：
+      · `states.checked` 为真（读成了，不许折成"没有"）；
+      · `states.by_task[子].state` 与 `agent_state` 同字（这一档是静默）；
+      · `states.counts` 里静默至少 1 条。
+    """
+    env = _a_env(tmp_path)
+    child = str(env["silent"]["task_id"])
+    reg = ToolRegistry(name="state-view")
+    CT.register(reg, store=env["store"], conductor=env["cond"])
+    with calling_as(str(env["owner"]), "M"):
+        res = reg.call("conductor.state", {}, role="M")
+    assert getattr(res, "ok", False), getattr(res, "error", res)
+    states = dict((res.data or {}).get("states") or {})
+    assert states.get("checked") is True, states
+    by_task = dict(states.get("by_task") or {})
+    assert str((by_task.get(child) or {}).get("state") or "") == "silent", by_task.get(child)
+    assert int((states.get("counts") or {}).get("silent") or 0) >= 1, states.get("counts")
+
+
 def test_b_a_flying_child_is_refused_by_the_silent_gate(tmp_path: pathlib.Path) -> None:
     """b) 在飞的子 ⇒ 拒 `target_not_silent` ＋ 拒信说"它还在干活"。
 
