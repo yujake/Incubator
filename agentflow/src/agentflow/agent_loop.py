@@ -5975,6 +5975,9 @@ class AgentLoop:
                 run.park["wait_any"] = True
         elif want.get("requested") and not pending_timers:
             # ② 显式要求等 + 一条计时器都没有 ⇒ 无事可做 ⇒ 交差
+            # 兜底表在这里挂（而不是起跑处）：它只在"这一趟要静默了"的这一刻存在。
+            # 起跑处挂会让活跃期间的每次投递都被它命中 —— 那正是前三次挂死的原因。
+            self._arm_lifeline_once()
             out.update(skip_model=True, decision="handoff",
                        reason=("它要求等任意计时器返回，而一条计时器都没有 ⇒ "
                                "无事可做且无计时器 ⇒ 交差（向父代理报告）"))
