@@ -33,7 +33,7 @@ B 拿到 stmt:000008 的完整证明（F 的手稿 7595 B / 54 行），要把�
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
 | a 带正文的那一笔真的落盘 | `proof_text` 换成全文、旧正文进 `proof_history`（`text`/`sha`/`replaced_by` 逐条对得上） | 改前 `ok:true` 而 `proof_text` 一个字没动、`proof_history` 空（上面路 1 的原话） |
-| a2 旧签不再算数、但不删 | 覆盖之后 `review_standing.state=="stale"`、`bits.reviewed` 读成 False、签名台账里那一签还在 | 改前正文没变 ⇒ 旧签照样算数（挡签链因此永远进不到场） |
+| a2 旧签不再算数、但不删 | 覆盖之后 `review_standing.state=="stale"`、`bits.reviewed` 读成 False、签名台账里那 3 票还在（业主 2026-10-29：连续 3 次「成立」才签，第 1、2 次只落台账） | 改前正文没变 ⇒ 旧签照样算数（挡签链因此永远进不到场） |
 | b1 反真空（A 的排除项） | 把 `_carries_canonical_write` 打成恒 False ⇒ a 必红 | —— |
 | b2 别条命题的稿不许当依赖源 | 只交别条命题的稿 ⇒ `manuscript_owner_mismatch`，拒信点名两个号；`dependencies` 一行不落 | 改前 `ok:true`、被当成这条命题的稿 |
 | b3 带正文 + 别条命题的稿 | 正文照写、那份稿的依赖面一条不落，读数 `manuscript_owner` 点名它属于谁 | 改前正文写不进去 |
@@ -141,11 +141,37 @@ def _row(st: Store) -> dict:
 
 
 def _sign(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
-    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。"""
+    """V 的一次审校（`verify.verify_proof` 走的就是它；这里不经模型）= 台账一票。
+
+    业主 2026-10-29 的口径：一票不翻位。同一份正文连续 3 次「成立」才轮到
+    秘书发签（`SIGN_STREAK_NEED`），第 1、2 次只落台账、`bits.evidence` 不翻位。
+    """
     return VR.record_verification(
         st.root, statement_id=stmt_id or SID, proof_text=proof_text,
         verdict={"verdict": "成立", "findings": []}, verifier="agent-V", store=st,
         proof_no=1)
+
+
+def _sign_three(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
+    """凑够「连续 3 次成立、同一份正文」的那一签（第 3 次才翻位）。
+
+    顺带把口径钉在这一个夹具里：第 1 次与第 2 次的 `written` 必须是 False、
+    位必须还是 False —— 否则"3 次之后才签"这件事在夹具上就没被量到。
+    """
+    rows = []
+    for i in (1, 2):
+        got = _sign(st, proof_text=proof_text, stmt_id=stmt_id)
+        wb = dict(got.get("statement_writeback") or {})
+        assert wb.get("written") is False, (f"第 {i} 次「成立」就把第 3 位翻了", wb)
+        assert int(wb.get("streak") or 0) == i, (f"第 {i} 次的连续读数不对", wb)
+        assert EB.bits_from_row(_row(st))["reviewed"] is False, (
+            f"第 {i} 次「成立」之后位已经翻上去（业主 2026-10-29：第 1、2 次不翻位）")
+        rows.append(got)
+    third = _sign(st, proof_text=proof_text, stmt_id=stmt_id)
+    wb = dict(third.get("statement_writeback") or {})
+    assert wb.get("written") is True, ("连续 3 次成立之后仍然不发签", wb)
+    assert int(wb.get("streak") or 0) == int(wb.get("need") or VR.SIGN_STREAK_NEED) == 3, wb
+    return third
 
 
 def _deps_count(st: Store) -> int:
@@ -196,13 +222,24 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     """a2 判据：换完正文之后 V 的旧签不再算数，而台账里那一签不删（审计可查）。
 
     "不再算数"由读侧现算（`review_standing` 的 stale）与位（`bits.reviewed=False`）
-    各说一遍；"不删"由签名台账里那一行仍在、`verification_id` 仍是它来钉。
+    各说一遍；"不删"由签名台账里那几行仍在、`verification_id` 仍是最近那一签来钉。
+
+    口径（业主 2026-10-29）：签不是"一次成立就签"。夹具因此先断"1 次不签、2 次不签"，
+    再断"3 次之后才签"（同一份正文、同一证明号），然后才做覆盖那一步。
     """
     st = _ws(tmp_path)
     sid = _own(st)
+    one = _sign(st, proof_text=TRUNCATED, stmt_id=sid)
+    assert one["verification_id"].startswith("v-"), one
+    assert EB.bits_from_row(_row(st))["reviewed"] is False, (
+        "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）")
+    two = _sign(st, proof_text=TRUNCATED, stmt_id=sid)
+    assert EB.bits_from_row(_row(st))["reviewed"] is False, (
+        "第 2 次「成立」就把第 3 位翻了（连续 3 次才发签）")
     signed = _sign(st, proof_text=TRUNCATED, stmt_id=sid)
     assert str(signed.get("verification_id") or "").startswith("v-"), signed
-    assert EB.bits_from_row(_row(st))["reviewed"] is True, "正控：签完之后这一位必须是 True"
+    assert EB.bits_from_row(_row(st))["reviewed"] is True, (
+        "正控：连续 3 次「成立」之后这一位必须是 True")
 
     _foreign_manuscript_on_disk(st)
     out = _agent(st).register_statement(
@@ -221,8 +258,10 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     assert EB.bits_from_row(_row(st))["reviewed"] is False, _row(st).get("bits")
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert problems == [], problems
-    assert [r["verification_id"] for r in rows] == [signed["verification_id"]], (
-        "旧签被删了 —— 审计链断在这里")
+    assert [r["verification_id"] for r in rows] == [
+        one["verification_id"], two["verification_id"], signed["verification_id"]], (
+        "旧签被删了 —— 审计链断在这里（连票数也要留在台账上，缺一行就说不清"
+        "那一版正文当年够不够 3 票）")
 
 
 # ============================================================ b1：反真空

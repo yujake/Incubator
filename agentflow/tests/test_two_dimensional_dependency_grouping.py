@@ -409,12 +409,39 @@ def _statement_with_two_proofs(st: Store) -> dict:
     return row
 
 
+def _sign_n(st: Store, *, proof_text: str, proof_no: int) -> dict:
+    """把某一份证明签够「连续 3 次成立」（同一份正文、同一证明号），返回最末那一票。
+
+    业主 2026-10-29：一票不翻位；第 1 次必须先断"没签上"，第 3 次才断"签上了"。
+    计数按 `(命题号, 证明号)` 分组 ⇒ 这里只签一份，另一份的票一张都不借。
+    """
+    first = VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
+                                   verdict={"verdict": "成立", "findings": []},
+                                   verifier="agent-V", store=st, proof_no=proof_no)
+    wb = dict(first.get("statement_writeback") or {})
+    assert wb.get("written") is False and int(wb.get("streak") or 0) == 1, (
+        "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", wb)
+    VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
+                           verdict={"verdict": "成立", "findings": []},
+                           verifier="agent-V", store=st, proof_no=proof_no)
+    last = VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
+                                  verdict={"verdict": "成立", "findings": []},
+                                  verifier="agent-V", store=st, proof_no=proof_no)
+    wb = dict(last.get("statement_writeback") or {})
+    assert wb.get("written") is True and int(wb.get("streak") or 0) == 3, (
+        "连续 3 次「成立」之后仍然没发签", wb)
+    return last
+
+
 def test_r10_counts_per_statement_and_proof_pair(tmp_path: pathlib.Path):
-    """判据 ⑥：一条命题两条证明、只有 #p2 签过 ⇒ 计数 1，键是 `(stmt, 2)`。
+    """判据 ⑥：一条命题两条证明、只有 #p2 签够 ⇒ 计数 1，键是 `(stmt, 2)`。
 
     改前红：`counted` 里一条命题一行（`{"stmt_id", "grade", "label"}`）⇒
     `counted[0]["proof_no"]` 是 `KeyError` —— 读数答不出"被审过的是哪一条证明"，
     于是"#p2 签过"这件事在收工门上与"#p1 签过"完全同形。
+
+    口径（业主 2026-10-29）：第 3 位要「连续 3 次成立且同一份正文」才翻 ⇒ 每份证明
+    签够 3 票；票数按 `(命题号, 证明号)` 分组，`#p1` 的票一张都不许借给 `#p2`。
     """
     st = _ws(tmp_path)
     _statement_with_two_proofs(st)
@@ -423,10 +450,8 @@ def test_r10_counts_per_statement_and_proof_pair(tmp_path: pathlib.Path):
     assert n0 == 0, d0
     assert d0["counted"] == [], d0
 
-    # 只签第 2 条证明（写入口就是 V 用的那一个，不经模型）。
-    signed = VR.record_verification(st.root, statement_id=SID, proof_text=PROOF2,
-                                    verdict={"verdict": "成立", "findings": []},
-                                    verifier="agent-V", store=st, proof_no=2)
+    # 只签第 2 条证明的 3 票（写入口就是 V 用的那一个，不经模型）。
+    signed = _sign_n(st, proof_text=PROOF2, proof_no=2)
     assert signed["proof_no"] == 2 and signed["proof_sha256"] == VR.proof_sha(PROOF2), signed
 
     n, detail = _r10(st)
@@ -435,15 +460,13 @@ def test_r10_counts_per_statement_and_proof_pair(tmp_path: pathlib.Path):
     assert pairs == [(SID, 2)], (pairs, detail["counted"])
     assert detail.get("counted_total") == 1, detail
     assert detail.get("counted_statements") == 1, detail
-    # #p1 一次都没签 ⇒ 它进"还没审"那一档，不许借 #p2 的签。
+    # #p1 一次都没签 ⇒ 它进"还没审"那一档，不许借 #p2 的 3 票。
     assert detail["proofs_unreviewed"] == [f"{SID}#p1"], detail
     assert detail["proofs_unreviewed_total"] == 1, detail
     assert detail["proofs_stale"] == [], detail
 
-    # 再把 #p1 签掉：逐条证明的计数变成 2，而腿的读数（定理级汇总）仍是 1 条命题。
-    VR.record_verification(st.root, statement_id=SID, proof_text=PROOF1,
-                            verdict={"verdict": "成立", "findings": []},
-                            verifier="agent-V", store=st, proof_no=1)
+    # 再把 #p1 也签够 3 票：逐条证明的计数变成 2，而腿的读数（定理级汇总）仍是 1 条命题。
+    _sign_n(st, proof_text=PROOF1, proof_no=1)
     n2, d2 = _r10(st)
     assert n2 == 1, d2
     assert d2["counted_total"] == 2, d2

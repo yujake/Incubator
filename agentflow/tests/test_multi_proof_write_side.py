@@ -83,10 +83,38 @@ def _row(store: Store) -> dict:
 
 
 def _sign(store: Store, *, text: str = P1, proof_no: int = 1) -> dict:
-    """V 的签名写入口（`verify_proof` 走的就是它；这里不经模型）。"""
+    """V 的一次审校（`verify_proof` 走的就是它；这里不经模型）= 台账一票，不翻位。
+
+    业主 2026-10-29：同一份正文连续 3 次「成立」才发签（`SIGN_STREAK_NEED`）。
+    票数按 `(命题号, 证明号)` 分组 ⇒ 下面 `_sign_n` 只给一份证明投票。
+    """
     return VR.record_verification(
         store.root, statement_id=S.format_id(0), proof_text=text,
         verdict=dict(_OK), verifier="agent-V", store=store, proof_no=proof_no)
+
+
+def _sign_n(store: Store, *, text: str = P1, proof_no: int = 1,
+            n: int = VR.SIGN_STREAK_NEED) -> dict:
+    """再给 `#proof_no` 投 `n` 票（同一份正文、同一证明号），返回最末那一票。
+
+    每一步都断"连续读数按 +1 涨"与"没到门槛就不翻位、到了就翻"：
+    这样"3 次之后才签"与"票按证明号各数各的"两件事在夹具上各自被量到。
+    """
+    last: dict = {}
+    base: int | None = None
+    for i in range(1, int(n) + 1):
+        last = _sign(store, text=text, proof_no=proof_no)
+        wb = dict(last.get("statement_writeback") or {})
+        got = int(wb.get("streak") or 0)
+        if base is None:
+            base = got - 1
+        assert got == base + i, (f"第 {i} 票的连续读数不对（这一批之前 {base} 票）", wb)
+        need = int(wb.get("need") or VR.SIGN_STREAK_NEED)
+        if got >= need:
+            assert wb.get("written") is True, ("票数够了仍然没发签", wb)
+        else:
+            assert wb.get("written") is False, (f"第 {i} 票（{got}/{need}）就把第 3 位翻了", wb)
+    return last
 
 
 def _ledger(store: Store) -> list[dict]:
@@ -260,17 +288,18 @@ def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_
 
 # ============================================================ ④ 签名带对象
 def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
-    """④ 签 `(命题, proof_no=2)` ⇒ 台账行 `stmt_id` 非空、`proof_no=2`、sha 是 #p2 的。
+    """④ 签 `(命题, proof_no=2)` 三票 ⇒ 台账行 `stmt_id` 非空、`proof_no=2`、sha 是 #p2 的。
 
     这一条钉的正是"真机把 `stmt_id` 写成了 None"那个缺口：签名行必须自己说清
-    "我签的是哪条命题的哪一份证明的哪一版正文"，三者一个都不能缺。
+    "我签的是哪条命题的哪一份证明的哪一版正文"，三者一个都不能缺。票数按证明号分组
+    （业主 2026-10-29），所以 #p2 要自己凑够 3 票才翻位。
     """
     st = _ws(tmp_path)
     _agent(st).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
     sid = _row(st)["stmt_id"]
 
-    signed = _sign(st, text=P2, proof_no=2)
+    signed = _sign_n(st, text=P2, proof_no=2)
     assert signed["stmt_id"] == sid, signed
     assert signed["statement_id"] == sid, signed
     assert signed["proof_no"] == 2, signed
@@ -296,12 +325,21 @@ def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
     两层都要判：
     - 写侧的逐条表 `bits.evidence.reviewed_by_proof`（业主点名的那一格）；
     - 读侧的逐条读数（`statement_review_reading`）—— #p2 自成一档，档位不许被 #p1 抬起来。
+
+    负控再加一层（业主 2026-10-29）：#p1 只投 1 票时它自己也不算签上（连续 3 次才发签），
+    而 #p2 从头到尾一张票都没有 —— 借光这一条在"一票"与"三票"两种票数下都要成立。
     """
     st = _ws(tmp_path)
     _agent(st).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
     sid = _row(st)["stmt_id"]
-    signed = _sign(st, text=P1, proof_no=1)
+    one = _sign(st, text=P1, proof_no=1)
+    assert dict(one.get("statement_writeback") or {}).get("written") is False, one
+    assert EB.reviewed_by_proof(_row(st)) == {}, (
+        "一票就把逐条表写成签上了（连续 3 次才发签）", _row(st)["bits"])
+    assert EB.bits_from_row(_row(st))["reviewed"] is False, _row(st)["bits"]
+
+    signed = _sign_n(st, text=P1, proof_no=1)
     wb = signed["statement_writeback"]
     assert wb["written"] is True and wb["proof_no"] == 1, wb
 
@@ -322,6 +360,10 @@ def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
     assert p2["reviewed"] is False and p2["state"] == "unsigned", p2
     assert p2["grade"] == "conjecture", "#p2 借了 #p1 的签"
     assert reading["proofs_unreviewed"] == [f"{sid}#p2"], reading
+    # #p1 的 4 票（先 1 票、再 3 票）是自己的，不许算到 #p2 头上（逐条连续读数各数各的）。
+    p1 = next(p for p in reading["proofs"] if p["proof_no"] == 1)
+    assert p1["streak"] == 4 and p1["streak_ok"] is True, p1
+    assert p2["streak"] == 0 and p2["streak_ok"] is False, p2
 
 
 # ============================================================ ⑥ 哈希不是门锁
@@ -343,7 +385,7 @@ def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
     # 那一笔本身不许因为签完之后又改稿而被拒"。
     out = _agent(st).register_statement(**OWN, proofs=[{"proof_no": 1, "text": P1}])
     assert out["ok"] is True, out
-    signed = _sign(st, text=P1, proof_no=1)
+    signed = _sign_n(st, text=P1, proof_no=1)
     sha_at_sign = signed["proof_sha256"]
     assert sha_at_sign == VR.proof_sha(P1)
 

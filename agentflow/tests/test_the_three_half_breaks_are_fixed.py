@@ -107,9 +107,25 @@ def _row(store: Store, stmt_id: str = SID) -> dict:
 
 
 def _sign(store: Store, *, text: str, proof_no: int) -> dict:
+    """V 的一次审校 = 台账一票（业主 2026-10-29：一票不翻位）。"""
     return VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                   verdict=dict(_OK), verifier="agent-V", store=store,
                                   proof_no=proof_no)
+
+
+def _sign_n(store: Store, *, text: str, proof_no: int) -> dict:
+    """把 `#proof_no` 签够「连续 3 次成立、同一份正文」（第 3 票才翻位），返回第 3 票。
+
+    顺带断口径本身：前两票 `written=False`、第三票 `written=True`。
+    票数按 `(命题号, 证明号)` 分组 ⇒ 这里只给一份证明投票，另一份的票不借。
+    """
+    last: dict = {}
+    for i in (1, 2, 3):
+        last = _sign(store, text=text, proof_no=proof_no)
+        wb = dict(last.get("statement_writeback") or {})
+        assert int(wb.get("streak") or 0) == i, (f"第 {i} 票的连续读数不对", wb)
+        assert wb.get("written") is (i == 3), (f"第 {i} 票的翻位结论不对", wb)
+    return last
 
 
 def _edit(store: Store, *, proof_no: int, text: str) -> dict:
@@ -328,21 +344,24 @@ def test_a_bad_proof_tail_is_named_instead_of_disappearing(tmp_path: pathlib.Pat
 # ============================================================ ② L3：任一条 in-sync
 
 def test_the_summary_bit_stays_true_while_any_proof_is_in_sync(tmp_path: pathlib.Path) -> None:
-    """② 签 #p1、签 #p2、改 #p2 ⇒ 汇总位仍 True；再把 #p1 也改掉 ⇒ 才变 False。
+    """② 签够 #p1、签够 #p2、改 #p2 ⇒ 汇总位仍 True；再把 #p1 也改掉 ⇒ 才变 False。
 
     断点原文：`reviewed_by` 只有一格（最近那一签），`_stale_review_cleared` 只核它。
     "签 #p1、改 #p2"之后逐条读数 `[(1,'signed'),(2,'stale')]`、命题级读数
     `reviewed=True`，而 `bits_from_row(row)["reviewed"]` 读成 False。
+
+    口径（业主 2026-10-29）：一份证明要「连续 3 次成立、同一份正文」才翻第 3 位
+    ⇒ 夹具里两份证明各签够 3 票（票只投给自己的证明号）。
     """
     st = _ws(tmp_path)
     assert _register_two(st)["ok"] is True
     assert EB.bits_from_row(_row(st))["reviewed"] is False, "夹具前提：还没签就应当是 False"
 
-    out1 = _sign(st, text=P1, proof_no=1)
+    out1 = _sign_n(st, text=P1, proof_no=1)
     assert out1["statement_writeback"]["written"] is True, out1["statement_writeback"]
     assert EB.bits_from_row(_row(st))["reviewed"] is True, (
         "② 签了 #p1 之后汇总位不是 True")
-    out2 = _sign(st, text=P2, proof_no=2)
+    out2 = _sign_n(st, text=P2, proof_no=2)
     assert out2["statement_writeback"]["written"] is True, out2["statement_writeback"]
     assert EB.reviewed_by_proof(_row(st)) == {1: True, 2: True}, _row(st)["bits"]["evidence"]
 
@@ -557,8 +576,9 @@ def test_negative_control_only_the_latest_signature_turns_the_summary_bit_red(
     """
     st = _ws(tmp_path)
     assert _register_two(st)["ok"] is True
-    assert _sign(st, text=P1, proof_no=1)["statement_writeback"]["written"] is True
-    assert _sign(st, text=P2, proof_no=2)["statement_writeback"]["written"] is True
+    # 业主 2026-10-29：每份证明各凑够 3 票才翻位（票数按证明号分组）。
+    assert _sign_n(st, text=P1, proof_no=1)["statement_writeback"]["written"] is True
+    assert _sign_n(st, text=P2, proof_no=2)["statement_writeback"]["written"] is True
     assert _edit(st, proof_no=2, text=P2_EDITED)["proof_text"] == P1
     assert EB.bits_from_row(_row(st))["reviewed"] is True, "夹具前提：改稿这一笔没有动位本身"
 

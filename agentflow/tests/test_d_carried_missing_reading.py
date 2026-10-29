@@ -43,7 +43,11 @@ def _ws(path: pathlib.Path) -> Store:
 
 def _add_statement(store: Store, stmt_id: str, *, derived_from: list[str] | None = None,
                    proof_text: str = "") -> dict:
-    """写一条在册命题（`proof_review` 档）。"""
+    """写一条在册命题（`proof_review` 档）。
+
+    这一档的写入期闸要求盘上真有能签住它的那一签，而业主 2026-10-29 的口径是
+    「同一份正文连续 3 次「成立」才发签」⇒ 夹具要签够 3 次（第 1 次必须先断"没签上"）。
+    """
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=f"在册命题 {stmt_id}",
@@ -57,12 +61,21 @@ def _add_statement(store: Store, stmt_id: str, *, derived_from: list[str] | None
     row.validate()
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row.to_dict())
-    signed = VR.record_verification(
-        store.root, statement_id=stmt_id,
-        proof_text=str(row.proof_text),
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-        store=store, proof_no=1)
+
+    def _sign() -> dict:
+        return VR.record_verification(
+            store.root, statement_id=stmt_id, proof_text=str(row.proof_text),
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            store=store, proof_no=1)
+
+    one = _sign()
+    wb = dict(one.get("statement_writeback") or {})
+    assert wb.get("written") is False and int(wb.get("streak") or 0) == 1, (
+        "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", wb)
+    _sign()
+    signed = _sign()
     assert signed.get("checked") is True, signed
+    assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
     got["evidence_kind"] = "proof_review"
