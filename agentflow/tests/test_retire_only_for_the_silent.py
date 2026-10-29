@@ -172,16 +172,29 @@ def _a_problems(env: dict[str, Any]) -> list[str]:
     return problems
 
 
-def test_a_a_silent_child_can_be_retired(tmp_path: pathlib.Path) -> None:
+def test_a_a_silent_child_can_be_retired(tmp_path: pathlib.Path,
+                                         monkeypatch: pytest.MonkeyPatch) -> None:
     """a) 静默子（无工作、无计时器、无活跃子）⇒ 可销（正控）。
 
     正控也要有改前红：它断言的 `target_state` / `blocking` / `refusal_code` 三格
     在改前的回执里根本不存在（读到的是 KeyError）—— 而"静默可销"这句话如果连
     读数都不给，父就没有任何办法把"可以销了"与"再等等"分开。
+
+    2026-10-29 追加一手：销号必须把兜底计时器一起撤掉（`clock.kill_lifeline`），
+    否则"号已销、计时器又长回来"是不可逆的鬼读数。这里用打桩看它真的被调到，
+    台账号传对了（撤表本体另有 `tests/test_the_lifeline_timer.py` 钉住）。
     """
+    calls: list[str] = []
+
+    def _fake_kill(workspace, *, task_id, reason=""):
+        calls.append(str(task_id))
+        return {"checked": True, "killed": ["tm-000000"], "suppressed": True, "reason": ""}
+
+    monkeypatch.setattr(CLK, "kill_lifeline", _fake_kill)
     env = _a_env(tmp_path)
     problems = _a_problems(env)
     assert problems == [], problems
+    assert calls, "销号没有去撤兜底计时器（kill_lifeline 一次都没被调）"
 
 
 # ====================================================================== b) 在飞

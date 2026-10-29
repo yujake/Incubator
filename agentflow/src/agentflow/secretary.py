@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import manuscripts as MS
+from . import clock
 from . import proofloc as _PL
 from . import propositionkey as _PK
 from . import refusals as R
@@ -7746,6 +7747,20 @@ class Secretary:
                                           "why": "还在它名下的名册上、没销号（父一销号，"
                                                  "就再没有任何代理有权限销它）"}
                                          for r in rows_left]}}
+        # ---- 先撤兜底计时器（业主 2026-10-29 第 7 条：静默可销号，但销号必须把那条表
+        #      撤掉并落抑制标记，否则"号已销、计时器又长回来"是不可逆的鬼读数）。
+        #
+        # 为什么放在台账那一笔之前：两个方向都会留半笔，但只有一个是可重试的 ——
+        #   clock-first 失败 ⇒ "叫不醒了、名字还没销"（可重试）；
+        #   settle-first 失败 ⇒ "已销号但仍会醒"（不可逆）。
+        killed = clock.kill_lifeline(getattr(self.store, "root", "") or "",
+                                     task_id=str(tid), reason=str(reason or ""))
+        if not killed.get("checked"):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [(f"{name}（{tid}）的兜底计时器没撤成"
+                             f"（{killed.get('reason') or '没查成'}）⇒ 一个字节都没落盘，"
+                             "重试即可（反方向会是『已销号却还会被叫醒』，不可逆）")],
+                    "lifeline": killed}
         # ---- 落定台账那一行（业主 2026-10-26：「确实保证这个机制跑得通」）
         #
         # 顺序是判据本身：先落台账、再写名册。反过来先写名册时，台账那一笔要是炸了，
