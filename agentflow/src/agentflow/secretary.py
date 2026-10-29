@@ -8147,8 +8147,17 @@ def _nontriviality_level(value: Any) -> int | None:
         return None
     if isinstance(value, int):
         got: Any = value
-    elif isinstance(value, str) and value.strip().isdigit():
-        got = int(value.strip())
+    elif isinstance(value, str):
+        raw = value.strip()
+        upper = raw.upper()
+        if upper.startswith("T") and upper[1:].isdigit():
+            # 2026-10-29：判档那一问的 decision 词表就是 T0..T4，这里原先只认数字
+            # ⇒ 模型答 "T3" 永远解析成 None（"交给模型判"在结构上走不通）。
+            got = int(upper[1:])
+        elif raw.isdigit():
+            got = int(raw)
+        else:
+            return None
     else:
         return None
     return got if got in NONTRIVIALITY_LEVELS else None
