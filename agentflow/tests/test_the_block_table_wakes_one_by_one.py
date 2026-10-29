@@ -361,8 +361,9 @@ def _w4_problems(env: dict[str, Any]) -> list[str]:
         problems.append(f"叫的必须是「要唤醒的那个号」（{owner}），不是板项号："
                         f"calls={env['calls']}")
     row = _rows(env).get(item) or {}
-    if str(row.get("status")) != "running":
-        problems.append(f"status 该由 block 翻成 running，实际 {row.get('status')!r}")
+    if str(row.get("status")) != "block":
+        problems.append(f"status 这一幕不许动（业主自查实测：先写 running 会让唤醒闸门判 in_flight，"
+                        f"一条都叫不起来）实际 {row.get('status')!r}")
     if str(row.get("item_state")) != "queued":
         problems.append(f"item_state 该由 block 翻成 queued（渲染只认 queued），"
                         f"实际 {row.get('item_state')!r}")
@@ -453,9 +454,9 @@ def _w5_problems(env: dict[str, Any]) -> list[str]:
     rows = _rows(env)
     for iid in (first, second):
         row = rows.get(iid) or {}
-        if str(row.get("status")) != "running" or str(row.get("item_state")) != "queued":
-            problems.append(f"{iid} 的直写与唤唤醒是两步，直写对两条都该落盘："
-                            f"status={row.get('status')!r}、item_state={row.get('item_state')!r}")
+        if str(row.get("status")) != "block" or str(row.get("item_state")) != "queued":
+            problems.append(f"{iid} 的直写与唤醒是两步：直写只翻 item_state（status 留给执行侧），"
+                            f"实际 status={row.get('status')!r}、item_state={row.get('item_state')!r}")
     return problems
 
 
@@ -604,7 +605,7 @@ def test_the_ids_argument_lands_on_the_named_rows_only(tmp_path: pathlib.Path) -
     row = _rows(env).get(unnamed) or {}
     if str(row.get("status")) != "block" or str(row.get("item_state")) != "block":
         problems.append(f"没点到的 {unnamed} 一个字节都不许动："
-                        f"status={row.get('status')!r}、item_state={row.get('item_state')!r}")
+                        f"status (留给执行侧翻) ={row.get('status')!r}、item_state={row.get('item_state')!r}")
     assert problems == [], problems
 
 
@@ -762,9 +763,9 @@ def _w8_problems(env: dict[str, Any]) -> list[str]:
     if env["calls"] != [owner]:
         problems.append(f"叫的该是 owner（不是板项号）：calls={env['calls']}")
     row = _rows(env).get(item) or {}
-    if str(row.get("status")) != "running" or str(row.get("item_state")) != "queued":
-        problems.append(f"两根轴该翻回 running/queued：{row.get('status')!r}/"
-                        f"{row.get('item_state')!r}")
+    if str(row.get("status")) != "block" or str(row.get("item_state")) != "queued":
+        problems.append(f"item_state 该翻成 queued、status 留给执行侧："
+                        f"{row.get('status')!r}/{row.get('item_state')!r}")
     return problems
 
 

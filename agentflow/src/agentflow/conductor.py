@@ -3674,7 +3674,10 @@ class Conductor:
                                    f"（item_state={now.get('item_state')!r}）⇒ 这一条不动")
                     else:
                         patch = dict(now)
-                        patch["status"] = "running"
+                        # 不改 status：直写跑在唤醒之前，而 wake_on_lifeline 的闸门正是
+                        # "目标在跑就不叫"。先写 running，闸门立刻判 in_flight，一条都叫不起来
+                        # （业主自查实测：板上 queued、回执 started=False、没人读）。
+                        # status 留给执行侧 resume_dispatched 去翻，它翻的同时起线程。
                         patch["item_state"] = "queued"
                         patch["item_close"] = ""
                         patch["seen_by"] = ""
