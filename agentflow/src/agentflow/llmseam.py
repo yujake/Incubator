@@ -470,13 +470,19 @@ class LlmSeam:
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
 
+        # 温度这一格只在调用方显式给了时才传下去（2026-10-29 第 16 轮）：
+        # 它是给 V 的审阅调用加的那一格；无条件传会让所有"按脚本回文本"的替身网关
+        # （它们没有这个形参）在调用期抛 TypeError，而那个 TypeError 会被上层折成
+        # `judge_failed:TypeError` ⇒ 一条本该绿的判据红在"替身签名"上，不是行为上。
+        # 不给就压根不传 ⇒ 网关取这一档配置的那一格（两处同源，见 `temperature_of`）。
+        _kw: dict[str, Any] = {}
+        if temperature is not None:
+            _kw["temperature"] = temperature
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
                                           system=(system or None),
-                                          # 显式给的温度透传；不给就是 None ⇒ 网关取这一档
-                                          # 配置的那一格（两处同源，见 `temperature_of`）。
-                                          temperature=temperature,
-                                          tools=(face.functions if face is not None else None))
+                                          tools=(face.functions if face is not None else None),
+                                          **_kw)
         except J.BudgetExhausted as exc:
             return self._finish_failure("judge_over_budget", str(exc), base, t0,
                                         prompt, system, task_id, note)
