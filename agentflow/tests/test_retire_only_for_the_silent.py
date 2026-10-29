@@ -313,6 +313,34 @@ def test_i_the_silent_answer_is_the_same_in_every_reader(tmp_path: pathlib.Path)
     counts_standby = env["sec"].child_counts(owner=str(env["owner"]))
     assert int(counts_standby.get("active_child_count") or 0) == 1, counts_standby
 
+def test_j_retiring_kills_the_lifeline_and_stops_the_rearm(tmp_path: pathlib.Path) -> None:
+    """销号必须把兜底计时器销掉，并且停止自动重挂（业主 2026-10-29）。
+
+    三件事一次断到底（端到端，走真的 `conductor.retire_child` 工具）：
+      1. 销号前它有一条兜底表（这就是"静默"的载体）；
+      2. 销号后那条表不在盘上、且留下抑制标记；
+      3. 再挂一次必须被拒（skipped="suppressed"）—— 否则"被打掉就续"会把它复活，
+         盘上出现"号已销、计时器又长回来"这种不可逆的鬼读数。
+    """
+    env = _a_env(tmp_path)
+    ctx = dict(env["silent"])
+    child = str(ctx["task_id"])
+    root = str(env["root"])
+
+    armed = CLK.arm_lifeline(root, task_id=child, role="D")
+    assert armed.get("armed") is True, armed
+    assert len(CLK.lifeline_of(root, child)) == 1, CLK.lifeline_of(root, child)
+
+    res = _call(env, child_name=str(ctx["name"]), reason="销号：连兜底表一起销")
+    data = _data_of(res)
+    assert data.get("state") == "retired", data
+
+    assert CLK.lifeline_of(root, child) == [], CLK.lifeline_of(root, child)
+    assert CLK.lifeline_suppressed(root, child) is True, "销号没留下抑制标记"
+    again = CLK.arm_lifeline(root, task_id=child, role="D")
+    assert again.get("armed") is False and again.get("skipped") == "suppressed", again
+
+
 def test_b_a_flying_child_is_refused_by_the_silent_gate(tmp_path: pathlib.Path) -> None:
     """b) 在飞的子 ⇒ 拒 `target_not_silent` ＋ 拒信说"它还在干活"。
 
