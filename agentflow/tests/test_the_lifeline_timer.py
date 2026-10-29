@@ -131,3 +131,41 @@ def test_only_the_lifeline_is_silent_and_own_timers_are_standby() -> None:
                            wait=C.waiters_of(C.clock_waiters(str(ws)), [me]))
     assert second["state"] == C.AGENT_STATE_STANDBY, second
     assert [w["id"] for w in second["waiters"]], second
+
+
+def test_a_neighbours_event_does_not_wake_it() -> None:
+    """射程：与它无关的事件不许把它叫醒（业主 2026-10-29 第 1 条）。
+
+    兜底表等的是"与我有关"的东西；若写成通配（任何事件都算），一次广播会把所有
+    静默代理一起叫醒，成本 = 事件 x 静默者数，"静默期间零模型调用"也就不成立了。
+    """
+    ws = _workspace()
+    me, other = "t-000001", "t-000002"
+    CLK.arm_lifeline(ws, task_id=me, role="D")
+    CLK.observe_event("message", task_id=other, from_task_id="t-000009", role="M",
+                      content="与 D1 无关的一条广播", message_id="m-broadcast")
+    timer = [t for t in CLK.book(ws).pending() if CLK.is_lifeline(t)][0]
+    trigger, _why = timer.due_reason(CLK.now())
+    assert trigger == "", f"无关事件把它叫醒了：{trigger}"
+
+
+def test_only_one_lifeline_even_after_a_reload() -> None:
+    """幂等：进程重启（重新从盘上装载）之后仍然恰好一条，重复挂不会再长一条。"""
+    ws = _workspace()
+    me = "t-000003"
+    CLK.arm_lifeline(ws, task_id=me, role="D")
+    CLK.reset_books()
+    again = CLK.arm_lifeline(ws, task_id=me, role="D")
+    assert again["skipped"] == "already", again
+    assert len(CLK.lifeline_of(ws, me)) == 1, CLK.lifeline_of(ws, me)
+
+
+def test_the_purpose_exemption_does_not_leak() -> None:
+    """豁免不外溢：只有框架那条兜底表免"缺目的"，模型自己起的表照样被追问。"""
+    ws = _workspace()
+    me = "t-000004"
+    CLK.arm_lifeline(ws, task_id=me, role="D")
+    CLK.start_timer(ws, after_sec=600.0, reason="", task_id=me, role="D")
+    missing = CLK.timers_missing_purpose(ws, for_task_id=me)
+    assert len(missing) == 1, missing
+    assert str(missing[0]["kind"]) != CLK.LIFELINE_KIND, missing
