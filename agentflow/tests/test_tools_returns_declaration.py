@@ -126,7 +126,7 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-28（阶段 ③ 2B）：119 → 120（`search.retry_pending` —— 把「有元数据、
 #: 没全文」的文献逐条再取一次；四结局 got / failed / no_location / cooled_down）。
 #: 探针靠 `_PREREQS` 里那条 `table.create` 先落一行待取文献，于是主路径被真跑到。
-TOOL_COUNT = 120
+TOOL_COUNT = 121
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -345,6 +345,9 @@ def tool_params() -> dict[str, dict]:
     probe_root = _ALLOCATED.get("probe_task_root") or ""
     probe_child = _ALLOCATED.get("probe_task_child") or ""
     return {
+        # 2026-10-29（wake_blocked）：探针走默认那一支（dry_run=True、approve 空）——
+        # 它必须 ok=True 且给全 returns 的键（"没批准"是受控拒绝，不是异常）。
+        "conductor.wake_blocked": {"dry_run": True},
         # ---- 只读角色的两件产出登记工具（2026-10-18 业主裁定；判据 `test_readonly_output_channel`）----
         # 参数取最小合规形态：C 交一份报告、H 记一条自己读出来的发现。
         "analysis.register_report": {
@@ -699,6 +702,7 @@ def tool_params() -> dict[str, dict]:
 #:     （`ocr.run`）。
 EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
     {
+        "conductor.wake_blocked",
         "analysis.register_report",
         "attack.check_budget", "attack.create_plan", "attack.list_plans", "attack.pick_next_subgoal",
         "attack.status", "attack.step",
@@ -839,6 +843,8 @@ EXECUTED_WITH_CAVEAT: dict[str, str] = {
 #: 顺序是判据的一部分：顺序错了会让本来能跑的工具变成 ok=False ⇒ 白白多一个跳过。
 MUTATING_LAST: frozenset[str] = frozenset(
     {
+        # 2026-10-29：它会直写 tasks（翻 item_state）并起一条同号循环。
+        "conductor.wake_blocked",
         "conductor.summon",
         "conductor.stop",
         "conductor.cancel",
