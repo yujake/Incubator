@@ -833,15 +833,18 @@ def agent_state(*, row: Mapping[str, Any] | None,
     if retired:
         return settle(AGENT_STATE_SILENT,
                       "已销号 ⇒ 退场（销号即退场，不在活跃集合里）")
-    if wait_any_requested and still_pending:
+    if wait_any_requested:
+        # 有目的的等待（业主 2026-10-29 第 5、6 条）：挂着"等任意计时器返回"是在等一个
+        # 它自己点名的东西回来 —— 那是待机，不是静默。静默只留给"只挂着兜底计时器"。
+        # 与兜底表的分工：兜底表由框架维护、代理无感、不进 `rows`（见 clock_waiters），
+        # 所以走到这里说明它自己要求过等，"时钟上一条都没有"不再是交差的证据。
         marks = "、".join(sorted({str(x.get("id") or "") for x in rows}))
         where = str(wa.get("wait_id") or "")
         detail = f"，也挂着 {marks}" if marks else ""
         return settle(
             AGENT_STATE_STANDBY,
             (f"它挂着等任意计时器返回（wait_any={where or '在账上'}{detail}；"
-             f"时钟上还有 {int(pending_total or 0) if pending_total is not None else len(rows)}"
-             " 条没回来）"))
+             "这是它自己要求的等，属于待机）"))
     if parked:
         marks = "、".join(sorted({str(x.get("id") or "") for x in rows
                                   if str(x.get("park_state") or "") == "parked"}))

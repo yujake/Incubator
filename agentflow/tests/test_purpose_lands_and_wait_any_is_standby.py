@@ -452,10 +452,13 @@ def test_d2_without_the_wait_any_rule_the_same_agent_reads_silent(
 
 
 def test_e_wait_any_with_nothing_left_to_wait_is_still_a_handoff(tmp_path, bench) -> None:
-    """d/e) 意图还在、而可等的东西已经没了 ⇒ 仍按既有口径（交差/静默），理由点名这一档。
+    """d/e) 意图还在、而它自己起的表都回来了 ⇒ 仍是待机（口径改于 2026-10-29）。
 
-    起意时有一条表（所以 `request_wait_any` 受理），随后那条表到点了 —— 这一档
-    不许读成待机（它已经没有可等的东西了），也不许和"从来没要求过等"折平。
+    起意时有一条表（所以 `request_wait_any` 受理），随后那条表到点了。
+    业主 2026-10-29 第 5/6 条：「模型自己设的任何计时器存在且它在等这些计时器时就是待机，
+    如果只有兜底的计时器才是静默」；且 `clock.wait_any` 是「有目的的等待」。
+    所以这一档是待机（它自己要求过等），不是交差；静默只留给"只挂着兜底计时器"。
+    这一条同时钉住：它不许与"从来没要求过等"折平（理由必须点名 wait_any）。
     """
     st, cond, ws = _ws(tmp_path, "wait-any-empty")
     me = cond.open_top_level_run("M", TASK)
@@ -466,9 +469,9 @@ def test_e_wait_any_with_nothing_left_to_wait_is_still_a_handoff(tmp_path, bench
     bench.advance(120.0)          # 那条表到点
     assert CLK.timers_missing_purpose(ws) == [], "夹具前提：目的都在，这里只看等待意图"
     cell = dict(_three(ws, st)[child])
-    assert cell["state"] == COND.AGENT_STATE_SILENT, cell
+    assert cell["state"] == COND.AGENT_STATE_STANDBY, cell
     assert "等任意计时器" in cell["reason"], cell["reason"]
-    assert "交差" in cell["reason"] or "没有可等" in cell["reason"], cell["reason"]
+    assert "待机" in cell["reason"], cell["reason"]
 
 
 def test_f_an_unreadable_wait_any_book_is_unknown_not_silent(tmp_path, bench) -> None:
