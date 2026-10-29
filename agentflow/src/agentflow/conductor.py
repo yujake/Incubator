@@ -3393,7 +3393,13 @@ class Conductor:
                           error=f"{type(exc).__name__}: {exc}",
                           detail="被一条来信叫起来之后跑坏了")
 
-        threading.Thread(target=_run, name=f"agentflow-resume-{task_id}",
+        # 上下文必须跟着线程走（2026-10-29 第 18 轮，G8 抓到的空归属）：被叫醒的代理在
+        # 这个后台线程里跑 `backend.call` / `_end_from_payload`，而 `run_as` / `calling_as`
+        # 是 contextvar —— 不起一份拷贝，它在新线程里读到的是空的，落盘的行就没有归属。
+        # 与 `start_summon` 同一个做法（同一个坑在那边已经踩过一次）。
+        _ctx = contextvars.copy_context()
+        threading.Thread(target=_ctx.run, args=(_run,),
+                         name=f"agentflow-resume-{task_id}",
                          daemon=True).start()
         out["started"] = True
         out["reason"] = (f"{task_id} 已按同号继续（status 由 "
