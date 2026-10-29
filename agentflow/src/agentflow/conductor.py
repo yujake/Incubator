@@ -3703,8 +3703,13 @@ class Conductor:
             cell["started"] = started
             if started:
                 woken += 1
+                # 回执措辞的硬要求（2026-10-29 接线小模拟的读数）：这一句是模型读到的
+                # 唯一一句"接下来该做什么"。只写"翻成 queued 了"会让它以为板项没了 ——
+                # 板项还在板上，收口要收件人自己 ack，销号闸照旧挡着。
                 cell["why"] = (f"{owner} 已按同号叫起：板项 {item_id} 已由 block 翻成 "
-                               "queued，它醒来就能在板上读到这一条")
+                               "queued，它醒来就能在板上读到这一条。板项仍在板上：收口要"
+                               "收件人自己 ack（`conductor.ack`），销号闸照旧挡着 —— "
+                               "唤醒解除的是「叫不醒」，不是「挡住销号」")
             else:
                 why_not = str(got.get("reason") or "") if isinstance(got, Mapping) else ""
                 cell["refusal_code"] = "wake_failed"
