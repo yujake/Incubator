@@ -618,6 +618,12 @@ def test_d_nothing_to_do_and_no_timer_is_a_handoff(tmp_path, bench,
     assert run.handed_off.get("reported") is True, run.handed_off
     assert run.final.startswith("交差："), run.final
 
+    # 2026-10-29（兜底计时器）：交差 = 这一趟进入静默，所以此刻盘上必须有、且只有一条
+    # 兜底表，并且它没有被抑制（"收工仍续"的真机口径读数就在这里）。
+    lives = CLK.lifeline_of(ws, child)
+    assert len(lives) == 1, lives
+    assert CLK.lifeline_suppressed(ws, child) is False, lives
+
     # 父的收件箱：既有消息通道上的那一条
     events, problems = SS.read_session(ws, sid=SID)
     assert not problems, problems
