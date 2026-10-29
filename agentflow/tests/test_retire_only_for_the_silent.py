@@ -300,12 +300,18 @@ def test_i_the_silent_answer_is_the_same_in_every_reader(tmp_path: pathlib.Path)
         f"两处读数分家：activity_snapshot 说 {page_state!r}，"
         f"retire_state_of 说 {gate_state!r}")
     assert gate.get("silent") is True, gate
+    # 第三处（Secretary 层的计数）：active_child_count 就是"非静默数"。
+    counts_silent = env["sec"].child_counts(owner=str(env["owner"]))
+    assert int(counts_silent.get("active_child_count") or 0) == 0, counts_silent
+
     # 反真空：给它挂一条模型自设的表 ⇒ 三处必须一起变成"待机"，不许只有一处动
     _timer(env, child)
     page2 = str((dict((cond.activity_snapshot().get("by_task") or {})).get(child) or {})
                 .get("state") or "")
     gate2 = str(cond.retire_state_of(child).get("state") or "")
     assert page2 == gate2 == "standby", (page2, gate2)
+    counts_standby = env["sec"].child_counts(owner=str(env["owner"]))
+    assert int(counts_standby.get("active_child_count") or 0) == 1, counts_standby
 
 def test_b_a_flying_child_is_refused_by_the_silent_gate(tmp_path: pathlib.Path) -> None:
     """b) 在飞的子 ⇒ 拒 `target_not_silent` ＋ 拒信说"它还在干活"。
