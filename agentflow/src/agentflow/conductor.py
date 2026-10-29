@@ -3022,6 +3022,27 @@ class Conductor:
         got = got if isinstance(got, Mapping) else {}
         name = str(got.get("name") or "")
         raised = str(got.get("problem") or "")
+        # ---- 名字撞车时的补救（2026-10-29 真机 paper-rewrite-80 的真因）
+        #
+        # 父可以自己给名字（`targets[].name`）。真机上 M 第二批扇出沿用了第一批的
+        # D1/D2/D3，而这三个名字已经绑在别的 task_id 上 ⇒ 秘书按"用过的名字不再发给
+        # 另一个子代理"受控拒绝 ⇒ 那三条子代理台账有、名册没有（页面报"未落名册的子"），
+        # 而这次拒绝只经 `_log`（本配置没有日志钩子）⇒ 盘上一点痕迹都没留下。
+        #
+        # 处理：撞名字不是"不许登记"，而是"这个名字配不上这一条" ⇒ 改由框架顺延发号，
+        # 并在 note 里写明换过名字。"每条建立的子行恰好登记一次"因此仍然成立。
+        renamed_from = ""
+        if raised and want_name and ("已经用过" in raised or "不再发给另一个子代理" in raised):
+            try:
+                retry = sink.roster_add(**{**kwargs, "want_name": "", "new": str(role)})
+            except Exception as exc:  # noqa: BLE001
+                retry = {"problem": f"{type(exc).__name__}: {exc}"}
+            retry = retry if isinstance(retry, Mapping) else {}
+            if not str(retry.get("problem") or ""):
+                renamed_from = want_name
+                got = retry
+                name = str(got.get("name") or "")
+                raised = ""
         reading = self._roster_files_reading(
             sink=sink, owner=str(owner), name=name, task_id=str(task_id),
             surface=str(got.get("surface") or ""))
@@ -3047,6 +3068,10 @@ class Conductor:
             problem = (f"{task_id}：秘书没有发名（返回的 name 是空串）⇒ 名册项没有名字，"
                        "按没写成报" + (f"；{problem}" if problem else ""))
             raised = ""
+        if renamed_from:
+            note = (note + "；" if note else "") + \
+                   (f"父给的名字 {renamed_from} 已经绑在别的子代理上 ⇒ 改用框架顺延发的 {name}"
+                    "（撞名字不是不登记：那会让台账有、名册没有）")
         if raised:
             if problem:
                 problem += f"；秘书那一侧的原话：{raised}"
