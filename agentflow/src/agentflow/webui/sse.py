@@ -381,6 +381,10 @@ def subscribe() -> Subscription:
 
 #: `attach()` 装上的四个闭包（`detach()` 与"幂等替换"的识别靠它）。
 _ATTACHED: dict[str, Any] = {}
+#: 被 `attach()` 顶掉的外来钩子（`detach()` 要还原它们，不是设 None）。
+#: 2026-10-29 真因：`clock` 的事件旁路也挂在 `sessions.append` 这一槽上，
+#: 一律设 None 会把它永久抹掉 ⇒ 之后所有派活/发消息都不再唤醒挂机的父。
+_PREV: dict[str, Any] = {}
 
 
 def _snapshot_payload(root: Any) -> dict[str, Any]:
@@ -476,6 +480,8 @@ def attach(*, publish: Any = None) -> dict[str, Any]:
                             if old is not None and old is not _ATTACHED.get(name)))
     _ATTACHED.clear()
     _ATTACHED.update(wired)
+    _PREV.clear()
+    _PREV.update(previous)
     return {"attached": tuple(sorted(wired)), "replaced": replaced, "problem": ""}
 
 
@@ -485,13 +491,17 @@ def detach() -> dict[str, Any]:
     撤的是当前槽里的东西（不管它是不是 `attach` 装的）：这样判据能保证
     "这条用例结束时四个槽一定是空的"，而调用方也不会留一个自己不知道的钩子在跑。
     """
+    # 还原：把 attach() 顶掉的那些外来钩子放回去（没有就设 None）。
+    # 为什么不能一律 None：clock 的事件旁路也挂在这一槽上，抹掉它等于让
+    # "子发消息唤醒挂机父"这条链从进程里消失（真机：test_h 的 fires == []）。
     removed = {
-        "append": SS.set_append_hook(None),
-        "question": U.set_question_hook(None),
-        "answered": U.set_answer_hook(None),
-        "stop": SC.set_stop_hook(None),
+        "append": SS.set_append_hook(_PREV.get("append")),
+        "question": U.set_question_hook(_PREV.get("question")),
+        "answered": U.set_answer_hook(_PREV.get("answered")),
+        "stop": SC.set_stop_hook(_PREV.get("stop")),
     }
     _ATTACHED.clear()
+    _PREV.clear()
     return {"detached": tuple(sorted(name for name, old in removed.items()
                                      if old is not None))}
 
