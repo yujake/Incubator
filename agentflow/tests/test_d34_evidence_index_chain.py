@@ -286,17 +286,71 @@ def test_1b_the_index_must_point_at_the_bytes_on_disk(tmp_path: pathlib.Path) ->
 
 
 # ============================================================ ② E 报告那一路
+class _Call:
+    """`llmseam.SeamCall` 的替身：`judge()` 只读 ok / problem / detail。"""
+
+    ok = True
+    problem = ""
+    detail = ""
+    text = ""
+    model = "fake"
+    prompt_version = "t"
+    prompt_sha256 = "0" * 64
+
+
+class _VSecretarySeam:
+    """V 的秘书那一档的假缝（`ask_json` 形状）：照剧本签。
+
+    业主 2026-10-29 的追加口径：V 不再自己发签，发签权在 V 的秘书手上 ——
+    所以"V 签上了"这条夹具要给它一个带判断面的秘书，否则 `checked=False` 不放签
+    （fail-closed）。这里按 `note` 分档回预置结论。
+    """
+
+    wired = True
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = ""):
+        self.seen.append(str(note))
+        kind = str(note).split(":", 1)[-1]
+        answers = {"v_reply_defect": {"decision": "没问题", "reason": "夹具：读不出缺陷"},
+                   "sign_issuance": {"decision": "签发", "reason": "夹具：连续次数够了"}}
+        return dict(answers.get(kind, {})), _Call()
+
+
+def _verify_three(store: Store, sid: str, column: str) -> tuple[dict, dict]:
+    """让 V 审三次同一份证明栏（会审是机械的，不用模型），返回 (第 1 次, 第 3 次)。
+
+    第 1 次必须"不签上"、第 3 次必须"签上"：业主 2026-10-29 的连续 3 次口径。
+    """
+    from agentflow import secretary as SEC
+
+    sec = SEC.Secretary("V", root=store.root, store=store,
+                        seam=_VSecretarySeam(), enable_model=True)
+    v = AgentV(store, workspace_root=store.root, secretary=sec)
+    first = v.verify_proof(sid, proof_text=column)
+    assert first.get("checked") is True, first
+    assert first.get("signed_bit3") is False, (
+        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
+    v.verify_proof(sid, proof_text=column)
+    third = v.verify_proof(sid, proof_text=column)
+    assert third.get("checked") is True and third.get("verdict") == "成立", third
+    assert third.get("signed_bit3") is True, third
+    assert dict(third.get("sign_issuance") or {}).get("issued") is True, third
+    return first, third
+
+
 def _e_case(tmp_path: pathlib.Path) -> tuple[Store, dict, str]:
-    """E 跑穷举 ⇒ B 先按猜想登记 ⇒ V 会审签「成立」⇒ D 写索引。"""
+    """E 跑穷举 ⇒ B 先按猜想登记 ⇒ V 会审三次、签「成立」⇒ D 写索引。"""
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     env = _run_exhaustive(store)
     filed = _file_conjecture(store, column=env["column"])
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
-    signed = AgentV(store, workspace_root=store.root).verify_proof(
-        sid, proof_text=env["column"])
-    assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
+    _verify_three(store, sid, env["column"])
     _index_for_e_report(store, env)
     return store, env, sid
 
@@ -331,7 +385,11 @@ def test_2_b_takes_the_e_report_through_the_index(tmp_path: pathlib.Path) -> Non
 
 # ============================================================ ③ F 证明那一路
 def _f_case(tmp_path: pathlib.Path, *, sign_sha: str | None = None) -> tuple[Store, str]:
-    """F 的证明 + V 的签 + D 报告里的一行索引（`evidence_kind=proof`）。"""
+    """F 的证明 + V 的签 + D 报告里的一行索引（`evidence_kind=proof`）。
+
+    业主 2026-10-29：第 3 位要「同一份正文连续 3 次成立」才翻 ⇒ 台账里是三票
+    （v-000001/2/3，同一 sha、同一证明号），而不是改前那一票。
+    """
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     _write(store, F_PROOF_REL, F_PROOF)
@@ -339,10 +397,11 @@ def _f_case(tmp_path: pathlib.Path, *, sign_sha: str | None = None) -> tuple[Sto
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
     sha = _bytes_sha(pathlib.Path(store.root) / F_PROOF_REL)
-    _ledger(store, sid, [{"verification_id": "v-000001", "proof_no": 1,
+    _ledger(store, sid, [{"verification_id": f"v-{i:06d}", "proof_no": 1,
                           "verdict": "成立", "proof_sha256": _text_sha(F_PROOF),
                           "object_sha256": sha, "object_path": F_PROOF_REL,
-                          "at": TS}])
+                          "at": TS}
+                         for i in (1, 2, 3)])
     _index_for_f_proof(store, sha=sha,
                        v_signature={"verdict": "成立", "sha256": sign_sha or sha})
     return store, sid
@@ -364,8 +423,7 @@ def test_3b_the_old_statement_ledger_route_still_works(tmp_path: pathlib.Path) -
     env = _run_exhaustive(store)
     filed = _file_conjecture(store, column=env["column"])
     sid = str(filed["stmt_id"])
-    signed = AgentV(store, workspace_root=store.root).verify_proof(
-        sid, proof_text=env["column"])
+    _first, signed = _verify_three(store, sid, env["column"])
     assert signed.get("verdict") == "成立", signed
     # 没有 MAPPING.json（`index_rows` 空）⇒ 走原来那一路
     assert PM.index_rows(store.root) == []

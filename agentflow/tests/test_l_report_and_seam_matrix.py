@@ -199,6 +199,49 @@ def _verdict_json(verdict: str, *, step: int = 0) -> str:
     }, ensure_ascii=False)
 
 
+class _Call:
+    """`llmseam.SeamCall` 的替身：`judge()` 只读 ok / problem / detail。"""
+
+    ok = True
+    problem = ""
+    detail = ""
+    text = ""
+    model = "fake"
+    prompt_version = "t"
+    prompt_sha256 = "0" * 64
+
+
+class _VSecretarySeam:
+    """V 的秘书那一档的假缝（`ask_json` 形状）：照剧本签。
+
+    业主 2026-10-29：连续 3 次「成立」之后才轮到秘书发签 ⇒ 这一条要签上就必然
+    经过秘书那一关（`v_reply_defect` 判有没有缺陷、`sign_issuance` 判发不发）。
+    """
+
+    wired = True
+
+    def __init__(self, issuance: str = "签发") -> None:
+        self.issuance = issuance
+        self.seen: list[str] = []
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = ""):
+        self.seen.append(str(note))
+        kind = str(note).split(":", 1)[-1]
+        answers = {"v_reply_defect": {"decision": "没问题", "reason": "夹具：读不出缺陷"},
+                   "sign_issuance": {"decision": self.issuance,
+                                     "reason": "夹具：按连续读数发签"}}
+        return dict(answers.get(kind, {})), _Call()
+
+
+def _v_secretary(store: Store, *, issuance: str = "签发"):
+    """V 的秘书（带判断面）。"""
+    from agentflow import secretary as SEC
+
+    return SEC.Secretary("V", root=store.root, store=store,
+                         seam=_VSecretarySeam(issuance), enable_model=True)
+
+
 def _own_statement() -> dict:
     """B 登记自产命题时那几格（`register_statement` 的硬要求）。"""
     return {
@@ -323,8 +366,19 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     before_sign = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)
     assert before_sign.get("state") == "stale", before_sign
 
-    # ---- 重新过 V 的签：新号、新结论、正文 in-sync
-    v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")]))
+    # ---- 重新过 V 的签：连续 3 次「成立」才签上（业主 2026-10-29），新号、正文 in-sync
+    #
+    # 改前这里只签一次、读侧只看"最近一签是成立" ⇒ `state=signed`。现在第 1、2 次只落
+    # 台账（`state=holding`、`bits.reviewed=False`），第 3 次才翻位 —— 两档都要断。
+    v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")] * 3),
+                secretary=_v_secretary(st))
+    first_sign = v2.verify_proof(sid, proof_text=new_proof)
+    assert first_sign.get("checked") is True, first_sign
+    assert first_sign.get("signed_bit3") is False, (
+        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first_sign)
+    held = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)
+    assert held.get("state") == "holding" and held.get("streak") == 1, held
+    v2.verify_proof(sid, proof_text=new_proof)
     signed2 = v2.verify_proof(sid, proof_text=new_proof)
     assert signed2.get("checked") is True, signed2
     assert signed2.get("verdict") == "成立", signed2
@@ -333,6 +387,7 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     standing = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)
     assert standing.get("state") == "signed", standing
     assert standing.get("in_sync") is True, standing
+    assert standing.get("streak") == 3 and standing.get("streak_ok") is True, standing
 
     # ---- L 再形式化这一版：覆盖逐条接上 ⇒ 结论真的翻成 verified
     two = agent.formalize(CLAIM, source=_source(STEPS - 1), statement_id=sid)

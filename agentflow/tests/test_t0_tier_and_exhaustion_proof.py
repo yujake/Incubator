@@ -202,12 +202,22 @@ def _sign_with_v(store: Store, column: str,
     （`numericproof.filing_problems`）从 2026-10-23 晚起要求盘上真有第三方（V）的会审
     签名 —— E 自己盖在 `observations.e_signature` 上的那一格不算数。V 只审在册的命题，
     所以顺序只能是"先猜想落库、再会审、再升档"。
+
+    业主 2026-10-29：第 1、2 次「成立」只落台账、不翻第 3 位，同一份正文连续 3 次
+    才轮到 V 的秘书发签 ⇒ 会审要跑三次（前两次先断"没签上"，第三次断"签上了"）。
     """
     filed = _file_as_conjecture(store, proof_text=column, statement_full=statement_full)
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
-    got = AgentV(store, workspace_root=store.root).verify_proof(sid, proof_text=column)
+    v = AgentV(store, workspace_root=store.root, secretary=_secretary_v(store))
+    first = v.verify_proof(sid, proof_text=column)
+    assert first.get("checked") is True and first.get("verdict") == "成立", first
+    assert first.get("signed_bit3") is False, (
+        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
+    v.verify_proof(sid, proof_text=column)
+    got = v.verify_proof(sid, proof_text=column)
     assert got.get("checked") is True and got.get("verdict") == "成立", got
+    assert got.get("signed_bit3") is True, got
     return got
 
 
@@ -248,6 +258,36 @@ def _canned(payload: dict):
 def _secretary_b(store: Store, payload: dict) -> SEC.Secretary:
     return SEC.Secretary("B", root=store.root, store=store,
                          seam=_canned(payload), enable_model=True)
+
+
+class _VSignSeam:
+    """V 的秘书那一档的替身缝（`ask_json` 形状）：按 `note` 分档回预置结论。
+
+    业主 2026-10-29：发签权在 V 的秘书手上 ⇒ "V 签上了"这条夹具要给它一个带判断面的
+    秘书。`v_reply_defect` 判这段回复有没有缺陷（判不了的行不计入连续）、
+    `sign_issuance` 判发不发这一签。
+    """
+
+    wired = True
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def ask_json(self, prompt, *, system: str = "", task_id: str = "", note: str = ""):
+        import types as _t
+
+        self.seen.append(str(note))
+        kind = str(note).split(":", 1)[-1]
+        answers = {"v_reply_defect": {"decision": "没问题", "reason": "夹具：读不出缺陷"},
+                   "sign_issuance": {"decision": "签发", "reason": "夹具：连续次数够了"}}
+        return (dict(answers.get(kind, {})),
+                _t.SimpleNamespace(ok=True, problem="", detail=""))
+
+
+def _secretary_v(store: Store) -> SEC.Secretary:
+    """V 的秘书（带判断面）：`verify_proof` 的第三段（秘书发签）走的就是它。"""
+    return SEC.Secretary("V", root=store.root, store=store,
+                         seam=_VSignSeam(), enable_model=True)
 
 
 def _gate(secretary: Any, name: str = "own.register_statement",
@@ -453,17 +493,24 @@ def test_criterion3_a_trivial_statement_is_filed_and_lands_on_t0(tmp_path: pathl
 
     这是业主这一次裁定的正面：平凡不是"不许进"，是"进哪一档"。
 
-    2026-10-24（业主裁定 B2）之后"平凡"的含义是"力气小"，而档位由力气读数给：
+    2026-10-24（业主裁定 B2）之后"平凡"的含义是"力气小"，而档位由秘书判：
     所以这一条要带一份力气小的证明（一行推导）。不交证明时档位是「未判」——
     "没有证明正文"与"证明花的力气小"是两件事（判据见
     `tests/test_nontriviality_is_judged_by_effort.py` 的 (a)/(b)）。
+
+    2026-10-29 业主再裁定「全交给模型判」：档位那一格由秘书自报的档位给，
+    机器力气读数只作参考（`secretary.judge_statement` 那一支）。所以夹具里的秘书
+    必须是一份"判太平凡、自报第 0 档"的读数 —— 改前这里报的是 2 档，于是返回的
+    `tier` 读成 T2（而断言的 T0 是旧口径下"平凡 ⇒ 一律 T0"的形态）。断言一个字
+    没动：仍然要求 `tier=T0` + `downgraded=True` + 收工读数里 T0 记 1 条。
     """
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     text = ("对任意正整数 n，n^2+n 一定是偶数。\n\n"
             "证明：n 与 n+1 必有一偶，故 n(n+1) 是偶数。∎")
     sec = _secretary_b(store, {"decision": "太平凡", "reason": "这是显而易见的等式重排",
-                              "basis": ["没有后续使用"], "nontriviality": 2})
+                              "basis": ["没有后续使用"], "nontriviality": 0,
+                              "nontriviality_basis": "一行推导，体量/步骤都在最低一档"})
     note = _gate(sec, statement_full=text)
     assert note is not None, "判了「太平凡」却没有给出档位读数"
     assert note["tier"] == "T0" and note["downgraded"] is True, note
