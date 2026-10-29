@@ -3304,9 +3304,9 @@ class Conductor:
             role = str(row.get("role") or "")
             runner = getattr(self, "resume_runner", None)
             if not callable(runner):
-                out["reason"] = (f"{recipient} 已完成（status={status}）⇒ 该把它跑起来，"
-                                 "但这一趟没有接执行侧（`resume_runner` 未接线）")
-                return out
+                # 默认执行侧就在本类里（同号继续、不新建行）：接线不必由调用方补，
+                # 否则"静默的唤醒"会变成"要看谁配了钩子"。
+                runner = self.resume_dispatched
             try:
                 runner(recipient, role=role, item_id=item_id, kind=kind,
                        previous_status=status)
@@ -3322,6 +3322,57 @@ class Conductor:
             return out
         finally:
             self.last_consumer_reading = dict(out)
+
+    def resume_dispatched(self, task_id: str, *, role: str = "", item_id: str = "",
+                          kind: str = "", previous_status: str = "") -> dict[str, Any]:
+        """把一条已终态但未销号的代理行按同一号继续跑起来（业主 2026-10-29）。
+
+        这是"静默的唤醒 = 接到消息"的执行侧：板项已经在它名下（`open_item` 落的），
+        这里只做两件事 —— 把 status 由终态改回 running，用既有派活下半
+        （`backend.call(..., task_id=同号)` + `_end_from_payload`）在后台把它跑起来。
+        不新建 tasks 行、不动名册与名字（业主：「它的号还在就一直用」）。
+
+        返回 `{"started","role","task_id","item_id","reason"}`；从不抛。
+        """
+        out: dict[str, Any] = {"started": False, "task_id": task_id, "role": str(role or ""),
+                              "item_id": str(item_id or ""), "reason": ""}
+        try:
+            row = self._task(task_id) or {}
+            if not row:
+                out["reason"] = f"{task_id} 在台账里没有那一行 ⇒ 没得跑"
+                return out
+            role = str(role or row.get("role") or "")
+            upd = dict(row)
+            upd["status"] = "running"
+            upd["outcome"] = None
+            upd["ended_at"] = None
+            task = S.Task(**{k: v for k, v in upd.items()
+                             if k in S.Task.__dataclass_fields__})
+            task.validate()
+            with self.store.tx("tasks", actor="conductor",
+                               note=f"resume:{kind or '-'}:{item_id or '-'}") as tx:
+                tx.upsert("tasks", task.to_dict(),
+                          note=f"resume:{kind or '-'}:{item_id or '-'}")
+        except Exception as exc:  # noqa: BLE001 —— 改不回 running 就不假装跑起来了
+            out["reason"] = f"{task_id} 改不回 running（{type(exc).__name__}: {exc}）"
+            return out
+
+        def _run() -> None:
+            try:
+                raw = self.backend.call(role, "", {}, task_id=task_id)
+                self._end_from_payload(task_id, raw)
+            except Exception as exc:  # noqa: BLE001 —— 跑坏了要落终态，不许僵尸 running
+                self._end(task_id, status="failed", outcome="failed",
+                          error=f"{type(exc).__name__}: {exc}",
+                          detail="被一条来信叫起来之后跑坏了")
+
+        threading.Thread(target=_run, name=f"agentflow-resume-{task_id}",
+                         daemon=True).start()
+        out["started"] = True
+        out["reason"] = (f"{task_id} 已按同号继续（status 由 "
+                         f"{previous_status or '终态'} 改回 running，因为收到了 "
+                         f"{kind or '来信'} {item_id or '-'}）")
+        return out
 
     def _is_retired_task(self, task_id: str) -> bool:
         """这个台账号对应的名册项是不是已销号。
