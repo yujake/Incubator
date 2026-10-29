@@ -4472,6 +4472,26 @@ class AgentLoop:
         return reg or None
 
 
+    def _arm_lifeline_once(self) -> dict[str, Any]:
+        """这一趟开跑时挂上兜底计时器（业主 2026-10-29 第 3 条：通用设计，每号一条）。
+
+        幂等：已经有一条 ⇒ `skipped="already"`（重启/续跑不会多长一条）。
+        fail-open：挂不上不拦这一趟，但读数里留着 `skipped` 与理由
+        （"没挂上"不许折成"挂上了"）。
+        """
+        root = self._clock_root()
+        me = str(self.my_task_id or "")
+        if not root or not me:
+            return {"armed": False, "skipped": "no_root" if not root else "no_task_id",
+                    "reason": "没有时钟根或台账号 ⇒ 兜底计时器挂不上"}
+        try:
+            got = dict(CLK.arm_lifeline(root, task_id=me, role=str(self.role or "")))
+        except Exception as exc:  # noqa: BLE001 —— 挂不上不许拦下这一趟
+            got = {"armed": False, "skipped": "error",
+                   "reason": f"{type(exc).__name__}: {exc}"}
+        self.lifeline_reading = got
+        return got
+
     def _clock_root(self) -> str:
         """本实例的时钟根（`<根>/out/clock/…` 就在它下面）。
 
@@ -5280,6 +5300,10 @@ class AgentLoop:
                 continue
             timer = bucket.get(str(row.get("timer_id") or ""))
             if timer is None or not self._is_my_waiter(timer):
+                continue
+            # 兜底计时器不是"它在等谁"（业主 2026-10-29：代理对它无感）：
+            # 把它算进挂机，这一趟就会永远 park 在一条它根本不知道的表上。
+            if CLK.is_lifeline(timer):
                 continue
             rows.append(timer.row(reading))
             timers.append(timer)
@@ -6818,6 +6842,13 @@ class AgentLoop:
         t0 = time.monotonic()
         self.my_task_id = my_task_id
         self.depth = depth
+        # 兜底计时器（业主 2026-10-29 第 3 条：通用设计，每个台账号一条）：
+        # 入口在 `_arm_lifeline_once`，但这一轮不在这里调——实测两处回归：
+        #   ① 它 is_park=True，`_park_reading` 会把它算成"在等谁" ⇒ 这一趟永远 park；
+        #   ② 它被打掉就调 `wake_on_lifeline` ⇒ `resume_dispatched` 另起同号循环 ⇒
+        #      起跑即自我唤醒，测试整个挂住（`test_timers_and_handoff_semantics` 超时）。
+        # 要接上它，得先给"叫醒"加一条"这一趟就是我、别叫我自己"的判据；在那之前
+        # 只保留入口 + 判据（`tests/test_the_lifeline_timer.py`），真机不自动挂。
         # 这一趟的收件人（父是谁）现算一次：它既是提示词里 `{{parent_task_id}}` 那一格，
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
