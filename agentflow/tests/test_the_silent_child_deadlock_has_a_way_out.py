@@ -86,12 +86,21 @@ def test_the_deadlock_is_real_before_voiding(tmp_path: pathlib.Path) -> None:
 
 
 def test_voiding_a_silent_childs_notice_clears_the_item(tmp_path: pathlib.Path) -> None:
-    """正控：静默子代理名下那条 ack-only 通知 ⇒ 作废后 `item_close="expired"`、树可清。"""
+    """正控：叫不醒的子代理名下那条 ack-only 通知 ⇒ 作废后 `item_close="expired"`、树可清。
+
+    2026-10-29 口径改判（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
+    "永远不会再处理这条通知"——兜底表被打掉就会把它叫起来，它自己能 ack。
+    作废的正当性因此收窄成"这个号叫不醒了"（已销号 / 兜底表被永久抑制）；
+    这里用 `clock.kill_lifeline` 把它造成叫不醒，再走同一条正控。
+    """
+    from agentflow import clock as CLK
+
     root, box = _workspace(tmp_path)
     # 子代理已静默/退役：实例行一开始就是 done（含 ended_at/outcome 两格）
     child = _child_row(box, status="done")
     notice = _notice_for_child(box, parent_tid=child, role="D")
-    got = box.void_items([notice], by_task_id="t-000001", why="子代理已静默，通知永不投递")
+    CLK.kill_lifeline(str(root), task_id=child, reason="销号：叫不醒了")
+    got = box.void_items([notice], by_task_id="t-000001", why="子代理已销号，叫不醒")
     assert got["checked"] is True, got
     assert got["voided"] == [notice], got
     row = next(r for r in box._tasks() if str(r.get("task_id")) == notice)

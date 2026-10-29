@@ -3531,6 +3531,22 @@ class Conductor:
                     out["refused"].append({"id": iid, "why": (
                         f"{owner} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")})
                     continue
+                # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
+                # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
+                # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
+                receiver = str(row.get("parent_task_id") or "")
+                deaf = False
+                try:
+                    deaf = bool(CLK.lifeline_suppressed(str(getattr(self.store, "root", "") or ""),
+                                                        receiver)) or self._is_retired_task(receiver)
+                except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
+                    deaf = False
+                if not deaf:
+                    out["refused"].append({"id": iid, "why": (
+                        f"{owner} 只是静默，但一条消息或一次委托就会把它叫醒"
+                        "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
+                        "；作废不可逆，不许拿『它不会再看』当理由")})
+                    continue
                 new = dict(row)
                 new["item_state"] = "done"
                 new["item_close"] = "expired"
