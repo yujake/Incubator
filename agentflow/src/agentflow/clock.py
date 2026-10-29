@@ -4146,6 +4146,12 @@ def request_wait_any(workspace: str | Path, *, task_id: str, role: str = "",
     rows = [r for r in rows if str(r.get("task_id") or "") != tid]
     row = {"wait_id": f"wa-{seq:06d}", "task_id": tid, "role": str(role or ""),
            "purpose": str(purpose or "").strip(), "at": stamp,
+           # 起意那一刻的观测窗事件序号：读数拿它当基线，只数这之后的事件。
+           # 2026-10-29 真因：这一格原先没有，读数于是把基线写死 0（`seq_mark = 0`），
+           # 而观测窗是进程全局的 —— 长跑里前面几百个用例的事件全都算"起意之后回来了"
+           # （同台账号 + 假时钟把旧的真实时间比成"更新"），于是新起意的等待当场就被判成
+           # "该回模型"，挂机永远不成立。真机：31 条。
+           "at_seq": _event_seq(),
            "workspace": str(Path(workspace).resolve())}
     rows.append(row)
     doc.update({"schema": SCHEMA, "next_seq": seq + 1, "rows": rows})
@@ -4228,21 +4234,32 @@ def wait_any_reading(workspace: str | Path, task_id: str) -> dict[str, Any]:
     if not woke:
         # 事件也是"任一计时器返回"之外的醒源（子代理发消息 / 收工提交）：它同样该
         # 结束这一档挂机，否则"等我孩子说话"会一直挂到超时。
+        #
+        # 基线取"起意那一刻的事件序号"（`at_seq`），不是 0：
+        # 观测窗是进程全局的，写死 0 会把前面所有用例的事件都算成"起意之后回来了"
+        # —— 同台账号（多数判据都在新工作区里开 t-000001）加上假时钟让旧事件的时间看起来
+        # 更新，于是新起的等待当场判"该回模型"，挂机永远不成立（真机 `31 条回来了`）。
+        # 墙钟那一支只对老行（没有 `at_seq`）生效：假时钟下它必然错位。
         try:
-            seq_mark = 0
+            try:
+                seq_mark = int(row.get("at_seq") or 0)
+            except (TypeError, ValueError):
+                seq_mark = 0
             events = observed_events(since_seq=seq_mark)["events"]
         except Exception:  # noqa: BLE001 - 读不成只影响这一格
             events = []
+        legacy = not row.get("at_seq")
         for e in events:
             if str(e.get("task_id") or "") != tid and str(e.get("from_task_id") or "") != tid:
                 continue
-            try:
-                if since and str(e.get("at") or "") and _parse_iso(str(e["at"])) < _parse_iso(since):
-                    continue
-            except ClockError:
-                # 时间戳解析不出来（老事件行的 at 不是 ISO）：按"这一条算新的"处理 ——
-                # 少算一条会让"醒"这件事丢失，多算一条只会让这一拍多回一次模型。
-                pass
+            if legacy and since and str(e.get("at") or ""):
+                try:
+                    if _parse_iso(str(e["at"])) < _parse_iso(since):
+                        continue
+                except ClockError:
+                    # 时间戳解析不出来（老事件行的 at 不是 ISO）：按"这一条算新的"处理 ——
+                    # 少算一条会让"醒"这件事丢失，多算一条只会让这一拍多回一次模型。
+                    pass
             woke.append({"id": f"event:{e.get('seq')}", "kind": str(e.get("kind") or ""),
                          "outcome": "", "woke_reason": "event",
                          "message": str(e.get("content") or "")[:120]})
