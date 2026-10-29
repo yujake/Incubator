@@ -157,8 +157,6 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
     },
     "F5_two_nontrivial_questions": {
         "src/agentflow/agent_loop.py": "该删，已转持有方（热文件，本轮只读）",
-        "src/agentflow/secretary.py":
-            "该删，已转持有方（当时正被另一条 lane 改，行号在动）",
         "src/agentflow/specs/b.py": "该删，已转持有方（FC-27 禁改区）",
         "tests/test_filing_tier_carries_the_proof.py":
             "判据读它：断言 note 里不再出现旧那两问（负控）",
