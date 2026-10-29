@@ -455,16 +455,24 @@ def clock_waiters(workspace: str | Path) -> dict[str, Any]:
         out["reason"] = f"时钟读不成（{type(exc).__name__}: {exc}）"
         return out
     rows: list[dict[str, Any]] = []
+    lifeline_rows: list[dict[str, Any]] = []
     for timer in timers:
         if str(getattr(timer, "state", "")) != "pending":
             continue
-        rows.append({"id": str(getattr(timer, "timer_id", "") or ""),
-                     "kind": str(getattr(timer, "kind", "") or ""),
-                     "park_state": str(getattr(timer, "park_state", "") or ""),
-                     "at": str(getattr(timer, "due_at", "") or ""),
-                     "purpose": CLK.purpose_of(timer),
-                     "to": str(getattr(timer, "to", "") or ""),
-                     "task_id": str(getattr(timer, "task_id", "") or "")})
+        row = {"id": str(getattr(timer, "timer_id", "") or ""),
+               "kind": str(getattr(timer, "kind", "") or ""),
+               "park_state": str(getattr(timer, "park_state", "") or ""),
+               "at": str(getattr(timer, "due_at", "") or ""),
+               "purpose": CLK.purpose_of(timer),
+               "to": str(getattr(timer, "to", "") or ""),
+               "task_id": str(getattr(timer, "task_id", "") or "")}
+        # 兜底计时器单列（业主 2026-10-29）：它是框架的保活账、代理对它无感，
+        # 不许混进 `rows` —— 混进去会让"挂着东西"恒真、三态里的静默整档消失，
+        # 而且没有任何一处会报错。
+        if CLK.is_lifeline(timer):
+            lifeline_rows.append(row)
+            continue
+        rows.append(row)
     for periodic in periodics:
         if str(getattr(periodic, "state", "")) != "running":
             continue
@@ -516,6 +524,12 @@ def clock_waiters(workspace: str | Path) -> dict[str, Any]:
     steps = step_beats(workspace)
     out.update({"checked": True, "by_task": by_task, "rows": rows,
                 "count": len(rows), "reason": "",
+                # 兜底计时器单列一格（业主 2026-10-29）：三态里"只挂着它"就是静默。
+                "lifeline_rows": lifeline_rows,
+                "lifeline_count": len(lifeline_rows),
+                "lifeline_by_task": {str(r.get("task_id") or ""): r
+                                     for r in lifeline_rows
+                                     if str(r.get("task_id") or "")},
                 "wait_any_checked": wait_any_checked,
                 "wait_any_by_task": wait_any_by_task,
                 "wait_any_reason": wait_any_reason,

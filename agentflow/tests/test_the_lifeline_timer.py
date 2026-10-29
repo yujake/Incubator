@@ -72,3 +72,25 @@ def test_a_finished_account_is_not_read_as_a_closed_target() -> None:
         if trigger:
             reasons.append((timer.timer_id, trigger, why))
     assert reasons == [], reasons
+
+
+def test_only_the_lifeline_is_silent_and_own_timers_are_standby() -> None:
+    """只挂兜底计时器 ⇒ 静默；挂着模型自己起的表 ⇒ 待机（双向，防两档折平）。"""
+    from agentflow import conductor as C
+
+    ws = _workspace()
+    me = "t-000001"
+    CLK.arm_lifeline(ws, task_id=me, role="D")
+    row = {"task_id": me, "role": "D", "status": "done"}
+    item = {"name": "D1", "task_id": me, "retired": False}
+
+    first = C.agent_state(row=row, item=item,
+                          wait=C.waiters_of(C.clock_waiters(str(ws)), [me]))
+    assert first["state"] == C.AGENT_STATE_SILENT, first
+    assert first["waiters"] == [], first
+
+    CLK.start_timer(ws, after_sec=600.0, reason="等孩子回话", task_id=me, role="D")
+    second = C.agent_state(row=row, item=item,
+                           wait=C.waiters_of(C.clock_waiters(str(ws)), [me]))
+    assert second["state"] == C.AGENT_STATE_STANDBY, second
+    assert [w["id"] for w in second["waiters"]], second
