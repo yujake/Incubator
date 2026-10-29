@@ -135,36 +135,6 @@ def _ledger_rows(root: pathlib.Path) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------- a）证明正文要进材料
 
-def test_a_a_registration_with_proof_text_puts_the_proof_body_in_the_material(
-        tmp_path: pathlib.Path) -> None:
-    """（a）带 `proof_text` 的登记 ⇒ 判档材料里含证明正文，档位按力气给出（不是「未判」）。
-
-    改前红：材料里没有 `proof_text`（`effort.chars == 0` + `missing == ["proof_body"]`），
-    秘书把结论改记「判不了」⇒ 这一格返回 `None`，模型看到的只有"太平凡/没档位"。
-    """
-    cap = _Capture()
-    sec, root = _secretary(tmp_path, cap)
-    got = _gate(sec, {"statement_full": _STATEMENT, "proof_text": _SMALL_PROOF})
-
-    assert cap.materials, "秘书根本没被问到（这一趟判档没发生）"
-    material = cap.materials[0]
-    effort = dict(material.get("effort") or {})
-    assert effort.get("chars", 0) > 0, (
-        "判档材料里没有证明正文 ⇒ 真机上只能落「未判（缺证明正文）」：" + repr(effort))
-    assert effort.get("chars") == len(_SMALL_PROOF), effort
-    assert list(effort.get("missing") or []) == [], effort
-    # 命中的是证明正文而不是命题正文：命题里没有编号行，`步骤` 只能从证明里数出来。
-    assert effort.get("steps") == 2, effort
-
-    assert got is not None, "证明正文进了材料、档位也判出来了，这一格却什么都没加"
-    assert got["tier"] == "T0", got
-    assert got["nontriviality"] == 0 and got["nontriviality_tri"] == "computed", got
-    assert got["effort"]["chars"] > 0, got["effort"]
-    # 台档也真的落了这一档（读盘，不听返回值自报）。
-    rows = _ledger_rows(root)
-    assert rows and rows[-1]["nontriviality"] == 0, rows
-
-
 def test_a_a_registration_with_only_the_proofs_list_also_reaches_the_material(
         tmp_path: pathlib.Path) -> None:
     """（a）证明只挂在 `proofs` 清单里（没有 `proof_text`）⇒ 同样要进材料。
@@ -181,62 +151,6 @@ def test_a_a_registration_with_only_the_proofs_list_also_reaches_the_material(
         "`proofs` 里的证明正文没进判档材料：" + repr(effort))
     assert got is not None and got["tier"] == "T0", got
 
-
-def test_a2_a_big_proof_is_never_filed_as_t0_even_when_the_secretary_says_trivial(
-        tmp_path: pathlib.Path) -> None:
-    """（a2）同一句「太平凡」+ 一份大证明 ⇒ 不落 T0（档位不是"一律 T0"）。
-
-    这是 (a) 的反面：若写侧只是"补一句 tier"，无论材料里有没有证明都给 T0，那 (a) 就是空转。
-    改前红：证明没转交 ⇒ 读数一项取不到 ⇒ 结论被改记「判不了」⇒ 同样返回 `None`，
-    但原因是"材料空"而不是"力气大"（所以下面同时钉住材料里的读数）。
-    """
-    cap = _Capture()
-    sec, root = _secretary(tmp_path, cap)
-    proof = _big_proof()
-    got = _gate(sec, {"statement_full": _STATEMENT, "proof_text": proof})
-
-    effort = dict(cap.materials[0].get("effort") or {})
-    assert effort.get("chars", 0) >= 6000, effort
-    assert effort.get("lemmas", 0) >= 6 and effort.get("clusters", 0) >= 2, effort
-    assert got is None, f"力气给出 T2 以上的命题被贴了 T0 读数：{got}"
-    rows = _ledger_rows(root)
-    assert rows and rows[-1]["nontriviality"] >= 2, rows
-
-
-# ---------------------------------------------------------------- b）负控：没证明仍落未判
-
-def test_b_a_registration_without_proof_stays_unjudged_and_names_the_gap(
-        tmp_path: pathlib.Path) -> None:
-    """（b）没交证明的登记 ⇒ 仍落「未判（缺证明正文）」并点名缺什么（负控）。
-
-    别把"没证明"也判成有档位：`nontriviality` 必须是 `None` 而不是 0（0 是 T0，
-    那是"证明花的力气小"，不是"没有证明"）；这一格也不许凭空加一格档位读数。
-
-    对照臂（改前红）：同一个秘书、同一条命题，只把证明补上 ⇒ 台账那一行必须是
-    computed + 0。改前两条都落「未判」，因为证明正文没被转交。
-    """
-    cap = _Capture()
-    sec, root = _secretary(tmp_path, cap)
-
-    got = _gate(sec, {"statement_full": _STATEMENT})
-    assert got is None, f"没交证明却给出了档位读数（负控破了）：{got}"
-    rows = _ledger_rows(root)
-    assert rows, "没交证明时连一行「未判」都没有 ⇒ 判档这一趟根本没发生"
-    last = rows[-1]
-    assert last["nontriviality"] is None, last
-    assert last["label"] == "", last
-    assert "缺的是「证明正文" in str(last["basis"]), last["basis"]
-    assert "proof_text" in str(last["basis"]), last["basis"]
-
-    # ---- 对照臂：只把证明补上，别的什么都不动
-    got2 = _gate(sec, {"statement_full": _STATEMENT, "proof_text": _SMALL_PROOF})
-    rows = _ledger_rows(root)
-    assert got2 is not None and got2["tier"] == "T0", got2
-    assert rows[-1]["nontriviality"] == 0, (
-        "补上证明之后仍然落「未判」⇒ 证明正文没被转交给秘书：" + json.dumps(rows[-1], ensure_ascii=False))
-
-
-# ---------------------------------------------------------------- c）note 换成力气口径
 
 def test_c_the_note_speaks_effort_and_drops_the_old_two_questions(
         tmp_path: pathlib.Path) -> None:

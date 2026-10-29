@@ -1688,7 +1688,7 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 | C6 | 依赖面族：手稿四列表 → 秘书洗稿 → D 携带 → B 读稿登记 | §16.6 | `tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py`、`tests/test_dependency_wiring_is_live.py`、`tests/test_d_to_b_carried_road.py`、`tests/test_b_manuscript_must_be_framework_rendered.py`、`tests/test_d_carried_missing_reading.py` |
 | C7 | 引用核实族：六档与挡签 | §16.7 | `tests/test_v_checks_fs_citations.py`、`tests/test_signing_never_lies.py`、`tests/test_quote_verification_leaves_evidence.py`、`tests/test_verify_quote_levels.py` |
 | C8 | 命题同一性族：条件→结论一致、洗定理名、概念按定义项 | §16.8 | `tests/test_one_concept_is_one_row.py`、`tests/test_secretary_recognizes_the_same_proposition.py`、`tests/test_the_secretary_washes_internal_work_names.py`、`tests/test_one_theorem_many_proofs_is_not_three_theorems.py`、`tests/test_suspected_split_proposition.py` |
-| C9 | 非平凡度族：按证明花的力气分 T0–T4 | §16.9 | `tests/test_nontriviality_is_judged_by_effort.py`、`tests/test_secretary_rates_nontriviality.py`、`tests/test_nontriviality_reading_is_read_only.py`、`tests/test_b_nontriviality_language_is_tiers.py` |
+| C9 | 非平凡度族：由秘书按五档定义判 T0–T4 | §16.9 | `tests/test_the_secretary_decides_the_tier_not_the_score.py`、`tests/test_secretary_rates_nontriviality.py`、`tests/test_nontriviality_reading_is_read_only.py`、`tests/test_b_nontriviality_language_is_tiers.py` |
 | C10 | 形式化入口族：只有用户指定 ⇒ M→B，`B→L` 唯一入边，F 不立 formal 子目标 | §16.10 | `tests/test_f_formal_subgoal_owner_l.py`、`tests/test_f_has_no_formal_entry.py`、`tests/test_f_reasoning_is_its_working_mode.py`、`tests/test_lean_switch_points_at_l.py` |
 | C11 | 权限面与写口族：`statements` 只经 B、手填 ID 拒、通用写口只写簿记、保留产物 | §16.11 | `tests/test_statements_are_registered_by_b.py`、`tests/test_hand_filled_ids_are_refused.py`、`tests/test_universal_tools_are_for_everyone.py`、`tests/test_fs_reserved_framework_artifacts.py`、`tests/test_set_fields_are_normalized_on_write.py`、`tests/test_direct_write_is_routed_to_the_secretary.py`、`tests/test_tasks_write_port_refuses_forgeries.py`、`tests/test_a_concept_row_is_registered_by_the_secretary.py` |
 | C12 | 读数与用户端族：名册三态读数、书目面、聊天行 ID、预热三态、错误两轴 | §16.12 | `tests/test_webui_three_state_reading.py`、`tests/test_webui_readers.py`、`tests/test_library_face_only_counts_admitted_works.py`、`tests/test_chat_lines_carry_the_absolute_id.py`、`tests/test_chat_page_shows_who_and_which_id.py`、`tests/test_cache_warm_button_is_honest.py`、`tests/test_the_root_is_named_m.py` |
@@ -1762,13 +1762,21 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 - **落点**：`src/agentflow/propositionkey.py::same_concept`、`src/agentflow/propositionkey.py::candidates_for`、`src/agentflow/propositionkey.py::concept_keys`、`src/agentflow/propositionkey.py::defined_term`、`src/agentflow/propositionkey.py::concept_similarity`、`src/agentflow/propositionkey.py::BASIS_CONCEPT_TERM`、`src/agentflow/propositionkey.py::BASIS_CONCEPT_LABEL`、`src/agentflow/propositionkey.py::CONCEPT_GENERIC_TERMS`、`src/agentflow/secretary.py::wash_working_name`、`src/agentflow/secretary.py::_strip_working_names`、`src/agentflow/secretary.py::_same_concept_candidate`、`src/agentflow/secretary.py::_merge_into_concept`、`src/agentflow/secretary.py::adjudicate_proposition`、`src/agentflow/secretary.py::append_proposition_verdict`、`src/agentflow/secretary.py::proposition_verdicts_path`、`src/agentflow/secretary.py::PROPOSITION_VERDICTS`、`src/agentflow/secretary.py::CONCEPT_IDENTITY_KINDS`
 - **判据**：`tests/test_secretary_recognizes_the_same_proposition.py::test_two_phrasings_of_one_proposition_become_one_row_with_proof_two`、`tests/test_secretary_recognizes_the_same_proposition.py::test_unjudgeable_texts_are_unknown_and_never_merged`、`tests/test_secretary_adjudication_is_wired.py::test_a_wired_secretary_really_issues_one_proposition_identity_call`、`tests/test_one_concept_is_one_row.py::test_a2_the_same_defined_term_under_another_label_is_one_concept`、`tests/test_one_concept_is_one_row.py::test_c_stubbing_the_criterion_to_different_turns_a_red`、`tests/test_the_secretary_washes_internal_work_names.py::test_a_the_real_mp3_work_name_never_becomes_the_theorem_name`、`tests/test_the_secretary_washes_internal_work_names.py::test_b_legitimate_theorem_names_are_not_touched_at_all`、`tests/test_one_theorem_many_proofs_is_not_three_theorems.py::test_a_the_route_leaves_the_label_and_lands_on_the_proof`、`tests/test_suspected_split_proposition.py::test_too_short_texts_are_unknown_and_never_folded_into_different`；现算：`secretary.PROPOSITION_VERDICTS` = 3、`secretary.CONCEPT_IDENTITY_KINDS` = 1、`propositionkey.BASIS_CONCEPT_TERM` = concept_defined_term
 
-### [规范] §16.9 C9 非平凡度族：按证明花的力气分 T0–T4
+### [规范] §16.9 C9 非平凡度族：由秘书按五档定义判 T0–T4
 
-**规则**：一条命题的非平凡度分五档 `T0`–`T4`，判据是**证明花了多少力气**（体量 / 步骤数 / 引理数 / 用到几个工具簇 / 有没有绕路），不是"值不值得做"那两个旧问题 —— 旧的两问**不再作判据**（判据文件里有一条专测它）；读数与判定分开：`proof_effort_readings` 只读，`nontriviality_from_effort` 把读数折成档，判不出就写 `unknown` 而不退回 `T1`。
+**规则**：一条命题的非平凡度分五档 `T0`–`T4`。判档的是**B 的秘书（模型）**，按业主给的五句
+自然语言定义判：T0 基础定理或初步结论（平凡但真，含数值实验直接穷举得出的）/ T1 有一定
+价值的非平凡结论 / T2 证明方法都平凡但工作量较大 / T3 需要较多技巧或跨领域工具 /
+T4 需要天才般的洞察力、思维链极长或偏离主流的构造。`secretary.proof_effort_readings`
+数出来的五项（体量 / 步骤 / 引理 / 工具簇 / 绕路）**只是参考读数**，不是判据：写得长不等于难。
+判不出来（没有判断面 / 回不了解析）就记「判不了」（`NONTRIVIALITY_UNJUDGED`），不许回落机械分、
+不许折成 T0。2026-10-29 业主裁定之后，机械落格那三个符号
+（`EFFORT_TIER_BANDS` / `effort_tier_label` / `nontriviality_from_effort`）已从代码里删除。
 
-- 补充：档位边界住在 `EFFORT_TIER_BANDS`（五档，`(下限, 上限, 档名)` 三元组），工具簇跨度住在 `EFFORT_TOOL_CLUSTERS`，"绕路"靠步号不连续（`_step_numbers` 那张表在依赖面那一侧）看出来。
-- **落点**：`src/agentflow/secretary.py::EFFORT_TIER_BANDS`、`src/agentflow/secretary.py::EFFORT_TOOL_CLUSTERS`、`src/agentflow/secretary.py::nontriviality_from_effort`、`src/agentflow/secretary.py::proof_effort_readings`、`src/agentflow/secretary.py::effort_tier_label`、`src/agentflow/secretary.py::PROOF_BODY_CAP`、`src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT`、`src/agentflow/depsection.py::proof_steps`、`src/agentflow/depsection.py::proof_body`
-- **判据**：`tests/test_nontriviality_is_judged_by_effort.py::test_c_a_big_proof_with_many_lemmas_and_two_clusters_is_t2_or_above`、`tests/test_nontriviality_is_judged_by_effort.py::test_d_a_three_line_proof_that_only_uses_definitions_stays_t0`、`tests/test_nontriviality_is_judged_by_effort.py::test_e_the_two_old_questions_are_not_criteria`、`tests/test_nontriviality_is_judged_by_effort.py::test_f_zeroed_effort_readings_break_the_big_proof_case`、`tests/test_secretary_rates_nontriviality.py::test_the_five_levels_are_declared_with_the_owner_semantics`、`tests/test_secretary_rates_nontriviality.py::test_unknown_is_not_a_tier`、`tests/test_nontriviality_reading_is_read_only.py::test_counts_keep_unjudged_apart_from_t1`、`tests/test_b_nontriviality_language_is_tiers.py::test_b_source_has_no_trivial_wording_outside_history_comments`；现算：`secretary.EFFORT_TIER_BANDS` = 5、`secretary.EFFORT_TOOL_CLUSTERS` = 8
+- 补充：五档语义写在 `secretary.NONTRIVIALITY_LEVELS` 与判档题面（`_judge_system`）里；
+  解析器 `_nontriviality_level` 同时认 `T0`–`T4` 与数字（模型照题面答 `T3` 不会再被读成判不了）。
+- **落点**：`src/agentflow/secretary.py::NONTRIVIALITY_LEVELS`、`src/agentflow/secretary.py::proof_effort_readings`、`src/agentflow/secretary.py::_judge_system`、`src/agentflow/secretary.py::_nontriviality_level`、`src/agentflow/secretary.py::PROOF_BODY_CAP`、`src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT`
+- **判据**：`tests/test_the_secretary_decides_the_tier_not_the_score.py::test_the_secretary_decides_the_tier`、`tests/test_the_secretary_decides_the_tier_not_the_score.py::test_without_the_model_the_tier_is_unjudged`、`tests/test_the_secretary_decides_the_tier_not_the_score.py::test_the_stub_would_have_caught_a_mechanical_rule`、`tests/test_the_secretary_decides_the_tier_not_the_score.py::test_the_mechanical_symbols_are_gone`、`tests/test_the_tier_label_parses.py::test_the_t3_label_and_number_both_parse`、`tests/test_the_tier_prompt_carries_the_five_definitions.py::test_the_prompt_carries_the_five_owner_definitions`（数字格：无 —— 档位由秘书按五档定义判、不由分数落格，没有可现算的边界数；理由见本节规则）
 
 ### [规范] §16.10 C10 形式化入口族：只有用户指定 ⇒ M→B，`B→L` 唯一入边，F 不立 formal 子目标
 
@@ -1815,7 +1823,7 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 | C5 "公告里点名 + 指令语气 ⇒ 拒" | 判"是不是指令语气"有一次语义判定，不是词表比对 | `src/agentflow/agent_prompts.py` 的公共频道那一段 + `tests/test_the_public_channel_is_the_senders_children.py` |
 | C7 "不要求逐字（同一句话换写法仍可 `consistent`）" | "意思一样"不可枚举；能机器核的是**档位与挡签** | `tests/test_v_checks_fs_citations.py::test_a_consistent_use_signs_even_though_the_words_differ` |
 | C8 "条件 → 结论 一致" | 判一条命题是不是同一条要过一次模型；机器核的是它的**后果**（合并成一行 / `unknown` 不合并） | `tests/test_secretary_recognizes_the_same_proposition.py` |
-| C9 "按花的力气" | 五档的**边界**可核，"这次算不算绕路"不行 | `tests/test_nontriviality_is_judged_by_effort.py` |
+| C9 "档位由谁判" | 档位由秘书（模型）按五档定义判；力气读数只作参考 | `tests/test_the_secretary_decides_the_tier_not_the_score.py` |
 | C13 三条基础设施判据 | 它们守的是"别的判据可不可信"，没有自己的读数 | `tests/test_clean_invariant.py`、`tests/test_green_is_not_faked.py` |
 
 > 这一栏本身就是三态纪律的一次落地：**"核不了"要写"核不了"，不写一个看起来精确的数字。**

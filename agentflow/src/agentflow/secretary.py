@@ -2380,7 +2380,10 @@ class Secretary:
             decided = str(got.get("decision") or "")
             model_level = _nontriviality_level(got.get("nontriviality"))
             model_note = str(got.get("nontriviality_basis") or "")
-            verdict = nontriviality_from_effort(readings)
+            # 2026-10-29 业主「全交给模型判」⇒ 机械落格函数已删；这个常量只为
+            # 让下面的 `verdict[...]` 引用不必改写，它不提供档位（level=None）。
+            verdict = {"level": None,
+                       "why": "力气读数只作参考（档位由秘书按五档定义判）"}
             level = verdict["level"]
             notes: list[str] = []
             if text_truncated:
@@ -2393,7 +2396,9 @@ class Secretary:
                                  "那一判断不采信，改记「判不了」")
                 if model_note:
                     notes.append(f"秘书原报档位依据（输入不完整，只留痕不作判据）：{model_note}")
-            elif level is None:
+            # 2026-10-29：机械落格删掉之后 level 恒为 None，原来这条 `elif level is None`
+            # 会把每一条都读进"读数取不到"那一支 —— 条件改成读力气读数本身。
+            elif not readings.get("chars"):
                 notes.append(str(verdict["why"]))
                 if _is_trivial_verdict(decided):
                     got["decision_overridden_from"] = decided
@@ -2406,22 +2411,26 @@ class Secretary:
                 if model_note:
                     notes.append(f"秘书原报档位依据：{model_note}")
             else:
-                # 读数完整：档位按读数给定（秘书自报只作交叉核对）。
-                if _is_trivial_verdict(decided):
-                    if level == 0:
-                        notes.append(f"降为 {nontriviality_label(0)}：" + str(verdict["why"])
-                                     + f"；秘书原话：{str(got.get('reason') or '')[:200]}")
+                # 读数完整：档位以秘书（模型）判的为准（业主 2026-10-29：全交给模型判，
+                # 判档的还是 B 秘书）。力气读数仍进 `effort`，只作参考、不再裁定档位。
+                # 秘书没给档位 ⇒ 判不了，不许回落机械分、更不许折成 T0。
+                if model_level is not None:
+                    if model_level != level:
+                        notes.append(
+                            f"档位以秘书判定为准：{nontriviality_label(model_level)}"
+                            f"（机器力气读数只作参考，score="
+                            f"{int(readings.get('score') or 0)}）")
+                        level = model_level
                     else:
-                        got["decision_overridden_from"] = decided
-                        got["decision"] = "合格"
-                        notes.append("秘书判了「太平凡」，但" + str(verdict["why"])
-                                     + " ⇒ 档位不压低（判据只有力气那一组，"
-                                     "「没人用得上 / 不比已知强」不作判据）")
+                        notes.append(str(verdict["why"]))
                 else:
-                    notes.append(str(verdict["why"]))
-                if model_level is not None and model_level != level:
-                    notes.append(f"秘书自报 {nontriviality_label(model_level)}，"
-                                 "与力气读数不一致 ⇒ 以读数为准")
+                    notes.append(
+                        "秘书没给档位（没接模型 / 没开 model / 回不了解析）⇒ 这一格记判不了；"
+                        "机器力气读数只作参考，不拿来补一个档位")
+                    level = None
+                if _is_trivial_verdict(decided) and level == 0:
+                    notes.append(f"降为 {nontriviality_label(0)}：" + str(verdict["why"])
+                                 + f"；秘书原话：{str(got.get('reason') or '')[:200]}")
                 if model_note:
                     notes.append(f"秘书原报档位依据：{model_note}")
             basis_note = "；".join(n for n in notes if n)[:900]
@@ -8417,14 +8426,6 @@ def nontriviality_of(root: str | Path, statement_full: str, *,
 # 三态纪律不变：一项都读不到（没有证明正文）或正文被截断 ⇒ 档位是 None，且原因必须点名
 # 缺的是哪一项读数 —— 不许拿 0 冒充"判不了"，也不许拿"材料不足"冒充"输入不完整"。
 
-#: 力气分数 → 档位的边界表（唯一一处定义；改它等于改"多不平凡"的口径）。
-#:
-#: 分数是五项读数之和（见上面那张表），每档的分数区间写在第一、二格，第三格是档位名。
-#: 判据 `tests/test_nontriviality_is_judged_by_effort.py` 的 (c)/(d) 钉的就是这条表的
-#: 两头：体量大 + 多条引理 + 跨簇的证明必须进 T2 以上，三行只用定义的证明必须落在 T0。
-EFFORT_TIER_BANDS: tuple[tuple[int, int, str], ...] = (
-    (0, 1, "T0"), (2, 3, "T1"), (4, 7, "T2"), (8, 15, "T3"), (16, 10 ** 9, "T4"),
-)
 
 #: "跨度"读数的单位：工具簇。一个簇 = 一类论证工具；簇的个数就是"跨了几个领域"的机器读数。
 #:
@@ -8565,58 +8566,8 @@ def proof_effort_readings(*, statement_full: str = "", proof_text: str = "",
     return out
 
 
-def effort_tier_label(score: Any) -> str:
-    """分数 → 档位名（`0 -> "T0"` …；坏输入 ⇒ 空串）。边界只在这里读一次。"""
-    try:
-        got = int(score)
-    except (TypeError, ValueError):
-        return ""
-    for low, high, label in EFFORT_TIER_BANDS:
-        if low <= got <= high:
-            return label
-    return ""
 
 
-def nontriviality_from_effort(readings: Mapping[str, Any]) -> dict[str, Any]:
-    """力气读数 → 非平凡性档位（三态：读全了给 0–4；读不到/被截断给 None + 原因）。
-
-    为什么这一层与 :func:`proof_effort_readings` 分开：读数是"文本里数出来的东西"，
-    档位是"这些数落在哪一格"。分开之后，判据可以把两者分别打桩（(f) 的反真空：
-    读数全 0 ⇒ 体量大的那条必须掉档；读数恒 T3 ⇒ 三行证明必须升档），
-    而"打桩之后判据会不会跟着红"正是"这一档到底是不是读数给的"的唯一证明。
-
-    返回 `{"level": int|None, "label": "T0".."T4"|"", "band": 同 label, "score": int,
-    "why": 一句话, "missing": [...]}`。三态的第一条：`missing` 非空、或 `text_truncated`
-    为真 ⇒ `level` 是 None，`why` 点名缺的是哪一项 —— 不是 0。
-    """
-    got = dict(readings or {})
-    missing = [str(x) for x in (got.get("missing") or [])]
-    score = int(got.get("score") or 0)
-    base = {"score": score, "missing": missing}
-    truncated = bool(got.get("text_truncated"))
-    if truncated:
-        at = int(got.get("truncated_at") or PROOF_BODY_CAP)
-        return {**base, "level": None, "label": "", "band": "",
-                "why": (f"这一条正文在 {at} 字处被截断（正文共 "
-                        f"{int(got.get('body_chars') or 0)} 字，读的上限是 {at} 字）"
-                        "—— 档位判不了是因为输入不完整，不是因为材料不足")}
-    if missing:
-        names = {"proof_body": "证明正文（体量/步骤/引理/跨度四项都取不到）"}
-        lack = "、".join(names.get(m, m) for m in missing)
-        return {**base, "level": None, "label": "", "band": "",
-                "why": f"判不了：缺的是「{lack}」这一项力气读数 —— "
-                       "补上逐字证明正文（proof_text 或 statement_full 里的证明小节）再判"}
-    label = effort_tier_label(score)
-    if not label:
-        return {**base, "level": None, "label": "", "band": "",
-                "why": f"判不了：力气分数 {score!r} 落在边界表之外（EFFORT_TIER_BANDS 要改）"}
-    detail = (f"力气分数 {score} = 体量 {int(got.get('chars') or 0)} 字/{int(got.get('chars') or 0) // 2000}"
-              f" + 步骤 {int(got.get('steps') or 0)}/{int(got.get('steps') or 0) // 6}"
-              f" + 引理 {int(got.get('lemmas') or 0)}/{int(got.get('lemmas') or 0) // 2}"
-              f" + 工具簇 {int(got.get('clusters') or 0)}/{max(0, int(got.get('clusters') or 0) - 1)}"
-              f" + 绕路 {'1' if got.get('detour') else '0'}")
-    return {**base, "level": int(label[1:]), "label": label, "band": label,
-            "why": f"按力气读数判 {label}（{detail}）"}
 
 
 def material_truncation(context: Mapping[str, Any]) -> dict[str, Any]:

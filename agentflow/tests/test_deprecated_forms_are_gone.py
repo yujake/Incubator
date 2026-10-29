@@ -160,8 +160,6 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
         "src/agentflow/specs/b.py": "该删，已转持有方（FC-27 禁改区）",
         "tests/test_filing_tier_carries_the_proof.py":
             "判据读它：断言 note 里不再出现旧那两问（负控）",
-        "tests/test_nontriviality_is_judged_by_effort.py":
-            "判据读它：断言档位不归因到旧那两问（负控）",
         "tests/test_secretary.py":
             "判据读它：注释说明升档只补力气读数（旧那两问不作判据）",
     },
@@ -497,6 +495,9 @@ def test_the_commented_code_scanner_ignores_prose(tmp_path: pathlib.Path) -> Non
 
 #: 文件 -> 为什么那句话里的旧名字还留着。
 DANGLING_ALLOWED: dict[str, str] = {
+    "src/agentflow/specs/b.py":
+        "该删，已转持有方（FC-27 禁改区）：那一句写「判据本体在 `secretary.proof_effort_readings` 与 `secretary.EFFORT_TIER_BANDS`」，而 EFFORT_TIER_BANDS 已按业主 2026-10-29 的裁定删除；这一行等人工改"
+,
     "src/agentflow/autonomy.py":
         "活陷阱：`STOP_TOKEN` 撤掉之后，任何还引用它的代码会立刻 NameError —— "
         "这一句是「旁路没了、别再把它加回来」的唯一说明，删掉下一个人会重新加一个字面匹配",

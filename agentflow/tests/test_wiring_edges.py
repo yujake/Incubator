@@ -543,7 +543,6 @@ WIRED: dict[str, str] = {
     "_reserved_artifact": "fs_tools._reserved_refusal（fs_write / fs_edit 两道闸共用）",
     # 12 非平凡度
     "proof_effort_readings": "Secretary.judge_statement",
-    "nontriviality_from_effort": "Secretary.judge_statement",
     "material_truncation": "Secretary.judge_statement",
     # 13 命题同一性
     "adjudicate_proposition": "Secretary.record_statement",

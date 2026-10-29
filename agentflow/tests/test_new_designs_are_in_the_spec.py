@@ -296,8 +296,6 @@ def _measures() -> dict[str, object]:
         "secretary.PROPOSITION_VERDICTS": lambda: len(secretary.PROPOSITION_VERDICTS),
         "secretary.CONCEPT_IDENTITY_KINDS": lambda: len(secretary.CONCEPT_IDENTITY_KINDS),
         "propositionkey.BASIS_CONCEPT_TERM": lambda: str(propositionkey.BASIS_CONCEPT_TERM),
-        "secretary.EFFORT_TIER_BANDS": lambda: len(secretary.EFFORT_TIER_BANDS),
-        "secretary.EFFORT_TOOL_CLUSTERS": lambda: len(secretary.EFFORT_TOOL_CLUSTERS),
         "agent_f.core.FORMAL_OWNER": lambda: str(fcore.FORMAL_OWNER),
         "agent_f.core.E_METHODS": lambda: len(fcore.E_METHODS),
         "agent_f.core.FORMAL_EDGE_MISSING_REASON": lambda: str(fcore.FORMAL_EDGE_MISSING_REASON),
