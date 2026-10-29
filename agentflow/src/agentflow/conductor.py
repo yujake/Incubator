@@ -3247,7 +3247,102 @@ class Conductor:
                              summary=summary, called_by=called_by,
                              parent_task_id=parent_task_id, depth=depth,
                              keep_alive=keep_alive, input_key=input_key)
-        return self._write_new_row(row, note=f"item:{kind}")
+        item_id = self._write_new_row(row, note=f"item:{kind}")
+        # ---- 「接到消息就是叫醒」（业主 2026-10-29）
+        #
+        # 计时器到点与同伴发消息走到的是同一条路：都在收件人名下落一条板项
+        # （`kind="notice"` / `kind="message"`）。业主的口径是——
+        # 「这和计时器到点时给代理发消息唤醒一样，静默的唤醒就是接到消息被唤醒」，
+        # 所以"叫醒"不是另一个动作，它就是这一刻：信落盘了，收件人得有人读。
+        #
+        # 这一层只做判定与留痕（读收件人那一行、决定要不要跑它），
+        # 真正把循环跑起来的那一步由 `self.resume_runner` 接（默认没接 ⇒ 读数写清
+        # "执行侧未接线"，不许当"它会读到"）。
+        self._ensure_consumer(item_id=item_id, kind=kind,
+                              recipient=str(parent_task_id or ""))
+        return item_id
+
+    def _ensure_consumer(self, *, item_id: str, kind: str, recipient: str) -> dict[str, Any]:
+        """板项落盘之后：收件人得有人读它（静默的唤醒 = 接到消息）。
+
+        三态读数 `{"attempted","started","reason"}` 写进 `self.last_consumer_reading`
+        供调用点与判据读；从不抛（叫不醒不许带走这次投递）。
+
+        判定次序（与业主 2026-10-29 的两条裁定一一对应）：
+        ```text
+        ① kind 不在白名单（message / notice）  ⇒ attempted=False（"板上有活"不是"来信"）
+        ② 收件人空                            ⇒ attempted=False（公共频道/广播）
+        ③ 台账读不成 / 没有那一行               ⇒ attempted=True + 理由
+        ④ 已销号                              ⇒ 不跑它（"已销号是彻底没有了"；寻址那关已拦，这里双保险）
+        ⑤ 还在跑（status ∈ UNFINISHED_STATUSES）⇒ 不动它（下一拍它自己读到）
+        ⑥ 终态且未销号                          ⇒ 该跑起来：status 由终态改回 running，
+                                                 交给 `self.resume_runner`（同号、不新建行）
+        ```
+        """
+        out: dict[str, Any] = {"attempted": False, "started": False, "reason": "",
+                               "item_id": item_id, "recipient": recipient}
+        try:
+            if str(kind or "") not in ("message", "notice"):
+                out["reason"] = f"kind={kind} 不是来信（只有 message / notice 才算叫醒）"
+                return out
+            if not recipient:
+                out["reason"] = "没有收件人（公共频道/广播）⇒ 没有要跑的人"
+                return out
+            out["attempted"] = True
+            row = self._task(recipient) or {}
+            if not row:
+                out["reason"] = f"{recipient} 在台账里没有那一行 ⇒ 它不存在（不是'已叫醒'）"
+                return out
+            if self._is_retired_task(recipient):
+                out["reason"] = (f"{recipient} 已销号 ⇒ 彻底没有了（业主 2026-10-29）。"
+                                 "投递本应被秘书拦；要它干活就重新派一个")
+                return out
+            status = str(row.get("status") or "")
+            if status in UNFINISHED_STATUSES:
+                out["reason"] = f"{recipient} 还在跑（status={status}）⇒ 板项它下一拍自己读到"
+                return out
+            role = str(row.get("role") or "")
+            runner = getattr(self, "resume_runner", None)
+            if not callable(runner):
+                out["reason"] = (f"{recipient} 已完成（status={status}）⇒ 该把它跑起来，"
+                                 "但这一趟没有接执行侧（`resume_runner` 未接线）")
+                return out
+            try:
+                runner(recipient, role=role, item_id=item_id, kind=kind,
+                       previous_status=status)
+            except Exception as exc:  # noqa: BLE001
+                out["reason"] = f"{recipient} 的执行侧起不来（{type(exc).__name__}: {exc}）"
+                return out
+            out["started"] = True
+            out["reason"] = (f"{recipient} 已按同号继续（status 由 {status} 改回 running，"
+                             f"因为收到了 {kind} {item_id}）")
+            return out
+        except Exception as exc:  # noqa: BLE001 —— 判定自己坏了也是"没叫成"
+            out["reason"] = f"叫醒判定没跑成（{type(exc).__name__}: {exc}）"
+            return out
+        finally:
+            self.last_consumer_reading = dict(out)
+
+    def _is_retired_task(self, task_id: str) -> bool:
+        """这个台账号对应的名册项是不是已销号。
+
+        读不到 ⇒ 返回 False（方向取"宁可叫它"，因为"叫醒一个还在的代理"只花一次循环，
+        而"把一个还在的代理当成已销号"会让它永远收不到信）。已销号那一档的权威读数在
+        秘书的退役名单里（`Secretary.retired_names` / 销号名单文件）。
+        """
+        try:
+            sec = getattr(self, "secretary", None)
+            if sec is None:
+                return False
+            holder = getattr(sec, "retired_names", None)
+            got = holder() if callable(holder) else holder
+            if isinstance(got, Mapping):
+                return task_id in {str(k) for k in got}
+            if isinstance(got, (list, tuple, set)):
+                return task_id in {str(x) for x in got}
+        except Exception:  # noqa: BLE001 —— 读不到就当没销号（方向见 docstring）
+            return False
+        return False
 
     @staticmethod
     def _item_row(*, kind: str, role: str, expects: str, action: str = "",
