@@ -763,7 +763,12 @@ def agent_state(*, row: Mapping[str, Any] | None,
                           "handoff": hand,
                           "waiters": rows, "waiting_for": [str(x) for x in waiting_for],
                           "wait_any": wa,
-                          "stalled": False, "stalled_sec": None, "stalled_reason": ""}
+                          "stalled": False, "stalled_sec": None, "stalled_reason": "",
+                          # 2026-10-29 业主：「静默的意思是"我的工作完成了，我彻底休息了。
+                          # 但如果需要我，给我再发消息或委托，我随叫随到"」；「已销号是彻底
+                          # 没有了」。所以静默要再分两档：可叫醒（号还在）与不可叫醒
+                          # （已销号）。这一格就是那个区分，静默与已销号不许折平。
+                          "wakeable": False}
 
     def _stall_text() -> str:
         """停滞那一句人话（必须含最后一步的时刻与"已经多少分钟没有新步"）。"""
@@ -783,6 +788,13 @@ def agent_state(*, row: Mapping[str, Any] | None,
         out["stalled"] = bool(state == AGENT_STATE_FLYING and stall_hit)
         out["stalled_sec"] = round(float(stall_sec), 3) if out["stalled"] else None
         out["stalled_reason"] = _stall_text() if out["stalled"] else ""
+        # 「随叫随到」的机器形态：静默 + 未销号 + 台账行已终态 ⇒ 可叫醒。
+        # 已销号那一档永远是 False（业主：「已销号是彻底没有了」）。
+        out["wakeable"] = bool(
+            state == AGENT_STATE_SILENT
+            and not retired
+            and bool(status)
+            and status not in UNFINISHED_STATUSES)
         return out
 
     if not ledger_checked:
