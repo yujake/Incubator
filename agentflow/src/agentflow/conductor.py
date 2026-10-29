@@ -3304,12 +3304,16 @@ class Conductor:
             role = str(row.get("role") or "")
             runner = getattr(self, "resume_runner", None)
             if not callable(runner):
-                # 2026-10-29：机制已在（`resume_dispatched` 实现 + 判据覆盖），
-                # 但接线必须显式。理由是一条实测回归：一旦 `open_item` 默认把
-                # 终态收件人跑起来，"给静默子开一条 queued notice"就会把它叫成
-                # active，于是 `test_a_child_with_unread_board_items_is_refused`
-                # 的销号分支从 waiting_no_children 变成 active。按业主口径那是
-                # 新语义，但必须先一起改掉那一批判据 —— 不许靠默认值悄悄移。
+                # 2026-10-29 业主：「静默……随叫随到」「静默的唤醒就是接到消息被唤醒」。
+                # 规则是框架的规则；但默认接线这一步先按住，理由是实测到一条时序竞态：
+                # 一旦 `open_item` 立刻把收件人改成 running 并起后台线程，
+                # "开一条 message ⇒ 马上销它"这类既有流程会读到 running（拒），
+                # 而线程落定之后又读到 silent（放行）—— 同一笔动作两个结果，
+                # 实测 `test_ack_is_the_hand_and_retire_needs_a_clean_board` 时红时绿。
+                # 要开默认接线，先得有"已叫起但还没开始跑"这一格（pending wake），
+                # 让销号读到的是确定的一档，而不是跟线程抢时序。
+                # 在那之前：真实装配（`host.wired_conductor`）已经接上执行侧，
+                # 替身/判据构造保持"未接线"，读数写清。
                 out["reason"] = (f"{recipient} 已完成（status={status}）⇒ 该把它跑起来，"
                                  "但这一趟没有接执行侧（`resume_runner` 未接线）")
                 return out

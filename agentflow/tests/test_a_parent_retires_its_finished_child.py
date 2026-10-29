@@ -239,12 +239,19 @@ def test_a_child_with_unread_board_items_is_refused(tmp_path: pathlib.Path) -> N
 
     负控的负控：把那条板项收口（`item_state=done`）之后，同一笔就能销 ——
     否则这条判据证明不了"是板项挡住了它"，只证明"它一律拒绝"。
+
+    2026-10-29 口径修正（业主：「静默的唤醒就是接到消息被唤醒」）：
+    `kind="message"` / `"notice"` 是来信，落盘就会把已完成的收件人叫起来
+    （`Conductor._ensure_consumer` ⇒ `resume_dispatched`），于是它不再静默、销号分支落到
+    `active`。所以这一条要用不叫醒的板项（`kind="work"`）来钉"有未消项就拒销号"；
+    "来信会把它叫起来"由下一条 `…_message_item_wakes_...` 单独钉。
     """
     env = _workspace(tmp_path)
     child = _child(env["cond"], str(env["owner"]), role="F", status="done")
     _roster(env, child, role="F", brief="攻坚")
-    item = env["cond"].open_item(kind="notice", role="F", expects="ack", action="notice",
-                                 summary="一条没消的通知", called_by="M",
+    item = env["cond"].open_item(kind="delegation", role="F", expects="ack",
+                                 action="delegation",
+                                 summary="一条没消的活", called_by="M",
                                  parent_task_id=child, depth=3)
 
     res = _call(env, child, reason="想销")
