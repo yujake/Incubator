@@ -2691,6 +2691,17 @@ class Secretary:
             "reading_why": str(reading.get("why") or "")[:400],
         }
         out["material"] = dict(material)
+        # ---- 没有判断面 ⇒ checked=False（业主 2026-10-29：「装配没接上时秘书判定必须报
+        # checked=False 且不放签」）。这一格必须排在"地板没过"之前：那一支会报
+        # `checked=True`＋"还差 N 次"，而装配缺失时票数根本不再增长（`judge_v_reply`
+        # 没判过的行是 unsure，不清零也不计入）—— 于是"没有秘书"会被读成"再签几次就有了"。
+        # 地板读数先算完再返回：调用方仍能看到 streak/need/streak_ok（那是事实），
+        # 而"这一趟没有人判"由 checked=False 说。
+        if self.seam is None or not self.enable_model:
+            out["reason"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 判定没查成："
+                             "不放签（checked=False 不是「可以签」，也不是「还差几次」）")
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
         if not out["streak_ok"]:
             # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,

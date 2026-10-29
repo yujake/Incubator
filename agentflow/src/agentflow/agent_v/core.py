@@ -10,14 +10,18 @@ H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五�
 `read_only=True`、`write_set=frozenset()`（`specs/v.py`）。它唯一的产物是
 `verifications/<命题号>.jsonl`（追加式，`verifications.record_verification` 发号）。所以它拿不到任何写工具
 —— 这不是"约定只读"，是 `tools.base._role_surface`的结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
-## 2026-10-22 补：签字要能到命题那一行上
-`verify_proof` 签完之后调 `verifications.record_verification(..., store=self.store)`：它先把
-台账那一行落盘，再在同一个 `statements` 事务里把被签的那一份证明（`proof_no`）的
-`reviewed` 翻上去（凭据换成这一签的 `verification_id` / `proof_sha256` / `proof_no`）。
-为什么必须由签名这条路径自己写：此前第 3 位的唯一写者是 B 的 `register_statement`，而它按
+## 2026-10-22 补：签字要能到命题那一行上（2026-10-29 起由秘书落地）
+`verify_proof` 调 `verifications.record_verification(..., store=self.store, flip=False)`：
+它只把台账那一行落盘。把被签的那一份证明（`proof_no`）的 `reviewed` 翻上去是
+`verifications.sign_statement` 的事，而它的唯一调用者是 V 的秘书
+（`Secretary.decide_sign_issuance` 的落地那一步）。为什么必须由签名这条路径自己写：
+此前第 3 位的唯一写者是 B 的 `register_statement`，而它按
 `evidencebits.BIT_OWNERS` 不替 V 签字 ⇒ "V 签了、台账上写着成立"与"命题那一行的 reviewed 位"
 之间没有连接，收工门 R10 恒 0。写回的结果在返回值 `review_write` 里（写没写成、为什么、
 回滚了没有），失败不静默吞掉。
+业主 2026-10-29 的口径：V 只产审稿意见；发不发签由 V 的秘书决定（连续 3 次 clean 才发），
+所以 `verify_proof` 的返回值里 `signed_bit3` 读的是"秘书真的把位翻上去了没有"，
+不是"台账里的票数够不够"。
 ## 三态纪律在这里的落法（这一层最容易出错的地方）
 `成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
@@ -674,8 +678,12 @@ class AgentV:
             })
             self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
             return out
-        payload = VR.bit3_payload(row, streak=VR.consecutive_holds(
+        payload = (VR.bit3_payload(row, streak=VR.consecutive_holds(
             self.workspace_root, sid, proof_no=no))
+            if bool(issuance.get("issued")) else {})
+        # 签成没成只看秘书落地那一步（`issued`），不看"台账票数够不够"（业主 2026-10-29）。
+        # 票够而秘书没落（装配缺失 / 它判了不发 / 判不了）⇒ 位没有翻，返回值不许说签了；
+        # 改前这里按连续读数合成了第 3 位，于是"没人发签"在返回值里长得像"已经签上"。
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB
@@ -827,8 +835,11 @@ class AgentV:
             })
             self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
             return out
-        payload = VR.bit3_payload(row, streak=VR.consecutive_holds(
+        payload = (VR.bit3_payload(row, streak=VR.consecutive_holds(
             self.workspace_root, sid, proof_no=no))
+            if bool((out.get("sign_issuance") or {}).get("issued")) else {})
+        # 与普通逐行走查那一支同一条纪律：签成没成只看秘书落地那一步（`issued`）。
+        # 这一路改前也是"按连续读数合成第 3 位"，于是装配缺失时返回值说签了、盘上没翻。
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB
@@ -940,13 +951,43 @@ class _ScriptedSeam:
         return SimpleNamespace(text=text, problem="" if text else "judge_not_wired")
 
 
+class _NoSecretary:
+    """自检用的"没有秘书"替身：三件都如实报 `checked=False`（业主 2026-10-29）。
+
+    为什么自检必须给它：`AgentV._secretary()` 会真的去装配一名秘书（工具路径那条缺口），
+    而自检不该联网、也不该花钱。给了这个替身，"这一趟没有秘书"就是自检里的第一条读数
+    —— 它同时是发签那条路径的反面（`signed_bit3` 必须为假）。
+    """
+
+    seam = ""
+    model_source = "自检：这一趟没有秘书"
+
+    def judge_v_reply(self, **_kw: Any) -> dict[str, Any]:
+        """判定没查成（不是"没问题"）：`axis` 归 unsure（不清零、不计入）。"""
+        return {"checked": False, "axis": "unsure", "decision": "",
+                "reason": "自检：没有秘书 ⇒ 判定没查成"}
+
+    def decide_sign_issuance(self, **_kw: Any) -> dict[str, Any]:
+        """没人发签 ⇒ 不签发。"""
+        return {"checked": False, "issue": False, "issued": False, "streak": 0,
+                "projected": 0, "need": VR.SIGN_STREAK_NEED, "streak_ok": False,
+                "decision": "", "writeback": {}, "landed": False,
+                "reason": "自检：没有秘书 ⇒ 没有人发这一签"}
+
+    def wash_v_reply(self, **_kw: Any) -> dict[str, Any]:
+        """洗不出来 ⇒ 不输出原文（自检不测洗稿，只核三态形状）。"""
+        return {"checked": False, "washed": False, "text": "", "findings": [],
+                "dropped": [], "refused": "secretary_unavailable",
+                "reason": "自检：没有秘书"}
+
+
 def selftest() -> int:
     """最小自检：冷启动的接口形态、三态、签位条件、追加式编号、没查成不落行。"""
     import tempfile
 
     checks: list[tuple[str, bool]] = []
     root = Path(tempfile.mkdtemp(prefix="agent_v_selftest_"))
-    agent = AgentV(None, workspace_root=root, llm=_ScriptedSeam([
+    agent = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([
         '{"verdict": "成立", "findings": []}',
         '{"verdict": "有毛病", "defect_step": 2, "findings": '
         '[{"level": "error", "step": 2, "kind": "无依据", "detail": "第 2 步没有依据"}]}',
@@ -964,18 +1005,21 @@ def selftest() -> int:
     # 台账发的号是正确的六位（见下一条与 `tests/test_id_width.py`）。
     checks.append((f"编号从 v-{S.format_id(1)} 起（六位；旧四位号读侧兼容）",
                    clean["verification_id"] == f"v-{S.format_id(1)}"))
-    checks.append(("成立才签第 3 位", clean["signed_bit3"] is True))
-    # 第 3 位（审过）的 owner 是 V —— 这句话有两半，都要核：
-    #   ① 静态那一半：`evidencebits.BIT_OWNERS["reviewed"] == "V"`（位表里的 owner）；
-    #   ② 实际那一半：这一行签名的是 V（`reviewed_by.verifier`）且凭据就是
-    #      本次发的那个号（`reviewed_by.verification_id`，不再写死四位）。
+    # 业主 2026-10-29：V 只产意见，签由秘书发；而且连续 3 次成立才签。
+    # 自检这一趟没有秘书 ⇒ 第 1 次成立既没有票数也没有人发签 ⇒ 第 3 位必须是空的。
+    checks.append(("成立但第 1 次不签第 3 位（没有秘书、也没到第 3 票）",
+                   clean["signed_bit3"] is False
+                   and clean["sign_issuance"]["checked"] is False
+                   and clean["sign_issuance"]["issue"] is False))
+    # 第 3 位（审过）的 owner 是 V —— 这一格只能核静态那一半：
+    # `evidencebits.BIT_OWNERS["reviewed"] == "V"`（位表里的 owner）。
+    # "签名者是 V、凭据是本次这行"那一半要真的签成才看得到，自检没有秘书 ⇒ 不在这里核
+    # （那一条在 `tests/test_v_sign_gate_streak.py` 的 a6/a8 里走真路径）。
     from .. import evidencebits as _EB
 
-    checks.append(("五元位第 3 位 owner 是 V（位表 owner=V，且签名者与凭据都是本次这行）",
+    checks.append(("五元位第 3 位 owner 是 V（位表那一格）",
                    _EB.BIT_OWNERS.get("reviewed") == "V"
-                   and bool(clean["bits"].get("reviewed"))
-                   and clean["reviewed_by"].get("verifier") == DEFAULT_VERIFIER
-                   and clean["reviewed_by"].get("verification_id") == clean["verification_id"]))
+                   and clean["reviewed_by"] == {}))
 
     bad = agent.verify_proof("0007", proof_text="1. 由定义直接得到。2. 易证。")
     checks.append(("有毛病指到那一步", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
@@ -999,7 +1043,7 @@ def selftest() -> int:
                    not (params & {"store", "conductor", "registry", "session_root"})))
     # 正控：提示词里真的有对象与硬禁令（否则上面那条"没有句柄"只是空集通过）。
     seam = _ScriptedSeam(['{"verdict": "看不出来", "findings": []}'])
-    probe = AgentV(None, workspace_root=root, llm=seam)
+    probe = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=seam)
     probe.verify_proof("0008", proof_text="1. 显然成立。", readonly_facts="- 只读读数：0 行")
     sent = seam.prompts[0] if seam.prompts else ""
     checks.append(("提示词里带证明全文与硬禁令", "1. 显然成立。" in sent and "易证" in sent))
@@ -1009,7 +1053,7 @@ def selftest() -> int:
                    probe.list_verifications("0008")["total"] == 1
                    and VR.bit3_payload(probe.list_verifications("0008")["items"][0]) == {}))
 
-    noproof = AgentV(None, workspace_root=root, llm=_ScriptedSeam([]))
+    noproof = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([]))
     got = noproof.verify_proof("0007", proof_text="")
     checks.append(("没有证明全文就不问模型", got["checked"] is False
                    and got["reason"] == "no_proof_text"))

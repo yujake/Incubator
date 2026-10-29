@@ -24,6 +24,9 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | a5 | `signs_bit3` 没有连续读数 ⇒ 不签（fail-closed） | 缺省放行 ⇒ 门被静默绕开 |
 | a6 | 发签那一步由秘书调 `sign_statement` 落地 | 退回 V 自己翻位 ⇒ 秘书只在旁边看 |
 | a7/v7 | 装配缺失 ⇒ 秘书判定 `checked=False` 且不发签（主路径，不是边角） | 没秘书也翻位 ⇒ 门槛在装配层不存在 |
+| a8/v8 | 签只能经秘书：`sign_statement` 的调用者只许是 `_land_sign_issuance`；V 这一路每次落台账都是 `flip=False` | V 自己补一刀 / 落台账顺手翻位 ⇒ 调用者名单里出现 `verify_proof` |
+| a9/v8 负控 | 秘书"判了签发但不落盘" ⇒ 位一次都不许翻（V 不许替它落） | V 拿 `issue=True` 自己翻位 ⇒ 三次 clean 之后位就翻上去了 |
+| a10/v7 正面 | 工具路径那种构造（只有 store + root）会自己装配秘书；装配给出没缝的秘书 ⇒ `checked=False` 且不发签 | 惰性装配坏了 / 没秘书也签 ⇒ 工具路径上门槛不存在 |
 | b1/v1 | 三档不许折平：fault 清零 / clean +1 / unsure 不清零不计入 | 折成一档 ⇒ 先夸后刺被当成 clean |
 | b2 | 题面逐字带着三条判定规则 | 题面丢了规则 ⇒ 模型只能猜 |
 | b3/v4 | 秘书不看证明：材料里塞 F 正文必须被拒 | 收了但没用 ⇒ 盘上查不出"看过" |
@@ -41,6 +44,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sys
 
 import pytest
 
@@ -347,6 +351,153 @@ def test_a7_no_secretary_means_no_signature_at_all(tmp_path):
     # 秘书没判过的那三签是 `unsure`：不清零、也不计入 ⇒ 连续次数停在 2
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2, (
         "秘书没判过的签被算成了 clean（或把已有的两票清零了）⇒ unsure 那一档没接上")
+
+
+# ============================================================ a8–a10 / v8 与 v7
+
+def _spy_signing(monkeypatch):
+    """给两个写口各包一层：记下 `sign_statement` 的调用者函数名与每次落台账的 `flip`。
+
+    为什么量"调用者函数名"而不是"源码里有没有那个字符串"：本仓反复踩过"判据读源码文本"
+    的坑（`test_model_calls_are_deterministic` 那条就是）。运行时栈是行为，不是措辞：
+    谁真的调了签，就一定在名单里。
+    """
+    callers: list[str] = []
+    flips: list[object] = []
+    real_sign = VR.sign_statement
+    real_record = VR.record_verification
+
+    def _sign(store, **kw):
+        callers.append(str(sys._getframe(1).f_code.co_name))
+        return real_sign(store, **kw)
+
+    def _record(root, **kw):
+        flips.append(kw.get("flip", True))
+        return real_record(root, **kw)
+
+    monkeypatch.setattr(VR, "sign_statement", _sign)
+    monkeypatch.setattr(VR, "record_verification", _record)
+    return callers, flips
+
+
+def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
+    """v8：V 的代码路径里没有自己签的调用；`sign_statement` 只能由秘书调。
+
+    两条腿缺一条就只是"读起来像"：
+    ① 运行时调用栈：三次发签里，每一个调用者都必须是 `_land_sign_issuance`（秘书落地那一步）；
+       `verify_proof` / `_finish_numeric` / `record_verification` 一次都不许出现；
+    ② 落台账那一步：V 这一路每一次 `record_verification` 都必须 `flip=False`
+       （V 只落台账，翻位不是它的事）。
+
+    反真空：这一趟必须真的发生过发签（`callers` 非空），否则"没有自己签"只是没签。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    seam = _Seam({"sign_issuance": [_axis(SEC.SIGN_ISSUE)],
+                  "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
+    agent = _agent(st, _sec(st, seam))
+    callers, flips = _spy_signing(monkeypatch)
+    for i in (1, 2, 3):
+        got = agent.verify_proof(SID, proof_text=PROOF)
+        assert got["checked"] is True, got
+        assert got["signed_bit3"] is (i == 3), (i, got["signed_bit3"], got["sign_issuance"])
+    assert callers, "三趟 clean 里一次发签都没有发生 ⇒ 这一条没测到'签'（判据真空）"
+    assert set(callers) == {"_land_sign_issuance"}, (
+        f"`sign_statement` 被这些调用者调过：{sorted(set(callers))} ⇒ "
+        "发签没有唯一落在秘书那一侧（V 或别的路径还在自己签）")
+    assert "verify_proof" not in callers and "_finish_numeric" not in callers, callers
+    assert flips and all(f is False for f in flips), (
+        f"V 这一路有 `record_verification` 没带 flip=False：{flips} ⇒ "
+        "V 把「落台账」与「翻位」合成了一步")
+    assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
+
+
+class _LazyButApproving:
+    """一个"判了签发、却不去落盘"的秘书（夹具）。
+
+    它把「决定」与「落地」分开：`decide_sign_issuance` 说签发，但从不调 `sign_statement`。
+    业主口径把落地也交给秘书（`Secretary._land_sign_issuance`）—— 若 V 在拿到
+    `issue=True` 之后自己补一刀，这一条就会红。
+    """
+
+    seam = "fake-wired"
+    model_source = "夹具：判了但不落盘"
+
+    def judge_v_reply(self, **_kw):
+        return {"checked": True, "axis": "clean", "decision": SEC.V_REPLY_CLEAN,
+                "reason": "夹具：照规则判 clean", "basis": []}
+
+    def decide_sign_issuance(self, **_kw):
+        return {"checked": True, "issue": True, "issued": False,
+                "streak": VR.SIGN_STREAK_NEED, "projected": VR.SIGN_STREAK_NEED,
+                "need": VR.SIGN_STREAK_NEED, "streak_ok": True,
+                "decision": SEC.SIGN_ISSUE, "landed": True, "writeback": {},
+                "reason": "夹具：判签发，但一个字都不写盘"}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": False, "washed": False, "text": "", "findings": [],
+                "dropped": [], "refused": "secretary_unavailable", "reason": "夹具"}
+
+
+def test_a9_a_secretary_that_decides_but_does_not_land_cannot_sign(tmp_path):
+    """v8 负控：秘书"判了签发但不落盘" ⇒ 位一次都不许翻。
+
+    这是"签只能经秘书"的反面证明：如果 V 拿到 `issue=True` 就自己补一刀，
+    或者不看落地结果就报 `signed_bit3=True`，三次 clean 之后位就会翻上去。
+    断言同时钉住"票数够"（`streak_ok=True`）—— 于是红只可能来自"谁落的地"。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    agent = _agent(st, _LazyButApproving())
+    for i in (1, 2, 3):
+        got = agent.verify_proof(SID, proof_text=PROOF)
+        assert got["sign_issuance"]["issue"] is True, got["sign_issuance"]
+        assert got["sign_issuance"]["streak_ok"] is True, got["sign_issuance"]
+        assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
+        assert got["signed_bit3"] is False, (
+            f"第 {i} 趟 V 把'秘书决定签发'读成了'位已经签上'：{got['bits']}")
+        assert _row(st)["bits"]["reviewed"] is False, _row(st)["bits"]
+    rows, _bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
+    assert len(rows) == 3, f"三趟审阅应当落三行台账（意见照留），实得 {len(rows)}"
+
+
+def test_a10_the_tool_path_assembles_its_own_secretary_or_reports_checked_false(
+        tmp_path, monkeypatch):
+    """v7 正面用例之二：工具路径那种构造（只有 store + root）也要有自己的秘书。
+
+    `tools/verify_tools.py:_agent_v` 是 FC-27（prover-bridge），只给 store 与工作区根，
+    造不出秘书 ⇒ 装配必须落在 `AgentV` 这一层（`draft/125` §三 的缺口）。
+    这一条把 `secretary.for_role_wired` 换成"造得出来、但没有判断面"（真机形态：没有配
+    秘书那一档 key），于是走的是 `AgentV._secretary()` 的真实那条路 ——
+    不是夹具里手动把 `_secretary_tried` 打成 True（a7 那样做测不到"有没有去装配"）。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    made: list[object] = []
+
+    def _factory(role, *, root, store=None, **_kw):
+        got = SEC.Secretary(str(role), root=pathlib.Path(root), store=store,
+                            seam=None, enable_model=False)
+        made.append(got)
+        return got
+
+    monkeypatch.setattr(SEC, "for_role_wired", _factory)
+    clean = {"checked": True, "axis": "clean", "decision": SEC.V_REPLY_CLEAN}
+    _sign(st, judge=clean)
+    _sign(st, judge=clean)                      # 地板先过：只剩"有没有人发签"
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 2
+    agent = AgentV(st, workspace_root=st.root,
+                   llm=_ReviewSeam(json.dumps(_OK, ensure_ascii=False)))
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert made, "AgentV 没有去装配秘书 ⇒ 工具路径那一侧的缺口仍然没补上"
+    assert got["checked"] is True, got
+    assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
+    assert got["sign_issuance"]["checked"] is False, got["sign_issuance"]
+    assert got["sign_issuance"]["issue"] is False, got["sign_issuance"]
+    assert got["signed_bit3"] is False and got["bits"]["reviewed"] is False, got["bits"]
+    assert _row(st)["bits"]["reviewed"] is False, _row(st)["bits"]
+    # 没判过的那一签是 unsure：不清零、也不计入 ⇒ 连续次数停在 2
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 2
 
 
 # ============================================================ b1 / v1：三档
