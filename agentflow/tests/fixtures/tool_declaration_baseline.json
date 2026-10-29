@@ -1,7 +1,7 @@
 {
   "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 120,
+  "n_tools": 121,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -93,7 +93,7 @@
     "verify.verify_proof"
   ],
   "added_after_compression": {
-    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。 2026-10-28（阶段 ③ 2B）：又加 1 件 —— `search.retry_pending`（把「有元数据、没全文」的文献逐条再取一次，四结局 got/failed/no_location/cooled_down）；同一口径：它从未压缩过，不进 compression_cohort，也不进比例的分母。",
+    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。 2026-10-28（阶段 ③ 2B）：又加 1 件 —— `search.retry_pending`（把「有元数据、没全文」的文献逐条再取一次，四结局 got/failed/no_location/cooled_down）；同一口径：它从未压缩过，不进 compression_cohort，也不进比例的分母。 2026-10-29（业主逐字：「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」）：再起 1 件 —— `conductor.wake_blocked`（逐条审批式唤醒 `item_state=block` 的板项）。同一口径：它的说明是新写的、从未压缩过，不在 compression_cohort 里，也不进比例的分母；登记行上的 added_after_compression: true 就是这条登记本身。",
     "tools": [
       "clock.alarm_start",
       "clock.now",
@@ -129,7 +129,8 @@
       "conductor.patrol_verdict",
       "conjecture.register_conjecture",
       "conductor.void_items",
-      "search.retry_pending"
+      "search.retry_pending",
+      "conductor.wake_blocked"
     ]
   },
   "declarations": {
@@ -5484,6 +5485,44 @@
       "handler_name": "functools.partial",
       "summary": "把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，冷却中的源跳过而不是判失败。",
       "added_after_compression": true
+    },
+    "conductor.wake_blocked": {
+      "summary": "把被优雅停止停住的活（`item_state=block` 的板项）逐条审批唤醒 —— 业主 2026-10-29 逐字：「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」。逐条审批式：默认 `dry_run=true` 只看不写（审计照跑、逐条给结论）；`approve=\"yes\"` 才算批准，且 `dry_run=false` 才真写。没带批准的那一趟连审计结论都不给（逐条 `skip` + `not_approved`）—— 一张「没批准但可唤醒」的清单等于把绕开批准的路递到调用方手里。三档逐条：`resume`（owner 静默、未销号、仍在册、板项未终态、子树无在跑）/ `review`（任一读数没查成，交人看，不猜）/ `skip`（已销号、owner 在飞、板项已终态、子树有在跑、不是静默、没批准，逐条给 `refusal_code`）。真写时两根轴一起翻（status→running、item_state→queued）并在 `inputs` 追一条 `wake:<谁>@<iso>|<为什么>`，然后只经 `wake_on_lifeline` 叫醒 owner（那条路带「已销号 / 在飞」双闸）。两条后果写在明面上：① 唤醒清不掉板项本身 —— 它只是回到 queued，收口仍要收件人自己 `conductor.ack`（`expects=work`）或 `conductor.void_items`（只收 `expects=ack` 且收件人叫不醒的那种）；② block 板项会一直挡收工（`retire_integrity.open_items` ⇒ `dirty` ⇒ `complete=false`），唤醒解除的是「叫不醒」，不是「挡住销号」。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 12
+            },
+            "maxItems": 50,
+            "description": "只审这几条板项（`tasks` 里的 task_id）；不给 = 板上全部 `item_state=block` 的行"
+          },
+          "approve": {
+            "type": "string",
+            "maxLength": 8,
+            "description": "批准令牌：只有 \"yes\" 才算批准（大小写不敏感）。空 = 没批准 ⇒ 不审也不动"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "true（缺省）= 只看不写；false = 批准之后真的直写并叫醒"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','state','items','count','requested','approve_present','dry_run','reason'}；state 是 woken / refused / nothing / unknown 之一（它说的是「这一笔有没有叫醒」，不是「板上还有没有 block 行」）；items[] 每项是 {item_id,task_id,owner,verdict,started,refusal_code,why,mark} 同形同集（verdict 取 resume / review / skip；mark 是写进 inputs 的那条 wake: 落痕，没写就是空串）",
+      "side_effect": "write_local",
+      "external": "none",
+      "roles": [
+        "M"
+      ],
+      "tags": [],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
     }
   },
   "contract_amendments": [
@@ -5650,14 +5689,14 @@
         "conductor.state"
       ],
       "key": "returns",
-      "reason": "G2 第 ③ 条（业主 2026-10-26）：conductor.state 多一格 programs —— 盘上的程序进程读数。收工与停车要看它，原来它不在状态读数里，于是「起过什么程序、还活着没有」无处可查。",
-      "date": "2026-10-26",
+      "reason": "本格自压缩基线以来两次演进，本条按「现值」重记一次（`edits` 的 `from` 仍是基线里那一版）：① 2026-10-26 G2 第 ③ 条（业主）加 `programs` —— 盘上的程序进程读数，收工与停车要看它，原来「起过什么程序、还活着没有」无处可查；② 2026-10-29（业主：`conductor.state` 此前零三态，是审计点名的漏点）加 `states` —— 三态合计 `checked` / `counts`（按 state 计数）/ `by_task`（逐号）/ `reason`，数据源 `activity_snapshot`，读不成 ⇒ `checked=False` + 理由（「没查成」不许折成「一条都没有」）。为什么合成一条而不是再加一条：`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值 —— 正控 `test_the_recorded_amendments_are_the_only_thing_they_excuse` 会把 `edits` 从**现值**退回再比一次，留旧 `to` 的账就是「账与盘上的东西对不上」。",
+      "date": "2026-10-29",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'root','tables','conjectures','tasks','queues'}",
-          "to": "{'root','tables','conjectures','tasks','queues','programs'}"
+          "to": "{'root','tables','conjectures','tasks','queues','programs','states'}"
         }
       ]
     },
