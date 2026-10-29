@@ -77,6 +77,15 @@ class VerificationWiringError(RuntimeError):
     """这次审校没查成：没有模型缝，或拿回来的结论不合法。不是 `有毛病`。"""
 
 
+#: 业主 2026-10-29：「temperature = 1.0（正常对话的数值）」——只给 V 的审阅调用。
+#:
+#: 为什么 V 用正常对话的温度而别的角色不动：V 的活是"读出这份证明站不站得住"，
+#: 那是理解与判断，不是把同一句话复现三遍。而"可复现"这一条已经由连续 3 次
+#: （`verifications.SIGN_STREAK_NEED`）＋ 秘书语义判定承担，不再靠把采样钉死。
+#: 别的角色与秘书那一档仍是 `modelgw.DEFAULT_TEMPERATURE`（0.2），一个字节都没动。
+REVIEW_TEMPERATURE = 1.0
+
+
 def _read_only_facts(store: Any, statement_id: str) -> str:
     """只读读数（命题现状 + 文献/实验条数）—— I12 里"只读查询面"那一半。
 
@@ -196,7 +205,9 @@ class AgentV:
             return "", "judge_not_wired"
         try:
             if hasattr(seam, "ask"):
-                call = seam.ask(prompt, task_id="")
+                # 业主 2026-10-29：V 的审阅调用按正常对话的温度问（`REVIEW_TEMPERATURE`
+                # = 1.0）；别的角色没有这一格，仍是 `modelgw.DEFAULT_TEMPERATURE`（0.2）。
+                call = seam.ask(prompt, task_id="", temperature=REVIEW_TEMPERATURE)
                 problem = str(getattr(call, "problem", "") or "")
                 text = str(getattr(call, "text", "") or "")
                 if problem and not text:

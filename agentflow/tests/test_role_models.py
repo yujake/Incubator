@@ -245,7 +245,10 @@ def test_every_model_key_on_the_write_side_shows_up_in_the_readback(tmp_path, mo
                       "secretary": {"api_key": "k-sec"}})
     got = _reading(tmp_path, monkeypatch)
     want = set(SET.MODEL_KEYS)
-    assert want == {"vendor", "api_key", "base_url", "name", "reasoning_effort"}, want
+    # 2026-10-29：词表多一格 `temperature`（业主：「temperature = 1.0（正常对话的数值）」，
+    # 只给 V 的审阅调用）。这一条是"加了词就别忘了读侧"的判据，代价就是这一行要跟着加。
+    assert want == {"vendor", "api_key", "base_url", "name", "reasoning_effort",
+                    "temperature"}, want
     missing = {
         "model": sorted(want - set(got["model"])),
         "models.A": sorted(want - set(got["models"]["A"])),

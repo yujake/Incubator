@@ -355,9 +355,9 @@ export interface SettingsReading {
   path: string;
   exists: boolean;
   toolchain: Record<string, string>;
-  model: { vendor: string; api_key: string; base_url: string; name: string; reasoning_effort: string; key_source: string; configured: boolean };
-  models: Record<string, { api_key: string; base_url: string; name: string; vendor: string; reasoning_effort: string; key_source: string; configured: boolean; source: string }>;
-  secretary: { api_key: string; base_url: string; name: string; vendor: string; reasoning_effort: string; key_source: string; configured: boolean; source: string; own_slot?: Record<string, string> };
+  model: { vendor: string; api_key: string; base_url: string; name: string; reasoning_effort: string; temperature: string; key_source: string; configured: boolean };
+  models: Record<string, { api_key: string; base_url: string; name: string; vendor: string; reasoning_effort: string; temperature: string; key_source: string; configured: boolean; source: string }>;
+  secretary: { api_key: string; base_url: string; name: string; vendor: string; reasoning_effort: string; temperature: string; key_source: string; configured: boolean; source: string; own_slot?: Record<string, string> };
   workspace: Record<string, string>;
   raw_keys: string[];
 }

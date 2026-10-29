@@ -99,6 +99,14 @@ class SeamCall:
     #: 所有者 2026-10-10 的原话是"感觉像不怎么过脑子"—— 那一句在改前无法验证：
     #: 请求体里没有这一栏，回复里的 `reasoning_content` 也从没被读过。
     reasoning_effort: str = ""
+    #: 这一趟按哪个采样温度问的（`modelgw.TEMPERATURE_RANGE` 里的一个数）。
+    #:
+    #: 三态：`None` = 这一趟没有发请求（没接线 / 预算已尽）—— "没查过"不是"0"；
+    #: 具体数值 = 真的进了请求体 `temperature` 那一格的那个数（显式给的那个，
+    #: 或这一档配置 `ModelSpec.temperature` 的那个）。
+    #: 为什么它是一个字段：温度是"这一次判定可不可复现"的一半读数，而改前它只活在
+    #: `modelclient` 的 `to_dict()` 里、从没进过网线（`draft/125` §四 的假绿）。
+    temperature: float | None = None
     #: 这一趟回复里的思维链字数（上游 `message.reasoning_content`）。
     #: 只记字数不记原文：与 `tool_call_list` 不进 `to_dict()` 同一条纪律（会随每次调用膨胀）。
     reasoning_chars: int = 0
@@ -157,6 +165,7 @@ class SeamCall:
             "tools_advertised": self.tools_advertised,
             "tools_sha256": self.tools_sha256,
             "reasoning_effort": self.reasoning_effort,
+            "temperature": self.temperature,
             "reasoning_chars": self.reasoning_chars,
             "tool_calls": self.tool_calls,
         }
@@ -391,15 +400,36 @@ class LlmSeam:
         spec = getattr(self.gateway, "spec", None)
         return str(getattr(spec, "reasoning_effort", "") or "")
 
+    def temperature_of(self, requested: float | None = None) -> float | None:
+        """这一次真正会进请求体的那个温度（审计记录的一栏；没接线时是 `None`）。
+
+        显式给的优先（`ask(temperature=…)`）；没给就取这一档配置
+        （`ModelSpec.temperature`，唯一来源在 `modelgw`，这里只转抄）。
+        没接线时回 `None` 而不是 0：这一趟没有请求体，"没查过"与"发了个 0"必须分开。
+        """
+        if not self.wired:
+            return None
+        if requested is not None:
+            return float(requested)
+        spec = getattr(self.gateway, "spec", None)
+        got = getattr(spec, "temperature", None)
+        return None if got is None else float(got)
+
     # -------------------------------------------------------------- 调用
     def ask(self, prompt: str, *, system: str = "", task_id: str = "",
             note: str = "",
-            face: "ToolFace | None" = None) -> SeamCall:
+            face: "ToolFace | None" = None,
+            temperature: float | None = None) -> SeamCall:
         """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
 
         `max_tokens` 这一栏已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
         它此前由循环步（`agent_loop`）传 32,768；删掉之后请求体里不再有这一栏，
         额度交回上游（真调用对照：不带比带 32768 还宽）。
+
+        `temperature`（2026-10-29）：不给就用这一档配置的温度（`ModelSpec.temperature`，
+        缺省 0.2）—— 与改前逐字相同。给了就透传进请求体并记进 `SeamCall.temperature`。
+        为什么要显式这一格：业主把 V 的审阅调用定在 1.0（正常对话的数值），
+        而"这一次按几度问的"必须能在审计记录里读回来（读数与请求体同源）。
         """
         t0 = time.monotonic()
         base = dict(
@@ -413,6 +443,8 @@ class LlmSeam:
             tools_sha256=face.sha256 if face is not None else "",
             # "我们要求它想多深"：配置面的读数（结果面是下面的 `reasoning_chars`）。
             reasoning_effort=self.reasoning_effort,
+            # "这一次按几度采样"：与 `_payload` 里那一格同源（没接线 ⇒ None）。
+            temperature=self.temperature_of(temperature),
         )
         if not self.wired:
             call = SeamCall(ok=False, problem="judge_not_wired",
@@ -441,6 +473,9 @@ class LlmSeam:
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
                                           system=(system or None),
+                                          # 显式给的温度透传；不给就是 None ⇒ 网关取这一档
+                                          # 配置的那一格（两处同源，见 `temperature_of`）。
+                                          temperature=temperature,
                                           tools=(face.functions if face is not None else None))
         except J.BudgetExhausted as exc:
             return self._finish_failure("judge_over_budget", str(exc), base, t0,

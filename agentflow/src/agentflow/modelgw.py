@@ -166,6 +166,8 @@ ENV_NAME = "AGENTFLOW_MODEL_NAME"
 ENV_TIMEOUT = "AGENTFLOW_MODEL_TIMEOUT_SEC"
 ENV_RETRIES = "AGENTFLOW_MODEL_MAX_RETRIES"
 ENV_EFFORT = "AGENTFLOW_MODEL_REASONING_EFFORT"
+#: 采样温度（2026-10-29）：第七个模型档环境变量，同一道梯子（环境变量 > 设置文件 > 缺省）。
+ENV_TEMPERATURE = "AGENTFLOW_MODEL_TEMPERATURE"
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 #: 缺省模型（S-I / 裁定 19乙，2026-10-10）：从 `deepseek-chat` 换成 `deepseek-flash`。
@@ -195,6 +197,15 @@ REASONING_EFFORTS: tuple[str, ...] = ("off", "low", "high", "max")
 #: 缺省强度。2026-10-10 所有者裁定逐字："所有智能体都要能 thinking，且开默认到 High"。
 #: 它取代改前那种"什么也不发"的形态 —— 后者在真机上的读数是"模型没想"。
 DEFAULT_REASONING_EFFORT = "high"
+
+#: 缺省采样温度。它一直是 0.2（`ModelSpec.temperature` 的缺省值），2026-10-29 起只是
+#: 多了一个名字与一道读入校验 —— 别的角色的默认值一个字节都没动。
+DEFAULT_TEMPERATURE = 0.2
+
+#: 采样温度的合法区间（闭区间）。为什么要有它：温度不是一个"随便填个数字"的旋钮 ——
+#: 抄错一位（10 而不是 1.0）在上游那一侧会被裁到 1.0 或直接 400，而两种表现都长得像
+#: "模型不听话"；区间外当场抛，问题才停在这一层。
+TEMPERATURE_RANGE: tuple[float, float] = (0.0, 2.0)
 
 #: 传输层的签名：`(url, headers, body, timeout_sec) -> (http_status, text)`。
 Transport = Callable[[str, Mapping[str, str], bytes, float], "tuple[int, str]"]
@@ -249,6 +260,38 @@ def normalize_reasoning_effort(raw: Any) -> str:
             "所以这里必须自己拦 —— 否则一个拼错的强度会静默地按缺省跑"
         )
     return text
+
+
+def normalize_temperature(raw: Any) -> float:
+    """把一处来源的采样温度归一成浮点；空 ⇒ 缺省 0.2，非数或区间外 ⇒ 当场报错。
+
+    ## 为什么它也要"读入即校验"（与 :func:`normalize_reasoning_effort` 同一条纪律）
+
+    温度抄错一位（10 而不是 1.0）在上游那一侧有两种表现：被裁到 1.0，或者直接 400。
+    两种都会在下游长成"模型不听话"或"这次没查成"，而真正的原因在配置里那一格。
+    所以校验放在构造点（`ModelSpec.__post_init__`），不放到发请求那里：
+    一个不合法的温度根本构造不出 spec。
+
+    空串 = 未设置 = 缺省（`settings.example.json` 里那一格留空就是这个意思）；
+    `None` 同理。区间见 :data:`TEMPERATURE_RANGE`。
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return DEFAULT_TEMPERATURE
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"temperature 必须是一个数（空值等价于缺省 {DEFAULT_TEMPERATURE}），"
+            f"收到 {raw!r}") from exc
+    low, high = TEMPERATURE_RANGE
+    # NaN 与 inf 都过不了这个比较（NaN 的任何比较都是 False）⇒ 一起被拦在这里。
+    if not (low <= value <= high):
+        raise ValueError(
+            f"temperature 必须落在 [{low}, {high}] 里（空值等价于缺省 "
+            f"{DEFAULT_TEMPERATURE}），收到 {raw!r}。"
+            "抄错一位（例如 10 而不是 1.0）在上游那一侧会被裁到 1.0 或直接 400，"
+            "两种表现都不会说'是你配置写错了'")
+    return value
 
 
 def reasoning_body_fields(effort: str) -> dict[str, Any]:
@@ -354,6 +397,10 @@ class ModelSpec:
         """
         object.__setattr__(self, "reasoning_effort",
                            normalize_reasoning_effort(self.reasoning_effort))
+        # 采样温度走同一道纪律（2026-10-29）：空值 = 缺省 0.2，非数/区间外当场抛。
+        # 为什么也放在构造点：温度错了在上游那侧会被裁掉或 400，而两种都长得像"模型不行"。
+        object.__setattr__(self, "temperature",
+                           normalize_temperature(self.temperature))
         # ---- S-I：空串 = "没配"（设置文件里那一格留空就是这个意思），落到内置默认。
         #
         # 为什么放在构造点而不是各调用点：`ModelSpec()` 的 dataclass 默认值给的是常量，
@@ -430,6 +477,9 @@ def spec_for(role: str = "", *, secretary: bool = False,
     name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
     api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
     effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
+    # 采样温度（2026-10-29）：同一道梯子（环境变量 > 设置文件 > 缺省 0.2），
+    # 读进来就校验；词表那一格在 `settings.MODEL_KEYS` 里（面板按它画）。
+    temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
     vendor = str(ms.get("vendor") or "").strip().lower()
     fallback_url = VENDOR_BASE_URLS.get(vendor, DEFAULT_BASE_URL)
     spec = ModelSpec(
@@ -440,6 +490,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
         timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
         reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
+        temperature=normalize_temperature(temperature),
         key_source=key_src,
     )
     return spec, (where or "")
@@ -535,6 +586,9 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
     # 词表外的取值在 `ModelSpec` 构造时当场抛（见 `normalize_reasoning_effort`），
     # 不在这里吞成缺省。
     effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
+    # 采样温度走同一条梯子（2026-10-29）：环境变量 > 设置文件 > 缺省 0.2。
+    # 区间外/非数在 `normalize_temperature` 当场抛（不在这里吞成缺省）。
+    temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
     return ModelSpec(
         base_url=(base_url or DEFAULT_BASE_URL).rstrip("/"),
         model=name or DEFAULT_MODEL,
@@ -542,6 +596,7 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
         timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
         reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
+        temperature=normalize_temperature(temperature),
         key_source=key_src,
     )
 

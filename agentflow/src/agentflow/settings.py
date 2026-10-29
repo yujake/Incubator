@@ -179,7 +179,13 @@ BOOL_KEYS: tuple[str, ...] = (LEAN_ENABLED_KEY,)
 #: `modelgw.REASONING_EFFORTS` —— 本模块按设计不认识业务词表（它只管"取到一个字符串"），
 #: 在这里再写一份就是同一个词表的第二个定义点。词表外的取值由
 #: `modelgw.ModelSpec` 构造时当场拒绝（拼错一个字母会报错，不会静默按缺省跑）。
-MODEL_KEYS: tuple[str, ...] = ("vendor", "api_key", "base_url", "name", "reasoning_effort")
+#:
+#: `temperature` 是 2026-10-29 加的（业主口径：「temperature = 1.0（正常对话的数值）」，
+#: 只给 V 的审阅调用）。它的合法区间与缺省同样不在这里：唯一来源是
+#: `modelgw.DEFAULT_TEMPERATURE` / `modelgw.TEMPERATURE_RANGE`，读入校验在
+#: `modelgw.normalize_temperature`（空串 = 未设置 = 缺省 0.2，别的角色一个字节不动）。
+MODEL_KEYS: tuple[str, ...] = ("vendor", "api_key", "base_url", "name",
+                               "reasoning_effort", "temperature")
 #: `models` 段（按角色覆盖，业主 2026-10-14：「允许不同角色智能体用不同模型厂商的
 #: 不同 api key」）：键是角色名（`A`–`H` / `V` / `M`）或 `default`，值是那一段
 #: `MODEL_KEYS` 的子集。取缝时的梯子是：`models.<角色>` → `models.default` → `model`
@@ -357,12 +363,14 @@ def _parse_switch(raw: str, *, where: str) -> bool:
 
 def model_settings(path: str | Path | None = None, *,
                    env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """`model` 段：`vendor` / `api_key` / `base_url` / `name` / `reasoning_effort`（缺的补空串）。
+    """`model` 段：`vendor` / `api_key` / `base_url` / `name` / `reasoning_effort` / `temperature`（缺的补空串）。
 
     这一口只负责「取值」，不负责脱敏也不负责判定：回显 key 的地方一律走
     `ModelSpec.redacted()`（见模块 docstring 的「安全阀」）。
     `reasoning_effort` 空串 = 未设置 = 用缺省（`modelgw.DEFAULT_REASONING_EFFORT`，High）；
     它的词表外取值也不在这里判（见 `MODEL_KEYS` 上面那段理由）。
+    `temperature` 空串 = 未设置 = 用缺省（`modelgw.DEFAULT_TEMPERATURE`，0.2）；
+    区间外的值由 `modelgw.normalize_temperature` 在构造 spec 时当场拒。
 
     它是默认档：按角色取缝走 :func:`model_settings_for`（那一口把 `models.<角色>`
     与 `models.default` 叠在上面）；`model` 段本身仍然有效（向后兼容：只配过它的

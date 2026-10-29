@@ -10,7 +10,8 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
        `verifications.sign_statement` 翻 `bits.evidence`）。
       ② V 不知道秘书洗稿的存在（提示词与技能手册里不出现洗稿/清洗）。
       ③ 思考默认 High 是已有设计（加判据钉住，不新写一套）。
-      ④ temperature 仍然不要动（只留 TODO）。
+      ④ temperature：业主 2026-10-29 改口径为「1.0（正常对话的数值）」，只给 V 的
+         审阅调用；别的角色仍是 0.2（c6/v10）。
 ```
 
 ## 判据表（每条都带"它能怎么红"）
@@ -36,6 +37,7 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | c3 | C 段交付面：板项 detail 用洗过的文本（kind/expects 不变） | 新增一档 kind ⇒ 命中冻结面 |
 | c4 | V 的可见提示词/技能手册不出现洗稿/清洗相关字眼 | 提示词里写出"你的意见会被清洗" ⇒ 违反口径 ② |
 | c5 | V 的思考强度默认 High（既有设计） | 缺省被改成 low ⇒ 钉不住 |
+| c6/v10 | V 的审阅请求体 `temperature==1.0`；别的角色与秘书那一档仍是 0.2 | 摘掉 `AgentV._ask` 里的温度 ⇒ 请求体回到 0.2 |
 | z1/z2 | 反真空：把 streak 闸 / judge 摘掉 ⇒ a1 / b1 红 | 判据自己不能红 = 没测到东西 |
 
 全部 tmp 工作区、零真模型调用（V 的审阅与秘书的判断都用离线替身缝）。
@@ -751,6 +753,55 @@ def test_c5_vs_thinking_default_is_high(tmp_path):
     seam = LS.LlmSeam.for_role("V", session_root=tmp_path, gateway=gw)
     seam.ask("夹具：审一遍", task_id="t-wire")
     assert bodies and bodies[-1].get("reasoning_effort") == "high", bodies[-1:]
+
+
+def test_c6_vs_review_call_asks_at_temperature_one(tmp_path):
+    """v10：V 的审阅请求体里 `temperature==1.0`；别的角色不受影响（仍是 0.2）。
+
+    业主 2026-10-29：「temperature = 1.0（正常对话的数值）」——只给 V 的审阅调用。
+    读的是真请求体（`modelgw.ModelGateway._payload` 组出来的那个 JSON，transport
+    替身抄一份），不是 `to_dict()` 的读数，也不是源码文本里的字面量：改前那条假绿
+    正是 grep 了一个从没进过网线的常量（见 `tests/test_model_calls_are_deterministic.py`）。
+
+    负控：把 `AgentV._ask` 里那个 `temperature=` 摘掉 ⇒ body 回到 0.2，这一条当场红。
+    """
+    from agentflow import llmseam as LS
+
+    st = _ws(tmp_path)
+    _put(st)
+    bodies: list[dict] = []
+
+    def _transport(_url, _headers, data, _timeout):
+        bodies.append(json.loads(data.decode("utf-8")))
+        return 200, json.dumps({"choices": [{"message": {
+            "content": json.dumps(_OK, ensure_ascii=False)}}]}, ensure_ascii=False)
+
+    gw = G.ModelGateway(G.ModelSpec(api_key="k"), transport=_transport,
+                        sleep=lambda _s: None, clock=lambda: 0.0)
+    seam = LS.LlmSeam.for_role("V", session_root=st.root, gateway=gw)
+    # 秘书用"判了不落盘"的替身：这一条只量请求体，不让它写盘、也不让它联网
+    agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_LazyButApproving())
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert got["checked"] is True and got["verdict"] == "成立", got
+    assert bodies, "V 的审阅一次请求都没发 ⇒ 这一条没测到请求体"
+    assert bodies[-1]["temperature"] == 1.0, (
+        "V 的审阅请求体不是 1.0（业主 2026-10-29 的正常对话口径）："
+        f"{bodies[-1].get('temperature')!r}")
+    # 别的角色不受影响：同一条网关配置下，F 那一档仍然是缺省 0.2
+    other: list[dict] = []
+
+    def _t2(_url, _headers, data, _timeout):
+        other.append(json.loads(data.decode("utf-8")))
+        return 200, json.dumps({"choices": [{"message": {"content": "{}"}}]})
+
+    gw2 = G.ModelGateway(G.ModelSpec(api_key="k"), transport=_t2,
+                         sleep=lambda _s: None, clock=lambda: 0.0)
+    LS.LlmSeam.for_role("F", session_root=st.root, gateway=gw2).ask("夹具：别的角色")
+    assert other and other[-1]["temperature"] == G.DEFAULT_TEMPERATURE == 0.2, other[-1:]
+    # 秘书那一档也不动（它的判断调用走 `ask_json`，没有显式温度）
+    LS.LlmSeam.for_secretary(owner_role="V", session_root=st.root,
+                             gateway=gw2).ask("夹具：秘书")
+    assert other[-1]["temperature"] == 0.2, other[-1]
 
 
 # ============================================================ z：反真空（v6）

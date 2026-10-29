@@ -1426,10 +1426,13 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 ### §14.1 写缓存：没有开关，只有一个前提
 
-全仓 grep `cache_control` 命中 **0 处**；六个模型档环境变量（真身
-`src/agentflow/modelgw.py:163-168` 的 `ENV_KEY` / `ENV_BASE` / `ENV_NAME` /
-`ENV_TIMEOUT` / `ENV_RETRIES` / `ENV_EFFORT`，值都是 `AGENTFLOW_MODEL_…`）
-里**没有一个是缓存开关**。
+全仓 grep `cache_control` 命中 **0 处**；七个模型档环境变量（真身
+`src/agentflow/modelgw.py` 的 `ENV_KEY` / `ENV_BASE` / `ENV_NAME` /
+`ENV_TIMEOUT` / `ENV_RETRIES` / `ENV_EFFORT` / `ENV_TEMPERATURE`，值都是
+`AGENTFLOW_MODEL_…`）里**没有一个是缓存开关**。`ENV_TEMPERATURE` 是 2026-10-29
+加的（业主：「temperature = 1.0（正常对话的数值）」，只给 V 的审阅调用）：它管的是采样，
+不是缓存 —— 换一个温度会让上游的前缀缓存按"同一条前缀"照旧命中，命中与否只取决于
+system 的字节是否相同。
 
 请求体的唯一组装置是 `modelgw.ModelGateway._payload`（`src/agentflow/modelgw.py:739-764`）：
 `model` / `messages`（system 一条 + user 一条）/ `temperature` / `stream` / 推理强度 /

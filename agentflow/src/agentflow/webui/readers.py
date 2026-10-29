@@ -2092,6 +2092,9 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                             "name": red_slot["model"],
                             "vendor": red_slot["vendor"],
                             "reasoning_effort": red_slot["reasoning_effort"],
+                            # 采样温度（2026-10-29）：按角色那一档也要报，
+                            # 否则"能给 V 配 1.0"这件事在机器面上看不见。
+                            "temperature": str(red_slot["temperature"]),
                             # 这一格必须取这一档自己的 `key_source`（`spec_for` 已经
                             # 按这一档算过 env/settings）。此前这里调的是全局 `key_source()` ——
                             # 它读的是 `model` 段 ⇒ 每一档都报同一个来源：`models.A` 的 key
@@ -2106,6 +2109,8 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         sec_cell = {"api_key": red_sec["api_key"], "base_url": red_sec["base_url"],
                     "name": red_sec["model"], "vendor": red_sec["vendor"],
                     "reasoning_effort": red_sec["reasoning_effort"],
+                    # 采样温度（2026-10-29）：秘书那一档的形状与上面两处逐字相同。
+                    "temperature": str(red_sec["temperature"]),
                     "key_source": sec_spec.key_source,
                     "configured": sec_spec.configured, "source": sec_where,
                     "own_slot": (raw.get(SECRETARY_SECTION) or {}) if isinstance(raw, dict) else {}}
@@ -2121,6 +2126,9 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     # 它同属"这台机器上的模型配置"，所以机器面必须报它 —— 否则台面上默认写着
     # 一切正常，而 `settings.json` 里那个值可能是 `off`。
     effort_raw = model.get("reasoning_effort", "") or ""
+    # 采样温度（2026-10-29）：与强度同一条纪律 —— 盘上写了什么，机器面就报什么；
+    # 区间外的值判成 unreadable 并把原值原样回显（回显成缺省会让人以为配置生效了）。
+    temperature_raw = model.get("temperature", "") or ""
     effort_problem = ""
     try:
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
@@ -2130,10 +2138,12 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                          # `spec.redacted()`，不传就等于"盘上写了厂商、机器面说没有"
                          # —— 而面板上那一格的初值正是从这份读数取的。
                          vendor=model.get("vendor", "") or "",
-                         reasoning_effort=effort_raw)
+                         reasoning_effort=effort_raw,
+                         temperature=temperature_raw)
         effort_shown = spec.redacted()["reasoning_effort"]
+        temperature_shown = str(spec.redacted()["temperature"])
     except ValueError as exc:
-        # 词表外的强度：这是"查过了、那格里是坏的"，不是崩溃，也不是"没配"。
+        # 词表外/区间外的取值：这是"查过了、那格里是坏的"，不是崩溃，也不是"没配"。
         # 所以照旧给出成形的读数，只把这一段判成 unreadable 并把原值原样回显
         # （回显成缺省会让人以为配置生效了）。
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
@@ -2141,6 +2151,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                          api_key=model.get("api_key", "") or "",
                          vendor=model.get("vendor", "") or "")
         effort_shown = effort_raw
+        temperature_shown = temperature_raw
         effort_problem = f"{type(exc).__name__}: {exc}"
     red = spec.redacted()
     reading = {
@@ -2156,6 +2167,10 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                   # `tests/test_role_models.py` 的读数那三条）。
                   "vendor": red["vendor"],
                   "reasoning_effort": effort_shown,
+                  # 采样温度（2026-10-29）：这一格与 `spec.temperature` 同源 ——
+                  # 盘上没写就是缺省（0.2），写了就是那个数；区间外由上面那一支
+                  # 判成 unreadable 并回显原值。
+                  "temperature": temperature_shown,
                   # key 是从哪一档取到的（`"env"` / `"settings"` / 空串）。
                   # 所有者 2026-10-10 的裁定是"key 从 config 里面接"——
                   # 这一格就是那句话在机器面上的读数：`settings` 才算成立，
@@ -2170,7 +2185,8 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         "raw_keys": sorted(raw) if isinstance(raw, dict) else [],
     }
     if effort_problem:
-        return reading, TRI_UNREADABLE, ("settings.json 的 model.reasoning_effort 不是合法取值："
+        return reading, TRI_UNREADABLE, ("settings.json 的 model 段有一格不是合法取值"
+                                         "（reasoning_effort / temperature）："
                                          + effort_problem)
     reason = ""
     if not on_disk:
@@ -4049,15 +4065,17 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("path", "string"), ("exists", "boolean"),
       ("toolchain", "Record<string, string>"),
       ("model", "{ vendor: string; api_key: string; base_url: string; name: string; "
-                "reasoning_effort: string; key_source: string; "
+                "reasoning_effort: string; temperature: string; key_source: string; "
                 "configured: boolean }"),
       # 按角色那一档（业主 2026-10-14）：槽 → 那一档的读数（key 一律掩码）。
       ("models", "Record<string, { api_key: string; base_url: string; name: string; "
-                 "vendor: string; reasoning_effort: string; key_source: string; "
+                 "vendor: string; reasoning_effort: string; temperature: string; "
+                 "key_source: string; "
                  "configured: boolean; source: string }>"),
       # 秘书那一档（全角色共用）：读数同上一格 + 那一档自己的原文（key 也掩码）。
       ("secretary", "{ api_key: string; base_url: string; name: string; vendor: string; "
-                    "reasoning_effort: string; key_source: string; configured: boolean; "
+                    "reasoning_effort: string; temperature: string; key_source: string; "
+                    "configured: boolean; "
                     "source: string; own_slot?: Record<string, string> }"),
       ("workspace", "Record<string, string>"), ("raw_keys", "string[]"))),
     ("MachineView",

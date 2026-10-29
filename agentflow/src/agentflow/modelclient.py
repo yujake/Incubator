@@ -185,11 +185,12 @@ class ModelClient:
             "tokens_in": tin,
             "tokens_out": tout,
             "scope": self.scope,
-            # 2026-10-17（长跑 goal）：采样钉死。审核类调用（V 的 `verify_proof` 等）
-            # 原先用默认采样 ⇒ 同一份证明会一次判「成立」、一次判「有毛病」（实测），
-            # 于是"经审核才进定理库/才作根"这扇门天生不可复现 ⇒ 长跑里证明链反复开合。
-            # 默认 0；要改由配置面显式覆盖（这一栏同时进读数，见 `SeamCall`）。
-            "temperature": 0,
+            # 采样温度。2026-10-17 那一版在这里写死 0，并以"请求体里钉死了采样"的名义
+            # 被判据 grep 过 —— 那是假绿：请求体由 `modelgw` 组装，用的是
+            # `ModelSpec.temperature`（缺省 0.2），这个 0 从没进过网线。
+            # 现在它是"这一档配置的那个数"（读数与请求体同源），
+            # 显式温度走 `LlmSeam.ask(temperature=…)`（见 `llmseam.SeamCall.temperature`）。
+            "temperature": getattr(self.gateway.spec, "temperature", None),
             "model": getattr(self.gateway.spec, "model", ""),
             "base_url": getattr(self.gateway.spec, "base_url", ""),
         }
