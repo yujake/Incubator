@@ -37,6 +37,9 @@ M_TOOL_FACE = {
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
     "conductor.closing", "conductor.status_report",
+    # 2026-10-29（业主）：block 表逐条审批唤醒 —— 编排动作（它直写台账并叫醒一个被停的号），
+    # 不是文件面的写，所以进编排面而不是白名单。
+    "conductor.wake_blocked",
     # 工作项板（业主 2026-10-08 裁 A1=甲）：M 的编排面看"还挂着什么"。
     # A–H 的那一半是 `manuscripts.items` / `manuscripts.ack`（领域动作面），不在这里。
     "conductor.board",
