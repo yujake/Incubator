@@ -255,9 +255,17 @@ def test_citation_problem_blocks_the_verdict_and_the_signature(monkeypatch) -> N
     clean = dict(AgentV(store, workspace_root=tmp, llm=_Seam()).verify_proof(
         statement_id=sid) or {})
     assert clean.get("checked") is True, clean.get("reason")
-    assert clean["verdict"] == "成立" and clean["signed_bit3"] is True, clean
+    # 2026-10-29（业主口径：连续 3 次「没问题」才发签、签由 V 的秘书判定并落盘）：
+    # 这里只跑了一次审校 ⇒ 结论是「成立」，但不许签上第 3 位；
+    # 改前这条断言的是"signed_bit3 is True"（一次成立就签），那是旧口径。
+    assert clean["verdict"] == "成立", clean
+    assert clean["signed_bit3"] is False, clean
     rows, _ = VR.list_verifications(tmp, statement_id=sid)
-    assert VR.signs_bit3(rows[-1]) is True, rows[-1]
+    assert VR.signs_bit3(rows[-1]) is False, rows[-1]
+    standing = VR.review_standing(tmp, statement_id=sid,
+                                proof_text="1. 由定义直接得到。")
+    assert standing["streak"] < standing["need"], standing
+    assert standing["state"] == "holding", standing
 
 
 # ---------------------------------------------------------------- p205 挂过 xfail、p206 收口的两条
