@@ -194,7 +194,9 @@ TIMER_STATES: tuple[str, ...] = ("pending", "fired", "cancelled")
 #: 计时器种类的受控词表。`periodic` 是"周期性巡查"那一档（到点不消耗）；
 #: `program` 是"起了一个外部程序"那一档（业主 2026-10-27：「运行一个程序时会自动
 #: 启动一个计时器，程序运行完成时计时器会返回」）。
-TIMER_KINDS: tuple[str, ...] = ("timer", "alarm", "periodic", "program")
+#: `lifeline` 是"兜底计时器"那一档（业主 2026-10-29）：框架维护、代理无感、被打掉即续、
+#: 收工后仍续；三态里"只挂着它"就是静默（判据 `clock.is_lifeline`）。
+TIMER_KINDS: tuple[str, ...] = ("timer", "alarm", "periodic", "program", "lifeline")
 
 #: 程序计时器的结局受控词表（程序结束时写进 `outcome`；`exit_code` 单列一格）。
 #:
@@ -1742,10 +1744,15 @@ class Timer:
                 why = (f"它{'交' if last.kind == 'submit' else '说'}了"
                        f"（{last.kind}@{last.at or '刚发生'}）：{last.content[:120]}")
             else:
-                state, _resolved, why = target or target_state(
-                    self.workspace, *parse_wait_for(self.wait_for))
-                if state == "closed":
-                    hits.append("target_closed")
+                # 兜底计时器不问目标（业主 2026-10-29 第 2 条）：
+                # 它等的键就是它自己的台账号，而"我那一行已经 done"正是"收工后仍续"的常态；
+                # 一旦去问，`target_state` 必然判 `closed`，30 秒对账就把保活表打掉、
+                # 零事件也醒，而且一声不吭。
+                if not is_lifeline(self):
+                    state, _resolved, why = target or target_state(
+                        self.workspace, *parse_wait_for(self.wait_for))
+                    if state == "closed":
+                        hits.append("target_closed")
         if self.cap_passed(reading):
             hits.append("cap")
         return ",".join(hits), why
@@ -2982,8 +2989,13 @@ def cancel_timer(workspace: str | Path, timer_id: str) -> tuple[Timer | None, st
 
 
 def timers(workspace: str | Path) -> list[Timer]:
-    """这个工作区的全部计时器（含已到点与已取消，按 due 排序）。"""
-    return book(workspace).all()
+    """这个工作区的全部计时器（含已到点与已取消，按 due 排序）。
+
+    兜底计时器（`lifeline`）不在这里：它是框架的保活账，代理对它无感
+    （业主 2026-10-29 第 2 条）。要看它请用 `lifeline_of(workspace, task_id)`。
+    这条过滤是"对模型不可见"的落点之一 —— 模型查"我手上还有哪些表"读的就是本函数。
+    """
+    return [t for t in book(workspace).all() if not is_lifeline(t)]
 
 
 # ---------------------------------------------------------------- 等程序（业主 2026-10-27 第一条）
@@ -5130,9 +5142,15 @@ def next_due(workspace: str | Path) -> dict[str, Any]:
 
 
 def _probe_targets(timers: Iterable[Timer]) -> dict[str, tuple[str, str, str]]:
-    """一次把这一批计时器等的东西各问一遍（同一个对象只问一次）。"""
+    """一次把这一批计时器等的东西各问一遍（同一个对象只问一次）。
+
+    兜底计时器不问：它等的键是它自己的台账号，而"我那一行已经是 done"正是
+    "收工后仍续"的常态 —— 去问就必然被判成 `target_closed`，30 秒对账就把保活表打掉。
+    """
     out: dict[str, tuple[str, str, str]] = {}
     for timer in timers:
+        if is_lifeline(timer):
+            continue
         key = _target_key(timer)
         if not key or key in out:
             continue
@@ -5239,6 +5257,10 @@ def _deliver_one_locked(bucket: TimerBook, timer: Timer, reason: str, why: str,
     timer.note = str(got.get("note") or "")
     # 索引的第三个同步点：它转 fired 了，不该再出现在反查索引与堆顶里。
     bucket.sync_index(timer)
+    # 兜底计时器：被打掉就立刻续一条（业主 2026-10-29 第 2 条「它一直会续」）。
+    # 落点必须在这里 —— 交差之后循环就结束了（`_park_gate` 的 handoff 支 ⇒ break），
+    # 只有时钟的消耗路径能覆盖"收工之后仍续"这一态。
+    _renew_lifeline(timer)
     try:
         bucket.save()
     except ClockStateError as exc:
@@ -6471,6 +6493,10 @@ __all__ = [
     "set_due_handler",
     "set_purpose",
     "set_target_probe",
+    "arm_lifeline",
+    "is_lifeline",
+    "lifeline_key",
+    "lifeline_of",
     "start_alarm",
     "start_periodic",
     "start_program",
@@ -6489,3 +6515,105 @@ __all__ = [
     "waits_path",
     "wake_path",
 ]
+
+
+# ---------------------------------------------------------------- 兜底计时器（业主 2026-10-29）
+
+#: 兜底计时器的 kind。它由框架维护、代理对它无感（不进模型可见读数）、每次被打掉
+#: （事件命中、到点被投递）就自动续一条、收工之后仍续。三态里"只挂着它"就是静默；
+#: 挂着模型自己起的表才是待机（业主 2026-10-29 第 2、5 条）。
+LIFELINE_KIND: str = "lifeline"
+
+#: 兜底计时器的目的文本：非空 ⇒ `purpose_missing` 天然为假，不会被"缺目的"追问
+#: （照 `PATROL_REASON` 的先例：框架自己起的表必须自带目的，别让模型去补）。
+LIFELINE_REASON: str = "保活：等与你有关的东西（框架自带，代理不用管它）"
+
+
+def is_lifeline(timer: Any) -> bool:
+    """这条计时器是不是兜底计时器。唯一判据，别处不许各写一份。"""
+    return str(getattr(timer, "kind", "") or "") == LIFELINE_KIND
+
+
+def lifeline_key(task_id: str) -> str:
+    """兜底计时器的等待键：只认"与我有关"的事件（业主 2026-10-29 第 1 条）。
+
+    为什么不写成"全体通配"：通配会让一条广播把在场所有静默代理一起叫醒
+    （成本 = 事件 x 静默者数），也会破坏"扇出不抢占"那条既有保证。
+    """
+    return f"task:{str(task_id or '').strip()}"
+
+
+def lifeline_of(workspace: str | Path, task_id: str) -> list[dict[str, Any]]:
+    """这个台账号名下还挂着的兜底计时器（正常恰好一条）。"""
+    want = str(task_id or "").strip()
+    if not want:
+        return []
+    rows: list[dict[str, Any]] = []
+    for timer in book(workspace).pending():
+        if not is_lifeline(timer):
+            continue
+        if str(timer.task_id or "") != want:
+            continue
+        rows.append({"timer_id": str(timer.timer_id or ""), "task_id": want,
+                     "role": str(timer.role or ""), "state": str(timer.state or ""),
+                     "wait_for": str(timer.wait_for or "")})
+    return rows
+
+
+def arm_lifeline(workspace: str | Path, *, task_id: str, role: str = "",
+                 reason: str = "") -> dict[str, Any]:
+    """挂上兜底计时器；同一个台账号同时恰好一条（幂等）。
+
+    三态纪律：挂不上不是"静默"，必须如实说没挂上（`armed=False` + `skipped`），
+    让读数分得开"没有它"与"有它"。
+    """
+    want = str(task_id or "").strip()
+    if not want:
+        return {"armed": False, "skipped": "no_task_id", "task_id": "", "timer_id": "",
+                "reason": "没有台账号 ⇒ 兜底计时器挂不上"}
+    already = lifeline_of(workspace, want)
+    if already:
+        return {"armed": False, "skipped": "already", "task_id": want,
+                "timer_id": already[0]["timer_id"],
+                "reason": "这个台账号已经有一条兜底计时器了（不重复挂）"}
+    timer = _new_lifeline_timer(workspace, task_id=want, role=str(role or ""),
+                                reason=str(reason or LIFELINE_REASON))
+    bucket = book(workspace)
+    timer.timer_id = bucket.allocate("tm")
+    bucket.add(timer)
+    _register_parked(timer)
+    return {"armed": True, "skipped": "", "task_id": want,
+            "timer_id": str(timer.timer_id or ""), "reason": ""}
+
+
+def _new_lifeline_timer(workspace: str | Path, *, task_id: str, role: str,
+                        reason: str) -> Timer:
+    """组装一条兜底计时器（不含 ID）。
+
+    刻意不走 `_new_timer`：它要求"等一段时间 / 等谁"二选一，且"等谁"要先探针解析出
+    具名对象；兜底计时器两样都不是（它等的是"与我有关的任何东西"）。
+    """
+    reading = now()
+    timer = Timer(timer_id="", kind=LIFELINE_KIND, reason=str(reason or LIFELINE_REASON),
+                  to="self", task_id=str(task_id or ""), role=str(role or ""),
+                  workspace=str(Path(workspace).resolve()),
+                  created_at=(_iso(reading.wall) if reading.wall is not None else ""),
+                  due_at="", wait_for=lifeline_key(task_id))
+    timer.purpose_source = "given"
+    timer.event_seq = _event_seq()
+    return timer
+
+
+def _renew_lifeline(timer: Timer) -> dict[str, Any]:
+    """一条兜底计时器被打掉之后，立刻续一条新的（幂等：同一台账号恰好一条）。
+
+    失败不抛：续不上要能被读数看见（`armed=False` + 理由），而不是把一次投递搞崩。
+    """
+    if not is_lifeline(timer):
+        return {"armed": False, "skipped": "not_lifeline"}
+    try:
+        return arm_lifeline(timer.workspace, task_id=str(timer.task_id or ""),
+                            role=str(timer.role or ""))
+    except Exception as exc:  # noqa: BLE001 - 续不上不许带走这次投递
+        return {"armed": False, "skipped": "error",
+                "reason": f"{type(exc).__name__}: {exc}"}
