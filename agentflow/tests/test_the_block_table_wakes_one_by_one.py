@@ -20,7 +20,7 @@
 
 所以这一层是"读 block 行 → 逐条审计 → 批准了才逐条直写并唤醒"。
 
-## 这一份钉住的六件事
+## 这一份钉住的八件事
 
 | 判据 | 守的是 |
 |---|---|
@@ -30,6 +30,13 @@
 | w4 `test_w4_the_direct_write_leaves_a_legal_row` | 直写后的行仍然合法：两根轴一起翻、`item_close` 仍 ""、`seen_*` 已清、`inputs` 有 `wake:` 落痕、`S.Task.validate()` 通过 |
 | w5 `test_w5_one_failed_wake_does_not_swallow_the_other` | 逐条隔离：两条 resume，第一条的唤醒失败 ⇒ 第二条照常被叫，回执分别 `started=True`/`False` |
 | w6 `test_w6_an_in_flight_owner_is_skipped_not_started_twice` | 在飞不另起：owner 在飞 ⇒ skip（`refusal_code="in_flight"`），不产生第二个同号循环 |
+| w7 `test_w7_waking_the_same_row_twice_is_a_no_op` | 幂等：叫醒之后再调两趟（不给 ids / 给 ids）⇒ `nothing` 与 `skip`/`not_blocked`，一个字节都没写、没再叫人、`wake:` 落痕不翻倍 |
+| w8 `test_w8_the_real_producer_makes_rows_the_reader_picks_up` | 读侧与真实生产者的口径：`stopctl.block_remaining_tasks` 造的 block 行（两根轴一起翻）必须被本层读到并唤醒 —— 手搓夹具与真实生产者不许分家 |
+
+w7 / w8 是 2026-10-29 那趟可用性探针（temp 里的脚本，走真 `Store` / 真
+`open_item` / 真 `block_remaining_tasks`）的读数补出来的：探针五档 a–e 全绿，但 d
+（再调一次）与"真实生产者"这两档此前没有任何判据守着 —— 那种缺口不会让现有 12 条
+变红，它只是在实现漂了之后继续绿。
 
 ## 反真空（每条判据都自带负控）
 
@@ -54,6 +61,7 @@ from typing import Any
 
 from agentflow import clock as CLK
 from agentflow import schema as S
+from agentflow import stopctl as SC
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
 
@@ -651,3 +659,124 @@ def test_the_json_receipt_survives_a_round_trip(tmp_path: pathlib.Path) -> None:
     assert isinstance(back["items"], list) and back["items"], back
     for cell in back["items"]:
         assert set(cell) == ITEM_KEYS, sorted(cell)
+
+
+# ====================================================================== w7 幂等
+def _wake_marks(row: mapping) -> list[str]:
+    """那一行 `inputs` 里的 `wake:` 落痕（重复写就会多一条）。"""
+    return [str(m) for m in (row.get("inputs") or ()) if str(m).startswith("wake:")]
+
+
+def _w7_problems(env: dict[str, Any]) -> list[str]:
+    """(w7) 的判据本体：同一行叫醒两次的第二次必须是空动作。"""
+    problems: list[str] = []
+    owner = _agent(env["cond"], str(env["boss"]))
+    item = _blocked_item(env["cond"], owner)
+    first = env["cond"].wake_blocked(approve="yes", dry_run=False)
+    problems += _shapes(first)
+    first_cell = _verdicts(first).get(item) or {}
+    if first_cell.get("started") is not True:
+        problems.append(f"正控：第一次该真的叫起来，实际 {first_cell.get('started')!r}"
+                        f"（why={first_cell.get('why')!r}）")
+    row = _rows(env).get(item) or {}
+    if len(_wake_marks(row)) != 1:
+        problems.append(f"正控：第一次之后该恰好一条 wake: 落痕，实际 {_wake_marks(row)}")
+    calls_after_first = list(env["calls"])
+    before = _tasks_bytes(env)
+    # 第二趟：不给 ids —— 板上一条 block 行都不剩了
+    again = env["cond"].wake_blocked(approve="yes", dry_run=False)
+    problems += _shapes(again)
+    if again.get("state") != "nothing":
+        problems.append(f"叫醒之后再调（不给 ids）该说 nothing（查过了、没有），"
+                        f"实际 {again.get('state')!r}（reason={again.get('reason')!r}）")
+    if again.get("items"):
+        problems.append(f"叫醒之后不该再有逐条清单：{again.get('items')}")
+    if int(again.get("count") or 0) != 0:
+        problems.append(f"第二趟 count 该是 0，实际 {again.get('count')!r}")
+    # 第三趟：点了那条已经叫醒的行 —— 它不是 block 了，逐条该是 skip / not_blocked
+    named = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
+    problems += _shapes(named)
+    cell = _verdicts(named).get(item) or {}
+    if cell.get("verdict") != "skip":
+        problems.append(f"该行已不是 block 板项 ⇒ 该判 skip，实际 {cell.get('verdict')!r}"
+                        f"（why={cell.get('why')!r}）")
+    if cell.get("refusal_code") != "not_blocked":
+        problems.append(f"理由码该是 not_blocked，实际 {cell.get('refusal_code')!r}")
+    if cell.get("started") is not False:
+        problems.append(f"不是 block 的那一行不许再叫一次：started={cell.get('started')!r}")
+    if cell.get("mark"):
+        problems.append(f"不是 block 的那一行不许再落痕：{cell.get('mark')!r}")
+    # 三件硬读数：一个字节都没写、没再叫人、落痕不翻倍
+    if before != _tasks_bytes(env):
+        problems.append("第二、三趟写了盘：`tasks.json` 前后不是逐字节一致")
+    if env["calls"] != calls_after_first:
+        problems.append(f"第二、三趟又叫了人：{env['calls']}（第一次之后是 {calls_after_first}）")
+    row = _rows(env).get(item) or {}
+    if len(_wake_marks(row)) != 1:
+        problems.append(f"wake: 落痕被重复写了：{_wake_marks(row)}")
+    return problems
+
+
+def test_w7_waking_the_same_row_twice_is_a_no_op(tmp_path: pathlib.Path) -> None:
+    """w7) 幂等：叫醒之后再调两趟，第二趟与第三趟都是空动作。
+
+    为什么必须有这一条（2026-10-29 可用性探针 d 档的读数）：回执里的 `state` 说的是
+    这一笔有没有叫醒，不是"板上还有没有 block 行"。再调那一趟的实现若把"已经叫醒过"
+    读成"还能再叫"，代价是同一行多一条 `wake:` 落痕、再起一个同号循环，而既有 12 条
+    判据一条都不会红（它们都只跑一趟）。两档都要判：不给 `ids`（走读侧筛选 ⇒ `nothing`）
+    与给 `ids`（走逐条判定 ⇒ `skip`/`not_blocked`）是两条不同的分支。
+    """
+    problems = _w7_problems(_workspace(tmp_path, "w7"))
+    assert problems == [], problems
+
+
+# ====================================================================== w8 真生产者
+def _w8_problems(env: dict[str, Any]) -> list[str]:
+    """(w8) 的判据本体：block 行由真实生产者造，本层必须读得到并唤醒。"""
+    problems: list[str] = []
+    owner = _agent(env["cond"], str(env["boss"]), status="running")
+    item = env["cond"].open_item(kind="delegation", role="D", expects="work",
+                                 action="write_report", summary="夹具：优雅停止停下来的活",
+                                 parent_task_id=owner, depth=3,
+                                 input_key=f"item:{owner}:w8")
+    # 真实生产者：`stopctl.block_remaining_tasks` 一次写两根轴（status + item_state）
+    got = SC.block_remaining_tasks(env["store"], task_id=owner, why="夹具：budget")
+    if not got.get("checked"):
+        problems.append(f"夹具自己没成立：block_remaining_tasks 没查成（{got.get('reason')!r}）")
+    rows = _rows(env)
+    if str((rows.get(owner) or {}).get("status")) != "block":
+        problems.append(f"夹具自己没成立：owner 那一行该被翻成 block，"
+                        f"实际 {(rows.get(owner) or {}).get('status')!r}")
+    if str((rows.get(item) or {}).get("item_state")) != "block":
+        problems.append(f"夹具自己没成立：板项该被翻成 block，"
+                        f"实际 {(rows.get(item) or {}).get('item_state')!r}"
+                        f"（blocked_items={got.get('blocked_items')!r}）")
+    went = env["cond"].wake_blocked(approve="yes", dry_run=False)
+    problems += _shapes(went)
+    cell = _verdicts(went).get(item) or {}
+    if cell.get("verdict") != "resume":
+        problems.append(f"真实生产者造的 block 行必须被读成 resume，实际 "
+                        f"{cell.get('verdict')!r}（why={cell.get('why')!r}）")
+    if cell.get("started") is not True:
+        problems.append(f"它该被叫起来：started={cell.get('started')!r}")
+    if env["calls"] != [owner]:
+        problems.append(f"叫的该是 owner（不是板项号）：calls={env['calls']}")
+    row = _rows(env).get(item) or {}
+    if str(row.get("status")) != "running" or str(row.get("item_state")) != "queued":
+        problems.append(f"两根轴该翻回 running/queued：{row.get('status')!r}/"
+                        f"{row.get('item_state')!r}")
+    return problems
+
+
+def test_w8_the_real_producer_makes_rows_the_reader_picks_up(tmp_path: pathlib.Path) -> None:
+    """w8) 读侧与真实生产者同口径：`stopctl.block_remaining_tasks` 造的行必须被读到。
+
+    为什么必须有这一条（2026-10-29 可用性探针的口径）：本文件其余判据的 block 行都是
+    手搓的（`_blocked_item` 直接写两根轴）。手搓夹具与真实生产者一旦分家 ——
+    比如生产者改了只翻 `status`、不翻 `item_state` —— 本层就静默地一条也读不到，
+    而所有手搓夹具的判据照样全绿（它们造的行仍然两根轴都是 block）。这一条把"生产者的
+    读数"接进判据：夹具自己先断言 producer 真的造出了 block 行，再断言本层读得到它。
+    """
+    problems = _w8_problems(_workspace(tmp_path, "w8"))
+    assert problems == [], problems
+
