@@ -662,3 +662,25 @@ def test_g_the_board_gate_still_speaks_first(tmp_path: pathlib.Path) -> None:
     assert "未消的板项" in str(data2.get("reason") or ""), data2
     assert [str(x.get("task_id") or "") for x in (data2.get("open_items") or [])] == [item2], data2
     assert _retired_rows(env2["root"], owner2) == [], "被拒绝时一行都不许写"
+
+def test_m_the_patrol_reading_agrees_with_the_retire_gate(tmp_path: pathlib.Path) -> None:
+    """m) 第六处读数同源：`conductor.patrol` 的 `states` 必须与销号门同字（2026-10-29 第 13 轮）。
+
+    这条补的是 `draft/115` 记的缺口 A。之前的做法（造"M 循环 + 名册树"让 `items` 里出现
+    一条）试了四次都是 0 条 —— 因为 `items` 只收"活跃子代理"，而静默的号根本不在里面。
+    改从 `states` 那一格切：它对全部代理行给三态，正是"六处读数同源"要的那一份。
+
+    守的真事：patrol 若把"挂着兜底表的静默号"读成待机/在飞，父就会照着巡视图去等一个
+    其实已经停下来的号；而这张图是 M 每次轮查必读的。
+    """
+    env = _a_env(tmp_path)
+    child = str(env["silent"]["task_id"])
+    got = CT._patrol_reading(env["cond"])
+    assert got.get("checked") is True, got.get("reason")
+    states = dict(got.get("states") or {})
+    assert str(states.get(child) or "") == "silent", states.get(child)
+    gate = env["cond"].retire_state_of(child)
+    assert str(states.get(child)) == str(gate.get("state")), (states.get(child), gate)
+    snap = env["cond"].activity_snapshot()
+    assert str((snap.get("by_task") or {}).get(child, {}).get("state")) == str(states.get(child))
+
