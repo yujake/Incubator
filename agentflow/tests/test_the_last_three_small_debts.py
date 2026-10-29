@@ -86,10 +86,26 @@ def _register(store: Store) -> str:
 
 
 def _sign(store: Store, sid: str, text: str, proof_no: int) -> dict:
-    """V 的签名写入口（`verify_proof` 走的就是它；这里不经模型）。"""
-    return VR.record_verification(
-        store.root, statement_id=sid, proof_text=text, verdict=dict(_OK),
-        verifier="agent-V", store=store, proof_no=proof_no)
+    """V 的签名写入口（`verify_proof` 走的就是它；这里不经模型）。
+
+    ## 为什么连签 `SIGN_STREAK_NEED` 次（业主 2026-10-29 口径）
+    「一次成立就签」已取消：同一份正文（同 `proof_sha256`）必须连续
+    `SIGN_STREAK_NEED` 次「成立」且秘书判定通过，第 1、2 次只落台账、第 3 位不翻。
+    夹具按同一份正文、同一证明号连签（返回签发的那一签），并在这里钉住"前几次不翻位"
+    —— 这条正控就是新口径，判据本身的断言一条都没放宽。
+    """
+    need = int(VR.SIGN_STREAK_NEED)
+    signed: dict = {}
+    for i in range(1, need + 1):
+        signed = VR.record_verification(
+            store.root, statement_id=sid, proof_text=text, verdict=dict(_OK),
+            verifier="agent-V", store=store, proof_no=proof_no)
+        wrote = bool((signed.get("statement_writeback") or {}).get("written"))
+        assert wrote is (i == need), (
+            f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："
+            f"连续 {need} 次才发签（第 1、2 次只落台账），读到的理由："
+            f"{(signed.get('statement_writeback') or {}).get('reason') or '（没有理由）'}")
+    return signed
 
 
 def _tier(store: Store, sid: str, text: str) -> dict:
@@ -172,6 +188,10 @@ def test_an_unreadable_proof_number_is_not_folded_and_a_missing_one_still_is_p1(
     assert VR.proof_label(sid, 2) == f"{sid}#p2", VR.proof_label(sid, 2)
 
     # 老签名行（没有 `proof_no` 这一格，只有 `statement_id`）：读侧仍按 #p1 认。
+    #
+    # 2026-10-29 口径：连续 3 次「成立」才发签（第 1、2 次只落台账）⇒ 夹具按老格式写
+    # `SIGN_STREAK_NEED` 行（每一行都缺 `proof_no`，于是"缺这一格按 #p1 认"在每一行上
+    # 都被判到）。这一条量的是证明号的读法，不是签的门槛 —— 所以门槛在这里是显式前置。
     legacy = _ws(tmp_path / "legacy_row")
     sid2 = _register(legacy)
     path = VR.verification_ledger_path(legacy.root, sid2)
@@ -185,11 +205,16 @@ def test_an_unreadable_proof_number_is_not_folded_and_a_missing_one_still_is_p1(
         "at": "2026-01-01T00:00:00+00:00",
     }
     assert "proof_no" not in old_row, "这一条判的就是「行上没有这一格」"
-    path.write_text(json.dumps(old_row, ensure_ascii=False) + "\n", encoding="utf-8")
+    need = int(VR.SIGN_STREAK_NEED)
+    path.write_text("".join(
+        json.dumps(dict(old_row, verification_id=f"v-000{i}", round=i),
+                   ensure_ascii=False) + "\n" for i in range(1, need + 1)),
+        encoding="utf-8")
     assert VR.proof_no_of(old_row) == 1, "老行的证明号读不成 #p1"
     got = VR.review_standing(legacy.root, statement_id=sid2, proof_text=P1, proof_no=None)
     assert got["checked"] is True and got["state"] == "signed", got
     assert got["ok"] is True and got["proof_no"] == 1, got
+    assert got["streak"] == need and got["streak_ok"] is True, got
 
 
 # ============================================================ ⑤ R009

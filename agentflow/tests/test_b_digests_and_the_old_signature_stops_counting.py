@@ -100,6 +100,34 @@ def _sign(st: Store, *, proof_text: str) -> dict:
         verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1)
 
 
+#: 2026-10-29 口径：同一份正文（同 `proof_sha256`）要连续 3 次「成立」且秘书判定通过，
+#: 才轮到秘书落签；第 1、2 次只落台账、`bits.evidence` 不翻位。
+SIGN_TIMES = VR.SIGN_STREAK_NEED
+
+
+def _sign_enough(st: Store, *, proof_text: str) -> list[dict]:
+    """把同一份正文签到发签门槛（返回那几行台账，最后一行是签发的那一签）。
+
+    改前夹具只签一次就断言「第 3 位是 True」——那是旧口径（一次成立就签）。现在这条
+    口径的正控就在这里：第 1、2 次不翻位（`written=False` 而台账照落），第
+    `SIGN_TIMES` 次才翻。判据自己的断言因此一个字都没放宽，只是夹具按新规矩攒够次数。
+    """
+    rows: list[dict] = []
+    sid = str(_row(st)["stmt_id"])
+    for i in range(1, SIGN_TIMES + 1):
+        got = _sign(st, proof_text=proof_text)
+        rows.append(got)
+        writeback = dict(got.get("statement_writeback") or {})
+        assert bool(writeback.get("written")) is (i == SIGN_TIMES), (
+            f"第 {i} 次「成立」的翻位读数是 written={writeback.get('written')!r} —— "
+            f"2026-10-29 口径要求：连续 {SIGN_TIMES} 次才发签，第 1..{SIGN_TIMES - 1} 次"
+            f"只落台账（读侧理由：{writeback.get('reason') or '（没有理由）'}）", writeback)
+        assert EB.bits_from_row(_row(st))["reviewed"] is (i == SIGN_TIMES), (
+            f"第 {i} 次「成立」就把第 3 位翻上去了（2026-10-29 口径：连续 {SIGN_TIMES} 次"
+            f"且同一份正文才发签；{sid} 的 bits={_row(st).get('bits')}）")
+    return rows
+
+
 # ==================================================== a：提示词侧的三条口径与正反例
 
 def _b_body(slug: str) -> str:
@@ -216,15 +244,15 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
     `resign_required`，note 只说"读侧转 stale（待复核）"—— 读的人不知道下一步该干什么。
 
     这一笔还钉住三件"没被破坏"的事：行上的正文真的换成了消化的那一份、旧正文进
-    `proof_history`、台账那一签一行都没删（作废是读侧现算，不是框架删签）。
+    `proof_history`、台账那三签一行都没删（作废是读侧现算，不是框架删签）。
     """
     st = _ws(tmp_path)
     first = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
     assert first["ok"] is True, first
     sid = str(_row(st)["stmt_id"])
 
-    signed = _sign(st, proof_text=SRC)
-    assert str(signed.get("verification_id") or "").startswith("v-"), signed
+    signed = _sign_enough(st, proof_text=SRC)      # 2026-10-29：连签 3 次才发签
+    assert str(signed[-1].get("verification_id") or "").startswith("v-"), signed[-1]
     assert EB.bits_from_row(_row(st))["reviewed"] is True, "正控：签完之后第 3 位必须是 True"
 
     got = _agent(st).register_statement(**_own(), proof_text=DIGEST, proof_manuscript=SRC)
@@ -242,8 +270,8 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
     assert EB.bits_from_row(row)["reviewed"] is False, row.get("bits")
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert problems == [], problems
-    assert [r["verification_id"] for r in rows] == [signed["verification_id"]], (
-        "旧签被删了 —— 作废是读数，不是删记录")
+    assert [r["verification_id"] for r in rows] == [r["verification_id"] for r in signed], (
+        "旧签被删了 —— 作废是读数，不是删记录（三签一行都不许少）")
 
 
 def test_b2_the_action_and_params_named_in_the_note_are_real(tmp_path):
@@ -277,7 +305,7 @@ def test_c_the_same_text_keeps_the_signature_alive(tmp_path):
     first = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
     assert first["ok"] is True, first
     sid = str(_row(st)["stmt_id"])
-    signed = _sign(st, proof_text=SRC)
+    signed = _sign_enough(st, proof_text=SRC)      # 2026-10-29：连签 3 次才发签
 
     again = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
     assert again.get("canonical_written") is not True, again
@@ -292,7 +320,9 @@ def test_c_the_same_text_keeps_the_signature_alive(tmp_path):
     assert not (row.get("proof_history") or []), row.get("proof_history")
     standing = VR.review_standing(st.root, statement_id=sid, proof_text=SRC, proof_no=1)
     assert standing["state"] == "signed", standing
-    assert standing["verification_id"] == signed["verification_id"], standing
+    # 最近一签说了算（这三签同一份正文，签发的是最后那一签）
+    assert standing["verification_id"] == signed[-1]["verification_id"], standing
+    assert standing["streak"] == SIGN_TIMES and standing["streak_ok"] is True, standing
     assert EB.bits_from_row(row)["reviewed"] is True, row.get("bits")
 
 

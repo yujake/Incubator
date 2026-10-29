@@ -131,11 +131,25 @@ def _sign(store: Store, sid: str) -> dict:
     台账的那个写入口：`verdict` 是 V 的三态结论，`store` 一给就同一次写把第 3 位翻上去
     （见 `record_verification` 的 docstring）。这与 `AgentV.verify_proof` 拿到结论之后
     调的是同一个函数，不是另一条路。
+
+    ## 为什么这里连签 `SIGN_STREAK_NEED` 次（2026-10-29 口径）
+    「一次成立就签」已经取消：同一份正文（同 `proof_sha256`）必须连续
+    `SIGN_STREAK_NEED` 次「成立」且秘书判定通过，第 1、2 次只落台账、第 3 位不翻。
+    返回最后那一签（签发的那一签）；台账里前两行照样在，判据的断言一条都没放宽。
     """
-    return VR.record_verification(
-        store.root, statement_id=sid, proof_text=PROOF,
-        verdict={"verdict": "成立", "findings": []},
-        verifier="agent-V", store=store)
+    need = int(VR.SIGN_STREAK_NEED)
+    signed: dict = {}
+    for i in range(1, need + 1):
+        signed = VR.record_verification(
+            store.root, statement_id=sid, proof_text=PROOF,
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", store=store)
+        wrote = bool((signed.get("statement_writeback") or {}).get("written"))
+        assert wrote is (i == need), (
+            f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："
+            f"连续 {need} 次才发签（第 1、2 次只落台账），读到的理由："
+            f"{(signed.get('statement_writeback') or {}).get('reason') or '（没有理由）'}")
+    return signed
 
 
 def _resubmit(store: Store, **kw) -> dict:
@@ -252,7 +266,9 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     assert before["kind"] == "theorem", before
     trace0 = dict(before.get("_kind_upgrade") or {})
     assert trace0.get("from") == "conjecture" and trace0.get("to") == "theorem", trace0
-    assert "verifications/000000.jsonl#v-000001" in str(trace0.get("basis") or ""), trace0
+    # 依据指向签发的那一签（2026-10-29：连续 3 次之后第 3 行才发签，不是第 1 行）
+    sign_row = f"verifications/{sid}.jsonl#{signed['verification_id']}"
+    assert sign_row in str(trace0.get("basis") or ""), (sign_row, trace0)
     # 同一笔事务的读数是签名入口给的（`record_verification` 把它挂在
     # `statement_writeback` 上），不是"事后才补"的一句话。
     writeback = dict(signed.get("statement_writeback") or {})
@@ -268,7 +284,7 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     assert row["evidence_kind"] == "proof_review", row
     trace = dict(row.get("_kind_upgrade") or {})
     assert trace.get("from") == "conjecture" and trace.get("to") == "theorem", trace
-    assert "verifications/000000.jsonl#v-000001" in str(trace.get("basis") or ""), trace
+    assert sign_row in str(trace.get("basis") or ""), (sign_row, trace)
 
     # 读数面也要能看见这次升档（不是只在盘上悄悄改了一格）。
     assert any("kind" in c for c in (again.get("changes") or [])), again
@@ -381,8 +397,8 @@ def test_criterion5_a_historical_row_is_read_but_never_rewritten(store: Store) -
 
     夹具是「老工作区」里那种行的形状（D-69 之前写下的：V 签完之后、B 还没再登记）：
     `kind="conjecture"`、`bits.proof=true`、`bits.reviewed=true`、
-    `verifications/<号>.jsonl#v-000001` 判成立。D-69 之后签名那一笔自己就会抬档，
-    所以这种形态只能按历史形态写回盘上（真机上它是 sylow3 那三行）。
+    `verifications/<号>.jsonl#v-000003`（连续 3 次之后签发的那一签）判成立。D-69 之后
+    签名那一笔自己就会抬档，所以这种形态只能按历史形态写回盘上（真机上它是 sylow3 那三行）。
 
     判据两件：
     1. 读侧按新口径读出 `theorem`（并给出依据）—— 不然缺陷没修；

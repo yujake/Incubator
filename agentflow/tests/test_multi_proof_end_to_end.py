@@ -135,10 +135,25 @@ def _own(full: str, short: str) -> dict:
 
 
 def _sign(store: Store, *, text: str, proof_no: int, stmt_id: str = SID) -> dict:
-    """V 的签名写入口（`V.verify_proof` 签的就是它；这里不经模型）。"""
-    return VR.record_verification(store.root, statement_id=stmt_id, proof_text=text,
-                                  verdict=dict(_OK), verifier="agent-V", store=store,
-                                  proof_no=proof_no)
+    """V 的签名写入口（`V.verify_proof` 签的就是它；这里不经模型）。
+
+    ## 为什么连签 `SIGN_STREAK_NEED` 次（业主 2026-10-29 口径）
+    「一次成立就签」已取消：同一份正文（同 `proof_sha256`）必须连续
+    `SIGN_STREAK_NEED` 次「成立」且秘书判定通过，第 1、2 次只落台账、第 3 位不翻。
+    所以夹具按同一份正文、同一证明号连签，返回「签发的那一签」（最后一行）；这条
+    口径的正控也在这里：前几次 `written` 必须是假（否则就退回旧口径了）。
+    """
+    need = int(VR.SIGN_STREAK_NEED)
+    signed: dict = {}
+    for i in range(1, need + 1):
+        signed = VR.record_verification(store.root, statement_id=stmt_id, proof_text=text,
+                                        verdict=dict(_OK), verifier="agent-V", store=store,
+                                        proof_no=proof_no)
+        wrote = bool((signed.get("statement_writeback") or {}).get("written"))
+        assert wrote is (i == need), _broken(
+            "L2", f"第 {i} 次「成立」的翻位读数是 written={wrote!r}（2026-10-29 口径："
+                  f"连续 {need} 次才发签，第 1..{need - 1} 次只落台账）", signed)
+    return signed
 
 
 def _ledger(store: Store, stmt_id: str = SID) -> list[dict]:

@@ -27,6 +27,7 @@ from agentflow import capabilities as C
 from agentflow import schema as S
 from agentflow.specs import builtin_specs
 from agentflow.verifications import (
+    SIGN_STREAK_NEED,
     parse_verdict,
     proof_review_gap,
     record_verification,
@@ -355,10 +356,21 @@ SID = S.format_id(7)
 STATEMENT_ROW = {"statement_id": SID, "proof_text": PROOF_TEXT, "evidence_kind": "proof_review"}
 
 
-def _sign(root, proof_text: str = PROOF_TEXT) -> None:
-    """按 V 的口径落一签（`成立` + 无未解决 error ⇒ `signs_bit3` 成立）。"""
-    record_verification(root, statement_id=SID, proof_text=proof_text,
-                        verdict=parse_verdict('{"verdict": "成立", "findings": []}'))
+#: 2026-10-29 口径：同一份证明、同一版正文（同 `proof_sha256`）必须连续
+#: `SIGN_STREAK_NEED` 次「成立」且秘书判定通过，才轮到秘书落签；第 1、2 次只落台账。
+SIGN_TIMES = SIGN_STREAK_NEED
+
+
+def _sign(root, proof_text: str = PROOF_TEXT, *, times: int = SIGN_TIMES) -> list[dict]:
+    """按 V 的口径落 `times` 签（`成立` + 无未解决 error），返回那几行台账。
+
+    改前夹具只落一签（"一次成立就签"那份旧口径）；现在第 1、2 次只落台账、
+    `bits.evidence` 不翻，所以默认攒够 `SIGN_TIMES` 次 —— 而"一签不够"这件事由
+    `test_a_signed_statement_is_not_asked_for_another_signature` 用 `times=1` 单独正控。
+    """
+    return [record_verification(root, statement_id=SID, proof_text=proof_text,
+                                verdict=parse_verdict('{"verdict": "成立", "findings": []}'))
+            for _ in range(int(times))]
 
 
 def _d_side_ok(root, row) -> bool:
@@ -376,13 +388,21 @@ def _m_side_missing(root) -> list[str]:
 
 
 def test_a_signed_statement_is_not_asked_for_another_signature(tmp_path) -> None:
-    """⑤ 正控：已签（最近一签「成立」且 sha 相符）⇒ D 与 M 的清单都不再要求它。"""
+    """⑤ 正控：已签（连续 `SIGN_TIMES` 次「成立」且 sha 相符）⇒ D 与 M 的清单都不再要求它。
+
+    两段：① 第 1 次「成立」不算签（业主 2026-10-29：连续 3 次才发签，前两次只落台账）
+    —— 这一段是这条新口径的正控；② 攒够次数之后，两边的清单都不再点名它。
+    """
     root = tmp_path / "ws"
     root.mkdir()
-    _sign(root)
+    _sign(root, times=1)
+    assert _d_side_ok(root, STATEMENT_ROW) is False, (
+        "只「成立」了 1 次就被当成签过了 ⇒ 业主 2026-10-29 的「连续 3 次才发签」没接上"
+        "（前两次只落台账、`bits.evidence` 不翻位）")
+    _sign(root, times=SIGN_TIMES - 1)          # 补够剩余次数 ⇒ 第 3 次才落签
     assert _d_side_ok(root, STATEMENT_ROW) is True, (
-        "已经签过的命题在 D 那一侧仍被判『没带签』⇒ D 会让 F 补签，而它已经签过了"
-        "（业主裁定：签一次即定，不该反复要求签字）")
+        f"已经签过（连续 {SIGN_TIMES} 次「成立」且 sha 相符）的命题在 D 那一侧仍被判"
+        "『没带签』⇒ D 会让 F 补签，而它已经签过了")
     assert _m_side_missing(root) == [], (
         "已经签过的命题仍留在 M 的收工清单里 ⇒ 主控会反复要求补签；"
         f"读到 {_m_side_missing(root)}")

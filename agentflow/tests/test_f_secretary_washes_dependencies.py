@@ -65,6 +65,12 @@ def _ws(path: pathlib.Path) -> Store:
 
 def _add_statement(store: Store, stmt_id: str, *, label: str = "",
                    level: str = "proof_review") -> dict:
+    """写一条在册命题；要 `proof_review` 就先让 V 签满门槛，再升档（写入期有闸）。
+
+    2026-10-29 口径：`proof_review` 那一档的准入现在是"同一份正文连续
+    `SIGN_STREAK_NEED` 次「成立」"（第 1、2 次只落台账、不翻位），所以夹具连签 ——
+    闸的判据一个字都没放宽，只是夹具按新规矩凑够次数。
+    """
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=label or f"在册命题 {stmt_id}",
@@ -77,12 +83,18 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row.to_dict())
     if level == "proof_review":
-        signed = VR.record_verification(
-            store.root, statement_id=stmt_id,
-            proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
-            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
-        assert signed.get("checked") is True, signed
+        need = int(VR.SIGN_STREAK_NEED)
+        for i in range(1, need + 1):
+            signed = VR.record_verification(
+                store.root, statement_id=stmt_id,
+                proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+                verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+                store=store, proof_no=1)
+            assert signed.get("checked") is True, signed
+            written = bool((signed.get("statement_writeback") or {}).get("written"))
+            assert written is (i == need), (
+                f"第 {i} 次「成立」的翻位读数是 written={written!r} —— 2026-10-29 口径："
+                f"连续 {need} 次才发签，第 1..{need - 1} 次只落台账", signed)
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
     got["evidence_kind"] = level

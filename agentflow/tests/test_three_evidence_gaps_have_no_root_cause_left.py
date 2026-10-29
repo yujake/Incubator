@@ -111,11 +111,20 @@ def _promote_to_proof_review(store: Store, stmt_id: str, proof_text: str) -> Non
     「proof_review级及以上才可引用」）。改前这两条用例走的是"正文扫描"的老路，不经过
     那道门；现在它们按新口径交稿，被引命题就必须真的够格 —— 否则红的是档位门，
     而这两条用例要证明的不是档位门。
+
+    2026-10-29 口径：`proof_review` 那一档的准入是"同一份正文连续 `SIGN_STREAK_NEED`
+    次「成立」"（第 1、2 次只落台账、不翻位）⇒ 这里连签够次数再改档位。
     """
-    signed = VR.record_verification(
-        store.root, statement_id=stmt_id, proof_text=proof_text, verdict=_OK,
-        verifier="agent-V", store=store, proof_no=1)
-    assert signed.get("checked") is True, signed
+    need = int(VR.SIGN_STREAK_NEED)
+    for i in range(1, need + 1):
+        signed = VR.record_verification(
+            store.root, statement_id=stmt_id, proof_text=proof_text, verdict=_OK,
+            verifier="agent-V", store=store, proof_no=1)
+        assert signed.get("checked") is True, signed
+        wrote = bool((signed.get("statement_writeback") or {}).get("written"))
+        assert wrote is (i == need), (
+            f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："
+            f"连续 {need} 次才发签（第 1、2 次只落台账）", signed)
     row = _row(store, stmt_id)
     row["evidence_kind"] = "proof_review"
     with store.tx("statements", actor="test", note="fixture:evidence_kind") as tx:
@@ -131,10 +140,22 @@ def _deps_of(store: Store, stmt_id: str) -> list[dict]:
 
 
 def _sign(store: Store, *, stmt_id: str, proof_text: str, proof_no: int) -> dict:
-    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。"""
-    return VR.record_verification(
-        store.root, statement_id=str(stmt_id), proof_text=proof_text,
-        verdict=dict(_OK), verifier="agent-V", store=store, proof_no=int(proof_no))
+    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。
+
+    2026-10-29 口径：同一份正文连续 `SIGN_STREAK_NEED` 次「成立」且秘书判定通过才发签
+    （第 1、2 次只落台账）⇒ 夹具连签够次数、返回签发的那一签；这条正控在下面钉住。
+    """
+    need = int(VR.SIGN_STREAK_NEED)
+    signed: dict = {}
+    for i in range(1, need + 1):
+        signed = VR.record_verification(
+            store.root, statement_id=str(stmt_id), proof_text=proof_text,
+            verdict=dict(_OK), verifier="agent-V", store=store, proof_no=int(proof_no))
+        wrote = bool((signed.get("statement_writeback") or {}).get("written"))
+        assert wrote is (i == need), (
+            f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："
+            f"连续 {need} 次才发签（第 1、2 次只落台账）", signed)
+    return signed
 
 
 def _plant_mirror(store: Store, rows: list[dict]) -> pathlib.Path:
@@ -246,13 +267,19 @@ def test_b_the_ledger_has_one_body_and_the_readout_can_say_signed(tmp_path):
     """
     st = _ws(tmp_path, "b")
     b = _agent(st)
-    out = b.register_statement(**own("命题 B1：被签三次的那一条。"),
-                               proof_text="证明：由定义直接得到。")
+    # 三份证明各签满门槛（2026-10-29 口径：同一份正文连续 `SIGN_STREAK_NEED` 次「成立」
+    # 且秘书判定通过才发签，第 1、2 次只落台账）⇒ 这一条夹具要"签过三份"就得先有三份
+    # 在册证明，再各签够次数。读数面的断言（`signed >= 3`）一个字都没放宽。
+    proof_texts = ("证明：由定义直接得到。", "证明：换一条路线。", "证明：再换一条路线。")
+    out = b.register_statement(
+        **own("命题 B1：被签三次的那一条。"),
+        proofs=[{"proof_no": i, "text": t}
+                for i, t in enumerate(proof_texts, 1)])
     assert out.get("ok") is True, out
     sid = str(out["stmt_id"])
     for no in (1, 2, 3):
-        _sign(st, stmt_id=sid, proof_text=VR.proof_text_of(_row(st, sid), no) if no > 1
-              else "证明：由定义直接得到。", proof_no=no)
+        _sign(st, stmt_id=sid, proof_text=VR.proof_text_of(_row(st, sid), no),
+              proof_no=no)
 
     reading = VR.ledger_reading(st.root, store=st)
     assert reading["checked"] is True, reading
@@ -407,15 +434,18 @@ def test_d_anti_vacuum_both_guards_are_load_bearing(tmp_path, monkeypatch):
     assert not _a_holds(stubbed), (
         "把 `deps_missing` 的读数打桩成空之后判据 a 还是绿的 ⇒ a 没接在那根线上")
 
-    # ---- 正控（b）：真口径下，文件 3 行 vs 派生副本 0 行是"分家"
+    # ---- 正控（b）：真口径下，文件 6 行 vs 派生副本 0 行是"分家"
     st_b = _ws(tmp_path, "db")
     b = _agent(st_b)
-    out = b.register_statement(**own("命题 D1：被签两次的那一条。"),
-                               proof_text="证明：由定义直接得到。")
+    d_texts = ("证明：由定义直接得到。", "证明：换一条路线。")
+    out = b.register_statement(
+        **own("命题 D1：被签两次的那一条。"),
+        proofs=[{"proof_no": i, "text": t} for i, t in enumerate(d_texts, 1)])
     sid = str(out["stmt_id"])
+    # 2026-10-29 口径：两份证明各要连续 `SIGN_STREAK_NEED` 次「成立」（只落台账的那两次
+    # 也算台账的行）⇒ 这里是 2×3 行
     for no in (1, 2):
-        _sign(st_b, stmt_id=sid,
-              proof_text="证明：由定义直接得到。" if no == 1 else "证明：换一条路线。",
+        _sign(st_b, stmt_id=sid, proof_text=VR.proof_text_of(_row(st_b, sid), no),
               proof_no=no)
     _plant_mirror(st_b, [])
     assert _b_holds(st_b.root, st_b), VR.ledger_reading(st_b.root, store=st_b)
@@ -439,6 +469,48 @@ def _sylow3_statements() -> list[dict]:
     return [dict(r) for r in json.loads(path.read_text(encoding="utf-8")).get("rows") or []]
 
 
+def _top_up_a_copy_of_the_real_ledgers(root, source) -> pathlib.Path:
+    """把真机那批 `verifications/*.jsonl` 拷进临时工作区，并把每一份证明补到发签门槛。
+
+    为什么要补（业主 2026-10-29 的口径）：真机那批台账是"一次成立就签"那一版写下的
+    （每份 1–2 行「成立」），新口径下它们读成 `holding` —— 于是"读数面能说签了几份"
+    这件事在原件上读不出非零。补次数只补「副本」：`projects/` 一个字节都不动，
+    `ledger_reading` 的读法一个字都没改。
+
+    补法是追加同一份正文的「成立」行（同 `proof_sha256`），直到该命题该证明号的
+    `consecutive_holds` 说 `streak_ok` —— 用的是公开读口，不手算票数。
+    """
+    win = pathlib.Path(root) / "verifications"
+    win.mkdir(parents=True, exist_ok=True)
+    need = int(VR.SIGN_STREAK_NEED)
+    for src in sorted((pathlib.Path(source) / VR.VERIFICATIONS_DIR).glob("*.jsonl")):
+        rows = [json.loads(line) for line in
+                src.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert rows, src
+        last = dict(rows[-1])
+        assert str(last.get("verdict")) == "成立", (src.name, last.get("verdict"))
+        no = VR.proof_no_of(last)
+        sid = src.stem
+        dst = win / src.name
+
+        def _flush() -> None:
+            dst.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                           encoding="utf-8")
+
+        _flush()
+        n = len(rows)
+        for _ in range(need):
+            holds = VR.consecutive_holds(root, sid, proof_no=no)
+            if holds.get("streak_ok"):
+                break
+            n += 1
+            rows.append(dict(last, verification_id=f"v-9{n:04d}", round=n))
+            _flush()
+        holds = VR.consecutive_holds(root, sid, proof_no=no)
+        assert holds.get("streak_ok") is True, (src.name, holds)
+    return pathlib.Path(root)
+
+
 def test_e_sylow3_recompute_says_which_gap_would_still_show(tmp_path):
     """判据 e：用 sylow3 的三条命题做只读夹具，复算"改后这三条缺口各读成什么"。
 
@@ -452,7 +524,6 @@ def test_e_sylow3_recompute_says_which_gap_would_still_show(tmp_path):
     # ---- 缺口二：这一趟到底"签了几份"（改前：文件 7 份、按表看是 0 行）
     ledger = VR.ledger_reading(SYLOW3)
     assert ledger["files"] == 7, ledger
-    assert ledger["signed"] == 7, ledger
     assert ledger["table"]["is_store_table"] is False, ledger["table"]
     assert ledger["table"]["rows"] is None, ledger["table"]
     assert ledger["mirror"]["present"] is False, ledger["mirror"]
@@ -460,6 +531,16 @@ def test_e_sylow3_recompute_says_which_gap_would_still_show(tmp_path):
     # 缺口二改后不会"消失"，但它变成一个能被读到的数（而不是一页空白）
     assert f"{VR.VERIFICATIONS_DIR}/*.jsonl" == ledger["source"], ledger
     assert ledger["rows"] >= 14, ledger
+    # 2026-10-29 口径（连续 3 次「成立」才发签）落在真机老台账上的读数：那批行是旧口径
+    # 写的（每份 1–2 行「成立」）⇒ 现在一份都不到门槛，`signed` 是 0（而 `rows` 仍是 14：
+    # 文件面照读）。"读数面能说签了几份"由下面那份补够次数的副本证明：
+    assert ledger["signed"] == 0 and ledger["signed_statements"] == [], ledger
+    topped = _top_up_a_copy_of_the_real_ledgers(tmp_path / "sylow3_ledger", SYLOW3)
+    signed_copy = VR.ledger_reading(topped)
+    assert signed_copy["files"] == 7 and signed_copy["rows"] == ledger["rows"] + 7 * (
+        int(VR.SIGN_STREAK_NEED) - 1), signed_copy
+    assert signed_copy["signed"] == 7, signed_copy
+    assert len(signed_copy["signed_statements"]) == 7, signed_copy
 
     # ---- 缺口一：把 000000 那一笔原样（定理内容 + 证明过程）重放一遍
     st = _ws(tmp_path, "e1")
