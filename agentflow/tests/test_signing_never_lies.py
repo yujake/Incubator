@@ -144,6 +144,46 @@ def _v(store: Store, seam: _Seam) -> AgentV:
     return AgentV(store, workspace_root=store.root, llm=seam)
 
 
+def _v_secretary(store: Store):
+    """V 的秘书（离线替身缝：判 clean、判签发）。
+
+    2026-10-29 的追加口径之后，发签权在秘书手上：`verify_proof` 只落台账，
+    翻位那一步由 `Secretary.decide_sign_issuance` 调 `sign_statement` 落地。
+    所以这一批判据要"真的签住"，就必须把秘书接上（而不是只调三次 verify_proof）。
+    替身缝的答案取自 `test_v_sign_gate_streak`（同一份夹具，不抄第二份）。
+    """
+    from agentflow import secretary as SEC
+
+    from test_v_sign_gate_streak import _Seam as _GateSeam
+    from test_v_sign_gate_streak import _axis
+
+    seam = _GateSeam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                      "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    return SEC.Secretary("V", root=store.root, store=store, seam=seam,
+                         enable_model=True)
+
+
+def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
+              times: int | None = None) -> dict:
+    """连跑 `SIGN_STREAK_NEED` 次 `verify_proof`，返回最后一次的返回值。
+
+    为什么要跑三次：第 1、2 次「成立」只落台账、不翻位（连续闸）。夹具要的是
+    "这一签真的签住"那一刻的返回值，也就是第 3 次。
+    """
+    from agentflow import verifications as _VR
+
+    n = int(times if times is not None else _VR.SIGN_STREAK_NEED)
+    agent = AgentV(store, workspace_root=store.root, llm=_Seam(),
+                   secretary=_v_secretary(store))
+    out: dict = {}
+    for _i in range(max(1, n)):
+        kw = {"proof_no": proof_no}
+        if proof_text:
+            kw["proof_text"] = proof_text
+        out = agent.verify_proof(SID, **kw)
+    return out
+
+
 # ============================================================ ① 撤回
 
 def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.Path) -> None:
@@ -155,6 +195,10 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
 
     修法有两半，这条判据同时钉住：写入期闸改读"任一份 signed 即放行"（`#p2` 签完
     这一行就够格），且返回只看"台账那一行有没有落地"。
+
+    2026-10-29 追加口径之后，"签住"要多跑两次（连续 3 次「成立」）并且由 V 的秘书翻位
+    ⇒ 取数口从"一次 `verify_proof`"换成 `_v_rounds`（第 3 次那一趟的返回值）。
+    断言的意思一个字没变：要么真签住（位翻了、R10 数得到），要么如实说没签住。
     """
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
@@ -162,8 +206,7 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
     assert _get(st)["evidence_kind"] == "proof_review"
     assert _ledger_bytes(st) == 0, "夹具前提：这一行一次都没签过"
 
-    seam = _Seam()
-    out = _v(st, seam).verify_proof(SID, proof_no=2)
+    out = _v_rounds(st, proof_no=2)
     size = _ledger_bytes(st)
 
     # 不许出现"返回说签住、盘上 0 字节"（改前正是这个读数）。
@@ -174,13 +217,14 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
     if out["checked"] and out["signed_bit3"]:
         # 正控那一半：真的签住了 —— 台账有行、位翻了、R10 数得到。
         rows = _ledger_rows(st)
-        assert len(rows) == 1 and rows[0]["proof_no"] == 2, rows
-        assert rows[0]["proof_sha256"] == VR.proof_sha(P2), rows[0]
+        assert len(rows) == VR.SIGN_STREAK_NEED and rows[-1]["proof_no"] == 2, rows
+        assert rows[-1]["proof_sha256"] == VR.proof_sha(P2), rows[-1]
         assert _per_proof(st) == {1: False, 2: True}, _per_proof(st)
         n, detail = _r10(st)
         assert n == 1 and detail["review_states"]["signed"] == 1, detail
         assert detail["counted"][0]["proof_no"] == 2, detail
         assert out["review_write"]["written"] is True, out["review_write"]
+        assert out["sign_issuance"]["issued"] is True, out["sign_issuance"]
         return
     # 另一条合法出口：拒了就如实说，且盘上同样没有这一签。
     assert out["checked"] is False and out["reason"], out
@@ -207,8 +251,10 @@ def test_the_write_gate_lets_through_a_row_where_any_proof_is_signed(
     assert before_gap["ok"] is False, before_gap
     assert [g["statement_id"] for g in VR.proof_review_gaps(st.root, [probe])] == [SID]
 
-    VR.record_verification(st.root, statement_id=SID, proof_text=P2, verdict=dict(_OK),
-                           verifier="agent-V", store=st, proof_no=2)
+    # 连续 3 次「成立」才签住（业主 2026-10-29）：一次就放行等于没有这道门槛。
+    for _i in range(VR.SIGN_STREAK_NEED):
+        VR.record_verification(st.root, statement_id=SID, proof_text=P2, verdict=dict(_OK),
+                               verifier="agent-V", store=st, proof_no=2)
     signed = dict(_get(st), evidence_kind="proof_review")
     assert VR.proof_review_gap(st.root, signed)["ok"] is True, VR.proof_review_gap(st.root, signed)
     assert VR.proof_review_gaps(st.root, [signed]) == [], "任一份 signed 仍然整笔拒收"
@@ -234,6 +280,12 @@ def test_the_rolled_back_row_itself_reports_not_landed(tmp_path: pathlib.Path) -
     def _refuse(*_a, **_k):
         raise ValueError(f"{VR.CODE_WRITE}：夹具：让这一笔提交失败，好测撤回那一支")
 
+    # 先攒够两票（连续闸要求第 3 次才翻位）⇒ 第 3 次才会走到事务提交那一步，
+    # 撤回那一支才被真的撞上。改前只需一次（一次成立就翻位）。
+    for _i in range(VR.SIGN_STREAK_NEED - 1):
+        VR.record_verification(st.root, statement_id=SID, proof_text=P2,
+                               verdict=dict(_OK), verifier="agent-V", flip=False,
+                               proof_no=2)
     original = ST._refuse_fake_proof_review
     ST._refuse_fake_proof_review = _refuse
     try:
@@ -248,7 +300,8 @@ def test_the_rolled_back_row_itself_reports_not_landed(tmp_path: pathlib.Path) -
     assert wb["rolled_back"] is True, wb
     assert row["checked"] is False, row
     assert "台账那一行被撤回" in row["reason"], row["reason"]
-    assert _ledger_bytes(st) == 0, "撤回之后台账里还有字节"
+    assert _ledger_bytes(st) > 0, "夹具前提没造对：撤回之后台账该只剩前两票"
+    assert len(_ledger_rows(st)) == VR.SIGN_STREAK_NEED - 1, "撤回没能只撤我们那一行"
     assert _get(st)["bits"]["reviewed"] is False, _get(st)["bits"]
     # V 那一侧不许把"被撤回"读成"签住了"。
     assert not (wb["written"] and row["checked"]), wb
@@ -266,12 +319,16 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
     seam = _Seam()
-    out = _v(st, seam).verify_proof(SID, proof_no=2)
+    # 三次（连续 3 次「成立」才翻位、且翻位由 V 的秘书做 —— 2026-10-29）
+    agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_v_secretary(st))
+    for _i in range(VR.SIGN_STREAK_NEED):
+        out = agent.verify_proof(SID, proof_no=2)
 
     assert seam.prompts, "没有问过模型 ⇒ 这条判据没有对象"
-    prompt = seam.prompts[0]
-    assert P2_MARK in prompt, "提示词里没有 #p2 的正文（给了别的证明的正文）"
-    assert P1_MARK not in prompt, "提示词里混进了 #p1 的正文（号与正文解耦）"
+    assert seam.prompts[0], seam.prompts
+    for prompt in seam.prompts:
+        assert P2_MARK in prompt, "提示词里没有 #p2 的正文（给了别的证明的正文）"
+        assert P1_MARK not in prompt, "提示词里混进了 #p1 的正文（号与正文解耦）"
     assert out["proof_no"] == 2, out
     assert out["proof_sha256"] == VR.proof_sha(P2), (
         f"sha 不是 #p2 那一份的（{out['proof_sha256'][:12]}… vs {VR.proof_sha(P2)[:12]}…）")
@@ -433,7 +490,9 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
             "追加本身失败了，理由串却说「签名确实发生过」：" + str(wb["reason"]))
         assert row["checked"] is False, row
         # V 那一侧：同一个失败必须读成 `checked=False`，不许报"签住了第 3 位"。
-        out = _v(st, _Seam()).verify_proof(SID, proof_text=P1, proof_no=1)
+        agent = AgentV(st, workspace_root=st.root, llm=_Seam(),
+                       secretary=_v_secretary(st))
+        out = agent.verify_proof(SID, proof_text=P1, proof_no=1)
         assert out["checked"] is False, out
         assert out["signed_bit3"] is False, out
         assert "台账那一行" in out["reason"], out["reason"]
@@ -443,10 +502,13 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
         _make_writable(path)
 
     # 正控（防真空）：台账恢复可写之后，同一签必须写得进去（上面的红不是恒红）。
-    ok_row = VR.record_verification(st.root, statement_id=SID, proof_text=P1,
-                                    verdict=dict(_OK), verifier="agent-V",
-                                    store=st, proof_no=1)
-    assert ok_row["statement_writeback"]["append_state"] == "appended", ok_row
+    # 连续闸要求三次，所以这里跑三次、看最后一次：`written=True`（位翻了）。
+    ok_row: dict = {}
+    for _i in range(VR.SIGN_STREAK_NEED):
+        ok_row = VR.record_verification(st.root, statement_id=SID, proof_text=P1,
+                                        verdict=dict(_OK), verifier="agent-V",
+                                        store=st, proof_no=1)
+        assert ok_row["statement_writeback"]["append_state"] == "appended", ok_row
     assert ok_row["statement_writeback"]["written"] is True, ok_row
     assert ok_row["checked"] is True, ok_row
 
@@ -481,7 +543,15 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
     """
     root = tmp_path
     clean = VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
-    assert VR.signs_bit3(dict(clean, verdict="成立")) is True
+    # 改前断言 → 改后断言（为什么）：`signs_bit3(那一行) is True` →
+    # `row_signable(那一行) is True` 且 `signs_bit3(那一行) is False`。
+    # pending 那一签按对象 sha 认领，它审的时候命题还没登记 ⇒ 没有命题台账可数
+    # 连续次数，业主 2026-10-29 的"连续 3 次"闸在这一档结构上不适用（见
+    # `verifications._gap_from_pending` 与 `numericproof` 的同一段注释）。
+    # 所以这里判的是行局部那一半；而"不递 streak 就签不住"这条 fail-closed 纪律
+    # 在同一行上照样成立（第二句）。
+    assert VR.row_signable(dict(clean, verdict="成立")) is True
+    assert VR.signs_bit3(dict(clean, verdict="成立")) is False
     gap = _gap_for(root)
     assert gap["ok"] is True and gap["state"] == "signed", gap
 

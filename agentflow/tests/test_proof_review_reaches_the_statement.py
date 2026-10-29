@@ -107,11 +107,25 @@ def _row(store: Store) -> dict:
 
 
 def _sign(store: Store, *, text: str = PROOF1, proof_no: int = 1,
-          verdict: dict | None = None) -> dict:
-    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。"""
-    return VR.record_verification(store.root, statement_id=SID, proof_text=text,
-                                  verdict=verdict or _OK, verifier="agent-V",
-                                  store=store, proof_no=proof_no)
+          verdict: dict | None = None, times: int | None = None) -> dict:
+    """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。
+
+    ## 为什么默认签三次（2026-10-29 业主「V 签门槛 = 连续 3 次没问题」）
+    第 1、2 次「成立」只落台账、不翻位（`verifications.sign_statement` 的连续闸）。
+    这一份判据量的是"签住之后读侧读得对不对"，所以夹具要把那一签真的签住：
+    连续 `SIGN_STREAK_NEED` 次同一份正文、同一结论。判「有毛病」/「看不出来」的那几档
+    只需一次（它们本来就不签，多签几次只会让台账噪音变大）。
+    返回最后一次那一行（读侧要的 `verification_id` 就是它）。
+    """
+    want = verdict or _OK
+    n = int(times if times is not None
+            else (VR.SIGN_STREAK_NEED if str(want.get("verdict")) == "成立" else 1))
+    row: dict = {}
+    for _i in range(max(1, n)):
+        row = VR.record_verification(store.root, statement_id=SID, proof_text=text,
+                                     verdict=want, verifier="agent-V",
+                                     store=store, proof_no=proof_no)
+    return row
 
 
 def _r10(store: Store) -> tuple[int, dict]:
@@ -347,10 +361,22 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     """⑧ 向后兼容：不带 `proof_no` 的签名行 / 没有证明清单的命题行，读数逐字不变。
 
     老形态：
-    (a) 老签名行（只有 `statement_id` + `proof_sha256`，没有 `stmt_id` / `proof_no`）；
-    (b) 老判据（`verifications.proof_review_gap` 对同一行仍判 `ok=True`、sha 相符）；
+    (a) 老签名行（只有 `statement_id` + `proof_sha256`，没有 `stmt_id` / `proof_no`）：
+    它仍然被认得（不折成"没签过"），只是按 2026-10-29 的连续 3 次口径读到
+    `holding`（签过、判成立、还差次数）—— 见下面"改前断言 → 改后断言"；
+    (b) 老判据（`verifications.proof_review_gap`）：一条老签不够发签，`why` 里必须
+    逐字说"还差几次"（不是一句笼统的"没有凭据"）；
     (c) 只有第 3 位、台账里一次都没有的老命题行：位说审过，而凭据里没有任何可定位的
     签名（无 `verification_id`、无 `proof_sha256`）⇒ 判不了 ⇒ 不计入 R10。
+
+    改前断言 → 改后断言（为什么）：
+    - `n == 1`（一条老签就计入 R10）→ `n == 0` 且 `review_states["holding"] == 1`
+      （业主 2026-10-29：「V 签门槛 = 连续 3 次没问题」。一条老签不再算"签住"，
+       而它必须读成 `holding` 而不是 `unsigned`：台账上明明有那一行，
+       说成"一次都没签"是假话）。
+    - `gap["ok"] is True` → `gap["ok"] is False` 且 `gap["state"] == "holding"`
+      （同一个口径在写入期闸上的读数；`sha_matches` 仍然为真 —— 兼容性没退，
+       退的是"一票就算过"这条口径）。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -363,12 +389,20 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     path.write_text(json.dumps(old_row, ensure_ascii=False) + "\n", encoding="utf-8")
 
     n, detail = _r10(st)
-    assert n == 1, detail
-    assert detail["review_states"]["signed"] == 1, detail
+    assert n == 0, detail
+    assert detail["review_states"]["holding"] == 1, detail
     assert detail["stale_ids"] == [] and detail["proofs_unreviewed"] == [], detail
     gap = VR.proof_review_gap(st.root, {"stmt_id": SID, "proof_text": PROOF1,
                                         "evidence_kind": "proof_review"})
-    assert gap["ok"] is True and gap["sha_matches"] is True, gap
+    assert gap["ok"] is False and gap["state"] == "holding", gap
+    assert gap["sha_matches"] is True, gap
+    assert "连续次数只到 1/3" in gap["why"], gap["why"]
+    # 补够三次之后同一个口判 ok（否则上面那一条可能只是"这个口永远不放行"）
+    for _i in range(VR.SIGN_STREAK_NEED - 1):
+        VR.record_verification(st.root, statement_id=SID, proof_text=PROOF1,
+                               verdict=_OK, verifier="agent-V", store=st, proof_no=1)
+    assert VR.proof_review_gap(st.root, {"stmt_id": SID, "proof_text": PROOF1,
+                                         "evidence_kind": "proof_review"})["ok"] is True
     # 没有证明清单 ⇒ 只有 #p1 一条，编号与正文都不变
     assert VR.proof_list(_row(st)) == [(1, PROOF1)], VR.proof_list(_row(st))
 

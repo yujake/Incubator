@@ -73,11 +73,23 @@ def ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _sign(store: Store, stmt_id: str, proof_text: str = _PROOF, verdict: dict | None = None) -> dict:
-    """替 V 落一签（与 `verify.verify_proof` 落盘的是同一行，只是不经模型）。"""
-    return VR.record_verification(store.root, statement_id=stmt_id,
-                                  proof_text=proof_text, verdict=verdict or _OK,
-                                  verifier="agent-V")
+def _sign(store: Store, stmt_id: str, proof_text: str = _PROOF, verdict: dict | None = None,
+          *, times: int | None = None) -> dict:
+    """替 V 落一签（与 `verify.verify_proof` 落盘的是同一行，只是不经模型）。
+
+    2026-10-29（业主「V 签门槛 = 连续 3 次没问题」）之后，「成立」要连续
+    `SIGN_STREAK_NEED` 次才签住 ⇒ 默认落三次（同一份正文）；「有毛病」那一档只落一次
+    （它本来就不签）。返回最后一次那一行。
+    """
+    want = verdict or _OK
+    n = int(times if times is not None
+            else (VR.SIGN_STREAK_NEED if str(want.get("verdict")) == "成立" else 1))
+    row: dict = {}
+    for _i in range(max(1, n)):
+        row = VR.record_verification(store.root, statement_id=stmt_id,
+                                     proof_text=proof_text, verdict=want,
+                                     verifier="agent-V")
+    return row
 
 
 def _write(store: Store, row: dict) -> None:
@@ -88,8 +100,14 @@ def _write(store: Store, row: dict) -> None:
 
 # --------------------------------------------------------------- ① 有凭据的收
 def test_a_proof_review_with_a_signature_is_accepted(ws: Store):
-    """正控：先有「成立」那一签 ⇒ 这一行收（并且审计期不点名它）。"""
-    _sign(ws, "000000")
+    """正控：先有「成立」那一签 ⇒ 这一行收（并且审计期不点名它）。
+
+    改前断言 → 改后断言（为什么）：`gap["verification_id"] == v-000001` →
+    `== v-000003`（最后一次那一签）。业主 2026-10-29 的连续 3 次口径下，"签住"的那一签
+    必然是连续第 3 次（`_sign` 默认落三次），凭据那一格记的是最近那一签，
+    所以它从第 1 行变成第 3 行；断言的意思（"凭据指向落盘的那一签"）一个字没变。
+    """
+    signed = _sign(ws, "000000")
     _write(ws, _row())
     assert [str(r.get("stmt_id")) for r in ws.rows("statements")] == ["000000"]
 
@@ -100,7 +118,9 @@ def test_a_proof_review_with_a_signature_is_accepted(ws: Store):
     # 判据本身也给"够"的读数（三态：`checked=True` 且 `ok=True`）
     gap = VR.proof_review_gap(ws.root, _row())
     assert gap["ok"] is True and gap["checked"] is True, gap
-    assert gap["verification_id"] == f"v-{S.format_id(1)}" and gap["sha_matches"] is True, gap
+    assert gap["verification_id"] == str(signed["verification_id"]), gap
+    assert gap["verification_id"] == f"v-{S.format_id(VR.SIGN_STREAK_NEED)}", gap
+    assert gap["sha_matches"] is True, gap
 
 
 # --------------------------------------------------------------- ② 无凭据的拒

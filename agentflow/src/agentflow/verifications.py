@@ -845,17 +845,44 @@ def proof_sha(proof_text: str) -> str:
     return hashlib.sha256(str(proof_text or "").encode("utf-8")).hexdigest()
 
 
-#: 一条证明（或一条命题）相对「它现在这一份正文」的五种读数（唯一口径在
+#: 一条证明（或一条命题）相对「它现在这一份正文」的六种读数（唯一口径在
 #: :func:`review_standing` / :func:`statement_review_reading`）。
 #:
-#: 顺序是"从查清了到没查成"：`signed`（现行版有「成立」那一签）/ `stale`（签的是旧版，
+#: 顺序是"从查清了到没查成"：`signed`（现行版有「成立」那一签，且连续次数够了）/
+#: `holding`（签过、判成立，但连续次数还没到 `SIGN_STREAK_NEED`）/ `stale`（签的是旧版，
 #: 待复核）/ `rejected`（现行版被签过，结论不是「成立」）/ `unsigned`（一次都没签）/
 #: `unreadable`（台账读不出来 / 证明号认不出 —— 没查成，不是通过、也不是没签过）。
 #:
 #: 为什么 stale 与 rejected 必须分开（三态纪律）：前者是"签过、但签的不是现在这一份"，
 #: 后者是"签的就是这一份、结论是没过"。把两者折成同一个"不算"会让"改完稿还没送审"
 #: 与"审过了、没过"在读数上长得一样，而处置完全不同（前者重派 V，后者改证明）。
-REVIEW_STATES: tuple[str, ...] = ("signed", "stale", "rejected", "unsigned", "unreadable")
+#:
+#: 为什么 `holding` 必须单列（业主 2026-10-29「连续 3 次」）：第 1、2 次「成立」只落台账、
+#: 不翻位（`:func:`sign_statement``）。若把它们折进 `unsigned`，那一档的措辞是"一次都没签"——
+#: 而台账上明明有 1、2 行签，读的人会拿到一句假话；折进 `rejected` 更坏（"复核过、结论不是
+#: 成立"同样是假话）。三档的处置也不同：holding = 再派两次审阅；unsigned = 派一次；rejected = 改证明。
+REVIEW_STATES: tuple[str, ...] = ("signed", "holding", "stale", "rejected",
+                                  "unsigned", "unreadable")
+
+#: 「连续几次成立才发签」（业主 2026-10-29 的口径：V 签门槛 = 连续 3 次没问题 + 秘书语义判定）。
+#:
+#: 为什么是一个常量而不是散在各处的 `3`：判据（`review_standing` / `signs_bit3` /
+#: `sign_statement`）与读数（`proof_review_gap` 的 checklist、`review_standing` 的
+#: `streak/need/streak_ok`）必须说同一个数。抄成三份之后，调一次口径就会留下两处
+#: 还按旧数算的暗门 —— 而那种暗门没有任何一条判据会报。
+SIGN_STREAK_NEED: int = 3
+
+#: 台账行上「秘书语义判定」那一格的键（业主 2026-10-29 的 B 段）。
+#:
+#: 它是行上的一格而不是 statements 的新列：连续计数从台账派生（`draft/125` §二 A），
+#: 于是 `schema.py` / `store.py` 这两个 FC-27 一个字节都不用动。历史行没有这一格
+#: ⇒ 读侧按"没判过"处理（也就是"计入连续"）——那是这条口径上线之前的行为，逐字不变。
+SECRETARY_JUDGE_KEY = "secretary_judge"
+
+#: 秘书判定那一路的三档（与 `secretary.V_REPLY_*` 的 axis 逐字同一套，业主 2026-10-29）：
+#: `clean` = 没问题（计入连续）/ `fault` = 有缺陷要指出（清零）/
+#: `unsure` = 判不了（不清零、也不计入 —— 业主原话，见 `draft/125` §五 v1）。
+SECRETARY_JUDGE_AXES: tuple[str, ...] = ("clean", "fault", "unsure")
 
 #: 多证明模型的落点（业主 2026-10-22：不加 schema 字段）。
 #:
@@ -1099,7 +1126,11 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            used_faces: Iterable[str] = (), submission_id: str = "",
            store: Any = None, proof_no: Any = None,
            object_sha256: Any = "", object_path: Any = "",
-           citation_gate: Mapping[str, Any] | None = None) -> dict[str, Any]:
+           citation_gate: Mapping[str, Any] | None = None,
+           secretary_judge: Mapping[str, Any] | None = None,
+           sign_issuance: Mapping[str, Any] | None = None,
+           washed_relay: Mapping[str, Any] | None = None,
+           flip: bool = True) -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
     编号 `v-NNNN` 由脚本按文件内顺序发（`draft/39` §3.21 五：与手稿编号、台账 id 同一套）。
@@ -1139,6 +1170,22 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     （`ok` / `problem` / `why` 三个读数）。为什么必须落盘：那时 `citation_checks` 常常
     是空数组，而空数组什么都不挡 —— 读侧的硬闸（:func:`signs_bit3`）要能分开
     "没查成"与"核过、没有引用"。查成了的行不写这一格（老行因此逐字节不变）。
+
+    ## `secretary_judge` / `sign_issuance`：业主 2026-10-29 的 B 段与 A 段
+    `secretary_judge` 是秘书对这段回复的三档语义判定（`clean` / `fault` / `unsure`），
+    原样落到台账那一行的 `SECRETARY_JUDGE_KEY` 那一格 —— 连续计数读它（`fault` 清零、
+    `unsure` 不计入也不清零）。不给就一个字节都不写（历史行与"没问过秘书"的那一批
+    因此逐字节不变，读侧按"没判过"处理，也就是计入）。
+    `sign_issuance` 是秘书"发不发这一签"的决定，原样交给 :func:`sign_statement` 当闸：
+    `checked=False`（没缝 / 超时 / 台账读不成 / 没装配）⇒ 不翻位。
+    两个参数都只影响"位翻不翻"，不改台账那一行的 `verdict`（那是 `parse_verdict` 的正本）。
+
+    ## `flip=False`：这一签只落台账，翻位交给秘书（业主 2026-10-29 追加口径）
+    原话：「V 不再自己发签。V 只产出审稿意见；由 V 的秘书判定并落盘」。所以 V 的写入口
+    取 `flip=False`：台账那一行照落（正本），`statement_writeback.deferred_to="secretary"`，
+    第 3 位由 `Secretary.decide_sign_issuance` 判完再调
+    :func:`sign_statement`（`append_ledger=False`）翻。默认 `True` 是兼容门（夹具 / 直调本函数
+    的那一批），生产 V 那两条路都传 `False`。
     """
     # 证明号先判：坏号在写任何东西之前就拒（不落台账、不改位）。
     no = proof_no_strict(proof_no)
@@ -1206,14 +1253,76 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if gate_problem:
         row["citation_gate"] = {"ok": False, "problem": gate_problem,
                                 "why": str(citation_gate.get("why") or "")}
+    #: 秘书语义判定那三档（业主 2026-10-29 的 B 段）：`{axis, checked, decision, reason}`。
+    #: 只在调用方真问过秘书时写（条件写入 ⇒ 历史行与新行里"没判过"的那一批逐字节不变）。
+    #: 为什么落在这一行而不是 `statements` 的新列：连续计数从台账派生（`draft/125` §二 A），
+    #: 而"这一签当年算不算一票"是这一行的性质（`_hold_run_lengths` 读它）。
+    if isinstance(secretary_judge, Mapping):
+        axis = str(secretary_judge.get("axis") or "").strip()
+        row[SECRETARY_JUDGE_KEY] = {
+            "axis": axis if axis in SECRETARY_JUDGE_AXES else "unsure",
+            "checked": bool(secretary_judge.get("checked")),
+            "decision": str(secretary_judge.get("decision") or ""),
+            "reason": str(secretary_judge.get("reason") or "")[:300],
+        }
+    #: 洗过的那一份转达文本（业主 2026-10-29 的 C 段）：`{text, findings, dropped, refused}`。
+    #: 只在秘书真的洗出来时写（`washed=True`）—— 洗不出来的那一档不写这一格：
+    #: 台账上"没有这一格"必须是"没洗过/洗不出来"，而不许写一份空文本冒充洗过。
+    #: 它是 C 段交付面的唯一来源（`agent_loop.v_rejections_digest` 读这一格），
+    #: 于是"递给 F 的那段话"与"台账上留痕的那段话"是同一份字节。
+    if isinstance(washed_relay, Mapping) and washed_relay.get("washed"):
+        row["washed_relay"] = {
+            "text": str(washed_relay.get("text") or ""),
+            "findings": [dict(f) for f in (washed_relay.get("findings") or [])
+                         if isinstance(f, Mapping)],
+            "dropped": [dict(f) for f in (washed_relay.get("dropped") or [])
+                        if isinstance(f, Mapping)],
+        }
     if store is None:
         _append_verification(path, row)
         return row
-    if not signs_bit3(row):
+    if flip is False:
+        # ---- 业主 2026-10-29 追加口径：V 不再自己发签 ----
+        #
+        # V 只产审稿意见；"翻不翻第 3 位"由 V 的秘书判（`Secretary.decide_sign_issuance`），
+        # 落地那一步也由它调 `sign_statement(append_ledger=False)`。所以这一支只落台账
+        # （正本先落，签这个事实不依赖任何人的决定），把翻位留给秘书：
+        # `statement_writeback.deferred_to == "secretary"` 是"这一支没翻位"的可读读数，
+        # 它不是失败（`checked` 仍为真：台账那一行确实落了）。
+        append_state = "not_attempted"
+        append_problem = ""
+        try:
+            _append_verification(path, row)
+            append_state = "appended"
+        except OSError as exc:
+            append_state = "failed"
+            append_problem = f"{type(exc).__name__}: {exc}"
+        writeback: dict[str, Any] = {
+            "written": False, "rolled_back": False, "append_state": append_state,
+            "re_sign_required": append_state != "appended", "grade": "",
+            "statement_id": str(statement_id), "proof_no": no,
+            "proof_sha256": sha, "kind_upgrade": {}, "upgrade_note": "",
+            "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
+            "deferred_to": "secretary",
+            "reason": (f"签字权在 V 的秘书手上（业主 2026-10-29）：台账那一行已落"
+                       f"（{vid}），第 3 位等秘书判"
+                       + (f"；但签名那一行没写成（{append_problem}）" if append_problem else "")),
+        }
+        row["statement_writeback"] = writeback
+        _mark_landed(row, writeback)
+        return row
+    if not row_signable(row):
         # 签不住的结论也要落台账（它是"看过、结论是没过"的证据），但它不翻任何位。
         # 追加由本函数做（`sign_statement` 在这一支只回一句理由、不碰台账）⇒ 由本函数
         # 把追加落在哪一态写回 `statement_writeback`（2026-10-22 审计第 5 条：那一格
         # 此前只有"-written 前的 -1"一个哨兵兼任两义，"签名确实发生过"可能是在说谎）。
+        #
+        # 判据是行局部那一半（`row_signable`），不是 `signs_bit3`：后者还要连续次数，
+        # 而"连续次数不够"与"这一签签不住"是两件事 —— 前者仍要走 `sign_statement`
+        # （它负责把台账追加在事务里、并在次数够了的时候翻位），后者连事务都不该开。
+        # 改前这里写的是 `signs_bit3(row)`（那时它只有行局部那一半）；业主 2026-10-29
+        # 给 `signs_bit3` 加了连续闸之后，若不同步改这一行，"成立但还差次数"那一支会
+        # 被当成本支处理 ⇒ 台账会被追加两次（一次在这里、一次在 `sign_statement` 里）。
         append_state = "not_attempted"
         append_problem = ""
         try:
@@ -1234,7 +1343,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         _mark_landed(row, writeback)
         return row
     writeback = sign_statement(store, row=row, proof_text=proof_text,
-                               path=path, proof_no=no)
+                               path=path, proof_no=no, sign_issuance=sign_issuance)
     row["statement_writeback"] = writeback
     _mark_landed(row, writeback)
     return row
@@ -1344,7 +1453,7 @@ def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
     out["file_names"] = sorted(p.name for p in base.glob("*.jsonl"))
     out["files"] = len(out["file_names"])
     out["rows"] = len(rows)
-    signed = [r for r in rows if signs_bit3(r)]
+    signed = signed_rows(rows)
     out["signed"] = len(signed)
     out["signed_statements"] = sorted({_statement_id_of(r) for r in signed if _statement_id_of(r)})
     out["problems"] = list(bad)
@@ -1455,8 +1564,8 @@ def signing_gate_problem(row: Mapping[str, Any]) -> str:
     return str(gate.get("problem") or "").strip()
 
 
-def signs_bit3(row: Mapping[str, Any]) -> bool:
-    """这一行能不能签五元位第 3 位（§3.21 五：`成立` 且没有未解决的 error）。
+def row_signable(row: Mapping[str, Any]) -> bool:
+    """行局部那一半：这一行自己够不够格签五元位第 3 位（`成立` 且没有未解决的 error）。
 
     再加一条（业主 2026-10-26）：引用核实里只要有一条挡住签字的档（`stronger` /
     `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
@@ -1466,6 +1575,13 @@ def signs_bit3(row: Mapping[str, Any]) -> bool:
     同一道闸也认 `citation_gate.problem`（`:func:`signing_gate_problem`）：台账里记着
     "依赖台账读不出来"的行，哪怕 `citation_checks` 是空数组（空数组什么都不挡），也不许
     签 —— "没查成"与"核过、没有引用"必须分开。
+
+    ## 为什么它与 :func:`signs_bit3` 是两个名字而不是一个（业主 2026-10-29）
+    「连续 3 次」这一条读不到：它要数台账尾部那几行（:func:`consecutive_holds`）。
+    行局部谓词自己读台账就会造出"位上说签了、台账只签一次"的第二份账（`draft/124` §一②），
+    所以两条轴在这里分开：本函数 = 这一行自己的资格；:func:`signs_bit3` =
+    本函数 且 调用方递进来的连续读数。函数名刻意不同，免得读的人以为
+    `signs_bit3(row)` 少了什么参数只是"默认值不同"。
     """
     if str(row.get("verdict") or "") != "成立":
         return False
@@ -1476,16 +1592,87 @@ def signs_bit3(row: Mapping[str, Any]) -> bool:
     return not citation_blocks(row)
 
 
-def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+def secretary_axis(row: Mapping[str, Any]) -> str:
+    """这一行台账上的秘书判定档（`SECRETARY_JUDGE_AXES`；没有这一格 ⇒ 空串）。
+
+    空串 = "这一签不是秘书判过的那一档"（历史行 / 秘书不在场时没写这一格）——读侧按
+    计入处理，也就是这条口径上线之前的行为。取了词表外的值也归空串：秘书返回
+    "Clean"（大小写）/ 半截词这类写法时，不许它把一条有缺陷的签静默算成 clean ——
+    词表外的结论一律不采信（`Secretary.judge` 的同一条纪律），不采信的后果就是回到
+    "没判过"那一档（可计入、但也不给它 clean 的名分）。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    if not isinstance(got, Mapping):
+        return ""
+    axis = str(got.get("axis") or "").strip()
+    return axis if axis in SECRETARY_JUDGE_AXES else ""
+
+
+def _streak_number(streak: Any) -> int | None:
+    """把"连续读数"归一成一个整数；`None` = 这一档没有可用的读数。
+
+    接受三种来路（都是同一件事的不同载体，不另立判据）：
+    - `consecutive_holds` 的返回值（dict）：`checked` 为假 ⇒ `None`（没查成不是 0 次）；
+    - 一个整数（已经数过的连续次数）；
+    - `None` / 其它任何东西 ⇒ `None`（没有读数，与"读到 0"不同）。
+    """
+    if isinstance(streak, Mapping):
+        if not bool(streak.get("checked")):
+            return None
+        try:
+            return int(streak.get("streak") or 0)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(streak, bool) or streak is None:
+        return None
+    try:
+        return int(streak)
+    except (TypeError, ValueError):
+        return None
+
+
+def streak_ok(streak: Any, need: int = SIGN_STREAK_NEED) -> bool:
+    """连续读数够不够发签（没读数 ⇒ 不够：fail-closed）。
+
+    为什么 `None` 不许当"够"：`signs_bit3` 是本仓唯一的签字硬闸，而"调用方忘了传连续
+    读数"与"连续次数够了"必须分得开。默认放行的话，任何一处漏传都会静默退回
+    "一次成立就发签"—— 那正是这一条口径要取消的东西，而盘上不会有任何读数报它。
+    """
+    got = _streak_number(streak)
+    if got is None:
+        return False
+    return got >= int(need)
+
+
+def signs_bit3(row: Mapping[str, Any], *, streak: Any = None) -> bool:
+    """这一行能不能签五元位第 3 位：行局部资格 且 连续次数够。
+
+    `streak`（业主 2026-10-29）是台账派生的连续成立次数，三种载体见
+    :func:`_streak_number`；不给就不签（fail-closed，理由见 :func:`streak_ok`）。
+
+    为什么连续次数是入参而不是在这里现读台账：本函数是行局部谓词（被一批
+    "手里只有一行"的地方调用，`numericproof` / `_gap_from_pending` / 各处读数），
+    拿不到可靠的行序。硬塞一次读盘会让"这一行"与"它的位置"两件事在每个调用点各算一遍
+    ——`draft/124` §一② 点名的那种第二份账就是这么长出来的。
+
+    历史行（没有 `secretary_judge` 这一格）不受影响：连续计数把它们当"没判过"（计入），
+    与这条口径上线之前的读数逐字相同。
+    """
+    if not row_signable(row):
+        return False
+    return streak_ok(streak)
+
+
+def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any]:
     """把一行审校翻成五元位第 3 位那份读数（交给 `evidencebits.bits_of`）。
 
-    签不了（`有毛病` / `看不出来` / 有未解决 error）⇒ 返回 `{}`（第 3 位保持空）——
-    这不是"忘了写"，是"没签"。
+    签不了（`有毛病` / `看不出来` / 有未解决 error / 连续次数不够）⇒ 返回 `{}`
+    （第 3 位保持空）—— 这不是"忘了写"，是"没签"。`streak` 与 :func:`signs_bit3` 同义。
 
     凭据里带 `proof_no` 与 `proof_sha256`（2026-10-22）：读侧要拿它们回答"位上说审过的
     那一份，还是不是现在这一份"（`evidencebits.bits_from_row` 与收工门的 R10 都读这两格）。
     """
-    if not signs_bit3(row):
+    if not signs_bit3(row, streak=streak):
         return {}
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
     return {
@@ -1502,6 +1689,148 @@ def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:
             "proof_sha256": str(row.get("proof_sha256") or ""),
         },
     }
+
+
+def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
+    """逐行给出「到这一行为止，连续几次成立」（行序就是台账的追加序）。
+
+    这是「连续 N 次」的唯一计数实现：:func:`consecutive_holds`（从尾部取一格）、
+    :func:`review_standing`（它已经读过同一批行，不重复读盘）、:func:`signed_rows`
+    （一批台账里哪几行签住了）三处都调它。三处各写一遍合计，只会让三处对同一批行
+    给出三个数 —— 而"位上说签了、台账只签一次"正是这种分家的形态。
+
+    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径）
+    - `proof_sha256` 变了 ⇒ 清零（F 改稿之后，之前那几次审的不是这一份）；
+    - 行局部签不住（`有毛病` / 未解决 error / 引用挡签）⇒ 清零；
+    - 秘书判 `fault`（有缺陷要指出）⇒ 清零；
+    - 秘书判 `unsure`（判不了）⇒ 不清零、也不计入（业主原话「不清零不计入」）：
+      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2
+      而不是 3 —— "一次判不了"既不许把已有的两票作废，也不许冒充第三票。
+
+    调用方负责先把行分组（同一命题 + 同一证明号）：一条命题的两份证明各自数各自的，
+    `#p1` 的三票不许替 `#p2` 数（不许借光）。
+    """
+    out: list[int] = []
+    sha = ""
+    run = 0
+    for row in rows:
+        one = str(row.get("proof_sha256") or "")
+        if not out or one != sha:
+            run = 0
+            sha = one
+        axis = secretary_axis(row)
+        if axis == "fault":
+            run = 0
+        elif axis == "unsure":
+            # 不清零、也不计入：这一行的连续值原样带过去（见 docstring 那一节）。
+            pass
+        elif not row_signable(row):
+            run = 0
+        else:
+            run += 1
+        out.append(run)
+    return out
+
+
+def _rows_of_proof(rows: Sequence[Mapping[str, Any]], proof_no: int) -> list[Mapping[str, Any]]:
+    """这一批台账行里属于 `#proof_no` 的那些（按台账行序，别的证明的行一条都不带）。"""
+    return [r for r in rows if proof_no_of(r) == int(proof_no)]
+
+
+def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
+                      need: int = SIGN_STREAK_NEED) -> dict[str, Any]:
+    """台账尾部连续几次「成立」且是同一份正文（纯读；业主 2026-10-29 的 A 段）。
+
+    这就是「连续 3 次没问题」那个计数：从 `verifications/<命题号>.jsonl` 的尾部按台账
+    行序往回数，同一 `proof_sha256`、连续 `verdict="成立"` 的行数；任何一行的结论不是
+    「成立」、或者 sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
+    秘书判 `unsure` 的行不清零也不计入（见 :func:`_hold_run_lengths`）。
+
+    ## 三态（"没查成"不是"0 次"）
+    | 结局 | `checked` | `streak` |
+    |---|---|---|
+    | 数出来了（含"一次都没签"） | True | 数出来的次数（可以是 0） |
+    | 台账在盘上但读不出坏行 / 证明号认不出 / 命题号不是编号形态 | False | 0 |
+
+    `checked=False` 时 `streak=0` 只是占位（返回值必须有一个整数），调用方要读的是
+    `checked`：`signs_bit3(row, streak=<这一份>)` 会因为它 `checked` 为假而不签
+    （见 :func:`_streak_number`），所以"没查成"在签字那一端是 fail-closed 的。
+
+    返回键：`checked` / `statement_id` / `proof_no` / `need` / `streak` / `streak_ok` /
+    `sha`（尾部那一签盖住的正文 sha256）/ `rows`（这一个证明号的行数）/
+    `ledger` / `reason`。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "statement_id": str(statement_id or "").strip(),
+        "proof_no": 0, "need": int(need), "streak": 0, "streak_ok": False,
+        "sha": "", "rows": 0, "ledger": "", "reason": "",
+    }
+    no = _read_proof_no(proof_no)
+    if no < 1:
+        out["reason"] = (f"证明号认不出：收到 {proof_no!r} ⇒ 不知道数的是哪一份证明，"
+                         "这一格**没查成**（不是「一次都没签」）")
+        return out
+    out["proof_no"] = no
+    sid = out["statement_id"]
+    if not S.is_valid_id(sid):
+        out["reason"] = (f"命题号 {sid!r} 不是编号形态 ⇒ 查不到台账，这一格没查成"
+                         "（不是「一次都没签」）")
+        return out
+    try:
+        path = verification_ledger_path(root, sid)
+    except VerificationError as exc:
+        out["reason"] = f"命题号 {sid!r} 查不到台账（{exc}）⇒ 这一格没查成"
+        return out
+    out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
+    if not path.is_file():
+        out.update(checked=True,
+                   reason=(f"`{out['ledger']}` 不在盘上 ⇒ 一次审校都没有"
+                           "（查过了：连续次数是 0，不是「没查成」）"))
+        return out
+    rows, problems = JF.read_jsonl(path)
+    if problems:
+        out["reason"] = (f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
+                         "连续次数没查成（不是「0 次」）")
+        return out
+    mine = _rows_of_proof(rows, no)
+    out["rows"] = len(mine)
+    out["checked"] = True
+    if not mine:
+        out["reason"] = (f"`{out['ledger']}` 里没有 #{no} 这一份证明的签 ⇒ 连续次数 0"
+                         "（别的证明签过也不借光）")
+        return out
+    runs = _hold_run_lengths(mine)
+    tail = mine[-1]
+    run = runs[-1]
+    out.update(streak=int(run), streak_ok=bool(run >= out["need"]),
+               sha=str(tail.get("proof_sha256") or ""))
+    if out["streak_ok"]:
+        out["reason"] = (f"#{no} 的尾部连续 {run} 次「成立」且盖着同一份正文"
+                         f"（sha {out['sha'][:12]}…，门槛 {out['need']} 次）⇒ 够发签")
+    else:
+        out["reason"] = (f"#{no} 的尾部连续 {run} 次「成立」（门槛 {out['need']} 次，"
+                         f"最新一签 {str(tail.get('verification_id') or '') or '（没有编号）'}、"
+                         f"verdict={tail.get('verdict')!r}）⇒ 还不够发签")
+    return out
+
+
+def signed_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """这一批台账行里签住了第 3 位的那些（按 (命题号, 证明号) 分组各自数连续次数）。
+
+    `ledger_reading` / `unverified_statement_refs` 要从一批跨命题的行里数"有几行签住了"，
+    而连续次数只能在同一份证明的同一批行里数 ⇒ 分组这一步必须只有一处实现
+    （否则两个读数会对同一批行给出不同的行数）。
+    """
+    groups: dict[tuple[str, int], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault((_statement_id_of(row), proof_no_of(row)), []).append(row)
+    out: list[Mapping[str, Any]] = []
+    for key in sorted(groups):
+        one = groups[key]
+        for row, run in zip(one, _hold_run_lengths(one)):
+            if signs_bit3(row, streak=run):
+                out.append(row)
+    return out
 
 
 def _verification_line(row: Mapping[str, Any]) -> str:
@@ -1540,7 +1869,8 @@ def _rollback_append(path: Path, before: int, row: Mapping[str, Any]) -> bool:
 
 
 def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[str, Any],
-                           *, proof_text: str, proof_no: int = 1) -> dict[str, Any]:
+                           *, proof_text: str, proof_no: int = 1,
+                           streak: Any = None) -> dict[str, Any]:
     """命题那一行改成"那一份证明的第 3 位已签"的样子。
 
     只动四处：那一份证明的 `reviewed`（#p1 = `bits.reviewed` 的汇总位；#p2+ 另外把
@@ -1569,7 +1899,7 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
     # 证明号已经在 `sign_statement` 判过（`proof_no_strict`：没给 ⇒ canonical，给了坏值 ⇒
     # 拒）；这里再走一遍同一个函数是防"将来有人直接调本函数"时把 0 静默折成 #p1。
     no = proof_no_strict(proof_no)
-    payload = bit3_payload(verification_row)
+    payload = bit3_payload(verification_row, streak=streak)
     reviewed_by = dict(payload.get("reviewed_by") or {})
     bits = dict(new.get("bits") or {})
     ev = dict(bits.get("evidence") or {})
@@ -1660,7 +1990,9 @@ def _kind_upgrade_from_signature(row: Mapping[str, Any], *, root: str | Path,
 
 
 def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
-                   path: Path | None = None, proof_no: Any = None) -> dict[str, Any]:
+                   path: Path | None = None, proof_no: Any = None,
+                   sign_issuance: Mapping[str, Any] | None = None,
+                   append_ledger: bool = True) -> dict[str, Any]:
     """把一签写回 `statements` 那一行里那一条证明的第 3 位（与台账同一次写）。
 
     ## 这一格为什么原来永远是 False
@@ -1696,15 +2028,41 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     理由串据此分三句；`re_sign_required` 说清调用方是不是必须重签（只有"没落地"才要）。
 
     返回键：`written` / `reason` / `rolled_back` / `grade` / `statement_id` / `proof_no` /
-    `proof_sha256` / `append_state` / `re_sign_required` / `kind_upgrade` / `upgrade_note`。
+    `proof_sha256` / `append_state` / `re_sign_required` / `kind_upgrade` / `upgrade_note` /
+    `streak` / `need` / `streak_ok`（业主 2026-10-29 的连续读数；键集合固定 ——
+    "这一格没有读数"与"这一格是 0"必须由键的存在区分开）。
     `written=False` 的四种来路各有
-    理由串：签不住第 3 位（不改位）、命题不在册或那一份证明不在（没有可写的行）、
+    理由串：签不住第 3 位（不改位）、连续次数不够（不改位）、秘书没发签（不改位）、
+    命题不在册或那一份证明不在（没有可写的行）、
     追加失败（连台账那一行都没写）、事务失败（附回滚结果）。
 
     ## D-69：同一笔事务里把 `kind` 跟着这一签抬上去
     见 :func:`_kind_upgrade_from_signature`。它只改 `kind` 那一格（起点只认 `conjecture`），
     判不了就一个字节都不动；抬了的时候 `kind_upgrade` / `upgrade_note` 两格把依据
     （`verifications/<命题号>.jsonl#v-…`）写出来，读的人不用去翻台账才知道凭什么。
+
+    ## 第 1、2 次只落台账、不翻位（业主 2026-10-29 的 A 段）
+    这一签先追加进台账（那是正本），然后从台账现数尾部连续成立次数
+    （:func:`consecutive_holds`，含刚追加的这一行）：数到 `SIGN_STREAK_NEED` 次才翻位，
+    否则 `written=False` + 理由串点名"还差几次" —— 台账那一行照样在，
+    `append_state="appended"`、`re_sign_required=False`（"次数不够"不是"没落地"）。
+    计数放在追加之后、且只有这一处：`draft/124` §一② 点名的那种第二份账
+    （"位上说签了、台账只签一次"）就是"行局部谓词自己数次数"长出来的。
+
+    ## `sign_issuance`：秘书持有"发不发签"的决定（业主 2026-10-29）
+    调用方问过秘书 ⇒ 把那份三态读数递进来（:meth:`Secretary.decide_sign_issuance` 的返回）。
+    `checked` 为假（没缝 / 超时 / 台账读不成 / 没装配）或 `issue` 为假 ⇒ 不翻位，
+    理由串逐字写出秘书那一句：`checked=False` 绝不被读成"没问题"
+    （`draft/125` §三：装配没接上时秘书判定必须报 `checked=False`，且不放签）。
+    `None` = 调用方没有问过秘书（老调用点 / 夹具 / 直接调本函数那一档）⇒ 只按连续闸判，
+    这一档是兼容门，不是第二套判据。
+
+    ## `append_ledger=False`：台账那一行已经由调用方落了（业主 2026-10-29 追加口径）
+    V 不再自己发签：`AgentV.verify_proof` 只落台账（`record_verification(flip=False)`），
+    然后由 V 的秘书判定并调本函数翻位（`Secretary.decide_sign_issuance` 的落地那一步）。
+    那时台账那一行已经在盘上（它是正本、先落），本函数只做"翻位"这一半 ⇒ `append_ledger=False`：
+    不再追加（否则同一签在台账上出现两次），`append_state="appended_by_caller"`，
+    异常分支也不撤回（不是我们追加的，没有可撤的）。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
     # 证明号：调用方给的那个（`proof_no`）；没给就按这一行自己记的那一格 —— 老行只有
@@ -1715,7 +2073,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         "proof_sha256": str(row.get("proof_sha256") or ""),
         #: 台账那一行落在哪一态（三态，不许折平）：
         #: `not_attempted` = 这一支根本不追加（签不住第 3 位 / 号认不出）；
-        #: `appended` = 真追加了一行（撤回与否另看 `rolled_back`）；`failed` = 追加本身失败。
+        #: `appended` = 真追加了一行（撤回与否另看 `rolled_back`）；`failed` = 追加本身失败；
+        #: `appended_by_caller` = 调用方先落了那一行（`append_ledger=False`：V 的秘书那条路），
+        #: 本函数只翻位、不撤回。
         "append_state": "not_attempted",
         #: 调用方是不是必须重签：只有"这一签没有落在台账上"（追加失败 / 已撤回）才为真。
         "re_sign_required": False,
@@ -1725,6 +2085,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: 抬档的读数原话（「因 V 判成立而抬档：conjecture→theorem（依据 …）」）；
         #: 没抬时是空串。它不写进 `reason`：`reason` 只留"这一签没落成"的那几档。
         "upgrade_note": "",
+        #: 业主 2026-10-29 的连续读数（见 :func:`consecutive_holds`）：这一签落地之后
+        #: 台账尾部的连续成立次数 / 门槛 / 够不够。三个键无条件存在。
+        "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
     }
     try:
         no = proof_no_of(row) if proof_no is None else proof_no_strict(proof_no)
@@ -1733,7 +2096,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                    reason=(f"{exc}；第 3 位一个字没动，台账里也没有这一签"))
         return out
     out["proof_no"] = no
-    if not signs_bit3(row):
+    if not row_signable(row):
         out["reason"] = ("这一签签不住第 3 位（verdict 不是「成立」，或有未解决的 error）"
                          "⇒ 位不动：没签住的字不该改任何读数")
         return out
@@ -1746,15 +2109,20 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         with store.tx("statements", actor=f"verifier-{row.get('verifier') or 'V'}",
                       note=f"verify.sign:{sid}#p{no}") as tx:
             found = tx.find("statements", stmt_id=sid)
-            try:
-                before = _append_verification(ledger, row)
-            except OSError:
-                # 追加本身失败：记下这一态再往外抛（理由串要据此说"整笔没发生"，
-                # 不许说"签名确实发生过"）。
-                append_state = "failed"
-                raise
-            append_state = "appended"
-            out["append_state"] = append_state
+            if not append_ledger:
+                # 台账那一行是调用方先落的（V 的秘书那条路）：这里一个字都不追加。
+                append_state = "appended_by_caller"
+                out["append_state"] = append_state
+            else:
+                try:
+                    before = _append_verification(ledger, row)
+                except OSError:
+                    # 追加本身失败：记下这一态再往外抛（理由串要据此说"整笔没发生"，
+                    # 不许说"签名确实发生过"）。
+                    append_state = "failed"
+                    raise
+                append_state = "appended"
+                out["append_state"] = append_state
             if found is None:
                 out["reason"] = (f"`statements` 里没有命题 {sid} ⇒ 只落了台账（签名）那一行，"
                                  "第 3 位没有可写的行")
@@ -1763,7 +2131,32 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 out["reason"] = (f"命题 {sid} 的证明清单里没有 #{no}（`{PROOFS_KEY}` 那一条）"
                                  "⇒ 只落了台账那一行；第 3 位不翻（不许把这一签记到 #p1 头上）")
                 return out
-            new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no)
+            # ---- 业主 2026-10-29：连续 N 次成立才翻位（第 1、2 次只落台账）。
+            #
+            # 现读台账（含刚追加的这一行）——这是"连续次数"的唯一来路；不在这里另存一份
+            # 计数、也不许把一个整数从调用方传进来：位是台账的缓存，缓存只能从正本现算。
+            holds = consecutive_holds(getattr(store, "root", ""), sid, proof_no=no)
+            out["streak"] = int(holds.get("streak") or 0)
+            out["need"] = int(holds.get("need") or SIGN_STREAK_NEED)
+            out["streak_ok"] = bool(holds.get("streak_ok"))
+            if sign_issuance is not None and not (
+                    bool(sign_issuance.get("checked")) and bool(sign_issuance.get("issue"))):
+                # 秘书没有发签（没缝 / 超时 / 台账读不成 / 它自己判了不发）。
+                # 这一档与"次数不够"必须分开说：前者是"没有人发这一签"，后者是"还差几次"。
+                out["reason"] = ("秘书没有发这一签（"
+                                 + ("checked=False："
+                                    if not bool(sign_issuance.get("checked")) else "")
+                                 + f"{str(sign_issuance.get('reason') or '没有给理由')}）"
+                                 "⇒ 只落了台账那一行，第 3 位不翻")
+                return out
+            if not signs_bit3(row, streak=holds):
+                out["reason"] = (f"连续「成立」{out['streak']}/{out['need']} 次"
+                                 f"（同一份正文 sha {str(row.get('proof_sha256') or '')[:12]}…）"
+                                 "⇒ 还差次数：只落了台账那一行，第 3 位不翻"
+                                 "（连续 3 次没问题才发签）")
+                return out
+            new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no,
+                                          streak=holds)
             # ---- D-69：V 判「成立」⇒ 同一笔事务里按证据位把 `kind` 现算一遍。
             #
             # 位置在"位已经翻上去"之后、`tx.upsert` 之前：台账那一行刚追加进
@@ -1785,7 +2178,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         elif rolled:
             reason = (f"第 3 位没写成（{type(exc).__name__}: {exc}）；"
                       "台账那一行已撤回（整笔没发生，可以重试）⇒ 必须重签")
-        elif append_state == "appended":
+        elif append_state in ("appended", "appended_by_caller"):
             reason = (f"第 3 位没写成（{type(exc).__name__}: {exc}）；"
                       "台账那一行留着（签名确实发生过）；读侧按台账现算，不按这一位")
         else:
@@ -1794,17 +2187,22 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                       "台账那一行没有追加（整笔没发生）⇒ 必须重签")
         out.update(
             written=False, rolled_back=bool(rolled), append_state=append_state,
-            re_sign_required=(not rolled and append_state != "appended"),
+            re_sign_required=(not rolled
+                              and append_state not in ("appended", "appended_by_caller")),
             reason=reason)
     return out
 
 
-def _superseded_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+def _superseded_reading(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any]:
     """一条被更近的签盖过去的旧签（`review_standing` 的 `superseded` 元素）。
 
     它回答"这一份正文以前还被谁签过、签的是哪一版、结论是什么"：旧签仍然可见，
     但判定只看最近那一签（:func:`review_standing`）。字段刻意只留定位用的几格，
     正文与 findings 不回放 —— 那些在台账文件里逐字可查，读数层不复制历史。
+
+    `signed_bit3` 是那一签当年的读数：`streak` 由调用方按"到这一行为止的连续次数"
+    递进来（:func:`_hold_run_lengths` 的分组读数）——旧签也要过同一道连续闸，
+    否则"当年签住了"会把一条只有 1 票的旧签说成签过。
     """
     return {
         "verification_id": str(row.get("verification_id") or ""),
@@ -1813,7 +2211,7 @@ def _superseded_reading(row: Mapping[str, Any]) -> dict[str, Any]:
         "at": str(row.get("at") or ""),
         "proof_no": proof_no_of(row),
         "proof_sha256": str(row.get("proof_sha256") or ""),
-        "signed_bit3": signs_bit3(row),
+        "signed_bit3": signs_bit3(row, streak=streak),
         "unresolved_errors": int(row.get("unresolved_errors") or 0),
         "why": str(row.get("why") or "")[:200],
     }
@@ -1843,7 +2241,15 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     不计入、并各自有一个可读的理由。返回键：`checked` / `state` / `ok` / `in_sync` /
     `ledger_present` / `statement_id` / `proof_no` / `sha` / `verification_id` / `verdict` /
     `round` / `unresolved_errors` / `rows`（这条命题的台账总行数）/ `proof_rows`（本份
-    证明的行数）/ `superseded` / `superseded_total` / `problems` / `ledger` / `why`。
+    证明的行数）/ `superseded` / `superseded_total` / `problems` / `ledger` / `why` /
+    `streak` / `need` / `streak_ok`（业主 2026-10-29 的连续读数）。
+
+    ## 「连续 3 次」在这一格怎么读（业主 2026-10-29 的 A 段）
+    `state="signed"` 的条件从"最近一签是成立"改成"尾部连续 `SIGN_STREAK_NEED` 签成立
+    且同一份正文"：`streak` / `need` / `streak_ok` 三格把这件事逐字报出来。签过、判成立、
+    但次数还没到 ⇒ `state="holding"`（不是 `signed`，也不是"一次都没签"）。计数只调
+    :func:`_hold_run_lengths`（不重复读盘：这里的 `mine` 就是它要的那批行），
+    行长与"哪一签算第几票"因此与 :func:`consecutive_holds` 逐字一致。
 
     ## 证明号认不出 ⇒ `unreadable`，不折成 `#p1`（2026-10-22 收尾）
     `proof_no` 问的是"要看哪一份证明"，所以没给（`None` / 空串）才是 canonical；给了但
@@ -1862,6 +2268,9 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "verification_id": "", "verdict": "", "round": None,
         "unresolved_errors": 0, "rows": 0, "proof_rows": 0, "problems": [],
         "superseded": [], "superseded_total": 0,
+        #: 连续读数（业主 2026-10-29）：三个键无条件存在（"这一格是 0"与"没有这一格"
+        #: 必须靠键的存在分开）。读不成 / 没有那一行时它们是 0 / 3 / False。
+        "streak": 0, "need": int(SIGN_STREAK_NEED), "streak_ok": False,
         "ledger": "", "why": "",
     }
     if no < 1:
@@ -1919,26 +2328,47 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     chosen = covering[-1] if covering else mine[-1]
     cut = next((i for i, r in enumerate(mine) if r is chosen), len(mine) - 1)
     superseded = mine[:cut]
+    # ---- 连续读数（业主 2026-10-29）：逐行的"到这一行为止连续几次成立"。
+    #
+    # `runs[-1]` 是本份证明现在的连续次数（尾部那一签数到几），`runs[cut]` 是
+    # "被选中那一签当年算第几票"—— 判定用的是后者：`chosen` 未必是尾行
+    # （F 改了正文、而更早的几签盖着现行 sha 时就是那种情形），拿尾行的票数去判
+    # 一个更早的签会把它说成它没达到过的次数。
+    runs = _hold_run_lengths(mine)
+    chosen_run = runs[cut] if 0 <= cut < len(runs) else 0
     out.update({
+        "streak": int(runs[-1] if runs else 0),
+        "need": int(SIGN_STREAK_NEED),
+        "streak_ok": bool(runs and runs[-1] >= SIGN_STREAK_NEED),
         "verification_id": str(chosen.get("verification_id") or ""),
         "verdict": str(chosen.get("verdict") or ""),
         "round": chosen.get("round"),
         "unresolved_errors": int(chosen.get("unresolved_errors") or 0),
         #: 被这一签盖过去的旧签（仍可见、不参与判定）：按台账行序，逐条给 id / verdict /
         #: 那一签盖住的 sha。它是"旧签降为历史"的唯一读数格。
-        "superseded": [_superseded_reading(r) for r in superseded],
+        "superseded": [_superseded_reading(r, streak=runs[i])
+                       for i, r in enumerate(superseded)],
         "superseded_total": len(superseded),
         #: I10 硬禁令在这一签上的机械命中（2026-10-27，只报不判）：这一格不参与
         #: `state` / `ok` / `in_sync` 中的任何一个 —— 它只是让"这一签盖过的正文里有
         #: 「易证/显然」"这件事可见。老行没有这一格 ⇒ 空列表。
         "hard_ban_markers": [str(m) for m in (chosen.get("hard_ban_markers") or [])],
     })
-    if covering and signs_bit3(chosen):
+    if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
-                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）最近一签是"
-                        f"「成立」：{out['verification_id']}（{out['ledger']}）"
+                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）连续 "
+                        f"{chosen_run}/{SIGN_STREAK_NEED} 签「成立」，最近一签是"
+                        f"{out['verification_id']}（{out['ledger']}）"
                         + (f"；更早的 {len(superseded)} 签已降为历史"
                            "（见 superseded，不参与判定）" if superseded else "")))
+        return out
+    if covering and row_signable(chosen) and not signs_bit3(chosen, streak=chosen_run):
+        # 签过、判成立、签的也是现行这一份 —— 就是次数没到（业主 2026-10-29）。
+        out.update(state="holding", in_sync=True,
+                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）已连续 "
+                        f"{chosen_run}/{SIGN_STREAK_NEED} 签「成立」（最近一签 "
+                        f"{out['verification_id']}，{out['ledger']}）⇒ **还差 "
+                        f"{SIGN_STREAK_NEED - chosen_run} 次**才发签：台账有行、第 3 位没翻"))
         return out
     if covering:
         out.update(state="rejected", in_sync=True,
@@ -1968,17 +2398,22 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
 
     返回键：
     - `proofs`: `[{proof_no, state, ok, in_sync, reviewed, grade, formal,
-      proof_sha256, verification_id, why}]`（每条证明一条，按 `proof_no` 升序）；
+      proof_sha256, verification_id, streak, need, streak_ok, why}]`
+      （每条证明一条，按 `proof_no` 升序）；
       其中 `formal` 是这一条证明自己的第 4 位（`{证明号: 状态}` 里的那一格，
       四态 + 读侧产生的 `stale`）：`#p1` 形式化通过不等于 `#p2` 形式化通过，
       所以它必须逐条给，并且与 `grade` 成对读；
+      `streak` / `need` / `streak_ok` 是这一份证明自己的连续读数（业主 2026-10-29，
+      `#p1` 的票数不替 `#p2` 数）；
     - `reviewed`: 命题级 —— 至少一条证明 `signed`（定理档取"最高"就落在这一格）；
     - `grade`: 逐条证明各自的档里最高的那一档（`_highest_grade`）：一条 in-sync 都没有
       ⇒ `conjecture`；两条各缺一半（一条有形式化、另一条有签名）⇒ 不许凑出定理
       （借光由逐条派生挡掉，见 `proofs[*]["grade"]`）；
-    - `state`: 命题级五态（有 signed 就 `signed`；否则有 stale 就 `stale`；否则有
-      rejected 就 `rejected`；否则 `unsigned`；有 unreadable 且没别的 ⇒ `unreadable`）；
-    - `proofs_unreviewed` / `proofs_stale` / `proofs_rejected`: 逐条证明的编号写法
+    - `state`: 命题级六态（有 signed 就 `signed`；否则有 stale 就 `stale`；否则有
+      rejected 就 `rejected`；否则有 holding 就 `holding`；否则有 unreadable 且没别的
+      ⇒ `unreadable`；否则 `unsigned`）；
+    - `proofs_unreviewed` / `proofs_stale` / `proofs_rejected` / `proofs_holding`:
+      逐条证明的编号写法
       （`000004#p2`），不许折进"没有证明"：它们是两条独立读数；
     - `proofs_superseded`: 被更近的签盖过去的旧签（写法 `000004#p1:v-000001`）；
       它们仍可见，但不参与判定（最近一签说了算）；
@@ -2022,6 +2457,7 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "proofs_unreviewed": [],
             "proofs_stale": [],
             "proofs_rejected": [],
+            "proofs_holding": [],
             "proofs_superseded": [],
             "superseded_total": 0,
             "problems": [],
@@ -2033,6 +2469,7 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
     unreviewed: list[str] = []
     stale: list[str] = []
     rejected: list[str] = []
+    holding: list[str] = []
     superseded_labels: list[str] = []
     problems: list[str] = []
     ledger_present = False
@@ -2067,6 +2504,11 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             #: 被最近那一签盖过去的旧签（仍可见、不参与判定）。`review_standing`
             #: 的同一格原样下传，逐条证明分开。
             "superseded": old,
+            #: 连续读数（业主 2026-10-29）：这一份证明自己的 `streak` / `need` /
+            #: `streak_ok`，逐条证明分开（#p1 的票数不替 #p2 数）。
+            "streak": int(st.get("streak") or 0),
+            "need": int(st.get("need") or SIGN_STREAK_NEED),
+            "streak_ok": bool(st.get("streak_ok")),
             "why": str(st.get("why") or ""),
         })
         if state == "unsigned":
@@ -2075,6 +2517,8 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             stale.append(proof_label(sid, no))
         elif state == "rejected":
             rejected.append(proof_label(sid, no))
+        elif state == "holding":
+            holding.append(proof_label(sid, no))
     reviewed = any(e["ok"] for e in entries)
     states = [e["state"] for e in entries]
     if reviewed:
@@ -2083,6 +2527,10 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         state = "stale"
     elif "rejected" in states:
         state = "rejected"
+    elif "holding" in states:
+        # 签过、判成立、只是次数没到（业主 2026-10-29）。它必须排在 `unsigned` 之前：
+        # "有行、还差两次"与"一次都没签"是两种处置（前者再派两次，后者派一次）。
+        state = "holding"
     elif "unreadable" in states:
         state = "unreadable"
     else:
@@ -2105,6 +2553,10 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         elif state == "rejected":
             why = (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
                    f"（rejected：{'、'.join(rejected)}）")
+        elif state == "holding":
+            why = (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
+                   f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
+                   "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）")
         elif state == "unreadable":
             why = f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成（不是「没签过」）"
         else:
@@ -2121,6 +2573,9 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         "proofs_unreviewed": unreviewed,
         "proofs_stale": stale,
         "proofs_rejected": rejected,
+        #: 签过、判成立、但连续次数还没到的那些（写法与上面三格同形）。
+        #: 单列的理由：它们是"再派两次审阅"的待办，不是"派一次"，也不是"改证明"。
+        "proofs_holding": holding,
         #: 被更近的签盖过去的旧签（写法 `000004#p1:v-000001`）：它们仍在台账里、
         #: 仍读得出来，但不参与命题级判定（最近一签说了算，见 `review_standing`）。
         "proofs_superseded": superseded_labels,
@@ -2211,7 +2666,11 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     """
     row = dict(got.get("row") or {})
     row.setdefault("verdict", str(got.get("verdict") or ""))
-    row_ok = signs_bit3(row)
+    # pending 那一签按对象 sha 认领，没有命题台账可数连续次数（它审的时候命题还没
+    # 登记，那条台账还不存在）⇒ 连续闸在这一档不适用，判据只走行局部那一半
+    # （`row_signable`：成立 + 无未解决 error + 引用不挡）。这不是放宽：连续闸要读的
+    # 东西在 pending 这条路上根本不存在，硬套只会把"先签后登记"这条合法路整条堵死。
+    row_ok = row_signable(row)
     verdict_word = str(got.get("verdict") or "")
     out["ledger"] = str(got.get("ledger") or "")
     out["verification_id"] = str(out["ledger"]).split("#")[-1]
@@ -2244,8 +2703,13 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     return out
 
 
-def _bit3_blockers(row: Mapping[str, Any]) -> str:
-    """`signs_bit3` 为假时，逐条说清是哪一条挡住（拒信与读数的唯一措辞处）。"""
+def _bit3_blockers(row: Mapping[str, Any], *, streak: Any = None) -> str:
+    """`signs_bit3` 为假时，逐条说清是哪一条挡住（拒信与读数的唯一措辞处）。
+
+    `streak` 与 :func:`signs_bit3` 同义：行局部都过了、只有连续次数不够时，这一格
+    必须把那句话写出来 —— 否则拒信会落进 `"判据判不了（读数不全）"` 那条兜底，
+    读的人以为"有一格没读出来"，而实际只是"还差两次审阅"。
+    """
     why: list[str] = []
     if int(row.get("unresolved_errors") or 0) != 0:
         why.append(f"未解决的 error {int(row.get('unresolved_errors') or 0)} 条")
@@ -2256,6 +2720,12 @@ def _bit3_blockers(row: Mapping[str, Any]) -> str:
     if blocked:
         why.append("引用核实挡住：" + "、".join(
             f"{e['stmt_id'] or '（没有号）'} 判 {e['verdict']}" for e in blocked))
+    if row_signable(row) and not streak_ok(streak):
+        got = _streak_number(streak)
+        why.append(("连续「成立」的次数没读出来（这一格没查成 ⇒ 不发签）"
+                    if got is None else
+                    f"连续「成立」{got}/{SIGN_STREAK_NEED} 次（还差 "
+                    f"{SIGN_STREAK_NEED - got} 次）"))
     return "；".join(why) or "判据判不了（读数不全）"
 
 
@@ -2299,7 +2769,8 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         "verification_id": "", "verdict": "", "round": None,
         "sha_matches": None, "ledger": "", "rows": 0, "problems": [],
         #: 现行这一份的读数（`REVIEW_STATES`）与证明号：`ok` 只在 `signed` 时为真。
-        #: `state="stale"` 是"签过、但签的是旧版"—— 它是待复核这个读数，不是"没签过"。
+        #: `state="stale"` 是"签过、但签的是旧版"—— 它是待复核这个读数，不是"没签过"；
+        #: `state="holding"` 是"签过、判成立、连续次数还没到"（业主 2026-10-29）。
         "state": "", "proof_no": None,
     }
     checks: list[dict[str, Any]] = [
@@ -2474,6 +2945,23 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         checks[2]["detail"] = "签的是另一版，无从比"
         out["why"] = str(chosen.get("why") or "")
         return out
+    if state == "holding":
+        # 签过、判成立、签的也是现行这一版 —— 就是连续次数没到（业主 2026-10-29）。
+        # 它与 `unsigned`（一次都没签）必须分开说：前者的下一步是"再送 V 两次"，
+        # 后者是"送 V 一次"。折成同一个读数会让"已经在路上"看起来像"还没出发"。
+        entry = next((p for p in entries
+                      if as_proof_no(p.get("proof_no")) == chosen_no), {})
+        got = int(entry.get("streak") or 0)
+        need = int(entry.get("need") or SIGN_STREAK_NEED)
+        checks[1]["detail"] = (f"{proof_label(sid, chosen_no)} 已连续 {got}/{need} 次「成立」"
+                               f"（最近一签 {out['verification_id']}）")
+        checks[2]["detail"] = "签的就是现行这一版（不是过期），只是连续次数还没到"
+        out["checked"] = checked
+        out["why"] = (f"命题 {sid} 的证明签过、也判了「成立」，但连续次数只到 {got}/{need}"
+                      f"⇒ 第 3 位不发签（业主 2026-10-29：连续 {need} 次没问题才发签；"
+                      "第 1、2 次只落台账、不翻位）。下一步：再送 V 审够次数，"
+                      "不许把这两票当成一次签")
+        return out
     if state == "unsigned":
         # 台账读得出、只是这一份（以及别的证明）一次都没签 ⇒ 查过了，结论是"没凭据"。
         # 改前这一支掉进最后那段，被报成 checked=False「台账读不出来（没查成）」——
@@ -2629,7 +3117,7 @@ def unverified_statement_refs(root: str | Path,
                 refs.append(ref)
                 continue
             ref["rows"] = len(rows)
-            ref["signed"] = any(signs_bit3(r) for r in rows)
+            ref["signed"] = bool(signed_rows(rows))
             if not rows:
                 ref["why"] = f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 是空文件 ⇒ 一次审校都没落过"
             refs.append(ref)
@@ -2841,12 +3329,20 @@ def selftest() -> int:
                    row["verification_id"] == f"v-{S.format_id(1)}"))
     checks.append(("有毛病不签第 3 位", bit3_payload(row) == {}))
     good = parse_verdict('{"verdict": "成立", "findings": []}')
+    first = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=good)
+    checks.append(("第 1 次成立只落台账、不翻位（业主 2026-10-29）",
+                   bit3_payload(first, streak=consecutive_holds(root, "0007")).get("reviewed")
+                   is not True))
+    record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=good)
     ok_row = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=good)
-    checks.append(("成立才签第 3 位", bit3_payload(ok_row).get("reviewed") is True))
-    checks.append(("追加式（两行）", len(list_verifications(root, limit=None)[0]) == 2))
+    holds = consecutive_holds(root, "0007")
+    checks.append((f"连续 {SIGN_STREAK_NEED} 次成立才签第 3 位",
+                   holds["streak"] >= SIGN_STREAK_NEED
+                   and bit3_payload(ok_row, streak=holds).get("reviewed") is True))
+    checks.append(("追加式（四行）", len(list_verifications(root, limit=None)[0]) == 4))
     checks.append(("limit=0 是零条、limit=None 才是全量",
                    list_verifications(root, limit=0)[0] == []
-                   and len(list_verifications(root, limit=None)[0]) == 2))
+                   and len(list_verifications(root, limit=None)[0]) == 4))
     try:
         parse_verdict("我不确定")
         unparsable = False

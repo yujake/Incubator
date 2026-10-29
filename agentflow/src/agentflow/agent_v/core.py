@@ -139,7 +139,8 @@ class AgentV:
 
     def __init__(self, store: Any, *, workspace_root: str | Path | None = None,
                  llm: Any = None, config: Mapping[str, Any] | None = None,
-                 log: Callable[[str], None] | None = None) -> None:
+                 log: Callable[[str], None] | None = None,
+                 secretary: Any = None) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         root = workspace_root or getattr(store, "root", None) or "."
@@ -147,6 +148,19 @@ class AgentV:
         self.llm = llm
         self.actor = str(self.cfg.get("actor") or DEFAULT_VERIFIER)
         self.log = log
+        #: V 自己的秘书（业主 2026-10-29：发不发签由它持有）。
+        #:
+        #: 为什么它有一个构造形参：`agent_loop.run_role` 那条路在装配期就已经造好了一名
+        #: 秘书（并按名册绑了实例）—— 那一条应当原样交进来，而不是在这里另造一个
+        #: （两个对象 = 两本台账）。不给 ⇒ 由 :meth:`_secretary` 惰性装配：
+        #: `draft/125` §三点名的"工具路径造不出秘书"那个缺口，落点就在这一处
+        #: （工具层 `tools/verify_tools.py` 是 FC-27，不许改；`AgentV` 不是）。
+        self.secretary = secretary
+        #: 惰性装配只试一次（并且试过就要记住）："没缝"不是一个每签都要重试的错误，
+        #: 而"没试过"与"试了没成"必须在读数上分得开。
+        self._secretary_tried = secretary is not None
+        #: 装配读数（懒装配失败/没缝时的那一句为什么；空串 = 没出问题或还没试）。
+        self.secretary_problem = ""
         self.logs: list[str] = []
 
     # ------------------------------------------------------------------ 内部
@@ -192,6 +206,109 @@ class AgentV:
         except Exception as exc:  # noqa: BLE001 —— 缝的异常是"没查成"，不是"有毛病"
             return "", f"{type(exc).__name__}: {exc}"
         return "", "judge_not_wired"
+
+    # ---------------------------------------------------- 秘书（业主 2026-10-29）
+
+    def _secretary(self) -> Any:
+        """这一趟的 V 秘书（没有 ⇒ `None`，理由在 `self.secretary_problem`）。
+
+        ## 为什么装配点在这里（`draft/125` §三的那个缺口）
+        V 走循环时 `agent_loop.run_role` 已经装配好秘书并交进来；V 走工具路径
+        （M 派 `V.verify_proof`）时，工具层 `tools/verify_tools.py:_agent_v` 只拿得到
+        store 与工作区根 —— 它造不出秘书，而它是 FC-27（禁改区），不许为了接线改它。
+        所以装配落在 `AgentV` 自己这一层：它是被那一处构造的，不是禁改区。
+
+        ## 没缝 ≠ 有问题
+        `secretary.for_role_wired` 在设置里没有秘书那一档 key 时不装空缝
+        （那会把"从来没有判断面"写成"试过了、没成"）⇒ 这里的秘书 `seam is None`，
+        `judge` / `decide_sign_issuance` 会如实报 `checked=False`。业主口径：
+        装配没接上时秘书判定必须报 `checked=False`，且不发签（`draft/125` §三）。
+        """
+        if self.secretary is not None:
+            return self.secretary
+        if self._secretary_tried:
+            return None
+        self._secretary_tried = True
+        try:
+            from .. import secretary as _SEC
+
+            got = _SEC.for_role_wired("V", root=self.workspace_root, store=self.store)
+        except Exception as exc:  # noqa: BLE001 —— 造不出来是"没有秘书"，不是"没问题"
+            self.secretary_problem = (f"V 的秘书装配失败（{type(exc).__name__}: {exc}）⇒ "
+                                      "这一趟没有秘书：判定与发签都按 checked=False 读")
+            self._emit(f"verify_proof：{self.secretary_problem}")
+            return None
+        self.secretary = got
+        if not str(getattr(got, "seam", "")):
+            self.secretary_problem = (f"V 的秘书没有判断面（{got.model_source or '没有模型缝'}）"
+                                      "⇒ 判定与发签按 checked=False 读（不是「没问题」）")
+        return got
+
+    def _judge_v_reply(self, reply: str, verdict: Mapping[str, Any],
+                       no: int, *, statement_id: str = "") -> dict[str, Any]:
+        """问秘书：V 这段回复落在三档的哪一档（业主 2026-10-29 的 B 段）。
+
+        材料只给 V 的回复正文 + 这一签的 `verdict` / `defect_step`；不给 F 的证明
+        （I12：V 的秘书读叙述本来就被 `may_read_narrative` 禁，这里不开那个口子）。
+        没有秘书 ⇒ `checked=False` + `axis="unsure"`：这一格是"没判成"，而
+        `unsure` 在连续计数里不清零也不计入（`verifications._hold_run_lengths`），
+        于是"没判过"既不会冒充一票，也不会把已有的票作废。
+        """
+        sec = self._secretary()
+        if sec is None:
+            return {"checked": False, "axis": "unsure", "decision": "",
+                    "reason": (self.secretary_problem
+                               or "这一趟没有 V 的秘书 ⇒ 语义判定没查成（不是「没问题」）")}
+        return sec.judge_v_reply(reply=str(reply or ""),
+                                 verdict=str(verdict.get("verdict") or ""),
+                                 defect_step=verdict.get("defect_step"),
+                                 statement_id=str(statement_id or ""),
+                                 proof_no=no,
+                                 task_id=str(self.cfg.get("task_id") or ""))
+
+    def _wash_v_reply(self, reply: str, verdict: Mapping[str, Any], no: int, *,
+                      statement_id: str = "") -> dict[str, Any]:
+        """问秘书：把这段意见洗成能转达给 F 的文本（业主 2026-10-29 的 C 段）。
+
+        秘书不在场 ⇒ `checked=False, refused="secretary_unavailable"`，且不返回原文
+        （`wash_v_reply` 的纪律：洗不出来就不输出原文）。
+        """
+        sec = self._secretary()
+        if sec is None:
+            return {"checked": False, "washed": False, "text": "", "findings": [],
+                    "dropped": [], "refused": "secretary_unavailable",
+                    "reason": (self.secretary_problem
+                               or "这一趟没有 V 的秘书 ⇒ 洗不出来（不输出原文）")}
+        return sec.wash_v_reply(reply=str(reply or ""),
+                                verdict=str(verdict.get("verdict") or ""),
+                                defect_step=verdict.get("defect_step"),
+                                statement_id=str(statement_id or ""), proof_no=no,
+                                task_id=str(self.cfg.get("task_id") or ""),
+                                label=str(verdict.get("label") or ""))
+
+    def _decide_sign_issuance(self, statement_id: str, proof_text: str, no: int,                              verdict: Mapping[str, Any], *,
+                              row: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """问秘书：这一签发不发（业主 2026-10-29 的 A 段，追加口径：落盘也由它做）。
+
+        `row` 是 `record_verification(flip=False)` 刚落下的台账那一行：秘书据此知道
+        "这一签已经在台账上了"（连续次数不用再加一票），并在判发之后由它自己调
+        `sign_statement(append_ledger=False)` 翻位。
+
+        没有秘书 ⇒ `checked=False, issue=False, issued=False`：不放签。这一句是
+        fail-closed 的那一半（`draft/125` §三：「装配没接上时，秘书判定必须报
+        checked=False」；追加口径之后它是主路径：发签权在秘书手上，秘书不在场就等于
+        不能发签）。
+        """
+        sec = self._secretary()
+        if sec is None:
+            return {"checked": False, "issue": False, "issued": False, "streak": 0,
+                    "projected": 0, "need": VR.SIGN_STREAK_NEED, "streak_ok": False,
+                    "decision": "", "writeback": {}, "landed": False,
+                    "reason": (self.secretary_problem
+                               or "这一趟没有 V 的秘书 ⇒ 没有人发这一签（不放签）")}
+        return sec.decide_sign_issuance(statement_id=statement_id, proof_text=proof_text,
+                                        proof_no=no, verdict=verdict, row=row,
+                                        task_id=str(self.cfg.get("task_id") or ""))
 
     # ---------------------------------------------------- 引用核实（业主 2026-10-26）
 
@@ -285,6 +402,10 @@ class AgentV:
             "citations": [],
             "citation_checks": [],
             "citation_gate": VR.citation_gate([]),
+            # 业主 2026-10-29 的两格：秘书语义判定（B 段，三档）与发签决定（A 段）。
+            # 键无条件存在（"没判成"由 `checked=False` 说，不靠少给键来表达）。
+            "secretary_judge": {},
+            "sign_issuance": {},
         }
         sid = out["statement_id"]
         if not S.is_valid_id(sid):
@@ -369,24 +490,39 @@ class AgentV:
                     f"（{len(_reviewed.get('checks') or [])} 项检查，"
                     f"缺材料 {_reviewed.get('missing') or []}）")
                 _text_for_ledger = text or str(hit.get("proof_text") or "")
+                # 业主 2026-10-29：穷举型证据这一路也走同一对秘书判定（B 段 / A 段）。
+                # 这一路的"回复"没有模型原文（会审是机械的七项核对）⇒ 材料给的是
+                # 会审自己的结论那一句，而不是 F 的证明正文（I12 同一条纪律）。
+                _n_verdict = _ER.verdict_of(_reviewed)
+                _n_reply = (f"穷举型证据会审：结论 {_n_verdict.get('verdict')!r}"
+                            f"（{len(_reviewed.get('checks') or [])} 项检查，"
+                            f"缺材料 {_reviewed.get('missing') or []}）")
+                _n_judge = self._judge_v_reply(_n_reply, _n_verdict, no, statement_id=sid)
+                out["secretary_judge"] = dict(_n_judge)
                 try:
                     _row = VR.record_verification(
                         self.workspace_root, statement_id=sid,
                         proof_text=_text_for_ledger,
-                        verdict=_ER.verdict_of(_reviewed), verifier=self.actor,
+                        verdict=_n_verdict, verifier=self.actor,
                         submission_id=str(self.cfg.get("submission_id") or ""),
                         store=self.store, proof_no=no,
                         # D-34：这一签审的对象是 E 那份报告（它的字节 sha256 与相对路径）。
                         # 记进台账之后，B 的入库闸就能"按对象内容找签"（B 的报告是目录，
                         # 索引里那四格写的就是这一份），于是"谁先谁后"不再重要。
                         object_sha256=str(_reviewed.get("report_sha256") or ""),
-                        object_path=str(_reviewed.get("report_path") or ""))
+                        object_path=str(_reviewed.get("report_path") or ""),
+                        secretary_judge=_n_judge,
+                        # 业主 2026-10-29 追加口径：V 只落台账，翻位交给秘书。
+                        flip=False)
                 except (VR.VerificationError, OSError) as exc:
                     out["reason"] = "ledger_unwritable"
                     out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                      "这一格没查成（不落台账、不改位、必须重签）")
                     self._emit(f"verify_proof({sid})：台账写不进去 —— 会审没落地")
                     return out
+                _n_issuance = self._decide_sign_issuance(sid, _text_for_ledger, no,
+                                                         _n_verdict, row=_row)
+                out["sign_issuance"] = dict(_n_issuance)
                 return self._finish_numeric(out, statement_id=sid, no=no, row=_row,
                                             reviewed=_reviewed)
             # 正文只从"证明号指定的那一份"取（2026-10-22 审计第 2 条）：
@@ -468,6 +604,28 @@ class AgentV:
                       if gate.get("weaker") else "")
                    + ("；依赖台账读不到（这一档没查成）" if gate.get("problem") else ""))
 
+        # ---- 业主 2026-10-29：V 不再自己发签 ----
+        #
+        # 追加口径逐字：「V 不再自己发签。V 只产出审稿意见；由 V 的秘书判定并落盘
+        # （`Secretary.decide_sign_issuance` → 满足"连续 3 次 clean"才调
+        # `verifications.sign_statement` 翻 `bits.evidence`）」。
+        #
+        # 于是这一段的顺序是三步，写盘的位置与改前不同：
+        # ① 秘书判这段回复是哪一档（B 段；材料只给回复 + 这一签的 verdict/defect_step）；
+        # ② `record_verification(flip=False)` 只落台账（正本先落，签这个事实不依赖任何人
+        #    的决定；`statement_writeback.deferred_to == "secretary"`）；
+        # ③ 秘书读连续次数 + 判"发不发"，判发就由它自己调 `sign_statement` 翻位。
+        # 秘书不在场 / 没缝 / 判不了 ⇒ ②照落、③不翻 ⇒ 第 3 位保持空（fail-closed）。
+        judgment = self._judge_v_reply(reply, verdict, no, statement_id=sid)
+        out["secretary_judge"] = dict(judgment)
+        # C 段：秘书判"有缺陷要指出"⇒ 立刻洗一遍，把洗过的文本随台账那一行落盘。
+        # 为什么在落台账之前洗：台账是追加式文件，行写下去就不能改；洗过的转达文本
+        # 必须与那一签一起落（`v_rejections_digest` 从那一格读给 F）。
+        # 洗不出来 ⇒ 这一格不写（"没有这一格" = 没洗过，不许写空文本冒充洗过）。
+        wash: dict[str, Any] = {}
+        if str(judgment.get("axis") or "") == "fault":
+            wash = self._wash_v_reply(reply, verdict, no, statement_id=sid)
+            out["wash_v_reply"] = dict(wash)
         try:
             row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
                                          verdict=verdict, verifier=self.actor,
@@ -476,7 +634,13 @@ class AgentV:
                                          # `problem` 非空（依赖台账读不出来）要随行落盘：
                                          # 否则读侧只看到空的 `citation_checks`，分不开
                                          # "没查成"与"核过、没有引用"。
-                                         citation_gate=gate)
+                                         citation_gate=gate,
+                                         # B 段：三档语义判定随台账那一行落盘。
+                                         secretary_judge=judgment,
+                                         # C 段：洗过的转达文本（只有真洗出来时才写）。
+                                         washed_relay=wash,
+                                         # A 段：发签权在秘书手上 ⇒ 这一次不翻位。
+                                         flip=False)
         except (VR.VerificationError, OSError) as exc:
             # 台账写不进去（坏行 / 权限 / 磁盘 / 目录）⇒ 这是"没查成"，不是"签住了"。
             # 不接住它会让异常穿透到工具层，而那一层读不到"这一签没落地"这句话。
@@ -485,7 +649,16 @@ class AgentV:
             out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
                              "（不落台账、不改位、必须重签）")
             return out
-        writeback = dict(row.get("statement_writeback") or {})
+        issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row)
+        out["sign_issuance"] = dict(issuance)
+        self._emit(f"verify_proof({sid})：秘书语义判定 "
+                   f"{'checked' if judgment.get('checked') else 'checked=False'}"
+                   f"（{judgment.get('axis') or '没判'}）"
+                   f"；发签 {'发' if issuance.get('issue') else '不发'}"
+                   f"（连续 {issuance.get('projected')}/{issuance.get('need')}）"
+                   + (f"；翻位 {'成' if issuance.get('issued') else '没成'}"
+                      if issuance.get("issue") else ""))
+        writeback = dict(issuance.get("writeback") or row.get("statement_writeback") or {})
         if row.get("checked") is False:
             # 台账那一行没落地（被撤回 / 追加失败）：不许报"签住了第 3 位"。
             # 改前这里照样 `checked=True, signed_bit3=True`，而盘上 0 字节（审计第 1 条）。
@@ -501,7 +674,8 @@ class AgentV:
             })
             self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
             return out
-        payload = VR.bit3_payload(row)
+        payload = VR.bit3_payload(row, streak=VR.consecutive_holds(
+            self.workspace_root, sid, proof_no=no))
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB
@@ -639,7 +813,10 @@ class AgentV:
         留一行（那是"看过、结论是没过/判不了"的证据）。
         """
         sid = statement_id
-        writeback = dict(row.get("statement_writeback") or {})
+        # 翻位那一步在秘书那一侧（业主 2026-10-29 追加口径）：`row.statement_writeback`
+        # 是 record_verification 的"deferred"读数，真正的写回在 `out["sign_issuance"]` 里。
+        writeback = dict((out.get("sign_issuance") or {}).get("writeback")
+                         or row.get("statement_writeback") or {})
         if row.get("checked") is False:
             out.update({
                 "checked": False,
@@ -650,7 +827,8 @@ class AgentV:
             })
             self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
             return out
-        payload = VR.bit3_payload(row)
+        payload = VR.bit3_payload(row, streak=VR.consecutive_holds(
+            self.workspace_root, sid, proof_no=no))
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB

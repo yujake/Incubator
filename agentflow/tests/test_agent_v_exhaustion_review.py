@@ -35,6 +35,7 @@ from agentflow import capabilities as C  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
+from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
@@ -142,16 +143,45 @@ def _chain(tmp_path: pathlib.Path, body: str = EXHAUSTIVE_PROBE,
     assert filed.get("ok") is True, filed
     statement = store.rows("statements")[-1]
     return {"store": store, "out": out, "row": row, "column": column,
-            "statement": statement, "v": AgentV(store, workspace_root=store.root)}
+            "statement": statement, "v": AgentV(store, workspace_root=store.root,
+                                                secretary=_v_secretary(store))}
+
+
+def _v_secretary(store: Store):
+    """V 的秘书替身：判 clean、判签发（业主 2026-10-29：发签权在秘书手上）。
+
+    离线缝的答案与 `test_v_sign_gate_streak` 同源（不抄第二份夹具）。
+    """
+    from agentflow import secretary as SEC
+
+    from test_v_sign_gate_streak import _Seam as _GateSeam
+    from test_v_sign_gate_streak import _axis
+
+    seam = _GateSeam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                      "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    return SEC.Secretary("V", root=store.root, store=store, seam=seam,
+                         enable_model=True)
+
+
+def _three(agent: AgentV, sid: str, column: str) -> dict:
+    """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值（第 3 次才翻位）。"""
+    got: dict = {}
+    for _i in range(VR.SIGN_STREAK_NEED):
+        got = agent.verify_proof(sid, proof_text=column)
+    return got
 
 
 # ------------------------------------------------------------------ ③ 三态
 
 
 def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.Path) -> None:
-    """③-1 成立：七项检查全过 ⇒ `成立`、签第 3 位、台账落一行；②③ 的作者仍是 E。"""
+    """③-1 成立：七项检查全过 ⇒ `成立`、签第 3 位、台账落一行；②③ 的作者仍是 E。
+
+    2026-10-29 之后"签第 3 位"要连续 `SIGN_STREAK_NEED` 次「成立」、且翻位由 V 的秘书做
+    ⇒ 三次会审之后取最后一次（`_three`），台账因此有三行（改前一行）。
+    """
     env = _chain(tmp_path)
-    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"])
+    got = _three(env["v"], env["statement"]["stmt_id"], env["column"])
     assert got["checked"] is True, got
     assert got["kind"] == "numeric_evidence", got
     assert got["verdict"] == ER.VERDICT_OK, (got["verdict"], got.get("findings"))
@@ -163,7 +193,8 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
     assert got["report_path"] == ER.report_relpath(env["out"]["experiment_id"])
     assert got["proof_authors"] == ["E"], got
     ledger = env["v"].list_verifications(env["statement"]["stmt_id"])["items"]
-    assert [r["verdict"] for r in ledger] == [ER.VERDICT_OK], ledger
+    # 三次会审各落一行（连续 3 次「成立」才发签）—— 改前一次就够。
+    assert [r["verdict"] for r in ledger] == [ER.VERDICT_OK] * VR.SIGN_STREAK_NEED, ledger
 
 
 def test_4b_a_broken_exhaustive_note_is_faulty_and_named(tmp_path: pathlib.Path) -> None:
@@ -260,15 +291,30 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
     env = _chain(tmp_path)
     sid = env["statement"]["stmt_id"]
     cond = wired_conductor(env["store"], workspace_root=str(env["store"].root))
+    # 工具路径（`tools/verify_tools.py:_agent_v`）造不出 V 的秘书，而那一处是 FC-27
+    # （禁改区）⇒ 这一条链上没有秘书。业主 2026-10-29 的追加口径是"发签权在秘书手上、
+    # 秘书不在场就等于不能发签"（`draft/125` §三点名的装配缺口正是这里），所以这一条
+    # 现在判的是诚实的读数：会审照做、台账照落，而第 3 位不翻、且 `sign_issuance`
+    # 明写 `checked=False`。装配补齐之后（`AgentV._secretary` 现造 / 调用方传 `secretary=`）
+    # 这一条应当改成"三次之后 signed_bit3 为真"，那是下一半的判据。
     got = cond.summon("V", "verify_proof",
                       {"statement_id": sid, "proof_text": env["column"]}, by="E")
     assert got.status == "done", (got.status, got.outcome, getattr(got, "detail", ""))
     assert str(got.outcome) != "refused", (got.outcome, getattr(got, "refusal_reason", ""))
     payload = dict(getattr(got, "payload", None) or {})
     assert payload.get("verdict") == ER.VERDICT_OK, payload
-    assert payload.get("signed_bit3") is True, payload
     assert payload.get("kind") == "numeric_evidence", payload
     assert payload.get("verification_id"), payload
+    assert payload.get("signed_bit3") is False, (
+        "工具路径上没有 V 的秘书，却把第 3 位翻了 ⇒ 发签逃过了秘书那一关：" + str(payload))
+    issuance = dict(payload.get("sign_issuance") or {})
+    assert issuance.get("issue") is False and issuance.get("issued") is False, issuance
+    # 这一趟同时挡在两道闸上：① 台账那一签的语义判定是 `unsure`（没有秘书 ⇒ 没人判）
+    # ⇒ 它既不计数也不清零 ⇒ 连续次数 0；② 连续次数不够 ⇒ 不发签。
+    assert issuance.get("projected") == 0, issuance
+    assert issuance.get("streak_ok") is False, issuance
+    assert issuance.get("need") == VR.SIGN_STREAK_NEED, issuance
+    assert (payload.get("secretary_judge") or {}).get("axis") == "unsure", payload
     # 负控：没这条边的角色派 V 仍然被拒（否则上面那条"受理"只是空转）
     bad = cond.summon("V", "list_verifications", {}, by="G")
     assert str(bad.outcome) == "refused", bad

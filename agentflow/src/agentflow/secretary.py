@@ -230,6 +230,37 @@ PROPOSITION_VERDICT_TEXT_CHARS = 1200
 #: 键是证明号的字符串形式（JSON 的键只能是字符串），读侧一律走 :func:`proof_route_of`。
 PROOF_ROUTES_KEY = "_proof_routes"
 
+#: V 的回复落在哪一档（业主 2026-10-29 的 B 段：「三档不许折平」）。
+#:
+#: 为什么另立一张表而不复用 `STATEMENT_VERDICTS`（`合格` / `太平凡` / `判不了`）：
+#: 那是 B 的审美轴（这条命题够不够格入库），这里是 V 的结论轴（这段审阅回复
+#: 到底有没有指出缺陷）。两根轴共用一张词表之后，"太平凡"会被当成一种"有缺陷"——
+#: 而它们在台账上是两件事（前者不改任何签，后者清零连续次数）。
+V_REPLY_CLEAN = "没问题"
+V_REPLY_FAULT = "有缺陷要指出"
+V_REPLY_UNSURE = "判不了"
+
+#: `v_reply_defect` 那一类的词表（顺序 = 由"没问题"到"判不了"，与判定规则同向）。
+V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT, V_REPLY_UNSURE)
+
+#: 词表取值 ⇒ 台账上那一条轴的三档（与 `verifications.SECRETARY_JUDGE_AXES` 逐字同一套）。
+#: 为什么要有这一张映射而不是直接把中文写进台账：台账那一格是给代码读的
+#: （`verifications._hold_run_lengths` 按 `fault` / `unsure` 分流），中文词表是给
+#: 模型读的。两者之间只有这一处翻译，改词不改轴。
+V_REPLY_AXIS: dict[str, str] = {
+    V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault", V_REPLY_UNSURE: "unsure",
+}
+
+#: V 的秘书「发不发这一签」（业主 2026-10-29 的 A 段）。
+#:
+#: 两档 + 判不了：`不签发` 与 `判不了` 的效果一样（都不放签）而读数必须分开
+#: ——前者是"看过读数、决定不发"，后者是"这一趟判不了"（三态纪律）。
+SIGN_ISSUE = "签发"
+SIGN_WITHHOLD = "不签发"
+
+#: `sign_issuance` 那一类的词表。
+SIGN_ISSUANCE_VERDICTS: tuple[str, ...] = (SIGN_ISSUE, SIGN_WITHHOLD, V_REPLY_UNSURE)
+
 #: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
 #:
 #: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
@@ -241,6 +272,19 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "statement_aesthetic": STATEMENT_VERDICTS,
     # 命题同一性（业主 2026-10-24：「让秘书洗定理名，让秘书判」）：结论词表就是三态。
     "proposition_identity": PROPOSITION_VERDICTS,
+    # V 的回复有没有指出缺陷（业主 2026-10-29 的 B 段）。独立一张表，不复用审美轴。
+    "v_reply_defect": V_REPLY_VERDICTS,
+    # 这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
+    "sign_issuance": SIGN_ISSUANCE_VERDICTS,
+}
+
+#: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
+#:
+#: 为什么需要这张小表：`_record_judge` 的缺省是 `"建议重排"`（派活那一轴的词）——
+#: 对上面这两类新判断，`checked=False` 时写"建议重排"是一句假话。这里只给新类别
+#: 一个词（`判不了`），其余类别原样保留旧缺省：改它们的词会改历史读数，那不是本批的口径。
+_JUDGE_UNDECIDED: dict[str, str] = {
+    "v_reply_defect": V_REPLY_UNSURE, "sign_issuance": V_REPLY_UNSURE,
 }
 
 
@@ -2211,7 +2255,10 @@ class Secretary:
             basis = basis + [f"cost.ledger={result['cost'].get('ledger') or '查不到'}"]
         self.note_decision(
             duty=2, kind=KIND_DECISION,
-            decision=str(result.get("decision") or "建议重排"),
+            # 没判成时写哪个词：按类别（`_JUDGE_UNDECIDED`）。缺省仍是派活那一轴的
+            # "建议重排"（历史读数逐字不变）；V 的两类判词写"判不了" —— 对它们写
+            # "建议重排"是一句假话（那两类里没有"重排"这件事）。
+            decision=str(result.get("decision") or _JUDGE_UNDECIDED.get(kind, "建议重排")),
             reason=str(result.get("reason") or ""),
             basis=basis, target={"judge": kind}, judge=result,
             before=json.dumps(dict(context), ensure_ascii=False, sort_keys=True,
@@ -2454,6 +2501,430 @@ class Secretary:
             # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
             self._statement_verdicts[key] = dict(got)
         return got
+
+    # ------------------------------------------------ V 的三件事（业主 2026-10-29）
+    #
+    # V 签门槛 = 连续 3 次没问题 + V 秘书语义判定 + 洗稿转达。三件都落在 V 的秘书身上：
+    # | 方法 | 业主口径 | 返回里的三态 |
+    # |---|---|---|
+    # | `judge_v_reply` | V 的回复落在 clean / fault / unsure 哪一档 | `checked=False` = 没判成 |
+    # | `decide_sign_issuance` | 这一签发不发（读连续次数 + 模型判） | `checked=False` ⇒ 不发 |
+    # | `wash_v_reply` | 把 V 的意见洗成能转达给 F 的文本 | `checked/ washed / refused` |
+    #
+    # 三件共用同一条制度约束：材料里没有 F 的证明正文。`may_read_narrative` 对
+    # role="V" 恒 False（I12），而"把证明正文当材料递进去"正是绕过那条隔离的暗通道。
+
+    def judge_v_reply(self, *, reply: str, verdict: str = "", defect_step: Any = None,
+                      statement_id: str = "", proof_no: Any = 1,
+                      task_id: str = "", proof_text: str = "",
+                      materials: Any = None) -> dict[str, Any]:
+        """V 这段审阅回复到底有没有指出缺陷（业主 2026-10-29 的 B 段，三档不许折平）。
+
+        ## 材料只给两样（这是本方法的判据，不是实现细节）
+        V 的回复正文 + 该台账行的 `verdict` / `defect_step`。不给 F 的证明
+        （I12：V 的秘书读叙述本来就被 `may_read_narrative` 禁，这里不开那个口子）。
+        所以 `proof_text` / `materials` 两个形参是受控拒绝口：调用方若真把它们塞进来，
+        本方法拒判（`checked=False` + `refused="proof_text_not_allowed"`），
+        而不是"收了但没用"—— 后者会让"秘书看过 F 的证明"这件事在盘上查不出来。
+
+        ## 返回
+        `checked` / `answer`（三档中文） / `axis`（`clean` / `fault` / `unsure`） /
+        `reason` / `basis` / `material`（真递给模型的那一份，供判据逐字核） /
+        `refused` / `cost` / `verdict`（台账那一行的结论原文）。
+
+        `checked=False` 时 `axis="unsure"`：不是"没问题"。这一档在连续计数里
+        不清零也不计入（`verifications.SECRETARY_JUDGE_AXES` 的口径）。
+        """
+        from . import verifications as _VR   # 惰性：此处只借它的三档词表与 `row_signable`
+
+        out: dict[str, Any] = {
+            "checked": False, "answer": V_REPLY_UNSURE, "axis": "unsure",
+            "reason": "", "basis": [], "refused": "", "cost": {},
+            "verdict": str(verdict or ""), "defect_step": defect_step,
+            "statement_id": str(statement_id or ""), "proof_no": 0,
+            "material": {},
+        }
+        try:
+            out["proof_no"] = int(_VR.as_proof_no(proof_no) or 0)
+        except (TypeError, ValueError):
+            out["proof_no"] = 0
+        if str(proof_text or "").strip() or materials is not None:
+            out["refused"] = "proof_text_not_allowed"
+            out["reason"] = ("材料里被塞进了 F 的证明正文（或额外的 materials）⇒ 拒判："
+                             "V 的秘书只读 V 的回复与那一签的 verdict/defect_step"
+                             "（I12：V 的秘书不读 F 的叙述）。请把证明正文拿掉再来问")
+            self.note_decision(
+                duty=2, kind=KIND_DECISION, decision=V_REPLY_UNSURE,
+                reason=out["reason"], target={"judge": "v_reply_defect"},
+                judge=dict(out), fail_open=False,
+                before=f"reply_chars={len(str(reply or ''))}", )
+            return out
+        body = str(reply or "").strip()
+        if not body:
+            out["reason"] = "V 的回复正文是空的 ⇒ 没有可判的对象（不是「没问题」）"
+            return out
+        # 递给模型的材料：只有这两样（键集合固定，判据可以逐字核）。
+        material = {
+            "v_reply": body[:JUDGE_MATERIAL_CAP],
+            "ledger_row": {"verdict": str(verdict or ""), "defect_step": defect_step},
+        }
+        out["material"] = dict(material)
+        got = self.judge("v_reply_defect", material, task_id=task_id)
+        out["cost"] = dict(got.get("cost") or {})
+        out["reason"] = str(got.get("reason") or "")
+        out["basis"] = list(got.get("basis") or [])
+        if not got.get("checked"):
+            # 没查成 ⇒ unsure（词表里那一档），不是 clean。`judge` 已经把这一趟
+            # 落进决定台账了（`_record_judge`），这里不重复落。
+            out["answer"] = V_REPLY_UNSURE
+            out["axis"] = "unsure"
+            return out
+        answer = str(got.get("decision") or "").strip()
+        if answer not in V_REPLY_AXIS:
+            # 词表外（`judge` 已经挡过一次，这里是第二道：本方法的取值只由 V_REPLY_AXIS 定）。
+            out["answer"] = V_REPLY_UNSURE
+            out["axis"] = "unsure"
+            out["reason"] = f"结论 {answer!r} 不在 {list(V_REPLY_VERDICTS)} 里 ⇒ 不采信"
+            return out
+        out.update(checked=True, answer=answer, axis=V_REPLY_AXIS[answer])
+        return out
+
+    def decide_sign_issuance(self, *, statement_id: str, proof_text: str = "",
+                             proof_no: Any = 1, verdict: Mapping[str, Any] | None = None,
+                             task_id: str = "", row: Mapping[str, Any] | None = None
+                             ) -> dict[str, Any]:
+        """这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
+
+        ## 判据分两层，且只有一层能否决
+        1. 台账那一层（机械、唯一真身）：`:func:`verifications.review_standing`` 现算的
+           连续读数 —— 这一签落下去之后尾部连续「成立」几次（`streak + 1`，且必须盖着
+           同一份正文）。次数不够 ⇒ `不签发`，不问模型（省一次调用，也不给它推翻门槛的机会）。
+        2. 秘书那一层（语义）：次数够了，才问模型「签发 / 不签发 / 判不了」。
+           它只能在这个前提下再否决，不能把"次数不够"判成"签发"。
+        ⇒ 两层是"与"，不是"或"：门槛是地板，秘书的决定是天花板。
+
+        ## 三态（"没查成"绝不被读成"没问题"）
+        | 结局 | 返回 |
+        |---|---|
+        | 判了 | `checked=True` + `issue`（真/假）+ `decision`（中文三档） |
+        | 没缝 / 开关关着 / 超时 / 台账读不成 / 坏 JSON | `checked=False` + `issue=False` + 理由 |
+
+        `checked=False` ⇒ 不发签（`draft/125` §三：装配没接上时秘书判定必须报
+        `checked=False`，且不放签）。返回键：`checked` / `issue` / `decision` / `streak` /
+        `need` / `streak_ok` / `projected` / `same_sha` / `state` / `reason` / `basis` /
+        `reading` / `cost` / `material`。
+
+        ## 落痕
+        走 `note_decision`（那本账：`before` = 台账读数、`after` = 决定、`judge` = 这一趟判词）。
+        判词那一行由 `judge()` 自己落（`_record_judge`），所以一次决定会留两行：
+        一行"判断"、一行"决定"——它们是两件事（判了什么 / 据此发不发）。
+        """
+        from . import verifications as _VR   # 惰性：与 `merge_into_*` 那条同一处依赖
+
+        v = dict(verdict or {})
+        if row is not None and not v:
+            # 调用方只给了台账那一行：这一签的结论与未解决 error 从行上读（同一份事实，
+            # 不要求调用方抄第二遍）。
+            v = {"verdict": row.get("verdict"),
+                 "unresolved_errors": row.get("unresolved_errors"),
+                 "defect_step": row.get("defect_step")}
+        out: dict[str, Any] = {
+            "checked": False, "issue": False, "issued": False,
+            "decision": V_REPLY_UNSURE, "landed": False, "writeback": {},
+            "streak": 0, "need": int(_VR.SIGN_STREAK_NEED), "streak_ok": False,
+            "projected": 0, "same_sha": False, "state": "", "reason": "",
+            "basis": [], "reading": {}, "cost": {}, "material": {},
+            "statement_id": str(statement_id or ""), "proof_no": 0,
+        }
+        try:
+            out["proof_no"] = int(_VR.as_proof_no(proof_no) or 0)
+        except (TypeError, ValueError):
+            out["proof_no"] = 0
+        root = self.store.root if self.store is not None else self.root
+        try:
+            reading = _VR.review_standing(root, statement_id=str(statement_id or ""),
+                                          proof_text=str(proof_text or ""),
+                                          proof_no=proof_no)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没问题"
+            out["reason"] = (f"台账读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成："
+                             "不放签（不是「可以签」）")
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
+        out["reading"] = dict(reading)
+        out["streak"] = int(reading.get("streak") or 0)
+        out["state"] = str(reading.get("state") or "")
+        sha = str(reading.get("sha") or "")
+        same_sha = bool(sha) and sha == _VR.proof_sha(str(proof_text or ""))
+        out["same_sha"] = same_sha
+        # 这一签落下去之后的连续次数：同一份正文 ⇒ 前一票 + 这一票；换了一份 ⇒ 从 1 起。
+        #
+        # 两种调用顺序都要对（业主 2026-10-29 追加口径之后，生产走的是第二种）：
+        # · 先问后做：台账里还没有这一签 ⇒ `streak + 1`（预测）；
+        # · 先落台账后问（V 的秘书这一条路：`record_verification(flip=False)` 已经把行落了）
+        #   ⇒ 这一签就是尾部那一签 ⇒ 连续次数就是 `streak`，不许再加一票。
+        # 判据是 `verification_id` 与尾部那一签同号（不是靠调用方自己说落没落）。
+        landed = (isinstance(row, Mapping)
+                  and str(row.get("verification_id") or "")
+                  and str(row.get("verification_id") or "")
+                  == str(reading.get("verification_id") or ""))
+        out["landed"] = bool(landed)
+        candidate_ok = (str(v.get("verdict") or "") == "成立"
+                        and int(v.get("unresolved_errors") or 0) == 0)
+        if landed:
+            out["projected"] = out["streak"] if candidate_ok else 0
+        else:
+            out["projected"] = ((out["streak"] + 1) if (same_sha and candidate_ok)
+                                else (1 if candidate_ok else 0))
+        out["streak_ok"] = bool(out["projected"] >= int(out["need"]))
+        if not bool(reading.get("checked")):
+            out["reason"] = (f"台账那一格没查成（{str(reading.get('why') or '')[:160]}）"
+                             "⇒ 不放签（不是「没问题」）")
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
+        # 递给模型的材料：只有读数，没有证明正文（I12 同一条纪律）。
+        material = {
+            "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
+            "state": out["state"], "streak": out["streak"], "need": out["need"],
+            "projected": out["projected"], "streak_ok": out["streak_ok"],
+            "same_sha": same_sha, "candidate_verdict": str(v.get("verdict") or ""),
+            "candidate_defect_step": v.get("defect_step"),
+            "reading_why": str(reading.get("why") or "")[:400],
+        }
+        out["material"] = dict(material)
+        if not out["streak_ok"]:
+            # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。
+            out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
+                       reason=(f"连续「成立」还差 {int(out['need']) - int(out['projected'])} 次"
+                               f"（这一签落下之后 {out['projected']}/{out['need']}，"
+                               f"同一份正文={same_sha}）⇒ 不签发"),
+                       basis=[f"streak={out['streak']}", f"need={out['need']}",
+                              f"same_sha={same_sha}"])
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
+        got = self.judge("sign_issuance", material, task_id=task_id)
+        out["cost"] = dict(got.get("cost") or {})
+        if not got.get("checked"):
+            out["reason"] = (f"秘书判不了（{str(got.get('reason') or '')[:200]}）⇒ 不放签"
+                             "（checked=False 不是「可以签」）")
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
+        decision = str(got.get("decision") or "").strip()
+        if decision not in SIGN_ISSUANCE_VERDICTS:
+            out["reason"] = f"结论 {decision!r} 不在 {list(SIGN_ISSUANCE_VERDICTS)} 里 ⇒ 不放签"
+            self._note_sign_issuance(out, task_id=task_id)
+            return out
+        out.update(checked=True, decision=decision, issue=(decision == SIGN_ISSUE),
+                   reason=str(got.get("reason") or ""),
+                   basis=list(got.get("basis") or []))
+        if out["issue"]:
+            # ---- 落地那一步也在秘书这一侧（业主 2026-10-29 追加口径）----
+            #
+            # 原话：「由 V 的秘书判定并落盘（… 满足"连续 3 次 clean"才调
+            # `verifications.sign_statement` 翻 `bits.evidence`）」。
+            # `append_ledger=False`：台账那一行是 `AgentV` 先落的（正本先落），
+            # 本方法只翻位 —— 同一个 verification_id 在台账上绝不出现两次。
+            self._land_sign_issuance(out, proof_text=str(proof_text or ""),
+                                     proof_no=proof_no, row=row)
+        self._note_sign_issuance(out, task_id=task_id)
+        return out
+
+    def _land_sign_issuance(self, out: dict[str, Any], *, proof_text: str,
+                            proof_no: Any, row: Mapping[str, Any] | None) -> None:
+        """把"签发"这个决定落成一次 `sign_statement`（翻位的唯一写口）。
+
+        三态：落成了（`issued=True`）/ 没有可写的行（没有 store 或没有那一行的 row）/
+        写了但没成（`sign_statement` 自己报的理由）。三种都不改变 `issue` 这一个决定
+        —— 决定是决定，落地是落地（`draft/125` 三态纪律：决定与它的产物分开报）。
+        """
+        from . import verifications as _VR
+
+        if self.store is None:
+            out["reason"] = (f"{out.get('reason') or ''}；但这一名秘书没有 store "
+                             "⇒ 决定是「签发」，而翻位那一步落不了（换装配："
+                             "`for_role_wired(..., store=<本工作区的 store>)`）")
+            return
+        if not isinstance(row, Mapping) or not str(row.get("verification_id") or ""):
+            out["reason"] = (f"{out.get('reason') or ''}；但没有可翻的那一行"
+                             "（`record_verification` 的返回行没递进来）⇒ 只落了决定")
+            return
+        try:
+            writeback = _VR.sign_statement(self.store, row=dict(row),
+                                           proof_text=proof_text, proof_no=proof_no,
+                                           append_ledger=False, sign_issuance=dict(out))
+        except Exception as exc:  # noqa: BLE001 —— 翻位失败要如实报（台账那一行已在盘上）
+            out["writeback"] = {"written": False,
+                                "reason": f"翻位没成（{type(exc).__name__}: {exc}）"}
+            out["reason"] = (f"{out.get('reason') or ''}；翻位没成"
+                             f"（{type(exc).__name__}: {exc}）⇒ 位没翻，台账那一行留着")
+            return
+        out["writeback"] = dict(writeback)
+        out["issued"] = bool(writeback.get("written"))
+        if not out["issued"]:
+            out["reason"] = (f"{out.get('reason') or ''}；但翻位没落成："
+                             f"{str(writeback.get('reason') or '没有理由')}")
+
+    def _note_sign_issuance(self, out: Mapping[str, Any], *, task_id: str = "") -> None:
+        """把"发不发签"这一行落进决定台账（`before` = 台账读数，`after` = 决定）。
+
+        为什么单独一个私有方法（而不再塞进 `decide_sign_issuance` 的每一支）：返回句有
+        六条路（读不成 / 没查成 / 地板没过 / 判不了 / 词表外 / 判了），而每一条都要
+        留痕 —— 六处各写一遍必然漏一处，而漏的那一处正好会是"没发签"的那条路。
+        """
+        self.note_decision(
+            duty=2, kind=KIND_DECISION,
+            decision=str(out.get("decision") or V_REPLY_UNSURE),
+            reason=str(out.get("reason") or ""),
+            basis=list(out.get("basis") or []),
+            target={"sign_issuance": str(out.get("statement_id") or "")},
+            judge={k: out.get(k) for k in
+                   ("checked", "issue", "decision", "streak", "need", "streak_ok",
+                    "projected", "same_sha", "state", "reading", "cost")},
+            before=json.dumps(dict(out.get("material") or {}), ensure_ascii=False,
+                              sort_keys=True, default=str)[:2000],
+            after=(f"issue={bool(out.get('issue'))}；decision={out.get('decision')!r}"
+                   f"；连续 {out.get('projected')}/{out.get('need')}"),
+            fail_open=False,
+        )
+
+    def wash_v_reply(self, *, reply: str, verdict: str = "", defect_step: Any = None,
+                     statement_id: str = "", proof_no: Any = 1,
+                     task_id: str = "", label: str = "") -> dict[str, Any]:
+        """把 V 的意见洗成能转达给 F 的文本（业主 2026-10-29 的 C 段）。
+
+        仿 :meth:`wash_dependency_face` 的三态，但有一处刻意不同：那一支洗失败时
+        返回原稿（那是 F 自己的稿子，退回原文不是泄露），这一支洗失败时不输出原文
+        —— V 的回复正文不许原样递到 F 面前（业主口径：洗稿转达；`draft/125` §二 C
+        「洗不出来 ⇒ 受控拒绝、不输出原文」）。所以 `refused=True` 时 `text` 恒空串。
+
+        ## findings 必须逐字可回溯（`judges._ground` 的纪律）
+        模型给的每条 `findings[*].quote` 都要在 V 的回复原文里逐字找到（只压空白差异），
+        找不到的落进 `dropped` 并不采信；一条都没落地、而模型又给了 findings ⇒
+        `refused="findings_not_grounded"`（说明这一次洗出来的话在原文里没有着落）。
+        洗过的那份文本 = 模型给的 `text`（那是转述，不是原文）。
+
+        ## 落痕
+        进 `decisions_path()` 那本账（`before` = V 原文、`after` = 洗过的文本、
+        `changes` = 逐条改了哪几处、`judge` = 这一趟的洗稿读数）。不写 `relay.jsonl`
+        —— 那一份是转达链自己的账，两件事写在同一处会让"谁洗的"与"谁转达的"分不开。
+
+        返回键：`checked` / `washed` / `text` / `findings` / `dropped` / `refused` /
+        `reason` / `actor` / `changes` / `cost` / `material`。
+        """
+        from . import judges as _J   # 惰性：落地判据（`judges._ground`）的唯一实现在这里
+        from . import verifications as _VR
+
+        out: dict[str, Any] = {
+            "checked": False, "washed": False,
+            #: 洗不动时恒空串：这一格不许退化成"原文"（那正是要挡的那件事）。
+            "text": "", "findings": [], "dropped": [], "refused": "",
+            "reason": "", "actor": f"secretary-{self.role}", "changes": [], "cost": {},
+            "material": {}, "statement_id": str(statement_id or ""), "proof_no": 0,
+        }
+        try:
+            out["proof_no"] = int(_VR.as_proof_no(proof_no) or 0)
+        except (TypeError, ValueError):
+            out["proof_no"] = 0
+        body = str(reply or "").strip()
+        if not body:
+            out.update(checked=True, refused="empty_reply",
+                       reason="V 的回复正文是空的 ⇒ 没有可洗的东西（也就没有可转达的意见）")
+            self._note_wash(out, reply="", task_id=task_id)
+            return out
+        if self.seam is None or not self.enable_model:
+            out.update(refused="secretary_unavailable",
+                       reason=("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 洗不出来："
+                               "受控拒绝，**不输出 V 的原文**（洗稿转达是这一档的唯一出口）"))
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        material = {"v_reply": body[:JUDGE_MATERIAL_CAP],
+                    "ledger_row": {"verdict": str(verdict or ""), "defect_step": defect_step},
+                    "label": str(label or "")}
+        out["material"] = dict(material)
+        prompt = (
+            "把下面这段验证者（V）的审阅回复**改写成转达给作者（F）的工作意见**。"
+            "只回一个 JSON 对象，字段：\n"
+            "text（改写后的正文：第三人称、按「指到哪一步 / 问题是什么 / 下一步补什么」"
+            "分条写；**不要**照抄原文的句子，不要复述 V 的第一人称口气，"
+            "不要评价作者的思路好不好；只写能据以动手的结论）、\n"
+            "findings（字符串数组或对象数组：每一条给 `quote` = 你在原文里逐字引用的那一句、"
+            "`why` = 它说明什么问题。`quote` 必须与原文逐字相同（只允许空白差异），"
+            "改了字就不采信）、\n"
+            "step（整数或 null：这一条意见指向第几步）。\n"
+            "不许写原文里没有的意思；原文没指出缺陷时，text 就写「这一轮没有指出缺陷」"
+            "与它实际核过的东西，findings 给空数组。\n\n"
+            + _judge_material(material))
+        try:
+            data, call = self.seam.ask_json(prompt, system=_wash_v_system(),
+                                            task_id=task_id, note="secretary:wash_v_reply")
+        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 洗不出来（受控拒绝）
+            out.update(refused="wash_call_failed",
+                       reason=f"洗稿调用失败（{type(exc).__name__}: {exc}）⇒ 不输出原文")
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
+            out.update(refused="wash_no_reply",
+                       reason=(f"洗稿没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
+                               f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 不输出原文"))
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        washed = str(data.get("text") or "").strip()
+        kept, dropped = _J._ground(body, data.get("findings"))
+        out["findings"] = kept
+        out["dropped"] = dropped
+        proposed = data.get("findings")
+        if not washed:
+            out.update(refused="wash_empty_text",
+                       reason="模型没有给出改写后的正文 ⇒ 洗不出来（不输出原文）")
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        if isinstance(proposed, (list, tuple)) and proposed and not kept:
+            # 给了 findings、而一条都引不回原文 ⇒ 这一遍洗出来的话没有着落。
+            out.update(refused="findings_not_grounded",
+                       reason=(f"模型给了 {len(proposed)} 条 findings，没有一条能逐字落回 "
+                               "V 的原文 ⇒ 不采信这一遍（不输出原文）"))
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        if washed == body:
+            # 逐字相同 = 没有洗过（这一档最危险：它长得像"洗好了"）。
+            out.update(refused="wash_verbatim",
+                       reason="改写后的正文与 V 的原文逐字相同 ⇒ 不算洗过（不输出原文）")
+            self._note_wash(out, reply=body, task_id=task_id)
+            return out
+        out.update(checked=True, washed=True, text=washed,
+                   reason=(f"洗过：{len(kept)} 条 findings 逐字落回原文"
+                           + (f"，{len(dropped)} 条引不到被丢弃" if dropped else "")))
+        out["changes"] = [{"field": "text", "from": "（V 的原文，不转达）", "to": washed,
+                           "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"}]
+        out["changes"].extend(
+            {"field": "findings", "from": str(d.get("quote") or ""),
+             "to": "（丢弃）", "why": str(d.get("why") or "引文落不回原文")}
+            for d in dropped)
+        self._note_wash(out, reply=body, task_id=task_id)
+        return out
+
+    def _note_wash(self, out: Mapping[str, Any], *, reply: str, task_id: str = "") -> None:
+        """把洗稿这一行落进决定台账（`before` = 原文、`after` = 洗过的文本）。
+
+        与 :meth:`_note_sign_issuance` 同一条理由：返回句有六条路，每一条都要留痕。
+        注意 `before` 落的是原文：那本账是秘书自己的账（不是给 F 看的），
+        而"洗的时候原文长什么样"是复核这一遍洗得对不对的唯一依据。
+        """
+        self.note_decision(
+            duty=2, kind=KIND_DECISION,
+            decision=("已洗稿" if out.get("washed") else "洗不出来"),
+            reason=str(out.get("reason") or ""),
+            basis=[f"refused={out.get('refused') or '（没拒）'}",
+                   f"findings={len(out.get('findings') or [])}",
+                   f"dropped={len(out.get('dropped') or [])}"],
+            target={"wash_v_reply": str(out.get("statement_id") or "")},
+            judge={k: out.get(k) for k in
+                   ("checked", "washed", "refused", "findings", "dropped",
+                    "statement_id", "proof_no")},
+            before=str(reply or "")[:2000],
+            after=str(out.get("text") or "")[:2000],
+            changes=[dict(c) for c in (out.get("changes") or [])][:20],
+            fail_open=False,
+        )
 
     def not_applicable_nontriviality(self, *, statement_full: str, kind: str = "",
                                      task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
@@ -8794,11 +9265,68 @@ def _judge_system(kind: str) -> str:
             "conclusion（一句话：这一条的结论是什么）。"
             "basis 里必须分别对条件与结论各给一句比对（例如『条件：都是有限群 + p 是素数，"
             "一致；结论：都是 Sylow p-子群存在，一致』）—— 不许只给一个总分。")
+    elif kind == "v_reply_defect":
+        # 业主 2026-10-29（V 签门槛的 B 段）：三档不许折平，逐条把判定规则写进题面。
+        # 为什么必须逐字写"先夸后刺"这几种形态：`verifications.parse_verdict` 只能挡住
+        # "有毛病但没给 defect_step"，它挡不住"整体很好，只是有一个缺陷需要指出"——
+        # 那种回复在词表上读成「成立」，而它明明指出了一个缺陷。
+        ask = (
+            "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底**有没有指出缺陷**？"
+            "按三档判（业主定的规则逐条照办，不要自己发明中间档）：\n"
+            "**有缺陷要指出**（以下四种写法都算，哪怕开头先夸了一大段）：\n"
+            "- 「整体很好，只是有一个缺陷需要指出……」；\n"
+            "- 「思路没问题，但是有一个记号问题需要强调……」；\n"
+            "- 「我找不到反例，但某对象似乎没有定义」；\n"
+            "- 「我觉得没问题但我没逐行验证」——没验证过就不是没问题。\n"
+            "**没问题**：它真的逐条走查过、并且明确写了「我试了几种反例构造都失败、"
+            "未发现问题」这一档（有反例尝试的记录，而不是一句笼统的放心）。\n"
+            "**判不了**：它的依据落在**不归 F** 的那几样上 —— 文献真伪/页码核对、"
+            "实验数值复现、稿件排版与术语统一；或者回复里读不出它对证明本身说了什么。\n"
+            "只判这段回复**说了什么**：不要替它补它没说过的检查，也不要因为语气自信就判没问题。"
+            "decision 取「没问题」/「有缺陷要指出」/「判不了」之一；reason 一句话；"
+            "basis 里引回复原文的片段（逐字，不要改写）。"
+        )
+    elif kind == "sign_issuance":
+        # 业主 2026-10-29（V 签门槛的 A 段）：发不发签由 V 的秘书说了算。
+        # 材料里只有台账读数（连续次数 / 门槛 / 正文 sha / 这一签的结论），没有证明正文
+        # （V 的秘书不读 F 的叙述，`may_read_narrative` 对 role="V" 恒 False）。
+        ask = (
+            "问题：验证者（V）刚对一个命题的某一份证明给出了结论，现在要决定"
+            "**这一签发不发**（发签 = 把命题行的第 3 位翻成「审过」）。"
+            "材料是台账现算的读数，不是证明正文。判据只有一条："
+            "业主定的门槛是「连续 3 次没问题」——`streak`（尾部连续「成立」的次数）"
+            "必须达到 `need`（门槛），且这几次盖的是**同一份正文**（`same_sha` 为真）。\n"
+            "- 次数够了、同一份正文、这一签的结论是「成立」⇒ 判「签发」；\n"
+            "- 次数不够 / 不是同一份正文 / 这一签的结论不是「成立」⇒ 判「不签发」，"
+            "并在 basis 里点名差在哪一项；\n"
+            "- 读数不全（`checked` 为假、或某一格读不出来）⇒ 判「判不了」——"
+            "**不许**把「判不了」当「没问题」。\n"
+            "decision 取「签发」/「不签发」/「判不了」之一；reason 一句话；"
+            "basis 写明你依据的是哪几格读数。"
+        )
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
                "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"
                "判『建议改派』= 换一个收件方更合适；判『建议不派』= 别派这条。")
     return f"{head}\n\n{ask}\n\n"
+
+
+def _wash_v_system() -> str:
+    """洗稿那一趟的稳定头（进 `system` 位）：纪律 + 输出形状。
+
+    与 :func:`_judge_system` 同一条缓存纪律：这一段只取决于"这是洗稿"，不取决于材料
+    （任何两趟、任何一份回复，它逐字节相同），所以它能进前缀；材料留在 user 位。
+    为什么它不说"你是 V 的秘书"以外的事：洗稿的判据只有三条（逐字引、不添意思、
+    不评价价值），多写只会让模型在这些轴上自由发挥。
+    """
+    return (
+        "你是「秘书」的洗稿面：把验证者（V）的审阅回复改写成**转达给作者**的工作意见。"
+        "纪律三条：① 只写原文里有的意思，不许添；② findings 里每一条 `quote` 必须与原文"
+        "逐字相同（只允许空白差异）—— 改了字就不采信；③ 不评价作者思路好不好、不写"
+        "「这篇论文有没有价值」这类价值判断（那不是 V 的判据面）。"
+        "只回一个 JSON 对象，字段：text（改写后的正文）、findings（对象数组：quote + why）、"
+        "step（整数或 null）。\n\n"
+    )
 
 
 def _judge_material(context: Mapping[str, Any]) -> str:

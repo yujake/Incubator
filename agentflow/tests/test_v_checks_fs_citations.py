@@ -156,14 +156,21 @@ def _cite(store: Store, *, citing: str, cited: str, note: str = F_NOTE,
 
 
 def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
-    """造一条够格（或刻意不够格）被引的引理，返回它的命题号。"""
+    """造一条够格（或刻意不够格）被引的引理，返回它的命题号。
+
+    2026-10-29 之后"签住"要连续 `SIGN_STREAK_NEED` 次「成立」（第 1、2 次只落台账、
+    不翻位）：这一条引理要够 `proof_review` 级被引，所以这里签够次数（改前只签一次）。
+    """
     sid = _register(store, full=LEMMA_FULL, proof=LEMMA_PROOF)
     if evidence_kind == "proof_review":
-        signed = VR.record_verification(
-            store.root, statement_id=sid, proof_text=LEMMA_PROOF,
-            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
+        signed: dict = {}
+        for _i in range(VR.SIGN_STREAK_NEED):
+            signed = VR.record_verification(
+                store.root, statement_id=sid, proof_text=LEMMA_PROOF,
+                verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+                store=store, proof_no=1)
         assert signed.get("checked") is True, signed
+        assert signed["statement_writeback"]["written"] is True, signed["statement_writeback"]
     _set_evidence_kind(store, sid, evidence_kind)
     return sid
 
@@ -182,8 +189,35 @@ def _check(sid: str, verdict: str, *, note: str = "", verbatim: bool = False) ->
 
 
 def _v(store: Store, reply: str) -> tuple[AgentV, _Seam]:
+    """V + 它的秘书（两人都在场才签得住，业主 2026-10-29 的追加口径）。"""
     seam = _Seam(reply)
-    return AgentV(store, workspace_root=store.root, llm=seam), seam
+    return AgentV(store, workspace_root=store.root, llm=seam,
+                  secretary=_v_secretary(store)), seam
+
+
+def _v_secretary(store: Store):
+    """V 的秘书替身：判 clean、判签发（离线缝；夹具与 `test_v_sign_gate_streak` 同源）。"""
+    from agentflow import secretary as SEC
+
+    from test_v_sign_gate_streak import _Seam as _GateSeam
+    from test_v_sign_gate_streak import _axis
+
+    seam = _GateSeam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                      "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    return SEC.Secretary("V", root=store.root, store=store, seam=seam,
+                         enable_model=True)
+
+
+def _three(agent: AgentV, main: str, **kw: Any) -> dict:
+    """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值。
+
+    为什么不是一次：业主 2026-10-29「V 签门槛 = 连续 3 次没问题」—— 第 1、2 次只落台账、
+    不翻位。这一份判据量的是"签住之后引用核实读得对不对"，所以夹具要把那一签真的签住。
+    """
+    out: dict = {}
+    for _i in range(VR.SIGN_STREAK_NEED):
+        out = agent.verify_proof(main, **kw)
+    return out
 
 
 def _ledger_row(store: Store, sid: str) -> dict:
@@ -227,7 +261,7 @@ def test_a_consistent_use_signs_even_though_the_words_differ(tmp_path: pathlib.P
     agent, seam = _v(store, _reply(checks=[_check(lemma, "consistent",
                                                 note="F 只用它的'中心非平凡'那一句，与原命题一致")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"], "依赖面登记了一条引用，审查材料却空着（只给编号也不行，这里要的是材料）"
     assert [c["stmt_id"] for c in out["citation_checks"]] == [lemma]
     assert out["citation_checks"][0]["verdict"] == "consistent"
@@ -250,7 +284,8 @@ def test_a_consistent_use_signs_even_though_the_words_differ(tmp_path: pathlib.P
         "stmt_id": lemma, "verdict": "consistent", "quote_verbatim": False,
         "note": "F 只用它的'中心非平凡'那一句，与原命题一致", "in_material": True}]
     assert set(disk["citation_checks"][0]) == set(VR.CITATION_CHECK_KEYS)
-    assert VR.signs_bit3(disk) is True and VR.bit3_payload(disk).get("reviewed") is True
+    assert VR.signs_bit3(disk, streak=VR.SIGN_STREAK_NEED) is True
+    assert VR.bit3_payload(disk, streak=VR.SIGN_STREAK_NEED).get("reviewed") is True
 
 
 # ============================================================ b 逐字但用法被夸大
@@ -269,7 +304,7 @@ def test_a_verbatim_quote_used_more_strongly_cannot_sign(tmp_path: pathlib.Path)
         _check(lemma, "stronger", verbatim=True,
                note="命题只说'非平凡'，F 当成'中心含 p 阶元'用了（更强）")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert _blocked_by(out, "stronger"), out
     assert out["citation_checks"][0]["quote_verbatim"] is True, "逐字这一格只是信息，但它要如实记"
     assert int(out["unresolved_errors"]) >= 1, "挡签的引用核实必须落成 error finding"
@@ -298,7 +333,7 @@ def test_an_unrelated_citation_cannot_sign(tmp_path: pathlib.Path) -> None:
     agent, _seam = _v(store, _reply(checks=[
         _check(lemma, "unrelated", note="这条命题讲中心非平凡，F 用它替'正则性'那一步，两者无关")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert _blocked_by(out, "unrelated"), out
     assert out["citation_gate"]["ok"] is False
     assert [e["stmt_id"] for e in out["citation_gate"]["blocking"]] == [lemma]
@@ -331,7 +366,7 @@ def test_stubbing_the_check_to_always_consistent_would_make_b_and_c_red(
         main = _register(store, full=MAIN_FULL, proof=MAIN_PROOF)
         _cite(store, citing=main, cited=lemma, note=note)
         agent, _seam = _v(store, _reply(checks=[_check(lemma, want, note="模型其实说了 " + want)]))
-        out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+        out = _three(agent, main, proof_text=MAIN_PROOF)
 
         assert out["citation_checks"][0]["verdict"] == "consistent", (
             "打桩没生效 ⇒ 这一条判据什么也没证明", out["citation_checks"])
@@ -362,7 +397,7 @@ def test_a_cross_check_citation_is_inadmissible_and_cannot_sign(tmp_path: pathli
     agent, seam = _v(store, _reply(checks=[
         _check(lemma, "consistent", note="用法与原文一致（模型原话）")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"][0]["evidence_kind"] == "cross_check", out["citations"]
     assert out["citations"][0]["admissible"] is False
     assert _blocked_by(out, "inadmissible"), out
@@ -396,7 +431,7 @@ def test_stubbing_the_floor_gate_moves_both_directions(tmp_path: pathlib.Path,
     monkeypatch.setattr(AgentV, "_citation_admissibility", lambda self, kind: True)
     store, main, lemma = _store_fixture("permit", "cross_check")
     agent, _seam = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"][0]["admissible"] is True, "打桩没生效"
     assert _blocked_by(out, "inadmissible") is False, "档位闸恒放行下 e 竟然还成立 ⇒ 它量的不是档位"
     assert _signed(out) is True
@@ -406,7 +441,7 @@ def test_stubbing_the_floor_gate_moves_both_directions(tmp_path: pathlib.Path,
     monkeypatch.setattr(AgentV, "_citation_admissibility", lambda self, kind: False)
     store, main, lemma = _store_fixture("deny", "proof_review")
     agent, _seam = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"][0]["admissible"] is False, "打桩没生效"
     assert _signed(out) is False, "档位闸恒拒绝下 a 的正控竟然还签住了 ⇒ 它量的不是档位"
     assert _blocked_by(out, "inadmissible") is True
@@ -428,7 +463,7 @@ def test_a_weaker_use_still_signs_but_is_named_in_the_readings(tmp_path: pathlib
     agent, _seam = _v(store, _reply(checks=[
         _check(lemma, "weaker", note="F 只要'中心非平凡'，命题其实更强 —— 只用到了弱形式")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert _signed(out), out
     assert out["citation_checks"][0]["verdict"] == "weaker"
     assert out["citation_gate"]["weaker"] and out["citation_gate"]["ok"] is True, out["citation_gate"]
@@ -454,7 +489,7 @@ def test_an_unknown_citation_lands_as_undetermined_and_does_not_sign(
     agent, _seam = _v(store, _reply(checks=[
         _check(lemma, "unknown", note="那句话在这一步的上下文里读不出确定含义，判不了")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["checked"] is True, "判不了也要落台账（它不是没查成）"
     assert out["verdict"] == "看不出来" and out["signed_bit3"] is False, out
     assert _ledger_row(store, main)["verdict"] == "看不出来"
@@ -476,7 +511,7 @@ def test_a_citation_to_a_missing_proposition_cannot_be_called_consistent(
     agent, seam = _v(store, _reply(checks=[
         _check("999999", "consistent", note="模型说一致（它也没见过这条命题）")]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"][0]["statement_missing"] is True, out["citations"]
     assert out["citation_checks"][0]["verdict"] == "unknown", out["citation_checks"]
     assert "不在册" in out["citation_checks"][0]["note"]
@@ -499,7 +534,7 @@ def test_a_cited_proposition_without_a_verdict_is_unknown_and_cannot_sign(
     _cite(store, citing=main, cited=lemma, note=F_NOTE)
     agent, _seam = _v(store, _reply(checks=[]))
 
-    out = agent.verify_proof(main, proof_text=MAIN_PROOF)
+    out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citation_checks"][0]["verdict"] == "unknown", out["citation_checks"]
     assert "没有对这条被引命题给出结论" in out["citation_checks"][0]["note"]
     assert out["signed_bit3"] is False and _blocked_by(out, "unknown"), out
@@ -522,12 +557,12 @@ def test_dependencies_of_another_proof_do_not_enter_this_proofs_material(
     _cite(store, citing=main, cited=lemma, note="第二条路线才用到这条引理", proof_no=2)
 
     agent, _seam = _v(store, _reply(checks=[]))
-    out1 = agent.verify_proof(main, proof_text=MAIN_PROOF, proof_no=1)
+    out1 = _three(agent, main, proof_text=MAIN_PROOF, proof_no=1)
     assert out1["citations"] == [], "把 #p2 的依赖塞进了 #p1 的材料（串份）"
     assert out1["signed_bit3"] is True, out1
 
     agent2, seam2 = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
-    out2 = agent2.verify_proof(main, proof_text=MAIN_PROOF_2, proof_no=2)
+    out2 = _three(agent2, main, proof_text=MAIN_PROOF_2, proof_no=2)
     assert [c["stmt_id"] for c in out2["citations"]] == [lemma], out2["citations"]
     assert out2["proof_no"] == 2 and out2["signed_bit3"] is True, out2
     assert LEMMA_FULL in seam2.prompts[0]
@@ -577,9 +612,9 @@ def test_signs_bit3_refuses_a_row_whose_citation_check_blocks() -> None:
     for verdict in sorted(VR.CITATION_SIGNABLE):
         row = dict(base, citation_checks=[{"stmt_id": "000002", "verdict": verdict,
                                            "quote_verbatim": True, "note": "x"}])
-        assert VR.signs_bit3(row) is True, verdict
+        assert VR.signs_bit3(row, streak=VR.SIGN_STREAK_NEED) is True, verdict
     # 历史行（没有这一格）照旧：老台账的读数逐字不变。
-    assert VR.signs_bit3(dict(base)) is True
+    assert VR.signs_bit3(dict(base), streak=VR.SIGN_STREAK_NEED) is True
 
 
 # ============================================================ 两个判定口必须同结论（2026-10-27）
@@ -622,8 +657,10 @@ def test_the_citation_gate_and_signs_bit3_reach_the_same_verdict_after_disk(
     assert merged["verdict"] == "成立", merged
 
     text = "证明：由命题 000001 立得。"
-    VR.record_verification(tmp_path, statement_id="000009", proof_text=text,
-                           verdict=merged, citation_gate=gate)
+    # 三次「成立」才签住（业主 2026-10-29）；第 1、2 次只落台账 ⇒ 读侧读到 holding。
+    for _i in range(VR.SIGN_STREAK_NEED):
+        VR.record_verification(tmp_path, statement_id="000009", proof_text=text,
+                               verdict=merged, citation_gate=gate)
     rows, problems = VR.list_verifications(tmp_path, statement_id="000009", limit=None)
     assert problems == [], problems
     disk = dict(rows[-1])
@@ -632,9 +669,10 @@ def test_the_citation_gate_and_signs_bit3_reach_the_same_verdict_after_disk(
     assert set(disk["citation_checks"][0]) == set(VR.CITATION_CHECK_KEYS)
     # ③ 两个口同结论。
     assert VR.citation_blocks(disk) == [], VR.citation_blocks(disk)
-    assert VR.signs_bit3(disk) is gate["ok"] is True
-    assert VR.review_standing(tmp_path, statement_id="000009",
-                              proof_text=text)["state"] == "signed"
+    assert VR.signs_bit3(disk, streak=VR.SIGN_STREAK_NEED) is gate["ok"] is True
+    standing = VR.review_standing(tmp_path, statement_id="000009", proof_text=text)
+    assert standing["state"] == "signed", standing
+    assert standing["streak"] == VR.SIGN_STREAK_NEED, standing
 
 
 def test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red() -> None:
@@ -654,7 +692,7 @@ def test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red() -> 
 
     row = {"stmt_id": "000009", "verdict": "成立", "unresolved_errors": 0,
            "citation_checks": [dict(c) for c in checks]}
-    assert VR.signs_bit3(row) is True
+    assert VR.signs_bit3(row, streak=VR.SIGN_STREAK_NEED) is True
 
     stripped = dict(row, citation_checks=[
         {k: v for k, v in c.items() if k != "in_material"} for c in row["citation_checks"]])

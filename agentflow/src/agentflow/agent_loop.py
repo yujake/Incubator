@@ -2565,6 +2565,11 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                 # 就是「这一签盖的正是现在这一份、结论不是成立」。
                 "in_sync": bool(e.get("in_sync")),
                 "proof_sha256": str(e.get("proof_sha256") or ""),
+                #: 业主 2026-10-29 的 C 段：V 的意见经秘书洗过之后那一份转达文本
+                #: （台账那一行的 `washed_relay.text`）。空 = 这一签没洗过（历史行 /
+                #: 洗不出来）—— 交付那一侧据此把"洗过"与"没洗过"分开写。
+                "washed": str(((sign.get("washed_relay") or {}).get("text")
+                               if isinstance(sign.get("washed_relay"), Mapping) else "") or ""),
             })
     details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
     if not details and not problems:
@@ -2576,7 +2581,9 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                      f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
         for d in details[:max(1, int(limit))]:
             step = ("第 %s 步" % d["defect_step"]) if d.get("defect_step") else "步号没读到"
-            what = str((d.get("finding") or {}).get("detail") or "")
+            # 渲染集合 = 投递集合：洗过的那一份也必须在这里出现（否则"板上是洗过的、
+            # 开场事实是原文"—— 两份说法，而 F 只信它先读到的那一份）。
+            what = str(d.get("washed") or (d.get("finding") or {}).get("detail") or "")
             lines.append(
                 f"- {d['label']}：verdict={d['verdict']}、"
                 f"unresolved_errors={d['unresolved_errors']}、最近一签 "
@@ -2617,6 +2624,16 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     - 没有 conductor / 没有台账号 ⇒ `checked=False` + `reason`（不是「送过了」）；
     - 开项抛异常 ⇒ 那一条进 `problems`，其余照开（一条坏不许带走整批）；
     - 已经在了 ⇒ 进 `existing`（不重开，但读得出来它早就在那儿）。
+
+    ## 「洗过的文本」那一档（业主 2026-10-29 的 C 段）
+    `details[*]["washed"]` 非空 ⇒ 这一项递出去的是秘书洗过的意见
+    （`Secretary.wash_v_reply` 的 `text`），而不是 V 的原话：
+    「V 的意见经秘书清洗后交给 F」。板项的形状一个字不变（`kind="notice"` /
+    `expects="ack"` 是 `ITEM_KINDS` / `ITEM_EXPECTS` 的冻结面，不许新增档），
+    变的只是 `detail` 的正文。
+    `washed` 为空 ⇒ 逐字回到改前那一版（老调用点 / 洗不出来那一批），
+    并对读的人写明"这一条是 V 的原话（没洗过）"——不许让"洗过"与"没洗过"
+    在板上长得一样（那会让一次洗稿失败静默变成一次转达）。
     """
     out: dict[str, Any] = {"checked": False, "role": role, "task_id": str(task_id or ""),
                            "opened": [], "existing": [], "problems": [], "reason": ""}
@@ -2646,12 +2663,17 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
             out["existing"].append(key)
             continue
         step = (f"第 {d['defect_step']} 步" if d.get("defect_step") else "步号没读到")
-        what = str((d.get("finding") or {}).get("detail") or "")
+        # 业主 2026-10-29 的 C 段：`washed` 非空 ⇒ 递的是秘书洗过的意见（V 的原文不转达）。
+        # 空 ⇒ 逐字回到改前那一版，并写明"这一条没洗过"（洗过与没洗过不许在板上长得一样）。
+        washed = str(d.get("washed") or "").strip()
+        what = washed or str((d.get("finding") or {}).get("detail") or "")
         body = (f"V 判「有毛病」：{d['label']}（最近一签 "
                 f"{d.get('verification_id') or '（没读到编号）'}，"
                 f"unresolved_errors={d.get('unresolved_errors')}）\n"
-                f"错在{step}" + (f"：{what}" if what else "") + "\n"
-                f"下一步该补的就是{step}；补完把这一份重新送 V"
+                + ("意见（秘书洗过的转达；V 的原文不转达）：\n" if washed
+                   else (f"错在{step}" + (f"：{what}" if what else "") + "\n"))
+                + (f"{what}\n" if washed and what else "")
+                + f"下一步该补的就是{step}；补完把这一份重新送 V"
                 f"（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
                 f"这一签盖的就是现在这一份（proof_text 与现文一致）："
                 f"{'True' if d.get('in_sync') else 'False'}")

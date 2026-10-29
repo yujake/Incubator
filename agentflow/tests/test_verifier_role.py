@@ -93,14 +93,26 @@ def test_e9_a_dirty_proof_is_refused_at_the_step_and_not_signed(tmp_path):
 
 
 def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
-    """E9②：干净的证明 ⇒ `成立` ⇒ 签第 3 位 ⇒ 五位派生出「预备定理级」。"""
+    """E9②：干净的证明 ⇒ `成立` ⇒ 签第 3 位 ⇒ 五位派生出「预备定理级」。
+
+    2026-10-29（业主「V 签门槛 = 连续 3 次没问题」）之后，签第 3 位要两条轴同时成立：
+    行局部资格（`row_signable`）且连续次数够（`streak`）。本用例只看前者 —— 那一签
+    来自"直调写入口"的夹具、没有命题台账可数（`store=None`），所以连续次数必须由这一层
+    显式递进来：`streak=SIGN_STREAK_NEED`。
+
+    改前断言 → 改后断言（为什么）：
+    - `VR.signs_bit3(row) is True` → `VR.signs_bit3(row, streak=3) is True`
+      （连续次数成了一道独立的闸；不递 = 不签，见 `test_a5_*`）。
+    - 新增反面：同一个 row 不递 streak 必须为 False（否则"多了一个参数"这句话没有判据）。
+    """
     root = tmp_path / "ws"
     root.mkdir()
     ok = VR.parse_verdict('{"verdict": "成立", "findings": []}')
     row = VR.record_verification(root, statement_id="0007", proof_text=_CLEAN, verdict=ok,
                     used_faces=("statements.read", "experiments.read"))
-    assert VR.signs_bit3(row) is True, row
-    payload = VR.bit3_payload(row)
+    assert VR.signs_bit3(row) is False, "没有连续读数也签了 ⇒ 那道闸没接上"
+    assert VR.signs_bit3(row, streak=VR.SIGN_STREAK_NEED) is True, row
+    payload = VR.bit3_payload(row, streak=VR.SIGN_STREAK_NEED)
     assert payload["reviewed"] is True, payload
     assert payload["reviewed_by"]["verification_id"] == f"v-{S.format_id(1)}", payload
     assert payload["reviewed_by"]["evidence"].endswith(f"0007.jsonl#v-{S.format_id(1)}"), payload
@@ -115,7 +127,8 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
                         {"verdict": "有毛病", "defect_step": 1,
                          "findings": [{"level": "error", "step": 1, "kind": "缝", "detail": "第 1 步"}]},
                         ensure_ascii=False)))
-    unsigned = EB.bits_of(proof=True, proof_process=_DIRTY, **VR.bit3_payload(bad))
+    unsigned = EB.bits_of(proof=True, proof_process=_DIRTY,
+                          **VR.bit3_payload(bad, streak=VR.SIGN_STREAK_NEED))
     assert unsigned["grade"] == "conjecture", unsigned
 
 

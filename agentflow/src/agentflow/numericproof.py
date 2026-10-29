@@ -1270,7 +1270,12 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         # 放进 `verifications/<号>.jsonl` 会被拒、放进 pending 就被当成签过。
         pending_row = dict(pending.get("row") or {})
         pending_row.setdefault("verdict", str(pending.get("verdict") or ""))
-        if not _VR.signs_bit3(pending_row):
+        # 业主 2026-10-29 给 `signs_bit3` 加了「连续 N 次」那一闸；pending 这一签按
+        # 对象 sha 认领，审的时候命题还没登记 ⇒ 没有命题台账可数连续次数，那条闸
+        # 在这一档不适用。所以这里判的是行局部那一半（`row_signable`）——
+        # 这不是放宽：改前 `signs_bit3` 只有这一半，逐字不变；连续闸要读的东西在
+        # pending 这条路上根本不存在。
+        if not _VR.row_signable(pending_row):
             out["found"] = False
             out["verdict"] = str(pending.get("verdict") or "")
             out["ledger"] = str(pending.get("ledger") or "")
