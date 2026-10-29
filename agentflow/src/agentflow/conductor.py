@@ -3459,6 +3459,276 @@ class Conductor:
             return False
         return False
 
+    #: 逐条审批唤醒写进板项那一行 `inputs` 的落痕前缀：`wake:<谁>@<iso>|<为什么>`。
+    #:
+    #: 与 `blocked:` / `stop-notified:` / `stop-acked:` / `edge-released:` /
+    #: `void:expired:` 同一族：`inputs` 是"这一行与什么打过交道"那一格，加一个元素不改变
+    #: 语义，也不需要动 `schema.py`（禁改区）。事后必须能回答"谁批的、什么时候、凭什么"
+    #: —— 唤醒是不可逆的那一类动作（醒来之后它会接着跑、接着花钱）。
+    _WAKE_PREFIX = "wake:"
+
+    def wake_blocked(self, ids: Sequence[str] | None = None, *, approve: str = "",
+                     dry_run: bool = True) -> dict[str, Any]:
+        """读 block 行、逐条审计、批准了才逐条直写并唤醒（业主 2026-10-29）。
+
+        业主原话（逐字）：「直接读 block 表，并将自动审计工具和 block 表结合起来做
+        自动的逐个审批唤醒工具」。
+
+        ## 它读哪几行（按 `item_state` 筛，不按 `status`）
+        `tasks` 里 `item_state == "block"` 的行 —— 那是 `stopctl.block_remaining_tasks`
+        停下来的委托项（同一次写入把 `status` 与 `item_state` 两根轴一起翻成 `block`）。
+        刻意不按 `status == "block"` 筛：`status` 会被单向翻（`done` 之后不再回 `block`），
+        于是"板项早已 done、`status` 还停在 block"的老板项会混进来 —— 读它们等于去唤醒
+        一件早就做完了的活。要唤醒的那个号是这一行的 `parent_task_id`（收件人），
+        不是板项自己的号：板项不是代理，叫它没有对象。
+
+        ## 三档（缺读数一律不许猜）
+        ```text
+        resume  owner 静默 且 未销号 且 仍在册 且 该板项未终态 且 子树无在跑
+        review  任一读数没查成（静默 / 子树活跃 / 名册）—— 交人看，不猜
+        skip    已销号 / owner 在飞 / 板项已终态 / 子树有在跑 / 不是静默 / 没批准
+        ```
+        逐条给理由码（`refusal_code`），八格回执项一个不多一个不少（见下）。
+
+        ## 批：`approve="yes"` 才算有令牌
+        `approve` 是"允许按审计结论动作"的令牌，不是"要不要真写"的开关。没有令牌的那
+        一趟连"它能唤醒"这个结论都不给（全记 `skip` + `not_approved`）：一张"没批准但
+        可唤醒"的清单等于把绕开批准的路递到调用方手里。`dry_run=True` 才是"别真动"：
+        审计照跑、回执照给，但一个字节都不写、一次都不叫。
+
+        ## 写（绕过状态机，照 `stopctl.block_remaining_tasks` 的样板）
+        `block` 在 `ITEM_MOVES` 里没有出边（四条全 `back`）⇒ 不能走 `_set_item`，只能
+        `store.tx("tasks")` 直写。同一次写入翻两根轴，一次只动一条：
+        ```text
+        status      block -> running
+        item_state  block -> queued    （渲染只认 queued）
+        item_close  保持 ""            （schema：只在 item_state='done' 时有意义）
+        seen_by / seen_step  一并清空  （schema：要么都在、要么都不在）
+        ended_at    None               （schema：pending/running 不许带 ended_at）
+        outcome     None               （上一趟的结局不属于这一趟）
+        inputs      追加 wake:<谁>@<iso>|<为什么>
+        ```
+        写后立刻 `S.Task.validate()` 自校：这一层绕开了状态机，它是剩下的唯一一道闸。
+        直写与唤醒是两步：直写落盘了而唤醒没成时，回执是 `refusal_code="wake_failed"`
+        而那一行已经翻过来了 —— 下一步该做的是再叫一次，不是以为它还停着。
+
+        ## 醒：只调 `wake_on_lifeline`
+        它是唯一带"已销号 / 在飞"双闸的那一层。绝不直接调 `resume_dispatched`：
+        那条路没有闸，绕过它就等于允许同号起第二个循环（业主 2026-10-29 的自我唤醒
+        事故：两个自己互相喂事件，直到把进程挂死）。owner 在飞 ⇒ 本方法按 `skip` 记
+        `refusal_code="in_flight"` 并且一次都不叫 —— 那条消息会进它自己的收件箱。
+
+        ## 三条必须写在明面上的后果
+        1. 唤醒清不掉板项本身：它把 `item_state` 从 `block` 翻成 `queued`，板项还在板上
+           （要收口得由收件人自己 ack）。所以本方法的回执不承诺"作废"、也不承诺"消项"。
+        2. `expects="work"` 的 block 项作废不掉（`void_items` 只收 `expects="ack"`）——
+           所以"审批之后作废"不是唤醒的替代品，本方法不许诺它。
+        3. `block` 会被"等谁"那个读口当成已收口（`tools/clock_tools.CLOSED_ITEM_STATES`
+           = `("done", "block")`）⇒ 一条挂在它上面的等待计时器会提前报醒。这是既有
+           读口的口径，本方法不改它、也不许假装它不存在。
+
+        ## 回执（抄 `ack_items` 的形状）
+        `{"checked", "state", "items", "count", "requested", "reason"}`：
+
+        - `state`：`woken`（至少叫起来一条）/ `refused`（有候选、一条都没叫起来）/
+          `nothing`（一条 block 行都没有，或没给 `ids`）/ `unknown`（台账读不成，
+          `checked=False`）—— 它说的是"这一笔有没有叫醒"，逐条的审计结论在
+          `items[].verdict`；
+        - `items[]`：每项 `{item_id, task_id, owner, verdict, started, refusal_code,
+          why, mark}`（逐项同形同集）—— `item_id` 是板项号，`task_id` 是要唤醒的那个号，
+          `owner` 是它的角色，`mark` 是写进 `inputs` 的那条落痕（没写就是空串）；
+        - `count` 数的是真正被叫起来的条数（`started=True`）；`requested` 是给了几个号；
+        - 三态：台账读不成 ⇒ `checked=False` + `state="unknown"`，绝不折成"没有 block 行"。
+
+        逐条隔离：一条失败只影响它自己（写失败 / 叫不醒都逐条记，不中断整趟）。
+        """
+        asked = [str(x) for x in (ids or ()) if str(x).strip()]
+        out: dict[str, Any] = {"checked": True, "state": "nothing", "items": [],
+                               "count": 0, "requested": len(asked), "reason": ""}
+        try:
+            rows = [dict(r) for r in self._tasks()]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["checked"] = False
+            out["state"] = "unknown"
+            out["reason"] = (f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
+                             "（不是「板上没有 block 行」）")
+            return out
+        by_id = {str(r.get("task_id") or ""): r for r in rows}
+        picked: list[tuple[str, dict | None]] = []
+        if asked:
+            picked = [(tid, by_id.get(tid)) for tid in asked]
+        else:
+            picked = sorted(((str(r.get("task_id") or ""), dict(r)) for r in rows
+                             if str(r.get("item_state") or "") == "block"),
+                            key=lambda x: x[0])
+        allowed = str(approve or "").strip().lower() == "yes"
+        # 谁批的：生产里是这一趟的台账号（`calling_as` 挂的），夹具里退回顶趟号，
+        # 都没有才落主控代号 —— 落痕要能回答"谁批的"，所以不许留空。
+        who = str(self._owner_task_id() or S.CONDUCTOR_ROLE)
+        woken = 0
+        for item_id, row in picked:
+            cell: dict[str, Any] = {"item_id": item_id, "task_id": "", "owner": "",
+                                    "verdict": "skip", "started": False,
+                                    "refusal_code": "", "why": "", "mark": ""}
+            out["items"].append(cell)
+            if row is None:
+                cell["refusal_code"] = "no_such_item"
+                cell["why"] = (f"台账里没有 {item_id} 这一行 ⇒ 这个号点错了"
+                               "（不是「已经唤醒了」）")
+                continue
+            item_state = str(row.get("item_state") or "")
+            if item_state == "done":
+                cell["refusal_code"] = "item_closed"
+                cell["why"] = (f"{item_id} 的板项已经终态（item_state=done，"
+                               f"item_close={row.get('item_close')!r}）⇒ 活已经收口，"
+                               "不许再叫它（叫起来也没有活给它）")
+                continue
+            if item_state != "block":
+                cell["refusal_code"] = "not_blocked"
+                cell["why"] = (f"{item_id} 现在不是 block 板项（item_state={item_state!r}）"
+                               "⇒ 它没被停掉，这一层没有对象")
+                continue
+            owner = str(row.get("parent_task_id") or "")
+            cell["task_id"] = owner
+            owner_row = by_id.get(owner) or {}
+            cell["owner"] = str(owner_row.get("role") or "")
+            if not owner:
+                cell["refusal_code"] = "no_owner"
+                cell["why"] = (f"{item_id} 没有 parent_task_id（顶层项）⇒ "
+                               "没有可唤醒的号（板项不是代理，叫它没有对象）")
+                continue
+            if not allowed:
+                cell["refusal_code"] = "not_approved"
+                cell["why"] = ("没批准：approve 不是 \"yes\" ⇒ 不审也不动（一个字节都没写、"
+                               "一次都没叫）；要看审计结论就带 approve=\"yes\" 再跑一趟"
+                               "预览（dry_run=True）")
+                continue
+            # ---- 逐条审计：已销号 / 在册 / 在飞 / 子树 / 静默（每一条都要有读数）----
+            if self._is_retired_task(owner):
+                cell["refusal_code"] = "retired"
+                cell["why"] = (f"{owner} 已销号 ⇒ 彻底没有了（业主 2026-10-29）：叫不醒，"
+                               "也不该动它名下的行；要它干活就重新派一个")
+                continue
+            if not owner_row:
+                cell["refusal_code"] = "owner_missing"
+                cell["why"] = (f"{item_id} 的收件人 {owner} 在台账里没有那一行 ⇒ 它不在册"
+                               "（不是「已经收工」）⇒ 这个号叫不起来")
+                continue
+            if str(owner_row.get("status") or "") in UNFINISHED_STATUSES:
+                cell["refusal_code"] = "in_flight"
+                cell["why"] = (f"{owner} 它自己在跑（status={owner_row.get('status')}）⇒ "
+                               "那条消息/委托会进它自己的收件箱，另起就是第二个同号循环"
+                               "（业主 2026-10-29 的自我唤醒事故）")
+                continue
+            sub = self.active_in_subtree(owner)
+            if not sub.get("checked"):
+                cell["verdict"] = "review"
+                cell["refusal_code"] = "unknown_reading"
+                cell["why"] = (f"{owner} 这一支有没有在跑的程序读不成"
+                               f"（{sub.get('reason') or '没查成'}）⇒ 交人看（不猜）")
+                continue
+            if int(sub.get("active_count") or 0) > 0:
+                busy = "、".join(str(r.get("task_id")) for r in (sub.get("rows") or ()))
+                cell["refusal_code"] = "subtree_active"
+                cell["why"] = (f"{owner} 这一支还有 "
+                               f"{int(sub.get('active_count') or 0)} 个节点在活跃（{busy}）"
+                               "⇒ 它不是静默：叫起来会与它们抢同一份活")
+                continue
+            gate = self.retire_state_of(owner)
+            state = str(gate.get("state") or AGENT_STATE_UNKNOWN)
+            if not gate.get("checked") or state == AGENT_STATE_UNKNOWN:
+                cell["verdict"] = "review"
+                cell["refusal_code"] = "unknown_reading"
+                cell["why"] = (f"{owner} 是不是静默读不成（"
+                               f"{gate.get('state_reason') or gate.get('reason') or '没查成'}"
+                               "）⇒ 交人看（不猜）")
+                continue
+            if not gate.get("silent"):
+                waited = "、".join(str(x) for x in (gate.get("waiting_for") or ()))
+                busy = "、".join(str(x) for x in (gate.get("busy_roots") or ()))
+                where = (f"在等 {waited}" if waited else
+                         f"名下有在跑的 {busy}" if busy else
+                         str(gate.get("state_reason") or "它还挂着东西"))
+                cell["refusal_code"] = "not_silent"
+                cell["why"] = (f"{owner} 此刻不是静默（{gate.get('state_label') or state}："
+                               f"{where}）⇒ 叫起来就是第二个同号循环")
+                continue
+            cell["verdict"] = "resume"
+            why_wake = (f"逐条审批唤醒（审计判 resume：owner 静默、未销号、板项 {item_id} "
+                        f"未终态、子树无在跑）⇒ 批准后直写并唤醒 {owner}")
+            if dry_run:
+                cell["why"] = ("预览（dry_run=True）：判为 resume（可唤醒）—— 批准后才会"
+                               "直写这一行并叫它；这一趟一个字节都没写、一次都没叫")
+                continue
+            # ---- 直写（绕过状态机，一次只动这一条）------------------------------
+            mark = f"{self._WAKE_PREFIX}{who}@{S.now_iso()}|{why_wake[:160]}"
+            self._refuse_write_in_snapshot("逐条审批唤醒（wake_blocked）")
+            trouble = ""
+            try:
+                with self.store.tx("tasks", actor="conductor", note="item:wake") as tx:
+                    now = tx.find("tasks", task_id=item_id)
+                    if now is None:
+                        trouble = f"直写时 {item_id} 在台账里已经没有了"
+                    elif str(now.get("item_state") or "") != "block":
+                        trouble = (f"直写读了第二遍：{item_id} 已经不是 block 板项"
+                                   f"（item_state={now.get('item_state')!r}）⇒ 这一条不动")
+                    else:
+                        patch = dict(now)
+                        patch["status"] = "running"
+                        patch["item_state"] = "queued"
+                        patch["item_close"] = ""
+                        patch["seen_by"] = ""
+                        patch["seen_step"] = None
+                        patch["outcome"] = None
+                        patch["ended_at"] = None
+                        patch["started_at"] = (str(now.get("started_at") or "")
+                                              or S.now_iso())
+                        patch["inputs"] = ([str(x) for x in (now.get("inputs") or ())]
+                                           + [mark])
+                        task = S.Task(**{k: v for k, v in patch.items()
+                                         if k in S.Task.__dataclass_fields__})
+                        task.validate()
+                        tx.upsert("tasks", task.to_dict(), note="item:wake")
+                if not trouble:
+                    cell["mark"] = mark
+            except Exception as exc:  # noqa: BLE001 —— 写不进去就如实回，不假装叫了
+                trouble = f"直写 {item_id} 没成（{type(exc).__name__}: {exc}）"
+            if trouble:
+                cell["refusal_code"] = "write_failed"
+                cell["why"] = trouble + " ⇒ 没叫它（写不进去就不许假装叫了）"
+                continue
+            # ---- 醒：只走 wake_on_lifeline（唯一带"已销号 / 在飞"双闸的那一层）----
+            got = self.wake_on_lifeline(owner)
+            started = bool(got.get("started")) if isinstance(got, Mapping) else False
+            cell["started"] = started
+            if started:
+                woken += 1
+                cell["why"] = (f"{owner} 已按同号叫起：板项 {item_id} 已由 block 翻成 "
+                               "queued，它醒来就能在板上读到这一条")
+            else:
+                why_not = str(got.get("reason") or "") if isinstance(got, Mapping) else ""
+                cell["refusal_code"] = "wake_failed"
+                cell["why"] = (f"直写已经落盘（{item_id} 已 queued、落痕在 inputs），但叫不醒"
+                               f"它（{why_not or '没给理由'}）⇒ 下一步：再叫一次，或重新派活")
+        out["count"] = woken
+        if not picked:
+            out["state"] = "nothing"
+            out["reason"] = ("板上没有 item_state=block 的行 ⇒ 这一层没有对象"
+                             "（查过了、没有，不是「没查成」）")
+        elif woken:
+            out["state"] = "woken"
+            out["reason"] = f"叫起来 {woken} 条（其余逐条理由见 items）"
+        else:
+            out["state"] = "refused"
+            if not allowed:
+                out["reason"] = "没批准（approve 不是 \"yes\"）⇒ 不审也不动，一条都没叫"
+            elif dry_run:
+                out["reason"] = ("预览（dry_run=True）：一个字节都没写、一次都没叫"
+                                 "（逐条的审计结论见 items[].verdict）")
+            else:
+                out["reason"] = "一条都没叫起来（逐条理由见 items）"
+        return out
+
     @staticmethod
     def _item_row(*, kind: str, role: str, expects: str, action: str = "",
                   summary: str = "", called_by: str = "",
