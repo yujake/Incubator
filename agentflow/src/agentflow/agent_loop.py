@@ -6843,13 +6843,12 @@ class AgentLoop:
         self.my_task_id = my_task_id
         self.depth = depth
         # 兜底计时器（业主 2026-10-29 第 3 条：通用设计，每个台账号一条）：
-        # 入口在 `_arm_lifeline_once`；这里仍然不调 —— 第二次接线实测仍挂住
-        # （`test_timers_and_handoff_semantics` 超时）。已有的两条前提没能救下它：
-        #   ① `_park_reading` 已排除 lifeline（不会永远 park）；
-        #   ② `wake_on_lifeline` 已加"目标在跑就不叫"（2a5b969）。
-        # 说明还有第三条没找出来 —— 最可能是：起跑那一刻台账那一行还不是 running
-        # （或还没落行），于是"在跑就别叫"这条判据看不见它，`resume_dispatched`
-        # 照样另起一个同号循环。这条线索记在 `draft/113`，要先把台账行的时序摸清再接线。
+        # 入口 `_arm_lifeline_once` 与"活着的循环"登记（clock.loop_started / loop_ended）
+        # 都已实现且有判据，但起跑处仍不挂：第三次试接（带进程内登记闸门）之后
+        # `test_timers_and_handoff_semantics` 仍然挂住（>4 分钟无输出）。
+        # 已排除：①永远 park（_park_reading 剔了 lifeline）②自我唤醒（loop_is_live 闸）
+        # 下一轮的查法写在这里：给"挂上之后这一趟到底多跑了哪些拍"加一条临时读数，
+        # 看是不是每次投递都触发续 → 又立刻被同一批事件命中，形成自激。
         # 这一趟的收件人（父是谁）现算一次：它既是提示词里 `{{parent_task_id}}` 那一格，
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
