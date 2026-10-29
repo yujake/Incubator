@@ -327,7 +327,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（120 个，逐条；Lean 关着时 117 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（117 个，逐条；Lean 关着时 117 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -1636,7 +1636,7 @@ C 的产出有两类，状态语义完全不同。
 | 替调用方编一个"这个证明号是谁选的" | `path_source` 只收 `B` / `C` / `L` 三值，空 = 没交代；"谁选的路径"与"谁验的"必须分开 | **B / C / L**（三选一，但必须写明） |
 | 决定"验的是哪一份证明"却不给号 | 一个定理有多条证明路径时，不给号就一个字节都不写（`proof_path_unspecified`） | 调用方（`proof_no`） |
 
-### L.4 工具面（Lean 开时 39 个 / 关时 0 个，实测）
+### L.4 工具面（Lean 开时 0 个 / 关时 0 个，实测）
 
 **现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单见附录 §L.4 —— 那里逐格现算，本节不抄会变的分份数。
 
