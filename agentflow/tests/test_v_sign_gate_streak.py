@@ -769,15 +769,21 @@ def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_
     sent = seam.prompts[0] if seam.prompts else ""
     assert sent, "这一趟没有提示词 ⇒ 判据扫不到可见面（假绿）"
     body = "\n".join(s.body for s in SK.skills_for("V"))
+
+    def _missing(text: str) -> list[str]:
+        """这一份可见文本缺了哪几条必须出现的句子（空列表 = 齐了）。"""
+        need = ["秘书判定并落盘", "发不发签", "你看不到审阅之外的任何东西",
+                "这是嘱托，不是门", "DEVELOPMENT-SPEC.md", "§13",
+                "H-1", "H-5", "T-1", "T-8", "N-1", "N-4", "C-1", "C-4", "不归 F"]
+        return [p for p in need if p not in text]
+
     for name, text in (("冷启动提示词", sent), ("技能手册", body)):
-        # ① 「签由秘书」：两份都写「秘书判定并落盘」，且都点名"发不发签"这件事
-        assert "秘书判定并落盘" in text, (name, "「签由秘书」那一句不见了")
-        assert "发不发签" in text, (name, "没有点名『发不发签由秘书』")
-        assert "你看不到审阅之外的任何东西" in text, (name, "「看不到审阅之外」那一句不见了")
-        assert "这是嘱托，不是门" in text, (name, "清单没有注明『这是嘱托，不是门』")
-        assert "DEVELOPMENT-SPEC.md" in text and "§13" in text, (name, "没有指向 §13")
-        for mark in ("H-1", "H-5", "T-1", "T-8", "N-1", "N-4", "C-1", "C-4", "不归 F"):
-            assert mark in text, (name, mark)
+        assert not _missing(text), (name, "缺了这些句子/条目：", _missing(text))
+    # 负控（§13.2「没有负控的判据不算判据」）：把「签由秘书」那一句从同一份提示词里挖掉，
+    # 上面那个算式必须当场看见 —— 否则它量的只是"文本很长"，而不是那几句话在不在。
+    stripped = sent.replace("秘书判定并落盘", "")
+    assert _missing(stripped), "负控失效：挖掉『签由秘书』之后同一个算式仍然说齐了"
+    assert "秘书判定并落盘" in _missing(stripped)
     # ⑤ 索引里点得到那份手册（正文按需读，索引是唯一入口）
     system = AP.system_prompt("V", registry=build_registry().registry)
     idx = SK.skill_path("V", "产出-只产意见-签在秘书")
@@ -847,6 +853,10 @@ def test_c6_vs_review_call_asks_at_temperature_one(tmp_path):
     assert bodies[-1]["temperature"] == 1.0, (
         "V 的审阅请求体不是 1.0（业主 2026-10-29 的正常对话口径）："
         f"{bodies[-1].get('temperature')!r}")
+    # 负控：同一个缝、同一条网关配置，不显式给温度时 body 是 0.2 ——
+    # 于是"1.0"只可能来自 `AgentV._ask` 里那一格，而不是这条夹具的配置。
+    LS.LlmSeam.for_role("V", session_root=st.root, gateway=gw).ask("夹具：不给温度")
+    assert bodies[-1]["temperature"] == G.DEFAULT_TEMPERATURE == 0.2, bodies[-1]
     # 别的角色不受影响：同一条网关配置下，F 那一档仍然是缺省 0.2
     other: list[dict] = []
 
