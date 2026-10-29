@@ -271,6 +271,42 @@ def test_h_the_ready_list_and_the_retire_agree(tmp_path: pathlib.Path) -> None:
         f"（{'放行' if retire_says else '拒绝'}）；拒因：{data.get('reason') or data.get('why')}")
 
 
+def test_i_the_silent_answer_is_the_same_in_every_reader(tmp_path: pathlib.Path) -> None:
+    """②-b：静默在几处读数上必须是同一个答案（本会话只覆盖能直接调的三处）。
+
+    守的是什么：静默一旦在某个读数上分家，就会出现"页面说静默、销号门说在飞"
+    或"就绪清单说可销、判决说不可销"这类来回打转（draft/115 ②-b）。
+    这里取三处：`agent_state`（判决本体）、`activity_snapshot.by_task`（页面与巡检的源头）、
+    `retire_state_of`（销号门）。三处必须同字。
+
+    另外三处（`roster_face` / `child_counts` / `patrol`）要各自的装配夹具，未在此覆盖，
+    已记在 draft/115 ②-b，留给下一轮。
+    """
+    env = _a_env(tmp_path)
+    child = str(env["silent"]["task_id"])
+    cond = env["cond"]
+
+    snap = cond.activity_snapshot()
+    by_task = dict((snap or {}).get("by_task") or {})
+    cell = dict(by_task.get(child) or {})
+    assert cell, f"activity_snapshot 里没有 {child}（只列了 {sorted(by_task)}）"
+    page_state = str(cell.get("state") or "")
+
+    gate_state = str(cond.retire_state_of(child).get("state") or "")
+
+    gate = cond.retire_state_of(child)
+    assert page_state == "silent", f"活动面把静默读成了 {page_state!r}"
+    assert gate_state == page_state, (
+        f"两处读数分家：activity_snapshot 说 {page_state!r}，"
+        f"retire_state_of 说 {gate_state!r}")
+    assert gate.get("silent") is True, gate
+    # 反真空：给它挂一条模型自设的表 ⇒ 三处必须一起变成"待机"，不许只有一处动
+    _timer(env, child)
+    page2 = str((dict((cond.activity_snapshot().get("by_task") or {})).get(child) or {})
+                .get("state") or "")
+    gate2 = str(cond.retire_state_of(child).get("state") or "")
+    assert page2 == gate2 == "standby", (page2, gate2)
+
 def test_b_a_flying_child_is_refused_by_the_silent_gate(tmp_path: pathlib.Path) -> None:
     """b) 在飞的子 ⇒ 拒 `target_not_silent` ＋ 拒信说"它还在干活"。
 
