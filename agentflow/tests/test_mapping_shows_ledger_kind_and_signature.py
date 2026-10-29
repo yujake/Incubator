@@ -393,17 +393,35 @@ def _own(**kw) -> dict:
 
 
 def _signed_row(tmp_path: pathlib.Path, **kw) -> tuple[Store, str, dict]:
-    """按猜想登记一条命题，再让 V 判「成立」（`record_verification` 是 V 的写入口）。"""
+    """按猜想登记一条命题，再让 V 判「成立」三次（`record_verification` 是 V 的写入口）。
+
+    业主 2026-10-29：同一份正文连续 3 次「成立」才发签。所以这里先断"第 1 次不签上"
+    （`written=False`、`kind` 还停在 conjecture），再签够 3 次 —— 抬档那一格挂在
+    "真签上了"上，而"真签上"现在就是连续 3 次。
+    """
     store = Store(tmp_path / "sig")
     store.init()
     filed = AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         **_own(**kw))
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
+    first = VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
+                                   verdict={"verdict": "成立", "findings": []},
+                                   verifier="agent-V", store=store)
+    assert dict(first.get("statement_writeback") or {}).get("written") is False, (
+        "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", first.get("statement_writeback"))
+    assert [dict(r) for r in store.rows("statements")
+            if str(r.get("stmt_id")) == sid][0]["kind"] == "conjecture", (
+        "一票就抬档了（抬档只挂在真签上的那一笔）")
+    VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
+                           verdict={"verdict": "成立", "findings": []},
+                           verifier="agent-V", store=store)
     out = VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
                                  verifier="agent-V", store=store)
     assert out.get("checked") is True and out.get("verdict") == "成立", out
+    assert dict(out.get("statement_writeback") or {}).get("written") is True, (
+        "连续 3 次成立之后仍然没发签", out.get("statement_writeback"))
     row = [dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == sid][0]
     return store, sid, row
 
@@ -433,7 +451,9 @@ def test_e_a_signed_conjecture_becomes_a_theorem_in_the_same_write(
                                  verdict={"verdict": "成立", "findings": []},
                                  verifier="agent-V", store=store)
     writeback = dict(out.get("statement_writeback") or {})
-    # 已经是 theorem ⇒ 起点不再是 conjecture ⇒ 这一笔不重复抬（三态：不适用范围不写）。
+    # 连续 3 次成立之后这里已经是第 4 票：它会照常翻位（票数够了），而 kind 已经是
+    # theorem ⇒ 起点不再是 conjecture ⇒ 这一笔不重复抬（三态：不适用范围不写）。
+    assert writeback.get("written") is True, writeback
     assert writeback.get("kind_upgrade") in ({}, None), writeback
 
 

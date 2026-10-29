@@ -137,10 +137,25 @@ def _row(st: Store, stmt_id: str = SID) -> dict:
 
 
 def _sign(st: Store, *, text: str, proof_no: int = 1, stmt_id: str = SID) -> dict:
-    """V 的签名写入口（`verify_proof` 走的就是它；这里不经模型）。"""
+    """V 的一次审校 = 台账一票（业主 2026-10-29：一票不翻位）。"""
     return VR.record_verification(st.root, statement_id=stmt_id, proof_text=text,
                                   verdict=dict(_OK), verifier="agent-V", store=st,
                                   proof_no=proof_no)
+
+
+def _sign_n(st: Store, *, text: str, proof_no: int = 1, stmt_id: str = SID) -> dict:
+    """把某一份证明签够「连续 3 次成立、同一份正文」（第 3 票才翻位），返回第 3 票。
+
+    前两票必须先断"没翻位"、第三票断"翻了"：否则"3 次之后才签"这件事在夹具上
+    没被量到，而票数按证明号分组 ⇒ 只给一个证明号投票。
+    """
+    last: dict = {}
+    for i in (1, 2, 3):
+        last = _sign(st, text=text, proof_no=proof_no, stmt_id=stmt_id)
+        wb = dict(last.get("statement_writeback") or {})
+        assert int(wb.get("streak") or 0) == i, (f"第 {i} 票的连续读数不对", wb)
+        assert wb.get("written") is (i == 3), (f"第 {i} 票的翻位结论不对", wb)
+    return last
 
 
 def _reading(st: Store, stmt_id: str = SID) -> dict:
@@ -402,13 +417,14 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
     assert all(int(d.get("path_group") or 0) == 1 for d in _deps(st)), _deps(st)
 
     # V 的签按 proof_no 各签一份（既有 `reviewed_by_proof` 已经支持多维）：
-    # 两份证明各签一次，台账两行、逐条表两张都为 true —— 一份的签不许顶替另一份。
-    signed1 = _sign(st, text=PROOF_A, proof_no=1)
-    signed2 = _sign(st, text=PROOF_B, proof_no=2)
+    # 两份证明各签够 3 票（业主 2026-10-29），台账六行、逐条表两张都为 true ——
+    # 一份的签不许顶替另一份（票也各数各的：`#p1` 的 3 票不给 `#p2` 借光）。
+    signed1 = _sign_n(st, text=PROOF_A, proof_no=1)
+    signed2 = _sign_n(st, text=PROOF_B, proof_no=2)
     assert signed1.get("proof_sha256") == VR.proof_sha(PROOF_A), signed1
     assert signed2.get("proof_sha256") == VR.proof_sha(PROOF_B), signed2
     ledger = [r for r in VR.list_verifications(st.root, statement_id=SID, limit=None)[0]]
-    assert sorted((int(r.get("proof_no") or 0) for r in ledger)) == [1, 2], ledger
+    assert sorted((int(r.get("proof_no") or 0) for r in ledger)) == [1, 1, 1, 2, 2, 2], ledger
     assert EB.reviewed_by_proof(_row(st)) == {1: True, 2: True}, EB.reviewed_by_proof(_row(st))
     per = {int(p["proof_no"]): p for p in _reading(st).get("proofs") or []}
     assert per[1]["state"] == "signed" and per[2]["state"] == "signed", per
@@ -429,7 +445,7 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     b = _agent(st)
     first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
     assert first.get("ok") is True, first
-    signed = _sign(st, text=PROOF_A, proof_no=1)
+    signed = _sign_n(st, text=PROOF_A, proof_no=1)
     assert signed.get("statement_writeback", {}).get("written") is True, signed
     assert _reading(st).get("reviewed") is True, _reading(st)
 
@@ -466,7 +482,8 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     assert merged.get("reviewed") is False, merged
 
     # 重签之后才算成立（正控：否则上面那几条可能只是因为"这一格永远是红的"）。
-    resigned = _sign(st, text=MERGED, proof_no=1)
+    # 合并换了正文 ⇒ 连续次数从 0 起算，要重新凑够 3 票（业主 2026-10-29）。
+    resigned = _sign_n(st, text=MERGED, proof_no=1)
     assert resigned.get("statement_writeback", {}).get("written") is True, resigned
     reading2 = _reading(st)
     assert reading2.get("reviewed") is True, reading2
