@@ -764,6 +764,12 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
+    # 2026-10-29（block 表 × 逐条审批唤醒）：`conductor.wake_blocked` 的描述里点了这一格，
+    # 因为"唤醒不清板项、block 项还会永久挡收工"这件事必须说清到具体读数格 ——
+    # 它是 `Conductor.retire_integrity` 返回的 `open_items`，读它的是收工门，不是工具
+    # （与上面 `stats.closure_reminders` 同形：读数字段路径）。
+    "retire_integrity.open_items": "读数字段路径（`Conductor.retire_integrity` 返回的 "
+                                   "open_items 那一格），不是工具",
     "autonomy.run_autonomous": "模块.函数引用（说明这条纪律由哪段代码保证），不是工具",
     "policy.check": "同 autonomy.run_autonomous",
     "policy.waves_of": "同 autonomy.run_autonomous",

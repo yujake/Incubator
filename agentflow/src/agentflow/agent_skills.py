@@ -440,6 +440,79 @@ def _m_skills() -> tuple[Skill, ...]:
 """,
         ),
         Skill(
+            # 2026-10-29 第二段：`Conductor.wake_blocked` 进 M 的工具面之后，模型那一侧
+            # 读得到的是这一份手册（工具描述只给一句话口径，手册给步骤与反面形态）。
+            # 这一条刻意只写"怎么用 + 三条硬事实"，不写实现 —— 实现的三档、直写那几格、
+            # 只经 `wake_on_lifeline` 叫醒那一条都在能力的 docstring 里（判据在
+            # `tests/test_the_block_table_wakes_one_by_one.py`）。
+            slug="唤醒-逐条审批而不是一键全醒",
+            title="被停住的活怎么接着做：逐条审批唤醒（block 板项）",
+            summary=("`conductor.wake_blocked` 逐条审批：默认只看不写，approve=\"yes\" 才动；"
+                     "唤醒不清板项，block 板项会一直挡收工"),
+            when=("板上有 `item_state=block` 的行（优雅停止停下来的活）、或者收工门点名"
+                  "「名下还有未消的板项」而那一项是 block 的时候"),
+            actions=(),
+            tools=("conductor.wake_blocked", "conductor.ack", "conductor.void_items",
+                   "conductor.retire_child", "conductor.board", "conductor.closing"),
+            body="""# 被停住的活怎么接着做：逐条审批唤醒
+
+## 先说这件事是什么
+
+优雅停止（收到停、或预算到）时，框架会把这一趟**没做完**的任务与委托翻成 `block`
+（`status` 与 `item_state` 两根轴一起翻）。那不是"做完了"，也不是"没人做了"：活还挂在
+板上、收件人也还在，只是**没有人会自己接着做**。处置它只有一个动作 ——
+`conductor.wake_blocked`，而它是**逐条审批唤醒**，不是一键全醒。
+
+## 三档读数：先看，再决定批不批
+
+`conductor.wake_blocked` 不带批准也照跑审计（`dry_run=True` 那一趟只读），逐条给你三档：
+
+- `resume` —— 可唤醒：owner 静默、未销号、仍在册、这条板项未终态、它那一支没有在跑；
+- `review` —— 读数没查成（静默 / 子树 / 名册任一处读不出来）⇒ 交人看，**不许猜**；
+  把它读成 `resume` 就是叫起第二个同号循环，读成 `skip` 就是一条活永远没人做；
+- `skip` —— 逐条带 `refusal_code`：已销号（彻底没有了）、owner 在飞（那条消息会进它
+  自己的收件箱，另起就是第三个循环）、板项已终态（活已经收口）、子树有在跑、不是静默、
+  没批准。
+
+`state` 那一格说的是"这一笔有没有叫醒"（`woken` / `refused` / `nothing` / `unknown`），
+逐条的审计结论在 `items[].verdict` —— 两格别混着读。
+
+## 批：两格都对才动
+
+- 默认 `dry_run=True` 只看不写：审计照跑、回执照给，**一个字节都不写、一次都不叫**；
+- `approve="yes"` 才动：没带批准的那一趟连"它能唤醒"这个结论都不给（逐条 `skip` +
+  `not_approved`）。这不是工具别扭 —— 一张"没批准但可唤醒"的清单，等于把绕开批准的路
+  递到调用方手里。批准要有人担，所以是谁批的会落进那一行的 `inputs`
+  （`wake:<谁>@<iso>|<为什么>`，事后能回答"谁批的、什么时候、凭什么"）；
+- 真写要 `dry_run=False` 且 `approve="yes"`：两根轴一起翻（`status` 回 `running`、
+  `item_state` 回 `queued`），然后才叫醒 owner。
+
+只点你想批的那几条（`ids`）：不给它就是"板上全部 block 行"，而"全部"这件事
+只在你真的逐条看过之后才算看过。
+
+## 两条硬事实（都会咬人）
+
+1. **唤醒不等于收口。** 唤醒只是让那条板项回到 `queued`、让 owner 接着做 ——
+   板项本身还在板上。要收口得有人 `conductor.ack`（收件人自己 ack，`expects=work`
+   的项用 `close="completed"`）；`expects=ack` 的通知且收件人**叫不醒**（已销号 / 兜底表
+   被永久抑制）时才轮到 `conductor.void_items`。所以唤醒之后"板干净了"这句话是假的。
+2. **block 板项也会永久挡收工**：它计入 `retire_integrity.open_items` ⇒ 已销号节点进
+   `dirty` ⇒ `complete=False`，收工门就一直报不完。而 `conductor.retire_child` 对
+   "名下还有未消的板项"一律受控拒绝 —— 所以"唤醒一次就清了板项"这条路走不通：
+   **唤醒解除的是"叫不醒"，不是"挡住销号"**。挡销号要靠 ack / 作废那条链。
+
+## 反面形态（真机上都能发生）
+
+- 不带批准先跑一趟，然后把回执里"能唤醒"的那几条当成已经批准 —— 那一步会把"谁批的"
+  这一格永远留空，而唤醒是不可逆的（醒来就接着跑、接着花钱）；
+- 看到 `review` 就按 `resume` 处理 —— 那三档存在的唯一理由就是这一档不许猜；
+- 唤醒之后就去销号 —— 板项还在（`queued`），`conductor.retire_child` 照样拒；拒信会点名
+  那几条板项，读它，别换个名字重试；
+- 把 "owner 已销号" 那一档反复重试 —— 已销号是彻底没有了：要它干活就重新派一个，
+  而不是叫醒一个不存在的名字。
+""",
+        ),
+        Skill(
             slug="指派-按任务类型选收件人",
             title="按任务类型选收件人（要多跳的活逐格看伙伴表：路线只有一个真身）",
             summary=("这类活收件人是 X；要多跳的活（F、V）逐格看伙伴表 —— 路线只有一个真身"

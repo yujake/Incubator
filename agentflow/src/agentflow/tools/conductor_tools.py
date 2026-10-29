@@ -2625,6 +2625,91 @@ def conductor_ack(_conductor: Any, item_ids: list, note: str = "",
     return ok(data, **data)
 
 
+@tool(
+    "conductor.wake_blocked",
+    "把被优雅停止停住的活（`item_state=block` 的板项）逐条审批唤醒 —— 业主 2026-10-29 逐字："
+    "「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」。"
+    "逐条审批式：默认 `dry_run=true` 只看不写（审计照跑、逐条给结论）；`approve=\"yes\"` 才算批准，"
+    "且 `dry_run=false` 才真写。没带批准的那一趟连审计结论都不给（逐条 `skip` + `not_approved`）"
+    "—— 一张「没批准但可唤醒」的清单等于把绕开批准的路递到调用方手里。三档逐条："
+    "`resume`（owner 静默、未销号、仍在册、板项未终态、子树无在跑）/ `review`（任一读数没查成，"
+    "交人看，不猜）/ `skip`（已销号、owner 在飞、板项已终态、子树有在跑、不是静默、没批准，"
+    "逐条给 `refusal_code`）。真写时两根轴一起翻（status→running、item_state→queued）并在 "
+    "`inputs` 追一条 `wake:<谁>@<iso>|<为什么>`，然后只经 `wake_on_lifeline` 叫醒 owner（那条路"
+    "带「已销号 / 在飞」双闸）。两条后果写在明面上：① 唤醒清不掉板项本身 —— 它只是回到 queued，"
+    "收口仍要收件人自己 `conductor.ack`（`expects=work`）或 `conductor.void_items`（只收 "
+    "`expects=ack` 且收件人叫不醒的那种）；② block 板项会一直挡收工（`retire_integrity.open_items` "
+    "⇒ `dirty` ⇒ `complete=false`），唤醒解除的是「叫不醒」，不是「挡住销号」。",
+    {"type": "object",
+     "properties": {
+         "ids": {"type": "array",
+                 "items": {"type": "string", "minLength": 4, "maxLength": 12},
+                 "maxItems": 50,
+                 "description": ("只审这几条板项（`tasks` 里的 task_id）；不给 = 板上全部 "
+                                 "`item_state=block` 的行")},
+         "approve": {"type": "string", "maxLength": 8,
+                     "description": ("批准令牌：只有 \"yes\" 才算批准（大小写不敏感）。"
+                                     "空 = 没批准 ⇒ 不审也不动")},
+         "dry_run": {"type": "boolean",
+                     "description": "true（缺省）= 只看不写；false = 批准之后真的直写并叫醒"},
+     },
+     "required": [],
+     "additionalProperties": False},
+    side_effect="write_local",
+    # 只有主控：唤醒是"要不要让一件停掉的活接着花钱"的判定，那是主控的活；子代理
+    # 手里没有「叫醒别人」的正当理由（它自己的父叫它，走的是消息/委托那条被动路）。
+    roles=("M",),
+    returns=("{'checked','state','items','count','requested','approve_present','dry_run',"
+             "'reason'}；state 是 woken / refused / nothing / unknown 之一（它说的是「这一笔"
+             "有没有叫醒」，不是「板上还有没有 block 行」）；items[] 每项是 "
+             "{item_id,task_id,owner,verdict,started,refusal_code,why,mark} 同形同集"
+             "（verdict 取 resume / review / skip；mark 是写进 inputs 的那条 wake: 落痕，"
+             "没写就是空串）"),
+)
+def conductor_wake_blocked(_conductor: Any, ids: list | None = None,
+                           approve: str = "", dry_run: bool = True) -> ToolResult:
+    """工具体：逐条审批唤醒被停住的活（判定与写盘都在 `Conductor.wake_blocked`）。
+
+    ## 为什么这一层几乎不做事
+    "读哪几行 / 审成哪三档 / 写哪几格 / 叫不叫"全部已有唯一实现（`Conductor.wake_blocked`），
+    工具层只做两件事：把 `approve` 归一成"有没有批准"这一格读数（`approve_present`），
+    以及把回执按 `returns=` 声明的键集端出去。工具层再判一遍三档就是第二份口径 ——
+    而两份口径漂移的形态是"工具说可唤醒、能力层说不行"，模型会照着工具那一份写下游逻辑。
+
+    ## 三态都在 `ok(...)` 里（与同族的 `conductor.void_items` / `conductor.ack` 同一形状）
+    `state=unknown` / `checked=False` 不是工具故障：下一步该做的是"重读一次"，而
+    `fail` 会把 `data` 整个丢掉（`ToolResult` 的错误那一档 `data=None`），于是逐条清单、
+    理由码与"谁批的"那一格全没了 —— 那正是受控拒绝里唯一有用的东西。
+    """
+    asked = [str(x) for x in (ids or ())]
+    data: dict[str, Any] = {
+        "checked": False, "state": "unknown", "items": [], "count": 0,
+        "requested": len(asked),
+        "approve_present": str(approve or "").strip().lower() == "yes",
+        "dry_run": bool(dry_run), "reason": "",
+    }
+    try:
+        got = _conductor().wake_blocked(asked or None, approve=str(approve or ""),
+                                        dry_run=bool(dry_run))
+    except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写：这一档只能如实说不知道
+        data["reason"] = (f"逐条审批唤醒时抛了（{type(exc).__name__}: {exc}）"
+                          "⇒ 落没落盘不知道（不是「板上没有 block 行」）")
+        return ok(data, **data)
+    if not isinstance(got, Mapping):
+        data["reason"] = "唤醒的读数不是对象 ⇒ 没查成（不是「没有 block 行」）"
+        return ok(data, **data)
+    state = str(got.get("state") or "unknown")
+    data.update(
+        checked=bool(got.get("checked")),
+        state=state if state in ("woken", "refused", "nothing", "unknown") else "unknown",
+        items=[dict(i) for i in (got.get("items") or ()) if isinstance(i, Mapping)],
+        count=int(got.get("count") or 0),
+        requested=int(got.get("requested") or len(asked)),
+        reason=str(got.get("reason") or ""),
+    )
+    return ok(data, **data)
+
+
 POST_TASK_STATES: tuple[str, ...] = ("posted", "existing", "refused", "unknown")
 
 
@@ -3958,6 +4043,18 @@ _TOOL_FUNCTIONS = _TOOL_FUNCTIONS + (
     # 作废只写台账里那几行（`item_close="expired"`）：判定与写盘都在
     # `Conductor.void_items`，这里只把主控句柄绑上去。
     (conductor_void_items, ('_conductor',)),
+    # 逐条审批唤醒（业主 2026-10-29：block 表 × 自动审计）。只绑主控句柄 ——
+    # 读数面（三档 / 直写 / 只经 `wake_on_lifeline`）全在 `Conductor.wake_blocked` 里。
+    #
+    # 2026-10-29 登记口径（这一条要人看一眼）：它进册会让工具总数 120 → 121，
+    # 于是四处声明面跟着过期 —— `tests/golden/tool_surface_snapshot.json`、
+    # `tests/golden/agent_surface_snapshot.json`（M 的 tools 名单）、
+    # `tests/test_tools_returns_declaration.py` 的 `TOOL_COUNT` 与探针表、
+    # `tests/fixtures/tool_declaration_baseline.json`（+ PROMPT_VERSION / ROLE-SPECS 计数）。
+    # 那几处都在 FC-27 或需要人逐格看 diff，所以本棒刻意没有重冻、也没有改计数：
+    # 判据红着，红得精确（"注册了 121 个工具（`_TOOL_FUNCTIONS` 有 121 件）"），
+    # 而不是让新工具从那份门的下面溜过去。
+    (conductor_wake_blocked, ('_conductor',)),
 )
 
 
