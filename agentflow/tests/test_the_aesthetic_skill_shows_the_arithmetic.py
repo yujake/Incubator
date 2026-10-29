@@ -1,32 +1,18 @@
 # -*- coding: utf-8 -*-
-"""判据：B 的审美技能必须把"太平凡"的算术摆出来，说清它不评数学价值。
+"""判据：B 的审美技能要写清"判档的是秘书（模型），力气读数只作参考"。
 
-## 现场（2026-10-28，业主：「平凡怎么能这么判」）
+业主 2026-10-29：「全交给模型判，5 个等级的自然语言描述应该还在吧」「判档的还是 B 秘书」。
 
-页面上五条命题全判"太平凡"，理由都写着"分数 0（体量 1425 字、步骤 0、引理 0、工具簇 1、
-绕路 0）"。查下来它不是模型读出来的判断，是算术：
+改前这份技能教的是机械口径（「五项合成一个分数，分数落格」「档位由机器按上面五项读数算，
+不能靠多写两句自我评价改变」），与新的题面自相矛盾。改后必须：
 
-```
-score = 体量字 // 2000 + 编号步骤 // 6 + 不同引理 // 2 + max(0, 簇-1) + 绕路
-T0 = 0-1 分
-```
-
-`chars // 2000` 在 0-1999 字之间恒为 0 ⇒ 1400 字的短证明与 5 个字的空话在这一项上完全
-一样；五条（1425/1527/1592/1815/1692 字）分全为 0 ⇒ 全落 T0。而"太平凡"这个词读起来像在
-评数学价值。
-
-## 这一组守什么
-
-1. 技能正文里有那条公式（`// 2000` 与档位边界）与"不是在评数学价值"那句话；
-2. 五条真机读数写进正文（读的人知道这是算术，不是个案）；
-3. 词表不动：`statement_aesthetic` 的判定词仍是 合格/太平凡/判不了 —— 改词是一次
-   受控词表变更（下游的 `_is_trivial_verdict`、收工门 notes、页面都读它），
-   要动得单独一次、带理由，不在这一条里偷偷改。
+1. 五档的自然语言定义仍在（业主原话）；
+2. 明写判档的是自己（B 的秘书面），`effort` 只是参考读数；
+3. 反真空：正文里不再出现 `EFFORT_TIER_BANDS` 或"档位由机器按…算"这类旧口径。
 """
 from __future__ import annotations
 
 from agentflow import agent_skills as AS
-from agentflow import secretary as SEC
 
 
 def _body() -> str:
@@ -38,22 +24,25 @@ def _body() -> str:
     raise AssertionError("技能表里没有 B 的审美技能 ⇒ 判据失去对象")
 
 
-def test_the_skill_shows_the_arithmetic():
-    """正题：公式与档位边界在技能正文里（可离线复算）。"""
+def test_the_five_definitions_are_still_there():
+    """正题①：五档定义（业主原话）一处没丢。"""
     body = _body()
-    assert "// 2000" in body or "//2000" in body, body[:600]
-    assert "T0" in body and "0-1 分" in body, body[:600]
+    assert "天才般的洞察力" in body, body[:400]
+    # 技能正文按行宽折行，"有一定价值的非平凡结论"会被断成两行 ⇒ 分段断言
+    assert "有一定价值的" in body and "非平凡结论" in body, body[:400]
+    assert "基础定理或初步结论" in body, body[:400]
 
 
-def test_the_skill_says_it_is_not_a_judgement_of_the_mathematics():
-    """正题：说清"太平凡"只等于"力气读数落 0-1 分"，不评数学价值。"""
+def test_the_body_says_the_secretary_judges_and_effort_is_only_a_reading():
+    """正题②：判档的是秘书（模型），力气读数只作参考。"""
     body = _body()
-    assert "不是在评数学价值" in body, body[:600]
-    # 真机那五条要写进正文（读的人一眼看出这是台阶，不是个案）
-    assert "1425" in body and "1692" in body, body[:800]
+    assert "参考读数" in body, body[:600]
+    assert "判档的是你自己" in body, body[:600]
+    assert "写得长不等于难" in body, body[:900]
 
 
-def test_the_verdict_vocabulary_is_unchanged():
-    """反真空：词表没有被我偷偷改（改词是一次受控词表变更，要单独做）。"""
-    assert SEC.STATEMENT_VERDICTS == ("合格", "太平凡", "判不了"), SEC.STATEMENT_VERDICTS
-    assert SEC.EFFORT_TIER_BANDS[0] == (0, 1, "T0"), SEC.EFFORT_TIER_BANDS
+def test_the_old_mechanical_claim_is_gone():
+    """反真空：旧口径（按五项读数算档、不能靠自我评价改变）必须消失。"""
+    body = _body()
+    assert "EFFORT_TIER_BANDS" not in body, body[:600]
+    assert "档位由机器按上面五项读数算" not in body, body[:600]
