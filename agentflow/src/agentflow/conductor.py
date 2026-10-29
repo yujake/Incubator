@@ -3413,6 +3413,18 @@ class Conductor:
         if self._is_retired_task(tid):
             return {"started": False, "task_id": tid,
                     "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
+        # 2026-10-29 实测的自我唤醒：兜底表是在这一趟循环里被打掉的，这时再
+        # `resume_dispatched` 就会另起一个同号循环 —— 两个自己互相喂事件，直到把进程挂死
+        # （`test_timers_and_handoff_semantics` 超时那次）。它自己在跑 ⇒ 不叫它：
+        # 那条消息本来就会进到它自己的收件箱。
+        try:
+            row = next((r for r in self._tasks() if str(r.get("task_id") or "") == tid), None)
+        except Exception:  # noqa: BLE001 - 读不成不拦（宁可叫它）
+            row = None
+        if str((row or {}).get("status") or "") in UNFINISHED_STATUSES:
+            return {"started": False, "task_id": tid,
+                    "reason": (f"{tid} 它自己在跑（status={(row or {}).get('status')}）⇒ "
+                               "不另起一个同号循环；那条消息会进它自己的收件箱")}
         runner = getattr(self, "resume_runner", None)
         if not callable(runner):
             return {"started": False, "task_id": tid,
