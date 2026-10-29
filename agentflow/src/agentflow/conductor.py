@@ -2992,21 +2992,7 @@ class Conductor:
                                 "（`conductor.roster_sink` 与 `conductor.secretary` 都是 None）")}
         want_name = str(meta.get("name") or "")
         reuse = str(meta.get("reuse") or "")
-        # ---- 自愈（2026-10-29 真机 paper-rewrite-80）：这个父名下可能已经有
-        # "台账有、名册没有"的代理行（实例分派那条路走完没落名册：真机上
-        # t-000012/013/014 三条 D 实例，父名册只剩 5 行，页面把它们报成
-        # "未落名册的子"）。`Secretary.roster_repair` 就是补这件事的自愈口，
-        # 但它此前一个调用点都没有（只有定义）。这里在每次登记之前先让它补一次：
-        # 补登记按 task_id 去重、按 next_name 发号，重复调用不会重名。
         note = ""
-        try:
-            fixed, why = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
-        except Exception as exc:  # noqa: BLE001 —— 自愈失败不许带走这次派活
-            fixed, why = 0, f"{type(exc).__name__}: {exc}"
-        if fixed:
-            note = f"登记前自愈：补了 {fixed} 条当时没写进名册的代理行"
-        elif why:
-            note = f"登记前自愈没跑成（{why}）——不影响这一条的登记"
         brief = str(meta.get("brief") or "")
         task = str(meta.get("task") or "")
         brief_for_add = brief
@@ -3068,6 +3054,20 @@ class Conductor:
                 # 三份都读到那一行，但秘书那一侧报了问题 ⇒ 不丢原话，按"写成但不干净"记。
                 note = (note + "；" if note else "") + \
                        f"秘书那一侧报了问题（三份都已写成）：{raised}"
+        # ---- 兜底自愈（2026-10-29）：把"台账有、名册没有"的其他代理行补上。
+        #
+        # 位置必须在 `roster_add` 之后：`_write_new_row` 先于 [5b] 把这一条子行写进台账，
+        # 而它此刻还没进名册 —— 若自愈跑在登记之前，它会把这一条也当成"漏掉的"补一次，
+        # 于是同一条子行在名册里出现两行（实测：D1|t-000002 与 D2|t-000002，名字跳号 D2/D4/D6）。
+        # 放在登记之后，这一条已经在对照表里了 ⇒ 自愈只补真正漏掉的。
+        try:
+            fixed, why = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 —— 自愈失败不许带走这次派活
+            fixed, why = 0, f"{type(exc).__name__}: {exc}"
+        if fixed:
+            note = (note + "；" if note else "") + f"兜底自愈：补了 {fixed} 条当时没写进名册的代理行"
+        elif why:
+            note = (note + "；" if note else "") + f"兜底自愈没跑成（{why}）——不影响这一条的登记"
         return {"name": name, "considered": True, "problem": problem,
                 "state": state, "note": note}
 

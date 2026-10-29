@@ -64,6 +64,46 @@ def test_a_repair_before_registration_fills_the_hole(tmp_path: pathlib.Path) -> 
     assert "t-999999" in ids, (rec, rows)
 
 
+def test_one_summon_makes_exactly_one_roster_row(tmp_path: pathlib.Path) -> None:
+    """（C-c）一次召唤恰好一行：instance 扇出 3 条 ⇒ 父名册 3 行、名字不跳号。
+
+    这条钉的是我上一版兜底位置放错的形态：自愈跑在 `roster_add` 之前时，
+    `_write_new_row` 刚写进台账、还没进名册的那一条会被自愈当成"漏掉的"补一次，
+    于是同一条子行在名册里出现两行（实测 D1|t-000002 与 D2|t-000002，名字跳成 D2/D4/D6）。
+    """
+    cond, parent = _env(tmp_path)
+    made = []
+    for i, label in enumerate(("D#1", "D#2", "D#3"), start=1):
+        start = cond.summon_begin("D", "research", {"qid": str(i)},
+                                  parent_task_id=parent, instance=label,
+                                  roster={"brief": f"研究包{i}", "task": "做一件研究"})
+        assert start.task_id, start
+        made.append(str(start.task_id))
+    rows, problems = cond.secretary.roster_rows(parent)
+    assert problems == [], problems
+    ids = [str(r.get("task_id")) for r in rows]
+    assert sorted(ids) == sorted(made), (ids, made)      # 每个编号恰好一行
+    assert len(ids) == len(set(ids)), ids                # 没有重复行
+    names = sorted(str(r.get("name")) for r in rows)
+    assert names == ["D1", "D2", "D3"], names            # 名字连续、不跳号
+
+
+def test_the_backstop_is_not_the_fix(tmp_path: pathlib.Path) -> None:
+    """（C-d）把兜底自愈打桩成 no-op ⇒ 上面那条仍然成立（治本不依赖兜底）。"""
+    cond, parent = _env(tmp_path)
+    cond.secretary.roster_repair = lambda **kw: (0, "")  # type: ignore[assignment]
+    made = []
+    for i in range(1, 4):
+        start = cond.summon_begin("D", "research", {"qid": str(i)},
+                                  parent_task_id=parent, instance=f"D#{i}",
+                                  roster={"brief": f"研究包{i}", "task": "做一件研究"})
+        assert start.task_id, start
+        made.append(str(start.task_id))
+    rows, _ = cond.secretary.roster_rows(parent)
+    ids = [str(r.get("task_id")) for r in rows]
+    assert sorted(ids) == sorted(made), (ids, made)
+
+
 def test_without_the_repair_the_hole_stays(tmp_path: pathlib.Path) -> None:
     """反真空：只登记、不走自愈 ⇒ 那条代理行仍然不在名册里。"""
     cond, parent = _env(tmp_path)
