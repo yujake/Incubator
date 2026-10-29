@@ -400,7 +400,17 @@ def wired_conductor(store: Any, *, policy: Any = None, llm: Any = None,
 
     reg = build_role_registry(store, llm=llm, providers=providers, extractor=extractor,
                               config=config, workspace_root=workspace_root)
-    return conductor_for(store, policy=policy, role_registry=reg, backend=backend)
+    cond = conductor_for(store, policy=policy, role_registry=reg, backend=backend)
+    # 「静默的唤醒就是接到消息」（业主 2026-10-29）：真实跑的那一趟在这里把执行侧接上——
+    # 收件人已完成且未销号时，一条 message / notice 落盘就会把它按同一个号继续跑起来。
+    # 替身构造的 conductor 默认不接（`_ensure_consumer` 会明说"执行侧未接线"），
+    # 于是"要不要叫醒"的判定与"真的跑起来"在读数上分得开。
+    if cond is not None and hasattr(cond, "resume_dispatched"):
+        try:
+            cond.resume_runner = cond.resume_dispatched
+        except Exception:  # noqa: BLE001 —— 接线失败不许带走装配
+            pass
+    return cond
 
 
 def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
