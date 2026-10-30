@@ -204,6 +204,25 @@ def _citation_material(store: Any, statement_id: str, proof_no: int
                                 deps=deps, statements=stmts), ""
 
 
+def _signed_ledger_row(root: Any, statement_id: str, proof_no: int) -> dict[str, Any]:
+    """这一份证明签住的那一行台账（读不到 / 没有 ⇒ 空 dict；只作读数回放用）。
+
+    为什么要有它：已经签过的命题再被送来时，`verify_proof` 短接、不落新行，而那一签的
+    逐条引用结论 / findings 只存在于"签住的那一行"上 —— 不回放，调用方拿到的手里会比
+    真身更空（"核过、有一条 weaker"与"没有引用"在读数上长得一样）。
+    判据本体仍是 `verifications.signed_rows`（"这一批里哪几行签住了"的唯一实现），
+    这里只做"按证明号取最后那一行"。
+    """
+    try:
+        rows, _bad = VR.list_verifications(root, statement_id=statement_id, limit=None)
+    except (OSError, VR.VerificationError):
+        # 台账读不出来 ⇒ 回放不了（不是"没有引用"）。调用方在 `detail` 里照实说。
+        return {}
+    one = [r for r in rows if VR.proof_no_of(r) == int(proof_no)]
+    signed = VR.signed_rows(one)
+    return dict(signed[-1]) if signed else {}
+
+
 class AgentV:
     """验证者。三个 handler 与 `specs/v.py` 的 `handler_name` 逐字同名。
 
@@ -458,6 +477,18 @@ class AgentV:
         `streak` / `need` / `streak_ok` / `issue` / `issued` / `verdict` /
         `verification_id` / `terminal`），而 `secretary_judge` / `sign_issuance` 仍是
         "最后一转"那两格。
+
+        ## 已经签过的命题不再送审（2026-10-31）
+
+        命题行上这一份证明的第 3 位已经为真（`bits.reviewed=True`，逐条表里这一份也
+        签着）⇒ 这一趟不进连判循环，直接返回：`checked=True`、`signed_bit3=True`、
+        `review_passes=[]`、`reason="already_signed"`，台账一行都不落、模型一次都不问。
+        为什么要有这一格：真机冒烟（工作区 `projects/abelian-smoke-20261030c`）上一条
+        已经签过的命题又被送审了四趟，其中一趟被判成 fault，读侧把它当成"有毛病要打回"，
+        F 于是被叫去改一份已经签过的证明（真机证据在 `draft/142` §四）。返回值里的
+        引用核实与 findings 取"签住的那一行台账"的读数（这一趟没有新判，不许现造）；
+        改稿之后签的那一份与现在这一份不是同一份正文 ⇒ 读侧把它读成过期，这一趟不短接、
+        照常重审。
         """
         del kw  # 声明层没有别的参数；多给的键在这里不静默生效
         out: dict[str, Any] = {
@@ -701,6 +732,100 @@ class AgentV:
             out["detail"] = ("没有可审的证明全文（参数里没给，statements 里也没有）"
                              "⇒ 这一格没查成")
             return out
+
+        # ---- 2026-10-31：已经签过的不再送审（真机 `projects/abelian-smoke-20261030c` 的 v9–v12）----
+        #
+        # 那 12 行台账全属同一份正文（同一个 `proof_sha256`）：v6–v8 三转 clean 之后第 3 位
+        # 已经翻真（`statements[000001].bits.reviewed = True`），v9–v12 却还在被送审，其中
+        # v10 被判成 fault ⇒ 读侧（`agent_loop.v_rejections_digest` → `deliver_v_verdicts`）
+        # 把一条已经签过的证明当成"有毛病要打回"，F 于是被叫去改一份已经签过的稿
+        # （真机证据在 `draft/142` §四）。
+        #
+        # 判据只有一句：命题行上这一份证明的第 3 位已经为真 ⇒ 这一趟没有可做的审校。
+        # 三样读数由 `verifications.bit3_already_signed` 一路给（纯读命题行，不看台账）：
+        # `checked=True`（这一格有结论）、`signed_bit3=True`（位真的在那儿）、
+        # `review_passes=[]`（这一趟一转都没判）；台账一行都不落、模型一次都不问。
+        #
+        # 短接必须落在"读完 statements 行之后、进连判循环之前"：放进循环里会让第一转先花掉
+        # 一次模型调用（正是真机 v9 那一行），放在读行之前则拿不到那个位。决定"签过没有"
+        # 的那一问也不许读台账：台账能回答"这一签怎么来的"，但"这一位现在是不是真的"只有
+        # 命题行能回答 —— 依据台账短接会让"先清掉那一位再重审"永远发生不了（台账是追加式
+        # 文件，没有任何调用点会为了重审去改写它）。
+        #
+        # 没有 store 就没有命题行可读 ⇒ 判不了，照常审（重审是安全方向：多花一次模型调用，
+        # 不会把已签的证明误当成没签）。
+        if self.store is not None:
+            already = VR.bit3_already_signed(hit, proof_no=no, proof_text=text)
+            if bool(already.get("signed")):
+                reviewed_by = dict(already.get("reviewed_by") or {})
+                signed_id = str(reviewed_by.get("verification_id") or "")
+                # 这一趟没有新判任何事，但"那一签当时读到了什么"必须照得出来：引用材料
+                # （这一份证明的依赖行 + 被引命题正文摘要）现读，逐条引用结论 / findings /
+                # 引用闸回放签住的那一行台账（`ledger` 指向它）。为什么必须回放：读者手上的
+                # 返回值不许比真身更空 —— 空 `citation_checks` 会让"核过、有一条 weaker"
+                # 与"没有引用"在读数上长得一样（那正是 `returns=` 那一格在治的病）。
+                # 回放不是现造：来源只有盘上那一行，找不到就照实说找不到。
+                signed_row = _signed_ledger_row(self.workspace_root, sid, no)
+                citations, citations_problem = _citation_material(self.store, sid, no)
+                for item in citations:
+                    # 档位判据走可打桩的那一格（`_citation_admissibility`，与循环里同一处）。
+                    item["admissible"] = bool(
+                        self._citation_admissibility(item.get("evidence_kind") or ""))
+                # 引用闸也是纯函数（`citation_gate`）：台账只在"这一档没查成"时存那一格
+                # （`problem` 非空，见 `record_verification`），其余情况按行上的逐条结论现算
+                # —— 两处读法必须与循环里那一趟相同，否则回放出来的闸与那一签当时的闸不同。
+                replayed_checks = list(signed_row.get("citation_checks") or [])
+                stored_gate = signed_row.get("citation_gate")
+                if isinstance(stored_gate, Mapping) and stored_gate:
+                    replayed_gate = dict(stored_gate)
+                else:
+                    replayed_gate = VR.citation_gate(
+                        replayed_checks,
+                        problem=str(citations_problem if not signed_row else ""))
+                out.update({
+                    "checked": True,
+                    "signed_bit3": True,
+                    # 位与凭据都从命题行读回来（这一趟没有新的一签，所以不许现造一份）。
+                    "bits": dict(already.get("bits") or {}),
+                    "reviewed_by": reviewed_by,
+                    "verification_id": signed_id,
+                    "verdict": str(signed_row.get("verdict") or reviewed_by.get("verdict") or ""),
+                    "defect_step": signed_row.get("defect_step"),
+                    "findings": list(signed_row.get("findings") or []),
+                    "unresolved_errors": int(signed_row.get("unresolved_errors") or 0),
+                    "proof_sha256": str(already.get("proof_sha256") or VR.proof_sha(text)),
+                    "proof_chars": int(signed_row.get("proof_chars") or len(text)),
+                    "citations": citations,
+                    "citation_checks": replayed_checks,
+                    "citation_gate": replayed_gate,
+                    "ledger": (f"{VR.VERIFICATIONS_DIR}/{sid}.jsonl#{signed_id}"
+                               if signed_id else ""),
+                    # 这一趟一转都没判：读侧不许把它读成"判过、没问题"，也不许读成"没判过
+                    # 所以还要再审"—— 短接这件事由 `reason` 说。
+                    "review_passes": [],
+                    "reason": "already_signed",
+                    "detail": (f"命题 {sid} 的 {VR.proof_label(sid, no)} 第 3 位已经为真"
+                               f"（签在 {signed_id or '（台账没记编号）'}）⇒ 这一趟没有可做的"
+                               "审校：不再重复审、不落新台账行、不问模型。上面那些引用核实与"
+                               "findings 是那一签留下的读数，不是这一趟新判的"
+                               f"（台账那一行：{VR.VERIFICATIONS_DIR}/{sid}.jsonl"
+                               f"#{signed_id or '?'}）。"
+                               + ("这一趟的依赖台账读不出来，引用材料这一格没取成："
+                                  f"{citations_problem}；" if citations_problem else "")
+                               + ("台账里没找到那一签的原文 ⇒ 逐条引用结论与 findings "
+                                  "取不到（那不是「核过、没有引用」）。"
+                                  if signed_id and not signed_row else "")
+                               # 引用闸那一句原话照旧带出来（挡签 / 弱形式 / 没查成都在
+                               # 这一个人话里点名）—— 正常那一趟的 `detail` 就是它。
+                               + (f"引用核实那一档的读数：{replayed_gate.get('why')}"
+                                  if replayed_gate.get("why") else "")
+                               + ("要重新审一份已经签过的证明，要么先改稿（签的是旧版正文时"
+                                  "读侧会把它读成过期，这一趟就不会短接），要么先把那一位清掉。")),
+                })
+                self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 这一条已经签过了"
+                           f"（第 3 位为真，签在 {signed_id or '（台账没记编号）'}）"
+                           "—— 不再重复审，不落新台账行、不问模型")
+                return out
 
         # ---- 引用核实的材料（业主 2026-10-26：V 要核 F 的引用，而 F 的引用不是逐字引文）----
         #

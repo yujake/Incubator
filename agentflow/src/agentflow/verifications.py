@@ -1906,6 +1906,86 @@ def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any
     }
 
 
+def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF_NO,
+                        proof_text: str = "") -> dict[str, Any]:
+    """命题行上这一份证明的第 3 位是不是已经为真（纯读；2026-10-31）。
+
+    ## 为什么要有这一格
+    一条已经签过的命题不该再被送审。真机冒烟（工作区 `projects/abelian-smoke-20261030c`）
+    的 `verifications/000001.jsonl` 有 12 行、全是同一份正文（同一个 `proof_sha256`）：
+    v6–v8 三转 clean 之后第 3 位已经翻真，v9–v12 却还在被送审，其中 v10 被判成 fault
+    —— 读侧（`agent_loop.v_rejections_digest` → `deliver_v_verdicts`）把那一转当成
+    「有毛病要打回」，F 于是被叫去改一份已经签过的证明。判据落在写侧这一格：
+    位已经为真 ⇒ 这一趟没有可做的审校（调用方据此短接，见 `AgentV.verify_proof`）。
+
+    ## 它读什么、不读什么
+    只读命题行（`statements` 那一行）上的五元位，并且现算
+    （`evidencebits.bits_from_row`）：于是「签的是旧版正文」那一档在这里已经读成没签
+    —— 改稿之后仍然会重审，那正是要的。不读台账、不读模型、不写任何东西：
+    台账回答"这一签是怎么来的"，而"这一位现在是不是真的"只有命题行能回答。
+
+    ## 逐条证明（`#p2` 不许借 `#p1` 的光）
+    有逐条表（`bits.evidence.reviewed_by_proof`）时按证明号读：`#p2` 那条是假 ⇒ 不短接
+    （哪怕汇总位 `bits.reviewed` 因为 `#p1` 为真）。没有逐条表（历史行 / 只翻汇总位的
+    写者）⇒ 汇总位与 `reviewed_by` 是唯一凭据，此时按 `reviewed_by.proof_no` 判
+    「签的是哪一份」；那一格也没有 ⇒ 按 canonical 读（老数据不带证明号）。
+
+    ## 返回（键集合固定；判不了也照样给全）
+    `signed` / `proof_no` / `proof_sha256` / `reviewed_by` / `bits` / `why`。
+    `signed=False` 的 `why` 写清是哪一档（位没翻 / 签过但正文改过 / 签的是别的证明 /
+    没有命题行 / 证明号认不出），读的人不必从几个假值里反推。
+    """
+    from . import evidencebits as _EB   # 惰性：与 `_reviewed_statement_row` 同一条纪律
+
+    out: dict[str, Any] = {
+        "signed": False, "proof_no": DEFAULT_PROOF_NO, "proof_sha256": "",
+        "reviewed_by": {}, "bits": {}, "why": "",
+    }
+    if not isinstance(row, Mapping) or not row:
+        out["why"] = "没有命题行 ⇒ 判不了「这一位签过没有」"
+        return out
+    no = as_proof_no(proof_no)
+    if no < 1:
+        out["why"] = f"证明号认不出：{proof_no!r}"
+        return out
+    out["proof_no"] = no
+    bits = _EB.bits_from_row(row)
+    out["bits"] = bits
+    out["reviewed_by"] = dict((bits.get("evidence") or {}).get("reviewed_by") or {})
+    sha_now = proof_sha(proof_text) if str(proof_text or "").strip() else ""
+    out["proof_sha256"] = sha_now
+    if not bits.get("reviewed"):
+        raw = row.get("bits") if isinstance(row.get("bits"), Mapping) else {}
+        if raw.get("reviewed"):
+            # 位在盘上写着真、读侧却现算成假：那是「签过、但签的不是现在这一份正文」
+            # （`evidencebits._stale_review_cleared`）。它必须照常重审，不许短接。
+            out["why"] = ("命题行上那一位写的是真，但那一签盖住的不是现在这一份正文"
+                          "（读侧按过期现算成假）⇒ 改稿之后要重审")
+        else:
+            out["why"] = "命题行的第 3 位没翻（这一份证明没被签过）"
+        return out
+    per = _EB.reviewed_by_proof(bits)
+    sha_by = _EB.reviewed_sha_by_proof(bits)
+    if per:
+        if not per.get(no):
+            out["why"] = (f"第 3 位签的证明不是 #{no}（逐条表里 #{no} 为假）"
+                          "⇒ 这一份不许借别的证明的光")
+            return out
+    else:
+        signed_no = as_proof_no(out["reviewed_by"].get("proof_no")) \
+            if out["reviewed_by"] else 0
+        if signed_no and signed_no != no:
+            out["why"] = f"第 3 位签的是 #{signed_no}，不是 #{no}"
+            return out
+    want = str(sha_by.get(no) or "")
+    if want and sha_now and want != sha_now:
+        out["why"] = (f"#{no} 那一签盖住的正文不是现在这一份"
+                      f"（签的 sha {want[:12]}…，现在 {sha_now[:12]}…）")
+        return out
+    out["signed"] = True
+    return out
+
+
 def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     """逐行给出「到这一行为止，连续几次成立」（行序就是台账的追加序）。
 

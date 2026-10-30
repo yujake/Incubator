@@ -159,7 +159,6 @@ def test_r2_clearing_the_bit_lets_the_same_call_review_again(tmp_path):
 
 
 # ============================================================ r3：历史行为不变
-
 def test_r3_an_unsigned_statement_still_reviews_three_times(tmp_path):
     """未签的命题照旧一次判满三转（3 行、3 次模型调用、发签）—— 短接不许做宽。"""
     st = T3._ws(tmp_path)
@@ -177,3 +176,65 @@ def test_r3_an_unsigned_statement_still_reviews_three_times(tmp_path):
     assert got["signed_bit3"] is True, got["sign_issuance"]
     assert (got["review_passes"] or [])[-1]["terminal"] == "signed", got["review_passes"]
     assert T3._stmt_row(st)["bits"]["reviewed"] is True, T3._stmt_row(st)["bits"]
+
+
+# ============================================================ r4：另一份证明不许借光
+
+def _put_two_proofs(st):
+    """一条命题两份证明：`#p1` 是行上的 `proof_text`，`#p2` 在 `proofs` 清单里。"""
+    proof_2 = T3.PROOF + "\n3. 补上第三步。"
+    row = {
+        "stmt_id": T3.SID, "origin": "own_result", "kind": "theorem",
+        "label": "弦长函数非常值", "statement_full": T3.FULL,
+        "statement_text": "弦长函数不是常值", "proof_text": T3.PROOF,
+        "evidence_kind": "heuristic", "status": "active",
+        "quote_verified": None, "quote_reason": "自产命题，没有外部引文要比对",
+        "created_at": T3.TS, "created_by": "test",
+        "bits": EB.bits_of(proof=True, proof_process=T3.PROOF, kind="theorem"),
+        "proofs": [{"proof_no": 2, "proof_text": proof_2}],
+    }
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+    return proof_2
+
+
+def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
+    """`#p1` 签过之后，`#p2` 不许短接（逐条表里 `#p2` 还是假）。
+
+    这一条量的是"短接做宽"的第二种形态：按命题级汇总位（`bits.reviewed` 是
+    "任一份成立即为真"）短接，会替 `#p2` 借 `#p1` 的光 —— 一份一次都没审过的证明
+    被读成"已经签过"，那是比原缺陷更坏的一种假话（`evidencebits.reviewed_by_proof`
+    存在的理由就是这一条）。
+    """
+    st = T3._ws(tmp_path)
+    proof_2 = _put_two_proofs(st)
+    agent, review, sec_seam = _signed_agent(st)
+
+    first = agent.verify_proof(T3.SID, proof_no=1)
+    assert first["signed_bit3"] is True, first["sign_issuance"]
+    assert EB.reviewed_by_proof(T3._stmt_row(st)) == {1: True, 2: False}, (
+        EB.reviewed_by_proof(T3._stmt_row(st)))
+    review.prompts.clear()
+    sec_seam.seen.clear()
+
+    second = agent.verify_proof(T3.SID, proof_no=2)
+
+    assert second["reason"] != "already_signed", (
+        "#p2 一次都没审过，这一趟却短接了 ⇒ 短接读的是命题级汇总位（借了 #p1 的光）")
+    assert review.asked() == VR.SIGN_STREAK_NEED, (
+        f"#p2 只问了 {review.asked()} 次模型 ⇒ 它没被真的审过")
+    assert len(second["review_passes"] or []) == VR.SIGN_STREAK_NEED, second["review_passes"]
+    assert second["proof_no"] == 2, second
+    assert second["proof_sha256"] == VR.proof_sha(proof_2), second
+    assert second["signed_bit3"] is True, second["sign_issuance"]
+    assert EB.reviewed_by_proof(T3._stmt_row(st)) == {1: True, 2: True}, (
+        EB.reviewed_by_proof(T3._stmt_row(st)))
+    rows = T3._rows(st)
+    assert len(rows) == 2 * VR.SIGN_STREAK_NEED, f"台账应当 6 行，实得 {len(rows)}"
+
+    # 两份都签了之后，再问 #p2 才该短接。
+    review.prompts.clear()
+    third = agent.verify_proof(T3.SID, proof_no=2)
+    assert third["reason"] == "already_signed", third["reason"]
+    assert third["review_passes"] == [], third["review_passes"]
+    assert review.asked() == 0, review.asked()
