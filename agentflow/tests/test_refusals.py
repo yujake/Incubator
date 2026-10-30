@@ -37,6 +37,13 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     ("agent_d/poll.py", ""):
         "工具 `research.poll_waiting` 自己失败了（不是参数不对、也不是前置条件不满足）"
         "⇒ 这是「执行了、没成功」，该落 `failed`，不该冒充 `refused`",
+    # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 的三条"没查成"
+    # （模型没给出可解析结论 / 结论不合法 / 台账写不进去）是执行了、没成功，
+    # 不是"这次调用不成立" —— 它们必须落 `failed`（每条都带 reason 与 detail），
+    # 不许冒充 `refused`：冒充会让"没查成"看起来像"审过了、有毛病"。
+    ("agent_v/core.py", ""):
+        "V 的一转审校没查成（拿不到合法结论 / 台账写不进去）—— 执行了、没成功，"
+        "该落 failed 且逐条带 reason；冒充 refused 会把「没查成」说成「审过了」",
     # 注：`agent_g/paper_package.py` 的三档（`package_build_failed` / `state_failed` /
     # `anchor_script_failed`）2026-10-13 随整条 `paper_package` 路退场而删除
     # （业主裁定与退场面见文件头 docstring 与 `draft/117`）。
@@ -143,6 +150,9 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     ("agent_l/formalize.py", ""): 11,
     # `proof_manuscript()` 的写盘失败一条 + `preview_dependencies()` 的读数一条。
     ("agent_f/manuscript.py", ""): 2,
+    # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
+    # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
+    ("agent_v/core.py", ""): 3,
 }
 
 
