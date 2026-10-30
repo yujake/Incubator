@@ -300,29 +300,34 @@ def test_e1_fault_washes_and_the_washed_opinion_is_what_f_gets(tmp_path):
 # ============================================================ e2：clean 不打扰 F
 
 def test_e2_clean_does_not_touch_f_and_bumps_the_streak(tmp_path):
-    """e2：V 说"我试了几种反例构造都失败，未发现问题" ⇒ 不发意见给 F；streak +1。
+    """e2：V 说"我试了几种反例构造都失败，未发现问题" ⇒ 不发意见给 F；每转 streak +1。
 
-    两次 clean 各跑一次：0 -> 1 -> 2（`+1` 是这两次之间的差，不是"第一次就是 1"）。
+    2026-10-30 起"连续三次"发生在同一次调用里（业主口径：V 判没问题后连续再判，
+    不是 F 交三次），所以这一条从"两次调用 0 -> 1 -> 2"改成"一次调用的三转
+    1 -> 2 -> 3"；断言的对象没变：每转各 +1、F 侧一个字节都没多。
     现有设计里没有"已通过"那一档板项（`deliver_v_verdicts` 只投"要 F 改"的意见），
     所以这一条的读数是"F 侧一个字节都没多"。
     """
     st = _ws(tmp_path)
     _put(st)
-    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
-    for i in (1, 2):
-        _agent, got, _sec_obj = _ask_v(st, seam, REPLY_CLEAN)
-        assert got["secretary_judge"]["axis"] == "clean", got["secretary_judge"]
-        assert not (got.get("wash_v_reply") or {}), got.get("wash_v_reply")
-        holds = VR.consecutive_holds(st.root, SID)
-        assert holds["checked"] is True and holds["streak"] == i, holds
-        text, details, problems, cond, out = _deliver(st)
-        assert not problems, problems
-        assert details == [], details
-        assert out["checked"] is True and out["opened"] == [], out
-        assert cond.items == [], cond.items
-        # 文本是"名下没有被 V 判有毛病的证明"那一句（没有逐条行）；不按字面匹配整句，
-        # 免得把措辞改一下也判红 —— 这一条量的是"没有明细行"。
-        assert "- " not in text, text
+    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                  "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    _agent, got, _sec_obj = _ask_v(st, seam, REPLY_CLEAN)
+    assert got["secretary_judge"]["axis"] == "clean", got["secretary_judge"]
+    assert not (got.get("wash_v_reply") or {}), got.get("wash_v_reply")
+    passes = got.get("review_passes") or []
+    assert [p["streak"] for p in passes] == [1, 2, 3], passes
+    assert [p["axis"] for p in passes] == ["clean"] * 3, passes
+    holds = VR.consecutive_holds(st.root, SID)
+    assert holds["checked"] is True and holds["streak"] == 3, holds
+    text, details, problems, cond, out = _deliver(st)
+    assert not problems, problems
+    assert details == [], details
+    assert out["checked"] is True and out["opened"] == [], out
+    assert cond.items == [], cond.items
+    # 文本是"名下没有被 V 判有毛病的证明"那一句（没有逐条行）；不按字面匹配整句，
+    # 免得把措辞改一下也判红 —— 这一条量的是"没有明细行"。
+    assert "- " not in text, text
     assert seam.asked("wash_v_reply") == 0
 
 
@@ -333,18 +338,22 @@ def test_e3_unsure_is_neither_counted_nor_zeroed_and_never_reaches_f(tmp_path):
 
     先攒一票 clean，再喂一条含糊的"成立"：连续次数必须停在 1。
     折成 clean ⇒ 2（冒充了一票）；折成 fault ⇒ 0（把已有的一票作废）。两个方向都被这一条钉住。
+
+    2026-10-30 起这两票落在同一次调用的两转里（第 1 转 clean、第 2 转 unsure 就立刻停），
+    所以读数从"两次 `verify_proof` 的返回值"改成"`review_passes` 的 (axis, streak) 序列"，
+    另加一条：unsure 之后不许再问第三转。
     """
     st = _ws(tmp_path)
     _put(st)
     seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN), _axis(SEC.V_REPLY_UNSURE)]})
     agent = AgentV(st, workspace_root=st.root,
                    llm=_ReviewSeam(REPLY_CLEAN, REPLY_UNSURE), secretary=_sec(st, seam))
-    first = agent.verify_proof(SID, proof_text=PROOF)
-    assert first["secretary_judge"]["axis"] == "clean", first["secretary_judge"]
-    assert VR.consecutive_holds(st.root, SID)["streak"] == 1
-    second = agent.verify_proof(SID, proof_text=PROOF)
-    assert second["checked"] is True, second
-    assert second["secretary_judge"]["axis"] == "unsure", second["secretary_judge"]
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert got["checked"] is True, got
+    passes = got.get("review_passes") or []
+    assert [p["axis"] for p in passes] == ["clean", "unsure"], passes
+    assert [p["streak"] for p in passes] == [1, 1], passes
+    assert got["secretary_judge"]["axis"] == "unsure", got["secretary_judge"]
     holds = VR.consecutive_holds(st.root, SID)
     assert holds["checked"] is True and holds["streak"] == 1, (
         f"unsure 改了票数（{holds['streak']}）⇒ 它被折成了 clean（2）或 fault（0）")
@@ -496,7 +505,11 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     st2 = _ws(tmp_path / "wired")
     _put(st2)
     reg2 = build_registry(store=st2, workspace_root=st2.root, roles=("V",)).registry
-    clean_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
+    # 2026-10-30 起一次调用会连判三转 ⇒ 第三转已经够门槛，秘书会问"发不发签"，
+    # 所以这一条也会撞上 `sign_issuance`（夹具必须给它一份结论，否则那一格是
+    # checked=False，而这一条量的不是"秘书判断面接线没有"）。
+    clean_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                        "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
     monkeypatch.setattr(AV, "default_llm", lambda: _ReviewSeam(REPLY_CLEAN))
     monkeypatch.setattr(SEC, "for_role_wired", _factory(clean_seam))
     got2 = reg2.call("verify.verify_proof",

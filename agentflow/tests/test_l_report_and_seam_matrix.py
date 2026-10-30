@@ -366,22 +366,20 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     before_sign = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)
     assert before_sign.get("state") == "stale", before_sign
 
-    # ---- 重新过 V 的签：连续 3 次「成立」才签上（业主 2026-10-29），新号、正文 in-sync
+    # ---- 重新过 V 的签：连续 3 次「成立」才签上，新号、正文 in-sync
     #
-    # 改前这里只签一次、读侧只看"最近一签是成立" ⇒ `state=signed`。现在第 1、2 次只落
-    # 台账（`state=holding`、`bits.reviewed=False`），第 3 次才翻位 —— 两档都要断。
+    # 改前这里只签一次、读侧只看"最近一签是成立" ⇒ `state=signed`。2026-10-29 起第 1、2 签
+    # 只落台账（`state=holding`、`bits.reviewed=False`），第 3 签才翻位；2026-10-30 起这三次
+    # 发生在同一次调用的三转里（业主口径：V 判没问题后连续再判，不是 F 三交）⇒
+    # 两档读数（前两转 holding、第三转 signed）改从 `review_passes` 的逐转读数里读。
     v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")] * 3),
                 secretary=_v_secretary(st))
-    first_sign = v2.verify_proof(sid, proof_text=new_proof)
-    assert first_sign.get("checked") is True, first_sign
-    assert first_sign.get("signed_bit3") is False, (
-        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first_sign)
-    held = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)
-    assert held.get("state") == "holding" and held.get("streak") == 1, held
-    v2.verify_proof(sid, proof_text=new_proof)
     signed2 = v2.verify_proof(sid, proof_text=new_proof)
     assert signed2.get("checked") is True, signed2
     assert signed2.get("verdict") == "成立", signed2
+    passes = signed2.get("review_passes") or []
+    assert [p["streak"] for p in passes] == [1, 2, 3], passes
+    assert [p["issued"] for p in passes] == [False, False, True], passes
     assert signed2.get("verification_id") != signed1.get("verification_id"), (
         signed1.get("verification_id"), signed2.get("verification_id"))
     standing = VR.review_standing(ws, statement_id=sid, proof_text=new_proof, proof_no=1)

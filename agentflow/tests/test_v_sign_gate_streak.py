@@ -42,6 +42,17 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | c7/S6 | V 的思考强度默认 High 是既有默认（`modelgw.DEFAULT_REASONING_EFFORT` → `ModelSpec` → `spec_for`/`spec_from_env` → 请求体），读数是活的 | 把 `AGENTFLOW_MODEL_REASONING_EFFORT=low` 灌进同一道梯子 ⇒ 读数与请求体不跟着变 = 判据在量常量 |
 | z1/z2 | 反真空：把 streak 闸 / judge 摘掉 ⇒ a1 / b1 红 | 判据自己不能红 = 没测到东西 |
 
+## 2026-10-30 的口径追加：三次是同一次调用里的三转（本文件两处跟着掉头）
+
+业主逐字：「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次
+V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知道叫它改正。这块 V 秘书要做好」。
+于是 `AgentV.verify_proof` 一次调用会自己判到门槛为止（`agent_v.core.MAX_REVIEW_PASSES`）。
+本文件里受影响的是 a6 / a8：它们原本"调三次 `verify_proof`、每次一转"，现在改成
+"调一次、三转"，断言对象（秘书持有发签权 / `sign_statement` 的唯一调用者 / 每转
+`flip=False`）一个字没放宽 —— 落台账的次数仍是 3，发签仍是 1 次。
+a1–a5 / a7 / a9 / a10 / b1 走的是直调写入口或"没有秘书""判了不落盘"那几档，
+与"一次调用判几转"无关，原样未改（a9/a10 那两档的停条件见 t2/t3 的同族判据）。
+
 全部 tmp 工作区、零真模型调用（V 的审阅与秘书的判断都用离线替身缝）。
 """
 from __future__ import annotations
@@ -294,8 +305,10 @@ def test_a5_signs_bit3_without_a_streak_reading_does_not_sign(tmp_path):
 def test_a6_the_secretary_performs_the_flip(tmp_path):
     """追加口径 ①：V 只落台账；翻位那一步由秘书调 `sign_statement` 落地。
 
-    三次审阅 ⇒ 第三次之后 `bits.reviewed` 才为真，而前两次的
-    `statement_writeback.deferred_to` 都是 `"secretary"`（V 没自己翻）。
+    2026-10-30 起一次 `verify_proof` 自己连判三次（业主口径：「连续 3 次没问题」是
+    V 判完接着再判，不是 F 交三次），所以这一条从"调三次、第三次才签"改成"一次调用、
+    三转里第三转才签"：前两转的 `sign_issuance` 是"不签发（还差次数）"，第三转才是
+    签发 + 翻位。断言的对手方没变 —— 变的只是"三次"落在哪一层。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -303,17 +316,18 @@ def test_a6_the_secretary_performs_the_flip(tmp_path):
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     sec = _sec(st, seam)
     agent = _agent(st, sec)
-    for i in (1, 2):
-        got = agent.verify_proof(SID, proof_text=PROOF)
-        assert got["checked"] is True, got
-        assert got["sign_issuance"]["issue"] is False, got["sign_issuance"]
-        assert got["sign_issuance"]["checked"] is True, got["sign_issuance"]
-        assert _row(st)["bits"]["reviewed"] is False, f"第 {i} 次就翻位了"
-    third = agent.verify_proof(SID, proof_text=PROOF)
-    assert third["sign_issuance"]["issue"] is True, third["sign_issuance"]
-    assert third["sign_issuance"]["issued"] is True, third["sign_issuance"]
-    assert third["signed_bit3"] is True and third["bits"]["reviewed"] is True, third["bits"]
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert got["checked"] is True, got
+    passes = got.get("review_passes") or []
+    assert [p["streak"] for p in passes] == [1, 2, 3], passes
+    assert [p["issue"] for p in passes] == [False, False, True], passes
+    assert [p["issued"] for p in passes] == [False, False, True], passes
+    assert got["sign_issuance"]["issue"] is True, got["sign_issuance"]
+    assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
+    assert got["signed_bit3"] is True and got["bits"]["reviewed"] is True, got["bits"]
     assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
+    rows, _bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
+    assert len(rows) == 3, f"三转应当落三行台账（前两转只落台账），实得 {len(rows)}"
     # 发签决定落进了秘书那本账（不是只留在返回值里）
     ledger = sec.decisions_path()
     assert ledger.is_file(), "发签决定没有落台账"
@@ -391,10 +405,13 @@ def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
     """v8：V 的代码路径里没有自己签的调用；`sign_statement` 只能由秘书调。
 
     两条腿缺一条就只是"读起来像"：
-    ① 运行时调用栈：三次发签里，每一个调用者都必须是 `_land_sign_issuance`（秘书落地那一步）；
+    ① 运行时调用栈：这一趟发签里，调用者必须是 `_land_sign_issuance`（秘书落地那一步）；
        `verify_proof` / `_finish_numeric` / `record_verification` 一次都不许出现；
     ② 落台账那一步：V 这一路每一次 `record_verification` 都必须 `flip=False`
        （V 只落台账，翻位不是它的事）。
+
+    2026-10-30 起"三次审阅"发生在一次调用里的三转（业主口径），所以这里从"调三次
+    `verify_proof`"改成"调一次、三转"：落台账的次数仍是 3（三转各一行），发签仍是 1 次。
 
     反真空：这一趟必须真的发生过发签（`callers` 非空），否则"没有自己签"只是没签。
     """
@@ -404,11 +421,11 @@ def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     agent = _agent(st, _sec(st, seam))
     callers, flips = _spy_signing(monkeypatch)
-    for i in (1, 2, 3):
-        got = agent.verify_proof(SID, proof_text=PROOF)
-        assert got["checked"] is True, got
-        assert got["signed_bit3"] is (i == 3), (i, got["signed_bit3"], got["sign_issuance"])
-    assert callers, "三趟 clean 里一次发签都没有发生 ⇒ 这一条没测到'签'（判据真空）"
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert got["checked"] is True, got
+    assert len(got.get("review_passes") or []) == 3, got.get("review_passes")
+    assert got["signed_bit3"] is True, (got["signed_bit3"], got["sign_issuance"])
+    assert callers, "三转 clean 里一次发签都没有发生 ⇒ 这一条没测到'签'（判据真空）"
     assert set(callers) == {"_land_sign_issuance"}, (
         f"`sign_statement` 被这些调用者调过：{sorted(set(callers))} ⇒ "
         "发签没有唯一落在秘书那一侧（V 或别的路径还在自己签）")
@@ -416,6 +433,7 @@ def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
     assert flips and all(f is False for f in flips), (
         f"V 这一路有 `record_verification` 没带 flip=False：{flips} ⇒ "
         "V 把「落台账」与「翻位」合成了一步")
+    assert len(flips) == 3, f"三转应当各落一行台账，实得 {len(flips)} 次：{flips}"
     assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
 
 

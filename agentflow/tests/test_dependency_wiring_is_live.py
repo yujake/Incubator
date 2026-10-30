@@ -740,14 +740,16 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     v = AgentV(store, workspace_root=store.root, llm=v_llm,
                secretary=_v_secretary(store))
     b_row = next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == b_stmt)
-    # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要先断"1 次不签"，
-    # 再断"连续 3 次之后才签"（同一份正文、同一证明号）。
-    first_sign = v.verify_proof(b_stmt, proof_text=str(b_row.get("proof_text") or ""))
-    assert first_sign.get("checked") is True, first_sign
-    assert first_sign.get("signed_bit3") is False, (
-        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first_sign)
-    v.verify_proof(b_stmt, proof_text=str(b_row.get("proof_text") or ""))
+    # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要断"前几转不签"；
+    # 2026-10-30 起那几次落在同一次调用的多转里（V 判没问题后连续再判，不是 F 三交）
+    # ⇒ 逐转读数从 `review_passes` 读，"连续之后才签"这条口径本身没变。
     signed = v.verify_proof(b_stmt, proof_text=str(b_row.get("proof_text") or ""))
+    assert signed.get("checked") is True, signed
+    v_passes = signed.get("review_passes") or []
+    assert len(v_passes) == int(VR.SIGN_STREAK_NEED), v_passes
+    assert [p.get("issued") for p in v_passes] == [False] * (len(v_passes) - 1) + [True], (
+        "逐转的发签读数不是「前几转只落台账、最后一转才签」："
+        f"{[p.get('issued') for p in v_passes]}", signed)
     assert signed.get("signed_bit3") is True, signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {
         THEOREM_A, THEOREM_B}, signed.get("citation_checks")

@@ -1682,17 +1682,25 @@ def _streak_number(streak: Any) -> int | None:
         return None
 
 
-def streak_ok(streak: Any, need: int = SIGN_STREAK_NEED) -> bool:
+def streak_ok(streak: Any, need: int | None = None) -> bool:
     """连续读数够不够发签（没读数 ⇒ 不够：fail-closed）。
 
     为什么 `None` 不许当"够"：`signs_bit3` 是本仓唯一的签字硬闸，而"调用方忘了传连续
     读数"与"连续次数够了"必须分得开。默认放行的话，任何一处漏传都会静默退回
     "一次成立就发签"—— 那正是这一条口径要取消的东西，而盘上不会有任何读数报它。
+
+    `need=None` = 门槛现读 `SIGN_STREAK_NEED`（2026-10-30 改）。改前这里是
+    `need: int = SIGN_STREAK_NEED` —— 默认参数在导入期求值，等于把门槛的第二个副本
+    钉进了签字闸：门槛一旦不是 3（`agent_v.core.MAX_REVIEW_PASSES` 那份负控就把门槛
+    临时打成 1 与 5），秘书那一端按新值判"够"，这一端按旧值判"不够" —— 同一个门槛给出
+    两个数，而"发签没落成"这句理由会把它说成"还差次数"。默认参数不是配置，它是一次
+    快照；门槛要现读。
     """
     got = _streak_number(streak)
     if got is None:
         return False
-    return got >= int(need)
+    limit = int(SIGN_STREAK_NEED) if need is None else int(need)
+    return got >= limit
 
 
 def signs_bit3(row: Mapping[str, Any], *, streak: Any = None) -> bool:
@@ -1789,8 +1797,12 @@ def _rows_of_proof(rows: Sequence[Mapping[str, Any]], proof_no: int) -> list[Map
 
 
 def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
-                      need: int = SIGN_STREAK_NEED) -> dict[str, Any]:
+                      need: int | None = None) -> dict[str, Any]:
     """台账尾部连续几次「成立」且是同一份正文（纯读；业主 2026-10-29 的 A 段）。
+
+    `need=None` = 门槛现读 `SIGN_STREAK_NEED`（2026-10-30 改，理由与 :func:`streak_ok`
+    同一句：默认参数是导入期的快照，不是门槛本身 —— 而 `sign_statement` 的签字闸读的
+    就是这个函数的返回值，两处门槛漂了之后"够不够"会给出两个数）。
 
     这就是「连续 3 次没问题」那个计数：从 `verifications/<命题号>.jsonl` 的尾部按台账
     行序往回数，同一 `proof_sha256`、连续 `verdict="成立"` 的行数；任何一行的结论不是
@@ -1813,7 +1825,8 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     """
     out: dict[str, Any] = {
         "checked": False, "statement_id": str(statement_id or "").strip(),
-        "proof_no": 0, "need": int(need), "streak": 0, "streak_ok": False,
+        "proof_no": 0, "need": int(SIGN_STREAK_NEED) if need is None else int(need),
+        "streak": 0, "streak_ok": False,
         "sha": "", "rows": 0, "ledger": "", "reason": "",
     }
     no = _read_proof_no(proof_no)

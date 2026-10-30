@@ -391,18 +391,23 @@ def _v_with_secretary(store: Store, llm) -> AgentV:
 
 
 def _v_reviews_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
-    """同一份正文连审到发签门槛（前几次不签，最后一次才签 —— 新口径的正控）。"""
-    outs: list[dict] = []
+    """同一份正文审到发签门槛（在这一趟的多转里：前几转只落台账，最后一转才签）。
+
+    2026-10-30 起"连审到门槛"发生在同一次调用里（业主口径：V 判没问题后连续再判，
+    不是 F 交三次）⇒ 正控改从 `review_passes` 的逐转 `issued` 里读，对手方没变。
+    """
     need = int(VR.SIGN_STREAK_NEED)
-    for i in range(1, need + 1):
-        got = agent.verify_proof(sid, proof_text=text)
-        outs.append(got)
-        assert got.get("checked") is True, got
-        assert got.get("signed_bit3") is (i == need), (
-            f"第 {i} 次审校的 signed_bit3={got.get('signed_bit3')!r} —— 2026-10-29 口径："
-            f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（第 1、2 次只落台账）；"
-            f"发签决定读数：{got.get('sign_issuance')}", got)
-    return outs
+    got = agent.verify_proof(sid, proof_text=text)
+    assert got.get("checked") is True, got
+    passes = got.get("review_passes") or []
+    assert len(passes) == need, (
+        f"这一趟自己连判了 {len(passes)} 转（门槛 {need} 转）：{passes}")
+    assert [p.get("issued") for p in passes] == [False] * (need - 1) + [True], (
+        f"逐转的发签读数是 {[p.get('issued') for p in passes]} —— 2026-10-29 口径："
+        f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（前几转只落台账）")
+    assert got.get("signed_bit3") is True, (
+        f"最后一转应当签上第 3 位；发签决定读数：{got.get('sign_issuance')}", got)
+    return [got]
 
 
 def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> None:

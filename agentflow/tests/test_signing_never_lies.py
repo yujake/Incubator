@@ -164,19 +164,18 @@ def _v_secretary(store: Store):
 
 
 def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
-              times: int | None = None) -> dict:
-    """连跑 `SIGN_STREAK_NEED` 次 `verify_proof`，返回最后一次的返回值。
+              times: int = 1) -> dict:
+    """跑 `times`（缺省 1）次 `verify_proof`，返回最后一次的返回值。
 
-    为什么要跑三次：第 1、2 次「成立」只落台账、不翻位（连续闸）。夹具要的是
-    "这一签真的签住"那一刻的返回值，也就是第 3 次。
+    为什么缺省从 `SIGN_STREAK_NEED` 改成 1：2026-10-30 起一次 `verify_proof` 会自己
+    连判到门槛为止（业主口径：「连续 3 次没问题」是 V 判完接着再判，不是 F 交三次）
+    ⇒ 一次调用就是"一整趟攒票"，再跑三次只会让台账多出六行，而这一族判据要读的是
+    "这一签真的签住"那一刻的返回值。
     """
-    from agentflow import verifications as _VR
-
-    n = int(times if times is not None else _VR.SIGN_STREAK_NEED)
     agent = AgentV(store, workspace_root=store.root, llm=_Seam(),
                    secretary=_v_secretary(store))
     out: dict = {}
-    for _i in range(max(1, n)):
+    for _i in range(max(1, int(times))):
         kw = {"proof_no": proof_no}
         if proof_text:
             kw["proof_text"] = proof_text
@@ -198,7 +197,9 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
 
     2026-10-29 追加口径之后，"签住"要多跑两次（连续 3 次「成立」）并且由 V 的秘书翻位
     ⇒ 取数口从"一次 `verify_proof`"换成 `_v_rounds`（第 3 次那一趟的返回值）。
-    断言的意思一个字没变：要么真签住（位翻了、R10 数得到），要么如实说没签住。
+    2026-10-30 起那两次不再由调用方跑：一次 `verify_proof` 自己连判三次（业主口径
+    「V 判没问题后连续再判，不是 F 提交 3 次」）⇒ `_v_rounds` 的缺省次数回到 1，
+    而断言的意思一个字没变：要么真签住（位翻了、R10 数得到），要么如实说没签住。
     """
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
