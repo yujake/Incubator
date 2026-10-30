@@ -1049,6 +1049,13 @@ _ROLES_V = ("V",)
             # 2026-10-27：写回那一格（台账行上的 `statement_writeback`：写没写成 / 为什么 /
             # 撤回没有）。三条返回路径都有它（没写回可报时是空对象），所以声明里必须有。
             "'review_write',"
+            # 2026-10-29（业主批准改 FC-27）：V 签门槛那两格 ——
+            # `secretary_judge` 是秘书对这段回复的语义三档（clean/fault/unsure），
+            # `sign_issuance` 是"发不发签"的决定与连续读数。三条返回路径都有这两格。
+            # 刻意**不写** `wash_v_reply`：它只在 fault 那一支出现，写进键集合会让
+            # "声明 ⊆ 实跑"在受控拒绝那一支假红（与 retire_child 把 open_items 的
+            # 元素键排除在外同一个理由）。
+            "'secretary_judge','sign_issuance',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "
