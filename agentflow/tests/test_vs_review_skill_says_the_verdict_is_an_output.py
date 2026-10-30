@@ -17,7 +17,7 @@ V 会这么写是因为派活的原文是「核…回 defect_step 与逐条 find
 1. 技能正文里有这条口径（三处关键词都在：产出 / 入参 / message）；
 2. 反真空：`verify.verify_proof` 的声明参数里没有 `verdict` / `findings` /
    `defect_step`（这两处必须同时成立：技能说"别传"、工具也"不收"）；
-3. 落盘：技能真的物化成 `skills/V/复核-三态并指到那一步.md` 且带这一段。
+3. 落盘：技能真的物化成 `skills/V/复核-两态并指到那一步.md` 且带这一段。
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def _skill() -> dict:
     for role, items in AS.CATALOG.items():
         for item in items:
             got = item if isinstance(item, dict) else getattr(item, "__dict__", {})
-            if str(got.get("slug")) == "复核-三态并指到那一步":
+            if str(got.get("slug")) == "复核-两态并指到那一步":
                 return {**got, "_role": role}
     raise AssertionError("技能表里没有 V 的复核技能 ⇒ 判据失去对象")
 
@@ -65,5 +65,5 @@ def test_the_skill_lands_on_disk_with_that_paragraph(tmp_path: pathlib.Path):
     ws = tmp_path / "ws"
     (ws / "skills").mkdir(parents=True)
     materialize(ws)
-    text = (ws / "skills" / "V" / "复核-三态并指到那一步.md").read_text(encoding="utf-8")
+    text = (ws / "skills" / "V" / "复核-两态并指到那一步.md").read_text(encoding="utf-8")
     assert "产出" in text and "入参" in text, text[:400]

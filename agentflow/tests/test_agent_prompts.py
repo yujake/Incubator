@@ -2157,7 +2157,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p219"
+_FROZEN_PROMPT_VERSION = "p220"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2351,16 +2351,16 @@ _FROZEN_PROMPT_VERSION = "p219"
 # 环境变量与 `conftest.py` 逐条对齐）的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "822362d286cd603f1222f7520b181656b4f8b751968aefe6fc687220ce2ca0d3",
-    "B": "c4bc9836a806026ce7af866fc7a5805873e5efb84253927a9df30b4c91ed3942",
+    "B": "d4ad691177fe6b55f6c8970cb16c8e24382d999e147cacba8ca8e2e48d755db4",
     "C": "03661adca70c0017f3d3ff3314725c1134ae2e28930b57c087add8a3028ce429",
     "D": "5c33db062222081dd092dad40ddf9c57626a7ceb31719b2c63de32d9e10b1067",
-    "E": "6b6045d881fd86794c4a8e4d07473863955660c5ce11ebd7abcfb5b1992c6bed",
-    "F": "2cfef07246b44bb807abae1c543e6cb88a2fb5e69f25cf1e3f9208da60e2cca8",
+    "E": "4082aceab2270b61f39916be35137cd115a6f71e4e358957524193fea832e74c",
+    "F": "f6e602805439ace14aef745ce51247c151c0cccb1f3fbd65f583383be85b5ea3",
     "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
     "H": "ac8a5bde4214a0596434cdfae3f13073b79fed4906cc8e867f8747625631cb71",
     "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
-    "M": "44b7c2e6a9e5f5169c23e7cb1b749bcf887fd8d96bbc53fcc5f6026817442547",
-    "V": "ffd9cfd318d1b6b0eca809505bb999832db67c719536504e57836a4ae9bf2ef1",
+    "M": "d3d81018dcab51046501da9dcf7f169ccbc570a199dbd603fe7401cb116bc649",
+    "V": "3cf2517975098d2c76656e5519ee94c5a20f546e02e821543d12dce65342ee50",
 }
 
 

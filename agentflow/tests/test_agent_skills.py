@@ -264,7 +264,7 @@ def test_the_cross_reference_registry_cannot_rot(monkeypatch):
     （实测真有这样的句子）。但豁免具名之后就会腐烂：那一句正文被删了、
     或者出边变了让它变得够得到 —— 那时这条登记就成了"看起来还在挡着什么"。
     所以登记本身也在判据里：不成立就报出来（与本仓 R010 那张假阳性表的纪律同源）。"""
-    monkeypatch.setitem(AS._BODY_CROSS_REFS, ("V", "复核-三态并指到那一步", "A.run_once"),
+    monkeypatch.setitem(AS._BODY_CROSS_REFS, ("V", "复核-两态并指到那一步", "A.run_once"),
                         "（负面夹具）这一条不成立：那一句正文里没有它")
     problems = AS.validate()
     assert any("_BODY_CROSS_REFS" in p and "已经不成立" in p for p in problems), problems

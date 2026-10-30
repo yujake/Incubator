@@ -2817,7 +2817,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
 #: 十一格是 `D:\Incubator\temp\recompute_digests.py`（与 conftest 的环境变量逐条对齐：
 #: Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）的现算值，不是手抄。
-PROMPT_VERSION = "p219"
+PROMPT_VERSION = "p220"
 
 
 
@@ -4836,7 +4836,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-                   '补上之后能不能过；推不到就诚实写"看不出来"。',
+                   '补上之后能不能过；推不到（没找到缺陷）就写"成立"并说清沿哪几关试过。',
 
 
 
@@ -4848,7 +4848,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("V", "敢创新"): '不提猜想、不给新方向、不改证明：你是判定者，你的产出只有一个三态结论与'
+    ("V", "敢创新"): '不提猜想、不给新方向、不改证明：你是判定者，你的产出只有一个两态结论与'
 
 
 
