@@ -2817,7 +2817,25 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
 #: 十一格是 `D:\Incubator\temp\recompute_digests.py`（与 conftest 的环境变量逐条对齐：
 #: Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）的现算值，不是手抄。
-PROMPT_VERSION = "p220"
+#: `p221`（2026-10-30，业主批准动禁改区 · FC-27）：F 的结论面收成两态
+#:
+#: ① `specs/f.py` 的 policy 那一条（F 读 V 的结论）：改前让 F 在 V 报「看不出来」时把它
+#:    当成「这一格还没被签」；改后逐字「V 只会退回两种结论：成立（没找到缺陷）/
+#:    有毛病（找到缺陷，指到步号与原句）」+ 两句落法（有毛病 ⇒ 按那条缺陷改稿/补步骤；
+#:    成立 ⇒ 这一格被审过、不再重交）。V 那一侧在 p220 已经只剩两态，这一笔把 F 侧跟上。
+#: ② 连带：`tests/test_agent_prompts.py` 的十一格表（只有 F 换值：
+#:    f6e60280 → 6d606f06；其余十格逐字同值 —— 这一条只落在 F 自己的 policy 上）+
+#:    `_FROZEN_PROMPT_VERSION` 抬到 p221；`tests/test_prompt_stability.py` 的
+#:    `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格、键名一格未动 ⇒
+#:    count / keys_sha256 与上一格同值，现算不手抄）；
+#:    `tests/golden/agent_surface_snapshot.json` 重冻（11 个角色的 prompt 各一行版本号 +
+#:    F 那一段正文）。
+#: ③ 不动的：`agent_skills._f_skills()` 的正文改了，但索引那三格（slug / summary / when）
+#:    一格没动 ⇒ 它不进提示词摘要；F 的动作数 / 工具数 / 边 / 写集一格未动。
+#: ④ 已知待办（与 p220 同一句）：`tests/fixtures/prompt_cache_warm.json` 没有重落 ——
+#:    重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`，业主之前给过那两条
+#:    命令）⇒ 那两档缓存读数 stale，`test_prompt_cache_warm` 的对应两条现在红。
+PROMPT_VERSION = "p221"
 
 
 

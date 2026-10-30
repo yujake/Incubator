@@ -2157,7 +2157,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p220"
+# 2026-10-30（p220 → p221，业主批准动禁改区 · FC-27）：`specs/f.py` 的 policy 那一条
+# 把「V 报看不出来 时把它当成这一格还没被签」换成两态（成立 / 有毛病 + 各自该怎么办）
+# ⇒ 这一条只落在 F 自己的段上，十一格里只有 F 换值。逐格旧值 → 新值：
+#   F f6e60280 → 6d606f06；其余十格（A/B/C/D/E/G/H/L/M/V）逐字同值。
+# 十一格是 `D:\Incubator\temp\recompute_f_digest.py`（导入本文件的 `_surface_digest`，
+# 环境变量与 `conftest.py` 逐条对齐：Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）
+# 的现算值，不是手抄。
+_FROZEN_PROMPT_VERSION = "p221"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2355,7 +2362,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "C": "03661adca70c0017f3d3ff3314725c1134ae2e28930b57c087add8a3028ce429",
     "D": "5c33db062222081dd092dad40ddf9c57626a7ceb31719b2c63de32d9e10b1067",
     "E": "4082aceab2270b61f39916be35137cd115a6f71e4e358957524193fea832e74c",
-    "F": "f6e602805439ace14aef745ce51247c151c0cccb1f3fbd65f583383be85b5ea3",
+    "F": "6d606f063d92e42f70c9db82ee649b817aa83da0c349831f75a131ff96dc643c",
     "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
     "H": "ac8a5bde4214a0596434cdfae3f13073b79fed4906cc8e867f8747625631cb71",
     "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
