@@ -1050,7 +1050,8 @@ _ROLES_V = ("V",)
             # 撤回没有）。三条返回路径都有它（没写回可报时是空对象），所以声明里必须有。
             "'review_write',"
             # 2026-10-29（业主批准改 FC-27）：V 签门槛那两格 ——
-            # `secretary_judge` 是秘书对这段回复的语义三档（clean/fault/unsure），
+            # `secretary_judge` 是秘书对这段回复的语义两档（clean / fault；「判不了」不是一种结论，
+            # 业主 2026-10-30 第三次裁定：只要不是完全没毛病都叫有毛病），
             # `sign_issuance` 是"发不发签"的决定与连续读数。三条返回路径都有这两格。
             # 刻意**不写** `wash_v_reply`：它只在 fault 那一支出现，写进键集合会让
             # "声明 ⊆ 实跑"在受控拒绝那一支假红（与 retire_child 把 open_items 的
@@ -1058,7 +1059,7 @@ _ROLES_V = ("V",)
             "'secretary_judge','sign_issuance',"
             # 2026-10-30（业主批准改 FC-27）：一次 `verify_proof` 现在会自己连着判到门槛
             # 为止（业主逐字：「连续 3 次没问题」是 V 判没问题后连续再判，不是 F 提交三次）。
-            # `review_passes` 是这一趟逐次的读数：每一项给 pass（第几次）/ axis（秘书三档）/
+            # `review_passes` 是这一趟逐次的读数：每一项给 pass（第几次）/ axis（秘书两档）/
             # decision（发签决定）/ streak / need / streak_ok / issue / issued / verdict /
             # verification_id。三条返回路径都有这一格（没判过时是空数组）。
             # 为什么不复用 `secretary_judge` / `sign_issuance`：那两格只装最后一趟，读不出
