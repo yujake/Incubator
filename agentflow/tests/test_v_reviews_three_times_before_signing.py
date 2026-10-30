@@ -1,18 +1,37 @@
 # -*- coding: utf-8 -*-
 """业主 2026-10-30：「连续 3 次没问题」是 V 判完接着再判，不是 F 提交三次。
 
-口径逐字（本次唯一权威）：
+口径逐字（第一次，2026-10-30 上午）：
 
     「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次 V 过 3 次。
       毕竟没问题的判决没必要给 F。有毛病要给 F 知道叫它改正。这块 V 秘书要做好」
 
-三条要求 → 三条判据（全部先红后绿）：
+## 2026-10-30 第二次裁定（本次唯一权威，逐字）
+
+    「没有什么『还没够』，连判里面如果判出一回秘书语义分析认为是『有毛病』的，
+      则直接打回了，连判终止」
+
+于是连判的终局只有两种，没有第三种：
+
+1. 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签（现状已对）；
+2. 任一转秘书语义判定判出 `fault`（有毛病）⇒ 「立刻终止」：这一转就是终局，台账那
+   一行就是打回给 F 的那一条（`via=secretary_fault`，递的是洗过的转达）。`unsure`
+   （判不了）同样终止并打回，理由码与 fault 分开（`via=secretary_unsure`，读数里写
+   "需要补材料或重交"）；V 自己的结论不是「成立」那一档也立刻停（本身就是打回）。
+
+"循环跑完而既没签也没打回"不是一条终局：只可能是配置病态（门槛被改成 0 / 负数），
+那时返回值报内部不一致（`checked=False` + 明确 reason），不许写成"次数没到"。
+上界因此「动态等于门槛」（`VR.SIGN_STREAK_NEED` 现读）：要么签、要么打回，逻辑上必然命中。
+
+五条要求 → 五条判据（全部先红后绿）：
 
 | 编号 | 它要证明的事 | 改前怎么红 | 什么改动会让它红回去 |
 |---|---|---|---|
 | t1 | 一次 `verify_proof` 自己判三次 clean ⇒ 台账恰好 3 行、秘书发签、位翻上去；F 那一侧一条都没有 | 一次调用只问一次模型（台账 1 行、不签） | 把循环摘掉 / 让 clean 也开板项 |
-| t2 | 第 2 次判 fault ⇒ 立刻停（2 行、不签），洗过的那一份能读出 `via=secretary_fault` | 一次调用没有第 2 次 | fault 之后接着判 / 洗稿没落进台账 |
-| t3 | 门槛打到 1 ⇒ 只判 1 次就签；打到 5 ⇒ 在上界之内停住、如实不签 | 「判几次」与门槛无关（恒 1 次） | 上界跟着门槛长 / 不够也签 |
+| t2 | 第 2 次判 fault ⇒ 立刻停（2 行、不签），洗过的那一份能读出 `via=secretary_fault` | fault 那一转之后还接着问第三问 | fault 之后接着判 / 洗稿没落进台账 |
+| t3 | 上界动态等于门槛：门槛 1 ⇒ 判 1 次就签；门槛 5 ⇒ 判满 5 次、第 5 次签上 | 上界是导入期的常量（门槛 5 时判到 3 就停、如实不签 = 业主否掉的终局） | 上界与门槛又分成两个数 / 判不满也签 |
+| t4 | 第 2 转判 `unsure` ⇒ 2 行、不签、立刻停，读侧是「另一档」明细（`via=secretary_unsure`） | unsure 之后不进读侧明细（或与 fault 混成一档） | 把 unsure 折成 clean / 折成 fault / 留成"次数没到" |
+| t5 | `agent_v/core.py` 与 `verifications.py` 的返回值/读数/docstring 里"还没够 / 还不够 / 未达门槛"一处都不剩 | 那三种措辞还留在连判读数与 `sign_issuance.reason` 里 | 任何一处重新写回这类终局 |
 
 ## 为什么"F 那一侧一条都没有"要读 `v_rejections_digest`
 
@@ -270,6 +289,10 @@ def test_t2_a_fault_on_the_second_pass_stops_and_is_washed_to_f(tmp_path):
     # 洗稿真的问过一次，且洗过的那一份落进了台账那一行。
     assert sec_seam.asked("wash_v_reply") == 1, sec_seam.seen
     assert rows[-1]["washed_relay"]["text"] == WASHED, rows[-1].get("washed_relay")
+    # 这一转就是终局：连判在它这里断掉（不是"再给一次机会"），读数里说得出来。
+    assert passes[-1].get("terminal") == "fault", passes
+    assert "终局" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
+    assert "还差" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
 
     _text, details, _problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
     faults = [d for d in details if d.get("via") == "secretary_fault"]
@@ -288,16 +311,19 @@ def test_t2_a_fault_on_the_second_pass_stops_and_is_washed_to_f(tmp_path):
         "递到 F 的板项里出现了 V 的原文（洗过的那一份没被用）")
 
 
-# ============================================================ t3：上界与门槛分开
+# ============================================================ t3：上界 = 门槛
 
-def test_t3_the_threshold_and_the_pass_bound_are_two_different_numbers(tmp_path,
-                                                                     monkeypatch):
-    """门槛 1 ⇒ 判 1 次就签；门槛 5 ⇒ 在"上界"之内停住，如实不签（不许假装签上）。
+def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
+    """门槛 1 ⇒ 判 1 次就签；门槛 5 ⇒ 判满 5 次、第 5 次签上。
 
-    这一条是负控：把门槛临时打成别的数，看"判几次"是不是还老实。
+    这一条是负控：把门槛临时打成别的数，看"判几次"是不是真的跟着门槛走。
     - 门槛 1：第一问就够 ⇒ 只许问 1 次（多问就是白花钱，也说明停的条件没接上）；
-    - 门槛 5：一次调用有一个上界（不是"追到够为止"）⇒ 问到上界就停、台账如数落行、
-      发签那几格如实说"不够"，位一个字节都不许动。
+    - 门槛 5：一次调用的上界「动态等于门槛」（`VR.SIGN_STREAK_NEED` 现读）⇒ 判满
+      5 次、台账 5 行、第 5 次签上。
+
+    改前（上一版）这里断言的是"判到上界（3）停住、如实不签"——那条断言的终局正是
+    业主本次裁定否掉的东西（逐字：「没有什么『还没够』」），所以跟着掉头：
+    "判到上界停住" 与 "判满门槛签上" 之间，现在只剩后者。
     """
     # (a) 门槛 1：一问即够。
     st = _ws(tmp_path / "a")
@@ -315,7 +341,7 @@ def test_t3_the_threshold_and_the_pass_bound_are_two_different_numbers(tmp_path,
     assert len(_rows(st)) == 1, _rows(st)
     assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
     assert got["signed_bit3"] is True, got["bits"]
-    # (b) 门槛 5：一次调用判不到 5 次 clean，于是它必须停在某个上界并如实说"不够"。
+    # (b) 门槛 5：上界跟着门槛走 ⇒ 判满 5 次、第 5 次签上（不是判到 3 就停）。
     st2 = _ws(tmp_path / "b")
     _put(st2)
     review2 = _ReviewSeam([CLEAN_REPLY])
@@ -326,13 +352,129 @@ def test_t3_the_threshold_and_the_pass_bound_are_two_different_numbers(tmp_path,
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 5)
     got2 = agent2.verify_proof(SID, proof_text=PROOF)
     passes = got2.get("review_passes") or []
-    assert 1 < len(passes) <= VR.SIGN_STREAK_NEED, (
-        f"门槛 5 时判了 {len(passes)} 次 ⇒ 要么没继续判，要么上界跟着门槛长")
-    assert review2.asked() == len(passes), (review2.asked(), passes)
-    assert len(_rows(st2)) == len(passes), (
-        f"台账 {len(_rows(st2))} 行 ≠ 判了 {len(passes)} 次 ⇒ 有一问没落行")
-    assert got2["sign_issuance"]["streak_ok"] is False, got2["sign_issuance"]
-    assert got2["sign_issuance"]["issued"] is False, got2["sign_issuance"]
-    assert got2["signed_bit3"] is False and got2["bits"].get("reviewed") is not True, got2
-    assert _stmt_row(st2)["bits"]["reviewed"] is False, _stmt_row(st2)["bits"]
-    assert "还差" in got2["sign_issuance"]["reason"], got2["sign_issuance"]["reason"]
+    assert len(passes) == 5, f"门槛 5 时判了 {len(passes)} 次 ⇒ 上界没有等于门槛"
+    assert review2.asked() == 5, (review2.asked(), passes)
+    assert [p["streak"] for p in passes] == [1, 2, 3, 4, 5], passes
+    assert [p["issue"] for p in passes] == [False, False, False, False, True], passes
+    assert len(_rows(st2)) == 5, f"台账应当 5 行（每一转各一行），实得 {len(_rows(st2))}"
+    assert got2["sign_issuance"]["streak_ok"] is True, got2["sign_issuance"]
+    assert got2["sign_issuance"]["issued"] is True, got2["sign_issuance"]
+    assert got2["signed_bit3"] is True and got2["bits"]["reviewed"] is True, got2
+    assert _stmt_row(st2)["bits"]["reviewed"] is True, _stmt_row(st2)["bits"]
+    # 终局是"签上"，不是"次数没到"：两格读数都这么说。
+    assert passes[-1].get("terminal") == "signed", passes
+    assert "还差" not in got2["sign_issuance"]["reason"], got2["sign_issuance"]
+
+
+# ============================================================ t4：unsure 也终止并打回
+
+#: 第 2 转的回复：含糊（没有尝试痕迹），秘书那一档才判得出「判不了」。
+UNSURE_REPLY = json.dumps({"verdict": "成立", "why": "我觉得没问题。", "findings": []},
+                          ensure_ascii=False)
+
+
+def test_t4_an_unsure_pass_ends_the_run_and_goes_back_as_unsure(tmp_path):
+    """第 2 转秘书判「判不了」（unsure）⇒ 2 行、不签、立刻停，读侧是另一档明细。
+
+    口径（业主 2026-10-30 本次裁定第三条）：unsure 既不是 clean 也不是 fault，但也不许
+    被写成"次数没到"——它同样终止连判并打回 F：板项/读数里如实写"秘书判不了这一条
+    （需要补材料或重交）"，理由码与 fault 那一档「分开」（`via=secretary_unsure`，
+    fault 是"有毛病"，unsure 是"没判出来"；两种都要 F 知道，但理由码不同）。
+
+    反真空（本用例同时钉住"分开"这件事）：`via` 必须是 `secretary_unsure` 而不是
+    `secretary_fault`；板项措辞必须说"判不了"，而不是"V 判有毛病"。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    # 第 3 问的回复故意还留着（含糊那份）——若实现没停，它会真的被问第三次。
+    review = _ReviewSeam([CLEAN_REPLY, UNSURE_REPLY])
+    sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
+                                         _axis(SEC.V_REPLY_UNSURE)]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=_secretary(st, sec_seam))
+
+    got = agent.verify_proof(SID, proof_text=PROOF)
+
+    assert review.asked() == 2, (
+        f"第 2 转已经判不了，却又问了 {review.asked()} 次模型 ⇒ 「立刻终止」没做到")
+    passes = got.get("review_passes") or []
+    assert [p["axis"] for p in passes] == ["clean", "unsure"], passes
+    # unsure 不清零、也不计入：第 2 转的连续次数仍是第 1 转的 1（不是 2、也不是 0）。
+    assert [p["streak"] for p in passes] == [1, 1], passes
+    assert passes[-1].get("terminal") == "unsure", passes
+    rows = _rows(st)
+    assert len(rows) == 2, f"台账应当 2 行，实得 {len(rows)}"
+    assert rows[-1]["secretary_judge"]["axis"] == "unsure", rows[-1]["secretary_judge"]
+    assert got["secretary_judge"]["axis"] == "unsure", got["secretary_judge"]
+    assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
+    assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
+    assert "终局" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
+    assert "还差" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
+    # 判不了不洗稿：洗过的那一格没有内容（洗稿只属于 fault 那一档）。
+    assert not (rows[-1].get("washed_relay") or {}), rows[-1].get("washed_relay")
+    assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
+
+    # 读侧：一条明确的明细，理由码与 fault 分开。
+    text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
+    assert problems == [], problems
+    assert len(details) == 1, (text[:400], details)
+    detail = details[0]
+    assert detail["via"] == "secretary_unsure", detail
+    assert detail["via"] != "secretary_fault", detail
+    assert "判不了" in text, text
+    assert "判「有毛病」" not in text, text
+
+    # 板项：一项，措辞是"判不了 / 需要补材料或重交"，不是"V 判有毛病"。
+    board = _BoardDouble()
+    delivered = AL.deliver_v_verdicts(board, task_id="t-000001", depth=0,
+                                      details=details)
+    assert delivered.get("checked") is True, delivered
+    assert delivered.get("problems") == [], delivered
+    assert len(board.opened) == 1, board.opened
+    summary = str(board.opened[0]["kwargs"].get("summary") or "")
+    assert "判不了" in summary, summary
+    assert "判「有毛病」" not in summary, summary
+    body = str(board.details[0]["args"][1]) if board.details else ""
+    assert "判不了" in body, body
+    assert "秘书洗过的转达" not in body, (
+        "判不了那一档没有洗过的文本 ⇒ 板项不许长得像「洗过的转达」")
+
+
+# ============================================================ t5：措辞判据（防回归）
+
+#: 业主 2026-10-30 否掉的终局措辞：这三种写法只描述"还差多少次"，而连判的终局只有
+#: 两种（签 / 打回）—— 它们一旦回到返回值、读数或 docstring 里，读者就会把「打回」
+#: 读成「再多判几次就好」，而这正是本次裁定取消的东西。
+NOT_ENOUGH_WORDING = ("还没够", "还不够", "未达门槛")
+#: 允许的历史注释白名单。「刻意为空」：这一条量的是"这三个词一处都不剩"；白名单一旦
+#: 有内容，判据就退化成"只剩白名单外的那几处"（而历史注释正是最容易被整批豁免的一档）。
+NOT_ENOUGH_ALLOWED: tuple[tuple[str, str], ...] = ()
+
+
+def test_t5_no_not_enough_wording_survives_in_the_readings():
+    """`agent_v/core.py` 与 `verifications.py` 里那三种"还差次数"的终局措辞一处不留。
+
+    为什么扫源码而不是只扫返回值：返回值只覆盖跑得到的分支，而措辞最容易留在
+    docstring / 注释里（那正是下一次改动会照着抄的模板）。
+    """
+    src = pathlib.Path(VR.__file__).resolve().parent
+    targets = {"agent_v/core.py": src / "agent_v" / "core.py",
+               "verifications.py": src / "verifications.py"}
+    assert NOT_ENOUGH_ALLOWED == (), "白名单只许为空（见上面的理由）"
+    scanned: dict[str, str] = {}
+    for name, path in targets.items():
+        assert path.is_file(), f"{name} 不在盘上：{path}"
+        text = path.read_text(encoding="utf-8")
+        assert text.strip(), f"{name} 是空的 ⇒ 判据扫不到东西（假绿）"
+        scanned[name] = text
+    # 反真空：这两份源码确实带着本批改过的那几格（扫错文件会假绿）。
+    assert "verify_proof" in scanned["agent_v/core.py"], "扫的不是 V 的实现"
+    assert "consecutive_holds" in scanned["verifications.py"], "扫的不是台账读数"
+    hits = [f"{name}:{i}:{word}:{line.strip()[:80]}"
+            for name, text in scanned.items()
+            for word in NOT_ENOUGH_WORDING
+            for i, line in enumerate(text.splitlines(), start=1)
+            if word in line]
+    assert hits == [], (
+        "连判的终局只剩「签 / 打回」两种，这几种措辞不许再出现：\n" + "\n".join(hits))
+
