@@ -2476,6 +2476,13 @@ class Conductor:
         #: 主控（M）自己的秘书（A 线）。`None` = 没装配 ⇒ 只摆同 key 终态行、不做委派评估。
         #: 秘书不写任何库表、判断不构成任何门的通过条件（`draft/55` §4）。
         self.secretary = secretary
+        #: 最近一次读销号名单的读数（由 :meth:`retired_reading_of` 写）。
+        #:
+        #: 为什么它是一个独立的实例格：`_is_retired_task` 只能回一个布尔，而"读成了、
+        #: 它没销号"与"销号名单读不全"必须是两个读数（三态纪律）。折平的代价在这一格上
+        #: 很具体 —— 盘上有一行坏行时，读的人只看到"它没销号"，而下一步（叫醒一个已销号
+        #: 的名字）是不可逆的那一边。形状见 `retired_reading_of` 的返回值。
+        self.last_retired_reading: dict[str, Any] = {}
         #: 最近一次派活前摆出来的"同 key 既有终态行"（读数的第二个落点：日志之外）。
         self._last_duplicates: list[dict] = []
         #: 本次 run 的即时视图（不是账）：只回答"这次 run 还能不能再召唤"。
@@ -3310,6 +3317,12 @@ class Conductor:
             if not row:
                 out["reason"] = f"{recipient} 在台账里没有那一行 ⇒ 它不存在（不是'已叫醒'）"
                 return out
+            # 已销号 ⇒ 不跑它（"已销号是彻底没有了"）。
+            # 这里刻意只传号、不传 `parent`：这一格是投递路上的双保险，`parent` 由
+            # `retired_reading_of` 自己从台账那一行取（多一次 0.2 ms 的台账读，换掉
+            # "调用方必须知道销号名单按父存"这条隐含约定）。判据
+            # `test_a_message_runs_a_silent_agent.py` 把本方法打桩成单参数的 lambda，
+            # 所以这一处的签名只用最窄的那一种。
             if self._is_retired_task(recipient):
                 out["reason"] = (f"{recipient} 已销号 ⇒ 彻底没有了（业主 2026-10-29）。"
                                  "投递本应被秘书拦；要它干活就重新派一个")
@@ -3416,9 +3429,6 @@ class Conductor:
         tid = str(task_id or "").strip()
         if not tid:
             return {"started": False, "task_id": "", "reason": "没有台账号 ⇒ 叫不起来"}
-        if self._is_retired_task(tid):
-            return {"started": False, "task_id": tid,
-                    "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
         # 2026-10-29 实测的自我唤醒：兜底表是在这一趟循环里被打掉的，这时再
         # `resume_dispatched` 就会另起一个同号循环 —— 两个自己互相喂事件，直到把进程挂死
         # （`test_timers_and_handoff_semantics` 超时那次）。它自己在跑 ⇒ 不叫它：
@@ -3427,6 +3437,11 @@ class Conductor:
             row = next((r for r in self._tasks() if str(r.get("task_id") or "") == tid), None)
         except Exception:  # noqa: BLE001 - 读不成不拦（宁可叫它）
             row = None
+        # 已销号 ⇒ 叫不醒（"彻底没有了"）。销号名单按父存，`parent` 就取刚读到的这一行；
+        # 台账读不成时留空，`retired_reading_of` 会退回"自己读 / 扫名册目录"。
+        if self._is_retired_task(tid, parent=str((row or {}).get("parent_task_id") or "")):
+            return {"started": False, "task_id": tid,
+                    "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
         if str((row or {}).get("status") or "") in UNFINISHED_STATUSES:
             return {"started": False, "task_id": tid,
                     "reason": (f"{tid} 它自己在跑（status={(row or {}).get('status')}）⇒ "
@@ -3445,25 +3460,220 @@ class Conductor:
         out["task_id"] = tid
         return out
 
-    def _is_retired_task(self, task_id: str) -> bool:
+    def _retired_owners_of(self, task_id: str, parent: str = "") -> list[str]:
+        """这个号可能落在谁名下的销号名单里（名单按父分文件：`out/roster/<父>-retired.jsonl`）。
+
+        次序：调用方给的父 → 台账那一行的 `parent_task_id` → 扫名册目录里所有
+        `*-retired.jsonl`。为什么最后要扫全目录：`_is_retired_task(tid)` 的签名只有号，
+        而名单的键是父 —— 台账里没有这一行时（老工作区 / `rebuild` 之前的盘）只有扫目录
+        才对得上。一份名单都没有 ⇒ 空表：那是"这个工作区还没有人销过号"（一条查过的事实），
+        不是"没查成"。
+        """
+        pid = str(parent or "").strip()
+        if pid:
+            return [pid]
+        try:
+            row = self._task(str(task_id or "")) or {}
+        except Exception:  # noqa: BLE001 —— 读不到台账那一行就不拿它当父（继续往下找）
+            row = {}
+        pid = str(row.get("parent_task_id") or "").strip()
+        if pid:
+            return [pid]
+        try:
+            root = str(getattr(self.store, "root", "") or "")
+            folder = Path(root).joinpath(*SEC.ROSTER_DIR) if root else None
+            if folder is None or not folder.is_dir():
+                return []
+            suffix = "-retired.jsonl"
+            return sorted(p.name[: -len(suffix)] for p in folder.iterdir()
+                          if p.is_file() and p.name.endswith(suffix))
+        except Exception:  # noqa: BLE001 —— 扫不动就等于"没有名单可问"（方向：宁可叫它）
+            return []
+
+    @staticmethod
+    def _retired_rows_of(got: Any) -> tuple[list[Any], list[str]]:
+        """把读口的返回值归一成 `(行, 坏行)`（只归一形状，不解释语义）。
+
+        四种形状（它们都是"某处真的这么写过"的形态，不是设想）：
+
+        ```text
+        ① (rows, bad)         真身 `Secretary.retired_names(owner)` 的返回
+        ② [行 / 名字 / 号 …]   只说"有这些"的序列（`list` 或 `tuple`）
+        ③ {号或名字: 理由}     Mapping：键既当 task_id 也当 name（两种键都认）
+        ④ 单行 / 单个名字      也收（一个对象不包在表里）
+        ```
+        """
+        if got is None:
+            return [], []
+        if isinstance(got, Mapping):
+            return [{"task_id": str(k), "name": str(k)} for k in got], []
+        if isinstance(got, (list, tuple, set, frozenset)):
+            items = list(got)
+            if (len(items) == 2
+                    and isinstance(items[0], (list, tuple, set, frozenset))
+                    and isinstance(items[1], (list, tuple, set, frozenset))):
+                return list(items[0]), [str(x) for x in items[1]]
+            return items, []
+        return [got], []
+
+    def _retired_names_of(self, holder: Any, owner: str) -> tuple[list[Any], list[str]]:
+        """销号名单 → `(行, 坏行)`（读口适配那一层：形状由 :meth:`_retired_rows_of` 归一）。
+
+        ## 为什么这一层必须存在（2026-10-31 实测的不可逆缺陷）
+
+        改前那一句是 `got = holder() if callable(holder) else holder` —— 它假定
+        `retired_names` 是无参的。真身是
+        `secretary.py: def retired_names(self, owner: str) -> tuple[list[dict], list[str]]`：
+        无参调 ⇒ `TypeError` ⇒ 被"读不到就当没销号"的 `except` 吞掉 ⇒ 闸门在真秘书下
+        永远返回 False ⇒ 已销号的号被判 resume、落 `wake:` 痕、被叫醒两次
+        （`draft/143` §7.3 逐字读数）。签名与返回形状是两处独立的错，任一都够让它失效。
+
+        所以这里先看签名再调（要 `owner` 就传、不要就不传），`inspect` 取不到签名
+        （内置 / C 实现）或两种调法各错一次时，两个方向都试一次；返回的形状交给
+        `_retired_rows_of`。读口自己抛异常不在这里吞：调用方（`retired_reading_of`）
+        要把它落成"没查成"，而不是"没有销号"。
+        """
+        if not callable(holder):
+            return self._retired_rows_of(holder)
+        takes_owner = True
+        try:
+            params = inspect.signature(holder).parameters
+        except (TypeError, ValueError):  # 取不到签名 ⇒ 当它要（下面还会再试另一边）
+            params = None
+        if params is not None:
+            takes_owner = any(p.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                                         inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                         inspect.Parameter.VAR_POSITIONAL)
+                              for p in params.values())
+        first = (owner,) if takes_owner else ()
+        other = () if takes_owner else (owner,)
+        try:
+            return self._retired_rows_of(holder(*first))
+        except TypeError:
+            return self._retired_rows_of(holder(*other))
+
+    @staticmethod
+    def _retired_row_keys(row: Any) -> set[str]:
+        """一行销号名单里"可指的键"：`task_id` 与 `name` 两个都认。
+
+        为什么两个都要认：真身那一行是
+        `{"owner","name","task_id","role","at","reason","branch"}` —— `name` 是名册名
+        （`D1`）、`task_id` 是台账号（`t-000002`）。调用点手里有时只有号、有时只有名；
+        只认一个键的那一半会静默地永远不命中，而"永远不命中"在"已销号"这一格上就是
+        "已销号却仍会被叫醒"（不可逆）。
+        """
+        if isinstance(row, Mapping):
+            return {str(row.get("task_id") or "").strip(),
+                    str(row.get("name") or "").strip()} - {""}
+        return {str(row or "").strip()} - {""}
+
+    def retired_reading_of(self, task_id: str, *, parent: str = "",
+                           name: str = "") -> dict[str, Any]:
+        """这个号是不是已销号：四格读数（`checked` / `retired` / `bad` / `reason`）。
+
+        返回 `{"checked","retired","task_id","name","owners","rows","bad",
+        "matched_by","matched_owner","reason"}`：
+
+        - `retired`：读到了匹配行才是真（读到就是读到，同一份名单里的坏行不改变它）；
+        - `checked`：这一格查成了没有。名单读不全（`bad` 非空）/ 读口抛了 / 没有秘书 /
+          没有这个读口 ⇒ `False`，而 `reason` 如实写是哪一档；
+        - `bad`：坏行原样带着（`[第 1 行读不出来（…）]`），不折成"没有销号"；
+        - `owners`：问过哪几份名单（`_retired_owners_of` 的读数）；
+        - `matched_by` / `matched_owner`：命中的是哪个键（`task_id` / `name`）、在哪一份名单里。
+
+        ## 方向（不改）
+        读不成 / 读不全 ⇒ `retired=False`，动作侧因此仍取"宁可叫它"（
+        `_is_retired_task` 的 docstring 逐字：叫醒一个还在的代理只花一次循环，而把一个
+        还在的代理当成已销号会让它永远收不到信）。这个方向不改，但读数必须分得开 ——
+        "叫了"与"没销号"是两件事，否则下一次读的人只会看到"它没销号"，而盘上其实有
+        一行读不出来。
+        """
+        tid = str(task_id or "").strip()
+        want = str(name or "").strip()
+        out: dict[str, Any] = {"checked": False, "retired": False, "task_id": tid,
+                               "name": want, "owners": [], "rows": 0, "bad": [],
+                               "matched_by": "", "matched_owner": "", "reason": ""}
+        self.last_retired_reading = out
+        if not tid and not want:
+            out.update(checked=True, reason="没有号也没有名字 ⇒ 没有可销的对象（查过了）")
+            return out
+        sec = getattr(self, "secretary", None)
+        if sec is None:
+            out["reason"] = "没有秘书 ⇒ 读不到销号名单（不是「没销号」）"
+            return out
+        holder = getattr(sec, "retired_names", None)
+        if holder is None:
+            out["reason"] = (f"{type(sec).__name__} 没有 retired_names 这个读口 ⇒ "
+                             "读不到销号名单（不是「没销号」）")
+            return out
+        parents = self._retired_owners_of(tid, parent)
+        out["owners"] = list(parents)
+        if callable(holder):
+            if not parents:
+                out.update(checked=True,
+                           reason="名册目录里一份销号名单都没有（查过了）⇒ 没有销号")
+                return out
+            asked = parents
+        else:
+            asked = [""]          # 替身：数据是一整份，不分父
+        wanted = {tid, want} - {""}
+        rows_total = 0
+        bad: list[str] = []
+        for who in asked:
+            try:
+                rows, bads = self._retired_names_of(holder, who)
+            except Exception as exc:  # noqa: BLE001 —— 读口自己炸了也是"没查成"
+                bad.append(f"{who or '（不分父）'}：读不出来（{type(exc).__name__}: {exc}）")
+                continue
+            rows_total += len(rows)
+            for msg in bads:
+                bad.append(f"{who or '（不分父）'}：{msg}" if len(asked) > 1 else str(msg))
+            for row in rows:
+                hit = self._retired_row_keys(row) & wanted
+                if not hit:
+                    continue
+                out["retired"] = True
+                out["matched_by"] = "、".join(sorted(hit))
+                out["matched_owner"] = who
+        out["rows"] = rows_total
+        out["bad"] = bad
+        out["checked"] = not bad
+        if out["retired"]:
+            out["reason"] = ("" if not bad else
+                             f"销号名单读不全（{len(bad)} 行：{bad[0]}）—— "
+                             "但这一号已读到销号行")
+        elif bad:
+            out["reason"] = (f"销号名单读不全（{len(bad)} 行：{bad[0]}）⇒ "
+                             "不能据此说「没销号」")
+        return out
+
+    def _retired_unchecked_note(self) -> str:
+        """销号名单没查成时附在理由串后面的那一句（查成了就是空串）。
+
+        为什么必须附：`resume` 那一档的措辞里有"未销号"三个字。销号名单读不全时那三个字
+        是没有根据的 —— 附一句"读不全（…）"才让回执与盘上一致（`draft/143` §7.3：
+        盘上说它已销号、回执说它"owner 静默、未销号"，正是本仓最忌的那一类。）
+        """
+        got = dict(getattr(self, "last_retired_reading", {}) or {})
+        if got.get("checked") is not False:
+            return ""
+        why = str(got.get("reason") or "没查成")
+        return f"（销号名单这一格没查成：{why}；方向：宁可叫它）"
+
+    def _is_retired_task(self, task_id: str, *, parent: str = "") -> bool:
         """这个台账号对应的名册项是不是已销号。
+
         读不到 ⇒ 返回 False（方向取"宁可叫它"，因为"叫醒一个还在的代理"只花一次循环，
         而"把一个还在的代理当成已销号"会让它永远收不到信）。已销号那一档的权威读数在
-        秘书的退役名单里（`Secretary.retired_names` / 销号名单文件）。
+        秘书的退役名单里（`Secretary.retired_names(owner) -> (rows, bad)`，按父分文件）。
+
+        `parent` 是"谁名下的那份名单"（销号名单按父存）：四个调用点都能从台账那一行拿到
+        它，拿到了就少一次读；拿不到时 `retired_reading_of` 自己按 `parent_task_id` 找，
+        再不行扫名册目录。读不成 / 读不全的读数在 `self.last_retired_reading` 里
+        （`checked=False` ＋ 原样带着 `bad`），本方法只回那个布尔。
         """
-        try:
-            sec = getattr(self, "secretary", None)
-            if sec is None:
-                return False
-            holder = getattr(sec, "retired_names", None)
-            got = holder() if callable(holder) else holder
-            if isinstance(got, Mapping):
-                return task_id in {str(k) for k in got}
-            if isinstance(got, (list, tuple, set)):
-                return task_id in {str(x) for x in got}
-        except Exception:  # noqa: BLE001 —— 读不到就当没销号（方向见 docstring）
-            return False
-        return False
+        return bool(self.retired_reading_of(task_id, parent=parent).get("retired"))
+
 
     #: 逐条审批唤醒写进板项那一行 `inputs` 的落痕前缀：`wake:<谁>@<iso>|<为什么>`。
     #:
@@ -3610,11 +3820,16 @@ class Conductor:
                                "预览（dry_run=True）")
                 continue
             # ---- 逐条审计：已销号 / 在册 / 在飞 / 子树 / 静默（每一条都要有读数）----
-            if self._is_retired_task(owner):
+            # 销号名单按父存：`owner` 的父就是"该读哪一份名单"（`owner_row` 在读侧已经拿到了）。
+            if self._is_retired_task(owner, parent=str(owner_row.get("parent_task_id") or "")):
                 cell["refusal_code"] = "retired"
                 cell["why"] = (f"{owner} 已销号 ⇒ 彻底没有了（业主 2026-10-29）：叫不醒，"
                                "也不该动它名下的行；要它干活就重新派一个")
                 continue
+            # 销号名单这一格没查成（读不全 / 没有秘书 / 读口抛了）⇒ 后面每一句"未销号"
+            # 都要带上这一句；折成"没销号"会把"没查成"读成"查过了、没问题"。
+            # （局部名不叫 `roster_note`：本模块里那个名字已经指"名册写入的兜底说明"。）
+            retired_note = self._retired_unchecked_note()
             if not owner_row:
                 cell["refusal_code"] = "owner_missing"
                 cell["why"] = (f"{item_id} 的收件人 {owner} 在台账里没有那一行 ⇒ 它不在册"
@@ -3661,10 +3876,11 @@ class Conductor:
                 continue
             cell["verdict"] = "resume"
             why_wake = (f"逐条审批唤醒（审计判 resume：owner 静默、未销号、板项 {item_id} "
-                        f"未终态、子树无在跑）⇒ 批准后直写并唤醒 {owner}")
+                        f"未终态、子树无在跑）⇒ 批准后直写并唤醒 {owner}{retired_note}")
             if dry_run:
                 cell["why"] = ("预览（dry_run=True）：判为 resume（可唤醒）—— 批准后才会"
-                               "直写这一行并叫它；这一趟一个字节都没写、一次都没叫")
+                               "直写这一行并叫它；这一趟一个字节都没写、一次都没叫"
+                               + retired_note)
                 continue
             # ---- 直写（绕过状态机，一次只动这一条）------------------------------
             mark = f"{self._WAKE_PREFIX}{who}@{S.now_iso()}|{why_wake[:160]}"
@@ -3718,7 +3934,7 @@ class Conductor:
                 cell["why"] = (f"{owner} 已按同号叫起：板项 {item_id} 已由 block 翻成 "
                                "queued，它醒来就能在板上读到这一条。板项仍在板上：收口要"
                                "收件人自己 ack（`conductor.ack`），销号闸照旧挡着 —— "
-                               "唤醒解除的是「叫不醒」，不是「挡住销号」")
+                               "唤醒解除的是「叫不醒」，不是「挡住销号」" + retired_note)
             else:
                 why_not = str(got.get("reason") or "") if isinstance(got, Mapping) else ""
                 cell["refusal_code"] = "wake_failed"
@@ -3838,10 +4054,15 @@ class Conductor:
                 # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
                 # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
                 receiver = str(row.get("parent_task_id") or "")
+                # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
+                # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
+                # `lifeline_suppressed` 那一半在工作。
+                receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
                 deaf = False
                 try:
                     deaf = bool(CLK.lifeline_suppressed(str(getattr(self.store, "root", "") or ""),
-                                                        receiver)) or self._is_retired_task(receiver)
+                                                        receiver)) or self._is_retired_task(
+                        receiver, parent=receiver_parent)
                 except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
                     deaf = False
                 if not deaf:
