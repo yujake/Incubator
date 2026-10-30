@@ -211,10 +211,14 @@ def test_f3_putting_the_old_sentence_back_makes_f1_red(monkeypatch) -> None:
         assert any("看不出来" in x for x in bad), (
             "判据报红了，但没点名『看不出来』那一档 ⇒ 它不是量那句话的：" + " | ".join(bad))
         # 基线干净时（f1 绿着），"变红"必须只由拼回去的旧句引起 —— 否则这一条只证明了
-        # "判据会因别的原因红"。改前基线不干净（f1 本来就红），这一半不适用。
+        # "判据会因别的原因红"。旧句自己会同时命中两条判据（那一行里的「看不出来」与那个
+        # 旧说法「这一格还没被签」），两条都算"由那句话引起"。
+        # 改前基线不干净（f1 本来就红），这一半不适用。
         if not baseline:
-            assert not [x for x in bad if "看不出来" not in x], (
-                "拼回旧句之后多报了别的东西 ⇒ 红的原因不止那句话：" + " | ".join(bad))
+            others = [x for x in bad
+                      if "看不出来" not in x and "这一格还没被签" not in x]
+            assert not others, (
+                "拼回旧句之后多报了别的东西 ⇒ 红的原因不止那句话：" + " | ".join(others))
     finally:
         monkeypatch.undo()
         assert _f_prompt() == before, "负控之后渲染面没恢复 ⇒ 后面的用例会被污染"
