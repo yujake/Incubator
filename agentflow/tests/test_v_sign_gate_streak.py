@@ -28,10 +28,10 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | a8/v8 | 签只能经秘书：`sign_statement` 的调用者只许是 `_land_sign_issuance`；V 这一路每次落台账都是 `flip=False` | V 自己补一刀 / 落台账顺手翻位 ⇒ 调用者名单里出现 `verify_proof` |
 | a9/v8 负控 | 秘书"判了签发但不落盘" ⇒ 位一次都不许翻（V 不许替它落） | V 拿 `issue=True` 自己翻位 ⇒ 三次 clean 之后位就翻上去了 |
 | a10/v7 正面 | 工具路径那种构造（只有 store + root）会自己装配秘书；装配给出没缝的秘书 ⇒ `checked=False` 且不发签 | 惰性装配坏了 / 没秘书也签 ⇒ 工具路径上门槛不存在 |
-| b1/v1 | 三档不许折平：fault 清零 / clean +1 / unsure 不清零不计入 | 折成一档 ⇒ 先夸后刺被当成 clean |
+| b1/v1 | 两档不许折平：fault 清零 / clean +1；答历史那一格（"判不了"）⇒ 不采信（没有轴）；历史行的 unsure 只作历史兼容读 | 折成一档 ⇒ 先夸后刺被当成 clean / 把"判不了"当成一种结论 |
 | b2 | 题面逐字带着三条判定规则 | 题面丢了规则 ⇒ 模型只能猜 |
 | b3/v4 | 秘书不看证明：材料里塞 F 正文必须被拒 | 收了但没用 ⇒ 盘上查不出"看过" |
-| b4 | 词表外结论不采信（归 unsure，不归 clean） | 采信自由文本 ⇒ 第八种写法进台账 |
+| b4 | 词表外结论不采信（没有轴，不归 clean） | 采信自由文本 ⇒ 第八种写法进台账 |
 | c1/v5 | 洗稿：交付给 F 的 detail ≠ V 原文；findings 逐字可回溯 | 直接转发原文 ⇒ 洗稿等于没做 |
 | c2 | 洗不出来 ⇒ 受控拒绝、不输出原文 | 拒绝时顺手回原文 ⇒ 泄露 |
 | c3 | C 段交付面：板项 detail 用洗过的文本（kind/expects 不变） | 新增一档 kind ⇒ 命中冻结面 |
@@ -46,7 +46,7 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 
 业主逐字：「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次
 V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知道叫它改正。这块 V 秘书要做好」。
-于是 `AgentV.verify_proof` 一次调用会自己判到门槛为止（`agent_v.core.MAX_REVIEW_PASSES`）。
+于是 `AgentV.verify_proof` 一次调用会自己判到门槛为止（上界现读 = 门槛：`agent_v.core.review_pass_bound()`）。
 本文件里受影响的是 a6 / a8：它们原本"调三次 `verify_proof`、每次一转"，现在改成
 "调一次、三转"，断言对象（秘书持有发签权 / `sign_statement` 的唯一调用者 / 每转
 `flip=False`）一个字没放宽 —— 落台账的次数仍是 3，发签仍是 1 次。
@@ -123,6 +123,29 @@ def _sign(store: Store, *, verdict: dict | None = None, text: str = PROOF,
     return VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                   verdict=verdict or _OK, verifier="agent-V",
                                   store=store, proof_no=1, secretary_judge=judge)
+
+
+def _sign_legacy_unsure(store: Store, *, text: str = PROOF) -> dict:
+    """手写一条 2026-10-30 之前那一版写下的台账行（`axis="unsure"`，只作历史兼容读）。
+
+    为什么必须"手写"而不能走 `_sign`：写侧（`record_verification`）已经收不了那一格了
+    —— 传进去会落成空轴（`test_v_reviews_three_times_before_signing.py::t6` 的落盘口
+    那一条钉着这件事）。要量"读侧读得出历史行、且它既不算票也不清零"，就只能按老版本
+    的形状把那一行追加进去；底稿那一行自己也不许算票（`checked=False`），否则这条判据
+    会把自己的底稿算成一次 clean。
+    """
+    base = VR.record_verification(store.root, statement_id=SID, proof_text=text,
+                                  verdict=_OK, verifier="agent-V", store=store,
+                                  proof_no=1,
+                                  secretary_judge={"checked": False, "axis": "",
+                                                   "decision": "没查成"})
+    legacy = {**base,
+              "verification_id": f"v-legacy-{base['verification_id']}",
+              # 历史行里那一格：只作历史兼容读（读得出、新判定不再产生）。
+              "secretary_judge": {"axis": "unsure", "checked": True,
+                                  "decision": "判不了"}}
+    VR._append_verification(VR.verification_ledger_path(store.root, SID), legacy)
+    return legacy
 
 
 _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据",
@@ -363,15 +386,17 @@ def test_a7_no_secretary_means_no_signature_at_all(tmp_path):
         got = agent.verify_proof(SID, proof_text=PROOF)
         assert got["checked"] is True, got
         assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
-        assert got["secretary_judge"]["axis"] == "unsure", got["secretary_judge"]
+        # 2026-10-30 第三次裁定：没有判断面 ⇒ 没有轴（空串）。"判不了"不是一种结论，
+        # 所以这里既不是 clean、也不是 fault、更不是旧那一格 unsure。
+        assert got["secretary_judge"]["axis"] == "", got["secretary_judge"]
         assert got["sign_issuance"]["checked"] is False, got["sign_issuance"]
         assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
         assert _row(st)["bits"]["reviewed"] is False, f"第 {i} 次在没有秘书的情况下翻了位"
     rows, _bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
     assert len(rows) == 5, f"意见没有落台账（{len(rows)} 行）"
-    # 秘书没判过的那三签是 `unsure`：不清零、也不计入 ⇒ 连续次数停在 2
+    # 秘书没判过的那三签没有轴（checked=False）：不清零、也不计入 ⇒ 连续次数停在 2
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2, (
-        "秘书没判过的签被算成了 clean（或把已有的两票清零了）⇒ unsure 那一档没接上")
+        "秘书没判过的签被算成了 clean（或把已有的两票清零了）⇒ 没查成那一档没接上")
 
 
 # ============================================================ a8–a10 / v8 与 v7
@@ -521,15 +546,24 @@ def test_a10_the_tool_path_assembles_its_own_secretary_or_reports_checked_false(
     assert got["sign_issuance"]["issue"] is False, got["sign_issuance"]
     assert got["signed_bit3"] is False and got["bits"]["reviewed"] is False, got["bits"]
     assert _row(st)["bits"]["reviewed"] is False, _row(st)["bits"]
-    # 没判过的那一签是 unsure：不清零、也不计入 ⇒ 连续次数停在 2
+    # 没判过的那一签没有轴（checked=False）：不清零、也不计入 ⇒ 连续次数停在 2
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2
 
 
-# ============================================================ b1 / v1：三档
+# ============================================================ b1 / v1：两档
+#
+#: 2026-10-30 第三次裁定之后，V 那一根轴的历史轴名（只作历史兼容读）。
+#: 它不再是词表里的一格（`SEC.V_REPLY_VERDICTS` 只有两格），但老台账行里出现过它 ——
+#: 所以 b1 用它量"读侧读得出、且既不算票也不清零"，而不再用它量一种新结论。
+LEGACY_UNSURE = "unsure"
 
-def test_b1_the_three_states_are_not_flattened(tmp_path):
+
+def test_b1_the_two_states_are_not_flattened(tmp_path):
     """v1：先夸后刺 ⇒ fault（不计入）；反例尝试全失败 ⇒ clean（+1）；
-    理由面错位 ⇒ unsure（不清零、也不计入）。"""
+    答历史那一格（"判不了"）⇒ 不是一种结论：不采信（`checked=False`、没有轴）；
+    而历史台账行里的 unsure 只作历史兼容读（读得出、不清零、也不计入）。
+    """
+
     st = _ws(tmp_path)
     _put(st)
     # 三次 clean ⇒ 攒够三票
@@ -542,22 +576,27 @@ def test_b1_the_three_states_are_not_flattened(tmp_path):
     # 先夸后刺：同一套机制、不同结论 ⇒ fault
     seam_fault = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_FAULT)]})
     fault = _sec(st, seam_fault).judge_v_reply(reply=RAW_SENTENCE, verdict="成立",
-                                              statement_id=SID)
+                                               statement_id=SID)
     assert fault["checked"] is True and fault["axis"] == "fault", fault
-    # 理由面错位 ⇒ unsure
-    seam_unsure = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_UNSURE)]})
-    unsure = _sec(st, seam_unsure).judge_v_reply(reply="文献 [16] 那条我查不到。",
-                                                verdict="成立", statement_id=SID)
-    assert unsure["checked"] is True and unsure["axis"] == "unsure", unsure
-    # ---- 三档在台账上的效果（这才是"不许折平"）
+    # 2026-10-30 第三次裁定：词表只有两格 —— 模型答历史那一格（"判不了"）时不在词表里
+    # ⇒ 不采信（`checked=False`、没有轴），既不是 clean 也不是 fault，更不是第三档。
+    seam_cannot = _Seam({"v_reply_defect": [_axis("判不了")]})
+    cannot = _sec(st, seam_cannot).judge_v_reply(reply="文献 [16] 那条我查不到。",
+                                                 verdict="成立", statement_id=SID)
+    assert cannot["checked"] is False and cannot["axis"] == "", cannot
+    assert "不采信" in cannot["reason"] or "不在" in cannot["reason"], cannot["reason"]
+    assert cannot["answer"] != "判不了", cannot
+    # ---- 两档在台账上的效果（这才是"不许折平"）
     _sign(st, judge=fault)                      # 1 票都不算
     assert VR.consecutive_holds(st.root, SID)["streak"] == 0, "fault 被计入了"
     _sign(st, judge=clean)
     _sign(st, judge=clean)
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2
-    _sign(st, judge=unsure)                     # 不清零、也不计入
+    # 历史行（2026-10-30 之前写下的 axis=unsure）：只作历史兼容读 —— 不清零、也不计入。
+    # 这里手写一条旧行（`record_verification` 的写侧已经不收这一格了）。
+    _sign_legacy_unsure(st, text=PROOF)
     holds = VR.consecutive_holds(st.root, SID)
-    assert holds["streak"] == 2, f"unsure 把票数改了（{holds['streak']}）"
+    assert holds["streak"] == 2, f"历史行的 unsure 把票数改了（{holds['streak']}）"
     assert _row(st)["bits"]["reviewed"] is False
     _sign(st, judge=clean)                      # 第三票到
     assert VR.consecutive_holds(st.root, SID)["streak"] == 3
@@ -603,13 +642,14 @@ def test_b3_the_secretary_never_gets_the_proof_text(tmp_path):
 
 
 def test_b4_a_conclusion_outside_the_vocabulary_is_not_taken(tmp_path):
-    """词表外的结论不采信，且归 unsure（不是 clean —— 那会把没判成当没问题）。"""
+    """词表外的结论不采信，且没有轴（不是 clean、也不是 fault —— 那是"没查成"）。"""
     st = _ws(tmp_path)
     seam = _Seam({"v_reply_defect": [_axis("成立")]})       # 另一根轴的词
     got = _sec(st, seam).judge_v_reply(reply=RAW_SENTENCE, verdict="成立",
                                        statement_id=SID)
     assert got["checked"] is False, got
-    assert got["axis"] == "unsure", got
+    # 2026-10-30 第三次裁定：没查成 ⇒ 没有轴（空串），不许折成任何一档结论。
+    assert got["axis"] == "", got
     assert "不采信" in got["reason"] or "词表" in got["reason"], got["reason"]
 
 
@@ -964,23 +1004,40 @@ def test_z1_removing_the_streak_gate_makes_the_first_hold_flip(tmp_path, monkeyp
     assert _row(st2)["bits"]["reviewed"] is False, "摘掉闸与不摘掉闸结论一样 ⇒ a1 没量到闸"
 
 
-def test_z2_ignoring_the_secretary_axis_makes_a_fault_row_count(tmp_path, monkeypatch):
-    """v6 下半：把 judge 那一格摘掉（`secretary_axis` 恒返回空串）⇒ b1 的
-    "fault 不计入"当场变红。"""
+def test_z2_reading_the_axis_as_clean_makes_a_fault_row_count(tmp_path, monkeypatch):
+    """v6 下半（负控）：让那一格读成 `clean`，b1 的"fault 不计入"当场失效。
+
+    为什么负控改成"恒读成 clean"而不是"恒读成空串"（2026-10-30 第三次裁定之后）：
+    空串在现在的口径里是"没有轴 ⇒ 没查成" ⇒ 既不算票、也不清零（下面 (c) 钉着）。
+    拿它当负控，等于拿"读不出来"冒充"判过了"—— 那正是这条口径要禁止的 fail-open。
+    """
+    fault = {"checked": True, "axis": "fault", "decision": "有缺陷要指出"}
+    # (a) 把读侧打成恒 `clean` ⇒ 三次 fault 也攒够三票（b1 的绿是靠那一格读出来的）
     st = _ws(tmp_path)
     _put(st)
-    fault = {"checked": True, "axis": "fault", "decision": "有缺陷要指出"}
-    monkeypatch.setattr(VR, "secretary_axis", lambda _row: "")
+    monkeypatch.setattr(VR, "secretary_axis", lambda _row: "clean")
     for _i in range(3):
         _sign(st, judge=fault)
     assert _row(st)["bits"]["reviewed"] is True, (
-        "摘掉 judge 之后三次 fault 仍然没签 ⇒ b1 的'fault 不计入'不是 judge 干的")
+        "把那一格读成 clean 之后，三次 fault 仍然没签 ⇒ b1 的'fault 不计入'不是它干的")
     monkeypatch.undo()
+    # (b) 真的读出来 ⇒ fault 不计入（正控）
     st2 = _ws(tmp_path / "clean")
     _put(st2)
     for _i in range(3):
         _sign(st2, judge=fault)
     assert _row(st2)["bits"]["reviewed"] is False, "judge 接上了而 fault 仍然计入"
+    # (c) 读不出来（空串）⇒ 既不算票也不清零（"没查成"不是 clean，也不是 fault）
+    st3 = _ws(tmp_path / "no-axis")
+    _put(st3)
+    monkeypatch.setattr(VR, "secretary_axis", lambda _row: "")
+    for _i in range(3):
+        _sign(st3, judge=fault)
+    assert _row(st3)["bits"]["reviewed"] is False, (
+        "轴读不出来时 fault 被算成了 clean ⇒ fail-open")
+    monkeypatch.undo()
+    assert VR.consecutive_holds(st3.root, SID)["streak"] == 0, (
+        "轴读不出来的行既不该算票，也不该清零（它只是没查成）")
 
 # ============================================== a11 秘书判了缺陷：读数要说得出来
 def test_a11_a_secretary_fault_is_visible_in_the_standing(tmp_path: pathlib.Path) -> None:

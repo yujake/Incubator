@@ -309,12 +309,17 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
         "工具路径上没有 V 的秘书，却把第 3 位翻了 ⇒ 发签逃过了秘书那一关：" + str(payload))
     issuance = dict(payload.get("sign_issuance") or {})
     assert issuance.get("issue") is False and issuance.get("issued") is False, issuance
-    # 这一趟同时挡在两道闸上：① 台账那一签的语义判定是 `unsure`（没有秘书 ⇒ 没人判）
-    # ⇒ 它既不计数也不清零 ⇒ 连续次数 0；② 连续次数不够 ⇒ 不发签。
+    # 这一趟挡在两道闸上：① 台账那一签的语义判定没有轴（没有秘书 ⇒ 没人判 ——
+    # 2026-10-30 第三次裁定之后"判不了"不再是一种结论，所以这里既不是 clean、也不是
+    # fault、更不是旧那一格 unsure）⇒ 它既不计数也不清零 ⇒ 连续次数 0；
+    # ② 连续次数不够 / 没人发签 ⇒ 不发签。装配缺口那一档不算框架失败：V 的会审确实做完了
+    # （`checked` 仍为真、`verdict` 与台账都在），缺的只是"谁能发这一签"。
     assert issuance.get("projected") == 0, issuance
     assert issuance.get("streak_ok") is False, issuance
     assert issuance.get("need") == VR.SIGN_STREAK_NEED, issuance
-    assert (payload.get("secretary_judge") or {}).get("axis") == "unsure", payload
+    judge = dict(payload.get("secretary_judge") or {})
+    assert judge.get("axis") == "", judge
+    assert judge.get("checked") is False, judge
     # 负控：没这条边的角色派 V 仍然被拒（否则上面那条"受理"只是空转）
     bad = cond.summon("V", "list_verifications", {}, by="G")
     assert str(bad.outcome) == "refused", bad

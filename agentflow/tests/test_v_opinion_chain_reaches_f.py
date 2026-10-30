@@ -5,7 +5,7 @@
 
 ```text
 AgentV.verify_proof（V 的真入口）
-  -> 秘书 judge_v_reply（语义三档：clean / fault / unsure）
+  -> 秘书 judge_v_reply（语义两档：clean / fault；历史行里的 unsure 只作历史兼容读）
   -> fault 才 wash_v_reply（洗稿；洗不出来就不输出原文）
   -> verifications/<命题号>.jsonl 那一行的 washed_relay（洗过的转达文本）
   -> agent_loop.v_rejections_digest（读侧）
@@ -19,7 +19,7 @@ AgentV.verify_proof（V 的真入口）
 |---|---|---|
 | e1 | fault 才洗：V 的回复"整体很好，只是有一个记号问题需要强调"⇒ 秘书判 fault ⇒ 洗 ⇒ 板项 detail 不是 V 原文，且逐字带着 V 指出的那个问题 | 同一份回复、只把秘书判成 clean ⇒ 洗稿一次都不许发生（本用例里当场跑一遍）；fault 却不洗 / 洗了但没递 ⇒ 板项读不到洗过的文本 |
 | e2 | clean 不打扰 F：V 说"我试了几种反例构造都失败，未发现问题"⇒ 不发意见、streak +1 | 把 clean 当 fault（洗了/递了）或不计入（streak 不涨）⇒ 红 |
-| e3 | unsure 不冒充：V 的回复含糊（无尝试痕迹）⇒ 不计入、不清零，然后按"判不了"打回 F（`via=secretary_unsure`，措辞与 fault 分开） | 折成 clean（streak 变 2）或折成 fault（streak 归零/洗稿）⇒ 红；把判不了那一档删掉（或与 fault 混成同一档）⇒ 也红 |
+| e3 | 判不了不是结论：秘书答历史那一格 ⇒ 不采信（`checked=False`、没查成）、不打回；历史行里的 unsure 只作历史兼容读 | 把它折成 clean / fault（都算一种结论）⇒ 红；把历史那一格从读侧删掉（老台账读不出）⇒ 也红 |
 | e4 | F 收不到 V 原文：板项 detail 与 V 原文不相等、且第一人称那句不在里面；kind/expects 不许新造（只能是 notice/ack） | 直接转发原文 ⇒ 红；新造一档 kind/expects ⇒ 冻结面被改 |
 | e5 | 端到端的顺序：先喂 V 的意见、再断言 F 看得到；中间不许手工改盘绕过秘书 | 没有 V 那一签（空工作区）却能在板上开到项 ⇒ 红；板项文本不是台账那一格的字节 ⇒ 红 |
 
@@ -331,54 +331,77 @@ def test_e2_clean_does_not_touch_f_and_bumps_the_streak(tmp_path):
     assert seam.asked("wash_v_reply") == 0
 
 
-# ============================================================ e3：unsure 不冒充
+# ============================================================ e3：判不了不再是结论
 
-def test_e3_unsure_is_neither_counted_nor_zeroed_and_is_sent_back_as_unsure(tmp_path):
-    """e3：V 的回复含糊（无尝试痕迹）⇒ 秘书判 unsure ⇒ 不计入、不清零，然后打回 F。
+def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_reads_compatibly(tmp_path):
+    """e3：秘书答「判不了」⇒ 不是一种结论（没查成）；历史行里的 unsure 只作历史兼容读。
 
-    先攒一票 clean，再喂一条含糊的"成立"：连续次数必须停在 1。
-    折成 clean ⇒ 2（冒充了一票）；折成 fault ⇒ 0（把已有的一票作废）。两个方向都被这一条钉住。
+    2026-10-30 第三次裁定逐字：「不可能有判不了…只要不是完全没毛病都叫有毛病」。两半：
 
-    2026-10-30 起这两票落在同一次调用的两转里（第 1 转 clean、第 2 转 unsure 就立刻停），
-    所以读数从"两次 `verify_proof` 的返回值"改成"`review_passes` 的 (axis, streak) 序列"，
-    另加一条：unsure 之后不许再问第三转。
-
-    ## 2026-10-30 第二次裁定之后掉头：「不给 F 发意见」改成「按判不了打回」
-
-    业主逐字：「unsure（判不了）…也终止并打回…板项/读数里如实写『秘书判不了这一条
-    （需要补材料或重交）』，与 fault 分开」。所以本用例的最后两行从"明细为空、板上 0 项"
-    改成"明细恰好一条、`via=secretary_unsure`（不是 `secretary_fault`）、板上 1 项、
-    措辞说判不了" —— 前半段（不计入、不清零、没洗稿）一个字没放宽。
+    ① 新判定：先攒一票 clean，再喂一条含糊的"成立"而秘书答的是历史那一格（判不了）
+       ⇒ 它不在两格词表里 ⇒ 不采信（`checked=False`、没有轴）：连判立刻停、
+       整笔 `checked=False`（`reason` 以 `secretary_unjudged` 开头、说清没查成）、
+       不签、也不打回（它不是"有毛病"）。连续次数停在 1（这一行不算票、不清零）。
+    ② 历史行：手写一条 `axis="unsure"` 的旧行（2026-10-30 之前那一版留下的）⇒ 读得出、
+       不清零也不计入，而且不进 F 的明细 —— 它不是 V 的判决。
     """
     st = _ws(tmp_path)
     _put(st)
-    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN), _axis(SEC.V_REPLY_UNSURE)]})
+    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN), _axis("判不了")]})
     agent = AgentV(st, workspace_root=st.root,
                    llm=_ReviewSeam(REPLY_CLEAN, REPLY_UNSURE), secretary=_sec(st, seam))
     got = agent.verify_proof(SID, proof_text=PROOF)
-    assert got["checked"] is True, got
+    # 没查成（框架失败）：不是"审过了"，也不是"有毛病"
+    assert got["checked"] is False, got
+    assert "secretary_unjudged" in str(got["reason"]), got["reason"]
+    assert "没查成" in str(got["reason"]), got["reason"]
     passes = got.get("review_passes") or []
-    assert [p["axis"] for p in passes] == ["clean", "unsure"], passes
-    assert [p["streak"] for p in passes] == [1, 1], passes
-    assert got["secretary_judge"]["axis"] == "unsure", got["secretary_judge"]
+    assert [p["axis"] for p in passes] == ["clean", ""], passes
+    assert passes[-1].get("terminal") == "unjudged", passes
+    assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
+    assert got["secretary_judge"]["axis"] == "", got["secretary_judge"]
+    assert got["signed_bit3"] is False and got["bits"] == {}, got
+    # 那一行照落（V 的意见是 V 的产物），但它的轴是空的（"没查成"不是一种判定）。
+    sign = _ledger_row(st)
+    assert sign["verdict"] == "成立", sign
+    assert (sign.get("secretary_judge") or {}).get("axis") == "", sign["secretary_judge"]
+    assert (sign.get("secretary_judge") or {}).get("checked") is False, sign["secretary_judge"]
     holds = VR.consecutive_holds(st.root, SID)
     assert holds["checked"] is True and holds["streak"] == 1, (
-        f"unsure 改了票数（{holds['streak']}）⇒ 它被折成了 clean（2）或 fault（0）")
-    # 台账上那一行照落（意见留痕），但没有洗稿
-    sign = _ledger_row(st)
-    assert sign["verdict"] == "成立" and (sign.get("washed_relay") or {}) == {}, sign
-    assert seam.asked("wash_v_reply") == 0
-    # 2026-10-30（业主第二次裁定）：unsure 也终止并打回 —— 但理由码与 fault 分开。
+        f"没查成那一行改了票数（{holds['streak']}）：它既不算票、也不清零")
+    # 不打回：读侧一条明细都没有，板上一个项都不开（没查成不是"有毛病"）。
     _text, details, _problems, cond, out = _deliver(st)
-    assert len(details) == 1, details
-    assert details[0].get("via") == "secretary_unsure", details[0]
-    assert details[0].get("via") != "secretary_fault", details[0]
-    assert details[0].get("washed") in ("", None), details[0]
-    assert out["checked"] is True and len(out["opened"]) == 1, out
-    assert len(cond.items) == 1, cond.items
-    summary = str(cond.items[0].get("summary") or "")
-    assert "判不了" in summary, summary
-    assert "判「有毛病」" not in summary, summary
+    assert details == [], details
+    assert out["opened"] == [] and cond.items == [], cond.items
+
+    # ---- ② 历史行（手写一条 axis=unsure 的旧行）：只作历史兼容读
+    st2 = _ws(tmp_path / "legacy")
+    _put(st2)
+    ok = VR.parse_verdict(REPLY_CLEAN)
+    first = VR.record_verification(st2.root, statement_id=SID, proof_text=PROOF, verdict=ok,
+                                   verifier="agent-V", store=st2, proof_no=1,
+                                   secretary_judge={"checked": True, "axis": "clean",
+                                                    "decision": SEC.V_REPLY_CLEAN})
+    VR._append_verification(VR.verification_ledger_path(st2.root, SID), {
+        **{k: first[k] for k in ("statement_id", "stmt_id", "proof_no", "verifier", "verdict",
+                                 "defect_step", "quote", "why", "findings",
+                                 "unresolved_errors", "citation_checks", "proof_sha256",
+                                 "proof_chars", "submission_id", "at")},
+        "verification_id": "v-legacy-0001", "round": 2,
+        # 历史行里那一格：只作历史兼容读（读得出、新判定不再产生）。
+        "secretary_judge": {"axis": "unsure", "checked": True, "decision": "判不了"},
+    })
+    legacy_rows = [r for r in VR.list_verifications(st2.root, statement_id=SID, limit=None)[0]
+                   if r.get("verification_id") == "v-legacy-0001"]
+    assert len(legacy_rows) == 1, VR.list_verifications(st2.root, statement_id=SID, limit=None)
+    assert VR.secretary_axis(dict(legacy_rows[0])) == "unsure", legacy_rows[0]
+    legacy = VR.consecutive_holds(st2.root, SID)
+    assert legacy["checked"] is True and legacy["streak"] == 1, (
+        f"历史行的 unsure 改了票数（{legacy['streak']}）—— 它只作历史兼容读：不计入、不清零")
+    _t2, details2, problems2, cond2, out2 = _deliver(st2)
+    assert details2 == [], details2
+    assert not problems2, problems2
+    assert out2["opened"] == [] and cond2.items == [], cond2.items
 
 
 # ============================================================ e4：F 收不到 V 原文

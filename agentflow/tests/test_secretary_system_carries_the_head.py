@@ -114,9 +114,15 @@ def test_the_head_is_the_one_of_that_kind_not_a_placeholder() -> None:
         for word in verdicts:
             assert word in head, (kind, word, head[:200])
         # 别的类别的词表不许整张混进来（同一根轴的词混进来就是"两处两个词表"）。
+        #
+        # 2026-10-30 收窄一处（第三次裁定之后）：V 那一档的题面必须逐字否掉另一个轴的
+        # 词（「判不了」不是一种结论 —— 业主逐字要求写这一句）。"点名否掉"不是"给它留了
+        # 一个位置"，所以只对逐字否掉的那一种写法开口子：写成 `「<词>」不是一种结论` 才算
+        # 说不收它，其余任何出现仍然算泄漏。
         others = [w for k, vs in SEC.JUDGE_VERDICTS.items() if k != kind for w in vs]
         unique = [w for w in others if w not in verdicts]
-        leaked = [w for w in unique if w in head]
+        leaked = [w for w in unique
+                  if w in head and f"「{w}」不是一种结论" not in head]
         assert not leaked, (kind, leaked, head[:200])
 
 

@@ -6,32 +6,43 @@
     「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次 V 过 3 次。
       毕竟没问题的判决没必要给 F。有毛病要给 F 知道叫它改正。这块 V 秘书要做好」
 
-## 2026-10-30 第二次裁定（本次唯一权威，逐字）
+## 2026-10-30 第二次裁定（仍有效，逐字）
 
     「没有什么『还没够』，连判里面如果判出一回秘书语义分析认为是『有毛病』的，
       则直接打回了，连判终止」
 
 于是连判的终局只有两种，没有第三种：
 
-1. 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签（现状已对）；
+1. 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签；
 2. 任一转秘书语义判定判出 `fault`（有毛病）⇒ 「立刻终止」：这一转就是终局，台账那
-   一行就是打回给 F 的那一条（`via=secretary_fault`，递的是洗过的转达）。`unsure`
-   （判不了）同样终止并打回，理由码与 fault 分开（`via=secretary_unsure`，读数里写
-   "需要补材料或重交"）；V 自己的结论不是「成立」那一档也立刻停（本身就是打回）。
+   一行就是打回给 F 的那一条（`via=secretary_fault`，递的是洗过的转达）；V 自己的
+   结论不是「成立」那一档也立刻停（本身就是打回）。
 
 "循环跑完而既没签也没打回"不是一条终局：只可能是配置病态（门槛被改成 0 / 负数），
 那时返回值报内部不一致（`checked=False` + 明确 reason），不许写成"次数没到"。
 上界因此「动态等于门槛」（`VR.SIGN_STREAK_NEED` 现读）：要么签、要么打回，逻辑上必然命中。
 
-五条要求 → 五条判据（全部先红后绿）：
+## 2026-10-30 第三次裁定（推翻"判不了"那一档，逐字）
+
+    「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」
+
+于是：① 秘书的语义判定只有两档（clean / fault），拿不准、只挑出一处小记号问题、
+只说"我没逐行验证"——统统算 fault（题面只给两档；词表里也只有两格，模型若仍答历史
+那一格就按"不采信"处理 ⇒ `checked=False`，不会被折成第三种结论）；
+② 历史台账行里的 unsure 只作历史兼容读（读得出、新产生的一律没有它）；
+③ 「没查成」不是判定：秘书问不出来 / 输出不合法 / 台账写不进去 ⇒ 终止 + `checked=False`
++ 明确 reason，不许当成 fault 打回，也不许说"次数没到"。
+
+六条要求 → 六条判据（全部先红后绿）：
 
 | 编号 | 它要证明的事 | 改前怎么红 | 什么改动会让它红回去 |
 |---|---|---|---|
 | t1 | 一次 `verify_proof` 自己判三次 clean ⇒ 台账恰好 3 行、秘书发签、位翻上去；F 那一侧一条都没有 | 一次调用只问一次模型（台账 1 行、不签） | 把循环摘掉 / 让 clean 也开板项 |
 | t2 | 第 2 次判 fault ⇒ 立刻停（2 行、不签），洗过的那一份能读出 `via=secretary_fault` | fault 那一转之后还接着问第三问 | fault 之后接着判 / 洗稿没落进台账 |
-| t3 | 上界动态等于门槛：门槛 1 ⇒ 判 1 次就签；门槛 5 ⇒ 判满 5 次、第 5 次签上 | 上界是导入期的常量（门槛 5 时判到 3 就停、如实不签 = 业主否掉的终局） | 上界与门槛又分成两个数 / 判不满也签 |
-| t4 | 第 2 转判 `unsure` ⇒ 2 行、不签、立刻停，读侧是「另一档」明细（`via=secretary_unsure`） | unsure 之后不进读侧明细（或与 fault 混成一档） | 把 unsure 折成 clean / 折成 fault / 留成"次数没到" |
-| t5 | `agent_v/core.py` 与 `verifications.py` 的返回值/读数/docstring 里"还没够 / 还不够 / 未达门槛"一处都不剩 | 那三种措辞还留在连判读数与 `sign_issuance.reason` 里 | 任何一处重新写回这类终局 |
+| t3 | 上界动态等于门槛：门槛 1 ⇒ 判 1 次就签；门槛 5 ⇒ 判满 5 次、第 5 次签上；门槛 0 ⇒ 内部不一致 | 上界是导入期的常量（门槛 5 时判到 3 就停、如实不签 = 业主否掉的终局） | 上界与门槛又分成两个数 / 判不满也签 |
+| t4 | 第 2 转是含糊的一段话 ⇒ 判成 `fault`（不是 unsure、不是 clean）⇒ 立刻停、打回、洗过的意见到 F；答历史那一格 ⇒ 不采信（没有第三种结论） | 题面又给三档 / 把"判不了"折成一种结论 / 含糊被折成 clean | 题面或词表里出现第三格 / 不采信被折成 fault 或 clean |
+| t5 | 秘书问不出来（缝 `ok=False`）⇒ `checked=False`、终止、不签、不打回，reason 说清没查成 | 把"没查成"当成 fault 打回，或当成 clean 放过去 | 没查成那一档又折回任何一档判定 |
+| t6 | `src/` 里：三种"还差次数"的终局措辞一处不剩（V 那一链的四份源码）；`unsure` 每一处都写明「只作历史兼容读」，且写侧结构上产生不出它 | 那三种措辞还在连判读数里；或"判不了"又被当成一种结论写进台账 | 任何一处写回这类终局 / 写侧又能产生 unsure |
 
 ## 为什么"F 那一侧一条都没有"要读 `v_rejections_digest`
 
@@ -386,115 +397,277 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     assert _stmt_row(st3)["bits"]["reviewed"] is False, _stmt_row(st3)["bits"]
 
 
-# ============================================================ t4：unsure 也终止并打回
+# ============================================================ t4：含糊就是 fault
 
-#: 第 2 转的回复：含糊（没有尝试痕迹），秘书那一档才判得出「判不了」。
-UNSURE_REPLY = json.dumps({"verdict": "成立", "why": "我觉得没问题。", "findings": []},
-                          ensure_ascii=False)
+#: 第 2 转的回复：含糊（没有尝试痕迹）。业主 2026-10-30 第三次裁定：「只要不是完全没毛病
+#: 都叫有毛病」⇒ 这一段必须判成 fault（不是 clean，也不再有一种"判不了"的结论）。
+VAGUE_REPLY = json.dumps({"verdict": "成立", "why": "我觉得没问题，但我没逐行验证。",
+                          "findings": []}, ensure_ascii=False)
+#: 洗过的那一份（含糊那一转的转达文本）。它的 findings 必须能逐字引回 V 的回复。
+WASHED_VAGUE = "V 没有逐行验证：请把每一步的依据补齐之后再送 V 重审。"
 
 
-def test_t4_an_unsure_pass_ends_the_run_and_goes_back_as_unsure(tmp_path):
-    """第 2 转秘书判「判不了」（unsure）⇒ 2 行、不签、立刻停，读侧是另一档明细。
+def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
+    """第 2 转是含糊的一段话 ⇒ 判成 `fault`（不是 unsure、不是 clean）⇒ 立刻终止并打回。
 
-    口径（业主 2026-10-30 本次裁定第三条）：unsure 既不是 clean 也不是 fault，但也不许
-    被写成"次数没到"——它同样终止连判并打回 F：板项/读数里如实写"秘书判不了这一条
-    （需要补材料或重交）"，理由码与 fault 那一档「分开」（`via=secretary_unsure`，
-    fault 是"有毛病"，unsure 是"没判出来"；两种都要 F 知道，但理由码不同）。
+    业主 2026-10-30 第三次裁定逐字：「不可能有判不了。你告诉我啥叫判不了？只要不是完全
+    没毛病都叫有毛病」。三半都钉住：
 
-    反真空（本用例同时钉住"分开"这件事）：`via` 必须是 `secretary_unsure` 而不是
-    `secretary_fault`；板项措辞必须说"判不了"，而不是"V 判有毛病"。
+    ① 题面与词表：只有两档，并逐字写着"判不了不是一种结论"（题面又给三档，模型迟早
+       会把那一档答回来）；含糊的几种写法在题面里明文算「有缺陷要指出」；
+    ② 链路：含糊那一转秘书判 fault ⇒ 连判立刻停（2 行、不签）、"这一转就是终局：
+       已按 fault 打回 F"，洗过的那一份落进台账并经读侧交到 F（`via=secretary_fault`）；
+    ③ 反真空：秘书若仍答历史那一格（"判不了"）⇒ 它不是一种结论：不采信、
+       `checked=False`、没有轴（既不是 clean 也不是 fault）。
     """
+    # ---- ① 题面与词表：两档，且"判不了"被明文否掉
+    system = SEC._judge_system("v_reply_defect")
+    assert "「判不了」不是一种结论" in system, system[-400:]
+    assert "只有两档" in system, system[-400:]
+    assert SEC.V_REPLY_VERDICTS == (SEC.V_REPLY_CLEAN, SEC.V_REPLY_FAULT), SEC.V_REPLY_VERDICTS
+    assert set(SEC.V_REPLY_AXIS.values()) == {"clean", "fault"}, SEC.V_REPLY_AXIS
+    # 含糊的这几种写法逐字在题面里算「有缺陷要指出」（否则模型只会猜）。
+    for phrase in ("我没逐行验证", "拿不准", "只挑出一处小记号问题"):
+        assert phrase in system, (phrase, system[-600:])
+
+    # ---- ② 链路：含糊那一转判成 fault ⇒ 立刻停、打回、洗过的意见到 F
     st = _ws(tmp_path)
     _put(st)
-    # 第 3 问的回复故意还留着（含糊那份）——若实现没停，它会真的被问第三次。
-    review = _ReviewSeam([CLEAN_REPLY, UNSURE_REPLY])
+    review = _ReviewSeam([CLEAN_REPLY, VAGUE_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
-                                         _axis(SEC.V_REPLY_UNSURE)]})
+                                         _axis(SEC.V_REPLY_FAULT)],
+                      "wash_v_reply": [{"text": WASHED_VAGUE, "step": 2,
+                                        "findings": [{"quote": "我没逐行验证",
+                                                      "why": "没验证过就不是没问题"}]}]})
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
 
     got = agent.verify_proof(SID, proof_text=PROOF)
 
     assert review.asked() == 2, (
-        f"第 2 转已经判不了，却又问了 {review.asked()} 次模型 ⇒ 「立刻终止」没做到")
+        f"第 2 转已经判成 fault，却又问了 {review.asked()} 次模型 ⇒ 「立刻终止」没做到")
     passes = got.get("review_passes") or []
-    assert [p["axis"] for p in passes] == ["clean", "unsure"], passes
-    # unsure 不清零、也不计入：第 2 转的连续次数仍是第 1 转的 1（不是 2、也不是 0）。
-    assert [p["streak"] for p in passes] == [1, 1], passes
-    assert passes[-1].get("terminal") == "unsure", passes
+    assert [p["axis"] for p in passes] == ["clean", "fault"], passes
+    # fault 清零：第 2 转的连续次数是 0（不是 1 —— 那会是"不清零"的旧 unsure 口径）。
+    assert [p["streak"] for p in passes] == [1, 0], passes
+    assert passes[-1].get("terminal") == "fault", passes
     rows = _rows(st)
     assert len(rows) == 2, f"台账应当 2 行，实得 {len(rows)}"
-    assert rows[-1]["secretary_judge"]["axis"] == "unsure", rows[-1]["secretary_judge"]
-    assert got["secretary_judge"]["axis"] == "unsure", got["secretary_judge"]
+    assert rows[-1]["secretary_judge"]["axis"] == "fault", rows[-1]["secretary_judge"]
+    assert got["secretary_judge"]["axis"] == "fault", got["secretary_judge"]
     assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
     assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
     assert "终局" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
     assert "还差" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
-    # 判不了不洗稿：洗过的那一格没有内容（洗稿只属于 fault 那一档）。
-    assert not (rows[-1].get("washed_relay") or {}), rows[-1].get("washed_relay")
+    # fault 那一档要洗稿：洗过一次，洗过的文本随台账行落盘。
+    assert sec_seam.asked("wash_v_reply") == 1, sec_seam.seen
+    assert rows[-1]["washed_relay"]["text"] == WASHED_VAGUE, rows[-1].get("washed_relay")
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
+    # 反真空：新写的台账行里没有任何一格写着 unsure（新判定不再产生它）。
+    assert all("unsure" not in json.dumps(r, ensure_ascii=False) for r in rows), rows
 
-    # 读侧：一条明确的明细，理由码与 fault 分开。
+    # 读侧：走的就是 fault 那一档（洗过的转达），不是另造一档。
     text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
     assert problems == [], problems
     assert len(details) == 1, (text[:400], details)
-    detail = details[0]
-    assert detail["via"] == "secretary_unsure", detail
-    assert detail["via"] != "secretary_fault", detail
-    assert "判不了" in text, text
-    assert "判「有毛病」" not in text, text
+    assert details[0]["via"] == "secretary_fault", details[0]
+    assert details[0]["washed"] == WASHED_VAGUE, details[0]
 
-    # 板项：一项，措辞是"判不了 / 需要补材料或重交"，不是"V 判有毛病"。
+    # ---- ③ 历史那一格不再是一种结论：秘书答它 ⇒ 不采信（没有轴、checked=False）
+    st2 = _ws(tmp_path / "legacy-answer")
+    _put(st2)
+    legacy_answer = _secretary(st2, _Seam({"v_reply_defect": [_axis("判不了")]}))
+    judge = legacy_answer.judge_v_reply(reply="我觉得没问题，但我没逐行验证。",
+                                        verdict="成立", statement_id=SID)
+    assert judge["checked"] is False, judge
+    assert judge["axis"] == "", judge
+    assert "不采信" in judge["reason"] or "不在" in judge["reason"], judge["reason"]
+    assert judge["answer"] != "判不了", (
+        "历史那一格被当成一种结论写进了返回值的 `answer`：" + str(judge))
+
+
+# ============================================================ t5：问不出来 ⇒ 没查成
+
+class _DeadSeam:
+    """秘书的缝：这一问没答上来（`ok=False` / 没有回音）。t5 用它量"没查成"。"""
+
+    wired = True
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str, str]] = []
+        self.calls = 0
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "") -> tuple[dict | None, _Call]:
+        self.seen.append((note, prompt, system))
+        self.calls += 1
+        call = _Call()
+        call.ok = False
+        call.problem = "timeout"
+        call.detail = "夹具：这一问没有回音"
+        return None, call
+
+
+def test_t5_a_secretary_that_cannot_answer_is_not_a_verdict(tmp_path):
+    """秘书问不出来（缝返回 `ok=False`）⇒ `checked=False`、终止、不签、也不打回。
+
+    口径（业主 2026-10-30 第三次裁定第 3 条）：「没查成」不是判定 —— 秘书问不出来 /
+    模型输出不合法 / 台账写不进去 ⇒ 框架失败：终止 + `checked=False` + 明确 reason；
+    不许当成 fault 打回，也不许说"次数没到"。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    review = _ReviewSeam([CLEAN_REPLY])
+    dead = _DeadSeam()
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=SEC.Secretary("V", root=st.root, store=st, seam=dead,
+                                           enable_model=True))
+
+    got = agent.verify_proof(SID, proof_text=PROOF)
+
+    # 连判在第一转就停了（V 问了一次模型、秘书问了一次）。
+    assert review.asked() == 1, review.asked()
+    assert dead.calls == 1, dead.calls
+    rows = _rows(st)
+    assert len(rows) == 1, f"V 的审阅是真的 ⇒ 台账那一行照落，实得 {len(rows)}"
+    assert rows[0]["secretary_judge"]["checked"] is False, rows[0]["secretary_judge"]
+    assert rows[0]["secretary_judge"]["axis"] == "", rows[0]["secretary_judge"]
+    assert got["checked"] is False, got
+    assert str(got["reason"]).startswith("secretary_unjudged"), got["reason"]
+    assert "没查成" in str(got["reason"]), got["reason"]
+    assert "timeout" in str(got["detail"]), got["detail"]
+    assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
+    assert got["sign_issuance"]["checked"] is False, got["sign_issuance"]
+    assert got["signed_bit3"] is False and got["bits"] == {}, got
+    assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
+    # 不打回：读侧一条明细都没有，板上一个项都不开（没查成不是"有毛病"）。
+    text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
+    assert details == [], (text[:400], details)
     board = _BoardDouble()
     delivered = AL.deliver_v_verdicts(board, task_id="t-000001", depth=0,
                                       details=details)
-    assert delivered.get("checked") is True, delivered
-    assert delivered.get("problems") == [], delivered
-    assert len(board.opened) == 1, board.opened
-    summary = str(board.opened[0]["kwargs"].get("summary") or "")
-    assert "判不了" in summary, summary
-    assert "判「有毛病」" not in summary, summary
-    body = str(board.details[0]["args"][1]) if board.details else ""
-    assert "判不了" in body, body
-    assert "秘书洗过的转达" not in body, (
-        "判不了那一档没有洗过的文本 ⇒ 板项不许长得像「洗过的转达」")
+    assert board.opened == [], board.opened
+    assert delivered.get("opened") == [], delivered
 
 
-# ============================================================ t5：措辞判据（防回归）
+# ============================================================ t6：措辞判据（防回归）
 
 #: 业主 2026-10-30 否掉的终局措辞：这三种写法只描述"还差多少次"，而连判的终局只有
 #: 两种（签 / 打回）—— 它们一旦回到返回值、读数或 docstring 里，读者就会把「打回」
-#: 读成「再多判几次就好」，而这正是本次裁定取消的东西。
+#: 读成「再多判几次就好」，而这正是裁定取消的东西。
 NOT_ENOUGH_WORDING = ("还没够", "还不够", "未达门槛")
-#: 允许的历史注释白名单。「刻意为空」：这一条量的是"这三个词一处都不剩"；白名单一旦
-#: 有内容，判据就退化成"只剩白名单外的那几处"（而历史注释正是最容易被整批豁免的一档）。
-NOT_ENOUGH_ALLOWED: tuple[tuple[str, str], ...] = ()
+#: V 那一根轴的历史轴名（2026-10-30 之前写下的台账行里出现过它）。
+#:
+#: 这一条不是"这个词决不允许出现"—— 读侧必须留着它（老台账要读得出）；它量的是
+#: "不许再作为一种判定结论出现"。两件事分开量（见下面 ② 与 ③）。
+LEGACY_AXIS = "unsure"
+#: 只读、不许改的那一处（FC-27 禁改区）：`tools/verify_tools.py` 的 returns 说明里有一句
+#: 旧的三档描述。它不在本批写权里，所以扫描时显式排除并登记原因 —— 为了变绿去改
+#: 禁改区，等于把"判据变绿"换成"权限越界"。
+FC27_OUT_OF_SCOPE = ("tools/verify_tools.py",)
+#: 「只作历史兼容读」这句话的写法：判据按它认"这一处说明了它不是一种结论"。
+LEGACY_NOTE = "历史兼容读"
 
 
-def test_t5_no_not_enough_wording_survives_in_the_readings():
-    """`agent_v/core.py` 与 `verifications.py` 里那三种"还差次数"的终局措辞一处不留。
+def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
+    """`src/` 里：终局措辞一处不剩；`unsure` 只作历史兼容读、写侧产生不出它。
 
-    为什么扫源码而不是只扫返回值：返回值只覆盖跑得到的分支，而措辞最容易留在
-    docstring / 注释里（那正是下一次改动会照着抄的模板）。
+    业主 2026-10-30 的两次裁定各管一半：第二次否掉"还差次数"那类终局措辞，第三次
+    否掉"判不了"这一档结论。两个方向都扫源码：返回值只覆盖跑得到的分支，而措辞
+    最容易留在 docstring / 注释里 —— 那正是下一次改动会照着抄的模板。
+
+    为什么 ① 只扫 V 那一链的四份源码：那三种措辞在别的模块里有完全不同的意思
+    （`specs/*` 的长句、`tools/doc_tools.py` 的引文覆盖面），全仓扫描会把它们误判成本条
+    口径的终局措辞 —— 那是判据量错了对象。② 反过来是全 `src/` 扫的：`unsure` 只可能在
+    这几处出现，漏一处就等于漏了一条"它还是一种结论"的暗门。
     """
     src = pathlib.Path(VR.__file__).resolve().parent
-    targets = {"agent_v/core.py": src / "agent_v" / "core.py",
-               "verifications.py": src / "verifications.py"}
-    assert NOT_ENOUGH_ALLOWED == (), "白名单只许为空（见上面的理由）"
+    v_chain = {"agent_v/core.py": src / "agent_v" / "core.py",
+               "verifications.py": src / "verifications.py",
+               "secretary.py": src / "secretary.py",
+               "agent_loop.py": src / "agent_loop.py"}
     scanned: dict[str, str] = {}
-    for name, path in targets.items():
+    for name, path in v_chain.items():
         assert path.is_file(), f"{name} 不在盘上：{path}"
         text = path.read_text(encoding="utf-8")
         assert text.strip(), f"{name} 是空的 ⇒ 判据扫不到东西（假绿）"
         scanned[name] = text
-    # 反真空：这两份源码确实带着本批改过的那几格（扫错文件会假绿）。
+    # 反真空：这四份源码确实带着本批改过的那几格（扫错文件会假绿）。
     assert "verify_proof" in scanned["agent_v/core.py"], "扫的不是 V 的实现"
     assert "consecutive_holds" in scanned["verifications.py"], "扫的不是台账读数"
-    hits = [f"{name}:{i}:{word}:{line.strip()[:80]}"
-            for name, text in scanned.items()
-            for word in NOT_ENOUGH_WORDING
-            for i, line in enumerate(text.splitlines(), start=1)
-            if word in line]
-    assert hits == [], (
-        "连判的终局只剩「签 / 打回」两种，这几种措辞不许再出现：\n" + "\n".join(hits))
+    assert "judge_v_reply" in scanned["secretary.py"], "扫的不是秘书的判定面"
+    assert "v_rejections_digest" in scanned["agent_loop.py"], "扫的不是读侧"
 
+    # ① 三种"还差次数"的终局措辞：一处都不许有（白名单刻意为空）。
+    wording = [f"{name}:{i}:{word}:{line.strip()[:70]}"
+               for name, text in scanned.items()
+               for i, line in enumerate(text.splitlines(), start=1)
+               for word in NOT_ENOUGH_WORDING if word in line]
+    assert wording == [], (
+        "连判的终局只剩「签 / 打回」两种，这几种措辞不许再出现：\n" + "\n".join(wording))
+
+    # ② `unsure`：全 `src/` 扫；每一处都必须在「只作历史兼容读」的语境里（FC-27 除外）。
+    every_py = {p.relative_to(src).as_posix(): p for p in sorted(src.rglob("*.py"))}
+    assert "agent_v/core.py" in every_py and "tools/verify_tools.py" in every_py, sorted(every_py)
+    unannotated: list[str] = []
+    seen = 0
+    for rel, path in every_py.items():
+        if rel in FC27_OUT_OF_SCOPE:
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            if LEGACY_AXIS not in line:
+                continue
+            seen += 1
+            window = lines[max(0, i - 6): i + 7]
+            if not any(LEGACY_NOTE in w for w in window):
+                unannotated.append(f"{rel}:{i + 1}:{line.strip()[:80]}")
+    assert seen >= 8, f"全 src/ 只扫到 {seen} 处 `{LEGACY_AXIS}` ⇒ 扫错了对象（假绿）"
+    assert unannotated == [], (
+        f"`{LEGACY_AXIS}` 只在「只作历史兼容读」的语境里允许出现；这几处没写明：\n"
+        + "\n".join(unannotated))
+
+    # ③ 写侧结构上产生不出它：词表 / 轴表 / 落盘口各断言一次。
+    assert SEC.V_REPLY_VERDICTS == (SEC.V_REPLY_CLEAN, SEC.V_REPLY_FAULT), SEC.V_REPLY_VERDICTS
+    assert set(SEC.V_REPLY_AXIS.values()) == {"clean", "fault"}, SEC.V_REPLY_AXIS
+    assert VR.SECRETARY_JUDGE_AXES == ("clean", "fault"), VR.SECRETARY_JUDGE_AXES
+    assert VR.SECRETARY_JUDGE_HISTORICAL_AXES == (LEGACY_AXIS,), (
+        VR.SECRETARY_JUDGE_HISTORICAL_AXES)
+    st = _ws(tmp_path)
+    _put(st)
+    ok = VR.parse_verdict(CLEAN_REPLY)
+    first = VR.record_verification(
+        st.root, statement_id=SID, proof_text=PROOF, verdict=ok, verifier="agent-V",
+        store=st, proof_no=1,
+        secretary_judge={"checked": True, "axis": "clean", "decision": SEC.V_REPLY_CLEAN})
+    assert first["secretary_judge"]["axis"] == "clean", first["secretary_judge"]
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 1
+    # 落盘口：把历史那一格塞给 `record_verification` ⇒ 落成空轴（写不进来）。
+    tried = VR.record_verification(
+        st.root, statement_id=SID, proof_text=PROOF, verdict=ok, verifier="agent-V",
+        store=st, proof_no=1,
+        secretary_judge={"checked": True, "axis": LEGACY_AXIS, "decision": "判不了"})
+    assert tried["secretary_judge"]["axis"] == "", tried["secretary_judge"]
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 1
+    # 读侧兼容：手写一条 2026-10-30 之前那一版写下的行 ⇒ 读得出，且既不算票也不清零。
+    VR._append_verification(VR.verification_ledger_path(st.root, SID), {
+        **{k: first[k] for k in ("statement_id", "stmt_id", "proof_no", "verifier", "verdict",
+                                 "defect_step", "quote", "why", "findings",
+                                 "unresolved_errors", "citation_checks", "proof_sha256",
+                                 "proof_chars", "submission_id", "at")},
+        "verification_id": "v-legacy-0001",
+        "round": 2,
+        "secretary_judge": {"axis": LEGACY_AXIS, "checked": True, "decision": "判不了"},
+    })
+    legacy_rows = [r for r in _rows(st) if r["verification_id"] == "v-legacy-0001"]
+    assert len(legacy_rows) == 1, _rows(st)
+    assert VR.secretary_axis(legacy_rows[0]) == LEGACY_AXIS, legacy_rows[0]
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 1, (
+        "历史行的 unsure 改了票数：它只作历史兼容读（不算票、也不清零）")
+    last = VR.record_verification(
+        st.root, statement_id=SID, proof_text=PROOF, verdict=ok, verifier="agent-V",
+        store=st, proof_no=1,
+        secretary_judge={"checked": True, "axis": "clean", "decision": SEC.V_REPLY_CLEAN})
+    assert last["secretary_judge"]["axis"] == "clean", last["secretary_judge"]
+    assert VR.consecutive_holds(st.root, SID)["streak"] == 2, (
+        "历史行那一格把连续次数清零了（它只作历史兼容读）")
