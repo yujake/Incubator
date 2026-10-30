@@ -1,21 +1,29 @@
 # -*- coding: utf-8 -*-
-"""判据：判决词「成立 / 有毛病 / 看不出来」只有一个真身，另三处必须与它逐字一致。
+"""判据：判决词「成立 / 有毛病」只有一个真身，另三处必须与它逐字一致。
 
-## 这一份在治什么（2026-10-27，R-EVID 分块审查 ③）
+## 这一份在治什么（2026-10-27，R-EVID 分块审查 ③；2026-11-01 按两态裁定改口径）
 
 同一个词表在四个模块里各有一份落点：
 
 | 落点 | 它管的是 | 词表 | 与真身的关系 |
 |---|---|---|---|
-| `verifications.VERDICTS` | V 的台账结论（`parse_verdict` 校验的就是它） | 三档，按"站不住→站得住"排 | 真身 |
+| `verifications.VERDICTS` | V 的台账结论（`parse_verdict` 校验的就是它） | 两档（有毛病 / 成立），按"站不住→站得住"排 | 真身 |
+| `verifications.LEGACY_VERDICTS` | 历史台账行里那一格（只作兼容读） | `看不出来` | 真身的历史值（读得出、不算票、不产生） |
 | `numericproof.THIRD_PARTY_VERDICT_OK` | 第三方签字那一档"签住了"的取值 | `"成立"` | 真身的最后一档（按位置引用，不抄字面量） |
-| `exhaustionreport.VERDICT_OK` / `VERDICT_BAD` / `VERDICT_UNKNOWN` | 穷举型证据的会审三态 | 三个词 | 与真身逐字相同 |
-| `schema.REVIEW_VERDICTS` | `documents.review_verdict`（另一根轴：文档审校结论） | 三个词 + 一个空串 | 三个词逐字相同；空串表示"还没审" |
+| `exhaustionreport.VERDICT_OK` / `VERDICT_BAD` / `VERDICT_UNKNOWN` | 穷举型证据的会审机器读数 | 三个词 | 前两个与真身逐字相同；`VERDICT_UNKNOWN` 是兼容读值（V 不再产出它，见下） |
+| `schema.REVIEW_VERDICTS` | `documents.review_verdict`（另一根轴：文档审校结论） | 三个词 + 一个空串 | 两态 + 历史值逐字相同；空串表示"还没审" |
 
-前三处是同一根轴（一次证明审校的结论），第四处是另一根轴但共用同一批词。
-改前它们各是一份字面量，没有任何东西钉住"加一档时四处一起改" ⇒ 判决词加一档，
-下游四处里只有一处会认。这一份把那件事变成可机械判的：逐字一致（`==`，
-顺序也判），词表本身的形状（几档、谁在最后）单独钉一次。
+## 2026-11-01：V 的结论收成两态，这一份跟着改口径（不是放宽）
+
+业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
+于是真身只剩两格，`看不出来` 降到"历史台账行里的那一个值"（`LEGACY_VERDICTS`）：
+读得出、写不出。而另外三处里：
+- `numericproof` 按位置引用最后一格（`[-1]`）—— 仍是 `成立`，一个字没动；
+- `exhaustionreport` 的三格是机械会审自己的读数（`review()` 的返回值），V 会在
+  缺材料时把它读成"没查成"，所以那一格仍是 `看不出来` 这个词：它是另一份读数的
+  兼容值，不是 V 的结论。这一条判据因此钉"它与历史值逐字相同"，而不是"它等于真身"；
+- `schema.REVIEW_VERDICTS` 是 H 的文档审校轴（另一根轴、另一份台账），这一批不动
+  （业主 2026-11-01 只裁 V 的结论词）。它现在等于"两态 + 历史值"，仍逐字可对。
 
 ## 为什么钉"顺序"而不只钉集合
 
@@ -25,7 +33,8 @@
 
 ## 这一份不改任何代码行为
 
-它只读常量。要加第四档判决词时，这一份会先红，提醒把四处一起改。
+它只读常量。要加第三档判决词时，这一份会先红，提醒把四处一起改（并想清"这一档
+是 V 的结论，还是另一份读数"）。
 """
 from __future__ import annotations
 
@@ -45,46 +54,57 @@ from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 
 
-def test_the_authority_is_the_three_verdict_words_in_order() -> None:
-    """真身：三档、顺序 = 从"站不住"到"站得住"（另两处是按位置引用它的）。"""
-    assert VR.VERDICTS == ("有毛病", "看不出来", "成立")
+def test_the_authority_is_the_two_verdict_words_in_order() -> None:
+    """真身：两档、顺序 = 从"站不住"到"站得住"（另两处是按位置引用它的）。"""
+    assert VR.VERDICTS == ("有毛病", "成立")
     assert VR.VERDICTS[-1] == "成立", "最后一档是'签住了'那一档，numericproof 按 -1 引用它"
     assert VR.VERDICTS[0] == "有毛病"
-    assert VR.VERDICTS[1] == "看不出来"
-    assert len(VR.VERDICTS) == 3
+    assert len(VR.VERDICTS) == 2
+    # 第三态不存在：它只剩"历史行里那一个值"的身份（读得出、写不出）
+    assert "看不出来" not in VR.VERDICTS, VR.VERDICTS
+    assert VR.LEGACY_VERDICTS == ("看不出来",), VR.LEGACY_VERDICTS
 
 
 def test_the_same_axis_copies_are_word_for_word_identical() -> None:
-    """同一根轴（一次证明审校的结论）：另两处必须与真身逐字一致。"""
+    """同一根轴：（可产出的）两格逐字一致；会审那一格的历史值对得上 `LEGACY_VERDICTS`。"""
     assert NP.THIRD_PARTY_VERDICT_OK == VR.VERDICTS[-1], (
         "numericproof 的'签住了'取值与真身不一致 —— 索引里那一行会被读成没签住")
-    assert (ER.VERDICT_BAD, ER.VERDICT_UNKNOWN, ER.VERDICT_OK) == VR.VERDICTS, (
-        "exhaustionreport 的会审三态与真身不一致（顺序也要一致：它是按位置读的）")
+    assert (ER.VERDICT_BAD, ER.VERDICT_OK) == VR.VERDICTS, (
+        "exhaustionreport 的会审两态与真身不一致（顺序也要一致：它是按位置读的）")
+    assert ER.VERDICT_UNKNOWN == VR.LEGACY_VERDICTS[0], (
+        "会审那一格的历史值必须与本模块的 `LEGACY_VERDICTS` 逐字相同 —— 它现在只作"
+        "兼容读：V 读到它就把这一格记成「没查成」，不再产出这一档")
+    assert all(word not in VR.VERDICTS for word in (ER.VERDICT_UNKNOWN,))
 
 
-def test_schema_review_verdicts_is_another_axis_and_therefore_has_one_extra_cell() -> None:
-    """`schema.REVIEW_VERDICTS` 是另一根轴：三个词逐字相同，多一个空串。
+def test_schema_review_verdicts_is_another_axis_and_therefore_has_extra_cells() -> None:
+    """`schema.REVIEW_VERDICTS` 是另一根轴：两态 + 历史值逐字相同，多一个空串。
 
-    空串不是第四档判决，是"这份文档还没有审校结论"（`documents.review_verdict` 的
-    缺省）。所以这里只判"去掉空串之后与真身逐字相同 + 恰好多一格"，
+    空串不是又一动判决，是"这份文档还没有审校结论"（`documents.review_verdict` 的
+    缺省）。所以这里判"去掉空串之后与真身 + 历史值逐字相同 + 恰好多一格"，
     不判"两者相等" —— 那会把另一根轴折成本轴。
     """
-    assert set(S.REVIEW_VERDICTS) - {""} == set(VR.VERDICTS), (
-        f"文档审校结论的词表与真身分家了：{S.REVIEW_VERDICTS}")
+    assert set(S.REVIEW_VERDICTS) - {""} == set(VR.VERDICTS) | set(VR.LEGACY_VERDICTS), (
+        f"文档审校结论的词表与真身（含历史值）分家了：{S.REVIEW_VERDICTS}")
     assert "" in S.REVIEW_VERDICTS, "空串是'还没审'这一档，删掉它会把'没审'折成一档判决"
-    assert len(S.REVIEW_VERDICTS) == len(VR.VERDICTS) + 1
+    assert len(S.REVIEW_VERDICTS) == len(VR.VERDICTS) + len(VR.LEGACY_VERDICTS) + 1
 
 
 def test_parse_verdict_accepts_exactly_the_authority() -> None:
-    """行为面：`parse_verdict` 认的判决词必须恰好是真身那三档。"""
+    """行为面：两态逐字认；历史那一格与"判不了"那一族折成 `成立`；其余一个都不认。"""
     for word in VR.VERDICTS:
-        # `有毛病` 必须指到那一步（`parse_verdict` 的另一条纪律），其余两档不需要。
+        # `有毛病` 必须指到那一步（`parse_verdict` 的另一条纪律），另一档不需要。
         payload = {"verdict": word,
                    "defect_step": 1 if word == "有毛病" else None, "findings": []}
         got = VR.parse_verdict(__import__("json").dumps(payload, ensure_ascii=False))
         assert got["verdict"] == word
+    # 历史那一格（2026-11-01 之前写下的）：折成 `成立`，原话进 `verdict_raw`
+    folded = VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足", "findings": []}')
+    assert folded["verdict"] == "成立", folded
+    assert folded["verdict_raw"] == "看不出来", folded
+    assert "没有找到缺陷" in folded["why"], folded["why"]
     # 词表之外的词一个都不许认（首尾空白是 `parse_verdict` 刻意容忍的，不算"之外的词"）。
-    for bad in ("proved", "已完成", "", "成立。"):
+    for bad in ("proved", "已完成", "", "成立。", "大概成立"):
         with pytest.raises(VR.VerificationError):
             VR.parse_verdict('{"verdict": %s, "findings": []}'
                              % __import__("json").dumps(bad, ensure_ascii=False))

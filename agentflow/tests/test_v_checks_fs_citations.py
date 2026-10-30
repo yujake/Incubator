@@ -37,8 +37,9 @@
 | f 反真空：档位闸打桩 | 恒放行 ⇒ e 必红；恒拒绝 ⇒ a 的正控必红 | 两端都打，证明"红"不是写死的 |
 
 另加四条护栏（不属业主点名那五条，但同一条断链上的读数）：`weaker` 可签但点名、
-`unknown` 落"看不出来"、材料里有引用而 V 没给结论按 `unknown`、`#p2` 的依赖不进
-`#p1` 的审查材料；以及台账/读侧那两格的硬闸（`signs_bit3` 与 `bit3_payload`）。
+`unknown` 不许签（结论仍是两态里的 `成立`，由引用闸挡住）、材料里有引用而 V 没给结论
+按 `unknown`、`#p2` 的依赖不进 `#p1` 的审查材料；以及台账/读侧那两格的硬闸
+（`signs_bit3` 与 `bit3_payload`）。
 
 全部 tmp 工作区、零模型调用（V 的模型缝用一个按剧本回答的替身，不花一分钱），
 不读写 `projects/`。
@@ -229,11 +230,18 @@ def _ledger_row(store: Store, sid: str) -> dict:
 
 #: 判据 b / c / e 的公共断言，抽成谓词是为了让反真空那一条能直接判"它在打桩下必红"。
 def _blocked_by(out: dict, verdict: str) -> bool:
-    """这条判据成立吗：读数里有 `verdict` 那一档、结论不是成立、且没签住第 3 位。"""
-    checks = list(out.get("citation_checks") or [])
-    return (bool(checks) and str(checks[0].get("verdict") or "") == verdict
-            and str(out.get("verdict") or "") != "成立"
-            and out.get("signed_bit3") is False)
+    """这条判据成立吗：引用闸的挡签清单里有 `verdict` 那一档、这一签没落地、且没造出第三态。
+
+    2026-11-01（两态裁定）之后判法变了、但没有放宽：改前看"结论被改判成 `看不出来`"，
+    现在第三态不存在 —— `unknown` 那一档让结论仍停在 `成立`（V 没找到缺陷），挡住这一签
+    的是引用闸。所以这里判的是三件更具体的事：闸点名了那一档、位没翻、且读数里不是
+    `看不出来`（那一档不许再出现）。
+    """
+    gate = dict(out.get("citation_gate") or {})
+    blocking = [str(e.get("verdict") or "") for e in (gate.get("blocking") or [])]
+    return (verdict in blocking
+            and out.get("signed_bit3") is False
+            and str(out.get("verdict") or "") != "看不出来")
 
 
 def _signed(out: dict) -> bool:
@@ -473,14 +481,21 @@ def test_a_weaker_use_still_signs_but_is_named_in_the_readings(tmp_path: pathlib
     assert "弱形式" in str(out["reason"]) or "弱形式" in str(out["detail"])
 
 
-# ============================================================ 护栏：unknown 落未定
+# ============================================================ 护栏：unknown 挡住签
 
 def test_an_unknown_citation_lands_as_undetermined_and_does_not_sign(
         tmp_path: pathlib.Path) -> None:
-    """护栏：V 自己说判不了（`unknown`）⇒ 不许签成立，但"未定"要落进台账。
+    """护栏：V 自己说判不了（`unknown`）⇒ 不许签成立，而台账照样落这一行。
 
-    「可以落未定」的落法：结论改成存量三态里的 `看不出来`（它不是成立，也不是"没查成"），
-    台账照样有那一行 —— 判不了是一条结论，不是一次没查成。
+    （名字里的 `undetermined` 是历史名：2026-11-01 之后这一档不是一个结论词，
+    见 `docs/DEVELOPMENT-SPEC.md` §16.7 对这条判据的登记。改的是判据本体，靶子没变：
+    "判不了的那一条不许换成一签"。）
+
+    业主 2026-11-01 把 V 的结论收成两态，所以这一档的落法改了（判据跟着改，不是放宽）：
+    结论仍是 `成立`（V 没有找到缺陷 —— 判不了不是找到缺陷），而"这一签不许落地"由
+    引用闸挡住：那一条 `unknown` 同时是一条 error（`unresolved_errors > 0`）并进
+    `citation_blocks` ⇒ `row_signable` 为假。不存在第三个结论词（改前它落成
+    `看不出来`），而"判不了也要落台账"这件事一个字没动。
     """
     store = _ws(tmp_path)
     lemma = _lemma(store)
@@ -491,8 +506,15 @@ def test_an_unknown_citation_lands_as_undetermined_and_does_not_sign(
 
     out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["checked"] is True, "判不了也要落台账（它不是没查成）"
-    assert out["verdict"] == "看不出来" and out["signed_bit3"] is False, out
-    assert _ledger_row(store, main)["verdict"] == "看不出来"
+    assert out["verdict"] == "成立", out
+    assert out["verdict"] not in ("看不出来",), "第三态又冒出来了" + str(out["verdict"])
+    assert out["citation_checks"][0]["verdict"] == "unknown", out["citation_checks"]
+    assert out["signed_bit3"] is False, out
+    row = _ledger_row(store, main)
+    assert row["verdict"] == "成立", row
+    assert int(row["unresolved_errors"]) >= 1, row
+    assert VR.row_signable(row) is False, "判不了的那一条没有挡住这一签"
+    assert VR.citation_blocks(row), row
 
 
 # ============================================================ 护栏：引用指向不在册命题

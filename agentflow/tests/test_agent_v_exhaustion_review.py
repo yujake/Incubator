@@ -222,23 +222,34 @@ def test_4c_a_search_space_that_the_code_does_not_support_is_faulty(
     assert "1099511627776" in json.dumps(got["findings"], ensure_ascii=False), got["findings"]
 
 
-def test_4d_a_missing_report_is_unknown_and_never_holds(tmp_path: pathlib.Path) -> None:
-    """③-4 报告没落地（缺材料）⇒ `看不出来`，点名缺什么；台账照样留一行（那是"判不了"）。"""
+def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Path) -> None:
+    """③-4 报告没落地（缺材料）⇒ 没查成，点名缺什么；台账里不留行。
+
+    2026-11-01 业主裁定把「看不出来」这一档整个取消（「看不出错就是没毛病」），于是
+    缺材料的落法改了：它既不是"找到了缺陷"（不许打回 F），也不是"没找到缺陷"
+    （不许判成立），只有"没查成"这一格 —— `checked=False` + `reason="missing_material"`，
+    台账不留行（留一行会把"没查成"冒充成"审过了"）。会审的七项读数仍在
+    `exhaustion_review` 里（它是机械读数的正本）。
+    """
     env = _chain(tmp_path)
     report = pathlib.Path(env["store"].root) / env["out"]["report_path"]
     assert report.is_file()
     report.unlink()
     got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"])
-    assert got["checked"] is True, got
-    assert got["verdict"] == ER.VERDICT_UNKNOWN, (got["verdict"], got.get("findings"))
-    assert got["verdict"] != ER.VERDICT_OK, "报告没了却判成立 ⇒ 这一档形同虚设"
+    assert got["checked"] is False, got
+    assert got["reason"] == "missing_material", got["reason"]
+    # 不许出现"成立"：这是这一档最容易糊过去的地方
+    assert got.get("verdict") in (None, ""), got.get("verdict")
+    assert got.get("verdict") != ER.VERDICT_OK
     assert got["signed_bit3"] is False
     reviewed = got["exhaustion_review"]
     text = json.dumps({"why": reviewed["why"], "findings": reviewed["findings"],
-                       "missing": reviewed["missing"]}, ensure_ascii=False)
+                       "missing": reviewed["missing"], "detail": got["detail"]},
+                      ensure_ascii=False)
     assert "缺" in text and ("报告" in text or "落盘" in text), text
+    # 台账里一行都没有（"没查成"不落行）
     ledger = env["v"].list_verifications(env["statement"]["stmt_id"])["items"]
-    assert [r["verdict"] for r in ledger] == [ER.VERDICT_UNKNOWN], ledger
+    assert ledger == [], ledger
 
 
 def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.Path) -> None:

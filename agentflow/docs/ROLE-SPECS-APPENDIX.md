@@ -1031,7 +1031,7 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 | `agent_f` | `SELF-CHECK DONE（agent_f）：失败 0 项` | **0** | 40 |
 | `agent_g` | `SELF-CHECK DONE（agent_g）` | **0** | 45 |
 | `agent_h` | `SELF-CHECK DONE（agent_h）` | **0** | 83 |
-| `agent_v` | `SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败` | **0** | 18 |
+| `agent_v` | `SELF-CHECK DONE（agent_v）：18 项通过 / 0 项失败` | **0** | 19 |
 | `pipeline` | `SELF-CHECK DONE（pipeline）` | **0** | 46 |
 | `llm` | `SELF-CHECK DONE` | **0** | 41 |
 | `conductor` | **无入口**（`conductor.py` 是模块，不是包） | — | — |

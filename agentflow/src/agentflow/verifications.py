@@ -24,15 +24,20 @@
 重读 —— 把证明当一次输入整体读（"这些缝正是正确的事实变成错误证明的地方"），而不是只逐单元
 核对。
 ## 落点与形态（与手稿同一形态：追加式 JSONL，不新增台账表）
-`<工作区>/verifications/<命题号>.jsonl`：一行 = 一次审校，至少要有输入证明的 `sha256`、三态
+`<工作区>/verifications/<命题号>.jsonl`：一行 = 一次审校，至少要有输入证明的 `sha256`、两态
 结论、逐条 findings（每条带步号）、用了哪个只读面、验证者实例名；编号 `v-0001…` 按文件内顺序
 发（与手稿编号、台账 id 同一套做法）。
-## 三态纪律在这里的落法
-`成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（模型输出不是合法
-JSON、字段缺、取值不在词表里）不是这三个之一 —— `record()` 在没有合法结论时抛
-`VerificationError`，绝不写一行"看不出来"来冒充"审过了"。签"审过"（§3.21 五）：`verdict="成立"`
-且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，`bit3_payload()` 给出五元位第 3 位那份
-读数（`reviewed=True` + 凭据）。
+## V 的结论只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，『看不出来错』就是
+## 没毛病，没有『看不出来对』」）
+`VERDICTS` 只有 `有毛病` / `成立` 两格，"检查器自己没跑成"（模型输出不是合法 JSON、字段缺、
+取值不在词表里）不是这两格之一 —— `record()` 在没有合法结论时抛 `VerificationError`，绝不写
+一行"没查成"来冒充"审过了"。模型若回「看不出来 / 判不了 / 我无法判断」这一族措辞，一律按
+`成立` 收（:func:`parse_verdict` 的折档；`why` 逐字写明"它没有找到缺陷 ⇒ 按没毛病"）：
+判「成立」不要求 V 证明它正确，只要求它没找到缺陷；「看不出错」就是没毛病，而"看不出对"
+这回事不存在。历史台账行里出现过 `看不出来`（:data:`LEGACY_VERDICTS`）只作兼容读：读得出、
+不计入"连续成立"的票、也不改写历史行。
+签"审过"（§3.21 五）：`verdict="成立"` 且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，
+`bit3_payload()` 给出五元位第 3 位那份读数（`reviewed=True` + 凭据）。
 ## 「复核过的是哪一份」怎么记（业主 2026-10-22 口径，治那处结构性断链）
 签名行记 `(stmt_id, proof_no, proof_sha256)`。`proof_no` 是证明号：`1` = canonical
 （缺省，老数据不带它就等价于 `#p1`），`2, 3, …` 是同一条命题的其它证明（见 :data:`PROOFS_KEY`）。
@@ -86,8 +91,45 @@ from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处�
 
 #: 验证台账目录（工作区根下）。
 VERIFICATIONS_DIR = "verifications"
-#: 三态结论（顺序就是从"站不住"到"站得住"；`看不出来` 不是 `成立`）。
-VERDICTS: tuple[str, ...] = ("有毛病", "看不出来", "成立")
+#: V 的结论 —— 只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，
+#: 『看不出来错』就是没毛病，没有『看不出来对』」）。顺序就是从"找到了缺陷"到"没找到缺陷"；
+#: 最后一格永远是 `成立`（`numericproof.THIRD_PARTY_VERDICT_OK` 按 `[-1]` 引用它）。
+#:
+#: 为什么没有再少一格：`成立` 的定义是"没找到缺陷"，不是"证明了它正确" —— 于是
+#: "信息不足、判不了"这一类落在 `成立` 这一侧（:func:`parse_verdict` 的折档），
+#: 而不是一个新档。"看不出对"这回事不存在：V 永远拿不出"它一定正确"的证据，
+#: 那一档从来就不是它的一项结论。
+#:
+#: 与秘书那一条不冲突（两张词表、两条纪律）：秘书判的是回复的措辞
+#: （「我没逐行验证」这类要被判 fault 打回），V 这一侧是结论词，只有两态。
+VERDICTS: tuple[str, ...] = ("有毛病", "成立")
+#: 历史台账行里出现过的那一格（只作兼容读）：读得出、不计入"连续成立"的票、
+#: 也不清零、更不改写历史行（台账是追加式文件，迁移要重写历史行 ⇒ 不做）。
+#: 写侧永远产生不出它：`parse_verdict` 把这一族措辞折成 `成立`，`record_verification`
+#: 因此写不出第三态。
+LEGACY_VERDICTS: tuple[str, ...] = ("看不出来",)
+#: `parse_verdict` 把哪些措辞折成 `成立`（含 `LEGACY_VERDICTS` 那一格）。
+#:
+#: 判据是"这一族措辞是否在说『我没找到缺陷』"，而不是"猜它想说什么"：命中任一片段
+#: ⇒ 按 `成立` 收，`why` 里写清为什么这么收、`verdict_raw` 留住模型的原话。
+#: 刻意窄：`大概成立` / `通过` / `proved` 这些不属于这一族的写法仍然抛
+#: `VerificationError`（那是"没查成"，不落行）—— 折档不是"什么词都收"。
+VERDICT_FOLD_MARKERS: tuple[str, ...] = (
+    "看不出", "判不了", "无法判断", "无法确定", "不能判断", "不能确定",
+    "不确定", "难以判断", "判不出来", "判不出", "说不准", "不好说", "拿不准",
+)
+#: 业主 2026-11-01 逐字要求写进 V 可见面的那两句：两态的定义，与"看不出错就是成立"。
+#:
+#: 为什么它们是常量而不是散在提示词里的字面量：`verifications.cold_start_prompt` 是 V
+#: 每次审阅真正读到的入口，`specs/v.py` 的 `policy` 是渲染进 system prompt 的那一份
+#: （那一处不能 import 本模块 —— 本模块 import 它，反过来会成环）。两处必须逐字相同，
+#: 而"逐字相同"只能由渲染面判据钉住：`tests/test_v_verdict_is_two_states.py` 的 s4
+#: 在渲染之后的提示词上核这两句（不是核源码里的常量）。
+TWO_STATE_LINE = (
+    "成立（没找到缺陷 —— 不要求你证明它正确）"
+    "/ 有毛病（找到了缺陷，必须指到步号与原句）")
+NO_THIRD_STATES = (
+    "『看不出错』就是成立；不存在『看不出来』这一档，也不存在『看不出对』这回事")
 #: findings 的级别 —— 别名，不抄第二份：词表真身是 `schema.FINDING_LEVELS`
 #: （`parse_verdict` 与 `schema.ReviewFinding` 判的是同一件事，两处各写一份字面量
 #: 就会在加一档时一处认、一处拒）。
@@ -438,17 +480,20 @@ def apply_citation_gate(verdict: Mapping[str, Any],
                         gate: Mapping[str, Any]) -> dict[str, Any]:
     """把引用核实的结论并进 V 的结论（纯函数：`parse_verdict` 的形态进、同一形态出）。
 
-    三档处置（业主 2026-10-26 的签字前置）：
+    三档处置（业主 2026-10-26 的签字前置；2026-11-01 按两态结论改口径）：
     - 有 `stronger` / `unrelated` / `inadmissible` ⇒ 不许判「成立」：结论改判「有毛病」，
       逐条 error 落进 findings（点明哪一条被引命题、差在哪）。这就是受控拒绝：这一签
       签不成，而"为什么签不成"在台账里逐字可读；
-    - 只有 `unknown` ⇒ 改判「看不出来」（判不了不是一致，也不是"有毛病"：它是一条
-      诚实的未定）；
+    - 只有 `unknown` ⇒ 结论不动，仍是「成立」（V 没找到缺陷 —— 判不了不是找到缺陷），
+      但这一签由引用闸挡住：`blocking` 里那条 `unknown` 同时是 `findings` 里一条 error
+      （⇒ `unresolved_errors > 0`）且进 :func:`citation_blocks` ⇒
+      :func:`row_signable` 为假 ⇒ 既不翻位、也不投"连续成立"那一票。
+      改前这里把结论改判成第三态 `看不出来`；业主 2026-11-01 裁定那一档不存在，
+      而"判不了挡签"这件事本来就有自己的落点（引用闸），不需要借一个假结论来说；
     - 只有 `weaker` ⇒ 结论不动（可签），但加一条 info 把"这一步只用到弱形式"记下来；
-    - `gate["problem"]` 非空（依赖台账读不出来 ⇒ 这一档没查成）⇒ 与挡签同档：结论
-      从「成立」改判「看不出来」（`blocking` 里有实档才改「有毛病」）。它是"没查成"，
-      不是"没有引用"：改前只看 `blocking`，于是 `problem` 非空 + `citation_checks`
-      空时这一签照样判「成立」—— 那正是把"没查成"折成"没有引用"。
+    - `gate["problem"]` 非空（依赖台账读不出来 ⇒ 这一档没查成）⇒ 与 `unknown` 同一档：
+      结论不动、`citation_gate.problem` 随行落盘 ⇒ `signing_gate_problem` 挡住这一签。
+      改前它也把结论改判成第三态；那是把"没查成"折成一个假结论，同一批改掉。
 
     改判时 `defect_step` 保留模型给的那一步（它可能仍是承重步）；模型没给就留 `None` ——
     这一档的缺陷是按"被引命题"定位的，不是按步号定位的（`parse_verdict` 因此允许
@@ -462,6 +507,8 @@ def apply_citation_gate(verdict: Mapping[str, Any],
         "findings": [dict(f) for f in (verdict.get("findings") or [])],
         "unresolved_errors": 0,
         "citation_checks": [dict(c) for c in (verdict.get("citation_checks") or [])],
+        #: 折过档的那一行把模型原话带下去（`apply_citation_gate` 是纯函数，不许吃掉它）。
+        "verdict_raw": str(verdict.get("verdict_raw") or ""),
     }
     blocking = list(gate.get("blocking") or [])
     defect = [e for e in blocking if str(e.get("verdict") or "") != "unknown"]
@@ -490,10 +537,12 @@ def apply_citation_gate(verdict: Mapping[str, Any],
                        f"{entry.get('stmt_id') or '（没有号）'} 的弱形式{tail}"
                        "；不等于错，但读的人要知道它没有被用满"),
         })
-    if (blocking or gate.get("problem")) and out["verdict"] == "成立":
-        out["verdict"] = "有毛病" if defect else "看不出来"
-        if out["verdict"] == "看不出来":
-            out["defect_step"] = None
+    if defect and out["verdict"] == "成立":
+        # 引用被夸大 / 引错 / 档位不够 ⇒ 这是找到了缺陷（缺陷按被引命题定位）。
+        out["verdict"] = "有毛病"
+    # 只有 `unknown` / 依赖台账读不出来 ⇒ 结论不动（它没找到缺陷）：这一签由引用闸挡住
+    # （那几条 error 让 `unresolved_errors > 0`，且 `citation_blocks` / `signing_gate_problem`
+    # 也挡）⇒ 不翻位、不投连续成立那一票。这里刻意不造第三态（业主 2026-11-01）。
     if blocking or gate.get("problem"):
         gate_why = str(gate.get("why") or "")
         if gate_why:
@@ -572,6 +621,8 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     引用核实那一格（`citation_checks`）随同一行落盘，形状与 `record_verification` 逐格相同。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
+                                        # 折过档的那一行要把模型原话带下去（审计用）。
+                                        "verdict_raw": verdict.get("verdict_raw", ""),
                                         "defect_step": verdict.get("defect_step"),
                                         "quote": verdict.get("quote", ""),
                                         "why": verdict.get("why", ""),
@@ -604,6 +655,9 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         "round": len(rows) + 1, "used_faces": [], "submission_id": "",
         "landed": "pending", "at": _now_iso(),
     }
+    if str(checked.get("verdict_raw") or "").strip():
+        #: 折档那一行留住的模型原话（只在真折过时写 ⇒ "模型自己就答了两态"的行逐字节不变）。
+        row["verdict_raw"] = str(checked["verdict_raw"]).strip()
     #: 同 `record_verification`：I10 硬禁令的机械命中只作读数（条件写入、不参与判定）。
     _pending_banned = banned_markers_in(text)
     if _pending_banned:
@@ -768,6 +822,16 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "你是验证者（V）。你这一次只做一件事：把下面这份证明**按写成后的样子**整体重读一遍，"
         "判断它站不站得住。\n\n"
         "你不写、不改证明；不判这命题值不值得做；不做稿件级正式审查。\n\n"
+        # ---- 业主 2026-11-01：V 的结论只有两态（逐字见下）----
+        #
+        # 这一段是结论词那一根轴，与秘书那一条（它判的是回复的措辞）是两张词表。
+        # 判据：`tests/test_v_verdict_is_two_states.py` 的 s4（这一份与 system prompt
+        # 都要有两态那两句，且 `看不出来` 只许出现在那句否定式里）。
+        "## 结论只有两态\n"
+        "- " + TWO_STATE_LINE + "。\n"
+        "- " + NO_THIRD_STATES + "。\n"
+        "- 你判「成立」时不需要证明它正确，只需要说明你**沿下面那几条角度都没找到缺陷**；"
+        "拿不准、信息不足、某个记号没定义，都要落到这两态里的一态，别另起一档。\n\n"
         # ---- 业主 2026-10-29 追加口径：V 只产意见，签由秘书发（S5 的提示词落点）----
         #
         # 这一段的判据是 v9（`tests/test_v_sign_gate_streak.py` 的 c4）：V 的可见文本里
@@ -792,7 +856,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         f"{str(proof_text or '').strip() or '（空）'}\n\n"
         f"{citations_block(citations, citations_problem)}\n\n"
         "## 只输出一个 JSON 对象（不要解释文字、不要代码围栏）\n"
-        '{"verdict": "成立|有毛病|看不出来", "defect_step": <整数或 null>, '
+        '{"verdict": "成立|有毛病", "defect_step": <整数或 null>, '
         '"quote": "<命中的原话，逐字>", "why": "<一句话理由>", '
         '"findings": [{"level": "error|warning|info", "step": <整数或 null>, '
         '"kind": "<短语>", "detail": "<指到那一步的说明>"}], '
@@ -800,8 +864,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         '"verdict": "consistent|weaker|stronger|unrelated|inadmissible|unknown", '
         '"quote_verbatim": <true 或 false>, "note": "<一句话依据：一致在哪 / 差在哪>"}]}\n'
         "- `defect_step`：有毛病时**必须**给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
-        "- `看不出来`：信息不足、无法判断时的诚实结论 —— 它不是 `成立`；\n"
-        "- 没有毛病才写 `成立`（空 findings 或只有 info/warning）。\n"
+        "- 没有找到缺陷就写 `成立`（空 findings 或只有 info/warning）；找到了缺陷就写 `有毛病`"
+        "并指到步号。**没有第三个词**：写成「看不出来 / 判不了」会被按 `成立` 收"
+        "（" + NO_THIRD_STATES + "）。\n"
         # ---- 审阅清单（draft/122 按 F 的交付面重剪；S5 的提示词落点）----
         #
         # 为什么清单在提示词里、而它又明说"不是门"：`docs/DEVELOPMENT-SPEC.md` §13 的分工
@@ -837,11 +902,13 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 明确不归 F 的（不许拿这些凑数）：文献真伪与页码级核对（归 B；C-3 只判说清没说清）、"
         "实验数值 / 复现结果（归 E）、稿件排版 / 术语统一 / 写作风格（归 G / C）、"
         "「这篇论文有没有价值 / 想法好不好」（那是 M 的）。"
-        "回复里若主要以这些作为「发现问题」的依据 ⇒ 按「看不出来」处理，并写明「理由面错位」。\n"
+        "回复里若主要以这些作为「发现问题」的依据 ⇒ 它们不是这份证明的缺陷，"
+        "这一签按 `成立` 收，并在 `why` 里写明「理由面错位」。\n"
         "- 结论语法：有毛病 ⇒ 逐条三段式（位置（步号）/ 原文逐字 / 类型编号 / 为何不成立 / "
         "需补什么）；成立 ⇒ 说清走过哪几关、每关的核对记录，以及你尝试过的反驳"
         "（在哪一处试着构造反例、为什么失败）；只写「整体框架没问题 / 思路上没问题」"
-        "而不带这些记录 ⇒ 看不出来（未完成验证），不是成立。\n"
+        "而不带这些记录 ⇒ 这一签仍按 `成立` 收（判成立不要求你证明它正确），"
+        "但读数里会点名「没给核对记录」—— 那是给读的人看的，不是第三档。\n"
         # ---- 引用核实那一档的口径（业主 2026-10-26 两批裁定，逐字见 CITATION_VERDICTS）
         "\n## 引用核实怎么判（正常写证明就是不会逐字的；判据不是字面像不像）\n"
         "- `consistent`：F 的用法与这条命题真正说的条件/结论一致（改写、压缩、换符号都行）；\n"
@@ -884,8 +951,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "⑦ 形式化那一格填的类别对不对（数值定理填数值程序、理论定理填 `.lean`）。\n"
         "- 结论落在三格：`exhaustion_review`（整份会审读数）/ `checks`（七项逐项 ok）/ "
         "`missing`（缺哪一块材料）。\n"
-        "- 这一档里的 `看不出来` 是缺材料（报告没落地、实验行没有、②③ 缺一块），不是"
-        "「没查成」：点名缺哪一块即可，但不许判 `成立` —— 缺材料的诚实结论就是看不出来。\n"
+        "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格**没查成**：点名缺哪一块，"
+        "**既不判 `成立`、也不判 `有毛病`**，台账里也不留那一行（留一行会把「没查成」"
+        "冒充成「审过了」）；材料补齐之后重新送审。\n"
         "- 七项全过才签 `成立`；这一签是「对数值证据的背书」，不是「你逐行读过一份"
         "自然语言证明」。\n"
     )
@@ -1118,9 +1186,18 @@ def proof_label(statement_id: str, proof_no: int = 1) -> str:
 def parse_verdict(text: str) -> dict[str, Any]:
     """把 V 的那一句输出解析成一次审校的结论；不合法 ⇒ 抛 `VerificationError`（没查成）。
 
-    "没查成"与"看不出来"必须分开：前者是检查器的问题（重试/修提示词），
-    后者是对证明的结论（诚实地说判不了）。把两者折平，会让一次模型抽风
-    在台账上留下"V 看过这份证明，结论是看不出来"——那是一条假证据。
+    "没查成"与"对证明的两态结论"必须分开：前者是检查器的问题（重试/修提示词），
+    后者是对证明的判断。把两者折平，会让一次模型抽风在台账上留下"V 看过这份证明"
+    ——那是一条假证据。
+
+    ## 结论只有两态，第三族措辞折进 `成立`（业主 2026-11-01 裁定）
+    业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
+    所以模型若回「看不出来 / 判不了 / 我无法判断」这一族（:data:`VERDICT_FOLD_MARKERS`
+    + :data:`LEGACY_VERDICTS`），一律按 `成立` 收：判「成立」不要求它证明正确，
+    只要求它没找到缺陷 —— "看不出错"就是没毛病。收的时候两件事必须留下：
+    ① `why` 里逐字写明"它没有找到缺陷 ⇒ 按没毛病"（否则读的人看不出这一行是折出来的）；
+    ② `verdict_raw` 留住模型的原话（否则"它其实没判"这件事在盘上不可见）。
+    不属于这一族的写法（`大概成立` / `proved` / 空串）仍然抛错：那是"没查成"，不落行。
 
     ## 引用核实那一格（业主 2026-10-26 裁定）
     输出里的 `citation_checks` 一并洗成 :data:`CITATION_CHECK_KEYS` 那五格并放进结论，
@@ -1142,9 +1219,24 @@ def parse_verdict(text: str) -> dict[str, Any]:
         raise VerificationError(f"V 的输出不是合法 JSON（{type(exc).__name__}: {exc}）") from exc
     if not isinstance(got, Mapping):
         raise VerificationError("V 的输出必须是对象")
-    verdict = str(got.get("verdict") or "").strip()
-    if verdict not in VERDICTS:
-        raise VerificationError(f"verdict 必须是 {VERDICTS} 之一，收到 {verdict!r}")
+    said = str(got.get("verdict") or "").strip()
+    #: 折档时留住的原话（调用方已经折过再交回来时，这一格由它带过来）。
+    verdict_raw = str(got.get("verdict_raw") or "").strip()
+    verdict = said
+    fold_note = ""
+    if said not in VERDICTS:
+        if said in LEGACY_VERDICTS or any(m in said for m in VERDICT_FOLD_MARKERS):
+            verdict = "成立"
+            verdict_raw = verdict_raw or said
+            fold_note = (
+                f"；V 回的是「{said}」这一档 —— 它没有找到缺陷 ⇒ 按「没毛病」收："
+                "判「成立」不要求它证明正确，只要求它没找到缺陷（「看不出错」就是成立；"
+                "不存在「看不出来」这一档，也不存在「看不出对」这回事）")
+        else:
+            raise VerificationError(
+                f"verdict 必须是 {VERDICTS} 之一（或「看不出来 / 判不了」这一族 —— "
+                f"它按「成立」收），收到 {said!r}")
+
     findings: list[dict[str, Any]] = []
     for item in (got.get("findings") or []):
         if not isinstance(item, Mapping):
@@ -1165,9 +1257,11 @@ def parse_verdict(text: str) -> dict[str, Any]:
             "verdict='有毛病' 必须给 defect_step（指到那一步）—— 只说'有毛病'"
             "等于把改哪儿留给作者猜（唯一例外：有一条挡住签字的引用核实，缺陷按被引命题定位）"
         )
-    return {"verdict": verdict, "defect_step": defect_step,
+    return {"verdict": verdict, "verdict_raw": verdict_raw,
+            "defect_step": defect_step,
             "quote": str(got.get("quote") or "").strip(),
-            "why": str(got.get("why") or "").strip(), "findings": findings,
+            "why": (str(got.get("why") or "").strip() + fold_note),
+            "findings": findings,
             "citation_checks": checks,
             "unresolved_errors": sum(1 for f in findings if f["level"] == "error")}
 
@@ -1255,6 +1349,10 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     # 证明号先判：坏号在写任何东西之前就拒（不落台账、不改位）。
     no = proof_no_strict(proof_no)
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
+                                        # 折过档的那一行要把模型原话带下去（审计用）：
+                                        # 不带的话，`parse_verdict` 只能看到已折好的
+                                        # 「成立」，盘上就再也查不到"它其实没判"。
+                                        "verdict_raw": verdict.get("verdict_raw", ""),
                                         "defect_step": verdict.get("defect_step"),
                                         "quote": verdict.get("quote", ""),
                                         "why": verdict.get("why", ""),
@@ -1294,6 +1392,10 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
+    if str(checked.get("verdict_raw") or "").strip():
+        #: 折档那一行留住的模型原话（"它其实没判、只是没找到缺陷"这件事的唯一读数）。
+        #: 只在真折过时写 ⇒ "模型自己就答了两态"的行与历史行逐字节不变。
+        row["verdict_raw"] = str(checked["verdict_raw"]).strip()
     #: I10 硬禁令的机械命中（2026-10-27，业主裁定：先接成读数、不许直接挡签）。
     #: 命中就写一格 `hard_ban_markers`（"易证/显然/trivial/…"逐条），落盘可见；
     #: 只在命中时写（条件写入，老行与"没命中"的行逐字节不变）。它不参与任何判定：
@@ -1637,6 +1739,9 @@ def signing_gate_problem(row: Mapping[str, Any]) -> str:
 def row_signable(row: Mapping[str, Any]) -> bool:
     """行局部那一半：这一行自己够不够格签五元位第 3 位（`成立` 且没有未解决的 error）。
 
+    历史行（`verdict` 落在 :data:`LEGACY_VERDICTS`，例如 2026-11-01 之前写下的
+    `看不出来`）在这里一律 False：那一档不是"成立"，而且它现在也不存在（只作兼容读）。
+
     再加一条（业主 2026-10-26）：引用核实里只要有一条挡住签字的档（`stronger` /
     `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
     放在写路径上，是因为"读者眼里的成立"由这一格读出来 —— 手写一条成立行与 V 自己判了
@@ -1775,7 +1880,8 @@ def signs_bit3(row: Mapping[str, Any], *, streak: Any = None) -> bool:
 def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any]:
     """把一行审校翻成五元位第 3 位那份读数（交给 `evidencebits.bits_of`）。
 
-    签不了（`有毛病` / `看不出来` / 有未解决 error / 连续次数不够）⇒ 返回 `{}`
+    签不了（`有毛病` / 历史行里的 `看不出来`（:data:`LEGACY_VERDICTS`，只作兼容读） /
+    有未解决 error / 连续次数不够）⇒ 返回 `{}`
     （第 3 位保持空）—— 这不是"忘了写"，是"没签"。`streak` 与 :func:`signs_bit3` 同义。
 
     凭据里带 `proof_no` 与 `proof_sha256`（2026-10-22）：读侧要拿它们回答"位上说审过的
@@ -1808,13 +1914,18 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     （一批台账里哪几行签住了）三处都调它。三处各写一遍合计，只会让三处对同一批行
     给出三个数 —— 而"位上说签了、台账只签一次"正是这种分家的形态。
 
-    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径 + 2026-10-30 第三次裁定）
+    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径 + 2026-10-30 第三次裁定
+    ## + 2026-11-01 的两态结论）
     - `proof_sha256` 变了 ⇒ 清零（F 改稿之后，之前那几次审的不是这一份）；
     - 行局部签不住（`有毛病` / 未解决 error / 引用挡签）⇒ 清零；
     - 秘书判 `fault`（有缺陷要指出）⇒ 清零；
     - 秘书没判成（`checked=False`，不是一种判定）⇒ 不清零、也不计入；
     - 历史行里的 `unsure`（2026-10-30 之前写下的）只作历史兼容读：不清零、也不计入 ——
-      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2 而不是 3。
+      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2 而不是 3；
+    - 历史行里的 `verdict="看不出来"`（2026-11-01 之前写下的那一档，:data:`LEGACY_VERDICTS`）
+      同样只作兼容读：不清零、也不计入（`clean, 看不出来, clean` 数出来是 2）。它不是
+      清零那一档：清零等于拿一条按旧口径写下的历史行去作废已经发生的审校，而这一格
+      只该回答"现在这一份正文上连续几次没找到缺陷"。
 
     调用方负责先把行分组（同一命题 + 同一证明号）：一条命题的两份证明各自数各自的，
     `#p1` 的三票不许替 `#p2` 数（不许借光）。
@@ -1828,7 +1939,11 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
             run = 0
             sha = one
         axis = secretary_axis(row)
-        if axis == "fault":
+        if str(row.get("verdict") or "") in LEGACY_VERDICTS:
+            # 历史行（verdict="看不出来"，2026-11-01 之前的写侧才产得出它）：只作兼容读
+            # ⇒ 不清零、也不计入。这一支排在 fault 之前：历史行的秘书那一格本来就不存在。
+            pass
+        elif axis == "fault":
             run = 0
         elif axis == "unsure":
             # 历史行（只作历史兼容读）：不清零、也不计入。
@@ -1863,7 +1978,8 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     行序往回数，同一 `proof_sha256`、连续 `verdict="成立"` 的行数；任何一行的结论不是
     「成立」、或者 sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
     秘书没查成的那一行不清零也不计入；历史行里那一格（只作历史兼容读）同样如此
-    （见 :func:`_hold_run_lengths`）。
+    （见 :func:`_hold_run_lengths`）——包括 2026-11-01 之前写下的 `verdict="看不出来"`
+    （:data:`LEGACY_VERDICTS`：读得出、不算票、不清零）。
 
     ## 三态（"没查成"不是"0 次"）
     | 结局 | `checked` | `streak` |
@@ -2338,6 +2454,27 @@ def _superseded_reading(row: Mapping[str, Any], *, streak: Any = None) -> dict[s
     }
 
 
+def _legacy_standing(*, sid: str, no: int, covering: bool, verification_id: str,
+                     verdict: str, line_why: str) -> dict[str, Any]:
+    """历史行（`verdict` 落在 :data:`LEGACY_VERDICTS`）的第 3 位读数（`review_standing` 的兼容支）。
+
+    业主 2026-11-01 的两态裁定之后，`看不出来` 不再是一种结论；但 2026-11-01 之前写下的
+    台账行里出现过它，而"最近一签"可能正是那样一行。三件事必须在这一句里说清（读的人据此
+    判断"要不要重签"，而不是"这一份没过"）：① 这是历史行、不是一次新判定；② 它既不投
+    "连续成立"那一票、也不清零；③ 第 3 位因此仍没翻（要签就按两态重签一次）。
+    `state` 沿用 `rejected`（六态词表是 R10 与收工门共读的，这一批不改它 —— 改词表是
+    另一根轴）；`in_sync` 照旧由"这一行盖的是不是现行正文"回答。
+    """
+    return {
+        "state": "rejected", "in_sync": bool(covering),
+        "why": (f"{proof_label(sid, no)} 最近一签 {verification_id} 是历史台账行："
+                f"verdict={verdict!r}（2026-11-01 之前的那一档）⇒ 只作历史兼容读："
+                "它读得出、但既不算票、也不清零（新判定只产生 `成立` / `有毛病` 两态，"
+                "不再产生这一档）。第 3 位因此仍没翻 —— 要签就按两态对现在这一份重签。"
+                f"（历史行自己写的理由：{line_why[:120]}）"),
+    }
+
+
 def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                     proof_no: int = 1) -> dict[str, Any]:
     """一条证明的第 3 位相对「它现在这一份正文」的读数（唯一判定口，纯读）。
@@ -2371,6 +2508,9 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     但次数还没到 ⇒ `state="holding"`（不是 `signed`，也不是"一次都没签"）。计数只调
     :func:`_hold_run_lengths`（不重复读盘：这里的 `mine` 就是它要的那批行），
     行长与"哪一签算第几票"因此与 :func:`consecutive_holds` 逐字一致。
+
+    ## 历史行 `verdict="看不出来"` 怎么读
+    见 :func:`_legacy_standing`（业主 2026-11-01 的两态裁定：那一档只作兼容读）。
 
     ## 证明号认不出 ⇒ `unreadable`，不折成 `#p1`（2026-10-22 收尾）
     `proof_no` 问的是"要看哪一份证明"，所以没给（`None` / 空串）才是 canonical；给了但
@@ -2486,6 +2626,12 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "secretary_judged": secretary_judged(chosen),
         "secretary_unjudged": secretary_unjudged(chosen),
     })
+    if str(out["verdict"]) in LEGACY_VERDICTS:
+        out.update(_legacy_standing(sid=sid, no=no, covering=bool(covering),
+                                    verification_id=str(out["verification_id"]),
+                                    verdict=str(out["verdict"]),
+                                    line_why=str(chosen.get("why") or "")))
+        return out
     if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
                    why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）连续 "

@@ -236,9 +236,15 @@ def test_citation_problem_blocks_the_verdict_and_the_signature(monkeypatch) -> N
     assert out.get("checked") is True, out.get("reason")
     assert out["citation_gate"]["problem"] == problem, out["citation_gate"]
     assert out["citation_gate"]["ok"] is False, out["citation_gate"]
-    assert out["verdict"] != "成立", out
+    # 2026-11-01（V 的结论收成两态）：改前这一格断言 `verdict != "成立"`（那时它被改判成
+    # 第三态 `看不出来`）。业主裁定那一档不存在 ⇒ 结论仍是「成立」（V 没找到缺陷），
+    # 挡签由引用闸说：`problem` 随行落盘、`signs_bit3` / `bit3_payload` 一律不放行。
+    # 断言强度没减 —— 靶子始终是"依赖台账读不到 ⇒ 这一签不许落地"，另多判一条
+    # "不许靠造一个假结论来说这件事"。
+    assert out["verdict"] == "成立", out
+    assert out["verdict"] != "看不出来", out
     assert out["signed_bit3"] is False, out
-    # 台账那一行也不许是「成立」：读侧硬闸与写侧同一道（`signs_bit3` 读 `citation_gate`）。
+    # 台账那一行也不许签住：读侧硬闸与写侧同一道（`signs_bit3` 读 `citation_gate`）。
     rows, problems = VR.list_verifications(tmp, statement_id=sid)
     assert not problems, problems
     row = rows[-1]

@@ -132,15 +132,24 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
     assert unsigned["grade"] == "conjecture", unsigned
 
 
-# ============================================================ 三态与"没查成"
+# ============================================================ 两态与"没查成"
 
-def test_three_states_are_not_collapsed(tmp_path):
-    """三态：`看不出来`（对证明的结论）与"没查成"（输出不合法）不许折平。"""
+def test_two_states_are_not_collapsed(tmp_path):
+    """两态：`看不出来` 这一族折成 `成立`，与"没查成"（输出不合法）不许折平。
+
+    2026-11-01 业主裁定：「不应该有『看不出来』，『看不出来错』就是没毛病，没有
+    『看不出来对』」。所以这里判的是折档的两件事：结论落在 `成立`、原话留在
+    `verdict_raw`（"+ 折档不翻位"）；而真正的"没查成"（不是 JSON / 缺步号 /
+    词表外的写法）仍然抛错、不落行。
+    """
     root = tmp_path / "ws"
     root.mkdir()
     unclear = VR.record_verification(root, statement_id="0009", proof_text=_DIRTY,
                         verdict=VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足"}'))
-    assert unclear["verdict"] == "看不出来" and VR.signs_bit3(unclear) is False, unclear
+    assert unclear["verdict"] == "成立", unclear
+    assert unclear["verdict_raw"] == "看不出来", unclear
+    assert "没有找到缺陷" in unclear["why"], unclear["why"]
+    assert VR.signs_bit3(unclear) is False, unclear
     assert VR.bit3_payload(unclear) == {}, unclear
     with pytest.raises(VR.VerificationError):
         VR.parse_verdict("我觉得还行")            # 不是 JSON ⇒ 没查成

@@ -55,13 +55,18 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 或秘书在次数够的那一转既不签也不判出问题 ⇒ 返回值报内部不一致（`checked=False` + 明确
 `reason`），绝不写成"次数没到"。逐次读数在返回值的 `review_passes` 里（每项带
 `terminal`：这一转是不是终局、是哪一种终局）。
-## 三态纪律在这里的落法（这一层最容易出错的地方）
-`成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
+## V 的结论只有两态（业主 2026-11-01 裁定）
+业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
+`成立` / `有毛病` 是对证明的两态结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON /
+字段缺 / 取值不在词表里）不是这两态之一。模型若回「看不出来 / 判不了 / 我无法判断」
+这一族措辞，`verifications.parse_verdict` 一律折成 `成立`（它没有找到缺陷 ⇒ 按没毛病收），
+`why` 里写明这么收的理由、`verdict_raw` 留住原话。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
-- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；- 
+- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；-
 `checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
-两者都不落台账（`verifications.record_verification` 在没有合法结论时抛`VerificationError`，绝不写一行"看不出来"来冒
-充"审过了"）。
+两者都不落台账（`verifications.record_verification` 在没有合法结论时抛`VerificationError`，
+绝不写一行"没查成 / 看不出来"来冒充"审过了"）。穷举型证据缺材料同理：
+`checked=False, reason="missing_material"`（缺哪一块进 `detail`），台账里也不留行。
 """
 
 from __future__ import annotations
@@ -559,9 +564,11 @@ class AgentV:
             # 填的类别对不对）。判据本体只有一处：`exhaustionreport.review`；这里只负责
             # 把它的三态结论翻成一次审校（落台账、`成立` 才签第 3 位）。
             #
-            # 三态里最要紧的一档是「看不出来」：报告没落地（E 的 ②③ 没落成盘上那份读数）
-            # 时不许判成立 —— 缺材料时的诚实结论是看不出来，而它照样落一行台账
-            # （它是"看过、判不了"的证据，与"没查成"分得开）。
+            # 三态里最要紧的一档是「缺材料」：报告没落地（E 的 ②③ 没落成盘上那份读数）
+            # 时不许判成立 —— 而业主 2026-11-01 的裁定把「看不出来」这一档整个取消了，
+            # 所以缺材料落的是没查成（`checked=False` + `reason="missing_material"`）：
+            # 台账里不留行，缺哪一块逐条进 `detail`。它既不是"找到了缺陷"（不许打回 F），
+            # 也不是"没找到缺陷"（不许判成立）—— 材料补齐之后重新送审。
             from .. import exhaustionreport as _ER
 
             _exp_rows: list = []
@@ -586,9 +593,30 @@ class AgentV:
                 # 这一路的"回复"没有模型原文（会审是机械的七项核对）⇒ 材料给的是
                 # 会审自己的结论那一句，而不是 F 的证明正文（I12 同一条纪律）。
                 _n_verdict = _ER.verdict_of(_reviewed)
+                _missing = [str(m) for m in (_reviewed.get("missing") or [])]
+                if str(_n_verdict.get("verdict") or "") == _ER.VERDICT_UNKNOWN:
+                    # ---- 缺材料 ⇒ 没查成（业主 2026-11-01：不存在「看不出来」这一档）----
+                    #
+                    # 会审本身跑完了（七项逐项有读数），但盘上缺了该有的那一块：这既不是
+                    # "找到了缺陷"（不许打回 F），也不是"没找到缺陷"（不许判成立）。
+                    # 诚实的那一格只有"没查成"：`checked=False` + 明确 reason，台账里不留行
+                    # （留一行会把"没查成"冒充成"审过了"）。缺哪一块逐条进 detail。
+                    out["checked"] = False
+                    out["reason"] = "missing_material"
+                    out["detail"] = (
+                        f"穷举型证据会审缺材料（{'; '.join(_missing) or '没点名'}）⇒ 这一格"
+                        "**没查成**：既不判「成立」（缺材料不许判成立）、也不判「有毛病」"
+                        "（没有找到缺陷，不许按缺陷打回 F），台账里不留行。"
+                        "补上缺的那几块之后重新送审（会审的七项读数在 exhaustion_review 里）。")
+                    self._emit(f"verify_proof({sid})：穷举会审缺材料 —— 没查成，不落台账行"
+                               f"（{_missing}）")
+                    return out
+                # 业主 2026-10-29：穷举型证据这一路也走同一对秘书判定（B 段 / A 段）。
+                # 这一路的"回复"没有模型原文（会审是机械的七项核对）⇒ 材料给的是
+                # 会审自己的结论那一句，而不是 F 的证明正文（I12 同一条纪律）。
                 _n_reply = (f"穷举型证据会审：结论 {_n_verdict.get('verdict')!r}"
                             f"（{len(_reviewed.get('checks') or [])} 项检查，"
-                            f"缺材料 {_reviewed.get('missing') or []}）")
+                            f"缺材料 {_missing}）")
                 _n_judge = self._judge_v_reply(_n_reply, _n_verdict, no, statement_id=sid)
                 out["secretary_judge"] = dict(_n_judge)
                 try:
@@ -717,7 +745,8 @@ class AgentV:
         passes: list[dict[str, Any]] = []
         last: dict[str, Any] = {}
         #: 终局是哪一种："" = 循环跑完还没命中终局（= 内部不一致）/ signed / fault /
-        #: verdict（V 自己的结论不是成立）/ unjudged（秘书这一问没查成）/
+        #: verdict（V 自己的结论不是成立）/ gate（结论成立、但这一行自己签不住：
+        #: 引用核实挡签或还有未解决的 error）/ unjudged（秘书这一问没查成）/
         #: ledger（台账那一行没落地）。
         stopped = ""
         stop_why = ""
@@ -771,6 +800,21 @@ class AgentV:
                 stopped = "ledger"
                 passes[-1]["terminal"] = stopped
                 stop_why = "台账那一行没落地（必须重签）"
+                break
+            if not VR.row_signable(once["row"]):
+                # ---- 结论写「成立」，但这一行自己签不住（引用核实挡签 / 未解决的 error）----
+                #
+                # 2026-11-01 的两态裁定把这个终局露了出来：改前"引用判不了"被改判成第三态
+                # `看不出来`，于是循环按"V 的结论不是成立"那一支停；现在结论仍是 `成立`
+                # （它没找到缺陷），挡住这一签的是引用闸，而循环此前不读它 ⇒ 三转跑完既没签、
+                # 也没打回，收尾报一条假的 `internal_inconsistency`。这一支补上那个终局：
+                # 立刻停，由正常收尾路径如实报"结论成立、但这一签没落地，为什么"。
+                stopped = "gate"
+                passes[-1]["terminal"] = stopped
+                stop_why = ("这一签的结论是「成立」，但它自己签不住"
+                            f"（{VR.signing_gate_problem(once['row']) or '引用核实挡签'}"
+                            f"；未解决 error {int(once['row'].get('unresolved_errors') or 0)} 条）"
+                            "⇒ 不签第 3 位；连判到此为止（这不是有毛病，也不是没查成）")
                 break
             if bool(once["issuance"].get("issue")):
                 stopped = "signed"
@@ -931,7 +975,8 @@ class AgentV:
 
         一转做五件事，一件都不许省：
         ① 真的问一次模型（第 2 转起在提问的末尾追加"第几次"，稳定前缀一个字不动）；
-        ② 把回复解析成三态结论（不合法 ⇒ 这一格"没查成"，不落台账行）；
+        ② 把回复解析成两态结论（不合法 ⇒ 这一格"没查成"，不落台账行；「看不出来」那一族
+         措辞由 `verifications.parse_verdict` 折成「成立」）；
         ③ 引用核实的定稿与签字前置（与改前同一套判据，唯一实现在 `verifications`）；
         ④ 秘书的语义两档判定（B 段）＋ 判了 fault 时那一次洗稿（C 段）；
         ⑤ `record_verification(flip=False)` 落一行台账；clean 且结论是「成立」才问秘书
@@ -953,7 +998,7 @@ class AgentV:
         if problem:
             return {"ok": False, "reason": problem,
                     "detail": ("这次审校没有拿到合法结论 ⇒ 台账里不留行"
-                               "（留一行'看不出来'会把'没查成'冒充成'审过了'）"),
+                               "（留一行会把「没查成」冒充成「审过了」）"),
                     "emit": f"verify_proof({sid})：没查成（{problem}）—— 不落台账行"}
         try:
             verdict = VR.parse_verdict(reply)
@@ -967,7 +1012,8 @@ class AgentV:
         # 三条判据在这里合成一个结论：① 每一条被引命题都要有结论（缺的按 unknown 算）；
         # ② 被引命题低于 `proof_review` ⇒ inadmissible（事实，不交给模型裁量）；
         # ③ 有一条挡签的档 ⇒ 结论从「成立」改判（stronger/unrelated/inadmissible →
-        #    有毛病，只有 unknown → 看不出来）。改判的每一条都落进 findings 并点名，
+        #    有毛病；只有 unknown ⇒ 结论不动（它没找到缺陷），由引用闸挡住这一签）。改判的
+        #    每一条都落进 findings 并点名，
         #    于是"签不成"这件事在台账里逐字可读，而不是只在返回值里说一句。
         checks = self._citation_checks(list(verdict.get("citation_checks") or []), citations)
         gate = VR.citation_gate(checks, problem=citations_problem)
@@ -1201,7 +1247,7 @@ class AgentV:
         """穷举型证据会审的收尾：台账那一行落地没有、五元位、返回值。
 
         这一段与 `verify_proof` 的普通收尾是同一套纪律（只认 `row` 上的 `checked`）：
-        台账没落地就不许报"签住了第 3 位"；`成立` 才签；`有毛病` / `看不出来` 照样
+        台账没落地就不许报"签住了第 3 位"；`成立` 才签；`有毛病` / 历史行里的 `看不出来` 照样
         留一行（那是"看过、结论是没过/判不了"的证据）。
         """
         sid = statement_id
@@ -1359,14 +1405,14 @@ class _NoSecretary:
                 "reason": "自检：没有秘书 ⇒ 没有人发这一签"}
 
     def wash_v_reply(self, **_kw: Any) -> dict[str, Any]:
-        """洗不出来 ⇒ 不输出原文（自检不测洗稿，只核三态形状）。"""
+        """洗不出来 ⇒ 不输出原文（自检不测洗稿，只核两态形状）。"""
         return {"checked": False, "washed": False, "text": "", "findings": [],
                 "dropped": [], "refused": "secretary_unavailable",
                 "reason": "自检：没有秘书"}
 
 
 def selftest() -> int:
-    """最小自检：冷启动的接口形态、三态、签位条件、追加式编号、没查成不落行。"""
+    """最小自检：冷启动的接口形态、两态、签位条件、追加式编号、没查成不落行。"""
     import tempfile
 
     checks: list[tuple[str, bool]] = []
@@ -1432,10 +1478,16 @@ def selftest() -> int:
     sent = seam.prompts[0] if seam.prompts else ""
     checks.append(("提示词里带证明全文与硬禁令", "1. 显然成立。" in sent and "易证" in sent))
     checks.append(("提示词里带只读读数", "只读读数：0 行" in sent))
-    # `看不出来` 是对证明的结论（落行），与"没查成"（不落行）必须分开。
-    checks.append(("看不出来落行但不签",
+    # 业主 2026-11-01：回「看不出来」这一族 ⇒ 折成 `成立` 落行（它不是"没查成"），
+    # 而"折出来的成立"照样不签第 3 位（没有秘书、也没有连续次数）。
+    _probe_rows = probe.list_verifications("0008")["items"]
+    checks.append(("回「看不出来」⇒ 折成成立并落行（why 说清为什么这么收）",
                    probe.list_verifications("0008")["total"] == 1
-                   and VR.bit3_payload(probe.list_verifications("0008")["items"][0]) == {}))
+                   and bool(_probe_rows) and _probe_rows[0]["verdict"] == "成立"
+                   and "没有找到缺陷" in str(_probe_rows[0].get("why") or "")
+                   and _probe_rows[0].get("verdict_raw") == "看不出来"))
+    checks.append(("折出来的成立同样不签第 3 位",
+                   bool(_probe_rows) and VR.bit3_payload(_probe_rows[0]) == {}))
 
     noproof = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([]))
     got = noproof.verify_proof("0007", proof_text="")
