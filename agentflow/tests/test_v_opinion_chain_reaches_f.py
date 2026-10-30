@@ -19,7 +19,7 @@ AgentV.verify_proof（V 的真入口）
 |---|---|---|
 | e1 | fault 才洗：V 的回复"整体很好，只是有一个记号问题需要强调"⇒ 秘书判 fault ⇒ 洗 ⇒ 板项 detail 不是 V 原文，且逐字带着 V 指出的那个问题 | 同一份回复、只把秘书判成 clean ⇒ 洗稿一次都不许发生（本用例里当场跑一遍）；fault 却不洗 / 洗了但没递 ⇒ 板项读不到洗过的文本 |
 | e2 | clean 不打扰 F：V 说"我试了几种反例构造都失败，未发现问题"⇒ 不发意见、streak +1 | 把 clean 当 fault（洗了/递了）或不计入（streak 不涨）⇒ 红 |
-| e3 | unsure 不冒充：V 的回复含糊（无尝试痕迹）⇒ 不计入、不清零、也不给 F 发意见 | 折成 clean（streak 变 2）或折成 fault（streak 归零/洗稿）⇒ 红 |
+| e3 | unsure 不冒充：V 的回复含糊（无尝试痕迹）⇒ 不计入、不清零，然后按"判不了"打回 F（`via=secretary_unsure`，措辞与 fault 分开） | 折成 clean（streak 变 2）或折成 fault（streak 归零/洗稿）⇒ 红；把判不了那一档删掉（或与 fault 混成同一档）⇒ 也红 |
 | e4 | F 收不到 V 原文：板项 detail 与 V 原文不相等、且第一人称那句不在里面；kind/expects 不许新造（只能是 notice/ack） | 直接转发原文 ⇒ 红；新造一档 kind/expects ⇒ 冻结面被改 |
 | e5 | 端到端的顺序：先喂 V 的意见、再断言 F 看得到；中间不许手工改盘绕过秘书 | 没有 V 那一签（空工作区）却能在板上开到项 ⇒ 红；板项文本不是台账那一格的字节 ⇒ 红 |
 
@@ -333,8 +333,8 @@ def test_e2_clean_does_not_touch_f_and_bumps_the_streak(tmp_path):
 
 # ============================================================ e3：unsure 不冒充
 
-def test_e3_unsure_is_neither_counted_nor_zeroed_and_never_reaches_f(tmp_path):
-    """e3：V 的回复含糊（无尝试痕迹）⇒ 秘书判 unsure ⇒ 不计入、不清零、也不给 F 发意见。
+def test_e3_unsure_is_neither_counted_nor_zeroed_and_is_sent_back_as_unsure(tmp_path):
+    """e3：V 的回复含糊（无尝试痕迹）⇒ 秘书判 unsure ⇒ 不计入、不清零，然后打回 F。
 
     先攒一票 clean，再喂一条含糊的"成立"：连续次数必须停在 1。
     折成 clean ⇒ 2（冒充了一票）；折成 fault ⇒ 0（把已有的一票作废）。两个方向都被这一条钉住。
@@ -342,6 +342,13 @@ def test_e3_unsure_is_neither_counted_nor_zeroed_and_never_reaches_f(tmp_path):
     2026-10-30 起这两票落在同一次调用的两转里（第 1 转 clean、第 2 转 unsure 就立刻停），
     所以读数从"两次 `verify_proof` 的返回值"改成"`review_passes` 的 (axis, streak) 序列"，
     另加一条：unsure 之后不许再问第三转。
+
+    ## 2026-10-30 第二次裁定之后掉头：「不给 F 发意见」改成「按判不了打回」
+
+    业主逐字：「unsure（判不了）…也终止并打回…板项/读数里如实写『秘书判不了这一条
+    （需要补材料或重交）』，与 fault 分开」。所以本用例的最后两行从"明细为空、板上 0 项"
+    改成"明细恰好一条、`via=secretary_unsure`（不是 `secretary_fault`）、板上 1 项、
+    措辞说判不了" —— 前半段（不计入、不清零、没洗稿）一个字没放宽。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -357,12 +364,21 @@ def test_e3_unsure_is_neither_counted_nor_zeroed_and_never_reaches_f(tmp_path):
     holds = VR.consecutive_holds(st.root, SID)
     assert holds["checked"] is True and holds["streak"] == 1, (
         f"unsure 改了票数（{holds['streak']}）⇒ 它被折成了 clean（2）或 fault（0）")
-    # 台账上那一行照落（意见留痕），但没有洗稿、没有递送
+    # 台账上那一行照落（意见留痕），但没有洗稿
     sign = _ledger_row(st)
     assert sign["verdict"] == "成立" and (sign.get("washed_relay") or {}) == {}, sign
     assert seam.asked("wash_v_reply") == 0
+    # 2026-10-30（业主第二次裁定）：unsure 也终止并打回 —— 但理由码与 fault 分开。
     _text, details, _problems, cond, out = _deliver(st)
-    assert details == [] and out["opened"] == [] and cond.items == [], (details, cond.items)
+    assert len(details) == 1, details
+    assert details[0].get("via") == "secretary_unsure", details[0]
+    assert details[0].get("via") != "secretary_fault", details[0]
+    assert details[0].get("washed") in ("", None), details[0]
+    assert out["checked"] is True and len(out["opened"]) == 1, out
+    assert len(cond.items) == 1, cond.items
+    summary = str(cond.items[0].get("summary") or "")
+    assert "判不了" in summary, summary
+    assert "判「有毛病」" not in summary, summary
 
 
 # ============================================================ e4：F 收不到 V 原文
