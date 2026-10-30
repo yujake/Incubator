@@ -25,10 +25,25 @@ H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五�
 ## 2026-10-30 补：「连续 3 次」是谁在数（这一条改了调用形态）
 业主口径逐字：「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次
 V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知道叫它改正。这块 V 秘书要做好」。
-于是 `verify_proof` 一次调用会自己问模型最多 `MAX_REVIEW_PASSES` 次（同一份正文、同一个
-`proof_no`）：每一问都落一行台账、都问一次秘书发不发；判出 fault 或判不了就立刻停
-（fault 那一档经秘书洗稿后由 `agent_loop.v_rejections_digest` 与 `deliver_v_verdicts`
-送到 F，clean 那一档一个字都不发给 F）。逐次读数在返回值的 `review_passes` 里。
+于是 `verify_proof` 一次调用会自己问模型（同一份正文、同一个 `proof_no`）：每一问都落一行
+台账、都问一次秘书发不发；clean 那一档一个字都不发给 F。
+
+## 2026-10-30 再补：连判只有两种终局（业主第二次裁定，本次唯一权威）
+业主口径逐字：「连判里面如果判出一回秘书语义分析认为是『有毛病』的，
+则直接打回了，连判终止」。于是这一趟的终局只有两种，上界动态等于门槛
+（:func:`review_pass_bound`，`VR.SIGN_STREAK_NEED` 现读）：
+
+1. 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签；
+2. 任一转判出 `fault`（有毛病）⇒ 立刻终止，这一转就是终局：台账那一行经秘书洗稿后由
+   `agent_loop.v_rejections_digest` 与 `deliver_v_verdicts` 打回给 F；判不了（`unsure`）
+   同样终止并打回（理由码分开：`secretary_unsure`，"需要补材料或重交"）；V 自己的结论
+   不是「成立」那一档也立刻停（它本身就是打回）。
+
+"循环跑完而既没签也没打回"不是一条终局：它只可能来自病态配置（门槛被改成 0 / 负数）
+或秘书在次数够的那一转既不签也不判出问题 ⇒ 返回值报内部不一致（`checked=False` + 明确
+`reason`），绝不写成"次数没到"。另有一档"没查成"（拿不到合法结论 / 台账那一行没落地）：
+那是 `checked=False`，也不是一条终局。逐次读数在返回值的 `review_passes` 里（每项带
+`terminal`：这一转是不是终局、是哪一种终局）。
 ## 三态纪律在这里的落法（这一层最容易出错的地方）
 `成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
@@ -92,16 +107,21 @@ class VerificationWiringError(RuntimeError):
 #: 别的角色与秘书那一档仍是 `modelgw.DEFAULT_TEMPERATURE`（0.2），一个字节都没动。
 REVIEW_TEMPERATURE = 1.0
 
-#: 一次 `verify_proof` 最多替 F 连判几次（业主 2026-10-30 的"连续再判"）。
+#: 一次 `verify_proof` 最多替 F 连判几次：「动态等于门槛」（业主 2026-10-30 的两次裁定）。
 #:
-#: 这一格是"一次调用最多问几遍"的上界，与"多少票才发签"（`VR.SIGN_STREAK_NEED`）
-#: 是两个数，只是今天恰好相等。为什么不现读门槛：门槛被调高时若上界跟着长，
-#: "上界"这个词就没有内容 —— 一次调用的成本会随门槛无限长，而"上界到了仍不够就
-#: 如实返回"那条口径永远走不到（它只可能在"上界小于门槛"时发生）。所以这一格在
-#: 导入期定死（取当时的 `VR.SIGN_STREAK_NEED`），门槛照旧每趟现读。
-#: 负控：`tests/test_v_reviews_three_times_before_signing.py` 的 t3 把门槛打成 5，
-#: 判次必须停在 3、如实报"还差 2 次"、位一个字节都不许动。
-MAX_REVIEW_PASSES: int = int(VR.SIGN_STREAK_NEED)
+#: 改前这里是导入期定死的常量（`MAX_REVIEW_PASSES = int(VR.SIGN_STREAK_NEED)`），并按"上界
+#: 与门槛是两个数"实现：门槛调高时判到上界就停、如实报"次数没到"。业主 2026-10-30 的第二次
+#: 裁定逐字否掉了那个终局：「连判里面如果判出一回秘书语义分析认为是
+#: 『有毛病』的，则直接打回了，连判终止」。于是上界与门槛是同一个数，而且「每趟现读」：
+#: 循环跑满门槛时，clean 那一档必然已经攒够门槛票 ⇒ "要么签、要么打回"逻辑上必然命中
+#: （跑完两头都没有 = 内部不一致，见 `verify_proof` 循环之后那一段）。
+#:
+#: 为什么不在导入期取一次就够：门槛是配置，默认参数/模块常量都是一次快照；快照与现读漂了
+#: 之后，"判几次"会按旧门槛走、而"够不够发签"按新门槛判 —— 同一趟调用里两个数。
+def review_pass_bound() -> int:
+    """这一趟最多判几转 = 门槛现读（`verifications.SIGN_STREAK_NEED`）。"""
+    return int(VR.SIGN_STREAK_NEED)
+
 
 #: 第 2 次起的提问末尾追加的那一句（"第几次"只加在提问的尾巴上）。
 #:
@@ -407,14 +427,17 @@ class AgentV:
         "没查成"（`checked=False`）不是工具失败（同 `verify.check_formal` 的`no_backend`：那是没查成，不是查了没过）⇒ 照样
         `ok` 返回、键一个不少，由 `checked` / `reason` 说出真相。少给键会让下游把"这一格没有读数"读成"这一格是零"。
 
-        ## 一次调用里连判几次（业主 2026-10-30）
+        ## 一次调用里连判几次：只有两种终局（业主 2026-10-30 的两次裁定）
 
-        "连续 3 次没问题"是 V 判完接着再判，不是 F 交三次。所以本方法最多自己问模型
-        `MAX_REVIEW_PASSES` 次（同一份正文、同一个 `proof_no`），每一转各落一行台账、
-        各问一次秘书；判出 fault / 判不了就立刻停，签上了就停，上界到了就停并如实报
-        "还差几次"。逐次读数在返回值的 `review_passes` 里（每项给 `pass` / `axis` /
-        `decision` / `streak` / `need` / `streak_ok` / `issue` / `issued` / `verdict` /
-        `verification_id`），而 `secretary_judge` / `sign_issuance` 仍是"最后一转"那两格。
+        "连续 3 次没问题"是 V 判完接着再判，不是 F 交三次。所以本方法自己问模型最多
+        :func:`review_pass_bound` 次（= 门槛现读，同一份正文、同一个 `proof_no`），每一转
+        各落一行台账、各问一次秘书。终局只有两种：签上了（连续 `need` 转 clean ⇒ 秘书发签）
+        或打回了（任一转判出 fault / 判不了 / 结论不是成立 ⇒ 那一转就是终局，立刻停）。
+        "跑完而两头都没有"报内部不一致（`checked=False`），不当成一条终局。
+        逐次读数在返回值的 `review_passes` 里（每项给 `pass` / `axis` / `decision` /
+        `streak` / `need` / `streak_ok` / `issue` / `issued` / `verdict` /
+        `verification_id` / `terminal`），而 `secretary_judge` / `sign_issuance` 仍是
+        "最后一转"那两格。
         """
         del kw  # 声明层没有别的参数；多给的键在这里不静默生效
         out: dict[str, Any] = {
@@ -630,27 +653,31 @@ class AgentV:
                                       text, readonly_facts=facts, citations=citations,
                                       citations_problem=citations_problem)
 
-        # ---- 业主 2026-10-30：一次调用里连着判（见模块 docstring 那一节）----
+        # ---- 业主 2026-10-30 的两次裁定：一次调用里连着判，终局只有两种 ----
         #
         # 循环的每一转都是一次真的模型调用 + 一行台账 + 一次秘书判定，三件事一件都不许省：
         # 省了模型调用就成了"把同一份结论抄三遍"（那不是连续三次判断，是一次判断数三下）；
         # 省了台账行，连续次数就没有来源；省了秘书判定，就等于 V 自己发签（2026-10-29 已收回）。
         #
-        # 停的四条，按优先级：
-        # ① 秘书已经决定签发（`issue`）：签上了就停；而"判了签发却没落盘"是装配问题，
-        #    再判三转也变不出一张签 —— 一并停，并让 `issued` 如实说没落地；
-        # ② 秘书判了 fault：缺陷已点名，洗过的那一份随台账行落盘，交给
-        #    `agent_loop.v_rejections_digest` 与 `deliver_v_verdicts` 那条已有的路送到 F
-        #    （业主逐字：「有毛病的要给 F 知道叫它改正」）；
-        # ③ 判不了（`unsure`：没秘书 / 没缝 / 词表外）或这一签的结论不是「成立」：立刻停。
-        #    unsure 在连续计数里不清零也不计入，再问两转只会把"判不了"变成"问了三遍还是
-        #    判不了"，白花钱；结论不是成立则已经是要送回 F 的那一档，在这里多问没有意义；
-        # ④ 上界 `MAX_REVIEW_PASSES` 到了：停，并如实把"还差几次"留在
-        #    `sign_issuance.reason` 里 —— 不许拿"够了"去凑一张签。
+        # 停的两条（业主第二次裁定的逐字：「连判里面如果判出一回秘书
+        # 语义分析认为是『有毛病』的，则直接打回了，连判终止」）：
+        # ① 签上：秘书已经决定签发（`issue`）。"判了签发却没落盘"是装配问题，再判几转也变不
+        #    出一张签 ⇒ 一并停，并让 `issued` 如实说没落地；
+        # ② 打回：秘书判 fault（有毛病）/ 判不了（unsure），或这一签的结论不是「成立」。
+        #    那一转就是终局：缺陷（或"判不了"）已经点名，这一行的读数就是打回给 F 的那一条
+        #    （fault 那一档随台账行带上洗过的转达；unsure 那一档不洗稿、理由码分开）。
+        #    不再多问一转 —— 多问等于"再给一次机会"，而业主的口径是"直接打回"。
+        #
+        # 上界动态等于门槛（`review_pass_bound()` 现读）：跑满门槛时 clean 那一档必然攒够
+        # 门槛票，于是"要么签、要么打回"必然命中。跑完两头都没有 ⇒ 内部不一致（见下）。
+        need = review_pass_bound()
         passes: list[dict[str, Any]] = []
-        stop_why = (f"上界 {int(MAX_REVIEW_PASSES)} 次到了，连续次数还没到门槛")
         last: dict[str, Any] = {}
-        for pass_no in range(1, max(1, int(MAX_REVIEW_PASSES)) + 1):
+        #: 终局是哪一种："" = 循环跑完还没命中终局（= 内部不一致）/ signed / fault / unsure
+        #: / verdict（V 自己的结论不是成立）/ ledger（台账那一行没落地）。
+        stopped = ""
+        stop_why = ""
+        for pass_no in range(1, need + 1):
             once = self._review_pass(sid=sid, text=text, no=no, prompt=prompt,
                                      citations=citations,
                                      citations_problem=citations_problem,
@@ -680,7 +707,8 @@ class AgentV:
                 "axis": str(once["judgment"].get("axis") or ""),
                 "decision": str(once["issuance"].get("decision") or ""),
                 # `projected` 是"这一签落下去之后的连续次数"（秘书那一步已经按台账算过，
-                # 这一转的票也在里面）⇒ 它就是这一转的 streak。
+                # 这一转的票也在里面）⇒ 它就是这一转的 streak。打回那一档由
+                # `_reject_issuance` 按同一份台账现算（unsure 不清零也不计入）。
                 "streak": int(once["issuance"].get("projected") or 0),
                 "need": int(once["issuance"].get("need") or VR.SIGN_STREAK_NEED),
                 "streak_ok": bool(once["issuance"].get("streak_ok")),
@@ -688,18 +716,39 @@ class AgentV:
                 "issued": bool(once["issuance"].get("issued")),
                 "verdict": str(once["row"].get("verdict") or ""),
                 "verification_id": str(once["row"].get("verification_id") or ""),
+                #: 这一转是不是终局、是哪一种（""=不是终局）。读侧不必再从"下一转还在不在"
+                #: 反推"停在哪儿"，也不用把"打回"读成"次数没到"。
+                "terminal": "",
             })
             out["review_passes"] = passes
+            if once["row"].get("checked") is False:
+                # 台账那一行没落地（追加失败 / 被撤回）⇒ 立刻停：再判几转也攒不出一票
+                # （连续次数从台账派生）。收尾那一支会报 `ledger_row_lost`，不许报"签住了"。
+                stopped = "ledger"
+                passes[-1]["terminal"] = stopped
+                stop_why = "台账那一行没落地（必须重签）"
+                break
             if bool(once["issuance"].get("issue")):
+                stopped = "signed"
+                passes[-1]["terminal"] = stopped
                 stop_why = ("签上了" if once["issuance"].get("issued")
                             else "秘书判了签发，但翻位没落成（落地是秘书的事）")
                 break
             axis = str(once["judgment"].get("axis") or "")
             if axis != "clean":
-                stop_why = f"秘书判 {axis or '（没判）'}（这一档不攒票，立刻停）"
+                # fault / unsure / 词表外（= 没判出来）：三种都立刻停，而且都是打回。
+                stopped = "fault" if axis == "fault" else "unsure"
+                passes[-1]["terminal"] = stopped
+                stop_why = ("秘书判 fault（有毛病）：这一转就是终局，立刻打回 F"
+                            if stopped == "fault" else
+                            "秘书判不了（unsure）：这一转就是终局，立刻打回 F"
+                            "（需要补材料或重交）")
                 break
             if str(once["row"].get("verdict") or "") != "成立":
-                stop_why = f"这一签的结论是 {once['row'].get('verdict')!r}（不攒票，立刻停）"
+                stopped = "verdict"
+                passes[-1]["terminal"] = stopped
+                stop_why = (f"这一签的结论是 {once['row'].get('verdict')!r}"
+                            "（本身就是打回，立刻停）")
                 break
         # 循环之后：这一趟的读数一律取"最后那一转"（前面的每一转都在 `review_passes` 里）。
         row = dict(last.get("row") or {})
@@ -713,6 +762,21 @@ class AgentV:
                                   for c in (last.get("checks") or [])]
         if last.get("wash"):
             out["wash_v_reply"] = dict(last["wash"])
+        if stopped == "":
+            # 循环跑完而既没签也没打回 ⇒ 内部不一致，不是一条终局（业主 2026-10-30 否掉的
+            # 就是"次数没到"这类收尾）。`checked=False` 是"没查成"，不是"审过了"。
+            out["review_passes"] = passes
+            out["reason"] = "internal_inconsistency：连判跑完既没签也没打回"
+            out["detail"] = (
+                f"门槛 {need} 次、这一趟判了 {len(passes)} 转，却既没有秘书发签、也没有任何"
+                "一转被秘书判出毛病或判不了 ⇒ 这是一处内部不一致（不是一条合法的终局，"
+                "也不是「再判几次就好」）。两种来路：① 门槛被改成 0 或负数（连判一转都跑不了）；"
+                "② 秘书在连续次数已经够的那一转既不发签、也没判出问题（秘书那一侧的装配或"
+                "判定异常）。处置：把门槛改回正整数，并核对 V 的秘书装配"
+                "（`secretary.for_role_wired(\"V\", ...)`）之后重签。")
+            self._emit(f"verify_proof({sid})：连判跑完既没签也没打回 —— 内部不一致"
+                       f"（门槛 {need}，判了 {len(passes)} 转）")
+            return out
         self._emit(f"verify_proof({sid})：这一趟自己连判 {len(passes)} 次"
                    f"（停在：{stop_why}）")
         self._emit(f"verify_proof({sid})：秘书语义判定 "
@@ -798,7 +862,9 @@ class AgentV:
         ② 把回复解析成三档结论（不合法 ⇒ 这一格"没查成"，不落台账行）；
         ③ 引用核实的定稿与签字前置（与改前同一套判据，唯一实现在 `verifications`）；
         ④ 秘书的语义三档判定（B 段）＋ 判了 fault 时那一次洗稿（C 段）；
-        ⑤ `record_verification(flip=False)` 落一行台账，再问秘书发不发签（A 段）。
+        ⑤ `record_verification(flip=False)` 落一行台账；clean 且结论是「成立」才问秘书
+        发不发签（A 段），其余几档已经是终局 —— 由 `_reject_issuance` 给一个 fail-closed
+        的读数（见那个方法：这一签不许在"打回"的同一条路径上翻上位）。
 
         为什么这一转必须单独是一个方法：它要在 `verify_proof` 里被转三次，而"每一转都走
         同一套纪律"这件事只能有一个实现 —— 抄三遍必然漂（而漂的那一处正好会是
@@ -884,10 +950,84 @@ class AgentV:
                                "（不落台账、不改位、必须重签）"),
                     "emit": "", "judgment": judgment, "wash": wash,
                     "gate": gate, "checks": checks}
-        issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row)
+        axis = str(judgment.get("axis") or "")
+        if axis == "clean" and str(verdict.get("verdict") or "") == "成立":
+            # 只有 clean 那一档才问"这一签发不发"（其余几档已经是终局，见 `_reject_issuance`）。
+            issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row)
+        else:
+            issuance = self._reject_issuance(sid, no, text=text, row=row,
+                                             judgment=judgment, verdict=verdict)
         return {"ok": True, "row": row, "judgment": judgment, "wash": wash,
                 "issuance": issuance, "gate": gate, "checks": checks,
                 "verdict": verdict}
+
+    def _reject_issuance(self, statement_id: str, proof_no: int, *, text: str,
+                         row: Mapping[str, Any], judgment: Mapping[str, Any],
+                         verdict: Mapping[str, Any]) -> dict[str, Any]:
+        """这一转已经是终局（打回）⇒ 不发签，读数逐字说清"为什么没签"。
+
+        为什么不问 `decide_sign_issuance`：它读的是"连续次数够不够 + 是否同一份正文"。
+        在这一转上那两条都可能已经满足（unsure 那一行既不清零也不计入，fault 之前攒的票
+        也还在），于是它会在"打回"的同一条路径上把第 3 位翻上去 —— 那一签与刚判出来的缺陷
+        会同时成立，而业主的口径是这一转直接打回。所以这一格由 V 这一侧直接给一个
+        fail-closed 的读数：`issue=False`、`issued=False`（这一签没有发、也不该发）。
+
+        `checked` 取秘书这一次判定自己的 `checked`：它判过（fault / 判不了）⇒ True；
+        它根本没有判断面（没有秘书 / 没缝）⇒ False —— "没判过"不许被读成"判过了"。
+        `streak` / `need` / `state` / `same_sha` 从台账现算（同一份读数来源，不另立判据）。
+        """
+        try:
+            standing = VR.review_standing(self.workspace_root, statement_id=statement_id,
+                                          proof_text=text, proof_no=proof_no)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是读数缺失，不是"发了签"
+            self._emit(f"verify_proof({statement_id})：打回那一转的台账读数没读成"
+                       f"（{type(exc).__name__}: {exc}）")
+            standing = {}
+        need = int(VR.SIGN_STREAK_NEED)
+        streak = int(standing.get("streak") or 0)
+        # 词表只有那一个来源（`secretary.SIGN_WITHHOLD`）：这里不抄第二份中文取值。
+        from .. import secretary as _SEC
+
+        axis = str(judgment.get("axis") or "")
+        # 这一转凭什么打回：fault / unsure（词表外也算"没判出来"）/ verdict（结论不是成立）。
+        # 三档的判定与 `verify_proof` 循环里那三个分支逐字同一套（一处改两处漂是不允许的）。
+        kind = ("fault" if axis == "fault"
+                else ("verdict" if (axis == "clean"
+                                    and str(verdict.get("verdict") or "") != "成立")
+                      else "unsure"))
+        return {
+            "checked": bool(judgment.get("checked")),
+            "issue": False, "issued": False, "landed": False,
+            "decision": _SEC.SIGN_WITHHOLD,
+            "streak": streak, "need": need,
+            "streak_ok": bool(streak >= need), "projected": streak,
+            "same_sha": bool(str(standing.get("sha") or "")
+                             and str(standing.get("sha")) == VR.proof_sha(text)),
+            "state": str(standing.get("state") or ""),
+            "reason": self._rejection_reason(kind=kind, verdict=verdict),
+            "basis": [f"秘书判定 axis={axis or '（没判）'}",
+                      f"continuous={streak}/{need}",
+                      f"row={row.get('verification_id') or '（没有编号）'}"],
+            "reading": dict(standing), "cost": {}, "material": {},
+            "writeback": {}, "statement_id": str(statement_id),
+            "proof_no": int(proof_no),
+        }
+
+    def _rejection_reason(self, *, kind: str, verdict: Mapping[str, Any]) -> str:
+        """打回那一转的 `sign_issuance.reason`：说清"为什么不签"，不说"次数没到"。
+
+        三档分开写（读的人据此知道下一步该干什么）：fault = 有毛病（按缺陷改）、
+        unsure = 判不了（需要补材料或重交）、verdict = V 自己的结论不是成立（本身就是打回）。
+        `kind` 由调用方按与循环同一套判据算好（`fault` / `unsure` / `verdict`）。
+        """
+        if kind == "fault":
+            return ("这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局："
+                    "已按 fault 打回 F（错在第几步见洗过的转达与 findings）")
+        if kind == "unsure":
+            return ("这一转秘书判不了（unsure）⇒ 不发签；这一转就是终局：已按「判不了」"
+                    "打回 F（需要补材料或重交）")
+        return (f"这一签的结论是 {str(verdict.get('verdict') or '（不是成立）')!r} ⇒ "
+                "不发签；这一转就是终局：这一份要打回 F 改正之后再送 V 重审")
 
     def _review_without_statement(self, *, text: str, no: int) -> dict[str, Any] | None:
         """命题还没在册时的一次穷举型证据会审（D-34）；不归这一档 ⇒ `None`。

@@ -1659,6 +1659,21 @@ def secretary_axis(row: Mapping[str, Any]) -> str:
     return axis if axis in SECRETARY_JUDGE_AXES else ""
 
 
+def secretary_judged(row: Mapping[str, Any]) -> bool:
+    """这一行的秘书判定是"判过了"还是"没判断面"（`checked` 那一格；没有 ⇒ False）。
+
+    为什么要单独一个读口（业主 2026-10-30）：`axis="unsure"` 混着两种来路 —— 秘书真的
+    看了、判不出来（`checked=True`），和这一趟根本没有判断面（没有秘书 / 没缝，
+    `checked=False`）。两者的处置不同：前者是"这一条打回、要补材料或重交"，后者是装配
+    缺口（读数上说"没判成"，不许被读成"判不了这一条"）。读侧只认这一格，不许自己
+    再写一遍 `secretary_judge.checked` 的取值路径。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    if not isinstance(got, Mapping):
+        return False
+    return bool(got.get("checked"))
+
+
 def _streak_number(streak: Any) -> int | None:
     """把"连续读数"归一成一个整数；`None` = 这一档没有可用的读数。
 
@@ -1691,9 +1706,9 @@ def streak_ok(streak: Any, need: int | None = None) -> bool:
 
     `need=None` = 门槛现读 `SIGN_STREAK_NEED`（2026-10-30 改）。改前这里是
     `need: int = SIGN_STREAK_NEED` —— 默认参数在导入期求值，等于把门槛的第二个副本
-    钉进了签字闸：门槛一旦不是 3（`agent_v.core.MAX_REVIEW_PASSES` 那份负控就把门槛
-    临时打成 1 与 5），秘书那一端按新值判"够"，这一端按旧值判"不够" —— 同一个门槛给出
-    两个数，而"发签没落成"这句理由会把它说成"还差次数"。默认参数不是配置，它是一次
+    钉进了签字闸：门槛一旦不是 3（`agent_v.core.review_pass_bound` 的负控就把门槛
+    临时打成 1 与 5），秘书那一端按新值判"够"，这一端按旧值判"没到门槛" —— 同一个门槛
+    给出两个数，而"发签没落成"这句理由会把它说成"还差次数"。默认参数不是配置，它是一次
     快照；门槛要现读。
     """
     got = _streak_number(streak)
@@ -1874,7 +1889,8 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     else:
         out["reason"] = (f"#{no} 的尾部连续 {run} 次「成立」（门槛 {out['need']} 次，"
                          f"最新一签 {str(tail.get('verification_id') or '') or '（没有编号）'}、"
-                         f"verdict={tail.get('verdict')!r}）⇒ 还不够发签")
+                         f"verdict={tail.get('verdict')!r}）⇒ 不发签：连续次数没到门槛"
+                         "（这一签只落台账、不翻位）")
     return out
 
 
@@ -2424,6 +2440,9 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "secretary_axis": str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or ""),
         "secretary_fault": (str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or "")
                             == "fault"),
+        #: 这一转的秘书判定是"判过了"还是"没判断面"（业主 2026-10-30）：`axis="unsure"`
+        #: 混着两种来路，读侧要拿这一格把它们分开（见 :func:`secretary_judged`）。
+        "secretary_judged": secretary_judged(chosen),
     })
     if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
@@ -2443,7 +2462,12 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                         + ("；但秘书读出了缺陷（它判 fault：V 的结论词虽写「成立」，"
                            "回复里其实指出了问题）—— 这一份要按缺陷处理，"
                            "别把「还差几次」当成「还没评够」"
-                           if out.get("secretary_fault") else "")))
+                           if out.get("secretary_fault") else "")
+                        + ("；而这一转秘书判不了（unsure：判过了、没判出来）—— 这一份"
+                           "要按「判不了」处理：秘书判不了这一条（需要补材料或重交），"
+                           "别把「还差几次」当成「再多判几转就好」"
+                           if (str(out.get("secretary_axis") or "") == "unsure"
+                               and out.get("secretary_judged")) else "")))
         return out
     if covering:
         out.update(state="rejected", in_sync=True,
@@ -2584,6 +2608,11 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "streak": int(st.get("streak") or 0),
             "need": int(st.get("need") or SIGN_STREAK_NEED),
             "streak_ok": bool(st.get("streak_ok")),
+            #: 秘书对最近那一签的语义判定（业主 2026-10-30）：`axis` 是 clean / fault /
+            #: unsure，`judged` 区分"判过了"与"没判断面"。读侧据此把"打回"与"次数没到"
+            #: 分开（unsure 打回那一档的处置是补材料或重交，不是再判几转）。
+            "secretary_axis": str(st.get("secretary_axis") or ""),
+            "secretary_judged": bool(st.get("secretary_judged")),
             "why": str(st.get("why") or ""),
         })
         if state == "unsigned":
@@ -2620,23 +2649,9 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
     grade = _highest_grade([str(e.get("grade") or "") for e in entries])
     if not grade:
         grade = _EB.derive_grade(out_bits, kind=kind)
-    why = ""
-    if not reviewed:
-        if state == "stale":
-            why = (f"{sid} 的证明都签过旧版（或签过但没盖住现在这一份）"
-                   f"（stale：{'、'.join(stale)}）⇒ 一条 in-sync 的签名都没有")
-        elif state == "rejected":
-            why = (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
-                   f"（rejected：{'、'.join(rejected)}）")
-        elif state == "holding":
-            why = (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
-                   f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
-                   "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）")
-        elif state == "unreadable":
-            why = f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成（不是「没签过」）"
-        else:
-            why = (f"{sid} 的证明一次都没签（{'、'.join(unreviewed) or '没有证明'}）"
-                   "⇒ 第 3 位是没签过，不是签过过期")
+    why = _statement_reading_why(sid=sid, state=state, reviewed=reviewed, entries=entries,
+                                 unreviewed=unreviewed, stale=stale, rejected=rejected,
+                                 holding=holding)
     return {
         "checked": not problems,
         "ledger_present": ledger_present,
@@ -2658,6 +2673,43 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         "problems": problems,
         "why": why,
     }
+
+
+def _statement_reading_why(*, sid: str, state: str, reviewed: bool,
+                           entries: Sequence[Mapping[str, Any]],
+                           unreviewed: Sequence[str], stale: Sequence[str],
+                           rejected: Sequence[str], holding: Sequence[str]) -> str:
+    """命题级那句 `why`（六态各一句；`holding` 里再把两种处置分开）。
+
+    为什么要单独一个函数：这条`why`有六个分支、每支都是一句人话，而它住在
+    :func:`statement_review_reading` 里会把那个函数压过 200 行（`scripts/repo_survey.py`
+    的长函数基线是逐条登记的，长大要人裁）。判据不变，只是换了个落点。
+    """
+    if reviewed:
+        return ""
+    if state == "stale":
+        return (f"{sid} 的证明都签过旧版（或签过但没盖住现在这一份）"
+                f"（stale：{'、'.join(stale)}）⇒ 一条 in-sync 的签名都没有")
+    if state == "rejected":
+        return (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
+                f"（rejected：{'、'.join(rejected)}）")
+    if state == "holding":
+        # 2026-10-30（业主第二次裁定）：holding 里混着两种处置 —— "次数没到"（再送 V 判
+        # 几转）与"秘书判不了"（这一条要补材料或重交）。读数必须先把它们分开，否则
+        # 后一种会被读成前一种（那正是业主逐字否掉的那类终局）。
+        unsure = [str(e.get("label") or "") for e in entries
+                  if str(e.get("state") or "") == "holding"
+                  and e.get("secretary_axis") == "unsure"
+                  and e.get("secretary_judged")]
+        return (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
+                f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
+                "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）"
+                + (f"；其中 {'、'.join(unsure)} 是秘书判不了这一条（需要补材料或重交）"
+                   "—— 那一档不是「再判几转就好」" if unsure else ""))
+    if state == "unreadable":
+        return f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成（不是「没签过」）"
+    return (f"{sid} 的证明一次都没签（{'、'.join(unreviewed) or '没有证明'}）"
+            "⇒ 第 3 位是没签过，不是签过过期")
 
 
 def _highest_grade(grades: Sequence[str]) -> str:

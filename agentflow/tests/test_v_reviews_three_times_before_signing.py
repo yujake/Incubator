@@ -364,6 +364,26 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     # 终局是"签上"，不是"次数没到"：两格读数都这么说。
     assert passes[-1].get("terminal") == "signed", passes
     assert "还差" not in got2["sign_issuance"]["reason"], got2["sign_issuance"]
+    # (c) 病态配置：门槛打成 0 ⇒ 连判一转都跑不了、既没签也没打回 ⇒ 内部不一致
+    #     （不是"次数没到"那种收尾，也不是"审过了"）。这是那条兜底分支的唯一判据。
+    st3 = _ws(tmp_path / "c")
+    _put(st3)
+    review3 = _ReviewSeam([CLEAN_REPLY])
+    sec_seam3 = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    agent3 = AgentV(st3, workspace_root=st3.root, llm=review3,
+                    secretary=_secretary(st3, sec_seam3))
+    monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 0)
+    got3 = agent3.verify_proof(SID, proof_text=PROOF)
+    assert review3.asked() == 0, (
+        f"门槛 0 时仍然问了 {review3.asked()} 次模型 ⇒ 上界没有跟着门槛走")
+    assert got3["review_passes"] == [], got3["review_passes"]
+    assert _rows(st3) == [], "门槛 0 时落了台账行 ⇒ 判据前提被破坏"
+    assert got3["checked"] is False, got3
+    assert str(got3["reason"]).startswith("internal_inconsistency"), got3["reason"]
+    assert "还差" not in str(got3["reason"]), got3["reason"]
+    assert got3["signed_bit3"] is False and got3["bits"] == {}, got3
+    assert _stmt_row(st3)["bits"]["reviewed"] is False, _stmt_row(st3)["bits"]
 
 
 # ============================================================ t4：unsure 也终止并打回
