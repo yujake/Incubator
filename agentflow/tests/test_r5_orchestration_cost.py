@@ -1096,7 +1096,6 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     "temp/rbe4_prompt_digests.py",
     "temp/rbe4_rows_cost.py",
     "temp/rbe4_sessions_reads.py",
-    "temp/recompute_prompt_digests.py",
 )
 
 
