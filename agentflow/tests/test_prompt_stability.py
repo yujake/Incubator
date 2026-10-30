@@ -633,7 +633,12 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 在盘上没有读数。
     {"version": "p218", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p218（2026-10-29）：V 只产审稿意见、签由秘书判定并落盘；M 的编排面多 conductor.wake_blocked（逐条审批唤醒）。"}
+     "note": "抬版本 p218（2026-10-29）：V 只产审稿意见、签由秘书判定并落盘；M 的编排面多 conductor.wake_blocked（逐条审批唤醒）。"},
+    # p218 → p219（2026-10-29 业主批准）：specs/v.py 三句改成"签由秘书"、specs/d.py 与 m.py 的
+    # 静默定义按定稿重写；facts 那 15 格一格没挪 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p219", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p219（2026-10-29）：V 的职责文与 D/M 的静默定义改成定稿口径（V 只产意见、签由秘书；静默 = 只挂兜底计时器）。"}
 
 )
 

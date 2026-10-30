@@ -2817,7 +2817,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
 #: 十一格是 `D:\Incubator\temp\recompute_digests.py`（与 conftest 的环境变量逐条对齐：
 #: Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）的现算值，不是手抄。
-PROMPT_VERSION = "p218"
+PROMPT_VERSION = "p219"
 
 
 

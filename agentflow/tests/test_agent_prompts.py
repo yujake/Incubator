@@ -394,7 +394,7 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     # 2026-10-13 业主更正：审校链的中心是 B / H / V —— 三个角色各自的框都要写着它
     # 三格各自的那句"我在链上干什么"（业主 2026-10-13 更正后：不再抄原话，只留做法）
     chain_phrases = {"B": "你是审校这条链的第一环", "H": "你站在这条审校链的中间",
-                     "V": "你是这条链的签名环"}
+                     "V": "你是这条链的审阅环"}
     for role, phrase in chain_phrases.items():
         rb = AP.ROLE_BRIEFS[role]
         mine = "\n".join([rb.duty, rb.deliverable, *rb.boundary, *rb.policy])
@@ -2157,7 +2157,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p218"
+_FROZEN_PROMPT_VERSION = "p219"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2351,16 +2351,16 @@ _FROZEN_PROMPT_VERSION = "p218"
 # 环境变量与 `conftest.py` 逐条对齐）的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "822362d286cd603f1222f7520b181656b4f8b751968aefe6fc687220ce2ca0d3",
-    "B": "24dc2329367c181686e8f2fa2b7367ecc7529fbf38832840ac774ca499f83dec",
+    "B": "c4bc9836a806026ce7af866fc7a5805873e5efb84253927a9df30b4c91ed3942",
     "C": "03661adca70c0017f3d3ff3314725c1134ae2e28930b57c087add8a3028ce429",
-    "D": "44b6f5f2327feb5e20874b5cbb978546cbf6f0b1b0209cd8387368c8039c167a",
-    "E": "79ea5bac7bf56448d78fdc7f47b34049794e20e275f57ef9763dcb91eafe4e69",
-    "F": "90fd138a8c6c6415b6aecf8dec93040f66bd64313cedac3708794d7968615603",
+    "D": "5c33db062222081dd092dad40ddf9c57626a7ceb31719b2c63de32d9e10b1067",
+    "E": "6b6045d881fd86794c4a8e4d07473863955660c5ce11ebd7abcfb5b1992c6bed",
+    "F": "2cfef07246b44bb807abae1c543e6cb88a2fb5e69f25cf1e3f9208da60e2cca8",
     "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
     "H": "ac8a5bde4214a0596434cdfae3f13073b79fed4906cc8e867f8747625631cb71",
     "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
-    "M": "5c4848b618fcb72c7d22a3e5f45d465e600c007516fdcd2ad54d047fe6fa49ac",
-    "V": "6b8ebdb44f10e66ecad7d4ae389d61a2de086e136c1ee55836f26d99ad849d7d",
+    "M": "44b7c2e6a9e5f5169c23e7cb1b749bcf887fd8d96bbc53fcc5f6026817442547",
+    "V": "ffd9cfd318d1b6b0eca809505bb999832db67c719536504e57836a4ae9bf2ef1",
 }
 
 
