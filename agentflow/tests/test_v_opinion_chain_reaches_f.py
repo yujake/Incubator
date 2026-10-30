@@ -455,20 +455,16 @@ def test_e5_order_v_first_then_f_sees_the_washed_opinion(tmp_path):
 def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, monkeypatch):
     """(C) 读数：`ToolRegistry.call("verify.verify_proof")` 的返回键 vs `returns=` 声明。
 
-    已知缺口（`tools/verify_tools.py` 在 FC-27，本轮不许改）：声明里没有
-    `secretary_judge` / `sign_issuance`。判据因此红的是
-    `tests/test_tools_returns_declaration.py::test_no_tool_returns_a_top_level_key_it_does_not_declare`
-    —— 它逐工具比对"实跑给了、声明没提"的顶层键。
+    这一条原来钉的是已知缺口：声明里没有 `secretary_judge` / `sign_issuance`，
+    所以差集逐字等于那两格。2026-10-29 业主批准改 FC-27、那两格已补进
+    `tools/verify_tools.py` 的 `returns=` ⇒ 缺口关闭，本判据随之改判为断言差集为空
+    （钉子掉头：以前它证明"缺口存在"，现在它证明"缺口不存在"）。
 
-    这一条把那个读数钉死：差集必须逐字等于那几格（下面三档各自写死）。等 FC-27 由人
-    补上声明之后这里会红 —— 那时把三处断言改成各自应为的差集，这条钉子的使命就完成了。
+    为什么 `wash_v_reply` 不在声明里、也不算差集：它只在 fault 那一支出现，
+    写进 `returns=` 会让 `test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
+    在受控拒绝那一支假红（与 retire_child 排除 open_items 元素键同一个理由）。
 
-    三档读数（都在同一个工具入口上取）：
-      1. 没接线（`judge_not_wired` 那一支）⇒ 差集 = 秘书那两格；
-      2. 接线、秘书判 clean 且票数不够 ⇒ 差集仍是那两格，而两格都带上了真读数
-         （`secretary_judge.axis=clean`、`sign_issuance.checked=True`）；
-      3. 接线、秘书判 fault ⇒ 差集多一格 `wash_v_reply`（那一格是 fault 支才写的，
-         所以它只在实跑这一支上才看得见 —— 见 e1）。
+    读数（同一个工具入口、没接线那一支）：差集必须是空列表。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -484,8 +480,10 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     extra = [k for k in keys if k not in declared]
     # 三态：这一趟没有模型缝 ⇒ 走"没查成"那一支；键集合仍然完整（这是它能被比对的前提）
     assert data.get("checked") is False and data.get("reason") == "judge_not_wired", data
-    assert extra == ["secretary_judge", "sign_issuance"], (
-        f"返回键 {keys}；声明 {sorted(declared)}；差集 {extra}")
+    assert extra == [], (
+        f"返回键 {keys}；声明 {sorted(declared)}；差集 {extra}"
+        "（2026-10-29 起声明已补齐 secretary_judge / sign_issuance；差集不为空说明"
+        "又有新读数没进声明）")
 
     # ---- 2. 接线之后：那两格带上真读数（活字段，不是空占位）
     def _factory(seam):
@@ -509,7 +507,7 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     assert data2.get("checked") is True, data2
     assert data2["secretary_judge"].get("axis") == "clean", data2["secretary_judge"]
     assert data2["sign_issuance"].get("checked") is True, data2["sign_issuance"]
-    assert [k for k in keys2 if k not in declared] == ["secretary_judge", "sign_issuance"], (
+    assert [k for k in keys2 if k not in declared] == [], (
         f"返回键 {keys2}；声明 {sorted(declared)}")
 
     # ---- 3. fault 那一支：多一格 wash_v_reply（同一份声明缺口，只在实跑这一支可见）
@@ -528,8 +526,10 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     assert data3.get("checked") is True, data3
     assert data3["secretary_judge"].get("axis") == "fault", data3["secretary_judge"]
     assert data3.get("wash_v_reply", {}).get("washed") is True, data3.get("wash_v_reply")
-    assert [k for k in keys3 if k not in declared] == [
-        "secretary_judge", "sign_issuance", "wash_v_reply"], (
+    # `wash_v_reply` 刻意不进声明（只在 fault 这一支出现；写进 returns= 会让
+    # `test_declared_keys_are_a_subset_of_what_the_handler_actually_returns` 在
+    # 受控拒绝那一支假红 —— 与 retire_child 排除 open_items 元素键同一个理由）。
+    assert [k for k in keys3 if k not in declared] == ["wash_v_reply"], (
         f"返回键 {keys3}；声明 {sorted(declared)}")
 
 def test_e6_a_secretary_fault_still_names_the_step(tmp_path):
