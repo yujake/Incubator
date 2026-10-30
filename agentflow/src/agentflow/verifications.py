@@ -930,10 +930,22 @@ SIGN_STREAK_NEED: int = 3
 #: ⇒ 读侧按"没判过"处理（也就是"计入连续"）——那是这条口径上线之前的行为，逐字不变。
 SECRETARY_JUDGE_KEY = "secretary_judge"
 
-#: 秘书判定那一路的三档（与 `secretary.V_REPLY_*` 的 axis 逐字同一套，业主 2026-10-29）：
-#: `clean` = 没问题（计入连续）/ `fault` = 有缺陷要指出（清零）/
-#: `unsure` = 判不了（不清零、也不计入 —— 业主原话，见 `draft/125` §五 v1）。
-SECRETARY_JUDGE_AXES: tuple[str, ...] = ("clean", "fault", "unsure")
+#: 台账行上「秘书语义判定」那一格的写侧轴（业主 2026-10-29 的 B 段；
+#: 2026-10-30 第三次裁定收成两档）：`clean` = 没问题（计入连续）/
+#: `fault` = 有缺陷要指出（清零）。
+#:
+#: 为什么没有第三格：业主逐字「不可能有判不了…只要不是完全没毛病都叫有毛病」。写侧
+#: （`record_verification`）只收这两格 —— 传别的值一律落成空轴（"这一行没有轴" =
+#: 这一趟没查成），于是"新判定产生 unsure"在结构上不可能发生。
+SECRETARY_JUDGE_AXES: tuple[str, ...] = ("clean", "fault")
+
+#: 历史行里出现过、只作历史兼容读的轴名（2026-10-30 之前写下的行）。
+#:
+#: `unsure` = 判不了：那一版把它当第三档，连续计数里"不清零也不计入"。现在它不再是
+#: 一种结论（新判定不产生它），但老台账必须读得出：`secretary_axis` 认这一格，
+#: `_hold_run_lengths` 对它沿用旧口径（不计入、不清零）。它不在写侧词表里
+#: （`record_verification` 会把这一格落成空轴）。
+SECRETARY_JUDGE_HISTORICAL_AXES: tuple[str, ...] = ("unsure",)
 
 #: 多证明模型的落点（业主 2026-10-22：不加 schema 字段）。
 #:
@@ -1223,10 +1235,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     "没查成"与"核过、没有引用"。查成了的行不写这一格（老行因此逐字节不变）。
 
     ## `secretary_judge` / `sign_issuance`：业主 2026-10-29 的 B 段与 A 段
-    `secretary_judge` 是秘书对这段回复的三档语义判定（`clean` / `fault` / `unsure`），
-    原样落到台账那一行的 `SECRETARY_JUDGE_KEY` 那一格 —— 连续计数读它（`fault` 清零、
-    `unsure` 不计入也不清零）。不给就一个字节都不写（历史行与"没问过秘书"的那一批
-    因此逐字节不变，读侧按"没判过"处理，也就是计入）。
+    `secretary_judge` 是秘书对这段回复的两档语义判定（`clean` / `fault`），原样落到台账
+    那一行的 `SECRETARY_JUDGE_KEY` 那一格 —— 连续计数读它（`fault` 清零、`clean` 计入；
+    没查成的那一行两样都不做）。写侧只收这两格（`:data:`SECRETARY_JUDGE_AXES``）：历史
+    那一格（`unsure`，只作历史兼容读，见 `SECRETARY_JUDGE_HISTORICAL_AXES`）写不进来，
+    会落成空轴。不给就一个字节都不写（历史行与"没问过秘书"的那一批因此逐字节不变，
+    读侧按"没判过"处理，也就是计入）。
     `sign_issuance` 是秘书"发不发这一签"的决定，原样交给 :func:`sign_statement` 当闸：
     `checked=False`（没缝 / 超时 / 台账读不成 / 没装配）⇒ 不翻位。
     两个参数都只影响"位翻不翻"，不改台账那一行的 `verdict`（那是 `parse_verdict` 的正本）。
@@ -1304,14 +1318,19 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if gate_problem:
         row["citation_gate"] = {"ok": False, "problem": gate_problem,
                                 "why": str(citation_gate.get("why") or "")}
-    #: 秘书语义判定那三档（业主 2026-10-29 的 B 段）：`{axis, checked, decision, reason}`。
+    #: 秘书语义判定的两档轴（业主 2026-10-29 的 B 段；2026-10-30 第三次裁定收成两档）：
+    #: `{axis, checked, decision, reason}`。
     #: 只在调用方真问过秘书时写（条件写入 ⇒ 历史行与新行里"没判过"的那一批逐字节不变）。
     #: 为什么落在这一行而不是 `statements` 的新列：连续计数从台账派生（`draft/125` §二 A），
     #: 而"这一签当年算不算一票"是这一行的性质（`_hold_run_lengths` 读它）。
     if isinstance(secretary_judge, Mapping):
         axis = str(secretary_judge.get("axis") or "").strip()
+        # 写侧只有两格（业主 2026-10-30 第三次裁定）：词表外的取值一律落成空轴
+        # （"这一行没有轴" = 没查成），不折成任何一档结论；历史那一格（`unsure`）
+        # 写不进来 —— 它只在 `SECRETARY_JUDGE_HISTORICAL_AXES` 里（只作历史兼容读）
+        # 被 `secretary_axis` 读出去，于是"新判定产生 unsure"在这里被挡住。
         row[SECRETARY_JUDGE_KEY] = {
-            "axis": axis if axis in SECRETARY_JUDGE_AXES else "unsure",
+            "axis": axis if axis in SECRETARY_JUDGE_AXES else "",
             "checked": bool(secretary_judge.get("checked")),
             "decision": str(secretary_judge.get("decision") or ""),
             "reason": str(secretary_judge.get("reason") or "")[:300],
@@ -1644,34 +1663,50 @@ def row_signable(row: Mapping[str, Any]) -> bool:
 
 
 def secretary_axis(row: Mapping[str, Any]) -> str:
-    """这一行台账上的秘书判定档（`SECRETARY_JUDGE_AXES`；没有这一格 ⇒ 空串）。
+    """这一行台账上的秘书判定轴（写侧 `SECRETARY_JUDGE_AXES`；没有这一格 ⇒ 空串）。
 
-    空串 = "这一签不是秘书判过的那一档"（历史行 / 秘书不在场时没写这一格）——读侧按
-    计入处理，也就是这条口径上线之前的行为。取了词表外的值也归空串：秘书返回
-    "Clean"（大小写）/ 半截词这类写法时，不许它把一条有缺陷的签静默算成 clean ——
-    词表外的结论一律不采信（`Secretary.judge` 的同一条纪律），不采信的后果就是回到
-    "没判过"那一档（可计入、但也不给它 clean 的名分）。
+    两个世界都在这里读：写侧两格（`clean` / `fault`）与历史行里那一格
+    （`SECRETARY_JUDGE_HISTORICAL_AXES`，只作历史兼容读 —— 2026-10-30 之前写下的
+    行里出现过 `unsure`；新判定不再产生它，`record_verification` 会把它落成空轴）。
+
+    空串 = "这一行没有轴"（历史行没有这一格 / 这一趟没查成 / 秘书不在场）。读侧按
+    "计入"处理 —— 那是这条口径上线之前的行为，逐字不变。取了词表外的值也归空串：
+    秘书返回 "Clean"（大小写）/ 半截词这类写法时，不许它把一条有缺陷的签静默算成
+    clean —— 词表外的结论一律不采信（`Secretary.judge` 同一条纪律）。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
     if not isinstance(got, Mapping):
         return ""
     axis = str(got.get("axis") or "").strip()
-    return axis if axis in SECRETARY_JUDGE_AXES else ""
+    return axis if axis in SECRETARY_JUDGE_AXES + SECRETARY_JUDGE_HISTORICAL_AXES else ""
 
 
 def secretary_judged(row: Mapping[str, Any]) -> bool:
-    """这一行的秘书判定是"判过了"还是"没判断面"（`checked` 那一格；没有 ⇒ False）。
+    """这一行的秘书判定是"判过了"还是"没判成"（`checked` 那一格；没有 ⇒ False）。
 
-    为什么要单独一个读口（业主 2026-10-30）：`axis="unsure"` 混着两种来路 —— 秘书真的
-    看了、判不出来（`checked=True`），和这一趟根本没有判断面（没有秘书 / 没缝，
-    `checked=False`）。两者的处置不同：前者是"这一条打回、要补材料或重交"，后者是装配
-    缺口（读数上说"没判成"，不许被读成"判不了这一条"）。读侧只认这一格，不许自己
-    再写一遍 `secretary_judge.checked` 的取值路径。
+    为什么要单独一个读口（业主 2026-10-30）：没有这一格的老行与"判了、但没查成"的行
+    长得不一样，而它们的处置也不同 —— 前者按计入处理（口径上线前的历史），后者既不算票
+    也不清零（`_hold_run_lengths` 的口径）。读侧只认这一格，不许自己再写一遍
+    `secretary_judge.checked` 的取值路径。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
     if not isinstance(got, Mapping):
         return False
     return bool(got.get("checked"))
+
+
+def secretary_unjudged(row: Mapping[str, Any]) -> bool:
+    """这一行写着"问过秘书、没判成"（有那一格、但 `checked` 为假）。
+
+    与"没有那一格"（历史行 / 从没问过）刻意分开：前者是这一趟的框架失败（业主
+    2026-10-30 第三次裁定：没查成不是一种判定），后者按旧口径计入连续。两者在连续
+    计数里恰好都是"既不算票、也不清零"，但读数必须分得开 —— 否则"这一趟没查成"
+    会被读成"这一份还没判过"。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    if not isinstance(got, Mapping):
+        return False
+    return not bool(got.get("checked"))
 
 
 def _streak_number(streak: Any) -> int | None:
@@ -1773,13 +1808,13 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     （一批台账里哪几行签住了）三处都调它。三处各写一遍合计，只会让三处对同一批行
     给出三个数 —— 而"位上说签了、台账只签一次"正是这种分家的形态。
 
-    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径）
+    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径 + 2026-10-30 第三次裁定）
     - `proof_sha256` 变了 ⇒ 清零（F 改稿之后，之前那几次审的不是这一份）；
     - 行局部签不住（`有毛病` / 未解决 error / 引用挡签）⇒ 清零；
     - 秘书判 `fault`（有缺陷要指出）⇒ 清零；
-    - 秘书判 `unsure`（判不了）⇒ 不清零、也不计入（业主原话「不清零不计入」）：
-      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2
-      而不是 3 —— "一次判不了"既不许把已有的两票作废，也不许冒充第三票。
+    - 秘书没判成（`checked=False`，不是一种判定）⇒ 不清零、也不计入；
+    - 历史行里的 `unsure`（2026-10-30 之前写下的）只作历史兼容读：不清零、也不计入 ——
+      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2 而不是 3。
 
     调用方负责先把行分组（同一命题 + 同一证明号）：一条命题的两份证明各自数各自的，
     `#p1` 的三票不许替 `#p2` 数（不许借光）。
@@ -1796,7 +1831,12 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
         if axis == "fault":
             run = 0
         elif axis == "unsure":
-            # 不清零、也不计入：这一行的连续值原样带过去（见 docstring 那一节）。
+            # 历史行（只作历史兼容读）：不清零、也不计入。
+            pass
+        elif isinstance(row.get(SECRETARY_JUDGE_KEY), Mapping) and (
+                not secretary_judged(row) or not axis):
+            # 问过秘书、没查成（`checked=False`）/ 轴读不出来：那不是一种判定 ⇒
+            # 同样既不攒票也不作废（fail-closed：词表外的轴不许静默算成 clean）。
             pass
         elif not row_signable(row):
             run = 0
@@ -1822,7 +1862,8 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     这就是「连续 3 次没问题」那个计数：从 `verifications/<命题号>.jsonl` 的尾部按台账
     行序往回数，同一 `proof_sha256`、连续 `verdict="成立"` 的行数；任何一行的结论不是
     「成立」、或者 sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
-    秘书判 `unsure` 的行不清零也不计入（见 :func:`_hold_run_lengths`）。
+    秘书没查成的那一行不清零也不计入；历史行里那一格（只作历史兼容读）同样如此
+    （见 :func:`_hold_run_lengths`）。
 
     ## 三态（"没查成"不是"0 次"）
     | 结局 | `checked` | `streak` |
@@ -2440,9 +2481,10 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "secretary_axis": str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or ""),
         "secretary_fault": (str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or "")
                             == "fault"),
-        #: 这一转的秘书判定是"判过了"还是"没判断面"（业主 2026-10-30）：`axis="unsure"`
-        #: 混着两种来路，读侧要拿这一格把它们分开（见 :func:`secretary_judged`）。
+        #: 这一转的秘书判定是"判过了"还是"没判成"（业主 2026-10-30）：读侧要拿它把
+        #: "没查成"与"判过了"分开（见 :func:`secretary_judged` / :func:`secretary_unjudged`）。
         "secretary_judged": secretary_judged(chosen),
+        "secretary_unjudged": secretary_unjudged(chosen),
     })
     if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
@@ -2463,11 +2505,13 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                            "回复里其实指出了问题）—— 这一份要按缺陷处理，"
                            "别把「还差几次」当成「还没评够」"
                            if out.get("secretary_fault") else "")
-                        + ("；而这一转秘书判不了（unsure：判过了、没判出来）—— 这一份"
-                           "要按「判不了」处理：秘书判不了这一条（需要补材料或重交），"
-                           "别把「还差几次」当成「再多判几转就好」"
+                        + ("；而这一行是历史台账里的 unsure —— 只作历史兼容读：既不算票、"
+                           "也不清零（新判定不再产生这一格）"
                            if (str(out.get("secretary_axis") or "") == "unsure"
-                               and out.get("secretary_judged")) else "")))
+                               and out.get("secretary_judged")) else "")
+                        + ("；而这一转秘书没判成（checked=False：没查成，不是有毛病）"
+                           "—— 这一签不发，等判定接上之后重签"
+                           if out.get("secretary_unjudged") else "")))
         return out
     if covering:
         out.update(state="rejected", in_sync=True,
@@ -2608,11 +2652,11 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "streak": int(st.get("streak") or 0),
             "need": int(st.get("need") or SIGN_STREAK_NEED),
             "streak_ok": bool(st.get("streak_ok")),
-            #: 秘书对最近那一签的语义判定（业主 2026-10-30）：`axis` 是 clean / fault /
-            #: unsure，`judged` 区分"判过了"与"没判断面"。读侧据此把"打回"与"次数没到"
-            #: 分开（unsure 打回那一档的处置是补材料或重交，不是再判几转）。
+            #: 秘书对最近那一签的判定（业主 2026-10-30）：轴只有 clean / fault 两档，
+            #: `judged` 区分"判过了"与"没判成"，`unjudged` 是"问过、没查成"那一格。
             "secretary_axis": str(st.get("secretary_axis") or ""),
             "secretary_judged": bool(st.get("secretary_judged")),
+            "secretary_unjudged": bool(st.get("secretary_unjudged")),
             "why": str(st.get("why") or ""),
         })
         if state == "unsigned":
@@ -2694,18 +2738,24 @@ def _statement_reading_why(*, sid: str, state: str, reviewed: bool,
         return (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
                 f"（rejected：{'、'.join(rejected)}）")
     if state == "holding":
-        # 2026-10-30（业主第二次裁定）：holding 里混着两种处置 —— "次数没到"（再送 V 判
-        # 几转）与"秘书判不了"（这一条要补材料或重交）。读数必须先把它们分开，否则
-        # 后一种会被读成前一种（那正是业主逐字否掉的那类终局）。
-        unsure = [str(e.get("label") or "") for e in entries
+        # 2026-10-30（第三次裁定）：holding 里混着三种来路 —— "次数没到"（再送 V 判几转）、
+        # "这一转秘书没判成"（框架失败：没查成）与历史行里的 unsure（只作历史兼容读）。
+        # 读数必须先把它们分开，否则后两种会被读成第一种（"再判几次就好"）。
+        legacy = [str(e.get("label") or "") for e in entries
                   if str(e.get("state") or "") == "holding"
                   and e.get("secretary_axis") == "unsure"
                   and e.get("secretary_judged")]
+        unjudged = [str(e.get("label") or "") for e in entries
+                    if str(e.get("state") or "") == "holding"
+                    and e.get("secretary_unjudged")]
         return (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
                 f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
                 "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）"
-                + (f"；其中 {'、'.join(unsure)} 是秘书判不了这一条（需要补材料或重交）"
-                   "—— 那一档不是「再判几转就好」" if unsure else ""))
+                + (f"；其中 {'、'.join(legacy)} 是历史台账里的 unsure —— 只作历史兼容读："
+                   "既不算票、也不清零" if legacy else "")
+                + (f"；其中 {'、'.join(unjudged)} 是这一转秘书没判成（checked=False："
+                   "没查成，不是有毛病）—— 那一档不发签，等判定接上之后重签"
+                   if unjudged else ""))
     if state == "unreadable":
         return f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成（不是「没签过」）"
     return (f"{sid} 的证明一次都没签（{'、'.join(unreviewed) or '没有证明'}）"

@@ -2487,7 +2487,7 @@ def _washed_text(sign: Mapping[str, Any]) -> str:
 
 def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
                         via: str) -> dict[str, Any]:
-    """一条要交回 F 的 V 意见 ⇒ 明细那一格（三档共用，只有 `via` 与交付措辞不同）。
+    """一条要交回 F 的 V 意见 ⇒ 明细那一格（两档共用，只有 `via` 与交付措辞不同）。
 
     步号 / 缺陷步 / findings 都从台账那一行读（`statement_review_reading` 只回编号，
     不回 `defect_step`）—— 这一格是"读侧那一份"的唯一落点，别处不许再拼一遍。
@@ -2533,14 +2533,9 @@ def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
         #: （台账那一行的 `washed_relay.text`）。空 = 这一签没洗过（历史行 /
         #: 洗不出来）—— 交付那一侧据此把"洗过"与"没洗过"分开写。
         "washed": _washed_text(sign),
-        #: 这一条是凭什么进明细的（见 docstring 那一节的三档）：交付那一侧
-        #: 按它决定措辞 —— 三档在板上不许长得一样。
+        #: 这一条是凭什么进明细的（见 docstring 那一节的两档）：交付那一侧
+        #: 按它决定措辞 —— 两档在板上不许长得一样。
         "via": via,
-        #: 秘书那一次判定自己给的理由（台账那一行的 `secretary_judge.reason`）。
-        #: 判不了那一档靠它把"为什么判不了"说到 F 面前（洗过稿那一档不读它）。
-        "secretary_reason": (
-            str((sign.get(VR.SECRETARY_JUDGE_KEY) or {}).get("reason") or "")
-            if isinstance(sign.get(VR.SECRETARY_JUDGE_KEY), Mapping) else ""),
     }
 
 
@@ -2566,25 +2561,21 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     把 `state="rejected"` 的那些挑出来，再把那一签整行上的步号与 findings 读出来
     （`statement_review_reading` 只回编号，不回 `defect_step`）。
 
-    ## 三档进明细，`via` 说清是哪一档（业主 2026-10-29 的 B 段接到 C 段 + 2026-10-30 第三条）
+    ## 两档进明细，`via` 说清是哪一档（业主 2026-10-29 的 B 段接到 C 段）
 
     - `via="verdict"`：V 自己的结论写的是「有毛病」⇒ 逐字回到改前那一版；
-    - `via="secretary_fault"`：V 的结论词写的是「成立」，而秘书的三档语义判定说
+    - `via="secretary_fault"`：V 的结论词写的是「成立」，而秘书的语义判定说
       「这一回复指出了缺陷」（`secretary_judge.axis == "fault"`，落在台账那一行上）。
       这一档的 V 原文不进明细 —— 只有洗过的那一份（`washed_relay.text`）才算转达；
       洗不出来就不出现在明细里，并进 `problems`（洗稿纪律：洗不出来不输出原文）。
       为什么这一档必须递：语义判定存在的理由就是"V 的结论词与它说的话不一致"，
       而「若 fault 则洗稿 → 洗过的意见到 F」是业主口径里的同一句话。只按结论词分档
       会让这一整档洗了稿却送不出去，而盘上没有任何读数会说它没送到。
-    - `via="secretary_unsure"`（业主 2026-10-30 的第三条口径）：秘书这一转判不了
-      （`axis == "unsure"` 且 `secretary_judge.checked` 为真 —— 真的判过、没判出来）。
-      它同样终止连判并打回 F，但理由码与 fault 分开：fault 是"有毛病"（改缺陷），
-      unsure 是"没判出来"（需要补材料或重交）。这一档不洗稿（没有"缺陷"可洗），
-      也不递 V 的原文（原文里没有一条 V 自己判过的缺陷）；板项只写"判不了 + 补什么"。
-      `checked=False` 的那一批（没有秘书 / 没判断面）不进这一档：那是装配缺口，
-      读数上由 `sign_issuance.checked=False` 报，不许冒充"判不了这一条"。
-    - 三档的 `verdict` 各自如实保留（`成立` 就是 `成立`）：交付那一侧按 `via` 决定
+    - 两档的 `verdict` 各自如实保留（`成立` 就是 `成立`）：交付那一侧按 `via` 决定
       措辞，不许把 V 写「成立」的那一档说成「V 判有毛病」。
+    - 不进明细的那几档（都不许冒充打回）：历史行里的 `unsure`（只作历史兼容读），以及
+      秘书这一问"没查成"（`checked=False`：框架失败，读数由 `verify_proof` 的
+      `secretary_unjudged` 报）。
 
     ## 三态（不许把「没读成」折成「没有毛病」）
 
@@ -2633,31 +2624,26 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
         for r in led_rows:
             signed[str(r.get("verification_id") or "")] = dict(r)
         faulted: list[Mapping[str, Any]] = []
-        unsured: list[Mapping[str, Any]] = []
         for e in maybe_fault:
             vid = str(e.get("verification_id") or "")
             sign = signed.get(vid) or {}
-            axis = VR.secretary_axis(sign)
-            if axis == "fault":
-                if not _washed_text(sign):
-                    # C 段的纪律：洗不出来就不输出 V 的原文 ⇒ 这一条不转达，但要留一句
-                    # 读数（"没送到"不许静默）。
-                    problems.append(
-                        f"{e.get('label') or sid}：秘书判定这一回复指出了缺陷，但没洗出可转达的"
-                        "文本 ⇒ 这一条不转达（洗不出来不输出 V 的原文）")
-                    continue
-                faulted.append(e)
-            elif axis == "unsure" and VR.secretary_judged(sign):
-                # 业主 2026-10-30 的第三条口径：unsure（判不了）也终止并打回，但它不是
-                # "有毛病"—— 理由码单列一档（`via="secretary_unsure"`），措辞说"判不了
-                # 这一条（需要补材料或重交）"。`secretary_judged` 为假的那一批（没有秘书 /
-                # 没判断面）不进这里：那是装配缺口（读数说 checked=False），不是"判不了这一条"。
-                unsured.append(e)
-        if not rejected and not faulted and not unsured:
+            if VR.secretary_axis(sign) != "fault":
+                # 只有 fault 那一档才是"有毛病，要交回 F 改"。历史行里的 `unsure`
+                # （只作历史兼容读）与"没判成"（checked=False）都是框架/历史面 —— 两者
+                # 都不是 V 的判决，都不许冒充成一次打回。
+                continue
+            if not _washed_text(sign):
+                # C 段的纪律：洗不出来就不输出 V 的原文 ⇒ 这一条不转达，但要留一句
+                # 读数（"没送到"不许静默）。
+                problems.append(
+                    f"{e.get('label') or sid}：秘书判定这一回复指出了缺陷，但没洗出可转达的"
+                    "文本 ⇒ 这一条不转达（洗不出来不输出 V 的原文）")
+                continue
+            faulted.append(e)
+        if not rejected and not faulted:
             continue
         for e, via in ([(x, "verdict") for x in rejected]
-                       + [(x, "secretary_fault") for x in faulted]
-                       + [(x, "secretary_unsure") for x in unsured]):
+                       + [(x, "secretary_fault") for x in faulted]):
             details.append(_v_rejection_detail(
                 sid, e, signed.get(str(e.get("verification_id") or "")) or {}, via))
     details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
@@ -2667,37 +2653,17 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     lines: list[str] = []
     if details:
         n_fault = sum(1 for d in details if d.get("via") == "secretary_fault")
-        n_unsure = sum(1 for d in details if d.get("via") == "secretary_unsure")
-        if n_fault or n_unsure:
-            # 这两档的措辞不许与"V 判有毛病"混同：V 自己的结论词可能写的是「成立」。
-            parts: list[str] = []
-            if n_fault:
-                parts.append(f"{n_fault} 条 V 自己的结论写的是「成立」、而秘书判定它的回复"
-                             "指出了缺陷")
-            if n_unsure:
-                parts.append(f"{n_unsure} 条秘书这一转判不了（没判出来）")
+        if n_fault:
+            # 这一档的措辞不许与"V 判有毛病"混同：V 自己的结论词可能写的是「成立」。
             lines.append(
-                f"V 的意见要交回 F 的证明共 {len(details)} 条（其中 {'；'.join(parts)}；"
-                f"数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
+                f"V 的意见要交回 F 的证明共 {len(details)} 条（其中 {n_fault} 条 V 自己的结论"
+                f"写的是「成立」、而秘书判定它的回复指出了缺陷；数据源 "
+                f"`verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
         else:
             lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
                          f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
         for d in details[:max(1, int(limit))]:
             step = ("第 %s 步" % d["defect_step"]) if d.get("defect_step") else "步号没读到"
-            if d.get("via") == "secretary_unsure":
-                # 判不了那一档：理由码单列（`via`），措辞说"判不了这一条（需要补材料或
-                # 重交）"，不说"再判几转就好"（业主 2026-10-30 逐字否掉的是那一类终局）。
-                lines.append(
-                    f"- {d['label']}：V 的结论写的是 {d['verdict']}，而秘书这一转判不了"
-                    f"（没判出来；最近一签 {d['verification_id'] or '（没读到编号）'}，"
-                    f"{d['ledger']}）"
-                    + (f"（秘书给的理由：{str(d.get('secretary_reason') or '')[:120]}）"
-                       if d.get("secretary_reason") else "")
-                    + "；处置：秘书判不了这一条（需要补材料或重交）—— 补齐材料之后把这一份"
-                    "重新送 V（`verify.verify_proof`）重审，不许绕开 V 直接当定理用；"
-                    f"这一签盖的就是现在这一份（proof_text 与现文一致）："
-                    f"{'True' if d['in_sync'] else 'False'}")
-                continue
             # 渲染集合 = 投递集合：洗过的那一份也必须在这里出现（否则"板上是洗过的、
             # 开场事实是原文"—— 两份说法，而 F 只信它先读到的那一份）。
             what = str(d.get("washed") or (d.get("finding") or {}).get("detail") or "")
@@ -2736,7 +2702,7 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     """把 V 的意见写进收件人的收件板（业主 B-3：递到人，不只加读数）。
 
     「V 的意见」两档：V 自己判了「有毛病」的（`via="verdict"`），以及 V 的结论词写
-    「成立」而秘书三档语义判定说"这一回复指出了缺陷"的（`via="secretary_fault"`，
+    「成立」而秘书语义判定说"这一回复指出了缺陷"的（`via="secretary_fault"`，
     业主 2026-10-29 的 B 段接到 C 段）。两档都走同一条通道、同一个幂等键前缀，
     措辞按 `via` 分开（见下面「两档明细」那一节）。
 
@@ -2768,15 +2734,11 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     并对读的人写明"这一条是 V 的原话（没洗过）"——不许让"洗过"与"没洗过"
     在板上长得一样（那会让一次洗稿失败静默变成一次转达）。
 
-    ## 三档明细，三种措辞（`via`，见 `v_rejections_digest`）
+    ## 两档明细，两种措辞（`via`，见 `v_rejections_digest`）
     `via="secretary_fault"` 的那一档：V 自己的结论词可能写的是「成立」，所以这一项
     的第一句必须如实说"V 的意见指出缺陷（V 自己的结论写的是 X）"，不许套用
     "V 判有毛病"的措辞 —— 那是假话，而板项是 F 唯一会读的那一份。
     这一档的 `washed` 必须非空：洗不出来就不投递（不输出 V 的原文），并进 `problems`。
-
-    `via="secretary_unsure"` 的那一档（业主 2026-10-30）：秘书判不了这一条。措辞是
-    "判不了（需要补材料或重交）"，与"有毛病"分开；这一档不要求 `washed`（没有缺陷可洗），
-    但也不递 V 的原文 —— 只递"判不了"这句读数与处置。
     """
     out: dict[str, Any] = {"checked": False, "role": role, "task_id": str(task_id or ""),
                            "opened": [], "existing": [], "problems": [], "reason": ""}
@@ -2819,21 +2781,7 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
                 f"{d['label']}：秘书判了 fault 而这一条没有洗过的文本 ⇒ 不投递"
                 "（洗不出来不输出 V 的原文）")
             continue
-        if via == "secretary_unsure":
-            # 业主 2026-10-30：unsure（判不了）也打回，但它不是"有毛病"—— 措辞必须说
-            # "判不了这一条（需要补材料或重交）"，且不给 F 递 V 的原文（这一档根本没有
-            # 洗过的文本，原文里也没有一条 V 自己判过的缺陷）。
-            why = str(d.get("secretary_reason") or "").strip()
-            body = (f"V 这一转秘书判不了：{d['label']}（V 自己的结论写的是"
-                    f"「{d.get('verdict') or '（没读到）'}」；秘书这次没能判出这段回复是"
-                    f"「没问题」还是「有毛病」"
-                    + (f"：{why[:120]}" if why else "") + "）\n"
-                    "处置：秘书判不了这一条（需要补材料或重交）—— 补齐材料之后把这一份"
-                    "重新送 V（`verify.verify_proof`）重审，不许绕开 V 直接当定理用。\n"
-                    f"这一签盖的就是现在这一份（proof_text 与现文一致）："
-                    f"{'True' if d.get('in_sync') else 'False'}")
-            summary = f"V 这一转判不了：{d['label']}（需要补材料或重交）"
-        elif via == "secretary_fault":
+        if via == "secretary_fault":
             body = (f"V 的意见指出缺陷：{d['label']}（V 自己的结论写的是"
                     f"「{d.get('verdict') or '（没读到）'}」；秘书判定它的回复指出了缺陷，"
                     f"最近一签 {d.get('verification_id') or '（没读到编号）'}，"

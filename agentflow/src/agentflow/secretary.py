@@ -230,36 +230,50 @@ PROPOSITION_VERDICT_TEXT_CHARS = 1200
 #: 键是证明号的字符串形式（JSON 的键只能是字符串），读侧一律走 :func:`proof_route_of`。
 PROOF_ROUTES_KEY = "_proof_routes"
 
-#: V 的回复落在哪一档（业主 2026-10-29 的 B 段：「三档不许折平」）。
+#: V 的回复有没有指出缺陷（业主 2026-10-29 的 B 段；2026-10-30 第三次裁定收成两档）。
 #:
 #: 为什么另立一张表而不复用 `STATEMENT_VERDICTS`（`合格` / `太平凡` / `判不了`）：
 #: 那是 B 的审美轴（这条命题够不够格入库），这里是 V 的结论轴（这段审阅回复
 #: 到底有没有指出缺陷）。两根轴共用一张词表之后，"太平凡"会被当成一种"有缺陷"——
 #: 而它们在台账上是两件事（前者不改任何签，后者清零连续次数）。
+#:
+#: 2026-10-30（第三次裁定，逐字）：「不可能有判不了。你告诉我啥叫判不了？
+#: 只要不是完全没毛病都叫有毛病」。于是这一根轴的词表只有两格，历史上那一格
+#: （`判不了` / 轴名 `unsure`）从词表里删掉了：拿不准、只挑出一处小记号问题、说
+#: "我没逐行验证"——统统算「有缺陷要指出」。模型若仍答那一格，`judge()` 判它
+#: "不在词表里 ⇒ 不采信" ⇒ `checked=False`（"没查成"，见 :meth:`Secretary.judge_v_reply`），
+#: 不会被当成第三种结论，也不会在台账上留下一个 `判不了` 的判词。
+#: 历史台账行里出现过的 `unsure` 只作历史兼容读（`verifications.secretary_axis`）。
 V_REPLY_CLEAN = "没问题"
 V_REPLY_FAULT = "有缺陷要指出"
-V_REPLY_UNSURE = "判不了"
 
-#: `v_reply_defect` 那一类的词表（顺序 = 由"没问题"到"判不了"，与判定规则同向）。
-V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT, V_REPLY_UNSURE)
+#: `v_reply_defect` 那一类的词表（两格，顺序 = 由"没问题"到"有缺陷要指出"）。
+V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT)
 
-#: 词表取值 ⇒ 台账上那一条轴的三档（与 `verifications.SECRETARY_JUDGE_AXES` 逐字同一套）。
+#: 词表取值 ⇒ 台账上那条轴的两档（与 `verifications.SECRETARY_JUDGE_AXES` 逐字同一套）。
 #: 为什么要有这一张映射而不是直接把中文写进台账：台账那一格是给代码读的
-#: （`verifications._hold_run_lengths` 按 `fault` / `unsure` 分流），中文词表是给
-#: 模型读的。两者之间只有这一处翻译，改词不改轴。
-V_REPLY_AXIS: dict[str, str] = {
-    V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault", V_REPLY_UNSURE: "unsure",
-}
+#: （`verifications._hold_run_lengths` 按 `fault` 分流），中文词表是给模型读的。
+#: 两者之间只有这一处翻译，改词不改轴；这张映射里没有第三条出路 ——
+#: "拿不准"落在 `V_REPLY_FAULT` 那一格（业主逐字：只要不是完全没毛病都叫有毛病）。
+V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
 
 #: V 的秘书「发不发这一签」（业主 2026-10-29 的 A 段）。
 #:
-#: 两档 + 判不了：`不签发` 与 `判不了` 的效果一样（都不放签）而读数必须分开
-#: ——前者是"看过读数、决定不发"，后者是"这一趟判不了"（三态纪律）。
+#: 两档：`签发` / `不签发`。第三个词「判不了」在 2026-10-30 的第三次裁定之后不是一种
+#: 决定：读数不全 / 没答上来 ⇒ `checked=False` + 理由（"没查成"由那两格说，不由
+#: `decision` 冒充成第三档）。
 SIGN_ISSUE = "签发"
 SIGN_WITHHOLD = "不签发"
 
-#: `sign_issuance` 那一类的词表。
-SIGN_ISSUANCE_VERDICTS: tuple[str, ...] = (SIGN_ISSUE, SIGN_WITHHOLD, V_REPLY_UNSURE)
+#: `sign_issuance` 那一类的词表（两档）。
+SIGN_ISSUANCE_VERDICTS: tuple[str, ...] = (SIGN_ISSUE, SIGN_WITHHOLD)
+
+#: 判定"没查成"时，台账那一行的 `decision` 该写什么。
+#:
+#: 业主 2026-10-30：「没查成」不是一种判定 ⇒ 台账上也不许写成一个结论词。这一格因此用
+#: `没查成` 这个专用词：它不在任何一张 `JUDGE_VERDICTS` 里，读的人一眼看得出"这一趟没有
+#: 结论"，不会把它当成某一档（也不给"判不了"留位置）。
+JUDGE_UNCHECKED = "没查成"
 
 #: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
 #:
@@ -281,10 +295,10 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
 #: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
 #:
 #: 为什么需要这张小表：`_record_judge` 的缺省是 `"建议重排"`（派活那一轴的词）——
-#: 对上面这两类新判断，`checked=False` 时写"建议重排"是一句假话。这里只给新类别
-#: 一个词（`判不了`），其余类别原样保留旧缺省：改它们的词会改历史读数，那不是本批的口径。
+#: 对上面这两类判断，`checked=False` 时写"建议重排"是一句假话。这里给这两类一个专用词
+#: （`没查成`，不是任何一档结论），其余类别原样保留旧缺省：改它们的词会改历史读数。
 _JUDGE_UNDECIDED: dict[str, str] = {
-    "v_reply_defect": V_REPLY_UNSURE, "sign_issuance": V_REPLY_UNSURE,
+    "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
 }
 
 
@@ -2507,7 +2521,7 @@ class Secretary:
     # V 签门槛 = 连续 3 次没问题 + V 秘书语义判定 + 洗稿转达。三件都落在 V 的秘书身上：
     # | 方法 | 业主口径 | 返回里的三态 |
     # |---|---|---|
-    # | `judge_v_reply` | V 的回复落在 clean / fault / unsure 哪一档 | `checked=False` = 没判成 |
+    # | `judge_v_reply` | V 的回复落在 clean / fault 哪一档 | `checked=False` = 没查成（不是第三档） |
     # | `decide_sign_issuance` | 这一签发不发（读连续次数 + 模型判） | `checked=False` ⇒ 不发 |
     # | `wash_v_reply` | 把 V 的意见洗成能转达给 F 的文本 | `checked/ washed / refused` |
     #
@@ -2518,7 +2532,7 @@ class Secretary:
                       statement_id: str = "", proof_no: Any = 1,
                       task_id: str = "", proof_text: str = "",
                       materials: Any = None) -> dict[str, Any]:
-        """V 这段审阅回复到底有没有指出缺陷（业主 2026-10-29 的 B 段，三档不许折平）。
+        """V 这段审阅回复到底有没有指出缺陷（业主 2026-10-29 的 B 段；两档不许折平）。
 
         ## 材料只给两样（这是本方法的判据，不是实现细节）
         V 的回复正文 + 该台账行的 `verdict` / `defect_step`。不给 F 的证明
@@ -2528,17 +2542,23 @@ class Secretary:
         而不是"收了但没用"—— 后者会让"秘书看过 F 的证明"这件事在盘上查不出来。
 
         ## 返回
-        `checked` / `answer`（三档中文） / `axis`（`clean` / `fault` / `unsure`） /
-        `reason` / `basis` / `material`（真递给模型的那一份，供判据逐字核） /
+        `checked` / `answer`（模型原话那一格；没查成时是 `JUDGE_UNCHECKED`） /
+        `axis`（只有 `clean` / `fault` 两档；没查成时是空串） / `unwired`（这一趟有没有
+        判断面） / `reason` / `basis` / `material`（真递给模型的那一份，供判据逐字核） /
         `refused` / `cost` / `verdict`（台账那一行的结论原文）。
 
-        `checked=False` 时 `axis="unsure"`：不是"没问题"。这一档在连续计数里
-        不清零也不计入（`verifications.SECRETARY_JUDGE_AXES` 的口径）。
+        业主 2026-10-30 第三次裁定：「不可能有判不了…只要不是完全没毛病都叫有毛病」。
+        于是结论只有两格（`没问题` / `有缺陷要指出`）：拿不准、只挑出一处小记号问题、
+        只说"我没逐行验证"——每一档在题面里都明文算「有缺陷要指出」。模型若仍答历史
+        那一格（`判不了`）或任何词表外的写法 ⇒ `checked=False` + `axis=""`：
+        那是"没查成"（框架失败），不是一种结论，更不是"没问题"（连续计数里既不算票、
+        也不清零；上层见 `agent_v.core` 的 `secretary_unjudged` 那一支）。
         """
-        from . import verifications as _VR   # 惰性：此处只借它的三档词表与 `row_signable`
+        from . import verifications as _VR   # 惰性：此处只借它的轴词表与 `row_signable`
 
         out: dict[str, Any] = {
-            "checked": False, "answer": V_REPLY_UNSURE, "axis": "unsure",
+            "checked": False, "answer": JUDGE_UNCHECKED, "axis": "",
+            "unwired": bool(self.seam is None or not self.enable_model),
             "reason": "", "basis": [], "refused": "", "cost": {},
             "verdict": str(verdict or ""), "defect_step": defect_step,
             "statement_id": str(statement_id or ""), "proof_no": 0,
@@ -2554,7 +2574,7 @@ class Secretary:
                              "V 的秘书只读 V 的回复与那一签的 verdict/defect_step"
                              "（I12：V 的秘书不读 F 的叙述）。请把证明正文拿掉再来问")
             self.note_decision(
-                duty=2, kind=KIND_DECISION, decision=V_REPLY_UNSURE,
+                duty=2, kind=KIND_DECISION, decision=JUDGE_UNCHECKED,
                 reason=out["reason"], target={"judge": "v_reply_defect"},
                 judge=dict(out), fail_open=False,
                 before=f"reply_chars={len(str(reply or ''))}", )
@@ -2574,16 +2594,18 @@ class Secretary:
         out["reason"] = str(got.get("reason") or "")
         out["basis"] = list(got.get("basis") or [])
         if not got.get("checked"):
-            # 没查成 ⇒ unsure（词表里那一档），不是 clean。`judge` 已经把这一趟
+            # 没查成 ⇒ 没有轴（不是 clean、也不是 fault）。`judge` 已经把这一趟
             # 落进决定台账了（`_record_judge`），这里不重复落。
-            out["answer"] = V_REPLY_UNSURE
-            out["axis"] = "unsure"
+            out["answer"] = JUDGE_UNCHECKED
+            out["axis"] = ""
             return out
         answer = str(got.get("decision") or "").strip()
         if answer not in V_REPLY_AXIS:
             # 词表外（`judge` 已经挡过一次，这里是第二道：本方法的取值只由 V_REPLY_AXIS 定）。
-            out["answer"] = V_REPLY_UNSURE
-            out["axis"] = "unsure"
+            # 业主 2026-10-30：`判不了` 不是一种结论 ⇒ 它落到这里（"不采信"），不许
+            # 折成 fault 去凑一条判词，也不许折成 clean 放过去。
+            out["answer"] = JUDGE_UNCHECKED
+            out["axis"] = ""
             out["reason"] = f"结论 {answer!r} 不在 {list(V_REPLY_VERDICTS)} 里 ⇒ 不采信"
             return out
         out.update(checked=True, answer=answer, axis=V_REPLY_AXIS[answer])
@@ -2599,15 +2621,15 @@ class Secretary:
         1. 台账那一层（机械、唯一真身）：`:func:`verifications.review_standing`` 现算的
            连续读数 —— 这一签落下去之后尾部连续「成立」几次（`streak + 1`，且必须盖着
            同一份正文）。次数不够 ⇒ `不签发`，不问模型（省一次调用，也不给它推翻门槛的机会）。
-        2. 秘书那一层（语义）：次数够了，才问模型「签发 / 不签发 / 判不了」。
+        2. 秘书那一层（语义）：次数够了，才问模型「签发 / 不签发」。
            它只能在这个前提下再否决，不能把"次数不够"判成"签发"。
         ⇒ 两层是"与"，不是"或"：门槛是地板，秘书的决定是天花板。
 
         ## 三态（"没查成"绝不被读成"没问题"）
         | 结局 | 返回 |
         |---|---|
-        | 判了 | `checked=True` + `issue`（真/假）+ `decision`（中文三档） |
-        | 没缝 / 开关关着 / 超时 / 台账读不成 / 坏 JSON | `checked=False` + `issue=False` + 理由 |
+        | 判了 | `checked=True` + `issue`（真/假）+ `decision`（中文两档） |
+        | 没缝 / 开关关着 / 超时 / 台账读不成 / 坏 JSON / 词表外 | `checked=False` + `issue=False` + 理由 |
 
         `checked=False` ⇒ 不发签（`draft/125` §三：装配没接上时秘书判定必须报
         `checked=False`，且不放签）。返回键：`checked` / `issue` / `decision` / `streak` /
@@ -2630,7 +2652,7 @@ class Secretary:
                  "defect_step": row.get("defect_step")}
         out: dict[str, Any] = {
             "checked": False, "issue": False, "issued": False,
-            "decision": V_REPLY_UNSURE, "landed": False, "writeback": {},
+            "decision": JUDGE_UNCHECKED, "landed": False, "writeback": {},
             "streak": 0, "need": int(_VR.SIGN_STREAK_NEED), "streak_ok": False,
             "projected": 0, "same_sha": False, "state": "", "reason": "",
             "basis": [], "reading": {}, "cost": {}, "material": {},
@@ -2693,21 +2715,22 @@ class Secretary:
         out["material"] = dict(material)
         # ---- 没有判断面 ⇒ checked=False（业主 2026-10-29：「装配没接上时秘书判定必须报
         # checked=False 且不放签」）。这一格必须排在"地板没过"之前：那一支会报
-        # `checked=True`＋"还差 N 次"，而装配缺失时票数根本不再增长（`judge_v_reply`
-        # 没判过的行是 unsure，不清零也不计入）—— 于是"没有秘书"会被读成"再签几次就有了"。
+        # `checked=True`＋"连续次数不够"，而装配缺失时票数根本不再增长（没判成的行既
+        # 不算票也不清零）—— 于是"没有秘书"会被读成"再签几次就有了"。
         # 地板读数先算完再返回：调用方仍能看到 streak/need/streak_ok（那是事实），
         # 而"这一趟没有人判"由 checked=False 说。
         if self.seam is None or not self.enable_model:
             out["reason"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 判定没查成："
-                             "不放签（checked=False 不是「可以签」，也不是「还差几次」）")
+                             "不放签（checked=False 不是「可以签」，也不是「次数不够」）")
             self._note_sign_issuance(out, task_id=task_id)
             return out
         if not out["streak_ok"]:
-            # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。
+            # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。这一句只是"这一转还
+            # 不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给（签 / 打回）。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
-                       reason=(f"连续「成立」还差 {int(out['need']) - int(out['projected'])} 次"
-                               f"（这一签落下之后 {out['projected']}/{out['need']}，"
-                               f"同一份正文={same_sha}）⇒ 不签发"),
+                       reason=(f"连续「成立」{out['projected']}/{out['need']} 次"
+                               f"（这一签落下之后；同一份正文={same_sha}）⇒ 这一签不发；"
+                               f"门槛是 {int(out['need'])} 次连续的「没问题」"),
                        basis=[f"streak={out['streak']}", f"need={out['need']}",
                               f"same_sha={same_sha}"])
             self._note_sign_issuance(out, task_id=task_id)
@@ -2715,13 +2738,15 @@ class Secretary:
         got = self.judge("sign_issuance", material, task_id=task_id)
         out["cost"] = dict(got.get("cost") or {})
         if not got.get("checked"):
-            out["reason"] = (f"秘书判不了（{str(got.get('reason') or '')[:200]}）⇒ 不放签"
-                             "（checked=False 不是「可以签」）")
+            out["reason"] = (f"发签决定没查成（{str(got.get('reason') or '')[:200]}）⇒ 不放签"
+                             "（checked=False 不是「可以签」，也不是「不签发」这一档）")
             self._note_sign_issuance(out, task_id=task_id)
             return out
         decision = str(got.get("decision") or "").strip()
         if decision not in SIGN_ISSUANCE_VERDICTS:
-            out["reason"] = f"结论 {decision!r} 不在 {list(SIGN_ISSUANCE_VERDICTS)} 里 ⇒ 不放签"
+            # 词表外（含历史那一格「判不了」）⇒ 不采信：判成"没查成"，不是"不签发"。
+            out["reason"] = (f"结论 {decision!r} 不在 {list(SIGN_ISSUANCE_VERDICTS)} 里 ⇒ "
+                             "不采信：这一格按「没查成」读（不放签）")
             self._note_sign_issuance(out, task_id=task_id)
             return out
         out.update(checked=True, decision=decision, issue=(decision == SIGN_ISSUE),
@@ -2783,7 +2808,7 @@ class Secretary:
         """
         self.note_decision(
             duty=2, kind=KIND_DECISION,
-            decision=str(out.get("decision") or V_REPLY_UNSURE),
+            decision=str(out.get("decision") or JUDGE_UNCHECKED),
             reason=str(out.get("reason") or ""),
             basis=list(out.get("basis") or []),
             target={"sign_issuance": str(out.get("statement_id") or "")},
@@ -9277,30 +9302,36 @@ def _judge_system(kind: str) -> str:
             "basis 里必须分别对条件与结论各给一句比对（例如『条件：都是有限群 + p 是素数，"
             "一致；结论：都是 Sylow p-子群存在，一致』）—— 不许只给一个总分。")
     elif kind == "v_reply_defect":
-        # 业主 2026-10-29（V 签门槛的 B 段）：三档不许折平，逐条把判定规则写进题面。
+        # 业主 2026-10-29（V 签门槛的 B 段）第一版是三档；2026-10-30 第三次裁定收成两档：
+        # 「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
+        # 于是题面只给两档，并逐字写清"拿不准就按有缺陷处理"——没有中间档可退。
         # 为什么必须逐字写"先夸后刺"这几种形态：`verifications.parse_verdict` 只能挡住
         # "有毛病但没给 defect_step"，它挡不住"整体很好，只是有一个缺陷需要指出"——
         # 那种回复在词表上读成「成立」，而它明明指出了一个缺陷。
         ask = (
-            "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底**有没有指出缺陷**？"
-            "按三档判（业主定的规则逐条照办，不要自己发明中间档）：\n"
-            "**有缺陷要指出**（以下四种写法都算，哪怕开头先夸了一大段）：\n"
+            "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底有没有指出缺陷？"
+            "只有两档，没有中间档：\n"
+            "**有缺陷要指出**（只要不是完全没毛病，就判这一档）：\n"
             "- 「整体很好，只是有一个缺陷需要指出……」；\n"
             "- 「思路没问题，但是有一个记号问题需要强调……」；\n"
             "- 「我找不到反例，但某对象似乎没有定义」；\n"
-            "- 「我觉得没问题但我没逐行验证」——没验证过就不是没问题。\n"
+            "- 「我觉得没问题但我没逐行验证」——没验证过就不是没问题；\n"
+            "- 拿不准、说不清、只挑出一处小记号问题：一律判这一档。\n"
             "**没问题**：它真的逐条走查过、并且明确写了「我试了几种反例构造都失败、"
             "未发现问题」这一档（有反例尝试的记录，而不是一句笼统的放心）。\n"
-            "**判不了**：它的依据落在**不归 F** 的那几样上 —— 文献真伪/页码核对、"
-            "实验数值复现、稿件排版与术语统一；或者回复里读不出它对证明本身说了什么。\n"
-            "只判这段回复**说了什么**：不要替它补它没说过的检查，也不要因为语气自信就判没问题。"
-            "decision 取「没问题」/「有缺陷要指出」/「判不了」之一；reason 一句话；"
+            "它的依据落在不归 F 的那几样上（文献真伪/页码核对、实验数值复现、稿件排版"
+            "与术语统一）也不是没问题 —— 那说明它没审证明本身，按有缺陷处理。\n"
+            "「判不了」不是一种结论：判不出来就说明它没有证明「没问题」，按有缺陷处理。"
+            "只判这段回复说了什么：不要替它补它没说过的检查，也不要因为语气自信就判没问题。"
+            "decision 取「没问题」/「有缺陷要指出」之一；reason 一句话；"
             "basis 里引回复原文的片段（逐字，不要改写）。"
         )
     elif kind == "sign_issuance":
         # 业主 2026-10-29（V 签门槛的 A 段）：发不发签由 V 的秘书说了算。
         # 材料里只有台账读数（连续次数 / 门槛 / 正文 sha / 这一签的结论），没有证明正文
         # （V 的秘书不读 F 的叙述，`may_read_narrative` 对 role="V" 恒 False）。
+        # 2026-10-30 第三次裁定：这里的词表也只有两格 —— "读数不全"不是第三档答案，
+        # 那是"没查成"（框架按 checked=False 记，见 `decide_sign_issuance`）。
         ask = (
             "问题：验证者（V）刚对一个命题的某一份证明给出了结论，现在要决定"
             "**这一签发不发**（发签 = 把命题行的第 3 位翻成「审过」）。"
@@ -9310,9 +9341,8 @@ def _judge_system(kind: str) -> str:
             "- 次数够了、同一份正文、这一签的结论是「成立」⇒ 判「签发」；\n"
             "- 次数不够 / 不是同一份正文 / 这一签的结论不是「成立」⇒ 判「不签发」，"
             "并在 basis 里点名差在哪一项；\n"
-            "- 读数不全（`checked` 为假、或某一格读不出来）⇒ 判「判不了」——"
-            "不许把「判不了」当成通过。\n"
-            "decision 取「签发」/「不签发」/「判不了」之一；reason 一句话；"
+            "某一格读数读不出来时不要拿一个结论去凑：那是「没查成」，框架按 checked=False 记。\n"
+            "decision 取「签发」/「不签发」之一；reason 一句话；"
             "basis 写明你依据的是哪几格读数。"
         )
     else:
