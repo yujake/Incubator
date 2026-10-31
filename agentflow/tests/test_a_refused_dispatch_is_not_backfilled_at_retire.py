@@ -28,6 +28,10 @@
    当成"没被拒过"；
 5. 负控：把 `roster_repair` 打桩成 no-op ⇒ 第 3 条（真孤儿仍要补）必红。没有这一条，
    第 3 条的绿可能来自别处顺手补的行，"补的行为还在"就没有被人量过。
+6. 正题（第三个口，`draft/158` 二-1）：被派活闸拒掉的号（`outcome="refused"`）不许被
+   补成新名字 —— 那种拒绝只写在台账行上、不进 `refusals/*.jsonl`，本文件前五条盖不住；
+7. 同批：上面那条收窄不许顺手把真孤儿排掉（第 3 条的加强版），且补出来的行要带
+   `surface`（81 实测 13/13 条补登记行无面，正常行 52/52 有面）。
 
 ## 在旧树（2c7b29da）上怎么读
 
@@ -88,10 +92,38 @@ def _orphan(cond: Conductor, parent: str) -> str:
     }, note="judge:orphan"))
 
 
+def _gate_refused_child(cond: Conductor, parent: str, *, tag: str = "gate") -> str:
+    """派活闸拒掉的号：一条真台账行，`outcome="refused"`，但从没跑过。
+
+    这是 `draft/158` §一 的 ④ 那一档、也是本文件改前盖不住的那一档：`Conductor._refuse`
+    给被闸拒的召唤建的就是这种行（`outcome="refused"`、`refusal_reason` 非空、
+    `started_at == ended_at`、`tokens=0`、`parent_task_id` 保留），而它不进
+    `out/roster/refusals/<父>.jsonl`（那份流水只记名册写口的拒绝）——
+    于是只读流水的那一格看不见它，补登记会把它当成"真孤儿"发一个新名字。
+    """
+    return str(cond._write_new_row({
+        "role": "D", "action": "research", "called_by": "M",
+        "parent_task_id": parent, "depth": 1, "input_key": f"judge:{tag}",
+        "status": "done", "outcome": "refused",
+        "refusal_reason": "concurrency_exceeded",
+        "instance": "", "detail": "判据夹具：被派活闸拒掉的那一次（没跑，没有可登记的子代理）",
+        "error": None, "started_at": BR, "ended_at": BR,
+        "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+    }, note="judge:gate_refused"))
+
+
 def _ids(cond: Conductor, parent: str) -> list[str]:
     rows, problems = cond.secretary.roster_rows(parent)
     assert problems == [], problems
     return [str(r.get("task_id")) for r in rows]
+
+
+def _row_of(cond: Conductor, parent: str, task_id: str) -> dict:
+    rows, problems = cond.secretary.roster_rows(parent)
+    assert problems == [], problems
+    row = next((r for r in rows if str(r.get("task_id")) == task_id), None)
+    assert row is not None, (task_id, rows)
+    return row
 
 
 def _refusals_path(ws: pathlib.Path, owner: str) -> pathlib.Path:
@@ -179,6 +211,89 @@ def test_a_real_orphan_is_still_backfilled(tmp_path: pathlib.Path) -> None:
     assert got.get("ok") is False, got            # 名字不存在 ⇒ 仍被拒
     assert orphan in _ids(cond, parent), (
         "真孤儿也没补上：收窄过头了（79 那趟'11 个节点卡住'会复发）", _ids(cond, parent))
+
+
+# ====================================================================== 第三个口：派活闸
+# `draft/158` §一/§二-1（2026-11-01 的 81 趟）：13 行 `repaired` 里 7 条
+# （t-000078/79/80、t-000027/28、t-000030/31）是 `concurrency_exceeded` 派活闸拒掉的号。
+# 它们不是"被写口拒掉的派活"（本文件上面那两条正题），而是另一种拒绝：
+# `Conductor._refuse` 给被闸拒的召唤建一条真台账行（`outcome="refused"`、
+# `refusal_reason` 非空、`started_at==ended_at`、`tokens=0`），但它不进
+# `out/roster/refusals/<父>.jsonl` —— 于是只读那份流水的 `roster_repair` 把它当成真孤儿。
+# 换句话说：d9ebb7fe 只堵了"名册写口拒绝"这一个口，派活闸是第三个口。
+
+def test_a_gate_refused_dispatch_is_not_backfilled(tmp_path: pathlib.Path) -> None:
+    """正题：`outcome=refused`（`concurrency_exceeded`）的子不许被补登记发名字。
+
+    改前必红（在 `2b7b98b5` 上实测）：`roster_repair` 的 todo 只排除 `known` 与
+    `refusals/<父>.jsonl`，不看台账行的 `outcome` ⇒ 返回 `fixed=1`，名册里多一行
+    `D2/t2 repaired=true`（81 那趟就是这么冒出 7 条假名册项的）。判据落点：
+    `secretary.roster_repair` 的 todo 那一行。
+    """
+    cond, parent, ws = _env(tmp_path)
+    sec = cond.secretary
+    t1 = _child(cond, parent, tag="first")
+    made = sec.roster_add(owner=parent, role="D", task_id=t1, brief="第一件活",
+                          task="做研究", want_name="D1")
+    assert made.get("problem") == "", made
+    refused = _gate_refused_child(cond, parent)
+    # 前提：它确实在台账里、且确实不在名册里、也不在拒绝流水里（那只记写口拒的）
+    assert refused not in _ids(cond, parent)
+    assert refused not in [str(r.get("task_id")) for r in _refused_lines(ws, parent)]
+    fixed, why = sec.roster_repair(owner=parent)
+    assert fixed == 0, ("被派活闸拒掉的号被补成新名字了", fixed, why, _ids(cond, parent))
+    assert why == "", why
+    assert _ids(cond, parent) == [t1], _ids(cond, parent)
+
+
+def test_a_gate_refused_dispatch_is_not_backfilled_at_retire(tmp_path: pathlib.Path) -> None:
+    """正题（收工兜底那一侧）：销号触发的那一次 `roster_repair` 同样不许补它。
+
+    与上一条分开写：上面量的是"补登记这个函数"，这里量的是"收工时它真的被调了一次"
+    （`Secretary.retire` 里那一处），两条路各自都会把 81 那 7 条补成假名册项。
+    """
+    cond, parent, ws = _env(tmp_path)
+    sec = cond.secretary
+    t1 = _child(cond, parent, tag="first")
+    made = sec.roster_add(owner=parent, role="D", task_id=t1, brief="第一件活",
+                          task="做研究", want_name="D1")
+    assert made.get("problem") == "", made
+    refused = _gate_refused_child(cond, parent)
+    assert refused not in _ids(cond, parent)
+    got = sec.retire(owner=parent, name="D1", by_task_id=parent, reason="判据")
+    assert got.get("ok") is True, got
+    assert _ids(cond, parent) == [t1], (
+        "销号兜底把派活闸拒掉的号补成了新名字", _ids(cond, parent))
+    assert refused not in [str(r.get("task_id")) for r in _refused_lines(ws, parent)]
+
+
+def test_the_gate_refusal_does_not_shadow_a_real_orphan(tmp_path: pathlib.Path) -> None:
+    """反真空 + 补登记要有面：同一批里真孤儿仍要补，而补出来的 add 行带 `surface`。
+
+    两半是一笔里的两件事：
+    ① 只排除 `outcome=refused` 不许顺手把真孤儿也排掉（79 那趟"11 个节点卡住"会复发）；
+    ② 补出来的行要走 `surface_alloc`：81 实测 13/13 条 repaired add 行没有 `surface`
+       （正常的 52/52 条都有），于是 6 个真跑过的子代理一次都没切读写面
+       （`out/roster/t-000015-surfaces.jsonl` 的 `alloc` 里 F3/F4 没有槽位）。
+    """
+    cond, parent, ws = _env(tmp_path)
+    orphan = _orphan(cond, parent)
+    refused = _gate_refused_child(cond, parent)
+    fixed, why = cond.secretary.roster_repair(owner=parent)
+    assert (fixed, why) == (1, ""), (fixed, why, _ids(cond, parent))
+    assert _ids(cond, parent) == [orphan], _ids(cond, parent)
+    assert refused not in _ids(cond, parent), _ids(cond, parent)
+    row = _row_of(cond, parent, orphan)
+    assert str(row.get("surface") or ""), (
+        "补登记行没有面：那条真跑过的子代理在 `surface_of` 里读到空槽，一次都切不到读写面",
+        row)
+    # 面上的 `alloc` 那一行也要在（不是只往名册里写了一个字符串）：池事件流是面分配的真身
+    surfaces = pathlib.Path(ws).joinpath("out", "roster", f"{parent}-surfaces.jsonl")
+    assert surfaces.is_file(), surfaces
+    allocs = [json.loads(x) for x in surfaces.read_text(encoding="utf-8").splitlines() if x.strip()]
+    allocs = [r for r in allocs
+              if str(r.get("kind")) == "alloc" and str(r.get("name")) == str(row.get("name"))]
+    assert len(allocs) == 1 and str(allocs[0].get("slot")) == str(row.get("surface")), allocs
 
 
 def test_an_unreadable_refusal_ledger_is_not_an_empty_one(tmp_path: pathlib.Path) -> None:

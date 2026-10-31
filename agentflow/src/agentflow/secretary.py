@@ -7806,13 +7806,25 @@ class Secretary:
         按已用最大序号推（那一步只在锁内才是安全的 —— 把并发正确性归给发号器
         是错的，`draft/151` 一-3）。
 
-        ## 只补"真孤儿"（业主 2026-11-02 裁定，收窄）
+        ## 只补"真孤儿"（业主 2026-11-02 裁定，收窄；2026-11-01 补第三个口）
 
-        补的行必须同时满足：不在已知集（从未登记过）且不在拒绝流水里（不是"派活时
-        被写口拒过"那一种）。被拒是一次有记录的决定（:meth:`roster_refusal_note`），
-        收口时再把它变成子节点等于悄悄改写事实；而真正的孤儿（台账里有、名册里没有、
-        也没有拒绝记录 —— 实例分派 / 队列入账 / 更早的形态）仍然要补，否则 79 那趟
-        "11 个节点卡住"会复发。拒绝流水读不出来 ⇒ 一律不补（三态：读不到不是没被拒过）。
+        补的行必须同时满足：不在已知集（从未登记过）、不在拒绝流水里（不是"派活时
+        被写口拒过"那一种）、台账行自己也没说它是拒绝（不是"被派活闸拒掉"那一种）。
+        被拒是一次有记录的决定（:meth:`roster_refusal_note`），收口时再把它变成子节点
+        等于悄悄改写事实；而真正的孤儿（台账里有、名册里没有、也没有拒绝记录 ——
+        实例分派 / 队列入账 / 更早的形态）仍然要补，否则 79 那趟"11 个节点卡住"会复发。
+        拒绝流水读不出来 ⇒ 一律不补（三态：读不到不是没被拒过）。
+
+        ## 为什么还要读台账行的 `outcome`（`draft/158` §二-1）
+
+        拒绝有三个口，:meth:`_refused_task_ids` 只看得见第一个：名册写口拒的
+        （`name_taken` / `task_id_reused` / …）落 `refusals/<父>.jsonl`；而派活闸拒的
+        （`concurrency_exceeded`，`Conductor._refuse`）不写那份流水，只在台账上留一条
+        `outcome="refused"` 的真行（`conductor.py` 那句"被拒的那一次不登记"就是它自己
+        写的口径）。81 那趟实测：13 行 `repaired` 里 7 条是这种号（t-000078/79/80、
+        t-000027/28、t-000030/31），名册里挂着 7 个从没跑过的项、还占掉了本该给真子代理
+        的名字（`t-000106` 因此永久无名）。所以这里再看一眼台账行：它说自己是拒绝，就不补
+        —— 任何 `refusal_reason`，不只 `concurrency_exceeded`。
         """
         cond = self._conductor()
         if cond is None:
@@ -7834,7 +7846,9 @@ class Secretary:
             return 0, f"拒绝流水有 {len(bad_ref)} 行读不出来 ⇒ 不补（免得把被拒的号补成新名字）"
         todo = sorted(str(r.get("task_id") or "") for r in rows
                       if str(r.get("task_id") or "") not in known
-                      and str(r.get("task_id") or "") not in refused)
+                      and str(r.get("task_id") or "") not in refused
+                      # 第三个口：派活闸拒掉的号只有台账行这一份证据（见上面的 docstring）
+                      and str(r.get("outcome") or "") != "refused")
         fixed = 0
         for tid in todo:
             row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})
@@ -7845,6 +7859,14 @@ class Secretary:
             # `tests/test_no_dead_branch_on_a_field_that_is_always_empty.py` 的登记表。
             if problem:
                 return fixed, problem
+            # 补出来的行也要有面（`draft/158` 二-2 的副作用）：正常 add 行走 `surface_alloc`，
+            # 补登记此前不带 `surface` ⇒ 81 那 13 条补登记行 13/13 无面，正常行 52/52
+            # 有面；于是那 6 个真跑过的子代理在 `surface_of` 里读到空槽、一次都没切读写面。
+            # 拿不到面不带走这一次补登记（fail-open）：少一个面是"这一项干不了活"，少一条
+            # 名册行是"父根本销不掉它"（79 那趟的形态）；落一个空 `surface` 与改前同形，
+            # 读侧读得出"名下有项、没面"。
+            got_surface = self.surface_alloc(owner=owner, name=name)
+            slot = str(got_surface.get("slot") or "")
             ok, why = append_jsonl(roster_index_path(self.root, owner),
                                    {"kind": "bind", "owner": owner, "name": name, "role": role,
                                     "task_id": tid, "at": _now_iso(), "repaired": True})
@@ -7856,6 +7878,7 @@ class Secretary:
                                       "brief": "（补登记：这一条当时没写进名册）",
                                       # 这句话是秘书写的（不是父给的）⇒ 留痕那一格照写
                                       "brief_source": "secretary",
+                                      "surface": slot,
                                       "at": _now_iso(), "repaired": True})
             if not ok2:
                 return fixed, f"名册补写没成：{why2}"
