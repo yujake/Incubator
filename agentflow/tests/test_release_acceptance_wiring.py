@@ -73,6 +73,25 @@ def _run(store, report_path, *extra: str) -> tuple[int, str]:
     return int(code), buf.getvalue()
 
 
+def _touch_session(store) -> str:
+    """给 CLI 的 `--sid` 备一段真实存在的会话，返回那个号。
+
+    为什么夹具要这一段（2026-11-03，153-U-07）：`agentflow closing` 的 `--sid`
+    缺省是 `closing.NO_SESSION`（"这次调用没有会话身份"）⇒ `user_pending` 那一格是
+    「没查成」，而"没查成"不是 pass ⇒ 退出码不可能是 0。这些用例要测的是"交付好 ⇒ 0"
+    这条口径，所以它们必须像真机那样显式点名自己那一趟。
+
+    为什么不能只写 `--sid` 不落文件：给了号而盘上没有那一段是受控拒绝
+    （退出码 2、门不跑）—— 那正是同一条判据的第三条（`tests/
+    test_the_out_of_run_gate_reads_the_same_session.py`）。
+    一条 `agent_run_start` 就够：这一段没有待答问题 ⇒ `user_pending` 读到 `pass`。
+    """
+    sid = SS.session_id()
+    if not SS.session_path(store.root, sid=sid).is_file():
+        SS.append(store.root, {"kind": "agent_run_start", "role": "M"}, sid=sid)
+    return sid
+
+
 def _good_and_sid(tmp_path):
     """五条全过的那个工作区 + 它的会话号（夹具的提问落在"缺省会话"里）。
 
@@ -345,7 +364,8 @@ def test_unwiring_makes_that_control_dark(tmp_path, monkeypatch):
 
     monkeypatch.setattr(RX, "_c_statements", boom)
     monkeypatch.setattr(RX, "_auxiliary", boom)
-    code, out = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid,
+    code, out = _run(st, report, "--sid", _touch_session(st),
+                     "--cap-usd", "1.0", "--acceptance-sid", sid,
                      "--no-review-acceptance")
     assert code == 0, out
     assert "没查成" in out and "内容级验收" in out, out
@@ -429,7 +449,8 @@ def test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output
     "辅助读数不构成通过"。
     """
     st, report, sid = _good_clean_and_sid(tmp_path)
-    code, out = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
+    code, out = _run(st, report, "--sid", _touch_session(st),
+                     "--cap-usd", "1.0", "--acceptance-sid", sid)
     assert code == 0, out
 
     # 六条判据：名字与顺序都来自 `reviewaccept.CRITERIA`（改写一份就会在这里红）
@@ -465,13 +486,15 @@ def test_the_readings_are_recomputed_not_hand_copied(tmp_path):
     st, report, sid = _good_clean_and_sid(tmp_path)
     from agentflow import schema as _S
 
-    code, out = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
+    code, out = _run(st, report, "--sid", _touch_session(st),
+                     "--cap-usd", "1.0", "--acceptance-sid", sid)
     assert code == 0
     assert "passed（只看上面这几条）＝True" in out, out
 
     key, name = RX.CRITERIA[0]
     _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
-    code2, out2 = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
+    code2, out2 = _run(st, report, "--sid", _touch_session(st),
+                       "--cap-usd", "1.0", "--acceptance-sid", sid)
     assert code2 == 0, out2                                # 退出码仍由 M 的判据定
     assert f"{name}：{_MARKS['fail']}" in out2, out2
     assert "passed（只看上面这几条）＝False" in out2, out2
@@ -701,10 +724,14 @@ def test_the_exit_code_still_comes_only_from_the_closing_gate(tmp_path):
     本夹具补了论文对应表：少了那一格，`mapping_not_in_paper` 这条 blocker 会把三档全压成 1。
     """
     st, report, sid = _good_clean_and_sid(tmp_path)
-    code_wired, _ = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
-    code_unwired, out_unwired = _run(st, report, "--cap-usd", "1.0",
+    _gate_sid = _touch_session(st)
+    code_wired, _ = _run(st, report, "--sid", _gate_sid,
+                         "--cap-usd", "1.0", "--acceptance-sid", sid)
+    code_unwired, out_unwired = _run(st, report, "--sid", _gate_sid,
+                                     "--cap-usd", "1.0",
                                      "--acceptance-sid", sid, "--no-review-acceptance")
-    code_no_sid, out_no_sid = _run(st, report, "--cap-usd", "1.0")
+    code_no_sid, out_no_sid = _run(st, report, "--sid", _gate_sid,
+                                   "--cap-usd", "1.0")
     assert code_wired == code_unwired == code_no_sid == 0, (
         code_wired, code_unwired, code_no_sid, out_unwired, out_no_sid)
     # 三态不许折平：没给会话身份 ⇒ 那一格必须"没查成"，而收工门那 8 格仍是"通过"
@@ -737,14 +764,14 @@ def test_the_exit_code_follows_ms_verdict_three_ways(tmp_path):
     st3, report3 = _good_clean(tmp_path / "c")
     _m_verdict(tmp_path, met=True, basis="M 说达成了")
     _m_verdict(tmp_path / "b", met=False, basis="M 说还差一件")
-    code_yes, _ = _run(st, report)
-    code_no, out_no = _run(st2, report2)
-    code_none, out_none = _run(st3, report3)
+    code_yes, _ = _run(st, report, "--sid", _touch_session(st))
+    code_no, out_no = _run(st2, report2, "--sid", _touch_session(st2))
+    code_none, out_none = _run(st3, report3, "--sid", _touch_session(st3))
     assert (code_yes, code_no, code_none) == (0, 1, 2), (code_yes, code_no, code_none)
     assert "没有提交自己的判据" in out_none, out_none
     assert "没有提交自己的判据" not in out_no, out_no
     # 显式入口（人/CI 代述 M 的说法）压过落盘那一份
-    code_flag, _ = _run(st2, report2, "--goal-met")
+    code_flag, _ = _run(st2, report2, "--sid", _touch_session(st2), "--goal-met")
     assert code_flag == 0, code_flag
     assert _CL.read_m_verdict(tmp_path / "b")["count"] == 1, (
         "命令行那一次不该改写落盘的判据（它只是代述，不是运行内那一次）")
@@ -770,8 +797,10 @@ def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
     got = _CL.read_m_verdict(st.root)
     assert got["checked"] and got["count"] == 1, got
     assert got["verdict"]["met"] is True and got["verdict"]["sid"] == "s-verdict", got
-    # 运行外：不给任何判据开关 ⇒ 读到的就是上面那一份 ⇒ 退出码 0（一致）
-    code, out = _run(st, report)
+    # 运行外：不给任何判据开关 ⇒ 读到的就是上面那一份 ⇒ 退出码 0（一致）。
+    # `--sid` 仍要给：收工门那一格问的是"这一趟"，缺省（`NO_SESSION`）是「没查成」，
+    # 而"没查成"不是 pass ⇒ 退出码不可能是 0（153-U-07）。
+    code, out = _run(st, report, "--sid", _touch_session(st))
     assert code == 0, out
     assert "M 判" in out, out
 

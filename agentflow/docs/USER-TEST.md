@@ -277,6 +277,13 @@ python -B -m agentflow.cli --root . closing --project-dir . --report out\review\
 > `paper_not_checked`："给的目录看起来是论文包本身 ⇒ 论文那一格没查成"。
 > 所以"项目根"始终是**装着 `out/paper/` 的那一层**。
 
+> ④ **2026-11-03 起这条命令要带 `--sid`**（153-U-07）：收工门的 `user_pending`
+> 那一格问的是"**这一趟**有没有话在等用户"，而缺省（不带 `--sid`）是「这次调用没有
+> 会话身份」⇒ 那一格是**没查成**、退出码不可能是 0。要重跑上面那一屏，写成
+> `closing --sid <这一趟的会话号> --project-dir . --report out\review\REPORT.md`；
+> 给了号而盘上没有 `sessions\<号>.jsonl` 是**受控拒绝**（退出码 2、门不跑）。
+> 上面那段"该看到"是 2026-10 的真机记录，按原样留着、没有重跑。
+
 ## §7 无人值守一档（验证"不许把没问当成默许"）
 
 ```powershell

@@ -560,6 +560,22 @@ python -m agentflow --root projects\<ws> closing
 
 `closing` 逐格印 `paper / contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger`，
 再印非平凡性那一行（`T0..T4` + 未判；T0 = 基础定理或初步结论，平凡不再拒收），以及论文侧缺铺垫与 T4 缺造梯子记录（`[warning]` 行）。
+
+`closing` 头一行现在会写明**你读的是哪一场会话**（2026-11-03，153-U-07）：
+
+```powershell
+python -m agentflow --root projects\<ws> closing --sid <这一趟的会话号>
+```
+
+- 不带 `--sid` ⇒ 那一行印"缺省会话"，并且 `user_pending` 那一格是**没查成**：
+  这一次调用没有会话身份，不许拿 `sessions/<今天>.jsonl` 冒充"这一趟"。
+  缺省会话里有没有待答问题，与"这一趟在不在等用户"是两件事 —— 折平它们就会把
+  "问了还没答"读成"没问过"（`draft/37` §58/§63 记过两次的假绿）。
+  这一格不是 pass ⇒ 退出码不可能是 0。
+- `--sid <号>` 且盘上有 `sessions/<号>.jsonl` ⇒ 读那一段，那一行点名这个号。
+- `--sid <号>` 而盘上没有那一段 ⇒ **受控拒绝**：退出码 2、门不跑，
+  印一句"没有会话 <号>"并列出盘上有的号 —— 不给一份"八格全是没查成"的空读数。
+
 另有一条零模型调用的进度读数：`python -m agentflow --root <ws> status-report`
 （落 `out/review/STATUS-<时间>.md|json`，其中"在飞"只数实例行，见 §5）。
 

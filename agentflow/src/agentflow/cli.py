@@ -4241,6 +4241,43 @@ def cmd_status_report(args) -> int:
     return 0
 
 
+def _closing_session_identity(root: Path, given: str | None) -> tuple[str, str, str]:
+    """`agentflow closing` 的会话身份：`(sid, 读数里那一句, 拒绝理由)`。
+
+    三态（`draft/37` §63 + 153-U-07）：
+
+    - 给了号、且那一段在盘上 ⇒ `(号, 点名那句话, "")`；
+    - 给了号、盘上没有（或它根本不是会话号）⇒ `("", "", 拒绝那句话)`；
+    - 没给 ⇒ `(closing.NO_SESSION, 点名"缺省会话"那句话, "")`。
+
+    为什么"没给"落到 `NO_SESSION` 而不是 `None`：`None` 的语义是"读缺省会话"
+    （`sessions/<今天>.jsonl`，运维口径、合法），而运行外出口问的是"这一趟"。
+    两个输入混用，缺省会话里没有提问就会被读成"没问过"——§58/§63 的假绿。
+    """
+    from . import closing as CL
+    from . import sessions as SS
+
+    sid = str(given or "").strip()
+    if not sid:
+        return (CL.NO_SESSION,
+                "缺省会话（没给 `--sid` ⇒ 这一次调用没有会话身份：「待答问题」那一格是"
+                "「没查成」，不按 sessions/<今天>.jsonl 读 —— 那是运维口径，不是这一趟；"
+                "要读某一趟就显式给 `--sid`）",
+                "")
+    if any(ch in sid for ch in ("/", "\\")) or sid in (".", ".."):
+        return ("", "", f"拒绝：{sid!r} 不是一个会话号（会话号里不许有路径分隔符）"
+                        " ⇒ 不跑收工门（退出码 2）")
+    if not SS.session_path(root, sid=sid).is_file():
+        known = [str(s.get("sid") or "") for s in SS.list_sessions(root)
+                 if str(s.get("sid") or "")]
+        hint = ("盘上有的会话号：" + "、".join(known[:5])
+                + (f" …（共 {len(known)} 个）" if len(known) > 5 else "")) if known else \
+               "这个工作区还没有任何会话记录"
+        return ("", "", f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
+                        f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}")
+    return (sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "")
+
+
 def cmd_closing(args) -> int:
     """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -4256,6 +4293,16 @@ def cmd_closing(args) -> int:
     辅助读数照原样打出，并逐字说明"它们不构成通过"。
     `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），于是「三态分支」那一格
     是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，那正是 §58/§63 记过两次的假绿形态。
+    ## `--sid`：运行外出口也要说清"你读的是哪一场"（153-U-07）
+    收工门的 `user_pending` 那一格问的是"这一趟有没有话在等用户"。运行内
+    （`conductor.closing`）把这一趟的会话号传下去；运行外此前一个号都不带，于是
+    `check_closing(sid=None)` 落到 `sessions/<今天>.jsonl` —— 问的从"那一趟"变成了"今天那份"。
+    `--sid` 就是这个显式入口，三态与 `closing.NO_SESSION` 同一套：
+    - 给了号且那一段在盘上 ⇒ 读它，读数点名这个号；
+    - 给了号但盘上没有那一段 ⇒ 受控拒绝（退出码 2，门不跑）——不许给一份"八格全是没查成"的空读数；
+    - 没给 ⇒ `closing.NO_SESSION`（这一次调用没有会话身份），读数点名"缺省会话"并说明那一格是
+      "没查成"。缺省值不是 `None`：`None` 的语义是"读缺省会话"（运维口径、合法），
+      两个输入混用就会把"没问过"与"问了还没答"读成同一个值（§58/§63）。
     ## 退出码由 M 的判据定、机器读数也参与（业主 2026-10-09 + 2026-11-03 的裁决 ②）
     「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 退出码（0 可交付 / 1 被拦住 /
     2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它落到 `out/review/m-verdicts.jsonl`，
@@ -4276,7 +4323,15 @@ def cmd_closing(args) -> int:
     project = args.project_dir or ""
     report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
                              if project else "")
+    sid, session_note, problem = _closing_session_identity(root, getattr(args, "sid", None))
+    if problem:
+        # 受控拒绝：连"读哪一场"都定不下来时不许跑门 —— 跑出来那张表每一格都是
+        # "没查成"，读的人会以为已经读过一遍了（空读数冒充读数）。
+        print(tty.bullet(problem))
+        return 2
+    print(tty.bullet("会话：" + session_note))
     rep = CL.check_closing(st, project_dir=project, report_path=report,
+                           sid=sid,
                            goal=str(getattr(args, "goal", "") or ""),
                            goal_met=getattr(args, "goal_met", None),
                            basis=str(getattr(args, "basis", "") or ""))
@@ -5033,6 +5088,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="项目根目录（正文与编译回执在 <它>/out/paper/；不给 ⇒ 论文那一格是「没查成」）")
     sp.add_argument("--report", default="",
                     help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
+    sp.add_argument("--sid", default=_CL.NO_SESSION, metavar="SID",
+                    help="这一趟的会话号（「待答问题」那一格读 sessions/<SID>.jsonl 那一段）；"
+                         "不给 ⇒ 这一次调用没有会话身份（该格「没查成」），"
+                         "不按缺省会话读。给的号不在盘上 ⇒ 受控拒绝（退出码 2，门不跑）")
     # 内容级验收（`draft/37` §17.3）那一段的入参：只影响那一段的读数，
     # 不影响退出码（退出码仍然只由收工门定）。三个都给缺省值 ——
     # 缺省时那几格记「没查成」，不折成通过。
