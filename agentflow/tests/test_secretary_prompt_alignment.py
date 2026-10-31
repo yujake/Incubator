@@ -280,6 +280,11 @@ OTHER_CATCHERS: dict[str, dict[str, object]] = {
 #: —— 它们当初的登记理由写的是"随 S1k-2 落地"，S1k-2 早就落地了，而这张表只往下查
 #: 不往上查（判据只断言"死的都登记了"，不断言"登记的都还是死的"）⇒ 那 8 条腐烂了半年
 #: 也没人知道。要清就得人来清，这就是这次清。
+#:
+#: 2026-11-02（`draft/151` 一-4）：补上反向那一半 —— 登记项必须真的没有生产调用点
+#: （`test_the_no_call_point_table_has_no_stale_entries`）。`roster_repair` 就是腐烂的
+#: 那一条：它从 2026-10-29 起有两处生产调用点（`conductor._register_roster` 的兜底自愈、
+#: `secretary.retire` 的收工兜底），而这里一直写着"生产面今天无调用点"。
 NO_CALL_POINT_TODAY = {
     "pending_inbox": "定义了、`inbox_todos` 之外没有生产调用点（2026-10-07 现算 0 处）—— "
                      "与 `draft/69 §5` 的 R5-㔔 同族：**有产出方没接**，登记为读数而不是删掉",
@@ -289,8 +294,6 @@ NO_CALL_POINT_TODAY = {
                           "由测试消费（权限面的读数，不是派发点）",
     "merged_decisions": "只读访问器（整角色视图：老文件 + 全部分片）；生产面今天无调用点 —— "
                         "WebUI 那一面直接 glob 目录，这一格留给「按角色审账」的入口",
-    "roster_repair": "补登记入口；只在写路径被调用（I-15），"
-                     "生产面今天无调用点（派活登记那一步走的是 `roster_add`，不经过它）",
 }
 
 
@@ -517,6 +520,16 @@ def test_secretary_methods_without_a_call_point_are_registered() -> None:
     assert not unregistered, (
         "这些秘书方法今天在生产面**没有调用点**，却没有登记（登记表 = `NO_CALL_POINT_TODAY`）："
         f"{unregistered}\n  （登记过的：{sorted(NO_CALL_POINT_TODAY)}）")
+
+
+def test_the_no_call_point_table_has_no_stale_entries() -> None:
+    """反向那一半：登记为"无调用点"的方法必须真的没有生产调用点（登记会自己过期）。"""
+    stale = {n: _called_in_production(n) for n in NO_CALL_POINT_TODAY
+             if _called_in_production(n)}
+    assert not stale, (
+        "这些方法已经活过来了，却还登记在 `NO_CALL_POINT_TODAY` 里（过期登记会让下一个"
+        "人以为它们没人调）：\n  - " + "\n  - ".join(
+            f"{n}: {calls[:3]}" for n, calls in sorted(stale.items())))
 
 
 # --------------------------------------------------------------------------------------
