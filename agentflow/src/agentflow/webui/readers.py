@@ -3677,7 +3677,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     #
     # 2026-10-25（业主截图）：2026-10-24 起节点上的"子 N"只数名册项 —— 名册项少一个，
     # 父的子树读数就比台账低一个，而少的那一个既不在这棵树里、也不在任何一处说
-    # "它是谁的儿子"。所以每个节点补三格：`child_count`（台账里的子数）、
+    # "它是谁的儿子"。所以每个节点补三格：`children_in_ledger`（台账里的子数 ——
+    # 这个名字量的是"这个节点在台账里挂了几个子"，含没落名册的；收工读数里那个
+    # `child_count` 量的是"名册里还有几个没销号的项"，两个不同量故两个名，见 153-U-13）、
     # `roster_child_count`（名册项数）、`unrostered_children`（有父、没落名册的那些：
     # 编号 + 角色 + 状态，挂在父节点下看得见，同时仍进页面底部的 `unplaced`）。
     #
@@ -3834,7 +3836,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                           "retired": bool((node_row.get(k) or {}).get("retired"))}
                          for k in kids],
             # 子数按台账数（读不到台账 ⇒ null，不是 0）；名册项数是其中"落了名册"的那部分。
-            "child_count": (len(ledger_child_ids) if tasks_read else None),
+            "children_in_ledger": (len(ledger_child_ids) if tasks_read else None),
             "roster_child_count": len(kids),
             "unrostered_children": (unrostered_kids if tasks_read else []),
             "retired": bool(row.get("retired")),
@@ -4492,10 +4494,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
       ("tasks", "RosterTask[]"),
       # 2026-10-25（业主截图：「子 N」只数名册项，漏掉"有父但没落名册"的那些）：
-      # `child_count` 是台账里的子数（台账读不到 ⇒ null，不是 0），
+      # `children_in_ledger` 是台账里的子数（台账读不到 ⇒ null，不是 0；这个名字量的
+      # 是"这个节点在台账里挂了几个子"，与收工读数的 `child_count`（名册未销号项数）
+      # 是两个量），
       # `roster_child_count` 是名册项数，`unrostered_children` 是"有父、没落名册"的那些
       # （编号 + 角色 + 状态；它们同时仍进页面底部的 `unplaced`，两处同一口径）。
-      ("child_count", "number | null"), ("roster_child_count", "number"),
+      ("children_in_ledger", "number | null"), ("roster_child_count", "number"),
       ("unrostered_children", "RosterUnrostered[]"))),
     ("RosterUnrostered",
      "roster_face() 的 nodes[].unrostered_children[] 一项 —— 台账里有父、名册正文与"
@@ -4810,7 +4814,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
             "children": kids, "retired": False, "retired_branch": "",
             # 这一档整棵树都来自台账：子数就是台账子数，名册项数恒为 0，
             # 于是每一个子都"没落名册"（它们确实不在任何名册文件里）。
-            "child_count": len(kid_rows), "roster_child_count": 0,
+            "children_in_ledger": len(kid_rows), "roster_child_count": 0,
             "unrostered_children": [
                 {"task_id": str(k.get("task_id") or ""),
                  "role": str(k.get("role") or ""),

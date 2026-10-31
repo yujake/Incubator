@@ -15,10 +15,11 @@
 
 ## 修法（只加，不动既有键的语义）
 
-- `roster_face` 每个节点补三格：`child_count`（台账里的子数；台账读不到 ⇒ null）、
+- `roster_face` 每个节点补三格：`children_in_ledger`（台账里的子数；台账读不到 ⇒ null；
+  2026-11-03 由 `child_count` 改名，153-U-13：收工读数里那个 `child_count` 是另一个量）、
   `roster_child_count`（名册项数）、`unrostered_children`（有父、没落名册的那些：
   编号 + 角色 + 状态 + 为什么）；
-- 前端「子 N」改成读 `child_count`，并在名册项数比它少时同一格后面写
+- 前端「子 N」改成读 `children_in_ledger`，并在名册项数比它少时同一格后面写
   「其中 M 个未落名册」；未落名册的那些挂在父节点下面一行（编号 + 角色 + 状态），
   同时仍进页面底部的 `unplaced`（两处同一处判据的两个落位）。
 
@@ -26,10 +27,10 @@
 
 | 条 | 这条问什么 | 改前红在哪 |
 |---|---|---|
-| f | 台账 6 子 / 名册 4 项 ⇒ 父节点读数是 6，带 2 个未落名册；`unplaced` 里恰好是那 2 个 | 改前节点上没有 `child_count` 这一格，页面读的是 `children.length` = 4 |
+| f | 台账 6 子 / 名册 4 项 ⇒ 父节点读数是 6，带 2 个未落名册；`unplaced` 里恰好是那 2 个 | 改前节点上没有这一格（今天叫 `children_in_ledger`），页面读的是 `children.length` = 4 |
 | g | 反真空：把"未落名册"的计数打桩成 0 ⇒ f 必红 | 这一条证明 f 真的在测"按台账数"，不是被空数组顺手带绿 |
 
-另加一条源码判据（前端那一半）：`Roster.tsx` 必须真的用 `child_count` 与
+另加一条源码判据（前端那一半）：`Roster.tsx` 必须真的用 `children_in_ledger` 与
 `unrostered_children` 渲染，且同一格带「其中 M 个未落名册」那句话 —— 只改后端
 的话，页面上那个"4"一个字都不会变。
 
@@ -114,7 +115,7 @@ def _f_the_child_count_is_the_ledger_count(face: dict[str, Any]) -> None:
     """判据 f 的正控内容（判据 g 复用同一份断言来做反真空）。"""
     node = _m_node(face)
     # 改前红：这一格不存在（页面读的是 children.length = 4）。
-    assert node.get("child_count") == 6, ("「子 N」必须按台账数", node.get("child_count"), node)
+    assert node.get("children_in_ledger") == 6, ("「子 N」必须按台账数", node.get("children_in_ledger"), node)
     assert node.get("roster_child_count") == 4, node
     missing = [str(u.get("task_id")) for u in node.get("unrostered_children") or []]
     assert missing == [str(t) for t, _r in UNROSTERED], missing
@@ -151,7 +152,7 @@ def test_f_the_ledger_fallback_carries_the_same_three_cells(tmp_path: pathlib.Pa
     face = R.roster_face(root)
     assert face["answer"] == "unknown", face["reason"]
     node = _m_node(face)
-    assert node["child_count"] == 1, node
+    assert node["children_in_ledger"] == 1, node
     assert node["roster_child_count"] == 0, node
     assert [u["task_id"] for u in node["unrostered_children"]] == ["t-000002"], node
     assert node["registered"] is False, node
@@ -176,7 +177,7 @@ def test_g_negctl_zeroing_the_unrostered_count_makes_f_red(
 
 
 def test_the_page_shows_the_ledger_count_and_the_unrostered_children() -> None:
-    """前端源码判据：「子 N」读 `child_count`，未落名册的子挂在父节点下并带那两格。
+    """前端源码判据：「子 N」读 `children_in_ledger`，未落名册的子挂在父节点下并带那两格。
 
     为什么这一条是源码判据：页面读的是 `/api/roster` 的同一份 payload，但"显示哪一格"
     只活在前端（本仓对前端事实的既有口径，见 `test_roster_renders_as_a_tree.py` 判据③）。
@@ -184,7 +185,7 @@ def test_the_page_shows_the_ledger_count_and_the_unrostered_children() -> None:
     """
     text = ROSTER_TSX.read_text(encoding="utf-8")
     assert "childCountText" in text, "前端没有把「子 N」抽成一个可读的式子"
-    assert "node.child_count" in text, "「子 N」没有读 child_count（改前读的是 children.length）"
+    assert "node.children_in_ledger" in text, "「子 N」没有读 children_in_ledger（改前读的是 children.length）"
     assert "未落名册" in text, "名册项数比台账少时没有显式写「其中 M 个未落名册」"
     assert "unrosteredOf" in text and "UnrosteredLine" in text, \
         "未落名册的子没有挂在父节点下（不许只躺在页面底部的 unplaced 里）"

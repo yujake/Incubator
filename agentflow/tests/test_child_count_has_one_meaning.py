@@ -3,12 +3,12 @@
 
 ## 背景
 
-同一个键名 `child_count` 落在两个**分母与范围都不同**的问题上：
+同一个键名 `child_count` 落在两个分母与范围都不同的问题上：
 
 | 落点 | 数的是什么 | 范围 |
 |---|---|---|
-| `webui.readers.roster_face` 的节点格（`readers.py:3837`） | 这个节点在**台账**里挂了几个子（含没落名册的） | 这个节点 |
-| `Secretary.child_counts` 的 `child_count`（`secretary.py:7912`） | 名册里还有几个**没销号**的项 | 全工作区 / 按 owner |
+| `webui.readers.roster_face` 的节点格（`readers.py:3837`） | 这个节点在台账里挂了几个子（含没落名册的） | 这个节点 |
+| `Secretary.child_counts` 的 `child_count`（`secretary.py:7912`） | 名册里还有几个没销号的项 | 全工作区 / 按 owner |
 
 两个都对，但拿两处 `child_count` 对照的人只会得出"有一个在说谎"。
 
@@ -18,13 +18,13 @@
   `roster_child_count`；
 - 收工那一格（`child_counts` 的 `child_count`）的改名要动 `CHILD_COUNT_KEY` 的值 ⇒
   会改到 M 的提示词正文（`agent_prompts.py:3060` 逐字引着这个键名）⇒ 命中 FC-27
-  （`tests/golden/agent_surface_snapshot.json:254` 有渲染副本）。**那半笔不在本文件里**，
+  （`tests/golden/agent_surface_snapshot.json:254` 有渲染副本）。那半笔不在本文件里，
   见提交信息与报告。
 
 ## 这条判据钉住什么
 
 1. 名册面节点格叫 `children_in_ledger`，且同一个节点上不再有 `child_count`；
-2. 收工读数那一个仍然是"名册里未销号项数"（1 个名册项 / 2 个台账子）⇒ 两个数**不同值**，
+2. 收工读数那一个仍然是"名册里未销号项数"（1 个名册项 / 2 个台账子）⇒ 两个数不同值，
    证明它们是两个量（也就说明为什么必须两个名）；
 3. 前端两处（`rosterTree.ts` 的类型映射、`Roster.tsx` 的「子 N」）读的都是新名字 ——
    只改后端的话页面读不到那个数。

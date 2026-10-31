@@ -278,7 +278,7 @@ function asNode(value: unknown): RosterNode | null {
     children,
     // 子数按台账数（读不到 ⇒ null，界面那一格退回名册项数并注明"台账未读到"）；
     // 名册项数缺省按 children 的数量算（旧后端只给 children）。
-    child_count: asNumber(value["child_count"]),
+    children_in_ledger: asNumber(value["children_in_ledger"]),
     roster_child_count: asNumber(value["roster_child_count"]) ?? children.length,
     unrostered_children: asUnrostered(value["unrostered_children"]),
     retired: value["retired"] === true,

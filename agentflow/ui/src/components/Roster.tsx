@@ -225,8 +225,8 @@ function unrosteredOf(node: RosterNode): RosterUnrostered[] {
  */
 function childCountText(node: RosterNode): string {
   const missing = unrosteredOf(node).length;
-  const total = typeof node.child_count === "number" ? node.child_count : node.children.length;
-  const unknown = typeof node.child_count === "number" ? "" : "（台账未读到，按名册项数）";
+  const total = typeof node.children_in_ledger === "number" ? node.children_in_ledger : node.children.length;
+  const unknown = typeof node.children_in_ledger === "number" ? "" : "（台账未读到，按名册项数）";
   const tail = missing > 0 ? `（其中 ${missing} 个未落名册）` : "";
   return `子 ${total}${unknown}${tail}`;
 }

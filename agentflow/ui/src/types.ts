@@ -944,7 +944,7 @@ export interface RosterNode {
   in_flight: number | null;
   inbox: RosterInbox;
   tasks: RosterTask[];
-  child_count: number | null;
+  children_in_ledger: number | null;
   roster_child_count: number;
   unrostered_children: RosterUnrostered[];
 }
