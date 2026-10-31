@@ -289,7 +289,8 @@ def list_sessions(root: Any) -> list[dict]:
 # ====================================================================== 趟次索引（裁定 O2）
 #
 # 名字的边界（不许混用，见 `draft/78 §7` 的提醒）：这里的「趟次」是「一个会话文件里
-# 的第几趟运行」（一条 `agent_run_start` 到它之后的 `agent_run_end` 或文件尾）。
+# 的第几趟运行」（一条 `agent_run_start` 到它自己那条 `agent_run_end` —— 按 `task_id`
+# 配对，会话文件是多代理共写的 —— 或文件尾）。
 # `projects.py` 的 `run_index: int` 是另一个概念（这个项目第几趟，配 `out/run-<n>`），
 # 两者不同模块、不同语义，本模块不去碰那一个、也不把这张表塞进 `projects.py`。
 #
@@ -307,9 +308,31 @@ def run_index_path(root: Any) -> pathlib.Path:
 def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> list[dict]:
     """把一段会话的事件扫成「每一趟的运行读数」（纯函数，不碰盘）。
 
-    一趟 = 一条 `agent_run_start` 到它之后的 `agent_run_end`（或文件尾）。没有开始
+    一趟 = 一条 `agent_run_start` 到它自己那条 `agent_run_end`（或文件尾）。没有开始
     标记的事件不算一趟：那是「轮次之外的零散事件」，折成"一趟 0 步的运行"会让
     「最近一趟」被一个空壳顶掉（`webui/state.py` 的 `_scan` 把这条纪律写在同一处）。
+
+    ## 配对键是 `task_id`，不是"当前那趟"（`draft/158` §三）
+
+    会话文件是一个工作区一天一份、所有子代理共写的（见本模块下面 `_append_lock` 那
+    一段），而改前每一条 `agent_run_start` 就覆盖 `cur`、每一条 `agent_run_end` 就关掉"当前
+    那趟"——两端都不看 `task_id`。后果不是"聚合口径选错了"，是"切趟这一步根本没有键"：
+    81 那趟 71 条 start / 71 条 end 实测 63/71 行不可用（36 条 `end_ts=None`；有 end 的
+    35 条里 27 条挂的是别人的 end），M 那趟读出 4 步 / 4 次调用，而它自己的收工行写着
+    111 步 / 110 次调用。两条事件本来就都带 `task_id`（`agent_loop.run` 的写入口），
+    按它配对 71/71 全中。
+
+    三档归属（函数里的 `_owner_of`），顺序就是优先级：
+    ① 事件自带 `task_id` ⇒ 同号的那一趟（取最近开始的那一趟：被拒的续跑也写一条
+      `agent_run_start`，它排在真趟之前，取最早那条会把真趟的终态记到它头上）；
+    ② 没编号（旧会话文件 / 秘书自己的调用）⇒ 同角色的最近一趟；
+    ③ 只剩一趟没闭合 ⇒ 没有歧义，就是它。
+    没有 ④：多趟都开着又对不上号 ⇒ 这一条不记给任何一趟。错配比丢失更坏 —— 丢失在读数里
+    是空（读得出来），错配会被读成"另一趟的终态"（读不出来）。
+
+    步数与调用数以这一趟自己的收工行为准（`agent_run_end.steps` / `.spend.calls`）：
+    `agent_step` 事件里没有任务号，多代理交错时按位置数只能算到别家头上，而收工行是这一趟
+    自己写的账。收工行缺这两格（老数据 / 夹具）⇒ 落回逐条数。
 
     键与 `webui.state._scan` 逐字相同（20 个）—— `draft/75 §1.3` 的 `RunRow`：
     `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd,
@@ -320,7 +343,24 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     """
     rows = list(events)
     runs: list[dict] = []
-    cur: dict[str, Any] | None = None
+    #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 只留在这里，不进行（行键集与
+    #: `RunRow` 的 20 个逐字相同，加一格就是改契约）。
+    open_runs: list[tuple[str, dict]] = []
+
+    def _owner_of(tid: str, role: str) -> tuple[str, dict] | None:
+        """这条事件该记到哪一趟上（找不到 ⇒ `None`，不猜）。三档见上面的函数注释。"""
+        if tid:
+            for item in reversed(open_runs):
+                if item[0] == tid:
+                    return item
+            return None
+        for item in reversed(open_runs):
+            if str(item[1].get("role") or "") == role:
+                return item
+        if len(open_runs) == 1:
+            return open_runs[0]
+        return None
+
     for i, e in enumerate(rows):
         kind = str(e.get("kind") or "")
         if kind == "agent_run_start":
@@ -334,9 +374,12 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 "end_index": None, "end_ts": "",
             }
             runs.append(cur)
+            open_runs.append((str(e.get("task_id") or ""), cur))
             continue
-        if cur is None:
+        hit = _owner_of(str(e.get("task_id") or ""), str(e.get("role") or ""))
+        if hit is None:
             continue
+        cur = hit[1]
         if kind == "agent_step":
             cur["steps"] += 1
             cur["last_shape"] = str(e.get("shape") or "")
@@ -358,7 +401,17 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
             cur["elapsed_sec"] = e.get("elapsed_sec")
             cur["end_index"] = i
             cur["end_ts"] = str(e.get("ts") or "")
-            cur = None
+            # 这一趟自己写的账优先（见上面函数注释的最后一段）：`agent_step` 没有任务号，
+            # 交错时按位置数会数到别家头上；`spend.calls` 同理。缺这两格 ⇒ 保留逐条数。
+            steps = e.get("steps")
+            if isinstance(steps, int) and not isinstance(steps, bool) and steps >= 0:
+                cur["steps"] = steps
+            spend = e.get("spend")
+            if isinstance(spend, Mapping):
+                calls = spend.get("calls")
+                if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
+                    cur["llm_calls"] = calls
+            open_runs.remove(hit)
     # 待答问题挂在「正在等它」的那一趟上：与 `_scan` 同一口径
     # （停止理由空着却停在一个没答的问题上 ⇒ 那一档写 `waiting_for_user`）。
     pending_idx: list[int] = []

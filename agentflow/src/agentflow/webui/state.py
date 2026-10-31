@@ -244,7 +244,13 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     del session_root
     events = list(events)
     pending = [dict(q) for q in pending]
-    # ---- 每一趟 = 一条 `agent_run_start` 到它之后的 `agent_run_end`（或文件尾）。
+    # ---- 每一趟 = 一条 `agent_run_start` 到它自己那条 `agent_run_end`（或文件尾）。
+    #
+    # 配对键是 `task_id`，不是"当前那趟"（`draft/158` §三）：会话文件是一个工作区一天
+    # 一份、所有子代理共写，改前每一条 start 覆盖 `cur`、每一条 end 关掉"当前那趟"，
+    # 两端都不看任务号 ⇒ 81 那趟 63/71 行的终态为空或挂的是别人的 end。这一份与
+    # `sessions.runs_in_session` 是两处同形实现（只改一处等于再造一次"两个读口各说一套"），
+    # 所以三档归属与"收工行自报步数"必须逐句同形。
     #
     # 没有开始标记的事件「不许」被折成一趟：那是「轮次之外的零散事件」（例如人刚
     # 提交的一条 `user_answer`，或者一次不带 `--sid` 的 CLI 调用写的 `task_end`）。
@@ -253,9 +259,25 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     # 成了新一轮的开始）。所以零散事件单独收成一栏，并如实写"没有开始标记"。
     runs: list[dict[str, Any]] = []
     orphans: list[dict[str, Any]] = []
-    cur: dict[str, Any] | None = None
+    #: 还没闭合的趟：`(task_id, run)`，按开始顺序（`task_id` 只留在这里，不进行）。
+    open_runs: list[tuple[str, dict[str, Any]]] = []
     last_kind = ""
     last_seq = -1
+
+    def _owner_of(tid: str, role: str) -> tuple[str, dict[str, Any]] | None:
+        """这条事件该记到哪一趟上（找不到 ⇒ `None`，不猜）。三档同 `runs_in_session`。"""
+        if tid:
+            for item in reversed(open_runs):
+                if item[0] == tid:
+                    return item
+            return None
+        for item in reversed(open_runs):
+            if _text(item[1].get("role")) == role:
+                return item
+        if len(open_runs) == 1:
+            return open_runs[0]
+        return None
+
     for i, e in enumerate(events):
         kind = str(e.get("kind") or "")
         if kind:
@@ -271,12 +293,15 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 "end_index": None, "end_ts": "",
             }
             runs.append(cur)
+            open_runs.append((_text(e.get("task_id")), cur))
             continue
-        if cur is None:
+        hit = _owner_of(_text(e.get("task_id")), _text(e.get("role")))
+        if hit is None:
             # 轮次之外：只记账（条数、起止时间、有哪些 kind），不当成一趟运行。
             orphans.append({"sid": sid, "index": i, "kind": kind or "unknown",
                             "ts": _text(e.get("ts")), "role": _text(e.get("role"))})
             continue
+        cur = hit[1]
         if kind == "agent_step":
             cur["steps"] += 1
             cur["last_shape"] = _text(e.get("shape"))
@@ -298,7 +323,17 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
             cur["elapsed_sec"] = e.get("elapsed_sec")
             cur["end_index"] = i
             cur["end_ts"] = _text(e.get("ts"))
-            cur = None
+            # 这一趟自己写的账优先（`runs_in_session` 里那一段逐句同形）：多代理交错时
+            # 按事件位置数步会数到别家头上，而收工行是这一趟自己写的。缺格 ⇒ 保留逐条数。
+            steps = e.get("steps")
+            if isinstance(steps, int) and not isinstance(steps, bool) and steps >= 0:
+                cur["steps"] = steps
+            spend = e.get("spend")
+            if isinstance(spend, Mapping):
+                calls = spend.get("calls")
+                if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
+                    cur["llm_calls"] = calls
+            open_runs.remove(hit)
     # ---- 把待答问题挂到「正在等它」的那一趟上
     for run in runs:
         hi = run["end_index"] if run["end_index"] is not None else len(events)

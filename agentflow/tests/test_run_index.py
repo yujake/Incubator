@@ -238,3 +238,205 @@ def test_the_local_question_scan_agrees_with_userio(tmp_path: pathlib.Path) -> N
     U.ask_user(root, role="M", question="有问题的那一场", timeout_sec=0, sid="s-has-one")
     assert SS.session_ids_with_questions(root) == U.session_ids_with_questions(root)
     assert SS.session_ids_with_questions(root) == ["s-has-one"]
+
+
+# ====================================================================== 多代理交错
+# 为什么单列一组（`draft/158` §三）：会话文件是一个工作区一天一份、所有子代理共写的，
+# 而切趟规则此前假设"一次只有一趟"（每一条 start 覆盖 `cur`、每一条 end 关掉"当前那趟"，
+# 两端都不看 `task_id`）。81 那趟 71 条 start / 71 条 end 实测 63/71 行不可用
+# （36 条 `end_ts=None`，有 end 的 35 条里 27 条挂的是别人的 end），M 那趟读出 4 步 / 4 次
+# 调用，而它自己的收工行写着 111 步 / 110 次调用。
+#
+# 上面那些单代理用例天然过（顺序追加，`cur` 恰好就是那一趟），盖不住这一档。所以这里
+# 直接拿"交错"当夹具，并且不靠 `run_index_report` 判对错：索引与对账同源
+# （`reconcile_run_index` 现算用的就是 `runs_in_session`），配错了两边一起错、`drift`
+# 照样是空的 —— 自洽的错不算漂移。真正的判据是直接读那几趟的读数。
+
+def _ev(kind: str, **fields: object) -> dict:
+    """一行事件（`ts` 由调用方给：这一组要按 ts 认"这条 end 是不是它自己的"）。"""
+    row: dict = {"kind": kind}
+    row.update(fields)
+    return row
+
+
+def _nested_parent_and_child(root: pathlib.Path, sid: str) -> None:
+    """父 start → 子 start → 子的步与调用 → 子 end → 父的步与调用 → 父 end。
+
+    这是最普通的一趟父子：父派活之后等子跑完（子那一段整个嵌在父的窗口里）。
+    """
+    A = SS.append
+    A(root, _ev("agent_run_start", role="M", task="父的活", task_id="t-000001",
+                ts="2026-01-01T00:00:00+00:00"), sid=sid)
+    A(root, _ev("agent_step", role="M", index=0, shape="fs.write",
+                ts="2026-01-01T00:00:01+00:00"), sid=sid)
+    A(root, _ev("llm_call", role="M", task_id="t-000001", ok=True, usd=0.5,
+                ts="2026-01-01T00:00:02+00:00"), sid=sid)
+    A(root, _ev("agent_run_start", role="D", task="子的活", task_id="t-000002",
+                ts="2026-01-01T00:00:03+00:00"), sid=sid)
+    A(root, _ev("agent_step", role="D", index=0, shape="fs.read",
+                ts="2026-01-01T00:00:04+00:00"), sid=sid)
+    A(root, _ev("agent_step", role="D", index=1, shape="fs.write",
+                ts="2026-01-01T00:00:05+00:00"), sid=sid)
+    A(root, _ev("llm_call", role="D", task_id="t-000002", ok=True, usd=0.25,
+                ts="2026-01-01T00:00:06+00:00"), sid=sid)
+    A(root, _ev("agent_run_end", role="D", task_id="t-000002", stop_reason="final",
+                steps=2, spend={"calls": 1, "usd": 0.25},
+                ts="2026-01-01T00:00:07+00:00"), sid=sid)
+    A(root, _ev("agent_step", role="M", index=1, shape="fs.read",
+                ts="2026-01-01T00:00:08+00:00"), sid=sid)
+    A(root, _ev("agent_step", role="M", index=2, shape="fs.write",
+                ts="2026-01-01T00:00:09+00:00"), sid=sid)
+    A(root, _ev("llm_call", role="M", task_id="t-000001", ok=True, usd=0.125,
+                ts="2026-01-01T00:00:10+00:00"), sid=sid)
+    A(root, _ev("agent_run_end", role="M", task_id="t-000001", stop_reason="final",
+                steps=3, spend={"calls": 2, "usd": 0.625},
+                ts="2026-01-01T00:00:11+00:00"), sid=sid)
+
+
+def test_an_interleaved_child_does_not_steal_the_parents_readings(
+        tmp_path: pathlib.Path) -> None:
+    """判据 ①：父 start → 子 start → 子 end → 父 end ⇒ 父那趟的 steps/calls/终态必须对得上。
+
+    改前必红（实测这一条在 `2b7b98b5` 上）：
+    - 子那条 start 把 `cur` 从父顶掉 ⇒ 父的 `steps` 停在 1；
+    - 子那条 end 关掉"当前那趟"（= 子）之后 `cur` 是 None ⇒ 父后半段的步与调用整条丢弃，
+      父自己的 end 也落不上去 —— 于是父读出 `steps=1 / llm_calls=1 / stop_reason="" /
+      end_ts=""`，而它的收工行写的是 3 步 / 2 次调用 / final。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    sid = "s-nested"
+    _nested_parent_and_child(root, sid)
+    runs = SS.runs_in_session(SS.read_session(root, sid=sid)[0], sid=sid)
+    assert [r["role"] for r in runs] == ["M", "D"], runs
+    parent, child = runs
+    assert (parent["steps"], parent["llm_calls"], parent["stop_reason"]) == (3, 2, "final"), parent
+    assert parent["end_ts"] == "2026-01-01T00:00:11+00:00", parent
+    assert parent["end_index"] == 11, parent
+    assert parent["usd"] == 0.625 and parent["unknown_usd"] == 0, parent
+    assert (child["steps"], child["llm_calls"], child["stop_reason"]) == (2, 1, "final"), child
+    assert child["end_ts"] == "2026-01-01T00:00:07+00:00", child
+    assert child["usd"] == 0.25, child
+    # 这一格也写进落盘索引（网页与 CLI 读的是同一份口径）
+    index = SS.rebuild_run_index(root)
+    assert [r["steps"] for r in index["sessions"][sid]["runs"]] == [3, 2], index
+
+
+def _interleaved_six(root: pathlib.Path, sid: str) -> dict[str, str]:
+    """81 趟那种形态的缩本：6 趟同时开着、start 顺序与 end 顺序不一致。
+
+    与 81 的对应关系：
+    - 6 趟共写一份会话（父 M 一 + 五个子代理，其中三个同角色 D —— 81 里是 7 个 D）；
+    - 每条 end 带着自己的 `task_id` / `stop_reason` / `ts` / `steps`；
+    - 有一家的步（`t-000003` 的第二条）落在另一家已开跑之后：按事件位置数只能算到
+      别家头上（`agent_step` 事件里没有任务号），所以每趟的步数必须读它自己的收工行。
+
+    返回 `{task_id: 它的 end ts}`，判据据此认"这条 end 是不是它自己的"。
+    """
+    A = SS.append
+    ends = {"t-000001": "2026-01-01T00:00:30+00:00", "t-000002": "2026-01-01T00:00:27+00:00",
+            "t-000003": "2026-01-01T00:00:26+00:00", "t-000004": "2026-01-01T00:00:24+00:00",
+            "t-000005": "2026-01-01T00:00:28+00:00", "t-000006": "2026-01-01T00:00:25+00:00"}
+    stops = {"t-000001": "final", "t-000002": "max_steps", "t-000003": "error",
+             "t-000004": "interrupted", "t-000005": "no_tool_call", "t-000006": "waiting_for_user"}
+    clock = 0
+
+    def tick() -> str:
+        nonlocal clock
+        clock += 1
+        return f"2026-01-01T00:00:{clock:02d}+00:00"
+
+    A(root, _ev("agent_run_start", role="M", task="父", task_id="t-000001", ts=tick()), sid=sid)
+    A(root, _ev("agent_run_start", role="D", task="子一", task_id="t-000002", ts=tick()), sid=sid)
+    A(root, _ev("agent_step", role="M", index=0, shape="fs.write", ts=tick()), sid=sid)
+    A(root, _ev("agent_step", role="D", index=0, shape="fs.read", ts=tick()), sid=sid)
+    A(root, _ev("agent_run_start", role="D", task="子二", task_id="t-000003", ts=tick()), sid=sid)
+    A(root, _ev("agent_step", role="D", index=0, shape="fs.read", ts=tick()), sid=sid)
+    A(root, _ev("llm_call", role="D", task_id="t-000002", ok=True, usd=0.1, ts=tick()), sid=sid)
+    A(root, _ev("agent_run_start", role="E", task="子三", task_id="t-000004", ts=tick()), sid=sid)
+    A(root, _ev("agent_step", role="E", index=0, shape="fs.read", ts=tick()), sid=sid)
+    A(root, _ev("llm_call", role="M", task_id="t-000001", ok=True, usd=0.2, ts=tick()), sid=sid)
+    A(root, _ev("agent_run_start", role="D", task="子四", task_id="t-000005", ts=tick()), sid=sid)
+    # 子二的那一步落在子四已开跑之后：按位置数只会记到子四头上。
+    A(root, _ev("agent_step", role="D", index=1, shape="fs.write", ts=tick()), sid=sid)
+    A(root, _ev("agent_run_start", role="F", task="子五", task_id="t-000006", ts=tick()), sid=sid)
+    A(root, _ev("agent_step", role="F", index=0, shape="fs.read", ts=tick()), sid=sid)
+    # end 的顺序与 start 完全错开（81 的读数就是这种形态）
+    for tid in ("t-000004", "t-000006", "t-000003", "t-000002", "t-000005", "t-000001"):
+        A(root, _ev("agent_run_end", role="", task_id=tid, stop_reason=stops[tid],
+                    steps=1, spend={"calls": 1, "usd": 0.1}, ts=ends[tid]), sid=sid)
+    return ends
+
+
+def test_the_interleaved_shape_of_81_pairs_every_end_with_its_own_run(
+        tmp_path: pathlib.Path) -> None:
+    """判据 ②：71 start / 71 end 交错 ⇒ 每趟的 `end_ts` 与 `stop_reason` 都非空且属自己。
+
+    81 那趟的实测形态：`sessions/20261101.jsonl` 71 条 start / 71 条 end，索引里 36 条
+    `end_ts=""`、有 end 的 35 条里 27 条挂的是别人的 end（例：`start t-000026(F) ←
+    end of t-000010(D)`）。这里把那个形态缩到 6 趟，并且让 end 的落盘顺序与 start 错开。
+
+    改前必红：每条 end 关的都是"当前那趟"，而"当前那趟"是最后一条 start ⇒ 除最后一趟外
+    每条 run 的 `end_ts` 要么空、要么是别人的 ts。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    sid = "s-braid"
+    ends = _interleaved_six(root, sid)
+    runs = SS.runs_in_session(SS.read_session(root, sid=sid)[0], sid=sid)
+    by_tid = {"t-000001": "final", "t-000002": "max_steps", "t-000003": "error",
+              "t-000004": "interrupted", "t-000005": "no_tool_call",
+              "t-000006": "waiting_for_user"}
+    assert len(runs) == 6, runs
+    for run in runs:
+        # 角色不唯一（三个 D）⇒ 认领靠 end_ts，不靠角色
+        assert run["end_ts"], f"这一趟没有 end_ts（被别人的 start 顶掉了）：{run}"
+        assert run["stop_reason"], f"这一趟没有 stop_reason：{run}"
+        owners = [t for t, ts in ends.items() if ts == run["end_ts"]]
+        assert owners, f"它的 end_ts 不属于任何一趟：{run}"
+        assert by_tid[owners[0]] == run["stop_reason"], (owners, run)
+    # end_ts 两两不同（一条 end 只被一趟认领，没有张冠李戴）
+    assert len({r["end_ts"] for r in runs}) == 6, sorted(r["end_ts"] for r in runs)
+    # 每一趟的步数读的是它自己的收工行：子二的第二条步落在子四开跑之后，按位置数只能
+    # 算到子四头上（子二会变 2、子四会变 2），而两条收工行都写 1。
+    assert {r["steps"] for r in runs} == {1}, [(r["steps"], r["end_ts"]) for r in runs]
+    # 对账看不见这一类错（索引与现算同源）：这条在这里是"为什么上面的直接读数才是判据"
+    # 的机器记录，不是本用例的正题。
+    SS.rebuild_run_index(root)
+    report = SS.run_index_report(root)
+    assert report["usable"] is True and report["drift"] == [], report
+
+
+def test_a_single_agent_run_is_still_read_the_same(tmp_path: pathlib.Path) -> None:
+    """判据 ③（反真空）：没有交错时读数逐格不变 —— 配对键换了，单趟的账不能变。
+
+    改前/改后都必须绿：它守的是"为了让交错对上而把单代理那一档改坏"。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    sid = "s-solo"
+    A = SS.append
+    A(root, _ev("agent_run_start", role="M", task="独跑一趟", task_id="t-000001",
+                ts="2026-01-01T00:00:00+00:00"), sid=sid)
+    for i in range(3):
+        A(root, _ev("agent_step", role="M", index=i, shape="fs.write",
+                    ts=f"2026-01-01T00:00:0{i + 1}+00:00"), sid=sid)
+    A(root, _ev("llm_call", role="M", task_id="t-000001", ok=True, usd=0.25,
+                ts="2026-01-01T00:00:04+00:00"), sid=sid)
+    A(root, _ev("llm_call", role="M", task_id="t-000001", ok=True, usd=None,
+                ts="2026-01-01T00:00:05+00:00"), sid=sid)
+    A(root, _ev("agent_run_end", role="M", task_id="t-000001", stop_reason="final",
+                steps=3, final_chars=6, summons=1, messages=0, elapsed_sec=2.5,
+                spend={"calls": 2, "usd": 0.25}, ts="2026-01-01T00:00:06+00:00"), sid=sid)
+    runs = SS.runs_in_session(SS.read_session(root, sid=sid)[0], sid=sid)
+    assert len(runs) == 1, runs
+    run = runs[0]
+    assert (run["steps"], run["llm_calls"], run["stop_reason"]) == (3, 2, "final"), run
+    assert (run["usd"], run["unknown_usd"]) == (0.25, 1), run
+    assert (run["start_index"], run["end_index"]) == (0, 6), run
+    assert (run["start_ts"], run["end_ts"]) == ("2026-01-01T00:00:00+00:00",
+                                                "2026-01-01T00:00:06+00:00"), run
+    assert (run["final_chars"], run["summons"], run["messages"], run["elapsed_sec"]) == \
+        (6, 1, 0, 2.5), run
+    assert run["events_in_run"] == 6, run
+    assert (run["last_shape"], run["waiting_on"], run["waiting"]) == ("fs.write", [], False), run
