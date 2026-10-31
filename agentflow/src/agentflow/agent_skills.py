@@ -411,7 +411,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 ## 收尾还有一格：未闭环提醒是你秘书列的
 
-收工那一步（`conductor.closing`）与 `conductor.ledger(view="stats")` 的 `stats.closure_reminders`
+只有 `conductor.ledger(view="stats")` 的 `stats.closure_reminders`
 不是统计，是**点名**：谁提交了没人接手（`unclaimed`）、谁接了手却没有终态
 （`pending` / `running`）。它由**你的**秘书在收尾扫描时列出来，每条另进它的决定台账
 （`out/secretary/M.jsonl` 里 `duty=3` 那几行）。
