@@ -2171,7 +2171,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p225"
+_FROZEN_PROMPT_VERSION = "p226"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2381,7 +2381,8 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "8ec81e89b61876366292cdb2b8dae4974f6376541a602d9ee31716c65925e5f8",
     "H": "e23e2f50c9e878bd7c18c9e8179723aca2e966e242e31fb07f2f042f5895516b",
     "L": "bf25c613bf9449affe4bd6354b68f58473f8f202a0243ad1aee2f0d4eebc09a5",
-    "M": "66d1156a7807f6ab3ad07c23f433730e16e3b92b29fb20019180b2db3da17761",
+    # p226：conductor.closing 的 summary 压缩（269→234），只有 M 的 tools_lines 换值。
+    "M": "2d018a30f3790bd2e05fa8e920b9a0e9d69fe6a030b39564135010c8b51ef18d",
     "V": "f291a4b921e8dea0e20ed4b41417610944cae9f71090e37d226e7f5372c60f7e",
 }
 

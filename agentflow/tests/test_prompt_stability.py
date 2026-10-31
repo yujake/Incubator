@@ -691,7 +691,13 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 与上一格同值（现算值，不手抄）。
     {"version": "p225", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p225（2026-11-03 · 业主批准动禁改区）：收工读数那格从 child_count 改名 children_unretired（它数的是名册里未销号的子，不是台账子数；台账那一格是网页名册面的 children_in_ledger）。M 的名册视图那一段跟着改，facts 键集仍 15 格（键名与条数一格未动）"}
+     "note": "抬版本 p225（2026-11-03 · 业主批准动禁改区）：收工读数那格从 child_count 改名 children_unretired（它数的是名册里未销号的子，不是台账子数；台账那一格是网页名册面的 children_in_ledger）。M 的名册视图那一段跟着改，facts 键集仍 15 格（键名与条数一格未动）"},
+    # p225 -> p226（2026-11-03，业主批准动禁改区 · FC-27）：`conductor.closing` 的
+    # summary 压缩（269→234 字符）—— 那一句进 M 的 `tools_lines`，所以 M 的提示词变了。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p226", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p226（2026-11-03 · 业主批准动禁改区）：conductor.closing 的 summary 压缩（269→234 字符），保留 m_says_done / can_close / closable 的分工与 can_close=None 不是通过；这一句进 M 的 tools_lines，facts 键集仍 15 格（键名与条数一格未动）"}
 
 )
 

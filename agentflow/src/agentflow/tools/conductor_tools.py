@@ -1200,7 +1200,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）；名单在论文段里逐格写着，这里不重抄。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`m_says_done` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』；`can_close` 是机器口径（`bool | None`，`None` = 没接线，不许读成通过）。另回 `review_acceptance`：内容级验收五条 + 辅助读数；给 `cap_usd` 才判成本上限。",
+    "只读：跑收工门（八格）；名单见论文段。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`m_says_done` 是你的判断，不交 ⇒ `false`；`can_close` 是机器口径（`bool | None`，`can_close=None` 不是通过）；`closable` 是给调用方的布尔。另回 `review_acceptance`：内容级验收五条 + 辅助读数；`cap_usd` 判成本上限。",
     {
         "type": "object",
         "properties": {

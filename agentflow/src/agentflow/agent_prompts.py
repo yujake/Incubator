@@ -2870,7 +2870,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    重冻（11 个角色各一行版本号 + D / M 的两段正文）+ `docs/ROLE-GUIDE.md` 重生成。
 #: ③ 已知待办（与 p220 / p221 / p222 同一句）：`tests/fixtures/prompt_cache_warm.json`
 #:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
-PROMPT_VERSION = "p225"
+#: `p226`（2026-11-03，业主批准动禁改区 · FC-27）：`conductor.closing` 的 summary 压缩
+#: 269 → 234 字符（cohort 总量 6464 / 基线 8631 = 74.89%，仍 ≤ 75%）。压缩后的那一句
+#: 保留三个名字的分工（`m_says_done` = M 的判断 / `can_close` = 机器口径 / `closable` =
+#: 给调用方的布尔）与「`can_close=None` 不是通过」；只动这一条 summary，别的 summary 一格未动。
+#:
+#: ① 这一句进 M 的 `tools_lines` ⇒ 只有 M 那一格提示词换值（重算读数：变化的格 = ['M']；
+#:    A–L / V 十格逐字同值）。② 连带：`tests/test_agent_prompts.py` 的十一格表（M 一格）
+#:    + `_FROZEN_PROMPT_VERSION` 抬到 p226；`tests/test_prompt_stability.py` 的
+#:    `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格、键名一格未动）；
+#:    `tests/golden/tool_surface_snapshot.json` 与 `agent_surface_snapshot.json` 重冻；
+#:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
+PROMPT_VERSION = "p226"
 
 
 
