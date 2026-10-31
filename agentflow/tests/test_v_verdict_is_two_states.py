@@ -16,8 +16,11 @@ A. V 自己的结论只剩两态：成立 / 有毛病。
    reason 写明"它没有找到缺陷 ⇒ 按没毛病"。
    与秘书那一条不冲突：秘书判的是回复的措辞，V 这一侧是结论词，只有两态
    —— 两张词表、两条纪律。
-B. 历史台账行里 verdict="看不出来" 只作兼容读：读得出、不计入"连续成立"的票、
-   不改写历史行。
+B. 历史台账行里 verdict="看不出来" 按「成立（没找到缺陷）」读，并且计一票
+   （2026-11-02 追加裁定，业主逐字：「这一档连历史兼容读也不留」）。
+   改前它是"不算票、也不清零"—— 那是一种宽容（老行既不算通过、也不算失败）；
+   现在它算通过。这是放宽方向的改动，来自业主要求「不留该档」，
+   它会让老工作区的连续数变高（本文件 s3：2 → 3）。
 C. specs/v.py 的 policy 第一段写成两态并逐字写那两句（这一份的 s4 钉渲染面）。
 D. 三转连判机制不变：clean 仍要求 verdict=成立；有毛病仍立刻终止并打回 F。
 ```
@@ -28,7 +31,7 @@ D. 三转连判机制不变：clean 仍要求 verdict=成立；有毛病仍立�
 |---|---|---|
 | s1 | 模型回「看不出来」⇒ 台账那一行 verdict=成立（不是有毛病、也不是第三态），why 写明为什么这么收 | `parse_verdict` 认三态 ⇒ 原样落成 `看不出来` |
 | s2 | 模型回「我无法判断这份证明对不对」⇒ 同样落成成立（同一族措辞、同一处置） | 词表外 ⇒ 抛 `VerificationError`（"没查成"），一行都不落 |
-| s3 | 手写的 `verdict="看不出来"` 历史行：读得出、不投连续成立那一票、也不清零；`review_standing` 的 `why` 说得清"这是历史行" | 三态词表下它是"一种结论 ⇒ 清零、落成 rejected"，读的人看不到"历史"两个字 |
+| s3 | 手写的 `verdict="看不出来"` 历史行：读得出（盘上那四个字不动）、按成立读、投连续成立那一票；`review_standing` 读成 `signed` | 改前它"不算票、也不清零" ⇒ 同一条台账数出 2 而不是 3，且读数停在 `rejected` + 一句"历史行" |
 | s4 | 渲染后的 V 提示词（system + 冷启动，含技能索引摘要）里只剩两态那两句；`看不出来` 只许出现在"不存在……这一档"那句否定式里 | 两处都写着三态 / 让模型"信息不足就写看不出来" |
 | s5 | `verify.verify_proof` 给模型看的那段声明文字（`summary` ＋ `returns`，`returns` 会拼进 function-calling 的 description）里不再出现 `看不出来`；而"`checked=False` ⇒ 没查成、不落台账行"这条约束一字不许丢 | `returns` 里那句「绝不拿「看不出来」冒充「审过了」」指着已经取消的那一档；模型读到的是一档它产不出的结论 |
 
@@ -209,16 +212,17 @@ def _legacy_row(root: pathlib.Path, *, verdict: str = "看不出来",
     return legacy
 
 
-def test_s3_a_historical_undetermined_row_is_read_only_compat(tmp_path):
-    """s3：历史行（`verdict="看不出来"`）只作兼容读 —— 读得出、不算票、不清零、不改写。
+def test_s3_a_historical_row_reads_as_holds_and_counts_as_a_vote(tmp_path):
+    """s3：历史行（`verdict="看不出来"`）按「成立」读、并且计一票（2026-11-02 追加裁定）。
 
-    三半，缺一半这条判据就是假绿：
+    业主本轮逐字：「这一档连历史兼容读也不留」。于是读侧对它只剩一种读法 ——
+    按「成立（没找到缺陷）」读，并且投「连续成立」那一票。三半，缺一半这条判据就是假绿：
     ① 读得出：台账里三行都在，历史行那四个字原样还在盘上（不许被"顺手迁移"改掉）；
-    ② 不算票、也不清零：`成立, 成立, 看不出来` 的连续次数是 2 —— 比 3 少
-       （它没投那一票），也不是 0（它没有把前两票作废）。这一档与历史 `unsure`
-       的处理逐字同源（`_hold_run_lengths`：不清零、也不计入）；
-    ③ `review_standing` 的 `why` 说得清"这是历史台账里的历史行"，而不是把这一格说成
-       "复核过、结论不是成立"。
+    ② 算票：`成立, 成立, 看不出来` 的连续次数是 3 —— 改前是 2（那一档"不清零、也
+       不计入"）。这是放宽方向的改动（老行从"既不算通过也不算失败"变成"算通过"），
+       来自业主要求「不留该档」；
+    ③ 第 3 位跟着它走：`row_signable` 为真、`bit3_payload(streak=3)` 非空、
+       `review_standing` 读成 `signed`（改前是 `rejected` + 一句"历史行"）。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -238,29 +242,34 @@ def test_s3_a_historical_undetermined_row_is_read_only_compat(tmp_path):
     text = VR.verification_ledger_path(root, SID).read_text(encoding="utf-8")
     assert '"verdict": "看不出来"' in text, "历史行被改写了（台账是追加式的，不许迁移）"
 
-    # ② 不算票、也不清零
+    # ② 算票：3（改前 2）
     holds = VR.consecutive_holds(root, SID)
     assert holds["checked"] is True, holds
-    assert holds["streak"] == 2, (
-        f"历史行把票数改了（{holds['streak']}）：3 = 它被算了一票；0 = 它把前两票清零了")
+    assert holds["streak"] == 3, (
+        f"历史行没有计票（{holds['streak']}）：3 = 按成立读并算一票；"
+        "2 = 它还留着改前那条『不算票、也不清零』的宽容读法")
     assert holds["rows"] == 3, holds
-    assert VR.row_signable(legacy) is False, "历史行被判成够格签第 3 位"
-    assert VR.bit3_payload(legacy) == {}, VR.bit3_payload(legacy)
+    assert holds["streak_ok"] is True, holds
 
-    # ③ 读数说得清"这是历史行"
+    # ③ 第 3 位：这一行够格签，凭据上写的是读出来的结论（成立）
+    assert VR.row_signable(legacy) is True, "历史行仍被判成不够格签第 3 位"
+    payload = VR.bit3_payload(legacy, streak=3)
+    assert payload.get("reviewed") is True, payload
+    assert payload["reviewed_by"]["verdict"] == "成立", payload
+    assert VR.bit3_payload(legacy) == {}, "不给连续读数时它签得住 ⇒ 连续闸被绕开了"
+
+    # 读数：最近那一签就是它 ⇒ signed（不是改前那个 rejected + "历史行"）
     standing = VR.review_standing(root, statement_id=SID, proof_text=PROOF)
-    assert standing["state"] == "rejected", standing
-    why = str(standing.get("why") or "")
-    assert "历史" in why, why
-    assert "看不出来" in why, why
-    assert "只作历史兼容读" in why and "不算票" in why, why
-    assert standing["streak"] == 2, standing
+    assert standing["state"] == "signed", standing
+    assert standing["verdict"] == "成立", standing
+    assert standing["streak"] == 3, standing
+    assert "历史兼容读" not in str(standing.get("why") or ""), standing["why"]
 
-    # 补：历史行夹在两票中间时同样透明（clean, legacy, clean = 2 票；再加一票 = 3）
+    # 补：它后面再来一票就是第 4 票（改前停在 3）
     VR.record_verification(root, statement_id=SID, proof_text=PROOF,
                            verdict={"verdict": "成立", "findings": []},
                            verifier="agent-V")
-    assert VR.consecutive_holds(root, SID)["streak"] == 3, VR.consecutive_holds(root, SID)
+    assert VR.consecutive_holds(root, SID)["streak"] == 4, VR.consecutive_holds(root, SID)
 
 
 # ------------------------------------------------------------------ s4

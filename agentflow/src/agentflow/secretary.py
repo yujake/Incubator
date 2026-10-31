@@ -243,7 +243,11 @@ PROOF_ROUTES_KEY = "_proof_routes"
 #: "我没逐行验证"——统统算「有缺陷要指出」。模型若仍答那一格，`judge()` 判它
 #: "不在词表里 ⇒ 不采信" ⇒ `checked=False`（"没查成"，见 :meth:`Secretary.judge_v_reply`），
 #: 不会被当成第三种结论，也不会在台账上留下一个 `判不了` 的判词。
-#: 历史台账行里出现过的 `unsure` 只作历史兼容读（`verifications.secretary_axis`）。
+#: 2026-11-02（追加裁定：「这一档连历史兼容读也不留」）：老台账行上那个轴名也不再是
+#: 一格 —— `verifications.SECRETARY_JUDGE_HISTORICAL_AXES` 与 `secretary_axis` 的兼容支
+#: 一起删了，老行上那个值读出来是空轴（"这一行没有轴"）；`_hold_run_lengths` 里专门为它
+#: 写的那条分支也删了（那一支的结果与"轴读不出来"那条通用纪律逐字相同，删掉它等于删掉
+#: "承认那一档存在"的最后一处落点）。
 V_REPLY_CLEAN = "没问题"
 V_REPLY_FAULT = "有缺陷要指出"
 

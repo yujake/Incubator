@@ -28,14 +28,25 @@
 结论、逐条 findings（每条带步号）、用了哪个只读面、验证者实例名；编号 `v-0001…` 按文件内顺序
 发（与手稿编号、台账 id 同一套做法）。
 ## V 的结论只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，『看不出来错』就是
-## 没毛病，没有『看不出来对』」）
+## 没毛病，没有『看不出来对』」；2026-11-02 追加裁定：这一档连历史兼容读也不留）
 `VERDICTS` 只有 `有毛病` / `成立` 两格，"检查器自己没跑成"（模型输出不是合法 JSON、字段缺、
 取值不在词表里）不是这两格之一 —— `record()` 在没有合法结论时抛 `VerificationError`，绝不写
 一行"没查成"来冒充"审过了"。模型若回「看不出来 / 判不了 / 我无法判断」这一族措辞，一律按
 `成立` 收（:func:`parse_verdict` 的折档；`why` 逐字写明"它没有找到缺陷 ⇒ 按没毛病"）：
 判「成立」不要求 V 证明它正确，只要求它没找到缺陷；「看不出错」就是没毛病，而"看不出对"
-这回事不存在。历史台账行里出现过 `看不出来`（:data:`LEGACY_VERDICTS`）只作兼容读：读得出、
-不计入"连续成立"的票、也不改写历史行。
+这回事不存在。
+
+### 2026-11-02：那一档的历史兼容读也取消了（业主原话：「这一档连历史兼容读也不留」）
+改前读侧给老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）留了一条兼容支：「读得出、不计入
+"连续成立"的票、也不清零」。那是宽容方向的读法 —— 老行既不算通过、也不算失败，等于
+给一档已经取消的结论留了一个永久的豁免位。现在它只剩一种读法：按「成立（没找到缺陷）」
+读，并且投「连续成立」那一票（唯一读口 :func:`read_verdict`，`row_signable` /
+`_hold_run_lengths` / `review_standing` / `bit3_payload` 全部经它）。
+* 这是放宽方向的变化，来自业主要求「不留该档」；它会让老工作区的连续数变高
+  （实测：`projects/t1s/verifications/000007.jsonl` 只有一行历史行，改前 `0` 次、改后 `1` 次；
+  合成台账 `成立, 看不出来, 成立` 改前数出 2、改后数出 3）。
+* 台账文件不改写（追加式，迁移要重写历史行 ⇒ 不做）：盘上那四个字仍是原始读数，
+  只是读它的人按两态读。
 签"审过"（§3.21 五）：`verdict="成立"` 且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，
 `bit3_payload()` 给出五元位第 3 位那份读数（`reviewed=True` + 凭据）。
 ## 「复核过的是哪一份」怎么记（业主 2026-10-22 口径，治那处结构性断链）
@@ -103,10 +114,19 @@ VERIFICATIONS_DIR = "verifications"
 #: 与秘书那一条不冲突（两张词表、两条纪律）：秘书判的是回复的措辞
 #: （「我没逐行验证」这类要被判 fault 打回），V 这一侧是结论词，只有两态。
 VERDICTS: tuple[str, ...] = ("有毛病", "成立")
-#: 历史台账行里出现过的那一格（只作兼容读）：读得出、不计入"连续成立"的票、
-#: 也不清零、更不改写历史行（台账是追加式文件，迁移要重写历史行 ⇒ 不做）。
+#: 已经取消的那一档的历史值（业主 2026-11-02 追加裁定：「这一档连历史兼容读也不留」）。
+#:
+#: 业主 2026-11-01 裁定逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有
+#: 『看不出来对』」。于是这一档不再是 V 的一种结论；2026-11-02 又取消了读侧给它的
+#: 兼容支（那一条是宽容方向的：老行既不算通过也不算失败）。现在这个常量只剩两个用处：
+#: - 读侧的名字：:func:`read_verdict` 把老行上的这个值读成 `成立` —— 它按两态里那一格
+#:   算票、也能签第 3 位（改前是"不算票、也不清零"，见模块文档那一节）；
+#: - 对拍点：`schema.REVIEW_VERDICTS`（另一根轴，FC-27 禁改区）与
+#:   `exhaustionreport.VERDICT_UNKNOWN`（会审的机械读数）里还写着同一个词，读侧要对得上
+#:   （`tests/test_the_four_verdict_word_lists_agree.py`）。
+#:
 #: 写侧永远产生不出它：`parse_verdict` 把这一族措辞折成 `成立`，`record_verification`
-#: 因此写不出第三态。
+#: 因此写不出第三态。台账不改写（追加式文件，迁移要重写历史行 ⇒ 不做）。
 LEGACY_VERDICTS: tuple[str, ...] = ("看不出来",)
 #: `parse_verdict` 把哪些措辞折成 `成立`（含 `LEGACY_VERDICTS` 那一格）。
 #:
@@ -1004,16 +1024,14 @@ SECRETARY_JUDGE_KEY = "secretary_judge"
 #:
 #: 为什么没有第三格：业主逐字「不可能有判不了…只要不是完全没毛病都叫有毛病」。写侧
 #: （`record_verification`）只收这两格 —— 传别的值一律落成空轴（"这一行没有轴" =
-#: 这一趟没查成），于是"新判定产生 unsure"在结构上不可能发生。
-SECRETARY_JUDGE_AXES: tuple[str, ...] = ("clean", "fault")
-
-#: 历史行里出现过、只作历史兼容读的轴名（2026-10-30 之前写下的行）。
+#: 这一趟没查成），于是"新判定产生第三档"在结构上不可能发生。
 #:
-#: `unsure` = 判不了：那一版把它当第三档，连续计数里"不清零也不计入"。现在它不再是
-#: 一种结论（新判定不产生它），但老台账必须读得出：`secretary_axis` 认这一格，
-#: `_hold_run_lengths` 对它沿用旧口径（不计入、不清零）。它不在写侧词表里
-#: （`record_verification` 会把这一格落成空轴）。
-SECRETARY_JUDGE_HISTORICAL_AXES: tuple[str, ...] = ("unsure",)
+#: 2026-11-02（追加裁定：那一档连历史兼容读也不留）：改前这里还有第二个常量
+#: `SECRETARY_JUDGE_HISTORICAL_AXES = ("unsure",)` —— 老台账行上那个轴名"读得出、
+#: 不计票、也不清零"。那个常量、:func:`secretary_axis` 的兼容支与
+#: :func:`_hold_run_lengths` 里对应的一支一起删了：老行上的那个轴名现在读出来是
+#: 空轴（"这一行没有轴"），不再有任何一格替它留位置。
+SECRETARY_JUDGE_AXES: tuple[str, ...] = ("clean", "fault")
 
 #: 多证明模型的落点（业主 2026-10-22：不加 schema 字段）。
 #:
@@ -1331,9 +1349,9 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     ## `secretary_judge` / `sign_issuance`：业主 2026-10-29 的 B 段与 A 段
     `secretary_judge` 是秘书对这段回复的两档语义判定（`clean` / `fault`），原样落到台账
     那一行的 `SECRETARY_JUDGE_KEY` 那一格 —— 连续计数读它（`fault` 清零、`clean` 计入；
-    没查成的那一行两样都不做）。写侧只收这两格（`:data:`SECRETARY_JUDGE_AXES``）：历史
-    那一格（`unsure`，只作历史兼容读，见 `SECRETARY_JUDGE_HISTORICAL_AXES`）写不进来，
-    会落成空轴。不给就一个字节都不写（历史行与"没问过秘书"的那一批因此逐字节不变，
+    没查成的那一行两样都不做）。写侧只收这两格（`:data:`SECRETARY_JUDGE_AXES``）：词表外的
+    轴（包括 2026-10-30 之前那个已取消的轴名）一律落成空轴，写不进来。
+    不给就一个字节都不写（历史行与"没问过秘书"的那一批因此逐字节不变，
     读侧按"没判过"处理，也就是计入）。
     `sign_issuance` 是秘书"发不发这一签"的决定，原样交给 :func:`sign_statement` 当闸：
     `checked=False`（没缝 / 超时 / 台账读不成 / 没装配）⇒ 不翻位。
@@ -1428,9 +1446,9 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if isinstance(secretary_judge, Mapping):
         axis = str(secretary_judge.get("axis") or "").strip()
         # 写侧只有两格（业主 2026-10-30 第三次裁定）：词表外的取值一律落成空轴
-        # （"这一行没有轴" = 没查成），不折成任何一档结论；历史那一格（`unsure`）
-        # 写不进来 —— 它只在 `SECRETARY_JUDGE_HISTORICAL_AXES` 里（只作历史兼容读）
-        # 被 `secretary_axis` 读出去，于是"新判定产生 unsure"在这里被挡住。
+        # （"这一行没有轴"），不折成任何一档结论。2026-11-02 起连老行上那个已取消的
+        # 轴名也不再有特殊待遇：它不在 `SECRETARY_JUDGE_AXES` 里 ⇒ 落成空轴，
+        # 读侧（`secretary_axis`）看它跟"没有这一格"一样。
         row[SECRETARY_JUDGE_KEY] = {
             "axis": axis if axis in SECRETARY_JUDGE_AXES else "",
             "checked": bool(secretary_judge.get("checked")),
@@ -1736,11 +1754,42 @@ def signing_gate_problem(row: Mapping[str, Any]) -> str:
     return str(gate.get("problem") or "").strip()
 
 
+def read_verdict(row: Mapping[str, Any]) -> str:
+    """这一行台账的结论，按今天的两态读（读侧唯一读口；2026-11-02）。
+
+    ## 它只做一件事：把已取消的那一档折进 `成立`
+    老行上可能写着 `看不出来`（:data:`LEGACY_VERDICTS`，2026-11-01 之前写侧才产得出它）。
+    业主 2026-11-02 的追加裁定是「这一档连历史兼容读也不留」，于是读侧对它只剩一种读法：
+    按「成立（没找到缺陷）」读。业主 2026-11-01 的原话给了理由 ——「『看不出来错』就是
+    没毛病，没有『看不出来对』」：V 没找到缺陷，就是"没毛病"那一格。
+
+    ## 为什么单放一个函数（而不是让每处自己判一次）
+    改前这一档在读侧有四处各自的处置（`row_signable` 一律 False / `_hold_run_lengths`
+    "不清零也不计入" / `review_standing` 走 `_legacy_standing` 读成 `rejected` /
+    `bit3_payload` 签不了）。四处各自写一遍"历史行怎么读"，于是同一行在四个读数上
+    长得不一样 —— 而那正是 2026-11-02 要清掉的东西。现在它们都问这一个函数。
+
+    ## 这是放宽方向的改动（留痕）
+    改前"不计票"是一种宽容：老行既不算通过、也不算失败。现在它算通过 ⇒ 老工作区的
+    连续数会变高（实测 `projects/t1s/verifications/000007.jsonl`：0 → 1；合成台账
+    `成立, 看不出来, 成立`：2 → 3）。这一条来自业主「不留该档」的明文要求，
+    不是顺手放宽的（见模块文档同名那一节与 :func:`_hold_run_lengths`）。
+
+    ## 不改写历史行
+    台账是追加式的：盘上那四个字仍是原始读数（`list_verifications` 原样返回），
+    本函数只在读结论时折档。想复核"它当年写的到底是什么"的人仍然读得到。
+    """
+    got = str(row.get("verdict") or "")
+    return "成立" if got in LEGACY_VERDICTS else got
+
+
 def row_signable(row: Mapping[str, Any]) -> bool:
     """行局部那一半：这一行自己够不够格签五元位第 3 位（`成立` 且没有未解决的 error）。
 
-    历史行（`verdict` 落在 :data:`LEGACY_VERDICTS`，例如 2026-11-01 之前写下的
-    `看不出来`）在这里一律 False：那一档不是"成立"，而且它现在也不存在（只作兼容读）。
+    结论按 :func:`read_verdict` 读（两态的唯一读口）：老行上的 `看不出来`
+    （:data:`LEGACY_VERDICTS`）读成 `成立` ⇒ 它跟"V 当年判了成立"同形，算一票、也能签
+    第 3 位。改前这里对那一档一律 False（"那一档不是成立，只作兼容读"）——
+    2026-11-02 起取消：那一档连历史兼容读也不留，读它只剩两态这一种读法。
 
     再加一条（业主 2026-10-26）：引用核实里只要有一条挡住签字的档（`stronger` /
     `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
@@ -1758,7 +1807,7 @@ def row_signable(row: Mapping[str, Any]) -> bool:
     本函数 且 调用方递进来的连续读数。函数名刻意不同，免得读的人以为
     `signs_bit3(row)` 少了什么参数只是"默认值不同"。
     """
-    if str(row.get("verdict") or "") != "成立":
+    if read_verdict(row) != "成立":
         return False
     if int(row.get("unresolved_errors") or 0) != 0:
         return False
@@ -1770,20 +1819,27 @@ def row_signable(row: Mapping[str, Any]) -> bool:
 def secretary_axis(row: Mapping[str, Any]) -> str:
     """这一行台账上的秘书判定轴（写侧 `SECRETARY_JUDGE_AXES`；没有这一格 ⇒ 空串）。
 
-    两个世界都在这里读：写侧两格（`clean` / `fault`）与历史行里那一格
-    （`SECRETARY_JUDGE_HISTORICAL_AXES`，只作历史兼容读 —— 2026-10-30 之前写下的
-    行里出现过 `unsure`；新判定不再产生它，`record_verification` 会把它落成空轴）。
+    只有写侧那两格（`clean` / `fault`）；其余一律空串。
+    空串 = "这一行没有轴"（老行没有这一格 / 这一趟没查成 / 秘书不在场 / 老行上那个
+    已取消的轴名）。读侧怎么处置它，由调用方那一条纪律决定：:func:`_hold_run_lengths`
+    对"有这一格、但轴读不出来"的行是既不算票、也不清零（与"没有这一格"刻意分开 ——
+    读不出轴 ≠ 判过 clean，`tests/test_v_sign_gate_streak.py` 的 z2(c) 钉着这条 fail-closed）。
 
-    空串 = "这一行没有轴"（历史行没有这一格 / 这一趟没查成 / 秘书不在场）。读侧按
-    "计入"处理 —— 那是这条口径上线之前的行为，逐字不变。取了词表外的值也归空串：
-    秘书返回 "Clean"（大小写）/ 半截词这类写法时，不许它把一条有缺陷的签静默算成
-    clean —— 词表外的结论一律不采信（`Secretary.judge` 同一条纪律）。
+    2026-11-02（追加裁定：那一档连历史兼容读也不留）：改前这里还认一个历史轴名
+    （`SECRETARY_JUDGE_HISTORICAL_AXES = ("unsure",)`，2026-10-30 之前写下的行里有它）。
+    那个常量与这一支一起删了 —— 老行上的那个值现在读出来是空轴，"那一档"在读侧不再有
+    任何自己的位置：`_hold_run_lengths` 里也没有它的分支了（改前那条分支的结果与
+    "轴读不出来"那条通用纪律逐字相同，删掉它等于删掉"承认那一档存在"的最后一行字）。
+
+    取了词表外的值也归空串。那条保护落在写侧：`Secretary.judge` 对词表外的答法判
+    `checked=False`（没查成），于是读侧看到的是"问过、没判成"那一档（既不算票也不清零），
+    而不是"轴读不出来但算过了"。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
     if not isinstance(got, Mapping):
         return ""
     axis = str(got.get("axis") or "").strip()
-    return axis if axis in SECRETARY_JUDGE_AXES + SECRETARY_JUDGE_HISTORICAL_AXES else ""
+    return axis if axis in SECRETARY_JUDGE_AXES else ""
 
 
 def secretary_judged(row: Mapping[str, Any]) -> bool:
@@ -1803,10 +1859,11 @@ def secretary_judged(row: Mapping[str, Any]) -> bool:
 def secretary_unjudged(row: Mapping[str, Any]) -> bool:
     """这一行写着"问过秘书、没判成"（有那一格、但 `checked` 为假）。
 
-    与"没有那一格"（历史行 / 从没问过）刻意分开：前者是这一趟的框架失败（业主
-    2026-10-30 第三次裁定：没查成不是一种判定），后者按旧口径计入连续。两者在连续
-    计数里恰好都是"既不算票、也不清零"，但读数必须分得开 —— 否则"这一趟没查成"
-    会被读成"这一份还没判过"。
+    与"没有那一格"（从没问过 / 老行）刻意分开：前者是这一趟的框架失败（业主
+    2026-10-30 第三次裁定：没查成不是一种判定），它在连续计数里既不算票、也不清零；
+    后者按"没判过"计入连续（:func:`_hold_run_lengths`）。两者必须分得开 —— 否则
+    "这一趟没查成"会被读成"这一份还没判过"，而处置完全不同（前者等判定接上之后重签，
+    后者就是正常的第几票）。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
     if not isinstance(got, Mapping):
@@ -1880,9 +1937,10 @@ def signs_bit3(row: Mapping[str, Any], *, streak: Any = None) -> bool:
 def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any]:
     """把一行审校翻成五元位第 3 位那份读数（交给 `evidencebits.bits_of`）。
 
-    签不了（`有毛病` / 历史行里的 `看不出来`（:data:`LEGACY_VERDICTS`，只作兼容读） /
-    有未解决 error / 连续次数不够）⇒ 返回 `{}`
+    签不了（`有毛病` / 有未解决 error / 引用核实挡签 / 连续次数不够）⇒ 返回 `{}`
     （第 3 位保持空）—— 这不是"忘了写"，是"没签"。`streak` 与 :func:`signs_bit3` 同义。
+    老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）不在这张"签不了"的清单里：它按
+    :func:`read_verdict` 读成 `成立` ⇒ 只要连续次数够，它签得住（2026-11-02 追加裁定）。
 
     凭据里带 `proof_no` 与 `proof_sha256`（2026-10-22）：读侧要拿它们回答"位上说审过的
     那一份，还是不是现在这一份"（`evidencebits.bits_from_row` 与收工门的 R10 都读这两格）。
@@ -1896,7 +1954,10 @@ def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any
             "verifier": str(row.get("verifier") or "V"),
             "verification_id": str(row.get("verification_id") or ""),
             "round": row.get("round"),
-            "verdict": str(row.get("verdict") or ""),
+            #: 凭据上记的是按两态读出来的结论（:func:`read_verdict`）：老行上的
+            #: `看不出来` 在这里写 `成立` —— 凭据说的是"这一签凭的是哪一格判词"，
+            #: 不是"当年那四个字逐字长什么样"（逐字的原话在台账文件里）。
+            "verdict": read_verdict(row),
             "evidence": f"verifications/{sid}.jsonl#"
                         f"{row.get('verification_id')}",
             "findings": list(row.get("findings") or []),
@@ -1994,18 +2055,25 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     （一批台账里哪几行签住了）三处都调它。三处各写一遍合计，只会让三处对同一批行
     给出三个数 —— 而"位上说签了、台账只签一次"正是这种分家的形态。
 
-    ## 什么会清零、什么透明（业主 2026-10-29 的三档口径 + 2026-10-30 第三次裁定
-    ## + 2026-11-01 的两态结论）
+    ## 什么会清零、什么被读成"这一票算上了"（2026-10-29 的 A 段 + 2026-10-30 第三次裁定
+    ## + 2026-11-01 的两态结论 + 2026-11-02 的追加裁定）
     - `proof_sha256` 变了 ⇒ 清零（F 改稿之后，之前那几次审的不是这一份）；
     - 行局部签不住（`有毛病` / 未解决 error / 引用挡签）⇒ 清零；
     - 秘书判 `fault`（有缺陷要指出）⇒ 清零；
     - 秘书没判成（`checked=False`，不是一种判定）⇒ 不清零、也不计入；
-    - 历史行里的 `unsure`（2026-10-30 之前写下的）只作历史兼容读：不清零、也不计入 ——
-      这一行的连续值 = 前一行的连续值，于是 `clean, unsure, clean` 数出来是 2 而不是 3；
-    - 历史行里的 `verdict="看不出来"`（2026-11-01 之前写下的那一档，:data:`LEGACY_VERDICTS`）
-      同样只作兼容读：不清零、也不计入（`clean, 看不出来, clean` 数出来是 2）。它不是
-      清零那一档：清零等于拿一条按旧口径写下的历史行去作废已经发生的审校，而这一格
-      只该回答"现在这一份正文上连续几次没找到缺陷"。
+    - 老行上的 `看不出来`（:data:`LEGACY_VERDICTS`，2026-11-01 之前写下的那一档）⇒
+      按 `成立` 读、并且投这一票（:func:`read_verdict`）：`成立, 看不出来, 成立` 数出来
+      是 3。改前这一档是"不清零、也不计入"（数出来 2）—— 2026-11-02 业主追加裁定
+      「这一档连历史兼容读也不留」，于是那一条宽容的读法删掉了。这是放宽方向的改动，
+      它会让老工作区的连续数变高（实测 `projects/t1s/verifications/000007.jsonl`：
+      0 → 1），理由见模块文档同名那一节；
+    - 秘书那一格读不出轴（老行上那个已取消的轴名 / 词表外的写法）⇒ 既不算票、也不清零。
+      这一条不是替已取消的那一档留的豁免位，而是一条与它无关的 fail-closed 纪律：
+      "这一行的轴读不出来"与"这一趟判过了 clean"必须分得开，否则一次读侧故障就会把一条
+      `fault` 静默算成一票（`tests/test_v_sign_gate_streak.py` 的 z2(c) 钉着这件事）。
+      2026-11-02 删掉的是针对 `unsure` 那一个值的分支：老行上那个轴名现在不再被认出来
+      （它落进这一条通用纪律），所以它对读侧的影响是零 —— 改前那一条分支的结果与它一模一样，
+      删的是一条只为"承认那一档存在"而写的分支。
 
     调用方负责先把行分组（同一命题 + 同一证明号）：一条命题的两份证明各自数各自的，
     `#p1` 的三票不许替 `#p2` 数（不许借光）。
@@ -2019,19 +2087,16 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
             run = 0
             sha = one
         axis = secretary_axis(row)
-        if str(row.get("verdict") or "") in LEGACY_VERDICTS:
-            # 历史行（verdict="看不出来"，2026-11-01 之前的写侧才产得出它）：只作兼容读
-            # ⇒ 不清零、也不计入。这一支排在 fault 之前：历史行的秘书那一格本来就不存在。
-            pass
-        elif axis == "fault":
+        if axis == "fault":
             run = 0
-        elif axis == "unsure":
-            # 历史行（只作历史兼容读）：不清零、也不计入。
-            pass
         elif isinstance(row.get(SECRETARY_JUDGE_KEY), Mapping) and (
                 not secretary_judged(row) or not axis):
-            # 问过秘书、没查成（`checked=False`）/ 轴读不出来：那不是一种判定 ⇒
-            # 同样既不攒票也不作废（fail-closed：词表外的轴不许静默算成 clean）。
+            # 问过秘书、没查成（`checked=False`）/ 轴读不出来（老行上那个已取消的轴名、
+            # 词表外的写法）：那不是一种判定 ⇒ 既不攒票也不作废。
+            #
+            # 2026-11-02 删掉的是这一支上面那一条只为 `unsure` 写的分支（它当年写的是
+            # "历史行：不清零、也不计入"）。删了之后，老行上那个轴名落在这里 —— 结果与
+            # 改前逐字相同，差别只在"它现在是一条通用纪律的结果，不是那一档的豁免位"。
             pass
         elif not row_signable(row):
             run = 0
@@ -2055,11 +2120,11 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     就是这个函数的返回值，两处门槛漂了之后"够不够"会给出两个数）。
 
     这就是「连续 3 次没问题」那个计数：从 `verifications/<命题号>.jsonl` 的尾部按台账
-    行序往回数，同一 `proof_sha256`、连续 `verdict="成立"` 的行数；任何一行的结论不是
-    「成立」、或者 sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
-    秘书没查成的那一行不清零也不计入；历史行里那一格（只作历史兼容读）同样如此
-    （见 :func:`_hold_run_lengths`）——包括 2026-11-01 之前写下的 `verdict="看不出来"`
-    （:data:`LEGACY_VERDICTS`：读得出、不算票、不清零）。
+    行序往回数，同一 `proof_sha256`、连续判「成立」的行数；任何一行判「有毛病」、或者
+    sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
+    秘书没查成的那一行不清零也不计入；老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）
+    按成立读、并且算一票（2026-11-02：那一档连历史兼容读也不留，见
+    :func:`_hold_run_lengths` 与本模块 :func:`read_verdict`）。
 
     ## 三态（"没查成"不是"0 次"）
     | 结局 | `checked` | `streak` |
@@ -2517,13 +2582,16 @@ def _superseded_reading(row: Mapping[str, Any], *, streak: Any = None) -> dict[s
     但判定只看最近那一签（:func:`review_standing`）。字段刻意只留定位用的几格，
     正文与 findings 不回放 —— 那些在台账文件里逐字可查，读数层不复制历史。
 
+    `verdict` 按两态读（:func:`read_verdict`）：老行上的 `看不出来` 在这里报 `成立`
+    （2026-11-02：那一档连历史兼容读也不留）；逐字原话仍去台账文件里读。
+
     `signed_bit3` 是那一签当年的读数：`streak` 由调用方按"到这一行为止的连续次数"
     递进来（:func:`_hold_run_lengths` 的分组读数）——旧签也要过同一道连续闸，
     否则"当年签住了"会把一条只有 1 票的旧签说成签过。
     """
     return {
         "verification_id": str(row.get("verification_id") or ""),
-        "verdict": str(row.get("verdict") or ""),
+        "verdict": read_verdict(row),
         "round": row.get("round"),
         "at": str(row.get("at") or ""),
         "proof_no": proof_no_of(row),
@@ -2531,27 +2599,6 @@ def _superseded_reading(row: Mapping[str, Any], *, streak: Any = None) -> dict[s
         "signed_bit3": signs_bit3(row, streak=streak),
         "unresolved_errors": int(row.get("unresolved_errors") or 0),
         "why": str(row.get("why") or "")[:200],
-    }
-
-
-def _legacy_standing(*, sid: str, no: int, covering: bool, verification_id: str,
-                     verdict: str, line_why: str) -> dict[str, Any]:
-    """历史行（`verdict` 落在 :data:`LEGACY_VERDICTS`）的第 3 位读数（`review_standing` 的兼容支）。
-
-    业主 2026-11-01 的两态裁定之后，`看不出来` 不再是一种结论；但 2026-11-01 之前写下的
-    台账行里出现过它，而"最近一签"可能正是那样一行。三件事必须在这一句里说清（读的人据此
-    判断"要不要重签"，而不是"这一份没过"）：① 这是历史行、不是一次新判定；② 它既不投
-    "连续成立"那一票、也不清零；③ 第 3 位因此仍没翻（要签就按两态重签一次）。
-    `state` 沿用 `rejected`（六态词表是 R10 与收工门共读的，这一批不改它 —— 改词表是
-    另一根轴）；`in_sync` 照旧由"这一行盖的是不是现行正文"回答。
-    """
-    return {
-        "state": "rejected", "in_sync": bool(covering),
-        "why": (f"{proof_label(sid, no)} 最近一签 {verification_id} 是历史台账行："
-                f"verdict={verdict!r}（2026-11-01 之前的那一档）⇒ 只作历史兼容读："
-                "它读得出、但既不算票、也不清零（新判定只产生 `成立` / `有毛病` 两态，"
-                "不再产生这一档）。第 3 位因此仍没翻 —— 要签就按两态对现在这一份重签。"
-                f"（历史行自己写的理由：{line_why[:120]}）"),
     }
 
 
@@ -2589,8 +2636,11 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     :func:`_hold_run_lengths`（不重复读盘：这里的 `mine` 就是它要的那批行），
     行长与"哪一签算第几票"因此与 :func:`consecutive_holds` 逐字一致。
 
-    ## 历史行 `verdict="看不出来"` 怎么读
-    见 :func:`_legacy_standing`（业主 2026-11-01 的两态裁定：那一档只作兼容读）。
+    ## 历史行 `verdict="看不出来"` 怎么读（2026-11-02：这一档连历史兼容读也不留）
+    按 :func:`read_verdict` 读成 `成立` ⇒ 它走上面同一条路（同一份正文 ⇒ `signed` /
+    `holding`，并投"连续成立"那一票），没有"历史行"那一条支了。改前它读成 `rejected`
+    并附一句"只作兼容读：既不算票、也不清零"（宽容方向：老行既不算通过、也不算失败），
+    那一支（`_legacy_standing`）已整段删掉。
 
     ## 证明号认不出 ⇒ `unreadable`，不折成 `#p1`（2026-10-22 收尾）
     `proof_no` 问的是"要看哪一份证明"，所以没给（`None` / 空串）才是 canonical；给了但
@@ -2682,7 +2732,8 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "need": int(SIGN_STREAK_NEED),
         "streak_ok": bool(runs and runs[-1] >= SIGN_STREAK_NEED),
         "verification_id": str(chosen.get("verification_id") or ""),
-        "verdict": str(chosen.get("verdict") or ""),
+        #: 结论按两态读（:func:`read_verdict`）：老行上的 `看不出来` 在这里就是 `成立`。
+        "verdict": read_verdict(chosen),
         "round": chosen.get("round"),
         "unresolved_errors": int(chosen.get("unresolved_errors") or 0),
         #: 被这一签盖过去的旧签（仍可见、不参与判定）：按台账行序，逐条给 id / verdict /
@@ -2698,20 +2749,15 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: 成立、但秘书读出来它其实指出了缺陷"那一档。它不改六态词表（`state` 仍 `holding`，
         #: 因为 R10 与收工门共读那个词表），只让这件事在读数里说得出来 ——
         #: 否则读的人会把 `holding` 的"还差 3 次"当成"还没评够"，而实际是"被读出了缺陷"。
-        "secretary_axis": str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or ""),
-        "secretary_fault": (str((chosen.get(SECRETARY_JUDGE_KEY) or {}).get("axis") or "")
-                            == "fault"),
+        #: 2026-11-02 起这里是 :func:`secretary_axis` 的读法（只有 clean / fault 两格）：
+        #: 老行上那个已取消的轴名读出来是空串（"这一行没有轴"），不再在读数里冒充一格。
+        "secretary_axis": secretary_axis(chosen),
+        "secretary_fault": (secretary_axis(chosen) == "fault"),
         #: 这一转的秘书判定是"判过了"还是"没判成"（业主 2026-10-30）：读侧要拿它把
         #: "没查成"与"判过了"分开（见 :func:`secretary_judged` / :func:`secretary_unjudged`）。
         "secretary_judged": secretary_judged(chosen),
         "secretary_unjudged": secretary_unjudged(chosen),
     })
-    if str(out["verdict"]) in LEGACY_VERDICTS:
-        out.update(_legacy_standing(sid=sid, no=no, covering=bool(covering),
-                                    verification_id=str(out["verification_id"]),
-                                    verdict=str(out["verdict"]),
-                                    line_why=str(chosen.get("why") or "")))
-        return out
     if covering and signs_bit3(chosen, streak=chosen_run):
         out.update(state="signed", ok=True, in_sync=True,
                    why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）连续 "
@@ -2731,10 +2777,6 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                            "回复里其实指出了问题）—— 这一份要按缺陷处理，"
                            "别把「还差几次」当成「还没评够」"
                            if out.get("secretary_fault") else "")
-                        + ("；而这一行是历史台账里的 unsure —— 只作历史兼容读：既不算票、"
-                           "也不清零（新判定不再产生这一格）"
-                           if (str(out.get("secretary_axis") or "") == "unsure"
-                               and out.get("secretary_judged")) else "")
                         + ("；而这一转秘书没判成（checked=False：没查成，不是有毛病）"
                            "—— 这一签不发，等判定接上之后重签"
                            if out.get("secretary_unjudged") else "")))
@@ -2964,21 +3006,20 @@ def _statement_reading_why(*, sid: str, state: str, reviewed: bool,
         return (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
                 f"（rejected：{'、'.join(rejected)}）")
     if state == "holding":
-        # 2026-10-30（第三次裁定）：holding 里混着三种来路 —— "次数没到"（再送 V 判几转）、
-        # "这一转秘书没判成"（框架失败：没查成）与历史行里的 unsure（只作历史兼容读）。
-        # 读数必须先把它们分开，否则后两种会被读成第一种（"再判几次就好"）。
-        legacy = [str(e.get("label") or "") for e in entries
-                  if str(e.get("state") or "") == "holding"
-                  and e.get("secretary_axis") == "unsure"
-                  and e.get("secretary_judged")]
+        # 2026-10-30（第三次裁定）：holding 里混着两种来路 —— "次数没到"（再送 V 判几转）
+        # 与"这一转秘书没判成"（框架失败：没查成）。读数必须把它们分开，否则后者会被
+        # 读成前者（"再判几次就好"）。
+        #
+        # 2026-11-02 删掉了第三种来路：改前这里还单列"历史行里的 unsure（只作历史兼容读：
+        # 既不算票、也不清零）"。那一档连历史兼容读也不留之后，老行上那个轴名读出来是
+        # 空轴（:func:`secretary_axis`），它在连续计数里落进"轴读不出来"那条通用纪律
+        # （不计票、也不清零）—— 与"这一转秘书没判成"同一条处置，于是不再需要第三句。
         unjudged = [str(e.get("label") or "") for e in entries
                     if str(e.get("state") or "") == "holding"
                     and e.get("secretary_unjudged")]
         return (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
                 f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
                 "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）"
-                + (f"；其中 {'、'.join(legacy)} 是历史台账里的 unsure —— 只作历史兼容读："
-                   "既不算票、也不清零" if legacy else "")
                 + (f"；其中 {'、'.join(unjudged)} 是这一转秘书没判成（checked=False："
                    "没查成，不是有毛病）—— 那一档不发签，等判定接上之后重签"
                    if unjudged else ""))
@@ -3702,7 +3743,7 @@ def one_evidence_used_twice(documents: Iterable[Mapping[str, Any]],
 
 
 def selftest() -> int:
-    """最小自检：冷启动提示词只有对象、三态可判、签位条件、追加式编号。"""
+    """最小自检：冷启动提示词只有对象、两态可判、签位条件、追加式编号。"""
     import tempfile
 
     root = Path(tempfile.mkdtemp(prefix="verifications_selftest_"))
@@ -3722,7 +3763,7 @@ def selftest() -> int:
                    not (params & {"store", "conductor", "registry", "session_root"})))
     bad = parse_verdict('{"verdict": "有毛病", "defect_step": 2, "findings": '
                         '[{"level": "error", "step": 2, "kind": "无依据", "detail": "第 2 步"}]}')
-    checks.append(("三态解析", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
+    checks.append(("两态解析", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
     row = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=bad)
     # 编号宽度不许写死（2026-10-14 业主裁定：4 位 → 6 位）：发号点是
     # `next_verification_id` 的 `f"v-{S.format_id(...)}"`，所以断言也从
@@ -3751,7 +3792,18 @@ def selftest() -> int:
         unparsable = False
     except VerificationError:
         unparsable = True
-    checks.append(("没查成抛错（不冒充看不出来）", unparsable))
+    checks.append(("没查成抛错（不冒充审过了）", unparsable))
+    # 2026-11-02（业主：这一档连历史兼容读也不留）：老行上的那一格按 `成立` 读、能签、
+    # 而且算一票。三条一起判 —— 只判"读成成立"会漏掉"它在连续计数里仍被跳过"。
+    legacy = {"verdict": LEGACY_VERDICTS[0], "unresolved_errors": 0, "citation_checks": []}
+    checks.append(("老行上的已取消档：按成立读、且能签第 3 位",
+                   read_verdict(legacy) == "成立" and row_signable(legacy)))
+    checks.append(("连续计数：成立, 已取消档, 成立 是 3 票（改前是 2）",
+                   _hold_run_lengths([
+                       {"verdict": "成立", "proof_sha256": "x", "unresolved_errors": 0},
+                       dict(legacy, proof_sha256="x"),
+                       {"verdict": "成立", "proof_sha256": "x", "unresolved_errors": 0},
+                   ]) == [1, 2, 3]))
     for name, good_ in checks:
         print(f"  [{'PASS' if good_ else 'FAIL'}] {name}")
     return 0 if all(g for _, g in checks) else 1

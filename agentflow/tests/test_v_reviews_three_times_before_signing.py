@@ -565,8 +565,9 @@ LEGACY_AXIS = "unsure"
 #: 旧的三档描述。它不在本批写权里，所以扫描时显式排除并登记原因 —— 为了变绿去改
 #: 禁改区，等于把"判据变绿"换成"权限越界"。
 FC27_OUT_OF_SCOPE = ("tools/verify_tools.py",)
-#: 「只作历史兼容读」这句话的写法：判据按它认"这一处说明了它不是一种结论"。
-LEGACY_NOTE = "历史兼容读"
+#: 「只作历史兼容读」这句话的写法 —— 2026-11-02 起反向用：那一档连兼容读也不留，
+#: 所以判据要的是"每一处都写着它已经取消/已经删掉"，而不是"每一处都写着怎么兼容读它"。
+LEGACY_RETIRED_NOTES = ("已取消", "删了", "删掉", "不再")
 
 
 def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
@@ -606,7 +607,10 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     assert wording == [], (
         "连判的终局只剩「签 / 打回」两种，这几种措辞不许再出现：\n" + "\n".join(wording))
 
-    # ② `unsure`：全 `src/` 扫；每一处都必须在「只作历史兼容读」的语境里（FC-27 除外）。
+    # ② `unsure`：全 `src/` 扫。2026-11-02（业主：「这一档连历史兼容读也不留」）之后，
+    #    那一档连"兼容读"都不许有 —— 每一处都必须在"它已经取消/已经删掉"的语境里
+    #    （FC-27 除外）。改前这一条量的是"每一处都写着只作历史兼容读"；裁定变了，
+    #    量的方向跟着翻（不是放宽：改前允许"读得出、不计票"，现在连那句话都不许留）。
     every_py = {p.relative_to(src).as_posix(): p for p in sorted(src.rglob("*.py"))}
     assert "agent_v/core.py" in every_py and "tools/verify_tools.py" in every_py, sorted(every_py)
     unannotated: list[str] = []
@@ -620,19 +624,19 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
                 continue
             seen += 1
             window = lines[max(0, i - 6): i + 7]
-            if not any(LEGACY_NOTE in w for w in window):
+            if not any(note in w for note in LEGACY_RETIRED_NOTES for w in window):
                 unannotated.append(f"{rel}:{i + 1}:{line.strip()[:80]}")
-    assert seen >= 8, f"全 src/ 只扫到 {seen} 处 `{LEGACY_AXIS}` ⇒ 扫错了对象（假绿）"
+    assert seen >= 4, f"全 src/ 只扫到 {seen} 处 `{LEGACY_AXIS}` ⇒ 扫错了对象（假绿）"
     assert unannotated == [], (
-        f"`{LEGACY_AXIS}` 只在「只作历史兼容读」的语境里允许出现；这几处没写明：\n"
-        + "\n".join(unannotated))
+        f"`{LEGACY_AXIS}` 只许出现在「这一档已经取消」的语境里（业主 2026-11-02："
+        "连历史兼容读也不留）；这几处没写明：\n" + "\n".join(unannotated))
 
-    # ③ 写侧结构上产生不出它：词表 / 轴表 / 落盘口各断言一次。
+    # ③ 写侧结构上产生不出它，读侧也不再认它：词表 / 轴表 / 落盘口 / 历史轴表各断言一次。
     assert SEC.V_REPLY_VERDICTS == (SEC.V_REPLY_CLEAN, SEC.V_REPLY_FAULT), SEC.V_REPLY_VERDICTS
     assert set(SEC.V_REPLY_AXIS.values()) == {"clean", "fault"}, SEC.V_REPLY_AXIS
     assert VR.SECRETARY_JUDGE_AXES == ("clean", "fault"), VR.SECRETARY_JUDGE_AXES
-    assert VR.SECRETARY_JUDGE_HISTORICAL_AXES == (LEGACY_AXIS,), (
-        VR.SECRETARY_JUDGE_HISTORICAL_AXES)
+    assert not hasattr(VR, "SECRETARY_JUDGE_HISTORICAL_AXES"), (
+        "历史轴表的常量还在 ⇒ 那一档的兼容机制没有整段删掉")
     st = _ws(tmp_path)
     _put(st)
     ok = VR.parse_verdict(CLEAN_REPLY)
@@ -649,7 +653,9 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
         secretary_judge={"checked": True, "axis": LEGACY_AXIS, "decision": "判不了"})
     assert tried["secretary_judge"]["axis"] == "", tried["secretary_judge"]
     assert VR.consecutive_holds(st.root, SID)["streak"] == 1
-    # 读侧兼容：手写一条 2026-10-30 之前那一版写下的行 ⇒ 读得出，且既不算票也不清零。
+    # 读侧：手写一条 2026-10-30 之前那一版写下的行 ⇒ 那个轴名不再是词表里的一格
+    # （2026-11-02 业主：「这一档连历史兼容读也不留」）：读出来是空轴，连续计数里
+    # 没有一条分支认它（不计入、也不清零 —— 与"问过、没判成"同一条通用纪律）。
     VR._append_verification(VR.verification_ledger_path(st.root, SID), {
         **{k: first[k] for k in ("statement_id", "stmt_id", "proof_no", "verifier", "verdict",
                                  "defect_step", "quote", "why", "findings",
@@ -661,13 +667,14 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     })
     legacy_rows = [r for r in _rows(st) if r["verification_id"] == "v-legacy-0001"]
     assert len(legacy_rows) == 1, _rows(st)
-    assert VR.secretary_axis(legacy_rows[0]) == LEGACY_AXIS, legacy_rows[0]
+    assert VR.secretary_axis(legacy_rows[0]) == "", legacy_rows[0]
     assert VR.consecutive_holds(st.root, SID)["streak"] == 1, (
-        "历史行的 unsure 改了票数：它只作历史兼容读（不算票、也不清零）")
+        "老行上那个轴名改了票数：它读出来是空轴（不计入、也不清零），"
+        "而「不算票」这句话不再是给那一档留的豁免位 —— 它只是通用纪律的结果")
     last = VR.record_verification(
         st.root, statement_id=SID, proof_text=PROOF, verdict=ok, verifier="agent-V",
         store=st, proof_no=1,
         secretary_judge={"checked": True, "axis": "clean", "decision": SEC.V_REPLY_CLEAN})
     assert last["secretary_judge"]["axis"] == "clean", last["secretary_judge"]
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2, (
-        "历史行那一格把连续次数清零了（它只作历史兼容读）")
+        "老行那一格把连续次数清零了（它读出来是没有轴，不清零）")

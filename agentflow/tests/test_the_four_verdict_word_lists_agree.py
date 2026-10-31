@@ -8,7 +8,7 @@
 | 落点 | 它管的是 | 词表 | 与真身的关系 |
 |---|---|---|---|
 | `verifications.VERDICTS` | V 的台账结论（`parse_verdict` 校验的就是它） | 两档（有毛病 / 成立），按"站不住→站得住"排 | 真身 |
-| `verifications.LEGACY_VERDICTS` | 历史台账行里那一格（只作兼容读） | `看不出来` | 真身的历史值（读得出、不算票、不产生） |
+| `verifications.LEGACY_VERDICTS` | 已经取消的那一档的历史值（2026-11-02：连历史兼容读也不留） | `看不出来` | 真身的历史值（读得出、按成立读并计票、写不出） |
 | `numericproof.THIRD_PARTY_VERDICT_OK` | 第三方签字那一档"签住了"的取值 | `"成立"` | 真身的最后一档（按位置引用，不抄字面量） |
 | `exhaustionreport.VERDICT_OK` / `VERDICT_BAD` / `VERDICT_UNKNOWN` | 穷举型证据的会审机器读数 | 三个词 | 前两个与真身逐字相同；`VERDICT_UNKNOWN` 是兼容读值（V 不再产出它，见下） |
 | `schema.REVIEW_VERDICTS` | `documents.review_verdict`（另一根轴：文档审校结论） | 三个词 + 一个空串 | 两态 + 历史值逐字相同；空串表示"还没审" |
@@ -16,8 +16,9 @@
 ## 2026-11-01：V 的结论收成两态，这一份跟着改口径（不是放宽）
 
 业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
-于是真身只剩两格，`看不出来` 降到"历史台账行里的那一个值"（`LEGACY_VERDICTS`）：
-读得出、写不出。而另外三处里：
+于是真身只剩两格，`看不出来` 降到"已经取消的那一档的历史值"（`LEGACY_VERDICTS`）：
+写不出；读侧按 :func:`verifications.read_verdict` 读成 `成立` 并计一票（2026-11-02 追加
+裁定：那一档连历史兼容读也不留 —— 改前是"不算票、也不清零"）。而另外三处里：
 - `numericproof` 按位置引用最后一格（`[-1]`）—— 仍是 `成立`，一个字没动；
 - `exhaustionreport` 的三格是机械会审自己的读数（`review()` 的返回值），V 会在
   缺材料时把它读成"没查成"，所以那一格仍是 `看不出来` 这个词：它是另一份读数的
@@ -60,9 +61,11 @@ def test_the_authority_is_the_two_verdict_words_in_order() -> None:
     assert VR.VERDICTS[-1] == "成立", "最后一档是'签住了'那一档，numericproof 按 -1 引用它"
     assert VR.VERDICTS[0] == "有毛病"
     assert len(VR.VERDICTS) == 2
-    # 第三态不存在：它只剩"历史行里那一个值"的身份（读得出、写不出）
+    # 那一档已经取消：它只剩"历史值"这一个身份（读得出、按成立读并计票、写不出）
     assert "看不出来" not in VR.VERDICTS, VR.VERDICTS
     assert VR.LEGACY_VERDICTS == ("看不出来",), VR.LEGACY_VERDICTS
+    assert VR.read_verdict({"verdict": VR.LEGACY_VERDICTS[0]}) == VR.VERDICTS[-1], (
+        "历史值没有被读成真身的最后一格（成立）⇒ 那一档还在读侧冒充一格")
 
 
 def test_the_same_axis_copies_are_word_for_word_identical() -> None:
@@ -72,8 +75,8 @@ def test_the_same_axis_copies_are_word_for_word_identical() -> None:
     assert (ER.VERDICT_BAD, ER.VERDICT_OK) == VR.VERDICTS, (
         "exhaustionreport 的会审两态与真身不一致（顺序也要一致：它是按位置读的）")
     assert ER.VERDICT_UNKNOWN == VR.LEGACY_VERDICTS[0], (
-        "会审那一格的历史值必须与本模块的 `LEGACY_VERDICTS` 逐字相同 —— 它现在只作"
-        "兼容读：V 读到它就把这一格记成「没查成」，不再产出这一档")
+        "会审那一格的历史值必须与本模块的 `LEGACY_VERDICTS` 逐字相同 —— 那是另一份读数"
+        "（机械会审的「缺材料」）：V 读到它就把这一格记成「没查成」，V 自己不产出这个词")
     assert all(word not in VR.VERDICTS for word in (ER.VERDICT_UNKNOWN,))
 
 

@@ -333,8 +333,8 @@ def test_e2_clean_does_not_touch_f_and_bumps_the_streak(tmp_path):
 
 # ============================================================ e3：判不了不再是结论
 
-def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_reads_compatibly(tmp_path):
-    """e3：秘书答「判不了」⇒ 不是一种结论（没查成）；历史行里的 unsure 只作历史兼容读。
+def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_is_no_longer_a_cell(tmp_path):
+    """e3：秘书答「判不了」⇒ 不是一种结论（没查成）；老行上那个轴名不再是词表里的一格。
 
     2026-10-30 第三次裁定逐字：「不可能有判不了…只要不是完全没毛病都叫有毛病」。两半：
 
@@ -342,8 +342,11 @@ def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_reads_compatibly
        ⇒ 它不在两格词表里 ⇒ 不采信（`checked=False`、没有轴）：连判立刻停、
        整笔 `checked=False`（`reason` 以 `secretary_unjudged` 开头、说清没查成）、
        不签、也不打回（它不是"有毛病"）。连续次数停在 1（这一行不算票、不清零）。
-    ② 历史行：手写一条 `axis="unsure"` 的旧行（2026-10-30 之前那一版留下的）⇒ 读得出、
-       不清零也不计入，而且不进 F 的明细 —— 它不是 V 的判决。
+    ② 老行：手写一条 `axis="unsure"` 的旧行（2026-10-30 之前那一版留下的）⇒ 2026-11-02
+       的追加裁定（业主：「这一档连历史兼容读也不留」）之后，那个轴名不再是词表里的一格：
+       `secretary_axis` 读出来是空轴（"这一行没有轴"），连续计数里没有一条分支认它
+       （既不算票、也不清零 —— 与"问过、没判成"同一条通用纪律，不是给它留的豁免位），
+       它也不进 F 的明细（它不是 V 的判决）。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -374,7 +377,7 @@ def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_reads_compatibly
     assert details == [], details
     assert out["opened"] == [] and cond.items == [], cond.items
 
-    # ---- ② 历史行（手写一条 axis=unsure 的旧行）：只作历史兼容读
+    # ---- ② 老行（手写一条 axis=unsure 的旧行）：那个轴名不再是词表里的一格
     st2 = _ws(tmp_path / "legacy")
     _put(st2)
     ok = VR.parse_verdict(REPLY_CLEAN)
@@ -388,16 +391,19 @@ def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_reads_compatibly
                                  "unresolved_errors", "citation_checks", "proof_sha256",
                                  "proof_chars", "submission_id", "at")},
         "verification_id": "v-legacy-0001", "round": 2,
-        # 历史行里那一格：只作历史兼容读（读得出、新判定不再产生）。
+        # 老行上那一格：2026-11-02 起它不再被认出来（那一档连历史兼容读也不留）。
         "secretary_judge": {"axis": "unsure", "checked": True, "decision": "判不了"},
     })
     legacy_rows = [r for r in VR.list_verifications(st2.root, statement_id=SID, limit=None)[0]
                    if r.get("verification_id") == "v-legacy-0001"]
     assert len(legacy_rows) == 1, VR.list_verifications(st2.root, statement_id=SID, limit=None)
-    assert VR.secretary_axis(dict(legacy_rows[0])) == "unsure", legacy_rows[0]
+    assert VR.secretary_axis(dict(legacy_rows[0])) == "", legacy_rows[0]
+    assert "SECRETARY_JUDGE_HISTORICAL_AXES" not in dir(VR), (
+        "那个历史轴表的常量还在 ⇒ 兼容机制没有整段删掉")
     legacy = VR.consecutive_holds(st2.root, SID)
     assert legacy["checked"] is True and legacy["streak"] == 1, (
-        f"历史行的 unsure 改了票数（{legacy['streak']}）—— 它只作历史兼容读：不计入、不清零")
+        f"老行上那个轴名改了票数（{legacy['streak']}）—— 它读出来是空轴，"
+        "落进'问过、没判成 / 轴读不出来'那条通用纪律：不计入、也不清零")
     _t2, details2, problems2, cond2, out2 = _deliver(st2)
     assert details2 == [], details2
     assert not problems2, problems2

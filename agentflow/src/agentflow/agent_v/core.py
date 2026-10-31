@@ -43,8 +43,10 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 所以秘书的判定轴只有 `clean` / `fault`：拿不准、只挑出一处小记号问题、只说"我没逐行验证"
 ——统统算 `fault`。词表里也只有两格（`secretary.V_REPLY_VERDICTS`）：模型若仍答历史
 那一格（"判不了"）或任何词表外的写法 ⇒ `judge()` 判"不采信" ⇒ `checked=False`（没查成），
-不会被折成第三种结论。历史台账行里出现过的 `unsure` 只作历史兼容读（读得出、新判定不再
-产生它）。
+不会被折成第三种结论。2026-11-02（业主追加裁定：「这一档连历史兼容读也不留」）：老台账行
+上那个轴名也不再有兼容读 —— `verifications` 删了
+`SECRETARY_JUDGE_HISTORICAL_AXES` 与 `secretary_axis` 的兼容支，老行上那个值读出来是
+空轴（这一行没有轴），连续计数里没有一条分支认它。
 
 "没查成"不是判定（第 3 条）：秘书问不出来 / 模型输出不合法 / 台账写不进去 ⇒ 那是框架
 失败：终止、`checked=False` + 明确 reason，不许当成 fault 打回、也不许说"次数没到"。
@@ -65,7 +67,7 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 - `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；-
 `checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
 两者都不落台账（`verifications.record_verification` 在没有合法结论时抛`VerificationError`，
-绝不写一行"没查成 / 看不出来"来冒充"审过了"）。穷举型证据缺材料同理：
+绝不写一行"没查成"来冒充"审过了"）。穷举型证据缺材料同理：
 `checked=False, reason="missing_material"`（缺哪一块进 `detail`），台账里也不留行。
 """
 
@@ -593,10 +595,11 @@ class AgentV:
             # 要审的是那份程序与 E 写的 ②③ 对不对得上（程序在不在、搜索空间的数在代码里
             # 有没有着落、剪枝/对称性有没有解释、边界写没写、结论是不是穷尽、形式化那一格
             # 填的类别对不对）。判据本体只有一处：`exhaustionreport.review`；这里只负责
-            # 把它的三态结论翻成一次审校（落台账、`成立` 才签第 3 位）。
+            # 把它的三格读数翻成一次审校（落台账、`成立` 才签第 3 位）。
             #
-            # 三态里最要紧的一档是「缺材料」：报告没落地（E 的 ②③ 没落成盘上那份读数）
-            # 时不许判成立 —— 而业主 2026-11-01 的裁定把「看不出来」这一档整个取消了，
+            # 三格里最要紧的一档是「缺材料」（会审自己的读数是
+            # `exhaustionreport.VERDICT_UNKNOWN`）：报告没落地（E 的 ②③ 没落成盘上那份读数）
+            # 时不许判成立 —— 而业主 2026-11-01 的裁定把那一档整个取消了（V 不产出它），
             # 所以缺材料落的是没查成（`checked=False` + `reason="missing_material"`）：
             # 台账里不留行，缺哪一块逐条进 `detail`。它既不是"找到了缺陷"（不许打回 F），
             # 也不是"没找到缺陷"（不许判成立）—— 材料补齐之后重新送审。
@@ -789,7 +792,8 @@ class AgentV:
                     "bits": dict(already.get("bits") or {}),
                     "reviewed_by": reviewed_by,
                     "verification_id": signed_id,
-                    "verdict": str(signed_row.get("verdict") or reviewed_by.get("verdict") or ""),
+                    "verdict": (VR.read_verdict(signed_row)
+                                or str(reviewed_by.get("verdict") or "")),
                     "defect_step": signed_row.get("defect_step"),
                     "findings": list(signed_row.get("findings") or []),
                     "unresolved_errors": int(signed_row.get("unresolved_errors") or 0),
@@ -948,12 +952,14 @@ class AgentV:
                             else "秘书判了签发，但翻位没落成（落地是秘书的事）")
                 break
             axis = str(once["judgment"].get("axis") or "")
-            if str(once["row"].get("verdict") or "") != "成立":
+            if VR.read_verdict(once["row"]) != "成立":
                 # V 自己的结论不是「成立」⇒ 本身就是一条打回，不依赖秘书那一问。
                 # 它排在"秘书没查成"之前：V 已经判过的缺陷不许被改记成"没查成"。
+                # 结论按 `VR.read_verdict` 读（两态的唯一读口）：老行上那个已取消的档
+                # （2026-11-02：连历史兼容读也不留）读成 `成立`，不会在这里冒充打回。
                 stopped = "verdict"
                 passes[-1]["terminal"] = stopped
-                stop_why = (f"这一签的结论是 {once['row'].get('verdict')!r}"
+                stop_why = (f"这一签的结论是 {VR.read_verdict(once['row'])!r}"
                             "（本身就是打回，立刻停）")
                 break
             if axis == "fault":
@@ -1372,8 +1378,9 @@ class AgentV:
         """穷举型证据会审的收尾：台账那一行落地没有、五元位、返回值。
 
         这一段与 `verify_proof` 的普通收尾是同一套纪律（只认 `row` 上的 `checked`）：
-        台账没落地就不许报"签住了第 3 位"；`成立` 才签；`有毛病` / 历史行里的 `看不出来` 照样
-        留一行（那是"看过、结论是没过/判不了"的证据）。
+        台账没落地就不许报"签住了第 3 位"；`成立` 才签；`有毛病` 照样留一行
+        （那是"看过、结论是没过"的证据）。结论按两态读（`VR.read_verdict`）：
+        老行上那个已取消的档（2026-11-02：连历史兼容读也不留）读成 `成立`。
         """
         sid = statement_id
         # 翻位那一步在秘书那一侧（业主 2026-10-29 追加口径）：`row.statement_writeback`
@@ -1481,7 +1488,9 @@ class AgentV:
             "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest() if text else "",
             "proof_chars": len(text),
             "verifications": len(rows),
-            "last_verdict": (last or {}).get("verdict"),
+            #: 结论按两态读（`verifications.read_verdict`）：老行上的那一档（2026-11-02 起
+            #: 连历史兼容读也不留）在这里读成 `成立`，不冒充第三种结论。
+            "last_verdict": VR.read_verdict(last or {}),
             "last_verification_id": (last or {}).get("verification_id"),
             "problems": list(problems),
             "reason": ("读到了证明全文" if text else

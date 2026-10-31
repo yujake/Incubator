@@ -2515,7 +2515,9 @@ def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
         "stmt_id": sid,
         "proof_no": int(e.get("proof_no") or 1),
         "label": str(e.get("label") or f"{sid}#p{int(e.get('proof_no') or 1)}"),
-        "verdict": str(sign.get("verdict") or V_VERDICT_REJECTED),
+        #: 结论按两态读（`VR.read_verdict`）：老行上那个已取消的档读成 `成立`，
+        #: 交付那一侧就不会把一句已经不存在的判词抄给 F（2026-11-02 追加裁定）。
+        "verdict": VR.read_verdict(sign) or V_VERDICT_REJECTED,
         "unresolved_errors": int(e.get("unresolved_errors")
                                  or sign.get("unresolved_errors") or 0),
         "verification_id": str(e.get("verification_id") or ""),
@@ -2573,9 +2575,10 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
       会让这一整档洗了稿却送不出去，而盘上没有任何读数会说它没送到。
     - 两档的 `verdict` 各自如实保留（`成立` 就是 `成立`）：交付那一侧按 `via` 决定
       措辞，不许把 V 写「成立」的那一档说成「V 判有毛病」。
-    - 不进明细的那几档（都不许冒充打回）：历史行里的 `unsure`（只作历史兼容读），以及
-      秘书这一问"没查成"（`checked=False`：框架失败，读数由 `verify_proof` 的
-      `secretary_unjudged` 报）。
+    - 不进明细的那几档（都不许冒充打回）：秘书这一问"没查成"（`checked=False`：框架失败，
+      读数由 `verify_proof` 的 `secretary_unjudged` 报）。老台账行上那个已取消的秘书轴名
+      （2026-11-02 追加裁定：连历史兼容读也不留）读出来是空轴 —— 它落在"轴读不出来"那条
+      通用纪律上（不计票、也不清零），也不是一次打回。
 
     ## 三态（不许把「没读成」折成「没有毛病」）
 
@@ -2628,9 +2631,9 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             vid = str(e.get("verification_id") or "")
             sign = signed.get(vid) or {}
             if VR.secretary_axis(sign) != "fault":
-                # 只有 fault 那一档才是"有毛病，要交回 F 改"。历史行里的 `unsure`
-                # （只作历史兼容读）与"没判成"（checked=False）都是框架/历史面 —— 两者
-                # 都不是 V 的判决，都不许冒充成一次打回。
+                # 只有 fault 那一档才是"有毛病，要交回 F 改"。"没判成"（checked=False）是
+                # 框架面的事；老行上那个已取消的轴名（2026-11-02）读出来是空轴 —— 两者都
+                # 不是 V 的判决，都不许冒充成一次打回。
                 continue
             if not _washed_text(sign):
                 # C 段的纪律：洗不出来就不输出 V 的原文 ⇒ 这一条不转达，但要留一句

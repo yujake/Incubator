@@ -28,7 +28,7 @@ V 签门槛 = 连续 3 次"没问题" + V 秘书语义判定 + 洗稿转达
 | a8/v8 | 签只能经秘书：`sign_statement` 的调用者只许是 `_land_sign_issuance`；V 这一路每次落台账都是 `flip=False` | V 自己补一刀 / 落台账顺手翻位 ⇒ 调用者名单里出现 `verify_proof` |
 | a9/v8 负控 | 秘书"判了签发但不落盘" ⇒ 位一次都不许翻（V 不许替它落） | V 拿 `issue=True` 自己翻位 ⇒ 三次 clean 之后位就翻上去了 |
 | a10/v7 正面 | 工具路径那种构造（只有 store + root）会自己装配秘书；装配给出没缝的秘书 ⇒ `checked=False` 且不发签 | 惰性装配坏了 / 没秘书也签 ⇒ 工具路径上门槛不存在 |
-| b1/v1 | 两档不许折平：fault 清零 / clean +1；答历史那一格（"判不了"）⇒ 不采信（没有轴）；历史行的 unsure 只作历史兼容读 | 折成一档 ⇒ 先夸后刺被当成 clean / 把"判不了"当成一种结论 |
+| b1/v1 | 两档不许折平：fault 清零 / clean +1；答历史那一格（"判不了"）⇒ 不采信（没有轴）；老行上那个轴名读出来是空轴（2026-11-02：那一档连历史兼容读也不留 ⇒ 不作第三档、也不作豁免位） | 折成一档 ⇒ 先夸后刺被当成 clean / 把"判不了"当成一种结论 |
 | b2 | 题面逐字带着三条判定规则 | 题面丢了规则 ⇒ 模型只能猜 |
 | b3/v4 | 秘书不看证明：材料里塞 F 正文必须被拒 | 收了但没用 ⇒ 盘上查不出"看过" |
 | b4 | 词表外结论不采信（没有轴，不归 clean） | 采信自由文本 ⇒ 第八种写法进台账 |
@@ -126,13 +126,17 @@ def _sign(store: Store, *, verdict: dict | None = None, text: str = PROOF,
 
 
 def _sign_legacy_unsure(store: Store, *, text: str = PROOF) -> dict:
-    """手写一条 2026-10-30 之前那一版写下的台账行（`axis="unsure"`，只作历史兼容读）。
+    """手写一条 2026-10-30 之前那一版写下的台账行（`axis="unsure"`）。
 
     为什么必须"手写"而不能走 `_sign`：写侧（`record_verification`）已经收不了那一格了
     —— 传进去会落成空轴（`test_v_reviews_three_times_before_signing.py::t6` 的落盘口
-    那一条钉着这件事）。要量"读侧读得出历史行、且它既不算票也不清零"，就只能按老版本
-    的形状把那一行追加进去；底稿那一行自己也不许算票（`checked=False`），否则这条判据
-    会把自己的底稿算成一次 clean。
+    那一条钉着这件事）。要量"读侧怎么读老行上那个轴名"，只能按老版本的形状把那一行追加
+    进去；底稿那一行自己也不许算票（`checked=False`），否则这条判据会把自己的底稿算成
+    一次 clean。
+
+    2026-11-02（业主：「这一档连历史兼容读也不留」）：那个轴名不再是词表里的一格 ——
+    `secretary_axis` 读出来是空轴，连续计数里没有一条分支认它。它落进"问过、没判成 /
+    轴读不出来"那条通用纪律（既不算票、也不清零），那不是替这一档留的豁免位。
     """
     base = VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                   verdict=_OK, verifier="agent-V", store=store,
@@ -141,7 +145,7 @@ def _sign_legacy_unsure(store: Store, *, text: str = PROOF) -> dict:
                                                    "decision": "没查成"})
     legacy = {**base,
               "verification_id": f"v-legacy-{base['verification_id']}",
-              # 历史行里那一格：只作历史兼容读（读得出、新判定不再产生）。
+              # 老行上那一格：2026-11-02 起它不再被认出来（那一档连兼容读也不留）。
               "secretary_judge": {"axis": "unsure", "checked": True,
                                   "decision": "判不了"}}
     VR._append_verification(VR.verification_ledger_path(store.root, SID), legacy)
@@ -552,16 +556,17 @@ def test_a10_the_tool_path_assembles_its_own_secretary_or_reports_checked_false(
 
 # ============================================================ b1 / v1：两档
 #
-#: 2026-10-30 第三次裁定之后，V 那一根轴的历史轴名（只作历史兼容读）。
-#: 它不再是词表里的一格（`SEC.V_REPLY_VERDICTS` 只有两格），但老台账行里出现过它 ——
-#: 所以 b1 用它量"读侧读得出、且既不算票也不清零"，而不再用它量一种新结论。
+#: 2026-10-30 第三次裁定之后，V 那一根轴的历史轴名 —— 2026-11-02 起它连"兼容读"也没有了
+#: （业主：「这一档连历史兼容读也不留」）：不再是词表里的一格，`verifications` 里也没有
+#: 任何常量 / 分支替它留位置。b1 用它量"老行上那个轴名读出来是空轴、不再是第三档"。
 LEGACY_UNSURE = "unsure"
 
 
 def test_b1_the_two_states_are_not_flattened(tmp_path):
     """v1：先夸后刺 ⇒ fault（不计入）；反例尝试全失败 ⇒ clean（+1）；
     答历史那一格（"判不了"）⇒ 不是一种结论：不采信（`checked=False`、没有轴）；
-    而历史台账行里的 unsure 只作历史兼容读（读得出、不清零、也不计入）。
+    而老台账行上那个轴名（2026-11-02：那一档连历史兼容读也不留）读出来是空轴 ——
+    它落在"轴读不出来"那条通用纪律上（不计入、也不清零），不再是第三档的豁免位。
     """
 
     st = _ws(tmp_path)
@@ -592,11 +597,14 @@ def test_b1_the_two_states_are_not_flattened(tmp_path):
     _sign(st, judge=clean)
     _sign(st, judge=clean)
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2
-    # 历史行（2026-10-30 之前写下的 axis=unsure）：只作历史兼容读 —— 不清零、也不计入。
+    # 老行（2026-10-30 之前写下的 axis=unsure）：2026-11-02 起那个轴名不再是词表里的一格
+    # ⇒ 读出来是空轴，落进"轴读不出来"那条通用纪律（不计入、也不清零）。
     # 这里手写一条旧行（`record_verification` 的写侧已经不收这一格了）。
-    _sign_legacy_unsure(st, text=PROOF)
+    legacy = _sign_legacy_unsure(st, text=PROOF)
+    assert VR.secretary_axis(legacy) == "", (
+        f"老行上那个轴名还被认出来（{VR.secretary_axis(legacy)!r}）⇒ 兼容机制没删干净")
     holds = VR.consecutive_holds(st.root, SID)
-    assert holds["streak"] == 2, f"历史行的 unsure 把票数改了（{holds['streak']}）"
+    assert holds["streak"] == 2, f"老行上那个轴名改了票数（{holds['streak']}）"
     assert _row(st)["bits"]["reviewed"] is False
     _sign(st, judge=clean)                      # 第三票到
     assert VR.consecutive_holds(st.root, SID)["streak"] == 3
