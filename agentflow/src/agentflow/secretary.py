@@ -4732,35 +4732,51 @@ class Secretary:
             out.setdefault(name, "")
         return out
 
-    def _roster_history(self, owner: str) -> tuple[dict[str, str], list[str]]:
-        """这个父名下「这个号历史上登记给了谁」：全部 `add` 行 ∪ 全部 `bind` 行的 `task_id` 并集。
+    def _roster_bindings(self, owner: str) -> tuple[list[tuple[str, str]], list[str]]:
+        """“哪个号绑过谁”的全部历史：正文 `add` 行 ∪ 对照表 `bind` 行，按文件序。
 
-        返回 `({task_id: name}, 坏行)`。不读任何折叠视图：`_fold_index` 只留每个名字
-        最新那条 `bind`，于是"一个名字接过的第二件活"会把第一件活从已知集里挤出去 ——
-        自愈据此把已经登记过的行再补一次（`draft/149` §4.5 的机制 B，零并发即可复现）。
+        返回 `([(task_id, name)], 坏行)`。这是这一份历史的唯一解析器：两个读法
+        （:meth:`_roster_history` 的"号 → 名字"、:meth:`_bound_task_ids` 的"名字 → 全部号"）
+        都从它派生。为什么必须只有一处（`draft/151` 三-5）：这两处分别决定
+        “自愈会不会把已登记的号再补一次”与“销号漏不漏号”，两个后果都不可逆；而两份
+        逐字相同的解析器今天给出相同答案，改一处不会有任何判据变红。
 
-        写侧为什么读它（而不是读某个折叠项）：唯一性判据必须读全历史。`draft/150`
-        §5.1-① 的读数：116/881 个名册项在"正文的号"与"对照表的当前号"之间分叉，
-        拿任一份折叠视图当已知集都会把另一份判成"不存在"。
+        不读任何折叠视图：`_fold_index` 只留每个名字最新那条 `bind`，于是"一个名字接过
+        的第二件活"会把第一件活从已知集里挤出去 —— 自愈据此把已经登记过的行再补一次
+        （`draft/149` §4.5 的机制 B，零并发即可复现）。
         """
         from . import jsonlfile as JF
 
         body, bad_body = JF.read_jsonl(roster_path(self.root, owner))
         index, bad_index = JF.read_jsonl(roster_index_path(self.root, owner))
-        out: dict[str, str] = {}
+        rows: list[tuple[str, str]] = []
         for r in body:
             if str(r.get("kind") or "") != "add":
                 continue
             tid = str(r.get("task_id") or "")
             if tid:
-                out.setdefault(tid, str(r.get("name") or ""))
+                rows.append((tid, str(r.get("name") or "")))
         for r in index:
             if str(r.get("kind") or "") != "bind":
                 continue
             tid = str(r.get("task_id") or "")
             if tid:
-                out.setdefault(tid, str(r.get("name") or ""))
-        return out, list(bad_body) + list(bad_index)
+                rows.append((tid, str(r.get("name") or "")))
+        return rows, list(bad_body) + list(bad_index)
+
+    def _roster_history(self, owner: str) -> tuple[dict[str, str], list[str]]:
+        """这个父名下「这个号历史上登记给了谁」：全部 `add` 行 ∪ 全部 `bind` 行的 `task_id` 并集。
+
+        返回 `({task_id: name}, 坏行)`；首个名字胜（:meth:`_roster_bindings` 的顺序）。
+        写侧为什么读它（而不是读某个折叠项）：唯一性判据必须读全历史。`draft/150`
+        §5.1-① 的读数：116/881 个名册项在"正文的号"与"对照表的当前号"之间分叉，
+        拿任一份折叠视图当已知集都会把另一份判成"不存在"。
+        """
+        rows, bad = self._roster_bindings(owner)
+        out: dict[str, str] = {}
+        for tid, name in rows:
+            out.setdefault(tid, name)
+        return out, bad
 
     def _bound_task_ids(self, owner: str, name: str) -> list[str]:
         """这个名字绑过的全部号（正文 `add` 行 ∪ 对照表 `bind` 行，按出现顺序去重）。
@@ -4768,26 +4784,15 @@ class Secretary:
         销号要标死的不是"当前号"而是这一格：复用是合法的一等功能，一个名字接过
         N 件活就有 N 个号；只写最后那条 `bind` 会让早先的号在唤醒闸那里仍读成
         "没销号"（`draft/150` §5.1-③ 的读数 H：`wake(t-000002)` 仍 `started=true`）。
+        历史从 :meth:`_roster_bindings` 来（同一处解析；这里只做按名过滤）。
         """
         want = str(name or "")
-        out: list[str] = []
         if not want:
-            return out
-        from . import jsonlfile as JF
-
-        body, _bad_body = JF.read_jsonl(roster_path(self.root, owner))
-        for r in body:
-            if str(r.get("kind") or "") != "add" or str(r.get("name") or "") != want:
-                continue
-            tid = str(r.get("task_id") or "")
-            if tid and tid not in out:
-                out.append(tid)
-        index, _bad_index = JF.read_jsonl(roster_index_path(self.root, owner))
-        for r in index:
-            if str(r.get("kind") or "") != "bind" or str(r.get("name") or "") != want:
-                continue
-            tid = str(r.get("task_id") or "")
-            if tid and tid not in out:
+            return []
+        rows, _bad = self._roster_bindings(owner)
+        out: list[str] = []
+        for tid, who in rows:
+            if who == want and tid not in out:
                 out.append(tid)
         return out
 
