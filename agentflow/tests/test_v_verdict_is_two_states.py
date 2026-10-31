@@ -30,6 +30,7 @@ D. 三转连判机制不变：clean 仍要求 verdict=成立；有毛病仍立�
 | s2 | 模型回「我无法判断这份证明对不对」⇒ 同样落成成立（同一族措辞、同一处置） | 词表外 ⇒ 抛 `VerificationError`（"没查成"），一行都不落 |
 | s3 | 手写的 `verdict="看不出来"` 历史行：读得出、不投连续成立那一票、也不清零；`review_standing` 的 `why` 说得清"这是历史行" | 三态词表下它是"一种结论 ⇒ 清零、落成 rejected"，读的人看不到"历史"两个字 |
 | s4 | 渲染后的 V 提示词（system + 冷启动，含技能索引摘要）里只剩两态那两句；`看不出来` 只许出现在"不存在……这一档"那句否定式里 | 两处都写着三态 / 让模型"信息不足就写看不出来" |
+| s5 | `verify.verify_proof` 给模型看的那段声明文字（`summary` ＋ `returns`，`returns` 会拼进 function-calling 的 description）里不再出现 `看不出来`；而"`checked=False` ⇒ 没查成、不落台账行"这条约束一字不许丢 | `returns` 里那句「绝不拿「看不出来」冒充「审过了」」指着已经取消的那一档；模型读到的是一档它产不出的结论 |
 
 反真空各一条：s1/s2 的模型回复是真的经 `AgentV.verify_proof` 走一遍（不是直调
 `parse_verdict` 拼一个 dict）；s3 的历史行是手写进台账的（写侧已经收不了那一格）；
@@ -322,3 +323,75 @@ def test_s4_the_rendered_prompts_carry_only_two_states():
     # 两份文本各自都要有两态那两句（不是只有其中一份改到了）
     assert TWO_STATES in system_text and TWO_STATES in cold_text
     assert NO_THIRD in system_text and NO_THIRD in cold_text
+
+
+# ------------------------------------------------------------------ s5
+
+def _tool_face(name: str = "verify.verify_proof") -> str:
+    """一件工具「模型看得见的那段文字」：`summary` ＋ `returns`。
+
+    为什么 `returns` 与提示词算同一类面（不是"实现细节"）：`verify_tools.py` 自己
+    那段注释逐字写着它的去向 ——「`returns` 会拼进 function-calling 的 description
+    ⇒ 模型看得到，声明里没有的字段它就不知道存在」。既然提示词那一侧已经收成两态，
+    这段文字里再留着旧档，模型读到的就是一档它自己产不出的结论。
+    """
+    spec = build_registry().registry.get(name)
+    assert spec is not None, f"工具面里没有 {name} ⇒ 这条判据失去对象"
+    return "\n".join([str(spec.summary or ""), str(spec.returns or "")])
+
+
+def _tool_face_problems(text: str) -> list[str]:
+    """工具声明面里"旧档还在不在"（s5 的判据本体，与 s4 同一把尺子、对象不同）。
+
+    两件事各判一次：
+    ① `看不出来` 这四个字一次都不许出现 —— 与 s4 不同，这里不留「否定式」那个
+       例外：声明面是按键与用途写的，没有给「不存在某一档」留位置；真要在声明面里
+       写它，读的人只会以为那一档存在过且仍可用；
+    ② 语义不许缩水：`checked=False` 那一档必须仍被写成"没查成"且"不落台账行"。
+       只删旧档不补这一句，等于把"这一档不许被读成审过、没问题"这条约束也一起删掉
+       —— 那比不删更坏（模型会把 `checked=False` 读成"审过了、只是没毛病"）。
+    """
+    bad: list[str] = []
+    for line in text.splitlines():
+        if "看不出来" in line:
+            bad.append(f"这一行还留着『看不出来』那一档：{line.strip()[:200]}")
+    if "checked=False" not in text:
+        bad.append("声明面里没有 `checked=False` 这一档 ⇒ 它被整段删掉了，不是改了措辞")
+    if "没查成" not in text:
+        bad.append("`checked=False` 没有写成「没查成」⇒ 读的人会把它读成别的意思")
+    if "不落台账行" not in text:
+        bad.append("`checked=False` 那一档没有写清「不落台账行」（这一档唯一的硬后果）")
+    return bad
+
+
+def test_s5_the_tool_declaration_face_does_not_name_the_retired_state():
+    """s5：`verify.verify_proof` 的声明面（`summary` ＋ `returns`）里不再有旧档。
+
+    这一条守的是模型那一侧的可见面。改前 `returns` 末尾写着「此时不落台账行，
+    绝不拿「看不出来」冒充「审过了」」—— 而 V 从 2026-11-01 起只产 `成立` / `有毛病`
+    两态，`看不出来` 那一档已经不存在。留着这句话的代价不是"多一句废话"：
+    模型看到的是"我这一档的结论有可能落在『看不出来』"，而它根本产不出那个值；
+    同时"`checked=False` 不许被读成审过了"这条约束被绑在了一个不存在的档上。
+
+    反真空两条：
+    1) 声明面必须是真的那份（长度锚），否则"没出现这四个字"在一个空串上恒真；
+    2) 把改前那句措辞塞回去 ⇒ `_tool_face_problems` 必须当场报（探针打不中就是假绿）。
+    """
+    text = _tool_face()
+    assert len(text) > 500, len(text)
+
+    bad = _tool_face_problems(text)
+    assert bad == [], "\n".join(bad)
+
+    # 正控：把改前那句措辞塞回去 ⇒ 必报（且报的是"还留着那一档"，不是别的原因）
+    probe = text.replace("「没查成」冒充", "「看不出来」冒充")
+    assert probe != text, "声明面里找不到「没查成」冒充「审过了」那句 ⇒ 探针打不中（判据是假绿）"
+    hit = _tool_face_problems(probe)
+    assert hit, "塞回旧档措辞之后判据没报 ⇒ 它没在量这四个字"
+    assert any("看不出来" in x for x in hit), hit
+
+    # 反真空②：只删旧档、把"没查成 / 不落台账行"一起删掉的那一版同样必报
+    gutted = text.replace("没查成", "").replace("不落台账行", "")
+    assert _tool_face_problems(gutted), (
+        "把 `checked=False` 那两格约束一起删掉而判据没红 ⇒ 它只钉了字面，没钉语义"
+    )

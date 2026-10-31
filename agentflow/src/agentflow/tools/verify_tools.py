@@ -1068,7 +1068,11 @@ _ROLES_V = ("V",)
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "
-            "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」；"
+            # 2026-10-30（业主批准改 FC-27；E 那一笔）：这一句原本写「绝不拿『看不出来』
+            # 冒充『审过了』」—— 而 V 从 2026-11-01 起只产两态（成立 / 有毛病），
+            # 旧档那一格已经不存在。指向一个产不出的档，模型会以为自己的结论能落在那儿；
+            # 而真正要守的那件事是"`checked=False` 不许被读成审过了" ⇒ 措辞改钉这一档。
+            "此时**不落台账行**，绝不拿「没查成」冒充「审过了」；"
             "引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地"
             "（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；"
             "`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是"
