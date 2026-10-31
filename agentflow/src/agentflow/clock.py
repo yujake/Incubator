@@ -698,8 +698,12 @@ def set_patrol_probe(probe: Callable[[str, str], Mapping[str, Any]] | None
     - `checked`：这一次查成没查成（读不成台账 / 没有主控实例 => False）；
     - `reason`：没查成的理由（读数要能读出"为什么这一拍没有清单"）；
     - `at`：当拍时刻（ISO；读不到时钟就是空串）；
-    - `stalled` / `silent` / `open_items` / `refusals`：四类各一格，每格是
+    - `stalled` / `silent` / `open_items` / `final_refusals`：四类各一格，每格是
       `{"checked", "count", "rows", "reason"}`（`open_items` 另带 `ack` / `work`）。
+
+    第四格为什么叫 `final_refusals`（2026-11-03，153-U-09）：它数的是会话里的
+    `final_refused` 事件（收工被拒），与台账里"动作被拒"的 `action_refusals`、
+    名册写口拒绝的 `registration_refusals` 是三件事 —— 三件事各一个名字。
 
     为什么放在工具层：这四类要读台账、板项与名册，而本模块的纪律是"能被判据单独喂假时钟、
     单独检查读数"，不为一个查询把 Store 拖进来（与 `set_target_probe` 逐字同一条理由）。
@@ -735,7 +739,7 @@ def patrol_anomalies(workspace: str | Path, *, task_id: str = "") -> dict[str, A
      "stalled":     {"checked", "count", "rows", "reason"},
      "silent":      {...},
      "open_items":  {"checked", "count", "ack", "work", "rows", "reason"},
-     "refusals":    {...}}
+     "final_refusals": {...}}
     ```
 
     三态：`checked=False` 加 `reason` 就是"这一拍没查成"（读口没接 / 读口抛了 / 读口说
@@ -753,7 +757,7 @@ def patrol_anomalies(workspace: str | Path, *, task_id: str = "") -> dict[str, A
                            "task_id": str(task_id or ""),
                            "stalled": dict(blank), "silent": dict(blank),
                            "open_items": {**blank, "ack": None, "work": None},
-                           "refusals": dict(blank)}
+                           "final_refusals": dict(blank)}
     probe = _PATROL_PROBE
     if probe is None:
         out["reason"] = "没有接上异常清单的读口（set_patrol_probe 还没接）=> 这一拍没查成"
@@ -770,7 +774,8 @@ def patrol_anomalies(workspace: str | Path, *, task_id: str = "") -> dict[str, A
     out["at"] = str(got.get("at") or stamp)
     out["stalled"] = _patrol_cell(blank, got.get("stalled"), name="stalled")
     out["silent"] = _patrol_cell(blank, got.get("silent"), name="silent")
-    out["refusals"] = _patrol_cell(blank, got.get("refusals"), name="refusals")
+    out["final_refusals"] = _patrol_cell(blank, got.get("final_refusals"),
+                                         name="final_refusals")
     items = _patrol_cell({**blank, "ack": None, "work": None},
                          got.get("open_items"), name="open_items")
     out["open_items"] = items
@@ -815,7 +820,7 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
     某一类读不到 => 那一类写"条数读不到（理由）"，不许折成 0。
     """
     cells = {key: (anomalies.get(key) if isinstance(anomalies.get(key), Mapping) else {})
-             for key in ("stalled", "silent", "open_items", "refusals")}
+             for key in ("stalled", "silent", "open_items", "final_refusals")}
 
     def _count_of(cell: Mapping[str, Any], label: str) -> str:
         if not cell.get("checked", True) or cell.get("count") is None:
@@ -825,7 +830,7 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
     stalled = cells["stalled"]
     silent = cells["silent"]
     items = cells["open_items"]
-    refusals = cells["refusals"]
+    final_refusals = cells["final_refusals"]
 
     bits: list[str] = []
     if not stalled.get("checked", True) or stalled.get("count") is None:
@@ -869,15 +874,15 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
         ids = _patrol_ids(items)
         bits.append(f"{line}：{'、'.join(ids)}" if ids else line)
 
-    if not refusals.get("checked", True) or refusals.get("count") is None:
-        bits.append(_count_of(refusals, "④ 被拦的结项原因"))
-    elif int(refusals.get("count") or 0):
-        rows = list(refusals.get("rows") or ())
+    if not final_refusals.get("checked", True) or final_refusals.get("count") is None:
+        bits.append(_count_of(final_refusals, "④ 被拦的结项原因"))
+    elif int(final_refusals.get("count") or 0):
+        rows = list(final_refusals.get("rows") or ())
         head = rows[0] if rows else {}
         text = _first_sentence(head.get("text"))
         kind = str(head.get("kind") or "final_refused")
         where = f"（{kind}" + (f"，{str(head.get('at') or '')}" if head.get("at") else "") + "）"
-        bits.append(f"④ 被拦的结项原因 条数 {int(refusals['count'])}（最近一条）："
+        bits.append(f"④ 被拦的结项原因 条数 {int(final_refusals['count'])}（最近一条）："
                     f"{text or '读不到拒信原文'}{where}")
     else:
         bits.append("④ 被拦的结项原因 条数 0")

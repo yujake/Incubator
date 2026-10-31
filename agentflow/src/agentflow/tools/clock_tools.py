@@ -525,13 +525,17 @@ def _open_items_cell(box: Any, tree: Mapping[str, Any],
             "other": len(rows) - ack - work, "rows": rows, "reason": ""}
 
 
-def _refusal_cell(root: Path) -> dict[str, Any]:
+def _final_refusal_cell(root: Path) -> dict[str, Any]:
     """④ 被拦的结项原因：这一段工作区里最近一次 `final_refused` 的拒信首句。
 
     读的是会话记录（唯一落点：`agent_loop` 在 `shape == "final"` 那一支把
     `{"final_refused": {...}}` 落进这一步的结果，并可能以 `stop_reason="final_refused"`
     收这一趟）。`count` 是这一段里被拦过的总次数，`rows` 只放最近那一条（报醒要的是
     "最近一次"和它的首句，不是整份拒信）。
+
+    名字（2026-11-03，153-U-09）：这一格叫 `final_refusals`，因为它数的是收工被拒的
+    `final_refused` 事件；台账里"动作被拒"的行是 `statusreport` 的 `action_refusals`，
+    名册写口拒过的号是 `registration_refusals` —— 三件事三个名字，不许互相代替。
     """
     from .. import sessions as SS
 
@@ -599,9 +603,9 @@ def _patrol_probe(workspace: str, task_id: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {"checked": False, "reason": "", "at": stamp, "task_id": str(task_id),
                            "stalled": dict(blank), "silent": dict(blank),
                            "open_items": {**blank, "ack": None, "work": None},
-                           "refusals": dict(blank)}
+                           "final_refusals": dict(blank)}
     # ④ 与台账无关（它读会话），先读：台账坏了也不该让这一格跟着变成"没有"。
-    out["refusals"] = _refusal_cell(root)
+    out["final_refusals"] = _final_refusal_cell(root)
     store = _binding(workspace).get("store")
     if store is None:
         out["reason"] = "这个工作区没有绑定 store => 台账读不成（不许读成「本轮无异常」）"
@@ -653,7 +657,7 @@ def _patrol_reading(workspace: str | Path, *, task_id: str = "") -> dict[str, An
     """
     got = C.patrol_anomalies(workspace, task_id=task_id)
     counts: dict[str, Any] = {}
-    for key in ("stalled", "silent", "open_items", "refusals"):
+    for key in ("stalled", "silent", "open_items", "final_refusals"):
         cell = got.get(key) if isinstance(got.get(key), Mapping) else {}
         counts[key] = {"checked": bool(cell.get("checked")),
                        "count": cell.get("count")}

@@ -204,9 +204,9 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                         "active_child_count": None,
                         "reason": f"{type(exc).__name__}: {exc}"}
     # 2026-11-03（153-U-09 的 registration 半）：名册写口拒过的号。
-    # 名字用 `registration_refusals`：本模块里那个 `refusals` 是动作被拒的行
+    # 名字用 `registration_refusals`：本模块里 `action_refusals` 是动作被拒的行
     # （`tasks` 里带 `refusal_reason` 的），与这一份（名册写口拒绝的流水）是两件事；
-    # `action_refusals` 的改名与 U-07 同轮，这一笔只加不改。
+    # 第三义（收工被拒的 `final_refused` 事件）在 `clock.patrol_anomalies` 那一格。
     try:
         from .secretary import registration_refusals as _registration_refusals
 
@@ -253,6 +253,11 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                 "top_level_runs":
                     "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
                     "召唤看 conductor.stats() 的 started_total）",
+                "action_refusals":
+                    "动作被拒的行：tasks 里 outcome=refused 的那些（按 refusal_reason 分档）。"
+                    "口径：三个『被拒』各是一个量 —— 这里是动作被拒；收工被拒的 final_refused "
+                    "事件在 clock.patrol_anomalies 的 final_refusals；名册写口拒过的号是 "
+                    "registration_refusals（上一条）。三者不许互相代替",
                 "registration_refusals":
                     "名册写口拒过的号（out/roster/refusals/<父>.jsonl 的全部行；"
                     "口径只有 secretary.registration_refusals 一处）。checked=false 是"
@@ -278,12 +283,12 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         # 待答涉及哪几段会话：报告是离线文件，"这几条是谁的"必须写在读数里
         # （D14 的第二个口径：`pending_questions` 与网页同源之后，sid 是它的坐标）。
         "pending_questions_sids": pending_sids,
-        "refusals": {"total": len(refused), "by_reason": by_reason,
-                     "recent": [{"task_id": str(t.get("task_id") or ""),
-                                 "role": str(t.get("role") or ""),
-                                 "action": str(t.get("action") or ""),
-                                 "reason": str(t.get("refusal_reason") or "")}
-                                for t in refused[-RECENT_LIMIT:]]},
+        "action_refusals": {"total": len(refused), "by_reason": by_reason,
+                            "recent": [{"task_id": str(t.get("task_id") or ""),
+                                        "role": str(t.get("role") or ""),
+                                        "action": str(t.get("action") or ""),
+                                        "reason": str(t.get("refusal_reason") or "")}
+                                       for t in refused[-RECENT_LIMIT:]]},
         # ---- 后几批新落的两类读数（`draft/39` §6.15）：F 的产物与集体插话。
         # 为什么把它们放进状态报告：真机卡点②③ 要读的正是这两样（"V 有没有被 F 用起来"
         # 与"attack_plans.history 的产物四种有没有齐备"），而 M/用户想知道"现在什么情况"时
@@ -522,9 +527,10 @@ def _next_steps(report: Mapping[str, Any]) -> list[str]:
     if (report.get("in_flight") or {}).get("running_tasks"):
         out.append(f"有 {report['in_flight']['running_tasks']} 条任务还在飞 ⇒ 现在别改口径，"
                    "等它们收工（这份报告本身不打断它们）")
-    if (report.get("refusals") or {}).get("total"):
-        top = sorted((report["refusals"]["by_reason"] or {}).items(), key=lambda kv: -kv[1])[:2]
-        out.append("被拒的动作有 " + str(report["refusals"]["total"]) + " 次，最常见的是 "
+    if (report.get("action_refusals") or {}).get("total"):
+        top = sorted((report["action_refusals"]["by_reason"] or {}).items(),
+                     key=lambda kv: -kv[1])[:2]
+        out.append("被拒的动作有 " + str(report["action_refusals"]["total"]) + " 次，最常见的是 "
                    + "、".join(f"{k}×{v}" for k, v in top) + " ⇒ 参数表/口径要按它改")
     if report.get("pending_questions"):
         out.append(f"有 {report['pending_questions']} 个问题在等用户回答 ⇒ 那是唯一该「停下来」的地方")
@@ -574,7 +580,7 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
     ms = report.get("manuscripts") or {}
     infl = report.get("in_flight") or {}
     five = report.get("five_bit") or {}
-    ref = report.get("refusals") or {}
+    ref = report.get("action_refusals") or {}
     fac = report.get("faculty") or {}
     hygiene = fac.get("conjecture_hygiene") or {}
     strength = fac.get("claim_strength") or {}

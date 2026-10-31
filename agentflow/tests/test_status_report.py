@@ -84,8 +84,9 @@ def test_e15_2_every_count_in_the_report_is_recomputable(tmp_path):
         assert report["tables"][table]["count"] == again["tables"][table]["count"], table
     assert report["tables"]["conjectures"]["count"] == 1, report["tables"]["conjectures"]
     assert report["tables"]["tasks"]["count"] == 1, report["tables"]["tasks"]
-    assert report["refusals"]["total"] == 1, report["refusals"]
-    assert report["refusals"]["by_reason"] == {"invalid_params": 1}, report["refusals"]
+    assert report["action_refusals"]["total"] == 1, report["action_refusals"]
+    assert report["action_refusals"]["by_reason"] == {"invalid_params": 1}, \
+        report["action_refusals"]
 
     # 负控：把 json 里的一个数改坏 ⇒ 它与复算值不再相等（判据真的在读数）
     _r, md, js = SR.write_status_report(st, ws, stamp="20261005-1201")
@@ -487,8 +488,8 @@ def test_the_report_is_json_serialisable_and_carries_the_four_reading_groups(tmp
     report = SR.collect(st, ws)
     blob = json.dumps(report, ensure_ascii=False)
     assert len(blob) > 200, blob
-    for key in ("tables", "manuscripts", "five_bit", "in_flight", "refusals", "next_steps",
-                "attack_rounds", "interjections"):
+    for key in ("tables", "manuscripts", "five_bit", "in_flight", "action_refusals",
+                "next_steps", "attack_rounds", "interjections"):
         assert key in report, key
     assert set(report["tables"]) == set(SR.REPORT_TABLES), sorted(report["tables"])
 
