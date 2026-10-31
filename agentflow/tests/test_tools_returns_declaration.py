@@ -3,14 +3,14 @@
 ## 这个文件修的是什么
 
 仓库里早就有一条判据 `tests/test_tools_audit_fixes.py::declared_keys`：```python def declared_keys(returns: str) -> set[str]: return set(re.findall(r"'([a-z_][a-z0-9_]*)'", returns))```它只抓单引号键，下游断言是 ``declared - actual == set()``。于是任何不带引号的写法（``data={src, dst}``、``{question_id, from, to}``、``data=整数行数。``）都被抽成空集 —— 而空集永远是子集 ⇒ 判据真空通过，那条「docstring 与实现一致」的审计结论在这些工具上从来没有被执行过。本轮实测（`D
-:\\Incubator\\temp\\_probe_returns_parse.py`）：55 个工具里 36 个（65%）的 ``returns=`` 非空却抽不出任何键。这个文件就是为这 36 个工具补上的门。
+:\\Incubator\\temp\\_probe_returns_parse.py`）：2026-10-13 的读数 —— 当时 55 个工具里 36 个（65%）的 ``returns=`` 非空却抽不出任何键。这个文件就是为这 36 个工具补上的门（当时那个数；今天的规模见 `TOOL_COUNT`，有一条判据 `tests/test_the_returns_declaration_file_counts_match_the_disk.py` 钉着这一格）。
 
 ## 三条断言，以及它们各自不能证明什么
 
 1. `test_every_tool_returns_declaration_is_machine_readable`
 —— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。它不能证明「声明的键是对的」
 —— 那是第 2 条的事。`test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
-—— 对全部 55 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
+—— 对全部 122 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
 LLM 少看到有用的键，但不会让调用方读错。这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
 - 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
 - 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
@@ -94,11 +94,13 @@ TS = "2026-01-01T00:00:00+00:00"
 #: `python -m agentflow.cli tools` 的实测总数）。98 与 97 并存的含糊正是这次订正的理由。
 #:
 #: 两个口径（同一个包的两次装配，差的是 Lean 开关，不许互换）：
-#:   · Lean 开：110 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
-#:     钉成 "1"，`formal_tools` 装在册；本常量与下面的 `registry` 都在这一档里跑。
-#:   · Lean 关：107 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
-#:     一件都没有），所以少 3。
-#: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
+#:   · Lean 开：本常量与下面的 `registry` 都在这一档里跑 —— 件数就是 `TOOL_COUNT` 那个数
+#:     （2026-11-03 现读 122；判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
+#:     钉成 "1"，`formal_tools` 装在册）。
+#:   · Lean 关：比 Lean 开那一档少 `formal.*` 三件 —— shell 缺省时 `formal_tools` 整个模块
+#:     不装（那三件一件都没有）。这一档不写具体件数：写了就又是一颗会过期的数，
+#:     需要时现算（`len(build_registry(...).registry.names())`）。
+#: 两档都真的存在，且差的是哪三件也写在这里：把 Lean 关那一档的数搬进本常量会少算三件，
 #: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
 #:
 #: 2026-10-27：107 → 110（D-53 晚班时钟八件的收口）。`clock.periodic_start` /
@@ -145,12 +147,12 @@ SUBSET_CHECK_SCOPE = (
     "所以『元素 A 有、元素 B 没有』这种漂移**这一条**抓不到。"
     "⚠️ 2026-10-15 起，那两个盲区**各有一条判据**了（三条各管一件事，别把强度混起来）：\n"
     "  ① 『给了却没声明』：`test_no_tool_returns_a_top_level_key_it_does_not_declare`"
-    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 80 个工具**零缺键**）。"
+    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 122 个工具**零缺键**）。"
     "为什么它值得单独一条：`tools/base.py:721` 把 `returns` 拼进 function-calling 的 "
     "`description` ⇒ **模型看得到**，于是「声明里没有」= 「模型不知道这个字段存在」"
     "（`doc.scan_claim` 的 `status_axis`/`undecided_reason` 就是这一类 —— 那两格**正是三态**）；\n"
     "  ② 『数组里逐元素不一致』：`test_every_element_of_an_array_carries_the_same_top_level_keys`"
-    "（实测全 79 个工具里只有 `table.schema` 犯过，132 处，已修）。"
+    "（实测全 122 个工具里只有 `table.schema` 犯过，132 处，已修）。"
 )
 
 # ---------------------------------------------------------------- 豁免清单
@@ -361,7 +363,7 @@ def _write_integrity_probe(root: Path) -> None:
 
 
 def tool_params() -> dict[str, dict]:
-    """55 个工具各自那一次调用的参数。"""
+    """122 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
     probe_root = _ALLOCATED.get("probe_task_root") or ""
     probe_child = _ALLOCATED.get("probe_task_child") or ""
@@ -1300,7 +1302,7 @@ def _seed(store: Store, root: Path) -> None:
 class _RoleGateBypassedRegistry(ToolRegistry):
     """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 55 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 122 个工具 —— 那是设计意图（只读角色拿不到写工具）。
     本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
 
     为什么这是可接受的、而不是"测试把门拆了"：
@@ -1335,7 +1337,7 @@ def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
 
 @pytest.fixture
 def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
-    """一个装齐 55 个工具的注册表（联网工具用桩注入，不动装配代码）。
+    """一个装齐 122 个工具的注册表（联网工具用桩注入，不动装配代码）。
 
     `monkeypatch` 在夹具结束时自动还原，所以打桩不会泄漏到别的测试文件 ——
     这一点很重要：判据测试里的桩若泄漏，「别的测试变成了在测桩」是没有任何报错的。
@@ -1430,7 +1432,7 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
 
 @pytest.fixture
 def observations(registry: ToolRegistry) -> dict[str, Observation]:
-    """对 55 个工具各调一次，记录观测结果。
+    """对 122 个工具各调一次，记录观测结果。
 
     调用顺序 = 非破坏性工具在前、破坏性工具在后（见 `MUTATING_LAST`）。
     """
@@ -1519,13 +1521,13 @@ def test_registry_ships_exactly_the_expected_number_of_tools(registry: ToolRegis
 
 
 def test_every_tool_returns_declaration_is_machine_readable(registry: ToolRegistry) -> None:
-    """反真空：55 个工具逐个，`returns=` 必须能被机器读出键集合。
+    """反真空：122 个工具逐个，`returns=` 必须能被机器读出键集合。
 
     放行条件只有一个：工具在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么没有键集合」）。
     失败信息带上原始 `returns=` 字符串 —— 否则人不知道该改什么。
 
     为什么必须有这条：下游判据是 ``declared - actual == set()``，而空集永远是子集。
-    一份抽不出键的声明会让那条判据静默地什么都不检查 —— 本轮实测 36/55（65%）
+    一份抽不出键的声明会让那条判据静默地什么都不检查 —— 本轮（2026-10-13）实测 36/55（65%）
     的工具处于这个状态，「docstring 与实现一致」这条结论在它们身上从未被执行。
     """
     bad: list[str] = []
@@ -1614,16 +1616,16 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """全部 55 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    """全部 122 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
     分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
     被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
-    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 55 个工具全部走到 ok 分支。
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 122 个工具全部走到 ok 分支。
     把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。`ok=False` 与「豁免的工具」
     是两种不同的"没法比对"：`ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；* 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data
     是标量/行对象）⇒ 查成了，只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控`test_negative_control_an_exempted_tool_is_still_probed_for_real`
     盯着它的行为）。但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。`MAX_SKIPPED = 0` 的依据：本文件的
     `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片
-    ⇒ 55 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
+    ⇒ 122 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
     """
     mismatches: list[str] = []
     skipped: list[str] = []
@@ -1892,7 +1894,7 @@ def test_every_element_of_an_array_carries_the_same_top_level_keys(
     上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
     在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
     ## 实测（2026-10-15）
-    全 79 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    全 122 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
     那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。修法是每个元素都给这三格、不适用时给如实空值（`[]` / `None`）。
     ## 一条不许混进来的东西（我第一版判据就栽在这）
     比的是元素的顶层键，不是递归取并集之后的键集合。递归取键会把元素`default` 里嵌套的 `{"start","end","label"}` 算进那个元素，于是"两个元素的 `default` 形状不同"（合法：默认值本来就各不相同）
@@ -1958,10 +1960,10 @@ def test_no_tool_returns_a_top_level_key_it_does_not_declare(
     ## 为什么这一条值得存在（2026-10-15 更正了一条我自己的错判）
     我此前判它"按比例不动"，依据是"声明不全只会让调用方少看到字段"。那句的后果算轻了：`tools/base.py:721` 逐字 `description = summary + "\\n返回：" + returns`⇒
     `returns` 会拼进 function-calling 的 `description`，也就是模型看得到。模型读到的就是这一串键；声明里没有的字段，它不知道存在，于是不会用。
-    实测的代价（当时那 16 件里最重的一件）：`doc.scan_claim` 的声明只列`{checked,claim_id,ok,findings,error_count,warning_count}`，
+    实测的代价（2026-10-13 那批 16 件里最重的一件）：`doc.scan_claim` 的声明只列`{checked,claim_id,ok,findings,error_count,warning_count}`，
     而它实跑还给`status_axis` / `undecided_reason` —— 那两格正是三态（"这条没查成"与"这条查过没问题"靠它们分开）。模型看不到它们，三态纪律在模型这一侧又折回去了。
     ## 今天的读数
-    全 80 个工具、零个顶层键未声明（2026-10-15 一次清完：先补 6 件最重的，再补剩下 10 件）。下面的反真空与负控保证这条判据不是"扫了个寂寞"。
+    全 122 个工具、零个顶层键未声明（2026-10-15 一次清完：先补 6 件最重的，再补剩下 10 件）。下面的反真空与负控保证这条判据不是"扫了个寂寞"。
     """
     bad: list[str] = []
     checked = 0
