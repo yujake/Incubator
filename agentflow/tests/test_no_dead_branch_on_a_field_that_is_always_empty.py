@@ -3,7 +3,7 @@
 
 ## 背景
 
-`Secretary.next_name` 今天**不可能拒**：它最后一句是
+`Secretary.next_name` 今天不能拒：它最后一句是
 `return f"{role}{max(seen, default=0) + 1}", ""` —— 第二个分量恒为空串
 （`secretary.py:4877`）。而两处调用点还留着 `if problem:` 的出口：
 
@@ -11,20 +11,20 @@
 - `Secretary.roster_repair`（`secretary.py:7788-7790`）
 
 151 判过："删掉会削掉'将来发号器可能拒'的显式出口，保留则要接受这两行永远不被执行"
-—— 结论是**保留**。但 151 只记了一处，后一个人照着删就会只删一处，于是同一件事在
+—— 结论是保留。但 151 只记了一处，后一个人照着删就会只删一处，于是同一件事在
 两个函数里各有一套处理（一个能拒、一个直接崩），而那不会让任何判据变红。
 
 ## 这条判据钉住什么
 
-1. **前提今天成立**：`next_name` 的返回确实恒空（AST 核那个 `return` 的第二个分量是
+1. 前提今天成立：`next_name` 的返回确实恒空（AST 核那个 `return` 的第二个分量是
    `""` 字面量）。若哪天它真能拒了，下面两条的"死分支"说法就过期了 —— 那时应当删本文件，
    而不是给它放行；
-2. **两处都在册**：`next_name` 的调用点里，带 `if <问题变量>:` 的恰好是登记过的那两处
+2. 两处都在册：`next_name` 的调用点里，带 `if <问题变量>:` 的恰好是登记过的那两处
    （多一处 = 有新的死分支没登记；少一处 = 有人只删了一边）；
-3. **两处带同一句登记注释**：每个 `if` 的上一行必须是那句 `_MARKER` 开头的话，且全文件
+3. 两处带同一句登记注释：每个 `if` 的上一行必须是那句 `_MARKER` 开头的话，且全文件
    只出现两次 —— 删一边会红，写第三处而不登记也会红。
 
-为什么值得一条判据：死代码不能靠行为红（它永远不执行），只能靠**结构**。而"两处各留一套"
+为什么值得一条判据：死代码不能靠行为红（它永远不执行），只能靠结构。而"两处各留一套"
 正是这个仓库反复踩的形态。
 """
 from __future__ import annotations
@@ -109,19 +109,29 @@ def test_the_two_dead_branches_are_the_registered_ones() -> None:
 
 
 def test_each_dead_branch_carries_the_same_note() -> None:
-    """③ 每个 `if` 的上一行都是那句登记注释，且全文件只出现两次（今天红）。"""
+    """③ 每个 `if` 上面紧邻的那一段注释里有那句登记语，且全文件只出现两次（今天红）。
+
+    为什么核"紧邻的整段注释"而不只核上一行：登记语写清楚要三行（为什么是死分支 / 与谁成对 /
+    怎么改），把它压成一行只会写成一句看不懂的暗号。所以判据核"`if` 正上方那段连续注释"
+    里有没有 `_MARKER` —— 中间隔了空行或代码就不算（那等于注释跟这一支没关系）。
+    """
     lines = SECRETARY.read_text(encoding="utf-8").splitlines()
-    hint = "两处必须成对：`_roster_add` 与 `roster_repair`（见 tests/test_no_dead_branch_on_a_field_that_is_always_empty.py）"
+    hint = ("两处必须成对：`_roster_add` 与 `roster_repair`"
+            "（见 tests/test_no_dead_branch_on_a_field_that_is_always_empty.py）")
     missing = []
     for name, lineno in _dead_branch_sites():
-        #: `lineno` 是 1 起的行号，`lines[lineno - 2]` 就是它上一行。
-        previous = lines[lineno - 2] if lineno >= 2 else ""
-        if _MARKER not in previous and _MARKER not in lines[lineno - 1]:
+        #: 从 `if` 的上一行往上收集连续的 `#` 注释行。
+        block: list[str] = []
+        i = lineno - 2  #: 0 起的下标，指向 `if` 的上一行
+        while i >= 0 and lines[i].strip().startswith("#"):
+            block.append(lines[i])
+            i -= 1
+        if not any(_MARKER in line for line in block):
             missing.append(f"{name}（第 {lineno} 行）")
     total = "\n".join(lines).count(_MARKER)
     assert not missing, (
-        f"这两处死分支没有登记注释（上一行要以 `{_MARKER}` 开头）："
-        + "、".join(missing) + f"\n登记那句话请写：{hint}")
+        f"这两处死分支上面那段注释里没有 `{_MARKER}`："
+        + "、".join(missing) + f"\n登记语请写：{hint}")
     assert total == 2, (
         f"`{_MARKER}` 在源文件里出现 {total} 次，应当是 2 次（两处死分支各一次）—— "
         "多出来说明有新的一处没登记进 `_DEAD_BRANCH_SITES`")

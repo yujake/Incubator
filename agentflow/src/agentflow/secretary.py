@@ -5093,6 +5093,10 @@ class Secretary:
                                 "（要接这件活就 reuse 那个名字）")}
         if not want_name:
             name, problem = self.next_name(owner, role)
+            # 死分支·契约出口：`next_name` 今天的第二个分量恒为空串（它自己的 docstring 与
+            # `tests/test_no_dead_branch_on_a_field_that_is_always_empty.py` 钉着这件事），
+            # 所以这一支永远不执行。留着是给"将来发号器能拒"的显式出口 —— 与
+            # `roster_repair` 里那一支是同一件事：删/留必须成对，不许只改一处。
             if problem:
                 return {"name": "", "role": str(role), "task_id": str(task_id),
                         "problem": problem}
@@ -7786,6 +7790,9 @@ class Secretary:
             row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})
             role = str(row.get("role") or "")
             name, problem = self.next_name(owner, role)
+            # 死分支·契约出口：与 `_roster_add` 里那一支是同一件事（`next_name` 今天恒返回
+            # 空问题串）。两处必须成对：删/留都一起改，并同步
+            # `tests/test_no_dead_branch_on_a_field_that_is_always_empty.py` 的登记表。
             if problem:
                 return fixed, problem
             ok, why = append_jsonl(roster_index_path(self.root, owner),
