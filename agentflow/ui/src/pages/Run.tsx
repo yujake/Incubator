@@ -336,14 +336,23 @@ export function Run(props: RunProps) {
                 </span>
               </div>
             ) : null}
-            {index.data.drift.length === 0 ? (
-              <span class="empty">索引与事件现算结果逐趟一致（drift 是 0 条）。</span>
-            ) : (
+            {index.data.drift.length > 0 ? (
               index.data.drift.map((d, i) => (
                 <div class="row drift" key={i}>
                   <span class="mono">{d}</span>
                 </div>
               ))
+            ) : index.data.tri === "computed" ? (
+              <span class="empty">索引与事件现算结果逐趟一致（drift 是 0 条）。</span>
+            ) : index.data.tri === "unreadable" ? (
+              <span class="empty">
+                没有索引可对账 —— 这个工作区从没建过索引（不影响趟次读数：趟次是回退
+                现算的）。这里的「drift 是 0 条」是「没有可比的东西」，不是「一致」。
+              </span>
+            ) : (
+              <span class="empty">
+                这个工作区一场会话都没有 —— 没有可对账的源（不是「对上了」）。
+              </span>
             )}
           </>
         )}

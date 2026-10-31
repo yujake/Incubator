@@ -694,6 +694,26 @@ def _write_a_max_only_acceptance_table(root: pathlib.Path) -> None:
     ]}, ensure_ascii=False), encoding="utf-8")
 
 
+def _write_a_session_without_an_index(root: pathlib.Path) -> None:
+    """给 Run 页一段会话、但**不建**索引（E5 的现场形状）。
+
+    真机 156 个工作区里 0 个有 `index/run-index.json`（`rebuild_run_index` 零生产
+    调用者），而 Run 页原先只看 `drift.length === 0` —— 于是同一张卡上既说
+    「索引不可用（没建或读不出）」，又说「索引与事件现算结果逐趟一致」。
+    有了这段会话，`/api/run-index` 在页面上走的是 `tri=unreadable` 那一档
+    （不是"一场会话都没有"那一档）。
+    """
+    from agentflow import sessions as SS
+
+    SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "E5 的会话",
+                     "ts": "2026-11-03T00:00:00+08:00"}, sid="demo-sid")
+    SS.append(root, {"kind": "agent_step", "role": "M", "index": 0, "shape": "fs.write",
+                     "payload": {}, "result": {"ok": True},
+                     "ts": "2026-11-03T00:00:01+08:00"}, sid="demo-sid")
+    SS.append(root, {"kind": "agent_run_end", "role": "M", "stop_reason": "final",
+                     "final": "收工", "ts": "2026-11-03T00:00:02+08:00"}, sid="demo-sid")
+
+
 def test_every_page_mounts_clean_and_prints_no_markdown_markers(
         tmp_path: pathlib.Path) -> None:
     """逐页核对（R88）：十页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
@@ -708,9 +728,14 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
     2026-11-03（E4）：正文里也不許出现字面量 `undefined` —— 那是"某个可选读数
     被直接 `String()` 了"的形态（现场：验收表 `max`-only 行的 `min`）。为了让这一格
     真的有机会红，先往工作区里写一张只有上限的验收表（真机 60/99 份就是这样）。
+
+    2026-11-03（E5）：`/run/<sid>` 在索引不可用时不许说「逐趟一致」，而且要在卡片里
+    说清"没有可对账的源"。为了走 `tri=unreadable` 那一档，先给工作区写一段会话
+    （真机 0/156 有索引）。
     """
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
         _write_a_max_only_acceptance_table(root)
+        _write_a_session_without_an_index(root)
         page = live["page"]
         for route in ROUTES:
             live["errors"].clear()
@@ -730,6 +755,15 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
             assert "[object Object]" not in body, (
                 f"{route} 的正文里印出了 `[object Object]` —— 有一个对象被 String() 了"
                 "（本机实测：Mathlib 探针那一格曾经就是这样）")
+            if route.startswith("/run/"):
+                # 2026-11-03（E5）：索引不可用时 Run 页不许说「逐趟一致」——
+                # 那一档的 `drift` 是空集，不是"零处不一致"。这一条今天红：
+                # 正文里就有「索引与事件现算结果逐趟一致」。
+                assert "逐趟一致" not in body, (
+                    f"{route} 在索引不可用时说了「逐趟一致」——"
+                    f"drift 为空只说明没有可比的东西：{body[:600]!r}")
+                assert "没有索引可对账" in body or "一场会话都没有" in body, (
+                    f"{route} 没有把「没有可对账的源」说清楚：{body[:600]!r}")
             assert page.eval_on_selector("#app", "n => n.children.length") > 0, \
                 f"{route} 的 #app 里一个子节点都没有"
             noisy = [e for e in live["errors"] if "favicon" not in e]
