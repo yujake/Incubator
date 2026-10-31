@@ -1999,6 +1999,300 @@ def review_report(
     }
 
 
+# ---------------------------------------------------------------- 文本异常字符审计
+# 业主 2026-10-30 裁定：「需要保证后续写论文不出现异常字符，给 H 加个工具审」。
+#
+# ## 为什么这一格必须是「只读 + 逐条给位置」
+#
+# 异常字符这一类错误的共同点是「看起来没问题」：编辑器不显示零宽字符，PDF 里
+# 全角括号与半角括号一样好看，不换行空格唯一的效果是断行算法在那一段失效。
+# 于是「读一遍，我觉得没有」这种审法对它们完全无效 —— 人对看不见的东西没有直觉。
+# 读数必须逐条落到 文件:行:列 与码位上，H 才能拿着它去要一个修法（改的人是 G）。
+#
+# ## 六档的边界，以及「多一档 / 少一档」为什么都要红
+#
+# 六档的词表在 `TEXT_INTEGRITY_KINDS`（唯一来源）。分档不是学术分类，而是
+# 处置分类：控制符与零宽几乎一定是管道污染的残留（删掉），替换符说明上游
+# 解码已经丢了字符（要回去查那一份的来源），双向控制符能让人读到与实际
+# 相反的文本（安全档），不换行空格只是断行（换成普通空格），CJK 在英文正文里
+# 说明这一句没被改写成目标语言（要改写，不是删）。把两档折成一档，H 拿到的
+# 修法就错了。
+#
+# ## `cjk` 为什么只在 `.tex` / `.md` 里报
+#
+# 论文正文不许有中文，但代码与注释里出现中文是另一回事（本仓的注释就是中文的）。
+# 所以这一档挂在「正文类后缀」上，而不是挂在工具上 —— 同一个工具扫 `.py`
+# 时不报 CJK，但它照样报控制符与零宽，那两档与文件类型无关。
+
+
+#: 六档异常字符（读数 `counts` 的键域；顺序即报出来的顺序）。
+TEXT_INTEGRITY_KINDS: tuple[str, ...] = (
+    "cjk",
+    "control",
+    "zero_width",
+    "replacement",
+    "bidi",
+    "nbsp",
+)
+
+#: `cjk` 那一档的码位域。为什么不是一个区间：业主那句是「CJK 统一表意
+#: （U+4E00–9FFF 等）」，而真论文里最先出现的那一批恰恰在「等」里 ——
+#: 实测 `projects/paper-rewrite-80/out/paper/main.tex:936` 那 9 个字符里只有 6 个
+#: 落在 U+4E00–9FFF，另外 3 个是全角标点（U+FF08 `（` / U+FF0C `，` / U+FF09 `）`）。
+#: 只认统一表意 ⇒ 那一行只报 6 个，而「9 个」这个读数是业主自己数出来的口径
+#: （判据 `tests/test_h_can_audit_text_integrity.py` 的 g1 钉的就是它）。
+_CJK_RANGES: tuple[tuple[int, int], ...] = (
+    (0x2E80, 0x2EFF),   # CJK 部首补充
+    (0x3000, 0x303F),   # CJK 标点（。「」等）
+    (0x3400, 0x4DBF),   # 统一表意扩展 A
+    (0x4E00, 0x9FFF),   # 统一表意
+    (0xF900, 0xFAFF),   # 兼容表意
+    (0xFF00, 0xFFEF),   # 全角/半角形式（（，）等）
+)
+
+#: `cjk` 只在这些后缀里报（正文类）。其余后缀照样扫，但那几档里没有 cjk。
+_CJK_SUFFIXES: tuple[str, ...] = (".tex", ".md")
+
+#: 目录递归时认的文本后缀。别的后缀不扫 —— 那不是「零命中」，是「不归它管」。
+_SCAN_SUFFIXES: tuple[str, ...] = (".tex", ".md", ".txt", ".bib")
+
+#: `limit` 的缺省值：这一次最多返回多少条 `findings`。
+#: `counts` 不受它影响（与 `table.count` 同一条纪律：`counts` 是盘上的真总数，
+#: `findings` 只是这一次给出的那一截；两者的差额在 `detail[].returned` 上看得见）。
+DEFAULT_FINDINGS_LIMIT = 200
+
+
+def _char_kind(ch: str, suffix: str) -> str | None:
+    """一个字符属于哪一档（`None` = 不在六档里，正常字符）。
+
+    `suffix` 只影响 `cjk` 那一档（见上面「`cjk` 为什么只在 `.tex` / `.md` 里报」）。
+    判据顺序与词表顺序无关，但有两条是刻意的：双向控制符先判（它落在
+    U+202A–202E / U+2066–2069，与别的档不重叠，先判只是让读源码的人一眼看到
+    安全档在前）；`\\n` / `\\r` / `\\t` 从控制符里排除（它们是文本的结构，
+    不是污染）。
+    """
+    cp = ord(ch)
+    if 0x202A <= cp <= 0x202E or 0x2066 <= cp <= 0x2069:
+        return "bidi"
+    if 0x200B <= cp <= 0x200D or cp in (0xFEFF, 0x2060):
+        return "zero_width"
+    if cp == 0xFFFD:
+        return "replacement"
+    if cp == 0x00A0:
+        return "nbsp"
+    if (cp < 0x20 and cp not in (0x09, 0x0A, 0x0D)) or cp == 0x7F:
+        return "control"
+    if suffix in _CJK_SUFFIXES and any(lo <= cp <= hi for lo, hi in _CJK_RANGES):
+        return "cjk"
+    return None
+
+
+def _excerpt(line: str, column: int, width: int = 40) -> str:
+    """命中位置附近的一段原文（给人看的定位辅助，不参与任何判据）。
+
+    刻意不转义：所见即盘上那一行的片段（零宽字符在它里面也就"看不见"，
+    这正是要让人看到的样子），可读的同一性由 `codepoint` 给。
+    """
+    start = max(0, column - 1 - width)
+    end = min(len(line), column + width)
+    return ("…" if start else "") + line[start:end] + ("…" if end < len(line) else "")
+
+
+def _scan_text(rel: str, text: str, *, limit: int) -> tuple[list[dict], dict[str, int]]:
+    """扫一份已解码的正文：返回 `(findings, counts)`（`counts` 是真总数）。"""
+    findings: list[dict] = []
+    counts: dict[str, int] = {k: 0 for k in TEXT_INTEGRITY_KINDS}
+    suffix = Path(rel).suffix.lower()
+    for lineno, line in enumerate(text.split("\n"), 1):
+        for column, ch in enumerate(line, 1):
+            kind = _char_kind(ch, suffix)
+            if kind is None:
+                continue
+            counts[kind] += 1
+            if len(findings) < limit:
+                findings.append({
+                    "path": rel,
+                    "line": lineno,
+                    "column": column,
+                    "char": ch,
+                    "codepoint": f"U+{ord(ch):04X}",
+                    "kind": kind,
+                    "excerpt": _excerpt(line, column),
+                })
+    return findings, counts
+
+
+def _reject_path(raw: Any, why: str) -> str:
+    return f"拒绝路径 {raw!r}：{why}"
+
+
+def _resolve_under(root: Path, raw: Any) -> tuple[Path | None, str]:
+    """把一条路径参数解析成「确定在工作区根之下」的绝对路径。
+
+    规则与 `fs_tools._resolve` 逐条同形（拒绝绝对路径 / 盘符 / UNC / 设备命名空间 /
+    NUL；`resolve()` 之后再 `relative_to(root)` 才是唯一判据）。不成立时返回
+    `(None, 理由)` 而不是抛异常 —— 读不成在这件工具里是一个「读数」
+    （`checked=False` + `reason`），不是一次崩溃。
+    为什么这件只读工具也要这道闸：只读不等于无边界。给 H 一把能读整台机器的尺子，
+    「H 审的是本项目的论文」这句话就不再成立（它可能审到上一版、或者别的项目）。
+    """
+    if not isinstance(raw, str):
+        return None, f"paths 里必须是字符串，收到 {type(raw).__name__}"
+    text = raw.strip()
+    if not text:
+        return None, "paths 里的空串：要表示工作区根请用 '.'"
+    if "\x00" in text:
+        return None, _reject_path(raw, "含 NUL 字节（绝对不是合法路径名）")
+    norm = text.replace("\\", "/")
+    if norm.startswith("/"):
+        return None, _reject_path(raw, "只接受工作区内的相对路径（绝对路径/UNC/设备命名空间一律拒绝）")
+    if len(norm) > 1 and norm[1] == ":":
+        return None, _reject_path(raw, "只接受相对路径（盘符路径会被解析到工作区之外）")
+    candidate = (root / norm).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, _reject_path(raw, f"越出工作区（解析为 {candidate}，工作区根为 {root}）")
+    return candidate, ""
+
+
+def _rel_posix(path: Path, root: Path) -> str:
+    """工作区相对路径（posix 分隔符）。读数里的 `path` 一律用这个形态（与 `fs.*` 同一条）。"""
+    return path.relative_to(root).as_posix()
+
+
+def _read_body(path: Path) -> tuple[str | None, str]:
+    """读一份文本；读不成返回 `(None, 理由)`（三态里的第三态，绝不返回空串冒充空文件）。
+
+    二进制判据是两条：含 NUL 字节（文本文件不会有，而截断的二进制几乎一定有），
+    或解码不出 UTF-8。两条都要 —— 只看解码的话，一份"恰好是合法 UTF-8 的二进制"
+    会被解成乱码字符，然后报出一串 `control`（那是假发现，比漏报更坏）。
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        return None, f"{path.name} 读不出来（{type(e).__name__}: {e}）"
+    if b"\x00" in raw:
+        return None, f"{path.name} 是二进制文件（含 NUL 字节）⇒ 它没有可数的字符"
+    try:
+        return raw.decode("utf-8"), ""
+    except UnicodeDecodeError as e:
+        return None, f"{path.name} 不是 UTF-8 文本（{e}）⇒ 它没有可数的字符"
+
+
+def _expand(root: Path, target: Path) -> tuple[list[Path], str]:
+    """一条参数路径 → 要扫的文件清单（文件就是它自己；目录递归认那四个后缀）。"""
+    if target.is_file():
+        return [target], ""
+    if not target.is_dir():
+        return [], f"{_rel_posix(target, root)} 在盘上不存在"
+    files = sorted(p for p in target.rglob("*")
+                   if p.is_file() and p.suffix.lower() in _SCAN_SUFFIXES)
+    if not files:
+        return [], (f"{_rel_posix(target, root)} 里没有可扫的文件"
+                    f"（认 {'/'.join(_SCAN_SUFFIXES)}）⇒ 这一条什么都没扫到")
+    return files, ""
+
+
+def scan_text_integrity(root: Any, paths: Any, *, limit: Any = None) -> dict:
+    """扫一批文本里的异常字符，逐条给位置与码位（只读；不写任何东西）。
+
+    返回的六个键在三条路径上（扫成了 / 一条都没扫成 / 部分扫成）完全一致：
+
+    - `checked`：这些路径是不是全部读成了。有一条读不成 ⇒ `False`；
+    - `reason`：读不成时逐字理由（全部读成 ⇒ 空串）。空串与非空串是这条读数
+      唯一能分开「没查成」与「查过了、干净」的地方 —— 所以读不成时绝不
+      返回 `checked=True` + 零命中（那会把「没查」折成「没问题」）；
+    - `scanned`：这次真的读成并扫过的文件（工作区相对路径，posix 分隔符）；
+    - `findings`：逐条 `{path, line, column, char, codepoint, kind, excerpt}`
+      （`line` / `column` 从 1 起；`char` 是原字符本身，`codepoint` 是 `U+XXXX`）；
+    - `counts`：按 `kind` 汇总的真总数（六档全在，零也写出来；不受 `limit` 影响）；
+    - `detail`：逐条参数路径的读数 `{path, checked, reason, files, counts, returned}`。
+
+    `limit`（缺省 `DEFAULT_FINDINGS_LIMIT`）只管返回多少条 `findings`：
+    `counts` 仍是真总数，某一条路径少给了几条由 `detail[].counts` 之和
+    减 `detail[].returned` 看得出来。
+    """
+    if limit is None:
+        cap = DEFAULT_FINDINGS_LIMIT
+    else:
+        cap = int(limit)
+        if cap < 1:
+            raise ValueError(f"limit 必须是正整数，收到 {limit!r}")
+
+    findings: list[dict] = []
+    counts: dict[str, int] = {k: 0 for k in TEXT_INTEGRITY_KINDS}
+    scanned: list[str] = []
+    details: list[dict] = []
+    reasons: list[str] = []
+
+    if not isinstance(paths, (list, tuple)) or not paths:
+        return {
+            "checked": False,
+            "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」",
+            "scanned": [],
+            "findings": [],
+            "counts": counts,
+            "detail": [],
+        }
+
+    base = Path(str(root)).resolve() if root is not None else None
+    if base is None:
+        return {
+            "checked": False,
+            "reason": "装配时没有拿到工作区根 ⇒ 这些相对路径无从解析（没查成，不是零命中）",
+            "scanned": [],
+            "findings": [],
+            "counts": counts,
+            "detail": [],
+        }
+
+    for raw in paths:
+        target, why = _resolve_under(base, raw)
+        entry: dict = {
+            "path": str(raw),
+            "checked": False,
+            "reason": why,
+            "files": [],
+            "counts": {k: 0 for k in TEXT_INTEGRITY_KINDS},
+            "returned": 0,
+        }
+        if target is not None:
+            files, why = _expand(base, target)
+            if not why:
+                entry["checked"] = True
+            else:
+                entry["reason"] = why
+        if entry["checked"]:
+            for path in files:
+                rel = _rel_posix(path, base)
+                body, why = _read_body(path)
+                if body is None:
+                    entry["checked"] = False
+                    entry["reason"] = (entry["reason"] + "；" if entry["reason"] else "") + why
+                    continue
+                scanned.append(rel)
+                entry["files"].append(rel)
+                got, part = _scan_text(rel, body, limit=cap - len(findings))
+                findings.extend(got)
+                entry["returned"] += len(got)
+                for kind in TEXT_INTEGRITY_KINDS:
+                    counts[kind] += part[kind]
+                    entry["counts"][kind] += part[kind]
+        if not entry["checked"] and entry["reason"]:
+            reasons.append(entry["reason"])
+        details.append(entry)
+
+    return {
+        "checked": not reasons,
+        "reason": "；".join(reasons),
+        "scanned": scanned,
+        "findings": findings,
+        "counts": counts,
+        "detail": details,
+    }
+
+
 # ---------------------------------------------------------------- 工具装配
 
 
@@ -2248,11 +2542,54 @@ def _review_record_finding_tool(_not_wired, store, actor, **kw):
     )
 
 
+@tool(
+    "review.scan_text_integrity",
+    (
+        "扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），"
+        "逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成"
+        "『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。"
+    ),
+    {
+        "type": "object",
+        "properties": {
+            "paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "工作区内的相对路径（文件或目录；目录递归 .tex/.md/.txt/.bib）",
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "description": ("这一次最多返回多少条 findings（缺省 200）；"
+                                "counts 是盘上的真总数，不受它限制"),
+            },
+        },
+        "required": ["paths"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("H",),
+    returns="{'checked','reason','scanned','findings','counts','detail'}",
+    tags=("review", "read", "gate"),
+)
+def _review_scan_text_integrity_tool(root, paths, limit=None):
+    """`review.scan_text_integrity` 的工具体（注入值是工作区根 `root`）。
+
+    返回值就是 `scan_text_integrity()` 的那六个键，一个不多一个不少：
+    三条路径（扫成 / 一条都没扫成 / 部分扫成）的键集必须一致，否则调用方
+    得先判 `ok` 才知道能不能读 `counts` —— 那正是三态纪律要避免的形态。
+    """
+    return ok(scan_text_integrity(root, paths, limit=limit))
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 #: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
 _READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_review_scan_document_tool, ()),
     (_review_list_findings_tool, ('_not_wired', 'store')),
+    # 2026-10-30（业主：「给 H 加个工具审」）：唯一一件要工作区根的审校工具 ——
+    # 其余四件的输入都是台账行或稿件对象，只有它按相对路径去盘上读正文。
+    (_review_scan_text_integrity_tool, ('root',)),
 )
 
 #: 会写盘的三个入口：默认不装（结构约束：H 的工具面必须全 read/none）。
@@ -2275,9 +2612,16 @@ def register(
     include_writers: bool = False,
     actor: str = "agent-H",
     semantic_judge: Any = None,
+    root: Any = None,
     **_: Any,
 ) -> None:
     """装配审校工具。
+
+    `root`（2026-10-30 加）：工作区根，只喂给 `review.scan_text_integrity` 那一件
+    —— 它按相对路径去盘上读正文，其余四件的输入是台账行或稿件对象，不需要根。
+    由 `build_registry` 的装配期注入（`deps["workspace_root"]`）；直接调
+    `register()` 而不给根时那件工具会如实报 `checked=False`（「没查成」），
+    不会静默按当前工作目录去读一个别的项目。
 
     ## 为什么写工具默认不注册
 
@@ -2299,6 +2643,7 @@ def register(
     _bound['store'] = store
     _bound['actor'] = actor
     _bound['semantic_judge'] = semantic_judge
+    _bound['root'] = root
     for _fn, _deps in _READ_TOOL_FUNCTIONS:
         registry.register(replace(_fn.__tool_spec__,
                                   handler=partial(_fn, *[_bound[k] for k in _deps])))

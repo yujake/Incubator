@@ -327,7 +327,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（121 个，逐条；Lean 关着时 118 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（122 个，逐条；Lean 关着时 119 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -469,6 +469,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 120 | `conductor.review_child` | 细看一个活跃子代理：给它的绝对编码，返回 `conductor.patrol` 里那一项的全部信息（同一份实现），外加整棵名册树（带绝对编码，从里面挑号）。号不合法时受控拒绝并点名哪些号合法（`legal_codes` 上限 20 条 + `legal_total` 总数）：台账里没有 ⇒ `not_in_roster`；有但不活跃（已收工 / 已销号）⇒ `not_active` 并点明它在哪一档。 | `read` | 否 | M | **code** | {'checked','ok','legal','code','item','tree','refused','reason','legal_codes','legal_total','target_state','target_state_label'}；item 的形状与 `conductor.patrol` 的 items 里那一项逐键相同（不合法时是空表） | `tests/test_m_patrol_reads_every_active_child.py` | 与 `conductor.patrol` **同一份实现**（`_patrol_reading`）：`item` 与 patrol 的那一项逐键相同；非法号受控拒绝（`not_in_roster` / `not_active`）并点名 `legal_codes`（上限 `LEGAL_CODES_LIMIT=20`）与 `legal_total` |
 | 121 | `conductor.patrol_verdict` | 对一个活跃子代理下结论：`verdict="pass"`（过）或 `verdict="guide"`（指导意见，`text` 必填）。`guide` 走的就是 `conductor.guide` 那条沿秘书链逐级转发的路（正文只到链尾），回执原样带出（`relay_id` / `delivered_to` / `hops`）；`pass` 在转发台账所在的那同一本账里落一条痕。号不合法或它此刻不活跃 ⇒ 受控拒绝并点名合法号与它在哪一档；被拒的结论不落成「巡过了」。 | `write_local` | **是** | M | **code**,**verdict**；text | {'checked','ok','status','verdict','code','state','target_state','target_state_label','refused','reason','error','chain','chain_text','delivered_to','hops','item_id','relay_id','trace','trace_problem','legal_codes','legal_total','text'}；status 是 passed / delivered / refused / unknown 之一；guide 的回执（relay_id / delivered_to / hops / item_id）原样带出 | `tests/test_m_patrol_reads_every_active_child.py` | 业主口径 ①：`guide` 走的就是 `conductor.guide` 那条**既有秘书链**（同一个 handler `conductor_guide`：`Conductor.resolve_chain` 逐跳校验 + 逐级转发 + 只有链尾开板项，回执原样带出 `relay_id`/`delivered_to`/`hops`），**不是第二份投递路**；② 轮查是规范动作（见上一条），本工具是那四步里的「逐个给 `pass`/`guide`」；③ `pass` 在 `out/secretary/relay.jsonl` 落痕（`kind=patrol_verdict`，与转发同一本账）；对不活跃的号受控拒绝并点名它在哪一档 |
 | 124 | `search.retry_pending` | 把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；行上没有可重取地址的如实记 no_location（没去取），冷却中的源跳过而不判失败 | `write_local` | **是** | A | （无）；limit, lit_id | `{checked,scanned,attempted,counts,rows,stopped,coverage_before,coverage_after,note}`；counts 是 `{got,failed,no_location,cooled_down}`；rows[] 每项是 `{lit_id,outcome,source,url,kind,http_status,path,bytes,sha256,error,cooldown_left_sec,note}`；coverage_before / coverage_after 与 `search.shelf` 的 coverage 同形 | `tests/test_the_retry_pending_path_is_honest.py` | 阶段 ③ 2B（2026-10-28，`draft/173` §3 方案 B）：真机那趟 `literature` 32 行里 27 行只有元数据（`download.url` 记着定位链接、note 逐字「要全文请按它重取」），而 A 当时只能一条条手工 `search.download` + `search.register`，10 次里 404/429/400 各两次 ⇒ 四种结局各是一种**处置**：got = 现在可离线引用；failed = 试过没拿到（`kind` 记受控档）；no_location = 没地址 ⇒ 没去取；cooled_down = 源在冷却 ⇒ 跳过（下次还能取）。`failed` 是刻意加的第四档：把 404 折进 no_location 就是把「下载失败」写成「这篇不存在」。冷却表与 `providers` 共用，键是主机归一的源（如 `wiley.com`）或行上记的 provider |
+| 126 | `review.scan_text_integrity` | 扫一批文本里的异常字符（六档：cjk / control / zero_width / replacement / bidi / nbsp），逐条给 `path` / `line` / `column` / `char` / `codepoint` / `kind` / `excerpt`；读不成如实报 `checked=false` + 理由（不折成「零命中」）；`counts` 是盘上的真总数，不受 `limit` 影响。目录递归 `.tex` / `.md` / `.txt` / `.bib` | `read` | 否 | H | **paths**；limit | `{'checked','reason','scanned','findings','counts','detail'}`；findings[] 每项 `{path,line,column,char,codepoint,kind,excerpt}`；counts 是 `{cjk,control,zero_width,replacement,bidi,nbsp}`（六档全在，零也写出来）；detail[] 每项 `{path,checked,reason,files,counts,returned}` | `tests/test_h_can_audit_text_integrity.py` | 2026-10-30 新增（业主 2026-10-30 逐字：「需要保证后续写论文不出现异常字符，给 H 加个工具审」）：① `roles=("H",)` —— 审校者的尺子不只给作者，也不给另外两个只读角色 C / V（判据 g5）；② `cjk` 那一档的码位域是「统一表意（含扩展 A / 兼容 / 部首）+ CJK 标点 + 全角形式」：真论文 `main.tex:936` 那 9 个字符里只有 6 个在 U+4E00–9FFF，另外 3 个是全角标点（`（` `，` `）`），只认统一表意就会少报（判据 g1 钉的是 9）；③ `cjk` 只在 `.tex` / `.md` 里报 —— 代码与注释里出现中文是另一回事，`.txt` / `.bib` 同理（那几档照旧扫 control / zero_width 等五档）；④ 路径闸门与 `fs_tools._resolve` 同形（只收相对路径，`resolve()` 之后仍须在工作区根之下）：只读不等于无边界；⑤ 二进制判据是两条（含 NUL 字节，或解不出 UTF-8）—— 只看解码会把「恰好是合法 UTF-8 的二进制」解成乱码字符，然后报出一串假 `control` |
 
 ### R0.1 工具面的公共事实（逐格现读见附录 §R0.1）
 
@@ -1394,7 +1395,7 @@ C 的产出有两类，状态语义完全不同。
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |
 
-### H.4 工具面（44 个，实测）
+### H.4 工具面（45 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role H`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §H.4 —— 那里逐格现算，本节不抄会变的分份数。
 

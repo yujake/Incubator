@@ -486,7 +486,13 @@ def test_h_tool_surface_is_read_only(h_store: Store):
     # ---- review_tools 的默认注册面只读；写工具要显式 include_writers
     default_reg = ToolRegistry(name="review-default")
     RV.register(default_reg, store=h_store)
-    assert default_reg.names() == ["review.list_findings", "review.scan_document"]
+    # 2026-10-30：默认只读面多了一件 `review.scan_text_integrity`（业主逐字「需要保证
+    # 后续写论文不出现异常字符，给 H 加个工具审」，判据在
+    # `tests/test_h_can_audit_text_integrity.py`）。这一格仍然写死名单、不改成子集：
+    # 默认面多一件必须有人在这里认一次账，否则「默认只读」会退化成「随便加，
+    # 反正断言是子集」—— 那正是这条判据本来要挡的那件事。
+    assert default_reg.names() == ["review.list_findings", "review.scan_document",
+                                   "review.scan_text_integrity"]
     assert all(s.side_effect in ("none", "read") for s in default_reg.for_role("H"))
 
     writer_reg = ToolRegistry(name="review-writers")
