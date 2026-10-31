@@ -3188,7 +3188,15 @@ class Conductor:
     @staticmethod
     def _roster_row_is_this_child(row: Mapping[str, Any], *, key: str, name: str,
                                   task_id: str, surface: str = "") -> bool:
-        """这一行是不是"这个子代理的那一行"（三份的键不同：正文看 `add`、对照表看 `bind`）。"""
+        """这一行是不是"这个子代理的那一行"（三份的键不同：正文看 `add`、对照表看 `bind`）。
+
+        正文与对照表只认 `task_id`：一个名字接过 N 件活是合法形态（复用），按名字认
+        会把"同一个名字名下另一件活的那一行"读成"这一趟那一行写成了" —— 于是
+        一件根本没登记的活被报成 `state="written"`，而"名册三份都读得到这一趟的那一行"
+        这句话就变成了假话（`draft/151` 三-2；探针 H 的 `problem=""` 正是这么来的）。
+        面池那一份反过来只按名字/槽位认：面的行本来就不带 `task_id`，它的键是
+        `(name, slot)`。
+        """
         # 这一处问的不是"轴"（是不是板项），而是"这是名册三份里哪一份的那一行"：
         # 名册正文只认 `add`、对照表只认 `bind`、面池按名字/槽位认。所以它就地读 `kind`，
         # 不走 `row_axis` —— 那一格回答的是任务台账的轴，不是名册事件的种类。
@@ -3201,9 +3209,7 @@ class Conductor:
             return False
         if key == "index" and kind != "bind":
             return False
-        if task_id and str(row.get("task_id") or "") == str(task_id):
-            return True
-        return bool(name) and who == name
+        return bool(task_id) and str(row.get("task_id") or "") == str(task_id)
 
     # ---------------------------------------------------------------- 工作项板（业主 2026-10-08 裁 A1=甲）
     #

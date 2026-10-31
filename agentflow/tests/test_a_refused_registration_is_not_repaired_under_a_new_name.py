@@ -133,3 +133,34 @@ def test_a_normal_registration_still_registers_and_the_backstop_still_runs(
     ids = {str(r.get("task_id")) for r in _rows(cond, parent)}
     assert mine in ids, rec
     assert orphan in ids, ("兜底自愈被一起掐死了：这条漏行没补上", _kinds(cond, parent))
+
+
+# ------------------------------------------------------------------ 5（"这一趟那一行"）
+def test_a_sibling_task_under_the_same_name_is_not_read_as_written(
+        tmp_path: pathlib.Path) -> None:
+    """正题：同一个名字名下的另一件活不许被读成"这一趟的那一行"。
+
+    `_roster_files_reading` 的 docstring 说它问的是"这一趟的那一行在不在"，
+    而 `_roster_row_is_this_child` 在名册正文/对照表上曾经接受"同名即算" ⇒
+    一件根本没登记的新活会被读成 `written`（探针 H 的 `problem=""` 正是这么来的）。
+    面池那一份仍然按名字认（面的行本来就不带 `task_id`），这一条也把它钉住。
+    """
+    cond, parent = _env(tmp_path)
+    first = _child(cond, parent, tag="first")
+    made = cond.secretary.roster_add(owner=parent, role="D", task_id=first,
+                                     brief="第一件活", task="做研究", want_name="D1")
+    assert made.get("problem") == "", made
+    surface = str(made.get("surface") or "")
+    assert surface, made
+    sibling = _child(cond, parent, tag="sibling")     # 同一名字下的另一件活，没登记
+    reading = cond._roster_files_reading(sink=cond.secretary, owner=parent,
+                                         name="D1", task_id=sibling, surface=surface)
+    assert reading["roster"]["state"] == "missing", (
+        "同名另一件活被读成'这一趟那一行写成了'", reading["roster"])
+    assert reading["index"]["state"] == "missing", reading["index"]
+    assert reading["surfaces"]["state"] == "written", reading["surfaces"]
+    # 反真空：真正那一行三份都读得到。
+    ok = cond._roster_files_reading(sink=cond.secretary, owner=parent,
+                                    name="D1", task_id=first, surface=surface)
+    assert {k: v["state"] for k, v in ok.items()} == {
+        "roster": "written", "index": "written", "surfaces": "written"}, ok
