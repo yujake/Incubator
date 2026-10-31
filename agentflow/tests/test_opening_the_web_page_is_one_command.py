@@ -35,7 +35,7 @@ def test_the_same_workspace_reuses_the_server_already_serving_it(tmp_path: pathl
     root = _root(tmp_path)
     monkeypatch.setattr(S, "recorded_port", lambda r: 8788)
     monkeypatch.setattr(S, "verify_serving",
-                        lambda url, *, root: {"state": "ok", "reason": ""})
+                        lambda url, *, root, token="": {"state": "ok", "reason": ""})
     got = S.ensure_serving(root)
     assert got["action"] == "reuse", got
     assert got["port"] == 8788 and got["url"].endswith(":8788/"), got
@@ -47,9 +47,9 @@ def test_a_foreign_occupant_makes_it_move_to_a_free_port(tmp_path: pathlib.Path,
     root = _root(tmp_path)
     monkeypatch.setattr(S, "recorded_port", lambda r: 8788)
     monkeypatch.setattr(S, "verify_serving",
-                        lambda url, *, root: {"state": "mismatch", "reason": "别的工作区"})
+                        lambda url, *, root, token="": {"state": "mismatch", "reason": "别的工作区"})
     monkeypatch.setattr(S, "port_owner",
-                        lambda host, port: {"checked": True, "state": "busy", "root": "别的"})
+                        lambda host, port, **kw: {"checked": True, "state": "busy", "root": "别的"})
     got = S.ensure_serving(root)
     assert got["action"] == "start", got
     assert got["port"] != 8788 and got["port"] > 0, got
@@ -63,7 +63,7 @@ def test_an_explicit_port_is_never_reused(tmp_path: pathlib.Path,
     root = _root(tmp_path)
     monkeypatch.setattr(S, "recorded_port", lambda r: 8788)
     monkeypatch.setattr(S, "verify_serving",
-                        lambda url, *, root: {"state": "ok", "reason": ""})
+                        lambda url, *, root, token="": {"state": "ok", "reason": ""})
     got = S.ensure_serving(root, port=9123)
     assert got["action"] == "start" and got["port"] == 9123, got
 
@@ -75,3 +75,23 @@ def test_the_port_is_written_down_and_read_back(tmp_path: pathlib.Path):
     assert S.write_port_file(root, 8788, "http://127.0.0.1:8788/") == ""
     assert S.recorded_port(root) == 8788
     assert (root / S.PORT_FILE_NAME).is_file()
+
+def test_the_reuse_probe_carries_the_token(tmp_path: pathlib.Path,
+                                           monkeypatch: pytest.MonkeyPatch):
+    """口令档（E1）：复用那一问必须带这一趟的口令。
+
+    不带的话，登记端口上真在服务的自己人也会被 401 读成"不是我"，于是每次开网页
+    都白起第二个进程（Windows 的 `SO_REUSEADDR` 还会让第二次 bind 静默成功）。
+    """
+    root = _root(tmp_path)
+    seen: dict[str, str] = {}
+    monkeypatch.setattr(S, "recorded_port", lambda r: 8788)
+
+    def _verify(url, *, root, token=""):
+        seen["token"] = token
+        return {"state": "ok", "reason": ""}
+
+    monkeypatch.setattr(S, "verify_serving", _verify)
+    got = S.ensure_serving(root, token="tok-reuse")
+    assert got["action"] == "reuse", got
+    assert seen["token"] == "tok-reuse", seen

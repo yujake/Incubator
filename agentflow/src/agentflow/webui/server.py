@@ -44,13 +44,40 @@ Q1 说"其余未知路径吐 index.html"，而既有判据
 ## 安全与失败姿态（与拆包前逐条相同）
 
 - 服务默认只听 `127.0.0.1`；`--token` 给一个共享口令（或 `AGENTFLOW_WEB_TOKEN`），
-  给了就要求 `?token=` 或 `Authorization: Bearer`；
+  给了就要求 `?token=` / `Authorization: Bearer` / 口令 cookie（见下一节）；
 - 服务器自己写的最后一页是 :func:`_error_page`（只有错误页），它把理由串经
   `html.escape` 后才写进 HTML；盘上的文本一律走 JSON —— 前端用文本节点渲染它们
   （两条转义判据见 `tests/test_webui.py`：一条钉服务端，一条钉前端源码里没有
   把字符串当 HTML 用的写法）；
 - 写失败不许折成 200（`writes.answer` 的三态）；
 - 每个响应都带 `X-Content-Type-Options: nosniff`。
+
+## 口令档（`--token`）：自证与页面各带一次口令（2026-11-03 修 E1 / E2）
+
+口令档原先有两条同时存在、互相独立的缺陷，合起来的效果是"这个开关一开，服务根本
+站不住，站住了也是白屏"：
+
+1. 自证不带口令（E1）：`run()` 的 `_self_check` 调 `verify_serving(url, root=root)`
+   去打 `/api/state`，而口令那一格（:meth:`WebHandler._token_ok`）没有查询串就回 401
+   ⇒ 自证 8 秒后判 `unknown`、`srv.shutdown()`、退出 1。打出去的那一行 URL
+   于是是一个死地址。修法：口令是 `serve()` 挂到句柄上的同一个事实
+   （`handler.token`），`verify_serving(..., token=...)` 把它带进自证请求
+   （Bearer 头）；`run()` / `serve()` 的端口探测 / `ensure_serving` 的复用判断
+   三处都传同一个值 —— 不许另造第二份口径。
+2. 页面带不上口令（E2）：口令模式下外壳里的 `/static/*.js`、`/api/state` 与
+   `/api/stream` 都是普通请求（浏览器不会给它们补 `?token=`）⇒ 全 401，`GET /` 拿到
+   的 HTML 后面什么都没有。修法：`?token=` 校验通过时种一个同源会话 cookie
+   （:data:`TOKEN_COOKIE_NAME`，`Path=/; HttpOnly; SameSite=Strict`），
+   `_token_ok` 认它 ⇒ 浏览器随后请求的同源资源（含 `EventSource`）自动带上口令。
+
+为什么是 cookie、不是"前端从 `meta` 里读出来再拼到每个请求/SSE 上"：后者要改
+`ui/src/api.ts` / `ui/src/sse.ts` 并重新构建入库的前端产物，还要往外壳里注入第二个
+令牌位；而静态资源那一支（`<script src>` / `<link href>`）根本不经过前端代码，
+`meta` 方案对它完全无效 ⇒ 两条新面（新 meta 位、新拼串口径）换来的只是同一件事。
+cookie 只多一个响应头，`_token_ok` 的口径（`secrets.compare_digest`，fail-closed）
+一个字不改。外壳里的资源仍走绝对路径（`/static/assets/...`）：外壳在 `/` 与
+`/run/{sid}` 两条路上各吐一次，相对路径到了 `/run/{sid}` 会解析成
+`/run/static/...`（深链刷新立刻白屏）—— 缺的是口令，不是相对路径。
 
 ## 两个开关（裁定 C2 / E1，本批只做到"解析并透传"）
 
@@ -75,7 +102,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from ..stop_reasons import STOP_REASONS
 from . import routes, sse
@@ -97,6 +124,34 @@ DEFAULT_HEARTBEAT_SEC = 15.0
 _STATIC_REL = ("web", "static")
 #: 静态路由的前缀（与 `ui/vite.config.ts` 的 `base` 逐字一致；不一致时页面全白）。
 STATIC_PREFIX = "/static/"
+
+#: 口令 cookie 的名字（E2）：`?token=` 校验通过之后种下的同源会话 cookie，
+#: `_token_ok` 认它。浏览器随后请求的 `/static/*`、`/api/*` 与 `EventSource` 会自动带上
+#: —— 这就是"口令随页面到达后续请求"那一条（理由见模块 docstring 的「口令档」一节）。
+#: 名字带 `agentflow_` 前缀：同一台机器上别的服务另起一个 cookie 名，不会互相顶掉。
+TOKEN_COOKIE_NAME = "agentflow_web_token"
+
+
+def token_cookie_header(value: str) -> str:
+    """口令 cookie 的 `Set-Cookie` 整行（`value` 在这里做百分号编码）。
+
+    `HttpOnly`：前端脚本读不到它（少一条 XSS 泄漏面）；`SameSite=Strict`：跨站导航
+    不带它（口令不能靠"受害者刚好打开一个链接"送达）；不写 `Secure`：本服务默认
+    只听回环、走的是 `http://`，写上 `Secure` 会让浏览器直接丢掉它。
+    不写 `Max-Age`：会话 cookie，关掉浏览器就没了（口令不该在盘上过夜）。
+    """
+    return (f"{TOKEN_COOKIE_NAME}={quote(str(value), safe='')}; "
+            "Path=/; HttpOnly; SameSite=Strict")
+
+
+def cookie_value(header: str, name: str) -> str:
+    """从 `Cookie` 头里取一个值（解百分号编码；没有就是空串，不抛）。"""
+    for part in str(header or "").split(";"):
+        key, sep, value = part.partition("=")
+        if sep and key.strip() == name:
+            return unquote(value.strip().strip('"'))
+    return ""
+
 
 #: 静态资源的 content-type 表（认不出来的一律 `application/octet-stream`：
 #: 猜错的类型比不认识的类型更危险，尤其配上 `nosniff`）。
@@ -220,42 +275,78 @@ class WebHandler(BaseHTTPRequestHandler):
 
     #: 本次请求解出来的路径（`_parse` 填；未知路由那一条要用它说清"是什么没找到"）。
     _path: str = ""
+    #: 这一趟要不要在响应里种口令 cookie（`_token_ok` 在"地址栏带口令"那一档置真；
+    #: 每个请求一个实例，所以它是逐请求的事实，不是进程级开关）。
+    _set_token_cookie: bool = False
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003 - 基类签名
         """默认日志会往 stderr 打每一行请求；改成一条短行（测试里也不吵）。"""
         sys.stderr.write("[webui] %s\n" % (fmt % args))
 
     # ------------------------------------------------------------ 口令
+    def _want_token(self) -> str:
+        """这一趟要求的口令（`serve()` 挂上来的那一格；没有就退回环境变量）。
+
+        口令只有一个真身：`serve()` 挂到句柄上的 `token`（环境变量那一档在
+        `run()` 里已经折进同一个值，但直接调 `serve()` 的嵌入方也可能只设了环境变量，
+        所以这里照旧兜一层）。自证 :func:`verify_serving` 拿的是同一个值 —— E1 修的
+        正是"自证另走一条不带口令的路"。
+        """
+        return str(self.token or os.environ.get("AGENTFLOW_WEB_TOKEN", ""))
+
     def _token_ok(self, query: Mapping[str, Sequence[str]]) -> bool:
-        """给了口令就要求它：`?token=` 或 `Authorization: Bearer`。"""
-        want = self.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
+        """给了口令就要求它：`?token=` / `Authorization: Bearer` / 口令 cookie。
+
+        三个来路只认同一个口令值（`_want_token()`），比对一律走
+        `secrets.compare_digest`。地址栏那一路（`?token=`）校验通过时顺手种 cookie
+        （:data:`TOKEN_COOKIE_NAME`）—— 浏览器只会在地址栏里带一次 `?token=`，
+        外壳里的 `/static/*` 与前端 fetch / `EventSource` 都不带查询串（E2）。
+        """
+        want = self._want_token()
         if not want:
             return True
         got = ""
         vals = query.get("token") or []
         if vals:
             got = _text(vals[0])
+        if got:
+            ok = secrets.compare_digest(got.encode("utf-8"), want.encode("utf-8"))
+            if ok:
+                # 只在"地址栏那一趟"种：Bearer / cookie 这两路都是后续请求，不再种。
+                self._set_token_cookie = True
+            return ok
+        auth = self.headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            got = auth[7:].strip()
         if not got:
-            auth = self.headers.get("Authorization", "")
-            if auth.lower().startswith("bearer "):
-                got = auth[7:].strip()
+            got = cookie_value(self.headers.get("Cookie", ""), TOKEN_COOKIE_NAME)
         # 与写面的 CSRF 那一格同一条口径（`writes._csrf_ok`）：口令比对走
         # `secrets.compare_digest`，不用 `==`。比的是令牌，逐字符提前返回的
         # 相等比较会把"对了几个字符"泄给对端；本服务默认只听回环，所以这
         # 一格不是主防线，但同一个仓库里两处口令用两种比法是没必要的分叉。
-        return secrets.compare_digest(got.encode("utf-8"), want.encode("utf-8"))
+        return bool(got) and secrets.compare_digest(got.encode("utf-8"),
+                                                    want.encode("utf-8"))
 
     # ------------------------------------------------------------ 输出
     def _send(self, code: int, body: bytes, ctype: str,
               extra: Mapping[str, str] | None = None,
               cache: str = "no-store") -> None:
-        """一个响应（HEAD 只发头）。`cache` 是 Cache-Control 那一格。"""
+        """一个响应（HEAD 只发头）。`cache` 是 Cache-Control 那一格。
+
+        口令 cookie 在这里统一补（E2）：`_token_ok` 判定"这一趟是地址栏带口令来的"
+        之后置 `_set_token_cookie`，于是这一趟的响应（外壳 200、`/api/*` 的 JSON、
+        甚至一条诚实的错误页）都带上 `Set-Cookie`。放在 `_send` 而不是各个 handler
+        里，是因为"哪个 handler 记得种 cookie"正是会漏一处的形态。
+        """
+        headers = dict(extra or {})
+        if self._set_token_cookie:
+            headers.setdefault("Set-Cookie", token_cookie_header(self._want_token()))
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in (extra or {}).items():
+        for k, v in headers.items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
@@ -626,7 +717,8 @@ class WebStartupError(RuntimeError):
         self.owner: dict[str, Any] = dict(owner or {})
 
 
-def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
+def port_owner(host: str, port: int, *, timeout: float = 2.0,
+               token: str = "") -> dict:
     """这个端口上有没有"正在服务的东西"（三态：`free` / `busy` / `unknown`）。
 
     ## 判据是"连得上"，不是"bind 得上"（2026-10-28 修）
@@ -642,8 +734,12 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
     - 超时 / 其它 ⇒ 退回裸 bind：bind 不上就 `busy`（fail-closed，宁可不绑也不双绑），
       bind 得上就是 `free`。
 
-    返回 `{"checked","state","root","pid","reason"}`；`root` / `pid` 来自对面 `/api/state`
+        返回 `{"checked","state","root","pid","reason"}`；`root` / `pid` 来自对面 `/api/state`
     的自述（读不出就是空串 / 0，不代表"没有占位者"）。
+
+    `token` 是这一趟的口令：口令档下自述那一趟必须带它，否则 401 会让一个真正在
+    服务的自己人被读成 `unknown`（E1 的同一处口径；这里缺了那一条，`--port N` 的
+    第二次启动就会在 Windows 的 `SO_REUSEADDR` 下静默双绑，正是这个函数要防的事）。
     """
     import socket
 
@@ -683,7 +779,7 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
         # 连上了不等于"在服务网页"：TIME_WAIT 里也连得上（真机 8788 全是 TimeWait、
         # 零个 listener，`Get-NetTCPConnection` 可核）。所以再用一次 `/api/state` 自述：
         # 真答得上来才判 busy，否则回 unknown（让真正的 bind + 起服务后的自证去决定）。
-        got = verify_serving(f"http://{host}:{int(port)}/", root="")
+        got = verify_serving(f"http://{host}:{int(port)}/", root="", token=token)
         if isinstance(got, dict) and str(got.get("state") or "") in ("ok", "mismatch"):
             # "ok" = 在服务就是我们要的那个工作区；"mismatch" = 在服务、但根不是我们 ——
             # 两种都算"有人在服务这个端口"，只有 "unknown"（答不上来）才判不了。
@@ -700,11 +796,18 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0) -> dict:
                 "reason": f"{type(exc).__name__}: {exc}"}
 
 
-def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0) -> dict:
+def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0,
+                   token: str = "") -> dict:
     """绑完自证：这一趟的端口真是自己在服务吗（三态，`ok` 才放行）。
 
     `mismatch` = 200 但 root 不是这一趟 ⇒ 端口上答话的是别人（改前那种"绑上了却空转、
     真正答话的是旧服务"的形态）；`unknown` = 连不上/不通 ⇒ 没查成，不许折成 ok。
+
+    `token` 是这一趟的口令（缺省空 = 不要求口令，与"服务没开口令"同一档）。
+    E1 的修法就是这一个参数：自证要证明的是"带口令的这一趟在服务"，所以它必须
+    带和 `handler._want_token()` 同一个值（`?token=` 这一档在这里走 Bearer 头，
+    免得口令进 URL；两者在 `_token_ok` 里是同一条比对）。不带 ⇒ 口令档下恒 401
+    ⇒ 自证判 `unknown`（今天那条 9.2 秒后退出 1 的路）。
     """
     import urllib.request
 
@@ -712,8 +815,10 @@ def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0) -> dict:
     out: dict[str, Any] = {"checked": True, "state": "unknown", "code": 0, "root": "",
                            "reason": "", "url": url}
     target = url.rstrip("/") + "/api/state"
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = urllib.request.Request(target, headers=headers)
     try:
-        with urllib.request.urlopen(target, timeout=timeout) as resp:  # noqa: S310 - 本机自检
+        with urllib.request.urlopen(request, timeout=timeout) as resp:  # noqa: S310 - 本机自检
             out["code"] = int(getattr(resp, "status", 0) or 0)
             body = resp.read()
     except Exception as exc:  # noqa: BLE001
@@ -799,7 +904,7 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     owner: dict[str, Any] = {"checked": False, "state": "port_zero", "root": "", "pid": 0,
                              "reason": "port=0：由系统挑空端口，不探测"}
     if int(port):
-        owner = port_owner(host, int(port))
+        owner = port_owner(host, int(port), token=token)
         if owner.get("state") == "busy":
             # 只有"明确有人服务"才拒；`unknown`（TIME_WAIT / 判不了）放行，
             # 由 `run()` 的自证把"在服务的是不是这一趟"钉死。
@@ -896,7 +1001,7 @@ def free_port_near(host: str, start: int, *, span: int = 40) -> int:
 
 
 def ensure_serving(root: str | Path, *, host: str = DEFAULT_HOST,
-                   port: int = 0) -> dict[str, Any]:
+                   port: int = 0, token: str = "") -> dict[str, Any]:
     """这一趟该"复用已在跑的那一个"还是"起一个新的"（只有这一处判）。
 
     返回 `{"action": "reuse"|"start", "port": N, "url": ..., "why": ...}`。
@@ -907,6 +1012,9 @@ def ensure_serving(root: str | Path, *, host: str = DEFAULT_HOST,
       `ok`）⇒ `reuse`，不再起第二个；
     - 登记端口被别的程序占着 / 服务的是别的工作区 ⇒ 从它往上找一个空端口再 `start`
       （找不到就交回 0 让系统挑）。
+
+    `token` 是这一趟的口令（E1）：口令档下"复用"那一问必须带它，否则登记端口上
+    真在服务的自己人也会被 401 读成"不是我"，于是每次开网页都白起第二个进程。
     """
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     if int(port):
@@ -915,11 +1023,11 @@ def ensure_serving(root: str | Path, *, host: str = DEFAULT_HOST,
     remembered = recorded_port(root)
     if remembered:
         url = f"http://{shown}:{remembered}/"
-        got = verify_serving(url, root=root)
+        got = verify_serving(url, root=root, token=token)
         if got.get("state") == "ok":
             return {"action": "reuse", "port": remembered, "url": url,
                     "why": "这个端口上服务的正是这个工作区（登记在 webui.json）"}
-        owner = port_owner(host, remembered)
+        owner = port_owner(host, remembered, token=token)
         if owner.get("state") == "busy":
             alt = free_port_near(host, remembered + 1)
             return {"action": "start", "port": alt,
@@ -973,7 +1081,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         plan = {"action": "start", "port": int(args.port), "url": "",
                 "why": "显式给了端口"}
     else:
-        plan = ensure_serving(root, host=args.host)
+        plan = ensure_serving(root, host=args.host, token=token)
     if plan.get("action") == "reuse":
             url_now = str(plan.get("url") or "")
             if args.json:
@@ -1044,7 +1152,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         deadline = time.monotonic() + 8.0
         got: dict[str, Any] = {}
         while time.monotonic() < deadline:
-            got = verify_serving(url, root=root)
+            got = verify_serving(url, root=root, token=token)
             if got.get("state") == "ok":
                 break
             # 等一等再试：这里不许裸 `time.sleep` —— 判据 `test_clock_governs_all_timed_work`
