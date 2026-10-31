@@ -370,8 +370,9 @@ def subscribe() -> Subscription:
 #    调用点上只多一个 `is not None`；
 # 2. 幂等：重复 `attach()` 是替换（每次都用同一组新闭包覆盖四个槽），
 #    回调表里永远只有一份；`attach()` 把"被自己顶掉的外来钩子"报出来；
-# 3. 可撤：`detach()` 把四个槽清零，回到"没人接"的状态 —— 判据用它保证
-#    一条用例装的钩子不会污染下一条。
+# 3. 可撤：`detach()` 只撤自己装的那几个槽（`_ATTACHED`），被顶掉的外来钩子
+#    还原回去 —— 判据用它保证一条用例装的钩子不会污染下一条，而 clock 的
+#    事件旁路也不会被第二次 `detach()` 当成自己的再摘一遍（2026-11-03 的真因）。
 #
 # `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）本批刻意不做：那需要一个
 # 轮询/watch 点，而"状态一律从盘上派生、不做后台轮询线程"是本服务的既有纪律
@@ -478,32 +479,49 @@ def attach(*, publish: Any = None) -> dict[str, Any]:
     # 若按 `is not None` 算，第二次 `attach()` 会把自己的旧闭包报成"外来钩子"。
     replaced = tuple(sorted(name for name, old in previous.items()
                             if old is not None and old is not _ATTACHED.get(name)))
+    # `_PREV` 记的是"这一层下面那个外来钩子"。重复 `attach()` 是替换：槽里原本
+    # 就是自己上一次装的闭包时，它不能进 `_PREV`（否则 `detach()` 会把自己上一次
+    # 的闭包留在槽里继续发事件），应当沿用再下面那一层的记录。
+    for name, old in previous.items():
+        if old is not None and old is not _ATTACHED.get(name):
+            _PREV[name] = old
+        else:
+            _PREV.setdefault(name, None)
     _ATTACHED.clear()
     _ATTACHED.update(wired)
-    _PREV.clear()
-    _PREV.update(previous)
     return {"attached": tuple(sorted(wired)), "replaced": replaced, "problem": ""}
 
 
 def detach() -> dict[str, Any]:
-    """撤掉 `attach()` 装的钩子（回到"没人接"）；返回撤掉了哪几个槽。
+    """只撤 `attach()` 自己装的那几个钩子；返回撤掉了哪几个槽。
 
-    撤的是当前槽里的东西（不管它是不是 `attach` 装的）：这样判据能保证
-    "这条用例结束时四个槽一定是空的"，而调用方也不会留一个自己不知道的钩子在跑。
+    判据是 `_ATTACHED`（"我装的那一个"），不是"槽里现在是谁"。
+    为什么必须这样（2026-11-03 的真因）：`clock` 的事件旁路也挂在
+    `sessions.append` 这一槽上。旧实现第二次 `detach()` 时 `_PREV` 已经清空，
+    于是把第一次还原回来的 clock 观测器当成自己的又摘一遍 ⇒ 之后
+    `observe_work` / `observe_message` 不再跑，`parked_steps` / `delivery` 恒 0；
+    同一个缺陷也让 `detach()` 不幂等（`test_webui_pages.py:796`）。
     """
-    # 还原：把 attach() 顶掉的那些外来钩子放回去（没有就设 None）。
-    # 为什么不能一律 None：clock 的事件旁路也挂在这一槽上，抹掉它等于让
-    # "子发消息唤醒挂机父"这条链从进程里消失（真机：test_h 的 fires == []）。
-    removed = {
-        "append": SS.set_append_hook(_PREV.get("append")),
-        "question": U.set_question_hook(_PREV.get("question")),
-        "answered": U.set_answer_hook(_PREV.get("answered")),
-        "stop": SC.set_stop_hook(_PREV.get("stop")),
-    }
+    removed: dict[str, Any] = {}
+    for name, setter in (("append", SS.set_append_hook),
+                         ("question", U.set_question_hook),
+                         ("answered", U.set_answer_hook),
+                         ("stop", SC.set_stop_hook)):
+        ours = _ATTACHED.get(name)
+        if ours is None:
+            continue
+        restore = _PREV.get(name)
+        # 一次读 + 写：setter 的返回值就是"槽里原来是谁"。不另加 getter，
+        # 因为另外两个槽归别的模块，公开面只有"装/撤并报旧值"这一种形状。
+        current = setter(restore)
+        if current is ours:
+            removed[name] = current
+            continue
+        # 槽里已经不是我们装的（有人在我们之后顶掉了它）⇒ 原样放回，不算我们撤的。
+        setter(current)
     _ATTACHED.clear()
     _PREV.clear()
-    return {"detached": tuple(sorted(name for name, old in removed.items()
-                                     if old is not None))}
+    return {"detached": tuple(sorted(removed))}
 
 
 def hook_problems() -> dict[str, str]:
