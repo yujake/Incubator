@@ -5747,6 +5747,7 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   sid: str | None = None,
                   goal: str = "", goal_met: bool | None = None, basis: str = "",
                   task_list: Iterable[Mapping[str, Any]] = (),
+                  retire: Any = None, programs: Any = None,
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
 
@@ -5762,6 +5763,10 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
 
 收工由 M 判（业主 2026-10-09）：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
 ⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
+  `retire` / `programs`（2026-11-03，153-U-01/U-02 第 2 笔）是机器口径的两个喂参：
+  `retire` 是 `Conductor.retire_integrity` 的读数（要 `checked` / `complete`），`programs` 是程序读数
+  （要 `checked` / `running_count`）。两个都给了才可能算出 `can_close` 的真/假；没给 ⇒ `None`
+  （`not_wired`，既不是过也不是不过）。见 :func:`machine_caliber`。
   `goal` / `basis` 是自述。八格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
   `verdict_conflicts` 再点名自述与任务列表对不上）—— 判据归 M，读数的可见性不减。
     """
@@ -5801,6 +5806,10 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                 "at": str((got.get("verdict") or {}).get("at") or "")}
             if got.get("checked") and got.get("verdict"):
                 rep.m_verdict = dict(got["verdict"])
+    # 机器口径（153-U-01/U-02 第 2 笔）：判据已经解析完（命令行那份或落盘那份）才算得出
+    # `m_says_done`，所以放在这里而不是函数开头。没喂 ⇒ None（`not_wired`）。
+    rep.readings["machine_caliber"] = machine_caliber(
+        m_says_done=rep.m_says_done, retire=retire, programs=programs)
     for name in checks:
         if name == "paper":
             _run_check(rep, name, _check_paper, project_dir, store)
@@ -6067,6 +6076,102 @@ def read_m_verdict(root: str | Path) -> dict[str, Any]:
     else:
         out["reason"] = "这一份里没有 `kind=m_verdict` 的行（不是『判过、没达成』）"
     return out
+
+
+def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
+    """给机器口径现算两个喂参：`{"retire": …, "programs": …, "root": …, "why": …}`。
+
+    根台账号的取法（2026-11-03，153-U-01/U-02 第 2 笔）：给了就用；不给就取台账里最近一条
+    顶趟行（`called_by="user"` 且 `parent_task_id` 空 —— 与 `Conductor.open_top_level_run` 写的那一行同形）。
+    找不到 / 读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒ `can_close=None` + `not_wired`）。
+
+    为什么在 closing 这一侧现算而不是让每个调用方各自拼：两个入口（运行内的
+    `conductor.closing`、运行外的 `agentflow closing`）必须喂同一份口径，否则又是"两个出口各说一套"。
+    """
+    root = str(root_task_id or "")
+    out: dict[str, Any] = {"retire": None, "programs": None, "root": root, "why": ""}
+    try:
+        from .conductor import Conductor
+
+        cond = Conductor(store)
+        if not root:
+            root = latest_top_level_task_id(store)
+            out["root"] = root
+        if not root:
+            out["why"] = ("没给根台账号，台账里也找不到顶趟行（`called_by=user` 且"
+                          " `parent_task_id` 空）⇒ 机器口径算不出来")
+            return out
+        out["retire"] = dict(cond.retire_integrity(root) or {})
+        out["programs"] = dict(cond.programs_in_subtree(root) or {})
+    except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 没喂（None），不是"不通过"
+        out["why"] = f"{type(exc).__name__}: {exc}"
+        out["retire"] = None
+        out["programs"] = None
+    return out
+
+
+def latest_top_level_task_id(store: Any) -> str:
+    """台账里最近一条顶趟行的 `task_id`（没有 ⇒ 空串，不猜）。"""
+    try:
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception:  # noqa: BLE001 —— 读不成 = 没有（调用方据此给 None）
+        return ""
+    tops = [r for r in rows
+            if str(r.get("called_by") or "") == "user"
+            and not str(r.get("parent_task_id") or "")]
+    if not tops:
+        return ""
+    tops.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+    return str(tops[-1].get("task_id") or "")
+
+
+def machine_caliber(*, m_says_done: bool, retire: Any = None,
+                    programs: Any = None) -> dict[str, Any]:
+    """机器口径那一格的三态读数：`{checked, value, reason}`（2026-11-03，153-U-01/U-02 第 2 笔）。
+
+    口径（业主 2026-11-03 的裁决 ①=乙）：
+    `can_close = m_says_done ∧ retire_integrity.complete ∧ programs_ok`。
+
+    三态纪律（这一格的全部意义都在这里）：
+    - 两个喂参都给了、且各自 `checked` 都是真 ⇒ `checked=True`，`value` 是真/假，
+      `reason` 在假时点名是哪一个假；
+    - 有一个没给 ⇒ `checked=False`、`value=None`、reason 以 `not_wired:` 开头
+      —— 算不出来既不是过也不是不过（不许退化成 `False`：那会被读成"机器说不通过"）；
+    - 给了但那个它自己 `checked=False`（台账读不成 / 程序读数没查成）⇒ 同样 `None`，
+      reason 点名是哪一格没查成（没查成 ≠ 不通过）。
+    """
+    missing: list[str] = []
+    if retire is None:
+        missing.append("retire_integrity")
+    if programs is None:
+        missing.append("programs")
+    if missing:
+        return {"checked": False, "value": None,
+                "reason": (f"not_wired: 这一格还没接线（{' / '.join(missing)} 没喂进来）"
+                           "⇒ can_close 是 None：既不是过也不是不过，不许读成通过")}
+    retire_map = dict(retire) if isinstance(retire, Mapping) else {}
+    prog_map = dict(programs) if isinstance(programs, Mapping) else {}
+    unreadable: list[str] = []
+    if not retire_map.get("checked"):
+        unreadable.append(f"retire 那一格没查成（{retire_map.get('reason') or '没给原因'}）")
+    if not prog_map.get("checked"):
+        unreadable.append(f"programs 那一格没查成（{prog_map.get('reason') or '没给原因'}）")
+    if unreadable:
+        return {"checked": False, "value": None,
+                "reason": "；".join(unreadable) + " —— 算不出来，不许读成不通过"}
+    retire_ok = bool(retire_map.get("complete"))
+    programs_ok = (int(prog_map.get("running_count") or 0) == 0
+                   and not prog_map.get("unowned"))
+    bad: list[str] = []
+    if not m_says_done:
+        bad.append("m_says_done 是假（M 自己说没做完）")
+    if not retire_ok:
+        bad.append("retire 不干净（名下还有在册节点或已销号节点名下的未消项）")
+    if not programs_ok:
+        bad.append(f"programs 没停（还有 {int(prog_map.get('running_count') or 0)} 个程序在跑）")
+    value = not bad
+    return {"checked": True, "value": value,
+            "reason": "" if value else "机器口径不成立：" + "；".join(bad)}
 
 
 def tri_state_exit_code(rep: ClosingReport) -> int:

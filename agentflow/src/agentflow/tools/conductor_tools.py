@@ -1333,10 +1333,14 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
         else:
             written = {"tried": False, "ok": False, "path": "",
                        "why": "没有项目根/会话根 ⇒ 判据没落盘（运行外那一趟会读不到）"}
+    # 2026-11-03（153-U-01/U-02 第 2 笔）：把机器口径的两个喂参交下去 —— 运行内这一趟
+    # 有台账与进程读数，所以 `can_close` 在这里才算得出来（喂不齐时仍是 None + reason）。
+    feed = CL.machine_feeders(store, root_task_id=str(getattr(store, "root", "") and ""))
     rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path,
                            session_root=session_root, sid=sid,
                            goal=goal, goal_met=goal_met, basis=basis,
-                           task_list=task_list or ())
+                           task_list=task_list or (),
+                           retire=feed.get("retire"), programs=feed.get("programs"))
     data = rep.to_dict()
     # 内容级验收（§17.3）：同一批入参走只读入口 `reviewaccept.check_review`。
     # 它与收工门是同一份交付的同一个问题的两层，所以并排给出、各自三态。

@@ -4,7 +4,7 @@
 ## 背景
 
 第 1 笔（`1449d314`）把 `can_close` 拆成两个名字：`m_says_done`（M 的判断）与
-`can_close: bool | None`（机器口径）。**那一笔里 `can_close` 恒 `None`**（reason 写着
+`can_close: bool | None`（机器口径）。那一笔里 `can_close` 恒 `None`（reason 写着
 `not_wired: 这一格还没接线（retire_integrity / programs 没喂进来）`）—— 因为
 `ClosingReport` 里没有任何 `retire_integrity` 格（`grep retire_integrity closing.py` = 0 命中），
 `programs_ok` 也只活在 `agent_loop._final_gate_reading` 里。
@@ -15,9 +15,9 @@
 ## 这条判据钉住什么
 
 1. 喂齐且三者全真 ⇒ `can_close is True`，`closable` 跟着真；
-2. 任一个假 ⇒ `can_close is False`，**且 `can_close_reason` 说清是哪一个假**
+2. 任一个假 ⇒ `can_close is False`，且 `can_close_reason` 说清是哪一个假
    （retire 不干净 / programs 没停 / M 说没达成）；
-3. 没喂 ⇒ `can_close is None` + `reason` 里是 `not_wired`（**不许退化成 False** ——
+3. 没喂 ⇒ `can_close is None` + `reason` 里是 `not_wired`（不许退化成 False ——
    False 会被读成"机器说不通过"）；
 4. 喂了、但某一格自己 `checked=False` ⇒ 仍 `None` + 说清是哪一格没查成
    （三态纪律：没查成 ≠ 不通过）。
@@ -32,7 +32,7 @@ from agentflow.store import Store
 
 def _ws(tmp_path: pathlib.Path) -> Store:
     root = tmp_path / "ws"
-    root.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
     st = Store(root)
     st.init()
     return st
