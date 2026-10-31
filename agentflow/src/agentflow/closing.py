@@ -6083,7 +6083,10 @@ def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
 
     根台账号的取法（2026-11-03，153-U-01/U-02 第 2 笔）：给了就用；不给就取台账里最近一条
     顶趟行（`called_by="user"` 且 `parent_task_id` 空 —— 与 `Conductor.open_top_level_run` 写的那一行同形）。
-    找不到 / 读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒ `can_close=None` + `not_wired`）。
+    找不到顶趟行 / 读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒ `can_close=None` + `not_wired`）。
+    为什么不退回"最近一条任务行"或"随便挑一个 M 行"：机器口径回答的是"这一趟能不能交"，
+    拿错根就会把别人那一支的销号状态当成自己的 —— 那比"算不出来"坏得多（算不出来只是不知道，
+    拿错根是说了假话）。
 
     为什么在 closing 这一侧现算而不是让每个调用方各自拼：两个入口（运行内的
     `conductor.closing`、运行外的 `agentflow closing`）必须喂同一份口径，否则又是"两个出口各说一套"。
@@ -6139,6 +6142,12 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
       —— 算不出来既不是过也不是不过（不许退化成 `False`：那会被读成"机器说不通过"）；
     - 给了但那个它自己 `checked=False`（台账读不成 / 程序读数没查成）⇒ 同样 `None`，
       reason 点名是哪一格没查成（没查成 ≠ 不通过）。
+
+    两条轴别混（读这一格的人最容易错的地方）：八格那条轴（`status` / `machine_pass`）问的是
+    "那八条判据过没过"，机器口径这一格问的是"M 说做完了 ∧ 树清干净了 ∧ 程序停了没有"。
+    两者可以同时出现"八格 fail 而机器口径 True"（那个工作区的八格里有一条与这三件事无关）；
+    所以看到 `can_close=True` 而 `exit_code==1` 并不矛盾 —— 前者是机器口径，后者还要过
+    `machine_pass`（见 :func:`tri_state_exit_code`）。
     """
     missing: list[str] = []
     if retire is None:

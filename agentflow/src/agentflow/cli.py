@@ -4330,8 +4330,14 @@ def cmd_closing(args) -> int:
         print(tty.bullet(problem))
         return 2
     print(tty.bullet("会话：" + session_note))
+    # 2026-11-03（153-U-01/U-02 第 2 笔，U-07 之后补）：运行外这一趟也喂机器口径的两个喂参
+    # —— 与运行内 `conductor.closing` 走同一个 `machine_feeders`（两个出口一份口径）。
+    # 喂不上（找不到顶趟行 / 读不成）⇒ 两个都是 None ⇒ `can_close` 落 None + `not_wired`
+    # （三态：算不出来既不是过也不是不过）。U-07 的 `sid=sid` 原样保留。
+    feed = CL.machine_feeders(st)
     rep = CL.check_closing(st, project_dir=project, report_path=report,
                            sid=sid,
+                           retire=feed.get("retire"), programs=feed.get("programs"),
                            goal=str(getattr(args, "goal", "") or ""),
                            goal_met=getattr(args, "goal_met", None),
                            basis=str(getattr(args, "basis", "") or ""))
