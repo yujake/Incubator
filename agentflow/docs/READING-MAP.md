@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-26，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-03，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **255 个 `.py`、209,413 行**，**69 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,063 行** —— 批 R40 把它补进了 §3 的表；
+> **257 个 `.py`、223,941 行**，**70 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,760 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -39,6 +39,10 @@
 > `agent_loop.py` 8,535 → **12,063** 行；同批新增的 `clock.py` / `agenttrace.py` /
 > `depsection.py` / `errorstats.py` / `propositionkey.py` / `readouts.py` /
 > `statementfission.py` / `stepdispatch.py` 与 `tools/clock_tools.py` 已在下面的分层表里各有一行）。
+> **2026-11-03 再改一次**：209,413 → **223,941**（文件数 255 → **257**，`>800 行` 69 → **70**；
+> `agent_loop.py` 12,063 → **12,760** 行）。同批把"谁抓这三个数"从 `temp/_probe_doc_vs_code.py`
+> 的 ③（**不在 `tests/` 里、CI 不跑**）搬成判据 `tests/test_reading_map_counts.py`：那三个数
+> 上一次更新是 2026-10-26，之后漂了 8 天而没有任何东西会红 —— 探针抓得到、但没人跑它。
 > 复算命令就是上面那一条）。
 > **退场的那三个模块名这里刻意不写 `.py` 扩展名**：本图自己的判据要求图里每个像文件名的
 > token 都在盘上真的存在，写全名会让那条判据红 —— 而它们确实已经不在盘上了）。）
