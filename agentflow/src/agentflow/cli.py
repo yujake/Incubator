@@ -4248,6 +4248,48 @@ def cmd_status_report(args) -> int:
 # 同一件事两个出口，一个拒绝一个放行。搬进 `closing.py` 之后这里不再有第二份实现。
 
 
+#: `agentflow closing` 通关之后建趟次索引时写进审计的 `by` 字段（逐字）。
+CLOSING_INDEX_BY = "agentflow closing"
+
+
+def _finish_closing(args, root: Path, rep) -> int:
+    """收工门的统一出口：先翻退出码，退出码 0 之后再建趟次索引（2026-11-03 第二笔）。
+
+    为什么建索引挂在退出码 0 之后：`index/run-index.json` 是"这一趟已经对过账"的派生
+    读数；门没过（1/2）时建它，等于让页面把"没交付 / 没查成"读成"对过账了"
+    （与 `finish_top_level_run` 只对 `stop_reason=final` 建索引同一条口径）。
+    为什么失败不改退出码：索引是派生数据，建不成不该把"门过了"改判成"没交付"；
+    但它必须可见 —— 打一句黄字，并进 `data/events.jsonl` 的审计
+    （`conductor.run_index_rebuild` 自己落那一行，`by="agentflow closing"`）。
+    为什么复用那个函数而不是在这里再写一份：索引的三个生产入口（顶趟收工、
+    `agentflow project rebuild-run-index`、本处）必须共用同一份"该不该建 / 建没建成 /
+    怎么留痕"的口径。
+    `--no-index`：只想看门过没过的人不写盘（连审计也不落）。
+    """
+    from . import closing as CL
+    from .conductor import run_index_rebuild
+
+    code = CL.tri_state_exit_code(rep)
+    if getattr(args, "no_index", False):
+        if code == 0:
+            print(tty.bullet("趟次索引：没建（`--no-index`）—— 这一次只看门过没过"))
+        return code
+    if code != 0:
+        return code
+    reading = run_index_rebuild(root, by=CLOSING_INDEX_BY, actor="cli")
+    if reading["checked"]:
+        print(tty.bullet(f"趟次索引：{reading['path']}"
+                         f"（built={reading['built']}；{reading['note']}）"))
+    else:
+        print(tty.bullet(tty.paint(
+            f"趟次索引没建成（不影响退出码）：{reading['reason']}", "yellow")))
+    if reading["audit_path"]:
+        print(tty.bullet(f"趟次索引审计：{reading['audit_path']}"))
+    elif reading["audit_reason"]:
+        print(tty.bullet(f"趟次索引审计没落：{reading['audit_reason']}"))
+    return code
+
+
 def cmd_closing(args) -> int:
     """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -4281,8 +4323,18 @@ def cmd_closing(args) -> int:
     且机器读数也过（八格全 pass、没有 blocker）—— 机器说不行时退出码不许是 0
     （2026-11-03 的裁决 ②）。八格照旧逐格现算并打出来，它们既进退出码、也进读数。
 
-    读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/paper/`、`out/review/` 下的产物；不写任何表、不改任何文件。
-    实现方式一句话：`closing.check_closing` 现算八格，本层只排版与翻退出码。
+    ## 通关之后建趟次索引（2026-11-03 第二笔，E5 的第三半）
+    退出码 0 之后调 `conductor.run_index_rebuild(by="agentflow closing")` —— 与顶趟收工
+    成功那一步、`agentflow project rebuild-run-index` 同一个函数（第三个生产入口）。
+    门没过（1/2）不建：索引是"这一趟对过账"的派生读数，建了就等于把"没交付/没查成"
+    读成"对过账了"。建索引失败不改退出码（派生数据建不成不应该把"门过了"改判成
+    "没交付"），但打一句黄字并进 `data/events.jsonl` 的审计。`--no-index` 关掉这一笔
+    （只想看门过没过的人不写盘）。
+
+    读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/paper/`、`out/review/` 下的产物；不写任何表。
+    退出码 0 时另写 `<工作区>/index/run-index.json`（派生数据）与 `data/events.jsonl` 的一行
+    `op=info` 审计；`--no-index` 或退出码非 0 时不写任何文件。
+    实现方式一句话：`closing.check_closing` 现算八格，本层只排版、翻退出码、通关之后建索引。
     """
     from . import closing as CL
     from . import leantoolchain as LT
@@ -4351,12 +4403,12 @@ def cmd_closing(args) -> int:
         # 关掉是显式的：它让"零调用的那段历史"仍可复现，也方便对拍接线前后的读数。
         print("[review-acceptance] 这一次没跑（`--no-review-acceptance`）—— "
               "这一格是「没查成」，不是「内容级验收通过了」")
-        return CL.tri_state_exit_code(rep)
+        return _finish_closing(args, root, rep)
     _print_review_acceptance(st, project=project, report=report,
                              cap_usd=getattr(args, "cap_usd", None),
                              sid=(getattr(args, "acceptance_sid", None)
                                   or CL.NO_SESSION))
-    return CL.tri_state_exit_code(rep)
+    return _finish_closing(args, root, rep)
 
 
 def _print_review_acceptance(store, *, project: str, report: str,
@@ -5082,6 +5134,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "不给 ⇒ 那一格是「没查成」，不按缺省会话读）")
     sp.add_argument("--no-review-acceptance", action="store_true",
                     help="不跑收工门之后的那个内容级验收读数（缺省就跑）")
+    # 趟次索引（2026-11-03 第二笔）：退出码 0 之后建 `index/run-index.json`
+    # （与顶趟收工成功那一步、`agentflow project rebuild-run-index` 同一个函数）。
+    sp.add_argument("--no-index", action="store_true",
+                    help="通关之后不建趟次索引（只想看门过没过的人不写盘：连"
+                         "`data/events.jsonl` 的审计也不落）")
     # M 的判据（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）：
     # 缺省 = 读运行内落盘的那一份（`out/review/m-verdicts.jsonl`）；显式给这里三个
     # 开关就按命令行这一份判（人/CI 代述 M 的说法时用）。都不给又没有落盘的那一份

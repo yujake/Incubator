@@ -1548,11 +1548,12 @@ def _admitted_inputs(params: Mapping[str, Any]) -> list[str]:
 #
 # `sessions.rebuild_run_index` 此前零生产调用者（2026-11-03 清点 E5：156 个工作区里
 # 0 份 `index/run-index.json`），于是 `GET /api/run-index` 在真实工作区恒为
-# `tri="unreadable"`。现在它有两个生产入口，都走下面这一个函数：
+# `tri="unreadable"`。现在它有三个生产入口，都走下面这一个函数：
 #   1. 顶趟收工成功那一步（:meth:`Conductor.finish_top_level_run`，
 #      `stop_reason == "final"`）；
-#   2. `agentflow project rebuild-run-index --workspace <工作区>`。
-# 为什么这个函数住在 conductor.py：两个入口必须共用同一份"该不该建 / 建没建成 /
+#   2. `agentflow project rebuild-run-index --workspace <工作区>`；
+#   3. `agentflow closing` 通关之后（退出码 0，2026-11-03 第二笔）。
+# 为什么这个函数住在 conductor.py：三个入口必须共用同一份"该不该建 / 建没建成 /
 # 怎么留痕"的口径，而 `webui` 是 conductor 的下游（`webui.readers` 导入本模块），
 # 反向 import 会成环；`sessions.py` 只负责"现算 + 原子落盘"，不管这三件事。
 #
