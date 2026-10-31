@@ -4,14 +4,14 @@
 ## 背景
 
 业主 2026-11-02 的裁定让"被拒"落成一条盘上流水（`out/roster/refusals/<父>.jsonl`），
-但那个流水**只有一个读者**：`Secretary.roster_repair`（收口兜底读它，免得把被拒的号
+但那个流水只有一个读者：`Secretary.roster_repair`（收口兜底读它，免得把被拒的号
 补成新名字）。全仓 `refusals_path` / `roster_refusal_note` / `_refused_task_ids` 的命中
-只有 `secretary.py` 自己；`webui/*.py` 与 `ui/src/**` 对 `refus` 的命中全是别的意思
-（"被拒的续跑" / "写设置的 refused"）⇒ **"这一号曾被拒过"在读数面上不可见**。
+只有 `secretary.py` 自己；`webui/*.py` 与 `ui/src/` 对 `refus` 的命中全是别的意思
+（"被拒的续跑" / "写设置的 refused"）⇒ "这一号曾被拒过"在读数面上不可见。
 
 ## 这一笔做什么（2026-11-03 的裁决 5 的 `registration_refusals` 那一半）
 
-给一个**只读读数**：`secretary.registration_refusals(root, owner=...)`，
+给一个只读读数：`secretary.registration_refusals(root, owner=...)`，
 并在两处读数面上透出来 —— `conductor.state`（主控的判断面）与项目状态报告
 （`statusreport`）。名字用 `registration_refusals`（与 `action_refusals` /
 `final_refusals` 那两义分开；词面拆分见 153-U-09）。

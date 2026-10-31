@@ -203,6 +203,17 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         child_counts = {"checked": False, "child_count": None,
                         "active_child_count": None,
                         "reason": f"{type(exc).__name__}: {exc}"}
+    # 2026-11-03（153-U-09 的 registration 半）：名册写口拒过的号。
+    # 名字用 `registration_refusals`：本模块里那个 `refusals` 是动作被拒的行
+    # （`tasks` 里带 `refusal_reason` 的），与这一份（名册写口拒绝的流水）是两件事；
+    # `action_refusals` 的改名与 U-07 同轮，这一笔只加不改。
+    try:
+        from .secretary import registration_refusals as _registration_refusals
+
+        reg_refusals = _registration_refusals(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不许折成"没人被拒"
+        reg_refusals = {"checked": False, "count": 0, "items": [], "bad": [str(exc)],
+                        "owner": "", "path": ""}
 
     report: dict[str, Any] = {
         "generated_at": _now().replace(microsecond=0).isoformat(),
@@ -219,6 +230,8 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             "child_count": child_counts.get("child_count"),
             "active_child_count": child_counts.get("active_child_count"),
             "child_counts": child_counts,
+            # 名册写口拒过的号（只读；`checked=false` 是"这一份流水读不出来"）。
+            "registration_refusals": reg_refusals,
             # 口径（不可省）：这两个数一个是台账全量、一个是"用户发起的那一趟"。
             # 不写清就会变成"同一屏里两个读数各说一件事"（`conductor.stats()` 的同一条纪律）。
             "calibers": {
@@ -240,6 +253,11 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                 "top_level_runs":
                     "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
                     "召唤看 conductor.stats() 的 started_total）",
+                "registration_refusals":
+                    "名册写口拒过的号（out/roster/refusals/<父>.jsonl 的全部行；"
+                    "口径只有 secretary.registration_refusals 一处）。checked=false 是"
+                    "『这一份流水读不出来』，不是『没人被拒』——两件事折平会把一次有记录的"
+                    "拒绝读成没有发生过",
                 "pending_questions":
                     "全工作区的待答（`userio.workspace_pending_view`，与「在飞」页同一来源；"
                     "不是只读默认会话）",

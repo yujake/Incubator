@@ -886,7 +886,11 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
-    returns="{'root','tables','conjectures','tasks','queues','programs','states'}",
+    returns="{'root','tables','conjectures','tasks','queues','programs',"
+            "'states','registration_refusals'}；`registration_refusals` 是"
+            "{checked,count,items,bad,owner,path}：名册写口拒过的号（items 每条 "
+            "{task_id,requested_name,refusal_code,problem,at}；checked=false 是"
+            "「这一份流水读不出来」，不是「没人被拒」）",
 )
 def conductor_state(_conductor, ) -> ToolResult:
     """工具体：只读状态视图（给主控判断用，不含建议）。
@@ -957,10 +961,20 @@ def conductor_state(_conductor, ) -> ToolResult:
     }
     programs["named"] = (list(programs["owned_named"]) + list(programs["unowned_named"])
                          + list(programs["orphan_named"]))
+    # 2026-11-03（153-U-09 的 registration 半）：名册写口拒过的号 —— 只读读数，
+    # 以前只有收口兜底一个读者，"这一号曾被拒过"在人的读数面上不可见。
+    # 名字用 `registration_refusals`（与 `action_refusals` / `final_refusals` 分开）。
+    try:
+        from ..secretary import registration_refusals as _registration_refusals
+
+        refused = _registration_refusals(store_.root)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不许折成"没人被拒"
+        refused = {"checked": False, "count": 0, "items": [], "bad": [str(exc)],
+                   "owner": "", "path": ""}
     data = {"root": str(getattr(store_, "root", "")), "tables": tables,
             "conjectures": conjectures, "tasks": len(c.tree()),
             "queues": _queue_backlog(store_), "programs": programs,
-            "states": _states_reading(c)}
+            "states": _states_reading(c), "registration_refusals": refused}
     return ok(data, **data)
 
 @tool(

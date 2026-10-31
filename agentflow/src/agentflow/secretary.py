@@ -555,6 +555,56 @@ def refusals_path(root: str | Path, owner: str) -> Path:
     return Path(root).joinpath(*ROSTER_DIR, "refusals", f"{owner}.jsonl")
 
 
+def registration_refusals(root: str | Path, *, owner: str = "") -> dict[str, Any]:
+    """名册写口拒过的那些号 —— 只读读数（2026-11-03，153-U-09 的 registration 半）。
+
+    为什么要一个读数面：这条流水（`refusals_path`）从 2026-11-02 起就在盘上，但唯一的读者
+    是收口兜底 `Secretary.roster_repair` —— "这一号曾被拒过"在人的读数面上完全不可见。
+    业主 2026-11-03 的裁决 5 要的就是这一格。
+
+    名字为什么叫 `registration_refusals`（而不是 `refusals`）：全仓 `refusals` 一词已有三义
+    —— 动作被拒的行（`statusreport` 的 `refusal_reason`）、收工被拒的事件
+    （`patrol` 的 `final_refused`）、以及这一份名册写口的拒绝流水。三件事各一个词：
+    `action_refusals` / `final_refusals` / `registration_refusals`（前两个的改名与 U-07 同轮）。
+
+    返回 `{"checked", "count", "items", "bad", "owner", "path"}`：
+    - `checked=False` ⇒ 这一份流水读不出来（坏行见 `bad`）—— 不是"没人被拒"；
+    - `items` 每条 `{task_id, requested_name, refusal_code, problem, at}`（原样透传流水里的格）；
+    - `owner` 给空串 ⇒ 读 `out/roster/refusals/` 下全部父的流水（跨父合计）。
+    """
+    from . import jsonlfile as JF
+
+    base = Path(root).joinpath(*ROSTER_DIR, "refusals")
+    paths: list[Path] = []
+    if str(owner or ""):
+        paths = [refusals_path(root, str(owner))]
+    else:
+        try:
+            paths = sorted(base.glob("*.jsonl"))
+        except OSError:
+            paths = []
+    items: list[dict[str, Any]] = []
+    bad: list[str] = []
+    checked = True
+    for path in paths:
+        rows, bad_rows, state = JF.read_jsonl_state(path)
+        if state == "unreadable":
+            checked = False
+            bad.append(f"{path.name} 读不出来（这一格不是「没人被拒」）")
+        bad.extend(str(x) for x in bad_rows)
+        for row in rows:
+            items.append({
+                "task_id": str(row.get("task_id") or ""),
+                "requested_name": str(row.get("requested_name") or ""),
+                "refusal_code": str(row.get("refusal_code") or ""),
+                "problem": str(row.get("problem") or ""),
+                "at": str(row.get("at") or ""),
+            })
+    return {"checked": checked and not bad, "count": len(items), "items": items,
+            "bad": bad, "owner": str(owner or ""),
+            "path": str(paths[0]) if len(paths) == 1 else str(base)}
+
+
 def retired_row_gaps(rows: Iterable[Any], owner: str = "") -> tuple[list[str], list[dict[str, Any]]]:
     """销号名单每一行"认不认得出是哪一号 / 哪一名" ⇒ `(逐条说明, 逐条结构化读数)`。
 

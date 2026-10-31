@@ -868,7 +868,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'checked','open_items','open_count','readings'}",
+   "returns": "{'checked','board_open_items','board_open_count','readings'}；有合成项时另给 pending_attack_count / pending_attack_items / pending_attack_note 与 pending_search_count / pending_search_items / pending_search_note（合成项不落台账 ⇒ 不计入 board_open_count）",
    "roles": [
     "M"
    ],
@@ -1212,7 +1212,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'checked','root','count','order','by_state','items','anomalies','clock','reason'}；items 里每一项是 {code, chain, chain_text, name, role, state, state_label, state_reason, status, doing, board, timers, last_guidance, notes}；doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked, in_progress_id, in_progress_reason, open_count, items}；timers 是 {checked, count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing, waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id, reason}",
+   "returns": "{'checked','root','count','order','by_state','items','anomalies','clock','reason'}；items 里每一项是 {code, chain, chain_text, name, role, state, state_label, state_reason, status, doing, board, timers, last_guidance, notes}；doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked, in_progress_id, in_progress_reason, child_open_count, items}（`child_open_count` 量的是这一个子代理名下未完成的真板项件数）；timers 是 {checked, count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing, waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id, reason}",
    "roles": [
     "M"
    ],
@@ -1446,7 +1446,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'root','tables','conjectures','tasks','queues','programs','states'}",
+   "returns": "{'root','tables','conjectures','tasks','queues','programs','states','registration_refusals'}；`registration_refusals` 是{checked,count,items,bad,owner,path}：名册写口拒过的号（items 每条 {task_id,requested_name,refusal_code,problem,at}；checked=false 是「这一份流水读不出来」，不是「没人被拒」）",
    "roles": [
     "M"
    ],
