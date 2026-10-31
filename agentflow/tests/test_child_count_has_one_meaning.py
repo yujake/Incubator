@@ -8,7 +8,7 @@
 | 落点 | 数的是什么 | 范围 |
 |---|---|---|
 | `webui.readers.roster_face` 的节点格（`readers.py:3837`） | 这个节点在台账里挂了几个子（含没落名册的） | 这个节点 |
-| `Secretary.child_counts` 的 `child_count`（`secretary.py:7912`） | 名册里还有几个没销号的项 | 全工作区 / 按 owner |
+| `Secretary.child_counts` 的 `children_unretired`（`secretary.py:7969`） | 名册里还有几个没销号的项 | 全工作区 / 按 owner |
 
 两个都对，但拿两处 `child_count` 对照的人只会得出"有一个在说谎"。
 
@@ -18,8 +18,10 @@
   `roster_child_count`；
 - 收工那一格（`child_counts` 的 `child_count`）的改名要动 `CHILD_COUNT_KEY` 的值 ⇒
   会改到 M 的提示词正文（`agent_prompts.py:3060` 逐字引着这个键名）⇒ 命中 FC-27
-  （`tests/golden/agent_surface_snapshot.json:254` 有渲染副本）。那半笔不在本文件里，
+  （`tests/golden/agent_surface_snapshot.json:254` 有渲染副本）。那半笔当时不在本文件里，
   见提交信息与报告。
+  2026-11-03 已落地（`1d32ce18`）：`CHILD_COUNT_KEY` 改成 `children_unretired`，
+  提示词正文与快照同步改过；本文件第 ② 条从此读新名字（同一条改名纪律的另一半）。
 
 ## 这条判据钉住什么
 
@@ -94,12 +96,13 @@ def test_the_roster_face_counts_children_in_the_ledger_under_its_own_name(
 
 
 def test_the_two_numbers_are_two_quantities(tmp_path: pathlib.Path) -> None:
-    """② 两个数确实不同值（所以必须两个名）：台账 2 子 vs 名册 1 项。"""
+    """② 两个数确实不同值（所以必须两个名）：台账 2 子 vs 名册 1 项
+    —— 右边那个键 2026-11-03 起叫 `children_unretired`（`1d32ce18`），不再是 `child_count`。"""
     root = _workspace(tmp_path)
     node = _m_node(R.roster_face(root))
     counts = Secretary("M", root=root, store=Store(root)).child_counts(owner="t-000001")
     ledger_side = node.get("children_in_ledger")
-    roster_side = counts.get("child_count")
+    roster_side = counts.get("children_unretired")
     assert ledger_side == 2 and roster_side == 1, (ledger_side, roster_side)
     assert ledger_side != roster_side, (
         "两个数今天相等 ⇒ 这条判据失去了'同名不同义'的对象，请重新裁这两个名字")
