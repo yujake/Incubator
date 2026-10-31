@@ -3752,7 +3752,10 @@ class Conductor:
           `items[].verdict`；
         - `items[]`：每项 `{item_id, task_id, owner, verdict, started, refusal_code,
           why, mark}`（逐项同形同集）—— `item_id` 是板项号，`task_id` 是要唤醒的那个号，
-          `owner` 是它的角色，`mark` 是写进 `inputs` 的那条落痕（没写就是空串）；
+          `owner` 是它的角色，`mark` 是写进 `inputs` 的那条落痕（没写就是空串）。
+          `task_id` / `owner` 在每一档都给（`skip` 那几档也一样，2026-10-30）；
+          只有"台账里根本没有那一行"（`no_such_item`）时这两格是空串 —— 那一档读不出来，
+          不许拿 `item_id` 顶替（那会让"点错了"看起来像"叫对了"）；
         - `count` 数的是真正被叫起来的条数（`started=True`）；`requested` 是给了几个号；
         - 三态：台账读不成 ⇒ `checked=False` + `state="unknown"`，绝不折成"没有 block 行"。
 
@@ -3792,6 +3795,17 @@ class Conductor:
                 cell["why"] = (f"台账里没有 {item_id} 这一行 ⇒ 这个号点错了"
                                "（不是「已经唤醒了」）")
                 continue
+            # 先回填"哪一条、谁的"（2026-10-30，C）：`item_id` 是板项号，`task_id` 是要
+            # 唤醒的那个号，`owner` 是它的角色。这三格必须在每一档回执里都齐 ——
+            # 包括下面那几个早退档（已终态 / 不是 block）。改前这两格写在早退之后，
+            # 于是 `item_closed` 与 `not_blocked` 两档的 `task_id` / `owner` 是空串：
+            # 读的人只能拿板项号去叫，而板项不是代理，叫它没有对象；"这是谁的活"
+            # 也在回执里消失了。修法是把回填挪到早退之前，而不是给某一档单独补一句 ——
+            # 单独补就是把"逐项同形同集"拆成两份实现，下一档早退时又会漏。
+            owner = str(row.get("parent_task_id") or "")
+            cell["task_id"] = owner
+            owner_row = by_id.get(owner) or {}
+            cell["owner"] = str(owner_row.get("role") or "")
             item_state = str(row.get("item_state") or "")
             if item_state == "done":
                 cell["refusal_code"] = "item_closed"
@@ -3804,10 +3818,6 @@ class Conductor:
                 cell["why"] = (f"{item_id} 现在不是 block 板项（item_state={item_state!r}）"
                                "⇒ 它没被停掉，这一层没有对象")
                 continue
-            owner = str(row.get("parent_task_id") or "")
-            cell["task_id"] = owner
-            owner_row = by_id.get(owner) or {}
-            cell["owner"] = str(owner_row.get("role") or "")
             if not owner:
                 cell["refusal_code"] = "no_owner"
                 cell["why"] = (f"{item_id} 没有 parent_task_id（顶层项）⇒ "

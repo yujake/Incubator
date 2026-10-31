@@ -32,6 +32,7 @@
 | w6 `test_w6_an_in_flight_owner_is_skipped_not_started_twice` | 在飞不另起：owner 在飞 ⇒ skip（`refusal_code="in_flight"`），不产生第二个同号循环 |
 | w7 `test_w7_waking_the_same_row_twice_is_a_no_op` | 幂等：叫醒之后再调两趟（不给 ids / 给 ids）⇒ `nothing` 与 `skip`/`not_blocked`，一个字节都没写、没再叫人、`wake:` 落痕不翻倍 |
 | w8 `test_w8_the_real_producer_makes_rows_the_reader_picks_up` | 读侧与真实生产者的口径：`stopctl.block_remaining_tasks` 造的 block 行（两根轴一起翻）必须被本层读到并唤醒 —— 手搓夹具与真实生产者不许分家 |
+| `test_every_skip_still_names_the_row_whose_work_stopped` | skip 的每一档都要给 `task_id` / `owner`（`item_closed` / `not_blocked` 也不许留空，且 `owner` 取自"要唤醒的那个号"那一行）；`no_such_item` 反过来钉空 —— 读不出来时不许编一个名字 |
 
 w7 / w8 是 2026-10-29 那趟可用性探针（temp 里的脚本，走真 `Store` / 真
 `open_item` / 真 `block_remaining_tasks`）的读数补出来的：探针五档 a–e 全绿，但 d
@@ -180,6 +181,35 @@ def _shapes(got: mapping) -> list[str]:
 
 def _verdicts(got: mapping) -> dict[str, dict]:
     return {str(c.get("item_id")): dict(c) for c in (got.get("items") or ())}
+
+
+def _named_problems(cell: mapping, *, task_id: str, role: str,
+                    where: str) -> list[str]:
+    """回执项那两格名字（C）：`task_id` / `owner` 不许是空串。
+
+    为什么这两格单列一条判据：`item_id`（板项号）与 `task_id`（要唤醒的那个号）是
+    两个不同的号。只给前者，读的人只能拿板项号去叫 —— 而板项不是代理，叫它没有
+    对象（本方法 docstring 逐字：「要唤醒的那个号是这一行的 `parent_task_id`」）。
+    `owner` 同理：没有角色名，"这是谁的活停在这里"在回执里就消失了。
+
+    为什么钉「等于该任务行的 role」而不是「非空」：非空能挡住空串，挡不住"把板项
+    自己的 role 抄过来"（`_blocked_item` 那一行的 role 也在盘上，非空）。owner 这一格
+    说的是「被叫起来的那个号是什么角色」，所以读数只能来自 `task_id` 那一行。
+    """
+    problems: list[str] = []
+    got_tid = str(cell.get("task_id") or "")
+    got_owner = str(cell.get("owner") or "")
+    if got_tid != task_id:
+        problems.append(f"{where}：task_id 该是 {task_id!r}（这一行的 parent_task_id），"
+                        f"实际 {got_tid!r}")
+    if not got_owner.strip():
+        problems.append(f"{where}：owner 是空串 —— 回执没回答「这是谁的角色」"
+                        f"（item_id={cell.get('item_id')!r}、"
+                        f"refusal_code={cell.get('refusal_code')!r}）")
+    elif got_owner != role:
+        problems.append(f"{where}：owner 该是「要唤醒的那个号」那一行的 role"
+                        f"（{role!r}），实际 {got_owner!r}")
+    return problems
 
 
 # ====================================================================== w1 只读
@@ -707,6 +737,11 @@ def _w7_problems(env: dict[str, Any]) -> list[str]:
         problems.append(f"不是 block 的那一行不许再叫一次：started={cell.get('started')!r}")
     if cell.get("mark"):
         problems.append(f"不是 block 的那一行不许再落痕：{cell.get('mark')!r}")
+    # C（2026-10-30）：skip 那一档也要回答"哪一条、谁的"。
+    problems += _named_problems(
+        cell, task_id=owner,
+        role=str((_rows(env).get(owner) or {}).get("role") or ""),
+        where=f"w7 第三趟（{item} 已不是 block 板项）")
     # 三件硬读数：一个字节都没写、没再叫人、落痕不翻倍
     if before != _tasks_bytes(env):
         problems.append("第二、三趟写了盘：`tasks.json` 前后不是逐字节一致")
@@ -779,5 +814,54 @@ def test_w8_the_real_producer_makes_rows_the_reader_picks_up(tmp_path: pathlib.P
     读数"接进判据：夹具自己先断言 producer 真的造出了 block 行，再断言本层读得到它。
     """
     problems = _w8_problems(_workspace(tmp_path, "w8"))
+    assert problems == [], problems
+
+
+# ====================================================================== C 每档都有名字
+def test_every_skip_still_names_the_row_whose_work_stopped(
+        tmp_path: pathlib.Path) -> None:
+    """C) skip 的每一档都要给 `task_id` / `owner`，不只是 `not_blocked` 那一档。
+
+    改前（2026-10-30 读数）：`task_id` / `owner` 的回填写在「不是 block」那几个早退
+    分支之后，于是 `item_closed` 与 `not_blocked` 两档的回执里这两格都是空串 ——
+    一个"已终态"的板项在回执里连"这是谁的活"都不说，读的人只能拿板项号去猜。
+
+    修法不是给 `not_blocked` 单独补一句，而是把回填移到早退之前（每一档都齐）：
+    「失败/跳过各档的回执都要一致」——只补一档等于把"形状同集"这件事拆成两份实现，
+    下一档早退时又会漏。
+
+    反真空两件：
+    1) `owner` 那一格钉的是「要唤醒的那个号」那一行的 role（夹具刻意让代理行是 `E`、
+       板项行是 `D`）—— 若实现顺手抄板项行的 role，这一条当场红；
+    2) `no_such_item` 那一档反过来钉空：台账里没有那一行，名字就读不出来，
+       编一个出来（拿 `item_id` 顶替）比留空更坏 —— 那会让"点错了"看起来像"叫对了"。
+    """
+    env = _workspace(tmp_path, "names")
+    owner = _agent(env["cond"], str(env["boss"]), role="E")
+    closed = _blocked_item(env["cond"], owner)          # 板项行的 role 是 D
+    with env["store"].tx("tasks", actor="test") as tx:
+        row = dict(tx.find("tasks", task_id=closed) or {})
+        row.update(item_state="done", item_close="completed")
+        tx.upsert("tasks", S.Task(**row).to_dict())
+    bogus = "T-00000000-deadbeef"
+    got = env["cond"].wake_blocked([closed, bogus], approve="yes", dry_run=False)
+    problems = _shapes(got)
+    cells = _verdicts(got)
+    one = cells.get(closed) or {}
+    if one.get("verdict") != "skip" or one.get("refusal_code") != "item_closed":
+        problems.append(f"{closed} 该判 skip/item_closed，实际 "
+                        f"{one.get('verdict')!r}/{one.get('refusal_code')!r}")
+    if str((_rows(env).get(closed) or {}).get("role")) != "D":
+        problems.append("夹具自己没成立：板项行的 role 该是 D（与代理行的 E 不同）")
+    problems += _named_problems(one, task_id=owner, role="E",
+                                where=f"item_closed（{closed}）")
+    two = cells.get(bogus) or {}
+    if two.get("refusal_code") != "no_such_item":
+        problems.append(f"点错了的号该判 no_such_item，实际 {two.get('refusal_code')!r}")
+    if str(two.get("task_id") or "") or str(two.get("owner") or ""):
+        problems.append(f"台账里没有那一行 ⇒ 名字读不出来，不许编一个："
+                        f"task_id={two.get('task_id')!r}、owner={two.get('owner')!r}")
+    if env["calls"]:
+        problems.append(f"这两档都不许叫人：calls={env['calls']}")
     assert problems == [], problems
 
