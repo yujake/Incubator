@@ -459,6 +459,56 @@ def retired_path(root: str | Path, owner: str) -> Path:
     return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
 
 
+def retired_row_gaps(rows: Iterable[Any], owner: str = "") -> tuple[list[str], list[dict[str, Any]]]:
+    """销号名单每一行"认不认得出是哪一号 / 哪一名" ⇒ `(逐条说明, 逐条结构化读数)`。
+
+    为什么这一档单列（`draft/145` R8/R10/R11/R18）：`jsonlfile.read_jsonl` 只回答
+    "这一行是不是合法 JSON / 是不是对象"，不回答"这一行说的是谁"。于是下面这些都
+    读成"这一份里没有它"、进而被叫醒（已销号却仍被叫醒是不可逆的那一边）：
+
+    ```text
+    少 task_id（只有名字）      ⇒ 唤醒闸手里只有号 ⇒ 认不出
+    task_id 写成 int / name 写成 list ⇒ str(...) 出来的东西永远不等于真键 ⇒ 认不出
+    owner 与所在分片不符         ⇒ 归属键自相矛盾（R19 的"张冠李戴"那一半）
+    ```
+
+    判据只说两件事（§3.1 注 2）：`task_id` 与 `name` 是不是非空字符串，
+    外加 `owner` 与分片名对不对得上。刻意不校验"号看起来像不像 `t-000123`"——
+    格式校验会变成第二份发号口径。
+
+    返回第二格给"这一行可能是谁"用（按号 / 按名逐个排除）：`task_id` / `name`
+    非空字符串就原样带着，否则空串（= 用不了这个键）。名字那一半要靠调用方去名册里
+    换算出"这一号叫什么"才能排除（见 `Conductor._retired_names_of_key`）。
+    """
+    messages: list[str] = []
+    rows_out: list[dict[str, Any]] = []
+    for i, row in enumerate(rows or (), 1):
+        if not isinstance(row, Mapping):
+            # 一行就是一个号 / 一个名字（老 dict 替身、`retired_names = ["t-1"]`）
+            if not str(row or "").strip():
+                msg = f"第 {i} 行认不出来（空行）"
+                messages.append(msg)
+                rows_out.append({"line": i, "task_id": "", "name": "", "why": msg})
+            continue
+        tid = row.get("task_id")
+        name = row.get("name")
+        use_tid = str(tid).strip() if (isinstance(tid, str) and tid.strip()) else ""
+        use_name = str(name).strip() if (isinstance(name, str) and name.strip()) else ""
+        why = ""
+        if not use_tid:
+            why = f"第 {i} 行认不出来（task_id 不是非空字符串：{tid!r}）"
+        elif not use_name:
+            why = f"第 {i} 行认不出来（name 不是非空字符串：{name!r}）"
+        elif owner and str(row.get("owner") or "") not in ("", str(owner)):
+            why = (f"第 {i} 行的 owner={row.get('owner')!r} 与分片不符"
+                   f"（分片是 {owner!r}）")
+        if not why:
+            continue
+        messages.append(why)
+        rows_out.append({"line": i, "task_id": use_tid, "name": use_name, "why": why})
+    return messages, rows_out
+
+
 #: 名册目录里"不是名册正文"的那几种后缀（`<父>-index.jsonl` / `<父>-surfaces.jsonl` /
 #: `<父>-retired.jsonl`）。全工作区口径的读数按它排除，而不是按"文件名里有没有横线"猜 ——
 #: 父的编号本身不含横线，但靠猜迟早会把一种新后缀算成一份名册。
@@ -1657,6 +1707,13 @@ class Secretary:
         #: 2026-10-09 起不是空集：B 的写入代理要落 `statements`（含概念行）与
         #: `dependencies`（业主那两句裁定），只走 :meth:`record_statement` 一处。
         self.writes: frozenset[str] = frozenset(STATEMENT_WRITE_TABLES)
+        #: 最近一次销号名单读数（由 :meth:`retired_ledger` 写）。
+        #:
+        #: 为什么单列一格：`retired_names` 只回 `(行, 坏行)`、`_is_retired` 只回一个布尔，
+        #: 于是"这一份读不全"（认不出来的行 / 整份读不出来 / 不可信的分片）在任何返回值上
+        #: 都无处可报，被读成"没销号"（`draft/145` §一 R8/R14/R19）。
+        #: 形状见 :meth:`retired_ledger` 的返回值；它是读数，不是判据。
+        self.last_retired_ledger: dict[str, Any] = {}
         self._negotiations: list[dict[str, Any]] = []
         #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上（S1m）：
         #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
@@ -4503,10 +4560,67 @@ class Secretary:
         return _fold_index(rows), bad
 
     def retired_names(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
-        """销号名单（业主 B1）：名字一经退役永久不复用。`(行列表, 坏行)`。"""
+        """销号名单（业主 B1）：名字一经退役永久不复用。`(行列表, 坏行)`。
+
+        这是 :meth:`retired_ledger` 的薄包装：`bad` 的口径与改前逐字相同（"某行不是
+        合法 JSON / 不是对象"），所以既有读者不受影响。"这一份名单够不够回答否"那一格
+        不在这里 —— 它在 `retired_ledger` 的 `checked` / `unattributable` 上。
+        """
+        got = self.retired_ledger(owner, trusted_shard=True)
+        return list(got.get("rows") or []), list(got.get("bad") or [])
+
+    def retired_ledger(self, owner: str, *, trusted_shard: bool) -> dict[str, Any]:
+        """销号名单的四态读数 ＋ 逐行读数（`draft/145` §3.1）。
+
+        返回 `{"checked","state","rows","bad","unattributable","unattributable_rows",
+        "reason"}`。`state` 是 `jsonlfile.READ_STATES` 之一（`absent` / `empty` / `ok` /
+        `unreadable`），`checked` 的含义只有一句：这一份名单的否定结论（「这一号没
+        销过」）信不信得过（整片口径）。`unattributable` 是那一档的逐条说明，
+        `unattributable_rows` 是同一批行的结构化读数（哪一行、哪个键还用得了），
+        给调用方"按号 / 按名逐个排除：这一行可能是谁"用（判据在
+        :func:`retired_row_gaps`）。
+
+        为什么要多出 `unattributable` 这一档（改前没有，于是下面这些全被读成"没销号"）：
+        一行是合法 JSON、也是对象，但认不出它是哪一号 / 哪一名 —— 少 `task_id`、
+        少 `name`、或两者类型不是非空字符串（`draft/145` R8 / R10 / R11）；
+        又或者那一行的 `owner` 与它所在的分片名字对不上（R19 的"张冠李戴"那一半）。
+        这种行今天既不在 `bad` 里、也不命中任何键 ⇒ 闸门读成"这一份里没有它" ⇒
+        已销号的号照样被叫醒。判据只认"非空字符串"两件事，刻意不校验格式
+        （格式校验会变成第二份发号口径 —— `draft/145` §3.1 注 2）。
+
+        `trusted_shard`：这个分片名是怎么来的，必须由调用方显式说。
+        - `True`：来自台账那一行自己的 `parent_task_id`（或写侧的"我就是这个父"）⇒
+          文件不存在就是"还没人销过号"这条查过的事实（`absent` + `checked=True`）；
+        - `False`：来自扫目录 / 调用方猜的 ⇒ 文件不存在证明不了任何事（`checked=False`）。
+        把这两档折在一起，就是 `draft/145` B1/B2 那条洞（"读不成"被写成"查过了、没有"）。
+        """
         from . import jsonlfile as JF
 
-        return JF.read_jsonl(retired_path(self.root, owner))
+        rows, bad, state = JF.read_jsonl_state(retired_path(self.root, owner))
+        bad = list(bad)
+        unattributable, unattributable_rows = retired_row_gaps(rows, owner)
+        out: dict[str, Any] = {"checked": True, "state": str(state), "rows": list(rows),
+                               "bad": bad, "unattributable": unattributable,
+                               "unattributable_rows": unattributable_rows, "reason": ""}
+        if state == "unreadable":
+            # 一个坏字节（R14）/ 一个占成目录的路径（R15）：这一片一条都读不出来。
+            # 这一档绝不是"这一片里没有销号"—— 它是"整份失效"，所以 `checked=False`。
+            out["checked"] = False
+            out["reason"] = ("整份读不出来（这一格不是「没有销号」）："
+                             + (bad[0] if bad else "读文本失败"))
+        elif state == "absent" and not trusted_shard:
+            out["checked"] = False
+            out["reason"] = (f"{owner or '?'} 这一份名单不存在，而分片名不可信"
+                             "（不是从台账那一行来的）⇒ 「没有这份名单」证明不了任何事")
+        else:
+            problems = bad + unattributable
+            if problems:
+                out["checked"] = False
+                out["reason"] = f"{len(problems)} 行读不全（{problems[0]}）"
+            elif state == "absent":
+                out["reason"] = ("还没有人销过号（这一份名单还不存在；分片名来自台账那一行）")
+        self.last_retired_ledger = dict(out)
+        return out
 
     def _used_names(self, owner: str) -> dict[str, str]:
         """该父名下"用过的所有名字"：名字 → 角色（含已收口、已销号、只在对照表里的）。
@@ -4538,9 +4652,15 @@ class Secretary:
         return out
 
     def _retired_used(self, owner: str) -> list[str]:
-        """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。"""
-        rows, _bad = self.retired_names(owner)
-        return [str(r.get("name") or "") for r in rows if str(r.get("name") or "")]
+        """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。
+
+        走 :meth:`retired_ledger`（写侧的分片名就是"我这个父"，所以 `trusted_shard=True`）：
+        `bad` / `unattributable` 不再被 `_bad` 丢掉 —— 它们留在 `self.last_retired_ledger`
+        里，"这一格读不全"从此是一个读得出来的事实，而不是一个被吞掉的返回值。
+        """
+        got = self.retired_ledger(owner, trusted_shard=True)
+        return [str(r.get("name") or "") for r in (got.get("rows") or [])
+                if str(r.get("name") or "")]
 
     def next_name(self, owner: str, role: str) -> tuple[str, str]:
         """下一个可用的本地名（`<角色><序号>`；用过的名字绝不回收）。返回 `(名字, 问题)`。
@@ -8608,8 +8728,15 @@ class Secretary:
         return str(name) in self._used_names(owner)
 
     def _is_retired(self, owner: str, name: str) -> bool:
-        rows, _bad = self.retired_names(owner)
-        return any(str(r.get("name") or "") == str(name) for r in rows)
+        """这个名字是不是销过号（写侧的复用闸）。
+
+        走 :meth:`retired_ledger` 而不是 `retired_names`：语义一个字不改（"读到一行
+        名字对得上"就是真），但坏行 / 认不出来的行现在留在 `self.last_retired_ledger`
+        里。写侧的"复活"风险（`draft/145` H14：`bad` 被 `_bad` 丢掉 ⇒ 已销号的名字
+        还能被 `reuse` 回来）从这里开始有了一个可读的读数；本方法仍只回那个布尔。
+        """
+        got = self.retired_ledger(owner, trusted_shard=True)
+        return any(str(r.get("name") or "") == str(name) for r in (got.get("rows") or []))
 
     def _children_left_behind(self, tid: str) -> dict[str, Any]:
         """销 `tid` 之前：它名下还有哪些"只有它这一个父能销"的名册项。

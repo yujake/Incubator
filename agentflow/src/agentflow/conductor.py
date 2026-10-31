@@ -3317,15 +3317,21 @@ class Conductor:
             if not row:
                 out["reason"] = f"{recipient} 在台账里没有那一行 ⇒ 它不存在（不是'已叫醒'）"
                 return out
-            # 已销号 ⇒ 不跑它（"已销号是彻底没有了"）。
-            # 这里刻意只传号、不传 `parent`：这一格是投递路上的双保险，`parent` 由
-            # `retired_reading_of` 自己从台账那一行取（多一次 0.2 ms 的台账读，换掉
-            # "调用方必须知道销号名单按父存"这条隐含约定）。判据
-            # `test_a_message_runs_a_silent_agent.py` 把本方法打桩成单参数的 lambda，
-            # 所以这一处的签名只用最窄的那一种。
-            if self._is_retired_task(recipient):
+            # 已销号 ⇒ 不跑它（"已销号是彻底没有了"）；销号名单读不全 ⇒ 也不跑
+            # （`unknown`，fail-closed：业主 2026-10-31）。
+            # 这一格是投递路上的双保险：`parent` 由 `retired_reading_of` 自己从台账那一行
+            # 取（多一次 0.2 ms 的台账读，换掉"调用方必须知道销号名单按父存"这条隐含约定）。
+            # 判据 `test_a_message_runs_a_silent_agent.py` 把这一格读的布尔口打桩成单参数
+            # lambda，所以 `retired_verdict` 在 `parent` 为空时只传号。
+            verdict = self.retired_verdict(recipient)
+            if verdict == "retired":
                 out["reason"] = (f"{recipient} 已销号 ⇒ 彻底没有了（业主 2026-10-29）。"
                                  "投递本应被秘书拦；要它干活就重新派一个")
+                return out
+            if verdict == "unknown":
+                out["reason"] = (f"{recipient} 的销号名单读不全（{self._retired_reason()}）⇒ "
+                                 "不叫它（fail-closed）；信已经落在它收件箱里，等这一格"
+                                 "读得出来再叫")
                 return out
             status = str(row.get("status") or "")
             if status in UNFINISHED_STATUSES:
@@ -3424,7 +3430,9 @@ class Conductor:
         """兜底表被打掉时把那个代理叫起来（同一个号继续）。
 
         口径（业主 2026-10-29）：兜底表的作用是"保证一个代理不是真的死了、接住所有的事件"。
-        已销号 ⇒ 叫不醒（"彻底没有了"）；名册读不到 ⇒ 宁可叫它（与 `_is_retired_task` 同向）。
+        已销号 ⇒ 叫不醒（"彻底没有了"）；销号名单读不全 ⇒ 也不叫（`unknown`，交人看）——
+        2026-10-31 业主裁定的方向是 fail-closed：这一格读不出它销过没有，就不把"叫醒"
+        这件事当结论（改前那一档被折成"没销号"⇒ 已销号的号照样被叫起来）。
         """
         tid = str(task_id or "").strip()
         if not tid:
@@ -3437,11 +3445,17 @@ class Conductor:
             row = next((r for r in self._tasks() if str(r.get("task_id") or "") == tid), None)
         except Exception:  # noqa: BLE001 - 读不成不拦（宁可叫它）
             row = None
-        # 已销号 ⇒ 叫不醒（"彻底没有了"）。销号名单按父存，`parent` 就取刚读到的这一行；
+        # 已销号 ⇒ 叫不醒（"彻底没有了"）；销号名单读不全 ⇒ 也不叫（fail-closed，
+        # 业主 2026-10-31）。销号名单按父存，`parent` 就取刚读到的这一行；
         # 台账读不成时留空，`retired_reading_of` 会退回"自己读 / 扫名册目录"。
-        if self._is_retired_task(tid, parent=str((row or {}).get("parent_task_id") or "")):
+        verdict = self.retired_verdict(tid, parent=str((row or {}).get("parent_task_id") or ""))
+        if verdict == "retired":
             return {"started": False, "task_id": tid,
                     "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
+        if verdict == "unknown":
+            return {"started": False, "task_id": tid,
+                    "reason": (f"{tid} 的销号名单读不全（{self._retired_reason()}）⇒ 不叫"
+                               "（fail-closed）；这一格既不是「已销号」也不是「没销号」")}
         if str((row or {}).get("status") or "") in UNFINISHED_STATUSES:
             return {"started": False, "task_id": tid,
                     "reason": (f"{tid} 它自己在跑（status={(row or {}).get('status')}）⇒ "
@@ -3460,35 +3474,50 @@ class Conductor:
         out["task_id"] = tid
         return out
 
-    def _retired_owners_of(self, task_id: str, parent: str = "") -> list[str]:
-        """这个号可能落在谁名下的销号名单里（名单按父分文件：`out/roster/<父>-retired.jsonl`）。
+    def _retired_trusted_shard(self, task_id: str, parent: str = "") -> str:
+        """这个号"该读哪一份销号名单"——可信的那一份（名单按父分文件）。
 
-        次序：调用方给的父 → 台账那一行的 `parent_task_id` → 扫名册目录里所有
-        `*-retired.jsonl`。为什么最后要扫全目录：`_is_retired_task(tid)` 的签名只有号，
-        而名单的键是父 —— 台账里没有这一行时（老工作区 / `rebuild` 之前的盘）只有扫目录
-        才对得上。一份名单都没有 ⇒ 空表：那是"这个工作区还没有人销过号"（一条查过的事实），
-        不是"没查成"。
+        次序：调用方给的父 → 台账那一行的 `parent_task_id`。两者都没有 ⇒ `""`：
+        这时只能扫名册目录，而扫出来的分片名不算可信（"这一份里没有它"证明不了
+        "别的分片里也没有它"，`draft/145` R19/B1）。
+
+        为什么"哪个分片"与"信不信这个分片名"要分开（§3.1 注 1）：`absent` 这一档只在
+        分片名可信时才是"还没人销过号"这条查过的事实；分片名是猜的 / 扫来的时，
+        "文件不存在"什么都证明不了。这一格必须由调用方显式说清 ——
+        `retired_ledger(..., trusted_shard=...)`，不在这里猜。
         """
         pid = str(parent or "").strip()
         if pid:
-            return [pid]
+            return pid
         try:
             row = self._task(str(task_id or "")) or {}
-        except Exception:  # noqa: BLE001 —— 读不到台账那一行就不拿它当父（继续往下找）
+        except Exception:  # noqa: BLE001 —— 读不到台账那一行就不拿它当父（往下走扫目录）
             row = {}
-        pid = str(row.get("parent_task_id") or "").strip()
-        if pid:
-            return [pid]
+        return str(row.get("parent_task_id") or "").strip()
+
+    def _retired_shards_on_disk(self) -> tuple[list[str], str]:
+        """扫名册目录里所有 `<父>-retired.jsonl` ⇒ `(分片名, 扫不成时的理由)`。
+
+        为什么最后要扫全目录（R19）：一个号可能被记在别的父的分片里（分片错配 /
+        台账那一行的父被改过 / 老工作区的盘）。改前"给了 `parent` 就只问那一份"
+        ⇒ 一次错配就是永久盲区：`state=absent`、`checked=True`、回执一个字不提读不全。
+
+        第二格是三态纪律：扫不成 ≠ 一份都没有。`([], 理由)` 是"没查成"
+        （`draft/145` B2/R20：名册目录本身读不成 / 被占成一个同名文件）；
+        只有"目录读得出来、里面确实没有一份"才是 `([], "")`（一条查过的事实）。
+        """
         try:
             root = str(getattr(self.store, "root", "") or "")
-            folder = Path(root).joinpath(*SEC.ROSTER_DIR) if root else None
-            if folder is None or not folder.is_dir():
-                return []
+            if not root:
+                return [], ""
+            folder = Path(root).joinpath(*SEC.ROSTER_DIR)
+            if not folder.exists():          # 还没人派过活：合法初态，不是"没查成"
+                return [], ""
             suffix = "-retired.jsonl"
             return sorted(p.name[: -len(suffix)] for p in folder.iterdir()
-                          if p.is_file() and p.name.endswith(suffix))
-        except Exception:  # noqa: BLE001 —— 扫不动就等于"没有名单可问"（方向：宁可叫它）
-            return []
+                          if p.is_file() and p.name.endswith(suffix)), ""
+        except Exception as exc:  # noqa: BLE001 —— 扫不动是"没查成"（禁止折成空表）
+            return [], f"名册目录读不成（{type(exc).__name__}: {exc}）"
 
     @staticmethod
     def _retired_rows_of(got: Any) -> tuple[list[Any], list[str]]:
@@ -3567,31 +3596,173 @@ class Conductor:
                     str(row.get("name") or "").strip()} - {""}
         return {str(row or "").strip()} - {""}
 
+    @staticmethod
+    def _retired_gaps_of(rows: Any, owner: str) -> tuple[list[str], list[dict[str, Any]]]:
+        """替身读口那一档的"行认不出来"（真身由 `Secretary.retired_ledger` 给）。
+
+        判据只有一份实现（`secretary.retired_row_gaps`）：替身那四种壳（`(rows, bad)` /
+        `list` / 无参可调 / 老 `{号: 理由}` dict）走的是同一条口径 —— 真身严、替身松
+        等于给下一份判据留一条"换个壳就绿"的路。
+        """
+        return SEC.retired_row_gaps(rows, owner)
+
+    def _retired_names_of_key(self, who: str, task_id: str) -> tuple[set[str], bool]:
+        """这一号在 `who` 这份名册里叫什么 ⇒ `(名字集合, 查成了没有)`。
+
+        为什么需要它：一份销号行是按名册名字写的（`Secretary.retire` 先按名字
+        `_resolve`，再落 `{"name","task_id",…}`）。所以"少了 `task_id`、只剩名字"那一行
+        能不能是这一号，取决于这一号叫什么 —— 不知道名字就只能说"不知道"。
+
+        `checked=False`（名册 / 对照表读不出来）时不能排除任何一行，调用方按 fail-closed
+        处理。名册正文与对照表都读（两处都可能缺行：H7 的半份登记、H17 的 `unrostered`），
+        任一处读不全 ⇒ `checked=False`。
+        """
+        sec = getattr(self, "secretary", None)
+        names: set[str] = set()
+        checked = True
+        got_any = False
+        for reader in ("roster_rows", "roster_index"):
+            fn = getattr(sec, reader, None)
+            if not callable(fn):
+                continue
+            got_any = True
+            try:
+                rows, bad = fn(who)
+            except Exception:  # noqa: BLE001 —— 读不成 ⇒ 不能排除
+                return set(), False
+            if bad:
+                return set(), False
+            for row in rows or ():
+                row = row if isinstance(row, Mapping) else {}
+                if str(row.get("task_id") or "") == str(task_id) or \
+                        str(row.get("first_task_id") or "") == str(task_id):
+                    name = str(row.get("name") or "").strip()
+                    if name:
+                        names.add(name)
+        return names, (checked and got_any)
+
+    def _retired_gap_may_be_key(self, gap: Mapping[str, Any], *, who: str,
+                                tid: str, want: str) -> bool:
+        """这一行"认不出来"的记录有没有可能是这一号 / 这一名（`draft/145` §3.1）。
+
+        为什么逐个键判，而不是"一片里有一行认不出来就整片不算数"：销号行是按名册名字写
+        的，所以一行"少了 `task_id`、名字是 `D1`"的记录可能是 `D1` 那一号，不可能是
+        别的号 —— 把整片都判成读不全，会让同一个父名下每一个还活着的号都叫不醒
+        （那是另一种不可逆：`draft/145` §3.4 的反真空那一半）。
+
+        判法（只往前排除，排不掉就是"可能是"）：
+        ```text
+        两个键都用不了（都空）        ⇒ 可能是任何号 ⇒ True
+        号对得上                      ⇒ True（那一行可能就是这一号，只是没读全）
+        名对得上（调用方给的 / 名册里换出来的）⇒ True
+        名用不了、号用不了            ⇒ True
+        名用不了、号对不上            ⇒ False（号已经把它排除掉了）
+        名对不上、而这一号的名字读不出来 ⇒ True（不能排除）
+        名对不上、这一号的名字读出来了   ⇒ False
+        ```
+        """
+        row_tid = str(gap.get("task_id") or "").strip()
+        row_name = str(gap.get("name") or "").strip()
+        if not row_tid and not row_name:
+            return True
+        if row_tid and tid and row_tid == tid:
+            return True
+        names, names_checked = self._retired_names_of_key(who, tid) if tid else (set(), False)
+        keys = (names | {want}) - {""}
+        if row_name and row_name in keys:
+            return True
+        if not row_name:
+            return not row_tid
+        return not names_checked
+
+    def _read_retired_shard(self, who: str, *, trusted: bool) -> dict[str, Any]:
+        """读一份销号名单 ⇒ `{checked,state,rows,bad,unattributable,
+        unattributable_rows,file_problem,reason}`。
+
+        读口从两个里挑：秘书的 :meth:`Secretary.retired_ledger`（四态 ＋ 逐行读数，
+        分片可信度显式传进去）优先；只有 `retired_names` 的替身退回老读法（那一档没有
+        `state`，逐行读数由 :meth:`_retired_gaps_of` 现算）。
+
+        `file_problem` 是"这一份名单自己没查成"（整份读不出来 / 分片名不可信）：
+        那一档对任何号都是"不知道"；而"某一行的内容认不出来"只对"可能是它"的号
+        才是"不知道"（那是 `unattributable_rows`，判法见 :meth:`_retired_gap_may_be_key`）。
+
+        读口自己抛异常不在这里吞：调用方要把它落成"没查成"，而不是"没有销号"。
+        """
+        sec = getattr(self, "secretary", None)
+        ledger = getattr(sec, "retired_ledger", None)
+        if callable(ledger):
+            raw = ledger(who, trusted_shard=trusted)
+            got = dict(raw) if isinstance(raw, Mapping) else {}
+            state = str(got.get("state") or "")
+            bad = [str(x) for x in (got.get("bad") or [])]
+            unattr = [str(x) for x in (got.get("unattributable") or [])]
+            reason = str(got.get("reason") or "")
+            file_problem = ""
+            if state == "unreadable":
+                file_problem = reason or "整份读不出来（这一格不是「没有销号」）"
+            elif not bad and not unattr and got.get("checked") is False:
+                file_problem = reason or "这一份销号名单没查成"
+            return {"checked": got.get("checked") is not False,
+                    "state": state,
+                    "rows": list(got.get("rows") or []),
+                    "bad": bad,
+                    "unattributable": unattr,
+                    "unattributable_rows": [dict(x) for x in
+                                            (got.get("unattributable_rows") or [])
+                                            if isinstance(x, Mapping)],
+                    "file_problem": file_problem,
+                    "reason": reason}
+        holder = getattr(sec, "retired_names", None)
+        rows, bads = self._retired_names_of(holder, who)
+        messages, gaps = self._retired_gaps_of(rows, who)
+        return {"checked": not (bads or messages),
+                "state": "ok" if rows else "empty",
+                "rows": list(rows),
+                "bad": [str(x) for x in bads],
+                "unattributable": messages,
+                "unattributable_rows": gaps,
+                "file_problem": "",
+                "reason": ""}
+
     def retired_reading_of(self, task_id: str, *, parent: str = "",
                            name: str = "") -> dict[str, Any]:
-        """这个号是不是已销号：四格读数（`checked` / `retired` / `bad` / `reason`）。
+        """这个号是不是已销号：四态读数（`checked` / `retired` / `bad` / `reason`）。
 
         返回 `{"checked","retired","task_id","name","owners","rows","bad",
-        "matched_by","matched_owner","reason"}`：
+        "unattributable","unknown_reasons","state","matched_by","matched_owner","reason"}`：
 
         - `retired`：读到了匹配行才是真（读到就是读到，同一份名单里的坏行不改变它）；
-        - `checked`：这一格查成了没有。名单读不全（`bad` 非空）/ 读口抛了 / 没有秘书 /
+        - `checked`：这一份名单的否定结论（「这一号没销过」）信不信得过。
+          读不全（坏行 / 认不出来的行 / 分片不可信 / 扫不成）/ 读口抛了 / 没有秘书 /
           没有这个读口 ⇒ `False`，而 `reason` 如实写是哪一档；
+        - `unknown_reasons`：这一号自己的否定结论信不信得过（非空 ⇒ 不许说"没销号"）。
+          它比 `checked` 窄：一片里另有一行"整行读不出来"时，那一行进 `bad`、回执逐字
+          带着，但不冻结别的号；只有"可能是这一号"的读不全（整份读不成 / 分片不可信 /
+          扫不成 / 认不出来的行按名册名字换算出可能命中它）才进这一格。
         - `bad`：坏行原样带着（`[第 1 行读不出来（…）]`），不折成"没有销号"；
-        - `owners`：问过哪几份名单（`_retired_owners_of` 的读数）；
+        - `unattributable`：行读得出来但认不出是哪一号 / 哪一名（少 `task_id` /
+          少 `name` / 类型不对 / `owner` 与分片不符）—— 这一档改前不存在，于是
+          R8/R10/R11/R19 全被读成"这一份里没有它"；
+        - `owners`：问过哪几份名单（先问可信分片，读不到匹配行时回溯扫目录）；
         - `matched_by` / `matched_owner`：命中的是哪个键（`task_id` / `name`）、在哪一份名单里。
 
-        ## 方向（不改）
-        读不成 / 读不全 ⇒ `retired=False`，动作侧因此仍取"宁可叫它"（
-        `_is_retired_task` 的 docstring 逐字：叫醒一个还在的代理只花一次循环，而把一个
-        还在的代理当成已销号会让它永远收不到信）。这个方向不改，但读数必须分得开 ——
-        "叫了"与"没销号"是两件事，否则下一次读的人只会看到"它没销号"，而盘上其实有
-        一行读不出来。
+        ## 分片（R19）：先读可信的那一份，读不到就扫目录回溯
+        这份名单按父分文件（`out/roster/<父>-retired.jsonl`），而"哪个父"来自台账那一行
+        的 `parent_task_id`。分片名可信时，文件不存在就是"还没人销过号"（`checked=True`）；
+        分片名是扫来的 / 猜的时，那一档是"读不全"。两种情况都要再扫一遍目录：
+        一行内容完全正确、只是落在别的父的分片里时，只问那一份会读成"没销号"。
+
+        ## 方向（2026-10-31 业主裁定：fail-closed）
+        这一份读数本身只回答"读到了没有 / 查成了没有"，不替动作侧决定叫不叫；
+        动作侧看的是 :meth:`retired_verdict` 那个三态，`unknown` ⇒ 不叫醒。
+        `checked=False` 再也不等于"没销号"：它是"这一格读不出来"。
         """
         tid = str(task_id or "").strip()
         want = str(name or "").strip()
         out: dict[str, Any] = {"checked": False, "retired": False, "task_id": tid,
                                "name": want, "owners": [], "rows": 0, "bad": [],
+                               "unattributable": [], "unknown_reasons": [], "state": "",
                                "matched_by": "", "matched_owner": "", "reason": ""}
         self.last_retired_reading = out
         if not tid and not want:
@@ -3599,35 +3770,52 @@ class Conductor:
             return out
         sec = getattr(self, "secretary", None)
         if sec is None:
-            out["reason"] = "没有秘书 ⇒ 读不到销号名单（不是「没销号」）"
+            # 没有秘书 ≠ 读不全：销号名单只有一个写者（`Secretary.retire`），这一趟连
+            # 秘书都没接 ⇒ 这个工作区里没有能销号的机制，也就没有"读不出来的销号"。
+            # 折成 `unknown` 会让"没接秘书的装配"从此叫不醒任何人（另一种不可逆），
+            # 而既有判据（`test_the_block_table_wakes_one_by_one` 等）钉的正是"没秘书时
+            # 该叫得起来"。真正该 fail-closed 的是"有读口、但这份名单读不全"。
+            out.update(checked=True,
+                       reason="这一趟没有接秘书 ⇒ 没有销号名单可读（也没有人能写它）")
             return out
+        ledger = getattr(sec, "retired_ledger", None)
         holder = getattr(sec, "retired_names", None)
-        if holder is None:
-            out["reason"] = (f"{type(sec).__name__} 没有 retired_names 这个读口 ⇒ "
-                             "读不到销号名单（不是「没销号」）")
+        if not callable(ledger) and holder is None:
+            out["reason"] = (f"{type(sec).__name__} 没有 retired_ledger / retired_names "
+                             "这个读口 ⇒ 读不到销号名单（不是「没销号」）")
+            out["unknown_reasons"] = [f"销号名单读不全 ⇒ {out['reason']}"]
             return out
-        parents = self._retired_owners_of(tid, parent)
-        out["owners"] = list(parents)
-        if callable(holder):
-            if not parents:
-                out.update(checked=True,
-                           reason="名册目录里一份销号名单都没有（查过了）⇒ 没有销号")
-                return out
-            asked = parents
-        else:
-            asked = [""]          # 替身：数据是一整份，不分父
         wanted = {tid, want} - {""}
+        split = callable(ledger) or callable(holder)   # 真读口按父分文件；替身是一整份
+        trusted = self._retired_trusted_shard(tid, parent) if split else ""
+        plan: list[tuple[str, bool]] = ([(trusted, True)] if trusted else []) \
+            if split else [("", False)]
+        asked: list[str] = []
+        notes: list[tuple[str, str, list[str]]] = []       # (坏行 / 认不出来, 分片, 逐条)
+        files: list[tuple[str, str]] = []                  # (分片, 这一份自己没查成)
+        gaps_all: list[tuple[str, dict[str, Any]]] = []    # (分片, 逐行读数)
+        states: list[str] = []
         rows_total = 0
-        bad: list[str] = []
-        for who in asked:
-            try:
-                rows, bads = self._retired_names_of(holder, who)
-            except Exception as exc:  # noqa: BLE001 —— 读口自己炸了也是"没查成"
-                bad.append(f"{who or '（不分父）'}：读不出来（{type(exc).__name__}: {exc}）")
-                continue
+
+        def _absorb(who: str, got: dict[str, Any]) -> None:
+            """把一份分片的读数收进总读数（行照读、问题分档记）。"""
+            nonlocal rows_total
+            asked.append(who)
+            states.append(str(got.get("state") or ""))
+            rows = list(got.get("rows") or [])
             rows_total += len(rows)
-            for msg in bads:
-                bad.append(f"{who or '（不分父）'}：{msg}" if len(asked) > 1 else str(msg))
+            bads = [str(x) for x in (got.get("bad") or [])]
+            unattr = [str(x) for x in (got.get("unattributable") or [])]
+            if bads:
+                notes.append(("bad", who, bads))
+            if unattr:
+                notes.append(("unattributable", who, unattr))
+            file_problem = str(got.get("file_problem") or "")
+            if file_problem:
+                files.append((who, file_problem))
+            for gap in (got.get("unattributable_rows") or []):
+                if isinstance(gap, Mapping):
+                    gaps_all.append((who, dict(gap)))
             for row in rows:
                 hit = self._retired_row_keys(row) & wanted
                 if not hit:
@@ -3635,16 +3823,85 @@ class Conductor:
                 out["retired"] = True
                 out["matched_by"] = "、".join(sorted(hit))
                 out["matched_owner"] = who
+
+        def _read_one(who: str, trust: bool) -> None:
+            try:
+                got = self._read_retired_shard(who, trusted=trust)
+            except Exception as exc:  # noqa: BLE001 —— 读口自己炸了也是"没查成"
+                got = {"checked": False, "state": "unreadable", "rows": [],
+                       "bad": [], "unattributable": [], "unattributable_rows": [],
+                       "file_problem": f"读不出来（{type(exc).__name__}: {exc}）",
+                       "reason": ""}
+            _absorb(who, got)
+
+        for who, trust in plan:
+            _read_one(who, trust)
+        scan_error = ""
+        if split and not out["retired"]:
+            # R19 的回溯：可信分片里没有它 ⇒ 还要看别的父的分片（那些分片名不可信，
+            # 所以 `trusted_shard=False`：它们的 `absent` 不算"查过了、没有"）。
+            shards, scan_error = self._retired_shards_on_disk()
+            for who in shards:
+                if who in asked:
+                    continue
+                _read_one(who, False)
+        out["owners"] = list(asked)
         out["rows"] = rows_total
+        multi = len(asked) > 1
+        bad: list[str] = []
+        unattributable: list[str] = []
+        for kind, who, msgs in notes:
+            for msg in msgs:
+                text = msg if (not multi or not who) else f"{who}：{msg}"
+                (bad if kind == "bad" else unattributable).append(text)
+        if scan_error:
+            bad.append(scan_error)
         out["bad"] = bad
-        out["checked"] = not bad
+        out["unattributable"] = unattributable
+        for one in ("unreadable", "ok", "empty", "absent"):
+            if one in states:
+                out["state"] = one
+                break
+        problems = bad + unattributable
+        out["checked"] = not problems          # 整片口径（§3.1）
+        # ---- 这一号自己的否定结论（`unknown_reasons` 非空 ⇒ 不许说"没销号"）----
+        #
+        # 两档要分开（否则要么"一个坏字节冻结整棵树"，要么"认不出来的行放走已销号"）：
+        # · 文件级（读不成 / 分片不可信 / 扫不成 / 没有读口）⇒ 对任何号都是"不知道"；
+        # · 行级（一行读得出来、但认不出是哪一号）⇒ 只对"它可能是"的那些号才是
+        #   "不知道"（判法 `_retired_gap_may_be_key`）：一行"少了 task_id、名字是 D1"的
+        #   记录可能是 D1 那一号，不可能是别的号 —— 把整片都判成读不全会让同一个父名下
+        #   每一个还活着的号都叫不醒（`draft/145` §3.4 的反真空那一半）。
+        # 至于"整行读不出来"（半行 / 非法 JSON）那一档：它进 `bad`、回执里逐字带着，
+        # 但不冻结别的号（`tests/test_a_retired_name_is_never_woken.py::w12` 与
+        # `test_an_unreadable_retired_list_is_not_an_empty_one.py::w14` 的反真空钉住
+        # 的正是这一格；"整份读不出来"是另一档，见上面 `file_problem`）。
+        unknown: list[str] = []
+        for who, msg in files:
+            text = msg if (not multi or not who) else f"{who}：{msg}"
+            unknown.append(f"销号名单读不全 ⇒ {text}")
+        if scan_error:
+            unknown.append(f"销号名单读不全 ⇒ {scan_error}")
+        for who, gap in gaps_all:
+            try:
+                may = self._retired_gap_may_be_key(gap, who=who, tid=tid, want=want)
+            except Exception:  # noqa: BLE001 —— 判不了就当它可能是（fail-closed）
+                may = True
+            if not may:
+                continue
+            detail = str(gap.get("why") or "这一行认不出来")
+            text = detail if (not multi or not who) else f"{who}：{detail}"
+            unknown.append(f"销号名单读不全 ⇒ {text}；这一行可能就是这一号")
+        out["unknown_reasons"] = unknown
         if out["retired"]:
-            out["reason"] = ("" if not bad else
-                             f"销号名单读不全（{len(bad)} 行：{bad[0]}）—— "
+            out["reason"] = ("" if not problems else
+                             f"销号名单读不全（{len(problems)} 行：{problems[0]}）—— "
                              "但这一号已读到销号行")
-        elif bad:
-            out["reason"] = (f"销号名单读不全（{len(bad)} 行：{bad[0]}）⇒ "
+        elif problems:
+            out["reason"] = (f"销号名单读不全（{len(problems)} 行：{problems[0]}）⇒ "
                              "不能据此说「没销号」")
+        elif not asked:
+            out["reason"] = "名册目录里一份销号名单都没有（查过了）⇒ 没有销号"
         return out
 
     def _retired_unchecked_note(self) -> str:
@@ -3653,26 +3910,86 @@ class Conductor:
         为什么必须附：`resume` 那一档的措辞里有"未销号"三个字。销号名单读不全时那三个字
         是没有根据的 —— 附一句"读不全（…）"才让回执与盘上一致（`draft/143` §7.3：
         盘上说它已销号、回执说它"owner 静默、未销号"，正是本仓最忌的那一类。）
+
+        2026-10-31 起本方法在正常路径上恒为空串：`retired_verdict` 判 `unknown` 时
+        `wake_blocked` 走 `review` 那一支、根本走不到 `resume`，所以到这里的读数一定
+        `checked=True`。留着它是给"外部打桩/覆写了布尔口"那一档的兜底 —— 那种情况下
+        读数可能与布尔口不一致，而这一句就是"不许把没查成写成没销号"的最后一道措辞。
         """
         got = dict(getattr(self, "last_retired_reading", {}) or {})
         if got.get("checked") is not False:
             return ""
         why = str(got.get("reason") or "没查成")
-        return f"（销号名单这一格没查成：{why}；方向：宁可叫它）"
+        return f"（销号名单这一格没查成：{why}；按业主 2026-10-31 的裁定这一档不该叫醒）"
 
     def _is_retired_task(self, task_id: str, *, parent: str = "") -> bool:
-        """这个台账号对应的名册项是不是已销号。
+        """这个台账号对应的名册项是不是已销号（只回"读到了匹配行没有"）。
 
-        读不到 ⇒ 返回 False（方向取"宁可叫它"，因为"叫醒一个还在的代理"只花一次循环，
-        而"把一个还在的代理当成已销号"会让它永远收不到信）。已销号那一档的权威读数在
-        秘书的退役名单里（`Secretary.retired_names(owner) -> (rows, bad)`，按父分文件）。
+        读不到 ⇒ 返回 False。这个布尔不改语义，也不承担"叫不叫"的决定：`False` 里
+        混着"读过了、没销号"与"读不全、不知道"两档，而那两档的下一步相反
+        （照叫 / 不叫）。动作侧看的是 :meth:`retired_verdict` 那个三态。
 
-        `parent` 是"谁名下的那份名单"（销号名单按父存）：四个调用点都能从台账那一行拿到
-        它，拿到了就少一次读；拿不到时 `retired_reading_of` 自己按 `parent_task_id` 找，
-        再不行扫名册目录。读不成 / 读不全的读数在 `self.last_retired_reading` 里
-        （`checked=False` ＋ 原样带着 `bad`），本方法只回那个布尔。
+        已销号那一档的权威读数在秘书的销号名单里（`Secretary.retired_ledger(owner,
+        trusted_shard=...)`，按父分文件）。`parent` 是"谁名下的那份名单"：四个调用点
+        都能从台账那一行拿到它；拿不到时 `retired_reading_of` 自己按 `parent_task_id`
+        找，再不行扫名册目录（并回溯别的分片）。读不成 / 读不全的读数在
+        `self.last_retired_reading` 里（`checked=False` ＋ 原样带着 `bad` /
+        `unattributable`）。
         """
         return bool(self.retired_reading_of(task_id, parent=parent).get("retired"))
+
+    def retired_verdict(self, task_id: str, *, parent: str = "",
+                        name: str = "") -> str:
+        """`retired` / `live` / `unknown` —— 动作侧只看这一个字符串（`draft/145` §3.2）。
+
+        三档的判据（都在 :meth:`retired_reading_of` 的读数上，不另立口径）：
+        ```text
+        retired  读到了匹配行（读到就是读到；同一份名单里的坏行不改变它）
+        live     这一号/这一名的否定结论查成了（没有一行可能是它，且名单读得成）
+        unknown  这一号/这一名自己读不全：整份读不出来 / 分片不可信 / 扫不成 /
+                 读口抛了 / 有一行认不出是哪一号而它可能就是这一号
+        ```
+        业主 2026-10-31 的裁定是 fail-closed：`unknown` ⇒ 不叫醒（交人看）。
+        改前那一格是反的（"读不全"被折成"没销号"⇒ 已销号的号照样被叫起来）。
+
+        两处刻意的分界（都是判据钉住的，不是随手放的）：
+        - 「已销号」仍由布尔口 :meth:`_is_retired_task` 回答（语义与签名都不变：判据里
+          有一处把它打桩成单参数 lambda），所以那一处打桩照样生效；
+        - 判 `unknown` 用的是读数的 `unknown_reasons`（这一号自己的否定结论信不信
+          得过），不是整片的 `checked`：一片里另有一行"整行读不出来"时，那一行进
+          `bad`、回执逐字带着，但不冻结别的号（`wake_blocked` 的 `review` 那一档只留
+          给"可能就是这一号"的读不全）。
+        """
+        tid = str(task_id or "").strip()
+        want = str(name or "").strip()
+        try:
+            hit = bool(self._is_retired_task(tid, parent=parent) if parent
+                       else self._is_retired_task(tid))
+        except TypeError:
+            # 布尔口被外部打桩成单参数 / 无参时照原样问一次（`test_a_message_runs_a_silent_agent`）
+            hit = bool(self._is_retired_task(tid))
+        if hit:
+            return "retired"
+        got = dict(getattr(self, "last_retired_reading", {}) or {})
+        if want and (str(got.get("task_id") or "") != tid
+                     or str(got.get("name") or "") != want):
+            got = dict(self.retired_reading_of(tid, parent=parent, name=want))
+        return "unknown" if (got.get("unknown_reasons") or []) else "live"
+
+    def _retired_reason(self) -> str:
+        """最近一次销号名单读数里"这一号自己"的那一句理由（`unknown` 的回执要带上它）。"""
+        got = dict(getattr(self, "last_retired_reading", {}) or {})
+        unknown = [str(x) for x in (got.get("unknown_reasons") or [])]
+        if unknown:
+            return unknown[0]
+        return str(got.get("reason") or "没查成")
+
+    def _retired_first_problem(self) -> str:
+        """最近一次读数里第一个"读不全"的细节（回执里"先看哪一行"的那一句）。"""
+        got = dict(getattr(self, "last_retired_reading", {}) or {})
+        problems = [str(x) for x in (got.get("bad") or [])]
+        problems += [str(x) for x in (got.get("unattributable") or [])]
+        return problems[0] if problems else self._retired_reason()
 
 
     #: 逐条审批唤醒写进板项那一行 `inputs` 的落痕前缀：`wake:<谁>@<iso>|<为什么>`。
@@ -3701,10 +4018,13 @@ class Conductor:
         ## 三档（缺读数一律不许猜）
         ```text
         resume  owner 静默 且 未销号 且 仍在册 且 该板项未终态 且 子树无在跑
-        review  任一读数没查成（静默 / 子树活跃 / 名册）—— 交人看，不猜
+        review  任一读数没查成（销号名单 / 静默 / 子树活跃 / 名册）—— 交人看，不猜
         skip    已销号 / owner 在飞 / 板项已终态 / 子树有在跑 / 不是静默 / 没批准
         ```
         逐条给理由码（`refusal_code`），八格回执项一个不多一个不少（见下）。
+        销号名单读不全那一档是 `review` ＋ `unknown_retired`（不叫醒，2026-10-31
+        业主裁定的 fail-closed）；一笔里所有候选都停在 `review` 时顶层 `state="unknown"`
+        （"没查成"，不是"叫不动"）。
 
         ## 批：`approve="yes"` 才算有令牌
         `approve` 是"允许按审计结论动作"的令牌，不是"要不要真写"的开关。没有令牌的那
@@ -3831,13 +4151,28 @@ class Conductor:
                 continue
             # ---- 逐条审计：已销号 / 在册 / 在飞 / 子树 / 静默（每一条都要有读数）----
             # 销号名单按父存：`owner` 的父就是"该读哪一份名单"（`owner_row` 在读侧已经拿到了）。
-            if self._is_retired_task(owner, parent=str(owner_row.get("parent_task_id") or "")):
+            owner_parent = str(owner_row.get("parent_task_id") or "")
+            verdict = self.retired_verdict(owner, parent=owner_parent)
+            if verdict == "retired":
                 cell["refusal_code"] = "retired"
                 cell["why"] = (f"{owner} 已销号 ⇒ 彻底没有了（业主 2026-10-29）：叫不醒，"
                                "也不该动它名下的行；要它干活就重新派一个")
                 continue
-            # 销号名单这一格没查成（读不全 / 没有秘书 / 读口抛了）⇒ 后面每一句"未销号"
-            # 都要带上这一句；折成"没销号"会把"没查成"读成"查过了、没问题"。
+            if verdict == "unknown":
+                # 2026-10-31 业主裁定 fail-closed：销号名单读不全 ⇒ 不叫醒，交人看。
+                # 这一档的下一步不是"别叫了"，而是"去看那一份名单的那几行" ——
+                # 那正是 `review` 的既有定义（"任一读数没查成 ⇒ 交人看，不猜"）。
+                # 理由码单列 `unknown_retired`（不复用 `unknown_reading`）：同一项上可能
+                # 同时坏两格（子树读数 ＋ 销号名单），复用会让"哪一格坏"读不出来。
+                cell["verdict"] = "review"
+                cell["refusal_code"] = "unknown_retired"
+                cell["why"] = (f"{owner} 的销号名单这一格没查成"
+                               f"（{self._retired_reason()}）⇒ 不叫醒（fail-closed）："
+                               "这一格读不出它销过没有，就不把叫醒这件事当结论。"
+                               f"先看 out/roster/{owner_parent or '?'}-retired.jsonl 的"
+                               f"那几行（{self._retired_first_problem()}）。")
+                continue
+            # 销号名单这一格查成了（`live`）⇒ 后面每一句"未销号"都有根据。
             # （局部名不叫 `roster_note`：本模块里那个名字已经指"名册写入的兜底说明"。）
             retired_note = self._retired_unchecked_note()
             if not owner_row:
@@ -3958,6 +4293,17 @@ class Conductor:
         elif woken:
             out["state"] = "woken"
             out["reason"] = f"叫起来 {woken} 条（其余逐条理由见 items）"
+        elif out["items"] and all(str(c.get("verdict") or "") == "review"
+                                  for c in out["items"]):
+            # 每一条都停在 `review`（读数没查成）⇒ 这一笔的顶层结论是"没查成"，
+            # 不是"叫不动"。折进 `refused` 会让读的人以为"查过了、它们都叫不醒"，
+            # 而真相是"一条都没查成"（`draft/145` §3.2 顺带修的那一格）。
+            out["state"] = "unknown"
+            n_retired = sum(1 for c in out["items"]
+                            if str(c.get("refusal_code") or "") == "unknown_retired")
+            out["reason"] = ((f"{n_retired} 条的销号名单读不全 ⇒ 一条都没叫"
+                              "（不是「都叫不动」）") if n_retired else
+                             "每一条都有读数没查成 ⇒ 一条都没叫（交人看，不是「都叫不动」）")
         else:
             out["state"] = "refused"
             if not allowed:
@@ -4013,14 +4359,18 @@ class Conductor:
         1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
         2. 调用方必须已经证明收件人叫不醒（已销号，或兜底表被永久抑制）：只是静默
            不够 —— 一条消息或一次委托就会把它叫起来，那时它自己能 ack（本方法逐项核
-           `retire_state_of` 与 `lifeline_suppressed` / `_is_retired_task`，两个读数都
-           不是"叫不醒"就拒）—— 不许把还可能被叫醒的活清掉；
+           `retire_state_of` 与 `lifeline_suppressed` / `retired_verdict`，两个读数都
+           不是"叫不醒"就拒）—— 不许把还可能被叫醒的活清掉。销号名单读不全
+           （`unknown`）也不算"叫不醒"：那一档的拒信带理由码 `unknown_retired`，
+           因为"读不出来"证明不了"它叫不醒"（fail-closed，2026-10-31）；
         3. 作废不经过状态机（`item_move` 描述的是"有人读过/办过"，作废恰恰是
            "不会有人读"），但一律过 `schema.Task.validate`；来路写进 `inputs`
            （`void:expired:<父台账号>:<理由>`），于是事后能回答"谁作废的、为什么"。
 
-        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"reason"}`（三态：读不成 ⇒
-        `checked=False`，不许折成"没有要作废的"）。
+        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"reason"}`；拒信只有
+        `unknown_retired` 那一档多一个 `code` 格（`{"id","code","why"}` —— 理由码是
+        机器读的那一格，改前那一句"它只是静默"是没有根据的结论、也没有理由码）。
+        三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
         """
         self._refuse_write_in_snapshot("作废板项（void_items）")
         ids = [str(x) for x in item_ids if str(x).strip()]
@@ -4068,18 +4418,28 @@ class Conductor:
                 # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
                 # `lifeline_suppressed` 那一半在工作。
                 receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
-                deaf = False
+                # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
+                # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
+                # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
+                verdict = "unknown"
+                suppressed = False
                 try:
-                    deaf = bool(CLK.lifeline_suppressed(str(getattr(self.store, "root", "") or ""),
-                                                        receiver)) or self._is_retired_task(
-                        receiver, parent=receiver_parent)
+                    verdict = self.retired_verdict(receiver, parent=receiver_parent)
+                    suppressed = bool(CLK.lifeline_suppressed(
+                        str(getattr(self.store, "root", "") or ""), receiver))
                 except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
-                    deaf = False
-                if not deaf:
-                    out["refused"].append({"id": iid, "why": (
-                        f"{owner} 只是静默，但一条消息或一次委托就会把它叫醒"
-                        "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
-                        "；作废不可逆，不许拿『它不会再看』当理由")})
+                    verdict = "unknown"
+                    suppressed = False
+                if not (suppressed or verdict == "retired"):
+                    if verdict == "unknown":
+                        out["refused"].append({"id": iid, "code": "unknown_retired", "why": (
+                            f"{owner} 的销号名单读不全（{self._retired_reason()}）⇒ "
+                            "证明不了「它叫不醒」，不代作废（作废不可逆）")})
+                    else:
+                        out["refused"].append({"id": iid, "why": (
+                            f"{owner} 只是静默，但一条消息或一次委托就会把它叫醒"
+                            "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
+                            "；作废不可逆，不许拿『它不会再看』当理由")})
                     continue
                 new = dict(row)
                 new["item_state"] = "done"
