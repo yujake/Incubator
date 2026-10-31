@@ -250,6 +250,19 @@ def default_static_root() -> Path:
     return Path(__file__).resolve().parents[1].joinpath(*_STATIC_REL)
 
 
+#: "对端没了"的三种异常（唯一的名单，E3）。
+#:
+#: 为什么必须只有一处：同一个事实原先在这份文件里有两份名单 ——
+#: `handle_one_request` 认三种，`_invoke` 只认两种（漏了 `ConnectionAbortedError`）。
+#: 于是客户端导航（浏览器把连接掐掉）在处理器回话那一步抛出的
+#: `ConnectionAbortedError: [WinError 10053]` 落到 `_invoke` 的兜底分支，
+#: 被记成一次 `handler_crashed` 500 + 一整段 traceback（实测：一次浏览器套件 27 次）。
+#: `sse.py` 的流循环另有自己的收尾（那边连 `OSError` 一起算正常终点，因为一条流的
+#: 写失败就是它该结束的时候）—— 它问的是另一件事，所以不并进这里。
+#: 判据 `tests/test_webui_client_abort_is_not_a_500.py` 钉着"这三个名字全树只出现一次"。
+PEER_GONE = (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)
+
+
 class WebHandler(BaseHTTPRequestHandler):
     """路由表驱动的小服务（表在 :data:`agentflow.webui.routes.ROUTES`）。
 
@@ -401,8 +414,7 @@ class WebHandler(BaseHTTPRequestHandler):
         `ConnectionAbortedError` 就从这里冒出来，`socketserver.handle_error` 于是把
         `Exception occurred during processing of request …` 与整段回溯打进 stderr）。
 
-        口径刻意只认三种"对端没了"的异常：`ConnectionAbortedError` /
-        `ConnectionResetError` / `BrokenPipeError`（都是 `OSError` 的子类）。
+        口径刻意只认三种"对端没了"的异常（名单只有一个：:data:`PEER_GONE`），
         其余异常一律照旧冒泡给 `socketserver.handle_error` —— 顺手 catch
         `Exception` 会让真错误从日志里消失，那比日志脏坏得多（本项目
         "没查成与查过了没问题必须分得开"的同一条纪律）。
@@ -411,7 +423,7 @@ class WebHandler(BaseHTTPRequestHandler):
         """
         try:
             super().handle_one_request()
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+        except PEER_GONE:
             self.close_connection = True
 
     # ------------------------------------------------------------ GET
@@ -472,6 +484,13 @@ class WebHandler(BaseHTTPRequestHandler):
 
         所以这里兜住：回 500 JSON（`{"ok": false, "kind": "handler_crashed", ...}`），
         并把 traceback 逐行写进 stderr（人能从日志里读到是哪一行）。
+
+        ## 例外：客户端先走了（E3，2026-11-03）
+
+        三种"对端没了"（:data:`PEER_GONE`）原样上抛，不记 500、不打 traceback：
+        那不是处理器崩了，是浏览器导航时把连接掐掉了。这里原先自己列了一份两种的
+        名单（漏了 `ConnectionAbortedError`），于是 WinError 10053 被记成事故
+        （实测一次浏览器套件 27 次）。名单现在与 `handle_one_request` 共用一处。
         """
         try:
             local = getattr(self, name, None)
@@ -482,7 +501,7 @@ class WebHandler(BaseHTTPRequestHandler):
             if sub is not None:
                 sub(self, params, query)
                 return
-        except (BrokenPipeError, ConnectionResetError):
+        except PEER_GONE:
             # 客户端自己断了：不是我们的错，也没有可回话的对象。
             raise
         except Exception as exc:  # noqa: BLE001 —— 兜底是为了"有回话 + 有日志"
