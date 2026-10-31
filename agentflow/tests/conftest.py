@@ -654,6 +654,36 @@ def _restore_role_seams():
     _LS._ROLE_SEAMS.update(saved)
 
 
+@pytest.fixture(autouse=True)
+def _restore_write_path_hooks():
+    """每条判据前后快照/还原"会话写入后的钩子槽"与时钟的装配闩锁（进程级状态隔离）。
+
+    为什么需要（draft/156 §3.1 的根因）：`sessions._APPEND_HOOK` 是进程级单槽，
+    `clock_tools._observe_session_event` 挂在上面，是把"发消息/派活/回合"喂给时钟的
+    唯一入口（`observe_message` / `observe_work` 的唯一调用点）。几条网页端判据会在
+    用例里 `sse.detach()` 或 `SS.set_append_hook(None)` 把它清掉，而
+    `clock_tools._HOOK_INSTALLED` 的"只装一次"闩锁让后续装配不再装回 ⇒ 同一进程里
+    后跑的 `test_park_is_a_real_stop` / `test_purpose_lands...` 读到的 `parked_steps` /
+    `delivery` 恒 0（单跑绿、串跑红，2026-11-03 精确定位）。
+
+    产品侧已经改成"槽里不是自己就重装"（`clock_tools._install_append_hook`）；这里再
+    把"忘记收尾"的跨用例泄漏关掉。为什么放在 conftest 而不是逐条判据里写收尾：以后
+    还会有新的判据去装/清这个槽，逐条写一定漏（与上面 `_reset_provider_cooldowns` /
+    `_restore_role_seams` 是同一条纪律）。`_HOOK_PREV` 必须一起还原：它是观测器链的
+    下一跳，留下一条指向上一条判据的闭包等于把别人的局部状态带进下一条判据。
+    """
+    from agentflow import sessions as _SS
+    from agentflow.tools import clock_tools as _CT
+
+    saved_hook = _SS._APPEND_HOOK
+    saved_installed = _CT._HOOK_INSTALLED
+    saved_prev = _CT._HOOK_PREV
+    yield
+    _SS.set_append_hook(saved_hook)
+    _CT._HOOK_INSTALLED = saved_installed
+    _CT._HOOK_PREV = saved_prev
+
+
 @pytest.fixture
 def artifacts_ws(tmp_path: Path) -> Path:
     """六面只读模型的夹具工作区（裁定 J2/K2；见 :func:`make_artifacts_sample`）。"""
