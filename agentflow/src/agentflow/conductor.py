@@ -1529,6 +1529,98 @@ def _admitted_inputs(params: Mapping[str, Any]) -> list[str]:
     return items
 
 
+# ====================================================================== 趟次索引的生产入口
+#
+# `sessions.rebuild_run_index` 此前零生产调用者（2026-11-03 清点 E5：156 个工作区里
+# 0 份 `index/run-index.json`），于是 `GET /api/run-index` 在真实工作区恒为
+# `tri="unreadable"`。现在它有两个生产入口，都走下面这一个函数：
+#   1. 顶趟收工成功那一步（:meth:`Conductor.finish_top_level_run`，
+#      `stop_reason == "final"`）；
+#   2. `agentflow project rebuild-run-index --workspace <工作区>`。
+# 为什么这个函数住在 conductor.py：两个入口必须共用同一份"该不该建 / 建没建成 /
+# 怎么留痕"的口径，而 `webui` 是 conductor 的下游（`webui.readers` 导入本模块），
+# 反向 import 会成环；`sessions.py` 只负责"现算 + 原子落盘"，不管这三件事。
+#
+# 三条纪律：
+# - 幂等：索引内容（`sessions` 那张表）与盘上一致就不重写 —— 索引里有
+#   `generated_at`，重写一次字节就变了，而"跑两次字节相同"是那条 CLI 的判据；
+# - 失败不静默：返回 `checked=False` + `reason`，调用方必须把它说出口
+#   （CLI 退出码 2、收工那一步写日志）；
+# - 留痕：每次尝试都往 `data/events.jsonl` 记一行 `op=info`（只在该工作区有 `data/`
+#   时）—— "建没建、为什么没建成"能事后查，而不是只活在这一次的 stdout 里。
+
+
+def _audit_run_index(root: Path, reading: Mapping[str, Any], *, by: str,
+                     actor: str) -> tuple[str, str]:
+    """把这一次建索引落成 `data/events.jsonl` 的一行（`op=info`，不改任何表）。
+
+    返回 `(事件日志路径, 没写成的原因)`。没有 `data/` 的目录不硬造一个（那会在别人的
+    目录里凭空长出 store，`store.Store.init` 的守卫就是为这件事存在的）。
+    """
+    if not (root / "data").is_dir():
+        return "", "这个目录没有 data/（不是初始化过的工作区）⇒ 审计没落"
+    from .store import Store
+
+    try:
+        store = Store(root)
+        with store.tx(actor=actor, note="rebuild_run_index") as tx:
+            tx.info("run_index_rebuild", checked=bool(reading.get("checked")),
+                    built=bool(reading.get("built")),
+                    path=str(reading.get("path") or ""),
+                    reason=str(reading.get("reason") or ""), by=str(by or ""))
+        return str(store.events_path), ""
+    except Exception as exc:  # noqa: BLE001 - 审计写不成不许改"索引建没建成"这个结论
+        return "", f"{type(exc).__name__}: {exc}"
+
+
+def run_index_rebuild(root: Any, *, by: str = "",
+                      actor: str = "conductor") -> dict[str, Any]:
+    """现算并落 `<工作区>/index/run-index.json`，返回读数（永不抛）。
+
+    返回的七个键：
+
+    - `checked`：这一步真的做完了（落盘，或确认盘上那份已是最新）。`False` = 没做成，
+      原因在 `reason` 里；
+    - `built`：这一次真的写了盘（`False` + `checked=True` ⇒ 已是最新、字节未动）；
+    - `path`：索引的落点（`sessions.run_index_path`）；
+    - `reason`：`checked=False` 时非空；
+    - `note`：人读的一句话（"已落盘" / "没有重写（同一份字节）"）；
+    - `audit_path` / `audit_reason`：审计那一格的落点与没落成的原因。
+
+    写失败不吞掉：`OSError` / 形状不对都折进 `checked=False` + `reason`，因为调用方
+    要据此决定退出码与日志；而"写完了但读不回来"单独说清（写成功与读得出来是两件事）。
+    """
+    from . import sessions as SS
+
+    root_p = Path(str(root))
+    path = SS.run_index_path(root_p)
+    reading: dict[str, Any] = {
+        "checked": False, "built": False, "path": str(path), "reason": "",
+        "audit_path": "", "audit_reason": "",
+        "note": "",
+    }
+    try:
+        fresh = SS.compute_run_index(root_p)
+        stored, _why = SS.load_run_index(root_p)
+        if stored is not None and stored.get("sessions") == fresh["sessions"]:
+            # 内容一致 ⇒ 不重写：`generated_at` 会让每一次重写都换字节，而这条命令
+            # 的判据是"跑两次字节相同"。索引是派生数据，字节不变比"时间戳新"重要。
+            reading.update(checked=True,
+                           note="索引已在盘上且与事件现算结果逐趟一致 ⇒ 没有重写（同一份字节）")
+        else:
+            SS.rebuild_run_index(root_p)
+            got, why = SS.load_run_index(root_p)
+            if got is None:
+                reading["reason"] = f"写完了但读不回来：{why}"
+            else:
+                reading.update(checked=True, built=True, note="索引已落盘")
+    except Exception as exc:  # noqa: BLE001 - 建索引失败不许打断收工/命令，原因进读数
+        reading["reason"] = f"{type(exc).__name__}: {exc}"
+    reading["audit_path"], reading["audit_reason"] = _audit_run_index(
+        root_p, reading, by=by, actor=actor)
+    return reading
+
+
 @dataclass
 class SummonResult:
     """一次召唤的结构化结果。永远不抛业务异常（设计 §2）。
@@ -7250,12 +7342,24 @@ class Conductor:
         killed = [str(x) for x in (cut_off_children or ()) if str(x)]
         killed_text = (f"；我退出时掐断了 {len(killed)} 个还在跑的子：{'、'.join(killed)}"
                        if killed else "")
-        return self._end(task_id, status="done", outcome="ok" if done else "no_result",
-                         detail=(f"顶趟收工：{stop_reason}"
-                                 + (f"；{detail[:200]}" if detail else "")
-                                 + killed_text
-                                 + _closure_suffix(closure)),
-                         tokens=tokens_of_top, usd=usd_of_top)
+        result = self._end(task_id, status="done", outcome="ok" if done else "no_result",
+                           detail=(f"顶趟收工：{stop_reason}"
+                                   + (f"；{detail[:200]}" if detail else "")
+                                   + killed_text
+                                   + _closure_suffix(closure)),
+                           tokens=tokens_of_top, usd=usd_of_top)
+        # ---- E5 第二半（2026-11-03）：顶趟收工成功那一步落一次趟次索引。
+        #
+        # 「收工成功」= `stop_reason == "final"`（与上面 `done` 同一判据）；不完整那一档
+        # 不建、也不覆盖已有索引 —— 半截运行建出来的索引会让页面把"没跑完"读成
+        # "已经对过账"。失败不静默：`checked=False` 的原因进日志（审计在
+        # `run_index_rebuild` 里另落一行）。
+        if done:
+            reading = run_index_rebuild(getattr(self.store, "root", "."),
+                                        by=f"顶趟收工（{task_id}）")
+            if not reading["checked"]:
+                self._log(f"趟次索引没建成：{reading['reason']}", task_id=task_id)
+        return result
 
     #: 职责 3（闭环提醒）最近一次的收尾读数（`stats()` 与测试读它）。
     _closure_reading: dict[str, Any]

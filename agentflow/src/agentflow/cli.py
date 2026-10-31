@@ -2334,6 +2334,61 @@ def cmd_artifacts(args) -> int:
     return 0
 
 
+def _rebuild_run_index_command(args) -> int:
+    """`agentflow project rebuild-run-index`：给一个工作区建一次趟次索引（显式、幂等）。
+
+    为什么要有这条命令（2026-11-03 清点 E5）：`sessions.rebuild_run_index` 此前零生产
+    调用者，156 个工作区里 0 份 `index/run-index.json` ⇒ `GET /api/run-index` 恒为
+    `tri="unreadable"`。另一条生产入口是顶趟收工成功那一步（`conductor.finish_top_level_run`），
+    两处都调同一个 `conductor.run_index_rebuild` —— 于是"建没建、建在哪、为什么没建成"
+    只有一份口径。
+
+    目标怎么给：`--workspace <目录>` 直接指一个工作区（任意工作区，不必先在
+    `projects/` 里登记）；不给就用 `--name <项目名>` 到 `--projects-dir` 下找。
+
+    三态与退出码：`0` 建成了（含"已是最新、字节未动"这一档）/ `2` 没查成（原因逐字
+    打出，并已进 `data/events.jsonl` 的审计）。幂等：索引内容与盘上一致时不重写，
+    所以同一条命令跑两次，`index/run-index.json` 的字节相同。
+
+    读写：只写 `<工作区>/index/run-index.json` 与 `data/events.jsonl` 的一行 `op=info`
+    审计（没有 `data/` 的目录不硬造 store，也不建 `data/`）；不碰任何表、零模型调用。
+    """
+    from .conductor import run_index_rebuild
+
+    given = str(getattr(args, "workspace", "") or "").strip()
+    if given:
+        target = Path(given).expanduser().resolve()
+    else:
+        from . import projects as P
+
+        name = str(getattr(args, "name", "") or "").strip()
+        if not name:
+            print("[project] 没查成：`rebuild-run-index` 要给 `--workspace <工作区>`"
+                  " 或 `--name <项目名>` —— 没给就不知道建哪个工作区的索引",
+                  file=sys.stderr)
+            return 2
+        target = P.projects_dir(args.projects_dir) / name
+    if not target.is_dir():
+        print(f"[project] 没查成：{target} 不存在（或不是目录）⇒ 没有可建索引的工作区",
+              file=sys.stderr)
+        return 2
+
+    reading = run_index_rebuild(target, by="agentflow project rebuild-run-index",
+                                actor="cli")
+    print(tty.bullet(f"工作区：{target}"))
+    print(tty.bullet(f"索引：{reading['path']}"))
+    print(tty.bullet(f"checked={reading['checked']} built={reading['built']}"))
+    if reading["note"]:
+        print(tty.bullet(reading["note"]))
+    if reading["reason"]:
+        print(tty.bullet(tty.paint(f"没建成：{reading['reason']}", "yellow")))
+    if reading["audit_path"]:
+        print(tty.bullet(f"审计：{reading['audit_path']}"))
+    elif reading["audit_reason"]:
+        print(tty.bullet(f"审计没落：{reading['audit_reason']}"))
+    return 0 if reading["checked"] else 2
+
+
 def cmd_project(args) -> int:
     """项目式用法：一个项目一个文件夹（`projects/project1`…），冷/热启动按文件夹在不在。
 
@@ -2344,10 +2399,16 @@ def cmd_project(args) -> int:
     这里是唯一把 `--projects-dir` 与 `--start` 翻译成动作的地方；
     真正的判定与执行在 `agentflow.projects`（那里有它自己的负控自检）。
 
-    读写：读写 `projects/<名字>/` 下那一整套工作区：`list` / `plan` 只读，`run` / `create` 会建目录、写表、落报告。
-    实现方式一句话：`projects` 模块（`list_projects` / `project_plan` / `run_project` / `create_project`）。
+    读写：读写 `projects/<名字>/` 下那一整套工作区：`list` / `plan` 只读，`run` / `create` 会建目录、写表、落报告；
+    `rebuild-run-index` 只写 `<工作区>/index/run-index.json`（派生数据）与 `data/events.jsonl` 的一行审计，
+    不碰任何表。
+    实现方式一句话：`projects` 模块（`list_projects` / `project_plan` / `run_project` / `create_project`）；
+    `rebuild-run-index` 走 `conductor.run_index_rebuild`（与顶趟收工成功那一步同一个函数）。
     """
     from . import projects as P
+
+    if args.action == "rebuild-run-index":
+        return _rebuild_run_index_command(args)
 
     root = P.projects_dir(args.projects_dir)
     try:
@@ -4736,9 +4797,14 @@ def build_parser() -> argparse.ArgumentParser:
         "project",
         help="项目工作区：list / plan / run / create（一个项目一个文件夹，冷启动还是热启动看文件夹在不在）",
     )
-    sp.add_argument("action", choices=["list", "plan", "run", "create"],
+    sp.add_argument("action", choices=["list", "plan", "run", "create", "rebuild-run-index"],
                     help="list 列出现有项目；plan 只说明这次会怎么跑（不写字节）；"
-                         "run 真跑；create 正常地建一个审阅型项目（--paper 给那篇外部论文）")
+                         "run 真跑；create 正常地建一个审阅型项目（--paper 给那篇外部论文）；"
+                         "rebuild-run-index 给一个工作区建趟次索引"
+                         "（页面 /api/run-index 读的那份派生表；幂等）")
+    sp.add_argument("--workspace", default="",
+                    help="rebuild-run-index 的目标工作区（任意目录；不写就用 --name 到 "
+                         "--projects-dir 下找）。只对那一条动作有意义")
     sp.add_argument("--name", default=None,
                     help="项目名（缺省=自动取下一个 projectN；run 时也接受已有名字=热启动）")
     sp.add_argument("--projects-dir", default=None,
