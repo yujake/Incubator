@@ -376,12 +376,26 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
 # ------------------------------------------------------------------ ⑤ 反真空
 
 def _stub_latest(monkeypatch: pytest.MonkeyPatch, *, verdict: str = "成立") -> None:
-    """把"读 verifications 最近一签"打桩成恒成立（返回一签盖住任何正文的签）。"""
-    def _fake(root: Any, *, proof_text: Any = "", statement_id: str = "") -> dict[str, Any]:
+    """把"读 verifications 最近一签"打桩成恒成立（返回一签盖住任何正文/任何对象的签）。
+
+    2026-11-03（`draft/154`）：读口多了 `object_sha256` / `object_path` 两个关键字
+    （收工门按 E 报告的字节 sha 认签），返回值多了 `row` / `signable` 两格
+    （「有毛病」的 `defect_step` 只在那一行上）。打桩必须按同一个形状回"签住了" ——
+    否则这一条反真空会因为"桩少了键"而红，而不是因为"门信了桩"而红（那是两件事：
+    前者说明桩过期了，后者才是判据没有反真空）。
+    """
+    def _fake(root: Any, *, proof_text: Any = "", statement_id: str = "",
+              object_sha256: Any = "", object_path: Any = "") -> dict[str, Any]:
+        sha = VR.proof_sha(str(proof_text or ""))
+        row = {"verification_id": "v-000001", "verdict": verdict, "proof_sha256": sha,
+               "object_sha256": str(object_sha256 or ""),
+               "object_path": str(object_path or "")}
         return {"checked": True, "found": True, "verdict": verdict,
-                "proof_sha256": VR.proof_sha(str(proof_text or "")),
+                "proof_sha256": sha, "object_sha256": str(object_sha256 or ""),
+                "object_path": str(object_path or ""), "row": row, "signable": True,
+                "stale": False, "stale_row": {}, "stale_ledger": "",
                 "ledger": "verifications/000000.jsonl#v-000001",
-                "why": "（打桩：恒成立）"}
+                "why": "（打桩：恒成立）", "route": "statement"}
 
     monkeypatch.setattr(NP, "latest_third_party_sign", _fake, raising=True)
 

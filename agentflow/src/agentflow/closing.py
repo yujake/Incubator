@@ -4846,16 +4846,26 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             rep.status["contradictions"] = "unknown"
 
 
-def _has_t3(exp: Mapping[str, Any]) -> bool:
+def _has_t3(exp: Mapping[str, Any], *, root: Any = None,
+            statements: Sequence[Mapping[str, Any]] = ()) -> bool:
     """T3 的机械形态（§10.2）：形式化方法 + proof 级 + 检查器真的说过话。
 
     2026-10-23（业主裁定「纯数值实验把整个命题证掉了也能拿 proof，理由是穷举，
-    签名是那份程序」）：这一格多一个入口 —— 按穷举签下的 proof 行（signed_by=V、②③ 由 E 写）也算背书。
-    判据本体只有一处（`numericproof.is_signed_exhaustion`：方法属于计算类、
-    `evidence_kind="proof"`、签名栏写的是 `signed_by="V"`、证明理由在受控词表里），
-    这里不抄第二份。
-    不加这一支的后果是可量化的：一条真的穷举证明会被这一格判成"没有 T3 背书"，
-    于是"穷举也能拿 proof"这句话在收工门上永远是一个 blocker。
+    签名是那份程序」）：这一格多一个入口 —— 按穷举签下的 proof 行也算背书。
+    2026-11-03（业主裁定「穷举式数值实验是可以作为 proof 级背书的，V 要签的是 E 那份报告的
+    理论论证部分」）：穷举支路不再只读 E 自写的 `signed_by="V"`，而是核 V 对那份 E 报告的
+    真签（判据本体 `numericproof.exhaustion_backing`：V 台账里存在一行、`object_sha256` ==
+    这份报告的 sha、verdict == 成立、签的就是现在这一份）。四结局里只有"成立且签的是这一份"
+    给背书；有毛病 / 没审过 / 签的是旧版 / 没查成 都不给 —— 理由各不相同，由
+    `_check_load_bearing` 逐条写进读数（判据在那一侧只写一遍，这里只回答真假）。
+
+    为什么这一支的判据不能只有 `is_signed_exhaustion`：那一格读的 `signed_by="V"` 是 E 在
+    `numericproof.sign_experiment` 里写的自述（`suspect_self_signed` 的 docstring 逐字承认），
+    V 从来没有在这条路径上盖过章 —— 拿它当"V 签过"等于把 E 的自述当成第三方签字，
+    于是"V 判了有毛病"与"V 签过"在这一格里长得一模一样。
+    不加穷举这一支的后果也是可量化的：一条真的穷举证明会被判成"没有 T3 背书"，于是
+    "穷举也能拿 proof"这句话在收工门上永远是一个 blocker —— 那一条由下面这个入口解决
+    （核 V 的真签），而不是靠不核签解决。
     """
     if str(exp.get("evidence_kind") or "") != "proof":
         return False
@@ -4863,7 +4873,9 @@ def _has_t3(exp: Mapping[str, Any]) -> bool:
         return bool(str(exp.get("verifier_output") or "").strip())
     from . import numericproof as _NP
 
-    return _NP.is_signed_exhaustion(exp)
+    if not _NP.is_signed_exhaustion(exp):
+        return False
+    return bool(_NP.exhaustion_backing(exp, root=root, statements=statements)["backed"])
 
 
 def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
@@ -4884,18 +4896,19 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         return
     # ---- 可疑的自签背书（2026-10-27，R-EVID 的 D4；业主裁定「先报不拦」）----------
     #
-    # 为什么放在这个位置（在 Lean 开关那一支之前）：`_has_t3` 认的是
-    # `is_signed_exhaustion(exp)`，而那一格读的 `signed_by="V"` 是 E 在
-    # `numericproof.sign_experiment` 里写进去的自述（V 没有在这条路径上盖过章）；
-    # 真正的第三方签字在 `verifications/` 里。而"这一格要不要判"与"Lean 开没开"
-    # 无关：E 的穷举自签在 lean 关掉的那些趟里一样存在。所以这条读数必须两条支路
-    # 都跑到（放函数末尾会让 lean 关掉的绝大多数趟直接漏掉它）。
+    # 这一格覆盖全工作区的 `is_signed_exhaustion` 行（承重门只判被正文引到的那些），
+    # 判据只写一遍：`numericproof.exhaustion_backing` —— 承重门的穷举支路调的是同一个
+    # 函数（2026-11-03，`draft/154` 业主裁定「V 要签的是 E 那份报告的理论论证部分」）。
+    # 放在这个位置（在 Lean 开关那一支之前）：E 的穷举自签在 lean 关掉的那些趟里一样
+    # 存在，所以这条读数必须两条支路都跑到（放函数末尾会让 lean 关掉的绝大多数趟
+    # 直接漏掉它）。
     #
-    # 只报不拦：`warning` 不进 `blockers`，也不改 `status` —— 业主的口径是先量
-    # 涉案条数，下一轮再决定拦不拦（一次加闸会把存量穷举证明整批掉档）。
-    try:
-        from . import numericproof as _NP
+    # 只报不拦：`warning` 不进 `blockers`、也不改 `status`（业主 2026-10-27 的口径）。
+    # 去重（2026-11-03）：被正文引到、且承重门那一条 finding 已经逐条点名的行，
+    # 这里不再说第二遍 —— 同一份判据、同一句话，只留一处（见下面 `residual`）。
+    from . import numericproof as _NP
 
+    try:
         suspect = _NP.suspect_self_signed(store.rows("experiments"), root=store.root,
                                           statements=store.rows("statements"))
     except Exception as exc:  # noqa: BLE001 —— 这一格坏了不许拖垮承重门
@@ -4914,23 +4927,15 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         "e_signature_backed": int(suspect.get("e_signature_backed") or 0),
         "third_party_verdicts": dict(suspect.get("third_party_verdicts") or {}),
         "by_project": dict(suspect.get("by_project") or {}),
+        # 2026-11-03（154）：四结局的逐条分布与逐行读数（与承重门同一份判据）。
+        "states": dict(suspect.get("states") or {}),
+        "rows": list(suspect.get("rows") or [])[:20],
     }
+    suspect_rows = [dict(s) for s in (suspect.get("suspects") or [])]
     if not suspect.get("checked"):
         rep.findings.append(Finding(
             "load_bearing", "suspect_self_signed_unchecked", "warning",
             f"可疑自签背书这一格没查成：{suspect.get('why')}（不是「没有可疑行」）"))
-    elif suspect.get("total"):
-        _ids = "、".join(f"{s.get('experiment_id') or '?'}"
-                         f"（{s.get('statement_id') or '命题未在册'}）"
-                         for s in (suspect.get("suspects") or [])[:5])
-        rep.findings.append(Finding(
-            "load_bearing", "suspect_self_signed", "warning",
-            f"有 {suspect['total']} 条实验行声称穷举证明已由 V 签下"
-            '（`observations.e_signature.signed_by="V"`），而 `verifications/` 里'
-            f"拿不出对应的第三方签字行：{_ids}。"
-            "这一格只是读数，不拦收工（业主 2026-10-27 裁定：先报不拦）；"
-            "要消掉它：让 V 会审那一份证明栏（`verify.verify_proof`），"
-            "或把那一行的档如实降成 cross_check/heuristic"))
     # ---- 开关（业主 2026-10-12）：这一格的判据整条建立在
     # 「`method="formal"` 能产出 `evidence_kind="proof"`」之上。用户把形式化关掉时，
     # 那条路结构上产不出 proof 行，于是这一格的红不再是"承重结论没背书"，
@@ -4998,9 +5003,15 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     closed_exp_ids = {str(r.get("source_experiment_id"))
                       for r in store.rows("dependencies")
                       if str(r.get("status") or "") == "closed" and r.get("source_experiment_id")}
+    statements = store.rows("statements")
     load_bearing = 0
     downgraded = 0
     bad: list[str] = []
+    #: 被正文引到的"自签穷举行"的四结局读数（按实验号去重 —— 一条行可以被多条断言引到）。
+    #: 判据本体 `numericproof.exhaustion_backing`，与下面 `_has_t3` 的穷举支路同一个函数。
+    backing_by_eid: dict[str, dict[str, Any]] = {}
+    #: 承重门那一条 finding 已经逐条点名的实验行（给上面那条 warning 去重用）。
+    reported_eids: set[str] = set()
     for doc in docs:
         for claim in doc.get("claims") or []:
             if not isinstance(claim, Mapping):
@@ -5009,14 +5020,41 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                 continue          # 非承重（cross_check / heuristic）⇒ 这条门不管它
             load_bearing += 1
             cites = {str(c) for c in (claim.get("citations") or [])}
-            backed = any(f"exp:{eid}" in cites and _has_t3(row) for eid, row in exps.items())
-            backed = backed or any(eid in closed_exp_ids and _has_t3(row)
-                                   for eid, row in exps.items() if f"exp:{eid}" in cites)
-            if not backed:
-                bad.append(f"{doc.get('doc_id')}#{claim.get('claim_id')}"
-                           f"（{str(claim.get('text') or '')[:40]}）")
+            cited = [(eid, row) for eid, row in exps.items() if f"exp:{eid}" in cites]
+            closed = [(eid, row) for eid, row in cited if eid in closed_exp_ids]
+            # 穷举那一路的读数：只对"自签穷举行"问（别的行不在这一问的射程里）。
+            got_by_eid: dict[str, dict[str, Any]] = {}
+            for eid, row in {e: r for e, r in cited + closed}.items():
+                if not _NP.is_signed_exhaustion(row):
+                    continue
+                got = _NP.exhaustion_backing(row, root=store.root, statements=statements)
+                got_by_eid[str(eid)] = got
+                backing_by_eid[str(eid)] = {
+                    key: got.get(key) for key in
+                    ("state", "verdict", "defect_step", "statement_id", "report_path",
+                     "report_sha256", "ledger", "why")
+                }
+            backed = any(_has_t3(row, root=store.root, statements=statements)
+                         for _eid, row in cited)
+            backed = backed or any(_has_t3(row, root=store.root, statements=statements)
+                                   for _eid, row in closed)
+            if backed:
+                continue
+            # 没背书 ⇒ 逐条给理由（四种结局各有各的话；`defect_step` 写在理由里）。
+            reasons: list[str] = []
+            for eid, got in got_by_eid.items():
+                state = str(got.get("state") or _NP.EXHAUSTION_BACKING_UNCHECKED)
+                if state == _NP.EXHAUSTION_BACKING_SIGNED:
+                    continue
+                reported_eids.add(str(eid))
+                reasons.append(f"exp:{eid} " + str(got.get("why") or state))
+            if not reasons:
+                reasons.append("引到的实验行不是 T3 形态（既没有形式化检查器的原话，"
+                               "也不是 V 真签过的穷举证明）")
+            bad.append(f"{doc.get('doc_id')}#{claim.get('claim_id')}"
+                       f"（{str(claim.get('text') or '')[:40]}）：" + "；".join(reasons[:3]))
     # 命题台账那一半：`active` + proof 级 + 有下游（被别人 derived_from 引到）= 承重。
-    stmts = store.rows("statements")
+    stmts = statements      # 同一份快照（上面认号已经读过一次；两次读会给出两个答案）
     downstream: dict[str, int] = {}
     for s in stmts:
         for dep in s.get("derived_from") or []:
@@ -5030,6 +5068,11 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         stmt_load_bearing += 1
         if str(s.get("evidence_kind") or "") != "proof":
             downgraded += 1          # 已降档：这正是允许的出路
+    # 四结局的逐条分布（去重后按实验号数；一条行被两条断言引到只算一条）。
+    backing_states: dict[str, list[str]] = {s: [] for s in _NP.EXHAUSTION_BACKING_STATES}
+    for eid, got in backing_by_eid.items():
+        state = str(got.get("state") or _NP.EXHAUSTION_BACKING_UNCHECKED)
+        backing_states.setdefault(state, []).append(eid)
     rep.readings["load_bearing"] = {
         "claims_with_proof": load_bearing,
         "claims_without_t3": len(bad),
@@ -5038,7 +5081,35 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         "must_t3_conditions": [{"condition": c, "mechanical": m, "status": s}
                                for c, m, s in MUST_T3_CONDITIONS],
         "must_t3_gap": MUST_T3_GAP_NOTE,
+        # 2026-11-03（`draft/154`）：穷举那一路"V 到底签没签住"的逐条读数。
+        # 四档分开数、逐条给理由与 defect_step —— 折成一个数就没人知道该派谁去做什么。
+        "exhaustion_backing": {
+            "states": {k: len(v) for k, v in backing_states.items()},
+            "ids": {k: list(v)[:8] for k, v in backing_states.items()},
+            "rows": dict(backing_by_eid),
+            "note": ("判据本体 `numericproof.exhaustion_backing`（与 B 的入库闸同一份）："
+                     "V 台账里存在一行、`object_sha256` == 这份 E 报告的 sha、verdict=成立、"
+                     "且签的就是现在这一份 ⇒ 才给背书；有毛病 / 没审过 / 签的是旧版 / "
+                     "没查成 都不给，理由各不相同"),
+        },
     }
+    # 去重（2026-11-03）：承重门那一条 finding 已经逐条点名过的行，这里不再说第二遍
+    # —— 同一份判据、同一句话只留一处。这一格只报"没被正文引到"的残余（集合不同：
+    # 这一格覆盖全工作区，承重门只判被引到的那些）。
+    residual = [s for s in suspect_rows
+                if str(s.get("experiment_id") or "") not in reported_eids]
+    if residual:
+        _ids = "、".join(f"{s.get('experiment_id') or '?'}（{s.get('state') or '?'}"
+                         f"{'，第 ' + str(s['defect_step']) + ' 步' if s.get('defect_step') else ''}）"
+                         for s in residual[:5])
+        rep.findings.append(Finding(
+            "load_bearing", "suspect_self_signed", "warning",
+            f"另有 {len(residual)} 条实验行声称穷举证明已由 V 签下，而 `verifications/` 里"
+            f"拿不出盖住那一份的签（没被正文引到，所以承重门那一条没点到它们）：{_ids}。"
+            "判据与承重门同一份（`numericproof.exhaustion_backing`，逐条理由见 "
+            "`readings.suspect_self_signed.rows` 的 `state`）；这一格只是读数、不拦收工"
+            "（业主 2026-10-27 裁定：先报不拦）。要消掉它：让 V 会审那一份报告"
+            "（`verify.verify_proof`），或把那一行的档如实降成 cross_check/heuristic"))
     if bad:
         rep.status["load_bearing"] = "fail"
         rep.findings.append(Finding(

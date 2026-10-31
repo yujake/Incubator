@@ -745,27 +745,37 @@ def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
 
     `is_signed_exhaustion` 读的 `signed_by="V"` 是 E 在 `sign_experiment` 里写进去的
     一格自述 —— V 从来没有在这条路径上盖过章。真正的第三方签字在
-    `verifications/<命题号>.jsonl`（判据本体 `third_party_problems`）。而
-    `closing._has_t3` 直接拿 `is_signed_exhaustion` 当"承重结论有 T3 背书"，
-    不调 `third_party_problems` ⇒ 一条 E 自签的穷举行能给承重结论背书。
+    `verifications/<命题号>.jsonl`（判据本体 `third_party_problems`）。
+    2026-11-03 之后：收工门（`closing._has_t3` 的穷举支路）与 B 的入库闸都改调
+    `exhaustion_backing` —— 那一格不再给"V 没真签过"的穷举行背书。本函数仍是读数
+    （覆盖全工作区、不只被正文引到的那几条），但它算的是同一份判据，不再另有一套口径。
 
-    为什么不直接加闸：改一次会把存量穷举定理整批掉档（业主明确"先量涉案条数"）。
-    所以这一格只产出读数：`suspects` 逐条点名 `experiment_id` / `statement_id` / `why`，
-    由收工报告印一句话，不改任何 status、不进 blockers。
+    为什么不直接删掉/升级成闸：它数的是"全工作区有多少条声称 V 签下"，承重门只判
+    "被正文引到的那几条"；两者集合不同（`draft/154` §4.2），保留读数是为了让没被引到的
+    那些行也看得见。但它不再和被引到的那几条各说一遍：收工门那一条 finding 会跳过
+    已经逐条点名的实验行（`closing._check_load_bearing` 里的去重）。
 
-    返回 `{"checked", "suspects", "total", "why"}`，另有四格读数（2026-11-03，153-U-06 的丙+乙）：
+    返回 `{"checked", "suspects", "total", "why"}`，另有六格读数（2026-11-03，153-U-06 的丙+乙
+    ＋ 154 的四结局）：
     `signer_required`（这一签应当由谁签 —— 恒 `"V"`，`signed_by` 只能是它，E 只是 ②③
     的作者）、`e_signature_backed`（本工作区多少条靠 `e_signature` 背书）、
     `third_party_verdicts`（这些行的第三方签名分布：`已签·成立` / `已签·<判决>` / `没签` /
-    `没查成`）、`by_project`（本工作区的名字 → 三个计数；跨工作区的合计数不在一个
-    per-workspace 读数里编造）。`checked=False` 是"没查成"（没给工作区根 ⇒ 查不到
+    `签的是旧版` / `没查成`）、`by_project`（本工作区的名字 → 三个计数；跨工作区的合计数
+    不在一个 per-workspace 读数里编造）、`states`（`exhaustion_backing` 的四结局逐条计数）、
+    `rows`（逐条的 `state` / `report_sha256` / `defect_step` / `ledger` —— 读的人照着它能
+    直接翻到那一签）。`checked=False` 是"没查成"（没给工作区根 ⇒ 查不到
     `verifications/`），不是"没有可疑行"。
     """
     rows = [dict(r) for r in (experiments or ()) if isinstance(r, Mapping)]
     out: dict[str, Any] = {"checked": False, "suspects": [], "total": 0, "why": "",
                            "signer_required": str(PROOF_SIGNER),
                            "e_signature_backed": 0,
-                           "third_party_verdicts": {}, "by_project": {}}
+                           "third_party_verdicts": {}, "by_project": {},
+                           # 四结局的逐条分布（2026-11-03，154）：与 `closing._has_t3`
+                           # 的穷举支路同一份判据（`exhaustion_backing`）⇒ 这一格的
+                           # "会掉多少条"就是承重门那一格会掉多少条。
+                           "states": {s: 0 for s in EXHAUSTION_BACKING_STATES},
+                           "rows": []}
     if not str(root or "").strip():
         out["why"] = ("没给工作区根 ⇒ 查不到 `verifications/`（这一格没查成，"
                       "不是「没有可疑行」）")
@@ -774,6 +784,8 @@ def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
     suspects: list[dict[str, Any]] = []
     backed = 0
     verdicts: dict[str, int] = {}
+    states: dict[str, int] = {s: 0 for s in EXHAUSTION_BACKING_STATES}
+    detail_rows: list[dict[str, Any]] = []
     for row in rows:
         # 只看"声称自己够 proof 的那一档"：`sign_experiment` 给每一条计算类实验都写
         # `signed_by="V"`（那是签字岗位的名字，不是"V 盖过章"），拿它当射程会把
@@ -781,42 +793,61 @@ def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
         if not is_signed_exhaustion(row):
             continue
         backed += 1
-        column = proof_column(row)
-        sid = statement_id_for_body(statements, column) if statements else ""
+        # 判据只有一处：`exhaustion_backing`（收工门的穷举支路调的是同一个函数）。
+        # 改前这里自己算一遍 `third_party_problems` ⇒ 同一条行在两个出口上各有各的说法
+        # （`draft/144:505` 说的"与 `_has_t3` 认自签直接对立"）。
+        got = exhaustion_backing(row, root=root, statements=statements)
+        state = str(got.get("state") or EXHAUSTION_BACKING_UNCHECKED)
+        states[state] = states.get(state, 0) + 1
         # 那一签的分布（2026-11-03，乙）：这一格要能分辨"V 审过、判了有毛病"与
         # "压根没签"—— 两者的处置完全不同，而 `total` 一个数把这两种折成一样。
-        sig = latest_third_party_sign(root, proof_text=column, statement_id=sid)
-        if not sig.get("checked"):
-            verdicts["没查成"] = verdicts.get("没查成", 0) + 1
-        elif not sig.get("found"):
-            verdicts["没签"] = verdicts.get("没签", 0) + 1
+        if state in (EXHAUSTION_BACKING_SIGNED, EXHAUSTION_BACKING_DEFECTIVE):
+            label = f"已签·{got.get('verdict') or '（判决空）'}"
+        elif state == EXHAUSTION_BACKING_STALE:
+            label = "签的是旧版"
+        elif state == EXHAUSTION_BACKING_UNCHECKED:
+            label = "没查成"
         else:
-            label = f"已签·{sig.get('verdict') or '（判决空）'}"
-            verdicts[label] = verdicts.get(label, 0) + 1
-        problems = third_party_problems(column, root=root, statement_id=sid)
-        if not problems:
+            label = "没签"
+        verdicts[label] = verdicts.get(label, 0) + 1
+        detail_rows.append({
+            "experiment_id": str(row.get("experiment_id") or row.get("id") or ""),
+            "state": state,
+            "statement_id": str(got.get("statement_id") or ""),
+            "report_path": str(got.get("report_path") or ""),
+            "report_sha256": str(got.get("report_sha256") or ""),
+            "verdict": str(got.get("verdict") or ""),
+            "defect_step": got.get("defect_step"),
+            "ledger": str(got.get("ledger") or ""),
+        })
+        if state == EXHAUSTION_BACKING_SIGNED:
             continue
         suspects.append({
             "experiment_id": str(row.get("experiment_id") or row.get("id") or ""),
             "code": SUSPECT_SELF_SIGNED,
-            "statement_id": sid,
+            "statement_id": str(got.get("statement_id") or ""),
             "method": str(row.get("method") or ""),
             "signed_by": str(signature_of(row).get("signed_by") or ""),
-            "why": problems[0],
+            "state": state,
+            "defect_step": got.get("defect_step"),
+            "why": str(got.get("why") or ""),
         })
     out["suspects"] = suspects
     out["total"] = len(suspects)
     out["e_signature_backed"] = backed
     out["third_party_verdicts"] = verdicts
+    out["states"] = states
+    out["rows"] = detail_rows
     out["by_project"] = {
         str(root).replace("\\", "/").rstrip("/").split("/")[-1]: {
             "e_signature_backed": backed,
             "would_drop_load_bearing": len(suspects),
-            "third_party_signed": backed - verdicts.get("没签", 0) - verdicts.get("没查成", 0),
+            "third_party_signed": states.get(EXHAUSTION_BACKING_SIGNED, 0),
         }
     }
     out["why"] = (f"台账 {len(rows)} 条实验行里有 {len(suspects)} 条声称穷举证明已由 V 签下，"
-                  "而 `verifications/` 里拿不出对应的第三方签字行（只报不拦）")
+                  "而 `verifications/` 里拿不出对应的第三方签字行（只报不拦；逐条理由见 "
+                  "`rows` 的 `state`）")
     return out
 
 
@@ -1165,9 +1196,61 @@ def find_index_entry(rows: Sequence[Mapping[str, Any]], *, program: Any = "",
 THIRD_PARTY_VERDICT_OK = "成立"
 
 
+def _sign_row_pins(row: Mapping[str, Any], *, want: set[str], want_object: str,
+                   want_path: str) -> bool:
+    """这一行台账盖的是不是"现在这一份"（认签的唯一判据，两条路共用）。
+
+    判据只有三句（`draft/154` 的逐字口径）：
+
+    1. 给了对象 sha、而这一行有 `object_sha256` ⇒ 必须相等；行上还写了
+       `object_path` 时，路径也必须是这一份（同一份字节挂到别人的号上不算）。
+       不许退回按 `proof_sha256` 认 —— 报告重跑（②③ 原文未变、读数变了）时正文
+       sha 与旧签一致而对象已经换了，退回按正文认就会把"签的是旧版报告"读成"签过"。
+    2. 给了对象 sha、而这一行没有那一格（D-34 之前写的 / 手写的行）⇒ 按
+       `proof_sha256` 认（存量兼容，与改前逐字相同）。
+    3. 没给对象 sha（B 的入库闸按证明栏认签那一路）⇒ 按 `proof_sha256` 认。
+    """
+    got_obj = str(row.get("object_sha256") or "").strip().lower()
+    if want_object and got_obj:
+        if got_obj != want_object:
+            return False
+        got_path = norm_rel(row.get("object_path"))
+        return not (want_path and got_path and got_path != want_path)
+    return str(row.get("proof_sha256") or "") in want
+
+
+def _pending_stale_row(root: Any, *, want_object: str,
+                       want_path: str) -> tuple[dict[str, Any], str]:
+    """pending 台账里"盖的是同一份对象的旧版"的那一行，以及"没查成"的理由。
+
+    只认 `object_path` 相同、`object_sha256` 不同这一种形态：没有对象路径的老行
+    与这一份是不是同一个对象，台账上没有可判的事实 —— 那不是"签的是旧版"，
+    宁可落到"从没审过"（`unsigned`）也不编一个旧版出来。
+    """
+    if not want_path:
+        return {}, ""
+    try:
+        from . import verifications as _VR
+        rows, problems = _VR.pending_rows(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不动 ⇒ "没查成"，不是"没有旧版"
+        return {}, (f"`verifications/pending/` 读不出来（{type(exc).__name__}: {exc}）"
+                    "⇒ 这一格没查成")
+    if problems:
+        return {}, f"pending 台账读不出来（{'；'.join(problems[:2])}）⇒ 这一格没查成"
+    hit: dict[str, Any] = {}
+    for row in rows:
+        if norm_rel(row.get("object_path")) != want_path:
+            continue
+        got = str(row.get("object_sha256") or "").strip().lower()
+        if want_object and got and got != want_object:
+            hit = dict(row)
+    return hit, ""
+
+
 def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                             statement_id: str = "",
-                            object_sha256: str = "") -> dict[str, Any]:
+                            object_sha256: str = "",
+                            object_path: str = "") -> dict[str, Any]:
     """读 `verifications/<命题号>.jsonl`，取「盖住这一份证明栏的最近一签」。
 
     为什么需要这一格（业主 2026-10-23 晚「签字仍然由 V 签」的落地）：改前 B 的入库闸读的是
@@ -1190,11 +1273,33 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
     借光（业主 2026-10-23 晚的坑：`kind=theorem` / `evidence_kind=proof` /
     `bits.reviewed=False` 正是"别人的签顶了这一行"的形态）。
 
-    返回 `{"checked","found","verdict","proof_sha256","ledger","why","route"}`：
+    返回 `{"checked","found","verdict","proof_sha256","ledger","why","route"}`，
+    另有四格读数（2026-11-03，154 那一轮：收工门要按对象认签，也要分得清四结局）：
 
     - `checked=False` ⇒ 「没查成」（没给工作区根 / 台账读不出来），不是"没有签"；
     - `checked=True, found=False` ⇒ 查过了：台账不在盘上，或最近一签盖的不是这一份正文；
     - `checked=True, found=True` ⇒ `verdict` / `proof_sha256` / `ledger` 是那一签的读数。
+    - `row` ⇒ 认到的那一整行（`found=True` 或"认到了但签不住"时非空）。为什么要交出去：
+      「有毛病」的 `defect_step` / `findings` 只在行上，不交半行给调用方，读的人就只能知道
+      "有毛病"、不知道第几步（`draft/154` 要的正是"第 4 步剪枝没解释"这一句）。
+    - `signable` ⇒ 那一行自己够不够格签（`verifications.row_signable`：成立、无未解决 error、
+      引用核实不挡、没有"引用核实没查成"）。`found` 的语义没有因此改变（它仍然是
+      "认到了那一签"）—— 但收工门要的是"签住了"，那一档由调用方按这一格判。
+    - `stale` / `stale_row` ⇒ 查过了、没有盖住这一份的签，但台账里有一行盖的是
+      同一份对象的旧版（`object_path` 相同、`object_sha256` 不同），或命题台账最近一签
+      盖的是别的正文。这两格把"从没审过"与"签的是旧版"分开 —— 改前两者都是 `found=False`。
+
+    ## 认签的键：有对象格的行按对象核，没有对象格的老行才按正文 sha 核（2026-11-03）
+
+    给了 `object_sha256`（收工门按 E 那份报告的字节 sha 认签）时：
+
+    - 那一行有 `object_sha256` ⇒ 只认"等于它"（再核 `object_path`：行上写了路径、而路径
+      不是这一份 ⇒ 不认）。不许退回按 `proof_sha256` 认：报告重跑一次（②③ 原文没变、
+      程序/读数那几块变了）时正文 sha 与旧签一致而对象已经换了 —— 退回按正文认会把
+      "签的是旧版报告"当成"签过"（那正是 `draft/154` 的第 ④ 种结局）。
+    - 那一行没有那一格（D-34 之前写的行 / 手写的行）⇒ 按 `proof_sha256` 认（存量兼容；
+      这条老口径一个字都没改）。
+    - 没给 `object_sha256`（B 的入库闸那一路按证明栏认签）⇒ 与改前逐字相同：按 `proof_sha256` 认。
 
     ## D-34：找签改成"按对象内容 sha"（于是顺序不再重要）
 
@@ -1211,7 +1316,10 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
     """
     out: dict[str, Any] = {"checked": False, "found": False, "verdict": "",
                            "proof_sha256": "", "ledger": "", "why": "",
-                           "route": "", "object_sha256": ""}
+                           "route": "", "object_sha256": "", "object_path": "",
+                           # 四格读数（2026-11-03）：那一行本身 / 它够不够格签 / 有没有旧版的签。
+                           "row": {}, "signable": False,
+                           "stale": False, "stale_row": {}, "stale_ledger": ""}
     if root is None or not str(root).strip():
         out["why"] = ("没给工作区根 ⇒ `verifications/` 无从读起（这一格没查成，"
                       "不是「没有签」）")
@@ -1223,7 +1331,9 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         return out
     text = str(proof_text or "")
     want_object = str(object_sha256 or "").strip().lower()
+    want_path = norm_rel(object_path)
     out["object_sha256"] = want_object
+    out["object_path"] = want_path
     if not text.strip() and not want_object:
         out["why"] = "证明栏是空的、也没给对象 sha ⇒ 没有可签的对象"
         return out
@@ -1263,23 +1373,27 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                 statement_why = f"`{_VR.VERIFICATIONS_DIR}/{sid}.jsonl` 是空台账（一行都没有）"
             else:
                 lineno, last = sign
-                matched = (str(last.get("proof_sha256") or "") in want
-                           or (want_object
-                               and str(last.get("object_sha256") or "").strip().lower()
-                               == want_object))
+                ledger = (f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#"
+                          f"{last.get('verification_id') or f'line{lineno}'}")
+                matched = _sign_row_pins(last, want=want, want_object=want_object,
+                                         want_path=want_path)
                 out.update(found=bool(matched),
+                           row=dict(last) if matched else {},
+                           signable=bool(_VR.row_signable(last)),
                            verdict=str(last.get("verdict") or ""),
                            proof_sha256=str(last.get("proof_sha256") or ""),
-                           ledger=f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#"
-                                  f"{last.get('verification_id') or f'line{lineno}'}",
+                           ledger=ledger,
                            route="statement")
                 if out["found"]:
                     out["why"] = (f"{out['ledger']} 是最近一签，verdict={out['verdict']!r}、"
                                   "指纹与这一份相符")
                     return out
-                statement_why = (f"{out['ledger']} 是最近一签（verdict={out['verdict']!r}），"
-                                 "而它的 `proof_sha256` 与这一份证明栏对不上 —— "
-                                 "签的是改稿前的旧版或别的正文")
+                # 认到了"这一条命题的最近一签"、但它盖的不是这一份（正文或对象对不上）⇒
+                # 这是"签的是旧版"那一档的证据，不折进"从没审过"。
+                out.update(stale=True, stale_row=dict(last), stale_ledger=ledger)
+                statement_why = (f"{ledger} 是最近一签（verdict={out['verdict']!r}），"
+                                 "而它的指纹与这一份对不上 —— "
+                                 "签的是改稿前的旧版报告或别的正文")
                 out.update(found=False, verdict="", proof_sha256="", ledger="", route="")
     else:
         statement_why = ("没给命题号 ⇒ 这一条还没在册（V 只审在册的命题）；"
@@ -1307,6 +1421,7 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         # pending 这条路上根本不存在。
         if not _VR.row_signable(pending_row):
             out["found"] = False
+            out["row"] = pending_row          # 认到了，但签不住 —— 行要交出去（defect_step 在行上）
             out["verdict"] = str(pending.get("verdict") or "")
             out["ledger"] = str(pending.get("ledger") or "")
             out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
@@ -1315,7 +1430,8 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                           # 有一份说法（同一句话在两个出口上各写一遍必然漂移）。
                           + _VR._bit3_blockers(pending_row))
             return out
-        out.update(found=True, verdict=str(pending.get("verdict") or ""),
+        out.update(found=True, row=pending_row, signable=True,
+                   verdict=str(pending.get("verdict") or ""),
                    proof_sha256=str(pending.get("proof_sha256") or ""),
                    ledger=str(pending.get("ledger") or ""), route="pending")
         out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
@@ -1323,6 +1439,23 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                       "（命题登记之前审的那一签不丢）")
         return out
     out["found"] = False
+    stale_row, stale_why = _pending_stale_row(root, want_object=want_object,
+                                              want_path=want_path)
+    if stale_why:
+        # 读 pending 的那一步在上面已经查成了（`pending_sign` 读不动就会抛），所以这里
+        # 读不出来只可能是两读之间盘上变了 —— 如实记"没查成"，不许折成"没有旧版"。
+        out["checked"] = False
+        out["why"] = stale_why
+        return out
+    if stale_row:
+        out.update(stale=True, stale_row=dict(stale_row),
+                   stale_ledger=(f"{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/"
+                                 f"{str(stale_row.get('object_sha256') or stale_row.get('proof_sha256') or '')[:64]}"
+                                 f".jsonl#{stale_row.get('verification_id') or '?'}"))
+        out["why"] = (f"`{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/` 里有一签盖的是"
+                      f"这份对象的旧版（{stale_row.get('object_path')!r}，签的 sha 与"
+                      "现在这一份对不上）⇒ 它不算这一份的签")
+        return out
     out["why"] = statement_why or (f"`{_VR.VERIFICATIONS_DIR}/"
                                    f"{_VR.PENDING_DIR_NAME}/` 里也没有盖住这一份的签")
     return out
@@ -1366,6 +1499,224 @@ def third_party_problems(proof_text: Any, *, root: Any = None,
                 "改完证明栏要重新送审（新的一签盖住新的正文），"
                 f"在那之前这一条最多是 {SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"]
     return []
+
+
+def statement_id_for_column(statements: Sequence[Mapping[str, Any]],
+                            proof_text: Any) -> str:
+    """在册命题里"证明栏与这一份逐字相同"的那一条的号（认不出 ⇒ 空串，不猜）。
+
+    为什么按证明栏认号：收工门手上只有实验行（E 的那份穷举证明），没有 B 交来的命题正文；
+    "这一份报告被谁签过"的唯一入口是 V 的台账，而台账按命题号分文件。E 的证明栏是
+    B 原样登记进 `statements.proof_text` 的那一份（业主：B 只负责原样登记）⇒ 按它认号
+    与"按正文认号"是同一件事（`statement_id_for_body` 认的是命题正文，两者不可互换）。
+    认不出 ⇒ 空串：调用方据此只读 pending 那一路（D-34：命题未在册时签落 pending）。
+    """
+    want = norm_text(proof_text)
+    if not want:
+        return ""
+    for row in (statements or ()):
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("kind") or "") == "concept":
+            continue
+        if norm_text(row.get("proof_text")) == want:
+            return str(row.get("stmt_id") or "")
+    return ""
+
+
+#: 「V 有没有对这份 E 报告真签过」这一问的结局（`draft/154` 的四结局 + 「没查成」）。
+#:
+#: 只有 :data:`EXHAUSTION_BACKING_SIGNED` 是背书。其余四种理由各不相同（处置人不同）：
+#: `defective` 要 E 去修第几步（`defect_step` 在读数里）、`unsigned` 要派 V 去审、
+#: `stale` 要按现在这一份重新送审、`unchecked` 是这一格没查成（不是"没签"）。
+EXHAUSTION_BACKING_SIGNED = "signed"
+EXHAUSTION_BACKING_DEFECTIVE = "defective"
+EXHAUSTION_BACKING_UNSIGNED = "unsigned"
+EXHAUSTION_BACKING_STALE = "stale"
+EXHAUSTION_BACKING_UNCHECKED = "unchecked"
+EXHAUSTION_BACKING_STATES: tuple[str, ...] = (
+    EXHAUSTION_BACKING_SIGNED, EXHAUSTION_BACKING_DEFECTIVE,
+    EXHAUSTION_BACKING_UNSIGNED, EXHAUSTION_BACKING_STALE,
+    EXHAUSTION_BACKING_UNCHECKED,
+)
+
+
+def _finding_detail(row: Mapping[str, Any], step: Any) -> str:
+    """那一行台账里"第几步、为什么"的原文（找不到 ⇒ 空串，不编）。
+
+    为什么单列：`defect_step` 只是一个号，读的人还要知道那一步的话才动得了手
+    （`draft/154`：`exp:000058` 那一签的 `defect_step=4`，话是"代码里有 ['visited'] 这类
+    剪枝/对称性构造，而 ③ 里一个字都没解释"）。
+    """
+    findings = [f for f in (row.get("findings") or []) if isinstance(f, Mapping)]
+    for item in findings:
+        if step is not None and item.get("step") == step:
+            return str(item.get("detail") or "")
+    for item in findings:
+        if str(item.get("level") or "") == "error":
+            return str(item.get("detail") or "")
+    return ""
+
+
+def _step_text(step: Any, detail: str) -> str:
+    """「第几步不成立：那句话」（没点名第几步时如实说没点名，不编一个号）。"""
+    if step is None:
+        return detail or "（那一签没点名第几步，行上也没有 findings）"
+    return f"第 {step} 步不成立" + (f"：{detail}" if detail else "")
+
+
+def _refusal(why: str) -> str:
+    """B 的入库闸那一句拒信（与 `third_party_problems` 同一个开头，读的人不用学两套）。"""
+    return ("缺 V 的会审签名：" + why +
+            "。E 的 `observations.e_signature` 是 E 自己盖的章，它不构成第三方签字；"
+            "这一条要 proof，先让 V 会审这一份报告（产物是 "
+            "`verifications/<命题号>.jsonl` 的那一行；命题未在册时落 "
+            "`verifications/pending/<对象 sha>.jsonl`），签「成立」之后再来；"
+            f"补不齐就最多是 {SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）")
+
+
+def _refusal_unchecked(why: str) -> str:
+    """「没查成」那一句（三态：不许折成"签过"，也不许折成"没签"）。"""
+    return ("缺 V 的会审签名：这一格没查成 —— " + why +
+            "。没查成不是「签过」，所以这一条拿不到 proof")
+
+
+def exhaustion_backing(experiment: Mapping[str, Any] | None, *, root: Any,
+                       statements: Sequence[Mapping[str, Any]] = (),
+                       statement_id: str = "") -> dict[str, Any]:
+    """V 有没有对这份 E 报告真签过 —— 四结局 + 「没查成」（收工门与 B 的入库闸共用）。
+
+    ## 它问的问题与 `third_party_problems` 不是同一个
+
+    - `third_party_problems` 问「这一份证明栏被 V 签过吗」：B 的入库闸手上是 B 交来的
+      三段式正文，按正文 sha 认签（F 侧那一路 / 老台账行全靠它）；
+    - 这一个问「这一份 E 报告（`out/experiments/<号>/exhaustion.md` 的字节）被 V 签过吗」：
+      收工门手上只有实验行 —— 没有命题正文、也不该去信 `e_signature`。它能按对象认的只有
+      报告的 sha256，而 V 的台账行上 `object_sha256` / `object_path` 记的正是它
+      （`agent_v/core.py` 落台账时取的就是 `exhaustionreport.review` 的
+      `report_sha256` / `report_path`，业主 2026-10-23 夜 D-34 的认领模型）。
+
+    判据逐字（`draft/154`）：「V 台账里存在一行，`object_sha256` == 这份 E 报告的 sha、
+    `verdict` == 成立、且钉的 proof/row 与当前一致」。认签/认对象的键只有一处实现
+    （:func:`_sign_row_pins`），两条路（命题台账 / pending）与两个调用方都走它。
+
+    ## 四结局（每一种给不同的理由 —— 处置人不同，折平就没人知道该做什么）
+
+    - `signed` ①：那一签判「成立」、签的就是现在这一份、且那一行自己签得住 ⇒ 给背书
+      （这是业主裁定允许的那一档：穷举证明可以给承重结论背书，V 签的是 E 报告的
+      理论论证部分）；
+    - `defective` ②：V 判了「有毛病」（或判「成立」但那一行签不住）⇒ 不给背书，
+      `defect_step` 与那一句原文进 `why`、`defect_step` 也单列一格；
+    - `unsigned` ③：台账里从来没有这一份的签 ⇒ 不给背书，理由写"没审过"
+      （不是"审过、没毛病"）；
+    - `stale` ④：台账里有签、但签的是旧版（对象 sha 对不上）⇒ 不给背书，
+      理由写"签的是旧版报告"；
+    - `unchecked`：没给根 / 台账读不出来 ⇒ 不给背书（三态：没查成不是"签过"）。
+
+    `statements` 只用来认号（:func:`statement_id_for_column`）：认不出也照样能查
+    （pending 那一路按对象 sha 认领）。`statement_id` 给了就优先用它（B 的入库闸手上有号）。
+    """
+    row = _as_mapping(experiment)
+    out: dict[str, Any] = {
+        "checked": False, "state": EXHAUSTION_BACKING_UNCHECKED, "backed": False,
+        "experiment_id": str(row.get("experiment_id") or ""),
+        "statement_id": str(statement_id or "").strip(),
+        "report_path": "", "report_sha256": "",
+        "verdict": "", "defect_step": None, "ledger": "",
+        "why": "", "problems": [],
+    }
+    if not is_signed_exhaustion(row):
+        # 不是"E 签下的穷举证明行" ⇒ 这一问对它不成立（调用方据此不给背书，理由要说清
+        # 是"这一行不在射程里"，不是"V 没签它"）。
+        out.update(checked=True, state=EXHAUSTION_BACKING_UNSIGNED,
+                   why="这一行不是「V 签、E 写 ②③」的穷举证明行 ⇒ 没有可签的报告对象")
+        out["problems"] = [_refusal(out["why"])]
+        return out
+    if root is None or not str(root).strip():
+        out["why"] = ("没给工作区根 ⇒ `verifications/` 无从读起（这一格没查成，"
+                      "不是「没审过」）")
+        out["problems"] = [_refusal_unchecked(out["why"])]
+        return out
+    try:
+        from . import exhaustionreport as _ER
+        from . import verifications as _VR
+    except Exception as exc:  # noqa: BLE001 —— 那一侧读不到就是"没查成"
+        out["why"] = (f"判据模块读不到（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
+        out["problems"] = [_refusal_unchecked(out["why"])]
+        return out
+    facts = _ER.report_facts(row)
+    want_sha = str(facts.get("sha256") or "").strip().lower()
+    want_path = norm_rel(facts.get("path"))
+    out.update(report_path=want_path, report_sha256=want_sha)
+    if not want_sha or not want_path:
+        out.update(checked=True, state=EXHAUSTION_BACKING_UNSIGNED,
+                   why=("②③ 没有落盘读数（`observations.exhaustion_report` 里没有 path/sha256）"
+                        "⇒ V 没有可签的对象，这一行不算被签过（不是「V 审过、没毛病」）"))
+        out["problems"] = [_refusal(out["why"])]
+        return out
+    column = proof_column(row)
+    sid = str(statement_id or "").strip() or statement_id_for_column(statements, column)
+    out["statement_id"] = sid
+    sig = latest_third_party_sign(root, proof_text=column, statement_id=sid,
+                                  object_sha256=want_sha, object_path=want_path)
+    if not sig.get("checked"):
+        out["why"] = str(sig.get("why") or "")
+        out["problems"] = [_refusal_unchecked(out["why"])]
+        return out
+    out["checked"] = True
+    out["ledger"] = str(sig.get("ledger") or "")
+    if sig.get("found") and sig.get("signable"):
+        verdict = str(_VR.read_verdict(sig.get("row") or {}) or sig.get("verdict") or "")
+        out.update(state=EXHAUSTION_BACKING_SIGNED, backed=True, verdict=verdict)
+        out["why"] = (f"{out['ledger']} 是最近一签，verdict={verdict!r}、签的就是"
+                      f"现在这一份 E 报告（`{want_path}`，sha {want_sha[:12]}…）")
+        return out
+    if sig.get("row"):
+        signed_row = dict(sig["row"])
+        verdict = str(_VR.read_verdict(signed_row) or sig.get("verdict") or "")
+        step = signed_row.get("defect_step")
+        out.update(state=EXHAUSTION_BACKING_DEFECTIVE, verdict=verdict,
+                   defect_step=step if isinstance(step, int) else None)
+        if verdict == THIRD_PARTY_VERDICT_OK:
+            out["why"] = (f"V 对这份 E 报告的最近一签判了「成立」，但那一签签不住"
+                          f"（{out['ledger']}）：" + _VR._bit3_blockers(signed_row))
+        else:
+            out["why"] = (f"V 对这份 E 报告的最近一签判了 {verdict!r}（{out['ledger']}）："
+                          + _step_text(step, _finding_detail(signed_row, step)))
+        out["problems"] = [_refusal(out["why"])]
+        return out
+    if sig.get("stale"):
+        stale_row = dict(sig.get("stale_row") or {})
+        old = str(stale_row.get("object_sha256") or stale_row.get("proof_sha256") or "")
+        out.update(state=EXHAUSTION_BACKING_STALE,
+                   verdict=str(stale_row.get("verdict") or ""),
+                   ledger=str(sig.get("stale_ledger") or ""))
+        out["why"] = ("台账里那一签盖的是这份报告的旧版（"
+                      + (f"它签的 sha {old[:12]}… " if old else "")
+                      + "与现在这一份对不上）⇒ 不是这一份的签；改完要重新送审，"
+                      "新的一签盖住新的一份")
+        out["problems"] = [_refusal(out["why"])]
+        return out
+    where = (f"命题 {sid} 的台账里" if sid else
+             "命题台账（这一条还没有在册的证明栏）与 pending 两路里")
+    out.update(state=EXHAUSTION_BACKING_UNSIGNED,
+               why=(f"{where}都没有盖住这一份 E 报告"
+                    f"（`{want_path}`，sha {want_sha[:12]}…）的签 —— V 从没审过它"
+                    "（不是「审过、没毛病」）"))
+    out["problems"] = [_refusal(out["why"])]
+    return out
+
+
+def exhaustion_backing_problems(experiment: Mapping[str, Any] | None, *, root: Any,
+                                statements: Sequence[Mapping[str, Any]] = (),
+                                statement_id: str = "") -> list[str]:
+    """`exhaustion_backing` 的拒信清单（空清单 = 有背书）。
+
+    只做转发：拒信正文由 :func:`exhaustion_backing` 一次写完（两个出口共用同一句话 ——
+    同一件事在两个出口上各写一遍必然漂移）。
+    """
+    return list(exhaustion_backing(experiment, root=root, statements=statements,
+                                   statement_id=statement_id).get("problems") or [])
 
 
 def statement_id_for_body(statements: Sequence[Mapping[str, Any]],
@@ -1415,12 +1766,14 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
     - ⑦ 签名主体必须是 V、②③ 的作者必须是 E（`proof_authors` 含 E）；
       B 自称作者 / 改写 E 的读数 / 签名写成 `signed_by="E"` ⇒ 受控拒绝；
     - ②③ 的落盘核查交给 `exhaustionreport`（那一侧在时；不在时如实记"没查成"）；
-    - 第三方签字（`root` / `statements` / `statement_full` 给了才查得了）：按正文认出在册
-      的那条命题，读 `verifications/<命题号>.jsonl` 的最近一签，要求 verdict=成立、
-      且 `proof_sha256` 与这一份证明栏对得上。E 的 `observations.e_signature` 是 E 自己
-      盖的章，它不算第三方；没有在册的同文命题 / 台账里没有那一签 / 最近一签是有毛病 /
-      sha 对不上 ⇒ 拒，拒信点名"缺 V 的会审签名"与最近一签的 verdict。缺了这几个参数 ⇒
-      这一格没查成 ⇒ 也拒（三态纪律：没查成不许折成通过）；
+    - 第三方签字（`root` / `statements` / `statement_full` 给了才查得了）：E 侧那一路
+      调 :func:`exhaustion_backing`（与收工门同一份判据）—— V 的台账里存在一行、
+      `object_sha256` == 这份 E 报告的 sha、verdict=成立、且签的就是现在这一份 ⇒ 放行；
+      有毛病 / 没审过 / 签的是旧版 / 没查成 ⇒ 拒，拒信点名"缺 V 的会审签名"与
+      是哪一种（`defect_step` 也写在里面）。F 侧那一路没有 E 报告，仍按证明栏/索引的
+      sha 认（:func:`third_party_problems`）。E 的 `observations.e_signature` 是 E 自己
+      盖的章，两条路都不算第三方；缺了这几个参数 ⇒ 这一格没查成 ⇒ 也拒（三态纪律：
+      没查成不许折成通过）；
     - 都没有 ⇒ 最多到 :data:`SUPPORTED_ONLY_KIND`。
 
     ## D-34：多一路"顺索引取对象"（`index_rows` 是 D 报告里的目录行）
@@ -1534,25 +1887,19 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
     # 改前这一格只读 `experiments.observations.e_signature.signed_by`，而那串字是 E 在
     # `build_experiment` 里自己写上去的 ⇒ "第三方"两个字没有任何东西核过。实测：真穷举
     # 实验跑完、`verifications/` 目录根本不存在，B 仍然登记成功（kind=theorem、
-    # evidence_kind=proof、bits.reviewed=False）。现在必须盘上真有一签：按正文认出在册
-    # 的那条命题，读 `verifications/<命题号>.jsonl` 的最近一签，verdict 要成立、
-    # `proof_sha256` 要与这一份证明栏对得上（判据本体 `latest_third_party_sign` /
-    # `third_party_problems`，读法与 `agent_c.proof_chain._verified_ok` 同一口径）。
+    # evidence_kind=proof、bits.reviewed=False）。
+    #
+    # 2026-11-03（`draft/154` 业主裁定「V 要签的是 E 那份报告的理论论证部分」）：这一格
+    # 改成调 `exhaustion_backing` —— 与收工门（`closing._has_t3` 的穷举支路）同一份判据、
+    # 同一句话（改前收工门不核第三方签，B 入库核：同一条链两套口径）。
+    # 认签的键是 V 台账行上的 `object_sha256`（E 那份报告的字节 sha，`agent_v/core.py`
+    # 落台账时取 `exhaustionreport.review` 的 `report_sha256`）；判据本体只有一处
+    # （`_sign_row_pins`，经 `latest_third_party_sign` 的两条路读出）。
+    # 四结局（成立 / 有毛病 / 没审过 / 签的是旧版）各给各的理由 —— 处置人不同，折平之后
+    # 读的人只知道"缺签"、不知道该派谁去做什么。
     sid = statement_id_for_body(statements, statement_full)
-    if not sid and not want_object:
-        return [
-            "缺 V 的会审签名：命题台账里没有与这一条同文的在册命题 ⇒ V 没有可审的对象"
-            "（它只审在册的命题，`verify_proof` 对不在册的命题直接报 `statement_missing`）。"
-            "业主 2026-10-23 晚：「签字仍然由 V 签（不是 E）」—— E 的 "
-            "`observations.e_signature` 是 E 自己盖的章，它不构成第三方签字。"
-            "正路：① 先按猜想把这一条登记（`kind=\"conjecture\"`，证明栏照交）；"
-            "② 请 V 会审这一份证明栏（`verify_proof`，产物就是 "
-            "`verifications/<命题号>.jsonl` 那一行）；③ 签「成立」之后把同一份内容再交一次、"
-            "kind 改回定理级。补不齐就最多是 "
-            f"{SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"
-        ]
-    return third_party_problems(text, root=root, statement_id=sid,
-                                object_sha256=want_object)
+    return exhaustion_backing_problems(found, root=root, statements=statements,
+                                       statement_id=sid)
 
 
 def verifier_problems(statement: Mapping[str, Any],
