@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from typing import Any
 
 import pytest
@@ -639,13 +640,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p219", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p219（2026-10-29）：V 的职责文与 D/M 的静默定义改成定稿口径（V 只产意见、签由秘书；静默 = 只挂兜底计时器）。"},
-    # p219 → p220（2026-11-01，业主批准动禁改区 · FC-27）：V 的结论收成两态
+    # p219 → p220（2026-10-30，业主批准动禁改区 · FC-27）：V 的结论收成两态
     # （「不应该有『看不出来』，『看不出来错』就是没毛病」）—— 换的是段正文（V 的
     # policy / 手册 / 技能索引摘要 + `verify.verify_proof` 的动作描述），一格事实的
     # 落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    # 日期更正（2026-10-30，H 那一笔）：这一格原写 2026-11-01 —— 那是一个还没到的
+    # 日期（抬这一格的 commit 是 89e784a2，落盘 2026-10-30 22:36；后一格 p221 记的
+    # 也是 2026-10-30）。账注里的日子是审计读的一格，不是随手写的标签：写一个未来的
+    # 日期会让「哪一版在哪天落地」这条读数自相矛盾，所以统一成 2026-10-30。
+    # 只改账注文字：count / keys_sha256 一个字没动（facts 键集仍是那 15 格）。
     {"version": "p220", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p220（2026-11-01 · 业主批准）：V 的结论收成两态（成立 / 有毛病），『看不出错』就是成立、不存在『看不出来』这一档；历史台账行里那一格只作兼容读。facts 键集仍 15 格（键名与条数一格未动）"},
+     "note": "抬版本 p220（2026-10-30 · 业主批准）：V 的结论收成两态（成立 / 有毛病），『看不出错』就是成立、不存在『看不出来』这一档；历史台账行里那一格只作兼容读。facts 键集仍 15 格（键名与条数一格未动）"},
     # p220 → p221（2026-10-30，业主批准动禁改区 · FC-27）：F 读 V 的结论收成两态
     # （`specs/f.py` 的 policy 那一条）—— 换的是段正文，一格事实的落点都没挪 ⇒
     # count / keys_sha256 与上一格同值（现算值，不手抄）。这一格存在的理由同上几格：
@@ -707,6 +713,39 @@ def test_facts_migration_must_leave_a_version_trace() -> None:
     red = PS.facts_migration_problem(bumped, frozen=(*_VOLATILE_FACT_SETS[:-1],
                                                     dict(first, version=bumped)))
     assert red, "只抬版本、键集账本没跟上，判据却放过了"
+
+
+def _ledger_date(cell: dict[str, Any]) -> str:
+    """账注里第一个 ISO 日子（读不出就是空串）。账注是散文，日子只在开头那一处。"""
+    found = re.search(r"\d{4}-\d{2}-\d{2}", str(cell.get("note") or ""))
+    return found.group(0) if found else ""
+
+
+def test_no_ledger_note_is_dated_after_the_current_version() -> None:
+    """账注的日子不许晚于账本最后一格（= 当前版本那一格）的日子。
+
+    改前读数（2026-10-31）：p220 那格写 2026-11-01，而账本最后一格 p221 写 2026-10-30
+    —— 同一条账里出现「后落地的一版日子更早」，读的人无法判断到底是"p220 还没落地"
+    还是"那一格的日子写错了"。而 2026-11-01 那时还没到：抬 p220 的 commit 是
+    89e784a2，落盘 2026-10-30 22:36（`git log --format='%h %ad' 89e784a2` 可复核）。
+
+    为什么上界取「最后一格」而不是「今天」：最后一格就是 live 那一版（上一段的正控
+    钉着它的版本号 = `PROMPT_VERSION`），它的日子是账本里唯一可当上界的日期 ——
+    拿系统时钟判会变成一条"换台机器、换一天跑就红"的判据，那不是判据，那是时钟的读数。
+
+    这一条不判格与格之间的先后：p209 / p210 / p211 记的是 2026-10-26，而 p208 记
+    2026-10-27 —— 那几格是"批次日"与"落地日"不同，都是已经过去的日子；改它们要另
+    一笔授权（见这一批 H 的处置清单），也不该混进"这一格写了一个还不存在的日子"里。
+    """
+    dates = [(str(c.get("version") or ""), _ledger_date(c)) for c in _VOLATILE_FACT_SETS]
+    top_version, top_date = dates[-1]
+    assert top_date, (f"账本最后一格 {top_version} 的账注里读不出日子 ⇒ 这条判据的上界"
+                      "没有对象（反真空：它不许在一个没有日期的账本上恒真）")
+    late = [f"{v}：{d} 晚于最后一格 {top_version} 的 {top_date}"
+            for v, d in dates if d and d > top_date]
+    assert late == [], late
+    # 反真空：账本里绝大多数格子都真的带着日子（不是只有最后一格有）。
+    assert len([1 for _v, d in dates if d]) >= 10, dates
 
 
 def test_the_volatile_fact_keyset_digest_is_order_independent() -> None:
