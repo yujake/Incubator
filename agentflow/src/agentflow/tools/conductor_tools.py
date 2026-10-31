@@ -1316,6 +1316,15 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     sess = session if isinstance(session, Mapping) else {}
     session_root = str(sess.get("root") or "") or None
     sid = str(sess.get("sid") or CL.NO_SESSION)
+    # ---- 受控拒绝（2026-11-03 第二笔）：号不在盘上 ⇒ 门根本不跑，而且这一趟的判据
+    # 也不许先落盘（拒绝 = 一行都不写）。句子与码由 `closing.closing_session_identity`
+    # 一处给出 ⇒ 与 `agentflow closing`、`readouts.gates_readout` 同文同码（2）。
+    ident = CL.closing_session_identity(
+        session_root or getattr(store, "root", ""), sid)
+    if ident.problem:
+        return fail(ident.problem, kind=str(ident.code or "no_such_session"),
+                    refused=True, exit_code=2, session=str(sid or ""))
+    sid = ident.sid
     # 落盘先于读数：这一次调用给出的判据要能立刻被"运行外那一趟"读到。
     written: dict[str, Any] = {"tried": False, "ok": False, "why": "", "path": ""}
     if goal_met is not None or (task_list if isinstance(task_list, (list, tuple)) else None):

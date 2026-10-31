@@ -29,7 +29,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, NamedTuple, Sequence
 
 from . import papercompile as PC
 from . import schema as S
@@ -3349,6 +3349,92 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 #: 把它折进 `sid=None` 就会重演同一个假绿 —— 而这次连"读错了文件"都不会有人发现。
 NO_SESSION = ""
 
+#: `closing_session_identity` 的两个受控拒绝码（与 CLI 的退出码 2 同一档）。
+#:
+#: 为什么要有它们（2026-11-03 第二笔）：`agentflow closing` 在 e4e5efff 已经先定
+#: 会话身份、号不在盘上就受控拒绝（退出码 2，门不跑）；而 API 那几个出口
+#: （`readouts.gates_readout` / `conductor.closing` / 将来的网页端点）直接调
+#: `check_closing(sid=…)`，`sessions.read_session` 把"文件不存在"读成空会话 ⇒
+#: `user_pending` 拿到 `pass`。同一件事两个出口，一个拒绝一个放行。
+#: 现在把"读哪一场"抽成本模块唯一的一份实现（`closing_session_identity`）：
+#: CLI 与 API 都先问它，拒绝时用的是同一句话、同一个码（2）。
+NO_SUCH_SESSION = "no_such_session"
+BAD_SESSION_ID = "invalid_session_id"
+
+
+class SessionIdentity(NamedTuple):
+    """`check_closing` 与 `agentflow closing` 共用的"读哪一场"答案（三态 + 拒绝码）。
+
+    `sid`：`None` = 读缺省会话（运维口径）；`NO_SESSION`（空串）= 这一次调用没有会话
+    身份；一个具体号 = 读那一段。`problem` 非空 ⇒ 受控拒绝（`code` 是
+    :data:`NO_SUCH_SESSION` / :data:`BAD_SESSION_ID` 之一），调用方不许跑门：
+    跑出来那张表每一格都是"没查成"，读的人会以为已经读过一遍了（空读数冒充读数）。
+    """
+
+    sid: str | None
+    note: str
+    problem: str
+    code: str
+
+
+def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
+    """`agentflow closing` / `check_closing` 的会话身份：`(sid, 读数里那一句, 拒绝理由, 码)`。
+
+    三态（`draft/37` §63 + 153-U-07 + 2026-11-03 第二笔）：
+
+    - `given is None` ⇒ 读缺省会话（`sessions/<今天>.jsonl`，运维口径、合法）；
+    - `given` 是空串（`NO_SESSION`）⇒ 没给号：点名"缺省会话"，`user_pending` 那一格
+      「没查成」—— 不许折进 `None` 的"读缺省会话"（§58/§63 的假绿）；
+    - 给了号、且那一段在盘上 ⇒ 读它，读数点名这个号；
+    - 给了号、盘上没有（或它根本不是会话号）⇒ 受控拒绝（退出码 2，门不跑）。
+
+    为什么"没给"落到 `NO_SESSION` 而不是 `None`：两个输入混用，缺省会话里没有提问
+    就会被读成"没问过"——§58/§63 的假绿。
+
+    为什么这一份实现住在 `closing.py`（2026-11-03 第二笔）：CLI 与 API 两个出口必须
+    拒绝同一件事、用同一句话、给同一个码；两处各写一份 = 下一次改文案只改一边，
+    于是同一个号在一个出口是"拒绝"、在另一个出口是"空读数"。
+    """
+    from . import sessions as SS
+
+    if given is None:
+        return SessionIdentity(
+            None,
+            "缺省会话（`sid=None` ⇒ 读 sessions/<今天>.jsonl；这是运维口径，不是"
+            "「这一趟」—— 要读某一趟就显式给号）",
+            "", "")
+    sid = str(given or "").strip()
+    if not sid:
+        return SessionIdentity(
+            NO_SESSION,
+            "缺省会话（没给 `--sid` ⇒ 这一次调用没有会话身份：「待答问题」那一格是"
+            "「没查成」，不按 sessions/<今天>.jsonl 读 —— 那是运维口径，不是这一趟；"
+            "要读某一趟就显式给 `--sid`）",
+            "", "")
+    if any(ch in sid for ch in ("/", "\\")) or sid in (".", ".."):
+        return SessionIdentity(
+            "", "",
+            f"拒绝：{sid!r} 不是一个会话号（会话号里不许有路径分隔符）"
+            " ⇒ 不跑收工门（退出码 2）",
+            BAD_SESSION_ID)
+    if root is None or not str(root):
+        # 没有会话根：由 `_check_user_pending` 如实记「没查成」（不是"这个号不存在"）。
+        return SessionIdentity(sid, f"{sid}（`--sid` 显式给的那一段）", "", "")
+    if not SS.session_path(root, sid=sid).is_file():
+        known = [str(s.get("sid") or "") for s in SS.list_sessions(root)
+                 if str(s.get("sid") or "")]
+        hint = ("盘上有的会话号：" + "、".join(known[:5])
+                + (f" …（共 {len(known)} 个）" if len(known) > 5 else "")) if known else \
+               "这个工作区还没有任何会话记录"
+        return SessionIdentity(
+            "", "",
+            f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
+            f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}",
+            NO_SUCH_SESSION)
+    return SessionIdentity(
+        sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "", "")
+
+
 #: 收工判据的那一句话（业主 2026-10-09 逐字）——三处（`to_dict` / 工具 / CLI）共用一份措辞，
 #: 免得"谁判收工"这件事在不同出口里被说成三件不同的事。
 VERDICT_NOTE = (
@@ -3483,6 +3569,17 @@ class ClosingReport:
     def unknowns(self) -> list[str]:
         """没查成的那些检查（不是通过）。"""
         return sorted(k for k, v in self.status.items() if v == "unknown")
+
+    @property
+    def refusal(self) -> dict[str, Any] | None:
+        """这一次调用是不是受控拒绝（会话号那一格）；`None` = 不是拒绝。
+
+        形状：`{"code","sid","detail","exit_code"}`。`detail` 就是 CLI 打出来的那一句
+        （`closing_session_identity()` 的 `problem`）—— 只写一处，两个出口同文同码。
+        拒绝发生时 `status` 是空的：这不是"八格全是没查成"的空读数，而是"门根本没跑"。
+        """
+        got = self.readings.get("refusal")
+        return dict(got) if isinstance(got, Mapping) and got.get("code") else None
 
     @property
     def failed(self) -> list[str]:
@@ -3695,6 +3792,9 @@ class ClosingReport:
             "verdict_conflicts": self.verdict_conflicts,
             "escalation_gaps": self.escalation_gaps,
             "verdict_note": VERDICT_NOTE,
+            # 受控拒绝那一格（2026-11-03 第二笔）：None = 门跑了；非空 = 门根本没跑
+            # （会话号不在盘上 / 不是一个号）。两个出口读同一个形状，句子与码同源。
+            "refusal": self.refusal,
             "status": dict(self.status),
             "failed": self.failed,
             "unknowns": self.unknowns,
@@ -5832,6 +5932,12 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
 说"我没查成"，也不许在缺少读数时说"可以交"。`sid` 三态见 :data:`NO_SESSION`：具体会话号 / `None`
 （缺省会话）/ `NO_SESSION`（没有会话身份 ⇒ `user_pending` 那格 `unknown`）。
 
+给了具体会话号而盘上没有那一段（或它根本不是会话号）⇒ 受控拒绝：门不跑，返回的
+报告里 `readings["refusal"]` 非空（`{"code","sid","detail","exit_code": 2}`），`status` 为空。
+CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.closing`）问的是
+同一个 :func:`closing_session_identity` ⇒ 同一句话、同一个码；"门根本没跑"与"跑了、
+八格都没查成"因此长得不一样（2026-11-03 第二笔）。
+
 收工由 M 判（业主 2026-10-09）：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
 ⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
   `retire` / `programs`（2026-11-03，153-U-01/U-02 第 2 笔）是机器口径的两个喂参：
@@ -5844,6 +5950,21 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     rep = ClosingReport()
     tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
     root = session_root if session_root is not None else getattr(store, "root", None)
+    # ---- 会话身份先过闸（2026-11-03 第二笔）：号不在盘上 ⇒ 门不跑、马上受控拒绝。
+    #
+    # 为什么必须在跑门之前：门自己会把每一格兜成 `unknown`，"号不在盘上"与"查过了、
+    # 八格都没查成"在出口上会长得一模一样（e4e5efff 在 CLI 侧已经这么判过，这一笔把
+    # 同一个判据搬到唯一入口上，于是 API 那几个出口也拿到同一个拒绝）。
+    identity = closing_session_identity(root, sid)
+    if identity.problem:
+        rep.readings["session"] = {"sid": identity.sid, "note": identity.note,
+                                   "problem": identity.problem}
+        rep.readings["refusal"] = {"code": identity.code,
+                                   "sid": str(sid if sid is not None else ""),
+                                   "detail": identity.problem,
+                                   "exit_code": 2}
+        return rep
+    sid = identity.sid
     if goal_met is not None or tasks:
         rep.m_verdict = _m_verdict_payload(goal=goal, met=goal_met, basis=basis,
                                            tasks=tasks)

@@ -25,6 +25,7 @@ import json
 import pathlib
 
 from agentflow import closing as CL
+from agentflow import sessions as SS
 from agentflow.store import Store
 
 TS = "2026-10-09T00:00:00+08:00"
@@ -148,6 +149,10 @@ def test_an_item_it_cannot_do_must_be_reported_to_the_user(tmp_path: pathlib.Pat
     report = _report(st.root)
     tasks = [{"what": "逐条核引文", "state": "done"},
              {"what": "重渲染附录并核锚", "state": "cannot", "why": "编译脚本缺"}]
+
+    # 这一段会话必须在盘上（2026-11-03 第二笔：号不在盘上是受控拒绝，不是
+    # "读成空会话 ⇒ 没有上报"）。断言一个字没改：要看的是"没上报的项被点名"。
+    SS.append(st.root, {"kind": "agent_run_start", "role": "M"}, sid="r1")
 
     # ① 没上报 ⇒ gap 点名（判据仍归 M：它能停，但"闷着不说"看得见）
     quiet = CL.check_closing(st, checks=("substance",), project_dir=str(st.root),

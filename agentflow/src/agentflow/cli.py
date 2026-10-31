@@ -4241,41 +4241,11 @@ def cmd_status_report(args) -> int:
     return 0
 
 
-def _closing_session_identity(root: Path, given: str | None) -> tuple[str, str, str]:
-    """`agentflow closing` 的会话身份：`(sid, 读数里那一句, 拒绝理由)`。
-
-    三态（`draft/37` §63 + 153-U-07）：
-
-    - 给了号、且那一段在盘上 ⇒ `(号, 点名那句话, "")`；
-    - 给了号、盘上没有（或它根本不是会话号）⇒ `("", "", 拒绝那句话)`；
-    - 没给 ⇒ `(closing.NO_SESSION, 点名"缺省会话"那句话, "")`。
-
-    为什么"没给"落到 `NO_SESSION` 而不是 `None`：`None` 的语义是"读缺省会话"
-    （`sessions/<今天>.jsonl`，运维口径、合法），而运行外出口问的是"这一趟"。
-    两个输入混用，缺省会话里没有提问就会被读成"没问过"——§58/§63 的假绿。
-    """
-    from . import closing as CL
-    from . import sessions as SS
-
-    sid = str(given or "").strip()
-    if not sid:
-        return (CL.NO_SESSION,
-                "缺省会话（没给 `--sid` ⇒ 这一次调用没有会话身份：「待答问题」那一格是"
-                "「没查成」，不按 sessions/<今天>.jsonl 读 —— 那是运维口径，不是这一趟；"
-                "要读某一趟就显式给 `--sid`）",
-                "")
-    if any(ch in sid for ch in ("/", "\\")) or sid in (".", ".."):
-        return ("", "", f"拒绝：{sid!r} 不是一个会话号（会话号里不许有路径分隔符）"
-                        " ⇒ 不跑收工门（退出码 2）")
-    if not SS.session_path(root, sid=sid).is_file():
-        known = [str(s.get("sid") or "") for s in SS.list_sessions(root)
-                 if str(s.get("sid") or "")]
-        hint = ("盘上有的会话号：" + "、".join(known[:5])
-                + (f" …（共 {len(known)} 个）" if len(known) > 5 else "")) if known else \
-               "这个工作区还没有任何会话记录"
-        return ("", "", f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
-                        f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}")
-    return (sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "")
+# `agentflow closing` 的会话身份（2026-11-03 第二笔）：唯一实现在
+# `closing.closing_session_identity` —— CLI 与 API（`readouts.gates_readout` /
+# `conductor.closing` / 将来的网页端点）问同一份答案，拒绝时同一句话、同一个码（2）。
+# 这一格此前是本文件里的 `_closing_session_identity`：CLI 会拒、API 照样读成空会话 ⇒
+# 同一件事两个出口，一个拒绝一个放行。搬进 `closing.py` 之后这里不再有第二份实现。
 
 
 def cmd_closing(args) -> int:
@@ -4323,13 +4293,16 @@ def cmd_closing(args) -> int:
     project = args.project_dir or ""
     report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
                              if project else "")
-    sid, session_note, problem = _closing_session_identity(root, getattr(args, "sid", None))
-    if problem:
+    identity = CL.closing_session_identity(root, getattr(args, "sid", None))
+    if identity.problem:
         # 受控拒绝：连"读哪一场"都定不下来时不许跑门 —— 跑出来那张表每一格都是
         # "没查成"，读的人会以为已经读过一遍了（空读数冒充读数）。
-        print(tty.bullet(problem))
+        # 这句话与码由 `closing.closing_session_identity` 一处给出：API 那几个出口
+        # 拿到的是同一句、同一个 `exit_code=2`（2026-11-03 第二笔）。
+        print(tty.bullet(identity.problem))
         return 2
-    print(tty.bullet("会话：" + session_note))
+    sid = identity.sid
+    print(tty.bullet("会话：" + identity.note))
     # 2026-11-03（153-U-01/U-02 第 2 笔，U-07 之后补）：运行外这一趟也喂机器口径的两个喂参
     # —— 与运行内 `conductor.closing` 走同一个 `machine_feeders`（两个出口一份口径）。
     # 喂不上（找不到顶趟行 / 读不成）⇒ 两个都是 None ⇒ `can_close` 落 None + `not_wired`

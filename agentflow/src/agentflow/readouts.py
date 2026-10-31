@@ -68,8 +68,12 @@ FLOW_DATA_KEYS: tuple[str, ...] = ("roles", "totals")
 COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 
 #: `gates_readout` 的 `data` 键集。
+#:
+#: `refusal`（2026-11-03 第二笔）：`None` = 门真的跑了；非空 = 受控拒绝（会话号不在
+#: 盘上 / 不是一个号），那一份 data 里的 `cells` 是空的而不是八格 `unknown` ——
+#: "门根本没跑"与"跑了、八格都没查成"必须长得不一样。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "m_says_done",
-                                    "can_close", "closable", "verdict")
+                                    "can_close", "closable", "verdict", "refusal")
 
 #: 读数名 → 它的 `data` 键集。判据从这一张表取期望值（不在测试里手抄第二份）。
 READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
@@ -457,6 +461,14 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
 
     `project_dir` / `report_path` 不给 ⇒ 依赖它们的那几格如实记 `unknown`（不是 pass）。
 
+    `sid` 给了一个盘上不存在的号 ⇒ 受控拒绝（2026-11-03 第二笔）：`checked=False`、
+    `reason` 就是 CLI 那一句原话、`data.refusal` 带 `{"code","sid","detail","exit_code": 2}`，
+    `data.cells` 为空（门根本没跑，不是"八格全是 unknown"的空读数）。这一档与
+    `agentflow closing` 共用 `closing.closing_session_identity`，所以两个出口同文同码。
+    机器口径的两个喂参也在这里现算（`closing.machine_feeders`）—— API 出口此前不喂 ⇒
+    同一份工作区在 API 算出 `can_close=None`、在 CLI 算出 True/False（"一个说不知道、
+    一个说可以交"）。
+
     `scanned`：`stats all` 共读一份扫描（2026-10-27，R-BE1 的 ⑥-5）。门的"现算"不受影响 ——
     八格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
     只用它的 `store`）。
@@ -465,7 +477,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     why = _scan_problem(scanned, need=("events", "sessions"))
     empty = {"cells": [], "counts": {s: 0 for s in CELL_STATES},
              "machine_pass": False, "m_says_done": False, "can_close": None,
-     "closable": False, "verdict": None}
+             "closable": False, "verdict": None, "refusal": None}
     if why:
         return _envelope(checked=False, reason=why, data=empty)
     store = scanned.get("store")
@@ -479,12 +491,30 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                              reason=f"打开工作区失败（{type(e).__name__}: {e}）", data=empty)
     from . import closing as CL
 
+    # 机器口径的两个喂参（2026-11-03 第二笔）：CLI 与工具体都喂这一份；这一条读数
+    # 此前不喂 ⇒ 同一份工作区在 API 出口算出 `can_close=None`、在 CLI 出口算出
+    # True/False（"一个说不知道、一个说可以交"）。现在三个出口走同一个
+    # `closing.machine_feeders`（口径只有一处）。
+    feed = CL.machine_feeders(store)
     try:
         report = CL.check_closing(store, project_dir=str(project_dir or ""),
-                                  report_path=str(report_path or ""), sid=sid)
+                                  report_path=str(report_path or ""), sid=sid,
+                                  retire=feed.get("retire"), programs=feed.get("programs"))
     except Exception as e:  # noqa: BLE001 门自己抛了 ⇒ 这一趟"没查成"，不是"没问题"
         return _envelope(checked=False,
                          reason=f"收工门没跑成（{type(e).__name__}: {e}）", data=empty)
+    # ---- 受控拒绝（2026-11-03 第二笔）：号不在盘上 ⇒ 门根本没跑。
+    #
+    # 这一档不许折成"八格全是 unknown 的一张表"（那是空读数）：`checked=False` +
+    # 原话进 `reason`，`data.refusal` 带 code/sid/exit_code —— CLI 那边是同一句话、
+    # 同一个码（2），两个出口拒绝同一件事。
+    if report.refusal:
+        refused = dict(report.refusal)
+        data = dict(empty, refusal=refused)
+        return _envelope(checked=False, reason=str(refused.get("detail") or ""),
+                         data=data,
+                         problems=[_problem(str(refused.get("code") or "refusal"),
+                                            str(refused.get("detail") or ""))])
     detail_of: dict[str, list[str]] = {}
     problems: list[dict[str, str]] = []
     for finding in report.findings:
@@ -503,14 +533,17 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
         counts[status] = int(counts[status]) + 1
         cells.append({"name": name, "status": status,
                       "detail": "；".join(d for d in detail_of.get(name, []) if d)})
-    data: dict[str, Any] = {"cells": cells, "counts": counts,
-                            "machine_pass": bool(report.machine_pass),
-                            # 2026-11-03（153-U-01/U-02）：`m_says_done` 是 M 的判断；`can_close` 是机器口径
+    data: dict[str, Any] = {
+        "cells": cells, "counts": counts,
+        "machine_pass": bool(report.machine_pass),
+        # 2026-11-03（153-U-01/U-02）：`m_says_done` 是 M 的判断；`can_close` 是机器口径
         # （`bool | None`，`None` = 没接线 —— 不许折成 False，那会被读成"机器说不通过"）。
         "m_says_done": bool(report.m_says_done),
         "can_close": report.can_close,
         "closable": bool(report.closable),
-                            "verdict": dict(report.m_verdict) if report.m_verdict else None}
+        "verdict": dict(report.m_verdict) if report.m_verdict else None,
+        "refusal": None,
+    }
     return _envelope(checked=True, reason="", data=data, problems=problems)
 
 

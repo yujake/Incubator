@@ -58,6 +58,9 @@ def test_a_question_from_another_run_is_not_counted(tmp_path: Path):
     ws = _ws(tmp_path / "other", sid="real-other", answered=True)
     st = S.Store(ws)
     st.init()
+    # 这一趟自己那一段必须在盘上（2026-11-03 第二笔：号不在盘上是受控拒绝，
+    # 不是"读成空会话 ⇒ pass"）。断言一个字没改：要看的是"别处的提问不算数"。
+    SS.append(ws, {"kind": "agent_run_start", "role": "M"}, sid="real9")
     acc = RA.check_review(st, project_dir=str(ws), report_path="", cost_cap_usd=1.0, sid="real9")
     assert acc.criteria["triage_branch_recorded"] == "unknown", acc.details
     rep = CL.check_closing(st, project_dir="", report_path="", sid="real9")

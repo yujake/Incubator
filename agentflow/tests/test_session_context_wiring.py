@@ -155,6 +155,9 @@ def test_the_judge_itself_has_the_third_input(tmp_path: Path):
 def test_a_question_in_another_session_does_not_count(tmp_path: Path):
     """负控：别的 sid 的提问不算这一趟的（两处入口都必须是 `pass`）。"""
     ws = _ws(tmp_path / "ws", sid="other-run-63")
+    # 这一趟自己那一段必须在盘上（2026-11-03 第二笔：号不在盘上是受控拒绝，
+    # 不是"读成空会话 ⇒ pass"）。断言一个字没改：要看的是"别处的提问不算数"。
+    SS.append(ws, {"kind": "agent_run_start", "role": "M"}, sid=SID)
     st, data = _in_run(ws, sid=SID)
     outside = CL.check_closing(st, project_dir="", report_path="", sid=SID)
     assert data["status"]["user_pending"] == "pass", data["status"]

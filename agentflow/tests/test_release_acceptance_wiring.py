@@ -164,6 +164,13 @@ def _tool_closing(store, *, project_dir: str = "", report_path: str = "",
     """
     from agentflow.tools import build_registry
 
+    root_for_session = store.root if session_root is None else session_root
+    sid_used = SS.session_id() if sid is None else sid
+    # 这一趟的会话必须在盘上（2026-11-03 第二笔：`conductor.closing` 对不存在的号
+    # 受控拒绝，与 `agentflow closing` 同一句话同一个码）。夹具此前靠"空会话"拿到
+    # pass —— 那是真机上不可能出现的形态（每一趟都会先落 `agent_run_start`）。
+    if not SS.session_path(root_for_session, sid=sid_used).is_file():
+        SS.append(root_for_session, {"kind": "agent_run_start", "role": "M"}, sid=sid_used)
     built = build_registry(store=store, workspace_root=store.root,
                            session_root=(store.root if session_root is None else session_root),
                            sid=(SS.session_id() if sid is None else sid),
