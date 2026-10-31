@@ -7,17 +7,17 @@
 
 | 落点 | 数的是什么 | 范围 |
 |---|---|---|
-| `webui.readers.roster_face` 的节点格（已改名 `children_in_ledger`） | 这个节点在**台账**里挂了几个子 | 这一个节点 |
-| `Secretary.child_counts()` 的 `child_count`（收工读数经 `closing.child_counts_reading` 转发） | 名册里还有几个**没销号**的项 | 全工作区 / 按 owner |
+| `webui.readers.roster_face` 的节点格（已改名 `children_in_ledger`） | 这个节点在台账里挂了几个子 | 这一个节点 |
+| `Secretary.child_counts()` 的 `child_count`（收工读数经 `closing.child_counts_reading` 转发） | 名册里还有几个没销号的项 | 全工作区 / 按 owner |
 
-业主 2026-11-03 的裁决 4：网页那格叫 `children_in_ledger`，**收工那格叫 `children_unretired`**，
+业主 2026-11-03 的裁决 4：网页那格叫 `children_in_ledger`，收工那格叫 `children_unretired`，
 两处都加"这个名字量的是什么"的一句说明。
 
 ## 这条判据钉住什么
 
 1. 收工读数那格的名字是 `children_unretired`（`conductor.CHILD_COUNT_KEY` 与 `child_counts()`
-   的返回同一个来源），且同一份返回里**不再**出现 `child_count`（同义两键 = 又一处各说一套）；
-2. 它数的是**名册里未销号的项**（不是台账子数）：造 2 个名册项 ⇒ 这一格是 2；
+   的返回同一个来源），且同一份返回里不再出现 `child_count`（同义两键 = 又一处各说一套）；
+2. 它数的是名册里未销号的项（不是台账子数）：造 2 个名册项 ⇒ 这一格是 2；
 3. 读数里带一句"这个名字量的是什么"的说明（`labels` 或 note 里点明"名册"与"未销号"）；
 4. 与网页那格并排看得懂：`children_in_ledger` 的说明里点到"台账"，`children_unretired` 的
    说明里点到"名册"。
@@ -66,10 +66,15 @@ def test_the_closing_reading_carries_the_new_name(tmp_path: pathlib.Path) -> Non
 
 
 def test_the_name_says_what_it_measures() -> None:
-    """③ 读数里要有一句"这个名字量的是什么"。"""
-    from agentflow.conductor import CHILD_COUNT_LABELS
+    """③ 读数里要有一句"这个名字量的是什么"（中文名保持短，口径读 `CHILD_COUNT_CALIBERS`）。"""
+    from agentflow.conductor import CHILD_COUNT_LABELS, CHILD_COUNT_CALIBERS
 
     assert "children_unretired" in CHILD_COUNT_LABELS, CHILD_COUNT_LABELS
-    label = str(CHILD_COUNT_LABELS["children_unretired"])
-    assert "名册" in label and "未销号" in label, (
-        f"`CHILD_COUNT_LABELS` 里那句没说清它数的是名册里未销号的子：{label!r}")
+    assert CHILD_COUNT_LABELS["children_unretired"] == "子代理数", CHILD_COUNT_LABELS
+    assert "children_unretired" in CHILD_COUNT_CALIBERS, CHILD_COUNT_CALIBERS
+    text = str(CHILD_COUNT_CALIBERS["children_unretired"])
+    assert "名册" in text and "未销号" in text, (
+        f"`CHILD_COUNT_CALIBERS` 里那句没说清它数的是名册里未销号的子：{text!r}")
+    assert "台账" in text and "children_in_ledger" in text, (
+        "口径里要并排点出网页那一格（台账子数 `children_in_ledger`），读者才看得出是两个量："
+        f"{text!r}")

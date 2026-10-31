@@ -1690,7 +1690,7 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
              "'open_items','missing','reason','note','retired_path','roster_retired',"
              "'subtree','subtree_size','order','cascade','retired_count','unrostered',"
              "'kept','cascade_reading',"
-             "'active_nodes','busy_task_ids','readings','child_count',"
+             "'active_nodes','busy_task_ids','readings','children_unretired',"
              "'active_child_count','target_state','target_state_label','blocking',"
              "'refusal_code'}；"
              "open_items 是列表（没销成时才非空），每项给 task_id / kind / item_state / "
@@ -1811,7 +1811,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         # （"谁因为什么没销"）与 `cascade`（"销了哪些、按什么次序"）不是同一件事。
         "kept": [],
         "cascade_reading": {"count": 0, "ids": [], "levels": [], "kept": []},
-        "child_count": None, "active_child_count": None,
+        "children_unretired": None, "active_child_count": None,
         # 销号前置的读数（业主 2026-10-26：「销号可以也只可针对静默子代理」）：
         # 目标此刻的三态、逐条 blocking、以及受控拒绝的机器码。这三格在 `returns=`
         # 里都声明了，所以每一条返回路径上都必须真的有它们。
@@ -1856,10 +1856,10 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         try:
             got = sec.child_counts(owner=mine)
         except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
-            return {"checked": False, "child_count": None, "active_child_count": None,
+            return {"checked": False, "children_unretired": None, "active_child_count": None,
                     "reason": f"{type(exc).__name__}: {exc}"}
         if not isinstance(got, Mapping):
-            return {"checked": False, "child_count": None, "active_child_count": None,
+            return {"checked": False, "children_unretired": None, "active_child_count": None,
                     "reason": "名册读数不是对象"}
         return got
 
@@ -1967,7 +1967,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     data["branch"] = ""
     before = _counts(sec)
     data["readings"] = {"child_counts_before": before}
-    data["child_count"] = before.get("child_count")
+    data["children_unretired"] = before.get("children_unretired")
     data["active_child_count"] = before.get("active_child_count")
     # ---- 子树与次序（从最深到最浅 = 先叶子后父）。级联销号按这个次序落盘。
     try:
@@ -2160,7 +2160,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                         blocking=list(probe.get("blocking") or []))
         return _out("refused",
                     (f"{tid} 这一支里还有 {active_count} 个节点在活跃"
-                     f"（子代理数={data['child_count']}，"
+                     f"（子代理数={data['children_unretired']}，"
                      f"活跃子代理数={data['active_child_count']}）⇒ 整笔不销、一处都不动："
                      "先等那些节点交差再销。点名：" + "；".join(named)),
                     missing=named,
@@ -2455,7 +2455,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     after = _counts(sec)
     data["readings"]["child_counts_after"] = after
     data["readings"]["written"] = [w["task_id"] for w in written]
-    data["child_count"] = after.get("child_count")
+    data["children_unretired"] = after.get("children_unretired")
     data["active_child_count"] = after.get("active_child_count")
     from ..secretary import retired_path
 

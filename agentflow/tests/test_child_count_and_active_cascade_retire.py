@@ -170,34 +170,34 @@ def test_a_two_counts_are_named_and_counted_separately(tmp_path: pathlib.Path) -
 
     counts = env["sec"].child_counts(owner=owner)
     assert counts["checked"] is True, counts
-    assert counts["child_count"] == 3, counts
+    assert counts["children_unretired"] == 3, counts
     assert counts["active_child_count"] == 2, counts
     assert counts["complete"] is True, counts
     # 名字：机器键与中文名同源，两个数各自有名，不许共用一个
-    assert counts["labels"] == {"child_count": "子代理数",
+    assert counts["labels"] == {"children_unretired": "子代理数",
                                 "active_child_count": "活跃子代理数"}, counts["labels"]
-    assert counts["child_count"] != counts["active_child_count"], (
+    assert counts["children_unretired"] != counts["active_child_count"], (
         "两个数相等 ⇒ 这条判据证明不了『分得开』：夹具里明明 2 个在跑")
     assert "子代理数=3" in counts["note"] and "活跃子代理数=2" in counts["note"], counts["note"]
 
     # 名册面（父与子看的那一份视图）上两个数各自出现
     view = env["sec"].roster_view(owner=owner)
     assert view["checked"] is True, view
-    assert view["child_count"] == 3, view
+    assert view["children_unretired"] == 3, view
     assert view["active_child_count"] == 2, view
-    assert view["counts"]["child_count"] == 3, view["counts"]
+    assert view["counts"]["children_unretired"] == 3, view["counts"]
 
     # 读数面：两个数各自一格、各有名字。口径只有 `Secretary.child_counts` 一处 ——
     # 改前这里经由 `readouts.READOUTS["roster"]`，而那个读数生产 0 读者（2026-10-27 删掉），
     # 于是这一条直接钉口径真身（不是放宽断言：同样的数、同样的标签、同样"各占一格"）。
     face = env["sec"].child_counts(owner=owner)
     assert face["checked"] is True, face
-    assert face["child_count"] == 3, face
+    assert face["children_unretired"] == 3, face
     assert face["active_child_count"] == 2, face
-    assert face["labels"]["child_count"] == "子代理数", face
+    assert face["labels"]["children_unretired"] == "子代理数", face
     assert face["labels"]["active_child_count"] == "活跃子代理数", face
     # 两个数在同一份读数里各自占一格（不是拼在一个字符串里）
-    assert "child_count" in face and "active_child_count" in face, face
+    assert "children_unretired" in face and "active_child_count" in face, face
 
     # 负控：把 3 个都收口之后活跃数必须归 0（否则那 2 是编出来的）
     for tid in [str(r.get("task_id") or "") for r in
@@ -205,7 +205,7 @@ def test_a_two_counts_are_named_and_counted_separately(tmp_path: pathlib.Path) -
                 if str(r.get("parent_task_id") or "") == owner]:
         _finish(env, tid)
     again = env["sec"].child_counts(owner=owner)
-    assert again["child_count"] == 3, again
+    assert again["children_unretired"] == 3, again
     assert again["active_child_count"] == 0, again
 
 
@@ -229,8 +229,8 @@ def _b_problems(env: dict[str, object]) -> list[str]:
         if "等" not in note:
             problems.append(f"{label}（{tid}）的读数缺那句人话：note={note!r}")
     top = env["sec"].child_counts(owner=str(env["owner"]))
-    if top.get("child_count") != 1:
-        problems.append(f"父名下只有 A 一个名册项，实际 child_count={top.get('child_count')}")
+    if top.get("children_unretired") != 1:
+        problems.append(f"父名下只有 A 一个名册项，实际 children_unretired={top.get('children_unretired')}")
     if top.get("active_child_count") != 1:
         problems.append("A 自己在等，所以父的活跃子代理数该是 1，"
                         f"实际 {top.get('active_child_count')}")
@@ -395,8 +395,8 @@ def _d_problems(env: dict[str, object], calls: list[tuple[str, str]]) -> list[st
             problems.append(f"{owner} 的销号名单该只有 {want}，实际 {got}")
     # 销完之后父那份名册的两个读数：子代理数 0 —— A 已退场
     after = dict((data.get("readings") or {}).get("child_counts_after") or {})
-    if after.get("child_count") != 0:
-        problems.append(f"销完之后父名下该 0 项，实际 {after.get('child_count')}")
+    if after.get("children_unretired") != 0:
+        problems.append(f"销完之后父名下该 0 项，实际 {after.get('children_unretired')}")
     # 幂等：同一笔再来一次 ⇒ 受控拒绝（不重复销），且次序表不再增长
     again = _call(env, child_name=str(chain["name_a"]))
     if again.data.get("state") != "refused":

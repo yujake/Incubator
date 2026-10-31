@@ -8199,7 +8199,7 @@ class Secretary:
         （整体拒）。DSH 的 `list-agents.js:30-47` 是逐行报 `corrupt/unsupported/unavailable`。现在照它：好行照常
         渲染，坏行逐条落进 `diagnostics`（带行号与类别）。只有一种情形仍然整体拒：一条好行都没有而坏行有（三态纪律挡的正是"名册是空的"与"名册读不成"被折成同一句话）。
         ## 两个读数各占一格（业主 2026-10-26）
-        这一份视图顶上带 `child_count`（子代理数 = 名下未销号的名册项数）与
+        这一份视图顶上带 `children_unretired`（子代理数 = 名下未销号的名册项数）与
         `active_child_count`（活跃子代理数 = 其中非静默的数量 = 在飞 + 待机），
         另有一格 `counts`（`Secretary.child_counts` 的整份读数：`owner` / `states` /
         `waiting_only` / `unjudged` / `note`）与一格 `states`（四档各几个）。

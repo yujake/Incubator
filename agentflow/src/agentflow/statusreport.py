@@ -200,7 +200,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         child_counts = _Secretary(_S.CONDUCTOR_ROLE, root=root,
                                   store=store).child_counts()
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"名册空了"
-        child_counts = {"checked": False, "child_count": None,
+        child_counts = {"checked": False, "children_unretired": None,
                         "active_child_count": None,
                         "reason": f"{type(exc).__name__}: {exc}"}
     # 2026-11-03（153-U-09 的 registration 半）：名册写口拒过的号。
@@ -227,7 +227,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             # 活跃子代理数 = 其中"工作没做完还在做"的（含靠等下级才活跃的）。
             # 不许相加、不许互相代替 —— 折成一个数之后，"名册只增不减"与"活都干完了"
             # 会长得一模一样，而这两件事该做的下一步正好相反。
-            "child_count": child_counts.get("child_count"),
+            "children_unretired": child_counts.get("children_unretired"),
             "active_child_count": child_counts.get("active_child_count"),
             "child_counts": child_counts,
             # 名册写口拒过的号（只读；`checked=false` 是"这一份流水读不出来"）。
@@ -240,7 +240,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                     "不含板项行 message/notice/report/delegation；"
                     "判据只有 secretary.row_axis / secretary.is_live_agent 一处，"
                     "2026-10-26 Q27）",
-                "child_count":
+                "children_unretired":
                     "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；"
                     "口径只有 secretary.Secretary.child_counts 一处）",
                 "active_child_count":

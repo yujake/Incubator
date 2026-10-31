@@ -442,8 +442,8 @@ def _c_problems(env: dict[str, Any]) -> list[str]:
     # 读数面：待机也算活跃（活跃 = 非静默），两个数与三态读数同源。
     before = dict((data.get("readings") or {}).get("child_counts_before") or {})
     states = dict(before.get("states") or {})
-    if before.get("child_count") != 1:
-        problems.append(f"子代理数该是 1，实际 {before.get('child_count')!r}")
+    if before.get("children_unretired") != 1:
+        problems.append(f"子代理数该是 1，实际 {before.get('children_unretired')!r}")
     if before.get("active_child_count") != 1:
         problems.append(f"待机也算活跃 ⇒ 活跃子代理数该是 1，实际 "
                         f"{before.get('active_child_count')!r}")

@@ -165,7 +165,7 @@ def _b_problems(env: dict[str, object]) -> list[str]:
         problems.append(f"父的读数里待机该是 1，实际 {states['standby']}")
     if not counts.get("active_child_count"):
         problems.append("待机也算活跃（业主：有『等』这个动作还是算活跃的），"
-                        f"而 active_child_count={counts.get('active_child_count')!r}")
+                        f"而 active_children_unretired={counts.get('active_child_count')!r}")
     return problems
 
 
@@ -295,7 +295,7 @@ def test_e_a_retired_agent_reads_silent_even_with_a_timer(
     assert node["state"] == COND.AGENT_STATE_SILENT, node
     # 它不在活跃集合里：子代理数只数未销号项，活跃数里没有它。
     counts = env["sec"].child_counts(owner=owner)
-    assert counts["child_count"] == 0, counts
+    assert counts["children_unretired"] == 0, counts
     assert counts["active_child_count"] == 0, counts
 
     # 台账那一层（`activity_snapshot`）不知道"销号"这件事 —— 它只有台账行，
@@ -314,15 +314,15 @@ def test_e_a_retired_agent_reads_silent_even_with_a_timer(
 
 # ====================================================================== f) 活跃 = 非静默
 def _f_problems(env: dict[str, object]) -> list[str]:
-    """(f) 的判据本体：1 飞 1 待 1 静默 ⇒ `child_count=3`、`active_child_count=2`。"""
+    """(f) 的判据本体：1 飞 1 待 1 静默 ⇒ `children_unretired=3`、`active_children_unretired=2`。"""
     ctx = dict(env["three"])          # type: ignore[arg-type]
     owner = str(ctx["owner"])
     problems: list[str] = []
     counts = env["sec"].child_counts(owner=owner)
     if counts.get("checked") is not True:
         return [f"两个读数没读成：{counts.get('reason')}"]
-    if counts.get("child_count") != 3:
-        problems.append(f"子代理数该是 3，实际 {counts.get('child_count')!r}")
+    if counts.get("children_unretired") != 3:
+        problems.append(f"子代理数该是 3，实际 {counts.get('children_unretired')!r}")
     if counts.get("active_child_count") != 2:
         problems.append(f"活跃子代理数 = 非静默 = 在飞 + 待机 = 2，"
                         f"实际 {counts.get('active_child_count')!r}")
@@ -379,12 +379,12 @@ def test_f_active_child_count_is_the_non_silent_count(tmp_path: pathlib.Path) ->
     改前的 `active_child_count` 数的是"未收口的任务 + 活跃的下级"：
     - 静默那一个（done、无钟、无下级）不算 ⇒ 这一条改前读 1（少了待机那一个）；
     - 若把口径改成"名册项数"（业主点名要拆开的那两个数折成一个）⇒ 读 3。
-    两个数都必须不相等且各自出现：`child_count=3`、`active_child_count=2`。
+    两个数都必须不相等且各自出现：`children_unretired=3`、`active_children_unretired=2`。
     """
     env = _f_env(tmp_path)
     assert _f_problems(env) == [], _f_problems(env)
     counts = env["sec"].child_counts(owner=str(dict(env["three"])["owner"]))
-    assert counts["child_count"] != counts["active_child_count"], counts
+    assert counts["children_unretired"] != counts["active_child_count"], counts
 
 
 # ====================================================================== g) unknown
@@ -599,7 +599,7 @@ def test_the_json_shapes_are_stable_under_both_faces(tmp_path: pathlib.Path) -> 
     owner = str(dict(env["three"])["owner"])
     counts = env["sec"].child_counts(owner=owner)
     assert set(env["sec"].child_counts().keys()) >= {
-        "checked", "child_count", "active_child_count", "states", "state_labels",
+        "checked", "children_unretired", "active_child_count", "states", "state_labels",
         "by_owner", "waiting_only", "unjudged", "complete", "note"}, sorted(counts)
     assert counts["state_labels"]["standby"] == "待机", counts["state_labels"]
     view = env["sec"].roster_view(owner=owner)

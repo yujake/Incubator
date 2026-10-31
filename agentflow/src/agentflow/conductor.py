@@ -79,10 +79,25 @@ UNFINISHED_STATUSES: tuple[str, ...] = tuple(SEC.LIVE_TASK_STATUSES)
 #: 业主逐字：「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
 #: 键给机器，中文名给人，两者同源（`CHILD_COUNT_LABELS`）—— 名册面、收工读数与 CLI
 #: 读数都从这里取措辞，不许各写一份（同一读数三处措辞迟早会漂成三个意思）。
-CHILD_COUNT_KEY = "child_count"
+#:
+#: 2026-11-03（153-U-13 的另一半，业主裁决 4）：这一格从 `child_count` 改名
+#: `children_unretired` —— 这个名字量的是「名册里还没销号的子」，不是「台账里挂了几个子」；
+#: 后者是网页名册面那一格，已经叫 `children_in_ledger`（`webui.readers.roster_face`）。
+#: 两个量两个名，说明各写在自己的那一处：这里 → 名册 / 未销号；那边 → 台账 / 含未落名册。
+CHILD_COUNT_KEY = "children_unretired"
 ACTIVE_CHILD_COUNT_KEY = "active_child_count"
 CHILD_COUNT_LABELS: dict[str, str] = {CHILD_COUNT_KEY: "子代理数",
                                       ACTIVE_CHILD_COUNT_KEY: "活跃子代理数"}
+#: 每个名字量的是什么的一句说明（业主 2026-11-03 裁决 4 的"两处都加一句说明"）：
+#: 中文名给人看（上面那张表，保持短），口径读这里。两个量各一句，谁也不许含糊：
+#: - `children_unretired`：名册里还没销号的名册项数（不是台账里的子数 ——
+#:   台账那一格是网页名册面的 `children_in_ledger`，含没落名册的子）；
+#: - `active_child_count`：其中非静默的数量（在飞 + 待机；unknown 既不算活跃也不算静默）。
+CHILD_COUNT_CALIBERS: dict[str, str] = {
+    CHILD_COUNT_KEY: "名册里未销号的名册项数（不是台账里的子数；台账那一格是网页名册面的 "
+                     "children_in_ledger，含没落名册的子）",
+    ACTIVE_CHILD_COUNT_KEY: "上述名册项里非静默的数量（在飞 + 待机；unknown 既不算活跃也不算静默）",
+}
 
 #: 信息型板项的 `kind`：读进提示词那一拍就消费完 ⇒ "seen 即 ack"（D12；判据与理由在
 #: `Conductor` 的"工作项板"那一节，落点是 `Conductor.mark_item_seen`）。
@@ -5711,7 +5726,7 @@ class Conductor:
         """子树里还在活跃的节点（受控拒绝要点名的那一份读数）。
 
         返回 `{"checked","rows","active_count","subtree_size","busy_root_ids",
-        "child_count","active_child_count","reason"}`：
+        "children_unretired","active_child_count","reason"}`：
         - `rows`：只放活跃的节点，次序照 :meth:`subtree_postorder`（最深的在前）；
           每行带 `task_id` / `role` / `status` / `self_busy` / `waiting_only` / `note`
           与 `busy`（把它撑成活跃的那些"真在跑"的节点，含它们在做什么）——
@@ -5726,14 +5741,14 @@ class Conductor:
         order = self.subtree_postorder(root_task_id)
         if not order.get("checked"):
             return {"checked": False, "rows": [], "active_count": 0, "subtree_size": 0,
-                    "busy_root_ids": [], "child_count": None,
+                    "busy_root_ids": [], "children_unretired": None,
                     "active_child_count": None,
                     "reason": str(order.get("reason") or "子树判不了")}
         snap = self.activity_snapshot()
         if not snap.get("checked"):
             return {"checked": False, "rows": [], "active_count": 0,
                     "subtree_size": len(order.get("order") or []), "busy_root_ids": [],
-                    "child_count": None, "active_child_count": None,
+                    "children_unretired": None, "active_child_count": None,
                     "reason": str(snap.get("reason") or "活跃读数没读成")}
         by_task = dict(snap.get("by_task") or {})
         row_of = {str(r.get("task_id") or ""): r for r in order.get("rows") or []}
@@ -5763,7 +5778,7 @@ class Conductor:
         return {"checked": True, "rows": out, "active_count": len(out),
                 "subtree_size": len(order.get("order") or []),
                 "busy_root_ids": sorted(busy_ids),
-                "child_count": None, "active_child_count": None, "reason": ""}
+                "children_unretired": None, "active_child_count": None, "reason": ""}
 
     def inside_subtree(self, root_task_id: str, task_id: str) -> dict[str, Any]:
         """`task_id` 是不是在 `root_task_id` 这一支下面（含它自己）。三态。

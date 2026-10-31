@@ -2171,7 +2171,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p224"
+_FROZEN_PROMPT_VERSION = "p225"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2372,17 +2372,17 @@ _FROZEN_PROMPT_VERSION = "p224"
 # 逐笔出处写在 `agent_prompts.PROMPT_VERSION` 上方 p222 那一格（p219 起不再逐版往这里重抄：
 # 同一件事两处说法，两处就会漂）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "822362d286cd603f1222f7520b181656b4f8b751968aefe6fc687220ce2ca0d3",
-    "B": "d4ad691177fe6b55f6c8970cb16c8e24382d999e147cacba8ca8e2e48d755db4",
-    "C": "03661adca70c0017f3d3ff3314725c1134ae2e28930b57c087add8a3028ce429",
-    "D": "e890bd3a1c3dfbe3c385ad10bfd1bf6659805a8c22555ac253bc9f14b4617000",
-    "E": "4082aceab2270b61f39916be35137cd115a6f71e4e358957524193fea832e74c",
-    "F": "6d606f063d92e42f70c9db82ee649b817aa83da0c349831f75a131ff96dc643c",
-    "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
-    "H": "425e071ad7c5c6f00a9d20c6d61b34c42a3af8cef609a8eb72f5e60223502f2f",
-    "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
-    "M": "c654c2105b7352acf21058bf1f235e05b13b4c92153c1d1fbd4950c3eb64ee79",
-    "V": "3cf2517975098d2c76656e5519ee94c5a20f546e02e821543d12dce65342ee50",
+    "A": "faa859c11e8cce08612d971320f93e695840fe8e5d1ff4a98a4ba5ec02af95ba",
+    "B": "627f8e2a4b509f6c0aa0126132a145cd9029c3a9e7e8fcb5a38291e722144bb3",
+    "C": "a1d8cfc1bec0dd920cbc3208558cc8e57439b4100ff86eb5893202b1aeb52778",
+    "D": "55e4349152f9cb1d1aba53199040f3919d5ee2813d0f297d868b923a343172eb",
+    "E": "3d8b7d392f911123c54fc6bd6e322e335b0c821fb985680a5f4cfc10acc1e488",
+    "F": "507ba201443ec1b061caf53facd5eafac0e7887bd57ffcbec92cbbd93d5d4ad6",
+    "G": "8ec81e89b61876366292cdb2b8dae4974f6376541a602d9ee31716c65925e5f8",
+    "H": "e23e2f50c9e878bd7c18c9e8179723aca2e966e242e31fb07f2f042f5895516b",
+    "L": "bf25c613bf9449affe4bd6354b68f58473f8f202a0243ad1aee2f0d4eebc09a5",
+    "M": "66d1156a7807f6ab3ad07c23f433730e16e3b92b29fb20019180b2db3da17761",
+    "V": "f291a4b921e8dea0e20ed4b41417610944cae9f71090e37d226e7f5372c60f7e",
 }
 
 

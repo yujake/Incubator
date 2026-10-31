@@ -4495,7 +4495,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("tasks", "RosterTask[]"),
       # 2026-10-25（业主截图：「子 N」只数名册项，漏掉"有父但没落名册"的那些）：
       # `children_in_ledger` 是台账里的子数（台账读不到 ⇒ null，不是 0；这个名字量的
-      # 是"这个节点在台账里挂了几个子"，与收工读数的 `child_count`（名册未销号项数）
+      # 是"这个节点在台账里挂了几个子"，与收工读数的 `children_unretired`（名册未销号项数）
       # 是两个量），
       # `roster_child_count` 是名册项数，`unrostered_children` 是"有父、没落名册"的那些
       # （编号 + 角色 + 状态；它们同时仍进页面底部的 `unplaced`，两处同一口径）。

@@ -338,8 +338,8 @@ def test_d_the_seat_count_and_the_ledgers_do_not_drift(tmp_path: pathlib.Path) -
             problems.append(f"{tag}：席位读数={seats.get('count')} 与台账在飞数={len(ledger)} 分家")
         if counts.get("checked") is not True:
             problems.append(f"{tag}：名册读数没读成（{counts.get('reason')}）")
-        elif int(counts.get("child_count") or 0) != len(ledger):
-            problems.append(f"{tag}：名册未销号项={counts.get('child_count')} 与台账在飞数"
+        elif int(counts.get("children_unretired") or 0) != len(ledger):
+            problems.append(f"{tag}：名册未销号项={counts.get('children_unretired')} 与台账在飞数"
                             f"={len(ledger)} 分家")
         # "活跃子代理数"（= 非静默）比占位数少的那些，必须正好是"已静默、还能销"的那几格。
         silent_seats = [s for s in (seats.get("seats") or []) if s.get("retirable")]

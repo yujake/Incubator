@@ -317,7 +317,7 @@ def test_c_the_question_does_not_retire_anything(tmp_path: pathlib.Path) -> None
     # 名册上它还占着一位（销号会把它从"子代理数"里减掉，`child_counts` 是那个读数的
     # 唯一口径）：问询落了之后这个数不许动。
     counts = env["sec"].child_counts(owner=str(env["owner"]))
-    assert counts.get("child_count") == 1, counts
+    assert counts.get("children_unretired") == 1, counts
 
 
 # ====================================================================== d) 停滞读数

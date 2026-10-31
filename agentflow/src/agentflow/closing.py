@@ -3731,7 +3731,7 @@ class ClosingReport:
         cc_note = ""
         if isinstance(cch, Mapping):
             if cch.get("checked"):
-                cc_note = (f"；名册 子代理数={cch.get('child_count')}，"
+                cc_note = (f"；名册 子代理数={cch.get('children_unretired')}，"
                            f"活跃子代理数={cch.get('active_child_count')}")
                 waiting = cch.get("waiting_only") or []
                 if waiting:
@@ -5684,10 +5684,10 @@ def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
         # 缝从哪来写进 `Secretary.model_source`（秘书档没配 key 时它连着为什么）。
         got = for_role_wired(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
     except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
-        return {"checked": False, "child_count": None, "active_child_count": None,
+        return {"checked": False, "children_unretired": None, "active_child_count": None,
                 "reason": f"{type(exc).__name__}: {exc}"}
     if not isinstance(got, Mapping):
-        return {"checked": False, "child_count": None, "active_child_count": None,
+        return {"checked": False, "children_unretired": None, "active_child_count": None,
                 "reason": "名册读数不是对象 ⇒ 没查成"}
     return dict(got)
 

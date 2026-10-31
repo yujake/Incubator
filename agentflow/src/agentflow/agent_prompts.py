@@ -2480,7 +2480,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      `idle` = 台账里有它、但当前不在跑，收尾那类也算这一档；`ready` = 台账里没有它这一
 #:      行、已经不在跑仍可续）；另补三格 `agent_state` / `active` / `waiting_only` ＋
 #:      `waiting_note`（"它到底算不算活着"与 `in_flight` 不是同一件事），视图顶上补
-#:      `child_count` 与 `active_child_count`（两个数不许相加、不许互相代替）。
+#:      `children_unretired` 与 `active_child_count`（两个数不许相加、不许互相代替）。
 #:   ⑤ LOOP_SHAPE_09（停下当前那一轮）：删掉「不在册/已结束的会静默 no-op」——它把两种
 #:      结局折成一档；现在分写：名字不在名册里 ⇒ 受控拒绝 `not_mine`（越界的不许停）；
 #:      名字在名册里、而台账里那条活已经不在了 ⇒ 静默 no-op（`accepted` ＋ `no_op`）。
@@ -2870,7 +2870,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    重冻（11 个角色各一行版本号 + D / M 的两段正文）+ `docs/ROLE-GUIDE.md` 重生成。
 #: ③ 已知待办（与 p220 / p221 / p222 同一句）：`tests/fixtures/prompt_cache_warm.json`
 #:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
-PROMPT_VERSION = "p224"
+PROMPT_VERSION = "p225"
 
 
 
@@ -3057,7 +3057,8 @@ LOOP_PROTOCOL = """\
    摘要）。另外三格回答的是"它到底算不算活着"，与 `in_flight` 不是同一件事，别互相代替：
    `agent_state`（在飞 / 待机 / 静默 / 未读到）、`active`（按继承口径算不算活跃 —— 有活跃
    下级的、正在等的都算）、`waiting_only` + `waiting_note`（"它只是在等"的那句人话）。
-   视图顶上还有两个数：`child_count`（名下未销号的名册项数）与 `active_child_count`
+   视图顶上还有两个数：`children_unretired`（名下**名册里未销号**的名册项数 —— 不是台账里的
+   子数；台账那一格是网页名册面的 `children_in_ledger`）与 `active_child_count`
    （其中非静默的数量）—— 两个数不许相加、不许互相代替。
 
 9) 让一个子代理**停下当前那一轮**（父决定；**只停它自己那一轮** —— 它排队收到的消息还在、

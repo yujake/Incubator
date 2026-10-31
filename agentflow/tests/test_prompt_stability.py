@@ -684,7 +684,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 上一格同值（现算值，不手抄）。这一格存在的理由同 p220-p223：版本抬了就记一格。
     {"version": "p224", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p224（2026-11-03 · 业主批准动禁改区）：`can_close` 拆成两个名字 —— `m_says_done` 是 M 的判断，`can_close` 是机器口径（bool | None，None = 没接线/算不出来，不许读成通过）；M 的交付说明那一段随之改写（三个名字的分工）。facts 键集仍 15 格（键名与条数一格未动）"}
+     "note": "抬版本 p224（2026-11-03 · 业主批准动禁改区）：`can_close` 拆成两个名字 —— `m_says_done` 是 M 的判断，`can_close` 是机器口径（bool | None，None = 没接线/算不出来，不许读成通过）；M 的交付说明那一段随之改写（三个名字的分工）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p224 -> p225（2026-11-03，业主批准动禁改区 · FC-27）：收工那格改名
+    # `child_count` -> `children_unretired`（153-U-13 的另一半）—— M 的名册视图那一段
+    # 逐字引着这个键名，所以提示词变了。一格事实的落点都没挪 ⇒ count / keys_sha256
+    # 与上一格同值（现算值，不手抄）。
+    {"version": "p225", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p225（2026-11-03 · 业主批准动禁改区）：收工读数那格从 child_count 改名 children_unretired（它数的是名册里未销号的子，不是台账子数；台账那一格是网页名册面的 children_in_ledger）。M 的名册视图那一段跟着改，facts 键集仍 15 格（键名与条数一格未动）"}
 
 )
 
