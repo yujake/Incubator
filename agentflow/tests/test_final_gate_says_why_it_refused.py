@@ -18,14 +18,14 @@
 
 ## 业主的裁定（2026-11-03 第 ③ 条）
 
-- `checked=False` **一律挡**（fail-closed），与"A 的读不全 ⇒ 不叫醒"同一口径；
-- `why` 必须写**真原因**，不许再出现"还有节点没销号"这种假原因；
+- `checked=False` 一律挡（fail-closed），与"A 的读不全 ⇒ 不叫醒"同一口径；
+- `why` 必须写真原因，不许再出现"还有节点没销号"这种假原因；
 - 并给一句"这种情形下怎么继续"的指路。
 
 ## 这条判据钉住什么
 
 1. 四条读不成的路径（没 conductor / 没 `retire_integrity` / 它抛异常 / 它自己报
-   `checked=False`）**一律** `applicable=True` 且 `complete=False`；
+   `checked=False`）一律 `applicable=True` 且 `complete=False`；
 2. 四句 `why` 各不相同、都非空、都说出真原因（点名哪一格没查成；抛异常那一条带异常名），
    且都不含"还有节点没销号"；
 3. 四句 `why` 都带指路（`conductor.state`）；
@@ -87,7 +87,7 @@ def _refused(reading: dict[str, Any]) -> bool:
 #: (名字, conductor, 拒信里必须出现的真原因片段)
 _BROKEN: tuple[tuple[str, Any, str], ...] = (
     ("no_conductor", None, "没有台账"),
-    ("no_retire_integrity", _NoIntegrity(), "没有 retire_integrity"),
+    ("no_retire_integrity", _NoIntegrity(), "没有 `retire_integrity`"),
     ("raises", _Cond(raises="台账文件读不成（判据构造）"), "RuntimeError"),
     ("retire_says_unchecked", _Cond({"checked": False, "complete": False,
                                      "root": "t-000001", "count": 0, "total": 0,

@@ -650,6 +650,32 @@ def _refusal_stop_line(*, streak: int, limit: int, key: str, what: str) -> str:
             "把它真的办掉之后再来收工（`--resume` 可以接着跑）。")
 
 
+def final_refusal_beats_text(first_refusal: Mapping[str, Any] | None,
+                             final_gate: Mapping[str, Any] | None) -> str:
+    """补救窗口用尽时那一句"它到底试没试过销号"（进 `run.stop_reason` 的收尾读数）。
+
+    三档，判据是"在册节点数变了没有"这个结构读数，不去猜它调过哪件工具。
+
+    2026-11-03（153-U-04）补第四档：先问 `checked`。改前这里直接拿 `count` 比
+    `count`，而 `checked=False` 的那几档 `count` 恒 0 ⇒ 比出来是"从 0 减到 0"，
+    落到第三档那句"在册节点已清空，卡在已销号节点名下的未消项" —— 假原因
+    （台账根本没读成，谈不上清空）。所以 `checked` 不是真值时先说"没查成"。
+    """
+    first = dict(first_refusal or {})
+    last = dict(final_gate or {})
+    if not last.get("checked"):
+        return ("这一格始终没查成（"
+                f"{str(last.get('reason') or first.get('reason') or '没给原因')}）"
+                "⇒ 在册数读不出来：既不能说清空了，也不能说它没试过销号")
+    was = int(first.get("count") or 0)
+    now = int(last.get("count") or 0)
+    if now < was:
+        return f"在册从 {was} 个减到 {now} 个：它动过销号工具，只是没销干净"
+    if now > 0:
+        return f"在册仍是 {now} 个，一个都没少：它一次都没试过销号"
+    return "在册节点已清空，卡在已销号节点名下的未消项（见上面那句 why）"
+
+
 def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
     """一个有效步的简报行：模型说了什么 + 框架执行结果（键序见 `_canonical`）。"""
     return _spoken_half(step, payload) + _result_half(result)
@@ -6761,9 +6787,9 @@ class AgentLoop:
         - `applicable`：这道闸对这一趟有没有对象 —— 只有主控 M 有（其余角色名下没有
           "整棵树"这回事），所以非 M 一律 `applicable=False, complete=True`（放行，且
           不落噪声）；"不是 M"是查过了的结论，不是"没查成"；
-        - `checked`：台账读到没有。读不成 ⇒ `checked=False` 但这一趟照旧放行
-          （没有台账的那一趟本来就不在这道闸的射程里：`run_role` 拿不到 conductor 时
-          连台账号都没有），同时把"这一格没查成"写进 `run.notes` —— 不许静默；
+        - `checked`：台账读到没有。读不成 ⇒ `checked=False` 且这一趟也挡住
+          （业主 2026-11-03 的裁定 ③：fail-closed，与"A 的读不全 ⇒ 不叫醒"同一口径）：
+          "有没有树、清没清"这件事不知道的时候，不许把它读成"干净"；
         - `complete`：这一支全部销号了没有（`nodes` 与 `dirty` 都空），并且这一支名下
           没有还在跑的程序（`programs_ok`）。两条轴各自给读数，合起来才是"可以收工"；
         - `nodes` / `dirty` / `count` / `total` / `root_open_items`：判据本体在
@@ -6816,15 +6842,31 @@ class AgentLoop:
         mine = str(self.my_task_id or "")
         if cond is None or not mine:
             reading["checked"] = False
-            reading["reason"] = ("这一趟没有台账（conductor 或台账号是空的）⇒ "
-                                 "名下那棵树查不成，这一格按没查成记，不按干净记")
+            reading["complete"] = False
+            # 业主 2026-11-03 的裁定 ③：这一支改前是"照旧放行"，现在是挡（fail-closed）。
+            # 为什么不让它放行：这一趟是主控（`role == M` ⇒ 这道闸有对象），却读不到
+            # "名下那棵树"，于是"清没清"不知道 —— 不知道不许写成"干净"。
+            missing = "conductor 没接上" if cond is None else "台账号是空的"
+            reading["why"] = (
+                f"还没收工：这一趟没有台账（{missing}，"
+                f"{reading.get('root') or '（空）'}）⇒ 名下那棵树查不成，"
+                "这一格按『没查成』挡，不按『干净』放行"
+                " ⇒ 先跑 `conductor.state` 看这一趟有没有接上 conductor，"
+                "接上之后再发 final（结构完整性闸）")
             if run is not None:
-                run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
+                run.notes.append(f"收工前的销号完整性没查成：{reading['reason'] or missing}")
             return reading
         look = getattr(cond, "retire_integrity", None)
         if not callable(look):
             reading["checked"] = False
+            reading["complete"] = False
             reading["reason"] = "conductor 没有 retire_integrity（这一格没接上）"
+            reading["why"] = (
+                f"还没收工：{reading.get('root') or mine} 那棵树读不成 —— "
+                "这个 conductor 没有 `retire_integrity`（这一格没接上），"
+                "于是『整棵树都销号了没有』不知道 ⇒ 按『没查成』挡"
+                " ⇒ 先跑 `conductor.state` 确认这台机器上的 conductor 是哪一版，"
+                "换一个带 `retire_integrity` 的再收工（结构完整性闸）")
             if run is not None:
                 run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
             return reading
@@ -6832,13 +6874,26 @@ class AgentLoop:
             got = look(mine)
         except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"干净"
             reading["checked"] = False
+            reading["complete"] = False
             reading["reason"] = f"{type(exc).__name__}: {exc}"
+            reading["why"] = (
+                f"还没收工：{reading.get('root') or mine} 那棵树读不成 —— "
+                f"`retire_integrity` 抛了 {reading['reason']} ⇒ 按『没查成』挡，"
+                "不按『干净』放行"
+                " ⇒ 先跑 `conductor.state` 看台账与 conductor 还在不在，"
+                "修好再发 final（结构完整性闸）")
             if run is not None:
                 run.notes.append(f"收工前的销号完整性没查成（{reading['reason']}）")
             return reading
         if not isinstance(got, Mapping):
             reading["checked"] = False
+            reading["complete"] = False
             reading["reason"] = "retire_integrity 的读数不是对象"
+            reading["why"] = (
+                f"还没收工：{reading.get('root') or mine} 那棵树读不成 —— "
+                "`retire_integrity` 返回的不是对象（这一格的契约变了）⇒ 按『没查成』挡"
+                " ⇒ 先跑 `conductor.state` 看这一版读数是什么形状，"
+                "再接一版能读的（结构完整性闸）")
             if run is not None:
                 run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
             return reading
@@ -6847,6 +6902,13 @@ class AgentLoop:
                 reading[key] = got[key]
         reading["applicable"] = True
         if not reading.get("checked"):
+            reading["complete"] = False
+            why = (f"还没收工：{reading.get('root') or mine} 那棵树读不成 —— "
+                   f"`retire_integrity` 自己报『没查成』（{reading.get('reason') or '没给原因'}）"
+                   " ⇒ 按『没查成』挡，不按『干净』放行"
+                   " ⇒ 先跑 `conductor.state` 看这一趟的台账读到没有，"
+                   "读得到再发 final（结构完整性闸）")
+            reading["why"] = why
             if run is not None:
                 run.notes.append(f"收工前的销号完整性没查成（{reading.get('reason')}）")
             return reading
@@ -7784,7 +7846,16 @@ class AgentLoop:
                 # 补救拍（下面那一支），连着被拒满 `max_final_refused` 才以 `final_refused` 收尾。
                 final_gate = self._final_gate_reading(run)
                 if final_gate.get("applicable") and not final_gate.get("complete"):
-                    why = str(final_gate.get("why") or "还有节点没销号 ⇒ 不记 final")
+                    # 拒信只说真原因：`_final_gate_reading` 在"挡住"这一支一定给了
+                    # `why`（四条读不成的路径各写各的，判据
+                    # `tests/test_final_gate_says_why_it_refused.py` 钉着这件事）。
+                    # 改前这里有一句兜底串（"还有节点没销号"，见 153-U-04）：`why` 一旦为空，
+                    # 它就会把"台账读不成"说成"还有节点没销号" —— 假原因，已删。
+                    why = str(final_gate.get("why") or "")
+                    if not why:
+                        why = ("收工门没过，而这一格没给出原因（这本身是个缺陷："
+                               "`_final_gate_reading` 挡住时必须写 why）⇒ 读数见 "
+                               f"{final_gate.get('reason') or '同一条的 reason 也是空的'}")
                     run.notes.append(why)
                     # 清单进这一步的结果：模型下一轮读得到（有几种工具能处置它）；
                     # 落盘的那一份在 `agent_run_end.notes` 与 `runs/*.json` 的 steps 里。
@@ -7817,14 +7888,9 @@ class AgentLoop:
                         #   · 一拍都没动手（在册数一个没少）⇒ 下一步要先问它卡在哪。
                         # 判据是"在册节点数变了没有"这个结构读数，不去猜它调过哪件工具
                         # （按工具名匹配会把"换了个写法"判成"没试"，而那种误判恰好最贵）。
-                        was = int((first_refusal or {}).get("count") or 0)
-                        now = int(final_gate.get("count") or 0)
-                        if now < was:
-                            seen = f"在册从 {was} 个减到 {now} 个：它动过销号工具，只是没销干净"
-                        elif now > 0:
-                            seen = f"在册仍是 {now} 个，一个都没少：它一次都没试过销号"
-                        else:
-                            seen = "在册节点已清空，卡在已销号节点名下的未消项（见上面那句 why）"
+                        # 2026-11-03（153-U-04）：第三档还必须再分一次 —— `checked=False`
+                        # 的那两档 `count` 恒 0，拿它去比会得出"已清空"这句假话。
+                        seen = final_refusal_beats_text(first_refusal, final_gate)
                         run.stop_reason = "final_refused"
                         run.notes.append(
                             f"收工被拒之后补救了 {run.final_refused_beats} 拍仍不完整"
