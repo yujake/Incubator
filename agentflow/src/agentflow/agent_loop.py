@@ -3541,8 +3541,8 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— 2026-10-22 按业主
     口径从 fail-open 改成 fail-closed，那之前它是"退回原来的路照发，读数标出来"）、`parent` / `child`
     （解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受
-    控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名匹
-    配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
+    控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名或
+    绝对编号匹配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
     这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission` 那一份唯一实现。
 
     ## `addressed_by`（D-63，业主 2026-10-24：「现在怎么还有to谁的写法？已经是名册机制了！」）
@@ -3602,6 +3602,19 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
            and str(m["task_id"]) != mine]
     how_hint = token
     addressed_by = "task_id" if hit else ""
+    if len(hit) > 1:
+        # ⑦（业主 2026-11-02）：同一个号在名册上对应多个成员 ⇒ 拒歧义，不静默取 hit[0]。
+        # 改前这里 `member = hit[0]`：按号寻址会静默把信投给名字排序第一个的那个成员，
+        # 而"同一个号两个名字"正是名册重复里最危险的一档（第二个名字永远收不到）。
+        names = sorted(str(m.get("name") or m.get("task_id") or "") for m in hit)
+        out.update(checked=True, how="ambiguous_in_roster", task_id=token,
+                   candidates=names, refused="ambiguous_in_roster",
+                   error=(f"绝对编号 {token} 在你的名册上对应 {len(names)} 个成员"
+                          f"（{'、'.join(names)}）⇒ 受控拒绝：不替你挑一个 —— "
+                          "同一个号不该有两个名字（这一份名册要人核）；"
+                          "核清之前请写名册名，或换一个号"),
+                   why=f"按号多匹配：{names}（同一个号两个名字）")
+        return out
     # ② 名册名
     if not hit:
         hit = [m for m in members if str(m.get("name") or "") and str(m["name"]) == token]

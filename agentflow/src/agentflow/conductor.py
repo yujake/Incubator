@@ -2985,13 +2985,18 @@ class Conductor:
                          meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """把"刚建立的那个子行"登记进 `owner` 的名册。
 
-        返回 `{name, problem, considered, state, note}`，后两格是写侧的三态读数：
+        返回 `{name, problem, considered, state, note}`（写口拒绝时另带
+        `refusal_code`：`name_taken` / `task_id_reused` / `task_id_retired`），后几格是
+        写侧的三态读数：
 
         - `state="written"`：名册三份都读得到"这一趟的那一行"；
         - `state="missing"`：至少一份没写成，`problem` 逐份给文件名与原因；
         - `state="unknown"`：读不到（不许折成"写成了"，也不许折成"没写成"）；
         - `state=""`：这一趟根本没有"登记"这一步（只在调用方没走这条漏斗时出现）；
         - `note` 非空 = 写成了，但父给的那几格被写侧兜底换过（不是失败）。
+
+        写口拒绝（`refusal_code` 非空）直接原样返回：不重试、不跑下面的兜底自愈
+        （业主 2026-11-02：撞名字不再由框架顺延换名，交父决定）。
 
         六条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
         1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
@@ -3058,27 +3063,18 @@ class Conductor:
         got = got if isinstance(got, Mapping) else {}
         name = str(got.get("name") or "")
         raised = str(got.get("problem") or "")
-        # ---- 名字撞车时的补救（2026-10-29 真机 paper-rewrite-80 的真因）
+        refusal_code = str(got.get("refusal_code") or "")
+        # ---- 写口拒绝（业主 2026-11-02：「撞名 ⇒ 静默换名」去掉，改成 name_taken 拒绝）
         #
-        # 父可以自己给名字（`targets[].name`）。真机上 M 第二批扇出沿用了第一批的
-        # D1/D2/D3，而这三个名字已经绑在别的 task_id 上 ⇒ 秘书按"用过的名字不再发给
-        # 另一个子代理"受控拒绝 ⇒ 那三条子代理台账有、名册没有（页面报"未落名册的子"），
-        # 而这次拒绝只经 `_log`（本配置没有日志钩子）⇒ 盘上一点痕迹都没留下。
-        #
-        # 处理：撞名字不是"不许登记"，而是"这个名字配不上这一条" ⇒ 改由框架顺延发号，
-        # 并在 note 里写明换过名字。"每条建立的子行恰好登记一次"因此仍然成立。
-        renamed_from = ""
-        if raised and want_name and ("已经用过" in raised or "不再发给另一个子代理" in raised):
-            try:
-                retry = sink.roster_add(**{**kwargs, "want_name": "", "new": str(role)})
-            except Exception as exc:  # noqa: BLE001
-                retry = {"problem": f"{type(exc).__name__}: {exc}"}
-            retry = retry if isinstance(retry, Mapping) else {}
-            if not str(retry.get("problem") or ""):
-                renamed_from = want_name
-                got = retry
-                name = str(got.get("name") or "")
-                raised = ""
+        # 改前这里在 `want_name` 撞车时替父改主意：改发一个顺延的新名字继续登记，
+        # 只把换名写进 note（`draft/150` §5.2-④ 点名的第二次入口）。现在三种写口拒绝
+        # （name_taken / task_id_reused / task_id_retired）一律原样交回父决定：
+        # 不重试、也不跑下面的兜底自愈 —— 自愈会把刚被拒的这一条按新名字补进去，
+        # 那等于换个地方继续静默改名。
+        if refusal_code:
+            return {"name": name, "considered": True, "state": "missing",
+                    "problem": f"{task_id}：名册拒绝登记（{refusal_code}）—— {raised}",
+                    "refusal_code": refusal_code, "note": note}
         reading = self._roster_files_reading(
             sink=sink, owner=str(owner), name=name, task_id=str(task_id),
             surface=str(got.get("surface") or ""))
@@ -3104,10 +3100,6 @@ class Conductor:
             problem = (f"{task_id}：秘书没有发名（返回的 name 是空串）⇒ 名册项没有名字，"
                        "按没写成报" + (f"；{problem}" if problem else ""))
             raised = ""
-        if renamed_from:
-            note = (note + "；" if note else "") + \
-                   (f"父给的名字 {renamed_from} 已经绑在别的子代理上 ⇒ 改用框架顺延发的 {name}"
-                    "（撞名字不是不登记：那会让台账有、名册没有）")
         if raised:
             if problem:
                 problem += f"；秘书那一侧的原话：{raised}"

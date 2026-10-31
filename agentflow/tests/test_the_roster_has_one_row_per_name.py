@@ -389,7 +389,8 @@ def test_r7_addressing_by_a_shared_task_id_refuses_ambiguity(tmp_path: pathlib.P
     assert got.get("checked") is True, got
     assert str(got.get("refused") or "") == "ambiguous_in_roster", got
     assert sorted(got.get("candidates") or []) == ["D1", "D2"], got
-    assert str(got.get("task_id") or "") == "", got
+    assert str(got.get("task_id") or "") == shared, got
+    assert str(got.get("kind") or "") == "", got
     assert "不替你挑一个" in str(got.get("error") or ""), got
     # 反真空：按名字仍能各自寻址（拒的是"按号多匹配"，不是把这两个名字一起废掉）。
     one = roster_addresses(sec, to="D1", owner=owner, my_task_id="t-999999")
