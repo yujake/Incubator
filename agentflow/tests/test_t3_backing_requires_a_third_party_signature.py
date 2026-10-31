@@ -262,6 +262,10 @@ def _assert_defective_cannot_back(tmp_path: pathlib.Path) -> None:
     assert "第 4 步" in text, text
     assert "有毛病" in text, text
     assert _backing_reading(rep)["states"]["defective"] == 1, _backing_reading(rep)
+    # 去重（`draft/154` §三）：这一行已经被承重门逐条点名 ⇒ 那条 warning 不许再说第二遍。
+    assert "suspect_self_signed" not in {f.code for f in rep.findings}, (
+        f"承重门已经点名 exp:{row['experiment_id']}，warning 又报了一遍："
+        f"{[f.code for f in rep.findings]}")
 
 
 def test_2_a_defect_verdict_does_not_back_and_names_the_step(
@@ -289,6 +293,10 @@ def _assert_unsigned_cannot_back(tmp_path: pathlib.Path) -> None:
     assert rep.status["load_bearing"] == "fail", rep.to_dict()
     assert "没审过" in _reasons(rep), _reasons(rep)
     assert _backing_reading(rep)["states"]["unsigned"] == 1, _backing_reading(rep)
+    # 去重（`draft/154` §三）：承重门已经点名过它 ⇒ 那条 warning 不再说第二遍。
+    assert "suspect_self_signed" not in {f.code for f in rep.findings}, (
+        f"承重门已经点名 exp:{row['experiment_id']}，warning 又报了一遍："
+        f"{[f.code for f in rep.findings]}")
 
 
 def test_3_a_report_never_reviewed_is_not_a_report_without_defects(
@@ -363,3 +371,27 @@ def test_5_stubbing_the_backing_check_makes_2_3_4_red(
                  _assert_stale_cannot_back):
         with pytest.raises(AssertionError):
             body(tmp_path / body.__name__)
+
+
+# ------------------------------------------------------------------ ⑥ 去重的另一半
+
+def test_6_an_uncited_row_is_named_exactly_once_by_the_warning(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑥ 没被正文引到的自签穷举行仍然被那条 warning 点名一次（只报不拦）。
+
+    真机存量（`paper-rewrite-78` 的 `000078`、`r34c` 两条、`r34d` 三条，共 6 条 unsigned）
+    就是这个形态：承重门碰不到它们（正文里没有 proof 级断言引到它们），所以只由这条 warning
+    点名。去重之后恰好一次 —— 既不许因为它不进 blocker 就消失（那是"不报也不拦"），
+    也不许在被引到时与承重门那条 finding 各说一遍。
+    """
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+    st, row = _world(tmp_path)
+    assert not (pathlib.Path(st.root) / VR.VERIFICATIONS_DIR).exists()
+    rep = CL.check_closing(st, checks=("load_bearing",), project_dir="", report_path="")
+    assert rep.status["load_bearing"] == "pass", rep.to_dict()
+    warnings = [f for f in rep.findings if f.code == "suspect_self_signed"]
+    assert len(warnings) == 1, [f.code for f in rep.findings]
+    assert row["experiment_id"] in str(warnings[0].detail), warnings[0].detail
+    assert "没被正文引到" in str(warnings[0].detail), warnings[0].detail
+    assert warnings[0].level != "blocker", warnings[0].level      # 只报不拦
+    assert rep.readings["suspect_self_signed"]["states"]["unsigned"] == 1, rep.readings
