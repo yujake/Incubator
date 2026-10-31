@@ -487,6 +487,19 @@ def _fixture_workspace(tmp: pathlib.Path) -> pathlib.Path:
     return root
 
 
+def _rows_union(rows: Any) -> set[str]:
+    """一栏里所有行的键的并集（空栏 / 非列表 ⇒ 空集）。
+
+    为什么是并集而不是第一行：同一个接口的多行形状不必相同。E4 的 `max` 就是
+    "夹具第一行是 min 档、真机 60/99 份工作区是 max-only 行"漏掉的 —— 判据的
+    取键范围必须覆盖每一行。并集抽成模块级函数，是为了让"它真的是并集"能被单独
+    钉住（负控：第二行才出现的键必须被看见）。
+    """
+    if not isinstance(rows, list):
+        return set()
+    return {str(key) for row in rows if isinstance(row, dict) for key in row}
+
+
 def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     """后端在这个工作区上真读出来的键集合（一栏一个接口）。
 
@@ -509,9 +522,12 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
         # 验收表三行全是 `min` 档，于是"真机 60/99 份工作区里那些 `max` 档行"在
         # 这条判据的世界里根本不存在：`types.ts` 把 `min` 写成必填、把 `max` 漏掉，
         # 契约 C 照样全绿，而页面把 `String(undefined)` 印上屏。行一级的类型该覆盖
-        # 每一行的键（同一个接口的多行形状不必相同），所以现在取并集。
-        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            out[name] = {key for row in rows if isinstance(row, dict) for key in row}
+        # 每一行的键（同一个接口的多行形状不必相同），所以现在取并集 —— 并集本身
+        # 抽成模块级的 :func:`_rows_union`，判据可以单独钉它（负控见
+        # `tests/test_webui_types_cover_every_row.py` 的 ③）。
+        got = _rows_union(rows)
+        if got:
+            out[name] = got
 
     snap = W.snapshot(root)
     out["StateSnapshot"] = set(snap)

@@ -352,7 +352,7 @@ function NodeDetail(props: { node: RosterNode }) {
         </span>
       </div>
       <div class="row">
-        子（{typeof n.child_count === "number" ? n.child_count : n.children.length}）：
+        子（{typeof n.children_in_ledger === "number" ? n.children_in_ledger : n.children.length}）：
         <span class="roster-children">{childText(n.children)}</span>
       </div>
       <div class="row">
@@ -454,6 +454,19 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             </span>
             <Badge kind="badge-unknown" text={node.role === "" ? "unknown" : node.role} />
             <span class="mono">{node.task_id === "" ? "unknown" : node.task_id}</span>
+            {/* 2026-11-03（E10）：`registered === false` = 这棵树来自台账兜底档
+                （`out/roster/` 没读到、`data/tasks.json` 里有带父的代理行），
+                它不在任何名册项上。名册档的节点「不带」这一格（= 它在名册上），
+                所以判据写成 `=== false` 而不是 `!node.registered` —— 后者会把
+                "名册档"与"兜底档"画成同一个样子。 */}
+            {node.registered === false ? (
+              <Badge
+                kind="badge-unknown"
+                text="台账兜底"
+                title={"这一棵树来自 data/tasks.json（名册 out/roster/ 没读到）⇒ "
+                  + "它不在任何名册项上（registered=false）。名册档的节点不带这一格"}
+              />
+            ) : null}
             <span class="readings">{childCountText(node)}</span>
             {/* 「▸ 活 N（飞 a · 待 b）」：N = 非静默（在飞 + 待机），不是 children.length
                 （业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」）。

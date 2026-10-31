@@ -947,6 +947,7 @@ export interface RosterNode {
   children_in_ledger: number | null;
   roster_child_count: number;
   unrostered_children: RosterUnrostered[];
+  registered?: boolean;
 }
 
 /** 出处：roster_face() 的 nodes[].unrostered_children[] 一项 —— 台账里有父、名册正文与对照表里都没有任何名册项接过的那一行（它同时仍进页面底部的 `unplaced`，两处是同一处判据的两个落位）。 */
@@ -1161,6 +1162,7 @@ export interface CacheActive {
   fresh: boolean;
   tri: string;
   why: string;
+  key: CacheKeyCell | Record<string, never>;
   text: string;
 }
 

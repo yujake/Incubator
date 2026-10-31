@@ -28,7 +28,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { api, postCacheWarm, whyOf } from "../api";
-import type { CacheActive, CacheTier, CacheView, CacheWarmJob } from "../types";
+import type { CacheActive, CacheKeyCell, CacheTier, CacheView, CacheWarmJob } from "../types";
 import { useFace } from "../live";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
@@ -95,12 +95,44 @@ function emphasized(text: string) {
   );
 }
 
+/** `active.key` 那一格：换没换 key（`same` / `stale` / `unknown`）。
+ *
+ * 2026-11-03（E10）：后端一直给这一格（`cachectl._active_doc` 的 `"key"`），
+ * 而 `types.ts` 此前没声明它 ⇒ `tsc` 看不见、页面也没读过。它读不出来时后端给
+ * 的是 `{}`（与 `CheckpointView.spend` 同一条写法），所以先在这里把"整格为空"
+ * 与"有读数"分开 —— 不许把 `{}` 当 `CacheKeyCell` 用。
+ */
+function activeKeyCell(active: CacheActive): CacheKeyCell | null {
+  const cell = active.key;
+  if (typeof cell === "object" && cell !== null && "tri" in cell && "recorded" in cell) {
+    return cell as CacheKeyCell;
+  }
+  return null;
+}
+
+/** `key.tri` 的四个取值各一句（文案是"怎么画"，读数在 `CacheKeyCell.tri` / `text`）。 */
+const KEY_TRI_LABEL: Record<string, string> = {
+  same: "没换",
+  stale: "换了（缓存等于空）",
+  unknown: "没查成",
+};
+
 /** 当前使用的那一档：顶部横幅与状态面板都先画这一行（读不出来时是"没有可用缓存"）。 */
 function ActiveReading(props: { active: CacheActive }) {
   const a = props.active;
+  const keyCell = activeKeyCell(a);
   return (
     <div class={a.tri === "found" ? "readings" : "readings tri-reason"}>
       {emphasized(a.text)}
+      {keyCell === null ? null : (
+        <span
+          class="readings"
+          title={keyCell.text === "" ? keyCell.reason : keyCell.text}
+        >
+          {" · key："}
+          {KEY_TRI_LABEL[keyCell.tri] ?? (keyCell.tri === "" ? "没读到" : keyCell.tri)}
+        </span>
+      )}
     </div>
   );
 }

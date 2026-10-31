@@ -4500,7 +4500,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # `roster_child_count` 是名册项数，`unrostered_children` 是"有父、没落名册"的那些
       # （编号 + 角色 + 状态；它们同时仍进页面底部的 `unplaced`，两处同一口径）。
       ("children_in_ledger", "number | null"), ("roster_child_count", "number"),
-      ("unrostered_children", "RosterUnrostered[]"))),
+      ("unrostered_children", "RosterUnrostered[]"),
+      # 2026-11-03（E10）：这一格只在「台账兜底档」（`_roster_from_tasks`）出现，
+      # 恒为 `False`；名册档的节点不带它 —— 不带就是"它在名册上"（那一档的名册项
+      # 必然登记过，`test_roster_registration_covers_every_path.py` 逐字钉着"名册
+      # 节点不带 `registered` 这一格"）。所以写成可选：写成必填，名册档的
+      # `node.registered` 就是 `undefined`，正是 E4 那一类"声明比盘上硬"的形状陷阱。
+      ("registered?", "boolean"))),
     ("RosterUnrostered",
      "roster_face() 的 nodes[].unrostered_children[] 一项 —— 台账里有父、名册正文与"
      "对照表里都没有任何名册项接过的那一行（它同时仍进页面底部的 `unplaced`，"
@@ -4626,7 +4632,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("readings_prompt_version", "string"), ("covered", "string"),
       ("covered_count", "number"), ("total", "number"), ("missing", "string[]"),
       ("absent", "string[]"), ("fresh", "boolean"), ("tri", "string"),
-      ("why", "string"), ("text", "string"))),
+      ("why", "string"),
+      # 2026-11-03（E10）：这一格是"这一档的 key 换没换"（与
+      # `status()["tiers"][档]["key"]` 同一份读数，形状见 `CacheKeyCell`）。
+      # 读不出来时 `_active_doc` 给的是 `{}`（`dict(reading.get("key") or {})`），
+      # 所以它与 `CheckpointView.spend` / `prompt_cache` 同一条写法：
+      # `CacheKeyCell | Record<string, never>`，不拿必填去冒充每一档都有读数。
+      ("key", "CacheKeyCell | Record<string, never>"),
+      ("text", "string"))),
     ("CacheReminder",
      "cachectl.status() 的 reminder —— 换 key 那条提醒（网页顶部横幅与命令行同一句）",
      (("active", "boolean"), ("tri", "string"), ("tiers", "string[]"),
