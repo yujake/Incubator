@@ -25,11 +25,13 @@ enum、不重冻快照 ⇒ 一个计数都不变。同一个类，每角色一�
 from __future__ import annotations
 
 import datetime as _dt
+import functools
 import hashlib
 import json
 import re
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -335,6 +337,81 @@ def _append_lock(path: Path) -> Any:
             lock = threading.Lock()
             _APPEND_LOCKS[key] = lock
         return lock
+
+
+#: 名册写的 per-owner 临界区（业主 2026-11-02 口径②）：进程内一把 `threading.Lock` +
+#: 跨进程一把 `FileLock`，按 `(root.resolve(), owner)` 分片。
+#:
+#: 为什么不复用 `_APPEND_LOCKS`：那把锁按文件名罩"一次追加（取号 + 写一行）"，
+#: 罩不住"读三份文件 → 判（名字 / 槽位 / 重号）→ 写两笔"这一整段（`draft/149` §3.2）。
+#: 为什么落在 `Secretary` 而不是 `Conductor`：`open_solo_entry`（用户指定单条执行）
+#: 不经过 conductor（`agent_loop.py` 直接调秘书），加在 conductor 上会漏掉它。
+_ROSTER_LOCKS: dict[str, Any] = {}
+_ROSTER_LOCKS_GUARD = threading.Lock()
+#: 同线程重入计数（roster_add → surface_alloc 会再要一次同一把锁）。
+_ROSTER_DEPTH = threading.local()
+
+
+@contextmanager
+def _roster_section(root: str | Path, owner: str) -> Any:
+    """同 `(root, owner)` 的名册写临界区（同线程可重入；跨进程用 `<owner>.jsonl.section.lock`）。
+
+    锁序（必须写死，否则会死锁）：进这里之前先把 `tasks` 那一侧的事做完。`retire` 就是
+    这样排的（`settle` 在写名册三笔之前），所以临界区里不再取任何 store 锁 ——
+    只可能是 `tasks → roster`，不可能是反向。
+
+    重入为什么必须有：`roster_add` 在临界区里调 `surface_alloc`（名字与槽位必须同一段），
+    而 `surface_alloc` 自己也要这把锁；`filelock` 不可重入（`draft/149` A2 实测嵌套会
+    超时），所以内层按线程计数直接放行。
+    """
+    from filelock import FileLock
+
+    key = f"{Path(root).resolve()}::{str(owner or '')}"
+    held = getattr(_ROSTER_DEPTH, "held", None)
+    if held is None:
+        held = {}
+        _ROSTER_DEPTH.held = held
+    if held.get(key):
+        held[key] = int(held[key]) + 1
+        try:
+            yield
+        finally:
+            held[key] = int(held[key]) - 1
+        return
+    with _ROSTER_LOCKS_GUARD:
+        lock = _ROSTER_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _ROSTER_LOCKS[key] = lock
+    target = roster_path(root, owner)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:  # 目录建不出来时下面 FileLock 会自己报错，不在这里折成"没锁"
+        pass
+    with lock:
+        with FileLock(str(target) + ".section.lock", timeout=30.0):
+            held[key] = 1
+            try:
+                yield
+            finally:
+                held[key] = 0
+
+
+def _roster_guarded(func: Any) -> Any:
+    """把一次写方法的整段包进 per-owner 临界区（`owner` 从关键字参数取）。
+
+    只给"判据 + 写盘"全在本方法里的那几支用（`roster_add` / `roster_repair` /
+    `surface_alloc` / `surface_release`）。`retire` 刻意不用它：它中间有 `store.tx("tasks")`，
+    整段包进来会把锁序变成 `roster → tasks`（`draft/149` §3.6 要求反过来）。
+    """
+
+    @functools.wraps(func)
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        owner = str(kwargs.get("owner") or "")
+        with _roster_section(self.root, owner):
+            return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
@@ -4730,6 +4807,7 @@ class Secretary:
             return f"{name} 已销号（名字永久不复用，业主 B1）"
         return ""
 
+    @_roster_guarded
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
                    task: str = "", task_id_first: str = "", want_name: str = "",
                    reuse: str = "", surface: str = "", new: str = "") -> dict[str, Any]:
@@ -4973,6 +5051,7 @@ class Secretary:
                                     if r["state"] == "待释放"],
                 "reason": ""}
 
+    @_roster_guarded
     def surface_alloc(self, *, owner: str, want: str = "", name: str = "") -> dict[str, Any]:
         """从池里取一个干净的槽位给 `name` 用（派活那一刻，与 `roster_add` 同一趟）。
 
@@ -5012,6 +5091,7 @@ class Secretary:
             return {"slot": slot, "path": str(path), "problem": f"池事件没写成：{why}"}
         return {"slot": slot, "path": str(path), "problem": ""}
 
+    @_roster_guarded
     def surface_release(self, *, owner: str, name: str, slot: str) -> tuple[str, str]:
         """归还一个槽位：先归档面里的东西，再写 `release`；归档失败 ⇒ `archive_failed`
         （槽位停在"待释放"、不入池）。返回 `(落成的状态, 问题)`。"""
@@ -7526,6 +7606,7 @@ class Secretary:
         except Exception:  # noqa: BLE001
             return ""
 
+    @_roster_guarded
     def roster_repair(self, *, owner: str) -> tuple[int, str]:
         """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
 
