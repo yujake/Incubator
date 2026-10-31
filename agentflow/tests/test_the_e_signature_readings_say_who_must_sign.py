@@ -3,14 +3,14 @@
 
 ## 背景（业主 2026-11-03 的调查结论：不是 bug，设计那一半要留）
 
-`is_signed_exhaustion` 认的 `signed_by="V"` 是 **E 在 `sign_experiment` 里代写的一格自述**
+`is_signed_exhaustion` 认的 `signed_by="V"` 是 E 在 `sign_experiment` 里代写的一格自述
 （V 从来没在这条路径上盖过章）。业主 2026-10-27 的裁定是"先报不拦"，所以判定一个字节
-都不改。但**读数与措辞**有两处说错/说不清：
+都不改。但读数与措辞有两处说错/说不清：
 
 1. `closing.py:4781` 那句写"签名者 E" —— 与字段语义相反（字段里写的是 V；E 是 ②③ 的作者）。
    `tests/test_t0_tier_and_exhaustion_proof.py:22` 的表头也写 `signed_by=E`。
-2. 那条"只报不拦"的读数只有 `total` / `ids`，看不出：**这一签应当由谁签**、
-   多少条靠 `e_signature` 背书、**V 到底审没审过**（审过而判了"有毛病"与"压根没签"
+2. 那条"只报不拦"的读数只有 `total` / `ids`，看不出：这一签应当由谁签、
+   多少条靠 `e_signature` 背书、V 到底审没审过（审过而判了"有毛病"与"压根没签"
    是两件事，处置完全不同）。
 
 ## 这条判据钉住什么
@@ -104,5 +104,9 @@ def test_the_source_does_not_say_the_signer_is_e_any_more() -> None:
     assert "签名者 E" not in text, (
         "`closing.py` 里还写着" + "签名者 E" + "：字段语义是 `signed_by=\"V\"`（E 只是 ②③ 的作者）")
     t0 = T0_TEST.read_text(encoding="utf-8")
-    assert "signed_by=V" in t0 and "signed_by=E" not in t0, (
-        "`tests/test_t0_tier_and_exhaustion_proof.py` 的表头还写着 `signed_by=E`")
+    #: 只核判据表里"①"那一行：同一个文件别处仍可以写 `signed_by=E`（那是"受控拒绝的
+    #: 那个值"，判据 ⑦ 的正文就要提它）—— 所以这里不能对全文一刀切。
+    row_one = [ln for ln in t0.splitlines() if ln.startswith("| ① |")]
+    assert len(row_one) == 1, f"判据表里应有恰好一行 ①，实测 {len(row_one)} 行"
+    assert "signed_by=V" in row_one[0] and "signed_by=E" not in row_one[0], (
+        f"判据表 ① 那一行还写着 `signed_by=E`（该是 V）：{row_one[0]}")

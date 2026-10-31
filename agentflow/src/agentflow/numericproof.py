@@ -753,25 +753,46 @@ def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
     所以这一格只产出读数：`suspects` 逐条点名 `experiment_id` / `statement_id` / `why`，
     由收工报告印一句话，不改任何 status、不进 blockers。
 
-    返回 `{"checked", "suspects", "total", "why"}`：`checked=False` 是"没查成"
-    （没给工作区根 ⇒ 查不到 `verifications/`），不是"没有可疑行"。
+    返回 `{"checked", "suspects", "total", "why"}`，另有四格读数（2026-11-03，153-U-06 的丙+乙）：
+    `signer_required`（这一签应当由谁签 —— 恒 `"V"`，`signed_by` 只能是它，E 只是 ②③
+    的作者）、`e_signature_backed`（本工作区多少条靠 `e_signature` 背书）、
+    `third_party_verdicts`（这些行的第三方签名分布：`已签·成立` / `已签·<判决>` / `没签` /
+    `没查成`）、`by_project`（本工作区的名字 → 三个计数；跨工作区的合计数不在一个
+    per-workspace 读数里编造）。`checked=False` 是"没查成"（没给工作区根 ⇒ 查不到
+    `verifications/`），不是"没有可疑行"。
     """
     rows = [dict(r) for r in (experiments or ()) if isinstance(r, Mapping)]
-    out: dict[str, Any] = {"checked": False, "suspects": [], "total": 0, "why": ""}
+    out: dict[str, Any] = {"checked": False, "suspects": [], "total": 0, "why": "",
+                           "signer_required": str(PROOF_SIGNER),
+                           "e_signature_backed": 0,
+                           "third_party_verdicts": {}, "by_project": {}}
     if not str(root or "").strip():
         out["why"] = ("没给工作区根 ⇒ 查不到 `verifications/`（这一格没查成，"
                       "不是「没有可疑行」）")
         return out
     out["checked"] = True
     suspects: list[dict[str, Any]] = []
+    backed = 0
+    verdicts: dict[str, int] = {}
     for row in rows:
         # 只看"声称自己够 proof 的那一档"：`sign_experiment` 给每一条计算类实验都写
         # `signed_by="V"`（那是签字岗位的名字，不是"V 盖过章"），拿它当射程会把
         # 每一条普通数值实验都点成可疑 —— 那是噪音，不是读数。
         if not is_signed_exhaustion(row):
             continue
+        backed += 1
         column = proof_column(row)
         sid = statement_id_for_body(statements, column) if statements else ""
+        # 那一签的分布（2026-11-03，乙）：这一格要能分辨"V 审过、判了有毛病"与
+        # "压根没签"—— 两者的处置完全不同，而 `total` 一个数把这两种折成一样。
+        sig = latest_third_party_sign(root, proof_text=column, statement_id=sid)
+        if not sig.get("checked"):
+            verdicts["没查成"] = verdicts.get("没查成", 0) + 1
+        elif not sig.get("found"):
+            verdicts["没签"] = verdicts.get("没签", 0) + 1
+        else:
+            label = f"已签·{sig.get('verdict') or '（判决空）'}"
+            verdicts[label] = verdicts.get(label, 0) + 1
         problems = third_party_problems(column, root=root, statement_id=sid)
         if not problems:
             continue
@@ -785,6 +806,15 @@ def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
         })
     out["suspects"] = suspects
     out["total"] = len(suspects)
+    out["e_signature_backed"] = backed
+    out["third_party_verdicts"] = verdicts
+    out["by_project"] = {
+        str(root).replace("\\", "/").rstrip("/").split("/")[-1]: {
+            "e_signature_backed": backed,
+            "would_drop_load_bearing": len(suspects),
+            "third_party_signed": backed - verdicts.get("没签", 0) - verdicts.get("没查成", 0),
+        }
+    }
     out["why"] = (f"台账 {len(rows)} 条实验行里有 {len(suspects)} 条声称穷举证明已由 V 签下，"
                   "而 `verifications/` 里拿不出对应的第三方签字行（只报不拦）")
     return out

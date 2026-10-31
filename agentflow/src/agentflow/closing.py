@@ -4779,7 +4779,8 @@ def _has_t3(exp: Mapping[str, Any]) -> bool:
     2026-10-23（业主裁定「纯数值实验把整个命题证掉了也能拿 proof，理由是穷举，
     签名是那份程序」）：这一格多一个入口 —— 按穷举签下的 proof 行（signed_by=V、②③ 由 E 写）也算背书。
     判据本体只有一处（`numericproof.is_signed_exhaustion`：方法属于计算类、
-    `evidence_kind="proof"`、签名者 E、证明理由在受控词表里），这里不抄第二份。
+    `evidence_kind="proof"`、签名栏写的是 `signed_by="V"`、证明理由在受控词表里），
+    这里不抄第二份。
     不加这一支的后果是可量化的：一条真的穷举证明会被这一格判成"没有 T3 背书"，
     于是"穷举也能拿 proof"这句话在收工门上永远是一个 blocker。
     """
@@ -4832,6 +4833,14 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         "total": int(suspect.get("total") or 0),
         "ids": [str(s.get("experiment_id") or "") for s in (suspect.get("suspects") or [])][:20],
         "why": str(suspect.get("why") or ""),
+        # 2026-11-03（153-U-06 的丙+乙）：这三格是读数，与 `total` 一样只报不拦。
+        # `signer_required` 说清这一签应当由谁签（V；E 只是 ②③ 的作者），
+        # `e_signature_backed` / `third_party_verdicts` 分辨"V 审过判了有毛病"与"压根没签"，
+        # `by_project` 给出本工作区那三个计数（跨工作区的合计不在这一格里编造）。
+        "signer_required": str(suspect.get("signer_required") or ""),
+        "e_signature_backed": int(suspect.get("e_signature_backed") or 0),
+        "third_party_verdicts": dict(suspect.get("third_party_verdicts") or {}),
+        "by_project": dict(suspect.get("by_project") or {}),
     }
     if not suspect.get("checked"):
         rep.findings.append(Finding(

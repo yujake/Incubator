@@ -19,7 +19,7 @@
 
 | # | 判据 | 改前为什么红 |
 |---|---|---|
-| ① | 穷举实验 ⇒ 命题可标 proof、`signed_by=E`、证明栏是脚本三段式 | `schema.Experiment.validate` 一律拒"计算类称 proof" |
+| ① | 穷举实验 ⇒ 命题可标 proof、`signed_by=V`、证明栏是脚本三段式 | `schema.Experiment.validate` 一律拒"计算类称 proof" |
 | ② | 不完全实验 ⇒ 标不成 proof，只能 `cross_check`（负控） | 没有这个判据；B 可以随手标 proof |
 | ③ | 平凡命题 ⇒ 收录成功且档位 T0（不再拒收） | 入库口返回 `statement_too_trivial` 拒收 |
 | ④ | T0/T1 文案是业主原话，T2–T4 逐字未变 | 没有 T0；T1 还是"刚过收录门槛" |
