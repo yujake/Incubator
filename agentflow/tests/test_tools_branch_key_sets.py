@@ -63,7 +63,7 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # T0-9（2026-09-28）：8 件，工具体一律 `ok(data, data)`；§198（2026-09-30）`conductor.summon_many` 加进来
     # ⇒ 16 → 18（旧数法），2026-10-01 按调用点去重后是 9。2026-10-09（S1b 加 `conductor.board` 时欠下的一格，
     # H-1a 归位）：10 → 11 —— `conductor_board` 写 `ok(view, **view)`，键由 `Conductor.board_view` 的返回值决定，
-    # 它的 `returns=` 逐字声明 `{'checked','open_items','open_count','readings'}` 并已通过实跑核。
+    # 它的 `returns=` 逐字声明 `{'checked','board_open_items','board_open_count','readings'}` 并已通过实跑核（2026-11-03 改名：153-U-05）。
     # 2026-10-09（S6-b 加 `conductor.broadcast` 时欠下的一格，同批归位）：11 → 12 —— `conductor_broadcast`
     # 写 `ok(got, **got)`，键由 `Conductor.broadcast` 的返回值决定，`returns=` 逐字声明八个键并由实跑核钉住
     # （探针在 `calling_as` 里跑，走"没有收件人"那一支）。该函数的载荷见它自己的注释；"声明必须是实跑键集的 # 子集"由 `test_tools_returns_declaration.py` 钉住。

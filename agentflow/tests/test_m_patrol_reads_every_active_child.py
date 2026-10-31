@@ -339,7 +339,7 @@ def _assert_in_progress(env: dict[str, Any], data: dict[str, Any]) -> None:
     """未做完的板项逐条给；`claimed` 那一条是"现在在做这一项"。"""
     board = _by_code(data)[env["d1"]]["board"]
     assert board["checked"] is True, board
-    assert board["open_count"] == 2, board
+    assert board["child_open_count"] == 2, board
     ids = [r["id"] for r in board["items"]]
     assert sorted(ids) == sorted([env["doing"], env["todo"]]), ids
     assert board["in_progress_id"] == env["doing"], board
@@ -352,7 +352,7 @@ def _assert_in_progress(env: dict[str, Any], data: dict[str, Any]) -> None:
     quiet = _by_code(data)[env["f1"]]["board"]
     assert quiet["in_progress_id"] == "", quiet
     assert quiet["in_progress_reason"], quiet
-    assert quiet["open_count"] == 0, quiet
+    assert quiet["child_open_count"] == 0, quiet
 
 
 def test_d_board_marks_the_item_being_done_right_now(tmp_path: pathlib.Path) -> None:
@@ -515,7 +515,7 @@ def test_g_reverse_vacuum_accepting_any_code_goes_red(
             "name": "", "role": "D", "state": COND.AGENT_STATE_FLYING,
             "state_label": "", "state_reason": "", "status": "running", "doing": {},
             "board": {"checked": True, "in_progress_id": "", "in_progress_reason": "",
-                      "open_count": 0, "items": []},
+                      "child_open_count": 0, "items": []},
             "timers": {"checked": True, "count": 0, "rows": [], "reason": ""},
             "last_guidance": {"checked": True, "relay_id": "", "reason": ""},
             "notes": [], "legal": True}]

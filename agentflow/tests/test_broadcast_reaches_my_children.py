@@ -107,7 +107,7 @@ def test_the_readings_say_opened_but_not_read(tmp_path: pathlib.Path):
     after = cond.board_readings()
     assert after["by_state"]["done"] == 1, after
     assert after["by_close"]["acked"] == 1, after
-    left = {str(x["task_id"]) for x in cond.board_view(limit=50)["open_items"]}
+    left = {str(x["task_id"]) for x in cond.board_view(limit=50)["board_open_items"]}
     assert item not in left, ("已经收口的信息型项还挂在板上（会永久积压并卡销号门）", left)
     assert kid_b and st is not None
 

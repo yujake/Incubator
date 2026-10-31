@@ -31,7 +31,7 @@ def test_a_metadata_only_literature_row_shows_up(tmp_path: pathlib.Path) -> None
     _row(st, "000001", "", "skipped")
     view = Conductor(store=st).board_view(limit=50)
     assert view.get("pending_search_count") == 1, view
-    assert [r.get("kind") for r in (view.get("open_items") or [])] == ["pending_search"]
+    assert [r.get("kind") for r in (view.get("pending_search_items") or [])] == ["pending_search"]
 
 
 def test_a_full_text_row_is_not_flagged(tmp_path: pathlib.Path) -> None:

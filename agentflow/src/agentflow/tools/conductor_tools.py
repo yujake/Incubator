@@ -1417,13 +1417,17 @@ def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> T
      "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
-    returns="{'checked','open_items','open_count','readings'}",
+    returns=("{'checked','board_open_items','board_open_count','readings'}"
+             "；有合成项时另给 pending_attack_count / pending_attack_items / "
+             "pending_attack_note 与 pending_search_count / pending_search_items / "
+             "pending_search_note（合成项不落台账 ⇒ 不计入 board_open_count）"),
 )
 def conductor_board(_conductor, limit: int = 20) -> ToolResult:
     """工具体：转发 `Conductor.board_view`（工具只做适配层，权限判定不在这一层）。
 
     "读不成"必须显式报错而不是回一个空板：`checked=False` 说明没查成，
-    而"板上没事"是 `checked=True` 且 `open_count==0` —— 这两件事折平就是本仓最忌的形态。
+    而"板上没事"是 `checked=True` 且 `board_open_count==0`（只数真板项；合成项另有
+    `pending_*_count`）—— 这两件事折平就是本仓最忌的形态。
     """
     view = _conductor().board_view(limit=int(limit))
     if not view.get("checked", False):
@@ -3364,12 +3368,17 @@ def _in_progress_of(rows: Any) -> tuple[str, str]:
 
 
 def _board_cell(cond: Any, code: str) -> dict[str, Any]:
-    """未做完的板项逐条 + 现在在做哪一项（`open_items_of` 是未消项的唯一读数）。"""
+    """未做完的板项逐条 + 现在在做哪一项（`open_items_of` 是未消项的唯一读数）。
+
+    `child_open_count` 这个名字量的是什么（153-U-05）：这一个子代理名下、未完成的
+    真板项件数（`open_items_of(code)` 的条数）。它不含合成项、也不是全工作区 —— 与
+    `conductor.board` 的 `board_open_count`（全工作区真板项）是两个分母，故两个名。
+    """
     try:
         rows = [dict(r) for r in cond.open_items_of(code)]
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
         return {"checked": False, "in_progress_id": "", "in_progress_reason": "",
-                "open_count": 0, "items": [],
+                "child_open_count": 0, "items": [],
                 "reason": f"板读不成（{type(exc).__name__}: {exc}）⇒ 它名下还有几条项判不了"}
     in_progress, why = _in_progress_of(rows)
     items: list[dict[str, Any]] = []
@@ -3393,7 +3402,7 @@ def _board_cell(cond: Any, code: str) -> dict[str, Any]:
                                  "⇒ 年龄读不了")),
         })
     return {"checked": True, "in_progress_id": in_progress,
-            "in_progress_reason": why, "open_count": len(items),
+            "in_progress_reason": why, "child_open_count": len(items),
             "items": items, "reason": ""}
 
 
@@ -3821,7 +3830,8 @@ _guide_handler = conductor_guide
              "；items 里每一项是 {code, chain, chain_text, name, role, state, state_label,"
              " state_reason, status, doing, board, timers, last_guidance, notes}；"
              "doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked,"
-             " in_progress_id, in_progress_reason, open_count, items}；timers 是 {checked,"
+             " in_progress_id, in_progress_reason, child_open_count, items}（`child_open_count`"
+             " 量的是这一个子代理名下未完成的真板项件数）；timers 是 {checked,"
              " count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing,"
              " waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；"
              "last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id,"

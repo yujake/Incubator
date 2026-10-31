@@ -16,7 +16,7 @@
 ## 业主的裁决与这条判据落实的形态
 
 - `board_view` 的真板项数改叫 `board_open_count`，列表改叫 `board_open_items`；
-  **合成项分开列**：`pending_attack_items` / `pending_search_items`（+ 原有的两个 count）。
+  合成项分开列：`pending_attack_items` / `pending_search_items`（+ 原有的两个 count）。
   合成项不落台账（每拍现造），与真板项不同源 —— 合进同一个数里就说不清"板上还剩几件活"。
 - `patrol` 的那一个改叫 `child_open_count`（它的分母是"这一个子代理名下"）。
 - 三处各带一句"这个名字量的是什么"（写在源串里，见两个返回值旁边的注释）。

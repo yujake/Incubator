@@ -117,8 +117,8 @@ def test_only_board_rows_are_visible_on_the_board(tmp_path: pathlib.Path):
             "ended_at": S.now_iso(), "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
         }, note="fixture:legacy")
     view = c.board_view()
-    assert view["open_count"] == 1, view
-    assert [r["kind"] for r in view["open_items"]] == ["message"], view["open_items"]
+    assert view["board_open_count"] == 1, view
+    assert [r["kind"] for r in view["board_open_items"]] == ["message"], view["board_open_items"]
     rd = c.board_readings()
     assert rd["board_rows"] == 1 and rd["old_instance_rows"] == 1, rd
 
@@ -146,4 +146,4 @@ def test_readings_are_three_state_when_the_table_cannot_be_read(tmp_path: pathli
     rd = c.board_readings()
     assert rd["checked"] is False and "RuntimeError" in rd["reason"], rd
     view = c.board_view()
-    assert view["checked"] is False and view["open_count"] == 0, view
+    assert view["checked"] is False and view["board_open_count"] == 0, view

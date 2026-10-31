@@ -6592,13 +6592,19 @@ class Conductor:
 
         口径（甲形态的一条硬约束）：`tasks` 现在有两类行 —— 板项（`kind` 非空）与老实例行
         （`kind` 为空）。两边不许混：这个视图只数板项，"派了几件活"那一类旧读数只数后者。
+
+        两个数各一个名（153-U-05，业主 2026-11-03 的裁决 4）—— 它们不同源，不许并：
+        - `board_open_count` / `board_open_items`：这个名字量的是真板项（`tasks` 里
+          `kind` 非空且 `item_state != done`）的件数与明细，落台账、可复算；
+        - `pending_attack_count` / `pending_search_count`（+ 对应的 `*_items`）：量的是合成项
+          —— 由猜想与文献现状每拍现造、不落台账 ⇒ 并进上面那个数就再也说不清"板上还剩几件活"。
         """
         try:
             rows = self._board_rows()
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "reason": f"{type(exc).__name__}: {exc}",
-                    "open_items": [], "open_count": 0}
-        open_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
+                    "board_open_items": [], "board_open_count": 0}
+        board_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
         # 2026-10-17（T5 第 2 趟真机读数驱动）：把"登记了但没人立项"的猜想
         # 变成板上的待办。为什么放在这里：D 的手册已经逐字写了"登记完猜想请接着把
         # 这一腿开出去"（且自己记着"第 10 趟 T5 这一环整环为 0"），可第 2 趟 T5 又是 0
@@ -6610,19 +6616,22 @@ class Conductor:
         # "缺一篇"这件事当时只存在于模型的文字里，台账上看不见。现在变成板项：
         # `path` 空（只有元数据）或 `download.status` 不是 ok ⇒ 一条 `pending_search`。
         gaps = self._pending_search_items()
-        open_items = open_items + pending + gaps
-        open_items.sort(key=lambda r: (str(r.get("started_at") or ""),
-                                       str(r.get("task_id") or "")))
-        out = {"checked": True, "open_items": open_items[:max(1, int(limit))],
-               "open_count": len(open_items), "readings": self.board_readings()}
+        board_items.sort(key=lambda r: (str(r.get("started_at") or ""),
+                                        str(r.get("task_id") or "")))
+        out = {"checked": True, "board_open_items": board_items[:max(1, int(limit))],
+               "board_open_count": len(board_items), "readings": self.board_readings()}
         if pending:
             out["pending_attack_count"] = len(pending)
+            out["pending_attack_items"] = pending[:max(1, int(limit))]
             out["pending_attack_note"] = ("这些是**已登记的猜想但还没有立项**"
-                                          "（谁去立项由你派，别自己动手）")
+                                          "（谁去立项由你派，别自己动手）；"
+                                          "它们不计入 `board_open_count`（合成项不落台账）")
         if gaps:
             out["pending_search_count"] = len(gaps)
+            out["pending_search_items"] = gaps[:max(1, int(limit))]
             out["pending_search_note"] = ("这些文献**只有元数据、没有全文**（或下载没成）"
-                                          "—— 要补全文就派检索的那一位，别自己去找")
+                                          "—— 要补全文就派检索的那一位，别自己去找；"
+                                          "它们不计入 `board_open_count`（合成项不落台账）")
         return out
 
     def _pending_search_items(self) -> list[dict[str, Any]]:

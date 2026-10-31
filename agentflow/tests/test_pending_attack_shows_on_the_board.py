@@ -43,7 +43,7 @@ def test_a_conjecture_without_a_plan_shows_up(tmp_path: pathlib.Path) -> None:
     st = _store(tmp_path)
     view = Conductor(store=st).board_view(limit=20)
     assert view.get("pending_attack_count") == 1, view
-    kinds = [str(r.get("kind") or "") for r in (view.get("open_items") or [])]
+    kinds = [str(r.get("kind") or "") for r in (view.get("pending_attack_items") or [])]
     assert "pending_attack" in kinds, kinds
 
 
