@@ -654,9 +654,97 @@ def _restore_role_seams():
     _LS._ROLE_SEAMS.update(saved)
 
 
+#: 四条写路径上全部进程级可变状态的会话基线（`_write_path_hooks_baseline` 在
+#: 第一条判据之前拍下；每条判据收尾都还原到这一份）。清单只有一处，读/写共用
+#: `_write_path_hook_state()` —— 两处各抄一份，后加的那一格一定漏。
+_WRITE_PATH_HOOK_BASELINE: dict = {}
+
+
+def _write_path_hook_state() -> dict:
+    """读一遍四条写路径的进程级状态（快照/还原的唯一清单）。
+
+    三组：
+    - 四个钩子槽：`sessions.append` / `userio.question` / `userio.answered` /
+      `stopctl.stop`（`sse.attach()` 装的就是这四个）；
+    - 三格"旁路坏没坏"读数（`hook_problems()` 直接读它们）；
+    - 装配侧的两份记账：`clock_tools` 的 `_HOOK_INSTALLED` / `_HOOK_PREV`
+      （观测器链的下一跳）、`sse` 的 `_ATTACHED` / `_PREV`（"我装的是哪一个、
+      我顶掉的是谁"）与它那一代默认广播器 `_DEFAULT` / `_GENERATION`
+      （`serve()` 只在"这一代是我开的"时才接钩子 —— 上一代没关掉，下一条判据的
+      `serve()` 就静默地一个钩子都不接，`test_closing_the_server_releases_the_hooks`
+      实测红在 `assert _attached()`）。
+    """
+    from agentflow import sessions as _SS
+    from agentflow import stopctl as _SC
+    from agentflow import userio as _U
+    from agentflow.tools import clock_tools as _CT
+    from agentflow.webui import sse as _SSE
+
+    return {
+        "append": _SS._APPEND_HOOK,
+        "question": _U._QUESTION_HOOK,
+        "answered": _U._ANSWER_HOOK,
+        "stop": _SC._STOP_HOOK,
+        "append_problem": _SS._APPEND_HOOK_PROBLEM,
+        "userio_problem": _U._HOOK_PROBLEM,
+        "stop_problem": _SC._STOP_HOOK_PROBLEM,
+        "installed": _CT._HOOK_INSTALLED,
+        "hook_prev": _CT._HOOK_PREV,
+        "attached": dict(_SSE._ATTACHED),
+        "prev": dict(_SSE._PREV),
+        "default": _SSE._DEFAULT,
+        "generation": _SSE._GENERATION,
+    }
+
+
+def _apply_write_path_hook_state(saved: dict) -> None:
+    """把上面那一份状态原样装回去（`_ATTACHED` / `_PREV` 原地清空再填，保持同一对象）。"""
+    from agentflow import sessions as _SS
+    from agentflow import stopctl as _SC
+    from agentflow import userio as _U
+    from agentflow.tools import clock_tools as _CT
+    from agentflow.webui import sse as _SSE
+
+    # 两本账先还原：槽要落回会话基线那一版装配上，账本若还留着这一条判据的闭包，
+    # 下一条判据里的 `detach()` 会按它去动槽（见 `_restore_write_path_hooks` 的实测）。
+    _SSE._ATTACHED.clear()
+    _SSE._ATTACHED.update(saved["attached"])
+    _SSE._PREV.clear()
+    _SSE._PREV.update(saved["prev"])
+    _SS.set_append_hook(saved["append"])
+    _U.set_question_hook(saved["question"])
+    _U.set_answer_hook(saved["answered"])
+    _SC.set_stop_hook(saved["stop"])
+    _SS._APPEND_HOOK_PROBLEM = saved["append_problem"]
+    _U._HOOK_PROBLEM = saved["userio_problem"]
+    _SC._STOP_HOOK_PROBLEM = saved["stop_problem"]
+    _CT._HOOK_INSTALLED = saved["installed"]
+    _CT._HOOK_PREV = saved["hook_prev"]
+    _SSE._DEFAULT = saved["default"]
+    _SSE._GENERATION = saved["generation"]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _write_path_hooks_baseline():
+    """在第一条判据之前拍下"会话基线"，供下面那条逐条还原的夹具用。
+
+    为什么基线要在会话级拍、而不是每条判据自己"进来时拍一张"（2026-11-03，156 ④）：
+    `scope="module"` 的夹具只装配一次，它们跑在第一条判据的函数级夹具之前。
+    于是模块夹具装上的东西（`build_registry()` 顺带把 `clock_tools._observe_session_event`
+    挂到 `sessions.append` 上，`test_prompt_cache_active_tier.py` 的 `renders` 就是
+    这样）会以"这条判据进来时就是这样"的身份通过逐条快照、一路活到下一个文件。
+    逐条快照只保证"这条判据没改坏"，不保证"每条判据从同一个起点出发" ——
+    而后者才是隔离。会话基线是那个起点。
+    """
+    _WRITE_PATH_HOOK_BASELINE.clear()
+    _WRITE_PATH_HOOK_BASELINE.update(_write_path_hook_state())
+    yield
+    _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
+
+
 @pytest.fixture(autouse=True)
 def _restore_write_path_hooks():
-    """每条判据前后快照/还原"会话写入后的钩子槽"与时钟的装配闩锁（进程级状态隔离）。
+    """每条判据收尾把"会话写入后的钩子槽"还原到会话基线（进程级状态隔离）。
 
     为什么需要（draft/156 §3.1 的根因）：`sessions._APPEND_HOOK` 是进程级单槽，
     `clock_tools._observe_session_event` 挂在上面，是把"发消息/派活/回合"喂给时钟的
@@ -671,17 +759,31 @@ def _restore_write_path_hooks():
     还会有新的判据去装/清这个槽，逐条写一定漏（与上面 `_reset_provider_cooldowns` /
     `_restore_role_seams` 是同一条纪律）。`_HOOK_PREV` 必须一起还原：它是观测器链的
     下一跳，留下一条指向上一条判据的闭包等于把别人的局部状态带进下一条判据。
-    """
-    from agentflow import sessions as _SS
-    from agentflow.tools import clock_tools as _CT
 
-    saved_hook = _SS._APPEND_HOOK
-    saved_installed = _CT._HOOK_INSTALLED
-    saved_prev = _CT._HOOK_PREV
+    ## 四个槽都要还原，且必须连 `sse` 的两本账一起还原
+
+    只还原 `sessions` 那一槽时，另外三个槽（`userio` 的 question / answered、
+    `stopctl` 的 stop）会带着上一条判据装的闭包活到下一条；而 `sse.attach()`
+    认"外来钩子"靠的是它自己的两本账（`_ATTACHED` 是我装的、`_PREV` 是被我顶掉的
+    那一层），这两本账不还原就会与槽对不上：实测跑完 `tests/test_prompt_cache_active_tier.py`
+    （模块级夹具 `renders` 里的 `render_all()` 让时钟观测器留在 `sessions.append` 上）再跑
+    `tests/test_webui.py`（`SSE.attach()` 记下 `_PREV["append"]` = 时钟观测器，收尾时
+    只有槽被还原成时钟观测器、账本还留着），接着跑
+    `tests/test_webui_sse.py::test_attach_wires_all_four_write_paths` 时，那条用例的
+    autouse 夹具先 `detach()` ⇒ 把账本里的时钟观测器放回槽里并清空 `_ATTACHED`，
+    于是紧接的 `attach()` 把它报成"我顶掉了一个外来钩子"：
+    `{'attached': (…四个…), 'replaced': ('append',), 'problem': ''}` ⇒ 判据红在
+    `assert got["replaced"] == ()`（单跑绿、串跑红，2026-11-03 精确定位）。
+    还原面覆盖"四条写路径的全部进程级可变状态"，下一条判据就不会继承上一条的装配。
+    `_HOOK_PROBLEM` 三格一起还原：它们是"旁路坏没坏"的读数，跨用例留着会让
+    `hook_problems()` 的断言读到别人的故障。`sse._DEFAULT` / `_GENERATION` 也一起还原：
+    `serve()` 只在"这一代是它开的"时才接钩子，上一代没关掉（`test_detach_restores_the
+    _foreign_hooks.py` 就是只 `begin_serving()` 不 `close_all()`）⇒ 下一条判据的
+    `serve()` 静默地一个钩子都不接，`test_closing_the_server_releases_the_hooks.py`
+    红在 `assert _attached()`（单跑绿、串跑红，2026-11-03 同一次定位）。
+    """
     yield
-    _SS.set_append_hook(saved_hook)
-    _CT._HOOK_INSTALLED = saved_installed
-    _CT._HOOK_PREV = saved_prev
+    _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
 
 
 @pytest.fixture
