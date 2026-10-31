@@ -14,9 +14,11 @@ from __future__ import annotations
 import inspect
 import pathlib
 
-from agentflow.conductor import Conductor, LocalBackend
+from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.secretary import Secretary
 from agentflow.store import Store
+from agentflow.tools import ToolRegistry
+from agentflow.tools import conductor_tools as CT
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -26,6 +28,11 @@ def _ws(tmp_path: pathlib.Path) -> dict:
     store = Store(root)
     store.init()
     cond = Conductor(store, registry={}, backend=LocalBackend({}))
+    sec = Secretary("M", root=root, store=store, enable_model=False)
+    # 销号与登记名册必须落同一份名册（生产里由 `AgentLoop._bind_roster_sink` 接上）；
+    # `cond.secretary` 是 `_is_retired_task` 读销号名单那一格的来路（`agent_loop.py`）。
+    cond.roster_sink = sec
+    cond.secretary = sec
     calls: list[tuple[str, dict]] = []
 
     def _runner(tid: str, **kw):
@@ -34,7 +41,8 @@ def _ws(tmp_path: pathlib.Path) -> dict:
 
     cond.resume_runner = _runner
     owner = str(cond.open_top_level_run("M", "夹具：别叫我自己"))
-    return {"root": root, "cond": cond, "owner": owner, "calls": calls}
+    return {"root": root, "store": store, "cond": cond, "sec": sec,
+            "owner": owner, "calls": calls}
 
 
 def _child(cond: Conductor, parent: str, *, status: str) -> str:
@@ -44,6 +52,28 @@ def _child(cond: Conductor, parent: str, *, status: str) -> str:
            "ended_at": (TS if status == "done" else None),
            "started_at": TS, "detail": "夹具子代理"}
     return str(cond._write_new_row(row, note="fixture:selfwake"))
+
+
+def _retire_for_real(env: dict, child: str) -> dict:
+    """走真销号路径：名册登记 → 工具 `conductor.retire_child` → `Secretary.retire`。
+
+    与 `test_a_retired_name_is_never_woken.py::_retire_for_real`（w9）同一手法：
+    销号名单那一行的形状是生产者的事实，判据要读的是生产者写出来的东西。
+    """
+    owner = str(env["owner"])
+    added = env["sec"].roster_add(owner=owner, role="D", task_id=str(child),
+                                  brief="写研究报告")
+    name = str(added.get("name") or "")
+    if not name or added.get("problem"):
+        return {"ok": False, "name": name,
+                "data": {"state": "", "refusal_code": "roster_add",
+                         "why": str(added.get("problem") or "名册没登记成")}}
+    reg = ToolRegistry(name="wake-self")
+    CT.register(reg, store=env["store"], conductor=env["cond"])
+    with calling_as(owner, "M"):
+        res = reg.call("conductor.retire_child", {"child_name": name}, role="M")
+    return {"ok": bool(getattr(res, "ok", False)), "name": name,
+            "data": dict(getattr(res, "data", None) or {})}
 
 
 def _fixture_problems(env: dict, child: str) -> list[str]:
@@ -113,8 +143,14 @@ def test_s3_a_retired_agent_is_still_deaf(tmp_path: pathlib.Path) -> None:
     """已销号 ⇒ 叫不醒（P4 的边界不许被 s1 掩盖）。"""
     env = _ws(tmp_path)
     child = _child(env["cond"], str(env["owner"]), status="done")
-    env["cond"].secretary = type("S", (), {"retired_names": {child: "已销号"}})()
-    problems = _fixture_problems(env, child)
+    retired = _retire_for_real(env, child)
+    problems: list[str] = []
+    if not retired["ok"] or retired["data"].get("state") != "retired":
+        data = dict(retired.get("data") or {})
+        problems.append(f"夹具自己没成立：真销号没成（{data.get('state')!r} / "
+                        f"{data.get('refusal_code')!r} / {data.get('why')!r}）")
+    else:
+        problems += _fixture_problems(env, child)
     assert problems == [], problems
     got = env["cond"].wake_on_lifeline(child)
     assert got.get("started") is False, got

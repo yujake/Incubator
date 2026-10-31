@@ -65,9 +65,11 @@ from agentflow import clock as CLK
 from agentflow import schema as S
 from agentflow import secretary as SEC
 from agentflow import stopctl as SC
-from agentflow.conductor import Conductor, LocalBackend
+from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.secretary import Secretary
 from agentflow.store import Store
+from agentflow.tools import ToolRegistry
+from agentflow.tools import conductor_tools as CT
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -91,6 +93,13 @@ def _workspace(tmp_path: pathlib.Path, name: str = "ws") -> dict[str, Any]:
     store = Store(root)
     store.init()
     cond = Conductor(store, registry={}, backend=LocalBackend({}))
+    sec = Secretary("M", root=root, store=store, enable_model=False)
+    # 生产里由 `AgentLoop._bind_roster_sink` 接上（与 `test_retire_only_for_the_silent.py`
+    # 同一条取法）：销号与登记名册必须落同一份名册，否则判据测的不是生产形态。
+    cond.roster_sink = sec
+    # 生产里 `agent_loop.py` 还有这一句（`cond.secretary = sec`）：它是
+    # `_is_retired_task` 读销号名单那一格的来路。
+    cond.secretary = sec
     calls: list[str] = []
     plan: dict[str, bool] = {}
 
@@ -102,7 +111,7 @@ def _workspace(tmp_path: pathlib.Path, name: str = "ws") -> dict[str, Any]:
 
     cond.resume_runner = _runner
     boss = str(cond.open_top_level_run("M", "夹具：block 表逐个审批唤醒"))
-    return {"root": root, "store": store, "cond": cond, "boss": boss,
+    return {"root": root, "store": store, "cond": cond, "sec": sec, "boss": boss,
             "calls": calls, "plan": plan}
 
 
@@ -147,9 +156,38 @@ def _blocked_item(cond: Conductor, owner: str, *, role: str = "D",
     return str(cond._write_new_row(row, note="fixture:wake_blocked"))
 
 
-def _retire(cond: Conductor, task_id: str) -> None:
-    """把某个号记成"已销号"（秘书那一侧的权威读数，`_is_retired_task` 只读这一格）。"""
-    cond.secretary = type("S", (), {"retired_names": {str(task_id): "夹具：已销号"}})()
+def _retire_for_real(env: dict[str, Any], task_id: str) -> dict[str, Any]:
+    """走真销号路径：名册登记 → 工具 `conductor.retire_child` → `Secretary.retire`。
+
+    与 `test_a_retired_name_is_never_woken.py::_retire_for_real`（w9）同一手法：
+    销号名单那一行的形状（`owner`/`name`/`task_id`/`role`/`at`/`reason`/`branch`/
+    `seq`）是生产者的事实，判据要读的是生产者写出来的东西 —— 手造行只能证明
+    "我会读我自己想出来的形状"。
+    """
+    boss = str(env["boss"])
+    added = env["sec"].roster_add(owner=boss, role="D", task_id=str(task_id),
+                                  brief="写研究报告")
+    name = str(added.get("name") or "")
+    if not name or added.get("problem"):
+        return {"ok": False, "name": name,
+                "data": {"state": "", "refusal_code": "roster_add",
+                         "why": str(added.get("problem") or "名册没登记成")}}
+    reg = ToolRegistry(name="wake-blocked")
+    CT.register(reg, store=env["store"], conductor=env["cond"])
+    with calling_as(boss, "M"):
+        res = reg.call("conductor.retire_child", {"child_name": name}, role="M")
+    return {"ok": bool(getattr(res, "ok", False)), "name": name,
+            "data": dict(getattr(res, "data", None) or {})}
+
+
+def _retire_fixture_problems(env: dict[str, Any], retired: dict[str, Any],
+                             task_id: str) -> list[str]:
+    """真销号先自己成立，再交给反真空那一格判"夹具是不是真身"。"""
+    if not retired.get("ok") or retired["data"].get("state") != "retired":
+        data = dict(retired.get("data") or {})
+        return [f"夹具自己没成立：真销号没成（{data.get('state')!r} / "
+                f"{data.get('refusal_code')!r} / {data.get('why')!r}）"]
+    return _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=task_id)
 
 
 def _fixture_is_real_problems(env: dict[str, Any], *, owner: str,
@@ -368,8 +406,8 @@ def _w3_skip_and_review_problems(env: dict[str, Any]) -> list[str]:
     """
     problems: list[str] = []
     dead = _agent(env["cond"], str(env["boss"]))
-    _retire(env["cond"], dead)
-    problems += _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
+    retired = _retire_for_real(env, dead)
+    problems += _retire_fixture_problems(env, retired, dead)
     gone = _blocked_item(env["cond"], dead)
     live = _agent(env["cond"], str(env["boss"]))
     blind = _blocked_item(env["cond"], live)
@@ -444,8 +482,8 @@ def test_w3_the_retire_fixture_is_the_real_secretary(tmp_path: pathlib.Path) -> 
     """
     env = _workspace(tmp_path, "w3-real")
     dead = _agent(env["cond"], str(env["boss"]))
-    _retire(env["cond"], dead)
-    problems = _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
+    retired = _retire_for_real(env, dead)
+    problems = _retire_fixture_problems(env, retired, dead)
     sec = env["cond"].secretary
     if not problems and isinstance(sec, Secretary):
         path = SEC.retired_path(str(env["root"]), str(env["boss"]))
@@ -642,8 +680,8 @@ def test_the_receipt_is_one_shape_for_every_item(tmp_path: pathlib.Path) -> None
     """
     env = _workspace(tmp_path, "shape")
     dead = _agent(env["cond"], str(env["boss"]))
-    _retire(env["cond"], dead)
-    problems = _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
+    retired = _retire_for_real(env, dead)
+    problems = _retire_fixture_problems(env, retired, dead)
     _blocked_item(env["cond"], dead)
     live = _agent(env["cond"], str(env["boss"]))
     _blocked_item(env["cond"], live)
