@@ -239,6 +239,9 @@ def test_a_real_browser_origin_gets_403_when_the_face_is_closed(
     Machine / Run 两个页面的按钮今天还是空壳（见模块 docstring），所以这里测的是
     按钮将要收到的那一支响应，不是一张还不存在的 DOM。前端拿到它之后渲染什么，
     属于 A 线那条判据（`tri=not_applicable` 由 `TriState` 呈现）。
+
+    2026-11-03（E7）：只读档不落审计台账 —— 这一条改成断言"浏览器里点一下，
+    工作区根上什么都没多出来"（"被拒也留一行"那一半在写面开着的判据里数）。
     """
     with _workspace(tmp_path) as root, _live(root, allow_writes=False) as live:
         _enter_spa(live)
@@ -248,7 +251,8 @@ def test_a_real_browser_origin_gets_403_when_the_face_is_closed(
         assert payload["ok"] is False and payload["tri"] == "not_applicable", payload
         assert "写面没开" in payload["reason"], payload["reason"]
     assert SC.read_stop(root) is None
-    assert audit.read_actions(root)[0]["ok"] is False, audit.read_actions(root)
+    assert audit.read_actions(root) == [], (
+        "只读服务在真实浏览器点一下之后写了审计台账（E7）")
 
 
 def test_a_write_without_the_csrf_header_is_refused_in_a_real_browser(
@@ -695,7 +699,7 @@ def _write_a_max_only_acceptance_table(root: pathlib.Path) -> None:
 
 
 def _write_a_session_without_an_index(root: pathlib.Path) -> None:
-    """给 Run 页一段会话、但**不建**索引（E5 的现场形状）。
+    """给 Run 页一段会话、但不建索引（E5 的现场形状）。
 
     真机 156 个工作区里 0 个有 `index/run-index.json`（`rebuild_run_index` 零生产
     调用者），而 Run 页原先只看 `drift.length === 0` —— 于是同一张卡上既说

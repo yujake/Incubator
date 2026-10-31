@@ -641,8 +641,9 @@ function RosterBody(props: {
           <Badge kind="badge-unknown" text={`answer=${data.answer}`} />
           <b> 名册没读到</b>：
           {data.reason === "" ? "端点没有给理由" : data.reason}
-          {" "}—— 这一档是「这份读数没拿到」，而不是「这个工作区没有子代理」
-          （后端给的计数栏是 null，不是 0）。
+          {" "}—— 这一档是「这份读数没拿到」，而不是「这个工作区没有子代理」。
+          {" "}这一档的计数可能是 null（名册与台账都没有），也可能来自台账回退
+          —— 有数，但那些子不在名册上（真机读数：`answer=unknown` 而 `count=7`）。
         </div>
       ) : null}
       {nodes === 0 ? (

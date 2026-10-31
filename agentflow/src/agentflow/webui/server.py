@@ -79,13 +79,23 @@ cookie 只多一个响应头，`_token_ok` 的口径（`secrets.compare_digest`�
 `/run/{sid}` 两条路上各吐一次，相对路径到了 `/run/{sid}` 会解析成
 `/run/static/...`（深链刷新立刻白屏）—— 缺的是口令，不是相对路径。
 
-## 两个开关（裁定 C2 / E1，本批只做到"解析并透传"）
+## 两个开关（裁定 C2 / E1）：它们真的改变行为
 
 `serve(..., allow_writes=False, settings_write=True)` 与 CLI 的 `--allow-writes` /
-`--no-settings-write` 今天还没有接任何一条判断：写面要等 W3（授权 + 审计）、
-设置写面要等 W4。它们先落在这里，是为了让"默认只读"这个口径在调用链上有名字，
-而不是等 W3 再改一遍签名。`--help` 里逐字写了"本批还没有接线"，免得读的人
-以为自己已经拿到了写面。
+`--no-settings-write` 不是"解析了但没人用"的两格：`writes.authorize()` 的授权矩阵
+把它们当第 3 层与第 4 层真的判（`writes.py::authorize`）。
+
+- 不开 `--allow-writes`（缺省）⇒ 写面是只读的：`/api/stop` / `/api/submit` /
+  `/api/settings` / `/api/budget` / `/api/run` / `/api/task` / `/api/cache/warm`
+  的写请求一律 403，且这一档一个字节都不往工作区写（连审计台账
+  `web-actions.jsonl` 也不写 —— 见 `writes._finish` 的只读分支）；
+- `--no-settings-write` 只关第 4 层：`POST /api/settings` 403，其余写端点照旧；
+- `POST /answer` 不在这道闸门后面（它的闸门是 `userio.answer_question`，
+  `draft/73` §2.5 的"现状，不动"），但它的审计也跟随 `allow_writes`（只读不落盘）。
+
+`--help` 里逐字写着这三条（2026-11-03 修 E8：改前那两句"本批还没有接线：现在给不给
+都一样"与实现相反，而 `agentflow web --help` 早就说的是对的 —— 同一仓库两套 help
+互相打脸）。`cli.py::cmd_web` 的 docstring 是第三份公开文本，三处必须同一口径。
 """
 
 from __future__ import annotations
@@ -426,14 +436,30 @@ class WebHandler(BaseHTTPRequestHandler):
         except PEER_GONE:
             self.close_connection = True
 
+    # ------------------------------------------------------------ 401 形态
+    def _unauthorized(self) -> None:
+        """口令不对/没给：`/api/*` 回 JSON，页面与静态资源回 HTML（E9）。
+
+        为什么按路径分（2026-11-03 修 E9）：`/api/*` 的其余错误早就一律 JSON
+        （Q1：未知端点 404 JSON），只有 401 这一格不分路径、一律吐 HTML ——
+        前端 `api.ts` 的 `readJSON` 只能把一整段 `<!DOCTYPE html>…` 当理由塞进
+        `ApiError.reason` 上屏。两档的形状：`/api/*` → `{"ok": false, "tri":
+        "not_applicable", "reason": …}`；其余 → 那张 401 HTML 页（浏览器看得懂）。
+        """
+        reason = "口令不对或没给（?token= / Authorization: Bearer / 口令 cookie）"
+        if self._path.startswith("/api/"):
+            self._json(401, {"ok": False, "tri": "not_applicable",
+                             "reason": reason, "path": self._path})
+            return
+        self._html(401, "<!DOCTYPE html><html><body><h1>401</h1>"
+                        f"<p>{_esc(reason)}</p></body></html>")
+
     # ------------------------------------------------------------ GET
     def do_GET(self) -> None:  # noqa: N802 - 基类签名
         """GET：查 `ROUTES`；未命中走 :meth:`handle_unknown`（裁定 Q1）。"""
         path, query = self._parse()
         if not self._token_ok(query):
-            self._html(401, "<!DOCTYPE html><html><body><h1>401</h1>"
-                            "<p>口令不对或没给（<code>?token=</code> 或 "
-                            "<code>Authorization: Bearer</code>）。</p></body></html>")
+            self._unauthorized()
             return
         hit = routes.match("GET", path, table=self.routes_table or None)
         if hit is None:
@@ -447,8 +473,7 @@ class WebHandler(BaseHTTPRequestHandler):
         """POST：查 `ROUTES`；未命中 ⇒ 404（POST 没有 SPA 回退这回事）。"""
         path, query = self._parse()
         if not self._token_ok(query):
-            self._html(401, "<!DOCTYPE html><html><body><h1>401</h1>"
-                            "<p>口令不对或没给。</p></body></html>")
+            self._unauthorized()
             return
         hit = routes.match("POST", path, table=self.routes_table or None)
         if hit is None:
@@ -1089,12 +1114,15 @@ def run(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--open", action="store_true", help="起好之后用浏览器打开首页")
     ap.add_argument("--json", action="store_true",
                     help="只打印一行 URL 的 JSON（便于起后台任务后拿到确切 URL）")
-    # 裁定 T1：只加这两个开关。（注意）本批它们还没有接线（W3 的写面、W4 的设置写面），
-    # 下面两句 help 逐字说明这一点 —— 免得读 help 的人以为写面已经开了。
+    # 裁定 T1 的两个开关。它们真的改变行为（`writes.authorize()` 的第 3 / 第 4 层）：
+    # 不给 `--allow-writes` ⇒ 写面只读，`/api/*` 的写端点一律 403，而且这一档
+    # 一个字节都不往工作区写（连审计台账也不写）。2026-11-03 修 E8：改前这两句写的是
+    # "本批还没有接线：现在给不给都一样"，与实现相反。
     ap.add_argument("--allow-writes", action="store_true",
-                    help="允许写面（本批还没有接线：W3 才真正生效，现在给不给都一样）")
+                    help="允许写面（缺省只读：不给 ⇒ /api/ 下七条写端点 403，"
+                         "且只读档不往工作区写任何文件）")
     ap.add_argument("--no-settings-write", action="store_true",
-                    help="关掉设置写面（本批还没有接线：W4 才真正生效，现在给不给都一样）")
+                    help="关掉设置写面（只关 POST /api/settings：那条 403，其余写端点照旧）")
     args = ap.parse_args(list(argv) if argv is not None else None)
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
@@ -1156,8 +1184,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"工作区根：{root}", flush=True)
         print("Ctrl-C 停止。", flush=True)
         if args.allow_writes or args.no_settings_write:
-            print("（提示：--allow-writes / --no-settings-write 本批只做到解析与透传，"
-                  "W3 / W4 才真正生效 —— 现在它们不改变任何行为。）", flush=True)
+            # 2026-11-03（E8）：改前这句说"只做到解析与透传，现在不改变任何行为"——
+            # 与 `writes.authorize()` 的实现相反。现在照实说这一趟的写面是哪一档。
+            print("（写面：" + ("已开 --allow-writes" if args.allow_writes
+                              else "只读（没开 --allow-writes）：/api/ 的写端点一律 403，"
+                                   "只读档不往工作区写任何文件")
+                  + "；设置写面：" + ("关（--no-settings-write）"
+                                     if args.no_settings_write else "开") + "）", flush=True)
     if args.open:
         try:
             webbrowser.open(url)
