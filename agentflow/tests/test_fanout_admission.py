@@ -710,25 +710,44 @@ def test_await_fanout_slot_honours_an_already_cancelled_token(tmp_path):
     assert killed["in_flight_after"] == 3, "取消不冒充腾出了名额"
 
 
-def test_await_fanout_slot_reports_slot_freed_when_a_child_returns(tmp_path):
-    """单元级正控：等待期间有一行返回 ⇒ `slot_freed`，读数里两个数都对得上。"""
+def test_await_fanout_slot_reports_slot_freed_when_a_child_returns(tmp_path, monkeypatch):
+    """单元级正控：等待期间有一行返回 ⇒ `slot_freed`，读数里两个数都对得上。
+
+    同步点不赌时序（2026-11-03 的真 flake）：旧写法是两个线程 + `sleep(0.4)` ——
+    后台写 `tasks.json`（`os.replace`）、主线程每 0.5s 无锁读同一个文件，Windows 上
+    读者的 `open` 与写者的 `os.replace` 相撞会直接抛 `PermissionError: [Errno 13]`。
+    这里把"子代理返回"放在主线程的等待那一拍里做：`CLK.await_io` 是等待的唯一入口
+    （生产实现本来就走它），它被调到就说明"在飞 3 已经读到、下一拍还没读"；此时落
+    终态是严格有序的（先写后读），没有第二个线程碰同一份文件。断言强度不变：
+    `slot_freed` 表示"真的被叫醒"，不是"可能"。
+    """
     store = _mk_store(tmp_path)
     c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=5.0)
     parent = _parent(c)
     in_flight = _seed_in_flight(store, parent, 3)
 
-    def _return_one() -> None:
-        time.sleep(0.4)
-        _mark_returned(store, in_flight[0])
+    real_await = CO.CLK.await_io
+    waited: list[float] = []
+    writing = False
 
-    t = threading.Thread(target=_return_one, daemon=True)
-    t.start()
-    try:
-        out = c._await_fanout_slot(parent, 3, token=None)
-    finally:
-        t.join(timeout=5.0)
+    def _child_returns_during_the_wait(seconds, purpose, **kw):
+        nonlocal writing
+        if writing:
+            # store 的原子写在 `os.replace` 重试时也会走 `CLK.await_io`：那一拍
+            # 只许真睡，不许再落一次终态（否则递归）。
+            return real_await(seconds, purpose, **kw)
+        waited.append(seconds)
+        writing = True
+        try:
+            _mark_returned(store, in_flight[0])   # 这一拍"有一行返回了"
+        finally:
+            writing = False
+        return real_await(seconds, purpose, **kw)
 
-    assert not t.is_alive(), "后台线程没在窗口内收工"
+    monkeypatch.setattr(CO.CLK, "await_io", _child_returns_during_the_wait)
+    out = c._await_fanout_slot(parent, 3, token=None)
+
+    assert waited, "没有走到等待那一拍 ⇒ 同步点没落上，这条判据没有对象"
     assert out["reason"] == "slot_freed", out
     assert out["in_flight_before"] == 3 and out["in_flight_after"] == 2, out
     assert out["waited_sec"] > 0, out
