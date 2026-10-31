@@ -2986,17 +2986,21 @@ class Conductor:
         """把"刚建立的那个子行"登记进 `owner` 的名册。
 
         返回 `{name, problem, considered, state, note}`（写口拒绝时另带
-        `refusal_code`：`name_taken` / `task_id_reused` / `task_id_retired`），后几格是
+        `refusal_code`：`name_taken` / `task_id_reused` / `task_id_retired` /
+        `member_retired` / `not_in_roster`，与 `Secretary.roster_add` 的回执同一套），后几格是
         写侧的三态读数：
 
         - `state="written"`：名册三份都读得到"这一趟的那一行"；
         - `state="missing"`：至少一份没写成，`problem` 逐份给文件名与原因；
         - `state="unknown"`：读不到（不许折成"写成了"，也不许折成"没写成"）；
         - `state=""`：这一趟根本没有"登记"这一步（只在调用方没走这条漏斗时出现）；
-        - `note` 非空 = 写成了，但父给的那几格被写侧兜底换过（不是失败）。
+        - `note` 非空 = 走完了登记漏斗、但有下面两件"不是失败"的事之一：父给的那几句
+          被写侧兜底换过（改由秘书代写简介），或兜底自愈补了 N 条历史漏行。
 
-        写口拒绝（`refusal_code` 非空）直接原样返回：不重试、不跑下面的兜底自愈
-        （业主 2026-11-02：撞名字不再由框架顺延换名，交父决定）。
+        写口拒绝（`refusal_code` 非空或 `problem` 非空，即"秘书那一侧一个字都没写"）
+        一律原样返回：不重试、不跑下面的兜底自愈（业主 2026-11-02：撞名字不再由框架
+        顺延换名，交父决定；2026-11-02 补：任何拒绝都算 —— 自愈会把刚被拒的这一条
+        按新名字补进名册，那等于换个地方继续静默改名，`draft/151` 三-1）。
 
         六条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
         1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
@@ -3067,13 +3071,19 @@ class Conductor:
         # ---- 写口拒绝（业主 2026-11-02：「撞名 ⇒ 静默换名」去掉，改成 name_taken 拒绝）
         #
         # 改前这里在 `want_name` 撞车时替父改主意：改发一个顺延的新名字继续登记，
-        # 只把换名写进 note（`draft/150` §5.2-④ 点名的第二次入口）。现在三种写口拒绝
-        # （name_taken / task_id_reused / task_id_retired）一律原样交回父决定：
-        # 不重试、也不跑下面的兜底自愈 —— 自愈会把刚被拒的这一条按新名字补进去，
-        # 那等于换个地方继续静默改名。
-        if refusal_code:
+        # 只把换名写进 note（`draft/150` §5.2-④ 点名的第二次入口）。
+        #
+        # 现在任何拒绝（不只是带码的那三种）都原样交回父决定：不重试、也不跑下面的
+        # 兜底自愈。判据是"秘书那一侧有没有报 problem"而不是"有没有码"—— 自愈会把刚被拒的
+        # 这一条当成"台账有、名册没有"的漏行，按一个新名字补进名册 ⇒ 换个地方继续静默改名
+        # （`draft/151` 三-1；改前读数 `temp/probe_h11_leftovers.py` 的 H/I/J：拒绝之后名册
+        # 里仍多出 `D2/t-000006 repaired=true`）。代价是"被拒的那一条暂时没有名字"——
+        # 它由收口那一刻的收工兜底（`Secretary.retire` 里的 `roster_repair`）负责补，
+        # 两件事不是一个时刻：派活时不自作主张，收口时必须给得出名字（`draft/151` 三-6）。
+        if raised:
             return {"name": name, "considered": True, "state": "missing",
-                    "problem": f"{task_id}：名册拒绝登记（{refusal_code}）—— {raised}",
+                    "problem": (f"{task_id}：名册没登记"
+                                f"（{refusal_code or 'refused'}）—— {raised}"),
                     "refusal_code": refusal_code, "note": note}
         reading = self._roster_files_reading(
             sink=sink, owner=str(owner), name=name, task_id=str(task_id),
@@ -3099,20 +3109,13 @@ class Conductor:
             state = "missing"
             problem = (f"{task_id}：秘书没有发名（返回的 name 是空串）⇒ 名册项没有名字，"
                        "按没写成报" + (f"；{problem}" if problem else ""))
-            raised = ""
-        if raised:
-            if problem:
-                problem += f"；秘书那一侧的原话：{raised}"
-            else:
-                # 三份都读到那一行，但秘书那一侧报了问题 ⇒ 不丢原话，按"写成但不干净"记。
-                note = (note + "；" if note else "") + \
-                       f"秘书那一侧报了问题（三份都已写成）：{raised}"
         # ---- 兜底自愈（2026-10-29）：把"台账有、名册没有"的其他代理行补上。
         #
         # 位置必须在 `roster_add` 之后：`_write_new_row` 先于 [5b] 把这一条子行写进台账，
         # 而它此刻还没进名册 —— 若自愈跑在登记之前，它会把这一条也当成"漏掉的"补一次，
         # 于是同一条子行在名册里出现两行（实测：D1|t-000002 与 D2|t-000002，名字跳号 D2/D4/D6）。
-        # 放在登记之后，这一条已经在对照表里了 ⇒ 自愈只补真正漏掉的。
+        # 放在登记之后、且只在"这一条真的写成"时跑 ⇒ 自愈只补历史漏行，不补刚被拒的这一条
+        # （拒绝在上面那条早返里已经交回父了）。
         try:
             fixed, why = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 —— 自愈失败不许带走这次派活

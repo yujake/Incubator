@@ -4817,8 +4817,8 @@ class Secretary:
                 seen.append(int(name[len(role):]))
         return f"{role}{max(seen, default=0) + 1}", ""
 
-    def _reuse_refusal(self, owner: str, name: str) -> str:
-        """`reuse=<名>` 这个目标能不能接活：空串 = 能，否则是一句受控拒绝的理由。
+    def _reuse_refusal(self, owner: str, name: str) -> tuple[str, str]:
+        """`reuse=<名>` 这个目标能不能接活：`("", "")` = 能，否则是 `(一句受控拒绝的理由, 理由码)`。
 
         判据只有一条（业主 2026-10-24 的最终口径）："在册且未销号"就能再接活。
         「已收口子代理可再接收活，但已销号不可用」——
@@ -4827,14 +4827,22 @@ class Secretary:
         - 销号（名册项标了 retired、名字进了销号名单）⇒ 这个子代理退场了，名字永久
           不复用（`reuse` 指向它一律受控拒绝）。
 
+        理由码（2026-11-02 补，三态：父要能机器判"是哪种不许"）：
+        - `member_retired`：这个名字销过号（与按名寻址那一档同一个词）；
+        - `not_in_roster`：名册里根本没有这个名字。
+        在此之前这两档只有人话、没有码，而 `Conductor._register_roster` 恰恰拿
+        "有没有码"当"要不要跑兜底自愈"的开关 ⇒ 这两档拒绝之后那条子行会被自愈
+        按新名字补进名册（`temp/probe_h11_leftovers.py` 的 H / I 读数：等于换个
+        地方继续静默改名）。码在这里给全，那条开关才关得上。
+
         这一处刻意单独成一个方法：判据把它打桩成"只要在册就行"⇒ 销号那一档必须红；
         打桩成"只认活跃任务"⇒ 收口那一档必须红（`tests/test_roster_ownership_...`）。
         """
         if not self._name_exists(owner, name):
-            return f"名册里没有 {name} ⇒ 不猜（复用必须父先看名册）"
+            return (f"名册里没有 {name} ⇒ 不猜（复用必须父先看名册）", "not_in_roster")
         if self._is_retired(owner, name):
-            return f"{name} 已销号（名字永久不复用，业主 B1）"
-        return ""
+            return (f"{name} 已销号（名字永久不复用，业主 B1）", "member_retired")
+        return ("", "")
 
     @_roster_guarded
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
@@ -4856,6 +4864,15 @@ class Secretary:
 
         两个入口不许混着给（`reuse` 与 `new` / `want_name` 同时给 ⇒ 受控拒绝：那是
         两句互相矛盾的话，猜哪一句都会替调用方改主意）。
+
+        ## 受控拒绝带机器码（业主 2026-11-02）
+        拒绝时回执多一格 `refusal_code`（成功回执逐键不变），取值只有这五个，一档一个语义：
+        `name_taken`（这个名字用过：活跃 / 已收口 / 已销号）、`task_id_reused`（同一个号
+        已经登记在别的名字名下）、`task_id_retired`（这个号销过号，不许再 add / bind）、
+        `member_retired`（`reuse` 指向一个已销号的名字）、`not_in_roster`（`reuse` 指向
+        名册里没有的名字）。前两个是 `want_name` / 新号两支的闸，后三个是 `reuse` 支的闸。
+        父据此决定"换一个号 / 换一个名字 / 停止"，框架不替它改主意 ——
+        `Conductor._register_roster` 也按这一格决定"不跑兜底自愈"。
 
         ## 盘上落什么（`task_id` 是调用流水读数，不是归属键）
         - 名册正文 `<父>.jsonl`：`kind="add"` 一行建项（名字、角色、简介、面、创建时间）；
@@ -4902,11 +4919,11 @@ class Secretary:
         at = _now_iso()
         if reuse:
             name = str(reuse)
-            refusal = self._reuse_refusal(owner, name)
+            refusal, refusal_code = self._reuse_refusal(owner, name)
             if refusal:
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "brief": text, "brief_written": source == "secretary",
-                        "problem": refusal}
+                        "refusal_code": refusal_code, "problem": refusal}
             # ⑥（业主 2026-11-02）：已销号的号不许再绑给任何名字。名字那一侧封死
             # 而号那一侧敞开，会让"名字永久不复用"变成一句空话 —— 旧号换个名字又活了。
             retired_by = self._retired_name_of_task_id(owner, str(task_id))

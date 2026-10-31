@@ -268,8 +268,10 @@ def test_reuse_of_a_closed_item_is_allowed_and_a_retired_one_is_refused(
     assert refused["problem"] and "销号" in refused["problem"], refused
 
     # 反真空①：把复用判据打桩成"只要在册就行"⇒ 销号那一档必须红。
-    def _anything_goes(_owner: str, _name: str) -> str:
-        return ""
+    # （2026-11-02：`_reuse_refusal` 的返回值从"一句理由或空串"变成 `(理由, 理由码)`
+    #  —— 判据要机器可认的理由码才能决定"不跑兜底自愈"，见 `draft/151` 三-3。）
+    def _anything_goes(_owner: str, _name: str) -> tuple[str, str]:
+        return ("", "")
 
     real = env["sec"]._reuse_refusal
     env["sec"]._reuse_refusal = _anything_goes      # type: ignore[assignment]
@@ -281,11 +283,11 @@ def test_reuse_of_a_closed_item_is_allowed_and_a_retired_one_is_refused(
     assert loose["problem"] == "", ("打桩没生效：这条反真空证明不了销号那一档有牙", loose)
 
     # 反真空②：把复用判据打桩成"只认活跃任务"⇒ 收口那一档必须红。
-    def _active_only(owner: str, name: str) -> str:
+    def _active_only(owner: str, name: str) -> tuple[str, str]:
         tasks = [first, second]
         if not any(str(env["cond"]._task(t).get("status") or "") in ("pending", "running")
                    for t in tasks):
-            return f"{name} 已收口（打桩：只认活跃任务）"
+            return (f"{name} 已收口（打桩：只认活跃任务）", "member_retired")
         return real(owner, name)
 
     second_ws = tmp_path / "ws2"
