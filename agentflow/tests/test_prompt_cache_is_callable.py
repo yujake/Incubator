@@ -332,10 +332,10 @@ def test_4_the_web_face_requires_the_write_switch_and_a_confirmation(
     assert code == 403, (code, got)
     assert got["tri"] == "not_applicable", got
     assert "写面没开" in got["reason"], got
-    # 被拒的那一次也进审计台账（`writes._finish` 的统一口径），而它没有被当成成功
-    ledger = root / "web-actions.jsonl"
-    assert ledger.is_file(), "被拒的写尝试也该留一行审计"
-    assert '"computed"' not in ledger.read_text(encoding="utf-8"), "被拒的一次被记成了 computed"
+    # 2026-11-03（E7）：只读档不落盘 —— `web-actions.jsonl` 也是工作区根上的一个文件，
+    # 写它就是"只读服务不是只读"（现场：只读服务在 projects/ 下建过两个台账）。
+    assert not (root / "web-actions.jsonl").exists(), (
+        "只读档的被拒写尝试在工作区根上建了审计台账")
 
     # 写面开着、缺 confirm：400（一个字节都不写）
     root2 = tmp_path / "ws-noconfirm"
@@ -345,6 +345,12 @@ def test_4_the_web_face_requires_the_write_switch_and_a_confirmation(
     assert code == 400, (code, got)
     assert got["tri"] == "not_applicable", got
     assert "confirm=1" in got["reason"], got
+    # 写面开着时，被拒的那一次照旧进台账（`writes._finish` 的统一口径），
+    # 而它没有被当成成功。
+    ledger2 = root2 / "web-actions.jsonl"
+    assert ledger2.is_file(), "写面开着时被拒的写尝试也该留一行审计"
+    assert '"computed"' not in ledger2.read_text(encoding="utf-8"), (
+        "被拒的一次被记成了 computed")
 
     # 白名单：lean=both / lean=x 都不认（网页上一个按钮一档）
     with _server(root2, allow_writes=True) as base:

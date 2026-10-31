@@ -53,6 +53,14 @@
 
 每一次到达本模块处理器的写尝试（含被拒的）都追加一行
 `<工作区>/web-actions.jsonl`（裁定 D2，实现见 :mod:`agentflow.webui.audit`）。
+
+一个必须写清楚的例外（E7，2026-11-03）：只读档（没开 `--allow-writes`）不写这一行。
+台账是工作区根上的一个文件，而缺省档在 `--help` 与模块 docstring 里叫"只读"——
+写它就是"只读服务不是只读"（实测：只发过 GET 与被拒 POST 的只读服务在
+`projects/chain-v1` 与 `projects/p6t2-research-20261012` 各建了一个
+`web-actions.jsonl`）。所以只读档的被拒尝试只进 stderr，回执里
+`extra.audit.tri = not_applicable` 并说清"没落盘"；写面开了之后照旧每一笔都留档
+（判据 `tests/test_webui_read_only_does_not_write.py` 的两半）。
 一处说清楚的例外：未注册的 `/api/*` 路径由 A 线 `server.py` 直接回 JSON 404，
 请求走不到这里 ⇒ 那一类 404 不在台账里（它不是一次"写尝试"，是一次"没有这条路"）。
 """
@@ -72,7 +80,7 @@ from .. import sessions as SS
 from .. import settings as SET
 from .. import stopctl as SC
 from .. import userio as U
-from ..store import Store
+from ..store import Store, StoreError
 from . import audit
 from . import state as _state
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
@@ -312,16 +320,37 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
 
     `state` 是"被起的这件事到哪一步了"（D-60 ③：缓存的 `plan` / `running`），
     与 `tri` 分处两根轴；不给就不带这一格（其余写端点的回执一个字节都不变）。
+
+    只读档（`--allow-writes` 没开）不落盘（E7，2026-11-03）：审计台账是
+    `<工作区>/web-actions.jsonl`，写它就是在别人的目录里新建文件 —— 而缺省档在
+    `--help` 与模块 docstring 里叫"只读"。于是这一档的写法是：只把这一笔打进
+    stderr，回执里 `extra.audit.tri = not_applicable` 并说清"没落盘"。
+    不改的另半：写面开了之后，被拒的尝试照旧留一行（判据 ③ 是它）。
     """
     tri = tri or (TRI_COMPUTED if ok else _TRI_FOR_CODE.get(code, TRI_NOT_APPLICABLE))
-    row, problem = audit.record_action(handler.root, endpoint=endpoint, source=source,
-                               params=params, result=result, tri=tri, ok=ok, http=code)
     body: dict[str, Any] = {"ok": ok, "tri": tri, "reason": result}
     if ident:
         body["id"] = ident
     if state:
         body["state"] = state
-    out_extra: dict[str, Any] = dict(extra or {})
+    if not writes_allowed(handler):
+        summary = audit.summarize(params)
+        sys.stderr.write(f"[webui] 只读档不落审计（{endpoint} → http {code}，"
+                         f"ok={ok}）：{result}\n")
+        out_extra: dict[str, Any] = dict(extra or {})
+        out_extra["audit"] = {
+            "tri": TRI_NOT_APPLICABLE,
+            "path": str(audit.actions_path(handler.root)),
+            "params_sha256": audit.digest_of(summary),
+            "reason": ("本服务是只读档（没开 --allow-writes）：这一笔只进服务端日志，"
+                       "不写 web-actions.jsonl —— 只读档一个字节都不往工作区写"),
+        }
+        body["extra"] = out_extra
+        handler._json(code, body)
+        return body
+    row, problem = audit.record_action(handler.root, endpoint=endpoint, source=source,
+                               params=params, result=result, tri=tri, ok=ok, http=code)
+    out_extra = dict(extra or {})
     out_extra["audit"] = {
         "tri": TRI_UNREADABLE if problem else TRI_COMPUTED,
         "path": str(audit.actions_path(handler.root)),
@@ -418,8 +447,23 @@ def handle_submit(handler: Any, params: Mapping[str, str],
     if not topic:
         return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
                        result="拒绝：topic 不能为空（整批未写入）", ok=False)
-    store = Store(root)
-    store.init()
+    try:
+        store = Store(root)
+        store.init()
+    except (StoreError, OSError) as exc:
+        # E6（2026-11-03）：`Store.init()` 原本写在 `try` 之外。根上有网页自己写的
+        # `.agentflow-stop` / `budget.json` / `web-actions.jsonl`、又没有 `data/` 时
+        # 它抛 `StoreError` ⇒ 冒到 `server._invoke` 的兜底分支 ⇒ 500
+        # `handler_crashed`，而且 `_finish()` 没被调用（这一笔被拒的写尝试不进台账）。
+        # 这是查得清的拒绝（"这个工作区没 init 过"），不是处理器崩了：
+        # 受控 400 + `tri=not_applicable` + 照常走 `_finish` 落审计。
+        # 不接受"把 `web-actions.jsonl` 加进 store 的根白名单"那种修法：
+        # 那会放宽 `store.py` 的"别在别人的目录里凭空建库"那道守卫。
+        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
+                       result=("拒绝：这个工作区没有 data/（没 `agentflow init` 过），"
+                               "不能入队 —— 先 `agentflow init`，或换一个已初始化的"
+                               f"工作区。{type(exc).__name__}: {exc}"),
+                       ok=False, tri=TRI_NOT_APPLICABLE)
     rid = ""
     try:
         with store.tx("search_requests", actor="web", note="web-submit") as tx:
@@ -751,7 +795,8 @@ HANDLERS.update({
 
 
 # ====================================================================== 回答（既有写路径）
-def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str]:
+def answer(root: Path, form: Mapping[str, Sequence[str]],
+           *, audit_enabled: bool = True) -> tuple[int, str, str]:
     """处理一次回答提交：返回 `(状态码, 重定向目标, HTML 正文)`。
 
     三态纪律：qid 不在待答清单里 ⇒ 409（不是 200），并在页面上说清是哪一档：
@@ -762,6 +807,10 @@ def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str
     `handle_answer` 与 `tests/test_webui.py` 钉死的契约，"写成了但没审计上"
     不该被折叠成"写失败"（那会把一次真实的落盘说成没发生）。所以审计失败走 stderr，
     而 `/api/*` 那三条端点的回执把 `extra.audit` 如实带给调用方。
+
+    `audit_enabled`（E7，2026-11-03）：只读档（没开 `--allow-writes`）传 `False` ——
+    那时台账不落盘，这一笔只进 stderr。"只读"这个词必须守住：写
+    `<工作区>/web-actions.jsonl` 就是在别人的目录里新建文件。
     """
     def one(name: str) -> str:
         """取表单里某个字段的第一个值（没有就给空串 —— 表单字段缺失是常态，不是错误）。"""
@@ -773,6 +822,10 @@ def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str
         params = {"qid": one("qid"), "sid": one("sid"),
                   "selected": [_text(x) for x in (form.get("selected") or [])],
                   "custom": one("custom"), "skip": one("skip")}
+        if not audit_enabled:
+            # E7：只读档不写盘（`<工作区>/web-actions.jsonl` 也是盘上的一个文件）。
+            sys.stderr.write(f"[webui] 只读档不落审计（/answer → http {code}）\n")
+            return code, location, body
         _row, problem = audit.record_action(
             root, endpoint="/answer", source="", params=params,
             result=f"http {code}",

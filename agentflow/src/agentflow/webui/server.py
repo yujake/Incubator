@@ -107,7 +107,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from ..stop_reasons import STOP_REASONS
 from . import routes, sse
 from .state import _esc, _text
-from .writes import answer
+from .writes import answer, writes_allowed
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "WebHandler", "default_static_root", "serve",
            "run"]
@@ -689,9 +689,15 @@ class WebHandler(BaseHTTPRequestHandler):
 
         非 303 的正文由 `writes.answer()` 给（它自己转义过里面的用户文本），
         这里只把它嵌进错误页 —— 不重新渲染、也不二次转义。
+
+        `audit_enabled` 取 :func:`agentflow.webui.writes.writes_allowed` 这同一个事实
+        （E7，2026-11-03）：只读档不落 `web-actions.jsonl`（那是工作区根上的一个文件）。
+        `/answer` 本身不在这道闸门后面（它的闸门是 `userio.answer_question`），
+        所以这里传的是"本服务开没开写面"，不是"这条端点准不准写"。
         """
         del params, query
-        code, location, body = answer(self.root, self._form())
+        code, location, body = answer(self.root, self._form(),
+                                      audit_enabled=writes_allowed(self))
         if code == 303:
             self._redirect(303, location)
             return

@@ -420,7 +420,12 @@ def test_the_budget_endpoint_appends_and_the_next_gate_sees_it(tmp_path: pathlib
 
 def test_the_budget_endpoint_refuses_without_writes_or_confirmation(
         tmp_path: pathlib.Path) -> None:
-    """拒绝档：没开写面 ⇒ 403；缺 `confirm=1` / `action` 不认 / `usd` 非数 ⇒ 400 且零写入。"""
+    """拒绝档：没开写面 ⇒ 403；缺 `confirm=1` / `action` 不认 / `usd` 非数 ⇒ 400 且零写入。
+
+    2026-11-03（E7）：只读档不落审计（`web-actions.jsonl` 也是工作区根上的文件），
+    所以"被拒也留一行"那一半改到写面开着的服务上数 —— 断言从 `>= 5` 变成
+    "只读那一次 0 行、开写面之后的 4 次各 1 行"，强度没有降低（两档分别有读数）。
+    """
     from agentflow import budget as B
 
     root = _mk(tmp_path)
@@ -428,6 +433,7 @@ def test_the_budget_endpoint_refuses_without_writes_or_confirmation(
         code, body, _ct = _post(base, "/api/budget",
                                 {"action": "add", "usd": "1", "confirm": "1"})
     assert code == 403 and _json_of(body)["ok"] is False, (code, body[:200])
+    assert not (root / audit.LEDGER_NAME).exists(), "只读服务在根上写了审计台账（E7）"
     with _server(root) as base:
         for fields, why in (
             ({"action": "add", "usd": "1"}, "缺 confirm"),
@@ -439,9 +445,11 @@ def test_the_budget_endpoint_refuses_without_writes_or_confirmation(
             assert code == 400, (why, code, body[:200])
             assert _json_of(body)["ok"] is False, (why, body[:200])
     assert not (root / B.REGISTER_NAME).exists(), "被拒的那几次不许在盘上留下寄存器"
-    # 审计照旧：每一次尝试（含被拒的）都留一行
+    # 审计照旧：写面开着时，每一次尝试（含被拒的）都留一行
     rows = audit.read_actions(root)
-    assert len([r for r in rows if r.get("endpoint") == "/api/budget"]) >= 5, rows
+    budget_rows = [r for r in rows if r.get("endpoint") == "/api/budget"]
+    assert len(budget_rows) == 4, rows
+    assert [r["http"] for r in budget_rows] == [400, 400, 400, 400], budget_rows
 
 
 # ====================================================================== /answer
@@ -451,10 +459,13 @@ def test_answer_keeps_its_old_status_codes_and_now_leaves_an_audit_row(
 
     为什么 `/answer` 不走授权矩阵：见模块 docstring（`draft/73` §2.5 的"现状，不动"
     + `tests/test_webui.py` 那 21 条）。
+    2026-11-03（E7）：这一条起服务时打开写面 —— 只读档不落审计（见
+    `tests/test_webui_read_only_does_not_write.py`），而这一条要数的是"写面开着时
+    `/answer` 的两次尝试各留一行"。
     """
     root = _mk(tmp_path)
     qid = _ask(root)
-    with _server(root, allow_writes=False) as base:
+    with _server(root) as base:
         code, _body, _ctype = _post(base, "/answer", {"qid": qid, "sid": "t",
                                                       "selected": "甲"}, csrf=None)
         assert code == 303, code
@@ -510,15 +521,21 @@ def test_the_answer_write_really_goes_through_userio(tmp_path: pathlib.Path) -> 
 
 # ====================================================================== 审计
 def test_refused_attempts_also_leave_an_audit_row(tmp_path: pathlib.Path) -> None:
-    """正控（D2）：被拒的尝试也留档 —— 审计要能回答"有没有人试过"。"""
+    """正控（D2）：被拒的尝试也留档 —— 审计要能回答"有没有人试过"。
+
+    2026-11-03（E7）：这一格必须打在写面开着的服务上 —— 只读档不落审计
+    （工作区根上的 `web-actions.jsonl` 也是一个文件；见
+    `tests/test_webui_read_only_does_not_write.py`）。被拒的那两笔改由 CSRF 挡住
+    （同样是 403，同样是"有人试过"）。
+    """
     root = _mk(tmp_path)
-    with _server(root, allow_writes=False) as base:
-        _post(base, "/api/stop", {"reason": "user", "confirm": "1"})
-        _post(base, "/api/stop", {"reason": "user", "confirm": "1"})
+    with _server(root) as base:
+        _post(base, "/api/stop", {"reason": "user", "confirm": "1"}, csrf=None)
+        _post(base, "/api/stop", {"reason": "user", "confirm": "1"}, csrf=None)
     rows = audit.read_actions(root)
     assert len(rows) == 2, rows
     assert all(r["ok"] is False and r["http"] == 403 for r in rows), rows
-    assert all("写面没开" in r["result"] for r in rows), rows
+    assert all("CSRF" in r["result"] for r in rows), rows
 
 
 def _secret_problems(blob: str, secret: str) -> list[str]:
