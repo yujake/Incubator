@@ -98,7 +98,7 @@ class CjkExemption:
                 "count": self.count, "reason": self.reason}
 
 
-#: 历史工作区里「确实是 CJK、但这次不改」的逐条登记（本轮先只落判据，表暂时为空）。
+#: 历史工作区里「确实是 CJK、但这次不改」的逐条登记。
 #:
 #: 为什么要有这张表：`projects/paper-rewrite-80/out/paper/main.tex` 第 936 行
 #: `…（原文 1188 字，已截断）` 是历史工作区产物，业主明令「80 不重启」⇒ 不许
@@ -106,9 +106,16 @@ class CjkExemption:
 #: 所以处置是「逐条登记」：路径 / 行号 / 该行字符数 / 理由写死，登记项必须
 #: 仍然被扫到同样的读数（见 `_registered_reading`），否则判红。
 #:
-#: 本笔是红的：80 那份历史稿尚未登记 ⇒ 主判据红；下一笔把第 936 行那 9 个
-#: 字符逐条登记进来之后转绿。空表不是免检：未登记的 CJK 一律判红。
-CJK_EXEMPTIONS: tuple[CjkExemption, ...] = ()
+#: 为什么不是「跳过整个工作区」：那会把该工作区里「新出现」的 CJK 一并放过；
+#: 判据只豁免它点名的那一行、那个字符数。
+CJK_EXEMPTIONS: tuple[CjkExemption, ...] = (
+    CjkExemption(
+        path="projects/paper-rewrite-80/out/paper/main.tex",
+        line=936,
+        count=9,
+        reason="业主明令 80 不重启；该文为历史工作区产物；已由 review.scan_text_integrity 可随时复核",
+    ),
+)
 
 
 def is_cjk(ch: str) -> bool:
