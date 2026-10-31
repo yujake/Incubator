@@ -517,8 +517,7 @@ def _pid_alive(pid: int) -> bool:
 
 # ---------------------------------------------------------------- 名册与对照表（S1k）
 #
-# 落点：`out/roster/<owner>.jsonl`（名册）、`<owner>-index.jsonl`（电话簿）、
-# `<owner>-retired.jsonl`（销号名单）。三份都 append-only，读侧折叠。
+# 落点：`out/roster/<owner>.jsonl`（名册）、`<owner>-index.jsonl`（电话簿）、`<owner>-retired.jsonl`（销号名单）、`refusals/<owner>.jsonl`（拒绝流水，子目录）。四份都 append-only，读侧折叠。
 # 为什么不放 `out/secretary/`：`webui/readers.py` 是目录 glob（`*.jsonl`），
 # 同目录会把名册行混进"秘书决定台账"那一面（`draft/92` §2 的落点说明）。
 
@@ -538,6 +537,22 @@ def roster_index_path(root: str | Path, owner: str) -> Path:
 def retired_path(root: str | Path, owner: str) -> Path:
     """销号名单（业主 B1：名字一经退役永久不复用；后续版本的新功能读它）。"""
     return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
+
+
+def refusals_path(root: str | Path, owner: str) -> Path:
+    """派活登记被拒的流水（业主 2026-11-02：「被拒是一次有记录的决定」）。
+
+    为什么必须落一条盘上记录：拒绝当时名册三份一个字节都没写（`roster_add` 直接返回），
+    跨进程唯一靠得住的证据就是这一刻落下的这条流水。收口兜底（`roster_repair`）读它，
+    于是"派活时被拒的号"不会在销号那一刻被补成新名字 —— 而那等于悄悄改写那次拒绝
+    （`draft/151` 三-6 的另一半；裁定见 `draft/151` §6.4）。
+
+    落点：`out/roster/refusals/<父>.jsonl`。放进子目录、而不是像 `-retired.jsonl` 那样
+    同目录同后缀，是因为读侧按 `out/roster/*.jsonl` 的目录 glob 认"谁有一份名册"
+    （`roster_owners` 与 `webui.readers._roster_files`），同目录新增一种后缀要在两处
+    各登记一次；子目录两处都天然看不见（`out/surfaces/archive/` 是同一个做法）。
+    """
+    return Path(root).joinpath(*ROSTER_DIR, "refusals", f"{owner}.jsonl")
 
 
 def retired_row_gaps(rows: Iterable[Any], owner: str = "") -> tuple[list[str], list[dict[str, Any]]]:
@@ -593,6 +608,8 @@ def retired_row_gaps(rows: Iterable[Any], owner: str = "") -> tuple[list[str], l
 #: 名册目录里"不是名册正文"的那几种后缀（`<父>-index.jsonl` / `<父>-surfaces.jsonl` /
 #: `<父>-retired.jsonl`）。全工作区口径的读数按它排除，而不是按"文件名里有没有横线"猜 ——
 #: 父的编号本身不含横线，但靠猜迟早会把一种新后缀算成一份名册。
+#: 2026-11-02 的拒绝流水（`refusals/<父>.jsonl`）不在这张表里：它在子目录里，两处
+#: `*.jsonl` 的目录 glob（`roster_owners` / `webui.readers._roster_files`）都看不见它。
 _ROSTER_SIDECAR_SUFFIXES: tuple[str, ...] = ("-index.jsonl", "-surfaces.jsonl",
                                              "-retired.jsonl")
 
@@ -4796,6 +4813,43 @@ class Secretary:
                 out.append(tid)
         return out
 
+    @_roster_guarded
+    def roster_refusal_note(self, *, owner: str, task_id: str, name: str = "",
+                            refusal_code: str = "", problem: str = "") -> tuple[bool, str]:
+        """把"这一号被写口拒了"落成一条可跨进程读到的流水（业主 2026-11-02 的裁定）。
+
+        写侧为什么必须做这件事：拒绝的那一刻名册三份一个字节都没写，于是"被拒过"这个
+        事实在盘上原本只活在调用方的 `roster_problem` 里（而它随进程消失）。没有这条
+        流水，收口兜底（`roster_repair`）就把这个号当成"漏登记的孤儿"补成新名字 ——
+        等于把一次有记录的拒绝悄悄改写成一个子节点（`temp/probe_h11_leftovers.py` 的
+        L 读数）。返回 `(写成了没有, 没写成的理由)`；写不成不抛（拒绝本身仍要如实交回）。
+        """
+        return append_jsonl(refusals_path(self.root, owner),
+                            {"kind": "refused", "owner": str(owner),
+                             "task_id": str(task_id),
+                             "requested_name": str(name or ""),
+                             "refusal_code": str(refusal_code or ""),
+                             "problem": str(problem or ""), "at": _now_iso()})
+
+    def _refused_task_ids(self, owner: str) -> tuple[set[str], list[str]]:
+        """这个父名下"被写口拒过"的全部号 ⇒ `(号集合, 坏行)`（三态：坏行非空 ⇒ 不许当成没被拒）。
+
+        坏行要不要 fail-closed：要。把它读成"没有拒绝记录"会让收口兜底把被拒的号补成新名字
+        —— 这一步不可逆；而"这一份流水读不出来所以这次不补"是可逆的（补一次下回还有机会）。
+        """
+        from . import jsonlfile as JF
+
+        rows, bad, state = JF.read_jsonl_state(refusals_path(self.root, owner))
+        out: set[str] = set()
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            if tid:
+                out.add(tid)
+        bad = list(bad)
+        if state == "unreadable" and not bad:
+            bad = ["拒绝流水读不出来（这一格不是「没人被拒」）"]
+        return out, bad
+
     def _retired_used(self, owner: str) -> list[str]:
         """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。
 
@@ -4853,6 +4907,37 @@ class Secretary:
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
                    task: str = "", task_id_first: str = "", want_name: str = "",
                    reuse: str = "", surface: str = "", new: str = "") -> dict[str, Any]:
+        """写口 + 拒绝留痕（真正的登记逻辑在 :meth:`_roster_add`，两半在同一个临界区里）。
+
+        为什么单包这一层（业主 2026-11-02：「被拒是一次有记录的决定」）：拒绝时
+        `_roster_add` 一个字节都不写，于是"被拒过"必须由写口自己在同一个 per-owner
+        临界区里落一条流水（:func:`refusals_path`）—— 否则收口兜底（`roster_repair`）
+        会把这个号当成"漏登记的孤儿"补成新名字，等于把一次有记录的拒绝悄悄改写成一个
+        子节点（`temp/probe_h11_leftovers.py` 的 L 读数）。放在这一层而不是调用方，
+        是为了让"拒了"与"记下拒了"之间没有任何时间窗。
+
+        记录写不成不改变拒绝的结论（回执的 `problem` / `refusal_code` 逐字不变），
+        只把"以后可能被收口兜底补上"写进回执的 `note`。
+        """
+        got = self._roster_add(owner=owner, role=role, task_id=task_id, brief=brief,
+                              task=task, task_id_first=task_id_first,
+                              want_name=want_name, reuse=reuse, surface=surface, new=new)
+        problem = str(got.get("problem") or "")
+        if not problem:
+            return got
+        ok, why = self.roster_refusal_note(
+            owner=owner, task_id=task_id, name=str(got.get("name") or ""),
+            refusal_code=str(got.get("refusal_code") or ""), problem=problem)
+        if ok:
+            return got
+        out = dict(got)
+        out["note"] = (f"拒绝记录没写成（{why}）"
+                       "⇒ 收口兜底可能把这一条补成新名字")
+        return out
+
+    def _roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
+                    task: str = "", task_id_first: str = "", want_name: str = "",
+                    reuse: str = "", surface: str = "", new: str = "") -> dict[str, Any]:
         """名册登记（增那一支）：`{"name","role","task_id","brief","brief_written","problem"}`。
 
         ## 两个入口，语义不同（业主 2026-10-24）
@@ -7666,6 +7751,14 @@ class Secretary:
         于是两个并发修复既不会重复分配、也不会各补一行；名字在锁内由 `next_name`
         按已用最大序号推（那一步只在锁内才是安全的 —— 把并发正确性归给发号器
         是错的，`draft/151` 一-3）。
+
+        ## 只补"真孤儿"（业主 2026-11-02 裁定，收窄）
+
+        补的行必须同时满足：不在已知集（从未登记过）且不在拒绝流水里（不是"派活时
+        被写口拒过"那一种）。被拒是一次有记录的决定（:meth:`roster_refusal_note`），
+        收口时再把它变成子节点等于悄悄改写事实；而真正的孤儿（台账里有、名册里没有、
+        也没有拒绝记录 —— 实例分派 / 队列入账 / 更早的形态）仍然要补，否则 79 那趟
+        "11 个节点卡住"会复发。拒绝流水读不出来 ⇒ 一律不补（三态：读不到不是没被拒过）。
         """
         cond = self._conductor()
         if cond is None:
@@ -7682,8 +7775,12 @@ class Secretary:
         known, bad = self._roster_history(owner)
         if bad:
             return 0, f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）"
+        refused, bad_ref = self._refused_task_ids(owner)
+        if bad_ref:
+            return 0, f"拒绝流水有 {len(bad_ref)} 行读不出来 ⇒ 不补（免得把被拒的号补成新名字）"
         todo = sorted(str(r.get("task_id") or "") for r in rows
-                      if str(r.get("task_id") or "") not in known)
+                      if str(r.get("task_id") or "") not in known
+                      and str(r.get("task_id") or "") not in refused)
         fixed = 0
         for tid in todo:
             row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})

@@ -3081,6 +3081,11 @@ class Conductor:
         # 它由收口那一刻的收工兜底（`Secretary.retire` 里的 `roster_repair`）负责补，
         # 两件事不是一个时刻：派活时不自作主张，收口时必须给得出名字（`draft/151` 三-6）。
         if raised:
+            # 拒绝已在写口那一刻落成流水（`Secretary.roster_add` 的包装层，同一个
+            # per-owner 临界区）；这里只把"记录没写成"那一句如实带出来
+            # —— 回执的 `note` 是它唯一的落点（业主 2026-11-02 的裁定）。
+            if str(got.get("note") or ""):
+                note = (note + "；" if note else "") + str(got.get("note"))
             return {"name": name, "considered": True, "state": "missing",
                     "problem": (f"{task_id}：名册没登记"
                                 f"（{refusal_code or 'refused'}）—— {raised}"),
