@@ -56,14 +56,17 @@ w6 就是这条纪律的判据：owner 在飞时 `calls` 必须是空的。
 
 from __future__ import annotations
 
+import inspect
 import json
 import pathlib
 from typing import Any
 
 from agentflow import clock as CLK
 from agentflow import schema as S
+from agentflow import secretary as SEC
 from agentflow import stopctl as SC
 from agentflow.conductor import Conductor, LocalBackend
+from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 TS = "2026-01-01T00:00:00+00:00"
@@ -147,6 +150,58 @@ def _blocked_item(cond: Conductor, owner: str, *, role: str = "D",
 def _retire(cond: Conductor, task_id: str) -> None:
     """把某个号记成"已销号"（秘书那一侧的权威读数，`_is_retired_task` 只读这一格）。"""
     cond.secretary = type("S", (), {"retired_names": {str(task_id): "夹具：已销号"}})()
+
+
+def _fixture_is_real_problems(env: dict[str, Any], *, owner: str,
+                             task_id: str) -> list[str]:
+    """反真空：这一份夹具的"已销号"必须由真 `Secretary` 给出，不许退化成 dict 替身。
+
+    `draft/145` §5：两处替身都是 `{号: 理由}` 这个 Mapping，经
+    `Conductor._retired_rows_of` 的 Mapping 分支只剩 `{"task_id": k, "name": k}`
+    （两个键同值）、`bad` 恒 `[]`，而且它根本不是 callable（不收 `owner`）。于是适配层
+    的签名试探与 `(rows, bad)` 解包两道一步都没走过 —— 这正是"全仓判据全绿、而
+    `_is_retired_task` 恒 False"的成因（`draft/143` §7.4）。
+
+    三格分开报（任一格都足以让本文件那两条判据红）：
+    1. 对象是 `Secretary`（Mapping / 手搓壳都不算）；
+    2. 读口是绑定方法，`owner` 必填、无默认（替身连"可调用"都不是）；
+    3. 回的是 `(rows, bad)`，行是生产者写的 8 格，`name` 与 `task_id` 不同值
+       （Mapping 分支把两个键抄成同一个值）。
+    """
+    problems: list[str] = []
+    sec = env["cond"].secretary
+    if not isinstance(sec, Secretary):
+        return [f"夹具退化成替身了：{type(sec).__name__}（必须是真 Secretary；"
+                "dict 替身只走 Mapping 分支，绕开签名与 (rows, bad) 两道适配）"]
+    try:
+        sig = inspect.signature(type(sec).retired_names)
+    except (TypeError, ValueError) as exc:
+        return [f"夹具的读口不是方法（{type(exc).__name__}: {exc}）"]
+    params = list(sig.parameters.values())
+    if [p.name for p in params] != ["self", "owner"]:
+        problems.append(f"夹具读口的签名该是 (self, owner)，实际 "
+                        f"({', '.join(p.name for p in params)})")
+    elif params[1].default is not inspect.Parameter.empty:
+        problems.append(f"夹具读口的 owner 不许有默认值：{params[1]!r}")
+    got = sec.retired_names(str(owner))
+    if not (isinstance(got, tuple) and len(got) == 2):
+        return problems + [f"夹具的读口该回 (rows, bad) 二元组，实际 "
+                           f"{type(got).__name__}: {got!r}"]
+    rows, bad = got
+    if not isinstance(rows, list) or not isinstance(bad, list):
+        return problems + [f"(rows, bad) 该都是 list，实际 "
+                           f"{type(rows).__name__} / {type(bad).__name__}"]
+    mine = [r for r in rows if str((r or {}).get("task_id") or "") == str(task_id)]
+    if not mine:
+        return problems + [f"夹具自己没成立：销号名单里没有 {task_id}（rows={rows!r}）"]
+    wanted = {"owner", "name", "task_id", "role", "at", "reason", "branch", "seq"}
+    if set(mine[0]) != wanted:
+        problems.append(f"夹具的销号行键集不对：多 {sorted(set(mine[0]) - wanted)}、"
+                        f"少 {sorted(wanted - set(mine[0]))}")
+    if str(mine[0].get("name") or "") == str(mine[0].get("task_id") or ""):
+        problems.append("夹具的销号行 name 与 task_id 同值 —— 这是 Mapping 分支"
+                        "（`{号: 理由}`）的形状；真生产者写的是名册名（如 D1）")
+    return problems
 
 
 def _tasks_bytes(env: dict[str, Any]) -> bytes:
@@ -314,6 +369,7 @@ def _w3_skip_and_review_problems(env: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     dead = _agent(env["cond"], str(env["boss"]))
     _retire(env["cond"], dead)
+    problems += _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
     gone = _blocked_item(env["cond"], dead)
     live = _agent(env["cond"], str(env["boss"]))
     blind = _blocked_item(env["cond"], live)
@@ -372,6 +428,39 @@ def test_w3_the_three_verdicts_are_not_folded_together(tmp_path: pathlib.Path) -
     """
     problems = _w3_skip_and_review_problems(_workspace(tmp_path, "w3a"))
     problems += _w3_resume_problems(_workspace(tmp_path, "w3b"))
+    assert problems == [], problems
+
+
+def test_w3_the_retire_fixture_is_the_real_secretary(tmp_path: pathlib.Path) -> None:
+    """反真空：w3 / 回执同形的"已销号"必须来自真 `Secretary`，不是 dict 替身。
+
+    `draft/145` §5 的结论：替身经 Mapping 分支只剩两个同值键、`bad` 恒空、不收
+    `owner`，所以适配层怎么退化这些判据都照样绿。这一条把"夹具本身"变成机器读数：
+    真身必须回生产者写的 8 格行（`name="D1" ≠ task_id`），而且 `bad` 通道不是写死的
+    空表 —— 往真销号名单里追加一行坏行，`retired_names` 必须报出来。
+
+    "写成能红的"指的就是这一步：改前两处替身还在时，`_fixture_is_real_problems`
+    第一格就报"夹具退化成替身了"。
+    """
+    env = _workspace(tmp_path, "w3-real")
+    dead = _agent(env["cond"], str(env["boss"]))
+    _retire(env["cond"], dead)
+    problems = _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
+    sec = env["cond"].secretary
+    if not problems and isinstance(sec, Secretary):
+        path = SEC.retired_path(str(env["root"]), str(env["boss"]))
+        good = path.read_text(encoding="utf-8")
+        path.write_text(good + "{ 这一行不是 JSON —— 反真空：`bad` 不许是写死的空表\n",
+                        encoding="utf-8")
+        try:
+            rows, bad = sec.retired_names(str(env["boss"]))
+        finally:
+            path.write_text(good, encoding="utf-8")
+        if not bad:
+            problems.append("销号名单里有一行坏行，`bad` 却是空的 —— 这是替身的形状"
+                            "（Mapping 分支写死 `, []`），真读口必须报出来")
+        elif not rows:
+            problems.append(f"坏行旁边那一行好行也没读出来：bad={bad!r}")
     assert problems == [], problems
 
 
@@ -554,11 +643,12 @@ def test_the_receipt_is_one_shape_for_every_item(tmp_path: pathlib.Path) -> None
     env = _workspace(tmp_path, "shape")
     dead = _agent(env["cond"], str(env["boss"]))
     _retire(env["cond"], dead)
+    problems = _fixture_is_real_problems(env, owner=str(env["boss"]), task_id=dead)
     _blocked_item(env["cond"], dead)
     live = _agent(env["cond"], str(env["boss"]))
     _blocked_item(env["cond"], live)
     got = env["cond"].wake_blocked(approve="yes", dry_run=True)
-    problems = _shapes(got)
+    problems += _shapes(got)
     kinds = {str(c.get("verdict")) for c in (got.get("items") or ())}
     if kinds != {"skip", "resume"}:
         problems.append(f"夹具该读出 skip ＋ resume 两档，实际 {sorted(kinds)}")

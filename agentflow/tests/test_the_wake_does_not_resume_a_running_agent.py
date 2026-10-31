@@ -11,9 +11,11 @@
 """
 from __future__ import annotations
 
+import inspect
 import pathlib
 
 from agentflow.conductor import Conductor, LocalBackend
+from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 TS = "2026-01-01T00:00:00+00:00"
@@ -44,6 +46,50 @@ def _child(cond: Conductor, parent: str, *, status: str) -> str:
     return str(cond._write_new_row(row, note="fixture:selfwake"))
 
 
+def _fixture_problems(env: dict, child: str) -> list[str]:
+    """反真空：s3 的"已销号"必须由真 `Secretary` 给出，不许退化成 dict 替身。
+
+    `draft/145` §5：替身是 `{号: 理由}` 这个 Mapping —— 不收 `owner`、`bad` 恒 `[]`、
+    `retired_names` 连 callable 都不是。它让 `wake_on_lifeline` 走最宽的 Mapping
+    分支，于是适配层的签名试探与 `(rows, bad)` 解包一步都没走过。这一格把它们点出来：
+    对象是 `Secretary`、读口要 `owner`、回 `(rows, bad)` 且行是生产者的 8 格。
+    """
+    problems: list[str] = []
+    sec = env["cond"].secretary
+    if not isinstance(sec, Secretary):
+        return [f"夹具退化成替身了：{type(sec).__name__}（必须是真 Secretary；"
+                "dict 替身只走 Mapping 分支，绕开签名与 (rows, bad) 两道适配）"]
+    try:
+        sig = inspect.signature(type(sec).retired_names)
+    except (TypeError, ValueError) as exc:
+        return [f"夹具的读口不是方法（{type(exc).__name__}: {exc}）"]
+    params = list(sig.parameters.values())
+    if [p.name for p in params] != ["self", "owner"]:
+        problems.append(f"夹具读口的签名该是 (self, owner)，实际 "
+                        f"({', '.join(p.name for p in params)})")
+    elif params[1].default is not inspect.Parameter.empty:
+        problems.append(f"夹具读口的 owner 不许有默认值：{params[1]!r}")
+    got = sec.retired_names(str(env["owner"]))
+    if not (isinstance(got, tuple) and len(got) == 2):
+        return problems + [f"夹具的读口该回 (rows, bad) 二元组，实际 "
+                           f"{type(got).__name__}: {got!r}"]
+    rows, bad = got
+    if not isinstance(rows, list) or not isinstance(bad, list):
+        return problems + [f"(rows, bad) 该都是 list，实际 "
+                           f"{type(rows).__name__} / {type(bad).__name__}"]
+    mine = [r for r in rows if str((r or {}).get("task_id") or "") == str(child)]
+    if not mine:
+        return problems + [f"夹具自己没成立：销号名单里没有 {child}（rows={rows!r}）"]
+    wanted = {"owner", "name", "task_id", "role", "at", "reason", "branch", "seq"}
+    if set(mine[0]) != wanted:
+        problems.append(f"夹具的销号行键集不对：多 {sorted(set(mine[0]) - wanted)}、"
+                        f"少 {sorted(wanted - set(mine[0]))}")
+    if str(mine[0].get("name") or "") == str(mine[0].get("task_id") or ""):
+        problems.append("夹具的销号行 name 与 task_id 同值 —— 这是 Mapping 分支"
+                        "（`{号: 理由}`）的形状；真生产者写的是名册名（如 D1）")
+    return problems
+
+
 def test_s1_a_running_agent_is_not_resumed(tmp_path: pathlib.Path) -> None:
     """目标正在跑 ⇒ 不许再起一个同号循环（那会造出两个自己）。"""
     env = _ws(tmp_path)
@@ -68,6 +114,8 @@ def test_s3_a_retired_agent_is_still_deaf(tmp_path: pathlib.Path) -> None:
     env = _ws(tmp_path)
     child = _child(env["cond"], str(env["owner"]), status="done")
     env["cond"].secretary = type("S", (), {"retired_names": {child: "已销号"}})()
+    problems = _fixture_problems(env, child)
+    assert problems == [], problems
     got = env["cond"].wake_on_lifeline(child)
     assert got.get("started") is False, got
     assert "叫不醒" in str(got.get("reason") or ""), got
