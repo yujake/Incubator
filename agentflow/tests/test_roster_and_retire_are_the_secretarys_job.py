@@ -163,7 +163,13 @@ def test_retire_executes_and_remembers_the_name(tmp_path: pathlib.Path):
     # 用过的名字（含已销号的 D1、被兜底占掉的 D2）一个都不回收。
     repaired = [r for r in _lines(roster_path(tmp_path / "ws", owner)) if r.get("repaired")]
     assert [(r["name"], r["task_id"]) for r in repaired] == [("D2", later)], repaired
-    nxt = sec.roster_add(owner=owner, role="D", task_id=later, brief="后来的那件")
+    # 2026-11-02 口径（④）：`later` 已经被自愈登记在 D2 名下 ⇒ 同一个号再 add 一次
+    # 必须受控拒绝（改前这里会再发一个 D3，同一个号两条 add 行）。
+    dup = sec.roster_add(owner=owner, role="D", task_id=later, brief="同一个号再登一次")
+    assert dup.get("refusal_code") == "task_id_reused", dup
+    # 序号仍然不回收：换一个真正没登记过的号，下一个名字还是 D3。
+    fresh = _child(cond, owner, status="done", key="s1k@fresh")
+    nxt = sec.roster_add(owner=owner, role="D", task_id=fresh, brief="后来的那件")
     assert nxt.get("name") == "D3" and nxt.get("name") != "D1", (
         "序号回收了（销号的名字又被发出去）", nxt)
 

@@ -268,7 +268,7 @@ def test_r3_repair_does_not_forget_a_task_the_name_already_bound(
     orphan = _child(cond, owner, tag="r3-orphan")
     fixed2, why2 = sec.roster_repair(owner=owner)
     assert (fixed2, why2) == (1, ""), (fixed2, why2)
-    assert [str(r.get("task_id")) for r in _adds_for(env, orphan)], [orphan]
+    assert [str(r.get("task_id")) for r in _add_rows_for(env, orphan)], [orphan]
 
 
 # ---------------------------------------------------------------- r4（同号 / 同名去重）

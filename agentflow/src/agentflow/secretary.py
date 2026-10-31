@@ -4655,6 +4655,36 @@ class Secretary:
             out.setdefault(name, "")
         return out
 
+    def _roster_history(self, owner: str) -> tuple[dict[str, str], list[str]]:
+        """这个父名下「这个号历史上登记给了谁」：全部 `add` 行 ∪ 全部 `bind` 行的 `task_id` 并集。
+
+        返回 `({task_id: name}, 坏行)`。不读任何折叠视图：`_fold_index` 只留每个名字
+        最新那条 `bind`，于是"一个名字接过的第二件活"会把第一件活从已知集里挤出去 ——
+        自愈据此把已经登记过的行再补一次（`draft/149` §4.5 的机制 B，零并发即可复现）。
+
+        写侧为什么读它（而不是读某个折叠项）：唯一性判据必须读全历史。`draft/150`
+        §5.1-① 的读数：116/881 个名册项在"正文的号"与"对照表的当前号"之间分叉，
+        拿任一份折叠视图当已知集都会把另一份判成"不存在"。
+        """
+        from . import jsonlfile as JF
+
+        body, bad_body = JF.read_jsonl(roster_path(self.root, owner))
+        index, bad_index = JF.read_jsonl(roster_index_path(self.root, owner))
+        out: dict[str, str] = {}
+        for r in body:
+            if str(r.get("kind") or "") != "add":
+                continue
+            tid = str(r.get("task_id") or "")
+            if tid:
+                out.setdefault(tid, str(r.get("name") or ""))
+        for r in index:
+            if str(r.get("kind") or "") != "bind":
+                continue
+            tid = str(r.get("task_id") or "")
+            if tid:
+                out.setdefault(tid, str(r.get("name") or ""))
+        return out, list(bad_body) + list(bad_index)
+
     def _retired_used(self, owner: str) -> list[str]:
         """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。
 
@@ -4770,6 +4800,32 @@ class Secretary:
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "brief": text, "brief_written": source == "secretary",
                         "problem": refusal}
+            # ⑥（业主 2026-11-02）：已销号的号不许再绑给任何名字。名字那一侧封死
+            # 而号那一侧敞开，会让"名字永久不复用"变成一句空话 —— 旧号换个名字又活了。
+            retired_by = self._retired_name_of_task_id(owner, str(task_id))
+            if retired_by:
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "brief": text, "brief_written": source == "secretary",
+                        "refusal_code": "task_id_retired",
+                        "problem": (f"{task_id} 已经销号（{retired_by}）⇒ 受控拒绝"
+                                    "（task_id_retired）：已销号的号不许再绑活，也不许"
+                                    "再登记给别的名字（否则它会变成永远销不掉的孤儿）")}
+            # ④：一个号只属于一个名字。同一个号已经绑在别人身上 ⇒ 这不是"这件活
+            # 落到这个名字上"，而是"两个名字指向同一个子代理"—— 读侧会静默取第一个。
+            history, bad_hist = self._roster_history(owner)
+            if bad_hist:
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "brief": text, "brief_written": source == "secretary",
+                        "problem": (f"名册/对照表有 {len(bad_hist)} 行读不出来 ⇒ 不绑"
+                                    f"（免得把同一个号绑给两个名字）：{bad_hist[0]}")}
+            owner_name = str(history.get(str(task_id)) or "")
+            if owner_name and owner_name != name:
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "brief": text, "brief_written": source == "secretary",
+                        "refusal_code": "task_id_reused",
+                        "problem": (f"{task_id} 已经绑在 {owner_name} 名下 ⇒ 受控拒绝"
+                                    "（task_id_reused）：一个号只属于一个名字（要接这件活"
+                                    "就 reuse 那个名字）")}
             bind: dict[str, Any] = {"kind": "bind", "owner": owner, "name": name,
                                     "role": str(role), "task_id": str(task_id), "at": at}
             if str(task or "").strip():
@@ -4790,12 +4846,38 @@ class Secretary:
             name = str(want_name)
             if self._name_exists(owner, name):
                 status = ("已销号" if self._is_retired(owner, name) else "已收口或还在用")
-                problem = (f"{name} 已经用过（{status}）⇒ 受控拒绝：用过的名字不再发给"
-                           "另一个子代理（要新建一个同类子代理，让秘书顺延发号，"
-                           "或显式给一个没用过的名字）")
+                problem = (f"{name} 已经用过（{status}）⇒ 受控拒绝（name_taken）："
+                           "用过的名字不再发给另一个子代理（要新建一个同类子代理，"
+                           "让秘书顺延发号，或显式给一个没用过的名字）")
                 return {"name": name, "role": str(role), "task_id": str(task_id),
-                        "problem": problem}
+                        "problem": problem, "refusal_code": "name_taken"}
         else:
+            name = ""
+        # ⑥（业主 2026-11-02）：已销号的号不许再登记（名字那一侧早就封死，号那一侧
+        # 改前敞着 —— `draft/149` §1.4-④：换个新名字重新 add 成功，于是这个新名字
+        # 永远销不掉、成为永久孤儿，父也永远不许销号）。
+        retired_by = self._retired_name_of_task_id(owner, str(task_id))
+        if retired_by:
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "refusal_code": "task_id_retired",
+                    "problem": (f"{task_id} 已经销号（{retired_by}）⇒ 受控拒绝"
+                                "（task_id_retired）：已销号的号不许再登记给任何名字"
+                                "（否则它会变成一个永远销不掉的孤儿项）")}
+        # ④（业主 2026-11-02）：同一个号不许出现在两条 `add` 行。判据读全历史
+        # （全部 add ∪ 全部 bind），不读折叠视图 —— 后者会把复用过的旧号判成"没见过"。
+        history, bad_hist = self._roster_history(owner)
+        if bad_hist:
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "problem": (f"名册/对照表有 {len(bad_hist)} 行读不出来 ⇒ 不登记"
+                                f"（免得重名或重号）：{bad_hist[0]}")}
+        owner_name = str(history.get(str(task_id)) or "")
+        if owner_name:
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "refusal_code": "task_id_reused",
+                    "problem": (f"{task_id} 已经登记在 {owner_name} 名下 ⇒ 受控拒绝"
+                                "（task_id_reused）：同一个号不许出现在两条 add 行"
+                                "（要接这件活就 reuse 那个名字）")}
+        if not want_name:
             name, problem = self.next_name(owner, role)
             if problem:
                 return {"name": "", "role": str(role), "task_id": str(task_id),
@@ -7458,10 +7540,13 @@ class Secretary:
                     if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
         except Exception as exc:  # noqa: BLE001
             return 0, f"台账读不成（{type(exc).__name__}: {exc}）"
-        index, bad = self.roster_index(owner)
+        # 已知集 = 全部 `add` 行 ∪ 全部 `bind` 行的 task_id 并集（业主 2026-11-02 的定稿口径）。
+        # 改前读 `roster_index` 的折叠视图 ⇒ 一个名字接过第二件活之后，第一件活从
+        # `known` 里消失 ⇒ 自愈把已经登记过的行再补一次（机制 B，零并发可复现；
+        # `draft/149` §4.5 的 I 组读数：`repair fixed=1`，多出 `D2/t-000002`）。
+        known, bad = self._roster_history(owner)
         if bad:
-            return 0, f"对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）"
-        known = {str(r.get("task_id") or "") for r in index}
+            return 0, f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）"
         todo = sorted(str(r.get("task_id") or "") for r in rows
                       if str(r.get("task_id") or "") not in known)
         fixed = 0
@@ -8741,6 +8826,22 @@ class Secretary:
         """
         got = self.retired_ledger(owner, trusted_shard=True)
         return any(str(r.get("name") or "") == str(name) for r in (got.get("rows") or []))
+
+    def _retired_name_of_task_id(self, owner: str, task_id: str) -> str:
+        """这个号在销号名单里吗 ⇒ 那一行的名字（空串 = 没命中）。
+
+        与 :meth:`_is_retired` 同一个读口（名字那一半），这一格问的是"号"那一半：
+        名字可以在销号后被复用检查挡住，而号那一侧改前完全敞开（`draft/149` §1.4-④：
+        已销号的号换个新名字重新登记成功 ⇒ 新名字永远销不掉 ⇒ 永久孤儿）。
+        """
+        tid = str(task_id or "")
+        if not tid:
+            return ""
+        got = self.retired_ledger(owner, trusted_shard=True)
+        for r in got.get("rows") or []:
+            if str(r.get("task_id") or "") == tid:
+                return str(r.get("name") or "")
+        return ""
 
     def _children_left_behind(self, tid: str) -> dict[str, Any]:
         """销 `tid` 之前：它名下还有哪些"只有它这一个父能销"的名册项。
