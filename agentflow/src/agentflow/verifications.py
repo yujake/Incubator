@@ -1765,7 +1765,7 @@ def read_verdict(row: Mapping[str, Any]) -> str:
 
     ## 为什么单放一个函数（而不是让每处自己判一次）
     改前这一档在读侧有四处各自的处置（`row_signable` 一律 False / `_hold_run_lengths`
-    "不清零也不计入" / `review_standing` 走 `_legacy_standing` 读成 `rejected` /
+    "不清零也不计入" / `review_standing` 曾走下去的那条历史支读成 `rejected` /
     `bit3_payload` 签不了）。四处各自写一遍"历史行怎么读"，于是同一行在四个读数上
     长得不一样 —— 而那正是 2026-11-02 要清掉的东西。现在它们都问这一个函数。
 
@@ -2640,7 +2640,7 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     按 :func:`read_verdict` 读成 `成立` ⇒ 它走上面同一条路（同一份正文 ⇒ `signed` /
     `holding`，并投"连续成立"那一票），没有"历史行"那一条支了。改前它读成 `rejected`
     并附一句"只作兼容读：既不算票、也不清零"（宽容方向：老行既不算通过、也不算失败），
-    那一支（`_legacy_standing`）已整段删掉。
+    那条历史支已整段删掉（连函数一起）。
 
     ## 证明号认不出 ⇒ `unreadable`，不折成 `#p1`（2026-10-22 收尾）
     `proof_no` 问的是"要看哪一份证明"，所以没给（`None` / 空串）才是 canonical；给了但
