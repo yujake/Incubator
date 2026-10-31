@@ -1079,6 +1079,11 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     "temp/golden_diff_p205.py",
     "temp/l1_a10_counts.py",
     "temp/l1_digests.py",
+    # 156 批（2026-11-03）：153-U-09 那笔的"改前/改后对照"探针。它落在仓内
+    # `temp/`（agentflow/temp），而本判据认的工作区根 `temp/` 是仓库上一层
+    # （`_reference_scan_roots()` 的 `ws_root`）—— 与上面那些已登记的探针同一个形态：
+    # 文件在仓内草稿目录里还活着，工作区根那一份没有。按"已知的探针逐条登记"处理。
+    "temp/probe_153_u09_before_after.py",
     "temp/r_be2_after_reads.py",
     "temp/r_be2_board_write_cost.py",
     "temp/r_be2_cap_profile.py",
@@ -1197,6 +1202,13 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_import_mathlib_probe",       # 2026-10-25 合并时删掉的 umbrella 探针：`toolchain.py` 的注释在讲"改前那两处探测"，`tests/test_mathlib_reading_has_one_source.py` 的判据 ② 就是断言它不存在 —— 留痕必须点名被删的东西，否则"删了什么、凭什么删"不可查
     "_MATCH",                      # 2026-10-27 删除说明里点名的旧名（`capabilities.py` 原处那段"为什么删掉那个匹配函数"的墓碑句）：留痕必须写出被删的东西叫什么，否则读的人不知道删的是哪一件。登记而不改那段说明，按本表纪律
     "_schema_allows_null",         # 同型：2026-10-27 删掉的那条"null 闸"（`tools/base.py` 原处留的删除说明点了它）。它描述的是一个不打算落地的判据，留名是为了让下一个人明白"这里曾经有过、我们决定不要"
+    # —— 2026-11-03（156 批）：三条新登记，逐条写在下面 ——
+    # 三条都是"引用正当、但符号面只有一个出现点（或零个）"：两条是本文件旁边那两条
+    # autouse 夹具的名字（pytest 按名调用，符号面只有定义处那一次），一条是改名前
+    # 那个实现的墓碑句。按本表纪律逐条登记并写清它属于哪一类，不改引用处的文本。
+    "_reset_provider_cooldowns",   # `tests/conftest.py` 的 autouse 夹具名：只由 pytest 的 fixture 机制按名引用（符号面只有定义处一次）；conftest 里那条逐条还原写路径钩子的夹具的说明拿它当"同一条纪律"的例子
+    "_restore_role_seams",         # 同型（另一条 autouse 夹具，同处引用）
+    "_closing_session_identity",   # 改名前那个实现（2026-11-03 搬进 `closing.closing_session_identity`）：`src/agentflow/cli.py` 原处那段墓碑句在讲"这一格此前是本文件里的它、为什么摘掉"（CLI 会拒、API 照样读成空会话）—— 留痕按纪律必须点名被删的东西
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

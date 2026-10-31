@@ -654,7 +654,7 @@ def _restore_role_seams():
     _LS._ROLE_SEAMS.update(saved)
 
 
-#: 四条写路径上全部进程级可变状态的会话基线（`_write_path_hooks_baseline` 在
+#: 四条写路径上全部进程级可变状态的会话基线（由下面那条会话级 autouse 夹具在
 #: 第一条判据之前拍下；每条判据收尾都还原到这一份）。清单只有一处，读/写共用
 #: `_write_path_hook_state()` —— 两处各抄一份，后加的那一格一定漏。
 _WRITE_PATH_HOOK_BASELINE: dict = {}
@@ -706,7 +706,7 @@ def _apply_write_path_hook_state(saved: dict) -> None:
     from agentflow.webui import sse as _SSE
 
     # 两本账先还原：槽要落回会话基线那一版装配上，账本若还留着这一条判据的闭包，
-    # 下一条判据里的 `detach()` 会按它去动槽（见 `_restore_write_path_hooks` 的实测）。
+    # 下一条判据里的 `detach()` 会按它去动槽（见下面那条逐条还原夹具里的实测）。
     _SSE._ATTACHED.clear()
     _SSE._ATTACHED.update(saved["attached"])
     _SSE._PREV.clear()
