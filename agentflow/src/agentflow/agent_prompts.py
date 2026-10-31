@@ -2856,7 +2856,21 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    现在点名 H 两档（H：Lean 关 / 开 的 prompt_sha256 都对不上），
 #:    `test_loading_the_cache_readings_picks_the_matching_lean_tier` 因为版本号
 #:    p221 → p222 也一并红。两条的处置是同一条命令，不是改判据。
-PROMPT_VERSION = "p222"
+#: `p223`（2026-11-02，业主批准动禁改区 · FC-27）：D / M 的 policy 把「顺延发号」
+#: 改成「让秘书按序号发下一个未用名」—— 事实没变（不点名就按用过的最大序号发一个新名），
+#: 换的只是词面：已废的「撞名 ⇒ 改用顺延名继续登记」删了，可"顺延"这两个字还留在
+#: D / M 这条仍为真的句子里 ⇒ 读者会把两件事读成一件事（`draft/151` §6.4 第 1 条）。
+#:
+#: ① 只动 `specs/d.py` / `specs/m.py` 的这两句，两处逐字同一句 ⇒ 十一格里只有 D / M 换值
+#:    （重算读数：变化的格 = ['D', 'M']）。其余九格逐字同值。
+#: ② 连带：十一格表（`tests/test_agent_prompts.py` 的 `_FROZEN_PROMPT_DIGESTS` /
+#:    `_FROZEN_PROMPT_VERSION` 抬到 p223）+ `tests/test_prompt_stability.py` 的
+#:    `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格、键名一格未动 ⇒
+#:    count / keys_sha256 与上一格同值）+ `tests/golden/agent_surface_snapshot.json`
+#:    重冻（11 个角色各一行版本号 + D / M 的两段正文）+ `docs/ROLE-GUIDE.md` 重生成。
+#: ③ 已知待办（与 p220 / p221 / p222 同一句）：`tests/fixtures/prompt_cache_warm.json`
+#:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
+PROMPT_VERSION = "p223"
 
 
 

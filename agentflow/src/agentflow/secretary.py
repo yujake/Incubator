@@ -5062,7 +5062,7 @@ class Secretary:
                 status = ("已销号" if self._is_retired(owner, name) else "已收口或还在用")
                 problem = (f"{name} 已经用过（{status}）⇒ 受控拒绝（name_taken）："
                            "用过的名字不再发给另一个子代理（要新建一个同类子代理，"
-                           "让秘书顺延发号，或显式给一个没用过的名字）")
+                           "让秘书按序号发下一个未用名，或显式给一个没用过的名字）")
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "problem": problem, "refusal_code": "name_taken"}
         else:

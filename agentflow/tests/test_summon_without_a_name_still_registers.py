@@ -15,7 +15,7 @@
 ## 修法（只加不删，既有语义不动）
 
 - 召唤即登记：调用方没给 `name`、也没给 `reuse` ⇒ 显式走 `new=role`，名字由
-  `Secretary.next_name` 按用过的最大序号顺延（不靠父记得给，也不会把同一个名字发给两个子代理）；
+  `Secretary.next_name` 按用过的最大序号发下一个未用名（不靠父记得给，也不会把同一个名字发给两个子代理）；
 - 写侧兜底：父那句进不了名册（超长 / 多行）⇒ 改交空简介 + 任务原文，走秘书代写那一支
   （登记行里 `brief_source=secretary`），父的原文与被替换的理由进 `roster_note`；
 - 逐份读数：`_register_roster` 写完之后读盘核对三份，缺哪一份、为什么，逐份进
@@ -26,7 +26,7 @@
 | 条 | 这条问什么 | 改前红在哪 |
 |---|---|---|
 | a | 不带 `name` 的子一派出，名册三份立刻各有一行 | 改前 brief 68 字被内容闸拒在写盘之前 ⇒ 三份都不存在 |
-| b | 派两个同类 ⇒ 名字顺延 E1 / E2（不是两个无名、也不重号） | 改前两次都整份漏写，一条名字也发不出来 |
+| b | 派两个同类 ⇒ 按序号发 E1 / E2（不是两个无名、也不重号） | 改前两次都整份漏写，一条名字也发不出来 |
 | c | 写侧说"成功"却没写盘 ⇒ `roster_problem` 逐份点名（负控：不许静默） | 改前只信秘书的返回值，盘上一行都没有也不报 |
 | d | 反真空：把"自动发名"打桩成空 ⇒ a 必红 | 这一条证明 a 真的在测"名字由框架发"，不是被空名顺手带绿 |
 | e | `summon_many` 同形：批量里每个不带名字的子各自登记 | 改前整批零行（与 a 同一处写侧缺口） |
@@ -235,11 +235,11 @@ def test_a_control_named_and_wellbriefed_summon_is_unchanged(
     assert not res.roster_note, res
 
 
-# ---------------------------------------------------------------- 判据 b（顺延）
+# ---------------------------------------------------------------- 判据 b（按序号发号）
 
 
 def test_b_two_nameless_children_get_F1_F2_by_sequence(tmp_path: pathlib.Path) -> None:
-    """判据 b：派两个同类 ⇒ 名字顺延 E1 / E2（不是两个无名，也不重号）。
+    """判据 b：派两个同类 ⇒ 按序号发 E1 / E2（不是两个无名，也不重号）。
 
     改前红：两次都整份漏写，盘上一条名字都没有（不是"重号"，是"零行"）。
     """
@@ -253,7 +253,7 @@ def test_b_two_nameless_children_get_F1_F2_by_sequence(tmp_path: pathlib.Path) -
         allocs = _rows(paths["surfaces"], "alloc")
         assert len(adds) == len(binds) == len(allocs) == 2, (adds, binds, allocs)
         names = [str(a.get("name") or "") for a in adds]
-        assert names == ["E1", "E2"], ("名字必须顺延，且不重号", names)
+        assert names == ["E1", "E2"], ("名字必须按序号发，且不重号", names)
         assert all(names), names
         assert [str(a.get("task_id")) for a in adds] == \
                [str(first.task_id), str(second.task_id)], adds

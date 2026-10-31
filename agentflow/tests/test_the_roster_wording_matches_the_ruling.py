@@ -43,6 +43,23 @@ STALE_PHRASES: tuple[str, ...] = (
 #: 除它以外一个文件都不例外 —— 包括本判据文件头引用的那三处。
 _SELF = pathlib.Path(__file__).resolve()
 
+#: 「顺延」这个词面拆成两句之后（业主 2026-11-02 批准动禁改区统一词面）：
+#: - 留：事实「新派活时按序号发下一个未用名」（`next_name` 按已用最大序号 +1，
+#:   今天仍然如此）—— 改用 `FACT_PHRASE`；
+#: - 删：已废的「撞名 ⇒ 改用顺延名继续登记」（`4e2963b4` 已删）—— 它的历史留痕仍在
+#:   `conductor.py` 的注释与 `test_a_taken_name_is_refused.py` 里，那几处继续写「顺延」。
+#: 为什么禁的是这一整句而不是「顺延」两个字：历史留痕要用这个词才说得清"删掉的是哪条
+#: 行为"；而事实句若与它共用词面，读者（和模型）会把两件事读成一件事。
+DEPRECATED_FACT_PHRASE = "让秘书顺延发号"
+FACT_PHRASE = "按序号发下一个未用名"
+
+#: 事实句一旦被替换，这三处（模型看得见的声明 + 拒信）必须都换上新的说法。
+FACT_PHRASE_OWNERS: tuple[str, ...] = (
+    "src/agentflow/specs/d.py",
+    "src/agentflow/specs/m.py",
+    "src/agentflow/secretary.py",
+)
+
 
 def _texts() -> list[pathlib.Path]:
     out: list[pathlib.Path] = []
@@ -96,3 +113,39 @@ def test_the_retire_backstop_comment_still_exists_and_names_the_ruling() -> None
         "收口这一刻才补名字'这两件事（`draft/151` 三-6）")
     assert not re.search(r"撞名字.{0,6}改发新号", window), (
         "收工兜底那一段又写回'撞名字改发新号'了", window[:200])
+
+
+def test_the_still_true_sentence_no_longer_borrows_the_retired_word() -> None:
+    """正题：事实句不再写成「让秘书顺延发号」（它曾与已废的换名共用词面）。"""
+    hits: list[str] = []
+    for path in _texts():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):  # 读不出来不是"没有这句话"
+            hits.append(f"{path.relative_to(ROOT)}: <读不出来>")
+            continue
+        if DEPRECATED_FACT_PHRASE in text:
+            line = text[:text.index(DEPRECATED_FACT_PHRASE)].count("\n") + 1
+            hits.append(f"{path.relative_to(ROOT)}:{line}: {DEPRECATED_FACT_PHRASE}")
+    assert not hits, (
+        "这些地方还把'不点名 ⇒ 按序号发一个新名'写成'让秘书顺延发号' —— 它和已废的"
+        "「撞名 ⇒ 改用顺延名继续登记」共用词面（业主 2026-11-02 批准动禁改区统一词面）：\n  - "
+        + "\n  - ".join(hits))
+
+
+def test_the_new_wording_landed_and_the_history_keeps_its_word() -> None:
+    """反真空：新事实句真的落到三处；历史留痕不许被一起洗掉（业主：别把「顺延」整个删掉）。"""
+    for rel in FACT_PHRASE_OWNERS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert FACT_PHRASE in text, (
+            f"{rel} 里没有「{FACT_PHRASE}」：事实句被删掉了，而不是换了词面"
+            "（业主 2026-11-02 的口径：事实保留、只统一词面）")
+    # 已删行为的历史留痕：`_register_roster` 的注释仍逐字说明"改前改发顺延的新名字"。
+    conductor = (PKG / "conductor.py").read_text(encoding="utf-8")
+    assert "顺延" in conductor, (
+        "`conductor.py` 里已删换名行为的留痕被洗掉了：历史记录要继续用「顺延」这个词"
+        "才说得清删的是哪一条")
+    old_case = (ROOT / "tests" / "test_a_taken_name_is_refused.py").read_text(encoding="utf-8")
+    assert "顺延" in old_case, (
+        "`test_a_taken_name_is_refused.py` 里'改前改发顺延名'的读数被洗掉了 —— "
+        "那一条证明的正是'静默换名已经删掉'")
