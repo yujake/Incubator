@@ -484,7 +484,7 @@ def test_evidence_negative_control_catches_a_column_swallowing_its_tri() -> None
 # ====================================================================== 4 Artifacts
 def test_artifacts_page_reads_the_seven_columns(artifacts_ws: pathlib.Path,
                                                 tmp_path: pathlib.Path) -> None:
-    """Artifacts：真读数（台账 5 行 / 交接 1 / 验收 3 / 六件 6 / 任务 1）· 空态 · 三态。"""
+    """Artifacts：真读数（台账 5 行 / 交接 1 / 验收 4 / 六件 6 / 任务 1）· 空态 · 三态。"""
     text = _page_text("Artifacts")
     assert _read_problems("Artifacts", text, PAGE_KEYS["Artifacts"]) == [], (
         _read_problems("Artifacts", text, PAGE_KEYS["Artifacts"]))
@@ -502,7 +502,7 @@ def test_artifacts_page_reads_the_seven_columns(artifacts_ws: pathlib.Path,
             "夹具刚落盘，每一条的 sha 都该对得上：" + str(art["ledger_verify"]))
         assert len(art["handoffs"]) == 1, art["handoffs"]
         assert art["handoffs"][0]["sha256"] != "", art["handoffs"][0]
-        assert len(art["checks"]) == 3, art["checks"]  # 夹具样本是 3 行（真机 8 行）
+        assert len(art["checks"]) == 4, art["checks"]  # 夹具样本 4 行（第 4 行是 max-only；真机 8 行）
         assert len(art["style"]["sections"]) == 4, art["style"]
         assert len(art["secretary"]) == 2, art["secretary"]
         assert len(art["products"]) == 6, art["products"]

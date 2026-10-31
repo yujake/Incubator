@@ -505,8 +505,13 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
 
     def _take(rows, name: str) -> None:
+        # 2026-11-03（E4）：这里原先是 `set(rows[0])` —— 只读**第一行**的键。夹具的
+        # 验收表三行全是 `min` 档，于是"真机 60/99 份工作区里那些 `max` 档行"在
+        # 这条判据的世界里根本不存在：`types.ts` 把 `min` 写成必填、把 `max` 漏掉，
+        # 契约 C 照样全绿，而页面把 `String(undefined)` 印上屏。行一级的类型该覆盖
+        # **每一行**的键（同一个接口的多行形状不必相同），所以现在取并集。
         if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            out[name] = set(rows[0])
+            out[name] = {key for row in rows if isinstance(row, dict) for key in row}
 
     snap = W.snapshot(root)
     out["StateSnapshot"] = set(snap)

@@ -4342,8 +4342,18 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_task_id_tri", "string"))),
     ("AcceptanceCheck",
      "out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；"
-     "`closing.ACCEPTANCE_CHECKS_NAME`）",
-     (("id", "string"), ("kind", "string"), ("min", "number"), ("name", "string"),
+     "`closing.ACCEPTANCE_CHECKS_NAME`）。阈值是 `min` / `max` / `na` 三选一："
+     "`min` 档问「做得够不够」（`got >= min`），`max` 档问「剩下多少没做」"
+     "（`got <= max`，真机 60/99 份工作区里有这种行），`na` 档是「这一档对这个项目"
+     "不适用」（三态，不是通过也不是失败）⇒ 三格都写成可选，谁都不冒充必填",
+     (("id", "string"), ("kind", "string"),
+      # 2026-11-03（E4）：这三格原先是必填 `min`、`max`/`na` 压根没声明。于是
+      # `types.ts` 里 `AcceptanceCheck.min` 是必填 number，而盘上 60 份工作区的
+      # C3/C4 是 max-only 行 ⇒ `Artifacts.tsx` 的 `String(r.min)` 印出 `undefined`。
+      # 形状真身是 `closing.py` 的阈值那一段（`want_min` / `want_max` / `row["na"]`）。
+      ("min?", "number | null"), ("max?", "number | null"),
+      ("na?", "boolean"),
+      ("name", "string"),
       ("note", "string"),
       # 验收表是配置行（`C1`–`C8`），不是某条写入 ⇒ 编号那一格是 `not_applicable`。
       ("by_role", "string"), ("by_role_source", "string"),

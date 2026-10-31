@@ -450,8 +450,11 @@ RUN_PRODUCT_NAMES: tuple[str, ...] = (
     "cost.json", "report.md",
 )
 
-#: 验收表的机器可判行（真机 `p9b/out/paper/ACCEPTANCE-CHECKS.json` 是 8 行 C1–C8，
-#: 键 `id/kind/min/name/note`）。这里造同样的形状。
+#: 验收表的机器可判行（真机 `p9b/out/paper/ACCEPTANCE-CHECKS.json` 是 8 行 C1–C8）。
+#: 这里造同样的形状。2026-11-03（E4）：第四行是上限档（只有 `max`、没有 `min`）——
+#: 真机 99 份验收表里有 60 份含这种行（98 行），而夹具原先三行全 `min`，于是
+#: `types.ts` 把 `min` 写成必填也永远绿、页面印出 `undefined`。形状真身：
+#: `closing.py` 的 `min` / `max` / `na` 三档阈值。
 ACCEPTANCE_CHECKS_SAMPLE: tuple[dict, ...] = (
     {"id": "C1", "kind": "research_question_rows", "min": 1,
      "name": "立题：研究问题已立", "note": "夹具样本"},
@@ -459,6 +462,8 @@ ACCEPTANCE_CHECKS_SAMPLE: tuple[dict, ...] = (
      "name": "取材：文献已入库", "note": "夹具样本"},
     {"id": "C3", "kind": "experiment_rows", "min": 1,
      "name": "实验：至少跑过一次", "note": "夹具样本"},
+    {"id": "C4", "kind": "unfinished_request_rows", "max": 0,
+     "name": "请求闭环", "note": "夹具样本：只有上限（max-only 行）"},
 )
 
 #: 报告体例的四节名字（真机 `p9b/out/review/REPORT-STYLE.json` 逐字）。

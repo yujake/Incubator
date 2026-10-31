@@ -678,6 +678,22 @@ ROUTES = ("/", "/errors", "/live", "/budget", "/evidence", "/artifacts", "/accep
           "/machine", "/help", "/run/demo-sid")
 
 
+def _write_a_max_only_acceptance_table(root: pathlib.Path) -> None:
+    """给产物页一张"只有上限"的验收表（E4 的现场形状）。
+
+    真机 99 份 `out/paper/ACCEPTANCE-CHECKS.json` 里有 60 份含 `max`-only 行
+    （`{"id": "C3", …, "max": 0}`，没有 `min`）。这一页原先对每一行都
+    `String(r.min)`，于是那 60 个工作区的产物页上印着字面量 `undefined` ——
+    而浏览器判据当时只看 console / markdown 记号，这一格谁也没看。
+    """
+    d = root / "out" / "paper"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "ACCEPTANCE-CHECKS.json").write_text(json.dumps({"checks": [
+        {"id": "C3", "name": "请求闭环", "kind": "unfinished_request_rows",
+         "max": 0, "note": "还有几行没做（上限档）"},
+    ]}, ensure_ascii=False), encoding="utf-8")
+
+
 def test_every_page_mounts_clean_and_prints_no_markdown_markers(
         tmp_path: pathlib.Path) -> None:
     """逐页核对（R88）：十页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
@@ -688,8 +704,13 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
 
     `***` 是密钥掩码（`ModelSpec.redacted` / `SET.MASKED_KEY`），不是 markdown：
     先把 `***` 从正文里去掉再找 `**`，免得把"key 配了"这件如实读数判成缺陷。
+
+    2026-11-03（E4）：正文里也不許出现字面量 `undefined` —— 那是"某个可选读数
+    被直接 `String()` 了"的形态（现场：验收表 `max`-only 行的 `min`）。为了让这一格
+    真的有机会红，先往工作区里写一张只有上限的验收表（真机 60/99 份就是这样）。
     """
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        _write_a_max_only_acceptance_table(root)
         page = live["page"]
         for route in ROUTES:
             live["errors"].clear()
@@ -701,6 +722,10 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
             assert where < 0, (
                 f"{route} 的正文里有 markdown 记号："
                 f"{clean[max(0, where - 60):where + 60]!r}")
+            assert "undefined" not in body, (
+                f"{route} 的正文里印出了字面量 undefined —— 有一个可选读数被"
+                f"直接 String() 了（E4 现场：验收表 max-only 行的 min）："
+                f"{body[max(0, body.find('undefined') - 80):body.find('undefined') + 80]!r}")
             assert body.strip() != "", f"{route} 是白屏（正文一个字都没有）"
             assert "[object Object]" not in body, (
                 f"{route} 的正文里印出了 `[object Object]` —— 有一个对象被 String() 了"

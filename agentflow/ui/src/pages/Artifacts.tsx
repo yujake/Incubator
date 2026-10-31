@@ -53,10 +53,29 @@ import { Table, cell, plain } from "../components/Table";
 import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
-import type { LibraryView, LibraryWork } from "../types";
+import type { AcceptanceCheck, LibraryView, LibraryWork } from "../types";
 
 /** 长文截断（与后端 `webui/state.py` 的 `CLIP` 同一口径：两头留、中间省）。 */
 const CLIP = 400;
+
+/** 一条验收行的阈值读数（E4）：`min`（下限）/ `max`（上限）二选一，`na` 行两者都无。
+ *
+ * 为什么不能直接 `String(r.min)`：真机 99 份 `ACCEPTANCE-CHECKS.json` 里有 60 份含
+ * `max`-only 行（`{"id": "C3", "kind": "unfinished_request_rows", "max": 0}` ——
+ * 「剩下多少没做」那一档的达标线是 0，用 `min` 表达不出来），那一格读出来是
+ * `undefined`，`String(undefined)` 会把字面量 `undefined` 印上屏。三档分开：
+ *
+ * - 这一行没声明这个方向的阈值 ⇒ `—`（不是 0、也不是 unknown：它压根没有这条线）；
+ * - `na` 行 ⇒ `不适用`（`closing.py` 的第三档阈值，不是通过也不是失败）；
+ * - 真给了数字 ⇒ 数字。
+ */
+function bound(row: AcceptanceCheck, which: "min" | "max"): string {
+  if (row.na === true) {
+    return "不适用";
+  }
+  const value = which === "min" ? row.min : row.max;
+  return typeof value === "number" ? String(value) : "—";
+}
 
 /** 这一面读数的九张卡：栏序 = `draft/74 §3.4` 那七栏 + 后来补的两栏，标题的唯一来源。
  *
@@ -471,7 +490,12 @@ export function Artifacts() {
               {
                 key: "min",
                 title: "下限",
-                render: (r) => String(r.min),
+                render: (r) => bound(r, "min"),
+              },
+              {
+                key: "max",
+                title: "上限",
+                render: (r) => bound(r, "max"),
               },
               { key: "note", title: "备注" },
             ]}

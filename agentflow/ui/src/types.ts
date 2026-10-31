@@ -743,11 +743,13 @@ export interface SecretaryDecision {
   by_task_id_tri: string;
 }
 
-/** 出处：out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；`closing.ACCEPTANCE_CHECKS_NAME`）。 */
+/** 出处：out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；`closing.ACCEPTANCE_CHECKS_NAME`）。阈值是 `min` / `max` / `na` 三选一：`min` 档问「做得够不够」（`got >= min`），`max` 档问「剩下多少没做」（`got <= max`，真机 60/99 份工作区里有这种行），`na` 档是「这一档对这个项目不适用」（三态，不是通过也不是失败）⇒ 三格都写成可选，谁都不冒充必填。 */
 export interface AcceptanceCheck {
   id: string;
   kind: string;
-  min: number;
+  min?: number | null;
+  max?: number | null;
+  na?: boolean;
   name: string;
   note: string;
   by_role: string;
