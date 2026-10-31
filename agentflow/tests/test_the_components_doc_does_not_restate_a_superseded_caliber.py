@@ -98,12 +98,22 @@ def test_the_row_names_the_real_caliber() -> None:
 
 
 def test_the_anchor_is_still_the_m_verdict() -> None:
-    """④ 反真空：`can_close` 的实现今天必须读 `m_verdict`（否则上面三条钉的是空气）。"""
+    """④ 反真空：M 的判断那一格今天必须读 `m_verdict`（否则上面三条钉的是空气）。
+
+    2026-11-03（153-U-01/U-02）：那一格改名叫 `m_says_done`；`can_close` 变成了机器口径
+    （`bool | None`，`None` = 没接线）。所以锚点也搬过去 —— 文档里"`m_says_done` = M 在
+    `m_verdict.met` 里说的那一句"这句话的真身是那个属性。
+    """
     from agentflow.closing import ClosingReport
 
-    prop = ClosingReport.can_close
+    prop = ClosingReport.m_says_done
     source = inspect.getsource(prop.fget if isinstance(prop, property) else prop)
     assert _TRUE_CALIBER in source, (
-        "`ClosingReport.can_close` 不再读 `m_verdict` ⇒ 真值换人了，"
+        "`ClosingReport.m_says_done` 不再读 `m_verdict` ⇒ 真值换人了，"
         "`docs/SYSTEM-COMPONENTS.md` 那一条说法必须重新裁一次，不能继续绿着：\n"
         f"{source}")
+    machine = ClosingReport.can_close
+    machine_src = inspect.getsource(machine.fget if isinstance(machine, property) else machine)
+    assert "_machine_caliber" in machine_src, (
+        "`ClosingReport.can_close` 不再是机器口径那一格（2026-11-03 裁决 ①=乙）：\n"
+        f"{machine_src}")

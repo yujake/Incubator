@@ -535,7 +535,8 @@ def test_the_tool_readings_are_recomputed_not_hand_copied(tmp_path):
     before = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
                            cap_usd=1.0, sid=sid)
     assert before.ok and before.data["review_acceptance"]["passed"] is True, before.data
-    assert before.data["can_close"] is True, before.data
+    assert before.data["m_says_done"] is True, before.data
+    assert before.data["can_close"] is None, before.data  # 机器口径第 1 笔还没接线
 
     key, _name = RX.CRITERIA[0]
     _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
@@ -546,7 +547,7 @@ def test_the_tool_readings_are_recomputed_not_hand_copied(tmp_path):
     assert _criterion_row(ra, key)["state"] == "fail", ra["criteria"]
     assert ra["passed"] is False and key in ra["failed"], ra
     # 两层刻意不折平：内容级判据红了，收工门那八格照旧（can_close 由 M 的判据定）
-    assert after.data["can_close"] is True, after.data["status"]
+    assert after.data["m_says_done"] is True, after.data["status"]
     assert after.data["status"] == before.data["status"], (
         "内容级验收把收工门的读数带偏了 —— 两层的入参同源，但判定必须各管各的")
 
@@ -763,7 +764,8 @@ def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
                         goal_met=True, basis="八格与内容级读数都在",
                         task_list=[{"what": "把交付做完", "state": "done"}])
     assert res.ok, (res.error, res.meta)
-    assert res.data["can_close"] is True, res.data
+    assert res.data["m_says_done"] is True, res.data
+    assert res.data["can_close"] is None, res.data
     assert res.data["verdict_written"]["ok"] is True, res.data["verdict_written"]
     got = _CL.read_m_verdict(st.root)
     assert got["checked"] and got["count"] == 1, got

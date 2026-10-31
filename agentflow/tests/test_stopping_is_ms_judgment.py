@@ -61,7 +61,7 @@ def test_m_says_done_and_that_is_the_verdict(tmp_path: pathlib.Path):
                 basis="P2/P7/P8/P9 全绿",
                 task_list=[{"what": "逐条核引文", "state": "done"},
                            {"what": "形式化核两条定理", "state": "done"}])
-    assert rep.can_close is True, rep.to_dict()
+    assert rep.m_says_done is True, rep.to_dict()
     assert rep.machine_pass is False, "夹具的前提：机器那一格是 fail"
     assert CL.tri_state_exit_code(rep) == 1, (
         "机器说不行 ⇒ 退出码不许是 0（2026-11-03 裁决 ②）；能不能停仍由 `can_close` 说")
@@ -76,7 +76,7 @@ def test_m_may_stop_against_a_red_cell_but_the_cell_is_named(tmp_path: pathlib.P
     rep = _gate(st, _report(st.root), goal="交付", goal_met=True,
                 task_list=[{"what": "写报告", "state": "done"}])
     assert rep.machine_pass is False and rep.status["substance"] == "fail", rep.to_dict()
-    assert rep.can_close is True, "判据归 M：机器有意见不阻断它停"
+    assert rep.m_says_done is True, "判据归 M：机器有意见不阻断它停"
     assert [x["check"] for x in rep.overrode] == ["substance"], rep.overrode
     assert "substance" in rep.summary(), rep.summary()
 
@@ -105,7 +105,7 @@ def test_m_may_refuse_to_stop_even_when_the_machine_is_green(tmp_path: pathlib.P
                 basis="还差引文逐条核验",
                 task_list=[{"what": "逐条核引文", "state": "not_done", "why": "检索被 429 挡住"}])
     assert rep.machine_pass is True, ("这一条的前提是机器那一格真的绿了", rep.to_dict())
-    assert rep.can_close is False, rep.to_dict()
+    assert rep.m_says_done is False, rep.to_dict()
     assert CL.tri_state_exit_code(rep) == 1, "M 说没做完 ⇒ 退出码 1（被拦住）"
     assert [x["check"] for x in rep.overrode] == ["*"], rep.overrode
 
@@ -118,7 +118,7 @@ def test_m_saying_done_while_its_own_list_has_open_items_is_named(tmp_path: path
                            {"what": "形式化核两条定理", "state": "not_done",
                             "why": "Lean 环境缺包"},
                            {"what": "重渲染附录", "state": "cannot", "why": "编译脚本缺"}])
-    assert rep.can_close is True, "判据归 M：它说停就停"
+    assert rep.m_says_done is True, "判据归 M：它说停就停"
     assert [x["what"] for x in rep.verdict_conflicts] == ["形式化核两条定理", "重渲染附录"], \
         rep.verdict_conflicts
     assert "对不上" in rep.summary(), rep.summary()
@@ -128,7 +128,7 @@ def test_without_a_verdict_nobody_said_it_may_close(tmp_path: pathlib.Path):
     """反真空：M 没交判据 ⇒ `can_close=false` + 退出码 2（"没人判过"不是"可以交"）。"""
     st = _store(tmp_path)
     rep = _gate(st, _report(st.root))
-    assert rep.m_verdict is None and rep.can_close is False, rep.to_dict()
+    assert rep.m_verdict is None and rep.m_says_done is False, rep.to_dict()
     assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
     assert "没有提交自己的判据" in rep.summary(), rep.summary()
     assert json.dumps(rep.to_dict(), ensure_ascii=False)  # 可落档
@@ -153,7 +153,7 @@ def test_an_item_it_cannot_do_must_be_reported_to_the_user(tmp_path: pathlib.Pat
     quiet = CL.check_closing(st, checks=("substance",), project_dir=str(st.root),
                              report_path=str(report), session_root=str(st.root), sid="r1",
                              goal="交付", goal_met=True, task_list=tasks)
-    assert quiet.can_close is True, quiet.to_dict()
+    assert quiet.m_says_done is True, quiet.to_dict()
     assert [x["what"] for x in quiet.escalation_gaps] == ["重渲染附录并核锚"], \
         quiet.readings["verdict_escalation"]
     assert "没上报的项" in quiet.summary(), quiet.summary()

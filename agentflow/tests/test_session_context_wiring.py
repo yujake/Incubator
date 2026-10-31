@@ -92,7 +92,10 @@ def test_in_run_reading_equals_the_outside_reading(tmp_path: Path):
             " —— 两个入口读的必须是同一段会话（§63）")
     assert data["failed"] == outside.failed, (data["failed"], outside.failed)
     assert data["unknowns"] == outside.unknowns, (data["unknowns"], outside.unknowns)
-    assert bool(data["can_close"]) == outside.can_close
+    # 2026-11-03（153-U-01/U-02）：`can_close` 是三态（`bool | None`）—— 第 1 笔还没接线
+    # ⇒ 两边都该是 None（`bool(None) == False` 会把"没查成"读成"机器说不通过"）。
+    assert data["can_close"] is None and outside.can_close is None, (
+        data["can_close"], outside.can_close)
 
     # 反真空：这一格真不是 pass，否则上面的"相等"证明不了任何事。
     assert outside.status["user_pending"] == "fail", outside.to_dict()
@@ -127,7 +130,8 @@ def test_without_session_identity_the_cell_is_unknown(tmp_path: Path):
 
     assert data["status"]["user_pending"] == "unknown", data["status"]
     assert "no_session_identity" in _codes(data), _codes(data)
-    assert data["can_close"] is False, data
+    # 这条路径是"这次调用没有会话身份" ⇒ 那一格没查成 ⇒ 机器口径是 None（不是 False）。
+    assert data["can_close"] is None, data
 
     # 负控的负控：同一份工作区、外部带缺省 sid 读，那一格「是」 fail
     # ⇒ 上面那个 unknown 不是"文件里没东西"，而是"这次调用没有身份"。

@@ -45,7 +45,8 @@ def _rep(**kw):
 def test_a_machine_failure_makes_the_exit_code_nonzero() -> None:
     """① 机器有一格不是 pass，而 M 说达成 ⇒ 退出码不是 0（改前是 0）。"""
     rep = _rep(status={"a": "pass", "b": "unknown"}, m_verdict={"met": True, "basis": "夹具"})
-    assert rep.can_close is True, "夹具的前提：M 说达成"
+    assert rep.m_says_done is True, "夹具的前提：M 说达成"
+    assert rep.can_close is None, "夹具的前提：机器口径还没接线（第 1 笔）"
     assert rep.machine_pass is False, "夹具的前提：机器那一格是 unknown"
     assert CL.tri_state_exit_code(rep) == 1, (
         f"机器读数说不行（unknown / 不是 pass），退出码却是 {CL.tri_state_exit_code(rep)} "
@@ -65,7 +66,10 @@ def test_both_sides_saying_yes_is_still_zero() -> None:
     rep = _rep(status={"a": "pass", "b": "pass"},
                findings=[_finding("warning")],  # warning 只报不拦
                m_verdict={"met": True, "basis": "夹具"})
-    assert rep.can_close and rep.machine_pass
+    # 2026-11-03（裁决 ①=乙）：能不能交看 `closable`（机器口径没接线时退回 M ∧ 八格）；
+    # `can_close` 本身是三态，今天（第 1 笔）是 None —— 它不许被读成通过。
+    assert rep.closable and rep.machine_pass
+    assert rep.can_close is None
     assert CL.tri_state_exit_code(rep) == 0
 
 

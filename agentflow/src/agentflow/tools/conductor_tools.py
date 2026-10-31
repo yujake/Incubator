@@ -1200,7 +1200,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）；名单在论文段里逐格写着，这里不重抄。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`can_close` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』。另回 `review_acceptance`：内容级验收五条 + 辅助读数；给 `cap_usd` 才判成本上限。",
+    "只读：跑收工门（八格）；名单在论文段里逐格写着，这里不重抄。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`m_says_done` 由你交的判据（`goal`/`goal_met`/`task_list`）决定，不交 ⇒ `false` + 『没人判过』；`can_close` 是机器口径（`bool | None`，`None` = 没接线，不许读成通过）。另回 `review_acceptance`：内容级验收五条 + 辅助读数；给 `cap_usd` 才判成本上限。",
     {
         "type": "object",
         "properties": {
@@ -1219,7 +1219,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
             "goal_met": {"type": "boolean",
                          "description": "**你的判断**：目标达成了没有（业主 2026-10-09："
                                         "「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。"
-                                        "不给 ⇒ 这一趟没有收工判据（`can_close=false`）"},
+                                        "不给 ⇒ 这一趟没有收工判据（`m_says_done=false`）"},
             "basis": {"type": "string",
                       "description": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / "
                                      "与机器八格不一致时你为什么不认它）"},
@@ -1249,13 +1249,16 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     },
     side_effect="read",
     roles=("M",),
-    returns=("{'can_close','machine_pass','m_verdict','overrode','verdict_conflicts',"
+    returns=("{'m_says_done','can_close','can_close_reason','closable','machine_pass',"
+             "'m_verdict','overrode','verdict_conflicts',"
              "'verdict_note','verdict_written',"
              "'status','failed','unknowns','findings','readings','summary','review_acceptance'}；"
-             "**can_close 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，"
+             "**`m_says_done` 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，"
              "结论写在 `goal_met`），机器八格退成读数（`status`/`machine_pass`），"
              "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` "
-             "逐项点名；M 没给判据 ⇒ `can_close=false` + 读数说明『没人判过』；"
+             "逐项点名；M 没给判据 ⇒ `m_says_done=false` + 读数说明『没人判过』；"
+             "`can_close` 是**机器口径**（`bool | None`：`None` = 没接线/算不出来，"
+             "既不是过也不是不过，不许读成通过）；`closable` 是给调用方的那个布尔（会不会交）；"
              "M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`"
              "（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；"
              "status 的键是八格检查（paper/contradictions/load_bearing/report_shape/"
@@ -1293,15 +1296,20 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     为什么与 CLI 出口同形：两个入口读的是同一批入参（`project_dir` /`report_path` / `session_root` / `sid` / 成本上限），就该给出同一栏读数 ——判据名、判据顺序、辅助读数的标签与那句禁令
     全部现取自 `reviewaccept`（`CRITERIA` / `AUXILIARY_SIGNALS` / `to_dict`），本文件不抄第二份。
     `cap_usd` 不给时成本那一格是「没查成」而不是「通过」（与 CLI 那边的缺省一致）。
-    收工由 M 判（业主 2026-10-09）「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 本工具新增`goal` / `goal_met` / `basis` 三个入参：`can_close` 是 M 的判据，机器那八格退成读数
-    （`status` / `machine_pass`），两者不一致时 `overrode` 逐格点名。 M 不给 `goal_met` ⇒ `can_close=false` + 「没人判过」的读数（不是「可以交」）。内容级验收（`review_acceptance`）
+    收工由 M 判（业主 2026-10-09）「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 本工具新增`goal` / `goal_met` / `basis` 三个入参：`m_says_done` 是 M 的判据，机器那八格退成读数
+    （`status` / `machine_pass`），两者不一致时 `overrode` 逐格点名。 M 不给 `goal_met` ⇒ `m_says_done=false` + 「没人判过」的读数（不是「可以交」）。内容级验收（`review_acceptance`）
     照旧只是读数 —— 它从不参与 `can_close`，这一条从裁定题 13 起就没变过。
     判据由 M 在运行内给，而门还有运行外的出口（`agentflow closing` / 发布门）：两处必须得出同一个结论（`draft/37` §63 记过一次"运行内 `can_close=true`、外部 `failed=[...]`"的
     假绿）。所以 M 给判据的那一次调用把它落到`out/review/m-verdicts.jsonl`（append-only，取最后一行）—— 运行外那一趟没有显式入参时读它。门本身仍然只读：`check_closing` 不写任何东西，写这
     一笔的是本工具（M 的动作），落盘失败如实进 `verdict_written`。
     """
     if store is None:
-        return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
+        # 2026-11-03（153-U-01/U-02）：三态纪律 —— "没查成"不是"机器说不通过"，
+        # 所以 `can_close` 给 None（不是 False），并把原因写进 `can_close_reason`。
+        return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store",
+                    can_close=None,
+                    can_close_reason=("no_store：没有工作区 ⇒ 这一格没查成"
+                                      "（既不是过也不是不过）"))
     from .. import closing as CL
     from .. import reviewaccept as RX
 
@@ -1335,10 +1343,16 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     acc = RX.check_review(store, project_dir=project_dir, report_path=report_path,
                           session_root=session_root, cost_cap_usd=cap_usd, sid=sid)
     ra = acc.to_dict()
-    kind = "" if rep.can_close else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
-                                     else "closing_blocked")
+    # 2026-11-03（153-U-01/U-02）：能不能交看 `rep.closable`（机器口径给了就听它，没接线就
+    # 退回 M 的判据 ∧ 机器八格）；`can_close` 本身是三态（None = 没接线，不许读成通过）。
+    kind = "" if rep.closable else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
+                                    else "closing_blocked")
     return ok({
-        "can_close": data["can_close"], "machine_pass": data["machine_pass"],
+        "m_says_done": data["m_says_done"],
+        "can_close": data["can_close"],
+        "can_close_reason": data["can_close_reason"],
+        "closable": data["closable"],
+        "machine_pass": data["machine_pass"],
         "m_verdict": data["m_verdict"], "overrode": data["overrode"],
         "verdict_conflicts": data["verdict_conflicts"],
         "verdict_note": data["verdict_note"],
@@ -1363,7 +1377,7 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
             "readings": ra["readings"],
             "summary": acc.summary(),
         },
-    }, kind=kind, blocked=not rep.can_close,
+    }, kind=kind, blocked=not rep.closable,
         blocker_count=len(rep.blockers), unknown_count=len(rep.unknowns))
 
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。

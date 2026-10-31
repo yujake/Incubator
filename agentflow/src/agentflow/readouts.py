@@ -68,7 +68,8 @@ FLOW_DATA_KEYS: tuple[str, ...] = ("roles", "totals")
 COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 
 #: `gates_readout` 的 `data` 键集。
-GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "can_close", "verdict")
+GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "m_says_done",
+                                    "can_close", "closable", "verdict")
 
 #: 读数名 → 它的 `data` 键集。判据从这一张表取期望值（不在测试里手抄第二份）。
 READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
@@ -463,7 +464,8 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     scanned = scan(target) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
     empty = {"cells": [], "counts": {s: 0 for s in CELL_STATES},
-             "machine_pass": False, "can_close": False, "verdict": None}
+             "machine_pass": False, "m_says_done": False, "can_close": None,
+     "closable": False, "verdict": None}
     if why:
         return _envelope(checked=False, reason=why, data=empty)
     store = scanned.get("store")
@@ -503,7 +505,11 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                       "detail": "；".join(d for d in detail_of.get(name, []) if d)})
     data: dict[str, Any] = {"cells": cells, "counts": counts,
                             "machine_pass": bool(report.machine_pass),
-                            "can_close": bool(report.can_close),
+                            # 2026-11-03（153-U-01/U-02）：`m_says_done` 是 M 的判断；`can_close` 是机器口径
+        # （`bool | None`，`None` = 没接线 —— 不许折成 False，那会被读成"机器说不通过"）。
+        "m_says_done": bool(report.m_says_done),
+        "can_close": report.can_close,
+        "closable": bool(report.closable),
                             "verdict": dict(report.m_verdict) if report.m_verdict else None}
     return _envelope(checked=True, reason="", data=data, problems=problems)
 
@@ -639,7 +645,8 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
             counts = data.get("counts") or {}
             lines += ["", "计数：" + "  ".join(f"{s}={counts.get(s, 0)}" for s in CELL_STATES),
                       f"机器口径 machine_pass={bool(data.get('machine_pass'))}；"
-                      f"M 判据 can_close={bool(data.get('can_close'))}"]
+                      f"M 判据 m_says_done={bool(data.get('m_says_done'))}，"
+          f"机器口径 can_close={data.get('can_close')!r}"]
             verdict = data.get("verdict")
             if verdict:
                 lines.append(f"M 的判据：met={verdict.get('met')} "

@@ -82,7 +82,7 @@ EXIT_CODE_DOMAINS: dict[str, dict[int, str]] = {
     },
     # `agentflow closing`：收工门。表体在 `closing.tri_state_exit_code`。
     "gate": {
-        0: "M 判达成（can_close）",
+        0: "M 判达成（m_says_done）且机器读数也过（machine_pass）",
         1: "被拦住（M 判了没达成）",
         2: "没人判过（没有 m_verdict ⇒ 没查成）",
     },

@@ -2870,7 +2870,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    重冻（11 个角色各一行版本号 + D / M 的两段正文）+ `docs/ROLE-GUIDE.md` 重生成。
 #: ③ 已知待办（与 p220 / p221 / p222 同一句）：`tests/fixtures/prompt_cache_warm.json`
 #:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
-PROMPT_VERSION = "p223"
+PROMPT_VERSION = "p224"
 
 
 
@@ -5247,8 +5247,10 @@ PAPER_PACK = """\
     重写要 `overwrite`）。
 - `conductor.closing` 仍要跑（它是收工门）：两个参数都给对 —— `project_dir` 是项目根
   （这个工作区就是根 ⇒ 给 `"."`；给了 `out/paper` 它会把 `out/paper` 再拼一次），
-  `report_path` 给 `out/review/REPORT.md`。它报出来的缺口按原因行读，
-  别只看那句 `can_close`。
+  `report_path` 给 `out/review/REPORT.md`。它报出来的缺口按原因行读。
+  三个名字别混：`m_says_done` 是**你的**判断（你自己列的任务列表做完了没有）；
+  `can_close` 是**机器口径**；`can_close=null`（没接线/算不出来）**不是通过**，
+  它既不是过也不是不过 —— 不许把它读成通过，也不许把 `can_close=false` 说成"我说没做完"。
 - 关键取舍要问用户（`ask_user` 那条形状）：问过的问题会落盘；在没人值守的运行里，
   提问会停在"等待用户"，等回答回来再继续。这不是麻烦，是这道门的一条读数
   （`triage_branch_recorded`：一次都没问过 ⇒ 那一格只能记"没查成"）。
@@ -5261,7 +5263,7 @@ PAPER_PACK = """\
   这一格才会翻成 `pass`。框架侧对无人值守这一档的处置见 `draft/37` §66 的三档登记
   （甲/乙/丙），当前采用**乙**：判据保持 `fail`，口径写在提示词与文档里。
 - **报告里点到的每一行台账必须真的在盘上**（`draft/37` §70 的真机读数）。
-  第十四趟真机：六条判据全绿、收工门 `can_close=true`，而交付说明里写着
+  第十四趟真机：六条判据全绿、收工门 `m_says_done=true`，而交付说明里写着
   "4 条登记进 `statements`（0000–0003）"—— 台账里只有 `0000` 一条：
   前两次登记被参数校验拒了（`page_range` 传成了字符串），模型把**打算做的事**
   写成了**已经做完的事**。规则只有两条：
