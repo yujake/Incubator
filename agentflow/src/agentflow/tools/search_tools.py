@@ -705,7 +705,10 @@ def _multi_source_reading(mp: Any) -> dict[str, Any]:
         })
     return {
         "sources": rows,
-        "refusals": dict(getattr(mp, "last_refusals", None) or {}),
+        # 名字（2026-11-03，153-U-09 第二笔）：出口那本 multi 早就叫 `source_refusals`
+        # （`_h_literature` 的 data 里那一格）；这里跟着用同一个名字，免得同一个量
+        # 在函数内部与出口各叫一个名字（业主 2026-11-02 批准动这一处）。
+        "source_refusals": dict(getattr(mp, "last_refusals", None) or {}),
         # 两支"没交货"的分开列：`failed` 是上游坏了，`refused` 是这一问根本没发出去。
         # 折成一个"没结果"会让"被墙/限流"与"这问对这条通道不适用"同形。
         "failed": sorted(r["name"] for r in rows if r["status"] == "failed"),
@@ -821,7 +824,7 @@ def _h_literature(
                 providers_requested=wanted,
                 sources=multi["sources"],
                 source_failures=multi["failed"],
-                source_refusals=multi["refusals"],
+                source_refusals=multi["source_refusals"],
                 topic=topic,
                 mode=mode,
             )

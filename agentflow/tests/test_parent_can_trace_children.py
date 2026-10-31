@@ -148,7 +148,7 @@ def test_01_a_non_conductor_only_traces_one_layer(tmp_path: pathlib.Path):
     assert data["me"]["task_id"] == fx["d2"], data["me"]
     # 四格读数都在（状态 / 最近 N 步 / 被拒 / 产出 / 上一次交接）。
     child = data["children"][0]
-    for key in ("status", "outcome", "recent_steps", "refusals", "products",
+    for key in ("status", "outcome", "recent_steps", "subtask_refusals", "products",
                 "last_handoff"):
         assert key in child, (key, child)
     assert child["recent_steps"]["shown"], child["recent_steps"]
@@ -289,7 +289,7 @@ def test_06_refusals_and_products_are_readable_in_the_one_layer_view(
     with _as(fx["ws"], fx["d2"], "D", fx["d1"], "D"):
         res = fx["reg"].call("trace.children", role="D", window=5)
     child = _children(res)["children"][0]
-    ref = child["refusals"]
+    ref = child["subtask_refusals"]
     assert ref["count"] == 2, ref
     assert ref["by_category"].get("forbidden_edge") == 1, ref
     assert ref["by_category"].get("capacity_refused") == 1, ref

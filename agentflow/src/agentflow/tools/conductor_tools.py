@@ -2970,7 +2970,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     returns=("{'checked','roots','depth_requested','depth_reached','window','rows',"
              "'count','truncated','session','silent_children','child_wait_invariant'}；"
              "每个节点里有 {'task_id','role','level',"
-             "'status','outcome','recent_steps','refusals','products','last_handoff'}；"
+             "'status','outcome','recent_steps','subtask_refusals','products','last_handoff'}；"
              "silent_children 是这一支里交过差的子代理编号（父据此把它们记为静默），"
              "child_wait_invariant 是不变量『活跃子代理 ⇒ 必有一条等它的计时器』的读侧判据"
              "（by_parent 逐父给 active_children / waited / unwaited / problems）"),

@@ -18,22 +18,40 @@
 2. 改名不改值：动作被拒 1 行 ⇒ `action_refusals.total == 1`、`by_reason == {"invalid_params": 1}`；
    一段会话里一次 `final_refused` ⇒ `final_refusals.count == 1`、行里 `kind` 仍是 `final_refused`；
 3. 三义互不复用：`registration_refusals` 与 `action_refusals` 同在一份状态报告里、各是各的格；
-4. 反向：全仓 `src/` 里不许再出现不带限定的 `refusals` 字典键 —— 除两张逐条登记的
-   别的含义（`agenttrace` 的子任务被拒次数、`search_tools` 的检索被拒）；
-   登记会过期：人把那一处也改掉之后登记必须删，否则这里红。
+4. 反向：全仓 `src/` 里不许再出现不带限定的 `refusals` 字典键 —— 登记表已清零
+   （2026-11-03 第二笔：`agenttrace` 那处改成 `subtask_refusals`、`search_tools`
+   那处改成 `source_refusals`，与出口那本 multi 已有的名字同一个），
+   于是这一条从"除两处之外"收紧成"一处都不许有"。
+
+## 第二笔做了什么（这一笔是"登记过期"那一半的兑现）
+
+上一笔把两处别的含义「登记」在这里、没有改名（改名要动 `returns=` 与冻结快照，
+属 FC-27 的 eval-criteria）。业主 2026-11-02 批准动禁改区 ⇒ 这一笔把它们改掉，
+登记表随之清零：
+
+| 落点 | 改前 | 改后 | 值 |
+|---|---|---|---|
+| `agenttrace.node_facts` 的节点读数 | `refusals` | `subtask_refusals` | 逐字不变（`_refusals()` 的返回原样搬过去） |
+| `tools.search_tools._multi_source_reading` | `refusals` | `source_refusals` | 逐字不变（`mp.last_refusals` 原样搬过去；出口那本 multi 早就叫这个名字） |
+
+登记表只增不减会烂成噪音 —— 所以下面两条正向判据不只是"新名字在"，还钉住
+"值没变"（改名的唯一合法形态）。
 """
 from __future__ import annotations
 
 import ast
 import pathlib
+import types
 
 import pytest
 
+from agentflow import agenttrace as AT
 from agentflow import clock as C
 from agentflow import sessions as SS
 from agentflow import statusreport as SR
 from agentflow.store import Store
 from agentflow.tools import clock_tools as CT
+from agentflow.tools import search_tools as ST
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 
@@ -156,20 +174,79 @@ def test_the_three_meanings_have_three_names(tmp_path: pathlib.Path) -> None:
         report["in_flight"]["registration_refusals"]
 
 
+# ---------------------------------------------------------------- ③b 两处改名：值必须逐字不变
+
+#: 子任务被拒那一格用的夹具行（一条台账里 `outcome=refused` 的行）。
+_SUBTASK_ROW = {
+    "task_id": "t-000001", "role": "D", "status": "done", "outcome": "refused",
+    "refusal_reason": "forbidden_edge", "kind": "", "detail": "越权边（夹具）",
+    "started_at": "", "ended_at": "",
+}
+
+
+def _subtask_cell(tmp_path: pathlib.Path) -> dict:
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    st = Store(ws)
+    st.init()
+    return dict(AT.node_facts(st, ws, dict(_SUBTASK_ROW)))
+
+
+def test_the_subtask_cell_is_named_subtask_refusals(tmp_path: pathlib.Path) -> None:
+    """① `agenttrace` 那一格改名成 `subtask_refusals`，且值逐字不变（改名不改值）。
+
+    "逐字不变"的对照：这一份 dict 就是改名前同一个夹具上 `node_facts()["refusals"]`
+    的返回值（2026-11-03 改前用 `temp/probe_153_u09_before_after.py` 落过盘）。
+    """
+    got = _subtask_cell(tmp_path)
+    assert "subtask_refusals" in got, sorted(got)
+    assert "refusals" not in got, (
+        "子任务读数里还有裸 `refusals` ⇒ 它与动作/收工/名册三义仍共用一个名字", sorted(got))
+    assert got["subtask_refusals"] == {
+        "count": 1,
+        "by_category": {"forbidden_edge": 1},
+        "samples": [{"code": "forbidden_edge", "category": "forbidden_edge",
+                     "text": "forbidden_edge"}],
+        "unclassified": 0,
+        "checked": True,
+    }, got["subtask_refusals"]
+
+
+def test_the_search_cell_is_named_source_refusals() -> None:
+    """① `search_tools._multi_source_reading` 那一格改名成 `source_refusals`。
+
+    出口那本 multi 早就叫 `source_refusals`（`_h_literature` 的 data 里那一格），
+    改前只有函数内部这一份 dict 叫裸 `refusals` —— 同一个量两个名字。
+    值仍逐字是 `mp.last_refusals`（这里钉的就是"原样搬过去"）。
+    """
+    class _Stat:
+        status = "query_not_applicable_cjk"
+        count = 0
+        error_kind = "query_not_applicable"
+        error = "查询对这条通道不适用（夹具）"
+        delivered = False
+        refused = True
+
+    mp = types.SimpleNamespace(
+        last_stats={"openalex": _Stat(), "crossref": _Stat()},
+        last_refusals={"openalex": "查询对这条通道不适用（夹具）",
+                       "crossref": "查询对这条通道不适用（夹具）"},
+    )
+    multi = ST._multi_source_reading(mp)
+    assert "source_refusals" in multi, sorted(multi)
+    assert "refusals" not in multi, (
+        "检索读数里还有裸 `refusals` ⇒ 同一个量在函数内部与出口各叫一个名字", sorted(multi))
+    assert multi["source_refusals"] == mp.last_refusals, multi["source_refusals"]
+
+
 # ---------------------------------------------------------------- ④ 反向：不许再有无名的 refusals 键
 
 #: 仍然叫裸 `refusals` 的那两处，逐条登记（含义 + 为什么不在这三义里）。
-#: 2026-11-03（153-U-09）：改名它们要动工具声明 `returns=` 与冻结快照
-#: （FC-27 的 eval-criteria），所以本笔只登记、不改。
-KNOWN_BARE_KEYS: dict[str, str] = {
-    "agenttrace.py":
-        "子任务追踪里的『被拒次数与类目』（`_refusals`：这一步的拒信原话 + 台账里 "
-        "`outcome=refused` 的行）。它是一份按类目聚合的追踪读数，不是这三义里的任何一格；"
-        "改名要动 `conductor.watch` / `trace.children` 的 `returns=` 与两份冻结快照 ⇒ FC-27，单独一笔",
-    "tools/search_tools.py":
-        "检索多路的『这一路被拒了』（provider 的 `last_refusals`）。出口那本 multi 已经叫 "
-        "`source_refusals`，裸键只在函数内部那一份 dict 里；它与动作/收工/名册三件事都不是一回事",
-}
+#: 2026-11-03（153-U-09 第二笔）：登记表已清零 —— 两处都改了名
+#: （`subtask_refusals` / `source_refusals`）。只增不减的登记表会烂成噪音，
+#: 所以这里留着一个空表而不是删掉这段：下一处再出现裸键时，
+#: 判据的报错会指向这张表（"要么改名，要么逐条登记"，二选一都得说清）。
+KNOWN_BARE_KEYS: dict[str, str] = {}
 
 #: 扫的键名：不带限定的 `refusals`（`action_refusals` 之类带前缀的不算）。
 _BARE = "refusals"

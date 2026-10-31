@@ -544,7 +544,7 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
     roles=tuple(S.ROLES),
     returns=("{'checked','me','depth_requested','depth_granted','one_layer_only',"
              "'children','count','deeper','session'}；每个子任务里有 "
-             "{'task_id','role','status','outcome','recent_steps','refusals',"
+             "{'task_id','role','status','outcome','recent_steps','subtask_refusals',"
              "'products','last_handoff'}"),
 )
 def trace_children(store, root, *, task_id: str = "", depth: int = 1,

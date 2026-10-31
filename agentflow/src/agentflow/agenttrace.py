@@ -458,8 +458,12 @@ def node_facts(
         "started_at": str(row.get("started_at") or ""),
         "ended_at": row.get("ended_at"),
         "recent_steps": steps_view,
-        "refusals": _refusals(records, {"steps": all_steps,
-                                        "checked": steps_all.get("checked", True)}, row),
+        # 名字（2026-11-03，153-U-09 第二笔）：这一格是"子任务被拒次数与类目"，
+        # 与 `statusreport.action_refusals`（台账里的动作行）、`clock.final_refusals`
+        # （收工被拒）、`secretary.registration_refusals`（名册写口）是三件不同的事。
+        # 业主 2026-11-02 批准动这一处（改它要动两个工具的 `returns=` 与冻结快照）。
+        "subtask_refusals": _refusals(records, {"steps": all_steps,
+                                                "checked": steps_all.get("checked", True)}, row),
         "products": _products(store, row),
         "last_handoff": handoff,
     }
