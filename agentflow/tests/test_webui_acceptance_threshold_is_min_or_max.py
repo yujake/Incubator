@@ -15,7 +15,7 @@
 
 为什么判据没红：夹具三行全是 `min`（`tests/conftest.py` 的 `ACCEPTANCE_CHECKS_SAMPLE`），
 契约 C 又只读第一行（`_take` 原先是 `set(rows[0])`）—— 两层盲区叠在一起。
-这一笔同时补了这两处：夹具加一条 `max`-only 行，`_take` 取**每一行**键的并集。
+这一笔同时补了这两处：夹具加一条 `max`-only 行，`_take` 取每一行键的并集。
 
 ## 这一份守什么
 
@@ -86,6 +86,17 @@ def _interface_body(name: str) -> str:
     return found.group(1) if found else ""
 
 
+#: 块注释与整行注释（与 `tests/test_webui_pages.py` 同一条口径：注释不上屏，
+#: 写在注释里的 `String(r.min)` 不算"页面还在那样渲染"）。
+_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_LINE_COMMENT = re.compile(r"^[ \t]*//.*$", re.M)
+
+
+def _code_only(text: str) -> str:
+    """剥掉注释之后的页面源码（判据只看真的会执行的写法）。"""
+    return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
+
+
 # ====================================================================== ① 端点
 def test_a_max_only_row_keeps_its_upper_bound(artifacts_ws: pathlib.Path) -> None:
     """①：夹具里那一条 `max`-only 行原样到达 `/api/artifacts`（`min` 不在）。"""
@@ -118,9 +129,14 @@ def test_the_generated_type_covers_both_directions() -> None:
 # ====================================================================== ③ 页面
 def test_the_page_renders_both_bounds() -> None:
     """③：产物页同时有下限与上限两列，且不再无条件 `String(r.min)`。"""
-    src = ARTIFACTS_TSX.read_text(encoding="utf-8")
-    assert 'key: "min"' in src, "产物页没有下限那一列"
-    assert 'key: "max"' in src, "产物页没有上限那一列（max-only 行会印出 undefined）"
-    assert "r.max" in src, "上限那一列没有读 r.max"
+    src = _code_only(ARTIFACTS_TSX.read_text(encoding="utf-8"))
+    assert 'key: "min"' in src and 'bound(r, "min")' in src, (
+        "产物页缺下限那一列（或它没走三态渲染）")
+    assert 'key: "max"' in src and 'bound(r, "max")' in src, (
+        "产物页没有上限那一列（max-only 行会印出 undefined）")
+    # 两格都读的是同一个三态渲染器，它必须真的读这两个键（别只加一个空列）。
+    assert "row.min" in src and "row.max" in src, (
+        "阈值渲染器没读 min / max 两格")
     assert "String(r.min)" not in src, (
         "产物页仍然无条件 String(r.min) —— max-only 行会印出 undefined")
+    assert "不适用" in src, "`na` 那一档没有单独的显示（会与「没声明」混成一档）"

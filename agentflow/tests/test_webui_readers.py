@@ -488,7 +488,8 @@ def test_artifacts_face_reads_ledger_handoffs_checks_style_products_tasks(
     required = tuple(f for f in FIELDS["HandoffRow"]
                      if f not in ("revises", "kind", "ref_problems"))
     assert set(got["handoffs"][0]) >= set(required), sorted(got["handoffs"][0])
-    assert [c["id"] for c in got["checks"]] == ["C1", "C2", "C3"], got["checks"]
+    # 夹具样本 4 行（2026-11-03 · E4：第 4 行是 max-only 档；真机 8 行）。
+    assert [c["id"] for c in got["checks"]] == ["C1", "C2", "C3", "C4"], got["checks"]
     assert got["style"]["sections"] == list(conftest.REPORT_STYLE_SECTIONS)
     assert len(got["secretary"]) == 2, got["secretary"]
     assert got["run_dir"].endswith("run-1"), got["run_dir"]
