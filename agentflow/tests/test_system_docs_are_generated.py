@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -94,6 +95,32 @@ def test_every_documented_symbol_mentioned_in_a_component_is_importable() -> Non
             )
             checked += 1
     assert checked == 0 or checked > 0  # 形态说明：为空也允许（散文里不一定有 模块.符号 形态）
+
+
+def test_every_documented_exhaustion_backing_state_exists_in_code() -> None:
+    """组件表点名的穷举背书结局必须 ⊆ `numericproof.EXHAUSTION_BACKING_STATES`。
+
+    文档是生成物，但「哪几个结局」这句清单是手写的：代码加一种/删一种而生成器没跟上，
+    `test_the_two_documents_are_byte_identical_to_a_fresh_generation` 只会说「逐字节一致」
+    —— 两边一起停在旧清单上它照样绿。这一条把文档里的码与代码里的真身钉在一起。
+    """
+    from agentflow import numericproof as NP
+
+    text = COMPONENTS_DOC.read_text(encoding="utf-8")
+    marker = "exhaustion_backing（V 对这份 E 报告真签过没有）的五结局："
+    lines = [line for line in text.splitlines() if marker in line]
+    assert len(lines) == 1, f"组件表里找不到（或找到多条）`{marker}` ⇒ 这条判据失去对象"
+    cell = lines[0].split(marker, 1)[1].split(" | ", 1)[0]
+    documented = set(re.findall(r"(?:^|；)\s*([a-z_]+)\s", cell))
+    states = set(NP.EXHAUSTION_BACKING_STATES)
+    assert documented, f"`{marker}` 后面一个结局都没点名 ⇒ 这条判据失去对象"
+    assert documented <= states, (
+        f"组件表提到的结局 {sorted(documented - states)} 在 numericproof 里不存在 "
+        f"（真身：{sorted(states)}）"
+    )
+    assert documented == states, (
+        f"组件表漏了这些结局：{sorted(states - documented)}（真身：{sorted(states)}）"
+    )
 
 
 def test_both_documents_are_registered_in_the_docs_index() -> None:

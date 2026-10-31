@@ -233,7 +233,12 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "src/agentflow/numericproof.py",
         "数值与穷举那一档证据的判定：档位、上界与枚举量的读数、第三方签字。",
         "exhaustion_verdict（穷举判定）、bound_check（上界对枚举量，只作读数）、third_party_problems（B 的入库闸）、"
-        "suspect_self_signed（可疑自签，先报不拦）。",
+        "suspect_self_signed（可疑自签，先报不拦）、exhaustion_backing（V 对这份 E 报告真签过没有）的五结局："
+        "signed 那一签判成立、签的就是现在这一份且那一行自己签得住 ⇒ 给背书；"
+        "defective V 判了有毛病（或判成立但那一行签不住）⇒ 不给，要 E 修第几步；"
+        "unsigned 台账里从来没有这一份的签 ⇒ 不给，要派 V 去审；"
+        "stale 台账里有签但签的是旧版 ⇒ 不给，要按现在这一份重新送审；"
+        "unchecked 没给根或台账读不出来 ⇒ 不给，是「没查成」不是「没签」。",
         "读写 data/experiments.json 的证据字段",
         "tests/test_t0_tier_and_exhaustion_proof.py、tests/test_b_third_party_signature_gate.py",
     ),
