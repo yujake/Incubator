@@ -7729,13 +7729,27 @@ class Secretary:
         return self._resolve(parent, name)
 
     def name_of(self, *, owner: str, task_id: str) -> tuple[str, str]:
-        """反查：某个调用行属于这个名册里的哪一个名字。"""
+        """反查：某个调用行属于这个名册里的哪一个名字（一个号两个名字 ⇒ 不猜）。
+
+        为什么必须在本层拒歧义（`draft/151` 三-4）：写口从 2026-11-02 起拒"同一个号
+        出现在两条 add"（`task_id_reused`），但 `projects/**` 里的历史名册有这一形态；
+        按号寻址那一侧（`agent_loop.roster_addresses`）已经因此拒 `ambiguous_in_roster`，
+        而这里改前 `return` 第一个命中 —— `surface_of` 就会按第一个名字的槽位去切
+        读写面，两个人的面重叠等于跨代理写同一份文件。三态纪律：多匹配不是"查到了
+        一个"，它是"这一格判不了"，回空名 + 一句点名（读者退回用编号）。
+        """
         index, bad = self.roster_index(owner)
         if bad:
             return "", f"对照表有 {len(bad)} 行读不出来"
-        for r in index:
-            if str(r.get("task_id") or "") == str(task_id):
-                return str(r.get("name") or ""), ""
+        names = sorted({str(r.get("name") or "") for r in index
+                        if str(r.get("name") or "")
+                        and str(r.get("task_id") or "") == str(task_id)})
+        if len(names) > 1:
+            return "", (f"对照表里 {task_id} 对应 {len(names)} 个名字（{'、'.join(names)}）"
+                        "⇒ 不猜（同一个号两个名字；按号寻址的同一档是 "
+                        "`ambiguous_in_roster`，这一份名册要人核）")
+        if names:
+            return names[0], ""
         return "", f"对照表里没有 {task_id}（未登记）"
 
     #: `status` 那一格的取值（S-H，裁定 14）。前三档照 DSH `list-agents.js:24-29` 的算法逐字：
