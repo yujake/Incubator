@@ -4762,6 +4762,35 @@ class Secretary:
                 out.setdefault(tid, str(r.get("name") or ""))
         return out, list(bad_body) + list(bad_index)
 
+    def _bound_task_ids(self, owner: str, name: str) -> list[str]:
+        """这个名字绑过的全部号（正文 `add` 行 ∪ 对照表 `bind` 行，按出现顺序去重）。
+
+        销号要标死的不是"当前号"而是这一格：复用是合法的一等功能，一个名字接过
+        N 件活就有 N 个号；只写最后那条 `bind` 会让早先的号在唤醒闸那里仍读成
+        "没销号"（`draft/150` §5.1-③ 的读数 H：`wake(t-000002)` 仍 `started=true`）。
+        """
+        want = str(name or "")
+        out: list[str] = []
+        if not want:
+            return out
+        from . import jsonlfile as JF
+
+        body, _bad_body = JF.read_jsonl(roster_path(self.root, owner))
+        for r in body:
+            if str(r.get("kind") or "") != "add" or str(r.get("name") or "") != want:
+                continue
+            tid = str(r.get("task_id") or "")
+            if tid and tid not in out:
+                out.append(tid)
+        index, _bad_index = JF.read_jsonl(roster_index_path(self.root, owner))
+        for r in index:
+            if str(r.get("kind") or "") != "bind" or str(r.get("name") or "") != want:
+                continue
+            tid = str(r.get("task_id") or "")
+            if tid and tid not in out:
+                out.append(tid)
+        return out
+
     def _retired_used(self, owner: str) -> list[str]:
         """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。
 
@@ -8576,33 +8605,51 @@ class Secretary:
             return {"ok": False, "action": "refused", "report": {}, "why": [why],
                     "reading": reading}
         at = _now_iso()
-        wrote_roster, why_r = append_jsonl(roster_path(self.root, owner),
-                                           {"kind": "retire", "owner": owner, "name": str(name),
-                                            "task_id": tid, "branch": branch, "by": str(by_task_id),
-                                            "reason": str(reason or ""),
-                                            "reading": reading, "at": at})
-        wrote_index, why_i = append_jsonl(roster_index_path(self.root, owner),
-                                          {"kind": "retire", "owner": owner, "name": str(name),
-                                           "task_id": tid, "reason": str(reason or ""), "at": at})
-        wrote_retired, why_x = append_jsonl(retired_path(self.root, owner),
-                                            {"owner": owner, "name": str(name), "task_id": tid,
-                                             "role": str(row.get("role") or ""), "at": at,
-                                             "reason": str(reason or ""),
-                                             "branch": branch})
-        if not (wrote_roster and wrote_index and wrote_retired):
-            return {"ok": False, "action": "refused", "report": {},
-                    "why": [f"退役没写全（名册={wrote_roster}/{why_r} 对照表={wrote_index}/{why_i} "
-                            f"销号={wrote_retired}/{why_x}）"],
-                    "reading": reading}
-        # S1n（业主补充）：退役 ⇒ 面归还"可分配池"（名字不回收、面回收）。
-        # 归还前先归档；归档失败 ⇒ 槽位停在"待释放"，读数里如实写（不入池）。
+        # ⑤（业主 2026-11-02）：销号要标死这个名字绑过的全部号，不只当前号。
+        # "读 bind 历史 + 写销号三笔"必须在同一个 per-owner 临界区：临界区外新来的
+        # bind 会落在"读历史"与"写销号"之间，那个号就漏掉了（漏号 = 永久可唤醒，
+        # 不可逆）。锁序不变：`settle` 与 `note_edge_release` 都在这一句之前做完。
+        slot = ""
         surface_note = ""
-        slot = next((str(r.get("surface") or "") for r in self.roster_rows(owner)[0]
-                     if str(r.get("name") or "") == str(name)), "")
-        if slot:
-            state, why_s = self.surface_release(owner=owner, name=str(name), slot=slot)
-            surface_note = (f"面 {slot} 已归还池里" if state == "空闲"
-                            else f"面 {slot} 停在待释放（{why_s}）")
+        with _roster_section(self.root, owner):
+            retired_ids = self._bound_task_ids(owner, name=str(name))
+            if str(tid) not in retired_ids:
+                retired_ids.append(str(tid))
+            wrote_roster, why_r = append_jsonl(roster_path(self.root, owner),
+                                               {"kind": "retire", "owner": owner, "name": str(name),
+                                                "task_id": tid, "task_ids": retired_ids,
+                                                "branch": branch, "by": str(by_task_id),
+                                                "reason": str(reason or ""),
+                                                "reading": reading, "at": at})
+            wrote_index, why_i = append_jsonl(roster_index_path(self.root, owner),
+                                              {"kind": "retire", "owner": owner, "name": str(name),
+                                               "task_id": tid, "task_ids": retired_ids,
+                                               "reason": str(reason or ""), "at": at})
+            wrote_retired, why_x = True, ""
+            for one in retired_ids:
+                ok_one, why_one = append_jsonl(retired_path(self.root, owner),
+                                               {"owner": owner, "name": str(name),
+                                                "task_id": one,
+                                                "role": str(row.get("role") or ""), "at": at,
+                                                "reason": str(reason or ""),
+                                                "branch": branch})
+                if not ok_one:
+                    wrote_retired, why_x = False, why_one
+                    break
+            if not (wrote_roster and wrote_index and wrote_retired):
+                return {"ok": False, "action": "refused", "report": {},
+                        "why": [f"退役没写全（名册={wrote_roster}/{why_r} "
+                                f"对照表={wrote_index}/{why_i} "
+                                f"销号={wrote_retired}/{why_x}）"],
+                        "reading": reading}
+            # S1n（业主补充）：退役 ⇒ 面归还"可分配池"（名字不回收、面回收）。
+            # 归还前先归档；归档失败 ⇒ 槽位停在"待释放"，读数里如实写（不入池）。
+            slot = next((str(r.get("surface") or "") for r in self.roster_rows(owner)[0]
+                         if str(r.get("name") or "") == str(name)), "")
+            if slot:
+                state, why_s = self.surface_release(owner=owner, name=str(name), slot=slot)
+                surface_note = (f"面 {slot} 已归还池里" if state == "空闲"
+                                else f"面 {slot} 停在待释放（{why_s}）")
         return {"ok": True, "action": "retired", "report": {},
                 # 级联读数（Q13）：这一笔实际销掉的只有目标本身 —— 逐层收掉静默子树
                 # 那件事在 `conductor.retire_child`（先深后浅、整笔不销或整支销完）。
