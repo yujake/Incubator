@@ -1879,13 +1879,24 @@ def _observe_session_event(root: Any, event: Mapping[str, Any]) -> None:
 
 
 def _install_append_hook() -> str:
-    """把时钟接进会话写路径（只装一次）。返回这一趟做了什么（进装配读数）。"""
+    """把时钟接进会话写路径。返回这一趟做了什么（进装配读数）。
+
+    判据不是"我装过没有"（`_HOOK_INSTALLED` 只是一格缓存），而是槽里现在是不是
+    我们这一个：`sessions._APPEND_HOOK` 是进程级单槽，网页端的 `attach()` /
+    `detach()` 与判据都可能把它换成别人或 None（draft/156 §3.1）。信布尔闩锁会让
+    "被摘掉之后再也装不回来" —— `observe_work` / `observe_message` 不跑，
+    `parked_steps` / `delivery` 恒 0，而装配读数还报着 `already`。
+    """
     global _HOOK_INSTALLED, _HOOK_PREV
-    if _HOOK_INSTALLED:
-        return "already"
     from .. import sessions as SS
 
-    _HOOK_PREV = SS.set_append_hook(_observe_session_event)
+    if _HOOK_INSTALLED and SS._APPEND_HOOK is _observe_session_event:
+        return "already"
+    previous = SS.set_append_hook(_observe_session_event)
+    if previous is not _observe_session_event:
+        # 只记"别人"：槽里本来就是我们自己（`_HOOK_INSTALLED` 被别的路径重置过）时
+        # 不能再把 `_HOOK_PREV` 指成自己，否则观测器会把自己调一圈。
+        _HOOK_PREV = previous
     _HOOK_INSTALLED = True
     return "installed"
 

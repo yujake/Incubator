@@ -17,7 +17,9 @@ test_h: assert [f["timer_id"] for f in fires] == [timer_id], fires
 
 1. 正题：装一个来宾 append 钩子 → `sse.attach()` → `sse.detach()` ⇒ 那个钩子必须回来；
 2. 反真空：`detach()` 之前先清掉 `_PREV`（模拟旧实现"一律设 None"）⇒ 来宾钩子必须消失，
-   也就是说第 1 条真的在守这件事。
+   也就是说第 1 条真的在守这件事；
+3. 另一半（2026-11-03 补）：钩子被清成 `None` 之后，下一次 `build_registry` 必须把它装回来
+   —— `clock_tools._HOOK_INSTALLED` 是"只装一次"的闩锁，信它就会让观测链永久消失。
 """
 from __future__ import annotations
 
@@ -62,3 +64,26 @@ def test_the_old_behaviour_would_drop_it(tmp_path: pathlib.Path):
         assert not calls, "这次应当被抹掉 —— 否则第 1 条是恒真的假绿"
     finally:
         SS.set_append_hook(None)
+
+
+def test_build_registry_reinstalls_the_clock_hook_after_it_was_cleared(tmp_path):
+    """负控：钩子被清成 None 之后，下一次 `build_registry` 必须重新装上（不是报 "already"）。
+
+    为什么这条必须存在：`sessions._APPEND_HOOK` 是进程级单槽，`clock_tools` 的观测器
+    （`_observe_session_event`）挂在上面，而清除者不止一个文件（本文件、`test_webui*`）。
+    旧实现信 `_HOOK_INSTALLED` 这个布尔闩锁 ⇒ 槽被清掉之后再装配直接返回 `already`，
+    `observe_work` / `observe_message` 再也不跑（`parked_steps` / `delivery` 恒 0）。
+    """
+    from agentflow.store import Store
+    from agentflow.tools import build_registry
+    from agentflow.tools import clock_tools as CT
+
+    ws = tmp_path / "ws"
+    st = Store(ws)
+    st.init()
+    build_registry(store=st, workspace_root=ws)
+    assert SS._APPEND_HOOK is CT._observe_session_event, "前提：装配该把时钟观测器装上"
+    SS.set_append_hook(None)          # 模拟网页端判据的清除
+    build_registry(store=st, workspace_root=ws)
+    assert SS._APPEND_HOOK is CT._observe_session_event, (
+        "_HOOK_INSTALLED 让装配报了 already、钩子没装回来 ⇒ 时钟观测链永久消失")
