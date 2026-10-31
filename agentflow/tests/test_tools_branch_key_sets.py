@@ -31,7 +31,12 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     "doc_tools.py": 2,
     "fs_tools.py": 7,
     "ocr_tools.py": 1,
-    "review_tools.py": 1,
+    # 2026-11-02（业主「给 H 加个工具审」）：多了一处 `ok(scan_text_integrity(...))` ——
+    # 那个键集不是写在调用点的字面量，而是纯函数 `scan_text_integrity()` 的返回（六键由
+    # `TEXT_INTEGRITY_KINDS` 与它自己的 `returns=` 一起钉住，见 `test_h_can_audit_text_integrity`）。
+    # 要在调用点写成字面量，就得把六格在工具体里再抄一遍 —— 那正是"两处说法分家"的形态，
+    # 所以这里按处数登记（1 → 2），并在提交信息里说明为什么不是字面量。
+    "review_tools.py": 2,
     "search_tools.py": 3,
     "table_tools.py": 7,
     # 2026-10-01（`draft/28` §218.3）：`T-8` 把工具体从 `register` 里搬到模块级之后，
