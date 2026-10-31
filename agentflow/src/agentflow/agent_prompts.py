@@ -2835,7 +2835,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ④ 已知待办（与 p220 同一句）：`tests/fixtures/prompt_cache_warm.json` 没有重落 ——
 #:    重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`，业主之前给过那两条
 #:    命令）⇒ 那两档缓存读数 stale，`test_prompt_cache_warm` 的对应两条现在红。
-PROMPT_VERSION = "p221"
+#: `p222`（2026-10-30，业主批准动禁改区 · FC-27）：H 的工具面多一件只读工具
+#:
+#: ① 业主逐字「需要保证后续写论文不出现异常字符，给 H 加个工具审」⇒
+#:    `tools/review_tools.py` 新增 `review.scan_text_integrity`（`side_effect="read"`、
+#:    `roles=("H",)`）。这一笔一个字都没改手写段文：变的是派生态 —— H 的 `tools_lines`
+#:    那一行多了一件工具（名字 + 摘要 + 必填参数 + 副作用），而那一行对每个角色只渲染
+#:    自己的工具面 ⇒ 只有 H 那一格换值。
+#: ② 版本照样要抬：判据问的是"渲染出来的整份提示词变了没有"，它不区分手写段与派生态
+#:    （与 p216 的注解同一句）。逐格：H ac8a5bde → 见 `_FROZEN_PROMPT_DIGESTS`；
+#:    A–G / L / M / V 十格逐字同值（重算读数：变化的格 = ['H']）。
+#: ③ 连带：十一格表（H 一格）+ `_FROZEN_PROMPT_VERSION` 抬到 p222 +
+#:    `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
+#:    15 格、键名一格未动 ⇒ count / keys_sha256 与上一格同值，现算不手抄）+
+#:    两份 golden 一起重冻（`tool_surface_snapshot.json` 多一件工具；
+#:    `agent_surface_snapshot.json` 里 H 那一份 prompt 的版本号与工具清单各一行）。
+#: ④ 已知待办（与 p220 / p221 同一句，本笔没有修）：`tests/fixtures/prompt_cache_warm.json`
+#:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
+#:    读数：`tests/test_prompt_cache_warm.py::test_both_lean_tiers_are_recorded_and_fresh`
+#:    现在点名 H 两档（H：Lean 关 / 开 的 prompt_sha256 都对不上），
+#:    `test_loading_the_cache_readings_picks_the_matching_lean_tier` 因为版本号
+#:    p221 → p222 也一并红。两条的处置是同一条命令，不是改判据。
+PROMPT_VERSION = "p222"
 
 
 

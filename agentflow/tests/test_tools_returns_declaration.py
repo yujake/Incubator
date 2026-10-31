@@ -126,7 +126,13 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-28（阶段 ③ 2B）：119 → 120（`search.retry_pending` —— 把「有元数据、
 #: 没全文」的文献逐条再取一次；四结局 got / failed / no_location / cooled_down）。
 #: 探针靠 `_PREREQS` 里那条 `table.create` 先落一行待取文献，于是主路径被真跑到。
-TOOL_COUNT = 121
+#: 2026-10-30：120 → 121（`review.scan_text_integrity` —— 业主逐字「需要保证后续写
+#: 论文不出现异常字符，给 H 加个工具审」）。它的探针扫的是 `registry` 夹具里现造的
+#: `out/integrity-probe.tex`（一行干净英文 + 一个零宽空格）：主路径被真跑到，
+#: `findings[]` 那七个键与 `detail[]` 那六个键因此都能观察到；`counts` 留一个非零
+#: （`zero_width=1`）—— 六档全零的那一支由 `tests/test_h_can_audit_text_integrity.py`
+#: 的 g2 钉着，两条判据分工不同（这一条问"实现到底给不给这些键"）。
+TOOL_COUNT = 122
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -339,6 +345,21 @@ _PREREQS: dict[str, Any] = {
 }
 
 
+def _write_integrity_probe(root: Path) -> None:
+    """造 `review.scan_text_integrity` 的探针目标：一行干净英文 + 一个零宽空格。
+
+    为什么必须现造而不是扫 `_seed` 里那些文件：探针要打在声明所描述的那一支上
+    （见本文件 docstring 的「观测必须打在声明所描述的那一支上」）。六档全零那一支
+    由 `tests/test_h_can_audit_text_integrity.py` 的 g2 钉着，这一条要的是
+    「读成了、有发现」那一支 —— 否则 `findings[]` 那七个键与 `detail[].counts`
+    都观察不到，「声明 ⊆ 实跑」在那几格上会退化成空集比较（`G-21`）。
+    """
+    target = root / "out" / "integrity-probe.tex"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("A clean English sentence.\nzero\u200bwidth here.\n",
+                      encoding="utf-8", newline="")
+
+
 def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
@@ -365,6 +386,10 @@ def tool_params() -> dict[str, dict]:
             "evidence": "判据探针用",
             "level": "warning",
         },
+        # 文本完整性审计（2026-10-30）：扫 `registry` 夹具里现造的那一份
+        # `out/integrity-probe.tex`（一行干净英文 + 一个零宽空格）。不传 `limit`：
+        # 缺省那一支也要被走到（它是 `returns` 里唯一带默认值的参数）。
+        "review.scan_text_integrity": {"paths": ["out/integrity-probe.tex"]},
         # ---- D-53 的时钟五件（2026-10-24 晚）----
         # 探针只验键集，不真的等到点：计时器给 1 小时、闹钟给 2099 年，
         # 两次调用都停在"pending"那一支（返回值键集合与成功投递那一支相同）。
@@ -718,6 +743,10 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
         "research.write_note",
         "review.list_findings", "review.record_finding", "review.scan_document",
+        # 文本完整性审计（2026-10-30，业主「给 H 加个工具审」）：探针真跑到了主路径
+        # （读成了一份、报出一个零宽空格）⇒ 键名读自实跑观测；`findings[]` 与
+        # `detail[]` 的嵌套键也因此被观察到（空数组时那几格一个都验不到）。
+        "review.scan_text_integrity",
         "search.dedup_check", "search.ingest_local", "search.literature", "search.local",
         "search.providers",
         "search.register",
@@ -1344,6 +1373,9 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     _row_file = (_paper_root / "out" / "paper" / MAPPING_ROW_FILE)
     _row_file.parent.mkdir(parents=True, exist_ok=True)
     _row_file.write_text("The probe enumerates the first 64 periods.\n", encoding="utf-8")
+    # 文本完整性审计的探针目标（2026-10-30）：见 `_write_integrity_probe` 的 docstring
+    # （为什么现造一份、而不是去扫上面那些既有文件）。
+    _write_integrity_probe(store.root)
     monkeypatch.setenv(PC.ENGINE_ENV, str(FX.fake_engine(_paper_root / "_engine")))
 
     # 检索侧：provider 构造与探测函数都换成桩，下载器也不联网。

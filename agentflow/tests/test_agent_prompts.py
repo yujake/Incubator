@@ -2164,7 +2164,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 十一格是 `D:\Incubator\temp\recompute_f_digest.py`（导入本文件的 `_surface_digest`，
 # 环境变量与 `conftest.py` 逐条对齐：Lean 开、设置文件钉到不存在的路径、机器事实类变量清空）
 # 的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p221"
+_FROZEN_PROMPT_VERSION = "p222"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2356,6 +2356,14 @@ _FROZEN_PROMPT_VERSION = "p221"
 #   M f3e029d5→5c4848b6 / V de15442a→6b8ebdb4。
 # 十一格是 `D:\Incubator\temp\recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 环境变量与 `conftest.py` 逐条对齐）的现算值，不是手抄。
+# 2026-10-30（p222）：只有 H 那一格换值 —— H 的工具面多一件只读工具
+# `review.scan_text_integrity`（`roles=("H",)`），它的 summary 进 `tools_lines` 那一行，
+# 而那一行只渲染本角色的工具面 ⇒ 其余十格逐字同值（重算读数：变化的格 = ['H']）。
+# 这一笔没有改任何手写段文：变的是派生态（工具面从注册表现算）。版本照样要抬 ——
+# 判据问的是"渲染出来的整份提示词变了没有"，它不区分手写段与派生态。
+# 逐格：H ac8a5bde→425e071a（A–G / L / M / V 十格与 p221 同值）。
+# 逐笔出处写在 `agent_prompts.PROMPT_VERSION` 上方 p222 那一格（p219 起不再逐版往这里重抄：
+# 同一件事两处说法，两处就会漂）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "822362d286cd603f1222f7520b181656b4f8b751968aefe6fc687220ce2ca0d3",
     "B": "d4ad691177fe6b55f6c8970cb16c8e24382d999e147cacba8ca8e2e48d755db4",
@@ -2364,7 +2372,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "E": "4082aceab2270b61f39916be35137cd115a6f71e4e358957524193fea832e74c",
     "F": "6d606f063d92e42f70c9db82ee649b817aa83da0c349831f75a131ff96dc643c",
     "G": "d2ddd830dd1f75c54531312b679d5965b549f90150151d26d9ff52f687e95a72",
-    "H": "ac8a5bde4214a0596434cdfae3f13073b79fed4906cc8e867f8747625631cb71",
+    "H": "425e071ad7c5c6f00a9d20c6d61b34c42a3af8cef609a8eb72f5e60223502f2f",
     "L": "172c9cf0dd1633f8a94561b6dbcaed3f3f4d01845a2ddd56f7b3aaf6d632360b",
     "M": "d3d81018dcab51046501da9dcf7f169ccbc570a199dbd603fe7401cb116bc649",
     "V": "3cf2517975098d2c76656e5519ee94c5a20f546e02e821543d12dce65342ee50",

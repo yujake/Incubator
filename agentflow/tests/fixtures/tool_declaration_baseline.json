@@ -1,7 +1,7 @@
 {
   "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 121,
+  "n_tools": 122,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -130,7 +130,8 @@
       "conjecture.register_conjecture",
       "conductor.void_items",
       "search.retry_pending",
-      "conductor.wake_blocked"
+      "conductor.wake_blocked",
+      "review.scan_text_integrity"
     ]
   },
   "declarations": {
@@ -5521,6 +5522,43 @@
         "M"
       ],
       "tags": [],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
+    },
+    "review.scan_text_integrity": {
+      "summary": "扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "工作区内的相对路径（文件或目录；目录递归 .tex/.md/.txt/.bib）"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "这一次最多返回多少条 findings（缺省 200）；counts 是盘上的真总数，不受它限制"
+          }
+        },
+        "required": [
+          "paths"
+        ],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','reason','scanned','findings','counts','detail'}",
+      "side_effect": "read",
+      "external": "none",
+      "roles": [
+        "H"
+      ],
+      "tags": [
+        "review",
+        "read",
+        "gate"
+      ],
       "handler_name": "functools.partial",
       "added_after_compression": true
     }
