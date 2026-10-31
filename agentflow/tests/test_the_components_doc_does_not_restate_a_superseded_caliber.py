@@ -3,26 +3,26 @@
 
 ## 背景
 
-同一个布尔在今天有三处说法，其中一处**正好相反**：
+同一个布尔在今天有三处说法，其中一处正好相反：
 
 | 处 | 说法 |
 |---|---|
 | `closing.py` 的 `ClosingReport.can_close` | = M 在 `m_verdict.met` 里说的那一句 |
-| `closing.py:VERDICT_NOTE`（业主 2026-10-09 的两句裁定） | 同上；机器八格（`status` / `machine_pass`）是**读数** |
-| `docs/SYSTEM-COMPONENTS.md`（**生成物**） | 「`ClosingReport（can_close 只在全过为真）`」 |
+| `closing.py:VERDICT_NOTE`（业主 2026-10-09 的两句裁定） | 同上；机器八格（`status` / `machine_pass`）是读数 |
+| `docs/SYSTEM-COMPONENTS.md`（生成物） | 「`ClosingReport（can_close 只在全过为真）`」 |
 
 最后那一句出自 `tools/write_system_docs.py` 的组件表（表是手写的，判据只核"点名的模块与
-符号存在"，`tests/test_system_docs_are_generated.py` 逐字节比的是"盘上 == 现算"，**散文的
-真假不在任何判据的射程里**）。于是它一路绿灯地挂在那里，把 2026-10-09 被裁定推翻的口径
+符号存在"，`tests/test_system_docs_are_generated.py` 逐字节比的是"盘上 == 现算"，散文的
+真假不在任何判据的射程里）。于是它一路绿灯地挂在那里，把 2026-10-09 被裁定推翻的口径
 当成规格讲给读者 —— 而 `can_close` 是全仓最重要的一个布尔。
 
 ## 这条判据钉住什么
 
-1. **生成物里不许再出现那句旧口径**（"只在全过为真"）—— 生成物是模型/读者真正看到的那一份；
-2. **生成器里也不许留**（只改生成物 = 下一次 `python tools/write_system_docs.py` 就回来）；
-3. **那个格子必须点名真正的口径**（`m_verdict`）—— 删掉旧话而什么都不说，等于把这一格
+1. 生成物里不许再出现那句旧口径（"只在全过为真"）—— 生成物是模型/读者真正看到的那一份；
+2. 生成器里也不许留（只改生成物 = 下一次 `python tools/write_system_docs.py` 就回来）；
+3. 那个格子必须点名真正的口径（`m_verdict`）—— 删掉旧话而什么都不说，等于把这一格
    挖空，读者照样不知道 `can_close` 是什么；
-4. **真值锚点自己也钉住**：`can_close` 的实现今天必须读 `m_verdict`（若哪天真的改回机械合取，
+4. 真值锚点自己也钉住：`can_close` 的实现今天必须读 `m_verdict`（若哪天真的改回机械合取，
    那是业主的另一次裁定 —— 那时本判据的第 1–3 条会一起失效，而不是"文档对了、代码错了"）。
 
 第 4 条是这条判据的反真空：没有它，三条文案断言可以在真值已经换了的情况下继续绿着。
