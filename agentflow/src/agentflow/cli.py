@@ -4195,11 +4195,13 @@ def cmd_closing(args) -> int:
     辅助读数照原样打出，并逐字说明"它们不构成通过"。
     `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），于是「三态分支」那一格
     是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，那正是 §58/§63 记过两次的假绿形态。
-    ## 退出码由 M 的判据定（业主 2026-10-09）：「是否收工不要用机械判据，由 M 制定的目标是否达成
-    为准」⇒ 退出码（0 可交付 / 1 被拦住 / 2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它
-    落到 `out/review/m-verdicts.jsonl`，这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI
-    代述 M 的说法"的显式入口。没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。八格照旧
-    逐格现算并打出来，但它们是读数。
+    ## 退出码由 M 的判据定、机器读数也参与（业主 2026-10-09 + 2026-11-03 的裁决 ②）
+    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 退出码（0 可交付 / 1 被拦住 /
+    2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它落到 `out/review/m-verdicts.jsonl`，
+    这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI 代述 M 的说法"的显式入口。
+    没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。0 要两边都说行：M 判了达成
+    且机器读数也过（八格全 pass、没有 blocker）—— 机器说不行时退出码不许是 0
+    （2026-11-03 的裁决 ②）。八格照旧逐格现算并打出来，它们既进退出码、也进读数。
 
     读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/paper/`、`out/review/` 下的产物；不写任何表、不改任何文件。
     实现方式一句话：`closing.check_closing` 现算八格，本层只排版与翻退出码。
@@ -4984,7 +4986,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--basis", default="", help="（M 的判据）凭什么这么判：读数/交付物路径")
     _met = sp.add_mutually_exclusive_group()
     _met.add_argument("--goal-met", dest="goal_met", action="store_true", default=None,
-                      help="（M 的判据）目标达成了 ⇒ 收工（退出码 0）")
+                      help="（M 的判据）目标达成了 ⇒ 收工（退出码 0；还要机器读数也过，"
+                           "八格全 pass 且没有 blocker）")
     _met.add_argument("--goal-not-met", dest="goal_met", action="store_false",
                       help="（M 的判据）没达成 ⇒ 不退（退出码 1）")
     sp.set_defaults(func=cmd_closing)

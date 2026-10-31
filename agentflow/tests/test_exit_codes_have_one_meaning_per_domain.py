@@ -146,10 +146,13 @@ def test_the_gate_domain_covers_the_three_shapes(tmp_path: pathlib.Path) -> None
     ws = tmp_path / "ws"
     ws.mkdir()
     Store(ws).init()
-    rep = CL.check_closing(Store(ws), project_dir="", report_path="")
+    # 2026-11-03（153-U-03）：这一条问的是"gate 域里有哪几个码"，三态直接按
+    # `ClosingReport` 造：空工作区的机器八格不全 pass ⇒ 造不出 0 那一档，而 0 只在
+    # "两边都说行"时给（见 `closing.tri_state_exit_code`）。
+    rep = CL.ClosingReport(status={"a": "pass"}, m_verdict=None)
     codes = {CL.tri_state_exit_code(rep)}
-    rep_met = CL.check_closing(Store(ws), project_dir="", report_path="", goal_met=True)
-    rep_not = CL.check_closing(Store(ws), project_dir="", report_path="", goal_met=False)
+    rep_met = CL.ClosingReport(status={"a": "pass"}, m_verdict={"met": True})
+    rep_not = CL.ClosingReport(status={"a": "pass"}, m_verdict={"met": False})
     codes |= {CL.tri_state_exit_code(rep_met), CL.tri_state_exit_code(rep_not)}
     assert codes == {0, 1, 2}, codes
     assert codes <= set(DOMAINS["gate"]), sorted(codes - set(DOMAINS["gate"]))

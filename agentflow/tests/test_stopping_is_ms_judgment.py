@@ -50,14 +50,21 @@ def _gate(st: Store, report: pathlib.Path, **kw):
 
 
 def test_m_says_done_and_that_is_the_verdict(tmp_path: pathlib.Path):
-    """正控①：M 按自己的任务列表判"做完了" ⇒ 能停（机器那几格只是读数）。"""
+    """正控①：M 按自己的任务列表判"做完了" ⇒ 能停（`can_close`）。
+
+    注意"能停"与"可交付"是两件事（2026-11-03 裁决 ②）：这一份的机器读数不是 pass
+    （空台账 ⇒ `substance` 那一格 fail），所以退出码是 1 —— 那是"机器说不行"，
+    不是"M 的判据不算数"。
+    """
     st = _store(tmp_path)
     rep = _gate(st, _report(st.root), goal="把论文包审完并交修订稿", goal_met=True,
                 basis="P2/P7/P8/P9 全绿",
                 task_list=[{"what": "逐条核引文", "state": "done"},
                            {"what": "形式化核两条定理", "state": "done"}])
     assert rep.can_close is True, rep.to_dict()
-    assert CL.tri_state_exit_code(rep) == 0
+    assert rep.machine_pass is False, "夹具的前提：机器那一格是 fail"
+    assert CL.tri_state_exit_code(rep) == 1, (
+        "机器说不行 ⇒ 退出码不许是 0（2026-11-03 裁决 ②）；能不能停仍由 `can_close` 说")
     assert rep.m_verdict["counts"] == {"done": 2, "not_done": 0, "cannot": 0, "total": 2}
     assert rep.verdict_conflicts == [], rep.verdict_conflicts
 

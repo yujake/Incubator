@@ -5993,14 +5993,20 @@ def tri_state_exit_code(rep: ClosingReport) -> int:
     域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["gate"]`，全仓统一的三条口径见
     `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）。这一域没有 `3/4/5`。
 
-    口径按业主 2026-10-09 的裁定改：0 只在 M 判了"达成"时给（`can_close`）；
-    M 没判 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
-    M 判了"没达成" ⇒ 1。机器那八格只在读数里说话（`machine_pass` / `failed` / `unknowns`）。
+    口径（业主 2026-10-09 的裁定 + 2026-11-03 的裁决 ②）：
+    - M 没提交判据 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
+    - 其余情况 0 只在两边都说行时给：M 判了"达成"（`can_close`）并且机器读数也
+      说行（`machine_pass`：八格全 pass 且 `blockers` 为空 —— 引文无区间 / 对应表缺失 /
+      回执无背书那三条 blocker 都在这里）；
+    - 剩下的一律 1（被拦住）。
+
+    2026-11-03 之前这一支只看 `can_close`：机器八格 unknown/fail、而 M 说达成的那一趟
+    会退出 0（"可交付"），与机器读数互相打脸。机器说不行时退出码不许是 0。
     """
-    if rep.can_close:
-        return 0
     if not rep.m_verdict:
         return 2
+    if rep.can_close and rep.machine_pass:
+        return 0
     return 1
 
 # ---------------------------------------------------------------- 论文证明的可查性（S2）

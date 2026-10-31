@@ -90,6 +90,33 @@ def _good_and_sid(tmp_path):
     return st, report, SS.session_id()
 
 
+def _good_clean(tmp_path):
+    """`_good` 再加一格：把论文对应表补上并重编（M 的判据不写）。
+
+    2026-11-03（153-U-03，业主裁决 ②）起退出码要"两边都说行"：M 判了达成还要机器读数
+    也过（八格全 pass + 没有 blocker）。`_good` 不写对应表 ⇒ `mapping_not_in_paper` 那条
+    blocker 会把退出码压成 1 —— 那是真读数，不是噪音。要测"可以交"（退出码 0）或
+    "没人判过"（退出码 2）的那几档，就得把这一格补齐（同一套做法见
+    `tests/test_closing_gate.py` 的 `_project`）。
+    """
+    import paperfixture as _FX
+    from agentflow import papercompile as _PC
+    from agentflow import papermapping as _PM
+
+    st, report = _good(tmp_path)
+    _PM.write_package(st.root, [])
+    with _FX.use_engine(_FX.fake_engine(st.root / "_engine3")):
+        _PC.compile_paper(st.root)
+    return st, report
+
+
+def _good_clean_and_sid(tmp_path):
+    """`_good_clean` + 一笔"M 说达成"的判据 + 会话号（落盘那一条走 `_m_verdict`）。"""
+    st, report = _good_clean(tmp_path)
+    _m_verdict(tmp_path, met=True, basis="机械干净 + 八格读数")
+    return st, report, SS.session_id()
+
+
 def _m_verdict(root, *, met: bool, goal: str = "把这份交付做到能交",
                basis: str = "", tasks=()) -> None:
     """往 `out/review/m-verdicts.jsonl` 追加一笔 M 的判据（append-only）。"""
@@ -290,7 +317,7 @@ def test_every_criterion_really_runs_through_the_cli_exit(tmp_path, monkeypatch,
     "这条调用链在生产面上存在"。直接调判据只能证明判据自己是对的
     —— 而那件事已经有五条测试在守了（它们此前全绿，而生产面是 0 条 import）。
     """
-    st, report, sid = _good_and_sid(tmp_path)
+    st, report, sid = _good_clean_and_sid(tmp_path)
 
     def boom(*_a, **_kw):
         raise AssertionError(f"判据 {impl} 被调到了（这正是要证的：调用链活着）")
@@ -311,7 +338,7 @@ def test_unwiring_makes_that_control_dark(tmp_path, monkeypatch):
     `test_every_criterion_really_runs_through_the_cli_exit` 六条全部不炸（红），
     而这一条转而变绿。
     """
-    st, report, sid = _good_and_sid(tmp_path)
+    st, report, sid = _good_clean_and_sid(tmp_path)
 
     def boom(*_a, **_kw):
         raise AssertionError("接线摘掉了，判据不该被调到")
@@ -401,7 +428,7 @@ def test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output
     逐条核判据名、逐条核三态标记、逐条核辅助读数的值，并核那句
     "辅助读数不构成通过"。
     """
-    st, report, sid = _good_and_sid(tmp_path)
+    st, report, sid = _good_clean_and_sid(tmp_path)
     code, out = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
     assert code == 0, out
 
@@ -435,7 +462,7 @@ def test_the_readings_are_recomputed_not_hand_copied(tmp_path):
     没有这一条，接线可以写成"打一句固定的『五条全过』"而所有别的判据全绿
     —— 那正是本项目反复踩的"算了不判 = 假读数"。
     """
-    st, report, sid = _good_and_sid(tmp_path)
+    st, report, sid = _good_clean_and_sid(tmp_path)
     from agentflow import schema as _S
 
     code, out = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
@@ -667,10 +694,12 @@ def test_the_exit_code_still_comes_only_from_the_closing_gate(tmp_path):
     ③ 接线跑着、而内容级验收"没查成"（没给 `--acceptance-sid`）⇒ 必须还是 0
        —— "内容级验收没查成"绝不许把退出码从 0 变成 2 或 1。
 
-    新口径（业主 2026-10-09）只改了"谁定退出码"：由 M 的判据定（不再是"八格全过"），
-    "内容级验收不参与退出码"这一条一个字没变。
+    口径（业主 2026-10-09 + 2026-11-03 裁决 ②）：退出码由 M 的判据与机器读数共同定 ——
+    0 要两边都说行（`can_close` 且 `machine_pass`）。"内容级验收不参与退出码"这一条仍然成立：
+    它在这三个方向里都不进八格（实测三档 `acceptance` 都是 `pass`、退出码都是 0）。
+    本夹具补了论文对应表：少了那一格，`mapping_not_in_paper` 这条 blocker 会把三档全压成 1。
     """
-    st, report, sid = _good_and_sid(tmp_path)
+    st, report, sid = _good_clean_and_sid(tmp_path)
     code_wired, _ = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
     code_unwired, out_unwired = _run(st, report, "--cap-usd", "1.0",
                                      "--acceptance-sid", sid, "--no-review-acceptance")
@@ -691,8 +720,9 @@ def test_the_exit_code_follows_ms_verdict_three_ways(tmp_path):
     """退出码跟着 M 的判据 走（业主 2026-10-09：「是否收工不要用机械判据，
     由 M 制定的目标是否达成为准」）—— 三态各一条：
 
-    - 运行内落过判据、说"达成" ⇒ 0（运行外那一趟读的是运行内那一份：这条路
-      正是 `draft/37` §63 记过的"两个出口读数必须一致"）；
+    - 运行内落过判据、说"达成"，且机器读数也过 ⇒ 0（运行外那一趟读的是运行内
+      那一份：这条路正是 `draft/37` §63 记过的"两个出口读数必须一致"；
+      2026-11-03 起 0 要两边都说行）；
     - 落过的判据说"没达成" ⇒ 1；
     - 一行都没落 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。
 
@@ -701,9 +731,9 @@ def test_the_exit_code_follows_ms_verdict_three_ways(tmp_path):
     """
     from agentflow import closing as _CL
 
-    st, report = _good(tmp_path)
-    st2, report2 = _good(tmp_path / "b")
-    st3, report3 = _good(tmp_path / "c")
+    st, report = _good_clean(tmp_path)
+    st2, report2 = _good_clean(tmp_path / "b")
+    st3, report3 = _good_clean(tmp_path / "c")
     _m_verdict(tmp_path, met=True, basis="M 说达成了")
     _m_verdict(tmp_path / "b", met=False, basis="M 说还差一件")
     code_yes, _ = _run(st, report)
@@ -727,7 +757,7 @@ def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
     """
     from agentflow import closing as _CL
 
-    st, report = _good(tmp_path)
+    st, report = _good_clean(tmp_path)
     res = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
                         cap_usd=1.0, sid="s-verdict", goal="把这份交付做到能交",
                         goal_met=True, basis="八格与内容级读数都在",

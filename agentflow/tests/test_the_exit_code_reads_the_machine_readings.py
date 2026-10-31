@@ -12,8 +12,8 @@ return 1
 ```
 
 而 `machine_pass`（八格全 pass 且没有 blocker）与 `blockers`（J21 引文无区间 / J22 对应表
-缺失 / J23 回执无背书）**一个都不参与**退出码。于是"八格 fail 或 unknown、M 却说达成"的
-那一趟：`can_close=true` ⇒ 退出码 **0**（= 可交付），而机器读数明明说不行。
+缺失 / J23 回执无背书）一个都不参与退出码。于是"八格 fail 或 unknown、M 却说达成"的
+那一趟：`can_close=true` ⇒ 退出码 0（= 可交付），而机器读数明明说不行。
 
 ## 业主 2026-11-03 的裁决 ②
 
@@ -21,11 +21,11 @@ return 1
 
 ## 这条判据钉住什么
 
-1. `met=True` 而有一格 `unknown`/`fail` ⇒ 退出码 **1**（改前是 0）；
-2. `met=True` 而有一条 `blocker` ⇒ 退出码 **1**（改前是 0）；
-3. 两边都说行（`met=True` + 八格全 pass + 无 blocker）⇒ **0**（反真空：不许改成"永远非 0"）；
-4. 没人判过（`m_verdict=None`）⇒ **2**（"没查成"不许折成 1 也不许折成 0）；
-5. `met=False` + 八格全 pass ⇒ **1**（M 说没做到，机器说没事 ⇒ 仍不收工）；
+1. `met=True` 而有一格 `unknown`/`fail` ⇒ 退出码 1（改前是 0）；
+2. `met=True` 而有一条 `blocker` ⇒ 退出码 1（改前是 0）；
+3. 两边都说行（`met=True` + 八格全 pass + 无 blocker）⇒ 0（反真空：不许改成"永远非 0"）；
+4. 没人判过（`m_verdict=None`）⇒ 2（"没查成"不许折成 1 也不许折成 0）；
+5. `met=False` + 八格全 pass ⇒ 1（M 说没做到，机器说没事 ⇒ 仍不收工）；
 6. `tri_state_exit_code` 的 docstring 必须点名它读了 `machine_pass` / `blockers`
    —— 口径说明与代码同一个地方，不许只改代码。
 """

@@ -949,7 +949,11 @@ def test_the_paper_check_goes_red_alone(tmp_path: pathlib.Path):
     judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
                               goal="审完交付", goal_met=True,
                               task_list=[{"what": "审完", "state": "done"}])
-    assert judged.can_close and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
+    # 2026-11-03（153-U-03，业主裁决 ②）：`can_close` 仍跟着 M（这一条要测的正是那个），
+    # 但退出码 0 要"两边都说行" —— 这一份 `paper` 那一格是 fail ⇒ 退出码 1。
+    assert judged.can_close, judged.to_dict()
+    assert judged.machine_pass is False, judged.to_dict()
+    assert CL.tri_state_exit_code(judged) == 1, judged.to_dict()
     assert [x["check"] for x in judged.overrode] == ["paper"], judged.overrode
 
 
