@@ -4885,7 +4885,8 @@ class Conductor:
 
     def _set_item(self, task_id: str, *, state: str, close: str = "",
                   by_task_id: str = "", step: int | None = None,
-                  note: str = "") -> tuple[str, str, bool]:
+                  note: str = "", by_evidence: bool = False,
+                  ) -> tuple[str, str, bool]:
         """工作项状态迁移的唯一写入点。返回 `(落成的状态, 问题, changed)`。
 
         第三格 `changed` 是"真写了行"与"命中同一终态、零写入"的分界（2026-10-26 Q24）：
@@ -4899,7 +4900,9 @@ class Conductor:
         1. `back`（倒退，或非终态的重复设置）⇒ 零写入，返回 `("", 那一句, False)`；
         2. 空口 ack（业主 A5 的闸，不拆）：目标 `done` 而现态还没到 `seen` ——
            判据就是图里 `(现态, "seen")` 是不是 `forward` ⇒ 返回
-           `("ack_unbacked", 那一句, False)`，只记读数、不写状态；
+           `("ack_unbacked", 那一句, False)`，只记读数、不写状态（`by_evidence=True` 只给
+           框架凭证据收口的调用方 —— 那不是"收件人 ack"，A5 那条判据对它不成立；
+           收件人自己那一条路一个字都没放宽，缺省 `False`）；
         3. `same`（同一终态重复设置）⇒ 返回 `(state, "", False)`，零写入。
            这不是错误：D12 之后信息型板项在渲染那一拍就收口成 `done`，随后
            `close_item` / `conductor.ack` 再推一次 `done` 是正常次序；
@@ -4922,7 +4925,8 @@ class Conductor:
             move = self.item_move(cur, state)
             if move == self.ITEM_MOVE_BACK:
                 return "", f"{task_id} 已经到过 {cur!r}（不许倒退或重复迁移）", False
-            if state == "done" and self.item_move(cur, "seen") == self.ITEM_MOVE_FORWARD:
+            if (state == "done" and not by_evidence
+                    and self.item_move(cur, "seen") == self.ITEM_MOVE_FORWARD):
                 return "ack_unbacked", (f"{task_id} 还没有 seen（没被读进任何一步）就收到 ack ⇒ "
                                         "空口 ack：读数留着，状态不动（业主 A5）"), False
             if move == self.ITEM_MOVE_SAME:
@@ -5031,6 +5035,27 @@ class Conductor:
         state, why, _changed = self._set_item(task_id, state="done", close=close,
                                               by_task_id=by_task_id)
         return state, why
+
+    def close_item_by_evidence(self, task_id: str, *, close: str,
+                               why: str = "") -> tuple[str, str]:
+        """框架凭证据收口一项（不是收件人 ack）：`close="completed"` / `"expired"`。
+
+        为什么需要它（业主 2026-11-01 的裁定把"打回"变成一条义务之后）：
+        `v-resubmit@` 那条义务的收口条件是"同一条命题出现更新的干净「成立」行"，
+        放弃原命题时则要把它作废 —— 两种都不是"收件人读过了"，而
+        `_set_item` 的空口 ack 闸（业主 A5）只对"目标 done 而现态还没 seen"生效，
+        于是凭证据收口会一头撞在 `ack_unbacked` 上、那条项永远留在板上，
+        反过来把销号（`retire_integrity`）锁死。这一条只做一件事：把那道闸按
+        `by_evidence=True` 关掉，收件人自己那条路一个字节都没放宽。
+
+        `why` 只进事件 note（"谁凭哪条证据收的"），不写进 `detail`：那一格是给
+        收件人读的，不该被框架读数盖掉。返回 `(落成的状态, 问题)`。
+        """
+        state, problem, _changed = self._set_item(
+            task_id, state="done", close=str(close or ""), by_evidence=True,
+            note=(f"item:done:close={str(close or '')}:evidence"
+                  + (f"（{str(why)[:120]}）" if why else "")))
+        return state, problem
 
     def ack_items(self, item_ids: Sequence[str], *, by_task_id: str, note: str = "",
                   close: str = "acked") -> dict[str, Any]:

@@ -73,7 +73,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator, Mapping, Sequence
 
 from filelock import FileLock, Timeout
 
@@ -95,7 +95,384 @@ PENDING = "pending"
 DISPATCHED = "dispatched"
 UNDELIVERED = "undelivered"
 
-#: 幂等键前缀。与 `agent_loop.V_VERDICT_ITEM_PREFIX` 逐字相同（不在这里抄第二份字面量）。
+# ------------------------------------------------------------------ 重送义务（I2）
+#
+# 业主 2026-11-01 的裁定把"打回"变成了两种东西：一条回执（已送到），以及一条
+# 必须重送的义务。改前只有前者 —— 82 的真机读数说得很直白：8 条 V 判决回执全部
+# dispatched，其中 t-000022(000001) 与 t-000027(000002) 甚至已经 acked/done，而这两条
+# 命题至今没有 V 签；同一批判决还被重复投给后来的 F 台账号（t-000082/083/089/090
+# 全 seen）。"知道了"（ack）与"改完了"（新的成立行）是两件事，而只有后者能关掉
+# 一条重送义务。
+#
+# 所以这一档单独立一条板项（复用 `conductor.open_item` / `set_item_detail`，
+# 不新造第二套板项）：
+#   · 幂等键 `v-resubmit@<命题号>@<proof_sha256>`：不带收件人后缀。带后缀的键会
+#     为每一次 F 起跑各开一条 —— 82 那四条重复项（t-000082/089/090 + 原项）就是
+#     后缀的后果；
+#   · 负责人 = 那一次送审的送审者（`outbox` 里的 recipient/submitter）。取不到就记
+#     `owner="unknown"`，由收工读数 `statements_unsigned` 的 `owner_known` 说清楚
+#     （"记 unknown 并进收工读数"），不拿"谁醒着"当负责人；
+#   · 关闭条件 = 同一命题出现更新的干净「成立」行（`settle_resubmitted`），不是 ack：
+#     `expects="work"` ⇒ 收口只能是 `completed` / `expired`（`schema.Task.validate`
+#     的交叉校验），拿到"知道了"什么也关不掉；
+#   · 放弃原命题时这一项同时作废（`close_resubmits_for`，`close="expired"`）——
+#     否则"放弃"这条出口会被"名下还有未消的板项"反锁住（`retire_integrity`）。
+
+#: 重送义务板项的幂等键前缀（I2）。与 `v-verdict@` 分开：后者是回执，前者是义务。
+RESUBMIT_PREFIX = "v-resubmit@"
+
+
+def resubmit_key(label: str, proof_sha: str) -> str:
+    """重送义务的幂等键：`v-resubmit@<命题号>@<proof_sha256>`。
+
+    为什么键里是 sha 而不是 proof 编号：sha 是"哪一份正文"的指纹（业主 2026-10-22
+    的多证明模型里，同一命题下 #p1/#p2 各自独立）；换了 sha 就是另一份正文，
+    该开新的义务。刻意不带收件人后缀（见上面那一段）。
+    """
+    sid = str(label or "").split("#", 1)[0]
+    return f"{RESUBMIT_PREFIX}{sid}@{str(proof_sha or '').strip()}"
+
+
+def resubmit_sha_of(key: str) -> str:
+    """从重送义务的键里取回 `proof_sha256`（认不出 ⇒ 空串，不猜）。"""
+    raw = str(key or "")
+    if not raw.startswith(RESUBMIT_PREFIX):
+        return ""
+    rest = raw[len(RESUBMIT_PREFIX):]
+    _sid, sep, sha = rest.partition("@")
+    return sha if sep else ""
+
+
+def _resubmit_items(conductor: Any, statement_id: str) -> list[dict[str, Any]]:
+    """这一条命题名下未消的重送项（读不成 ⇒ 空列表，由调用方的话说清）。"""
+    if conductor is None:
+        return []
+    want = f"{RESUBMIT_PREFIX}{str(statement_id or '')}@"
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001 —— 读不成不是"没有义务"
+        return []
+    return [r for r in rows
+            if str(r.get("input_key") or "").startswith(want)
+            and str(r.get("item_state") or "") != "done"]
+
+
+def _resubmit_item_by_key(conductor: Any, key: str) -> dict[str, Any]:
+    """板上有没有这一条（精确键：不认收件人后缀，那是回执那一侧的兼容口径）。"""
+    if conductor is None:
+        return {}
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001
+        return {}
+    for row in rows:
+        if str(row.get("input_key") or "") == str(key or ""):
+            return row
+    return {}
+
+
+def _ledger_rows(*, root: str | Path, statement_id: str
+                 ) -> tuple[list[dict[str, Any]], list[str]]:
+    """这条命题的台账（原样读，坏行进 problems；不折成"没有签"）。"""
+    from . import verifications as VR
+
+    try:
+        rows, problems = VR.list_verifications(root, statement_id=statement_id, limit=None)
+    except Exception as exc:  # noqa: BLE001
+        return [], [f"台账读不成（{type(exc).__name__}: {exc}）"]
+    return [dict(r) for r in rows], [str(p) for p in problems]
+
+
+def _proof_no_of_sha(rows: Sequence[Mapping[str, Any]], sha: str) -> int | None:
+    """这个 sha 属于第几份证明（从台账行反查；认不出 ⇒ `None`）。
+
+    为什么不从 statements 行现算：F 改过稿之后，旧 sha 已经不在现行正文里了
+    （真机 000006：20:42 打回的是 f6e…，20:50 重送的是 2203…）。台账是追加式的，
+    它记得那份旧正文属于哪个证明号 —— 那正是"关闭条件按证明号匹配"要的东西。
+    """
+    from . import verifications as VR
+
+    want = str(sha or "")
+    if not want:
+        return None
+    for row in rows:
+        if str(row.get("proof_sha256") or "") != want:
+            continue
+        return int(VR.as_proof_no(row.get("proof_no")) or 1)
+    return None
+
+
+def resubmit_cleared(*, root: str | Path, label: str, proof_sha: str) -> dict[str, Any]:
+    """这一份正文（sha）的"重送义务"是否已经被一条更新的干净「成立」行清掉。
+
+    判据（三态）：台账读不成 ⇒ `checked=False`（不是"没清掉"，也不是"清掉了"）；
+    查成了 ⇒ `cleared` 说结论，`later_at` / `later_verification_id` 是那条成立的签。
+    """
+    from . import verifications as VR
+    from . import vsigns as VSP
+
+    out: dict[str, Any] = {"checked": False, "cleared": False, "proof_no": None,
+                           "later_at": "", "later_verification_id": "", "why": ""}
+    sid = str(label or "").split("#", 1)[0]
+    rows, problems = _ledger_rows(root=root, statement_id=sid)
+    if problems:
+        out["why"] = "；".join(problems[:2])
+        return out
+    out["checked"] = True
+    sha = str(proof_sha or "")
+    no = _proof_no_of_sha(rows, sha)
+    out["proof_no"] = no
+    if no is None:
+        out["why"] = (f"台账里没有任何一行盖着 sha={sha[:12]}… ⇒ 认不出这是第几份证明"
+                      "（那就不猜它有没有被清掉）")
+        return out
+    last_fault = -1
+    for i, row in enumerate(rows):
+        if int(VR.as_proof_no(row.get("proof_no")) or 1) != no:
+            continue
+        if str(row.get("proof_sha256") or "") == sha:
+            last_fault = i
+    for i in range(last_fault + 1, len(rows)):
+        row = rows[i]
+        if int(VR.as_proof_no(row.get("proof_no")) or 1) != no:
+            continue
+        if VR.read_verdict(row) != "成立":
+            continue
+        if VSP.verdict_axis(row):
+            continue
+        out.update(cleared=True, later_at=str(row.get("at") or ""),
+                   later_verification_id=str(row.get("verification_id") or ""),
+                   why=(f"{label} 在那次打回之后又有一次干净的「成立」"
+                        f"（{row.get('verification_id')}，{row.get('at')}）⇒ 义务已清"))
+        return out
+    out["why"] = "这一次打回之后还没有更新的干净「成立」⇒ 义务还在"
+    return out
+
+
+def _resubmit_body(*, label: str, detail: Mapping[str, Any], at: str) -> tuple[str, str]:
+    """重送项的一句话摘要 + 正文（≤400 字：`set_item_detail` 是给人读的那一格）。"""
+    step = (f"第 {detail.get('defect_step')} 步" if detail.get("defect_step")
+            else "步号没读到")
+    sha = str(detail.get("proof_sha256") or "")
+    summary = f"待重送：{label}（打回于 {at or '时刻没读到'}，错在{step}）"
+    body = (
+        f"这是一条必须重送的义务，不是通知：{label} 被 V 判过缺陷"
+        f"（最近一签 {detail.get('verification_id') or '（没读到编号）'}，错在{step}，"
+        f"这一签盖的是 sha {sha[:12]}…）。\n"
+        "收口条件只有一条：同一条命题（同一份证明）出现更新的、干净的「成立」行 ——"
+        "届时这一项由框架自动收口（completed），不靠 ack；"
+        "退回一句「知道了」不会让它消失。\n"
+        "两条出路：① 补齐之后把这一份重新送 V（`verify.verify_proof`）重签；"
+        "② 确实做不下去就明确放弃原命题（B 侧：`table.update` 该命题 "
+        "`status=abandoned` + 放弃标记，理由与时间缺一不可）——放弃时这一项同时作废。"
+    )
+    return summary, body[:400]
+
+
+def ensure_resubmit(*, store: Any, root: str | Path, label: str,
+                    verification_id: str, detail: Mapping[str, Any], recipient: str,
+                    role: str, depth: int, at: str = "") -> dict[str, Any]:
+    """开一条「待重送」板项（幂等；已清掉的不开）。
+
+    返回 `{"checked","state","key","item_id","owner","reason","problems"}`，`state ∈
+    {opened, existing, cleared, closed, unowned, skipped, error}`：
+
+    - `opened`：新开了一条；
+    - `existing`：同键的项已经在板上（不重开 —— 这是幂等的落点）；
+    - `cleared`：这次打回之后已经有一条更新的干净「成立」⇒ 义务本来就没了，不开
+      （历史补投会走到这一支：81/82 的旧判决不该在收工时凭空长出一条待办）；
+    - `closed`：板上那条已经 done（不重开，读数说"已经收口"）；
+    - `unowned`：读不到送审者 ⇒ 不猜负责人、不开项，负责人记 `unknown`（收工读数里
+      `statements_unsigned.rows[].owner_known=False` 会把它说清楚）；
+    - `skipped`：这一行没有 sha / 没有命题号 ⇒ 做不出幂等键（不猜）；
+    - `error`：开项抛了（`problems` 里带原话），不带走这一签。
+    """
+    from . import vsigns as VSP
+
+    out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
+                           "owner": str(recipient or ""), "reason": "", "problems": []}
+    sid = str(label or "").split("#", 1)[0]
+    sha = str(detail.get("proof_sha256") or "")
+    if not sid or not sha:
+        out.update(state="skipped",
+                   reason="这一行没有命题号 / 没有 proof_sha256 ⇒ 做不出幂等键（不猜）")
+        return out
+    key = resubmit_key(label, sha)
+    out["key"] = key
+    cleared = resubmit_cleared(root=root, label=label, proof_sha=sha)
+    if not cleared.get("checked"):
+        out.update(state="skipped",
+                   reason=(f"台账读不成 ⇒ 判不了这条义务清没清（{cleared.get('why')}）"
+                           "；不拿'读不出来'当'还没清'去开一条待办"))
+        out["problems"].append(str(cleared.get("why") or "台账读不成"))
+        return out
+    conductor = _conductor(store)
+    if cleared.get("cleared"):
+        # 已经清了：板上若还开着那一条（历史遗留），顺手收口；没有就什么都不开。
+        row = _resubmit_item_by_key(conductor, key)
+        if row and conductor is not None:
+            _state, why = conductor.close_item_by_evidence(
+                str(row.get("task_id") or ""), close="completed",
+                why=f"义务已清：{cleared.get('why')}")
+            if why:
+                out["problems"].append(why)
+        out.update(checked=True, state="cleared", item_id=str(row.get("task_id") or ""),
+                   reason=str(cleared.get("why") or "义务已清"))
+        return out
+    if not str(recipient or ""):
+        out.update(state="unowned", owner="unknown",
+                   reason=("读不到送审者 ⇒ 不猜负责人、不开项；负责人记 unknown，"
+                           "由收工读数 statements_unsigned 的 owner_known 说清楚"))
+        return out
+    row = _resubmit_item_by_key(conductor, key)
+    if row:
+        task_id = str(row.get("task_id") or "")
+        state = str(row.get("item_state") or "")
+        out.update(checked=True, item_id=task_id,
+                   state=("closed" if state == "done" else "existing"),
+                   reason=(f"同键的板项已存在（{task_id}，item_state={state}）⇒ 不重开"))
+        return out
+    if conductor is None:
+        out.update(state="skipped",
+                   reason="这一趟没有 conductor ⇒ 板项开不了（不拿意图当交付）")
+        return out
+    summary, body = _resubmit_body(label=label, detail=detail, at=at)
+    try:
+        item_id = conductor.open_item(
+            kind="notice", role=str(role or ""), expects="work", action="notice",
+            summary=summary, called_by="V", parent_task_id=str(recipient),
+            depth=int(depth or 1) + 1, input_key=key)
+        conductor.set_item_detail(item_id, body)
+    except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走这一签
+        out.update(state="error",
+                   reason=f"板项没开成（{type(exc).__name__}: {exc}）")
+        out["problems"].append(out["reason"])
+        return out
+    out.update(checked=True, state="opened", item_id=item_id,
+               reason=f"新开重送项 {item_id}（负责人 {recipient}）")
+    return out
+
+
+def settle_resubmitted(*, store: Any, root: str | Path,
+                       row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条干净的「成立」签落下之后：把同一份证明名下开着的重送项收口。
+
+    判据（缺一不可）：这一行的结论词是「成立」，且秘书没有判 fault（判 fault 的
+    "成立"仍然是一次打回 —— 82 的 000001/000006 就是这一档）。收口方式
+    `close="completed"`（"做完了"，不是"知道了"），由 `conductor.close_item_by_evidence`
+    落盘：那是唯一一条不是收件人 ack 的收口语义。
+
+    返回 `{"checked","closed","skipped","problems","reason"}`；台账读不成 ⇒
+    `checked=False`（不是"没有要收口的"）。
+    """
+    from . import verifications as VR
+    from . import vsigns as VSP
+
+    out: dict[str, Any] = {"checked": False, "closed": [], "skipped": [],
+                           "problems": [], "reason": ""}
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+    if not sid:
+        out["reason"] = "这一行没有命题号 ⇒ 判不了要收口哪一条"
+        return out
+    if VR.read_verdict(row) != "成立" or VSP.verdict_axis(row):
+        out.update(checked=True, reason="这一签不是干净的「成立」⇒ 没有义务要收口")
+        return out
+    no = int(VR.as_proof_no(row.get("proof_no")) or 1)
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "这一趟没有 conductor ⇒ 板项收不了口（不是「没有要收口的」）"
+        return out
+    rows, problems = _ledger_rows(root=root, statement_id=sid)
+    out["checked"] = True
+    out["problems"].extend(problems)
+    for item in _resubmit_items(conductor, sid):
+        key = str(item.get("input_key") or "")
+        sha = resubmit_sha_of(key)
+        item_no = _proof_no_of_sha(rows, sha)
+        if item_no is None:
+            # 认不出属于第几份证明 ⇒ 不猜；只在 sha 完全相同时收口。
+            if sha and sha == str(row.get("proof_sha256") or ""):
+                item_no = no
+            else:
+                out["skipped"].append({"key": key,
+                                       "why": "认不出这条义务是第几份证明的（台账里没有那个 sha）"})
+                continue
+        if item_no != no:
+            continue
+        task_id = str(item.get("task_id") or "")
+        _state, why = conductor.close_item_by_evidence(
+            task_id, close="completed",
+            why=(f"同一份证明（#p{no}）出现了干净的「成立」："
+                 f"{row.get('verification_id') or '（没读到编号）'}"))
+        if why:
+            out["problems"].append(f"{task_id}：{why}")
+            continue
+        out["closed"].append(task_id)
+    out["reason"] = (f"收口 {len(out['closed'])} 条重送项"
+                     + (f"；{len(out['skipped'])} 条认不出是哪一份证明" if out["skipped"] else "")
+                     + (f"；{len(out['problems'])} 条没收成" if out["problems"] else ""))
+    return out
+
+
+def close_resubmits_for(store: Any, *, statement_id: str, why: str) -> dict[str, Any]:
+    """把一条命题名下全部开着的重送项作废（`close="expired"`）。
+
+    谁调它：放弃原命题那一步（`Secretary` 的 abandoned 分支）。为什么必须调：
+    `retire_integrity` 把"名下还有未消的板项"算成不干净，而放弃之后的义务不该再
+    压着任何人 —— 不在这里收口，"放弃"这条出口会被销号闸反锁住。
+    """
+    out: dict[str, Any] = {"checked": False, "closed": [], "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "这一趟没有 conductor ⇒ 重送项收不了口（不是「没有要收口的」）"
+        return out
+    out["checked"] = True
+    for item in _resubmit_items(conductor, statement_id):
+        task_id = str(item.get("task_id") or "")
+        _state, problem = conductor.close_item_by_evidence(
+            task_id, close="expired", why=str(why or "命题被明确放弃"))
+        if problem:
+            out["problems"].append(f"{task_id}：{problem}")
+            continue
+        out["closed"].append(task_id)
+    out["reason"] = (f"作废 {len(out['closed'])} 条重送项"
+                     + (f"；{len(out['problems'])} 条没收成" if out["problems"] else ""))
+    return out
+
+
+def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
+    """重送义务的读数：开着的 / 认不出负责人的 / 逐条明细（收工与判据共用）。"""
+    out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "rows": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有重送义务」）"
+        return out
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"板项读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["checked"] = True
+    for row in rows:
+        key = str(row.get("input_key") or "")
+        if not key.startswith(RESUBMIT_PREFIX):
+            continue
+        state = str(row.get("item_state") or "")
+        if state == "done":
+            continue
+        owner = str(row.get("parent_task_id") or "")
+        out["open"] += 1
+        if not owner:
+            out["unowned"] += 1
+        out["rows"].append({"task_id": str(row.get("task_id") or ""), "key": key,
+                            "owner": owner or "unknown", "item_state": state,
+                            "role": str(row.get("role") or ""),
+                            "detail": str(row.get("detail") or "")[:200]})
+    out["reason"] = f"板上开着 {out['open']} 条重送义务"
+    return out
+
+
 def _prefix() -> str:
     from .agent_loop import V_VERDICT_ITEM_PREFIX
 
@@ -488,6 +865,7 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
                 f"{author_role}。按业主 2026-11-01 的口径这是缺陷，不是转交 —— 回执仍投送审者。）")
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
                            "opened": False, "reason": "", "problems": [],
+                           "resubmit": {},
                            "submitter": recipient, "submitter_role": role,
                            "author": author_role,
                            "author_source": str(who.get("source") or ""),
@@ -532,6 +910,13 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
                     out.update(checked=True, state=DISPATCHED,
                                item_id=str(cur.get("item_id") or ""),
                                reason="outbox 已记：这一条投给这个收件人过了（不重开）")
+                    # 回执那一条已经在板上，但"必须重送"的义务是另一条板项：
+                    # 旧盘（本笔之前投过的判决）在这里补开，幂等键没有收件人后缀，
+                    # 于是同一个收件人跑十趟也只有一条。
+                    out["resubmit"] = ensure_resubmit(
+                        store=store, root=root, label=label,
+                        verification_id=verification_id, detail=detail,
+                        recipient=recipient, role=role, depth=depth, at=at)
                     return out
             if not cur:
                 _append(root, {"key": key, "label": label,
@@ -568,6 +953,12 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
             else:
                 out.update(state=UNDELIVERED,
                            reason=str(got.get("reason") or "板项没开成（原因没读到）"))
+            # ---- I2（业主 2026-11-01）：「打回」不只是一条回执，还是一条必须重送的
+            # 义务。义务单独一条板项（`v-resubmit@<命题>@<sha>`，无收件人后缀），
+            # 关闭条件是"同一份证明出现更新的干净成立行"，不是 ack。
+            out["resubmit"] = ensure_resubmit(
+                store=store, root=root, label=label, verification_id=verification_id,
+                detail=detail, recipient=recipient, role=role, depth=depth, at=at)
             _append(root, {"key": key, "label": label,
                            "verification_id": verification_id, "recipient": recipient,
                            "role": role, "at": at, "by_task": by_task,
@@ -585,10 +976,13 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
     """甲 的入口：`record_verification` 之后立刻调（一条台账行 → 一次投递）。
 
     收件人 = `current_parent()`（召唤这一趟 V 的那个任务）。不是"有毛病"那一档就
-    什么都不做（返回 `state="skipped"`）—— 回执只给"要改的人"，"成立"那一档不打扰谁。
+    不投回执（`state="skipped"`）—— 但"干净的成立"那一档要做另一件事：把同一份
+    证明名下开着的重送义务收口（`settle_resubmitted`，`state="settled"`）。
+    这就是业主 2026-11-01 裁定的关闭条件：不是 ack，而是"更新的成立行"。
     """
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
-                           "opened": False, "reason": "", "problems": []}
+                           "opened": False, "reason": "", "problems": [],
+                           "resubmit": {}}
     if store is None:
         out["reason"] = "没有 store ⇒ 回执没处落（不是「投过了」）"
         return out
@@ -600,8 +994,21 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
         from . import vsigns as VSP
 
         if not VSP.verdict_axis(row):
-            out.update(state="skipped",
-                       reason="这一签不是「有毛病」那一档 ⇒ 不投（回执只给要改的人）")
+            # 干净的「成立」是关闭重送义务的那一道门（不是"什么都不做"）。
+            try:
+                settled = settle_resubmitted(store=store, root=_root_of(store), row=row)
+            except Exception as exc:  # noqa: BLE001 —— 收口失败不许带走这一签
+                settled = {"checked": False, "closed": [], "skipped": [], "problems": [],
+                           "reason": f"重送项收口没跑成（{type(exc).__name__}: {exc}）"}
+            out["resubmit"] = settled
+            out["problems"].extend(str(x) for x in (settled.get("problems") or []))
+            if settled.get("closed"):
+                out.update(checked=bool(settled.get("checked")), state="settled",
+                           reason=str(settled.get("reason") or "义务已清"))
+            else:
+                out.update(checked=bool(settled.get("checked")), state="skipped",
+                           reason="这一签不是「有毛病」那一档 ⇒ 不投回执"
+                                  "（回执只给要改的人）；也没有要收口的重送项")
             return out
         detail = _detail_of_row(row)
     except Exception as exc:  # noqa: BLE001
@@ -742,6 +1149,20 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
             except Exception as exc:  # noqa: BLE001
                 out["problems"].append(f"{label}@{vid}：outbox 认领没写成"
                                        f"（{type(exc).__name__}: {exc}）")
+            # 回执项在板上 ≠ 重送义务在板上：旧盘（本笔之前投过的判决）要走这一支
+            # 把义务补开。幂等键没有收件人后缀，所以补投十趟也只多一条。
+            _detail = _detail_from_ledger(store, root, label, vid)
+            if _detail is not None:
+                _holder = str(item.get("parent_task_id") or "")
+                _rs = ensure_resubmit(
+                    store=store, root=root, label=label, verification_id=vid,
+                    detail=_detail, recipient=_holder,
+                    role=str(item.get("role") or ""),
+                    depth=max(1, int(_task_row(store, _holder).get("depth") or 1)),
+                    at=str(row.get("at") or ""))
+                out.setdefault("resubmit", []).append(
+                    {"label": label, "verification_id": vid, **_rs})
+                out["problems"].extend(str(x) for x in (_rs.get("problems") or []))
             continue
         # 板上没有 ⇒ 定收件人：先看 outbox 意图，再看时间窗（唯一才认）。
         recipient, role, depth, why = "", "", 0, ""

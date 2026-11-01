@@ -26,19 +26,55 @@
 """
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
 from agentflow import closing as CL
+from agentflow import conductor as CND
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
+from agentflow import vreceipts as VRC
+from agentflow.agent_v import AgentV
 from agentflow.store import Store
+from agentflow.tools.conductor_tools import conductor_for, reset_cache
 
 TS = "2026-11-01T20:00:00+08:00"
 SID = "000001"
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
 PROOF = "取 δ=ε，逐点验证：|x-y|<δ ⇒ |f(x)-f(y)|<ε。"
 PROOF2 = "取 δ=ε/2，用紧性把逐点控制换成一致控制，再验证 |x-y|<δ ⇒ |f(x)-f(y)|<ε。"
+REPLY_DEFECT = json.dumps({
+    "verdict": "有毛病", "defect_step": 5, "why": "第 5 步没有依据",
+    "findings": [{"level": "error", "step": 5, "kind": "无依据的步骤",
+                  "detail": "第 5 步直接用了结论"}],
+}, ensure_ascii=False)
+REPLY_CLEAN = json.dumps({"verdict": "成立", "why": "逐步核过，没有缺陷"},
+                         ensure_ascii=False)
+
+
+class _Call:
+    ok = True
+    problem = ""
+    detail = ""
+    text = ""
+    model = "fake"
+    prompt_version = "t"
+    prompt_sha256 = "0" * 64
+
+
+class _Seam:
+    """V 的那条缝：只喂审阅结论（不联网）。"""
+
+    wired = True
+
+    def __init__(self, *replies: str) -> None:
+        self.replies = list(replies)
+
+    def ask(self, prompt: str = "", **_kw) -> _Call:
+        call = _Call()
+        call.text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        return call
 
 
 # ------------------------------------------------------------------ 夹具
@@ -262,3 +298,133 @@ def test_the_abandon_marker_roundtrips_and_rejects_half_forms():
         SA.abandon_marker(at=TS, reason="   ")
     with pytest.raises(ValueError):
         SA.abandon_marker(at="昨天", reason="有理由")
+
+
+# ------------------------------------------------------------------ ②/④ 重送义务（板项层）
+#
+# 这一节走 V 的真入口（`AgentV.verify_proof`）：回执与义务都由 `vreceipts.publish_row`
+# 在判定那一笔里开，判据测的是"生产写出来的那份"，不是手写行。
+
+_SEQ = {"n": 0}
+
+
+def _agent_row(st: Store, *, role: str = "F", parent: str = "t-root",
+               depth: int = 2) -> str:
+    """落一条代理行（`kind` 空）：收件人 / 送审者都用它。"""
+    from agentflow.conductor import Conductor
+
+    _SEQ["n"] += 1
+    return Conductor._write_new_row(
+        conductor_for(st), {
+            "task_id": "", "role": role, "action": "", "called_by": "M",
+            "parent_task_id": parent, "depth": depth,
+            "input_key": f"@t:{role}:{_SEQ['n']}",
+            "status": "done", "outcome": "ok", "refusal_reason": None,
+            "instance": f"{role}#1", "detail": "夹具", "error": None,
+            "started_at": TS, "ended_at": TS, "tokens": 0, "usd": 0.0,
+            "artifacts": [], "inputs": [],
+        }, note="probe:agent")
+
+
+def _verify_v(st: Store, sid: str, *, parent: str, proof: str = PROOF,
+              reply: str = REPLY_DEFECT) -> dict:
+    """走 V 的真入口（投递钩子在它里面）。"""
+    agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply))
+    with CND.calling_as("t-v1", "V", parent_task_id=parent, parent_role="F"):
+        return agent.verify_proof(sid, proof_text=proof)
+
+
+def _resubmit_items(st: Store) -> list[dict]:
+    return [dict(r) for r in st.rows("tasks")
+            if str(r.get("input_key") or "").startswith(VRC.RESUBMIT_PREFIX)]
+
+
+def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
+    """④ 打回 ⇒ 开一条「待重送」板项；键是 `v-resubmit@<命题>@<sha>`，没有收件人后缀。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    got = _verify_v(st, SID, parent=parent)
+    assert got.get("checked") is True, got
+    items = _resubmit_items(st)
+    assert len(items) == 1, [(r.get("input_key"), r.get("item_state")) for r in items]
+    one = items[0]
+    assert one["input_key"] == VRC.resubmit_key(f"{SID}#p1", VR.proof_sha(PROOF)), one
+    assert one["input_key"].endswith(VR.proof_sha(PROOF)), "键尾必须是 sha，不是收件人"
+    assert str(one.get("parent_task_id")) == parent, "负责人 = 那一次送审的送审者"
+    assert str(one.get("expects")) == "work", "重送是要交付的活，不是'知道了'"
+    assert str(one.get("kind")) == "notice"
+    assert str(one.get("item_state")) == "queued", one
+    assert "重送" in str(one.get("detail") or ""), one.get("detail")
+
+
+def test_the_same_sha_faulted_twice_still_opens_only_one_item(tmp_path):
+    """④ 同一份证明打回两次（两签、同一 sha）⇒ 板项只 1 条；补投再跑一遍也不增。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    _verify_v(st, SID, parent=parent)
+    assert len(_resubmit_items(st)) == 1, [r.get("input_key") for r in _resubmit_items(st)]
+    VRC.backfill(store=st)
+    assert len(_resubmit_items(st)) == 1, [r.get("input_key") for r in _resubmit_items(st)]
+    # 而回执那一侧是两条（两签两个 vid）—— 义务与回执不是同一条
+    receipts = [r for r in st.rows("tasks")
+                if str(r.get("input_key") or "").startswith("v-verdict@")]
+    assert len(receipts) == 2, [r.get("input_key") for r in receipts]
+
+
+def test_a_clean_hold_closes_the_resubmit_item_but_an_ack_does_not(tmp_path):
+    """②/④ 关闭条件 = 更新的干净「成立」行；ack 关不掉它（这是业主裁定的关闭条件）。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    item_id = str(item["task_id"])
+
+    cond = conductor_for(st)
+    acked = cond.ack_items([item_id], by_task_id=parent)
+    assert not acked.get("acked"), acked
+    assert str(_resubmit_items(st)[0]["item_state"]) != "done", "ack 不许关掉重送义务"
+
+    _reproof(st)
+    got = _verify_v(st, SID, parent=parent, proof=PROOF2, reply=REPLY_CLEAN)
+    assert got.get("checked") is True, got
+    closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item_id][0]
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "completed", closed
+
+
+def test_an_unowned_fault_opens_nothing_and_reads_as_owner_unknown(tmp_path):
+    """I2 的第二半：读不到送审者 ⇒ 记 unknown、不开项（不拿"谁醒着"当负责人）。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    _put(st)
+    # 不在任何召唤里 ⇒ current_parent 为空 ⇒ undelivered
+    agent = AgentV(st, workspace_root=st.root, llm=_Seam(REPLY_DEFECT))
+    got = agent.verify_proof(SID, proof_text=PROOF)
+    assert got.get("checked") is True, got
+    assert _resubmit_items(st) == [], [r.get("input_key") for r in _resubmit_items(st)]
+    one = _unsigned(st)["rows"][0]
+    assert one["owner_known"] is False and one["owner"] == "", one
+
+
+def test_abandonment_expires_the_open_resubmit_item(tmp_path):
+    """③/④ 放弃原命题 ⇒ 那条义务同时作废（否则销号闸会被它反锁住）。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    got = VRC.close_resubmits_for(st, statement_id=SID, why="命题被明确放弃")
+    assert got["checked"] is True and got["closed"], got
+    closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "expired", closed
+    assert _resubmit_items(st) == [] or all(
+        str(r.get("item_state")) == "done" for r in _resubmit_items(st)), _resubmit_items(st)
