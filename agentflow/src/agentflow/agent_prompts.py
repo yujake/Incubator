@@ -5236,7 +5236,7 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门的 `machine_pass` = 八格全过 **且没有 blocker**，两者缺一都不许说"完成"）：八格是 `paper` / `contradictions` /
+五、完成定义（收工门八格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：八格是 `paper` / `contradictions` /
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
 同样以它的当次读数为准。

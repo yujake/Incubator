@@ -1537,7 +1537,7 @@ C 的产出有两类，状态语义完全不同。
 | 终止条件 | 两态结论落台账即终止；**"没查成"不是终止** —— 它不落行、如实报出来 | `verifications.parse_verdict` | 不落行 |
 | 命题号 | 必须 **六位十进制**（旧数据里的四位仍可读） | `verifications.verification_ledger_path` | 抛 `VerificationError`（`verify.verify_proof` 回报 `reason="bad_statement_id"`） |
 
-### V.7 两态与失败模式（“已知会犯的错”明细见附录 §V.7）
+### V.7 三态与失败模式（业主要求的子节名；今天对证明只剩两态，「判不了」那一档已退场）
 
 **两态（对证明的结论，都不是"没查成"）**：
 
