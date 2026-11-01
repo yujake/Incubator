@@ -1101,6 +1101,27 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     "temp/rbe4_prompt_digests.py",
     "temp/rbe4_rows_cost.py",
     "temp/rbe4_sessions_reads.py",
+    # 2026-11-01（167/168 批）：下面 11 条是 158–161 那几批的探针 / 夹具 / 整树副本。
+    # 引用写在源码注释里，文件在仓内 `agentflow/temp/` 还活着，而本判据认的工作区根
+    # （仓库上一层）的 `temp/` 没有它们 —— 与 `probe_153_u09_before_after.py` 同形态：
+    # 按"已知的探针/副本逐条登记"处理，不改引用（那些注释在讲当时的读数与复跑路径，
+    # 改名会篡改史实）。逐条按批次点名：
+    #   · 161 读图/网页探针：dump_bodies / probe_webui / replica_81（工作区副本）/
+    #     report.txt / scan_variants；
+    #   · 160 副本：_probe_160_ws81（整树副本，落点不带扩展名）、`_recompute_160.py`（重算读数）；
+    #   · 159 夹具：`probe_159_sibling_race_fixture.py`、`ws159_81`（81 工作区副本）；
+    #   · 158 副本：`ws158_copy`、`ws158_roster`。
+    "temp/161_dump_bodies.py",
+    "temp/161_probe_webui.py",
+    "temp/161_replica_81",
+    "temp/161_report.txt",
+    "temp/161_scan_variants.py",
+    "temp/_probe_160_ws81",
+    "temp/_recompute_160.py",
+    "temp/probe_159_sibling_race_fixture.py",
+    "temp/ws158_copy",
+    "temp/ws158_roster",
+    "temp/ws159_81",
 )
 
 
@@ -1660,13 +1681,18 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
         f"逐处读数：{res['missing_test_files']}"
     )
 
-    exempted_files = sorted({rel for rel, _, _ in res["exempted"]})
+    # 记号豁免只看仓里的文件：`temp/` 下可能有整树副本（实测 `temp/161_before_tree/`），
+    # 副本里那一行记号是「复制品」，不是一次新豁免 —— 让它进等额会让一份 scratch 副本
+    # 把登记表翻倍。副本仍留在扫描面里（里面的悬空引用照旧报），只是不能新增豁免。
+    exempted = [(rel, lineno, tok) for rel, lineno, tok in res["exempted"]
+                if not rel.startswith("temp/")]
+    exempted_files = sorted({rel for rel, _, _ in exempted})
     assert exempted_files == sorted(_REF_EXEMPTED_EXPECTED_FILES) and (
-        len(res["exempted"]) == len(_REF_EXEMPTED_EXPECTED_FILES)
+        len(exempted) == len(_REF_EXEMPTED_EXPECTED_FILES)
     ), (
         "带记号豁免的引用与登记表 `_REF_EXEMPTED_EXPECTED_FILES` 不符 —— 豁免是暗门，"
         "每放行一条都要在表里留一次可见的登记（文件不符、多一条、少一条都算不符）："
-        f"{res['exempted']} vs {list(_REF_EXEMPTED_EXPECTED_FILES)}"
+        f"{exempted} vs {list(_REF_EXEMPTED_EXPECTED_FILES)}"
     )
 
     #: 第 2 条的登记面必须逐条等额：多一个（仓里新出现一条只有文本提及、既没登记
@@ -1741,7 +1767,8 @@ def test_the_reference_exemption_marker_is_alive() -> None:
                     "（在仓内认不出仓是 FAILED，不走这一支）")
     tree, ws_root = roots
     res = _scan_ticked_references(tree, ws_root)
-    assert res["exempted"], (
+    # 与上一条同口径：只认仓里的记号；`temp/` 下整树副本里的复制记号不能把机制"撑活着"。
+    assert any(not rel.startswith("temp/") for rel, _, _ in res["exempted"]), (
         f"全仓没有一条引用带豁免记号 `{_REF_EXEMPT_MARK}` ⇒ 记号的豁免机制死了："
         "要么记号被删了，要么扫描器不再识别它。死掉的豁免机制会让引用的那条判据"
         "从'显式豁免两处'退回'漏报'，而它的读数看上去与'干净'一模一样"
