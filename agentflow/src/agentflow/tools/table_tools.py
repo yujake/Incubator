@@ -971,7 +971,8 @@ def _routed_ok(*, backstop: str, entry: str, table: str, what_happened: str,
                row: Mapping[str, Any] | None = None, landed_id: str = "",
                changes: Sequence[Any] = (), requested_id: str = "",
                dropped_keys: Sequence[str] = (),
-               detail: Mapping[str, Any] | None = None) -> ToolResult:
+               detail: Mapping[str, Any] | None = None,
+               extra: Mapping[str, Any] | None = None) -> ToolResult:
     """兜底方办成了：`ok=True`，`data` 是上面那个形状。
 
     为什么 `error` 那一格也带一句（`ok` 仍然是 True）：`errorstats` 那份按码归类的读数
@@ -979,11 +980,17 @@ def _routed_ok(*, backstop: str, entry: str, table: str, what_happened: str,
     而"这一笔被兜底接管了"正是业主第 3 条要计的事件。所以那一格写的是接管读数、
     不是失败：`ok=True` 说明这条路走通了。正文里逐字写明这一点，避免模型把
     "有人兜底"读成"我做错了"。
+
+    `extra`（2026-11-02 加）是"这一笔顺手办成的另一件事"的读数（今天只有一处：
+    放弃命题时作废名下重送义务，键是 `abandon`）。不给就一个键都不多 —— 老调用点的
+    返回形状逐字不变。
     """
     data = _routed_shape(backstop=backstop, entry=entry, table=table, state="routed",
                          what_happened=what_happened, row=row, landed_id=landed_id,
                          changes=changes, requested_id=requested_id,
                          dropped_keys=dropped_keys, detail=detail)
+    if extra:
+        data.update({str(k): v for k, v in extra.items()})
     note = (f"{_route_code(backstop)}：{what_happened}"
             "（这一格是兜底读数，不是失败读数：ok=true 就是'系统替你办成了'）")
     return ToolResult(True, data, note, {"kind": _route_code(backstop),
@@ -1120,6 +1127,64 @@ def _route_direct_write(ctx: TableContext, *, route: tuple[str, str, str, str, s
                               why="工具层没有这一格的实现（表登记了入口、代码没接上）")
 
 
+def _abandon_reading(ctx: TableContext, *, statement_id: str,
+                     row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """就地写成功之后：这一行若是可解析的 `abandoned`，就作废它名下的重送义务。
+
+    调用点只有一处（`_route_to_secretary` 的"非正文 patch 成功之后"）：`table.update`
+    是业主验收的通用写口，模型真看得到、真会用的就是它（83 里 4 条 abandoned 全走这里）。
+    改前 `statementabandon.apply_abandonment` 只有测试在调，于是"放弃命题"这一笔写完之后，
+    板上那条 `v-resubmit@<命题>@<sha>` 还开着（`retire_integrity` 因此把放弃这条出口
+    反锁死），要等收工对账才关得掉 —— 它本该是"放弃"这件事的一部分。
+
+    为什么不在这里另写一遍 close：放弃的语义（状态 + 标记 + 义务作废）只有
+    `statementabandon.apply_abandonment` 那一份实现；它已经写好"这一行早就是 abandoned"
+    的幂等档（`already=True`：不写 statements，只 `close_resubmits_for`）。所以这里
+    只做两件事：认标记（`parse_abandon`，读侧唯一实现）与调用它。
+
+    ## 三态（拒绝折平）
+    - 这一行不是 `abandoned` ⇒ 返回 `{}`（不碰任何东西，老返回形状逐字不变）；
+    - 是 `abandoned` 但标记不可解析 ⇒ 返回 `checked=False` + `why`，不去猜理由
+      （`schema.Statement.validate` 会先挡这一档，这里是兜底）；
+    - 调用抛错 ⇒ `checked=False` + `problems`，不带走那一笔已经落盘的改写。
+    """
+    data = dict(row or {})
+    if str(data.get("status") or "") != "abandoned":
+        return {}
+    out: dict[str, Any] = {"checked": False, "abandoned": False, "already": False,
+                           "stmt_id": str(statement_id or ""), "marker": "",
+                           "resubmits": {}, "why": ""}
+    try:
+        from .. import statementabandon as _SA
+    except Exception as exc:  # noqa: BLE001 —— 模块都拿不到：没查成，不是"没有义务"
+        out["why"] = (f"放弃那一格没接上（{type(exc).__name__}: {exc}）"
+                      "⇒ 名下重送义务没作废（不是「没有义务」）")
+        return out
+    parsed = _SA.parse_abandon(data.get("quote_reason"))
+    if not parsed.get("checked"):
+        out["why"] = (f"这一行是 abandoned，而放弃标记读不出来（{parsed.get('why')}）"
+                      " ⇒ 不猜理由、也不动板项（schema 校验本该先挡下这一行）")
+        return out
+    out["marker"] = str(data.get("quote_reason") or "")
+    try:
+        got = _SA.apply_abandonment(ctx.store, statement_id=str(statement_id),
+                                    reason=str(parsed.get("reason") or ""),
+                                    at=str(parsed.get("at") or ""),
+                                    actor=f"table.update:{_caller_role() or 'unknown'}")
+    except Exception as exc:  # noqa: BLE001 —— 作废失败不带走那一笔改写（读数要说清）
+        out["why"] = (f"作废名下重送义务时抛了（{type(exc).__name__}: {exc}）"
+                      "⇒ 命题已放弃，板项可能仍开着")
+        return out
+    out.update(checked=bool(got.get("checked")), abandoned=bool(got.get("abandoned")),
+               already=bool(got.get("already")), marker=str(got.get("marker") or ""),
+               resubmits=dict(got.get("resubmits") or {}),
+               stmt_id=str(got.get("stmt_id") or statement_id))
+    if not got.get("checked"):
+        out["why"] = (f"{got.get('refused') or '没写成'}：{got.get('why') or ''}"
+                      " ⇒ 命题那一笔改写已经落盘，重送义务没作废")
+    return out
+
+
 def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
                         payload: Mapping[str, Any], id: str = "",
                         idf: str = "") -> ToolResult:
@@ -1182,10 +1247,32 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
             what = ("已由系统就地改写非正文格（" + "、".join(changes) + "）"
                     if changes else
                     "已由系统核对非正文格（已经是这些值 ⇒ 一个字节都没写）")
+            # ---- 2026-11-02（真机 83 · ①）：放弃命题必须当场作废名下的重送义务。
+            #
+            # 真机代价：83 里那 4 条 `abandoned` 全是经 `table.update(status=abandoned)`
+            # 写的，而这条正路此前只改 `statements` 那一行、不认识板项 ⇒ 该命题名下开着的
+            # `v-resubmit@<命题>@<sha>` 一直留在板上（`item_state=queued`、`expects=work`），
+            # 要等到收工前那一趟对账（`vreceipts.reconcile_resubmits`）才关得掉；在那之前
+            # `retire_integrity` 的"名下还有未消的板项"把"放弃"这条出口反锁死。
+            #
+            # 为什么调 `statementabandon.apply_abandonment` 而不是在这里搬一遍 close 逻辑：
+            # "放弃"的语义（状态 + 标记 + 义务作废）只有那一处实现，且它自带"已经是
+            # abandoned"的幂等档（`already=True`：不写 statements、只作废义务）。于是
+            # 这里只加一个调用点，判据仍是一份。失败不带走这一笔已经落盘的改写：
+            # 读数进 `detail.abandon`（`checked=False` + `problems`），不折成"没有义务"。
+            abandon = _abandon_reading(ctx, statement_id=str(id), row=got.get("row"))
+            if abandon:
+                closed = list((abandon.get("resubmits") or {}).get("closed") or ())
+                if closed:
+                    what += f"，并作废它名下开着的 {len(closed)} 条重送义务"
+                elif not abandon.get("checked"):
+                    what += "；名下重送义务没作废成（见 detail.abandon，别当成「没有义务」）"
             return _routed_ok(backstop="secretary", entry=str(entry), table=table,
                               what_happened=what, row=got.get("row"),
                               landed_id=str(got.get("stmt_id") or ""),
-                              changes=changes, requested_id=str(id), detail=got)
+                              changes=changes, requested_id=str(id),
+                              detail=({**dict(got), "abandon": abandon} if abandon else got),
+                              extra=({"abandon": abandon} if abandon else None))
         merged = dict(current)
         merged.update(dict(payload or {}))
         body = merged

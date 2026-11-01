@@ -577,8 +577,18 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
     """③ 端到端（业主验收口径）：`table.update(status=abandoned, quote_reason=标记)`。
 
     走的是生产的通用写口（`table.update` → `Secretary.amend_statement_meta`，业主
-    2026-11-01 加的非正文三格就地写口），不是直接调内部函数。就地写口不认识板项，
-    所以重送义务由收工前那一趟对账（`vreceipts.reconcile_resubmits`，backfill 里调）作废。
+    2026-11-01 加的非正文三格就地写口），不是直接调内部函数。
+
+    ## 2026-11-02 改（①：`apply_abandonment` 没有生产调用点）
+
+    改前这一条把"重送义务什么时候作废"押在收工前那一趟对账上（`vreceipts.
+    reconcile_resubmits`，backfill 里调）—— 也就是说真机上"放弃命题"那一笔写完之后，
+    板上那条 `v-resubmit@` 还开着，直到有人跑收工对账才关得掉（83 的真实读数：4 条
+    abandoned 全走 `table.update`，而那一趟不认识板项）。现在作废就发生在那一笔写口里
+    （`table_tools._route_to_secretary` 在就地写成功之后调 `apply_abandonment`），
+    所以下面断言的是"写完就 done/expired"，而对账那一趟此时是「幂等重放」（零写入）：
+    改前它非空（`expired` 里有这一条），改后它必须空 —— 这不是放宽，是同一件事挪到了
+    写口上（判据见 `test_table_update_closes_the_open_resubmit_item_and_leaves_no_open_work`）。
     """
     st = _ws(tmp_path)
     conductor_for(st)
@@ -601,13 +611,87 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
     assert _unsigned(st)["count"] == 0, _unsigned(st)
     assert _abandoned(st)["count"] == 1, _abandoned(st)
 
-    got = VRC.backfill(store=st)
-    rec = got["resubmit_reconcile"]
-    assert rec["checked"] is True, rec
-    assert item["task_id"] in rec["expired"], rec
+    # 写口自己关：不等 backfill。
     closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
     assert str(closed.get("item_state")) == "done", closed
     assert str(closed.get("item_close")) == "expired", closed
+
+    got = VRC.backfill(store=st)
+    rec = got["resubmit_reconcile"]
+    assert rec["checked"] is True, rec
+    assert item["task_id"] not in rec["expired"], rec
+    assert item["task_id"] not in rec["closed"], rec
+    closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "expired", closed
+
+
+# ------------------------------------------------------------------ ① 放弃 ⇒ 板项当场作废
+#
+# 真机代价（83 的读数）：`statementabandon.apply_abandonment` 只有测试在调，走
+# `table.update(status=abandoned)` 那条正路不会 close 该命题名下的 `v-resubmit@` 项 ⇒
+# 板上留下一条永远关不掉的 work 项（`retire_integrity` 把"名下还有未消的板项"算成
+# 不干净，于是"放弃"这条出口被反锁死）。这一节把"谁在什么时候关"钉在写口上。
+
+def _open_work_for(st: Store, sid: str) -> list[dict]:
+    """该命题名下还开着的重送 work 项（`expects=work` 且 `item_state != done`）。"""
+    want = f"{VRC.RESUBMIT_PREFIX}{sid}@"
+    return [dict(r) for r in st.rows("tasks")
+            if str(r.get("input_key") or "").startswith(want)
+            and str(r.get("expects") or "") == "work"
+            and str(r.get("item_state") or "") != "done"]
+
+
+def test_table_update_closes_the_open_resubmit_item_and_leaves_no_open_work(tmp_path):
+    """① 打回 → 开 v-resubmit 项 → 放弃命题 ⇒ 该项 done/expired，板上没有它的 open work。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    assert _open_work_for(st, SID), "夹具没造出重送项 —— 判据会变成恒绿"
+
+    reg = _table_registry(st)
+    with CND.calling_as("t-b1", "B"):
+        res = reg.call("table.update", table="statements", id=SID,
+                       patch={"status": "abandoned",
+                              "quote_reason": SA.abandon_marker(
+                                  at="2026-11-01T21:10:00+08:00",
+                                  reason="第 5 步补不出来，改不动了")})
+    assert res.ok, (res.error, getattr(res, "data", None) or getattr(res, "meta", None))
+
+    closed = next(dict(r) for r in st.rows("tasks")
+                  if str(r.get("task_id")) == item["task_id"])
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "expired", closed
+    assert _open_work_for(st, SID) == [], _open_work_for(st, SID)
+    # 读数透出来（模型 / 审计看得到"放弃把哪条义务作废了"）
+    payload = getattr(res, "data", None) or {}
+    got = payload.get("abandon") or {}
+    assert got.get("checked") is True, payload
+    assert item["task_id"] in list((got.get("resubmits") or {}).get("closed") or []), got
+
+
+def test_a_fault_that_is_not_abandoned_keeps_the_resubmit_item_open(tmp_path):
+    """① 反真空：只打回、不放弃 ⇒ 该项仍 open（不能被无条件关掉）。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    # 只改一句无害的非正文格（不碰 status / quote_reason）⇒ 义务一个字都不该动。
+    reg = _table_registry(st)
+    with CND.calling_as("t-b1", "B"):
+        res = reg.call("table.update", table="statements", id=SID,
+                       patch={"kind": "lemma"})
+    assert res.ok, (res.error, getattr(res, "data", None) or getattr(res, "meta", None))
+    still = next(dict(r) for r in st.rows("tasks")
+                 if str(r.get("task_id")) == item["task_id"])
+    assert str(still.get("item_state")) != "done", still
+    assert [r["task_id"] for r in _open_work_for(st, SID)] == [item["task_id"]], \
+        _open_work_for(st, SID)
 
 
 def test_the_table_update_route_refuses_an_abandonment_without_a_marker(tmp_path):
