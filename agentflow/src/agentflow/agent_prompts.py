@@ -8434,7 +8434,7 @@ def toolchain_formal_text() -> str:
                 "  1. 把证明过程逐字写进 `statements` 的 `proof_text`"
                 "（含假设、每一步的依据、以及你没能接上的那一步）；\n"
                 "  2. 派 V（`summon` 它的 `verify.verify_proof`，交命题号 + 证明全文）逐行走查 —— "
-                "它的三态结论落 `verifications/<命题号>.jsonl`，这是本会话**唯一**的「审过」凭据；\n"
+                "它的两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`，这是本会话**唯一**的「审过」凭据；\n"
                 "  3. 结论强度：`evidence_kind=\"proof\"` 产不出来 ⇒ 断言最高只能到"
                 "「cross_check / heuristic」，正文里不许出现「已形式化验证」这类词；\n"
                 "  4. 检查器状态那一栏会如实报 `lean_disabled`（不是 `no_backend`："

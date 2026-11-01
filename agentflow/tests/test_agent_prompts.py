@@ -771,6 +771,10 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "research.write_note": "真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`，"
                            "`roles=('D',)`）—— 与 `research.set_status` 同一条契约，"
                            "本文件的夹具不带 store ⇒ 跳过",
+    # 2026-11-01（审计 174 §1.3 那一族）：B 的说明面要指认「推断 proof_authors 的是哪个模块」，
+    # 而那一句写的是模块文件（`proofauthors.py`）。它不是工具，也不该被读成工具名 ——
+    # 判据 `tests/test_b_param_face_explains_proof_authors_and_kind.py` 逐字要求带 `.py`。
+    "proofauthors.py": "文件名（模块文件），不是工具 —— B 的说明面用它指认推断那一格的是哪个模块",
     # 2026-10-29（block 表 × 逐条审批唤醒）：`conductor.wake_blocked` 的描述里点了这一格，
     # 因为"唤醒不清板项、block 项还会永久挡收工"这件事必须说清到具体读数格 ——
     # 它是 `Conductor.retire_integrity` 返回的 `open_items`，读它的是收工门，不是工具
@@ -1188,6 +1192,13 @@ def test_every_tool_on_the_face_is_listed_with_its_required_parameter_keys(regis
             expected = "（必填 " + ("、".join(req_list) if req_list else "无")
             if not properties:
                 expected += "；不许传任何参数"
+            else:
+                # 2026-11-01（业主裁定 + 审计 174 §1.2）：可选键用 `?key` 紧凑列在必填之后。
+                # 形状仍是精确相等（改形状就必须改这条判据），只是多了一段可选的尾巴 ——
+                # 于是「可选键静默消失」也会在这里红，而不是只靠 test_prompt_param_hints。
+                opt_list = [k for k in properties if k not in required]
+                if opt_list:
+                    expected += "；可选 " + "、".join("?" + k for k in opt_list)
             expected += "）"
             assert hint == expected, (
                 f"{role} 的工具 {spec.name} 的参数提示形状变了：\n  现场 {hint}\n  应为 {expected}"

@@ -4,7 +4,7 @@
 `closing` 的真身是 `machine_pass = all(status[格] == "pass") and not blockers`
 （`closing.py:3634-3643`）。改前 PAPER_PACK 第五节的完成定义只写「收工门八格全过才算
 交付」—— 窄了一个维度：`statements_unsigned`（既无 V 签又未放弃的命题）这类 blocker
-**不落在任何一格上**，八格全绿也照样把 `machine_pass` 打成假。
+不落在任何一格上，八格全绿也照样把 `machine_pass` 打成假。
 
 这一份判据钉三件：
 1. M / G / H 三格（`PAPER_PACK` 的注册面）都读到「八格全过且没有 blocker」这句；
