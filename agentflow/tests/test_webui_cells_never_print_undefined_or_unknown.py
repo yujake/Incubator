@@ -1,30 +1,30 @@
 # -*- coding: utf-8 -*-
 """页面单元格：不许把「可能是 undefined 的值」直接 `String()`，不许把「空正文」印成 `unknown`。
 
-## 这一份钉的是**类**，不是那两个个例
+## 这一份钉的是类，不是那两个个例
 
 改前真机两处（2026-11-01，`projects/paper-rewrite-81`）：
 
 1. `ui/src/pages/Evidence.tsx` 的「fail_open」列写着 `render: (r) => String(r.fail_open)` ——
    `out/secretary/` 下混进来的两份旁支台账（`nontriviality.jsonl` 89 行 /
-   `proposition_verdicts.jsonl` 54 行）**根本没有这一栏**，于是 613 行里有 143 行在屏上
+   `proposition_verdicts.jsonl` 54 行）根本没有这一栏，于是 613 行里有 143 行在屏上
    印成字面量 `undefined`。同页其余列都走 `components/Table.cell()`（它承诺
    `null` / `undefined` / 空串 ⇒ `unknown`，三态），只有这一列绕过了它。
 2. `ui/src/pages/Acceptance.tsx` 的「读数」列写着 `detail === "" ? "unknown" : detail` ——
    而 `unknown` 在同一页专指「没查成」（`verdictBadge` 那一档）。`reviewaccept` 在几条
-   判据**过了**的时候不写 `details`（`within_cost_cap` / `attachment_is_honest` 的通过
+   判据过了的时候不写 `details`（`within_cost_cap` / `attachment_is_honest` 的通过
    分支），于是同一行会出现「结论 过了 / 读数 unknown」。
 
 如果判据只钉这两行，下一张页面换个字段名就会再犯一次（改前全仓就有 8 处同族：见下）。
-所以这里钉的是两条**规则**，扫 `ui/src/pages/*.tsx` 的**每一个单元格**：
+所以这里钉的是两条规则，扫 `ui/src/pages/*.tsx` 的每一个单元格：
 
-- **R1**：单元格里出现 `String(<行成员>)`（`r.x` / `row.x` / `w.x` / `r["x"]`），而这一格里
+- R1：单元格里出现 `String(<行成员>)`（`r.x` / `row.x` / `w.x` / `r["x"]`），而这一格里
   没有任何「缺值守卫」（`=== null` / `!== null` / `=== undefined` / `!== undefined` /
   `typeof` / `??`）⇒ 一条 finding。守卫写法放行，是因为它已经把「缺」折成了某个显示值；
-  要判的是**绕过取值器**这件事（`cell()` / `plain()` / `blank()` 是唯一白名单）。
-- **R2**：单元格里把**正文类字段**（`detail` / `details[…]` / `note` / `reason` /
+  要判的是绕过取值器这件事（`cell()` / `plain()` / `blank()` 是唯一白名单）。
+- R2：单元格里把正文类字段（`detail` / `details[…]` / `note` / `reason` /
   `problem` / `prose`）的空串折成裸 `"unknown"` ⇒ 一条 finding。三态词（`state` /
-  `verdict` / `triage`）的空串**就是**「没查成」，不在此列 —— 这一条的分界线是语义，
+  `verdict` / `triage`）的空串就是「没查成」，不在此列 —— 这一条的分界线是语义，
   不是"扫到 unknown 就算"。
 
 「单元格」的取法（两条规则都按它）：列定义 `render:` 的函数体（从 `=>` 起做括号平衡，
@@ -51,7 +51,7 @@ Live.tsx:106        R1  <span class="mono">{String(r.pid)}</span>
 
 ## 为什么六处 `String(x.y)` → `cell(x.y)` 是安全的重构
 
-有值时输出**逐字不变**（`cell(42) === "42"`、`cell(false) === "false"`）；只有"这一格
+有值时输出逐字不变（`cell(42) === "42"`、`cell(false) === "false"`）；只有"这一格
 压根没有"时才从字面量 `undefined` 变成 `unknown`（= 这一页对"没读到"的既有承诺）。
 """
 
@@ -223,7 +223,7 @@ def _with_replaced(page: str, *, old: str, new: str) -> dict[str, str]:
 def test_negative_control_the_old_fail_open_render_turns_it_red() -> None:
     """负控①：把 Evidence 那一处改回 `String(r.fail_open)` ⇒ 必红，且点名 file:line。
 
-    这一条就是业主那句「把修好的那处临时改回 ⇒ 必红」的机器形态：它在**整页副本**上
+    这一条就是业主那句「把修好的那处临时改回 ⇒ 必红」的机器形态：它在整页副本上
     改，所以行号与真文件同一套坐标。
     """
     sources = _page_sources()
@@ -251,7 +251,7 @@ def test_negative_control_the_old_empty_detail_turns_it_red() -> None:
 
 
 def test_negative_control_a_multiline_render_body_is_seen_too() -> None:
-    """负控③：缺陷写成**多行** `render:` 体也照样被抓（证明不是按行扫的）。"""
+    """负控③：缺陷写成多行 `render:` 体也照样被抓（证明不是按行扫的）。"""
     sources = _page_sources()
     planted = dict(sources)
     planted["Run.tsx"] = sources["Run.tsx"] + (

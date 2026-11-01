@@ -86,24 +86,24 @@ READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
 #: `stats all` 那一档的 `data` 键集（就是四条读数的名字，顺序即呈现顺序）。
 ALL_DATA_KEYS: tuple[str, ...] = ("errors", "flow", "cost", "gates")
 
-#: 门那一格的**四态**取值（与 `closing.ClosingReport.status` 同一套词）。
+#: 门那一格的四态取值（与 `closing.ClosingReport.status` 同一套词）。
 #:
 #: 为什么有四档（2026-11-01 补 `na`）：改前这里只有 `pass` / `fail` / `unknown`，
 #: 而 `closing` 早就会写第四档 `na`（`load_bearing` 在「形式化已关闭」的项目上
 #: 记 `na`，closing.py 的 `rep.status["load_bearing"] = "na"`）。于是 `gates_readout`
 #: 在 :531 把它折成 `unknown` —— 同一现场两个读口给出两种 counts：
-#: `closing` 侧 pass5/fail1/unknown1/**na1**，读数层 pass5/fail1/**unknown2**。
-#: 扫全库 158 个工作区，`load_bearing` 那一格 **158/158 都是 `na`** ⇒ 不是某个
+#: `closing` 侧 pass5/fail1/unknown1/na1，读数层 pass5/fail1/unknown2。
+#: 扫全库 158 个工作区，`load_bearing` 那一格 158/158 都是 `na` ⇒ 不是某个
 #: 工作区的怪数据，是这个词表少了一档（每一份收工门读数都被折了同一格）。
 #:
 #: 四档各自的语义（`unknown` 与 `na` 是两件不同的事，不许互相折）：
 #:
 #: - `pass`：查过了，这一格成立；
 #: - `fail`：查过了，这一格不成立（拦住）；
-#: - `unknown`：**没查成** —— 跑了但读不成；或缺了它依赖的入参（如没给项目根 /
+#: - `unknown`：没查成 —— 跑了但读不成；或缺了它依赖的入参（如没给项目根 /
 #:   报告路径）；或台账读不出来。它说的永远是"我们不知道"，不是"不成立"；
-#: - `na`：**不适用** —— 这一档对这个项目天然不成立（例如「形式化已关闭」的项目
-#:   没有承重结论要 T3 背书）。它是**读数**，不是"没查成"：把 `na` 读成 `unknown`
+#: - `na`：不适用 —— 这一档对这个项目天然不成立（例如「形式化已关闭」的项目
+#:   没有承重结论要 T3 背书）。它是读数，不是"没查成"：把 `na` 读成 `unknown`
 #:   等于把「这一档不存在」说成「我们没查」。
 #:
 #: 折平哪一种都有代价：`na → unknown` 让"不适用"混进"没查成"（改前就是这个形态，

@@ -13,8 +13,8 @@ closing 侧（rep.status 逐格）  pass2 fail1 unknown4 na1
 ```
 
 真机读数（2026-11-01）：`agentflow stats gates` 在 `projects/paper-rewrite-81` 上打出
-`load_bearing unknown`，而那一格自己的原话写着「T3 判据**不适用**（不是通过，也不是失败）」；
-扫全库 158 个工作区，`load_bearing` 那一格 **158/158 都是 `na`** —— 不是某个工作区的
+`load_bearing unknown`，而那一格自己的原话写着「T3 判据不适用（不是通过，也不是失败）」；
+扫全库 158 个工作区，`load_bearing` 那一格 158/158 都是 `na` —— 不是某个工作区的
 怪数据，是读数层少了一档词。
 
 ## 四条判据
@@ -22,7 +22,7 @@ closing 侧（rep.status 逐格）  pass2 fail1 unknown4 na1
 | # | 判据 | 守的是 |
 |---|---|---|
 | ① | 真工作区端到端：`na` 那格在读数侧仍是 `na`，且 `counts` 与 `closing` 逐格相等（八格，含 na 键） | 业主原话「同一现场两读口 counts 逐格相等（含 na）」；用的是真的 `check_closing`（只把 Lean 开关拔到关，那是这副夹具造 na 的唯一办法，不是打桩门） |
-| ② | 打桩八格混合（pass4/fail1/unknown1/na1）：`data.counts` 与 `Counter(rep.status)` **字典相等** | 不是"sum 相等"：折一格时总数照样是 8，只有逐格比对看得见 |
+| ② | 打桩八格混合（pass4/fail1/unknown1/na1）：`data.counts` 与 `Counter(rep.status)` 字典相等 | 不是"sum 相等"：折一格时总数照样是 8，只有逐格比对看得见 |
 | ③ | 负控：把 `CELL_STATES` 打回改前三项 ⇒ 同一条比对必红（`na` 消失、`unknown` +1） | 业主原话「把 na 映射回 unknown ⇒ 红」；也证明 ①② 不是恒绿 |
 | ④ | 类判据：AST 扫 `closing.py` 里 `rep.status[…] = <字面量>`（含 `IfExp` 两支）⇒ 集合 ⊆ `CELL_STATES`，且必须含 `na` | 下一个新状态（今天是 `na`）加进 `closing` 而忘了读数层 ⇒ 红；钉的是"词表覆盖门的状态值"，不是一个状态 |
 
@@ -84,7 +84,7 @@ def test_a_real_gate_that_says_na_stays_na_on_the_reading_side(
     """端到端：一个真的会记 `na` 的收工门，读数侧那格必须仍是 `na`，counts 逐格相等。
 
     造 `na` 的办法是业主 2026-10-12 那条真实开关：把 Lean 形式化关掉 ⇒ `load_bearing`
-    记 `na`（"这一格问的东西这一趟不适用"）。这里拔的是 `settings` 的开关，**不是**把
+    记 `na`（"这一格问的东西这一趟不适用"）。这里拔的是 `settings` 的开关，不是把
     `check_closing` 打桩 —— 门是真的跑过的，八格是真的现算的，`na` 是门自己写的。
     空工作区就是这副夹具：没有东西要交付 ⇒ 另外几格多数是 unknown / fail，正好不是"全 pass"。
     """
@@ -234,7 +234,7 @@ def test_unknown_and_na_are_documented_as_two_different_things() -> None:
     assert "unknown" in block and "na" in block, block[-400:]
     assert "没查成" in block, "词表注释里没写清 unknown = 没查成"
     assert "不适用" in block, "词表注释里没写清 na = 不适用"
-    # 两条语义必须在**同一块**里成对出现（分到两处就会各自漂）
+    # 两条语义必须在同一块里成对出现（分到两处就会各自漂）
     assert block.index("没查成") < block.index("不适用"), block[-400:]
 
     # gates_readout 自己的 docstring 也要说清 na 不是 unknown
