@@ -49,7 +49,17 @@ export function Acceptance() {
   // 那一格从"没查成"变成一条假的"没过"。这一格自己的说明写的就是"没给 ⇒ 没查成"，
   // 所以拼请求时按同一口径：不是有限数就当没给。
   const usableCap = cap !== null && Number.isFinite(cap) ? cap : null;
-  const face = useFace(() => api.getAcceptance({ capUsd: usableCap }));
+  // 2026-11-01（块 1）：这一页此前只拼 `capUsd`，于是 `acceptance_face` 的
+  // `project_dir` 恒为空 ⇒ `reviewaccept._auxiliary` 拿不到项目根 ⇒
+  // `tex_sha256` / `pdf_pages` / `receipt_matches_tex` 三格**按构造永远**空/unknown
+  // —— 连一份有 24 页 PDF 的成品工作区也一样。`projectDir: "."` 按后端
+  // `resolve_under_workspace` 的口径解析为工作区根（不是进程 cwd），报告路径
+  // 用它自己的缺省落点；两者都只是"告诉读数去哪里看"，不改变任何判据。
+  const face = useFace(() => api.getAcceptance({
+    projectDir: ".",
+    reportPath: "out/review/REPORT.md",
+    capUsd: usableCap,
+  }));
 
   if (face.data === null) {
     return (

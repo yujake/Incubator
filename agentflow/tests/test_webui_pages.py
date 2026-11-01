@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import pathlib
@@ -211,6 +212,40 @@ def _broken_workspace(tmp: pathlib.Path, artifacts_ws: pathlib.Path) -> pathlib.
     sess = sorted((root / "sessions").glob("*.jsonl"))[0]
     with open(sess, "a", encoding="utf-8") as fh:
         fh.write("{ 这一行不是 JSON\n")
+    return root
+
+
+def _workspace_with_a_paper(tmp: pathlib.Path, artifacts_ws: pathlib.Path) -> pathlib.Path:
+    """夹具工作区 + 一份真的论文包（`main.tex` / `main.pdf` / 编译回执）。
+
+    为什么要造这一份：`reviewaccept._auxiliary` 的 `tex_sha256` / `pdf_pages` /
+    `receipt_matches_tex` 三格只有在**给到项目根**时才读得出值。块 1 修的正是
+    "页面没把项目根传下去"，所以判据必须有一份"传了就该有五格"的现场；
+    原来的 `artifacts_ws` 没有主稿，只能证明"没传时是空"，证明不了另一半。
+    """
+    import shutil
+
+    import fitz  # PyMuPDF：只用来造一页合法 PDF（读页数走 `extract.page_count`）
+
+    root = tmp / "paper-ws"
+    shutil.copytree(artifacts_ws, root)
+    pkg = root / "out" / "paper"
+    pkg.mkdir(parents=True, exist_ok=True)
+    tex = pkg / "main.tex"
+    tex.write_text(
+        "\\documentclass{article}\n\\begin{document}\n"
+        "\\section{夹具}\n\\begin{theorem}夹具定理。\\end{theorem}\n"
+        "\\begin{proof}夹具证明。\\end{proof}\n\\end{document}\n",
+        encoding="utf-8")
+    pdf = pkg / "main.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(str(pdf))
+    doc.close()
+    (pkg / "COMPILE-RECEIPT.json").write_text(
+        json.dumps({"tex_sha256": hashlib.sha256(tex.read_bytes()).hexdigest(),
+                    "pages": 1, "engine": "fixture", "exit_codes": [0, 0]},
+                   ensure_ascii=False), encoding="utf-8")
     return root
 
 
@@ -577,6 +612,46 @@ def test_acceptance_negative_control_catches_a_page_that_writes_unknown_as_pass(
     # 空态文案与三态落点都得在
     assert _empty_state_problems("Acceptance", shell, EMPTY_WORDS["Acceptance"])
     assert _tri_state_problems("Acceptance", shell)
+
+
+def test_acceptance_page_passes_the_project_root_and_report_path(
+        artifacts_ws: pathlib.Path, tmp_path: pathlib.Path) -> None:
+    """块 1：页面必须把 `project_dir` / `report_path` 传下去（否则 aux 三格永远空）。
+
+    改前现场（2026-11-01 实测）：页面只拼 `capUsd` ⇒ `acceptance_face` 的
+    `project_dir` 恒为空 ⇒ `_auxiliary` 的 `tex_sha256` / `pdf_pages` /
+    `receipt_matches_tex` 三格按构造永远空/unknown，连一份有 24 页 PDF 的成品
+    工作区也一样。这一条用正反两半钉住：
+
+    - 正控：页面源码真的读了这两个入参；端点带上它们之后 **aux 五格都有值**；
+    - 负控：同一个工作区不带它们 ⇒ 那三格回到空/unknown（证明有值不是夹具自带的）。
+    """
+    text = _page_text("Acceptance")
+    reads = _page_reads(text)
+    assert "projectDir" in reads, "Acceptance 页没把 projectDir 传给 api.getAcceptance"
+    assert "reportPath" in reads, "Acceptance 页没把 reportPath 传给 api.getAcceptance"
+
+    root = _workspace_with_a_paper(tmp_path, artifacts_ws)
+    with _server(root) as base:
+        code, acc, raw = _get(
+            base, "/api/acceptance?project_dir=.&report_path=out/review/REPORT.md")
+        assert code == 200, (code, raw[:400])
+        aux = acc["auxiliary"]
+        # 五格都有值：三格是块 1 修的那三格，另两格原本就有。
+        assert aux["tex_sha256"], aux
+        assert aux["pdf_pages"] == "1", aux
+        assert aux["receipt_matches_tex"] == "consistent", aux
+        assert aux["task_rows"].isdigit(), aux
+        assert aux["ledger_rows"].isdigit(), aux
+        # 报告在盘上 ⇒ 附件诚实那一格从 unknown 变成 pass（同一批入参的另一半）
+        assert acc["criteria"]["attachment_is_honest"] == "pass", acc["criteria"]
+
+    with _server(root) as base:
+        code, bare, raw = _get(base, "/api/acceptance")
+        assert code == 200, (code, raw[:400])
+        assert bare["auxiliary"]["tex_sha256"] == "", bare["auxiliary"]
+        assert bare["auxiliary"]["pdf_pages"] == "", bare["auxiliary"]
+        assert bare["auxiliary"]["receipt_matches_tex"] == "unknown", bare["auxiliary"]
 
 
 # ====================================================================== 6 Machine
