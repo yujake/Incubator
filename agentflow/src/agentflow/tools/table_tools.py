@@ -1467,7 +1467,7 @@ def table_list(
 
 @tool(
     "table.get",
-    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
+    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。",
     _obj({"table": _TABLE_PROP, "id": {
         "type": "string",
         "description": (f"主键值（{S.ID_DIGITS} 位十进制字符串如 `000000`，"
@@ -1597,9 +1597,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 @tool(
     "table.update",
     "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。"
-    "`table=\"statements\"` 只放三格就地改：`status` / `kind` / `quote_reason`"
-    "（走秘书的校验与事务，不新建行）；带正文（`statement_full` / `proof_text`）的"
-    "patch 仍走登记路；白名单之外的格受控拒绝。",
+    "`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改"
+    "（整行校验 + 事务）；带正文仍走登记路；其余格拒。",
     _obj(
         {
             "table": _TABLE_PROP,

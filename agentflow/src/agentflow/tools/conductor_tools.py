@@ -296,7 +296,7 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例要各自不同的 `instance` 标签才同波并发；没标签时自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `concurrent_peak`。",
+    "一次派**一批**活：按写集分波（`policy.waves_of`）线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
     {
         "type": "object",
         "properties": {
