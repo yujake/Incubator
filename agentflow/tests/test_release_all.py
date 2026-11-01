@@ -2592,7 +2592,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "statementabandon.py": "「放弃原命题」的标记（业主 2026-11-01 裁定）：`quote_reason` 里的 "
                           "`abandoned@<ISO8601>@<理由>` 是「明确放弃」在盘上的唯一载体 —— "
                           "`abandon_marker`（写侧拼装，理由/时间缺一即拒）与 `parse_abandon`"
-                          "（读侧三态：可解析 / 不是标记 / 自称放弃而读不出理由）；不新增列、"
+                          "（读侧三态：可解析 / 不是标记 / 自称放弃而读不出理由）与 pply_abandonment（写：改状态 + 落理由与时间 + 作废重送义务）—— 三者同处一模块，schema 的校验与 closing 的两格读数都从这里取；不新增列、"
                           "不新增表，照 `pending_definition` 那套受控标记的纪律",
     # 接线批 C1（`draft/103` §4.1b）：预设组装 → 角色提示词的接线层。
     # 它不发明机制：发现/优先级/挂载/创作在 `presets.py`（DSH 端口批 3），

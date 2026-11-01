@@ -478,3 +478,84 @@ def test_the_gate_is_green_when_every_statement_is_signed_or_abandoned(tmp_path)
     assert rep.blockers == [], [f.to_dict() for f in rep.findings]
     assert rep.machine_pass is True, rep.to_dict()
     assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+
+
+# ------------------------------------------------------------------ ③ 放弃出口（写侧）
+#
+# 这一节测的是 `statementabandon.apply_abandonment`（写侧唯一实现）：状态 + 理由 + 时间
+# 一起落盘，名下开着的重送义务一并作废。第二半是"经 `table.update` 走到这里"
+# （`Secretary.record_statement` 的 abandoned 分支），端到端那一条在下面。
+
+def test_apply_abandonment_writes_status_and_marker(tmp_path):
+    """③ 写侧：一条在册命题 ⇒ status=abandoned + 可解析标记；读数从 unsigned 挪到 abandoned。"""
+    st = _ws(tmp_path)
+    _put(st)
+    _verify(st)
+    assert _unsigned(st)["count"] == 1
+    got = SA.apply_abandonment(st, statement_id=SID, reason="第 5 步补不出来",
+                               at="2026-11-01T21:10:00+08:00")
+    assert got["checked"] is True and got["abandoned"] is True, got
+    row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
+    assert row["status"] == "abandoned", row
+    parsed = SA.parse_abandon(row["quote_reason"])
+    assert parsed["checked"] and parsed["at"] == "2026-11-01T21:10:00+08:00", parsed
+    assert "补不出来" in parsed["reason"], parsed
+    assert _unsigned(st)["count"] == 0, _unsigned(st)
+    abandoned = _abandoned(st)
+    assert abandoned["count"] == 1 and abandoned["rows"][0]["stmt_id"] == SID, abandoned
+    rep = _closing(st)
+    assert [f for f in rep.blockers if f.check == "statements_unsigned"] == [], rep.to_dict()
+
+
+def test_apply_abandonment_is_idempotent(tmp_path):
+    """③ 同一份放弃重放 ⇒ 幂等（不改任何格、不报错）。"""
+    st = _ws(tmp_path)
+    _put(st)
+    first = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS)
+    second = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS)
+    assert first["checked"] and second["checked"], (first, second)
+    assert second["already"] is True and second["changes"] == [], second
+
+
+def test_apply_abandonment_refuses_without_a_reason_or_an_id(tmp_path):
+    """③ 没有理由 / 没有命题号 / 不在册 ⇒ 受控拒绝，盘上一个字节都不改。"""
+    st = _ws(tmp_path)
+    _put(st)
+    blank = SA.apply_abandonment(st, statement_id=SID, reason="   ")
+    assert blank["checked"] is False and blank["refused"] == "abandon_marker_invalid", blank
+    no_id = SA.apply_abandonment(st, statement_id="", reason="有理由")
+    assert no_id["checked"] is False and no_id["refused"] == "abandon_missing_id", no_id
+    unknown = SA.apply_abandonment(st, statement_id="999999", reason="有理由")
+    assert unknown["checked"] is False, unknown
+    assert unknown["refused"] == "abandon_unknown_statement", unknown
+    assert next(dict(r) for r in st.rows("statements"))["status"] == "active"
+
+
+def test_apply_abandonment_expires_the_open_resubmit_item(tmp_path):
+    """③ 放弃 ⇒ 名下开着的重送义务同时作废（否则销号闸被反锁）。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    got = SA.apply_abandonment(st, statement_id=SID, reason="改不动了", at=TS)
+    assert got["checked"] is True, got
+    assert got["resubmits"]["checked"] is True and got["resubmits"]["closed"], got["resubmits"]
+    closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "expired", closed
+
+
+def test_schema_requires_a_parseable_marker_for_abandoned():
+    """③ 数据面：status=abandoned 而标记不可解析 ⇒ `Statement.validate` 当场拒。"""
+    from agentflow import schema as S
+
+    base = dict(stmt_id="0009", origin="own_result", kind="theorem",
+                statement_full="若 A 则 B", proof_text="证明：略。",
+                status="abandoned")
+    with pytest.raises(ValueError):
+        S.Statement(**{**base, "quote_reason": "算了不做了"}).validate()
+    ok = S.Statement(**{**base, "quote_reason": SA.abandon_marker(at=TS, reason="改不动了")})
+    ok.validate()
+    assert ok.status == "abandoned"

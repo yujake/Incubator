@@ -1379,17 +1379,30 @@ STATEMENT_ORIGINS = ("external_lit", "own_result")
 
 #: 命题台账的状态（`draft/37` §16 P1，与 §8/§9 的裁决闭环配套）：active（在册、可用作依据）·
 #: disputed（有争议、尚未裁决，不许当依据用，见 verify 的不变量）· refuted（被证否）·
-#: superseded（被后来的一条取代）· pending_definition（概念行：行已登记、定义还没到）。
+#: superseded（被后来的一条取代）· pending_definition（概念行：行已登记、定义还没到）·
+#: abandoned（明确放弃原命题：`quote_reason` 里必须是一条可解析的放弃标记
+#: `abandoned@<ISO8601>@<理由>`，唯一实现 `statementabandon`）。
+#:
+#: `abandoned` 为什么必须是一等状态（业主 2026-11-01 裁定，逐字）：
+#: 「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」
+#: —— "一直改"与"放弃"是两条合法终点，只有它们都读得出来，收工门才敢对"既没签
+#: 也没放弃"那一档判红（`closing.statements_unsigned` → blocker）。把它折进
+#: `superseded`（被取代）或 `refuted`（被证否）都会说一句假话：放弃的命题既没有
+#: 后来者，也没被证否。
 #: 最后一档的边界（`draft/93·续` D12，业主 2026-10-09 选甲）：① 它不是"可用依据"（与
 #: `disputed`/`refuted`/`superseded` 同列，见 `STATEMENT_UNUSABLE_STATUSES`）；② 必须带待补标记
 #: （`quote_reason` 里的 `concept:pending_search` / `concept:self_authored`，唯一出处是
 #: `migrate_concepts`）⇒ "为什么空着"与"谁来补"在盘上读得到（`pending_inbox` 扫的就是它）。
-STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded", "pending_definition")
+STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded", "pending_definition",
+                      "abandoned")
 
 #: 命题台账里不许再被当作依据的状态。`verify` 的不变量读的就是这一份名单 ——
 #: 两处各写一份是"同一判据两个落位"，漂移时没有任何地方会红。
 #: `pending_definition` 在列：定义还没到的概念不是依据（"待补"不是"已成立"）。
-STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded", "pending_definition")
+#: `abandoned` 在列：放弃的命题不再是依据（与 `superseded`"被取代"同一条纪律 ——
+#: 它不是"还没签，先用着"）。
+STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded", "pending_definition",
+                               "abandoned")
 
 # ---------------------------------------------------------------- 断言的语义词表
 #
@@ -2342,6 +2355,23 @@ class Statement:
                 "概念行还没抽到定义时走 `pending_definition`（D12 甲：那一档不是依据，"
                 "且必须带待补标记）；其余情形请补全假设或标成 disputed/refuted/superseded"
             )
+        # ---- 放弃那一档（业主 2026-11-01）：必须带理由与时间。
+        #
+        # 为什么这一格要在数据面拦：`status="abandoned"` 只是换了一个字面量 ——
+        # 一条被标成放弃、却读不出"为什么、什么时候"的命题，与"悬着"没有区别
+        # （读的人既没法复核，也没法回答"这件事是几时被放下的"）。判据本体是
+        # `statementabandon.parse_abandon`（唯一实现，写读两侧共用），这里只转发。
+        if self.status == "abandoned":
+            from . import statementabandon as _SA
+
+            got = _SA.parse_abandon(self.quote_reason)
+            if not got.get("checked"):
+                raise ValueError(
+                    "status='abandoned' 必须在 quote_reason 里写一条可解析的放弃标记"
+                    f"（`{_SA.ABANDON_MARKER}<ISO8601>{_SA.ABANDON_SEP}<理由>`）："
+                    f"{got.get('why') or '标记读不出来'} —— 只标状态不写理由与时间，"
+                    "等于把'为什么放下'记成一笔没人能接手的账（与 `quote_verified` "
+                    "的三态纪律同一条）")
         # ---- 待补那一档的配套纪律（D12 甲的第 ② 条）：空定义必须说清"为什么空、谁来补"。
         # 只对概念行要求：别的命题若落成 pending_definition，那是把"还没做"记成一笔
         # 没人能接手的账（与 `quote_verified` 的三态纪律同一条）。
