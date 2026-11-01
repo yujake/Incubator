@@ -3474,8 +3474,8 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                       f"`{out['ledger']}` 不在盘上 ⇒ **一次审校都没有**。"
                       "这一档要求 V 的 `verifications` 里那一条签「成立」（且审的是现在"
                       "这一版）—— 没有它，这一行就只是「自称被审过」。"
-                      f"两条出口：① 派 V 去 `verify_proof(stmt:{sid})`；"
-                      "② 把 evidence_kind 降成 heuristic")
+                      f"建议：① 派 V 去 `verify_proof(statement_id=\"{sid}\")`（不传 "
+                      "proof_text，签的就是现行正文）；② 把 evidence_kind 降成 heuristic")
         return out
     rows, problems = JF.read_jsonl(path)
     out["rows"] = len(rows)
@@ -3564,13 +3564,17 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
             f"{proof_label(sid, chosen_no)} 现在这一份上那一签是 {out['verification_id']}："
             f"verdict={out['verdict']!r}、unresolved_errors={out['unresolved_errors']}"
             f"（why：{str(chosen.get('why') or '')[:120]}）⇒ 复核过、结论不是「成立」。"
-            "这一档要的正是「成立」那一签；改好证明再派 V 走一遍，或者如实降档")
+            "建议：按 findings 改好证明再派 V 走一遍，或者如实降档 —— "
+            "改完再把同一份内容交一次（改稿是正常动作，不是越权）。")
         return out
     if state == "stale":
         checks[1]["detail"] = (f"{proof_label(sid, chosen_no)} 签过，但没有一签盖住现在这一份"
                                f"（最近一签 {out['verification_id']}）")
         checks[2]["detail"] = "签的是另一版，无从比"
-        out["why"] = str(chosen.get("why") or "")
+        out["why"] = (str(chosen.get("why") or "")
+                      + "；改稿是正确动作，建议：请重新拿 V 签 —— 派 V 用 "
+                      f"`verify_proof(statement_id=\"{sid}\", proof_no={chosen_no})` "
+                      "审现行正文（连判 3 次干净成立后秘书发签）")
         return out
     if state == "holding":
         # 签过、判成立、签的也是现行这一版 —— 就是连续次数没到（业主 2026-10-29）。
@@ -3586,7 +3590,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         out["checked"] = checked
         out["why"] = (f"命题 {sid} 的证明签过、也判了「成立」，但连续次数只到 {got}/{need}"
                       f"⇒ 第 3 位不发签（业主 2026-10-29：连续 {need} 次没问题才发签；"
-                      "第 1、2 次只落台账、不翻位）。下一步：再送 V 审够次数，"
+                      "第 1、2 次只落台账、不翻位）。建议：再送 V 审够次数，"
                       "不许把这两票当成一次签")
         return out
     if state == "unsigned":
@@ -3599,6 +3603,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         out["checked"] = checked
         out["why"] = str(chosen.get("why") or
                          f"`{out['ledger']}` 里没有这一份证明的签 ⇒ 一次都没签")
+        out["why"] += ("；建议：请拿 V 签 —— 派 V 用 "
+                       f"`verify_proof(statement_id=\"{sid}\", proof_no={chosen_no})` 审这一份"
+                       "（连判 3 次干净成立后秘书发签）")
         return out
     checks[1]["detail"] = "台账读不出来（没查成）"
     checks[2]["detail"] = "同上"

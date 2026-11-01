@@ -187,12 +187,14 @@ def _rewrite_note(reading: Mapping) -> str:
         return "V 的签盖住的就是这一份正文（`review_standing=signed`）⇒ 不用重签。"
     if state == "stale":
         return ("正文被改写过 ⇒ 盖在旧正文上的那一签不算数"
-                "（`review_standing=stale`）⇒ 派 V 重新签：" + call + where)
+                "（`review_standing=stale`）⇒ 派 V 重新签（建议：请重新拿 V 签）：" + call + where)
     if state == "rejected":
         return ("正文被改写过 ⇒ 现行这一份最近那一签的结论不是「成立」"
-                "（`review_standing=rejected`）⇒ 派 V 重新签：" + call + where)
+                "（`review_standing=rejected`）⇒ 建议：按 findings 改完再送，不要原样重送 —— "
+                "改完派 V 重新签：" + call + where)
     if state == "unsigned":
-        return "这一份正文还没有 V 的签（`review_standing=unsigned`）⇒ 派 V 签：" + call
+        return ("这一份正文还没有 V 的签（`review_standing=unsigned`）"
+                "⇒ 建议：请拿 V 签：" + call)
     return ("这一签现在算不算数没查成（`review_standing=unreadable`）⇒ 不当作签过、"
             "也不当作没签过：先让台账读得出来，再派 V 重新签：" + call)
 
@@ -234,6 +236,76 @@ def _must_start_as_conjecture_refusal(*, kind_now: str, origin: str) -> dict:
         "如果你本来就有外部出处：给 source_lit_id + page_range 并按 "
         "origin='external_lit' 重交。",
         statement_kind=kind_now, declared_origin=str(origin))
+
+
+def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = "",
+                    streak: int | None = None, need: int | None = None,
+                    why: str = "") -> str:
+    """`self_authored_needs_v` 那一句：事实 + `建议：` + 一条真的走得通的路（唯一落点）。
+
+    ## 为什么按状态分四句（2026-11-02，业主裁定「一句原因 + 一句建议」）
+
+    `_v_signature_for` 的 `state` 回答的正是"这一版正文现在欠什么"，而四种欠账的
+    下一步不是同一件事，写成一句通用文案会把处置说错：
+
+    - `stale`（签过旧版、正文改过）⇒「请重新拿 V 签」。改稿是正确动作，别把它读成
+      "你错了"；路径必须写全（先按 `kind="conjecture"` 再交一次让新正文上盘，再送 V），
+      因为改后的正文此刻还没上盘 —— 只说"送 V"的那一版照做会撞 `proof_text_mismatch`
+      （`agent_v/core.py` 的 `verify_proof`：参数给的正文必须与盘上那一份同 sha）。
+    - `unsigned`（一次都没签过）⇒「请拿 V 签」，不说「重新」（还没有旧签可"重新"）。
+    - `rejected`（同一份正文被判过「有毛病」）⇒「按 findings 改完再送」，不说「重签」：
+      签的还是这份正文，重送一次结论不会变，说「重签」等于教人原样重送。
+    - `holding`（签过、判成立、连续次数没到）⇒「再送 V 审够次数」，不必改稿、不必重交。
+
+    ## 可达性
+
+    四句里点名的每一步都在今天的面上（判据
+    `tests/test_b_rewrite_without_v_sign_says_resign.py` 的 b 条真的走了一遍）：
+    `kind="conjecture"` / `statement_full` / `proof_text` 是 `own.register_statement` 的
+    真参数；`verify.verify_proof` 的 `statement_id` / `proof_no` 是 V 的真参数
+    （`B → V` 边在 `capabilities.ALLOWED_EDGES` 里）；"连续 3 次"是
+    `verifications.SIGN_STREAK_NEED`；签落 `out/vsigns/<被审正文的 sha>.json`
+    （`vsigns.SIGNS_DIR`），`kind` 由签名那一笔自动抬（`_kind_upgrade_from_signature`）。
+    """
+    sid_txt = sid or "（无号）"
+    head = f"这一版正文（proof_sha256={sha12}…）"
+    if state == "stale":
+        return (
+            f"{head}在 V 的台账里没有盖住它的「成立」签（在册 {sid_txt} 只签过另一版）"
+            "⇒ 整笔不写。改稿是正确动作，建议：请重新拿 V 签 —— "
+            "① 把这一版按 kind=\"conjecture\" 再交一次（同一 statement_full + 新 proof_text）："
+            "正文上盘、旧正文进 proof_history；"
+            f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1)"
+            "（不传 proof_text，读盘上新正文）连判 3 次干净成立 ⇒ 秘书发签 "
+            "out/vsigns/<新正文sha>.json，kind 会自动抬成 theorem；不必再交一次登记。"
+            "禁令：不许拿别的命题的签来顶，也不许绕开 V 当定理用。")
+    if state == "unsigned":
+        return (
+            f"{head}在 V 的台账里一次都没签过 ⇒ 整笔不写。"
+            f"建议：请拿 V 签 —— 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", "
+            "proof_no=1)（不传 proof_text，读盘上这一份）连判 3 次干净成立 ⇒ "
+            "秘书发签 out/vsigns/<正文sha>.json，kind 会自动抬成 theorem。"
+            "这一版已经在盘上，不必再按 kind=\"conjecture\" 交一次。"
+            "禁令：不许绕开 V 直接当定理用。")
+    if state == "rejected":
+        return (
+            f"{head}最近那一签的结论不是「成立」（{verification_id or '（没有号）'}）"
+            "⇒ 整笔不写。建议：按 findings 改完再送，不要原样重送 —— 先把证明改好，"
+            "把改稿按 kind=\"conjecture\" 再交一次（旧正文进 proof_history），"
+            f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) 重审。"
+            "禁令：原样重送不会改变结论；签的还是这份正文。")
+    if state == "holding":
+        got = int(streak or 0)
+        want = int(need or 0) or int(_VR.SIGN_STREAK_NEED)
+        return (
+            f"{head}已经连续「成立」{got}/{want} 次，还不够发签 ⇒ 整笔不写。"
+            f"建议：再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) "
+            "审够次数（第 1、2 次只落台账、不翻位；够次数那一次秘书发签）—— "
+            "不必改稿、不必再交登记。")
+    return (
+        f"{head}在 V 的台账里查不到能签住它的那一签，而这一格没查成 "
+        f"（{why[:120] if why else '台账读不出来'}）⇒ 整笔不写。"
+        "没查成不是「没签」，也不许当成签过；先把台账/读数修好再重判。")
 
 
 def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str, dict | None]:
@@ -2468,6 +2540,10 @@ class _RegisterStatement:
 
         out: dict = {"checked": False, "signed": False, "stmt_id": "",
                      "verification_id": "", "proof_sha256": "", "in_ledger": False,
+                     #: 这一版正文在 V 的台账里"欠什么"：`signed` / `stale`（改过）/
+                     #: `unsigned`（没签过）/ `rejected`（判过有毛病）/ `holding`
+                     #: （次数没到）/ `unreadable`（没查成）。拒信按它分句。
+                     "state": "", "streak": 0, "need": 0,
                      "why": ""}
         store = getattr(self, "store", None)
         if store is None:
@@ -2514,18 +2590,47 @@ class _RegisterStatement:
                            why=(f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成"
                                 f"（{str(reading.get('why') or '')[:160]}）"))
                 continue
+            # ---- 这一版正文"欠什么"：按它的 sha 在逐条读数里找同一份的那一格。
+            #
+            # 改前这里只找 `reviewed=True` 且 sha 相符的那一签；找不到就一律写成
+            # "没有盖住这一份正文的「成立」签" —— 四种欠账（改过 / 没签过 / 判过有毛病 /
+            # 次数没到）被折成同一句话，而它们的下一步完全不同（业主 2026-11-01：
+            # 「其它拒都最好要回复一句原因，一句建议」）。所以这里把同一份的那一格
+            # 原样带出来（`state`），拒信由 `_needs_v_reason` 按它分句。
+            matched: dict = {}
+            other: dict = {}
             for item in reading.get("proofs") or []:
-                if not bool(item.get("reviewed")):
-                    continue
                 if str(item.get("proof_sha256") or "") != sha:
+                    if bool(item.get("reviewed")) and not other:
+                        other = dict(item)
                     continue
-                out.update(signed=True, stmt_id=sid,
-                           verification_id=str(item.get("verification_id") or ""),
-                           why=(f"{item.get('verification_id')} 签「成立」、且 proof_sha256 "
-                                f"与这一份正文相符（verifications/{sid}.jsonl）"))
-                return out
-            out["why"] = (f"在册的那一条（{sid}）没有盖住这一份正文的「成立」签："
-                          f"{str(reading.get('why') or '')[:200]}")
+                matched = dict(item)
+                if bool(item.get("reviewed")):
+                    out.update(signed=True, stmt_id=sid, state="signed",
+                               verification_id=str(item.get("verification_id") or ""),
+                               why=(f"{item.get('verification_id')} 签「成立」、且 proof_sha256 "
+                                    f"与这一份正文相符（verifications/{sid}.jsonl）"))
+                    return out
+            if matched:
+                out.update(state=str(matched.get("state") or "unsigned"),
+                           stmt_id=sid,
+                           verification_id=str(matched.get("verification_id") or ""),
+                           streak=int(matched.get("streak") or 0),
+                           need=int(matched.get("need") or 0),
+                           why=str(matched.get("why") or reading.get("why") or ""))
+                continue
+            if other or str(reading.get("state") or "") in (
+                    "signed", "rejected", "holding", "stale"):
+                # 在册那一版上有签，但盖的不是这一份 ⇒ 改稿（stale）。
+                out.update(state="stale", stmt_id=sid,
+                           verification_id=str(other.get("verification_id") or ""),
+                           why=(f"在册的那一条（{sid}）的签盖的是另一版"
+                                f"（{str(other.get('verification_id') or '（没有号）')}），"
+                                f"这一版（sha {sha[:12]}…）还没有签"))
+            else:
+                out.update(state="unsigned", stmt_id=sid,
+                           why=(f"在册的那一条（{sid}）一次都没签过"
+                                f"（sha {sha[:12]}… 上没有「成立」签）"))
         # ---- D-34：命题登记之前审的那一签不丢（按内容 sha 认领）
         #
         # r34b 的真机现场：`statements` 0 行时 V 审完只能报 `statement_missing`，那一签
@@ -2551,6 +2656,7 @@ class _RegisterStatement:
         if pending.get("found"):
             out["why"] = (f"命题还没在册时 V 审过这一份，但那一签的结论是 "
                           f"{pending.get('verdict')!r}（不是「成立」）⇒ 这一条仍没有签住")
+            out["state"] = "rejected"
         return out
 
     def _e_signed_exhaustion(self, proof_text: Any) -> dict | None:
@@ -2646,20 +2752,22 @@ class _RegisterStatement:
             stmt_id=str(sig.get("stmt_id") or ""),
             verification_id=str(sig.get("verification_id") or ""),
             proof_sha256=str(sig.get("proof_sha256") or ""),
+            #: 这一版正文"欠什么"（signed / stale / unsigned / rejected / holding /
+            #: unreadable）：拒信按它分四句，下一步不是同一件事（见 `_needs_v_reason`）。
+            state=str(sig.get("state") or ""),
+            streak=int(sig.get("streak") or 0),
+            need=int(sig.get("need") or 0),
             why=str(sig.get("why") or ""))
         if sig.get("signed"):
             return {"needs_v": True, "refused": "", "reason": "", "reading": reading}
-        reason = (
-            f"自产的定理级命题（kind={kind_now!r}、origin={str(origin)!r}、"
-            f"source_lit_id={str(lit_id or '')!r}）在 V 的台账里没有一份「成立」的签盖住"
-            f"这一份正文（proof_sha256={str(sig.get('proof_sha256') or '')[:12]}…）⇒ 整笔不写"
-            f"（业主 2026-10-22 B-3：「B 侧自己杜撰定理与证明时，也必须给 V 看才能落库，"
-            f"否则按瞎编处理」）。查的结果：{str(sig.get('why') or '（没有读数）')}。"
-            "两条路都不堵：① 按猜想注册：把 kind 改成 \"conjecture\"（证明正文照交）—— "
-            "猜想不受这条闸管，落库之后它才审得动；② 先送 V：唤起 V 的 `verify.verify_proof` "
-            "走查这一份，V 签「成立」之后把同一份内容再交一次、kind 改回定理级"
-            "（档位给 evidence_kind=\"proof_review\"），那时这条闸会放行。"
-            "不许拿别的命题的签来顶（sha 必须与这一份正文相符），也不许绕开 V 直接当定理用。")
+        reason = _needs_v_reason(
+            sid=str(sig.get("stmt_id") or ""),
+            sha12=str(sig.get("proof_sha256") or "")[:12],
+            state=str(sig.get("state") or ""),
+            verification_id=str(sig.get("verification_id") or ""),
+            streak=int(sig.get("streak") or 0),
+            need=int(sig.get("need") or 0),
+            why=str(sig.get("why") or ""))
         return {"needs_v": True, "refused": self.SELF_AUTHORED_NEEDS_V,
                 "reason": reason, "reading": reading}
 
