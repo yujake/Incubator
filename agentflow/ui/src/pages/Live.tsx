@@ -51,14 +51,18 @@ export function Live() {
   return (
     <>
       <Card
-        title="在飞"
-        subtitle={l === null ? "" : `结论：${l.answer === "" ? "unknown" : l.answer}`}
+        title="在飞（tasks 里 running）/ 未收尾的循环"
+        subtitle={
+          l === null
+            ? ""
+            : `结论：在飞（tasks 里 running）= ${cell(l.tasks_running)} · 未收尾的循环 = ${cell(l.unclosed_loops)}`
+        }
         tone={l !== null && isUnreadable(l.tri) ? "problem" : "plain"}
         right={
           l === null ? (
-            liveFace.problem === "" ? null : <TriState tri="unreadable" reason={liveFace.problem} label="在飞面" />
+            liveFace.problem === "" ? null : <TriState tri="unreadable" reason={liveFace.problem} label="监控面" />
           ) : (
-            <TriState tri={l.tri} label="在飞面" reason={l.reason} />
+            <TriState tri={l.tri} label="监控面" reason={l.reason} />
           )
         }
       >
@@ -72,22 +76,43 @@ export function Live() {
                 <span class="mono">{l.unreadable_sessions.join("、")}</span>
               </div>
             ) : null}
-            {/* 这一页两张表是"循环 / 进程面"的读数，不是名册卡那一格代理三态：
-                挂机（待机）的那一趟循环仍然活着（进程在、只是这一拍不调模型），
-                所以"表里有它"不等于"它在飞"。它此刻是哪一档，看下面名册树那一行的徽标。 */}
+            {/* 两个数分开读（2026-11-01，82 的定格数据）：改前这里只有一张「在飞」表，
+                而表里列的是"有 start 没 end 的循环记录" —— 主机进程已经退出、被父叫停的
+                循环也被叫成「在飞」。业主的口径：在飞只许用在 tasks 状态上；循环表叫
+                「未收尾的循环」，逐行标它是不是还活着。 */}
             <div class="readings">
-              下面两张表读的是「循环 / 进程面」（谁还在盘上跑）—— 它不等于代理三态：
-              挂机（待机）的那一趟循环仍然活着，所以「这张表里有它」不等于「它在飞」。
-              一个代理此刻是「在飞 / 待机 / 静默 / 未读到」哪一档，看名册树那一行的徽标
-              （悬停有原因）。
+              两个数分开读：「在飞」只数 tasks 里 <span class="mono">status=running</span>{" "}
+              的行（与名册三态同源），这里是 <b>{cell(l.tasks_running)}</b>；
+              下面那张表读的是 <b>未收尾的循环</b>（有 <span class="mono">agent_run_start</span>、
+              没有 <span class="mono">agent_run_end</span> 的循环记录），这里是{" "}
+              <b>{cell(l.unclosed_loops)}</b> —— 它不是「在飞」：没收到 end 只说明
+              这一段记录没有收尾，不说明它还在跑。
+            </div>
+            <div class="readings">
+              <b>在飞（tasks 里 running）= {cell(l.tasks_running)}</b>{" · "}<b>未收尾的循环 = {cell(l.unclosed_loops)}</b>
+              {" 行（有 start 没 end 的循环记录）。"}
+              行尾那一格说这一行是什么：顶趟已收尾的行是"被打断后剩下的循环记录"，
+              顶趟还在跑的行才可能是活着的。
             </div>
             <Table
               rows={running}
-              empty="没有在跑的循环。"
+              empty="没有未收尾的循环（每一趟都收到了自己的 agent_run_end）。"
               columns={[
                 { key: "role", title: "角色", render: (r) => <Badge kind="badge-unknown" text={cell(r.role)} /> },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
                 { key: "since", title: "从什么时候起", render: (r) => <span class="mono">{r.since}</span> },
+                // 2026-11-01（82 的定格数据）：这一行是不是活着，由读数层的 `stale_loop`
+                // 说 —— 顶趟已收尾 ⇒ 宿主进程走了 / 被叫停，这一行不是活着。
+                {
+                  key: "stale_loop",
+                  title: "这一行是什么",
+                  render: (r) =>
+                    r.stale_loop ? (
+                      <span class="badge badge-fail">宿主进程已退出/被叫停，不是活着</span>
+                    ) : (
+                      <span class="badge badge-pass">顶趟还在跑（这一趟确实还没收尾）</span>
+                    ),
+                },
               ]}
             />
             {/* D6（2026-10-22 读数）：这一格是宿主进程的 pid，不是这一行自己的 pid ——

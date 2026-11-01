@@ -405,12 +405,15 @@ _ALLOWED: dict[tuple[str, str], str] = {
     ('pages/Home.tsx', '* 活着（进程在、只是这一拍不调模型），所以这一页不说「主控在飞」—— 那句话该由三态说。'): 'NOTE',
     ('pages/Live.tsx', '* 在飞（业主 2026-10-12：「特别照顾……对多智能体系统的监控能力」）。'): 'PAGE',
     ('pages/Live.tsx', '* 「在飞」那两张表里只有角色名、没有绝对编号的缺口，也把父→子那一层摆出来。'): 'PAGE',
-    ('pages/Live.tsx', 'title="在飞"'): 'PAGE',
-    ('pages/Live.tsx', 'liveFace.problem === "" ? null : <TriState tri="unreadable" reason={liveFace.problem} label="在飞面" />'): 'PAGE',
-    ('pages/Live.tsx', '<TriState tri={l.tri} label="在飞面" reason={l.reason} />'): 'PAGE',
-    ('pages/Live.tsx', '所以"表里有它"不等于"它在飞"。它此刻是哪一档，看下面名册树那一行的徽标。 */}'): 'NOTE',
-    ('pages/Live.tsx', '挂机（待机）的那一趟循环仍然活着，所以「这张表里有它」不等于「它在飞」。'): 'LOOP',
-    ('pages/Live.tsx', '一个代理此刻是「在飞 / 待机 / 静默 / 未读到」哪一档，看名册树那一行的徽标'): 'STATE',
+    # 2026-11-01（82 的定格数据）：卡片标题与「结论」改成两个数并列 ——
+    # 「在飞」那一半只属于 tasks 状态（TASK），循环那一半叫「未收尾的循环」。
+    ('pages/Live.tsx', 'title="在飞（tasks 里 running）/ 未收尾的循环"'): 'PAGE',
+    ('pages/Live.tsx', ': `结论：在飞（tasks 里 running）= ${cell(l.tasks_running)} · 未收尾的循环 = ${cell(l.unclosed_loops)}`'): 'TASK',
+    ('pages/Live.tsx', '<b>在飞（tasks 里 running）= {cell(l.tasks_running)}</b>{" · "}<b>未收尾的循环 = {cell(l.unclosed_loops)}</b>'): 'TASK',
+    ('pages/Live.tsx', '{/* 两个数分开读（2026-11-01，82 的定格数据）：改前这里只有一张「在飞」表，'): 'LOOP',
+    ('pages/Live.tsx', '循环也被叫成「在飞」。业主的口径：在飞只许用在 tasks 状态上；循环表叫'): 'LOOP',
+    ('pages/Live.tsx', '两个数分开读：「在飞」只数 tasks 里 <span class="mono">status=running</span>{" "}'): 'TASK',
+    ('pages/Live.tsx', '<b>{cell(l.unclosed_loops)}</b> —— 它不是「在飞」：没收到 end 只说明'): 'NOTE',
     ('pages/Live.tsx', '紧挨着「在飞」那张卡，因为"谁在跑"与"它是谁的子"是同一个问题。 */}'): 'PAGE',
     ('pages/Live.tsx', '叫停的落点是工作区 <span class="mono">runs/</span> 下那一个跨进程开关：在飞的循环'): 'LOOP',
     ('pages/Machine.tsx', '* 现在 `GET /api/live`（在飞面）给了它，卡片改成指路「在飞」页 ——'): 'PAGE',
@@ -437,7 +440,6 @@ _ALLOWED: dict[tuple[str, str], str] = {
     ('rosterTree.ts', 'notes.push(`合计里的 active（${activeRaw}）不等于在飞 + 待机（${active}）`'): 'STATE',
     ('rosterTree.ts', 'let text = `在飞 ${flying} · 待机 ${standby} · 静默 ${silent}`;'): 'STATE',
     ('rosterTree.ts', 'let text = `在飞 ${tally.flying} · 待机 ${tally.standby} · 静默 ${tally.silent}`;'): 'STATE',
-    ('types.ts', '/** 出处：live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）。 */'): 'LOOP',
 }
 
 #: 五个判决档的一句话理由（白名单里每一处都归其中一档）。
