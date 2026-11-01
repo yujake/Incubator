@@ -327,22 +327,37 @@ def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
 
 
 def test_the_category_table_has_no_duplicate_or_unknown_categories() -> None:
-    """表本身的自洽：码不重复、每个码的类目都在两张类目表里、类目无重复。
+    """表本身的自洽：码不重复、每个码的类目都在四张类目表里、类目无重复。
 
-    两张表合起来就是 `ALL_CATEGORIES`（错误 ＋ 过程读数），码的类目只能落在这两者里 ——
-    落不进去说明码表里有一个谁也不认的类目名（那种名字永远不会被数出来）。
+    四张表合起来就是 `ALL_CATEGORIES`（错误 ＋ 系统侧 ＋ 状态读数 ＋ 过程读数），码的类目
+    只能落在这四者里 —— 落不进去说明码表里有一个谁也不认的类目名（那种名字永远不会被数
+    出来）。2026-11-01 扩面从两张表变成四张：系统侧与状态读数各有自己的桶，都不进 `total`
+    （`errorstats` 模块 docstring 第二节）。
     """
     cats = [cat for cat, _why in ES.ALL_CATEGORIES]
     assert len(cats) == len(set(cats)), f"类目重复：{cats}"
-    assert ES.ALL_CATEGORIES == ES.ERROR_CATEGORIES + ES.PROCESS_CATEGORIES
-    assert not (set(c for c, _w in ES.ERROR_CATEGORIES)
-                & set(c for c, _w in ES.PROCESS_CATEGORIES)), "两张类目表不许有交集"
+    assert ES.ALL_CATEGORIES == (ES.ERROR_CATEGORIES + ES.SYSTEM_CATEGORIES
+                                 + ES.STATE_CATEGORIES + ES.PROCESS_CATEGORIES)
+    groups = (set(c for c, _w in ES.ERROR_CATEGORIES),
+              set(c for c, _w in ES.SYSTEM_CATEGORIES),
+              set(c for c, _w in ES.STATE_CATEGORIES),
+              set(c for c, _w in ES.PROCESS_CATEGORIES))
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            assert not (groups[i] & groups[j]), "四张类目表两两不许有交集"
     codes = [code for code, _c, _w in ES.CODE_TABLE]
     assert len(codes) == len(set(codes)), "同一个码登记了两次（主码就不确定了）"
     for code, cat, where in ES.CODE_TABLE:
         assert cat in cats, f"{code} 的类目 {cat} 不在 ALL_CATEGORIES 里"
         assert where.strip(), f"{code} 没写出处"
     assert ES.CODE_TO_CATEGORY == {c: cat for c, cat, _w in ES.CODE_TABLE}
+    # 反真空：扩面的 15 类必须真的进了某一张表（否则"扩了"只是文档里的一句话）
+    assert len(ES.EXPANDED_ROLE_CATEGORIES) == 11
+    assert len(ES.SYSTEM_CATEGORY_NAMES) == 3 and len(ES.STATE_CATEGORY_NAMES) == 1
+    assert ES.EXPANDED_ROLE_CATEGORIES <= groups[0]
+    assert ES.STRUCTURAL_ONLY_CATEGORIES == (ES.EXPANDED_ROLE_CATEGORIES
+                                             | ES.SYSTEM_CATEGORY_NAMES
+                                             | ES.STATE_CATEGORY_NAMES)
 
 
 # ---------------------------------------------------------------- 呈现与 CLI 出口

@@ -95,6 +95,116 @@
 判据 `tests/test_multi_call_is_a_capability_not_an_error.py` 把上面每一条都钉住
 （含"改前红"与"把拆分打桩成没拆分 ⇒ 必红"的反真空）。
 
+## 扩面（2026-11-01，业主逐字「错误动作监控的覆盖面有些小了，请扩大监控范围」）
+
+真机 82 现场逐类核过（只读探针 `temp/probe82_*.py`）：改前六类一共收到 14 条，而同一份
+盘上"出错 / 被拒 / 被挡"的结构化信号约有 69 条 —— 漏掉约四分之三。漏的原因不是数错
+了，是入口只有一条：改前每个类目都靠"文案里出现某个码"命中，于是三种漏法同时成立：
+
+1. 真相在字段里，文案里没有码：`ok=False`、`item_state="seen"`、`target.judge`、
+   `outcome="cut_off_by_parent"` —— 这些字段一个都不带码名；
+2. 有些源整个没被读：`verifications/`、`out/roster/`、`out/secretary/` 三个目录，
+   改前一行都没进过这个模块；
+3. 有些码在真机上恒为 0：82 的 `tasks.outcome="refused"` 是 0 行 —— 真正的拒绝全
+   发生在工具层（33 条 `ok=false`）与名册层（2 条写口拒绝）。于是
+   `STATUS-*.json` 的 `action_refusals.total` 也恒为 0：监控在盯一个恒为 0 的字段。
+
+### 一、新 15 类全部是结构化类目，不进 `_MATCH_ORDER`
+
+这是本次唯一一条硬口径，理由是真机实测的假阳性：
+
+- `judge_bad_json` 这个字符串在 82 的 22 个步里出现，只有 2 条是真的（16 条在
+  `result.data` 里 —— 那是 `table.describe` 打印的码表清单；2 条在 `reasoning`；1 条在
+  `payload`）。按文案数是 11 倍。
+- `timeout` 17 次、`重试` 20 次、`回滚` 4 次、`cancelled` 51 次，全部是提示词原文，
+  真的超时 / 重试 / 回滚是 0 条。
+- `warn` 里的多调用汇总逐条复述"第 2 条 fs.read 被拒：. 是目录" —— 按文案数会把同一件事
+  数两遍（与 D-65 那条纪律正面冲突）。
+
+所以新 15 类只从字段取，`_MATCH_ORDER` 里一个都没有；`CODE_TABLE` 里仍逐条登记它们的
+码与出处（`test_every_category_has_a_code_that_really_exists_in_the_source` 靠它，人读
+出处也靠它）。结构判据在读侧独立成函数（`_tool_refusal_family` 等），每个都写明读哪一格。
+
+### 二、三个桶，不许相加
+
+| 桶 | 装什么 | 进不进"错误动作"总数 |
+|---|---|---|
+| `by_role` / `role_total` / `total` | 角色侧：这一方自己的动作做错了 / 被拦了 | 进（唯一的总数） |
+| `system` / `system_total` | 系统侧：判据自己没判成、外部面掉了、收工门拦下 | 不进（单位不同：一边是"谁做错了"，一边是"系统哪里坏了"） |
+| `state_readings` | 状态读数：板项没被 ack（快照，会回落） | 不进（它是"现在积着什么"，不是"发生过几次"） |
+| `process` | 过程读数（拆步 / 转交办成 / 被叫停 / 自愈补登记） | 不进（已有的纪律） |
+
+页面顶部那三个数（角色侧 X / 系统侧 Y / 状态读数 Z）刻意不相加：把"谁做错了"与"系统
+哪里坏了"加起来得不到任何一个有名字的量。
+
+### 三、六档归属（`ATTRIBUTION_BUCKETS` / `attribution_of`）
+
+改前只有两档（`CALLER_ATTRIBUTED_CODES` 记 `called_by`，其余记 `role`）。新类里出现了四种
+"错的那一方不是记录里那个人"的形态，所以扩成六档，逐档写明理由：
+
+| 档 | 什么时候 | 记谁 |
+|---|---|---|
+| `actor` | 这条记录就是它自己的动作回执（默认） | 记录里的 `role` |
+| `caller` | 结构判据说"这次派活派错了"：召唤期六条 + 送审时命题没登记 + 父退场切断 | `called_by`（或送审方） |
+| `author` | 证明本身有毛病 ⇒ 记写出这条证明的那一方 | `statements.proof_authors` → 退回 `created_by` |
+| `recipient` | 板项没被 ack ⇒ 记该 ack 的那一方 | 板项行的 `role`（收件人） |
+| `roster` | 名册写口拒了一个名字 | 要这个名字的那一方（`owner` 的 `role`） |
+| `system` | 判据没判成 / 外部面掉了 / 收工门拦下 | `（系统）`，进 `system` 桶 |
+
+`author` 那一档是这次最要紧的一条：82 里 V 判「有毛病」2 条，命题的 `proof_authors` 是
+`["F"]` —— 记到 V 头上就等于"复核的人替写证明的人背锅"，那正是判据
+`test_error_action_stats.py` 钉的第一条（"一方的错不算到另一方头上"）的反面。
+
+### 四、去重：三对必须点名（否则一扩面就翻倍）
+
+主码规则管的是"同一段文字里多个码"；新类会撞的是"同一件事落在两条记录上"。下面三对
+是逐条核过会撞的，已在读侧显式登记：
+
+| 对 | 为什么撞 | 怎么去重 |
+|---|---|---|
+| `agent_step` ↔ `agent_step_call` | 一步给多条调用时，步与逐条记录都在盘上；`warn` 的汇总还逐条复述结局 | 步只数 `result.ok is False` 那一档；逐条记录只数 `not_executed`，两者不重叠 |
+| `verifications/<号>.jsonl` ↔ V 的 `agent_step` | V 的回执把同一句判词又说了一遍 | 只从 `verifications/` 数，V 的步只在没有台账行时兜底（`verdict_missing`） |
+| `out/roster/refusals/*.jsonl` ↔ 秘书的证据流水 | 写口拒一次，两处各落一条 | 只从 `refusals/` 数，秘书行只提供"谁要的这个名字" |
+
+### 五、明确不算错误动作（不写死这一条，一扩面就一定报警疲劳）
+
+四条主排除（每一条都在 82 上有量：73 / 4 / 11 / 2 —— 记进去就会把真信号淹掉）：
+
+| # | 事件 | 为什么不算 | 归到哪 |
+|---|---|---|---|
+| ① | `item_close="acked"`（正常 ack） | 82 有 73 条，占板项 81% | 不记 |
+| ② | `retire`（正常销号） | 收口的正常形态（82 主册 4 条） | 不记 |
+| ③ | `cancelled` 当且仅当 `runs/stop-history.jsonl` 里有 `by="user"` 的记录 | 人叫停不是错误（82 是 11 条，全部有停机记录解释） | 单列读数 `task_stopped` |
+| ④ | `roster_repair` 成功补登记 | 自愈成功 ⇒ 与 `direct_write_routed` 同一手法：办成了不算错 | 单列读数 `roster_repaired`（82 是 2） |
+
+四条同族排除（同一理由，只是量小）：
+
+| 事件 | 为什么不算 | 归到哪 |
+|---|---|---|
+| `outcome ∈ {ok, no_result, not_applicable}` | 做了 / 查了没有 / 不适用 | 不记 |
+| `vsigns.index_drift` 的 `not_applicable` | `out/vsigns/` 不在 = 这个工作区还没签（合法初态） | 不记 |
+| 秘书 `decision ∈ {可派, 合格, 已优化, 建议不派, 建议重排, 已执笔, 已洗稿, 已提醒}` | 正常工作 | 不记 |
+| `multi_call` 拆步 / `direct_write_routed` | 已有裁定（D-65） | 已在 `process` |
+
+`cancelled` 那一条是本表最容易改坏的一格：它现在是"先看停机流水、再决定算不算"。谁把
+这一步改成"看到 cancelled 就记一条错误"，82 上会立刻多出 11 条假错误，而且那 11 条恰好是
+业主自己按的停止键。
+
+### 六、本模块读七个源（四个是这次新加的）
+
+| 源 | 路径 | 三态口径 |
+|---|---|---|
+| `events` | `data/events.jsonl` | 不存在 ⇒ `checked=False` |
+| `sessions` | `sessions/*.jsonl` | 目录不存在 ⇒ 正常形态（0 条，`checked=True`） |
+| `verifications` | `verifications/*.jsonl` | 同上（没有签名就是 0 条） |
+| `roster` | `out/roster/*.jsonl` + `refusals/` | 同上 |
+| `secretary` | `out/secretary/*.jsonl` | 同上 |
+| `statements` | `data/statements.json`（只取 `proof_authors`） | 读不出来 ⇒ `author` 那一档记 `（未记作者）`，不猜 |
+| `closing` | 现算 `closing.check_closing` | 没有 `out/` ⇒ `not_applicable`（收工门没有对象）；算不出来 ⇒ `unknown` |
+
+`closing` 是唯一"现算"的源，也是唯一可能慢的：它的读数与 Acceptance 页同一处
+（`closing.check_closing`），不在本模块重算一份口径。
+
 ## 码 → 类目这张表从哪来
 
 `CODE_TABLE` 每行是（码, 类目, 出处）。出处逐条去代码里 grep 过，写的是定义或产出那一
@@ -174,6 +284,82 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "论文对应表的逐行缺口（mapping_* 一族：孤立行、引文定位缺、文件缺、程序缺…）"),
     ("relay_after_refusal",
      "流程层：被禁边拒掉之后发起的代唤请示（转投，不是重试同一条边）"),
+    # ---- 以下 11 类全部是 2026-11-01 扩面时追加的（业主「覆盖面有些小了」）。
+    #
+    # 一律追加在末尾，一条都不许插到上面去：`_MATCH_ORDER` 的优先级是"类目表靠前优先"，
+    # 插在中间会让老例子的主码换类目 —— 而 `test_error_action_stats.py` 把六个老例子
+    # 逐条钉住了。判据 `test_the_primary_code_rule_is_pinned` 就是这条纪律的机器读数。
+    #
+    # 这 11 类都不进 `_MATCH_ORDER`（结构化类目，见模块 docstring 第一节）。
+    ("roster_write_refused",
+     "名册写口拒绝：要一个已经被用掉的名字 / reuse 与 want_name 同时给 ⇒ 这次派活没成立"
+     "（记'要这个名字的那一方'，不是秘书；只有 refusal_code 时按码分，没有码时按原话点名）"),
+    ("tool_refused_path",
+     "工具层路径判据：文件 / 路径不存在、目标是目录、这一行没有全文路径 ⇒ 模型对着盘上"
+     "不存在的东西干活（幻觉操作的最早信号；判据读 `result.ok is False` + `result.error`）"),
+    ("tool_refused_reserved",
+     "保留产物闸：手写框架渲染的证明 / 研究手稿 ⇒ 模型想绕过渲染正路"
+     "（判据读 `result.error` 的 `框架渲染的产物` 原话，产出点 `tools/fs_tools.py`）"),
+    ("tool_refused_edit_window",
+     "定点替换闸：old_string 找不到 / 出现了多次 / 一次改动超过单次上限 ⇒ 没读盘就改盘"
+     "（判据读 `result.error` 的 `old_string 在` / `单次定点替换上限`）"),
+    ("experiment_failed",
+     "实验失败：脚本跑了、给出不可复核的结论（result=refutes 却没有 counterexample）或崩了"
+     "（判据读 `result.error` 的 `实验执行失败`；产出点 `tools/verify_tools.py`）"),
+    ("experiment_refused",
+     "实验跑之前就被拒：参数在跑脚本之前就不合格（R-01 一分钟都不该花）⇒ 白派一次活"
+     "（判据读 `result.error` 的 `跑脚本之前`；与 experiment_failed 分开计：一个白跑，一个没跑）"),
+    ("reply_shape_rejected",
+     "回复形状被拒：一句话里同时给两件事（`一次只能说一件事`）/ 计划结构缺字段"
+     "（`攻坚计划被拒绝`）⇒ 不是参数坏、也不是 JSON 坏，是这次回话的形状不成立"),
+    ("child_cut_off",
+     "被父退场切断：父代理退场时它还在跑，这一行由父的退场结算写成终态、结果未知"
+     "（判据读 `tasks.outcome == 'cut_off_by_parent'`，记发起方 `called_by`）"),
+    ("verdict_missing",
+     "没审成：命题还没登记就送审（`statement_missing`），台账不留行 ⇒ 这一次复核空转"
+     "（判据读 V 的 `result.data.kind`；不留行是有意的：留一行会把'没查成'冒充成'审过了'。"
+     "归属记送审方 `called_by`；查不到送审方时退回动作方 —— 真机 82 的 `agent_step` 不带 "
+     "`task_id`，落到的就是这一档，读数上看得见）"),
+    ("verdict_understated",
+     "低报缺陷：V 的回复称'未找到实质缺陷'，而秘书的判词是`有缺陷要指出` ⇒ 判据在低报"
+     "（判据读 `out/secretary/*.jsonl` 的 `target.judge == 'v_reply_defect'` + `decision`）"),
+    ("proof_defect_found",
+     "证明有毛病：V 判`有毛病`或 `unresolved_errors > 0` ⇒ 产出不达标"
+     "（判据读 `verifications/<号>.jsonl`；记命题作者 `proof_authors`，不是记 V）"),
+)
+
+#: 2026-11-01 扩面追加的 11 个角色侧类目（全部是结构化类目，判据读字段不读文案）。
+#: 显式列出而不是拿 `ERROR_CATEGORIES[-11:]` 切片：切片会在有人再追加一类时静默变形，
+#: 而这张表是"哪些类目不参与文案匹配"的唯一依据。
+EXPANDED_ROLE_CATEGORIES: frozenset[str] = frozenset({
+    "roster_write_refused", "tool_refused_path", "tool_refused_reserved",
+    "tool_refused_edit_window", "experiment_failed", "experiment_refused",
+    "reply_shape_rejected", "child_cut_off", "verdict_missing",
+    "verdict_understated", "proof_defect_found",
+})
+
+#: 系统侧类目：这些不是"哪个角色做错了"，是"系统哪里坏了"。它们不进
+#: `by_role` / `role_total` / `total`，单独进 `system` 桶。为什么不混进去：把"谁做错了"
+#: 与"系统哪里坏了"加起来的那个数没有名字（与 process 分桶同一个理由）。
+SYSTEM_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("external_unavailable",
+     "外部面掉了：检索 provider 每一路都失败（ProviderError / HTTP 429）⇒ 这一次没有查成"
+     "（不是'没有结果'；两者在读数上必须分得开，否则'查无此文'会被它顶掉）"),
+    ("hook_undecided",
+     "hook 没判成：`fail_open=True` 或秘书 `decision=判不了` ⇒ 判据自己没给出结论"
+     "（fail-open 是设计好的降级，但它必须看得见：看不见就等于'判过了、没事'）"),
+    ("closing_blocker",
+     "收工门拦下：`closing.check_closing` 的 blocker 逐条（如 `contradiction_disputed_source` / "
+     "`acceptance_missing_for_research`）⇒ 这一趟交不出去（判据与 Acceptance 页同一处，不另算）"),
+)
+
+#: 状态读数类目：它是快照（"现在积着什么"），不是"发生过几次" —— 所以既不进
+#: `total` 也不进 `system`，单独一栏，并且会随 ack 回落。
+STATE_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("item_not_acked",
+     "板项没被 ack：`item_state ∈ {seen, queued}` 且不是停机通知 ⇒ 通知发了没人收口"
+     "（`seen` = 读进提示词了、缺那个 ack；`queued` = 连读都没读到。停机相关的几类不算："
+     "82 的 17 条里有 4 条是停止通知 / 用户叫停，那是叫停的下游形态）"),
 )
 
 #: 过程读数类目：这些数说的是"系统在做什么"，不是"哪里做错了"，所以不进
@@ -190,17 +376,80 @@ PROCESS_CATEGORIES: tuple[tuple[str, str], ...] = (
      "直写被转交正路并办成：通用写口碰到'只能经正路写'的表时，系统把这一笔交给兜底方，"
      "兜底方按它自己的判据跑完、行真的落了盘（过程读数，不计错；判据读结局码 "
      "routed_to_backstop.<兜底方>，拒的 / 不可达的在错误表里那一档）"),
+    # ---- 2026-11-01 扩面加的两条：它们都是"发生了、但不是错误动作"，
+    # 与 `direct_write_routed`（转交办成）同一手法 —— 办成了 / 叫停了都不进错误表，
+    # 但必须有一个地方能看见它，否则"没有错误"与"没有人干活"分不开。
+    ("task_stopped",
+     "被叫停：`tasks.outcome == cancelled` 且 `runs/stop-history.jsonl` 里有 `by=user` 的"
+     "停机记录（过程读数，不计错；82 是 11 条，全部有停机记录解释。没有解释的那些才算可疑，"
+     "所以 `sources.stop_history.unexplained` 单独给一个数）"),
+    ("roster_repaired",
+     "名册自愈补登记：收口兜底 `Secretary.roster_repair` 把漏登记的号补上（过程读数，不计错；"
+     "判据读 `out/roster/*.jsonl` 的 `repaired=True`。82 是 2 条，恰好对应 2 条写口拒绝）"),
 )
 
-#: 全部类目（错误 ＋ 过程读数）。`primary_code` 的优先级按这一张表的顺序取：错误类目全排在
-#: 前面 —— 于是"同一段文字既像过程读数又像错误"时算错误那一档（宁严不宽）。
-ALL_CATEGORIES: tuple[tuple[str, str], ...] = ERROR_CATEGORIES + PROCESS_CATEGORIES
+#: 全部类目（错误 ＋ 系统侧 ＋ 状态读数 ＋ 过程读数）。`primary_code` 的优先级按这一张表
+#: 的顺序取：错误类目全排在前面 —— 于是"同一段文字既像过程读数又像错误"时算错误那一档
+#: （宁严不宽）。系统侧 / 状态读数排在错误之后：它们不进 `_MATCH_ORDER`（见下一条）。
+ALL_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ERROR_CATEGORIES + SYSTEM_CATEGORIES + STATE_CATEGORIES + PROCESS_CATEGORIES)
 
-#: 哪些类目算错误（计入 `total` / `role_total`）。分桶只认这一张表，不认调用点。
+#: 哪些类目算"角色侧错误动作"（计入 `total` / `role_total`）。分桶只认这一张表，不认调用点。
 ERROR_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in ERROR_CATEGORIES)
+
+#: 哪些类目是系统侧（进 `system` 桶，不进角色合计）。
+SYSTEM_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in SYSTEM_CATEGORIES)
+
+#: 哪些类目是状态读数（进 `state_readings`，是快照、不进任何总数）。
+STATE_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in STATE_CATEGORIES)
 
 #: 哪些类目是过程读数（不计错，单独一栏）。
 PROCESS_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in PROCESS_CATEGORIES)
+
+#: 结构化类目：它们的判据只读字段，不进 `_MATCH_ORDER`（模块 docstring 第一节）。
+#: 为什么必须显式排除：真机实测的三条假阳性 ——
+#: ① `warn` 里的多调用汇总逐条复述"第 2 条 fs.read 被拒：. 是目录"，按文案数会把一次
+#:    被拒的调用数成两次（与 D-65 正面冲突）；
+#: ② `item_state` 这个词在 `table.describe` 的输出里满天飞，按文案数会把"打印了一张表结构"
+#:    数成"有一条板项没被 ack"；
+#: ③ `ProviderError` / `有毛病` 这类词在 payload 与 result.data 里出现，而它们不是"撞上"。
+#: 所以这 15 类一律由读侧的显式函数产出（`_tool_refusal_family` 等），一个都不靠找字。
+STRUCTURAL_ONLY_CATEGORIES: frozenset[str] = frozenset(
+    EXPANDED_ROLE_CATEGORIES | SYSTEM_CATEGORY_NAMES | STATE_CATEGORY_NAMES)
+
+#: 六档归属（模块 docstring 第三节）。顺序就是 `attribution_of` 的判定顺序。
+ATTRIBUTION_BUCKETS: tuple[tuple[str, str], ...] = (
+    ("actor", "动作方：这条记录就是它自己的动作回执（默认档）"),
+    ("caller", "发起方：结构判据说这次派活 / 这次送审派错了"),
+    ("author", "命题作者：证明本身有毛病 ⇒ 记写出这条证明的那一方（不是复核者 V）"),
+    ("recipient", "收件人：板项没被 ack ⇒ 记该 ack 的那一方（不是发送方）"),
+    ("roster", "名册发起方：写口拒了一个名字 ⇒ 记要这个名字的那一方"),
+    ("system", "系统侧：判据没判成 / 外部面掉了 / 收工门拦下 ⇒ 不进角色合计"),
+)
+
+#: 记 `called_by` 的类目（码那一档仍用 `CALLER_ATTRIBUTED_CODES`，两处并存：
+#: 老类目按码分，新类目按类目分 —— 因为新类目根本不是靠码命中的）。
+CALLER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({
+    "child_cut_off", "verdict_missing",
+})
+
+#: 记命题作者（`statements.proof_authors` → `created_by`）的类目。
+AUTHOR_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"proof_defect_found"})
+
+#: 记名册发起方（`owner` 那一行的 `role`）的类目。
+ROSTER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"roster_write_refused"})
+
+#: 系统侧那一档的"角色"名。它不是一个角色（`schema.ROLES` 里没有），所以
+#: `_known_role` 对它一律回 False —— 于是它永远不会被当成 `called_by` 命中。
+SYSTEM_ACTOR = "（系统）"
+
+#: 命题作者查不到时的名字（与 `UNKNOWN_ROLE` 同一条纪律：不猜）。
+UNKNOWN_AUTHOR = "（未记作者）"
+
+#: 每一类留几条明细样本（页面"展开到每条的 source"那一栏）。刻意不是全部：
+#: 这一栏回答"这一类的一条长什么样、去哪个文件哪一条看"，不是把台账搬进 JSON。
+_SAMPLE_CAP = 20
+
 
 #: 多调用这一族的类目：它们的读数只从结构化字段与逐条记录取，不扫"步的那段文字"。
 #: 为什么必须显式排除文案：`stepdispatch.StepDispatch.summary` 是拿每一条的 `line` 拼出来的，
@@ -384,6 +633,69 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("mapping_package_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::PAPER_KINDS"),
     ("mapping_lean_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::LEAN_KINDS"),
     ("请代唤", "relay_after_refusal", "src/agentflow/agent_loop.py::RELAY_SUBJECT（RELAY_SUBJECT）"),
+    # ---- 2026-11-01 扩面的 15 类（出处一律写符号名，不写行号）。
+    #
+    # 这些码不进 `_MATCH_ORDER`（`STRUCTURAL_ONLY_CATEGORIES`）：它们的码登记在这里是
+    # 为了两件事 —— ① 判据 `test_every_category_has_a_code_that_really_exists_in_the_source`
+    # 能逐条断言"这个码真的在源码里"；② 人读出处时知道去哪一格看。判定本身读字段，
+    # 不找字（理由见模块 docstring 第一节的三条实测假阳性）。
+    ("name_taken", "roster_write_refused",
+     "src/agentflow/secretary.py::refusals_path（写口拒绝流水；`name_taken` 由 roster_add 产出）"),
+    ("文件不存在：", "tool_refused_path",
+     "src/agentflow/tools/fs_tools.py::fs_read（ToolError 原文）"),
+    ("路径不存在：", "tool_refused_path",
+     "src/agentflow/tools/fs_tools.py::fs_list（ToolError 原文）"),
+    ("是目录（要列出内容请用", "tool_refused_path",
+     "src/agentflow/tools/fs_tools.py::fs_read（ToolError 原文）"),
+    ("没有全文路径", "tool_refused_path",
+     "src/agentflow/tools/ocr_tools.py::_target_path（前置条件拒信原文）"),
+    ("框架渲染的产物", "tool_refused_reserved",
+     "src/agentflow/tools/fs_tools.py::fs_write（保留产物闸的原话）"),
+    ("单次定点替换上限", "tool_refused_edit_window",
+     "src/agentflow/tools/fs_tools.py::fs_edit（MAX_EDIT_BYTES 那一档的拒信原文）"),
+    ("old_string 在", "tool_refused_edit_window",
+     "src/agentflow/tools/fs_tools.py::fs_edit（找不到 / 出现多次两档的拒信原文）"),
+    ("实验执行失败", "experiment_failed",
+     "src/agentflow/tools/verify_tools.py::register._run_experiment_tool"
+     "（ExperimentError 的包装原话）"),
+    ("跑脚本之前", "experiment_refused",
+     "src/agentflow/agent_e/run_experiment.py::_RunExperiment.run_experiment"
+     "（R-01 的跑前判据原话）"),
+    ("一次只能说一件事", "reply_shape_rejected",
+     "src/agentflow/agent_loop.py::_decode_shape（一回合给两件事的拒信原话）"),
+    ("攻坚计划被拒绝", "reply_shape_rejected",
+     "src/agentflow/tools/attack_tools.py::_guard（计划结构缺字段的拒信原文）"),
+    ("cut_off_by_parent", "child_cut_off",
+     "src/agentflow/schema.py::TASK_OUTCOMES（父退场结算写下的终态）"),
+    ("statement_missing", "verdict_missing",
+     "src/agentflow/agent_v/core.py::AgentV.verify_proof"
+     "（`kind=statement_missing`：没审、不留台账行）"),
+    ("有缺陷要指出", "verdict_understated",
+     "src/agentflow/secretary.py::Secretary.note_decision"
+     "（`target.judge=v_reply_defect` 的判词档）"),
+    ("有毛病", "proof_defect_found",
+     "src/agentflow/verifications.py::VERDICTS（两态判词之一；行上 `unresolved_errors` 同族）"),
+    ("ProviderError", "external_unavailable",
+     "src/agentflow/providers.py::ProviderError（检索 provider 每一路都失败时抛的那一个）"),
+    ("fail_open", "hook_undecided",
+     "src/agentflow/agent_loop.py::AgentLoop._statement_filing_tier"
+     "（hook 没判成时的 `fail_open=True` 读数）"),
+    ("判不了", "hook_undecided",
+     "src/agentflow/secretary.py::Secretary.note_decision（`decision=判不了` 那一档）"),
+    ("contradiction_disputed_source", "closing_blocker",
+     "src/agentflow/closing.py::_check_contradictions（blocker 的 code）"),
+    ("acceptance_missing_for_research", "closing_blocker",
+     "src/agentflow/closing.py::_check_acceptance（blocker 的 code）"),
+    # 状态读数：`item_state` 是结构字段名（与 `multi_call` 那一行的用法同形 ——
+    # 码这一格记的是"判据读的那一格的字段名"，不是一段会被扫到的文案）。
+    ("item_state", "item_not_acked",
+     "src/agentflow/schema.py::Task.item_state（`seen` = 读了没 ack；`queued` = 连读都没读到）"),
+    # 过程读数那两格：`cancelled` 是 `TASK_OUTCOMES` 里的终态，算不算错由停机流水决定；
+    # `repaired` 是自愈补登记行的标记（与 `direct_write_routed` 同一手法：办成了不算错）。
+    ("cancelled", "task_stopped",
+     "src/agentflow/schema.py::TASK_OUTCOMES（被叫停的终态；算不算错看 runs/stop-history.jsonl）"),
+    ("repaired", "roster_repaired",
+     "src/agentflow/secretary.py::Secretary.roster_repair（补登记行的标记）"),
 )
 
 #: 码 → 类目（由 `CODE_TABLE` 派生，只有这一处真身）。
@@ -403,16 +715,33 @@ _CODE_INDEX: dict[str, int] = {code: i for i, (code, _c, _w) in enumerate(CODE_T
 #: （14 字）压过 `行校验失败`（5 字），于是写入期判据那一类永远收不到数。
 #: 类目顺序把结构性判据排在前面（根因先看），同类目里再让长码胜出 ——
 #: 于是 `judge_not_wired` 不会被 `not_wired` 抢先（两者同类目，长的那个更准）。
+#:
+#: 2026-11-01：`STRUCTURAL_ONLY_CATEGORIES` 那一批不进来（模块 docstring 第一节）。
+#: 它们由读侧的显式函数产出，一个都不靠找字 —— 所以这里过滤掉之后，`primary_code`
+#: 的行为与扩面之前逐字相同（老的六个例子仍然逐条成立）。
 _MATCH_ORDER: tuple[tuple[str, str], ...] = tuple(
     (code, cat)
     for code, cat, _where in sorted(
-        CODE_TABLE,
+        (row for row in CODE_TABLE if row[1] not in STRUCTURAL_ONLY_CATEGORIES),
         key=lambda t: (_CATEGORY_INDEX[t[1]], -len(t[0]), _CODE_INDEX[t[0]]))
 )
 
 #: 事件流里带拒绝语义的两档 `tasks.outcome`。
 _REFUSAL_OUTCOME = "refused"
 _FAILED_OUTCOME = "failed"
+
+#: 父退场结算写下的终态（`schema.TASK_OUTCOMES` 之一）：孩子还在跑、父先退了。
+_CUT_OFF_OUTCOME = "cut_off_by_parent"
+
+#: 被叫停的终态。它算不算错先看停机流水（模块 docstring 第五节）。
+_CANCELLED_OUTCOME = "cancelled"
+
+#: 板项（`kind` 非空）的那两个词（`schema`：`message` 一条消息 / `notice` 一条通知）。
+_BOARD_KINDS: frozenset[str] = frozenset({"notice", "message"})
+
+#: 停机相关的板项：它们没被 ack 是"叫停的下游形态"，不算"通知发了没人收口"。
+#: 判据是 detail 的开头（两句都是框架自己写的固定前缀，不是模型的话）。
+_STOP_ITEM_PREFIXES: tuple[str, ...] = ("停止通知", "用户叫停（开关文件")
 
 
 # ---------------------------------------------------------------- 主码
@@ -435,19 +764,63 @@ def primary_code(*texts: Any) -> tuple[str, str] | None:
     return None
 
 
+def attribution_of(code: str, category: str) -> str:
+    """这一条该记谁：返回 `ATTRIBUTION_BUCKETS` 里的一个档名。
+
+    判定顺序就是本函数的分支顺序，理由逐条：
+
+    1. `system` 先判：系统侧类目（`SYSTEM_CATEGORIES`）的 "角色" 永远是 `SYSTEM_ACTOR`，
+       这一点不受别的规则影响 —— 若放到后面，一个凑巧在 `CALLER_ATTRIBUTED_CODES` 里的码
+       会把它拖进角色表；
+    2. 状态读数（`STATE_CATEGORIES`）记收件人：板项行的 `role` 就是收件人
+       （`parent_task_id` 那一方），记录里已经没有"动作方"这一档了；
+    3. 名册类记发起方：`owner` 那一行的 `role`；
+    4. 证明缺陷记作者：`proof_authors` → `created_by`；
+    5. 新类里那两个"送审派错了 / 父先退了"记 `called_by`；
+    6. 老类目按码分（`CALLER_ATTRIBUTED_CODES`），其余是 `actor`。
+
+    为什么不让调用点自己决定档位：档位是类目的属性（"证明有毛病"永远该记作者，
+    与它在哪张表里被读出来无关）。放调用点上，第二个读同一件事的人一定会写错。
+    """
+    if category in SYSTEM_CATEGORY_NAMES:
+        return "system"
+    if category in STATE_CATEGORY_NAMES:
+        return "recipient"
+    if category in ROSTER_ATTRIBUTED_CATEGORIES:
+        return "roster"
+    if category in AUTHOR_ATTRIBUTED_CATEGORIES:
+        return "author"
+    if category in CALLER_ATTRIBUTED_CATEGORIES:
+        return "caller"
+    if code in CALLER_ATTRIBUTED_CODES:
+        return "caller"
+    return "actor"
+
+
 # ---------------------------------------------------------------- 结果形状
 
 
 def _error_category(category: str) -> str:
-    """确认这是一个错误类目，原样返回；传的是过程读数类目就抛 `ValueError`。
+    """确认这是一个角色侧错误类目，原样返回；传过程读数 / 系统侧 / 状态读数就抛。
 
-    为什么抛而不是回 0：0 会把"这不是一个错误类目"读成"这一类没有"，而这两件事的处置
+    为什么抛而不是回 0：0 会把"这不是一个角色侧类目"读成"这一类没有"，而这两件事的处置
     完全不同（前者是口径错用，后者是读数）。同一个理由见模块 docstring 的三态那一条。
+    系统侧与状态读数各有自己的取数函数（`system_category_total` / `state_category_total`），
+    因为它们不进 `total`（模块 docstring 第二节）。
     """
     if category in PROCESS_CATEGORY_NAMES:
         raise ValueError(
             f"{category} 是过程读数（拆分），不是错误类目 —— 请用 process_category_total / "
             "process_count；它不进 total 是有意的（业主 D-65）")
+    if category in SYSTEM_CATEGORY_NAMES:
+        raise ValueError(
+            f"{category} 是系统侧类目（不进角色合计）—— 请用 system_category_total / "
+            "system_count；它不进 total 是有意的：把'谁做错了'与'系统哪里坏了'相加得不到"
+            "任何一个有名字的量（模块 docstring 第二节）")
+    if category in STATE_CATEGORY_NAMES:
+        raise ValueError(
+            f"{category} 是状态读数（快照，会回落）—— 请用 state_category_total；"
+            "它既不进 total 也不进 system（模块 docstring 第二节）")
     return category
 
 
@@ -470,6 +843,23 @@ class ErrorStats:
     total: int = 0
     #: 角色 → 过程读数类目 → 条数（拆分生效的正读数；不计错，见 `PROCESS_CATEGORIES`）。
     process: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: 系统侧：类目 → 条数（不进 `by_role` / `total`，见模块 docstring 第二节）。
+    system: dict[str, int] = field(default_factory=dict)
+    system_total: int = 0
+    #: 状态读数：角色 → 类目 → 条数（快照；不进任何总数）。
+    state_readings: dict[str, dict[str, int]] = field(default_factory=dict)
+    state_readings_total: int = 0
+    #: 类目 → 三态（`checked` / `state` / `reason` / `rows`）。新 15 类每一类都有自己的三态：
+    #: 一个源读不到时只有那一类变 `unknown`，不许把整页拖成 0，也不许把 0 当成读数。
+    class_state: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: 类目 → 前 `_SAMPLE_CAP` 条明细（`{role, code, source, ref, ts, detail}`）。
+    #: 页面"展开到每条的 source"靠它；计数与它无关（样本只为看一条长什么样）。
+    samples: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: 类目 → `{first, last, this_run, earlier, no_ts}`（时间那一栏：首条 / 末条 /
+    #: 这一趟几条 / 更早几条 / 没记时间的几条）。
+    spans: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: "这一趟"的边界（最后一处 `agent_run_start` 的 ts）。空串 = 边界读不到。
+    run_boundary: str = ""
     checked: bool = False
     state: str = "unknown"
     reason: str = ""
@@ -484,6 +874,18 @@ class ErrorStats:
         """某错误类目的全角色合计。过程读数请用 `process_category_total`。"""
         _error_category(category)
         return sum(int(c.get(category, 0)) for c in self.by_role.values())
+
+    def system_count(self, category: str) -> int:
+        """某系统侧类目的条数（不进角色合计）。"""
+        if category not in SYSTEM_CATEGORY_NAMES:
+            raise ValueError(f"{category} 不是系统侧类目 —— 系统侧见 SYSTEM_CATEGORIES")
+        return int(self.system.get(category, 0))
+
+    def state_category_total(self, category: str) -> int:
+        """某状态读数类目的全角色合计（快照，不进任何总数）。"""
+        if category not in STATE_CATEGORY_NAMES:
+            raise ValueError(f"{category} 不是状态读数类目 —— 见 STATE_CATEGORIES")
+        return sum(int(c.get(category, 0)) for c in self.state_readings.values())
 
     def process_count(self, role: str, category: str) -> int:
         """某角色在某过程读数类目上的条数（不计错的那些读数走这一格）。"""
@@ -506,6 +908,20 @@ class ErrorStats:
                 out[cat] = n
         return out
 
+    def system_categories(self) -> dict[str, int]:
+        """系统侧类目 → 条数（按 `SYSTEM_CATEGORIES` 的顺序，只留非 0 的）。"""
+        return {cat: int(self.system.get(cat, 0)) for cat, _why in SYSTEM_CATEGORIES
+                if int(self.system.get(cat, 0))}
+
+    def state_categories(self) -> dict[str, int]:
+        """状态读数类目 → 条数（按 `STATE_CATEGORIES` 的顺序，只留非 0 的）。"""
+        out: dict[str, int] = {}
+        for cat, _why in STATE_CATEGORIES:
+            n = self.state_category_total(cat)
+            if n:
+                out[cat] = n
+        return out
+
     def process_categories(self) -> dict[str, int]:
         """过程读数类目 → 全角色合计（按 `PROCESS_CATEGORIES` 的顺序，只留非 0 的）。"""
         out: dict[str, int] = {}
@@ -515,24 +931,89 @@ class ErrorStats:
                 out[cat] = n
         return out
 
+    def by_class(self) -> list[dict[str, Any]]:
+        """按类的一行一条（页面"按类"那一段与 CLI 都用这一份）。
+
+        一条 = `{category, bucket, count, meaning, state, checked, reason, by_role}`。
+        `bucket ∈ {error, system, state, process}` —— 页面上分栏、排序时也只在自己那一栏
+        里排：把三种单位混在一个降序表里，第一条永远是单位最大的那个，读的人会以为它最严重。
+
+        为什么计数为 0 的类目也出现（而 `categories()` 只留非 0）：这一页的价值是
+        "一眼看出哪里在漏"，而"这一类这一趟 0 条"与"这一类根本没接上"必须分得开 ——
+        前者是绿，后者是 `unknown`（`state` 那一格）。
+        """
+        meaning = dict(ALL_CATEGORIES)
+        order = ("error", "system", "state", "process")
+        rows: list[dict[str, Any]] = []
+        for bucket, cats in (("error", ERROR_CATEGORIES), ("system", SYSTEM_CATEGORIES),
+                             ("state", STATE_CATEGORIES), ("process", PROCESS_CATEGORIES)):
+            for cat, _why in cats:
+                if bucket == "error":
+                    n = self.category_total(cat)
+                    per_role = {r: int(c.get(cat, 0)) for r, c in sorted(self.by_role.items())
+                                if int(c.get(cat, 0))}
+                elif bucket == "system":
+                    n = int(self.system.get(cat, 0))
+                    per_role = {SYSTEM_ACTOR: n} if n else {}
+                elif bucket == "state":
+                    n = self.state_category_total(cat)
+                    per_role = {r: int(c.get(cat, 0))
+                                for r, c in sorted(self.state_readings.items())
+                                if int(c.get(cat, 0))}
+                else:
+                    n = self.process_category_total(cat)
+                    per_role = {r: int(c.get(cat, 0))
+                                for r, c in sorted(self.process.items())
+                                if int(c.get(cat, 0))}
+                tri = dict(self.class_state.get(cat) or {})
+                span = dict(self.spans.get(cat) or {})
+                rows.append({"category": cat, "bucket": bucket, "count": int(n),
+                             "meaning": meaning.get(cat, ""), "by_role": per_role,
+                             "checked": bool(tri.get("checked", self.checked)),
+                             "state": str(tri.get("state") or ("checked" if self.checked
+                                                               else "unknown")),
+                             "reason": str(tri.get("reason") or ""),
+                             "first_ts": str(span.get("first") or ""),
+                             "last_ts": str(span.get("last") or ""),
+                             "this_run": int(span.get("this_run") or 0),
+                             "earlier": int(span.get("earlier") or 0),
+                             "no_ts": int(span.get("no_ts") or 0),
+                             "samples": [dict(s) for s in (self.samples.get(cat) or ())]})
+        rows.sort(key=lambda r: (order.index(str(r["bucket"])), -int(r["count"]),
+                                 str(r["category"])))
+        return rows
+
     def as_dict(self) -> dict[str, Any]:
         """机器可读形态（CLI 的 `--json` 直接印它）。
 
-        `by_role` / `role_total` / `total` 只含错误类目；`process` 与 `process_by_role`
-        是过程读数（拆分）。两组键刻意不合并：合并之后 `total` 又不等于"错误动作总数"了。
+        `by_role` / `role_total` / `total` 只含角色侧错误类目；`process` / `process_by_role`
+        是过程读数（拆分）；`system` 是系统侧；`state_readings` 是状态读数（快照）。
+        四组键刻意不合并：合并之后 `total` 又不等于"错误动作总数"了，而"角色侧 48 /
+        系统侧 8 / 状态读数 13"这三个数本来就不该相加（模块 docstring 第二节）。
         """
         return {
             "by_role": {r: dict(sorted(c.items())) for r, c in sorted(self.by_role.items())},
             "role_total": dict(sorted(self.role_total.items())),
             "total": int(self.total),
+            "system": dict(sorted(self.system.items())),
+            "system_total": int(self.system_total),
+            "state_readings": {r: dict(sorted(c.items()))
+                               for r, c in sorted(self.state_readings.items())},
+            "state_readings_total": int(self.state_readings_total),
             "process_by_role": {r: dict(sorted(c.items()))
                                 for r, c in sorted(self.process.items())},
             "process": dict(self.process_categories()),
+            "classes": self.by_class(),
+            "class_state": {k: dict(v) for k, v in sorted(self.class_state.items())},
+            "samples": {k: [dict(s) for s in v] for k, v in sorted(self.samples.items())},
+            "spans": {k: dict(v) for k, v in sorted(self.spans.items())},
+            "run_boundary": self.run_boundary,
             "checked": bool(self.checked),
             "state": self.state,
             "reason": self.reason,
             "sources": {k: dict(v) for k, v in self.sources.items()},
         }
+
 
 
 # ---------------------------------------------------------------- 读盘（只读）
@@ -623,6 +1104,9 @@ def _latest_task_rows(events: Iterable[Mapping[str, Any]]) -> list[dict[str, Any
         if tid not in latest:
             order.append(tid)
         latest[tid] = dict(row)
+        #: 事件自己的 `ts`（行上没有这一格）：样本的"什么时候"靠它。只加在副本上，
+        #: 不进台账行、不写回任何地方。
+        latest[tid].setdefault("_ts", str(event.get("ts") or ""))
     return [latest[tid] for tid in order]
 
 
@@ -693,34 +1177,347 @@ def _is_split_step(record: Mapping[str, Any]) -> bool:
         return False
 
 
+# ---------------------------------------------------------------- 辅助源（只读）
+#
+# 2026-11-01 扩面新加的四个目录 + 两个只取一格的源。每个都是独立的读函数：
+# `test_stats_all_reads_disk_once` 数的是 `_read_events` / `_read_sessions` 那两个口，
+# 所以这里不会把那条判据带动；而 `readouts` 每条读数只调一次 `_read_aux`。
+
+
+def _read_jsonl_dir(root: Path, sub: str, pattern: str = "*.jsonl",
+                    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """读 `<root>/<sub>/<pattern>` 下的 jsonl（坏行单独计数，不静默跳过）。
+
+    目录不存在 ⇒ `checked=True` + 0 条（"这个工作区没有这一类记录"是正常形态，
+    与 `sessions` 那一支同一条口径）；目录在而每一行都读不明白 ⇒ `checked=False`。
+    """
+    reading: dict[str, Any] = {"checked": True, "dir": sub, "files": 0, "records": 0,
+                               "bad_lines": 0, "reason": ""}
+    folder = root / sub
+    if not folder.is_dir():
+        return ([], reading)
+    rows: list[dict[str, Any]] = []
+    bad = 0
+    files = 0
+    for path in sorted(folder.glob(pattern)):
+        if not path.is_file():
+            continue
+        files += 1
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            bad += 1
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                bad += 1
+                continue
+            if isinstance(obj, dict):
+                obj["_file"] = path.name
+                rows.append(obj)
+            else:
+                bad += 1
+    reading.update(files=files, records=len(rows), bad_lines=bad)
+    if not rows and bad:
+        reading["checked"] = False
+        reading["reason"] = f"{sub} 里每一行都读不明白（{bad} 行）"
+    return (rows, reading)
+
+
+def _read_json_table(root: Path, rel: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """读一张表文件（`data/<表>.json`）的行。形状是 `{"schema_version":…, "rows":[…]}`。
+
+    只给"取一格"的用途（`statements` 的 `proof_authors`）：读不出来 ⇒ `checked=False`，
+    调用方把归属记成 `（未记作者）`，不猜一个角色。
+    """
+    reading: dict[str, Any] = {"checked": True, "path": rel, "records": 0,
+                               "bad_lines": 0, "reason": ""}
+    path = root / rel
+    if not path.is_file():
+        return ([], reading)
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        reading.update(checked=False, reason=f"{rel} 读不出来（{type(e).__name__}: {e}）")
+        return ([], reading)
+    rows = doc.get("rows") if isinstance(doc, Mapping) else None
+    if isinstance(rows, Mapping):
+        rows = list(rows.values())
+    if not isinstance(rows, list):
+        reading.update(checked=False, reason=f"{rel} 里没有 rows 列表")
+        return ([], reading)
+    good = [dict(r) for r in rows if isinstance(r, Mapping)]
+    reading.update(records=len(good), bad_lines=len(rows) - len(good))
+    return (good, reading)
+
+
+def _read_stop_history(root: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """读 `runs/stop-history.jsonl`（停机流水）。没有这个文件 ⇒ 0 条，不是"读不到"。"""
+    reading: dict[str, Any] = {"checked": True, "path": "runs/stop-history.jsonl",
+                               "records": 0, "bad_lines": 0, "by_user": 0,
+                               "unexplained": 0, "reason": ""}
+    path = root / "runs" / "stop-history.jsonl"
+    if not path.is_file():
+        return ([], reading)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        reading.update(checked=False, reason=f"停机流水读不出来（{type(e).__name__}: {e}）")
+        return ([], reading)
+    rows: list[dict[str, Any]] = []
+    bad = 0
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            bad += 1
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+        else:
+            bad += 1
+    by_user = sum(1 for r in rows if str(r.get("by") or "") == "user")
+    reading.update(records=len(rows), bad_lines=bad, by_user=by_user)
+    return (rows, reading)
+
+
+def _read_closing(root: Path) -> dict[str, Any]:
+    """现算收工门（`closing.check_closing`）—— 与 Acceptance 页同一处，不另算一份。
+
+    三态：没有 `out/` ⇒ `not_applicable`（这个工作区还没有可交的东西，收工门没有对象）；
+    算不出来 ⇒ `unknown`（不是"没有 blocker"）。这一支是本模块唯一"现算"的源，也是唯一
+    可能慢的；所以它只读一次、只给 `closing_blocker` 一类用。
+    """
+    reading: dict[str, Any] = {"checked": False, "state": "unknown", "reason": "",
+                               "blockers": [], "status": {}, "machine_pass": False,
+                               "can_close": None, "can_close_reason": "", "source": "closing.check_closing"}
+    if not (root / "out").is_dir():
+        reading.update(checked=True, state="not_applicable",
+                       reason="这个工作区没有 out/ ⇒ 收工门没有对象（不是'通过了'）")
+        return reading
+    try:
+        from . import closing as CL
+        from .store import Store
+
+        # 必须绝对路径：`check_closing` 按 store 的 root 解析 `data/` 与 `statements`，
+        # 给一个相对路径会让它读不到表 —— 实测（82，相对路径）多出第三条 blocker
+        # `statements_unsigned_without_v_or_abandon`，而绝对路径下只有两条。读数会因此
+        # 静默变成"另一个工作区"的结论，所以这里显式 resolve。
+        store = Store(Path(root).resolve())
+        rep = CL.check_closing(store, project_dir=".", report_path="out/review/REPORT.md")
+    except Exception as e:  # noqa: BLE001 读不出来与"没有 blocker"必须分得开
+        reading.update(reason=f"收工门算不出来（{type(e).__name__}: {e}）")
+        return reading
+    blockers = []
+    for one in (getattr(rep, "blockers", None) or ()):
+        code = str(getattr(one, "code", "") or "")
+        check = str(getattr(one, "check", "") or "")
+        level = str(getattr(one, "level", "") or "")
+        blockers.append({"code": code, "check": check, "level": level})
+    reading.update(checked=True, state="checked", reason="", blockers=blockers,
+                   status={str(k): str(v) for k, v in (getattr(rep, "status", None) or {}).items()},
+                   machine_pass=bool(getattr(rep, "machine_pass", False)),
+                   can_close=getattr(rep, "can_close", None),
+                   can_close_reason=str(getattr(rep, "can_close_reason", "") or ""))
+    return reading
+
+
+def _read_aux(root: Path) -> dict[str, Any]:
+    """一次读完扩面要用的全部辅助源，供 `error_action_stats_from` 用。
+
+    为什么单列一个函数（而不塞进 `readouts.scan`）：这四个源只有错误动作读数要，
+    塞进共用扫描会让 `flow` / `cost` / `gates` 白读它们；而"每条读数自己读一遍"
+    又会把同目录读多次。单列一次是这两头之间的那个点（父裁第 ② 条）。
+
+    返回的每个源都是 `{"rows" 或 "reading"}` 形状；`reading` 逐源带 `checked` / `reason`，
+    于是"这一类没查成"能落到具体那一类上，不把整页拖成 0。
+    """
+    verifications, ver_reading = _read_jsonl_dir(root, "verifications")
+    refusals, ref_reading = _read_jsonl_dir(root, "out/roster/refusals")
+    secretary, sec_reading = _read_jsonl_dir(root, "out/secretary")
+    roster_rows, roster_reading = _read_jsonl_dir(root, "out/roster")
+    statements, st_reading = _read_json_table(root, "data/statements.json")
+    stop_rows, stop_reading = _read_stop_history(root)
+    closing_reading = _read_closing(root)
+
+    # 名册折叠：`*-index.jsonl` 是 append-only 流水（bind / retire），不是状态 ——
+    # 直接数会把"B1 重开 10 次"读成"10 个重名"。折叠口径与 `secretary.child_counts` 一致。
+    #
+    # 只折 `-index.jsonl`：主册（`<owner>.jsonl`）与索引记的是同一批名字（`add` 与 `bind`
+    # 一一对应），两份一起折会让每个名字都变成"同名多开"的假数（实测 82：42 个假重名）。
+    live: dict[str, dict[str, list[str]]] = {}
+    for row in roster_rows:
+        if not str(row.get("_file") or "").endswith("-index.jsonl"):
+            continue
+        name = str(row.get("name") or "")
+        owner = str(row.get("owner") or "")
+        if not name or not owner:
+            continue
+        slot = live.setdefault(owner, {})
+        if str(row.get("kind") or "") == "retire":
+            slot.pop(name, None)
+        else:
+            slot.setdefault(name, []).append(str(row.get("task_id") or ""))
+    collisions = {f"{owner}:{name}": len(ids)
+                  for owner, names in live.items() for name, ids in names.items() if len(ids) > 1}
+    repaired = [row for row in roster_rows
+                if row.get("repaired") and not str(row.get("_file") or "").endswith("-index.jsonl")]
+    # 会话文件名（只 glob 名字，不读内容）：样本的 `source` 要指到具体哪个文件，
+    # 而 `sessions.read_all_sessions` 刻意不回文件名（它是"记录"不是"文件"）。
+    sess_folder = root / "sessions"
+    session_names = (sorted(p.name for p in sess_folder.glob("*.jsonl") if p.is_file())
+                     if sess_folder.is_dir() else [])
+    roster_reading = dict(roster_reading)
+    roster_reading.update(
+        children_unretired=sum(len(names) for names in live.values()),
+        name_collisions=len(collisions),
+        collisions=dict(sorted(collisions.items())),
+        repaired=len(repaired),
+    )
+
+    return {
+        "verifications": {"rows": verifications, "reading": ver_reading},
+        "roster": {"rows": roster_rows, "refusals": refusals, "repaired": repaired,
+                   "reading": roster_reading},
+        "roster_refusals": {"rows": refusals, "reading": ref_reading},
+        "secretary": {"rows": secretary, "reading": sec_reading},
+        "statements": {"rows": statements, "reading": st_reading},
+        "stop_history": {"rows": stop_rows, "reading": stop_reading},
+        "session_files": {"rows": [], "reading": {"checked": True, "names": session_names,
+                                                  "reason": ""}},
+        "closing": {"rows": [], "reading": closing_reading},
+    }
+
+
+def _no_aux(reason: str) -> dict[str, Any]:
+    """没传辅助源时的替身：每个源都 `checked=False`，理由是同一句。
+
+    为什么是 `unknown` 而不是空：这四个源里藏着 7 个类目。把它们折成 0 会让
+    "这一类这一趟没有"与"这一类根本没查"长得一模一样（三态纪律）。
+    """
+    reading = {"checked": False, "reason": reason}
+    return {name: {"rows": [], "reading": dict(reading)}
+            for name in ("verifications", "roster", "roster_refusals", "secretary",
+                         "statements", "stop_history", "closing")}
+
+
+#: 工具层拒因的族表（`(类目, 认得它的原话)`）。顺序即优先级：同一段文字同时命中两族时
+#: 上面那族赢（例如"实验参数在跑脚本之前就不合格"只归 `experiment_refused`）。
+#: 每一族的原话都在源码里逐条 grep 过（见 `CODE_TABLE` 的出处列）。
+_TOOL_REFUSAL_FAMILIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("experiment_refused", ("跑脚本之前",)),
+    ("experiment_failed", ("实验执行失败",)),
+    ("tool_refused_reserved", ("框架渲染的产物",)),
+    ("tool_refused_edit_window", ("单次定点替换上限", "old_string 在")),
+    ("reply_shape_rejected", ("一次只能说一件事", "攻坚计划被拒绝")),
+    ("tool_refused_path", ("文件不存在：", "路径不存在：", "是目录（要列出内容请用",
+                           "没有全文路径")),
+    ("external_unavailable", ("ProviderError",)),
+)
+
+
+def _reply_shape_family(result: Mapping[str, Any]) -> tuple[str, str] | None:
+    """一步 `shape="invalid"` 里"这次回话的形状不成立"的那一档：`(码, 类目)` 或 None。
+
+    读 `result.problem` / `result.error` / `result.detail` 三格 —— 形状被拒的原话在
+    `problem` 里（`agent_loop` 把它当成"这一步是什么形状"的理由），与 `ok=False` 那一族
+    走的是不同字段，所以不能共用 `_tool_refusal_family`。
+    """
+    text = " ".join(str(result.get(k) or "") for k in ("problem", "error", "detail"))
+    for needle in ("一次只能说一件事", "攻坚计划被拒绝"):
+        if needle in text:
+            return (needle, "reply_shape_rejected")
+    return None
+
+
+def _tool_refusal_family(result: Mapping[str, Any]) -> tuple[str, str] | None:
+    """一条 `ok=False` 的工具结果属于哪一族：`(码, 类目)`；认不出 ⇒ None。
+
+    只读 `result.error` 与 `result.detail`，不读 `warn`：`warn` 里的多调用汇总逐条
+    复述"第 2 条 fs.read 被拒：. 是目录"，读它会把一次被拒的调用数成两次（D-65 那条纪律
+    的反面）。也不读 `result.data`：那里是工具输出，`table.describe` 打印的 schema 里
+    满地都是 `item_state` 这种词。
+    """
+    text = " ".join(str(result.get(k) or "") for k in ("error", "detail"))
+    if not text.strip():
+        return None
+    for category, needles in _TOOL_REFUSAL_FAMILIES:
+        for needle in needles:
+            if needle in text:
+                return (needle, category)
+    return None
+
+
+def _role_of(value: Any) -> str:
+    """从 `created_by` / `proof_authors` 这种"带前缀的角色名"里取角色。
+
+    `secretary-B` → `B`；`B` → `B`；认不出 ⇒ 原样（由调用方决定记 `（未记作者）` 还是记它）。
+    """
+    name = str(value or "").strip()
+    if not name:
+        return ""
+    if name in S.ROLES or name == S.CONDUCTOR_ROLE:
+        return name
+    tail = name.rsplit("-", 1)[-1].strip()
+    if tail in S.ROLES or tail == S.CONDUCTOR_ROLE:
+        return tail
+    return name
+
+
+def _author_of(row: Mapping[str, Any], authors: Mapping[str, str]) -> str:
+    """一条 `verifications` 行的命题作者：`statements.proof_authors` → `created_by`。
+
+    为什么不去看 `verifier`：那是 V。把"证明有毛病"记到 V 头上，等于让复核的人替写证明的
+    人背锅 —— 而"一方的错不算到另一方头上"是这个模块钉的第一条。
+    """
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+    if sid and sid in authors:
+        return authors[sid]
+    return UNKNOWN_AUTHOR
+
+
 def error_action_stats(target: Any) -> ErrorStats:
     """按角色统计错误动作计数。`target` 可以是工作区根路径，也可以是 `Store`。
 
-    纯读：不写库、不写盘、不建目录、不加锁（`Store.read_events` 本身只读文件）。
+    纯读：不写库、不写盘、不建目录、不加锁（`Store.read_events` 本身只读文件；
+    `closing.check_closing` 也只读，实测跑完工作区 350 个文件的 mtime 一个都没动）。
     三态见模块 docstring 第 3 条：读不到 ⇒ `checked=False` / `state="unknown"`，
     不把"没读到"折成 0。
     """
     root, store = _resolve_target(target)
     events, ev_reading = _read_events(root, store)
     records, ss_reading = _read_sessions(root)
-    return error_action_stats_from(events, ev_reading, records, ss_reading)
+    aux = _read_aux(root) if root.is_dir() else _no_aux(f"工作区不存在：{root}")
+    return error_action_stats_from(events, ev_reading, records, ss_reading, aux=aux)
 
 
 def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                             ev_reading: Mapping[str, Any] | None,
                             records: Iterable[Mapping[str, Any]] | None,
-                            ss_reading: Mapping[str, Any] | None) -> ErrorStats:
-    """同一份计数，但输入是已经读好的记录（不再读盘）。
+                            ss_reading: Mapping[str, Any] | None,
+                            *,
+                            aux: Mapping[str, Any] | None = None) -> ErrorStats:
+    """同一份计数，但输入是已经读好的记录（不再读事件流与会话记录）。
 
     为什么要这一支（2026-10-27，R-BE1 的 ⑥-5）：`stats all` 那四条读数各读一遍盘
     （实测 `events.jsonl` 读 4 次、`sessions/*.jsonl` 读 4 次；同一份 2.9 MB 的会话
     被解析四遍）。`readouts` 把它自己那份扫描交给这里，计数口径仍然只有这一处 ——
     在这里复制一份分类逻辑就是第二套口径，而那正是 `readouts` 这一层存在的理由。
 
-    读数与 `error_action_stats` 逐字相同（两条路的差别只有"谁去读盘"，
-    判据 `tests/test_stats_all_reads_disk_once.py` 拿同一夹具对拍两份 `as_dict()`）。
+    `aux`（2026-11-01 扩面）：扩面新读的四个目录 + 两个只取一格的源，由
+    `_read_aux(root)` 一次读好传进来。不传 ⇒ 那 7 个类目一律 `unknown`，不是 0
+    （它们藏在辅助源里，"没查"与"没有"必须分得开）。`readouts.errors_readout` 传它；
+    判据 `tests/test_stats_all_reads_disk_once.py` 拿同一夹具对拍两条路的 `as_dict()`。
 
-    三态：两个 `*_reading` 原样带出去（`checked` / `reason` / `unreadable_files`），
+    三态：三个 `*_reading` 原样带出去（`checked` / `reason` / `unreadable_files`），
     本函数不重判"读没读到"。两个 reading 会先复制成本地 dict，于是 `unclassified`
     那一格的累加不会写回调用方手里的那份扫描读数。
     """
@@ -728,44 +1525,203 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
     records = list(records or ())
     ev_reading: dict[str, Any] = dict(ev_reading or {})
     ss_reading: dict[str, Any] = dict(ss_reading or {})
+    aux_in: Mapping[str, Any] = aux if isinstance(aux, Mapping) else _no_aux(
+        "这条路径没传辅助源（只读了事件流与会话记录）⇒ 这一类的 7 个读数没查成")
+
+    def _aux_rows(name: str) -> list[dict[str, Any]]:
+        got = aux_in.get(name)
+        rows = got.get("rows") if isinstance(got, Mapping) else None
+        return [dict(r) for r in (rows or ()) if isinstance(r, Mapping)]
+
+    def _aux_reading(name: str) -> dict[str, Any]:
+        got = aux_in.get(name)
+        reading = got.get("reading") if isinstance(got, Mapping) else None
+        return dict(reading or {"checked": False, "reason": "这个源没读到"})
 
     counts: dict[str, dict[str, int]] = {}
     process: dict[str, dict[str, int]] = {}
+    state: dict[str, dict[str, int]] = {}
+    system: dict[str, int] = {}
     hits: dict[str, dict[str, int]] = {}
+    #: 每一类的前 `_SAMPLE_CAP` 条明细：页面上"展开到每条的 source"靠它。
+    #: 只留前 N 条是刻意的：这一栏是"点开看一条长什么样"，不是把台账搬进 JSON。
+    samples: dict[str, list[dict[str, Any]]] = {}
+    #: 结构判据认不出的那些：不猜一个类目，但必须看得见（与 `events.unclassified` 同族）。
+    unclassified: dict[str, int] = {"tool": 0, "verdict": 0, "roster": 0, "secretary": 0}
 
-    def _bump(role: str, code: str, cat: str) -> None:
-        """记一条命中。落哪个桶由类目决定（`PROCESS_CATEGORY_NAMES`），不由调用点决定。
+    #: 当前这条记录的出处（`source` / `ref` / `ts` / `detail`）。每个循环在取到一条记录时
+    #: 就地更新它，`_bump` 用它在"头 N 条"时留样本 —— 于是"每条样本的 source"只在一处拼，
+    #: 不必在十几个 `_bump` 调用点各写一遍（那种写法一定会漏掉几处，而漏了没人看得出）。
+    ctx: dict[str, str] = {"source": "", "ref": "", "ts": "", "detail": ""}
+    #: 类目 → `{first, last, this_run, earlier, no_ts}`：时间那一栏的读数。
+    #: "这一趟"的边界不是拍出来的一个数：`run_boundary` = 最后一处 `agent_run_start` 的 ts
+    #: （这一趟从哪一刻起）。边界拿不到（没有 `agent_run_start`）⇒ 全部记 `earlier` 并把
+    #: `run_boundary` 留空，页面上那一栏就显示"边界读不到"，不假装分了趟。
+    spans: dict[str, dict[str, Any]] = {}
+    run_boundary = ""
+    for record in records:
+        if str(record.get("kind") or "") != "agent_run_start":
+            continue
+        one = str(record.get("ts") or "")
+        if one and one > run_boundary:
+            run_boundary = one
 
-        为什么把分桶放在这里：于是"过程读数"在结构上进不了 `total` / `role_total` ——
-        任何一条路径把拆分读数当错误记，它都会落进另一个桶。而不是靠每个调用点自己记得
-        "这个不计错"（那种纪律一定会漏，而漏了不会有任何地方报错）。
-        """
-        bucket = process if cat in PROCESS_CATEGORY_NAMES else counts
-        cells = bucket.setdefault(role, {})
-        cells[cat] = int(cells.get(cat, 0)) + 1
+    def _span(cat: str, when: str) -> None:
+        slot = spans.setdefault(cat, {"first": "", "last": "", "this_run": 0,
+                                      "earlier": 0, "no_ts": 0})
+        if not when:
+            slot["no_ts"] = int(slot["no_ts"]) + 1
+            return
+        if not slot["first"] or when < slot["first"]:
+            slot["first"] = when
+        if not slot["last"] or when > slot["last"]:
+            slot["last"] = when
+        key = "this_run" if run_boundary and when >= run_boundary else "earlier"
+        slot[key] = int(slot[key]) + 1
+
+    def _mark(role: str, code: str) -> None:
         seen = hits.setdefault(role, {})
         seen[code] = int(seen.get(code, 0)) + 1
 
-    # ---- 事件流：tasks 行的拒绝与失败
+    def _bump(role: str, code: str, cat: str, **where: str) -> None:
+        """记一条命中。落哪个桶由类目决定，不由调用点决定。
+
+        为什么把分桶放在这里：于是"过程读数 / 系统侧 / 状态读数"在结构上进不了
+        `total` / `role_total` —— 任何一条路径把它们当错误记，它都会落进另一个桶。
+        而不是靠每个调用点自己记得"这个不计错"（那种纪律一定会漏，而漏了不会有任何地方报错）。
+
+        `source` / `ref` / `ts` / `detail` 是"这一条从哪来"的四个格子（页面展开用）：
+        `source` 是文件（或现算入口），`ref` 是文件里的记录身份（`task_id` / `verification_id` /
+        `seq`），`detail` 是那一句原话的截断。计数不受它们影响 —— 只在头 N 条时留样本。
+        不传就用当前 `ctx`（每个循环在取到一条记录时就地更新它）。
+        """
+        where = {k: str(v) for k, v in where.items()}
+        get = lambda name: where.get(name) or ctx.get(name, "")  # noqa: E731
+        if cat in SYSTEM_CATEGORY_NAMES:
+            system[cat] = int(system.get(cat, 0)) + 1
+            _mark(SYSTEM_ACTOR, code)
+            bucket_role = SYSTEM_ACTOR
+        elif cat in STATE_CATEGORY_NAMES:
+            cells = state.setdefault(role, {})
+            cells[cat] = int(cells.get(cat, 0)) + 1
+            _mark(role, code)
+            bucket_role = role
+        else:
+            bucket = process if cat in PROCESS_CATEGORY_NAMES else counts
+            cells = bucket.setdefault(role, {})
+            cells[cat] = int(cells.get(cat, 0)) + 1
+            _mark(role, code)
+            bucket_role = role
+        source, ref = get("source"), get("ref")
+        _span(cat, get("ts"))
+        if (source or ref) and len(samples.setdefault(cat, [])) < _SAMPLE_CAP:
+            samples[cat].append({"role": bucket_role, "code": str(code),
+                                 "source": source, "ref": ref,
+                                 "ts": get("ts"), "detail": get("detail")[:160]})
+
+    def _bump_system(code: str, cat: str) -> None:
+        _bump(SYSTEM_ACTOR, code, cat)
+
+
+    task_rows = _latest_task_rows(events)
+    task_role: dict[str, str] = {}
+    task_caller: dict[str, str] = {}
+    for row in task_rows:
+        tid = str(row.get("task_id") or "")
+        if tid:
+            task_role[tid] = str(row.get("role") or "")
+            task_caller[tid] = str(row.get("called_by") or "")
+
+    def _caller_or_actor(record: Mapping[str, Any], role: str) -> str:
+        """送审 / 父退场那一档：能查到 `called_by` 就记它，查不到退回动作方。"""
+        tid = str(record.get("task_id") or "")
+        caller = task_caller.get(tid) or ""
+        if _known_role(caller):
+            return _role_name(caller)
+        return role
+
+    session_names = list(_aux_reading("session_files").get("names") or ())
+
+    def _where(record: Mapping[str, Any]) -> tuple[str, str, str]:
+        """一条会话记录的 `(source, ref, ts)`：页面展开时"去哪看这一条"。
+
+        `source` 指到具体文件：记录自带 `sid` 就用它；否则这个工作区只有一个会话文件时
+        用那个文件名；多个文件又没有 `sid` ⇒ 只给目录（不猜是哪一个 —— 猜错比指不到更坏）。
+        `ref` 是记录身份（`kind#index`），配 `ts` 足以 `grep` 定位。
+        """
+        sid = str(record.get("sid") or "")
+        name = f"{sid}.jsonl" if sid else (session_names[0] if len(session_names) == 1 else "")
+        kind = str(record.get("kind") or "")
+        idx = record.get("index")
+        ref = f"{kind}#{idx}" if idx is not None else kind
+        return (f"sessions/{name}" if name else "sessions/", ref,
+                str(record.get("ts") or ""))
+
+    stop_rows = _aux_rows("stop_history")
+    stopped_by_user = any(str(r.get("by") or "") == "user" for r in stop_rows)
+
+    # ---- 事件流：tasks 行的被拒 / 没做成 / 板项 / 被叫停
     if ev_reading.get("checked"):
-        for row in _latest_task_rows(events):
+        for row in task_rows:
+            ctx.update(source="data/events.jsonl", ref=str(row.get("task_id") or ""),
+                       ts=str(row.get("_ts") or ""),
+                       detail=str(row.get("detail") or ""))
             outcome = str(row.get("outcome") or "")
-            if outcome not in (_REFUSAL_OUTCOME, _FAILED_OUTCOME):
+            if outcome in (_REFUSAL_OUTCOME, _FAILED_OUTCOME):
+                found = primary_code(row.get("refusal_reason"), row.get("error"),
+                                     row.get("detail"))
+                if found is None:
+                    # 被拒但理由码不在码表里（历史行 / 新码没登记）：不猜一个类目出来，
+                    # 也不静默丢掉 —— 记进 `sources.events.unclassified`，人读的呈现里会点名。
+                    # 这条纪律与"没读到不许折成 0"同族：没见过的东西不许编，但必须看得见。
+                    if outcome == _REFUSAL_OUTCOME:
+                        ev_reading["unclassified"] = int(
+                            ev_reading.get("unclassified") or 0) + 1
+                    continue
+                code, cat = found
+                if code in CALLER_ATTRIBUTED_CODES and _known_role(row.get("called_by")):
+                    role = _role_name(row.get("called_by"))
+                else:
+                    role = _role_name(row.get("role"))
+                _bump(role, code, cat)
                 continue
-            found = primary_code(row.get("refusal_reason"), row.get("error"), row.get("detail"))
-            if found is None:
-                # 被拒但理由码不在码表里（历史行 / 新码没登记）：不猜一个类目出来，
-                # 也不静默丢掉 —— 记进 `sources.events.unclassified`，人读的呈现里会点名。
-                # 这条纪律与"没读到不许折成 0"同族：没见过的东西不许编，但必须看得见。
-                if outcome == _REFUSAL_OUTCOME:
-                    ev_reading["unclassified"] = int(ev_reading.get("unclassified") or 0) + 1
+            if outcome == _CUT_OFF_OUTCOME:
+                # 父退场切割：孩子还在跑、父先退了 ⇒ 这一行由父的退场结算写成终态。
+                # 记发起方（`called_by`）：活是它派出去的，它先走了。
+                _bump(_caller_or_actor(row, _role_name(row.get("role"))),
+                      "cut_off_by_parent", "child_cut_off")
                 continue
-            code, cat = found
-            if code in CALLER_ATTRIBUTED_CODES and _known_role(row.get("called_by")):
-                role = _role_name(row.get("called_by"))
-            else:
-                role = _role_name(row.get("role"))
-            _bump(role, code, cat)
+            if outcome == _CANCELLED_OUTCOME:
+                # 叫停算不算错，先看停机流水（模块 docstring 第五节那条最容易改坏的格子）。
+                if stopped_by_user:
+                    _bump(_role_name(row.get("role")), "cancelled", "task_stopped")
+                else:
+                    # 没有 by=user 的停机记录解释它 ⇒ 不记错误（可能是父的 dispose），
+                    # 但要看得见：记进 `sources.events.cancelled_unexplained`。
+                    ev_reading["cancelled_unexplained"] = int(
+                        ev_reading.get("cancelled_unexplained") or 0) + 1
+                continue
+        # ---- 板项（状态读数）：`item_state != done` 且不是停机通知
+        for row in task_rows:
+            if str(row.get("kind") or "") not in _BOARD_KINDS:
+                continue
+            ctx.update(source="data/events.jsonl", ref=str(row.get("task_id") or ""),
+                       ts=str(row.get("_ts") or ""),
+                       detail=str(row.get("detail") or ""))
+            if str(row.get("item_state") or "") == "done":
+                continue
+            detail = str(row.get("detail") or "").lstrip()
+            if detail.startswith(_STOP_ITEM_PREFIXES):
+                # 停机相关的那 4 条：它们是叫停的下游形态，不是"通知发了没人收口"。
+                ev_reading["stop_items_open"] = int(ev_reading.get("stop_items_open") or 0) + 1
+                continue
+            _bump(_role_name(row.get("role")), "item_state", "item_not_acked")
+    # 板项是快照：`tasks` 读不到时那个 0 也得说成"没查成"，所以单独一格的读数
+    board_lines = [r for r in task_rows if str(r.get("kind") or "") in _BOARD_KINDS]
+    if ev_reading.get("checked"):
+        ev_reading["board_items"] = len(board_lines)
+        ev_reading["board_open"] = sum(1 for r in board_lines
+                                       if str(r.get("item_state") or "") != "done")
 
     # ---- 会话记录：判据层的 problem、工具层的拒信、代唤请示
     if ss_reading.get("checked"):
@@ -785,6 +1741,11 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
         for record in records:
             kind = str(record.get("kind") or "")
             role = _role_name(record.get("role"))
+            src, ref, when = _where(record)
+            ctx.update(source=src, ref=ref, ts=when,
+                       detail=str((record.get("result") or {}).get("error")
+                                  if isinstance(record.get("result"), Mapping) else "")
+                       or str(record.get("problem") or "") or str(record.get("subject") or ""))
             if kind == "llm_call":
                 found = primary_code(record.get("problem"), record.get("detail"))
                 if found is not None:
@@ -802,6 +1763,36 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                         counted_from_llm.discard(key)
                     else:
                         _bump(role, *found)
+                # ---- 结构判据：只在主码没认出任何类目时才走（于是老的六类逐条不变）
+                if found is None:
+                    result = record.get("result")
+                    if isinstance(result, Mapping):
+                        data = result.get("data")
+                        if (isinstance(data, Mapping)
+                                and str(data.get("kind") or "") == "statement_missing"):
+                            # 没审成：命题还没登记就送审 ⇒ 记送审方（它是这次送审的发起方）
+                            _bump(_caller_or_actor(record, role), "statement_missing",
+                                  "verdict_missing")
+                        elif result.get("ok") is False:
+                            if str(result.get("outcome") or "") == _CANCELLED_OUTCOME:
+                                # 与 `tasks` 行那个 `cancelled` 是同一件事（召唤被叫停）：
+                                # 只从台账数一次，这里不重计（去重对 ① 的另一半）。
+                                pass
+                            else:
+                                family = _tool_refusal_family(result)
+                                if family is None:
+                                    # ok=False 但哪一族都不认：不猜（兜底留在 sources 里）
+                                    unclassified["tool"] += 1
+                                else:
+                                    _bump(role, *family)
+                        elif str(record.get("shape") or "") == "invalid":
+                            # 形状被拒（"一次只能说一件事"）：原话在 `result.problem` 里，
+                            # 与 ok=False 那一族不同字段，所以单独一支。
+                            shape_family = _reply_shape_family(result)
+                            if shape_family is None:
+                                unclassified["verdict"] += 1
+                            else:
+                                _bump(role, *shape_family)
                 # 拆分这件事的读数从结构字段取：一个被拆分的回合正好记一次。
                 if _is_split_step(record):
                     _bump(role, "multi_call", "steps_split")
@@ -811,6 +1802,8 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                 # 执行了 ⇒ 过程读数 `multi_call_executed_calls`（拆分生效的正读数）；
                 # 没执行 ⇒ 按它自己的结局原话进三个真失败类目之一（`_call_text`）。
                 # "一条记录只算一次"在这里成立：本记录只往一个桶里记一次。
+                # 与 `agent_step` 不重叠：步只数 `ok=False` 那一步的结局，这里只数
+                # `not_executed`（那一条在步上没有对应记录）。
                 if not bool(record.get("not_executed")):
                     _bump(role, "agent_step_call", "multi_call_executed_calls")
                     continue
@@ -828,8 +1821,97 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                     _bump(_role_name(record.get("from")), *found)
                 continue
 
+    # ---- 校验台账：V 判「有毛病」/ 有未解决 error ⇒ 记命题作者
+    ver_reading = _aux_reading("verifications")
+    if ver_reading.get("checked"):
+        st_rows = _aux_rows("statements")
+        authors: dict[str, str] = {}
+        for row in st_rows:
+            sid = str(row.get("stmt_id") or "")
+            if not sid:
+                continue
+            who = row.get("proof_authors")
+            first = ""
+            if isinstance(who, (list, tuple)) and who:
+                first = str(who[0] or "")
+            elif isinstance(who, str):
+                first = who
+            name = _role_of(first) or _role_of(row.get("created_by"))
+            if name:
+                authors[sid] = name
+        for row in _aux_rows("verifications"):
+            sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+            ctx.update(source=f"verifications/{sid}.jsonl" if sid else "verifications/",
+                       ref=str(row.get("verification_id") or ""),
+                       ts=str(row.get("at") or ""),
+                       detail=str(row.get("why") or row.get("defect_step") or ""))
+            verdict = str(row.get("verdict") or "")
+            unresolved = int(row.get("unresolved_errors") or 0)
+            if verdict != "有毛病" and unresolved <= 0:
+                continue
+            _bump(_author_of(row, authors), "有毛病", "proof_defect_found")
+
+    # ---- 名册写口拒绝：记"要这个名字的那一方"
+    ref_reading = _aux_reading("roster_refusals")
+    if ref_reading.get("checked"):
+        for row in _aux_rows("roster_refusals"):
+            owner = str(row.get("owner") or "")
+            ctx.update(source=f"out/roster/refusals/{row.get('_file') or ''}",
+                       ref=f"{owner}#{row.get('seq')}", ts=str(row.get("at") or ""),
+                       detail=str(row.get("problem") or ""))
+            role = _role_of(task_role.get(owner) or "")
+            if not role:
+                unclassified["roster"] += 1
+                role = UNKNOWN_ROLE
+            code = str(row.get("refusal_code") or "")
+            if not code:
+                # 没有码的那一条（`reuse`/`want_name` 同时给）：码这一格记原话的前 24 字，
+                # 它只影响 `sources.hits`，不影响类目。
+                code = str(row.get("problem") or "")[:24] or "name_taken"
+            _bump(role, code, "roster_write_refused")
+        for row in _aux_rows("roster"):
+            if row.get("repaired") and not str(row.get("_file") or "").endswith("-index.jsonl"):
+                owner = str(row.get("owner") or "")
+                ctx.update(source=f"out/roster/{row.get('_file') or ''}",
+                           ref=str(row.get("name") or ""), ts=str(row.get("at") or ""),
+                           detail=str(row.get("brief") or ""))
+                _bump(_role_of(task_role.get(owner) or "") or UNKNOWN_ROLE,
+                      "repaired", "roster_repaired")
+
+    # ---- 秘书判词：V 低报缺陷（记 V）与 hook 没判成（系统侧）
+    sec_reading = _aux_reading("secretary")
+    if sec_reading.get("checked"):
+        for row in _aux_rows("secretary"):
+            target = row.get("target")
+            judge_axis = str(target.get("judge") or "") if isinstance(target, Mapping) else ""
+            decision = str(row.get("decision") or "")
+            ctx.update(source=f"out/secretary/{row.get('_file') or ''}",
+                       ref=f"seq={row.get('seq')}", ts=str(row.get("at") or ""),
+                       detail=str(row.get("reason") or ""))
+            if judge_axis == "v_reply_defect" and decision == "有缺陷要指出":
+                _bump(_role_name(row.get("role")), "有缺陷要指出", "verdict_understated")
+                continue
+            if row.get("fail_open") or decision == "判不了":
+                _bump_system("fail_open" if row.get("fail_open") else "判不了",
+                             "hook_undecided")
+
+    # ---- 收工门（现算）：blocker 逐条
+    cls_reading = _aux_reading("closing")
+    for one in (cls_reading.get("blockers") or ()):
+        code = str((one or {}).get("code") or "") if isinstance(one, Mapping) else ""
+        ctx.update(source="closing.check_closing",
+                   ref=str((one or {}).get("check") or "") if isinstance(one, Mapping) else "",
+                   ts=str(cls_reading.get("at") or ""),
+                   detail=str((one or {}).get("level") or "") if isinstance(one, Mapping) else "")
+        if not code:
+            unclassified["verdict"] += 1
+            code = "closing_blocker"
+        _bump_system(code, "closing_blocker")
+
     role_total = {role: sum(cats.values()) for role, cats in counts.items()}
     total = sum(role_total.values())
+    state_total = sum(sum(cats.values()) for cats in state.values())
+    system_total = sum(system.values())
 
     checked = bool(ev_reading.get("checked")) and bool(ss_reading.get("checked"))
     reasons: list[str] = []
@@ -837,21 +1919,65 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
         reasons.append(str(ev_reading.get("reason") or "事件流读不到"))
     if not ss_reading.get("checked"):
         reasons.append(str(ss_reading.get("reason") or "会话记录读不到"))
-    sources = {
+
+    # ---- 逐类三态：一个源读不到只让那一类变 unknown，不把整页拖成 0
+    base_state = "checked" if checked else "unknown"
+    base_reason = "；".join(reasons)
+    class_state: dict[str, dict[str, Any]] = {
+        cat: {"checked": checked, "state": base_state, "reason": base_reason}
+        for cat, _why in ALL_CATEGORIES}
+
+    def _apply(categories: frozenset[str] | set[str] | tuple[str, ...],
+               reading: Mapping[str, Any]) -> None:
+        got = bool(reading.get("checked"))
+        tri = str(reading.get("state") or ("checked" if got else "unknown"))
+        why = str(reading.get("reason") or "")
+        for cat in categories:
+            class_state[cat] = {"checked": got, "state": tri, "reason": why}
+
+    _apply({"proof_defect_found"}, ver_reading)
+    _apply({"roster_write_refused"}, ref_reading)
+    _apply({"verdict_understated", "hook_undecided"}, sec_reading)
+    _apply({"closing_blocker"}, cls_reading)
+    _apply({"task_stopped"}, _aux_reading("stop_history"))
+    _apply({"roster_repaired"}, _aux_reading("roster"))
+    # `statements` 读不出来只影响归属（退回 `（未记作者）`），不影响计数 —— 所以
+    # `proof_defect_found` 的三态仍由 `verifications` 决定，这一格在 `sources.statements` 里
+    # 单独看得见（不把"作者没记"折成"这一类没查成"）。
+
+    sources: dict[str, dict[str, Any]] = {
         "events": ev_reading,
         "sessions": ss_reading,
-        "hits": {"checked": checked, "codes": {r: dict(sorted(c.items())) for r, c in sorted(hits.items())}},
+        "verifications": ver_reading,
+        "roster": _aux_reading("roster"),
+        "roster_refusals": ref_reading,
+        "secretary": sec_reading,
+        "statements": _aux_reading("statements"),
+        "stop_history": _aux_reading("stop_history"),
+        "closing": cls_reading,
+        "unclassified": unclassified,
+        "hits": {"checked": checked,
+                 "codes": {r: dict(sorted(c.items())) for r, c in sorted(hits.items())}},
     }
     return ErrorStats(
         by_role={r: dict(sorted(c.items())) for r, c in sorted(counts.items())},
         role_total=dict(sorted(role_total.items())),
         total=total,
         process={r: dict(sorted(c.items())) for r, c in sorted(process.items())},
+        system=dict(sorted(system.items())),
+        system_total=system_total,
+        state_readings={r: dict(sorted(c.items())) for r, c in sorted(state.items())},
+        state_readings_total=state_total,
+        class_state=class_state,
+        samples={k: [dict(s) for s in v] for k, v in sorted(samples.items())},
+        spans={k: dict(v) for k, v in sorted(spans.items())},
+        run_boundary=run_boundary,
         checked=checked,
         state="checked" if checked else "unknown",
         reason="；".join(reasons),
         sources=sources,
     )
+
 
 
 # ---------------------------------------------------------------- 人读的呈现
@@ -883,18 +2009,21 @@ def _table_lines(head: list[str], rows: list[list[str]]) -> list[str]:
 
 
 def render_text(stats: ErrorStats) -> list[str]:
-    """渲染成两张小表：错误动作（角色 × 类目）与拆分读数（过程读数，不计错）。
+    """渲染成四张表：三个总数、角色侧错误、系统侧、状态读数、过程读数。
 
-    CLI 与非 CLI 调用共用这一份。两张表分开是有意的：把拆分那几格混进错误表，
-    读的人会把"系统拆了一步"看成"出错了" —— 而业主 D-65 的口径正好相反。
-    拆分那一栏的措辞也是中性的（"被拆分的步数" / "拆出来并执行了的调用条数"），
-    它旁边那句才点名三档真失败（discarded / unexecuted / out_of_limit）。
+    CLI 与非 CLI 调用共用这一份。几张表分开是有意的：把拆分那几格混进错误表，
+    读的人会把"系统拆了一步"看成"出错了" —— 而业主 D-65 的口径正好相反；
+    "系统侧"与"状态读数"混进角色表则会把三种单位加成一个没有名字的数
+    （模块 docstring 第二节）。
     """
     lines: list[str] = []
     events = stats.sources.get("events") or {}
     sessions = stats.sources.get("sessions") or {}
-    lines.append("错误动作计数（按角色 × 类目；只读，零模型调用）")
-    lines.append(f"三态    checked={stats.checked}  state={stats.state}")
+    lines.append("错误动作计数（角色侧 / 系统侧 / 状态读数分栏；只读，零模型调用）")
+    lines.append(f"三态    checked={stats.checked}  state={stats.state}"
+                 f"  逐类 读到 {_count_classes(stats, 'checked')} / "
+                 f"没查成 {_count_classes(stats, 'unknown')} / "
+                 f"不适用 {_count_classes(stats, 'not_applicable')}")
     if stats.reason:
         lines.append(f"原因    {stats.reason}")
     lines.append(
@@ -903,6 +2032,10 @@ def render_text(stats: ErrorStats) -> list[str]:
             ev=events.get("events", 0), evbad=events.get("bad_lines", 0),
             ss=sessions.get("records", 0), files=sessions.get("files", 0),
             ssbad=sessions.get("bad_lines", 0)))
+    lines.append(
+        "三个数  角色侧 {t} / 系统侧 {s} / 状态读数 {z}"
+        "   ← 刻意不相加：三种单位（谁做错了 / 系统哪里坏了 / 现在积着什么）".format(
+            t=stats.total, s=stats.system_total, z=stats.state_readings_total))
     if not stats.checked:
         lines.append("")
         lines.append("没有读到该读的东西 ⇒ 这里的 0 不是『没有错误动作』，是『没查成』。")
@@ -910,10 +2043,15 @@ def render_text(stats: ErrorStats) -> list[str]:
     if unclassified:
         lines.append(f"未归类  {unclassified} 条被拒的理由码不在码表里（未计入任何类目；"
                      "要收进来就把它登记进 CODE_TABLE）")
+    loose = {k: int(v or 0) for k, v in (stats.sources.get("unclassified") or {}).items()
+             if int(v or 0)}
+    if loose:
+        lines.append(f"未归类（结构判据）  {loose} —— 认不出族的那几条没有猜类目，"
+                     "只在 sources.unclassified 里留着")
 
     cats = list(stats.categories().items())
     lines.append("")
-    lines.append("错误动作（角色 × 类目；只有这张表进 total）：")
+    lines.append("角色侧错误动作（角色 × 类目；只有这张表进 total）：")
     if not cats:
         lines.append("  全 0（错误类目一条都没命中）" if stats.checked else "  无可报读数")
     else:
@@ -930,10 +2068,36 @@ def render_text(stats: ErrorStats) -> list[str]:
         for cat, _n in cats:
             lines.append(f"  {cat}: {meanings.get(cat, '')}")
 
+    # ---- 系统侧（不进角色合计）
+    sys_cats = list(stats.system_categories().items())
+    lines.append("")
+    lines.append("系统侧异常（不是哪个角色做错了；不进 total）：")
+    if not sys_cats:
+        tri = _count_classes(stats, "unknown")
+        lines.append("  0 条" + ("（但有类目没查成 —— 见下面逐类三态）" if tri else ""))
+    else:
+        smean = dict(SYSTEM_CATEGORIES)
+        for cat, n in sorted(sys_cats, key=lambda kv: -kv[1]):
+            lines.append(f"  {cat}: {n} —— {smean.get(cat, '')}")
+
+    # ---- 状态读数（快照）
+    st_cats = list(stats.state_categories().items())
+    lines.append("")
+    lines.append("状态读数（快照，会随 ack 回落；既不进 total 也不进系统侧）：")
+    if not st_cats:
+        lines.append("  0 条")
+    else:
+        stmean = dict(STATE_CATEGORIES)
+        for cat, n in st_cats:
+            per = {r: c.get(cat, 0) for r, c in sorted(stats.state_readings.items())
+                   if c.get(cat)}
+            lines.append(f"  {cat}: {n}（按角色 {per}）—— {stmean.get(cat, '')}")
+
     # ---- 过程读数（不是错误，单独一栏）
     proc = list(stats.process_categories().items())
     lines.append("")
-    lines.append("过程读数（不是错误：步被拆开逐条执行是正常能力，直写被转交正路办成也是）：")
+    lines.append("过程读数（不是错误：步被拆开逐条执行是正常能力，直写被转交正路办成也是，"
+                 "人叫停与自愈补登记也是）：")
     if not proc:
         lines.append("  没有任何过程读数（被拆分的步数 0 / 拆出来的调用 0 / 转交办成 0）")
     else:
@@ -947,6 +2111,11 @@ def render_text(stats: ErrorStats) -> list[str]:
         pmeanings = dict(PROCESS_CATEGORIES)
         for cat, _n in proc:
             lines.append(f"  {cat}: {pmeanings.get(cat, '')}")
+    stop = stats.sources.get("stop_history") or {}
+    if stop.get("records"):
+        lines.append(f"  被叫停的解释：停机流水 {stop.get('records')} 条，其中 by=user "
+                     f"{stop.get('by_user')} 条；没有解释的 cancelled "
+                     f"{int((stats.sources.get('events') or {}).get('cancelled_unexplained') or 0)} 条")
     lines.append(
         "  真失败长在错误表上：多调用那三档（"
         f"multi_call_discarded={stats.category_total('multi_call_discarded')} / "
@@ -957,10 +2126,19 @@ def render_text(stats: ErrorStats) -> list[str]:
         "『步被拆分』与『转交办成』本身都不是失败。")
 
     lines.append("")
-    lines.append("口径：角色归属见 errorstats 模块 docstring（召唤期结构判据记 called_by）；"
+    lines.append("口径：角色归属见 errorstats 模块 docstring（六档 `ATTRIBUTION_BUCKETS`："
+                 "召唤期结构判据记 called_by、证明有毛病记命题作者、板项没 ack 记收件人、"
+                 "名册写口拒绝记要名字的那一方、系统侧不进角色表）；"
                  "一条记录只算一次，主码 = 类目表靠前的类目优先、同类目里长码优先。"
-                 "过程读数是 process，不进 total / role_total（业主 D-65）。")
+                 "新 15 类全部是结构化类目（不进主码、不扫文案）。"
+                 "过程读数 / 系统侧 / 状态读数都不进 total（业主 D-65 与 2026-11-01 扩面口径）。")
     return lines
+
+
+def _count_classes(stats: ErrorStats, state: str) -> int:
+    """逐类三态里某一档有几个类目（页面顶部那一行"15 类里 X 类读到 / Y 类没查成 / Z 类不适用"）。"""
+    return sum(1 for one in (stats.class_state or {}).values()
+               if str(one.get("state") or "") == state)
 
 
 def stats_json(stats: ErrorStats) -> str:

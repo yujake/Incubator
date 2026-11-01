@@ -368,9 +368,10 @@ def test_e_the_category_tables_are_self_consistent(tmp_path: pathlib.Path) -> No
     # 拆分那两个读数是过程读数，不是错误类目
     assert {"steps_split", "multi_call_executed_calls"} <= ES.PROCESS_CATEGORY_NAMES
     assert not ({"steps_split", "multi_call_executed_calls"} & ES.ERROR_CATEGORY_NAMES)
-    # 两张表不相交，合起来就是 ALL_CATEGORIES（没有第三张表偷偷存在）
+    # 四张表两两不相交，合起来就是 ALL_CATEGORIES（没有第五张表偷偷存在）
     assert not (set(err_names) & set(proc_names)), (err_names, proc_names)
-    assert ES.ALL_CATEGORIES == ES.ERROR_CATEGORIES + ES.PROCESS_CATEGORIES
+    assert ES.ALL_CATEGORIES == (ES.ERROR_CATEGORIES + ES.SYSTEM_CATEGORIES
+                                 + ES.STATE_CATEGORIES + ES.PROCESS_CATEGORIES)
     assert ES.ERROR_CATEGORY_NAMES == frozenset(err_names)
     assert ES.PROCESS_CATEGORY_NAMES == frozenset(proc_names)
     # 三个新类目：在受控词表（CODE_TABLE）里，且 primary_code 认得它们
