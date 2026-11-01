@@ -627,6 +627,20 @@ ROUTED_CODES: tuple[str, ...] = (
 _NOT_ROUTABLE_KEYS: frozenset[str] = frozenset(
     {"bits", "verification_id", "reviewed_by", "created_by"})
 
+#: `table.update(table="statements")` 里"带正文/证据"的那几个键：带它们的 patch 仍走
+#: 登记路（"整行再交一次登记"），不走非正文写口。2026-11-01（真机 82 · A-1…A-4）：
+#: 只有不带它们的 patch 才允许落进 `Secretary.amend_statement_meta` 的三格白名单。
+#:
+#: 为什么 `evidence_kind` 算这一档：升档本来就是"同一份内容再交一次、带更强凭据"那条路
+#: （`Secretary._upgrade_evidence_kind` 是唯一实现），把它挪进就地改写口会绕开凭据判据。
+STATEMENT_BODY_PATCH_KEYS: frozenset[str] = frozenset({
+    "statement_full", "statement_text", "proof_text", "proofs",
+    "evidence_kind", "proof_manuscript",
+})
+
+#: 非正文写口被白名单拒时的码（可定位：模型读得到"我多给了哪一格"）。
+STATEMENT_PATCH_KEY_NOT_ALLOWED = "statement_patch_key_not_allowed"
+
 #: `statements` 的登记归属（2026-10-26，D8）：只有 B 的 `register_statement` 能写。
 #:
 #: 为什么不是"路由到秘书就够"：路由把调用方的角色原样传给秘书，而非 B 的角色会被
@@ -1133,6 +1147,45 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
             # 因为"要改哪一行"根本不知道（不是"路由没成"）。
             return fail(f"{table} 里没有主键 {id}", table=table, id=id, found=False,
                         kind="not_found")
+        keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
+        if not (keys & STATEMENT_BODY_PATCH_KEYS):
+            # ---- 非正文 patch ⇒ 秘书的"就地改三格"写口（真机 82 · A-1…A-4）
+            #
+            # 改前这一支把"盘上那一行 + patch"整份再交一次 `record_statement`，而查重
+            # 判据正是"同一条 statement_full 已在册" ⇒ 改 kind / status / quote_reason
+            # 这类非正文 patch 100% 落 duplicate 拒。四次 routed 全是它（A-1 改 kind、
+            # A-2/A-3 改 status、A-4 改 quote_reason）。
+            #
+            # 为什么选"在兜底处认出"而不是"新加一条 B 的动作"：后者会改动作面/权限面
+            # （新增 ActionSpec + handler + 工具面），而这一笔要做的事已经有了主人
+            # （秘书的写侧）。所以这里只做路由识别，写仍然由
+            # `Secretary.amend_statement_meta` 在 `store.tx` 里做、过
+            # `schema.Statement.validate()`；白名单之外的键由它受控拒绝。
+            from ..secretary import for_role_wired
+
+            try:
+                sec = for_role_wired(role, root=ctx.store.root, store=ctx.store)
+                got = sec.amend_statement_meta(str(id), dict(payload or {}), role=role,
+                                               task_id=_caller_task_id())
+            except Exception as exc:  # noqa: BLE001 —— 兜底方不可达必须回 unknown
+                return _route_unavailable(backstop="secretary", entry=str(entry),
+                                          table=table,
+                                          why=f"{type(exc).__name__}: {exc}",
+                                          requested_id=str(id))
+            if got.get("refused"):
+                # 受控拒绝用秘书自己的码（`statement_patch_key_not_allowed` /
+                # `bad_statement_kind` / `bad_statement_status` / `not_found`）：
+                # 把"我多给了哪一格"留在 `meta.kind` 上，模型据此就能改对。
+                return fail(f"{got['refused']}：{got.get('reason') or ''}",
+                            table=table, id=id, kind=str(got.get("refused")), detail=got)
+            changes = list(got.get("changes") or ())
+            what = ("已由系统就地改写非正文格（" + "、".join(changes) + "）"
+                    if changes else
+                    "已由系统核对非正文格（已经是这些值 ⇒ 一个字节都没写）")
+            return _routed_ok(backstop="secretary", entry=str(entry), table=table,
+                              what_happened=what, row=got.get("row"),
+                              landed_id=str(got.get("stmt_id") or ""),
+                              changes=changes, requested_id=str(id), detail=got)
         merged = dict(current)
         merged.update(dict(payload or {}))
         body = merged
@@ -1543,7 +1596,10 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
 @tool(
     "table.update",
-    "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。",
+    "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。"
+    "`table=\"statements\"` 只放三格就地改：`status` / `kind` / `quote_reason`"
+    "（走秘书的校验与事务，不新建行）；带正文（`statement_full` / `proof_text`）的"
+    "patch 仍走登记路；白名单之外的格受控拒绝。",
     _obj(
         {
             "table": _TABLE_PROP,

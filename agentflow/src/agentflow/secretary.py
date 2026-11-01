@@ -1352,6 +1352,20 @@ def normalize_same_as(value: Any) -> tuple[str, int]:
 
 
 
+#: `table.update(table="statements")` 允许就地改的非正文三格（真机 82 · A-1…A-4）。
+#:
+#: 为什么只有这三格：B 这一趟想改的三件事就是它们；改正文有专门的登记路（重交一条
+#: 带新 `statement_full` / `proof_text` 的登记，旧正文进 `proof_history`）。
+#: 白名单之外的键一律受控拒绝 —— 这里放宽一个词，等于放宽一整类写口，而
+#: 「谁能改 statements 的哪一格」是 FC-27 的权限面（`tools/table_tools.py` 也是禁改区）。
+STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
+
+#: 就地改 `kind` 时认的英文词表（命题性的那几档 + 概念/定义两档）。
+#:
+#: 中文 kind（`定理` / `引理`）不在里面：真机 82 的 A-1 就是它进不了命题性词表、
+#: 也不在猜想白名单，而拒因说的是另一件事（去要 V 签）。这一格把"不是取值"说清。
+STATEMENT_META_KINDS: tuple[str, ...] = PROPOSITION_KINDS + NOT_APPLICABLE_KINDS
+
 #: 同一性按"定义项相同"判的那几档 kind（概念行没有条件 → 结论，命题那一套判据对它失效）。
 #:
 #: 为什么只有 `concept` 一档、不顺手带上 `definition`：这一档的判据是"标签（或正文里
@@ -6023,6 +6037,143 @@ class Secretary:
             out.update(checked=False, refused="write_failed",
                        reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
         return out
+
+    def amend_statement_meta(self, stmt_id: str, patch: Mapping[str, Any], *,
+                             role: str = "B", task_id: str = "") -> dict[str, Any]:
+        """就地改一条在册命题的非正文格（`status` / `kind` / `quote_reason`）。
+
+        ## 为什么需要这一条（真机 82，2026-11-01 · A-1…A-4）
+
+        B 四次用 `table.update(table="statements")` 想改 `kind` / `status` /
+        `quote_reason`，四次都被"同一条 statement_full 已在册"拒：兜底把"盘上那一行 +
+        patch"整份再交一次登记，而查重判据正是"同一条正文已在册" ⇒ 非正文 patch
+        100% 落 duplicate 拒，三格于是没有任何写入口。
+        这一格就是那条写口，也是"改哪一格"允许被路由过来的唯一白名单。
+
+        ## 边界（这是权限面，必须写死）
+        - 只认 `STATEMENT_META_PATCH_KEYS` 三个键；白名单之外一律受控拒绝
+          （`statement_patch_key_not_allowed`），一个字节都不写；
+        - `kind` 只认英文词表 `STATEMENT_META_KINDS`（中文 kind 是
+          `bad_statement_kind`，不是"重复读数"）；
+        - `status` 只认 `schema.STATEMENT_STATUSES`；
+        - 正文 / 证据面不在这一格：要改正文请重交一条登记（旧正文进 `proof_history`）。
+
+        ## 走的是秘书的校验与事务
+        整行重建后过 `schema.Statement.validate()`（与登记那一支同一套字段校验），
+        在 `store.tx("statements", ...)` 里写，并留 `_statement_amend_history`
+        （谁、何时、从什么改成什么；只留最近 20 条，与 `_proposition_matches` 同一条
+        有界读数纪律）。三态：改成了 / 已经是这些值（幂等，不写）/ 受控拒绝。
+
+        ## 返回
+        | 结局 | 返回 |
+        |---|---|
+        | 改成了 | `checked=True` + `amended=True` + `changes` + `row` |
+        | 没有可改的 | `checked=True` + `amended=False`（一个字节都没写） |
+        | 受控拒绝 | `checked=False` + `refused=<码>` + `reason` |
+        """
+        out: dict[str, Any] = {"checked": False, "amended": False,
+                               "stmt_id": str(stmt_id or ""), "changes": [],
+                               "before": {}, "row": {}, "tables": [],
+                               "refused": "", "reason": ""}
+        if self.store is None:
+            out.update(refused="secretary_unavailable",
+                       reason="这一名秘书没有 store ⇒ 改不了（命题的写侧归秘书）")
+            return out
+        if str(role) not in STATEMENT_WRITER_ROLES:
+            out.update(refused="not_statement_writer",
+                       reason=(f"命题的写入侧是 B 的活（收到 role={role!r}）—— "
+                               f"只有 {STATEMENT_WRITER_ROLES} 能经这一格改命题"))
+            return out
+        sid = str(stmt_id or "").strip()
+        wanted = {str(k): v for k, v in dict(patch or {}).items()
+                  if not str(k).startswith("_")}
+        if not wanted:
+            out.update(refused="empty_statement_patch",
+                       reason=("patch 是空的 ⇒ 没有要改的格。这一条只改 "
+                               f"{list(STATEMENT_META_PATCH_KEYS)} 之一或多个"))
+            return out
+        extra_keys = sorted(k for k in wanted if k not in STATEMENT_META_PATCH_KEYS)
+        if extra_keys:
+            out.update(refused="statement_patch_key_not_allowed", reason=(
+                f"这一条只允许就地改 {list(STATEMENT_META_PATCH_KEYS)}，收到 {extra_keys}。"
+                "改正文请把新正文写进 `statement_full` / `proof_text` 再交一次 "
+                "`own.register_statement`（同一条命题会就地覆盖，旧正文进 `proof_history`）；"
+                "其余格没有就地写口 —— 整笔不写，盘上一个字节都没变。"))
+            return out
+        if "status" in wanted:
+            status = str(wanted["status"] or "").strip()
+            if status not in S.STATEMENT_STATUSES:
+                out.update(refused="bad_statement_status", reason=(
+                    f"status 必须是 {S.STATEMENT_STATUSES} 之一，收到 {wanted['status']!r}"
+                    "（它是命题的可信状态，不是自由文本）"))
+                return out
+            wanted["status"] = status
+        if "kind" in wanted:
+            kind = str(wanted["kind"] or "").strip()
+            if kind not in STATEMENT_META_KINDS:
+                out.update(refused="bad_statement_kind", reason=(
+                    f"kind 必须是英文词表 {list(STATEMENT_META_KINDS)} 之一，收到 {kind!r} —— "
+                    "中文 kind（定理 / 引理）不是取值；这一格由证据派生，改它也请走证据"))
+                return out
+            wanted["kind"] = kind
+        if "quote_reason" in wanted:
+            text = str(wanted["quote_reason"] or "")
+            if not text.strip():
+                out.update(refused="bad_quote_reason", reason=(
+                    "quote_reason 不能改成空串 —— 三态纪律：没通过要说清为什么、"
+                    "还没查也要说出来，不许留白"))
+                return out
+            wanted["quote_reason"] = text
+        try:
+            with self.store.tx("statements", actor=f"secretary-{self.role}",
+                               note="secretary:amend_statement_meta") as tx:
+                row = next((dict(r) for r in tx.rows("statements")
+                            if str(r.get("stmt_id") or "") == sid), None)
+                if row is None:
+                    out.update(refused="not_found",
+                               reason=f"statements 里没有主键 {sid} ⇒ 没有可改的行")
+                    return out
+                before = {k: row.get(k) for k in wanted}
+                changed = {k: v for k, v in wanted.items() if row.get(k) != v}
+                out["before"] = before
+                if not changed:
+                    out.update(checked=True, amended=False, row=row,
+                               reason=("这一笔要改的格已经是这些值 ⇒ 一个字节都没写"
+                                       "（幂等：不是失败，也不是改成了）"))
+                    return out
+                merged = dict(row)
+                merged.update(changed)
+                history = [dict(h) for h in (row.get("_statement_amend_history") or [])
+                           if isinstance(h, Mapping)]
+                history.append({
+                    "at": S.now_iso(), "by": f"secretary-{self.role}",
+                    "task_id": str(task_id or ""),
+                    "changes": {k: {"from": before.get(k), "to": v}
+                                for k, v in changed.items()}})
+                merged["_statement_amend_history"] = history[-20:]
+                try:
+                    obj = S.row_from_dict("statements", dict(merged))
+                    obj.validate()
+                    canonical = obj.to_dict()
+                except (TypeError, ValueError) as exc:
+                    out.update(refused="validation", reason=(
+                        f"改完之后这一行不是合法的命题行（{type(exc).__name__}: {exc}）"
+                        " ⇒ 整笔不写（不在'改一格'里顺手写坏一行）"))
+                    return out
+                extra = {k: v for k, v in merged.items() if k not in canonical}
+                row_out = {**extra, **canonical}
+                tx.upsert("statements", row_out, note="secretary:amend_statement_meta")
+                out.update(checked=True, amended=True, stmt_id=sid,
+                           changes=sorted(changed), row=row_out,
+                           tables=["statements"],
+                           reason=("就地改了 " + "、".join(sorted(changed))
+                                   + "（非正文格；正文与证据面一个字没动）"))
+                return out
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
+            out.update(checked=False, refused="write_failed",
+                       reason=(f"改非正文格没成（{type(exc).__name__}: {exc}）"
+                               " ⇒ 这一笔按'没写成'读"))
+            return out
 
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
                          force_new: bool = False) -> dict[str, Any]:
