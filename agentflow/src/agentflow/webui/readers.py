@@ -505,7 +505,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     """`GET /api/run/{sid}` 的读模型：`RunView` = `Run` + `report` + `checkpoint`。
 
     - `runs`：这一趟会话里的每一趟（`sessions.runs_in_session`，与 `webui.state._scan`
-      的 20 键逐字同形）；
+      的 22 键逐字同形）；
     - `report`：`out/review/REPORT.md` 的读数，两栏 `{status, text}`，`status` 是
       `ok`/`missing`/`unknown`（另一套词表，见裁定 N1）；
     - `checkpoint`：`runs/agent-<角色>-<sid>.json` 的内容（读不到就是 `None`）。
@@ -516,7 +516,17 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     - `checkpoint_spend_usd`：那一份检查点自己的累计（`spend.usd`，读不到 `null`）；
     - `same_run_spend_usd`：这一段会话里同角色的最后一趟的事件求和（找不到 `null`）；
     - `same_run_unknown_usd` / `same_run_start_index`：同一趟里算不出价钱的那部分、
-      以及那一趟的起始下标（页面用它说清"比的是哪一趟"）。
+      以及那一趟的起始下标（页面用它说清"比的是哪一趟"）；
+    - `unattributed_usd`（162 ②）：这一段会话里"事件流有、而**没有任何一趟**的自报账
+      认得"的钱 —— 也就是 `llm_call.usd` 合计减掉各趟 `spend_usd` 合计。它回答的是
+      "那批没人认领的调用去哪了"，**不许摊进任何一趟**（81 上那 80 条 / $0.136779
+      就在这一格里，而不是被某一趟的 `usd` 吃掉）。会话文件不在盘上时它是 `null`
+      （"没查成"，不是"0 元没人认领"）。
+
+    为什么 `same_run_spend_usd` 仍然读 `usd`（事件求和）而不是 `spend_usd`（162 ② 之后
+    行里两格都有）：那一格的全部意义是"**另一个来源**算出来的同一个数"。把它换成
+    `spend_usd`，它就与检查点那一格同源（都是这一趟自己的缝），那张并排卡从此永远绿 ——
+    而它是这个数唯一的独立交叉验证。
 
     为什么要有这两格（此前页面拿"整段会话每一趟之和"去比"一份检查点"）：会话跑过
     两趟、或跑过子代理时两者结构上必然不等，于是页面恒挂一条红徽标"两处不一致"，
@@ -537,7 +547,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
                 "checkpoint": None, "checkpoint_reason": "", "path": str(path),
                 "checkpoint_role": "", "checkpoint_spend_usd": None,
                 "same_run_spend_usd": None, "same_run_unknown_usd": 0,
-                "same_run_start_index": None}
+                "same_run_start_index": None, "unattributed_usd": None}
     events, bad = SS.read_session(root_p, sid=sid)
     runs = SS.runs_in_session(events, sid=sid)
     rstatus, rtext = _read_report(root_p)
@@ -4017,7 +4027,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("checkpoint_spend_usd", "number | null"),
       ("same_run_spend_usd", "number | null"),
       ("same_run_unknown_usd", "number"),
-      ("same_run_start_index", "number | null"))),
+      ("same_run_start_index", "number | null"),
+      # 162 ②：这一格里放的是"事件流有、没有任何一趟的自报账认得"的钱。它不进任何一趟的
+      # `usd`（三态纪律：不许把一个没有主人的数摊给某一个主人）。
+      ("unattributed_usd", "number | null"))),
     ("EventRow",
      "run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/"
      "`end_index` 同一套编号：解析成功后的事件列表下标，0 起）",
@@ -4732,13 +4745,34 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
             for name, _source, fields in _TS_TYPES}
 
 
-#: `RunRow` 的 20 个键（`draft/75 §1.3` 的 C3 表；`webui/state.py:_scan` 与
-#: `sessions.runs_in_session` 逐字同形）。`RunRow` 那个接口由 A 线的 `state.py` 声明，
+#: `RunRow` 的 22 个键（`draft/75 §1.3` 的 C3 表 + 162 的花销两格；`webui/state.py:_scan`
+#: 与 `sessions.runs_in_session` 逐字同形）。`RunRow` 那个接口由 A 线的 `state.py` 声明，
 #: 所以这里的键名只能自己列一份 —— 判据 `test_the_run_row_keys_match_sessions`
 #: 会断言这一份与 `sessions.runs_in_session` 真给出的键集合相同（漂移当场红）。
+#:
+#: ## 162 ②：`spend_usd` / `spend_unknown_usd_calls` 加进来，而 `usd` 不换
+#:
+#: 改前这一行只有一格钱（`usd` = 把**归到这一趟的** `llm_call.usd` 加起来）。而收工那
+#: 一行自己带着这一趟的账（`agent_run_end.spend`，写侧是 `agent_loop.py` 的收工事件、
+#: 形状是 `llmseam.SeamSpend.to_dict()` 的 5 格）。两处数的不是同一件事：
+#:
+#: - `usd`：**事件流**求和。空 `task_id` 的调用按 role 猜主人（`_owner_of` 的 ② 档），
+#:   多代理交错时会算到别家头上；81 上 71 趟里 18 趟与自己的收工行有小数差
+#:   （合计 5.728771 vs 5.678979，差 $0.049792）。
+#: - `spend_usd`：**这一趟自己的缝**记的账。它不看 `task_id`，所以它天然认得
+#:   "自己发出的、事件里没记编号"的调用 —— 那正是事件求和漏掉/抢走的那部分。
+#:
+#: 为什么**两个都给**而不是拿 `spend_usd` 顶替 `usd`：`webui.readers.run_view` 的
+#: `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
+#: 而 `usd`（事件求和）是这个数**唯一**的独立第二读数。换掉它，那一栏就变成
+#: "同一个来源的两次抄写"，从此永远绿 —— 那张卡的全部意义就没了。
+#:
+#: 三态：`spend_usd` / `spend_unknown_usd_calls` 在没有收工行（`end_index is None`）
+#: 时是 **`None`，不是 `0`** —— "这一趟没写收工行"与"这一趟花了 0 元"是两件事。
 RUN_ROW_KEYS: tuple[str, ...] = (
     "sid", "role", "task", "start_index", "start_ts", "steps", "llm_calls", "usd",
-    "unknown_usd", "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
+    "unknown_usd", "spend_usd", "spend_unknown_usd_calls",
+    "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
     "last_shape", "end_index", "end_ts", "waiting_on", "waiting", "events_in_run",
 )
 

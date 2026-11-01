@@ -66,6 +66,7 @@ export interface SessionRow {
   pending: number;
   runs: number;
   orphans: number;
+  unattributed_usd: number | null;
 }
 
 /** 出处：snapshot() 的 `pending_questions[]` —— 一条待答问题（全局，不按会话过滤）。 */
@@ -92,6 +93,8 @@ export interface RunRow {
   llm_calls: number;
   usd: number | null;
   unknown_usd: number;
+  spend_usd: number | null;
+  spend_unknown_usd_calls: number | null;
   stop_reason: string;
   final_chars: number | null;
   summons: number | null;
@@ -230,6 +233,7 @@ export interface RunView {
   same_run_spend_usd: number | null;
   same_run_unknown_usd: number;
   same_run_start_index: number | null;
+  unattributed_usd: number | null;
 }
 
 /** 出处：run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/`end_index` 同一套编号：解析成功后的事件列表下标，0 起）。 */

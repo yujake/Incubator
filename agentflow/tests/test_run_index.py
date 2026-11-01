@@ -10,6 +10,9 @@
 | `test_an_absent_index_is_unreadable_not_computed` | 负控（三态） | 索引不在盘上 | `tri=unreadable`，不是 `computed` |
 | `test_an_empty_workspace_is_not_applicable` | 负控（三态） | 一场会话都没有 | `tri=not_applicable` |
 | `test_the_event_kind_constants_match_userio` | 反真空 | 字面量与 `userio` 的常量 | 相等 |
+| `test_the_run_line_reports_its_own_spend_without_replacing_the_event_sum` | 正控（162 ②） | 三趟：spend 齐 / spend 缺一格 / 没有收工行 | 两个数并存；缺格与无收工行各是 `None` |
+| `test_unattributed_usd_answers_where_the_unowned_calls_went` | 正控（162 ②） | 一条秘书调用谁都不认领 | 会话级那一格 = 0.9，逐趟 `usd` 一格都不吃它 |
+| `test_unattributed_usd_is_zero_when_every_call_has_a_claim` | 反真空（162 ②） | 每一分钱都有自报账认领 | 那一格是真 `0.0`；会话不在盘上才是 `None` |
 ## 名字的边界（不许混用）
 这里的「趟次」是会话内的第几趟（一条 `agent_run_start` → `agent_run_end`）。`projects.py` 的 `run_index: int` 是"这个项目第几趟"（配 `out/run-<n>`）
 ——另一个概念，本文件一个字都不碰它（`draft/78 §7` 的提醒）。
@@ -24,6 +27,8 @@ import pathlib
 
 from agentflow import sessions as SS
 from agentflow import userio as U
+from agentflow.webui import readers as R
+from agentflow.webui import state as W
 
 #: 固定时间戳（与 `tests/conftest.py` 的口径一致：判据不依赖当前时间）。
 TS = "2026-01-01T00:00:00+00:00"
@@ -114,6 +119,121 @@ def test_a_pending_question_lands_on_the_run_that_waits_for_it(
     U.answer_question(root, qid=out.qid, selected=("保留",), sid="s-q")
     runs2 = SS.compute_run_index(root)["sessions"]["s-q"]["runs"]
     assert runs2[0]["waiting_on"] == [] and runs2[0]["waiting"] is False, runs2
+
+
+# ====================================================================== 162 ② 花销两格
+def _spend_ws(root: pathlib.Path) -> None:
+    """一场会话三趟：闭合且 spend 齐 / 闭合但 spend 缺一格 / 没有收工行。"""
+    A = SS.append
+    sid = "s-spend"
+    A(root, {"kind": "agent_run_start", "role": "M", "task": "父", "task_id": "t-000001",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "M", "task_id": "t-000001", "ok": True,
+             "usd": 0.25, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "M", "task_id": "t-000001",
+             "stop_reason": "final", "steps": 1,
+             "spend": {"calls": 1, "usd": 0.25, "unknown_usd_calls": 0}, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_start", "role": "D", "task": "子", "task_id": "t-000002",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "D", "task_id": "t-000002", "ok": True,
+             "usd": 0.2, "ts": TS}, sid=sid)
+    # 空编号：按 role 归到 D 那一趟，且它算不出价钱 ⇒ unknown_usd 进一格
+    A(root, {"kind": "llm_call", "role": "D", "ok": False, "usd": None, "ts": TS}, sid=sid)
+    # 收工行**缺 `unknown_usd_calls` 这一格**（老数据 / 夹具会长成这样）
+    A(root, {"kind": "agent_run_end", "role": "D", "task_id": "t-000002",
+             "stop_reason": "final", "steps": 1,
+             "spend": {"calls": 2, "usd": 0.7}, "ts": TS}, sid=sid)
+    # 没有收工行的一趟：按定义没有自报账
+    A(root, {"kind": "agent_run_start", "role": "E", "task": "没写完", "task_id": "t-000003",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "E", "task_id": "t-000003", "ok": True,
+             "usd": 0.5, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_start", "role": "F", "task": "也没写完", "task_id": "t-000004",
+             "ts": TS}, sid=sid)
+    # 秘书在轮次里发的一次调用：role 与任何一趟都对不上、又没有编号 ⇒ 谁都不认领。
+    # 此刻开着两趟 ⇒ 也不会被"只剩一趟"那一档兜走（那正是它该被丢掉的形态）。
+    A(root, {"kind": "llm_call", "role": "secretary:B", "ok": True, "usd": 0.9, "ts": TS},
+      sid=sid)
+
+
+def test_the_run_line_reports_its_own_spend_without_replacing_the_event_sum(
+        tmp_path: pathlib.Path) -> None:
+    """正控（162 ②）：收工行自报单独成格，`usd` 仍是事件求和 —— 两个数都留着。
+
+    三态逐档钉住：`spend` 齐 ⇒ 两个数；`spend` 缺一格 ⇒ 那一格是 `None`（不是 0）；
+    没有收工行 ⇒ 两格都是 `None`（"没写收工行"与"花了 0 元"是两件事）。
+
+    为什么 `usd` 不许被顶替：`readers.run_view` 的 `same_run_spend_usd`（页面那张
+    "同一趟的两个来源并排"）读的就是它 —— 那是这个数唯一的独立第二读数。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _spend_ws(root)
+    runs = SS.runs_in_session(SS.read_session(root, sid="s-spend")[0], sid="s-spend")
+    assert [r["task_id"] for r in runs] == ["t-000001", "t-000002", "t-000003", "t-000004"], runs
+
+    first, second, third = runs[0], runs[1], runs[2]
+    # ① 齐的那一趟：事件求和与自报账都在，且各自是各自的口径
+    assert (first["usd"], first["unknown_usd"]) == (0.25, 0), first
+    assert (first["spend_usd"], first["spend_unknown_usd_calls"]) == (0.25, 0), first
+    # ② 缺 `unknown_usd_calls` 的那一趟：缺的那一格是 None（不是 0），`usd` 不被顶替
+    assert (second["usd"], second["unknown_usd"]) == (0.2, 1), second
+    assert second["spend_usd"] == 0.7, second
+    assert second["spend_unknown_usd_calls"] is None, \
+        f"收工行缺 unknown_usd_calls ⇒ 那一格必须是 None（不是 0）：{second}"
+    # ③ 没有收工行的那一趟：两格都是 None
+    assert third["spend_usd"] is None and third["spend_unknown_usd_calls"] is None, third
+    assert third["usd"] == 0.5, "没有收工行不等于没有事件求和"
+
+
+def test_unattributed_usd_answers_where_the_unowned_calls_went(
+        tmp_path: pathlib.Path) -> None:
+    """正控（162 ②）：没人认领的那笔钱有一格回答，且**没有**摊进任何一趟。
+
+    改前的形态是：空 `task_id` 的调用按 role 硬塞给"同角色最近那一趟"，于是
+    81 上 71 趟里 18 趟与自己的收工行有小数差（合计 +$0.049792）。现在它有一个
+    自己的落点 —— 会话级 `unattributed_usd` —— 而逐趟的 `usd` 一个字节都不许吃它。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _spend_ws(root)
+    events, _bad = SS.read_session(root, sid="s-spend")
+    runs = SS.runs_in_session(events, sid="s-spend")
+
+    # 事件流合计 = 0.25 + 0.2 + 0.5 + 0.9（那条 usd=None 的调用贡献 0）；
+    # 各趟自报账合计 = 0.25 + 0.7（没有收工行的那两趟没有自报数）。
+    assert SS.unattributed_usd_of(events, runs) == 0.9, SS.unattributed_usd_of(events, runs)
+    # 它没有摊进任何一趟（改前的形态是"某一趟的 usd 里多出 0.9"）
+    assert max(float(r["usd"] or 0.0) for r in runs) == 0.5, [r["usd"] for r in runs]
+    # 会话行那一格（`/api/state` 的 sessions[]）也读得到，且是同一个数
+    snap = W.snapshot(root)
+    row = [s for s in snap["sessions"] if s["sid"] == "s-spend"][0]
+    assert row["unattributed_usd"] == 0.9, row
+    # `/api/run/{sid}` 那一面同样给这一格
+    assert R.run_view(root, "s-spend")["unattributed_usd"] == 0.9
+
+
+def test_unattributed_usd_is_zero_when_every_call_has_a_claim(
+        tmp_path: pathlib.Path) -> None:
+    """反真空（162 ②）：每一分钱都有某趟的自报账认领时，这一格是 `0.0`（真的 0），
+    而不是"没算"—— `None` 只留给"没查成"（会话文件不在盘上那一档）。"""
+    root = tmp_path / "ws"
+    root.mkdir()
+    A = SS.append
+    sid = "s-claimed"
+    A(root, {"kind": "agent_run_start", "role": "M", "task": "一趟", "task_id": "t-000001",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "M", "task_id": "t-000001", "ok": True,
+             "usd": 0.125, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "M", "task_id": "t-000001",
+             "stop_reason": "final", "steps": 1,
+             "spend": {"calls": 1, "usd": 0.125, "unknown_usd_calls": 0}, "ts": TS}, sid=sid)
+    events, _bad = SS.read_session(root, sid=sid)
+    runs = SS.runs_in_session(events, sid=sid)
+    assert SS.unattributed_usd_of(events, runs) == 0.0
+    assert W.snapshot(root)["sessions"][0]["unattributed_usd"] == 0.0
+    # 会话文件不在盘上 ⇒ `None`（没查成，不是 0）
+    assert R.run_view(root, "s-not-there")["unattributed_usd"] is None
 
 
 # ====================================================================== 负控 ① 手改索引

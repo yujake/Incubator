@@ -664,7 +664,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("events_listed", "number | null"), ("bad_lines", "number"),
       ("first_ts", "string"), ("last_ts", "string"), ("last_kind", "string"),
       ("last_seq", "number"), ("pending", "number"), ("runs", "number"),
-      ("orphans", "number"))),
+      ("orphans", "number"),
+      # 162 ②：这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱
+      # （= `llm_call.usd` 合计 − 各趟 `spend_usd` 合计）。会话文件读不出来时是 `null`。
+      ("unattributed_usd", "number | null"))),
     ("PendingQuestion",
      "snapshot() 的 `pending_questions[]` —— 一条待答问题（全局，不按会话过滤）",
      (("qid", "string"), ("sid", "string"), ("role", "string"), ("ts", "string"),
@@ -675,6 +678,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("sid", "string"), ("role", "string"), ("task", "string"),
       ("start_index", "number"), ("start_ts", "string"), ("steps", "number"),
       ("llm_calls", "number"), ("usd", "number | null"), ("unknown_usd", "number"),
+      # 162 ②：收工那一行自己报的账（`agent_run_end.spend`）。**不顶替 `usd`** ——
+      # `usd` 是事件求和，是同一趟的另一个来源（`readers.run_view` 的并排卡靠它）。
+      # 没有收工行 ⇒ 两格都是 `null`（不是 0）。
+      ("spend_usd", "number | null"), ("spend_unknown_usd_calls", "number | null"),
       ("stop_reason", "string"), ("final_chars", "number | null"),
       ("summons", "number | null"), ("messages", "number | null"),
       ("elapsed_sec", "number | null"), ("last_shape", "string"),
