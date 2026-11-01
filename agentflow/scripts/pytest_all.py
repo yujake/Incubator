@@ -571,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"  # 只为日志解码；不覆盖 PYTHONPATH、不改 PYTHONUTF8
     started = time.monotonic()
-    started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    run_started_at = time.strftime("%Y-%m-%d %H:%M:%S")
     results: dict[int, ChunkResult] = {}
     pending: dict[int, tuple[subprocess.Popen[bytes], object, Path, list[str], float]] = {}
 
@@ -615,14 +615,14 @@ def main(argv: list[str] | None = None) -> int:
     while pending:
         now = time.monotonic()
         for index in list(pending):
-            process, handle, log_path, argv, started_at = pending[index]
+            process, handle, log_path, argv, chunk_started = pending[index]
             rc = process.poll()
             if rc is None:
                 continue
             del pending[index]
             process.wait()
             handle.close()  # type: ignore[union-attr]
-            seconds = round(time.monotonic() - started_at, 1)
+            seconds = round(time.monotonic() - chunk_started, 1)
             result = read_chunk(
                 index, rc, log_path, plan[index].files, argv, seconds,
                 log_label=_relative(root, log_path),
@@ -631,13 +631,13 @@ def main(argv: list[str] | None = None) -> int:
             print(_chunk_line(result), flush=True)
 
         for index in list(pending):
-            process, handle, log_path, argv, started_at = pending[index]
-            if args.timeout_sec is not None and now - started_at > args.timeout_sec:
+            process, handle, log_path, argv, chunk_started = pending[index]
+            if args.timeout_sec is not None and now - chunk_started > args.timeout_sec:
                 del pending[index]
                 process.kill()
                 process.wait()
                 handle.close()  # type: ignore[union-attr]
-                seconds = round(time.monotonic() - started_at, 1)
+                seconds = round(time.monotonic() - chunk_started, 1)
                 result = read_chunk(
                     index, None, log_path, plan[index].files, argv, seconds,
                     status="timeout",
@@ -650,11 +650,11 @@ def main(argv: list[str] | None = None) -> int:
         if pending and _log_bytes(run_dir) > MAX_LOG_BYTES:
             log_cap_hit = True
             for index in list(pending):
-                process, handle, log_path, argv, started_at = pending.pop(index)
+                process, handle, log_path, argv, chunk_started = pending.pop(index)
                 process.kill()
                 process.wait()
                 handle.close()  # type: ignore[union-attr]
-                seconds = round(time.monotonic() - started_at, 1)
+                seconds = round(time.monotonic() - chunk_started, 1)
                 result = read_chunk(
                     index, None, log_path, plan[index].files, argv, seconds,
                     status="log-budget",
@@ -684,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": 1,
         "run_id": run_dir.name,
         "root": str(root),
-        "started_at": started_at,
+        "started_at": run_started_at,
         "wall_seconds": wall,
         "jobs_requested": requested,
         "jobs": jobs,
