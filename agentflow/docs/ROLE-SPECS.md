@@ -328,6 +328,26 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 判据 | `tests/test_webui{,_contracts,_help_is_current,_ledger_counts_writes,_live_names_the_host_process,_pages,_pending_is_one_list,_readers,_readings_format,_roster_panel,_settings_write,_sse,_static,_writes,_browser}.py`，**15** 个文件 | `(Get-ChildItem tests/test_webui*.py).Count` |
 | 已知边界 | 原始七层出处的 `draft/35` **没有这一层**（后加）；`draft/114` 记的是"九页 / 十条只读面 / 五条写端点"（**当次读数，未复跑**） | — |
 
+### 0.9 官能轻重：`specs/<角色>.py::SPEC.emphasis` 是唯一真身
+
+十项官能在每个角色上的轻重（`core` 主战 / `minor` 有但不主战 / `denied` 结构上不许）只在
+`src/agentflow/specs/<角色>.py` 的 `SPEC.emphasis` 里写一次。同值的还有两份，**都不是真身**：
+`agent_prompts.FACULTY_EMPHASIS` 是发布副本（`tests/test_agent_spec_reconciliation.py` 逐格
+比对），`docs/ROLE-GUIDE.md` 是 `tools/write_system_docs.py` 的生成物。三处说法不一致时，
+**以 `specs/` 为准**，改其余两处。
+
+「手」这一档量的是「这一岗的主战场是不是自己动手产出」，**不是**「工具面上有几件
+`write_local`」—— 官能档位与工具面件数是两根轴，不能拿来互相反推。E 与 L 是 `core`
+（E 落实验与脚本、L 落 Lean 源码），H 是 `denied`（**数据面**写是结构禁止的；它自己侧那
+四件登记的落库代理与簿记不在这一档里，见 §H.8），V 是 `minor`（产物是一份文件而不是一张表，
+见 §V.8）。E / H / L 三家的档位本身没有不一致 —— 复跑：
+
+```powershell
+python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_prompts as AP;from agentflow.specs import builtin_specs as B;sp=B();print({r:{k:(dict(sp[r].emphasis)[k],AP.FACULTY_EMPHASIS[r][k]) for k in sp[r].emphasis if dict(sp[r].emphasis)[k]!=AP.FACULTY_EMPHASIS[r][k]} for r in sp})"
+```
+
+每一格都是空字典 ⇒ 两处逐格相同。
+
 ---
 
 ## R0. 全局工具总表（123 个，逐条；Lean 关着时 120 个 —— 三件 `formal.*` 不装配）
@@ -742,13 +762,11 @@ B 的"没有结果"逐个列：
 
 ### C.1 一句话定位
 
-**C 把三张知识表变成可读的结构结论**，且**全量只读**。
+**C 把三张知识表变成可读的结构结论**，且**对其它智能体的产出全量只读**（自己的产出照写，见下）。
 它回答：**"这张关系图长什么样？哪里是热点、哪里是空洞、哪两条路径最值得下钻？"**
 
-**C 也是"只读但确实会写自己的产出表"的角色之一**（另一处是 H 的 `review_findings` / `documents.status`；`capabilities.WRITE_SETS["C"] = {"analysis_reports", "search_requests"}`）。
-这不是冲突：`analysis_reports` 是 C 写**它自己说过什么**（`AnalysisReport.persist`，`agent_c.AnalysisReport.persist`）；
-`search_requests` 是 I3 直连那条通道（`handle` 分派需求时直接建检索请求行）—— **两条都是只读角色的显式登记例外**，真身是 `specs/c.py` 的 `write_set`；
-它**一行 `statements`/`relations` 都不碰**。
+**C 是只读角色 —— 口径是「对其它智能体的产出只读；自己侧的产物可写」**（业主 2026-11-01 的定义；同一口径写在 `specs/c.py` 的 `boundary` 与 `docs/ROLE-GUIDE.md`）：`capabilities.WRITE_SETS["C"] = {"analysis_reports", "search_requests"}` —— `analysis_reports` 是 C 写**它自己说过什么**（`AnalysisReport.persist`，`agent_c.AnalysisReport.persist`）；`search_requests` 是 I3 直连那条通道（`handle` 分派需求时直接建检索请求行）—— **两条都是只读角色的显式登记例外**（`capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]`），真身是 `specs/c.py` 的 `write_set`；
+它**一行 `statements`/`relations` 都不碰**。工具面上的写工具也全部落在自己侧的产物与簿记上（逐件见 §C.8）。
 
 ### C.2 职责
 
@@ -827,11 +845,15 @@ C 的产出有两类，状态语义完全不同。
 - 报告 markdown 文件存在。
 - 报告行 ID 唯一。
 - 数组字段已声明。
-- **C 不能写知识表**。
-- **C 的工具面 1 个写工具**，且是**逐条登记的例外**：`analysis.register_report`
+- **C 不能写知识表**（`statements` / `relations` / `literature` 零写入点）。
+- **C 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：工具面上的
+  `write_local` 全部是自己侧的产物与簿记 —— `analysis.register_report`
   （`tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['C']`，写面钉死在 `analysis_reports`
-  一张表）—— 除了它，`for_role("C")` 拿不到任何 `write_local` 工具。
-  > 旧文写"0 个写工具"是 2026-10-18 之前的口径（业主那次裁定加了 C 的产出登记通道）。
+  一张表）+ 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`（`UNIVERSAL_TOOLS`，
+  只写通信与簿记）；另有一条登记例外：调用方开 `submit_requests=true` 时 `graph.gaps` 写
+  `search_requests`（那件声明 `read`，不在 `write_local` 里）。
+  > 旧文写"1 个写工具 / 拿不到任何 `write_local`"是**通用写工具（`UNIVERSAL_TOOLS`）进册
+  > 之前**的读数（那之后那两句按字面就不成立了）。自己侧的逐件清单以附录 §C.8 的现读为准。
 - **C 不召唤任何角色**（`ALLOWED_EDGES["C"] = frozenset()`，2026-10-20 业主裁定：
   改回 C 无出边、由 D 唤起 C）—— 它的报告随返回值交给派它的人，不需要一条出边。
 
@@ -1215,6 +1237,13 @@ C 的产出有两类，状态语义完全不同。
   - `attack_plans` → **D**（`attack.status`）、**G**（写稿读攻坚结论）、**H**（核对 `stalled` 有没有谎报成 `resolved`）
   - `search_requests` / `reprocess_requests`（F 提交的）→ **A** / **B**
   - `experiments`（经 E）→ **G** / **H**
+- **已知缺口（2026-11-02 查证，本轮不改）**：`agent_f.manuscript.dependency_rows` 的
+  `path_group` **恒为 `1`** —— 这不是算错，是口径缺口：F 的产物 schema
+  （`attackround.PRODUCT_SPECS["proof"]`）只有 `steps[{text, cites, assumption}]`，没有
+  「第几条证明」这一维，`agent_f` 里也 0 处 `proof_no` ⇒ 这个数在 F 这一侧**没有来源**；
+  要修得给产物与提示词加一维（改结构），不是改一行。手写的四列表那一侧是好的：B 读
+  `depsection.parse_dependency_section` 时按路径号 1..N 落 `used_by="stmt:<号>#pN"`，
+  多证明机制在 B / C 那一侧照常成立。
 
 ### F.10 自检入口
 
@@ -1356,13 +1385,14 @@ C 的产出有两类，状态语义完全不同。
 
 ### H.1 一句话定位
 
-**H 产出"发现"，且发现本身必须有证据**，并且**只读**。
+**H 产出"发现"，且发现本身必须有证据**，并且**对其它智能体的产出只读**。
 它回答：**"这份稿件有没有不合格的地方？改过之后真的改好了吗？"**
 
-**H 也是"能写，但只写两样东西"的只读角色**（另一处是 C：`analysis_reports` / `search_requests`）：`review_findings`（自己的发现）
-与 `documents.status`（只改状态，**改不了任何一句断言**）。
-`capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]` 逐字登记了这个例外
-（`capabilities.READ_ONLY_WRITE_EXCEPTIONS`）。
+**H 是只读角色 —— 口径是「对其它智能体的产出只读；自己侧的产物可写」**（业主 2026-11-01 的定义；同一口径写在 `specs/h.py` 的 `boundary` 与 `docs/ROLE-GUIDE.md`）：自己侧的产物是 `review_findings`（自己的发现）
+与 `documents.status`（只改状态，**改不了任何一句断言**），落库走四件**登记过的代理**
+（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）。
+表级例外由 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]` 逐字登记，工具级由
+`tools/base.py` 的 `READONLY_CALL_EXCEPTIONS["H"]` 逐条登记。
 
 ### H.2 职责
 
@@ -1446,8 +1476,11 @@ C 的产出有两类，状态语义完全不同。
 - `accepted` 稿件不得有 open error。
 - `proof` 断言的依赖闭合（H 是复核方）。
 - 证据等级不得过度声称。
-- **H 的写面只有 4 件已登记的落库代理**（`review.review_document` / `review.verify_fixes` /
-  `review.report` / `review.record_finding`）。
+- **H 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：自己侧的产物是
+  那 4 件已登记的落库代理（`review.review_document` / `review.verify_fixes` /
+  `review.report` / `review.record_finding`），簿记是 7 件 `clock.*` +
+  `conductor.ack` / `conductor.post_task` —— 工具面上的 `write_local` 全在这两侧，
+  `fs.*` / `table.*` 写工具一件都没有（逐件清单见附录 §H.8 的现读）。
 - **H 只召唤 `A E G`**。
 
 ### H.9 接口
@@ -1478,8 +1511,10 @@ C 的产出有两类，状态语义完全不同。
 **签不在 V 手上**：发签由它的秘书判定并落盘（`out/vsigns/<被审正文的 sha>.json`，一稿一签）；V 只把结论写进台账那一行。
 它回答：**"这份证明站不站得住？站不住的是哪一步？"**
 
-**V 是唯一"能写，但写的是一个文件、不是一张表"的角色**：唯一的产物是
-`<工作区>/verifications/<命题号>.jsonl`（追加式，一行 = 一次审校）。
+**V 是只读角色 —— 口径是「对其它智能体的产出只读；自己侧的产物可写」**（业主 2026-11-01 的定义；同一口径写在 `specs/v.py` 的 `boundary` 与 `docs/ROLE-GUIDE.md`）。自己侧的产物是一个**文件**而不是一张表：
+`<工作区>/verifications/<命题号>.jsonl`（追加式，一行 = 一次审校），以及签的侧文件
+`out/vsigns/<被审正文的 sha>.json`（后者由框架侧的签发判定落盘）；簿记是 7 件 `clock.*` +
+`conductor.ack` / `conductor.post_task`。
 `capabilities.WRITE_SETS["V"] == frozenset()`（空集）与 `tools.READ_ONLY_ROLES = ("C","H","V")`
 一起说这件事：**在"会写哪几张表"这根轴上是只读的，而它确实要落一样东西** ——
 两者不矛盾，只是分处两根轴（`schema.TABLES` 是 **17** 张，V 一张都没加）。
@@ -1503,7 +1538,7 @@ C 的产出有两类，状态语义完全不同。
 | **写、改证明的任何一句** | V 是判定者："你是判定者，你的产出只有一个两态结论与逐条 findings"（`specs/v.py` 的 `local_notes['敢创新']` 逐字）；能改稿的人不能同时是判它过没过的人 | **F** |
 | 判"这条命题值不值得做、下一步往哪儿走" | 那是**方向判断**，不是证明判断；V 的官能表里 `敢创新` 是 `denied` | **D** |
 | 稿件级正式审查（体例 / 引用是否得当 / 依赖闭合） | 那是**五元位第 5 位**，owner 是 H；V 只看证明本身 | **H** |
-| 写任何一张表 | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 的结构性剥离把它拿到的写工具全剥掉 | **B / D / E / G**（各自的写面） |
+| 写任何一张表 | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 把 `fs.*` / `table.*` 一类写工具剥掉，留下的 9 件 `write_local` 全是自己侧的簿记（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）；产物那一份文件由 `verify.verify_proof` 落（见 §V.8） | **B / D / E / G**（各自的写面） |
 | 自己补证据、自己提新方向 | 引用到"不干净的命题"时，缺陷**沿依赖边上溯**并如实报出 —— 修是 F/D 的事 | **F**（改证明）/ **D**（改方向） |
 | 拿"看不出来"冒充"审过了" | 它不是两态之外的第三个结论：判不出来 = 没找到缺陷 ⇒ 按「成立」收；缺材料那一档是**没查成**（不落行、如实报），两件事不许折平 | —（结构性禁止） |
 | 靠"再问 F 一句"补齐判断所需的信息 | 那会把冷启动绕过去；判不出来就是没找到缺陷 ⇒ 按「成立」收（没有第三个词可以拿来当退路） | — |
@@ -1550,7 +1585,7 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.8 不变式
 
-- **V 对其它智能体的产出只读**：别人的台账一张表都不写；自己侧的写工具是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`（簿记），产物是 `verifications/<号>.jsonl` 与签的侧文件。
+- **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：别人的台账一张表都不写；自己侧的产物是 `verifications/<号>.jsonl` 与签的侧文件，写工具是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`（簿记，工具面共 9 件 `write_local`）。
 - **输出不合法绝不落台账行**。
 - **台账只追加、编号由脚本发**。
 - **第 3 位只在 `成立` 且无未解决 error 时被签**。

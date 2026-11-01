@@ -214,7 +214,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 **逐件清单（按模块，共 40）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `evidence_for` `list_experiments` `run_experiment`）。
 
-> **`verify.check_formal` 不在 E 的工具面里**：它的 `roles` 现读是**空集**（形式化入口归 L 的 `formal.check_formal`），E 自己的 Lean 侧写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF`，受控拒绝码 `formal_moved_to_l`）。E 的写面只有 `experiments` 一张表。
+> **`verify.check_formal` 不在工具面上**：它在 2026-10-23 那批里被**整条删除**（不是把 `roles` 收成空集），形式化入口归 L 的 `formal.check_formal`。E 自己的形式化那一支也已摘掉：`run_experiment(method="formal")` 以受控拒绝码 `formal_not_in_e`（`agent_e._support.E_NO_FORMAL_REASON`）拒绝；`formal_moved_to_l` 只是词表里的历史码，E 今天不再产出它。E 的**表级**写面只有 `experiments` 一张（`capabilities.WRITE_SETS`；工具面上的 `write_local` 件数见本节上面那五格）。
 
 **E 拿不到**：另 83 件 —— `analysis.*` 1（`register_report`） · `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `conductor.*` 19 · `conjecture.*` 1（`register_conjecture`） · `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `formal.*` 3（`check_formal` `formalize` `record`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 8（`list_findings` `record_finding` `report` `review_document` `scan` `scan_document` `scan_text_integrity` `verify_fixes`） · `search.*` 10 · `text.*` 1（`extract`） · `trace.*` 4（`chain` `concept` `literature` `relation`） · `verify.*` 4（`detect_verifier` `list_verifications` `read_proof` `verify_proof`）（逐件见正文 §R0 全表；本节只给条数）。
 
@@ -600,7 +600,7 @@ C 的产出有两类，状态语义完全不同。
 | 报告行 ID 唯一 | `duplicate_id` | error |
 | 数组字段已声明 | `undeclared_array_field` | error |
 | **C 不能写知识表** | 由 `capabilities.assert_capabilities()` 的**只读角色写集例外**断言保证（`capabilities.assert_capabilities`） | 导入期 `AssertionError` |
-| **C 的工具面 1 个写工具**（`analysis.register_report`，READONLY_CALL_EXCEPTIONS['C'] 逐条登记） | `tools.base.ToolRegistry.for_role` 结构性剥离 + `role_filter_notes` 留痕 | 实测 1（2026-10-20） |
+| **C 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义） | 自己侧：`analysis.register_report`（`READONLY_CALL_EXCEPTIONS['C']`）+ 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`；`for_role` 只剥 `fs.*` / `table.*` 一类 | 实测 10 件 `write_local`（2026-11-02 现读） |
 | **C 不召唤任何角色**（它的汇报 = 返回值） | `ALLOWED_EDGES["C"] == frozenset()`（`capabilities.ALLOWED_EDGES`；2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C） | 静态表 |
 
 ### C.7 [附录·实测] 下沉明细
@@ -881,7 +881,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 | `accepted` 稿件不得有 open error | `accepted_with_open_error` | error |
 | `proof` 断言的依赖闭合（H 是复核方） | `proof_claim_with_unclosed_dependency` / `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency` | error |
 | 证据等级不得过度声称 | `overclaim` / `proof_claim_rests_on_weaker_evidence` | error |
-| **H 的写面只有 4 件已登记的落库代理** | `READONLY_CALL_EXCEPTIONS['H']`（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）+ `for_role` 把其余写工具结构性剥离 | 实测 4 件 `write_local`（声明面）/ 0 件（`fs.*`/`table.*` 写工具） |
+| **H 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义） | 自己侧的产物：4 件登记的落库代理（`READONLY_CALL_EXCEPTIONS['H']`：`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）+ 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`；`for_role` 只剥 `fs.*` / `table.*` 一类 | 实测 13 件 `write_local`（2026-11-02 现读）/ 0 件（`fs.*` / `table.*` 写工具） |
 | **H 只召唤 `A E G`** | `ALLOWED_EDGES["H"] == {"A","E","G"}` | 静态表 |
 
 ### H.7 [附录·实测] 下沉明细
@@ -913,7 +913,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 | 不变式 | 检查项名 / 判据 | 级别 |
 |---|---|---|
-| **V 的工具面 0 个写工具** | `for_role("V")` 结构性剥离 + `tools.READ_ONLY_ROLES` 里的 `"V"` | 实测 0（2026-10-21 现读：`{'C': ['analysis.register_report'], 'H': ['review.review_document','review.verify_fixes','review.report','review.record_finding'], 'V': []}` ⇒ V 一栏是空的） |
+| **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义） | 自己侧的产物是 `verifications/<命题号>.jsonl`（由 `verify.verify_proof` 落）与签的侧文件；簿记是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`；`for_role("V")` 只剥 `fs.*` / `table.*` 一类 | 实测 9 件 `write_local`（2026-11-02 现读：7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）/ 0 件 `fs.*` / `table.*` 写工具 |
 | **输出不合法绝不落台账行** | `verifications.parse_verdict` 抛 `VerificationError` ⇒ `record_verification` 不写行 | 自检 `[PASS] 没查成不落行` |
 | **台账只追加、编号由脚本发** | `v-{S.format_id(len(rows) + 1)}`（六位，与手稿编号、台账 id 同一套做法） | 自检 `[PASS] 编号从 v-000001 起（六位；旧四位号读侧兼容）` —— **2026-10-18 修复轮后转绿**；采集当天红在写死四位的断言上（F-5，判为断言过期） |
 | **第 3 位只在 `成立` 且无未解决 error 时被签** | `verifications.signs_bit3` / `bit3_payload`（签不了 ⇒ 返回 `{}`：**"没签"不是"忘了写"**） | 自检 `[PASS] 成立才签第 3 位` / `[PASS] 有毛病不签第 3 位` |
