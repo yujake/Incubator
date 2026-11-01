@@ -10457,6 +10457,38 @@ class AgentLoop:
                                detail=("还在跑：本步先不等（可抢占）。它回来之后结论会在"
                                        "你下一次被问之前以【子代理返场】投给你 —— "
                                        "不要因为 status=running 就重派；收工会被拒到它回齐"))
+                    # ---- 名册读数不许随这一支丢掉（`draft/160` 二-2，丙案第 3 点）
+                    #
+                    # 登记发生在 `summon_begin` 的 [5b]（子代理跑起来之前），所以"登记成没成"
+                    # 在这一刻已经有值（`SummonHandle.roster_reading` 就是它）。改前这里直接
+                    # return，名册两格只在"孩子落定之后"那一条路上才交回 —— 而真机上绝大多数
+                    # 派活落在这条早返支（81 趟实测：2419 个 `agent_step` 只有 9 个带任何
+                    # `roster_*` 键；`t-000106` 被 `name_taken` 拒的那一步一个都没有）。
+                    # 收工门的 `roster_registration` 数的正是这一格 ⇒ 丢了它，"名册有 N 处
+                    # 没登记"这个已有读数本身不可信，而那正是 `draft/160` 里 t-000106
+                    # 永久无名却收工门只报 1 处的原因。
+                    # 三态照旧：`roster_considered` 一起交回，"走过了、结论是不登记"与
+                    # "根本没走过"在下游才分得开（`_roster_reading` 的判据就是它）。
+                    cells = getattr(handle, "roster_reading", None)
+                    if callable(cells):
+                        try:
+                            got_cells = cells()
+                        except Exception:  # noqa: BLE001 —— 读数坏了不许带走这次派活
+                            got_cells = {}
+                        if isinstance(got_cells, Mapping):
+                            out["roster_considered"] = bool(
+                                got_cells.get("roster_considered"))
+                            # 与 `_roster_reading` 同一口径：有 problem 时不交名字
+                            # （回执里的 name 是"它点名要的那个"，不是"登记成了的那个"；
+                            # 两个都写会让 `roster_registration.registered` 把一次被拒
+                            # 数成一次登记成功 —— 本批的合成会话读数抓到的就是这一档）。
+                            problem = str(got_cells.get("roster_problem") or "")
+                            if problem:
+                                out["roster_problem"] = problem
+                            else:
+                                name = str(got_cells.get("roster_name") or "")
+                                if name:
+                                    out["roster_name"] = name
                     return out
                 # 回来了：结果照旧写进这一步的返回值（"汇报 = 返回值"那条契约），
                 # 挂账摘掉（否则返场点会把它再投一次）。

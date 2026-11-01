@@ -3137,7 +3137,18 @@ def _roster_unrostered_children(ledger_child_ids: list[str], *,
 
     单成一个函数的第二个理由：判据 g（反真空）把它打桩成恒空 ⇒ 「其中 M 个未落名册」
     这一格必须当场变 0，于是"按台账数"这件事不是被空数组顺手带绿的。
+
+    ## `ran` 那一格（`draft/160` 三-3 的丙案）
+
+    这一份是「台账有父、名册没接过」的全集（含被派活闸拒掉、从没跑过的号，含还在
+    飞的），而收工门新加的 `roster_registration.unnamed` 只数其中的「真跑过」子集。
+    两处不许各写一份判据：`ran` 由 `secretary.ran_but_unnamed`（全仓唯一的四条件）现算
+    —— 于是页面上"谁该有名字却没有"与收工读数说的是同一句话。81 趟的 `t-000030`
+    （被闸拒、从没跑过）与 `t-000106`（真跑、被 `name_taken` 拒）在这一格里靠 `ran`
+    分开：前者是"没跑过"，后者才是"跑过却没名字"。
     """
+    from ..secretary import ran_but_unnamed
+
     out: list[dict[str, Any]] = []
     for tid in ledger_child_ids:
         if tid in registered:
@@ -3148,6 +3159,7 @@ def _roster_unrostered_children(ledger_child_ids: list[str], *,
                     "status": str(row.get("status") or ""),
                     "started_at": str(row.get("started_at") or ""),
                     "ended_at": str(row.get("ended_at") or ""),
+                    "ran": bool(ran_but_unnamed(row, registered)),
                     "why": "台账里有它这一行，名册正文与对照表里都没有任何名册项接过它"})
     return out
 

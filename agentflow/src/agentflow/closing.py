@@ -3823,6 +3823,15 @@ class ClosingReport:
         if isinstance(ros, Mapping) and ros.get("checked") and int(ros.get("with_problem") or 0):
             ros_note = (f"；**名册有 {int(ros['with_problem'])} 处没登记**"
                         f"（{ros['with_problem']} 条 `roster_problem`；读数，不拦门）")
+        # 「真跑但无名」那半句（`draft/160` 三-3 的丙案）：与上面那半句是两个问题 ——
+        # 上面问"会话里报过几次没登记"，这里问"盘上现在有几个跑过却没名字的号"。
+        # 它读盘不读会话，所以可抢占派活把 `roster_problem` 丢了也照样看得见
+        # （81 的 `t-000106` 就是被丢的那一条）。同样只在真的 >0 时加，不改门强度。
+        un = ros.get("unnamed") if isinstance(ros, Mapping) else None
+        if isinstance(un, Mapping) and un.get("checked") and int(un.get("count") or 0):
+            ids = [str(r.get("task_id") or "") for r in (un.get("rows") or [])][:3]
+            ros_note += (f"；**有 {int(un['count'])} 个真跑的子代理没有名字**"
+                         f"（{'、'.join(i for i in ids if i)}；读数，不拦门）")
         # 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）。
         # 这一句是这一屏里唯一同时说出两个数的地方 —— 把它们并成"名册有 N 个"就让
         # "名册只增不减"与"活都干完了"长得一模一样。它同样是读数：不改 `m_says_done`、
@@ -5767,7 +5776,8 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
     return out
 
 
-def roster_registration_reading(session_root: Any, *, sid: str | None = None) -> dict[str, Any]:
+def roster_registration_reading(session_root: Any, *, sid: str | None = None,
+                                store: Any = None) -> dict[str, Any]:
     """收工门的「名册写没写」格：这一段会话里 `roster_problem` 非空的次数。
 
 名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），但"这一趟派活有没有把子
@@ -5775,13 +5785,31 @@ def roster_registration_reading(session_root: Any, *, sid: str | None = None) ->
 付面 —— 名册 0 行（改前批量派活那条路一次登记都没有）与名册都写上了，两种日子长得一样。这一格只回答一个数：
 `with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
 
+## 为什么还要 `unnamed`（`draft/160` 三-3 的丙案）
+
+`with_problem` 数的是会话里交回来的 `roster_problem`，而可抢占派活在句柄没落定时
+提前返回（`agent_loop._do_summon`），名册读数那一行在它后面 ⇒ 81 趟 2419 个
+`agent_step` 只有 9 个带任何 `roster_*` 键，`t-000106`（真跑、`done/ok`、有产物、
+名册里一行没有）那一步一个都没有。所以这一格单列一份从盘上算的读数：
+`unnamed = {checked, count, scanned, rows, bad, owners, reason}`，逐条点名
+「真跑过、名册上没有」的子代理，并给出它当初点的那个名字现在挂在谁身上
+（81 的 `E2` 就落在 `held_by = {task_id: t-000030, retired: True, task_outcome: refused}`）。
+
+它与 `with_problem` 回答的是两件事，谁也不代替谁：前者是"这一次会话有没有报过没登记"，
+后者是"盘上现在有多少个跑过却没名字的号"。两个都只落 `readings`、都在 `summary()`
+里各半句、都不进 `status` / 不产生 `Finding` ⇒ 门的强度一格没改。
+
 三态（`checked=False` 绝不是"都写上了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；读得成但
 一步都没有（`agent_step` 0 条）⇒ 同样 `checked=False`（"没有对象"与"查过了是 0"必须分开）。不许 fail（业
 主口径：只可见）：它是 `readings` 里的一格，不进 `status` / `machine_pass`、不产生 `Finding` —— 名册某一条
 没写上是"这一格没成事"，与"门该不该拦"是两件事。收工时只在 :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `m_says_done`。
     """
+    # `unnamed` 与 `with_problem` 的口径互相独立：它读盘、不读会话，所以即使会话那
+    # 一半读不成（下面几条早返），它也照旧给得出（`session_root` 为空时它自己报三态）。
+    unnamed = unnamed_children_reading(session_root, store=store)
     out: dict[str, Any] = {"checked": True, "runs": 0, "steps": 0, "registered": 0,
-                           "with_problem": 0, "problems": [], "reason": ""}
+                           "with_problem": 0, "problems": [], "unnamed": unnamed,
+                           "reason": ""}
     if session_root is None:
         out.update(checked=False, reason="没有会话记录根 ⇒ 名册登记这一格没查成")
         return out
@@ -5860,6 +5888,56 @@ def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
     if not isinstance(got, Mapping):
         return {"checked": False, "children_unretired": None, "active_child_count": None,
                 "reason": "名册读数不是对象 ⇒ 没查成"}
+    return dict(got)
+
+
+def unnamed_children_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
+    """「真跑但无名」那一格（`draft/160` 三-3 的丙案）：读数，不拦门。
+
+    ## 它为什么存在
+
+    81 趟的 `t-000106` 真跑完（`done/ok`、有产物）、名册三份里一行都没有，而收工门
+    只报「1 处没登记」—— 那 1 处是另一个缺陷（`t-000007` 三份没写全，`draft/160`
+    二-2），跟它毫无关系。它连那 1 都不进，因为可抢占派活在句柄没落定时提前返回
+    （`agent_loop._do_summon`），把 `roster_problem` 丢了。所以这一格不读会话，读
+    盘上的事实：台账（谁真跑过）join 名册历史（谁有名字）join 拒绝流水（它点的名字
+    现在在谁手里）。
+
+    ## 口径只有一处
+
+    四个条件全在 `secretary.ran_but_unnamed` 里（那里逐条写着每个条件对着哪个已堵住
+    的洞）；取数与 join 在 `Secretary.unnamed_children`。这里只转发 —— 与
+    `child_counts_reading` 同一套纪律（收工读数另算一遍就是"同一读数两个主人"）。
+    网页那格（`webui.readers._roster_unrostered_children`）用的是同一个判据。
+
+    ## 三态
+
+    没有工作区根 / 台账读不成 / 名册或拒绝流水有坏行 ⇒ `checked=False` 且 `count=None`
+    （不是 0）。它只落 `readings`、不进 `status`、不产生 `Finding` ⇒ 门的强度一格没改。
+    """
+    if root is None:
+        return {"checked": False, "count": None, "rows": [], "bad": [], "scanned": 0,
+                "owners": [], "reason": "没有工作区根 ⇒ 这一格没查成（不是「没有无名子代理」）"}
+    if store is None:
+        try:
+            from .store import Store
+
+            store = Store(root)
+        except Exception:  # noqa: BLE001 —— 造不出 store 就按"读不到台账"如实报
+            store = None
+    try:
+        from .secretary import for_role_wired
+
+        # 与 `child_counts_reading` 同一个构造点（`for_role_wired`）；这一格不判命题，
+        # 所以 `enable_model=False` —— 少一条"秘书档没配 key"的读数噪声。
+        got = for_role_wired(S.CONDUCTOR_ROLE, root=root, store=store,
+                             enable_model=False).unnamed_children()
+    except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
+        return {"checked": False, "count": None, "rows": [], "bad": [], "scanned": 0,
+                "owners": [], "reason": f"读数没跑成（{type(exc).__name__}: {exc}）"}
+    if not isinstance(got, Mapping):
+        return {"checked": False, "count": None, "rows": [], "bad": [], "scanned": 0,
+                "owners": [], "reason": "读数不是对象 ⇒ 没查成"}
     return dict(got)
 
 
@@ -6072,7 +6150,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # 落 `readings`、在 `summary()` 里加半句话；不进 `status`、不产生 `Finding`
     # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
     rep.readings["roster_registration"] = _run_reading(
-        rep, "roster_registration", roster_registration_reading, root, sid=sid)
+        rep, "roster_registration", roster_registration_reading, root, sid=sid, store=store)
     # ---- 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）
     #
     # 为什么并进这一屏：收工那一刻父要回答的正是"我这一支还有几个名字在用、其中几个

@@ -661,6 +661,53 @@ def registration_refusals(root: str | Path, *, owner: str = "") -> dict[str, Any
             "path": str(paths[0]) if len(paths) == 1 else str(base)}
 
 
+#: 「真跑过」的终态（`tasks.status` 那一格）。为什么不用 `tokens > 0` 当判据：81 趟实测
+#: `t-000073` 真跑了 18 分钟也 `tokens=0`（记账在 `usage_ledger` 那一侧，`tasks.tokens`
+#: 回答的是"这一行抄回来多少"，不是"它跑没跑"）。`draft/160` §三-6 的丁案把它列成前提假设之一。
+RAN_STATUSES: tuple[str, ...] = ("done", "failed", "cancelled")
+
+
+def ran_but_unnamed(row: Mapping[str, Any],
+                    known: Mapping[str, Any] | set[str] | frozenset[str]) -> bool:
+    """这条台账行是不是「真跑过、名册里却没有它」—— 全仓唯一的判据。
+
+    ## 为什么要有这一格（`draft/160` 的问题定义）
+
+    81 趟的 `t-000106`：父点名 `E2`，而 `E2` 已被一个从没跑过的号（`t-000030`，派活闸
+    `concurrency_exceeded`）占着 ⇒ 名册写口受控拒绝（`name_taken`），派活照跑、子代理
+    真跑完（`done/ok`、有产物），然后两条补名路都关着（`draft/160` 一-c）⇒ 它永久没有
+    名字，而盘上没有任何一格读数看得出这件事。
+
+    ## 四个条件，一条都不能少（每一条都对着一个已堵住的洞）
+
+    1. `status ∈ RAN_STATUSES`：跑完了（`done` / `failed` / `cancelled`）。在飞的
+       （`pending` / `running`）不算 —— 那是 159 那个"台账行已落、名册还没落"的窗口，
+       把它算进来就会把兄弟行报成"无名"（同一族误判，`draft/159` §一）。
+    2. `outcome != "refused"`：派活闸拒掉的号不许进这一格。这是 d9ebb7fe / 1cdacbf6
+       划的那条界（"没跑过"与"跑过没名"是两件事），也是本格不重开那两个洞的证明。
+    3. `ended_at` 非空：与 1 互为兜底 —— 只有真的有过结束时刻才叫跑完。
+    4. `task_id ∉ known`：`known` 是那个父名下「名册接过」的全部号（`add` ∪ `bind`，
+       与 `Secretary._roster_history` 同一份口径）。有名字的当然不算无名。
+
+    `known` 收 `Mapping` 或集合：前者就是 `_roster_history` 的返回值（号 → 名字），
+    后者给只需要"在不在"的读者用（`webui.readers` 那一格）。
+    """
+    if str(row.get("kind") or ""):
+        # 板项行（`message` / `notice`）不是代理：它们没有"跑过"这回事。
+        return False
+    tid = str(row.get("task_id") or "")
+    if not tid or tid in known:
+        return False
+    if not str(row.get("parent_task_id") or ""):
+        # 没有父的绝对编号 ⇒ 不在任何人的名册上，也无从"该有名字"（顶趟就是这样）。
+        return False
+    if str(row.get("status") or "") not in RAN_STATUSES:
+        return False
+    if str(row.get("outcome") or "") == "refused":
+        return False
+    return bool(str(row.get("ended_at") or ""))
+
+
 def retired_row_gaps(rows: Iterable[Any], owner: str = "") -> tuple[list[str], list[dict[str, Any]]]:
     """销号名单每一行"认不认得出是哪一号 / 哪一名" ⇒ `(逐条说明, 逐条结构化读数)`。
 
@@ -8228,6 +8275,184 @@ class Secretary:
                     "by_owner": {k: dict(v) for k, v in sorted(per_owner.items())},
                     "note": note})
         return out
+
+    def unnamed_children(self, *, owner: str = "") -> dict[str, Any]:
+        """「真跑但无名」的逐条读数（`draft/160` 三-3 的丙案；只读，不修）。
+
+        ## 它回答的问题
+
+        「这一支里，有没有真跑过、却在任何一个父的名册上都找不到名字的子代理？」
+        —— 81 趟的 `t-000106` 就是它：真跑、`done/ok`、有产物，而名册三份里一行都没有，
+        父永远叫不出它的名字（`retire(name=…)` 叫不到；只能用 `retire_child(task_id=…)`
+        走 unrostered 那一支认边收口，收完仍然没有名字）。
+
+        ## 判据只有一处
+
+        「真跑过」的条件全在模块级 :func:`ran_but_unnamed` 里（四个条件连着三个已堵住
+        的洞），这里只负责取数、join、按父归组。网页那一格
+        （`webui.readers._roster_unrostered_children`）用同一个函数给每条打 `ran` 标记
+        —— 两个面说的是同一句话，不是各写一份。
+
+        ## 口径：台账 join 名册历史，不读会话
+
+        为什么不用会话里那条 `roster_problem`：可抢占派活在句柄没落定时提前返回
+        （`agent_loop._do_summon`），名册读数那一行在后面 —— 81 里 2419 个 `agent_step`
+        只有 9 个带任何 `roster_*` 键，`t-000106` 那一步一个都没有（`draft/160` 二-2）。
+        所以这一格读盘上的事实：`tasks`（谁真跑过）+ 名册三份（谁有名字）+ 拒绝流水
+        （它当初点的那个名字，现在在谁手里）。
+
+        ## 三态（`checked` 绝不折成"没有"）
+
+        - 台账读不成 ⇒ `checked=False` + `reason`，`count=None`（不是 0：0 是"查过了，
+          一个都没有"这个很强的结论）；
+        - 某个父的名册 / 拒绝流水有坏行 ⇒ 同样 `checked=False` + `bad` 逐条点名 ——
+          "读不全"不许折成"这一支没有无名子代理"（fail-closed，与 `roster_repair`
+          同一条纪律）。
+
+        ## 返回
+
+        `{"checked","count","scanned","rows","bad","owners","reason"}`；`rows` 每一条：
+
+        - `task_id` / `role` / `parent_task_id` / `status` / `outcome` / `started_at` / `ended_at`；
+        - `artifacts`（台账里那一格原样）+ `artifacts_missing`（在盘上找不到的那几个）；
+        - `edge_released`：父有没有已经认掉这条边（81 的 `t-000106` 是 `True` —— 收口了
+          仍然没有名字，正是这一格要让人看见的那件事）；
+        - `requested_name` / `refusal_code`：它当初点名要的是什么、被哪一档拒绝（从
+          `refusals/<父>.jsonl` 来；没被拒过就是两个空串）；
+        - `held_by`：那个名字现在挂在谁身上（`null` = 没人用；否则 `{name, task_id,
+          retired, retired_task_id, task_status, task_outcome}`）—— 这一格回答"是哪个
+          号占掉了它的名字"，也就是 81 里 `E2 → t-000030（已销号、outcome=refused）`
+          那条链在收工读数上的落点。
+        """
+        out: dict[str, Any] = {"checked": False, "count": None, "scanned": 0,
+                               "rows": [], "bad": [], "owners": [], "reason": ""}
+        cond = self._conductor()
+        if cond is None:
+            out["reason"] = "没有 store ⇒ 读不到台账（这一格不是「没有无名子代理」）"
+            return out
+        try:
+            rows = [r for r in cond._tasks() if not str(r.get("kind") or "")]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["reason"] = f"台账读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+            return out
+        out["scanned"] = len(rows)
+        want = str(owner or "")
+        owners = [want] if want else sorted(
+            {str(r.get("parent_task_id") or "") for r in rows
+             if str(r.get("parent_task_id") or "")})
+        out["owners"] = list(owners)
+        bad: list[str] = []
+        got: list[dict[str, Any]] = []
+        for own in owners:
+            known, bad_hist = self._roster_history(own)
+            bad.extend(f"{own}：{x}" for x in bad_hist)
+            # 认边落痕写在父那一行上（`Conductor.note_edge_release` 的落点），不在子行：
+            # 81 的 `t-000106` 那一条是 `t-000016.inputs` 里的 `edge-released:t-000106#1`。
+            parent_row = self._task_row(rows, own)
+            refusals: dict[str, dict[str, Any]] = {}
+            try:
+                ref = registration_refusals(self.root, owner=own)
+            except Exception as exc:  # noqa: BLE001 —— 读不成按坏行处理（fail-closed）
+                ref = {"checked": False, "items": [],
+                       "bad": [f"拒绝流水读不成（{type(exc).__name__}: {exc}）"]}
+            bad.extend(f"{own}：{x}" for x in (ref.get("bad") or []))
+            for item in ref.get("items") or []:
+                tid = str(item.get("task_id") or "")
+                if tid:
+                    refusals[tid] = item
+            holders = self._name_holders(own) if refusals else {}
+            for row in rows:
+                if str(row.get("parent_task_id") or "") != own:
+                    continue
+                if not ran_but_unnamed(row, known):
+                    continue
+                tid = str(row.get("task_id") or "")
+                refusal = refusals.get(tid) or {}
+                asked = str(refusal.get("requested_name") or "")
+                held = dict(holders.get(asked) or {}) if asked else {}
+                if held:
+                    hrow = self._task_row(rows, str(held.get("task_id") or ""))
+                    held["task_status"] = str(hrow.get("status") or "")
+                    held["task_outcome"] = str(hrow.get("outcome") or "")
+                arts = [str(a) for a in (row.get("artifacts") or []) if str(a)]
+                got.append({
+                    "task_id": tid,
+                    "role": str(row.get("role") or ""),
+                    "parent_task_id": own,
+                    "status": str(row.get("status") or ""),
+                    "outcome": str(row.get("outcome") or ""),
+                    "started_at": str(row.get("started_at") or ""),
+                    "ended_at": str(row.get("ended_at") or ""),
+                    "artifacts": arts,
+                    "artifacts_missing": [a for a in arts if not self._artifact_on_disk(a)],
+                    "edge_released": self._edge_released(parent_row, tid),
+                    "requested_name": asked,
+                    "refusal_code": str(refusal.get("refusal_code") or ""),
+                    "held_by": held or None,
+                })
+        got.sort(key=lambda x: (x["parent_task_id"], x["task_id"]))
+        out.update({"rows": got, "count": len(got), "bad": bad})
+        if bad:
+            out["reason"] = (f"名册 / 拒绝流水有 {len(bad)} 处读不出来 ⇒ 这一格不许当成"
+                             f"「只有 {len(got)} 个」（读不全不是查过了）")
+            return out
+        out["checked"] = True
+        return out
+
+    @staticmethod
+    def _task_row(rows: Iterable[Mapping[str, Any]], task_id: str) -> Mapping[str, Any]:
+        """在已经读出来的台账行里找那一号（找不到回空 dict —— 名字的持有者可能是历史行）。"""
+        want = str(task_id or "")
+        if not want:
+            return {}
+        for r in rows:
+            if str(r.get("task_id") or "") == want:
+                return r
+        return {}
+
+    def _name_holders(self, owner: str) -> dict[str, dict[str, Any]]:
+        """这个父名下「名字现在挂在谁身上」：`名字 → {name, task_id, retired, retired_task_id}`。
+
+        口径与 `_roster_history` 同一份（`add` ∪ `bind`，首个名字胜）：名字是身份，
+        一个名字只该有一个当前号。销号名单上有的再补两格 —— 81 的 `E2` 正是这一档：
+        名册项 `E2/t-000030`、04:46:50 已销号 ⇒ 持有者 `retired=True`。
+        """
+        out: dict[str, dict[str, Any]] = {}
+        rows, _bad = self._roster_bindings(owner)
+        for tid, name in rows:
+            if name and name not in out:
+                out[name] = {"name": name, "task_id": tid, "retired": False,
+                             "retired_task_id": ""}
+        got = self.retired_ledger(owner, trusted_shard=True)
+        for r in got.get("rows") or []:
+            name = str(r.get("name") or "")
+            if name in out:
+                out[name]["retired"] = True
+                out[name]["retired_task_id"] = str(r.get("task_id") or "")
+        return out
+
+    def _artifact_on_disk(self, rel: str) -> bool:
+        """台账里那一格产物在不在盘上（相对路径按工作区根解析）。"""
+        text = str(rel or "")
+        if not text:
+            return False
+        p = Path(text)
+        if not p.is_absolute():
+            p = Path(self.root).joinpath(text)
+        try:
+            return p.is_file()
+        except OSError:
+            return False
+
+    @staticmethod
+    def _edge_released(row: Mapping[str, Any], task_id: str) -> bool:
+        """父那一行的 `inputs` 里有没有认掉这条边（`edge-released:<子号>#<n>`）。
+
+        落点在父行（`Conductor.note_edge_release` 写的是派活方那一行），所以调用方
+        传进来的必须是父行 —— 传子行会恒为 False（81 的 `t-000106` 就是这么验的）。
+        """
+        want = f"edge-released:{task_id}"
+        return any(str(x).startswith(want) for x in (row.get("inputs") or []))
 
     def roster_view(self, *, owner: str, scope: str = "self",
                     limit: int = 20) -> dict[str, Any]:
