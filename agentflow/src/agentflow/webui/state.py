@@ -284,8 +284,13 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
             last_kind = kind
             last_seq = max(last_seq, int(e.get("seq") or i))
         if kind == "agent_run_start":
+            start_tid = _text(e.get("task_id"))
             cur = {
                 "sid": sid, "role": _text(e.get("role")), "task": _text(e.get("task")),
+                # 162 ④：绝对编号只从这一趟自己的开场事件来（读不到 ⇒ ""，不造假编号）。
+                # `runs_in_session` 里同一句。
+                "task_id": start_tid,
+                "task_id_source": "event" if start_tid else "missing",
                 "start_index": i, "start_ts": _text(e.get("ts")),
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
                 # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
@@ -297,7 +302,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 "end_index": None, "end_ts": "",
             }
             runs.append(cur)
-            open_runs.append((_text(e.get("task_id")), cur))
+            open_runs.append((start_tid, cur))
             continue
         hit = _owner_of(_text(e.get("task_id")), _text(e.get("role")))
         if hit is None:

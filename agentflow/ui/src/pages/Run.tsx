@@ -370,6 +370,9 @@ export function Run(props: RunProps) {
             columns={[
               { key: "start_index", title: "起始下标" },
               { key: "role", title: "角色" },
+              // 162 ④：绝对编号（`agent_run_start.task_id`）。`task_id_source` 是 `missing`
+              // 时这一格就是空串 ⇒ 表里由 `cell()` 渲染成 `unknown`（不是"没有编号所以是 0"）。
+              { key: "task_id", title: "编号" },
               { key: "task", title: "任务" },
               { key: "steps", title: "步数" },
               { key: "llm_calls", title: "模型调用" },

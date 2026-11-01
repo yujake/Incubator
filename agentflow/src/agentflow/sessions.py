@@ -48,7 +48,14 @@ RUN_INDEX_DIR_NAME = "index"
 #: 索引文件名。
 RUN_INDEX_NAME = "run-index.json"
 #: 索引的形状版本。它是派生数据：版本变了不许猜，一律重建。
-RUN_INDEX_VERSION = 1
+#:
+#: 2026-11-01（162 ④）：1 → 2。run 行在 162 里多了五格（`spend_usd` /
+#: `spend_unknown_usd_calls` / `events_span` 改名 / `events_owned` / `task_id` +
+#: `task_id_source`），而每场会话的 `digest` 是**整批 run 行**规范化 JSON 的 sha256 ——
+#: 行形状一变摘要就换，于是一份**上一版代码算出来的**索引会以"读数与索引里不一致"
+#: （drift）的样子报出来，而它其实没被人手改过。抬版本号之后它走"版本不认识"那一档
+#: （`tri=unreadable`、`drift=[]`），处置是**重建**，不是抓人。
+RUN_INDEX_VERSION = 2
 ENV_SESSION = "AGENTFLOW_SESSION"
 
 #: 提问 / 回答那两种事件的 kind。字面量与 `userio.ASK_KIND` / `userio.ANSWER_KIND`
@@ -370,10 +377,10 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
     事件求和是这个数**唯一**的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
 
-    键与 `webui.state._scan` 逐字相同（23 个）—— `draft/75 §1.3` 的 `RunRow`：
-    `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd,
-    spend_usd, spend_unknown_usd_calls, stop_reason, final_chars, summons, messages,
-    elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting,
+    键与 `webui.state._scan` 逐字相同（25 个）—— `draft/75 §1.3` 的 `RunRow`：
+    `sid, role, task, task_id, task_id_source, start_index, start_ts, steps, llm_calls,
+    usd, unknown_usd, spend_usd, spend_unknown_usd_calls, stop_reason, final_chars,
+    summons, messages, elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting,
     events_span, events_owned`。
     `usd`/`final_chars`/`summons`/`messages`/`elapsed_sec` 读不到就是 `None`
     （三态：不是 0）；`unknown_usd` 是"算不出价钱的那几次"的计数，它天然是 0 起算。
@@ -390,8 +397,8 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     """
     rows = list(events)
     runs: list[dict] = []
-    #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 只留在这里，不进行（行键集与
-    #: `RunRow` 的 23 个逐字相同，加一格就是改契约 —— 162 ④ 会把它加进去）。
+    #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 也进进行（162 ④），
+    #: 因为它是这一趟的**绝对编号**：页面上"这一趟是谁的活"要答得出来。
     open_runs: list[tuple[str, dict]] = []
 
     def _owner_of(tid: str, role: str) -> tuple[str, dict] | None:
@@ -411,9 +418,14 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     for i, e in enumerate(rows):
         kind = str(e.get("kind") or "")
         if kind == "agent_run_start":
+            start_tid = str(e.get("task_id") or "")
             cur = {
                 "sid": sid, "role": str(e.get("role") or ""),
                 "task": str(e.get("task") or ""),
+                # 162 ④：绝对编号只从这一趟自己的开场事件来（读不到 ⇒ ""，不造假编号；
+                # `task_id_source` 说它从哪来 —— 这一面刻意没有 `ChatLine` 那种 inherited）
+                "task_id": start_tid,
+                "task_id_source": "event" if start_tid else "missing",
                 "start_index": i, "start_ts": str(e.get("ts") or ""),
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
                 # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
@@ -425,7 +437,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 "end_index": None, "end_ts": "",
             }
             runs.append(cur)
-            open_runs.append((str(e.get("task_id") or ""), cur))
+            open_runs.append((start_tid, cur))
             continue
         hit = _owner_of(str(e.get("task_id") or ""), str(e.get("role") or ""))
         if hit is None:
