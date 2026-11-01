@@ -127,12 +127,24 @@ def test_g5_f_does_not_name_vs_read_proof(prompts) -> None:
 
 # ============================================================ D4
 def test_d4_the_manuscript_is_seven_sections(prompts) -> None:
-    """D4：手稿七节，成果概述在第一 —— policy / 交付句 / 技能索引三处同口径。"""
+    """D4：手稿七节，成果概述在第一 —— 交付句与技能索引两处同口径。
+
+    2026-11-01 改口径（审计 171 D-08 + `fs_tools.py` 的保留表）：`reports/RESEARCH.md`
+    是框架保留面（`("D", "contains:RESEARCH")` ⇒ `fs.write` / `fs.edit` 受控拒绝
+    `reserved_framework_artifact`），而它没有渲染器 ⇒ 原来那句「手写它、七节」是
+    「教了做不到」。跨趟记忆的真落点是 `research.write_note`（按问题追加，表里持久）
+    与 `D.write_report` 的工作稿；七节这个数不变，换的只是落点。
+    """
     assert _has(prompts["D"], "成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / "
                               "例子与反例 / 未解问题 / 下一步七节"), (
         "[D4] D 的交付句（deliverable）还是六节，或成果概述不在最前")
-    assert _has(prompts["D"], "reports/RESEARCH.md 七节"), (
-        "[D4] 技能书索引里那句 summary 还是「六节」")
+    assert _has(prompts["D"], "research.write_note"), (
+        "[D4] 技能书索引里那句 summary 没有点名真正的记忆落点 `research.write_note`")
+    assert _has(prompts["D"], "七节"), (
+        "[D4] 技能书索引里那句 summary 丢了「七节」这个数（数不出来就守不住）")
+    assert not _has(prompts["D"], "reports/RESEARCH.md 七节"), (
+        "[D4] 技能书索引又把 `reports/RESEARCH.md` 许成手写落点 —— 那是框架保留面"
+        "（`fs.write` / `fs.edit` 对它受控拒绝 `reserved_framework_artifact`）")
 
 
 # ============================================================ D5
