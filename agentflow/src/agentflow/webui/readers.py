@@ -2186,8 +2186,10 @@ def _paper_facts(project: str) -> dict[str, Any]:
     matched, why = PC.receipt_matches_tex(str(project))
     verdict = ("consistent" if matched is True else
                ("drifted" if matched is False else "unknown"))
+    # 行数与 `/api/source` 的 `total` 同口径（物理行；末尾换行不再多算一行）。
     return {"tex_path": "out/paper/" + PC.TEX_NAME, "exists": True,
-            "lines": text.count("\n") + 1, "sections": text.count("\\section{"),
+            "lines": text.count("\n") + (0 if text.endswith("\n") else 1),
+            "sections": text.count("\\section{"),
             "subsections": text.count("\\subsection{"),
             "env_counts": {name: text.count("\\begin{%s}" % name) for name in env_names},
             "proof_envs": text.count("\\begin{proof}"),
