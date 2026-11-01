@@ -1351,6 +1351,28 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
                            task_list=task_list or (),
                            retire=feed.get("retire"), programs=feed.get("programs"))
     data = rep.to_dict()
+    # ---- 167/乙（业主 2026-11-01 裁定）：门读数算完之后，同一条调用链补投 outbox。
+    #
+    # 落点刻意选在"门读数已经算完"之后：`check_closing` 仍然只读（它被文档与
+    # 判据钉成"不写任何东西"），补投是这一次工具调用自己的副作用，读数进
+    # `readings` 那一格 —— 不新增顶层键 ⇒ 不动 `returns=` 声明、不动工具面 golden。
+    #
+    # 补投源是 `receipt_digest` 的全部「有毛病」行，不是 `v_rejections_digest`
+    # 的"每份证明最近一签"：81 上那两处差一条（`000000#p1` 的 `v-000001` 被
+    # `v-000002` 顶掉），拿后者当补投源，那一条永远补不回来。见
+    # `vreceipts.backfill` 的 docstring。
+    try:
+        from .. import vreceipts as _VRC
+
+        _backfill = _VRC.backfill(store=store, caller="conductor.closing")
+    except Exception as exc:  # noqa: BLE001 —— 补投没跑成不许带走收工读数
+        _backfill = {"checked": False,
+                     "reason": (f"补投没跑成（{type(exc).__name__}: {exc}）"
+                                "⇒ 不是「没有漏投」")}
+    try:
+        data.setdefault("readings", {})["v_receipts"] = _backfill
+    except Exception:  # noqa: BLE001 —— 读数挂不上不许带走收工
+        pass
     # 内容级验收（§17.3）：同一批入参走只读入口 `reviewaccept.check_review`。
     # 它与收工门是同一份交付的同一个问题的两层，所以并排给出、各自三态。
     acc = RX.check_review(store, project_dir=project_dir, report_path=report_path,

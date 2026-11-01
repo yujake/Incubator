@@ -2341,6 +2341,15 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "delivery_checked": bool(_undelivered.get("delivery_checked")),
                 "receipts": int(_undelivered.get("receipts") or 0),
                 "delivered": int(_undelivered.get("delivered") or 0),
+                # 167：`dispatched` 与 `delivered` 是两个数（业主 2026-11-01）——
+                # "投出去了、没人读"（dispatched_only）不许与"连板项都没有"折成一档。
+                "dispatched": int(_undelivered.get("dispatched") or 0),
+                "not_dispatched": int(_undelivered.get("not_dispatched") or 0),
+                # 「替人送审」按 error 级别可见（业主 2026-11-01 定稿：这属于缺陷，
+                # 不是分流问题）；「作者未记录」是另一档 —— 它不是"没问题"。
+                "submitter_is_not_author": int(
+                    _undelivered.get("submitter_is_not_author") or 0),
+                "author_not_recorded": int(_undelivered.get("author_not_recorded") or 0),
                 "undelivered": int(_undelivered.get("undelivered") or 0),
                 "undelivered_ids": list(_undelivered.get("undelivered_ids") or [])[:8],
                 "reason": str(_undelivered.get("reason") or ""),
@@ -2353,7 +2362,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                            "⇒ 不是「没有签文件」")}
             detail["undelivered_reviews"] = {
                 "checked": False, "delivery_checked": False, "receipts": 0,
-                "delivered": 0, "undelivered": 0, "undelivered_ids": [],
+                "delivered": 0, "dispatched": 0, "not_dispatched": 0,
+                "submitter_is_not_author": 0, "author_not_recorded": 0,
+                "undelivered": 0, "undelivered_ids": [],
                 "reason": (f"打回与送达那一格没查成（{type(exc).__name__}: {exc}）"
                            "⇒ 不是「没有打回」"), "problems": []}
         if rows and not counted:

@@ -747,7 +747,9 @@ def delivery_of(root: Any, store: Any, *, label: str, verification_id: str,
 
     判据（缺一不可，全部是盘上已有的读数，不新增写点）：
 
-    - 交付：`tasks` 里有一条 `input_key = v-verdict@<label>@<vid>` 的板项；
+    - 交付：`tasks` 里有一条 `input_key = v-verdict@<label>@<vid>@<收件人>` 的板项
+      （改前投的那一批没有收件人后缀 `v-verdict@<label>@<vid>`，照样认 ——
+      读旧盘的口径不许因为键加了收件人就把 81 的 4 条读成"没投"。业主 2026-11-01）；
     - 读取：那一行 `item_close == "acked"`（`v-verdict@` 在
       `conductor.ACK_REQUIRED_ITEM_PREFIXES` 里 ⇒ 不会"渲染即收口"，`acked` 只能是
       收件人自己 ack 过的），并读 `seen_by` / `seen_step`；
@@ -761,6 +763,14 @@ def delivery_of(root: Any, store: Any, *, label: str, verification_id: str,
     if problem:
         out["problems"].append(problem)
     row = items.get(key) or {}
+    if not row:
+        # 带收件人后缀的新键（同一 label@vid 可能有多个收件人；取第一个可读的，
+        # 排序只为"同一份盘读两次得同一个答案"，不是裁决谁更该收）。
+        for one_key in sorted(items):
+            if one_key.startswith(key + "@"):
+                row = items[one_key]
+                out["input_key"] = one_key
+                break
     if not row:
         return out
     out["item_task_id"] = str(row.get("task_id") or "")
@@ -785,9 +795,16 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     """全局「V 打回 + 送达」读数（M 侧的一眼清单；数据源只有台账 + tasks + 会话事件）。
 
     返回：`checked` / `receipts`（回执行数）/ `statements`（涉及的命题数）/
-    `delivered` / `undelivered` / `undelivered_ids` / `steps`（缺陷步分布）/
-    `rows`（前 `limit` 条，含 label / state / delivered_to / delivered_at）/
-    `problems` / `reason`。
+    `delivered` / `dispatched` / `not_dispatched` / `undelivered` / `undelivered_ids` /
+    `steps`（缺陷步分布）/ `rows`（前 `limit` 条，含 label / state / delivered_to /
+    delivered_at）/ `problems` / `reason`。
+
+    `dispatched` 与 `delivered` 是两个数（业主 2026-11-01 裁定）：
+    `dispatched` = 板项在（不管读没读）；`delivered` = 收件人真的读过并 ack 了。
+    折成一个"未送达"会让"没人投"与"投了没人读"在读数上同形 —— 81 之前那一版正是
+    这么读的（8 条全算"未送达"里挑，`dispatched_only` 那一档被讲成了"没送到"）。
+    `undelivered` 保留旧口径（`receipts - delivered`），供既有读者（收工门 / M 的
+    `global_v_rejections_text`）逐字不变。
 
     三态：台账读不成 ⇒ `checked=False`（「不是」"没有打回"）；`store=None` ⇒ 送达那一
     半没查成（`delivery_checked=False`），但回执数照样给。
@@ -796,6 +813,8 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
 
     out: dict[str, Any] = {"checked": False, "delivery_checked": False, "receipts": 0,
                            "statements": 0, "delivered": 0, "undelivered": 0,
+                           "dispatched": 0, "not_dispatched": 0,
+                           "submitter_is_not_author": 0, "author_not_recorded": 0,
                            "undelivered_ids": [], "steps": {}, "rows": [],
                            "problems": [], "reason": ""}
     rows, problems = _fault_rows(root)
@@ -822,28 +841,65 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     if item_problem:
         out["problems"].append(item_problem + " ⇒ 送达那一半没查成")
     detail: list[dict[str, Any]] = []
+    # 167：作者 / 送审者这一格（业主 2026-11-01「谁写证明谁送审」）。
+    # 用惰性 import：`vreceipts` 的读口又会调回本函数，模块级 import 会成环。
+    try:
+        from . import vreceipts as _VRC
+
+        box = _VRC.outbox_index(root)
+    except Exception:  # noqa: BLE001 —— 读不成是"作者/送审者这一格没查成"
+        _VRC, box = None, {}
+        out["problems"].append("outbox 读不出来 ⇒ 作者/送审者这一格没查成")
     for row in rows:
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
         no = int(_VR.as_proof_no(row.get("proof_no")) or 1)
         label = f"{sid}#p{no}"
-        one = delivery_of(root, store, label=label,
-                          verification_id=str(row.get("verification_id") or ""),
-                          mailbox=mailbox)
+        vid = str(row.get("verification_id") or "")
+        one = delivery_of(root, store, label=label, verification_id=vid, mailbox=mailbox)
+        rec = dict(box.get((label, vid)) or {})
+        author = _VRC.author_of(store, label) if _VRC is not None else {
+            "checked": False, "author": "", "source": "", "reason": "outbox 读不成"}
+        submitter_role = str(rec.get("submitter_role") or one["delivered_to"] or "")
+        author_role = str(author.get("author") or "")
+        if author.get("checked"):
+            not_author = bool(author_role and submitter_role
+                              and author_role != submitter_role)
+            author_unknown = False
+        else:
+            not_author, author_unknown = None, True
         detail.append({
             "artifact_sha": str(row.get("proof_sha256") or ""),
-            "label": label, "verification_id": str(row.get("verification_id") or ""),
+            "label": label, "verification_id": vid,
             "axis": verdict_axis(row), "at": str(row.get("at") or ""),
             "defect_steps": defect_steps(row), "state": one["state"],
             "delivered_to": one["delivered_to"], "delivered_at": one["delivered_at"],
             "read_by": one["read_by"], "read_step": one["read_step"],
+            # 送审者 / 作者 / 替人送审那一档（可见，不是路由：回执仍投送审者）
+            "submitter": str(rec.get("submitter") or ""),
+            "submitter_role": submitter_role,
+            "author": author_role,
+            "author_source": str(author.get("source") or ""),
+            "submitter_is_not_author": not_author,
+            "author_not_recorded": author_unknown,
         })
     out["delivered"] = sum(1 for d in detail if d["state"] == "delivered")
+    out["dispatched"] = sum(1 for d in detail if d["state"] != "not_dispatched")
+    out["not_dispatched"] = int(out["receipts"]) - int(out["dispatched"])
     out["undelivered"] = int(out["receipts"]) - int(out["delivered"])
+    # 「替人送审」按 error 级别单独计数；作者未记录是另一档（不是"没问题"）。
+    out["submitter_is_not_author"] = sum(1 for d in detail
+                                         if d["submitter_is_not_author"] is True)
+    out["author_not_recorded"] = sum(1 for d in detail if d["author_not_recorded"])
     out["undelivered_ids"] = [f"{d['label']}@{d['verification_id']}" for d in detail
                               if d["state"] != "delivered"]
     out["rows"] = detail[:max(1, int(limit))]
     out["reason"] = (f"「有毛病」{out['receipts']} 条（{out['statements']} 条命题）；"
-                     f"已送达 {out['delivered']} 条、未送达 {out['undelivered']} 条"
+                     f"已投出 {out['dispatched']} 条（其中已送达 {out['delivered']} 条）、"
+                     f"未投出 {out['not_dispatched']} 条、未送达 {out['undelivered']} 条"
+                     + (f"；替人送审 {out['submitter_is_not_author']} 条（error）"
+                        if out["submitter_is_not_author"] else "")
+                     + (f"；作者未记录 {out['author_not_recorded']} 条"
+                        if out["author_not_recorded"] else "")
                      + ("；送达那一半没查成" if item_problem else ""))
     return out
 

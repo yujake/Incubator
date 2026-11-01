@@ -2817,7 +2817,7 @@ def global_v_rejections_text(root: str | Path, store: Any = None, *,
 
 def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = "F",
                        details: Sequence[Mapping[str, Any]] = (),
-                       called_by: str = "V") -> dict[str, Any]:
+                       called_by: str = "V", note: str = "") -> dict[str, Any]:
     """把 V 的意见写进收件人的收件板（业主 B-3：递到人，不只加读数）。
 
     「V 的意见」两档：V 自己判了「有毛病」的（`via="verdict"`），以及 V 的结论词写
@@ -2881,10 +2881,20 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
         return out
     have = {str(r.get("input_key") or "") for r in board if str(r.get("input_key") or "")}
     for d in details:
+        # 幂等键（业主 2026-11-01 裁定）：`v-verdict@<label>@<vid>@<收件人>`。
+        # 为什么带收件人：同一 vid 可能先落 outbox 后被补投；"两者都收"这一档被否，
+        # 所以键要回答"这一条投给这个收件人了没有"。旧盘上的项没有收件人后缀
+        # （`v-verdict@<label>@<vid>`）⇒ 只作为读旧盘的兼容键，不许用它写新项。
         key = (f"{V_VERDICT_ITEM_PREFIX}{d['label']}"
-               f"@{str(d.get('verification_id') or '')}")
+               f"@{str(d.get('verification_id') or '')}@{str(task_id or '')}")
+        legacy = (f"{V_VERDICT_ITEM_PREFIX}{d['label']}"
+                  f"@{str(d.get('verification_id') or '')}")
         if key in have:
             out["existing"].append(key)
+            continue
+        if legacy in have:
+            # 改前投过的那一条（81 的 4 条就是这一档）：不重开，读数照旧。
+            out["existing"].append(legacy)
             continue
         step = (f"第 {d['defect_step']} 步" if d.get("defect_step") else "步号没读到")
         # 业主 2026-10-29 的 C 段：`washed` 非空 ⇒ 递的是秘书洗过的意见（V 的原文不转达）。
@@ -2926,6 +2936,10 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
                     f"这一签盖的就是现在这一份（proof_text 与现文一致）："
                     f"{'True' if d.get('in_sync') else 'False'}")
             summary = f"V 判「有毛病」：{d['label']}（错在{step}）"
+        # 附加读数（167，业主 2026-11-01）：替人送审那一档必须出现在收件人读得到的地方。
+        # 放在正文最前面而不是末尾：`set_item_detail` 只留前 400 字，接在末尾等于丢掉。
+        if note:
+            body = f"{note}\n{body}"
         try:
             item_id = conductor.open_item(
                 kind="notice", role=role, expects="ack", action="notice",

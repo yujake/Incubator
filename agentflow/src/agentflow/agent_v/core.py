@@ -1228,6 +1228,25 @@ class AgentV:
                     "emit": "", "judgment": judgment, "wash": wash,
                     "gate": gate, "checks": checks}
         axis = str(judgment.get("axis") or "")
+        # ---- 167/甲（业主 2026-11-01 裁定）：判定那一笔就投，收件人 = 送审者
+        #
+        # 为什么必须在这里、而不是等 F 下一次起跑（改前那一版在
+        # `agent_loop.deliver_v_verdicts` 的唯一调用点 = `AgentLoop.run` 的 F 分支）：
+        # 81 的 8 条判定里 4 条落在 F 最后一次起跑之后 ⇒ 连板项都没开，"送到"变成了
+        # "收件人醒着"的副产品。回执是这一次判定的产物，不是下一次起跑的副作用。
+        #
+        # 顺序（崩溃不丢）：`vreceipts.publish_row` 先把意图落盘、再开板项、再记
+        # dispatched（见那个模块的 docstring）。这里只用 `_publish_receipt` 一个口，
+        # 判据（`tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py`）
+        # 打桩的也是它 —— 摘掉它必须让"8 条判定 8 条有板项"变红。
+        #
+        # 收件人读不到（不在任何召唤里 / 台账没有那一行）⇒ 意图记 `undelivered`，
+        # 不拿"谁醒着"当收件人。这一格失败不许带走这一签：`_verify_pass` 的
+        # 返回值一个字都不变（下面的键集合是判据钉住的）。
+        receipt = self._publish_receipt(row)
+        if receipt.get("state"):
+            self._emit(f"verify_proof({sid})：回执 {receipt.get('state')}"
+                       f"（{receipt.get('reason') or '没有读数'}）")
         if (bool(judgment.get("checked")) and axis == "clean"
                 and str(verdict.get("verdict") or "") == "成立"):
             # 只有"判过了、没问题、结论成立"这一档才问"这一签发不发"
@@ -1239,6 +1258,33 @@ class AgentV:
         return {"ok": True, "row": row, "judgment": judgment, "wash": wash,
                 "issuance": issuance, "gate": gate, "checks": checks,
                 "verdict": verdict}
+
+    def _publish_receipt(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        """把这一签的回执投给送审者（167/甲；业主 2026-11-01 裁定）。
+
+        ## 为什么单独一个方法
+
+        判据要能把它打桩成空转（反真空：摘掉它 ⇒ "8 条判定 8 条有板项"必须变红），
+        而 `verify_proof` 的返回值键集合是三条返回路径 / `returns=` 声明钉住的
+        （`tests/test_tools_returns_declaration.py`）—— 投递读数因此不进返回值，
+        只进 outbox（`out/vreceipts/outbox.jsonl`，盘上可读、崩了也在）与一条 `_emit`。
+
+        ## 三态
+
+        - `dispatched`：板项在（新开或已在）；`undelivered`：读不到送审者（不猜）；
+        - `pending`：这一趟没有 conductor / 开项失败 ⇒ 意图已落盘，留给收工前补投；
+        - 不是「有毛病」那一档 ⇒ `skipped`（"成立"的签不打扰任何人）。
+
+        任何异常都折成 `{"state": "error"}` 返回，不许带走这一签 —— 回执投不出去
+        是框架面的失败，不是"这一份证明没毛病"。
+        """
+        try:
+            from .. import vreceipts as VRC
+
+            return VRC.publish_row(self.store, row, at=str(row.get("at") or ""))
+        except Exception as exc:  # noqa: BLE001 —— 投递失败不许带走这一签
+            return {"checked": False, "state": "error",
+                    "reason": f"回执投递没跑成（{type(exc).__name__}: {exc}）"}
 
     def _terminal_issuance(self, statement_id: str, proof_no: int, *, text: str,
                            row: Mapping[str, Any], judgment: Mapping[str, Any],
