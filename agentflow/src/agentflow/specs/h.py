@@ -161,8 +161,9 @@ SPEC = AgentSpec(
             "`line` / `column` / `text` / `why` / `ref` / `codepoint`），逐类的三态在 `detail[]`，没查成的类在 "
             "`bad[]`（`checked=false` 只表示没查成，不是零命中）。别一件一件去要旧工具，更别在正文里自己数。"
             "**这些读数不进 finding 台账**：`schema.FINDING_KINDS` 里没有这七类，`review.record_finding` 会当场"
-            "拒收（实测 7/7）—— 要留可追踪的凭据就用 `review.report` 的 markdown（每条带 `file` / `line` / `ref`），"
-            "不要硬塞一个不存在的 kind。",
+            "拒收（实测 7/7）—— **`review.scan` 的读数本身就是凭据**：`findings[]` 每条都带 `file` / `line` / `ref`"
+            "（`scanned` 记这一趟扫了哪些文件），把读数原样写进你的交付与回报；`review.report` 产出的 markdown 是"
+            "G1–G15 门表、**不含这批读数**，不要指望在那里再落一份，也不要硬塞一个不存在的 kind。",
             "**审稿清单（正文禁令，六项逐条打勾）**：① 内部编号（`exp:` / `stmt:` / `lit:` / `rel:` / `eval:` / `doc:` —— 只在附录 A 允许）；"
             "② 自审小节（「文献可核性」「Reproducibility」「ACCEPTANCE」「缺口与边界（逐条）」）；③ 过程词（台账、本轮、本项目、"
             "验收表、sha256、「我们派了 E 跑」「M 决定」）；④ 内部术语（`cross_check` / `supported_not_proved` / "
