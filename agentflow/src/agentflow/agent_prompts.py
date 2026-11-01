@@ -5214,10 +5214,14 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门八格全过才算交付，任何一格没过就不许说"完成"）：八格是 `paper` / `contradictions` /
+五、完成定义（收工门的 `machine_pass` = 八格全过 **且没有 blocker**，两者缺一都不许说"完成"）：八格是 `paper` / `contradictions` /
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
 同样以它的当次读数为准。
+**八格之外还有一类 blocker（它不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` —— 既没有 V 签、
+也没有被明确放弃的命题（业主 2026-11-01 的裁定）。两条出路：重送 V 拿到干净的「成立」，或明确放弃
+（`status=abandoned` + `quote_reason=abandoned@<ISO8601>@<理由>`）。同类 blocker 还有 `acceptance_unmet` /
+`paper_pdf_is_stale` / `MAPPING_NOT_WRITTEN` 等 —— 只要 `closing` 的读数里 `blockers` 非空，就不算交付。
 1. **正文与 PDF 对得上**（收工门那一格叫 `paper`，判据只有一条）：编译回执里的
    `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
    这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/paper/main.tex`
