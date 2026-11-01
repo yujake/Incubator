@@ -110,7 +110,8 @@ python -m agentflow --root projects\my-topic start --watch --port 52060 --open
 - **不带 `--task`**：只开网页，服务一直开着，`Ctrl-C` 停（此时会多印一行 `Ctrl-C 停。`）。
 - **带 `--task`**：服务在后台线程里，边跑边可监督；**这一趟跑完就收**——想接着看就再敲一次
   `start --watch`（或老命令 `web`）。
-- `--host` 缺省 `127.0.0.1`（只听本机）；`--port` 缺省 `8788`，`--port 0` 让系统挑；
+- `--host` 缺省 `127.0.0.1`（只听本机）；这条路的 `--port` 缺省仍是 `8788`，`--port 0` 让系统挑
+  （老命令 `web` 的端口改成"从 8700 起自动挑 + 自动换号"，工作区也自己找，见 §5.0）；
   `--token` 也可以走环境变量 `AGENTFLOW_WEB_TOKEN`。写面缺省**只读**：`--allow-writes` 才放开
   `/api/` 下那六条写端点（`POST /answer` 是既有写路径，缺省也放行），`--no-settings-write`
   只关 `POST /api/settings`。
@@ -129,7 +130,7 @@ python -m agentflow --root projects\my-topic start --watch --port 52060 --open
 | 跑一条角色的循环 | `start --mode role --role <角色> --task <一句话>` | `run-agent <角色> --task <一句话>` | 单角色调试、`--drive`、`--rounds` 多轮 |
 | 十角色循环 | `start --mode research --task <一句话>` | `run-agent M --task <一句话> --subagents` | 需要显式指定顶层角色时 |
 | 项目工作区 | `start --mode project --task <一句话>`（或 `--project <名字>`） | `project run [--name <名字>]` | 要用 `project list` / `project plan` / `project create --paper <pdf>` 时 |
-| 只开网页 | `start --watch` | `web` | 只要 URL 一行的 `--json`，或脚本里按 `web` 的参数调用 |
+| 只开网页 | `start --watch` | `web` | 只要 URL 一行的 `--json`，或"不想自己拼工作区/端口"（`web` 自己找，见 §5.0） |
 
 两处**必须知道**的差别（这是别名与统一入口唯一不同的地方，也是刻意的）：
 
@@ -199,6 +200,67 @@ python -m agentflow --root <ws> budget --add 5 --note "让它跑完"
 ---
 
 ## 5. 网页有哪几页、各看什么
+
+### 5.0 先起一个网页：`agentflow web`（不用 `cd src`、不用自己拼 `--root` / 端口）
+
+```powershell
+cd D:\Incubator\agentflow
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
+
+python -m agentflow web
+```
+
+`$env:PYTHONPATH='src'` 只在"没把包装进 site-packages"时需要；它让这条命令在**任意 cwd**
+都能跑（改前 `python -m agentflow.webui` 必须先 `cd src`，否则 `No module named agentflow`）。
+工作区也不用给：不给 `--root` 时它自己找"最近的工作区"——当前目录或它的上级目录是工作区
+就用它；在仓库根或 `temp/` 里敲，就打开 `projects/` 里最近改过的那个。要指定就写顶层
+`--root`（必须写在 `web` 之前）：`python -m agentflow --root projects\my-topic web`。
+
+本机 2026-11-01 的输出逐字如下（这个工作区已经有一个服务在跑，于是它**复用**，不再起第二个）：
+
+```text
+缓存：使用 非 Lean 版缓存（p229 · 11/12）
+agentflow 用户端（已在跑，复用）：http://127.0.0.1:8720/
+工作区根：D:\Incubator\agentflow\projects\paper-rewrite-82
+```
+
+第一行是缓存读数（环境相关），第二行就是能直接点开的 URL。没有旧服务时它自己起一个，
+打印 `agentflow 用户端：http://127.0.0.1:8701/` 这一行，再跟 `工作区根：…` 与
+`Ctrl-C 停止。`。
+
+#### 端口 / 换号 / 只看读数
+
+```powershell
+python -m agentflow --root projects\my-topic web             # 缺省：从 8700 起挑一个空闲的
+python -m agentflow --root projects\my-topic web --port 8721 # 指名端口；被占就报错并提示换号
+python -m agentflow web --json                               # 给脚本读：stdout 只有一行 JSON
+```
+
+缺省端口不再是 8788，而是**从 8700 起自动挑**：8700 被占（含刚停掉的 TIME_WAIT）就换
+8701、8702……并在起服前说明换到了哪个号：
+
+```text
+[web] 从 8700 起自动挑端口：前 1 个不可用（被占或 TIME_WAIT）⇒ 用 8701
+agentflow 用户端：http://127.0.0.1:8701/
+工作区根：D:\Incubator\agentflow\temp\_web_probe_ws
+Ctrl-C 停止。
+```
+
+`--port N` 是**显式**的：被占时不会偷偷换号，而是受控拒绝（非 0 退出），并给出下一步：
+
+```text
+[webui] 起不来：127.0.0.1:8721 已经被占用（占位者工作区：…）⇒ 不绑。…
+[web] 8721 被占（占位者工作区：…）⇒ 换一个号：--port 8722，或不给 --port 让它从 8700 起自动挑。
+```
+
+`--json` 把那一行换成机器可读的（`reused=true` = 复用了已在跑的那个；新起时没有这一格）：
+
+```text
+{"url": "http://127.0.0.1:8720/", "root": "D:\\Incubator\\agentflow\\projects\\paper-rewrite-82", "reused": true}
+```
+
+与 `start --watch` 的分工：`start --watch` 是"边跑边盯"（打印 URL / 工作区 / sid / 当前轮
+四格，`--port` 缺省仍是 8788，见 §1.3）；`web` 是"只想看图"那一档，工作区与端口都自己找。
 
 九页（导航八条，`/run/<sid>` 是第九页）：
 
@@ -509,9 +571,26 @@ python -m agentflow --root projects\my-topic run-agent M --task "<题目>" `
   --budget-usd 5 --sid my-1 --stop-file projects\my-topic\runs\.agentflow-stop
 ```
 
+**提示词里有多行中文时不要用 `--task`**：PowerShell 传多行中文给它会把那段话传碎
+（改前每次真机都得现写一个 `temp/_launch_cold_v2*.py` 启动器）。把提示词原样存成一个
+UTF-8 文件，让命令自己读：
+
+```powershell
+# 提示词先原样落文件：多行、中文、引号、$ 与 % 都照原样写进去，末尾有没有换行都行
+python -m agentflow --root projects\my-topic run-agent M --task-file temp\我的提示词.txt
+# [task-file] 字符数=<去掉末尾一个换行后的字数> sha256=<同一段文本 UTF-8 编码的前 32 位>（temp\我的提示词.txt；已原样传给 --task）
+```
+
+那行读数与既有启动器逐字同口径（`temp/_launch_cold_v2*.py`：只去掉文件末尾那一个换行，
+`sha256` 取前 32 位）。真机那一份（2026-11-01 的 `temp\_cold_start_task_uap.txt`）是
+`字符数=1219 sha256=11c9964a30c89f10b16d0e03e53b762f`，与当时的启动器日志相同。
+同一个文件两次跑读数相同；文件末尾没有换行时不会多去字符；读不出来以退出码 2 停下并
+说明原因；`--task` 与 `--task-file` 同时给会被拒（退出码 2）——不会谁覆盖谁。
+
 | 参数 | 含义 |
 |---|---|
-| `--task "<文本>"` | 题目（必填）；也可以是"继续上一趟"的话 |
+| `--task "<文本>"` | 题目（与 `--task-file` 二选一）；也可以是"继续上一趟"的话 |
+| `--task-file <路径>` | 从 UTF-8 文件逐字读题目（只去掉末尾一个换行）再原样当 `--task`；打印 `字符数=` 与 `sha256=` 前 32 位。多行中文提示词用它 |
 | 角色（位置参数） | `run-agent M` 里的 `M`：`A`–`H` 与 `V`/`L`/`M` |
 | `--budget-usd N` | 累计上限；显式给了就落盘（见 §3）。**`0` = 不设上限**（2026-10-27 起；改前 0 = 上限零，第一拍就停） |
 | `--sid` | 会话号（台账按它分片；`--resume` 也认它） |
