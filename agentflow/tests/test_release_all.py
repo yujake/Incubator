@@ -2583,6 +2583,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                         "读侧谁先读哪一个就给出哪一种答案（`closing` / `agent_v` / `webui` 三处反着读）；"
                         "取值理由（判据要求它 / 写入侧只有它必填 / 下游靠它做事 / 老数据只有它）写在"
                         "模块 docstring 里，本模块是「读哪一格」这一句话的唯一定义点",
+    # 2026-11-01（业主裁定「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，
+    # 或者放弃原命题」）：「放弃」这件事在盘上要有载体 —— `status="abandoned"` 只说"放手了"，
+    # 这一格说"为什么、什么时候"。为什么必须落在顶层：写侧（`schema.Statement.validate`）
+    # 与读侧（`closing.statements_abandoned_reading` / `statements_unsigned_reading`）分处
+    # 两个模块，而"什么算一条可解析的放弃标记"只能有一份判据 —— 两处各写一份正则，
+    # "标了 abandoned 却读不出理由"这一档就会在一个出口算放弃、在另一个出口算未签。
+    "statementabandon.py": "「放弃原命题」的标记（业主 2026-11-01 裁定）：`quote_reason` 里的 "
+                          "`abandoned@<ISO8601>@<理由>` 是「明确放弃」在盘上的唯一载体 —— "
+                          "`abandon_marker`（写侧拼装，理由/时间缺一即拒）与 `parse_abandon`"
+                          "（读侧三态：可解析 / 不是标记 / 自称放弃而读不出理由）；不新增列、"
+                          "不新增表，照 `pending_definition` 那套受控标记的纪律",
     # 接线批 C1（`draft/103` §4.1b）：预设组装 → 角色提示词的接线层。
     # 它不发明机制：发现/优先级/挂载/创作在 `presets.py`（DSH 端口批 3），
     # `composition.py` 只回答"组装文件里那一行名字落到哪个注册函数上"。

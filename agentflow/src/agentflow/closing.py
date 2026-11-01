@@ -4715,6 +4715,265 @@ def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
     }
 
 
+def _iso_seconds_between(then: str, now: Any) -> float | None:
+    """`then` 到 `now` 相差几秒（`None` = 时间读不出来，不猜 0）。
+
+    为什么单独一个函数：这一格要给"已悬多久"，而"读不出时间"与"刚发生"在屏幕上
+    长得一样（都像 0）—— 三态在这里的落法是 `None` + 空串，不是编一个 0。
+    """
+    from datetime import datetime
+
+    stamp = str(then or "").strip()
+    if not stamp:
+        return None
+    try:
+        before = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    try:
+        after = now if isinstance(now, datetime) else datetime.fromisoformat(str(now))
+    except ValueError:
+        after = datetime.now().astimezone()
+    if before.tzinfo is None and after.tzinfo is not None:
+        before = before.replace(tzinfo=after.tzinfo)
+    if after.tzinfo is None and before.tzinfo is not None:
+        after = after.replace(tzinfo=before.tzinfo)
+    return max(0.0, (after - before).total_seconds())
+
+
+def _human_span(seconds: float | None) -> str:
+    """秒 ⇒ 人话（"51 分钟" / "2 小时 7 分钟"）；读不出来 ⇒ 空串（不是 "0 秒"）。"""
+    if seconds is None:
+        return ""
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "不到 1 分钟"
+    if minutes < 60:
+        return f"{minutes} 分钟"
+    hours, rest = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours} 小时{rest} 分钟" if rest else f"{hours} 小时"
+    days, hours = divmod(hours, 24)
+    return f"{days} 天{hours} 小时" if hours else f"{days} 天"
+
+
+def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
+    """I1 的收工读数：既没有 V 签、也没有被明确放弃的非概念命题（逐条点名）。
+
+    业主 2026-11-01 逐字裁定：
+
+    > 「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」
+
+    所以"已登记的命题"只许落在两处：「有 V 签」，或「被明确放弃（带理由与时间）」。
+    这一格就是"第三种状态"的机器读数 —— 它必须能数得出来、点得出名，否则那句话在盘上
+    没有载体（81/82 两趟真机的形态：打回之后没有任何读数说"这一条还欠一个签"）。
+
+    ## 口径（三个判据都从既有唯一实现取，不写第二份）
+
+    - 哪些行算数：`statements` 里 `kind != "concept"` 的行。概念行不参与等级链
+      （`evidencebits.derive_grade` 对它短路成 `not_applicable`），也没有可签的证明 ——
+      既有读数对概念一律短路（`verifications.statement_review_reading` 的概念分支、
+      `agent_loop.v_rejections_digest` 的 `continue`），这一格与它们同口径。
+    - 有签：逐条证明读 `verifications.review_standing`（第 3 位的唯一判定口）：
+      `signed`；或 `holding` 且不是秘书判 fault、也不是"问过没判成"
+      （业主 2026-11-01 的验收口径：重送之后拿到一次干净的「成立」就该归 0 ——
+      `holding` 只是"连续次数还没到 3"，那是发签门槛，不是"没签过"）。
+    - 明确放弃：`status == "abandoned"` 且 `quote_reason` 是一条可解析的
+      放弃标记（`statementabandon.parse_abandon`）。自称放弃却拿不出理由与时间的行
+      不算放弃（它进下面 `abandoned_without_reason` 那一类），否则"标个状态"就能
+      绕过整条裁定。
+
+    ## 每一行的 `class`（六档；这是散文里的受控词，刻意不定义成模块级元组 ——
+    ## R011 的死取值普查会排除"定义点所在文件"当产出面，而这里的产出点就在本文件）
+
+    | class | 意思 |
+    |---|---|
+    | `fault_unrepaired` | 打回之后没有更新的干净「成立」（含"V 写成立、秘书判 fault"那一档） |
+    | `abandoned_without_reason` | 自称 `abandoned`，而理由/时间读不出来 ⇒ 不算明确放弃 |
+    | `stale` | 签过，但签的是旧版正文（正文在那之后改过，需重签） |
+    | `judgment_missing` | 判了「成立」而秘书那一问没判成（这一签不发，等判定接上之后重签） |
+    | `unreadable` | 台账读不出来（这一条没查成，不是"没签过"） |
+    | `never_submitted` | 一次都没送过 V |
+
+    一条命题有多份证明时，按上面那张表的次序取最重的一档（`fault_unrepaired`
+    排在最前：它有人被要求改，其余几档还在等一个动作）。
+
+    ## 每一行给的读数
+
+    `stmt_id` / `class` / `last_verdict`（最近那一签的结论词，没有就是空串）/
+    `fault_at`（最近一次打回的时刻）/ `hung_seconds` + `hung`（已悬多久；时间读不出来
+    就是 `None` + 空串）/ `owner` + `owner_known`（这一条打回投给了谁 —— 取
+    `vreceipts` outbox 里的送审者；取不到就是 `unknown`，不猜）/ `proofs`（逐条证明
+    的同一组读数）/ `why`（一句话说清这一行为什么没有签）。
+
+    三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（这一格没查成，
+    不是"一条都不欠签"）。
+    """
+    from datetime import datetime
+
+    from . import statementabandon as _SA
+    from . import verifications as _VR
+    from . import vsigns as _VSP
+    from . import vreceipts as _VRC
+
+    out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
+                           "checked_from": "statements", "rows": [], "by_class": {},
+                           "problems": [], "reason": ""}
+    rows, why = _statement_rows(store)
+    if rows is None:
+        out["reason"] = why
+        return out
+    root = str(getattr(store, "root", "") or "")
+    now_dt = now or ""
+    try:
+        box = _VRC.outbox_index(root) if root else {}
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"负责人那一格没查成"
+        box = {}
+        out["problems"].append(f"outbox 读不出来（{type(exc).__name__}: {exc}）"
+                               "⇒ 负责人那一格没查成（记 unknown）")
+    #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
+    rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1, "stale": 2,
+            "judgment_missing": 3, "unreadable": 4, "never_submitted": 5}
+    for sid, row in sorted(rows.items()):
+        kind = str(row.get("kind") or "")
+        if kind == "concept":
+            continue
+        out["scanned"] += 1
+        if str(row.get("status") or "") == "abandoned":
+            got = _SA.parse_abandon(row.get("quote_reason"))
+            if got.get("checked"):
+                continue
+            out["rows"].append({
+                "stmt_id": sid, "kind": kind, "class": "abandoned_without_reason",
+                "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                "owner": "", "owner_known": False, "proofs": [],
+                "why": f"status=abandoned 而拿不出理由与时间（{got.get('why') or '没读成'}）"
+                       "⇒ 不算明确放弃"})
+            out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
+            continue
+        try:
+            ledger_rows, ledger_problems = _VR.list_verifications(
+                root, statement_id=sid, limit=None)
+        except Exception as exc:  # noqa: BLE001 —— 台账读不成 = 这一条没查成
+            ledger_rows, ledger_problems = [], [f"台账读不成（{type(exc).__name__}: {exc}）"]
+        for one in ledger_problems:
+            out["problems"].append(f"{sid}：{one}")
+        by_vid = {str(r.get("verification_id") or ""): dict(r) for r in ledger_rows}
+        proofs: list[dict[str, Any]] = []
+        for no, text in _VR.proof_list(row):
+            label = _VR.proof_label(sid, no)
+            try:
+                st = _VR.review_standing(root, statement_id=sid, proof_text=text, proof_no=no)
+            except Exception as exc:  # noqa: BLE001 —— 没读成不许折成"没签过"
+                proofs.append({"proof_no": no, "label": label, "state": "unreadable",
+                               "class": "unreadable", "verdict": "", "verification_id": "",
+                               "fault_at": "", "owner": "", "owner_known": False,
+                               "why": f"第 3 位读数没读成（{type(exc).__name__}: {exc}）"})
+                continue
+            state = str(st.get("state") or "unsigned")
+            verdict = str(st.get("verdict") or "")
+            vid = str(st.get("verification_id") or "")
+            fault_at = ""
+            fault_vid = ""
+            for one in ledger_rows:
+                if (int(_VR.as_proof_no(one.get("proof_no")) or 1) != int(no)
+                        or not _VSP.verdict_axis(one)):
+                    continue
+                fault_at = str(one.get("at") or fault_at)
+                fault_vid = str(one.get("verification_id") or fault_vid)
+            if state == "signed":
+                continue
+            if state == "holding":
+                # 「成立」但第 3 位没翻：两种情况都是欠签，一种不是。
+                if st.get("secretary_unjudged"):
+                    cls = "judgment_missing"
+                elif st.get("secretary_fault"):
+                    cls = "fault_unrepaired"
+                else:
+                    # 干净的「成立」（连续次数未满 3）⇒ 本读数按"有 V 签"算：
+                    # 这是业主 2026-11-01 的验收口径「重送并成立 ⇒ 归 0」。
+                    continue
+            elif state == "rejected":
+                cls = "fault_unrepaired"
+            elif state == "stale":
+                cls = "stale"
+            elif state == "unreadable":
+                cls = "unreadable"
+            else:
+                cls = "never_submitted"
+            rec = dict(by_vid.get(vid) or {})
+            owner = str(rec.get("submitter") or rec.get("recipient") or "")
+            if not owner and fault_vid:
+                owner = str((box.get((label, fault_vid)) or {}).get("submitter") or "")
+            proofs.append({
+                "proof_no": no, "label": label, "state": state, "class": cls,
+                "verdict": verdict, "verification_id": vid,
+                "fault_at": fault_at, "owner": owner, "owner_known": bool(owner),
+                "why": str(st.get("why") or "")[:400]})
+        if not proofs:
+            continue
+        worst = min(proofs, key=lambda p: (rank.get(str(p["class"]), 9), p["proof_no"]))
+        cls = str(worst["class"])
+        fault_at = str(worst.get("fault_at") or "")
+        hung = _iso_seconds_between(fault_at, now_dt) if fault_at else \
+            _iso_seconds_between(str(row.get("created_at") or ""), now_dt)
+        owner = str(worst.get("owner") or "")
+        out["rows"].append({
+            "stmt_id": sid, "kind": kind, "class": cls,
+            "last_verdict": str(worst.get("verdict") or ""), "fault_at": fault_at,
+            "hung_seconds": hung, "hung": _human_span(hung),
+            "owner": owner, "owner_known": bool(owner),
+            "proofs": proofs, "why": str(worst.get("why") or "")[:400]})
+    for one in out["rows"]:
+        key = str(one["class"])
+        out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
+    out["checked"] = True
+    out["count"] = len(out["rows"])
+    out["reason"] = ("查过了：没有「既无 V 签也未放弃」的命题"
+                     if not out["rows"] else
+                     f"查过了：{out['count']} 条命题既无 V 签也未明确放弃"
+                     f"（扫了 {out['scanned']} 条非概念命题）")
+    return out
+
+
+def statements_abandoned_reading(store: Any) -> dict[str, Any]:
+    """I3 的另一格读数：明确放弃的命题（带理由与时间）。
+
+    判据只有一条：`status == "abandoned"` 且 `quote_reason` 是一条可解析的放弃标记
+    （`statementabandon.parse_abandon`，写侧 `schema.Statement.validate` 逐条核）。
+    "明确"这个词的机器含义就在这里：理由与时间都读得出来。
+
+    三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（没查成，不是"没有放弃"）。
+    自称放弃而标记读不出来的行不计入这一格（它们进 `statements_unsigned` 的
+    `abandoned_without_reason`），同时进 `problems` —— 两个读数对同一行给出相反的
+    结论是这一格最危险的形态，所以这里只认"可解析"的那一些。
+    """
+    from . import statementabandon as _SA
+
+    out: dict[str, Any] = {"checked": False, "count": 0, "checked_from": "statements",
+                           "rows": [], "problems": [], "reason": ""}
+    rows, why = _statement_rows(store)
+    if rows is None:
+        out["reason"] = why
+        return out
+    for sid, row in sorted(rows.items()):
+        if str(row.get("status") or "") != "abandoned":
+            continue
+        got = _SA.parse_abandon(row.get("quote_reason"))
+        if not got.get("checked"):
+            out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
+            continue
+        out["rows"].append({"stmt_id": sid, "kind": str(row.get("kind") or ""),
+                            "at": str(got.get("at") or ""),
+                            "reason": str(got.get("reason") or ""),
+                            "label": str(row.get("label") or "")})
+    out["checked"] = True
+    out["count"] = len(out["rows"])
+    out["reason"] = ("查过了：没有明确放弃的命题" if not out["rows"] else
+                     f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）")
+    return out
+
+
 def quote_evidence_reading(store: Any) -> dict[str, Any]:
     """D1 的收工读数：盘上"说通过"的行里，哪些拿不出可复核的区间（逐条点名）。
 
@@ -6214,6 +6473,19 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # `grade` / `class=TYPE_AHEAD_OF_GRADE_CODE`）。
     rep.readings["statement_grade"] = _run_reading(
         rep, "statement_grade", type_ahead_of_grade_rows, store)
+    # ---- 命题的签收尾那一格（业主 2026-11-01 裁定；本笔先只落读数）
+    #
+    # 业主逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，
+    # 或者放弃原命题」。这一格就是"既要一直改、又没人叫他改"的那批命题的读数 ——
+    # 82 真机的形态是"打回之后三小时里 0 次 verify_proof，而被拒的那几条悬在那里"。
+    #
+    # 本笔只把读数落进 `readings`（`checked` / `count` / 逐条 `rows`），门的强度由
+    # 下一笔（blocker）改 —— 那一条在提交信息里逐字写明"收工门强度变更"，不许被
+    # 读成"读数变化"。
+    rep.readings["statements_unsigned"] = _run_reading(
+        rep, "statements_unsigned", statements_unsigned_reading, store)
+    rep.readings["statements_abandoned"] = _run_reading(
+        rep, "statements_abandoned", statements_abandoned_reading, store)
     # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
     #
     # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：
