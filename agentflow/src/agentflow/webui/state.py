@@ -395,6 +395,25 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     pending: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
     orphans: list[dict[str, Any]] = []
+    # ---- 会话文件只读一遍（2026-11-01，161 ②）。
+    #
+    # 改前这一份快照把同一批会话文件读了 4 遍：`list_sessions` 一遍、待答那一路
+    # （`session_ids_with_questions` → `list_sessions` 一遍 + 自己 `read_session` 一遍，
+    # 有未答问题时 `pending_view` 再一遍）、下面主循环再一遍。真机 81 单个会话文件
+    # 26 MB / 约 436 ms ⇒ 一次 `/api/state` 光"读会话"就 1.6–2.0 s。
+    # 现在 `list_sessions(read_cache=…)` 把那一遍读出来的 `{sid: (事件, 坏行)}` 交出来，
+    # 待答与主循环都用它。这是"同一份盘上事实只解析一遍"，不是缓存：
+    # 每个请求仍然现读现算，读到的东西与改前逐字节相同。
+    read_cache: dict[str, tuple[list[dict], list[str]]] = {}
+    cache_ok = True
+    sessions_problem = ""
+    try:
+        listed = SS.list_sessions(root_p, read_cache=read_cache)
+    except Exception as exc:  # noqa: BLE001 - 读不到会话目录 = 没查成，不是「没有会话」
+        listed = []
+        # 没读成就不能拿"空缓存"冒充"这个工作区没有会话"：把口子关掉，让下游照旧自己读。
+        cache_ok = False
+        sessions_problem = f"会话目录没查成：{type(exc).__name__}: {exc}"
     # ---- 待答问题：唯一来源是 `userio`（裁定 L1）。
     #
     # 一次取全工作区（`workspace_pending_view`），再按会话号切给下面的 `_scan` ——
@@ -402,30 +421,30 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     # 那正是 L1 要删掉的那份第二实现（"哪些问题还没答"的口径必须只有一处）。
     # 这一层读不出来时如实记 `problems`（"没查成"不是"没有待答"），并让待答那一栏
     # 保持空 —— 页面据 `problems` 显示"没查成"的横幅。
+    # 交出去的是 `{sid: 事件}` 那份视图（`read_cache` 里存的是 `(事件, 坏行)` 两格）。
+    events_of: dict[str, list[dict]] = {sid: got_events
+                                        for sid, (got_events, _bad) in read_cache.items()}
     try:
         from .. import userio as _U
 
-        pending_all: list[dict[str, Any]] = _U.workspace_pending_view(root_p)
+        pending_all: list[dict[str, Any]] = _U.workspace_pending_view(
+            root_p, cache=events_of if cache_ok else None)
     except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
         pending_all = []
         problems.append(f"待答清单没查成：{type(exc).__name__}: {exc}")
+    # `problems` 的次序是读数的一部分：改前"待答"那条在前、会话目录那条在后，
+    # 这里照旧（两处同时失败时正文才不会换序），所以上面那一条先记、这里再补。
+    if sessions_problem:
+        problems.append(sessions_problem)
     by_sid: dict[str, list[dict[str, Any]]] = {}
     for one in pending_all:
         by_sid.setdefault(_text(one.get("sid")), []).append(one)
-    try:
-        listed = SS.list_sessions(root_p)
-    except Exception as exc:  # noqa: BLE001 - 读不到会话目录 = 没查成，不是「没有会话」
-        listed = []
-        problems.append(f"会话目录没查成：{type(exc).__name__}: {exc}")
     for item in listed:
         sid = _text(item.get("sid"))
         if not _sid_ok(sid):
             problems.append(f"会话号不安全，跳过：{sid!r}")
             continue
-        try:
-            events, bad = SS.read_session(root_p, sid=sid)
-        except Exception as exc:  # noqa: BLE001
-            events, bad = [], [f"{type(exc).__name__}: {exc}"]
+        events, bad = read_cache.get(sid, ([], []))
         got = _scan(root_p, sid, events, bad, by_sid.get(sid, ()))
         sessions.append({
             "sid": sid,

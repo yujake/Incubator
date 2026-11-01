@@ -100,7 +100,11 @@ def test_both_numbers_move_together_when_the_shared_list_changes(
         {"qid": "injected-2", "sid": SID, "role": "M", "ts": "", "timeout_sec": None,
          "text": "注入的二", "options": [], "multi": False, "index": 101},
     ]
-    monkeypatch.setattr(U, "workspace_pending_view", lambda _root: [dict(q) for q in fake])
+    # 桩要收下 `snapshot()` 新加的那个可选关键字 `cache`（161 ②：会话只读一遍，
+    # 待答与趟次共用那一遍的事件）。它是一条优化通道，不许改变"待答从哪来"这个问题：
+    # 注入的这两条 qid 在会话事件里根本不存在，下面仍然必须是 2。
+    monkeypatch.setattr(U, "workspace_pending_view",
+                        lambda _root, **_kw: [dict(q) for q in fake])
 
     snap = W.snapshot(root)
     assert len(snap["pending_questions"]) == 2, snap["pending_questions"]

@@ -194,7 +194,9 @@ def read_session(root: Any, sid: str | None = None) -> tuple[list[dict], list[st
     return read_jsonl(session_path(root, sid))
 
 
-def _iter_sessions(root: Any) -> list[tuple[pathlib.Path, list[dict], list[str]]]:
+def _iter_sessions(root: Any,
+                   read_cache: dict[str, tuple[list[dict], list[str]]] | None = None
+                   ) -> list[tuple[pathlib.Path, list[dict], list[str]]]:
     """这个项目的每一场会话：`(路径, 事件, 坏行问题)`，按文件名排序、每个文件只读一遍。
 
     为什么把「读一遍」收成一处：`list_sessions` / `session_ids_with_questions` /
@@ -203,11 +205,23 @@ def _iter_sessions(root: Any) -> list[tuple[pathlib.Path, list[dict], list[str]]
     `sessions/` 被读成 26.3MB / 404ms；合并后 1.0 遍 / 110ms）。
     三处读的是同一批文件、同一个口径（`jsonlfile.read_jsonl`），合起来只该读一遍。
     目录不存在 ⇒ 空列表（合法初态，不是错误）。
+
+    `read_cache` 是给调用方的出口（2026-11-01，161 ②）：传一个字典进来，这一遍读出来
+    的 `{sid: (事件, 坏行)}` 会一并填进去，调用方（`webui.state.snapshot`）就能拿同一
+    份事件去扫趟次与待答。没有这个出口，它只能把每个会话文件再读 1–3 遍（真机 81
+    单个文件 26 MB / ~436 ms，一次 `/api/state` 曾读 4 遍）。填进去的就是返回值里那
+    三格，一个字不改；不传则一切照旧。
     """
     d = sessions_dir(root)
     if not d.is_dir():
         return []
-    return [(p, *read_session(root, p.stem)) for p in sorted(d.glob("*.jsonl"))]
+    got: list[tuple[pathlib.Path, list[dict], list[str]]] = []
+    for p in sorted(d.glob("*.jsonl")):
+        events, problems = read_session(root, p.stem)
+        got.append((p, events, problems))
+        if read_cache is not None:
+            read_cache[p.stem] = (events, problems)
+    return got
 
 
 def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
@@ -271,8 +285,15 @@ def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     return (records, reading)
 
 
-def list_sessions(root: Any) -> list[dict]:
-    """列出这个项目的所有会话（按文件名排序）。目录不存在 ⇒ 空列表（合法初态）。"""
+def list_sessions(root: Any,
+                  *,
+                  read_cache: dict[str, tuple[list[dict], list[str]]] | None = None
+                  ) -> list[dict]:
+    """列出这个项目的所有会话（按文件名排序）。目录不存在 ⇒ 空列表（合法初态）。
+
+    `read_cache` 见 :func:`_iter_sessions`：传进来就把这一遍读出来的
+    `{sid: (事件, 坏行)}` 一并填好，返回值与读法都不受影响。
+    """
     return [
         {
             "sid": p.stem,
@@ -282,7 +303,7 @@ def list_sessions(root: Any) -> list[dict]:
             "first_ts": str(events[0].get("ts") or "") if events else "",
             "last_ts": str(events[-1].get("ts") or "") if events else "",
         }
-        for p, events, problems in _iter_sessions(root)
+        for p, events, problems in _iter_sessions(root, read_cache=read_cache)
     ]
 
 

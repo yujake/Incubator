@@ -277,7 +277,20 @@ def reply_text(event: Mapping[str, Any]) -> str:
     return str(event.get("answer") or "")
 
 
-def _events(session_root: Path, sid: str | None) -> list[dict]:
+def _events(session_root: Path, sid: str | None, *,
+            cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+            ) -> list[dict]:
+    """一段会话的事件；给了 `cache`（`{sid: 事件}`）且命中就不再读盘。
+
+    为什么留这个口（2026-11-01，161 ②）：`workspace_pending_view` 与它下游本来会把
+    每个会话文件读 2–3 遍，而这些调用点拿到的是同一份事件。`cache` 由调用方从
+    `sessions.list_sessions(read_cache=…)` 那一遍读盘里带过来；不传就照旧自己读。
+    返回列表是新的（浅拷贝）—— 调用方就地 `append/排序` 污染不到那一遍的缓存。
+    """
+    if cache is not None and sid is not None:
+        hit = cache.get(str(sid))
+        if hit is not None:
+            return list(hit)
     events, _problems = SS.read_session(session_root, sid=sid)
     return events
 
@@ -324,14 +337,17 @@ def _question_of(event: Mapping[str, Any]) -> Question:
                                       or event.get("multiSelect")))
 
 
-def pending_questions(session_root: Path | str, *, sid: str | None = None) -> list[Question]:
+def pending_questions(session_root: Path | str, *, sid: str | None = None,
+                      cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                      ) -> list[Question]:
     """还没被回答的问题（按提问顺序）。给 CLI 用：人打开终端时就能看到它在等什么。
 
     语义没有变（"问了还没答"）—— 变的只是"没答时框架会停下来"这件事的落点
     （在 `agent_loop` / `run-agent` 里，不在这里）。
+    `cache` 是 `{sid: 事件}`（见 :func:`_events`），给了且命中就不再读盘。
     """
     root = Path(session_root)
-    events = _events(root, sid)
+    events = _events(root, sid, cache=cache)
     answered = {str(e.get("qid")) for e in events if e.get("kind") == ANSWER_KIND}
     out: list[Question] = []
     for e in events:
@@ -355,7 +371,9 @@ def list_questions(session_root: Path | str, *, sid: str | None = None) -> list[
     return [_question_of(e) for e in _events(root, sid) if e.get("kind") == ASK_KIND]
 
 
-def session_ids_with_questions(session_root: Path | str) -> list[str]:
+def session_ids_with_questions(session_root: Path | str, *,
+                               cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                               ) -> list[str]:
     """哪些会话里出现过提问（给界面做跨会话扫描）。
 
     为什么要它：待答的东西必须「全局可达」。这条界面纪律我们抄自 DSH 的
@@ -364,9 +382,18 @@ def session_ids_with_questions(session_root: Path | str) -> list[str]:
     提问正阻塞着某一趟运行，而那一趟的会话可能不在人当前看的地方。
     于是人得先知道"该去哪些会话里找"，而这件事只有读遍 `sessions/` 才知道。
     读不出坏行的会话照样返回（提问可能就在那些好行里）—— 由调用方按需报出坏行数。
+
+    `cache` 是 `{sid: 事件}`：给了它就不再自己 `list_sessions` + 逐会话读盘
+    （那正是改前"一遍变两遍"的地方）。会话号集合与顺序口径不变：按 sid 排序，
+    与 `list_sessions` 按文件名排序是同一个次序（sid 就是文件名的 stem）。
     """
     root = Path(session_root)
     out: list[str] = []
+    if cache is not None:
+        for sid in sorted(cache):
+            if sid and any(e.get("kind") == ASK_KIND for e in cache[sid]):
+                out.append(sid)
+        return out
     for row in SS.list_sessions(root):
         sid = str(row.get("sid") or "")
         if not sid:
@@ -579,39 +606,47 @@ def reply_view(event: Mapping[str, Any]) -> dict[str, Any]:
             "by": str(event.get("by") or "user"), "late": bool(event.get("late"))}
 
 
-def pending_view(session_root: Path | str, *, sid: str | None = None) -> list[dict[str, Any]]:
+def pending_view(session_root: Path | str, *, sid: str | None = None,
+                 cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                 ) -> list[dict[str, Any]]:
     """一个会话里"还没被回答"的问题，逐条读成 `question_view` 的形状。
 
     与 `pending_questions` 的分工：那个给 Python 调用方（`Question` 对象），
     这个给读者/前端（JSON 安全的字典，带 `sid` 与事件下标）。两者都在本模块，
     于是"待答"这条口径只有一个来源。
+    `cache` 是 `{sid: 事件}`：给了且命中就不再读盘（同一份事件下面还要用一次）。
     """
     root = Path(session_root)
-    events = _events(root, sid)
+    events = _events(root, sid, cache=cache)
     index_of: dict[str, int] = {}
     for i, e in enumerate(events):
         if e.get("kind") == ASK_KIND:
             qid = str(e.get("qid") or "")
             index_of.setdefault(qid, i)
     out: list[dict[str, Any]] = []
-    for q in pending_questions(root, sid=sid):
+    for q in pending_questions(root, sid=sid, cache=cache):
         out.append(question_view(q, sid=str(sid or ""),
                                  index=index_of.get(q.qid)))
     return out
 
 
-def workspace_pending_view(session_root: Path | str) -> list[dict[str, Any]]:
+def workspace_pending_view(session_root: Path | str, *,
+                           cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                           ) -> list[dict[str, Any]]:
     """全部会话里还没被回答的问题（"待答必须全局可达"那条界面纪律的落点）。
 
     为什么它不是 `pending_view(root)` 能顶替的：不给 `sid` 时 `read_session` 读的是
     默认会话（`session_id()`），而界面上要的恰恰是"不挑会话"的那一份 —— 提问
     正阻塞着某一趟，而那一趟可能不在人当前看的地方（`DESIGN-CONDUCTOR.md` §1.1）。
     排序按 `(sid, index)`，于是两次调用的顺序稳定（判据按顺序比）。
+
+    `cache` 是 `{sid: 事件}`（由 `sessions.list_sessions(read_cache=…)` 那一遍读盘
+    带过来）：给了就不再把每个会话文件读 2 遍。不给 ⇒ 照旧自己读。
     """
     root = Path(session_root)
     out: list[dict[str, Any]] = []
-    for sid in session_ids_with_questions(root):
-        out.extend(pending_view(root, sid=sid))
+    for sid in session_ids_with_questions(root, cache=cache):
+        out.extend(pending_view(root, sid=sid, cache=cache))
     out.sort(key=lambda q: (str(q.get("sid") or ""),
                             q.get("index") if isinstance(q.get("index"), int) else -1))
     return out
