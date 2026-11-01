@@ -697,7 +697,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
     {"version": "p226", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p226（2026-11-03 · 业主批准动禁改区）：conductor.closing 的 summary 压缩（269→234 字符），保留 m_says_done / can_close / closable 的分工与 can_close=None 不是通过；这一句进 M 的 tools_lines，facts 键集仍 15 格（键名与条数一格未动）"}
+     "note": "抬版本 p226（2026-11-03 · 业主批准动禁改区）：conductor.closing 的 summary 压缩（269→234 字符），保留 m_says_done / can_close / closable 的分工与 can_close=None 不是通过；这一句进 M 的 tools_lines，facts 键集仍 15 格（键名与条数一格未动）"},
+    # p226 -> p227（2026-11-01，业主批准动禁改区 · FC-27；`draft/160` 三-4 的丁案）：
+    # 循环协议第 2 条（summon 那一形）补三句名册口径 —— 撞名被拒但真跑过的号，收口兜底
+    # 会补一个从未用过的新名字（名册行留 requested_name / refusal_code）；没跑过的号
+    # 永远不会拿到名字。它是共用段 ⇒ 十一格全换。一格事实的落点都没挪 ⇒ count /
+    # keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p227", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p227（2026-11-03 落账；业主 2026-11-01 裁定）：循环协议（summon 那一形）的名册口径改成「没跑过的号不许补名」—— 撞名被拒绝的是那一笔名册登记，但真跑完之后收口兜底会补一个从未用过的新名字（名册行留 requested_name / refusal_code 说明它当初想叫什么、为什么没落），没跑过的号（并发 / 深度 / 扇出这类闸拒掉的）永远不会拿到名字。换的是共用段 ⇒ 十一格提示词全换；facts 键集仍 15 格（键名与条数一格未动）"}
 
 )
 

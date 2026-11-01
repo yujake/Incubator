@@ -15,13 +15,14 @@
 
 ## 这一组守什么
 
-1. 正题（`name_taken`）：第二件活撞名被拒 ⇒ 销号 D1 之后，名册里仍然只有 D1/t1，
-   t2 一行都不多（改前：多一行 `D2/t2 repaired=true`）；
-2. 正题（`not_in_roster`，新号）：复用一个名册里没有的名字被拒 ⇒ 销号之后也不许多一行。
+1. 正题（`name_taken`，2026-11-01 新口径）：第二件活撞名被拒、但它真跑过
+   （`status=done / outcome=ok`）⇒ 销号时补一个从未用过的新名字（不是 D1），
+   add 行三格齐全，按新名寻址/销号都叫得到，第二次自愈 `fixed=0`；
+2. 正题（`not_in_roster`，新号）：复用一个名册里没有的名字被拒、但真跑过 ⇒ 同上。
    为什么不再用 `task_id_reused`：那个理由码的前提恰恰是"这个号已经在 known 里"，
-   于是销号兜底本来就不会补它 —— 实测（本笔的 temp 探针在两棵树上各跑一次）两棵树
-   的 `adds_after_retire` 完全相同（都只有 `D1/t1`）⇒ 那条判据恒绿，等于没量。
-   换成新号之后，改前（2c7b29da）销号会真的多出一行 `D2/t2`（行为红），改后才不多；
+   于是销号兜底本来就不会补它 —— 实测两棵树的 `adds_after_retire` 完全相同（都只有
+   `D1/t1`）⇒ 那条判据恒绿，等于没量。换成新号之后，改前（2c7b29da）销号会真的多出
+   一行 `D2/t2`（行为红），改后才不多；
 3. 反真空（真孤儿）：台账里有、名册里没有、没有拒绝记录 ⇒ 收工兜底仍然要补，
    否则 79 那趟"11 个节点卡住"会复发；
 4. 三态：拒绝流水读不出来 ⇒ `roster_repair` 不补（返回非空问题），不许把"读不到"
@@ -32,6 +33,22 @@
    补成新名字 —— 那种拒绝只写在台账行上、不进 `refusals/*.jsonl`，本文件前五条盖不住；
 7. 同批：上面那条收窄不许顺手把真孤儿排掉（第 3 条的加强版），且补出来的行要带
    `surface`（81 实测 13/13 条补登记行无面，正常行 52/52 有面）。
+
+## 2026-11-01 业主裁定后的口径变更（`draft/160` 三-4 的丁案）
+
+上一版把"被写口拒过"与"没跑过"折成同一类，于是 81 的 `t-000106`（真跑、`done/ok`、
+有产物，只是父点名的 `E2` 被一个从没跑过的号占着）永久无名。业主裁定：判据从
+"被拒过的号"改成"没跑过的号"。落地后本文件第 1、2 条改判：
+
+- 没跑过的号（`outcome="refused"`，即派活闸拒掉的）永远不许补名 —— 原样保留
+  （这是 d9ebb7fe 的实质，见下面第 6 条那两条正题）；
+- 真跑过的无名号必须补一个从未用过的新名（不许是被拒的那个，B1 不动），
+  且 add 行带 `named_after_run` / `requested_name` / `refusal_code` 三格留痕；
+- 补名之后 `name_of` / `surface_of` / `retire(name=新名)` 都叫得到；
+- 同一号不许补两次（第二次 `roster_repair` 必须 `fixed=0`）。
+
+这不是放宽：改判的三条判据都是加强（三格留痕、可寻址、幂等），而被宽的只有
+"真跑过、只是名字没落"这一档。
 
 ## 在旧树（2c7b29da）上怎么读
 
@@ -147,36 +164,68 @@ def _refused_lines(ws: pathlib.Path, owner: str) -> list[dict]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-def test_a_name_taken_dispatch_is_not_backfilled_at_retire(tmp_path: pathlib.Path) -> None:
-    """正题：撞名被拒的那件活，销号时不许被补成新名字。"""
+def _new_named_row(cond, parent: str, task_id: str) -> dict:
+    """那个号补出来的 add 行（读盘上的行，不读折叠视图 —— 留痕三格只在 add 行上）。"""
+    path = SEC.roster_path(cond.store.root, parent)
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    got = [r for r in rows if str(r.get("kind") or "") == "add"
+           and str(r.get("task_id") or "") == task_id]
+    assert len(got) == 1, (task_id, rows)
+    return got[0]
+
+
+def _a_really_ran_refusal_is_named(cond, parent: str, t1: str, t2: str,
+                                   want: str, code: str) -> None:
+    """判据①②③④的共用断言（2026-11-01 新口径）。"""
+    sec = cond.secretary
+    rows = _ids(cond, parent)
+    assert rows == [t1, t2], (
+        "真跑过的那一件必须被补名（新口径：判据从『被拒过』改成『没跑过』）", rows)
+    row2 = _row_of(cond, parent, t2)
+    new = str(row2.get("name") or "")
+    assert new and new != want, ("不许复用被拒的那个名字（B1）", row2)
+    # ② 三格留痕：它当初想叫什么、哪一档拒的、是不是跑过之后才补的名
+    disk = _new_named_row(cond, parent, t2)
+    assert disk.get("named_after_run") is True, disk
+    assert str(disk.get("requested_name") or "") == want, disk
+    assert str(disk.get("refusal_code") or "") == code, disk
+    assert str(disk.get("surface") or ""), ("补出来的行也要有面（1cdacbf6 的口径）", disk)
+    # ③ 补名之后按新名寻址 / 按新名销号都叫得到
+    assert sec.name_of(owner=parent, task_id=t2)[0] == new
+    assert sec.resolve_down(owner=parent, name=new)[0] == t2
+    assert sec.surface_of(owner=parent, task_id=t2).get("checked") is True
+    # ④ 同一号不许补两次（第二次自愈 fixed=0，名册不多行）
+    assert sec.roster_repair(owner=parent) == (0, "", [])
+    assert _ids(cond, parent) == [t1, t2]
+
+
+def test_a_name_taken_dispatch_is_named_at_retire_under_the_new_ruling(
+        tmp_path: pathlib.Path) -> None:
+    """正题（2026-11-01 新口径）：撞名被拒但真跑过的那件活，销号时补一个从未用过的新名。"""
     cond, parent, ws = _env(tmp_path)
     sec = cond.secretary
     t1 = _child(cond, parent, tag="first")
     made = sec.roster_add(owner=parent, role="D", task_id=t1, brief="第一件活",
                           task="做研究", want_name="D1")
     assert made.get("problem") == "", made
-    t2 = _child(cond, parent, tag="second")
+    t2 = _child(cond, parent, tag="second")      # 判据夹具：done/ok ⇒ 真跑过
     rec = cond._register_roster(task_id=t2, role="D", owner=parent,
                                 meta={"name": "D1", "brief": "第二件活", "task": "接着做"})
     assert str(rec.get("refusal_code") or "") == "name_taken", rec
     got = sec.retire(owner=parent, name="D1", by_task_id=parent, reason="判据")
     assert got.get("ok") is True, got
-    # 行为断言排在流水断言之前：旧树（没有 refusals_path）先按"名册多一行"红。
-    assert _ids(cond, parent) == [t1], (
-        "被拒的那件活在销号时被补成新名字了（等于悄悄改写那次拒绝）", _ids(cond, parent))
+    # 拒绝流水一条不少（拒绝本身没被改写）
     refused = _refused_lines(ws, parent)
     assert [str(r.get("task_id")) for r in refused] == [t2], refused
     assert str(refused[0].get("refusal_code")) == "name_taken", refused
+    # 回执要说清"它当初点名 D1 被拒、现在叫什么"
+    assert any("补名" in str(w) and "D1" in str(w) for w in (got.get("why") or [])), got
+    _a_really_ran_refusal_is_named(cond, parent, t1, t2, "D1", "name_taken")
 
 
-def test_a_not_in_roster_dispatch_is_not_backfilled_at_retire(
+def test_a_not_in_roster_dispatch_is_named_at_retire_under_the_new_ruling(
         tmp_path: pathlib.Path) -> None:
-    """正题：复用一个名册里没有的名字被拒（新号）⇒ 销号之后也不许多出一行。
-
-    改前的夹具用的是 `task_id_reused`，而那个码的前提就是"这个号已经在 known 里"
-    ⇒ 销号兜底本来就不会补它，改前/改后名册都不变（恒绿）。换成新号 + `not_in_roster`
-    之后，改前（2c7b29da）销号会真的补一行 `D2/t2 repaired=true`，这条判据才量得到行为。
-    """
+    """正题（2026-11-01 新口径）：复用一个名册里没有的名字被拒、但真跑过 ⇒ 同样补新名。"""
     cond, parent, ws = _env(tmp_path)
     sec = cond.secretary
     t1 = _child(cond, parent, tag="first")
@@ -185,7 +234,6 @@ def test_a_not_in_roster_dispatch_is_not_backfilled_at_retire(
     assert made.get("problem") == "", made
     t2 = _child(cond, parent, tag="second")
     before = _ids(cond, parent)
-    # 新号：名册里没有它（这正是"销号兜底会真的去补"的前提）。
     assert t2 not in before, before
     rec = cond._register_roster(task_id=t2, role="D", owner=parent,
                                 meta={"reuse": "D9", "brief": "复用一个不存在的名字",
@@ -193,12 +241,78 @@ def test_a_not_in_roster_dispatch_is_not_backfilled_at_retire(
     assert str(rec.get("refusal_code") or "") == "not_in_roster", rec
     got = sec.retire(owner=parent, name="D1", by_task_id=parent, reason="判据")
     assert got.get("ok") is True, got
-    # 行为断言排在流水断言之前：旧树（没有 refusals_path）先按"名册多一行"红。
-    assert _ids(cond, parent) == [t1], (
-        "被 not_in_roster 拒掉的新号，销号时被补成新名字了", _ids(cond, parent))
     refused = _refused_lines(ws, parent)
     assert [str(r.get("task_id")) for r in refused] == [t2], refused
     assert [str(r.get("refusal_code")) for r in refused] == ["not_in_roster"], refused
+    _a_really_ran_refusal_is_named(cond, parent, t1, t2, "D9", "not_in_roster")
+
+
+def _running_child(cond, parent: str, *, tag: str) -> str:
+    """一条还在飞的子行（`status=running`、没有 `ended_at`）：真跑证据不成立。"""
+    return str(cond._write_new_row({
+        "role": "D", "action": "research", "called_by": "M",
+        "parent_task_id": parent, "depth": 1, "input_key": f"judge:{tag}",
+        "status": "running", "outcome": None, "refusal_reason": None, "instance": "",
+        "detail": "判据夹具：还在跑", "error": None,
+        "started_at": "2026-10-29T17:00:00+08:00", "ended_at": None,
+        "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+    }, note=f"judge:running:{tag}"))
+
+
+def test_a_refused_registration_without_run_evidence_is_never_named(
+        tmp_path: pathlib.Path) -> None:
+    """①（新口径的硬边）：写口拒过、但没有真跑证据（还在飞/无 `ended_at`）⇒ 永远不补。
+
+    这一条与上面两条是同一口径的两端：判据从"被拒过"改成"没跑过"，而"跑没跑"由
+    `status` / `ended_at` 判 —— 还在飞的号既不是"跑过"，也不许被补名（159 的洞）。
+    它落定之后才补：见下一条。
+    """
+    cond, parent, _ws = _env(tmp_path)
+    sec = cond.secretary
+    t1 = _child(cond, parent, tag="first")
+    made = sec.roster_add(owner=parent, role="D", task_id=t1, brief="第一件活",
+                          task="做研究", want_name="D1")
+    assert made.get("problem") == "", made
+    flying = _running_child(cond, parent, tag="flying")
+    rec = cond._register_roster(task_id=flying, role="D", owner=parent,
+                                meta={"name": "D1", "brief": "还在跑的那件", "task": "接着做"})
+    assert str(rec.get("refusal_code") or "") == "name_taken", rec
+    fixed, why, skipped = sec.roster_repair(owner=parent)
+    assert fixed == 0 and why == "", (fixed, why, skipped)
+    assert flying not in _ids(cond, parent), ("还在飞的不许被补名", _ids(cond, parent))
+    # 把拒绝流水那条留着（拒绝是真的），但号没跑完 ⇒ 依然不补
+    got = sec.retire(owner=parent, name="D1", by_task_id=parent, reason="判据")
+    assert got.get("ok") is True, got
+    assert flying not in _ids(cond, parent)
+
+
+def test_the_same_number_is_named_once_it_really_ran(tmp_path: pathlib.Path) -> None:
+    """①→②：同一号落定（有 `ended_at`、`done/ok`）之后，下一次自愈必须补它，且只补一次。"""
+    cond, parent, _ws = _env(tmp_path)
+    sec = cond.secretary
+    t1 = _child(cond, parent, tag="first")
+    made = sec.roster_add(owner=parent, role="D", task_id=t1, brief="第一件活",
+                          task="做研究", want_name="D1")
+    assert made.get("problem") == "", made
+    flying = _running_child(cond, parent, tag="flying")
+    cond._register_roster(task_id=flying, role="D", owner=parent,
+                          meta={"name": "D1", "brief": "还在跑的那件", "task": "接着做"})
+    assert sec.roster_repair(owner=parent)[0] == 0
+    # 落定：它真跑完了
+    row = dict(cond._task(flying) or {})
+    row.update({"status": "done", "outcome": "ok",
+                "ended_at": "2026-10-29T17:05:00+08:00"})
+    with cond.store.tx("tasks", actor="test", note="judge:settle") as tx:
+        tx.upsert("tasks", row, note="judge:settle")
+    fixed, why, _skipped = sec.roster_repair(owner=parent)
+    assert fixed == 1 and why == "", (fixed, why, _ids(cond, parent))
+    named = _row_of(cond, parent, flying)
+    assert str(named.get("name") or "") not in ("", "D1"), named
+    disk = _new_named_row(cond, parent, flying)
+    assert str(disk.get("requested_name") or "") == "D1", disk
+    assert disk.get("named_after_run") is True, disk
+    # 幂等：再跑一次 fixed=0
+    assert sec.roster_repair(owner=parent) == (0, "", [])
 
 
 def test_a_real_orphan_is_still_backfilled(tmp_path: pathlib.Path) -> None:

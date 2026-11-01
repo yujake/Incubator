@@ -3225,9 +3225,16 @@ class Conductor:
         # 兜底自愈。判据是"秘书那一侧有没有报 problem"而不是"有没有码"—— 自愈会把刚被拒的
         # 这一条当成"台账有、名册没有"的漏行，按一个新名字补进名册 ⇒ 换个地方继续静默改名
         # （`draft/151` 三-1；改前读数 `temp/probe_h11_leftovers.py` 的 H/I/J：拒绝之后名册
-        # 里仍多出 `D2/t-000006 repaired=true`）。代价是"被拒的那一条暂时没有名字"——
+        # 里仍多出 `D2/t-000006 repaired=true`）。代价是"被拒的那一条这一次没有名字"——
         # 它由收口那一刻的收工兜底（`Secretary.retire` 里的 `roster_repair`）负责补，
         # 两件事不是一个时刻：派活时不自作主张，收口时必须给得出名字（`draft/151` 三-6）。
+        #
+        # 2026-11-01 业主裁定（`draft/160` 三-4 的丁案）把"给得出名字"的对象定死了：
+        # 没跑过的号（`outcome="refused"`）永远没有名字；真跑过的号（`status` 是终态、
+        # 有 `ended_at`）会在自愈时补一个从未用过的新名字，add 行带
+        # `named_after_run` / `requested_name` / `refusal_code` 三格留痕（被拒的那个
+        # 名字不复用）。所以这里"交回父决定"的口径一个字没变，变的是收口那一侧：拒过
+        # 但跑过的号不再永久无名。
         if raised:
             # 拒绝已在写口那一刻落成流水（`Secretary.roster_add` 的包装层，同一个
             # per-owner 临界区）；这里只把"记录没写成"那一句如实带出来
@@ -3275,6 +3282,20 @@ class Conductor:
             fixed, why, skipped = 0, f"{type(exc).__name__}: {exc}", []
         if fixed:
             note = (note + "；" if note else "") + f"兜底自愈：补了 {fixed} 条当时没写进名册的代理行"
+        # 丁（业主 2026-11-01）：补名必须说清"它当初点名要什么、现在叫什么" ——
+        # 否则读回执的人只会看到"多了一行"，而名字在人的视角里像是丢了。
+        named = list(getattr(sink, "last_repair_named", None) or [])
+        if named:
+            bits: list[str] = []
+            for x in named[:5]:
+                one = str(x.get("task_id") or "")
+                if str(x.get("requested_name") or ""):
+                    one += (f"（它点名的 {x.get('requested_name')} 被拒："
+                            f"{x.get('refusal_code')}）⇒ 补成 {x.get('name')}")
+                else:
+                    one += f" ⇒ {x.get('name')}"
+                bits.append(one)
+            note = (note + "；" if note else "") + "补名：" + "、".join(bits)
         if skipped:
             # 读数：因为「还在飞（名册登记还没发生）」而跳过的号。不回这一格，
             # 「该补没补」在盘上就只剩一条谁也读不出来的沉默（`draft/159` §三-甲）。

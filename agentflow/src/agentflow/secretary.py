@@ -7927,29 +7927,39 @@ class Secretary:
         两处一对调，这条保证就没了，而所有正题仍会是绿的（读序负控钉在
         `tests/test_sibling_registration_race_is_not_backfilled.py`）。
 
-        ## 只补"真孤儿"（业主 2026-11-02 裁定，收窄；2026-11-01 补第三个口）
+        ## 只补"该有名字"的号（业主 2026-11-01 裁定：判据从"被拒过的号"改成"没跑过的号"）
 
-        补的行必须同时满足：不在已知集（从未登记过）、不在拒绝流水里（不是"派活时
-        被写口拒过"那一种）、台账行自己也没说它是拒绝（不是"被派活闸拒掉"那一种）。
-        被拒是一次有记录的决定（:meth:`roster_refusal_note`），收口时再把它变成子节点
-        等于悄悄改写事实；而真正的孤儿（台账里有、名册里没有、也没有拒绝记录 ——
-        实例分派 / 队列入账 / 更早的形态）仍然要补，否则 79 那趟"11 个节点卡住"会复发。
-        拒绝流水读不出来 ⇒ 一律不补（三态：读不到不是没被拒过）。
+        三档，逐档对着一个已堵住的洞（`draft/160` 四-4）：
 
-        ## 为什么还要读台账行的 `outcome`（`draft/158` §二-1）
+        ① 派活闸拒掉的号（台账行 `outcome="refused"`）：永远不补。这是 1cdacbf6 的洞
+           （81 那 7 条 phantom 就是这么冒出假名册项的），那一条排除一个字不动；
+        ② 名册写口拒过的号（`refusals/<父>.jsonl` 里有它的记录）：只有"真跑过"时才补。
+           这是 d9ebb7fe 的洞的收窄：它当时要挡的是"没跑过的号被补成新名字"，但把
+           "真跑了、只是名字没落"的也一起挡了 —— 81 的 `t-000106` 因此永久无名。业主
+           2026-11-01 的裁定是：拒绝是一次有记录的决定，但"这次派活被拒"与"这次名册
+           登记被拒"是两件事（后者是部分拒绝：派活成功、子代理真跑、只有名字没落）；
+        ③ 从没被拒过的孤儿（实例分派 / 队列入账 / 更早的形态）：老口径照补 —— 79 那趟
+           "11 个节点卡住"就是这一档，不许因为 ② 的改动把它一起关掉。这一档今天只由
+           `roster_pending` 挡在飞，不要求 `ended_at`：一条 `running` 却没有结束时刻的
+           行是"不知道跑没跑"，而"父按名销不掉它"的代价（整棵树收不了工）比"补了一个
+           可能没跑完的号"更不可逆。
 
-        拒绝有三个口，:meth:`_refused_task_ids` 只看得见第一个：名册写口拒的
-        （`name_taken` / `task_id_reused` / …）落 `refusals/<父>.jsonl`；而派活闸拒的
-        （`concurrency_exceeded`，`Conductor._refuse`）不写那份流水，只在台账上留一条
-        `outcome="refused"` 的真行（`conductor.py` 那句"被拒的那一次不登记"就是它自己
-        写的口径）。81 那趟实测：13 行 `repaired` 里 7 条是这种号（t-000078/79/80、
-        t-000027/28、t-000030/31），名册里挂着 7 个从没跑过的项、还占掉了本该给真子代理
-        的名字（`t-000106` 因此永久无名）。所以这里再看一眼台账行：它说自己是拒绝，就不补
-        —— 任何 `refusal_reason`，不只 `concurrency_exceeded`。
+        "真跑过"的判据不另写一份：它就是模块级的 :func:`ran_but_unnamed`（收工门的
+        `roster_registration.unnamed` 与网页那一格用的是同一个函数）。名义上是四个
+        条件，这里用的是同一份 `status` / `outcome` / `ended_at` 三格。
+
+        ## 补名之后的留痕（业主 2026-11-01：别让人以为名字丢了）
+
+        add 行多三格：`named_after_run`（这一条是不是"跑过之后才补的名"）、
+        `requested_name`（它当初点名要的那个，原样保留 —— 那是"它曾经想叫 E2"的记录）、
+        `refusal_code`（哪一档拒的）。名册是 JSONL，没有 schema 契约，加键不改旧键。
+        回执（`:meth:`retire` 的 `why` 与 `_register_roster` 的 note）逐条说清
+        "你点的 E2 被拒，它叫 E4"；`self.last_repair_named` 是这两处读的同一份读数。
         """
         cond = self._conductor()
         if cond is None:
             return 0, "没有 store ⇒ 读不到台账，补不了", []
+        self.last_repair_named = []
         try:
             rows = [r for r in cond._tasks()
                     if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
@@ -7965,19 +7975,40 @@ class Secretary:
         refused, bad_ref = self._refused_task_ids(owner)
         if bad_ref:
             return 0, f"拒绝流水有 {len(bad_ref)} 行读不出来 ⇒ 不补（免得把被拒的号补成新名字）", []
+        # 拒绝流水里的那几格（`requested_name` / `refusal_code`）：只用来给补出来的 add 行
+        # 留痕，不参与判据（判据读的是 `_refused_task_ids` 那份号集合，同一个文件）。
+        asked_of: dict[str, dict[str, Any]] = {}
+        try:
+            for item in (registration_refusals(self.root, owner=owner).get("items") or []):
+                rtid = str(item.get("task_id") or "")
+                if rtid:
+                    asked_of[rtid] = item
+        except Exception:  # noqa: BLE001 —— 读不成只是少两格留痕（判据已由 bad_ref 先把过）
+            asked_of = {}
         # 在飞集合：读序在 `cond._tasks()` 之后（见 docstring，判据钉着这一条）。
         pending = roster_pending(self.root, owner)
-        cand = [str(r.get("task_id") or "") for r in rows
-                if str(r.get("task_id") or "") not in known
-                and str(r.get("task_id") or "") not in refused
-                # 第三个口：派活闸拒掉的号只有台账行这一份证据（见上面的 docstring）
-                and str(r.get("outcome") or "") != "refused"]
+        cand: list[str] = []
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            if not tid or tid in known:
+                continue
+            # ① 闸拒的号：永远不补（1cdacbf6，一字不动）。
+            if str(r.get("outcome") or "") == "refused":
+                continue
+            # ② 写口拒过的号：只有真跑过才补（丁）；没跑过的照样不补（d9ebb7fe 的实质）。
+            if tid in refused and not ran_but_unnamed(r, frozenset()):
+                continue
+            cand.append(tid)
         skipped = sorted(tid for tid in cand if tid in pending)
         todo = sorted(tid for tid in cand if tid not in pending)
         fixed = 0
         for tid in todo:
             row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})
             role = str(row.get("role") or "")
+            ran = ran_but_unnamed(row, frozenset())
+            asked = asked_of.get(tid) or {}
+            want_name = str(asked.get("requested_name") or "")
+            refusal_code = str(asked.get("refusal_code") or "")
             name, problem = self.next_name(owner, role)
             # 死分支·契约出口：与 `_roster_add` 里那一支是同一件事（`next_name` 今天恒返回
             # 空问题串）。两处必须成对：删/留都一起改，并同步
@@ -8004,10 +8035,20 @@ class Secretary:
                                       # 这句话是秘书写的（不是父给的）⇒ 留痕那一格照写
                                       "brief_source": "secretary",
                                       "surface": slot,
+                                      # 丁的三格留痕（业主 2026-11-01）：它是不是"跑过之后才补的
+                                      # 名"、它当初点名要什么（原样保留 —— 那是"它曾经想叫 E2"
+                                      # 的记录）、哪一档拒的。JSONL 无 schema 契约，加键不改旧键。
+                                      "named_after_run": bool(ran),
+                                      "requested_name": want_name,
+                                      "refusal_code": refusal_code,
                                       "at": _now_iso(), "repaired": True})
             if not ok2:
                 return fixed, f"名册补写没成：{why2}", skipped
             fixed += 1
+            self.last_repair_named.append({
+                "task_id": tid, "name": name, "role": role,
+                "named_after_run": bool(ran), "requested_name": want_name,
+                "refusal_code": refusal_code, "surface": slot})
         return fixed, "", skipped
 
     def resolve_down(self, *, owner: str, name: str) -> tuple[str, str]:
@@ -8909,14 +8950,26 @@ class Secretary:
         # 还缺行，那些子代理连名字都没有，父根本无法按名册名去销它（79 那趟 11 个节点
         # 卡住就是这个形态）。补一行只写名册与对照表，不动台账、不动进程。
         #
-        # 两件事不是同一件事（`draft/151` 三-6）：派活那一刻被 `name_taken` 拒绝的号，
-        # 会在这里（收口那一刻）拿到一个新名字。派活时不自作主张、收口时必须给得出名字，
-        # 两者职责不同；净效果是"被拒的名字最终仍会出现一个新名字"，这一点必须让人知道。
+        # 两件事不是同一件事（`draft/151` 三-6，2026-11-01 按业主裁定改口径）：
+        # 派活时不自作主张、收口时必须给得出名字。而"必须给得出"的对象是"真跑过"的号 ——
+        # 没跑过的号（被派活闸拒掉的）永远没有名字；写口拒过但真跑了的号，会在这里拿到
+        # 一个从未发过的新名字（`roster_repair` 补，add 行带 `named_after_run` /
+        # `requested_name` / `refusal_code` 三格留痕，被拒的那个名字不复用）。
+        # 下面把"谁补成了什么"原样写进回执 —— 否则读回执的人会以为名字丢了。
         repaired = 0
         try:
             repaired, _repair_why, _repair_skipped = self.roster_repair(owner=str(owner))
         except Exception as exc:  # noqa: BLE001 —— 兜底失败不许带走这次销号
             repaired, _repair_why, _repair_skipped = 0, f"{type(exc).__name__}: {exc}", []
+        named_notes: list[str] = []
+        for x in (getattr(self, "last_repair_named", None) or []):
+            if str(x.get("requested_name") or ""):
+                named_notes.append(
+                    f"补名：{x.get('task_id')} 当初点名的 {x.get('requested_name')} 被拒"
+                    f"（{x.get('refusal_code')}），它现在叫 {x.get('name')}"
+                    "（跑过之后补的新名字；被拒的那个不复用）")
+            else:
+                named_notes.append(f"补名：{x.get('task_id')} 补成 {x.get('name')}")
         tid, problem = self.resolve_down(owner=owner, name=str(name))
         if problem:
             if self._is_retired(owner, str(name)):
@@ -9187,7 +9240,8 @@ class Secretary:
                            f"{settled.get('status_before')}）⇒ 已落终态 "
                            f"{settled.get('status_after')}，下一次 summon 重新算占位"]
                           if settled.get("was_occupying") else [])
-                       + ([surface_note] if surface_note else []),
+                       + ([surface_note] if surface_note else [])
+                       + named_notes,
                 "surface": slot, "reading": reading,
                 "slot_freed": bool(settled.get("was_occupying")),
                 "settle": dict(settled)}

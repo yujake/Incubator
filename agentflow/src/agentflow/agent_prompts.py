@@ -2881,7 +2881,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格、键名一格未动）；
 #:    `tests/golden/tool_surface_snapshot.json` 与 `agent_surface_snapshot.json` 重冻；
 #:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
-PROMPT_VERSION = "p226"
+#: `p227`（2026-11-01，业主批准动禁改区 · FC-27；`draft/160` 三-4 的丁案）：名册口径
+#: 从"被拒过的号不许补名"改成"没跑过的号不许补名"—— 循环协议第 2 条（summon 那一形）
+#: 在"撞名 ⇒ 这次登记被拒、派活照跑"后面补三句：真跑完之后收口兜底会补一个从未用过的
+#: 新名字（名册行留 `requested_name` / `refusal_code`），没跑过的号永远不会拿到名字。
+#:
+#: ① 换的是共用段（循环协议）⇒ 十一格全换（重算读数：变化的格 = A–H / L / M / V 全部；
+#:    `temp/_recompute_160.py` 的现算值，不是手抄）。
+#: ② 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION` 抬到 p227；
+#:    `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
+#:    15 格、键名一格未动）；`tests/golden/agent_surface_snapshot.json` 重冻；
+#:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
+PROMPT_VERSION = "p227"
 
 
 
@@ -2953,7 +2964,10 @@ LOOP_PROTOCOL = """\
    要给**已有的**子代理再派一件活就写 `reuse:"D1"`（复用**不新增名册项**，只多一次调用）；
    父可以自己提名（`name`），也可以只给角色由秘书分配 —— 名字一经分配**不再改**
    （名字被占用或已销号 ⇒ 被受控拒绝的是**那一笔名册登记**：这次派活照跑、名字不落、
-   读数里写明理由；别自己换一个名字硬发）。
+   读数里写明理由；别自己换一个名字硬发）。但**它不会因此永久无名**：这一次**真跑完**
+   之后，收口时的兜底会给它补一个**从未用过的新名字**（名册行里留着 `requested_name`
+   与 `refusal_code`：你当初点的那个名字、为什么没落），下次看名册就知道它叫什么；
+   没跑过的号（被并发 / 深度 / 扇出这类闸拒掉的）永远不会拿到名字。
    要点名时先 `{"roster": {"of": "self"}}` 看一眼活跃名册（名字 · 简介 · 状态 ·
    在飞几件）；要某一个子代理**停下当前那一轮**就用 `{"interrupt": {"name": "D1"}}`
    （只停它那一轮：排队消息还在、它自己的子代理继续跑），**不要用全局叫停**。
