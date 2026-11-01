@@ -152,7 +152,7 @@ def test_the_second_submission_merges_instead_of_creating_a_row(tmp_path):
     sid = str(first["stmt_id"])
     second = sec.record_statement({**_body(FULL_A_ALT), "proof_text": PROOF_B},
                                   role="B")
-    assert second.get("ok") is True, second
+    assert second.get("checked") is True, second
     assert second.get("created") is False, second
     assert second.get("merged") is True, second
     assert str(second.get("stmt_id") or "") == sid, second

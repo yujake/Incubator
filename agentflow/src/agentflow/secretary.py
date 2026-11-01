@@ -1310,6 +1310,48 @@ def _is_proposition_kind(kind: Any) -> bool:
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
 
 
+#: `same_as` 归一化时要剥掉的外壳字符：模型把候选号写成了 Python/JSON 列表字面量
+#: （`"['000003']"`）或加了引号 / 空白（`'"000003"'` / `" 000003 "`）。
+#:
+#: 为什么集中成一个常量：真机 82 的 52 处坏值只出现三种外形（见
+#: `temp/probe_82_errors/same_as_hits.txt`），而"外壳有哪些字符"是这件事的唯一判据；
+#: 散在分支里写两遍，下一次多一种外形就会有半处漏掉。
+SAME_AS_WRAPPER_CHARS = "[]'\"` \t\r\n"
+
+
+def normalize_same_as(value: Any) -> tuple[str, int]:
+    """把模型点名的号归一化成裸号。返回 `(裸号, 它给了几个号)`。
+
+    真机 82（2026-11-01）：模型判 same 时把 `same_as` 写成 `"['000003']"`（本趟 52 处 /
+    16 个会话行），而 `adjudicate_proposition` 的成员判据是"逐字等于某个候选号" ⇒
+    判了 same 也不并、照旧落新行，造出 000001/000004、000003/000005 两个重复对。
+
+    ## 口径（宽进严出）
+    - 外层 `[]`、引号、反引号与空白一律剥掉：`"['000003']"` / `"000003"` /
+      `" 000003 "` 都得到 `"000003"`；
+    - 逗号分隔出多个号 ⇒ 不猜（返回 `("", n)`，n 是模型给了几个）：本趟真出现过
+      `"['000001', '000004']"`，替它挑一个等于替它表态；
+    - 空串 ⇒ `("", 0)`。
+
+    归一化只在"模型给了什么"这一层做，成员判定（在候选表里）仍由调用方按裸号逐字核
+    —— 这一格不是放宽，是把"外壳"与"指错号"两件事分开：前者是读数格式，后者是不许并。
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return "", 0
+    body = raw.strip(SAME_AS_WRAPPER_CHARS)
+    if not body:
+        return "", 0
+    pieces = [p.strip(SAME_AS_WRAPPER_CHARS) for p in body.split(",")]
+    pieces = [p for p in pieces if p]
+    if len(pieces) > 1:
+        return "", len(pieces)
+    if not pieces:
+        return "", 0
+    return pieces[0], 1
+
+
+
 #: 同一性按"定义项相同"判的那几档 kind（概念行没有条件 → 结论，命题那一套判据对它失效）。
 #:
 #: 为什么只有 `concept` 一档、不顺手带上 `definition`：这一档的判据是"标签（或正文里
@@ -5689,11 +5731,16 @@ class Secretary:
         out["statement_sha256"] = key
         cached = self._proposition_verdicts.get(key) or proposition_verdict_of(self.root, full)
         if cached:
+            # 缓存里的坏值也要按同一把尺归一化：本趟 `proposition_verdicts.jsonl` 的
+            # 第 6-9 行就是 `"['000001']"` 这一族，而同一段正文重交时读的正是它
+            # （"判过一次就复用"这条纪律会让坏值一直活着）。只归一化外形，
+            # 不重判 verdict —— 判词是那一趟的读数，改它等于替那一趟翻案。
+            cached_same_as, _n = normalize_same_as(cached.get("same_as"))
             out.update(
                 checked=True,
                 verdict=str(cached.get("verdict") or _PK.STATE_UNKNOWN),
                 canonical_name=str(cached.get("canonical_name") or ""),
-                same_as=str(cached.get("same_as") or ""),
+                same_as=cached_same_as,
                 route=str(cached.get("route") or ""),
                 condition=str(cached.get("condition") or ""),
                 conclusion=str(cached.get("conclusion") or ""),
@@ -5737,10 +5784,33 @@ class Secretary:
         out["basis"] = "；".join(parts + ([out["reason"]] if out["reason"] else []))
         if out["verdict"] == _PK.STATE_SAME:
             ids = [str(c["stmt_id"]) for c in candidates]
-            if out["same_as"] not in ids:
+            # ---- 先归一化外壳，再判成员（真机 82，2026-11-01）
+            #
+            # 现场：模型判 same 时把号写成 `"['000003']"`（52 处 / 16 个会话行），
+            # 而下面这条成员判据逐字比 ⇒ 判了 same 也不并、照旧落新行
+            # （重复对 000001/000004、000003/000005 就是这么来的）。
+            # 纪律不改：归一化后仍指不出候选号 ⇒ 不并（"凭一个指不出来的号合并，
+            # 等于替它编一条依据"这句话仍然成立）；多元素列表也不猜，只说清"你给了 N 个号"。
+            raw_same_as = str(out["same_as"] or "")
+            normalized, how_many = normalize_same_as(raw_same_as)
+            out["same_as"] = normalized
+            if not normalized:
+                out["verdict"] = _PK.STATE_UNKNOWN
+                if how_many > 1:
+                    out["reason"] = (
+                        f"模型判 same，但 same_as 给了 {how_many} 个号（收到 {raw_same_as!r}）"
+                        f" ⇒ 不猜：并进哪一条是它的判断，框架替它挑一个等于替它表态；"
+                        f"要并请只点一个号（候选 {ids or '空'}）")
+                else:
+                    out["reason"] = (
+                        f"模型判 same，但 same_as 没给出可用的号（收到 {raw_same_as!r}）"
+                        f" ⇒ 不并：指不出候选号的合并等于替它编一条依据（候选 {ids or '空'}）")
+                out["basis"] = "；".join(parts + [out["reason"]])
+            elif normalized not in ids:
                 out["verdict"] = _PK.STATE_UNKNOWN
                 out["reason"] = (
-                    f"模型判 same，但 same_as={out['same_as']!r} 不是候选表里的号"
+                    f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
+                    f" 不是候选表里的号"
                     f"（候选 {ids or '空'}）⇒ 不并：凭一个指不出来的号合并，等于替它编一条依据")
                 out["basis"] = "；".join(parts + [out["reason"]])
         try:
