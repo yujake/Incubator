@@ -654,9 +654,21 @@ def _restore_role_seams():
     _LS._ROLE_SEAMS.update(saved)
 
 
-#: 四条写路径上全部进程级可变状态的会话基线（由下面那条会话级 autouse 夹具在
-#: 第一条判据之前拍下；每条判据收尾都还原到这一份）。清单只有一处，读/写共用
+#: 四条写路径上全部进程级可变状态的会话基线。清单只有一处，读/写共用
 #: `_write_path_hook_state()` —— 两处各抄一份，后加的那一格一定漏。
+#:
+#: ## 拍摄时点：本文件导入期（不是会话夹具）
+#:
+#: 这一句是可检验的：pytest 在收集阶段导入测试模块，而
+#: `tests/test_agent_prompts.py:1533` 在导入期执行 `REGISTRY = build_registry().registry`
+#: ⇒ `tools/__init__.py:726` 的 `build_registry()` 经 `clock_tools._install_append_hook()`
+#: 把 `_observe_session_event` 挂到 `sessions._APPEND_HOOK`。基线若交给 session 夹具在
+#: 第一条判据 setup 时才拍（2026-11-03 156 ④ 的实现），拍到的就是这条别的测试模块的
+#: 导入期副作用；随后每条判据收尾按它把钩子装回槽里 ⇒ `sse.attach()` 如实报
+#: `replaced=('append',)`（2026-11-01 实测：`pytest tests/test_agent_prompts.py
+#: tests/test_webui_sse.py -q` 改前 1 failed / 85 passed，改后 86 passed）。
+#: 所以拍摄必须早于"任何测试模块被导入"。守它的判据：
+#: `tests/test_the_hook_baseline_is_captured_before_the_imports.py`。
 _WRITE_PATH_HOOK_BASELINE: dict = {}
 
 
@@ -697,6 +709,11 @@ def _write_path_hook_state() -> dict:
     }
 
 
+#: 导入期就拍（理由见 `_WRITE_PATH_HOOK_BASELINE` 上方那段）：此刻 `sys.modules` 里
+#: 还没有任何测试模块 —— 测试模块是 pytest 收集阶段才导入的，晚于本文件。
+_WRITE_PATH_HOOK_BASELINE.update(_write_path_hook_state())
+
+
 def _apply_write_path_hook_state(saved: dict) -> None:
     """把上面那一份状态原样装回去（`_ATTACHED` / `_PREV` 原地清空再填，保持同一对象）。"""
     from agentflow import sessions as _SS
@@ -726,9 +743,13 @@ def _apply_write_path_hook_state(saved: dict) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def _write_path_hooks_baseline():
-    """在第一条判据之前拍下"会话基线"，供下面那条逐条还原的夹具用。
+    """会话基线的应用（拍摄已在导入期，见 `_WRITE_PATH_HOOK_BASELINE` 上方那段）。
 
-    为什么基线要在会话级拍、而不是每条判据自己"进来时拍一张"（2026-11-03，156 ④）：
+    为什么 setup 也要 apply 一次：收集期的导入副作用（任何测试模块在导入期调
+    `build_registry()` —— 例如 `tests/test_agent_prompts.py:1533`）不许带进第一条判据；
+    不先 apply，第一条判据看到的仍是"收集跑完时"的状态，而那不是产品缺省。
+
+    为什么基线要在会话级、而不是每条判据自己"进来时拍一张"（2026-11-03，156 ④）：
     `scope="module"` 的夹具只装配一次，它们跑在第一条判据的函数级夹具之前。
     于是模块夹具装上的东西（`build_registry()` 顺带把 `clock_tools._observe_session_event`
     挂到 `sessions.append` 上，`test_prompt_cache_active_tier.py` 的 `renders` 就是
@@ -736,8 +757,7 @@ def _write_path_hooks_baseline():
     逐条快照只保证"这条判据没改坏"，不保证"每条判据从同一个起点出发" ——
     而后者才是隔离。会话基线是那个起点。
     """
-    _WRITE_PATH_HOOK_BASELINE.clear()
-    _WRITE_PATH_HOOK_BASELINE.update(_write_path_hook_state())
+    _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
     yield
     _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
 
