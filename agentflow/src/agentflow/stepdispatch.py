@@ -58,10 +58,34 @@ CATCH_FAILED = "catch_failed"
 #: 某一条没执行的两档理由（不是"成功"，也不是"被拒"——是"没轮到"）。
 NOT_EXECUTED_BUDGET = "budget"
 NOT_EXECUTED_FINISHED = "finished"
+#: 第三档（2026-11-01，真机 82 · F-1）：外面叫停（业主按停 / 强停 / 父叫停）导致这一回合收工。
+#:
+#: 为什么必须与 `NOT_EXECUTED_FINISHED` 分开：后者是"模型自己把回合收了"（它做错了），
+#: 前者是"有人在它做到一半时按了停"（它一条都没做错）。82 的 V 步 3 就是后者
+#: （`runs/stop-history.jsonl` 里 `by="user"`），却被 `errorstats` 整包记成
+#: `multi_call_unexecuted`（真失败），同一句 `warn` 还在教"下一步请只发一条调用"
+#: —— 与"多调用是能力"（D-65）自相矛盾。名字分开是这条修法的全部：读数按名字分流。
+NOT_EXECUTED_CANCELLED_BY_STOP = "cancelled_by_stop"
+
+#: 停机读数的事件名（不是 `STEP_CALL_EVENT`）：它是一条过程读数，不是"一条调用"。
+#:
+#: 为什么换事件名而不是多加一格：`errorstats` 的 `agent_step_call` 分支对任何
+#: `not_executed=True` 的记录，只要结局原话不在码表里就兜底记成
+#: `multi_call_unexecuted`（"它至少说明这一条没执行成"）。停机那一条的结局原话
+#: 也进不了码表（它是新的过程读数），于是只加字段不换名字的话，读数照旧是错的。
+#: 换成独立的 kind 之后，"这条记录不是一次失败调用"在结构上成立，不靠文案豁免。
+STEP_CALL_STOPPED_EVENT = "agent_step_call_cancelled_by_stop"
+
+#: 停机读数的类目名（有名字才能被计数；`errorstats` 的扩面那一侧按它登记）。
+STOP_CANCELLED_BY_STOP = "multi_call_cancelled_by_stop"
 
 #: 汇总里那句可执行建议（让模型据此少发并列调用）。
 ADVICE = ("下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，"
           "不会合并成一步。")
+
+#: 停机那一档的汇总建议（不再教"只发一条"：停机不是多发调用做错了）。
+STOP_ADVICE = ("这一次的未执行来自停机（业主 / 父叫停），不是「多发了一条」的错："
+               "多调用是能力；停机之后剩下的条目不再执行。")
 
 #: 一处文本上限（汇总那一行要能进 warn，而 warn 会进模型上下文）。
 LINE_CHARS = 80
@@ -214,8 +238,16 @@ class StepDispatch:
         return got
 
     def mark_not_executed(self, item: StepItem, reason: str) -> dict[str, Any]:
-        """把一条记成"没执行"（仍占一个步号：不计步会让"第几步"错位）。"""
+        """把一条记成"没执行"（仍占一个步号：不计步会让"第几步"错位）。
+
+        三档理由分开（`budget` / `finished` / `cancelled_by_stop`）：前两档是
+        "预算耗尽"与"模型自己把回合收了"，第三档是"外面按了停"。第三档额外带
+        `stop_reading` 这个名字，逐条记录据此换一个 kind（见 `STEP_CALL_STOPPED_EVENT`）
+        —— 停机那一条不是失败调用，读侧不许把它记成 `multi_call_unexecuted`。
+        """
+        cancelled = str(reason) == NOT_EXECUTED_CANCELLED_BY_STOP
         why = ("因预算未执行" if str(reason) == NOT_EXECUTED_BUDGET
+               else "因业主叫停（停机档）未执行" if cancelled
                else "因本回合已收工未执行")
         got = outcome_of(item.shape, item.payload, {}, executed=False)
         got["line"] = why
@@ -223,6 +255,8 @@ class StepDispatch:
             got["line"] = f"未执行（这一条解码不出来：{digest_line(item.detail, 40)}）"
         got["not_executed"] = True
         got["reason"] = str(reason or "")
+        if cancelled:
+            got["stop_reading"] = STOP_CANCELLED_BY_STOP
         got["detail"] = (f"{why}（第 {item.call_index + 1} 条 "
                          f"{action_of(item.shape, item.payload)}）")
         return self.note(item, got)
@@ -243,8 +277,14 @@ class StepDispatch:
         done = sum(1 for i in self.items
                    if not (self.outcomes.get(i.call_index) or {}).get("not_executed")
                    and self.outcomes.get(i.call_index))
+        # 停机那一档不拼"下一步请只发一条调用"：那一条建议的前提是"模型自己发多了"，
+        # 而这里有未执行是因为外面按了停（多调用本身是能力，D-65）。
+        cancelled = any(
+            str((self.outcomes.get(i.call_index) or {}).get("reason") or "")
+            == NOT_EXECUTED_CANCELLED_BY_STOP for i in self.items)
+        advice = STOP_ADVICE if cancelled else ADVICE
         return (f"{head}：{'；'.join(parts)}。"
-                f"（真的执行 {done} / {self.requested} 条）{ADVICE}")
+                f"（真的执行 {done} / {self.requested} 条）{advice}")
 
     def reading(self) -> dict[str, Any]:
         """机器读的那一份（步数 / 回合 / 调用条数三者都在这里）。"""

@@ -9561,8 +9561,13 @@ class AgentLoop:
         `usd=None` 只在"这一条没执行"时出现（没有花销可算，不是"花了零"）。
         """
         try:
-            SS.append(self.session_root, {
-                "kind": SD.STEP_CALL_EVENT, "role": self.role,
+            stop_reading = str(outcome.get("stop_reading") or "")
+            event: dict[str, Any] = {
+                # 停机那一条换一个事件名（见 `stepdispatch.STEP_CALL_STOPPED_EVENT`）：
+                # 它不是"一次没执行成的调用"，是"停机把这条调用挡在门外"的过程读数。
+                # 读数按名字分流，`multi_call_unexecuted` 于是不再把它算成真失败。
+                "kind": SD.STEP_CALL_STOPPED_EVENT if stop_reading else SD.STEP_CALL_EVENT,
+                "role": self.role,
                 "index": int(item.step_index),
                 "turn_index": int(item.turn_index),
                 "call_index": int(item.call_index),
@@ -9575,7 +9580,10 @@ class AgentLoop:
                 "reason": str(outcome.get("reason") or ""),
                 "elapsed_ms": int(outcome.get("elapsed_ms") or 0),
                 "usd": outcome.get("usd"),
-            }, sid=self.sid)
+            }
+            if stop_reading:
+                event["stop_reading"] = stop_reading
+            SS.append(self.session_root, event, sid=self.sid)
         except Exception as exc:  # noqa: BLE001 —— 读数落不成不许带走这一趟
             run.notes.append(f"逐条记录没落成（第 {item.call_index + 1} 条："
                              f"{type(exc).__name__}: {exc}）")
@@ -9629,8 +9637,22 @@ class AgentLoop:
         `agent_step` 事件逐条重建的，这里只落事件不落消息，续跑那一趟就会看到
         比当时多出几步 —— "当时那份"与"重建那份逐条相等"是本仓最强的一条判据。
         """
-        reason = (SD.NOT_EXECUTED_BUDGET if run.stop_reason == "budget"
-                  else SD.NOT_EXECUTED_FINISHED)
+        try:
+            from . import stopctl as _SC
+
+            user_stop = str(run.stop_reason or "") in _SC.USER_STOP_REASONS
+        except Exception:  # noqa: BLE001 —— 读不到词表时按"不是停机"保守处理（与改前同）
+            user_stop = False
+        if str(run.stop_reason or "") == SD.NOT_EXECUTED_BUDGET:
+            reason = SD.NOT_EXECUTED_BUDGET
+        elif user_stop:
+            # ---- 停机档（真机 82 · F-1）：未执行的原因是外面按了停，不是模型没做完。
+            # 这一档换一个名字（`cancelled_by_stop`），逐条记录据此落成
+            # `STEP_CALL_STOPPED_EVENT`，于是 `errorstats` 不会再把它记成
+            # `multi_call_unexecuted`（真失败）。
+            reason = SD.NOT_EXECUTED_CANCELLED_BY_STOP
+        else:
+            reason = SD.NOT_EXECUTED_FINISHED
         for item in list(pending):
             outcome = dispatch.mark_not_executed(item, reason)
             outcome["usd"] = None
