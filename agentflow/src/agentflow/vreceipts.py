@@ -77,6 +77,8 @@ from typing import Any, Iterator, Mapping
 
 from filelock import FileLock, Timeout
 
+from . import schema as _S
+
 #: 落点目录（`out/` 下，与 `out/vsigns/` 平级）：这是"回执投递"的账，不是签的账。
 OUTBOX_DIR = "vreceipts"
 
@@ -376,6 +378,10 @@ def _board_item(conductor: Any, label: str, verification_id: str) -> dict[str, A
     """板上有没有这一条（新键、旧键、任意收件人后缀都算）⇒ 那一行。"""
     base = legacy_key_of(label, verification_id)
     if conductor is None:
+        # 空输入得空输出：这一格是"板上有没有这一条"的纯读口，没有 conductor 就是
+        # "读不到板"。调用方（`_publish` / `backfill`）在调它之前已经单独判过
+        # `_conductor()` 是否为 None，并把那一档记成 pending / undelivered ——
+        # checked=False + reason 落在那里，不在这里。返回空字典不是把"没查"折成"没有"。
         return {}
     try:
         rows = [dict(r) for r in conductor._board_rows()]
@@ -388,8 +394,8 @@ def _board_item(conductor: Any, label: str, verification_id: str) -> dict[str, A
     return {}
 
 
-#: 角色名（写证明的那个人/那一类）。`proof_authors` 与 `created_by` 都按它归一。
-_ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M", "L")
+#: 角色名（写证明的那个人/那一类）。唯一来源是 `schema.ROLES`（R005：不抄第二份）。
+_ROLES = tuple(_S.ROLES)
 
 
 def _role_of(text: Any) -> str:
@@ -455,7 +461,7 @@ def _author_of(store: Any, label: str) -> dict[str, Any]:
     return out
 
 
-def author_of(store: Any, label: str) -> dict[str, Any]:
+def statement_author_of(store: Any, label: str) -> dict[str, Any]:
     """公开读口：`_author_of` 的同一份实现（读侧与判据都从这里问作者）。"""
     return _author_of(store, label)
 

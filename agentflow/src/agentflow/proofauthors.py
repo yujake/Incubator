@@ -34,8 +34,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-#: 角色词表（与 `schema.ROLES` 同源的那个集合；这里只列判据要认的字母）。
-ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M", "L")
+from . import schema as _S
+
+#: 角色词表：唯一来源是 `schema.ROLES`（不在这里抄第二份，R005）。
+ROLES = tuple(_S.ROLES)
 
 #: 来源路径前缀 ⇒ 写它的角色。次序即优先级（同一份 payload 里出现多个时取第一个）。
 SOURCE_RULES: tuple[tuple[str, str], ...] = (
@@ -76,7 +78,7 @@ def _paths_of(value: Any) -> list[str]:
     return [p.replace("\\", "/").strip().lstrip("./") for p in out if p.strip()]
 
 
-def reading(*, body: Mapping[str, Any] | None, root: Any = "") -> dict[str, Any]:
+def author_reading(*, body: Mapping[str, Any] | None, root: Any = "") -> dict[str, Any]:
     """这一次登记的作者读数：`{checked, author, source, reason}`。"""
     out: dict[str, Any] = {"checked": False, "author": "", "source": "", "reason": ""}
     payload = dict(body or {})

@@ -96,7 +96,7 @@ def test_an_unreadable_source_writes_no_author(store):
     assert got["author_reading"]["checked"] is False, got["author_reading"]
     assert "不猜" in got["author_reading"]["reason"], got["author_reading"]
     # 读侧也不许把它折成"作者 = 送审者"。
-    assert VRC.author_of(store, f"{got['stmt_id']}#p1")["checked"] is False
+    assert VRC.statement_author_of(store, f"{got['stmt_id']}#p1")["checked"] is False
 
 
 # ------------------------------------------------------------------ 3 落盘之后能判
@@ -109,7 +109,7 @@ def test_the_recorded_author_makes_the_flag_work_end_to_end(store):
         role="B")
     assert got.get("created") is True, got
     sid = got["stmt_id"]
-    a = VRC.author_of(store, f"{sid}#p1")
+    a = VRC.statement_author_of(store, f"{sid}#p1")
     assert (a["checked"], a["author"], a["source"]) == (True, "F", "proof_authors"), a
 
     # 送审者 B 的台账号（真台账行；conductor 与生产同形）。
@@ -146,7 +146,7 @@ def test_the_recorded_author_makes_the_flag_work_end_to_end(store):
         out = VRC._publish(store=store, root=str(store.root), label=f"{sid}#p1",
                            verification_id=vid, recipient=b_task, role="B",
                            depth=2, detail=detail, at=TS,
-                           author=VRC.author_of(store, f"{sid}#p1"))
+                           author=VRC.statement_author_of(store, f"{sid}#p1"))
     assert out["submitter_is_not_author"] is True, out
     item = next(dict(r) for r in store.rows("tasks")
                 if str(r.get("input_key") or "").startswith("v-verdict@"))

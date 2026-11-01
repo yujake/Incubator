@@ -857,7 +857,7 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
         vid = str(row.get("verification_id") or "")
         one = delivery_of(root, store, label=label, verification_id=vid, mailbox=mailbox)
         rec = dict(box.get((label, vid)) or {})
-        author = _VRC.author_of(store, label) if _VRC is not None else {
+        author = _VRC.statement_author_of(store, label) if _VRC is not None else {
             "checked": False, "author": "", "source": "", "reason": "outbox 读不成"}
         submitter_role = str(rec.get("submitter_role") or one["delivered_to"] or "")
         author_role = str(author.get("author") or "")

@@ -6775,7 +6775,7 @@ class Secretary:
             # 读不出来源 ⇒ 不写这一格（`author_not_recorded`），不许默认成 B。
             from . import proofauthors as _PAA
 
-            author = _PAA.reading(body=body, root=self.root)
+            author = _PAA.author_reading(body=body, root=self.root)
             if author.get("author"):
                 data["proof_authors"] = _PAA.recorded(author)
             out["author_reading"] = dict(author)
