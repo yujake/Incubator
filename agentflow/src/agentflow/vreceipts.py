@@ -145,7 +145,8 @@ def resubmit_sha_of(key: str) -> str:
 
 def _resubmit_items(conductor: Any, statement_id: str) -> list[dict[str, Any]]:
     """这一条命题名下未消的重送项（读不成 ⇒ 空列表，由调用方的话说清）。"""
-    if conductor is None:
+    if conductor is None:  # 未接板 ⇒ 没有可读的板项；这是「没接上」，
+        # 由调用方判 None 后写 `skipped` + reason 说清（不折成「查过、没有」）
         return []
     want = f"{RESUBMIT_PREFIX}{str(statement_id or '')}@"
     try:
@@ -159,7 +160,8 @@ def _resubmit_items(conductor: Any, statement_id: str) -> list[dict[str, Any]]:
 
 def _resubmit_item_by_key(conductor: Any, key: str) -> dict[str, Any]:
     """板上有没有这一条（精确键：不认收件人后缀，那是回执那一侧的兼容口径）。"""
-    if conductor is None:
+    if conductor is None:  # 未接板 ⇒ 没有可读的板项；这是「没接上」，
+        # 由调用方判 None 后写 `skipped` + reason 说清（不折成「查过、没有」）
         return {}
     try:
         rows = [dict(r) for r in conductor._board_rows()]
