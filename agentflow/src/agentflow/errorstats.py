@@ -1385,8 +1385,10 @@ def _read_aux(root: Path) -> dict[str, Any]:
 
     return {
         "verifications": {"rows": verifications, "reading": ver_reading},
-        "roster": {"rows": roster_rows, "refusals": refusals, "repaired": repaired,
-                   "reading": roster_reading},
+        # 名册这一格只带它自己的行；拒绝流水单列成 `roster_refusals`（下一行）。
+        # 2026-11-01：这里原先把拒绝流水的 `refusals` 又塞进名册那一格一次 ⇒ 同一个量
+        # 两个裸键名（三义那条判据点名要治的形态）。读侧只走 `roster_refusals`。
+        "roster": {"rows": roster_rows, "repaired": repaired, "reading": roster_reading},
         "roster_refusals": {"rows": refusals, "reading": ref_reading},
         "secretary": {"rows": secretary, "reading": sec_reading},
         "statements": {"rows": statements, "reading": st_reading},
