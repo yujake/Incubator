@@ -2397,14 +2397,29 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
             "c3": c3}
 
 
+def _newest_file(root_p: Path, rel: str, pattern: str = "*.jsonl") -> str:
+    """目录里最新的一个文件（工作区相对路径；没有 ⇒ 空串，调用方退回目录名）。
+
+    `/api/source` 只读文件、不收目录；没有这一层时 `sessions/` 这类出处点开会得到
+    「不是文件」的拒绝 —— 链接在、原文看不到，等于没有出处。
+    """
+    folder = root_p / rel
+    if not folder.is_dir():
+        return ""
+    files = sorted((p for p in folder.glob(pattern) if p.is_file()),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(files[0].relative_to(root_p)).replace("\\", "/") if files else ""
+
+
 def _gate_source(name: str, root_p: Path) -> dict[str, Any]:
     """八格各自的原文落点（没有单一文件的格子给它的主表；`match` 是给人看的）。"""
+    session = _newest_file(root_p, "sessions")
     table = {
         "paper": _src("out/paper/COMPILE-RECEIPT.json", label="编译回执"),
         "contradictions": _src("data/relations.json", label="矛盾闭环"),
         "load_bearing": _src("out/paper/main.tex", label="承重结论"),
         "report_shape": _src("out/review/REPORT.md", label="交付说明"),
-        "user_pending": _src("sessions/", label="待答问题"),
+        "user_pending": _src(session or "sessions/", label="待答问题"),
         "substance": _src("data/statements.json", label="实质产出"),
         "acceptance": _src("out/paper/ACCEPTANCE-CHECKS.json", label="验收表 C1–C16"),
         "artifact_ledger": _src("ARTIFACTS.jsonl", label="产物台账"),
@@ -2459,7 +2474,11 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                "programs_checked": bool(programs.get("checked")),
                "programs_running_count": int(programs.get("running_count") or 0),
                "programs_unowned": list(programs.get("unowned") or []),
-               "source": _src("out/roster/", label="retire_integrity")}
+               "source": _src(
+                   (f"out/roster/{retire.get('root')}.jsonl"
+                    if retire.get("root") and (root_p / "out" / "roster" /
+                                               f"{retire.get('root')}.jsonl").is_file()
+                    else "out/roster/"), label="retire_integrity")}
 
     # ---- 成本（三源并排：事件求和 / 收工行自报 / 无人认领）+ 时间轴
     try:
@@ -2530,14 +2549,16 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                "children_unretired": child.get("children_unretired"),
                "active_child_count": child.get("active_child_count"),
                "unplaced": unplaced,
-               "source": _src("sessions/", label="runs")}
+               "source": _src(_newest_file(root_p, "sessions") or "sessions/",
+                              label="runs")}
 
     # ---- 内容级验收（五条；只读、不进机器门）
     criteria = {str(k): str(v) for k, v in (acc.get("criteria") or {}).items()}
     details = {str(k): str(v) for k, v in (acc.get("details") or {}).items()}
     content_sources = {
         "attachment_is_honest": _src("out/review/REPORT.md", label="交付说明"),
-        "triage_branch_recorded": _src("sessions/", label="提问记录"),
+        "triage_branch_recorded": _src(_newest_file(root_p, "sessions") or "sessions/",
+                                       label="提问记录"),
         "within_cost_cap": _src("data/usage_ledger.json", label="成本台账"),
         "hops_have_readable_prompts": _src("data/tasks.json", label="召唤台账"),
         "statements_have_assumptions_and_source": _src("data/statements.json",
@@ -2560,7 +2581,8 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
         tri = TRI_UNREADABLE
         reason = str((getattr(rep, "refusal", {}) or {}).get("detail") or "门受控拒绝")
     return {"tri": tri, "reason": reason,
-            "source": _src("out/review/m-verdicts.jsonl", label="M 判据"),
+            "source": _src("out/review/m-verdicts.jsonl", match=last_closing_at,
+                           label="M 判据"),
             "gates": gates, "machine": machine,
             "undelivered": dict(proofs.get("receipt") or {}), "cost": cost,
             "runtime": runtime, "content": content}
