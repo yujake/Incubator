@@ -59,7 +59,16 @@ from . import schema as S
 READOUT_KEYS: tuple[str, ...] = ("checked", "state", "reason", "data", "problems")
 
 #: `errors_readout` 的 `data` 键集（写进判据，多一个少一个都算口径漂了）。
-ERRORS_DATA_KEYS: tuple[str, ...] = ("by_role", "role_total", "total", "categories", "sources")
+#:
+#: 2026-11-01 扩面：前五个键是改前就有的（`total` 仍是角色侧总数，语义一个字没改）；
+#: 后面几组是新的三类读数 + 逐类三态 + 每条 source 的样本。三组数刻意不相加：
+#: `total`（谁做错了）/ `system_total`（系统哪里坏了）/ `state_readings_total`
+#: （现在积着什么）是三种单位（`errorstats` 模块 docstring 第二节）。
+ERRORS_DATA_KEYS: tuple[str, ...] = (
+    "by_role", "role_total", "total", "categories", "sources",
+    "system", "system_total", "state_readings", "state_readings_total",
+    "classes", "class_state", "samples", "run_boundary",
+)
 
 #: `flow_readout` 的 `data` 键集。
 FLOW_DATA_KEYS: tuple[str, ...] = ("roles", "totals")
@@ -254,15 +263,23 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
                    ) -> dict[str, Any]:
     """按角色 × 类目的错误动作计数（口径全在 `errorstats`）。
 
-    `data` 的五个键与 `errorstats.ErrorStats.as_dict()` 同名同义：`by_role` / `role_total` /
-    `total` / `categories`（只留非 0 的类目合计，按类目表顺序）/ `sources`（逐源读数）。
-    为什么把 `sources` 放进 `data`：这一层最常见的误读是"0 次错误"，而排查那件事第一步就是
-    看"到底读了几条事件、几行读不明白"——它必须和计数在同一个对象里，才不会有人另算一份。
+    `data` 的键与 `errorstats.ErrorStats.as_dict()` 同名同义：`by_role` / `role_total` /
+    `total`（角色侧总数，语义与扩面前逐字相同）/ `categories`（只留非 0 的类目合计，
+    按类目表顺序）/ `sources`（逐源读数）。为什么把 `sources` 放进 `data`：这一层最常见的
+    误读是"0 次错误"，而排查那件事第一步就是看"到底读了几条事件、几行读不明白"——
+    它必须和计数在同一个对象里，才不会有人另算一份。
+
+    2026-11-01 扩面（业主「覆盖面有些小了」）加的三组，刻意不相加：
+
+    - `system` / `system_total`：系统侧（hook 没判成 / 外部面掉了 / 收工门拦下）；
+    - `state_readings` / `state_readings_total`：状态读数（板项没被 ack，快照会回落）；
+    - `classes` / `class_state` / `samples`：逐类的 `{count, bucket, state, reason, by_role}`
+      与每一类前 N 条的 `{source, ref, ts, detail}` —— 页面"按类"与"展开到每条的 source"
+      两段吃这一份，网页不另算一份口径。
 
     `scanned`（2026-10-27，R-BE1 的 ⑥-5）：调用方已经读过一份扫描（`scan()`）时传进来，
-    于是这一条不再自己读一遍盘。改前 `stats all` 一次跑四条，`events.jsonl` 与
-    `sessions/*.jsonl` 因此各被读 4 遍。计数仍然走 `errorstats.error_action_stats_from`
-    那一处（只有一份分类口径），本函数不复制它。
+    于是这一条不再自己读一遍盘。扩面新读的四个目录不进 `scan()`（只有这条读数要用），
+    在这里单列读一次 —— 整条读数仍然只读一遍盘。
     """
     #: `errorstats` 那一支"从已读记录算"的接缝。用 `getattr` 而不是直接名字：
     #: 那个文件此刻正被另一条 lane 重写，函数可能一时不在 —— 不在就退回"自己读一遍"，
@@ -270,8 +287,12 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
     from_records = getattr(ES, "error_action_stats_from", None)
     if scanned is not None and from_records is not None:
         sources = scanned.get("sources") or {}
+        # 扩面新源（`verifications/` / `out/roster/` / `out/secretary/` / 收工门现算）：
+        # 与"事件流 / 会话记录"不同，它们只有这一条读数要用，所以不进 `scan()`（进了
+        # `flow` / `cost` / `gates` 会白读）；这里单列读一次，于是整条读数仍然只读一遍盘。
+        aux = ES._read_aux(Path(str(scanned.get("root") or target)))
         stats = from_records(scanned.get("events"), sources.get("events"),
-                             scanned.get("sessions"), sources.get("sessions"))
+                             scanned.get("sessions"), sources.get("sessions"), aux=aux)
     else:
         # 单跑这一条时照旧：`error_action_stats` 自己就会读那两处（不重复读盘）。
         stats = ES.error_action_stats(target)
@@ -279,7 +300,17 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
                             "role_total": dict(stats.role_total),
                             "total": int(stats.total),
                             "categories": dict(stats.categories()),
-                            "sources": {k: dict(v) for k, v in stats.sources.items()}}
+                            "sources": {k: dict(v) for k, v in stats.sources.items()},
+                            "system": dict(stats.system_categories()),
+                            "system_total": int(stats.system_total),
+                            "state_readings": {r: dict(c) for r, c
+                                               in stats.state_readings.items()},
+                            "state_readings_total": int(stats.state_readings_total),
+                            "classes": [dict(one) for one in stats.by_class()],
+                            "class_state": {k: dict(v) for k, v in stats.class_state.items()},
+                            "samples": {k: [dict(s) for s in v]
+                                        for k, v in stats.samples.items()},
+                            "run_boundary": str(stats.run_boundary)}
     problems: list[dict[str, str]] = []
     unclassified = int((stats.sources.get("events") or {}).get("unclassified") or 0)
     if unclassified:
@@ -287,6 +318,21 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
             "unclassified_refusal",
             f"{unclassified} 条被拒行的理由码不在 CODE_TABLE 里（未计入任何类目；"
             "要收进来就把它登记进 errorstats.CODE_TABLE）"))
+    loose = {k: int(v or 0) for k, v in (stats.sources.get("unclassified") or {}).items()
+             if int(v or 0)}
+    if loose:
+        problems.append(_problem(
+            "unclassified_signal",
+            f"结构判据认不出族的那几条没有猜类目：{loose}（各自的那一类里没加数；"
+            "要收进来就给 errorstats 的族表补一条原话）"))
+    unknown = [one["category"] for one in stats.by_class()
+               if str(one.get("state") or "") == "unknown"]
+    if unknown:
+        # 三态纪律：没查到的那几类必须点名，否则页面上的 0 会被读成"这一类没事"。
+        problems.append(_problem(
+            "classes_unknown",
+            f"{len(unknown)} 个类目没查成（不是 0）：{'、'.join(unknown[:6])}"
+            f"{'…' if len(unknown) > 6 else ''}"))
     why = _scan_problem({"sources": stats.sources}, need=("events", "sessions"))
     if why:
         return _envelope(checked=False, reason=why or stats.reason, data=data,

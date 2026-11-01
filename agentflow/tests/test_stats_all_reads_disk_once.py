@@ -120,9 +120,32 @@ def test_errors_can_count_from_already_read_records(
     root, store = ES._resolve_target(ws)
     events, ev = ES._read_events(root, store)
     records, ss = ES._read_sessions(root)
-    from_records = ES.error_action_stats_from(events, ev, records, ss)
+    # 2026-11-01 扩面：四个辅助源（verifications / roster / secretary / 收工门现算）也要传，
+    # 否则那 7 个类目是 `unknown` —— 那是有意的三态，但两条路对拍时必须同态同数。
+    aux = ES._read_aux(root)
+    from_records = ES.error_action_stats_from(events, ev, records, ss, aux=aux)
     assert read_stats.as_dict() == from_records.as_dict(), (
         "两条路给出的计数不同 ⇒ 口径分家了", read_stats.as_dict(), from_records.as_dict())
     # 调用方传进来的扫描读数不许被写坏（`unclassified` 那一格是唯一会被累加的地方）
     assert "unclassified" not in ev or int(ev.get("unclassified") or 0) == int(
         from_records.sources["events"].get("unclassified") or 0)
+
+
+def test_without_the_auxiliary_sources_the_new_classes_are_unknown_not_zero(
+        tmp_path) -> None:
+    """没传 `aux` ⇒ 那 7 个类目是 `unknown`，不是 0（三态纪律，扩面不许折平）。
+
+    为什么这一条必须单独钉：`error_action_stats_from` 的四个位置参数是扩面之前就有的，
+    谁按老签名调它，新类目就会静默变成 0 —— 而 0 与"没查"在页面上长得一模一样。
+    """
+    ws = _fixture_workspace(tmp_path / "ws")
+    root, store = ES._resolve_target(ws)
+    events, ev = ES._read_events(root, store)
+    records, ss = ES._read_sessions(root)
+    bare = ES.error_action_stats_from(events, ev, records, ss)
+    for cat in ("proof_defect_found", "roster_write_refused", "verdict_understated",
+                "hook_undecided", "closing_blocker", "task_stopped", "roster_repaired"):
+        assert bare.class_state[cat]["state"] == "unknown", (cat, bare.class_state[cat])
+        assert bare.class_state[cat]["checked"] is False
+    # 而"读到了、就是 0 条"的那几类仍然是 checked（不许把整页拖成 unknown）
+    assert bare.class_state["forbidden_edge"]["state"] == "checked"

@@ -244,6 +244,18 @@ UNCHECKED_TYPES: dict[str, str] = {
     # 而"为什么这里没有读数"就写在上面这一句里（三态纪律：不是把接口删掉假装不存在）。
     "RosterNode": "夹具没有 `out/roster/<父编号>.jsonl`（名册只在派人时落）"
                   "⇒ `nodes[]` 是空数组，形状以 `roster_face` 在真工作区上的读数为准",
+    # 2026-11-01（扩面：错误动作那一页加了三组读数）：下面四个是 `ErrorStatsData` 的
+    # 子形状，夹具（`artifacts_ws`）没有 `verifications/` / `out/roster/refusals/` /
+    # `out/secretary/` 的拒信与判词，也没有收工门的 blocker ⇒ 样本 / blocker 数组是空的。
+    # 三态纪律在这里的落点与 `RosterNode` 同一条：登记"为什么没有读数"，不把接口删掉。
+    "ErrorBlocker": "夹具的收工门没有 blocker（`closing.check_closing` 在夹具上八格干净）"
+                    "⇒ `sources.closing.blockers[]` 是空数组，形状以 `check_closing` 为准",
+    "ErrorSignalSample": "夹具没有 `out/secretary/` 的判词行与 `out/roster/refusals/`"
+                         "⇒ `classes[].samples[]` 是空数组，形状以 `errorstats._bump` 的留样为准",
+    "ErrorClassRow": "同 `ErrorSignalSample`：`classes[]` 的行在夹具上与真机是同一份代码产出，"
+                     "但夹具上多数类目是 0 条、没有样本可对账 ⇒ 形状以 `ErrorStats.by_class()` 为准",
+    "ErrorClassState": "同 `ErrorClassRow`：逐类三态的键在夹具上齐全（checked/state/reason），"
+                       "但夹具上每个源都读到了，没有 unknown 那一档可对账",
     "RosterChild": "同 `RosterNode`：`nodes[].children[]` 在夹具上是空的"
                    "⇒ 形状以 `roster_face` 的 `children` 为准",
     "RosterInbox": "同 `RosterNode`：夹具上没有名册节点，`inbox` 一栏没有读数"
@@ -5560,18 +5572,54 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（与 `LibraryProblem` 同形：两族各是各的读数，合并不省事）",
      (("code", "string"), ("detail", "string"))),
     ("ErrorStatsSource",
-     "errors_readout() 的 data.sources[源] —— 逐源读数（三种源的键不完全相同，"
+     "errors_readout() 的 data.sources[源] —— 逐源读数（各源的键不完全相同，"
      "所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）",
      (("checked?", "boolean"), ("events?", "number"), ("files?", "number"),
       ("records?", "number"), ("bad_lines?", "number"),
       ("unreadable_files?", "string[]"), ("unclassified?", "number"),
-      ("table?", "string"), ("reason?", "string"))),
+      ("table?", "string"), ("reason?", "string"), ("state?", "string"),
+      ("dir?", "string"), ("path?", "string"), ("by_user?", "number"),
+      ("children_unretired?", "number"), ("name_collisions?", "number"),
+      ("repaired?", "number"), ("collisions?", "Record<string, number>"),
+      ("blockers?", "ErrorBlocker[]"), ("status?", "Record<string, string>"),
+      ("machine_pass?", "boolean"), ("can_close_reason?", "string"),
+      ("source?", "string"), ("names?", "string[]"))),
+    ("ErrorBlocker",
+     "errors_readout() 的 data.sources.closing.blockers[] —— 收工门的一条 blocker"
+     "（`closing.check_closing` 的 code / check / level 三格）",
+     (("code", "string"), ("check", "string"), ("level", "string"))),
+    ("ErrorClassState",
+     "errors_readout() 的 data.class_state[类目] —— 那一类自己的三态"
+     "（一个源读不到时只有这一类变 unknown，不许把整页拖成 0）",
+     (("checked", "boolean"), ("state", "string"), ("reason", "string"))),
+    ("ErrorSignalSample",
+     "errors_readout() 的 data.classes[].samples[] —— 这一类的一条「去哪看」"
+     "（`source` 是文件，`ref` 是文件里的记录身份，`ts` 与 `detail` 是定位与那一句原话）",
+     (("role", "string"), ("code", "string"), ("source", "string"), ("ref", "string"),
+      ("ts", "string"), ("detail", "string"))),
+    ("ErrorClassRow",
+     "errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）",
+     (("category", "string"), ("bucket", "string"), ("count", "number"),
+      ("meaning", "string"), ("by_role", "Record<string, number>"),
+      ("checked", "boolean"), ("state", "string"), ("reason", "string"),
+      ("first_ts", "string"), ("last_ts", "string"), ("this_run", "number"),
+      ("earlier", "number"), ("no_ts", "number"),
+      ("samples", "ErrorSignalSample[]"))),
     ("ErrorStatsData",
-     "errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）",
+     "errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。"
+     "`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，"
+     "**三组刻意不相加**（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）",
      (("by_role", "Record<string, Record<string, number>>"),
       ("role_total", "Record<string, number>"), ("total", "number"),
       ("categories", "Record<string, number>"),
-      ("sources", "Record<string, ErrorStatsSource>"))),
+      ("sources", "Record<string, ErrorStatsSource>"),
+      ("system", "Record<string, number>"), ("system_total", "number"),
+      ("state_readings", "Record<string, Record<string, number>>"),
+      ("state_readings_total", "number"),
+      ("classes", "ErrorClassRow[]"),
+      ("class_state", "Record<string, ErrorClassState>"),
+      ("samples", "Record<string, ErrorSignalSample[]>"),
+      ("run_boundary", "string"))),
     ("RoleErrorsView",
      "GET /api/errors 的整份读数（`readouts.errors_readout()` 逐字）",
      (("checked", "boolean"), ("state", "string"), ("reason", "string"),

@@ -762,7 +762,9 @@ def test_the_error_actions_page_is_a_thin_shell_around_the_band() -> None:
     assert 'from "../components/RoleErrors"' in body, "这一页没有 import RoleErrors"
     assert "<RoleErrors />" in body, "这一页没有渲染 <RoleErrors />"
     band = (UI_SRC / "components" / "RoleErrors.tsx").read_text(encoding="utf-8")
-    for key in ("getErrors(", "getErrorCategories(", "总错误动作"):
+    # 2026-11-01 扩面：抬头从「总错误动作」一个数变成「角色侧 / 系统侧 / 状态读数」三个数
+    # （三种单位，刻意不相加）。三个名字都要在那一栏的落点里 —— 少一个就说明有一段被搬走了。
+    for key in ("getErrors(", "getErrorCategories(", "角色侧", "系统侧", "状态读数"):
         assert key in band, f"那一栏的落点里没有 {key}（读与画不该被搬到别处）"
 
 
