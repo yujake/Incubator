@@ -434,7 +434,9 @@ def _param_problems(schema: Mapping[str, Any], params: Any, *, path: str = "") -
         if schema.get("additionalProperties") is False:
             extra = sorted((set(params) - set(props)), key=str)
             if extra:
-                hints = "；".join(_undeclared_hint(str(k), props) for k in extra)
+                # 同一句"怎么改"只留一次（两个都拼错的键会各自给出同一句通用建议）。
+                hints = "；".join(dict.fromkeys(
+                    _undeclared_hint(str(k), props) for k in extra))
                 problems.append(
                     f"出现未声明的参数：{extra}（schema 只允许 {sorted(props)}）。{hints}")
         for name, sub in props.items():
