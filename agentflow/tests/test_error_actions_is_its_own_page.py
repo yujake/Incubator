@@ -180,25 +180,24 @@ def test_c_the_two_pages_render_disjoint_component_sets() -> None:
 
 # ====================================================================== d 反真空
 def test_d_negative_control_catches_the_band_put_back_into_home() -> None:
-    """判据 d：把 `<RoleErrors />` 塞回对话页 ⇒ a 那条必红。"""
+    """判据 d：把 `RoleErrors` 塞回对话页 ⇒ a 那条必红。
+
+    刻意不拿某个具体的 import 行当锚点：`Home.tsx` 的 import 在 159 ① 的 `cell()` 改造里
+    已经从 `import { Table }` 变成 `import { Table, cell }`，拿旧锚点做负控会在页面本身
+    合格的情况下报红（把"改进"当成"回归"修）。这里直接构造两份"塞回去"的文本 ——
+    只加 import、以及 import + JSX —— 断言的是行为：两种形态都必须被
+    `_home_mount_problems` 认出。
+    """
     text = _home_text()
     assert _home_mount_problems(text) == [], _home_mount_problems(text)
-    doctored = text.replace(
-        "import { Table }",
-        "import { RoleErrors } from \"../components/RoleErrors\";\nimport { Table }",
-        1,
-    )
-    if doctored == text:
-        doctored = text + "\nconst _back = <RoleErrors />;\n"
-    assert doctored != text, "负控没改到东西（文件里找不到可插入的位置）"
-    problems = _home_mount_problems(doctored)
-    assert problems, "把 RoleErrors 塞回对话页却一声不吭"
-    assert any("RoleErrors" in one for one in problems), problems
-    # 只塞 import、不塞 JSX 也必须报（否则"移走"可以靠删一行注释蒙过去）
-    import_only = text.replace(
-        "import { Table }",
-        "import { RoleErrors } from \"../components/RoleErrors\";\nimport { Table }",
-        1,
-    )
+
+    import_only = 'import { RoleErrors } from "../components/RoleErrors";\n' + text
     assert import_only != text
-    assert _home_mount_problems(import_only) != [], "只把 import 加回去也应当报"
+    import_problems = _home_mount_problems(import_only)
+    assert import_problems, "只把 RoleErrors 的 import 加回去却一声不吭"
+    assert any("import" in one for one in import_problems), import_problems
+
+    mounted = import_only + '\nexport const _back = <RoleErrors />;\n'
+    assert mounted != import_only
+    mounted_problems = _home_mount_problems(mounted)
+    assert any("<RoleErrors" in one for one in mounted_problems), mounted_problems
