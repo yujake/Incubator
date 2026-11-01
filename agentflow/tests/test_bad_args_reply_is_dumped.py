@@ -34,8 +34,11 @@ from agentflow.tools import build_registry
 SID = "bad-args-dump"
 #: 坏参数里嵌在第 2000 字符之后的一段可定位标记（`detail` 原来的 200 字截不到它）。
 DEEP = "这一段在第两千字符之后：targets[7] 的 task 里有个没转义的引号"
+#: 第 200-600 字符之间的标记：`detail` 进循环时还会按 600 字剪一次，这一条落在剪之前。
+NEAR = "这一段在三百字附近：第二个 target 的键没加引号"
 #: 坏参数的原文：前面垫 3000 个字符，坏点落在很深的位置（与 B-1 的 6691 同形）。
-BROKEN_ARGS = ('{"targets": [{"task": "' + "填" * 3000 + DEEP + '" 坏在这里')
+BROKEN_ARGS = ('{"targets": [{"task": "' + "填" * 250 + NEAR + "填" * 2750 + DEEP
+               + '" 坏在这里')
 
 
 class _StubGateway:
@@ -119,10 +122,13 @@ def test_the_problem_is_still_judge_bad_args(tmp_path):
 
 
 def test_the_detail_carries_more_than_the_first_two_hundred_chars(tmp_path):
-    """c：`detail` 里的"原文前 N 字"要能截到第两千字符之后（改前是 200）。
+    """c：`detail` 里的"原文前 N 字"要能截到第两百字符之后（改前是 200）。
 
-    改前红：`to_shape` 的坏参数文案只带 `text[:200]`，深处的坏点不在 detail 里。
+    改前红：`to_shape` 的坏参数文案只带 `text[:200]`，第 250 字符处的标记不在 detail 里。
+    循环还会按 600 字再剪一次（`_clip(call.detail, 600)`），所以这一条用第两百到
+    第六百之间的标记；更深处（第两千之后）的证据由落盘文件那一格负责。
     """
     run, _root = _run(tmp_path)
     detail = str(run.steps[0].result.get("detail") or "")
-    assert DEEP[:20] in detail, f"detail 里没有深处的片段（长度 {len(detail)}）"
+    assert "原文前 2000 字" in detail, f"detail 的原文头没有提到 2000（长度 {len(detail)}）"
+    assert NEAR in detail, f"detail 里没有第两百字符之后的片段（长度 {len(detail)}）"

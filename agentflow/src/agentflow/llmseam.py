@@ -746,8 +746,17 @@ class LlmSeam:
             # 多给了一条 —— 它不是"没按协议说话"，所以不该走坏 JSON 那一档。
             data, problem, detail = face.to_shape(call.tool_call_list[0])
             if data is None:
+                # ---- 坏参数要留原文（真机 82，2026-11-01 · B-1/B-2/B-3）
+                #
+                # 改前这里原样构造 `SeamCall(**{**call.__dict__, ...})`，`text` 仍是
+                # 回复正文（原生调用时为空）⇒ 循环的 `_dump_invalid_reply` 写出
+                # 0 字节文件，而报错里的 char 6691 谁也复核不了。
+                # `judge_bad_args` 缺的那段证据就是 arguments 本身，所以这一类把
+                # `text` 换成它（其它码一个字不改：坏 JSON 的 `text` 本来就是回复正文）。
+                extra = ({"text": face.raw_args_text(call.tool_call_list[0])}
+                         if problem == "judge_bad_args" else {})
                 bad = SeamCall(**{**call.__dict__, "ok": False, "problem": problem,
-                                  "detail": detail})
+                                  "detail": detail, **extra})
                 return None, bad
             return data, call
         # 回落：上游没给结构化调用（或不支持 tools）⇒ 走原来的文本 JSON 那条路。
@@ -1101,6 +1110,22 @@ class ToolFace:
                        for value in self.names.values()})
         return candidate_tool_names(str(raw_name or ""), pool)
 
+    @staticmethod
+    def raw_args_text(call: Mapping[str, Any]) -> str:
+        """一条原生调用的 `arguments` 原文（不是回复正文）。
+
+        为什么需要它（真机 82，2026-11-01 · B-1/B-2/B-3）：`judge_bad_args` 坏的是
+        `arguments` 那段字符串，而 `SeamCall.text` 装的是"回复正文"——原生调用时它是
+        空的。循环把 `call.text` 交给 `_dump_invalid_reply`，于是 `out/invalid/*.txt`
+        全是 0 字节：报错给了列号（例如 char 6691），证据却被丢掉了。
+        这条口径只做一件事：把那段 arguments 还原成跟模型写的一样的字符串
+        （字符串原样、其它形态按 JSON 序列化），供留档与 detail 使用。
+        """
+        raw = call.get("arguments")
+        if isinstance(raw, str):
+            return raw
+        return json.dumps(raw if raw is not None else {}, ensure_ascii=False, default=str)
+
     def to_shape(self, call: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str, str]:
         """把一条原生工具调用翻成循环协议的形状。返回 `(data, problem, detail)`。
 
@@ -1121,20 +1146,22 @@ class ToolFace:
                 f"模型调用了一个没广告过的函数 {raw_name!r}（这一趟广告的是 "
                 f"{sorted(self.names)[:6]}…；并列候选（{len(cands)} 个）：{cands}"
                 " —— 机器只列候选、不自动改写）")
-        raw_args = call.get("arguments")
-        text = raw_args if isinstance(raw_args, str) else json.dumps(raw_args or {},
-                                                                    ensure_ascii=False, default=str)
+        text = self.raw_args_text(call)
         try:
             args = json.loads(text) if text.strip() else {}
         except json.JSONDecodeError as exc:
             # 与 DSH 的 `parseArguments` / `ToolArgsError` 同一条纪律：参数坏不是
             # "认不出的形状" —— 工具名已经从结构化字段拿到了，所以这句纠正能点名
             # "是哪个函数的参数坏了"，比"键名不对"精确得多。
+            #
+            # 原文头从 200 提到 2000（真机 82 · B-2）：坏点落在 char 6691 那种深处，
+            # 200 字截到的只是开头，读的人依然说不出"哪里坏"。代价是有界的（2000 字）。
             return None, "judge_bad_args", (
-                f"函数 {raw_name} 的参数不是合法 JSON（{exc}）；原文前 200 字：{text[:200]}")
+                f"函数 {raw_name} 的参数不是合法 JSON（{exc}）；原文前 2000 字：{text[:2000]}")
         if not isinstance(args, Mapping):
             return None, "judge_bad_args", (
-                f"函数 {raw_name} 的参数必须是一个 JSON 对象，收到 {type(args).__name__}")
+                f"函数 {raw_name} 的参数必须是一个 JSON 对象，收到 {type(args).__name__}；"
+                f"原文前 2000 字：{text[:2000]}")
         why = str(args.pop("why", "") or "")
         if target.startswith("tool:"):
             return {"tool": target.split(":", 1)[1], "args": dict(args), "why": why}, "", ""
