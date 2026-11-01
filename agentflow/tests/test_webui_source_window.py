@@ -190,6 +190,9 @@ def test_an_http_read_does_not_write_the_workspace(artifacts_ws: pathlib.Path) -
         assert got["lines"], got
         code2, pkg = _get(base, "/api/package?project_dir=.&report_path=out/review/REPORT.md")
         assert code2 == 200, (code2, pkg)
-        assert set(pkg) == {"tri", "reason", "generated_at", "proofs", "structure", "closing"}
+        # 2026-11-02：按盘失效缓存的 `cache` 三格是外壳上的（读模型里没有）；
+        # 其余六格逐键不变 —— 这里仍然逐键比，不是放宽。
+        assert set(pkg) == {"tri", "reason", "generated_at", "proofs", "structure",
+                            "closing", "cache"}, set(pkg)
         assert pkg["closing"]["gates"]["cells"], pkg["closing"]
     assert _snapshot(artifacts_ws) == before

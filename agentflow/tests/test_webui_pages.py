@@ -597,8 +597,12 @@ def test_acceptance_page_reads_the_three_package_blocks(
             base, "/api/package?project_dir=.&report_path=out/review/REPORT.md")
         assert code == 200, (code, raw[:400])
         assert pkg["tri"] == "computed", pkg
+        # 2026-11-02：按盘失效缓存落地的当笔，`/api/package` 顶层多一格 `cache`
+        # （`hit` / `key_sha` / `built_at`）。这里仍然逐键比，只是把那一格算进契约；
+        # `cache` 只在外壳上，读模型里没有它（见 `tests/test_webui_face_cache.py`）。
         assert set(pkg) == {"tri", "reason", "generated_at", "proofs",
-                            "structure", "closing"}, set(pkg)
+                            "structure", "closing", "cache"}, set(pkg)
+        assert set(pkg["cache"]) == {"hit", "key_sha", "built_at"}, pkg["cache"]
         assert pkg["structure"]["tri"] == "not_applicable", pkg["structure"]
         gates = pkg["closing"]["gates"]
         assert len(gates["cells"]) == 8, gates["cells"]
