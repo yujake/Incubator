@@ -97,14 +97,20 @@ def test_the_old_fighting_shape_still_lands(tmp_path) -> None:
 
 
 def test_the_prompt_separates_the_two_axes() -> None:
-    """⑤ 抬头/题面同时给审美轴词表与 nontriviality 取值域；旧打架指令消失。"""
+    """⑤ 抬头与 ask 同时给审美轴词表与 nontriviality 取值域；旧打架指令消失。"""
     text = SEC._judge_system("statement_aesthetic")
+    head, ask = text.split("\n\n", 1)
+    # 抬头：decision 的词表 + nontriviality 的取值域，两样都必须在（分开断言，
+    # 不让 ask 里的同一批字替抬头满足判据）。
     for word in SEC.STATEMENT_VERDICTS:
-        assert word in text, f"审美轴词 {word!r} 不在抬头里：{text[:600]}"
-    assert "nontriviality" in text, text[:600]
+        assert word in head, f"审美轴词 {word!r} 不在抬头里：{head[:600]}"
+    assert "nontriviality" in head, head[:600]
     for tier in ("T0", "T1", "T2", "T3", "T4"):
-        assert tier in text, f"nontriviality 的取值 {tier} 不在题面里：{text[:600]}"
-    assert "null" in text, text[:600]
+        assert tier in head, f"nontriviality 的取值 {tier} 不在抬头里：{head[:600]}"
+    assert "null" in head, head[:600]
+    # ask：档位装哪一格、判不了才 null，也必须写清。
+    assert "nontriviality" in ask, ask[:600]
+    assert "null" in ask, ask[:600]
     assert "decision 取 T0/T1/T2/T3/T4" not in text, "旧的两头讨好指令还在（decision 不许兼档位）"
     # 词表本身不动：它仍然是审美轴那一张（这一笔只改提示词，不改口径）。
     assert SEC.JUDGE_VERDICTS["statement_aesthetic"] is SEC.STATEMENT_VERDICTS
