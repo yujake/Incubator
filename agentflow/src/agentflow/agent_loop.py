@@ -2568,7 +2568,8 @@ def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
 
 
 def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
-                        *, limit: int = 8) -> tuple[str, list[dict[str, Any]], list[str]]:
+                        *, limit: int = 8, store: Any = None,
+                        ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """我名下被 V 判「有毛病」的证明明细：`(文本, 明细, 问题)`。
 
     ## 这一格为什么存在（业主 2026-10-22 的 B-3 裁定，逐字）
@@ -2722,7 +2723,96 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     if problems:
         lines.append("- 没读成的：" + "；".join(problems[:4])
                      + (f"（另 {len(problems) - 4} 条）" if len(problems) > 4 else ""))
+    lines.extend(_v_delivery_lines(root, details, store=store))
     return "\n".join(lines), details, problems
+
+
+def _v_delivery_lines(root: str | Path, details: Sequence[Mapping[str, Any]],
+                      *, store: Any = None) -> list[str]:
+    """「这几条判决送到 F 手上没有」那一段（业主 2026-11-01：回执不落文件、送达现算）。
+
+    为什么加在 `v_rejections_digest` 里而不是新造一份摘要：板项的开项与幂等键本来就长在
+    这一条链上（`V_VERDICT_ITEM_PREFIX` + `<label>@<verification_id>`），送达读数离开
+    这份明细就得多读一遍台账；两处各读一遍，迟早对同一批判决给出两个数。
+
+    三档分开报（`delivered` / `dispatched_only` / `not_dispatched`）—— 81 的真机读数就是
+    "8 条判决、4 条送达、后 4 条连板项都没有"（F 03:54 之后再没起跑），
+    把三档折成一个"未送达"会让"没人投"与"投了没人读"在读数上同形。
+    """
+    if not details:
+        return []
+    from . import vsigns as _VSP   # 惰性：与 `v_rejections_digest` 同一处依赖
+
+    mailbox = _VSP._mailbox_times(root)
+    rows: list[dict[str, Any]] = []
+    for d in details:
+        label = str(d.get("label") or "")
+        one = _VSP.delivery_of(root, store, label=label,
+                               verification_id=str(d.get("verification_id") or ""),
+                               mailbox=mailbox)
+        rows.append({"label": label, **one})
+    delivered = [r for r in rows if r["state"] == "delivered"]
+    dispatched = [r for r in rows if r["state"] == "dispatched_only"]
+    missing = [r for r in rows if r["state"] == "not_dispatched"]
+    if not store:
+        return ["- 送达：这一趟没有 store ⇒ 送达那一半没查成（不是「没送达」）"]
+    line = (f"- 送达：已送达 {len(delivered)}/{len(rows)} 条")
+    if dispatched:
+        line += f"；开了板项但还没读 {len(dispatched)} 条（{', '.join(r['label'] for r in dispatched[:4])}）"
+    if missing:
+        line += (f"；**连板项都没有** {len(missing)} 条"
+                 f"（{', '.join(r['label'] for r in missing[:4])}）—— 投递发生在收件人下一次"
+                 "起跑那一刻，那一次没发生就没有任何人被通知")
+    out = [line]
+    for r in delivered[:4]:
+        out.append(f"  · {r['label']}：送达 {r['delivered_to'] or '（没读到收件角色）'}"
+                   f"（板项 {r['item_task_id'] or '—'}，读于第 {r['read_step']} 步"
+                   f"{'，' + r['delivered_at'] if r.get('delivered_at') else '，时刻没读到'}）")
+    return out
+
+
+def global_v_rejections_text(root: str | Path, store: Any = None, *,
+                             limit: int = 8) -> tuple[str, list[str]]:
+    """「全局」的 V 打回读数（`(文本, 问题)`）—— M 侧那一格（业主 2026-11-01 的取证 A/D）。
+
+    为什么 M 需要它、而 F 那一份不够：`v_rejections_digest` 问的是"「我名下」被 V 判
+    「有毛病」的证明"，而 M 名下没有命题、也没有证明 —— 于是它那一格永远渲染成缺省句
+    「名下没有被 V 判「有毛病」的证明」，读到的人会把它当成"一条都没打回"。
+    全局读数回答的是另一个问题：「整个工作区里打回了几条、断在第几步、送到了没有。」
+
+    数据源只有三处（全是盘上已有的读数，本函数不写任何东西）：
+    `verifications/*.jsonl`（判定）/ `tasks`（板项）/ `sessions/*.jsonl` 的
+    `agent_mailbox` 事件（读它的时刻）。数不出来时 `checked=False` 那一档进问题清单，
+    「绝不折成"零条打回"」。
+    """
+    from . import vsigns as _VSP      # 惰性：与 `v_rejections_digest` 同一处依赖
+
+    got = _VSP.receipt_digest(root, store, limit=limit)
+    problems = list(got.get("problems") or [])
+    if not got.get("checked"):
+        return (f"（这一格没读成：{str(got.get('reason') or '台账读不出来')}"
+                " ⇒ 不是「没有打回」）"), problems
+    if not int(got.get("receipts") or 0):
+        return "（全局：台账里没有「有毛病」那一档的签 ⇒ 一条打回都没有，查过了）", problems
+    lines = [f"全局（不限于我名下）：被 V 判「有毛病」的证明共 {got['receipts']} 条"
+             f"（{got['statements']} 条命题；数据源 `verifications/*.jsonl` 逐条读；"
+             f"断在哪一步见每条）"]
+    for d in (got.get("rows") or [])[:max(1, int(limit))]:
+        steps = "、".join(f"第 {s} 步" for s in (d.get("defect_steps") or [])) or "步号没读到"
+        where = {"delivered": f"已送达 {d.get('delivered_to') or '（收件角色没读到）'}"
+                             f"（{d.get('delivered_at') or '时刻没读到'}）",
+                 "dispatched_only": "开了板项、还没被读",
+                 "not_dispatched": "「连板项都没开」（没有下一次起跑 ⇒ 没人被通知）"}.get(
+                     str(d.get("state") or ""), str(d.get("state") or ""))
+        lines.append(f"- {d.get('label')}（{d.get('axis') or 'verdict'}，"
+                     f"{d.get('verification_id') or '（没有编号）'}）：{steps}；{where}")
+    backlog = int(got["receipts"]) - len((got.get("rows") or [])[:max(1, int(limit))])
+    if backlog > 0:
+        lines.append(f"- （还有 {backlog} 条没渲染）")
+    lines.append(f"- 送达：已送达 {got.get('delivered')} 条、未送达 "
+                 f"{got.get('undelivered')} 条"
+                 + ("（送达那一半没查成）" if not got.get("delivery_checked") else ""))
+    return "\n".join(lines), problems
 
 
 def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = "F",
@@ -7115,7 +7205,12 @@ class AgentLoop:
         # 就被看见（否则 F 这一趟读到的板永远是上一趟的样子）。
         v_text, v_details, v_problems = "", [], []
         v_delivery: dict[str, Any] = {}
-        if self.role == "F" and self.store is not None:
+        # 业主 2026-11-01（取证 A/D）：M 与 F 要读的是两个问题 ——
+        # F：「我名下哪几条被打回、错在哪一步」（`v_rejections_digest`，还负责把判决递到板上）；
+        # M：「全局打回了几条、断在第几步、送到了没有」（`global_v_rejections_text`，只读不投）。
+        # 改前只有 F 那一档，于是 M 那一格永远渲染缺省句「名下没有被 V 判「有毛病」的证明」
+        # —— 那句话在 M 身上是假的（它名下没有命题，不代表没人被打回）。
+        if self.role in ("F", S.CONDUCTOR_ROLE) and self.store is not None:
             _v_root = getattr(self.store, "root", None) or self.workspace_root
             try:
                 _stmt_rows = [dict(r) for r in self.store.rows("statements")]
@@ -7124,10 +7219,16 @@ class AgentLoop:
                           f"（{type(exc).__name__}: {exc}）⇒ 不是「没有毛病」）")
                 v_problems = [f"statements 读不出来：{type(exc).__name__}: {exc}"]
             else:
-                v_text, v_details, v_problems = v_rejections_digest(_v_root, _stmt_rows)
-                v_delivery = deliver_v_verdicts(
-                    self.conductor, task_id=my_task_id, depth=depth,
-                    role=self.role, details=v_details)
+                if self.role == "F":
+                    v_text, v_details, v_problems = v_rejections_digest(
+                        _v_root, _stmt_rows, store=self.store)
+                    v_delivery = deliver_v_verdicts(
+                        self.conductor, task_id=my_task_id, depth=depth,
+                        role=self.role, details=v_details)
+                else:
+                    # M：只读不投（投递仍然只发生一次，在 F 的循环里；M 若也开项，
+                    # 同一条判决会被开两项 —— 幂等键是按收件人+判决算的）。
+                    v_text, v_problems = global_v_rejections_text(_v_root, self.store)
         # 板项（业主 A3=甲 "渲染即 seen"）：与我名下的未消项同一处现读；
         # `board_ids` 会在第一次成功的模型调用之后标成 `seen`（下面与投递标记同址）。
         board, board_ids, board_problems = board_digest(self.conductor, my_task_id=my_task_id)

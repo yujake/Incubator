@@ -2371,6 +2371,143 @@ def _kind_upgrade_from_signature(row: Mapping[str, Any], *, root: str | Path,
     return out
 
 
+def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
+                   sha: str, need: int, holds: Mapping[str, Any]) -> dict[str, Any]:
+    """组一份签的内容（纯读：台账 + 手稿路径；不写任何东西）。
+
+    业主 2026-11-01（逐字）：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
+    收录时读到。」于是签要落成「按被签正文 sha 命名」的一份侧文件（`out/vsigns/<sha>.json`），
+    它的内容全部从台账现读，不复制全文：
+
+    - `passes`：这一份正文尾部连续 `need` 转的 `{verification_id, at, proof_sha256, why}`
+      （`why` 是 V 那一转自己写的理由，逐字；「全文在台账」，见 `vsigns.PASSES_SOURCE_NOTE`）；
+    - `objections`：「同一份 sha」 上的「有毛病」记录（两档都算：V 自己判的、秘书判 fault 的）。
+      为什么要它：同一段正文可能先被判有毛病、后来连续三次成立拿到签（V 改判 / 秘书在
+      「V 写成立」的回复上读出缺陷那一档）—— 那段痕迹必须留在签上，否则"先有毛病、后有签"
+      这件事在签这一份文件里看不见（跨 sha 的改版链不在这里，那是台账 `superseded` 的事）；
+    - `artifact_path`：`depsection.manuscript_relpaths` 找得到就写（「只作定位，不参与判据」）；
+      找不到留空 —— `ledger` 那一格永远有，所以定位不会丢。
+
+    `written_by` 不在这里定（本函数只组内容）：它由调用方那一格
+    :func:`_vsigns_write_after_flip` 按 `append_ledger` 分两档 —— 秘书落地那条路
+    （V 先落台账、秘书只翻位）是 `secretary`，直调写入口（夹具 /
+    `record_verification(flip=True)`）是 `sign_statement(direct)`。两者都真实发生过，
+    把后者也写成 secretary 会让"这张签是谁发的"变成假话。
+    """
+    from . import vsigns as _VS
+
+    out: dict[str, Any] = {"passes": [], "objections": [], "artifact_path": "",
+                           "ledger": f"{VERIFICATIONS_DIR}/{statement_id}.jsonl#"
+                                     f"{str(holds.get('verification_id') or '')}",
+                           "at": S.now_iso()}
+    try:
+        rows, _problems = JF.read_jsonl(ledger)
+    except OSError:
+        rows = []
+    mine = _rows_of_proof([dict(r) for r in rows], proof_no)
+    runs = _hold_run_lengths(mine)
+    # 尾部那一串连续成立的票：`runs[i]` 就是"到这一行为止连续几次"，
+    # 所以从尾部往回收 `streak, streak-1, …` 恰好收齐那一串。
+    # 为什么不用 `signs_bit3(row, streak=runs[i])` 过滤：那个谓词问的是"这一行能不能翻位"
+    # （要够门槛），而这里要的是"哪几行是这一签的票"—— 前两票本来就不够门槛，
+    # 用翻位谓词会把它们全滤掉（实测：passes 只剩 1 条）。
+    tail = int(holds.get("streak") or (runs[-1] if runs else 0))
+    want = max(1, int(need or 1))
+    passes: list[dict[str, Any]] = []
+    for i in range(len(mine) - 1, -1, -1):
+        if len(passes) >= want:
+            break
+        if str(mine[i].get("proof_sha256") or "") != sha:
+            continue
+        if runs[i] != tail - len(passes):
+            continue
+        passes.append({"verification_id": str(mine[i].get("verification_id") or ""),
+                       "at": str(mine[i].get("at") or ""),
+                       "proof_sha256": str(mine[i].get("proof_sha256") or ""),
+                       "why": str(mine[i].get("why") or "")})
+    passes.reverse()
+    if passes:
+        # 最后的那一签就是这一份签的落点（台账行序 = 追加序，不存在第二种"最近"）。
+        out["ledger"] = f"{VERIFICATIONS_DIR}/{statement_id}.jsonl#" \
+                        f"{passes[-1]['verification_id']}"
+    out["passes"] = passes
+    objections: list[dict[str, Any]] = []
+    for row in mine:
+        if str(row.get("proof_sha256") or "") != sha:
+            continue
+        axis = _VS.verdict_axis(row)
+        if not axis:
+            continue
+        objections.append({"verification_id": str(row.get("verification_id") or ""),
+                           "at": str(row.get("at") or ""),
+                           "axis": axis,
+                           "defect_steps": _VS.defect_steps(row)})
+    out["objections"] = objections
+    try:
+        from . import depsection as _DS
+
+        for rel in _DS.manuscript_relpaths(statement_ids=[statement_id]):
+            if (Path(str(root)) / rel).is_file():
+                out["artifact_path"] = str(rel)
+                break
+    except Exception:  # noqa: BLE001 —— 定位那一格读不成不算失败（它不参与判据）
+        out["artifact_path"] = ""
+    return out
+
+
+def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path,
+                             statement_id: str, proof_no: int, sha: str,
+                             holds: Mapping[str, Any],
+                             append_ledger: bool) -> dict[str, Any]:
+    """翻位之后把签落成侧文件（「永不抛」：这一格的三态由调用方读）。
+
+    为什么要包一层、而不在 `sign_statement` 里直接调 `vsigns.write_sign`：
+    组内容（`_vsign_payload`，读台账 + 读手稿路径）与写文件是两件事，前者出错时
+    要说清"是哪一格没读成"，而不是让整笔事务因为一个定位读不到就回滚。
+
+    返回 `vsigns.write_sign` 的三态（`written` / `idempotent` / `conflict` /
+    `archive_error` / `reason` / `path` / `sign`），外加 `payload_problem`（组内容那一步
+    的问题，空串 = 组得成）。
+    """
+    out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
+                           "path": "", "archive_error": "", "reason": "",
+                           "sign": {}, "payload_problem": "",
+                           "refused_below_need": False}
+    from . import vsigns as _VS
+
+    root = getattr(store, "root", "")
+    need = int(holds.get("need") or SIGN_STREAK_NEED)
+    try:
+        payload = _vsign_payload(root=root, ledger=ledger, statement_id=statement_id,
+                                 proof_no=proof_no, sha=sha, need=need, holds=holds)
+    except Exception as exc:  # noqa: BLE001 —— 组内容失败要留读数，但不许带走翻位
+        out["payload_problem"] = f"{type(exc).__name__}: {exc}"
+        payload = {"passes": [], "objections": [], "artifact_path": "", "ledger": "",
+                   "at": S.now_iso()}
+    try:
+        got = _VS.write_sign(
+            root, artifact_sha=sha,
+            streak=int(holds.get("streak") or 0), need=need,
+            artifact_path=str(payload.get("artifact_path") or ""),
+            ledger=str(payload.get("ledger") or ""),
+            statement_id=str(statement_id or ""), proof_no=int(proof_no),
+            passes=list(payload.get("passes") or []),
+            objections=list(payload.get("objections") or []),
+            at=str(payload.get("at") or ""),
+            written_by=(_VS.WRITTEN_BY_DIRECT if append_ledger
+                        else _VS.WRITTEN_BY_SECRETARY))
+    except Exception as exc:  # noqa: BLE001 —— 写文件那一笔抛了也要如实报
+        out["reason"] = f"写签那一笔抛了（{type(exc).__name__}: {exc}）"
+        return out
+    out.update({k: got.get(k) for k in ("written", "idempotent", "conflict", "path",
+                                        "archive_error", "reason", "sign",
+                                        "refused_below_need")})
+    if out["payload_problem"]:
+        out["reason"] = (f"{out['reason']}；组签内容时有一格没读成"
+                         f"（{out['payload_problem']}）")
+    return out
+
+
 def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                    path: Path | None = None, proof_no: Any = None,
                    sign_issuance: Mapping[str, Any] | None = None,
@@ -2470,6 +2607,12 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: 业主 2026-10-29 的连续读数（见 :func:`consecutive_holds`）：这一签落地之后
         #: 台账尾部的连续成立次数 / 门槛 / 够不够。三个键无条件存在。
         "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
+        #: 业主 2026-11-01：这一签的侧文件（`out/vsigns/<artifact_sha>.json`）落成了没有。
+        #: 三态与 `vsigns.write_sign` 同形：`written` / `idempotent` / `conflict` /
+        #: `archive_error`（归档失败不回滚）/ `reason` / `path`。签文件写不成时本函数
+        #: 整笔失败（位也不会翻），所以"`written=True` 而 `vsign.written=False`"只可能
+        #: 是"这一份签早就在盘上、逐字相同"（`idempotent`）这一档。
+        "vsign": {},
     }
     try:
         no = proof_no_of(row) if proof_no is None else proof_no_strict(proof_no)
@@ -2551,6 +2694,33 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
                        kind_upgrade=dict(upgraded["kind_upgrade"]),
                        upgrade_note=str(upgraded["note"]))
+            # ---- 业主 2026-11-01：签落成一份按正文 sha 命名的侧文件 -------------------
+            #
+            # 位置在这里（upsert 之后、事务里）的三个理由：
+            # ① 位与签同生共死：`<sha>.json` 写不成 ⇒ 抛出去让整个事务回滚（连同台账那
+            #    一行一起撤回）——"签没落地"与"签落了但没档"是两件事，前者要能重试；
+            # ② 归档（`issued.json`）失败「不许」回滚：位已经翻在 `statements` 里，
+            #    删掉刚写好的签文件是抹掉发生过的事（`vsigns` 的模块 docstring 那一节）；
+            # ③ 内容全部从台账现读（`_vsign_payload`），不复制全文、不吃调用方状态。
+            sign_out = _vsigns_write_after_flip(
+                store, row=dict(row), ledger=ledger, statement_id=sid, proof_no=no,
+                sha=str(row.get("proof_sha256") or ""), holds=holds,
+                append_ledger=bool(append_ledger))
+            out["vsign"] = dict(sign_out)
+            if not (sign_out.get("written") or sign_out.get("idempotent")):
+                if sign_out.get("refused_below_need"):
+                    # 两道守卫不一致（`signs_bit3` 说够、`write_sign` 说不够）：位照它自己的
+                    # 判据翻，「不写签」，并把这件事留在 `vsign.reason` 里。
+                    #
+                    # 为什么这一档不许把整笔弄失败：`signs_bit3` 是第 3 位的「唯一」硬闸
+                    # （`tests/test_v_sign_gate_streak.py::z1` 用"把 `streak_ok` 打成恒真"
+                    # 做反真空负控）。若这里改成抛异常回滚，那道闸就再也量不出来了 ——
+                    # 一条"签没写"的读数是可见的，而一条"闸拆了也看不出来"的判据是不可修的。
+                    out["vsign"]["reason"] = str(sign_out.get("reason") or "")
+                else:
+                    # 签文件没落地（写不成 / 冲突）⇒ 整笔失败（位不许在"没有任何档"的情况下翻上去）。
+                    raise VerificationError(
+                        "签文件没写成：" + str(sign_out.get("reason") or "没有理由"))
     except Exception as exc:  # noqa: BLE001 - 写位失败要如实报（签名那一行可能已经在盘上了）
         rolled = (_rollback_append(ledger, before, row)
                   if append_state == "appended" and before >= 0 else False)

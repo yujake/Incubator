@@ -1640,6 +1640,25 @@ class _RegisterStatement:
             kind=kind_now)
         if bits_bad is not None:
             return bits_bad
+        # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
+        #
+        # 原话：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
+        # 于是 `out/vsigns/<artifact_sha>.json` 是 B 这一侧认得的那一份签：正文的 sha 对得上、
+        # 连续次数够、而且这一份签属于「这一条命题」（同一段正文被别的命题复用不算签过），
+        # 才把第 3 位写成已签。三态都在 `v_sign` 里（`checked` / `found` / `applied` / `why`），
+        # 认不出来时 `bits` 一个字都不动 —— 没签过不是"把审过的擦掉"。
+        try:
+            from agentflow import vsigns as _VS
+
+            bits, v_sign = _VS.bits_after_sign(
+                bits, root=getattr(self.store, "root", ""),
+                proof_text=str(proof_text or ""), statement_id=stmt_id_now,
+                proof_no=1, kind=str(kind_now or ""))
+        except Exception as exc:  # noqa: BLE001 —— 认签那一格读不成不许带走整笔登记
+            v_sign = {"checked": False, "found": False, "applied": False,
+                      "artifact_sha": "",
+                      "why": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
+                              "⇒ 不是「没有签」")}
         sec = self._statement_secretary()
         if sec is None:
             return _refuse("secretary_unavailable",
@@ -1743,6 +1762,7 @@ class _RegisterStatement:
                         "already": [int(n) for n in (more.get("already") or [])]}
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
+            out["v_sign"] = dict(v_sign)
             return out
         if written.get("upgraded") and not written.get("created"):
             # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书「改那一行」
@@ -1801,6 +1821,7 @@ class _RegisterStatement:
             md = self._manuscript_deps_after_write(sec, stmt_now, deps_groups)
             if md:
                 out["manuscript_deps"] = md
+            out["v_sign"] = dict(v_sign)
             return out
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
@@ -1888,6 +1909,7 @@ class _RegisterStatement:
                 md = self._manuscript_deps_after_write(sec, stmt_dup, deps_groups)
                 if md:
                     out["manuscript_deps"] = md
+                out["v_sign"] = dict(v_sign)
                 return out
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",

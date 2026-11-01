@@ -2324,6 +2324,38 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "③有记录且我方到 `pre_theorem`/`theorem` = 这一档要数的（见 `counted`）。"
                 "「没算过」不等于「算了、不够档」，所以这两件事的分母必须分开给"),
         }
+        # ---- 业主 2026-11-01：签的侧文件 + "没送到"的判决（只读数，「不参与任何等级」） --
+        #
+        # 为什么要放在这一格而不是新造一门：R10 已经在数"第 3 位相对现行正文"，
+        # 而"这一签在盘上有没有一份按正文 sha 命名的侧文件"是同一个问题的另一半
+        # （B 收录时靠它认签）。两处各数一遍就会对同一批签给出两个数。
+        # 三态：没有 `out/vsigns/` ⇒ `not_applicable`（66 行历史签补不出侧文件，不补 ⇒ 不红）。
+        # `undelivered_reviews` 是 81 那条真缺陷（8 判 4 送）在收工门上的可读落点。
+        try:
+            from . import vsigns as _VSP_GATE
+
+            detail["vsign_backed"] = _VSP_GATE.backed_reading(project_root, rows, store=store)
+            _undelivered = _VSP_GATE.receipt_digest(project_root, store, limit=8, times=False)
+            detail["undelivered_reviews"] = {
+                "checked": bool(_undelivered.get("checked")),
+                "delivery_checked": bool(_undelivered.get("delivery_checked")),
+                "receipts": int(_undelivered.get("receipts") or 0),
+                "delivered": int(_undelivered.get("delivered") or 0),
+                "undelivered": int(_undelivered.get("undelivered") or 0),
+                "undelivered_ids": list(_undelivered.get("undelivered_ids") or [])[:8],
+                "reason": str(_undelivered.get("reason") or ""),
+                "problems": list(_undelivered.get("problems") or [])[:4],
+            }
+        except Exception as exc:  # noqa: BLE001 —— 这两格读不成不许把 R10 整格带走
+            detail["vsign_backed"] = {
+                "checked": False, "tri": "unreadable", "problems": [],
+                "reason": (f"签的侧文件这一格没查成（{type(exc).__name__}: {exc}）"
+                           "⇒ 不是「没有签文件」")}
+            detail["undelivered_reviews"] = {
+                "checked": False, "delivery_checked": False, "receipts": 0,
+                "delivered": 0, "undelivered": 0, "undelivered_ids": [],
+                "reason": (f"打回与送达那一格没查成（{type(exc).__name__}: {exc}）"
+                           "⇒ 不是「没有打回」"), "problems": []}
         if rows and not counted:
             # ---- 「0 条高档」是哪一种 0（D10）：四种原因分开给，不折成一句"没审过"。
             #
