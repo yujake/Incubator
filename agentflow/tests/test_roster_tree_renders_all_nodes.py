@@ -48,10 +48,9 @@ from __future__ import annotations
 
 import json
 import pathlib
-import shutil
-import subprocess
 from typing import Any, Mapping
 
+import nodejs as NODE
 import pytest
 
 from agentflow.secretary import Secretary
@@ -64,7 +63,6 @@ UI = REPO / "ui"
 UI_SRC = UI / "src"
 TREE_TS = UI_SRC / "rosterTree.ts"
 ROSTER_TSX = UI_SRC / "components" / "Roster.tsx"
-TYPESCRIPT_LIB = UI / "node_modules" / "typescript" / "lib" / "typescript.js"
 
 #: 真机工作区（只读）。不在盘上就 skip 那一条判据，别的判据照旧跑夹具。
 REAL_WORKSPACE = REPO / "projects" / "sylow3"
@@ -169,22 +167,7 @@ def _referenced_but_absent(face: Mapping[str, Any]) -> set[str]:
 
 
 # ====================================================================== 跑前端
-_TRANSPILE_JS = r"""
-const ts = require(process.argv[1]);
-const fs = require("node:fs");
-const path = require("node:path");
-const src = fs.readFileSync(process.argv[2], "utf8");
-const out = ts.transpileModule(src, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    isolatedModules: true,
-  },
-  fileName: path.basename(process.argv[2]),
-}).outputText;
-fs.writeFileSync(process.argv[3], out, "utf8");
-"""
-
+#: 转译 / 跑转轮都由 `tests/nodejs.py` 那一份共用帮手做（node 缺失 ⇒ 它 skip 并记 unknown）。
 _RUNNER_JS = r"""
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -254,13 +237,6 @@ process.stdout.write(JSON.stringify(result));
 """
 
 
-def _node_exe() -> str:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("没装 node ⇒ 前端渲染函数这一层记 unknown（不记 pass）")
-    return node
-
-
 #: 同一个临时目录里的那一次转译只做一遍（判据里会拿它跑好几份读数）。
 _TRANSPILED: dict[str, pathlib.Path] = {}
 
@@ -270,22 +246,9 @@ def _module_js(tmp: pathlib.Path) -> pathlib.Path:
     cached = _TRANSPILED.get(str(tmp))
     if cached is not None and cached.is_file():
         return cached
-    node = _node_exe()
-    if not TYPESCRIPT_LIB.is_file():
-        pytest.skip("前端依赖没装（ui/node_modules/typescript 不在）⇒ 记 unknown（不记 pass）")
     assert TREE_TS.is_file(), (
         f"{TREE_TS.relative_to(REPO)} 不在盘上：名册树「画哪些行」没有可判的纯函数")
-    out = tmp / "rosterTree.mjs"
-    # `encoding="utf-8"` 不是装饰：node 按 UTF-8 往 stdout 写，而 `text=True` 不给编码时
-    # Python 用本机 locale（中文 Windows = GBK）去解它 ⇒ 读线程抛 UnicodeDecodeError、
-    # `proc.stdout` 变成空串，于是这一整个文件在那种机器上 6 条全红，红的却与被测代码
-    # 毫无关系（判据自己的环境脆弱）。同 `tests/test_webui_three_state_reading.py` 的口径。
-    proc = subprocess.run([node, "-e", _TRANSPILE_JS, str(TYPESCRIPT_LIB),
-                           str(TREE_TS), str(out)],
-                          capture_output=True, text=True, encoding="utf-8", timeout=180)
-    assert proc.returncode == 0, (
-        "把 rosterTree.ts 转成 ESM 失败（exit "
-        f"{proc.returncode}）：{((proc.stderr or '') + (proc.stdout or ''))[:800]}")
+    out = NODE.transpile(TREE_TS, tmp / "rosterTree.mjs")
     body = out.read_text(encoding="utf-8")
     assert '"./types"' not in body, (
         "rosterTree.ts 转出来还 import 了 ./types ⇒ 它不是纯函数，判据没法单独跑它")
@@ -295,18 +258,13 @@ def _module_js(tmp: pathlib.Path) -> pathlib.Path:
 
 def _run(face: Mapping[str, Any], tmp: pathlib.Path, *, mode: str = "tree") -> dict[str, Any]:
     """把一份读数喂给前端那一个纯函数，读回"它画了哪些行"。"""
-    node = _node_exe()
     module = _module_js(tmp)
     payload = tmp / f"payload-{mode}.json"
     payload.write_text(json.dumps(face, ensure_ascii=False), encoding="utf-8")
     runner = tmp / "runner.mjs"
     runner.write_text(_RUNNER_JS, encoding="utf-8")
-    proc = subprocess.run([node, str(runner), str(module), str(payload), mode],
-                          capture_output=True, text=True, encoding="utf-8", timeout=180)
-    assert proc.returncode == 0, (
-        f"前端那个纯函数在真读数上跑不起来（exit {proc.returncode}）："
-        f"{((proc.stderr or '') + (proc.stdout or ''))[:1200]}")
-    return json.loads(proc.stdout)
+    return dict(NODE.run_json(runner, str(module), str(payload), mode,
+                              what="前端那个纯函数在真读数上跑不起来"))
 
 
 # ====================================================================== 判据本身

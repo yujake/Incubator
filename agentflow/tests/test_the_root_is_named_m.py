@@ -41,10 +41,9 @@ from __future__ import annotations
 
 import json
 import pathlib
-import shutil
-import subprocess
 from typing import Any, Mapping
 
+import nodejs as NODE
 import pytest
 
 from agentflow import clock as CLK
@@ -57,7 +56,6 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 UI_SRC = REPO / "ui" / "src"
 ROSTER_TSX = UI_SRC / "components" / "Roster.tsx"
 TREE_TS = UI_SRC / "rosterTree.ts"
-TYPESCRIPT_LIB = REPO / "ui" / "node_modules" / "typescript" / "lib" / "typescript.js"
 #: 真机工作区（只读：这条判据不往它里面写一个字节）。
 REAL_WORKSPACE = REPO / "projects" / "mp3-r3"
 
@@ -194,22 +192,7 @@ def test_the_root_of_a_roster_face_is_named_m(tmp_path: pathlib.Path) -> None:
 
 # ====================================================================== a' 渲染
 #: 把 `ui/src/rosterTree.ts`（纯函数）转成 ESM 再真跑一遍：页面读的就是它的产物。
-_TRANSPILE_JS = r"""
-const ts = require(process.argv[1]);
-const fs = require("node:fs");
-const path = require("node:path");
-const src = fs.readFileSync(process.argv[2], "utf8");
-const out = ts.transpileModule(src, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    isolatedModules: true,
-  },
-  fileName: path.basename(process.argv[2]),
-}).outputText;
-fs.writeFileSync(process.argv[3], out, "utf8");
-"""
-
+#: 转译 / 跑转轮都由 `tests/nodejs.py` 那一份共用帮手做（node 缺失 ⇒ 它 skip 并记 unknown）。
 _RUNNER_JS = r"""
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -242,38 +225,19 @@ process.stdout.write(JSON.stringify({
 """
 
 
-def _node_exe() -> str:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("没装 node ⇒ 前端渲染函数这一层记 unknown（不记 pass）")
-    return node
-
-
 def _render(face: Mapping[str, Any], tmp: pathlib.Path) -> dict[str, Any]:
     """把一份读数喂给前端的渲染函数，读回根那一行与画出来的节点集合。"""
-    node = _node_exe()
-    if not TYPESCRIPT_LIB.is_file():
-        pytest.skip("前端依赖没装（ui/node_modules/typescript 不在）⇒ 记 unknown（不记 pass）")
     assert TREE_TS.is_file(), f"{TREE_TS.relative_to(REPO)} 不在盘上"
-    module = tmp / "rosterTree.mjs"
-    proc = subprocess.run([node, "-e", _TRANSPILE_JS, str(TYPESCRIPT_LIB),
-                           str(TREE_TS), str(module)],
-                          capture_output=True, text=True, encoding="utf-8", timeout=180)
-    assert proc.returncode == 0, (
-        "把 rosterTree.ts 转成 ESM 失败（exit "
-        f"{proc.returncode}）：{((proc.stderr or '') + (proc.stdout or ''))[:800]}")
+    module = NODE.transpile(TREE_TS, tmp / "rosterTree.mjs")
     assert '"./types"' not in module.read_text(encoding="utf-8"), (
         "rosterTree.ts 转出来还 import 了 ./types ⇒ 它不是纯函数，判据没法单独跑它")
     payload = tmp / "root-name-payload.json"
     payload.write_text(json.dumps(face, ensure_ascii=False), encoding="utf-8")
     runner = tmp / "root-name-runner.mjs"
     runner.write_text(_RUNNER_JS, encoding="utf-8")
-    got = subprocess.run([node, str(runner), str(module), str(payload)],
-                         capture_output=True, text=True, encoding="utf-8", timeout=180)
-    assert got.returncode == 0, (
-        f"跑前端渲染函数失败（exit {got.returncode}）："
-        f"{((got.stderr or '') + (got.stdout or ''))[:800]}")
-    return dict(json.loads(got.stdout))
+    got = NODE.run_json(runner, str(module), str(payload),
+                        what="跑前端渲染函数失败")
+    return dict(got)
 
 
 def test_the_rendered_root_row_says_m(tmp_path: pathlib.Path) -> None:
