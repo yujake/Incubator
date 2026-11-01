@@ -11,6 +11,7 @@ agent_prompts.system_prompt(role, registry=..., split_facts(facts))user   = 一�
 `user_replies` /`workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。秘书那一档（2026-10-21
 起与十个角色同形）：`Secretary.judge` 调`seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、材料留在 user。所以秘书那一行的预热对象是
 `_judge_system(kind)` 那一段，user 消息是空材料的形状（`材料：` + 一份 JSON）。改前它整条都在 user 位（`system=""`），实测连发两趟 `hit=0 / miss=175`。
+「谁进命中样本、谁被排除、为什么」：`--hit-sample` 点名的是"同一份前缀再发一次应当命中"的目标 —— 这是"缓存真的落地了"的实证（`write` 只是推导量：`write = miss`）。秘书被显式排除（见 `HIT_SAMPLE_EXCLUDED`）：它的 system 头只有 304 字（2026-11-01 真机读数），上游对这一段始终报 `hit=0`（连发两趟 `miss=176`）⇒ 把它放进样本就必然让整趟落成 `incomplete`，而同一趟里其余十一个目标的命中率是 99.3%–99.7%、每一行 `ok` 都是 true。于是"整趟没暖成"与"秘书这一格不计缓存命中"被折成了同一个词 —— 那个读数是假的。排除不是"不量"：秘书照常预热、照常有 `write>0` 的落地记录，只是不进"必须命中"的样本，并在读数里单列成 `hit_sample_excluded=[{target, why}]`（`--hit-sample` 里没有它时这一格是空表，不是一句话）。`verdict` 只由进样本的目标（`hit_sample_measured`）决定：`incomplete` 只在这些目标真有 miss 时出现；反真空是"让一个普通角色（例如 M）真 miss ⇒ 仍必须判 `incomplete`"（判据 `tests/test_prompt_cache_warm.py` 第 6 节）。
 内置花费上限：`LlmSeam(usd_budget=--cap-usd)`（默认 0.10 美元）是真闸：每发一次请求之前它自己比一次全局已花（`llmseam.ask` 的前两个分支），超了就返回 `judge_over_budget` 而不发请求。
 本脚本在它之外再预检一次（`spent >= cap` ⇒ 干净停下并说"剩下的没预热"），于是"超上限"不会被误读成"某一个角色预热失败"。幂等 / 可重复：同一 scenario 再跑一遍：同样的 prompt_sha256、同样的
 system/tools 摘要，第二趟的`hit` 会接近满、`write` 接近 0（这正是判据 ② 要的那一跳）。所以重复跑是安全的，而且它本身就是"缓存真的落了盘"的证明。退出码（三态，与 `noai_gate.py` /
@@ -30,7 +31,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
@@ -72,6 +73,25 @@ DEFAULT_CAP_USD = 0.10
 #: 做"第二次调用应该命中"那一跳的样本（省钱：只挑 2 个）。
 #: 挑规则：`M` 是最大的一份（历史真机读数就是它），`C` 是最小的一份（最便宜的对照）。
 DEFAULT_HIT_SAMPLE: tuple[str, ...] = ("M", "C")
+
+#: 命中样本里显式排除的目标与理由（排除了就单列，不是默默跳过）。
+#:
+#: ## 秘书为什么被排除（不是"跳过不量"）
+#:
+#: 它的 system 头只有 304 字（2026-11-01 真机读数：`--roles secretary` 那一趟的
+#: `system_chars=304`），而上游对这一段始终报 `hit=0`（连发两趟 `miss=176`）。
+#: 于是"把秘书放进 `--hit-sample`"必然让整趟落成 `incomplete` —— 而同一趟里
+#: 其余十一个目标的命中率是 99.3%–99.7%、`rows[].ok` 全为 true。两件事被折成
+#: 同一个词，读数就在说谎：读者分不出"整趟没暖成"与"秘书这一格不计命中"。
+#:
+#: 排除只作用于"必须命中"这个判据：秘书仍然在 `WARM_TARGETS` 里、仍然被预热、
+#: 仍然要有 `write>0` 的落地记录（`missing` 那一格照样会点名它）。它不进的是
+#: `sample_without_hit` 的来源；它进的是 `hit_sample_excluded`。
+HIT_SAMPLE_EXCLUDED: Mapping[str, str] = {
+    SECRETARY: ("system 头 304 字（2026-11-01 真机读数）：上游对这一段始终不计缓存命中"
+                "（连发两趟 hit 恒 0、miss=176）⇒ 不作为「必须命中」的样本；"
+                "它仍然预热、仍然有 write>0 的落地记录"),
+}
 
 #: 秘书那一档预热的是哪一类判断的提示词（`secretary.JUDGE_KINDS` 之一；
 #: 稳定头的长度与类别无关，取一个确定性的即可）。
@@ -598,6 +618,92 @@ def _absent_record_of(target: str, item: Mapping[str, Any], *, at: str) -> dict[
     }
 
 
+def judge_rows(rows: Sequence[Mapping[str, Any]], *, present: Sequence[str],
+               sample: Sequence[str], absent: Sequence[str] = (),
+               stopped: str = "", spent_usd: float = 0.0) -> dict[str, Any]:
+    """这一趟的结论与几条诊断（纯函数：真机入口与判据共用同一份口径）。
+
+    ## 谁进样本、谁被排除、为什么
+
+    - 进样本（`hit_sample_measured`）：`sample` 里没有被 `HIT_SAMPLE_EXCLUDED`
+      点名的目标。它们第二次调用（`pass=2`）必须 `hit>0`；真 miss 就进
+      `sample_without_hit`，整趟判 `incomplete`。
+    - 被排除（`hit_sample_excluded`）：`sample` 里登记在 `HIT_SAMPLE_EXCLUDED`
+      的目标（今天是秘书：system 头 304 字，上游对这一段始终 `hit=0`）。
+      排除是读数，不是静默跳过 —— 每一条都带着 `why` 落进读数文件；
+      它们仍然被预热、仍然要有 `write>0` 的落地记录（`missing` 那一格照样点名）。
+    - 结论只由进样本的目标决定：`incomplete = 有任何 missing / unknown_cache /
+      failed / stopped，或进样本的目标里真有 miss`。被排除的目标再怎么 `hit=0`
+      也不产生 `incomplete`。
+    - 反真空：`sample` 里全是排除目标时 `hit_sample_measured=[]`，note 明说
+      "这一格没量"——不许读成"都命中了"。
+
+    纯函数是刻意的：判据（`tests/test_prompt_cache_warm.py` 第 6 节）造一份读数就能
+    问"这一趟该判什么"，不必联网、不必花钱；而真机入口调的也是这一个函数 ⇒
+    判据与产品不会各算一套。
+    """
+    by_role: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        if int(row.get("pass") or 1) > 2:       # 诊断行不参与"这个目标预热了吗"
+            continue
+        by_role.setdefault(str(row.get("role")), []).append(row)
+    missing = [t for t in present
+               if not any((int((r.get("cache") or {}).get("write") or 0) > 0
+                           or int((r.get("cache") or {}).get("hit") or 0) > 0)
+                          for r in by_role.get(t, []))]
+    unknown_cache = [t for t in present
+                     if any(not (r.get("cache") or {}).get("known")
+                            for r in by_role.get(t, []))]
+    failed = [f"{r['role']}#{r['pass']}: {r['problem']}" for r in rows if not r.get("ok")]
+
+    excluded = [{"target": t, "why": HIT_SAMPLE_EXCLUDED[t]}
+                for t in sample if t in HIT_SAMPLE_EXCLUDED]
+    measured = [t for t in sample if t not in HIT_SAMPLE_EXCLUDED]
+    samples = {t: [r for r in by_role.get(t, []) if int(r.get("pass") or 1) == 2]
+               for t in measured}
+    sample_without_hit = [t for t, rs in samples.items()
+                          if not rs or not int((rs[0].get("cache") or {}).get("hit") or 0) > 0]
+
+    incomplete = bool(missing or unknown_cache or failed or sample_without_hit or stopped)
+    bits: list[str] = []
+    if missing:
+        bits.append(f"没有落地记录的目标：{missing}")
+    if unknown_cache:
+        bits.append(f"上游没给缓存读数的目标：{unknown_cache}")
+    if failed:
+        bits.append(f"失败调用：{failed[:4]}")
+    if sample_without_hit:
+        bits.append(f"第二次调用没命中的样本：{sample_without_hit}")
+    if stopped:
+        bits.append(stopped)
+    if excluded:
+        names = "、".join(f"{e['target']}（{e['why']}）" for e in excluded)
+        bits.append(f"命中样本里显式排除（不是命中失败）：{names}")
+    if incomplete:
+        note = "；".join(bits)
+    else:
+        note = (f"{len(present)} 个目标都有缓存落地记录"
+                f"（{len(absent)} 个按设计不在这一档：{list(absent)}）；"
+                f"二调样本 {measured} 命中")
+        if excluded:
+            note += f"；{len(excluded)} 个目标不进命中样本（已单列）：{[e['target'] for e in excluded]}"
+        if not measured:
+            note += "；⚠ 命中样本全是被排除的目标 ⇒ 这一趟没有目标能验证「第二次调用命中」，这一格没量"
+        note += f"；花费 {float(spent_usd):.6f} 美元"
+    return {
+        "verdict": "incomplete" if incomplete else "warmed",
+        "missing": missing,
+        "unknown_cache": unknown_cache,
+        "failed_calls": failed,
+        "sample_without_hit": sample_without_hit,
+        # 被排除的目标与理由（空表 = 这一趟的样本里没有被排除的目标）。
+        "hit_sample_excluded": excluded,
+        # 真的进了"必须命中"这条判据的目标（= 点名的样本 − 排除的）。
+        "hit_sample_measured": measured,
+        "note": note,
+    }
+
+
 def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CAP_USD,
          hit_sample: tuple[str, ...] = DEFAULT_HIT_SAMPLE, model: str = "",
          effort: str = "off", out_path: Path | None = None,
@@ -729,20 +835,10 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             rows.append(_record_of(target, item, call, pass_no=pass_no, at=at))
 
         spent, source = seam.spent_usd()
-        by_role: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            if int(row["pass"]) > 2:       # 诊断行不参与"这个目标预热了吗"
-                continue
-            by_role.setdefault(str(row["role"]), []).append(row)
-        missing = [t for t in present
-                   if not any((r["cache"]["write"] or 0) > 0 or (r["cache"]["hit"] or 0) > 0
-                              for r in by_role.get(t, []))]
-        unknown_cache = [t for t in present
-                         if any(not r["cache"]["known"] for r in by_role.get(t, []))]
-        failed = [f"{r['role']}#{r['pass']}: {r['problem']}" for r in rows if not r["ok"]]
-        samples = {t: [r for r in by_role.get(t, []) if r["pass"] == 2] for t in sample}
-        sample_miss = [t for t, rs in samples.items()
-                       if not rs or not (rs[0]["cache"]["hit"] or 0) > 0]
+        # 结论只在一个地方算（`judge_rows`）：判据造一份读数问的是同一个函数。
+        judgement = judge_rows(rows, present=list(present), sample=list(sample),
+                               absent=list(absent), stopped=stopped,
+                               spent_usd=float(spent))
         probe_rows = [r for r in rows if int(r["pass"]) == 3]
         tools_in_prefix: bool | None = None
         if probe_rows:
@@ -781,10 +877,14 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "hit_sample": list(sample),
             "stopped": stopped,
             "rows": rows,
-            "missing": missing,
-            "unknown_cache": unknown_cache,
-            "failed_calls": failed,
-            "sample_without_hit": sample_miss,
+            # 这几格的口径见 `judge_rows` 的 docstring：`sample_without_hit` 只点名
+            # 进样本的目标；被排除的目标进 `hit_sample_excluded`（带 why）。
+            "missing": judgement["missing"],
+            "unknown_cache": judgement["unknown_cache"],
+            "failed_calls": judgement["failed_calls"],
+            "sample_without_hit": judgement["sample_without_hit"],
+            "hit_sample_excluded": judgement["hit_sample_excluded"],
+            "hit_sample_measured": judgement["hit_sample_measured"],
             # 工具面在不在缓存前缀里（None = 没做这个诊断 / 上游没给读数）。
             "tools_in_prefix": tools_in_prefix,
             "tools_probe": tools_probe,
@@ -804,23 +904,8 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
         # 先定结论、再落盘：读数文件里必须带着结论写下去。
         # 反例（本脚本第一版就是这个形态）：先写文件后判结论 ⇒ 盘上 `verdict` 恒为空串，
         # 而"没判过"与"判过了没问题"在读者眼里长得一模一样（三态纪律）。
-        incomplete = bool(missing or unknown_cache or failed or sample_miss or stopped)
-        bits: list[str] = []
-        if missing:
-            bits.append(f"没有落地记录的目标：{missing}")
-        if unknown_cache:
-            bits.append(f"上游没给缓存读数的目标：{unknown_cache}")
-        if failed:
-            bits.append(f"失败调用：{failed[:4]}")
-        if sample_miss:
-            bits.append(f"第二次调用没命中的样本：{sample_miss}")
-        if stopped:
-            bits.append(stopped)
-        result["verdict"] = "incomplete" if incomplete else "warmed"
-        result["note"] = ("；".join(bits) if incomplete else
-                          f"{len(present)} 个目标都有缓存落地记录"
-                          f"（{len(absent)} 个按设计不在这一档：{absent}）；"
-                          f"二调样本 {list(sample)} 命中；花费 {spent:.6f} 美元")
+        result["verdict"] = str(judgement["verdict"])
+        result["note"] = str(judgement["note"])
 
         if out_path is not None:
             runs = load_readings(out_path)
@@ -828,7 +913,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             save_readings(out_path, runs)
             result["out"] = str(out_path)
             result["runs_in_file"] = min(len(runs), MAX_RUNS_KEPT)
-        return (EXIT_INCOMPLETE if incomplete else EXIT_WARMED), result
+        return (EXIT_INCOMPLETE if result["verdict"] == "incomplete" else EXIT_WARMED), result
     finally:
         shutil.rmtree(tmp_registry, ignore_errors=True)
         if own_session and not keep_session:
@@ -947,6 +1032,11 @@ def main(argv: list[str] | None = None) -> int:
         return code
 
     print(_table(list(result["rows"])))
+    for got in result.get("hit_sample_excluded") or []:
+        print(f"命中样本里显式排除：{got['target']} —— {got['why']}")
+    if result.get("hit_sample_measured") == []:
+        print("⚠ 命中样本里没有被排除之外的目标 ⇒ 这一趟没有目标能验证"
+              "「第二次调用命中」，这一格没量（不是「都命中了」）")
     if result.get("tools_in_prefix") is not None:
         print(f"工具面在缓存前缀里：{'是' if result['tools_in_prefix'] else '否'}"
               f"（诊断：目标 {result.get('tools_probe')} 去掉工具面后再发一次，"
