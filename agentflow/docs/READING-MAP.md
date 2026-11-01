@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-03，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **258 个 `.py`、227,823 行**，**71 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,959 行** —— 批 R40 把它补进了 §3 的表；
+> **259 个 `.py`、228,584 行**，**71 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,959 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -196,7 +196,8 @@
 | `tools/attack_tools.py` | F 的工具：多轮难题攻坚 |
 | `tools/conjecture_tools.py` | 猜想台账的产出面 |
 | `tools/doc_tools.py` | G 的工具：论文撰写 |
-| `tools/review_tools.py` | H 的工具：审校 |
+| `tools/review_tools.py` | H 的工具：审校（`review.scan` 的工具体在这里；判据与口径在 `texaudit.py`） |
+| `texaudit.py` | **论文正文的机械扫描**（业主 2026-11-01「将 H 的所有机械扫描工具统一成一个」）：`scan_tex()` 是七类（`text_integrity` / `cites` / `inputs` / `refs` / `proofs` / `duplicates` / `ledger_match`）的唯一实现，返回八键（`checked` / `kinds` / `findings` / `counts` / `bad` / `detail` / `scanned` / `reason`）；`findings[]` 九键恒定（不适用给如实空值），逐类三态在 `detail[]`。口径从这里只能读出一份：引用命令是六个（只认 `\ref` 会静默漏报悬空 `\eqref`），没被引用过的标签只进 `facts.unused_labels`（真稿 703 个标签里 229 个没被引，报出来就是 229 条假阳性），`ledger_match` 只回五个数 + `statement_surplus` 而不发明"proof 环境数 == 台账定理类数"。判据 `tests/test_texaudit.py` |
 | `tools/conductor_tools.py` | 主控工具：给 M 配手与眼（派活 / 台账 / 停止 / 状态） |
 | `tools/cache_tools.py` | **两档提示词缓存的两件工具**（业主 2026-10-23）：`cache.status`（只读：两档 × 四格读数 + 换 key 提醒）与 `cache.warm`（写 + 起子进程：真预热一档，`dry_run` 缺省）—— `roles=("M",)`，A–H/V/L 一个都拿不到。实现转发到 `cachectl.py`（本文件不另算一份）；没挂进 `tools._MODULES` 是合并点的交代，见该文件 docstring 与施工报告 |
 | `tools/formal_tools.py` | **L 的三件工具**（业主 2026-10-22）：`formal.formalize` / `formal.check_formal` / `formal.record`，`roles` 只有 L（`_ROLES_L`），副作用与外部性两根轴逐条声明；handler 惰性构造 `agent_l.AgentL`（与 E 的 `verify_tools` 同一个形状）。它是 L 的**写权限面落点之一**（`record` 会写 `experiments` 一行）—— 少一个字母就等于把形式化入口漏给别的角色，而工具层不会报错，它只会"成功"。判据 `tests/test_l_formalizes_what_b_says.py` |
