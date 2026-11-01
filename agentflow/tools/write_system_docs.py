@@ -311,21 +311,56 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
 )
 
 
-def _registry() -> Any:
-    """工具面按 Lean 开档算，与环境无关（否则同一棵树能生成两份不同的文档）。
+def _registry_build() -> Any:
+    """按生产同源的装配造一次工具面（临时工作区；不碰仓库里的任何工作区）。
 
-    为什么钉死开档：Lean 关着时 L 这一格不存在（`leanscope.LEAN_ONLY_ROLES`），
-    于是文档会少一整节 —— 而"少一节"与"这一节写错了"在 diff 里长得一样。
-    十一格是完整面；关档少的只是 L 那一格，读者看 L 那一节开头的说明即可。
-    钉死在这里而不是靠调用方的环境变量：判据在 pytest 里跑、人在终端里跑，
-    两处的 env 不一定一样（实测踩过：两次生成差了 30 件工具面）。
+    为什么必须给 `store` 与 `workspace_root`（审计 C 第 ① 条，2026-11-01）：
+    不给这两个依赖时 `fs_tools` / `research_tools` 会在 `build_registry` 里
+    被跳过，而 `build_registry` 的既定契约是"跳过记进 `skipped`、不报错"——
+    于是生成物安静地少 4–13 件工具（A 46→54、C 32→36、E 32→40、G 46→54、
+    H 42→46、L 31→39），`test_system_docs_are_generated` 却照样绿（它只比
+    "盘上 == 现算"，两边一起错时它什么也不说）。`strict=True` 让"少装"当场抛；
+    `_registry()` 另有一道显式检查，防止将来有人把 `strict` 去掉后又退回静默。
+
+    为什么工具面按 Lean 开档算，与环境无关（否则同一棵树能生成两份不同的文档）：
+    Lean 关着时 L 这一格不存在（`leanscope.LEAN_ONLY_ROLES`），于是文档会少一整节
+    —— 而"少一节"与"这一节写错了"在 diff 里长得一样。十一格是完整面；关档少的
+    只是 L 那一格，读者看 L 那一节开头的说明即可。钉死在这里而不是靠调用方的环境
+    变量：判据在 pytest 里跑、人在终端里跑，两处的 env 不一定一样（实测踩过：
+    两次生成差了 30 件工具面）。
+
+    为什么用 `roles=tuple(agentflow.tools.ROLES)`（不带主控 M）：生产面
+    （`agentflow tools` 与 `test_tool_surface_snapshot`）就是这一份口径；把 M
+    也塞进注入角色会让 `_effective_roles` 把写工具发给主控（实测 M 36→42，
+    其中多出来的不是主控该有的那几件）。
     """
     import os
+    import tempfile
 
     os.environ.setdefault("AGENTFLOW_LEAN_ENABLED", "1")
+    from agentflow.store import Store
+    from agentflow.tools import ROLES as TOOL_ROLES
     from agentflow.tools import build_registry
 
-    return build_registry().registry
+    with tempfile.TemporaryDirectory(prefix="agentflow-system-docs-") as tmp:
+        ws = pathlib.Path(tmp) / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        store = Store(ws)
+        store.init()
+        return build_registry(store=store, workspace_root=ws,
+                              roles=tuple(TOOL_ROLES), strict=True)
+
+
+def _registry() -> Any:
+    """工具面；任何模块被跳过就报错（"少而无声"是这条缺陷的形态本身）。"""
+    build = _registry_build()
+    if build.skipped:
+        raise RuntimeError(
+            "工具面装配有模块被跳过，文档不能按这个面生成（会安静地少几件工具）："
+            f"skipped = {build.skipped}。"
+            "第一次出现时它就是这样漏掉了 fs_tools 与 research_tools —— 不许静默跳过。"
+        )
+    return build.registry
 
 
 def _tool_rows(registry: Any, role: str) -> list[tuple[str, str, str, str]]:
