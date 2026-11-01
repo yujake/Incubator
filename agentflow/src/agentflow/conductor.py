@@ -3013,8 +3013,15 @@ class Conductor:
         return int(row.get("depth") or 0) + 1, str(row.get("role") or "unknown")
 
     # ---------------------------------------------------------------- 写台账
-    def _write_new_row(self, row: dict, *, note: str) -> str:
+    def _write_new_row(self, row: dict, *, note: str,
+                       roster_pending: bool = False) -> str:
         """取号 + 建行在同一个临界区内完成，返回 `task_id`。
+
+        `roster_pending=True` 时，取号之后、行提交之前把这一号标进
+        `secretary._ROSTER_PENDING`（见那个集合的 docstring）：`roster_repair`
+        的已知集并上它，「台账行已落、名册还没登记」就不会被读成「漏登记」。
+        清理在调用方的 `finally` 里（`_summon_preflight` 的 [5]→[5b] 整段），
+        这里只负责提交失败时回滚标记。
 
         ## 为什么"先算号、再写行"是一个真实缺陷（不是防御性编程）：`interactions.next_prefixed_id` 是纯函数（取 max+1
         并跳过已占用），它没有计数器。所以分开做在并发下必错：
@@ -3030,11 +3037,23 @@ class Conductor:
         `tasks.json` 逐字节不一致（I-9 直接失败）—— 数据没错，但"可重建"这条承诺破了。
         """
         self._refuse_write_in_snapshot("建行（_write_new_row）")
-        with self._id_lock:
-            with self.store.tx("tasks", actor="conductor", note=note) as tx:
-                return self._row_with_id(tx, row, note=note)
+        try:
+            with self._id_lock:
+                with self.store.tx("tasks", actor="conductor", note=note) as tx:
+                    return self._row_with_id(tx, row, note=note,
+                                             roster_pending=roster_pending)
+        except BaseException:
+            # 提交失败也要把在飞标记清掉：留着它，这一号会被 repair 永久跳过。
+            # `row` 就地带着 task_id（`_row_with_id` 在 upsert 之前就写进去了）；
+            # 取号自己就失败时它是空串，forget 是幂等 no-op。
+            if roster_pending:
+                SEC.forget_roster_pending(
+                    self.store.root, str(row.get("parent_task_id") or ""),
+                    str(row.get("task_id") or ""))
+            raise
 
-    def _row_with_id(self, tx: Any, row: dict, *, note: str) -> str:
+    def _row_with_id(self, tx: Any, row: dict, *, note: str,
+                     roster_pending: bool = False) -> str:
         """在一笔事务里取号 + 建行（`_write_new_row` 与批量建行共用的唯一一处）。
 
         为什么抽出来而不是让批量那一路自己写一遍（2026-10-27）：落盘的键集与键序
@@ -3045,6 +3064,13 @@ class Conductor:
         from .interactions import next_prefixed_id
 
         row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
+        if roster_pending:
+            # 标记落在 upsert/提交之前：别的线程读得到这一行的时刻，一定晚于这次
+            # `set.add`（GIL 下同一线程的语句顺序即可见顺序）。`roster_repair` 再按
+            # 「先读 `_tasks()`、后读标记」的顺序读，就得到「见行必见标记」；
+            # 反过来做的失效形态由读序负控钉着。
+            SEC.note_roster_pending(
+                self.store.root, str(row.get("parent_task_id") or ""), row["task_id"])
         ordered = {"task_id": row["task_id"]}
         ordered.update({k: v for k, v in row.items() if k != "task_id"})
         task = S.Task(
@@ -8230,43 +8256,52 @@ class Conductor:
             # 与本标记无关。
             "inputs": _admitted_inputs(params),
         }
+        # 「在飞」标记的寿命就是 [5]→[5b] 这一段：登记已经发生（或已经带理由地
+        # 没发生）之后才清。用 finally 而不是几个清理点 —— 漏一条路径，这一号就会被
+        # `roster_repair` 永久跳过（静默欠补），比多几行 diff 严重得多。
+        tid = ""
         try:
-            tid = self._write_new_row(row, note=f"start:{role}.{action}")
-        except BaseException:
-            # 建行失败（store 抛了什么）⇒ 预留必须还回去，否则"已接受、还没结束"的
-            # 计数会永久高一个，后续每一次召唤都被自己上次的失败挤掉配额。
-            _release_reservation()
-            raise
-        with self._lock:
-            # 把占位令牌换成真 task_id：计数一个不增不减（预留已经计过了）。
-            self._running.discard(reserve)
-            self._running.add(tid)
-        self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
-                  + (f", instance={instance}" if instance else "") + "）")
+            try:
+                tid = self._write_new_row(row, note=f"start:{role}.{action}",
+                                          roster_pending=True)
+            except BaseException:
+                # 建行失败（store 抛了什么）⇒ 预留必须还回去，否则"已接受、还没结束"的
+                # 计数会永久高一个，后续每一次召唤都被自己上次的失败挤掉配额。
+                _release_reservation()
+                raise
+            with self._lock:
+                # 把占位令牌换成真 task_id：计数一个不增不减（预留已经计过了）。
+                self._running.discard(reserve)
+                self._running.add(tid)
+            self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
+                      + (f", instance={instance}" if instance else "") + "）")
 
-        # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是唯一的登记点。
-        #
-        # 位置就是判据本身（三条，缺一条都会退回真机那个缺陷）：
-        # ① 在 `_write_new_row` 之后 —— 只有真的建了子行才登记（被拒的召唤在
-        #    `_refuse` 里另有一条路，它不经过这里 ⇒ 不会登记）；
-        # ② 在 `backend.call` 之前 —— 子代理可能跑很久、也可能被强停（`projects/p3-verify`
-        #    的 D 与它的 E 就是这样），等它返回再登记等于"没跑完的都不在名册上"；
-        # ③ 只在这里 —— 调用点（`_do_summon` / `_do_summon_many` / 队列认领 / 两个工具）
-        #    一个都不许再自己调 `roster_add`，否则同一个子代理会有两条同名项。
-        #
-        # 失败姿态：`_register_roster` 从不抛（没秘书/秘书拒收/抛异常都变成一条 problem），
-        # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
-        #
-        # 2026-10-24（sylow4 真机）：这里多一条——写没写成要读盘（`roster_rec["state"]`），
-        # 并把"没写成"与"兜底换过"都打进日志。理由：可抢占派活的父代理那一步拿到的是
-        # "还在跑"，读不到名册那几格（`_do_summon` 在 handle 没落定时提前返回）⇒
-        # 若这里不记，一次整份漏写就只剩读侧的 `unplaced` 这一个事后读数。
-        roster_rec = self._register_roster(task_id=tid, role=role,
-                                           owner=str(parent_task_id or ""), meta=roster)
-        if roster_rec.get("problem"):
-            self._log(f"名册没写成：{roster_rec['problem']}", task_id=tid)
-        elif roster_rec.get("note"):
-            self._log(f"名册写成（{roster_rec['note']}）", task_id=tid)
+            # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是唯一的登记点。
+            #
+            # 位置就是判据本身（三条，缺一条都会退回真机那个缺陷）：
+            # ① 在 `_write_new_row` 之后 —— 只有真的建了子行才登记（被拒的召唤在
+            #    `_refuse` 里另有一条路，它不经过这里 ⇒ 不会登记）；
+            # ② 在 `backend.call` 之前 —— 子代理可能跑很久、也可能被强停（`projects/p3-verify`
+            #    的 D 与它的 E 就是这样），等它返回再登记等于"没跑完的都不在名册上"；
+            # ③ 只在这里 —— 调用点（`_do_summon` / `_do_summon_many` / 队列认领 / 两个工具）
+            #    一个都不许再自己调 `roster_add`，否则同一个子代理会有两条同名项。
+            #
+            # 失败姿态：`_register_roster` 从不抛（没秘书/秘书拒收/抛异常都变成一条 problem），
+            # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
+            #
+            # 2026-10-24（sylow4 真机）：这里多一条——写没写成要读盘（`roster_rec["state"]`），
+            # 并把"没写成"与"兜底换过"都打进日志。理由：可抢占派活的父代理那一步拿到的是
+            # "还在跑"，读不到名册那几格（`_do_summon` 在 handle 没落定时提前返回）⇒
+            # 若这里不记，一次整份漏写就只剩读侧的 `unplaced` 这一个事后读数。
+            roster_rec = self._register_roster(task_id=tid, role=role,
+                                               owner=str(parent_task_id or ""), meta=roster)
+            if roster_rec.get("problem"):
+                self._log(f"名册没写成：{roster_rec['problem']}", task_id=tid)
+            elif roster_rec.get("note"):
+                self._log(f"名册写成（{roster_rec['note']}）", task_id=tid)
+        finally:
+            SEC.forget_roster_pending(
+                self.store.root, str(parent_task_id or ""), tid)
         # ---- [5c] 等这条子代理的计时器（业主 2026-10-27 第五条不变量）
         #
         # 「如果一个子代理还有活跃子代理，必存在一个等待该子代理的计时器，所以"静默"

@@ -180,11 +180,14 @@ def _in_window(tmp_path: pathlib.Path, *, role: str, action: str, param: str,
     park.release["T2"].set()
     th_t2.join(30)
     assert not th_t2.is_alive(), "T2 没回来"
+    # A、B 逐个放行：两条都在窗口里（T2 的自愈那一刻它们都还没登记），但名字是按
+    # 登记顺序发的 —— 同时放行会让本判据依赖线程调度顺序，而不是依赖被测语义。
     park.release["A"].set()
-    park.release["B"].set()
     th_a.join(30)
+    assert not th_a.is_alive(), "A 没回来"
+    park.release["B"].set()
     th_b.join(30)
-    assert not th_a.is_alive() and not th_b.is_alive(), "A/B 没回来"
+    assert not th_b.is_alive(), "B 没回来"
     for box in (box_t2, box_a, box_b):
         assert "err" not in box, box.get("err")
         cond.summon_run(box["start"])
