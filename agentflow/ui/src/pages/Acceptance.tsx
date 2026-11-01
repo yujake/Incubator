@@ -188,6 +188,7 @@ export function Acceptance() {
               有证明的命题 <span class="mono">{num(proofs.propositions_with_proof)}</span> ·
               台账定理类 <span class="mono">{num(proofs.ledger_theorem_kinds)}</span> ·
               V 已签 <span class="mono">{num(proofs.signed)}</span>
+              <SourceLink source={proofs.source} label="验收表" />
             </div>
             <div class="readings">{proofs.coverage_note}</div>
             <div class="readings">
@@ -205,6 +206,7 @@ export function Acceptance() {
               <span class="mono">{proofs.vsign.backed.length}</span> · 无侧文件
               <span class="mono">{proofs.vsign.without_sign.length}</span> · 孤儿签
               <span class="mono">{proofs.vsign.orphan_signs.length}</span>
+              <SourceLink source={proofs.vsign.source} label="签文件" />
             </div>
             {proofs.vsign.reason === "" ? null : (
               <div class="readings">{proofs.vsign.reason}</div>
@@ -217,6 +219,7 @@ export function Acceptance() {
               <span class="mono">{proofs.receipt.delivered}</span>）· 未投出
               <span class="mono">{proofs.receipt.not_dispatched}</span> · 未送达
               <span class="mono">{proofs.receipt.undelivered}</span>
+              <SourceLink source={proofs.receipt.source} label="回执" />
             </div>
             {Object.keys(proofs.receipt.steps).length === 0 ? null : (
               <div class="readings">
@@ -317,6 +320,7 @@ export function Acceptance() {
                   + (structure.paper.env_counts.corollary ?? 0)}
               </span> 个 · PDF <span class="mono">{num(structure.paper.pdf_pages)}</span> 页 ·
               编译回执 <span class="mono">{structure.paper.receipt_verdict}</span>
+              <SourceLink source={structure.source} label="正文" />
             </div>
             <div class="readings">
               定理类环境 <span class="mono">{num(structure.ledger.statement_envs)}</span> ·

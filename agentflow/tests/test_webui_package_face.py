@@ -61,7 +61,7 @@ def test_no_paper_is_not_applicable_not_zero(artifacts_ws: pathlib.Path) -> None
     pkg = R.package_face(artifacts_ws, project_dir=str(artifacts_ws))
     assert _keys(pkg) == {"tri", "reason", "generated_at", "proofs", "structure", "closing"}
     assert _keys(pkg["proofs"]) == {
-        "tri", "reason", "paper_theorem_envs", "propositions_with_proof",
+        "tri", "reason", "source", "paper_theorem_envs", "propositions_with_proof",
         "ledger_theorem_kinds", "signed", "coverage_note", "review_states",
         "rows", "vsign", "receipt", "c3"}
     assert _keys(pkg["structure"]) == {"tri", "reason", "source", "paper", "checks",
@@ -158,7 +158,8 @@ def test_unreadable_ledger_is_not_zero(artifacts_ws: pathlib.Path) -> None:
 def test_every_row_carries_a_source_ref(artifacts_ws: pathlib.Path) -> None:
     """`source` 的四格恒定（path / line / match / label）；空出处也要四格俱全。"""
     pkg = R.package_face(artifacts_ws, project_dir=str(artifacts_ws))
-    refs = [pkg["proofs"]["c3"]["source"],
+    refs = [pkg["proofs"]["source"], pkg["proofs"]["c3"]["source"],
+            pkg["proofs"]["vsign"]["source"], pkg["proofs"]["receipt"]["source"],
             pkg["structure"]["source"], pkg["closing"]["source"],
             pkg["closing"]["cost"]["source"],
             pkg["closing"]["runtime"]["source"],

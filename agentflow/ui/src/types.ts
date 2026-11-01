@@ -1278,6 +1278,7 @@ export interface PackageView {
 export interface ProofView {
   tri: Tri;
   reason: string;
+  source: SourceRef;
   paper_theorem_envs: number | null;
   propositions_with_proof: number | null;
   ledger_theorem_kinds: number | null;
@@ -1325,6 +1326,7 @@ export interface VsignView {
   backed: string[];
   without_sign: string[];
   orphan_signs: string[];
+  source: SourceRef;
 }
 
 /** 出处：package_face() 的 proofs.receipt / closing.undelivered —— `vsigns.receipt_digest`。 */
@@ -1341,6 +1343,7 @@ export interface ReceiptView {
   steps: Record<string, number>;
   submitter_is_not_author: number;
   author_not_recorded: number;
+  source: SourceRef;
 }
 
 /** 出处：package_face() 的 proofs.c3 —— `out/paper/ACCEPTANCE-CHECKS.json` 的 C3 行。 */
