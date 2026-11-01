@@ -1264,6 +1264,256 @@ export interface ErrorCategoryGlossary {
   source: string;
 }
 
+/** 出处：package_face() —— 论文包三块（proofs / structure / closing）。 */
+export interface PackageView {
+  tri: Tri;
+  reason: string;
+  generated_at: string;
+  proofs: ProofView;
+  structure: StructureView;
+  closing: ClosingView;
+}
+
+/** 出处：package_face() 的 proofs —— A 块（review 六态 / streak / defect_step / V 签 / 回执 / C3）。 */
+export interface ProofView {
+  tri: Tri;
+  reason: string;
+  paper_theorem_envs: number | null;
+  propositions_with_proof: number | null;
+  ledger_theorem_kinds: number | null;
+  signed: number | null;
+  coverage_note: string;
+  review_states: Record<string, number>;
+  rows: ProofRow[];
+  vsign: VsignView;
+  receipt: ReceiptView;
+  c3: C3View;
+}
+
+/** 出处：package_face() 的 proofs.rows[] —— 一条命题的 review 读数。 */
+export interface ProofRow {
+  stmt_id: string;
+  label: string;
+  kind: string;
+  status: string;
+  state: string;
+  grade: string;
+  reviewed: boolean;
+  proofs: ProofItem[];
+  source: SourceRef;
+}
+
+/** 出处：ProofRow.proofs[] —— 一条证明自己的读数（#p1 的票不替 #p2 数）。 */
+export interface ProofItem {
+  proof_no: number;
+  state: string;
+  streak: number;
+  need: number;
+  streak_ok: boolean;
+  grade: string;
+  verification_id: string;
+  defect_steps: number[];
+  source: SourceRef;
+}
+
+/** 出处：package_face() 的 proofs.vsign —— `vsigns.backed_reading`（side files / 覆盖率）。 */
+export interface VsignView {
+  tri: Tri;
+  reason: string;
+  files: number;
+  signed: string[];
+  backed: string[];
+  without_sign: string[];
+  orphan_signs: string[];
+}
+
+/** 出处：package_face() 的 proofs.receipt / closing.undelivered —— `vsigns.receipt_digest`。 */
+export interface ReceiptView {
+  checked: boolean;
+  reason: string;
+  receipts: number;
+  statements: number;
+  delivered: number;
+  dispatched: number;
+  not_dispatched: number;
+  undelivered: number;
+  undelivered_ids: string[];
+  steps: Record<string, number>;
+  submitter_is_not_author: number;
+  author_not_recorded: number;
+}
+
+/** 出处：package_face() 的 proofs.c3 —— `out/paper/ACCEPTANCE-CHECKS.json` 的 C3 行。 */
+export interface C3View {
+  id: string;
+  name: string;
+  got: number | null;
+  min: number | null;
+  ok: boolean;
+  detail: string;
+  source: SourceRef;
+}
+
+/** 出处：package_face() 的 structure —— B 块（正文体量 / 七类扫描 / 台账覆盖）。 */
+export interface StructureView {
+  tri: Tri;
+  reason: string;
+  paper: PaperFacts;
+  checks: Record<string, StructureCheck>;
+  ledger: LedgerFacts;
+  findings: StructureFinding[];
+}
+
+/** 出处：StructureView.paper —— `out/paper/main.tex` 的体量与编译回执。 */
+export interface PaperFacts {
+  tex_path: string;
+  exists: boolean;
+  lines: number | null;
+  sections: number | null;
+  subsections: number | null;
+  env_counts: Record<string, number>;
+  proof_envs: number | null;
+  pdf_pages: number | null;
+  pdf_exists: boolean;
+  compile_receipt: boolean;
+  receipt_verdict: string;
+  reason: string;
+}
+
+/** 出处：StructureView.checks[七类之一] —— 这一类的三态与命中数。 */
+export interface StructureCheck {
+  checked: boolean;
+  reason: string;
+  findings: number;
+  counts: Record<string, number>;
+}
+
+/** 出处：StructureView.findings[] —— `texaudit.scan_tex` 的一条 finding（带 file:line）。 */
+export interface StructureFinding {
+  kind: string;
+  severity: string;
+  file: string;
+  line: number;
+  ref: string;
+  why: string;
+  text: string;
+  source: SourceRef;
+}
+
+/** 出处：StructureView.ledger —— `texaudit._scan_ledger` 的五个数 + surplus。 */
+export interface LedgerFacts {
+  statement_envs: number | null;
+  proof_envs: number | null;
+  ledger_rows: number | null;
+  ledger_propositions: number | null;
+  ledger_theorem_kinds: number | null;
+  mapping_rows: number | null;
+  statement_surplus: string[];
+  mapping_state: string;
+}
+
+/** 出处：package_face() 的 closing —— C 块（八格四态 / 机器口径 / 成本 / 时间轴 / 内容级）。 */
+export interface ClosingView {
+  tri: Tri;
+  reason: string;
+  gates: GateTable;
+  machine: MachineCaliber;
+  undelivered: ReceiptView;
+  cost: CostView;
+  runtime: RuntimeView;
+  content: ContentAcceptance;
+}
+
+/** 出处：ClosingView.gates —— 收工门八格的四态一张表。 */
+export interface GateTable {
+  cells: GateCell[];
+  counts: Record<string, number>;
+  machine_pass: boolean;
+  m_says_done: boolean;
+  can_close: boolean | null;
+  can_close_reason: string;
+  closable: boolean;
+  verdict_at: string;
+  verdict_met: boolean | null;
+}
+
+/** 出处：GateTable.cells[] —— 一格（`pass` / `fail` / `unknown` / `na`）。 */
+export interface GateCell {
+  name: string;
+  status: string;
+  detail: string;
+  source: SourceRef;
+}
+
+/** 出处：ClosingView.machine —— `closing.machine_caliber` + retire / programs。 */
+export interface MachineCaliber {
+  checked: boolean;
+  value: boolean | null;
+  reason: string;
+  retire_checked: boolean;
+  retire_complete: boolean;
+  retire_open_items: number;
+  retire_nodes: number;
+  retire_states: Record<string, number>;
+  programs_checked: boolean;
+  programs_running_count: number;
+  programs_unowned: string[];
+  source: SourceRef;
+}
+
+/** 出处：ClosingView.cost —— 三源并排（事件求和 / 收工行自报 / 无人认领）。 */
+export interface CostView {
+  checked: boolean;
+  reason: string;
+  event_usd: number | null;
+  spend_usd: number | null;
+  spend_unknown_usd_calls: number | null;
+  unattributed_usd: number | null;
+  runs_without_spend: number;
+  ledger_usd: number | null;
+  ledger_rows: number | null;
+  source: SourceRef;
+}
+
+/** 出处：ClosingView.runtime —— 时间轴与名册两个读数。 */
+export interface RuntimeView {
+  first_start_ts: string;
+  last_event_ts: string;
+  elapsed_sec: number | null;
+  runs_total: number | null;
+  open_runs: number | null;
+  in_flight_agents: number | null;
+  last_closing_at: string;
+  roster_nodes: number;
+  children_in_ledger: number | null;
+  roster_child_count: number | null;
+  children_unretired: number | null;
+  active_child_count: number | null;
+  unplaced: number;
+  source: SourceRef;
+}
+
+/** 出处：ClosingView.content —— reviewaccept 五条（只读、不进机器门）。 */
+export interface ContentAcceptance {
+  tri: Tri;
+  reason: string;
+  criteria: Record<string, string>;
+  details: Record<string, string>;
+  titles: Record<string, string>;
+  failed: string[];
+  unchecked: string[];
+  passed: boolean;
+  note: string;
+}
+
+/** 出处：每一格的原文出处（`/api/source` 的三个入参 + 一个标签）。 */
+export interface SourceRef {
+  path: string;
+  line: number;
+  match: string;
+  label: string;
+}
+
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;

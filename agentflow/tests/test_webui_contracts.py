@@ -651,6 +651,15 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     acc = RD.acceptance_face(root)
     out.setdefault("AcceptanceView", set(acc))
 
+    # 2026-11-01（块 2）：论文包三块（`/api/package` 的读模型）。与上面各面同一条口径：
+    # 让后端那一侧真的去读，`CHECKED_TYPES` 里那四个顶层接口才有落脚点；行一级的
+    # 类型登记在 `readers.UNCHECKED_TYPES`（夹具不造 A/B 的行）。
+    pkg = RD.package_face(root, project_dir=str(root))
+    out["PackageView"] = set(pkg)
+    out["ProofView"] = set(pkg["proofs"])
+    out["StructureView"] = set(pkg["structure"])
+    out["ClosingView"] = set(pkg["closing"])
+
     # 错误动作那一面（2026-10-27 业主裁定 ⑥-5 / W4）：这两族的形状从 `ui/src/api.ts`
     # 搬进了生成物，于是 C 条从现在起核对它们的键名 —— 这正是那次搬迁想要的收益。
     # `readouts.errors_readout()` 在任何工作区上都给同一批顶层键（`state="unknown"`

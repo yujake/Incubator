@@ -737,6 +737,14 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["VerificationRow"] = set(ev["verifications"][0])
     acc = R.acceptance_face(artifacts_ws, project_dir=str(artifacts_ws))
     got["AcceptanceView"] = set(acc)
+    # 2026-11-01（块 2）：论文包三块（`/api/package` 的读模型）。三块顶层恒有同一批
+    # 键（没有正文 ⇒ structure 的 tri=not_applicable，门读不成 ⇒ closing 的 tri=
+    # unreadable），所以它们进受核对名单；行一级见 `UNCHECKED_TYPES`。
+    pkg = R.package_face(artifacts_ws, project_dir=str(artifacts_ws))
+    got["PackageView"] = set(pkg)
+    got["ProofView"] = set(pkg["proofs"])
+    got["StructureView"] = set(pkg["structure"])
+    got["ClosingView"] = set(pkg["closing"])
     mach = R.machine_face(artifacts_ws)
     got["MachineView"] = set(mach)
     got["SettingsReading"] = set(mach["settings"])

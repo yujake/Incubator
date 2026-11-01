@@ -106,8 +106,8 @@ __all__ = [
     "handle_chat", "handle_evidence",
     "handle_library", "handle_machine", "handle_roster", "handle_run_events",
     "handle_run_view", "handle_state",
-    "library_face", "machine_face", "roster_face", "run_events", "run_products",
-    "run_view", "sha_consistency",
+    "library_face", "machine_face", "package_face", "roster_face", "run_events",
+    "run_products", "run_view", "sha_consistency",
     "state_face",
     "ts_fields", "type_decls",
 ]
@@ -207,6 +207,10 @@ CHECKED_TYPES: tuple[str, ...] = (
     # `problems`），所以它们进受核对名单 —— 这是搬进生成物之后真正想要的收益：
     # C 条从现在起核对那批键名。缓存那一族留在 `UNCHECKED_TYPES`（理由见那一处）。
     "RoleErrorsView", "ErrorStatsData",
+    # 2026-11-01（块 2）：`/api/package` 的三块 + 外壳。顶层键在任何工作区上都在
+    # （没有正文 ⇒ `structure.tri=not_applicable`；门读不成 ⇒ `closing.tri=unreadable`，
+    # 键集合同一批），所以它们进受核对名单；行一级/子块类型见 `UNCHECKED_TYPES`。
+    "PackageView", "ProofView", "StructureView", "ClosingView",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -319,6 +323,43 @@ UNCHECKED_TYPES: dict[str, str] = {
     "LivePidRow": "夹具工作区里没有进程登记（`live[]` 是空数组）"
                   "⇒ 形状以 `stopctl.live_pids()` 的 `pid/role/sid/started_at/path` 为准；"
                   "同上，要核对它得先造 live 夹具",
+    # 2026-11-01（块 2）：`/api/package` 的行一级/子块类型。夹具造不出这些行
+    # （没有 statements-with-proofs、没有 `out/vsigns/`、没有 `out/roster/`、
+    # 也没有一份带 findings 的正文），所以 C 条只能核三块顶层键；行形状以
+    # `package_face` 的返回与 `_TS_TYPES` 的声明为准。真机 81 副本上逐格核过
+    # （2026-11-01，A 52 行 / B 5 条 findings / C 8 格）。
+    "ProofRow": "夹具没有带 `proof_text` 的命题行（`make_artifacts_sample` 不造 statements）"
+                "⇒ `proofs.rows[]` 是空数组；形状以 `package_face` 的返回为准",
+    "ProofItem": "同 `ProofRow`：没有命题行就没有逐条证明；形状同上",
+    "VsignView": "夹具没有 `out/vsigns/`（签只在 V 真签过之后才落）"
+                 "⇒ 只有 `tri=not_applicable` 那一档的读数，逐键核不成",
+    "ReceiptView": "夹具的 `verifications` 台账没有「有毛病」行 ⇒ 回执计数全 0，"
+                   "与「台账读不成」不同形但键集相同；逐键核对留给真机 81 副本",
+    "C3View": "夹具的 `ACCEPTANCE-CHECKS.json` 没有 C3 行（C1–C8 是另一批 id）"
+              "⇒ `got/min` 是 null；形状以 `package_face` 的返回为准",
+    "PaperFacts": "夹具没有 `out/paper/main.tex`（产物夹具只造验收表与报告）"
+                  "⇒ `exists=false`、其余是 null；形状以真机 81 副本的读数为准",
+    "StructureCheck": "七类扫描在夹具上没有正文 ⇒ 每一类都是 `checked=false`；"
+                      "逐类键集在真机 81 副本上核过",
+    "StructureFinding": "夹具上没有正文 ⇒ `findings[]` 是空数组；"
+                        "形状以 `texaudit.scan_tex` 的九键 finding 为准",
+    "LedgerFacts": "夹具的 statements 是空表 ⇒ 五个数全是 0/null；"
+                   "形状以真机 81 副本的读数为准",
+    "GateTable": "夹具上八格都会跑，但 `paper` / `acceptance` 的 detail 与真机不同；"
+                 "顶层键由 `ClosingView` 覆盖，行级 `GateCell` 见下一条",
+    "GateCell": "八格在夹具上真有 8 行（C 条按 `ClosingView.gates.cells` 取），"
+                "但这里只登记顶层；行形状以 `closing.DEFAULT_CHECKS` 为准",
+    "MachineCaliber": "夹具的 retire/programs 读数存在但节点/程序为空；"
+                      "形状以 `closing.machine_caliber` 的返回为准",
+    "CostView": "夹具只有一条 usage 行、没有 llm_call 事件 ⇒ 三源里两源是 0/null；"
+                "形状以 `sessions.runs_in_session` / `unattributed_usd_of` 为准",
+    "RuntimeView": "夹具只有一趟会话、没有名册 ⇒ 时间轴与名册计数大多是 0/null；"
+                   "形状以 `package_face` 在真机 81 副本上的返回为准",
+    "ContentAcceptance": "夹具上五条判据都读得出来（有 REPORT.md / 一条提问），"
+                         "但 `failed`/`unchecked` 的分档只有真机会同时出现两档；"
+                         "形状以 `reviewaccept.CRITERIA` 为准",
+    "SourceRef": "出处那一格是常数形状（path/line/match/label），"
+                 "C 条不需要逐行核；用 `/api/source` 的四条路径闸判据兜底",
 }
 
 #: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
@@ -2054,6 +2095,536 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
             "rows": _acceptance_rows(criteria, details),
             "failed": sorted(acc.failed), "auxiliary_note": str(
                 (acc.to_dict() or {}).get("auxiliary_note", ""))}
+
+
+# ====================================================================== 7 论文包三块
+# 三块回答三个问题（A 证明完整吗 / B 结构合规吗 / C 能不能收工）。它们共用一次
+# `GET /api/package`：这一页三块总是一起看，一次请求才有同一份快照；分成三个端点
+# 会让"已签 0 条"与"八格 pass"来自两个瞬间。
+#
+# 三块各自带 `tri` + `reason`：读不到写"没查成"，不写 0。每一行带 `source`
+# （path / line / match），网页用 `/api/source` 点开原文。
+
+#: 一块最多返回多少行（`counts` 仍是盘上真总数）。
+PACKAGE_ROWS_MAX = 200
+
+#: `/api/source` 一次最多回多少行 / 多少字节（26MB 的会话不许整份吐出去）。
+SOURCE_LINES_MAX = 200
+SOURCE_BYTES_MAX = 64 * 1024
+
+#: `/api/source` 只认这些后缀（文本；PDF / 图片 / 可执行文件一律不认）。
+SOURCE_SUFFIXES: tuple[str, ...] = (
+    ".tex", ".md", ".json", ".jsonl", ".txt", ".bib", ".yaml", ".yml",
+    ".cfg", ".ini", ".toml", ".py", ".log", ".csv",
+)
+
+
+def _now_iso() -> str:
+    """本机时区的 ISO 时刻（读数头那一格；与 `state._now_iso` 同一口径）。"""
+    import datetime as _dt
+
+    return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def _src(path: Any, *, line: Any = 0, match: str = "", label: str = "") -> dict[str, Any]:
+    """一格读数的原文出处（`/api/source` 的三个入参 + 一个给人看的标签）。"""
+    return {"path": str(path or ""), "line": int(line or 0),
+            "match": str(match or ""), "label": str(label or "")}
+
+
+def _seconds_between(first: str, last: str) -> float | None:
+    """两个 ISO 时刻之间几秒（读不出来 ⇒ `None`，不编一个 0）。"""
+    if not first or not last:
+        return None
+    import datetime as _dt
+
+    try:
+        a = _dt.datetime.fromisoformat(first)
+        b = _dt.datetime.fromisoformat(last)
+    except ValueError:
+        return None
+    try:
+        return max(0.0, round((b - a).total_seconds(), 1))
+    except TypeError:  # 一个带时区、一个不带 ⇒ 判不了
+        return None
+
+
+def _paper_facts(project: str) -> dict[str, Any]:
+    """`out/paper/` 的体量与编译回执（B 块的一行背景 + `pdf_pages` 降级后的落点）。"""
+    from .. import papercompile as PC
+
+    pkg = Path(str(project)) / "out" / "paper"
+    tex = pkg / PC.TEX_NAME
+    env_names = ("theorem", "lemma", "proposition", "corollary")
+    empty = {"tex_path": "out/paper/" + PC.TEX_NAME, "exists": False,
+             "lines": None, "sections": None, "subsections": None,
+             "env_counts": {name: 0 for name in env_names}, "proof_envs": None,
+             "pdf_pages": None, "pdf_exists": False, "compile_receipt": False,
+             "receipt_verdict": "unknown", "reason": ""}
+    if not tex.is_file():
+        empty["reason"] = f"{tex} 不在盘上 ⇒ 还没有可查的正文（合法初态，不是 0 行）"
+        return empty
+    try:
+        text = tex.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        empty["reason"] = f"{tex} 读不出来（{type(exc).__name__}: {exc}）"
+        return empty
+    pages: int | None = None
+    pdf = pkg / PC.PDF_NAME
+    if pdf.is_file():
+        try:
+            from ..extract import page_count
+
+            pages = int(page_count(pdf))
+        except Exception:  # noqa: BLE001 —— 页数是读数，读不到就 None
+            pages = None
+    matched, why = PC.receipt_matches_tex(str(project))
+    verdict = ("consistent" if matched is True else
+               ("drifted" if matched is False else "unknown"))
+    return {"tex_path": "out/paper/" + PC.TEX_NAME, "exists": True,
+            "lines": text.count("\n") + 1, "sections": text.count("\\section{"),
+            "subsections": text.count("\\subsection{"),
+            "env_counts": {name: text.count("\\begin{%s}" % name) for name in env_names},
+            "proof_envs": text.count("\\begin{proof}"),
+            "pdf_pages": pages, "pdf_exists": pdf.is_file(),
+            "compile_receipt": (pkg / PC.RECEIPT_NAME).is_file(),
+            "receipt_verdict": verdict,
+            "reason": "" if matched is not None else why}
+
+
+def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
+    """B 块：正文结构（`texaudit.scan_tex` 七类 + `out/paper` 体量）。"""
+    from .. import texaudit as TEX
+
+    paper = _paper_facts(project)
+    empty_ledger = {"statement_envs": None, "proof_envs": None, "ledger_rows": None,
+                    "ledger_propositions": None, "ledger_theorem_kinds": None,
+                    "mapping_rows": None, "statement_surplus": [], "mapping_state": ""}
+    empty_checks = {kind: {"checked": False, "reason": "还没扫", "findings": 0, "counts": {}}
+                    for kind in TEX.SCAN_KINDS}
+    if not paper["exists"]:
+        return {"tri": TRI_NOT_APPLICABLE,
+                "reason": "out/paper/main.tex 不在盘上 ⇒ 结构那一块还没有可查的正文",
+                "paper": paper, "checks": empty_checks, "ledger": empty_ledger,
+                "findings": []}
+    try:
+        from ..tools import review_tools as RT
+
+        raw = [rel for rel in ("out/paper/main.tex", "out/paper/mapping-appendix.tex")
+               if (root_p / rel).is_file()]
+        scan = TEX.scan_tex(root_p, kinds=list(TEX.SCAN_KINDS), project=project,
+                            raw_paths=raw, text_integrity=RT.scan_text_integrity)
+    except Exception as exc:  # noqa: BLE001 —— 扫描抛了 ⇒ 这一块没查成
+        return {"tri": TRI_UNREADABLE,
+                "reason": f"texaudit.scan_tex 没跑成（{type(exc).__name__}: {exc}）",
+                "paper": paper, "checks": empty_checks, "ledger": empty_ledger,
+                "findings": []}
+    facts = dict((scan.get("counts") or {}).get("facts") or {})
+    by_kind = dict((scan.get("counts") or {}).get("by_kind") or {})
+    detail = {str(d.get("kind")): d for d in (scan.get("detail") or [])}
+    checks: dict[str, dict[str, Any]] = {}
+    for kind in TEX.SCAN_KINDS:
+        d = detail.get(kind) or {}
+        counts: dict[str, int] = {}
+        if kind == "text_integrity":
+            counts = {name: int(facts.get(name) or 0)
+                      for name in ("cjk", "control", "zero_width",
+                                   "replacement", "bidi", "nbsp")}
+        checks[kind] = {"checked": bool(d.get("checked")),
+                        "reason": str(d.get("reason") or ""),
+                        "findings": int(by_kind.get(kind) or 0), "counts": counts}
+    findings = [{"kind": str(f.get("kind") or ""),
+                 "severity": str(f.get("severity") or ""),
+                 "file": str(f.get("file") or ""),
+                 "line": int(f.get("line") or 0),
+                 "ref": str(f.get("ref") or ""),
+                 "why": str(f.get("why") or ""),
+                 "text": str(f.get("text") or ""),
+                 "source": _src(f.get("file") or "", line=f.get("line") or 0,
+                                label=str(f.get("ref") or ""))}
+                for f in (scan.get("findings") or [])][:PACKAGE_ROWS_MAX]
+    ledger = {"statement_envs": facts.get("statement_envs"),
+              "proof_envs": facts.get("proof_envs"),
+              "ledger_rows": facts.get("ledger_rows"),
+              "ledger_propositions": facts.get("ledger_propositions"),
+              "ledger_theorem_kinds": facts.get("ledger_theorem_kinds"),
+              "mapping_rows": facts.get("mapping_rows"),
+              "statement_surplus": list(facts.get("statement_surplus") or []),
+              "mapping_state": str(facts.get("mapping_state") or "")}
+    return {"tri": TRI_COMPUTED if scan.get("checked") else TRI_UNREADABLE,
+            "reason": "" if scan.get("checked") else str(scan.get("reason") or "正文扫描没查成"),
+            "paper": paper, "checks": checks, "ledger": ledger, "findings": findings}
+
+
+def _empty_proofs(reason: str) -> dict[str, Any]:
+    return {"tri": TRI_UNREADABLE, "reason": reason,
+            "paper_theorem_envs": None, "propositions_with_proof": None,
+            "ledger_theorem_kinds": None, "signed": None,
+            "coverage_note": "分母读不到 ⇒ 不给比例（0 不是「没有」）。",
+            "review_states": {}, "rows": [],
+            "vsign": {"tri": TRI_UNREADABLE, "reason": reason, "files": 0,
+                      "signed": [], "backed": [], "without_sign": [], "orphan_signs": []},
+            "receipt": {"checked": False, "reason": reason, "receipts": 0,
+                        "statements": 0, "delivered": 0, "dispatched": 0,
+                        "not_dispatched": 0, "undelivered": 0, "undelivered_ids": [],
+                        "steps": {}, "submitter_is_not_author": 0,
+                        "author_not_recorded": 0},
+            "c3": {"id": "C3", "name": "", "got": None, "min": None, "ok": False,
+                   "detail": "", "source": _src("out/paper/ACCEPTANCE-CHECKS.json")}}
+
+
+def _proofs_block(root_p: Path, store: Any, rep: Any,
+                  structure: Mapping[str, Any]) -> dict[str, Any]:
+    """A 块：每条 statement 的 review state / streak / defect_step + V 签覆盖率 + 回执。"""
+    from .. import verifications as VR
+    from .. import vsigns as VSP
+
+    ledger = dict(structure.get("ledger") or {})
+    try:
+        rows = list(store.rows("statements"))
+    except Exception as exc:  # noqa: BLE001
+        return _empty_proofs(f"statements 台账读不出来（{type(exc).__name__}: {exc}）")
+    states = {str(s): 0 for s in VR.REVIEW_STATES}
+    proof_rows: list[dict[str, Any]] = []
+    with_proof = 0
+    for r in rows:
+        if str(r.get("kind") or "") == "concept":
+            continue
+        if not str(r.get("proof_text") or "").strip():
+            continue
+        with_proof += 1
+        sid = str(r.get("stmt_id") or r.get("statement_id") or "")
+        try:
+            got = VR.statement_review_reading(root_p, r)
+        except Exception as exc:  # noqa: BLE001 —— 这一条没查成，不影响别的行
+            got = {"state": "unreadable", "proofs": [], "reviewed": False,
+                   "grade": "", "why": f"{type(exc).__name__}: {exc}"}
+        state = str(got.get("state") or "unreadable")
+        states[state] = int(states.get(state, 0)) + 1
+        items = []
+        for p in (got.get("proofs") or []):
+            no = int(p.get("proof_no") or 1)
+            vid = str(p.get("verification_id") or "")
+            items.append({
+                "proof_no": no, "state": str(p.get("state") or ""),
+                "streak": int(p.get("streak") or 0), "need": int(p.get("need") or 0),
+                "streak_ok": bool(p.get("streak_ok")),
+                "grade": str(p.get("grade") or ""), "verification_id": vid,
+                "defect_steps": [],  # 下面用回执台账补（同一批签，不在两处各判一遍）
+                "source": _src(f"verifications/{sid}.jsonl",
+                               match=vid or sid, label=f"{sid}#p{no}"),
+            })
+        proof_rows.append({
+            "stmt_id": sid, "label": str(r.get("label") or ""),
+            "kind": str(r.get("kind") or ""), "status": str(r.get("status") or ""),
+            "state": state, "grade": str(got.get("grade") or ""),
+            "reviewed": bool(got.get("reviewed")), "proofs": items,
+            "source": _src("data/statements.json", match=f'"stmt_id": "{sid}"',
+                           label=sid),
+        })
+    try:
+        receipt = VSP.receipt_digest(root_p, store, limit=PACKAGE_ROWS_MAX, times=False)
+    except Exception as exc:  # noqa: BLE001
+        receipt = {"checked": False, "reason": f"回执台账没查成（{type(exc).__name__}: {exc}）",
+                   "receipts": 0, "statements": 0, "delivered": 0, "dispatched": 0,
+                   "not_dispatched": 0, "undelivered": 0, "undelivered_ids": [],
+                   "steps": {}, "submitter_is_not_author": 0, "author_not_recorded": 0}
+    defect_by_label = {str(r.get("label") or ""): list(r.get("defect_steps") or [])
+                       for r in (receipt.get("rows") or [])}
+    for row in proof_rows:
+        for p in row["proofs"]:
+            label = f"{row['stmt_id']}#p{int(p.get('proof_no') or 1)}"
+            p["defect_steps"] = [int(x) for x in
+                                 defect_by_label.get(label, [])]
+    try:
+        backed = VSP.backed_reading(root_p, rows, store=store)
+    except Exception as exc:  # noqa: BLE001
+        backed = {"checked": False, "tri": TRI_UNREADABLE,
+                  "reason": f"签的侧文件没查成（{type(exc).__name__}: {exc}）",
+                  "signed": [], "backed": [], "without_sign": [], "orphan_signs": []}
+    sign_dir = VSP.signs_dir(root_p)
+    files = 0
+    if sign_dir.is_dir():
+        files = len([p for p in sign_dir.glob("*.json") if p.name != "issued.json"])
+    c3 = {"id": "C3", "name": "", "got": None, "min": None, "ok": False,
+          "detail": "", "source": _src("out/paper/ACCEPTANCE-CHECKS.json")}
+    readings = getattr(rep, "readings", {}) or {}
+    for row in ((readings.get("acceptance") or {}).get("rows") or []):
+        if str(row.get("id") or "") != "C3":
+            continue
+        c3.update({"name": str(row.get("name") or ""),
+                   "got": row.get("got"), "min": row.get("min"),
+                   "ok": bool(row.get("ok")),
+                   "detail": str(row.get("detail") or "")[:400]})
+        break
+    signed = states.get("signed", 0)
+    envs = ledger.get("statement_envs")
+    note = ("正文定理类环境 / 有证明的命题 / 台账定理类三个分母并列："
+            "签覆盖率不合成一个比例（分母不同，合成会撒谎）。")
+    return {"tri": TRI_COMPUTED, "reason": "",
+            "paper_theorem_envs": envs, "propositions_with_proof": with_proof,
+            "ledger_theorem_kinds": ledger.get("ledger_theorem_kinds"),
+            "signed": signed, "coverage_note": note,
+            "review_states": states, "rows": proof_rows[:PACKAGE_ROWS_MAX],
+            "vsign": {"tri": str(backed.get("tri") or TRI_UNREADABLE),
+                      "reason": str(backed.get("reason") or ""), "files": files,
+                      "signed": list(backed.get("signed") or []),
+                      "backed": list(backed.get("backed") or []),
+                      "without_sign": list(backed.get("without_sign") or []),
+                      "orphan_signs": list(backed.get("orphan_signs") or [])},
+            "receipt": {"checked": bool(receipt.get("checked")),
+                        "reason": str(receipt.get("reason") or ""),
+                        "receipts": int(receipt.get("receipts") or 0),
+                        "statements": int(receipt.get("statements") or 0),
+                        "delivered": int(receipt.get("delivered") or 0),
+                        "dispatched": int(receipt.get("dispatched") or 0),
+                        "not_dispatched": int(receipt.get("not_dispatched") or 0),
+                        "undelivered": int(receipt.get("undelivered") or 0),
+                        "undelivered_ids": list(receipt.get("undelivered_ids") or []),
+                        "steps": dict(receipt.get("steps") or {}),
+                        "submitter_is_not_author": int(receipt.get("submitter_is_not_author") or 0),
+                        "author_not_recorded": int(receipt.get("author_not_recorded") or 0)},
+            "c3": c3}
+
+
+def _gate_source(name: str, root_p: Path) -> dict[str, Any]:
+    """八格各自的原文落点（没有单一文件的格子给它的主表；`match` 是给人看的）。"""
+    table = {
+        "paper": _src("out/paper/COMPILE-RECEIPT.json", label="编译回执"),
+        "contradictions": _src("data/relations.json", label="矛盾闭环"),
+        "load_bearing": _src("out/paper/main.tex", label="承重结论"),
+        "report_shape": _src("out/review/REPORT.md", label="交付说明"),
+        "user_pending": _src("sessions/", label="待答问题"),
+        "substance": _src("data/statements.json", label="实质产出"),
+        "acceptance": _src("out/paper/ACCEPTANCE-CHECKS.json", label="验收表 C1–C16"),
+        "artifact_ledger": _src("ARTIFACTS.jsonl", label="产物台账"),
+    }
+    return table.get(name, _src(""))
+
+
+def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
+                   structure: Mapping[str, Any], proofs: Mapping[str, Any],
+                   root_p: Path, store: Any) -> dict[str, Any]:
+    """C 块：八格四态 + 机器口径 + 回执 + 成本 + 时间轴/名册 + 内容级验收（折叠）。"""
+    from .. import closing as CL
+    from ..reviewaccept import CRITERIA
+
+    # ---- 八格（与 `readouts.gates_readout` 同一套四态；`test_webui_package_gates`
+    #      在夹具上逐格比对两个出口，防止这里悄悄漂成第二套口径）。
+    detail_of: dict[str, list[str]] = {}
+    for f in (getattr(rep, "findings", []) or []):
+        detail_of.setdefault(str(getattr(f, "check", "")), []).append(
+            str(getattr(f, "detail", "") or ""))
+    counts = {s: 0 for s in ("pass", "fail", "unknown", "na")}
+    cells = []
+    for name in CL.DEFAULT_CHECKS:
+        status = str((getattr(rep, "status", {}) or {}).get(name) or "unknown")
+        if status not in counts:
+            status = "unknown"
+        counts[status] = int(counts[status]) + 1
+        cells.append({"name": name, "status": status,
+                      "detail": "；".join(d for d in detail_of.get(name, []) if d),
+                      "source": _gate_source(name, root_p)})
+    verdict = getattr(rep, "m_verdict", None) or {}
+    gates = {"cells": cells, "counts": counts,
+             "machine_pass": bool(getattr(rep, "machine_pass", False)),
+             "m_says_done": bool(getattr(rep, "m_says_done", False)),
+             "can_close": getattr(rep, "can_close", None),
+             "can_close_reason": str(getattr(rep, "can_close_reason", "") or ""),
+             "closable": bool(getattr(rep, "closable", False)),
+             "verdict_at": str(verdict.get("at") or ""),
+             "verdict_met": (bool(verdict.get("met")) if verdict else None)}
+
+    # ---- 机器口径（retire / programs）
+    retire = dict(feed.get("retire") or {})
+    programs = dict(feed.get("programs") or {})
+    caliber = dict((getattr(rep, "readings", {}) or {}).get("machine_caliber") or {})
+    machine = {"checked": bool(caliber.get("checked")),
+               "value": caliber.get("value"), "reason": str(caliber.get("reason") or ""),
+               "retire_checked": bool(retire.get("checked")),
+               "retire_complete": bool(retire.get("complete")),
+               "retire_open_items": int(retire.get("root_open_items") or 0),
+               "retire_nodes": int(retire.get("total") or 0),
+               "retire_states": dict(retire.get("states") or {}),
+               "programs_checked": bool(programs.get("checked")),
+               "programs_running_count": int(programs.get("running_count") or 0),
+               "programs_unowned": list(programs.get("unowned") or []),
+               "source": _src("out/roster/", label="retire_integrity")}
+
+    # ---- 成本（三源并排：事件求和 / 收工行自报 / 无人认领）+ 时间轴
+    try:
+        records, info = SS.read_all_sessions(root_p)
+        runs = SS.runs_in_session(records)
+    except Exception as exc:  # noqa: BLE001
+        records, runs = [], []
+        info = {"checked": False, "reason": f"会话读不出来（{type(exc).__name__}: {exc}）"}
+    sessions_ok = bool(info.get("checked"))
+    event_usd = round(sum(float(r.get("usd") or 0) for r in runs), 6) if sessions_ok else None
+    spend_usd = round(sum(float(r.get("spend_usd") or 0) for r in runs), 6) if sessions_ok else None
+    runs_without_spend = sum(1 for r in runs if r.get("spend_usd") is None)
+    unattributed = SS.unattributed_usd_of(records, runs) if sessions_ok else None
+    try:
+        ledger_rows = list(store.rows("usage_ledger"))
+        ledger_usd = round(sum(float(r.get("usd") or 0) for r in ledger_rows), 6)
+    except Exception:  # noqa: BLE001
+        ledger_rows, ledger_usd = [], None
+    cost = {"checked": sessions_ok,
+            "reason": "" if sessions_ok else str(info.get("reason") or "会话没查成"),
+            "event_usd": event_usd, "spend_usd": spend_usd,
+            "spend_unknown_usd_calls": (sum(int(r.get("spend_unknown_usd_calls") or 0)
+                                            for r in runs) if sessions_ok else None),
+            "unattributed_usd": unattributed, "runs_without_spend": runs_without_spend,
+            "ledger_usd": ledger_usd, "ledger_rows": (len(ledger_rows) if ledger_usd is not None else None),
+            "source": _src("data/usage_ledger.json", label="usage_ledger")}
+    starts = [str(r.get("start_ts") or "") for r in runs if r.get("start_ts")]
+    ends = [str(r.get("end_ts") or r.get("start_ts") or "") for r in runs]
+    first, last = (min(starts) if starts else ""), (max(ends) if ends else "")
+    last_closing_at = str(verdict.get("at") or "")
+    if not last_closing_at:
+        last_closing_at = str(((getattr(rep, "readings", {}) or {})
+                               .get("verdict_source") or {}).get("at") or "")
+
+    # ---- 名册两个读数（`children_unretired` 与 `children_in_ledger` 是两个量）
+    roster_nodes = 0
+    children_in_ledger: int | None = None
+    roster_child_count: int | None = None
+    unplaced = 0
+    try:
+        face = roster_face(root_p)
+        nodes = list(face.get("nodes") or [])
+        roster_nodes = len(nodes)
+        if nodes:
+            children_in_ledger = nodes[0].get("children_in_ledger")
+            roster_child_count = nodes[0].get("roster_child_count")
+        unplaced = len(face.get("unplaced") or [])
+    except Exception:  # noqa: BLE001 —— 名册读不到 ⇒ 那几格 None，不是 0
+        pass
+    try:
+        from .. import schema as _S
+        from ..secretary import Secretary
+
+        child = Secretary(_S.CONDUCTOR_ROLE, root=root_p, store=store).child_counts()
+    except Exception:  # noqa: BLE001
+        child = {"checked": False, "children_unretired": None, "active_child_count": None}
+    runtime = {"first_start_ts": first, "last_event_ts": last,
+               "elapsed_sec": _seconds_between(first, last),
+               "runs_total": len(runs) if sessions_ok else None,
+               "open_runs": (sum(1 for r in runs if r.get("end_index") is None)
+                             if sessions_ok else None),
+               "in_flight_agents": (sum(1 for r in runs if r.get("end_index") is None)
+                                    if sessions_ok else None),
+               "last_closing_at": last_closing_at,
+               "roster_nodes": roster_nodes,
+               "children_in_ledger": children_in_ledger,
+               "roster_child_count": roster_child_count,
+               "children_unretired": child.get("children_unretired"),
+               "active_child_count": child.get("active_child_count"),
+               "unplaced": unplaced,
+               "source": _src("sessions/", label="runs")}
+
+    # ---- 内容级验收（五条；只读、不进机器门）
+    criteria = {str(k): str(v) for k, v in (acc.get("criteria") or {}).items()}
+    details = {str(k): str(v) for k, v in (acc.get("details") or {}).items()}
+    content = {"tri": str(acc.get("tri") or TRI_UNREADABLE),
+               "reason": str(acc.get("reason") or ""),
+               "criteria": criteria, "details": details,
+               "titles": {str(k): str(t) for k, t in CRITERIA},
+               "failed": sorted(k for k, v in criteria.items() if v == "fail"),
+               "unchecked": sorted(k for k, v in criteria.items() if v == "unknown"),
+               "passed": bool(criteria) and all(v == "pass" for v in criteria.values()),
+               "note": ("内容级验收只读、不进机器门；`failed` 是真不过，"
+                        "`unchecked` 是没查成 —— 两档不许折平。")}
+
+    tri = TRI_COMPUTED
+    reason = ""
+    if getattr(rep, "refusal", None):
+        tri = TRI_UNREADABLE
+        reason = str((getattr(rep, "refusal", {}) or {}).get("detail") or "门受控拒绝")
+    return {"tri": tri, "reason": reason, "gates": gates, "machine": machine,
+            "undelivered": dict(proofs.get("receipt") or {}), "cost": cost,
+            "runtime": runtime, "content": content}
+
+
+def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
+                 report_path: str = "", cap_usd: float | None = None,
+                 sid: str | None = None) -> dict[str, Any]:
+    """`GET /api/package` 的读模型：论文包三块（A 证明 / B 结构 / C 收工）。
+
+    一次调用读一次盘、算一次门：三块共用同一份快照（分成三个端点会让“已签 0 条”
+    与“八格 pass”来自两个瞬间）。`project_dir` / `report_path` 缺省取工作区根与
+    `out/review/REPORT.md` —— 页面必须把它们传下来；不传时 `_auxiliary` 的
+    `tex_sha256` / `pdf_pages` / `receipt_matches_tex` 三格会按构造永远是空/unknown。
+
+    每块的 `tri` 独立：`texaudit` 抛异常不会把八格一起打成 unknown。顶层 `tri`
+    只在三块全部没查成时才是 `unreadable`（部分没查成时逐块看 `reason`）。
+    """
+    from .. import closing as CL
+
+    root_p = Path(str(root))
+    try:
+        if store is None:
+            from ..store import Store
+
+            store = Store(root_p)
+        project = CL.resolve_under_workspace(store, project_dir or ".")
+        report = CL.resolve_under_workspace(store, report_path or "out/review/REPORT.md")
+        structure = _structure_block(root_p, project)
+        feed = CL.machine_feeders(store)
+        rep = CL.check_closing(store, project_dir=project, report_path=report,
+                               session_root=root_p, sid=sid,
+                               retire=feed.get("retire"), programs=feed.get("programs"))
+        acc = acceptance_face(root_p, store, project_dir=project,
+                              report_path=report, cap_usd=cap_usd, sid=sid)
+        proofs = _proofs_block(root_p, store, rep, structure)
+        closing = _closing_block(rep, feed, acc, structure, proofs, root_p, store)
+    except Exception as exc:  # noqa: BLE001 —— 整面没查成：三块都写“没查成”，不写 0
+        reason = f"论文包读数没跑成（{type(exc).__name__}: {exc}）"
+        return {"tri": TRI_UNREADABLE, "reason": reason,
+                "generated_at": _now_iso(),
+                "proofs": _empty_proofs(reason),
+                "structure": {"tri": TRI_UNREADABLE, "reason": reason,
+                              "paper": _paper_facts(str(root_p)),
+                              "checks": {}, "ledger": {}, "findings": []},
+                "closing": {"tri": TRI_UNREADABLE, "reason": reason,
+                            "gates": {"cells": [], "counts": {"pass": 0, "fail": 0,
+                                                              "unknown": 0, "na": 0},
+                                      "machine_pass": False, "m_says_done": False,
+                                      "can_close": None, "can_close_reason": reason,
+                                      "closable": False, "verdict_at": "",
+                                      "verdict_met": None},
+                            "machine": {"checked": False, "value": None, "reason": reason,
+                                        "retire_checked": False, "retire_complete": False,
+                                        "retire_open_items": 0, "retire_nodes": 0,
+                                        "retire_states": {}, "programs_checked": False,
+                                        "programs_running_count": 0, "programs_unowned": [],
+                                        "source": _src("")},
+                            "undelivered": dict(_empty_proofs(reason)["receipt"]),
+                            "cost": {"checked": False, "reason": reason, "event_usd": None,
+                                     "spend_usd": None, "spend_unknown_usd_calls": None,
+                                     "unattributed_usd": None, "runs_without_spend": 0,
+                                     "ledger_usd": None, "ledger_rows": None,
+                                     "source": _src("data/usage_ledger.json")},
+                            "runtime": {"first_start_ts": "", "last_event_ts": "",
+                                        "elapsed_sec": None, "runs_total": None,
+                                        "open_runs": None, "in_flight_agents": None,
+                                        "last_closing_at": "", "roster_nodes": 0,
+                                        "children_in_ledger": None,
+                                        "roster_child_count": None,
+                                        "children_unretired": None,
+                                        "active_child_count": None, "unplaced": 0,
+                                        "source": _src("sessions/")},
+                            "content": {"tri": TRI_UNREADABLE, "reason": reason,
+                                        "criteria": {}, "details": {}, "titles": {},
+                                        "failed": [], "unchecked": [], "passed": False,
+                                        "note": ""}}}
+    tris = [str(structure.get("tri") or ""), str(proofs.get("tri") or ""),
+            str(closing.get("tri") or "")]
+    tri = TRI_UNREADABLE if all(t == TRI_UNREADABLE for t in tris) else TRI_COMPUTED
+    reasons = [str(part.get("reason") or "") for part in (structure, proofs, closing)
+               if str(part.get("tri") or "") == TRI_UNREADABLE
+               and str(part.get("reason") or "")]
+    return {"tri": tri, "reason": "；".join(reasons), "generated_at": _now_iso(),
+            "proofs": proofs, "structure": structure, "closing": closing}
 
 
 def _as_text(value: Any) -> str:
@@ -4731,6 +5302,136 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("ErrorCategoryGlossary",
      "GET /api/errors/categories 的整份读数（一张常量表，无三态）",
      (("categories", "ErrorCategoryMeaning[]"), ("source", "string"))),
+
+    # ---------------------------------------------------------------- 15 论文包三块
+    # 2026-11-01（块 2）：`GET /api/package` 一次给三块（A 证明 / B 结构 / C 收工）。
+    # 三块顶层进 `CHECKED_TYPES`；行一级与子块类型登记在 `UNCHECKED_TYPES`（夹具
+    # 不逐行造 B 的 findings / A 的 proofs），理由写在那一处。
+    ("PackageView",
+     "package_face() —— 论文包三块（proofs / structure / closing）",
+     (("tri", "Tri"), ("reason", "string"), ("generated_at", "string"),
+      ("proofs", "ProofView"), ("structure", "StructureView"),
+      ("closing", "ClosingView"))),
+    ("ProofView",
+     "package_face() 的 proofs —— A 块（review 六态 / streak / defect_step / V 签 / 回执 / C3）",
+     (("tri", "Tri"), ("reason", "string"),
+      ("paper_theorem_envs", "number | null"),
+      ("propositions_with_proof", "number | null"),
+      ("ledger_theorem_kinds", "number | null"), ("signed", "number | null"),
+      ("coverage_note", "string"), ("review_states", "Record<string, number>"),
+      ("rows", "ProofRow[]"), ("vsign", "VsignView"), ("receipt", "ReceiptView"),
+      ("c3", "C3View"))),
+    ("ProofRow",
+     "package_face() 的 proofs.rows[] —— 一条命题的 review 读数",
+     (("stmt_id", "string"), ("label", "string"), ("kind", "string"),
+      ("status", "string"), ("state", "string"), ("grade", "string"),
+      ("reviewed", "boolean"), ("proofs", "ProofItem[]"), ("source", "SourceRef"))),
+    ("ProofItem",
+     "ProofRow.proofs[] —— 一条证明自己的读数（#p1 的票不替 #p2 数）",
+     (("proof_no", "number"), ("state", "string"), ("streak", "number"),
+      ("need", "number"), ("streak_ok", "boolean"), ("grade", "string"),
+      ("verification_id", "string"), ("defect_steps", "number[]"),
+      ("source", "SourceRef"))),
+    ("VsignView",
+     "package_face() 的 proofs.vsign —— `vsigns.backed_reading`（side files / 覆盖率）",
+     (("tri", "Tri"), ("reason", "string"), ("files", "number"),
+      ("signed", "string[]"), ("backed", "string[]"),
+      ("without_sign", "string[]"), ("orphan_signs", "string[]"))),
+    ("ReceiptView",
+     "package_face() 的 proofs.receipt / closing.undelivered —— `vsigns.receipt_digest`",
+     (("checked", "boolean"), ("reason", "string"), ("receipts", "number"),
+      ("statements", "number"), ("delivered", "number"), ("dispatched", "number"),
+      ("not_dispatched", "number"), ("undelivered", "number"),
+      ("undelivered_ids", "string[]"), ("steps", "Record<string, number>"),
+      ("submitter_is_not_author", "number"), ("author_not_recorded", "number"))),
+    ("C3View",
+     "package_face() 的 proofs.c3 —— `out/paper/ACCEPTANCE-CHECKS.json` 的 C3 行",
+     (("id", "string"), ("name", "string"), ("got", "number | null"),
+      ("min", "number | null"), ("ok", "boolean"), ("detail", "string"),
+      ("source", "SourceRef"))),
+    ("StructureView",
+     "package_face() 的 structure —— B 块（正文体量 / 七类扫描 / 台账覆盖）",
+     (("tri", "Tri"), ("reason", "string"), ("paper", "PaperFacts"),
+      ("checks", "Record<string, StructureCheck>"), ("ledger", "LedgerFacts"),
+      ("findings", "StructureFinding[]"))),
+    ("PaperFacts",
+     "StructureView.paper —— `out/paper/main.tex` 的体量与编译回执",
+     (("tex_path", "string"), ("exists", "boolean"),
+      ("lines", "number | null"), ("sections", "number | null"),
+      ("subsections", "number | null"), ("env_counts", "Record<string, number>"),
+      ("proof_envs", "number | null"), ("pdf_pages", "number | null"),
+      ("pdf_exists", "boolean"), ("compile_receipt", "boolean"),
+      ("receipt_verdict", "string"), ("reason", "string"))),
+    ("StructureCheck",
+     "StructureView.checks[七类之一] —— 这一类的三态与命中数",
+     (("checked", "boolean"), ("reason", "string"), ("findings", "number"),
+      ("counts", "Record<string, number>"))),
+    ("StructureFinding",
+     "StructureView.findings[] —— `texaudit.scan_tex` 的一条 finding（带 file:line）",
+     (("kind", "string"), ("severity", "string"), ("file", "string"),
+      ("line", "number"), ("ref", "string"), ("why", "string"),
+      ("text", "string"), ("source", "SourceRef"))),
+    ("LedgerFacts",
+     "StructureView.ledger —— `texaudit._scan_ledger` 的五个数 + surplus",
+     (("statement_envs", "number | null"), ("proof_envs", "number | null"),
+      ("ledger_rows", "number | null"), ("ledger_propositions", "number | null"),
+      ("ledger_theorem_kinds", "number | null"),
+      ("mapping_rows", "number | null"), ("statement_surplus", "string[]"),
+      ("mapping_state", "string"))),
+    ("ClosingView",
+     "package_face() 的 closing —— C 块（八格四态 / 机器口径 / 成本 / 时间轴 / 内容级）",
+     (("tri", "Tri"), ("reason", "string"), ("gates", "GateTable"),
+      ("machine", "MachineCaliber"), ("undelivered", "ReceiptView"),
+      ("cost", "CostView"), ("runtime", "RuntimeView"),
+      ("content", "ContentAcceptance"))),
+    ("GateTable",
+     "ClosingView.gates —— 收工门八格的四态一张表",
+     (("cells", "GateCell[]"), ("counts", "Record<string, number>"),
+      ("machine_pass", "boolean"), ("m_says_done", "boolean"),
+      ("can_close", "boolean | null"), ("can_close_reason", "string"),
+      ("closable", "boolean"), ("verdict_at", "string"),
+      ("verdict_met", "boolean | null"))),
+    ("GateCell",
+     "GateTable.cells[] —— 一格（`pass` / `fail` / `unknown` / `na`）",
+     (("name", "string"), ("status", "string"), ("detail", "string"),
+      ("source", "SourceRef"))),
+    ("MachineCaliber",
+     "ClosingView.machine —— `closing.machine_caliber` + retire / programs",
+     (("checked", "boolean"), ("value", "boolean | null"), ("reason", "string"),
+      ("retire_checked", "boolean"), ("retire_complete", "boolean"),
+      ("retire_open_items", "number"), ("retire_nodes", "number"),
+      ("retire_states", "Record<string, number>"), ("programs_checked", "boolean"),
+      ("programs_running_count", "number"), ("programs_unowned", "string[]"),
+      ("source", "SourceRef"))),
+    ("CostView",
+     "ClosingView.cost —— 三源并排（事件求和 / 收工行自报 / 无人认领）",
+     (("checked", "boolean"), ("reason", "string"),
+      ("event_usd", "number | null"), ("spend_usd", "number | null"),
+      ("spend_unknown_usd_calls", "number | null"),
+      ("unattributed_usd", "number | null"), ("runs_without_spend", "number"),
+      ("ledger_usd", "number | null"), ("ledger_rows", "number | null"),
+      ("source", "SourceRef"))),
+    ("RuntimeView",
+     "ClosingView.runtime —— 时间轴与名册两个读数",
+     (("first_start_ts", "string"), ("last_event_ts", "string"),
+      ("elapsed_sec", "number | null"), ("runs_total", "number | null"),
+      ("open_runs", "number | null"), ("in_flight_agents", "number | null"),
+      ("last_closing_at", "string"), ("roster_nodes", "number"),
+      ("children_in_ledger", "number | null"),
+      ("roster_child_count", "number | null"),
+      ("children_unretired", "number | null"),
+      ("active_child_count", "number | null"), ("unplaced", "number"),
+      ("source", "SourceRef"))),
+    ("ContentAcceptance",
+     "ClosingView.content —— reviewaccept 五条（只读、不进机器门）",
+     (("tri", "Tri"), ("reason", "string"),
+      ("criteria", "Record<string, string>"), ("details", "Record<string, string>"),
+      ("titles", "Record<string, string>"), ("failed", "string[]"),
+      ("unchecked", "string[]"), ("passed", "boolean"), ("note", "string"))),
+    ("SourceRef",
+     "每一格的原文出处（`/api/source` 的三个入参 + 一个标签）",
+     (("path", "string"), ("line", "number"), ("match", "string"),
+      ("label", "string"))),
 )
 
 # （`MISSING_TYPES` 在文件头声明：那是"这一层有哪些约定"的那一处，本处不再重复一份 —
