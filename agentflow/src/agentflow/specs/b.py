@@ -97,7 +97,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
         "`proof_text` 可缺（缺则落最低等级并进待办）；`quote_verified` 是三态（不传 = 还没查），"
         "不是 true 时必须给 `quote_reason`；是 true 时用 `quote_mode` 说清**怎么**通过的"
-        "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）",
+        "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）"
+        # 2026-11-01（真机 82 · C-2）：说明面必须自己回答"作者那一格谁写"。
+        # 现场：派活文字 `t-000098` 逐字教 B 传 `proof_authors=["F"]`，而它不在参数表里
+        # ⇒ `param_invalid`；B 去掉它再交，`proofauthors.py` 按来源路径推断，
+        # 于是 D 写的两条证明被记成 ["F"]。答案是"不接受手写"这件事只能由说明面说。
+        "。`proof_authors` 不是本动作的参数：那一格由 `proofauthors.py` 按来源路径推断"
+        "（收稿方读手稿时按手稿作者落），不接受手写 —— 传了会被参数门按未声明键"
+        "受控拒绝（派生列的去路见 `tools/base.py` 的参数门提示）",
         _obj(
             {
                 "statement_full": {**_S, "minLength": 1},
@@ -114,7 +121,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "**不拒收** —— 那条硬要求实测一条真猜想都没挡住，"
                                "只挡住了如实登记"},
                 "proofs": {"type": "array", "items": {"type": "object"}},
-                "kind": _S,
+                # 2026-11-01（真机 82 · A-1/C-1）：这一格此前只有 `{"type": "string"}`，
+                # 既没说英文词表，也没说"由证据派生"。现场：派活文字与 B 的实测都写中文
+                # `引理` / `定理`，而词表是英文的 —— 中文 kind 既进不了命题性词表、
+                # 也不在猜想白名单，拒因却只说"去要 V 签"（答非所问）。
+                "kind": {**_S, "description":
+                         "英文词表：theorem / lemma / proposition / corollary / conjecture / "
+                         "concept / definition（中文 kind 如「定理」「引理」不是取值）。"
+                         "它由证据派生、不许手改：首登只能是 conjecture 或 concept；"
+                         "抬档由秘书按证据现算（`evidencebits.kind_following_grade`："
+                         "V 的签盖住现行正文才把 conjecture 抬成 theorem / lemma），"
+                         "返回值里 `kind_upgrade` 给「依据是什么」"},
                 # 2026-10-24（业主两句：「路线写在证明这一层」；「不用机械判据，让秘书洗
                 # 定理名，让秘书判」）：label 只写定理名 —— 路线、证法、草稿状态都不进它。
                 "label": {**_S, "description":
