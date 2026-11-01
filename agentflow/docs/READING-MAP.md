@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-01，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **262 个 `.py`、234,549 行**，**73 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,995 行** —— 批 R40 把它补进了 §3 的表；
+> **262 个 `.py`、234,721 行**，**73 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,995 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -380,7 +380,7 @@
 | `schema.py` | 3915 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
 | `runflow.py` | 1723 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层。批 R113：单价改成按**这一趟自己的时间戳**取（`price_of(cfg, at=stamp)`），不再读结账时的墙钟 |
 | `evidence.py` | 1899 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 5772 | 27 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
+| `cli.py` | 5777 | 27 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
 | `claimanatomy.py` | 1891 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
 | `agent_b/core.py` | 1300 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1300 行）；`agent_b/_support.py` 是模块级 helper 与常量，223 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 2060 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
