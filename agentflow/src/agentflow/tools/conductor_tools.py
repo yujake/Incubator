@@ -294,6 +294,68 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
     data = _summon_dict(res)
     return ok(data, **data)
 
+def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
+    """工具面 `targets`（`target_role`）→ 形状面载荷（`role`），并把实例标签补齐。
+
+    ## 为什么这一格必须只有一份（2026-11-02，83 的真机读数）
+
+    `conductor.summon_many` 有两条入口：工具体（非循环调用方）与循环里的
+    `_do_summon_many`（可抢占）。改前两边各写一份「`target_role` 怎么读、同角色多实例
+    怎么补 `<角色>#N`」：形状那一路 2026-10-24 修成了可抢占（D-64），工具那一路还在
+    阻塞（`run_plan()` 默认档 → `handle.results()` → `wait_all()`，无 timeout）——
+    于是 83 上 M 在一次**工具调用**里零回合 6 778 秒，顶趟行永远 running，直到人工写
+    `.agentflow-stop`。翻译与校验抽到这里之后，两条入口读同一份 `targets`，
+    只剩「抢不抢」一个差别。
+
+    返回 `{"targets": [{role, task, params, instance, input_key, brief}], "why": ...}`：
+    键名是**形状路径**的（`_do_summon_many` 的入参形态），不是工具面的。
+    受控拒绝照旧抛 `ToolError`（缺 `target_role` / 缺 `task` / 条目不是对象）。
+    """
+    # ---- 实例标签的自动补齐（2026-09-30，加在"用户要一批 B 同时干活"这条路上）
+    #
+    # 为什么要有它：并发多实例要求"同一角色的每个 target 给不同 `instance`"
+    # （`policy._same_role_other_instance`），而模型在写一批 target 时经常不写
+    # 那个标签 —— 于是三个 B 会被排成三波串行，而它看起来"派了三份活、都成功了"。
+    # 那种失败不会报错，只是慢，正是最容易被读成"没问题"的形态。
+    # 所以这里做一件确定性的事：同一个角色在一次批量里出现多次、且没给标签时，
+    # 自动补上序号（`<role>#1`…），并在返回里逐项标 `auto_instance=True`。
+    # 给了标签的一律尊重（那是调用方在明确指定"谁干哪一份"）。
+    seen: dict[str, int] = {}
+    for item in (targets or []):
+        if isinstance(item, Mapping) and not str(item.get("instance") or ""):
+            seen[str(item.get("target_role") or "")] = seen.get(
+                str(item.get("target_role") or ""), 0) + 1
+    auto: dict[str, list[str]] = {
+        role: [f"{role}#{k}" for k in range(1, n + 1)] for role, n in seen.items() if n > 1
+    }
+    used: dict[str, int] = {}
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(targets or []):
+        if not isinstance(item, Mapping):
+            raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
+        target_role = str(item.get("target_role") or "")
+        # 2026-10-16（口径 S2 最终形态）：条目里「不读 `action`」（模型没有那个位置可填）。
+        if not target_role:
+            raise ToolError(f"targets[{i}] 缺 target_role")
+        work = str(item.get("task") or "").strip()
+        if not work:
+            raise ToolError(f"targets[{i}] 的 `task` 必填（这一件活是什么）")
+        instance = str(item.get("instance") or "")
+        if not instance and target_role in auto:
+            used[target_role] = used.get(target_role, 0) + 1
+            instance = auto[target_role][used[target_role] - 1]
+        out.append({
+            "role": target_role, "task": work,
+            "params": dict(item.get("params") or {}),
+            "instance": instance,
+            "input_key": str(item.get("input_key") or ""),
+            # 名册登记要用的那一格（2026-10-21）：工具的 schema 里没有 `brief` ——
+            # 那是形状面 `summon_many` 的；这里容忍它存在，给了就用，没给由秘书代写。
+            "brief": str(item.get("brief") or ""),
+        })
+    return {"targets": out, "why": str(why or "")}
+
+
 @tool(
     "conductor.summon_many",
     "一次派**一批**活：按写集分波（波次由写集现算）线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
@@ -345,62 +407,35 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
     三态纪律：每一项都必须有自己的结局（`status`/`outcome`/`refusal_reason`），
     列表长度恒等于输入长度 —— "第 3 个被拒了"不许表达成"只有 2 个任务"。
+
+    ## 循环里调它时，走的不是这个函数体（2026-11-02）
+
+    `AgentLoop._do_tool` 把 `conductor.summon_many` 分派到 `_do_summon_many`（可抢占、
+    句柄进本循环的挂账、返场投递 —— 与形状路径同一个执行体），因为可抢占要的是
+    "本循环"，而工具体只有 conductor。这个函数体是**非循环调用方**（与判据里的直接
+    调用）那一档：它按老语义阻塞到全部落定。两条入口的 `targets` 翻译共用
+    :func:`summon_many_payload`，于是"读哪个键、怎么补实例标签"只有一份。
     """
     from .. import scheduler as SC
 
     c = _conductor()
-    # ---- 实例标签的自动补齐（2026-09-30，加在"用户要一批 B 同时干活"这条路上）
-    #
-    # 为什么要有它：并发多实例要求"同一角色的每个 target 给不同 `instance`"
-    # （`policy._same_role_other_instance`），而模型在写一批 target 时经常不写
-    # 那个标签 —— 于是三个 B 会被排成三波串行，而它看起来"派了三份活、都成功了"。
-    # 那种失败不会报错，只是慢，正是最容易被读成"没问题"的形态。
-    # 所以这里做一件确定性的事：同一个角色在一次批量里出现多次、且没给标签时，
-    # 自动补上序号（`<role>#1`…），并在返回里逐项标 `auto_instance=True`。
-    # 给了标签的一律尊重（那是调用方在明确指定"谁干哪一份"）。
-    seen: dict[str, int] = {}
-    for item in (targets or []):
-        if isinstance(item, Mapping) and not str(item.get("instance") or ""):
-            seen[str(item.get("target_role") or "")] = seen.get(
-                str(item.get("target_role") or ""), 0) + 1
-    auto: dict[str, list[str]] = {
-        role: [f"{role}#{k}" for k in range(1, n + 1)] for role, n in seen.items() if n > 1
-    }
-    used: dict[str, int] = {}
-    calls = []
-    for i, item in enumerate(targets or []):
-        if not isinstance(item, Mapping):
-            raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
-        target_role = str(item.get("target_role") or "")
-        # 2026-10-16（口径 S2 最终形态）：条目里「不读 `action`」（模型没有那个位置可填）。
-        if not target_role:
-            raise ToolError(f"targets[{i}] 缺 target_role")
-        work = str(item.get("task") or "").strip()
-        if not work:
-            raise ToolError(f"targets[{i}] 的 `task` 必填（这一件活是什么）")
-        item = {**dict(item), "params": {**dict(item.get("params") or {}), "task": work}}
-        instance = str(item.get("instance") or "")
-        if not instance and target_role in auto:
-            used[target_role] = used.get(target_role, 0) + 1
-            instance = auto[target_role][used[target_role] - 1]
-        calls.append(SC.TaskCall(
-            # 2026-10-16（口径 S2 最终形态）：这里那个 `""` 是「内部 API 的实参」，
-            # 不是留给模型填的位置（条目里没有 `action` 可读）。
-            role=target_role, action="",
-            params=dict(item.get("params") or {}),
-            by=S.CONDUCTOR_ROLE,
-            # 2026-10-20：父必须是「发起这一批的那一趟的绝对编号」（改前这一格缺 ⇒
-            # `TaskCall.parent_task_id` 走默认 `None` ⇒ 批量派出去的子代理在台账上
-            # 全是孤儿，名册 owner 也落成空串/隐藏文件）。号从调用上下文读，
-            # 不在这里拼（`calling_as` 挂上的就是这一趟的 `task_id`）。
-            parent_task_id=current_task_id() or None,
-            input_key=str(item.get("input_key") or ""),
-            instance=instance,
-            # 名册登记要用的那两格（2026-10-21）：`task` 是这一项自己的那句活，
-            # `brief` 如果模型给了就原样带（工具的 schema 里没有 `brief` 这一格 ——
-            # 那是形状面 `summon_many` 的；这里容忍它存在，给了就用，没给由秘书代写）。
-            roster={"task": work, "brief": str(item.get("brief") or "")},
-        ))
+    plan = summon_many_payload(targets, why)
+    calls = [SC.TaskCall(
+        # 2026-10-16（口径 S2 最终形态）：这里那个 `""` 是「内部 API 的实参」，
+        # 不是留给模型填的位置（条目里没有 `action` 可读）。
+        role=one["role"], action="",
+        params={**dict(one.get("params") or {}), "task": str(one.get("task") or "")},
+        by=S.CONDUCTOR_ROLE,
+        # 2026-10-20：父必须是「发起这一批的那一趟的绝对编号」（改前这一格缺 ⇒
+        # `TaskCall.parent_task_id` 走默认 `None` ⇒ 批量派出去的子代理在台账上
+        # 全是孤儿，名册 owner 也落成空串/隐藏文件）。号从调用上下文读，
+        # 不在这里拼（`calling_as` 挂上的就是这一趟的 `task_id`）。
+        parent_task_id=current_task_id() or None,
+        input_key=str(one.get("input_key") or ""),
+        instance=str(one.get("instance") or ""),
+        roster={"task": str(one.get("task") or ""),
+                "brief": str(one.get("brief") or "")},
+    ) for one in plan["targets"]]
     t0 = time.monotonic()
     results = c.run_plan(calls)
     elapsed = time.monotonic() - t0

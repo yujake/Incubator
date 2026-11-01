@@ -10022,6 +10022,47 @@ class AgentLoop:
                 f"这一批里 {len(need)} 项派不出去：{want}；明细见 results")
         return out
 
+    def _do_summon_many_tool(self, args: Mapping[str, Any]) -> dict[str, Any]:
+        """工具面 `conductor.summon_many` 的循环内执行体（与形状面共用一个）。
+
+        ## 它存在的理由（2026-11-02）
+
+        可抢占要的是"句柄进本循环的挂账 + 下一次返场把结果投给模型"，而工具体只有
+        `conductor`、拿不到 loop。所以工具面那一件在循环里被分派到这里，与
+        `_do_summon_many` **共用一个执行体**（不是第二份实现）：`targets` 的翻译与校验
+        也只有一处（`tools.conductor_tools.summon_many_payload`）。
+
+        ## 返回形状：只加不减
+
+        外层是工具结果的形状（`{"tool","ok","data","error","meta"}`，与 `_do_tool`
+        对别的工具产出的一致）；`data` 里两套键并存：
+
+        - 工具 `returns=` 声明的那几格（`count` / `max_wave` / `elapsed_sec` / `why` /
+          `results` …）—— 老调用方与 `test_tools_branch_key_sets` 读的键一个不少；
+        - 形状面那几格（`summoned` / `running_count` / `preempted` / `dispatched` /
+          `running` / `how_to_get_the_rest` …）—— 可抢占那一档的读数。
+
+        参数错与"工具层受控拒绝"同形：一个 `ok=False` 的失败结果（不是抛出去打断循环）。
+        """
+        from .tools.conductor_tools import summon_many_payload
+
+        why = str(args.get("why") or "")
+        try:
+            payload = summon_many_payload(list(args.get("targets") or []), why)
+        except Exception as exc:  # noqa: BLE001 —— 受控拒绝回给模型，不打断循环
+            return {"tool": "conductor.summon_many", "ok": False, "data": {},
+                    "error": str(exc), "meta": {}}
+        t0 = time.monotonic()
+        data = self._do_summon_many(payload)
+        waves = list(data.get("waves") or [])
+        # `setdefault`：形状路径那一份（以及将来可能加的同名读数）优先，这里只补
+        # 工具 `returns=` 声明过、而形状路径不产的那三格。
+        data.setdefault("max_wave", max(waves) if waves else 0)
+        data.setdefault("elapsed_sec", round(time.monotonic() - t0, 3))
+        data.setdefault("why", why)
+        return {"tool": "conductor.summon_many", "ok": bool(data.get("ok")),
+                "data": data, "error": str(data.get("error") or ""), "meta": {}}
+
     #: 五项力气读数 → 各自的加分台阶（唯一一处定义在 `secretary.proof_effort_readings`）。
     #:
     #: 为什么这张表住在这一层：note 是给模型看的指路牌（"补哪一项能升档"），而档位本身
@@ -10250,6 +10291,21 @@ class AgentLoop:
         if refusal:
             out = {"tool": name, "ok": False, "error": refusal,
                    "meta": {"surface": str(self.surface)}}
+            if aliased_from:
+                out["aliased_from"] = aliased_from
+            return out
+        # ---- 同一件事的第二条入口（2026-11-02，83 的 113 分钟）
+        #
+        # `conductor.summon_many` 有两件"外壳"：工具面这一件与形状面的 `_do_summon_many`。
+        # 改前工具这一件走 `run_plan()` 的**阻塞档**（`handle.results()` → `wait_all()`，
+        # 无 timeout、不看停机开关、句柄不进本循环的挂账）—— 83 上 M 在这一次工具调用里
+        # 零回合 6 778 秒（04:51:18 → 06:44:19），顶趟行一直 `running`，直到人工写
+        # `.agentflow-stop` 才落 done/no_result。可抢占要的是"本循环的挂账 + 返场投递"，
+        # 而工具体只有 conductor、拿不到 loop ⇒ 这一层把两条入口并到同一个执行体上，
+        # 于是两条路只剩「抢不抢」一个差别（反真空判据把 `PREEMPTIBLE_DISPATCH`
+        # 打桩成 False ⇒ 退回阻塞形态）。
+        if name == "conductor.summon_many":
+            out = self._do_summon_many_tool(args)
             if aliased_from:
                 out["aliased_from"] = aliased_from
             return out
