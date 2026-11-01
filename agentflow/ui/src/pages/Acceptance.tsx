@@ -123,6 +123,13 @@ export function Acceptance() {
         right={face.problem === "" ? null : <TriState tri="unreadable" reason={face.problem} label="论文包" />}
       >
         <span class="readings">{face.problem === "" ? "正在读盘……" : face.problem}</span>
+        {face.problem === "" ? null : (
+          <div class="readings">
+            若这一条是「没有这个端点」，说明 8720 的 web 服务进程还是改动前那一版
+            （路由表在导入期固化）：刷新只换前端，需要重启 web 服务进程；
+            正在跑的那一趟（82）不要动。
+          </div>
+        )}
       </Card>
     );
   }
