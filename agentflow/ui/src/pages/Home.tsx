@@ -34,7 +34,7 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { CachePanel } from "../components/PromptCache";
-import { Table } from "../components/Table";
+import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
 import type { ChatLine, PendingQuestion, RunRow, StateSnapshot } from "../types";
@@ -511,7 +511,7 @@ export function Home() {
                 title: "坏行",
                 render: (s) =>
                   s.bad_lines > 0 ? (
-                    <Badge kind="badge-fail" text={String(s.bad_lines)} />
+                    <Badge kind="badge-fail" text={cell(s.bad_lines)} />
                   ) : (
                     <span class="mono">0</span>
                   ),

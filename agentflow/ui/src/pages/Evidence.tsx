@@ -648,7 +648,12 @@ export function Evidence() {
               {
                 key: "fail_open",
                 title: "fail_open",
-                render: (r) => String(r.fail_open),
+                // 走 `cell()`，与同页其余列同一个取值器：`out/secretary/` 下那份旁支台账
+                // （`nontriviality.jsonl` / `proposition_verdicts.jsonl`）的行**根本没有**
+                // `fail_open` 这一栏（真机读数：613 行里 143 行没有），改前这里
+                // `String(r.fail_open)` 把它们印成字面量 `undefined`。
+                // `undefined` 是"没读到"，不是"false"：这一列的三态就是 cell() 承诺的那三档。
+                render: (r) => cell(r.fail_open),
               },
               { key: "target", title: "对象", render: (r) => cell(r.target) },
               { key: "at", title: "时间", render: (r) => cell(r.at) },

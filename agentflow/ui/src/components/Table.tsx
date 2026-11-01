@@ -55,6 +55,28 @@ export function plain(value: unknown): string {
   return cell(value).replace(/\*\*([^*\n]+)\*\*/g, "$1");
 }
 
+/** 一格「没有正文」时的显示：`—`（**不是** `unknown`）。
+ *
+ * 为什么不能借 `unknown`：`cell()` 的 `unknown` 专指"这一格没读到"（三态里那一档）。
+ * 而"这一格没有正文可给"（例如内容级判据过了、没有要说的细节）**不是**没读到 ——
+ * 把它印成 `unknown` 会让同一行自相矛盾（结论：过了 / 读数：unknown）；
+ * 那正是 `pages/Acceptance.tsx` 的「读数」列改前那一版的形态。
+ *
+ * 与 `cell()` 的分工：
+ * - `cell()` 管"读不到" ⇒ `unknown`（三态那一档，读的人知道该去查为什么没读到）；
+ * - `blank()` 管"没有正文" ⇒ `—`（这一格本来就不该有字，不必去查）。
+ * 两个词分得开，读的人才分得开这两件事；空/缺 ≠ 没查成，这条就是 `blank()` 的全部理由。
+ */
+export function blank(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  if (typeof value === "string") {
+    return value.trim() === "" ? "—" : value;
+  }
+  return cell(value);
+}
+
 export function Table<T>(props: TableProps<T>) {
   if (props.rows.length === 0) {
     return <div class="empty">{props.empty}</div>;

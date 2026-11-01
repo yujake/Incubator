@@ -85,7 +85,7 @@ export function Live() {
               rows={running}
               empty="没有在跑的循环。"
               columns={[
-                { key: "role", title: "角色", render: (r) => <Badge kind="badge-unknown" text={String(r.role)} /> },
+                { key: "role", title: "角色", render: (r) => <Badge kind="badge-unknown" text={cell(r.role)} /> },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
                 { key: "since", title: "从什么时候起", render: (r) => <span class="mono">{r.since}</span> },
               ]}
@@ -103,7 +103,7 @@ export function Live() {
               rows={pids}
               empty="进程面：没有登记在盘上且活着的进程。"
               columns={[
-                { key: "pid", title: "宿主进程 pid", render: (r) => <span class="mono">{String(r.pid)}</span> },
+                { key: "pid", title: "宿主进程 pid", render: (r) => <span class="mono">{cell(r.pid)}</span> },
                 { key: "role", title: "角色" },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
                 { key: "started_at", title: "起于", render: (r) => <span class="mono">{r.started_at}</span> },

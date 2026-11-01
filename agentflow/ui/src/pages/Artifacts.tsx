@@ -232,10 +232,12 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
           {
             key: "mine_attempts",
             title: "挖掘尝试",
+            // 两处都走取值器（2026-11-01）：`String(w.mine_attempts)` 与模板里的
+            // `${w.mine_attempts}` 都是同一件事 —— 这一格没有时印字面量 `undefined`。
             render: (w) =>
               w.last_mine_error === ""
-                ? String(w.mine_attempts)
-                : `${w.mine_attempts} · 上次：${clip(w.last_mine_error)}`,
+                ? cell(w.mine_attempts)
+                : `${cell(w.mine_attempts)} · 上次：${clip(w.last_mine_error)}`,
           },
           {
             key: "download_state",
@@ -345,7 +347,9 @@ export function Artifacts() {
               {
                 key: "bytes",
                 title: "字节",
-                render: (r) => String(r.bytes),
+                // 走取值器：有值时逐字不变（`cell(number)` 就是 `String(number)`），
+                // 这一格没有时才从字面量 `undefined` 变成 `unknown`。
+                render: (r) => cell(r.bytes),
               },
               { key: "task_id", title: "任务" },
               { key: "at", title: "登记时间", render: (r) => cell(r.at) },
@@ -451,7 +455,7 @@ export function Artifacts() {
               {
                 key: "bytes",
                 title: "字节",
-                render: (r) => String(r.bytes),
+                render: (r) => cell(r.bytes),
               },
               { key: "body", title: "正文（截断）", render: (r) => plain(clip(r.body)) },
             ]}

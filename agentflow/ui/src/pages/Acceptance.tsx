@@ -23,6 +23,7 @@ import { useState } from "preact/hooks";
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { blank } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 
@@ -120,7 +121,13 @@ export function Acceptance() {
                   <tr key={k}>
                     <td class="mono">{k}</td>
                     <td>{verdictBadge(acc.criteria[k] ?? "")}</td>
-                    <td class="mono">{detail === "" ? "unknown" : detail}</td>
+                    {/* 「读数」列的空 detail 走 `blank()` ⇒ `—`，**不是** `unknown`：
+                        `reviewaccept` 在几条判据**过了**的时候不写 details（例如
+                        `within_cost_cap` 的通过分支），而 `unknown` 在同一页专指
+                        「没查成」——改前 `detail === "" ? "unknown" : detail` 会让
+                        那一行变成「结论 过了 / 读数 unknown」。
+                        三态在左列，正文在这里；两件事各说各的。 */}
+                    <td class="mono">{blank(detail)}</td>
                   </tr>
                 );
               })}
