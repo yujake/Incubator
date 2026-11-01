@@ -1210,8 +1210,19 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
         if current is None:
             # 与不带兜底那一档同形（`tx.find` 找不到就是 not_found）：空 id 也走这里，
             # 因为"要改哪一行"根本不知道（不是"路由没成"）。
-            return fail(f"{table} 里没有主键 {id}", table=table, id=id, found=False,
-                        kind="not_found")
+            #
+            # 建议那一句（业主 2026-11-02：「其它拒都最好要回复一句原因，一句建议」+
+            # 「建议侧务必保证真实可达，不是误导」）：
+            #   - `table.list` 是真工具（`table_tools.py:1512` 的 `@tool("table.list"`），
+            #     行里带 `stmt_id`（`schema.py:3459` 的 `id_field`）；
+            #   - `own.register_statement` 是 B 的真动作（`specs/b.py:94` / `:229`），
+            #     号由秘书在事务里发 —— 通用写口本来就写不出"不存在的行"。
+            # 判据：`tests/test_table_update_refusals_say_what_next.py` 照这句真的走一步。
+            return fail(f"{table} 里没有主键 {id} ⇒ 这一笔要改的那一行不在册（一个字节都没写）。"
+                        "建议：先用 `table.list(table=\"statements\")` 读出在册的 `stmt_id`"
+                        "（每行都带它）再拿那个号重交；要新建一条命题请走 "
+                        "`own.register_statement`（号由秘书在事务里现发）",
+                        table=table, id=id, found=False, kind="not_found")
         keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
         if not (keys & STATEMENT_BODY_PATCH_KEYS):
             # ---- 非正文 patch ⇒ 秘书的"就地改三格"写口（真机 82 · A-1…A-4）
