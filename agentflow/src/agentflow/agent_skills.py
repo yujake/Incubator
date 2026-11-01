@@ -1211,6 +1211,61 @@ def _h_skills() -> tuple[Skill, ...]:
 把它写成 `成立` 是本项目最贵的一种错。
 """,
         ),
+        Skill(
+            slug="审校-机械读数先扫一遍",
+            title="审校：七类机械读数一次拿全，再决定读哪几段",
+            summary="一个入口七类读数：字符 / 引用 / input / ref / proof / 重复 / 台账",
+            when="拿到一份新稿、或改完要复核时（先扫一遍，再带着读数去读稿）",
+            actions=("H.review", "H.verify_fixes"),
+            tools=("review.scan", "review.report", "fs.read"),
+            body="""# 机械读数先扫一遍
+
+## 为什么先扫
+
+审稿清单（写在 H 的声明里）有四条，其中两条的"数"你自己数不准：`\\begin{proof}` 在
+六万字符的正文里数一遍，错一个就是"这份稿子不合格"或"合格"的差别。而这七类读数
+现在有一个入口，同一份正文只数一遍：
+
+```
+review.scan(kinds=["text_integrity","cites","inputs","refs","proofs","duplicates",
+                   "ledger_match"],
+            project="projects/<项目名>")
+```
+
+## 返回怎么读（三件事，别混）
+
+1. `findings[]` 九键：`kind` / `severity` / `file` / `line` / `column` / `text` /
+   `why` / `ref` / `codepoint`。位置永远指得到（`file` 是工作区相对路径，`line` 从 1 起）。
+2. `detail[]` 逐类三态：`checked=false` 只表示这一类没查成，其余类照旧可信；
+   `bad[]` 里逐条给理由。`checked=false` 永远不是"零命中"。
+3. `counts.facts` 是数：`proof_envs` / `statement_envs` / `ledger_propositions` /
+   `ledger_theorem_kinds` / `mapping_rows` 五个数一起看 —— 它们本来就互不相等
+   （真稿上 18 / 18 / 15 / 7 / 13）。不要拿其中两个数的等号当判据：要报的是
+   `statement_surplus` 点名的那些"正文有、台账或对应表里没有"的环境。
+
+## 七类各看一眼什么
+
+| kind | 该报的那条 | 不该报的（假阳性） |
+|---|---|---|
+| text_integrity | 零宽 / 控制符 / 替换符 / 双向 / 正文里的 CJK | `nbsp` 只是断行（warning）；代码里的中文不算 |
+| cites | `\\cite` 的键在 `\\bibitem` 里找不到 | 多引了几条（`facts.uncited` 是数，不是错） |
+| inputs | `\\input{…}` 指的文件不在盘上 | — |
+| refs | `\\ref` 家族的键没有对应 `\\label` | 没被引用过的标签不算错（真稿 703 个里 229 个只给书签用） |
+| proofs | 定理类环境没有 proof / proof 没有归属 / proof 没闭合 | 一个定理写两段 proof（"(1)(2) 分别证"）是正常写法 |
+| duplicates | `\\label` 重名 / `\\newtheorem` 重名 | — |
+| ledger_match | `statement_surplus` 里那些环境 | 五个数彼此不等不是错 |
+
+## 读数之后
+
+- 这些读数不进 finding 台账：`schema.FINDING_KINDS` 里没有这七类，
+  `review.record_finding` 会当场拒收。要留可追踪的凭据就用 `review.report`
+  （markdown 里每条带 `file` / `line` / `ref`）。
+- 你自己读出来的那一条（例如"这一句把猜想写成了定理"）仍然用
+  `review.record_finding`，`kind` 取受控词表里现有的那几个。
+- 清单②（正文内部编号）与③（正文没有数值实验小节）没有机器读数 —— 自己数，
+  并把次数与行号写进 `evidence`，不许因为"工具没报"就当成通过。
+""",
+        ),
     )
 
 

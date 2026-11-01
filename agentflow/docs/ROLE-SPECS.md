@@ -1373,7 +1373,7 @@ C 的产出有两类，状态语义完全不同。
 | H-5 | **依赖分级**（FC-13）：`external_unavailable`=warning，`dangling`=error | `tools.review_tools.scan_document`；自检实测逐字 |
 | H-6 | 请 G 修订 / 向 A 核引文 / 向 E 核形式化 | `H → G`、`H → A`、`H → E`（`capabilities.ALLOWED_EDGES`） |
 | H-7 | **采信规则**（`draft/37` §16 P2）：采信一条命题只有两条路 —— 正文与 B 的台账**逐字一致**（`statements.quote_verified is True` 且文本可比对）+ E 的背书（`experiments.evidence_kind="proof"`）；两条都不在只能说"这条我采信不了" | 提示词口径（`ROLE_BRIEFS["H"].boundary`）；`tests/test_review_line_prompts.py` 的 H 组事实 |
-| H-8 | **按体例逐条打勾**（2026-10-18 起）：机器可判四条（proof 环境数 ≥6 / 正文内部编号 ==0 / 正文无「数值实验」类小节 / 有 Abstract＋`\bibitem`＋Appendix A）＋正文禁令六项＋骨架与证明粒度；发现稿子是研究报告 ⇒ 落 error 级 finding、裁决 `rejected`，**不许 `accepted`** | `specs/h.py::SPEC.brief.policy` 里 2026-10-18 那五条；`review.record_finding` |
+| H-8 | **按体例逐条打勾**（2026-10-18 起；2026-11-01 改口径）：四条 —— ① 定理那一档**先取读数再判**（`review.scan(kinds=["proofs","ledger_match"], project=…)` 给五个数 + `statement_surplus`；不再拿「proof 环境数 == 台账定理类命题数」当判据，也不再有「≥6」那个数）/ ② 正文内部编号 ==0（**没有机器读数**，自己数并写行号）/ ③ 正文无「数值实验」类小节（**没有机器读数**）/ ④ 有 Abstract＋`\bibitem`（`\cite` 对 `\bibitem` 走 `review.scan(kinds=["cites"])`）＋Appendix A；＋正文禁令六项＋骨架与证明粒度；发现稿子是研究报告 ⇒ 落 error 级 finding、裁决 `rejected`，**不许 `accepted`**。机械读数**不进 finding 台账**（词表里没有那七类）⇒ 要留凭据用 `review.report` | `specs/h.py::SPEC.brief.policy` 里 2026-10-18 那五条与 2026-11-01 那一条；`review.record_finding` |
 
 > **2026-10-18 起**：H 判的不再只是「说清楚没有」这一档 —— 论文体例的机器可判四条与正文禁令成为**可逐条打勾的审稿清单**（`specs/h.py::SPEC.brief.policy`），任何一条不合格都落 finding；「稿子读起来是研究报告」这一形态的裁决不许 `accepted`（error 级 ⇒ `rejected`，只报 warning 也只能是 `accepted_with_warnings`）。采信规则（H-7）不变。
 

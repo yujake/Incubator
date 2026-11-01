@@ -712,7 +712,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
     {"version": "p228", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p228（2026-11-03 落账；业主 2026-11-01 裁定「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：H 的工具面多一件只读工具 review.scan（统一入口，kinds 七类：text_integrity / cites / inputs / refs / proofs / duplicates / ledger_match）—— 只落在派生态（H 的 tools_lines 多一行），手写段文一格未动。facts 键集仍 15 格（键名与条数一格未动）"}
+     "note": "抬版本 p228（2026-11-03 落账；业主 2026-11-01 裁定「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：H 的工具面多一件只读工具 review.scan（统一入口，kinds 七类：text_integrity / cites / inputs / refs / proofs / duplicates / ledger_match）—— 只落在派生态（H 的 tools_lines 多一行），手写段文一格未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p228 -> p229（2026-11-01，业主批准动禁改区 · FC-27）：块 3 改手写段文 ——
+    # `specs/h.py` 的审稿清单四条改成"机器读数走 review.scan"（并写清②③没有机器读数）
+    # + 新增一条「机械读数走一个入口」（含"这些读数不进 finding 台账"）
+    # + `agent_skills._h_skills()` 新增 H 手册（索引行进前置提示词）⇒ 只有 H 那一格换值。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p229", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p229（2026-11-03 落账；业主 2026-11-01 裁定）：块 3 把 H 的审稿清单改成用 review.scan 取读数（七类一个入口；proof 环境数与台账定理类数的等号不再当判据，改看 statement_surplus），并写清「这些读数不进 finding 台账、要留凭据用 review.report」；另加一份 H 手册。只有 H 那一格换值，facts 键集仍 15 格"}
 
 )
 

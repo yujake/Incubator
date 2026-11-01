@@ -2171,7 +2171,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p228"
+_FROZEN_PROMPT_VERSION = "p229"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2388,6 +2388,15 @@ _FROZEN_PROMPT_VERSION = "p228"
 #: 变的是派生态（工具面从注册表现算）。逐格：H 3b686b76→acc9ec94
 #: （A–G / L / M / V 十格与 p227 同值，逐格现算见 `temp/_recompute_p228.py`）。
 #: 块 3 还要再抬一次（`specs/h.py` 的审稿清单改成用 `review.scan` 拿读数 + H 手册）。
+#: p228 → p229（2026-11-01，业主批准动禁改区 · FC-27）：块 3 改的是手写段文 ——
+#: `specs/h.py` 的审稿清单四条（改成"机器读数走 review.scan"，并写清哪两条没有机器
+#: 读数）+ 同一份声明里新增的一条「机械读数走一个入口」（含"这些读数不进 finding 台账"）
+#: + `agent_skills._h_skills()` 新增一份 H 手册（它的索引行进 H 的前置提示词）。
+#: 三笔都只落在 H 自己那一格 ⇒ 只有 H 换值（重算读数：变化的格 = ['H']）。
+#: 逐格：H acc9ec94→27716e46（其余十格与 p228 同值，现算见 `temp/_recompute_p228.py`）。
+#: 为什么块 3 不继续叫 p228：p228 已经落进 `tests/fixtures/prompt_cache_warm.json`
+#: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
+#: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "8d24e8eba9f6d50e4d4d1a58329ef2e1fad00499a00f1405d9afb10120c1b8ef",
     "B": "232f3c473af9b11395509cb788feda294ef68bb8f24607702abdd3876cab5721",
@@ -2396,7 +2405,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "E": "337cd50ee80db61419e5561dee83e8e054253392025fb0d0e070d847f52de14a",
     "F": "58295b4d0b8ea42fd9bd98e663221d31350dbce28101ff6302723aaa255d5b9d",
     "G": "dddd5baf4d0c7793ff1e837a21e4a2bf4c6f178b67b35cbe147b32ac9f192d94",
-    "H": "acc9ec94a31951934ef234104572ade7c94a4241c952739c9b92d477ccf41868",
+    "H": "27716e4637f221fe4bdc4dcdd46054e4a538ab40e712f01f3a86f761776e59da",
     "L": "2462bba428429c8241acb1360b25a4e8ea291aa5bdd4fafbd2ded36e3e6866cd",
     "M": "e416b8a2cdf15ee5eb784719bfdaa859fc3dc8c69ce859518109d6b7b33bf85d",
     "V": "7bb595da856ce8f701b5152ede90f2e49c5695b199b3b7aed3640c7bb00b2385",
