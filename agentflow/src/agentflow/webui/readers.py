@@ -82,6 +82,7 @@ from .. import sessions as SS
 from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
                          agent_states, clock_waiters, most_active_state, state_counts)
 from ..jsonlfile import read_jsonl_state
+from . import facecache
 from . import state as _state
 
 __all__ = [
@@ -3353,11 +3354,20 @@ def handle_evidence(handler: Any, params: Mapping[str, str],
 
 def handle_artifacts(handler: Any, params: Mapping[str, str],
                      query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=`）。"""
+    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=`）。
+
+    读数走 `facecache.cached_face`（按盘失效，见 `webui/facecache.py`）：同一份盘、
+    同一组参数直接复用上一份读模型，响应顶层多一格 `cache`（`hit` / `key_sha` /
+    `built_at`）。`cache` 刻意不进 `artifacts_face` 的返回值 —— 那是读模型，
+    与 `ui/src/types.ts` 的 `ArtifactsView` 逐格对齐。
+    """
     del params
     vals = query.get("run_dir") or []
     run_dir = str(vals[0]) if vals else None
-    _json_of(handler, artifacts_face(handler.root, run_dir=run_dir))
+    face, cache = facecache.cached_face(
+        "artifacts", handler.root, {"run_dir": run_dir if run_dir is not None else ""},
+        lambda: artifacts_face(handler.root, run_dir=run_dir))
+    _json_of(handler, {**face, "cache": cache})
 
 
 def handle_acceptance(handler: Any, params: Mapping[str, str],
@@ -3380,7 +3390,14 @@ def handle_acceptance(handler: Any, params: Mapping[str, str],
 
 def handle_package(handler: Any, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/package`：论文包三块（`?project_dir=` `?report_path=` `?cap_usd=` `?sid=`）。"""
+    """`GET /api/package`：论文包三块（`?project_dir=` `?report_path=` `?cap_usd=` `?sid=`）。
+
+    与 `/api/artifacts` 同一条缓存口径（`webui/facecache.py`）：失效键里装着
+    `project_dir` / `report_path` / `cap_usd` / `sid` 这四格参数、工作区全部文件的
+    `mtime_ns` + 大小、以及 `data/events.jsonl` 的最后序号。最后那一项同时是门结论的
+    保鲜期：`closing.check_closing` 的八格算在这一次读模型里，事件流一追加（序号变）
+    整份缓存就作废 —— 门结论不许跨过一次事件序号。
+    """
     del params
 
     def one(name: str) -> str:
@@ -3392,9 +3409,15 @@ def handle_package(handler: Any, params: Mapping[str, str],
         cap: float | None = float(cap_raw) if cap_raw else None
     except ValueError:
         cap = None
-    _json_of(handler, package_face(handler.root, project_dir=one("project_dir"),
-                                   report_path=one("report_path"), cap_usd=cap,
-                                   sid=(one("sid") or None)))
+    project_dir, report_path = one("project_dir"), one("report_path")
+    sid = one("sid") or None
+    face, cache = facecache.cached_face(
+        "package", handler.root,
+        {"project_dir": project_dir, "report_path": report_path,
+         "cap_usd": cap if cap is not None else "", "sid": sid or ""},
+        lambda: package_face(handler.root, project_dir=project_dir,
+                             report_path=report_path, cap_usd=cap, sid=sid))
+    _json_of(handler, {**face, "cache": cache})
 
 
 def handle_source(handler: Any, params: Mapping[str, str],
