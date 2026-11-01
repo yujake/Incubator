@@ -64,6 +64,11 @@ _RUNTIME_PRODUCTS = frozenset({
     # （`MAPPING.json` 是那份唯一真身、`MAPPING.md` 由它渲染），把它们降级成占位写法
     # 等于让图不再指到真名。
     "MAPPING.json", "MAPPING.md",
+    # V 签的派生归档（`vsigns.py` 的 `issued.json`）：落点是 `<工作区>/out/vsigns/issued.json`，
+    # 仓库根这一层永远没有它 —— 与四份运行时产物同一条道理。注意：逐份签
+    # `out/vsigns/<artifact_sha>.json` 的 token 含 `<`，按占位写法跳过；这里只登记归档这一个
+    # 裸文件名，且仍由 `test_the_runtime_product_exemptions_are_not_stale` 反向核它不在盘上。
+    "issued.json",
 })
 
 
