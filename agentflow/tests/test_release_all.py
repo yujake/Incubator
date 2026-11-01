@@ -2689,6 +2689,33 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                  "四条判据：重建一致 / 漏记 / 虚记 / 伪造痕迹）、`receipt_of` / `receipt_digest` / "
                  "`delivery_of`（回执与送达都从台账 + `tasks` + `agent_mailbox` 现算，不落文件）、"
                  "`bits_after_sign`（B 认签 ⇒ 第 3 位）",
+    # 2026-11-01（167 批，业主裁定「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」）：
+    # "谁写的这份证明"的唯一读数。为什么必须落在顶层：写它的是登记口（`secretary` 的
+    # `record_statement`，B 的写入代理），读它的是 V 回执的投递口（`vreceipts._author_of`）
+    # —— 两个角色、两条路径共用同一份判据；挂进 `agent_b/` 会让 V 侧取不到，挂进
+    # `agent_v/` 会让 B 侧写不进，而两份实现会让"作者未记录"与"作者是 B"分不开
+    # （那正是 81 的 8 条回执只能记 `author_not_recorded` 的形态）。
+    "proofauthors.py": "谁写的这份证明（业主 2026-11-01 裁定）：`author_reading`（三态 "
+                       "`checked`/`author`/`source`/`reason` —— 先认调用方显式交的 "
+                       "`proof_authors`，再按来源路径 `reports/`⇒F / `out/paper/`⇒G / "
+                       "`documents/`⇒B；读不出来就记「作者未记录」，不许默认成 B）与 "
+                       "`recorded`（读数 ⇒ 写进 statements 行的 `proof_authors`）—— "
+                       "登记口（`secretary.record_statement`）写、V 回执的投递口"
+                       "（`vreceipts._author_of`）读，两边共用这一份判据",
+    # 2026-11-01（167 批，丙案）：V 回执的投递。为什么必须落在顶层：写它的是 V 判完那一笔
+    # （`agent_v/core.py` 的 `_publish_receipt`），补投它的是收工门（`conductor.closing`
+    # 经 `tools/conductor_tools.py`）—— 两处分属角色面与工具面，谁家都不该是它的家；
+    # 它还要能被判据当纯函数打桩（`tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py`
+    # 打桩的就是 `_publish_receipt`，"8 条判定 8 条有板项"必须因此变红）。
+    "vreceipts.py": "V 回执的投递（167 丙案：判定即投 + 收工前补投）：`publish_row` 把 "
+                    "① outbox 意图（`out/vreceipts/outbox.jsonl`，append-only）落盘 → "
+                    "② 开板项 → ③ 记 `dispatched`/`undelivered` 整段放进同一把跨进程锁"
+                    "（`tasks.input_key` 没有唯一约束，锁是唯一的并发保证；不许把 "
+                    "`deliver_v_verdicts` 的调用挪到锁外）；收件人 = 送审者"
+                    "（`conductor.current_parent()`），读不到记 `undelivered`、不猜「谁醒着」；"
+                    "`backfill` 是收工前的补投（81 那 8 条按「台账号时间窗唯一」重解析），"
+                    "`outbox_index` / `outbox_digest` 是读口 —— `agent_v/core._publish_receipt` "
+                    "写、`conductor.closing` 补投",
     # `draft/39` §4（2026-10-05 用户口径）：M 的状态报告（旁路观测，谁都不停）。
     # 它不是对拍副本：四类读数怎么收集、怎么渲染成四节、怎么与复算对拍只有这一份实现；
     # 名字带 `status_report_`/`statusreport` 前缀是刻意的（R003 会把 `write_report`/
