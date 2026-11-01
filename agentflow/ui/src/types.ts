@@ -660,6 +660,8 @@ export interface VerificationRow {
   proof_chars: number;
   round: number;
   used_faces: string[];
+  review_call: string;
+  review_pass: number | null;
   submission_id: string;
   at: string;
   proof_sha_consistency: string;

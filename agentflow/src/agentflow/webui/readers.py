@@ -5191,6 +5191,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("why", "string"), ("findings", "Record<string, unknown>[]"),
       ("unresolved_errors", "number"), ("proof_sha256", "string"),
       ("proof_chars", "number"), ("round", "number"), ("used_faces", "string[]"),
+      # 2026-11-02（V 三轮送审的口径，业主逐字：「不允许跨两次送审累计成功数」）：
+      # 新写的台账行多两格 —— `review_call` 是同一趟 `verify_proof` 的调用 id
+      # （同趟三行逐字相同），`review_pass` 是这趟里的第几轮（1..need）。
+      # 类型取 `verifications.record_verification` 写行的真值：前者恒为 `str(...)`，
+      # 后者是 `int(...) if review_pass is not None else None` ⇒ 必填但可空。
+      # 老行没有这两格（读侧按历史形态 `legacy_rows` 计，不参与新签判断），
+      # 与 `citation_checks` 那一批同一条口径：声明的是新行形状，不是老盘的样子。
+      ("review_call", "string"), ("review_pass", "number | null"),
       ("submission_id", "string"), ("at", "string"),
       # 2026-10-23（业主：sha 原文不显示）：`proof_sha_consistency` 是
       # "V 签的那一份 vs 命题现在这一份（按 `proof_no` 逐条比）"的三档读数。
