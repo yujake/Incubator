@@ -6,7 +6,7 @@
 B 四次用 `table.update` 想改 `kind` / `status` / `quote_reason`，四次都被
 `routed_to_backstop.secretary_refused` 拒，理由逐字是"同一条 statement_full 已在册"。
 机制：兜底把"盘上那一行 + patch"整份再交给秘书登记，而秘书的查重判据正是
-"同一条 statement_full 已在册" ⇒ **非正文 patch 100% 落 duplicate 拒**。
+"同一条 statement_full 已在册" ⇒ 非正文 patch 100% 落 duplicate 拒。
 这一趟的三格（`kind` / `status` / `quote_reason`）于是没有任何写入口。
 
 ## 修法（选乙）
