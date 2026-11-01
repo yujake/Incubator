@@ -698,6 +698,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("RunRow",
      "snapshot() 的 `runs[]` —— 一趟运行（一条 agent_run_start 到它之后的 agent_run_end）",
      (("sid", "string"), ("role", "string"), ("task", "string"),
+      # 162 ④：这一趟的**绝对编号**（`agent_run_start.task_id`）。读不到写 `""`，
+      # 不造一个假编号；`task_id_source` 说这个编号从哪来（`event` / `missing`）。
+      # 这一面刻意只有两个取值：编号只能来自它自己的开场事件，不从相邻事件借。
+      ("task_id", "string"), ("task_id_source", "string"),
       ("start_index", "number"), ("start_ts", "string"), ("steps", "number"),
       ("llm_calls", "number"), ("usd", "number | null"), ("unknown_usd", "number"),
       # 162 ②：收工那一行自己报的账（`agent_run_end.spend`）。**不顶替 `usd`** ——

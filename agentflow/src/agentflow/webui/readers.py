@@ -505,7 +505,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     """`GET /api/run/{sid}` 的读模型：`RunView` = `Run` + `report` + `checkpoint`。
 
     - `runs`：这一趟会话里的每一趟（`sessions.runs_in_session`，与 `webui.state._scan`
-      的 23 键逐字同形）；
+      的 25 键逐字同形）；
     - `report`：`out/review/REPORT.md` 的读数，两栏 `{status, text}`，`status` 是
       `ok`/`missing`/`unknown`（另一套词表，见裁定 N1）；
     - `checkpoint`：`runs/agent-<角色>-<sid>.json` 的内容（读不到就是 `None`）。
@@ -4748,7 +4748,7 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
             for name, _source, fields in _TS_TYPES}
 
 
-#: `RunRow` 的 23 个键（`draft/75 §1.3` 的 C3 表 + 162 的三格；`webui/state.py:_scan`
+#: `RunRow` 的 25 个键（`draft/75 §1.3` 的 C3 表 + 162 的五格；`webui/state.py:_scan`
 #: 与 `sessions.runs_in_session` 逐字同形）。`RunRow` 那个接口由 A 线的 `state.py` 声明，
 #: 所以这里的键名只能自己列一份 —— 判据 `test_the_run_row_keys_match_sessions`
 #: 会断言这一份与 `sessions.runs_in_session` 真给出的键集合相同（漂移当场红）。
@@ -4788,8 +4788,22 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
 #:
 #: 三态：`spend_usd` / `spend_unknown_usd_calls` 在没有收工行（`end_index is None`）
 #: 时是 **`None`，不是 `0`** —— "这一趟没写收工行"与"这一趟花了 0 元"是两件事。
+#: ## 162 ④：`task_id` + `task_id_source` 进契约
+#:
+#: 行里一直有 `task`（那一段任务文本），却没有**绝对编号** —— 于是页面上"这一趟是谁的活"
+#: 答不出来，也没法拿去和名册 / 台账对。编号在写侧一直有：`agent_run_start` 与
+#: `agent_run_end` 都带 `task_id`（`agent_loop.run` 的写入口）。
+#:
+#: 三态：读不到写 **`""`**（不造一个假编号），并配一格 `task_id_source`
+#: （`"event"` = 事件里真有 / `"missing"` = 这一趟的开场事件没有编号）。
+#: 为什么只有两个取值、没有 `ChatLine` 那种 `inherited`：这一面**没有继承路径** ——
+#: 编号只能来自这一趟自己的开场事件，不从相邻事件借（借了就等于替它编一个号）。
+#:
+#: 实测（2026-11-01）：78–81 的 236 趟 **236/236** 都有非空唯一编号；但全仓 722 趟里
+#: 27 趟没有（`p5-review-*` / `p6e` / `p6f` 等 10 月初的工作区）⇒ 必须留 `""` 这一档。
 RUN_ROW_KEYS: tuple[str, ...] = (
-    "sid", "role", "task", "start_index", "start_ts", "steps", "llm_calls", "usd",
+    "sid", "role", "task", "task_id", "task_id_source",
+    "start_index", "start_ts", "steps", "llm_calls", "usd",
     "unknown_usd", "spend_usd", "spend_unknown_usd_calls",
     "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
     "last_shape", "end_index", "end_ts", "waiting_on", "waiting",

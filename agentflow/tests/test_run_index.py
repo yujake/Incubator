@@ -15,6 +15,8 @@
 | `test_unattributed_usd_is_zero_when_every_call_has_a_claim` | 反真空（162 ②） | 每一分钱都有自报账认领 | 那一格是真 `0.0`；会话不在盘上才是 `None` |
 | `test_events_span_is_a_span_and_events_owned_counts_this_run` | 正控（162 ③） | 两个代理交错写一份文件 | 跨度各自 6；归属各自 4、合计守恒 |
 | `test_events_owned_counts_the_steps_that_carry_no_task_id` | 反真空（162 ③） | `agent_step` 没有 `task_id` | 按 `task_id` 过滤会少 1 条 ⇒ 判据钉住"含步数" |
+| `test_the_run_line_carries_the_absolute_task_id` | 正控（162 ④） | 一趟带编号 / 一趟开场事件不带（收工行带） | `("t-000001","event")` / `("","missing")`，不从收工行借 |
+| `test_the_index_version_is_bumped_because_the_run_row_shape_changed` | 正控（162 ④） | 盘上放一份 `version=1` 的索引 | 版本号 == 2；老索引 `unreadable` + `drift=[]` |
 ## 名字的边界（不许混用）
 这里的「趟次」是会话内的第几趟（一条 `agent_run_start` → `agent_run_end`）。`projects.py` 的 `run_index: int` 是"这个项目第几趟"（配 `out/run-<n>`）
 ——另一个概念，本文件一个字都不碰它（`draft/78 §7` 的提醒）。
@@ -307,6 +309,61 @@ def test_events_owned_counts_the_steps_that_carry_no_task_id(tmp_path: pathlib.P
     # 按 task_id 过滤只能数到 3 条（开始 / llm_call / 收工）；含自己那条步数才是 4 条
     assert len(carrying) == 3, carrying
     assert m["events_owned"] == len(carrying) + len(my_steps), m
+
+
+# ====================================================================== 162 ④ 编号 + 版本
+def test_the_run_line_carries_the_absolute_task_id(tmp_path: pathlib.Path) -> None:
+    """正控（162 ④）：每一趟都带**它自己的**绝对编号，读不到就写 `""` 并标 `missing`。
+
+    这一面刻意**没有继承路径**：编号只能来自这一趟的开场事件。下面第二趟刻意让收工行
+    带着编号、开场事件不带 —— 若有人"顺手从收工行借一个"，这条会红。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    A = SS.append
+    sid = "s-ids"
+    A(root, {"kind": "agent_run_start", "role": "M", "task": "带编号",
+             "task_id": "t-000001", "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "M", "task_id": "t-000001",
+             "stop_reason": "final", "steps": 0, "spend": {"calls": 0, "usd": 0.0},
+             "ts": TS}, sid=sid)
+    # 10 月初的工作区就长这样：开场事件没有编号（但收工行有 —— 不许借）
+    A(root, {"kind": "agent_run_start", "role": "A", "task": "没编号", "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "A", "task_id": "t-000009",
+             "stop_reason": "final", "steps": 0, "spend": {"calls": 0, "usd": 0.0},
+             "ts": TS}, sid=sid)
+    runs = SS.runs_in_session(SS.read_session(root, sid=sid)[0], sid=sid)
+    assert [(r["task_id"], r["task_id_source"]) for r in runs] == [
+        ("t-000001", "event"), ("", "missing")], runs
+    assert runs[1]["task_id"] != "t-000009", "从收工行借了编号 —— 这一面没有继承路径"
+
+
+def test_the_index_version_is_bumped_because_the_run_row_shape_changed(
+        tmp_path: pathlib.Path) -> None:
+    """正控（162 ④）：行形状变了 ⇒ 索引版本抬到 2；老索引报"版本不认识"，不报假 drift。
+
+    为什么必须抬：盘上那份 `index/run-index.json` 的 `digest` 是**整批 run 行**规范化
+    JSON 的 sha256 —— 行里多一格，摘要就换一个，于是一份**旧代码算出来的**索引会以
+    "71 趟读数与索引里不一致"的样子报出来（81 上今天就是这样，drift 1 条）。
+    那是假话：索引没有被人手改过，它只是**上一版格式**。抬版本号之后它走"读不出来"
+    那一档（`tri=unreadable`、`drift=[]`、理由里点名版本），处置是重建，不是抓人。
+    """
+    assert SS.RUN_INDEX_VERSION == 2, (
+        f"行形状在 162 里变了三笔（花销两格 / 事件两格 / 编号两格），"
+        f"索引版本必须抬到 2，今天是 {SS.RUN_INDEX_VERSION}")
+    root = tmp_path / "ws"
+    root.mkdir()
+    _two_sessions_two_runs(root)
+    SS.rebuild_run_index(root)
+    assert SS.run_index_report(root)["usable"] is True          # 负控前：绿
+    path = SS.run_index_path(root)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["version"] = 1                                          # 假装是上一版的索引
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    report = SS.run_index_report(root)
+    assert report["usable"] is False and report["tri"] == "unreadable", report
+    assert report["drift"] == [], f"版本不认识不该报成 drift：{report['drift']}"
+    assert "版本" in report["reason"], report["reason"]
 
 
 # ====================================================================== 负控 ① 手改索引

@@ -87,6 +87,8 @@ export interface RunRow {
   sid: string;
   role: string;
   task: string;
+  task_id: string;
+  task_id_source: string;
   start_index: number;
   start_ts: string;
   steps: number;

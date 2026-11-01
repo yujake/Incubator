@@ -67,6 +67,7 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
     # 2026-10-12 追加 `switch_present`：停机那一栏接上了 `/api/live`（它是那一面的键）。
     "Run": ("runs", "report", "checkpoint", "unknown_usd", "drift", "usable",
             "orphans", "stop_reason", "spend", "events_span", "events_owned",
+            "task_id", "spend_usd", "unattributed_usd",
             "events", "total", "from_index", "to_index", "truncated",
             "index", "kind", "ts", "shape", "ok", "usd", "switch_present"),
     "Evidence": ("statements", "conjectures", "experiments", "review_findings",
