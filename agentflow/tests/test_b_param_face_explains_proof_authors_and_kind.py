@@ -5,7 +5,7 @@
 
 - 20:53:31 的 `t-000098` 派活文字逐字教 B 传 `proof_authors=["F"]`，而这一格
   「不在参数表里」 ⇒ `param_invalid`；B 去掉它再交才成功，而 `proof_authors` 由
-  `proofauthors.py` 按来源路径推断，于是 D 写的两条证明被记成了 `["F"]`。
+  模块 `proofauthors` 按来源路径推断，于是 D 写的两条证明被记成了 `["F"]`。
 - `kind` 那一格此前只有类型 `string`、没有说明：派活文字与 B 的实测都写中文
   `引理` / `定理`，而词表是英文的 —— 这一格要么被 `must_start_as_conjecture`
   引到"去要 V 签"（答非所问），要么根本改不动。
@@ -46,10 +46,14 @@ def test_the_summary_says_where_proof_authors_is_written():
     """a：说明面点名 `proof_authors` 由谁写、为什么不接受手写。
 
     改前红：说明面没有 `proof_authors` 这个词 —— 派活文字只能照自己的理解教模型传。
+    2026-11-01：钉的是「模块名被点名」，**不是扩展名** —— 提示词面有一条更硬的判据
+    （`test_agent_prompts.py::test_the_prompt_never_names_a_tool_that_does_not_exist`：
+    点号 token 必须是真的工具），而 `proofauthors.py` 是模块不是工具 ⇒ 说明面写成
+    「由模块 `proofauthors` 按来源路径推断」。断言对象（推断者必须被点名）一个字没动。
     """
     summary = str(_SPEC.summary)
     assert "proof_authors" in summary, summary
-    assert "proofauthors.py" in summary, summary
+    assert "proofauthors" in summary, summary
     assert "推断" in summary or "证据" in summary, summary
     assert "不接受手写" in summary or "不是本动作的参数" in summary, summary
 
