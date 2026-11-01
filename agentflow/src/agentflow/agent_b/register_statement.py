@@ -931,6 +931,30 @@ class _RegisterStatement:
             return text, 0, "proof_text"
         return "", 0, "没有可比的那一段（quote_span 与 proof_text 都是空的）"
 
+    def _evidence_kind_on_disk(self, stmt_id: str) -> str:
+        """回读那一行在盘上的 `evidence_kind`；读不到 ⇒ `"unknown"`。
+
+        为什么必须回读（真机 82，2026-11-01 · A-4）：同一份内容再交一次、请求
+        `evidence_kind="proof_review"`，而盘上那一行仍是 `heuristic`（没有 V 的连续签，
+        升档没有发生）。改前 duplicate 分支把入参 `evidence_kind` 原样回给模型 ⇒
+        两次回执都说 `proof_review`，模型以为档位升了，下一步去 `table.update` 改
+        `quote_reason` 撞墙。回执要回答的是"盘上现在是什么档"，不是"你要什么档"；
+        后者另起一格 `requested_evidence_kind`，两格同时在才读得出"要求过、没升成"。
+
+        三态：读不到台账 / 没有这一行 / 那一格是空的 ⇒ `"unknown"`
+        —— 拿请求值顶就是这次要修的那个谎。
+        """
+        sid = str(stmt_id or "")
+        if not sid:
+            return "unknown"
+        try:
+            rows = list(self.store.rows("statements"))
+        except Exception:  # noqa: BLE001 —— 读不到台账不是"盘上就是这个值"（折成请求值就是撒谎）
+            return "unknown"
+        row = next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)
+        kind = str((row or {}).get("evidence_kind") or "").strip()
+        return kind or "unknown"
+
     def register_statement(
         self,
         *,
@@ -1700,7 +1724,8 @@ class _RegisterStatement:
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
                    "quote_mode": str(quote_mode or ""),
-                   "evidence_kind": evidence_kind,
+                   "evidence_kind": self._evidence_kind_on_disk(stmt_now),
+                   "requested_evidence_kind": evidence_kind,
                    "matched_by": str(written.get("matched_by") or ""),
                    "similarity": float(written.get("similarity") or 0.0),
                    "proof_no": proof_no,
@@ -1779,7 +1804,8 @@ class _RegisterStatement:
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
                    "quote_mode": str(quote_mode or ""),
-                   "evidence_kind": evidence_kind, "upgraded": True,
+                   "evidence_kind": self._evidence_kind_on_disk(stmt_now),
+                   "requested_evidence_kind": evidence_kind, "upgraded": True,
                    "row": dict(written.get("row") or {}),
                    #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
@@ -1856,7 +1882,8 @@ class _RegisterStatement:
                        "source_lit_id": lit_id or None,
                        "quote_verified": quote_verified, "origin": origin,
                        "quote_mode": str(quote_mode or ""),
-                       "evidence_kind": evidence_kind, "new_row": False,
+                       "evidence_kind": self._evidence_kind_on_disk(stmt_dup),
+                       "requested_evidence_kind": evidence_kind, "new_row": False,
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": _deps_reading(written),
                        #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
@@ -1864,7 +1891,11 @@ class _RegisterStatement:
                        "manuscript_washed": manuscript_washed,
                        "manuscript_wash": dict(manuscript_wash),
                        "proof_vs_source": dict(proof_vs_source),
-                       "note": ("这一条没有新建行（同一条命题已在册）。")}
+                       # 升档没发生时把"还差什么"一并带回（`proof_review_gap` 的原话在
+                       # `written.reason` 里）：只说"重复读数"会让模型以为档位已经升上去了。
+                       "note": ("这一条没有新建行（同一条命题已在册）。"
+                                + (str(written.get("reason") or "")
+                                   if str(written.get("reason") or "").strip() else ""))}
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
                 if attach.get("canonical_written"):
@@ -1914,7 +1945,9 @@ class _RegisterStatement:
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",
                                str(attach.get("reason") or "证明清单没挂上"),
-                               stmt_id=stmt_dup)
+                               stmt_id=stmt_dup,
+                               evidence_kind=self._evidence_kind_on_disk(stmt_dup),
+                               requested_evidence_kind=evidence_kind)
             # 对调用方来说这是"这一次没有新行"，必须说出来（`ok=False` + `kind`），
             # 并把既有那一条的号给它 —— 否则它只会看到"没写成"而不知道东西在哪。
             #
@@ -1937,7 +1970,11 @@ class _RegisterStatement:
                            + ("；这一笔带来的证明清单里每一条都已经在册且逐字相同"
                               "（没有重复登记，也没有覆盖任何一份证明）"
                               if attach.get("already") else ""),
-                           stmt_id=stmt_dup)
+                           stmt_id=stmt_dup,
+                           # 档位回读（真机 82 · A-4）：回执说盘上的档，请求值另起一格。
+                           # 这一格是"我要求升、但没升成"与"我本来就要弱档"的唯一分界。
+                           evidence_kind=self._evidence_kind_on_disk(stmt_dup),
+                           requested_evidence_kind=evidence_kind)
         if not written.get("checked") or not written.get("created"):
             extra = {k: v for k, v in written.items()
                      if k in ("literature_rows", "available_lit_ids", "unresolved")}
