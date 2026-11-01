@@ -18,7 +18,7 @@
 |---|---|---|
 | a | 判档那一层对概念行落一条可判的读数：`level=null` + `basis="不适用：概念行没有证明正文，不做力气判档"` + `applicable=False` | 改前概念行一条记录都没有（`nontriviality.jsonl` 里没有它） |
 | b | 读侧把两者印成两个词：不适用 ⇒ `不适用`，判不了 ⇒ `未判`；有档位 ⇒ `T0`…`T4`（三个词不折平） | 改前两者都是"未判" |
-| c | 正控：概念行一次模型调用都不发（判档那一步对 concept 早退，`seam.calls == []`） | 这一条改前改后都该绿（护栏：早退不许顺手把调用放进来） |
+| c | 正控：概念行一次模型调用都不发、且读数 `checked=True` / `applicable=False`（判档那一步对 concept 早退，`seam.calls == []`） | 这一条改前改后都该绿（护栏：早退不许顺手把调用放进来） |
 | d | 反真空：把"不适用"打桩成 None（= 不落那一档）⇒ b 必红 | 它证明 b 的绿是那一条读数带来的 |
 
 ## 边界
@@ -51,6 +51,13 @@ CONCEPT_DEF = ("概念（有限维李代数）：设 K 为特征 0 的域，g �
 
 #: 一条真的命题（用来做负控：它的档位照旧是 T0–T4）。
 THEOREM = "设 G 是有限 p-群，则 G 的中心非平凡。"
+
+#: 上面那条命题的证明正文：判档真的会读它，于是"缝会被调用"这件事有对照
+#: （`test_the_concept_branch_costs_no_model_call` 的反面对照用；不写它，那个
+#: `seam.calls == []` 就分不清"早退挡住了调用"与"这只缝根本不会响"）。
+THEOREM_PROOF = ("证明：Z(G) 含单位元、对换位封闭。按类方程 |G| = |Z(G)| + "
+                 "Σ_i [G:C_G(g_i)]，每个非中心共轭类的长度都被 p 整除 ⇒ p | |Z(G)|，"
+                 "故 |Z(G)| > 1。")
 
 
 class _Seam:
@@ -244,11 +251,27 @@ def test_the_concept_branch_costs_no_model_call(tmp_path: pathlib.Path,
     assert seam.calls == [], seam.calls
     assert dict(row.get("bits")), row.get("bits")
 
-    # 反面对照（"`calls == []` 不是恒真"）：把早退那一支关掉，同一条缝就会被调一次。
+    # 反面对照两件（都不放宽：它们证明 `calls == []` 有分辨率，且 na 不是 unknown）。
+    #
+    # (1) 缝本身会响：同一条缝在一条「真有证明正文」的命题上判一次档 ⇒ calls 非空。
+    #     2026-11-01（两态那笔之后改判据方式，不改行为）：改前这一格靠"把早退打桩关掉
+    #     ⇒ 缝被调一次"证明有牙；两态之后关掉早退那一支会先撞"没证明正文 ⇒ 没查成"，
+    #     同样一次调用都不发（na 与 unknown 是两件事，不是同一条挡板的两面）⇒ 那个
+    #     构造不再能证明"是早退挡住了调用"。牙齿改成"缝在真判一档时确实会响"：
+    #     它仍然证明 `calls == []` 不是恒真。
+    before = len(seam.calls)
+    sec.judge_statement(statement_full=THEOREM, proof_text=THEOREM_PROOF, kind="theorem",
+                        task_id="t-2")
+    assert len(seam.calls) > before, (
+        "真命题判档一次调用都没发 ⇒ 上面那个 [] 说明不了'早退挡住了调用'")
+    # (2) 两态：关掉"不适用"那一档，概念行仍然不发调用（挡它的是另一支：没证明正文
+    #     ⇒ 没查成），而读数落到"未判"而不是"不适用" —— 这一条把两个词钉开。
     monkeypatch.setattr(SEC, "_is_not_applicable_kind", lambda kind: False, raising=True)
-    sec.judge_statement(statement_full=CONCEPT_DEF, kind="concept", task_id="t-2")
-    assert seam.calls != [], ("早退关掉之后仍然一次调用都没发 ⇒ 上面那个 [] "
-                              "说明不了'早退挡住了调用'")
+    seen = len(seam.calls)
+    other = sec.judge_statement(statement_full=CONCEPT_DEF, kind="concept", task_id="t-3")
+    assert len(seam.calls) == seen, (
+        "关掉「不适用」那一档之后概念行发了调用 ⇒ 早退不是唯一挡板（这一条就不该绿）")
+    assert other.get("checked") is False and other.get("nontriviality_tri") == "unjudged", other
 
 
 # ============================================================ d) 反真空
