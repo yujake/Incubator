@@ -509,7 +509,7 @@ def test_an_unknown_kind_is_rejected_not_ignored(tmp_path: pathlib.Path) -> None
 
 
 def test_negative_control_a_wrong_severity_is_rejected() -> None:
-    """负控：`_finding()` 只收三个严重度词 —— 造词当场抛（与 `schema.Finding` 同一条）。"""
+    """负控：`_finding()` 只收三个严重度词 —— 造词当场抛（与 `schema.FINDING_LEVELS` 是同一个集合）。"""
     with pytest.raises(ValueError, match="severity"):
         T._finding("cites", "fatal")  # noqa: SLF001
 
