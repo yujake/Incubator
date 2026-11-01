@@ -2672,6 +2672,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "verifications.py": "验证者 V 的证明级审校台账：`verifications/<命题号>.jsonl` 追加式一行一次审校、"
                         "冷启动提示词（`cold_start_prompt`，签名里没有句柄）、三态结论、签五元位第 3 位"
                         "（`signs_bit3`/`bit3_payload`）—— `draft/39` §3.21",
+    # 业主 2026-11-01（逐字）：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时
+    # 读到。」改前"签"只活在 `statements.bits.reviewed` 与台账尾部连续数里，两处都按命题号
+    # 索引 ⇒ B 拿着手稿问不出"这一份稿签过没有"。这一格就是那条断链的补口：按被签正文的
+    # sha 命名的一份侧文件（`out/vsigns/<sha>.json`）+ 派生归档（`issued.json`）+ 回执与
+    # 送达的「读口」（不落文件：台账那一行上已经逐条有 `defect_step`/`findings`/`washed_relay`）。
+    "vsigns.py": "V 签的侧文件与派生归档：`write_sign`（一稿一签、未达门槛一个字节都不写、"
+                 "已有就不覆盖）、`sign_of`（B 收录时认签的唯一读口）、`compute_index` / "
+                 "`rebuild_index` / `index_drift`（归档 = 从 `out/vsigns/*.json` 现算的派生物，"
+                 "四条判据：重建一致 / 漏记 / 虚记 / 伪造痕迹）、`receipt_of` / `receipt_digest` / "
+                 "`delivery_of`（回执与送达都从台账 + `tasks` + `agent_mailbox` 现算，不落文件）、"
+                 "`bits_after_sign`（B 认签 ⇒ 第 3 位）",
     # `draft/39` §4（2026-10-05 用户口径）：M 的状态报告（旁路观测，谁都不停）。
     # 它不是对拍副本：四类读数怎么收集、怎么渲染成四节、怎么与复算对拍只有这一份实现；
     # 名字带 `status_report_`/`statusreport` 前缀是刻意的（R003 会把 `write_report`/
