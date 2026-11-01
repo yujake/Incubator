@@ -559,3 +559,72 @@ def test_schema_requires_a_parseable_marker_for_abandoned():
     ok = S.Statement(**{**base, "quote_reason": SA.abandon_marker(at=TS, reason="改不动了")})
     ok.validate()
     assert ok.status == "abandoned"
+
+
+# ------------------------------------------------------------------ ③ 端到端：table.update
+
+def _table_registry(st: Store):
+    from agentflow.tools import table_tools
+    from agentflow.tools.base import ToolRegistry
+
+    reg = ToolRegistry(name="tables")
+    reg.bound_role = "B"
+    table_tools.register(reg, store=st)
+    return reg
+
+
+def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_it(tmp_path):
+    """③ 端到端（业主验收口径）：`table.update(status=abandoned, quote_reason=标记)`。
+
+    走的是生产的通用写口（`table.update` → `Secretary.amend_statement_meta`，业主
+    2026-11-01 加的非正文三格就地写口），不是直接调内部函数。就地写口不认识板项，
+    所以重送义务由收工前那一趟对账（`vreceipts.reconcile_resubmits`，backfill 里调）作废。
+    """
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    reg = _table_registry(st)
+    with CND.calling_as("t-b1", "B"):
+        res = reg.call("table.update", table="statements", id=SID,
+                       patch={"status": "abandoned",
+                              "quote_reason": SA.abandon_marker(
+                                  at="2026-11-01T21:10:00+08:00",
+                                  reason="第 5 步补不出来，改不动了")})
+    assert res.ok, (res.error, getattr(res, "data", None) or getattr(res, "meta", None))
+    row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
+    assert row["status"] == "abandoned", row
+    parsed = SA.parse_abandon(row["quote_reason"])
+    assert parsed["checked"] and parsed["at"] == "2026-11-01T21:10:00+08:00", parsed
+    assert _unsigned(st)["count"] == 0, _unsigned(st)
+    assert _abandoned(st)["count"] == 1, _abandoned(st)
+
+    got = VRC.backfill(store=st)
+    rec = got["resubmit_reconcile"]
+    assert rec["checked"] is True, rec
+    assert item["task_id"] in rec["expired"], rec
+    closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
+    assert str(closed.get("item_state")) == "done", closed
+    assert str(closed.get("item_close")) == "expired", closed
+
+
+def test_the_table_update_route_refuses_an_abandonment_without_a_marker(tmp_path):
+    """③ 反向：只写 status='abandoned' 而不带可解析标记 ⇒ 通用写口当场拒，一个字节不改。"""
+    st = _ws(tmp_path)
+    conductor_for(st)
+    parent = _agent_row(st)
+    _put(st)
+    _verify_v(st, SID, parent=parent)
+    item = _resubmit_items(st)[0]
+    reg = _table_registry(st)
+    with CND.calling_as("t-b1", "B"):
+        res = reg.call("table.update", table="statements", id=SID,
+                       patch={"status": "abandoned", "quote_reason": "算了不做了"})
+    assert res.ok is False, res
+    row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
+    assert row["status"] == "active", row
+    assert _unsigned(st)["count"] == 1, _unsigned(st)
+    still_open = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
+    assert str(still_open.get("item_state")) != "done", still_open

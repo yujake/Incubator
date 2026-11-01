@@ -1037,6 +1037,97 @@ def _current_task() -> str:
 
 # ------------------------------------------------------------------ 乙：收工前补投
 
+def reconcile_resubmits(*, store: Any, root: str | Path) -> dict[str, Any]:
+    """把板上开着的重送义务与"盘上的事实"对一次账（收工前那一趟的收敛点）。
+
+    为什么要对账（而不是只在写入时收口）：义务的关闭有两个来源，而它们不都经过
+    `vreceipts` ——
+
+    - 干净的「成立」签落下时由 `publish_row` 收口（`settle_resubmitted`）；
+    - 命题被明确放弃时，可能走 `statementabandon.apply_abandonment`（它自己会作废），
+      也可能走 `table.update(status=abandoned)` 那条就地写口（业主 2026-11-01 加的
+      `Secretary.amend_statement_meta`）—— 后者不认识板项，义务会留在板上，
+      反过来把销号闸（`retire_integrity` 的"名下还有未消的板项"）锁死。
+
+    所以补一条对账：逐条看板上开着的 `v-resubmit@<命题>@<sha>`，按盘上的事实决定
+    收口方式 —— 命题已是可解析的 `abandoned` ⇒ 作废（`expired`）；否则同一份证明
+    已有更新的干净「成立」⇒ 收口（`completed`）。两个判据都复用既有唯一实现
+    （`statementabandon.parse_abandon` / `resubmit_cleared`），这里不新立一份。
+
+    幂等：已经收口的项不在 `_resubmit_items` 里，重跑是零写入。三态：板项读不出来 /
+    台账读不出来 ⇒ `checked=False`（不是"没有要收口的"）。
+    """
+    from . import statementabandon as _SA
+
+    out: dict[str, Any] = {"checked": False, "closed": [], "expired": [], "left": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有重送义务」）"
+        return out
+    try:
+        board = [dict(r) for r in conductor._board_rows()]
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"板项读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    try:
+        statements = {str(r.get("stmt_id") or ""): dict(r)
+                      for r in store.rows("statements")}
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["checked"] = True
+    for row in board:
+        key = str(row.get("input_key") or "")
+        if not key.startswith(RESUBMIT_PREFIX):
+            continue
+        if str(row.get("item_state") or "") == "done":
+            continue
+        task_id = str(row.get("task_id") or "")
+        sid = key[len(RESUBMIT_PREFIX):].partition("@")[0]
+        sha = resubmit_sha_of(key)
+        stmt = statements.get(sid) or {}
+        if not stmt:
+            out["left"].append({"key": key, "why": f"命题 {sid} 不在册 ⇒ 不猜它放没放弃"})
+            continue
+        if str(stmt.get("status") or "") == "abandoned":
+            parsed = _SA.parse_abandon(stmt.get("quote_reason"))
+            if not parsed.get("checked"):
+                out["problems"].append(
+                    f"{sid}：status=abandoned 而放弃标记读不出来（{parsed.get('why')}）"
+                    " ⇒ 义务不按放弃处理（它仍然是未签）")
+                out["left"].append({"key": key, "why": "放弃标记读不出来"})
+                continue
+            _state, problem = conductor.close_item_by_evidence(
+                task_id, close="expired",
+                why=f"命题 {sid} 已被明确放弃（{parsed.get('at')}）")
+            if problem:
+                out["problems"].append(f"{task_id}：{problem}")
+                continue
+            out["expired"].append(task_id)
+            out["closed"].append(task_id)
+            continue
+        cleared = resubmit_cleared(root=root, label=f"{sid}#p1", proof_sha=sha)
+        if not cleared.get("checked"):
+            out["left"].append({"key": key, "why": str(cleared.get("why") or "台账读不成")})
+            continue
+        if not cleared.get("cleared"):
+            out["left"].append({"key": key, "why": "义务还在（还没有更新的干净成立）"})
+            continue
+        _state, problem = conductor.close_item_by_evidence(
+            task_id, close="completed",
+            why=f"义务已清：{cleared.get('why')}")
+        if problem:
+            out["problems"].append(f"{task_id}：{problem}")
+            continue
+        out["closed"].append(task_id)
+    out["reason"] = (f"对账：收口 {len(out['closed'])} 条"
+                     f"（其中放弃作废 {len(out['expired'])} 条），"
+                     f"仍开着 {len(out['left'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
 def _detail_from_ledger(store: Any, root: str, label: str,
                         verification_id: str) -> dict[str, Any] | None:
     """从台账文件把某一条判定读成投递明细（历史行没有 outbox 意图时走这一支）。"""
@@ -1220,6 +1311,15 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
         out["not_dispatched"] = int(again.get("not_dispatched") or 0)
     except Exception as exc:  # noqa: BLE001
         out["problems"].append(f"补投后的三态没读成（{type(exc).__name__}: {exc}）")
+    # 收工前的最后一件事：板上开着的重送义务与盘上的事实对一次账（命题已被明确放弃的
+    # 作废、已有更新干净成立的收口）。两条来源（`statementabandon` 与
+    # `Secretary.amend_statement_meta`）都不认识板项，这一格是它们的收敛点。
+    try:
+        out["resubmit_reconcile"] = reconcile_resubmits(store=store, root=root)
+    except Exception as exc:  # noqa: BLE001 —— 对账没跑成不许带走收工读数
+        out["resubmit_reconcile"] = {"checked": False, "closed": [], "expired": [],
+                                     "left": [], "problems": [],
+                                     "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
     out["reason"] = (f"回执 {out['receipts']} 条；补投新开 {len(out['opened'])} 条、"
                      f"认领 {len(out['adopted'])} 条、已在板上 {len(out['existing'])} 条、"
                      f"收件人不可判 {len(out['undelivered'])} 条；"
