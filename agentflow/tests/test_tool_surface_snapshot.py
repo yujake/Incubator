@@ -78,8 +78,11 @@ def _snapshot(tmp: pathlib.Path) -> dict:
     with_m = _build(tmp, roles=tuple(TOOL_ROLES)).registry
 
     cli: dict[str, str] = {}
+    # 2026-11-01（审计 174 §二 第 16 行）：`--role` 这一档此前只覆盖 A–H + V ——
+    # L 能查、但漂了不会有 golden diff；M 则根本不在 argparse 的 choices 里（exit 2）。
+    # 补上这两格之后，"角色即权限面"在命令行上覆盖全部 11 个有工具面的角色。
     for label, extra in [("", []), ("--json", ["--json"])] + \
-            [(f"--role {r}", ["--role", r]) for r in "ABCDEFGHV"]:
+            [(f"--role {r}", ["--role", r]) for r in "ABCDEFGHVL" + "M"]:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             code = main(["--root", str(tmp / "ws"), "tools", *extra])

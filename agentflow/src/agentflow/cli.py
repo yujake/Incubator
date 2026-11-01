@@ -4972,7 +4972,12 @@ def build_parser() -> argparse.ArgumentParser:
     # （实测 `invalid choice: 'E'`）——"角色即权限面"的可打印事实只覆盖 A–D。
     # 用 `S.ROLES`（schema 是角色名单的唯一来源，`tools.ROLES` 就是它）而不是
     # 在这里 import `tools`：这样 `cli --help` / 其它子命令不必为了一张词表去装配工具层。
-    sp.add_argument("--role", default=None, choices=list(S.ROLES), help="只看某个角色的工具")
+    # 2026-11-01（审计 174 §二 第 16 行）：`S.ROLES` 是可召唤的角色（A–H / V / L），
+    # 主控 M 不在里面（`NON_SUMMONABLE`）—— 但"谁能拿工具"是另一根轴，M 有 42 件。
+    # 于是 `--role M` 此前是 exit 2 / invalid choice，"主控有没有手"这件事在命令行上
+    # 无法逐件核对 ⇒ 这里显式补上 M（只补这一格，不改 `S.ROLES`：可召唤性不因此变化）。
+    sp.add_argument("--role", default=None, choices=list(S.ROLES) + ["M"],
+                    help="只看某个角色的工具（M = 主控；它不可召唤，但有工具面）")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_tools)
 
