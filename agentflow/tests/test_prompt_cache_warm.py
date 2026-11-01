@@ -965,3 +965,211 @@ def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
         assert int(row["cross_run_prefix_chars"]) == int(row["system_chars"]), (
             f"跨 run 可复用前缀只有 {row['cross_run_prefix_chars']} / 整份 "
             f"{row['system_chars']} 字符 ⇒ system 里还有跨 run 会变的东西")
+
+
+# ---------------------------------------------------------------- 6. 命中样本的口径
+#
+# 这一节是 2026-11-01 真机读数逼出来的（两趟都是 `verdict=incomplete` +
+# `sample_without_hit=["secretary"]`，而同一份读数里 `rows[].ok` 全为 true、
+# 其余十一个目标的命中率是 99.3%–99.7%）：
+#
+#   "整趟没暖成" 与 "秘书这一格不计缓存命中" 被折成了同一个词。
+#
+# 秘书的 system 头只有 304 字，上游对这一段始终报 `hit=0`（连发两趟 `miss=176`）。
+# 谁把它放进 `--hit-sample`，"第二次调用必须命中"这条判据就必然红 —— 红的原因
+# 不是这一趟没暖成，而是这一格按上游的口径不该进那个样本。
+#
+# 所以下面这几条判据读的是脚本自己算出来的结论（`warm()` 真跑一遍，只把
+# 网络那一层换成假 seam）：谁进样本、谁被显式排除、结论由谁决定。判据不自己
+# 重算一份 verdict —— 两份实现只会各自漂。
+
+
+class _FakeCall:
+    """一次假调用：只带 `promptstability.prompt_cache_record` 要读的那几格。"""
+
+    def __init__(self, *, hit: int, miss: int) -> None:
+        self.ok = True
+        self.problem = ""
+        self.detail = "假 seam：没有出网"
+        self.requested = True
+        self.model = "deepseek-flash"
+        self.usd = 0.00001
+        self.elapsed_sec = 0.001
+        self.tokens_in = hit + miss
+        self.tokens_out = 2
+        self.cache_hit_tokens = hit
+        self.cache_miss_tokens = miss
+        self.billing = {"cache_tri": "billed"}
+
+
+def _fake_seam_class(hits: Mapping[tuple[str, int], tuple[int, int]]) -> type:
+    """造一个 `LlmSeam` 替身：`ask()` 按 `(target, pass)` 回放读数，`(hit, miss)`。
+
+    为什么用替身而不是真发请求：这条判据要造的是指定形状的读数
+    （"十一个目标全命中 + 秘书无 hit"），真机跑不出这种受控对照，而且每次要花钱。
+    只替换网络那一层；规划、渲染、判结论、落盘全走 `warm()` 的真实现。
+    """
+
+    class _FakeSeam:
+        """`LlmSeam` 的最小同形面：`ask()` 与 `spent_usd()`。"""
+
+        def __init__(self, **_kwargs: Any) -> None:
+            self.calls: list[tuple[str, int]] = []
+
+        def ask(self, prompt: str, *, system: str = "", task_id: str = "",
+                note: str = "", face: Any = None) -> _FakeCall:
+            target, _, tag = note.partition("#")
+            target = target.split(":")[-1]
+            pass_no = int(tag)
+            self.calls.append((target, pass_no))
+            hit, miss = hits.get((target, pass_no), (0, 176))
+            return _FakeCall(hit=hit, miss=miss)
+
+        def spent_usd(self) -> tuple[float, str]:
+            return 0.0, "fake"
+
+    return _FakeSeam
+
+
+def _fake_warm(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path, *,
+               sample: Sequence[str] = ("M", "C", W.SECRETARY),
+               misses: Sequence[str] = ()) -> tuple[int, dict[str, Any]]:
+    """零花费跑一遍真 `warm()`：十一个角色全命中、秘书 `hit=0`（可以再点名真 miss）。
+
+    `misses` 里的目标第二次调用给 `hit=0 / miss=1000` —— 那是反真空的刀：
+    真有一个普通角色没命中时，`incomplete` 必须照样出现。
+    """
+    hits: dict[tuple[str, int], tuple[int, int]] = {
+        (role, 1): (1000, 100) for role in W.ROLES
+    }
+    hits[(W.SECRETARY, 1)] = (0, 176)
+    for target in sample:
+        hits[(target, 2)] = (990, 100)
+    hits[(W.SECRETARY, 2)] = (0, 176)
+    for target in misses:
+        hits[(target, 2)] = (0, 1000)
+
+    fake_spec = W.MG.ModelSpec(api_key="sk-假", model="deepseek-flash",
+                               base_url="https://api.deepseek.com/v1",
+                               vendor="deepseek", key_source="env")
+    monkeypatch.setattr(W.MG, "spec_from_env", lambda env=None: fake_spec)
+    monkeypatch.setattr(W, "LlmSeam", _fake_seam_class(hits))
+
+    previous = os.environ.get("AGENTFLOW_LEAN_ENABLED")
+    os.environ["AGENTFLOW_LEAN_ENABLED"] = "1"   # 与套件那一档一致（L 在场）
+    AP.reset_toolchain_readings()
+    try:
+        return W.warm(targets=tuple(W.WARM_TARGETS), cap_usd=0.10,
+                      hit_sample=tuple(sample), out_path=tmp_path / "warm.json",
+                      lean="on")
+    finally:
+        if previous is None:
+            os.environ.pop("AGENTFLOW_LEAN_ENABLED", None)
+        else:
+            os.environ["AGENTFLOW_LEAN_ENABLED"] = previous
+        AP.reset_toolchain_readings()
+
+
+def test_a_forced_secretary_sample_is_excluded_and_the_run_stays_warmed(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """判据：秘书被点名进 `--hit-sample` ⇒ 它被显式排除，整趟仍然是 `warmed`。
+
+    这正是 2026-11-01 真机那个形状：十一个目标全命中、`rows[].ok` 全 true，
+    秘书 `hit=0`。旧口径把它判成 `incomplete` + `sample_without_hit=["secretary"]`，
+    于是"整趟没暖成"与"秘书这一格不计命中"在读数上是同一个词 —— 读数是假的。
+
+    新口径要同时满足三件事：
+    ① `verdict="warmed"`（结论只由进样本的目标决定）；
+    ② 秘书出现在 `hit_sample_excluded` 里，且 `why` 说清"上游不计缓存命中"；
+    ③ 秘书仍然被预热：`pass=1` 那一行有 `write>0` 的落地记录 —— 排除的是
+       "必须命中的样本"，不是"预热"。
+    """
+    code, result = _fake_warm(monkeypatch, tmp_path)
+
+    assert result["verdict"] == "warmed", (
+        f"秘书进样本、其余十一个目标全命中，整趟却判 {result['verdict']!r}"
+        f"（sample_without_hit={result.get('sample_without_hit')}，"
+        f"note={result.get('note')}）⇒ 秘书那一格不该把整趟拖成 incomplete")
+    assert code == W.EXIT_WARMED, code
+
+    excluded = result.get("hit_sample_excluded")
+    assert excluded == [{"target": W.SECRETARY,
+                         "why": W.HIT_SAMPLE_EXCLUDED[W.SECRETARY]}], (
+        f"秘书没有被单列成「排除」，而是 {excluded!r} ⇒ 默默跳过是不允许的")
+    assert "不计缓存命中" in excluded[0]["why"], excluded[0]["why"]
+    assert result.get("hit_sample_measured") == ["M", "C"], result.get("hit_sample_measured")
+    assert result.get("sample_without_hit") == [], result.get("sample_without_hit")
+
+    secretary = [row for row in result["rows"]
+                 if str(row["role"]) == W.SECRETARY and int(row["pass"]) == 1]
+    assert secretary, "秘书那一行没了 ⇒ 排除变成了不量"
+    assert int(secretary[0]["cache"]["write"]) > 0, secretary[0]["cache"]
+    assert int(secretary[0]["cache"]["hit"]) == 0, secretary[0]["cache"]
+
+    # 反方向：秘书没进样本时，它不该出现在 `hit_sample_excluded` 里（排除是有条件的）。
+    code2, result2 = _fake_warm(monkeypatch, tmp_path / "no-secretary",
+                                sample=("M", "C"))
+    assert code2 == W.EXIT_WARMED, result2.get("note")
+    assert result2.get("hit_sample_excluded") == [], result2.get("hit_sample_excluded")
+    assert result2.get("hit_sample_measured") == ["M", "C"]
+
+
+def test_a_real_role_missing_the_second_call_still_makes_the_run_incomplete(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """反真空：让普通角色 `M` 第二次调用真 miss ⇒ 仍必须判 `incomplete`。
+
+    没有这一刀，"把秘书排除掉"与"把所有 miss 都放过"在读数上分不开 ——
+    前者是口径，后者是把问题糊掉。这里的读数故意做成"两件事同时成立"：
+    `M` 真 miss（进样本、没命中），秘书无 hit（不进样本）。
+    """
+    code, result = _fake_warm(monkeypatch, tmp_path, misses=("M",))
+
+    assert result["verdict"] == "incomplete", (
+        f"M 的第二次调用 miss 了，整趟却判 {result['verdict']!r} ⇒ 反真空失败")
+    assert code == W.EXIT_INCOMPLETE, code
+    assert result.get("sample_without_hit") == ["M"], (
+        f"sample_without_hit={result.get('sample_without_hit')!r}："
+        "它只许点名「进样本而未命中」的目标（秘书不算）")
+    assert [entry["target"] for entry in result.get("hit_sample_excluded") or []] == [
+        W.SECRETARY], result.get("hit_sample_excluded")
+    assert "M" in str(result.get("note")), result.get("note")
+
+
+def test_the_newest_real_run_per_tier_is_judged_only_by_the_in_sample_targets() -> None:
+    """真机读数（盘上那两趟）也必须是新口径：`warmed`，且结论只由进样本的目标决定。
+
+    这一条不造数据：它读 `_complete_run` 挑出来的、每档最新的一趟完整预热。
+    旧口径下这两趟是 `incomplete` + `sample_without_hit=["secretary"]` ——
+    而它们 `rows[].ok` 全为 true、其余目标命中率 99%+。判据要的是：
+    `sample_without_hit` 里一个被排除的目标都不许出现；`hit_sample_measured`
+    必须正好等于"点名了、且没被排除"的那些目标。
+    """
+    runs = _runs()
+    for lean in TIERS:
+        run = _complete_run(runs, lean)
+        label = _tier_label(lean)
+        assert run is not None, f"{label}：没有一趟完整的预热"
+        assert run.get("verdict") == "warmed", (
+            f"{label}（{run.get('at')}）：verdict={run.get('verdict')!r}，"
+            f"sample_without_hit={run.get('sample_without_hit')!r}，"
+            f"missing={run.get('missing')!r}，failed={run.get('failed_calls')!r}，"
+            f"stopped={run.get('stopped')!r} ⇒ 这一趟该读成 warmed")
+        assert run.get("sample_without_hit") == [], (
+            f"{label}：{run.get('sample_without_hit')!r}")
+        sample = [str(t) for t in (run.get("hit_sample") or [])]
+        excluded = [str(entry.get("target"))
+                    for entry in (run.get("hit_sample_excluded") or [])]
+        assert set(excluded) <= set(sample), (
+            f"{label}：排除名单 {excluded} 里有没进样本的目标（排除只能是样本的子集）")
+        assert run.get("hit_sample_measured") == [
+            t for t in sample if t not in excluded], (
+            f"{label}：hit_sample_measured={run.get('hit_sample_measured')!r} 与"
+            f"「样本 {sample} 减去排除 {excluded}」对不上")
+        # 进了样本的目标，第二次调用必须真的 hit>0（这是"整趟暖成了"的证据）。
+        second = {str(row.get("role")): row for row in _measured_rows(run.get("rows") or [])
+                  if int(row.get("pass") or 1) == 2}
+        for target in run.get("hit_sample_measured") or []:
+            row = second.get(str(target))
+            assert row is not None, f"{label}：进样本的 {target} 没有第二次调用的行"
+            assert int((row.get("cache") or {}).get("hit") or 0) > 0, (
+                f"{label}：进样本的 {target} 第二次调用 hit=0 ⇒ 不该判 warmed")
