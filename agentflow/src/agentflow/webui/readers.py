@@ -505,7 +505,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     """`GET /api/run/{sid}` 的读模型：`RunView` = `Run` + `report` + `checkpoint`。
 
     - `runs`：这一趟会话里的每一趟（`sessions.runs_in_session`，与 `webui.state._scan`
-      的 22 键逐字同形）；
+      的 23 键逐字同形）；
     - `report`：`out/review/REPORT.md` 的读数，两栏 `{status, text}`，`status` 是
       `ok`/`missing`/`unknown`（另一套词表，见裁定 N1）；
     - `checkpoint`：`runs/agent-<角色>-<sid>.json` 的内容（读不到就是 `None`）。
@@ -4748,10 +4748,26 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
             for name, _source, fields in _TS_TYPES}
 
 
-#: `RunRow` 的 22 个键（`draft/75 §1.3` 的 C3 表 + 162 的花销两格；`webui/state.py:_scan`
+#: `RunRow` 的 23 个键（`draft/75 §1.3` 的 C3 表 + 162 的三格；`webui/state.py:_scan`
 #: 与 `sessions.runs_in_session` 逐字同形）。`RunRow` 那个接口由 A 线的 `state.py` 声明，
 #: 所以这里的键名只能自己列一份 —— 判据 `test_the_run_row_keys_match_sessions`
 #: 会断言这一份与 `sessions.runs_in_session` 真给出的键集合相同（漂移当场红）。
+#:
+#: ## 162 ③：`events_in_run` 改名 `events_span`，另加 `events_owned`
+#:
+#: 改前那一格叫「趟内事件」，算的是 `end_index - start_index` —— 它是**下标跨度**，
+#: 不是"这一趟发了几条事件"。多代理共写同一份会话文件时，整段跨度里**别人的**事件
+#: 全被算进来：81 上 71 趟的合计是 70055，而真实事件只有 6514（10.75 倍）；M 那行
+#: 6512 里最多只有 512 条可能是它自己的（359 条带自己的 `task_id` + 153 条空编号但
+#: `role=M`），至少 6001 条是别人的。名字说"趟内事件"、数说"跨度"，这本身是一句假话，
+#: 所以：**纯跨度那一格改名**（`events_span`，数一个字节都不动），**另给一格**
+#: `events_owned`（按 `runs_in_session` 那三档归属只数归到这一趟的：81 上 70055 → 6254，
+#: M 那行 6512 → 521）。
+#:
+#: 为什么**不**改成"按 `task_id` 过滤"：`agent_step` 事件里**没有** `task_id`
+#: （81 上 2419 条全都没有），按 `task_id` 过滤会把步数整族丢光 —— M 那行会读成 360，
+#: 比真值 512 还小。判据 `test_events_owned_counts_the_steps_that_carry_no_task_id`
+#: 就是钉这件事的反真空。
 #:
 #: ## 162 ②：`spend_usd` / `spend_unknown_usd_calls` 加进来，而 `usd` 不换
 #:
@@ -4776,7 +4792,8 @@ RUN_ROW_KEYS: tuple[str, ...] = (
     "sid", "role", "task", "start_index", "start_ts", "steps", "llm_calls", "usd",
     "unknown_usd", "spend_usd", "spend_unknown_usd_calls",
     "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
-    "last_shape", "end_index", "end_ts", "waiting_on", "waiting", "events_in_run",
+    "last_shape", "end_index", "end_ts", "waiting_on", "waiting",
+    "events_span", "events_owned",
 )
 
 

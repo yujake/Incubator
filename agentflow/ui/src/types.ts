@@ -105,7 +105,8 @@ export interface RunRow {
   end_ts: string;
   waiting_on: string[];
   waiting: boolean;
-  events_in_run: number;
+  events_span: number;
+  events_owned: number;
 }
 
 /** 出处：snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）。 */

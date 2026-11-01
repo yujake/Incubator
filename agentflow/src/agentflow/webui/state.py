@@ -704,7 +704,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("elapsed_sec", "number | null"), ("last_shape", "string"),
       ("end_index", "number | null"), ("end_ts", "string"),
       ("waiting_on", "string[]"), ("waiting", "boolean"),
-      ("events_in_run", "number"))),
+      # 162 ③：`events_span` 是下标跨度（原 `events_in_run` 改名，数一个字节没动）；
+      # `events_owned` 是按三档归属**只数归到这一趟**的（含没有 `task_id` 的 `agent_step`）。
+      ("events_span", "number"), ("events_owned", "number"))),
     ("OrphanRow",
      "snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）",
      (("sid", "string"), ("index", "number"), ("kind", "string"),

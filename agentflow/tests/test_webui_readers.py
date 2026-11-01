@@ -205,10 +205,12 @@ def test_run_events_reads_the_rows_with_the_snapshot_numbering(
     inside = [e["index"] for e in rows
               if run["start_index"] <= e["index"] <= run["end_index"]]
     assert inside == [0, 1, 2], (inside, run["start_index"], run["end_index"])
-    # `events_in_run` 是 `end_index - start_index`（不数开始那一行），逐条回放给的是
+    # `events_span` 是 `end_index - start_index`（不数开始那一行），逐条回放给的是
     # 闭区间 `[start_index, end_index]` 那 3 行 —— 两者差 1 是既有口径，不是漂移。
-    assert run["events_in_run"] == 2, run["events_in_run"]
-    assert len(inside) == run["events_in_run"] + 1
+    # 162 ③ 把它从 `events_in_run` 改名成 `events_span`：它数的是**下标跨度**，
+    # 不是"这一趟发了几条事件"（后者是 `events_owned`，见 tests/test_run_index.py）。
+    assert run["events_span"] == 2, run["events_span"]
+    assert len(inside) == run["events_span"] + 1
 
 
 def test_run_events_pages_by_since_index_and_marks_truncation(

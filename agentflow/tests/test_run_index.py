@@ -13,6 +13,8 @@
 | `test_the_run_line_reports_its_own_spend_without_replacing_the_event_sum` | 正控（162 ②） | 三趟：spend 齐 / spend 缺一格 / 没有收工行 | 两个数并存；缺格与无收工行各是 `None` |
 | `test_unattributed_usd_answers_where_the_unowned_calls_went` | 正控（162 ②） | 一条秘书调用谁都不认领 | 会话级那一格 = 0.9，逐趟 `usd` 一格都不吃它 |
 | `test_unattributed_usd_is_zero_when_every_call_has_a_claim` | 反真空（162 ②） | 每一分钱都有自报账认领 | 那一格是真 `0.0`；会话不在盘上才是 `None` |
+| `test_events_span_is_a_span_and_events_owned_counts_this_run` | 正控（162 ③） | 两个代理交错写一份文件 | 跨度各自 6；归属各自 4、合计守恒 |
+| `test_events_owned_counts_the_steps_that_carry_no_task_id` | 反真空（162 ③） | `agent_step` 没有 `task_id` | 按 `task_id` 过滤会少 1 条 ⇒ 判据钉住"含步数" |
 ## 名字的边界（不许混用）
 这里的「趟次」是会话内的第几趟（一条 `agent_run_start` → `agent_run_end`）。`projects.py` 的 `run_index: int` 是"这个项目第几趟"（配 `out/run-<n>`）
 ——另一个概念，本文件一个字都不碰它（`draft/78 §7` 的提醒）。
@@ -95,7 +97,7 @@ def test_the_index_agrees_with_the_events_run_by_run(tmp_path: pathlib.Path) -> 
     # 缺收尾的那一趟：end_index/end_ts 是 None/""（三态，不是 0），终点取文件尾
     unfinished = index["sessions"]["s-beta"]["runs"][1]
     assert unfinished["end_index"] is None and unfinished["end_ts"] == ""
-    assert unfinished["events_in_run"] == 2, unfinished
+    assert unfinished["events_span"] == 2, unfinished
     # 重复重建是幂等的（除了 generated_at 那只钟）
     again = SS.rebuild_run_index(root)
     for sid in sorted(live):
@@ -234,6 +236,74 @@ def test_unattributed_usd_is_zero_when_every_call_has_a_claim(
     assert W.snapshot(root)["sessions"][0]["unattributed_usd"] == 0.0
     # 会话文件不在盘上 ⇒ `None`（没查成，不是 0）
     assert R.run_view(root, "s-not-there")["unattributed_usd"] is None
+
+
+# ====================================================================== 162 ③ 事件两格
+def _two_agents_share_one_file(root: pathlib.Path) -> None:
+    """一场会话里两个代理交错写：`agent_step` 没有 `task_id`，`llm_call` 有。"""
+    A = SS.append
+    sid = "s-two-agents"
+    A(root, {"kind": "agent_run_start", "role": "M", "task": "父", "task_id": "t-000001",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_start", "role": "A", "task": "子", "task_id": "t-000002",
+             "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_step", "role": "M", "shape": "fs.write", "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "A", "task_id": "t-000002", "ok": True,
+             "usd": 0.1, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_step", "role": "A", "shape": "tool", "ts": TS}, sid=sid)
+    A(root, {"kind": "llm_call", "role": "M", "task_id": "t-000001", "ok": True,
+             "usd": 0.2, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "M", "task_id": "t-000001",
+             "stop_reason": "final", "steps": 1,
+             "spend": {"calls": 1, "usd": 0.2, "unknown_usd_calls": 0}, "ts": TS}, sid=sid)
+    A(root, {"kind": "agent_run_end", "role": "A", "task_id": "t-000002",
+             "stop_reason": "final", "steps": 1,
+             "spend": {"calls": 1, "usd": 0.1, "unknown_usd_calls": 0}, "ts": TS}, sid=sid)
+
+
+def test_events_span_is_a_span_and_events_owned_counts_this_run(tmp_path: pathlib.Path) -> None:
+    """正控（162 ③）：`events_span` 是下标跨度，`events_owned` 只数归到这一趟的。
+
+    改前只有一格（叫 `events_in_run`、数是跨度），多代理共写时它把别人的事件也数进来。
+    81 上 71 趟合计 70055 而真实事件只有 6514（10.75 倍）—— 名字与数说的不是一件事。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _two_agents_share_one_file(root)
+    events, _bad = SS.read_session(root, sid="s-two-agents")
+    runs = SS.runs_in_session(events, sid="s-two-agents")
+    assert [r["role"] for r in runs] == ["M", "A"], runs
+    m, a = runs
+    # 跨度：M 覆盖 0..6（7 行跨度 6），A 覆盖 1..7（7 行跨度 6）
+    assert (m["events_span"], a["events_span"]) == (6, 6), (m["events_span"], a["events_span"])
+    # 归属：各自 4 条（开始 + 自己的 step + 自己的 llm_call + 收工），合计 = 全部 8 条
+    assert (m["events_owned"], a["events_owned"]) == (4, 4), (m["events_owned"], a["events_owned"])
+    assert m["events_owned"] + a["events_owned"] == len(events), "归属不守恒（有事件被数两遍或漏掉）"
+    # 改前那一格的口径（跨度）在 M 上会把 A 的 3 条也算进来 —— 这里钉住"两个数不同"
+    assert m["events_span"] != m["events_owned"], m
+
+
+def test_events_owned_counts_the_steps_that_carry_no_task_id(tmp_path: pathlib.Path) -> None:
+    """反真空（162 ③）：`agent_step` **没有** `task_id`，而 `events_owned` 仍包含它们。
+
+    这是"不许按 `task_id` 过滤"的那条判据：81 上 2419 条 `agent_step` 一条都没有
+    `task_id`，按 `task_id` 过滤会把步数整族丢光 —— M 那行会读成 360，比真值 512 还小。
+    "数得更严"在这里恰恰是错的。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _two_agents_share_one_file(root)
+    events, _bad = SS.read_session(root, sid="s-two-agents")
+    runs = SS.runs_in_session(events, sid="s-two-agents")
+    m = runs[0]
+    steps = [e for e in events if e.get("kind") == "agent_step"]
+    assert steps, "夹具里没有 agent_step ⇒ 这条判据是空跑"
+    assert all("task_id" not in e for e in steps), \
+        f"agent_step 居然带 task_id 了 ⇒ 这条判据的前提变了：{steps}"
+    carrying = [e for e in events if str(e.get("task_id") or "") == "t-000001"]
+    # 按 task_id 过滤只能数到 3 条（开始 / llm_call / 收工）；含步数才是 4 条
+    assert len(carrying) == 3, carrying
+    assert m["events_owned"] == len(carrying) + len(steps), m
 
 
 # ====================================================================== 负控 ① 手改索引
@@ -558,5 +628,9 @@ def test_a_single_agent_run_is_still_read_the_same(tmp_path: pathlib.Path) -> No
                                                 "2026-01-01T00:00:06+00:00"), run
     assert (run["final_chars"], run["summons"], run["messages"], run["elapsed_sec"]) == \
         (6, 1, 0, 2.5), run
-    assert run["events_in_run"] == 6, run
+    assert run["events_span"] == 6, run
+    # 162 ③：这场是单代理、7 条事件全归它 ⇒ `events_owned` 是 7（含开始那一行），
+    # 而 `events_span` 是 6（`end_index - start_index`，数的是跨度）。两个数不一样是
+    # 对的：一个数"这一趟有几条事件"，一个数"这一趟占了几行跨度"。
+    assert run["events_owned"] == 7, run
     assert (run["last_shape"], run["waiting_on"], run["waiting"]) == ("fs.write", [], False), run
