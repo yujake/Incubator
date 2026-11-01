@@ -1225,7 +1225,7 @@ export interface ReadoutProblem {
   detail: string;
 }
 
-/** 出处：errors_readout() 的 data.sources[源] —— 逐源读数（三种源的键不完全相同，所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）。 */
+/** 出处：errors_readout() 的 data.sources[源] —— 逐源读数（各源的键不完全相同，所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）。 */
 export interface ErrorStatsSource {
   checked?: boolean;
   events?: number;
@@ -1236,15 +1236,79 @@ export interface ErrorStatsSource {
   unclassified?: number;
   table?: string;
   reason?: string;
+  state?: string;
+  dir?: string;
+  path?: string;
+  by_user?: number;
+  children_unretired?: number;
+  name_collisions?: number;
+  repaired?: number;
+  collisions?: Record<string, number>;
+  blockers?: ErrorBlocker[];
+  status?: Record<string, string>;
+  machine_pass?: boolean;
+  can_close_reason?: string;
+  source?: string;
+  names?: string[];
 }
 
-/** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。 */
+/** 出处：errors_readout() 的 data.sources.closing.blockers[] —— 收工门的一条 blocker（`closing.check_closing` 的 code / check / level 三格）。 */
+export interface ErrorBlocker {
+  code: string;
+  check: string;
+  level: string;
+}
+
+/** 出处：errors_readout() 的 data.class_state[类目] —— 那一类自己的三态（一个源读不到时只有这一类变 unknown，不许把整页拖成 0）。 */
+export interface ErrorClassState {
+  checked: boolean;
+  state: string;
+  reason: string;
+}
+
+/** 出处：errors_readout() 的 data.classes[].samples[] —— 这一类的一条「去哪看」（`source` 是文件，`ref` 是文件里的记录身份，`ts` 与 `detail` 是定位与那一句原话）。 */
+export interface ErrorSignalSample {
+  role: string;
+  code: string;
+  source: string;
+  ref: string;
+  ts: string;
+  detail: string;
+}
+
+/** 出处：errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）。 */
+export interface ErrorClassRow {
+  category: string;
+  bucket: string;
+  count: number;
+  meaning: string;
+  by_role: Record<string, number>;
+  checked: boolean;
+  state: string;
+  reason: string;
+  first_ts: string;
+  last_ts: string;
+  this_run: number;
+  earlier: number;
+  no_ts: number;
+  samples: ErrorSignalSample[];
+}
+
+/** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，**三组刻意不相加**（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）。 */
 export interface ErrorStatsData {
   by_role: Record<string, Record<string, number>>;
   role_total: Record<string, number>;
   total: number;
   categories: Record<string, number>;
   sources: Record<string, ErrorStatsSource>;
+  system: Record<string, number>;
+  system_total: number;
+  state_readings: Record<string, Record<string, number>>;
+  state_readings_total: number;
+  classes: ErrorClassRow[];
+  class_state: Record<string, ErrorClassState>;
+  samples: Record<string, ErrorSignalSample[]>;
+  run_boundary: string;
 }
 
 /** 出处：GET /api/errors 的整份读数（`readouts.errors_readout()` 逐字）。 */

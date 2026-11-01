@@ -14,12 +14,19 @@
  *   意义正是"什么时候没数据"也要看得见。
  * - 端点本身没成（`face.problem`）：走同一个「读不到」形态，但理由写明是请求没成。
  *
- * ## 屏幕上的三段
+ * ## 屏幕上的四段（2026-11-01 扩面：从两段变四段）
  *
- * 1. 抬头三行：总错误动作 N / 最集中的类目 top3 / 三态（checked、state、逐源读数）；
- * 2. 矩阵：行=角色（`by_role` 的键，按合计降序），列=类目（`categories` 的键），
+ * 1. 抬头四行：角色侧 / 系统侧 / 状态读数（**三个数刻意不相加**）、逐类三态（读到 / 没查成 /
+ *    不适用）、最集中的类目 top3、逐源读数；
+ * 2. **按类**（新）：一行一类，列 = 类目 / 桶 / 条数 / 角色分布 / 这一趟·更早 / 三态；
+ *    点一行展开它的 `samples`（`source · ref · ts` 与那一句原话）——"哪里在漏"由这一段答；
+ * 3. **按角色**：矩阵，行=角色（`by_role` 的键，按合计降序），列=类目（`categories` 的键），
  *    格=计数。全 0 的格灰显（`empty` 那一档配色），非 0 的格加粗；
- * 3. 点某一行 ⇒ 展开该角色的类目明细（计数 + 类目释义那一句）；点某一列 ⇒ 只看这一类。
+ * 4. 点某一列 ⇒ 只看这一类；点某一行 ⇒ 展开该角色的类目明细（计数 + 类目释义那一句）。
+ *
+ * 三态纪律（扩面后更严）：一个源读不到只让**那一类**变 `unknown`，整页不因此变 0；而
+ * "这一类这一趟 0 条"仍然是 `checked` 的绿 —— 这两件事在屏幕上必须长得不一样
+ * （"按类"那一段的三态列就是它）。
  *
  * ## 为什么取数不挂 `useFace`
  *
@@ -30,7 +37,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { api, whyOf } from "../api";
-import type { ErrorCategoryGlossary, RoleErrorsView } from "../types";
+import type {
+  ErrorCategoryGlossary,
+  ErrorClassRow,
+  ErrorSignalSample,
+  RoleErrorsView,
+} from "../types";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 
@@ -65,8 +77,167 @@ export function topCategories(view: RoleErrorsView, limit: number): Array<{ name
     .slice(0, limit);
 }
 
-/** 类目 → 释义（`GET /api/errors/categories` 那一份；没读到就是空表，另有一句话说清）。 */
-function meaningsOf(gloss: ErrorCategoryGlossary | null): Record<string, string> {
+/** 桶的读法（后端 `bucket` 的四个取值）。四种单位不同，页面上必须分开写。 */
+const BUCKETS: Record<string, string> = {
+  error: "角色侧",
+  system: "系统侧",
+  state: "状态读数",
+  process: "过程读数",
+};
+
+/**
+ * "按类"那一段的行：非 0 的要出现；**0 条但没查成的更要出现**。
+ *
+ * 为什么 0 条还要留一行：这一栏回答的是"哪里在漏"，而"这一类这一趟 0 条（绿）"与
+ * "这一类根本没接上（未知）"必须分得开 —— 只留非 0 的话，后者会整行消失，看起来像绿。
+ */
+export function classRows(view: RoleErrorsView): ErrorClassRow[] {
+  return (view.data.classes ?? []).filter(
+    (one) => one.count > 0 || one.state !== "checked",
+  );
+}
+
+/** 逐类三态的合计（页面顶部那一行"X 类读到 / Y 类没查成 / Z 类不适用"）。 */
+export function classTally(view: RoleErrorsView): { checked: number; unknown: number; na: number } {
+  let checked = 0;
+  let unknown = 0;
+  let na = 0;
+  for (const one of view.data.classes ?? []) {
+    if (one.state === "checked") {
+      checked += 1;
+    } else if (one.state === "not_applicable") {
+      na += 1;
+    } else {
+      unknown += 1;
+    }
+  }
+  return { checked, unknown, na };
+}
+
+/** 一条样本的"去哪看"：`source` + `ref`（有 `ts` 就带上）。 */
+export function sampleWhere(one: ErrorSignalSample): string {
+  const where = `${one.source}${one.ref === "" ? "" : ` · ${one.ref}`}`;
+  return one.ts === "" ? where : `${where} · ${one.ts}`;
+}
+
+/** 按类那一行的角色分布：`A 3 · D 12`（没有角色就写清楚，不写空串）。 */
+export function roleSpread(one: ErrorClassRow): string {
+  const parts = Object.keys(one.by_role).map((role) => `${role} ${one.by_role[role]}`);
+  return parts.length === 0 ? "（无角色）" : parts.join(" · ");
+}
+
+/** 一类三态在页面上的说法（三档三句话，不许把 unknown 写成 0）。 */
+function stateWord(one: ErrorClassRow): string {
+  if (one.state === "checked") {
+    return one.count === 0 ? "读到（0 条）" : "读到";
+  }
+  if (one.state === "not_applicable") {
+    return "不适用";
+  }
+  return one.reason === "" ? "没查成" : `没查成：${one.reason}`;
+}
+
+/**
+ * "按类"那一段（2026-11-01 扩面新加的第一段）：一行一类，点开看这一类的 source 明细。
+ *
+ * 为什么这一段排在最前面：业主的原话是"一眼看出系统哪里在漏"，而"按角色"那张矩阵回答的
+ * 是"谁出错了" —— 两种问法。这一段的顺序是**桶 → 条数**（后端 `by_class()` 排好的），
+ * 三种单位不会混在同一个降序里。
+ */
+function ClassTable(props: {
+  view: RoleErrorsView;
+  picked: string;
+  onPick: (category: string) => void;
+}) {
+  const { view, picked, onPick } = props;
+  const [open, setOpen] = useState<string>("");
+  const rows = classRows(view);
+  if (rows.length === 0) {
+    return (
+      <div class="empty">
+        四个桶里一条都没有，而且每一类都是读出来的 0（state=checked）——
+        这不是"没查成"，是"查过了、真的没有"。
+      </div>
+    );
+  }
+  const out = [];
+  for (const one of rows) {
+    const isOpen = open === one.category;
+    const samples = one.samples ?? [];
+    out.push(
+      <tr key={one.category} class={picked === one.category ? "err-picked" : undefined}>
+        <th>
+          <button
+            class="err-pick"
+            type="button"
+            title="点这一类看它的 source 明细"
+            onClick={() => {
+              setOpen(isOpen ? "" : one.category);
+              onPick(one.category);
+            }}
+          >
+            <span class="mono">{one.category}</span>
+          </button>
+        </th>
+        <td class="tri-reason">{BUCKETS[one.bucket] ?? one.bucket}</td>
+        <td class={one.count === 0 ? "mono err-zero" : "mono err-hot"}>{one.count}</td>
+        <td class="tri-reason">{roleSpread(one)}</td>
+        <td class="mono">
+          {one.this_run} / {one.earlier}
+          {one.no_ts > 0 ? `（${one.no_ts} 条没记时间）` : ""}
+        </td>
+        <td class="tri-reason">{stateWord(one)}</td>
+      </tr>,
+    );
+    if (isOpen) {
+      out.push(
+        <tr key={`${one.category}-open`}>
+          <td colSpan={6}>
+            <div class="err-detail">
+              <div class="section-title">{one.category} —— {one.meaning}</div>
+              {one.state !== "checked" ? (
+                <div class="tri-reason">{stateWord(one)}</div>
+              ) : null}
+              {samples.length === 0 ? (
+                <div class="tri-reason">
+                  这一类没有留样的明细（0 条，或者样本是为 0 的旧读数）。
+                </div>
+              ) : (
+                <ul class="list">
+                  {samples.map((s) => (
+                    <li key={`${s.source}|${s.ref}|${s.ts}|${s.code}`}>
+                      <span class="mono">{sampleWhere(s)}</span>
+                      <span class="tri-reason"> — {s.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </td>
+        </tr>,
+      );
+    }
+  }
+  return (
+    <div class="err-scroll">
+      <table class="grid err-matrix">
+        <thead>
+          <tr>
+            <th>类目</th>
+            <th>桶</th>
+            <th>条数</th>
+            <th>角色</th>
+            <th>这一趟 / 更早</th>
+            <th>三态</th>
+          </tr>
+        </thead>
+        <tbody>{out}</tbody>
+      </table>
+    </div>
+  );
+}
+
+/** 类目 → 释义（`GET /api/errors/categories` 那一份；没读到就是空表，另有一句话说清）。 */function meaningsOf(gloss: ErrorCategoryGlossary | null): Record<string, string> {
   const out: Record<string, string> = {};
   for (const one of gloss === null ? [] : gloss.categories) {
     out[one.name] = one.meaning;
@@ -249,6 +420,8 @@ export function RoleErrors() {
     : [onlyCategory];
   const rows = matrixRows(view);
   const top = topCategories(view, TOP_LIMIT);
+  const tally = classTally(view);
+  const boundary = view.data.run_boundary ?? "";
   const meanings = meaningsOf(gloss);
   const events = view.data.sources.events ?? {};
   const sessions = view.data.sources.sessions ?? {};
@@ -269,11 +442,27 @@ export function RoleErrors() {
       }
     >
       <div class="readings">
-        总错误动作 <b class="mono">{view.data.total}</b>
+        角色侧 <b class="mono">{view.data.total}</b>
+        <span class="tri-reason"> · </span>
+        系统侧 <b class="mono">{view.data.system_total}</b>
+        <span class="tri-reason"> · </span>
+        状态读数 <b class="mono">{view.data.state_readings_total}</b>
         <span class="tri-reason">
           {" "}
-          · {rows.length} 个角色有记录 · 读数时间 {readAt === "" ? "（未记）" : readAt}
+          · 三个数刻意不相加：三种单位（谁做错了 / 系统哪里坏了 / 现在积着什么）·
+          {" "}
+          {rows.length} 个角色有记录 · 读数时间 {readAt === "" ? "（未记）" : readAt}
           （盘上一变就要重新读）
+        </span>
+      </div>
+      <div class="readings">
+        逐类三态：
+        <span class="mono">
+          15 类里读到 {tally.checked} / 没查成 {tally.unknown} / 不适用 {tally.na}
+        </span>
+        <span class="tri-reason">
+          {" "}
+          · 没查成的那几类不是 0：它们的数没算出来，页面上要点开看理由
         </span>
       </div>
       <div class="readings">
@@ -297,7 +486,7 @@ export function RoleErrors() {
           {" "}
           · 事件流 {events.events ?? 0} 条（{events.bad_lines ?? 0} 行读不明白） / 会话记录{" "}
           {sessions.records ?? 0} 条（{sessions.files ?? 0} 个文件，{sessions.bad_lines ?? 0}{" "}
-          行读不明白）· 口径在 errorstats（角色归属 / 一条记录只算一次 / 主码）
+          行读不明白）· 口径在 errorstats（六档归属 / 一条记录只算一次 / 主码 + 结构化类目）
         </span>
       </div>
       {view.problems.length === 0 ? null : (
@@ -310,6 +499,22 @@ export function RoleErrors() {
         </ul>
       )}
 
+      <div class="section-title">按类（哪里在漏：点一行看它的 source）</div>
+      <div class="tri-reason">
+        {" "}
+        「这一趟 / 更早」的边界 = 最后一处 `agent_run_start` 的 ts
+        {boundary === "" ? "（这一次没读到边界 ⇒ 全部记在'更早'，不假分趟）" : `（${boundary}）`}
+        。状态读数是快照，会随 ack 回落；它与角色侧、系统侧的单位不同。
+      </div>
+      <ClassTable
+        view={view}
+        picked={onlyCategory}
+        onPick={(category) => {
+          setOnlyCategory(onlyCategory === category ? "" : category);
+        }}
+      />
+
+      <div class="section-title">按角色（谁出错了）</div>
       {rows.length === 0 ? (
         <div class="empty">
           全 0：这个工作区里没有任何角色留下错误动作（已读出，checked=true）。

@@ -249,8 +249,8 @@ def test_d_the_matrix_is_rendered_from_by_role(tmp_path: pathlib.Path) -> None:
     # 行与列都要先过那个"排序/取键"的函数，页面里不许各自再算一遍
     assert "matrixRows(view)" in text, "矩阵的行没有走 matrixRows(view)"
     assert "matrixColumns(view)" in text, "矩阵的列没有走 matrixColumns(view)"
-    # 抬头三行：总错误动作 / 最集中的类目 / 三态
-    for word in ("总错误动作", "最集中的类目", "三态"):
+    # 抬头几行：角色侧 / 系统侧 / 状态读数（三行数，不许相加） / 最集中的类目 / 三态
+    for word in ("角色侧", "系统侧", "状态读数", "最集中的类目", "三态"):
         assert word in text, f"抬头少了那一行：{word}"
     # 点一行展开明细、点一列过滤（两个回调都在源码里）
     assert "setOpenRole(" in text, "点某一行没有展开明细"
@@ -315,12 +315,22 @@ def _component_text() -> str:
 
 
 def _head_total_problems(text: str) -> list[str]:
-    """抬头那一行是不是把 `data.total` 印出来（空 = 合格）。"""
-    if "总错误动作" not in text:
-        return ["抬头没有『总错误动作』这一行"]
-    if not re.search(r"总错误动作[\s\S]{0,60}\{[^}]*view\.data\.total[^}]*\}", text):
-        return ["抬头那一行印的不是 data.total（它得是后端给的那个数）"]
-    return []
+    """抬头那一行是不是把三个数都印出来、各来自各的格（空 = 合格）。
+
+    2026-11-01 扩面：抬头从"总错误动作 N"变成"角色侧 / 系统侧 / 状态读数"三个数并排。
+    三个数刻意不相加（三种单位），所以这一条逐个数核来源，不做"加起来对不对"那种核法。
+    """
+    problems: list[str] = []
+    if "角色侧" not in text:
+        problems.append("抬头没有『角色侧』那个数（扩面后它叫角色侧，与系统侧/状态读数并排）")
+    if not re.search(r"角色侧[\s\S]{0,40}\{[^}]*view\.data\.total[^}]*\}", text):
+        problems.append("抬头『角色侧』那个数印的不是 data.total（它得是后端给的那个数）")
+    if not re.search(r"系统侧[\s\S]{0,40}\{[^}]*view\.data\.system_total[^}]*\}", text):
+        problems.append("抬头『系统侧』那个数印的不是 data.system_total")
+    if not re.search(r"状态读数[\s\S]{0,40}\{[^}]*view\.data\.state_readings_total[^}]*\}",
+                     text):
+        problems.append("抬头『状态读数』那个数印的不是 data.state_readings_total")
+    return problems
 
 
 def _unknown_band_problems(text: str) -> list[str]:
