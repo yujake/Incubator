@@ -877,6 +877,11 @@ class AgentV:
         #: verdict（V 自己的结论不是成立）/ gate（结论成立、但这一行自己签不住：
         #: 引用核实挡签或还有未解决的 error）/ unjudged（秘书这一问没查成）/
         #: ledger（台账那一行没落地）。
+        #:
+        #: 判的次序（2026-11-01 修，`draft/165` 取证 D）：结局（fault / verdict）→
+        #: 签不签得动（gate）→ 签上了没有（signed）→ 没查成（unjudged）；台账那一档最先判。
+        #: 别把 gate 移回 verdict 之前：`row_signable` 蕴含"结论成立"，移回去就会再把
+        #: "有毛病"吞成"成立但签不住"（`tests/test_v_terminal_says_what_happened.py` 的 s3c 钉着）。
         stopped = ""
         stop_why = ""
         for pass_no in range(1, need + 1):
@@ -930,28 +935,25 @@ class AgentV:
                 passes[-1]["terminal"] = stopped
                 stop_why = "台账那一行没落地（必须重签）"
                 break
-            if not VR.row_signable(once["row"]):
-                # ---- 结论写「成立」，但这一行自己签不住（引用核实挡签 / 未解决的 error）----
-                #
-                # 2026-11-01 的两态裁定把这个终局露了出来：改前"引用判不了"被改判成第三态
-                # `看不出来`，于是循环按"V 的结论不是成立"那一支停；现在结论仍是 `成立`
-                # （它没找到缺陷），挡住这一签的是引用闸，而循环此前不读它 ⇒ 三转跑完既没签、
-                # 也没打回，收尾报一条假的 `internal_inconsistency`。这一支补上那个终局：
-                # 立刻停，由正常收尾路径如实报"结论成立、但这一签没落地，为什么"。
-                stopped = "gate"
-                passes[-1]["terminal"] = stopped
-                stop_why = ("这一签的结论是「成立」，但它自己签不住"
-                            f"（{VR.signing_gate_problem(once['row']) or '引用核实挡签'}"
-                            f"；未解决 error {int(once['row'].get('unresolved_errors') or 0)} 条）"
-                            "⇒ 不签第 3 位；连判到此为止（这不是有毛病，也不是没查成）")
-                break
-            if bool(once["issuance"].get("issue")):
-                stopped = "signed"
-                passes[-1]["terminal"] = stopped
-                stop_why = ("签上了" if once["issuance"].get("issued")
-                            else "秘书判了签发，但翻位没落成（落地是秘书的事）")
-                break
             axis = str(once["judgment"].get("axis") or "")
+            # ---- 先判结局（有毛病），再判"这一签签不签得动"，最后判"签上了没有" ----
+            #
+            # 这个次序是 2026-11-01 修的（`draft/165` 取证 D 的那个谎）：这一段原本把
+            # `if not VR.row_signable(...)` 排在 verdict 支之前，而 `row_signable` 的第一句
+            # 就是 `read_verdict(row) != "成立" ⇒ False` —— 于是"V 自己判了有毛病"的行必然
+            # 先在 gate 断掉，于是 `terminal="verdict"` 从 `d839936b`（2026-10-30）起再也走
+            # 不到（死档），81 的 8 行（8/8 有毛病）全被标成"成立但签不住"。
+            #
+            # 三条必须同时成立（`tests/test_v_terminal_says_what_happened.py` 的 s3c 用 AST
+            # 钉住，别只信这段注释）：
+            #   ① verdict 在 fault 之前：V 自己判过的缺陷不许被秘书那一档改写；
+            #   ② gate 在 fault 之后：gate 只吃"结论成立、但这一行自己签不住"的行；
+            #   ③ gate 在 signed 之前：否则（结论成立、引用挡签、而秘书已经判了签发）会被
+            #      报成"签上了" —— 位根本没翻，那是新的谎。
+            #
+            # 重排不改变任何签发判定：签发在 `_review_pass` 里已经做完（落台账、问秘书、
+            # 翻位都在那儿），这一段只写三个局部量然后 break；六个条件都是同一转的内生量、
+            # 彼此无副作用 ⇒ 停在第几转、问了模型几次、每一转的 issuance 逐字不变。
             if VR.read_verdict(once["row"]) != "成立":
                 # V 自己的结论不是「成立」⇒ 本身就是一条打回，不依赖秘书那一问。
                 # 它排在"秘书没查成"之前：V 已经判过的缺陷不许被改记成"没查成"。
@@ -966,6 +968,32 @@ class AgentV:
                 stopped = "fault"
                 passes[-1]["terminal"] = stopped
                 stop_why = "秘书判 fault（有毛病）：这一转就是终局，立刻打回 F"
+                break
+            if not VR.row_signable(once["row"]):
+                # ---- 结论写「成立」，但这一行自己签不住（引用核实挡签 / 未解决的 error）----
+                #
+                # 2026-11-01 的两态裁定把这个终局露了出来：改前"引用判不了"被改判成第三态
+                # `看不出来`，于是循环按"V 的结论不是成立"那一支停；两态之后结论仍是 `成立`
+                # （它没找到缺陷），挡住这一签的是引用闸，而循环此前不读它 ⇒ 三转跑完既没签、
+                # 也没打回，收尾报一条假的 `internal_inconsistency`。这一支补上那个终局：
+                # 立刻停，由正常收尾路径如实报"结论成立、但这一签没落地，为什么"。
+                #
+                # 它只接"结论成立"的行（上面两支已经把"有毛病"接走了）⇒ 下面这句
+                # "结论是「成立」"是这一支自己的前提，不是替别人写的。原来那句
+                # "也不是没查成"删掉了：秘书这一问没查成与"签不住"可以同时成立，
+                # 那句话会对读者撒谎；"没查成"由 `secretary_judge.checked` 自己说。
+                stopped = "gate"
+                passes[-1]["terminal"] = stopped
+                stop_why = ("这一签的结论是「成立」，但它自己签不住"
+                            f"（{VR.signing_gate_problem(once['row']) or '引用核实挡签'}"
+                            f"；未解决 error {int(once['row'].get('unresolved_errors') or 0)} 条）"
+                            "⇒ 不签第 3 位；连判到此为止（这不是有毛病）")
+                break
+            if bool(once["issuance"].get("issue")):
+                stopped = "signed"
+                passes[-1]["terminal"] = stopped
+                stop_why = ("签上了" if once["issuance"].get("issued")
+                            else "秘书判了签发，但翻位没落成（落地是秘书的事）")
                 break
             if not bool(once["judgment"].get("checked")):
                 # 秘书这一问没查成（没缝 / 没答上来 / 词表外）：那不是判定，更不是"有毛病"。
