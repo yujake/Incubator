@@ -2406,6 +2406,12 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-11-01（业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：
+    # 论文正文的机械扫描（七类 kinds 的唯一实现，`review.scan` 的读数全从这里出）。
+    # 为什么必须是顶层模块而不是塞进 `tools/`：它要能被测试当纯函数直接调
+    # （`tests/test_texaudit.py` 35 条判据一条都不碰工具层），而 `tools/` 下的模块
+    # 装配期就要 store / 工作区根；它一个都不需要，只读文件。
+    "texaudit.py": "论文正文机械扫描：scan_tex（七类 kinds）/ SCAN_KINDS / REF_COMMANDS / CITE_COMMANDS —— H 的统一入口 review.scan 背后的唯一实现，纯函数、不碰 store、不写盘",
     # 2026-10-24（p200 那一批的登记缺口，D-53 跑 `-k registry` 时按判据补登）：
     # 父子链的只读追踪侧（一层工具 `trace.children` 与全树工具 `conductor.watch`
     # 共用的读数实现）。它不注册工具、不写盘，但确实是一个顶层模块；

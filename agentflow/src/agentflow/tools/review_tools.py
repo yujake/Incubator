@@ -2587,9 +2587,12 @@ def _review_scan_text_integrity_tool(root, paths, limit=None):
 #:
 #: 为什么把"契约"与"接线"分成两步：工具声明的 `kinds` 枚举是契约（一次写完，不再动
 #: 工具面），而"现在真的能跑哪几类"是接线。分开之后，块 2 只改这一个元组 ——
-#: `tests/golden/tool_surface_snapshot.json` 一个字节都不用再重冻（重冻一次就是一轮
+#: `tests/golden/tool_surface_snapshot.json` 一个字节都没有重冻（重冻一次就是一轮
 #: 两人复核）。不在这个元组里的类会如实进 `bad[]`（"还没接线"），不是悄悄跳过。
-_WIRED_KINDS: tuple[str, ...] = ("text_integrity",)
+#:
+#: 2026-11-01（块 2）：七类全部接上。判据 `tests/test_h_scan_covers_seven_kinds.py`
+#: 钉住"接线面 == 契约面"，并把七类各自跑一遍（每类都有一条该报的、也都有一条干净的）。
+_WIRED_KINDS: tuple[str, ...] = TEX.SCAN_KINDS
 
 
 @tool(
