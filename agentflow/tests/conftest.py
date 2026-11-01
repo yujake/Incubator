@@ -713,6 +713,23 @@ def _write_path_hook_state() -> dict:
 #: 还没有任何测试模块 —— 测试模块是 pytest 收集阶段才导入的，晚于本文件。
 _WRITE_PATH_HOOK_BASELINE.update(_write_path_hook_state())
 
+#: 时钟单例的会话基线（`R3-10` 的 chunk-1 顺序依赖）：`clock.use(...)` 是进程级替换，
+#: 用例写完不还原，下一条判据里的 `store._atomic_write` 退避（走 `CLK.await_io`）就会
+#: 在假时钟下立即返回 —— 2026-11-01 实测 `test_clock_governs_all_timed_work.py` 的
+#: `test_e2` 留下假时钟后，`test_store_r3_commit_order.py` 的 0.62s 退避被压成 0.000s
+#: （全量红、单跑 12 passed）。与钩子基线同一条纪律：拍摄在导入期，逐条判据开始与
+#: 收尾都装回。判据见 `tests/test_the_clock_state_does_not_leak_between_tests.py`。
+from agentflow import clock as _CLK
+
+_CLOCK_BASELINE = _CLK.RealClock()
+_CLOCK_BASELINE_START = _CLOCK_BASELINE.read()
+
+
+def _apply_clock_baseline() -> None:
+    """把时钟单例装回会话基线（真时钟 + 进程启动读数）；不碰计时器簿记。"""
+    _CLK.use(_CLOCK_BASELINE)
+    _CLK._PROCESS_START = _CLOCK_BASELINE_START
+
 
 def _apply_write_path_hook_state(saved: dict) -> None:
     """把上面那一份状态原样装回去（`_ATTACHED` / `_PREV` 原地清空再填，保持同一对象）。"""
@@ -758,8 +775,10 @@ def _write_path_hooks_baseline():
     而后者才是隔离。会话基线是那个起点。
     """
     _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
+    _apply_clock_baseline()
     yield
     _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
+    _apply_clock_baseline()
 
 
 @pytest.fixture
@@ -812,9 +831,19 @@ def _restore_write_path_hooks():
     _foreign_hooks.py` 就是只 `begin_serving()` 不 `close_all()`）⇒ 下一条判据的
     `serve()` 静默地一个钩子都不接，`test_closing_the_server_releases_the_hooks.py`
     红在 `assert _attached()`（单跑绿、串跑红，2026-11-03 同一次定位）。
+
+    ## 时钟单例也在这里还原（`R3-10` 的 chunk-1 顺序依赖）
+
+    `test_clock_governs_all_timed_work.py` 的 `test_e2` 会 `C.use(fake)` 而不收尾；
+    同一进程后跑的 `test_store_r3_commit_order.py` 的退避走 `CLK.await_io`，假时钟下
+    0.62s 被压成 0.000s（2026-11-01 实测，单跑 12 passed）。逐条还原面在 setup 与收尾
+    各把 `clock` 单例装回会话基线 —— 不碰计时器簿记（`_BOOKS` 归各自的夹具管）。
+    判据见 `tests/test_the_clock_state_does_not_leak_between_tests.py`。
     """
+    _apply_clock_baseline()
     yield
     _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
+    _apply_clock_baseline()
 
 
 @pytest.fixture
