@@ -1017,22 +1017,41 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     2. 签文件里的 `streak >= need`（门槛在签文件里也留着，读侧再判一次）；
     3. 给了 `statement_id` 时，签文件里的 `statement_id` 必须与它相同 ——
        「同一段正文被另一条命题复用不算签过」（那是借光，`#p2` 不许借 `#p1` 的老纪律）。
-       `statement_id` 为空（B 正在新建一条还没有号的命题）⇒ 不认（那一条不可能有签）。
-    """
-    from . import verifications as _VR
 
+    ## `statement_id` 为空 = 正在新建一条命题（2026-11-02 改）
+    改前这一档直接放弃认签（"新建的那一条不可能已经签过"），于是「先有签、后登记」
+    永远认不到：V 在命题还没在册时审的那一签落在 `verifications/pending/<sha>.jsonl`
+    （D-34 的落点），而 B 一登记就把它漏掉 —— 同一份正文，先签后登记与先登记后签
+    成了两件事。同一条纪律在 `AgentB._v_signature_for` 里早就按正文 sha 去 pending
+    认领了，两处必须同一把尺。
+
+    所以空号这一档改走 pending 认领（:func:`_claim_pending_sign`）：按
+    「正文 sha + 未在册」认一签，判据与 V 那条 pending 台账同一把尺
+    （`verifications.row_signable`）。认领之后回写 `statement_id`（登记拿到号之后由
+    `register_statement` 调 :func:`bind_pending_claim`）—— 那就是"同一份正文只认领一次"
+    的锁：第二笔同文登记看到台账行已经绑了号，就不再认。
+
+    ## 返回的 `claim`（只在 pending 认领这一档出现）
+    `{ledger, verification_id, proof_sha256, object_sha256, bound_id, bound}`：
+    `bound_id` 非空 = 这一签早被别的命题认过（`bound=True`，这一笔不认）；
+    空 = 这一笔刚认下、等登记回写。老返回形状不变（`claim` 只在 pending 这一档出现）。
+    """
     out: dict[str, Any] = {"checked": False, "found": False, "applied": False,
                            "artifact_sha": "", "why": ""}
-    if not str(proof_text or "").strip() or not str(statement_id or "").strip():
+    if not str(proof_text or "").strip():
         out["checked"] = True
-        out["why"] = ("没有正文 / 这一条命题还没有号 ⇒ 认不了签"
-                      "（新建的那一条不可能已经签过）")
+        out["why"] = "没有正文 ⇒ 认不了签（签是盖在正文上的，签不了空串）"
         return dict(bits), out
+    from . import verifications as _VR
+
+    sha = _VR.proof_sha(str(proof_text))
+    if not str(statement_id or "").strip():
+        return _claim_pending_sign(bits, root=root, sha=sha, proof_no=proof_no,
+                                   kind=kind, out=out)
     try:
         no = int(_VR.as_proof_no(proof_no) or 1)
     except (TypeError, ValueError):
         no = 1
-    sha = _VR.proof_sha(str(proof_text))
     got = sign_of(root, sha)
     out.update(checked=bool(got.get("checked")), found=bool(got.get("found")),
                artifact_sha=sha, why=str(got.get("why") or ""))
@@ -1049,37 +1068,208 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
         return dict(bits), out
     passes = [dict(p) for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
     last = passes[-1] if passes else {}
+    new = _apply_review_to_bits(
+        bits, verification_id=str(last.get("verification_id") or ""),
+        evidence=str(sign.get("ledger") or ""), findings=[],
+        verdict="成立", proof_no=no, sha=sha, kind=str(kind or ""))
+    out["applied"] = True
+    out["why"] = (f"这一份正文有签（连续 {sign.get('streak')}/{sign.get('need')} 次成立，"
+                  f"签于 {str(sign.get('at') or '')}）⇒ 第 3 位按签写")
+    return new, out
+
+
+def _apply_review_to_bits(bits: Mapping[str, Any], *, verification_id: str,
+                          evidence: str, findings: Sequence[Mapping[str, Any]],
+                          verdict: str, proof_no: int, sha: str,
+                          kind: str) -> dict[str, Any]:
+    """把"这一份正文审过了"写进五元位第 3 位（两个来源共用这一份实现：签文件 / pending）。
+
+    为什么不各写一遍：签文件与 pending 台账是同一件事的两个落点（业主 2026-10-27
+    收口的那条纪律："同一份证据、两个落点、同一套判定"）。各写一遍，两边的
+    `reviewed_by` / 逐条表形状迟早分家 —— 读侧（`evidencebits` / 收工门 R10）
+    读到的就会是两套东西。
+    """
     from . import evidencebits as _EBmod
 
     new = dict(bits)
     ev = dict(new.get("evidence") or {})
     ev["reviewed_by"] = {
         "verifier": "V",
-        "verification_id": str(last.get("verification_id") or ""),
+        "verification_id": str(verification_id or ""),
         "round": None,
-        "verdict": "成立",
-        "evidence": str(sign.get("ledger") or ""),
-        "findings": [],
-        "proof_no": no,
-        "proof_sha256": sha,
+        "verdict": str(verdict or "成立"),
+        "evidence": str(evidence or ""),
+        "findings": [dict(f) for f in (findings or ()) if isinstance(f, Mapping)],
+        "proof_no": int(proof_no),
+        "proof_sha256": str(sha or ""),
     }
     # 逐条表整表写（与 `_reviewed_statement_row` 同一个形状：`#p2` 不许借 `#p1` 的光）。
     per = {str(n): bool(v) for n, v in
            (_EBmod.reviewed_by_proof(dict(bits)) or {}).items()}
-    per[str(no)] = True
+    per[str(int(proof_no))] = True
     ev[_EBmod.REVIEWED_BY_PROOF_KEY] = per
     sha_by = {str(n): str(v) for n, v in
               (_EBmod.reviewed_sha_by_proof(dict(bits)) or {}).items()}
-    sha_by[str(no)] = sha
+    sha_by[str(int(proof_no))] = str(sha or "")
     ev[_EBmod.REVIEWED_SHA_BY_PROOF_KEY] = sha_by
     new["reviewed"] = True
     new["evidence"] = ev
-    new = _EBmod.normalize_raw(new, origin=str(new.get("origin") or "own_result"),
-                               kind=str(kind or ""))
+    return _EBmod.normalize_raw(new, origin=str(new.get("origin") or "own_result"),
+                                kind=str(kind or ""))
+
+
+def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
+                        proof_no: Any, kind: str,
+                        out: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """`statement_id` 为空（正在新建命题）时，按正文 sha 去 pending 台账认那一签。
+
+    判据与 V 那条 pending 台账同一把尺（`verifications.row_signable`：结论「成立」、
+    没有未解决的 error、引用核实不挡；连续次数这一档在 pending 这条路上结构上不存在，
+    理由见 `verifications._gap_from_pending`）。四个结局都写进 `out["why"]`，拒绝折平。
+    """
+    from . import verifications as _VR
+
+    out["artifact_sha"] = str(sha or "")
+    try:
+        got = _VR.pending_sign(root, proof_shas=(str(sha or ""),))
+    except Exception as exc:  # noqa: BLE001 —— pending 读不动 ⇒ 没查成，不是"没有签"
+        out.update(checked=False,
+                   why=(f"`verifications/{_VR.PENDING_DIR_NAME}/` 读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 认签这一格没查成（不是「没有签」）"))
+        return dict(bits), out
+    out["checked"] = True
+    if not got.get("found"):
+        out["why"] = (f"`verifications/{_VR.PENDING_DIR_NAME}/` 里没有盖住这一份正文的签"
+                      "（它是新建的，V 也没在它登记之前审过）⇒ 第 3 位保持假")
+        return dict(bits), out
+    row = dict(got.get("row") or {})
+    out["found"] = True
+    ledger = str(got.get("ledger") or "")
+    claim = {"ledger": ledger,
+             "verification_id": str(ledger).split("#")[-1],
+             "proof_sha256": str(got.get("proof_sha256") or sha or ""),
+             "object_sha256": str(got.get("object_sha256") or ""),
+             "bound_id": "", "bound": False}
+    bound = str(row.get("stmt_id") or row.get("statement_id") or "")
+    if bound:
+        claim.update(bound_id=bound, bound=True)
+        out["claim"] = claim
+        out["why"] = (f"{ledger} 这一签已经认给 stmt:{bound} ⇒ 不再认领"
+                      "（同一份正文只认领一次；改稿请重签，登记不产生第二份签）")
+        return dict(bits), out
+    if not _VR.row_signable(row):
+        out["why"] = ("命题还没在册时 V 审过这一份，但那一签签不住"
+                      f"（结论 {_VR.read_verdict(row)!r}、未解决 error "
+                      f"{int(row.get('unresolved_errors') or 0)} 条、引用核实那一格见台账）"
+                      " ⇒ 不认（与 V 那条 pending 台账同一把尺：签不住的不许签第 3 位）")
+        return dict(bits), out
+    try:
+        no = int(_VR.as_proof_no(proof_no) or 1)
+    except (TypeError, ValueError):
+        no = 1
+    new = _apply_review_to_bits(
+        bits, verification_id=claim["verification_id"], evidence=ledger,
+        findings=list(row.get("findings") or ()),
+        verdict=_VR.read_verdict(row), proof_no=no,
+        sha=str(row.get("proof_sha256") or sha or ""), kind=str(kind or ""))
+    out["claim"] = claim
     out["applied"] = True
-    out["why"] = (f"这一份正文有签（连续 {sign.get('streak')}/{sign.get('need')} 次成立，"
-                  f"签于 {str(sign.get('at') or '')}）⇒ 第 3 位按签写")
+    out["why"] = (f"{ledger} 是命题还没在册时 V 审的那一签"
+                  f"（verdict={got.get('verdict')!r}）⇒ 按这一份正文的 sha 认领、"
+                  "第 3 位按签写；登记拿到号之后回写 statement_id（同一份正文只认领一次）")
     return new, out
+
+
+def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
+                       statement_id: str) -> dict[str, Any]:
+    """登记拿到号之后，把这一签认领在 pending 台账行上（回写 `statement_id`）。
+
+    为什么必须回写：`bits_after_sign` 在"新建命题"那一档只能按正文 sha 认签
+    （那时还没有号），若不在台账行上留下"这一签认给谁了"，同一份正文被登记两次就会
+    认领两次 —— 而两笔的 `statement_id` 不同，同一份签会同时被记在两条命题名下
+    （`#p2` 不许借 `#p1` 的光，反方向同理）。
+
+    ## 写什么
+    只改那一行（按 `verification_id` 定位）：`statement_id` / `stmt_id` 两键同值
+    （与 `record_verification` 同一个双写口径），另加 `claimed_at`（什么时候认的）。
+    已经绑了别的号 ⇒ 一个字节都不写，返回 `bound_elsewhere`（不覆盖前一笔的认领）。
+
+    ## 怎么写的（全仓唯一一处写 pending 台账）
+    pending 台账是 append-only 的（`verifications.record_pending_sign` 追加）；
+    这一格是唯一的"回写"——只重写那一行，其余行逐字节原样
+    （`splitlines(keepends=True)` 保住行尾），写临时文件再 `replace`（与
+    `_write_atomic` 同一手法）。三态：`checked=False` = 没写成（读不出来 / 行不见了 /
+    写盘失败），不许折成"已经绑了"。
+    """
+    out: dict[str, Any] = {"checked": False, "bound": False, "already": False,
+                           "statement_id": str(statement_id or ""), "ledger": "",
+                           "why": ""}
+    sid = str(statement_id or "").strip()
+    ledger = str((claim or {}).get("ledger") or "")
+    out["ledger"] = ledger
+    if not ledger:
+        out["why"] = "没有台账落点 ⇒ 没写成（不是「已经绑了」）"
+        return out
+    if not sid:
+        out["why"] = "没有命题号 ⇒ 不猜（这一行仍然算未认领）"
+        return out
+    rel = ledger.split("#", 1)[0].replace("\\", "/")
+    vid = str((claim or {}).get("verification_id") or "").split("#")[-1]
+    path = Path(str(root or "")) / rel
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        out["why"] = f"pending 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没写成"
+        return out
+    lines = raw.splitlines(keepends=True)
+    hit = -1
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if str(row.get("verification_id") or "") != vid:
+            continue
+        hit = i
+        current = str(row.get("stmt_id") or row.get("statement_id") or "")
+        if current and current != sid:
+            out.update(checked=True, bound_elsewhere=current,
+                       why=(f"这一签已经认给 stmt:{current} ⇒ 不覆盖"
+                            "（同一份正文只认领一次）"))
+            return out
+        if current == sid:
+            out.update(checked=True, already=True, bound=True,
+                       why=f"这一签早就认给 stmt:{sid}（幂等：一个字节都没写）")
+            return out
+        row["statement_id"] = sid
+        row["stmt_id"] = sid
+        row["claimed_at"] = _now_iso()
+        lines[i] = json.dumps(row, ensure_ascii=False) + "\n"
+        break
+    if hit < 0:
+        out["why"] = (f"`{rel}` 里没有 {vid or '（没有号）'} 那一行 ⇒ 没写成"
+                      "（不是「已经绑了」）")
+        return out
+    tmp = path.with_name(path.name + ".claim.tmp")
+    try:
+        tmp.write_text("".join(lines), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        out["why"] = f"回写 pending 台账没成（{type(exc).__name__}: {exc}）⇒ 没绑上"
+        return out
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass  # 清临时文件失败不许带走"已经写成了"这件事（残留的 .claim.tmp 只是多一个文件）
+    out.update(checked=True, bound=True,
+               why=(f"这一签认给 stmt:{sid}：pending 台账行回写了 statement_id"
+                    "（同一份正文只认领一次）"))
+    return out
+
 
 
 def _now_iso() -> str:

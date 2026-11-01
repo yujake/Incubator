@@ -2069,6 +2069,31 @@ class _RegisterStatement:
         if attach.get("written"):
             data = next((dict(r) for r in self.store.rows("statements")
                          if str(r.get("stmt_id") or "") == stmt_id), data)
+        # ---- 2026-11-02（②）：「先有签、后登记」认到的那一签，拿到号之后回写台账行。
+        #
+        # 为什么落在这里：`vsigns.bits_after_sign` 在"新建"这一档只能按正文 sha 认签
+        # （号是秘书在事务里现发的，此刻还没有），所以它交回来的 `claim` 里没有号。
+        # 不回写的话，同一份正文登记两次就会认领两次 —— 两笔的 `statement_id` 不同，同一份
+        # pending 签会同时被记在两条命题名下（`#p2` 不许借 `#p1` 的光，反方向同理）。
+        # 回写的判据只有一处（`vsigns.bind_pending_claim`），这里只负责在"号有了、而且
+        # 这一版 bits 真的跟着这一行落盘（`bits.reviewed` 为真）"时调它：dup / merge 那几支
+        # 的 bits 不一定写进盘上那一行（`_attach_proofs` 只在 canonical 被覆盖时合并 bits），
+        # 没落盘却回写 = 白占掉一份别人还能用的签。
+        if dict(v_sign.get("claim") or {}) and bool(dict(data.get("bits") or {}).get("reviewed")):
+            from agentflow import vsigns as _VS
+
+            claim_now = dict(v_sign.get("claim") or {})
+            bound = _VS.bind_pending_claim(getattr(self.store, "root", ""),
+                                           claim=claim_now, statement_id=stmt_id)
+            claim_now.update(bound=bool(bound.get("bound")),
+                             bound_id=(stmt_id if bound.get("bound")
+                                       else str(bound.get("bound_elsewhere") or "")),
+                             bind=bound)
+            v_sign = {**dict(v_sign), "claim": claim_now}
+            if bound.get("bound"):
+                v_sign["why"] = (str(v_sign.get("why") or "")
+                                 + "；并已把 statement_id 回写到 pending 台账行"
+                                   "（同一份正文只认领一次）")
         #: 刚挂上去的那几份证明（#p2 及以后）的依赖面：秘书那一条正路只扫 `proof_text`
         #: （#p1），这里把它补上 —— 一行都没有补的时候返回空字典（老返回值逐字不变）。
         proof_deps = self._write_attached_proof_deps(sec, stmt_id, proofs_listed, attach)
@@ -2122,6 +2147,9 @@ class _RegisterStatement:
                 #: （改前这件事只活在 `deps_written=0` 里，没有任何一格会因此变红 ——
                 #: 真机 sylow3 七条命题、依赖全表 0 行，就是静默过去的）。
                 "deps_missing": _deps_reading(written),
+                #: 认签读数（只在真认到一签时出现：新建那一档的老返回形状逐字不变）：
+                #: 键与另外三条"没有新建行"的出口同名（`v_sign`），三态都在读数里。
+                **({"v_sign": dict(v_sign)} if v_sign.get("found") else {}),
                 #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
