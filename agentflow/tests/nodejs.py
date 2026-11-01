@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`node` + `ui/node_modules/typescript` 的共用帮手（**唯一一份**）。
+"""`node` + `ui/node_modules/typescript` 的共用帮手（唯一一份）。
 
 ## 为什么有它
 
@@ -13,7 +13,7 @@ skip 的条件、transpile 的编译选项、以及下面那条编码坑，任�
 
 1. 没装 node ⇒ `skip`，reason 写明「记 unknown（不记 pass）」；
 2. 前端依赖没装（`ui/node_modules/typescript` 不在）⇒ `skip`，reason 同上；
-3. 转译 / 跑不起来 ⇒ **断言红**（那是判据自己的装置坏了，不是环境）。
+3. 转译 / 跑不起来 ⇒ 断言红（那是判据自己的装置坏了，不是环境）。
 
 `skip` 也是一条读数：pytest 的汇总行把它记成 `skipped`（`-rs` 还带 reason），
 所以「没查成」不会被读成「通过了」。

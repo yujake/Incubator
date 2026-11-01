@@ -22,7 +22,7 @@
 | ① 列名写清它是什么 | `Live.tsx` 里那一列的表头逐字是 `宿主进程 pid`，且有一句说明 |
 | ② 说明里写出"共用"这件事 | 表头上方那句必须同时出现"宿主进程"与"共用"（否则"宿主进程"三个字也是黑话） |
 | ③ 反真空：改回旧文案 ⇒ 红 | 把列名换回 `pid` / 把说明删掉，同一个检查函数必须报出来 |
-| ④ 那一格**真印出这一行的 pid** | 把那一列的 render **真跑一遍**（node 里喂两行不同 pid + 三行没有 pid）：两行印出两个不同的号；缺 pid 时印 `unknown` / `—`（三态），不是字面量 `undefined` |
+| ④ 那一格真印出这一行的 pid | 把那一列的 render 真跑一遍（node 里喂两行不同 pid + 三行没有 pid）：两行印出两个不同的号；缺 pid 时印 `unknown` / `—`（三态），不是字面量 `undefined` |
 | ⑤ 反真空：渲染坏了 ⇒ 红 | 把 render 换成固定字面量 ⇒ ④ 的检查必须报；换回 `String(r.pid)` ⇒ 缺值档变 `undefined` ⇒ 必须报 |
 | ⑥ 后端互证 | 同一进程登记两个角色 ⇒ `live_face` 两行的 pid 逐字相等（所以"每行 pid"没有分辨力） |
 
@@ -31,10 +31,10 @@
 
 ## 2026-11-01：④ 原先是「源码里有 `String(r.pid)`」，这一笔把它改成「真跑那一列」
 
-改前那条写法是 `if "String(r.pid)" not in source: …` —— 它断言的是**源码文本**。
+改前那条写法是 `if "String(r.pid)" not in source: …` —— 它断言的是源码文本。
 上一轮把 `Live.tsx:106` 的 `String(r.pid)` 换成了 `cell(r.pid)`（可读性修法；有值时
 输出逐字不变），两条判据当场红，而实现是对的。更要紧的是：这条判据与
-`tests/test_webui_cells_never_print_undefined_or_unknown.py` 的 R1 **互斥** ——
+`tests/test_webui_cells_never_print_undefined_or_unknown.py` 的 R1 互斥 ——
 后者把单元格里裸 `String(r.x)` 判为缺陷，且文件头逐字列着 `Live.tsx:106` 是
 "已修掉的 8 处之一"。两条判据不可能同时绿，而互斥是静默的（不同文件、不同时间红）。
 
@@ -88,7 +88,7 @@ PID_ROWS: tuple[dict[str, object], ...] = (
 )
 
 #: 缺 pid 时允许的两种显示：`cell()` 的 `unknown`（没读到）/ `blank()` 的 `—`（没有正文）。
-#: 都表示"这一格没有"，**不接受**字面量 `undefined`（那正是 R1 要挡的形态）。
+#: 都表示"这一格没有"，不接受字面量 `undefined`（那正是 R1 要挡的形态）。
 MISSING_WORDS = ("unknown", "—")
 
 
@@ -99,7 +99,7 @@ def _pid_label_problems(source: str) -> list[str]:
     只看 `Live.tsx` 里那几个关于 pid 的字符串，不做全文匹配：
     `running` 那张表也印 `sid`，全文匹配会让"表头改了、说明没改"照样绿。
 
-    渲染那一半**不在这里判**：那是"真跑出来是什么"（④），由
+    渲染那一半不在这里判：那是"真跑出来是什么"（④），由
     :func:`_render_problems` 判 —— 在这里再断言一段源码文本，就是 2026-11-01
     那次"把改进判成回归"的形态。
     """
@@ -202,10 +202,10 @@ def _render_expr(column: str) -> str:
     return "".join(expr).strip()
 
 
-#: 把那一列的 render 喂几行读数 → 读回每一格**上屏的文字**。
+#: 把那一列的 render 喂几行读数 → 读回每一格上屏的文字。
 #:
 #: `h` 是判据自己注入的（`{type, props, children}` 的极简 vnode），`cell` 来自
-#: `components/Table.tsx` 转出来的**真那一份** —— 不引 preact、不碰 DOM。
+#: `components/Table.tsx` 转出来的真那一份 —— 不引 preact、不碰 DOM。
 _RUNNER_JS = r"""
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -261,7 +261,7 @@ def _render_problems(cells: list[str]) -> list[str]:
 
     三件事，缺一件就能被"看起来对"的形状蒙过去：
     - 第一行印出 4321；
-    - 第二行印出 9999 —— **两行不同值**才证得明"印的是这一行的 pid"（固定字面量、
+    - 第二行印出 9999 —— 两行不同值才证得明"印的是这一行的 pid"（固定字面量、
       或误印成别的字段，都会在两行上给出同一个值）；
     - 三行没有 pid 的都落在三态词里（`unknown` / `—`）；`undefined` / 空串都不算。
     """
@@ -318,11 +318,11 @@ def test_negative_control_the_old_title_and_a_missing_note_are_both_reported() -
 # ====================================================================== ④ 真跑那一列
 def test_the_pid_column_prints_this_rows_pid_and_unknown_when_it_is_missing(
         tmp_path: pathlib.Path) -> None:
-    """判据 ④：那一格**真印出这一行的 pid**；缺 pid 时走三态（`unknown` / `—`）。
+    """判据 ④：那一格真印出这一行的 pid；缺 pid 时走三态（`unknown` / `—`）。
 
     这一条取代了原先的 `if "String(r.pid)" not in source`（见模块头 2026-11-01 那节）：
     源码里有某段文本证明不了"这一格印的是这一行的号"，而它会把
-    `String(…)` → `cell(…)` 这种**有值时输出逐字不变**的修法判成回归。
+    `String(…)` → `cell(…)` 这种有值时输出逐字不变的修法判成回归。
     """
     cells = _render_pid_cells(_live_source(), tmp_path)
     problems = _render_problems(cells)
@@ -339,7 +339,7 @@ def test_negative_control_a_fixed_literal_and_the_old_string_pid_are_both_report
     两种坏法分别对应旧判据想守的两件事：
     - 固定字面量：两行印出同一个值 ⇒ "印的不是这一行的 pid"；
     - 改回 `String(r.pid)`：有值档仍对，但缺 pid 档变字面量 `undefined` ⇒ "没走三态"。
-    这证明 ④ 不是恒绿的，也证明"改回旧写法"这条负控仍然会响（它是**收紧**：
+    这证明 ④ 不是恒绿的，也证明"改回旧写法"这条负控仍然会响（它是收紧：
     原先只要求源码里有那段文本，现在还要求缺值档必须落到三态词上）。
     """
     source = _live_source()
