@@ -51,6 +51,20 @@ def test_b_prompt_has_both_ends_of_the_timeline() -> None:
         "改过正文那一档要说成「对不上」（不是「被撤销」）：签没被撤，只是不盖这一版")
 
 
+def test_b_is_encouraged_to_rewrite_and_told_to_read_the_advice() -> None:
+    """业主 2026-11-01：改写要鼓励；被拒时读拒信里的「建议」（一句原因 + 一句建议）。"""
+    text = AP.system_prompt("B", registry=build_registry().registry)
+    assert "改写是正确动作" in text, "B 的提示词没有鼓励改写（别因为要重签就不敢改）"
+    assert "请重新拿 V 签" in text, (
+        "改后无签就入库那一档的那句话不在（业主要求拒信与提示词都说「请重新拿 V 签」）")
+    assert "被拒时先读" in text and "建议" in text, (
+        "没教「被拒时先读拒信里那句建议」—— 拒信体例是「一句原因 + 一句建议」")
+    # 可达性：那句话指的链路今天真的存在（送审入口 / streak 判定 / 发签落点）。
+    from agentflow import verifications as VR
+    assert int(VR.SIGN_STREAK_NEED) >= 1, "streak 门槛读不出来 ⇒ 「再派 V 签一次」不可达"
+    assert hasattr(VR, "sign_statement"), "发签入口不在 ⇒ 「重新拿 V 签」不可达"
+
+
 def test_a_signature_on_the_current_text_is_honoured(tmp_path: pathlib.Path) -> None:
     """现场㈠：签盖在现行正文上 ⇒ 原样入库认签（写入不拒）。"""
     store = Store(tmp_path / "ws")

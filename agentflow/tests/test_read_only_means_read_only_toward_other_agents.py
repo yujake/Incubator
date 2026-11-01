@@ -14,10 +14,10 @@
 ## 三条判据
 
 1. 文案：C / H / V 的渲染提示词里不许再说「拿不到任何写工具」；必须说
-   「对其它智能体的产出只读」，并点名**自己侧**的写工具（逐件）。
+   「对其它智能体的产出只读」，并点名自己侧的写工具（逐件）。
 2. 读数：三家的 `write_local` 集合必须与登记的那一份逐件相同（多一件就是权限面漂了，
    而漂了不会有任何地方报错）。
-3. 现场：H 去 ack 一条**别人的**板项 ⇒ 受控拒绝 `not_yours`，一条都不写
+3. 现场：H 去 ack 一条别人的板项 ⇒ 受控拒绝 `not_yours`，一条都不写
    （这就是"不改别人的产出"在板项那一侧的落点）。
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         "review.verify_fixes"))),
     "V": tuple(sorted(_CLOCK7 + _BOOK2)),
 }
-#: 本角色**自己侧**的业务写工具（文案里必须逐件点名）。
+#: 本角色自己侧的业务写工具（文案里必须逐件点名）。
 OWN_SIDE: dict[str, tuple[str, ...]] = {
     "C": ("analysis.register_report",),
     "H": ("review.review_document", "review.verify_fixes", "review.report",

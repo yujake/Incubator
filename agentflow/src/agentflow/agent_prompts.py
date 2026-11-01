@@ -2870,7 +2870,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    重冻（11 个角色各一行版本号 + D / M 的两段正文）+ `docs/ROLE-GUIDE.md` 重生成。
 #: ③ 已知待办（与 p220 / p221 / p222 同一句）：`tests/fixtures/prompt_cache_warm.json`
 #:    没有重落 —— 重落要真发模型请求（`scripts/warm_prompt_cache.py --cap-usd 0.1`）。
-#: `p226`（2026-11-03，业主批准动禁改区 · FC-27）：`conductor.closing` 的 summary 压缩
+#: `p226`（2026-10-31，业主批准动禁改区 · FC-27）：`conductor.closing` 的 summary 压缩
 #: 269 → 234 字符（cohort 总量 6464 / 基线 8631 = 74.89%，仍 ≤ 75%）。压缩后的那一句
 #: 保留三个名字的分工（`m_says_done` = M 的判断 / `can_close` = 机器口径 / `closable` =
 #: 给调用方的布尔）与「`can_close=None` 不是通过」；只动这一条 summary，别的 summary 一格未动。
@@ -2892,27 +2892,49 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
 #:    15 格、键名一格未动）；`tests/golden/agent_surface_snapshot.json` 重冻；
 #:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
-#: `p230`（2026-11-01，业主已批）：两笔合一个版本号（同一天同一批的文案收口）——
+#: `p228`（2026-11-01，业主批准动禁改区 · FC-27；`draft/173` 块 1）：H 的统一入口
+#: `review.scan` 上架（只接 `text_integrity`：七类字符只有一份实现，按引用传进去）。
+#: 换的是 H 那一格（工具面多一件 + 手册索引）⇒ 变化的格 = ['H']（重算读数）；连带
+#: `_FROZEN_PROMPT_VERSION` 抬到 p228、两份 golden 重冻（`tool_surface_snapshot.json`
+#: 多一件工具；`agent_surface_snapshot.json` 里 H 的 prompt 与工具清单各一行）。
+#: `p229`（2026-11-01，业主批准动禁改区 · FC-27；`draft/173` 块 3）：把「机械读数走一个
+#: 入口」写进 H 的提示词（`specs/h.py` 四条清单 + H 手册；`review.scan(kinds=[…])` 一次
+#: 拿全七类，别一件一件去要旧工具）。换的是 H 那一格 ⇒ 变化的格 = ['H']；连带
+#: `_FROZEN_PROMPT_VERSION` 抬到 p229、`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格）、`agent_surface_snapshot.json` 重冻。
+#: `p230`（2026-11-01，业主已批）：同一天同一批的文案收口，三批并一个版本号 ——
 #:
-#: ① 「压缩批次回涨到 76.61% 的那一格」：`table.update` 的说明 177 → 126 字符
-#:    （新增的"三格就地改"那句压成一句；`status` / `kind` / `quote_reason` 三格、
-#:    "带正文仍走登记路"、"其余格拒"三条都在），并同批把 `table.get`（121 → 99）、
-#:    `text.extract`（146 → 111）、`conductor.summon_many`（173 → 137）各压一处。
-#:    压缩批次（85 件）总量 6612 → 6468 字符 / 基线 8631 = 「74.95%」（改前 76.61%，
-#:    判据 `test_tool_descriptions_are_compressed` 要求 ≤75%；分母与名单一格未动）。
-#: ② 「B 的说明面不再点名一个不存在的点号工具名」：`proofauthors.py` →
-#:    「由模块 `proofauthors` 按来源路径推断」（判据
-#:    `test_the_prompt_never_names_a_tool_that_does_not_exist`：点号 token 必须是真的工具）。
-#: 变化格 = 「十一格全换」：`table.update` 的 summary 只进 A / B / D / E / F / G / L 七格的
-#: `tools_lines`，但同批压的 `table.get` / `text.extract` / `conductor.summon_many` 在
-#: 其余角色的工具面上也有（C / H 拿到 `table.get`）⇒ 没有一格逐字不变；B 另因 ② 换值。
-#: 逐格见 `_FROZEN_PROMPT_DIGESTS`，是 `temp/_recompute_digests.py` 的现算值、不是手抄。
-#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION` 抬到 p230；
-#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
-#: 15 格、键名一格未动 ⇒ count / keys_sha256 与上一格同值）；两份 golden 重冻
-#: （`tool_surface_snapshot.json` 四条 summary 的投影、`agent_surface_snapshot.json`
-#: 七格 prompt 与版本行）；`tests/fixtures/prompt_cache_warm.json` 两档重跑
-#: （业主已批 `--cap-usd 0.1`；12 个目标 × 2 档的 prompt_sha256 全变）。
+#: ① 压缩批次：`table.update` 的说明 177 → 126 字符（"三格就地改"压成一句；`status` /
+#:    `kind` / `quote_reason` 三格、"带正文仍走登记路"、"其余格拒"三条都在），同批把
+#:    `table.get`（121 → 99）、`text.extract`（146 → 111）、`conductor.summon_many`
+#:    （173 → 137）各压一处；85 件总量 6612 → 6473 字符 / 基线 8631 = 74.99%（判据
+#:    `test_tool_descriptions_are_compressed` 要求 ≤75%；分母与名单一格未动）。
+#: ② P0 那两笔（`draft/172` 的 P0）：B 的 `proof_review` 门槛改成只认 `signed`（连续 3 次
+#:    干净成立 + 引用核实通过；`holding` / 单次成立不算），V 的 `verify.verify_proof`
+#:    summary 与冷启动口径统一成两态（签落 `out/vsigns/<sha>.json`，由秘书发）。
+#: ③ 本轮的提示词口径收口（`draft/171`/`172`/`174` 的施工）：
+#:    · 未签闭环教进 M/D/F：`statements_unsigned` 是 blocker（不落在八格里任何一格上）、
+#:      两条出路（重送 V 拿干净「成立」/ `status=abandoned` + `quote_reason=abandoned@<ISO>@<理由>`）、
+#:      放弃作废 `v-resubmit@` 那一半；M 那句已作废的「0 不是失败，静默的 0 才是」删掉；
+#:    · F 补 `v-resubmit@<命题号>@<proof_sha256>`（expects=work，ack 关不掉）、
+#:      `verify_proof` 的必填 `statement_id` / `proof_no` / `readonly_facts`、
+#:      依赖面改成「你只交 cites」（`## 依赖` 由 `agent_f/manuscript.py` 渲染）；
+#:    · D 的手稿落点改成 `research.write_note` + `D.write_report` 的工作稿（`reports/RESEARCH.md`
+#:      是框架保留面，手写会被 `reserved_framework_artifact` 拒）；七节不变；
+#:    · 五个工具形幻名（`policy.check` / `quoteverify.check_quote` / `userio.ask_user` /
+#:      `autonomy.run_autonomous` / `policy.waves_of`）删掉或改成机制描述；
+#:    · `program.list` / `text.extract` 的跨面摘要按「面上有那件就用，没有就把「要停谁」给父/主控」
+#:      改写（C/H/V 没有 `program.stop`、A 没有 `ocr.*`）；
+#:    · F 的子目标必填补 `testable`；B 的档位读数改成「只有 T0 会带读数」；
+#:    · 只读角色口径 = 「对其它智能体的产出只读」（C/H/V 三处文案 + 共用段）；
+#:    · PAPER_PACK 的完成定义 = 八格全过且没有 blocker（点名 `statements_unsigned`）；
+#:    · `tools_lines` 的可选键用 `?key` 紧凑列出（43 件可选键从此可见；H 那一格 +16.9% 已报业主）。
+#: 变化格 = 十一格全换（共用段 + 各角色的 policy / 工具面都动过）。逐格见
+#: `_FROZEN_PROMPT_DIGESTS`，是 `temp/_recompute_digests.py` 的现算值、不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p230，没有 p231）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格）；
+#: 两份 golden 重冻；`docs/ROLE-GUIDE.md` 重生成；`tests/fixtures/prompt_cache_warm.json`
+#: 两档重跑（业主已批 `--cap-usd 0.1`）。
 PROMPT_VERSION = "p230"
 
 
