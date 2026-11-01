@@ -402,6 +402,11 @@ _ALLOWED_READ_ONLY: frozenset[tuple[str, str]] = frozenset({
     # `secretary.Secretary.child_counts` 一处。登记也跟着撤 —— 这张表是逐条对实际的，
     # 留着一条不再生效的豁免正是它自己说的"腐烂"。
     ("statusreport.py", "child_counts"),
+    # `webui/readers.py`：错误页那一块要读「名下还有几个未收尾的子项」，走的是
+    # `Secretary(...).child_counts()` —— 只取名册计数，从不调 `adjudicate_proposition`，
+    # 所以这里不需要缝。它与 `statusreport.py` 那一处同形（只读口径），登记的是
+    # 「确实只读」，不是「先放过」。
+    ("webui\\readers.py", "child_counts"),
 })
 
 #: `from .secretary import <名字> [as _X]` / `from . import secretary [as _Y]` —— 别名也要认
