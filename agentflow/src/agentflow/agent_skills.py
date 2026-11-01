@@ -1686,13 +1686,18 @@ def _f_skills() -> tuple[Skill, ...]:
 `max_parallel_subgoals`、`max_persist_attempts`、`max_depth`。
 只有轮数上限 ⇒ 单轮可无限扇出；只有并发上限 ⇒ 可无限轮。
 
-子目标**每一项三格必填**（少一格就被拒，而且**整笔不写库**）：
+子目标**每一项四格必填**（少一格就被拒，整笔不写库；受控码 `subgoal_without_testable`
+只点缺的那一格）:
 
 | 键 | 意思 |
 |---|---|
 | `sid` | 这一项的编号（计划内部用） |
 | `text` | **要做什么**（一句话说清；写成 `goal` 不算） |
-| `owner` | 归谁做（**权限面的一部分，不能默认**） |
+| `owner` | 归谁做（受控词表 `SUBGOAL_OWNERS`：F/A/B/C/D/E/G 之一，**不能默认**） |
+| `testable` | **怎么判它成立 / 不成立**（一句话；缺了这条整笔拒，不是"落 dead_end"） |
+
+`testable` 是最容易漏的那一格：它是立项那一刻的硬条件，不是"推进时才检查的软提示"
+—— 一条写不出可检验形式的子目标立不进计划。
 
 `status` 可给可不给，词表是 `todo` / `in_progress` / `supported_not_proved` /
 `closed` / `blocked` / `dropped`（写错会被拒，且拒信里会列出词表）。
