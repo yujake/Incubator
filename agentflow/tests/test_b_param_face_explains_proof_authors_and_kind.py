@@ -46,10 +46,10 @@ def test_the_summary_says_where_proof_authors_is_written():
     """a：说明面点名 `proof_authors` 由谁写、为什么不接受手写。
 
     改前红：说明面没有 `proof_authors` 这个词 —— 派活文字只能照自己的理解教模型传。
-    2026-11-01：钉的是「模块名被点名」，**不是扩展名** —— 提示词面有一条更硬的判据
+    2026-11-01：钉的是「模块名被点名」，扩展名不是断言对象 —— 提示词面有一条更硬的判据
     （`test_agent_prompts.py::test_the_prompt_never_names_a_tool_that_does_not_exist`：
-    点号 token 必须是真的工具），而 `proofauthors.py` 是模块不是工具 ⇒ 说明面写成
-    「由模块 `proofauthors` 按来源路径推断」。断言对象（推断者必须被点名）一个字没动。
+    点号 token 必须是真的工具，除非逐条登记）。所以这一格只要求「推断者被点名」这件事
+    成立：写成「由模块 `proofauthors`」或「由 `proofauthors.py`」都算过。
     """
     summary = str(_SPEC.summary)
     assert "proof_authors" in summary, summary
