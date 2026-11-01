@@ -359,6 +359,11 @@ LIVE-READINGS:END
 - **契约与判据**：与语言无关的三档退出码 `0/1/2`（`unknown ≠ pass`，§10.1）；
   `python tools/release_all.py` 的一键判定；`python -B scripts/lint_rules.py` 的三栏读数
   （`LIVE-READINGS` 的 `lint_rules_*`）。
+- **开发期提速（不是门）**：`python -B scripts/pytest_all.py --jobs 4` 把
+  `tests/test_*.py` 按文件字节数均衡分 4 路并行跑，日志与分块清单落在
+  `temp/pytest-all/<run-id>/`；`--jobs 1` 与直接 `python -m pytest` 的收集顺序等价
+  （用来定位顺序依赖）。它只提速、不改变判定：并行全绿不构成发布许可，
+  顺序依赖 / 单文件红仍由 `tools/run_each_test_file.py` 那条门判。
 - **已知边界**：`tools/release_all.py` 与 `scripts/release_check.py` **自身在 FC-27 禁改区、
   且未经人逐行走查** ⇒ **它们全绿也不构成发布许可**（§9.3）。
 

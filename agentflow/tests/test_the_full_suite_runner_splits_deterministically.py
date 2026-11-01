@@ -29,8 +29,6 @@ import pytest
 
 from scripts import pytest_all as P
 
-REPO = Path(__file__).resolve().parents[1]
-
 
 def _write(root: Path, rel: str, content: str) -> Path:
     """在合成树里写一个文件（显式 `newline`：R012 的行尾纪律）。"""
