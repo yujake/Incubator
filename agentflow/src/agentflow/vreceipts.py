@@ -160,7 +160,8 @@ def _append(root: str | Path, rec: Mapping[str, Any]) -> None:
     """追加一行并落盘（`fsync`：崩在返回之后的那一行也真的在盘上）。"""
     path = outbox_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps({"kind": KIND, **dict(rec)}, ensure_ascii=False, sort_keys=True)
+    line = json.dumps({"kind": KIND, **dict(rec)}, ensure_ascii=False, sort_keys=True,
+                      default=str)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(line + "\n")
         fh.flush()
