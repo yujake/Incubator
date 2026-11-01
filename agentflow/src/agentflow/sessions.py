@@ -51,10 +51,10 @@ RUN_INDEX_NAME = "run-index.json"
 #:
 #: 2026-11-01（162 ④）：1 → 2。run 行在 162 里多了五格（`spend_usd` /
 #: `spend_unknown_usd_calls` / `events_span` 改名 / `events_owned` / `task_id` +
-#: `task_id_source`），而每场会话的 `digest` 是**整批 run 行**规范化 JSON 的 sha256 ——
-#: 行形状一变摘要就换，于是一份**上一版代码算出来的**索引会以"读数与索引里不一致"
+#: `task_id_source`），而每场会话的 `digest` 是「整批 run 行」规范化 JSON 的 sha256 ——
+#: 行形状一变摘要就换，于是一份「上一版代码算出来的」索引会以"读数与索引里不一致"
 #: （drift）的样子报出来，而它其实没被人手改过。抬版本号之后它走"版本不认识"那一档
-#: （`tri=unreadable`、`drift=[]`），处置是**重建**，不是抓人。
+#: （`tri=unreadable`、`drift=[]`），处置是「重建」，不是抓人。
 RUN_INDEX_VERSION = 2
 ENV_SESSION = "AGENTFLOW_SESSION"
 
@@ -364,18 +364,18 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
 
     ## 花销：两个来源都留着，谁也不许顶替谁（162 ②）
 
-    - `usd`：**事件求和** —— 把归到这一趟的 `llm_call.usd` 加起来（归属规则见上）。
+    - `usd`：「事件求和」 —— 把归到这一趟的 `llm_call.usd` 加起来（归属规则见上）。
       空 `task_id` 的调用只能按 role 猜主人，多代理交错时会算到别家头上：
       81 上 71 趟里 18 趟与自己的收工行有小数差（合计 5.728771 vs 5.678979，差 $0.049792）。
-    - `spend_usd` / `spend_unknown_usd_calls`：**这一趟自己的缝**记的账
+    - `spend_usd` / `spend_unknown_usd_calls`：「这一趟自己的缝」记的账
       （`agent_run_end.spend`，写侧 `agent_loop.py` 的收工事件、形状 `llmseam.SeamSpend.to_dict()`）。
       它不看 `task_id`，所以它天然认得"自己发出的、事件里没记编号"的调用。
-      没有收工行（`end_index is None`）⇒ 两格都是 `None`，**不是 0**；收工行缺其中一格
+      没有收工行（`end_index is None`）⇒ 两格都是 `None`，「不是 0」；收工行缺其中一格
       ⇒ 那一格是 `None`（逐格回退，不是整块回退）。
 
     为什么两个都给而不是拿自报账顶替事件求和：`webui.readers.run_view` 的
     `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
-    事件求和是这个数**唯一**的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
+    事件求和是这个数「唯一」的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
 
     键与 `webui.state._scan` 逐字相同（25 个）—— `draft/75 §1.3` 的 `RunRow`：
     `sid, role, task, task_id, task_id_source, start_index, start_ts, steps, llm_calls,
@@ -387,18 +387,18 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
 
     ## 事件两格：跨度 vs 归属（162 ③）
 
-    - `events_span` = `end_index - start_index`（**下标跨度**，开始那一行算、收工那一行不算）。
-      多代理共写同一份会话文件时它把**别人的**事件也框进来：81 上 71 趟合计 70055，
+    - `events_span` = `end_index - start_index`（「下标跨度」，开始那一行算、收工那一行不算）。
+      多代理共写同一份会话文件时它把「别人的」事件也框进来：81 上 71 趟合计 70055，
       而真实事件只有 6514（10.75 倍）。名字以前叫 `events_in_run`，那是一个假名字。
-    - `events_owned` = 按上面那张三档归属表**只数归到这一趟**的事件（含它自己的
+    - `events_owned` = 按上面那张三档归属表「只数归到这一趟」的事件（含它自己的
       `agent_run_start`）。81 上合计 6254，M 那行 521。
-    - 为什么**不**按 `task_id` 过滤：`agent_step` 里没有 `task_id`（81 上 2419 条都没有），
+    - 为什么「不」按 `task_id` 过滤：`agent_step` 里没有 `task_id`（81 上 2419 条都没有），
       按它过滤会把步数整族丢光 —— M 那行会读成 360，比真值 512 还小。
     """
     rows = list(events)
     runs: list[dict] = []
     #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 也进进行（162 ④），
-    #: 因为它是这一趟的**绝对编号**：页面上"这一趟是谁的活"要答得出来。
+    #: 因为它是这一趟的「绝对编号」：页面上"这一趟是谁的活"要答得出来。
     open_runs: list[tuple[str, dict]] = []
 
     def _owner_of(tid: str, role: str) -> tuple[str, dict] | None:
@@ -477,7 +477,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 calls = spend.get("calls")
                 if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
                     cur["llm_calls"] = calls
-                # 162 ②：收工行自报的花销 —— 单独成格，**不顶替**上面的 `usd`（事件求和）。
+                # 162 ②：收工行自报的花销 —— 单独成格，「不顶替」上面的 `usd`（事件求和）。
                 # 逐格回退：缺哪一格就那一格留 `None`（"收工行没报这一格" ≠ "这一格是 0"）。
                 reported_usd = spend.get("usd")
                 if (isinstance(reported_usd, (int, float))
@@ -512,23 +512,23 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
 
 def unattributed_usd_of(events: Iterable[Mapping[str, Any]],
                         runs: Iterable[Mapping[str, Any]]) -> float:
-    """这一批事件里「有、而**没有任何一趟**的自报账认得」的钱（162 ②）。
+    """这一批事件里「有、而没有任何一趟的自报账认得」的钱（162 ②）。
 
     定义：`llm_call.usd` 合计 − 各趟 `spend_usd` 合计（`spend_usd` 是 `None` 的趟贡献 0）。
 
     ## 它回答的是"那批没人认领的调用去哪了"
 
-    改前这笔钱没有落点，它的去向是**被硬塞给某一趟**：`_owner_of` 的 ② 档"按 role 猜"，
+    改前这笔钱没有落点，它的去向是「被硬塞给某一趟」：`_owner_of` 的 ② 档"按 role 猜"，
     于是空 `task_id` 的调用会算进"同角色最近开始的那一趟"。81 上 71 趟里有 18 趟因此与
     自己的收工行有小数差（合计 +$0.049792），而真实情况是 80 条调用（$0.136779）根本没有
     主人 —— 其中 70 条是 `secretary:*`（$0.086987，被整条丢掉），10 条是别的（$0.049792，
-    被塞给了 11 趟）。这一格把那 80 条变成一个**会话级**读数，逐趟的 `usd` 不再吃它。
+    被塞给了 11 趟）。这一格把那 80 条变成一个「会话级」读数，逐趟的 `usd` 不再吃它。
 
     ## 三态
 
     - 有 `llm_call` 事件、每一分钱都被某趟的自报账认领 ⇒ `0.0`（真的 0，不是"没算"）；
     - 没有 `llm_call` 事件 ⇒ `0.0`（同一条口径：0 条调用、0 元）；
-    - "没查成"（会话文件读不出来）由调用方给 `None`，本函数**不**代为表达 ——
+    - "没查成"（会话文件读不出来）由调用方给 `None`，本函数「不」代为表达 ——
       它只回答"这一批事件里的钱有没有主人"，不回答"这批事件读没读到"。
 
     为什么把这条算术抽成函数而不是在两处各写一遍：`webui.state._scan`（会话行）与

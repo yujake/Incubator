@@ -143,7 +143,7 @@ def _spend_ws(root: pathlib.Path) -> None:
              "usd": 0.2, "ts": TS}, sid=sid)
     # 空编号：按 role 归到 D 那一趟，且它算不出价钱 ⇒ unknown_usd 进一格
     A(root, {"kind": "llm_call", "role": "D", "ok": False, "usd": None, "ts": TS}, sid=sid)
-    # 收工行**缺 `unknown_usd_calls` 这一格**（老数据 / 夹具会长成这样）
+    # 收工行「缺 `unknown_usd_calls` 这一格」（老数据 / 夹具会长成这样）
     A(root, {"kind": "agent_run_end", "role": "D", "task_id": "t-000002",
              "stop_reason": "final", "steps": 1,
              "spend": {"calls": 2, "usd": 0.7}, "ts": TS}, sid=sid)
@@ -192,7 +192,7 @@ def test_the_run_line_reports_its_own_spend_without_replacing_the_event_sum(
 
 def test_unattributed_usd_answers_where_the_unowned_calls_went(
         tmp_path: pathlib.Path) -> None:
-    """正控（162 ②）：没人认领的那笔钱有一格回答，且**没有**摊进任何一趟。
+    """正控（162 ②）：没人认领的那笔钱有一格回答，且「没有」摊进任何一趟。
 
     改前的形态是：空 `task_id` 的调用按 role 硬塞给"同角色最近那一趟"，于是
     81 上 71 趟里 18 趟与自己的收工行有小数差（合计 +$0.049792）。现在它有一个
@@ -286,7 +286,7 @@ def test_events_span_is_a_span_and_events_owned_counts_this_run(tmp_path: pathli
 
 
 def test_events_owned_counts_the_steps_that_carry_no_task_id(tmp_path: pathlib.Path) -> None:
-    """反真空（162 ③）：`agent_step` **没有** `task_id`，而 `events_owned` 仍包含它们。
+    """反真空（162 ③）：`agent_step` 「没有」 `task_id`，而 `events_owned` 仍包含它们。
 
     这是"不许按 `task_id` 过滤"的那条判据：81 上 2419 条 `agent_step` 一条都没有
     `task_id`，按 `task_id` 过滤会把步数整族丢光 —— M 那行会读成 360，比真值 512 还小。
@@ -313,9 +313,9 @@ def test_events_owned_counts_the_steps_that_carry_no_task_id(tmp_path: pathlib.P
 
 # ====================================================================== 162 ④ 编号 + 版本
 def test_the_run_line_carries_the_absolute_task_id(tmp_path: pathlib.Path) -> None:
-    """正控（162 ④）：每一趟都带**它自己的**绝对编号，读不到就写 `""` 并标 `missing`。
+    """正控（162 ④）：每一趟都带「它自己的」绝对编号，读不到就写 `""` 并标 `missing`。
 
-    这一面刻意**没有继承路径**：编号只能来自这一趟的开场事件。下面第二趟刻意让收工行
+    这一面刻意「没有继承路径」：编号只能来自这一趟的开场事件。下面第二趟刻意让收工行
     带着编号、开场事件不带 —— 若有人"顺手从收工行借一个"，这条会红。
     """
     root = tmp_path / "ws"
@@ -342,10 +342,10 @@ def test_the_index_version_is_bumped_because_the_run_row_shape_changed(
         tmp_path: pathlib.Path) -> None:
     """正控（162 ④）：行形状变了 ⇒ 索引版本抬到 2；老索引报"版本不认识"，不报假 drift。
 
-    为什么必须抬：盘上那份 `index/run-index.json` 的 `digest` 是**整批 run 行**规范化
-    JSON 的 sha256 —— 行里多一格，摘要就换一个，于是一份**旧代码算出来的**索引会以
+    为什么必须抬：盘上那份 `index/run-index.json` 的 `digest` 是「整批 run 行」规范化
+    JSON 的 sha256 —— 行里多一格，摘要就换一个，于是一份「旧代码算出来的」索引会以
     "71 趟读数与索引里不一致"的样子报出来（81 上今天就是这样，drift 1 条）。
-    那是假话：索引没有被人手改过，它只是**上一版格式**。抬版本号之后它走"读不出来"
+    那是假话：索引没有被人手改过，它只是「上一版格式」。抬版本号之后它走"读不出来"
     那一档（`tri=unreadable`、`drift=[]`、理由里点名版本），处置是重建，不是抓人。
     """
     assert SS.RUN_INDEX_VERSION == 2, (

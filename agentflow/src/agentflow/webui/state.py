@@ -345,7 +345,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 calls = spend.get("calls")
                 if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
                     cur["llm_calls"] = calls
-                # 162 ②：收工行自报的花销 —— 单独成格，**不顶替** `usd`（事件求和）。
+                # 162 ②：收工行自报的花销 —— 单独成格，「不顶替」 `usd`（事件求和）。
                 # 逐格回退（`runs_in_session` 里那一段逐句同形）：缺哪一格就那一格留 None。
                 reported_usd = spend.get("usd")
                 if (isinstance(reported_usd, (int, float))
@@ -703,13 +703,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("RunRow",
      "snapshot() 的 `runs[]` —— 一趟运行（一条 agent_run_start 到它之后的 agent_run_end）",
      (("sid", "string"), ("role", "string"), ("task", "string"),
-      # 162 ④：这一趟的**绝对编号**（`agent_run_start.task_id`）。读不到写 `""`，
+      # 162 ④：这一趟的「绝对编号」（`agent_run_start.task_id`）。读不到写 `""`，
       # 不造一个假编号；`task_id_source` 说这个编号从哪来（`event` / `missing`）。
       # 这一面刻意只有两个取值：编号只能来自它自己的开场事件，不从相邻事件借。
       ("task_id", "string"), ("task_id_source", "string"),
       ("start_index", "number"), ("start_ts", "string"), ("steps", "number"),
       ("llm_calls", "number"), ("usd", "number | null"), ("unknown_usd", "number"),
-      # 162 ②：收工那一行自己报的账（`agent_run_end.spend`）。**不顶替 `usd`** ——
+      # 162 ②：收工那一行自己报的账（`agent_run_end.spend`）。「不顶替 `usd`」 ——
       # `usd` 是事件求和，是同一趟的另一个来源（`readers.run_view` 的并排卡靠它）。
       # 没有收工行 ⇒ 两格都是 `null`（不是 0）。
       ("spend_usd", "number | null"), ("spend_unknown_usd_calls", "number | null"),
@@ -719,7 +719,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("end_index", "number | null"), ("end_ts", "string"),
       ("waiting_on", "string[]"), ("waiting", "boolean"),
       # 162 ③：`events_span` 是下标跨度（原 `events_in_run` 改名，数一个字节没动）；
-      # `events_owned` 是按三档归属**只数归到这一趟**的（含没有 `task_id` 的 `agent_step`）。
+      # `events_owned` 是按三档归属「只数归到这一趟」的（含没有 `task_id` 的 `agent_step`）。
       ("events_span", "number"), ("events_owned", "number"))),
     ("OrphanRow",
      "snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）",
