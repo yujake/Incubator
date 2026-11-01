@@ -720,7 +720,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
     {"version": "p229", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p229（2026-11-03 落账；业主 2026-11-01 裁定）：块 3 把 H 的审稿清单改成用 review.scan 取读数（七类一个入口；proof 环境数与台账定理类数的等号不再当判据，改看 statement_surplus），并写清「这些读数不进 finding 台账、要留凭据用 review.report」；另加一份 H 手册。只有 H 那一格换值，facts 键集仍 15 格"}
+     "note": "抬版本 p229（2026-11-03 落账；业主 2026-11-01 裁定）：块 3 把 H 的审稿清单改成用 review.scan 取读数（七类一个入口；proof 环境数与台账定理类数的等号不再当判据，改看 statement_surplus），并写清「这些读数不进 finding 台账、要留凭据用 review.report」；另加一份 H 手册。只有 H 那一格换值，facts 键集仍 15 格"},
+    # p229 -> p230（两笔文案收口，内容 2026-11-01 定稿；账注日子与上一格同日，
+    # 见 `test_no_ledger_note_is_dated_after_the_current_version` 的上界口径 ——
+    # 账本里 p223–p229 已记到 2026-11-03，这一格不许写一个更早的日子）：
+    # ① 压缩批次回涨那一格压回去（`table.update` 177 → 126，另 `table.get` /
+    #    `text.extract` / `conductor.summon_many` 各压一处；85 件总量 6612 → 6468 =
+    #    基线 8631 的 74.95%，改前 76.61%）；② B 的说明面不再点名 `proofauthors.py`
+    #    （改成「由模块 `proofauthors` 按来源路径推断」）。变化格 = 十一格全换
+    #    （`table.update` 只进七格，但同批压的 `table.get` / `text.extract` /
+    #    `conductor.summon_many` 也在其余角色的工具面上）。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p230", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p230（2026-11-03 落账，与上一格同日；两笔文案收口在 2026-11-01 定稿）：① 压缩批次回涨到 76.61% 那一格压回 74.95%（table.update 177→126，table.get / text.extract / conductor.summon_many 各压一处；85 件总量 6612→6468，基线 8631，分母与名单一格未动）；② B 的说明面把 `proofauthors.py` 改成「由模块 proofauthors 按来源路径推断」（提示词不许点名不存在的点号工具名）。变化格 = 十一格全换（三条压缩的 summary 分布在多个角色的工具面上）；facts 键集仍 15 格（键名与条数一格未动）"}
 
 )
 

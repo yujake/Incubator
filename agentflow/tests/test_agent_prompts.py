@@ -2171,7 +2171,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p229"
+_FROZEN_PROMPT_VERSION = "p230"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2398,17 +2398,17 @@ _FROZEN_PROMPT_VERSION = "p229"
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "8d24e8eba9f6d50e4d4d1a58329ef2e1fad00499a00f1405d9afb10120c1b8ef",
-    "B": "232f3c473af9b11395509cb788feda294ef68bb8f24607702abdd3876cab5721",
-    "C": "7c4339d8ec8fcbae337db7122fac8959a576803be9821a269737e8cdb830f44d",
-    "D": "a6df3a6a9e2791a816efb5ff8ad3eaad0badc3d462745908005ad355180bf965",
-    "E": "337cd50ee80db61419e5561dee83e8e054253392025fb0d0e070d847f52de14a",
-    "F": "58295b4d0b8ea42fd9bd98e663221d31350dbce28101ff6302723aaa255d5b9d",
-    "G": "dddd5baf4d0c7793ff1e837a21e4a2bf4c6f178b67b35cbe147b32ac9f192d94",
-    "H": "27716e4637f221fe4bdc4dcdd46054e4a538ab40e712f01f3a86f761776e59da",
-    "L": "2462bba428429c8241acb1360b25a4e8ea291aa5bdd4fafbd2ded36e3e6866cd",
-    "M": "e416b8a2cdf15ee5eb784719bfdaa859fc3dc8c69ce859518109d6b7b33bf85d",
-    "V": "7bb595da856ce8f701b5152ede90f2e49c5695b199b3b7aed3640c7bb00b2385",
+    "A": "a9a14630fb61c5ddf5260993c3a5c53aee62d42bfdeb596a99459a55cc5ae9cf",
+    "B": "310d105c38049e37a8cd0d422a4f241b8dbbdcbc6cc3e01b89b32e746801f174",
+    "C": "af10e7577e2c57efdb9519a3d72a7ab7871350dd490b00f9e550b10cb879d1a5",
+    "D": "af8e1f7268a6b780a95d2ee943245f1cae9d7c08a9c3fa3c4910612feedf1846",
+    "E": "7d7829978691d9952cbdfa7bc8030ee1534cbda802fa3864c0a31230550cdde9",
+    "F": "e994e4717bc8516f4ed4b5e804d53a181b6ab3832d9ad806c181c8bbceb35908",
+    "G": "b6aa734a83635cb9e492bbb709c338eea1b9a4eaebcf545e539fd46630652086",
+    "H": "d674b4df7fdf299ee3dd556a0de1920d0930a55ffecb6af3d33f377f7db7af78",
+    "L": "dc18c0c3102e02069f4b1172606c72b012414543e692bcb13ee76f27c2f3079e",
+    "M": "53feb5d1ec07695165f8508d658b4ef6bba1580de69515e7474001c767089aa7",
+    "V": "1713785ed43bb54f29be0ebea159cf7a0efb0dd4957c208d2447953ecedf1485",
 }
 
 

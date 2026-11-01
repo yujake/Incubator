@@ -102,7 +102,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 现场：派活文字 `t-000098` 逐字教 B 传 `proof_authors=["F"]`，而它不在参数表里
         # ⇒ `param_invalid`；B 去掉它再交，`proofauthors.py` 按来源路径推断，
         # 于是 D 写的两条证明被记成 ["F"]。答案是"不接受手写"这件事只能由说明面说。
-        "。`proof_authors` 不是本动作的参数：那一格由 `proofauthors.py` 按来源路径推断"
+        "。`proof_authors` 不是本动作的参数：那一格由模块 `proofauthors` 按来源路径推断"
         "（收稿方读手稿时按手稿作者落），不接受手写 —— 传了会被参数门按未声明键"
         "受控拒绝（派生列的去路见 `tools/base.py` 的参数门提示）",
         _obj(

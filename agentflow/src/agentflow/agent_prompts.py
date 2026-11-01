@@ -2892,7 +2892,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
 #:    15 格、键名一格未动）；`tests/golden/agent_surface_snapshot.json` 重冻；
 #:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
-PROMPT_VERSION = "p229"
+#: `p230`（2026-11-01，业主已批）：两笔合一个版本号（同一天同一批的文案收口）——
+#:
+#: ① 「压缩批次回涨到 76.61% 的那一格」：`table.update` 的说明 177 → 126 字符
+#:    （新增的"三格就地改"那句压成一句；`status` / `kind` / `quote_reason` 三格、
+#:    "带正文仍走登记路"、"其余格拒"三条都在），并同批把 `table.get`（121 → 99）、
+#:    `text.extract`（146 → 111）、`conductor.summon_many`（173 → 137）各压一处。
+#:    压缩批次（85 件）总量 6612 → 6468 字符 / 基线 8631 = 「74.95%」（改前 76.61%，
+#:    判据 `test_tool_descriptions_are_compressed` 要求 ≤75%；分母与名单一格未动）。
+#: ② 「B 的说明面不再点名一个不存在的点号工具名」：`proofauthors.py` →
+#:    「由模块 `proofauthors` 按来源路径推断」（判据
+#:    `test_the_prompt_never_names_a_tool_that_does_not_exist`：点号 token 必须是真的工具）。
+#: 变化格 = 「十一格全换」：`table.update` 的 summary 只进 A / B / D / E / F / G / L 七格的
+#: `tools_lines`，但同批压的 `table.get` / `text.extract` / `conductor.summon_many` 在
+#: 其余角色的工具面上也有（C / H 拿到 `table.get`）⇒ 没有一格逐字不变；B 另因 ② 换值。
+#: 逐格见 `_FROZEN_PROMPT_DIGESTS`，是 `temp/_recompute_digests.py` 的现算值、不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION` 抬到 p230；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
+#: 15 格、键名一格未动 ⇒ count / keys_sha256 与上一格同值）；两份 golden 重冻
+#: （`tool_surface_snapshot.json` 四条 summary 的投影、`agent_surface_snapshot.json`
+#: 七格 prompt 与版本行）；`tests/fixtures/prompt_cache_warm.json` 两档重跑
+#: （业主已批 `--cap-usd 0.1`；12 个目标 × 2 档的 prompt_sha256 全变）。
+PROMPT_VERSION = "p230"
 
 
 
