@@ -358,7 +358,8 @@ def _note_archive_error(root: Any, *, artifact_sha: str, error: str) -> str:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+            fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True,
+                                default=str) + "\n")
     except OSError as exc:
         return f"归档失败、连 `.archive-errors.jsonl` 都没写成（{type(exc).__name__}: {exc}）"
     return "归档失败，已记进 out/vsigns/.archive-errors.jsonl"
