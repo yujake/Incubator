@@ -6155,7 +6155,7 @@ class Secretary:
             if status not in S.STATEMENT_STATUSES:
                 out.update(refused="bad_statement_status", reason=(
                     f"status 必须是 {S.STATEMENT_STATUSES} 之一，收到 {wanted['status']!r}"
-                    "（它是命题的可信状态，不是自由文本）"))
+                    "（它是命题的可信状态，不是自由文本）；建议：按这份词表里的取值改后重交"))
                 return out
             wanted["status"] = status
         if "kind" in wanted:
@@ -6163,7 +6163,9 @@ class Secretary:
             if kind not in STATEMENT_META_KINDS:
                 out.update(refused="bad_statement_kind", reason=(
                     f"kind 必须是英文词表 {list(STATEMENT_META_KINDS)} 之一，收到 {kind!r} —— "
-                    "中文 kind（定理 / 引理）不是取值；这一格由证据派生，改它也请走证据"))
+                    "中文 kind（定理 / 引理）不是取值；这一格由证据派生，改它也请走证据。"
+                    "建议：按英文词表取值重交；要让 kind 跟着证据走，就重交 "
+                    "`own.register_statement`（`evidencebits.kind_following_grade` 现算）"))
                 return out
             wanted["kind"] = kind
         if "quote_reason" in wanted:
@@ -6171,7 +6173,8 @@ class Secretary:
             if not text.strip():
                 out.update(refused="bad_quote_reason", reason=(
                     "quote_reason 不能改成空串 —— 三态纪律：没通过要说清为什么、"
-                    "还没查也要说出来，不许留白"))
+                    "还没查也要说出来，不许留白。建议：写清「为什么没通过」或"
+                    "「为什么还没查」后重交（空串不是一种理由）"))
                 return out
             wanted["quote_reason"] = text
         try:

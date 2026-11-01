@@ -730,7 +730,8 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         # 先记"确认缺失"、再抛（逐字照 DSH `TFS:276` 的顺序）：
         # 反过来会让"读一个不存在的路径以授权带防护的创建"这条路断掉。
         OBS.observed_gate().note_absent(OBS.current_owner(), target)
-        raise ToolError(f"文件不存在：{_rel(ctx, target)}")
+        raise ToolError(f"文件不存在：{_rel(ctx, target)}"
+                        "；建议：路径先用 `fs.list` 确认，新建请用 `fs.write`（写完再读）")
     if target.is_dir():
         raise ToolError(f"{_rel(ctx, target)} 是目录（要列出内容请用 fs.list）")
 
@@ -908,7 +909,9 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     if denied is not None:
         return denied
     if target.exists() and target.is_dir():
-        raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件写")
+        raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件写"
+                        "；建议：写文件请带文件名（`fs.write(path=\"…/文件名\")`），"
+                        "列目录用 `fs.list`")
 
     payload = content.encode("utf-8")
     if len(payload) > MAX_WRITE_BYTES:
@@ -1018,6 +1021,11 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     try:
         observed_version = OBS.observed_gate().edit_intent(owner, key, rel)
     except OBS.ObservationRefusal as refusal:
+        if not target.exists():
+            # 文件不存在时「先读一次」不是一条能走的路（读它只会再撞一次「不存在」）。
+            # 这一句给的是真出路：确认路径 / 新建（与 `fs.edit` 的 `not_found` 同一档）。
+            return fail(f"{rel} 不存在（定点替换只能改已有文件）；建议：路径先用 `fs.list` "
+                        "确认，新建请用 `fs.write`（写完再读）", path=rel, kind="not_found")
         return fail(refusal.message, path=rel, kind=refusal.code)
     if not target.exists():
         return fail(f"{rel} 不存在（定点替换只能改已有文件）",
@@ -1035,21 +1043,26 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     if sha256 and sha256 != hashlib.sha256(before).hexdigest():
         return fail(
             f"{rel} 现在这一版的 sha256 与调用方给的不符 ⇒ 拒绝改。"
-            "（这一条防的是「我拿到的是别人改之前的那一版」—— 盲改会把别人的改动覆盖掉。）",
+            "（这一条防的是「我拿到的是别人改之前的那一版」—— 盲改会把别人的改动覆盖掉。）"
+            "建议：先 `fs.read` 这一份，按返回的 `meta.sha256` 重交（那是现在这一版）",
             path=rel, kind="sha_mismatch",
             sha256_now=hashlib.sha256(before).hexdigest(),
         )
     text, encoding, had_errors = _decode_text(before)
     if had_errors:
         return fail(f"{_rel(ctx, target)} 不是干净的 UTF-8（解码时有替换字符）⇒ 拒绝改，"
-                    "免得把编码问题写坏成内容问题",
+                    "免得把编码问题写坏成内容问题；建议：先 `fs.read` 看 `meta.encoding` / "
+                    "`meta.had_errors`，确要换掉整份正文就用 `fs.write(overwrite=true)` "
+                    "写正确编码的内容",
                     path=_rel(ctx, target), kind="not_utf8", encoding=encoding)
     if not old_string:
         return fail("old_string 不能为空（空串会在每一处之间插入 new_string）",
                     path=_rel(ctx, target), kind="empty_old_string")
     count = text.count(old_string)
     if count == 0:
-        return fail(f"old_string 在 {_rel(ctx, target)} 里找不到（逐字比对，含空白）⇒ 拒绝改",
+        return fail(f"old_string 在 {_rel(ctx, target)} 里找不到（逐字比对，含空白）⇒ 拒绝改；"
+                    "建议：先 `fs.read` 这一份，把 `old_string` 从原文逐字复制（含空白）；"
+                    "整份重写用 `fs.write`",
                     path=_rel(ctx, target), kind="not_found_old_string")
     if count > 1 and not allow_multiple:
         return fail(
