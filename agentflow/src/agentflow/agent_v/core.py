@@ -1241,7 +1241,7 @@ class AgentV:
         # 打桩的也是它 —— 摘掉它必须让"8 条判定 8 条有板项"变红。
         #
         # 收件人读不到（不在任何召唤里 / 台账没有那一行）⇒ 意图记 `undelivered`，
-        # 不拿"谁醒着"当收件人。这一格失败不许带走这一签：`_verify_pass` 的
+        # 不拿"谁醒着"当收件人。这一格失败不许带走这一签：`_review_pass` 的
         # 返回值一个字都不变（下面的键集合是判据钉住的）。
         receipt = self._publish_receipt(row)
         if receipt.get("state"):
