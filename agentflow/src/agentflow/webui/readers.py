@@ -858,6 +858,19 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
     （`agent_run_end.final` 里逐条点名它写了哪些行），这个答案是那一趟；对于转述型正文
     （别的事后引用别人的编号），这个答案可能是"引用者"—— 这是本口径的已知边界，写在
     `missing` 之外的读数要按这一条读。
+
+    ## 为什么先解析、再跑正则（2026-11-01）
+
+    改前是"先 `findall`、命中才 `json.loads`"：那个次序在原理上省的是 JSON 解析，
+    实测却把 99% 的时间花在那条 168/293 路交替的巨正则上（真机 81：`findall`
+    5,604 ms / 9,995 ms，而把这 1,045 条候选行全部 `json.loads` 只要 19–21 ms，
+    见 `temp/161_scan_variants.py` 与同目录的 161 报告）。所以把两件事的次序换过来：
+    先解析（便宜，而且能拿到 `kind` 做确定性过滤），只对那五种 kind 的行跑正则。
+
+    口径一个字没改：决定"哪一行能成为答案"的仍是上面那四条。两个次序的输入集合
+    完全相同（先 kind 后正则 vs 先正则后 kind，取的是同一个交集；`findall` 的输入
+    文本也还是那一行原文），只有通过 kind 的行才会被收，所以 `found` 逐号相同 ——
+    真机 81 上实测 68/68、176/176 逐号一致（`temp/161_scan_variants.py` 的 B 口径）。
     """
     wanted = sorted({str(t) for t in tokens if str(t)}, key=len, reverse=True)
     if not wanted:
@@ -873,19 +886,16 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
         for line in text.splitlines():
             if '"task_id"' not in line:
                 continue          # 便宜的预筛：没有编号的事件不可能是答案
-            hits = pattern.findall(line)
-            if not hits:
-                continue
             try:
                 event = json.loads(line)
             except ValueError:
                 continue          # 坏行：这一段里它算没读到（不猜）
             if str(event.get("kind") or "") not in kinds:
-                continue
+                continue          # 先 kind 后正则：正则只跑在会进答案的那几行上
             task_id = str(event.get("task_id") or "").strip()
             if not task_id:
                 continue
-            for token in hits:
+            for token in pattern.findall(line):
                 found.setdefault(token, task_id)
     return found
 
