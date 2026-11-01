@@ -764,17 +764,24 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
+    # 2026-11-01（审计 171 D-08 的修法）：D 的跨趟记忆落点。它与 `research.set_status` 同型 ——
+    # 真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`、`roles=('D',)`），
+    # 本文件的夹具不带 store ⇒ 那一组按契约跳过。它替换掉的是被 fs 保留表拒的
+    # `reports/RESEARCH.md`（手写那一份只会撞 `reserved_framework_artifact`）。
+    "research.write_note": "真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`，"
+                           "`roles=('D',)`）—— 与 `research.set_status` 同一条契约，"
+                           "本文件的夹具不带 store ⇒ 跳过",
     # 2026-10-29（block 表 × 逐条审批唤醒）：`conductor.wake_blocked` 的描述里点了这一格，
     # 因为"唤醒不清板项、block 项还会永久挡收工"这件事必须说清到具体读数格 ——
     # 它是 `Conductor.retire_integrity` 返回的 `open_items`，读它的是收工门，不是工具
     # （与上面 `stats.closure_reminders` 同形：读数字段路径）。
     "retire_integrity.open_items": "读数字段路径（`Conductor.retire_integrity` 返回的 "
                                    "open_items 那一格），不是工具",
-    "autonomy.run_autonomous": "模块.函数引用（说明这条纪律由哪段代码保证），不是工具",
-    "policy.check": "同 autonomy.run_autonomous",
-    "policy.waves_of": "同 autonomy.run_autonomous",
-    "quoteverify.check_quote": "同 autonomy.run_autonomous",
-    "userio.ask_user": "同 autonomy.run_autonomous",
+    # 2026-11-01（审计 174 §1.3 的修法）：`autonomy.run_autonomous` / `policy.check` /
+    # `policy.waves_of` / `quoteverify.check_quote` / `userio.ask_user` 五条已从提示词里删掉
+    # （它们是模块函数，不是工具；照字面调只会拿 `unknown_tool`）⇒ 这五条登记也一起摘掉。
+    # 判据 `test_the_prompt_never_names_a_tool_that_does_not_exist` 的"登记表里的 token 必须
+    # 还出现在某一格"那一半就是这条清理的驱动。
     "verifications.cold_start_prompt": "同 autonomy.run_autonomous（V 那一格的入口说明："
                                        "它说清 V 走的是冷启动入口，不是工具）",
     "own.register_statement": "动作被包成的那一件工具（`AgentLoop._registry_with_own_action`：名字是 "

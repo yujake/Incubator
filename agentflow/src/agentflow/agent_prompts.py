@@ -4199,7 +4199,8 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
 
 
 
-    ("谁能写数据", "只读角色拿不到写工具，且调用期再判一次（`tools/base.py` 的 `_role_surface`）"),
+    ("谁能写数据", "只读角色对其它智能体的产出只读（写工具只落在自己侧的产物与簿记上），"
+                 "且调用期再判一次（`tools/base.py` 的 `_role_surface`）"),
 
 
 
