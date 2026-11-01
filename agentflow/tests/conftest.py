@@ -742,6 +742,17 @@ def _write_path_hooks_baseline():
     _apply_write_path_hook_state(_WRITE_PATH_HOOK_BASELINE)
 
 
+@pytest.fixture
+def write_path_hook_baseline() -> dict:
+    """会话基线的一份只读副本（给「基线必须干净」那条判据用）。
+
+    只读：这里是浅拷贝，改它不会改到夹具还原用的那一份。
+    为什么要有这个出口：`_WRITE_PATH_HOOK_BASELINE` 是模块私有名，判据不该直接摸它；
+    而"基线里有没有别的测试模块的导入期副作用"这件事，只有判据读得出来。
+    """
+    return dict(_WRITE_PATH_HOOK_BASELINE)
+
+
 @pytest.fixture(autouse=True)
 def _restore_write_path_hooks():
     """每条判据收尾把"会话写入后的钩子槽"还原到会话基线（进程级状态隔离）。
