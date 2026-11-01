@@ -89,17 +89,8 @@ DECISION_PROPOSED = "洗出格式差异 ⇒ 请示"
 DECISION_ACCEPTED = "接受了秘书的格式洗"
 DECISION_REJECTED = "拒绝了秘书的格式洗"
 
-#: 「这条命题够不够格入库」的结论词表（业主 2026-10-14 裁决第 12 条前半）。
-#:
-#: 为什么要另一张词表而不是往 `DECISIONS` 里加两个字：那是两根不同的轴 ——
-#: `DECISIONS` 说的是"这条委托派不派、怎么派"，这张说的是"这条命题值不值得收"。
-#: 折进一张表里，"可派"与"太平凡"就会被下游当成同一栏的取值，而它们回答的问题不同
-#: （本仓把这种事叫"同一件事两个名字"的老毛病）。
-#: 三态：判不了是正经结论之一（没缝 / 开关关着 / 模型没回），不是"先收了再说"。
-STATEMENT_VERDICTS = ("合格", "太平凡", "判不了")
-
-#: 非平凡性的五档（业主 2026-10-21 定 T1–T4；2026-10-23 补 T0）：它回答"多不平凡"，
-#: 与 `STATEMENT_VERDICTS`（"收不收"）是两根轴。
+#: 非平凡性的五档（业主 2026-10-21 定 T1–T4；2026-10-23 补 T0）：它回答"多不平凡"。
+#: 2026-11-01 起它同时是判档那一问的词表（`STATEMENT_VERDICTS` 从它派生）—— 不再是两根轴。
 #:
 #: 2026-10-23 业主裁定的要点（逐字）：「只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
 #: T0 叫基础定理或初步结论，T1 重新定位为有一定价值的非平凡结论，T2 到 T4 定位不变」。
@@ -158,6 +149,38 @@ PROOF_BODY_CAP = 20_000
 #: 字面量的真身住在 `refusals.py`：同一句拒绝在写侧与判档位这一侧必须说同一个词。
 EMPTY_STATEMENT_TEXT = R.EMPTY_STATEMENT_TEXT
 
+def _nontriviality_level(value: Any) -> int | None:
+    """把模型给的档位收敛到 `0|1|2|3|4`；别的（含缺省）一律 `None` = 判不了。
+
+    2026-10-23 起 `0` 是一档真的档位（T0 基础定理或初步结论），所以"判不了"必须
+    换一个值：`None`。这里刻意不把坏输入折成 0 —— 那会把"模型给了 `1.9`"读成
+    "这是一条基础定理"，正是"静默降级"的形态。同理也不许折成 1。
+
+    只认整数（或纯数字字符串）：`1.9` 不是"第 1 档"，它是坏输入。
+
+    2026-11-01：`nontriviality_label` 与 `STATEMENT_VERDICTS` 在 import 期就要用它
+    （词表从档位轴派生），所以它住在档位常量旁边、必须定义在它们之前。
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        got: Any = value
+    elif isinstance(value, str):
+        raw = value.strip()
+        upper = raw.upper()
+        if upper.startswith("T") and upper[1:].isdigit():
+            # 2026-10-29：判档那一问的 decision 词表就是 T0..T4，这里原先只认数字
+            # ⇒ 模型答 "T3" 永远解析成 None（"交给模型判"在结构上走不通）。
+            got = int(upper[1:])
+        elif raw.isdigit():
+            got = int(raw)
+        else:
+            return None
+    else:
+        return None
+    return got if got in NONTRIVIALITY_LEVELS else None
+
+
 #: 档位的显示名（`0 -> "T0"`）。读侧一律调 :func:`nontriviality_label`，不各写一份。
 _NONTRIVIALITY_LABELS: dict[int, str] = {level: f"T{level}" for level in NONTRIVIALITY_LEVELS}
 
@@ -166,6 +189,40 @@ def nontriviality_label(level: Any) -> str:
     """档位号 → 显示名（`0 -> "T0"` … `4 -> "T4"`；判不了 ⇒ 空串）。"""
     got = _nontriviality_level(level)
     return _NONTRIVIALITY_LABELS.get(got, "") if got is not None else ""
+
+
+#: 判档那一问的结论词表（业主 2026-11-01 裁定：审美轴三格退场，直接只用 T0 到 T4）。
+#:
+#: 2026-11-01 之前这里是 `("合格", "太平凡", "判不了")`：一根"收不收"的审美轴，与
+#: `NONTRIVIALITY_LEVELS`（"多不平凡"）并排。裁定之后这一问只剩一根轴 —— `decision`
+#: 就是档位，三个旧词退场。从档位轴派生（不写第二份字面量）：两张表漂了，就会出现
+#: "词表里有 T5、档位轴没有"这种只在提示词里成立的档位。
+#:
+#: ## 两态（2026-11-01 第二刀：判不了退场为"没查成"）
+#: | 结局 | 盘上那一格 |
+#: |---|---|
+#: | 有档 | `decision` = `"T0"`…`"T4"`（决定台账同值；档位台账 `nontriviality` 0..4 + `label`） |
+#: | 没查成 | `judge.checked=false`；决定台账 `decision="没查成"`；没有档位行 |
+#:
+#: "判不了"不是一种判定结果，是"我们没拿到判定"（模型给 null / 旧词 / 坏 JSON，
+#: 调用失败，正文被截断，一项力气读数都取不到）—— 它的处置是"重试 / 重交 / 人看"，
+#: 所以它必须长成"没查成"，而不是第四档，也不是一条 `nontriviality: null` 的行。
+#:
+#: 概念 / 定义行另有一态 `not_applicable`（见 :meth:`Secretary.not_applicable_nontriviality`）：
+#: 那是"这一问对它不成立"，不是"没查成"，两回事，不许折平。
+#:
+#: ## 旧行怎么读（只影响读旧台账；写侧与新行一个字都不产生这三个词）
+#: | 老 `decision` | 折算出的档位 | 判据 |
+#: |---|---|---|
+#: | `T0`…`T4` | 同名档位 | 2026-11-01 那一笔的兼容形状 |
+#: | `太平凡` | T0 | 这个结论只剩"力气小 ⇒ 落 T0"这一层意思 |
+#: | `合格` | 读 `judge.nontriviality`（或同号 `nontriviality.jsonl` 那一行）；都没有 ⇒ 未判 | 它当年只表示"收"，从不携带档位 |
+#: | `判不了` | 未判（`None`） | 它是"该判而没判"，不是一档 |
+#:
+#: 唯一实现是 :func:`_tier_from_legacy_decision`（读旧行的唯一折算口）。判据
+#: `tests/test_the_statement_vocabulary_is_only_the_five_tiers.py` 钉着"旧词只许出现在它里面"。
+STATEMENT_VERDICTS: tuple[str, ...] = tuple(
+    nontriviality_label(level) for level in NONTRIVIALITY_LEVELS)
 
 
 #: 没有"证明正文"这一档、因而不做力气判档的那几档 kind（"不适用"的适用范围，唯一一处）。
@@ -190,13 +247,16 @@ def _is_not_applicable_kind(kind: Any) -> bool:
 
 
 def _is_trivial_verdict(decision: Any) -> bool:
-    """这一次判断的结论是不是「太平凡」（唯一口径）。
+    """这一次判断的档位是不是 T0（唯一口径；2026-11-01 起不再认旧词）。
 
-    为什么要单独一个函数：2026-10-23 之后"太平凡"这个结论有两个后果（落 T0 +
-    不在入库口拒收），两处必须问同一个问题。而这一条是"把'懂平凡'这一档打桩"
-    的注射点 —— 判据要把"恒判平凡"打进去看非平凡那一支会不会红，就得有一个名字。
+    为什么要单独一个函数：2026-10-23 之后"平凡"这个档位有两个后果（落 T0 + 不在入库口
+    拒收），两处必须问同一个问题。而这一条是"把'懂平凡'这一档打桩"的注射点 —— 判据要把
+    "恒判平凡"打进去看非平凡那一支会不会红，就得有一个名字。
+
+    2026-11-01：审美轴三格退场之后，"太平凡"不再是一个取值 ⇒ 这里只认档位（`"T0"` / `0`
+    / `"0"`）。旧词到档位的折算只在读旧行时做（:func:`_tier_from_legacy_decision`）。
     """
-    return str(decision or "") == "太平凡"
+    return _nontriviality_level(decision) == 0
 
 #: 「这一条与在册的哪一条是同一条命题」的结论词表（业主 2026-10-24 的准绳）。
 #:
@@ -301,10 +361,13 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
 #: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
 #:
 #: 为什么需要这张小表：`_record_judge` 的缺省是 `"建议重排"`（派活那一轴的词）——
-#: 对上面这两类判断，`checked=False` 时写"建议重排"是一句假话。这里给这两类一个专用词
+#: 对这几种判断，`checked=False` 时写"建议重排"是一句假话。这里给它们一个专用词
 #: （`没查成`，不是任何一档结论），其余类别原样保留旧缺省：改它们的词会改历史读数。
+#: 2026-11-01 补上 `statement_aesthetic`：词表退场之后"判不了"不再是一个取值，这一行
+#: 若不补，B 的台账在没查成时写的就是派活轴的"建议重排"（全仓已实测 10 行这种错轴）。
 _JUDGE_UNDECIDED: dict[str, str] = {
     "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
+    "statement_aesthetic": JUDGE_UNCHECKED,
 }
 
 
@@ -2580,42 +2643,45 @@ class Secretary:
                 "reason": f"没查成（{getattr(call, 'problem', '') or 'no_reply'}）："
                           f"{str(getattr(call, 'detail', '') or '')[:200]}",
                 "cost": cost})
-        decision = str(data.get("decision") or "").strip()
+        raw_decision = data.get("decision")
+        decision = str(raw_decision or "").strip()
         allowed = JUDGE_VERDICTS[kind]
-        # ---- 2026-11-01（真机 82）：档位与审美轴是两根轴，而这一层此前按审美轴的三格
-        # 词表校验。判档那一问的题面（`_judge_system` 的 statement_aesthetic，2026-10-29
-        # 起）明写「decision 取 T0/T1/T2/T3/T4 之一」⇒ 模型照题面答 "T1" 会在这里被判成
-        # "词表外 ⇒ 不采信"，`checked=False` 之后 `judge_statement` 连台账那一行都不落
-        # —— 读侧无论怎么改都读不到一个字节。所以这一支要收：档位原样进
-        # `nontriviality`（第二输出），审美轴按 2026-10-23 的口径换算（T0 = 平凡但真
-        # ⇒ 太平凡；T1..T4 ⇒ 合格），两根轴都不丢。
-        tier_from_decision = (_nontriviality_level(decision)
-                              if kind == "statement_aesthetic" else None)
-        if decision not in allowed and tier_from_decision is None:
-            return self._record_judge(kind, context, {
-                "checked": False,
-                "reason": f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信",
-                "cost": cost})
-        if tier_from_decision is not None:
-            explicit = _nontriviality_level(data.get("nontriviality"))
-            effective = explicit if explicit is not None else tier_from_decision
-            data = {**dict(data), "nontriviality": effective}
-            decision = "太平凡" if effective == 0 else "合格"
+        # ---- 2026-11-01（业主裁定：审美轴三格退场，判档那一问只剩 T0–T4）
+        #
+        # 三态（盘上必须分得开，见 STATEMENT_VERDICTS 的注释）：
+        #   档位   ⇒ decision = "T0".."T4"（原样带下去，不再回写成旧词）；
+        #   判不了 ⇒ decision 键在、值 null ⇒ checked=True + nontriviality=None；
+        #   没查成 ⇒ checked=False（没缝 / 超时 / 坏 JSON / 词表外）。
+        # 旧词（合格 / 太平凡 / 判不了）在这一层不采信：旧行只在读台账时折算
+        # （`_tier_from_legacy_decision`），写侧与新行一个字都不再产生它们。
+        # 2026-11-01（第二刀）：判档只有两态 —— 有 T0..T4，或者没拿到可用判定。
+        # null / 旧词 / 坏 JSON 一律走"没查成"（checked=False），不落档位行：
+        # "判不了"不是第四档，是我们没拿到判定（处置是重试 / 重交 / 人看）。
+        if (decision not in allowed
+                and (kind != "statement_aesthetic"
+                     or _nontriviality_level(decision) is None)):
+            if kind == "statement_aesthetic":
+                why = (f"模型没给出可用判定（decision={raw_decision!r}）：档位只认 "
+                       f"{list(allowed)} ⇒ 这一格没查成")
+            else:
+                why = f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信"
+            return self._record_judge(kind, context, {"checked": False, "reason": why,
+                                                      "cost": cost})
+        level = _nontriviality_level(decision) if kind == "statement_aesthetic" else None
+        if level is not None:
+            # 容忍模型把档位给成 2 / "2"（老形状）：台账与读侧一律写 "T2"，不写数字串。
+            decision = nontriviality_label(level)
         out = {
             "checked": True, "decision": decision,
             "reason": str(data.get("reason") or "")[:500],
             "basis": [str(x) for x in (data.get("basis") or [])][:5],
             "elapsed_sec": self._last_judge_elapsed, "cost": cost}
         if kind == "statement_aesthetic":
-            # ---- 2026-10-23：档位是同一趟判断的第二个输出（业主 2026-10-21），
-            # 而这一层此前把模型给的 `nontriviality` 丢掉了（只白名单了四格）⇒
-            # `judge_statement` 永远读到 None、台账里永远落"判不了"。
-            # 真机读数（r34 的 `out/secretary/nontriviality.jsonl`）：5 行全是
-            # `nontriviality: 0` / `basis: ""` —— 那正是这条丢失的形态（"没人判过"
-            # 与"判过但丢了"在盘上同形）。所以这里按类别把它放行，原样交给上层收敛。
-            # 注意这里不做校验（收敛与三态在 `judge_statement` 一处做）：
-            # 这一层只管"别把它丢了"。
-            out["nontriviality"] = data.get("nontriviality", data.get("tier"))
+            # 2026-11-01：档位就是 `decision` 本身（一根轴一个字段）。这里把它作为派生
+            # 读数带回（`judge_statement` 与旧替身都读这一格），不再单独向模型要第二个
+            # 字段 —— 两个字段就是"同一件事两个名字"，82 现场（模型把 T1 写进 reason）
+            # 正是这么来的。
+            out["nontriviality"] = level
             out["nontriviality_basis"] = str(data.get("nontriviality_basis") or "")[:500]
         if kind == "proposition_identity":
             # ---- 2026-10-24：同一趟判断的第二组输出（业主：让秘书洗定理名，让秘书判）。
@@ -2645,11 +2711,14 @@ class Secretary:
         basis = list(result.get("basis") or [])
         if result.get("cost"):
             basis = basis + [f"cost.ledger={result['cost'].get('ledger') or '查不到'}"]
+        # 没判成时写哪个词：按类别（`_JUDGE_UNDECIDED`）。缺省仍是派活那一轴的
+        # "建议重排"（历史读数逐字不变）；V 的两类与判档那一问写"没查成" —— 对它们写
+        # "建议重排"是一句假话（它们里没有"重排"这件事）。
+        #
+        # 2026-11-01（第二刀）：判档只有两态，`checked=True` 时 `decision` 必然是
+        # `"T0"`…`"T4"`；"没拿到判定"走 `checked=False`，落到这里的缺省"没查成"。
         self.note_decision(
             duty=2, kind=KIND_DECISION,
-            # 没判成时写哪个词：按类别（`_JUDGE_UNDECIDED`）。缺省仍是派活那一轴的
-            # "建议重排"（历史读数逐字不变）；V 的两类判词写"判不了" —— 对它们写
-            # "建议重排"是一句假话（那两类里没有"重排"这件事）。
             decision=str(result.get("decision") or _JUDGE_UNDECIDED.get(kind, "建议重排")),
             reason=str(result.get("reason") or ""),
             basis=basis, target={"judge": kind}, judge=result,
@@ -2675,14 +2744,19 @@ class Secretary:
         原话：「第十二条作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有资格入库，且让 B 在挑定理和
         命题提交入库时要有审美。」为什么是"秘书"而不是"又一条机器判据"：平凡与否不是字符串能判的事
         （`a+b=b+a` 与一条真定理的字面形态可能很像），它属于本仓划给秘书的那一类判断（`draft/55` §2 的 B 类：
-        机器只摆材料，结论由本体自己的缝给）。三态，且"没查成"不许读成"合格"：
+        机器只摆材料，结论由本体自己的缝给）。"两态"（2026-11-01 第二刀：判不了退场为
+        "没查成"）：
 
         | 结局 | 返回 |
         |---|---|
-        | 判了 | `checked=True` + `decision ∈ {"合格","太平凡","判不了"}` + `reason` + `basis` |
+        | 有档 | `checked=True` + `decision ∈ {"T0","T1","T2","T3","T4"}` + `nontriviality` 同值 + `label` |
+        | 没查成（没拿到可用判定） | `checked=False` + `reason`；不落档位行；决定台账写 `decision="没查成"` |
         | 不是 B 的秘书 | `checked=False` + 理由（这一问只属于 B） |
-        | 没缝 / 开关关着 / 超时 / 坏 JSON | `checked=False` + 理由（`judge` 的那几支） |
         | 正文 0 字 | `checked=False` + `code=empty_statement_text`（不进判档流程，不发调用，不落台账） |
+
+        "没查成"的几种来路：模型给 null / 旧词 / 坏 JSON、调用失败、正文被截断、
+        一项力气读数都取不到（没有证明正文）。它们的处置都是"重试 / 重交 / 人看" ——
+        所以盘上不许留一条 `nontriviality: null` 的行冒充"判过了但没档"。
 
         ## 2026-10-24（业主裁定 B2）：判据换成"这份证明花了多大力气"
         业主原话：「不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。
@@ -2690,14 +2764,21 @@ class Secretary:
         外加绕路与分数（:func:`proof_effort_readings`）。这几项只是参考读数：
         档位由秘书（模型）按五档定义判，`proof_effort_readings` 不落格。
 
-        三个"谁是权威"的取舍写在这里，读的人不用去猜：
-        1. 读数完整 ⇒ 档位按读数给定；秘书自报的 `nontriviality` 只作交叉核对，
-           不一致时以读数为准，并把两边都写进 `nontriviality_basis`。
-        2. 读数缺项（没有证明正文）或正文被截断 ⇒ 档位是 `None` + 原因点名缺哪一项 ——
-           不许落 0 冒充"基础定理"，也不许把"输入不完整"写成"材料不足"。
-        3. `decision` 跟着档位走（两栏不许自相矛盾）：读数给出 T1 以上而秘书判了「太平凡」⇒
-           改记「合格」；读数一项都拿不到或输入被截断而秘书判了「太平凡」⇒ 改记「判不了」。
-           两次改写都在结果里留 `decision_overridden_from`。
+        三条"谁是权威"的取舍写在这里，读的人不用去猜：
+        1. 档位由模型判（2026-10-29 业主「全交给模型判」）；力气读数只作参考，
+           不拿来补一个档位。
+        2. 读数缺项（没有证明正文）或正文被截断 ⇒ 这一格没查成（`checked=False`），
+           不发调用、不落档位行，reason 点名缺哪一项 —— 不许落 0 冒充"基础定理"，
+           也不许把"没拿到判定"写成一条"未判"的行。
+        3. `decision` 是唯一的主字段（2026-11-01 业主裁定：审美轴三格退场）。模型给
+           `T0`…`T4` 就是档位；给 JSON `null` / 旧词 / 别的一律"没查成"。
+
+        ## 旧行怎么读（2026-11-01 词表退场）
+        新行只写 `T0`…`T4`；旧台账里的三个旧词由 :func:`_tier_from_legacy_decision`
+        折算（太平凡 ⇒ T0；合格 ⇒ 读 `judge.nontriviality` / 同号档位行，都没有 ⇒ 未判；
+        判不了 ⇒ 未判）。本方法读的是"判词"而不是台账行，但 2026-11-01 之前的两字段
+        判词形状（`decision="合格"` + `nontriviality=2`）仍按旧别名读（decision 能解析
+        时以 decision 为准）。
 
         `proof_text` / `proofs` 是可选的：`specs/b.py` 规定证明交在 `proof_text` 那一栏，
         而 `agent_loop._statement_filing_tier` 这一趟只转交命题正文（那一行不在本文件，
@@ -2787,6 +2868,39 @@ class Secretary:
                           "—— 档位判不了是因为输入不完整，不是因为材料不足")
         else:
             trunc_note = ""
+
+        def _unjudged(reason: str, *, cost_reason: str) -> dict[str, Any]:
+            """这一格没查成：落一条 `decision=没查成` 的决定台账行，不落档位行。
+
+            2026-11-01（第二刀）：判档只有两态。"没拿到判定"不是第四档，也不是一条
+            `nontriviality: null` 的行 —— 后者会让"没人判过"在盘上冒充"判过了但没档"。
+            """
+            reason = str(reason)[:900]
+            self.note_decision(
+                duty=2, kind=KIND_DECISION, decision=JUDGE_UNCHECKED,
+                reason=reason, target={"judge": "statement_aesthetic"}, basis=[],
+                before=json.dumps({"statement_full": body_full,
+                                   "why_this_is_not_trivial": str(basis_hint or "")},
+                                  ensure_ascii=False, default=str)[:2000],
+                fail_open=False,
+            )
+            return {"checked": False, "decision": "", "basis": [], "reason": reason,
+                    "nontriviality": None, "label": "",
+                    "nontriviality_tri": "unjudged", "nontriviality_basis": "",
+                    "effort": readings, "text_truncated": bool(text_truncated),
+                    "cost": {"ledger": "", "reason": cost_reason}}
+
+        # 输入不完整 ⇒ 这一格没查成（不发调用、不落档位行）。这两支都必须在缓存/调用
+        # 之前：截断的正文发去判档只会白花一次调用，而且回来也没有可用判定。
+        if text_truncated:
+            return _unjudged(trunc_note + "。这一格没查成：把正文拆段重交（分段登记）再判",
+                             cost_reason="没发调用（正文被截断）")
+        if not readings.get("chars"):
+            return _unjudged(
+                "这一条一项力气读数都取不到（最常见的是没有证明正文）⇒ 这一格没查成："
+                "把完整证明交进 proof_text（或 statement_full 的证明小节）再判",
+                cost_reason="没发调用（缺证明正文）")
+
         # 缓存键：命题正文 + B 写的素材 + 证明正文的摘要。第三项是 2026-10-24 加的 ——
         # 同一条定理的第二份证明是另一次判断（力气不同），拿正文键去沿用会把它判成第一次那一档。
         key = hashlib.sha256(
@@ -2809,109 +2923,45 @@ class Secretary:
             return {**prior, "reused": True, "reused_key": key[:12],
                     "cost": {"ledger": "", "reason": "没发调用（沿用本趟第一次的结论）"}}
         got = self.judge("statement_aesthetic", context, task_id=task_id)
-        if got.get("checked"):
-            # 2026-10-21：同一趟判断的第二个输出 —— 非平凡性档位（0–4；判不了 = None）。
-            # 2026-10-23 业主裁定：判「太平凡」不再意味着"拒收"，而是"落 T0"。
-            # 2026-10-24 业主裁定（B2）当时改为按力气读数定档；2026-10-29 再改回由秘书（模型）判，
-        # 力气读数只剩"参考"这一层作用（业主：「全交给模型判」「判档的还是 B 秘书」）。
-            #
-            # 三态纪律：判不了（None）不许读成 T0 —— 所以只有"读数给出 0 档"才写 0；
-            # 读数一项都取不到时，秘书若判了「太平凡」，那一判断没有依据（改前正是
-            # 这样把每一条都压成 T0），改记「判不了」。
-            decided = str(got.get("decision") or "")
-            # ---- 2026-11-01（真机 82，48/48 档案位 null）：题面要求模型把档位放在
-            # `decision` 里（`_judge_system` 的 statement_aesthetic：「decision 取
-            # T0/T1/T2/T3/T4 之一」），而这一格此前只读 `nontriviality` ⇒ 模型照题面
-            # 答的 "T1" 永远读不到，兜底那句话还倒过来猜"没接模型 / 没开 model /
-            # 回不了解析"（三个猜测一个都不成立）。两个键都认：
-            # `nontriviality` 是专门的档位字段（老形状、历史台账、替身都用它）⇒ 它在
-            # 冲突时优先；只有它为 None 时才退到 decision。decision 的其它取值
-            # （"合格" / "太平凡" / "判不了" / "T9" …）由 `_nontriviality_level`
-            # 返回 None ⇒ 不折档、更不折成 0。
-            explicit_level = _nontriviality_level(got.get("nontriviality"))
-            from_decision = _nontriviality_level(decided)
-            model_level = explicit_level if explicit_level is not None else from_decision
-            model_note = str(got.get("nontriviality_basis") or "")
-            # 2026-10-29 业主「全交给模型判」⇒ 机械落格函数已删；这个常量只为
-            # 让下面的 `verdict[...]` 引用不必改写，它不提供档位（level=None）。
-            verdict = {"level": None,
-                       "why": "力气读数只作参考（档位由秘书按五档定义判）"}
-            level = verdict["level"]
-            notes: list[str] = []
-            if (explicit_level is not None and from_decision is not None
-                    and explicit_level != from_decision):
-                notes.append(
-                    f"decision={decided} 与 nontriviality={got.get('nontriviality')!r} 冲突 ⇒ "
-                    f"以 nontriviality={nontriviality_label(explicit_level)} 为准"
-                    "（显式字段优先：decision 那一格同时是审美轴的词，只有它恰好是"
-                    "可解析档位时才当档位读）")
-            if text_truncated:
-                level = None
-                notes.append(trunc_note)
-                if _is_trivial_verdict(decided):
-                    got["decision_overridden_from"] = decided
-                    got["decision"] = "判不了"
-                    notes.append("秘书判了「太平凡」，但这一趟看到的是被截断的正文 ⇒ "
-                                 "那一判断不采信，改记「判不了」")
-                if model_note:
-                    notes.append(f"秘书原报档位依据（输入不完整，只留痕不作判据）：{model_note}")
-            # 2026-10-29：机械落格删掉之后 level 恒为 None，原来这条 `elif level is None`
-            # 会把每一条都读进"读数取不到"那一支 —— 条件改成读力气读数本身。
-            elif not readings.get("chars"):
-                notes.append(str(verdict["why"]))
-                if _is_trivial_verdict(decided):
-                    got["decision_overridden_from"] = decided
-                    got["decision"] = "判不了"
-                    notes.append("秘书判了「太平凡」，但这一趟一项力气读数都取不到 ⇒ "
-                                 "「力气小」没有依据，改记「判不了」")
-                if model_level is not None:
-                    notes.append(f"秘书自报 {nontriviality_label(model_level)}，"
-                                 "但这一趟一项力气读数都取不到 ⇒ 档位落「未判」")
-                if model_note:
-                    notes.append(f"秘书原报档位依据：{model_note}")
-            else:
-                # 读数完整：档位以秘书（模型）判的为准（业主 2026-10-29：全交给模型判，
-                # 判档的还是 B 秘书）。力气读数仍进 `effort`，只作参考、不再裁定档位。
-                # 秘书没给档位 ⇒ 判不了，不许回落机械分、更不许折成 T0。
-                if model_level is not None:
-                    if model_level != level:
-                        notes.append(
-                            f"档位以秘书判定为准：{nontriviality_label(model_level)}"
-                            f"（机器力气读数只作参考，score="
-                            f"{int(readings.get('score') or 0)}）")
-                        level = model_level
-                    else:
-                        notes.append(str(verdict["why"]))
-                else:
-                    notes.append(
-                        "模型没给可解析的档位：缺字段（decision="
-                        f"{decided!r} 与 nontriviality="
-                        f"{got.get('nontriviality')!r} 都不是 T0–T4）⇒ 这一格记判不了；"
-                        "机器力气读数只作参考，不拿来补一个档位")
-                    level = None
-                if _is_trivial_verdict(decided) and level == 0:
-                    notes.append(f"降为 {nontriviality_label(0)}：" + str(verdict["why"])
-                                 + f"；秘书原话：{str(got.get('reason') or '')[:200]}")
-                if model_note:
-                    notes.append(f"秘书原报档位依据：{model_note}")
-            basis_note = "；".join(n for n in notes if n)[:900]
-            got = {**got, "nontriviality": level, "label": nontriviality_label(level),
-                   "nontriviality_basis": basis_note,
-                   "nontriviality_tri": "computed" if level is not None else "unjudged",
-                   "effort": readings, "effort_score": int(readings.get("score") or 0),
-                   "text_truncated": bool(text_truncated)}
-            root = getattr(self, "root", None)
-            if root is not None:
-                try:
-                    append_nontriviality(root, statement_full=body_full,
-                                         level=level, basis=basis_note,
-                                         role=str(self.role or ""), task_id=str(task_id or ""),
-                                         stmt_id=stmt_id,
-                                         effort=readings, text_truncated=bool(text_truncated))
-                except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
-                    got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
-            # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
-            self._statement_verdicts[key] = dict(got)
+        if not got.get("checked"):
+            # `judge` 已经把这一趟落进决定台账（"没查成"），这里不再落第二条。
+            return got
+        # 2026-11-01（第二刀）：判档只有两态 —— 有 T0..T4，或者没查成。
+        # `decision` 是唯一主字段；`nontriviality` 只剩旧形状的读别名。
+        decided = str(got.get("decision") or "")
+        level = _tier_from_judge_reply(got)
+        if level is None:
+            # checked=True 却没有可解析档位（旧替身 / 坏判词）⇒ 仍是"没查成"，不折档。
+            return _unjudged(
+                f"判词里没有可解析的档位（decision={decided!r}）⇒ 这一格没查成",
+                cost_reason="没发调用（判词没有档位）")
+        model_note = str(got.get("nontriviality_basis") or "")
+        notes = [f"档位以秘书判定为准：{nontriviality_label(level)}"
+                 f"（机器力气读数只作参考，score={int(readings.get('score') or 0)}）"]
+        if level == 0:
+            notes.append(f"降为 {nontriviality_label(0)}：力气读数只作参考"
+                         f"（档位由秘书按五档定义判）；秘书原话："
+                         f"{str(got.get('reason') or '')[:200]}")
+        if model_note:
+            notes.append(f"秘书原报档位依据：{model_note}")
+        basis_note = "；".join(n for n in notes if n)[:900]
+        got = {**got, "nontriviality": level, "label": nontriviality_label(level),
+               "nontriviality_basis": basis_note,
+               "nontriviality_tri": "computed",
+               "effort": readings, "effort_score": int(readings.get("score") or 0),
+               "text_truncated": False}
+        root = getattr(self, "root", None)
+        if root is not None:
+            try:
+                append_nontriviality(root, statement_full=body_full,
+                                     level=level, basis=basis_note,
+                                     role=str(self.role or ""), task_id=str(task_id or ""),
+                                     stmt_id=stmt_id,
+                                     effort=readings, text_truncated=False)
+            except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
+                got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
+        # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
+        self._statement_verdicts[key] = dict(got)
         return got
 
     # ------------------------------------------------ V 的三件事（业主 2026-10-29）
@@ -9886,33 +9936,53 @@ def _statement_sha(statement_full: str) -> str:
     return hashlib.sha256(str(statement_full or "").strip().encode("utf-8")).hexdigest()
 
 
-def _nontriviality_level(value: Any) -> int | None:
-    """把模型给的档位收敛到 `0|1|2|3|4`；别的（含缺省）一律 `None` = 判不了。
+def _tier_from_judge_reply(got: Mapping[str, Any]) -> int | None:
+    """从一趟判词里读档位（2026-11-01 起 `decision` 是唯一的主字段）。
 
-    2026-10-23 起 `0` 是一档真的档位（T0 基础定理或初步结论），所以"判不了"必须
-    换一个值：`None`。这里刻意不把坏输入折成 0 —— 那会把"模型给了 `1.9`"读成
-    "这是一条基础定理"，正是"静默降级"的形态。同理也不许折成 1。
-
-    只认整数（或纯数字字符串）：`1.9` 不是"第 1 档"，它是坏输入。
+    `decision` 可解析 ⇒ 就是它（数字 `2` / `"2"` / `"T2"` 都收敛到 2）；它不是档位时
+    才退到 `nontriviality` —— 那是 2026-11-01 之前"两字段两轴"形状的读别名（老结果、
+    替身、历史台账），不再向模型索取。两个都读不出来 ⇒ `None` = 判不了（不是 0）。
     """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        got: Any = value
-    elif isinstance(value, str):
-        raw = value.strip()
-        upper = raw.upper()
-        if upper.startswith("T") and upper[1:].isdigit():
-            # 2026-10-29：判档那一问的 decision 词表就是 T0..T4，这里原先只认数字
-            # ⇒ 模型答 "T3" 永远解析成 None（"交给模型判"在结构上走不通）。
-            got = int(upper[1:])
-        elif raw.isdigit():
-            got = int(raw)
-        else:
-            return None
-    else:
-        return None
-    return got if got in NONTRIVIALITY_LEVELS else None
+    level = _nontriviality_level(got.get("decision"))
+    if level is not None:
+        return level
+    return _nontriviality_level(got.get("nontriviality"))
+
+
+def _tier_from_legacy_decision(row: Mapping[str, Any]) -> int | None:
+    """一行旧台账折算出的档位（2026-11-01 词表退场后读旧行的唯一口径）。
+
+    业主 2026-11-01 裁定审美轴三格退场之后，写侧与新行只产生 `T0`…`T4` / `null`；
+    但 `out/secretary/<角色>.jsonl` 是 append-only 的，旧行里还有三个词。读旧行时按
+    这张表折算（这是"旧词"在源码里仅存的落点，判据钉着它只许出现在这里）：
+
+    | 老 `decision` | 折算出的档位 | 判据 |
+    |---|---|---|
+    | `T0`…`T4` | 同名档位 | 2026-11-01 那一笔的兼容形状 |
+    | `太平凡` | T0 | 这个结论只剩"力气小 ⇒ 落 T0"这一层意思 |
+    | `合格` | `judge.nontriviality` / 同号 `nontriviality.jsonl` 那一行；都没有 ⇒ 未判 | 它当年只表示"收"，从不携带档位 |
+    | `判不了` | 未判（`None`） | 它是"该判而没判"，不是一档 |
+
+    优先级：decision 能解析成档位 ⇒ 用它；否则 `太平凡` ⇒ 0；否则读 `nontriviality`
+    （先看行上的 `judge.nontriviality`，再看同级的 `nontriviality`）。新旧两套字段同时
+    出现且冲突时 decision 胜 —— 2026-11-01 起它才是唯一的主字段。
+
+    这一格只回答"这一行说的是哪一档"，不回答"这一行是不是判过了"：`None` 既可能是
+    "判不了"也可能是"没查成"，那要读 `judge.checked`（新行）或 `fail_open`（旧行），
+    不要把两者折成一档。
+    """
+    decision = str(row.get("decision") or "")
+    level = _nontriviality_level(decision)
+    if level is not None:
+        return level
+    if decision.strip() == "太平凡":
+        return 0
+    judge = row.get("judge")
+    if isinstance(judge, Mapping):
+        level = _nontriviality_level(judge.get("nontriviality"))
+        if level is not None:
+            return level
+    return _nontriviality_level(row.get("nontriviality"))
 
 
 def _level_from_row(row: Mapping[str, Any]) -> int | None:
@@ -10458,17 +10528,16 @@ def _judge_system(kind: str) -> str:
             "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
             "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）")
     if kind == "statement_aesthetic":
-        # ---- 2026-11-01 裁定：两个字段各管一轴，谁也不再兼两义。
+        # ---- 2026-11-01 业主两刀：审美轴三格退场，判档那一问只剩 T0–T4；
+        # "判不了"也不是第四档 —— 材料不足 / 正文被截断的情况框架在发问之前就挡住了，
+        # 走到这里就必须给出一档。模型若给 null / 旧词 / 别的一律"没查成"，不落档位行。
         #
-        # 改前 ask 让 decision 兼档位（"decision 取 T0/T1/T2/T3/T4 之一"），而抬头说
-        # decision 必须逐字取自审美轴三格 ⇒ 两条指令打架，模型两头讨好：真机 82 的
-        # judge 载荷是 `decision="合格" / nontriviality=null / reason="按五档属T1…"`
-        # —— 档位写进了 reason，读侧一个字段都认不到。所以档位单独一格：
-        # decision 只装审美轴三格（词表不动），nontriviality 必填、只装 T0..T4，
-        # 只有判「判不了」时才 null（并必须在 reason 里说清为什么）。
-        head += ('、nontriviality（**必填**：取 "T0"/"T1"/"T2"/"T3"/"T4" 之一；'
-                 '只有 decision 判「判不了」时才给 null，且必须在 reason 里写明为什么'
-                 '判不了 —— 档位只装这一格，不要写进 decision）')
+        # 为什么不再要第二个字段：2026-11-01 的 82 现场正是"两字段两轴"的形态 ——
+        # 模型把档位写进 reason、decision 写了旧词、nontriviality 给了 null，
+        # 读侧一个字段都认不到。一根轴一个字段，题面就不再有两套指令打架。
+        head += ('；另外，decision 就是这条命题的档位：**逐字取自** '
+                 '"T0"/"T1"/"T2"/"T3"/"T4" 之一（材料不足的情况框架会先挡住，'
+                 '不会把这一问发给你）')
     head += "。"
     if kind == "duplicate_retry":
         ask = ("问题：同一个 (role, action, input_key) 已经有下面这些终态行。这一次是"
@@ -10494,11 +10563,8 @@ def _judge_system(kind: str) -> str:
             "材料里的 `effort`（体量/步骤/引理/工具簇/绕路与分数）只是机器数出来的"
             "**参考读数**，不要拿它当判据：写得长不等于难，步数多也不等于难；"
             "也不要只在 basis 里复述那几个数字。\n"
-            "decision 只走审美轴那三格（与抬头同一张词表）：『合格』= 值得收；"
-            "『太平凡』= 平凡但真，档位给 T0；『判不了』= 拿不准或输入不完整。\n"
-            "nontriviality（必填）装档位：取 \"T0\"/\"T1\"/\"T2\"/\"T3\"/\"T4\" 之一；"
-            "只有 decision 判『判不了』时才给 null —— 给 null 必须在 reason 里写清"
-            "为什么判不了。\n"
+            "decision 就是这条命题的档位：取 \"T0\"/\"T1\"/\"T2\"/\"T3\"/\"T4\" 之一；"
+            "必须给出一档（材料不全会先被框架挡住，不会走到这一问）。\n"
             "reason 一句话；basis 写清你凭证明里的哪几步这么判（可以引用正文里的步骤，"
             "但不要用分数当理由）。"
         )
@@ -10617,8 +10683,7 @@ def _judge_material(context: Mapping[str, Any]) -> str:
     total = len(body)
     if total > JUDGE_MATERIAL_CAP:
         note = (f"\n…【材料在 {JUDGE_MATERIAL_CAP} 字处被截断：这一条正文共 {total} 字，"
-                f"只给了前 {JUDGE_MATERIAL_CAP} 字。档位判不了时请写「输入被截断」——"
-                "这是输入不完整，不是材料不足】\n")
+                f"只给了前 {JUDGE_MATERIAL_CAP} 字。这是输入不完整，不是材料不足】\n")
         return f"材料：\n{body[:JUDGE_MATERIAL_CAP]}{note}"
     return f"材料：\n{body}\n"
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""判据：判档那一问只有**两态** —— 有 T0–T4，或者这一格根本没查成。
+"""判据：判档那一问只有两态 —— 有 T0–T4，或者这一格根本没查成。
 
 ## 业主裁定（2026-11-01，两刀）
 
@@ -11,11 +11,11 @@
 所以最终形态（定稿）：
 
 - `STATEMENT_VERDICTS` = `("T0","T1","T2","T3","T4")`，从 `NONTRIVIALITY_LEVELS` 派生；
-  **没有 null、没有"判不了"、没有旧三格**；
-- 档位只有两种结局：**有 T0–T4**，或者**这一格根本没查成**
+  没有 null、没有"判不了"、没有旧三格；
+- 档位只有两种结局：有 T0–T4，或者这一格根本没查成
   （`checked=False` + reason；要重试 / 要重交 / 要人看）；
-- "判不了"不是一种判定结果，是**我们没拿到判定** —— 它必须长成 `checked=False`，
-  而且**不许落一条 `nontriviality: null` 的行**冒充"判过了但没档"；
+- "判不了"不是一种判定结果，是我们没拿到判定 —— 它必须长成 `checked=False`，
+  而且不许落一条 `nontriviality: null` 的行冒充"判过了但没档"；
 - 概念 / 定义行仍是 `not_applicable`：那是"这一问对它不成立"，不是"没查成"，两回事；
 - 旧台账里的三个旧词只在 `_tier_from_legacy_decision()` 一处折算（读旧行）。
 
@@ -24,7 +24,7 @@
 1. 词表 == 五档（从档位轴派生）；
 2. `src/` 里等于旧三格的字面量只许出现在 `_tier_from_legacy_decision()`（本模块严格；
    别处只允许已登记的其它轴）—— 反泄漏；
-3. 假缝回 `{"decision": null}` / 旧词 / 坏 JSON ⇒ 一律 `checked=False`，且**没有档位行**；
+3. 假缝回 `{"decision": null}` / 旧词 / 坏 JSON ⇒ 一律 `checked=False`，且没有档位行；
 4. 假缝回 `{"decision": "T2"}` ⇒ `checked=True`、档位 2、档位台账一行、决定台账 `decision="T2"`；
 5. 反真空：把词表 monkeypatch 回旧三格 ⇒ 1 必红；
 6. 概念行 ⇒ `not_applicable`（不进 3 的 `checked=False`）；
@@ -126,7 +126,9 @@ def test_the_old_words_live_only_in_the_legacy_decision_reader() -> None:
         "`_tier_from_legacy_decision` 里被折算：\n  " + "\n  ".join(outside))
 
     # 别的模块：只许已登记的那几个（V 判词折档 / 状态标签 / 门禁显示 / 错误桶名）。
-    registered = {"verifications.py", "conductor.py", "gates.py", "errorstats.py"}
+    # secretary.py 已经在上面的严格检查里逐个核过（只许在折算函数里），这里放行它。
+    registered = {"secretary.py", "verifications.py", "conductor.py", "gates.py",
+                  "errorstats.py"}
     src_root = pathlib.Path(SEC.__file__).resolve().parents[1]
     seen: dict[str, int] = {}
     for path in sorted(src_root.rglob("*.py")):
@@ -155,7 +157,7 @@ def test_the_old_words_live_only_in_the_legacy_decision_reader() -> None:
 def test_a_judge_without_a_usable_decision_is_not_a_tier(tmp_path: pathlib.Path) -> None:
     """③ null / 旧词 / 坏 JSON / 调用失败 / 缺证明正文 ⇒ 一律"没查成"，且没有档位行。
 
-    "判不了"不是第四档，也不是一条 `nontriviality: null` 的行：它是**我们没拿到判定**。
+    "判不了"不是第四档，也不是一条 `nontriviality: null` 的行：它是我们没拿到判定。
     台账上它只长成 `checked=False` + `decision="没查成"`，处置是"重试 / 重交 / 人看"。
     """
     cases = {

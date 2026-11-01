@@ -86,7 +86,7 @@ class _StubSecretary:
         self.label, self.level = label, level
 
     def judge_statement(self, **kw: Any) -> dict[str, Any]:
-        return {"checked": True, "decision": "太平凡", "reason": "力气小",
+        return {"checked": True, "decision": "T0", "reason": "力气小",
                 "basis": [], "reused": True, "nontriviality": self.level,
                 "label": self.label, "effort": self.effort,
                 "nontriviality_tri": "computed" if self.level is not None else "unjudged"}
@@ -95,7 +95,7 @@ class _StubSecretary:
 class _Capture:
     """替身判断面：记下秘书真正看到的材料，按剧本回一个结论（零模型调用）。"""
 
-    def __init__(self, decision: str = "太平凡", reason: str = "力气小") -> None:
+    def __init__(self, decision: str = "T0", reason: str = "力气小") -> None:
         self.decision = decision
         self.reason = reason
         self.materials: list[dict[str, Any]] = []
@@ -156,7 +156,7 @@ def test_c_the_note_speaks_effort_and_drops_the_old_two_questions(
         tmp_path: pathlib.Path) -> None:
     """（c）note 里出现五项力气读数之一，且不再出现旧那两问（改前红）。
 
-    这一条刻意用替身秘书（只回一格"判了太平凡"）：note 的红要有它自己的理由 ——
+    这一条刻意用替身秘书（只回一格"判了 T0"）：note 的红要有它自己的理由 ——
     改前那句 note 逐字教着旧两问，五个力气词一个都没有。
     """
     effort = SEC.proof_effort_readings(statement_full=_STATEMENT, proof_text=_SMALL_PROOF)
@@ -204,9 +204,9 @@ def test_d_stripping_the_proof_passthrough_turns_case_a_red(
         monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
     """（d）反真空：把 ① 的透传打桩成空 ⇒ (a) 必红。
 
-    打桩只做一件事：这一趟不问秘书要证明正文（等价于改前的调用点）。于是材料里
-    `effort.chars == 0`、`missing == ["proof_body"]`、结论改记「判不了」⇒
-    (a) 那三句断言同时不成立。
+    打桩只做一件事：这一趟不问秘书要证明正文（等价于改前的调用点）。于是读数一项都
+    取不到 ⇒ 这一格没查成（2026-11-01 第二刀）：不发调用、不落档位行，(a) 那三句
+    断言同时不成立。
     """
     original = SEC.Secretary.judge_statement
 
@@ -218,12 +218,9 @@ def test_d_stripping_the_proof_passthrough_turns_case_a_red(
     cap = _Capture()
     sec, root = _secretary(tmp_path, cap)
     got = _gate(sec, {"statement_full": _STATEMENT, "proof_text": _SMALL_PROOF})
-    effort = dict((cap.materials[0] if cap.materials else {}).get("effort") or {})
-    assert effort.get("chars", 0) == 0, f"透传打空之后材料里仍然有证明正文：{effort}"
-    assert list(effort.get("missing") or []) == ["proof_body"], effort
-    assert got is None, f"透传打空之后这一格仍然给出了档位读数：{got}"
-    rows = _ledger_rows(root)
-    assert rows and rows[-1]["nontriviality"] is None, rows
+    assert cap.materials == [], "缺证明正文时仍然把它发去判档（白花一次调用）"
+    assert got is None, f"缺证明正文之后这一格仍然给出了档位读数：{got}"
+    assert _ledger_rows(root) == [], "缺证明正文却落了一条'未判'的档位行"
 
 
 def test_d_the_call_site_hands_over_both_keywords() -> None:

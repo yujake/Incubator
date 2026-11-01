@@ -1360,33 +1360,34 @@ def _canned(payload: dict):
     return _Canned()
 
 
-def test_the_aesthetic_verdict_and_the_delegation_verdict_are_two_vocabularies(tmp_path):
+def test_the_tier_vocabulary_and_the_delegation_vocabulary_are_two_vocabularies(tmp_path):
     """两根轴的词表不许互相串（`JUDGE_VERDICTS` 是唯一一处定义）。
 
-    为什么这条值得单判：把「太平凡」写进派活那一栏（或反过来把「可派」写进审美那一栏），
+    2026-11-01：判档那一问的词表是 T0–T4（审美轴三格退场），派活那一轴仍是 `DECISIONS`。
+    为什么这条值得单判：把档位写进派活那一栏（或反过来把「可派」写进判档那一栏），
     下游读的是同一个 `decision` 字段而没有任何地方会报错 ——
     这与本仓"同一件事两个名字"的老毛病同族。所以每一类只认自己那张词表。
     """
     sec = _sec()
     root = tmp_path / "ws"
     root.mkdir()
-    # ① 审美那一类收到派活轴的结论 ⇒ 不采信
+    # ① 判档那一类收到派活轴的结论 ⇒ 不采信
     s1 = sec.Secretary("B", root=root, seam=_canned({"decision": "建议不派", "reason": "x"}),
                        enable_model=True)
     got1 = s1.judge("statement_aesthetic", {"statement_full": "a+b=b+a"})
     assert got1["checked"] is False and "建议不派" in got1["reason"], got1
-    # ② 派活那一类收到审美轴的结论 ⇒ 同样不采信
-    s2 = sec.Secretary("M", root=root, seam=_canned({"decision": "太平凡", "reason": "x"}),
+    # ② 派活那一类收到档位 ⇒ 同样不采信
+    s2 = sec.Secretary("M", root=root, seam=_canned({"decision": "T1", "reason": "x"}),
                        enable_model=True)
     got2 = s2.judge("duplicate_retry", {"to": "D"})
-    assert got2["checked"] is False and "太平凡" in got2["reason"], got2
+    assert got2["checked"] is False and "T1" in got2["reason"], got2
     # ③ 各回各的 ⇒ 都采信（反真空：不是"一律不采信"）
-    s3 = sec.Secretary("B", root=root, seam=_canned({"decision": "太平凡", "reason": "两条都答不上"}),
+    s3 = sec.Secretary("B", root=root, seam=_canned({"decision": "T1", "reason": "有一定价值"}),
                        enable_model=True)
     got3 = s3.judge("statement_aesthetic", {"statement_full": "a+b=b+a"})
-    assert got3["checked"] is True and got3["decision"] == "太平凡", got3
-    assert set(sec.STATEMENT_VERDICTS) == {"合格", "太平凡", "判不了"}
-    assert "太平凡" not in sec.DECISIONS, "审美轴的结论不许混进派活那一栏"
+    assert got3["checked"] is True and got3["decision"] == "T1", got3
+    assert set(sec.STATEMENT_VERDICTS) == {f"T{i}" for i in sec.NONTRIVIALITY_LEVELS}
+    assert not (set(sec.STATEMENT_VERDICTS) & set(sec.DECISIONS)), "两根轴的词表不许重叠"
 
 
 def test_the_statement_judgement_belongs_to_B_only(tmp_path):
@@ -1401,21 +1402,22 @@ def test_the_statement_judgement_belongs_to_B_only(tmp_path):
                       enable_model=True)
     got = a.judge_statement(statement_full="某定理")
     assert got["checked"] is False and "B" in got["reason"], got
-    b = sec.Secretary("B", root=root, seam=_canned({"decision": "合格", "reason": "有用"}),
+    b = sec.Secretary("B", root=root, seam=_canned({"decision": "T1", "reason": "有用"}),
                       enable_model=True)
-    ok = b.judge_statement(statement_full="某定理", basis_hint="L3 要用")
-    assert ok["checked"] is True and ok["decision"] == "合格", ok
+    ok = b.judge_statement(statement_full="某定理", basis_hint="L3 要用",
+                           proof_text="证明：由定义直接得到。")
+    assert ok["checked"] is True and ok["decision"] == "T1", ok
 
 
 def test_the_filing_gate_lands_on_t0_instead_of_refusing(tmp_path):
-    """入库口那一道闸：判「太平凡」⇒ 落 T0，不再拒收（业主 2026-10-23）。
+    """入库口那一道闸：判 T0 ⇒ 落 T0，不再拒收（业主 2026-10-23）。
 
-    改前这一格是"只有『判了 + 判太平凡』才拦"，返回 `ok=False` +
+    改前这一格是"只有『判了 + 判平凡』才拦"，返回 `ok=False` +
     `kind=statement_too_trivial`。业主的裁定把收场方式换了：平凡不是"不许进"，
     是"进哪一档"（T0 = 基础定理或初步结论）。所以这一格现在的返回值是一格读数
     （`tier="T0"` + `downgraded=True`），而不是拒绝。
 
-    六个放行档逐个过一遍：合格 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书
+    六个放行档逐个过一遍：非 T0 档 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书
     —— 它们一律什么都不加（`None`）。把"加了档位读数"与"拒收"折成同一种结局，
     是这一格最容易犯的错。
     """
@@ -1435,16 +1437,16 @@ def test_the_filing_gate_lands_on_t0_instead_of_refusing(tmp_path):
         def judge_statement(self, **kw):
             return self.out
 
-    note = gate("B", _Sec({"checked": True, "decision": "太平凡", "reason": "两条都答不上"}))
+    note = gate("B", _Sec({"checked": True, "decision": "T0", "reason": "力气小"}))
     assert note is not None and note["tier"] == "T0", note
-    assert note["downgraded"] is True and note["decision"] == "太平凡", note
+    assert note["downgraded"] is True and note["decision"] == "T0", note
     assert "不" not in note.get("error", ""), "这一格不许再返回拒绝"
     for label, args in (
-        ("合格", ("B", _Sec({"checked": True, "decision": "合格"}))),
-        ("判不了", ("B", _Sec({"checked": True, "decision": "判不了"}))),
+        ("非 T0 档", ("B", _Sec({"checked": True, "decision": "T2"}))),
+        ("判不了", ("B", _Sec({"checked": True, "decision": ""}))),
         ("没查成", ("B", _Sec({"checked": False, "reason": "没有缝"}))),
-        ("不是 B", ("A", _Sec({"checked": True, "decision": "太平凡"}))),
-        ("不是入库那件工具", ("B", _Sec({"checked": True, "decision": "太平凡"}))),
+        ("不是 B", ("A", _Sec({"checked": True, "decision": "T0"}))),
+        ("不是入库那件工具", ("B", _Sec({"checked": True, "decision": "T0"}))),
         ("没秘书", ("B", None)),
     ):
         if label == "不是入库那件工具":
@@ -1538,13 +1540,13 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
             return dict(self.payload), _t.SimpleNamespace(ok=True, problem="", detail="")
 
     # ① 同一份文本问两次 ⇒ 只花一次调用，第二次标 reused 且结论逐字相同
-    seam = _Counting({"decision": "太平凡", "reason": "两条依据都缺", "basis": ["x"]})
+    seam = _Counting({"decision": "T0", "reason": "力气小", "basis": ["x"]})
     s = sec.Secretary("B", root=root, seam=seam, enable_model=True)
     first = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
                               proof_text=small_proof)
     second = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
                                proof_text=small_proof)
-    assert first["checked"] is True and first["decision"] == "太平凡", first
+    assert first["checked"] is True and first["decision"] == "T0", first
     assert seam.calls == 1, f"同一个命题被真问了 {seam.calls} 次"
     assert second["decision"] == first["decision"] and second.get("reused") is True, second
     assert second["reason"] == first["reason"], second
@@ -1567,12 +1569,12 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
 
     s2 = sec.Secretary("B", root=root / "two", seam=_Boom(), enable_model=True)
     (root / "two").mkdir()
-    miss = s2.judge_statement(statement_full="同一条")
+    miss = s2.judge_statement(statement_full="同一条", proof_text=small_proof)
     assert miss["checked"] is False, miss
     assert not s2._statement_verdicts, "没查成的结论被缓存了（等于一次超时永久关掉这道门）"
-    ok_seam = _Counting({"decision": "合格", "reason": "有用", "basis": ["L3"]})
+    ok_seam = _Counting({"decision": "T1", "reason": "有一定价值", "basis": ["L3"]})
     s2.seam = ok_seam
-    again = s2.judge_statement(statement_full="同一条")
+    again = s2.judge_statement(statement_full="同一条", proof_text=small_proof)
     assert again["checked"] is True and ok_seam.calls == 1, again
 
 
@@ -1594,7 +1596,7 @@ def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
 
     class _Sec:
         def judge_statement(self, **kw):
-            return {"checked": True, "decision": "太平凡", "reason": "两条判据都答不上",
+            return {"checked": True, "decision": "T0", "reason": "两条判据都答不上",
                     "basis": [], "reused": True}
 
     got = AgentLoop._statement_filing_tier(

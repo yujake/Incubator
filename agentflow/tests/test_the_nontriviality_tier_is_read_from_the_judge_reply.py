@@ -89,44 +89,44 @@ def test_the_old_shape_still_works(tmp_path) -> None:
     assert (rows[0]["nontriviality"], rows[0]["label"]) == (2, "T2"), rows[0]
 
 
-def test_without_a_tier_the_basis_names_the_missing_field(tmp_path) -> None:
-    """③ 两键都缺 ⇒ 未判，且兜底措辞点名缺字段（不再猜"没接模型/没开 model/回不了解析"）。"""
+def test_a_reply_without_a_tier_is_unchecked(tmp_path) -> None:
+    """③ 判词里没有档位 ⇒ 这一格没查成（checked=False），不落一条'未判'的行。
+
+    2026-11-01（第二刀）之前这里会落一条 `nontriviality: null` 的行；那会让
+    "没拿到判定"在盘上冒充"判过了但没档"。现在它只长成 `checked=False` + reason。
+    """
     got = _judge_with(tmp_path, {"decision": "合格", "reason": "没问题"})
+    assert got["checked"] is False, got
     assert got["nontriviality"] is None, got
-    assert got["nontriviality_tri"] == "unjudged", got
-    basis = str(got.get("nontriviality_basis") or "")
-    assert "缺字段" in basis, basis
-    for lie in ("没接模型", "没开 model", "回不了解析"):
-        assert lie not in basis, f"兜底措辞还在猜「{lie}」：{basis}"
-    rows = _ledger(tmp_path)
-    assert rows[0]["nontriviality"] is None, rows[0]
+    assert "没查成" in str(got.get("reason") or ""), got
+    assert not SEC.nontriviality_path(tmp_path).exists(), "没拿到判定却落了一条档位行"
 
 
-def test_a_bad_tier_is_unjudged_not_t0(tmp_path) -> None:
-    """④ 坏输入（T9）⇒ 未判；不许折成某一档，尤其不许折成 0（那是 T0）。"""
+def test_a_bad_tier_is_unchecked_not_t0(tmp_path) -> None:
+    """④ 坏输入（T9）⇒ 没查成；不许折成某一档，尤其不许折成 0（那是 T0）。"""
     got = _judge_with(tmp_path, {"decision": "T9"})
+    assert got["checked"] is False, got
     assert got["nontriviality"] is None, got
-    assert got["nontriviality_tri"] == "unjudged", got
-    # 坏输入不是"没给字段"：兜底那句话照样要点名 decision 里不是 T0–T4。
-    assert "缺字段" in str(got.get("nontriviality_basis") or ""), got
-    rows = _ledger(tmp_path)
-    assert rows[0]["nontriviality"] is None, rows[0]
+    assert "T9" in str(got.get("reason") or ""), got
+    assert not SEC.nontriviality_path(tmp_path).exists(), "坏输入却落了一条档位行"
 
 
-def test_the_explicit_field_wins_a_conflict_and_leaves_a_trace(tmp_path) -> None:
-    """⑤ 冲突 ⇒ 以 `nontriviality` 为准，并在 basis 里写清（口径见模块 docstring）。"""
+def test_decision_wins_over_the_legacy_alias(tmp_path) -> None:
+    """⑤ 一根轴：decision 能解析时它就是档位，旧字段 `nontriviality` 不再参与。
+
+    2026-11-01 之前是"两字段两轴"，冲突时显式字段优先；裁定把审美轴三格退场之后
+    `decision` 是唯一的主字段 —— 旧字段只剩"decision 读不出来时的别名"这一层。
+    """
     got = _judge_with(tmp_path, {"decision": "T1", "nontriviality": 3})
-    assert (got["nontriviality"], got["label"]) == (3, "T3"), got
-    basis = str(got.get("nontriviality_basis") or "")
-    assert "冲突" in basis and "nontriviality" in basis, basis
+    assert (got["nontriviality"], got["label"]) == (1, "T1"), got
     rows = _ledger(tmp_path)
-    assert (rows[0]["nontriviality"], rows[0]["label"]) == (3, "T3"), rows[0]
+    assert (rows[0]["nontriviality"], rows[0]["label"]) == (1, "T1"), rows[0]
 
 
 def test_the_judge_vocabulary_gate_accepts_a_tier_decision(tmp_path) -> None:
-    """⑥ 模型照题面答 decision="T1" ⇒ `judge()` 采信，并把它作为第二输出带下去。
+    """⑥ 模型照题面答 decision="T1" ⇒ `judge()` 采信，decision 就是 "T1"。
 
-    改前这一层按 `STATEMENT_VERDICTS`（合格/太平凡/判不了）校验 ⇒ T1 被拒成
+    改前这一层按 `STATEMENT_VERDICTS`（三格旧词）校验 ⇒ T1 被拒成
     `checked=False`，`judge_statement` 连台账那一行都不会落 —— 读侧的修复在生产上
     永远走不到。这里是同一缺陷链的另一半。
     """
@@ -140,7 +140,7 @@ def test_the_judge_vocabulary_gate_accepts_a_tier_decision(tmp_path) -> None:
     got = boss.judge("statement_aesthetic", {"statement_full": "x"})
     assert got["checked"] is True, got
     assert got["nontriviality"] == 1, got
-    assert got["decision"] == "合格", f"档位与审美轴两根轴都要留：{got}"
+    assert got["decision"] == "T1", f"decision 就是档位（一根轴一个字段）：{got}"
 
 
 if __name__ == "__main__":  # pragma: no cover

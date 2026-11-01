@@ -118,8 +118,8 @@ def test_the_judge_layer_still_carries_the_tier_field(tmp_path: pathlib.Path) ->
         def ask_json(self, prompt, **kw):
             import types
 
-            return ({"decision": "合格", "reason": "有用", "basis": ["L3"],
-                     "nontriviality": 2, "nontriviality_basis": "方法平凡但体量大"},
+            return ({"decision": "T2", "reason": "有用", "basis": ["L3"],
+                     "nontriviality_basis": "方法平凡但体量大"},
                     types.SimpleNamespace(ok=True, problem="", detail=""))
 
     boss = SEC.Secretary(role="B", root=tmp_path, seam=_Seam(), enable_model=True)

@@ -48,7 +48,7 @@ def _secretary(tmp_path: pathlib.Path, seam: object, *, enable: bool = True) -> 
 
 
 SHORT_PROOF = "证明：由 Cauchy 定理与反演公式直接得到。"     # 机械分必然落 T0
-LONG_OK = {"decision": "合格", "nontriviality": "T3", "nontriviality_basis": "引用了跨领域工具"}
+LONG_OK = {"decision": "T3", "nontriviality_basis": "引用了跨领域工具"}
 
 
 def test_the_secretary_decides_the_tier(tmp_path: pathlib.Path):
@@ -72,7 +72,7 @@ def test_without_the_model_the_tier_is_unjudged(tmp_path: pathlib.Path):
 
 def test_the_stub_would_have_caught_a_mechanical_rule(tmp_path: pathlib.Path):
     """(d) 反真空：秘书回 T0 ⇒ 落 T0（说明 (a) 不是恒真）。"""
-    sec = _secretary(tmp_path, _StubSeam({"decision": "合格", "nontriviality": "T0",
+    sec = _secretary(tmp_path, _StubSeam({"decision": "T0",
                                           "nontriviality_basis": "平凡"}))
     got = sec.judge_statement(statement_full="命题：某交叉领域结论。", proof_text=SHORT_PROOF)
     assert got.get("nontriviality") == 0, got

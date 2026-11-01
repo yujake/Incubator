@@ -479,7 +479,7 @@ def _assert_nontrivial_branch_keeps_its_tier(store: Store) -> None:
     证明正文（体量 16 200 字 ⇒ 分数 8 ⇒ T3）：不交证明时档位是「未判」，那一支另有判据。
     """
     statement = ("设 D 是 III 型因子，则它的某个不变量取整数值。\n\n证明：" + "推导。" * 5400)
-    sec = _secretary_b(store, {"decision": "合格", "reason": "L3 那一步要用到它",
+    sec = _secretary_b(store, {"decision": "T3", "reason": "L3 那一步要用到它",
                                "basis": ["L3"], "nontriviality": 3,
                                "nontriviality_basis": "用了跨领域工具"})
     note = _gate(sec, statement_full=statement)
@@ -508,7 +508,7 @@ def test_criterion3_a_trivial_statement_is_filed_and_lands_on_t0(tmp_path: pathl
     add_literature(store, S.format_id(0))
     text = ("对任意正整数 n，n^2+n 一定是偶数。\n\n"
             "证明：n 与 n+1 必有一偶，故 n(n+1) 是偶数。∎")
-    sec = _secretary_b(store, {"decision": "太平凡", "reason": "这是显而易见的等式重排",
+    sec = _secretary_b(store, {"decision": "T0", "reason": "这是显而易见的等式重排",
                               "basis": ["没有后续使用"], "nontriviality": 0,
                               "nontriviality_basis": "一行推导，体量/步骤都在最低一档"})
     note = _gate(sec, statement_full=text)
