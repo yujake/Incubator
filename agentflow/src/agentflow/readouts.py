@@ -41,7 +41,7 @@
 | `errors_readout` | 每种角色犯了几次"错误动作"，各属哪一类 | 事件流的 `tasks` 行 + `sessions/*.jsonl` | `agentflow stats errors` |
 | `flow_readout` | 每种角色做了哪些动作、被拦下多少、转投多少 | 同一份扫描（`agent_step` 的 `shape` / `result` + `agent_message`） | `agentflow stats flow` |
 | `cost_readout` | 钱与 token 按角色、按阶段（`scope`）怎么分布 | `data/usage_ledger.json` | `agentflow stats cost` |
-| `gates_readout` | 收工门八格各是什么状态（三态一张表） | `closing.check_closing`（现算，不读缓存） | `agentflow stats gates` |
+| `gates_readout` | 收工门八格各是什么状态（四态一张表：pass / fail / unknown / na） | `closing.check_closing`（现算，不读缓存） | `agentflow stats gates` |
 
 `errors_readout` 的计数口径不在这里重写：它直接调 `errorstats.error_action_stats`（角色归属、
 主码规则、三态都在那里有逐条注释）。本模块只负责"把它装进统一外层"，外加把同一份扫描
@@ -86,8 +86,31 @@ READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
 #: `stats all` 那一档的 `data` 键集（就是四条读数的名字，顺序即呈现顺序）。
 ALL_DATA_KEYS: tuple[str, ...] = ("errors", "flow", "cost", "gates")
 
-#: 门那一格的三态取值（与 `closing.ClosingReport.status` 同一套词）。
-CELL_STATES: tuple[str, ...] = ("pass", "fail", "unknown")
+#: 门那一格的**四态**取值（与 `closing.ClosingReport.status` 同一套词）。
+#:
+#: 为什么有四档（2026-11-01 补 `na`）：改前这里只有 `pass` / `fail` / `unknown`，
+#: 而 `closing` 早就会写第四档 `na`（`load_bearing` 在「形式化已关闭」的项目上
+#: 记 `na`，closing.py 的 `rep.status["load_bearing"] = "na"`）。于是 `gates_readout`
+#: 在 :531 把它折成 `unknown` —— 同一现场两个读口给出两种 counts：
+#: `closing` 侧 pass5/fail1/unknown1/**na1**，读数层 pass5/fail1/**unknown2**。
+#: 扫全库 158 个工作区，`load_bearing` 那一格 **158/158 都是 `na`** ⇒ 不是某个
+#: 工作区的怪数据，是这个词表少了一档（每一份收工门读数都被折了同一格）。
+#:
+#: 四档各自的语义（`unknown` 与 `na` 是两件不同的事，不许互相折）：
+#:
+#: - `pass`：查过了，这一格成立；
+#: - `fail`：查过了，这一格不成立（拦住）；
+#: - `unknown`：**没查成** —— 跑了但读不成；或缺了它依赖的入参（如没给项目根 /
+#:   报告路径）；或台账读不出来。它说的永远是"我们不知道"，不是"不成立"；
+#: - `na`：**不适用** —— 这一档对这个项目天然不成立（例如「形式化已关闭」的项目
+#:   没有承重结论要 T3 背书）。它是**读数**，不是"没查成"：把 `na` 读成 `unknown`
+#:   等于把「这一档不存在」说成「我们没查」。
+#:
+#: 折平哪一种都有代价：`na → unknown` 让"不适用"混进"没查成"（改前就是这个形态，
+#: 格子的原话写着"不适用"，状态栏却写 unknown）；`na → pass` 更糟（把"不用查"
+#: 说成"查过了没问题"）。词表是这一层唯一的口径主人，所以补在词表上、而不是在
+#: `gates_readout` 里给某一格特判。
+CELL_STATES: tuple[str, ...] = ("pass", "fail", "unknown", "na")
 
 
 # ---------------------------------------------------------------- 外层
@@ -447,11 +470,15 @@ def cost_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
 def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                   sid: str | None = None,
                   scanned: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """收工门八格的三态一张表（现算，不读任何人缓存过的结论）。
+    """收工门八格的四态一张表（现算，不读任何人缓存过的结论）。
 
-    `data.cells` 每格 `{"name", "status", "detail"}`：`status` 取 `pass` / `fail` / `unknown`
-    （与 `closing.ClosingReport.status` 同一套词）；`detail` 是该格被拦时的原话（没有就是空串）。
-    `data.counts` 是三态各几格；`data.machine_pass` 是"八格全 pass 且没有 blocker"这个旧口径
+    `data.cells` 每格 `{"name", "status", "detail"}`：`status` 取 :data:`CELL_STATES`
+    的四档（`pass` / `fail` / `unknown` / `na`，与 `closing.ClosingReport.status` 同一套词）；
+    `detail` 是该格被拦时的原话（没有就是空串）。`na` 与 `unknown` 分得开是这一格的
+    硬口径：前者是"这一档对这个项目天然不成立"，后者是"没查成"—— 折在一起时，同一份
+    现场在 `agentflow closing` 与 `agentflow stats gates` 两个出口会给出两套 counts。
+    `data.counts` 是这四档各几格（逐格等于 `closing` 侧 `rep.status` 的分布）；
+    `data.machine_pass` 是"八格全 pass 且没有 blocker"这个旧口径
     （它只是读数：收工由 M 判，见 `closing.ClosingReport.can_close` 的注释）；
     `data.verdict` 是 M 那份判据（没有 ⇒ null，绝不编一个"通过了"）。
 
@@ -671,7 +698,9 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
         if not cells:
             lines += ["", "收工门八格：没有读数" if readout.get("checked") else "收工门八格：没查成"]
         else:
-            head = ["格", "三态", "原话（缩 46 字，全文见 --json）"]
+            # 列名逐字是「四态」：这一格的值域就是 `CELL_STATES` 的四档。写成「三态」
+            # 会让读的人以为 `na` 是别的什么东西（改前它正是被折进 `unknown` 的那一档）。
+            head = ["格", "四态", "原话（缩 46 字，全文见 --json）"]
             rows = [[c.get("name", ""), c.get("status", ""), _clip(str(c.get("detail") or ""))]
                     for c in cells]
             lines += ["", *_table(head, rows)]
