@@ -10235,7 +10235,20 @@ def _judge_system(kind: str) -> str:
     head = (f"你是「秘书」的判断面（类别：{kind}）。只回一个 JSON 对象，字段："
             f'decision（**必须逐字取自** {list(verdicts)} —— 这是这一类的词表，'
             "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
-            "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）。")
+            "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）")
+    if kind == "statement_aesthetic":
+        # ---- 2026-11-01 裁定：两个字段各管一轴，谁也不再兼两义。
+        #
+        # 改前 ask 让 decision 兼档位（"decision 取 T0/T1/T2/T3/T4 之一"），而抬头说
+        # decision 必须逐字取自审美轴三格 ⇒ 两条指令打架，模型两头讨好：真机 82 的
+        # judge 载荷是 `decision="合格" / nontriviality=null / reason="按五档属T1…"`
+        # —— 档位写进了 reason，读侧一个字段都认不到。所以档位单独一格：
+        # decision 只装审美轴三格（词表不动），nontriviality 必填、只装 T0..T4，
+        # 只有判「判不了」时才 null（并必须在 reason 里说清为什么）。
+        head += ('、nontriviality（**必填**：取 "T0"/"T1"/"T2"/"T3"/"T4" 之一；'
+                 '只有 decision 判「判不了」时才给 null，且必须在 reason 里写明为什么'
+                 '判不了 —— 档位只装这一格，不要写进 decision）')
+    head += "。"
     if kind == "duplicate_retry":
         ask = ("问题：同一个 (role, action, input_key) 已经有下面这些终态行。这一次是"
                "正当的重试，还是重复委托？判『可派』= 这次该照派；判『建议不派』= 别重复派。")
@@ -10260,8 +10273,12 @@ def _judge_system(kind: str) -> str:
             "材料里的 `effort`（体量/步骤/引理/工具簇/绕路与分数）只是机器数出来的"
             "**参考读数**，不要拿它当判据：写得长不等于难，步数多也不等于难；"
             "也不要只在 basis 里复述那几个数字。\n"
-            "decision 取 T0/T1/T2/T3/T4 之一；reason 一句话；"
-            "basis 写清你凭证明里的哪几步这么判（可以引用正文里的步骤，"
+            "decision 只走审美轴那三格（与抬头同一张词表）：『合格』= 值得收；"
+            "『太平凡』= 平凡但真，档位给 T0；『判不了』= 拿不准或输入不完整。\n"
+            "nontriviality（必填）装档位：取 \"T0\"/\"T1\"/\"T2\"/\"T3\"/\"T4\" 之一；"
+            "只有 decision 判『判不了』时才给 null —— 给 null 必须在 reason 里写清"
+            "为什么判不了。\n"
+            "reason 一句话；basis 写清你凭证明里的哪几步这么判（可以引用正文里的步骤，"
             "但不要用分数当理由）。"
         )
     elif kind == "proposition_identity":
