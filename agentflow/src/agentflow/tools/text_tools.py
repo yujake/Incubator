@@ -152,7 +152,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
     if not body.strip():
         return fail(
             "这一份**抽不出文字**（没有文本层）⇒ 不是「文件读不了」，是「它要 OCR」："
-            "用 `ocr.detect_text_layer` 确认，再按扫描件走 `ocr.run`（本机无 OCR 后端时会如实说）",
+            "先确认它是不是扫描件（你面上有 OCR 工具就用它；没有就把这一份交 B 转文本 —— 本机无 OCR 后端时那一侧也会如实说）",
             kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""))
 
     # 口径：「转成纯文字稿入库」 ⇒ 直接落在 `library/` 里（与那份 PDF 同处一层），
@@ -162,8 +162,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
         return fail(
             "这一份转出来的文本**疑似乱码**（NUL/替换字符/控制字符占比超标）⇒ "
             "**不写盘**：往 library/ 里放一份乱码比不放更坏（下游会把它当正文读）。"
-            "出路：换一份有文字层的原件、或按扫描件走 `ocr.run`；"
-            "也可以先 `ocr.detect_text_layer` 看它到底有没有文字层。",
+            "出路：换一份有文字层的原件，或按扫描件走 OCR（你面上有 OCR 工具就用它；没有就交 B 转文本）。",
             kind="garbled_text", path=str(p), lit_id=str(lit_id or ""), quality=q)
 
     target_dir = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
@@ -218,7 +217,7 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
 
 @tool(
     "text.extract",
-    "把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 `ocr.run`；别的角色只读那份 `.txt`。",
+    "把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。",
     {
         "type": "object",
         "properties": {

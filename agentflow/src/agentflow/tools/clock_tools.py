@@ -1592,7 +1592,7 @@ def _program_note(mine: Sequence[Mapping[str, Any]], unowned: Sequence[Mapping[s
     if running:
         pids = "、".join(str(r.get("pid")) for r in running)
         bits.append(f"我名下还有 {len(running)} 个程序在跑（pid {pids}）—— "
-                    "交差或销号之前先 program.stop（或者说明它们为什么该继续跑）")
+                    "交差或销号之前先叫停（你面上有停程序那件工具就用它；没有就把「要停谁」写给你的父/主控），或者说明它们为什么该继续跑）")
     else:
         bits.append("我名下没有还在跑的程序（查过了，不是没查成）")
     if unowned_count:
@@ -1610,7 +1610,7 @@ def _program_note(mine: Sequence[Mapping[str, Any]], unowned: Sequence[Mapping[s
     "列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / "
     "已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。"
     "空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。"
-    "这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑，先 program.stop。"
+    "这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。"
     "所有角色都能用。",
     {"type": "object",
      "properties": {

@@ -4188,6 +4188,10 @@ FACULTY_LAYERS: dict[str, tuple[str, str]] = {
 
 
 #: 结构层到底由什么保证：这段话是"哪些不许只写在提示词里"的清单（每条都有锚点）。
+#: 2026-11-01（审计 174 §1.3）：下面点的是机制与模块，不是工具名 —— 它们不带 `ns.name`
+#: 的工具形态（改前 `policy.check` / `quoteverify.check_quote` / `userio.ask_user` /
+#: `autonomy.run_autonomous` 四条被写成工具样式，而 123 件工具里一件都没有；照字面调
+#: 只会拿 `unknown_tool`）。判据：`tests/test_tool_summaries_only_name_tools_the_role_has.py`。
 
 
 
@@ -4199,11 +4203,11 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
 
 
 
-    ("谁能唤起谁", "`capabilities.ALLOWED_EDGES` + `policy.check`（边/深度/扇出/并发/预算）"),
+    ("谁能唤起谁", "`capabilities.ALLOWED_EDGES` 与 policy 模块的判据（边/深度/扇出/并发/预算）—— 这是结构，不是工具"),
 
 
 
-    ("引文是否逐字可达", "`quoteverify.check_quote` 逐字回验，不通过就标出来"),
+    ("引文是否逐字可达", "由 quoteverify 模块逐字回验，不通过就标出来（机制，不是工具）"),
 
 
 
@@ -4227,7 +4231,7 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
 
 
 
-    ("只有用户能定的取舍", "`userio.ask_user` 把问题送进用户频道并等回答；"
+    ("只有用户能定的取舍", "把问题送进用户频道并等回答（走循环形状 `{\"ask_user\": …}`，不是工具）；"
 
 
 
@@ -4235,7 +4239,7 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
 
 
 
-    ("放手后的自主轮与汇报", "`autonomy.run_autonomous`：轮次上限 + 每 N 轮一次公共汇报 + "
+    ("放手后的自主轮与汇报", "框架侧的自主轮：轮次上限 + 每 N 轮一次公共汇报 + "
 
 
 

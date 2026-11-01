@@ -296,7 +296,7 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活：按写集分波（`policy.waves_of`）线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
+    "一次派**一批**活：按写集分波（波次由写集现算）线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
     {
         "type": "object",
         "properties": {
@@ -2528,8 +2528,8 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
     "永久抑制），而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，"
     "父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，"
     "那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。"
-    "这一档在 2026-10-29 之后收窄了：只是静默还不够 —— 一条消息、一次委托或一次 "
-    "`conductor.wake_blocked` 就会把它叫起来，那时它自己能 ack；叫得醒的一律拒。"
+    "这一档在 2026-10-29 之后收窄了：只是静默还不够 —— 一条消息、一次委托，或主控 "
+    "`conductor.wake_blocked` 一下，就会把它叫起来，那时它自己能 ack；叫得醒的一律拒。"
     "三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须叫不醒"
     "（静默但叫得醒 ⇒ 先把唤醒那一步走完，作废不是唤醒的替代品）；"
     "作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，"
@@ -2614,7 +2614,7 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     "close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含"
     "`conductor.post_task` 之外的信息型项）用 close=\"acked\"；"
     "`conductor.post_task` 落的 work 项（expects=work）用 close=\"completed\"。"
-    "这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，"
+    "这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），"
     "而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。"
     "唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 "
     "state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— "
