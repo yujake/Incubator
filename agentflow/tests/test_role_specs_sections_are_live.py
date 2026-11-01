@@ -22,7 +22,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "ROLE-SPECS.md"
 
-#: L.1 曾经引用过的那个已删常量。**按两段拼出来**，不写成整串字面量 ——
+#: L.1 曾经引用过的那个已删常量。按两段拼出来，不写成整串字面量 ——
 #: `tests/test_e_has_no_lean_side.py::test_4_no_code_reference_to_the_deleted_symbols`
 #: 扫的是 `src` / `tests` / `scripts` / `tools` 下全部 `.py`（那条判据自己也在这四个根里），
 #: 整串一写进本文件，那条判据就会命中这一行。拼出来的名字与整串逐字等价，
