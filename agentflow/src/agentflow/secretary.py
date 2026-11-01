@@ -2526,11 +2526,25 @@ class Secretary:
                 "cost": cost})
         decision = str(data.get("decision") or "").strip()
         allowed = JUDGE_VERDICTS[kind]
-        if decision not in allowed:
+        # ---- 2026-11-01（真机 82）：档位与审美轴是两根轴，而这一层此前按审美轴的三格
+        # 词表校验。判档那一问的题面（`_judge_system` 的 statement_aesthetic，2026-10-29
+        # 起）明写「decision 取 T0/T1/T2/T3/T4 之一」⇒ 模型照题面答 "T1" 会在这里被判成
+        # "词表外 ⇒ 不采信"，`checked=False` 之后 `judge_statement` 连台账那一行都不落
+        # —— 读侧无论怎么改都读不到一个字节。所以这一支要收：档位原样进
+        # `nontriviality`（第二输出），审美轴按 2026-10-23 的口径换算（T0 = 平凡但真
+        # ⇒ 太平凡；T1..T4 ⇒ 合格），两根轴都不丢。
+        tier_from_decision = (_nontriviality_level(decision)
+                              if kind == "statement_aesthetic" else None)
+        if decision not in allowed and tier_from_decision is None:
             return self._record_judge(kind, context, {
                 "checked": False,
                 "reason": f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信",
                 "cost": cost})
+        if tier_from_decision is not None:
+            explicit = _nontriviality_level(data.get("nontriviality"))
+            effective = explicit if explicit is not None else tier_from_decision
+            data = {**dict(data), "nontriviality": effective}
+            decision = "太平凡" if effective == 0 else "合格"
         out = {
             "checked": True, "decision": decision,
             "reason": str(data.get("reason") or "")[:500],
@@ -2749,7 +2763,18 @@ class Secretary:
             # 读数一项都取不到时，秘书若判了「太平凡」，那一判断没有依据（改前正是
             # 这样把每一条都压成 T0），改记「判不了」。
             decided = str(got.get("decision") or "")
-            model_level = _nontriviality_level(got.get("nontriviality"))
+            # ---- 2026-11-01（真机 82，48/48 档案位 null）：题面要求模型把档位放在
+            # `decision` 里（`_judge_system` 的 statement_aesthetic：「decision 取
+            # T0/T1/T2/T3/T4 之一」），而这一格此前只读 `nontriviality` ⇒ 模型照题面
+            # 答的 "T1" 永远读不到，兜底那句话还倒过来猜"没接模型 / 没开 model /
+            # 回不了解析"（三个猜测一个都不成立）。两个键都认：
+            # `nontriviality` 是专门的档位字段（老形状、历史台账、替身都用它）⇒ 它在
+            # 冲突时优先；只有它为 None 时才退到 decision。decision 的其它取值
+            # （"合格" / "太平凡" / "判不了" / "T9" …）由 `_nontriviality_level`
+            # 返回 None ⇒ 不折档、更不折成 0。
+            explicit_level = _nontriviality_level(got.get("nontriviality"))
+            from_decision = _nontriviality_level(decided)
+            model_level = explicit_level if explicit_level is not None else from_decision
             model_note = str(got.get("nontriviality_basis") or "")
             # 2026-10-29 业主「全交给模型判」⇒ 机械落格函数已删；这个常量只为
             # 让下面的 `verdict[...]` 引用不必改写，它不提供档位（level=None）。
@@ -2757,6 +2782,13 @@ class Secretary:
                        "why": "力气读数只作参考（档位由秘书按五档定义判）"}
             level = verdict["level"]
             notes: list[str] = []
+            if (explicit_level is not None and from_decision is not None
+                    and explicit_level != from_decision):
+                notes.append(
+                    f"decision={decided} 与 nontriviality={got.get('nontriviality')!r} 冲突 ⇒ "
+                    f"以 nontriviality={nontriviality_label(explicit_level)} 为准"
+                    "（显式字段优先：decision 那一格同时是审美轴的词，只有它恰好是"
+                    "可解析档位时才当档位读）")
             if text_truncated:
                 level = None
                 notes.append(trunc_note)
@@ -2796,7 +2828,9 @@ class Secretary:
                         notes.append(str(verdict["why"]))
                 else:
                     notes.append(
-                        "秘书没给档位（没接模型 / 没开 model / 回不了解析）⇒ 这一格记判不了；"
+                        "模型没给可解析的档位：缺字段（decision="
+                        f"{decided!r} 与 nontriviality="
+                        f"{got.get('nontriviality')!r} 都不是 T0–T4）⇒ 这一格记判不了；"
                         "机器力气读数只作参考，不拿来补一个档位")
                     level = None
                 if _is_trivial_verdict(decided) and level == 0:
