@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-03，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **261 个 `.py`、229,900 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,973 行** —— 批 R40 把它补进了 §3 的表；
+> **261 个 `.py`、229,901 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，12,973 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -51,6 +51,13 @@
 > `agent_loop.py` 12,826 → **12,959** 行）。本批新增 `vsigns.py`（1033 行，新增的单职责模块：
 > 写签 / 认签 / 派生索引 / 回执与送达读口），另有 `closing.py` / `verifications.py` /
 > `agent_b/register_statement.py` 的增行；`vsigns.py` 已在第 1 层的表里有一行。
+> **2026-11-03 第三批再改一次**：227,823 → **229,901**（文件数 258 → **261**，`>800 行`
+> 71 → **72**；`agent_loop.py` 12,959 → **12,973** 行）。本批新增 `proofauthors.py`
+> （112 行：谁写的这份证明）与 `vreceipts.py`（840 行：V 回执的 outbox / 投递 / 补投 /
+> 读口）两个单职责模块 —— 两个都已在第 1 层的表里各有一行；`>800 行` 那一格
+> +1 只来自 `vreceipts.py`（逐文件比对基线提交 `ddace7ae` 的 71 个过线文件：新过线的
+> 只有它一个）。行数里还有 `vreceipts.py:163` 的 `json.dumps` 拆行补 `default=str`
+> 净 +1 行（对纯 JSON 载荷不改变任何字节）。
 > **退场的那三个模块名这里刻意不写 `.py` 扩展名**：本图自己的判据要求图里每个像文件名的
 > token 都在盘上真的存在，写全名会让那条判据红 —— 而它们确实已经不在盘上了）。）
 >
