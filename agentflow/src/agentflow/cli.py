@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -2990,6 +2991,83 @@ def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
             f"`agentflow --root {root} run-agent --resume …{sid_arg}`")
 
 
+def _task_text_of(args) -> int | None:
+    """`run-agent` 的 `--task` / `--task-file` 二选一：`None` = 可以开跑，非 `None` = 退出码。
+
+    ## 为什么要有这一格（业主 2026-11-01）
+
+    「开真机跑必须写一个临时启动器脚本，因为它要 --task 传一段多行提示词，而 --task
+    在 PowerShell 里传多行中文会碎 ⇒ 我每次都得现写一个 py 文件」。这一格把那份启动器
+    收进命令本身：`--task-file <path>` 逐字读文件，只去掉末尾一个换行，再原样交给
+    后面那条 `--task` 的路。
+
+    ## 读法与启动器逐字同源（`temp/_launch_cold_v2*.py`）
+
+    ```python
+    raw = TASK_FILE.read_text(encoding="utf-8")
+    TASK = raw[:-1] if raw.endswith("\\n") else raw
+    print(f"[launch] task 字符数={len(TASK)} sha256={sha256(TASK)[:32]}")
+    ```
+
+    所以这里也是 `Path.read_text(encoding="utf-8")`（文本模式：CRLF 会归一成 `\\n`，
+    与启动器读到的字符串是同一个），并且只切掉末尾那一个 `\\n` —— 不是 `rstrip`
+    （多去一个换行就换了任务指纹：真机那一份文件是 1220 字节、去掉一个换行后 1219 字，
+    `sha256` 前 32 位 `11c9964a…`）。
+
+    ## 三态
+
+    读不出来（不存在 / 不是 UTF-8）⇒ 打印中文原因并返回 2（没查成），不进运行层；
+    两个都给 ⇒ 先拒绝（不许谁静默覆盖谁）。两个都不给时给的是人话（点名两条路），
+    不是 argparse 那句 `the following arguments are required`。
+    """
+    raw_task = getattr(args, "task", None)
+    task_file = getattr(args, "task_file", None)
+    if raw_task is not None and task_file:
+        print(tty.paint(
+            "[run-agent] 用法错：--task 与 --task-file 只能给一个 —— 你两个都给了。"
+            "多行中文提示词请只给 --task-file <文件>；一句话任务请只给 --task。",
+            "yellow"), file=sys.stderr)
+        return 2
+    if not task_file:
+        if raw_task is None:
+            print(tty.paint(
+                '[run-agent] 缺一样要跑的东西：给 --task "这次要做的事"，'
+                "或 --task-file <文件>（提示词里有多行中文时用后者：PowerShell 传多行中文"
+                "给 --task 会把那段话传碎）。", "yellow"), file=sys.stderr)
+            return 2
+        return None
+    path = Path(str(task_file))
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(tty.paint(
+            f"[run-agent] 读不出 --task-file：{path} 不存在。"
+            "检查路径（带空格/中文的路径要整个用引号括起来，或写绝对路径），"
+            "或改用 --task 给一句话任务。", "yellow"), file=sys.stderr)
+        return 2
+    except UnicodeDecodeError as exc:
+        print(tty.paint(
+            f"[run-agent] 读不出 --task-file：{path} 不是 UTF-8 文本（{exc}）⇒ "
+            "另存成 UTF-8 再跑（这个文件是要逐字当提示词用的，不做编码猜测）。",
+            "yellow"), file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(tty.paint(
+            f"[run-agent] 读不出 --task-file：{path}（{type(exc).__name__}: {exc}）。",
+            "yellow"), file=sys.stderr)
+        return 2
+    task = raw[:-1] if raw.endswith("\n") else raw
+    digest = hashlib.sha256(task.encode("utf-8")).hexdigest()[:32]
+    reading = (f"[task-file] 字符数={len(task)} sha256={digest}"
+               f"（{path}；已原样传给 --task）")
+    # `--json` 的 stdout 必须是可解析的那一份运行记录 ⇒ 这一行读数走 stderr
+    # （与 `--budget-usd`、Lean 自检第一屏同一条纪律）。
+    print(reading, file=(sys.stderr if bool(getattr(args, "json", False)) else sys.stdout),
+          flush=True)
+    args.task = task
+    return None
+
+
 def cmd_run_agent(args) -> int:
     """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
 
@@ -3019,7 +3097,12 @@ def cmd_run_agent(args) -> int:
 
     读写：读任务与检查点；写 `tasks` / `usage_ledger` / `sessions/<sid>.jsonl` 与 `runs/` 下的运行记录（每一笔花销都进台账）。
     实现方式一句话：`agent_loop.run_role`（多轮走 `autonomy`，退出码由 `_run_agent_exit_code` 翻）。
+    `--task` 与 `--task-file` 的取舍在 :func:`_task_text_of`（读文件那一档逐字、只去末尾一个换行，
+    打印的 `字符数` / `sha256` 前 32 位与既有启动器同口径）。
     """
+    task_code = _task_text_of(args)
+    if task_code is not None:
+        return task_code
     return _run_spec(_spec_from(args, mode=MODE_ROLE, origin="run-agent"), args)
 
 
@@ -5161,7 +5244,16 @@ def build_parser() -> argparse.ArgumentParser:
                     "escalated 交给召唤者）。")
     sp.add_argument("role", choices=list(S.ROLES) + [S.CONDUCTOR_ROLE],
                     help="顶层角色（M = 主控，其余 = A–H）")
-    sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")
+    sp.add_argument("--task", default=None,
+                    help="这次要做的事（给角色的任务描述）—— 一句话的任务用它；"
+                         "提示词里有多行中文时不要用 --task，改用 --task-file")
+    # 业主 2026-11-01：「开真机跑必须写一个临时启动器脚本 …… 而 --task 在 PowerShell 里
+    # 传多行中文会碎」。这一格就是把那份启动器收进命令本身：逐字读文件，只去掉末尾一个
+    # 换行，再原样交给 `--task` 那条路（与 `temp/_launch_cold_v2*.py` 的读法/日志同口径）。
+    sp.add_argument("--task-file", default=None,
+                    help="从文件里逐字读任务（只去掉末尾一个换行）再原样传给 --task；"
+                         "与 --task 二选一。提示词里有多行中文时用它：PowerShell 传多行"
+                         "中文给 --task 会把那段话传碎")
     sp.add_argument("--drive", action="append", default=[],
                     help="把某个 (角色.动作) 交给模型驱动，可重复；不写则不改变确定性行为")
     sp.add_argument("--subagents", action="store_true",
