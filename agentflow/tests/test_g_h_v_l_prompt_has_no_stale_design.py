@@ -356,9 +356,20 @@ def check_numbers(t: Corpus) -> list[str]:
     h, v = t.prompt("H"), t.prompt("V")
     if "proof 环境数 ≥ 6" in h or "proof 环境数 >= 6" in h:
         out.append(f"[H-数字] proof 环境数还写死成 ≥ 6（{_at('specs/h.py', 'proof 环境数')}）")
-    if "== 台账里定理类命题数" not in h:
-        out.append(f"[H-数字] 没有把 proof 环境数挂到「台账里定理类命题数」上"
-                   f"（{_at('specs/h.py', 'proof 环境数')}）")
+    # 2026-11-01（业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：这一条原本
+    # 要求 H 的提示词里必须出现「== 台账里定理类命题数」—— 那是把旧口径钉成了正面
+    # 要求。实测（`temp/h_fact_calibers.json`）：真稿上 proof 环境数 18、台账定理类 7，
+    # 等号给出的是"差 11 条"，而真问题是 5 个孤儿环境（`statement_surplus`）。
+    # 所以翻成"旧口径的痕迹不许在 + 新口径的落点必须在"。
+    if "两个数必须相等" in h:
+        out.append(f"[H-数字] 还留着旧口径「两个数必须相等」"
+                   f"（{_at('specs/h.py', '两个数必须相等')}）")
+    if "review.scan" not in h:
+        out.append(f"[H-数字] H 的提示词里没有统一入口 `review.scan`"
+                   f"（{_at('specs/h.py', 'review.scan')}）")
+    if "statement_surplus" not in h:
+        out.append(f"[H-数字] H 的提示词里没有 `statement_surplus`（新口径的落点）"
+                   f"（{_at('specs/h.py', 'statement_surplus')}）")
     if "四件套" in h:
         out.append(f"[H-数字] 还写着「四件套齐全」而只列三样（{_at('specs/h.py', '四件套')}）")
     if "三件齐全" not in h:
