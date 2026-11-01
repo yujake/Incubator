@@ -1206,6 +1206,12 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_reset_provider_cooldowns",   # `tests/conftest.py` 的 autouse 夹具名：只由 pytest 的 fixture 机制按名引用（符号面只有定义处一次）；conftest 里那条逐条还原写路径钩子的夹具的说明拿它当"同一条纪律"的例子
     "_restore_role_seams",         # 同型（另一条 autouse 夹具，同处引用）
     "_closing_session_identity",   # 改名前那个实现（2026-11-03 搬进 `closing.closing_session_identity`）：`src/agentflow/cli.py` 原处那段墓碑句在讲"这一格此前是本文件里的它、为什么摘掉"（CLI 会拒、API 照样读成空会话）—— 留痕按纪律必须点名被删的东西
+    # —— 2026-11-01：`table.update` 的非正文三格写口（f4043cc2）带出来的两格 ——
+    # 两条都是「行内字符串键」（`row.get("……")` / `row["……"]`），符号面本来就不存在；
+    # 引用处是 `secretary.amend_statement_meta` 的 docstring 与那一笔的判据，
+    # 讲的是"这两格留痕各自只留最近 20 条"这一条同族的读数纪律。
+    "_statement_amend_history",    # 字符串键：`Secretary.amend_statement_meta` 往 statements 行里留的"谁、何时、从什么改成什么"（`row.get("_statement_amend_history")`，只留最近 20 条）
+    "_proposition_matches",        # 字符串键：并进已有命题那条路留的"并进来"的痕（`row.get("_proposition_matches")`，同样只留最近 20 条）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

@@ -26,7 +26,7 @@
 
 ## 判据怎么读
 
-`_wait_url` 只认第一行能解析成 JSON 且带 url 的输出；`--json` 档里人话一律走 stderr，
+`_Spawn.wait_url` 只认第一行能解析成 JSON 且带 url 的输出；`--json` 档里人话一律走 stderr，
 所以 stdout 逐行可解析（这一点由 `_spawn` 的注释与本文件的断言共同钉住）。
 """
 from __future__ import annotations
