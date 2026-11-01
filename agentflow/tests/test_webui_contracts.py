@@ -659,6 +659,7 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     out["ProofView"] = set(pkg["proofs"])
     out["StructureView"] = set(pkg["structure"])
     out["ClosingView"] = set(pkg["closing"])
+    out["SourceWindow"] = set(RD.source_window(root, "out/review/REPORT.md"))
 
     # 错误动作那一面（2026-10-27 业主裁定 ⑥-5 / W4）：这两族的形状从 `ui/src/api.ts`
     # 搬进了生成物，于是 C 条从现在起核对它们的键名 —— 这正是那次搬迁想要的收益。

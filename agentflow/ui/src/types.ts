@@ -1514,6 +1514,18 @@ export interface SourceRef {
   label: string;
 }
 
+/** 出处：GET /api/source 的读数 —— 一个文本文件的原文窗口（受控拒绝时 lines 为空）。 */
+export interface SourceWindow {
+  tri: Tri;
+  reason: string;
+  path: string;
+  line: number;
+  start_line: number;
+  lines: string[];
+  total: number | null;
+  truncated: boolean;
+}
+
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;

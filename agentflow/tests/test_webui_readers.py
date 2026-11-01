@@ -745,6 +745,8 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["ProofView"] = set(pkg["proofs"])
     got["StructureView"] = set(pkg["structure"])
     got["ClosingView"] = set(pkg["closing"])
+    # 2026-11-01（块 3）：`/api/source` 的窗口读数（夹具上读它自己那份报告）。
+    got["SourceWindow"] = set(R.source_window(artifacts_ws, "out/review/REPORT.md"))
     mach = R.machine_face(artifacts_ws)
     got["MachineView"] = set(mach)
     got["SettingsReading"] = set(mach["settings"])
@@ -894,7 +896,9 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
                     # 2026-10-21（业主的「名册监视」）：整棵名册树那一条只读端点
                     "handle_roster",
                     # 2026-10-24（D-57）：文献库那一面（只读；只算正式入库的那一档）
-                    "handle_library"}, ours
+                    "handle_library",
+                    # 2026-11-01（块 3）：论文包三块 + 原文窗口（两条都只读）
+                    "handle_package", "handle_source"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"

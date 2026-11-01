@@ -104,10 +104,10 @@ __all__ = [
     "chat_face", "code_consistency", "evidence_chain", "experiment_spots",
     "handle_acceptance", "handle_artifacts",
     "handle_chat", "handle_evidence",
-    "handle_library", "handle_machine", "handle_roster", "handle_run_events",
-    "handle_run_view", "handle_state",
+    "handle_library", "handle_machine", "handle_package", "handle_roster",
+    "handle_run_events", "handle_run_view", "handle_source", "handle_state",
     "library_face", "machine_face", "package_face", "roster_face", "run_events",
-    "run_products", "run_view", "sha_consistency",
+    "run_products", "run_view", "sha_consistency", "source_window",
     "state_face",
     "ts_fields", "type_decls",
 ]
@@ -141,6 +141,11 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/evidence", "handle_evidence"),
     ("GET", "/api/artifacts", "handle_artifacts"),
     ("GET", "/api/acceptance", "handle_acceptance"),
+    # 2026-11-01（块 3）：论文包三块一次读 + 原文窗口。两条都只读：
+    # `/api/package` 是 A/B/C 三块（三块总是一起看，一次请求才有同一份快照）；
+    # `/api/source` 是每格 `source` 的落地（路径闸在 `source_window` 里，四条判据）。
+    ("GET", "/api/package", "handle_package"),
+    ("GET", "/api/source", "handle_source"),
     ("GET", "/api/machine", "handle_machine"),
     # 业主 2026-10-12 的两条：预算窗口（②）与多智能体监控（①）。
     # 它们与六个面同族（读盘现算、三态、不缓存），所以落在同一张子表里。
@@ -210,7 +215,7 @@ CHECKED_TYPES: tuple[str, ...] = (
     # 2026-11-01（块 2）：`/api/package` 的三块 + 外壳。顶层键在任何工作区上都在
     # （没有正文 ⇒ `structure.tri=not_applicable`；门读不成 ⇒ `closing.tri=unreadable`，
     # 键集合同一批），所以它们进受核对名单；行一级/子块类型见 `UNCHECKED_TYPES`。
-    "PackageView", "ProofView", "StructureView", "ClosingView",
+    "PackageView", "ProofView", "StructureView", "ClosingView", "SourceWindow",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -2627,6 +2632,89 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
             "proofs": proofs, "structure": structure, "closing": closing}
 
 
+#: `/api/source` 读文件时最多先读这么多字节来定位行/needle（大文件不许整份转）。
+SOURCE_SCAN_BYTES = 2 * 1024 * 1024
+
+#: 窗口前后各留几行（`line` 定位时；第一行/最后一行会被夹住）。
+SOURCE_CONTEXT_LINES = 10
+
+
+def _source_refusal(path: str, reason: str) -> dict[str, Any]:
+    """受控拒绝：`tri=unreadable` + 理由，`lines` 永远为空（不回内容）。"""
+    return {"tri": TRI_UNREADABLE, "reason": reason, "path": str(path or ""),
+            "line": 0, "start_line": 0, "lines": [], "total": None,
+            "truncated": False}
+
+
+def source_window(root: str | Path, path: str, *, line: int = 0,
+                  match: str = "", max_lines: int = SOURCE_LINES_MAX) -> dict[str, Any]:
+    """`GET /api/source` 的读模型：工作区内一个文本文件的原文窗口。
+
+    四条闸（缺一条都等于把工作区文件读给浏览器）：
+
+    1. **相对路径**：绝对路径一律拒（`Path.is_absolute()`；Windows 盘符路径同样命中）；
+    2. **不许越界**：路径分量里出现 `..` 直接拒，不做"resolve 之后再看"的侥幸；
+    3. **工作区内**：`resolve()` 之后必须 `relative_to(workspace)`，符号链接跳出去也算越界；
+    4. **文本后缀**：只认 `SOURCE_SUFFIXES`（PDF / 图片 / 可执行文件不认）；
+    5. **大文件截断**：只先读 `SOURCE_SCAN_BYTES`，窗口最多 `max_lines` 行；总行数只在
+       没截断时给（截断时 `total=None` + `truncated=True`，不编一个假总数）。
+
+    三态：任何一条闸不过 ⇒ `tri="unreadable"` + `reason` + 空 `lines`（不是 200 的空文件）。
+    """
+    base = Path(str(root)).resolve()
+    raw = str(path or "").strip()
+    if not raw:
+        return _source_refusal(raw, "没给 path ⇒ 不知道要读哪一份原文")
+    p = Path(raw)
+    if p.is_absolute():
+        return _source_refusal(raw, "绝对路径一律拒（只收工作区内的相对路径）")
+    if any(part == ".." for part in p.parts):
+        return _source_refusal(raw, "路径里有 `..` ⇒ 越界拒绝")
+    try:
+        target = (base / p).resolve()
+    except OSError as exc:
+        return _source_refusal(raw, f"路径解析失败（{type(exc).__name__}: {exc}）")
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return _source_refusal(raw, "路径解析后在工作区外 ⇒ 拒绝（不回内容）")
+    if not target.is_file():
+        return _source_refusal(raw, "不是工作区内的一个文件（不存在或不是文件）")
+    if target.suffix.lower() not in SOURCE_SUFFIXES:
+        return _source_refusal(raw, f"这个后缀不认（只收 {', '.join(SOURCE_SUFFIXES)}）")
+    try:
+        size = target.stat().st_size
+    except OSError as exc:
+        return _source_refusal(raw, f"读不到文件大小（{type(exc).__name__}: {exc}）")
+    truncated = size > SOURCE_SCAN_BYTES
+    try:
+        with target.open("rb") as fh:
+            raw_bytes = fh.read(SOURCE_SCAN_BYTES)
+    except OSError as exc:
+        return _source_refusal(raw, f"读不出来（{type(exc).__name__}: {exc}）")
+    text = raw_bytes.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    total: int | None = None if truncated else len(lines)
+    want = max(1, int(max_lines or SOURCE_LINES_MAX))
+    start = 0
+    if match:
+        needle = str(match)
+        found = next((i for i, one in enumerate(lines) if needle in one), -1)
+        if found >= 0:
+            start = max(0, found - SOURCE_CONTEXT_LINES)
+            line = found + 1
+        else:
+            return _source_refusal(
+                raw, f"文件里没有找到 {needle!r}"
+                     + ("（这个文件已截断，needle 可能在后半段）" if truncated else ""))
+    elif line and int(line) > 0:
+        start = max(0, int(line) - 1 - SOURCE_CONTEXT_LINES)
+    window = lines[start:start + want]
+    return {"tri": TRI_COMPUTED, "reason": "", "path": raw,
+            "line": int(line or 0), "start_line": start + 1,
+            "lines": window, "total": total, "truncated": truncated}
+
+
 def _as_text(value: Any) -> str:
     """辅助读数收成字符串：`None`（读不出来）⇒ 空串，数字/布尔的字面量照写。"""
     if value is None:
@@ -3128,6 +3216,42 @@ def handle_acceptance(handler: Any, params: Mapping[str, str],
         cap = None
     _json_of(handler, acceptance_face(handler.root, project_dir=one("project_dir"),
                                       report_path=one("report_path"), cap_usd=cap))
+
+
+def handle_package(handler: Any, params: Mapping[str, str],
+                   query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/package`：论文包三块（`?project_dir=` `?report_path=` `?cap_usd=` `?sid=`）。"""
+    del params
+
+    def one(name: str) -> str:
+        vals = query.get(name) or []
+        return str(vals[0]) if vals else ""
+
+    cap_raw = one("cap_usd").strip()
+    try:
+        cap: float | None = float(cap_raw) if cap_raw else None
+    except ValueError:
+        cap = None
+    _json_of(handler, package_face(handler.root, project_dir=one("project_dir"),
+                                   report_path=one("report_path"), cap_usd=cap,
+                                   sid=(one("sid") or None)))
+
+
+def handle_source(handler: Any, params: Mapping[str, str],
+                  query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/source`：一个文本文件的原文窗口（只读；路径闸见 `source_window`）。"""
+    del params
+
+    def one(name: str) -> str:
+        vals = query.get(name) or []
+        return str(vals[0]) if vals else ""
+
+    try:
+        line = int(one("line") or 0)
+    except ValueError:
+        line = 0
+    _json_of(handler, source_window(handler.root, one("path"), line=line,
+                                    match=one("match")))
 
 
 def handle_machine(handler: Any, params: Mapping[str, str],
@@ -5432,6 +5556,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "每一格的原文出处（`/api/source` 的三个入参 + 一个标签）",
      (("path", "string"), ("line", "number"), ("match", "string"),
       ("label", "string"))),
+    ("SourceWindow",
+     "GET /api/source 的读数 —— 一个文本文件的原文窗口（受控拒绝时 lines 为空）",
+     (("tri", "Tri"), ("reason", "string"), ("path", "string"),
+      ("line", "number"), ("start_line", "number"), ("lines", "string[]"),
+      ("total", "number | null"), ("truncated", "boolean"))),
 )
 
 # （`MISSING_TYPES` 在文件头声明：那是"这一层有哪些约定"的那一处，本处不再重复一份 —
@@ -5535,6 +5664,8 @@ HANDLERS.update({
     "handle_evidence": handle_evidence,
     "handle_artifacts": handle_artifacts,
     "handle_acceptance": handle_acceptance,
+    "handle_package": handle_package,
+    "handle_source": handle_source,
     "handle_machine": handle_machine,
     "handle_budget_view": handle_budget_view,
     "handle_live": handle_live,

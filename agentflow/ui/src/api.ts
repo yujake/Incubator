@@ -23,10 +23,12 @@ import type {
   LibraryView,
   LiveView,
   MachineView,
+  PackageView,
   RosterView,
   RunEventsView,
   RunIndexDrift,
   RunView,
+  SourceWindow,
   StateSnapshot,
   StatusReportsView,
   ChatView,
@@ -78,6 +80,11 @@ export const ENDPOINTS = {
   // 第二条是类目 → 那一句含义（真身 `errorstats.ERROR_CATEGORIES`）。
   errors: "/api/errors",
   errorCategories: "/api/errors/categories",
+  // 2026-11-01（块 3）：论文包三块一次读（A 证明 / B 结构 / C 收工）+ 原文窗口。
+  // 两条都只读；`package` 的入参与 `acceptance` 同源（project_dir / report_path /
+  // cap_usd / sid），`source` 只吃 path / line / match。
+  package: "/api/package",
+  source: "/api/source",
   stream: "/api/stream",
 } as const;
 
@@ -149,6 +156,47 @@ export function chatPath(
   }
   const tail = q.toString();
   return tail === "" ? ENDPOINTS.acceptance : `${ENDPOINTS.acceptance}?${tail}`;
+}
+
+/** `/api/package` 的查询串（与 `acceptancePath` 同一批入参，多一个 `sid`）。 */
+export function packagePath(opts: {
+  projectDir?: string;
+  reportPath?: string;
+  capUsd?: number | null;
+  sid?: string;
+}): string {
+  const q = new URLSearchParams();
+  if (opts.projectDir) {
+    q.set("project_dir", opts.projectDir);
+  }
+  if (opts.reportPath) {
+    q.set("report_path", opts.reportPath);
+  }
+  if (typeof opts.capUsd === "number") {
+    q.set("cap_usd", String(opts.capUsd));
+  }
+  if (opts.sid) {
+    q.set("sid", opts.sid);
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.package : `${ENDPOINTS.package}?${tail}`;
+}
+
+/** `/api/source` 的查询串（`line` 与 `match` 二选一；两个都给时 `line` 优先）。 */
+export function sourcePath(opts: {
+  path: string;
+  line?: number;
+  match?: string;
+}): string {
+  const q = new URLSearchParams();
+  q.set("path", opts.path);
+  if (typeof opts.line === "number" && opts.line > 0) {
+    q.set("line", String(opts.line));
+  }
+  if (opts.match) {
+    q.set("match", opts.match);
+  }
+  return `${ENDPOINTS.source}?${q.toString()}`;
 }
 
 /** 请求失败时抛的那个东西：状态码 + 三态 + 人话理由（页面据此渲染 TriState）。 */
@@ -362,6 +410,30 @@ export const api = {
     reportPath?: string;
     capUsd?: number | null;
   } = {}): Promise<AcceptanceView> => getJSON<AcceptanceView>(acceptancePath(opts)),
+  /**
+   * 论文包三块（`GET /api/package`，2026-11-01 块 3）：A 证明 / B 结构 / C 收工。
+   *
+   * 一次请求拿三块：三块总是一起看，分成三个端点会让"已签 0 条"与"八格 pass"
+   * 来自两个瞬间。三块各自带 `tri`（`computed` / `unreadable` / `not_applicable`），
+   * 读不到时整块写"没查成"，不写 0。
+   */
+  getPackage: (opts: {
+    projectDir?: string;
+    reportPath?: string;
+    capUsd?: number | null;
+    sid?: string;
+  } = {}): Promise<PackageView> => getJSON<PackageView>(packagePath(opts)),
+  /**
+   * 一格读数的原文窗口（`GET /api/source`）：只读、工作区内、文本后缀。
+   *
+   * 后端对越界/绝对路径/工作区外路径一律受控拒绝（`tri="unreadable"` + 理由），
+   * 大文件只回前 N 行 + 总行数（`truncated`）。页面不许自己拼文件系统路径。
+   */
+  getSource: (opts: {
+    path: string;
+    line?: number;
+    match?: string;
+  }): Promise<SourceWindow> => getJSON<SourceWindow>(sourcePath(opts)),
   getMachine: (): Promise<MachineView> => getJSON<MachineView>(ENDPOINTS.machine),
   getBudget: (): Promise<BudgetView> => getJSON<BudgetView>(ENDPOINTS.budget),
   getLive: (): Promise<LiveView> => getJSON<LiveView>(ENDPOINTS.live),
