@@ -4752,9 +4752,9 @@ def _human_span(seconds: float | None) -> str:
         return f"{minutes} 分钟"
     hours, rest = divmod(minutes, 60)
     if hours < 24:
-        return f"{hours} 小时{rest} 分钟" if rest else f"{hours} 小时"
+        return f"{hours} 小时 {rest} 分钟" if rest else f"{hours} 小时"
     days, hours = divmod(hours, 24)
-    return f"{days} 天{hours} 小时" if hours else f"{days} 天"
+    return f"{days} 天 {hours} 小时" if hours else f"{days} 天"
 
 
 def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
@@ -6486,6 +6486,49 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         rep, "statements_unsigned", statements_unsigned_reading, store)
     rep.readings["statements_abandoned"] = _run_reading(
         rep, "statements_abandoned", statements_abandoned_reading, store)
+    # ---- 门：悬着的命题拦门（业主 2026-11-01 裁定）
+    #
+    # 这是收工门强度变更（不是读数变化）：改前"打回之后没人重送"只活在台账里，
+    # 门照样全绿（82 真机：20:50 之后 0 次 verify_proof，3 条被拒的证明悬着）。
+    # 业主逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，
+    # 或者放弃原命题」⇒ statements_unsigned > 0 进 blocker（machine_pass=false、
+    # 退出码 1），不是 warning。
+    #
+    # 为什么不新增第九个 status 格：status 里每加一格都会改"八格"契约与冻结快照
+    # （见本文件前面对八格的那些注释）；blocker 是既有机制，machine_pass 只看
+    # "八格全 pass 且没有 blocker"，这一格的强度与"第九格 fail"逐字等价。
+    _su = rep.readings["statements_unsigned"]
+    if not _su.get("checked"):
+        rep.findings.append(Finding(
+            "statements_unsigned", "statements_unsigned_unreadable", "warning",
+            f"命题的签收尾那一格没查成（{_su.get('reason') or '没给原因'}）⇒ "
+            "「既无 V 签也未放弃」这一笔数不出来（没查成不是通过，也不是零）"))
+    elif int(_su.get("count") or 0) > 0:
+        _rows = list(_su.get("rows") or [])
+        _named: list[str] = []
+        for one in _rows[:6]:
+            piece = str(one.get("stmt_id") or "") + f"（{one.get('class')}"
+            if one.get("last_verdict"):
+                piece += f"，最后 verdict={one['last_verdict']}"
+            if one.get("fault_at"):
+                piece += f"，{one['fault_at']} 打回"
+            if one.get("hung"):
+                piece += f"，已悬 {one['hung']}"
+            if one.get("owner"):
+                piece += f"，负责人 {one['owner']}"
+            elif not one.get("owner_known"):
+                piece += "，负责人 unknown"
+            _named.append(piece + "）")
+        rep.findings.append(Finding(
+            "statements_unsigned", "statements_unsigned_without_v_or_abandon", "blocker",
+            f"{_su['count']} 条命题既没有 V 签、也没有被明确放弃"
+            f"（按类：{_su.get('by_class') or {}}）；被点到的是 "
+            f"{'、'.join(_named)}{'…' if len(_rows) > len(_named) else ''} ⇒ "
+            "业主 2026-11-01 的裁定：「每个命题和证明的产出最终必须以V签收尾，"
+            "拿不到V签就得一直改，或者放弃原命题」。两条出路：① 补齐之后把这一份"
+            "重新送 V（`verify.verify_proof`）并拿到干净的「成立」；② 明确放弃"
+            "（B 侧 `table.update` 该命题 status=abandoned + 放弃标记，理由与时间"
+            "缺一不可）。逐条读数见 readings.statements_unsigned.rows"))
     # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
     #
     # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：

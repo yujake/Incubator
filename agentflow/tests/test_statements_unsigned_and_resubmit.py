@@ -428,3 +428,53 @@ def test_abandonment_expires_the_open_resubmit_item(tmp_path):
     assert str(closed.get("item_close")) == "expired", closed
     assert _resubmit_items(st) == [] or all(
         str(r.get("item_state")) == "done" for r in _resubmit_items(st)), _resubmit_items(st)
+
+
+# ------------------------------------------------------------------ ⑤ 收工门（强度变更）
+
+def _closing(st: Store):
+    """只跑读数那一层（`checks=()`）：这一笔要测的是门对"悬着"的反应。"""
+    return CL.check_closing(st, checks=(), goal="测门", goal_met=True, basis="夹具")
+
+
+def test_the_gate_blocks_while_a_statement_is_unsigned(tmp_path):
+    """⑤ 收工时还悬着 ⇒ blocker + machine_pass=false + 退出码 1（门强度变更）。"""
+    st = _ws(tmp_path)
+    _put(st)
+    _verify(st)
+    rep = _closing(st)
+    assert rep.machine_pass is False, rep.to_dict()
+    assert CL.tri_state_exit_code(rep) == 1, rep.to_dict()
+    blockers = [f for f in rep.blockers if f.check == "statements_unsigned"]
+    assert len(blockers) == 1, [f.to_dict() for f in rep.findings]
+    assert blockers[0].code == "statements_unsigned_without_v_or_abandon"
+    assert SID in blockers[0].detail, blockers[0].detail
+    assert "已悬" in blockers[0].detail and "负责人" in blockers[0].detail, blockers[0].detail
+    assert "业主 2026-11-01" in blockers[0].detail, "拦门读数要点名裁定"
+
+
+def test_the_gate_names_at_most_six_and_counts_the_rest(tmp_path):
+    """⑤ 逐条点名只到前 6 条，其余折成「共 N 条」（不许把 detail 塞爆）。"""
+    st = _ws(tmp_path)
+    for i in range(8):
+        _put(st, f"{i + 1:06d}")
+    rep = _closing(st)
+    detail = [f.detail for f in rep.blockers if f.check == "statements_unsigned"][0]
+    assert "8 条命题" in detail, detail
+    assert detail.count("，已悬") == 6, detail
+    assert "…" in detail, detail
+
+
+def test_the_gate_is_green_when_every_statement_is_signed_or_abandoned(tmp_path):
+    """⑤ 的正控：重送并成立 ⇒ 门绿（0 条未签）；没有 statements ⇒ 也绿。"""
+    st = _ws(tmp_path)
+    empty = _closing(st)
+    assert empty.blockers == [] and empty.machine_pass is True, empty.to_dict()
+    _put(st)
+    _verify(st)
+    _reproof(st)
+    _verify(st, proof=PROOF2, verdict="成立", fault=False, step=None)
+    rep = _closing(st)
+    assert rep.blockers == [], [f.to_dict() for f in rep.findings]
+    assert rep.machine_pass is True, rep.to_dict()
+    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()

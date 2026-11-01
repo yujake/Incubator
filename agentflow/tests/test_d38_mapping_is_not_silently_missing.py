@@ -168,10 +168,15 @@ def _numeric_workspace_with_document(tmp_path: pathlib.Path) -> pathlib.Path:
     行与正文的夹具直接取 `test_numeric_theorem_writing_spec` 的那一份（同一个仓库里
     只留一份"合规数值实验定理"的形状，不在这里抄第二份）。
     """
+    from conftest import sign_all_statements_for_the_gate
     from test_numeric_theorem_writing_spec import _row as numeric_row
     from test_numeric_theorem_writing_spec import _workspace as numeric_workspace
 
     root = numeric_workspace(pathlib.Path(tmp_path) / "ws", rows=[numeric_row()])
+    # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
+    # 拦门读数 `statements_unsigned`。这个夹具断言"门是绿的"，所以台账里那条定理
+    # 必须真有 V 签（连续 3 次干净「成立」）—— 断言一个字没改，只是把"绿"造全。
+    sign_all_statements_for_the_gate(root)
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     # 封一次：paper 那一格要的是"这份 PDF 是盘上这份 tex 编的"。

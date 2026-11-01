@@ -265,6 +265,52 @@ def sync_counters(store: Store) -> None:
 # --------------------------------------------------------------------------- 构造行
 
 
+def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
+                       times: int | None = None) -> int:
+    """把一条命题的第 3 位签住（夹具用）：连续几次干净的「成立」，返回签了几行。
+
+    为什么夹具需要它（2026-11-01，业主裁定「每个命题和证明的产出最终必须以V签收尾，
+    拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格拦门读数
+    `statements_unsigned` —— 一条在册、有证明、却没有 V 签的命题会让 `machine_pass`
+    变假。凡是断言"门是绿的"的夹具都必须先把这一格造绿；这不是放宽断言，而是把
+    "绿"造全（原来那些断言一个字都不改）。
+
+    走真写口 `verifications.record_verification`：第 3 位要连续
+    `verifications.SIGN_STREAK_NEED` 次「成立」才翻，所以缺省就写那么多次。
+    秘书轴写 `clean`（不写就按"没判过"计入；写上更接近真机）。
+    """
+    from agentflow import verifications as VR
+
+    need = int(times if times is not None else VR.SIGN_STREAK_NEED)
+    for _ in range(need):
+        VR.record_verification(
+            str(root), statement_id=str(statement_id), proof_text=str(proof_text),
+            verdict={"verdict": "成立"},
+            secretary_judge={"axis": "clean", "checked": True,
+                             "reason": "夹具：把第 3 位签住"},
+            flip=False)
+    return need
+
+
+def sign_all_statements_for_the_gate(root, times: int | None = None) -> int:
+    """把工作区里每条非概念命题都签住（夹具用），返回签了几条。
+
+    与 :func:`sign_for_the_gate` 同一个口；这一条只是"哪些行要签"的省事写法（读盘上
+    的 `statements`，概念行跳过 —— 概念不参与等级链、也没有可签的证明）。
+    """
+    from agentflow.store import Store
+
+    store = Store(str(root))
+    signed = 0
+    for row in store.rows("statements"):
+        if str(row.get("kind") or "") == "concept":
+            continue
+        sign_for_the_gate(root, statement_id=str(row.get("stmt_id") or ""),
+                          proof_text=str(row.get("proof_text") or ""), times=times)
+        signed += 1
+    return signed
+
+
 def add_request(
     store: Store,
     request_id: str,

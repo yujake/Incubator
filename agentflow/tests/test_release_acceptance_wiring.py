@@ -30,6 +30,7 @@ from agentflow import closing as CL
 from agentflow import reviewaccept as RX
 from agentflow import sessions as SS
 from agentflow import userio as U
+from conftest import sign_for_the_gate
 from test_review_acceptance import _good, _report, _seal, _stmt, _task, _usage
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -500,6 +501,10 @@ def test_the_readings_are_recomputed_not_hand_copied(tmp_path):
 
     key, name = RX.CRITERIA[0]
     _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
+    # 2026-11-01：收工门多了一格拦门读数 `statements_unsigned`。这一条要证的是"改坏一格
+    # ⇒ 那一格跟着红、而退出码仍由 M 的判据定"，所以新加的那条命题必须先把 V 签造出来
+    # （否则它自己会把退出码压成 1，测的就不是"读数按盘现算"了）。断言一个字没改。
+    sign_for_the_gate(st.root, statement_id="0002", proof_text="Proof. 逐字摘录……")
     code2, out2 = _run(st, report, "--sid", _touch_session(st),
                        "--cap-usd", "1.0", "--acceptance-sid", sid)
     assert code2 == 0, out2                                # 退出码仍由 M 的判据定

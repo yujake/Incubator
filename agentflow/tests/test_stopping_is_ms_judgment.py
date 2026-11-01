@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import pathlib
 
+from conftest import sign_for_the_gate
 from agentflow import closing as CL
 from agentflow import sessions as SS
 from agentflow.store import Store
@@ -102,6 +103,12 @@ def test_m_may_refuse_to_stop_even_when_the_machine_is_green(tmp_path: pathlib.P
     stmt.validate()
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", stmt.to_dict())
+    # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
+    # 拦门读数 `statements_unsigned` —— 一条在册、有证明、却没有 V 签的命题会让
+    # `machine_pass` 变假。这一条判据的前提是"机器那一格真的绿了"，所以夹具必须满足
+    # 新规：给这条命题补够干净的「成立」（第 3 位要连续 3 次才翻，见 `signs_bit3`）。
+    # 这不是放宽断言 —— 前提一个字没改，只是把"绿"造全。
+    sign_for_the_gate(st.root, statement_id="0000", proof_text="Proof. …")
     rep = _gate(st, _report(st.root), goal="交付", goal_met=False,
                 basis="还差引文逐条核验",
                 task_list=[{"what": "逐条核引文", "state": "not_done", "why": "检索被 429 挡住"}])

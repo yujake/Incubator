@@ -19,7 +19,7 @@ import json
 import pathlib
 import re
 
-from conftest import TS, sync_counters
+from conftest import TS, sign_for_the_gate, sync_counters
 import paperfixture as FX
 from agentflow import reviewaccept as RX
 from agentflow import schema as S
@@ -126,6 +126,11 @@ def _good(tmp_path: pathlib.Path):
         tx.upsert("literature", S.Literature(lit_id="0000", title="Brown 1971", type="J",
                                              summary="室图", path=None, added_at=TS).to_dict())
     _stmt(st, "0001")
+    # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
+    # 拦门读数 `statements_unsigned`。这一份夹具代表"五条内容级判据全过、门也绿"的
+    # 那一趟交付，所以台账里那条命题必须真有 V 签（连续 3 次干净「成立」）——
+    # 断言一个字没改，只是把"绿"造全。
+    sign_for_the_gate(st.root, statement_id="0001", proof_text="Proof. 逐字摘录……")
     _task(st, "t-0001")
     _usage(st, "0001", 0.25)
     sync_counters(st)

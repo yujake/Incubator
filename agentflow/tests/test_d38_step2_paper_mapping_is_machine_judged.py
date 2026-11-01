@@ -73,12 +73,17 @@ def _numeric_paper(tmp_path: pathlib.Path, *, patch: dict | None = None) -> path
     有行 = `doc.build_document` 成功过）。封 PDF 必须在写表之后：附录那一行
     `\\input{mapping-appendix}` 会让 `main.tex` 变长，先封后写 = 回执过期。
     """
+    from conftest import sign_all_statements_for_the_gate
     from test_d38_mapping_is_not_silently_missing import _document_row
     from test_numeric_theorem_writing_spec import _row as numeric_row
     from test_numeric_theorem_writing_spec import _workspace as numeric_workspace
 
     row = numeric_row(**(patch or {}))
     root = numeric_workspace(pathlib.Path(tmp_path) / "ws", rows=[row])
+    # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
+    # 拦门读数 `statements_unsigned`。这一份夹具断言 `machine_pass` 仍为真，所以台账里
+    # 那条定理必须真有 V 签（连续 3 次干净「成立」）—— 断言一个字没改，只是把"绿"造全。
+    sign_all_statements_for_the_gate(root)
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     tex = root / "out" / "paper" / PC.TEX_NAME
@@ -96,13 +101,20 @@ def _ledger_workspace(tmp_path: pathlib.Path) -> pathlib.Path:
 
     形态与第一步那两趟真机一致（`cube-ws` / `r34c`）：`out/paper` 里没有 MAPPING.json。
     """
+    from conftest import sign_for_the_gate
     from test_d38_mapping_is_not_silently_missing import _document_row, _statement_row
 
     root = pathlib.Path(tmp_path) / "ws"
     store = Store(root)
     store.init(force=True)
+    _stmt = _statement_row("000000")
     _dump(root / "data" / str(S.TABLES["statements"]["file"]),
-          {"schema_version": 2, "rows": [_statement_row("000000")]})
+          {"schema_version": 2, "rows": [_stmt]})
+    # 2026-11-01：收工门多了一格拦门读数 `statements_unsigned`（业主：「拿不到V签就得
+    # 一直改，或者放弃原命题」）。这一份夹具断言"缺那一行不许让老工作区判红"，所以台账里
+    # 那条命题必须真有 V 签 —— 断言一个字没改，只是把"不红"的前提造全。
+    sign_for_the_gate(root, statement_id=str(_stmt["stmt_id"]),
+                      proof_text=str(_stmt["proof_text"]))
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     return root
