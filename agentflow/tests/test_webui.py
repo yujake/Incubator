@@ -767,7 +767,8 @@ def test_events_outside_a_run_never_become_a_run(tmp_path: pathlib.Path):
         assert got["runs"][0]["stop_reason"] == "final", got["runs"][0]
         assert got["runs"][0]["usd"] == 0.25, got["runs"][0]
         # 那一趟的读数里不许出现空壳（本趟事件 0 条 / 0 步）
-        assert got["runs"][0]["steps"] == 1 and got["runs"][0]["events_in_run"] > 0
+        assert got["runs"][0]["steps"] == 1 and got["runs"][0]["events_span"] > 0
+        assert got["runs"][0]["events_owned"] > 0
         # 零散事件单独一栏（两条），不是"一趟 0 步的运行"
         assert [(o["sid"], o["kind"]) for o in got["orphans"]] == [
             ("20261003", "task_end"), ("t", "user_answer")], got["orphans"]

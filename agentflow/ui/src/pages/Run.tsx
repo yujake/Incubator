@@ -35,7 +35,7 @@ import { api, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { StopButtons } from "../components/Stop";
-import { Money } from "../components/Money";
+import { Money, formatUsd } from "../components/Money";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -378,10 +378,22 @@ export function Run(props: RunProps) {
                 title: "花销（事件求和）",
                 render: (r) => <Money usd={r.usd} unknownCalls={r.unknown_usd} />,
               },
+              {
+                // 162 ②：收工行自己报的账（`agent_run_end.spend`）。`null` ⇒ `unknown`
+                // —— 那不是"花得少"，是"这一趟没有收工行"（三态，不折成 $0.000000）。
+                key: "spend_usd",
+                title: "花销（收工行自报）",
+                render: (r) => <span class="mono">{formatUsd(r.spend_usd)}</span>,
+              },
+              // 162 ②：自报账里"算不出价钱"的那几次。单独一列，因为它是 `number | null` ——
+              // 硬塞进 Money 的 `unknownCalls` 会把 `null` 折成 0（"没报"读成"零次"）。
+              { key: "spend_unknown_usd_calls", title: "算不出价钱（自报）" },
               { key: "last_shape", title: "最后一步形态", render: (r) => text(r.last_shape) },
               { key: "stop_reason", title: "停止理由", render: (r) => text(r.stop_reason) },
               { key: "waiting_on", title: "在等哪个问题" },
-              { key: "events_in_run", title: "趟内事件" },
+              // 162 ③：一格是"占了几行下标"（跨度，含别人的），一格是"归到这一趟的"。
+              { key: "events_span", title: "趟内事件（跨度）" },
+              { key: "events_owned", title: "趟内事件（自己的）" },
               { key: "start_ts", title: "起" },
               { key: "end_ts", title: "止", render: (r) => text(r.end_ts) },
             ]}
@@ -439,6 +451,10 @@ export function Run(props: RunProps) {
         <div class="readings tri-reason">
           本段会话每一趟的合计（参考读数，不与上面那个数比 —— 跨趟是不同范围）：
           <Money usd={sessionTotal} unknownCalls={sessionUnknown} />
+        </div>
+        <div class="readings tri-reason">
+          本段会话里没有任何一趟的自报账认得的那笔钱（那批没编号的调用不摊给谁）：
+          <span class="mono">{formatUsd(v.unattributed_usd)}</span>
         </div>
       </Card>
 

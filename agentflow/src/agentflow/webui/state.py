@@ -290,6 +290,8 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
                 # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
                 "spend_usd": None, "spend_unknown_usd_calls": None,
+                # 162 ③：归属计数从它自己的开始那一行起算（`events_span` 也把它算进跨度）
+                "events_owned": 1,
                 "stop_reason": "", "final_chars": None, "summons": None,
                 "messages": None, "elapsed_sec": None, "last_shape": "",
                 "end_index": None, "end_ts": "",
@@ -304,6 +306,9 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                             "ts": _text(e.get("ts")), "role": _text(e.get("role"))})
             continue
         cur = hit[1]
+        # 162 ③：这条事件归到这一趟了 ⇒ 归属计数 +1（与 `events_span` 是两个问题：
+        # 一个是"谁写的"，一个是"占了几行下标"）。`runs_in_session` 里同一句。
+        cur["events_owned"] += 1
         if kind == "agent_step":
             cur["steps"] += 1
             cur["last_shape"] = _text(e.get("shape"))
@@ -358,7 +363,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
         if not run["stop_reason"] and mine:
             run["stop_reason"] = "waiting_for_user"
         run["waiting"] = bool(mine) and run["stop_reason"] == "waiting_for_user"
-        run["events_in_run"] = max(0, hi - run["start_index"])
+        run["events_span"] = max(0, hi - run["start_index"])
     # 挂在某一趟上的零散事件（同一会话里、在某趟范围内）不算「轮次之外」：
     # 判据是它有没有落在某条 run 的 [start, end] 区间里。
     def _inside(idx: int) -> bool:

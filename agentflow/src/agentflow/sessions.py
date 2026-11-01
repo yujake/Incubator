@@ -370,17 +370,28 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
     事件求和是这个数**唯一**的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
 
-    键与 `webui.state._scan` 逐字相同（22 个）—— `draft/75 §1.3` 的 `RunRow`：
+    键与 `webui.state._scan` 逐字相同（23 个）—— `draft/75 §1.3` 的 `RunRow`：
     `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd,
     spend_usd, spend_unknown_usd_calls, stop_reason, final_chars, summons, messages,
-    elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting, events_in_run`。
+    elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting,
+    events_span, events_owned`。
     `usd`/`final_chars`/`summons`/`messages`/`elapsed_sec` 读不到就是 `None`
     （三态：不是 0）；`unknown_usd` 是"算不出价钱的那几次"的计数，它天然是 0 起算。
+
+    ## 事件两格：跨度 vs 归属（162 ③）
+
+    - `events_span` = `end_index - start_index`（**下标跨度**，开始那一行算、收工那一行不算）。
+      多代理共写同一份会话文件时它把**别人的**事件也框进来：81 上 71 趟合计 70055，
+      而真实事件只有 6514（10.75 倍）。名字以前叫 `events_in_run`，那是一个假名字。
+    - `events_owned` = 按上面那张三档归属表**只数归到这一趟**的事件（含它自己的
+      `agent_run_start`）。81 上合计 6254，M 那行 521。
+    - 为什么**不**按 `task_id` 过滤：`agent_step` 里没有 `task_id`（81 上 2419 条都没有），
+      按它过滤会把步数整族丢光 —— M 那行会读成 360，比真值 512 还小。
     """
     rows = list(events)
     runs: list[dict] = []
     #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 只留在这里，不进行（行键集与
-    #: `RunRow` 的 22 个逐字相同，加一格就是改契约 —— 162 ④ 会把它加进去）。
+    #: `RunRow` 的 23 个逐字相同，加一格就是改契约 —— 162 ④ 会把它加进去）。
     open_runs: list[tuple[str, dict]] = []
 
     def _owner_of(tid: str, role: str) -> tuple[str, dict] | None:
@@ -407,6 +418,8 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
                 # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
                 "spend_usd": None, "spend_unknown_usd_calls": None,
+                # 162 ③：归属计数从它自己的开始那一行起算（`events_span` 也把它算进跨度）
+                "events_owned": 1,
                 "stop_reason": "", "final_chars": None, "summons": None,
                 "messages": None, "elapsed_sec": None, "last_shape": "",
                 "end_index": None, "end_ts": "",
@@ -418,6 +431,9 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
         if hit is None:
             continue
         cur = hit[1]
+        # 162 ③：这条事件归到这一趟了 ⇒ 归属计数 +1（与 `events_span` 是两个问题：
+        # 一个是"谁写的"，一个是"占了几行下标"）。
+        cur["events_owned"] += 1
         if kind == "agent_step":
             cur["steps"] += 1
             cur["last_shape"] = str(e.get("shape") or "")
@@ -478,7 +494,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
         if not run["stop_reason"] and mine:
             run["stop_reason"] = "waiting_for_user"
         run["waiting"] = bool(mine) and run["stop_reason"] == "waiting_for_user"
-        run["events_in_run"] = max(0, hi - run["start_index"])
+        run["events_span"] = max(0, hi - run["start_index"])
     return runs
 
 

@@ -300,10 +300,13 @@ def test_events_owned_counts_the_steps_that_carry_no_task_id(tmp_path: pathlib.P
     assert steps, "夹具里没有 agent_step ⇒ 这条判据是空跑"
     assert all("task_id" not in e for e in steps), \
         f"agent_step 居然带 task_id 了 ⇒ 这条判据的前提变了：{steps}"
+    # 只数 M 自己的那一行 step（另一条是 A 的：它按 role 归 A，不该算进 M）
+    my_steps = [e for e in steps if e.get("role") == "M"]
+    assert len(my_steps) == 1 and len(steps) == 2, steps
     carrying = [e for e in events if str(e.get("task_id") or "") == "t-000001"]
-    # 按 task_id 过滤只能数到 3 条（开始 / llm_call / 收工）；含步数才是 4 条
+    # 按 task_id 过滤只能数到 3 条（开始 / llm_call / 收工）；含自己那条步数才是 4 条
     assert len(carrying) == 3, carrying
-    assert m["events_owned"] == len(carrying) + len(steps), m
+    assert m["events_owned"] == len(carrying) + len(my_steps), m
 
 
 # ====================================================================== 负控 ① 手改索引

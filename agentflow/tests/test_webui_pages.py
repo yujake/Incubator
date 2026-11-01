@@ -140,7 +140,7 @@ def _strip_js_comments(text: str) -> str:
 
 #: 一次字段访问：`x.key` / `x?.key` / `x["key"]` 都算。
 _READ = re.compile(r"[.?\[]\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?\s*\]?")
-#: 表格列声明：`{ key: "events_in_run", ... }` 也算"这一页读了那一栏"。
+#: 表格列声明：`{ key: "events_span", ... }` 也算"这一页读了那一栏"。
 _READ_COLUMN = re.compile(r"\bkey:\s*[\"']([A-Za-z_][A-Za-z0-9_]*)[\"']")
 #: 对象字面量的属性名：`api.getAcceptance({ capUsd: cap })` 那一档。
 _READ_PROP = re.compile(r"[\{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*:")
@@ -322,7 +322,7 @@ def test_run_page_reads_the_timeline_and_the_index(
         assert len(view["runs"]) == 1, view["runs"]
         run = view["runs"][0]
         assert {"steps", "llm_calls", "usd", "unknown_usd", "stop_reason",
-                "waiting_on", "events_in_run"} <= set(run), sorted(run)
+                "waiting_on", "events_span", "events_owned"} <= set(run), sorted(run)
         assert view["report"]["status"] == "ok", view["report"]["status"]
         assert view["report"]["text"] != "", "夹具的交付说明有正文，读出来是空的"
         ck = view["checkpoint"]
