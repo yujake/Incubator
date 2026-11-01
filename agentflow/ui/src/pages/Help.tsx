@@ -161,8 +161,14 @@ const PAGES: PageRow[] = [
   },
   {
     page: "验收（/acceptance）",
-    reads: "GET /api/acceptance（可带 ?cap_usd=）",
-    answers: "五条判据 + 五种辅助读数，逐条 pass / fail / unknown（第三档是没查成，不是通过）",
+    reads: "GET /api/package（可带项目根、报告路径与 cap_usd）；"
+      + "每格「原文」走 GET /api/source",
+    answers: "论文包三块：A 证明完整吗（review 六态 / streak / defect_step / V 签 / "
+      + "回执送达）、B 结构合规吗（定理↔proof / cites / refs / 字符六类 / 台账覆盖）、"
+      + "C 能不能收工（八格四态 / machine_pass / can_close / retire / 成本 / 时间轴）。"
+      + "每格都能点开原文；读不到写「没查成」，不写 0。"
+      + "旧的五条判据 + 五种辅助读数：五条收进 C 块折叠区（只读、不进机器门），辅助读数不上屏；"
+      + "内容级五条逐条 pass / fail / unknown（第三档是没查成，不是通过）。",
   },
   {
     page: "本机（/machine）",
@@ -571,7 +577,7 @@ export function Help() {
         </div>
         <div class="readings">
           别把这格和 <span class="mono">cap_usd</span> 混了：<span class="mono">cap_usd</span> 是「验收」页
-          给 <span class="mono">GET /api/acceptance</span> 的成本上限（判「在成本上限内」那一格），
+          给 <span class="mono">GET /api/package</span> 的成本上限（判「在成本上限内」那一格），
           不进预算寄存器，也不参与停机。
         </div>
       </Card>
