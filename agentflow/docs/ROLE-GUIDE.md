@@ -123,7 +123,7 @@
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **54** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **54** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -242,7 +242,7 @@
 | `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **39** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -346,7 +346,7 @@
 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。 | `read` | `lit_id` |
 | `trace.relation` | L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。 | `read` | `relation_id` |
 
-共 **36** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **36** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
 
 ### 主要读写的文档与细节
 
@@ -499,7 +499,7 @@
 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。 | `read` | `lit_id` |
 | `trace.relation` | L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。 | `read` | `relation_id` |
 
-共 **59** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **59** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -609,7 +609,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **40** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **40** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -745,7 +745,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **52** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **52** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -878,7 +878,7 @@
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
-共 **54** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **54** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -995,7 +995,7 @@
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 
-共 **46** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **46** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
 
 ### 主要读写的文档与细节
 
@@ -1094,7 +1094,7 @@
 | `verify.read_proof` | 按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。 | `read` | `statement_id` |
 | `verify.verify_proof` | 把一份证明按写成后的样子整体重读（V 的唯一主动作）：两态结论（成立 / 有毛病）+ 问题指到步号，并写 verifications/<命题号>.jsonl。`side_effect=read`：V 不写表。 | `read` | `statement_id` |
 
-共 **28** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **28** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
 
 ### 主要读写的文档与细节
 
@@ -1198,7 +1198,7 @@
 | `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
-共 **39** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -1344,7 +1344,7 @@
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 
-共 **42** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **42** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 

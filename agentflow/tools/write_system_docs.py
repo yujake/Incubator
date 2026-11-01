@@ -444,7 +444,15 @@ def _role_section(role: str, registry: Any) -> list[str]:
     ]
     for name, summary, se, need in tools:
         lines.append(f"| `{name}` | {summary} | `{se}` | {need} |")
-    lines += ["", f"共 **{len(tools)}** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。", ""]
+    if spec.read_only:
+        # 2026-11-02（业主 2026-11-01 的口径）：只读 = 对其它智能体的产出只读，
+        # 自己侧的产物与簿记照写（C / H / V 的工具面上各有 10 / 13 / 9 件 write_local）。
+        # 旧句「只读角色在结构上拿不到写工具」与紧挨着的那张表自相矛盾。
+        face_note = ("只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的"
+                     "产物与簿记")
+    else:
+        face_note = "写面按上表的 side_effect 读"
+    lines += ["", f"共 **{len(tools)}** 件（声明在 src/agentflow/tools/；{face_note}）。", ""]
     lines += ["### 主要读写的文档与细节", "", "| 路径或落点 | 读还是写 | 细节 |", "|---|---|---|"]
     for path, rw, detail in ARTIFACTS.get(role, ()):
         lines.append(f"| {path} | {rw} | {detail} |")
