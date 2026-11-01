@@ -100,7 +100,7 @@
 | `lit.stage_withdraw` | 撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块。 | `write_local` | `slot`、`reason_code` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `search.dedup_check` | **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的键。 | `read` | `title` |
 | `search.download` | 把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完了。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。 | `write_local` | `url` |
@@ -120,7 +120,7 @@
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
 | `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
-| `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件要走 OCR：你面上有 OCR 工具就用它，没有就交 B 转成文本；别的角色只读那份 `.txt`。 | `write_local` | （无） |
+| `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **54** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
@@ -161,7 +161,7 @@
   - 改写要显式标注：把文献里的证明重写成我们的形式时，另起一行并标 origin=own_result（我们的重构），不许让改写看起来像原文。
   - 收录要有审美，也要判档位：判到最低那一档就是 T0（基础定理或初步结论）——这不是拒绝，是分档。判不了的写「未判」并给出理由；档位只有 T0–T4 这五档 ＋「未判」，没有第六种说法。
   - 判档位的素材是「这份证明花了多大力气」，五项读数：① 体量（证明正文多少字）；② 步骤数（编号步骤与分节）；③ 引了几条引理；④ 用到的工具与定理跨了几类（跨没跨领域）；⑤ 有没有绕远路（明明有更短的熟路却另走一条）。五项合成一个分数，分数落格：力气小就是 T0，体量大从 T2 起，技巧多或跨领域 T3，极长或极偏 T4。「后面哪一步会用到它」「比已知的那一条强在哪」这两件可以写，但不作判据 —— 写不写、答不答得上来，都不影响档位。
-  - 入库前你的秘书会替你把这一关：它给出档位（工具结果里带 `tier=T0`…`tier=T4`，或「未判」+ 理由），照旧收录、不再拒收 —— 它说的「哪一项力气读数缺」就是你升档的路：把证明正文交全（或补上体量/步骤/引理/跨度这几项读数）之后重交，档位才往上走。
+  - 入库前你的秘书会替你把这一关：它给出档位，照旧收录、不再拒收。**只有 T0 会在工具结果里带读数**（`tier=T0` + `downgraded=true` + 一句 `basis`）；T1–T4 不额外回读数 —— 档位去秘书的判定台账（`out/secretary/` 的 `nontriviality` 那几行）看；它没查成时回的是 `unjudged` + 理由。它说的「哪一项力气读数缺」就是你升档的路：把证明正文交全（或补上体量/步骤/引理/跨度这几项读数）之后重交，档位才往上走。
   - 它判`判不了`/`没查成`时这一格没有档位（那是「这一格没查成」，不是「合格」）；工具结果里带 `text_truncated` 时，判不了的原因是「输入被截断」（正文在 X 字处被切），不是「材料不足」——修法是把正文拆段重交。
   - **同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立路径」时，目标是同一条命题的 `proof_no` 1..N，不是 N 条独立命题。登记时一次交清：`own.register_statement` 的 `proofs=[{proof_no: 1..N, text: …}]`（`#p1` 落行上的 `proof_text`，`#p2` 起落同一行的 `proofs` 清单）。**每条证明各自要 V 的签**：`bits.evidence.reviewed_by_proof` 按 `proof_no` 逐份记（`{"1": true, "2": false}`），一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by="stmt:<命题号>#pN"` ＋ `path_group` 标明它属于第几条证明（`deps` 两维：外层 = 可选路径、内层 = 一条路径上的步骤），C 才能按不同的依赖面追出不同的证明路径。论文对应表里同一条命题占多行、每行各带 `proof_no`。**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / 归纳版）不等于不同命题；拆开之后 `proof_no` 恒为 1、`path_group` 只剩一组，多证明机制一次都不会被触发。判重先问「这是不是同一条」，再问「这是它的第几份证明」。
   - **这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、不给 `documents` 另开一类；A 交来的文献由你把定理与证明收进 `statements`（`proof_text` + 逐字出处），**收录比转述强**：综述里的一句话查不到行，收录表里每一行都能。
@@ -229,7 +229,7 @@
 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。 | `write_local` | （无） |
 | `ocr.detect_text_layer` | 判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验**」不是「**校验失败**」。 | `read` | （无） |
 | `ocr.run` | 对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本假装成功）。可给已登记文献编号。 | `write_local` | （无） |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
 | `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
@@ -331,7 +331,7 @@
 | `graph.stats` | 返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。 | `read` | （无） |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `search.local` | **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
 | `search.shelf` | **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
@@ -475,7 +475,7 @@
 | `graph.stats` | 返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。 | `read` | （无） |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `research.list_gaps` | 列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排序。 | `read` | （无） |
 | `research.poll_waiting` | 复查等待中的查询请求：请求是否结束、result_lit_ids 是否都被 B 消化；返回就绪/未就绪分组。 | `read` | （无） |
@@ -592,7 +592,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
 | `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
@@ -717,7 +717,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
 | `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
@@ -850,7 +850,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
 | `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
@@ -964,7 +964,7 @@
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
 | `review.record_finding` | 把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的那类用它；`evidence` 必填。 | `write_local` | `doc_id`、`kind`、`target`、`message`、`evidence` |
 | `review.report` | 产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。 | `write_local` | `doc_id`、`own_errors` |
@@ -1074,7 +1074,7 @@
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
@@ -1177,7 +1177,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
 | `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
@@ -1332,7 +1332,7 @@
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。 | `write_local` | `path`、`content` |
-| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明我还有程序在跑 —— 先叫停（面上有停程序那件工具就用它；没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
+| `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 
 共 **42** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
