@@ -6764,6 +6764,21 @@ class Secretary:
                 out["quote_reason_filled"] = True
             data = self._annotate_proposition(row.to_dict(), adj, proof_no=1,
                                               route=route)
+            # ---- 167/作者（业主 2026-11-01 裁定）：登记的那一刻把"谁写的"记下来。
+            #
+            # 为什么必须在这里：V 回执的收件人 = 送审者（召唤 V 的那个 task），而
+            # "送审者该不该是这个人"只能拿"作者是谁"来判（业主：「F 写的证明，F 送审
+            # ……B 侧收录」「不存在 F 写证明 B 送审」）。盘上此前没有这一格，81 的 8 条
+            # 回执只能记成 `author_not_recorded`（`vreceipts._author_of`）。
+            #
+            # 只加数据：不改 `bits`、不改收录行为、不改 `created_by`（那是登记口）。
+            # 读不出来源 ⇒ 不写这一格（`author_not_recorded`），不许默认成 B。
+            from . import proofauthors as _PAA
+
+            author = _PAA.reading(body=body, root=self.root)
+            if author.get("author"):
+                data["proof_authors"] = _PAA.recorded(author)
+            out["author_reading"] = dict(author)
             tx.upsert("statements", data, note="record_statement")
             if kind == "concept" and legacy.get("present"):
                 # 交来的就是一条概念（`kind="concept"`）⇒ 它自己那一行也要镜像：
