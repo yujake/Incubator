@@ -3859,6 +3859,103 @@ def cmd_doctor(args) -> int:
     return 0 if (rep["model"]["key_present"] and rep["can_do_formal"]) else 1
 
 
+#: `web` 自动挑端口的起点与跨度（业主 2026-11-01：「默认自动挑空闲端口，从 8700 起」）。
+#: 跨度只覆盖"这一段里找"的复用面（`_serving_here`），不是上限：40 个都不可用就交回 0。
+WEB_PORT_START = 8700
+WEB_PORT_SPAN = 40
+
+
+def _is_workspace_dir(path: Path) -> bool:
+    """这个目录是不是一个初始化过的工作区。
+
+    判据与 `projects.classify` 的 `workspace` 那一档同源（标记文件，或已落盘的
+    `data/counters.json`）；这里不 import `projects` —— `web` 是启动路径，少拉一个模块
+    就少一条能在 import 期坏掉的路。
+    """
+    p = Path(path)
+    return (p / WORKSPACE_MARKER).is_file() or (p / "data" / "counters.json").is_file()
+
+
+def _newest_workspace_under(base: Path) -> Path | None:
+    """`<base>/projects/` 里最近改过的那一个工作区；没有就 None。
+
+    只认"初始化过的工作区"（`:func:`_is_workspace_dir``），一个刚建、还没 init 的空文件夹
+    不算 —— 否则"最近建的项目"会把网页指到一个什么读数都没有的目录上。
+    """
+    projects = Path(base) / "projects"
+    try:
+        children = list(projects.iterdir()) if projects.is_dir() else []
+    except OSError:
+        return None
+    found: list[tuple[int, str, Path]] = []
+    for child in children:
+        try:
+            if child.is_dir() and _is_workspace_dir(child):
+                found.append((child.stat().st_mtime_ns, child.name, child))
+        except OSError:
+            continue
+    return max(found)[2] if found else None
+
+
+def _nearest_workspace(start: Path) -> Path:
+    """`web` 不给 `--root` 时的缺省工作区（业主：「默认当前目录下的最近工作区」）。
+
+    三档，按"离用户最近"排：
+
+    1. 当前目录或它的某个上级目录本身就是工作区 ⇒ 就是它（`cd` 进工作区再开网页是最常见的一档）；
+    2. 否则从当前目录往上，第一层带 `projects/` 的目录里最近改过的那个工作区
+       （在仓库根或 `temp/` 里敲命令时，它打开的是最近在跑的那个项目）；
+    3. 都没有 ⇒ 当前目录（与改前同形：至少能起，但不假装找到了一个工作区）。
+    """
+    here = Path(start).resolve()
+    for path in (here, *here.parents):
+        if _is_workspace_dir(path):
+            return path
+    for path in (here, *here.parents):
+        newest = _newest_workspace_under(path)
+        if newest is not None:
+            return newest.resolve()
+    return here
+
+
+def _port_is_open(host: str, port: int, *, timeout: float = 0.15) -> bool:
+    """这个端口上有没有 listener（只连一下，不发请求）。"""
+    import socket
+
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _serving_here(root: Path, host: str, token: str) -> str:
+    """这一段端口里，有没有一个正在服务这个工作区的网页；有 ⇒ 返回它的 URL。
+
+    为什么要有它：业主这一趟的真机服务是 `--port 8720` 显式起的，于是它不落
+    `webui.json`（显式端口不登记），另一条命令按"登记端口"找不到它，只能再起一个
+    读同一份盘的第二服务 —— 那正是"开网页那么累"的形态之一。
+
+    判据直接用 `webui.server.verify_serving` 的三态（`ok` 才算"在服务这个工作区"），不另写一份
+    解码；`recorded_port` 排在最前面，于是"按登记端口复用"这条老路仍然先被问到。
+    """
+    from . import webui
+    from .webui import server as _WS
+
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    remembered = _WS.recorded_port(root)
+    candidates = ([int(remembered)] if remembered else [])
+    candidates += list(range(WEB_PORT_START, WEB_PORT_START + WEB_PORT_SPAN))
+    for port in dict.fromkeys(candidates):
+        if not _port_is_open(shown, port):
+            continue
+        url = f"http://{shown}:{port}/"
+        got = _WS.verify_serving(url, root=root, token=token, timeout=0.5)
+        if str(got.get("state") or "") == "ok":
+            return url
+    return ""
+
+
 def cmd_web(args) -> int:
     """起用户端网页（本地小服务）。退出码 0 = 正常停止（Ctrl-C），2 = 没查成。
 
@@ -3883,22 +3980,93 @@ def cmd_web(args) -> int:
 
 
 def _exec_web(spec: RunSpec, args) -> int:
-    """原 `cmd_web` 的执行体（逐字转发）。"""
-    from . import webui
+    """原 `cmd_web` 的执行体（转发 `webui.run`，外加"缺省工作区 / 缺省端口"两件事）。
 
-    root = _root_of(args)
-    argv = ["--root", str(root), "--host", str(args.host), "--port", str(int(args.port))]
-    if args.open:
+    ## 为什么这两件事在这里
+
+    业主 2026-11-01：「开网页怎么那么累？」—— 要么必须 `cd src/` 才能
+    `python -m agentflow.webui`，要么得自己拼 `--root` 绝对路径、自己挑端口。
+    工作区与端口都是"这条命令自己就答得上来"的两格，于是它们在这里归一：
+
+    - 工作区：`--root`（顶层旗标）优先；不给就取"最近的工作区"
+      （:func:`_nearest_workspace`）—— 在仓库根或 `temp/` 里敲同一条命令，打开的是
+      最近在跑的那个项目，而不是 cwd 那个空目录；
+    - 端口：不给 `--port` ⇒ 从 :data:`WEB_PORT_START` 起挑第一个能绑的；这一段里
+      已经有服务在服务这个工作区 ⇒ 直接复用它的 URL（不再起第二个）；起点的号被占
+      ⇒ 换下一个并说明换成哪个。显式 `--port N` 被占 ⇒ webui 受控拒绝，这里再补一句
+      "换到哪个号"（webui 那句只教 `--port 0`）。
+
+    ## 为什么仍然逐字转发
+
+    `webui.run` 是这一条子命令的唯一实现（`R003` 防的正是"同一个公开名两处各有一份实现"），
+    这里只决定"给它的 argv 是哪几个字"；`--json` 的人话说明一律走 stderr，stdout 保持可解析。
+    """
+    from . import webui
+    from .webui import server as _WS
+
+    host = str(getattr(args, "host", "127.0.0.1") or "127.0.0.1")
+    token = str(getattr(args, "token", "") or os.environ.get("AGENTFLOW_WEB_TOKEN", ""))
+    as_json = bool(getattr(args, "json", False))
+    root = Path(spec.root).resolve() if spec.root else _nearest_workspace(Path.cwd())
+    want_open = bool(getattr(args, "open", False))
+    raw_port = getattr(args, "port", None)
+
+    if raw_port is None:
+        url = _serving_here(root, host, token)
+        if url:
+            # 已经在服务这个工作区 ⇒ 直接给地址（真机 8720 那一趟就是显式端口起的、
+            # 没有 webui.json 可读，所以这里按"这一段端口里谁在服务这个根"来找）。
+            if as_json:
+                print(json.dumps({"url": url, "root": str(root), "reused": True},
+                                 ensure_ascii=False, default=str), flush=True)
+            else:
+                print(f"agentflow 用户端（已在跑，复用）：{url}", flush=True)
+                print(f"工作区根：{root}", flush=True)
+            if want_open:
+                _open_browser(url)
+            return 0
+        port = _WS.free_port_near(host, WEB_PORT_START, span=WEB_PORT_SPAN)
+        if int(port or 0) != WEB_PORT_START:
+            skipped = (int(port) - WEB_PORT_START) if port else WEB_PORT_SPAN
+            note = (f"[web] 从 {WEB_PORT_START} 起自动挑端口：前 {skipped} 个不可用"
+                    f"（被占或 TIME_WAIT）⇒ 用 {port if port else '系统挑的端口'}")
+            # `--json` 的 stdout 只许有那一行 JSON ⇒ 说明走 stderr（与 --budget-usd 同一纪律）。
+            print(note, file=(sys.stderr if as_json else sys.stdout), flush=True)
+        raw_port = int(port or 0)
+
+    argv = ["--root", str(root), "--host", host, "--port", str(int(raw_port))]
+    if want_open:
         argv.append("--open")
-    if args.json:
+    if as_json:
         argv.append("--json")
-    if args.token:
-        argv += ["--token", str(args.token)]
+    if token:
+        argv += ["--token", token]
     if getattr(args, "allow_writes", False):
         argv.append("--allow-writes")
     if getattr(args, "no_settings_write", False):
         argv.append("--no-settings-write")
-    return webui.run(argv)
+    code = webui.run(argv)
+    if code != 0 and getattr(args, "port", None):
+        # 显式端口起不来：把"换到哪个号"写出来。为什么不预先探：`webui.run` 已经是
+        # "绑不上就受控拒绝"的那一处实现，这里只在它失败之后补一句可执行的下一步；
+        # 预先探一遍会让"端口恰好空着、但服务起不来"的两种失败混成一种说法。
+        owner = _WS.port_owner(host, int(raw_port), token=token) if int(raw_port) else {}
+        if str(owner.get("state") or "") == "busy":
+            print(tty.paint(
+                f"[web] {raw_port} 被占（占位者工作区：{owner.get('root') or '读不出'}）⇒ "
+                f"换一个号：--port {int(raw_port) + 1}，或不给 --port 让它从 "
+                f"{WEB_PORT_START} 起自动挑。", "yellow"), file=sys.stderr)
+    return code
+
+
+def _open_browser(url: str) -> None:
+    """用默认浏览器打开（打不开不属于"服务起不来"，不改变退出码）。"""
+    import webbrowser
+
+    try:
+        webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - 没有浏览器/没有桌面会话是环境问题，不是结论
+        pass
 
 
 def cmd_budget(args) -> int:
@@ -5196,7 +5364,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("web", help="起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）")
     sp.add_argument("--host", default="127.0.0.1",
                     help="监听地址（默认只监听本机；给 0.0.0.0 才会被别的机器访问）")
-    sp.add_argument("--port", type=int, default=8788, help="端口（0 = 让系统给一个空闲端口）")
+    # 2026-11-01：缺省从写死的 8788 改成"从 8700 起自动挑"（业主「默认自动挑空闲端口，
+    # 从 8700 起」）。为什么 8788 那条老缺省必须让位：它被当成显式端口转发给
+    # `webui.run`，于是"端口被占 ⇒ 自动换号"这条路在结构上不存在（模拟现场：8788 上
+    # 躺着一个半死的旧服务 ⇒ 新服务起不来、只留一句 connection refused）。
+    sp.add_argument("--port", type=int, default=None,
+                    help=f"监听端口（缺省：从 {WEB_PORT_START} 起自动挑一个空闲的，"
+                         "被占就换下一个并说明；给 0 让系统挑；给 N 且被占 ⇒ 报错并提示换号）")
     sp.add_argument("--open", action="store_true", help="起来之后用默认浏览器打开")
     sp.add_argument("--json", action="store_true",
                     help="只打印一行 URL 的 JSON（起后台任务时用它拿确切地址）")

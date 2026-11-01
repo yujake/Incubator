@@ -185,7 +185,11 @@ def test_c2_the_old_flag_defaults_are_unchanged() -> None:
     assert ns.budget_usd == 0.5 and ns.max_calls == 2 and ns.extract_rounds == 1
 
     ns = parser.parse_args(["web"])
-    assert ns.port == 8788 and ns.allow_writes is False and ns.no_settings_write is False
+    # 2026-11-01（业主「开网页怎么那么累」的 A 条）：`web` 的缺省端口从写死的 8788
+    # 改成自动挑（None ⇒ 从 `cli.WEB_PORT_START` = 8700 起，被占就换下一个）。
+    # 这不是"放宽老旗标"：老脚本要 8788 就显式写 `--port 8788`，下一行钉着它照旧解析成 8788。
+    assert ns.port is None and ns.allow_writes is False and ns.no_settings_write is False
+    assert parser.parse_args(["web", "--port", "8788"]).port == 8788
 
 
 def test_c2_the_mode_default_budgets_agree_with_the_old_parsers() -> None:

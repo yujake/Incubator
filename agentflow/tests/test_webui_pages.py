@@ -219,7 +219,7 @@ def _workspace_with_a_paper(tmp: pathlib.Path, artifacts_ws: pathlib.Path) -> pa
     """夹具工作区 + 一份真的论文包（`main.tex` / `main.pdf` / 编译回执）。
 
     为什么要造这一份：`reviewaccept._auxiliary` 的 `tex_sha256` / `pdf_pages` /
-    `receipt_matches_tex` 三格只有在**给到项目根**时才读得出值。块 1 修的正是
+    `receipt_matches_tex` 三格只有在给到项目根时才读得出值。块 1 修的正是
     "页面没把项目根传下去"，所以判据必须有一份"传了就该有五格"的现场；
     原来的 `artifacts_ws` 没有主稿，只能证明"没传时是空"，证明不了另一半。
     """
@@ -623,7 +623,7 @@ def test_acceptance_page_passes_the_project_root_and_report_path(
     `receipt_matches_tex` 三格按构造永远空/unknown，连一份有 24 页 PDF 的成品
     工作区也一样。这一条用正反两半钉住：
 
-    - 正控：页面源码真的读了这两个入参；端点带上它们之后 **aux 五格都有值**；
+    - 正控：页面源码真的读了这两个入参；端点带上它们之后 aux 五格都有值；
     - 负控：同一个工作区不带它们 ⇒ 那三格回到空/unknown（证明有值不是夹具自带的）。
     """
     text = _page_text("Acceptance")
