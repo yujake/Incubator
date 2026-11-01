@@ -382,6 +382,109 @@ def _type_name(v: Any) -> str:
 # 注释写着为什么"不改校验语义"）。留一个不打算落地的判据，只会让读的人以为 null 有闸。
 
 
+#: 参数门里"已知派生列 → 该写到哪"的小表（真机 82，2026-11-01 · C-1 / C-2 / E-1）。
+#:
+#: 为什么需要它：这几格在盘上是可读的列，但**不可写**（由某一处现算 / 推断），
+#: 而拒信此前只说"s schema 只允许 [...]" —— 模型于是照着允许清单再猜一次。
+#: 表里每一行都回答同一个问题："这一格不是我该写的，那我该写到哪？"
+#: 判据：`tests/test_param_gate_reports_every_problem_at_once.py` 的 b。
+_READONLY_PARAM_HINTS: dict[str, str] = {
+    "bits": "`bits` 由秘书按五元位现算（不接受手写）；要写理由请用 `quote_reason`",
+    "proof_authors": ("`proof_authors` 由 `proofauthors.py` 按来源路径推断"
+                      "（不接受手写）；删掉它再交即可"),
+    "created_by": "`created_by` 由台账按调用方角色填（写进去也只会被覆盖）；删掉它再交",
+    "created_at": "`created_at` 是写入期现算的时间（手写等于编一个）；删掉它再交",
+}
+
+
+def _undeclared_hint(key: str, props: Mapping[str, Any]) -> str:
+    """一个未声明键的"怎么改"：派生列说去哪，拼错的说最接近的已声明键。
+
+    这是拒信从"你错了"变回"改哪一格"的那一步：只列允许清单时，模型得自己把
+    "我传的是什么"与"表里有什么"对一遍 —— 而真机读数（C-1/C-2）显示它做不到。
+    """
+    known = _READONLY_PARAM_HINTS.get(str(key))
+    if known:
+        return known
+    near = difflib.get_close_matches(str(key), [str(p) for p in props], n=1, cutoff=0.5)
+    if near:
+        return f"最接近的已声明键是 {near[0]!r} —— 是不是想写它？"
+    return "把不认识的键删掉再交（`why` 不用传，它会自动记进留痕）"
+
+
+def _param_problems(schema: Mapping[str, Any], params: Any, *, path: str = "") -> list[str]:
+    """把 schema 与 params 的全部不合规点收成一份清单（一份空清单 = 合法）。
+
+    为什么不是"抛第一个错就返回"（改前是那样）：真机 82 的 C-3 是"缺一个必填、
+    多给一个未声明"，模型必须先改一个、再撞一次 —— 两轮往返只买到一条本该一次说完的
+    拒信。收集式校验把"要改几处"一次摊开；它不改变任何一条判据的严格程度。
+    """
+    t = schema.get("type")
+    if t is None:
+        return []                # 未声明类型 = 不约束
+
+    if t == "object":
+        if not isinstance(params, Mapping):
+            return [f"{path or 'params'} 必须是对象，收到 {_type_name(params)}"]
+        props: Mapping[str, Any] = schema.get("properties") or {}
+        problems: list[str] = []
+        for req in schema.get("required") or []:
+            if req not in params:
+                problems.append(f"缺少必填参数：{path}{req}（补上它再交）")
+        if schema.get("additionalProperties") is False:
+            extra = sorted((set(params) - set(props)), key=str)
+            if extra:
+                hints = "；".join(_undeclared_hint(str(k), props) for k in extra)
+                problems.append(
+                    f"出现未声明的参数：{extra}（schema 只允许 {sorted(props)}）。{hints}")
+        for name, sub in props.items():
+            if name in params and params[name] is not None:
+                problems.extend(_param_problems(sub, params[name], path=f"{path}{name}."))
+        return problems
+
+    if t == "array":
+        if not isinstance(params, (list, tuple)):
+            return [f"{path or 'value'} 必须是数组，收到 {_type_name(params)}"]
+        problems = []
+        if "minItems" in schema and len(params) < schema["minItems"]:
+            problems.append(f"{path} 至少 {schema['minItems']} 项，收到 {len(params)}")
+        if "maxItems" in schema and len(params) > schema["maxItems"]:
+            problems.append(f"{path} 最多 {schema['maxItems']} 项，收到 {len(params)}")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, Mapping):
+            for i, item in enumerate(params):
+                problems.extend(_param_problems(item_schema, item, path=f"{path}[{i}]."))
+        return problems
+
+    # ---- 标量：类型错就不再看取值（再叠一条 enum 错只会是同一件事的两种说法）
+    # bool 是 int 的子类，必须先单独判布尔，否则 True 会被当成合法整数
+    if t == "boolean":
+        if not isinstance(params, bool):
+            return [f"{path or 'value'} 必须是 boolean，收到 {_type_name(params)}"]
+    elif t == "integer":
+        if isinstance(params, bool) or not isinstance(params, int):
+            return [f"{path or 'value'} 必须是 integer，收到 {_type_name(params)}"]
+    else:
+        expected = _TYPES.get(t)
+        if expected and not isinstance(params, expected):
+            return [f"{path or 'value'} 必须是 {t}，收到 {_type_name(params)}"]
+
+    problems = []
+    if "enum" in schema and params not in schema["enum"]:
+        problems.append(f"{path or 'value'} 必须是 {schema['enum']} 之一，收到 {params!r}")
+    if t == "string":
+        if "minLength" in schema and len(params) < schema["minLength"]:
+            problems.append(f"{path} 长度至少 {schema['minLength']}")
+        if "maxLength" in schema and len(params) > schema["maxLength"]:
+            problems.append(f"{path} 长度最多 {schema['maxLength']}")
+    if t in ("integer", "number"):
+        if "minimum" in schema and params < schema["minimum"]:
+            problems.append(f"{path} 不能小于 {schema['minimum']}")
+        if "maximum" in schema and params > schema["maximum"]:
+            problems.append(f"{path} 不能大于 {schema['maximum']}")
+    return problems
+
+
 def validate_params(schema: Mapping[str, Any], params: Any, *, path: str = "") -> None:
     """按 schema 校验参数。不合法抛 `ParamError`（不是返回布尔）。
 
@@ -393,65 +496,23 @@ def validate_params(schema: Mapping[str, Any], params: Any, *, path: str = "") -
     这里必须先看 schema 声明的类型再决定怎么校验。
     曾经把"必须是对象"的检查放在函数开头，结果任何非对象值（比如一个字符串参数）
     一进来就被判成"必须是对象" —— 因为子 schema 也会走同一个函数。
+
+    ## 2026-11-01（真机 82）：一次报全，不再 first-error
+
+    改前每碰一个错就抛一次：C-3（缺 `path`、多给 `note`）要两次往返才凑齐；
+    C-1/C-2 两次撞"未声明参数"时，拒信只列允许清单、不说派生列该写到哪。
+    现在全部不合规点由 `_param_problems` 一次收齐，各占一行（派生列还给出去路，
+    拼错的键给最接近的候选）。判据
+    `tests/test_param_gate_reports_every_problem_at_once.py` 的四条。
+    严格程度一个字没放宽：收齐的仍是同一批判据，只是不再逐条挤牙膏。
     """
-    t = schema.get("type")
-    if t is None:
-        return  # 未声明类型 = 不约束
-
-    if t == "object":
-        if not isinstance(params, Mapping):
-            raise ParamError(f"{path or 'params'} 必须是对象，收到 {_type_name(params)}")
-        props: Mapping[str, Any] = schema.get("properties") or {}
-        for req in schema.get("required") or []:
-            if req not in params:
-                raise ParamError(f"缺少必填参数：{path}{req}")
-        if schema.get("additionalProperties") is False:
-            extra = set(params) - set(props)
-            if extra:
-                raise ParamError(f"出现未声明的参数：{sorted(extra, key=str)}（schema 只允许 {sorted(props)}）")
-        for name, sub in props.items():
-            if name in params and params[name] is not None:
-                validate_params(sub, params[name], path=f"{path}{name}.")
+    problems = _param_problems(schema, params, path=path)
+    if not problems:
         return
+    if len(problems) == 1:
+        raise ParamError(problems[0])
+    raise ParamError(problems[0] + "\n  - " + "\n  - ".join(problems[1:]))
 
-    if t == "array":
-        if not isinstance(params, (list, tuple)):
-            raise ParamError(f"{path or 'value'} 必须是数组，收到 {_type_name(params)}")
-        if "minItems" in schema and len(params) < schema["minItems"]:
-            raise ParamError(f"{path} 至少 {schema['minItems']} 项，收到 {len(params)}")
-        if "maxItems" in schema and len(params) > schema["maxItems"]:
-            raise ParamError(f"{path} 最多 {schema['maxItems']} 项，收到 {len(params)}")
-        item_schema = schema.get("items")
-        if isinstance(item_schema, Mapping):
-            for i, item in enumerate(params):
-                validate_params(item_schema, item, path=f"{path}[{i}].")
-        return
-
-    # ---- 标量
-    # bool 是 int 的子类，必须先单独判布尔，否则 True 会被当成合法整数
-    if t == "boolean":
-        if not isinstance(params, bool):
-            raise ParamError(f"{path or 'value'} 必须是 boolean，收到 {_type_name(params)}")
-    elif t == "integer":
-        if isinstance(params, bool) or not isinstance(params, int):
-            raise ParamError(f"{path or 'value'} 必须是 integer，收到 {_type_name(params)}")
-    else:
-        expected = _TYPES.get(t)
-        if expected and not isinstance(params, expected):
-            raise ParamError(f"{path or 'value'} 必须是 {t}，收到 {_type_name(params)}")
-
-    if "enum" in schema and params not in schema["enum"]:
-        raise ParamError(f"{path or 'value'} 必须是 {schema['enum']} 之一，收到 {params!r}")
-    if t == "string":
-        if "minLength" in schema and len(params) < schema["minLength"]:
-            raise ParamError(f"{path} 长度至少 {schema['minLength']}")
-        if "maxLength" in schema and len(params) > schema["maxLength"]:
-            raise ParamError(f"{path} 长度最多 {schema['maxLength']}")
-    if t in ("integer", "number"):
-        if "minimum" in schema and params < schema["minimum"]:
-            raise ParamError(f"{path} 不能小于 {schema['minimum']}")
-        if "maximum" in schema and params > schema["maximum"]:
-            raise ParamError(f"{path} 不能大于 {schema['maximum']}")
 
 
 # ---------------------------------------------------------------- ToolSpec
