@@ -1068,60 +1068,36 @@ def _symbol_count_skipped(p: pathlib.Path, tree: pathlib.Path) -> bool:
 #:   · 已知的历史探针（本表）⇒ 不算问题；
 #:   · 新写的、指向一个不存在的 `temp/` 文件的引用 ⇒ 仍然红（这才是这条判据的价值）。
 #: 业主的原话是"允许 temp 被删"，不是"注释可以乱引"。
+#:
+#: 解析口径（`X-91.5-3`）：一条 `temp/…` 引用先按 `<ws_root>/temp/…`、再按 `<交付树>/temp/…`
+#: 查（`_temp_reference_exists`），两处都缺才进本表。所以本表只收"两棵树里真的都没有"的
+#: 那些 —— 一条能解析的引用不许登记进来（那会把"能解析"写成"已知缺失"，永远掩盖）。
 _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
-    "temp/_clock_bench.py",
-    "temp/_clock_bench_before.json",
-    "temp/_clock_digest.py",
-    "temp/_clock_scale.py",
-    "temp/_p210_digests.py",
-    "temp/_rbe1_same_closure.py",
+    # 2026-11-03（`X-91.5-3` 收紧之后重算本表）：39 → 3。
+    # 其中 37 条的引用一直真实存在于交付树的 `agentflow/temp/…` 下 —— 判据此前只按
+    # `<ws_root>/temp/…` 一棵树解析，于是把它们全读成了"缺"。两棵树解析落地后它们能解析了，
+    # 按本判据自己的话「登记过期的（文件又回来了）要删掉 —— 多一条、少一条都算不符」删掉；
+    # 留在表里才是"把能解析写成已知缺失"，会永远掩盖真问题。被删的 37 条（史实留在本注释，
+    # 表里不占位）：
+    #   · `_clock_bench.py` / `_clock_bench_before.json` / `_clock_digest.py` /
+    #     `_clock_scale.py` / `_p210_digests.py` / `_rbe1_same_closure.py`；
+    #   · `l1_a10_counts.py` / `l1_digests.py` / `probe_153_u09_before_after.py`；
+    #   · `r_be2_*` 七条（after_reads / board_write_cost / cap_profile / cycle_test /
+    #     import_cost / reads_per_beat2 / static_cache）；
+    #   · `rbe3_measure.py` / `rbe3_measure_legacy.py` / `rbe3_repro_wait.py`；
+    #   · `rbe4_*` 七条（append_amp / canonical_equivalence / codetable_provenance /
+    #     nested_mutation_scan2 / prompt_digests / rows_cost / sessions_reads）；
+    #   · `161_dump_bodies.py` / `161_probe_webui.py` / `161_replica_81` / `161_report.txt` /
+    #     `161_scan_variants.py`；
+    #   · _probe_160_ws81（整树副本，落点不带扩展名） / `_recompute_160.py`；
+    #   · `probe_159_sibling_race_fixture.py` / `ws158_copy` / `ws158_roster` / `ws159_81`。
+    # 剩下这 3 条是两棵树里真的都没有的：
+    #   · 前两条：`agent_prompts.py` 注释里点名的两份 golden diff 探针（当时的读数出处）；
+    #   · 第三条：未跟踪报告 `temp/h_scan_unify_report.md` 里点名的目录形态 scratch 落点
+    #     （本轮两棵树重算后才第一次进表 —— 原语义照旧，缺了就要登记）。
     "temp/golden_diff_p203.py",
     "temp/golden_diff_p205.py",
-    "temp/l1_a10_counts.py",
-    "temp/l1_digests.py",
-    # 156 批（2026-11-03）：153-U-09 那笔的"改前/改后对照"探针。它落在仓内
-    # `temp/`（agentflow/temp），而本判据认的工作区根 `temp/` 是仓库上一层
-    # （`_reference_scan_roots()` 的 `ws_root`）—— 与上面那些已登记的探针同一个形态：
-    # 文件在仓内草稿目录里还活着，工作区根那一份没有。按"已知的探针逐条登记"处理。
-    "temp/probe_153_u09_before_after.py",
-    "temp/r_be2_after_reads.py",
-    "temp/r_be2_board_write_cost.py",
-    "temp/r_be2_cap_profile.py",
-    "temp/r_be2_cycle_test.py",
-    "temp/r_be2_import_cost.py",
-    "temp/r_be2_reads_per_beat2.py",
-    "temp/r_be2_static_cache.py",
-    "temp/rbe3_measure.py",
-    "temp/rbe3_measure_legacy.py",
-    "temp/rbe3_repro_wait.py",
-    "temp/rbe4_append_amp.py",
-    "temp/rbe4_canonical_equivalence.py",
-    "temp/rbe4_codetable_provenance.py",
-    "temp/rbe4_nested_mutation_scan2.py",
-    "temp/rbe4_prompt_digests.py",
-    "temp/rbe4_rows_cost.py",
-    "temp/rbe4_sessions_reads.py",
-    # 2026-11-01（167/168 批）：下面 11 条是 158–161 那几批的探针 / 夹具 / 整树副本。
-    # 引用写在源码注释里，文件在仓内 `agentflow/temp/` 还活着，而本判据认的工作区根
-    # （仓库上一层）的 `temp/` 没有它们 —— 与 `probe_153_u09_before_after.py` 同形态：
-    # 按"已知的探针/副本逐条登记"处理，不改引用（那些注释在讲当时的读数与复跑路径，
-    # 改名会篡改史实）。逐条按批次点名：
-    #   · 161 读图/网页探针：dump_bodies / probe_webui / replica_81（工作区副本）/
-    #     report.txt / scan_variants；
-    #   · 160 副本：_probe_160_ws81（整树副本，落点不带扩展名）、`_recompute_160.py`（重算读数）；
-    #   · 159 夹具：`probe_159_sibling_race_fixture.py`、`ws159_81`（81 工作区副本）；
-    #   · 158 副本：`ws158_copy`、`ws158_roster`。
-    "temp/161_dump_bodies.py",
-    "temp/161_probe_webui.py",
-    "temp/161_replica_81",
-    "temp/161_report.txt",
-    "temp/161_scan_variants.py",
-    "temp/_probe_160_ws81",
-    "temp/_recompute_160.py",
-    "temp/probe_159_sibling_race_fixture.py",
-    "temp/ws158_copy",
-    "temp/ws158_roster",
-    "temp/ws159_81",
+    "temp/_recompute",
 )
 
 
@@ -1429,6 +1405,33 @@ def test_the_ref_scan_skips_run_artifacts_but_not_the_repo(tmp_path: pathlib.Pat
     assert "REPORT.md" not in missing, f"运行产物不该被扫：{got['missing']}"
 
 
+def _temp_reference_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Path) -> bool:
+    """反引号里的 `temp/…` 引用存在吗 —— 两棵树、顺序写死；两处都缺才算缺（`X-91.5-3` 收紧）。
+
+    ## 为什么是两棵树（这是收紧，不是放宽）
+
+    注释写在交付树里的文件上（`agentflow/src/**`、`agentflow/tests/**`、`agentflow/docs/**`），
+    而 `temp/…` 这个相对路径在两种工作区布局下落在不同的根：
+
+    · 仓库根那一棵：`<ws_root>/temp/…`（= `D:\\Incubator\\temp\\…`）—— 判据原先只看这一棵；
+    · 交付树那一棵：`<tree>/temp/…`（= `D:\\Incubator\\agentflow\\temp\\…`）—— 注释所在文件的
+      所属树，也就是写注释的人心里的那一棵。
+
+    只认第一棵时，"文件真实存在于交付树的 `temp/` 下"会被读成"引用不存在"，于是要么误红、
+    要么被逼着把一条能解析的引用塞进 `_REF_KNOWN_MISSING_TEMP` —— 那是把"能解析"写成
+    "已知缺失"，会永远掩盖真问题。判据要抓的是"引用了一个不存在的东西"，不是"引用了一个
+    相对另一棵树的东西"：
+
+      1. 先 `ws_root / ref`（原口径，先查保序：老布局的读数一个字不变）；
+      2. 再 `tree / ref`（交付树那棵）；
+      3. 两处都不存在 ⇒ 仍然按原语义红，要求逐条登记进 `_REF_KNOWN_MISSING_TEMP`。
+
+    第 3 档由负控 `test_a_temp_reference_missing_in_both_trees_is_still_reported` 钉住
+    （三档：只在仓库根那棵 ⇒ 不红；只在交付树那棵 ⇒ 不红；两棵都没有 ⇒ 必须点名）。
+    """
+    return (ws_root / ref).exists() or (tree / ref).exists()
+
+
 def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     """扫整棵树里反引号包着的引用 ⇒ 读数（键：`files` / `tokens` / `paths` /
     `dangling` / `missing` / `exempted` / `dangling_tokens` / `symbol_counts` /
@@ -1503,7 +1506,7 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
                 if (rel, ref) in paths:
                     continue
                 paths.add((rel, ref))
-                if not (ws_root / ref).exists():
+                if not _temp_reference_exists(ref, tree=tree, ws_root=ws_root):
                     if marked:
                         exempted.append((rel, lineno, f"`{ref}`"))
                     else:
@@ -1595,6 +1598,46 @@ def test_a_scratch_copy_cannot_cure_a_dangling_reference(tmp_path: pathlib.Path)
         f"②的『读数不变』不是因为免疫、而是因为计数没在工作：{elsewhere['dangling']}")
 
 
+def test_a_temp_reference_missing_in_both_trees_is_still_reported(tmp_path: pathlib.Path):
+    """负控（`X-91.5-3` 的收紧），三档缺一档就会把"两棵树"变成"随便哪棵算数"：
+
+      ① 只在仓库根那棵（`<ws>/temp/…`）⇒ 不红（原口径先查，老布局读数一个字不变）；
+      ② 只在交付树那棵（`<agentflow>/temp/…`）⇒ 不红（本笔新增的那一棵：注释写在交付树的
+         文件里，而 `temp/…` 就在交付树下；改前这一档会误红、并逼人把它登记成"已知缺失"）；
+      ③ 两棵都没有（temp/xyz_not_exist.py 那个名字）⇒ 必须红并点名（原语义照旧，没有放宽）。
+
+    夹具刻意造两棵不同的树（`ws_root = tmp_path`、`tree = tmp_path/agentflow`）：
+    两个参数传同一个值的话，"两棵树"这件事根本没被证到。
+    三个引用在运行时拼接再造出来（同 `test_the_ref_scan_skips_run_artifacts_but_not_the_repo`
+    的做法）：本文件也在判据的扫描面里，写死字面量等于在本文件里制造三条真引用。
+    """
+    ws = tmp_path
+    tree = ws / "agentflow"
+    (tree / "src").mkdir(parents=True)
+    (tree / "docs").mkdir()
+    (ws / "temp").mkdir()
+    (tree / "temp").mkdir()
+    (tree / "src" / "defs.py").write_text("x = 1\n", encoding="utf-8")
+    (ws / "temp" / "under_ws.py").write_text("y = 1\n", encoding="utf-8")
+    (tree / "temp" / "under_tree.py").write_text("z = 1\n", encoding="utf-8")
+    ref_ws = "temp/" + "under_ws.py"
+    ref_tree = "temp/" + "under_tree.py"
+    ref_gone = "temp/" + "xyz_not_exist.py"
+    (tree / "docs" / "R.md").write_text(
+        f"见 `{ref_ws}`、`{ref_tree}` 与 `{ref_gone}`。\n", encoding="utf-8")
+
+    res = _scan_ticked_references(tree, ws)
+    assert res["paths"] == 3, f"路径族只接上 {res['paths']} 条（扫描器坏了？）：{res}"
+    missing = " ".join(res["missing"])
+    assert ref_gone in missing, (
+        f"两棵树都没有的 `temp/` 引用没被报出来 ⇒ 这次收紧变成了放宽：{res['missing']}")
+    assert ref_ws not in missing, (
+        f"只在仓库根那棵的引用被误判成缺（原口径丢了顺序）：{res['missing']}")
+    assert ref_tree not in missing, (
+        f"只在交付树那棵的引用被误判成缺（本笔新增的那一棵没接上）：{res['missing']}")
+    assert len(res["missing"]) == 1, res["missing"]
+
+
 def test_the_reference_scan_root_anchor_is_not_a_temp_artifact() -> None:
     """`X-91.5-3` 的反真空判据：根锚必须随仓走，不许挂在一份会被清理的产物上。
 
@@ -1639,7 +1682,9 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
     该 token 在整棵树里作为真符号（`.py` 的 Python 标识符，不含注释/docstring/字符串/`.md`）出现 ≤ 1 次 ⇒ 悬空。这是 `FIX11` 的 `C2` 换掉的口径：改之前数的是"全树文本出现次数"，于是"在本文件里随手写下一个被引用的 token"（哪怕只写在注释里）就能把计数从 1 抬到 2，别处的悬空引用被"治好"、判据安静变绿（第 10 轮实测 `symbCrit` / `symbBoth` 两档都是 `passed`）。
     第二条断言是逐条登记表 `_REF_KNOWN_MENTION_TOKENS`（这条口径的豁免面）：仓里"只有文本提及、没有真符号"的 token 必须与它逐条相等 —— 多一个（新写的、没有解释的提及）红，少一个（登记过期）也红。记号豁免表 `_REF_EXEMPTED_EXPECTED_FILES` 单独判（上面的断言），两者不通用。
 
-    这条判据的机制守卫是独立的用例 `test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference`（它自己造一份"只在判据文件里提及"的注入，断言那条引用仍然报红）。"""
+    这条判据的机制守卫是独立的用例 `test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference`（它自己造一份"只在判据文件里提及"的注入，断言那条引用仍然报红）。
+    ## `temp/…` 引用的两棵树（`X-91.5-3` 的收紧）
+    一条 `temp/…` 引用先按 `<ws_root>/temp/…`、再按 `<交付树>/temp/…` 解析（`_temp_reference_exists`），两处都缺才要求逐条登记进 `_REF_KNOWN_MISSING_TEMP`。为什么：注释写在交付树的文件上，而 `temp/…` 在两种布局下落在不同的根；只认第一棵会把"真实存在于 `agentflow/temp/` 下"读成"引用不存在"，从而把一条能解析的引用逼进登记表（"能解析"被写成"已知缺失"，永远掩盖）。三档读数由 `test_a_temp_reference_missing_in_both_trees_is_still_reported` 钉住（只在仓库根 ⇒ 不红；只在交付树 ⇒ 不红；两棵都没有 ⇒ 必须点名）。"""
     roots = _reference_scan_roots()
     if roots is None:
         pytest.skip("判据在仓外（祖先里没有本仓 checkout 结构）⇒ 未知，不是通过"
