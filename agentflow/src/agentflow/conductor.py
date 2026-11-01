@@ -3230,11 +3230,16 @@ class Conductor:
         # 放在登记之后、且只在"这一条真的写成"时跑 ⇒ 自愈只补历史漏行，不补刚被拒的这一条
         # （拒绝在上面那条早返里已经交回父了）。
         try:
-            fixed, why = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
+            fixed, why, skipped = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 —— 自愈失败不许带走这次派活
-            fixed, why = 0, f"{type(exc).__name__}: {exc}"
+            fixed, why, skipped = 0, f"{type(exc).__name__}: {exc}", []
         if fixed:
             note = (note + "；" if note else "") + f"兜底自愈：补了 {fixed} 条当时没写进名册的代理行"
+        if skipped:
+            # 读数：因为「还在飞（名册登记还没发生）」而跳过的号。不回这一格，
+            # 「该补没补」在盘上就只剩一条谁也读不出来的沉默（`draft/159` §三-甲）。
+            note = (note + "；" if note else "") + (
+                f"跳过 {len(skipped)} 条在飞（名册还没登记）：" + "、".join(skipped))
         elif why:
             note = (note + "；" if note else "") + f"兜底自愈没跑成（{why}）——不影响这一条的登记"
         return {"name": name, "considered": True, "problem": problem,

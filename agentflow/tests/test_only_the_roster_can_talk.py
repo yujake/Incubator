@@ -206,9 +206,9 @@ def test_negctl_skipping_the_registration_leaves_the_parent_blind(
         return {"name": "D1", "role": str(kw.get("role")), "task_id": str(kw.get("task_id")),
                 "problem": "（坏实现：跳过登记）"}
 
-    def no_repair(self: Any, *, owner: str) -> tuple[int, str]:
+    def no_repair(self: Any, *, owner: str) -> tuple[int, str, list[str]]:
         # 兜底自愈也不写（它是一条独立的写路径；两条都打掉才是"名册上一个字都没有"）
-        return 0, "（坏实现：跳过兜底补登记）"
+        return 0, "（坏实现：跳过兜底补登记）", []
 
     monkeypatch.setattr(SEC.Secretary, "roster_add", skip)
     monkeypatch.setattr(SEC.Secretary, "roster_repair", no_repair)

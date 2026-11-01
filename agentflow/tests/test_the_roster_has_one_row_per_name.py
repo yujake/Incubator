@@ -204,7 +204,7 @@ def test_r2b_mechanism_a_three_threads_add_then_repair_leave_one_row_per_task(
     def work(k: int, tid: str) -> None:
         start.wait()
         got = sec.roster_add(owner=owner, role="D", task_id=tid, brief=f"第 {k} 件活")
-        fixed, why = sec.roster_repair(owner=owner)
+        fixed, why, _skipped = sec.roster_repair(owner=owner)
         with lock:
             out.append({"k": k, "task_id": tid, "name": got.get("name"),
                         "problem": got.get("problem"),
@@ -258,7 +258,7 @@ def test_r3_repair_does_not_forget_a_task_the_name_already_bound(
     second = sec.roster_add(owner=owner, role="D", task_id=t2, brief="第二件活", reuse=name)
     assert second.get("problem") == "", second
 
-    fixed, why = sec.roster_repair(owner=owner)
+    fixed, why, _skipped = sec.roster_repair(owner=owner)
     assert (fixed, why) == (0, ""), (fixed, why)
     rows = _adds(env)
     assert len(rows) == 1, rows
@@ -266,7 +266,7 @@ def test_r3_repair_does_not_forget_a_task_the_name_already_bound(
     assert [r for r in rows if r.get("repaired")] == [], rows
     # 反真空：台账里真缺一行时，自愈还是要补（不许把"不补"写成"永远不补"）。
     orphan = _child(cond, owner, tag="r3-orphan")
-    fixed2, why2 = sec.roster_repair(owner=owner)
+    fixed2, why2, _skipped2 = sec.roster_repair(owner=owner)
     assert (fixed2, why2) == (1, ""), (fixed2, why2)
     assert [str(r.get("task_id")) for r in _add_rows_for(env, orphan)], [orphan]
 

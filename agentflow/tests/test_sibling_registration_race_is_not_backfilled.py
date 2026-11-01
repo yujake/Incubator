@@ -215,12 +215,27 @@ def test_sibling_in_the_window_is_not_backfilled(tmp_path, role, action, param,
         [(r.get("name"), r.get("task_id")) for r in got["adds"]]
 
 
-def test_pending_is_empty_after_a_summon(tmp_path) -> None:
-    """⑤ 在飞集合登记完必须清空（清不掉 = 该号被 repair 永久跳过）。"""
+def test_pending_is_marked_in_the_window_and_cleared_after(tmp_path) -> None:
+    """⑤ 窗口里必须标上、登记完必须清空。
+
+    只断言"登记完是空集"是不够的：空集在没有标记的树上同样成立（恒绿）。
+    所以窗口那一半是正题：台账行已落、登记还没发生时，集合里必须有这个号；
+    清不掉则是另一种病 —— 该号会被 repair 永久跳过（静默欠补）。
+    """
     cond, sec, ws, parent = _env(tmp_path)
-    first = cond.summon("D", "research", {"qid": "d1"}, parent_task_id=parent,
-                        roster={"brief": "第一件", "task": "做第一件"})
-    assert str(first.roster_name) == "D1"
+    park = _Parked(cond)
+    park.arrived["A"] = threading.Event()
+    park.release["A"] = threading.Event()
+    box, th = _start("A", cond, parent, role="D", action="research",
+                     params={"qid": "pending-a"}, by="M")
+    assert park.arrived["A"].wait(30.0), "A 没走到 _register_roster 门口"
+    tid = park.tids["A"]
+    assert SEC.roster_pending(ws, parent) == frozenset({tid}), SEC.roster_pending(ws, parent)
+    park.release["A"].set()
+    th.join(30)
+    assert not th.is_alive(), "A 没回来"
+    assert "err" not in box, box.get("err")
+    cond.summon_run(box["start"])
     assert SEC.roster_pending(ws, parent) == frozenset(), SEC.roster_pending(ws, parent)
 
 
@@ -294,7 +309,8 @@ def test_repair_reads_tasks_before_the_in_flight_set(tmp_path) -> None:
 
     cond, sec, ws, parent = _env(tmp_path)
     order: list[str] = []
-    orig_tasks = cond._tasks
+    read_cond = sec._conductor()      # repair 读的是秘书自己那个只读句柄，不是传入的 cond
+    orig_tasks = read_cond._tasks
     orig_pending = SEC.roster_pending
 
     def tasks() -> list[dict]:
@@ -305,11 +321,11 @@ def test_repair_reads_tasks_before_the_in_flight_set(tmp_path) -> None:
         order.append("pending")
         return orig_pending(root, owner)
 
-    cond._tasks = tasks  # type: ignore[method-assign]
+    read_cond._tasks = tasks  # type: ignore[method-assign]
     SEC.roster_pending = pending  # type: ignore[assignment]
     try:
         sec.roster_repair(owner=parent)
     finally:
-        cond._tasks = orig_tasks  # type: ignore[method-assign]
+        read_cond._tasks = orig_tasks  # type: ignore[method-assign]
         SEC.roster_pending = orig_pending  # type: ignore[assignment]
     assert order[:2] == ["tasks", "pending"], order

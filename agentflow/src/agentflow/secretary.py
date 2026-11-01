@@ -414,6 +414,62 @@ def _roster_guarded(func: Any) -> Any:
     return wrapper
 
 
+#: 名册登记的「在飞」集合（`draft/159` §三-甲）：按 `(root.resolve(), owner)` 分片，
+#: 与 `_ROSTER_LOCKS` 同键同址 —— 两者罩的是同一件事（这个父的名册写）。
+#:
+#: 语义：一个 `task_id` 从「它那一行要在这一笔 `tasks` 事务里提交」到「它自己的
+#: `roster_add` 已经落盘」之间，在这个集合里。`roster_repair` 的 `known` 并上它，
+#: 于是「还没登记」不会被读成「没登记」（81 趟 6 条 `repaired=true` 的根因：
+#: A 线程写完了台账行、还没登记，B 线程的补登记把 A 当孤儿补了）。
+#:
+#: 为什么是模块级而不是挂 `Conductor`：`_ROSTER_LOCKS` 是模块级，理由是
+#: 「`open_solo_entry` 不经过 conductor」；这一份罩的是同一个面，分片键必须同一份，
+#: 否则同一进程里两条 `Conductor` 各拿各的集合，窗口又回来了。
+#:
+#: 为什么读的时候不需要再加一层锁：写入顺序是 `set.add(tid)` 先于 `tasks` 事务提交，
+#: 而 `roster_repair` 先读 `_tasks()`、后读本集合 —— GIL 下「看得见那一行」的读者
+#: 之后一定看得见标记。这个读序是判据（`tests/test_sibling_registration_race_is_not_backfilled.py`
+#: 的读序负控），不是注释。
+_ROSTER_PENDING: dict[str, set[str]] = {}
+
+
+def _roster_pending_key(root: str | Path, owner: str) -> str:
+    """与 `_roster_section` 同一个分片键（`(root.resolve(), owner)`）。"""
+    return f"{Path(root).resolve()}::{str(owner or '')}"
+
+
+def note_roster_pending(root: str | Path, owner: str, task_id: str) -> None:
+    """把「这一号的台账行即将提交、名册还没登记」标进在飞集合（幂等）。"""
+    tid = str(task_id or "")
+    if not tid:
+        return
+    key = _roster_pending_key(root, owner)
+    with _ROSTER_LOCKS_GUARD:
+        _ROSTER_PENDING.setdefault(key, set()).add(tid)
+
+
+def forget_roster_pending(root: str | Path, owner: str, task_id: str) -> None:
+    """清掉在飞标记（登记结束/建行失败都走这里；清不掉 = 该号被 repair 永久跳过）。"""
+    tid = str(task_id or "")
+    if not tid:
+        return
+    key = _roster_pending_key(root, owner)
+    with _ROSTER_LOCKS_GUARD:
+        got = _ROSTER_PENDING.get(key)
+        if got is None:
+            return
+        got.discard(tid)
+        if not got:
+            _ROSTER_PENDING.pop(key, None)
+
+
+def roster_pending(root: str | Path, owner: str) -> frozenset[str]:
+    """这一父名下「正在登记、名册还没落盘」的号（只读；空集时顺手删键）。"""
+    key = _roster_pending_key(root, owner)
+    with _ROSTER_LOCKS_GUARD:
+        return frozenset(_ROSTER_PENDING.get(key) or ())
+
+
 def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
                    stamp_field: str = "", stamp_prefix: str = ""
                    ) -> tuple[bool, str, dict[str, Any]]:
@@ -7797,14 +7853,32 @@ class Secretary:
             return ""
 
     @_roster_guarded
-    def roster_repair(self, *, owner: str) -> tuple[int, str]:
-        """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
+    def roster_repair(self, *, owner: str) -> tuple[int, str, list[str]]:
+        """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。
+
+        返回 `(补了几条, 问题, 因为"在飞"而跳过的号)`。第三格不是计数而是号清单：
+        "因为还没登记所以不补"必须在读数上看得见 —— 否则它下次真变成"该补没补"时，
+        没有任何入口能查出是哪个号、为什么被跳过。
 
         只在写路径被调用（`draft/92` I-15：查只报不修）。补的时候按 `task_id` 升序，
         整段（读历史 → 判 → 两笔 append）在 `_roster_section` 的 per-owner 临界区里，
         于是两个并发修复既不会重复分配、也不会各补一行；名字在锁内由 `next_name`
         按已用最大序号推（那一步只在锁内才是安全的 —— 把并发正确性归给发号器
         是错的，`draft/151` 一-3）。
+
+        ## 在飞集合（`draft/159` §三-甲）：分得清"还没登记"与"从没登记"
+
+        81 趟 13 条 `repaired=true` 里 6 条是兄弟行竞态：A 已经 `_write_new_row`
+        落了台账行、还没走到自己的 `roster_add`，B 在登记之后跑本方法，把 A 当成
+        "台账有、名册没有"的漏行补了名；A 随后自己的登记撞 `task_id_reused`
+        （点名那一支撞 `name_taken`）—— 拒绝是果，补登记是先发生的那一半。
+        `_roster_section` 只串行化"写名册"，串行化不了"台账行已落、名册还没落"这个窗口。
+
+        所以 `todo` 再并上 `roster_pending(self.root, owner)`（见那个集合的 docstring）。
+        读序是判据的一部分：必须先读 `cond._tasks()`、后读在飞集合 —— 标记在
+        `tasks` 事务提交之前落进集合，GIL 下"看得见那一行"的读者之后一定看得见标记；
+        两处一对调，这条保证就没了，而所有正题仍会是绿的（读序负控钉在
+        `tests/test_sibling_registration_race_is_not_backfilled.py`）。
 
         ## 只补"真孤儿"（业主 2026-11-02 裁定，收窄；2026-11-01 补第三个口）
 
@@ -7828,27 +7902,31 @@ class Secretary:
         """
         cond = self._conductor()
         if cond is None:
-            return 0, "没有 store ⇒ 读不到台账，补不了"
+            return 0, "没有 store ⇒ 读不到台账，补不了", []
         try:
             rows = [r for r in cond._tasks()
                     if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
         except Exception as exc:  # noqa: BLE001
-            return 0, f"台账读不成（{type(exc).__name__}: {exc}）"
+            return 0, f"台账读不成（{type(exc).__name__}: {exc}）", []
         # 已知集 = 全部 `add` 行 ∪ 全部 `bind` 行的 task_id 并集（业主 2026-11-02 的定稿口径）。
         # 改前读 `roster_index` 的折叠视图 ⇒ 一个名字接过第二件活之后，第一件活从
         # `known` 里消失 ⇒ 自愈把已经登记过的行再补一次（机制 B，零并发可复现；
         # `draft/149` §4.5 的 I 组读数：`repair fixed=1`，多出 `D2/t-000002`）。
         known, bad = self._roster_history(owner)
         if bad:
-            return 0, f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）"
+            return 0, f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）", []
         refused, bad_ref = self._refused_task_ids(owner)
         if bad_ref:
-            return 0, f"拒绝流水有 {len(bad_ref)} 行读不出来 ⇒ 不补（免得把被拒的号补成新名字）"
-        todo = sorted(str(r.get("task_id") or "") for r in rows
-                      if str(r.get("task_id") or "") not in known
-                      and str(r.get("task_id") or "") not in refused
-                      # 第三个口：派活闸拒掉的号只有台账行这一份证据（见上面的 docstring）
-                      and str(r.get("outcome") or "") != "refused")
+            return 0, f"拒绝流水有 {len(bad_ref)} 行读不出来 ⇒ 不补（免得把被拒的号补成新名字）", []
+        # 在飞集合：读序在 `cond._tasks()` 之后（见 docstring，判据钉着这一条）。
+        pending = roster_pending(self.root, owner)
+        cand = [str(r.get("task_id") or "") for r in rows
+                if str(r.get("task_id") or "") not in known
+                and str(r.get("task_id") or "") not in refused
+                # 第三个口：派活闸拒掉的号只有台账行这一份证据（见上面的 docstring）
+                and str(r.get("outcome") or "") != "refused"]
+        skipped = sorted(tid for tid in cand if tid in pending)
+        todo = sorted(tid for tid in cand if tid not in pending)
         fixed = 0
         for tid in todo:
             row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})
@@ -7858,7 +7936,7 @@ class Secretary:
             # 空问题串）。两处必须成对：删/留都一起改，并同步
             # `tests/test_no_dead_branch_on_a_field_that_is_always_empty.py` 的登记表。
             if problem:
-                return fixed, problem
+                return fixed, problem, skipped
             # 补出来的行也要有面（`draft/158` 二-2 的副作用）：正常 add 行走 `surface_alloc`，
             # 补登记此前不带 `surface` ⇒ 81 那 13 条补登记行 13/13 无面，正常行 52/52
             # 有面；于是那 6 个真跑过的子代理在 `surface_of` 里读到空槽、一次都没切读写面。
@@ -7871,7 +7949,7 @@ class Secretary:
                                    {"kind": "bind", "owner": owner, "name": name, "role": role,
                                     "task_id": tid, "at": _now_iso(), "repaired": True})
             if not ok:
-                return fixed, f"补登记没写成：{why}"
+                return fixed, f"补登记没写成：{why}", skipped
             ok2, why2 = append_jsonl(roster_path(self.root, owner),
                                      {"kind": "add", "owner": owner, "name": name, "role": role,
                                       "task_id": tid, "first_task_id": tid,
@@ -7881,9 +7959,9 @@ class Secretary:
                                       "surface": slot,
                                       "at": _now_iso(), "repaired": True})
             if not ok2:
-                return fixed, f"名册补写没成：{why2}"
+                return fixed, f"名册补写没成：{why2}", skipped
             fixed += 1
-        return fixed, ""
+        return fixed, "", skipped
 
     def resolve_down(self, *, owner: str, name: str) -> tuple[str, str]:
         """下行译码：我名下名册里的名字 → 当前调用行。"""
@@ -8611,9 +8689,9 @@ class Secretary:
         # 两者职责不同；净效果是"被拒的名字最终仍会出现一个新名字"，这一点必须让人知道。
         repaired = 0
         try:
-            repaired, _repair_why = self.roster_repair(owner=str(owner))
+            repaired, _repair_why, _repair_skipped = self.roster_repair(owner=str(owner))
         except Exception as exc:  # noqa: BLE001 —— 兜底失败不许带走这次销号
-            repaired, _repair_why = 0, f"{type(exc).__name__}: {exc}"
+            repaired, _repair_why, _repair_skipped = 0, f"{type(exc).__name__}: {exc}", []
         tid, problem = self.resolve_down(owner=owner, name=str(name))
         if problem:
             if self._is_retired(owner, str(name)):

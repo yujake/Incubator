@@ -91,7 +91,7 @@ def test_one_summon_makes_exactly_one_roster_row(tmp_path: pathlib.Path) -> None
 def test_the_backstop_is_not_the_fix(tmp_path: pathlib.Path) -> None:
     """（C-d）把兜底自愈打桩成 no-op ⇒ 上面那条仍然成立（治本不依赖兜底）。"""
     cond, parent = _env(tmp_path)
-    cond.secretary.roster_repair = lambda **kw: (0, "")  # type: ignore[assignment]
+    cond.secretary.roster_repair = lambda **kw: (0, "", [])  # type: ignore[assignment]
     made = []
     for i in range(1, 4):
         start = cond.summon_begin("D", "research", {"qid": str(i)},

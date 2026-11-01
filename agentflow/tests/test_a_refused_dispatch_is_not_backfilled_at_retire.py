@@ -240,7 +240,7 @@ def test_a_gate_refused_dispatch_is_not_backfilled(tmp_path: pathlib.Path) -> No
     # 前提：它确实在台账里、且确实不在名册里、也不在拒绝流水里（那只记写口拒的）
     assert refused not in _ids(cond, parent)
     assert refused not in [str(r.get("task_id")) for r in _refused_lines(ws, parent)]
-    fixed, why = sec.roster_repair(owner=parent)
+    fixed, why, _skipped = sec.roster_repair(owner=parent)
     assert fixed == 0, ("被派活闸拒掉的号被补成新名字了", fixed, why, _ids(cond, parent))
     assert why == "", why
     assert _ids(cond, parent) == [t1], _ids(cond, parent)
@@ -279,7 +279,7 @@ def test_the_gate_refusal_does_not_shadow_a_real_orphan(tmp_path: pathlib.Path) 
     cond, parent, ws = _env(tmp_path)
     orphan = _orphan(cond, parent)
     refused = _gate_refused_child(cond, parent)
-    fixed, why = cond.secretary.roster_repair(owner=parent)
+    fixed, why, _skipped = cond.secretary.roster_repair(owner=parent)
     assert (fixed, why) == (1, ""), (fixed, why, _ids(cond, parent))
     assert _ids(cond, parent) == [orphan], _ids(cond, parent)
     assert refused not in _ids(cond, parent), _ids(cond, parent)
@@ -303,7 +303,7 @@ def test_an_unreadable_refusal_ledger_is_not_an_empty_one(tmp_path: pathlib.Path
     ledger = _refusals_path(ws, parent)
     ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger.write_text("这不是 JSON\n", encoding="utf-8")
-    fixed, why = cond.secretary.roster_repair(owner=parent)
+    fixed, why, _skipped = cond.secretary.roster_repair(owner=parent)
     assert fixed == 0, (fixed, why)
     assert why, ("拒绝流水读不出来却当成'没被拒过'补了行", _ids(cond, parent))
     assert orphan not in _ids(cond, parent), _ids(cond, parent)
@@ -315,10 +315,10 @@ def test_negative_control_a_noop_repair_makes_the_orphan_judgement_red(
 
     为什么负控要写进判据文件：第 3 条绿只说明"孤儿在名册里"，不说明"是收工兜底补的"。
     只有在"把补登记拿掉它必红"时，"补的行为还在"才算被量过。打桩点取
-    `Secretary.roster_repair`（`retire` 唯一的补登记入口），no-op 返回 `(0, "")`，
+    `Secretary.roster_repair`（`retire` 唯一的补登记入口），no-op 返回 `(0, "", [])`，
     不改生产代码、不放宽第 3 条的任何断言。
     """
-    monkeypatch.setattr(Secretary, "roster_repair", lambda self, *, owner: (0, ""))
+    monkeypatch.setattr(Secretary, "roster_repair", lambda self, *, owner: (0, "", []))
     with pytest.raises(AssertionError) as caught:
         test_a_real_orphan_is_still_backfilled(tmp_path)
     assert "真孤儿也没补上" in str(caught.value), caught.value
