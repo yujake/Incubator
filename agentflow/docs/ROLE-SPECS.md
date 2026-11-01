@@ -183,7 +183,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `B` | `C D H L V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判；`L` 与 `D` 是 2026-10-22 同日加的：`B→L` 是 L 的唯一入口，`B→D` 是"形式化暴露的缺陷严重时 B 通知 D 开展研究"那条路） |
 | `C` | **（无出边）** —— 2026-10-19 曾按「C 要能把"候选的更短路径"交给 D」加过一条 `C→D`，**2026-10-20 业主裁定撤回**（逐字：「把协作改成『D 唤起 C、C 向 D 汇报』，并保留 C 无出边的原始设定」）⇒ 今天 `ALLOWED_EDGES["C"] == frozenset()`；C 的"汇报"就是它的返回值。`read_only` / `write_set` 一个字没动 |
 | `D` | `A B C E F` |
-| `E` | `B D` |
+| `E` | `B D V` |
 | `F` | `A B C D E V` |
 | `G` | `A D E F` |
 | `H` | `A E G` |
@@ -213,7 +213,7 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 （C 没有出边、也不许给它加一条把话送回去的通道）。复跑 ⇒ `33`。
 判据：`tests/test_d_summons_c_and_c_reports_back.py`（正控：D 派 C、报告随返回值交回且
 D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、边总数（**那一条判据里
-写的是当次读数 32** —— 今天全表的读数是 35，见本节最后一条；判据里那个字面量要跟着改，
+写的是当次读数 32** —— 今天全表的读数是 36，见本节最后一条；判据里那个字面量要跟着改，
 否则它会红）；两条负控：
 把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ 反真空红；把 D 的 `_do_summon` 改成"不读返回值
 直接 final" ⇒ 正控红）。
@@ -241,9 +241,12 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 一环，而业主的裁定把"该不该付形式化的成本"这个判断留给 B）。**`M→L` 不存在**（主控不许
 直连 L，与 `M→F` / `M→V` 同一族：只走间接）；`F→L` / `E→L` / `D→L` 都评估过、都没开，
 理由逐条登记在 `specs/l.py::LATER_EDGES`（那份表不被任何代码读，它是给人看的）。
-复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `35`。
+复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `35`（当次读数；2026-10-23 加了 `E→V` 之后是 36，见下一条）。
 判据：`tests/test_l_collab_surface_is_exactly_this.py`（逐角色断言"除 B 之外没有任何角色的
 出边里有 L"、`L` 的出边恰好 `{C}`、`B` 的出边里有 L）。
+**2026-10-23 加一条 `E→V`，边总数 35 → 36**：穷举证据跑完之后要把 E 的那份报告直接交 V 会审
+（V 要签的是 E 报告的理论论证部分）⇒ E 的出边是 `B D V`，V 的入口从 `F` / `B` 两个变成
+`F` / `B` / `E` 三个。复跑：同一命令 ⇒ `36`。
 **Lean 关着时这条协作面整条看不见**：L 不在角色表里、`formal.*` 不装配、`B→L` 与 `L→C`
 都被 `policy` 判成 `forbidden_edge`（理由串点名 `lean_off`，
 `tests/test_l_is_isolated_when_lean_is_off.py`）。
@@ -296,11 +299,11 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **65**（6+7+10+15+5+4+7+5+3+3+0），与标题那个 65 同源：标题读的是
+> 十一行加起来是 **64**（6+7+10+15+4+4+7+5+3+3+0），与标题那个 64 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
-> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `65`。
+> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `64`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
-> 现读见上一句的复跑命令，Lean 关着跑同样是 `65`）。开关管的是另外两件事：**能不能派到它**
+> 现读见上一句的复跑命令，Lean 关着跑同样是 `64`）。开关管的是另外两件事：**能不能派到它**
 > （`policy` 判 `forbidden_edge`，理由串点名 `lean_off`）与**它的工具面装不装**
 > （`formal_tools` 不装配 ⇒ `for_role("L")` 是空集）。"声明面不看开关、行为面看"这两根轴
 > 不许折成一句"Lean 关时 L 不存在"。
@@ -985,11 +988,11 @@ C 的产出有两类，状态语义完全不同。
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_d`。**当次（2026-10-18）**：`SELF-CHECK DONE（agent_d）`；**退出码 0**。
 明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
 
-## E —— 数值实验与形式化验证
+## E —— 数值实验
 
 ### E.1 一句话定位
 
-**E 产出"证据"，且必须标注证据等级**。它回答：**"这条命题，跑一遍算不算支持它？形式化检查器认不认？"**
+**E 产出"证据"，且必须标注证据等级**。它回答：**"这条命题，跑一遍算不算支持它？穷举是不是把全域跑完了？"**
 
 ### E.2 职责
 
@@ -1000,17 +1003,17 @@ C 的产出有两类，状态语义完全不同。
 | E-3 | 崩溃一律记 `inconclusive` + `no_local_evidence` | 自检实测："崩溃 ⇒ inconclusive"、"崩溃 ⇒ no_local_evidence" |
 | E-4 | 超时同样记 `inconclusive` + `exit=None` | 自检实测 |
 | E-5 | 查已有证据（**三态**） | `agent_e.AgentE.evidence_for` |
-| E-6 | 形式化检查：**没有后端时如实回答「没做」** | `agent_e.AgentE.check_formal`；`checked=False, reason="no_backend", verified=None` |
+| E-6 | **没有形式化这条路径**：`run_experiment(method="formal")` 由动作面第一句以受控理由码 `formal_not_in_e` 拒绝（`AgentE` 上没有形式化方法）；形式化入口归 L | `agent_e/_support.py` 的 `E_NO_FORMAL_REASON`；`specs/e.py` 的动作表 |
 | E-7 | 绑定脚本的可复现性（`code_hash`） | `verify.code_hash`；`Experiment.code_hash` |
 
 ### E.3 明确不负责
 
 | 不做什么 | 为什么不由 E 做 | 该由谁做 |
 |---|---|---|
-| 说"命题被证明了" | **数值实验不构成证明**（`LESSONS.md` M4；`draft/17` §4.4）；E 的 `proof` 只能来自**形式化检查器**，而桥接层未接线 | **形式化检查器**（外部）/ **人** |
+| 说"命题被证明了" | E 不签命题档：穷举证据可以作为 `proof` 级背书，但成立靠 **V 对 E 报告的真签**（`object_sha256` == 现行那份 `exhaustion.md`；`signed_by=V` 只是署名岗位，不是凭据）；形式化那一路归 **L** | **V**（签 E 的报告）/ **L**（形式化）/ **人** |
 | 把 `supports` 当成 `closed` | 实测断言："只有数值证据却标 closed ⇒ schema 抛（FC-22）" | **F** / **G** 的写入被 schema 硬拦 |
 | 写稿件/断言 | 断言的话术、引用、降级规则是 G 的 | **G** |
-| 决定要不要再跑一个实验 | E 的动作只有 5 个（`capabilities.CAPABILITIES`），**没有"自己决定再跑"** | **F**（`attack.step` 的 owner 分派）/ **D**（`D → E`） |
+| 决定要不要再跑一个实验 | E 的动作只有 4 个（`capabilities.CAPABILITIES`），**没有"自己决定再跑"** | **F**（`attack.step` 的 owner 分派）/ **D**（`D → E`） |
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
@@ -1039,7 +1042,6 @@ C 的产出有两类，状态语义完全不同。
 | 一次 `run_experiment` 写几行 | **恰好 1 行** | 自检实测："事务性：experiments 5 -> 6"、"一次 run_experiment 只多一行" | — |
 | 路径越界 | 必须来自工作区内相对路径 | 自检实测："路径越界被拒绝" | 拒绝 |
 | 脚本自报 `proof` | **降级为 `cross_check`** | `verify.run_experiment` 的 `summary` 逐字；自检实测 | `notes` 记下这次越权 |
-| 形式化检查器 | 无后端 ⇒ 不跑 | 自检实测："无后端 ⇒ reason='no_backend' 且 verified 为 None（不是 False）" | `checked=False` |
 | 超时/崩溃的退出码 | 崩溃 `exit=3`；超时 `exit=None` | 自检实测 | 记 `inconclusive` |
 | 子进程环境 | `env = dict(os.environ)`（**继承完整环境，可联网**） | INVENTORY 4.4（`agent_e.AgentE._run_script`） | ⚠️ **未隔离**（FC-07 的"执行进程"档缺失） |
 
@@ -1049,7 +1051,6 @@ C 的产出有两类，状态语义完全不同。
 
 | 场景 | 三态形态（自检逐字） |
 |---|---|
-| 无形式化后端 | `checked=False` / `reason="no_backend"` / `verified=None`（**不是 `False`**） |
 | 两个参数都不给（`evidence_for`） | `checked=False`（没查） |
 | 给了参数且命中 | `checked=True` |
 | 命中但没有 `proof` | `proved=False` |
@@ -1074,9 +1075,10 @@ C 的产出有两类，状态语义完全不同。
 ### E.9 接口
 
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、`G`（§G.9）、
-  `H`（§H.9，"向 E 核形式化"）。
-- **E 能召唤谁**：`B`（"引文不可核实 → 请 B 重抽取"）与 `D`（"发现反例 → 回 D"）
-  （`capabilities.ALLOWED_EDGES`）。
+  `H`（§H.9：请求核实；形式化归 L，H 没有到 L 的边）。
+- **E 能召唤谁**：`B`（"引文不可核实 → 请 B 重抽取"）、`D`（"发现反例 → 回 D"）与 **`V`**
+  （穷举证据交 V 会审：V 对 E 的报告真签，`object_sha256`）—— 三条边都在
+  `capabilities.ALLOWED_EDGES`。
 - **入参从哪来**：`claim` / `claim_key` / `script_path`（调用方给的）；
   `capabilities.CAPABILITIES` 的 params schema 是**唯一**的机器可读契约。
 - **产出被谁消费**：
@@ -1236,7 +1238,7 @@ C 的产出有两类，状态语义完全不同。
 | G-4 | 渲染（不写库、不落盘） | `agent_g.render` |
 | G-5 | 按库里当前数据重画 markdown（**不改数据行，只改文件**） | `agent_g.refresh_markdown` |
 | G-6 | 按 H 的发现修订稿件 | `agent_g.revise`；`review_rounds+1`、`status=revised` |
-| G-7 | **按体例写正文**（2026-10-18 起）：骨架顺序固定、第 3 节 ≥6 个定理/引理/命题且每个带分步 `proof`、正文禁令六项、内部编号与计算证据只进附录 A | `specs/g.py::SPEC.brief.policy` 里 2026-10-18 那四条；`tests/test_agent_prompts.py` 的冻结摘要 |
+| G-7 | **按体例写正文**（2026-10-18 起；2026-10-24 按 D-40 改口径）：骨架顺序固定、第 3 节每个定理类环境各带分步 `proof`（环境数量由 `statements` 里 kind 是定理类的那几条定：**一条命题对一个环境，不凑数、不拆细**；**不写死下限**）、正文禁令六项、内部编号与计算证据只进附录 A | `specs/g.py::SPEC.brief.policy` 里 2026-10-18 与 2026-10-24 那几条；`papermapping` / `texaudit` 按台账与正文现算；`tests/test_agent_prompts.py` 的冻结摘要 |
 | G-8 | **写论文对应表三份**（2026-10-22 业主逐字「G加动作」）：`MAPPING.json` + `MAPPING.md` + 正文附录，先出表、再写正文。参数：`project`（必填，项目根）与 `rows`（必填，对应表的行，正文里每个定理类环境各占一行、多证明每条各占一行）；返回：那一次"写完再读"的读数（`state` / `md_state` / `appendix_state` / `problems`）；副作用：`write_local`（只写 `<项目根>/out/paper/` 下三份并把 `\input` 一行放进正文，不入库、不起子进程） | `agent_g/write_mapping.py`；工具 `doc.write_mapping`（内部只调 `papermapping.parse_rows` + `write_package`，写完再 `mapping_reading` 现读） |
 
 > **2026-10-18 起**：论文正文的体例（骨架 / 第 3 节证明线 / 正文禁令 / 附录 A 落点）不再只活在 G 的手感里 —— 它是 `specs/g.py::SPEC.brief.policy` 的四条硬条目，并由 H 的审稿清单逐条对拍（H-8）。G 原有的六条动作职责（G-1…G-6）不变。
@@ -1248,7 +1250,7 @@ C 的产出有两类，状态语义完全不同。
 | 不做什么 | 为什么不由 G 做 | 该由谁做 |
 |---|---|---|
 | 审自己的稿 | 自己审自己无法区分"发现"与"掩盖" | **H** |
-| 判一条断言是否被证明 | 证明要求 `proof` 级证据，那是 E 的形式化检查器的产出 | **E** + **形式化检查器** |
+| 判一条断言是否被证明 | 证明要求 `proof` 级证据：穷举由 E 出、**V 对 E 的报告真签**；形式化由 **L** 跑检查器、V 签 | **E** / **L** + **V** |
 | 编造引文 | 该链路已被 schema 硬拦（"没有引用的断言不允许进入稿件"，见自检逐字） | — |
 | 把只有数值支撑的结论放进主结果 | 硬性降级规则（`draft/17` §8.3 的 `allowed_use`） —— ⚠️ **该字段在当前 schema 里不存在**（实测 `allowed_use` 0 命中） | 现在只有"自动附加免责声明"这一层保障 |
 | 改知识表 | G 的写集是 `{documents, dependencies, review_findings}` | **B** |
@@ -1308,7 +1310,7 @@ C 的产出有两类，状态语义完全不同。
 | 无引用 | **构造时就抛错**（"不等写库"） | `doc.compose_claim` 的 `summary` |
 | 否定未分类 | **构造时就抛错** | 同上 |
 | 过度声称 | **构造时就抛错** | 同上 |
-| 断言引用不存在的文献 | ❌ **已知缺陷**：`scan_claim` 只检查 `citations` 非空且非空白，**从不解析** `lit:`/`rel:`/`exp:` 是否真实存在 ⇒ `citations:["lit:9999"]` **会通过全部闸门，`documents` 行被写入、markdown 被渲染** | INVENTORY 4.3(a)② |
+| 断言引用不存在的文献 | ✅ **会被拦（已修）**：写入前跑 `check_citations`，坏引用整笔不写、`kind="dangling_citation"`（`scan_claim` 那一层不再是把关者） | `tools/doc_tools.py`（FC-02 第二道闸）；`review_findings` 的 `dangling_citation` |
 | 依赖 `closed` 但来源不存在 | ✅ **会被拦**（`register_dependency` 真去核表） | INVENTORY 4.3(a)② 的对比 |
 | 文档状态更新失败 | **如实记录而不是假装成功** | `agent_h` 自检逐字："（状态未更新，**如实记录**而不是假装成功：`ValueError: documents.rows[2] 校验失败：claims[claim-9] 没有 citations`）" |
 
@@ -1339,7 +1341,7 @@ C 的产出有两类，状态语义完全不同。
   **G 不能被 A/B/C/D/E/F 召唤。**
 - **G 能召唤谁**：`A D E F`（`capabilities.ALLOWED_EDGES`）—— "写稿时发现缺证据 → 回去要"（`A` 是 2026-10-13 加的：缺证据时要能直接再检索一轮）。
 - **入参从哪来**：`relations` / `experiments` / `analysis_reports`（别人的产出）；
-  `capabilities.CAPABILITIES` 的 6 个动作 schema。
+  `capabilities.CAPABILITIES` 的 7 个动作 schema。
 - **产出被谁消费**：
   - `documents` 行 + `reports/*.md` → **H**（审校）、人
   - `dependencies` → **verify**（闭合检查）
@@ -1371,15 +1373,15 @@ C 的产出有两类，状态语义完全不同。
 | H-3 | 复审：重跑检查判 `fixed` / 仍 `open`；到上限则 `unresolved_review` | `agent_h.AgentH.verify_fixes`；`review.verify_fixes`（写侧） |
 | H-4 | 只读列举发现 | `agent_h.AgentH.list_findings` |
 | H-5 | **依赖分级**（FC-13）：`external_unavailable`=warning，`dangling`=error | `tools.review_tools.scan_document`；自检实测逐字 |
-| H-6 | 请 G 修订 / 向 A 核引文 / 向 E 核形式化 | `H → G`、`H → A`、`H → E`（`capabilities.ALLOWED_EDGES`） |
+| H-6 | 请 G 修订 / 向 A 核引文；**形式化归 L，H 没有到 L 的边** —— 这件事由 B 判断与安排（`B→L`） | `H → G`、`H → A`（`capabilities.ALLOWED_EDGES`）；`H → E` 只用于请求核实，不是形式化入口；`specs/h.py` 的 boundary（「断言能不能形式化由 B 判断」） |
 | H-7 | **采信规则**（`draft/37` §16 P2）：采信一条命题只有两条路 —— 正文与 B 的台账**逐字一致**（`statements.quote_verified is True` 且文本可比对）+ E 的背书（`experiments.evidence_kind="proof"`）；两条都不在只能说"这条我采信不了" | 提示词口径（`ROLE_BRIEFS["H"].boundary`）；`tests/test_review_line_prompts.py` 的 H 组事实 |
-| H-8 | **按体例逐条打勾**（2026-10-18 起；2026-11-01 改口径）：四条 —— ① 定理那一档**先取读数再判**（`review.scan(kinds=["proofs","ledger_match"], project=…)` 给五个数 + `statement_surplus`；不再拿「proof 环境数 == 台账定理类命题数」当判据，也不再有「≥6」那个数）/ ② 正文内部编号 ==0（**没有机器读数**，自己数并写行号）/ ③ 正文无「数值实验」类小节（**没有机器读数**）/ ④ 有 Abstract＋`\bibitem`（`\cite` 对 `\bibitem` 走 `review.scan(kinds=["cites"])`）＋Appendix A；＋正文禁令六项＋骨架与证明粒度；发现稿子是研究报告 ⇒ 落 error 级 finding、裁决 `rejected`，**不许 `accepted`**。机械读数**不进 finding 台账**（词表里没有那七类）⇒ 要留凭据用 `review.report` | `specs/h.py::SPEC.brief.policy` 里 2026-10-18 那五条与 2026-11-01 那一条；`review.record_finding` |
+| H-8 | **按体例逐条打勾**（2026-10-18 起；2026-11-01 改口径）：四条 —— ① 定理那一档**先取读数再判**（`review.scan(kinds=["proofs","ledger_match"], project=…)` 给五个数 + `statement_surplus`；不再拿「proof 环境数 == 台账定理类命题数」当判据，也不再有「≥6」那个数）/ ② 正文内部编号 ==0（**没有机器读数**，自己数并写行号）/ ③ 正文无「数值实验」类小节（**没有机器读数**）/ ④ 有 Abstract＋`\bibitem`（`\cite` 对 `\bibitem` 走 `review.scan(kinds=["cites"])`）＋Appendix A；＋正文禁令六项＋骨架与证明粒度；发现稿子是研究报告 ⇒ 落 error 级 finding、裁决 `rejected`，**不许 `accepted`**。机械读数**不进 finding 台账**（词表里没有那七类）⇒ **`review.scan` 的读数本身就是凭据**（`findings[]` 每条都带 `file` / `line` / `ref`，`scanned` 记这一趟扫了哪些文件）：把读数原样写进你的交付与回报；`review.report` 的 markdown 是 G1–G15 门表，**不含这批读数**，不要指望在那里再落一份 | `specs/h.py::SPEC.brief.policy` 里 2026-10-18 那五条与 2026-11-01 那一条；`review.record_finding` |
 
 > **2026-10-18 起**：H 判的不再只是「说清楚没有」这一档 —— 论文体例的机器可判四条与正文禁令成为**可逐条打勾的审稿清单**（`specs/h.py::SPEC.brief.policy`），任何一条不合格都落 finding；「稿子读起来是研究报告」这一形态的裁决不许 `accepted`（error 级 ⇒ `rejected`，只报 warning 也只能是 `accepted_with_warnings`）。采信规则（H-7）不变。
 
 > **2026-09-30（`draft/28` §199，人批准）**：H 的出边由 `{G}` 扩到 `{A, E, G}`。
 > 原状的理由是"审校者若能让别人改数据，它就同时是发现者与修正者" —— 那条理由
-> 针对的是**改数据**；而 A 的检索与 E 的形式化都**不改 H 正在审的那份稿**
+> 针对的是**改数据**；而 A 的检索与 E 的数值实验都**不改 H 正在审的那份稿**
 > （A 写 `literature`/`search_requests`，E 写 `experiments`）。原来的实际后果是：
 > 审校时发现"这条引文对不上"，H 唯一的动作是把问题退回给写稿的 G ——
 > 而 G 也未必拿得到那份原文。**H 仍然是只读角色**（`READ_ONLY_ROLES` 未动、
@@ -1592,7 +1594,7 @@ C 的产出有两类，状态语义完全不同。
 它回答：**"这条命题写下来还是不是原文那条？机器核过没有？"**
 
 **L 的存在性由 Lean 开关决定**（`leanscope.LEAN_ONLY_ROLES == ("L",)`）：开关关着时它不在角色表里、`formal.*` 一件都不装配、按名取它的每一个入口给受控拒绝（`reason=lean_off`，配置读不懂时是 `lean_unreadable`）、提示词里一个字都不提它，`B→L` 与 `L→C` 都被判 `forbidden_edge`。
-**它不是"跑不动的 E"**：E 的 Lean 侧已经写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF = True`，受控拒绝码 `formal_moved_to_l`），而桥接层仍然只有一份（`agent_l._CheckFormalL` 继承 E 的 `_CheckFormal`，最终调到 `verify.check_formal` → `formalgw.check_lean`）；L 与 E 的差别只有两处 —— **前置自检闸**，以及"写盘 + 检查 + 三态"收成一个动作。
+**它不是"跑不动的 E"**：E 那条侧路已经不存在 —— `agent_e._support` 的受控拒绝码是 `formal_not_in_e`（`E_NO_FORMAL_REASON`；`formal_moved_to_l` 只是词表里的历史码，E 不再产出它），`AgentE` 上没有形式化方法。桥接层仍然只有一份（`agent_l._CheckFormalL` 继承 E 的 `_CheckFormal`，最终调到 `verify.check_formal` → `formalgw.check_lean`）；L 与 E 的差别只有两处 —— **前置自检闸**，以及"写盘 + 检查 + 三态"收成一个动作。
 
 **产物三样**：盘上的 `code/formal/<声明名>.lean`（带 sha256 与逐步对照 `*.steps.jsonl`）、检查器原话与真实退出码、`experiments` 的一行（`method="formal"`）。
 前两样不是表行，第三样是 —— 所以写集只有 `experiments` 一格。
@@ -1605,7 +1607,7 @@ C 的产出有两类，状态语义完全不同。
 | L-2 | **真跑检查器**：把源码交给桥接层（唯一实现 `verify.check_formal`）真跑一次，按检查器原话与真实退出码下判；模型的话不许代替检查器 | `agent_l/_support.FORMAL_REASON_BY_TOOL_REASON`；`verifier_output` / `exit_code` |
 | L-3 | **三态结论，`unknown` 必带原因**：`unknown` 不许折进另外两档 | `agent_l/_support.THREE_STATES == ("verified","failed","unknown")`；受控理由表 `FORMAL_REASONS_L`（28 个取值） |
 | L-4 | **落盘 + 指纹 + 路径守卫**：写 `code/formal/<声明名>.lean`，给 `sha256`；任何越出工作区的路径先拒（`path_outside_workspace`） | `agent_l/core.py` 的 `_resolve`；`FORMAL_DIR`；`DECLARATION_NAME_RX`（声明名同时是文件名，`../` 在写盘之前被拒） |
-| L-5 | **自检闸**：任何 Lean 调用之前先过 `leantoolchain` 的四步（解析 / 版本 / 正样例 / 反控）；不是 `usable` 时这一趟的全部形式化结论记 `unknown`、不写盘、不起检查器、不连撞同一条错误 | `agent_l/core.py::_lean_selfcheck`；三档理由码 `lean_selfcheck_off` / `lean_selfcheck_unusable` / `lean_selfcheck_unknown`（`SELFCHECK_REASONS`） |
+| L-5 | **自检闸**：任何 Lean 调用之前先过 `leantoolchain` 的五步（解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）；不是 `usable` 时这一趟的全部形式化结论记 `unknown`、不写盘、不起检查器、不连撞同一条错误 | `agent_l/core.py::_lean_selfcheck`；三档理由码 `lean_selfcheck_off` / `lean_selfcheck_unusable` / `lean_selfcheck_unknown`（`SELFCHECK_REASONS`） |
 | L-6 | **登记一行实验**（`record`）：按 `statement_id` 读台账正文，再对 `code_path` 的 `.lean` **现跑一次**，把现跑得到的 status / verified / checker / `output_sha256` 写进那一行；调用方给的读数只用于对账 | `agent_l/record.py`；拒绝码 8 个（`RECORD_REASONS`） |
 | L-7 | **第 4 位的逐路径凭据**：落 `proof_no` / `proof_sha256` / `path_id` / `path_source`，读侧现算 `{证明号: 状态}` | `evidencebits.formal_by_proof` / `FORMAL_PATH_STATES`；§L.7 的"二维口径"那一段 |
 | L-8 | **协作面（只有两条）**：只被 `B` 派；只派 `C` 梳理证明链；形式化失败或对不上时按受控形态汇报给 B（`report` 那一格为 `reported` 才算 B 真的收到了） | `specs/l.py::SPEC.edges == ('C',)`；`agent_l/report.py` + `proofreport.py` |
@@ -1694,7 +1696,7 @@ C 的产出有两类，状态语义完全不同。
 |---|---|---|---|
 | 形式化这一路的**模型调用** | **0 次**（形式化是"给源码 + 起检查器"，不是"问模型"） | `agent_l/core.py` 的构造期注释逐字："与 E 同一条纪律：形式化这一路一次模型调用都没有" | — |
 | 单次检查器超时 | `timeout_sec` 缺省 **600 s**（`cfg["timeout"]` 可覆盖；每次调用也可显式给） | `agent_l/core.py::self.default_timeout` | ⇒ `timeout`（**`unknown`**，不是 `failed`） |
-| 自检 | 四步（解析 / 版本 / 正样例 / 反控）；同一实例只问一次（`_lean_reading_now` 缓存） | `leantoolchain.selfcheck`；`agent_l/core.py` | 不是 `usable` ⇒ 整趟 `unknown`；同一条失败**只报一行** |
+| 自检 | 五步（解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）；同一实例只问一次（`_lean_reading_now` 缓存） | `leantoolchain.selfcheck`；`agent_l/core.py` | 不是 `usable` ⇒ 整趟 `unknown`；同一条失败**只报一行** |
 | 失败说明的长度 | 压成一行，上限 400 字符 | `agent_l/_support.one_line` | 真机读数（8 次 `check_formal` 全撞同一件事）就是这条的来历：理由太长时模型每次只读到开头 |
 | 终止条件 | 三态之一落地即终止；**`unknown` 也是终止** —— 不重试同一条错误 | `agent_l/_support.THREE_STATES` | 不重试 |
 | 同一命题的形式化次数 | **不设上限**（每份证明各自一格：`#p1` / `#p2` / …） | `evidencebits.FORMAL_PATH_STATES` | 新的一格，旧的不覆盖 |
@@ -1781,7 +1783,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 `python -m agentflow.agent_l` ⇒ `No module named agentflow.agent_l.__main__; 'agentflow.agent_l' is a package and cannot be directly executed`，**退出码 1**。
 它的"自检"分成两件真事，各自有命令：
 
-1. **自检闸本体（`leantoolchain` 的四步）**：
+1. **自检闸本体（`leantoolchain` 的五步）**：
    `$env:PYTHONPATH='src'; $env:AGENTFLOW_LEAN_ENABLED='1'; python -c "from agentflow.leantoolchain import selfcheck; r=selfcheck(); print(r['state'], r['checked'], r['problems'])"`。
    当次读数（2026-10-23，本机）：**没设 `AGENTFLOW_LEAN_BIN` 时** ⇒ `unusable True [...]`（五档都没找到 lean）；
    **把 `AGENTFLOW_LEAN_BIN` 指到本机那一版**（本机那个 `bin` 目录由 `AGENTFLOW_LEAN_BIN` 指定，不在文档里写死绝对路径）⇒ `usable True []`，
