@@ -2892,7 +2892,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是
 #:    15 格、键名一格未动）；`tests/golden/agent_surface_snapshot.json` 重冻；
 #:    `tests/fixtures/prompt_cache_warm.json` 四趟 warm 重落（业主已批 `--cap-usd 0.1`）。
-PROMPT_VERSION = "p227"
+PROMPT_VERSION = "p228"
 
 
 

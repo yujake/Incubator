@@ -36,7 +36,10 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # `TEXT_INTEGRITY_KINDS` 与它自己的 `returns=` 一起钉住，见 `test_h_can_audit_text_integrity`）。
     # 要在调用点写成字面量，就得把六格在工具体里再抄一遍 —— 那正是"两处说法分家"的形态，
     # 所以这里按处数登记（1 → 2），并在提交信息里说明为什么不是字面量。
-    "review_tools.py": 2,
+    # 2026-11-01（业主「将 H 的所有机械扫描工具统一成一个」）：3 处 —— 第三处是
+    # `review.scan` 的 `ok(texaudit.scan_tex(...))`，八键由 texaudit 的 `returns=` 与
+    # `tests/test_texaudit.py` 的形状判据一起钉住（同一个理由：在调用点抄一遍就是第二个口径）。
+    "review_tools.py": 3,
     "search_tools.py": 3,
     "table_tools.py": 7,
     # 2026-10-01（`draft/28` §218.3）：`T-8` 把工具体从 `register` 里搬到模块级之后，

@@ -2171,7 +2171,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p227"
+_FROZEN_PROMPT_VERSION = "p228"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2381,6 +2381,13 @@ _FROZEN_PROMPT_VERSION = "p227"
 #:   M 2d018a30→e416b8a2 / V f291a4b9→7bb595da。
 #: 十一格是 `temp/_recompute_160.py`（导入本文件的 `_surface_digest`，环境变量与
 #: `conftest.py` 逐条对齐）的现算值，不是手抄。
+#: p227 → p228（2026-11-01，业主批准动禁改区 · FC-27；「将 H 的所有机械扫描工具统一成
+#: 一个方便 H 使用」）：H 的工具面多一件只读工具 `review.scan`（`roles=("H",)`，统一入口，
+#: 七类 kinds），它的 summary 进 `tools_lines` 那一行，而那一行只渲染本角色的工具面
+#: ⇒ 只有 H 那一格换值（重算读数：变化的格 = ['H']）。这一笔没有改任何手写段文，
+#: 变的是派生态（工具面从注册表现算）。逐格：H 3b686b76→acc9ec94
+#: （A–G / L / M / V 十格与 p227 同值，逐格现算见 `temp/_recompute_p228.py`）。
+#: 块 3 还要再抬一次（`specs/h.py` 的审稿清单改成用 `review.scan` 拿读数 + H 手册）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "8d24e8eba9f6d50e4d4d1a58329ef2e1fad00499a00f1405d9afb10120c1b8ef",
     "B": "232f3c473af9b11395509cb788feda294ef68bb8f24607702abdd3876cab5721",
@@ -2389,7 +2396,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "E": "337cd50ee80db61419e5561dee83e8e054253392025fb0d0e070d847f52de14a",
     "F": "58295b4d0b8ea42fd9bd98e663221d31350dbce28101ff6302723aaa255d5b9d",
     "G": "dddd5baf4d0c7793ff1e837a21e4a2bf4c6f178b67b35cbe147b32ac9f192d94",
-    "H": "3b686b76a0104b1a828ae2d1fd600d7809c06c2537a91dd78eeb81e6d2065479",
+    "H": "acc9ec94a31951934ef234104572ade7c94a4241c952739c9b92d477ccf41868",
     "L": "2462bba428429c8241acb1360b25a4e8ea291aa5bdd4fafbd2ded36e3e6866cd",
     "M": "e416b8a2cdf15ee5eb784719bfdaa859fc3dc8c69ce859518109d6b7b33bf85d",
     "V": "7bb595da856ce8f701b5152ede90f2e49c5695b199b3b7aed3640c7bb00b2385",

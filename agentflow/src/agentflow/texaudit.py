@@ -628,6 +628,7 @@ def scan_tex(
     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     text_integrity: Callable[..., dict] | None = None,
     raw_paths: Sequence[str] = (),
+    wired: Sequence[str] | None = None,
 ) -> dict:
     """扫一次：点名的那些类，折成同一份结构（纯函数，不写盘、不碰 store）。
 
@@ -641,6 +642,9 @@ def scan_tex(
     ledger : 台账三张表的行（不给 ⇒ 本层从 `root/data` 读；读不到 ⇒ 那一类"没查成"）。
     text_integrity : 字符扫描器的纯函数（`review_tools.scan_text_integrity`）。
     raw_paths : 原样路径（字符扫描器要自己解析它，所以按原样转交）。
+    wired : 这一趟真的接上了的类（缺省 = 全部）。不在里面的类进 `bad[]` 并记
+        "还没接线" —— 调用方（工具层）用它把"契约"与"接线"分成两步推进，
+        而三态纪律要求那一步如实说"没查成"，不能悄悄跳过。
     """
     if not isinstance(kinds, (list, tuple)) or not kinds:
         return _empty(kinds=[], reason="kinds 是空的（或不是数组）⇒ 这一趟什么都没扫，"
@@ -681,8 +685,16 @@ def scan_tex(
     scanned: list[str] = []
     by_kind: dict[str, int] = {k: 0 for k in kinds}
     all_facts: dict[str, Any] = {}
+    allowed = tuple(wired) if wired is not None else SCAN_KINDS
 
     for kind in kinds:
+        if kind not in allowed:
+            # 契约里认这一类、而这一趟还没接线 ⇒ 如实"没查成"（不是悄悄跳过）
+            reason = f"这一类还没接线（这一趟允许的是 {list(allowed)}）"
+            details.append(_detail(kind, checked=False, reason=reason,
+                                   counts={"findings": 0}))
+            bad.append({"kind": kind, "reason": reason})
+            continue
         if kind == "text_integrity":
             got, facts, reason, touched = _scan_text_integrity(
                 base, raw_paths, cap, text_integrity)

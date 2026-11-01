@@ -491,8 +491,11 @@ def test_h_tool_surface_is_read_only(h_store: Store):
     # `tests/test_h_can_audit_text_integrity.py`）。这一格仍然写死名单、不改成子集：
     # 默认面多一件必须有人在这里认一次账，否则「默认只读」会退化成「随便加，
     # 反正断言是子集」—— 那正是这条判据本来要挡的那件事。
-    assert default_reg.names() == ["review.list_findings", "review.scan_document",
-                                   "review.scan_text_integrity"]
+    # 2026-11-01：多一件 `review.scan`（业主「将 H 的所有机械扫描工具统一成一个方便 H
+    # 使用」；判据 `tests/test_h_scan_is_one_entry.py`）。这一次同样是"认账"而不是放宽：
+    # 它是 read，只读面仍是 none/read。
+    assert default_reg.names() == ["review.list_findings", "review.scan",
+                                   "review.scan_document", "review.scan_text_integrity"]
     assert all(s.side_effect in ("none", "read") for s in default_reg.for_role("H"))
 
     writer_reg = ToolRegistry(name="review-writers")

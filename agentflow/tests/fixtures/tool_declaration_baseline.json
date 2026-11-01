@@ -1,7 +1,7 @@
 {
-  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。",
+  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 122,
+  "n_tools": 123,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -107,9 +107,15 @@
       "conductor.ack",
       "conductor.escalate",
       "conductor.guide",
+      "conductor.patrol",
+      "conductor.patrol_verdict",
       "conductor.post_task",
       "conductor.retire_child",
+      "conductor.review_child",
+      "conductor.void_items",
+      "conductor.wake_blocked",
       "conductor.watch",
+      "conjecture.register_conjecture",
       "doc.write_mapping",
       "formal.check_formal",
       "formal.formalize",
@@ -123,15 +129,10 @@
       "lit.stage_withdraw",
       "program.list",
       "program.stop",
-      "trace.children",
-      "conductor.patrol",
-      "conductor.review_child",
-      "conductor.patrol_verdict",
-      "conjecture.register_conjecture",
-      "conductor.void_items",
+      "review.scan",
+      "review.scan_text_integrity",
       "search.retry_pending",
-      "conductor.wake_blocked",
-      "review.scan_text_integrity"
+      "trace.children"
     ]
   },
   "declarations": {
@@ -5549,6 +5550,64 @@
         "additionalProperties": false
       },
       "returns": "{'checked','reason','scanned','findings','counts','detail'}",
+      "side_effect": "read",
+      "external": "none",
+      "roles": [
+        "H"
+      ],
+      "tags": [
+        "review",
+        "read",
+        "gate"
+      ],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
+    },
+    "review.scan": {
+      "summary": "把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \\cite 对 \\bibitem / \\input 目标 / \\ref 对 \\label / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "text_integrity",
+                "cites",
+                "inputs",
+                "refs",
+                "proofs",
+                "duplicates",
+                "ledger_match"
+              ]
+            },
+            "description": "要查的类（可多选）。text_integrity=六类异常字符；cites=\\cite 键 ⊆ \\bibitem 键；inputs=\\input 目标在盘上；refs=\\ref 家族键 ⊆ \\label 键；proofs=定理类环境 ↔ proof 配对；duplicates=\\label/\\newtheorem 重名；ledger_match=正文/台账/对应表的五个数与多出来的环境",
+            "minItems": 1
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "工作区内的相对路径（文件或目录；目录递归 .tex/.md/.txt/.bib）。缺省 = project 的 out/paper/main.tex（给了 project 才缺省）"
+          },
+          "project": {
+            "type": "string",
+            "description": "论文项目根（工作区相对；`out/paper/main.tex` 在它下面）。只有 ledger_match 必须给它；不给 ⇒ 那一类如实报没查成"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "这一次最多返回多少条 findings（缺省 200）；counts 是盘上真总数，不受它限制"
+          }
+        },
+        "required": [
+          "kinds"
+        ],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','kinds','findings','counts','bad','detail','scanned','reason'}；findings[] 每项九键 {'kind','severity','file','line','column','text','why','ref','codepoint'}；detail[] 每项六键 {'kind','checked','reason','scanned','counts','returned'}；counts={'files','findings','by_kind','by_severity','facts'}；checked=False 只表示没查成（哪一类没查成见 bad[]），不是『零命中』",
       "side_effect": "read",
       "external": "none",
       "roles": [

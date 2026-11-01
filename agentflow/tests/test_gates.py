@@ -773,8 +773,8 @@ def test_review_report_tool_is_registered_only_on_the_writer_surface(tmp_path):
     st.init()
     default_reg = ToolRegistry(name="review-default")
     RV.register(default_reg, store=st)
-    assert default_reg.names() == ["review.list_findings", "review.scan_document",
-                                    "review.scan_text_integrity"]
+    assert default_reg.names() == ["review.list_findings", "review.scan",
+                                    "review.scan_document", "review.scan_text_integrity"]
     writers = ToolRegistry(name="review-writers")
     RV.register(writers, store=st, include_writers=True)
     assert writers.get("review.report").side_effect == "write_local"

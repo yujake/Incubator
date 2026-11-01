@@ -37,6 +37,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .. import claimanatomy as CA
 from .. import gates as G
 from .. import schema as S
+from .. import texaudit as TEX
 from .base import ToolRegistry, ToolSpec, fail, ok, tool
 from .doc_tools import OVERCLAIM_MARKERS, dependencies_for_doc, guard_result as _guard_result
 
@@ -2582,6 +2583,118 @@ def _review_scan_text_integrity_tool(root, paths, limit=None):
     return ok(scan_text_integrity(root, paths, limit=limit))
 
 
+#: `review.scan` 这一趟真的接上了的类（块 1 只接 `text_integrity`，块 2 扩到七类）。
+#:
+#: 为什么把"契约"与"接线"分成两步：工具声明的 `kinds` 枚举是契约（一次写完，不再动
+#: 工具面），而"现在真的能跑哪几类"是接线。分开之后，块 2 只改这一个元组 ——
+#: `tests/golden/tool_surface_snapshot.json` 一个字节都不用再重冻（重冻一次就是一轮
+#: 两人复核）。不在这个元组里的类会如实进 `bad[]`（"还没接线"），不是悄悄跳过。
+_WIRED_KINDS: tuple[str, ...] = ("text_integrity",)
+
+
+@tool(
+    "review.scan",
+    (
+        "把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \\cite 对 \\bibitem / "
+        "\\input 目标 / \\ref 对 \\label / theorem 对 proof / 重复声明 / 正文与台账的数。"
+        "只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。"
+        ),
+    {
+        "type": "object",
+        "properties": {
+            "kinds": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(TEX.SCAN_KINDS)},
+                "description": (
+                    "要查的类（可多选）。text_integrity=六类异常字符；cites=\\cite 键 ⊆ "
+                    "\\bibitem 键；inputs=\\input 目标在盘上；refs=\\ref 家族键 ⊆ \\label 键；"
+                    "proofs=定理类环境 ↔ proof 配对；duplicates=\\label/\\newtheorem 重名；"
+                    "ledger_match=正文/台账/对应表的五个数与多出来的环境"),
+                "minItems": 1,
+            },
+            "paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "工作区内的相对路径（文件或目录；目录递归 .tex/.md/.txt/.bib）。"
+                    "缺省 = project 的 out/paper/main.tex（给了 project 才缺省）"),
+            },
+            "project": {
+                "type": "string",
+                "description": (
+                    "论文项目根（工作区相对；`out/paper/main.tex` 在它下面）。"
+                    "只有 ledger_match 必须给它；不给 ⇒ 那一类如实报没查成"),
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "description": (
+                    "这一次最多返回多少条 findings（缺省 200）；counts 是盘上真总数，"
+                    "不受它限制"),
+            },
+        },
+        "required": ["kinds"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("H",),
+    returns=(
+        "{'checked','kinds','findings','counts','bad','detail','scanned','reason'}；"
+        "findings[] 每项九键 {'kind','severity','file','line','column','text','why','ref',"
+        "'codepoint'}；detail[] 每项六键 {'kind','checked','reason','scanned','counts',"
+        "'returned'}；counts={'files','findings','by_kind','by_severity','facts'}；"
+        "checked=False 只表示没查成（哪一类没查成见 bad[]），不是『零命中』"
+        ),
+    tags=("review", "read", "gate"),
+)
+def _review_scan_tool(root, kinds, paths=None, project=None, limit=None):
+    """`review.scan` 的工具体（注入值是工作区根 `root`）。
+
+    这一层只做三件工具层该做的事，读数一律由 `texaudit.scan_tex()` 给：
+    ① 路径解析与目录递归（复用 `_resolve_under` / `_expand`，与 `review.scan_text_integrity`
+    同一道闸 —— 只读不等于无边界）；② 解析失败逐条记成 `path_problems`（不静默跳过）；
+    ③ 把 `scan_text_integrity` 这件既有实现按引用传进去（六类字符只有一份实现，
+    这里不另写一套）。
+    """
+    base = Path(str(root)).resolve() if root is not None else None
+    files: list[Path] = []
+    problems: list[dict] = []
+    raw_paths = [str(p) for p in (paths or ())]
+    if base is None:
+        problems.append({"path": "", "why": (
+            "装配时没有拿到工作区根 ⇒ 相对路径无从解析（这一趟没查成，不是零命中）")})
+    else:
+        for raw in raw_paths:
+            target, why = _resolve_under(base, raw)
+            if target is None:
+                problems.append({"path": raw, "why": why})
+                continue
+            expanded, why = _expand(base, target)
+            if why:
+                problems.append({"path": raw, "why": why})
+                continue
+            files.extend(expanded)
+    project_path = None
+    if project is not None:
+        if base is None:
+            problems.append({"path": str(project), "why": "没有工作区根 ⇒ project 无从解析"})
+        else:
+            project_path, why = _resolve_under(base, str(project))
+            if project_path is None:
+                problems.append({"path": str(project), "why": why})
+    return ok(TEX.scan_tex(
+        base,
+        kinds=list(kinds),
+        files=files,
+        path_problems=problems,
+        project=project_path,
+        limit=limit,
+        text_integrity=scan_text_integrity,
+        raw_paths=raw_paths,
+        wired=_WIRED_KINDS,
+    ))
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 #: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
 _READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
@@ -2590,6 +2703,9 @@ _READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # 2026-10-30（业主：「给 H 加个工具审」）：唯一一件要工作区根的审校工具 ——
     # 其余四件的输入都是台账行或稿件对象，只有它按相对路径去盘上读正文。
     (_review_scan_text_integrity_tool, ('root',)),
+    # 2026-11-01（业主：「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：
+    # 统一入口。默认面因此多一件只读工具（两条写死名单的判据要有人认一次账）。
+    (_review_scan_tool, ('root',)),
 )
 
 #: 会写盘的三个入口：默认不装（结构约束：H 的工具面必须全 read/none）。

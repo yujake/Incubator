@@ -11,7 +11,7 @@
 
 角色之间没有直连通路：想叫谁干活就走 conductor.summon（受 ALLOWED_EDGES 约束）；想给谁说句话就沿秘书链逐跳转发（中间各跳不看正文）。
 
-角色数 **11**｜动作总数 **64**｜工具面合计 **409** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
+角色数 **11**｜动作总数 **64**｜工具面合计 **410** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
 
 ## 角色 A
 
@@ -912,6 +912,7 @@
 | `review.record_finding` | 把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的那类用它；`evidence` 必填。 | `write_local` | `doc_id`、`kind`、`target`、`message`、`evidence` |
 | `review.report` | 产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。 | `write_local` | `doc_id`、`own_errors` |
 | `review.review_document` | 审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。 | `write_local` | `doc_id` |
+| `review.scan` | 把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \cite 对 \bibitem / \input 目标 / \ref 对 \label / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。 | `read` | `kinds` |
 | `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
 | `review.scan_text_integrity` | 扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。 | `read` | `paths` |
 | `review.verify_fixes` | 复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未解决项。 | `write_local` | `doc_id`、`round_no` |
@@ -928,7 +929,7 @@
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 
-共 **41** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
+共 **42** 件（声明在 src/agentflow/tools/；只读角色在结构上拿不到写工具）。
 
 ### 主要读写的文档与细节
 
