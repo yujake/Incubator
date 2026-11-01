@@ -39,7 +39,8 @@ from typing import Any, Mapping, Sequence
 
 from .. import sessions as SS
 
-__all__ = ["snapshot", "answer_text_of", "option_view"]
+__all__ = ["snapshot", "answer_text_of", "option_view",
+           "TOP_RUN_TASK_ID", "top_run", "top_run_closed", "mark_stale_loops"]
 
 #: 页面里 JSON 摘要的截断长度（读数页不该被一条超长 payload 撑爆）。
 CLIP = 400
@@ -227,6 +228,70 @@ def _sid_ok(sid: str) -> bool:
     return bool(sid) and all(ch in _SID_OK for ch in sid) and ".." not in sid
 
 
+# ====================================================================== 未收尾的循环
+#: 顶趟的绝对编号：框架给第一趟（主控那一趟）分配的台账号是 `t-000001`
+#: （`conductor.open_top_level_run` 从这台台账的第一个号起用）。没有它时退回
+#: "这一场会话里最早开始的那一趟"（老会话 / 夹具里可能没有主控的开场事件）。
+TOP_RUN_TASK_ID = "t-000001"
+
+
+def top_run(runs: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """这一场会话的顶趟（`t-000001`；没有就取最早开始的那一趟）。一趟都没有 ⇒ `None`。"""
+    for run in runs:
+        if str(run.get("task_id") or "") == TOP_RUN_TASK_ID:
+            return run
+    if not runs:
+        return None
+    return min(runs, key=lambda r: int(r.get("start_index") or 0))
+
+
+def top_run_closed(runs: Sequence[Mapping[str, Any]]) -> bool:
+    """顶趟是不是已经收到自己的 `agent_run_end`（"这一趟的宿主循环已经走完"）。
+
+    三态口径：没有顶趟 / 顶趟没收到 end ⇒ `False`。`False` 在这里只有一种意思 ——
+    "判不出它已收尾"，不是"它还在跑"：`stale_loop` 那一格拿它当「关闭条件」用，
+    所以读不到时只会让行留在"未收尾"那一档（保守方向 = 不替它宣布死亡）。
+    """
+    top = top_run(runs)
+    return top is not None and top.get("end_index") is not None
+
+
+def mark_stale_loops(runs: Sequence[dict[str, Any]]) -> Sequence[dict[str, Any]]:
+    """给每一趟补一格 `stale_loop`：「有 start 没 end、而顶趟已经收尾」。
+
+    ## 这一格回答的是什么
+
+    `end_index is None`（或 `end_ts` 为空）只说得清"这一段记录没收到 end"，
+    说不清"它还在跑"。82 的定格数据就是这条缺陷的现场：两条 D 的
+    `agent_run_start`（20:38:22 / 20:38:23）一直没有对应的 `agent_run_end`，
+    而顶趟 `t-000001` 在 20:59:28 以 `stop_file` 收尾、宿主进程也已退出 ——
+    它们是被父叫停打断的循环记录，不是活着的循环。判据：
+
+    | 形态 | `stale_loop` |
+    |---|---|
+    | 有 start 有 end（已收尾） | `False` |
+    | 有 start 没 end，且顶趟已收尾（宿主走了 / 被叫停） | `True` |
+    | 有 start 没 end，但顶趟还在跑（那时它真的还在飞） | `False` |
+
+    ## 为什么判据挂在"顶趟"上
+
+    子循环跑在父进程里（线程），它们没有各自的 pid 登记（`stopctl.running_loops`
+    的注释写着同一件事）——所以"宿主还在不在"只能从顶趟读：顶趟收了 end ⇒ 那一趟
+    宿主循环已经走完，它名下还没收尾的子循环只可能是"被打断后剩下的记录"。
+    纪律与 run-index 那套一致：不许把"没收到 end"说成"还在跑"。
+
+    ## 为什么在这一层（读侧）加
+
+    盘上格式一个字节都不动（`sessions.py` 的 `runs_in_session` 仍是纯会话读数）；
+    这一格是读模型给页面用的派生读数，两个读口（本模块的 `_scan` 与
+    `readers.run_view`）都调这一个函数，于是它们不会各说一套。
+    """
+    closed = top_run_closed(runs)
+    for run in runs:
+        run["stale_loop"] = bool(closed and run.get("end_index") is None)
+    return runs
+
+
 # ====================================================================== 快照
 def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
           problems: Sequence[str],
@@ -356,6 +421,9 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                         and not isinstance(unknown_reported, bool) and unknown_reported >= 0):
                     cur["spend_unknown_usd_calls"] = unknown_reported
             open_runs.remove(hit)
+    # ---- 未收尾的循环（2026-11-01，82 的定格数据）：给每一趟补 `stale_loop`。
+    # 判据与逐格读数见 :func:`mark_stale_loops`：有 start 没 end、且顶趟已收尾 ⇒ True。
+    mark_stale_loops(runs)
     # ---- 把待答问题挂到「正在等它」的那一趟上
     for run in runs:
         hi = run["end_index"] if run["end_index"] is not None else len(events)
@@ -720,7 +788,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("waiting_on", "string[]"), ("waiting", "boolean"),
       # 162 ③：`events_span` 是下标跨度（原 `events_in_run` 改名，数一个字节没动）；
       # `events_owned` 是按三档归属「只数归到这一趟」的（含没有 `task_id` 的 `agent_step`）。
-      ("events_span", "number"), ("events_owned", "number"))),
+      ("events_span", "number"), ("events_owned", "number"),
+      # 2026-11-01（82 的定格数据）：「有 start 没 end」不等于「还在跑」。这一格只说
+      # "这一段记录没收到 end、而这一场会话的顶趟已经收尾" ⇒ 它是被打断后剩下的循环
+      # 记录，不是活着的循环。顶趟还在跑时它恒为 false（那时它真的还在飞）。
+      ("stale_loop", "boolean"))),
     ("OrphanRow",
      "snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）",
      (("sid", "string"), ("index", "number"), ("kind", "string"),

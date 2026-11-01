@@ -596,6 +596,10 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
                 "same_run_start_index": None, "unattributed_usd": None}
     events, bad = SS.read_session(root_p, sid=sid)
     runs = SS.runs_in_session(events, sid=sid)
+    # 未收尾的循环（2026-11-01，82 的定格数据）：`sessions.runs_in_session` 是纯会话
+    # 读数（盘上格式不动），`stale_loop` 由 `webui.state` 现算 —— 与 `/api/state` 的
+    # `runs[]` 同一个函数、同一套判据（顶趟已收尾 + 这一趟没收到 end）。
+    _state.mark_stale_loops(runs)
     rstatus, rtext = _read_report(root_p)
     ckpt = _checkpoint_of(root_p, sid)
     spend_tree = _checkpoint_spend(ckpt["checkpoint"])
@@ -3023,14 +3027,87 @@ def budget_face(root: str | Path) -> dict[str, Any]:
 
 
 # ====================================================================== 8 在飞
-def live_face(root: str | Path) -> dict[str, Any]:
-    """`GET /api/live` 的读模型：在飞的循环 + 活进程 + 停机开关 + 近几条停机历史。
+def _tasks_running_of(root: Path) -> tuple[int | None, str]:
+    """`tasks` 台账里 `status == "running"` 的行数 —— 「在飞」的唯一口径（三态）。
 
-    为什么这三样在一格里（业主 2026-10-12：「特别照顾……对多智能体系统的监控能力」）：
-    用户问"现在到底还有没有人在跑"时，`running_loops` 的会话面与 `live_pids` 的
-    进程面缺一路都会漏（那边 docstring 逐字写了两个方向的漏法），而停机开关是
-    "我按过停没有/谁按的"的唯一盘上事实 —— 三者分开成三条端点，页面就得自己拼，
-    拼错的那一版会把"有进程在跑"显示成"没事"。
+    为什么只数 `running`（不数 `pending`）：业主 2026-11-01 的口径逐字是
+    「在飞（tasks 里 running）」；`pending` 是「未收口的活」（`Roster.tsx` 已经把它
+    单列成"未收口的活 N 件"），把它并进「在飞」会让 82 这种收工现场读出 90。
+
+    为什么与名册三态同源：名册那一格的 `flying` 也是从 `tasks` 的 `status` 派生
+    （`conductor.agent_state` 的 ⑥），两处读的是同一本台账、同一列状态 ——
+    这一格只少了"挂机（parked）不算在飞"那一层细分，所以页面把它逐字标成
+    「tasks 里 running」，不与名册卡上那个 `flying` 混用同一个名字。
+
+    三态：台账读不出来 ⇒ `(None, 原因)`（"没查成"，不是 0）；台账不在盘上
+    （还没写过）⇒ `(None, 原因)`（"还没写过"，也不是 0）；读到了 ⇒ `(真数字, "")`。
+    """
+    from ..store import Store
+
+    try:
+        rows, tri = _table_state(Store(root), "tasks")
+    except Exception as exc:  # noqa: BLE001 - 读不到就是没查成，不折成 0
+        return None, (f"tasks 台账读不出来（「在飞」那一格记「没查成」，不记 0）："
+                      f"{type(exc).__name__}: {exc}")
+    if tri == TRI_NOT_APPLICABLE:
+        return None, ("tasks 台账不在盘上（还没写过；「在飞」那一格是「读不到」，不是 0）")
+    return sum(1 for row in rows if str(row.get("status") or "") == "running"), ""
+
+
+def _stale_loops_of(root: Path, running: Sequence[dict[str, Any]]) -> tuple[list[str], str]:
+    """给 `stopctl.running_loops().running[]` 的每一行补 `stale_loop`（就地写）。
+
+    `running` 的行按定义都是"有 start 没 end"（`stopctl.running_loops` 只列这种），
+    所以这里只需判「这场会话的顶趟收没收到 end」：顶趟已收尾 ⇒ 这些行是"被打断后
+    剩下的循环记录"（宿主进程走了 / 被父叫停），不是活着的循环。判据与
+    `webui.state.mark_stale_loops` 同一处（`top_run_closed`），两台读口不会各说一套。
+
+    读不出来 ⇒ `stale_loop=False` 并把原因带回（保守方向：不替它宣布"死了" ——
+    读不到只说"判不了"，不许折成"不是活着"）。返回 `(问题, 说明)`。
+    """
+    problems: list[str] = []
+    notes: list[str] = []
+    stale_by_sid: dict[str, bool] = {}
+    for row in running:
+        sid = str(row.get("sid") or "")
+        if sid and sid not in stale_by_sid:
+            try:
+                events, bad = SS.read_session(root, sid=sid)
+                if bad:
+                    notes.append(f"{sid} 的会话有坏行 ⇒ 顶趟有没有收尾判不了"
+                                 "（这些行留在「未收尾」，不替它们宣布死亡）")
+                    stale_by_sid[sid] = False
+                else:
+                    stale_by_sid[sid] = bool(_state.top_run_closed(
+                        SS.runs_in_session(events, sid=sid)))
+            except Exception as exc:  # noqa: BLE001
+                stale_by_sid[sid] = False
+                problems.append(f"判 {sid} 的顶趟有没有收尾时读盘失败："
+                                f"{type(exc).__name__}: {exc}")
+        row["stale_loop"] = bool(stale_by_sid.get(sid, False))
+    return problems, "；".join(notes)
+
+
+def live_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/live` 的读模型：未收尾的循环 + 活进程 + 停机开关 + 近几条停机历史。
+
+    ## 两个数必须分开读（2026-11-01，82 的定格数据）
+
+    改前这一面只有 `running`（"有 start 没 end 的循环记录"）与 `answer`（"有/没有"），
+    页面把前者叫成「在飞」。82 上于是出现两个都"对"、合起来是假的读数：
+    名册三态合计「在飞 0」，而循环表列着 2 行 D（20:38:22 / 20:38:23）并写着"结论：有"。
+    那 2 行是被父叫停打断的循环记录，宿主进程已退出 —— 它们不是活着的。
+
+    所以这一面现在给两个并列的数：
+
+    - `tasks_running`：`tasks` 台账里 `status == "running"` 的行数（读不到 / 还没写过
+      ⇒ `null` + `reason` 里说清是哪一档）—— 这才是「在飞」，与名册三态同源；
+    - `unclosed_loops`：`running` 的行数，即「未收尾的循环」（有 start 没 end）——
+      它「不是」在飞：没收到 end 只说明这一段记录没有收尾，不说明它还在跑。
+
+    每一行还带一格 `stale_loop`（判据同 `webui.state.mark_stale_loops`）：顶趟已收尾
+    ⇒ `true`，页面据此在行尾写"宿主进程已退出/被叫停，不是活着"。`answer` 也不再
+    被这种行顶成「有」：只剩 stale 行、又没有活进程 ⇒ `answer="没有"`。
 
     行一律用 `stopctl` 自己的字典逐字透传（`running` / `live` / 历史行）：
     在这一层再抄一份字段表就是第二份形状定义，必然与那边漂移。
@@ -3039,6 +3116,7 @@ def live_face(root: str | Path) -> dict[str, Any]:
 
     root_p = Path(str(root))
     problems: list[str] = []
+    notes: list[str] = []
     loops: dict[str, Any] = {"running": [], "live": [], "unreadable_sessions": [],
                              "answer": "没查成"}
     try:
@@ -3062,13 +3140,32 @@ def live_face(root: str | Path) -> dict[str, Any]:
         interrupts = [dict(r) for r in SC.interrupt_history(root_p, limit=5)]
     except Exception as exc:  # noqa: BLE001
         problems.append(f"stopctl.interrupt_history 读不出来：{type(exc).__name__}: {exc}")
+    running = [dict(r) for r in (loops.get("running") or [])]
+    stale_problems, stale_note = _stale_loops_of(root_p, running)
+    problems.extend(stale_problems)
+    if stale_note:
+        notes.append(stale_note)
+    live_rows = [dict(r) for r in (loops.get("live") or [])]
+    tasks_running, tasks_note = _tasks_running_of(root_p)
+    if tasks_note:
+        notes.append(tasks_note)
+    answer = str(loops.get("answer") or "")
+    if (answer == "有" and running and not live_rows
+            and all(row.get("stale_loop") for row in running)):
+        # 只有"没收到 end"的循环记录、且没有活进程 ⇒ 那不是"有人在跑"。
+        # 纪律：不许把"没收到 end"说成"还在跑"（82 那 2 行就是这一档）。
+        answer = "没有"
+        notes.append("没有活进程；循环表里的行都是未收尾的循环记录（顶趟已收尾）"
+                     "⇒ 「有/没有」读成「没有」")
     return {
         "tri": TRI_UNREADABLE if problems else TRI_COMPUTED,
-        "reason": "；".join(problems),
+        "reason": "；".join(problems + notes),
         "root": str(root_p),
-        "answer": str(loops.get("answer") or ""),
-        "running": list(loops.get("running") or []),
-        "live": list(loops.get("live") or []),
+        "answer": answer,
+        "tasks_running": tasks_running,
+        "unclosed_loops": len(running),
+        "running": running,
+        "live": live_rows,
         "unreadable_sessions": list(loops.get("unreadable_sessions") or []),
         "switch": switch,
         "switch_present": bool(switch.get("present") or switch.get("path")),
@@ -4897,8 +4994,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("tokens", "number"), ("usd", "number"), ("entries", "number"),
       ("attempts", "number"), ("roles?", "Record<string, number>"))),
     ("LiveView",
-     "live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
+     "live_face() —— 未收尾的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
      (("tri", "Tri"), ("reason", "string"), ("root", "string"), ("answer", "string"),
+      # 2026-11-01（82 的定格数据）：两个并列的数 —— 「在飞」只数 tasks 里 running
+      # （与名册三态同源），「未收尾的循环」数的是 `running[]`（有 start 没 end）。
+      # 读不到 / 还没写过 ⇒ `null`（不是 0）。
+      ("tasks_running", "number | null"), ("unclosed_loops", "number"),
       ("running", "LiveLoopRow[]"),
       ("live", "LivePidRow[]"),
       ("unreadable_sessions", "string[]"),
@@ -4909,8 +5010,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("history", "Array<Record<string, unknown>>"),
       ("interrupts", "Array<Record<string, unknown>>"))),
     ("LiveLoopRow",
-     "stopctl.running_loops() 的 running[] —— 还在盘上跑的一趟循环（会话面）",
-     (("role", "string"), ("sid", "string"), ("since", "string"))),
+     "stopctl.running_loops() 的 running[] —— 一条「未收尾的循环」（有 start 没 end；"
+     "`stale_loop` 由 `webui.state.mark_stale_loops` 现算）",
+     (("role", "string"), ("sid", "string"), ("since", "string"),
+      # 2026-11-01（82 的定格数据）：顶趟已收尾 ⇒ 这一行是"被打断后剩下的循环记录"，
+      # 不是活着的循环（页面据此写"宿主进程已退出/被叫停，不是活着"）。
+      ("stale_loop", "boolean"))),
     ("LivePidRow",
      "stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程"
      "（`path` 是那一份登记文件的落点，`live_pids` 会给）",
@@ -5694,6 +5799,11 @@ RUN_ROW_KEYS: tuple[str, ...] = (
     "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
     "last_shape", "end_index", "end_ts", "waiting_on", "waiting",
     "events_span", "events_owned",
+    # 2026-11-01（82 的定格数据）：「有 start 没 end」不是「还在跑」的判据。这一格由
+    # `webui.state.mark_stale_loops` 现算（与 `/api/state` 的 `runs[]` 同一处），
+    # 所以它也是"两份读口逐字同形"里的那一格（判据见
+    # `tests/test_the_run_row_has_two_readers_that_agree.py`）。
+    "stale_loop",
 )
 
 

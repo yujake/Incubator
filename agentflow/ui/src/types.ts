@@ -109,6 +109,7 @@ export interface RunRow {
   waiting: boolean;
   events_span: number;
   events_owned: number;
+  stale_loop: boolean;
 }
 
 /** 出处：snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）。 */
@@ -429,12 +430,14 @@ export interface UsageBucket {
   roles?: Record<string, number>;
 }
 
-/** 出处：live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）。 */
+/** 出处：live_face() —— 未收尾的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）。 */
 export interface LiveView {
   tri: Tri;
   reason: string;
   root: string;
   answer: string;
+  tasks_running: number | null;
+  unclosed_loops: number;
   running: LiveLoopRow[];
   live: LivePidRow[];
   unreadable_sessions: string[];
@@ -444,11 +447,12 @@ export interface LiveView {
   interrupts: Array<Record<string, unknown>>;
 }
 
-/** 出处：stopctl.running_loops() 的 running[] —— 还在盘上跑的一趟循环（会话面）。 */
+/** 出处：stopctl.running_loops() 的 running[] —— 一条「未收尾的循环」（有 start 没 end；`stale_loop` 由 `webui.state.mark_stale_loops` 现算）。 */
 export interface LiveLoopRow {
   role: string;
   sid: string;
   since: string;
+  stale_loop: boolean;
 }
 
 /** 出处：stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程（`path` 是那一份登记文件的落点，`live_pids` 会给）。 */

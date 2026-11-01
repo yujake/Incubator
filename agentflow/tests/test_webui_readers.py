@@ -911,15 +911,27 @@ def test_the_run_row_keys_match_what_sessions_computes(artifacts_ws: pathlib.Pat
     """反真空（两份实现的护栏）：`readers` 与 `sessions` 的趟次键集合逐字相同。
 
     `readers.run_view` 走 `sessions.runs_in_session`；而 `webui.state._scan` 另有一份
-    同形实现（A 线）。这条断言钉住"我这一份与 `RunRow` 的 20 个键一致"——哪天
+    同形实现（A 线）。这条断言钉住"我这一份与 `RunRow` 的键一致"——哪天
     `_scan` 改了键而我这边的（或 `RunRow` 的）没跟上，契约判据 C 会红，而这里
     先说清是"两份实现漂移"还是"夹具没造出来"。
+
+    2026-11-01（82 的定格数据）：`stale_loop` 是读侧现算的一格
+    （`webui.state.mark_stale_loops`，判据是"有 start 没 end + 顶趟已收尾"），
+    `sessions.runs_in_session` 仍是纯会话读数、盘上格式一个字节都没动 ⇒ 它不在
+    `live` 那一份里。所以这里分开钉两件事（不是放宽）：
+    ① 去掉这一格之后两边逐字相同；② 这一格在 `run_view` 那一份里确实在。
+    把 ① 写成"并集相等"会漏掉"两边都少一格"；把 ② 写成"至少有它"会把多出来的
+    第二格放过去 —— 两条都要，才是原来那条"逐字相同"的意思。
     """
+    derived_at_readers = {"stale_loop"}
     run = R.run_view(artifacts_ws, SID)["runs"][0]
     assert set(run) == set(R.RUN_ROW_KEYS), (sorted(run), sorted(R.RUN_ROW_KEYS))
     live = SS.runs_in_session(
         SS.read_session(artifacts_ws, sid=SID)[0], sid=SID)
-    assert set(live[0]) == set(run), (sorted(live[0]), sorted(run))
+    assert set(run) - derived_at_readers == set(live[0]), (
+        sorted(set(run) - derived_at_readers), sorted(live[0]))
+    assert derived_at_readers <= set(run), (
+        f"`run_view` 少了读侧现算的那一格：{sorted(derived_at_readers - set(run))}")
 
 
 def test_the_report_reading_uses_the_other_tri_vocabulary(
