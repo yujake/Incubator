@@ -2210,6 +2210,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
     if not paper["exists"]:
         return {"tri": TRI_NOT_APPLICABLE,
                 "reason": "out/paper/main.tex 不在盘上 ⇒ 结构那一块还没有可查的正文",
+                "source": _src("out/paper/main.tex"),
                 "paper": paper, "checks": empty_checks, "ledger": empty_ledger,
                 "findings": []}
     try:
@@ -2222,6 +2223,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 —— 扫描抛了 ⇒ 这一块没查成
         return {"tri": TRI_UNREADABLE,
                 "reason": f"texaudit.scan_tex 没跑成（{type(exc).__name__}: {exc}）",
+                "source": _src("out/paper/main.tex"),
                 "paper": paper, "checks": empty_checks, "ledger": empty_ledger,
                 "findings": []}
     facts = dict((scan.get("counts") or {}).get("facts") or {})
@@ -2258,6 +2260,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
               "mapping_state": str(facts.get("mapping_state") or "")}
     return {"tri": TRI_COMPUTED if scan.get("checked") else TRI_UNREADABLE,
             "reason": "" if scan.get("checked") else str(scan.get("reason") or "正文扫描没查成"),
+            "source": _src("out/paper/main.tex"),
             "paper": paper, "checks": checks, "ledger": ledger, "findings": findings}
 
 
@@ -2530,10 +2533,19 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
     # ---- 内容级验收（五条；只读、不进机器门）
     criteria = {str(k): str(v) for k, v in (acc.get("criteria") or {}).items()}
     details = {str(k): str(v) for k, v in (acc.get("details") or {}).items()}
+    content_sources = {
+        "attachment_is_honest": _src("out/review/REPORT.md", label="交付说明"),
+        "triage_branch_recorded": _src("sessions/", label="提问记录"),
+        "within_cost_cap": _src("data/usage_ledger.json", label="成本台账"),
+        "hops_have_readable_prompts": _src("data/tasks.json", label="召唤台账"),
+        "statements_have_assumptions_and_source": _src("data/statements.json",
+                                                       label="命题台账"),
+    }
     content = {"tri": str(acc.get("tri") or TRI_UNREADABLE),
                "reason": str(acc.get("reason") or ""),
                "criteria": criteria, "details": details,
                "titles": {str(k): str(t) for k, t in CRITERIA},
+               "sources": content_sources,
                "failed": sorted(k for k, v in criteria.items() if v == "fail"),
                "unchecked": sorted(k for k, v in criteria.items() if v == "unknown"),
                "passed": bool(criteria) and all(v == "pass" for v in criteria.values()),
@@ -2545,7 +2557,9 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
     if getattr(rep, "refusal", None):
         tri = TRI_UNREADABLE
         reason = str((getattr(rep, "refusal", {}) or {}).get("detail") or "门受控拒绝")
-    return {"tri": tri, "reason": reason, "gates": gates, "machine": machine,
+    return {"tri": tri, "reason": reason,
+            "source": _src("out/review/m-verdicts.jsonl", label="M 判据"),
+            "gates": gates, "machine": machine,
             "undelivered": dict(proofs.get("receipt") or {}), "cost": cost,
             "runtime": runtime, "content": content}
 
@@ -2588,9 +2602,11 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                 "generated_at": _now_iso(),
                 "proofs": _empty_proofs(reason),
                 "structure": {"tri": TRI_UNREADABLE, "reason": reason,
+                              "source": _src("out/paper/main.tex"),
                               "paper": _paper_facts(str(root_p)),
                               "checks": {}, "ledger": {}, "findings": []},
                 "closing": {"tri": TRI_UNREADABLE, "reason": reason,
+                            "source": _src("out/review/m-verdicts.jsonl"),
                             "gates": {"cells": [], "counts": {"pass": 0, "fail": 0,
                                                               "unknown": 0, "na": 0},
                                       "machine_pass": False, "m_says_done": False,
@@ -2620,6 +2636,7 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                                         "source": _src("sessions/")},
                             "content": {"tri": TRI_UNREADABLE, "reason": reason,
                                         "criteria": {}, "details": {}, "titles": {},
+                                        "sources": {},
                                         "failed": [], "unchecked": [], "passed": False,
                                         "note": ""}}}
     tris = [str(structure.get("tri") or ""), str(proofs.get("tri") or ""),
@@ -2650,13 +2667,13 @@ def source_window(root: str | Path, path: str, *, line: int = 0,
                   match: str = "", max_lines: int = SOURCE_LINES_MAX) -> dict[str, Any]:
     """`GET /api/source` 的读模型：工作区内一个文本文件的原文窗口。
 
-    四条闸（缺一条都等于把工作区文件读给浏览器）：
+    五条闸（缺一条都等于把工作区文件读给浏览器）：
 
-    1. **相对路径**：绝对路径一律拒（`Path.is_absolute()`；Windows 盘符路径同样命中）；
-    2. **不许越界**：路径分量里出现 `..` 直接拒，不做"resolve 之后再看"的侥幸；
-    3. **工作区内**：`resolve()` 之后必须 `relative_to(workspace)`，符号链接跳出去也算越界；
-    4. **文本后缀**：只认 `SOURCE_SUFFIXES`（PDF / 图片 / 可执行文件不认）；
-    5. **大文件截断**：只先读 `SOURCE_SCAN_BYTES`，窗口最多 `max_lines` 行；总行数只在
+    1. 相对路径：绝对路径一律拒（`Path.is_absolute()`；Windows 盘符路径同样命中）；
+    2. 不许越界：路径分量里出现 `..` 直接拒，不做"resolve 之后再看"的侥幸；
+    3. 工作区内：`resolve()` 之后必须 `relative_to(workspace)`，符号链接跳出去也算越界；
+    4. 文本后缀：只认 `SOURCE_SUFFIXES`（PDF / 图片 / 可执行文件不认）；
+    5. 大文件截断：只先读 `SOURCE_SCAN_BYTES`，窗口最多 `max_lines` 行；总行数只在
        没截断时给（截断时 `total=None` + `truncated=True`，不编一个假总数）。
 
     三态：任何一条闸不过 ⇒ `tri="unreadable"` + `reason` + 空 `lines`（不是 200 的空文件）。
@@ -5475,7 +5492,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("source", "SourceRef"))),
     ("StructureView",
      "package_face() 的 structure —— B 块（正文体量 / 七类扫描 / 台账覆盖）",
-     (("tri", "Tri"), ("reason", "string"), ("paper", "PaperFacts"),
+     (("tri", "Tri"), ("reason", "string"), ("source", "SourceRef"),
+      ("paper", "PaperFacts"),
       ("checks", "Record<string, StructureCheck>"), ("ledger", "LedgerFacts"),
       ("findings", "StructureFinding[]"))),
     ("PaperFacts",
@@ -5504,7 +5522,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("mapping_state", "string"))),
     ("ClosingView",
      "package_face() 的 closing —— C 块（八格四态 / 机器口径 / 成本 / 时间轴 / 内容级）",
-     (("tri", "Tri"), ("reason", "string"), ("gates", "GateTable"),
+     (("tri", "Tri"), ("reason", "string"), ("source", "SourceRef"),
+      ("gates", "GateTable"),
       ("machine", "MachineCaliber"), ("undelivered", "ReceiptView"),
       ("cost", "CostView"), ("runtime", "RuntimeView"),
       ("content", "ContentAcceptance"))),
@@ -5550,7 +5569,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "ClosingView.content —— reviewaccept 五条（只读、不进机器门）",
      (("tri", "Tri"), ("reason", "string"),
       ("criteria", "Record<string, string>"), ("details", "Record<string, string>"),
-      ("titles", "Record<string, string>"), ("failed", "string[]"),
+      ("titles", "Record<string, string>"), ("sources", "Record<string, SourceRef>"),
+      ("failed", "string[]"),
       ("unchecked", "string[]"), ("passed", "boolean"), ("note", "string"))),
     ("SourceRef",
      "每一格的原文出处（`/api/source` 的三个入参 + 一个标签）",

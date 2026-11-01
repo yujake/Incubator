@@ -192,8 +192,8 @@ def test_the_scan_is_not_vacuous() -> None:
     # 代码里不许再有它。
     assert "String(r.fail_open)" not in _strip_comments(evidence)
     acceptance = sources["Acceptance.tsx"]
-    assert "{blank(detail)}" in acceptance, (
-        "Acceptance 的「读数」列没有走 blank()（空 detail 会重新印成 unknown）")
+    assert "{blank(plain(cell.detail))}" in acceptance, (
+        "Acceptance 的八格「原话」列没有走 blank()（空 detail 会重新印成 unknown）")
     assert 'detail === "" ? "unknown"' not in _strip_comments(acceptance)
 
 
@@ -240,12 +240,12 @@ def test_negative_control_the_old_fail_open_render_turns_it_red() -> None:
 def test_negative_control_the_old_empty_detail_turns_it_red() -> None:
     """负控②：把 Acceptance 的「读数」列改回 `detail === "" ? "unknown" : detail` ⇒ 必红。"""
     sources = _page_sources()
-    planted = _with_replaced("Acceptance.tsx", old="{blank(detail)}",
-                            new='{detail === "" ? "unknown" : detail}')
+    planted = _with_replaced("Acceptance.tsx", old="{blank(plain(cell.detail))}",
+                            new='{cell.detail === "" ? "unknown" : cell.detail}')
     problems = audit_page_sources(planted)
     assert len(problems) == 1, problems
     lineno = sources["Acceptance.tsx"][:sources["Acceptance.tsx"].index(
-        "{blank(detail)}")].count("\n") + 1
+        "{blank(plain(cell.detail))}")].count("\n") + 1
     assert problems[0].startswith(f"Acceptance.tsx:{lineno} R2"), problems[0]
     assert "撞名" in problems[0], problems[0]
 

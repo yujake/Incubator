@@ -64,9 +64,10 @@ def test_no_paper_is_not_applicable_not_zero(artifacts_ws: pathlib.Path) -> None
         "tri", "reason", "paper_theorem_envs", "propositions_with_proof",
         "ledger_theorem_kinds", "signed", "coverage_note", "review_states",
         "rows", "vsign", "receipt", "c3"}
-    assert _keys(pkg["structure"]) == {"tri", "reason", "paper", "checks", "ledger", "findings"}
-    assert _keys(pkg["closing"]) == {"tri", "reason", "gates", "machine", "undelivered",
-                                     "cost", "runtime", "content"}
+    assert _keys(pkg["structure"]) == {"tri", "reason", "source", "paper", "checks",
+                                       "ledger", "findings"}
+    assert _keys(pkg["closing"]) == {"tri", "reason", "source", "gates", "machine",
+                                     "undelivered", "cost", "runtime", "content"}
     assert pkg["structure"]["tri"] == "not_applicable"
     assert pkg["structure"]["paper"]["exists"] is False
     assert pkg["structure"]["paper"]["lines"] is None, "没有正文不许写成 0 行"
@@ -158,10 +159,12 @@ def test_every_row_carries_a_source_ref(artifacts_ws: pathlib.Path) -> None:
     """`source` 的四格恒定（path / line / match / label）；空出处也要四格俱全。"""
     pkg = R.package_face(artifacts_ws, project_dir=str(artifacts_ws))
     refs = [pkg["proofs"]["c3"]["source"],
+            pkg["structure"]["source"], pkg["closing"]["source"],
             pkg["closing"]["cost"]["source"],
             pkg["closing"]["runtime"]["source"],
             pkg["closing"]["machine"]["source"]]
     refs += [cell["source"] for cell in pkg["closing"]["gates"]["cells"]]
+    refs += list(pkg["closing"]["content"]["sources"].values())
     for ref in refs:
         assert set(ref) == {"path", "line", "match", "label"}, ref
         assert isinstance(ref["line"], int)

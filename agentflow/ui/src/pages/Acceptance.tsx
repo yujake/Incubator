@@ -1,21 +1,16 @@
 /*
- * 收工门内容级验收（`draft/74 §3.6` 逐行落）。
+ * 论文包三块（2026-11-01，块 4）：A 证明完整吗 / B 结构合规吗 / C 能不能收工。
  *
- * 输入：`api.getAcceptance({projectDir, reportPath, capUsd})` → `AcceptanceView`
- * （B 线的 `readers.acceptance_face` ← `reviewaccept.check_review`）。SSE：`state`。
+ * 一次 `GET /api/package` 拿三块：三块总是一起看，一次请求才有同一份快照。
+ * 每一格都带 `source`（path / line / match），由 `SourceLink` 走 `/api/source`
+ * 点开原文 —— 没有出处的数字不许上屏。
  *
- * 这一页的词表与别处不同，必须原样保留 —— `criteria` 的值是
- * `pass` / `fail` / `unknown`（`reviewaccept` 的判据读数），它不是 `Tri` 的三个词，
- * 也不是 `ReportTri` 的三个词。三态纪律在这里的落点是把它们**逐档分清**：
- *
- * - `pass` ⇒ 绿；
- * - `fail` ⇒ 红（这一格查过了、结论是没过）；
- * - `unknown` ⇒ 黄（这一格**没查成**）——`draft/74 §3.6` 第 3 行点名的就是这一档：
- *   不给 `cap_usd` ⇒「在成本上限内」那一格是"没查成"，**不是通过**；
- * - 上表没有的词 ⇒ 灰 + 原样显示那个词（不假装认识它）。
- *
- * 两处**如实标注的缺口**：第 4 行（与工具面 `conductor.closing` 同源的第二读数）
- * 与第 5 行（污染面），`AcceptanceView` 里都没有对应的栏，今天也没有别的端点给它们。
+ * 三态纪律（这一页的全部价值所在）：
+ * - 块级 `tri`：`computed` / `unreadable` / `not_applicable`；读不到写"没查成"，
+ *   不写 0。没有正文 ⇒ B 块 `not_applicable`（不是 0 行、0 个定理）。
+ * - 八格是四态：`pass` / `fail` / `unknown`（没查成）/ `na`（不适用）。
+ * - 内容级验收五条**不进机器门**：`failed`（真不过）与 `unchecked`（没查成）
+ *   分两栏显示，不许折成一个 "failed"。
  */
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
@@ -23,12 +18,66 @@ import { useState } from "preact/hooks";
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { SourceLink } from "../components/SourceLink";
 import { blank } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 
-/** 一个判据格的视觉档（`pass` / `fail` / `unknown` 三档 + 不认识的词那一档）。 */
-function verdictBadge(value: string): ComponentChildren {
+/** 后端 `closing` 的 detail 里带 `**`；源码不是 Markdown，上屏前逐字去掉。 */
+function plain(text: string): string {
+  return text.split("**").join("");
+}
+
+function num(value: number | null | undefined): string {
+  return value === null || value === undefined ? "没读到" : String(value);
+}
+
+function usd(value: number | null | undefined): string {
+  return value === null || value === undefined ? "没读到" : value.toFixed(6);
+}
+
+/** 一条命题的 review state（六态；不认识的词原样显示，不假装认识）。 */
+function stateBadge(state: string): ComponentChildren {
+  if (state === "signed") {
+    return <Badge kind="badge-pass" text="已签" />;
+  }
+  if (state === "rejected") {
+    return <Badge kind="badge-fail" text="有毛病" />;
+  }
+  if (state === "stale") {
+    return <Badge kind="badge-unknown" text="待复核" />;
+  }
+  if (state === "holding") {
+    return <Badge kind="badge-na" text="累积中" />;
+  }
+  if (state === "unsigned") {
+    return <Badge kind="badge-na" text="没签过" />;
+  }
+  if (state === "unreadable") {
+    return <Badge kind="badge-unknown" text="没查成" />;
+  }
+  return <Badge kind="badge-na" text={state === "" ? "unknown" : state} />;
+}
+
+/** 八格的四态（`na` 不许折进 `unknown`）。 */
+function gateBadge(status: string): ComponentChildren {
+  if (status === "pass") {
+    return <Badge kind="badge-pass" text="过了" />;
+  }
+  if (status === "fail") {
+    return <Badge kind="badge-fail" text="没过" />;
+  }
+  if (status === "unknown") {
+    return <Badge kind="badge-unknown" text="没查成（不是通过）" />;
+  }
+  if (status === "na") {
+    return <Badge kind="badge-na" text="不适用" />;
+  }
+  return <Badge kind="badge-na" text={status === "" ? "unknown" : status} />;
+}
+
+/** 内容级五条的三态（`unknown` 是没查成，不是没过）。 */
+function reviewBadge(value: string): ComponentChildren {
   if (value === "pass") {
     return <Badge kind="badge-pass" text="过了" />;
   }
@@ -41,21 +90,26 @@ function verdictBadge(value: string): ComponentChildren {
   return <Badge kind="badge-na" text={value === "" ? "unknown" : value} />;
 }
 
+function canCloseWord(value: boolean | null): string {
+  if (value === true) {
+    return "可以交（机器口径成立）";
+  }
+  if (value === false) {
+    return "不能交（机器口径不成立）";
+  }
+  return "没接线（算不出来，不是通过）";
+}
+
 export function Acceptance() {
   const [capText, setCapText] = useState("");
   const cap = capText.trim() === "" ? null : Number(capText);
-  // 只有"读成一个有限数字"才算给了上限（2026-10-27）：`Number("abc")` 是 NaN，
-  // 而后端的 `float("NaN")` 不会抛 —— 它照样把 NaN 当上限算，于是「在成本上限内」
-  // 那一格从"没查成"变成一条假的"没过"。这一格自己的说明写的就是"没给 ⇒ 没查成"，
-  // 所以拼请求时按同一口径：不是有限数就当没给。
+  // 只有"读成一个有限数字"才算给了上限：`Number("abc")` 是 NaN，而后端的
+  // `float("NaN")` 不抛 —— 那一格会从"没查成"变成一条假的"没过"。
   const usableCap = cap !== null && Number.isFinite(cap) ? cap : null;
-  // 2026-11-01（块 1）：这一页此前只拼 `capUsd`，于是 `acceptance_face` 的
-  // `project_dir` 恒为空 ⇒ `reviewaccept._auxiliary` 拿不到项目根 ⇒
-  // `tex_sha256` / `pdf_pages` / `receipt_matches_tex` 三格**按构造永远**空/unknown
-  // —— 连一份有 24 页 PDF 的成品工作区也一样。`projectDir: "."` 按后端
-  // `resolve_under_workspace` 的口径解析为工作区根（不是进程 cwd），报告路径
-  // 用它自己的缺省落点；两者都只是"告诉读数去哪里看"，不改变任何判据。
-  const face = useFace(() => api.getAcceptance({
+  // `project_dir` / `report_path` 必须传：不传时 `_auxiliary` 的 tex / pdf / 回执
+  // 三格按构造永远空/unknown（块 1 的缺陷）。`"."` 按后端 `resolve_under_workspace`
+  // 解析成工作区根，不是进程 cwd。
+  const face = useFace(() => api.getPackage({
     projectDir: ".",
     reportPath: "out/review/REPORT.md",
     capUsd: usableCap,
@@ -64,36 +118,36 @@ export function Acceptance() {
   if (face.data === null) {
     return (
       <Card
-        title="验收"
+        title="论文包"
         tone={face.problem === "" ? "plain" : "problem"}
-        right={face.problem === "" ? null : <TriState tri="unreadable" reason={face.problem} label="验收面" />}
+        right={face.problem === "" ? null : <TriState tri="unreadable" reason={face.problem} label="论文包" />}
       >
         <span class="readings">{face.problem === "" ? "正在读盘……" : face.problem}</span>
       </Card>
     );
   }
 
-  const acc = face.data;
-  const criteria = Object.keys(acc.criteria).sort();
-  const auxiliary = Object.keys(acc.auxiliary).sort();
+  const pkg = face.data;
+  const proofs = pkg.proofs;
+  const structure = pkg.structure;
+  const closing = pkg.closing;
+  const gates = closing.gates;
+  const content = closing.content;
 
   return (
     <>
       <Card
-        title="内容级验收（收工门）"
-        subtitle={`${criteria.length} 条判据 + ${auxiliary.length} 条辅助读数`}
-        tone={isUnreadable(acc.tri) ? "problem" : "plain"}
-        right={<TriState tri={acc.tri} label="验收面" reason={acc.reason} />}
+        title="论文包"
+        subtitle="A 证明完整吗 · B 结构合规吗 · C 能不能收工"
+        tone={isUnreadable(pkg.tri) ? "problem" : "plain"}
+        right={<TriState tri={pkg.tri} label="论文包" reason={pkg.reason} />}
       >
         <div class="readings">
-          判据名唯一来源：<span class="mono">reviewaccept.CRITERIA</span> 与 <span class="mono">AUXILIARY_SIGNALS</span>。
+          生成时刻 <span class="mono">{pkg.generated_at}</span>；三块一次读盘。
+          读不到就写「没查成（不是通过）」，不写 0。
         </div>
-        {acc.failed.length === 0 ? null : (
-          <div class="readings">
-            不是 pass 的格子 <span class="mono">{acc.failed.join("、")}</span>
- （后端把 fail 与 unknown 都放进 failed；逐条看「结论」列 —— 那一列把两档分开画，
- 而这里不再自己从 criteria 里筛一遍 unknown：同一件事算两遍，迟早两处说两种话）
-          </div>
+        {pkg.reason === "" ? null : (
+          <div class="readings">三块里没查成的部分：<span class="mono">{pkg.reason}</span></div>
         )}
         <div class="card-head">
           <span class="caption">成本上限（cap_usd）</span>
@@ -112,98 +166,335 @@ export function Acceptance() {
         </div>
       </Card>
 
-      <Card title="五条判据" subtitle="逐条：名字 · 三态 · 读数">
-        {criteria.length === 0 ? (
-          <span class="empty">一条判据都没读到（即"没查成"）。</span>
+      <Card
+        title="A 证明完整吗"
+        subtitle="每 statement 的 review state · streak · V 签覆盖率 · 回执送达"
+        tone={isUnreadable(proofs.tri) ? "problem" : "plain"}
+        right={<TriState tri={proofs.tri} label="证明面" reason={proofs.reason} />}
+      >
+        {proofs.tri === "unreadable" ? (
+          <span class="empty">{proofs.reason || "证明那一块没查成"}</span>
         ) : (
-          <table class="grid">
-            <thead>
-              <tr>
-                <th>判据</th>
-                <th>结论</th>
-                <th>读数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {criteria.map((k) => {
-                const detail = acc.details[k] ?? "";
-                return (
-                  <tr key={k}>
-                    <td class="mono">{k}</td>
-                    <td>{verdictBadge(acc.criteria[k] ?? "")}</td>
-                    {/* 「读数」列的空 detail 走 `blank()` ⇒ `—`，**不是** `unknown`：
-                        `reviewaccept` 在几条判据**过了**的时候不写 details（例如
-                        `within_cost_cap` 的通过分支），而 `unknown` 在同一页专指
-                        「没查成」——改前 `detail === "" ? "unknown" : detail` 会让
-                        那一行变成「结论 过了 / 读数 unknown」。
-                        三态在左列，正文在这里；两件事各说各的。 */}
-                    <td class="mono">{blank(detail)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </Card>
+          <>
+            <div class="readings">
+              正文定理类环境 <span class="mono">{num(proofs.paper_theorem_envs)}</span> ·
+              有证明的命题 <span class="mono">{num(proofs.propositions_with_proof)}</span> ·
+              台账定理类 <span class="mono">{num(proofs.ledger_theorem_kinds)}</span> ·
+              V 已签 <span class="mono">{num(proofs.signed)}</span>
+            </div>
+            <div class="readings">{proofs.coverage_note}</div>
+            <div class="readings">
+              C3「{proofs.c3.name || "逐行走查签字的证明"}」：
+              <span class="mono">{num(proofs.c3.got)}</span> / 要求 ≥
+              <span class="mono">{num(proofs.c3.min)}</span> ·
+              {proofs.c3.ok ? " 过了" : " 没过"} <SourceLink source={proofs.c3.source} label="验收表" />
+            </div>
 
-      <Card title="五种辅助读数" subtitle="逐条同形（读不出来写 unknown，不写 0）">
-        {auxiliary.length === 0 ? (
-          <span class="empty">一条辅助读数都没读到。</span>
-        ) : (
-          <table class="grid">
-            <thead>
-              <tr>
-                <th>辅助读数</th>
-                <th>值</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auxiliary.map((k) => {
-                const v = acc.auxiliary[k] ?? "";
-                return (
-                  <tr key={k}>
-                    <td class="mono">{k}</td>
-                    <td class="mono">{v === "" ? "unknown（没读到）" : v}</td>
+            <div class="readings">
+              V 签侧文件：<span class="mono">out/vsigns/</span> 在盘上
+              <span class="mono">{proofs.vsign.files}</span> 份 · 状态
+              <span class="mono">{proofs.vsign.tri}</span> · 已签
+              <span class="mono">{proofs.vsign.signed.length}</span> · 有侧文件
+              <span class="mono">{proofs.vsign.backed.length}</span> · 无侧文件
+              <span class="mono">{proofs.vsign.without_sign.length}</span> · 孤儿签
+              <span class="mono">{proofs.vsign.orphan_signs.length}</span>
+            </div>
+            {proofs.vsign.reason === "" ? null : (
+              <div class="readings">{proofs.vsign.reason}</div>
+            )}
+
+            <div class="readings">
+              回执：<span class="mono">{proofs.receipt.receipts}</span> 条
+              （<span class="mono">{proofs.receipt.statements}</span> 条命题）· 已投出
+              <span class="mono">{proofs.receipt.dispatched}</span>（送达
+              <span class="mono">{proofs.receipt.delivered}</span>）· 未投出
+              <span class="mono">{proofs.receipt.not_dispatched}</span> · 未送达
+              <span class="mono">{proofs.receipt.undelivered}</span>
+            </div>
+            {Object.keys(proofs.receipt.steps).length === 0 ? null : (
+              <div class="readings">
+                缺陷步分布：
+                {Object.entries(proofs.receipt.steps).map(([step, n]) => `第${step}步×${n}`).join("、")}
+                ；替人送审 <span class="mono">{proofs.receipt.submitter_is_not_author}</span> ·
+                作者未记录 <span class="mono">{proofs.receipt.author_not_recorded}</span>
+              </div>
+            )}
+            {proofs.receipt.reason === "" ? null : (
+              <div class="readings">{proofs.receipt.reason}</div>
+            )}
+
+            <div class="caption">review 六态（分母 = 有 proof_text 的命题）</div>
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>状态</th>
+                  <th>条数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(proofs.review_states).sort().map(([state, count]) => (
+                  <tr key={state}>
+                    <td>{stateBadge(state)}</td>
+                    <td class="mono">{count}</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {acc.auxiliary_note === "" ? null : (
-          <div class="readings">{acc.auxiliary_note}</div>
+                ))}
+              </tbody>
+            </table>
+
+            <div class="caption">逐条命题（{proofs.rows.length} 行；每行带原文出处）</div>
+            {proofs.rows.length === 0 ? (
+              <span class="empty">一条带证明的命题都没读到（查过了，里面是 0 行）。</span>
+            ) : (
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>命题</th>
+                    <th>状态</th>
+                    <th>证明（streak/need）</th>
+                    <th>缺陷步</th>
+                    <th>原文</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proofs.rows.map((row) => (
+                    <tr key={row.stmt_id}>
+                      <td class="mono">{row.stmt_id} {row.label}</td>
+                      <td>{stateBadge(row.state)}</td>
+                      <td class="mono">
+                        {row.proofs.length === 0 ? "—" : row.proofs.map((p) => (
+                          <span key={p.proof_no}>
+                            #{p.proof_no} {p.streak}/{p.need}
+                            {p.streak_ok ? "（够了）" : ""}
+                            {" "}
+                            <SourceLink source={p.source} label="签行" />
+                          </span>
+                        ))}
+                      </td>
+                      <td class="mono">
+                        {row.proofs.flatMap((p) => p.defect_steps).length === 0
+                          ? "—"
+                          : row.proofs.flatMap((p) => p.defect_steps).join("、")}
+                      </td>
+                      <td><SourceLink source={row.source} label="台账行" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </Card>
 
       <Card
-        title="与工具面同源（缺口）"
-        right={
-          <TriState
-            tri="not_applicable"
-            label="conductor.closing 的第二读数"
-            reason="draft/74 说这一栏要比 conductor.closing 的 review_acceptance 子树里同一个键的值，而 AcceptanceView 里没有那一栏"
-          />
-        }
+        title="B 结构合规吗"
+        subtitle="定理↔proof 配对 · cites/refs/inputs/duplicates · 字符六类 · 台账覆盖"
+        tone={isUnreadable(structure.tri) ? "problem" : "plain"}
+        right={<TriState tri={structure.tri} label="结构面" reason={structure.reason} />}
       >
-        <div class="readings">
- "同一件事在两处是否同值"要一条读 conductor_tools.conductor_closing 的端点
-          才能给读数 —— 页面不许自己编一个数。
-        </div>
+        {structure.tri === "not_applicable" ? (
+          <span class="empty">
+            还没有可查的正文：{structure.reason}
+            <SourceLink source={structure.source} label="正文" />
+          </span>
+        ) : structure.tri === "unreadable" ? (
+          <span class="empty">{structure.reason || "结构那一块没查成"}</span>
+        ) : (
+          <>
+            <div class="readings">
+              正文 <span class="mono">{num(structure.paper.lines)}</span> 行 ·
+              <span class="mono">{num(structure.paper.sections)}</span> 节 ·
+              定理类 <span class="mono">
+                {(structure.paper.env_counts.theorem ?? 0)
+                  + (structure.paper.env_counts.lemma ?? 0)
+                  + (structure.paper.env_counts.proposition ?? 0)
+                  + (structure.paper.env_counts.corollary ?? 0)}
+              </span> 个 · PDF <span class="mono">{num(structure.paper.pdf_pages)}</span> 页 ·
+              编译回执 <span class="mono">{structure.paper.receipt_verdict}</span>
+            </div>
+            <div class="readings">
+              定理类环境 <span class="mono">{num(structure.ledger.statement_envs)}</span> ·
+              proof 环境 <span class="mono">{num(structure.ledger.proof_envs)}</span> ·
+              台账行 <span class="mono">{num(structure.ledger.ledger_rows)}</span> ·
+              命题 <span class="mono">{num(structure.ledger.ledger_propositions)}</span> ·
+              台账定理类 <span class="mono">{num(structure.ledger.ledger_theorem_kinds)}</span> ·
+              对应表 <span class="mono">{num(structure.ledger.mapping_rows)}</span> ·
+              surplus <span class="mono">{structure.ledger.statement_surplus.length}</span>
+            </div>
+
+            <div class="caption">七类扫描（`review.scan` 的同一份实现）</div>
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>类</th>
+                  <th>三态</th>
+                  <th>命中</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(structure.checks).map(([kind, check]) => (
+                  <tr key={kind}>
+                    <td class="mono">{kind}</td>
+                    <td>{check.checked ? <Badge kind="badge-pass" text="查了" /> : <Badge kind="badge-unknown" text="没查成" />}</td>
+                    <td class="mono">{check.findings}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div class="readings">
+              字符六类：
+              {["cjk", "control", "zero_width", "replacement", "bidi", "nbsp"].map((name) => (
+                <span key={name} class="mono">{name}={structure.checks.text_integrity?.counts[name] ?? "—"} </span>
+              ))}
+            </div>
+
+            <div class="caption">命中（{structure.findings.length} 条；每条都能点开原文）</div>
+            {structure.findings.length === 0 ? (
+              <span class="empty">没有命中（查过了，里面是 0 条）。</span>
+            ) : (
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>类</th>
+                    <th>级别</th>
+                    <th>位置</th>
+                    <th>为什么</th>
+                    <th>原文</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {structure.findings.map((f, i) => (
+                    <tr key={`${f.file}:${f.line}:${i}`}>
+                      <td class="mono">{f.kind}</td>
+                      <td class="mono">{f.severity}</td>
+                      <td class="mono">{f.file}:{f.line} {f.ref}</td>
+                      <td>{plain(f.why)}</td>
+                      <td><SourceLink source={f.source} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
       </Card>
 
       <Card
-        title="污染面（缺口）"
-        right={
-          <TriState
-            tri="not_applicable"
-            label="pollution"
-            reason="draft/74 说这一栏读 closing 的 readings['contradictions']（10 键，含 too_large 那一档），而 AcceptanceView 里没有这一栏"
-          />
-        }
+        title="C 能不能收工"
+        subtitle="八格四态 · machine_pass · can_close 三态 · retire · 成本 · 时间轴"
+        tone={isUnreadable(closing.tri) ? "problem" : "plain"}
+        right={<TriState tri={closing.tri} label="收工面" reason={closing.reason} />}
       >
-        <div class="readings">
- 命题级 / 断言级分布与 too_large 那一档同样要新增端点才能给读数。
-        </div>
+        {closing.tri === "unreadable" ? (
+          <span class="empty">{closing.reason || "收工那一块没查成"}</span>
+        ) : (
+          <>
+            <div class="readings">
+              八格计数：pass <span class="mono">{gates.counts.pass}</span> ·
+              fail <span class="mono">{gates.counts.fail}</span> ·
+              unknown <span class="mono">{gates.counts.unknown}</span> ·
+              na <span class="mono">{gates.counts.na}</span> ·
+              machine_pass <span class="mono">{String(gates.machine_pass)}</span> ·
+              can_close <span class="mono">{canCloseWord(gates.can_close)}</span>
+            </div>
+            <div class="readings">
+              M 判据：m_says_done <span class="mono">{String(gates.m_says_done)}</span> ·
+              {gates.verdict_met === null ? "没有人判过" : `met ${String(gates.verdict_met)}`}
+              {gates.verdict_at === "" ? "" : `（${gates.verdict_at}）`}
+              {gates.can_close_reason === "" ? "" : `；${plain(gates.can_close_reason)}`}
+              <SourceLink source={closing.source} label="判据行" />
+            </div>
+
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>格</th>
+                  <th>四态</th>
+                  <th>原话</th>
+                  <th>原文</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gates.cells.map((cell) => (
+                  <tr key={cell.name}>
+                    <td class="mono">{cell.name}</td>
+                    <td>{gateBadge(cell.status)}</td>
+                    <td>{blank(plain(cell.detail))}</td>
+                    <td><SourceLink source={cell.source} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div class="readings">
+              机器口径：retire <span class="mono">{String(closing.machine.retire_complete)}</span>
+              （在册 <span class="mono">{closing.machine.retire_nodes}</span> · 未消
+              <span class="mono">{closing.machine.retire_open_items}</span>）·
+              程序在跑 <span class="mono">{closing.machine.programs_running_count}</span> ·
+              <span class="mono">{closing.machine.reason}</span>
+              <SourceLink source={closing.machine.source} label="名册" />
+            </div>
+
+            <div class="readings">
+              成本：事件求和 <span class="mono">${usd(closing.cost.event_usd)}</span> ·
+              收工行自报 <span class="mono">${usd(closing.cost.spend_usd)}</span> ·
+              无人认领 <span class="mono">${usd(closing.cost.unattributed_usd)}</span> ·
+              没有自报账的趟 <span class="mono">{closing.cost.runs_without_spend}</span> ·
+              usage_ledger <span class="mono">${usd(closing.cost.ledger_usd)}</span>
+              （<span class="mono">{num(closing.cost.ledger_rows)}</span> 行）
+              <SourceLink source={closing.cost.source} label="台账" />
+            </div>
+
+            <div class="readings">
+              时间轴：<span class="mono">{num(closing.runtime.runs_total)}</span> 趟 ·
+              未闭合 <span class="mono">{num(closing.runtime.open_runs)}</span> ·
+              已跑 <span class="mono">{num(closing.runtime.elapsed_sec)}</span> 秒 ·
+              最后收工读数 <span class="mono">{blank(closing.runtime.last_closing_at)}</span>
+            </div>
+            <div class="readings">
+              名册：节点 <span class="mono">{closing.runtime.roster_nodes}</span> ·
+              台账子 <span class="mono">{num(closing.runtime.children_in_ledger)}</span> ·
+              名册项 <span class="mono">{num(closing.runtime.roster_child_count)}</span> ·
+              未销号 <span class="mono">{num(closing.runtime.children_unretired)}</span> ·
+              活跃 <span class="mono">{num(closing.runtime.active_child_count)}</span> ·
+              未登记 <span class="mono">{closing.runtime.unplaced}</span>
+              <SourceLink source={closing.runtime.source} label="会话" />
+            </div>
+
+            <details>
+              <summary class="readings">
+                内容级验收（只读，不进机器门）：{content.failed.length} 条真不过 ·
+                {content.unchecked.length} 条没查成
+              </summary>
+              <div class="readings">{content.note}</div>
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>判据</th>
+                    <th>结论</th>
+                    <th>读数</th>
+                    <th>原文</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(content.criteria).sort().map(([key, value]) => (
+                    <tr key={key}>
+                      <td class="mono">{key}<br />{content.titles[key] ?? ""}</td>
+                      <td>{reviewBadge(value)}</td>
+                      <td>{blank(plain(content.details[key] ?? ""))}</td>
+                      <td>
+                        <SourceLink source={content.sources[key] ?? { path: "", line: 0, match: "", label: "" }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div class="readings">
+                真不过：<span class="mono">{content.failed.join("、") || "无"}</span>；
+                没查成：<span class="mono">{content.unchecked.join("、") || "无"}</span>
+              </div>
+            </details>
+          </>
+        )}
       </Card>
     </>
   );

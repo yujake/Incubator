@@ -1358,6 +1358,7 @@ export interface C3View {
 export interface StructureView {
   tri: Tri;
   reason: string;
+  source: SourceRef;
   paper: PaperFacts;
   checks: Record<string, StructureCheck>;
   ledger: LedgerFacts;
@@ -1416,6 +1417,7 @@ export interface LedgerFacts {
 export interface ClosingView {
   tri: Tri;
   reason: string;
+  source: SourceRef;
   gates: GateTable;
   machine: MachineCaliber;
   undelivered: ReceiptView;
@@ -1500,6 +1502,7 @@ export interface ContentAcceptance {
   criteria: Record<string, string>;
   details: Record<string, string>;
   titles: Record<string, string>;
+  sources: Record<string, SourceRef>;
   failed: string[];
   unchecked: string[];
   passed: boolean;

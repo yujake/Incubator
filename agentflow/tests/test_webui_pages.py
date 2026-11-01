@@ -46,7 +46,9 @@ PAGES: dict[str, tuple[str, ...]] = {
     "Run": ("/api/run/{sid}", "/api/run-index"),
     "Evidence": ("/api/evidence",),
     "Artifacts": ("/api/artifacts",),
-    "Acceptance": ("/api/acceptance",),
+    # 2026-11-01（块 4）：这一页改成三块一次读（A 证明 / B 结构 / C 收工）；
+    # `/api/acceptance` 仍在（兼容旧消费者），但页面不再用它。
+    "Acceptance": ("/api/package",),
     "Machine": ("/api/machine",),
     "Budget": ("/api/budget",),
     "Live": ("/api/live", "/api/status-reports", "/api/usage"),
@@ -79,7 +81,13 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
     # 2026-10-23（业主：sha 原文不显示，只显示一致不一致）：这一格原来钉的是
     # `sha256_now`（盘上现在那一版的哈希）。页面现在读的是 `sha_consistency`
     # （match / mismatch / unknown）—— 钉的位置没变，钉的东西换成了那个词。
-    "Acceptance": ("criteria", "auxiliary", "details", "failed", "capUsd"),
+    # 2026-11-01（块 4）：三块（A/B/C）与它们的行级键。`projectDir` / `reportPath`
+    # 是块 1 的调用姿势（页面必须传下去，否则 aux 三格永远空）。
+    "Acceptance": ("projectDir", "reportPath", "proofs", "structure", "closing",
+                   "review_states", "rows", "vsign", "receipt", "c3",
+                   "paper", "checks", "ledger", "findings",
+                   "gates", "machine", "cost", "runtime", "content",
+                   "failed", "unchecked", "source", "sources"),
     # R90 追加三个：形式化开关本身（`lean_enabled`）、它的来源（`lean_enabled_source`）
     # 与当前模式（`formal_mode`）—— 只看 `lean_ready` 会把"用户关掉了"读成"没装"。
     "Machine": ("provers", "mathlib", "lean_ready", "can_do_formal", "settings",
@@ -105,7 +113,7 @@ EMPTY_WORDS: dict[str, str] = {
     "Run": "这一段会话里一趟都没有",
     "Evidence": "暂无命题（已读出）",
     "Artifacts": "暂无产物台账行",
-    "Acceptance": "一条判据都没读到",
+    "Acceptance": "还没有可查的正文",
     "Machine": "探测读数里一格都没有",
     "Budget": "暂无追加或重设记录",
     "Live": "会话面：没有在跑的循环",
@@ -567,12 +575,16 @@ def test_artifacts_negative_control_catches_a_page_that_hides_the_ledger_tri() -
 
 
 # ====================================================================== 5 Acceptance
-def test_acceptance_page_reads_the_five_criteria_and_the_cost_cap(
+def test_acceptance_page_reads_the_three_package_blocks(
         artifacts_ws: pathlib.Path) -> None:
-    """Acceptance：真读数（5 判据 + 5 辅助）· 三态（不给 cap_usd ⇒ 那一格 unknown）。
+    """Acceptance：三块真读数（A/B/C）· 四态/三态 · 每格带 source · failed/unchecked 分开。
 
-    这一条钉的是 `draft/74 §3.6` 第 3 行：`within_cost_cap` 在不给 `cap_usd` 时
-    必须是 `unknown`（"没查成"），给了 `cap_usd` 才是 `pass`/`fail`。
+    这一条钉的是块 4 的三条硬口径：
+
+    1. 页面读的是 `/api/package` 的三块（不是旧的 `/api/acceptance` 十格）；
+    2. 八格是四态（`pass` / `fail` / `unknown` / `na`），每格都带 `source.path`；
+    3. 内容级五条的 `failed`（真不过）与 `unchecked`（没查成）不重不漏，且页面
+       把 `unknown` 说成"没查成（不是通过）"，不许写成"通过"。
     """
     text = _page_text("Acceptance")
     assert _read_problems("Acceptance", text, PAGE_KEYS["Acceptance"]) == [], (
@@ -581,24 +593,38 @@ def test_acceptance_page_reads_the_five_criteria_and_the_cost_cap(
     assert _tri_state_problems("Acceptance", text) == []
 
     with _server(artifacts_ws) as base:
-        code, acc, _raw = _get(base, "/api/acceptance")
-        assert code == 200, code
-        assert acc["tri"] == "computed", acc
-        assert len(acc["criteria"]) == 5, acc["criteria"]
-        assert set(acc["criteria"].values()) <= {"pass", "fail", "unknown"}, acc["criteria"]
-        assert acc["criteria"]["within_cost_cap"] == "unknown", (
-            "不给 cap_usd ⇒「在成本上限内」那一格是没查成，不是通过：" + str(acc["criteria"]))
-        assert "within_cost_cap" in acc["reason"] or "没查成" in acc["reason"], acc["reason"]
-        assert len(acc["auxiliary"]) == 5, acc["auxiliary"]
-        assert acc["auxiliary"]["task_rows"] == "1", acc["auxiliary"]
+        code, pkg, raw = _get(
+            base, "/api/package?project_dir=.&report_path=out/review/REPORT.md")
+        assert code == 200, (code, raw[:400])
+        assert pkg["tri"] == "computed", pkg
+        assert set(pkg) == {"tri", "reason", "generated_at", "proofs",
+                            "structure", "closing"}, set(pkg)
+        assert pkg["structure"]["tri"] == "not_applicable", pkg["structure"]
+        gates = pkg["closing"]["gates"]
+        assert len(gates["cells"]) == 8, gates["cells"]
+        assert set(gates["counts"]) == {"pass", "fail", "unknown", "na"}, gates["counts"]
+        for cell in gates["cells"]:
+            assert cell["source"]["path"], cell
+        content = pkg["closing"]["content"]
+        assert set(content["criteria"]) == {
+            "statements_have_assumptions_and_source", "triage_branch_recorded",
+            "within_cost_cap", "hops_have_readable_prompts", "attachment_is_honest"}
+        assert set(content["failed"]) & set(content["unchecked"]) == set()
+        assert content["criteria"]["within_cost_cap"] == "unknown", content["criteria"]
 
         # 给了 cap_usd ⇒ 那一格真的算出结论（正控：三态不是恒 unknown）
-        _code, capped, _raw = _get(base, "/api/acceptance?cap_usd=0.5")
-        assert capped["criteria"]["within_cost_cap"] in ("pass", "fail"), capped["criteria"]
+        _code, capped, _raw = _get(
+            base, "/api/package?project_dir=.&report_path=out/review/REPORT.md&cap_usd=0.5")
+        assert capped["closing"]["content"]["criteria"]["within_cost_cap"] in (
+            "pass", "fail"), capped["closing"]["content"]["criteria"]
 
     # 查询参数的名字在 api.ts 那一层（页面用的是 TS 那边的 `capUsd`）
     api_ts = (UI_SRC / "api.ts").read_text(encoding="utf-8")
     assert '"cap_usd"' in api_ts, "api.ts 没把 capUsd 拼成后端的 ?cap_usd="
+    assert '"/api/package"' in api_ts, "api.ts 没声明 /api/package"
+    assert '"/api/source"' in api_ts, "api.ts 没声明 /api/source"
+    # 每一格都能点开原文（没有出处的数字不许上屏）
+    assert "SourceLink" in _strip_js_comments(text), "Acceptance 页没有 SourceLink"
     # 这一页的三态落点：`unknown` 必须被说成"没查成（不是通过）"，不许写成"通过"
     assert "没查成（不是通过）" in _strip_js_comments(text), (
         "Acceptance 页没有把 unknown 那一档说成「没查成（不是通过）」")
@@ -606,9 +632,9 @@ def test_acceptance_page_reads_the_five_criteria_and_the_cost_cap(
 
 def test_acceptance_negative_control_catches_a_page_that_writes_unknown_as_pass() -> None:
     """负控（Acceptance）：页面里把 `unknown` 写成"通过" ⇒ `_page_reads` 之外还得靠文案。"""
-    shell = 'const rows = acc.criteria;\n'
-    assert _read_problems("Acceptance", shell, ("auxiliary",)) == [
-        "Acceptance 页没有读 auxiliary"]
+    shell = 'const pkg = face.data;\n'
+    assert _read_problems("Acceptance", shell, ("proofs",)) == [
+        "Acceptance 页没有读 proofs"]
     # 空态文案与三态落点都得在
     assert _empty_state_problems("Acceptance", shell, EMPTY_WORDS["Acceptance"])
     assert _tri_state_problems("Acceptance", shell)
@@ -621,15 +647,16 @@ def test_acceptance_page_passes_the_project_root_and_report_path(
     改前现场（2026-11-01 实测）：页面只拼 `capUsd` ⇒ `acceptance_face` 的
     `project_dir` 恒为空 ⇒ `_auxiliary` 的 `tex_sha256` / `pdf_pages` /
     `receipt_matches_tex` 三格按构造永远空/unknown，连一份有 24 页 PDF 的成品
-    工作区也一样。这一条用正反两半钉住：
+    工作区也一样。块 4 之后页面走 `/api/package`，但同一个调用姿势（两个入参）
+    仍然必须传；这条判据同时钉住页面源码与旧兼容面 `/api/acceptance` 的读数：
 
-    - 正控：页面源码真的读了这两个入参；端点带上它们之后 aux 五格都有值；
+    - 正控：页面源码真的读了这两个入参；旧端点带上它们之后 aux 五格都有值；
     - 负控：同一个工作区不带它们 ⇒ 那三格回到空/unknown（证明有值不是夹具自带的）。
     """
     text = _page_text("Acceptance")
     reads = _page_reads(text)
-    assert "projectDir" in reads, "Acceptance 页没把 projectDir 传给 api.getAcceptance"
-    assert "reportPath" in reads, "Acceptance 页没把 reportPath 传给 api.getAcceptance"
+    assert "projectDir" in reads, "Acceptance 页没把 projectDir 传给 api.getPackage"
+    assert "reportPath" in reads, "Acceptance 页没把 reportPath 传给 api.getPackage"
 
     root = _workspace_with_a_paper(tmp_path, artifacts_ws)
     with _server(root) as base:
