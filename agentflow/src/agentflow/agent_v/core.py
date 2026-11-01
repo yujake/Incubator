@@ -151,6 +151,38 @@ REVIEW_PASS_NOTE = (
     "不要因为上一次怎么判就跟着判。）")
 
 
+#: 穷举会审「缺材料」那一档的判据与文案，两支（在册 / 未在册）共用这一处。
+#:
+#: 判据只有一条：会审自己的结论是 `exhaustionreport.VERDICT_UNKNOWN`（缺材料时
+#: `review()` 就这么判，`missing` 里点名缺哪一块）。为什么不是一个新常量：`review()` 是
+#: 那一档的唯一产出方，在这里另立一份字面量等于给同一件事造第二个真身。
+#:
+#: 文案为什么必须共用：两支落的东西不同（在册支进 `verifications/<号>.jsonl` 之前就 return，
+#: 未在册支进 `verifications/pending/<sha>.jsonl` 之前就 return），但读的人是同一批
+#: （F 要知道补什么、B 要知道这一条没审成）。2026-11-01 的审计现场正是两支各写各的：
+#: 在册支有护栏、未在册支没有 ⇒ 缺材料被折成「成立」写进 pending 台账。抄写两份文案迟早
+#: 会漂，所以只留这一份。
+MISSING_MATERIAL_REASON = "missing_material"
+
+
+def missing_material_detail(verdict: Mapping[str, Any],
+                            missing: list[str]) -> str:
+    """「缺材料 ⇒ 没查成」那一句（在册 / 未在册两支逐字同一句）。
+
+    返回空串 = 这一档不是缺材料（判据在调用方那一侧：`verdict_of(reviewed)["verdict"]`
+    等不等于 `VERDICT_UNKNOWN`）—— 这样调用方只需要判一次，文案不会出现第二份。
+    """
+    from .. import exhaustionreport as _ER
+
+    if str(verdict.get("verdict") or "") != _ER.VERDICT_UNKNOWN:
+        return ""
+    return (
+        f"穷举型证据会审缺材料（{'; '.join(missing) or '没点名'}）⇒ 这一格"
+        "**没查成**：既不判「成立」（缺材料不许判成立）、也不判「有毛病」"
+        "（没有找到缺陷，不许按缺陷打回 F），台账里不留行。"
+        "补上缺的那几块之后重新送审（会审的七项读数在 exhaustion_review 里）。")
+
+
 def _read_only_facts(store: Any, statement_id: str) -> str:
     """只读读数（命题现状 + 文献/实验条数）—— I12 里"只读查询面"那一半。
 
@@ -628,20 +660,21 @@ class AgentV:
                 # 会审自己的结论那一句，而不是 F 的证明正文（I12 同一条纪律）。
                 _n_verdict = _ER.verdict_of(_reviewed)
                 _missing = [str(m) for m in (_reviewed.get("missing") or [])]
-                if str(_n_verdict.get("verdict") or "") == _ER.VERDICT_UNKNOWN:
+                _missing_detail = missing_material_detail(_n_verdict, _missing)
+                if _missing_detail:
                     # ---- 缺材料 ⇒ 没查成（业主 2026-11-01：不存在「看不出来」这一档）----
                     #
                     # 会审本身跑完了（七项逐项有读数），但盘上缺了该有的那一块：这既不是
                     # "找到了缺陷"（不许打回 F），也不是"没找到缺陷"（不许判成立）。
                     # 诚实的那一格只有"没查成"：`checked=False` + 明确 reason，台账里不留行
                     # （留一行会把"没查成"冒充成"审过了"）。缺哪一块逐条进 detail。
+                    #
+                    # 判据与文案都在 `missing_material_detail` 里：未在册那一支
+                    # （`_review_without_statement`）用同一处 —— 两支必须同一条，
+                    # 否则其中一支漏掉时"缺材料 ⇒ 成立"就会从那一支漏出来（P0-1）。
                     out["checked"] = False
-                    out["reason"] = "missing_material"
-                    out["detail"] = (
-                        f"穷举型证据会审缺材料（{'; '.join(_missing) or '没点名'}）⇒ 这一格"
-                        "**没查成**：既不判「成立」（缺材料不许判成立）、也不判「有毛病」"
-                        "（没有找到缺陷，不许按缺陷打回 F），台账里不留行。"
-                        "补上缺的那几块之后重新送审（会审的七项读数在 exhaustion_review 里）。")
+                    out["reason"] = MISSING_MATERIAL_REASON
+                    out["detail"] = _missing_detail
                     self._emit(f"verify_proof({sid})：穷举会审缺材料 —— 没查成，不落台账行"
                                f"（{_missing}）")
                     return out
@@ -1373,6 +1406,12 @@ class AgentV:
 
         返回 `{"reviewed": {...}, "row": {...}}`；台账写不进去时返回
         `{"reason": "ledger_unwritable", "detail": ...}`（这一格"没查成"，不是"签过了"）。
+
+        缺材料时返回 `{"reason": "missing_material", "detail": ..., "reviewed": {...}}`，
+        一行都不落（判据与文案与在册那一支同一处：`missing_material_detail`）。
+        为什么未在册这一支更要紧：它落的是 `verifications/pending/<sha>.jsonl` ——
+        那一行按对象 sha 可认领，B 登记之后它就是正式的凭据。一行折出来的「成立」
+        在这里不是"多写一行"，是把"没查成"冒充成"审过了"（P0-1 的现场）。
         """
         if not str(text or "").strip():
             return None
@@ -1388,10 +1427,24 @@ class AgentV:
             return None
         reviewed = _ER.review(workspace_root=self.workspace_root,
                               statement={"proof_text": text}, experiments=exp_rows)
+        _verdict = _ER.verdict_of(reviewed)
+        _missing = [str(m) for m in (reviewed.get("missing") or [])]
+        _missing_detail = missing_material_detail(_verdict, _missing)
+        if _missing_detail:
+            # ---- 缺材料 ⇒ 没查成（与在册那一支同一判据、同一文案）----
+            #
+            # 审计现场（draft/172 §三 P0-1）：改前这里直接 `record_pending_sign(verdict=
+            # verdict_of(reviewed))`，而 `record_pending_sign` 过 `parse_verdict` ⇒
+            # 「看不出来」折成「成立」落进 pending 台账。V 的冷启动逐字禁止这么做
+            # （缺材料 ⇒ 没查成、台账里不留行）。所以护栏放在落盘之前，一行都不写。
+            self._emit(f"verify_proof(未在册)：穷举会审缺材料 —— 没查成，不落 pending 行"
+                       f"（{_missing}）")
+            return {"reason": MISSING_MATERIAL_REASON, "detail": _missing_detail,
+                    "reviewed": reviewed}
         try:
             row = VR.record_pending_sign(
                 self.workspace_root, proof_text=text,
-                verdict=_ER.verdict_of(reviewed), verifier=self.actor,
+                verdict=_verdict, verifier=self.actor,
                 object_sha256=str(reviewed.get("report_sha256") or ""),
                 object_path=str(reviewed.get("report_path") or ""))
         except (VR.VerificationError, OSError) as exc:
@@ -1413,6 +1466,15 @@ class AgentV:
         if str(got.get("reason") or ""):
             out["reason"] = str(got.get("reason"))
             out["detail"] = str(got.get("detail") or "")
+            reviewed = dict(got.get("reviewed") or {})
+            if reviewed:
+                # 缺材料那一档：会审跑完了、七项读数在手上，而 detail 里承诺了
+                # 「会审的七项读数在 exhaustion_review 里」⇒ 不带出来那句话就是假话。
+                # 四格与在册那一支护栏之前落的完全同形（不多不少）。
+                out["exhaustion_review"] = reviewed
+                out["signer"] = str(reviewed.get("signed_by") or "")
+                out["proof_authors"] = list(reviewed.get("proof_authors") or [])
+                out["report_path"] = str(reviewed.get("report_path") or "")
             return out
         row = dict(got.get("row") or {})
         reviewed = dict(got.get("reviewed") or {})
