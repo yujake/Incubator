@@ -994,7 +994,7 @@ _ROLES_V = ("V",)
 @tool(
     "verify.verify_proof",
     (
-            "把一份证明按写成后的样子整体重读（V 的唯一主动作）：三态结论 + 问题指到步号，并写 verifications/<命题号>.jsonl。`"
+            "把一份证明按写成后的样子整体重读（V 的唯一主动作）：两态结论（成立 / 有毛病）+ 问题指到步号，并写 verifications/<命题号>.jsonl。`"
             "side_effect=read`：V 不写表。"
             ),
     {
