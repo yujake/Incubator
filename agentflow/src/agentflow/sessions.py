@@ -355,17 +355,32 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     `agent_step` 事件里没有任务号，多代理交错时按位置数只能算到别家头上，而收工行是这一趟
     自己写的账。收工行缺这两格（老数据 / 夹具）⇒ 落回逐条数。
 
-    键与 `webui.state._scan` 逐字相同（20 个）—— `draft/75 §1.3` 的 `RunRow`：
+    ## 花销：两个来源都留着，谁也不许顶替谁（162 ②）
+
+    - `usd`：**事件求和** —— 把归到这一趟的 `llm_call.usd` 加起来（归属规则见上）。
+      空 `task_id` 的调用只能按 role 猜主人，多代理交错时会算到别家头上：
+      81 上 71 趟里 18 趟与自己的收工行有小数差（合计 5.728771 vs 5.678979，差 $0.049792）。
+    - `spend_usd` / `spend_unknown_usd_calls`：**这一趟自己的缝**记的账
+      （`agent_run_end.spend`，写侧 `agent_loop.py` 的收工事件、形状 `llmseam.SeamSpend.to_dict()`）。
+      它不看 `task_id`，所以它天然认得"自己发出的、事件里没记编号"的调用。
+      没有收工行（`end_index is None`）⇒ 两格都是 `None`，**不是 0**；收工行缺其中一格
+      ⇒ 那一格是 `None`（逐格回退，不是整块回退）。
+
+    为什么两个都给而不是拿自报账顶替事件求和：`webui.readers.run_view` 的
+    `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
+    事件求和是这个数**唯一**的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
+
+    键与 `webui.state._scan` 逐字相同（22 个）—— `draft/75 §1.3` 的 `RunRow`：
     `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd,
-    stop_reason, final_chars, summons, messages, elapsed_sec, last_shape,
-    end_index, end_ts, waiting_on, waiting, events_in_run`。
+    spend_usd, spend_unknown_usd_calls, stop_reason, final_chars, summons, messages,
+    elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting, events_in_run`。
     `usd`/`final_chars`/`summons`/`messages`/`elapsed_sec` 读不到就是 `None`
     （三态：不是 0）；`unknown_usd` 是"算不出价钱的那几次"的计数，它天然是 0 起算。
     """
     rows = list(events)
     runs: list[dict] = []
     #: 还没闭合的趟：`(task_id, run)`，按开始顺序。`task_id` 只留在这里，不进行（行键集与
-    #: `RunRow` 的 20 个逐字相同，加一格就是改契约）。
+    #: `RunRow` 的 22 个逐字相同，加一格就是改契约 —— 162 ④ 会把它加进去）。
     open_runs: list[tuple[str, dict]] = []
 
     def _owner_of(tid: str, role: str) -> tuple[str, dict] | None:
@@ -390,6 +405,8 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 "task": str(e.get("task") or ""),
                 "start_index": i, "start_ts": str(e.get("ts") or ""),
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
+                # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
+                "spend_usd": None, "spend_unknown_usd_calls": None,
                 "stop_reason": "", "final_chars": None, "summons": None,
                 "messages": None, "elapsed_sec": None, "last_shape": "",
                 "end_index": None, "end_ts": "",
@@ -432,6 +449,16 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
                 calls = spend.get("calls")
                 if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
                     cur["llm_calls"] = calls
+                # 162 ②：收工行自报的花销 —— 单独成格，**不顶替**上面的 `usd`（事件求和）。
+                # 逐格回退：缺哪一格就那一格留 `None`（"收工行没报这一格" ≠ "这一格是 0"）。
+                reported_usd = spend.get("usd")
+                if (isinstance(reported_usd, (int, float))
+                        and not isinstance(reported_usd, bool)):
+                    cur["spend_usd"] = float(reported_usd)
+                unknown_reported = spend.get("unknown_usd_calls")
+                if (isinstance(unknown_reported, int)
+                        and not isinstance(unknown_reported, bool) and unknown_reported >= 0):
+                    cur["spend_unknown_usd_calls"] = unknown_reported
             open_runs.remove(hit)
     # 待答问题挂在「正在等它」的那一趟上：与 `_scan` 同一口径
     # （停止理由空着却停在一个没答的问题上 ⇒ 那一档写 `waiting_for_user`）。
@@ -453,6 +480,47 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
         run["waiting"] = bool(mine) and run["stop_reason"] == "waiting_for_user"
         run["events_in_run"] = max(0, hi - run["start_index"])
     return runs
+
+
+def unattributed_usd_of(events: Iterable[Mapping[str, Any]],
+                        runs: Iterable[Mapping[str, Any]]) -> float:
+    """这一批事件里「有、而**没有任何一趟**的自报账认得」的钱（162 ②）。
+
+    定义：`llm_call.usd` 合计 − 各趟 `spend_usd` 合计（`spend_usd` 是 `None` 的趟贡献 0）。
+
+    ## 它回答的是"那批没人认领的调用去哪了"
+
+    改前这笔钱没有落点，它的去向是**被硬塞给某一趟**：`_owner_of` 的 ② 档"按 role 猜"，
+    于是空 `task_id` 的调用会算进"同角色最近开始的那一趟"。81 上 71 趟里有 18 趟因此与
+    自己的收工行有小数差（合计 +$0.049792），而真实情况是 80 条调用（$0.136779）根本没有
+    主人 —— 其中 70 条是 `secretary:*`（$0.086987，被整条丢掉），10 条是别的（$0.049792，
+    被塞给了 11 趟）。这一格把那 80 条变成一个**会话级**读数，逐趟的 `usd` 不再吃它。
+
+    ## 三态
+
+    - 有 `llm_call` 事件、每一分钱都被某趟的自报账认领 ⇒ `0.0`（真的 0，不是"没算"）；
+    - 没有 `llm_call` 事件 ⇒ `0.0`（同一条口径：0 条调用、0 元）；
+    - "没查成"（会话文件读不出来）由调用方给 `None`，本函数**不**代为表达 ——
+      它只回答"这一批事件里的钱有没有主人"，不回答"这批事件读没读到"。
+
+    为什么把这条算术抽成函数而不是在两处各写一遍：`webui.state._scan`（会话行）与
+    `webui.readers.run_view`（一趟详情）都要这一格，两处各写一遍就是"同一个数两份实现"。
+    """
+    total = 0.0
+    for e in events:
+        if str(e.get("kind") or "") != "llm_call":
+            continue
+        usd = e.get("usd")
+        if isinstance(usd, bool) or not isinstance(usd, (int, float)):
+            continue                      # 算不出价钱的那几次：不是 0，也不进这一格
+        total += float(usd)
+    claimed = 0.0
+    for run in runs:
+        usd = run.get("spend_usd")
+        if isinstance(usd, bool) or not isinstance(usd, (int, float)):
+            continue                      # 没有收工行的趟：没有自报数（不是 0）
+        claimed += float(usd)
+    return round(total - claimed, 6)
 
 
 def compute_run_index(root: Any) -> dict:

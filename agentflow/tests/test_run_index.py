@@ -170,7 +170,7 @@ def test_the_run_line_reports_its_own_spend_without_replacing_the_event_sum(
     root.mkdir()
     _spend_ws(root)
     runs = SS.runs_in_session(SS.read_session(root, sid="s-spend")[0], sid="s-spend")
-    assert [r["task_id"] for r in runs] == ["t-000001", "t-000002", "t-000003", "t-000004"], runs
+    assert [r["role"] for r in runs] == ["M", "D", "E", "F"], runs
 
     first, second, third = runs[0], runs[1], runs[2]
     # ① 齐的那一趟：事件求和与自报账都在，且各自是各自的口径

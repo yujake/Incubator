@@ -583,6 +583,9 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
                                  else int(same_run.get("unknown_usd") or 0)),
         "same_run_start_index": (None if same_run is None
                                  else int(same_run.get("start_index") or 0)),
+        # 162 ②：没人认领的那笔钱。它**不**进任何一趟的 `usd`（三态纪律：不许把一个
+        # 没有主人的数摊给某一个主人）。
+        "unattributed_usd": SS.unattributed_usd_of(events, runs),
     }
 
 

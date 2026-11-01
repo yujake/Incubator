@@ -288,6 +288,8 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 "sid": sid, "role": _text(e.get("role")), "task": _text(e.get("task")),
                 "start_index": i, "start_ts": _text(e.get("ts")),
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
+                # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
+                "spend_usd": None, "spend_unknown_usd_calls": None,
                 "stop_reason": "", "final_chars": None, "summons": None,
                 "messages": None, "elapsed_sec": None, "last_shape": "",
                 "end_index": None, "end_ts": "",
@@ -333,6 +335,16 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 calls = spend.get("calls")
                 if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
                     cur["llm_calls"] = calls
+                # 162 ②：收工行自报的花销 —— 单独成格，**不顶替** `usd`（事件求和）。
+                # 逐格回退（`runs_in_session` 里那一段逐句同形）：缺哪一格就那一格留 None。
+                reported_usd = spend.get("usd")
+                if (isinstance(reported_usd, (int, float))
+                        and not isinstance(reported_usd, bool)):
+                    cur["spend_usd"] = float(reported_usd)
+                unknown_reported = spend.get("unknown_usd_calls")
+                if (isinstance(unknown_reported, int)
+                        and not isinstance(unknown_reported, bool) and unknown_reported >= 0):
+                    cur["spend_unknown_usd_calls"] = unknown_reported
             open_runs.remove(hit)
     # ---- 把待答问题挂到「正在等它」的那一趟上
     for run in runs:
@@ -370,6 +382,9 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
         "orphan_to": ordered[-1]["ts"] if ordered else "",
         "last_kind": last_kind,
         "last_seq": last_seq,
+        # 162 ②：这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱。
+        # 算在 `sessions.unattributed_usd_of` 一处（两处各写一遍就是同一个数两份实现）。
+        "unattributed_usd": SS.unattributed_usd_of(events, runs),
     }
 
 
@@ -460,6 +475,8 @@ def snapshot(root: str | Path) -> dict[str, Any]:
             "pending": 0,
             "runs": len(got["runs"]),
             "orphans": len(got["orphans"]),
+            # 162 ②：没人认领的那笔钱（见 `_scan` 返回处那一格）
+            "unattributed_usd": got["unattributed_usd"],
         })
         pending.extend(got["pending"])
         runs.extend(got["runs"])
