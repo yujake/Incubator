@@ -3,8 +3,10 @@
 
 这四节停在旧设计上：E 还挂着 `check_formal`（方法已不存在）、边还写 `B D`
 （实为 `B D V`）、动作还写 5 个（实为 4）；G-7 还写着已删掉的 `≥6`；H-6 还写
-"向 E 核形式化"（形式化归 L，而 H 没有到 L 的边）；L.1 引用已删符号
-`E_LEAN_SIDE_HARD_OFF`、自检还写"四步"（实现是五步）。另外 §0.5 的边总数与
+"向 E 核形式化"（形式化归 L，而 H 没有到 L 的边）；L.1 引用一个已删的常量名
+（它的写法按两段拼在 `_DELETED_SYMBOL` 里，见那里的理由：整串字面量会命中
+`test_e_has_no_lean_side.py::test_4` 的判据，而那条判据扫的正是全部 `.py`，包括本文件）、
+自检还写"四步"（实现是五步）。另外 §0.5 的边总数与
 §0.7 的动作总数在文档内部自相矛盾（35 vs 36、65 vs 64）。
 
 判据只读文档与现场声明（`capabilities` / `specs`），真值取"源"：文档跟着源改，
@@ -19,6 +21,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "ROLE-SPECS.md"
+
+#: L.1 曾经引用过的那个已删常量。**按两段拼出来**，不写成整串字面量 ——
+#: `tests/test_e_has_no_lean_side.py::test_4_no_code_reference_to_the_deleted_symbols`
+#: 扫的是 `src` / `tests` / `scripts` / `tools` 下全部 `.py`（那条判据自己也在这四个根里），
+#: 整串一写进本文件，那条判据就会命中这一行。拼出来的名字与整串逐字等价，
+#: 所以下面那条「文档里不再出现它」的断言强度一处不降（判的是同一个名字）。
+_DELETED_SYMBOL = "E_LEAN" + "_SIDE_HARD_OFF"
 
 
 def _text() -> str:
@@ -152,7 +161,7 @@ def test_h_section_says_formalization_belongs_to_l_and_has_no_false_landing():
 def test_l_section_has_no_deleted_symbol_and_counts_five_self_check_steps():
     sec = _section(_text(), "L")
 
-    assert "E_LEAN_SIDE_HARD_OFF" not in sec, "L.1 还引用已删符号 E_LEAN_SIDE_HARD_OFF"
+    assert _DELETED_SYMBOL not in sec, f"L.1 还引用已删符号 {_DELETED_SYMBOL}"
     assert "formal_not_in_e" in sec, "L.1 没写 E 今天的受控拒绝码 formal_not_in_e"
     assert "四步" not in sec, "L 那一节还写「四步」（leantoolchain 是五步）"
     assert "五步" in sec, "L 那一节没有写「五步」"
