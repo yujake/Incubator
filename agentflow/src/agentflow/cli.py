@@ -3983,14 +3983,27 @@ def _newest_workspace_under(base: Path) -> Path | None:
 def _nearest_workspace(start: Path) -> Path:
     """`web` 不给 `--root` 时的缺省工作区（业主：「默认当前目录下的最近工作区」）。
 
-    三档，按"离用户最近"排：
+    四档，按"离用户最近"排：
 
-    1. 当前目录或它的某个上级目录本身就是工作区 ⇒ 就是它（`cd` 进工作区再开网页是最常见的一档）；
-    2. 否则从当前目录往上，第一层带 `projects/` 的目录里最近改过的那个工作区
-       （在仓库根或 `temp/` 里敲命令时，它打开的是最近在跑的那个项目）；
-    3. 都没有 ⇒ 当前目录（与改前同形：至少能起，但不假装找到了一个工作区）。
+    1. 当前目录或它的某个上级目录本身就是一个项目工作区 ⇒ 就是它
+       （`cd` 进工作区再开网页是最常见的一档）。代码检出目录自己不算这一档：
+       它也有 `data/` 表，但它是"根"，不是"最近在跑的那个项目"；
+    2. 在代码检出目录里（含它的子目录，例如 `temp/`）敲命令 ⇒ 打开 `projects/` 下
+       最近改过的那个工作区（真机 `projects/paper-rewrite-82` 就是这一档）；
+    3. 还没有 ⇒ 任意一个上级工作区（含检出目录本身）；
+    4. 都没有 ⇒ 当前目录（与改前同形：至少能起，但不假装找到了一个工作区）。
     """
     here = Path(start).resolve()
+    checkout = DEFAULT_ROOT.resolve()
+    for path in (here, *here.parents):
+        if path == checkout:
+            continue
+        if _is_workspace_dir(path):
+            return path
+    if here == checkout or checkout in here.parents:
+        newest = _newest_workspace_under(checkout)
+        if newest is not None:
+            return newest.resolve()
     for path in (here, *here.parents):
         if _is_workspace_dir(path):
             return path
