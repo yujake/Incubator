@@ -67,6 +67,14 @@ SOURCE_CARRIED = "carried_by_D"
 SOURCE_DISK = "disk"
 SOURCE_NONE = "none"
 
+#: `proof_text` 的来源（与上面那一组分开的一格读数，2026-11-02）。
+#:
+#: 上面那四个说的是"这份稿从哪来"，这一个说的是"落进 `proof_text` 的正文是不是
+#: 那份稿"。业主 2026-11-02 的口径是「F 侧实际上是 D 侧，F 的东西都在 D 的手稿上记了一笔」：
+#: 主路是 B 按 D 的携带单寻址 → 取到稿正文 → 落成 `proof_text`（:data:`SOURCE_MANUSCRIPT`）。
+#: `param` = 调用方直递的正文（它优先）；空串 = 这一笔没有正文要写。
+SOURCE_MANUSCRIPT = "manuscript"
+
 #: 二次寻址的三种形态（2026-11-02 业主：二次寻址必须是确定性工具，不许消耗 LLM 的 token）。
 #:
 #: | 值 | 什么时候 |
