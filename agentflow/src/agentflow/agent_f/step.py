@@ -312,6 +312,24 @@ class _Step:
         # `report_path`（给人读的推进台账）都会落进 history，也都在 `step` 的返回值里。
         if deploy.get("statement_id"):
             history_row["statement_id"] = str(deploy["statement_id"])
+        # ---- 送审与 V 签（业主 2026-11-02：「拿到V签F才能交差」）。
+        # 这一格必须进 history 与返回值两处：它是这一轮「交没交差」的唯一机器读数，
+        # 只写在 detail 那句散文里，读的人与下游都只能靠读中文来判。
+        # 四档：已签 / 待签 / 未通过 / 没查成（`agent_f/vsign.py`）。
+        if deploy.get("v_sign"):
+            _vs = dict(deploy["v_sign"])
+            _reading = dict(_vs.get("reading") or {})
+            history_row["v_sign"] = {
+                "state": str(_reading.get("state") or ""),
+                "label": str(_reading.get("label") or ""),
+                "delivered": bool(_reading.get("delivered")),
+                "channel": str(_reading.get("channel") or ""),
+                "ledger": str(_reading.get("ledger") or ""),
+                "submitted": bool(_vs.get("submitted")),
+                "skipped": bool(_vs.get("skipped")),
+                "why": str(_reading.get("why") or _vs.get("why") or ""),
+            }
+            history_row["delivered"] = bool(_reading.get("delivered"))
         if deploy.get("report_path"):
             history_row["report_path"] = str(deploy["report_path"])
         # 打回重写那一档的逐条说明要进 history：下一轮提示词的"前几轮发生过什么"
@@ -349,6 +367,13 @@ class _Step:
         # P3-6：产物落点也进返回值（调用方不必再读一遍 history 才知道去哪看）。
         if deploy.get("statement_id"):
             out["statement_id"] = str(deploy["statement_id"])
+        # ---- 送审与 V 签（业主 2026-11-02）：`delivered` 只在「已签」时为真 ——
+        # 拿不到 V 签，这一趟就读成没交差（`delivery_state` 是四档里的哪一档）。
+        if deploy.get("v_sign"):
+            out["v_sign"] = dict(deploy["v_sign"])
+            out["delivered"] = bool(deploy.get("delivered"))
+            out["delivery_state"] = str(deploy.get("delivery_state") or "")
+            out["delivery_label"] = str(deploy.get("delivery_label") or "")
         if deploy.get("report_path"):
             out["report_path"] = str(deploy["report_path"])
         # ---- 证明手稿（业主 2026-10-24 最终形态：作者只写内容、B 读稿登记）：

@@ -1814,6 +1814,7 @@ class _Core:
             return {"ok": False, "kind": "statement_handoff_failed", "statement_id": "",
                     "reused": bool(row_now), "promoted": False,
                     "manuscript_received": manuscript_received,
+                    "proof_text": body,
                     "why": f"{type(exc).__name__}: {exc}", "cites": cites}
 
         stmt_id = str(got.get("stmt_id") or "")
@@ -1826,11 +1827,13 @@ class _Core:
                         "evidence_kind": str(row_now.get("evidence_kind") or tier.get("kind") or ""),
                         "tier_why": str(tier.get("why") or ""),
                         "manuscript_received": manuscript_received, "why": "",
-                        "cites": cites, "handoff_reading": dict(got)}
+                        "cites": cites, "proof_text": body,
+                        "handoff_reading": dict(got)}
             return {"ok": False, "kind": "statement_handoff_refused",
                     "refused_kind": str(got.get("kind") or ""),
                     "statement_id": stmt_id, "reused": False, "promoted": False,
                     "manuscript_received": manuscript_received,
+                    "proof_text": body,
                     "why": str(got.get("error") or got.get("reason") or got.get("kind") or ""),
                     "cites": cites}
 
@@ -1855,7 +1858,39 @@ class _Core:
                                      or got.get("evidence_kind") or tier.get("kind") or ""),
                 "tier_why": str(tier.get("why") or ""), "row": landed,
                 "handoff_reading": dict(got), "nontriviality_note": judge_note,
-                "manuscript_received": manuscript_received, "why": "", "cites": cites}
+                "manuscript_received": manuscript_received, "why": "", "cites": cites,
+                "proof_text": body}
+
+    # ------------------------------------------------------ 送审与「V 签」读数
+    #
+    # 业主 2026-11-02（逐字）：「重点是要F侧拿V签，拿到V签F才能交差」。
+    #
+    # 改前这一层没有「送审」这一步：`_proof_outlet` 交完 B 的登记就结束了，
+    # `next_step` 那句「交 V 复核这一段论证」只是台账上的一句话 —— 83 的定格读数
+    # 就是现场（F 写的五份证明一份都没签，而每一趟都照样回 progress）。
+    # 现在这一方法把两件事接上：① 真的把这一份递给 V（进程内 `AgentV.verify_proof`，
+    # 与 F 交给 B 的 `register_statement` 同一种做法：`F -> V` 这条边一直在
+    # `capabilities.ALLOWED_EDGES` 里）；② 回读签，四档（已签 / 待签 / 未通过 / 没查成）。
+    # 判据全部在 `verifications` / `vsigns` 那一层，本方法一个字节都不写盘。
+    def _submit_and_read_sign(self, *, statement_id: str, proof_text: str,
+                              proof_no: Any = 1) -> dict:
+        """把这一份证明递给 V 并回读签；返回 `{submitted, skipped, why, reading, verification}`。"""
+        from . import vsign as _VS
+
+        # 注入点（与 `e` 同一个理由：验收测试塞一个假的 V，生产路径用真的）。
+        verifier = self.cfg.get("v_verifier")
+        try:
+            return _VS.submit_proof(
+                store=self.store, root=self.store.root, statement_id=statement_id,
+                proof_text=proof_text, proof_no=proof_no, verifier=verifier)
+        except Exception as exc:  # noqa: BLE001 - 送审这一格坏了不许带走这一轮
+            return {"submitted": False, "skipped": False, "checked": False,
+                    "why": f"送审这一格没跑成（{type(exc).__name__}: {exc}）",
+                    "statement_id": str(statement_id or ""), "verification": {},
+                    "reading": _VS.delivery_reading(self.store.root,
+                                                    statement_id=statement_id,
+                                                    proof_text=proof_text,
+                                                    proof_no=proof_no)}
 
     def _judge_nontriviality(self, *, full: str, text: str, body: str,
                              stmt_id: str = "") -> str:
@@ -1905,6 +1940,8 @@ class _Core:
         new_goals: list[dict[str, Any]] = []
         statement_id = ""
         outlet_note = ""
+        #: 这一轮送审与 V 签的读数（只有 `proof` 那一支有内容）：见 `_submit_and_read_sign`。
+        v_sign: dict[str, Any] = {}
         #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
         #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
         manuscript: dict[str, Any] = {}
@@ -1962,6 +1999,15 @@ class _Core:
                               f"第 {f.get('line')} 行「{_clip(str(f.get('quote') or ''), 40)}」"
                               f"写的是 {f.get('got')}，{f.get('why')} ⇒ 怎么改：{f.get('how_to_fix')}"
                               for f in findings) or str(wash.get("reason") or "")))
+                # 这一轮没有送审（打回的那一份不进 V 的审查队列）⇒ 签这一格照旧回读：
+                # 四档里它是「待签 / 没查成」，绝不是「已签」。`delivered` 因此为假。
+                from . import vsign as _VS_REFUSED
+
+                _refused_reading = _VS_REFUSED.delivery_reading(
+                    self.store.root, statement_id="",
+                    proof_text=str(wash.get("text") or manuscript.get("text") or ""))
+                detail += (f"；V 签：{_refused_reading.get('label')}"
+                           f"（{_refused_reading.get('why')}）—— 没签 ⇒ 这一趟不算交差")
                 return {
                     "action": "no_change",
                     "outcome": "no_change",
@@ -1973,6 +2019,12 @@ class _Core:
                     # 它确实是一次尝试（F 交了稿），只是被秘书打回 ⇒ 计数不隐瞒。
                     "count_attempt": True,
                     "statement_id": "",
+                    "v_sign": {"submitted": False, "skipped": True,
+                               "why": "秘书把这一份打回了 ⇒ 没有送审",
+                               "reading": _refused_reading},
+                    "delivered": False,
+                    "delivery_state": str(_refused_reading.get("state") or ""),
+                    "delivery_label": str(_refused_reading.get("label") or ""),
                     "report_path": "",
                     "manuscript_path": str(manuscript.get("path") or ""),
                     "manuscript": str(wash.get("text") or manuscript.get("text") or ""),
@@ -2026,6 +2078,20 @@ class _Core:
             else:
                 outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
                 evidence = []
+            # ---- 送审 + 回读 V 签（业主 2026-11-02：「拿到V签F才能交差」）-----------
+            #
+            # 位置是结构性的：登记拿到号之后才送（`verify.verify_proof` 的
+            # `statement_id` 是必填，没号那条路今天只对穷举型证据开放）。
+            # 登记没成（`statement_id` 空）也照样回读一次：那一格的读数是
+            # 「待签 + 为什么送不了」，不许因为没送成就不给读数。
+            v_sign = self._submit_and_read_sign(
+                statement_id=statement_id,
+                proof_text=str(outlet.get("proof_text") or ""))
+            _reading = dict(v_sign.get("reading") or {})
+            outlet_note += (f"；V 签：{_reading.get('label') or '没查成'}"
+                            f"（{_reading.get('why') or v_sign.get('why') or '没有读数'}）"
+                            + ("" if _reading.get("delivered")
+                               else " —— 没签 ⇒ 这一趟不算交差"))
             detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
                       f"这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
             if wash.get("changed"):
@@ -2093,6 +2159,13 @@ class _Core:
             "in_flight": kind == "dead_end",
             "count_attempt": True,
             "statement_id": statement_id,
+            # ---- 送审与 V 签（业主 2026-11-02）：这一格进返回值与 detail 两处。
+            # `delivered` 只在「已签」时为真 —— 拿不到 V 签，这一趟就读成没交差
+            # （四档：已签 / 待签 / 未通过 / 没查成，见 `agent_f/vsign.py`）。
+            "v_sign": dict(v_sign),
+            "delivered": bool((v_sign.get("reading") or {}).get("delivered")),
+            "delivery_state": str((v_sign.get("reading") or {}).get("state") or ""),
+            "delivery_label": str((v_sign.get("reading") or {}).get("label") or ""),
             "report_path": str(written["path"]),
             # P4-7：这一轮派出去的活由谁接 —— 父目标因此不再"每轮都压住子目标"
             # （`attack_tools.pick_next_subgoal` 按它排次序，见那里的 docstring）。
