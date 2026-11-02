@@ -774,7 +774,11 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     assert [p.get("issued") for p in v_passes] == [False] * (len(v_passes) - 1) + [True], (
         "逐转的发签读数不是「前几转只落台账、最后一转才签」："
         f"{[p.get('issued') for p in v_passes]}", signed)
-    assert signed.get("signed_bit3") is True, signed
+    # 2026-11-03 件二：命题行里还没有这一份正文（`proof_text=""`，下面第 ③ 步才写）
+    # ⇒ 第 3 位不翻；签文件照旧颁发，B 写正文时按 sha 认领。
+    assert signed.get("signed_bit3") is False, signed
+    assert (dict((signed.get("sign_issuance") or {}).get("writeback") or {})
+            .get("body_gate")) == "missing_body", signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {
         THEOREM_A, THEOREM_B}, signed.get("citation_checks")
     assert v_llm.prompts, "V 没有被问过"
@@ -786,6 +790,11 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
                      proof_text=PROOF_BODY, derived_from=[f_stmt])
     assert late.get("ok") is True, late
     assert str(late.get("stmt_id")) == b_stmt, late
+    # 2026-11-03 件二：V 签的时候命题行没有正文 ⇒ 位没翻；B 把正文写进来之后
+    # 按正文 sha 认领那一签（`bits_after_sign`），第 3 位这时才亮。
+    _lain = next(dict(r) for r in store.rows("statements")
+                 if str(r.get("stmt_id") or "") == b_stmt)
+    # 2026-11-03 件二：位是否翻由 B 的写入口按正文 sha 认领；这一条不是位判据。
     # 依赖面在第 ① 步已经落了（上面那组 rows 断言）；这一笔只补正文，不再重记。
     # 盘上两行：依赖行落在 B 那条命题上，verifications 里那一签是「成立」且签住第 3 位
     ledger, problems = VR.list_verifications(store.root, statement_id=b_stmt, limit=None)
@@ -903,3 +912,8 @@ def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
     assert str(got.get("manuscript_source")) == SRC_DISK, got
     assert _carried_holds(got, store, cited=THEOREM_A) is False, got
     assert {str(r.get("source_stmt_id")) for r in _deps(store)} == {THEOREM_A}, _deps(store)
+
+
+
+
+

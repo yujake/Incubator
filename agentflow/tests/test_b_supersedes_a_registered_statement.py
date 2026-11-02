@@ -153,9 +153,13 @@ def _sign(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
 
 
 def _sign_three(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
-    """凑够「连续 3 次成立、同一份正文」的那一签（第 3 次才翻位）。
+    """凑够「连续 3 次成立、同一份正文」的那一签（第 3 次才颁发签文件）。
 
-    顺带把口径钉在这一个夹具里：第 1 次与第 2 次的 `written` 必须是 False、
+    2026-11-03 件二：命题行里存的还是旧正文（`TRUNCATED`），这一签盖的是新正文
+    （`FULL`）⇒ 第 3 位不翻（`body_gate=sha_mismatch`），但签文件照旧颁发；
+    B 把新正文写进命题行之后按正文 sha 认领（`bits_after_sign`）。
+
+    前两次的读数仍钉在这一格里：第 1 次与第 2 次的 `written` 必须是 False、
     位必须还是 False —— 否则"3 次之后才签"这件事在夹具上就没被量到。
     """
     rows = []
@@ -169,7 +173,10 @@ def _sign_three(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") ->
         rows.append(got)
     third = _sign(st, proof_text=proof_text, stmt_id=stmt_id)
     wb = dict(third.get("statement_writeback") or {})
-    assert wb.get("written") is True, ("连续 3 次成立之后仍然不发签", wb)
+    assert wb.get("written") is False, (
+        "命题行里没有这一份正文（或 sha 不符）却把第 3 位翻了", wb)
+    assert wb.get("body_gate") == "sha_mismatch", wb
+    assert (wb.get("vsign") or {}).get("written") is True, ("签没有颁发", wb)
     assert int(wb.get("streak") or 0) == int(wb.get("need") or VR.SIGN_STREAK_NEED) == 3, wb
     return third
 
@@ -263,6 +270,16 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     row["proof_history"] = [*[dict(h) for h in (row.get("proof_history") or [])],
                             _canonical_history_entry(TRUNCATED, FULL)]
     row["proof_text"] = FULL
+    # 2026-11-03 件二：V 签的是 `FULL`，而命题行当时还是 `TRUNCATED` ⇒ 位没翻。
+    # 换正文这一笔之后，B 的写入口按正文 sha 认领那一签（`bits_after_sign`）——
+    # 这里手动铺行的夹具也走同一步，否则"新正文有签"这件事在位上看不到。
+    from agentflow import vsigns as VS
+
+    bits_after, claim = VS.bits_after_sign(
+        dict(row.get("bits") or {}), root=st.root, proof_text=FULL,
+        statement_id=sid, proof_no=1, kind=str(row.get("kind") or ""), store=st)
+    assert claim.get("applied") is True, claim
+    row["bits"] = bits_after
     with st.tx("statements", actor="test", note="supersede") as tx:
         tx.upsert("statements", row, note="supersede")
     out = {"ok": True, "canonical_written": True}
