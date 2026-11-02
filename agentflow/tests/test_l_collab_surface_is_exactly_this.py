@@ -509,30 +509,43 @@ def _own_statement() -> dict:
 
 
 def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> None:
-    """判据 5：B 覆盖 canonical ⇒ 旧正文进 `proof_history` ⇒ 再跑 V ⇒ 签更新。
+    """判据 5：V 先审新稿拿签（签块落稿）→ B 再收录 ⇒ 旧正文进 `proof_history`。
 
-    改前红：这条链的每一格都是既有机制，所以本判据在改前"恰好是绿的"——
-    它的作用是接线之后仍然成立的正控（改坏 B 的写路径或 V 的重签，这里当场红）。
+    2026-11-02 业主把次序定成「V 签先放在手稿里，让 B 录入」（`draft/179`）之后，
+    改前的 `B 登记 → V 判 → B 改稿` 这条环在 strict 下不可达：改稿那一笔没有签就被
+    准入闸整笔拒。现在的形态：V 连判三转、签块盖回稿（稿名按这一条命题的号命名，
+    第 9 格手稿号才映射得回来）⇒ B 拿着「稿里正文 + 手稿签块」收录。
 
-    反真空：两次签名必须是两个号（`v-NNNN` 不同），且第二次签的正文是新的那一份
-    （`review_standing` 读成 signed —— 旧签在新正文上是 stale）。
+    反真空：签块盖的必须是新稿那一份（sha 与连续次数都对得上，不是"有块就算"）；
+    旧台账那一签盖的是旧正文 ⇒ 新正文上仍读 stale（旧签不借光）；两次签的正文
+    sha 必须不同（否则上面那些"新签"可能只是旧签换了张皮）。
 
-    2026-10-29 口径：同一份正文要连续 `SIGN_STREAK_NEED` 次「成立」且秘书判定通过才发签
-    （第 1、2 次只落台账）⇒ 两段都按同一份正文连审，`_reviews_until_signed` 里钉住
-    "前几次不签"。
+    2026-10-29 口径：同一份正文要连续 `SIGN_STREAK_NEED` 次「成立」才算签；这一趟的
+    逐转读数由 `review_passes` 给出（不是同一份正文反复送三次）。
     """
+    from agentflow import depsection as _DS
+    from agentflow import evidencebits as EB
     from agentflow import verifications as VR
+    from agentflow import vsigns as VS
     from agentflow.store import Store
+
+    from conftest import seed_statement_row
 
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
     b = _agent_b(st, ws)
     old = _proof_text(LINKS)          # 漏一步的稿子（L 刚报回来的那一份）
-    first = b.register_statement(**_own_statement(), proof_text=old)
-    assert first.get("ok") is True, first
-    sid = str(first.get("stmt_id") or "")
-    assert sid, first
+    # 旧稿是"已在册、还没有 V 签"的历史形态（真机 own_result 行就是这么来的）：
+    # strict 下无签正文经 `register_statement` 写不进去 ⇒ 夹具直接铺行，判据不变。
+    seeded = seed_statement_row(
+        st, proof_text=old, statement_full=CLAIM, statement_text=CLAIM,
+        kind="conjecture", label=LABEL, origin="own_result", doc_id=S.format_id(0),
+        line_range={"start": 1}, quote_reason="我方自产命题，没有外部引文要比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=old,
+                        kind="conjecture"))
+    sid = str(seeded.get("stmt_id") or "")
+    assert sid, seeded
 
     bad_replies = [_verdict_json("有毛病", step=LINKS + 1)] * int(VR.SIGN_STREAK_NEED)
     v = _v_agent(st, ws, bad_replies)
@@ -540,26 +553,53 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     assert signed1.get("checked") is True, signed1
     assert signed1.get("verdict") == "有毛病", signed1
 
-    # ---- B 完善证明：同一份内容再交一次（覆盖 canonical，旧正文留痕）
+    # ---- 新稿先过 V：一次调用连判三转（3 转「成立」⇒ 签块盖回手稿）
     new = _proof_text(LINKS + 1)
-    second = b.register_statement(**_own_statement(), proof_text=new)
+    man_rel = _DS.manuscript_relpath(statement_id=sid)
+    assert man_rel, sid
+    man_text = ("# F 的证明手稿：加零不改变自然数\n\n"
+                "- 命题号：stmt:（还没落号）\n"
+                "- 计划：0000 · 子目标：s1\n\n"
+                f"## 命题\n\n{CLAIM}\n\n"
+                f"## 证明\n\n{new}\n\n"
+                "## 依赖\n\n"
+                "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+                "|---|---|---|---|\n"
+                "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+    man_path = ws / man_rel
+    man_path.parent.mkdir(parents=True, exist_ok=True)
+    man_path.write_text(man_text, encoding="utf-8")
+
+    v2 = _v_agent(st, ws, [_verdict_json("成立")] * int(VR.SIGN_STREAK_NEED))
+    signed2 = v2.verify_proof(proof_manuscript=man_rel)
+    assert signed2.get("checked") is True, signed2
+    assert signed2.get("kind") == "proof_unregistered_signed", signed2
+    assert signed2.get("verdict") == "成立", signed2
+    passes = signed2.get("review_passes") or []
+    assert [p.get("pass") for p in passes] == [1, 2, 3], passes
+    block = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
+                                        proof_sha=VR.proof_sha(new))
+    assert block.get("state") == "signed", block
+    assert (block.get("streak"), block.get("need")) == (3, 3), block
+    assert block.get("proof_sha256") != str(signed1.get("proof_sha256") or ""), (
+        block.get("proof_sha256"), signed1.get("proof_sha256"))
+
+    # ---- B 收录：正文取自稿里那一份，签由手稿签块认下
+    second = b.register_statement(**_own_statement(), proof_text=new,
+                                  proof_manuscript=man_path.read_text(encoding="utf-8"))
     assert second.get("ok") is True, second
     assert second.get("canonical_written") is True, second
     row = next(dict(r) for r in st.rows("statements") if str(r.get("stmt_id")) == sid)
     history = [dict(h) for h in (row.get("proof_history") or [])]
     assert [str(h.get("text") or "") for h in history] == [old], history
 
-    # ---- 重新得 V 签：新正文，新号，结论成立（连审到发签门槛）
-    v2 = _v_agent(st, ws, [_verdict_json("成立")] * int(VR.SIGN_STREAK_NEED))
-    reviewed = _reviews_until_signed(v2, sid, new)
-    signed2 = reviewed[-1]
-    assert signed2.get("checked") is True, signed2
-    assert signed2.get("verdict") == "成立", signed2
-    assert str(signed2.get("verification_id") or "").startswith("v-"), signed2
-    assert signed2.get("verification_id") != signed1.get("verification_id"), (
-        signed1.get("verification_id"), signed2.get("verification_id"))
+    # 旧台账那一签盖的是旧正文 ⇒ 新正文上读 stale；新签在手稿签块里（不在台账）。
     standing = VR.review_standing(ws, statement_id=sid, proof_text=new, proof_no=1)
-    assert standing.get("state") == "signed", standing
+    assert standing.get("state") == "stale", standing
+    assert standing.get("in_sync") is False, standing
+    block_now = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
+                                            proof_sha=VR.proof_sha(new))
+    assert block_now.get("state") == "signed", block_now
 
 
 # ============================================================ 6. B → D 升级
@@ -645,8 +685,3 @@ def test_seven_the_criterion_is_not_vacuous(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(mod, "_edge_violations", lambda edges: [])
     with pytest.raises(AssertionError):
         mod.test_one_b_can_cast_l_and_l_can_only_cast_c()
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

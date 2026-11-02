@@ -125,18 +125,49 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
                               script_path="scripts/probe.py", method="numeric"))
     steps.append("E.run_experiment")
 
-    # ⑥ B 登记一条自证命题（零文献依赖）＋ V 审核（桩模型稳定判"成立"）
+    # ⑥ 手稿先过 V（一次调用连判三转、签块落稿），B 再收录一条自证命题（零文献依赖）。
+    #    2026-11-02 业主把次序定成「V 签先放在 F 的手稿里，让 B 录入」：strict 准入闸下
+    #    无签的证明正文经 `register_statement` 写不进去，所以先让 V 审稿拿签。
     #    2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：入口档
     #    写成 conjecture；"它是不是定理"由 V 签完之后 `evidencebits.derive_grade` 现算。
+    from agentflow import depsection as DS
+    from agentflow import verifications as VR
+    from agentflow.agent_v import AgentV
+
+    man_rel = DS.manuscript_relpath(plan_id="probe-no-lit")
+    man_path = ws / man_rel
+    man_path.parent.mkdir(parents=True, exist_ok=True)
+    man_path.write_text(
+        "# F 的证明手稿：自证命题\n\n"
+        "- 命题号：stmt:（还没落号）\n"
+        "- 计划：probe-no-lit · 子目标：s1\n\n"
+        "## 命题\n\n若 n≥3 则 n^2+n 是偶数（自证）。\n\n"
+        f"## 证明\n\n{PROOF}\n\n"
+        "## 依赖\n\n"
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n"
+        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
+    reviewed = _as_dict(AgentV(st, llm=_FixedSeam("成立")).verify_proof(
+        proof_manuscript=man_rel))
+    assert reviewed.get("checked") is True, reviewed
+    assert reviewed.get("kind") == "proof_unregistered_signed", reviewed
+
     req = dict(origin="own_result", statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
                kind="conjecture", proof_text=PROOF, line_range={"start": 1},
-               doc_id="000000", quote_verified=False, quote_reason="自证：无外部引文")
+               doc_id="000000", quote_verified=False, quote_reason="自证：无外部引文",
+               proof_manuscript=man_path.read_text(encoding="utf-8"))
     row = _as_dict(b.register_statement(**req))
     assert row.get("ok"), row
     sid = str(row.get("stmt_id") or "")
-    verdict = _as_dict(AgentV(st, llm=_FixedSeam("成立")).verify_proof(sid, PROOF))
-    assert verdict.get("verdict") == "成立", verdict
-    steps.append("B.register_statement/V.verify_proof")
+    # 同一次审校的另一半：C 的「经审核」判据只读台账（`proof_chain._verified_ok`），
+    # 手稿签块是 B 收录的凭据 —— 三转签要各写各的（同一个写口）。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            st.root, statement_id=sid, proof_text=PROOF,
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", store=st)
+    steps.append("V.verify_proof/B.register_statement")
 
     # ⑦ 链闭合：经审核的自证定理 ⇒ 是根
     chain = _as_dict(AgentC(st).proof_chain(target=sid))
@@ -161,10 +192,5 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
 
     assert steps == ["A.search_literature", "B.run_once", "D.propose_question",
                      "F.create_plan/F.step", "E.run_experiment",
-                     "B.register_statement/V.verify_proof", "C.proof_chain",
+                     "V.verify_proof/B.register_statement", "C.proof_chain",
                      "G.build_document/H.review"], steps
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

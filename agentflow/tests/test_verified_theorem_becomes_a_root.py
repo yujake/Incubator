@@ -1,13 +1,21 @@
 # -*- coding: utf-8 -*-
 """经审核的自证定理 ⇒ 进定理库并作证明链的根（业主 2026-10-17 口径）。
 
-> *"自证定理在审核后要能进定理证明库。"*（并据此成为后续定理可引的根）
+> *"自证定理在审核后要能进定理库。"*（并据此成为后续定理可引的根）
 
 ## 现场（长跑预演，`draft/136`）
 
 一条 `origin="own_result"` 的自证命题（零文献依赖）：
-- `V.verify_proof` 判 成立（签第 3 位）时 ⇒ 它应当进库、可作根、链闭合；
+- V 审过、判 成立（签第 3 位）⇒ 它应当进库、可作根、链闭合；
 - 判 有毛病 / 没审 ⇒ 不许作根（三态不许折平）。
+
+## 2026-11-02 的次序（业主：「V 签先放在 F 的手稿里，让 B 录入」）
+
+正控不再走「B 登记 → V 判」，而是：先把手稿（`## 命题` / `## 证明`）交给 V 连判
+三转、签块盖回稿，再让 B 拿着「稿里正文 + 手稿签块」收录。strict 准入闸下，
+无签的证明正文经 `register_statement` 整笔写不进去，所以负控要的
+"在册、有证明、还没签"这一历史形态由夹具直接铺行（真机 3134 行 own_result
+正是这么来的）。
 
 这一组用注入的假 seam（离线、确定，不调上游）：一个稳定返回 `{"verdict": "成立"}`，
 另一个稳定返回 `{"verdict": "有毛病", "defect_step": 1}` ⇒ 两边都钉住。
@@ -20,12 +28,32 @@ import pathlib
 
 import pytest
 
+from agentflow import depsection as DS
+from agentflow import evidencebits as EB
+from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_c import AgentC
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+from conftest import seed_statement_row
+
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
+FULL = "若 n≥3 则 n^2+n 是偶数（自证）。"
+
+#: 与 `agent_f/manuscript.py::proof_manuscript` 同一个形状（V 只读 `## 证明` 那一节）。
+MANUSCRIPT = ("# F 的证明手稿：n^2+n 是偶数\n\n"
+              "- 命题号：stmt:（还没落号）\n"
+              "- 计划：0000 · 子目标：s1\n\n"
+              f"## 命题\n\n{FULL}\n\n"
+              f"## 证明\n\n{PROOF}\n\n"
+              "## 依赖\n\n"
+              "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+              "|---|---|---|---|\n"
+              "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+#: 未在册时没有号，按计划号命名（`depsection.manuscript_relpath` 是唯一命名口径）。
+REL = DS.manuscript_relpath(plan_id="0000")
 
 
 class _FixedSeam:
@@ -49,29 +77,76 @@ def _store(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _own_result_statement(st: Store) -> str:
+def _write_manuscript(st: Store) -> pathlib.Path:
+    path = pathlib.Path(st.root) / REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(MANUSCRIPT, encoding="utf-8")
+    return path
+
+
+def _seed_statement(st: Store) -> str:
+    """造一条"在册、有证明、还没有 V 签"的命题（历史形态：直接铺行）。
+
+    2026-11-02 准入闸默认 strict 之后，这个状态不能再经 `register_statement` 造出来
+    （无签的证明正文整笔拒 `proof_without_v_sign`）—— 而这一组负控测的正是
+    "这一行没审过 ⇒ 作不作根"。期望值与判据一个字都没改。
+    """
+    seeded = seed_statement_row(
+        st, proof_text=PROOF, statement_full=FULL, statement_text=FULL,
+        kind="conjecture", label="n^2+n 是偶数", origin="own_result",
+        doc_id="000000", line_range={"start": 1}, quote_verified=False,
+        quote_reason="自证：无外部引文",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=PROOF,
+                        kind="conjecture"))
+    return str(seeded.get("stmt_id") or "")
+
+
+def _audited_statement(st: Store) -> str:
+    """正控的现场：V 先审手稿（3 转成立 ⇒ 签块落稿）→ B 再收录。"""
+    path = _write_manuscript(st)
+    v = AgentV(st, llm=_FixedSeam("成立"))
+    signed = v.verify_proof(proof_manuscript=REL)
+    assert signed.get("checked") is True, signed
+    assert signed.get("kind") == "proof_unregistered_signed", signed
+    block = VS.manuscript_sign_standing(path.read_text(encoding="utf-8"),
+                                        proof_sha=VR.proof_sha(PROOF))
+    assert block.get("state") == "signed", block
+
     b = AgentB(st, extractor=None, extract_text=None)
-    #: 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：入口按
-    #: `kind="conjecture"` 登记。这一组的主题是"V 审过之后它能不能当根、链闭没闭合"，
-    #: 而等级由 `evidencebits.derive_grade` 按五元位现算 —— 与入口这一栏无关。
-    got = b.register_statement(origin="own_result",
-                               statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
-                               kind="conjecture", proof_text=PROOF,
+    got = b.register_statement(origin="own_result", statement_full=FULL,
+                               statement_text=FULL, kind="conjecture",
+                               proof_text=PROOF,
+                               proof_manuscript=path.read_text(encoding="utf-8"),
                                line_range={"start": 1}, doc_id="000000",
                                quote_verified=False, quote_reason="自证：无外部引文")
     row = got if isinstance(got, dict) else got.to_dict()
     assert row.get("ok"), row
-    return str(row.get("stmt_id") or "")
+    sid = str(row.get("stmt_id") or "")
+    bits = dict(next(r for r in st.rows("statements")
+                     if str(r.get("stmt_id")) == sid).get("bits") or {})
+    assert bits.get("reviewed") is True, bits
+    # ---- 同一次审校的另一半：台账那一行 ----
+    #
+    # `AgentC` 的「经审核」判据只读台账（`proof_chain._verified_ok`：`verifications/<号>.jsonl`
+    # 里有没有「成立」）；手稿签块是 B 收录时的凭据，不是台账行。两处是同一个写口
+    # （V 的 `record_verification`）的两个落点 —— 三转签要各写各的，否则"经审核"这句
+    # 话在 C 那一侧读不到。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            st.root, statement_id=sid, proof_text=PROOF,
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", store=st)
+    return sid
+
+
+def _own_result_statement(st: Store) -> str:
+    return _audited_statement(st)
 
 
 def test_an_audited_self_proved_theorem_is_a_closed_root(tmp_path: pathlib.Path) -> None:
     """正控：审核判成立 ⇒ 该自证定理作根、链闭合。"""
     st = _store(tmp_path)
     sid = _own_result_statement(st)
-    v = AgentV(st, llm=_FixedSeam("成立"))
-    out = v.verify_proof(sid, PROOF)
-    got = out if isinstance(out, dict) else out.to_dict()
-    assert got.get("verdict") == "成立", got
     rep = AgentC(st).proof_chain(target=sid)
     data = rep if isinstance(rep, dict) else rep.to_dict()
     payload = data.get("payload") or {}
@@ -82,7 +157,7 @@ def test_an_audited_self_proved_theorem_is_a_closed_root(tmp_path: pathlib.Path)
 def test_an_unaudited_statement_is_not_a_root(tmp_path: pathlib.Path) -> None:
     """负控：没审核 ⇒ 不作根、链不闭合（三态不许折平）。"""
     st = _store(tmp_path)
-    sid = _own_result_statement(st)
+    sid = _seed_statement(st)
     rep = AgentC(st).proof_chain(target=sid)
     data = rep if isinstance(rep, dict) else rep.to_dict()
     payload = data.get("payload") or {}
@@ -93,15 +168,12 @@ def test_an_unaudited_statement_is_not_a_root(tmp_path: pathlib.Path) -> None:
 def test_a_flawed_verdict_does_not_make_it_a_root(tmp_path: pathlib.Path) -> None:
     """负控：审成有毛病 ⇒ 同样不许作根。"""
     st = _store(tmp_path)
-    sid = _own_result_statement(st)
+    sid = _seed_statement(st)
     v = AgentV(st, llm=_FixedSeam("有毛病"))
-    v.verify_proof(sid, PROOF)
+    got = v.verify_proof(sid, PROOF)
+    got = got if isinstance(got, dict) else got.to_dict()
+    assert got.get("verdict") == "有毛病", got
     rep = AgentC(st).proof_chain(target=sid)
     data = rep if isinstance(rep, dict) else rep.to_dict()
     payload = data.get("payload") or {}
     assert payload.get("closed") is False, data.get("summary")
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

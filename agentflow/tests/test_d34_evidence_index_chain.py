@@ -253,6 +253,7 @@ def _details(reading: dict) -> str:
     return " ｜ ".join(str(p.get("detail")) for p in reading.get("problems") or [])
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_1_the_d_report_indexes_the_e_report(tmp_path: pathlib.Path) -> None:
     """① 数值实验定理那一行带四格 ⇒ pass；没有指向 E 报告的索引（path + sha）⇒ 红。
 
@@ -274,6 +275,7 @@ def test_1_the_d_report_indexes_the_e_report(tmp_path: pathlib.Path) -> None:
         assert cell in _details(bad), (cell, _details(bad))
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_1b_the_index_must_point_at_the_bytes_on_disk(tmp_path: pathlib.Path) -> None:
     """① 的另一半：索引写了 path + sha，但 sha 与盘上那份对象不符 ⇒ 红（点名 sha）。"""
     root = _mapping_workspace(tmp_path / "ws", cells={
@@ -355,6 +357,7 @@ def _e_case(tmp_path: pathlib.Path) -> tuple[Store, dict, str]:
     return store, env, sid
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_2_b_takes_the_e_report_through_the_index(tmp_path: pathlib.Path) -> None:
     """② B 顺索引取到 E 报告 + V 签 ⇒ 登记成 proof；索引指不到对象 ⇒ 拒并点名缺哪一段。"""
     store, env, _sid = _e_case(tmp_path / "ok")
@@ -407,6 +410,7 @@ def _f_case(tmp_path: pathlib.Path, *, sign_sha: str | None = None) -> tuple[Sto
     return store, sid
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_3_b_takes_the_f_proof_through_the_index(tmp_path: pathlib.Path) -> None:
     """③ B 顺索引取到 F 的证明 + V 签 ⇒ 登记成 proof（老路回归，不许被这次改坏）。"""
     store, _sid = _f_case(tmp_path / "ok")
@@ -416,6 +420,7 @@ def test_3_b_takes_the_f_proof_through_the_index(tmp_path: pathlib.Path) -> None
     assert row["kind"] == "theorem" and row["evidence_kind"] == "proof", row
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_3b_the_old_statement_ledger_route_still_works(tmp_path: pathlib.Path) -> None:
     """③ 的老路（按命题号的签，没有索引）：一个字节都没被这次改动弄坏。"""
     store = _store(tmp_path)
@@ -433,6 +438,7 @@ def test_3b_the_old_statement_ledger_route_still_works(tmp_path: pathlib.Path) -
 
 
 # ============================================================ ④ V 的签与对象 sha 不符
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_4_a_signature_on_another_object_is_refused(tmp_path: pathlib.Path) -> None:
     """④ V 的签与对象 sha 不符 ⇒ 拒（索引里写「成立」也不行）。"""
     store = _store(tmp_path)
@@ -457,6 +463,11 @@ def test_5_a_sign_made_before_registration_is_not_lost(tmp_path: pathlib.Path) -
     现场复刻：`statements` 0 行，V 审 E 那份报告判「成立」。改前那一签没有落点，
     只能 escalation，结论丢了；现在它落在 `verifications/pending/<sha>.jsonl`，
     B 登记之后按同一个 sha 认领。
+
+    这一条刻意不挂 `signed_v_handoffs`：那一格会在登记之前先补一票签（`_sign` 的
+    连续计数因此从 0 起变成 1 起，认领那一档也被它抢走），把"先签后登记"这个现场
+    造坏。这里的一签是显式的 `verifications.record_pending_sign`（V 的未在册那一支
+    走的正是它），认领与否只由正文 sha 决定。
     """
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
@@ -505,6 +516,7 @@ def _stub_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(NP, "resolve_index", _fake, raising=True)
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_6_stubbing_the_index_resolution_makes_the_negatives_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """⑥ 反真空：把"索引解析"打桩恒成功 ⇒ ②③ 的负控必红。
@@ -521,6 +533,7 @@ def test_6_stubbing_the_index_resolution_makes_the_negatives_red(
         "把索引解析打桩成恒成功之后仍然被拒 ⇒ ② 的红不是它管的")
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_6b_stubbing_it_also_frees_the_f_proof_negative_control(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """⑥ 的另一半（③）：签与对象 sha 不符那一档，桩一打必须放行。"""
@@ -532,6 +545,7 @@ def test_6b_stubbing_it_also_frees_the_f_proof_negative_control(
 
 
 # ============================================================ ⑦ 历史不追溯
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_7_historical_cross_check_rows_are_not_upgraded(tmp_path: pathlib.Path) -> None:
     """⑦ r34b 那 4 条 cross_check 不升档（新闸不许"扫全库升档"）。"""
     store = _store(tmp_path)
@@ -563,4 +577,3 @@ if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时�
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
