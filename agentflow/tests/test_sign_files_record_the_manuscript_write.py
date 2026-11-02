@@ -132,6 +132,19 @@ def test_b_a_failed_block_write_says_why(tmp_path: pathlib.Path) -> None:
     assert shown["line"] == 0, shown
 
 
+def test_b2_a_corrupt_manuscript_is_a_failure_not_a_crash(tmp_path: pathlib.Path) -> None:
+    """手稿不是 UTF-8（读它就抛）⇒ 一样落 `failed` + 原因，不许把发签整笔带走。"""
+    root = _workspace(tmp_path)
+    (root / MANUSCRIPT).write_bytes(b"\xff\xfe\x00 not utf-8 \xff")
+    got = _issue(root)
+    mw = got["manuscript_write"]
+    assert mw["state"] == "failed", mw
+    assert "读不出来" in mw["why"], mw
+    assert got["written"] is True, "签文件是证据：稿读不出来不许把它也带走"
+    shown = VSP.manuscript_write_reading(_sign_doc(root))
+    assert shown["state"] == "failed" and "读不出来" in shown["why"], shown
+
+
 # ====================================================================== c 未尝试
 def test_c_no_manuscript_path_is_not_attempted_not_failed(tmp_path: pathlib.Path) -> None:
     """发签 + 没有手稿落点 ⇒ `not_attempted`（"没得写"不是"写失败"）。"""
@@ -142,6 +155,9 @@ def test_c_no_manuscript_path_is_not_attempted_not_failed(tmp_path: pathlib.Path
     assert mw["state"] == "not_attempted", mw
     assert mw["written"] is False and mw["missing"] is False, mw
     assert "未尝试" in mw["why"], mw
+    # 收场那句话也要用同一个词：不是"写失败"，是"未尝试"。
+    assert "手稿签块未尝试" in got["reason"], got["reason"]
+    assert "手稿签块没写成" not in got["reason"], got["reason"]
     doc = _sign_doc(root)
     shown = VSP.manuscript_write_reading(doc)
     assert shown["state"] == "not_attempted", doc.get("manuscript_write")

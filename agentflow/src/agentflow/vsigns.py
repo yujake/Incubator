@@ -666,7 +666,7 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     path = Path(str(root or "")) / rel
     try:
         old = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         out.update(state="failed", missing=not path.exists(),
                    why=(f"手稿读不出来（{type(exc).__name__}: {exc}）⇒ 签块没写成"
                         if path.exists() else
@@ -847,9 +847,11 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     # 侧文件与手稿块是同一签的两个落点（同一把 sha、同一组读数）。写块失败不回滚侧文件：
     # 签已经发了这件事不许因为"稿没写成"而消失，读数写进 `manuscript_write.why`。
     out["manuscript_write"] = _stamp_block_after_sign(root, doc)
-    if not out["manuscript_write"].get("written"):
-        out["reason"] = (f"{out['reason']}；手稿签块没写成："
-                         f"{out['manuscript_write'].get('why')}")
+    _mw = out["manuscript_write"]
+    if not _mw.get("written"):
+        # 三态在收场那句话里也要分得开：没有手稿落点是"未尝试"，不是"写失败"。
+        _word = "未尝试" if str(_mw.get("state") or "") == "not_attempted" else "没写成"
+        out["reason"] = f"{out['reason']}；手稿签块{_word}：{_mw.get('why')}"
     # ---- 2026-11-02 晚：把这一笔的真实结果落进签文件 -------------------------
     # 只补这次新写成的签文件：已在盘上的签仍然"一稿一签、不重写"（那条纪律比
     # "把旧文件的空格补上"更重要 —— 旧文件缺这一格时读侧落 `unrecorded`）。
