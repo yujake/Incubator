@@ -433,8 +433,23 @@ def manuscript_proof_body(text: str) -> str:
 SIGN_MARK = "- V 签："
 
 #: 签块里那几格的键（顺序即写法；读侧按 `；` 与 `=` 拆）。
+#:
+#: 2026-11-02（业主裁定）：加第 9 格 `手稿号`，值是**裸稿号**（`000000` / `plan-0001` / `a`），
+#: 不是文件名 —— 写法上要把"哪一种号"带进值里（`f-proof-plan-0001.md` ⇒ `plan-0001`），
+#: 否则 `f-proof-plan-0001.md` 与 `f-proof-0001.md` 会在数字上撞车（都读成 `0001`）。
+#: 这一格回答"这一块属于哪一份稿"，与 `正文sha`（回答"签的是哪一份正文"）是两件事：
+#: 稿会被改名 / 搬走 / 复制，正文 sha 不会跟着变，所以两格都要有。
 SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "时间",
-                                    "签名者", "台账", "命题号")
+                                    "签名者", "台账", "命题号", "手稿号")
+
+#: 第 9 格的三态（读侧；2026-11-02）。三态不许折成两态：
+#:
+#: | 值 | 什么时候 | 不许读成 |
+#: |---|---|---|
+#: | `resolved` | 格里的裸稿号 == 它所处那份稿的裸稿号 | —— |
+#: | `unmatched` | 格里的号与这份稿对不上（块被搬过 / 格是空的 / 认不出这份稿的号 / 没给稿路径） | 不许读成"签过了" |
+#: | `legacy` | 旧 8 格块（当时还没有这一格） | 绝不许读成"没签"：它是当时真的签过 |
+MANUSCRIPT_ID_STATES: tuple[str, ...] = ("resolved", "unmatched", "legacy")
 
 #: 签文件里 `manuscript_write` 那一格的三态（写侧；2026-11-02）。
 #:
@@ -453,9 +468,30 @@ MANUSCRIPT_WRITE_STATES: tuple[str, ...] = ("written", "failed", "not_attempted"
 MANUSCRIPT_WRITE_UNRECORDED = "unrecorded"
 
 
+def manuscript_id_of(path: Any) -> str:
+    """手稿路径 ⇒ 裸稿号（`reports/f-proof-000000.md` ⇒ `000000`；`...-plan-0001.md` ⇒ `plan-0001`）。
+
+    认不出就回空串（不猜一个号）：第 9 格宁可落 `unmatched`，也不许把 `notes/foo.md`
+    读成 `foo` 然后冒充"这一块属于它"。认得两种写成：
+    `f-proof-<号>.md`（F 的证明手稿）与任意 `*-proof-<号>.md`（一样取最后一段）。
+    号里允许带前缀（`plan-0001`）：只去文件名前缀，不动号本身，所以两种号不会撞车。
+    """
+    name = str(path or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
+    if name.lower().endswith(".md"):
+        name = name[:-3]
+    if not name:
+        return ""
+    if name.startswith("f-proof-"):
+        return name[len("f-proof-"):]
+    if "-proof-" in name:
+        return name.rsplit("-proof-", 1)[-1]
+    return ""
+
+
 def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
                            verdict: str = "成立", signer: str = "V", at: str = "",
                            ledger: str = "", statement_id: str = "",
+                           manuscript_id: str = "",
                            signed: bool = True) -> str:
     """渲染那一行签块（纯字符串；判据在 :func:`stamp_manuscript_sign`）。
 
@@ -463,18 +499,23 @@ def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
     真实判词。为什么不过了就什么都不写：业主 2026-11-01「「有毛病」是给提供证明的一方
     看的，具体信息是叫它们优化证明」⇒ 没过也要在稿上留下"哪一步、什么判词"，
     否则 F 手里只剩一句口头转达。
+
+    `manuscript_id` 是第 9 格（裸稿号，业主 2026-11-02）：写侧由
+    :func:`manuscript_id_of` 从稿路径现算，不接受"手抄一个号"。
     """
     sha = str(proof_sha or "").strip().lower()
     return (f"{SIGN_MARK}已签={'true' if signed else 'false'}；"
             f"判词={str(verdict or '成立')}；"
             f"连续={int(streak or 0)}/{int(need or 0)}；正文sha={sha}；"
             f"时间={str(at or '')}；签名者={str(signer or 'V')}；"
-            f"台账={str(ledger or '')}；命题号={str(statement_id or '未在册')}")
+            f"台账={str(ledger or '')}；命题号={str(statement_id or '未在册')}；"
+            f"手稿号={str(manuscript_id or '')}")
 
 
 def stamp_manuscript_sign(text: str, *, proof_sha: Any, streak: Any, need: Any,
                           verdict: str = "成立", signer: str = "V", at: str = "",
                           ledger: str = "", statement_id: str = "",
+                          manuscript_id: str = "",
                           signed: bool = True) -> str:
     """把手稿正文里那一行签块写成这一签（纯函数、幂等）。
 
@@ -487,7 +528,7 @@ def stamp_manuscript_sign(text: str, *, proof_sha: Any, streak: Any, need: Any,
     mark = render_manuscript_sign(
         proof_sha=proof_sha, streak=streak, need=need, verdict=verdict,
         signer=signer, at=at, ledger=ledger, statement_id=statement_id,
-        signed=signed)
+        manuscript_id=manuscript_id, signed=signed)
     at_i = 0
     for i, ln in enumerate(lines):
         if ln.strip().startswith("- 计划："):
@@ -499,17 +540,25 @@ def stamp_manuscript_sign(text: str, *, proof_sha: Any, streak: Any, need: Any,
     return "\n".join(lines)
 
 
-def manuscript_sign_reading(text: str) -> dict[str, Any]:
+def manuscript_sign_reading(text: str, *, manuscript_path: Any = "") -> dict[str, Any]:
     """读手稿里那一行签块（纯读；没有就是 `found=False`，不是"没签"）。
 
     返回键：`found` / `signed` / `verdict` / `streak` / `need` / `proof_sha256` /
-    `at` / `signer` / `ledger` / `statement_id` / `mark` / `problem`。
+    `at` / `signer` / `ledger` / `statement_id` / `mark` / `problem`，外加第 9 格那一族
+    （2026-11-02）：`manuscript_id`（格里的裸稿号）/ `manuscript_key`（它所处那份稿的
+    裸稿号，`manuscript_path` 现算）/ `identity_state`（:data:`MANUSCRIPT_ID_STATES` 三态）。
+
     三态纪律：块在但读不成形（坏行 / 缺 `正文sha`）⇒ `found=True, signed=False`，
     并在 `problem` 里说缺什么 —— 不许折成"没有签"。
+    `identity_state` 同理：旧 8 格块是 `legacy`（当时真的签过），不是"没有这一格所以不算"
+    （那一档会把 84 的两份真签读成没签）。
     """
     out: dict[str, Any] = {"found": False, "signed": False, "verdict": "", "streak": 0,
                            "need": 0, "proof_sha256": "", "at": "", "signer": "",
-                           "ledger": "", "statement_id": "", "mark": "", "problem": ""}
+                           "ledger": "", "statement_id": "", "mark": "", "problem": "",
+                           "manuscript_id": "", "manuscript_key": manuscript_id_of(
+                               manuscript_path), "identity_state": "unmatched",
+                           "identity_why": ""}
     for raw in str(text or "").replace("\r\n", "\n").split("\n"):
         line = raw.strip()
         if not line.startswith(SIGN_MARK):
@@ -531,6 +580,28 @@ def manuscript_sign_reading(text: str) -> dict[str, Any]:
         if out["statement_id"] in ("未在册", ""):
             out["statement_id"] = ""
         out["proof_sha256"] = str(cells.get("正文sha") or "").strip().lower()
+        # ---- 第 9 格（2026-11-02）：三态不许折成两态 ----
+        if "手稿号" not in cells:
+            out["identity_state"] = "legacy"
+            out["identity_why"] = ("这一块是旧 8 格写法（当时还没有「手稿号」）⇒ legacy："
+                                   "它是当时真的签过，不许读成「没签」")
+        else:
+            out["manuscript_id"] = str(cells.get("手稿号") or "").strip()
+            if not out["manuscript_id"]:
+                out["identity_state"] = "unmatched"
+                out["identity_why"] = "签块里的「手稿号」是空的 ⇒ 这一块认不出属于哪一份稿"
+            elif not str(manuscript_path or "").strip():
+                out["identity_state"] = "unmatched"
+                out["identity_why"] = ("读的时候没给手稿路径 ⇒ 这一格对不上任何一份稿"
+                                       "（不是「签过了」）")
+            elif out["manuscript_key"] and out["manuscript_id"] == out["manuscript_key"]:
+                out["identity_state"] = "resolved"
+                out["identity_why"] = (f"签块的手稿号 {out['manuscript_id']} 与这一份稿相同")
+            else:
+                out["identity_state"] = "unmatched"
+                out["identity_why"] = (
+                    f"签块写的是手稿号 {out['manuscript_id']!r}，而它所在的那一份稿是 "
+                    f"{out['manuscript_key'] or '（认不出的名字）'!r} ⇒ 块被搬过 / 号写错了")
         run = str(cells.get("连续") or "")
         if "/" in run:
             left, right = run.split("/", 1)
@@ -546,6 +617,7 @@ def manuscript_sign_reading(text: str) -> dict[str, Any]:
                               f"{out['proof_sha256']!r}")
         return out
     return out
+
 
 
 def _sign_block_line(text: str) -> int:
@@ -592,7 +664,8 @@ def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
     return out
 
 
-def manuscript_sign_standing(text: str, *, proof_sha: Any = "") -> dict[str, Any]:
+def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
+                             manuscript_path: Any = "") -> dict[str, Any]:
     """签块相对"现在这一份正文"的读数（`signed` / `stale` / `rejected` / `unsigned`）。
 
     判据（与 `bits_after_sign` 同一把尺，不另立）：
@@ -600,8 +673,13 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "") -> dict[str, Any
     - 块在、`已签=true`、`连续>=require`、且块里的 `正文sha` == 这一份正文的 sha
       ⇒ `signed`；sha 不符 ⇒ `stale`（签完之后正文改过）；
     - 块在但 `已签=false`（判词不是成立）⇒ `rejected`。
+
+    `manuscript_path` 只喂给 :func:`manuscript_sign_reading` 的第 9 格那一族
+    （`identity_state` / `manuscript_id` / `manuscript_key`，2026-11-02）：
+    它不参与 `signed` 这一档的判定（那一档只认正文 sha 与连续次数），所以旧调用点
+    不传它时行为逐字不变 —— 但 `identity_state` 会如实落 `unmatched`（没给稿，对不上）。
     """
-    got = manuscript_sign_reading(text)
+    got = manuscript_sign_reading(text, manuscript_path=manuscript_path)
     out = {**got, "state": "unsigned", "checked": True,
            "sha_matches": None, "why": ""}
     if not got.get("found"):
@@ -675,8 +753,9 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     new = stamp_manuscript_sign(old, proof_sha=proof_sha, streak=streak, need=need,
                                 verdict=verdict, signer=signer, at=at,
                                 ledger=ledger, statement_id=statement_id,
+                                manuscript_id=manuscript_id_of(rel),
                                 signed=signed)
-    out["reading"] = manuscript_sign_reading(new)
+    out["reading"] = manuscript_sign_reading(new, manuscript_path=rel)
     out["line"] = _sign_block_line(new)
     if new == old:
         out.update(state="written", written=True, idempotent=True,
