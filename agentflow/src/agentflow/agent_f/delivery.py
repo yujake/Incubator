@@ -103,13 +103,50 @@ STATE_LABELS: dict[str, str] = {
 DELIVERED_MEANS = ("有成果、且每一条成果都已签 —— 不是「有一条签了」；0 条成果时它是假"
                    "（「没成果」是另一种收工理由，与「交差完成」不是一回事）")
 
+#: 一条成果「凭什么可以叫「证明」」的受控三档（业主 2026-11-02：「如果某命题无V签，
+#: F侧就不能声称自己产出了『证明』」）。判定只一处：:func:`claim_of`。
+CLAIM_PROOF = "proof"
+CLAIM_PROOF_UNSIGNED = "proof_unsigned"
+CLAIM_DRAFT = "draft"
+
+#: 受控词表（顺序 = 从"算证明"到"不算"）。
+OUTPUT_CLAIMS: tuple[str, ...] = (CLAIM_PROOF, CLAIM_PROOF_UNSIGNED, CLAIM_DRAFT)
+
+CLAIM_LABELS: dict[str, str] = {
+    CLAIM_PROOF: "证明（有 V 签）",
+    CLAIM_PROOF_UNSIGNED: "待签（还没 V 签，不算证明）",
+    CLAIM_DRAFT: "草稿（V 判过没过 / 没查成，不算证明）",
+}
+
+
+def claim_of(state: str, *, signed: bool = False) -> str:
+    """这一条成果现在「能不能叫「证明」」（业主原话：无 V 签就不能声称产出了证明）。
+
+    三档：
+
+    - `proof`：有 V 签（`state="signed"` 或 `signed=True`）—— 只有这一档计入「产出的证明数」；
+    - `proof_unsigned`：正文在、签还没到（`state="waiting"`：没送审，或审过、连续次数没到）
+      —— 它是一份待签的证明，但「还不是」证明；
+    - `draft`：V 判过、结论不是能签的那一档，或这一份根本没查成（`rejected` / `unknown`）
+      —— 它是草稿/待改稿，「不是」证明。
+
+    为什么要有这一格（而不是看 `signed_count` 就够了）：`signed_count` 回答"签了几条"，
+    这一格回答"有几条能叫证明"。把无签的正文说成"我产出了证明"，正是这一批要挡的那句话。
+    """
+    if signed or str(state or "") == "signed":
+        return CLAIM_PROOF
+    if str(state or "") == "waiting":
+        return CLAIM_PROOF_UNSIGNED
+    return CLAIM_DRAFT
+
 
 def empty_reading(why: str, *, state: str = "") -> dict[str, Any]:
     """没查成时的交差读数（键一个不少，值一律 `None` —— 不许靠"少给键"表达没查成）。"""
     return {
         "checked": False, "outputs": [],
         "total": None, "signed_count": None, "pending_count": None,
-        "unsigned_count": None, "coverage": "", "coverage_reading": "",
+        "unsigned_count": None, "proof_count": None, "proof_statements": [],
+        "draft_count": None, "coverage": "", "coverage_reading": "",
         "coverage_ratio": None, "coverage_why": why,
         "state": state, "state_label": STATE_LABELS.get(state, ""),
         "delivered": False, "delivered_means": DELIVERED_MEANS,
@@ -377,6 +414,7 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
     """
     items: list[dict[str, Any]] = []
     signed = pending = unsigned = 0
+    proof_statements: list[str] = []
     for one in outputs or ():
         got = dict(one or {})
         state = str(got.get("state") or "")
@@ -387,6 +425,12 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
         else:
             kind, unsigned = "unsigned", unsigned + 1
         got["counted_as"] = kind
+        # ---- 无签不许叫「证明」（业主 2026-11-02）：claim 是这一格唯一的口径。
+        claim = claim_of(state, signed=(kind == "signed"))
+        got["claim"] = claim
+        got["claim_label"] = CLAIM_LABELS.get(claim, "")
+        if claim == CLAIM_PROOF:
+            proof_statements.append(str(got.get("statement_id") or ""))
         items.append(got)
     total = len(items)
     cov = coverage_of(signed, total)
@@ -407,7 +451,8 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
     elif total > 0:
         state = STATE_OUTPUTS_UNSIGNED
         why = (f"有 {total} 条成果、其中 {signed} 条已签：待签 {pending} 条、未签 "
-               f"{unsigned} 条 ⇒ 还没到收工的时候")
+               f"{unsigned} 条 ⇒ 还没到收工的时候；"
+               f"能叫「证明」的只有已签的那 {signed} 条（未签的不计入产出的证明数）")
     else:
         state = STATE_NOT_STARTED
         why = "0 条成果 ⇒ 交差读数没有对象（「研究过没成果」与「还没开始」下一批分开）"
@@ -418,6 +463,10 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
         "signed_count": signed,
         "pending_count": pending,
         "unsigned_count": unsigned,
+        # ---- 产出统计：`proof_count` 只数 claim=="proof" 的那些（业主：无 V 签不许叫证明）
+        "proof_count": len(proof_statements),
+        "proof_statements": proof_statements,
+        "draft_count": total - len(proof_statements),
         **cov,
         "state": state,
         "state_label": STATE_LABELS[state],

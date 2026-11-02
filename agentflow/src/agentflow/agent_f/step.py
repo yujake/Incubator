@@ -402,6 +402,7 @@ class _Step:
         out["delivered"] = bool(_delivery.get("delivered"))
         for _key in ("signed_count", "pending_count", "unsigned_count",
                      "coverage", "coverage_reading", "coverage_ratio",
+                     "proof_count", "draft_count", "proof_statements",
                      "state", "state_label", "self_assessment"):
             if _key == "state":
                 out["delivery_state_plan"] = str(_delivery.get("state") or "")

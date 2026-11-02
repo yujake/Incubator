@@ -2211,6 +2211,9 @@ class _Core:
                     "pending_count": _delivery_refused.get("pending_count"),
                     "unsigned_count": _delivery_refused.get("unsigned_count"),
                     "coverage": _delivery_refused.get("coverage"),
+                    "proof_count": _delivery_refused.get("proof_count"),
+                    "draft_count": _delivery_refused.get("draft_count"),
+                    "proof_statements": list(_delivery_refused.get("proof_statements") or []),
                     "self_assessment": dict(_delivery_refused.get("self_assessment") or {}),
                     "self_assessment_raw": (product.get("self_assessment")
                                             if isinstance(product, Mapping) else None),
@@ -2383,6 +2386,10 @@ class _Core:
             "pending_count": delivery.get("pending_count"),
             "unsigned_count": delivery.get("unsigned_count"),
             "coverage": delivery.get("coverage"),
+            # 产出统计：只有拿到 V 签的那几条能叫「证明」（业主：无 V 签不许叫证明）。
+            "proof_count": delivery.get("proof_count"),
+            "draft_count": delivery.get("draft_count"),
+            "proof_statements": list(delivery.get("proof_statements") or []),
             "self_assessment": dict(delivery.get("self_assessment") or {}),
             "self_assessment_raw": (product.get("self_assessment")
                                     if isinstance(product, Mapping) else None),
