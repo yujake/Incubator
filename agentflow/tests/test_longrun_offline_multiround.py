@@ -171,6 +171,7 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
                proof_manuscript=man_path.read_text(encoding="utf-8"))
     row = _as_dict(b.register_statement(**req))
     assert row.get("ok"), row
+    assert (row.get("v_sign") or {}).get("applied") is True, row.get("v_sign")
     sid = str(row.get("stmt_id") or "")
     # 同一次审校的另一半：C 的「经审核」判据只读台账（`proof_chain._verified_ok`），
     # 手稿签块是 B 收录的凭据 —— 三转签要各写各的（同一个写口）。
