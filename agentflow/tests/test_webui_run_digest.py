@@ -49,11 +49,13 @@ INDEX_TITLE = "趟次索引（已对账）"
 
 
 # ====================================================================== 夹具
-def _ws(tmp_path: pathlib.Path, *, stop_reason: str = "final") -> pathlib.Path:
+def _ws(tmp_path: pathlib.Path, *, stop_reason: str = "final",
+        total: int = 3, unsigned: int = 1) -> pathlib.Path:
     """一个有会话（一趟真 run）的初始化工作区。
 
     `agent_run_end` 带上查档要用的四格：`steps` / `spend` / `summons` /
-    `final_gaps_reading`（验了几条 / 签了几个的唯一事件源）。
+    `final_gaps_reading`（验了几条 / 签了几个的唯一事件源）。`total` / `unsigned`
+    可改：e 条要复现 84 的"31 个已签证明位"那一档。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -69,8 +71,8 @@ def _ws(tmp_path: pathlib.Path, *, stop_reason: str = "final") -> pathlib.Path:
                      "stop_reason": stop_reason, "steps": 1,
                      "summons": ["A", "B"], "messages": 0,
                      "spend": {"calls": 1, "usd": 0.25, "unknown_usd_calls": 0},
-                     "final_gaps_reading": {"checked": True, "total": 3,
-                                            "unsigned": 1, "unreadable": 0},
+                     "final_gaps_reading": {"checked": True, "total": int(total),
+                                            "unsigned": int(unsigned), "unreadable": 0},
                      "final": "写完了", "final_chars": 3, "ts": TS}, sid="s1")
     return root
 
@@ -269,12 +271,12 @@ def test_e_signed_proofs_and_sign_files_are_two_different_numbers(
     "签了 31 份"。这一条同时钉反真空：删掉一份签文件 ⇒ `sign_files` 减一，
     而 `signed_proofs` 一个字节都不动（它们各读各的来源）。
     """
-    root = _ws(tmp_path, stop_reason="final")
+    root = _ws(tmp_path, stop_reason="final", total=32, unsigned=1)
     signs = _put_sign_files(root, n_signs=2)
     with _server(root) as base:
         code, dig = _get(base, "/api/run-digest?sid=s1")
         assert code == 200 and dig["tri"] == "computed", dig
-        assert dig["signed_proofs"] == 2, dig
+        assert dig["signed_proofs"] == 31, dig
         assert dig["sign_files"] == 3, dig
         assert "signed" not in dig, (
             "旧名字 `signed` 还在 ⇒ 名字与语义继续混用（它数的是证明位，不是签文件）")
@@ -283,7 +285,7 @@ def test_e_signed_proofs_and_sign_files_are_two_different_numbers(
         code, after = _get(base, "/api/run-digest?sid=s1")
         assert code == 200 and after["tri"] == "computed", after
     assert after["sign_files"] == 2, after
-    assert after["signed_proofs"] == dig["signed_proofs"] == 2, (
+    assert after["signed_proofs"] == dig["signed_proofs"] == 31, (
         "删签文件把已签证明位也改了 ⇒ 两个数不是各读各的来源", after)
 
 
