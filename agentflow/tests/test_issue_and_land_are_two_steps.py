@@ -9,7 +9,7 @@ V 只颁发：`out/vsigns/<sha>.json` 由颁发工具自动写（合规）；手
 
 - `issue()` = 颁发：写 `<sha>.json`（证据）+ `issued.json`（派生归档）+ 信封（写给收方秘书）；
 - `land()` = 落签：盖手稿块（第 9 格 = 裸稿号）+ 落台账位（`bits.evidence.reviewed_by_proof`）；
-- `by=` 必填，且只认 `secretary:<F|B>`：别的值 ⇒ 受控拒绝 `not_a_secretary`、**零字节**；
+- `by=` 必填，且只认 `secretary:<F|B>`：别的值 ⇒ 受控拒绝 `not_a_secretary`、零字节；
 - 签文件里的 `written_by` 从笼统的 `"secretary"` 改成 `"secretary:F"` / `"secretary:B"`。
 
 ## 为什么要拆

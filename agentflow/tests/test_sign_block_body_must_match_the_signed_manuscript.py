@@ -10,10 +10,10 @@
 
 ## 为什么这一条必须挡在"写块"这一口上
 
-`正文sha` 那一格只说明"V 签的是哪一份正文"，它不保证**眼前这份稿的正文**还是那一份。
+`正文sha` 那一格只说明"V 签的是哪一份正文"，它不保证眼前这份稿的正文还是那一份。
 签名之后 F 又改过稿（84 就是这样：块盖的是 `#p3` 的 sha，文件里现在是 `#p2` 的正文），
 再盖一块就等于把一份没被审过的正文盖成"签过"。所以判据放在 :func:`vsigns.land` /
-:func:`vsigns.write_manuscript_sign` 这一口：**一个字节都不写**，读数落 `body_mismatch`。
+:func:`vsigns.write_manuscript_sign` 这一口：一个字节都不写，读数落 `body_mismatch`。
 
 ## 判据
 
@@ -130,7 +130,7 @@ def test_d_the_84_manuscript_is_a_body_mismatch() -> None:
     standing = VS.manuscript_sign_standing(text, proof_sha=body_sha, manuscript_path=rel)
     assert standing["body_mismatch"] is True, standing
     assert standing["state"] == "stale", standing
-    # 只读纪律：写块那一口对同一份材料也必须拒绝（这里只调纯判据，不碰 projects/**）。
+    # 只读纪律：写块那一口对同一份材料也必须拒绝（这里只调纯判据，不碰 projects/ 下）。
     assert (PROJ84 / rel).read_text(encoding="utf-8") == text
 
 
