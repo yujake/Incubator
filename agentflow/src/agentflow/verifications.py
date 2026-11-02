@@ -2859,40 +2859,46 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             # 于是"没有正文（也就没有正文 sha）"被读成"第 1 份已签"。
             #
             # 判据（业主 2026-11-03）：第 3 位翻真要求"该份正文存在，且它的 sha 与这一签
-            # 覆盖的 sha 相同"。两条缺一 ⇒ 只落台账那一行（台账是签的正本），位不翻，
-            # 理由串点名缺哪一条 —— 不静默跳过，也不拿"签过了"冒充"命题行里有这一份"。
+            # 覆盖的 sha 相同"。两条缺一 ⇒ 位不翻，理由串点名缺哪一条 —— 不静默跳过，
+            # 也不拿"签过了"冒充"命题行里有这一份"。
+            #
+            # 但"位不翻"不等于"签不颁"：两阶段录入是 B 先拿号、V 先签、B 再把正文写进
+            # 命题行（2026-11-02 口径），B 靠 `out/vsigns/<正文 sha>.json` 按 sha 认领。
+            # 所以下面仍调 `_vsigns_write_after_flip`（写签文件 + 落手稿块），只是跳过
+            # `_reviewed_statement_row`/`tx.upsert` 那一半。
             body_in_row = proof_text_of(found, no)
             signed_sha = str(row.get("proof_sha256") or "")
+            body_gate = "matched"
             if not str(body_in_row or "").strip():
-                out["body_gate"] = "missing_body"
+                body_gate = "missing_body"
                 out["reason"] = (
                     f"命题 {sid} 的第 {no} 份证明没有正文（`proof_text` / `{PROOFS_KEY}` 都读不到）"
                     " ⇒ 这一签没有可盖的正文：第 3 位不翻（`reviewed_by_proof` 不写这一份），"
-                    "只落台账那一行")
-                return out
-            body_sha = proof_sha(str(body_in_row))
-            if not signed_sha or body_sha != signed_sha:
-                out["body_gate"] = "sha_mismatch"
-                out["reason"] = (
-                    f"命题 {sid} 的第 {no} 份证明正文 sha {body_sha[:12]}… 与这一签覆盖的 "
-                    f"sha {signed_sha[:12] or '（空）'}… 不符 ⇒ 第 3 位不翻"
-                    "（签的不是现在这一份正文），只落台账那一行")
-                return out
-            out["body_gate"] = "matched"
-            new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no,
-                                          streak=holds)
-            # ---- D-69：V 判「成立」⇒ 同一笔事务里按证据位把 `kind` 现算一遍。
-            #
-            # 位置在"位已经翻上去"之后、`tx.upsert` 之前：台账那一行刚追加进
-            # `verifications/<号>.jsonl`，`kind_following_grade` 现在读得到那一签；
-            # 判不了（`held` / `unreadable`）就原样不动（三态：不抬，也不降）。
-            upgraded = _kind_upgrade_from_signature(
-                new, root=getattr(store, "root", ""), verifier=f"verifier-{no}")
-            new = upgraded["row"]
-            tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
-            out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
-                       kind_upgrade=dict(upgraded["kind_upgrade"]),
-                       upgrade_note=str(upgraded["note"]))
+                    "签照旧颁发，等 B 把正文写进命题行之后按正文 sha 认领")
+            else:
+                body_sha = proof_sha(str(body_in_row))
+                if not signed_sha or body_sha != signed_sha:
+                    body_gate = "sha_mismatch"
+                    out["reason"] = (
+                        f"命题 {sid} 的第 {no} 份证明正文 sha {body_sha[:12]}… 与这一签覆盖的 "
+                        f"sha {signed_sha[:12] or '（空）'}… 不符 ⇒ 第 3 位不翻"
+                        "（签的不是现在这一份正文）；签照旧颁发，等正文换过来之后按 sha 认领")
+            out["body_gate"] = body_gate
+            if body_gate == "matched":
+                new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no,
+                                              streak=holds)
+                # ---- D-69：V 判「成立」⇒ 同一笔事务里按证据位把 `kind` 现算一遍。
+                #
+                # 位置在"位已经翻上去"之后、`tx.upsert` 之前：台账那一行刚追加进
+                # `verifications/<号>.jsonl`，`kind_following_grade` 现在读得到那一签；
+                # 判不了（`held` / `unreadable`）就原样不动（三态：不抬，也不降）。
+                upgraded = _kind_upgrade_from_signature(
+                    new, root=getattr(store, "root", ""), verifier=f"verifier-{no}")
+                new = upgraded["row"]
+                tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
+                out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
+                           kind_upgrade=dict(upgraded["kind_upgrade"]),
+                           upgrade_note=str(upgraded["note"]))
             # ---- 业主 2026-11-01：签落成一份按正文 sha 命名的侧文件 -------------------
             #
             # 位置在这里（upsert 之后、事务里）的三个理由：
