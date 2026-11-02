@@ -6357,6 +6357,22 @@
           "to": "{'checked','me','depth_requested','depth_granted','one_layer_only','children','count','deeper','session'}；每个子任务里有 {'task_id','role','status','outcome','recent_steps','subtask_refusals','products','last_handoff'}"
         }
       ]
+    },
+    {
+      "tools": [
+        "conductor.summon_many"
+      ],
+      "key": "returns",
+      "reason": "可抢占编排那一批（2026-11-02 d6d7ba05 / 2984c2c8 / ea86a3db）：`conductor.summon_many` 的 `returns` 多了一句「循环里调它时另带三格（只加不减）」—— `preempted`（本步只等到 `CHILD_STEP_WAIT_SEC` 就返场）、`dispatched`（已派出的 task_id）、`running`（还没回来的 task_id，结局在下一次返场投给你）。三格只在「循环路径」（父代理在循环里调它、可被抢占）出现，一次性调用那条路径不产生它们；声明只加不减，原有那 22 个键与 `results[]` 每项的键一个没动。本条按现值重记一次：`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值。",
+      "date": "2026-11-02",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}",
+          "to": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}。循环里调它时另带三格（只加不减）：'preempted'（本步只等到 CHILD_STEP_WAIT_SEC 就返场）、'dispatched'（已派出的 task_id）、'running'（还没回来的 task_id —— 它们的结局在下一次返场投给你，别因为 status=running 就重派）"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

@@ -1519,6 +1519,103 @@ def _declared_minus_actual(returns: str, obs: Observation) -> set[str] | None:
     return shared_declaration.declared_keys(returns) - actual
 
 
+#: 只在「循环路径」上产出的声明键（其余声明键仍由阻塞档那一次调用逐格核）。
+#:
+#: 为什么需要这一格：`conductor.summon_many` 有两条入口（见
+#: `tools/conductor_tools.py::conductor_summon_many` 的 docstring）—— 工具体那条
+#: 阻塞到全部落定，而 `preempted` / `dispatched` / `running` 是「本步只等到
+#: `CHILD_STEP_WAIT_SEC` 就返场」那一档才有的读数。`returns=` 自己逐字写明了这件事
+#: （「循环里调它时另带三格（只加不减）」）。所以那三格在阻塞档的观测上缺席
+#: **不是**"声明了却没给"，而是"要给的是另一条路径"。
+#:
+#: 处置口径（2026-11-02）：通用子集判据仍逐格核其余声明键，这三格从那一份观测里
+#: 扣掉；同一份 `_declared_minus_actual` 在**循环路径**的观测上再核一遍
+#: （`test_the_loop_path_returns_the_conditional_keys_it_declares`）——
+#: 于是每一条声明都仍然见过一次实跑，只是取样路径不同。这不是放宽：
+#: 删掉这三行登记，通用判据立刻会报"声明了但实现没给"。
+CONDITIONAL_KEYS: dict[str, frozenset[str]] = {
+    "conductor.summon_many": frozenset({"preempted", "dispatched", "running"}),
+}
+
+
+class _PreemptedBatch:
+    """一个「本步还没等完」的派活句柄：只实现 `_do_summon_many` 读的那几个方法。"""
+
+    def __init__(self, task_ids: tuple[str, ...]) -> None:
+        self._ids = tuple(task_ids)
+
+    def done(self) -> bool:
+        """还没全落定 ⇒ `_do_summon_many` 走 `preempted` 那一支。"""
+        return False
+
+    def settled_by_index(self) -> dict[int, object]:
+        """这一小段里一条都没回来。"""
+        return {}
+
+    def dispatched(self) -> list[dict]:
+        """句柄已经放出去的那几条（带 `task_id`）。"""
+        return [{"index": i, "task_id": tid} for i, tid in enumerate(self._ids)]
+
+    def running(self) -> list[str]:
+        """还在跑的编号（`_children_running` 从这一格读数）。"""
+        return list(self._ids)
+
+    def wait_any(self, timeout: float) -> bool:  # noqa: ARG002
+        """等一小段就返场（不睡觉：`_wait_for_children` 到点用 `slice` 收）。"""
+        return True
+
+
+class _PreemptingConductor:
+    """`run_plan` 的替身：只认可抢占那一档，并把「还没落定」的句柄交回来。"""
+
+    def __init__(self, task_ids: tuple[str, ...]) -> None:
+        from agentflow.policy import Policy
+
+        self.policy = Policy()
+        self._batch = _PreemptedBatch(task_ids)
+        self.calls: list = []
+
+    def run_plan(self, calls, token=None, preemptible=False):  # noqa: ANN001, ARG002
+        """循环路径按 `preemptible=True` 调它；别的档不是本条探针的对象。"""
+        assert preemptible is True, "这条探针要的是循环里的可抢占那一档"
+        self.calls = list(calls)
+        return self._batch
+
+
+def _loop_path_summon_many_data() -> dict:
+    """按「循环路径」取样 `conductor.summon_many`：强制走到可抢占那一支。
+
+    为什么不是直接 `registry.call(...)`：那走的是工具体（阻塞档），三格条件键属于
+    另一条入口。这里起一个最小的 `AgentLoop`（`auto_secretary=False`，registry/seam
+    都用不上），把 conductor 的 `run_plan` 换成"交回一个还没落定的句柄"的替身，
+    于是 `_do_summon_many_tool` 真的走到 `preempted` 那一支 —— 不靠睡多久、
+    不靠子代理真的跑起来，读数因此是确定的。
+
+    等待压到 0.02s：`_wait_for_children` 到点就以 `slice` 返场（它与真机同一个
+    返场点，只是不睡）。
+    """
+    from agentflow import agent_loop as AL
+
+    ids = ("t-000001", "t-000002")
+    cond = _PreemptingConductor(ids)
+    root = Path(tempfile.mkdtemp(prefix="summon-many-loop-"))
+    loop = AL.AgentLoop(
+        role="M", session_root=root, registry=None, seam=None, conductor=cond,
+        store=None, sid="probe", auto_secretary=False, workspace_root=str(root),
+    )
+    loop.my_task_id = "t-000009"
+    loop.child_step_wait_sec = 0.02
+    out = loop._do_summon_many_tool({
+        "targets": [{"target_role": "C", "task": f"第 {i} 件活", "instance": str(i)}
+                    for i in (1, 2)],
+        "why": "探针：只验循环路径的键集合",
+    })
+    assert out.get("ok") is True, out
+    data = out.get("data")
+    assert isinstance(data, dict), out
+    return dict(data)
+
+
 # ---------------------------------------------------------------- 1) 反真空门
 
 
@@ -1661,6 +1758,9 @@ def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
                 f"{name}: `comparable` 为真但 data 不是 dict ⇒ 判据自相矛盾（`G-21`），"
                 "不许把它读成『一致』"
             )
+        # 条件键（只在循环路径产出的那几格）从**这一份**观测里扣掉，改由下面那条
+        # 循环路径的用例逐格核 —— 每一条声明仍然见过一次实跑，只是取样路径不同。
+        missing -= CONDITIONAL_KEYS.get(name, frozenset())
         if missing:
             mismatches.append(
                 f"  {name}\n      声明了但实现没给：{sorted(missing)}\n"
@@ -1677,6 +1777,35 @@ def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     )
 
 
+def test_the_loop_path_returns_the_conditional_keys_it_declares(
+    registry: ToolRegistry, observations: dict[str, Observation]
+) -> None:
+    """条件键按「循环路径」取样：`preempted` / `dispatched` / `running` 三格真的在。
+
+    这条补的是上一条的取样口径（见 `CONDITIONAL_KEYS` 的注释）：那三格只在
+    `_do_summon_many_tool`（循环里的可抢占档）产出，阻塞档那次调用必然看不到它们。
+    扣掉它们之后，其余声明键仍由 `observations` 里那一次真实调用逐格核 —— 所以
+    两条路子合起来，`returns=` 里的每一条都仍然有过一次"实现真给了"的读数；
+    这三格不是被删掉，而是换了一条能产出它们的路径来核。
+
+    读数的另一半同样是判据：`preempted is True`、两个清单各两条编号 ——
+    三格若是空壳（`False` / `[]`），"声明 ⊆ 实跑"照样成立而承诺的东西没发生。
+    """
+    name = "conductor.summon_many"
+    data = _loop_path_summon_many_data()
+    for key in sorted(CONDITIONAL_KEYS[name]):
+        assert key in data, (f"声明里承诺的 `{key}` 在循环路径上也没出现", sorted(data))
+    assert data["preempted"] is True, data
+    assert data["dispatched"] == ["t-000001", "t-000002"], data
+    assert data["running"] == ["t-000001", "t-000002"], data
+    # 阻塞档那一次观测必须仍然是"其余声明键一条不缺"（否则这条只是把缺口挪走了）。
+    blocking = observations[name]
+    assert blocking.comparable, (blocking.ok, blocking.kind, blocking.error)
+    rest = shared_declaration.declared_keys(registry.get(name).returns) - CONDITIONAL_KEYS[name]
+    assert not (rest - (blocking.keys or set())), (
+        "其余声明键在阻塞档上缺席了 —— 条件键的登记不该顺带放过任何一条：",
+        sorted(rest - (blocking.keys or set())),
+    )
 def test_negative_control_a_declared_key_the_handler_never_returns_makes_the_subset_check_red(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
