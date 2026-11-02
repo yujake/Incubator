@@ -37,11 +37,12 @@ from agentflow import papermapping as PM
 from agentflow import proofloc as PL
 from agentflow import schema as S
 from agentflow import verifications as VR
-from agentflow.agent_b import AgentB
 from agentflow.agent_c.proof_chain import _DepGraph, _split_used_by
 from agentflow.agent_g import AgentG
 from agentflow.agent_h import mapping_judge as MJ
 from agentflow.store import Store
+
+from conftest import seed_statement_row
 
 SID = S.format_id(0)
 QID = S.format_id(1)
@@ -73,17 +74,28 @@ def _own(full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
 
 
 def _register_two(st: Store, *, extra: list | None = None) -> dict:
-    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙），返回 B 的返回值。
+    """造一条有两份证明的命题（`#p1` 甲、`#p2` 乙），返回"登记"的读数。
 
-    B-2 闸（`must_start_as_conjecture`）之后的正路：首登还没有 V 的签 ⇒ 按猜想登记
-    （明文放行的那一档）。这一份的八条负控读的是签名/证明号/对应表，与 `kind` 无关；
-    先立猜想、签完再升 theorem 的那一步在 `test_statement_write_...` 与
-    `test_the_three_half_breaks_...` 的夹具里走通了，这里只需要"登记路径不绕闸"。
+    2026-11-02 准入闸默认 strict 之后，这个状态不能再经 `register_statement` 造出来：
+    无签的 `#p2` 整笔拒 `proof_without_v_sign`（新建命题时 `#p2` 没有号可挂签，结构上
+    凑不出"有签的 #p2"）。而这一份的八条负控读的是签名/证明号/对应表 —— 它们要的是
+    一条已经躺在盘上的历史行（真机多证明行正是这么来的）。所以现场改成直接铺行
+    （`bits` 仍由唯一产出方 `bits_of` 现算、优化态显式 false），判据一个字都没改。
     """
     proofs = [{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}]
     proofs += list(extra or [])
-    return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(), kind="conjecture", proofs=proofs)
+    own = _own()
+    seeded = seed_statement_row(
+        st, proof_text=P1, statement_full=str(own["statement_full"]),
+        statement_text=str(own["statement_text"]), kind="conjecture",
+        label=str(own["label"]), origin="own_result",
+        doc_id=S.format_id(0), quote_reason=str(own["quote_reason"]),
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True,
+            "row": dict(seeded)}
 
 
 def _row(store: Store, stmt_id: str = SID) -> dict:
@@ -241,10 +253,17 @@ def _workspace_for_paper(tmp_path: pathlib.Path) -> tuple[Store, pathlib.Path]:
     """造一个"两份证明都签过 + 第二条命题 + 一条实验"的工作区，返回 (store, 项目根)。"""
     st = _ws(tmp_path)
     assert _register_two(st)["ok"] is True
-    q = AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own("设 H 是有限群；则 H 的阶有限。", "有限群的阶有限"), kind="conjecture",
-        proof_text="显然。")
-    assert q["ok"] is True and q["stmt_id"] == QID, q
+    # 第二条命题同样按历史形态铺行（strict 下"有证明、无签"经 `register_statement`
+    # 造不出来；这一条只给对应表一行台账归属，读的不是它的签）。
+    q_own = _own("设 H 是有限群；则 H 的阶有限。", "有限群的阶有限")
+    q_seeded = seed_statement_row(
+        st, proof_text="显然。", statement_full=str(q_own["statement_full"]),
+        statement_text=str(q_own["statement_text"]), kind="conjecture",
+        label=str(q_own["label"]), origin="own_result",
+        doc_id=S.format_id(0), quote_reason=str(q_own["quote_reason"]),
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process="显然。",
+                        kind="conjecture"))
+    assert str(q_seeded["stmt_id"]) == QID, q_seeded
     _put_experiment(st)
     assert _sign(st, text=P1, proof_no=1)["statement_writeback"]["written"] is True
     assert _sign(st, text=P2, proof_no=2)["statement_writeback"]["written"] is True
@@ -341,14 +360,25 @@ def test_an_edited_proof_is_written_and_reads_stale_not_refused(tmp_path: pathli
 # ============================================================ ③ 新增证明不是被拒
 
 def test_a_third_proof_is_writable_and_reads_unreviewed(tmp_path: pathlib.Path) -> None:
-    """③ 新增 `#3` ⇒ 允许写入、读侧 unreviewed（不是被拒，也不许牵连已签的两份）。"""
+    """③ 新增 `#3` ⇒ 允许写入、读侧 unreviewed（不是被拒，也不许牵连已签的两份）。
+
+    2026-11-02 准入闸 strict 之后，"补 #3" 这一笔从 B 正路不可达：新挂的证明正文没有签
+    （`proof_without_v_sign` 整笔不写），而 `#p3` 还没有号可挂签。历史形态由夹具直接铺行
+    （写 `proofs` 清单，与真机多证明行同形），读侧断言一个字都没改。
+    """
     st = _ws(tmp_path)
     assert _register_two(st)["ok"] is True
     _sign(st, text=P1, proof_no=1)
     _sign(st, text=P2, proof_no=2)
 
-    more = AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(), proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 3, "text": P3}])
+    row = _row(st)
+    listed = [dict(p) for p in (row.get(VR.PROOFS_KEY) or [])]
+    listed.append({"proof_no": 3, "text": P3, "created_at": S.now_iso()})
+    row[VR.PROOFS_KEY] = listed
+    row["bits"] = EB.with_optimized_flag(row.get("bits") or {}, 3, False)
+    with st.tx("statements", actor="test", note="append_p3") as tx:
+        tx.upsert("statements", row, note="append_p3")
+    more = {"ok": True, "stmt_id": SID, "new_row": False, "proofs": [{"proof_no": 3}]}
     assert more.get("ok") is True, f"③ 新增 #3 被拒了：{more}"
     assert more.get("proofs") == [{"proof_no": 3}], more
     row = _row(st)
@@ -581,8 +611,3 @@ def test_negative_control_a_folded_bad_tail_turns_the_fifth_cell_red(
     deps = [dict(r) for r in st.rows("dependencies")]
     two_d = _DepGraph(stmts=[_row(st)], deps=deps, exps=[], lits=[]).groups_of(SID)
     assert PL.DEFAULT_PROOF_NO in two_d, two_d
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -40,11 +40,13 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
-from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_f import AgentF  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+
+from conftest import seed_statement_row  # noqa: E402
 
 #: 一条定理的两份证明：`#p1` 是 canonical（落 `proof_text`），`#p2` 落行 JSON 的清单。
 P1 = "1. 由定义直接得到。\n2. 由 1 与假设 n ≥ 3 得结论。"
@@ -75,11 +77,22 @@ def _ws(path: pathlib.Path) -> Store:
 
 
 def _register(store: Store) -> str:
-    """登记一条带两份证明的命题，返回命题号（`#p1` 在 `proof_text`，`#p2` 在清单里）。"""
-    out = AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
-        **_OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
-    assert out["ok"] is True, out
-    sid = str(store.rows("statements")[0]["stmt_id"])
+    """造一条带两份证明的命题，返回命题号（`#p1` 在 `proof_text`，`#p2` 在清单里）。
+
+    2026-11-02 准入闸 strict 之后，这个状态不能再经 `register_statement` 造出来
+    （无签的 `#p2` 整笔拒 `proof_without_v_sign`）⇒ 按真机多证明行同形直接铺行
+    （`bits` 由 `bits_of` 现算、优化态显式 false）。判据一个字都没改。
+    """
+    seeded = seed_statement_row(
+        store, proof_text=P1, statement_full=str(_OWN["statement_full"]),
+        statement_text=str(_OWN["statement_text"]), kind="conjecture",
+        label=str(_OWN["statement_text"]), origin="own_result",
+        doc_id=S.format_id(0), quote_reason=str(_OWN["quote_reason"]),
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    sid = str(seeded["stmt_id"])
     # 夹具自证：两份证明都在行上（否则 ① 的"#p2 已签"没有落脚点）。
     assert [no for no, _ in VR.proof_list(dict(store.rows("statements")[0]))] == [1, 2]
     return sid
@@ -265,4 +278,3 @@ def test_the_new_two_layer_file_carries_no_decoration_in_its_comments(r009_scan)
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

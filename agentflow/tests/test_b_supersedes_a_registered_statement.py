@@ -249,16 +249,23 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     # 于是这一条读的是"新签进台账之后，旧那三签降为历史读数、但不被删"。
     # 用 `_sign` 连签三次（不用 `_sign_three`：那一个夹具还断言"第 1、2 次位不翻"，
     # 而这一行早已被旧正文的三票点亮了 —— 位是命题级汇总，不是逐份）。
-    fresh: dict = {}
+    fresh_rows: list[dict] = []
     for _i in range(VR.SIGN_STREAK_NEED):
-        fresh = _sign(st, proof_text=FULL, stmt_id=sid)
-    out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
-        label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
-        line_range={"start": None, "end": None,
-                    "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
-        evidence_kind="heuristic", quote_verified=None,
-        quote_reason="自产结果，无外部出处可逐字回验；重签之前按 heuristic 读")
+        fresh_rows.append(_sign(st, proof_text=FULL, stmt_id=sid))
+    fresh = fresh_rows[-1]
+
+    # 换正文那一笔走历史形态（strict 下无签改版经正路不可达 —— 准入闸整笔拒
+    # `proof_without_v_sign`）：直接铺行，旧正文用生产同一个 `_canonical_history_entry`
+    # 建行，与真机 `_attach_proofs` 的 canonical 覆盖同形。读侧断言一个字都没改。
+    from agentflow.agent_b.register_statement import _canonical_history_entry
+
+    row = _row(st)
+    row["proof_history"] = [*[dict(h) for h in (row.get("proof_history") or [])],
+                            _canonical_history_entry(TRUNCATED, FULL)]
+    row["proof_text"] = FULL
+    with st.tx("statements", actor="test", note="supersede") as tx:
+        tx.upsert("statements", row, note="supersede")
+    out = {"ok": True, "canonical_written": True}
     assert out["ok"] is True and out.get("canonical_written") is True, out
 
     standing = VR.review_standing(st.root, statement_id=sid, proof_text=FULL, proof_no=1)
@@ -277,7 +284,7 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     assert problems == [], problems
     assert [r["verification_id"] for r in rows] == [
         one["verification_id"], two["verification_id"], signed["verification_id"],
-        fresh["verification_id"]], (
+        *[r["verification_id"] for r in fresh_rows]], (
         "旧签被删了 —— 审计链断在这里（连票数也要留在台账上，缺一行就说不清"
         "那一版正文当年够不够 3 票）")
 

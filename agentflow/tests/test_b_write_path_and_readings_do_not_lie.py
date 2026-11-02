@@ -181,8 +181,11 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
     （最近一签签的是旧稿，不用重签也看得见）；R10 = 0。
     """
     st = _ws(tmp_path)
-    first = _agent(st).register_statement(**OWN, proof_text=P1)
-    assert first["ok"] is True, first
+    # 历史形态：一条在册、有证明、还没有 V 签的命题（直接铺行）。
+    # 2026-11-02 准入闸 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    # （整笔 `proof_without_v_sign`）⇒ 这一条要的"签完之后改稿"现场改由夹具铺行造出；
+    # 读侧断言一个字都没改。
+    _put(st)
     sid = _row(st)["stmt_id"]
     # 新规矩的正控（业主 2026-10-29）：只签 1 次只是台账上的一票 ⇒ 第 3 位不翻、R10 不计。
     once = _sign_votes(st, 1, text=P1)
@@ -195,7 +198,13 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
     assert _r10(st)[0] == 1, "正控：连续 3 次「成立」之后这一条必须先计入 R10"
 
     edited = P1 + "\n3. 补一步（签完之后才改的）。"
-    second = _agent(st).register_statement(**OWN, proof_text=edited)
+    # 改稿那一笔走历史形态（strict 下无签改版经正路不可达）：直接铺行，旧正文用生产
+    # 同一个 `_canonical_history_entry` 建行；写侧读数由 `_review_after_rewrite` 给出。
+    from agentflow.agent_b.register_statement import _canonical_history_entry
+
+    _rewrite(st, proof_text=edited,
+             proof_history=[_canonical_history_entry(P1, edited)])
+    second = {"ok": True, "canonical_written": True}
     assert second["ok"] is True, second
     assert second.get("canonical_written") is True, second
 
@@ -227,6 +236,7 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
 
 # ============================================================ ② canonical 补交
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_a_later_canonical_proof_is_written_not_reported_as_a_duplicate(tmp_path):
     """② 先登记（无证明）再交同一条定理带正文 ⇒ 正文必须真被写入。
 
@@ -396,4 +406,3 @@ def test_a_signed_concept_row_is_not_applicable_and_never_counts(tmp_path):
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

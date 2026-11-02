@@ -229,6 +229,13 @@ def test_the_on_record_work_name_is_repaired_when_a_proof_merges_in(
     assert _labels(st) == [REAL_LABEL], _labels(st)
     monkeypatch.undo()
     # 第二笔：同一条命题的另一种写法 + 一份证明 ⇒ 并进去，顺手修名。
+    #
+    # 2026-11-02 准入闸 strict：并进来的那一份正文必须已有一份覆盖它的 V 签。
+    # 这一笔按正文认不到在册那一行（两种写法规范化后不同）⇒ 走"V 先审、B 再收录"的
+    # 那一档：pending 台账按正文 sha 认领（`record_pending_sign` 的真写口）。
+    from conftest import sign_before_registration
+
+    sign_before_registration(st.root, proof_text=PROOF)
     second = _agent(st).register_statement(**_own(FULL_A_KEY, "另一条写法"), proof_text=PROOF)
     assert second.get("ok") is True, second
     assert second.get("merged") is True, second
@@ -259,4 +266,3 @@ def test_before_this_feature_exists_the_work_name_lands_verbatim(
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

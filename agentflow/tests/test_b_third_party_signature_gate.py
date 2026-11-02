@@ -40,7 +40,8 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature, sync_counters  # noqa: E402
+from conftest import add_literature, seed_statement_row, sync_counters  # noqa: E402
+from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -206,9 +207,22 @@ def _file(store: Store, *, column: str, kind: str = "theorem",
 
 
 def _file_conjecture(store: Store, *, column: str, body: str = BODY) -> dict:
-    """先按猜想落库（V 只审在册的命题 ⇒ 会审之前这一条只能是猜想）。"""
-    return _file(store, column=column, kind="conjecture",
-                 evidence_kind=NP.SUPPORTED_ONLY_KIND, body=body)
+    """造一条"在册的猜想"（历史形态：直接铺行；V 只审在册的命题）。
+
+    2026-11-02 准入闸默认 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    （整笔 `proof_without_v_sign`）—— 而这一组测的是"第三方签（sha / 最近 verdict）
+    对不上 ⇒ 不许升 proof"。现场由夹具直接铺行造出（真机在册猜想行同形：`bits` 由
+    `bits_of` 现算、台账 0 行），读侧判据一个字都没改。
+    """
+    seeded = seed_statement_row(
+        store, proof_text=column, statement_full=body, statement_text=body[:40],
+        kind="conjecture", label="R(3,4)=9", origin="own_result",
+        doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
+        quote_reason="own_result：我方推导，没有第二份文本可比对",
+        evidence_kind=NP.SUPPORTED_ONLY_KIND,
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=column,
+                        kind="conjecture"))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
 
 
 def _is_proof_statement(store: Store, body: str = BODY) -> dict:
@@ -411,8 +425,3 @@ def test_5_stubbing_the_ledger_read_makes_2_and_3_red(
     for body in (_assert_sha_mismatch_cannot_be_proof, _assert_rejected_cannot_be_proof):
         with pytest.raises(AssertionError):
             body(_store(tmp_path / body.__name__))
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

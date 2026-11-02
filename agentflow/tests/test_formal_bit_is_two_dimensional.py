@@ -49,7 +49,7 @@ from agentflow.store import Store
 #: 本机那一版真 Lean（绝对路径，不依赖 PATH）。
 #: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
 #: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
-from conftest import lean_path
+from conftest import lean_path, seed_statement_row
 
 LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
@@ -82,11 +82,31 @@ def _own() -> dict:
 
 
 def _register(store: Store, agent_b: AgentB, *, proofs: bool = True) -> dict:
-    """B 把这条定理登记成两路径（`#p1` + `#p2`）。"""
-    if not proofs:
-        return agent_b.register_statement(**_own(), proof_text=P1)
-    return agent_b.register_statement(
-        **_own(), proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
+    """造一条两路径（`#p1` + `#p2`）的在册命题（历史形态：直接铺行）。
+
+    2026-11-02 准入闸 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    （新建命题时无签的 `#p2` 整笔拒 `proof_without_v_sign`）—— 而这一组测的是第 4 位
+    （形式化）的二维读法。现场按真机多证明行同形铺行（`bits` 由 `bits_of` 现算、
+    优化态显式 false），读侧判据一个字都没改。
+    """
+    _ = agent_b  # 写口不再经过 B；参数留着让调用点逐个不动
+    own = _own()
+    extra: dict = {}
+    numbers = [1]
+    if proofs:
+        extra["proofs"] = [{"proof_no": 2, "text": P2, "created_at": S.now_iso()}]
+        numbers = [1, 2]
+    seeded = seed_statement_row(
+        store, proof_text=P1, statement_full=str(own["statement_full"]),
+        statement_text=str(own["statement_text"]), kind=str(own["kind"]),
+        label=str(own["label"]), origin=str(own["origin"]),
+        doc_id=S.format_id(0), line_range={"start": 1},
+        quote_reason=str(own["quote_reason"]),
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind=str(own["kind"])), numbers),
+        **extra)
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
 
 
 def _row(store: Store, sid: str) -> dict:
@@ -646,4 +666,3 @@ def test_bit_evidence_gaps_names_the_empty_experiments_false_green() -> None:
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

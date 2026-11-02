@@ -41,6 +41,8 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
+from conftest import seed_statement_row, sign_before_registration
+
 #: 真机夹具（只读）。用例在这一棵树不存在时 skip，不去凭空造一份"像 sylow3"的东西。
 SYLOW3 = pathlib.Path(__file__).resolve().parents[1] / "projects" / "sylow3"
 
@@ -102,6 +104,41 @@ def own(full: str, **kw) -> dict:
 def _row(store: Store, stmt_id: str) -> dict:
     return next(dict(r) for r in store.rows("statements")
                 if str(r.get("stmt_id") or "") == str(stmt_id))
+
+
+def _seed(store: Store, *, full: str, proof_text: str,
+          proofs: tuple = ()) -> dict:
+    """造一条在册命题（历史形态：直接铺行）。
+
+    2026-11-02 准入闸 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    （`proof_without_v_sign`）；新建命题时无签的 `#p2` 及以后更没有号可挂签。
+    这一组 b/c 要的是"盘上有一条带 N 份证明的行"，现场因此按真机行同形铺行
+    （`bits` 由 `bits_of` 现算、证明清单带 `created_at`）。判据一个字都没改。
+    """
+    payload = own(full)
+    numbers = [1] + [int(p.get("proof_no") or 0) for p in proofs]
+    seeded = seed_statement_row(
+        store, proof_text=proof_text,
+        statement_full=str(payload["statement_full"]),
+        statement_text=str(payload["statement_text"]), kind="conjecture",
+        label=str(payload["statement_text"]), origin="own_result",
+        doc_id=S.format_id(0), quote_reason=str(payload["quote_reason"]),
+        proofs=[{**dict(p), "created_at": S.now_iso()} for p in proofs],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=proof_text,
+                       kind="conjecture"), numbers))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
+
+
+def _register_after_pending_sign(store: Store, full: str, proof_text: str) -> dict:
+    """V 先审、B 再收录（单份散文证明的合法次序；`deps_missing` 由真登记那一笔给出）。
+
+    2026-11-02 准入闸 strict：无签的证明正文写不进去，而这一格要读的正是
+    "带证明正文却零依赖"时返回值里那一句。pending 那一签按正文 sha 认领
+    （`verifications.record_pending_sign` 的真写口），不是放宽闸。
+    """
+    sign_before_registration(store.root, proof_text=proof_text)
+    return _agent(store).register_statement(**own(full), proof_text=proof_text)
 
 
 def _promote_to_proof_review(store: Store, stmt_id: str, proof_text: str) -> None:
@@ -178,6 +215,7 @@ def _a_holds(out: dict) -> bool:
             and bool(str(got.get("next_step") or "").strip()))
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
     """判据 a：带证明正文而依赖 0 行 ⇒ 结果里出现 `deps_missing`（三态，逐档分开）。
 
@@ -271,10 +309,9 @@ def test_b_the_ledger_has_one_body_and_the_readout_can_say_signed(tmp_path):
     # 且秘书判定通过才发签，第 1、2 次只落台账）⇒ 这一条夹具要"签过三份"就得先有三份
     # 在册证明，再各签够次数。读数面的断言（`signed >= 3`）一个字都没放宽。
     proof_texts = ("证明：由定义直接得到。", "证明：换一条路线。", "证明：再换一条路线。")
-    out = b.register_statement(
-        **own("命题 B1：被签三次的那一条。"),
-        proofs=[{"proof_no": i, "text": t}
-                for i, t in enumerate(proof_texts, 1)])
+    out = _seed(st, full="命题 B1：被签三次的那一条。", proof_text=proof_texts[0],
+                proofs=tuple({"proof_no": i, "text": t}
+                             for i, t in enumerate(proof_texts[1:], 2)))
     assert out.get("ok") is True, out
     sid = str(out["stmt_id"])
     for no in (1, 2, 3):
@@ -346,10 +383,10 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
     """
     st = _ws(tmp_path, "c")
     b = _agent(st)
-    x = b.register_statement(**own("引理 X：任意有限群 G 有 Sylow p-子群。"),
-                             proof_text="证明：由轨道计数得。")
-    y = b.register_statement(**own("引理 Y：p-群作用的轨道长是 p 的幂。"),
-                             proof_text="证明：由群作用公理得。")
+    x = _seed(st, full="引理 X：任意有限群 G 有 Sylow p-子群。",
+              proof_text="证明：由轨道计数得。")
+    y = _seed(st, full="引理 Y：p-群作用的轨道长是 p 的幂。",
+              proof_text="证明：由群作用公理得。")
     assert x.get("ok") and y.get("ok"), (x, y)
     xid, yid = str(x["stmt_id"]), str(y["stmt_id"])
     # 手稿依赖段的引用门槛：被引的两条都要够 `proof_review`（业主 2026-10-24 加码裁定）
@@ -359,18 +396,17 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
     p1 = f"路线一：由 stmt:{xid} 直接推出。"
     p2 = f"路线二：由 stmt:{yid} 与双陪集计数推出。"
     p3 = f"路线三：由 stmt:{xid} 与 stmt:{yid} 一起推出。"
-    out = b.register_statement(
-        **own("主命题 P：同一条 Sylow 定理的三条独立证法。"),
-        proofs=[{"proof_no": 1, "text": p1}, {"proof_no": 2, "text": p2},
-                {"proof_no": 3, "text": p3}],
-        # 2026-10-26：三份证明各引在册命题 ⇒ 必须交稿；三个路径号对应三份证明。
-        proof_manuscript=_proof_manuscript([
-            (xid, "路线一：由引理 X 的轨道计数", 1),
-            (yid, "路线二：由引理 Y 的轨道长是 p 的幂", 2),
-            (xid, "路线三甲：引理 X 的 Sylow 存在性", 3),
-            (yid, "路线三乙：引理 Y 的轨道长", 3)]))
+    out = _seed(st, full="主命题 P：同一条 Sylow 定理的三条独立证法。",
+                proof_text=p1,
+                proofs=({"proof_no": 2, "text": p2}, {"proof_no": 3, "text": p3}))
     assert out.get("ok") is True, out
     pid = str(out["stmt_id"])
+    # 三份证明的依赖面仍走生产写口（秘书的 `record_proof_deps`，`_attach_proofs`
+    # 补写 #p2 及以后时用的正是它）：直接铺行只替掉被准入闸拦下的登记那一笔。
+    deps_written = dict(b._statement_secretary().record_proof_deps(
+        pid, [{"proof_no": 1, "text": p1}, {"proof_no": 2, "text": p2},
+              {"proof_no": 3, "text": p3}]))
+    assert deps_written.get("checked") is True, deps_written
     # 号与正文：三个号、#p1 在 canonical 那一格、其余在清单里
     assert [int(no) for no, _t in VR.proof_list(_row(st, pid))] == [1, 2, 3], out
     assert VR.proof_text_of(_row(st, pid), 1) == p1
@@ -396,13 +432,18 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
         _row(st, pid)["bits"]
     assert _c_holds(st, pid), (VR.proof_list(_row(st, pid)), _deps_of(st, pid))
 
-    # 后补的第 4 份证明：挂上清单的同时也要落成 `#p4` 那一面（不许静默丢）
+    # 后补的第 4 份证明：挂上清单的同时也要落成 `#p4` 那一面（不许静默丢）。
+    # 补 #pN 那一笔同样经正路不可达（无签的新正文）⇒ 清单直接铺行，依赖面仍走
+    # 生产写口 `record_proof_deps`。
     p4 = f"路线四：由 stmt:{yid} 的反向计数推出。"
-    more = b.register_statement(
-        **own("主命题 P：同一条 Sylow 定理的三条独立证法。"),
-        proofs=[{"proof_no": 1, "text": p1}, {"proof_no": 4, "text": p4}],
-        # 同一份稿（第 1 份证明那一面）；第 4 份证明的依赖面由第 2 份及以后的补写口落。
-        proof_manuscript=_proof_manuscript([(xid, "路线一：由引理 X 的轨道计数", 1)]))
+    row = _row(st, pid)
+    row[VR.PROOFS_KEY] = [*[dict(p) for p in (row.get(VR.PROOFS_KEY) or [])],
+                          {"proof_no": 4, "text": p4, "created_at": S.now_iso()}]
+    row["bits"] = EB.with_optimized_flag(row.get("bits") or {}, 4, False)
+    with st.tx("statements", actor="test", note="append_p4") as tx:
+        tx.upsert("statements", row, note="append_p4")
+    more = {"ok": True, "proof_deps": dict(
+        b._statement_secretary().record_proof_deps(pid, [{"proof_no": 4, "text": p4}]))}
     assert more.get("ok") is True, more
     assert [int(no) for no, _t in VR.proof_list(_row(st, pid))] == [1, 2, 3, 4], more
     got = dict(more.get("proof_deps") or {})
@@ -420,27 +461,25 @@ def test_d_anti_vacuum_both_guards_are_load_bearing(tmp_path, monkeypatch):
     """
     # ---- 正控（a）：真护栏下，孤命题这一笔是"说出来了"的
     st_a = _ws(tmp_path, "da")
-    lone = _agent(st_a).register_statement(
-        **own("孤命题：证明里一条在册引用都没有。"),
-        proof_text="证明：由定义与假设直接计算，不引用任何在册命题。")
+    lone = _register_after_pending_sign(
+        st_a, "孤命题：证明里一条在册引用都没有。",
+        "证明：由定义与假设直接计算，不引用任何在册命题。")
     assert _a_holds(lone), lone
 
     # 打桩：把读数函数换成空字典（= 改前那一格根本不存在）
     monkeypatch.setattr(SEC, "_deps_missing_reading", lambda **kw: {})
     st_a2 = _ws(tmp_path, "da2")
-    stubbed = _agent(st_a2).register_statement(
-        **own("孤命题：证明里一条在册引用都没有。"),
-        proof_text="证明：由定义与假设直接计算，不引用任何在册命题。")
+    stubbed = _register_after_pending_sign(
+        st_a2, "孤命题：证明里一条在册引用都没有。",
+        "证明：由定义与假设直接计算，不引用任何在册命题。")
     assert not _a_holds(stubbed), (
         "把 `deps_missing` 的读数打桩成空之后判据 a 还是绿的 ⇒ a 没接在那根线上")
 
     # ---- 正控（b）：真口径下，文件 6 行 vs 派生副本 0 行是"分家"
     st_b = _ws(tmp_path, "db")
-    b = _agent(st_b)
     d_texts = ("证明：由定义直接得到。", "证明：换一条路线。")
-    out = b.register_statement(
-        **own("命题 D1：被签两次的那一条。"),
-        proofs=[{"proof_no": i, "text": t} for i, t in enumerate(d_texts, 1)])
+    out = _seed(st_b, full="命题 D1：被签两次的那一条。", proof_text=d_texts[0],
+                proofs=({"proof_no": 2, "text": d_texts[1]},))
     sid = str(out["stmt_id"])
     # 2026-10-29 口径：两份证明各要连续 `SIGN_STREAK_NEED` 次「成立」（只落台账的那两次
     # 也算台账的行）⇒ 这里是 2×3 行
@@ -511,6 +550,7 @@ def _top_up_a_copy_of_the_real_ledgers(root, source) -> pathlib.Path:
     return pathlib.Path(root)
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_e_sylow3_recompute_says_which_gap_would_still_show(tmp_path):
     """判据 e：用 sylow3 的三条命题做只读夹具，复算"改后这三条缺口各读成什么"。
 
@@ -588,4 +628,3 @@ def test_e_sylow3_recompute_says_which_gap_would_still_show(tmp_path):
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

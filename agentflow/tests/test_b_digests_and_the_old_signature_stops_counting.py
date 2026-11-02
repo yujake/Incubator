@@ -42,9 +42,14 @@ if str(_SRC) not in sys.path:
 from agentflow import capabilities as C  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
+from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
+from agentflow.agent_b.register_statement import (  # noqa: E402
+    _canonical_history_entry, _rewrite_note)
 from agentflow.store import Store  # noqa: E402
+
+from conftest import seed_statement_row  # noqa: E402
 
 #: 一条自产命题（B 从 F 的手稿登记进来的那一种）。
 STATEMENT = "设 L 是椭圆上的弦长函数；则 L 不是常值函数。"
@@ -98,6 +103,54 @@ def _sign(st: Store, *, proof_text: str) -> dict:
     return VR.record_verification(
         st.root, statement_id=str(_row(st)["stmt_id"]), proof_text=proof_text,
         verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1)
+
+
+def _seed_row(st: Store) -> str:
+    """历史形态：一条在册、有证明、还没有 V 签的命题（直接铺行）。
+
+    2026-11-02 准入闸 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    （整笔 `proof_without_v_sign`）⇒ "签过之后改稿"这一组判据要的现场改由夹具直接铺行
+    （与真机 own_result 行同形：`bits` 由 `bits_of` 现算、台账 0 行）。判据一个字都没改。
+    """
+    seeded = seed_statement_row(
+        st, proof_text=SRC, statement_full=STATEMENT, statement_text=STATEMENT_TEXT,
+        kind="conjecture", label=STATEMENT_TEXT, origin="own_result",
+        doc_id=S.format_id(0), line_range={"label": "reports/attack-000000.md"},
+        quote_verified=None, quote_reason="自产证明，没有第二份文本可比对",
+        evidence_kind="heuristic",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=SRC,
+                        kind="conjecture"))
+    return str(seeded["stmt_id"])
+
+
+def _rewrite_to(st: Store, *, text: str) -> dict:
+    """历史形态的"改稿"那一笔：canonical 换正文、旧正文进 `proof_history`。
+
+    为什么不经 `register_statement`：strict 下无签改版经正路不可达（准入闸整笔拒
+    `proof_without_v_sign`），而这一组读的正是"改稿之后旧签还算不算数"。写入形态与
+    `_attach_proofs` 的 canonical 覆盖逐字同形（旧正文用同一个
+    `_canonical_history_entry` 建行）。
+    """
+    row = _row(st)
+    old = str(row.get("proof_text") or "")
+    history = [dict(h) if isinstance(h, dict) else h
+               for h in (row.get("proof_history") or [])]
+    history.append(_canonical_history_entry(old, text))
+    row["proof_history"] = history
+    row["proof_text"] = text
+    with st.tx("statements", actor="test", note="rewrite_canonical") as tx:
+        tx.upsert("statements", row, note="rewrite_canonical")
+    return _row(st)
+
+
+def _rewrite_return(st: Store, *, text: str) -> dict:
+    """改稿之后写侧那几格读数（生产判据本体：`_review_after_rewrite` + `_rewrite_note`）。"""
+    sid = str(_row(st)["stmt_id"])
+    reading = dict(AgentB._review_after_rewrite(st.root, stmt_id=sid, proof_text=text))
+    return {"ok": True, "canonical_written": True,
+            "review_standing": reading,
+            "resign_required": bool(reading.get("resign_required")),
+            "note": _rewrite_note(reading)}
 
 
 #: 2026-10-29 口径：同一份正文（同 `proof_sha256`）要连续 3 次「成立」且秘书判定通过，
@@ -247,17 +300,16 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
     `proof_history`、台账那三签一行都没删（作废是读侧现算，不是框架删签）。
     """
     st = _ws(tmp_path)
-    first = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
-    assert first["ok"] is True, first
-    sid = str(_row(st)["stmt_id"])
+    sid = _seed_row(st)
 
     signed = _sign_enough(st, proof_text=SRC)      # 2026-10-29：连签 3 次才发签
     assert str(signed[-1].get("verification_id") or "").startswith("v-"), signed[-1]
     assert EB.bits_from_row(_row(st))["reviewed"] is True, "正控：签完之后第 3 位必须是 True"
 
-    got = _agent(st).register_statement(**_own(), proof_text=DIGEST, proof_manuscript=SRC)
-    assert got["ok"] is True, got
-    assert got.get("canonical_written") is True, got
+    # 改稿那一笔走历史形态（strict 下无签改版经正路不可达）：直接铺行，旧正文进
+    # `proof_history`；写侧读数仍由生产判据给出。
+    _rewrite_to(st, text=DIGEST)
+    got = _rewrite_return(st, text=DIGEST)
     _b_must_hold(got, st, sid)
 
     row = _row(st)
@@ -307,9 +359,7 @@ def test_c_the_same_text_keeps_the_signature_alive(tmp_path):
     那一格 ⇒ 没有 `review_standing=stale`，行上的签照旧算数。
     """
     st = _ws(tmp_path)
-    first = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
-    assert first["ok"] is True, first
-    sid = str(_row(st)["stmt_id"])
+    sid = _seed_row(st)
     signed = _sign_enough(st, proof_text=SRC)      # 2026-10-29：连签 3 次才发签
 
     again = _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
@@ -333,6 +383,7 @@ def test_c_the_same_text_keeps_the_signature_alive(tmp_path):
 
 # ==================================================== d：信息格，不当门
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_d_verbatim_vs_source_is_an_information_grid_not_a_gate(tmp_path):
     """d：`proof_vs_source` 读得到"与来源是否逐字一致"，而且它不拦写入。
 
@@ -383,11 +434,12 @@ def test_e_stubbing_the_rewrite_reading_turns_b_red(tmp_path, monkeypatch):
         raising=True)
 
     st = _ws(tmp_path)
-    _agent(st).register_statement(**_own(), proof_text=SRC, proof_manuscript=SRC)
+    _seed_row(st)
     sid = str(_row(st)["stmt_id"])
     _sign(st, proof_text=SRC)
 
-    got = _agent(st).register_statement(**_own(), proof_text=DIGEST, proof_manuscript=SRC)
+    _rewrite_to(st, text=DIGEST)
+    got = _rewrite_return(st, text=DIGEST)
     assert got["ok"] is True, got
     assert (got.get("review_standing") or {}).get("state") == "signed", got.get("review_standing")
     assert got.get("resign_required") is False, got
@@ -398,8 +450,3 @@ def test_e_stubbing_the_rewrite_reading_turns_b_red(tmp_path, monkeypatch):
     # 而既有链没被打桩：读侧仍然是 stale（b 的返回那一格才是这一步给的）
     assert VR.review_standing(st.root, statement_id=sid, proof_text=DIGEST,
                               proof_no=1)["state"] == "stale"
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

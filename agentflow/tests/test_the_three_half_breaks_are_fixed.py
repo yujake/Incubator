@@ -33,7 +33,6 @@ from agentflow import papermapping as PM
 from agentflow import proofloc as PL
 from agentflow import schema as S
 from agentflow import verifications as VR
-from agentflow.agent_b import AgentB
 from agentflow.agent_c import AgentC
 from agentflow.agent_c.proof_chain import _DepGraph
 from agentflow.agent_g import AgentG
@@ -41,6 +40,8 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.web import emit_types as ET
 from agentflow.webui import readers as RD
+
+from conftest import seed_statement_row
 
 #: 命题 P（登记工作区里的第一条行，号由 store 发，实得 `000000`）。
 SID = S.format_id(0)
@@ -80,26 +81,37 @@ def _own(full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
 
 
 def _register_two(st: Store) -> dict:
-    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙）。
+    """造一条有两份证明的命题（`#p1` 甲、`#p2` 乙）—— 历史形态：直接铺行。
 
-    B-2 闸（`must_start_as_conjecture`）之后的正路：这一笔还没有 V 的签 ⇒ 先按猜想登记
-    （`kind="conjecture"` 是明文放行的那一档）。这一份里的判据读的是证明与五位，
-    与 `kind` 无关；把首登改成 theorem 才是"绕开闸"，那件事本身会被 B-2 拒。
+    2026-11-02 准入闸 strict 之后，这个状态不能再经 `register_statement` 造出来
+    （无签的 `#p2` 整笔拒 `proof_without_v_sign`；新建命题时 `#p2` 没有号可挂签）。
+    这一份里的判据读的是证明与五位，与入口路径无关 ⇒ 夹具按真机多证明行同形铺行
+    （`bits` 由 `bits_of` 现算、优化态显式 false），判据一个字都没改。
     """
-    return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(), kind="conjecture",
-        proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
+    own = _own()
+    seeded = seed_statement_row(
+        st, proof_text=P1, statement_full=str(own["statement_full"]),
+        statement_text=str(own["statement_text"]), kind="conjecture",
+        label=str(own["label"]), origin="own_result", doc_id=S.format_id(0),
+        quote_reason=str(own["quote_reason"]),
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
 
 
 def _register_one(st: Store, *, proof_text: str = P1,
                   full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
                   short: str = "弦长函数不是常值") -> dict:
-    """登记一条只有 canonical 证明的命题（`full` / `short` 必须与别的行不同）。
-
-    同 `_register_two` 的登记路径：没有 V 的签 ⇒ 首登按猜想。
-    """
-    return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(full, short), kind="conjecture", proof_text=proof_text)
+    """造一条只有 canonical 证明的命题（历史形态：直接铺行；`full` / `short` 要不同）。"""
+    seeded = seed_statement_row(
+        st, proof_text=proof_text, statement_full=full, statement_text=short,
+        kind="conjecture", label=short, origin="own_result", doc_id=S.format_id(0),
+        quote_reason="我方自产命题，没有外部引文要比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=proof_text,
+                        kind="conjecture"))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
 
 
 def _row(store: Store, stmt_id: str = SID) -> dict:
@@ -614,4 +626,3 @@ def test_negative_control_a_number_bits_declaration_turns_the_type_reading_red(
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
