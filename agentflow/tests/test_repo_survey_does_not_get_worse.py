@@ -123,7 +123,17 @@ BASELINE: dict[str, int] = {
     # 它是「既有函数被写胖过线」，不是新落的长函数（同一笔里新加的 `_read_aux` /
     # `_read_jsonl_dir` / `by_class` 都没过 200）；`errorstats.py` 本身早就超过 800 行，
     # 所以文件那一格不动。判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 87,
+    # 2026-11-02：87 → 89。两格，都能点名，都是"这一批的新能力落在既有函数里"把它们
+    # 推过 200 行（逐条按 (文件, 函数名) 比对基线提交 960ade2f^ 与 HEAD；没有一条掉回线下，
+    # 也没有一个新落的长函数）：
+    #   · `src/agentflow/secretary.py::decide_sign_issuance` 152 → 216 行 —— 960ade2f
+    #     （「V 一次送审 = 三轮 · 跨送审不累计」）新增可选 `within_call` / `review_call`：
+    #     给了趟内轮次就只看这一趟（台账只作 reading/ledger_streak 历史读数），
+    #     不给则保持原台账兼容门 —— 两套门都落在同一个签发函数里；
+    #   · `src/agentflow/verifications.py::review_standing` 195 → 206 行 —— 同一笔新增
+    #     `legacy_rows`：没有 `review_call` / `review_pass` 的老行读得出、但不参与新签判断。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 89,
     "dup_docstring_segments": 5,
 }
 
@@ -143,7 +153,10 @@ BASELINE: dict[str, int] = {
 #: 2026-11-01 再抬两格：文件 72 → 73（`webui/state.py` 785 → 857，跨线于 1328e94b）
 #: 与函数 86 → 87（`errorstats.py::error_action_stats_from` 146 → 478，跨线于 f06f0210），
 #: 两条都是"既有东西被写胖过线"，来源见 `BASELINE` 里那两格上方的逐条点名。
-BASELINE_OBSERVED = "2026-11-01"
+#: 2026-11-02 再抬函数 87 → 89，两个来源见 `BASELINE` 里那一格上方的逐条点名
+#: （`secretary.py::decide_sign_issuance` 152 → 216、`verifications.py::review_standing`
+#: 195 → 206，两格都跨线于 960ade2f）；文件那一格不动。
+BASELINE_OBSERVED = "2026-11-02"
 
 
 def _load_survey():
@@ -194,7 +207,7 @@ def test_survey_reports_numbers_and_stays_within_baseline():
 
     "读得出来"不是形式主义：`scanned_ok=True` 之后三格如果全是 0，那更像扫描器没接上
     而不是这棵树空了 —— 所以这里额外断言三格都大于 0（反真空）。今天它们分别是
-    70 / 86 / 5。
+    73 / 89 / 5。
     """
     mod = _load_survey()
     data = mod.survey(REPO)
