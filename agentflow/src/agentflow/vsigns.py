@@ -529,9 +529,10 @@ def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
     """渲染那一行签块（纯字符串；判据在 :func:`stamp_manuscript_sign`）。
 
     `signed=False` 写的是"审过了、没过"那一档：同一行、同一个落点，`已签=false` +
-    真实判词。为什么不过了就什么都不写：业主 2026-11-01「「有毛病」是给提供证明的一方
-    看的，具体信息是叫它们优化证明」⇒ 没过也要在稿上留下"哪一步、什么判词"，
-    否则 F 手里只剩一句口头转达。
+    真实判词。2026-11-03 起生产写口不再写这一档（甲口径：负判不是签）：`draft/178`
+    的边界是「V 不写手稿里的签块」，负判的落点改成 `verifications/pending/<sha>.jsonl`
+    （见 `agent_v/core.py::_review_unregistered_prose`）。这个参数只留给读侧兼容与夹具
+    构造旧块（84/85/86 的现场）—— 不是给生产路径用的。
 
     `manuscript_id` 是第 9 格（裸稿号，业主 2026-11-02）：写侧由
     :func:`manuscript_id_of` 从稿路径现算，不接受"手抄一个号"。
