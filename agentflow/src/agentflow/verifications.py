@@ -2754,6 +2754,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: 整笔失败（位也不会翻），所以"`written=True` 而 `vsign.written=False`"只可能
         #: 是"这一份签早就在盘上、逐字相同"（`idempotent`）这一档。
         "vsign": {},
+        #: 2026-11-03（件二）：翻位前那道正文闸的读数 —— `matched` / `missing_body` /
+        #: `sha_mismatch`。空串 = 还没走到那道闸（前面的分支已经返回）。
+        "body_gate": "",
     }
     try:
         no = proof_no_of(row) if proof_no is None else proof_no_strict(proof_no)
@@ -2848,6 +2851,34 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                                  "⇒ 还差次数：只落了台账那一行，第 3 位不翻"
                                  "（连续 3 次没问题才发签）")
                 return out
+            # ---- 2026-11-03（件二）：翻位前必须核"这一份正文存在，且就是签覆盖的那一份" ----
+            #
+            # 86 的现场：`stmt:000013` 的 `proof_text` 是空串（B 先按"不带正文"拿号，
+            # 正文等 V 签完再登记），而 V 的秘书按 `row.proof_sha256=ed35…` 调本函数 ⇒
+            # 改前这里不看命题行有没有正文，直接把 `reviewed_by_proof["1"]` 写成 true。
+            # 于是"没有正文（也就没有正文 sha）"被读成"第 1 份已签"。
+            #
+            # 判据（业主 2026-11-03）：第 3 位翻真要求"该份正文存在，且它的 sha 与这一签
+            # 覆盖的 sha 相同"。两条缺一 ⇒ 只落台账那一行（台账是签的正本），位不翻，
+            # 理由串点名缺哪一条 —— 不静默跳过，也不拿"签过了"冒充"命题行里有这一份"。
+            body_in_row = proof_text_of(found, no)
+            signed_sha = str(row.get("proof_sha256") or "")
+            if not str(body_in_row or "").strip():
+                out["body_gate"] = "missing_body"
+                out["reason"] = (
+                    f"命题 {sid} 的第 {no} 份证明没有正文（`proof_text` / `{PROOFS_KEY}` 都读不到）"
+                    " ⇒ 这一签没有可盖的正文：第 3 位不翻（`reviewed_by_proof` 不写这一份），"
+                    "只落台账那一行")
+                return out
+            body_sha = proof_sha(str(body_in_row))
+            if not signed_sha or body_sha != signed_sha:
+                out["body_gate"] = "sha_mismatch"
+                out["reason"] = (
+                    f"命题 {sid} 的第 {no} 份证明正文 sha {body_sha[:12]}… 与这一签覆盖的 "
+                    f"sha {signed_sha[:12] or '（空）'}… 不符 ⇒ 第 3 位不翻"
+                    "（签的不是现在这一份正文），只落台账那一行")
+                return out
+            out["body_gate"] = "matched"
             new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no,
                                           streak=holds)
             # ---- D-69：V 判「成立」⇒ 同一笔事务里按证据位把 `kind` 现算一遍。

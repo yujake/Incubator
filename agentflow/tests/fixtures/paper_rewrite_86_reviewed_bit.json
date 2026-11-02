@@ -1,0 +1,238 @@
+{
+ "source": "projects/paper-rewrite-86（2026-11-03 定格；只读）",
+ "statements": [
+  {
+   "stmt_id": "000000",
+   "origin": "own_result",
+   "kind": "conjecture",
+   "label": "R^d 上局部一致稠密引理",
+   "statement_text": "设 σ: R → R 连续且非多项式，记 N_σ^d := { x ↦ Σ_{k=1..N} a_k σ(w_k·x + b_k) + c : N ∈ N, a_k, c ∈ R, w_k ∈ R^d, b_k ∈ R } 为激活固定为 σ 的单隐层、宽度无界网络族。则对任意 f ∈ C(R^d)、任意紧集 K ⊂ R^d 与任意 ε > 0，存在 N ∈ N_σ^d 使得 sup_{x∈K} |f(x) − N(x)| < ε。假设只有两条：σ 连续、σ 非多项式；逼近元 N 允许依赖 (K, ε)，对紧集序列不要求一致的界（exhaustion 只给存在性、不给率）。",
+   "statement_full": "设 σ: R → R 连续且非多项式，记 N_σ^d := { x ↦ Σ_{k=1..N} a_k σ(w_k·x + b_k) + c : N ∈ N, a_k, c ∈ R, w_k ∈ R^d, b_k ∈ R } 为激活固定为 σ 的单隐层、宽度无界网络族。则对任意 f ∈ C(R^d)、任意紧集 K ⊂ R^d 与任意 ε > 0，存在 N ∈ N_σ^d 使得 sup_{x∈K} |f(x) − N(x)| < ε。假设只有两条：σ 连续、σ 非多项式；逼近元 N 允许依赖 (K, ε)，对紧集序列不要求一致的界（exhaustion 只给存在性、不给率）。",
+   "proof_text": "证明。设 f ∈ C(R^d)、紧集 K ⊂ R^d、ε > 0。取 χ ∈ C_c(R^d, [0,1]) 使 χ ≡ 1 于 K（Urysohn 引理；显式可取 χ(x) = φ(dist(x,K))，其中 φ ∈ C_c^∞(R)、φ = 1 于 [0,1]、supp φ ⊂ [−1,2]）。令 g = χ f，则 g ∈ C_c(R^d) 且 supp g ⊆ K' := {x : dist(x,K) ≤ 2}，而 K' 是紧集。由于 χ ≡ 1 于 K，故 g 与 f 在 K 上完全相同。对紧集 K' 上的连续函数 g 应用主定理 MT（σ 连续非多项式 ⇒ 对每个紧集在 sup 范数下稠密），取精度 ε/2，得 N ∈ N_σ^d 使 sup_{x ∈ K'} |g(x) − N(x)| < ε/2。于是 sup_{x ∈ K} |f(x) − N(x)| = sup_{x ∈ K} |g(x) − N(x)| ≤ sup_{x ∈ K'} |g(x) − N(x)| < ε/2 < ε。∎",
+   "source_lit_id": null,
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote_verified": null,
+   "quote_mode": "",
+   "quote_reason": "本条是 origin=own_result 的自产推导，出处是 reports/frontier.md 第 38–46 行（line_range），不是文献原文，没有可逐字回验的外部引文，故 quote_verified 保持未查（None）；证明正文待 V 走查后再补入。",
+   "quote_span": "",
+   "quote_call_sha256": "",
+   "evidence_kind": "cross_check",
+   "bits": {
+    "numeric": "pending",
+    "proof": true,
+    "reviewed": true,
+    "formal": "pending",
+    "audited": false,
+    "origin": "own_result",
+    "evidence": {
+     "numeric": {},
+     "numeric_reason": "",
+     "proof_process": "证明。设 f ∈ C(R^d)、紧集 K ⊂ R^d、ε > 0。取 χ ∈ C_c(R^d, [0,1]) 使 χ ≡ 1 于 K（Urysohn 引理；显式可取 χ(x) = φ(dist(x,K))，其中 φ ∈ C_c^∞(R)、φ = 1 于 [0,1]、supp φ ⊂ [−1,2]）。令 g = χ f，则 g ∈ C_c(R^d) 且 supp g ⊆ K' := {x : dist(x,K) ≤ 2}，而 K' 是紧集。由于 χ ≡ 1 于 K，故 g 与 f 在 K 上完全相同。对紧集 K' 上的连续函数 g 应用主定理 MT（σ 连续非多项式 ⇒ 对每个紧集在 sup 范数下稠密），取精度 ε/2，得 N ∈ N_σ^d 使 sup_{x ∈ K'} |g(x) − N(x)| < ε/2。于是 sup_{x ∈ K} |f(x) − N(x)| = sup_{x ∈ K} |g(x) − N(x)| ≤ sup_{x ∈ K'} |g(x) − N(x)| < ε/2 < ε。∎",
+     "proof_source": "own",
+     "reviewed_by": {
+      "verifier": "agent-V",
+      "verification_id": "v-000010",
+      "round": 10,
+      "verdict": "成立",
+      "evidence": "verifications/000000.jsonl#v-000010",
+      "findings": [],
+      "proof_no": 1,
+      "proof_sha256": "186d45edf6899e522f41173a83e9ad9660f0dbd04e8700c5399ab4073f845e1f"
+     },
+     "reviewed_source": "",
+     "formal": {},
+     "formal_reason": "",
+     "audited_by": {},
+     "reviewed_by_proof": {
+      "1": true
+     },
+     "reviewed_sha_by_proof": {
+      "1": "186d45edf6899e522f41173a83e9ad9660f0dbd04e8700c5399ab4073f845e1f"
+     },
+     "optimized_by_proof": {
+      "1": true
+     }
+    },
+    "voided_by": {},
+    "grade": "pre_theorem",
+    "audited_badge": false
+   },
+   "status": "active",
+   "derived_from": [
+    "000008"
+   ],
+   "aliases": [],
+   "doc_id": null,
+   "line_range": {
+    "start": 38,
+    "end": 46,
+    "label": "reports/frontier.md"
+   },
+   "created_at": "2026-11-03T04:36:37+08:00",
+   "created_by": "secretary-B",
+   "_proposition_adjudication": {
+    "checked": true,
+    "attempted": true,
+    "verdict": "different",
+    "canonical_name": "R^d 上局部一致稠密引理",
+    "same_as": "",
+    "basis": "条件：候选表为空，无可比对的条件；本条条件为 σ 连续且非多项式。；结论：候选表为空，无可比对的结论；本条结论为 N_σ^d 在 C(R^d) 上紧集一致稠密。；按判定规则：候选表为空 ⇒ different（没有可并的对象）。；候选表为空，没有可与之判定为同一定理的候选命题。",
+    "reason": "候选表为空，没有可与之判定为同一定理的候选命题。",
+    "reused": false,
+    "at": "2026-11-03T04:36:37+08:00"
+   },
+   "proof_authors": [
+    "F"
+   ]
+  },
+  {
+   "stmt_id": "000013",
+   "origin": "own_result",
+   "kind": "conjecture",
+   "label": "紧支撑有限符号测度上的卷积零条件引理",
+   "statement_text": "设 g ∈ L^1(R)，ρ 为 R 上有限符号测度且 supp ρ 紧。若对一切 b ∈ R 都有 ∫_R g(u+b) dρ(u) = 0，且 ∫_R g(u) du ≠ 0，则 ρ = 0。假设只有三条：g 可积；ρ 是有限符号测度且支集紧；卷积积分对一切平移 b 为零且 ∫g ≠ 0（若 ∫g = 0 结论不成立，故这一条不可省）。",
+   "statement_full": "设 g ∈ L^1(R)，ρ 为 R 上有限符号测度且 supp ρ 紧。若对一切 b ∈ R 都有 ∫_R g(u+b) dρ(u) = 0，且 ∫_R g(u) du ≠ 0，则 ρ = 0。假设只有三条：g 可积；ρ 是有限符号测度且支集紧；卷积积分对一切平移 b 为零且 ∫g ≠ 0（若 ∫g = 0 结论不成立，故这一条不可省）。",
+   "proof_text": "",
+   "source_lit_id": null,
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote_verified": null,
+   "quote_mode": "",
+   "quote_reason": "本条是 origin=own_result 的自产结果，出处是 F 的手稿 reports/f-proof-plan-000001.md 第 19–23 行（L2.5+ 的第 6–10 步），不是外部文献原文，没有可逐字回验的外部引文，故 quote_verified 保持未查（None）。本步先按写入期闸给的出路②拿 stmt 号（不带 proof_text）；证明正文的登记随后按『签块覆盖哪一段正文』决定（V 已把 C1+L2.5+ 共 10 步按 proof_no=1 整体签过，签的正文 sha=b101913dec…，单步拆开后的正文 sha 与原签不同）。",
+   "quote_span": "",
+   "quote_call_sha256": "",
+   "evidence_kind": "cross_check",
+   "bits": {
+    "numeric": "pending",
+    "proof": false,
+    "reviewed": true,
+    "formal": "pending",
+    "audited": false,
+    "origin": "own_result",
+    "evidence": {
+     "numeric": {},
+     "numeric_reason": "",
+     "proof_process": "",
+     "proof_source": "",
+     "reviewed_by": {
+      "verifier": "agent-V",
+      "verification_id": "v-000003",
+      "round": 3,
+      "verdict": "成立",
+      "evidence": "verifications/000013.jsonl#v-000003",
+      "findings": [],
+      "proof_no": 1,
+      "proof_sha256": "ed35a73fe3412d521a228c259684d34b64a30527e2ac97b789581d455cae6eaf"
+     },
+     "reviewed_source": "",
+     "formal": {},
+     "formal_reason": "",
+     "audited_by": {},
+     "reviewed_by_proof": {
+      "1": true
+     },
+     "reviewed_sha_by_proof": {
+      "1": "ed35a73fe3412d521a228c259684d34b64a30527e2ac97b789581d455cae6eaf"
+     }
+    },
+    "voided_by": {},
+    "grade": "conjecture",
+    "audited_badge": false
+   },
+   "status": "active",
+   "derived_from": [],
+   "aliases": [],
+   "doc_id": null,
+   "line_range": {
+    "start": 19,
+    "end": 23,
+    "label": "reports/f-proof-plan-000001.md"
+   },
+   "created_at": "2026-11-03T05:07:53+08:00",
+   "created_by": "secretary-B",
+   "_proposition_adjudication": {
+    "checked": true,
+    "attempted": true,
+    "verdict": "different",
+    "canonical_name": "紧支撑有限符号测度上的卷积零条件引理",
+    "same_as": "",
+    "basis": "条件：本条为 g∈L^1(R)、ρ 为 R 上有限符号测度且 supp ρ 紧、对一切 b 有 ∫g(u+b)dρ(u)=0 且 ∫g(u)du≠0；候选 000001 为 1≤p<∞、σ 连续非多项式、ρ 为紧支 Radon（正）测度——条件对象与强弱均不同（本条是符号测度+可积函数卷积条件，非稠密性命题）；条件：候选 000006 为 σ 连续非多项式 + 光滑紧支核 ρ_ε 磨光；候选 000002 为 σ 连续非多项式且 σ 有界 + ρ 有限测度且 C_c 在 L^p(ρ) 稠密；候选 000008 为 (a) σ 为多项式 / (b) σ 有界 Borel 可测 + 有限非负 Borel 测度——三者的条件组与本条（L^1 函数、紧支符号测度、卷积恒零）互不相同，无包含或等价改写关系；结论：本条结论为 ρ=0；候选 000001 与 000002 结论为 N_σ^d 在 L^p(ρ) 中稠密，候选 000006 结论为 σ_ε 非多项式，候选 000008 结论为『多项式激活不稠密』与『稠密当且仅当 σ 非多项式』——结论组全不同；条件强弱不同：本条不要求激活函数或测度空间的任何稠密性假设，候选条也不含本条的卷积零条件与 ∫g≠0，两侧条件既非同一组也非强弱包含；综合：条件与结论两侧均不一致，故判 different（非候选表为空所致，而是四条候选逐条条件/结论皆不匹配）；本条是「g∈L^1、ρ 为紧支有限符号测度、对一切平移卷积为零且 ∫g≠0 ⇒ ρ=0」，四个候选全是关于神经网络族在 L^p 中稠密性（或磨光保持非多项式）的命题，条件组与结论组无一相同。",
+    "reason": "本条是「g∈L^1、ρ 为紧支有限符号测度、对一切平移卷积为零且 ∫g≠0 ⇒ ρ=0」，四个候选全是关于神经网络族在 L^p 中稠密性（或磨光保持非多项式）的命题，条件组与结论组无一相同。",
+    "reused": false,
+    "at": "2026-11-03T05:07:53+08:00"
+   },
+   "proof_authors": [
+    "F"
+   ]
+  }
+ ],
+ "verifications": {
+  "000000": [
+   {
+    "at": "2026-11-03T04:51:29+08:00",
+    "citation_checks": [],
+    "defect_step": null,
+    "findings": [],
+    "proof_chars": 458,
+    "proof_no": 1,
+    "proof_sha256": "2ea6d066cc9a15544c852e86c8be99f0749d92a7181fc311d5f8444e7fd59471",
+    "quote": "",
+    "review_call": "2a9d51d23a75",
+    "review_pass": 1,
+    "round": 3,
+    "secretary_judge": {
+     "axis": "clean",
+     "checked": true,
+     "decision": "",
+     "reason": "回复逐条核对了步骤1–4，并明确记录边界/支撑与 MT 条件的反例构造尝试均失败，未发现问题。"
+    },
+    "statement_id": "000000",
+    "stmt_id": "000000",
+    "submission_id": "",
+    "unresolved_errors": 0,
+    "used_faces": [],
+    "verdict": "成立",
+    "verification_id": "v-000003",
+    "verifier": "agent-V",
+    "why": "五路核对未发现缺陷；MT 与 lit:000008 条件结论一致，K' 包含 K 且支撑控制成立，尝试在边界/支撑处构造反例失败。"
+   }
+  ],
+  "000013": [
+   {
+    "at": "2026-11-03T05:14:55+08:00",
+    "citation_checks": [],
+    "defect_step": null,
+    "findings": [],
+    "proof_chars": 624,
+    "proof_no": 1,
+    "proof_sha256": "ed35a73fe3412d521a228c259684d34b64a30527e2ac97b789581d455cae6eaf",
+    "quote": "",
+    "review_call": "32d386ce606d",
+    "review_pass": 3,
+    "round": 3,
+    "secretary_judge": {
+     "axis": "clean",
+     "checked": true,
+     "decision": "",
+     "reason": "该回复逐项核对了步骤7–10，并明确记录了构造反例失败的尝试，未发现缺陷。"
+    },
+    "statement_id": "000013",
+    "stmt_id": "000013",
+    "submission_id": "",
+    "unresolved_errors": 0,
+    "used_faces": [],
+    "verdict": "成立",
+    "verification_id": "v-000003",
+    "verifier": "agent-V",
+    "why": "逐项核对 Fourier 恒等式、连续性取邻域、整函数延拓和有限测度 Fourier 单射，并尝试在 H 非 L1 与 ĝ 局部零点处构造反驳，均未发现缺陷。"
+   }
+  ]
+ }
+}
