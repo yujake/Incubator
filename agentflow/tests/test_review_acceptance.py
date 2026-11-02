@@ -235,13 +235,112 @@ def test_m_s_declared_style_is_judged_section_by_section(tmp_path):
 
 
 def test_a_statement_without_a_page_range_fails(tmp_path):
-    """负控②：命题有假设、有出处，但没有页码 ⇒ 红（§14.4 第三条要"出处页码"）。"""
+    """负控②（判据 b 档）：**引文型命题**有假设、有出处，但没有页码 ⇒ 红。
+
+    这一条与下面那三条概念行/自有结果的用例是**一结**：豁免只覆盖"结构上给不出页码"
+    的那两类行，引文型命题的页码一个字没松（§14.4 第三条要"出处页码"）。
+    """
     st, report = _good(tmp_path)
     _stmt(st, "0002", page_range=S.PageRange())
     _seal(tmp_path, st)
     acc = _check(st, report)
     assert acc.criteria["statements_have_assumptions_and_source"] == "fail", acc.to_dict()
-    assert any("page_range" in b for b in acc.readings["statements_missing_fields"]), acc.readings
+    assert any("0002" in b and "page_range" in b
+               for b in acc.readings["statements_missing_fields"]), acc.readings
+
+
+def test_a_concept_row_from_literature_does_not_need_a_page_range(tmp_path):
+    """判据（a 档·概念行）：文献来的**概念行**缺页码 ⇒ 不该因此不通过，但要单独计数。
+
+    为什么概念行不该被要页码（2026-11-02，84 收工的 60 条读数 100% 是这一类）：
+    它的 `source_lit_id` 记的是"这个术语出自哪一篇"，不是"这段定义逐字抄自那一页"
+    （`agent_b/run_once.py` 逐字这么写）；定义本身是 B 在多处说法上综合出来的
+    （真机 84 的 `000002`：四种说法用「；」拼起来），而盘上没有任何一格能带页码
+    （`schema.Concept` 没有 `page_range`，`conceptrows.concept_statement` 也没有这个
+    参数）⇒ 对它提页码就是 `verify.py` 记过的"恒红的机器"（那里已经用同一条理由
+    把概念行排除出"逐字回验"）。同一份台账里**引文型命题**缺页码照旧不通过
+    （上面那条负控），所以这不是把必填删掉 —— 豁免的面积只有"页码"这一格。
+    """
+    st, report = _good(tmp_path)
+    _stmt(st, "0002", kind="concept", page_range=S.PageRange(), proof_text="",
+          quote_verified=None,
+          quote_reason="概念行没有'证明'这一档 ⇒ proof_text 留空；定义来自 lit:0000")
+    acc = _check(st, report)
+    assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
+    assert acc.readings["statements_missing_fields"] == [], acc.readings
+    assert acc.readings["page_range_not_required"]["concept_rows"] == ["0002"], acc.readings
+
+
+def test_an_own_result_without_a_page_range_is_counted_separately(tmp_path):
+    """判据（a 档·自有结果）：自产命题的出处是 `doc_id`/`line_range`，没有页码是常态。
+
+    这一档 2026-10-03 起就分开了（§68 人裁的甲档）：对它提"文献第几页"是把别人的
+    坐标系套到我们自己的结果上。它同样要**单独计数** —— 单独读数不等于静默豁免：
+    "有多少条没有页码"必须仍然是个读得出来的数。
+    """
+    st, report = _good(tmp_path)
+    _stmt(st, "0002", origin="own_result", source_lit_id=None, doc_id="0000",
+          page_range=S.PageRange(), proof_text="证明：由定义直接推出。",
+          quote_verified=False, quote_reason="自有结果：没有可逐字比对的外部引文")
+    acc = _check(st, report)
+    assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
+    assert acc.readings["page_range_not_required"]["own_result_rows"] == ["0002"], acc.readings
+
+
+def test_a_concept_row_without_a_source_is_still_refused():
+    """判据（b 档的另一半）：概念行只是不要页码，不是不要出处 —— 缺 `source_lit_id` 仍红。
+
+    这一条守的是"别把整条必填删掉"：豁免只覆盖"页码"那一格，来源那一格一个字没松。
+    直接用判据本体那个纯函数测（不经 `store`）：`schema` 在写入侧就拒这种行，
+    盘上本来不该有它 —— 但读侧判据仍要对"别人写进来的行"给出结论，
+    不许拿写侧的兜底当自己的判据（三态纪律的同一条）。
+    """
+    from agentflow import reviewaccept as RA
+
+    row = {"stmt_id": "0002", "origin": "external_lit", "kind": "concept",
+           "statement_full": "定义：……", "source_lit_id": None,
+           "page_range": {"start": None, "end": None, "label": ""}}
+    assert "source_lit_id" in RA.statement_source_problem(row), row
+    row["source_lit_id"] = "0000"          # 补上出处 ⇒ 只剩下免责的那一格（页码）
+    assert RA.statement_source_problem(row) == "", row
+
+
+def _old_rule_needs_a_page_for_every_row(row: dict) -> str:
+    """改前的口径（判据真要"一律要页码"时的形态）：不看 origin / kind，缺页码就红。
+
+    取值用字面量、不调被测模块的任何函数：这一条要能在改前的树上也构造得出来，
+    否则它的"红"证明不了判据在分档这件事。
+    """
+    page = row.get("page_range") or {}
+    if not (page.get("start") or str(page.get("label") or "").strip()):
+        return f"{row.get('stmt_id')} 缺 page_range（页码）"
+    return ""
+
+
+def test_c_removing_the_page_exemption_brings_the_red_back(tmp_path, monkeypatch):
+    """判据（c 反真空）：把两档豁免摘掉 ⇒ 同一份台账必须回到"不通过"。
+
+    打桩的落点是 `reviewaccept.statement_source_problem`（"哪一栏必须填"的唯一一处
+    口径）：概念行与自有结果的豁免都住在它里面。换回改前那条"一律要页码"，两条都得
+    红 —— 否则"通过"只证明这份台账恰好没被看，证明不了判据真的在按 origin / kind 分档。
+    """
+    st, report = _good(tmp_path)
+    _stmt(st, "0002", kind="concept", page_range=S.PageRange(), proof_text="",
+          quote_verified=None, quote_reason="概念行没有'证明'这一档")
+    _stmt(st, "0003", origin="own_result", source_lit_id=None, doc_id="0000",
+          page_range=S.PageRange(), proof_text="证明：由定义直接推出。",
+          quote_verified=False, quote_reason="自有结果：没有可逐字比对的外部引文")
+
+    # 基线：同一份台账在不打桩时必须绿（否则下面的红证明不了任何事）
+    acc = _check(st, report)
+    assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
+
+    monkeypatch.setattr(RX, "statement_source_problem", _old_rule_needs_a_page_for_every_row)
+    acc2 = _check(st, report)
+    assert acc2.criteria["statements_have_assumptions_and_source"] == "fail", acc2.details
+    missing = acc2.readings["statements_missing_fields"]
+    assert any("0002" in b for b in missing), missing
+    assert any("0003" in b for b in missing), missing
 
 
 def test_an_empty_ledger_is_not_compliance(tmp_path):
