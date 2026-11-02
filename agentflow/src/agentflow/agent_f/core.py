@@ -1865,32 +1865,43 @@ class _Core:
     #
     # 业主 2026-11-02（逐字）：「重点是要F侧拿V签，拿到V签F才能交差」。
     #
-    # 改前这一层没有「送审」这一步：`_proof_outlet` 交完 B 的登记就结束了，
+    # 改前这一层没有「签」这一格：`_proof_outlet` 交完 B 的登记就结束了，
     # `next_step` 那句「交 V 复核这一段论证」只是台账上的一句话 —— 83 的定格读数
     # 就是现场（F 写的五份证明一份都没签，而每一趟都照样回 progress）。
-    # 现在这一方法把两件事接上：① 真的把这一份递给 V（进程内 `AgentV.verify_proof`，
-    # 与 F 交给 B 的 `register_statement` 同一种做法：`F -> V` 这条边一直在
-    # `capabilities.ALLOWED_EDGES` 里）；② 回读签，四档（已签 / 待签 / 未通过 / 没查成）。
+    # 现在这一方法只做一件事：回读签（四档：已签 / 待签 / 未通过 / 没查成），
     # 判据全部在 `verifications` / `vsigns` 那一层，本方法一个字节都不写盘。
-    def _submit_and_read_sign(self, *, statement_id: str, proof_text: str,
-                              proof_no: Any = 1) -> dict:
-        """把这一份证明递给 V 并回读签；返回 `{submitted, skipped, why, reading, verification}`。"""
+    #
+    # ---- 2026-11-02 第二版：送审不在这里做（业主：「F 不是直接能派 V 吗」）----
+    #
+    # 改前一版这一格是「进程内调 `AgentV.verify_proof` 代送」—— 那绕开了派活面
+    # （`framework_summon`，`F -> V` 的边在，83 真机派过 17 次）。业主否掉了那种做法：
+    # 送审是 F 自己的动作（下一步 `next_step_hint` 明写怎么派），这一层只负责
+    # "现在有没有签"这一个读数。
+    def _read_sign(self, *, statement_id: str, proof_text: str,
+                   proof_no: Any = 1) -> dict:
+        """回读这一份证明的 V 签（纯读）；返回 `{reading, hint}`。"""
         from . import vsign as _VS
 
-        # 注入点（与 `e` 同一个理由：验收测试塞一个假的 V，生产路径用真的）。
-        verifier = self.cfg.get("v_verifier")
+        plan_paths = ()
         try:
-            return _VS.submit_proof(
-                store=self.store, root=self.store.root, statement_id=statement_id,
-                proof_text=proof_text, proof_no=proof_no, verifier=verifier)
-        except Exception as exc:  # noqa: BLE001 - 送审这一格坏了不许带走这一轮
-            return {"submitted": False, "skipped": False, "checked": False,
-                    "why": f"送审这一格没跑成（{type(exc).__name__}: {exc}）",
-                    "statement_id": str(statement_id or ""), "verification": {},
-                    "reading": _VS.delivery_reading(self.store.root,
-                                                    statement_id=statement_id,
-                                                    proof_text=proof_text,
-                                                    proof_no=proof_no)}
+            from .. import depsection as _DS
+
+            plan_paths = tuple(_DS.manuscript_relpaths(
+                statement_ids=[statement_id] if statement_id else (),
+                plan_id=str(self.cfg.get("plan_id") or "")))
+        except Exception:  # noqa: BLE001 - 定位不到手稿 ⇒ 只少读一处，不许带走这一轮
+            plan_paths = ()
+        try:
+            reading = _VS.delivery_reading(
+                self.store.root, statement_id=statement_id, proof_text=proof_text,
+                proof_no=proof_no, manuscript_paths=plan_paths)
+        except Exception as exc:  # noqa: BLE001 - 读签这一格坏了不许带走这一轮
+            reading = {"state": _VS.STATE_UNKNOWN, "label": "没查成",
+                       "delivered": False, "checked": False,
+                       "why": f"读签这一格没跑成（{type(exc).__name__}: {exc}）"}
+        return {"reading": reading,
+                "hint": _VS.next_step_hint(reading, statement_id=statement_id,
+                                           manuscript_paths=plan_paths)}
 
     def _judge_nontriviality(self, *, full: str, text: str, body: str,
                              stmt_id: str = "") -> str:
@@ -2003,11 +2014,12 @@ class _Core:
                 # 四档里它是「待签 / 没查成」，绝不是「已签」。`delivered` 因此为假。
                 from . import vsign as _VS_REFUSED
 
-                _refused_reading = _VS_REFUSED.delivery_reading(
+                _refused = _VS_REFUSED.delivery_reading(
                     self.store.root, statement_id="",
                     proof_text=str(wash.get("text") or manuscript.get("text") or ""))
-                detail += (f"；V 签：{_refused_reading.get('label')}"
-                           f"（{_refused_reading.get('why')}）—— 没签 ⇒ 这一趟不算交差")
+                detail += (f"；V 签：{_refused.get('label')}"
+                           f"（{_refused.get('why')}）—— 没签 ⇒ 这一趟不算交差"
+                           "；下一步：改完稿再跑一轮、由你派 V 审这一份")
                 return {
                     "action": "no_change",
                     "outcome": "no_change",
@@ -2019,12 +2031,10 @@ class _Core:
                     # 它确实是一次尝试（F 交了稿），只是被秘书打回 ⇒ 计数不隐瞒。
                     "count_attempt": True,
                     "statement_id": "",
-                    "v_sign": {"submitted": False, "skipped": True,
-                               "why": "秘书把这一份打回了 ⇒ 没有送审",
-                               "reading": _refused_reading},
+                    "v_sign": {"reading": _refused, "hint": "改完稿再跑一轮、由你派 V 审这一份"},
                     "delivered": False,
-                    "delivery_state": str(_refused_reading.get("state") or ""),
-                    "delivery_label": str(_refused_reading.get("label") or ""),
+                    "delivery_state": str(_refused.get("state") or ""),
+                    "delivery_label": str(_refused.get("label") or ""),
                     "report_path": "",
                     "manuscript_path": str(manuscript.get("path") or ""),
                     "manuscript": str(wash.get("text") or manuscript.get("text") or ""),
@@ -2078,20 +2088,21 @@ class _Core:
             else:
                 outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
                 evidence = []
-            # ---- 送审 + 回读 V 签（业主 2026-11-02：「拿到V签F才能交差」）-----------
+            # ---- 回读 V 签（业主 2026-11-02：「拿到V签F才能交差」）-----------------
             #
-            # 位置是结构性的：登记拿到号之后才送（`verify.verify_proof` 的
-            # `statement_id` 是必填，没号那条路今天只对穷举型证据开放）。
-            # 登记没成（`statement_id` 空）也照样回读一次：那一格的读数是
-            # 「待签 + 为什么送不了」，不许因为没送成就不给读数。
-            v_sign = self._submit_and_read_sign(
+            # 不在这里送审：送审是 F 自己的动作（`framework_summon`，`F -> V` 的边在）。
+            # 这一格只回答"这一份现在有没有签"，并把下一步（派 V）写进 detail。
+            # 登记没成（`statement_id` 空）也照样回读：那一格的读数是「待签 + 为什么
+            # 送不了」，不许因为没送成就不给读数。
+            v_sign = self._read_sign(
                 statement_id=statement_id,
                 proof_text=str(outlet.get("proof_text") or ""))
             _reading = dict(v_sign.get("reading") or {})
             outlet_note += (f"；V 签：{_reading.get('label') or '没查成'}"
-                            f"（{_reading.get('why') or v_sign.get('why') or '没有读数'}）"
+                            f"（{_reading.get('why') or '没有读数'}）"
                             + ("" if _reading.get("delivered")
-                               else " —— 没签 ⇒ 这一趟不算交差"))
+                               else " —— 没签 ⇒ 这一趟不算交差"
+                               f"；下一步：{v_sign.get('hint') or '派 V 审这一份'}"))
             detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
                       f"这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
             if wash.get("changed"):
@@ -2136,7 +2147,9 @@ class _Core:
         elif kind == "proof":
             basis = f"论证 {len(product.get('steps') or [])} 步" + (
                 f"；`stmt:{statement_id}`" if statement_id else "")
-            next_step = "交 V 复核这一段论证（`proof_review` 要 V 那一步）"
+            # 2026-11-02（业主：「F 不是直接能派 V 吗」）：下一步就是 F 自己去派 V ——
+            # 台账上这一句必须可执行（点号 / 点手稿路径），不再是一句"交 V 复核"。
+            next_step = str((v_sign or {}).get("hint") or "派 V 审这一份（`framework_summon`）")
         else:
             basis = (f"受控理由 {product.get('reason')}；"
                      f"best_partial {len(product.get('best_partial') or [])} 条")
