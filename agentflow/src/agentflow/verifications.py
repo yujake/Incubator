@@ -1016,7 +1016,15 @@ def proof_sha(proof_text: str) -> str:
 REVIEW_STATES: tuple[str, ...] = ("signed", "holding", "stale", "rejected",
                                   "unsigned", "unreadable")
 
-#: 「连续几次成立才发签」（业主 2026-10-29 的口径：V 签门槛 = 连续 3 次没问题 + 秘书语义判定）。
+#: 「一次送审内部连续几次成立才发签」（业主 2026-11-02 定稿）。
+#:
+#: 语义写死在这里，后来人不许再把它读成"跨送审累计"：
+#: - 一次 `verify_proof` 调用 = V 连判 `SIGN_STREAK_NEED` 轮（`agent_v.core.review_pass_bound`
+#:   现读这个数）；三轮里任一轮「有毛病」⇒ 立刻停、打回、不签；三轮都干净 ⇒ 发签。
+#: - 跨两次送审绝不累计：每份正文的签只由"某一次送审内部的那几轮"决定
+#:   （业主逐字：「不允许跨两次送审累计成功数」）。旧台账里那些没有 `review_call` /
+#:   `review_pass` 的行是历史形态（`legacy_rows`），读得出、但不参与新签判断。
+#: - 名字里的 "STREAK" 只指"同一趟调用内连着几轮 clean"，不是"台账尾部连续几行"。
 #:
 #: 为什么是一个常量而不是散在各处的 `3`：判据（`review_standing` / `signs_bit3` /
 #: `sign_statement`）与读数（`proof_review_gap` 的 checklist、`review_standing` 的
@@ -1318,6 +1326,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            secretary_judge: Mapping[str, Any] | None = None,
            sign_issuance: Mapping[str, Any] | None = None,
            washed_relay: Mapping[str, Any] | None = None,
+           review_pass: int | None = None, review_call: str = "",
            flip: bool = True) -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
@@ -1376,6 +1385,14 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     第 3 位由 `Secretary.decide_sign_issuance` 判完再调
     :func:`sign_statement`（`append_ledger=False`）翻。默认 `True` 是兼容门（夹具 / 直调本函数
     的那一批），生产 V 那两条路都传 `False`。
+
+    ## `review_pass` / `review_call`：这一行是"哪一趟送审的第几轮"（2026-11-02 定稿）
+    一次 `verify_proof` = V 连判 `SIGN_STREAK_NEED` 轮；`review_call` 是那一趟调用的 id
+    （每趟一个，同一趟的三行逐字相同），`review_pass` 是这趟里的第几轮（1..need）。
+    新签只认同一 `review_call` 内 `review_pass=1..need` 的那几行；跨调用绝不累计。
+    `round` 保持原样（全局台账行号，老读数仍在用），不要拿它当趟内轮次。
+    不给这两个参数（老调用点 / 夹具 / 直调本函数）⇒ `review_call=""`、
+    `review_pass=None` ⇒ 读侧按历史形态计（`legacy_rows`），不参与新签判断。
     """
     # 证明号先判：坏号在写任何东西之前就拒（不落台账、不改位）。
     no = proof_no_strict(proof_no)
@@ -1419,6 +1436,11 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "proof_sha256": sha,
         "proof_chars": len(str(proof_text or "")),
         "round": int(round_no) if round_no is not None else len(rows) + 1,
+        #: 这一行是"哪一趟送审的第几轮"（2026-11-02 定稿）：`review_call` 同一趟相同，
+        #: `review_pass` 是 1..need。老行没有这两个键 ⇒ 读侧按历史形态（`legacy_rows`）计，
+        #: 不参与新签判断。`round` 仍是全局台账行号，不是趟内轮次。
+        "review_pass": int(review_pass) if review_pass is not None else None,
+        "review_call": str(review_call or ""),
         "used_faces": [str(x) for x in used_faces],
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
@@ -2060,13 +2082,38 @@ def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF
     return out
 
 
+def _is_legacy_row(row: Mapping[str, Any]) -> bool:
+    """这一行是不是「历史形态」——没有单次送审的轮次标记。
+
+    2026-11-02 起新写的台账行都带 `review_call`（同一趟 `verify_proof` 的调用 id）与
+    `review_pass`（这趟里的第几轮）；老行没有这两个键。这两种行在判据上必须分开：
+
+    - 新行：只有同一 `review_call` 内的 `review_pass=1..need` 才算一次送审的三轮；
+    - 老行：读得出（`legacy_rows` 计数）、但不参与新签判断，也不按新规则重算成签。
+
+    判据取"两个标记缺任一"而不是只看 `review_call`：半截写入（有 call id、没有轮次）
+    同样说不清"这是第几轮"，按历史形态收是最保守的那一侧。
+    """
+    if not str(row.get("review_call") or "").strip():
+        return True
+    return row.get("review_pass") in (None, "")
+
+
 def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     """逐行给出「到这一行为止，连续几次成立」（行序就是台账的追加序）。
 
-    这是「连续 N 次」的唯一计数实现：:func:`consecutive_holds`（从尾部取一格）、
+    这是台账历史读数的唯一计数实现：:func:`consecutive_holds`（从尾部取一格）、
     :func:`review_standing`（它已经读过同一批行，不重复读盘）、:func:`signed_rows`
-    （一批台账里哪几行签住了）三处都调它。三处各写一遍合计，只会让三处对同一批行
-    给出三个数 —— 而"位上说签了、台账只签一次"正是这种分家的形态。
+    （一批台账里哪几行签住了）三处都调它。
+
+    它不再充当"新签发不发"的判据（2026-11-02 业主定稿：「不允许跨两次送审累计
+    成功数」）。一次 `verify_proof` 的签发只看同一次调用内的轮数
+    （`sign_issuance.within_call`）；这个函数数的是跨全部历史行的连续数，只用来回答
+    "台账上以前发生过什么"，旧工作区的读数（`holding` / `signed` 等）仍照它读。
+    三个调用点都是读侧；写侧 `sign_statement` 在拿到 `within_call` 时不调它。
+
+    三处各写一遍合计，只会让三处对同一批行给出三个数 —— 而"位上说签了、台账只签一次"
+    正是这种分家的形态。
 
     ## 什么会清零、什么被读成"这一票算上了"（2026-10-29 的 A 段 + 2026-10-30 第三次裁定
     ## + 2026-11-01 的两态结论 + 2026-11-02 的追加裁定）
@@ -2149,15 +2196,24 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     `checked`：`signs_bit3(row, streak=<这一份>)` 会因为它 `checked` 为假而不签
     （见 :func:`_streak_number`），所以"没查成"在签字那一端是 fail-closed 的。
 
+    ## `legacy_rows`：历史形态的显式读数（2026-11-02）
+
+    `legacy_rows` = 这一份证明的台账行里没有 `review_call` / `review_pass` 的行数。
+    这些行是旧版跨送审累计形态留下的（当时一次调用只判一轮、靠台账尾部凑次数），
+    读得出、也仍参与 `streak` 这个历史读数；但它们不参与新签判断 ——
+    新签只看同一趟 `verify_proof` 内 `review_pass=1..need` 的那几行
+    （`sign_issuance.within_call`）。"多少行是历史形态"必须能一眼读出来，否则
+    "旧台账的 2 行 clean 被当成这一次的 2 轮"会静静地发生。
+
     返回键：`checked` / `statement_id` / `proof_no` / `need` / `streak` / `streak_ok` /
     `sha`（尾部那一签盖住的正文 sha256）/ `rows`（这一个证明号的行数）/
-    `ledger` / `reason`。
+    `legacy_rows` / `ledger` / `reason`。
     """
     out: dict[str, Any] = {
         "checked": False, "statement_id": str(statement_id or "").strip(),
         "proof_no": 0, "need": int(SIGN_STREAK_NEED) if need is None else int(need),
         "streak": 0, "streak_ok": False,
-        "sha": "", "rows": 0, "ledger": "", "reason": "",
+        "sha": "", "rows": 0, "legacy_rows": 0, "ledger": "", "reason": "",
     }
     no = _read_proof_no(proof_no)
     if no < 1:
@@ -2188,6 +2244,7 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
         return out
     mine = _rows_of_proof(rows, no)
     out["rows"] = len(mine)
+    out["legacy_rows"] = sum(1 for r in mine if _is_legacy_row(r))
     out["checked"] = True
     if not mine:
         out["reason"] = (f"`{out['ledger']}` 里没有 #{no} 这一份证明的签 ⇒ 连续次数 0"
@@ -2419,26 +2476,54 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
         rows = []
     mine = _rows_of_proof([dict(r) for r in rows], proof_no)
     runs = _hold_run_lengths(mine)
-    # 尾部那一串连续成立的票：`runs[i]` 就是"到这一行为止连续几次"，
-    # 所以从尾部往回收 `streak, streak-1, …` 恰好收齐那一串。
-    # 为什么不用 `signs_bit3(row, streak=runs[i])` 过滤：那个谓词问的是"这一行能不能翻位"
-    # （要够门槛），而这里要的是"哪几行是这一签的票"—— 前两票本来就不够门槛，
-    # 用翻位谓词会把它们全滤掉（实测：passes 只剩 1 条）。
-    tail = int(holds.get("streak") or (runs[-1] if runs else 0))
     want = max(1, int(need or 1))
     passes: list[dict[str, Any]] = []
-    for i in range(len(mine) - 1, -1, -1):
-        if len(passes) >= want:
-            break
-        if str(mine[i].get("proof_sha256") or "") != sha:
-            continue
-        if runs[i] != tail - len(passes):
-            continue
-        passes.append({"verification_id": str(mine[i].get("verification_id") or ""),
-                       "at": str(mine[i].get("at") or ""),
-                       "proof_sha256": str(mine[i].get("proof_sha256") or ""),
-                       "why": str(mine[i].get("why") or "")})
-    passes.reverse()
+    # ---- 2026-11-02：签的 `passes` 只许来自同一趟送审（业主：「不允许跨两次送审
+    # 累计成功数」）。持有 `review_call` 时按它取行，绝不按台账尾部的连续票数回捞 ——
+    # 后者会把旧台账里的 clean 行拼进本次的签（实测：2 行历史 + 本次第 1 轮，tail=3
+    # 会捞到 runs=3/2/1 的三行，其中两行是历史行）。
+    call_id = str(holds.get("review_call") or "")
+    if call_id:
+        picked = [r for r in mine
+                  if str(r.get("review_call") or "") == call_id
+                  and int(r.get("review_pass") or 0) >= 1]
+        picked.sort(key=lambda r: int(r.get("review_pass") or 0))
+        picked = picked[:want]
+        for r in picked:
+            passes.append({
+                "verification_id": str(r.get("verification_id") or ""),
+                "at": str(r.get("at") or ""),
+                "proof_sha256": str(r.get("proof_sha256") or ""),
+                "why": str(r.get("why") or ""),
+                # 这两格让"三票同源"在签文件里可直接读（vsigns.write_sign 原样复制）。
+                "review_call": call_id,
+                "review_pass": int(r.get("review_pass") or 0),
+            })
+    else:
+        # 历史 / 直调路径：按台账尾部连续票数回捞（旧行为，逐字不变）。
+        # 尾部那一串连续成立的票：`runs[i]` 就是"到这一行为止连续几次"，
+        # 所以从尾部往回收 `streak, streak-1, …` 恰好收齐那一串。
+        # 为什么不用 `signs_bit3(row, streak=runs[i])` 过滤：那个谓词问的是"这一行能不能翻位"
+        # （要够门槛），而这里要的是"哪几行是这一签的票"—— 前两票本来就不够门槛，
+        # 用翻位谓词会把它们全滤掉（实测：passes 只剩 1 条）。
+        tail = int(holds.get("streak") or (runs[-1] if runs else 0))
+        for i in range(len(mine) - 1, -1, -1):
+            if len(passes) >= want:
+                break
+            if str(mine[i].get("proof_sha256") or "") != sha:
+                continue
+            if runs[i] != tail - len(passes):
+                continue
+            one = {"verification_id": str(mine[i].get("verification_id") or ""),
+                   "at": str(mine[i].get("at") or ""),
+                   "proof_sha256": str(mine[i].get("proof_sha256") or ""),
+                   "why": str(mine[i].get("why") or "")}
+            if (str(mine[i].get("review_call") or "")
+                    or mine[i].get("review_pass") is not None):
+                one["review_call"] = str(mine[i].get("review_call") or "")
+                one["review_pass"] = mine[i].get("review_pass")
+            passes.append(one)
+        passes.reverse()
     if passes:
         # 最后的那一签就是这一份签的落点（台账行序 = 追加序，不存在第二种"最近"）。
         out["ledger"] = f"{VERIFICATIONS_DIR}/{statement_id}.jsonl#" \
@@ -2589,6 +2674,14 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     `None` = 调用方没有问过秘书（老调用点 / 夹具 / 直接调本函数那一档）⇒ 只按连续闸判，
     这一档是兼容门，不是第二套判据。
 
+    ## `sign_issuance.within_call`：单次送审内部的轮数（2026-11-02 定稿）
+    这个键一旦给出（`AgentV` 的连判循环每一轮都会给"这一趟的第几轮"），本函数
+    只看它：`>= need` 才翻位；台账尾部的历史连续数不参与判定（不现数、不二次确认）。
+    这正是业主「不允许跨两次送审累计成功数」的落点 —— 旧后门是"台账已有 2 行 clean，
+    本次第 1 轮 clean ⇒ 3 票凑够"。`streak` / `need` / `streak_ok` 三格与签文件里的
+    `streak` 都取这个趟内数；签的 `passes` 按同一 `review_call` 取，绝不跨趟拼接。
+    不给 `within_call` ⇒ 走历史兼容门（台账读数），那一档不是送审路径。
+
     ## `append_ledger=False`：台账那一行已经由调用方落了（业主 2026-10-29 追加口径）
     V 不再自己发签：`AgentV.verify_proof` 只落台账（`record_verification(flip=False)`），
     然后由 V 的秘书判定并调本函数翻位（`Secretary.decide_sign_issuance` 的落地那一步）。
@@ -2617,8 +2710,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: 抬档的读数原话（「因 V 判成立而抬档：conjecture→theorem（依据 …）」）；
         #: 没抬时是空串。它不写进 `reason`：`reason` 只留"这一签没落成"的那几档。
         "upgrade_note": "",
-        #: 业主 2026-10-29 的连续读数（见 :func:`consecutive_holds`）：这一签落地之后
-        #: 台账尾部的连续成立次数 / 门槛 / 够不够。三个键无条件存在。
+        #: 连续读数（见 :func:`consecutive_holds`）：给了 `sign_issuance.within_call`
+        #: 时是这一趟送审内的轮数（2026-11-02 定稿）；不给时是台账尾部连续成立次数
+        #: （历史兼容门）。三个键无条件存在。
         "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
         #: 业主 2026-11-01：这一签的侧文件（`out/vsigns/<artifact_sha>.json`）落成了没有。
         #: 三态与 `vsigns.write_sign` 同形：`written` / `idempotent` / `conflict` /
@@ -2669,11 +2763,38 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 out["reason"] = (f"命题 {sid} 的证明清单里没有 #{no}（`{PROOFS_KEY}` 那一条）"
                                  "⇒ 只落了台账那一行；第 3 位不翻（不许把这一签记到 #p1 头上）")
                 return out
-            # ---- 业主 2026-10-29：连续 N 次成立才翻位（第 1、2 次只落台账）。
+            # ---- 业主 2026-10-29：连续 N 次成立才翻位（第 1、2 次只落台账）----
             #
-            # 现读台账（含刚追加的这一行）——这是"连续次数"的唯一来路；不在这里另存一份
-            # 计数、也不许把一个整数从调用方传进来：位是台账的缓存，缓存只能从正本现算。
-            holds = consecutive_holds(getattr(store, "root", ""), sid, proof_no=no)
+            # 2026-11-02 定稿：`sign_issuance.within_call` 一旦给出，只看这一趟送审
+            # 内部的轮数，台账尾部历史连续数一个字节都不参与"发不发签"的判断
+            # （业主：「不允许跨两次送审累计成功数」；后门是"2 行历史 clean + 本次第 1 轮"）。
+            # `within_call` 是 `Secretary.decide_sign_issuance` 从 `AgentV` 那趟循环
+            # 拿到的、已经按趟数过的数；这里不再现数台账，也不拿台账做二次确认。
+            # 不给它（旧直调路径 / 夹具 / `record_verification(flip=True)`）⇒ 仍按台账
+            # 读数走，那是历史兼容门，不是送审路径。
+            within_call: int | None = None
+            if sign_issuance is not None and sign_issuance.get("within_call") is not None:
+                try:
+                    within_call = int(sign_issuance.get("within_call"))
+                except (TypeError, ValueError):
+                    within_call = None
+            if within_call is not None:
+                need = int(sign_issuance.get("need") or SIGN_STREAK_NEED)
+                holds = {
+                    "checked": True,
+                    "streak": within_call, "need": need,
+                    "streak_ok": bool(within_call >= need),
+                    "sha": str(row.get("proof_sha256") or ""),
+                    # 让 `_vsign_payload` 按同一趟送审取 `passes`（不按台账尾部回捞）。
+                    "review_call": str(sign_issuance.get("review_call")
+                                       or row.get("review_call") or ""),
+                    "legacy_rows": 0,
+                }
+            else:
+                # 历史 / 直调路径：现读台账（含刚追加的这一行）——这是旧"连续次数"的
+                # 唯一来路；不在这里另存一份计数、也不许把一个整数从调用方传进来：
+                # 位是台账的缓存，缓存只能从正本现算。
+                holds = consecutive_holds(getattr(store, "root", ""), sid, proof_no=no)
             out["streak"] = int(holds.get("streak") or 0)
             out["need"] = int(holds.get("need") or SIGN_STREAK_NEED)
             out["streak_ok"] = bool(holds.get("streak_ok"))
@@ -2810,7 +2931,8 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     `ledger_present` / `statement_id` / `proof_no` / `sha` / `verification_id` / `verdict` /
     `round` / `unresolved_errors` / `rows`（这条命题的台账总行数）/ `proof_rows`（本份
     证明的行数）/ `superseded` / `superseded_total` / `problems` / `ledger` / `why` /
-    `streak` / `need` / `streak_ok`（业主 2026-10-29 的连续读数）。
+    `streak` / `need` / `streak_ok`（业主 2026-10-29 的连续读数）/ `legacy_rows`
+    （历史形态的行数，2026-11-02：只作历史台账读数，不参与新签判断）。
 
     ## 「连续 3 次」在这一格怎么读（业主 2026-10-29 的 A 段）
     `state="signed"` 的条件从"最近一签是成立"改成"尾部连续 `SIGN_STREAK_NEED` 签成立
@@ -2818,6 +2940,12 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     但次数还没到 ⇒ `state="holding"`（不是 `signed`，也不是"一次都没签"）。计数只调
     :func:`_hold_run_lengths`（不重复读盘：这里的 `mine` 就是它要的那批行），
     行长与"哪一签算第几票"因此与 :func:`consecutive_holds` 逐字一致。
+
+    ## 历史形态与"新签"分开（2026-11-02，业主定稿）
+    上面这段说的是台账历史读数：它回答"以前发生过什么"，旧工作区的 `state` 仍照它读。
+    但"新签发不发"不再看它 —— 新签只看同一趟 `verify_proof` 内 `review_pass=1..need`
+    的那几行（`sign_issuance.within_call`）。没有 `review_call` / `review_pass` 的行
+    由 `legacy_rows` 显式数出来，不参与新签判断，也不按新规则重算成签。
 
     ## 历史行 `verdict="看不出来"` 怎么读（2026-11-02：这一档连历史兼容读也不留）
     按 :func:`read_verdict` 读成 `成立` ⇒ 它走上面同一条路（同一份正文 ⇒ `signed` /
@@ -2845,6 +2973,9 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: 连续读数（业主 2026-10-29）：三个键无条件存在（"这一格是 0"与"没有这一格"
         #: 必须靠键的存在分开）。读不成 / 没有那一行时它们是 0 / 3 / False。
         "streak": 0, "need": int(SIGN_STREAK_NEED), "streak_ok": False,
+        #: 历史形态的行数（2026-11-02）：没有 `review_call` / `review_pass` 的行。
+        #: 它们只作历史台账读数，不参与新签判断；见 :func:`_is_legacy_row`。
+        "legacy_rows": 0,
         "ledger": "", "why": "",
     }
     if no < 1:
@@ -2887,6 +3018,7 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         return out
     mine = [r for r in rows if proof_no_of(r) == no]
     out["proof_rows"] = len(mine)
+    out["legacy_rows"] = sum(1 for r in mine if _is_legacy_row(r))
     if not mine:
         out.update(why=(f"`{out['ledger']}` 里没有 #{no} 这一份证明的签"
                         "（别的证明签过也不算 —— 不许借光）"))

@@ -38,6 +38,16 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
    `agent_loop.v_rejections_digest` 与 `deliver_v_verdicts` 打回给 F；V 自己的结论不是
    「成立」那一档也立刻停（它本身就是打回）。
 
+## 2026-11-02 定稿：跨两次送审绝不累计（业主追加口径，本模块的计数边界）
+
+业主逐字：「不允许跨两次送审累计成功数」。于是：
+
+- 一次 `verify_proof` = 同一次调用内连判 `SIGN_STREAK_NEED` 轮，每一趟从第 1 轮重数；
+- 台账每一行带 `review_pass`（这一趟的第几轮）与 `review_call`（这一趟的调用 id）；
+- 秘书的发签地板（`sign_issuance.within_call`）只看这一趟的轮数；台账尾部的历史连续数
+  （`consecutive_holds` / `legacy_rows`）只作历史读数，不参与新签判断；
+- 旧台账没有 `review_call` / `review_pass` 的行 = 历史形态，读得出、但不按新规则重算成签。
+
 ## 2026-10-30 三次补：秘书的语义判定只有两档（第三次裁定，本次唯一口径）
 业主口径逐字：「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
 所以秘书的判定轴只有 `clean` / `fault`：拿不准、只挑出一处小记号问题、只说"我没逐行验证"
@@ -74,6 +84,7 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 from __future__ import annotations
 
 import hashlib
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -137,7 +148,11 @@ REVIEW_TEMPERATURE = 1.0
 #: 为什么不在导入期取一次就够：门槛是配置，默认参数/模块常量都是一次快照；快照与现读漂了
 #: 之后，"判几次"会按旧门槛走、而"够不够发签"按新门槛判 —— 同一趟调用里两个数。
 def review_pass_bound() -> int:
-    """这一趟最多判几转 = 门槛现读（`verifications.SIGN_STREAK_NEED`）。"""
+    """这一趟最多判几转 = 门槛现读（`verifications.SIGN_STREAK_NEED`）。
+
+    这个上界就是一次送审内的轮数（2026-11-02 业主定稿：一次调用 = 连判三轮）。
+    它不是跨两次送审累计的目标数：每一趟从第 1 轮重新数，台账历史一票都不带进来。
+    """
     return int(VR.SIGN_STREAK_NEED)
 
 
@@ -422,12 +437,19 @@ class AgentV:
                                 label=str(verdict.get("label") or ""))
 
     def _decide_sign_issuance(self, statement_id: str, proof_text: str, no: int,                              verdict: Mapping[str, Any], *,
-                              row: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                              row: Mapping[str, Any] | None = None,
+                              within_call: int | None = None,
+                              review_call: str = "") -> dict[str, Any]:
         """问秘书：这一签发不发（业主 2026-10-29 的 A 段，追加口径：落盘也由它做）。
 
         `row` 是 `record_verification(flip=False)` 刚落下的台账那一行：秘书据此知道
         "这一签已经在台账上了"（连续次数不用再加一票），并在判发之后由它自己调
         `sign_statement(append_ledger=False)` 翻位。
+
+        `within_call`（2026-11-02 定稿）是这一趟送审内的第几轮：给了它，秘书那一侧
+        的地板只看这个数，台账尾部的历史连续数只作读数 —— 跨两次送审绝不累计。
+        `review_call` 是这一趟的调用 id，随发签读数落到签文件的 `passes` 里
+        （"三票同源"可读）。
 
         没有秘书 ⇒ `checked=False, issue=False, issued=False`：不放签。这一句是
         fail-closed 的那一半（`draft/125` §三：「装配没接上时，秘书判定必须报
@@ -443,6 +465,8 @@ class AgentV:
                                or "这一趟没有 V 的秘书 ⇒ 没有人发这一签（不放签）")}
         return sec.decide_sign_issuance(statement_id=statement_id, proof_text=proof_text,
                                         proof_no=no, verdict=verdict, row=row,
+                                        within_call=within_call,
+                                        review_call=review_call,
                                         task_id=str(self.cfg.get("task_id") or ""))
 
     # ---------------------------------------------------- 引用核实（业主 2026-10-26）
@@ -509,8 +533,15 @@ class AgentV:
         "跑完而两头都没有"报内部不一致（`checked=False`），不当成一条终局。
         逐次读数在返回值的 `review_passes` 里（每项给 `pass` / `axis` / `decision` /
         `streak` / `need` / `streak_ok` / `issue` / `issued` / `verdict` /
-        `verification_id` / `terminal`），而 `secretary_judge` / `sign_issuance` 仍是
-        "最后一转"那两格。
+        `verification_id` / `review_call` / `terminal`），而 `secretary_judge` /
+        `sign_issuance` 仍是"最后一转"那两格。
+
+        ## 2026-11-02 定稿：这一趟的轮数只在这一趟里数（跨送审绝不累计）
+        每一趟都有一个新的 `review_call`；三行台账的 `review_pass` 是 1 / 2 / 3。
+        发签地板（`sign_issuance.within_call`）只看这个趟内数；台账尾部历史连续数
+        （旧台账的 `legacy_rows`）只作历史读数，不参与新签判断。于是"上一趟留了 2 行
+        clean、这一趟第 1 轮 clean"不再凑成一张签 —— 业主逐字：「不允许跨两次送审
+        累计成功数」。
 
         ## 已经签过的命题不再送审（2026-10-31）
 
@@ -569,6 +600,13 @@ class AgentV:
             # 同理无条件存在（一次都没判成时是空数组 —— "没判过"与"判了 0 转"不靠少给键分）。
             "review_passes": [],
         }
+        # ---- 2026-11-02 业主定稿：一次送审 = 同一次调用内连判三轮，跨调用绝不累计 ----
+        #
+        # 这一趟的调用 id：这一趟落下的每一行台账都带同一个 `review_call`，行上再带
+        # `review_pass`（第几轮）。新签只认同一个 `review_call` 内 `review_pass=1..need`
+        # 的那几行；旧台账没有这两个标记 ⇒ 历史形态（`legacy_rows`），不参与新签判断。
+        # 只在内存里发，不改任何盘上格式；`round` 仍是全局台账行号，不动。
+        review_call = uuid.uuid4().hex[:12]
         sid = out["statement_id"]
         if not S.is_valid_id(sid):
             out["reason"] = "bad_statement_id"
@@ -699,6 +737,9 @@ class AgentV:
                         object_sha256=str(_reviewed.get("report_sha256") or ""),
                         object_path=str(_reviewed.get("report_path") or ""),
                         secretary_judge=_n_judge,
+                        # 穷举型证据是机械七项核对（不走上文的三轮连判）：这一格按
+                        # "这一趟的第 1 轮"如实记；签发仍走历史台账门（见 review_call 注释）。
+                        review_pass=1, review_call=review_call,
                         # 业主 2026-10-29 追加口径：V 只落台账，翻位交给秘书。
                         flip=False)
                 except (VR.VerificationError, OSError) as exc:
@@ -713,7 +754,8 @@ class AgentV:
                 if _n_word == "成立" and _n_judged and _n_axis == "clean":
                     # 只有"判过了、没问题、结论成立"这一档才问"这一签发不发"。
                     _n_issuance = self._decide_sign_issuance(sid, _text_for_ledger, no,
-                                                             _n_verdict, row=_row)
+                                                             _n_verdict, row=_row,
+                                                             review_call=review_call)
                 else:
                     # 其余那一档一律不发签，读数由 `_terminal_issuance` 给（与逐行走查
                     # 那条链同一套判据：verdict 先行，其次 fault，最后才是没查成）。
@@ -921,7 +963,7 @@ class AgentV:
             once = self._review_pass(sid=sid, text=text, no=no, prompt=prompt,
                                      citations=citations,
                                      citations_problem=citations_problem,
-                                     pass_no=pass_no)
+                                     pass_no=pass_no, review_call=review_call)
             if not once.get("ok"):
                 # 这一转没查成（没接线 / 结论不合法 / 台账写不进去）。已经读到的读数
                 # 照改前的顺序摊回返回值：秘书判定与引用核实在改前也是先落再写的，
@@ -942,20 +984,27 @@ class AgentV:
                 out["review_passes"] = passes
                 return out
             last = once
+            # 这一转的 streak 是这一趟送审内连到第几轮 clean（2026-11-02 定稿）：
+            # 不是台账尾部跨历史的连续数（那正是"跨两次送审累计"的后门）。
+            # 有毛病 / 结论不是成立 ⇒ 这一趟的连续数归零；秘书没判成那一档由底下
+            # 的 `terminal` 说明，不在这里冒充"0 轮"。
+            in_call_streak = (pass_no if (
+                str(once["judgment"].get("axis") or "") == "clean"
+                and VR.read_verdict(once["row"]) == "成立") else 0)
             passes.append({
                 "pass": pass_no,
                 "axis": str(once["judgment"].get("axis") or ""),
                 "decision": str(once["issuance"].get("decision") or ""),
-                # `projected` 是"这一签落下去之后的连续次数"（秘书那一步已经按台账算过，
-                # 这一转的票也在里面）⇒ 它就是这一转的 streak。打回那一档由
-                # `_terminal_issuance` 按同一份台账现算（没查成那一档不算票、也不清零）。
-                "streak": int(once["issuance"].get("projected") or 0),
-                "need": int(once["issuance"].get("need") or VR.SIGN_STREAK_NEED),
-                "streak_ok": bool(once["issuance"].get("streak_ok")),
+                "streak": in_call_streak,
+                "need": int(need),
+                "streak_ok": bool(in_call_streak >= int(need)),
                 "issue": bool(once["issuance"].get("issue")),
                 "issued": bool(once["issuance"].get("issued")),
                 "verdict": str(once["row"].get("verdict") or ""),
                 "verification_id": str(once["row"].get("verification_id") or ""),
+                #: 同一趟送审的调用 id（三转逐字相同）。签文件里的 `passes` 按它取行，
+                #: 旧台账没有这一格 ⇒ 历史形态，不参与新签判断。
+                "review_call": review_call,
                 #: 这一转是不是终局、是哪一种（""=不是终局）。读侧不必再从"下一转还在不在"
                 #: 反推"停在哪儿"，也不用把"打回"读成"次数没到"。
                 "terminal": "",
@@ -1162,7 +1211,7 @@ class AgentV:
 
     def _review_pass(self, *, sid: str, text: str, no: int, prompt: str,
                      citations: list[dict[str, Any]], citations_problem: str,
-                     pass_no: int) -> dict[str, Any]:
+                     pass_no: int, review_call: str = "") -> dict[str, Any]:
         """一份证明的一次独立审阅（业主 2026-10-30 的"连续再判"里的那一转）。
 
         一转做五件事，一件都不许省：
@@ -1178,6 +1227,11 @@ class AgentV:
         为什么这一转必须单独是一个方法：它要在 `verify_proof` 里被转三次，而"每一转都走
         同一套纪律"这件事只能有一个实现 —— 抄三遍必然漂（而漂的那一处正好会是
         "第 2 转忘了落台账"或"第 3 转跳过了秘书"）。
+
+        2026-11-02 定稿：`pass_no` 是这一趟送审内的第几轮，`review_call` 是这一趟的
+        调用 id。两格一起落进台账（`review_pass` / `review_call`），并作为 `within_call`
+        递给秘书的发签地板 —— 台账尾部历史连续数不再参与这一趟的签发判断
+        （业主：「不允许跨两次送审累计成功数」）。
 
         返回 `{"ok": True, "row": 台账行, "judgment": 秘书判定, "wash": 洗稿读数,
         "issuance": 发签决定, "gate": 引用闸, "checks": 逐条引用结论}`；
@@ -1250,7 +1304,9 @@ class AgentV:
                                          # C 段：洗过的转达文本（只有真洗出来时才写）。
                                          washed_relay=wash,
                                          # A 段：发签权在秘书手上 ⇒ 这一次不翻位。
-                                         flip=False)
+                                         flip=False,
+                                         review_pass=pass_no,
+                                         review_call=review_call)
         except (VR.VerificationError, OSError) as exc:
             # 台账写不进去（坏行 / 权限 / 磁盘 / 目录）⇒ 这是"没查成"，不是"签住了"。
             # 不接住它会让异常穿透到工具层，而那一层读不到"这一签没落地"这句话。
@@ -1284,7 +1340,11 @@ class AgentV:
                 and str(verdict.get("verdict") or "") == "成立"):
             # 只有"判过了、没问题、结论成立"这一档才问"这一签发不发"
             # （其余几档都是终局或没查成，见 `_terminal_issuance`）。
-            issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row)
+            # 2026-11-02 定稿：把"这一趟的第几轮"作为地板递给秘书 —— 前两轮必不签，
+            # 第三轮 clean 才签；台账历史行不参与（跨送审绝不累计）。
+            issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row,
+                                                  within_call=pass_no,
+                                                  review_call=review_call)
         else:
             issuance = self._terminal_issuance(sid, no, text=text, row=row,
                                                judgment=judgment, verdict=verdict)

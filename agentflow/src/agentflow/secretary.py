@@ -3061,7 +3061,9 @@ class Secretary:
 
     def decide_sign_issuance(self, *, statement_id: str, proof_text: str = "",
                              proof_no: Any = 1, verdict: Mapping[str, Any] | None = None,
-                             task_id: str = "", row: Mapping[str, Any] | None = None
+                             task_id: str = "", row: Mapping[str, Any] | None = None,
+                             within_call: int | None = None,
+                             review_call: str = ""
                              ) -> dict[str, Any]:
         """这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
 
@@ -3072,6 +3074,16 @@ class Secretary:
         2. 秘书那一层（语义）：次数够了，才问模型「签发 / 不签发」。
            它只能在这个前提下再否决，不能把"次数不够"判成"签发"。
         ⇒ 两层是"与"，不是"或"：门槛是地板，秘书的决定是天花板。
+
+        ## `within_call`：单次送审内部的轮数（2026-11-02 定稿，业主授权加这一格）
+        业主逐字：「不允许跨两次送审累计成功数」。`AgentV` 的连判循环每转都把
+        "这一趟的第几轮"作为 `within_call` 递进来；一旦给了它，第 1 层的地板就只看
+        这个数，台账尾部历史连续数一个字节都不再参与"发不发签"的判断（连"缺口补齐"
+        式的二次确认也不许：那正是后门从别处长回来的形态）。台账仍被读一次，但只作
+        `reading` / `ledger_streak` 这份历史读数；`checked=False` 的台账读不成
+        也不再挡住这一趟（历史读不成不是这一趟没判）。
+        不给 `within_call`（旧直调路径 / 夹具）⇒ 保持原行为：地板读台账。那是历史
+        兼容门，不是送审路径。
 
         ## 三态（"没查成"绝不被读成"没问题"）
         | 结局 | 返回 |
@@ -3103,6 +3115,10 @@ class Secretary:
             "decision": JUDGE_UNCHECKED, "landed": False, "writeback": {},
             "streak": 0, "need": int(_VR.SIGN_STREAK_NEED), "streak_ok": False,
             "projected": 0, "same_sha": False, "state": "", "reason": "",
+            #: 2026-11-02：单次送审内的轮数（None = 没给，走历史台账兼容门）/
+            #: 那一趟的调用 id / 台账尾部的历史连续数（只作读数，不参与判定）。
+            "within_call": None, "review_call": str(review_call or ""),
+            "ledger_streak": 0,
             "basis": [], "reading": {}, "cost": {}, "material": {},
             "statement_id": str(statement_id or ""), "proof_no": 0,
         }
@@ -3110,18 +3126,33 @@ class Secretary:
             out["proof_no"] = int(_VR.as_proof_no(proof_no) or 0)
         except (TypeError, ValueError):
             out["proof_no"] = 0
+        #: `within_call` 归一：负数按 0 收（"这一趟一轮都没判"不是"次数够了"）。
+        within: int | None = None
+        if within_call is not None:
+            try:
+                within = max(0, int(within_call))
+            except (TypeError, ValueError):
+                within = None
+        out["within_call"] = within
         root = self.store.root if self.store is not None else self.root
+        reading_problem = ""
         try:
             reading = _VR.review_standing(root, statement_id=str(statement_id or ""),
                                           proof_text=str(proof_text or ""),
                                           proof_no=proof_no)
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没问题"
-            out["reason"] = (f"台账读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成："
-                             "不放签（不是「可以签」）")
-            self._note_sign_issuance(out, task_id=task_id)
-            return out
+            if within is None:
+                out["reason"] = (f"台账读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成："
+                                 "不放签（不是「可以签」）")
+                self._note_sign_issuance(out, task_id=task_id)
+                return out
+            # 2026-11-02：给了 `within_call` 时台账只是历史读数 —— 历史读不成
+            # 不许反过来否决这一趟（要求 ④：台账不以任何形式参与发不发签）。
+            reading_problem = f"{type(exc).__name__}: {exc}"
+            reading = {}
         out["reading"] = dict(reading)
-        out["streak"] = int(reading.get("streak") or 0)
+        out["ledger_streak"] = int(reading.get("streak") or 0)
+        out["streak"] = out["ledger_streak"]
         out["state"] = str(reading.get("state") or "")
         sha = str(reading.get("sha") or "")
         same_sha = bool(sha) and sha == _VR.proof_sha(str(proof_text or ""))
@@ -3140,26 +3171,58 @@ class Secretary:
         out["landed"] = bool(landed)
         candidate_ok = (str(v.get("verdict") or "") == "成立"
                         and int(v.get("unresolved_errors") or 0) == 0)
-        if landed:
-            out["projected"] = out["streak"] if candidate_ok else 0
+        if within is not None:
+            # ---- 2026-11-02 定稿：地板只看这一趟送审内部的轮数。
+            # 台账尾部的历史连续数（`ledger_streak`）只作读数；`same_sha` 也只作读数，
+            # 不参与这一支的判定 —— 否则旧台账又能凑出一次签（要求 ④）。
+            out["streak"] = within
+            out["projected"] = within if candidate_ok else 0
+            out["streak_ok"] = bool(out["projected"] >= int(out["need"]))
+            out["basis"] = [f"within_call={within}", f"need={out['need']}",
+                            f"ledger_streak={out['ledger_streak']}（历史读数，不参与判定）"]
         else:
-            out["projected"] = ((out["streak"] + 1) if (same_sha and candidate_ok)
-                                else (1 if candidate_ok else 0))
-        out["streak_ok"] = bool(out["projected"] >= int(out["need"]))
-        if not bool(reading.get("checked")):
+            if landed:
+                out["projected"] = out["streak"] if candidate_ok else 0
+            else:
+                out["projected"] = ((out["streak"] + 1) if (same_sha and candidate_ok)
+                                   else (1 if candidate_ok else 0))
+            out["streak_ok"] = bool(out["projected"] >= int(out["need"]))
+            out["basis"] = [f"streak={out['streak']}", f"need={out['need']}",
+                            f"same_sha={same_sha}"]
+        if not bool(reading.get("checked")) and within is None:
             out["reason"] = (f"台账那一格没查成（{str(reading.get('why') or '')[:160]}）"
                              "⇒ 不放签（不是「没问题」）")
             self._note_sign_issuance(out, task_id=task_id)
             return out
         # 递给模型的材料：只有读数，没有证明正文（I12 同一条纪律）。
-        material = {
-            "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
-            "state": out["state"], "streak": out["streak"], "need": out["need"],
-            "projected": out["projected"], "streak_ok": out["streak_ok"],
-            "same_sha": same_sha, "candidate_verdict": str(v.get("verdict") or ""),
-            "candidate_defect_step": v.get("defect_step"),
-            "reading_why": str(reading.get("why") or "")[:400],
-        }
+        #
+        # 要求 ④（2026-11-02）：`within_call` 一旦给出，台账就是历史读数 ——
+        # 材料里「不放」任何台账派生的格子（`state` / `ledger_streak_history` /
+        # 台账算出来的 `same_sha`）。同一趟送审的三轮由 V 的循环保证是同一份正文，
+        # 所以这里给 `same_sha=True` 是"这一趟的事实"，不是台账读数。
+        if within is not None:
+            material = {
+                "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
+                "within_call": within,
+                "streak": out["projected"], "need": out["need"],
+                "projected": out["projected"], "streak_ok": out["streak_ok"],
+                "same_sha": True,
+                "candidate_verdict": str(v.get("verdict") or ""),
+                "candidate_defect_step": v.get("defect_step"),
+                "reading_why": ("这一签的轮数由 V 的连判循环给出（同一趟送审内第几轮）；"
+                                "台账历史行不参与这一趟的发签判定"),
+            }
+        else:
+            material = {
+                "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
+                "state": out["state"],
+                "streak": out["streak"],
+                "need": out["need"],
+                "projected": out["projected"], "streak_ok": out["streak_ok"],
+                "same_sha": same_sha, "candidate_verdict": str(v.get("verdict") or ""),
+                "candidate_defect_step": v.get("defect_step"),
+                "reading_why": str(reading.get("why") or reading_problem)[:400],
+            }
         out["material"] = dict(material)
         # ---- 没有判断面 ⇒ checked=False（业主 2026-10-29：「装配没接上时秘书判定必须报
         # checked=False 且不放签」）。这一格必须排在"地板没过"之前：那一支会报
@@ -3177,10 +3240,11 @@ class Secretary:
             # 不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给（签 / 打回）。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
                        reason=(f"连续「成立」{out['projected']}/{out['need']} 次"
-                               f"（这一签落下之后；同一份正文={same_sha}）⇒ 这一签不发；"
-                               f"门槛是 {int(out['need'])} 次连续的「没问题」"),
-                       basis=[f"streak={out['streak']}", f"need={out['need']}",
-                              f"same_sha={same_sha}"])
+                               f"（{'这一趟送审内' if within is not None else '台账历史读数'}"
+                               f"）⇒ 这一签不发；门槛是 {int(out['need'])} 次连续的「没问题」"
+                               + ("；台账历史行不参与这一趟的判定"
+                                  if within is not None else "")),
+                       basis=list(out["basis"]))
             self._note_sign_issuance(out, task_id=task_id)
             return out
         got = self.judge("sign_issuance", material, task_id=task_id)
@@ -3262,7 +3326,8 @@ class Secretary:
             target={"sign_issuance": str(out.get("statement_id") or "")},
             judge={k: out.get(k) for k in
                    ("checked", "issue", "decision", "streak", "need", "streak_ok",
-                    "projected", "same_sha", "state", "reading", "cost")},
+                    "projected", "same_sha", "state", "reading", "cost",
+                    "within_call", "ledger_streak", "review_call")},
             before=json.dumps(dict(out.get("material") or {}), ensure_ascii=False,
                               sort_keys=True, default=str)[:2000],
             after=(f"issue={bool(out.get('issue'))}；decision={out.get('decision')!r}"
