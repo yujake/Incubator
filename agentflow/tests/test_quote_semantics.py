@@ -153,7 +153,13 @@ def test_the_semantic_mode_demands_its_evidence() -> None:
 
 # ============================================================ 3 学分
 def test_the_citation_credit_needs_a_usable_mode() -> None:
-    """引用命题的学分：两档都给（逐字 / 语义），说不清方式的不给、没有区间的不给。"""
+    """引用命题的学分：两档都给（逐字 / 语义），说不清方式的不给、没有区间的不给。
+
+    2026-11-02（两阶段录入，`draft/179`）：引用侧的学分不再把等级抬到预备定理级 ——
+    文献编号顶的那一格是「占位签」（`reviewed_source="citation"`），不是 V 的真签，
+    所以等级一律停在「猜想」。两档的差别因此读在"第 2 位 + 凭据"上，
+    不读在等级上（判据一个字没放宽：没学分的那两档仍然连第 2 位都没有）。
+    """
     ok_v = {"stmt_id": "0001", "origin": "external_lit", "source_lit_id": "0001",
             "quote_verified": True, "quote_mode": "verbatim", "quote_span": _SPAN,
             "status": "active"}
@@ -162,10 +168,24 @@ def test_the_citation_credit_needs_a_usable_mode() -> None:
     bad = {**ok_v, "stmt_id": "0003", "quote_mode": "fuzzy"}
     # D1（2026-10-22）：说通过而拿不出区间 ⇒ 学分不给（那是 `no_evidence`）。
     no_span = {**ok_v, "stmt_id": "0004", "quote_span": ""}
-    assert EB.bits_from_row(ok_v)["grade"] == EB.bits_from_row(ok_s)["grade"] != "conjecture"
+    credit_v = EB.bits_from_row(ok_v)
+    credit_s = EB.bits_from_row(ok_s)
+    assert credit_v["grade"] == credit_s["grade"] == "conjecture", (credit_v, credit_s)
+    # 两档都拿到了引用学分：第 2 位亮着、凭据写着文献号。
+    assert credit_v["proof"] is True and credit_s["proof"] is True, (credit_v, credit_s)
+    assert credit_v["reviewed"] is False and credit_s["reviewed"] is False, (
+        "占位签把第 3 位读成了已签（2026-11-02 收口之后不许）", credit_v)
+    for bits in (credit_v, credit_s):
+        ev = dict(bits.get("evidence") or {})
+        assert str(ev.get("proof_source") or "") == "citation", ev
+        assert str((ev.get("reviewed_by") or {}).get("evidence") or "") == "lit:0001", ev
+        assert str(ev.get("reviewed_source") or "") == EB.REVIEWED_SOURCE_CITATION, ev
     assert EB.bits_from_row(bad)["grade"] == "conjecture", EB.bits_from_row(bad)
     assert EB.bits_from_row(no_span)["grade"] == "conjecture", (
         "空区间仍拿到引用学分 ⇒ D1 的读侧那一半没生效", EB.bits_from_row(no_span))
+    # 没学分的那两档连第 2 位都不许亮（与两档正控的差别在这里，不在等级）。
+    assert EB.bits_from_row(bad)["proof"] is False, EB.bits_from_row(bad)
+    assert EB.bits_from_row(no_span)["proof"] is False, EB.bits_from_row(no_span)
 
 
 def test_the_credit_reason_says_which_mode_it_was() -> None:

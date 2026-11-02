@@ -308,14 +308,25 @@ def test_gate_retirement_keeps_the_semantic_criteria_alive():
     是如实登记的，而不是靠编一个假入口。
     """
     import pathlib as _p
+    import re
 
     src_root = _p.Path(__file__).resolve().parents[1] / "src" / "agentflow"
+    #: 判据是"`deliver` 这个名字（不是 `delivery`）被 import / 调用"。
+    #: 2026-11-02：改前三处都是裸子串 —— `"import deliver"` 会命中
+    #: `from . import delivery as _DL`（`import deliver` + `y`），而 F 的两条
+    #: delivery 读数正是这么 import 的。那一条是「误报」：它没有调 `deliver.gate`，
+    #: 也不是 `deliver` 模块的入口。这里只把匹配收紧到词边界（判据的真身一个字没改：
+    #: 任何 `import deliver` / `from ... import deliver` / `deliver.gate(` 仍然红）。
+    _CALLS_DELIVER = re.compile(
+        r"(?<![A-Za-z0-9_])import\s+deliver(?![A-Za-z0-9_])"
+        r"|(?<![A-Za-z0-9_])deliver\s+as(?![A-Za-z0-9_])"
+        r"|(?<![A-Za-z0-9_])deliver\.gate\(")
     users = []
     for path in src_root.rglob("*.py"):
         if path.name == "deliver.py":
             continue
         text = path.read_text(encoding="utf-8")
-        if "import deliver" in text or "deliver.gate(" in text or "deliver as" in text:
+        if _CALLS_DELIVER.search(text):
             users.append(path.name)
     assert users == [], (
         "deliver 出现了新的生产调用者（那会造出第二套闸门入口）："

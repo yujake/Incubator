@@ -133,7 +133,14 @@ BASELINE: dict[str, int] = {
     #   · `src/agentflow/verifications.py::review_standing` 195 → 206 行 —— 同一笔新增
     #     `legacy_rows`：没有 `review_call` / `review_pass` 的老行读得出、但不参与新签判断。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 89,
+    # 2026-11-03：89 → 90。一格，能点名：`src/agentflow/agent_b/register_statement.py::
+    # _attach_proofs` 198 → 222 行 —— 179 批（两阶段录入）把"机械录入那一版显式标
+    # `optimized=false`、重交同一份不算『同种证明』"两段落在同一个挂证明的函数里。
+    # 逐条按 (文件, 函数名) 比对改前那 6 个被改的 src 文件（register_statement /
+    # closing / depsection / evidencebits / papermapping / secretary）：只有这一条
+    # 跨过 200，没有一条掉回线下，也没有一个新落的长函数。文件那一格不动（它本来就
+    # 超过 800 行）。
+    "src_functions_gt200_lines": 90,
     "dup_docstring_segments": 5,
 }
 
