@@ -22,11 +22,11 @@ lem:fixed→stmt:000005、thm:path2→stmt:000006、thm:path3→stmt:000000
 | # | 判据 | 改前红在哪 |
 |---|---|---|
 | a | 对应表每行带 `ledger_kind`，且与台账里那一行的 `kind` 逐条相等 | 表里根本没有这一格（只有论文侧的 `kind`） |
-| b | 每行带 `reviewed`（已签 / 没签 / 未读到），且与 `reviewed_by_proof` 逐条相等 | 同上：表里没有 V 那一格，`reviewed_by_proof` 只在命题目录里 |
+| b | 每行带 `reviewed`（已签 / 未通过 / 未审 / 未读到），且与台账现读逐条相等 | 同上：表里没有 V 那一格，`reviewed_by_proof` 只在命题目录里 |
 | c | 三份文件（json / md / 附录 tex）三处同源：同一行同两格逐字一致 | 两格不存在，谈不上一致 |
 | d | 落差读数：论文 env=theorem/lemma 而行 kind=conjecture ⇒ 报一条读数并点名 label → stmt | 没有任何一格报这件事（对应表三态只看"表与正文对不对得上"） |
 | e | 抬档：V 落「成立」⇒ 同一笔事务里该行 `kind` 由 conjecture 变 theorem，且读数写明依据 | V 那一签只翻第 3 位；`kind` 要等"同一份内容再交一次"才抬，而没人会回头做 |
-| f | 反真空：把 ① 的填充打桩成空 ⇒ a 红；把 ③ 的抬档打桩成空 ⇒ e 红；台账读不到 ⇒ `未读到`（不是 `没签`） | 三条判据本身不存在，反真空无从谈起 |
+| f | 反真空：把 ① 的填充打桩成空 ⇒ a 红；把 ③ 的抬档打桩成空 ⇒ e 红；statements 行读不到 ⇒ `未读到`（不是 `未审`、也不是 `未通过`） | 三条判据本身不存在，反真空无从谈起 |
 
 全部用例都在 `tmp_path` 下自建工作区，一个模型调用都不发（零模型钱）。
 
@@ -70,7 +70,10 @@ ZH_TEX = (
     "第三条引理（V 没签）。\n"
     "\\end{lemma}\n"
     "\\begin{theorem}\\label{thm:nosig}\n"
-    "第四条定理（逐份签名表里没有这一份 ⇒ 未读到）。\n"
+    "第四条定理（没有审校台账 ⇒ 未审）。\n"
+    "\\end{theorem}\n"
+    "\\begin{theorem}\\label{thm:corrupt}\n"
+    "第五条定理（审校台账坏行 ⇒ 未读到）。\n"
     "\\end{theorem}\n"
     "\\begin{experiment}\\label{exp:scan}\n"
     "一条实验（不算「排成定理」，不进落差读数）。\n"
@@ -101,13 +104,14 @@ def _signed_bits(*, proof_no: int = 1, verdict: str = "成立") -> dict:
     }
 
 
-#: 台账里那四行命题（D-69 的两个现场各占一条）：
+#: 台账里那几行命题（D-69 的两个现场各占一条，四种 reviewed 档各占一条）：
 #:
 #: - `000001`：`kind="conjecture"` 而 V 已签「成立」⇒ 论文里排成 lemma（落差 ① 的现场）；
 #: - `000002`：`kind="lemma"`、V 已签 ⇒ 与论文的 theorem 对不上（这一条不进落差读数：
 #:   业主的读数只管"台账仍是 conjecture"那一档）；
-#: - `000003`：`kind="conjecture"`、逐份签名表为假 ⇒ 论文里排成 lemma 而 V 没签；
-#: - `000004`：`kind="lemma"`、`bits` 里根本没有逐份签名表 ⇒ 那一格"未读到"。
+#: - `000003`：`kind="conjecture"`、逐份签名表为假、审校台账在 ⇒ 「未通过」；
+#: - `000004`：`kind="lemma"`、`bits` 里根本没有逐份签名表、审校台账不在 ⇒ 「未审」；
+#: - `000005`：`kind="lemma"`、审校台账在但有坏行 ⇒ 「未读到」。
 LEDGER_STATEMENTS: list[dict] = [
     {"stmt_id": "000001", "kind": "conjecture", "origin": "own_result",
      "statement_text": "第一条引理", "proof_text": PROOF, "bits": _signed_bits()},
@@ -124,9 +128,29 @@ LEDGER_STATEMENTS: list[dict] = [
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
               "evidence": {"proof_process": PROOF, "proof_source": "own"}}},
+    {"stmt_id": "000005", "kind": "lemma", "origin": "own_result",
+     "statement_text": "第五条定理", "proof_text": PROOF,
+     "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
+              "audited": False, "origin": "own_result",
+              "evidence": {"proof_process": PROOF, "proof_source": "own"}}},
 ]
 
-#: 对应表那五行（`ledger_kind` / `reviewed` 一律不填：写侧按台账现读现填）。
+#: 审校台账 `verifications/<命题号>.jsonl` 的夹具（不在表里的命题 = 没有这份台账）。
+#:
+#: `000003` 那一行是"审过、判有毛病、没签"：写侧只在真签时建 `reviewed_by_proof`
+#: 的键，于是这一条在逐份表里也是 `{"1": false}` 这种键在而值为假的形状。
+#: `000005` 那一份故意留一条坏行（读不出 ⇒ 未读到，不许折成未通过/未审）。
+VERIFICATIONS: dict[str, str] = {
+    "000002": ('{"statement_id": "000002", "verification_id": "v-000001",'
+               ' "proof_no": 1, "verdict": "成立"}\n'),
+    "000003": ('{"statement_id": "000003", "verification_id": "v-000002",'
+               ' "proof_no": 1, "verdict": "有毛病", "defect_step": 2}\n'),
+    "000005": ('{"statement_id": "000005", "verification_id": "v-000003",'
+               ' "proof_no": 1, "verdict": "有毛病"}\n'
+               '这条不是 JSON\n'),
+}
+
+#: 对应表那几行（`ledger_kind` / `reviewed` 一律不填：写侧按台账现读现填）。
 ROWS: list[dict] = [
     {"kind": "lemma", "label": "lem:signed", "env_no": 1,
      "ledger_id": "stmt:000001", "proof_no": 1, "file": "main.tex",
@@ -140,16 +164,20 @@ ROWS: list[dict] = [
     {"kind": "theorem", "label": "thm:nosig", "env_no": 2,
      "ledger_id": "stmt:000004", "proof_no": 1, "file": "main.tex",
      "citation_loc_reason": "own result：完整证明就在本文第 3 节，没有外部引文可定位"},
+    {"kind": "theorem", "label": "thm:corrupt", "env_no": 3,
+     "ledger_id": "stmt:000005", "proof_no": 1, "file": "main.tex",
+     "citation_loc_reason": "own result：完整证明就在本文第 3 节，没有外部引文可定位"},
     {"kind": "experiment", "label": "exp:scan", "env_no": 1,
      "ledger_id": "exp:000001", "proof_no": 1, "file": "main.tex"},
 ]
 
-#: 这三行按台账现读出来该是什么（`(ledger_kind, reviewed)`）。
+#: 这几行按台账现读出来该是什么（`(ledger_kind, reviewed)`）。
 EXPECTED_CELLS: dict[str, tuple[str, str]] = {
     "lem:signed": ("conjecture", "已签（判决：成立）"),
     "thm:other": ("lemma", "已签（判决：成立）"),
-    "lem:unsigned": ("conjecture", "没签"),
-    "thm:nosig": ("lemma", "未读到"),
+    "lem:unsigned": ("conjecture", "未通过"),
+    "thm:nosig": ("lemma", "未审"),
+    "thm:corrupt": ("lemma", "未读到"),
     # 实验行：`experiments` 表没有 `kind` 这一列 ⇒ 这一格是"未读到"（不是"不是定理"）。
     "exp:scan": ("未读到", "未读到"),
 }
@@ -186,6 +214,10 @@ def _workspace(root: pathlib.Path, *,
     package = PM.package_dir(root)
     package.mkdir(parents=True, exist_ok=True)
     (package / PM.PC.TEX_NAME).write_bytes(ZH_TEX.encode("utf-8"))
+    for sid, text in VERIFICATIONS.items():
+        path = root / VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("utf-8"))
     if write_package:
         PM.write_package(root, [PM.Row(**dict(row)) for row in (rows or [])],
                          workspace_root=root)
@@ -297,7 +329,7 @@ def test_a_every_row_carries_the_ledger_kind(tmp_path: pathlib.Path) -> None:
 # ------------------------------------------------------------------ b V 那一格
 
 def test_b_every_row_carries_the_signature_verdict(tmp_path: pathlib.Path) -> None:
-    """b) 每行带 `reviewed`（已签 / 没签 / 未读到），且与 `reviewed_by_proof` 逐条相等。
+    """b) 每行带 `reviewed`（已签 / 未通过 / 未审 / 未读到），且与台账现读逐条相等。
 
     改前红：表里没有 V 那一格。`reviewed_by_proof` 只在命题目录的 `bits` 里，
     读论文的人（H / 业主 / B）看不到"这一行签没签"。
@@ -360,11 +392,13 @@ def test_d_the_gap_is_reported_and_named(tmp_path: pathlib.Path) -> None:
         assert item["env_kind"] in PM.THEOREM_ENV_KINDS, item
 
     unsigned = reading["theorem_unsigned"]
-    assert unsigned["count"] == 1, unsigned
-    assert [it["label"] for it in unsigned["items"]] == ["lem:unsigned"], unsigned
+    assert unsigned["count"] == 2, unsigned
+    assert [it["label"] for it in unsigned["items"]] == ["lem:unsigned", "thm:nosig"], unsigned
+    # 两条"没签"来自不同的来路：一条审过（未通过），一条从没送审（未审）。
+    assert [it["reviewed"] for it in unsigned["items"]] == ["未通过", "未审"], unsigned
     assert "论文里排成定理但 V 没签" in str(unsigned["why"]), unsigned["why"]
     # "读不到"那一行单列，不算进"没签"。
-    assert [it["label"] for it in unsigned["unreadable"]] == ["thm:nosig"], unsigned
+    assert [it["label"] for it in unsigned["unreadable"]] == ["thm:corrupt"], unsigned
     assert "V 签没签读不到" in str(unsigned["why"]), unsigned["why"]
 
     # 两条读数都进了 `reason`（成文/收工那一句读得到），且都不在 `problems` 里。
@@ -512,33 +546,29 @@ def test_f2_stubbing_the_upgrade_makes_e_red(tmp_path: pathlib.Path,
     assert "_kind_upgrade" not in row, row
 
 
-def test_f3_an_unreadable_ledger_says_unread_not_unsigned(
+def test_f3_a_missing_statement_row_says_unread_not_unreviewed(
         tmp_path: pathlib.Path) -> None:
-    """f) 三态：台账读不到 ⇒ `reviewed = 未读到`，而且不是 `没签`。
+    """f) 三态：statements 行读不到 ⇒ `reviewed = 未读到`，而且不是「未审」/「未通过」。
 
-    三种"读不到"各来一次：台账里没有那一行 / 逐份签名表里没有这一份 /
-    判决原话那一格空。折成"没签"就等于把没查成报成一个关于 V 做过什么的结论。
+    这一档只在"这一格没查成"时出现：台账里没有那一行（`ledger_cells(None, …)`），
+    或者整张 statements 表读不出来。它不是「从没送审」（那要读得出"台账不在"），
+    也不是「审过没签」（那要读得出"台账在"）—— 折过去就等于把没查成报成一个
+    关于 V 做过什么的结论。
     """
-    missing_row = PM.ledger_cells(None, 1)
+    missing_row = PM.ledger_cells(None, 1, review_ledger=PM.REVIEW_LEDGER_PRESENT)
     assert missing_row[PM.REVIEWED_FIELD] == PM.LEDGER_CELL_UNREADABLE, missing_row
-    assert missing_row[PM.REVIEWED_FIELD] != PM.REVIEWED_UNSIGNED_CELL
+    assert missing_row[PM.REVIEWED_FIELD] not in (
+        PM.REVIEWED_UNREVIEWED, PM.REVIEWED_NOT_PASSED), missing_row
     assert missing_row[PM.LEDGER_KIND_FIELD] == PM.LEDGER_CELL_UNREADABLE, missing_row
-
-    no_key = {"stmt_id": "000009", "kind": "lemma",
-              "bits": {"evidence": {"reviewed_by_proof": {"2": True}}}}
-    cells = PM.ledger_cells(no_key, 1)
-    assert cells[PM.REVIEWED_FIELD] == PM.LEDGER_CELL_UNREADABLE, cells
-    # 另一份签过不算这一份签过（不许借光）：那一份本身读得出来。
-    assert PM.ledger_cells(no_key, 2)[PM.REVIEWED_FIELD].startswith("已签"), cells
 
     silent = {"stmt_id": "000010", "kind": "",
               "bits": {"evidence": {"reviewed_by_proof": {"1": True}}}}
-    cells = PM.ledger_cells(silent, 1)
+    cells = PM.ledger_cells(silent, 1, review_ledger=PM.REVIEW_LEDGER_PRESENT)
     # 签过、但判决原话那一格读不到 ⇒ 两件事分开写，都不折成"没签"。
     assert cells[PM.REVIEWED_FIELD] == "已签（判决：未读到）", cells
     assert cells[PM.LEDGER_KIND_FIELD] == PM.LEDGER_CELL_UNREADABLE, cells
 
-    # 台账整个读不到时，写侧也照样把"未读到"写进三份文件（不许印成空白）。
+    # statements 表整个读不到时，写侧也照样把"未读到"写进三份文件（不许印成空白）。
     root = _workspace(tmp_path / "noledger", statements=[])
     rows = _json_rows(root)
     assert {str(r[PM.REVIEWED_FIELD]) for r in rows} == {PM.LEDGER_CELL_UNREADABLE}, rows

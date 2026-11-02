@@ -141,16 +141,24 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 这件事在表上自己就是可见的 —— 不需要读者去翻两个文件对。G 手填的值会被这一次现读
 盖掉：填了就是声称，而这两格的声称必须来自台账。
 
-`reviewed` 的取值是三态，空着不许折成任何一边：
+`reviewed` 的取值是四档（业主 2026-11-02 裁定：「应该分：已签/未通过/未审/未读到」），
+空着不许折成任何一边：
 
-- `已签（判决：成立）`：逐份那张表里这一份为真，且 `reviewed_by` 记着判决原话；
-- `没签`：逐份那张表里这一份为假（签过别的证明不算 —— 不许借光）；
-- `未读到`：台账里没有这一行 / 这一份在逐份表里没有键 / 判决原话那一格读不到。
-  三种都是「读不到」，不是「没签」。
+- `已签（判决：成立）`：逐份那张表里这一份为真（`reviewed_by_proof[证明号] is True`），
+  且 `reviewed_by` 记着判决原话；原话读不到就印 `已签（判决：未读到）`（签过这件事读得出来，
+  判决对不对得上这一份读不出来，两件事分开写）；
+- `未通过`：审过、但没拿到签 —— `verifications/<命题号>.jsonl` 在，而这一份的键不存在或为假；
+- `未审`：从没送审 —— `verifications/<命题号>.jsonl` 不在；
+- `未读到`：台账文件在但读不出（坏行 / 权限 / 读异常），或 statements 行读不到。
+  这一格没查成，不是「未通过」也不是「未审」。
+
+判「审过没审过」认的是台账在不在，不是 `reviewed_by_proof` 有没有键：写侧
+`verifications._reviewed_statement_row` 只在真签的时候才建那个键，于是"审过、判过有毛病、
+从没签"的命题在逐份表里也没有键 —— 按"没键 = 未审"会把它读成"从没审过"。
 
 `ledger_kind` 同样是三态：台账行在就写它的 `kind`；台账行读不到（或那一行的 `kind`
 是空的）就写 `未读到`。渲染器最后这一道（`_ledger_kind_cell` / `_reviewed_print_cell`）保证
-这三格永远不会印成空白 —— 空白会被读成"没问题"，而这三态里没有一档是"没问题"。
+这两格永远不会印成空白 —— 空白会被读成"没问题"，而这几档里没有一档是"没问题"。
 
 ### 落差读数（D-69 ②：先让它看得见，不拦门）
 
@@ -158,8 +166,9 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 
 - `kind_gap`：论文里以 theorem / lemma 环境出现、而台账 `kind` 仍是 `conjecture`
   的行，逐条 `label → stmt:NNNNNN`（业主原话）；
-- `theorem_unsigned`：论文里排成定理而 V 没签的行；签没签读不到的那几行单列进
-  `unreadable`，不算进"没签"（三态：没查成不是结论）。
+- `theorem_unsigned`：论文里排成定理而 V 没签的行（`未通过` 与 `未审` 都算"没签"，
+  逐条 `reviewed` 那一格自己说是哪一档）；签没签读不到的那几行单列进
+  `unreadable`，不算进"没签"（没查成不是结论）。
 
 两格都不进 `problems`、不进 `ALL_PROBLEM_KINDS`，所以它们不改 `state`、不改收工门的
 八格、不给 `Finding`；它们进 `reason`（成文与收工那句话读得到）与 `readings`
@@ -222,6 +231,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import evidencebits as EB
+from . import jsonlfile as JF
 from . import papercompile as PC
 from . import proofloc as PL
 from . import numericproof as NP
@@ -341,17 +351,37 @@ REVIEWED_FIELD = "reviewed"
 #: 这两格的键（写进 json、进 md、进附录，三处同源）。
 LEDGER_CELL_FIELDS: tuple[str, str] = (LEDGER_KIND_FIELD, REVIEWED_FIELD)
 
-#: 三态里"读不到"那一档的写法（台账行不在 / 逐份签名表没有这一份 / 判决原话空）。
+#: 四档里"读不到"那一档的写法（台账文件在但读不出 / statements 行读不到）。
 #:
-#: 它不许折成 `没签`，也不许折成"已签"：读不到是"这一格没查成"，而"没签"是一个
-#: 关于 V 做过什么的结论 —— 两者在报告里长得一样是本项目最忌的形态。
+#: 它不许折成「未审」、也不许折成「未通过」：读不到是"这一格没查成"，而「未审」
+#: 是一个关于 V 有没有收到过这一份的结论 —— 两者在报告里长得一样是本项目最忌的形态。
 LEDGER_CELL_UNREADABLE = "未读到"
 
-#: 逐份签名表里这一份为假时的写法（签过别的证明不算，不许借光）。
-REVIEWED_UNSIGNED_CELL = "没签"
+#: 「审过、但没拿到签」：`verifications/<命题号>.jsonl` 在，而这一份的键不存在或为假。
+#:
+#: 为什么不能落在"没键 = 没签"上：写侧 `verifications._reviewed_statement_row`
+#: 只在真签的时候才建 `reviewed_by_proof` 那个键，于是"审过五次、三次判有毛病、
+#: 从没签"这种命题在逐份表里也没有键 —— 按"没键"读就会把它读成"从没审过"。
+#: 「审过没审过」认的是台账在不在，不是键在不在。
+REVIEWED_NOT_PASSED = "未通过"
+
+#: 「从没送审」：`verifications/<命题号>.jsonl` 不在（合法初态，不是读不到）。
+REVIEWED_UNREVIEWED = "未审"
 
 #: 签了之后的写法（`已签（判决：<判决原话>）`）。
-REVIEWED_SIGNED_TEMPLATE = "已签（判决：{verdict}）"
+REVIEWED_SIGNED = "已签"
+REVIEWED_SIGNED_TEMPLATE = REVIEWED_SIGNED + "（判决：{verdict}）"
+
+#: 审校台账 `verifications/<命题号>.jsonl` 的三态：在、不在、读不出。
+#:
+#: 这三档只用来判「未通过 / 未审 / 未读到」；「已签」只认
+#: `bits.evidence.reviewed_by_proof[证明号] is True`（那一格是签字的正本）。
+REVIEW_LEDGER_PRESENT = "present"
+REVIEW_LEDGER_ABSENT = "absent"
+REVIEW_LEDGER_UNREADABLE = "unreadable"
+REVIEW_LEDGER_STATES: tuple[str, ...] = (
+    REVIEW_LEDGER_PRESENT, REVIEW_LEDGER_ABSENT, REVIEW_LEDGER_UNREADABLE,
+)
 
 #: 论文里"排成定理"的那几类环境（D-69 的落差读数按它判）。
 #:
@@ -652,7 +682,7 @@ class Row:
     v_signature: Mapping[str, Any] | None = None
     #: ---- 台账那两格（D-69）：不手填，由 `fill_ledger_cells` 现读现填 ------------
     #:
-    #: `ledger_kind` 是台账那一行自己的 `kind`；`reviewed` 是 V 签没签 + 判决原话。
+    #: `ledger_kind` 是台账那一行自己的 `kind`；`reviewed` 是 V 拿这一份怎么办（四档）。
     #: 空串 = 这一格没填（旧表 / 还没填过）—— 渲染时印 `未读到`，不印空白。
     ledger_kind: str = ""
     reviewed: str = ""
@@ -663,7 +693,8 @@ class Row:
                                "env_no": int(self.env_no), "ledger_id": self.ledger_id,
                                "proof_no": int(self.proof_no), "file": self.file,
                                # 台账那两格（D-69）：三份同源的第一份。旧表没有这两键，
-                               # 那一档由读侧读成 `未读到`（不许读成"已签"或"没签"）。
+                               # 那一档由读侧读成 `未读到`（不许读成「已签」，也不许折成
+                               # 「未通过」或「未审」）。
                                LEDGER_KIND_FIELD: self.ledger_kind,
                                REVIEWED_FIELD: self.reviewed}
         if self.lean_file:
@@ -1235,45 +1266,108 @@ def _reviewed_by_of(ledger_row: Mapping[str, Any] | None) -> dict[str, Any]:
     return dict(by) if isinstance(by, Mapping) else {}
 
 
-def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
-    """V 签没签 + 判决原话（`reviewed` 那一格）。
+def reviewed_ledger_state(workspace_root: str | Path, statement_id: Any) -> str:
+    """这份命题的审校台账（`verifications/<命题号>.jsonl`）在不在、读不读得出。
 
-    判据只有一处：逐份那张表走 `evidencebits.reviewed_by_proof`（写侧
-    `verifications._reviewed_statement_row` 落的同一张表）；判决原话走
-    `bits.evidence.reviewed_by.verdict`。
+    返回 `REVIEW_LEDGER_STATES` 之一。判据只有一处：`jsonlfile.read_jsonl_state`
+    的四态 —— `absent` ⇒ 不在（`absent`）；`unreadable`（读异常 / 权限 / 不是 UTF-8）
+    或有任何坏行（`problems` 非空）⇒ 读不出（`unreadable`）；其余（`ok` / `empty`，
+    即文件在、行都读得出来）⇒ 在（`present`）。
 
-    三态（业主 D-69 口径：读不到不许折成任何一边）：
+    为什么"文件在、只是空"算「在」：空文件是"送审过、还没落下结论"的一种（写侧先建
+    文件再追加），它不是"从没送审"，也不是"读不出"。三件事三种处置。
 
-    - 台账行读不到 / 逐份表里没有这一份 ⇒ `未读到`（这一格没查成）；
-    - 这一份为假 ⇒ `没签`（签过别的证明不算 —— 不许借光）；
-    - 这一份为真 ⇒ `已签（判决：<原话>）`；原话那一格读不到、或者它记的是另一份
-      证明的签 ⇒ `已签（判决：未读到）`：签过这件事读得出来，判决对不对得上这一份
-      读不出来，两件事分开写。
+    为什么在这里读、而不是在 `reviewed_cell` 里读：渲染函数是纯函数（拿行出字），
+    一次渲染里每一行都要问这一格，写盘的东西只该在调用点读一遍（见
+    `_review_ledger_states`）。
+    """
+    sid = str(statement_id or "").strip()
+    if not sid:
+        return REVIEW_LEDGER_UNREADABLE
+    try:
+        path = V.verification_ledger_path(workspace_root, sid)
+    except Exception:  # noqa: BLE001 - 命题号坏到连路径都拼不出 ⇒ 这一格没查成
+        return REVIEW_LEDGER_UNREADABLE
+    _rows, problems, state = JF.read_jsonl_state(path)
+    if state == "absent":
+        return REVIEW_LEDGER_ABSENT
+    if state == "unreadable" or problems:
+        return REVIEW_LEDGER_UNREADABLE
+    return REVIEW_LEDGER_PRESENT
+
+
+def _review_ledger_states(workspace_root: str | Path, rows: Iterable[Row],
+                          ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                          ) -> dict[str, str]:
+    """一次读出这批论文行各自那份审校台账的三态（按命题号归并，同一份只读一遍）。
+
+    只有 `stmt:` 开头的行有这份台账：`exp:` / `rel:` 不在 V 的审校链上，查询时
+    由 `_review_ledger_of` 落 `unreadable`（那一格没查成，不是"从没送审"）。
+    """
+    out: dict[str, str] = {}
+    for row in rows:
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        if not resolved["ok"] or str(resolved["table"]) != "statements":
+            continue
+        sid = str(resolved["row_id"])
+        if sid not in out:
+            out[sid] = reviewed_ledger_state(workspace_root, sid)
+    return out
+
+
+def _review_ledger_of(resolved: Mapping[str, Any], states: Mapping[str, str]) -> str:
+    """一条论文行对应哪一档台账读数（非 statements 表 ⇒ `unreadable`，不冒充「未审」）。"""
+    if not resolved.get("ok") or str(resolved.get("table")) != "statements":
+        return REVIEW_LEDGER_UNREADABLE
+    return str(states.get(str(resolved.get("row_id")), REVIEW_LEDGER_UNREADABLE))
+
+
+def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
+                  review_ledger: str) -> str:
+    """V 签没签 + 判决原话（`reviewed` 那一格的四档）。
+
+    `review_ledger` 是这条命题那份审校台账 `verifications/<命题号>.jsonl` 的三态
+    （`REVIEW_LEDGER_STATES`），由调用点现读一遍传进来 —— 渲染函数不自己读盘。
+
+    四档（业主 2026-11-02 裁定：「应该分：已签/未通过/未审/未读到」）：
+
+    - `已签（判决：<原话>）`：逐份表里这一份为真（`reviewed_by_proof[证明号] is True`）。
+      原话那一格读不到、或者它记的是另一份证明的签 ⇒ `已签（判决：未读到）`；
+    - `未通过`：台账在，而这一份的键不存在或为假（审过，没拿到签 —— 含"判过有毛病"）；
+    - `未审`：台账不在（从没送审）；
+    - `未读到`：台账在但读不出 / 这一格没查成 / statements 行读不到 / 证明号读不出。
+
+    判「审过没审过」只认台账在不在：写侧只在真签时建 `reviewed_by_proof` 的键，
+    按"没键"读会把"审过、从没签"读成"从没审过"（这一个反向形态本轮一并治掉）。
     """
     if not isinstance(ledger_row, Mapping):
         return LEDGER_CELL_UNREADABLE
     no = _int_or_none(proof_no)
-    if no is None:
+    if no is None or str(review_ledger) not in REVIEW_LEDGER_STATES:
         return LEDGER_CELL_UNREADABLE
     per = EB.reviewed_by_proof(ledger_row)
-    if int(no) not in per:
+    if per.get(int(no)) is True:
+        by = _reviewed_by_of(ledger_row)
+        told = str(by.get("verdict") or "").strip()
+        # `reviewed_by` 只有一格（最近那一签）。它记的是哪一份，就只给那一份背书：
+        # 多证明时拿 #p1 的判决原话替 #p2 说话，等于让一份签替另一份签作证。
+        said = _int_or_none(by.get("proof_no"))
+        if said is not None and int(said) != int(no):
+            told = ""
+        return REVIEWED_SIGNED_TEMPLATE.format(verdict=told or LEDGER_CELL_UNREADABLE)
+    if str(review_ledger) == REVIEW_LEDGER_UNREADABLE:
         return LEDGER_CELL_UNREADABLE
-    if not per[int(no)]:
-        return REVIEWED_UNSIGNED_CELL
-    by = _reviewed_by_of(ledger_row)
-    told = str(by.get("verdict") or "").strip()
-    # `reviewed_by` 只有一格（最近那一签）。它记的是哪一份，就只给那一份背书：
-    # 多证明时拿 #p1 的判决原话替 #p2 说话，等于让一份签替另一份签作证。
-    said = _int_or_none(by.get("proof_no"))
-    if said is not None and int(said) != int(no):
-        told = ""
-    return REVIEWED_SIGNED_TEMPLATE.format(verdict=told or LEDGER_CELL_UNREADABLE)
+    if str(review_ledger) == REVIEW_LEDGER_ABSENT:
+        return REVIEWED_UNREVIEWED
+    return REVIEWED_NOT_PASSED
 
 
-def ledger_cells(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> dict[str, str]:
-    """一行的台账两格（`{ledger_kind, reviewed}`；三态口径见上面两个函数）。"""
+def ledger_cells(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
+                 review_ledger: str) -> dict[str, str]:
+    """一行的台账两格（`{ledger_kind, reviewed}`；四档口径见 `reviewed_cell`）。"""
     return dict(zip(LEDGER_CELL_FIELDS,
-                    (ledger_kind_cell(ledger_row), reviewed_cell(ledger_row, proof_no))))
+                    (ledger_kind_cell(ledger_row),
+                     reviewed_cell(ledger_row, proof_no, review_ledger=review_ledger))))
 
 
 def fill_ledger_cells(ledger_root: str | Path,
@@ -1287,19 +1381,26 @@ def fill_ledger_cells(ledger_root: str | Path,
     G 手填的值会被这一次现读盖掉。
 
     `ledger_root` 是"`data/` 那一层在谁下面"，也就是工作区根（与
-    `mapping_reading(workspace_root=…)` 同一处口径：台账在 `<工作区>/data/<表文件>`）。
-    论文包可能挂在项目子目录下，所以它不一定是项目根 —— 调用方给哪个就按哪个读。
+    `mapping_reading(workspace_root=…)` 同一处口径：台账在 `<工作区>/data/<表文件>`，
+    审校台账在 `<工作区>/verifications/<命题号>.jsonl`）。论文包可能挂在项目子目录下，
+    所以它不一定是项目根 —— 调用方给哪个就按哪个读。
 
     三态：`ledger_id` 解析不到、或台账里没有那一行 ⇒ 两格都写 `未读到`（这一格
-    没查成，不是"没签"、也不是"不是定理"）。`ledger=None` 时按 `ledger_root` 读盘。
+    没查成，不是"未审"、也不是"不是定理"）。`ledger=None` 时按 `ledger_root` 读盘。
+
+    审校台账那份三态在开头按命题号归并读一遍（`_review_ledger_states`），同一份
+    只读一次：一行一次 `open` 会让一张长表的填充退化成 N 次读盘。
     """
     known = ledger if ledger is not None else read_ledger_tables(ledger_root)
+    items = list(rows)
+    states = _review_ledger_states(ledger_root, items, known)
     out: list[Row] = []
-    for row in rows:
+    for row in items:
         resolved = resolve_ledger_id(row.ledger_id, known)
         target = (ledger_row(known, str(resolved["table"]), str(resolved["row_id"]))
                   if resolved["ok"] else None)
-        cells = ledger_cells(target, row.proof_no)
+        cells = ledger_cells(target, row.proof_no,
+                             review_ledger=_review_ledger_of(resolved, states))
         out.append(replace(row, ledger_kind=cells[LEDGER_KIND_FIELD],
                            reviewed=cells[REVIEWED_FIELD]))
     return out
@@ -1750,7 +1851,7 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                                      if isinstance(item.get(NP.INDEX_SIGN_FIELD), Mapping)
                                      else None),
                         # 台账那两格（D-69）：旧表没有这两键 ⇒ 读成空串 ⇒ 渲染印
-                        # `未读到`（"这一格没填"不许印成空白，也不许折成"没签"）。
+                        # `未读到`（"这一格没填"不许印成空白，也不许折成「未通过」/「未审」）。
                         ledger_kind=str(item.get(LEDGER_KIND_FIELD) or "").strip(),
                         reviewed=str(item.get(REVIEWED_FIELD) or "").strip()))
     return rows, problems
@@ -1840,8 +1941,12 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "E's exhaustive run (\\texttt{" + NT.EVIDENCE_PREFIX + "NNNNNN}) and where E's two written "
             "blocks (design note and exhaustion argument) live; when absent they read "
             "``(not a numeric proof)''. The two columns after the ledger row are the ledger's own "
-            "kind for that row and what V signed; ``(unread)'' in either of them means the cell could "
-            "not be read at all, which is neither ``signed'' nor ``unsigned''. This paragraph "
+            "kind for that row and what V did with it; the V column is one of four: "
+            "``signed (verdict: ...)'' (the per-proof signature table says this very proof is "
+            "signed), ``not passed'' (the review ledger exists, but this proof has no signature), "
+            "``unreviewed'' (the review ledger does not exist at all: never sent), or "
+            "``(unread)'' (the cell could not be read: no statement row, a broken ledger file). "
+            "``(unread)'' is never folded into ``not passed'' or ``unreviewed''. This paragraph "
             "itself is written by the renderer in the language of the paper: do not hand-copy it "
             "and do not mix languages."
         ),
@@ -1866,8 +1971,13 @@ _APPENDIX_TEXT: dict[str, Any] = {
             + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
             + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。"
             "台账序号后面那两列是「台账里这一行叫什么」（`" + LEDGER_KIND_FIELD + "`）与"
-            "「V 签没签、判决原话是什么」（`" + REVIEWED_FIELD + "`）：两格都由写侧按台账现读现填，"
-            "读不到就印「" + LEDGER_CELL_UNREADABLE + "」—— 那一档既不是「已签」也不是「没签」。"
+            "「V 拿这一份怎么办」（`" + REVIEWED_FIELD + "`）：两格都由写侧按台账现读现填。"
+            "后一格是四档：「已签（判决：…）」（逐份表说这一份签过）、「" + REVIEWED_NOT_PASSED
+            + "」（审校台账在、而这一份没拿到签）、「" + REVIEWED_UNREVIEWED
+            + "」（审校台账不在：从没送审）、「" + LEDGER_CELL_UNREADABLE
+            + "」（这一格没查成：statements 行读不到 / 台账读不出）——"
+            "「" + LEDGER_CELL_UNREADABLE + "」绝不折成「" + REVIEWED_NOT_PASSED
+            + "」或「" + REVIEWED_UNREVIEWED + "」。"
         ),
         "columns": (
             "环境", "label", "台账序号", "台账 kind", "V 是否签过", "证明号", "真实文件",
@@ -2049,7 +2159,7 @@ def _ledger_kind_cell(row: Row) -> str:
 def _reviewed_print_cell(row: Row) -> str:
     """`reviewed` 那一格在 md 里怎么印（空着就印 `未读到`，不印空白）。
 
-    与 `_ledger_kind_cell` 同一条纪律：这一格的三态里没有一档叫"空白"。
+    与 `_ledger_kind_cell` 同一条纪律：这一格的几档里没有一档叫"空白"。
     """
     return str(row.reviewed or "").strip() or LEDGER_CELL_UNREADABLE
 
@@ -2061,19 +2171,22 @@ def _reviewed_print_cell(row: Row) -> str:
 #: 三份仍然同源（同一批 `Row`、同一个渲染器），差别只是附录这一道按语言出词；
 #: 这与 Lean 那两格的"（未开 Lean）/ (Lean off)"是同一条既有口径。
 #:
+#: `reviewed` 那四档：`signed (verdict: …)` / `not passed` / `unreviewed` / `(unread)`。
 #: 判决原话那一格：中文版逐字用原话；英文版按 `schema.REVIEW_VERDICTS` 这张受控词表
 #: 翻成英文词。词表外的词（坏数据）英文附录印 `(unread)` 而不是把中文原话印进去：
 #: 印进去就破了 D-45 那条"英文论文的附录里没有 CJK"，而不印只是"这一格翻不出来"。
 _LEDGER_CELL_TEXT: dict[str, Any] = {
     PAPER_LANGUAGE_EN: {
         "unread": "(unread)",
-        "unsigned": "unsigned",
+        "not_passed": "not passed",
+        "unreviewed": "unreviewed",
         "signed": "signed (verdict: {verdict})",
         "verdicts": {"成立": "holds", "有毛病": "defective", "看不出来": "inconclusive"},
     },
     PAPER_LANGUAGE_ZH: {
         "unread": LEDGER_CELL_UNREADABLE,
-        "unsigned": REVIEWED_UNSIGNED_CELL,
+        "not_passed": REVIEWED_NOT_PASSED,
+        "unreviewed": REVIEWED_UNREVIEWED,
         "signed": REVIEWED_SIGNED_TEMPLATE,
         "verdicts": {},
     },
@@ -2083,14 +2196,17 @@ _LEDGER_CELL_TEXT: dict[str, Any] = {
 def _split_reviewed(cell: Any) -> tuple[str, str]:
     """把 `reviewed` 那一格的规范写法拆成 `(状态, 判决原话)`。
 
-    状态只有三档：`signed` / `unsigned` / `unread`。拆不出来的写法一律落 `unread`：
-    这一格认不出时，它说的既不是"签了"也不是"没签"，那是"这一格没查成"。
+    状态只有四档：`signed` / `not_passed` / `unreviewed` / `unread`。拆不出来的写法
+    一律落 `unread`：这一格认不出时，它说的既不是"签了"也不是"没签"，那是
+    "这一格没查成"。
     """
     text = str(cell or "").strip()
     if not text or text == LEDGER_CELL_UNREADABLE:
         return "unread", ""
-    if text == REVIEWED_UNSIGNED_CELL:
-        return "unsigned", ""
+    if text == REVIEWED_NOT_PASSED:
+        return "not_passed", ""
+    if text == REVIEWED_UNREVIEWED:
+        return "unreviewed", ""
     head, _, tail = REVIEWED_SIGNED_TEMPLATE.partition("{verdict}")
     if (tail and text.startswith(head) and text.endswith(tail)
             and len(text) > len(head) + len(tail)):
@@ -2099,11 +2215,11 @@ def _split_reviewed(cell: Any) -> tuple[str, str]:
 
 
 def _appendix_reviewed(cell: Any, language: str) -> str:
-    """附录里那一格（按论文语言出词；三态原样保留）。"""
+    """附录里那一格（按论文语言出词；四档原样保留）。"""
     text = _LEDGER_CELL_TEXT[language]
     state, verdict = _split_reviewed(cell)
-    if state == "unsigned":
-        return str(text["unsigned"])
+    if state in ("not_passed", "unreviewed"):
+        return str(text[state])
     if state != "signed":
         return str(text["unread"])
     word = verdict if language == PAPER_LANGUAGE_ZH else str(
@@ -2256,8 +2372,11 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         "（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION + "）落在哪一份读数里；"
         "那一行的 `file` 写的是那份程序的相对路径（相对仓库根），不是论文包内的 tex。",
         "`" + LEDGER_KIND_FIELD + "` 与 `" + REVIEWED_FIELD + "`（D-69）：台账那一行自己的 "
-        "`kind`，以及 V 签没签 + 判决原话。两格由写侧按台账现读现填（`fill_ledger_cells`），"
-        "读不到就写 `" + LEDGER_CELL_UNREADABLE + "` —— 那一档既不是「已签」也不是「没签」。"
+        "`kind`，以及 V 拿这一份怎么办（四档：「" + REVIEWED_SIGNED + "（判决：…）」/「"
+        + REVIEWED_NOT_PASSED + "」/「" + REVIEWED_UNREVIEWED + "」/「"
+        + LEDGER_CELL_UNREADABLE + "」）。两格由写侧按台账现读现填（`fill_ledger_cells`），"
+        "读不到就写 `" + LEDGER_CELL_UNREADABLE + "` —— 那一档既不折成「" + REVIEWED_NOT_PASSED
+        + "」也不折成「" + REVIEWED_UNREVIEWED + "」。"
         "它们让「论文里排成定理、台账里还是猜想」与「论文里排成定理、V 没签」这两件事在表上"
         "自己可见。",
         "",
@@ -2309,8 +2428,8 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
     `ledger_kind` / `reviewed` 会被这一次现读盖掉 —— 这两格是"台账说是什么"，
     不是"提交方声称是什么"；填错了没有东西会报错，现读才有。
 
-    `workspace_root` 是台账（`data/`）所在的那一层；不给就按 `project_root` 读
-    （单项目工作区里两者是同一个目录）。
+    `workspace_root` 是台账（`data/`）与审校台账（`verifications/`）所在的那一层；
+    不给就按 `project_root` 读（单项目工作区里两者是同一个目录）。
     """
     items = fill_ledger_cells(workspace_root if workspace_root is not None else project_root,
                               list(rows))
@@ -2870,7 +2989,8 @@ def _stray_mapping_copies(project: Path, workspace: Path) -> list[Path]:
 
 
 def ledger_cells_reading(rows: Iterable[Row],
-                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None) -> dict[str, Any]:
+                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None, *,
+                         review_states: Mapping[str, str]) -> dict[str, Any]:
     """盘上那张表的两格与台账现在的读数逐行比一遍（纯读，不写盘、也不拦门）。
 
     三种结局分开记（三态纪律）：
@@ -2879,6 +2999,9 @@ def ledger_cells_reading(rows: Iterable[Row],
     - `missing`：这一行两格是空的（旧表：写侧还没填过这两格）—— 它不是"没签"，
       是"这张表还没这两格"；
     - `stale`：填了，但与台账现在的读数不一致（表写完之后台账又动过）。
+
+    `review_states` 是命题号 → 审校台账三态（`_review_ledger_states` 的产物）：
+    `reviewed` 那一格的四档要用它判「未通过 / 未审 / 未读到」，这里不自己读盘。
 
     它是读数不是判据：D-69 的边界是"先让它看得见" —— 表被手改过、或者台账在表写完之后
     又签了一笔，这两件事都要在读数里点名，但不把论文卡在收工门上（`md_drifted` 与
@@ -2891,7 +3014,8 @@ def ledger_cells_reading(rows: Iterable[Row],
         resolved = resolve_ledger_id(row.ledger_id, ledger)
         target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
                   if resolved["ok"] else None)
-        want = ledger_cells(target, row.proof_no)
+        want = ledger_cells(target, row.proof_no,
+                            review_ledger=_review_ledger_of(resolved, review_states))
         got = {LEDGER_KIND_FIELD: str(row.ledger_kind or "").strip(),
                REVIEWED_FIELD: str(row.reviewed or "").strip()}
         if not got[LEDGER_KIND_FIELD] and not got[REVIEWED_FIELD]:
@@ -2906,7 +3030,8 @@ def ledger_cells_reading(rows: Iterable[Row],
 
 
 def kind_gap_reading(rows: Iterable[Row],
-                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None, *,
+                     review_states: Mapping[str, str]
                      ) -> tuple[dict[str, Any], dict[str, Any]]:
     """落差读数（D-69 ②）：论文说定理 / 台账说猜想，以及论文排成定理 / V 没签。
 
@@ -2917,8 +3042,12 @@ def kind_gap_reading(rows: Iterable[Row],
     （不读表上那两格：表可能还没填、也可能写完之后台账又动过 —— 落差说的是
     "论文与台账现在的关系"）。
 
-    三态：`reviewed` 读不到的行单列进 `unreadable`，不算进 `count`（"没签"是一个
-    关于 V 做过什么的结论；"读不到"是没查成，两者折平就等于把没查成报成没签）。
+    `review_states` 的口径同 `ledger_cells_reading`（命题号 → 审校台账三态）。
+
+    三态：`未通过` 与 `未审` 都算"V 没签"（两者是"没签"的两条不同来路，逐条 `reviewed`
+    那一格自己说是哪一档）；`未读到` 的行单列进 `unreadable`，不算进 `count`
+    （"没签"是一个关于 V 做过什么的结论；"读不到"是没查成，两者折平就等于把没查成
+    报成没签）。
 
     返回 `(kind_gap, theorem_unsigned)` 两份读数，形状都是
     `{"count", "items", "unreadable"?, "why"}`。这两条不拦门：业主的边界是
@@ -2933,14 +3062,15 @@ def kind_gap_reading(rows: Iterable[Row],
         resolved = resolve_ledger_id(row.ledger_id, ledger)
         target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
                   if resolved["ok"] else None)
-        cells = ledger_cells(target, row.proof_no)
+        cells = ledger_cells(target, row.proof_no,
+                             review_ledger=_review_ledger_of(resolved, review_states))
         item = {"label": row.label, "env_kind": row.kind, "ledger_id": row.ledger_id,
                 "proof_no": int(row.proof_no),
                 "ledger_kind": cells[LEDGER_KIND_FIELD], "reviewed": cells[REVIEWED_FIELD]}
         if cells[LEDGER_KIND_FIELD] == CONJECTURE_KIND:
             gap.append(item)
         state, _verdict = _split_reviewed(cells[REVIEWED_FIELD])
-        if state == "unsigned":
+        if state in ("not_passed", "unreviewed"):
             unsigned.append(item)
         elif state == "unread":
             unreadable.append(item)
@@ -3117,14 +3247,19 @@ def mapping_reading(project_root: str | Path, *,
     if LEAN_KINDS:
         problems += _lean_problems(rows, package, lean_on, artifacts, project)
     known = ledger if ledger is not None else read_ledger_tables(workspace)
+    # 审校台账那份三态按命题号归并读一遍（`reviewed` 那一格的四档要用它，
+    # 渲染函数自己不读盘 —— 见 `reviewed_cell`）。
+    review_states = _review_ledger_states(workspace, rows, known)
     # ---- 台账那两格与两条落差读数（D-69）：都是纯读、都不拦门。
     #
     # 位置在 `known` 之后、逐行校验之前：这三项问的是"论文与台账现在的关系"，
     # 与"表与正文对不对得上"是两件事 —— 混进 `problems` 就等于把它们当门，
     # 而业主的口径是先让它看得见（`kind_gap` / `theorem_unsigned` 都不在
     # `ALL_PROBLEM_KINDS` 里）。
-    reading["ledger_cells"] = ledger_cells_reading(rows, known)
-    reading["kind_gap"], reading["theorem_unsigned"] = kind_gap_reading(rows, known)
+    reading["ledger_cells"] = ledger_cells_reading(rows, known,
+                                                   review_states=review_states)
+    reading["kind_gap"], reading["theorem_unsigned"] = kind_gap_reading(
+        rows, known, review_states=review_states)
     gap_notes = [str(reading["kind_gap"].get("why") or ""),
                  str(reading["theorem_unsigned"].get("why") or "")]
     gap_notes = [text for text in gap_notes if text]
