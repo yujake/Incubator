@@ -121,7 +121,8 @@ ARTIFACT_SHA_RULE = (
 
 #: 为什么 `passes` 里没有全文（判据与后来人都要读到这一句）。
 PASSES_SOURCE_NOTE = (
-    "passes 是逐转的三元读数（verification_id / at / proof_sha256 / why）；"
+    "passes 是逐转的读数（verification_id / at / proof_sha256 / why，"
+    "另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；"
     "V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读")
 
 #: 归档项的键集合（顺序无关：落盘时 `sort_keys=True`）。多一格少一格都会让
