@@ -120,7 +120,7 @@ def test_the_same_body_registered_twice_does_not_claim_the_sign_twice(tmp_path):
 def test_one_changed_character_is_not_claimed(tmp_path):
     """③ 反真空：pending 签盖的是旧正文；改一个字之后登记 ⇒ 不认领（sha 不符）。
 
-    2026-11-02 准入闸默认 strict 之后，"不认领"的最终形态是**整笔被拒**
+    2026-11-02 准入闸默认 strict 之后，"不认领"的最终形态是「整笔被拒」
     （`proof_without_v_sign`）：没有一份盖住这一份正文的签，它就不许进台账。
     所以这一条读的是"拒收 + pending 那一行仍然没有绑号"，不再是"写进去了但没认签"。
     """
