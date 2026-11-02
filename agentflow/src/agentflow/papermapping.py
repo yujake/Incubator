@@ -372,6 +372,47 @@ REVIEWED_UNREVIEWED = "未审"
 REVIEWED_SIGNED = "已签"
 REVIEWED_SIGNED_TEMPLATE = REVIEWED_SIGNED + "（判决：{verdict}）"
 
+#: ---- 优化态与来源那两格（业主 2026-11-02 两阶段录入；draft/179 二之一） --------
+#:
+#: 优化态三档，词与 `evidencebits.OPTIMIZED_STATES` 一一对应：
+#: 这一份证明是"洗过的那一版"、还是"机械录入那一版、还等着洗"、还是"这一行根本没有
+#: 那一格"（存量行）。三档不许折平：折成两档会把存量行读成"等洗"（3000+ 行）
+#: 或读成"洗过"（更坏）。
+OPTIMIZED_FIELD = "optimized"
+OPTIMIZED_YES = "已优化"
+OPTIMIZED_NO = "未优化"
+OPTIMIZED_UNKNOWN = "未记录"
+
+#: 来源那一格（收工门按来源分档的同一口径，与 `evidencebits.bits_of` 的 proof_source 同词）：
+#: own = 我们自己的证明（F 的自动工具那一笔）；citation = 文献侧录入
+#: （V 签位填的是文献编号 = 占位签）；空 = 读不出来。
+PROOF_SOURCE_FIELD = "proof_source"
+PROOF_SOURCE_OWN = "own"
+PROOF_SOURCE_CITATION = "citation"
+
+
+def optimized_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
+    """这一份证明洗过没有（优化态那一格的三档 + 读不到那一档）。
+
+    - 已优化：`bits.evidence.optimized_by_proof[证明号] is True`；
+    - 未优化：那一格在、值为假；
+    - 未记录：这一行还没有那一格（存量行）—— 不许读成"未优化"，也不许读成"已优化"；
+    - 未读到：行读不到 / 证明号认不出（这一格没查成，三态里的"没查成"）。
+
+    判据只走 `evidencebits.optimized_state`（唯一读口）：这里再判一次就等于第二份口径。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return LEDGER_CELL_UNREADABLE
+    no = _int_or_none(proof_no)
+    if no is None:
+        return LEDGER_CELL_UNREADABLE
+    state = EB.optimized_state(ledger_row, int(no))
+    if state == "true":
+        return OPTIMIZED_YES
+    if state == "false":
+        return OPTIMIZED_NO
+    return OPTIMIZED_UNKNOWN
+
 #: 审校台账 `verifications/<命题号>.jsonl` 的三态：在、不在、读不出。
 #:
 #: 这三档只用来判「未通过 / 未审 / 未读到」；「已签」只认
@@ -686,6 +727,11 @@ class Row:
     #: 空串 = 这一格没填（旧表 / 还没填过）—— 渲染时印 `未读到`，不印空白。
     ledger_kind: str = ""
     reviewed: str = ""
+    #: 优化态那一格（业主 2026-11-02 两阶段录入）：已优化 / 未优化 / 未记录。
+    #: 与 `reviewed` 同一个落法：不手填，由 `fill_ledger_cells` 按台账现读现填。
+    optimized: str = ""
+    #: 这一份证明的来源（own / citation / 空）：收工门按来源分档的同一格口径。
+    proof_source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
@@ -696,7 +742,12 @@ class Row:
                                # 那一档由读侧读成 `未读到`（不许读成「已签」，也不许折成
                                # 「未通过」或「未审」）。
                                LEDGER_KIND_FIELD: self.ledger_kind,
-                               REVIEWED_FIELD: self.reviewed}
+                               REVIEWED_FIELD: self.reviewed,
+                               # 优化态与来源（业主 2026-11-02）：与上面两格同一个落法 ——
+                               # 写侧按台账现读现填（`fill_ledger_cells`），旧表没有这两键
+                               # 时读成空串 ⇒ 渲染印「未记录」，不印空白。
+                               OPTIMIZED_FIELD: self.optimized,
+                               PROOF_SOURCE_FIELD: self.proof_source}
         if self.lean_file:
             out["lean_file"] = self.lean_file
         if self.lean_target:
@@ -1364,10 +1415,27 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
 
 def ledger_cells(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
                  review_ledger: str) -> dict[str, str]:
-    """一行的台账两格（`{ledger_kind, reviewed}`；四档口径见 `reviewed_cell`）。"""
-    return dict(zip(LEDGER_CELL_FIELDS,
-                    (ledger_kind_cell(ledger_row),
-                     reviewed_cell(ledger_row, proof_no, review_ledger=review_ledger))))
+    """一行的台账格（ledger_kind / reviewed / optimized / proof_source）。"""
+    return {LEDGER_KIND_FIELD: ledger_kind_cell(ledger_row),
+            REVIEWED_FIELD: reviewed_cell(ledger_row, proof_no,
+                                          review_ledger=review_ledger),
+            OPTIMIZED_FIELD: optimized_cell(ledger_row, proof_no),
+            PROOF_SOURCE_FIELD: ledger_source_cell(ledger_row)}
+
+
+def ledger_source_cell(ledger_row: Mapping[str, Any] | None) -> str:
+    """这一份证明的来源那一格：own / citation（读不到 ⇒ 空串，渲染印「未记录」）。
+
+    只读 `bits.evidence.proof_source`（`evidencebits.bits_of` 写的唯一一处）：
+    不拿 `origin` 猜 —— origin="own_result" 里还混着 E 的穷举证明与 B 自写的正文，
+    "来源"这一格回答的是"这份证明是谁那条路交上来的"，不是"命题是谁的"。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return ""
+    bits = ledger_row.get("bits")
+    if not isinstance(bits, Mapping):
+        return ""
+    return str(dict(bits.get("evidence") or {}).get("proof_source") or "")
 
 
 def fill_ledger_cells(ledger_root: str | Path,
@@ -1402,7 +1470,9 @@ def fill_ledger_cells(ledger_root: str | Path,
         cells = ledger_cells(target, row.proof_no,
                              review_ledger=_review_ledger_of(resolved, states))
         out.append(replace(row, ledger_kind=cells[LEDGER_KIND_FIELD],
-                           reviewed=cells[REVIEWED_FIELD]))
+                           reviewed=cells[REVIEWED_FIELD],
+                           optimized=cells[OPTIMIZED_FIELD],
+                           proof_source=cells[PROOF_SOURCE_FIELD]))
     return out
 
 
@@ -1853,7 +1923,11 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         # 台账那两格（D-69）：旧表没有这两键 ⇒ 读成空串 ⇒ 渲染印
                         # `未读到`（"这一格没填"不许印成空白，也不许折成「未通过」/「未审」）。
                         ledger_kind=str(item.get(LEDGER_KIND_FIELD) or "").strip(),
-                        reviewed=str(item.get(REVIEWED_FIELD) or "").strip()))
+                        reviewed=str(item.get(REVIEWED_FIELD) or "").strip(),
+                        # 优化态与来源（2026-11-02）：与前两格同一条读法 —— 缺键读空串，
+                        # 渲染印「未记录」（不许折成「未优化」：那是"记过了、是假的"）。
+                        optimized=str(item.get(OPTIMIZED_FIELD) or "").strip(),
+                        proof_source=str(item.get(PROOF_SOURCE_FIELD) or "").strip()))
     return rows, problems
 
 
@@ -2164,6 +2238,26 @@ def _reviewed_print_cell(row: Row) -> str:
     return str(row.reviewed or "").strip() or LEDGER_CELL_UNREADABLE
 
 
+def _optimized_print_cell(row: Row) -> str:
+    """优化态那一格在 md 里怎么印（空着就印「未记录」，不印空白）。
+
+    为什么不印「未优化」：空串的意思是"这一格没填过"（旧表 / 存量行），而「未优化」
+    是一个关于这一份证明的结论（记过了、是假的）。两者在表上长得一样是本项目最忌的
+    形态（与 reviewed 的四档同一条理由）。
+    """
+    return str(row.optimized or "").strip() or OPTIMIZED_UNKNOWN
+
+
+def _source_print_cell(row: Row) -> str:
+    """来源那一格在 md 里怎么印（空着就印「未记录」）。"""
+    raw = str(row.proof_source or "").strip()
+    if raw == PROOF_SOURCE_OWN:
+        return "我方证明"
+    if raw == PROOF_SOURCE_CITATION:
+        return "文献侧录入"
+    return raw or OPTIMIZED_UNKNOWN
+
+
 #: 台账那两格在附录里按论文语言怎么说（D-45）。
 #:
 #: 为什么附录要翻一遍、而 json / md 只存中文那一版：json 与 md 是给人读的中文两份
@@ -2379,21 +2473,32 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         + "」也不折成「" + REVIEWED_UNREVIEWED + "」。"
         "它们让「论文里排成定理、台账里还是猜想」与「论文里排成定理、V 没签」这两件事在表上"
         "自己可见。",
+        "`" + OPTIMIZED_FIELD + "` 与 `" + PROOF_SOURCE_FIELD + "`（业主 2026-11-02 的两阶段"
+        "录入）：这一份证明洗过没有、以及它是哪条路交上来的。前者三档 ——「"
+        + OPTIMIZED_YES + "」（换过正文且拿到覆盖新正文的 V 签）/「" + OPTIMIZED_NO
+        + "」（机械录入那一版，还等着洗）/「" + OPTIMIZED_UNKNOWN + "」（这一行还没有那一格，"
+        "存量行）—— 第二阶段只读这一格（「洗过的肯定能保证V签」）。后者两档："
+        + PROOF_SOURCE_OWN + "（我们自己的证明）/ " + PROOF_SOURCE_CITATION
+        + "（文献侧录入：V 签位填的是文献编号 = 占位签，它不算已签）；读不出来就是空。",
         "",
         "| # | kind | label | env_no | ledger_id | " + LEDGER_KIND_FIELD + " | " + REVIEWED_FIELD
+        + " | " + OPTIMIZED_FIELD + " | " + PROOF_SOURCE_FIELD
         + " | proof_no | file | lean_file | lean_target "
         "| citation_loc | citation_loc_reason | page_or_section | numeric_evidence "
         "| exhaustion_note |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
         lines.append(
-            "| {i} | {kind} | {label} | {no} | {ledger} | {lkind} | {reviewed} | {proof} "
+            "| {i} | {kind} | {label} | {no} | {ledger} | {lkind} | {reviewed} | {optimized} "
+            "| {source} | {proof} "
             "| {file} | {lean_file} "
             "| {lean_target} | {loc} | {reason} | {where} | {evidence} | {note} |".format(
                 i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
                 ledger=row.ledger_id, proof=int(row.proof_no),
                 lkind=_ledger_kind_cell(row), reviewed=_reviewed_print_cell(row),
+                optimized=_optimized_print_cell(row),
+                source=_source_print_cell(row),
                 file=row.file or "（空）",
                 lean_file=_lean_cell(row.lean_file, lean_on),
                 lean_target=_lean_cell(row.lean_target, lean_on),
