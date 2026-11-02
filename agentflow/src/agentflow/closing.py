@@ -2213,14 +2213,22 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             grades[grade] = grades.get(grade, 0) + 1
             if has_bits:
                 grades_with_bits[grade] = grades_with_bits.get(grade, 0) + 1
-            if grade in ("pre_theorem", "theorem"):
-                if str(bits.get("origin") or "") == "external_lit":
+            # 引用命题（origin="external_lit"）不进这一档的计数，与等级无关。
+            #
+            # 2026-11-02（两阶段录入）：引用侧的"第 3 位"降成占位签（凭据是文献编号），
+            # 于是它再也到不了 pre_theorem。改前这条跳过写在 grade 判据里面，靠"引用命题
+            # 也能到预备定理级"这个前提工作；那个前提没了，跳过就必须挪到判据的真身上：
+            # 这一档数的是"我方造出的判决性证据"，判据是 origin，不是等级。读数
+            # cited_skipped 照旧逐条点名（它是这条理由的载体）。
+            if str(bits.get("origin") or "") == "external_lit":
+                if str(r.get("kind") or "") != "concept":
                     cited_skipped += 1
                     cited_skipped_rows.append({
                         "stmt_id": sid, "grade": grade,
                         "label": str(r.get("label") or "")[:60],
                     })
-                    continue
+                continue
+            if grade in ("pre_theorem", "theorem"):
                 # 逐条证明展开：这一格的键是 `(stmt_id, proof_no)`，不是"一条命题一行"。
                 # 一条命题可以有几条证明，每条证明各自有第 3 位（#p2 签过不等于 #p1 签过）；
                 # 折成一行会让"#p2 有成立那一签"把 #p1 也记成审过（借光）。
@@ -4936,6 +4944,93 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     return out
 
 
+def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
+    """第二阶段那一格读数：按 optimized 加来源分三档（业主 2026-11-02 两阶段录入）。
+
+    业主原话（`draft/179` 二之一）：「其实第二阶段逐个优化时只要读那栏记录是否优化的
+    新参数即可。若为否，要么是F刚产出的（此处机械录入就是指自动化工具），要么是文献
+    录入的……总之都要洗一遍。洗过的肯定能保证V签。所以二阶段只用看是否优化过」。
+
+    于是这一格回答的不是「签了没有」（那是 `statements_unsigned`），而是「哪些证明还没洗」。
+
+    ## 三档与判据（三档之和 == 逐条数，防空集）
+
+    | class | 判据 |
+    |---|---|
+    | `unoptimized_from_f` | `bits.evidence.proof_source == "own"` 且这一份的 optimized 不是 true |
+    | `unoptimized_from_lit` | `bits.evidence.proof_source == "citation"`（文献侧录入：V 签位填的是文献编号） |
+    | `unoptimized_source_not_recorded` | 来源读不出来（proof_source 空 / 没有 bits 的旧行），不许折成 from_f |
+
+    一条命题有多份证明时按份出读数：「签是逐条的」（`draft/179` 二之三），交差与洗都
+    按份算，不按命题算。
+
+    ## 为什么 optimized 用三态（true / false / not_recorded）
+
+    存量行没有这一格（真机 3134 行 own_result）。缺格折成 false 会让整库一次全变
+    「等洗」；折成 true 更坏（等于自报洗过）。所以缺格记 `not_recorded`，它在上面三档里
+    与 false 同档（都是「要洗」），但读数里逐条说得清是哪一种。判据读的是
+    `evidencebits.optimized_state`（唯一口径），不在这里再判一次。
+
+    ## 三态（这一格本身）
+
+    `statements` 读不出来 ⇒ `checked=False` + `reason`：没查成不是「一条都不欠洗」。
+    """
+    from . import evidencebits as _EB
+    from . import statementabandon as _SA
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
+                           "by_class": {}, "rows": [], "problems": [], "reason": ""}
+    rows, why = _statement_rows(store)
+    if rows is None:
+        out["reason"] = why
+        return out
+    for sid, row in sorted(rows.items()):
+        kind = str(row.get("kind") or "")
+        if kind == "concept":
+            continue
+        out["scanned"] += 1
+        # 明确放弃的命题不在这一格里追（它不是「等洗」，是「不做了」；那一档有
+        # `statements_abandoned` 专门数）。自称放弃而标记读不出来的照旧算等洗 ——
+        # 标个状态不能把它从这一格里摘掉。
+        if (str(row.get("status") or "") == "abandoned"
+                and _SA.parse_abandon(row.get("quote_reason")).get("checked")):
+            continue
+        ev = dict((row.get("bits") or {}).get("evidence") or {})
+        source = str(ev.get("proof_source") or "")
+        if source == "citation":
+            cls = "unoptimized_from_lit"
+        elif source == "own":
+            cls = "unoptimized_from_f"
+        else:
+            cls = "unoptimized_source_not_recorded"
+        for no, text in _VR.proof_list(row):
+            state = _EB.optimized_state(row, no)
+            if state == "true":
+                continue
+            out["rows"].append({
+                "stmt_id": sid, "kind": kind, "class": cls, "proof_no": int(no),
+                "optimized": state, "source": source or "(未记录)",
+                "proof_chars": len(str(text or "").strip()),
+                "why": ("这一份还没有洗过（" + ("记着未优化" if state == "false"
+                                               else "这一行还没有那一格（存量行）") + "）"
+                        + ("" if source else "；连来源都读不出来（proof_source 是空的）"))})
+    for one in out["rows"]:
+        key = str(one["class"])
+        out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
+    out["checked"] = True
+    out["count"] = len(out["rows"])
+    total = sum(int(v) for v in out["by_class"].values())
+    if total != out["count"]:
+        # 防空集：三档之和必须等于逐条数（同一个事实两个算法不一致 = 这一格坏了）。
+        out["problems"].append(
+            f"三档之和 {total} 与逐条数 {out['count']} 不一致，这一格自己坏了")
+    out["reason"] = ("查过了：没有待洗的证明（三档都是 0）" if not out["count"] else
+                     (f"查过了：{out['count']} 份证明还没洗过（按来源：{out['by_class']}；"
+                      f"扫了 {out['scanned']} 条非概念命题）"))
+    return out
+
+
 def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     """I3 的另一格读数：明确放弃的命题（带理由与时间）。
 
@@ -6486,6 +6581,24 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         rep, "statements_unsigned", statements_unsigned_reading, store)
     rep.readings["statements_abandoned"] = _run_reading(
         rep, "statements_abandoned", statements_abandoned_reading, store)
+    # ---- 第二阶段那一格（业主 2026-11-02 两阶段录入）：哪些证明还没洗过 --------
+    #
+    # 本笔只落读数（readings.statements_unoptimized，没查成时一条 warning）：
+    # 不改门的强度、不产生 blocker、不动退出码。为什么先只做读数：三档是"下一步给谁
+    # 派活"的读数，而存量工作区里第三档占绝大多数（旧行没有来源格），直接拦门等于把
+    # 历史工作区一次全判红，那一步要业主单独裁定。
+    rep.readings["statements_unoptimized"] = _run_reading(
+        rep, "statements_unoptimized", statements_unoptimized_reading, store)
+    _uo = rep.readings["statements_unoptimized"]
+    if not _uo.get("checked"):
+        rep.findings.append(Finding(
+            "statements_unoptimized", "statements_unoptimized_unreadable", "warning",
+            f"「哪些证明还没洗过」那一格没查成（{_uo.get('reason') or '没给原因'}）"
+            "⇒ 三档数不出来（没查成不是「一条都不欠洗」，也不是「都洗过了」）"))
+    for _p in list(_uo.get("problems") or []):
+        rep.findings.append(Finding(
+            "statements_unoptimized", "statements_unoptimized_self_inconsistent",
+            "warning", f"「哪些证明还没洗过」这一格自相矛盾：{_p}"))
     # ---- 门：悬着的命题拦门（业主 2026-11-01 裁定）
     #
     # 这是收工门强度变更（不是读数变化）：改前"打回之后没人重送"只活在台账里，
