@@ -7896,8 +7896,12 @@ class AgentLoop:
             # 抄给每一条会让同一笔调用在 `prompt_cache` 汇总里被数 N 次、思维链被读 N 遍。
             step_cache = turn_cache if item.call_index == 0 else {}
             shape, payload = item.shape, item.payload
-            # 逐条记账的两个读数（只在多调用回合里算：单条那一路与改前逐字相同）。
-            item_t0 = time.monotonic() if (dispatch is not None and dispatch.multi) else 0.0
+            # 逐条记账的两个读数（多调用回合，或"我自己的动作"那一条 —— 后者见
+            # `_own_action_of` 与 `_land_step_call` 的说明；单条普通工具与改前逐字相同）。
+            per_call_ledger = bool(
+                dispatch is not None
+                and (dispatch.multi or self._own_action_of(shape, payload)))
+            item_t0 = time.monotonic() if per_call_ledger else 0.0
             item_spend0 = self._global_spend()[0] if item_t0 else 0.0
             if item.problem:
                 # 这一条解码不出来 ⇒ 如实记一条"未执行"，不影响其余条目
@@ -8102,7 +8106,7 @@ class AgentLoop:
                 # 而"第 k 条 <工具名> <结果一句话>"的汇总挂在回合的最后一条上（模型只读一遍）。
                 # 改前这里是"只执行第 1 条"的 warn —— 真机三趟 76 个多调用步里丢掉的
                 # 107 条全是只读，一条都没执行；现在每一条都有它自己的结局读数。
-                if dispatch is not None and dispatch.multi:
+                if per_call_ledger:
                     final_outcome = SD.outcome_of(shape, payload, {**step_result, "ok": True})
                     final_outcome["elapsed_ms"] = int((time.monotonic() - item_t0) * 1000)
                     final_outcome["usd"] = round(
@@ -8396,7 +8400,7 @@ class AgentLoop:
             # 一个字节都没执行。现在每一条都有自己的步号、自己的准入与记账，
             # 这里把这一条的结局记下来（`agent_step_call`），并给最后一条挂上汇总
             # （"第 k 条 <工具名> <结果一句话>" + 一句可执行建议）。
-            if dispatch is not None and dispatch.multi:
+            if per_call_ledger:
                 outcome = SD.outcome_of(shape, payload, result)
                 outcome["elapsed_ms"] = int((time.monotonic() - item_t0) * 1000)
                 outcome["usd"] = round(self._global_spend()[0] - item_spend0, 6)
@@ -9563,6 +9567,33 @@ class AgentLoop:
         shape, payload, problem = _shape_of(data, roster=self._address_of)
         return str(shape), payload, action, str(problem), ""
 
+    def _own_action_of(self, shape: str, payload: Mapping[str, Any]) -> str:
+        """这一步调的是不是"我自己的动作"（`own.<动作>`）：是就返回那个工具名。
+
+        ## 为什么需要这一格（2026-11-02，83 的真机读数）
+
+        `own.<动作>` 是"这一趟自己的动作"包成的工具（`_own_action_tool`）。83 上 B 的
+        `t-000219` 在 113 分钟里调了 27 次 `own.run_once`（每次都真的 `processed=1`），
+        而逐条账 `agent_step_call` 里「一行都没有」—— 那一处闸只认"一步多条调用"
+        （`dispatch.multi`），而这是「一条一条」的。于是读数上只剩"ok=True + 空文本"
+        （那些步的 `llm_call.text_len=0`），"它在推进还是原地空转"在逐条账上答不出来。
+
+        ## 两种写法都要认
+
+        模型可以直接喊工具面上的真名 `own.run_once`，也可以喊手册里的短名 `run_once`
+        （`_do_tool` 的别名那一格会把它映射到 `own.run_once`）。两种都要落账，所以这里
+        一次判完；返回值是「规范名」（`own.<动作>`），读侧据此过滤。
+        """
+        if str(shape) != "tool":
+            return ""
+        name = str((payload or {}).get("name") or "")
+        if not name:
+            return ""
+        if name.startswith("own."):
+            return name
+        known = set(self.registry.names()) if hasattr(self.registry, "names") else set()
+        return f"own.{name}" if f"own.{name}" in known else ""
+
     def _land_step_call(self, item: Any, shape: str, payload: Mapping[str, Any],
                         outcome: Mapping[str, Any], run: "AgentLoop.LoopRun") -> None:
         """落一条 `agent_step_call`：第几条 / 工具名 / ok / 耗时 / usd（逐条可查的落点）。
@@ -9570,6 +9601,12 @@ class AgentLoop:
         键的三态：`not_executed=True` 的那一条 `ok=False` 且带 `reason`（不许折成成功）；
         `usd` 是这一条执行期间的全局花销增量（只读工具是 0.0，召唤一路才可能非零），
         `usd=None` 只在"这一条没执行"时出现（没有花销可算，不是"花了零"）。
+
+        ## 多一格 `own_action`（2026-11-02）
+
+        调的是"我自己的动作"（`own.*`）就带上它的规范名。那一档从今天起也落逐条账
+        （见 `_own_action_of` 的理由），而读侧要能把它们与"一步多条拆出来的那几条"
+        分开：前者不是拆分，是模型自己做的一件活（83 上 B 的 27 次 `own.run_once`）。
         """
         try:
             stop_reading = str(outcome.get("stop_reading") or "")
@@ -9592,6 +9629,9 @@ class AgentLoop:
                 "elapsed_ms": int(outcome.get("elapsed_ms") or 0),
                 "usd": outcome.get("usd"),
             }
+            own = self._own_action_of(str(shape), payload)
+            if own:
+                event["own_action"] = own
             if stop_reading:
                 event["stop_reading"] = stop_reading
             SS.append(self.session_root, event, sid=self.sid)
