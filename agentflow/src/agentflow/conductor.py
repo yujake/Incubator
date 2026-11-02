@@ -7411,8 +7411,21 @@ class Conductor:
                              cut_off_children: Sequence[str] = ()) -> SummonResult:
         """收一次顶趟（与 :meth:`open_top_level_run` 配对）。
 
-        三态：`stop_reason == "final"` ⇒ `ok`（它真的收了工）；其余一律 `no_result`（跑完了、但没给出结论 —— 停步数/
-        停坏 JSON 都属于这一档，不是 `failed`：那是"代码崩了"，两件事的处置不同）。
+        三态（2026-11-02 改成三档，83 的真机读数）：
+
+        | 档 | 判据 | `(status, outcome)` | `detail` 开头 |
+        |---|---|---|---|
+        | 收工成功 | `stop_reason == "final"` | `done / ok` | `顶趟收工：final` |
+        | 收工被叫停 | `stop_reason ∈ stopctl.USER_STOP_REASONS` | `done / cancelled` | `顶趟收工被叫停：<reason>` |
+        | 收工没做成 | 其余 | `done / no_result` | `收工没做成：<reason>` |
+
+        为什么必须分三档（改前后两档折在一个 `no_result` 里 —— 这是第三次三态折平，
+        前两次是 na/unknown 与判不了/没查成）：83 那一趟是 `stop_file`（人按的停），
+        而"它自己没做成"（撞步数、判停、协议连击）也是 `no_result` —— 于是"谁按的停"
+        与"它自己不行"在台账上长得一模一样，读的人只能去翻 `stop-history.jsonl`。
+        `failed` 仍不在这里出现：那是"代码崩了"，顶趟行的 `failed` 只有
+        `_sweep_stale_top_running` 那一档（进程已经不在）。
+
         ## 花销必须从账本抄回这一行（否则制造一条 `usage_task_total_mismatch`）：这一趟的账挂在这一行的 `task_id` 上
         （F1 的另一半），所以 `tasks.tokens/usd` 必须由账本派生（与 `_charge_and_settle` 同一条纪律：`tokens_for()`
         抄回，而不是自己累加）。实测过缺这一步的后果：库里 `tasks.tokens=0` 而账本 150 ⇒ `verify_all` 报一条 warning
@@ -7426,7 +7439,16 @@ class Conductor:
             usd_of_top = float(self.meter.usd_for(task_id))
         except Exception as exc:  # noqa: BLE001 - 抄不回来就留日志（不阻断收行）
             self._log(f"顶趟花销没抄回来（{task_id}）：{type(exc).__name__}: {exc}")
-        done = str(stop_reason or "") == "final"
+        reason = str(stop_reason or "")
+        done = reason == "final"
+        # ---- 三档映射（唯一判据在这里，见 docstring 那张表）
+        from . import stopctl as _STOP        # 惰性：不让 conductor 在导入期依赖停机模块
+        if done:
+            status, outcome, head = "done", "ok", f"顶趟收工：{reason}"
+        elif reason in _STOP.USER_STOP_REASONS:
+            status, outcome, head = "done", "cancelled", f"顶趟收工被叫停：{reason}"
+        else:
+            status, outcome, head = "done", "no_result", f"收工没做成：{reason}"
         # S-03 的第二个消费点（主控补的）：收尾前扫一次队 —— 只挂"下一次派活"的话，
         # 最需要它的时候（这一趟就要结束了）反而不会消费。计数分 trigger 记，
         # 于是"即"的折扣在读数上可度量（"派活时 N 条 / 收尾时 M 条"）。
@@ -7449,8 +7471,8 @@ class Conductor:
         killed = [str(x) for x in (cut_off_children or ()) if str(x)]
         killed_text = (f"；我退出时掐断了 {len(killed)} 个还在跑的子：{'、'.join(killed)}"
                        if killed else "")
-        result = self._end(task_id, status="done", outcome="ok" if done else "no_result",
-                           detail=(f"顶趟收工：{stop_reason}"
+        result = self._end(task_id, status=status, outcome=outcome,
+                           detail=(head
                                    + (f"；{detail[:200]}" if detail else "")
                                    + killed_text
                                    + _closure_suffix(closure)),

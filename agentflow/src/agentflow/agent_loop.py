@@ -1498,6 +1498,13 @@ class LoopRun:
     #: 翻到一条上一次留下的 STOP 就停会把之后每一趟都判死。刻意不进 `to_dict()`：
     #: 它是运行内判据的输入，不是交付面（`agent_run_start` 事件里已经有时间）。
     started_at: str = ""
+    #: 这一趟是什么时候收的（`S.now_iso()` 的形态；空串 = 还没收）。
+    #:
+    #: 与 `started_at` 的处置刻意相反（2026-11-02，83 的真机读数）：start「不进」`to_dict()`
+    #: （它是运行内判据的输入，`agent_run_start` 事件里已经有时间），而 end「必须进」——
+    #: 它是 `runs/*.json` 这份交付面唯一的收口时刻。改前 83 的 `runs/` 下 71 份 json 里
+    #: 0 份有 `end_ts`，于是"这一趟什么时候收的"只能从文件名/事件去猜。
+    ended_at: str = ""
     #: 这一趟最终的那份简报（重建续跑时的逐字对照物）。
     #:
     #: 刻意「不进 `to_dict()`」：那份记录会写成 `runs/*.json` 的产出文件，
@@ -1618,7 +1625,7 @@ class LoopRun:
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
         `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
-        `prompt_cache` / `elapsed_sec` / `notes` / `final_payload`。
+        `prompt_cache` / `elapsed_sec` / `end_ts` / `notes` / `final_payload`。
 
         （D-52/D-53 那九格此前漏在这份清单外：`mailbox_*` / `monitor_turns` /
         `wake*` / `clock_*` —— 判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
@@ -1710,7 +1717,8 @@ class LoopRun:
             # 提示词缓存的汇总（`LoopRun.prompt_cache` 的说明）：与 `spend` 并列，
             # 因为它们是同一笔钱的两面（花了多少 / 省了多少）。
             "prompt_cache": dict(self.prompt_cache),
-            "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
+            "elapsed_sec": round(self.elapsed_sec, 3), "end_ts": self.ended_at,
+            "notes": list(self.notes),
             # 收工那一步的原始载荷（`LoopRun.final_payload`）：与 `agent_run_end` 落盘的那
             # 一格同一份 —— "给调用方的返回"与"盘上的记录"不该各是一份。
             "final_payload": dict(self.final_payload),
@@ -8577,6 +8585,9 @@ class AgentLoop:
         run.summons_unconsumed = int(run.summon_consumption["summons_unconsumed"])
         run.notes.append(summon_consumption_sentence(run.summon_consumption))
         run.elapsed_sec = time.monotonic() - t0
+        # 收口时刻（`runs/*.json` 的 `end_ts`）：与 `elapsed_sec` 同一刻算，两个读数同源 ——
+        # 分两处取时间会让"跑了 12.3 秒"与 `end_ts - start_ts` 差出一截，而没人能说清差在哪。
+        run.ended_at = S.now_iso()
         run.messages = list(messages)
         run.transcript = render_messages(messages)
         # 委托做完 ⇒ 进度计数清零（裁定 12-F 逐字："每做完一个委托清一次"）。
@@ -10029,7 +10040,7 @@ class AgentLoop:
 
         可抢占要的是"句柄进本循环的挂账 + 下一次返场把结果投给模型"，而工具体只有
         `conductor`、拿不到 loop。所以工具面那一件在循环里被分派到这里，与
-        `_do_summon_many` **共用一个执行体**（不是第二份实现）：`targets` 的翻译与校验
+        `_do_summon_many` 「共用一个执行体」（不是第二份实现）：`targets` 的翻译与校验
         也只有一处（`tools.conductor_tools.summon_many_payload`）。
 
         ## 返回形状：只加不减
@@ -10297,7 +10308,7 @@ class AgentLoop:
         # ---- 同一件事的第二条入口（2026-11-02，83 的 113 分钟）
         #
         # `conductor.summon_many` 有两件"外壳"：工具面这一件与形状面的 `_do_summon_many`。
-        # 改前工具这一件走 `run_plan()` 的**阻塞档**（`handle.results()` → `wait_all()`，
+        # 改前工具这一件走 `run_plan()` 的「阻塞档」（`handle.results()` → `wait_all()`，
         # 无 timeout、不看停机开关、句柄不进本循环的挂账）—— 83 上 M 在这一次工具调用里
         # 零回合 6 778 秒（04:51:18 → 06:44:19），顶趟行一直 `running`，直到人工写
         # `.agentflow-stop` 才落 done/no_result。可抢占要的是"本循环的挂账 + 返场投递"，
@@ -12450,7 +12461,9 @@ def run_checkpoint_path(session_root: Path | str, role: str, sid: str | None = N
 def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
                         task: str, step: int, stop_reason: str,
                         waiting_for: str = "", spend: Mapping[str, Any] | None = None,
-                        prompt_cache: Mapping[str, Any] | None = None) -> str:
+                        prompt_cache: Mapping[str, Any] | None = None,
+                        started_at: str = "", end_ts: str = "",
+                        step_source: str = "run") -> str:
     """写这一趟的步检查点，返回问题串（空 = 写成了）。写入失败不许静默。
 
     指纹用 `autonomy.task_fingerprint(role, task)`（同一条口径，不另立一份）：续跑之前必须比对它 —— 拿 A 任务的检查点
@@ -12462,6 +12475,18 @@ def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
     三态（与 `LoopStep.to_dict()` 同一套）：算过、上游给了读数 ⇒ 11 格汇总（`hit` / `miss` 是数）；算过、上游一次都没
     给 ⇒ 汇总在，`unknown_calls > 0`、`hit_rate is None`（绝不折成 0%）、`why` 里写明原因；没算过 ⇒ `{}` ——"没有汇总"
     与"算过但上游没给"必须分得开，所以这一格永远在。
+
+    ## 收口时刻（2026-11-02）：`started_at` / `end_ts` / `step_source`
+
+    这一份是顶趟唯一落在 `runs/` 下的记录，而改前它没有"这一趟什么时候收的"这一格
+    （83 的 `runs/` 下 71 份 json 里 0 份有 `end_ts`）。现在：
+
+    - `end_ts`：收口时刻。正常那一档由 `run_role` 传 `LoopRun.ended_at`；「崩溃那一档」
+      没给就按写入这一刻补上（"收在这一刻"是真的：那一行也是这一刻收的）；
+    - `started_at`：只在这一趟真的开跑时才有值（没有就是空串，不编）；
+    - `step_source`：`run` = 步数取自 `LoopRun`；`crash` = 循环抛异常、步数没拿到
+      （此时 `step` 是按会话记录重建出来的，重建不出就是 0 —— 但「档位」说得清，
+      不许把 0 读成"它一步都没走"）。
     """
     from . import autonomy as AU
 
@@ -12473,6 +12498,11 @@ def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
                "spend": dict(spend or {}),
                # 与 `spend` 并列：键永远在（三态见 docstring）。
                "prompt_cache": dict(prompt_cache or {}),
+               # 收口那两格（语义见 docstring 最后一段）：`at` 是"这份文件什么时候写的"，
+               # `end_ts` 是"这一趟什么时候收的"。
+               "started_at": str(started_at or ""),
+               "end_ts": str(end_ts or "") or time.strftime("%Y-%m-%dT%H:%M:%S"),
+               "step_source": str(step_source or "run"),
                "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -12856,111 +12886,184 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
             solo_problem = f"单条执行的名册没登记（{type(exc).__name__}: {exc}）"
         else:
             solo_problem = str(got.get("problem") or "")
-    if resume:
-        cp = load_run_checkpoint(root, role, sid)
-        if cp is None:
-            # 2026-10-18（缺陷 ㉑，真机 `projects/t3a` 抓到）：检查点只在 `loop.run()`
-            # 返回之后才写（本文件 6326 行），于是被 kill/崩溃的运行永远没有检查点 ——
-            # 而"被 kill"恰恰是 `--resume` 存在的唯一理由。真机读数：t3a 跑了 97 次调用、
-            # 40 条实验、$1.05，`--resume` 却回 `no_checkpoint`，一条活都接不上。
-            # 但会话记录里有每一步（`agent_step` 事件）⇒ 用 `resume_messages` 重建：
-            # 重建得出步数就接着跑（这不是"从第 1 步重跑"）；重建不出就仍然如实拒。
-            _rebuilt, _step0 = resume_messages(root, role, sid, task=task)
-            if _step0 > 0:
-                cp = {"step": int(_step0), "task": str(task),
-                      "fingerprint": _task_fingerprint(role, task),
-                      "waiting_for": "", "stop_reason": ""}
-            else:
-                _note_resume_refusal(root, role, task, sid, "no_checkpoint", task_id=top_tid)
-                return LoopRun(role=role, task=task, stop_reason="no_checkpoint",
-                               final=(f"要求续跑，但既读不到检查点"
-                                      f"（{run_checkpoint_path(root, role, sid)}），"
-                                      "也重建不出会话记录里的任何一步 ⇒ 没查成。"
-                                      "不许当成'从第 1 步重跑'：重跑会把已经做过的活再做一遍。"))
-        if str(cp.get("fingerprint")) != _task_fingerprint(role, task):
-            # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
-            # 它的 `step` 数不是"这件事做到第几步"。
-            _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch", task_id=top_tid)
-            # `draft/37` §140：拒信要把检查点里那条任务原文交回去（照抄就能续）。
-            # 实测（2026-10-05，两个工作区各撞一次）：用"原任务"去续一条以"续作任务"
-            # 起的检查点 ⇒ 被拒，而拒信里没有那句该照抄的话，于是那一段成了空段
-            # （一步都没跑，而驱动器还以为它在跑）。
-            was = str(cp.get("task") or "")
-            return LoopRun(role=role, task=task, stop_reason="checkpoint_mismatch",
-                           final=("检查点里的任务指纹与这次的任务不一致 ⇒ 不许续跑："
-                                  "拿一个任务的进度去续另一个任务会把两件事混成一条，"
-                                  "而那条记录看起来完全正常。要接着跑就照抄检查点里那条"
-                                  f"任务原文（`{run_checkpoint_path(root, role, sid)}` 的 "
-                                  f"`task` 字段）：\n{was}"))
-        if str(cp.get("stop_reason")) == "final":
-            _note_resume_refusal(root, role, task, sid, "already_finished",
-                                 attempted_from=int(cp.get("step") or 0), task_id=top_tid)
-            return LoopRun(role=role, task=task, stop_reason="already_finished",
-                           final="上一趟已收工（final），续跑没有意义：没有要做的事。"
-                                 "要做新的事就给一个新的任务原文（那会换一份检查点）。")
-        waiting = str(cp.get("waiting_for") or "")
-        if waiting:
-            # 上一趟停在等某个问题：还没人答就「再停一次」，不许静默接着跑。
-            #
-            # 为什么这条必须在跑之前判（而不是靠模型自己"看见提示词里没有问题"）：
-            # 续跑那一段的提示词里带着"我上次问了 q0001"，而模型完全可以自行决定
-            # "既然没人答，我按最保守的做法继续" —— 那正是用户 2026-10-03 裁掉的
-            # 形态（"就停着"）。框架这一层必须把"没答"死死地钉住：
-            # 没有回答事件，就没有下一步。
-            answered = {str(r.get("qid") or "") for r in U.read_replies(root, sid=sid)}
-            if waiting not in answered:
-                _note_resume_refusal(root, role, task, sid, "still_waiting",
-                                     attempted_from=int(cp.get("step") or 0), task_id=top_tid)
-                return LoopRun(role=role, task=task, stop_reason="waiting_for_user",
-                               waiting_for=waiting,
-                               final=(f"还在等 {waiting} 的回答：没有人答就不接着跑"
-                                      "（不许把「没答」当成默许，也不许从没答的地方重跑）。"
-                                      f"用 `agentflow --root {root} answer {waiting} \"<回答>\"{f' --sid {sid}' if sid else ''}` 答完，再用 "
-                                       f"`agentflow --root {root} run-agent --resume …"
-                                       f"{f' --sid {sid}' if sid else ''}` 续跑。"))
-        # S-C 第 ② 步：续跑的载体换成了消息序列（`resume_messages`）——
-        # 重建出来的那份要么逐条相等、要么这一步没查成（三态：不猜、不从第 1 步重跑）。
-        rebuilt, step0 = resume_messages(root, role, sid, task=task)
-        if step0 <= 0:
-            _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
-                                 attempted_from=int(cp.get("step") or 0), task_id=top_tid)
-            return LoopRun(role=role, task=task, stop_reason="resume_no_transcript",
-                           final=("要求续跑，但会话记录里重建不出这一趟的任何一步"
-                                  "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
-                                  "⇒ 没查成：不许从第 1 步重跑。"))
-        run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid, depth=start_depth,
-                       resumed=(rebuilt, step0),
-                       waiting_for=str(cp.get("waiting_for") or ""))
-    else:
-        run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid, depth=start_depth)
-    completed = run.resumed_from + len(run.steps)
-    # ---- F1：顶趟也要收行（开了不收 = 台账上永远一条 `running`）
-    if top_tid:
+    # ---- 顶趟那一行必落终态（2026-11-02，83 的 113 分钟）
+    #
+    # 改前：收行那一段在 `loop.run()` 返回之后，而且是顺序语句 —— `run()` 一抛异常、
+    # 或者一阻塞，那一行就永远 `running`。83 的真机读数：`t-000001` 停在 02:01:31 那一行上，
+    # M 从 04:50:45 起 113 分钟没有新步，台账却写"在跑"，只有人工写 `.agentflow-stop` 才收场。
+    #
+    # 现在：唯一的收行出口是下面这个闭包（幂等），三条路都从它进来 ——
+    #   ① 正常出口（`run()` 返回之后）；② 五条"续跑被拒"的提前 return；
+    #   ③ `finally` 兜住"抛异常 / 被打断"那一档（落 `crashed`）。
+    # 三档的措辞与 `(status, outcome)` 由 `Conductor.finish_top_level_run` 一处映射。
+    top_closed: dict[str, bool] = {"done": False}
+    top_problems: list[str] = []
+
+    def _close_top(stop_reason: str, detail: str = "",
+                   cut_off: Sequence[str] = ()) -> None:
+        """把顶趟那一行收成终态（幂等：只写一次；没有台账号 ⇒ 什么都不做）。"""
+        if top_closed["done"] or not top_tid:
+            return
+        top_closed["done"] = True
         try:
-            conductor.finish_top_level_run(top_tid, stop_reason=str(run.stop_reason or ""),
-                                          detail=str(run.final or "")[:200],
-                                          # D22：只传原料（编号列表）；"掐断了 N 个…"那句
-                                          # 措辞与计数在 `finish_top_level_run` 一处组装
-                                          # （父行只有那一个组装点）。
-                                          cut_off_children=list(run.cut_off_children))
+            conductor.finish_top_level_run(
+                top_tid, stop_reason=str(stop_reason or ""), detail=str(detail or ""),
+                # D22：只传原料（编号列表）；"掐断了 N 个…"那句措辞与计数在
+                # `finish_top_level_run` 一处组装（父行只有那一个组装点）。
+                cut_off_children=list(cut_off or ()))
         except Exception as exc:  # noqa: BLE001 - 收行失败不许带走这一趟的产出
             log = getattr(conductor, "_log", None)
             if callable(log):
                 log(f"顶趟收行失败（{top_tid}）：{type(exc).__name__}: {exc}")
-            run.notes.append(f"顶趟那一行没写成终态（{type(exc).__name__}: {exc}）："
-                             "台账上它会停在 running（这一趟的产出不受影响）")
-    problem = save_run_checkpoint(root, role, sid, task=task, step=completed,
-                                  stop_reason=run.stop_reason, waiting_for=run.waiting_for,
-                                  spend=run.spend,
-                                  # 与 `spend` 同源、同一刻：`run()` 末尾（收工汇总那一节）
-                                  # 已经把它算好了，这里只是把它一起落盘 —— 此前只传了
-                                  # `spend`，于是顶趟的检查点里没有这一格（根因不是
-                                  # "先写文件后算汇总"，而是写文件这条路自己拼了一份
-                                  # 9 格的 dict，没拿到 `LoopRun` 的这一面）。
-                                  prompt_cache=run.prompt_cache)
-    if problem:
-        run.notes.append(f"这一趟的步检查点没写成（{problem}）：下一趟 `--resume` 会读到"
-                         "更早的一份（或读不到），于是它要么多跑几步、要么如实报'没查成'")
+            top_problems.append(
+                f"顶趟那一行没写成终态（{type(exc).__name__}: {exc}）："
+                "台账上它会停在 running（这一趟的产出不受影响）")
+
+    def _refused(got: LoopRun) -> LoopRun:
+        """续跑被拒那一档：先收行，再把这一趟的结局返回（不许留在 running）。"""
+        _close_top(got.stop_reason, got.final)
+        return got
+
+    run: LoopRun | None = None
+    ran = False
+
+    def _write_checkpoint() -> None:
+        """落这一趟的步检查点（`runs/agent-<角色>-<会话号>.json`，带 `end_ts`）。
+
+        三档（与 `save_run_checkpoint` 的 docstring 同一套）：
+        - 跑完的那一趟 ⇒ 步数/花销/缓存汇总都取自 `LoopRun`（`step_source="run"`）；
+        - 崩溃的那一趟 ⇒ 步数从会话记录重建（重建不出就是 0），`step_source="crash"`
+          —— 步数没拿到不等于"它一步都没走"，档位差别在盘上；
+        - 续跑被拒那五档 ⇒ 一步都没跑，不落（覆盖上一份等于把"上一趟做到第几步"抹掉）。
+        """
+        if run is not None:
+            problem = save_run_checkpoint(
+                root, role, sid, task=task,
+                step=run.resumed_from + len(run.steps),
+                stop_reason=run.stop_reason, waiting_for=run.waiting_for,
+                spend=run.spend,
+                # 与 `spend` 同源、同一刻：`run()` 末尾（收工汇总那一节）已经把它算好了，
+                # 这里只是把它一起落盘 —— 此前写文件这条路自己拼了一份九格的 dict，
+                # 没拿到 `LoopRun` 的这一面。
+                prompt_cache=run.prompt_cache,
+                started_at=run.started_at, end_ts=run.ended_at)
+            if problem:
+                run.notes.append(
+                    f"这一趟的步检查点没写成（{problem}）：下一趟 `--resume` 会读到"
+                    "更早的一份（或读不到），于是它要么多跑几步、要么如实报'没查成'")
+            return
+        if not ran:
+            return
+        step0 = 0
+        try:
+            _after, step0 = resume_messages(root, role, sid, task=task)
+        except Exception:  # noqa: BLE001 - 重建不出就按 0 落，但档位标 crash
+            step0 = 0
+        problem = save_run_checkpoint(root, role, sid, task=task, step=int(step0),
+                                      stop_reason="crashed", step_source="crash")
+        if problem:
+            top_problems.append(f"崩溃那一趟的步检查点没写成（{problem}）")
+
+    try:
+        if resume:
+            cp = load_run_checkpoint(root, role, sid)
+            if cp is None:
+                # 2026-10-18（缺陷 ㉑，真机 `projects/t3a` 抓到）：检查点只在 `loop.run()`
+                # 返回之后才写，于是被 kill/崩溃的运行永远没有检查点 ——
+                # 而"被 kill"恰恰是 `--resume` 存在的唯一理由。真机读数：t3a 跑了 97 次调用、
+                # 40 条实验、$1.05，`--resume` 却回 `no_checkpoint`，一条活都接不上。
+                # 但会话记录里有每一步（`agent_step` 事件）⇒ 用 `resume_messages` 重建：
+                # 重建得出步数就接着跑（这不是"从第 1 步重跑"）；重建不出就仍然如实拒。
+                _rebuilt, _step0 = resume_messages(root, role, sid, task=task)
+                if _step0 > 0:
+                    cp = {"step": int(_step0), "task": str(task),
+                          "fingerprint": _task_fingerprint(role, task),
+                          "waiting_for": "", "stop_reason": ""}
+                else:
+                    _note_resume_refusal(root, role, task, sid, "no_checkpoint",
+                                         task_id=top_tid)
+                    return _refused(LoopRun(
+                        role=role, task=task, stop_reason="no_checkpoint",
+                        final=(f"要求续跑，但既读不到检查点"
+                               f"（{run_checkpoint_path(root, role, sid)}），"
+                               "也重建不出会话记录里的任何一步 ⇒ 没查成。"
+                               "不许当成'从第 1 步重跑'：重跑会把已经做过的活再做一遍。")))
+            if str(cp.get("fingerprint")) != _task_fingerprint(role, task):
+                # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
+                # 它的 `step` 数不是"这件事做到第几步"。
+                _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch",
+                                     task_id=top_tid)
+                # `draft/37` §140：拒信要把检查点里那条任务原文交回去（照抄就能续）。
+                # 实测（2026-10-05，两个工作区各撞一次）：用"原任务"去续一条以"续作任务"
+                # 起的检查点 ⇒ 被拒，而拒信里没有那句该照抄的话，于是那一段成了空段
+                # （一步都没跑，而驱动器还以为它在跑）。
+                was = str(cp.get("task") or "")
+                return _refused(LoopRun(
+                    role=role, task=task, stop_reason="checkpoint_mismatch",
+                    final=("检查点里的任务指纹与这次的任务不一致 ⇒ 不许续跑："
+                           "拿一个任务的进度去续另一个任务会把两件事混成一条，"
+                           "而那条记录看起来完全正常。要接着跑就照抄检查点里那条"
+                           f"任务原文（`{run_checkpoint_path(root, role, sid)}` 的 "
+                           f"`task` 字段）：\n{was}")))
+            if str(cp.get("stop_reason")) == "final":
+                _note_resume_refusal(root, role, task, sid, "already_finished",
+                                     attempted_from=int(cp.get("step") or 0), task_id=top_tid)
+                return _refused(LoopRun(
+                    role=role, task=task, stop_reason="already_finished",
+                    final="上一趟已收工（final），续跑没有意义：没有要做的事。"
+                          "要做新的事就给一个新的任务原文（那会换一份检查点）。"))
+            waiting = str(cp.get("waiting_for") or "")
+            if waiting:
+                # 上一趟停在等某个问题：还没人答就「再停一次」，不许静默接着跑。
+                #
+                # 为什么这条必须在跑之前判（而不是靠模型自己"看见提示词里没有问题"）：
+                # 续跑那一段的提示词里带着"我上次问了 q0001"，而模型完全可以自行决定
+                # "既然没人答，我按最保守的做法继续" —— 那正是用户 2026-10-03 裁掉的
+                # 形态（"就停着"）。框架这一层必须把"没答"死死地钉住：
+                # 没有回答事件，就没有下一步。
+                answered = {str(r.get("qid") or "") for r in U.read_replies(root, sid=sid)}
+                if waiting not in answered:
+                    _note_resume_refusal(root, role, task, sid, "still_waiting",
+                                         attempted_from=int(cp.get("step") or 0),
+                                         task_id=top_tid)
+                    return _refused(LoopRun(
+                        role=role, task=task, stop_reason="waiting_for_user",
+                        waiting_for=waiting,
+                        final=(f"还在等 {waiting} 的回答：没有人答就不接着跑"
+                               "（不许把「没答」当成默许，也不许从没答的地方重跑）。"
+                               f"用 `agentflow --root {root} answer {waiting} \"<回答>\"{f' --sid {sid}' if sid else ''}` 答完，再用 "
+                               f"`agentflow --root {root} run-agent --resume …"
+                               f"{f' --sid {sid}' if sid else ''}` 续跑。")))
+            # S-C 第 ② 步：续跑的载体换成了消息序列（`resume_messages`）——
+            # 重建出来的那份要么逐条相等、要么这一步没查成（三态：不猜、不从第 1 步重跑）。
+            rebuilt, step0 = resume_messages(root, role, sid, task=task)
+            if step0 <= 0:
+                _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
+                                     attempted_from=int(cp.get("step") or 0), task_id=top_tid)
+                return _refused(LoopRun(
+                    role=role, task=task, stop_reason="resume_no_transcript",
+                    final=("要求续跑，但会话记录里重建不出这一趟的任何一步"
+                           "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
+                           "⇒ 没查成：不许从第 1 步重跑。")))
+            ran = True
+            run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
+                           depth=start_depth, resumed=(rebuilt, step0),
+                           waiting_for=str(cp.get("waiting_for") or ""))
+        else:
+            ran = True
+            run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
+                           depth=start_depth)
+        # ---- F1：顶趟也要收行（开了不收 = 台账上永远一条 `running`）
+        _close_top(run.stop_reason, run.final, run.cut_off_children)
+    finally:
+        # ③ 兜底：抛异常 / 被打断时也收行（`crashed` 在三档里落 done/no_result +
+        # 「收工没做成：crashed」）。它是兜底、不是唯一出口 —— ① 与 ② 在上面。
+        if not top_closed["done"]:
+            _close_top("crashed", "循环在落到自己的终态之前抛了异常（这一趟没有收工）")
+        _write_checkpoint()
+
+    if top_problems and run is not None:
+        run.notes.extend(top_problems)
     # `R2b-⑲`：M 的状态读数 —— 秘书台账里的坏行要在这一趟的读数里看得见
     # （不是门：坏行只说明那几行读不出来，不改变任何判定；读不到与"没问题"必须分开）。
     try:
