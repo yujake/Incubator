@@ -1635,61 +1635,9 @@ class AgentV:
                     if stopped != "signed" else "没有手稿落点"),
         }
         if stopped == "signed" and rel:
-            from .. import conductor as _CND
-
-            try:
-                _pid, prole = _CND.current_parent()
-                who = _VS.secretary_id(prole)
-            except Exception:  # noqa: BLE001 —— 读不到父角色不是失败：就是"没有收方秘书"
-                who = ""
-            try:
-                issued = _VS.issue(
-                    self.workspace_root, artifact_sha=sha, streak=streak, need=need,
-                    artifact_path=rel, ledger=f"{rel}#V签", statement_id="",
-                    proof_no=no, passes=passes, at=at, by=who)
-            except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报
-                issued = {"written": False, "reason": (
-                    f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"), "path": ""}
-            if issued.get("written") or issued.get("idempotent"):
-                try:
-                    landed = _VS.land(
-                        self.workspace_root, artifact_sha=sha, by=who,
-                        manuscript_path=rel, store=None, statement_id="",
-                        proof_no=no,
-                        # 台账位这一路没有命题行可翻（未在册），也不许在这里造一格。
-                        ledger_bit=False)
-                except Exception as exc:  # noqa: BLE001 —— 签已颁发，落签抛了要如实报
-                    landed = {"landed": False, "state": "refused", "code": "land_raised",
-                              "reason": f"落签那一笔抛了（{type(exc).__name__}: {exc}）"}
-            mw = dict(landed.get("manuscript_write") or {})
-            block_write.update(
-                written=bool(mw.get("written")),
-                idempotent=bool(mw.get("idempotent")),
-                missing=bool(mw.get("missing")),
-                state=str(mw.get("state") or (
-                    "failed" if (issued.get("written") or issued.get("idempotent"))
-                    else "not_attempted")),
-                path=str(mw.get("path") or rel),
-                line=int(mw.get("line") or 0),
-                reading=dict(mw.get("reading") or {}),
-                code=str(landed.get("code") or mw.get("code") or ""),
-                body_mismatch=bool(landed.get("body_mismatch")),
-                body_sha256=str(mw.get("body_sha256") or ""),
-                signed_sha256=str(mw.get("signed_sha256") or ""),
-            )
-            if block_write["written"]:
-                block_write["why"] = (
-                    f"签由收方秘书 {who or '（没有收方秘书）'} 落进 `{rel}`"
-                    f"（连续 {streak}/{need} 成立；V 只颁发，不写块）")
-            elif issued.get("written") or issued.get("idempotent"):
-                block_write["why"] = (
-                    f"签已颁发（`{issued.get('path') or '签文件'}`，信封→"
-                    f"{who or '（没有收方秘书）'}），但块没落："
-                    f"{landed.get('reason') or issued.get('reason') or '没有理由'}")
-            else:
-                block_write["why"] = (
-                    f"签发没成（`{issued.get('path') or '签文件'}`）："
-                    f"{issued.get('reason') or '没有理由'}；块没落")
+            block_write, issued, landed = self._issue_and_land_unregistered(
+                rel=rel, sha=sha, streak=streak, need=need, no=no,
+                passes=passes, at=at, block_write=block_write)
         else:
             # 负判：只落 pending 台账（不写块）；正判而没有手稿落点：签也只能落这里。
             try:
@@ -1714,6 +1662,81 @@ class AgentV:
                               else (f"判「{verdict_word}」：负判不写手稿块，判词落 "
                                     f"`{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/`"
                                     f"（{pending.get('verification_id') or '没编号'}）")))}
+
+    def _issue_and_land_unregistered(self, *, rel: str, sha: str, streak: int,
+                                     need: int, no: int,
+                                     passes: list[dict[str, Any]], at: str,
+                                     block_write: dict[str, Any]
+                                     ) -> tuple[dict[str, Any], dict[str, Any],
+                                                dict[str, Any]]:
+        """未在册正判的那一笔：V 出信封，收方秘书 land（2026-11-03 件一）。
+
+        为什么单独一个方法：`_review_unregistered_prose` 已经接近 200 行（repo survey
+        的软判据按函数量体量），把"颁发 + 落签"这一段抽出来，判据那一边一行不增。
+
+        返回 `(block_write, issued, landed)`：三格都是读数，`block_write` 是收尾
+        （`_finish_unregistered`）读的那一格。收方 = V 的 parent 那一侧（送审者），
+        身份只从 `conductor.current_parent()` 读；读不到 ⇒ 能颁发、不能落块，不猜 F/B。
+        """
+        from .. import conductor as _CND
+        from .. import vsigns as _VS
+
+        try:
+            _pid, prole = _CND.current_parent()
+            who = _VS.secretary_id(prole)
+        except Exception:  # noqa: BLE001 —— 读不到父角色不是失败：就是"没有收方秘书"
+            who = ""
+        issued: dict[str, Any] = {}
+        landed: dict[str, Any] = {}
+        try:
+            issued = _VS.issue(
+                self.workspace_root, artifact_sha=sha, streak=streak, need=need,
+                artifact_path=rel, ledger=f"{rel}#V签", statement_id="",
+                proof_no=no, passes=passes, at=at, by=who)
+        except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报
+            issued = {"written": False, "reason": (
+                f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"), "path": ""}
+        if issued.get("written") or issued.get("idempotent"):
+            try:
+                landed = _VS.land(
+                    self.workspace_root, artifact_sha=sha, by=who,
+                    manuscript_path=rel, store=None, statement_id="",
+                    proof_no=no,
+                    # 台账位这一路没有命题行可翻（未在册），也不许在这里造一格。
+                    ledger_bit=False)
+            except Exception as exc:  # noqa: BLE001 —— 签已颁发，落签抛了要如实报
+                landed = {"landed": False, "state": "refused", "code": "land_raised",
+                          "reason": f"落签那一笔抛了（{type(exc).__name__}: {exc}）"}
+        mw = dict(landed.get("manuscript_write") or {})
+        block_write.update(
+            written=bool(mw.get("written")),
+            idempotent=bool(mw.get("idempotent")),
+            missing=bool(mw.get("missing")),
+            state=str(mw.get("state") or (
+                "failed" if (issued.get("written") or issued.get("idempotent"))
+                else "not_attempted")),
+            path=str(mw.get("path") or rel),
+            line=int(mw.get("line") or 0),
+            reading=dict(mw.get("reading") or {}),
+            code=str(landed.get("code") or mw.get("code") or ""),
+            body_mismatch=bool(landed.get("body_mismatch")),
+            body_sha256=str(mw.get("body_sha256") or ""),
+            signed_sha256=str(mw.get("signed_sha256") or ""),
+        )
+        if block_write["written"]:
+            block_write["why"] = (
+                f"签由收方秘书 {who or '（没有收方秘书）'} 落进 `{rel}`"
+                f"（连续 {streak}/{need} 成立；V 只颁发，不写块）")
+        elif issued.get("written") or issued.get("idempotent"):
+            block_write["why"] = (
+                f"签已颁发（`{issued.get('path') or '签文件'}`，信封→"
+                f"{who or '（没有收方秘书）'}），但块没落："
+                f"{landed.get('reason') or issued.get('reason') or '没有理由'}")
+        else:
+            block_write["why"] = (
+                f"签发没成（`{issued.get('path') or '签文件'}`）："
+                f"{issued.get('reason') or '没有理由'}；块没落")
+        return block_write, issued, landed
 
     def _finish_unregistered(self, out: dict[str, Any], *, no: int,
                              got: Mapping[str, Any]) -> dict[str, Any]:
