@@ -77,8 +77,10 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
             "index", "kind", "ts", "shape", "ok", "usd", "switch_present",
             # 2026-11-02（裁定「甲」的档案格）：起止 / 步数 / 派活 / 验签 / 停止理由。
             # 这几格与索引格那几条是两条读数，页面两格并排、各读各的键。
+            # 2026-11-02 晚（84 ②）：`signed` 拆成 `signed_proofs` 与 `sign_files`
+            # —— 前者是已签证明位，后者是签文件份数，两格不许再共用一格。
             "start_ts", "end_ts", "unfinished", "dispatched", "verified",
-            "signed", "stop_reasons"),
+            "signed_proofs", "sign_files", "stop_reasons"),
     "Evidence": ("statements", "conjectures", "experiments", "review_findings",
                  "relations", "verifications", "secretary", "quote_verified",
                  "counterexample_experiment_id"),

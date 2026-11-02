@@ -135,7 +135,7 @@ def test_a_stopped_run_leaves_the_index_cell_unreadable_and_the_digest_cell_comp
     assert dig["runs"] == 1 and dig["steps"] == 1, dig
     assert dig["spend_usd"] == 0.25, dig
     assert dig["dispatched"] == 2, dig
-    assert dig["verified"] == 3 and dig["signed"] == 2, dig
+    assert dig["verified"] == 3 and dig["signed_proofs"] == 2, dig
     assert dig["stop_reasons"] == {"stop_file": 1}, dig
     assert dig["start_ts"] == TS and dig["end_ts"] == TS, dig
     # 只读：这一条 GET 不许把索引顺手建出来（裁定 ① 的守卫）。
@@ -184,8 +184,10 @@ def test_c_deleting_the_event_stream_makes_the_digest_unreadable_not_zero(
     assert gone["tri"] == "unreadable", gone
     assert gone["reason"] != "", gone
     for key in ("runs", "unfinished", "steps", "usd", "spend_usd", "dispatched",
-                "verified", "signed"):
+                "verified", "signed_proofs"):
         assert gone[key] is None, (key, gone)
+    # `sign_files` 不依赖事件流：事件流没了，它仍然如实数盘上的签文件（这个夹具是 0）。
+    assert gone["sign_files"] == before["sign_files"] == 0, (before, gone)
     assert gone["stop_reasons"] == {}, gone
 
     # 三态的另一头：从没有事件流的工作区是 `not_applicable`（不是 0，也不是 unreadable）。
@@ -228,7 +230,7 @@ def test_d_tampering_or_deleting_the_index_never_moves_the_digest_numbers(
         _code, second = _get(base, "/api/run-digest?sid=s1")
     assert idx_bad["tri"] != "computed" and idx_bad["drift"], idx_bad
     for key in ("tri", "runs", "steps", "spend_usd", "dispatched", "verified",
-                "signed", "stop_reasons", "start_ts", "end_ts"):
+                "signed_proofs", "sign_files", "stop_reasons", "start_ts", "end_ts"):
         assert second[key] == first[key], (key, first[key], second[key])
 
     # 删掉整份索引：索引格 unreadable，档案格照旧。
@@ -238,8 +240,51 @@ def test_d_tampering_or_deleting_the_index_never_moves_the_digest_numbers(
         _code, third = _get(base, "/api/run-digest?sid=s1")
     assert idx_none["tri"] == "unreadable" and idx_none["index"] is None, idx_none
     for key in ("tri", "runs", "steps", "spend_usd", "dispatched", "verified",
-                "signed", "stop_reasons"):
+                "signed_proofs", "sign_files", "stop_reasons"):
         assert third[key] == first[key], (key, first[key], third[key])
+
+
+# ====================================================================== e 两个数
+def _put_sign_files(root: pathlib.Path, n_signs: int = 2) -> list[pathlib.Path]:
+    """造签文件目录：`n_signs` 份逐签 + 一份 `issued.json` 归档。"""
+    d = root / "out" / "vsigns"
+    d.mkdir(parents=True, exist_ok=True)
+    made = []
+    for i in range(n_signs):
+        p = d / f"{i:064x}.json"
+        p.write_text("{}\n", encoding="utf-8")
+        made.append(p)
+    issued = d / "issued.json"
+    issued.write_text('{"schema": "vsigns-issued/1", "signs": []}\n', encoding="utf-8")
+    made.append(issued)
+    return made
+
+
+def test_e_signed_proofs_and_sign_files_are_two_different_numbers(
+        tmp_path: pathlib.Path) -> None:
+    """② 两个数不许共用一格：已签证明位（31）≠ 签文件份数（3）。
+
+    84 的现场：`signed` 读出来 31，而 `out/vsigns/` 里只有 3 个 JSON
+    （2 份签 + `issued.json`）。改前两件事共用 `signed` 一格，读的人会把 31 读成
+    "签了 31 份"。这一条同时钉反真空：删掉一份签文件 ⇒ `sign_files` 减一，
+    而 `signed_proofs` 一个字节都不动（它们各读各的来源）。
+    """
+    root = _ws(tmp_path, stop_reason="final")
+    signs = _put_sign_files(root, n_signs=2)
+    with _server(root) as base:
+        code, dig = _get(base, "/api/run-digest?sid=s1")
+        assert code == 200 and dig["tri"] == "computed", dig
+        assert dig["signed_proofs"] == 2, dig
+        assert dig["sign_files"] == 3, dig
+        assert "signed" not in dig, (
+            "旧名字 `signed` 还在 ⇒ 名字与语义继续混用（它数的是证明位，不是签文件）")
+
+        signs[0].unlink()
+        code, after = _get(base, "/api/run-digest?sid=s1")
+        assert code == 200 and after["tri"] == "computed", after
+    assert after["sign_files"] == 2, after
+    assert after["signed_proofs"] == dig["signed_proofs"] == 2, (
+        "删签文件把已签证明位也改了 ⇒ 两个数不是各读各的来源", after)
 
 
 # ====================================================================== 页面那一侧
@@ -306,3 +351,45 @@ def test_the_page_shows_the_two_cells_side_by_side_without_substitution() -> Non
     # 负控：删掉并排容器 ⇒ 必须报。
     flat = source.replace('class="two-up"', 'class="card"')
     assert any("并排" in p for p in _digest_card_problems(flat)), _digest_card_problems(flat)
+
+
+#: 档案格里两个数的页面判据：名字与语义必须对得上（84 ②）。
+_OLD_SIGNED = re.compile(r"digest\.data\.signed\b")
+
+
+def _digest_count_field_problems(source: str) -> list[str]:
+    """档案格必须同时读 `signed_proofs` 与 `sign_files`，且不许再读旧的 `signed`。
+
+    纯函数、可负控：旧名字与语义混用，读的人会把"31 个已签证明位"读成"31 份签文件"。
+    """
+    code = _code_only(source)
+    at = code.find(DIGEST_TITLE)
+    problems: list[str] = []
+    if at < 0:
+        return ["页面里没有档案格"]
+    region = code[at:at + 3000]
+    if "digest.data.signed_proofs" not in region:
+        problems.append("档案格没有读 digest.data.signed_proofs（已签证明位）")
+    if "digest.data.sign_files" not in region:
+        problems.append("档案格没有读 digest.data.sign_files（签文件份数）")
+    if _OLD_SIGNED.search(region):
+        problems.append("档案格还在读 digest.data.signed —— 名字与语义混用")
+    for label in ("已签证明位", "签文件"):
+        if label not in region:
+            problems.append(f"档案格没有把 `{label}` 说给读的人")
+    return problems
+
+
+def test_the_page_keeps_the_two_digest_counts_apart() -> None:
+    """② 的页面那一半：两个数并排显示、各有各的名字；负控能抓住退回旧名字。"""
+    source = RUN_TSX.read_text(encoding="utf-8")
+    assert _digest_count_field_problems(source) == [], _digest_count_field_problems(source)
+
+    # 负控：页面退回旧名字 `digest.data.signed` ⇒ 必须报「名字与语义混用」，
+    # 而且「没有读 signed_proofs」也要报（不许只改一处就悄悄过）。
+    doctored = source.replace("digest.data.signed_proofs", "digest.data.signed", 1)
+    assert doctored != source, "负控没改到源码"
+    got = _digest_count_field_problems(doctored)
+    assert any("signed_proofs" in p for p in got), got
+    assert any("混用" in p for p in got), got
+

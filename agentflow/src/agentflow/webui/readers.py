@@ -788,6 +788,26 @@ def run_events(root: str | Path, sid: str, *, since_index: int = 0,
 DIGEST_SCOPE_SESSION = "session"
 DIGEST_SCOPE_WORKSPACE = "workspace"
 
+#: 签文件的落点（与 `vsigns.SIGNS_DIR` 同一个目录；这里只数文件、不读内容）。
+DIGEST_SIGNS_DIR = "out/vsigns"
+
+
+def _digest_sign_files(root: Path) -> int | None:
+    """`out/vsigns/*.json` 的个数（逐份签 + 派生归档 `issued.json`）。
+
+    为什么把归档也算进来：84 的现场读数就是"3 个签文件（2 份签 + issued.json）"，
+    这个数字回答的是"签文件目录里有几份文件"，不是"签了几个证明位"。
+    三态：目录不在 ⇒ 0（这个工作区还没有签，是事实不是"没查成"）；
+    目录在而列不出来 ⇒ `None`（没查成，绝不折成 0）。
+    """
+    folder = Path(str(root)) / DIGEST_SIGNS_DIR
+    if not folder.is_dir():
+        return 0
+    try:
+        return sum(1 for p in folder.glob("*.json") if p.is_file())
+    except OSError:
+        return None
+
 
 def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
     """`GET /api/run-digest` 的读模型：从会话事件流现算的一份"趟次档案"。
@@ -819,10 +839,15 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       与"没有这一格"的趟数。它不顶替 `usd`：两个来源并排，是同一笔钱的两条独立读数；
     - `dispatched` / `dispatched_missing_runs`：`Σ len(agent_run_end.summons)`（真派出去
       的活）与"收工行没带 summons"的趟数；
-    - `verified` / `signed` / `gaps_missing_runs`：收工行 `final_gaps_reading` 的
+    - `verified` / `signed_proofs` / `gaps_missing_runs`：收工行 `final_gaps_reading` 的
       `total` 合计（这一趟名下带证明、查过 V 签那一栏的命题数）与
-      `total - unsigned` 合计（其中签住的条数），以及"收工行没带这一格"的趟数。
-      两格是"验了几条 / 签了几个"的事件流落点；读不到是 `None`，不是 0；
+      `total - unsigned` 合计（其中签住的**证明位**数），以及"收工行没带这一格"的趟数。
+      这里**不是**"签了几个签文件"：`signed_proofs` 数的是收工读数里的已签证明位；
+    - `sign_files`：**签文件的个数**（`out/vsigns/*.json`，含派生归档 `issued.json`）。
+      它与 `signed_proofs` 是两个数、两套口径，刻意分开命名（84 的现场：前者 3、
+      后者 31 —— 改前两件事共用 `signed` 一格，读的人会把 31 读成"签了 31 份"）。
+      目录不在 ⇒ 0（"这个工作区还没有签"）；目录在而列不出来 ⇒ `None`（没查成，不是 0）。
+      它不依赖事件流，所以事件流读不出来时它照常有值；
     - `stop_reasons`：`{停止理由: 趟数}`（空字典 = 一趟都没有停止理由可数）。
 
     有坏行时 `tri=unreadable` 而读得出来的那些行照常算（少给数会让"这一趟 0 步"
@@ -837,7 +862,8 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
         "steps": None, "usd": None, "unknown_usd_calls": None,
         "spend_usd": None, "spend_missing_runs": None,
         "dispatched": None, "dispatched_missing_runs": None,
-        "verified": None, "signed": None, "gaps_missing_runs": None,
+        "verified": None, "signed_proofs": None, "sign_files": _digest_sign_files(root_p),
+        "gaps_missing_runs": None,
         "stop_reasons": {},
     }
 
@@ -931,7 +957,7 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
             totals += max(0, int(total))
             signeds += max(0, int(total) - int(unsigned))
     face["verified"] = totals if seen else (0 if n == 0 else None)
-    face["signed"] = signeds if seen else (0 if n == 0 else None)
+    face["signed_proofs"] = signeds if seen else (0 if n == 0 else None)
     face["gaps_missing_runs"] = 0 if n == 0 else len(ends) - seen
 
     reasons: dict[str, int] = {}
@@ -5124,9 +5150,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 两条独立的花销读数：`usd` 是事件求和，`spend_usd` 是收工行自报账；不互相顶替。
       ("usd", "number | null"), ("unknown_usd_calls", "number | null"),
       ("spend_usd", "number | null"), ("spend_missing_runs", "number | null"),
-      # 派了多少活 / 验了几条 / 签了几个；`*_missing_runs` 说清"没读到"的范围。
+      # 派了多少活 / 验了几条 / 已签证明位 / 签文件几份；`*_missing_runs` 说清"没读到"的范围。
       ("dispatched", "number | null"), ("dispatched_missing_runs", "number | null"),
-      ("verified", "number | null"), ("signed", "number | null"),
+      ("verified", "number | null"),
+      # 两个数、两套口径（84 的现场：signed_proofs=31 而 sign_files=3）：
+      # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
+      # `out/vsigns/*.json` 的文件数（含 issued.json 归档）。不共用一格。
+      ("signed_proofs", "number | null"), ("sign_files", "number | null"),
       ("gaps_missing_runs", "number | null"),
       ("stop_reasons", "Record<string, number>"))),
     ("EvidenceView",

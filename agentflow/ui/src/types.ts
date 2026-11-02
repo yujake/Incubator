@@ -290,7 +290,8 @@ export interface RunDigestView {
   dispatched: number | null;
   dispatched_missing_runs: number | null;
   verified: number | null;
-  signed: number | null;
+  signed_proofs: number | null;
+  sign_files: number | null;
   gaps_missing_runs: number | null;
   stop_reasons: Record<string, number>;
 }

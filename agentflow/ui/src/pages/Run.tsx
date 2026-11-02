@@ -414,8 +414,11 @@ export function Run(props: RunProps) {
             <div class="readings">
               步数 <span class="mono">{num(digest.data.steps)}</span> · 派了多少活{" "}
               <span class="mono">{num(digest.data.dispatched)}</span> · 验了几条{" "}
-              <span class="mono">{num(digest.data.verified)}</span> · 签了几个{" "}
-              <span class="mono">{num(digest.data.signed)}</span>
+              <span class="mono">{num(digest.data.verified)}</span> · 已签证明位{" "}
+              <span class="mono">{num(digest.data.signed_proofs)}</span> · 签文件{" "}
+              <span class="mono">{num(digest.data.sign_files)}</span>
+              （<span class="mono">out/vsigns/</span> 下全部 JSON，含 issued.json；
+              与已签证明位不是同一个数）
             </div>
             <div class="readings">
               花了多少（收工行自报）{" "}
