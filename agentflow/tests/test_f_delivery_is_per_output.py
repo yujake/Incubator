@@ -20,6 +20,7 @@ import json
 import pathlib
 
 import pytest
+from conftest import seed_statement_row
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -74,13 +75,36 @@ def _plan() -> dict:
 
 
 def _proof_round(f: AgentF, plan: dict, *, sid: str, text: str) -> dict:
-    """走一次 `_apply_round` 的 proof 档，并把这一轮的 history 行补进计划（同 `step.py`）。"""
+    """走一次 `_apply_round` 的 proof 档，并把这一轮的 history 行补进计划（同 `step.py`）。
+
+    准入闸 strict 之后，一条"还没签的成果"不能再由这一次登记**造出来**（无签正文
+    整笔拒）。所以夹具先把这一份稿渲染出来（`proof_manuscript`，交给 B 的就是它），
+    再直接铺一行 statements（真机 3134 行 own_result 的历史形态）—— 行上的 canonical
+    与这一笔逐字相同 ⇒ 闸不适用（没有要写的新正文），`_apply_round` 照旧把稿发布。
+    期望值一个字没改。
+    """
     sg = next(dict(s) for s in plan["subgoals"] if s["sid"] == sid)
     product = {"product": "proof", "strategy": "direct", "why_strategy": "直接按定义",
                "steps": [{"n": 1, "text": f"{text}：取 ε>0，按定义逐点验证。", "cites": [],
                           "assumption": False},
                          {"n": 2, "text": "ε 任意 ⇒ 结论成立。", "cites": []}]}
+    manuscript = f.proof_manuscript(product, sg=sg, plan=plan)
+    body = _DS.proof_body(str(manuscript.get("text") or "")).strip("\n")
+    full = str(sg.get("text") or "")
+    if str(sg.get("testable") or ""):
+        full += f"；这一条的可检验形式：{sg.get('testable')}"
+    existing = next((dict(r) for r in f.store.rows("statements")
+                     if str(r.get("statement_full") or "").strip() == full.strip()), None)
+    if existing is not None:
+        seeded = existing
+    else:
+        seeded = seed_statement_row(
+            f.store, proof_text=body, statement_full=full,
+            statement_text=str(sg.get("text") or ""), kind="conjecture",
+            label=f"F 攻坚 {plan.get('plan_id') or ''} 子目标 {sid}",
+            quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
     deploy = f._apply_round(product, sg, plan=plan, owner="F")
+    assert str(deploy.get("statement_id") or "") == str(seeded["stmt_id"]), deploy
     plan["history"].append({"round": len(plan["history"]) + 1, "sid": sid,
                             "action": deploy.get("action"),
                             "outcome": deploy.get("outcome"),
