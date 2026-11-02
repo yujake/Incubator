@@ -105,7 +105,12 @@ def _audited_statement(st: Store) -> str:
     """正控的现场：V 先审手稿（3 转成立 ⇒ 签块落稿）→ B 再收录。"""
     path = _write_manuscript(st)
     v = AgentV(st, llm=_FixedSeam("成立"))
-    signed = v.verify_proof(proof_manuscript=REL)
+    # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份。
+    from agentflow import conductor as CND
+
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        signed = v.verify_proof(proof_manuscript=REL)
     assert signed.get("checked") is True, signed
     assert signed.get("kind") == "proof_unregistered_signed", signed
     block = VS.manuscript_sign_standing(path.read_text(encoding="utf-8"),

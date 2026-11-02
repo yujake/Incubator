@@ -208,7 +208,12 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
     man_path.write_text(man_text, encoding="utf-8")
 
     review, seam = _ReviewSeam(), _Seam()
-    got = _agent_v(st, review, seam).verify_proof(proof_manuscript=man_rel)
+    # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份。
+    from agentflow import conductor as CND
+
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = _agent_v(st, review, seam).verify_proof(proof_manuscript=man_rel)
     assert review.asked() == 3, (
         f"一次 verify_proof 只问了 {review.asked()} 次模型 ⇒ 「连续 3 次」还得靠人送三次")
     assert got.get("checked") is True, got

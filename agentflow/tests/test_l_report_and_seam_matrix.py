@@ -387,7 +387,12 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     man_path.write_text(man_text, encoding="utf-8")
 
     v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")] * 3))
-    signed2 = v2.verify_proof(proof_manuscript=man_rel)
+    # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份。
+    from agentflow import conductor as CND
+
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        signed2 = v2.verify_proof(proof_manuscript=man_rel)
     assert signed2.get("checked") is True, signed2
     assert signed2.get("kind") == "proof_unregistered_signed", signed2
     assert signed2.get("verdict") == "成立", signed2
