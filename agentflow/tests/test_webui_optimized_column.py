@@ -6,7 +6,7 @@
 业主 2026-11-03（goal 第 ⑤ 条）：网页端「命题台账」页要能看到"这一份证明洗过没有"。
 盘上那一格已经有唯一读口（`evidencebits.optimized_by_proof` / `optimized_state`），
 三态在 `evidencebits.OPTIMIZED_STATES` 里定死了（`true` / `false` / `not_recorded`），
-缺的只是**网页端**这一路：读模型没把那一格吐出来，页面上也没有那一列。
+缺的只是网页端这一路：读模型没把那一格吐出来，页面上也没有那一列。
 
 于是这份判据钉三件事（与任务 ④ 的 a / b / c 一一对应）：
 
@@ -18,7 +18,7 @@
 
 ## 为什么逐份的编号取自四张表的并集
 
-`optimized_by_proof` 只回答"记过的那几份各是什么"——缺格的那一份**不在表里**。
+`optimized_by_proof` 只回答"记过的那几份各是什么"——缺格的那一份不在表里。
 只看这张表，判据 b 那一档（这一份还没记）就会从屏幕上消失，而那正是要显示的一档。
 所以逐份的编号取自 `reviewed_by_proof` / `reviewed_sha_by_proof` /
 `optimized_by_proof` / `formal_by_proof` 四张同形表的并集：任一张认得这一份，
@@ -105,7 +105,7 @@ def ws_two_states(tmp_path: pathlib.Path) -> pathlib.Path:
 
 @pytest.fixture()
 def ws_missing_cell(tmp_path: pathlib.Path) -> pathlib.Path:
-    """判据 b：缺格 —— `evidence` 里有逐条签的两张表，就是**没有** `optimized_by_proof`。"""
+    """判据 b：缺格 —— `evidence` 里有逐条签的两张表，就是没有 `optimized_by_proof`。"""
     return _statement_ws(tmp_path, dict(_BITS_REVIEWED))
 
 
@@ -251,7 +251,7 @@ def test_c_stubbing_the_reading_to_constant_true_makes_a_red(
     """判据 c：把读口 `optimized_by_proof` 打桩成恒 true ⇒ 判据 a 必须红。
 
     为什么打这一层而不是 `optimized_state`：`optimized_state` 是唯一读口，
-    它内部读的就是这张表 —— 把**表**打桩，测的是"读模型真的经那个读口取数"
+    它内部读的就是这张表 —— 把表打桩，测的是"读模型真的经那个读口取数"
     这件事本身；只打 `optimized_state` 会把"读模型自己另判了一次"这种错放过。
     """
     before = R.evidence_chain(ws_two_states)["statements"]
