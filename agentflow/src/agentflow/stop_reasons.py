@@ -145,6 +145,11 @@ STOP_REASONS: dict[str, tuple[int | None, str, str, bool]] = {
     "model_output_limit": (1, "badge-fail", "思考吃光输出预算", True),
     "bad_json_limit": (1, "badge-fail", "坏 JSON 连击", True),
     "bad_args_limit": (1, "badge-fail", "坏参数连击", True),
+    # `crashed`（2026-11-02，83 的 113 分钟那一批）：循环在落到自己的终态之前
+    # 抛了异常 / 被打断，`run_role` 的 finally 兜底出口落这一档。归 1 而不是 5：
+    # 这是真出事（那一趟没有收工），台账按三档映射落 `done/no_result`、
+    # `detail` 点名「收工没做成：crashed」—— 与"门按设计挡住"的 5 不是同一件事。
+    "crashed": (1, "badge-fail", "崩了（没收工）", True),
     # `no_notify`：L-05e 之后循环不再产生它，但退出码 1 是既有登记（旧会话记录
     # 仍按"协议不遵"解释），所以它留在退出码表里，与本单的 max_steps 不同。
     "no_notify": (1, "badge-fail", "收工没按格式留痕（旧读数）", True),

@@ -1008,7 +1008,13 @@ def test_deleting_the_checkpoint_cache_write_makes_the_criterion_red(
 
     def _legacy_save(session_root: Any, role: str, sid: str | None, *, task: str,
                      step: int, stop_reason: str, waiting_for: str = "",
-                     spend: Any = None, prompt_cache: Any = None) -> str:
+                     spend: Any = None, prompt_cache: Any = None,
+                     # 2026-11-02：写侧补了收口三格，桩的签名跟上（旧实现不写它们，
+                     # 所以 payload 仍然只有那 9 格）—— 桩要代表"旧实现"，而旧实现
+                     # 的签名是它那个年代被调用的形状；拒收新 kwarg 只会让负控红在
+                     # TypeError 上，红的位置就不是"prompt_cache 没落盘"了。
+                     started_at: str = "", end_ts: str = "",
+                     step_source: str = "run") -> str:
         """改前那一版（`agent_loop.save_run_checkpoint` 的 9 格 payload，逐字照抄）。"""
         path = AL.run_checkpoint_path(session_root, role, sid)
         payload = {"role": role, "sid": str(sid or ""), "task": task,

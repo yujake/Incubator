@@ -1247,7 +1247,7 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
         row["statement_id"] = sid
         row["stmt_id"] = sid
         row["claimed_at"] = _now_iso()
-        lines[i] = json.dumps(row, ensure_ascii=False) + "\n"
+        lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
         break
     if hit < 0:
         out["why"] = (f"`{rel}` 里没有 {vid or '（没有号）'} 那一行 ⇒ 没写成"
