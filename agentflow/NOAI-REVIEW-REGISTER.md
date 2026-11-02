@@ -840,3 +840,47 @@ $ python scripts/noai_gate.py --check-consistency
    台账里的哈希与盘上内容**一致**（我改完误拦之后重新登记过一次）。
    "已登记"不等于"有人看过"：`reviewers=0` 意味着**一次逐行走查都还没有发生**。
 
+---
+
+## 10. 2026-11-02 批 178（V 签三方分工）—— 命中 3 条，**批准栏待 2 名 reviewer 人工签**
+
+**这一批的性质**：业主 2026-11-02 的口径（`draft/178`）把「V 只颁发 / 收方秘书落签 /
+谁产出谁送审 / B 不润色无签证明」写进 M 与 B 的 policy；改 policy 必然抬 `PROMPT_VERSION`
+（p231 → p232），因此也必然重冻带提示词的 golden。**业主同日放权动禁改区**：
+
+```text
+· 提示词改动若触发 `PROMPT_VERSION` ⇒ 抬 p232（只抬一次）+ 重冻两份 golden + 跑一次 warm
+  （约 $0.05–0.12，已批）
+· B 的**写路径**不许改（只许加只读判据与受控拒绝）；`specs/*` 若必须改 ⇒ 提交信息写
+  「业主 2026-11-02 放权动禁改区」+ 类别 + gate 原文
+```
+
+**授权改变的是"谁许可"，不改变 FC-27 的要求** —— 仍然必须由人逐行走查 + 2 名 reviewer；
+下面这张表的"批准"栏**没有**、也不许由 AI 填。
+
+| # | 路径 | 类别 | 这一批改了什么（走查要点） |
+|---:|---|---|---|
+| 1 | `src/agentflow/specs/m.py` | `auth-audit` | policy 第 15 项里「M 要 V 签字只能走经 B 的 `M→B→V`」换成「V 签不经你的手 —— 签在 V 那一侧颁发、由收方（F / B）那一侧落」；「缺签就派 D 让 F 补签」换成责任路由（在册缺签 ⇒ 让 B 处理；F 产出无签 ⇒ 经 D 让 F 先拿签）；新增「M 没有 V 签的编辑权，也没有获取义务」。**动作表 / 边 / 写集一个字未动**（`ACTIONS` / `edges` / `write_set` 零 diff，`capabilities` 四张表因此不变） |
+| 2 | `src/agentflow/specs/b.py` | `auth-audit` | policy 新增一条「收到没有 V 签的 F 证明 ⇒ 不润色、整笔退回，请 F 先拿 V 签」，并分出「册上已有而缺签是 B 自己的事」。**动作表 / 边 / 写集一个字未动**（B 的写路径与权限面零 diff） |
+| 3 | `tests/golden/agent_surface_snapshot.json` | `eval-criteria` | 重冻：11 格 `roles.*.prompt` 换值（其中 9 格只因共享尾部的「提示词版本：p232」；B / M 另有上述 policy 段），`roles.*.tools` / `write_set` / `edges` 逐格未动。逐格 diff 见提交 `7f7ea677` 与 `ac07d69f` |
+
+**当次读数（复跑命令与原文，`--since` 取本批之前的 `96999bc1`）**：
+
+```text
+$ python scripts/noai_gate.py --git --since 96999bc1
+[requires_human] required_approvals=2
+requires_human：3 条改动落在 **FC-27 禁 AI 区**（类别：auth-audit、eval-criteria）⇒ 必须由人编写或人逐行走查，并需要 2 名 reviewer 批准。命中：agentflow/src/agentflow/specs/b.py, agentflow/src/agentflow/specs/m.py, agentflow/tests/golden/agent_surface_snapshot.json
+  - agentflow/src/agentflow/specs/b.py  命中 src/agentflow/specs/b.py  [auth-audit]  角色 B 的声明真身（M3 起）：…
+  - agentflow/src/agentflow/specs/m.py  命中 src/agentflow/specs/m.py  [auth-audit]  角色 M 的声明真身（M3 起）：…
+  - agentflow/tests/golden/agent_surface_snapshot.json  命中 tests/golden/agent_surface_snapshot.json  [eval-criteria]  冻结快照（F15 入册）：…
+EXIT=1
+```
+
+**批准栏（由人签，AI 不许填）**：
+
+| reviewer | 日期 | 走查范围（逐行读过哪些） | 结论 |
+|---|---|---|---|
+| （待签） | | | |
+| （待签） | | | |
+
+
