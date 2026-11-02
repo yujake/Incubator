@@ -3299,9 +3299,13 @@ class Secretary:
                             proof_no: Any, row: Mapping[str, Any] | None) -> None:
         """把"签发"这个决定落成一次 `sign_statement`（翻位的唯一写口）。
 
-        三态：落成了（`issued=True`）/ 没有可写的行（没有 store 或没有那一行的 row）/
+        三态：签颁发了（`issued=True`）/ 没有可写的行（没有 store 或没有那一行的 row）/
         写了但没成（`sign_statement` 自己报的理由）。三种都不改变 `issue` 这一个决定
         —— 决定是决定，落地是落地（`draft/125` 三态纪律：决定与它的产物分开报）。
+
+        2026-11-03 件二：`issued` 回答的是"签有没有颁发"，不是"命题位有没有翻"。
+        两阶段录入里 V 先签、B 后写正文 ⇒ 签文件已落而位不翻；位与理由分开报
+        （`writeback.written` 是位，`writeback.body_gate` 说为什么没翻）。
         """
         from . import verifications as _VR
 
@@ -3326,10 +3330,15 @@ class Secretary:
                              f"（{type(exc).__name__}: {exc}）⇒ 位没翻，台账那一行留着")
             return
         out["writeback"] = dict(writeback)
-        out["issued"] = bool(writeback.get("written"))
+        vsign = dict(writeback.get("vsign") or {})
+        out["issued"] = bool(writeback.get("written")
+                              or vsign.get("written") or vsign.get("idempotent"))
         if not out["issued"]:
             out["reason"] = (f"{out.get('reason') or ''}；但翻位没落成："
                              f"{str(writeback.get('reason') or '没有理由')}")
+        elif not writeback.get("written"):
+            out["reason"] = (f"{out.get('reason') or ''}；签已颁发，但命题位没翻"
+                             f"（{str(writeback.get('reason') or '没有理由')}）")
 
     def _note_sign_issuance(self, out: Mapping[str, Any], *, task_id: str = "") -> None:
         """把"发不发签"这一行落进决定台账（`before` = 台账读数，`after` = 决定）。

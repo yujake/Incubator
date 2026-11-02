@@ -1194,7 +1194,7 @@ class AgentV:
             return out
         payload = (VR.bit3_payload(row, streak=VR.consecutive_holds(
             self.workspace_root, sid, proof_no=no))
-            if bool(issuance.get("issued")) else {})
+            if (bool(issuance.get("issued")) and bool(writeback.get("written"))) else {})
         # 签成没成只看秘书落地那一步（`issued`），不看"台账票数够不够"（业主 2026-10-29）。
         # 票够而秘书没落（装配缺失 / 它判了不发 / 没判成）⇒ 位没有翻，返回值不许说签了；
         # 改前这里按连续读数合成了第 3 位，于是"没人发签"在返回值里长得像"已经签上"。
