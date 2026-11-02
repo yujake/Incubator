@@ -272,6 +272,29 @@ export interface RunEventsView {
   events: EventRow[];
 }
 
+/** 出处：run_digest() —— 业主裁定「甲」的趟次档案：从会话事件流现算，不读也不落 `index/run-index.json`（收工没做成/被叫停的趟也有值；删掉事件流 ⇒ unreadable）。 */
+export interface RunDigestView {
+  tri: Tri;
+  reason: string;
+  scope: string;
+  sid: string;
+  runs: number | null;
+  unfinished: number | null;
+  start_ts: string;
+  end_ts: string;
+  steps: number | null;
+  usd: number | null;
+  unknown_usd_calls: number | null;
+  spend_usd: number | null;
+  spend_missing_runs: number | null;
+  dispatched: number | null;
+  dispatched_missing_runs: number | null;
+  verified: number | null;
+  signed: number | null;
+  gaps_missing_runs: number | null;
+  stop_reasons: Record<string, number>;
+}
+
 /** 出处：evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）。 */
 export interface EvidenceView {
   tri: Tri;

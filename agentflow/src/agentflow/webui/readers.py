@@ -87,7 +87,8 @@ from . import state as _state
 
 __all__ = [
     "ADMISSION_BASIS_CANDIDATE",
-    "CHECKED_TYPES", "CODE_CONSISTENCY_REVOKED", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX",
+    "CHECKED_TYPES", "CODE_CONSISTENCY_REVOKED", "DIGEST_SCOPE_SESSION",
+    "DIGEST_SCOPE_WORKSPACE", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX",
     "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
@@ -108,7 +109,7 @@ __all__ = [
     "handle_library", "handle_machine", "handle_package", "handle_roster",
     "handle_run_events", "handle_run_view", "handle_source", "handle_state",
     "library_face", "machine_face", "package_face", "roster_face", "run_events",
-    "run_products", "run_view", "sha_consistency", "source_window",
+    "run_digest", "run_products", "run_view", "sha_consistency", "source_window",
     "state_face",
     "ts_fields", "type_decls",
 ]
@@ -188,7 +189,7 @@ HANDLERS: dict[str, Any] = {}
 CHECKED_TYPES: tuple[str, ...] = (
     "RunProduct", "CheckpointView", "CheckpointSpendView", "CheckpointCacheView",
     "ReportReadingView",
-    "RunView", "EventRow", "RunEventsView",
+    "RunView", "RunDigestView", "EventRow", "RunEventsView",
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
@@ -764,6 +765,185 @@ def run_events(root: str | Path, sid: str, *, since_index: int = 0,
         "truncated": to_index < total,
         "events": rows,
     }
+
+
+# ====================================================================== 2c 趟次档案（裁定 甲）
+# 为什么要有这一面（业主 2026-11-02 的裁定「甲」，逐字）：
+#
+#   `index/run-index.json` 的口径一字不改 —— 只在"收工成功"时建；收工没做成 /
+#   被叫停 ⇒ 那一格如实 `unreadable`（没建就是没建，不许拿一份半截索引冒充"已对账"）。
+#   但"没建索引"不等于"这一趟没有可读的档案"：事件流还在，起止、步数、花销、派活、
+#   验签与停止理由全都在会话文件里。所以另给一条只读读数，从事件流现算。
+#
+# 三条硬纪律：
+# 1. 不落盘：`index/run-index.json` 一个字节都不写、也不读（`run_digest` 的调用链里
+#    没有 `SS.rebuild_run_index` / `SS.load_run_index`；判据 a/d 从两头钉着它）；
+# 2. 三态：`computed` / `unreadable` / `not_applicable` —— 没有事件流的工作区是
+#    `not_applicable`（"用不着"），不是 0；指定的会话文件被删掉是 `unreadable`
+#    （"没查成"），也不是 0；
+# 3. 两格不互相顶替：这一面的每一个数都从事件流现算，索引被手改/被删都不会让
+#    它动一个字节（判据 d）。
+
+#: `/api/run-digest` 在两种作用域下的 `scope` 取值。
+DIGEST_SCOPE_SESSION = "session"
+DIGEST_SCOPE_WORKSPACE = "workspace"
+
+
+def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
+    """`GET /api/run-digest` 的读模型：从会话事件流现算的一份"趟次档案"。
+
+    与 `sessions.load_run_index` / `run_index_report` 是两件东西：
+
+    - 索引是派生数据，只在收工成功那一刻落盘；本面不读也不写它；
+    - 本面每次调用都从 `sessions/*.jsonl` 现算，所以"没建索引"的趟也有档案。
+
+    ## 两个作用域
+
+    - 给了 `sid`：只读那一段会话（页面的档案格就是这一档）。会话文件不在盘上 ⇒
+      `unreadable`（调用方点名要这一段，找不到就是"没查成"）；但整个工作区连
+      `sessions/` 目录都没有 ⇒ `not_applicable`（从没有事件流，用不着）；文件在但还
+      没有任何事件 ⇒ `not_applicable`（合法初态）。删掉事件流落在前一档，不是 0；
+    - 没给 `sid`：读整个工作区的事件流。`sessions/` 下没有任何 `*.jsonl` ⇒
+      `not_applicable`（没有可现算的源，不是 0）。
+
+    ## 计数口径（逐个说清，免得"同一个词两处含义"）
+
+    - `runs`：`sessions.runs_in_session` 切出来的趟数（`agent_run_start` 到它自己的
+      `agent_run_end`，或文件尾）；
+    - `unfinished`：没有收到 `agent_run_end` 的趟数（`end_index is None`）；
+    - `start_ts` / `end_ts`：各趟 `start_ts` 的第一个 / `end_ts` 的最后一个（空串 = 没读到）；
+    - `steps`：`Σ runs[].steps`；
+    - `usd` / `unknown_usd_calls`：事件求和（`llm_call.usd` 归到各趟后的合计；
+      `unknown_usd_calls` 是算不出价钱的调用次数）。没有一条算得出价钱的调用 ⇒ `None`；
+    - `spend_usd` / `spend_missing_runs`：收工行自报账的合计（`agent_run_end.spend.usd`）
+      与"没有这一格"的趟数。它不顶替 `usd`：两个来源并排，是同一笔钱的两条独立读数；
+    - `dispatched` / `dispatched_missing_runs`：`Σ len(agent_run_end.summons)`（真派出去
+      的活）与"收工行没带 summons"的趟数；
+    - `verified` / `signed` / `gaps_missing_runs`：收工行 `final_gaps_reading` 的
+      `total` 合计（这一趟名下带证明、查过 V 签那一栏的命题数）与
+      `total - unsigned` 合计（其中签住的条数），以及"收工行没带这一格"的趟数。
+      两格是"验了几条 / 签了几个"的事件流落点；读不到是 `None`，不是 0；
+    - `stop_reasons`：`{停止理由: 趟数}`（空字典 = 一趟都没有停止理由可数）。
+
+    有坏行时 `tri=unreadable` 而读得出来的那些行照常算（少给数会让"这一趟 0 步"
+    变成一句假话），`reason` 里带坏行数；这与 `run_events` 同一口径。
+    """
+    root_p = Path(str(root))
+    sid = str(sid or "")
+    scope = DIGEST_SCOPE_SESSION if sid else DIGEST_SCOPE_WORKSPACE
+    face: dict[str, Any] = {
+        "tri": TRI_NOT_APPLICABLE, "reason": "", "scope": scope, "sid": sid,
+        "runs": None, "unfinished": None, "start_ts": "", "end_ts": "",
+        "steps": None, "usd": None, "unknown_usd_calls": None,
+        "spend_usd": None, "spend_missing_runs": None,
+        "dispatched": None, "dispatched_missing_runs": None,
+        "verified": None, "signed": None, "gaps_missing_runs": None,
+        "stop_reasons": {},
+    }
+
+    problems: list[str] = []
+    groups: list[tuple[list[dict], list[dict]]] = []
+    if sid:
+        path = SS.session_path(root_p, sid)
+        if not path.is_file():
+            # 两档必须分开：这个工作区连 sessions/ 都没有 ⇒ "没有事件流"（用不着，
+            # 合法初态）；sessions/ 在、独独这一段不在 ⇒ "没查成"（被删 / 编号错了），
+            # 后者是裁定 ④c 要抓的"删掉事件流 ⇒ unreadable，不是 0"。
+            if not SS.sessions_dir(root_p).is_dir():
+                return {**face, "tri": TRI_NOT_APPLICABLE,
+                        "reason": ("这个工作区没有事件流（sessions/ 目录都不在）："
+                                   "没有可现算的源，不是 0")}
+            return {**face, "tri": TRI_UNREADABLE,
+                    "reason": (f"会话文件不在盘上：{path}"
+                               "（这是「没查成」，不是「这一趟没有事件」）")}
+        events, bad = SS.read_session(root_p, sid=sid)
+        if not events and not bad:
+            return {**face, "tri": TRI_NOT_APPLICABLE,
+                    "reason": (f"会话文件在盘上但是空的（{path}）：还没写过事件，"
+                               "合法初态，不是没查成")}
+        if bad:
+            problems.append(f"会话有 {len(bad)} 条坏行（读得出来的事件照常算）："
+                            + "；".join(bad[:3]))
+        groups.append((events, SS.runs_in_session(events, sid=sid)))
+    else:
+        cache: dict[str, tuple[list[dict], list[str]]] = {}
+        rows = SS.list_sessions(root_p, read_cache=cache)
+        if not rows:
+            return {**face, "tri": TRI_NOT_APPLICABLE,
+                    "reason": ("这个工作区没有事件流（sessions/ 下没有 .jsonl）："
+                               "没有可现算的源，不是 0")}
+        for row in rows:
+            one_sid = str(row.get("sid") or "")
+            events, bad = cache.get(one_sid, ([], []))
+            if bad:
+                problems.append(f"会话 {one_sid} 有 {len(bad)} 条坏行（照常算读得出来的）："
+                                + "；".join(bad[:2]))
+            groups.append((events, SS.runs_in_session(events, sid=one_sid)))
+
+    if problems and not any(events for events, _rows in groups):
+        # 一句都没读出来（整段会话/整个工作区的文件都读不成）⇒ 计数栏是 None。
+        # 这是三态纪律里"没查成"那一档：把它折成 0 会让"读不出来"读成"一趟都没有"。
+        return {**face, "tri": TRI_UNREADABLE, "reason": "；".join(problems)}
+
+    runs = [run for _events, rows_ in groups for run in rows_]
+    # 只把"真的闭合了某一趟"的收工行算进档案：轮次之外的零散 end（没有对应 start）
+    # 不是任何一趟的收工读数，把它算进来会让"派活 / 验签"多出没有主人的数。
+    ends: list[dict] = []
+    for events, rows_ in groups:
+        closing = sorted({int(run["end_index"]) for run in rows_
+                          if isinstance(run.get("end_index"), int)})
+        ends.extend(events[index] for index in closing if 0 <= index < len(events))
+    n = len(runs)
+    face["runs"] = n
+    face["unfinished"] = sum(1 for run in runs if run.get("end_index") is None)
+    face["start_ts"] = next((str(run.get("start_ts") or "") for run in runs
+                             if str(run.get("start_ts") or "")), "")
+    end_stamps = [str(run.get("end_ts") or "") for run in runs
+                  if str(run.get("end_ts") or "")]
+    face["end_ts"] = max(end_stamps) if end_stamps else ""
+    face["steps"] = sum(int(run.get("steps") or 0) for run in runs)
+
+    def _num(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    usd_values = [float(run["usd"]) for run in runs if _num(run.get("usd"))]
+    face["usd"] = round(sum(usd_values), 6) if usd_values else (0.0 if n == 0 else None)
+    face["unknown_usd_calls"] = (0 if n == 0 else
+                                 sum(int(run.get("unknown_usd") or 0) for run in runs))
+    spend_values = [float(run["spend_usd"]) for run in runs if _num(run.get("spend_usd"))]
+    face["spend_usd"] = (round(sum(spend_values), 6) if spend_values
+                         else (0.0 if n == 0 else None))
+    face["spend_missing_runs"] = 0 if n == 0 else sum(
+        1 for run in runs if not _num(run.get("spend_usd")))
+
+    sent = [len(run["summons"]) for run in runs if isinstance(run.get("summons"), list)]
+    face["dispatched"] = sum(sent) if sent else (0 if n == 0 else None)
+    face["dispatched_missing_runs"] = 0 if n == 0 else n - len(sent)
+
+    totals = signeds = seen = 0
+    for event in ends:
+        reading = event.get("final_gaps_reading")
+        if not isinstance(reading, Mapping):
+            continue
+        total, unsigned = reading.get("total"), reading.get("unsigned")
+        if _num(total) and _num(unsigned):
+            seen += 1
+            totals += max(0, int(total))
+            signeds += max(0, int(total) - int(unsigned))
+    face["verified"] = totals if seen else (0 if n == 0 else None)
+    face["signed"] = signeds if seen else (0 if n == 0 else None)
+    face["gaps_missing_runs"] = 0 if n == 0 else len(ends) - seen
+
+    reasons: dict[str, int] = {}
+    for run in runs:
+        why = str(run.get("stop_reason") or "")
+        if why:
+            reasons[why] = reasons.get(why, 0) + 1
+    face["stop_reasons"] = reasons
+
+    if problems:
+        return {**face, "tri": TRI_UNREADABLE, "reason": "；".join(problems)}
+    return {**face, "tri": TRI_COMPUTED, "reason": ""}
 
 
 # ====================================================================== 3 证据链
@@ -4932,6 +5112,23 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("total", "number | null"), ("from_index", "number | null"),
       ("to_index", "number | null"), ("truncated", "boolean"),
       ("events", "EventRow[]"))),
+    ("RunDigestView",
+     "run_digest() —— 业主裁定「甲」的趟次档案：从会话事件流现算，不读也不落 "
+     "`index/run-index.json`（收工没做成/被叫停的趟也有值；删掉事件流 ⇒ unreadable）",
+     (("tri", "Tri"), ("reason", "string"),
+      # `session` = 点名一段会话；`workspace` = 整个工作区的事件流。
+      ("scope", "string"), ("sid", "string"),
+      ("runs", "number | null"), ("unfinished", "number | null"),
+      ("start_ts", "string"), ("end_ts", "string"),
+      ("steps", "number | null"),
+      # 两条独立的花销读数：`usd` 是事件求和，`spend_usd` 是收工行自报账；不互相顶替。
+      ("usd", "number | null"), ("unknown_usd_calls", "number | null"),
+      ("spend_usd", "number | null"), ("spend_missing_runs", "number | null"),
+      # 派了多少活 / 验了几条 / 签了几个；`*_missing_runs` 说清"没读到"的范围。
+      ("dispatched", "number | null"), ("dispatched_missing_runs", "number | null"),
+      ("verified", "number | null"), ("signed", "number | null"),
+      ("gaps_missing_runs", "number | null"),
+      ("stop_reasons", "Record<string, number>"))),
     ("EvidenceView",
      "evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"), ("store_problems", "string[]"),

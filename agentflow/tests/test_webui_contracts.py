@@ -591,6 +591,12 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
         out["RunEventsView"] = set(ev_rows)
         _take(ev_rows.get("events"), "EventRow")
 
+    # 趟次档案（2026-11-02 业主裁定「甲」新增的 `GET /api/run-digest`）：同一条口径 —
+    # 新面落地后让后端那一侧真的去读它，否则 `RunDigestView` 会"既不在受核对名单、
+    # 也没在欠账名单"。它从事件流现算、不读索引 ⇒ 夹具这一段会话上一定读得出来。
+    if sid:
+        out["RunDigestView"] = set(RD.run_digest(root, sid))
+
     # 对话那一面（R92 新增的 `GET /api/chat`）。与 `EventRow` 同一条口径：
     # 新面落地后要让后端那一侧真的去读它，否则它会"既不在受核对名单、也没在欠账名单"。
     # 夹具那一段会话里有主控的 run_start 与一条提问 ⇒ `ChatLine` 读得出键

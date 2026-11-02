@@ -728,6 +728,11 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["RunEventsView"] = set(ev_rows)
     assert ev_rows["events"], "夹具没造出事件行"
     got["EventRow"] = set(ev_rows["events"][0])
+    # 2026-11-02（业主裁定「甲」）：趟次档案从事件流现算 —— 夹具这一段会话有真事件，
+    # 所以它和其它面一样在受核对名单里要有落脚点（不读索引，删掉索引也读得出来）。
+    digest = R.run_digest(artifacts_ws, SID)
+    got["RunDigestView"] = set(digest)
+    assert digest["tri"] == "computed", digest
     art = R.artifacts_face(artifacts_ws)
     got["ArtifactsView"] = set(art)
     for name, rows in (("ArtifactRow", art["ledger"]),

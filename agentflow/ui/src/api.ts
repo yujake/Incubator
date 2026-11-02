@@ -26,6 +26,7 @@ import type {
   PackageView,
   RosterView,
   RunEventsView,
+  RunDigestView,
   RunIndexDrift,
   RunView,
   SourceWindow,
@@ -46,6 +47,9 @@ import type {
 export const ENDPOINTS = {
   state: "/api/state",
   runIndex: "/api/run-index",
+  // 2026-11-02（业主裁定「甲」）：趟次档案 —— 从事件流现算，不读也不落
+  // `index/run-index.json`。与 runIndex 是两格并排的独立读数。
+  runDigest: "/api/run-digest",
   run: "/api/run/{sid}",
   runEvents: "/api/run/{sid}/events",
   evidence: "/api/evidence",
@@ -93,6 +97,21 @@ export type EndpointName = keyof typeof ENDPOINTS;
 /** 一趟详情的实参拼装（`/api/run/{sid}` 的那一个占位符）。 */
 export function runPath(sid: string): string {
   return ENDPOINTS.run.replace("{sid}", encodeURIComponent(sid));
+}
+
+/**
+ * 趟次档案（`/api/run-digest`）的实参拼装。
+ *
+ * `sid` 是查询参数而不是路径段：这一个端点是**两种作用域**共用的一条读数
+ * （不给 `sid` = 整个工作区；给了 = 只算那一段会话）。页面的档案格传当前 `sid`。
+ */
+export function runDigestPath(sid: string): string {
+  const q = new URLSearchParams();
+  if (sid !== "") {
+    q.set("sid", sid);
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.runDigest : `${ENDPOINTS.runDigest}?${tail}`;
 }
 
 /**
@@ -385,6 +404,15 @@ export async function postAnswer(body: Record<string, string | string[]>): Promi
 export const api = {
   getState: (): Promise<StateSnapshot> => getJSON<StateSnapshot>(ENDPOINTS.state),
   getRunIndex: (): Promise<RunIndexDrift> => getJSON<RunIndexDrift>(ENDPOINTS.runIndex),
+  /**
+   * 趟次档案（业主 2026-11-02 裁定「甲」）：从事件流**现算**的一份读数。
+   *
+   * 它与 `getRunIndex()` 是两格并排的独立来源：索引只在收工成功时建，而这一条
+   * 在"被叫停 / 收工没做成"的趟上也有值；反过来，手改 / 删掉索引都不会让它动。
+   * 三态在返回的 `tri` 上（`computed` / `unreadable` / `not_applicable`）。
+   */
+  getRunArchive: (sid: string): Promise<RunDigestView> =>
+    getJSON<RunDigestView>(runDigestPath(sid)),
   getRun: (sid: string): Promise<RunView> => getJSON<RunView>(runPath(sid)),
   getRunEvents: (
     sid: string,

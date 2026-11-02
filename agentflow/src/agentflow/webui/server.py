@@ -622,6 +622,35 @@ class WebHandler(BaseHTTPRequestHandler):
 
         self._json(200, SS.run_index_report(self.root))
 
+    def handle_run_digest(self, params: Mapping[str, str],
+                          query: Mapping[str, Sequence[str]]) -> None:
+        """`GET /api/run-digest`：从事件流现算的趟次档案（业主 2026-11-02 裁定「甲」）。
+
+        与 `/api/run-index` 是两条独立的读数，各自读自己的来源：
+
+        - 索引那一格读盘上的 `index/run-index.json`（只在收工成功时建）；
+        - 这一格每次都从 `sessions/*.jsonl` 现算，不给 `sid` 就是整个工作区，
+          给了就只算那一段会话。不读、不写索引 —— 收工没做成/被叫停的趟
+          在这一格里有值，索引那一格仍是 `unreadable`（裁定 ④a 要的正是这个）。
+
+        三态在正文里（`tri` + `reason`），读不到也回 200：与 `handle_run_index`
+        同一档 —— "没查成"是一条读数，不是一次请求失败。
+
+        读数走 `facecache.cached_face`（按盘失效，与 `/api/package` 同一套）：
+        这个面要扫全部会话文件，页面上每翻一次都要读；同一份盘、同一组参数直接复用。
+        `cache` 只在 HTTP 外壳上，不进 `run_digest()` 的返回 —— 那是读模型，
+        与 `ui/src/types.ts` 的 `RunDigestView` 逐格对齐。
+        """
+        del params
+        from . import facecache
+        from . import readers as RD
+
+        sid = str((query.get("sid") or [""])[0])
+        face, cache = facecache.cached_face(
+            "run-digest", self.root, {"sid": sid},
+            lambda: RD.run_digest(self.root, sid))
+        self._json(200, {**face, "cache": cache})
+
     def handle_errors(self, params: Mapping[str, str],
                       query: Mapping[str, Sequence[str]]) -> None:
         """`GET /api/errors`：按角色 × 类目的错误动作计数（只读，零模型调用）。

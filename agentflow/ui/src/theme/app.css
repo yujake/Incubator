@@ -271,6 +271,21 @@ table.grid th {
   margin-left: auto;
 }
 
+/* 两格并排（业主 2026-11-02 裁定「甲」：趟次索引与趟次档案各占一格）。
+ * 窄屏落回一列：两张卡的内容都是读数行，挤成两列会比并排更难读。 */
+.two-up {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .two-up {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .row {
   display: flex;
   gap: var(--sp-2);

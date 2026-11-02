@@ -43,7 +43,9 @@ UI_SRC = REPO / "ui" / "src"
 PAGES: dict[str, tuple[str, ...]] = {
     "Home": ("/api/state",),
     "RoleErrorsPage": ("/api/errors", "/api/errors/categories"),
-    "Run": ("/api/run/{sid}", "/api/run-index"),
+    # 2026-11-02（业主裁定「甲」）：Run 页两格并排 —— 索引归索引（`/api/run-index`），
+    # 未收工的趟另有从事件流现算的档案（`/api/run-digest`），两条是独立读数。
+    "Run": ("/api/run/{sid}", "/api/run-index", "/api/run-digest"),
     "Evidence": ("/api/evidence",),
     "Artifacts": ("/api/artifacts",),
     # 2026-11-01（块 4）：这一页改成三块一次读（A 证明 / B 结构 / C 收工）；
@@ -72,7 +74,11 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
             "orphans", "stop_reason", "spend", "events_span", "events_owned",
             "task_id", "spend_usd", "unattributed_usd",
             "events", "total", "from_index", "to_index", "truncated",
-            "index", "kind", "ts", "shape", "ok", "usd", "switch_present"),
+            "index", "kind", "ts", "shape", "ok", "usd", "switch_present",
+            # 2026-11-02（裁定「甲」的档案格）：起止 / 步数 / 派活 / 验签 / 停止理由。
+            # 这几格与索引格那几条是两条读数，页面两格并排、各读各的键。
+            "start_ts", "end_ts", "unfinished", "dispatched", "verified",
+            "signed", "stop_reasons"),
     "Evidence": ("statements", "conjectures", "experiments", "review_findings",
                  "relations", "verifications", "secretary", "quote_verified",
                  "counterexample_experiment_id"),

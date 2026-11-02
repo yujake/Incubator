@@ -1,10 +1,13 @@
 /*
  * 一趟详情 —— 运行态（`draft/74 §3.2` 逐行落）。
  *
- * 输入三条端点 + 一次共享快照：
+ * 输入四条端点 + 一次共享快照：
  *
  * - `api.getRun(sid)` → `RunView`（`runs` / `report` / `checkpoint`）；
  * - `api.getRunIndex()` → `RunIndexDrift`（裁定 O2：趟次索引与它对账的结论）；
+ * - `api.getRunArchive(sid)` → `RunDigestView`（业主 2026-11-02 裁定「甲」：从事件流
+ *   **现算**的趟次档案 —— 收工没做成/被叫停的趟也有值，且不读也不落
+ *   `index/run-index.json`。它与上面那一条是**两格并排**的独立读数）；
  * - `api.getRunEvents(sid, { sinceIndex, limit })` → `RunEventsView`（题 T2-a：一趟的
  *   逐条事件，游标分页；旧壳那张"逐条事件卡片"退场后唯一能逐条复核的那一层）；
  * - `live.snapshot` → 台账读数（`ledger`）与「轮次之外的零散事件」（`orphans` /
@@ -68,6 +71,20 @@ function spendOf(ck: CheckpointView | null): CheckpointSpendView | null {
 
 function text(value: string): string {
   return value === "" ? "unknown" : value;
+}
+
+/** 数字读数的通用写法：`null` ⇒ `unknown`（不是 0）—— 三态纪律在数字上的落点。 */
+function num(value: number | null): string {
+  return value === null ? "unknown" : String(value);
+}
+
+/** 停止理由的计数：空字典是"读到了、没有理由可数"，不是"没读成"。 */
+function stopReasonText(reasons: Record<string, number>): string {
+  const keys = Object.keys(reasons);
+  if (keys.length === 0) {
+    return "（读到了：一趟都没有停止理由可数）";
+  }
+  return keys.map((key) => `${key} × ${reasons[key]}`).join("、");
 }
 
 /** 一行摘要：优先事件的 `text`，其次 `payload` / `result` 的 JSON，都没有就留空。 */
@@ -231,6 +248,9 @@ export function Run(props: RunProps) {
   const live = useLive();
   const view = useFace(() => api.getRun(props.sid));
   const index = useFace(() => api.getRunIndex());
+  // 业主 2026-11-02 裁定「甲」：未收工的趟另给一份从事件流现算的档案。
+  // 它与 `index` 是两条独立读数（两格并排），所以是两次取数、谁都不许顶替谁。
+  const digest = useFace(() => api.getRunArchive(props.sid));
   // 在飞面：这一页只用它的「停机开关」那一格（谁按的、按没按过）。
   // 它是一个独立的 hook，所以必须在下面那些 early return **之前**调 ——
   // hooks 的调用顺序是 React/Preact 的硬约束，放进分支里会当场炸。
@@ -301,8 +321,9 @@ export function Run(props: RunProps) {
         </div>
       </Card>
 
+      <div class="two-up">
       <Card
-        title="趟次索引（裁定 O2）"
+        title="趟次索引（已对账）"
         subtitle={index.data === null ? "还没读到" : `tri=${index.data.tri}`}
         tone={index.data !== null && index.data.tri !== "computed" ? "problem" : "plain"}
         right={
@@ -357,6 +378,65 @@ export function Run(props: RunProps) {
           </>
         )}
       </Card>
+
+      <Card
+        title="趟次档案（未收工）"
+        subtitle={digest.data === null ? "还没读到" : `tri=${digest.data.tri} · ${digest.data.scope}`}
+        tone={digest.data !== null && digest.data.tri === "unreadable" ? "problem" : "plain"}
+        right={
+          digest.data === null ? (
+            <TriState tri="unreadable" reason={digest.problem || "档案读数还没回来"} label="档案" />
+          ) : (
+            <TriState tri={digest.data.tri} label="趟次档案" reason={digest.data.reason} />
+          )
+        }
+      >
+        {digest.data === null ? (
+          <span class="readings">{digest.problem === "" ? "正在读盘……" : digest.problem}</span>
+        ) : digest.data.tri !== "computed" ? (
+          <>
+            <div class="readings">
+              这一格没查成（不是一份 0 档案）：<span class="mono">{digest.data.reason}</span>
+            </div>
+            <span class="empty">
+              趟数 / 步数 / 花销 / 派活 / 验签那几格因此是 unknown，不是 0：这一条读数只从
+              这个工作区的会话事件流现算，事件流不在就没有可现算的源。
+            </span>
+          </>
+        ) : (
+          <>
+            <div class="readings">
+              起 <span class="mono">{text(digest.data.start_ts)}</span> · 止{" "}
+              <span class="mono">{text(digest.data.end_ts)}</span> · 趟数{" "}
+              <span class="mono">{num(digest.data.runs)}</span>（未收工{" "}
+              <span class="mono">{num(digest.data.unfinished)}</span>）
+            </div>
+            <div class="readings">
+              步数 <span class="mono">{num(digest.data.steps)}</span> · 派了多少活{" "}
+              <span class="mono">{num(digest.data.dispatched)}</span> · 验了几条{" "}
+              <span class="mono">{num(digest.data.verified)}</span> · 签了几个{" "}
+              <span class="mono">{num(digest.data.signed)}</span>
+            </div>
+            <div class="readings">
+              花了多少（收工行自报）{" "}
+              <Money
+                usd={digest.data.spend_usd}
+                unknownCalls={digest.data.spend_missing_runs ?? 0}
+              />{" "}
+              · 事件求和{" "}
+              <Money usd={digest.data.usd} unknownCalls={digest.data.unknown_usd_calls ?? 0} />
+            </div>
+            <div class="readings">
+              停止理由 <span class="mono">{stopReasonText(digest.data.stop_reasons)}</span>
+            </div>
+            <div class="readings tri-reason">
+              这一格不看 index/run-index.json：它从会话事件流现算。所以"被叫停"的趟在这里
+              有值、索引那一格仍是 unreadable；反过来，手改或删掉索引也不会让这里的数动一格。
+            </div>
+          </>
+        )}
+      </Card>
+      </div>
 
       <Card title="时间线" subtitle={`${runs.length} 趟`}>
         {runs.length === 0 ? (
