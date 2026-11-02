@@ -462,7 +462,12 @@ def signed_v_handoffs(monkeypatch):
         for item in list(kw.get("proofs") or []):
             one = dict(item) if hasattr(item, "items") else {}
             body = str(one.get("text") or "")
-            no = int(one.get("proof_no") or 1)
+            try:
+                no = int(one.get("proof_no") or 1)
+            except (TypeError, ValueError):
+                # 负控（坏号 `"abc"` / 0）：这一份本来就该被 B 的参数校验拒掉，
+                # 夹具不猜它想签哪一份 —— 不签，让那条判据照原样红/绿。
+                continue
             if not body.strip():
                 continue
             if sid:
@@ -485,9 +490,16 @@ def signed_v_handoffs(monkeypatch):
         # 号不重复、正文非空。负控（重号 / 空正文 / 坏号）不许先落一行 ——
         # 那些用例断言的就是"整笔不写"，夹具替它铺行会把那条判据造坏。
         _plist = [dict(p) for p in (kw.get("proofs") or []) if hasattr(p, "items")]
-        _nos = [int((p or {}).get("proof_no") or (p or {}).get("no") or 1) for p in _plist]
+        _nos: list[int] = []
+        _no_ok = True
+        for _p in _plist:
+            try:
+                _nos.append(int((_p or {}).get("proof_no") or (_p or {}).get("no") or 1))
+            except (TypeError, ValueError):
+                _no_ok = False
         _valid_multi = (
-            len(_plist) >= 2
+            _no_ok
+            and len(_plist) >= 2
             and all(str((p or {}).get("text") or "").strip() for p in _plist)
             and all(no >= 1 for no in _nos)
             and len(set(_nos)) == len(_nos)
