@@ -7248,10 +7248,19 @@ class Secretary:
             #: 真机 sylow3 七条命题、依赖全表 0 行，就是这样静默过去的）。
             out["deps_missing"] = _deps_missing_reading(
                 proof_text=body.get("proof_text") or "", deps_written=dep_count,
-                derived_from=body.get("derived_from") or (), stmt_id=stmt_id, scan=scan)
+                derived_from=body.get("derived_from") or (), stmt_id=stmt_id,
+                # 这一行刚落成 ⇒ canonical 就是 #p1（`verifications.proof_list` 恒含
+                # (1, proof_text)）。改前这里没传 ⇒ 读数落 0，而模型读到的"proof_no=0"
+                # 正是它随后拿 proofs=[#1] 重交、撞 proof_same_kind 的起点
+                # （真机 85：22:01:08 首登 → 22:03:20 被拒）。
+                proof_no=1, scan=scan)
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=data, tables=written, deps_written=len(steps),
-                   path_groups=len(groups), pending_concepts=pending_concepts)
+                   path_groups=len(groups), pending_concepts=pending_concepts,
+                   # 新建那一行的证明号：canonical 恒为 #1（唯一读口径是
+                   # `verifications.proof_list`）。这一格不许留 0 —— 回执说 0，调用方
+                   # 就会去"修"它，而它本来就是 1。
+                   proof_no=1)
         if _is_not_applicable_kind(kind):
             # 概念/定义行的档位读数：不适用（没有证明正文）。落在这里而不是上面的
             # `judge_statement` 那一格，是因为这一支的命题正文通过了查重与同一性判定
@@ -7738,6 +7747,34 @@ class Secretary:
         kind_hits = self._same_kind_hits(row, proof)
         merge = body.get("merge") is True
         existing = VR.proof_list(row)
+        # ---- 同一份正文再交一次：不新增证明号，也不算「同种证明」（2026-11-02） ------
+        #
+        # 真机读数（projects/paper-rewrite-85/sessions/20261102.jsonl:2980，22:03:20）：
+        # B 为了把 proof_no 落成 1，拿同一份正文（8454 字、与在册 canonical 逐字同源）
+        # 以 proofs=[{proof_no:1,…}] 重交 ⇒ _same_kind_hits 拿它与在册 #1 比，
+        # 相似度 1.0000 >= 0.80 ⇒ 整笔 proof_same_kind 拒。那不是"两种同门证法被并列
+        # 记录"，而是同一条记录再交一次 —— 判据在这里分不开的代价是：B 再也不敢交
+        # 带证明的那一笔（proofs=0 的绕行就是这么来的）。
+        #
+        # 判据取 sha（verifications.proof_sha，与签名台账同一个哈希），不比相似度：
+        # "逐字同一份"是确定性的事实，不需要阈值。命中 ⇒ 一个字节都不写（那一份已经在册），
+        # 回执说清"就是第几份"，调用方据此收工。
+        same_sha = VR.proof_sha(proof)
+        same_text_no = next(
+            (int(no) for no, text in existing
+             if str(text or "").strip() and VR.proof_sha(str(text)) == same_sha), 0)
+        if same_text_no and not merge:
+            out.update(checked=True, created=False, duplicate=False, merged=True,
+                       merged_into=sid, stmt_id=sid, proof_no=int(same_text_no),
+                       matched_by=basis, similarity=similarity, same_kind=[],
+                       canonical_written=False,
+                       reason=(f"这一份正文与 stmt:{sid} 的第 #{int(same_text_no)} 份证明"
+                               "逐字相同（sha 一致）⇒ 不新增证明号、也不算「同种证明」："
+                               "同一条记录再交一次不是第二种证法。盘上一个字节都没动"
+                               "（那一份已在册）；要换这一份的正文就把新正文交上来"
+                               "（proof_text 或 proofs 里那一号），旧正文会进 proof_history，"
+                               "并请 V 对新正文重签（resign_required）"))
+            return out
         # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
         #
         # 这里刻意不去要求"合并稿本身与某一份同种"：合并稿是各取所长写出来的，
