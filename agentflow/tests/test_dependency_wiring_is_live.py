@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import sys
 
 # 与 `tests/conftest.py` 同一个注入方式：这一份也要能在一棵临时源码树上单独跑。
@@ -715,17 +716,28 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     _library(store)
     out = _run_proof_round(store, [f"stmt:{THEOREM_A}", f"stmt:{THEOREM_B}"])
     f_stmt = str(out["statement_id"])
-    assert (pathlib.Path(store.root) / str(out["manuscript_path"])).is_file(), out
+    man_path = pathlib.Path(store.root) / str(out["manuscript_path"])
+    assert man_path.is_file(), out
+
+    # 2026-11-02 准入闸（默认 strict）之后的真实次序（两阶段）：
+    #   ① 命题行 + 依赖面先落（正文空着 —— 闸只拦"要写进台账的证明正文"）；
+    #   ② V 读这份依赖面核引用、对"要写进去的那一份正文"签字；
+    #   ③ B 再交那份正文（此时已有签）。
+    # 为此先把 F 稿里的证明段正文搬走、只留依赖段 —— 不然 B 的读稿那一支会把
+    # 正文一并取来，撞上"无签不许写"。搬走的是**稿里的那一份**，正文本身留在
+    # `PROOF_BODY` 里，第 ③ 步照原样交给 B。
+    text = man_path.read_text(encoding="utf-8")
+    PROOF_BODY = DS.proof_body(text).strip("\n")
+    assert PROOF_BODY, text
+    man_path.write_text(
+        re.sub(r"(## 证明\n)(.*?)(\n## )", r"\1\n\3", text, flags=re.S),
+        encoding="utf-8")
 
     # D 交研究手稿（携带单里应该有 F 那一条）
     report = _d_report(store)
     carried = DS.carried_manuscripts(report)
     assert [r["statement_id"] for r in carried["rows"]] == [f_stmt], carried
 
-    # 2026-11-02 准入闸（默认 strict）之后的真实次序：命题行（含依赖面）先落，
-    # 证明正文要等 V 签过才写得进去。所以这一笔先登记成"证明还空着"的形态
-    # （`proof_text=""` 不在闸的适用面上），V 审的是下面那一份 `PROOF_BODY`。
-    PROOF_BODY = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
     got = _register(store, statement_full="定理：研究手稿引用了 F 的证明手稿（整条链）。",
                     proof_text="",
                     derived_from=[f_stmt])
@@ -738,7 +750,8 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     assert len(rows) >= 1, _deps(store)
     assert {int(r["path_group"]) for r in rows} == {1}, rows
     assert {str(r["source_stmt_id"]) for r in rows} == {THEOREM_A, THEOREM_B}, rows
-    assert (got.get("deps_missing") or {}).get("state") == "present", got
+    # 正文还是空的 ⇒ 这一格读成 `not_applicable`（"证明里一条引用都没有"无从谈起）；
+    # 第 ③ 步把正文交进来之后它才该读成 `present`（见下面 late 那一段）。
 
     # V 读同一份依赖面核引用并签字（签的是"这一份要写进台账的正文"）
     reply = json.dumps({"verdict": "成立", "defect_step": None, "why": "",
@@ -773,6 +786,7 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
                      proof_text=PROOF_BODY, derived_from=[f_stmt])
     assert late.get("ok") is True, late
     assert str(late.get("stmt_id")) == b_stmt, late
+    # 依赖面在第 ① 步已经落了（上面那组 rows 断言）；这一笔只补正文，不再重记。
     # 盘上两行：依赖行落在 B 那条命题上，verifications 里那一签是「成立」且签住第 3 位
     ledger, problems = VR.list_verifications(store.root, statement_id=b_stmt, limit=None)
     assert problems == [], problems

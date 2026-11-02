@@ -28,6 +28,10 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from conftest import (reset_bit3_cache, seed_statement_row,  # noqa: E402
+                      sign_for_the_gate)
+from agentflow import depsection as DS             # noqa: E402
+from agentflow import evidencebits as EB          # noqa: E402
 from agentflow import schema as S                 # noqa: E402
 from agentflow import secretary as SEC            # noqa: E402
 from agentflow import verifications as VR          # noqa: E402
@@ -70,7 +74,23 @@ def _row(st: Store) -> dict:
 
 
 def _conjecture(st: Store, text: str) -> dict:
-    """按猜想登记（自产 + 无出处 + 没签 ⇒ 只有这一档能落库）。"""
+    """第一笔：直接铺行造"在册、有证明、还没签"的历史形态。
+
+    2026-11-02 准入闸 strict 之后，无签的证明正文经 `register_statement` 写不进去
+    （整笔拒 `proof_without_v_sign`）—— 而这一组测的是"改稿/重签"那几档的拒信。
+    已在册时仍走真登记（改稿那一笔要量 `canonical_written`）。
+    """
+    if not st.rows("statements"):
+        seeded = seed_statement_row(
+            st, proof_text=text, statement_full=FULL, statement_text=TEXT,
+            kind="conjecture", label=TEXT, quote_verified=None,
+            quote_reason=OWN["quote_reason"],
+            doc_id=S.format_id(0), line_range={"start": None, "end": None, "label": ""},
+            # bits 按 B 真登记会落下的那一份现算（proof 位真、reviewed 假）——
+            # 升档那一格（D-37）读的就是它。
+            bits=EB.bits_of(origin="own_result", proof=True, proof_process=text,
+                            kind="conjecture"))
+        return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
     return _b(st).register_statement(**{**OWN, "kind": "conjecture"}, proof_text=text)
 
 
@@ -172,26 +192,51 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
     refused = _theorem(st, P2)
     assert "请重新拿 V 签" in str(refused.get("error") or ""), refused
 
-    # ① 按猜想再交一次：新正文上盘（不被 B-3 闸拦，kind 不会因此降档）。
-    rewrite = _conjecture(st, P2)
-    assert rewrite["ok"] is True, rewrite
-    assert rewrite.get("canonical_written") is True, rewrite
-    assert _row(st)["proof_text"] == P2, _row(st)["proof_text"]
-    assert _row(st)["kind"] == "theorem", _row(st)["kind"]
+    # 期望反转（准入闸变严：无签不再可写）之后，可达的那条路是 **V 签先落手稿**
+    # （业主 2026-11-02：「V 签不直接进台账，进手稿，随 B 侧收录时读到」）：
+    # 把握要交的新正文写成一份稿 → V 走"手稿"那条审稿入口连判 3 转、签块落回稿
+    # → 再把正文交 B（闸按手稿签块认那一份签）。
+    man_rel = "reports/f-proof-rewrite.md"
+    man_path = pathlib.Path(st.root) / man_rel
+    man_path.parent.mkdir(parents=True, exist_ok=True)
+    man_text = (f"# F 的证明手稿：{TEXT}\n\n- 命题号：stmt:{SID}\n\n"
+                f"## 命题\n\n{FULL}\n\n## 证明\n\n{P2}\n\n"
+                "## 依赖\n\n"
+                "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+                "|---|---|---|---|\n\n"
+                "（自足证明，空表就是声明。）\n")
+    man_path.write_text(man_text, encoding="utf-8")
 
-    # ② 派 V 审盘上这一份（不传 proof_text）：连判 3 次干净成立 ⇒ 秘书发签。
     review, seam = _ReviewSeam(), _Seam()
-    got = _agent_v(st, review, seam).verify_proof(SID)
+    got = _agent_v(st, review, seam).verify_proof(proof_manuscript=man_rel)
     assert review.asked() == 3, (
         f"一次 verify_proof 只问了 {review.asked()} 次模型 ⇒ 「连续 3 次」还得靠人送三次")
-    assert got.get("checked") is True and got.get("signed_bit3") is True, got
-    assert str(got.get("reason") or "").startswith("v-"), got.get("reason")
-    assert VSP.sign_path(st.root, VR.proof_sha(P2)).is_file(), (
-        "签没落到 out/vsigns/<新正文的 sha>.json —— 「重新拿 V 签」不可达")
+    assert got.get("checked") is True, got
+    assert "V 签" in man_path.read_text(encoding="utf-8"), (
+        "签块没落回稿 —— 「重新拿 V 签」不可达")
+
+    # 签到了再交正文：这一笔要量的是 `canonical_written`（旧正文进 proof_history）。
+    # 交的正是稿里那一份正文（`proof_body` 会带上段尾换行 —— 签块盖的就是这一串字节）。
+    signed_body = DS.proof_body(man_text)
+    # 手稿签块 + 在册台账两处都签住这一份（准入闸认"覆盖它的签"：手稿签块或台账）。
+    # 台账按连续 3 次「成立」签，且带 `store`（与 V 的现场发签同一个写口：签完
+    # D-37 会把 kind 抬成 theorem —— 这一条要量的"改稿之后不再降档"就落在这上面）。
+    for _i in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            st.root, statement_id=SID, proof_text=signed_body,
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", store=st)
+    rewrite = _b(st).register_statement(
+        **{**OWN, "kind": "conjecture"}, proof_text=signed_body,
+        proof_manuscript=man_text)
+    assert rewrite["ok"] is True, rewrite
+    assert rewrite.get("canonical_written") is True, rewrite
+    assert _row(st)["proof_text"].strip("\n") == P2, _row(st)["proof_text"]
+    assert _row(st)["kind"] == "theorem", _row(st)["kind"]
     assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
 
     # ③ 签完不必再交一次登记（再交只会得到 duplicate 读数，不是再一次欠签）。
-    again = _theorem(st, P2)
+    again = _theorem(st, signed_body)
     assert again.get("kind") == "duplicate_statement", again
 
 

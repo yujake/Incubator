@@ -47,6 +47,8 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from conftest import reset_bit3_cache
+
 from agentflow import capabilities as CAP
 from agentflow import depsection as DS
 from agentflow import host
@@ -423,6 +425,12 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     proof = _run_f_proof(store)
     f_stmt = str(proof["statement_id"])
 
+    # 准入闸（2026-11-02 默认 strict）之后，F 这一笔登记是先有签才写得进去的
+    # （`signed_v_handoffs` 用一份真签放行）；而这一条要跑的是"B 登记之后 V 现场连判
+    # 3 转发签"。把读侧那格缓存退回假，V 才会真的连判（真台账、真秘书判定）——
+    # 那一份签仍在 pending 台账里，闸在 B 那一步已经用过它。
+    reset_bit3_cache(store, f_stmt)
+
     d = _d_with_b(store)
     d.write_report()
     assert _a_holds(store, d.last_delivery), d.last_delivery
@@ -446,9 +454,13 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)
     assert problems == [] and ledger, (problems, ledger)
-    assert len(ledger) == int(VR.SIGN_STREAK_NEED), (
+    # V 现场这一趟落了 3 行（前两转只落台账、第三转发签）；另外 1 行是夹具
+    # "先签后登记"放行 B 那一笔的那一票（`signed_v_handoffs`）—— 两件事分开数。
+    assert len(ledger) == int(VR.SIGN_STREAK_NEED) + 1, (
         "前两次「成立」也必须落在台账里（只落台账、不翻位），"
         f"读到 {len(ledger)} 行：{[r.get('verification_id') for r in ledger]}")
+    assert [r.get("verdict") for r in ledger[-int(VR.SIGN_STREAK_NEED):]] == ["成立"] * int(
+        VR.SIGN_STREAK_NEED), ledger
     assert str(ledger[-1].get("verdict")) == "成立", ledger[-1]
 
 

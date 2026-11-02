@@ -355,6 +355,42 @@ def seed_statement_row(store, *, proof_text: str = "", statement_full: str = "",
     return row
 
 
+def reset_bit3_cache(store, statement_id: str, *, proof_no: int = 1) -> dict:
+    """把某一号证明的"第 3 位已签"**缓存**退回假（夹具用：让 V 的现场连判跑得动）。
+
+    为什么需要这一格（2026-11-02 准入闸 strict）：整条链"F 写稿 → D 携带 → B 登记
+    → V 现场连判 3 转发签"在 strict 下断在 B 那一步 —— 证明正文要先有签才写得进去。
+    夹具因此先用一份**真**签把 B 那一笔放行（`sign_before_registration` / 手稿签块），
+    于是 `bits.reviewed` 已经是真；而 V 的 `verify_proof` 见到"位已签"就不再连判
+    （`already_signed`，台账一行不落）。
+
+    这一格把**读侧缓存**退回假：pending/台账里那一份签仍在（闸已经用过它），只是
+    "位"这一格暂时不声称已签 —— 用例接着让 V 对同一份正文真判 3 转（真台账、真秘书
+    判定），V 自己把位再翻回来。它不是绕过闸（闸在 B 那一步已经跑过，签是真的），
+    也不是伪造结论（V 的三转与发签都要真跑）。
+
+    只改 `bits.reviewed` 与逐份表里的 `reviewed_by_proof` 那一号；别的格不动。
+    """
+    from agentflow import evidencebits as _EB
+
+    sid = str(statement_id or "")
+    row = next((dict(r) for r in store.rows("statements")
+                if str(r.get("stmt_id") or "") == sid), None)
+    if row is None:
+        raise AssertionError(f"reset_bit3_cache：盘上没有命题 {sid}")
+    bits = dict(row.get("bits") or {})
+    bits["reviewed"] = False
+    ev = dict(bits.get("evidence") or {})
+    by_proof = dict(ev.get(_EB.REVIEWED_BY_PROOF_KEY) or {})
+    by_proof.pop(str(int(proof_no)), None)
+    ev[_EB.REVIEWED_BY_PROOF_KEY] = by_proof
+    bits["evidence"] = ev
+    bits["grade"] = _EB.derive_grade(bits)
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", dict(row, bits=bits))
+    return bits
+
+
 def sign_all_statements_for_the_gate(root, times: int | None = None) -> int:
     """把工作区里每条非概念命题都签住（夹具用），返回签了几条。
 
