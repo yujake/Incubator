@@ -293,6 +293,10 @@ UNCHECKED_TYPES: dict[str, str] = {
     "ReviewedPath": "同 `FormalPath`：夹具没有 statements 行 ⇒ `reviewed_paths[]` 恒为空"
                     "数组（而真行上它一条证明一行）；形状以 "
                     "`evidencebits.reviewed_by_proof` 的读数为准（逐键判据同上）",
+    "OptimizedPath": "同 `ReviewedPath`：夹具没有 statements 行 ⇒ `optimized_paths[]` "
+                     "恒为空数组（而真行上它一条证明一行）；形状以 "
+                     "`evidencebits.optimized_state` 的读数为准"
+                     "（逐键判据在 tests/test_webui_optimized_column.py）",
     "ExperimentSpot": "夹具工作区没有 `out/experiments/<号>/`（实验跑过之后才落盘）"
                       "⇒ `experiment_spots[]` 恒为空数组；形状以 `experiment_spots()`"
                       " 的读数为准（同上那份判据文件）",
@@ -1456,6 +1460,38 @@ def _bit_word(value: Any) -> str:
     return str(value or "")
 
 
+def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
+    """这一条命题在盘上认得出来的证明号：四张逐证明表的并集（升序）。
+
+    为什么要并集、而不是只看 `optimized_by_proof`：那一格只回答"记过的那几份各是
+    什么"，缺格的那一份根本不在表里 —— 只看它，"这一份还没记"就会从屏幕上
+    消失，而那正是三态里的 `not_recorded`（业主 2026-11-02：缺格不许折成 false）。
+    所以逐份的编号取自四张同形表（`reviewed_by_proof` / `reviewed_sha_by_proof` /
+    `optimized_by_proof` / `formal_by_proof`）：任一张认得这一份，这一份就在命题
+    台账里占一行 —— 于是「优化」与签过 / 验过的逐份读数按 `proof_no` 并排，
+    缺哪一格就写哪一档，不借相邻那一份的光。
+
+    一张表读不出来只跳过它（另外三张照给）；证明号认不出的键本来就进不了那几张表。
+    """
+    from .. import evidencebits as EB
+
+    numbers: set[int] = set()
+    for reader in (EB.reviewed_by_proof, EB.reviewed_sha_by_proof,
+                   EB.optimized_by_proof, EB.formal_by_proof):
+        try:
+            table = reader(row)
+        except Exception:  # noqa: BLE001 - 一张读不出来不拖累其余三张
+            continue
+        for raw_no in table:
+            try:
+                no = int(raw_no)
+            except (TypeError, ValueError):
+                continue
+            if no >= 1:
+                numbers.add(no)
+    return sorted(numbers)
+
+
 def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
     """命题行的五元位逐位读数（业主 2026-10-23：「每一位一格」）。
 
@@ -1469,12 +1505,22 @@ def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
     现在这一份正文"由 `verifications` 的 `proof_sha_consistency` 回答 ——
     两件事各有各的落点，这一格不替另一件事说话。
 
-    读出不来时四格都是空串（页面按 `unknown` 处置），不冒充 `pending`。
+    2026-11-03（业主 goal ⑤：网页端「是否优化」）：再给一格 `optimized_paths`，
+    与 `reviewed_paths` 并排、同一条证明一行。三态由
+    `evidencebits.optimized_state` 给（唯一读口，本处不另判一次）：
+    `true` / `false` / `not_recorded`。缺格就是 `not_recorded`，不许折成
+    `false` —— 折平会让整库存量行一次全变「未优化」（真机 3000+ 行），
+    而折成 `true` 更坏（等于自报洗过）。逐份编号见 :func:`_per_proof_numbers`
+    （四张表的并集，所以"只有签的那张表认得、优化那张表还没记"的那一份也在）。
+
+    读出不来时四格都是空串（页面按 `unknown` 处置），不冒充 `pending`；
+    `optimized_paths` 读不出来时是空数组（页面写「未记录（说不出是哪一份）」，
+    不写「未优化」）。
     """
     from .. import evidencebits as EB
 
     out: dict[str, Any] = {"bit_numeric": "", "bit_proof": "", "bit_reviewed": "",
-                           "bit_audited": "", "reviewed_paths": []}
+                           "bit_audited": "", "reviewed_paths": [], "optimized_paths": []}
     try:
         bits = EB.bits_from_row(row)
     except Exception:  # noqa: BLE001 - 位读不出来 ⇒ 空串（页面写 unknown，不冒充 pending）
@@ -1489,6 +1535,11 @@ def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
         per = {}
     out["reviewed_paths"] = [{"proof_no": int(no), "reviewed": bool(flag)}
                              for no, flag in sorted(per.items())]
+    try:
+        out["optimized_paths"] = [{"proof_no": no, "state": EB.optimized_state(row, no)}
+                                  for no in _per_proof_numbers(row)]
+    except Exception:  # noqa: BLE001 - 逐份优化态读不出来 ⇒ 一条都不列（页面按未记录处置）
+        out["optimized_paths"] = []
     return out
 
 
@@ -1504,7 +1555,10 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
       `evidencebits.derive_grade`）—— 页面上"这一条到没到定理"与"哪条路径撑起来的"
       于是分得开；
     - `bit_numeric` / `bit_proof` / `bit_reviewed` / `bit_audited` 与 `reviewed_paths`：
-      见 :func:`_bit_readings`（第 4 位不在这里，它仍是逐路径那一格）。
+      见 :func:`_bit_readings`（第 4 位不在这里，它仍是逐路径那一格）；
+    - `optimized_paths`：`[{proof_no, state}]`，「是否优化」按证明逐份（三态
+      `true` / `false` / `not_recorded`，缺格不折成 false）—— 与 `reviewed_paths`
+      并排，同一条证明一行；编号取自四张逐证明表的并集。
 
     一个都不许自己算：每种读数各自只有一个出处，这里只搬运。
     """
@@ -5397,6 +5451,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("bit_numeric", "string"), ("bit_proof", "string"),
       ("bit_reviewed", "string"), ("bit_audited", "string"),
       ("reviewed_paths", "ReviewedPath[]"),
+      # 2026-11-03（业主 goal ⑤：网页端「是否优化」）：与 `reviewed_paths` 并排的
+      # 逐份那一格。三态 token 由 `evidencebits.optimized_state` 给（true / false /
+      # not_recorded）；缺格是 `not_recorded`，不是 `false`。页面那一列叫「优化」。
+      ("optimized_paths", "OptimizedPath[]"),
       ("grade", "string"), ("grade_label", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
@@ -5413,6 +5471,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "正文由 `VerificationRow.proof_sha_consistency` 回答。只签了 `#p1` 而定理还有"
      "`#p2` 时 `#p2` 是 false —— 折成一句「审过」就等于让它借 `#p1` 的光）",
      (("proof_no", "number"), ("reviewed", "boolean"))),
+    ("OptimizedPath",
+     "evidencebits.optimized_state() 的一行 —— 命题台账「是否优化」按证明逐份"
+     "（`proof_no` 是证明号，`state` 取 `evidencebits.OPTIMIZED_STATES` 的三档："
+     "true / false / not_recorded）。缺格 ⇒ not_recorded，不折成 false：折成 false "
+     "会让整库存量行一次全变「未优化」。编号取自 reviewed_by_proof / "
+     "reviewed_sha_by_proof / optimized_by_proof / formal_by_proof 四张表的并集 —— "
+     "于是「优化」与签过 / 验过的逐份读数按 proof_no 并排，`#p2` 不借 `#p1` 的光",
+     (("proof_no", "number"), ("state", "string"))),
     ("ReviewFindingRow",
      "store.rows(\"review_findings\")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）",
      (("finding_id", "string"), ("doc_id", "string"), ("kind", "string"),
