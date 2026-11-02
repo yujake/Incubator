@@ -164,6 +164,22 @@ class Policy:
     #: 2026-10-24 业主按上引原话改回"链上 5 个代理"，台账口径落成 4；
     #: 扇出那一族（25 / 主控 100）一个数没动。
     max_chain_depth: int = 4
+    #: 「审稿人不是下级」：这些角色不占链（业主 2026-11-02 裁定，取"乙"）。
+    #:
+    #: 业主原话：「F 不是直接能派 V 吗」+ V 是审稿人不是下级 ⇒ V 不该吃
+    #: M→G→D→F 那条链的第 5 层。83 的真机现场（`projects/paper-rewrite-83` 的
+    #: `t-000252`）：F 在 depth 4 上派 V，被 `depth_exceeded` 拒（"已经到第 5 个代理"），
+    #: 于是"证明要拿 V 签"这条硬要求在深链上变成不可能。
+    #:
+    #: 判据的落点只有一处（`:func:`check` 的第 [3] 步）：目标是审稿人时跳过链长闸；
+    #: 派非审稿人（E / B / …）仍按旧口径拒。边界写清：这不是"V 的链长无穷"——
+    #: V 自己的出边（`V → F` 退回）仍按同一张边表与同一条链长判；免掉的只是
+    #: "把审稿人算进被审者那条链"这一步。
+    #:
+    #: 为什么是常量而不是散在判据里的字面量：判据（`check`）与判据的判据（
+    #: 那几条测试）必须说同一句话；抄成两处之后，改一处就会留下一处"V 照样占链"的
+    #: 暗门，而没有任何一条测试会红。
+    reviewer_roles: frozenset[str] = frozenset({"V"})
     #: 单个任务同时在飞的直接子数上限（默认档；主控那一档见
     #: `DIRECT_CHILDREN_LIMIT_BY_ROLE`）。只数直接子，不管隔着几层的子：
     #: 孙辈、曾孙辈各自挂在它们自己的父名下，算的是那个父的格。
@@ -853,7 +869,13 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     # 整段还刻意压在 400 字以内：循环给模型看的是 `_clip(res.detail, 400)`
     # （`agent_loop._do_summon`），写到 400 字之外的句子模型永远读不到 —— 提示词里
     # 有跟没有一样，而台账里看着是"说了"。
-    if d.depth > policy.max_chain_depth:
+    # ---- 2026-11-02 业主裁定（取"乙"）：审稿人不占链 ----
+    #
+    # 「F 不是直接能派 V 吗」+ V 是审稿人不是下级 ⇒ 目标在 `policy.reviewer_roles` 时
+    # 链长闸不拦它。83 的 t-000252 就是被这一条挡掉的现场（F 在 depth 4 派 V）。
+    # 判据：`tests/test_reviewer_does_not_occupy_the_chain.py`（放行 / 非审稿人照拒 /
+    # 反真空：豁免摘掉 ⇒ 回到 depth_exceeded）。
+    if d.depth > policy.max_chain_depth and d.to not in policy.reviewer_roles:
         hops = int(policy.max_chain_depth)        # 台账数法：跳数上限（现读 policy）
         agents = max_agents_on_chain(policy)      # 业主数法：链上最多几个代理（现算）
         return Refusal(
