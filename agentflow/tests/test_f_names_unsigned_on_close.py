@@ -67,7 +67,7 @@ def _two_unsigned_outputs(st: Store) -> tuple[AgentF, str, list[str]]:
 
     2026-11-02 准入闸默认 strict 之后，这个现场不能再走 `_apply_round` 造：那条路
     经 B 的登记，而没有签的证明正文会被整笔拒（`proof_without_v_sign`）——
-    "无签的成果"在正路上已经不存在了。所以夹具改成**直接铺 statements 行**：
+    "无签的成果"在正路上已经不存在了。所以夹具改成「直接铺 statements 行」：
     真机 3134 行 own_result 就是这种历史形态（`bits={}`、没有台账、没有签），
     这一组判据测的正是"这个状态在收工时被读成什么"。
     改的是"怎么造现场"，不是期望值。

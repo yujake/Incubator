@@ -77,7 +77,7 @@ def _plan() -> dict:
 def _proof_round(f: AgentF, plan: dict, *, sid: str, text: str) -> dict:
     """走一次 `_apply_round` 的 proof 档，并把这一轮的 history 行补进计划（同 `step.py`）。
 
-    准入闸 strict 之后，一条"还没签的成果"不能再由这一次登记**造出来**（无签正文
+    准入闸 strict 之后，一条"还没签的成果"不能再由这一次登记「造出来」（无签正文
     整笔拒）。所以夹具先把这一份稿渲染出来（`proof_manuscript`，交给 B 的就是它），
     再直接铺一行 statements（真机 3134 行 own_result 的历史形态）—— 行上的 canonical
     与这一笔逐字相同 ⇒ 闸不适用（没有要写的新正文），`_apply_round` 照旧把稿发布。

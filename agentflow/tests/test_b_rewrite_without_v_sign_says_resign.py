@@ -192,7 +192,7 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
     refused = _theorem(st, P2)
     assert "请重新拿 V 签" in str(refused.get("error") or ""), refused
 
-    # 期望反转（准入闸变严：无签不再可写）之后，可达的那条路是 **V 签先落手稿**
+    # 期望反转（准入闸变严：无签不再可写）之后，可达的那条路是 「V 签先落手稿」
     # （业主 2026-11-02：「V 签不直接进台账，进手稿，随 B 侧收录时读到」）：
     # 把握要交的新正文写成一份稿 → V 走"手稿"那条审稿入口连判 3 转、签块落回稿
     # → 再把正文交 B（闸按手稿签块认那一份签）。

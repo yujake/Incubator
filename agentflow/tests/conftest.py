@@ -331,7 +331,7 @@ def seed_statement_row(store, *, proof_text: str = "", statement_full: str = "",
     """直接铺一行 `statements`（夹具用：造"无签成果"的历史形态）。
 
     为什么夹具需要这一格（2026-11-02 准入闸默认 strict）：闸把"没有签的证明正文"
-    整笔拒在 B 的登记入口上 ⇒ **经正路再也造不出"无签的证明"这个状态**。而
+    整笔拒在 B 的登记入口上 ⇒ 「经正路再也造不出"无签的证明"这个状态」。而
     `test_f_*` / `test_d37` / `r3_bits_producer` 这些判据测的正是"这个状态被读成
     什么"（未签 / 待签 / 不叫证明）—— 它们要的是一条已经躺在盘上的历史行
     （真机 3134 行 own_result 正是这么来的），不是一次登记。
@@ -356,15 +356,15 @@ def seed_statement_row(store, *, proof_text: str = "", statement_full: str = "",
 
 
 def reset_bit3_cache(store, statement_id: str, *, proof_no: int = 1) -> dict:
-    """把某一号证明的"第 3 位已签"**缓存**退回假（夹具用：让 V 的现场连判跑得动）。
+    """把某一号证明的"第 3 位已签"「缓存」退回假（夹具用：让 V 的现场连判跑得动）。
 
     为什么需要这一格（2026-11-02 准入闸 strict）：整条链"F 写稿 → D 携带 → B 登记
     → V 现场连判 3 转发签"在 strict 下断在 B 那一步 —— 证明正文要先有签才写得进去。
-    夹具因此先用一份**真**签把 B 那一笔放行（`sign_before_registration` / 手稿签块），
+    夹具因此先用一份「真」签把 B 那一笔放行（`sign_before_registration` / 手稿签块），
     于是 `bits.reviewed` 已经是真；而 V 的 `verify_proof` 见到"位已签"就不再连判
     （`already_signed`，台账一行不落）。
 
-    这一格把**读侧缓存**退回假：pending/台账里那一份签仍在（闸已经用过它），只是
+    这一格把「读侧缓存」退回假：pending/台账里那一份签仍在（闸已经用过它），只是
     "位"这一格暂时不声称已签 —— 用例接着让 V 对同一份正文真判 3 转（真台账、真秘书
     判定），V 自己把位再翻回来。它不是绕过闸（闸在 B 那一步已经跑过，签是真的），
     也不是伪造结论（V 的三转与发签都要真跑）。

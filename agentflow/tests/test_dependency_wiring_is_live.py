@@ -724,7 +724,7 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     #   ② V 读这份依赖面核引用、对"要写进去的那一份正文"签字；
     #   ③ B 再交那份正文（此时已有签）。
     # 为此先把 F 稿里的证明段正文搬走、只留依赖段 —— 不然 B 的读稿那一支会把
-    # 正文一并取来，撞上"无签不许写"。搬走的是**稿里的那一份**，正文本身留在
+    # 正文一并取来，撞上"无签不许写"。搬走的是「稿里的那一份」，正文本身留在
     # `PROOF_BODY` 里，第 ③ 步照原样交给 B。
     text = man_path.read_text(encoding="utf-8")
     PROOF_BODY = DS.proof_body(text).strip("\n")
