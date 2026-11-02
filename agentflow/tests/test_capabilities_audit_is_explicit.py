@@ -31,14 +31,14 @@ SRC = os.path.dirname(os.path.dirname(os.path.abspath(C.__file__)))
 
 
 def _child_env() -> dict[str, str]:
-    """子进程的**显式**环境：判据的读数不许取决于"是谁在调这条判据"。
+    """子进程的显式环境：判据的读数不许取决于"是谁在调这条判据"。
 
     为什么要钉 `PYTHONIOENCODING`：审计那两行是中文，子进程在 Windows 上默认按
     控制台代码页（本机 gbk）编码 stderr，而这里按 utf-8 解码 —— 不钉的话只剩
     一串 U+FFFD，判据于是红在"调用环境"上（`pytest_all` 注入了 utf-8 就绿、
     直接 `pytest` 就红）。三态纪律的反面：同一个判据两种调用两种结论。
 
-    刻意**不**改成 `errors="replace"` 后只断言 ASCII 片段：那是把断言放宽到
+    刻意不改用 `errors="replace"` 后只断言 ASCII 片段：那是把断言放宽到
     "只要还有几个字节对得上"。钉住子进程的编码才是让判据确定的那一处。
     """
     env = dict(os.environ)

@@ -1526,10 +1526,9 @@ def _declared_minus_actual(returns: str, obs: Observation) -> set[str] | None:
 #: 阻塞到全部落定，而 `preempted` / `dispatched` / `running` 是「本步只等到
 #: `CHILD_STEP_WAIT_SEC` 就返场」那一档才有的读数。`returns=` 自己逐字写明了这件事
 #: （「循环里调它时另带三格（只加不减）」）。所以那三格在阻塞档的观测上缺席
-#: **不是**"声明了却没给"，而是"要给的是另一条路径"。
-#:
+#: 不是「声明了却没给」，而是「要给的是另一条路径」。
 #: 处置口径（2026-11-02）：通用子集判据仍逐格核其余声明键，这三格从那一份观测里
-#: 扣掉；同一份 `_declared_minus_actual` 在**循环路径**的观测上再核一遍
+#: 扣掉；同一份 `_declared_minus_actual` 在循环路径的观测上再核一遍
 #: （`test_the_loop_path_returns_the_conditional_keys_it_declares`）——
 #: 于是每一条声明都仍然见过一次实跑，只是取样路径不同。这不是放宽：
 #: 删掉这三行登记，通用判据立刻会报"声明了但实现没给"。
@@ -1758,7 +1757,7 @@ def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
                 f"{name}: `comparable` 为真但 data 不是 dict ⇒ 判据自相矛盾（`G-21`），"
                 "不许把它读成『一致』"
             )
-        # 条件键（只在循环路径产出的那几格）从**这一份**观测里扣掉，改由下面那条
+        # 条件键（只在循环路径产出的那几格）从这一次观测里扣掉，改由下面那条
         # 循环路径的用例逐格核 —— 每一条声明仍然见过一次实跑，只是取样路径不同。
         missing -= CONDITIONAL_KEYS.get(name, frozenset())
         if missing:
