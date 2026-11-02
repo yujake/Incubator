@@ -35,6 +35,15 @@
  * - 实验表补「报告」一列：`out/experiments/<号>/exhaustion.md`（②③ 的唯一落点）。
  *   链接指向产物页那张实验落点卡（报告不在 web 服务的静态路由下，直接链文件是死链），
  *   没有报告写「无」而不是留空。
+ *
+ * ## 2026-11-03（业主 goal ⑤：网页端「是否优化」）
+ *
+ * - 命题台账补一列「优化」，与第 3 位 reviewed 并排：读后端逐份的 `optimized_paths`
+ *   （`[{proof_no, state}]`，三态由 `evidencebits.optimized_state` 给）；
+ * - 三档词逐字是「已优化 / 未优化 / 未记录」：缺格（`not_recorded`）不许折成
+ *   「未优化」—— 那一格在存量行上根本不存在，折平会让整库一次全变「未优化」；
+ * - 一行证明一格（`#p1 已优化 ｜ #p2 未优化`），`#p2` 不借 `#p1` 的光；
+ *   这一条没有逐证明记录时写「未记录（…说不出是哪一份）」，不写「未优化」。
  */
 import { api } from "../api";
 import { Badge } from "../components/Badge";
@@ -113,6 +122,44 @@ function reviewedCell(r: StatementRow) {
       title="第 3 位是按证明签的：一份证明一格，任一条签过即算过；签的是不是现在这一份正文，看「证明级」那一卡的证明一致"
     >
       {r.reviewed_paths.map((p) => `#p${p.proof_no} ${p.reviewed ? "已签" : "未签"}`).join(" ｜ ")}
+    </span>
+  );
+}
+
+/** 「优化」那一格的三档词（后端 `evidencebits.OPTIMIZED_STATES`：true / false / not_recorded）。
+ *
+ * 后端给 token、词只在这一处映射（与 `QUOTE_WORDS` / `FORMAL_WORDS` 同一条纪律）。
+ * `not_recorded` 的页面词逐字是「未记录」而不是「未优化」：缺格（存量行还没有这一格）
+ * 与"这一份确实还没洗"是两件事 —— 折平会让整库一次全变「未优化」，读的人会去洗
+ * 3000+ 条本来没欠账的证明。
+ */
+const OPTIMIZED_WORDS: Record<string, string> = {
+  true: "已优化",
+  false: "未优化",
+  not_recorded: "未记录",
+};
+
+/** 「优化」那一格：按证明逐份（`#p1 已优化 ｜ #p2 未优化`），与第 3 位并排。
+ *
+ * 这一条没有逐证明记录时（连证明号都读不出来）写「未记录（说不出是哪一份）」：
+ * 那是"没有这一格"，不是"没优化"—— 页面不替它编一个「未优化」。
+ */
+function optimizedCell(r: StatementRow) {
+  if (r.optimized_paths.length === 0) {
+    return (
+      <span class="tri-reason">
+        未记录（这一条没有逐证明的记录，说不出是哪一份 —— 与「未优化」是两件事）
+      </span>
+    );
+  }
+  return (
+    <span
+      class="mono"
+      title="是否优化是按证明记的：一份证明一格（已优化 / 未优化 / 未记录）；未记录 = 这一行还没有那一格，不是未优化"
+    >
+      {r.optimized_paths
+        .map((p) => `#p${p.proof_no} ${OPTIMIZED_WORDS[p.state] ?? p.state}`)
+        .join(" ｜ ")}
     </span>
   );
 }
@@ -327,6 +374,13 @@ export function Evidence() {
                 key: "reviewed_paths",
                 title: "第 3 位·reviewed（按证明）",
                 render: (r) => reviewedCell(r),
+              },
+              {
+                // 2026-11-03（业主 goal ⑤）：是否优化，与 reviewed 并排、同一条证明一格。
+                // 三档词：已优化 / 未优化 / 未记录（缺格不许折成「未优化」）。
+                key: "optimized_paths",
+                title: "优化",
+                render: (r) => optimizedCell(r),
               },
               {
                 // 五元位第 4 位（2026-10-22 起是二维的）：一份证明一行。
