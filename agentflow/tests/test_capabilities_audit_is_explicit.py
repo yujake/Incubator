@@ -30,12 +30,28 @@ from agentflow import capabilities as C
 SRC = os.path.dirname(os.path.dirname(os.path.abspath(C.__file__)))
 
 
-def _run(code: str) -> subprocess.CompletedProcess:
+def _child_env() -> dict[str, str]:
+    """子进程的**显式**环境：判据的读数不许取决于"是谁在调这条判据"。
+
+    为什么要钉 `PYTHONIOENCODING`：审计那两行是中文，子进程在 Windows 上默认按
+    控制台代码页（本机 gbk）编码 stderr，而这里按 utf-8 解码 —— 不钉的话只剩
+    一串 U+FFFD，判据于是红在"调用环境"上（`pytest_all` 注入了 utf-8 就绿、
+    直接 `pytest` 就红）。三态纪律的反面：同一个判据两种调用两种结论。
+
+    刻意**不**改成 `errors="replace"` 后只断言 ASCII 片段：那是把断言放宽到
+    "只要还有几个字节对得上"。钉住子进程的编码才是让判据确定的那一处。
+    """
     env = dict(os.environ)
     env["PYTHONPATH"] = SRC
+    # 与子进程解码侧（`encoding="utf-8"`）成对：一端写、一端读，两边同一个口径。
+    env["PYTHONIOENCODING"] = "utf-8"
     env.pop(C.CAPABILITY_AUDIT_ENV, None)
+    return env
+
+
+def _run(code: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", env=env, timeout=300)
+                          encoding="utf-8", errors="replace", env=_child_env(), timeout=300)
 
 
 def test_importing_capabilities_does_not_run_the_audit() -> None:
@@ -68,8 +84,7 @@ def test_explicit_run_does_audit_and_fills_the_readings() -> None:
 
 def test_the_env_switch_restores_the_import_time_audit() -> None:
     """③ 开关能恢复旧行为：`AGENTFLOW_CAPABILITY_AUDIT=1` ⇒ 导入期就跑一趟。"""
-    env = dict(os.environ)
-    env["PYTHONPATH"] = SRC
+    env = _child_env()
     env[C.CAPABILITY_AUDIT_ENV] = "1"
     p = subprocess.run(
         [sys.executable, "-c", "import agentflow.capabilities as C; print(C.AUDIT_RUNS)"],
