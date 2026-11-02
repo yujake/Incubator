@@ -321,6 +321,40 @@ def sign_before_registration(root, *, proof_text: str,
     return out
 
 
+def seed_statement_row(store, *, proof_text: str = "", statement_full: str = "",
+                       statement_text: str = "", kind: str = "conjecture",
+                       label: str = "", origin: str = "own_result",
+                       quote_verified=None,
+                       quote_reason: str = "夹具：直接铺行（历史形态：无 V 签）",
+                       status: str = "active", stmt_id: str = "",
+                       **extra) -> dict:
+    """直接铺一行 `statements`（夹具用：造"无签成果"的历史形态）。
+
+    为什么夹具需要这一格（2026-11-02 准入闸默认 strict）：闸把"没有签的证明正文"
+    整笔拒在 B 的登记入口上 ⇒ **经正路再也造不出"无签的证明"这个状态**。而
+    `test_f_*` / `test_d37` / `r3_bits_producer` 这些判据测的正是"这个状态被读成
+    什么"（未签 / 待签 / 不叫证明）—— 它们要的是一条已经躺在盘上的历史行
+    （真机 3134 行 own_result 正是这么来的），不是一次登记。
+
+    所以这一格绕开的是"怎么造现场"，不是判据：写出来的行与真机历史行同形
+    （`bits={}`、没有台账、没有签），读侧照常按现算判它未签。用例的期望值一个字
+    都不用改 —— 这正是迁 A 组要守的那条分工。
+    """
+    with store.tx("statements", actor="secretary-B") as tx:
+        sid = str(stmt_id or tx.alloc_id(S.TABLES["statements"]["id_kind"]))
+        row = {
+            "stmt_id": sid, "origin": str(origin), "kind": str(kind),
+            "label": str(label), "statement_text": str(statement_text or statement_full),
+            "statement_full": str(statement_full), "proof_text": str(proof_text),
+            "status": str(status), "created_at": S.now_iso(), "created_by": "secretary-B",
+            "quote_verified": quote_verified, "quote_reason": str(quote_reason),
+            "bits": {},
+        }
+        row.update(extra)
+        tx.upsert("statements", row)
+    return row
+
+
 def sign_all_statements_for_the_gate(root, times: int | None = None) -> int:
     """把工作区里每条非概念命题都签住（夹具用），返回签了几条。
 

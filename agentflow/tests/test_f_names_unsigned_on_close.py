@@ -24,6 +24,7 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+from conftest import seed_statement_row
 from agentflow import depsection as _DS
 from agentflow.agent_f import AgentF
 from agentflow.agent_f import delivery as FD
@@ -62,7 +63,15 @@ def _product(text: str) -> dict:
 
 
 def _two_unsigned_outputs(st: Store) -> tuple[AgentF, str, list[str]]:
-    """造一个两条成果、一条都没签的计划，并把轮数写成已用尽（收工出口）。"""
+    """造一个两条成果、一条都没签的计划，并把轮数写成已用尽（收工出口）。
+
+    2026-11-02 准入闸默认 strict 之后，这个现场不能再走 `_apply_round` 造：那条路
+    经 B 的登记，而没有签的证明正文会被整笔拒（`proof_without_v_sign`）——
+    "无签的成果"在正路上已经不存在了。所以夹具改成**直接铺 statements 行**：
+    真机 3134 行 own_result 就是这种历史形态（`bits={}`、没有台账、没有签），
+    这一组判据测的正是"这个状态在收工时被读成什么"。
+    改的是"怎么造现场"，不是期望值。
+    """
     f = _f(st)
     pid = f.create_plan("难题：判定这个族", "PK-179-CLOSE", subgoals=[
         {"sid": "s1", "text": "证明：紧集上的连续函数一致连续", "owner": "F",
@@ -76,10 +85,21 @@ def _two_unsigned_outputs(st: Store) -> tuple[AgentF, str, list[str]]:
     sids: list[str] = []
     for i, (sg, text) in enumerate((("s1", "紧集上的连续函数一致连续"),
                                     ("s2", "序列紧空间的乘积紧")), 1):
-        deploy = f._apply_round(_product(text), dict(row["subgoals"][i - 1]),
-                                plan=row, owner="F")
-        sid = str(deploy.get("statement_id") or "")
-        assert sid, deploy
+        body = f"1. {text}：取 ε>0，按定义逐点验证。（前提）"
+        seeded = seed_statement_row(
+            st, proof_text=body,
+            statement_full=f"{text}；这一条的可检验形式：存在反例或有限界",
+            statement_text=text, kind="conjecture", label=f"F 攻坚 {pid} 子目标 {sg}",
+            quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
+        sid = str(seeded["stmt_id"])
+        # F 的证明手稿落盘（收工读数按约定路径点名它；盘上没有签块 ⇒ 未签）。
+        rel = pathlib.Path("reports") / f"f-proof-{sid}.md"
+        path = pathlib.Path(st.root) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"# F 的证明手稿\n\n- 命题号：stmt:{sid}\n\n## 命题\n\n{text}\n\n"
+            f"## 证明\n\n{body}\n\n## 依赖\n\n（自足证明，空表就是声明。）\n",
+            encoding="utf-8")
         sids.append(sid)
         row["history"].append({"round": i, "sid": sg, "action": "proof",
                                "outcome": "progress", "detail": "", "evidence": [],
