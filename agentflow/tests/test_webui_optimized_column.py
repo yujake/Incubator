@@ -16,14 +16,18 @@
 | b | 造缺格（`bits.evidence` 里根本没有 `optimized_by_proof`）⇒ 逐份是 `not_recorded`，页面写「未记录」 | 同上；另一种错法是把它折成 `false` ⇒ 页面写「未优化」 |
 | c | 反真空：把读口 `evidencebits.optimized_by_proof` 打桩成恒 `true` ⇒ a 那个判据函数必须报 | 改前 a 根本没有读数可打桩（读不到 `optimized_paths`） |
 
-## 为什么逐份的编号取自四张表的并集
+## 为什么逐份的编号取自三张表的并集
 
 `optimized_by_proof` 只回答"记过的那几份各是什么"——缺格的那一份不在表里。
 只看这张表，判据 b 那一档（这一份还没记）就会从屏幕上消失，而那正是要显示的一档。
 所以逐份的编号取自 `reviewed_by_proof` / `reviewed_sha_by_proof` /
-`optimized_by_proof` / `formal_by_proof` 四张同形表的并集：任一张认得这一份，
-这一份就在命题台账里占一行 —— 「优化」与签过 / 验过的那几格按 `proof_no` 逐份并排，
+`optimized_by_proof` 三张同形表的并集：任一张认得这一份，
+这一份就在命题台账里占一行 —— 「优化」与签过 / 签的正文那两张表按 `proof_no` 逐份并排，
 缺哪一格就写哪一档，不借相邻那一份的光。
+
+（`formal_by_proof` 刻意不并进来：它在老行 / 单路径行上是标量，读侧按文档读成
+`{1: …}`，连没有证明表的概念行都会凭空多出 `#p1`。形式化那条路径仍由
+`formal_paths` 那一列负责。）
 
 ## 边界（这一份刻意不测什么）
 
@@ -59,7 +63,7 @@ TS = "2026-11-03T00:00:00+08:00"
 #: `evidencebits.OPTIMIZED_STATES` 的三个 token，映射只在页面那一处）。
 OPTIMIZED_WORDS: tuple[str, ...] = ("已优化", "未优化", "未记录")
 
-#: 逐条签那一张表（与验收表同形：`#p1` 签过、`#p2` 没签）—— 它让"四张表的并集"
+#: 逐条签那一张表（与验收表同形：`#p1` 签过、`#p2` 没签）—— 它让"三张表的并集"
 #: 这件事在夹具上真的有两个证明号，而不是只有 optimized 那一张自说自话。
 _BITS_REVIEWED: dict[str, Any] = {
     "reviewed_by_proof": {"1": True, "2": False},

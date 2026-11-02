@@ -1461,23 +1461,28 @@ def _bit_word(value: Any) -> str:
 
 
 def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
-    """这一条命题在盘上认得出来的证明号：四张逐证明表的并集（升序）。
+    """这一条命题在盘上认得出来的证明号：三张逐证明表的并集（升序）。
 
     为什么要并集、而不是只看 `optimized_by_proof`：那一格只回答"记过的那几份各是
     什么"，缺格的那一份根本不在表里 —— 只看它，"这一份还没记"就会从屏幕上
     消失，而那正是三态里的 `not_recorded`（业主 2026-11-02：缺格不许折成 false）。
-    所以逐份的编号取自四张同形表（`reviewed_by_proof` / `reviewed_sha_by_proof` /
-    `optimized_by_proof` / `formal_by_proof`）：任一张认得这一份，这一份就在命题
-    台账里占一行 —— 于是「优化」与签过 / 验过的逐份读数按 `proof_no` 并排，
-    缺哪一格就写哪一档，不借相邻那一份的光。
+    所以逐份的编号取自三张同形表（`reviewed_by_proof` / `reviewed_sha_by_proof` /
+    `optimized_by_proof`）：任一张认得这一份，这一份就在命题台账里占一行 —— 于是
+    「优化」与签过 / 签的正文那两张表按 `proof_no` 并排，缺哪一格就写哪一档，
+    不借相邻那一份的光。
 
-    一张表读不出来只跳过它（另外三张照给）；证明号认不出的键本来就进不了那几张表。
+    为什么不把 `formal_by_proof` 也并进来：那一格在老行 / 单路径行上是标量，
+    读侧按文档把它读成 `{1: 那个四态}` —— 连"没有任何证明表"的概念行都会因此
+    凭空多出 `#p1`，页面上会写"#p1 未记录"（暗示这一条有一份证明）。这一批只
+    「并排签的那两张表」，形式化那条路径由它自己那一列（`formal_paths`）负责。
+
+    一张表读不出来只跳过它（另外两张照给）；证明号认不出的键本来就进不了那几张表。
     """
     from .. import evidencebits as EB
 
     numbers: set[int] = set()
     for reader in (EB.reviewed_by_proof, EB.reviewed_sha_by_proof,
-                   EB.optimized_by_proof, EB.formal_by_proof):
+                   EB.optimized_by_proof):
         try:
             table = reader(row)
         except Exception:  # noqa: BLE001 - 一张读不出来不拖累其余三张
@@ -1511,7 +1516,7 @@ def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
     `true` / `false` / `not_recorded`。缺格就是 `not_recorded`，不许折成
     `false` —— 折平会让整库存量行一次全变「未优化」（真机 3000+ 行），
     而折成 `true` 更坏（等于自报洗过）。逐份编号见 :func:`_per_proof_numbers`
-    （四张表的并集，所以"只有签的那张表认得、优化那张表还没记"的那一份也在）。
+    （三张表的并集，所以"只有签的那张表认得、优化那张表还没记"的那一份也在）。
 
     读出不来时四格都是空串（页面按 `unknown` 处置），不冒充 `pending`；
     `optimized_paths` 读不出来时是空数组（页面写「未记录（说不出是哪一份）」，
@@ -1558,7 +1563,7 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
       见 :func:`_bit_readings`（第 4 位不在这里，它仍是逐路径那一格）；
     - `optimized_paths`：`[{proof_no, state}]`，「是否优化」按证明逐份（三态
       `true` / `false` / `not_recorded`，缺格不折成 false）—— 与 `reviewed_paths`
-      并排，同一条证明一行；编号取自四张逐证明表的并集。
+      并排，同一条证明一行；编号取自三张逐证明表的并集。
 
     一个都不许自己算：每种读数各自只有一个出处，这里只搬运。
     """
@@ -5476,7 +5481,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（`proof_no` 是证明号，`state` 取 `evidencebits.OPTIMIZED_STATES` 的三档："
      "true / false / not_recorded）。缺格 ⇒ not_recorded，不折成 false：折成 false "
      "会让整库存量行一次全变「未优化」。编号取自 reviewed_by_proof / "
-     "reviewed_sha_by_proof / optimized_by_proof / formal_by_proof 四张表的并集 —— "
+     "reviewed_sha_by_proof / optimized_by_proof 三张表的并集 —— "
      "于是「优化」与签过 / 验过的逐份读数按 proof_no 并排，`#p2` 不借 `#p1` 的光",
      (("proof_no", "number"), ("state", "string"))),
     ("ReviewFindingRow",

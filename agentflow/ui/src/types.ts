@@ -621,7 +621,7 @@ export interface ReviewedPath {
   reviewed: boolean;
 }
 
-/** 出处：evidencebits.optimized_state() 的一行 —— 命题台账「是否优化」按证明逐份（`proof_no` 是证明号，`state` 取 `evidencebits.OPTIMIZED_STATES` 的三档：true / false / not_recorded）。缺格 ⇒ not_recorded，不折成 false：折成 false 会让整库存量行一次全变「未优化」。编号取自 reviewed_by_proof / reviewed_sha_by_proof / optimized_by_proof / formal_by_proof 四张表的并集 —— 于是「优化」与签过 / 验过的逐份读数按 proof_no 并排，`#p2` 不借 `#p1` 的光。 */
+/** 出处：evidencebits.optimized_state() 的一行 —— 命题台账「是否优化」按证明逐份（`proof_no` 是证明号，`state` 取 `evidencebits.OPTIMIZED_STATES` 的三档：true / false / not_recorded）。缺格 ⇒ not_recorded，不折成 false：折成 false 会让整库存量行一次全变「未优化」。编号取自 reviewed_by_proof / reviewed_sha_by_proof / optimized_by_proof 三张表的并集 —— 于是「优化」与签过 / 验过的逐份读数按 proof_no 并排，`#p2` 不借 `#p1` 的光。 */
 export interface OptimizedPath {
   proof_no: number;
   state: string;
