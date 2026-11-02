@@ -6185,9 +6185,17 @@
         "verify.verify_proof"
       ],
       "key": "params",
-      "reason": "proof_text 从必填改成可省：不给（或给空串）时从 statements 里取 proof_no 指的那一份，取到的正文由返回里的 proof_sha256 / proof_chars 给出读数。",
+      "reason": "proof_text 从必填改成可省：不给（或给空串）时从 statements 里取 proof_no 指的那一份，取到的正文由返回里的 proof_sha256 / proof_chars 给出读数。 ｜ 2026-11-02 并账（V 的**未在册入口**，6fe67835「V 签落手稿 + 未在册入口」与 c6f3d672 的 p231）：`verify.verify_proof` 现在能审一份**还没在册**的证明手稿 —— `params` 新增 `proof_manuscript`（F 的证明手稿路径，工作区相对；命题还没在册时用它，给了它就可以不给 `statement_id`），`required` 里 `statement_id` 也不再必填（实现 `verify_tools._verify_verify_proof` 与提示词 p231 同批落地；源码那一行注释逐字写「2026-11-02：不再要求 `statement_id` —— 未在册那一档不给号、给手稿路径」）。`params` 是整格一份编辑清单，同一格里两次演进用一条「从基线一步记到现值」的账表达（与 `returns` 那条同族）：旧 reason 原文保留在前段，本条 edits 覆盖基线到现值的全部四项（新增 `proof_manuscript` / `proof_text` 说明改写 / `required` 删掉 `statement_id` 与 `proof_text`）。基线里此前没有逐项记账 ⇒ 契约判据红了（判据是对的）。",
       "date": "2026-10-26",
       "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/proof_manuscript",
+          "value": {
+            "type": "string",
+            "description": "F 的证明手稿路径（工作区相对；命题还没在册时用它，给了它就可以不给 statement_id）"
+          }
+        },
         {
           "op": "set_scalar",
           "path": "params/properties/proof_text/description",
@@ -6197,9 +6205,15 @@
         {
           "op": "remove_item",
           "path": "params/required",
+          "item": "statement_id"
+        },
+        {
+          "op": "remove_item",
+          "path": "params/required",
           "item": "proof_text"
         }
-      ]
+      ],
+      "date_amended": "2026-11-02"
     },
     {
       "tools": [
