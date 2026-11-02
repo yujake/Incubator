@@ -1951,7 +1951,7 @@ class _Core:
         new_goals: list[dict[str, Any]] = []
         statement_id = ""
         outlet_note = ""
-        #: 这一轮送审与 V 签的读数（只有 `proof` 那一支有内容）：见 `_submit_and_read_sign`。
+        #: 这一轮送审与 V 签的读数（只有 `proof` 那一支有内容）：见 `_read_sign`。
         v_sign: dict[str, Any] = {}
         #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
         #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
