@@ -12077,6 +12077,10 @@ LOOP_STOP_TO_TASK_OUTCOME: dict[str, tuple[str, str]] = {
     "waiting_for_user": ("done", "no_result"),
     "max_steps": ("done", "no_result"),
     "no_notify": ("done", "no_result"),
+    # `crashed`（2026-11-02 起登记进 `STOP_REASONS`）：循环在落到自己的终态之前
+    # 抛了异常 —— 台账按三档映射落 `done/no_result`。显式写出来而不是靠缺省：
+    # 上表头那句性质是「每一个登记过的 stop_reason 都有一档」，判据按它遍历。
+    "crashed": ("done", "no_result"),
     # ---- 这四档只活在 CLI 那一层（续跑/收工检查），子循环走不到；列在这里是为了让
     #      "每一个登记过的 stop_reason 都有一档"成为一条可判定的性质。
     "checkpoint_mismatch": ("done", "no_result"),
