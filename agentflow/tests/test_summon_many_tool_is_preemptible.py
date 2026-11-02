@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""2026-11-02（83 · M 零回合 113 分钟）：`conductor.summon_many` **工具入口**也必须可抢占。
+"""2026-11-02（83 · M 零回合 113 分钟）：`conductor.summon_many` 的工具入口也必须可抢占。
 
 ## 这一份钉的是什么
 
-83 的真机读数（只读复算）：M 第 11 步调的是**原生工具** `conductor.summon_many`
-（`agent_step.payload.name` 就是那个名字），这一个调用阻塞 **6 778 秒**
+83 的真机读数（只读复算）：M 第 11 步调的是原生工具 `conductor.summon_many`
+（`agent_step.payload.name` 就是那个名字），这一个调用阻塞 6 778 秒
 （llm_call 04:51:18 → agent_step 06:44:19），父代理 113 分钟零回合，顶趟行一直 `running`，
 直到人工写 `.agentflow-stop` 才落 `done/no_result`。
 
 根因不是"没有可抢占"——形状路径 `_do_summon_many` 自 2026-10-24（D-64）起就是可抢占的
-（≤ `CHILD_STEP_WAIT_SEC` 返场）。根因是**同一件事有两条拼法、只修了一条**：
+（≤ `CHILD_STEP_WAIT_SEC` 返场）。根因是「同一件事有两条拼法、只修了一条」：
 
 ```
 工具入口：conductor_tools.conductor_summon_many → Conductor.run_plan(calls)   # 默认 preemptible=False
@@ -279,7 +279,7 @@ def test_the_folding_point_delivers_the_tool_children(tmp_path: pathlib.Path,
 # ============================================================ c：老键一个不少
 def test_the_tool_payload_keeps_every_declared_key(tmp_path: pathlib.Path,
                                                    fast_loop: None) -> None:
-    """判据 c：可抢占那一路只**加**键，工具原来声明的那几个一个不少。
+    """判据 c：可抢占那一路只「加」键，工具原来声明的那几个一个不少。
 
     为什么单列一条：`conductor.summon_many` 的 `returns=` 是对模型与调用方的契约
     （`count` / `ok_count` / `refused_count` / `failed_count` / `waves` / `max_wave` /

@@ -303,12 +303,12 @@ def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
     `_do_summon_many`（可抢占）。改前两边各写一份「`target_role` 怎么读、同角色多实例
     怎么补 `<角色>#N`」：形状那一路 2026-10-24 修成了可抢占（D-64），工具那一路还在
     阻塞（`run_plan()` 默认档 → `handle.results()` → `wait_all()`，无 timeout）——
-    于是 83 上 M 在一次**工具调用**里零回合 6 778 秒，顶趟行永远 running，直到人工写
+    于是 83 上 M 在一次工具调用里零回合 6 778 秒，顶趟行永远 running，直到人工写
     `.agentflow-stop`。翻译与校验抽到这里之后，两条入口读同一份 `targets`，
     只剩「抢不抢」一个差别。
 
     返回 `{"targets": [{role, task, params, instance, input_key, brief}], "why": ...}`：
-    键名是**形状路径**的（`_do_summon_many` 的入参形态），不是工具面的。
+    键名是「形状路径」的（`_do_summon_many` 的入参形态），不是工具面的。
     受控拒绝照旧抛 `ToolError`（缺 `target_role` / 缺 `task` / 条目不是对象）。
     """
     # ---- 实例标签的自动补齐（2026-09-30，加在"用户要一批 B 同时干活"这条路上）
@@ -412,7 +412,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
     `AgentLoop._do_tool` 把 `conductor.summon_many` 分派到 `_do_summon_many`（可抢占、
     句柄进本循环的挂账、返场投递 —— 与形状路径同一个执行体），因为可抢占要的是
-    "本循环"，而工具体只有 conductor。这个函数体是**非循环调用方**（与判据里的直接
+    "本循环"，而工具体只有 conductor。这个函数体是「非循环调用方」（与判据里的直接
     调用）那一档：它按老语义阻塞到全部落定。两条入口的 `targets` 翻译共用
     :func:`summon_many_payload`，于是"读哪个键、怎么补实例标签"只有一份。
     """
