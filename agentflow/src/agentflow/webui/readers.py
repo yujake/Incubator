@@ -4881,6 +4881,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
       ("waiting_for", "string"), ("spend", "CheckpointSpendView | Record<string, never>"),
       ("prompt_cache", "CheckpointCacheView | Record<string, never>"),
+      # 2026-11-02（83 的 113 分钟那一批）：`save_run_checkpoint` 补了收口三格。
+      # 类型照写侧的真值（三格都是 `str(...)`，见 `save_run_checkpoint` 的 payload）：
+      # `started_at` 空串 = 这一趟没真的开跑（不编）；`end_ts` 崩溃那档按写入时刻补；
+      # `step_source` 是 `run` / `crash` 两档，说清 `step` 是从哪来的。
+      ("step_source", "string"), ("started_at", "string"), ("end_ts", "string"),
       ("at", "string"))),
     # 2026-10-19：顶趟的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。
     # 为什么它必须是声明出来的而不是 `Record<string, unknown>`：这一格是

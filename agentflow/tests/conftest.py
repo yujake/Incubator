@@ -487,8 +487,9 @@ def add_relation(
 # 的理由是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部 fixture 里 —— 一份 共享样本只有一个落点，改了不会只改一半。形状逐个有出处：六件产物的名字 ← `runflow.ARTIFACTS`；台账行的
 # 9 个键 ← `artifacts.FIELDS`；交接行的键 ← `manuscripts.write` 写的那个 dict；秘书决策行 ←
 # `secretary.Secretary.note_decision`；验收表的行键 `id/kind/min/name/note` ← `draft/75 §1.3` 的 8 行真机
-# 读数；体例四节名字 ← `draft/74 §0.4`；检查点的 10 个键 ← `agent_loop.save_run_checkpoint`（第 10 个
-# `prompt_cache` 是 2026-10-19 补的，形状 = `promptstability.summarize_prompt_cache` 的 11 格）；验证行的键 ← `verifications.record_verification`。
+# 读数；体例四节名字 ← `draft/74 §0.4`；检查点的 13 个键 ← `agent_loop.save_run_checkpoint`（第 10 个
+# `prompt_cache` 是 2026-10-19 补的，形状 = `promptstability.summarize_prompt_cache` 的 11 格；
+# 2026-11-02 起 `started_at` / `end_ts` / `step_source` 三格也在，见 `save_run_checkpoint` 的收口段）；验证行的键 ← `verifications.record_verification`。
 
 #: 六件产物的名字（`runflow.ARTIFACTS`；真机没有样本 ⇒ 裁定 J2 用夹具造）。
 RUN_PRODUCT_NAMES: tuple[str, ...] = (

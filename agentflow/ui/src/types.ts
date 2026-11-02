@@ -198,6 +198,9 @@ export interface CheckpointView {
   waiting_for: string;
   spend: CheckpointSpendView | Record<string, never>;
   prompt_cache: CheckpointCacheView | Record<string, never>;
+  step_source: string;
+  started_at: string;
+  end_ts: string;
   at: string;
 }
 

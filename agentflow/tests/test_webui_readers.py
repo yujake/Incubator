@@ -89,10 +89,13 @@ def test_the_state_face_reports_unreadable_when_it_could_not_read(
 def test_run_view_reads_runs_report_and_checkpoint(artifacts_ws: pathlib.Path) -> None:
     """正控（一趟详情）：`runs` / `report` / `checkpoint` 三栏都有真读数。
 
-    检查点的 10 个键与 `spend` 的 5 个键逐字钉住（`agent_loop.save_run_checkpoint` +
+    检查点的 13 个键与 `spend` 的 5 个键逐字钉住（`agent_loop.save_run_checkpoint` +
     `llmseam.SeamSpend.to_dict`），缓存汇总那 11 格与
     `promptstability.CACHE_SUMMARY_KEYS` 同一批（2026-10-19 补：顶趟只有这一份
-    "跑了什么"的文件，缓存的读数此前在它之外）。
+    "跑了什么"的文件，缓存的读数此前在它之外）。`started_at` / `end_ts` / `step_source`
+    是 2026-11-02（83 的 113 分钟那批）写侧补上的收口三格：夹具走的是
+    `save_run_checkpoint` 的默认档（没传 `started_at` ⇒ 空串，`step_source="run"`，
+    `end_ts` 由写侧按写入时刻补）。
     """
     got = R.run_view(artifacts_ws, SID)
     assert got["tri"] == R.TRI_COMPUTED, got
@@ -106,7 +109,12 @@ def test_run_view_reads_runs_report_and_checkpoint(artifacts_ws: pathlib.Path) -
     ck = got["checkpoint"]
     assert ck is not None, got["checkpoint_reason"]
     assert set(ck) == {"role", "sid", "task", "fingerprint", "step", "stop_reason",
-                       "waiting_for", "spend", "prompt_cache", "at"}, sorted(ck)
+                       "waiting_for", "spend", "prompt_cache",
+                       "step_source", "started_at", "end_ts", "at"}, sorted(ck)
+    # 收口三格不是"键在就行"：默认档的读数也要说得清（空串 = 没真的开跑；run = 步数取自 LoopRun）。
+    assert ck["step_source"] == "run", ck
+    assert ck["started_at"] == "", ck
+    assert ck["end_ts"], ck
     assert set(ck["spend"]) == {"calls", "tokens_in", "tokens_out", "usd",
                                 "unknown_usd_calls"}, sorted(ck["spend"])
     # 缓存汇总的键集与 Python 侧那一份同一个来源（不在这里再抄一遍）。
