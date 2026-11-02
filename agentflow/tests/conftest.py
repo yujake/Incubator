@@ -266,7 +266,7 @@ def sync_counters(store: Store) -> None:
 
 
 def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
-                       times: int | None = None) -> int:
+                       proof_no: int = 1, times: int | None = None) -> int:
     """把一条命题的第 3 位签住（夹具用）：连续几次干净的「成立」，返回签了几行。
 
     为什么夹具需要它（2026-11-01，业主裁定「每个命题和证明的产出最终必须以V签收尾，
@@ -274,6 +274,10 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
     `statements_unsigned` —— 一条在册、有证明、却没有 V 签的命题会让 `machine_pass`
     变假。凡是断言"门是绿的"的夹具都必须先把这一格造绿；这不是放宽断言，而是把
     "绿"造全（原来那些断言一个字都不改）。
+
+    2026-11-02 准入闸默认 strict 之后它还有第二个用处：「已在册的命题」再交证明时，
+    这一份正文必须先有签（`register_statement._unsigned_proof_gate`）。`proof_no`
+    指"签的是第几份"（缺省 1 = canonical）：多证明的夹具按份签，不许借光。
 
     走真写口 `verifications.record_verification`：第 3 位要连续
     `verifications.SIGN_STREAK_NEED` 次「成立」才翻，所以缺省就写那么多次。
@@ -288,8 +292,33 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
             verdict={"verdict": "成立"},
             secretary_judge={"axis": "clean", "checked": True,
                              "reason": "夹具：把第 3 位签住"},
-            flip=False)
+            proof_no=int(proof_no))
     return need
+
+
+def sign_before_registration(root, *, proof_text: str,
+                             times: int | None = None) -> dict:
+    """「命题还没在册」时 V 审的那一签：先落 pending 台账，登记时按正文 sha 认领。
+
+    为什么夹具需要它（2026-11-02 准入闸默认 strict）：新建命题时 `stmt_id` 还没发，
+    `register_statement._unsigned_proof_gate` 的在册台账那一路读不到号（`unsigned`），
+    而这一份正文要进台账就必须有一份覆盖它的签。合法的两条路里，文献侧占位签
+    （`external_lit` + 文献编号）只属于引用命题；自产命题走的正是「先签后登记」——
+    V 在命题还没在册时审过、落在 `verifications/pending/<正文 sha>.jsonl`，
+    B 登记时按 sha 认领（`vsigns.bits_after_sign` 的 pending 那一档）。
+
+    这不是"绕过闸"的开关：它写的是真的 pending 台账（走 `record_pending_sign`），
+    认领与否由正文 sha 决定 —— 改一个字就认不到。`times` 只为与
+    :func:`sign_for_the_gate` 同形，pending 这一档不看连续次数（见
+    `verifications._gap_from_pending` 的理由）。
+    """
+    from agentflow import verifications as VR
+
+    out = VR.record_pending_sign(
+        str(root), proof_text=str(proof_text),
+        verdict={"verdict": "成立", "findings": []})
+    _ = times  # pending 档不数连续次数（那一档结构上没有"同一趟三行"）
+    return out
 
 
 def sign_all_statements_for_the_gate(root, times: int | None = None) -> int:
@@ -309,6 +338,119 @@ def sign_all_statements_for_the_gate(root, times: int | None = None) -> int:
                           proof_text=str(row.get("proof_text") or ""), times=times)
         signed += 1
     return signed
+
+
+@pytest.fixture
+def signed_v_handoffs(monkeypatch):
+    """夹具前提：B 登记的那一份证明正文，V 已经签过（2026-11-02 准入闸 strict）。
+
+    为什么做成这一格而不是在每个用例里手算正文：F / D / 秘书那几条路交给 B 的正文
+    是「它们自己的写口拼出来的」（`agent_f._proof_outlet` 把 steps 拼成 "1. …（前提）"、
+    秘书洗过之后正文又变过）。在用例里抄一遍拼法，等于把生产口径抄成第二份
+    —— 那是这个仓库反复登记过的缺陷形态（"跨模块约定必须只有一处定义"）。
+
+    所以这一格钉在「入口」上：`AgentB.register_statement` 被包一层，先把"这一笔
+    即将写的那几份正文"用真写口签住（已在册 ⇒ `sign_for_the_gate` 落该命题台账；
+    还没在册 ⇒ `sign_before_registration` 落 pending 台账），再原样调用真方法。
+
+    这不是"绕过闸"：`_unsigned_proof_gate` 一个字都没动、照常判；签的正是
+    "这一份正文"，改一个字就签不住（sha 不符）。它只是把新口径下的前提
+    「V 已经签过这一份」在夹具里造出来 —— 用例原本假设的"无签也能入台账"
+    在 strict 下不再成立，这正是本批迁移要修的那件事。
+
+    不适用于"无签必须被拒"那一类判据（那些用例直接调 `register_statement`，
+    别挂这个 fixture）。
+    """
+    from agentflow.agent_b import AgentB
+
+    real = AgentB.register_statement
+
+    def signed(self, **kw):
+        text = str(kw.get("proof_text") or "")
+        row = self._existing_statement_for(str(kw.get("statement_full") or "")) or {}
+        sid = str(row.get("stmt_id") or "")
+
+        def covered(body: str, no: int) -> bool:
+            if not sid or not body.strip():
+                return False
+            try:
+                got = self._signature_covers(self.store, stmt_id=sid,
+                                             proof_no=no, text=body)
+            except Exception:  # noqa: BLE001 —— 读不出来就照原样补签（补签不会撒谎）
+                return False
+            return bool(got.get("signed"))
+
+        if text.strip() and not covered(text, 1):
+            if sid:
+                # 已在册：一票「成立」就够准入闸（`_signature_covers` 把 `holding`
+                # 且秘书判 clean 算作"有签"），而不翻第 3 位 —— 用例原本"这一行还没签"
+                # 的读数因此不被夹具顺手改掉。
+                sign_for_the_gate(self.store.root, statement_id=sid, proof_text=text,
+                                  times=1)
+            else:
+                sign_before_registration(self.store.root, proof_text=text)
+        for item in list(kw.get("proofs") or []):
+            one = dict(item) if hasattr(item, "items") else {}
+            body = str(one.get("text") or "")
+            no = int(one.get("proof_no") or 1)
+            if not body.strip():
+                continue
+            if sid:
+                if not covered(body, no):
+                    sign_for_the_gate(self.store.root, statement_id=sid, proof_text=body,
+                                      proof_no=no)
+            else:
+                # 新建命题：这一份还没号可挂 ⇒ 先落 pending 那一签（`#p1` 的免签门
+                # 走的正是它）；`#p2` 及以后靠下面那段"先落行、再按份签"。
+                sign_before_registration(self.store.root, proof_text=body)
+        # ---- 新命题一次交多份证明：先落一行"证明还空着"的命题，再按份签 ----
+        #
+        # 为什么这一档要特殊处理：准入闸的免签门只给 `#p1`（手稿签块 / pending 认领
+        # 都只盖 canonical），`#p2` 及以后只能靠「在册台账」那一签
+        # （`_signature_covers` 要一个有号的命题）。而新建命题时号还没发 ⇒
+        # "一次交 #p1+#p2 且两份都有签"在结构上只能走两步：命题先行、签后落证明。
+        # 这正是业主两阶段录入的真实次序（机械录入那一版先入册，洗过、签过再交正文）。
+        #
+        # 只在这一笔「真的合法」时走这一档：`proofs` 里两份以上 / 有 `#p2` 及以后、
+        # 号不重复、正文非空。负控（重号 / 空正文 / 坏号）不许先落一行 ——
+        # 那些用例断言的就是"整笔不写"，夹具替它铺行会把那条判据造坏。
+        _plist = [dict(p) for p in (kw.get("proofs") or []) if hasattr(p, "items")]
+        _nos = [int((p or {}).get("proof_no") or (p or {}).get("no") or 1) for p in _plist]
+        _valid_multi = (
+            len(_plist) >= 2
+            and all(str((p or {}).get("text") or "").strip() for p in _plist)
+            and all(no >= 1 for no in _nos)
+            and len(set(_nos)) == len(_nos)
+        )
+        if not sid and _valid_multi:
+            from agentflow import schema as _S
+
+            stub = {
+                "stmt_id": "", "origin": str(kw.get("origin") or "own_result"),
+                "kind": str(kw.get("kind") or "conjecture"),
+                "label": str(kw.get("label") or ""),
+                "statement_text": str(kw.get("statement_text") or ""),
+                "statement_full": str(kw.get("statement_full") or ""),
+                "proof_text": "", "status": "active",
+                "created_at": _S.now_iso(), "created_by": "secretary-B",
+                "quote_verified": kw.get("quote_verified"),
+                "quote_reason": str(kw.get("quote_reason") or ""),
+                "bits": {},
+            }
+            with self.store.tx("statements", actor="secretary-B") as tx:
+                sid = tx.alloc_id(_S.TABLES["statements"]["id_kind"])
+                stub["stmt_id"] = sid
+                tx.upsert("statements", stub)
+            for item in list(kw.get("proofs") or []):
+                one = dict(item) if hasattr(item, "items") else {}
+                body = str(one.get("text") or "")
+                if body.strip():
+                    sign_for_the_gate(self.store.root, statement_id=sid,
+                                      proof_text=body,
+                                      proof_no=int(one.get("proof_no") or 1), times=1)
+        return real(self, **kw)
+
+    monkeypatch.setattr(AgentB, "register_statement", signed)
 
 
 def add_request(
