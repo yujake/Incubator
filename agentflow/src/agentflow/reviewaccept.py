@@ -222,7 +222,8 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
                  "但仍在这里单独计数（静默豁免是本项目最忌的形态）。"),
     }
     acc.readings["page_range_missing_by_kind"] = {
-        **page_less_by_kind,
+        # 包一层 `by_kind`：`kind` 是自由文本，真有个 kind 叫 "note" 时不许撞掉说明
+        "by_kind": page_less_by_kind,
         "note": ("缺页码的外部行按 `kind` 分栏，给写侧一份收尾清单：判据的裁决"
                  "不在这里改（它们照旧在 `statements_missing_fields` 里），"
                  "这一栏只让'缺的是哪一类行'直接可见。"),

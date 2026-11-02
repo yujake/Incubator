@@ -268,7 +268,7 @@ def test_a_concept_row_without_a_page_range_also_fails(tmp_path):
     assert acc.criteria["statements_have_assumptions_and_source"] == "fail", acc.details
     assert any("0002" in b and "page_range" in b
                for b in acc.readings["statements_missing_fields"]), acc.readings
-    assert acc.readings["page_range_missing_by_kind"]["concept"] == ["0002"], acc.readings
+    assert acc.readings["page_range_missing_by_kind"]["by_kind"]["concept"] == ["0002"], acc.readings
     assert acc.readings["page_range_not_required"]["own_result_rows"] == [], acc.readings
 
 
@@ -285,7 +285,7 @@ def test_a_concept_row_with_a_page_range_passes(tmp_path):
           quote_reason="概念行没有'证明'这一档；定义引自 lit:0000，第 3 页")
     acc = _check(st, report)
     assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
-    assert acc.readings["page_range_missing_by_kind"].get("concept", []) == [], acc.readings
+    assert acc.readings["page_range_missing_by_kind"]["by_kind"].get("concept", []) == [], acc.readings
 
 
 def test_an_own_result_without_a_page_range_is_counted_separately(tmp_path):
@@ -302,7 +302,7 @@ def test_an_own_result_without_a_page_range_is_counted_separately(tmp_path):
     acc = _check(st, report)
     assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
     assert acc.readings["page_range_not_required"]["own_result_rows"] == ["0002"], acc.readings
-    assert acc.readings["page_range_missing_by_kind"].get("theorem", []) == [], acc.readings
+    assert acc.readings["page_range_missing_by_kind"]["by_kind"].get("theorem", []) == [], acc.readings
 
 
 def test_a_concept_row_without_a_source_is_still_refused():
