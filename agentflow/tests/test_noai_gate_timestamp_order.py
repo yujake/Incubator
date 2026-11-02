@@ -195,20 +195,31 @@ def test_record_audit_refuses_to_append_an_earlier_timestamp(tmp_path: pathlib.P
 # --------------------------------------------------------------------- 注入负控
 
 def _source_files(root: pathlib.Path) -> list[str]:
-    """整树的已收集文件清单（相对路径，正斜杠）。
+    """这棵树的源码清单（相对路径，正斜杠）：`git ls-files -co --exclude-standard`。
 
-    用清单法而不是写死目录名：漏掉一整个目录时，下面那个子进程 pytest 会在
-    "收集不到测试"上以非 0 退出 ⇒ 注入负控会以"预期红"的面目假绿。
+    为什么不是 `root.rglob("*")`（`R7-R1d-2` 之后补的隔离缺陷，2026-11-03 全量实测）：
+    `temp/` 与 `projects/` 都是 git-ignored 的运行时状态（本机实测合计 2.8 GB），
+    且 `projects/**/out/secretary/` 下有活着的 agent 进程在写 `<role>-<task>.jsonl.alive`
+    心跳文件、写完就删。`rglob` 清单拍下之后、复制循环读到它之前，这个文件可能已经不在
+    盘上了 ⇒ 复制这一步抛 `FileNotFoundError`：
+
+        FileNotFoundError: [Errno 2] No such file or directory:
+        '...\\projects\\paper-rewrite-86\\out\\secretary\\V-t-000062.jsonl.alive'
+
+    于是负控红在"盘外副本"上，而这条负控问的是"接线有没有被测到" —— 红错了地方，
+    并且把 2.8 GB 的运行时状态拖进每次复制（几分钟的窗口，正好够心跳文件被删）。
+    源码清单取 git 可见的那一份：已跟踪 + 未跟踪但未被忽略 = 1,373 个文件 / 34 MB，
+    既有"清单法"的性质（不写死目录名，漏掉一整个目录时下面的断言会先红），
+    又把"运行时状态"整块排除。复制循环另外容忍清单拍下之后才消失的文件（见
+    `_run_injection_negative_control`）：并行施工时别人可能正好删掉一个未跟踪文件。
     """
-    out: list[str] = []
-    for p in sorted(root.rglob("*")):
-        if not p.is_file():
-            continue
-        parts = p.relative_to(root).parts
-        if any(seg in {".git", "__pycache__", ".pytest_cache", "node_modules"} for seg in parts):
-            continue
-        out.append(p.relative_to(root).as_posix())
-    return out
+    proc = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "-co", "--exclude-standard"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert proc.returncode == 0, (
+        f"`git ls-files` 失败（判据失去对象，不是'复制清单是空的'）：{(proc.stderr or '')[-300:]}")
+    return [one for one in proc.stdout.split("\0") if one]
 
 
 def test_injection_negative_control_severing_the_wiring_turns_this_file_red(
@@ -216,8 +227,13 @@ def test_injection_negative_control_severing_the_wiring_turns_this_file_red(
 ) -> None:
     """负控（证明接线被测到）：把判定侧那两行注入成 `if False:` ⇒ 本文件必须变红。
 
-    形态照本仓惯例：盘外整树副本 + 打印副本 sha256 + 断言"注入点恰好命中 1 次"。
+    形态照本仓惯例：盘外源码树副本 + 打印副本 sha256 + 断言"注入点恰好命中 1 次"。
     子进程跑的是本文件，所以"接线被撤掉"这件事的结果就是"本文件里那两条断言红"。
+
+    副本是源码树（`git ls-files -co --exclude-standard`，见 `_source_files`），
+    不含 `temp/` / `projects/` 这两块 git-ignored 的运行时状态：后者有活进程在写心跳文件，
+    整树复制会在"清单拍下之后、读到它之前"撞上被删的文件（2026-11-03 全量实测，
+    报 `projects/.../V-t-000062.jsonl.alive` 不存在）。
 
     副本根为什么不用 `tmp_path`：Windows 的路径上限是 260 字符，而 pytest 给
     本用例的 `tmp_path` 里带着完整的用例名（这个名字本身就 70 个字符），
@@ -236,12 +252,29 @@ def test_injection_negative_control_severing_the_wiring_turns_this_file_red(
 
 def _run_injection_negative_control(src_root: pathlib.Path, dst_root: pathlib.Path) -> None:
     files = _source_files(src_root)
-    assert "scripts/noai_gate.py" in files and _NODE.split("::")[0] in files, files[:5]
+    required = {"scripts/noai_gate.py", "tests/conftest.py", "pyproject.toml",
+                _NODE.split("::")[0]}
+    assert required <= set(files), (
+        f"源码清单里缺了负控要跑的东西 {sorted(required - set(files))}（清单法漏了文件 ⇒ 子进程"
+        f"会在'收集不到测试'上非 0 退出，负控就假绿了）：{files[:5]}")
+    vanished: list[str] = []
     for rel in files:
         src = src_root / rel
         dst = dst_root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(src.read_bytes())
+        for attempt in (1, 2):
+            try:
+                dst.write_bytes(src.read_bytes())
+                break
+            except FileNotFoundError:
+                # 清单拍下之后源文件才消失（`git ls-files` 会列出"已从工作树删掉但还没
+                # `git rm`"的条目；并行施工时别人也可能正好删掉一个未跟踪文件）⇒ 它本来
+                # 就不在盘上，不是"复制漏了"。重试一次仍读不到才记下来。
+                if attempt == 2:
+                    vanished.append(rel)
+    assert not (required & set(vanished)), (
+        f"负控要跑的东西在复制时从盘上消失了：{sorted(required & set(vanished))} ⇒ 副本不完整")
+    assert (dst_root / "scripts" / "noai_gate.py").is_file(), "副本里没有 `scripts/noai_gate.py`"
 
     gate = dst_root / "scripts" / "noai_gate.py"
     old = ('    order_problem = audit_timestamps_not_monotonic(entry.counted_audits)\n'
