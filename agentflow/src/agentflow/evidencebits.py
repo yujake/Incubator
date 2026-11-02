@@ -207,6 +207,17 @@ def _bit_state(bits: Mapping[str, Any], name: str) -> str:
                if item in _BIT_OR_ORDER else 0)
 
 
+#: 第 3 位的两个凭据档（`bits.evidence.reviewed_source`，2026-11-02 两阶段录入）。
+#:
+#: `REVIEWED_SOURCE_V`：V 走过的那一签（真签，`reviewed` 为真时就是它）；
+#: `REVIEWED_SOURCE_CITATION`：文献编号占位（假签，业主原话「V 签位填文献编号（和
+#: citation 的文献编号一致）」）—— 它允许进台账，但不算已签。
+#: 空串 = 两个凭据都没有。这一格是读数，不是判据分支的唯一来源：判"真/假"的
+#: 正本仍是 `bits.reviewed`（布尔），`reviewed_source` 只回答"凭什么"。
+REVIEWED_SOURCE_V = "v"
+REVIEWED_SOURCE_CITATION = "citation"
+
+
 def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None = None,
             numeric_reason: str = "", proof: Any = None, proof_process: str = "",
             reviewed: Any = None, reviewed_by: Mapping[str, Any] | None = None,
@@ -218,17 +229,23 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
             kind: str = "") -> dict[str, Any]:
     """把各方标下的读数组装成五元位（纯函数：不读盘、不写盘）。
 
-    ## 引用命题那一条（`draft/39` §3.15 三）
+    ## 引用命题那一条（`draft/39` §3.15 三；2026-11-02 收口）
 
     `origin=external_lit` 且引到一条逐字核过的来源（`quote_verified is True`）⇒
-    第 2 位（有证明）与第 3 位（审过）直接为真，凭据是文献代号（不是 V 的走查）。
-    引用来的命题因此最多到"预备定理级"（第 4 位要形式化，第 5 位要 G 申请 H 审）。
+    第 2 位（有证明）为真，凭据是文献代号（不是 V 的走查）。第 3 位不再跟着翻真：
+    业主 2026-11-02 逐字「文献侧第一趟录入时没有V签，是假V签，但要允许进台账」+
+    「`bits.reviewed` 的汇总位不许把占位签读成已签」—— 占位签不是签，它只是"允许进台账"
+    的那一张凭据。凭据本身不丢：仍在 `evidence.reviewed_by`（`{"evidence": "lit:<编号>"}`），
+    并用 `evidence.reviewed_source` 三态说清这一格凭什么是真/假
+    （`citation` = 文献编号占位 / `v` = V 真签 / 空 = 没有）。
+    引用来的命题因此最多到"猜想"，要升档得先逐个优化重写、拿正常 V 签（第二阶段的活）。
     """
     cited = bool(source_lit_id) and origin == "external_lit" and quote_verified is True
     bits: dict[str, Any] = {
         "numeric": _state(numeric),
         "proof": bool(proof) or cited or bool(proof_process.strip()),
-        "reviewed": bool(reviewed) or cited,
+        # 第 3 位只认"真签"（V 走过的那一签 / 调用方显式说审过）。占位签不翻它。
+        "reviewed": bool(reviewed),
         # 第 4 位可以是二维的（`{证明号: 状态}`）：形状原样保留，见 `_bit_value`。
         "formal": _bit_value(formal),
         "audited": bool(audited),
@@ -242,6 +259,10 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
             # "自己写了证明却没写过程"而报缺陷（判据分不出两者等于两者被压成一件事）。
             "proof_source": "citation" if cited else ("own" if proof else ""),
             "reviewed_by": dict(reviewed_by or ({"evidence": f"lit:{source_lit_id}"} if cited else {})),
+            # 第 3 位凭什么是这个值（三态，2026-11-02）：`v` = 真签 / `citation` = 文献编号
+            # 占位（假签）/ 空 = 没有凭据。读侧不许把 `citation` 读成"已签"。
+            "reviewed_source": (REVIEWED_SOURCE_V if reviewed
+                                else (REVIEWED_SOURCE_CITATION if cited else "")),
             "formal": dict(formal_evidence or {}),
             "formal_reason": str(formal_reason or ""),
             "audited_by": dict(audited_by or {}),
@@ -310,6 +331,42 @@ def quote_explains_itself(row: Mapping[str, Any]) -> bool:
     return quote_state(row) in QUOTE_MODES
 
 
+def _citation_review_cleared(bits: dict[str, Any], row: Mapping[str, Any],
+                             *, kind: str) -> dict[str, Any]:
+    """引用命题的"第 3 位"在读侧降档：文献编号是占位签，不是签（2026-11-02）。
+
+    为什么读侧还要再判一次（写侧 `bits_of` 已经不再翻这一位）：盘上有 32 行是改前写的，
+    它们的 `bits.reviewed` 停在 `true`、凭据是 `{"evidence": "lit:…"}` —— 不降档的话
+    "假绿"在历史台账里一直留着（等级照样读出「预备定理级」），而业主的口径是
+    「`bits.reviewed` 的汇总位不许把占位签读成已签」。
+
+    ## 判据（只看"凭据长什么样"，不猜）
+    - 位是假 ⇒ 不动；
+    - 凭据里有 `verification_id` 或 `proof_sha256` ⇒ 真签（`bit3_payload` 与
+      `vsigns._apply_review_to_bits` 写的那两种形状都带这两格），一个字不动；
+    - 凭据的 `evidence` 以 `lit:` 开头 ⇒ 那是引用命题的文献代号 ⇒ 降成假，
+      `reviewed_source` 记 `citation`（"凭什么"这件事不许丢）。
+    别的形状（没有凭据 / 认不出的凭据）不判 —— "判不了"不许折成"降档"。
+    """
+    if not bits.get("reviewed"):
+        return bits
+    ev = dict(bits.get("evidence") or {})
+    by = dict(ev.get("reviewed_by") or {})
+    if str(by.get("verification_id") or "").strip() or str(by.get("proof_sha256") or "").strip():
+        return bits
+    evidence = str(by.get("evidence") or "")
+    if not evidence.startswith("lit:"):
+        return bits
+    out = dict(bits)
+    out["reviewed"] = False
+    ev["reviewed_source"] = REVIEWED_SOURCE_CITATION
+    out["evidence"] = ev
+    out["grade"] = derive_grade(out, kind=kind)
+    out["audited_badge"] = (bool(out.get("audited"))
+                            and out["grade"] not in ("conjecture", GRADE_NOT_APPLICABLE))
+    return out
+
+
 def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     """台账里的一行 ⇒ 五元位（唯一的读入口：判据、门、状态报告都走这里）。
 
@@ -332,6 +389,9 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
                        quote_verified=quote_explains_itself(row), kind=kind)
     bits = normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
+    # 占位签（文献编号）在读侧降档：写侧从 2026-11-02 起不再翻这一位，而改前写下的
+    # 32 行还停在 `true` 上 —— 两处都必须同一个结论，否则"假绿"只在新行上被修掉。
+    bits = _citation_review_cleared(bits, row, kind=kind)
     bits = _stale_review_cleared(bits, row, kind=kind)
     return _stale_formal_cleared(bits, row, kind=kind)
 
@@ -540,6 +600,137 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
         sha = str(value or "").strip()
         if sha:
             out[no] = sha
+    return out
+
+
+#: 逐条证明「这一份洗过没有」（业主 2026-11-02 的两阶段录入，`draft/179` 二之一）。
+#:
+#: 结构逐字与 :data:`REVIEWED_BY_PROOF_KEY` 同形："证明号 ⇒ 布尔"，
+#: `{"1": true, "2": false}`；住同一格口袋（`bits.evidence`），理由也一样 ——
+#: `bits` 顶层键集由 :func:`bits_shape_problems` 拥有（未知键写入期即拒），
+#: `evidence` 是它明确留白的凭据口袋。不许另造一张表/一个新字段：
+#: 这条口径要的"二维布尔"就是这一格。
+#:
+#: ## 为什么必须三态（:data:`OPTIMIZED_STATES`）
+#: 业主 2026-11-02 收口：「第二阶段逐个优化时只要读那栏记录是否优化的新参数即可。
+#: 若为否……总之都要洗一遍」。于是这一格是第二阶段唯一的判据 ——
+#: 而"没有这一格"（存量行）与"这一份确实没洗"在盘上长得一模一样。折成 `false` 会让
+#: 整库存量行一次全变"等洗"（真机 3134 行 `own_result`），折成 `true` 更坏（等于自报洗过）。
+#: 所以读口给三档：`true` / `false` / `not_recorded`；缺格不进
+#: `optimized_by_proof` 那张表（那张表只回答"记过的几份各是什么"）。
+#:
+#: ## 写者与时机
+#: 写者是 B 的登记正路（`agent_b/register_statement.py::_attach_proofs`），与"换正文"
+#: 同一笔事务：首登写 `{"1": false}`（机械录入那一版还没洗过），换正文之后拿到覆盖
+#: 新正文的 V 签才写 `true`。V 的签那一笔（`verifications`/`vsigns`）不碰这一格 ——
+#: 它回答的是"洗过没有"，不是"签过没有"。
+OPTIMIZED_BY_PROOF_KEY = "optimized_by_proof"
+
+#: `optimized` 的三档读数（读侧词表；写侧只写前两档）。
+#:
+#: `not_recorded` 刻意不叫 `unknown`：它不是"没查成"，而是"这一行还没有这一格" ——
+#: 存量零迁移的合法初态。任何判据不许把它当 false，也不许当 true。
+OPTIMIZED_STATES: tuple[str, ...] = ("true", "false", "not_recorded")
+
+
+def optimized_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
+    """按证明看「洗过没有」：`{证明号: 布尔}`（只含记过的那几份）。
+
+    与 :func:`reviewed_by_proof` 同一套口径：正位是 `bits.evidence.optimized_by_proof`，
+    兼容写在 `bits` 顶层的旧行；键按 `verifications.as_proof_no` 归一（认不出的键跳过），
+    值按 `bool` 归一（盘上是 JSON，可能是 `true` / `1` / `"true"`）。
+    缺格不进这张表 —— 要三态就读 :func:`optimized_state`。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    pocket = bits.get(OPTIMIZED_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        pocket = dict(bits.get("evidence") or {}).get(OPTIMIZED_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        return {}
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    out: dict[int, bool] = {}
+    for raw_no, value in pocket.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1:
+            continue
+        out[no] = bool(value)
+    return out
+
+
+def optimized_state(row: Mapping[str, Any], proof_no: Any) -> str:
+    """这一份证明的优化态：`"true"` / `"false"` / `"not_recorded"`（三态，不折平）。
+
+    号认不出（`0` / `"abc"`）⇒ `not_recorded`：那不是"没洗"，是"问的是哪一份都没有答案"，
+    与逐份签那一侧"号认不出 ⇒ unreadable"同一条纪律（`verifications.review_standing`）。
+    """
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    no = _VR.as_proof_no(proof_no)
+    if no < 1:
+        return "not_recorded"
+    table = optimized_by_proof(row)
+    if no not in table:
+        return "not_recorded"
+    return "true" if table[no] else "false"
+
+
+def with_optimized_defaults(bits: Mapping[str, Any], proof_numbers: Any) -> dict[str, Any]:
+    """把还没记过的那几份证明补成 `optimized=false`（机械录入的默认态）。
+
+    为什么是"补"而不是"整表写"：这一笔可能只是再交一次同一条命题（真机 D 的每一次
+    交付都会这样），整表写会把别的证明已经洗过的事实擦掉。已有的值一律不动 ——
+    "洗过"这件事只由换正文那一笔（拿到覆盖新正文的签）翻真。
+    """
+    out = dict(bits or {})
+    numbers: list[int] = []
+    for raw in (proof_numbers or ()):
+        try:
+            no = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if no >= 1 and no not in numbers:
+            numbers.append(no)
+    if not numbers:
+        return out
+    ev = dict(out.get("evidence") or {})
+    table = {str(n): bool(v) for n, v in optimized_by_proof(dict(out)).items()}
+    changed = False
+    for no in sorted(numbers):
+        if str(no) not in table:
+            table[str(no)] = False
+            changed = True
+    if not changed:
+        return out
+    ev[OPTIMIZED_BY_PROOF_KEY] = table
+    out["evidence"] = ev
+    return out
+
+
+def with_optimized_flag(bits: Mapping[str, Any], proof_no: Any, value: bool) -> dict[str, Any]:
+    """把某一份证明的优化态写成 `true` / `false`（写侧唯一入口，返回新的 `bits`）。
+
+    与 :func:`with_optimized_defaults` 的分工：那一个只补"还没记过的号"（机械录入的默认态，
+    已有的值不动）；这一个改一个号的值，用在两类真实事件上 ——
+    ① 换正文之后拿到覆盖新正文的 V 签 ⇒ 写 `true`（洗过了）；
+    ② 换正文而没有那一签 ⇒ 写 `false`（新正文还没洗过，旧的那一格必须跟着退回去）。
+
+    读侧不认"写进去的 true"本身，它还要与 `reviewed_sha_by_proof` 对一遍吗？不 ——
+    这一格回答的是"洗过没有"，而"洗过"的判据在这一笔写入时已经用
+    `verifications.review_standing` 判过一次；这里只负责把它落盘。
+    """
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    no = _VR.as_proof_no(proof_no)
+    if no < 1:
+        return dict(bits or {})
+    out = dict(bits or {})
+    ev = dict(out.get("evidence") or {})
+    table = {str(n): bool(v) for n, v in optimized_by_proof(dict(out)).items()}
+    table[str(no)] = bool(value)
+    ev[OPTIMIZED_BY_PROOF_KEY] = table
+    out["evidence"] = ev
     return out
 
 
