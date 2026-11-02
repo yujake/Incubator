@@ -438,7 +438,7 @@ SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "
 
 #: 签文件里 `manuscript_write` 那一格的三态（写侧；2026-11-02）。
 #:
-#: 为什么要有这一格：`write_sign` 把签块盖进手稿这一步发生在签文件落盘**之后**，
+#: 为什么要有这一格：`write_sign` 把签块盖进手稿这一步发生在签文件落盘「之后」，
 #: 而它的结果此前只活在返回值里 —— 签文件里没有这一格。真机 84 的两份签文件
 #: （`a6fa76d2` / `dcb988fa`）因此读出来是 `null`，而 `reports/f-proof-000000.md`
 #: 里明明有 `- V 签：` 块（台账指向 `verifications/000000.jsonl#v-000010`，正是
@@ -448,7 +448,7 @@ SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "
 #: 失败要能看出"为什么"，没尝试（这一签没有手稿落点）要明说"未尝试"。
 MANUSCRIPT_WRITE_STATES: tuple[str, ...] = ("written", "failed", "not_attempted")
 
-#: 读侧多出的第四档：旧版签文件**没有记**这一格（不是"没写"，是"没记录"）。
+#: 读侧多出的第四档：旧版签文件「没有记」这一格（不是"没写"，是"没记录"）。
 #: 84 那两份就落在这一档 —— 它们不是"未尝试"，而是"当时没把结果落进文件"。
 MANUSCRIPT_WRITE_UNRECORDED = "unrecorded"
 
@@ -562,7 +562,7 @@ def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
     为什么读侧要单独有一个函数：这一格是 2026-11-02 才进签文件的，盘上已经有
     旧版签文件（84 的两份 `a6fa76d2` / `dcb988fa` 就是）。旧文件没有这一格时，
     诚实的读法是 :data:`MANUSCRIPT_WRITE_UNRECORDED`（"当时没有记录"），
-    **不是** `None`（读的人会以为"没写"），也不是 `not_attempted`（那是另一种事实）。
+    「不是」 `None`（读的人会以为"没写"），也不是 `not_attempted`（那是另一种事实）。
 
     返回键：`state` / `written` / `idempotent` / `missing` / `path` / `line` /
     `why` / `reading`。`state` 只取三态词表 + `unrecorded`；读到不认识的词
@@ -759,7 +759,7 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     改前签文件里没有 `manuscript_write`：84 的两份签文件读出来是 `null`，而
     `reports/f-proof-000000.md` 里已经有块（台账指向 `verifications/000000.jsonl#v-000010`，
     正是本函数顺手盖的那一版）—— 读数与实际脱节，将来排查会照 `null` 去找。
-    现在**新写成的签文件**会带一格 `manuscript_write`（三态：`written` / `failed` /
+    现在新写成的签文件会带一格 `manuscript_write`（三态：`written` / `failed` /
     `not_attempted`，形状见 :func:`manuscript_write_reading`；带上 `path` 与 `line`）。
     已在盘上的签文件仍然"不重写"（一稿一签）：旧文件没有这一格时，读侧落
     `unrecorded`，不补写、不冒充。
@@ -772,7 +772,7 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
                            #: 它是一个独立的落点：侧文件是证据、手稿块是"随稿走的那一份"，
                            #: 任一失败都各自可见。
                            "manuscript_write": {},
-                           #: 这一格有没有落进**签文件**（新签才可能为真；旧签不重写）。
+                           #: 这一格有没有落进签文件本身（新签才可能为真；旧签不重写）。
                            "manuscript_write_recorded": False,
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
@@ -851,7 +851,7 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out["reason"] = (f"{out['reason']}；手稿签块没写成："
                          f"{out['manuscript_write'].get('why')}")
     # ---- 2026-11-02 晚：把这一笔的真实结果落进签文件 -------------------------
-    # 只补**这次新写成**的签文件：已在盘上的签仍然"一稿一签、不重写"（那条纪律比
+    # 只补这次新写成的签文件：已在盘上的签仍然"一稿一签、不重写"（那条纪律比
     # "把旧文件的空格补上"更重要 —— 旧文件缺这一格时读侧落 `unrecorded`）。
     # 顺序放在盖章之后：签文件先落盘是"签已经发了"的证据，写块失败也不回滚它。
     if out["written"]:

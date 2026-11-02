@@ -843,9 +843,9 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       的活）与"收工行没带 summons"的趟数；
     - `verified` / `signed_proofs` / `gaps_missing_runs`：收工行 `final_gaps_reading` 的
       `total` 合计（这一趟名下带证明、查过 V 签那一栏的命题数）与
-      `total - unsigned` 合计（其中签住的**证明位**数），以及"收工行没带这一格"的趟数。
-      这里**不是**"签了几个签文件"：`signed_proofs` 数的是收工读数里的已签证明位；
-    - `sign_files`：**签文件的个数**（`out/vsigns/*.json`，含派生归档 `issued.json`）。
+      `total - unsigned` 合计（其中签住的证明位数），以及"收工行没带这一格"的趟数。
+      这里不是"签了几个签文件"：`signed_proofs` 数的是收工读数里的已签证明位；
+    - `sign_files`：签文件的个数（`out/vsigns/*.json`，含派生归档 `issued.json`）。
       它与 `signed_proofs` 是两个数、两套口径，刻意分开命名（84 的现场：前者 3、
       后者 31 —— 改前两件事共用 `signed` 一格，读的人会把 31 读成"签了 31 份"）。
       目录不在 ⇒ 0（"这个工作区还没有签"）；目录在而列不出来 ⇒ `None`（没查成，不是 0）。
@@ -2687,7 +2687,7 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                       "source": _gate_source(name, root_p)})
     verdict = getattr(rep, "m_verdict", None) or {}
     #: `machine_pass` 是"八格全 pass 且没有 blocker"的合取（`closing.ClosingReport`），
-    #: 所以它变假有两条来源：**格失败**（fail / unknown / na 都不算 pass）与 **blocker**
+    #: 所以它变假有两条来源：格失败（fail / unknown / na 都不算 pass）与 blocker
     #: （不进八格、却拦门，如 `statements_unsigned`）。84 的现场：counts={pass:6,fail:1,na:1}、
     #: machine_pass=false、blockers=[] —— 只有格那一半。页面要能看出是哪一半（或两半），
     #: 所以这里把两条来源分别点名，并给一个受控的合成词 `machine_pass_cause`。

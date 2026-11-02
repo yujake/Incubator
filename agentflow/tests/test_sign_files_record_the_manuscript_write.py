@@ -13,7 +13,7 @@
 
 那一行正是 `write_sign` 里"顺手把签块盖进手稿"那一步盖的（V 未在册那一支写的是
 `台账=reports/…#V签`、`命题号=未在册`，84 的另一份 `f-proof-000001.md` 就是那个形状）。
-问题不在块有没有写，而在**写块那一步的结果只活在返回值里**：签文件落盘发生在盖章
+问题不在块有没有写，而在写块那一步的结果只活在返回值里：签文件落盘发生在盖章
 之前，`manuscript_write` 从来没被写进文件。于是读数与实际脱节，将来排查会照 `null`
 去找，而实际已经写成。
 
@@ -25,7 +25,7 @@
 | b | 发签 + 手稿不在盘上 | 签文件里没有明确失败原因（`state=failed` + `why` 说为什么） |
 | c | 发签 + 没有手稿路径 | 折成 `failed` 或 `null` 都红；必须是 `not_attempted` + 理由 |
 | d | 旧版签文件（没有这一格） | 读侧必须落 `unrecorded`（不是 `null`、也不是 `not_attempted`） |
-| e | 同一份正文再发一次签 | 一稿一签：签文件逐字节不变（补这一格只发生在**新签**上） |
+| e | 同一份正文再发一次签 | 一稿一签：签文件逐字节不变（补这一格只发生在新签上） |
 
 三条写侧状态的词表在 `vsigns.MANUSCRIPT_WRITE_STATES`；读侧第四档是
 `vsigns.MANUSCRIPT_WRITE_UNRECORDED`。
@@ -164,7 +164,7 @@ def test_d_a_legacy_sign_file_reads_as_unrecorded_not_null(tmp_path: pathlib.Pat
 
 # ====================================================================== e 一稿一签
 def test_e_an_existing_sign_is_not_rewritten(tmp_path: pathlib.Path) -> None:
-    """同一份正文再发一次签 ⇒ 签文件逐字节不变（补格子只发生在**新签**上）。"""
+    """同一份正文再发一次签 ⇒ 签文件逐字节不变（补格子只发生在新签上）。"""
     root = _workspace(tmp_path)
     first = _issue(root)
     assert first["written"] is True, first

@@ -4,10 +4,10 @@
 ## 84 的现场
 
 `/api/package` 的 `closing.gates`：`counts = {pass:6, fail:1, na:1, unknown:0}`、
-`machine_pass=false`、**`blockers` 一格没有**（读出来是 `null` / 不存在）。
+`machine_pass=false`、`blockers` 一格没有（读出来是 `null` / 不存在）。
 读的人只看到"门没过"，看不出是"有一格 fail"还是"本该有 blocker 却没产出"。
 
-`closing.ClosingReport.machine_pass` 的定义是"八格全 pass **且** 没有 blocker"：
+`closing.ClosingReport.machine_pass` 的定义是"八格全 pass 且没有 blocker"：
 `na`（不适用）也不等于 pass，所以 84 的 `machine_pass=false` 里同时有 `acceptance=fail`
 与 `load_bearing=na` 两份格读数；blocker 那一半是空的。两者都能让 machine_pass 变假，
 所以页面必须分开点名，不许只给一个 false。
@@ -21,7 +21,7 @@
 | c | 一格 fail + 一条 blocker | `machine_pass_cause="blockers+cells"`、两栏都非空 |
 | d | 八格全 pass、无 blocker | `machine_pass_cause="pass"`、两栏都空 |
 | e | 只有一格 `na` | 也算"格没全 pass"（`machine_pass` 的定义就是全 pass） |
-| f | machine_pass=false 的每一档 | **两栏不许同时空着**（空着就是缺陷读数） |
+| f | machine_pass=false 的每一档 | 两栏不许同时空着（空着就是缺陷读数） |
 | g | 页面源码 | 读 `gates.blocking_cells` / `gates.blockers` / `gates.machine_pass_cause`，并且有「因格失败」与 blocker 清单 |
 
 `machine_pass_cause` 是受控词：`pass` / `cells` / `blockers` / `blockers+cells` /
@@ -176,4 +176,3 @@ def test_h_the_type_declaration_carries_the_two_columns() -> None:
     for field in ("blockers: GateBlocker[]", "blocking_cells: GateCell[]",
                   "machine_pass_cause: string"):
         assert field in decl, f"`types.ts` 的 GateTable 里没有 {field}"
-
