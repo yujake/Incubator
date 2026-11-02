@@ -308,6 +308,27 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
         "没查成不是「没签」，也不许当成签过；先把台账/读数修好再重判。")
 
 
+#: 「没有签的证明不许进台账」这一闸的三态开关（业主 2026-11-02 的准入闸）。
+#:
+#: 取值：`strict`（「默认」，拒收无签的证明正文）/ `relaxed`（照改前收下，只用于
+#: 历史夹具与"迁移未完成"的那一段）/ 认不出 ⇒ 按 `strict` 走（三态纪律：认不出
+#: 不是"放行"）。
+#:
+#: 为什么要有这个开关而不是写死：这条闸是「门的强度变更」，它会让"以证明正文登记"
+#: 的所有旧夹具都不再成立（实测 55 个测试文件写的是改前口径「无签也能入台账」）。
+#: 判据要能同时跑两档，才跑得出反真空：把闸摘掉 ⇒ 那条"无签必须被拒"的判据必须红。
+UNSIGNED_PROOF_INTAKE_ENV = "AGENTFLOW_UNSIGNED_PROOF_INTAKE"
+UNSIGNED_PROOF_INTAKE_STATES: tuple[str, ...] = ("strict", "relaxed")
+
+
+def unsigned_proof_intake_is_strict() -> bool:
+    """这一闸现在是不是"拒"的那一档（默认是；认不出也按拒走）。"""
+    import os
+
+    raw = str(os.environ.get(UNSIGNED_PROOF_INTAKE_ENV) or "").strip().lower()
+    return raw != "relaxed"
+
+
 def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str, dict | None]:
     """校验并归一调用方交来的证明清单，返回 `(第 2 条以后的清单, #p1 的正文, 拒绝)`。
 
@@ -783,6 +804,23 @@ class _RegisterStatement:
                 merged = _bits_after_canonical_write(row, bits)
                 if merged:
                     row["bits"] = merged
+                # ---- 换正文 ⇒ 这一份的优化态重判（业主 2026-11-02 的两阶段录入） ----
+                #
+                # 口径（`draft/179` 二之一）：「洗过的肯定能保证V签。所以二阶段只用看是否
+                # 优化过」。于是这一格的语义只有一句：这一份正文是被洗过的那一版吗。
+                # 判据不在这里新写：一份正文"有没有签覆盖它"的唯一判定口是
+                # `verifications.review_standing`（现行正文的 sha + 连续次数）。有 ⇒ `true`；
+                # 没有 ⇒ `false`（新正文还没洗过，旧的那一格必须跟着退回去，不许留在 true 上）。
+                #
+                # 为什么这一笔不改"收不收"：改稿是正常动作（2026-10-22 审计口径：签名是读数、
+                # 不是门锁）。这一格只回答"洗没洗过" —— 拿它当"不许写"的闸是另一条口径的活。
+                _sig = self._signature_covers(store, stmt_id=str(stmt_id), proof_no=1,
+                                              text=raw_want)
+                row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, 1,
+                                                      bool(_sig.get("signed")))
+                out["optimized"] = [{"proof_no": 1, "optimized": bool(_sig.get("signed")),
+                                     "state": str(_sig.get("state") or ""),
+                                     "why": str(_sig.get("why") or "")}]
                 # ---- 改写过 ⇒ 旧签不算数（业主 2026-10-26 Q14 的唯一硬机制）。
                 #
                 # 判据不在这里：`verifications.review_standing` 是唯一判定口（它拿
@@ -815,6 +853,13 @@ class _RegisterStatement:
                 listed.append({"proof_no": no, "text": text,
                                "created_at": str(entry.get("created_at") or S.now_iso())})
                 out["attached"].append(no)
+                #: 新挂上来的一份证明 = 刚交来的机械录入那一版 ⇒ 优化态显式 `false`
+                #: （不是缺格：缺格与 false 在第二阶段读起来是两件事，见
+                #: `evidencebits.OPTIMIZED_STATES`）。翻真只发生在它被换正文那一笔。
+                row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, no, False)
+                out.setdefault("optimized", []).append(
+                    {"proof_no": int(no), "optimized": False, "state": "fresh",
+                     "why": "这一份刚挂上来（机械录入那一版），还没洗过"})
             # ---- 第 4 位（形式化，二维）从 L 的 experiments 台账同步（D28 的写侧）。
             #
             # 位置在"挂证明"之后：证明清单变了，这一位在册的路径也就变了。这一笔只
@@ -856,6 +901,156 @@ class _RegisterStatement:
                       note=f"agent_b.register_statement:proofs:{stmt_id}")
             out["written"] = True
             out["canonical_written"] = bool(canonical_changed)
+        return out
+
+    @staticmethod
+    def _unsigned_proof_gate(*, origin: str, lit_id: str, proof_text: str,
+                             proofs_listed: Any, row: Mapping | None,
+                             v_sign: Mapping, store: Any) -> dict:
+        """这一笔要写进台账的证明正文，每一份都得有一份覆盖它的签（业主 2026-11-02）。
+
+        ## 为什么闸设在这里、且不看 kind / 不看来源
+
+        85 暴露的那条绕行不是"某一种来源漏了"，而是「闸的判据选错了轴」：
+        `_self_authored_gate` 判的是 `kind`（猜想放行），F 那次闸判的是手稿来源
+        （carried_by_D / disk），于是"进程内直交 + 声称是猜想 + 无签"这一组合整条穿过。
+        业主的裁决是「机械录入那一版也必须有签（F 的签 或 文献编号）」——判据的真身是
+        "「要写进去的那份正文有没有签」"，与它叫什么 kind、从哪条路来都无关。
+
+        ## 判据（三档，不折平）
+
+        - 这一笔没有要写的证明正文（正文与在册逐字相同 / 根本没给）⇒ `applicable=False`：
+          不是"查过了、有签"，而是"这一笔没有内容要写"。D 的每一次交付都是这一档 ——
+          它交的是在册那一行的正文，干的是读稿登记依赖面（那条路不能因此被堵死）。
+        - 文献侧（`origin="external_lit"` 且有 `source_lit_id`）⇒ 免签：占位签就是
+          文献编号（`draft/179` 二之二「假V签，但要允许进台账」）。
+        - 其余 ⇒ 每一份要写的正文都要有覆盖它的签：在册台账（`_signature_covers`）或
+          手稿签块（`v_sign.applied`，sha 相符才算）。缺一份就整笔拒。
+
+        ## 为什么拒而不是"降档收下"
+
+        业主原话：「不许再出现 proofs=0 绕行」。降档收下就是那条绕行换了个名字
+        ——85 的 13 条正是"heuristic 收下、再进论文"来的。
+        """
+        out: dict = {"applicable": False, "refused": "", "reason": "", "reading": {}}
+        now = dict(row or {})
+        listed = {}
+        for item in (now.get(_VR.PROOFS_KEY) or []):
+            if isinstance(item, Mapping):
+                try:
+                    listed[int(item.get("proof_no") or 0)] = str(item.get("text") or "")
+                except (TypeError, ValueError):
+                    continue
+        pending: list[tuple[int, str]] = []
+        want = str(proof_text or "")
+        if want.strip() and want != str(now.get("proof_text") or ""):
+            pending.append((1, want))
+        for entry in (proofs_listed or []):
+            if not isinstance(entry, Mapping):
+                continue
+            try:
+                no = int(entry.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                continue
+            text = str(entry.get("text") or "")
+            if not text.strip():
+                continue
+            if listed.get(no) is None or listed.get(no) != text:
+                pending.append((no, text))
+        out["reading"] = {"applicable": bool(pending),
+                          "origin": str(origin or ""),
+                          "source_lit_id": str(lit_id or ""),
+                          "proofs": [{"proof_no": int(no), "signed": False}
+                                     for no, _ in pending],
+                          "why": ""}
+        if not pending:
+            out["reading"]["why"] = ("这一笔没有要新写的证明正文（与在册逐字相同 / 没给）"
+                                     "⇒ 这一格不适用")
+            return out
+        out["applicable"] = True
+        if str(origin or "") == "external_lit" and str(lit_id or "").strip():
+            out["reading"]["why"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账，"
+                                     "第二阶段再逐个优化重写拿真签")
+            for one in out["reading"]["proofs"]:
+                one["signed"] = True
+                one["sign"] = "placeholder_lit"
+            return out
+        signed: dict[int, str] = {}
+        if bool((v_sign or {}).get("applied")):
+            # 手稿签块认下来的一签：它只盖 canonical 那一份（`bits_after_sign` 的
+            # proof_no=1），所以只给 #p1 免签。
+            signed[1] = "manuscript_sign_block"
+        for no, text in pending:
+            if no in signed:
+                continue
+            got = _RegisterStatement._signature_covers(
+                store, stmt_id=str(now.get("stmt_id") or ""), proof_no=no, text=text)
+            if got.get("signed"):
+                signed[no] = "verification_ledger"
+        for one in out["reading"]["proofs"]:
+            one["signed"] = int(one["proof_no"]) in signed
+            if one["signed"]:
+                one["sign"] = signed[int(one["proof_no"])]
+        missing = [int(no) for no, _ in pending if int(no) not in signed]
+        if not missing:
+            out["reading"]["why"] = "每一份要写的正文都有签覆盖（" + "、".join(
+                f"#{no}:{how}" for no, how in sorted(signed.items())) + "）"
+            return out
+        out["refused"] = "proof_without_v_sign"
+        no_list = "、".join(f"#{no}" for no in missing)
+        out["reason"] = (
+            f"这一笔要写进台账的证明正文里，{no_list} 没有一份覆盖它的 V 签 ⇒ 整笔不写。"
+            "业主 2026-11-02 的口径是「机械录入那一版也必须有签（F 的签 或 文献编号），"
+            "不许再出现 proofs=0 绕行」—— 判据是这份正文有没有签，与 kind（猜想不是"
+            "免签通行证）、与来源（param / carried_by_D / disk / 进程内直交）都无关。"
+            "三条出路：① F 先拿签（F 用 `summon` V 的 `verify.verify_proof`，"
+            "带 `proof_manuscript`；三转成立后签落回稿，再交来入库）；"
+            "② B 自己把这一份送 V（`V.verify_proof` 带 `statement_id` + `proof_no`），"
+            "拿到「成立」再交；③ 这一条是文献来的 ⇒ 按 `origin=\"external_lit\"` + "
+            "`source_lit_id` 登记（V 签位填文献编号 = 占位签，允许入台账）。"
+            "读数见 `proof_gate`（哪几份缺签、每份的出路）。")
+        out["reading"]["why"] = out["reason"]
+        out["reading"]["missing"] = missing
+        return out
+
+    @staticmethod
+    def _signature_covers(store: Any, *, stmt_id: str, proof_no: Any, text: str) -> dict:
+        """这一份正文有没有一份覆盖它的 V 签（判据只有一处：`review_standing`）。
+
+        业主 2026-11-02 的两阶段录入把"洗过"与"有签"绑成一句话：「洗过的肯定能保证V签」。
+        于是 `optimized=true` 这一格背后必须真有一签 —— 而"这一签算不算数"的判定口
+        全仓只有 `verifications.review_standing`（现行正文的 sha、连续次数、秘书判定
+        都在它里面）。这里只把结论翻成布尔 + 三态读数，不另写第二份判据。
+
+        三态（不折平）：`signed` ⇒ true；`holding` 且秘书没判 fault ⇒ true
+        （业主 2026-11-01 验收口径：重送之后拿到一次干净的「成立」就归 0，`holding`
+        只是发签门槛没到，不是"没签过"）；其余（`unsigned` / `stale` / `rejected` /
+        `unreadable`）⇒ false，并给 `why`（拒收理由由调用方原话带回）。
+        """
+        out: dict = {"checked": False, "signed": False, "state": "unreadable", "why": ""}
+        root = getattr(store, "root", None) if store is not None else None
+        sid = str(stmt_id or "").strip()
+        if root is None or not sid:
+            out["why"] = "没有工作区根 / 没有命题号 ⇒ 这一格没查成（不当作签过）"
+            return out
+        try:
+            got = dict(_VR.review_standing(root, statement_id=sid, proof_text=text,
+                                           proof_no=proof_no))
+        except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许折成"没签过"
+            out["why"] = f"审校台账读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+            return out
+        state = str(got.get("state") or "unsigned")
+        out.update(checked=bool(got.get("checked")), state=state,
+                   why=str(got.get("why") or ""))
+        if state == "signed":
+            out["signed"] = True
+            return out
+        if state == "holding" and not bool(got.get("secretary_fault")):
+            out.update(signed=True,
+                       why=("连续读数 {}/{} 签「成立」（还没到发签门槛，但这一份真审过）"
+                            .format(int(got.get("streak") or 0), int(got.get("need") or 0))
+                            + (f"；{got.get('why')}" if got.get("why") else "")))
+            return out
         return out
 
     @staticmethod
@@ -1178,11 +1373,20 @@ class _RegisterStatement:
         manuscript_carried: dict = {}
         manuscript_path = ""
         manuscript_text = str(proof_manuscript or "")
+        #: 这一条命题是不是已经在册（按 `statement_full` 的规范化值，判据在
+        #: `_existing_statement_for`）。为什么要在寻址之前算出来：D 的携带单是按
+        #: 命题号点名的，而 B 在"命题已在册、这一笔只是把 D 的稿收进来"这一档上手里
+        #: 唯一的号就是这个 —— 不把它喂进候选，携带单里的那一行永远对不上号
+        #: （`read_carried_manuscript` 只剩"按正文 sha 撞"那一条路，而正文恰好也还没写）。
+        redelivery = self._existing_statement_for(full)
+        stmt_id_now = str((redelivery or {}).get("stmt_id") or "")
         probe_ids = _DS.candidate_statement_ids(
             derived_from=derived_from, proof_text=proof_text,
             # 手稿头那一行"命题号：stmt:<号>"：D 递过来的那一份稿用它自己的号
             # 去对携带单（`derived_from` 是承重链，不是这份稿自己的号）。
-            extra=[_DS.manuscript_statement_id(manuscript_text)])
+            # 在册那一行的号也进候选（2026-11-02）：D 的清单按号点名，而"已在册"这一档
+            # 除了它没有别的号可用。
+            extra=[_DS.manuscript_statement_id(manuscript_text), stmt_id_now])
         if manuscript_text.strip():
             # ---- D 的递交（2026-10-26 晚：「D 到 B 没有路吗？加」） -------------------
             #
@@ -1277,12 +1481,30 @@ class _RegisterStatement:
         #  - 声明了号、而号不是这一条 ⇒ 这份稿是别人的；
         #  - 没声明号（手写稿 / 框架渲染前的那一版）⇒ 不判所有权（`param` 直递是调用方
         #    明确递上来的，既有语义就是"这一笔用它"）。
-        redelivery = self._existing_statement_for(full)
-        stmt_id_now = str((redelivery or {}).get("stmt_id") or "")
         declared_owner = (_DS.manuscript_statement_id(manuscript_text)
                           if manuscript_text.strip() else "")
         manuscript_foreign = bool(declared_owner and stmt_id_now
                                   and declared_owner != stmt_id_now)
+        # ---- 寻址来的稿正文落成 `proof_text`（2026-11-02，业主：「F侧实际上是D侧，
+        #      F的东西都在D的手稿上记了一笔」） ------------------------------------
+        #
+        # 主路是 D 的携带单：B 按清单寻址（号 → 路径 → 文件 sha256）取到那份稿的正文。
+        # 改前那份正文只进依赖面（`_receive_carried_manuscript` 写 `dependencies`，
+        # 命题行一个字不动），于是"按稿收录"在盘上等于"读稿落依赖" —— 正文还得模型
+        # 手工粘进 `proof_text`（真机 85 的 `000000`/`000007` 就是这样被改写的）。
+        #
+        # 这里只做一件事：调用方没给 `proof_text`、而寻址到了一个属于这一条的稿，
+        # 就把稿里 `## 证明` 那一节当正文（`proof_text_source=manuscript`）。
+        # 三点边界：① 调用方显式给了正文 ⇒ 一律以它为准（`param`）；
+        # ② 稿是别人的（`manuscript_foreign`）⇒ 不取（那一档下面另有拒信）；
+        # ③ 与在册那一行的正文相同 ⇒ 也算取过了（读数照给，写入由 `carries_write` 决定）。
+        proof_text_source = "param" if str(proof_text or "").strip() else ""
+        if (not proof_text_source and manuscript_text.strip()
+                and not manuscript_foreign):
+            from_manuscript = str(_DS.proof_body(manuscript_text) or "").strip()
+            if from_manuscript:
+                proof_text = from_manuscript
+                proof_text_source = _DS.SOURCE_MANUSCRIPT
         #: 这一笔有没有"与在册那一行不一样"的东西要写（正文或证明清单）。有就绝不走
         #: "收方读稿登记：命题行不动"那条早退支路 —— 那条支路只负责"命题已经在册、
         #: 这一笔只是把 F 的稿交过来"，它一个字都不写正文；用它去接"改在册正文"这一笔，
@@ -1484,6 +1706,7 @@ class _RegisterStatement:
                     manuscript_refs=manuscript_refs, manuscript_source=manuscript_source,
                     manuscript_washed=manuscript_washed, manuscript_wash=manuscript_wash,
                     proofs=proofs_listed, proof_text=proof_text, deps_reading=_deps_reading,
+                    proof_text_source=proof_text_source,
                     proof_vs_source=proof_vs_source)
 
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
@@ -1499,7 +1722,7 @@ class _RegisterStatement:
         if evidence_kind not in S.EVIDENCE_KINDS:
             return _refuse("bad_evidence_kind",
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
-                           "（它是证据**强度**，不是来源；来源走 source_lit_id）")
+                           "（它是证据强度，不是来源；来源走 source_lit_id）")
         # ---- 2026-10-23（业主裁定「都由 E 来签」→ 晚间更正「签字仍然由 V 签」）：B 不许自签 proof
         #
         # `proof` 这一档从这一天起有两个入口：形式化（检查器/L 那一支）与穷举
@@ -1552,7 +1775,7 @@ class _RegisterStatement:
                 or dict(line_norm).get("start")
                 or str(dict(line_norm).get("label") or "").strip()):
             _missing.append("doc_id/line_range")
-        _all_missing = (" **这一笔还缺**：" + "、".join(_missing)
+        _all_missing = (" 这一笔还缺：" + "、".join(_missing)
                         + " —— 一次给齐就不用再来回问。") if _missing else ""
         lit_id = str(source_lit_id or "").strip()
         if origin == "external_lit" and not lit_id:
@@ -1567,7 +1790,7 @@ class _RegisterStatement:
             # （定理内容 + 证明过程），不是把三态纪律免掉。
             return _refuse("missing_quote_reason",
                            "quote_verified 不是 True 时必须给 quote_reason —— "
-                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）" + _all_missing)
+                           "三态纪律：没通过要说为什么没通过，还没查也要说出来（不许留白）" + _all_missing)
         # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
         # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
         #
@@ -1813,6 +2036,16 @@ class _RegisterStatement:
             kind=kind_now)
         if bits_bad is not None:
             return bits_bad
+        # ---- 机械录入的默认态：这一笔交来的每一份证明都标 `optimized=false`（业主 2026-11-02）
+        #
+        # 两阶段录入的第一阶段是"机械性地录入完"（`draft/179` 一、二之一）：那一版还没洗过
+        # ⇒ 这一格显式落 `false`，第二阶段只读它（「若为否……总之都要洗一遍」）。
+        # 只补"还没记过的号"，已有的值一律不动（D 的每一次交付都会重交同一份内容，
+        # 整表写会把别的证明"洗过"的事实擦掉）。翻真只发生在换正文那一笔（`_attach_proofs`）。
+        bits = _EB.with_optimized_defaults(
+            bits,
+            ([1] if str(proof_text or "").strip() else [])
+            + [int(e.get("proof_no") or 0) for e in proofs_listed])
         # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
         #
         # 原话：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
@@ -1839,6 +2072,29 @@ class _RegisterStatement:
                       "artifact_sha": "",
                       "why": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
                               "⇒ 不是「没有签」")}
+        # ---- 没有签的证明不许进台账（业主 2026-11-02；覆盖所有来源） ------------------
+        #
+        # 业主四条要求的第 5 条：「机械录入那一版也必须有签（F 的签 或 文献编号），
+        # 不许再出现 proofs=0 绕行」。而今天的口子不止一条：
+        #   · kind="conjecture" 让 _self_authored_gate 短路 ⇒ 无签照收（85 的 14/16 条）；
+        #   · 闸只认 carried_by_D / disk 两种手稿来源，F 的进程内直交（param）不触发；
+        #   · F 侧把 evidence_kind 现算成 heuristic 照交 ⇒ 无签进台账。
+        # 这条闸按判据的真身写：看的是"这一笔要写进台账的证明正文有没有一份覆盖它的签"，
+        # 不看 kind、不看来源、不看 evidence_kind。两条合法的免签路（业主原话）：
+        # ① 文献侧的占位签：origin="external_lit" + source_lit_id（V 签位填文献编号）；
+        # ② 已有一份真签覆盖这一份正文（在册台账，或手稿签块，sha 相符）。
+        #
+        # 判据本体在 `proofintake_unsigned_gate`（2026-11-02）。它默认是「闸」，
+        # 由 `AGENTFLOW_UNSIGNED_PROOF_INTAKE` 三态控制（默认 strict = 拒），
+        # 让"把闸摘掉 ⇒ 判据必须红"的反真空能被机器跑出来 —— 见那个函数的 docstring。
+        if unsigned_proof_intake_is_strict():
+            _pg = self._unsigned_proof_gate(
+                origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
+                proofs_listed=proofs_listed, row=redelivery, v_sign=v_sign,
+                store=self.store)
+            if _pg.get("refused"):
+                return _refuse(str(_pg["refused"]), str(_pg.get("reason") or ""),
+                               proof_gate=dict(_pg.get("reading") or {}))
         sec = self._statement_secretary()
         if sec is None:
             return _refuse("secretary_unavailable",
@@ -1900,6 +2156,11 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   #: 这一笔的正文是从哪来的（2026-11-02）：`param`（调用方直递）/
+                   #: `manuscript`（按 D 的携带单寻址到的那份稿的 `## 证明`）/ 空串（这一笔
+                   #: 没有正文要写）。与 `manuscript_source` 分开读：那一格说稿从哪来，
+                   #: 这一格说落进 `proof_text` 的是不是那份稿。
+                   "proof_text_source": proof_text_source,
                    "addressing": dict(addressing),
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
@@ -1970,6 +2231,8 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   #: 正文的来源（`param` / `manuscript` / 空串），口径见新建那一支。
+                   "proof_text_source": proof_text_source,
                    "addressing": dict(addressing),
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
@@ -2050,6 +2313,8 @@ class _RegisterStatement:
                        "deps_missing": _deps_reading(written),
                        #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                        "manuscript_source": manuscript_source,
+                       #: 正文的来源（`param` / `manuscript` / 空串），口径见新建那一支。
+                       "proof_text_source": proof_text_source,
                        "addressing": dict(addressing),
                        "manuscript_washed": manuscript_washed,
                        "manuscript_wash": dict(manuscript_wash),
@@ -2246,6 +2511,11 @@ class _RegisterStatement:
                 #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
+                #: 这一笔的正文是从哪来的（2026-11-02，D 侧是主路）：`param`（调用方直递）/
+                #: `manuscript`（按 D 的携带单寻址到的那份稿的 `## 证明` 那一节）/ 空串。
+                #: 与 `manuscript_source` 分开：那一格说稿从哪来，这一格说落进 `proof_text`
+                #: 的是不是那份稿 —— 两者都缺时，正文只能靠调用方手工粘（真机 85 就是这样）。
+                "proof_text_source": proof_text_source,
                 "addressing": dict(addressing),
                 "manuscript_washed": manuscript_washed,
                 "manuscript_wash": dict(manuscript_wash),
@@ -2291,10 +2561,10 @@ class _RegisterStatement:
                          "等级不许自报，判据永远现算。"
                          "这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），"
                          f"表格 {written.get('tables')}、路径组 {written.get('path_groups')}。"
-                         + ("这一行**缺 proof_text**（自产命题没有证明）：它进去了，"
+                         + ("这一行缺 proof_text（自产命题没有证明）：它进去了，"
                             "但等级现算是『猜想』，`pending` 里挂着待办。"
                             if needs_proof else "")
-                         + (f"概念行**不带** proof_text：交来的 {proof_text_dropped!r} "
+                         + (f"概念行不带 proof_text：交来的 {proof_text_dropped!r} "
                             "没有写进库（概念不参与等级链，要补的是定义，不是证明）。"
                             if proof_text_dropped else "")
                          + ("这一笔还给这条定理挂了多证明（"
@@ -2416,7 +2686,8 @@ class _RegisterStatement:
                                     proofs: Sequence[Mapping[str, Any]],
                                     proof_text: str,
                                     deps_reading: Any,
-                                    proof_vs_source: Mapping[str, Any] | None = None) -> dict:
+                                    proof_vs_source: Mapping[str, Any] | None = None,
+                                    proof_text_source: str = "") -> dict:
         """收下 D 递来的那一份稿：命题行不动，只把依赖面写进 `dependencies`。
 
         `deps_groups` 是上面那块已经解析并逐条核过档位的步骤（外层 = 路径组）；
@@ -2446,6 +2717,9 @@ class _RegisterStatement:
             note += f"；这一遍新落 {int(written['deps_written'])} 条依赖边"
         return {"ok": True, "stmt_id": stmt_id, "new_row": False, "received_manuscript": True,
                 "manuscript_source": manuscript_source,
+                #: 这一支不写正文（命题行不动）⇒ 正文来源是空串或"在册原样"。要给调用方
+                #: "为什么没写"的读数：`carries_write` 判的是"有没有与在册不同的东西"。
+                "proof_text_source": str(proof_text_source or ""),
                 "manuscript_washed": bool(manuscript_washed),
                 "manuscript_wash": dict(manuscript_wash),
                 #: 与来源是否逐字一致（信息格，不是门）：这一支不改正文，读数照给。
