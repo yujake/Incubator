@@ -23,7 +23,7 @@ from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.extract import extract_text
 
-from conftest import add_literature, write_library_file
+from conftest import add_literature, seed_statement_row, write_library_file
 
 CREATED = "2026-01-01T00:00:00+08:00"
 
@@ -76,7 +76,19 @@ def test_external_lit_with_verbatim_quote_lands_bits_in_the_same_transaction(sto
     所以等级回到「猜想」。要升到预备定理级得先逐个优化重写、拿正常 V 签。
     """
     lid = _lit(store)
-    res = _agent(store).register_statement(source_lit_id=lid, **_external())
+    # 准入闸（2026-11-02 默认 strict）：这一笔"引用命题、正文还没真签"的状态不能再经
+    # `register_statement` 造出来（无签正文整笔拒；就算补一份 V 签，那也不是这一条要
+    # 读的"占位签"形态）。所以现场改成直接铺行（真机历史形态），bits 仍由唯一产出方
+    # `bits_of` 现算 —— 期望值一个字没改：第 2 位亮、第 3 位假、等级停在猜想。
+    seeded = seed_statement_row(
+        store, proof_text="Proof. 逐字摘录。", statement_full="设 G 是有限群。",
+        statement_text="设 G 是有限群。", kind="theorem", origin="external_lit",
+        source_lit_id=lid, page_range={"start": 1, "end": None, "label": ""},
+        quote_verified=True, quote_reason="",
+        doc_id="0000", line_range={"start": None, "end": None, "label": ""},
+        bits=EB.bits_of(origin="external_lit", source_lit_id=lid,
+                        quote_verified=True, kind="theorem"))
+    res = {"ok": True, "stmt_id": str(seeded["stmt_id"])}
 
     assert res["ok"] is True, res
     rows = _bits_rows(store)
@@ -106,11 +118,19 @@ def test_own_result_proof_text_lights_bit_two_but_decides_no_grade(store):
     与声明成哪一种 kind 无关 —— 而入口档从这一批起只有猜想。
     """
     _lit(store)
-    res = _agent(store).register_statement(
+    # 准入闸 strict：同上一条 —— 直接铺行造"登记那一刻还没有 V 的结论"的历史形态，
+    # bits 由 `bits_of` 现算（第 2 位真、第 3 位假）。期望值一个字没改。
+    seeded = seed_statement_row(
+        store, proof_text="证明：逐步论证。",
         statement_full="对每个 m ≥ 5，k = 3 都有无穷多个例子。",
-        origin="own_result", kind="conjecture", doc_id="0000",
-        proof_text="证明：逐步论证。",
-        quote_reason="自有结果，没有引文可比对（三态里的那一句『为什么』）")
+        statement_text="对每个 m ≥ 5，k = 3 都有无穷多个例子。",
+        kind="conjecture", origin="own_result", doc_id="0000",
+        quote_verified=None,
+        quote_reason="自有结果，没有引文可比对（三态里的那一句『为什么』）",
+        line_range={"start": None, "end": None, "label": ""},
+        bits=EB.bits_of(origin="own_result", proof=True,
+                        proof_process="证明：逐步论证。", kind="conjecture"))
+    res = {"ok": True, "stmt_id": str(seeded["stmt_id"])}
 
     assert res["ok"] is True, res
     bits = _bits_rows(store)[0]["bits"]

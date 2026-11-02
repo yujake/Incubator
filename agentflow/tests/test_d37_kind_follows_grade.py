@@ -78,6 +78,8 @@ from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
+from conftest import seed_statement_row  # noqa: E402
+
 #: 一条干净的自产命题（cube 那条的形体：立方和闭式）。
 FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
 LABEL = "sum-of-cubes-closed-form"
@@ -109,10 +111,34 @@ def _own(**kw) -> dict:
 
 
 def _file(store: Store, **kw) -> dict:
-    """B 的入库正路（`own.register_statement` 的真身）：先按猜想落库。"""
-    out = _b(store).register_statement(**_own(proof_text=PROOF, **kw))
-    assert out.get("ok") is True, out
-    return out
+    """造一条在册的"猜想 + 有证明、还没签"的命题（历史形态：直接铺行）。
+
+    2026-11-02 准入闸默认 strict 之后，这个状态不能再经 `register_statement` 造出来
+    （无签的证明正文整笔拒 `proof_without_v_sign`）—— 而 D-37 这一组测的正是
+    "这一行现在叫不叫定理"。所以现场改成直接铺行（真机 3134 行 own_result 的形状：
+    bits 按 `bits_of` 现算（proof 位真、reviewed 位假）、台账 0 行、没有签）。
+    期望值与判据一个字都没改。
+    """
+    own = _own(proof_text=PROOF, **kw)
+    kind = str(own.get("kind") or "conjecture")
+    seeded = seed_statement_row(
+        store, proof_text=str(own.get("proof_text") or ""),
+        statement_full=str(own.get("statement_full") or ""),
+        statement_text=str(own.get("statement_text") or ""), kind=kind,
+        label=str(own.get("label") or ""), origin=str(own.get("origin") or "own_result"),
+        quote_verified=own.get("quote_verified"),
+        quote_reason=str(own.get("quote_reason") or ""),
+        # 其余按"B 真登记会落下的那一行"补齐（同形历史行）：`evidence_kind` 的缺省、
+        # 出处两栏、依赖/别名两张空表 —— 升档那一步要读它们。
+        evidence_kind="cross_check", doc_id="000000",
+        line_range={"start": 1, "end": None, "label": ""},
+        page_range={"start": None, "end": None, "label": ""},
+        derived_from=[], aliases=[], source_lit_id=None,
+        quote_mode="", quote_span="", quote_call_sha256="",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=PROOF,
+                        kind=kind))
+    return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": False,
+            "row": dict(seeded)}
 
 
 def _row(store: Store, sid: str) -> dict:
