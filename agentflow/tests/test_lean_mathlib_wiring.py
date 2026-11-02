@@ -163,7 +163,12 @@ def test_criterion_2_without_mathlib_it_falls_back_and_never_says_unusable(
 
 
 def test_criterion_3_a_detected_but_unusable_graph_library_is_unusable_with_raw_reason(
-        tmp_path: pathlib.Path) -> None:
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 2026-11-02：进程里可能还留着上一条用例经 `formalgw` 写进来的 `LEAN_PATH`
+    # （那是生产代码的全局副作用，见 `formalgw.py` 里那行 `os.environ["LEAN_PATH"]`）——
+    # 它会让这份"假 Mathlib 形状"的夹具被真 Mathlib 救活。这一条判的是"假的那一份
+    # 不可用"，所以先把环境里那条残留摘掉，再量。
+    monkeypatch.delenv("LEAN_PATH", raising=False)
     """判据 ③：工程根检测到了、图论那一项编不过 ⇒ `mathlib=unusable` 加检查器原文，
     而整次自检不许是 `usable`。
 
@@ -271,6 +276,9 @@ def _criterion_one_holds(tmp_path: pathlib.Path, lean: pathlib.Path,
 
 def test_criterion_4_anti_vacuum_stubbed_detection_cannot_make_it_usable(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 与判据 ③ 同一条理由：先摘掉进程里可能残留的 `LEAN_PATH`，否则"假 Mathlib"会被
+    # 真 Mathlib 救活，这条反真空就量不到"检测层说 usable 不算数"。
+    monkeypatch.delenv("LEAN_PATH", raising=False)
     """判据 ④：检测恒 True 而实际没有 ⇒ ① 的断言红、读数不许是 `usable`。
 
     没有这一条，"图论可用"可以整段照着检测层写出来：检测层说 detected 就报 usable，
