@@ -1023,8 +1023,19 @@ _ROLES_V = ("V",)
     # 这是 I12 冷启动在接口上的那一半 —— 传字符串而不是传 store，
     # "它能碰什么"就被固定在签名里，而不是靠一句"它会守规矩"。
             "readonly_facts": {"type": "string", "description": "只读读数（命题现状 / 台账条数）"},
+            # 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
+            # 收录时读到」）：未在册那一条入口 —— 传 F 那一份证明手稿的工作区相对路径
+            # （`reports/f-proof-*.md`），V 读稿审、三转干净就把签块盖回那一份手稿
+            # （`vsigns.write_manuscript_sign`）。此时 `statement_id` 不给：空号 =
+            # 「这一条还没在册」。落点不是 `verifications/<号>.jsonl`，而是手稿里那一行签块。
+            "proof_manuscript": {"type": "string", "description":
+                                 "F 的证明手稿路径（工作区相对；命题还没在册时用它，"
+                                 "给了它就可以不给 statement_id）"},
            },
-           "required": ["statement_id"],
+           # 2026-11-02：不再要求 `statement_id` —— 未在册那一档不给号、给手稿路径；
+           # 两个入口键一个都不给时由实现按 `checked=False` + `no_proof_text` 如实拒
+           # （那是"没查成"，不是"审过了"）。
+           "required": [],
            "additionalProperties": False,
            },
     side_effect="read",
@@ -1080,19 +1091,22 @@ _ROLES_V = ("V",)
             ),
     tags=("verification", "proof"),
 )
-def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, readonly_facts=None,
-                        proof_no=None):
+def _verify_verify_proof(_need_store, _agent_v, statement_id="", proof_text=None,
+                        readonly_facts=None, proof_no=None, proof_manuscript=None):
     """verify.verify_proof 的工具体。
 
     注入值（_need_store, _agent_v）由装配期用 `partial` 绑定，
     所以模型看到的签名与它声明的 properties 逐字对上。
+    `statement_id` 有缺省（2026-11-02）：未在册那一档不给号、只给
+    `proof_manuscript`，参数门不再拦它。
     """
     return (
     _need_store("verify.verify_proof")
-               or ok(_agent_v().verify_proof(statement_id=statement_id,
+               or ok(_agent_v().verify_proof(statement_id=statement_id or "",
                                              proof_text=proof_text or "",
                                              proof_no=proof_no,
-                                             readonly_facts=readonly_facts or ""))
+                                             readonly_facts=readonly_facts or "",
+                                             proof_manuscript=proof_manuscript or ""))
     )
 
 

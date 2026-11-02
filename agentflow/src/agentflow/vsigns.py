@@ -401,6 +401,254 @@ def archive(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def manuscript_proof_body(text: str) -> str:
+    """手稿里「被签的那一段正文」（`## 证明` 那一节，去掉小节自带的首尾空行）。
+
+    为什么需要这一格：`depsection.proof_body` 取的是 markdown 小节正文，首尾各带一个
+    `\\n`；而 F 交给 B 登记的 `proof_text` 是逐行 join 出来的那一串（没有首尾空行）。
+    签的 sha 按"登记时那一份正文"算（`ARTIFACT_SHA_RULE`）⇒ 两边必须先归一到同一串，
+    否则签块里的 sha 与 B 登记时算的 sha 永远差一个换行，签永远认不上 ——
+    而这条链上的每一处都"看起来成功了"。
+    """
+    from . import depsection as _DS
+
+    return str(_DS.proof_body(text) or "").strip("\n")
+
+
+# ---------------------------------------------------------------- 手稿里的签块
+#
+# 业主 2026-11-01（逐字，本模块开头已经引过一次）：「V 签不直接进台账，进手稿，随 B 侧
+# 将手稿中的定理或命题收录时读到。」当时这一层把签落成了侧文件（`out/vsigns/<sha>.json`），
+# 理由写在模块开头（"B 拿着手稿问不出来"）。2026-11-02 业主再明确一次：签要先放在 F 的
+# 手稿里，B 收录时从手稿里读到 ⇒ 这一节就是那条落点。
+#
+# 为什么照 `depsection.WASH_MARK` 的样子做（一行元信息 + 写/读一对）：手稿已经有一行
+# 机器可读的元信息（`- 依赖面洗稿：`），B 已经在读它（`manuscript_wash_reading`）。
+# 再发明一种块格式只会让"手稿里哪些行是机器写的"变成第二个约定。
+#
+# 位置与幂等：插在 `- 计划：` 那一行之后（与洗稿那一行同一个位置），写之前先删掉旧的
+# 同一行 —— 同一份手稿重签只留一行。
+#:
+#: 手稿里签块的固定前缀（写与读共用这一处；B 侧也按它读）。
+SIGN_MARK = "- V 签："
+
+#: 签块里那几格的键（顺序即写法；读侧按 `；` 与 `=` 拆）。
+SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "时间",
+                                    "签名者", "台账", "命题号")
+
+
+def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
+                           verdict: str = "成立", signer: str = "V", at: str = "",
+                           ledger: str = "", statement_id: str = "",
+                           signed: bool = True) -> str:
+    """渲染那一行签块（纯字符串；判据在 :func:`stamp_manuscript_sign`）。
+
+    `signed=False` 写的是"审过了、没过"那一档：同一行、同一个落点，`已签=false` +
+    真实判词。为什么不过了就什么都不写：业主 2026-11-01「「有毛病」是给提供证明的一方
+    看的，具体信息是叫它们优化证明」⇒ 没过也要在稿上留下"哪一步、什么判词"，
+    否则 F 手里只剩一句口头转达。
+    """
+    sha = str(proof_sha or "").strip().lower()
+    return (f"{SIGN_MARK}已签={'true' if signed else 'false'}；"
+            f"判词={str(verdict or '成立')}；"
+            f"连续={int(streak or 0)}/{int(need or 0)}；正文sha={sha}；"
+            f"时间={str(at or '')}；签名者={str(signer or 'V')}；"
+            f"台账={str(ledger or '')}；命题号={str(statement_id or '未在册')}")
+
+
+def stamp_manuscript_sign(text: str, *, proof_sha: Any, streak: Any, need: Any,
+                          verdict: str = "成立", signer: str = "V", at: str = "",
+                          ledger: str = "", statement_id: str = "",
+                          signed: bool = True) -> str:
+    """把手稿正文里那一行签块写成这一签（纯函数、幂等）。
+
+    先删掉旧的同一行再插到 `- 计划：` 之后：手稿是替换式写的（`publish_manuscript`
+    改名 / `mark_washed` 插行都会整文件重写），同一份稿上只该有一行签块。
+    找不到 `- 计划：` 时插在第 3 行之前（与 `mark_washed` 的兜底位置同一处）。
+    """
+    raw = str(text or "").replace("\r\n", "\n")
+    lines = [ln for ln in raw.split("\n") if not ln.strip().startswith(SIGN_MARK)]
+    mark = render_manuscript_sign(
+        proof_sha=proof_sha, streak=streak, need=need, verdict=verdict,
+        signer=signer, at=at, ledger=ledger, statement_id=statement_id,
+        signed=signed)
+    at_i = 0
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("- 计划："):
+            at_i = i + 1
+            break
+    else:
+        at_i = min(2, len(lines))
+    lines.insert(at_i, mark)
+    return "\n".join(lines)
+
+
+def manuscript_sign_reading(text: str) -> dict[str, Any]:
+    """读手稿里那一行签块（纯读；没有就是 `found=False`，不是"没签"）。
+
+    返回键：`found` / `signed` / `verdict` / `streak` / `need` / `proof_sha256` /
+    `at` / `signer` / `ledger` / `statement_id` / `mark` / `problem`。
+    三态纪律：块在但读不成形（坏行 / 缺 `正文sha`）⇒ `found=True, signed=False`，
+    并在 `problem` 里说缺什么 —— 不许折成"没有签"。
+    """
+    out: dict[str, Any] = {"found": False, "signed": False, "verdict": "", "streak": 0,
+                           "need": 0, "proof_sha256": "", "at": "", "signer": "",
+                           "ledger": "", "statement_id": "", "mark": "", "problem": ""}
+    for raw in str(text or "").replace("\r\n", "\n").split("\n"):
+        line = raw.strip()
+        if not line.startswith(SIGN_MARK):
+            continue
+        out["mark"] = line
+        body = line[len(SIGN_MARK):]
+        cells: dict[str, str] = {}
+        for cell in body.split("；"):
+            if "=" in cell:
+                k, v = cell.split("=", 1)
+                cells[k.strip()] = v.strip()
+        out["found"] = True
+        out["signed"] = str(cells.get("已签") or "").lower() == "true"
+        out["verdict"] = str(cells.get("判词") or "")
+        out["at"] = str(cells.get("时间") or "")
+        out["signer"] = str(cells.get("签名者") or "")
+        out["ledger"] = str(cells.get("台账") or "")
+        out["statement_id"] = str(cells.get("命题号") or "")
+        if out["statement_id"] in ("未在册", ""):
+            out["statement_id"] = ""
+        out["proof_sha256"] = str(cells.get("正文sha") or "").strip().lower()
+        run = str(cells.get("连续") or "")
+        if "/" in run:
+            left, right = run.split("/", 1)
+            try:
+                out["streak"] = int(left)
+                out["need"] = int(right)
+            except (TypeError, ValueError):
+                out["problem"] = f"签块里的「连续」读不出数字：{run!r}"
+        else:
+            out["problem"] = f"签块里没有「连续」，读到 {run!r}"
+        if len(out["proof_sha256"]) != 64:
+            out["problem"] = (f"签块里的「正文sha」不是 64 位十六进制："
+                              f"{out['proof_sha256']!r}")
+        return out
+    return out
+
+
+def manuscript_sign_standing(text: str, *, proof_sha: Any = "") -> dict[str, Any]:
+    """签块相对"现在这一份正文"的读数（`signed` / `stale` / `rejected` / `unsigned`）。
+
+    判据（与 `bits_after_sign` 同一把尺，不另立）：
+    - 没有块 ⇒ `unsigned`（"这一份还没签"，不是"查不成"）；
+    - 块在、`已签=true`、`连续>=require`、且块里的 `正文sha` == 这一份正文的 sha
+      ⇒ `signed`；sha 不符 ⇒ `stale`（签完之后正文改过）；
+    - 块在但 `已签=false`（判词不是成立）⇒ `rejected`。
+    """
+    got = manuscript_sign_reading(text)
+    out = {**got, "state": "unsigned", "checked": True,
+           "sha_matches": None, "why": ""}
+    if not got.get("found"):
+        out["why"] = "手稿里没有 V 签块（这一份还没签）"
+        return out
+    if got.get("problem"):
+        out.update(checked=False, state="unsigned",
+                   why=f"签块读不成形（{got['problem']}）⇒ 这一格没查成，不是「没签」")
+        return out
+    want = str(proof_sha or "").strip().lower()
+    out["sha_matches"] = (not want) or (got.get("proof_sha256") == want)
+    if not got.get("signed"):
+        out.update(state="rejected",
+                   why=(f"手稿里的签块是「{got.get('verdict') or '（空）'}」"
+                        "⇒ 审过了、没过，按缺陷改稿后再送"))
+        return out
+    if not out["sha_matches"]:
+        out.update(state="stale",
+                   why=(f"手稿里的签盖的是另一版（{got.get('proof_sha256')[:12]}… ≠ "
+                        f"{want[:12]}…）⇒ 签完之后正文改过，要重签"))
+        return out
+    if int(got.get("streak") or 0) < int(got.get("need") or 0):
+        out.update(state="unsigned",
+                   why=(f"签块里的连续读数是 {got.get('streak')}/{got.get('need')}"
+                        " ⇒ 未达门槛，不算签"))
+        return out
+    out.update(state="signed",
+               why=(f"手稿里的签块：连续 {got.get('streak')}/{got.get('need')} 成立、"
+                    f"正文 sha 相符（签于 {got.get('at') or '（没有时间）'}）"))
+    return out
+
+
+def write_manuscript_sign(root: Any, manuscript_path: Any, *,
+                          proof_sha: Any, streak: Any, need: Any,
+                          verdict: str = "成立", signer: str = "V", at: str = "",
+                          ledger: str = "", statement_id: str = "",
+                          signed: bool = True) -> dict[str, Any]:
+    """把签块盖进那一份手稿（唯一写手稿签块的入口；三态读数）。
+
+    为什么加这一格：`write_sign` 只写侧文件；未在册那一档（`verify_proof` 的
+    `proof_manuscript` 入口）连侧文件都没有，签只落在手稿里 ⇒ 写口必须有一个
+    不经过侧文件的形态。两处共用 :func:`stamp_manuscript_sign`，所以块逐字相同。
+
+    返回键：`written` / `idempotent` / `missing` / `path` / `why` / `reading`。
+    `missing=True` 是"那份手稿不在盘上"（没写成，不许当成写成了）。
+    """
+    out: dict[str, Any] = {"written": False, "idempotent": False, "missing": False,
+                           "path": "", "why": "", "reading": {}}
+    rel = str(manuscript_path or "").strip().replace("\\", "/")
+    out["path"] = rel
+    if not rel:
+        out["why"] = "没有手稿路径 ⇒ 签块没地方写（这一格没写成）"
+        return out
+    path = Path(str(root or "")) / rel
+    try:
+        old = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        out.update(missing=not path.exists(),
+                   why=(f"手稿读不出来（{type(exc).__name__}: {exc}）⇒ 签块没写成"
+                        if path.exists() else
+                        f"`{rel}` 不在盘上 ⇒ 签块没写成（未在册送审要指向 F 的那一份手稿）"))
+        return out
+    new = stamp_manuscript_sign(old, proof_sha=proof_sha, streak=streak, need=need,
+                                verdict=verdict, signer=signer, at=at,
+                                ledger=ledger, statement_id=statement_id,
+                                signed=signed)
+    out["reading"] = manuscript_sign_reading(new)
+    if new == old:
+        out.update(written=True, idempotent=True, why="签块已经在那一份手稿里（幂等：没重写）")
+        return out
+    tmp = path.with_name(path.name + ".sign.tmp")
+    try:
+        tmp.write_text(new, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        out["why"] = f"签块没写进手稿（{type(exc).__name__}: {exc}）"
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            # 清临时文件失败不许带走"这一笔没写成"这件事：残留的 `.sign.tmp`
+            # 只是手稿旁边多一个文件，下一次写块会用一个新临时名再写。
+            pass
+        return out
+    out.update(written=True, why=f"签块写进 `{rel}`（连续 {int(streak or 0)}/{int(need or 0)}）")
+    return out
+
+
+def _stamp_block_after_sign(root: Any, doc: Mapping[str, Any]) -> dict[str, Any]:
+    """`write_sign` 之后顺手把签块盖进它记下的那一份手稿（best-effort，不带走这一签）。
+
+    为什么不在这失败时回滚：签文件已经在盘上（证据），手稿块是"随稿走的那一份"；
+    写块失败要留读数（返回里的 `manuscript_write`），不许让"签已经发了"这件事消失。
+    """
+    rel = str(doc.get("artifact_path") or "").strip()
+    if not rel:
+        return {"written": False, "idempotent": False, "missing": False, "path": "",
+                "why": "这一签没有手稿落点（`artifact_path` 是空的）⇒ 只写侧文件",
+                "reading": {}}
+    return write_manuscript_sign(
+        root, rel, proof_sha=doc.get("artifact_sha"), streak=doc.get("streak"),
+        need=doc.get("need"), verdict=str(doc.get("verdict") or "成立"),
+        signer="V", at=str(doc.get("at") or ""),
+        ledger=str(doc.get("ledger") or ""),
+        statement_id=str(doc.get("statement_id") or ""))
+
+
 # ---------------------------------------------------------------- 写一份签
 
 def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
@@ -421,11 +669,22 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     理由串说清哪一格不同 —— 覆盖会把"先签了后来又不认"这段历史抹掉。
 
     返回键：`written` / `idempotent` / `conflict` / `path` / `archive_error` /
-    `archive_count` / `reason` / `sign`。
+    `archive_count` / `reason` / `sign` / `manuscript_write`。
+
+    ## 2026-11-02：签块同时盖进手稿（业主：「V 签不直接进台账，进手稿」）
+
+    侧文件写成功之后，按 `doc["artifact_path"]`（`verifications._vsign_payload` 已经按
+    `depsection.manuscript_relpaths` 定位好的那一份）把同一份签盖进手稿 —— 块长什么样、
+    幂等与解析全在 :func:`stamp_manuscript_sign` / :func:`manuscript_sign_reading`。
+    写块失败不回滚侧文件（签已经发了这件事不许消失），读数落 `manuscript_write`。
     """
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "archive_count": 0,
                            "reason": "", "sign": {},
+                           #: 手稿签块那一笔的读数（2026-11-02）：`written` / `idempotent` /
+                           #: `missing` / `path` / `why`。它是一个独立的落点：侧文件是证据、
+                           #: 手稿块是"随稿走的那一份"，任一失败都各自可见。
+                           "manuscript_write": {},
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False}
@@ -495,6 +754,13 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out["archive_error"] = str(got.get("error") or "归档没写成")
         out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
+    # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿」）：同一份签盖进手稿 -----
+    # 侧文件与手稿块是同一签的两个落点（同一把 sha、同一组读数）。写块失败不回滚侧文件：
+    # 签已经发了这件事不许因为"稿没写成"而消失，读数写进 `manuscript_write.why`。
+    out["manuscript_write"] = _stamp_block_after_sign(root, doc)
+    if not out["manuscript_write"].get("written"):
+        out["reason"] = (f"{out['reason']}；手稿签块没写成："
+                         f"{out['manuscript_write'].get('why')}")
     return out
 
 
@@ -1000,7 +1266,7 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
 
 def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                     statement_id: str = "", proof_no: Any = 1,
-                    kind: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
+                    kind: str = "", manuscript_text: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
     """B 收录时"认签"：有一份对得上这一份正文的签 ⇒ 把第 3 位写成已签。
 
     返回 `(bits, reading)`。`reading` 是这一步的读数（「三态」）：
@@ -1046,6 +1312,34 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     from . import verifications as _VR
 
     sha = _VR.proof_sha(str(proof_text))
+    # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
+    #      收录时读到」）：手稿里那一行签块是 B 收录时的第一来源 ----
+    #
+    # 判据不在 B 那一侧重写：读块、比 sha、看连续次数全在 `manuscript_sign_standing`
+    # 一处（与侧文件/pending 同一把尺：`streak >= need` 且正文 sha 相符）。
+    # 块说 signed ⇒ 认；块说 rejected / stale ⇒ 不认（理由带走，`found=True` 让读的人
+    # 分得清"没有块"与"有块但不能认"）。没有块 ⇒ 落到下面既有的两条来源。
+    if str(manuscript_text or "").strip():
+        try:
+            no = int(_VR.as_proof_no(proof_no) or 1)
+        except (TypeError, ValueError):
+            no = 1
+        block = manuscript_sign_standing(str(manuscript_text), proof_sha=sha)
+        out.update(checked=bool(block.get("checked")),
+                   found=bool(block.get("found")), artifact_sha=sha,
+                   why=str(block.get("why") or ""), block=dict(block))
+        if str(block.get("state") or "") == "signed":
+            new = _apply_review_to_bits(
+                bits, verification_id="", evidence=str(block.get("ledger") or ""),
+                findings=[], verdict="成立", proof_no=no, sha=sha,
+                kind=str(kind or ""))
+            out["applied"] = True
+            out["why"] = (f"手稿里的签块：连续 {block.get('streak')}/{block.get('need')}"
+                          f" 成立且正文 sha 相符（签于 {block.get('at') or '（没有时间）'}）"
+                          " ⇒ 第 3 位按手稿里的签写")
+            return new, out
+        if str(block.get("state") or "") in ("rejected", "stale"):
+            return dict(bits), out
     if not str(statement_id or "").strip():
         return _claim_pending_sign(bits, root=root, sha=sha, proof_no=proof_no,
                                    kind=kind, out=out)

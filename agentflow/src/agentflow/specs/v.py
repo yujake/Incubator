@@ -106,8 +106,20 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 传字符串而不是传 store，是为了让"它能碰什么"在接口上就固定下来
                 # （I12 的结构形态，见 `verifications.cold_start_prompt`）。
                 "readonly_facts": _S,
+                # 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或
+                # 命题收录时读到」）：给一条"还没在册"的入口 —— 传 F 那一份证明手稿的
+                # 工作区相对路径（`reports/f-proof-*.md`），V 就读稿审、三转干净就把签块
+                # 盖回**那一份手稿**（`vsigns.write_manuscript_sign`）。此时 `statement_id`
+                # 不给（空串 = 还没在册），落点不是 `verifications/<号>.jsonl`。
+                # 为什么不是新动作：V 做的还是同一件事（重读一份证明、给两态结论），
+                # 变的只是对象从"在册命题的正文"扩到"手稿里的那一段正文"。
+                "proof_manuscript": _S,
             },
-            required=("statement_id",),
+            # 2026-11-02：`statement_id` 不再是唯一的入口键 —— 未在册那一档不给号，
+            # 给 `proof_manuscript`。两键至少给一个，缺哪个由实现按 `checked=False`
+            # 如实拒（`no_proof_text` / `statement_missing`），不在这里做二选一约束
+            # （`_obj` 的 required 是"根级必填"，没有"二选一"的位置）。
+            required=(),
         ),
         "一行验证台账（含 v-NNNN / verdict / findings / proof_sha256）",
         side_effect="read", handler_name="verify_proof",

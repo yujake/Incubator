@@ -277,8 +277,11 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
 def test_b2_the_action_and_params_named_in_the_note_are_real(tmp_path):
     """b2：note 里点名的动作与形参逐个对工具声明核过（今晚被"不存在的形参"咬过一次）。
 
-    `V.verify_proof`：`statement_id` 必填、`proof_no` 是它自己的形参、`additionalProperties`
-    为假（所以只能给这几个名字）。这条判据让 note 里那句话不能自己编。
+    `V.verify_proof` 的参数面（2026-11-02 起）：`statement_id` 不再是根级必填 ——
+    命题还没在册时走另一条入口 `proof_manuscript`（F 的证明手稿路径）。两个入口键
+    至少给一个，缺哪个由实现按 `checked=False` 如实拒（`no_proof_text` /
+    `statement_missing`）。`additionalProperties` 仍为假（所以只能给声明里那几个名字）。
+    这条判据让 note 里那句话不能自己编。
     """
     spec = C.find_action("V", "verify_proof")
     assert spec is not None, "capabilities 里没有 V.verify_proof"
@@ -287,7 +290,9 @@ def test_b2_the_action_and_params_named_in_the_note_are_real(tmp_path):
     props = dict(params.get("properties") or {})
     assert "statement_id" in props, sorted(props)
     assert "proof_no" in props, sorted(props)
-    assert list(params.get("required") or []) == ["statement_id"], params.get("required")
+    # 2026-11-02（业主：「V 签先放在 F 的手稿里让 B 录入」）：未在册那条入口。
+    assert "proof_manuscript" in props, sorted(props)
+    assert list(params.get("required") or []) == [], params.get("required")
     assert params.get("additionalProperties") is False, params
     # 与 B 的出边也一致：B 派得动 V（note 里让 B 去派它，不是一句做不到的指令）
     assert "V" in set(C.ALLOWED_EDGES.get("B", ())), sorted(C.ALLOWED_EDGES.get("B", ()))

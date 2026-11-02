@@ -53,6 +53,7 @@ from __future__ import annotations
 from ._support import Any, Mapping, Path, S, Sequence, _short
 
 from .. import depsection as _DS
+from .. import verifications as _VR   # 签块的 sha 与台账同一把尺（`proof_sha(正文)`）
 
 
 class _Manuscript:
@@ -313,6 +314,40 @@ class _Manuscript:
         # 按号改名时把开头那一行"命题号"也改成真的号：只改文件名会让盘上出现
         # "文件叫 f-proof-000001.md、正文说还没落号"的双读数（见 `_retitle`）。
         titled = self._retitle(text, sid)
+        # ---- 2026-11-02：登记前后 V 可能已经把签块盖进这一份稿（未在册送审那条路）----
+        #
+        # 改名 / 重写都是整文件写（用的是手上这份 `text`，它产生于送审之前）⇒ 不把签块
+        # 搬过来，"签过"就会在登记那一刻或下一轮丢掉。这里只搬已有那一行，不新造签：
+        # 而且只在块里的正文 sha 与现在这一份正文相符时才搬（改过稿就不搬 ——
+        # 那一签签的是旧版，`manuscript_sign_standing` 会读成 stale，那是诚实的）。
+        try:
+            from .. import vsigns as _VS
+
+            # 与「登记时那一份正文」对齐（`vsigns.manuscript_proof_body` 的同一归一）：
+            # `depsection.proof_body` 带首尾空行，而 F 交给 B 的 `proof_text` 不带。
+            body_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
+            candidates: list[str] = []
+            old_path = (Path(root) / old_rel) if old_rel else None
+            if old_path is not None and old_path.is_file():
+                candidates.append(old_path.read_text(encoding="utf-8"))
+            target = Path(root) / new_rel
+            if target.is_file():
+                candidates.append(target.read_text(encoding="utf-8"))
+            for cand in candidates:
+                block = _VS.manuscript_sign_reading(cand)
+                if not block.get("found") or block.get("proof_sha256") != body_sha:
+                    continue
+                titled = _VS.stamp_manuscript_sign(
+                    titled, proof_sha=body_sha,
+                    streak=block.get("streak"), need=block.get("need"),
+                    verdict=str(block.get("verdict") or "成立"),
+                    signer=str(block.get("signer") or "V"),
+                    at=str(block.get("at") or ""),
+                    ledger=str(block.get("ledger") or ""),
+                    statement_id=sid, signed=bool(block.get("signed")))
+                break
+        except Exception:  # noqa: BLE001 —— 搬块失败不带走改名（签块丢了要比整笔崩掉轻）
+            titled = titled
         out["text"] = titled
         if old_rel == new_rel:
             out.update(path=new_rel, published=True, why="")

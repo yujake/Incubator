@@ -288,7 +288,8 @@ def test_5_forcing_the_signature_lookup_open_makes_criterion_3_red(
     plain = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review")))
     assert plain.get("kind") == "self_authored_needs_v", plain
 
-    def _always_signed(self, *, statement_full: str, proof_text: str) -> dict:
+    def _always_signed(self, *, statement_full: str, proof_text: str,
+                       manuscript_text: str = "") -> dict:
         return {"checked": True, "signed": True, "in_ledger": True,
                 "stmt_id": str(first.get("stmt_id") or ""),
                 "verification_id": "v-999999", "proof_sha256": "",

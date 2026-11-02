@@ -1588,7 +1588,9 @@ class _RegisterStatement:
             # 闸判的那个 kind 与落库的那个 kind 必须是同一个字符串，否则"判据放过了、
             # 落下去的却是另一个 kind"这件事在读数上完全看不见。
             origin=str(origin), kind=kind_now, lit_id=lit_id,
-            statement_full=full, proof_text=str(proof_text or ""))
+            statement_full=full, proof_text=str(proof_text or ""),
+            # 2026-11-02：手稿签块也在这道闸的可见面上（业主：B 收录时从稿上读到签）。
+            manuscript_text=str(manuscript_text or ""))
         if self_authored.get("refused"):
             # 两条裁定的分工按"阶段"分，拒收码也跟着阶段走（同一件事的两种说法：
             # 一个说"你一开始就不该叫定理"，一个说"现在欠的是 V 的一签"）：
@@ -1749,7 +1751,10 @@ class _RegisterStatement:
             bits, v_sign = _VS.bits_after_sign(
                 bits, root=getattr(self.store, "root", ""),
                 proof_text=str(proof_text or ""), statement_id=stmt_id_now,
-                proof_no=1, kind=str(kind_now or ""))
+                proof_no=1, kind=str(kind_now or ""),
+                # 2026-11-02（业主：「V 签先放在 F 的手稿里，让 B 录入」）：
+                # 收录时先读手稿里那一行签块（`vsigns.manuscript_sign_standing`）。
+                manuscript_text=str(manuscript_text or ""))
         except Exception as exc:  # noqa: BLE001 —— 认签那一格读不成不许带走整笔登记
             v_sign = {"checked": False, "found": False, "applied": False,
                       "artifact_sha": "",
@@ -2539,7 +2544,8 @@ class _RegisterStatement:
         except Exception:  # noqa: BLE001 —— 坏 json / 读不出来 ⇒ 同上
             return []
 
-    def _v_signature_for(self, *, statement_full: str, proof_text: str) -> dict:
+    def _v_signature_for(self, *, statement_full: str, proof_text: str,
+                         manuscript_text: str = "") -> dict:
         """这一条自产命题有没有「V 签成立、且盖的正是这一份正文」的签（纯读）。
 
         ## 判据只有一处
@@ -2594,6 +2600,29 @@ class _RegisterStatement:
             return out
         sha = VR.proof_sha(want)
         out["proof_sha256"] = sha
+        # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或
+        #      命题收录时读到」）：手稿里那一行签块是最先看的一处 ----
+        #
+        # 为什么放在"按正文认台账里同一条命题"之前：第一次登记时册上根本没有同文的行
+        # （`same` 为空），而业主要的那条路正是"签先在手稿里、B 收录时读到" ——
+        # 放到后面就永远读不到第一次登记。判据不在这一层重写：读块、比正文 sha、
+        # 看连续次数都在 `vsigns.manuscript_sign_standing`（与 pending / 侧文件同一把尺）。
+        # 只有 `signed` 这一档在这里结案；其余档（rejected / stale / unsigned /
+        # 读不成形）照旧落到下面的台账与 pending 两条来源 —— 不在这里提前下"没签"的结论。
+        try:
+            from agentflow import vsigns as _VS_BLOCK
+
+            block = _VS_BLOCK.manuscript_sign_standing(
+                str(manuscript_text or ""), proof_sha=sha)
+        except Exception as exc:  # noqa: BLE001 —— 块读不动 ⇒ 这一格没查成，不是"没有签"
+            block = {"state": "", "checked": False,
+                     "why": f"手稿签块读不出来（{type(exc).__name__}: {exc}）"}
+        if str(block.get("state") or "") == "signed":
+            out.update(signed=True, state="signed",
+                       verification_id=str(block.get("ledger") or ""),
+                       why=(f"手稿里的签块：{block.get('why')} —— B 收录时从稿上读到"
+                            "（业主 2026-11-01：「随 B 侧将手稿中的定理或命题收录时读到」）"))
+            return out
         same = [r for r in rows
                 if str(r.get("kind") or "") != "concept"
                 and _T.normalize(_SB.body_of(r)) == key]
@@ -2705,7 +2734,8 @@ class _RegisterStatement:
         return _NP.find_signed_exhaustion_for_column(rows, proof_text)
 
     def _self_authored_gate(self, *, origin: str, kind: str, lit_id: str,
-                            statement_full: str, proof_text: str) -> dict:
+                            statement_full: str, proof_text: str,
+                            manuscript_text: str = "") -> dict:
         """业主 B-3 的写侧闸：自产的定理级命题要么有 V 的签，要么受控拒绝。
 
         返回 `{"needs_v": bool, "refused": str, "reason": str, "reading": {...}}`：
@@ -2771,7 +2801,9 @@ class _RegisterStatement:
                      "穷举证明（signed_by=V、proof_authors 含 E、proof_reason=exhaustion）⇒ "
                      "数值证据由 V 签、②③ 由 E 写，不需要 V 的逐行走查"))
             return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
-        sig = self._v_signature_for(statement_full=statement_full, proof_text=proof_text)
+        sig = self._v_signature_for(statement_full=statement_full,
+                                    proof_text=proof_text,
+                                    manuscript_text=manuscript_text)
         reading.update(
             checked=bool(sig.get("checked")),
             needs_v=True,
