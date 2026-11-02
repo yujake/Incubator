@@ -235,9 +235,9 @@ def test_m_s_declared_style_is_judged_section_by_section(tmp_path):
 
 
 def test_a_statement_without_a_page_range_fails(tmp_path):
-    """负控②（判据 b 档）：**引文型命题**有假设、有出处，但没有页码 ⇒ 红。
+    """负控②（判据 b 档）：引文型命题有假设、有出处，但没有页码 ⇒ 红。
 
-    这一条与下面那三条概念行/自有结果的用例是**一结**：豁免只覆盖"结构上给不出页码"
+    这一条与下面那三条概念行/自有结果的用例是一对：豁免只覆盖"结构上给不出页码"
     的那两类行，引文型命题的页码一个字没松（§14.4 第三条要"出处页码"）。
     """
     st, report = _good(tmp_path)
@@ -250,7 +250,7 @@ def test_a_statement_without_a_page_range_fails(tmp_path):
 
 
 def test_a_concept_row_from_literature_does_not_need_a_page_range(tmp_path):
-    """判据（a 档·概念行）：文献来的**概念行**缺页码 ⇒ 不该因此不通过，但要单独计数。
+    """判据（a 档·概念行）：文献来的概念行缺页码 ⇒ 不该因此不通过，但要单独计数。
 
     为什么概念行不该被要页码（2026-11-02，84 收工的 60 条读数 100% 是这一类）：
     它的 `source_lit_id` 记的是"这个术语出自哪一篇"，不是"这段定义逐字抄自那一页"
@@ -258,7 +258,7 @@ def test_a_concept_row_from_literature_does_not_need_a_page_range(tmp_path):
     （真机 84 的 `000002`：四种说法用「；」拼起来），而盘上没有任何一格能带页码
     （`schema.Concept` 没有 `page_range`，`conceptrows.concept_statement` 也没有这个
     参数）⇒ 对它提页码就是 `verify.py` 记过的"恒红的机器"（那里已经用同一条理由
-    把概念行排除出"逐字回验"）。同一份台账里**引文型命题**缺页码照旧不通过
+    把概念行排除出"逐字回验"）。同一份台账里引文型命题缺页码照旧不通过
     （上面那条负控），所以这不是把必填删掉 —— 豁免的面积只有"页码"这一格。
     """
     st, report = _good(tmp_path)
@@ -275,7 +275,7 @@ def test_an_own_result_without_a_page_range_is_counted_separately(tmp_path):
     """判据（a 档·自有结果）：自产命题的出处是 `doc_id`/`line_range`，没有页码是常态。
 
     这一档 2026-10-03 起就分开了（§68 人裁的甲档）：对它提"文献第几页"是把别人的
-    坐标系套到我们自己的结果上。它同样要**单独计数** —— 单独读数不等于静默豁免：
+    坐标系套到我们自己的结果上。它同样要单独计数 —— 单独读数不等于静默豁免：
     "有多少条没有页码"必须仍然是个读得出来的数。
     """
     st, report = _good(tmp_path)
