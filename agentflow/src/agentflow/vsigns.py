@@ -436,6 +436,22 @@ SIGN_MARK = "- V 签："
 SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "时间",
                                     "签名者", "台账", "命题号")
 
+#: 签文件里 `manuscript_write` 那一格的三态（写侧；2026-11-02）。
+#:
+#: 为什么要有这一格：`write_sign` 把签块盖进手稿这一步发生在签文件落盘**之后**，
+#: 而它的结果此前只活在返回值里 —— 签文件里没有这一格。真机 84 的两份签文件
+#: （`a6fa76d2` / `dcb988fa`）因此读出来是 `null`，而 `reports/f-proof-000000.md`
+#: 里明明有 `- V 签：` 块（台账指向 `verifications/000000.jsonl#v-000010`，正是
+#: `write_sign` 顺手盖的那一版）。读数与实际脱节，将来排查会照 `null` 去找。
+#:
+#: 三态不许折成 `null`：写成功要能看出"落在哪一份稿、第几行、块里是什么"，
+#: 失败要能看出"为什么"，没尝试（这一签没有手稿落点）要明说"未尝试"。
+MANUSCRIPT_WRITE_STATES: tuple[str, ...] = ("written", "failed", "not_attempted")
+
+#: 读侧多出的第四档：旧版签文件**没有记**这一格（不是"没写"，是"没记录"）。
+#: 84 那两份就落在这一档 —— 它们不是"未尝试"，而是"当时没把结果落进文件"。
+MANUSCRIPT_WRITE_UNRECORDED = "unrecorded"
+
 
 def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
                            verdict: str = "成立", signer: str = "V", at: str = "",
@@ -532,6 +548,50 @@ def manuscript_sign_reading(text: str) -> dict[str, Any]:
     return out
 
 
+def _sign_block_line(text: str) -> int:
+    """签块在正文里的行号（1 起；没有 ⇒ 0）。写侧用它报"落在哪一行"。"""
+    for no, raw in enumerate(str(text or "").replace("\r\n", "\n").split("\n"), 1):
+        if raw.strip().startswith(SIGN_MARK):
+            return no
+    return 0
+
+
+def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
+    """读一份签文件里的 `manuscript_write` 那一格（四档，永不回 `None`）。
+
+    为什么读侧要单独有一个函数：这一格是 2026-11-02 才进签文件的，盘上已经有
+    旧版签文件（84 的两份 `a6fa76d2` / `dcb988fa` 就是）。旧文件没有这一格时，
+    诚实的读法是 :data:`MANUSCRIPT_WRITE_UNRECORDED`（"当时没有记录"），
+    **不是** `None`（读的人会以为"没写"），也不是 `not_attempted`（那是另一种事实）。
+
+    返回键：`state` / `written` / `idempotent` / `missing` / `path` / `line` /
+    `why` / `reading`。`state` 只取三态词表 + `unrecorded`；读到不认识的词
+    同样落 `unrecorded` 并说清读到的是什么（不静默把它读成成功）。
+    """
+    out: dict[str, Any] = {"state": MANUSCRIPT_WRITE_UNRECORDED,
+                           "written": False, "idempotent": False, "missing": False,
+                           "path": "", "line": 0, "why": "", "reading": {}}
+    if not isinstance(doc, Mapping):
+        out["why"] = "签文件没读成 ⇒ 这一格没查成（不是「没写」）"
+        return out
+    got = doc.get("manuscript_write")
+    if not isinstance(got, Mapping):
+        out["why"] = ("这份签文件没有 `manuscript_write` 那一格（旧版只把结果留在"
+                      "返回值里）⇒ 这一格没记录，不是「没写」")
+        return out
+    for key in ("written", "idempotent", "missing", "path", "line", "why", "reading"):
+        if key in got:
+            out[key] = got[key]
+    state = str(got.get("state") or "")
+    if state not in (*MANUSCRIPT_WRITE_STATES, MANUSCRIPT_WRITE_UNRECORDED):
+        out["state"] = MANUSCRIPT_WRITE_UNRECORDED
+        out["why"] = (f"签文件里的 `manuscript_write.state` 是 {state!r}，"
+                      "不在三态词表里 ⇒ 这一格没记录")
+        return out
+    out["state"] = state
+    return out
+
+
 def manuscript_sign_standing(text: str, *, proof_sha: Any = "") -> dict[str, Any]:
     """签块相对"现在这一份正文"的读数（`signed` / `stale` / `rejected` / `unsigned`）。
 
@@ -585,21 +645,29 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     `proof_manuscript` 入口）连侧文件都没有，签只落在手稿里 ⇒ 写口必须有一个
     不经过侧文件的形态。两处共用 :func:`stamp_manuscript_sign`，所以块逐字相同。
 
-    返回键：`written` / `idempotent` / `missing` / `path` / `why` / `reading`。
-    `missing=True` 是"那份手稿不在盘上"（没写成，不许当成写成了）。
+    返回键：`state` / `written` / `idempotent` / `missing` / `path` / `line` /
+    `why` / `reading`。`state` 只取 :data:`MANUSCRIPT_WRITE_STATES` 里的三个词：
+
+    - `written`：块在稿里（`idempotent=True` 表示本来就在、没重写）；
+    - `failed`：有手稿落点、但没写进去（`why` 说为什么；`missing=True` 是稿不在盘上）；
+    - `not_attempted`：没有手稿路径（这一签本来就只写侧文件，不是"写失败"）。
+
+    `line` 是签块在正文里的行号（1 起；没写成 ⇒ 0）—— `write_sign` 会把它和
+    `path` 一起落进签文件的 `manuscript_write` 那一格（见 :func:`manuscript_write_reading`）。
     """
-    out: dict[str, Any] = {"written": False, "idempotent": False, "missing": False,
-                           "path": "", "why": "", "reading": {}}
+    out: dict[str, Any] = {"state": "not_attempted", "written": False,
+                           "idempotent": False, "missing": False,
+                           "path": "", "line": 0, "why": "", "reading": {}}
     rel = str(manuscript_path or "").strip().replace("\\", "/")
     out["path"] = rel
     if not rel:
-        out["why"] = "没有手稿路径 ⇒ 签块没地方写（这一格没写成）"
+        out["why"] = "没有手稿路径 ⇒ 签块没地方写（这一格未尝试，不是失败）"
         return out
     path = Path(str(root or "")) / rel
     try:
         old = path.read_text(encoding="utf-8")
     except OSError as exc:
-        out.update(missing=not path.exists(),
+        out.update(state="failed", missing=not path.exists(),
                    why=(f"手稿读不出来（{type(exc).__name__}: {exc}）⇒ 签块没写成"
                         if path.exists() else
                         f"`{rel}` 不在盘上 ⇒ 签块没写成（未在册送审要指向 F 的那一份手稿）"))
@@ -609,14 +677,17 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
                                 ledger=ledger, statement_id=statement_id,
                                 signed=signed)
     out["reading"] = manuscript_sign_reading(new)
+    out["line"] = _sign_block_line(new)
     if new == old:
-        out.update(written=True, idempotent=True, why="签块已经在那一份手稿里（幂等：没重写）")
+        out.update(state="written", written=True, idempotent=True,
+                   why="签块已经在那一份手稿里（幂等：没重写）")
         return out
     tmp = path.with_name(path.name + ".sign.tmp")
     try:
         tmp.write_text(new, encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
+        out["state"] = "failed"
         out["why"] = f"签块没写进手稿（{type(exc).__name__}: {exc}）"
         try:
             if tmp.exists():
@@ -626,7 +697,9 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
             # 只是手稿旁边多一个文件，下一次写块会用一个新临时名再写。
             pass
         return out
-    out.update(written=True, why=f"签块写进 `{rel}`（连续 {int(streak or 0)}/{int(need or 0)}）")
+    out.update(state="written", written=True,
+               why=f"签块写进 `{rel}` 第 {out['line']} 行"
+                   f"（连续 {int(streak or 0)}/{int(need or 0)}）")
     return out
 
 
@@ -638,8 +711,10 @@ def _stamp_block_after_sign(root: Any, doc: Mapping[str, Any]) -> dict[str, Any]
     """
     rel = str(doc.get("artifact_path") or "").strip()
     if not rel:
-        return {"written": False, "idempotent": False, "missing": False, "path": "",
-                "why": "这一签没有手稿落点（`artifact_path` 是空的）⇒ 只写侧文件",
+        return {"state": "not_attempted", "written": False, "idempotent": False,
+                "missing": False, "path": "", "line": 0,
+                "why": "这一签没有手稿落点（`artifact_path` 是空的）⇒ 只写侧文件"
+                       "（未尝试，不是失败）",
                 "reading": {}}
     return write_manuscript_sign(
         root, rel, proof_sha=doc.get("artifact_sha"), streak=doc.get("streak"),
@@ -669,7 +744,8 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     理由串说清哪一格不同 —— 覆盖会把"先签了后来又不认"这段历史抹掉。
 
     返回键：`written` / `idempotent` / `conflict` / `path` / `archive_error` /
-    `archive_count` / `reason` / `sign` / `manuscript_write`。
+    `archive_count` / `reason` / `sign` / `manuscript_write` /
+    `manuscript_write_recorded`。
 
     ## 2026-11-02：签块同时盖进手稿（业主：「V 签不直接进台账，进手稿」）
 
@@ -677,14 +753,27 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     `depsection.manuscript_relpaths` 定位好的那一份）把同一份签盖进手稿 —— 块长什么样、
     幂等与解析全在 :func:`stamp_manuscript_sign` / :func:`manuscript_sign_reading`。
     写块失败不回滚侧文件（签已经发了这件事不许消失），读数落 `manuscript_write`。
+
+    ## 2026-11-02 晚：这一笔的读数也落进签文件本身（修 84 的 `null`）
+
+    改前签文件里没有 `manuscript_write`：84 的两份签文件读出来是 `null`，而
+    `reports/f-proof-000000.md` 里已经有块（台账指向 `verifications/000000.jsonl#v-000010`，
+    正是本函数顺手盖的那一版）—— 读数与实际脱节，将来排查会照 `null` 去找。
+    现在**新写成的签文件**会带一格 `manuscript_write`（三态：`written` / `failed` /
+    `not_attempted`，形状见 :func:`manuscript_write_reading`；带上 `path` 与 `line`）。
+    已在盘上的签文件仍然"不重写"（一稿一签）：旧文件没有这一格时，读侧落
+    `unrecorded`，不补写、不冒充。
     """
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "archive_count": 0,
                            "reason": "", "sign": {},
-                           #: 手稿签块那一笔的读数（2026-11-02）：`written` / `idempotent` /
-                           #: `missing` / `path` / `why`。它是一个独立的落点：侧文件是证据、
-                           #: 手稿块是"随稿走的那一份"，任一失败都各自可见。
+                           #: 手稿签块那一笔的读数（2026-11-02）：`state` / `written` /
+                           #: `idempotent` / `missing` / `path` / `line` / `why` / `reading`。
+                           #: 它是一个独立的落点：侧文件是证据、手稿块是"随稿走的那一份"，
+                           #: 任一失败都各自可见。
                            "manuscript_write": {},
+                           #: 这一格有没有落进**签文件**（新签才可能为真；旧签不重写）。
+                           "manuscript_write_recorded": False,
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False}
@@ -761,6 +850,24 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     if not out["manuscript_write"].get("written"):
         out["reason"] = (f"{out['reason']}；手稿签块没写成："
                          f"{out['manuscript_write'].get('why')}")
+    # ---- 2026-11-02 晚：把这一笔的真实结果落进签文件 -------------------------
+    # 只补**这次新写成**的签文件：已在盘上的签仍然"一稿一签、不重写"（那条纪律比
+    # "把旧文件的空格补上"更重要 —— 旧文件缺这一格时读侧落 `unrecorded`）。
+    # 顺序放在盖章之后：签文件先落盘是"签已经发了"的证据，写块失败也不回滚它。
+    if out["written"]:
+        try:
+            current, problem = _read_json(path)
+            if current is None:
+                out["reason"] = (f"{out['reason']}；手稿签块读数没写进签文件"
+                                 f"（{problem}）")
+            else:
+                current["manuscript_write"] = out["manuscript_write"]
+                _write_atomic(path, current)
+                out["sign"] = current
+                out["manuscript_write_recorded"] = True
+        except OSError as exc:
+            out["reason"] = (f"{out['reason']}；手稿签块读数没写进签文件"
+                             f"（{type(exc).__name__}: {exc}）")
     return out
 
 
