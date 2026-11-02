@@ -1485,7 +1485,7 @@ def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
                    EB.optimized_by_proof):
         try:
             table = reader(row)
-        except Exception:  # noqa: BLE001 - 一张读不出来不拖累其余三张
+        except Exception:  # noqa: BLE001 - 一张读不出来不拖累另外两张
             continue
         for raw_no in table:
             try:
