@@ -2961,7 +2961,24 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 重冻（逐格 diff 见提交信息）；`docs/ROLE-GUIDE.md` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.05`，
 #: 实际花费见提交信息）。
-PROMPT_VERSION = "p231"
+#: `p232`（2026-11-02，业主的方向盘 · 责任路由；不新增动作、不动权限面）：
+#:
+#: ① M 那一格（`specs/m.py`）：把「F 产出的证明天生带 V 的签字，真发现缺签就派 D 去核、
+#:    由 D 让 F 补签」与「要 V 的签就经 B 走那条路（M→B→V 两跳）」两句换成业主 2026-11-02
+#:    的责任路由：命题在册缺签 ⇒ 那是 B 侧问题、让 B 处理（重送 / 补证 / 明确放弃），
+#:    不许让 B 去润色 F 的证明；F 产出但没签 ⇒ F 侧工作异常、经 D 让 F 先拿 V 签。
+#:    并按同日收口写明 M 没有 V 签的编辑权、也没有获取义务（不需要 M→V，也不需要 M→B→V 代唤）。
+#: ② B 那一格（`specs/b.py`）：新增一条「收到没有 V 签的 F 证明 ⇒ 不润色、整笔退回，
+#:    请 F 先拿 V 签」；并把「册上已有这一条而缺签」分出来（B 自己处理，不许推给 F）。
+#:
+#: 逐格旧值 → 新值（p231 → p232，现算，不是手抄；脚本 `temp/_178_recompute_p232.py`）：
+#:   A 5123ace4→5123ace4 / B 0d5eadea→d942282a / C 90c19871→90c19871 /
+#:   D e5e43b8e→e5e43b8e / E 91cad508→91cad508 / F 00b76d27→00b76d27 /
+#:   G bd3ea65a→bd3ea65a / H 15cc471d→15cc471d / L 40152fe3→40152fe3 /
+#:   M 2c289de9→3cc08f2b / V 1703a9c5→1703a9c5。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p232）；
+#: `tests/golden/agent_surface_snapshot.json` 带提示词摘要的那几格重冻（逐格 diff 见提交信息）。
+PROMPT_VERSION = "p232"
 
 
 

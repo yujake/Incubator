@@ -739,6 +739,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p231", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p231（2026-11-03，账本上界口径：本账 p224–p230 记的都是 2026-11-03，而业主这一笔裁定的日子是 2026-11-02 —— 两个日子并列写在这里，别让 `test_no_ledger_note_is_dated_after_the_current_version` 的上界悬空）：① F 的 policy 改成「由你派 V」+ `proof_manuscript` 未在册入口 + `v_sign` 四档（没签不算交差）；② V 的 `verify.verify_proof` 参数面：`statement_id` 不再根级必填、新增可选 `proof_manuscript` —— 这一笔落在动作表上，D / G / M 的伙伴动作段与 V 自己的工具目录跟着换值；③ 变化格 = D / F / G / M / V，其余六格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p231 → p232（2026-11-02 业主的责任路由：在册缺签找 B / F 产出无签让 F 先拿签）。
+    {"version": "p232", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p232（2026-11-03）：① M 的 policy 把「F 产出的证明天生带 V 的签字，缺签就派 D 让 F 补签」与「要 V 的签就经 B 走 M→B→V 两跳」换成业主 2026-11-02 的责任路由：命题在册缺签 ⇒ 让 B 处理（重送 / 补证 / 明确放弃），F 产出无签 ⇒ 经 D 让 F 先拿 V 签；并按同日收口写明 M 没有 V 签的编辑权与获取义务；② B 的 policy 新增「收到没有 V 签的 F 证明 ⇒ 不润色、整笔退回，请 F 先拿 V 签」，并把「册上已有而缺签」分出来（B 自己处理）；③ 变化格 = B / M 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

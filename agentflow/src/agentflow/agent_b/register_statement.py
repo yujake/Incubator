@@ -1655,6 +1655,29 @@ class _RegisterStatement:
                         and quote_verified is not True
                         and kind_now not in CONJECTURE_START_KINDS)
             if _b2_hits and not bool((self_authored.get("reading") or {}).get("in_ledger")):
+                # ---- 2026-11-02（业主的责任路由）----
+                #
+                # 原话：「如果F侧产出证明而没有V签，这是F侧工作异常，B不该处理（润色）无签
+                # 证明」「命题在册且缺失V签，这是B侧问题，M应让B处理」。
+                # 两条分开落：
+                #   · 册上还没有这一条、而这一笔是 F 的手稿（`manuscript_source` 不是 none）
+                #     ⇒ F 侧异常：退回，明确"请 F 先拿 V 签"（谁产出谁送审），不润色；
+                #   · 没有手稿来源（B 自己在登记一份正文）或册上已有这一条 ⇒ 走既有的
+                #     两条拒信（B-2 / `self_authored_needs_v`），B 自己处理，不推给 F。
+                source = str(manuscript_source or "").strip()
+                if source in (_DS.SOURCE_CARRIED, _DS.SOURCE_DISK):
+                    suggestion = ("请 F 先拿 V 签：F 用 `summon` V 的 `verify.verify_proof`"
+                                  "（带 `proof_manuscript`）；三转成立后由收方秘书 "
+                                  "`vsigns.land(by=\"secretary:F\")` 把签落回稿，拿到签再把"
+                                  "这一份交来入库（B 不改写无签的证明）")
+                    return _refuse(
+                        self.F_PROOF_UNSIGNED,
+                        ("这一份证明是 F 产出的（手稿来源 " + source + "），而它没有 V 签 ⇒ "
+                         "这是 F 侧的工作异常：B 不处理、不润色无签的证明，整笔退回。"
+                         "建议：" + suggestion),
+                        suggestion=suggestion,
+                        manuscript_source=source,
+                        stmt_id=str(stmt_id_now or ""))
                 return _must_start_as_conjecture_refusal(kind_now=kind_now,
                                                          origin=str(origin))
             return _refuse(str(self_authored["refused"]),
@@ -2580,6 +2603,9 @@ class _RegisterStatement:
 
     #: 这条闸的受控拒绝码（调用方据它分辨「参数不对」与「还欠 V 一签」）。
     SELF_AUTHORED_NEEDS_V = "self_authored_needs_v"
+    #: 2026-11-02（业主：「F 侧产出证明而没有 V 签，这是 F 侧工作异常，B 不该处理（润色）无签证明」）：
+    #: 收到的是 F 的手稿、而它没有 V 签 ⇒ 退回、不润色，要求 F 先拿 V 签（谁产出谁送审）。
+    F_PROOF_UNSIGNED = "f_proof_needs_v_sign_first"
 
     def _report_index_rows(self) -> list[dict]:
         """D 报告的目录行（论文对应表那几行；读不到 ⇒ 空清单，不猜）。
