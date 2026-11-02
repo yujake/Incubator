@@ -67,11 +67,26 @@ def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 def _issue(root: pathlib.Path, *, artifact_path: str = MANUSCRIPT) -> dict:
-    """发一份签（门栏 3/3 已满足，所以走的是"真的落盘"那一条路）。"""
-    return VSP.write_sign(
+    """发一份签（2026-11-02 起两步：`issue()` 颁发 + `land()` 落签）。
+
+    返回的是两笔读数合起来的形状（`manuscript_write` 取落签那一笔）—— 本文件量的是
+    "写块那一笔的结果有没有落进签文件"，所以两步之间不许有第三个写者。
+    """
+    issued = VSP.issue(
         root, artifact_sha=SHA, streak=3, need=3, artifact_path=artifact_path,
         ledger="verifications/000000.jsonl#v-000010", statement_id="000000",
-        proof_no=1, at=TS)
+        proof_no=1, at=TS, by="secretary:F")
+    landed = VSP.land(root, artifact_sha=SHA, by="secretary:F",
+                      manuscript_path=artifact_path, statement_id="000000",
+                      proof_no=1)
+    got = dict(issued)
+    got["land"] = dict(landed)
+    got["manuscript_write"] = dict(landed.get("manuscript_write") or {})
+    got["manuscript_write_recorded"] = bool(landed.get("sign_recorded"))
+    if not landed.get("landed"):
+        got["reason"] = (f"{issued.get('reason') or ''}；"
+                         f"{landed.get('reason') or ''}")
+    return got
 
 
 def _sign_doc(root: pathlib.Path) -> dict:
@@ -159,9 +174,10 @@ def test_c_no_manuscript_path_is_not_attempted_not_failed(tmp_path: pathlib.Path
     assert mw["state"] == "not_attempted", mw
     assert mw["written"] is False and mw["missing"] is False, mw
     assert "未尝试" in mw["why"], mw
-    # 收场那句话也要用同一个词：不是"写失败"，是"未尝试"。
-    assert "手稿签块未尝试" in got["reason"], got["reason"]
-    assert "手稿签块没写成" not in got["reason"], got["reason"]
+    # 收场那句话也要用同一个词：不是"写失败"，是"未尝试"（2026-11-02 起颁发与落签
+    # 分成两句，所以这里按"同一句话里必须出现未尝试、且不许出现没写成"来钉）。
+    assert "未尝试" in got["reason"], got["reason"]
+    assert "没写成" not in got["reason"], got["reason"]
     doc = _sign_doc(root)
     shown = VSP.manuscript_write_reading(doc)
     assert shown["state"] == "not_attempted", doc.get("manuscript_write")

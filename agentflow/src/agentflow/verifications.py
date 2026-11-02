@@ -839,7 +839,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
     except Exception:  # noqa: BLE001
         _lean_on = False
     return (
-        "你是验证者（V）。你这一次只做一件事：把下面这份证明**按写成后的样子**整体重读一遍，"
+        "你是验证者（V）。你这一次只做一件事：把下面这份证明按写成后的样子整体重读一遍，"
         "判断它站不站得住。\n\n"
         "你不写、不改证明；不判这命题值不值得做；不做稿件级正式审查。\n\n"
         # ---- 业主 2026-11-01：V 的结论只有两态（逐字见下）----
@@ -850,7 +850,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "## 结论只有两态\n"
         "- " + TWO_STATE_LINE + "。\n"
         "- " + NO_THIRD_STATES + "。\n"
-        "- 你判「成立」时不需要证明它正确，只需要说明你**沿下面那几条角度都没找到缺陷**；"
+        "- 你判「成立」时不需要证明它正确，只需要说明你沿下面那几条角度都没找到缺陷；"
         "拿不准、信息不足、某个记号没定义，都要落到这两态里的一态，别另起一档。\n\n"
         # ---- 业主 2026-10-29 追加口径：V 只产意见，签由秘书发（S5 的提示词落点）----
         #
@@ -876,7 +876,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 无条件前提（结论要的前提没写出来）；\n"
         "- 无依据的步骤（既没引到在册的 id，也没有同段内的推导）；\n"
         f"- 缝：{'、'.join(HARD_BAN_MARKERS)} 这类「跳过去」的措辞；\n"
-        "- 引用到一条**不干净**的命题（还是猜想 / 已作废 / 只是 assumption）。\n\n"
+        "- 引用到一条不干净的命题（还是猜想 / 已作废 / 只是 assumption）。\n\n"
         "## 只读读数（你只能看这些；没有 store 句柄，也不给你作者的任何解释）\n"
         f"{readonly_facts.strip() or '（调用方没有附只读读数）'}\n\n"
         "## 命题（含完整假设）\n"
@@ -892,9 +892,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         '"citation_checks": [{"stmt_id": "<被引命题号>", '
         '"verdict": "consistent|weaker|stronger|unrelated|inadmissible|unknown", '
         '"quote_verbatim": <true 或 false>, "note": "<一句话依据：一致在哪 / 差在哪>"}]}\n'
-        "- `defect_step`：有毛病时**必须**给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
+        "- `defect_step`：有毛病时必须给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
         "- 没有找到缺陷就写 `成立`（空 findings 或只有 info/warning）；找到了缺陷就写 `有毛病`"
-        "并指到步号。**没有第三个词**：写成「看不出来 / 判不了」会被按 `成立` 收"
+        "并指到步号。没有第三个词：写成「看不出来 / 判不了」会被按 `成立` 收"
         "（" + NO_THIRD_STATES + "）。\n"
         # ---- 审阅清单（draft/122 按 F 的交付面重剪；S5 的提示词落点）----
         #
@@ -964,7 +964,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         # 两处都把签说成 V 自己发的，与同一份提示词第 8 行（「签由你的秘书判定并落盘」）
         # 互斥。现在统一：V 给判定，发签在秘书。
         "\n## 你这个「成立」是什么强度：两类 proof 并列\n"
-        f"- 本会话 Lean 形式化：{'**已开启**' if _lean_on else '**已关闭**'}；\n"
+        f"- 本会话 Lean 形式化：{'已开启' if _lean_on else '已关闭'}；\n"
         "- `proof` 级证据有两类，并列、不分高低：\n"
         "  ① Lean 形式化 —— 凭据是 `formal.check_formal` 的检查器原话；\n"
         "  ② 穷举 —— 凭据是 E 写的那份程序 + ②③；这一签由你的秘书发"
@@ -972,7 +972,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         # 2026-10-24：判据 long 期望这一句「不构成 `proof`」—— 它的意思是"
         # 你这一次逐行走查的「成立」本身不是 proof 级凭据：proof 档要那两类里的某一份"
         # （检查器原话 / 穷举那份程序），你这一签是给它们背书的，不是替代它们。
-        "- 要说清强度：你这一次的「成立」**本身不构成 `proof`** —— 它是对上面两类里某一份的背书；"
+        "- 要说清强度：你这一次的「成立」本身不构成 `proof`** —— 它是对上面两类里某一份的背书；"
         "`proof` 级证据仍然要那一份凭据（检查器原话，或穷举那份程序 + ②③）。\n"
         "- 所以别在理由里写「已形式化验证」（那是第 ① 类的说法）；穷举那一类你要写的是"
         "「穷尽性与会审七项已核」。\n"
@@ -984,8 +984,8 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "⑦ 形式化那一格填的类别对不对（数值定理填数值程序、理论定理填 `.lean`）。\n"
         "- 结论落在三格：`exhaustion_review`（整份会审读数）/ `checks`（七项逐项 ok）/ "
         "`missing`（缺哪一块材料）。\n"
-        "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格**没查成**：点名缺哪一块，"
-        "**既不判 `成立`、也不判 `有毛病`**，台账里也不留那一行（留一行会把「没查成」"
+        "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格没查成：点名缺哪一块，"
+        "既不判 `成立`、也不判 `有毛病`**，台账里也不留那一行（留一行会把「没查成」"
         "冒充成「审过了」）；材料补齐之后重新送审。\n"
         "- 七项全过才判 `成立`；会不会发签由你的秘书按连续次数判 —— 这一签是「对数值证据的背书」，"
         "不是「你逐行读过一份自然语言证明」。\n"
@@ -2218,7 +2218,7 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     no = _read_proof_no(proof_no)
     if no < 1:
         out["reason"] = (f"证明号认不出：收到 {proof_no!r} ⇒ 不知道数的是哪一份证明，"
-                         "这一格**没查成**（不是「一次都没签」）")
+                         "这一格没查成（不是「一次都没签」）")
         return out
     out["proof_no"] = no
     sid = out["statement_id"]
@@ -2556,25 +2556,42 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
 def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path,
                              statement_id: str, proof_no: int, sha: str,
                              holds: Mapping[str, Any],
-                             append_ledger: bool) -> dict[str, Any]:
+                             append_ledger: bool, by: str = "") -> dict[str, Any]:
     """翻位之后把签落成侧文件（「永不抛」：这一格的三态由调用方读）。
 
-    为什么要包一层、而不在 `sign_statement` 里直接调 `vsigns.write_sign`：
-    组内容（`_vsign_payload`，读台账 + 读手稿路径）与写文件是两件事，前者出错时
-    要说清"是哪一格没读成"，而不是让整笔事务因为一个定位读不到就回滚。
+    为什么与落签拆成两步（2026-11-02 业主口径）：V 只颁发（`vsigns.issue`），
+    手稿块与台账位由收方秘书落（`vsigns.land`，`by=` 只认 `secretary:F|B`）。
+    本函数是 V 侧那一半的接线：颁发成功之后按 `by` 去落签；`by` 为空（直调 / 夹具 /
+    V 的父角色读不到）⇒ 颁发照做（`written_by=sign_statement(direct)`），但落签会被
+    受控拒绝 `not_a_secretary`，块不盖 —— 读数留在 `land` 那一格，不冒充"落成了"。
 
-    返回 `vsigns.write_sign` 的三态（`written` / `idempotent` / `conflict` /
-    `archive_error` / `reason` / `path` / `sign`），外加 `payload_problem`（组内容那一步
-    的问题，空串 = 组得成）。
+    返回 `issue` 的三态（`written` / `idempotent` / `conflict` / `archive_error` /
+    `reason` / `path` / `sign` / `envelope`），外加 `land`（落签那一笔的读数）与
+    `payload_problem`（组内容那一步的问题，空串 = 组得成）。
     """
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "reason": "",
-                           "sign": {}, "payload_problem": "",
+                           "sign": {}, "payload_problem": "", "envelope": {},
+                           "land": {}, "manuscript_write": {},
                            "refused_below_need": False}
     from . import vsigns as _VS
 
     root = getattr(store, "root", "")
     need = int(holds.get("need") or SIGN_STREAK_NEED)
+    # ---- 收方秘书是谁：调用方给了就用；没给就按这一趟的父角色现读（权威来源）----
+    #
+    # 为什么是 `current_parent()` 而不是"猜一个 F / B"：V 的 parent 就是"谁送审"，
+    # 而收方秘书只能是那一位的秘书（业主 2026-11-02：父代理 = V 的 parent）。
+    # 读不到（直调 / 夹具 / 没有挂点）⇒ 空串 = 没有收方秘书 ⇒ 能颁发、不能落块。
+    who = str(by or "").strip()
+    if not who:
+        try:
+            from . import conductor as _CND
+
+            _pid, prole = _CND.current_parent()
+            who = _VS.secretary_id(prole)
+        except Exception:  # noqa: BLE001 —— 读不到父角色不是失败：就是"没有收方秘书"
+            who = ""
     try:
         payload = _vsign_payload(root=root, ledger=ledger, statement_id=statement_id,
                                  proof_no=proof_no, sha=sha, need=need, holds=holds)
@@ -2583,7 +2600,7 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
         payload = {"passes": [], "objections": [], "artifact_path": "", "ledger": "",
                    "at": S.now_iso()}
     try:
-        got = _VS.write_sign(
+        got = _VS.issue(
             root, artifact_sha=sha,
             streak=int(holds.get("streak") or 0), need=need,
             artifact_path=str(payload.get("artifact_path") or ""),
@@ -2592,14 +2609,31 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
             passes=list(payload.get("passes") or []),
             objections=list(payload.get("objections") or []),
             at=str(payload.get("at") or ""),
-            written_by=(_VS.WRITTEN_BY_DIRECT if append_ledger
-                        else _VS.WRITTEN_BY_SECRETARY))
+            by=who)
     except Exception as exc:  # noqa: BLE001 —— 写文件那一笔抛了也要如实报
-        out["reason"] = f"写签那一笔抛了（{type(exc).__name__}: {exc}）"
+        out["reason"] = f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"
         return out
     out.update({k: got.get(k) for k in ("written", "idempotent", "conflict", "path",
-                                        "archive_error", "reason", "sign",
-                                        "refused_below_need")})
+                                        "archive_error", "reason", "sign", "envelope",
+                                        "code", "refused_below_need")})
+    if got.get("written") or got.get("idempotent"):
+        try:
+            landed = _VS.land(
+                root, artifact_sha=sha, by=who,
+                manuscript_path=str(payload.get("artifact_path") or ""),
+                store=None, statement_id=str(statement_id or ""),
+                proof_no=int(proof_no),
+                # 台账位由外层事务（`sign_statement` 的 `store.tx`）落 —— 这里再落一次
+                # 就是同一格两个写者（而且会重入同一把表锁）。
+                ledger_bit=False)
+        except Exception as exc:  # noqa: BLE001 —— 落签抛了也要如实报（签已经颁发了）
+            landed = {"landed": False, "state": "refused", "reason": (
+                f"落签那一笔抛了（{type(exc).__name__}: {exc}）"), "code": "land_raised"}
+        out["land"] = dict(landed or {})
+        out["manuscript_write"] = dict((landed or {}).get("manuscript_write") or {})
+        if not (landed or {}).get("landed"):
+            out["reason"] = (f"{out['reason']}；落签没成："
+                             f"{str((landed or {}).get('reason') or '没有理由')}")
     if out["payload_problem"]:
         out["reason"] = (f"{out['reason']}；组签内容时有一格没读成"
                          f"（{out['payload_problem']}）")
@@ -2609,7 +2643,7 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
 def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                    path: Path | None = None, proof_no: Any = None,
                    sign_issuance: Mapping[str, Any] | None = None,
-                   append_ledger: bool = True) -> dict[str, Any]:
+                   append_ledger: bool = True, by: str = "") -> dict[str, Any]:
     """把一签写回 `statements` 那一行里那一条证明的第 3 位（与台账同一次写）。
 
     ## 这一格为什么原来永远是 False
@@ -2839,7 +2873,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             sign_out = _vsigns_write_after_flip(
                 store, row=dict(row), ledger=ledger, statement_id=sid, proof_no=no,
                 sha=str(row.get("proof_sha256") or ""), holds=holds,
-                append_ledger=bool(append_ledger))
+                append_ledger=bool(append_ledger), by=str(by or ""))
             out["vsign"] = dict(sign_out)
             if not (sign_out.get("written") or sign_out.get("idempotent")):
                 if sign_out.get("refused_below_need"):
@@ -2985,7 +3019,7 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         out.update(
             checked=False, state="unreadable",
             why=(f"证明号认不出：收到 {proof_no!r}（合法写法是 1、2、3 … 或 "
-                 "'2' / 'p2' / '#p2'）⇒ 不知道问的是哪一份证明，这一格**没查成**"
+                 "'2' / 'p2' / '#p2'）⇒ 不知道问的是哪一份证明，这一格没查成"
                  "（不是「没签过」，也不是「签过过期」）；读侧不把它折成 canonical（#p1）"))
         return out
     if not sid:
@@ -3572,7 +3606,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
             checks[1]["detail"] = "概念行没有'证明'这一档，不适用"
             checks[2]["detail"] = "同上"
             out["why"] = (f"命题 {sid or '（没有编号）'} 是概念行（kind='concept'）："
-                          "概念没有'证明'这一档（不参与等级链）⇒ 这一格对它**不适用**，"
+                          "概念没有'证明'这一档（不参与等级链）⇒ 这一格对它不适用，"
                           "不许读成'有证明'，也不许读成'缺证明'")
         return out
     text = str(row.get("proof_text") or "")
@@ -3603,7 +3637,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         checks[1]["detail"] = f"`{out['ledger']}` 不在盘上（一次审校都没有）"
         checks[2]["detail"] = "没有那一行，无从比"
         out["why"] = (f"命题 {sid} 声称 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
-                      f"`{out['ledger']}` 不在盘上 ⇒ **一次审校都没有**。"
+                      f"`{out['ledger']}` 不在盘上 ⇒ 一次审校都没有。"
                       "这一档要求 V 的 `verifications` 里那一条签「成立」（且审的是现在"
                       "这一版）—— 没有它，这一行就只是「自称被审过」。"
                       f"建议：① 派 V 去 `verify_proof(statement_id=\"{sid}\")`（不传 "
@@ -3616,7 +3650,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         checks[1]["detail"] = f"台账有读不出来的行：{problems[:3]}（没查成）"
         checks[2]["detail"] = "同上"
         out["why"] = (f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
-                      "凭据**没查成**（不是「查过、没问题」）")
+                      "凭据没查成（不是「查过、没问题」）")
         return out
     if not rows:
         pending = _pending_signed(root, text)
@@ -3873,7 +3907,7 @@ def unverified_statement_refs(root: str | Path,
                 ref["rows"] = 0
                 ref["signed"] = False
                 ref["why"] = (f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 不在盘上 ⇒ "
-                              "这一条命题**一次审校都没落过**")
+                              "这一条命题一次审校都没落过")
                 refs.append(ref)
                 continue
             rows, bad = JF.read_jsonl(path)

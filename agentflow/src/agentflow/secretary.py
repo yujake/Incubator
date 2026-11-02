@@ -967,7 +967,7 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["retired_branch"] = str(r.get("branch") or "")
         elif kind == "keep_alive":
             # 读侧先落地的那一格：今天没有任何生产者（全仓没有一处往名册写
-            # `kind="keep_alive"` 的行，`projects/**` 现存的 roster jsonl 里也是 0 行）。
+            # `kind="keep_alive"` 的行，`projects/ 下` 现存的 roster jsonl 里也是 0 行）。
             # 「做完还待命」这条事实的唯一来源是台账那一侧的派活项（
             # `conductor.keep_alive_of` 读 `kind="delegation"` 行的 `keep_alive`），
             # `_state_reading` 走的正是那一条路。
@@ -3276,6 +3276,25 @@ class Secretary:
         self._note_sign_issuance(out, task_id=task_id)
         return out
 
+    def sign_recipient(self) -> str:
+        """这一签的收方秘书（`secretary:F` / `secretary:B`；读不到 ⇒ 空串）。
+
+        2026-11-02 业主口径：V 只颁发，手稿块与台账位由收方秘书落；收方 = V 的
+        parent（谁送审谁收签）。身份只有一个来源：`conductor.current_parent()`（运行期
+        `calling_as` 挂上来的那一位，不是模型给的一个参数，也不是"谁是 V 就谁落"）。
+        读不到就回空串 —— 那一档能颁发、不能落块（`vsigns.land` 会受控拒绝
+        `not_a_secretary`），不许拿 `self.role`（那是 V 自己的角色）去凑一个收方。
+        """
+        from . import conductor as _CND
+
+        _pid, prole = _CND.current_parent()
+        try:
+            from . import vsigns as _VS
+
+            return _VS.secretary_id(prole)
+        except Exception:  # noqa: BLE001 —— 读不到就"没有收方秘书"，不猜
+            return ""
+
     def _land_sign_issuance(self, out: dict[str, Any], *, proof_text: str,
                             proof_no: Any, row: Mapping[str, Any] | None) -> None:
         """把"签发"这个决定落成一次 `sign_statement`（翻位的唯一写口）。
@@ -3298,7 +3317,8 @@ class Secretary:
         try:
             writeback = _VR.sign_statement(self.store, row=dict(row),
                                            proof_text=proof_text, proof_no=proof_no,
-                                           append_ledger=False, sign_issuance=dict(out))
+                                           append_ledger=False, sign_issuance=dict(out),
+                                           by=self.sign_recipient())
         except Exception as exc:  # noqa: BLE001 —— 翻位失败要如实报（台账那一行已在盘上）
             out["writeback"] = {"written": False,
                                 "reason": f"翻位没成（{type(exc).__name__}: {exc}）"}
@@ -3382,7 +3402,7 @@ class Secretary:
         if self.seam is None or not self.enable_model:
             out.update(refused="secretary_unavailable",
                        reason=("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 洗不出来："
-                               "受控拒绝，**不输出 V 的原文**（洗稿转达是这一档的唯一出口）"))
+                               "受控拒绝，不输出 V 的原文（洗稿转达是这一档的唯一出口）"))
             self._note_wash(out, reply=body, task_id=task_id)
             return out
         material = {"v_reply": body[:JUDGE_MATERIAL_CAP],
@@ -3390,10 +3410,10 @@ class Secretary:
                     "label": str(label or "")}
         out["material"] = dict(material)
         prompt = (
-            "把下面这段验证者（V）的审阅回复**改写成转达给作者（F）的工作意见**。"
+            "把下面这段验证者（V）的审阅回复改写成转达给作者（F）的工作意见。"
             "只回一个 JSON 对象，字段：\n"
             "text（改写后的正文：第三人称、按「指到哪一步 / 问题是什么 / 下一步补什么」"
-            "分条写；**不要**照抄原文的句子，不要复述 V 的第一人称口气，"
+            "分条写；不要照抄原文的句子，不要复述 V 的第一人称口气，"
             "不要评价作者的思路好不好；只写能据以动手的结论）、\n"
             "findings（字符串数组或对象数组：每一条给 `quote` = 你在原文里逐字引用的那一句、"
             "`why` = 它说明什么问题。`quote` 必须与原文逐字相同（只允许空白差异），"
@@ -3850,7 +3870,7 @@ class Secretary:
                 else:
                     proposal_arg = ""
                 reason = ("；".join(plan["changes"]) or "（改了格式格）"
-                          ) + "｜**没有执行**：等父用 accept_proposal / reject_proposal 表态"
+                          ) + "｜没有执行：等父用 accept_proposal / reject_proposal 表态"
             elif plan["problem"]:
                 decision = "洗格式请示：这个编号不成立 ⇒ 受控拒绝"
                 proposal_arg = plan["proposal_id"] or None
@@ -4326,7 +4346,7 @@ class Secretary:
                                    "确认不成立，这一趟没有派活")
                 return plan
             if got_fp and got_fp != want_fp:
-                plan["problem"] = (f"请示 {want!r} 是对**另一份**载荷发的（指纹不一致）⇒ "
+                plan["problem"] = (f"请示 {want!r} 是对另一份载荷发的（指纹不一致）⇒ "
                                    "不能拿它确认这一份，这一趟没有派活")
                 plan["proposal_id"] = want
                 return plan
@@ -8463,7 +8483,7 @@ class Secretary:
         """反查：某个调用行属于这个名册里的哪一个名字（一个号两个名字 ⇒ 不猜）。
 
         为什么必须在本层拒歧义（`draft/151` 三-4）：写口从 2026-11-02 起拒"同一个号
-        出现在两条 add"（`task_id_reused`），但 `projects/**` 里的历史名册有这一形态；
+        出现在两条 add"（`task_id_reused`），但 `projects/ 下` 里的历史名册有这一形态；
         按号寻址那一侧（`agent_loop.roster_addresses`）已经因此拒 `ambiguous_in_roster`，
         而这里改前 `return` 第一个命中 —— `surface_of` 就会按第一个名字的槽位去切
         读写面，两个人的面重叠等于跨代理写同一份文件。三态纪律：多匹配不是"查到了
@@ -10592,7 +10612,7 @@ def _judge_system(kind: str) -> str:
     """
     verdicts = JUDGE_VERDICTS.get(kind, DECISIONS)
     head = (f"你是「秘书」的判断面（类别：{kind}）。只回一个 JSON 对象，字段："
-            f'decision（**必须逐字取自** {list(verdicts)} —— 这是这一类的词表，'
+            f'decision（必须逐字取自 {list(verdicts)} —— 这是这一类的词表，'
             "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
             "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）")
     if kind == "statement_aesthetic":
@@ -10603,7 +10623,7 @@ def _judge_system(kind: str) -> str:
         # 为什么不再要第二个字段：2026-11-01 的 82 现场正是"两字段两轴"的形态 ——
         # 模型把档位写进 reason、decision 写了旧词、nontriviality 给了 null，
         # 读侧一个字段都认不到。一根轴一个字段，题面就不再有两套指令打架。
-        head += ('；另外，decision 就是这条命题的档位：**逐字取自** '
+        head += ('；另外，decision 就是这条命题的档位：逐字取自 '
                  '"T0"/"T1"/"T2"/"T3"/"T4" 之一（材料不足的情况框架会先挡住，'
                  '不会把这一问发给你）')
     head += "。"
@@ -10621,15 +10641,15 @@ def _judge_system(kind: str) -> str:
         # 那五句定义原样放进题面，判定归模型，`effort` 只作参考读数。
         ask = (
             "问题：本体（B）要把下面这条命题收进 `statements`（定理与证明收录表）。"
-            "请按下面这五档的**自然语言定义**判它落在哪一档（业主原话）：\n"
+            "请按下面这五档的自然语言定义判它落在哪一档（业主原话）：\n"
             "- T0 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些）\n"
             "- T1 有一定价值的非平凡结论\n"
             "- T2 证明方法都是平凡的，但工作量较大\n"
             "- T3 需要用较多的技巧或跨领域工具\n"
             "- T4 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造\n"
-            "判的是**这份证明本身**：思路、承重步骤、用到的工具、有没有真技巧。\n"
+            "判的是这份证明本身：思路、承重步骤、用到的工具、有没有真技巧。\n"
             "材料里的 `effort`（体量/步骤/引理/工具簇/绕路与分数）只是机器数出来的"
-            "**参考读数**，不要拿它当判据：写得长不等于难，步数多也不等于难；"
+            "参考读数，不要拿它当判据：写得长不等于难，步数多也不等于难；"
             "也不要只在 basis 里复述那几个数字。\n"
             "decision 就是这条命题的档位：取 \"T0\"/\"T1\"/\"T2\"/\"T3\"/\"T4\" 之一；"
             "必须给出一档（材料不全会先被框架挡住，不会走到这一问）。\n"
@@ -10671,13 +10691,13 @@ def _judge_system(kind: str) -> str:
         ask = (
             "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底有没有指出缺陷？"
             "只有两档，没有中间档：\n"
-            "**有缺陷要指出**（只要不是完全没毛病，就判这一档）：\n"
+            "有缺陷要指出（只要不是完全没毛病，就判这一档）：\n"
             "- 「整体很好，只是有一个缺陷需要指出……」；\n"
             "- 「思路没问题，但是有一个记号问题需要强调……」；\n"
             "- 「我找不到反例，但某对象似乎没有定义」；\n"
             "- 「我觉得没问题但我没逐行验证」——没验证过就不是没问题；\n"
             "- 拿不准、说不清、只挑出一处小记号问题：一律判这一档。\n"
-            "**没问题**：它真的逐条走查过、并且明确写了「我试了几种反例构造都失败、"
+            "没问题：它真的逐条走查过、并且明确写了「我试了几种反例构造都失败、"
             "未发现问题」这一档（有反例尝试的记录，而不是一句笼统的放心）。\n"
             "它的依据落在不归 F 的那几样上（文献真伪/页码核对、实验数值复现、稿件排版"
             "与术语统一）也不是没问题 —— 那说明它没审证明本身，按有缺陷处理。\n"
@@ -10694,7 +10714,7 @@ def _judge_system(kind: str) -> str:
         # 那是"没查成"（框架按 checked=False 记，见 `decide_sign_issuance`）。
         ask = (
             "问题：验证者（V）刚对一个命题的某一份证明给出了结论，现在要决定"
-            "**这一签发不发**（发签 = 把命题行的第 3 位翻成「审过」）。"
+            "这一签发不发（发签 = 把命题行的第 3 位翻成「审过」）。"
             "材料是台账现算的读数，不是证明正文。判据只有一条："
             "业主定的门槛是「同一份正文连续 3 次都判「成立」」——`streak`（尾部连续「成立」的次数）"
             "必须达到 `need`（门槛），且这几次盖的是同一份正文（那一格读数须为真）。\n"
@@ -10721,7 +10741,7 @@ def _wash_v_system() -> str:
     不评价价值），多写只会让模型在这些轴上自由发挥。
     """
     return (
-        "你是「秘书」的洗稿面：把验证者（V）的审阅回复改写成**转达给作者**的工作意见。"
+        "你是「秘书」的洗稿面：把验证者（V）的审阅回复改写成转达给作者的工作意见。"
         "纪律三条：① 只写原文里有的意思，不许添；② findings 里每一条 `quote` 必须与原文"
         "逐字相同（只允许空白差异）—— 改了字就不采信；③ 不评价作者思路好不好、不写"
         "「这篇论文有没有价值」这类价值判断（那不是 V 的判据面）。"

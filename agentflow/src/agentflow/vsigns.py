@@ -108,11 +108,44 @@ INDEX_SCHEMA = "vsigns-issued/1"
 #: 归档项里「谁写的」那一格的唯一合法取值。任何别的值 ⇒ 有人手改过（:func:`index_drift` 判红）。
 ARCHIVED_BY = "agentflow.vsigns.archive"
 
-#: 写签者那一格的两个取值：秘书落地那条路（`append_ledger=False`）与直调写入口
-#: （`record_verification(flip=True)` 的兼容门 / 夹具）。两者都真实发生过，
-#: 所以分开记 —— 把直调也写成 `secretary` 会让"这张签是谁发的"变成一句假话。
-WRITTEN_BY_SECRETARY = "secretary"
+#: 写签者那一格的两个取值。
+#:
+#: 2026-11-02（业主）：`written_by` 不再写笼统的 `"secretary"` —— 收方秘书必须点名，
+#: 所以新签写 `"secretary:F"` / `"secretary:B"`（见 :data:`SECRETARY_OF`）。直调写入口
+#: （夹具 / `record_verification(flip=True)`，没有收方秘书）仍写这个值：两者都真实发生过，
+#: 把后者也写成 secretary 会让"这张签是谁发的"变成假话。
 WRITTEN_BY_DIRECT = "sign_statement(direct)"
+#: 历史取值（84 的两份签文件写的就是它）：只读，不再写。
+#: 读侧不许因为它是旧值就把它读成"没有写签者"。
+WRITTEN_BY_SECRETARY = "secretary"
+
+#: 收方秘书的身份值（业主 2026-11-02：`by=` 必填，只认这两个）。
+#:
+#: 为什么只认这两个：落签是收方的动作（F 的秘书落 F 的稿、B 的秘书落 B 收录的命题），
+#: 而 V 与 F / B 本身都不许落 —— 这正是「防止F自己给自己签」那条口径的结构落点。
+#: 别的值（`secretary:V` 也算）⇒ 受控拒绝 `not_a_secretary`、零字节。
+SECRETARY_OF: tuple[str, ...] = ("secretary:F", "secretary:B")
+
+#: 非收方秘书来落签时的原因码（受控拒绝；调用方按它分句，不许折成"系统故障"）。
+NOT_A_SECRETARY = "not_a_secretary"
+
+#: 颁发时写给收方秘书的那个信封的 `kind`（它是签文件里的一格，不是另一份文件）。
+#:
+#: 为什么要有它：颁发（V）与落签（收方）拆开之后，"这签该由谁落"必须有一处写得下来
+#: 且读得回来 —— 写在文件外（只在返回值里）的话，落签那一步就没有可比对的收件人，
+#: 谁都能来落。`to` 只认 :data:`SECRETARY_OF` 里的值。
+ENVELOPE_KIND = "v-sign-issued"
+
+
+def secretary_id(role: Any) -> str:
+    """角色名 ⇒ 收方秘书的身份值（`"F"` ⇒ `"secretary:F"`；别的角色 ⇒ 空串）。
+
+    只认 F / B：V 是颁发方、M 没有 V 签的编辑权（业主 2026-11-02），其余角色连
+    "收方"都不是。空串 = 这一趟没有可落的秘书（不是"随便谁都能落"）。
+    """
+    text = str(role or "").strip()
+    want = f"secretary:{text}"
+    return want if want in SECRETARY_OF else ""
 
 #: `artifact_sha` 的口径（一句话版，给读的人与判据看）。
 ARTIFACT_SHA_RULE = (
@@ -434,7 +467,7 @@ SIGN_MARK = "- V 签："
 
 #: 签块里那几格的键（顺序即写法；读侧按 `；` 与 `=` 拆）。
 #:
-#: 2026-11-02（业主裁定）：加第 9 格 `手稿号`，值是**裸稿号**（`000000` / `plan-0001` / `a`），
+#: 2026-11-02（业主裁定）：加第 9 格 `手稿号`，值是裸稿号（`000000` / `plan-0001` / `a`），
 #: 不是文件名 —— 写法上要把"哪一种号"带进值里（`f-proof-plan-0001.md` ⇒ `plan-0001`），
 #: 否则 `f-proof-plan-0001.md` 与 `f-proof-0001.md` 会在数字上撞车（都读成 `0001`）。
 #: 这一格回答"这一块属于哪一份稿"，与 `正文sha`（回答"签的是哪一份正文"）是两件事：
@@ -689,7 +722,7 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     # ---- 2026-11-02：「这一块签的正文」与「这份稿现在的正文」是两个问题 ----
     #
     # `sha_matches` 回答"签块盖的是不是调用方问的那一份正文"（`proof_sha`）；
-    # `body_mismatch` 回答"签块盖的是不是**这份稿里现在这一份**正文"。两者可以同时
+    # `body_mismatch` 回答"签块盖的是不是这份稿里现在这一份正文"。两者可以同时
     # 一真一假（84：块与登记的那一份相符，而盘上这份稿已经是另一版）—— 折成一个
     # 布尔就会让"签过"把改稿盖过去。
     try:
@@ -720,7 +753,7 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
                         f"{want[:12]}…）⇒ 签完之后正文改过，要重签"))
         return out
     if out["body_mismatch"]:
-        # 2026-11-02：签块与调用方问的那一份相符，但**这份稿里现在这一份正文**
+        # 2026-11-02：签块与调用方问的那一份相符，但这份稿里现在这一份正文
         # 已经不是它了（84 的形态）⇒ 这一块不许给这份稿作证。
         out.update(state="stale",
                    why=(f"这份稿的「## 证明」正文 sha 是 {out['body_sha256'][:12]}…，"
@@ -745,7 +778,7 @@ def manuscript_body_matches(text: str, *, artifact_sha: Any) -> dict[str, Any]:
     三态：被签的 sha 认不出 ⇒ `checked=False, matches=None`（没查成，不是"相符"）；
     查成了 ⇒ `matches` 真/假，且 `body_mismatch` 是它的反面（读侧只读这一格，不自己取反）。
 
-    为什么落块前必须过这一道：`正文sha` 只说明"V 签的是哪一份正文"，不保证**眼前这份稿**
+    为什么落块前必须过这一道：`正文sha` 只说明"V 签的是哪一份正文"，不保证眼前这份稿
     还是那一份（84 就是"块盖 #p3、文件正文 #p2"）。少了这一道，改过的稿会被盖上一块
     不属于它的签，而读侧每一处都会"看起来成功了"。
     """
@@ -871,35 +904,29 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     return out
 
 
-def _stamp_block_after_sign(root: Any, doc: Mapping[str, Any]) -> dict[str, Any]:
-    """`write_sign` 之后顺手把签块盖进它记下的那一份手稿（best-effort，不带走这一签）。
+# ---------------------------------------------------------------- 颁发（V 的动作）
 
-    为什么不在这失败时回滚：签文件已经在盘上（证据），手稿块是"随稿走的那一份"；
-    写块失败要留读数（返回里的 `manuscript_write`），不许让"签已经发了"这件事消失。
-    """
-    rel = str(doc.get("artifact_path") or "").strip()
-    if not rel:
-        return {"state": "not_attempted", "written": False, "idempotent": False,
-                "missing": False, "path": "", "line": 0,
-                "why": "这一签没有手稿落点（`artifact_path` 是空的）⇒ 只写侧文件"
-                       "（未尝试，不是失败）",
-                "reading": {}}
-    return write_manuscript_sign(
-        root, rel, proof_sha=doc.get("artifact_sha"), streak=doc.get("streak"),
-        need=doc.get("need"), verdict=str(doc.get("verdict") or "成立"),
-        signer="V", at=str(doc.get("at") or ""),
-        ledger=str(doc.get("ledger") or ""),
-        statement_id=str(doc.get("statement_id") or ""))
+def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
+          artifact_path: str = "", ledger: str = "", statement_id: str = "",
+          proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
+          objections: Sequence[Mapping[str, Any]] = (), at: str = "",
+          by: str = "") -> dict[str, Any]:
+    """颁发一份签：`out/vsigns/<artifact_sha>.json` + `issued.json` + 信封（纯写这一半）。
 
+    ## 2026-11-02：颁发与落签拆开（业主口径）
+    ```text
+    V 只颁发：`out/vsigns/<sha>.json` 由颁发工具自动写（合规）；手稿块与台账位由收方秘书落。
+    ```
+    所以本函数只做 V 那一半：写证据文件、更新派生归档、把"这签该由谁落"写进信封
+    （签文件里的一格 `envelope`，读侧 :func:`sign_envelope` 读）。手稿块与台账位一个字节
+    都不碰 —— 那是 :func:`land` 的事，而且只有收方秘书（`by`）能落。
 
-# ---------------------------------------------------------------- 写一份签
-
-def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
-               artifact_path: str = "", ledger: str = "", statement_id: str = "",
-               proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
-               objections: Sequence[Mapping[str, Any]] = (), at: str = "",
-               written_by: str = WRITTEN_BY_SECRETARY) -> dict[str, Any]:
-    """落一份签，再更新归档（顺序固定；返回三态读数）。
+    ## `by`：收方秘书的身份值（只认 :data:`SECRETARY_OF`）
+    - `by="secretary:F"` / `"secretary:B"` ⇒ 签文件写 `written_by` = 它，信封 `to` = 它；
+    - `by=""` ⇒ 直调 / 夹具那一档（没有收方秘书）：`written_by=WRITTEN_BY_DIRECT`，
+      信封 `to` 空 —— 这一档能颁发，但不能落块（:func:`land` 的 `by` 必填）；
+    - 别的值（含 `"secretary:V"`）⇒ 受控拒绝 :data:`NOT_A_SECRETARY`，一个字节都不写
+      （连 `out/vsigns/` 都不建）。
 
     ## 门槛也在这里再判一次（不允许绕过 `signs_bit3` 直接写签）
     `streak < need` ⇒ 「一个字节都不写」（`written=False` + 理由）。理由：本函数是
@@ -912,39 +939,22 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
     理由串说清哪一格不同 —— 覆盖会把"先签了后来又不认"这段历史抹掉。
 
     返回键：`written` / `idempotent` / `conflict` / `path` / `archive_error` /
-    `archive_count` / `reason` / `sign` / `manuscript_write` /
-    `manuscript_write_recorded`。
-
-    ## 2026-11-02：签块同时盖进手稿（业主：「V 签不直接进台账，进手稿」）
-
-    侧文件写成功之后，按 `doc["artifact_path"]`（`verifications._vsign_payload` 已经按
-    `depsection.manuscript_relpaths` 定位好的那一份）把同一份签盖进手稿 —— 块长什么样、
-    幂等与解析全在 :func:`stamp_manuscript_sign` / :func:`manuscript_sign_reading`。
-    写块失败不回滚侧文件（签已经发了这件事不许消失），读数落 `manuscript_write`。
-
-    ## 2026-11-02 晚：这一笔的读数也落进签文件本身（修 84 的 `null`）
-
-    改前签文件里没有 `manuscript_write`：84 的两份签文件读出来是 `null`，而
-    `reports/f-proof-000000.md` 里已经有块（台账指向 `verifications/000000.jsonl#v-000010`，
-    正是本函数顺手盖的那一版）—— 读数与实际脱节，将来排查会照 `null` 去找。
-    现在新写成的签文件会带一格 `manuscript_write`（三态：`written` / `failed` /
-    `not_attempted`，形状见 :func:`manuscript_write_reading`；带上 `path` 与 `line`）。
-    已在盘上的签文件仍然"不重写"（一稿一签）：旧文件没有这一格时，读侧落
-    `unrecorded`，不补写、不冒充。
+    `archive_count` / `reason` / `sign` / `envelope` / `code` / `refused_below_need`。
     """
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "archive_count": 0,
-                           "reason": "", "sign": {},
-                           #: 手稿签块那一笔的读数（2026-11-02）：`state` / `written` /
-                           #: `idempotent` / `missing` / `path` / `line` / `why` / `reading`。
-                           #: 它是一个独立的落点：侧文件是证据、手稿块是"随稿走的那一份"，
-                           #: 任一失败都各自可见。
-                           "manuscript_write": {},
-                           #: 这一格有没有落进签文件本身（新签才可能为真；旧签不重写）。
-                           "manuscript_write_recorded": False,
+                           "reason": "", "sign": {}, "envelope": {}, "code": "",
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False}
+    # ---- 收方秘书这一格先验（零字节）：拒绝要发生在建目录之前 ----
+    who = str(by or "").strip()
+    if who and who not in SECRETARY_OF:
+        out.update(code=NOT_A_SECRETARY,
+                   reason=(f"`by={who!r}` 不是收方秘书 ⇒ 不颁发（一个字节都不写）："
+                           f"只认 {list(SECRETARY_OF)} —— 落签是 F / B 的秘书的动作，"
+                           "V 与 F / B 本身都不许落（防止自己给自己签）"))
+        return out
     try:
         key = _sha_key(artifact_sha)
     except VsignError as exc:
@@ -955,6 +965,8 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
                    reason=(f"连续「成立」{int(streak)}/{int(need)} 次 ⇒ 一个字节都不写："
                            "未达门槛就没有签（业主：只有连续三次审核通过这才叫 V 签）"))
         return out
+    envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
+                "issued_by": "V"}
     doc: dict[str, Any] = {
         "schema": SIGN_SCHEMA,
         "artifact_sha": key,
@@ -970,8 +982,12 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
         "objections": [dict(o) for o in (objections or ())],
         "source_note": PASSES_SOURCE_NOTE,
         "at": str(at or ""),
-        "written_by": str(written_by or WRITTEN_BY_SECRETARY),
+        #: 谁落签（2026-11-02）：收方秘书的身份值；直调那一档是
+        #: :data:`WRITTEN_BY_DIRECT`（历史值 `"secretary"` 只读、不再写）。
+        "written_by": who or WRITTEN_BY_DIRECT,
+        "envelope": envelope,
     }
+    out["envelope"] = envelope
     path = sign_path(root, key)
     out["path"] = rel(path, root)
     out["sign"] = doc
@@ -988,6 +1004,7 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
             # 那一档绝不覆盖：可疑的文件要人看，不许工具悄悄修好它。
             doc = old
             out["sign"] = doc
+            out["envelope"] = dict(doc.get("envelope") or {})
             out.update(idempotent=True,
                        reason=(f"`{out['path']}` 已经在盘上（签于 "
                                f"{str(doc.get('at') or '（没有 at）')}）⇒ 不重写：一稿一签"))
@@ -1011,34 +1028,234 @@ def write_sign(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out["archive_error"] = str(got.get("error") or "归档没写成")
         out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
-    # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿」）：同一份签盖进手稿 -----
-    # 侧文件与手稿块是同一签的两个落点（同一把 sha、同一组读数）。写块失败不回滚侧文件：
-    # 签已经发了这件事不许因为"稿没写成"而消失，读数写进 `manuscript_write.why`。
-    out["manuscript_write"] = _stamp_block_after_sign(root, doc)
-    _mw = out["manuscript_write"]
-    if not _mw.get("written"):
-        # 三态在收场那句话里也要分得开：没有手稿落点是"未尝试"，不是"写失败"。
-        _word = "未尝试" if str(_mw.get("state") or "") == "not_attempted" else "没写成"
-        out["reason"] = f"{out['reason']}；手稿签块{_word}：{_mw.get('why')}"
-    # ---- 2026-11-02 晚：把这一笔的真实结果落进签文件 -------------------------
-    # 只补这次新写成的签文件：已在盘上的签仍然"一稿一签、不重写"（那条纪律比
-    # "把旧文件的空格补上"更重要 —— 旧文件缺这一格时读侧落 `unrecorded`）。
-    # 顺序放在盖章之后：签文件先落盘是"签已经发了"的证据，写块失败也不回滚它。
-    if out["written"]:
-        try:
-            current, problem = _read_json(path)
-            if current is None:
-                out["reason"] = (f"{out['reason']}；手稿签块读数没写进签文件"
-                                 f"（{problem}）")
-            else:
-                current["manuscript_write"] = out["manuscript_write"]
-                _write_atomic(path, current)
-                out["sign"] = current
-                out["manuscript_write_recorded"] = True
-        except OSError as exc:
-            out["reason"] = (f"{out['reason']}；手稿签块读数没写进签文件"
-                             f"（{type(exc).__name__}: {exc}）")
     return out
+
+
+def sign_envelope(doc: Mapping[str, Any] | None) -> dict[str, Any]:
+    """读一份签文件里的信封那一格（纯读；旧签没有它 ⇒ `to=""`，不冒充"已经写了"）。
+
+    返回 `{to, kind, at, issued_by, recorded}`：`recorded=False` = 这份签文件是 2026-11-02
+    之前的写法（还没有密码封这一格），那一档的落签不受 `to` 约束（见 :func:`land`）。
+    """
+    out: dict[str, Any] = {"to": "", "kind": "", "at": "", "issued_by": "",
+                           "recorded": False}
+    if not isinstance(doc, Mapping):
+        return out
+    got = doc.get("envelope")
+    if not isinstance(got, Mapping):
+        return out
+    out.update(recorded=True, to=str(got.get("to") or ""),
+               kind=str(got.get("kind") or ""), at=str(got.get("at") or ""),
+               issued_by=str(got.get("issued_by") or ""))
+    return out
+
+
+# ---------------------------------------------------------------- 落签（收方秘书的动作）
+
+def _record_manuscript_write(root: Any, key: str, mw: Mapping[str, Any], *,
+                             by: str = "") -> dict[str, Any]:
+    """把手稿块那一笔的读数补进签文件（`manuscript_write`；落成时连 `written_by`）。
+
+    为什么要补：这一格此前只活在返回值里，于是 84 的两份签文件读出来是 `null`，
+    而稿上明明有块（`draft/84` ①）。读的人的下一步是照 `null` 去找，所以"没落成"
+    也要落成一条可读的读数（`failed` / `not_attempted`），不许静默。
+    一稿一签：已存在的那份签只在落签这一步被补一次这两格，正文与 `passes` 一个字不动。
+    """
+    out: dict[str, Any] = {"recorded": False, "why": ""}
+    path = sign_path(root, key)
+    try:
+        current, problem = _read_json(path)
+        if current is None:
+            out["why"] = f"手稿签块读数没写进签文件（{problem}）"
+            return out
+        if current.get("manuscript_write") and mw.get("idempotent"):
+            # 一稿一签：块本来就在、这一笔没重写 ⇒ 签文件也不许重写（哪怕读数逐字相同，
+            # 重写一次就把"第 4 转不改签文件"那条判据变成了寄希望于字节恰好稳定）。
+            out["recorded"] = True
+            return out
+        current["manuscript_write"] = dict(mw or {})
+        if str(by or "").strip():
+            current["written_by"] = str(by)
+        _write_atomic(path, current)
+    except OSError as exc:
+        out["why"] = (f"手稿签块读数没写进签文件（{type(exc).__name__}: {exc}）")
+        return out
+    out["recorded"] = True
+    return out
+
+
+def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
+         store: Any = None, statement_id: str = "", proof_no: Any = None,
+         ledger_bit: bool = True) -> dict[str, Any]:
+    """落签：把一份已经颁发的签盖进手稿（第 9 格 = 裸稿号）+ 落台账位。
+
+    ## 只有收方秘书能落（`by` 必填）
+    `by` 只认 :data:`SECRETARY_OF`（`secretary:F` / `secretary:B`）；别的一律受控拒绝
+    :data:`NOT_A_SECRETARY`，零字节（不盖块、不改签文件、不翻台账位）。
+    为什么：落签是收方的动作 —— F 的秘书落 F 的稿、B 的秘书落 B 收录的命题。
+    V 与 F / B 本身都不许落，否则「防止F自己给自己签」在结构上就不成立。
+
+    ## 两道前置判据（缺一不落）
+    1. 信封收件人：签文件里 `envelope.to` 非空而 `!= by` ⇒ `addressed_to_another_secretary`
+       （零字节：别的秘书的签不许被这一位落）；
+    2. 正文逐字：`manuscript_proof_body(稿)` 的 sha 必须等于签文件的 `artifact_sha`
+       （:func:`manuscript_body_matches`）⇒ 不符即 `body_mismatch`，零字节。
+
+    ## 落什么
+    - 手稿块：:func:`write_manuscript_sign`（9 格，`手稿号` 由稿路径现算）；
+    - 签文件：补 `manuscript_write`（三态 + `path`/`line`），`written_by` 改成 `by`
+      （2026-11-02：点名是哪一位收方秘书；只在新落成时改写，旧签不回头补）；
+    - 台账位：给了 `store` 才落（`bits.evidence.reviewed_by_proof` /
+      `reviewed_sha_by_proof` 那一格）。V 那条路的外层事务已经落了位，
+      所以那里传 `store=None` ⇒ 读数 `not_attempted` 并说明"由外层事务落"，
+      不许折成"落了"。
+
+    返回键：`checked` / `landed` / `state`（`landed` / `refused` / `no_sign`）/
+    `code` / `by` / `artifact_sha` / `manuscript_id` / `body_mismatch` /
+    `manuscript_write` / `ledger_bit` / `ledger_why` / `sign_recorded` / `reason`。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "landed": False, "state": "refused", "code": "",
+        "by": str(by or "").strip(), "artifact_sha": str(artifact_sha or "").strip().lower(),
+        "manuscript_id": "", "body_mismatch": False, "manuscript_write": {},
+        "ledger_bit": "not_attempted", "ledger_why": "", "sign_recorded": False,
+        "reason": ""}
+    who = str(by or "").strip()
+    if who not in SECRETARY_OF:
+        out.update(code=NOT_A_SECRETARY,
+                   reason=(f"`by={who!r}` 不是收方秘书 ⇒ 不落签（一个字节都不写）："
+                           f"只认 {list(SECRETARY_OF)}"))
+        return out
+    try:
+        key = _sha_key(artifact_sha)
+    except VsignError as exc:
+        out["reason"] = f"{exc} ⇒ 落不了签（没查成）"
+        return out
+    out["artifact_sha"] = key
+    got = sign_of(root, key)
+    out["checked"] = bool(got.get("checked"))
+    if not got.get("checked"):
+        out["reason"] = f"{got.get('why')} ⇒ 落不了签（没查成）"
+        return out
+    if not got.get("found"):
+        out.update(state="no_sign",
+                   reason=(f"`{got.get('path')}` 不在盘上 ⇒ 没有可落的签"
+                           "（先由 V 颁发，再由收方秘书落）"))
+        return out
+    doc = dict(got.get("sign") or {})
+    env = sign_envelope(doc)
+    if env.get("to") and env.get("to") != who:
+        out.update(code="addressed_to_another_secretary",
+                   reason=(f"这一签的信封写给 {env.get('to')!r}，不是 {who!r} ⇒ 不落"
+                           "（零字节：别的秘书的签不许被这一位落）"))
+        return out
+    rel_manuscript = str(manuscript_path or doc.get("artifact_path") or "").strip()
+    mw = write_manuscript_sign(
+        root, rel_manuscript, proof_sha=doc.get("artifact_sha"),
+        streak=doc.get("streak"), need=doc.get("need"),
+        verdict=str(doc.get("verdict") or "成立"), signer="V",
+        at=str(doc.get("at") or ""), ledger=str(doc.get("ledger") or ""),
+        statement_id=str(doc.get("statement_id") or ""))
+    out["manuscript_write"] = mw
+    out["manuscript_id"] = manuscript_id_of(rel_manuscript)
+    out["body_mismatch"] = bool(mw.get("body_mismatch"))
+    if mw.get("code") == "body_mismatch":
+        # 安全档：正文不是被签的那一份 ⇒ 零字节（签文件也不许被这一次改写）。
+        out.update(code="body_mismatch", reason=f"落签没成：{mw.get('why')}")
+        return out
+    # 其余没落成的那几档（没有落点 / 稿不在盘 / 读不出来）仍把读数落进签文件：
+    # 它们是"这一签没落"的事实，不是安全拒绝；旧行为（读数只活在返回值里）正是
+    # 84 那两份签文件读成 `null` 的病根，不在这里复发。
+    recorded = _record_manuscript_write(root, key, mw, by=who if mw.get("written") else "")
+    out["sign_recorded"] = bool(recorded.get("recorded"))
+    if recorded.get("why"):
+        out["reason"] = recorded["why"]
+    if not rel_manuscript:
+        out.update(code="no_manuscript_path",
+                   reason=("这一签没有手稿落点（`artifact_path` 是空的）⇒ 手稿块没地方落"
+                           f"（未尝试，不是失败）：{mw.get('why')}"))
+        return out
+    if not mw.get("written"):
+        code = str(mw.get("code") or "")
+        if not code:
+            code = "manuscript_missing" if mw.get("missing") else "manuscript_not_written"
+        out.update(code=code, reason=f"落签没成：{mw.get('why')}")
+        return out
+    # 签文件补两格（`manuscript_write` + 落成时的 `written_by`）。
+    recorded = _record_manuscript_write(root, key, mw, by=who)
+    out["sign_recorded"] = bool(recorded.get("recorded"))
+    if recorded.get("why"):
+        out["reason"] = recorded["why"]
+    # 台账位（只在这一层有 store 时落；V 那条路由外层事务落，见 docstring）。
+    if not ledger_bit:
+        out["ledger_bit"] = "not_attempted"
+        out["ledger_why"] = "调用方说这一笔的台账位由外层事务落（`ledger_bit=False`）"
+    elif store is None:
+        out["ledger_bit"] = "not_attempted"
+        out["ledger_why"] = ("没有 store ⇒ 台账位不在这里落（V 那条路由外层 "
+                             "`sign_statement` 的事务落）")
+    else:
+        sid = str(statement_id or doc.get("statement_id") or "")
+        no = proof_no if proof_no is not None else doc.get("proof_no")
+        got_bit = _land_ledger_bit(store, statement_id=sid, proof_no=no, sha=key,
+                                   ledger=str(doc.get("ledger") or ""), by=who)
+        out["ledger_bit"] = str(got_bit.get("state") or "not_attempted")
+        out["ledger_why"] = str(got_bit.get("why") or "")
+    out.update(state="landed", landed=True,
+               reason=(f"签块落进 `{rel_manuscript}` 第 {mw.get('line')} 行"
+                       f"（手稿号 {out['manuscript_id'] or '（认不出）'}）"
+                       + (f"；{out['reason']}" if out["reason"] else "")))
+    return out
+
+
+def _land_ledger_bit(store: Any, *, statement_id: str, proof_no: Any, sha: str,
+                     ledger: str, by: str) -> dict[str, Any]:
+    """把这一签落到台账位（`bits.evidence.reviewed_by_proof` 那一格；纯写这一处）。
+
+    为什么独立一格：`land` 在 V 那条路上不落位（外层事务已经落了），而在"收方秘书单独
+    落一份已经颁好的签"这条路上必须自己落 —— 两种调用都要看得见"落没落、为什么没落"。
+    三态：`written` / `no_statement`（册上没有那一条）/ `failed`（事务写不成）/ `not_attempted`。
+    """
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {"state": "not_attempted", "statement_id": str(statement_id or ""),
+                           "proof_no": 0, "why": ""}
+    try:
+        no = int(_VR.as_proof_no(proof_no) or 0)
+    except (TypeError, ValueError):
+        no = 0
+    out["proof_no"] = no
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out["why"] = "这一签没有命题号（未在册那一档）⇒ 没有可翻的位"
+        return out
+    if no < 1:
+        out["why"] = f"证明号认不出（收到 {proof_no!r}）⇒ 不翻位（不猜 #p1）"
+        return out
+    try:
+        with store.tx("statements", actor=f"verifier-{by}",
+                      note=f"vsign.land:{sid}#p{no}") as tx:
+            row = tx.find("statements", stmt_id=sid)
+            if row is None:
+                out.update(state="no_statement",
+                           why=f"`statements` 里没有命题 {sid} ⇒ 没有可翻的位")
+                return out
+            found = dict(row)
+            bits = dict(found.get("bits") or {})
+            found["bits"] = _apply_review_to_bits(
+                bits, verification_id="", evidence=str(ledger or ""), findings=[],
+                verdict="成立", proof_no=no, sha=str(sha or ""),
+                kind=str(found.get("kind") or ""))
+            tx.upsert("statements", found, note=f"vsign.land:{sid}#p{no}")
+    except Exception as exc:  # noqa: BLE001 —— 翻位失败要如实报（块已经落了）
+        out.update(state="failed",
+                   why=f"台账位没写成（{type(exc).__name__}: {exc}）⇒ 块已落、位没跟")
+        return out
+    out.update(state="written",
+               why=(f"{sid}#p{no} 的 reviewed_by_proof 与 reviewed_sha_by_proof 已落"
+                    f"（sha {str(sha or '')[:12]}…）"))
+    return out
+
 
 
 # ---------------------------------------------------------------- 归档与逐份签对账

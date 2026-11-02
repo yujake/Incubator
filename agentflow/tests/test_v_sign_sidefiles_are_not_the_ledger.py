@@ -197,8 +197,10 @@ def test_r3_below_the_bound_no_sign_file_is_written(tmp_path):
     got = VR.consecutive_holds(st.root, SID, proof_no=1)
     assert (got["streak"], got["need"]) == (2, 3), got
     assert _signs(st) == [], f"连续 2/3 次就出现了签文件 {_signs(st)} ⇒ 门槛被绕过"
-    # `write_sign` 自己也拒（唯一写口不许只看调用方说的 written=True）。
-    refused = VSP.write_sign(st.root, artifact_sha=VR.proof_sha(PROOF), streak=2, need=3)
+    # 门槛那一层自己也拒（唯一写口不许只看调用方说的 written=True）。
+    # 2026-11-02 起写口分成 `issue` / `land` 两步，这里量的是"颁发"那一半。
+    refused = VSP.issue(st.root, artifact_sha=VR.proof_sha(PROOF), streak=2, need=3,
+                        by="secretary:F")
     assert not refused["written"] and "未达门槛" in refused["reason"], refused
     assert _signs(st) == []
 
@@ -248,12 +250,14 @@ def test_r4b_a_fourth_pass_does_not_rewrite_the_sign(tmp_path):
 
 
 def test_r4c_the_secretary_path_marks_the_sign_as_hers(tmp_path):
-    """落签者是秘书（业主 2026-11-01 的 ③）：秘书那条路写出来的签，`written_by` 必须是 secretary。
+    """落签者是收方秘书（业主 2026-11-02）：签文件里的 `written_by` 必须点名是哪一位。
 
-    为什么这一格要单独钉：`sign_statement` 有两个调用者（秘书落地 / 直调写入口），
-    而"签是谁发的"只能靠 `append_ledger=False` 这一个既有的读数区分。两档写成同一个值，
-    读的人就分不出"秘书发的签"与"夹具/直调发的签"—— 而前者才是业主口径里的 V 签。
+    为什么这一格要单独钉：`sign_statement` 有两条调用者（秘书落地 / 直调写入口），
+    而"签该由谁落"只能从权威上下文读（`conductor.current_parent()` 的父角色，
+    见 `Secretary.sign_recipient`）—— 不许从 `self.role`（那是 V 自己的角色）凑一个。
+    两档写成同一个值，读的人就分不出"收方秘书落的签"与"夹具/直调发的签"。
     """
+    from agentflow import conductor as CND
     from agentflow import secretary as SEC
 
     class _Seam:
@@ -285,14 +289,18 @@ def test_r4c_the_secretary_path_marks_the_sign_as_hers(tmp_path):
         verifier="agent-V", store=st, proof_no=1, flip=False,
         secretary_judge={"checked": True, "axis": "clean", "decision": "没问题"})
     sec = SEC.Secretary("V", root=st.root, store=st, seam=_Seam(), enable_model=True)
-    got = sec.decide_sign_issuance(statement_id=SID, proof_text=PROOF, proof_no=1,
-                                   verdict=_OK, row=third)
+    # V 这一趟是 F 派出来的（收方 = F 的秘书）—— 身份只从 `calling_as` 读，不由模型给。
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = sec.decide_sign_issuance(statement_id=SID, proof_text=PROOF, proof_no=1,
+                                       verdict=_OK, row=third)
     assert got["issue"] is True and got["issued"] is True, got
     sha = VR.proof_sha(PROOF)
     doc = _sign_doc(st, sha)
-    assert doc["written_by"] == VSP.WRITTEN_BY_SECRETARY, (
-        f"秘书那条路写出来的签记成了 {doc['written_by']!r} ⇒ "
-        "「谁发的签」这一格读不出业主口径里的那个答案")
+    assert doc["written_by"] == "secretary:F", (
+        f"收方秘书那条路写出来的签记成了 {doc['written_by']!r} ⇒ "
+        "「谁该落这一签」这一格读不出业主口径里的那个答案（只许 secretary:F / secretary:B）")
+    assert doc["envelope"]["to"] == "secretary:F", doc.get("envelope")
     assert [p["verification_id"] for p in doc["passes"]] == \
         ["v-000001", "v-000002", "v-000003"], doc["passes"]
     assert VSP.index_drift(st.root)["drift"] == []
