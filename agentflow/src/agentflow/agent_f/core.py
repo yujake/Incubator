@@ -357,6 +357,29 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         ]
         lines += [f"- {seg}" for seg in str(retry_note).splitlines() if seg.strip()]
         lines.append("")
+    # ---- 第 7 段：交差自评（业主 2026-11-02：「F具体是否收工靠它自己评判」）
+    #
+    # 为什么写进提示词：三条自评判据是"F 自己判"的，框架不替它判 —— 它没写时
+    # `agent_f/delivery.py` 只能如实标 `source="derived"`（按盘上证据推的，不是自评）。
+    # 为什么它不是"收工开关"：这一段只要求每轮顺带写一格自评；收不收工仍看逐条读数
+    # （`delivery` 那一格）与三条判据，一条签到手不等于交差。
+    lines += [
+        "",
+        "## 7. 交差自评（每一轮都顺带写一格 `self_assessment`；它不是收工开关）",
+        "一个任务可以产出多条成果，**不要因为一条拿到签就收工**。你的交差读数按条读"
+        "（`F.step` 的 `delivery`：`signed_count` / `pending_count` / `unsigned_count` / "
+        "`coverage` / `self_assessment`）。收不收工由你自己判，三条各给一档：",
+        "1. `comprehensive`：是否全面研究了 D 交给你的攻坚任务 —— `comprehensive`"
+        "（每条子目标都研究过）/ `partial`（只研究了一部分）/ `not_comprehensive`（还没开始）；",
+        "2. `enough_output`：是否尽力做出了足够多的成果（**也可以是没成果**）—— "
+        "`enough_output`（成果都签了）/ `some_output`（有成果、还没全签）/ `no_output`"
+        "（研究了、尽力了、0 条成果 —— 这是**合法的收工理由**）；",
+        "3. `partial_output`：即使没完成原定任务，是否产出了一些小的阶段性成果 —— "
+        "`partial_output`（归约 / 反例族 / 排除的路 / 部分引理）/ `none`（没有）。",
+        "写法：与产物同一个 JSON 对象，平级一格 —— "
+        '`"self_assessment": {"comprehensive": "...", "enough_output": "...", '
+        '"partial_output": "...", "why": "你自己的话"}`。',
+    ]
     lines += [
         "只输出一个 JSON 对象，不要写解释、不要写 Markdown 围栏。",
     ]
@@ -1118,6 +1141,12 @@ class _Core:
                 }, checks)
             try:
                 product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
+                # 自评那一格（业主 2026-11-02）：`parse_round` 只认受控四档，会把这一格
+                # 丢掉 —— 所以在这里从模型原样交回的 JSON 里取出、挂回产物。
+                # 它缺席时 `agent_f/delivery.py` 会如实标 `source="derived"`（不冒充自评）；
+                # 写成受控档位之外的词时那一格读成 `unreadable`（逐条列出哪一格错）。
+                if isinstance(data, Mapping) and data.get("self_assessment") is not None:
+                    product["self_assessment"] = data.get("self_assessment")
                 break
             except AR.RoundError as exc:
                 # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 把它的原话
@@ -1903,6 +1932,140 @@ class _Core:
                 "hint": _VS.next_step_hint(reading, statement_id=statement_id,
                                            manuscript_paths=plan_paths)}
 
+    # ------------------------------------------------------ 交差读数：按条，不是按这一轮
+    #
+    # 业主 2026-11-02（逐字，`draft/179` §二之三）：
+    #   「一个F可以产出多条成果，不要暗示它一拿到一条定理的证明就交差。
+    #     F具体是否收工靠它自己评判：是否全面研究了D交给它的攻坚任务、是否尽力做出了
+    #     足够多的成果（也可以是没成果）、即使没完成原定任务，是否产出了一些小的阶段性成果」
+    #
+    # 改前这一层只有 `_read_sign`：它读的是「这一轮那一份」证明的签。于是三条成果只签了
+    # 一条也读成 `delivered=True`（"有一个签"被读成交差完成），而"研究了、0 条成果"
+    # 根本没有能读的格。逐条的判据在 `agent_f/delivery.py`（纯函数，不读盘）；
+    # 这里只负责"每一条成果的现行正文与签"这一层读盘，再把两者接起来。
+    def _statement_row(self, statement_id: str) -> dict:
+        """`statements` 里那一行（读不到 ⇒ 空表 + 一句实话，不当成"没有这条"）。"""
+        sid = str(statement_id or "").strip()
+        if not sid:
+            return {}
+        try:
+            return next((dict(r) for r in self.store.rows("statements")
+                         if str(r.get("stmt_id") or "") == sid), {})
+        except Exception as exc:  # noqa: BLE001 - 读不到就如实说，不据此判"没签"
+            self._log(f"statements 读不到（找 stmt:{sid}）：{type(exc).__name__}: {exc}")
+            return {}
+
+    def _output_body(self, statement_id: str, plan_id: str = "") -> dict:
+        """这一条成果的「现行正文」（签盖的就是它）与手稿落点。
+
+        次序：① 按命题号命名的那份手稿（`reports/f-proof-<号>.md`，框架发布的那一份）
+        → ② `statements` 行的 `proof_text` → ③ 行里 `proofs` 清单的最后一份。
+        三条都读不到 ⇒ `text=""`，签那一格会读成「没查成」（不是「待签」）。
+        """
+        from .. import depsection as _DS
+
+        sid = str(statement_id or "").strip()
+        ids = (sid,) if sid else ()
+        paths = tuple(_DS.manuscript_relpaths(statement_ids=ids,
+                                              plan_id=str(plan_id or "")))
+        try:
+            got = _DS.read_manuscript(self.store.root, statement_ids=ids,
+                                      plan_id=str(plan_id or ""))
+        except Exception as exc:  # noqa: BLE001 - 找稿这一层坏了 ⇒ 退到台账，不带走这一趟
+            got = {"checked": False, "source": _DS.SOURCE_NONE, "text": "", "path": "",
+                   "why": f"按约定路径找手稿没跑成（{type(exc).__name__}: {exc}）"}
+        text = ""
+        if str(got.get("source") or "") == _DS.SOURCE_DISK and got.get("text"):
+            # 与 V 签字时用的是同一把尺（`vsigns.manuscript_proof_body`：
+            # `proof_body` 去掉首尾换行）—— 自己另写一遍 `.strip()` 就会让 sha 对不上，
+            # 于是"签在盘上、读数说没签"（正是这一批要防的那种假读数）。
+            from .. import vsigns as _VS
+
+            text = _VS.manuscript_proof_body(str(got.get("text") or ""))
+        row = self._statement_row(sid)
+        if not text.strip():
+            text = str(row.get("proof_text") or "")
+        if not text.strip():
+            proofs = row.get("proofs") or []
+            if proofs:
+                text = str((dict(proofs[-1]) or {}).get("text") or "")
+        return {"text": text, "paths": paths,
+                "source": str(got.get("source") or ""),
+                "manuscript": str(got.get("path") or ""),
+                "statement": row,
+                "why": str(got.get("why") or "")}
+
+    def _delivery_reading(self, plan: Mapping[str, Any], *, current: Mapping[str, Any] | None = None,
+                          assessment: Any = None) -> dict:
+        """逐条交差读数（读盘：每一条成果各自读一次签，再交给 `delivery.summary` 汇总）。
+
+        `current` 是"这一轮刚产出的那一条"（`_apply_round` 在 `step` 把它追加进 history
+        之前就要读数）：`{statement_id, reading, proof_text, manuscript, round, subgoal}`。
+        同一号在 history 里已有旧读数时，以 `current` 这一份为准（它是最新的签）。
+        """
+        from . import delivery as _DL
+
+        row = dict(plan or {})
+        history = [dict(h) for h in (row.get("history") or []) if isinstance(h, Mapping)]
+        plan_id = str(row.get("plan_id") or self.cfg.get("plan_id") or "")
+        found = _DL.outputs_of(history)
+        cur = dict(current or {})
+        cur_sid = str(cur.get("statement_id") or "").strip()
+        if cur_sid and not any(str(o.get("statement_id")) == cur_sid for o in found):
+            found.append({"statement_id": cur_sid,
+                          "round": int(cur.get("round") or 0),
+                          "subgoal": str(cur.get("subgoal") or ""),
+                          "action": str(cur.get("action") or ""), "submissions": 1})
+        outputs: list[dict[str, Any]] = []
+        for out in found:
+            sid = str(out.get("statement_id") or "")
+            if cur_sid and sid == cur_sid and cur.get("reading") is not None:
+                reading = dict(cur.get("reading") or {})
+                manuscript = str(cur.get("manuscript") or "")
+                statement: dict[str, Any] = {}
+            else:
+                body = self._output_body(sid, plan_id=plan_id)
+                got = self._read_sign(statement_id=sid,
+                                      proof_text=str(body.get("text") or ""))
+                reading = dict(got.get("reading") or {})
+                manuscript = str(body.get("manuscript") or "")
+                statement = dict(body.get("statement") or {})
+            outputs.append({**out, "statement_id": sid, "manuscript": manuscript,
+                            "statement": statement,
+                            "state": str(reading.get("state") or ""),
+                            "label": str(reading.get("label") or ""),
+                            "signed": bool(reading.get("delivered")),
+                            "channel": str(reading.get("channel") or ""),
+                            "sha": str(reading.get("sha") or ""),
+                            "why": str(reading.get("why") or "")})
+        if assessment is None:
+            # 没有新的一轮时（`F.status` / 收工门读它）：取最近一轮 F 自己写的自评。
+            for h in reversed(history):
+                if h.get("self_assessment"):
+                    assessment = h.get("self_assessment")
+                    break
+        return _DL.summary(outputs=outputs, history=history,
+                           subgoals=[dict(s) for s in (row.get("subgoals") or [])],
+                           rounds=int(row.get("rounds") or 0),
+                           self_assessment=assessment)
+
+    def delivery_reading(self, plan: str | Mapping[str, Any]) -> dict:
+        """一个计划的逐条交差读数（`plan` 可以是 `plan_id`，也可以是那一行）。
+
+        这是 F 的"交没交差"的唯一机器读数：键与判据见 `agent_f/delivery.py`。
+        读不到计划 ⇒ `checked=False`（「没查成」，不是"没有成果"）。
+        """
+        from . import delivery as _DL
+
+        if isinstance(plan, Mapping):
+            return self._delivery_reading(plan)
+        pid = str(plan or "").strip()
+        row = self._plan_row(pid) if pid else None
+        if row is None:
+            return _DL.empty_reading(
+                f"计划 {pid!r} 不在册 ⇒ 交差读数没查成（不是「没有成果」）")
+        return self._delivery_reading(row)
+
     def _judge_nontriviality(self, *, full: str, text: str, body: str,
                              stmt_id: str = "") -> str:
         """让 B 的秘书判一次非平凡度；返回空串 = 判了（或不需要判），非空 = 没判成的原因。
@@ -1953,6 +2116,8 @@ class _Core:
         outlet_note = ""
         #: 这一轮送审与 V 签的读数（只有 `proof` 那一支有内容）：见 `_read_sign`。
         v_sign: dict[str, Any] = {}
+        #: 这一轮交给 B 登记的那一笔（只有 `proof` 那一支有内容）。
+        outlet: dict[str, Any] = {}
         #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
         #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
         manuscript: dict[str, Any] = {}
@@ -2020,6 +2185,14 @@ class _Core:
                 detail += (f"；V 签：{_refused.get('label')}"
                            f"（{_refused.get('why')}）—— 没签 ⇒ 这一趟不算交差"
                            "；下一步：改完稿再跑一轮、由你派 V 审这一份")
+                # 这一轮没有新成果，但「交差读数照给」：之前已经交出去的成果仍要逐条读。
+                _delivery_refused = self._delivery_reading(
+                    plan, assessment=(product.get("self_assessment")
+                                      if isinstance(product, Mapping) else None))
+                detail += (f"；交差（逐条）：已签 "
+                           f"{_delivery_refused.get('coverage_reading') or '0/0'}"
+                           f"（待签 {_delivery_refused.get('pending_count')} 条、未签 "
+                           f"{_delivery_refused.get('unsigned_count')} 条）")
                 return {
                     "action": "no_change",
                     "outcome": "no_change",
@@ -2032,7 +2205,15 @@ class _Core:
                     "count_attempt": True,
                     "statement_id": "",
                     "v_sign": {"reading": _refused, "hint": "改完稿再跑一轮、由你派 V 审这一份"},
-                    "delivered": False,
+                    "delivered": bool(_delivery_refused.get("delivered")),
+                    "delivery": _delivery_refused,
+                    "signed_count": _delivery_refused.get("signed_count"),
+                    "pending_count": _delivery_refused.get("pending_count"),
+                    "unsigned_count": _delivery_refused.get("unsigned_count"),
+                    "coverage": _delivery_refused.get("coverage"),
+                    "self_assessment": dict(_delivery_refused.get("self_assessment") or {}),
+                    "self_assessment_raw": (product.get("self_assessment")
+                                            if isinstance(product, Mapping) else None),
                     "delivery_state": str(_refused.get("state") or ""),
                     "delivery_label": str(_refused.get("label") or ""),
                     "report_path": "",
@@ -2161,6 +2342,25 @@ class _Core:
         report_note = (f"台账 `{written['path']}`" if written["ok"]
                        else f"⚠️ 台账没写成（{written['path']}：{written['why']}）")
         detail = f"{detail}；{report_note}"
+        # ---- 逐条交差读数（业主 2026-11-02：「一个F可以产出多条成果」）-------------
+        #
+        # 这一格「不是」这一轮那一份的签（那是 `v_sign`），而是"这个任务到目前为止
+        # 交出去的每一条成果各自签没签"的汇总。为什么必须在这里读一遍：
+        # 一条签到手不等于交差 —— 旧的单一 `delivered` 恰好把这两件事混成了一件。
+        # `current` 让这一轮刚产出的那一条用刚读到的签（不必再读一次盘）。
+        delivery = self._delivery_reading(
+            plan,
+            current={"statement_id": statement_id, "reading": dict(v_sign.get("reading") or {}),
+                     "proof_text": str(outlet.get("proof_text") or ""),
+                     "manuscript": str(manuscript.get("path") or ""),
+                     "round": round_no, "subgoal": sid},
+            assessment=(product.get("self_assessment")
+                        if isinstance(product, Mapping) else None))
+        detail += (f"；交差（逐条）：已签 {delivery.get('coverage_reading') or '0/0'}"
+                   f"（待签 {delivery.get('pending_count')} 条、未签 "
+                   f"{delivery.get('unsigned_count')} 条）"
+                   + ("" if delivery.get("delivered")
+                      else " —— 不是「有一条签了」就算交差"))
         return {
             "action": kind,
             "outcome": "no_change" if kind == "dead_end" else "progress",
@@ -2173,10 +2373,20 @@ class _Core:
             "count_attempt": True,
             "statement_id": statement_id,
             # ---- 送审与 V 签（业主 2026-11-02）：这一格进返回值与 detail 两处。
-            # `delivered` 只在「已签」时为真 —— 拿不到 V 签，这一趟就读成没交差
-            # （四档：已签 / 待签 / 未通过 / 没查成，见 `agent_f/vsign.py`）。
+            # `v_sign` 是「这一轮这一份」的四档（已签 / 待签 / 未通过 / 没查成）。
             "v_sign": dict(v_sign),
-            "delivered": bool((v_sign.get("reading") or {}).get("delivered")),
+            # `delivered` 自本批起的语义是「逐条」的：有成果、且每一条都已签
+            # （见 `agent_f/delivery.py::DELIVERED_MEANS`）—— 不是"这一轮那一份签了"。
+            "delivered": bool(delivery.get("delivered")),
+            "delivery": delivery,
+            "signed_count": delivery.get("signed_count"),
+            "pending_count": delivery.get("pending_count"),
+            "unsigned_count": delivery.get("unsigned_count"),
+            "coverage": delivery.get("coverage"),
+            "self_assessment": dict(delivery.get("self_assessment") or {}),
+            "self_assessment_raw": (product.get("self_assessment")
+                                    if isinstance(product, Mapping) else None),
+            # 这一轮那一份的四档（`delivery_state` / `delivery_label` 仍是「当轮」的读数）。
             "delivery_state": str((v_sign.get("reading") or {}).get("state") or ""),
             "delivery_label": str((v_sign.get("reading") or {}).get("label") or ""),
             "report_path": str(written["path"]),

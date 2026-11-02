@@ -329,7 +329,26 @@ class _Step:
                 "skipped": bool(_vs.get("skipped")),
                 "why": str(_reading.get("why") or _vs.get("why") or ""),
             }
-            history_row["delivered"] = bool(_reading.get("delivered"))
+        # ---- 逐条交差读数（业主 2026-11-02：「一个F可以产出多条成果」）-------------
+        # 历史行里那一格 `delivered` 自本批起是「整个任务」的读数（有成果、且每条都已签），
+        # 不是这一轮那一份 —— 后者在 `v_sign` 里。读不到计划的旧行没有这一格，照旧能读。
+        if deploy.get("delivery"):
+            _dl = dict(deploy["delivery"] or {})
+            history_row["delivery"] = {
+                "checked": bool(_dl.get("checked")),
+                "total": _dl.get("total"),
+                "signed_count": _dl.get("signed_count"),
+                "pending_count": _dl.get("pending_count"),
+                "unsigned_count": _dl.get("unsigned_count"),
+                "coverage": str(_dl.get("coverage") or ""),
+                "state": str(_dl.get("state") or ""),
+                "delivered": bool(_dl.get("delivered")),
+            }
+            history_row["delivered"] = bool(_dl.get("delivered"))
+            # F 自己写的自评原样留痕（下一轮/`status` 读签时还要用它；推出来的不落盘，
+            # 否则下次会冒充成"F 自己的自评"）。
+            if deploy.get("self_assessment_raw") is not None:
+                history_row["self_assessment"] = deploy.get("self_assessment_raw")
         if deploy.get("report_path"):
             history_row["report_path"] = str(deploy["report_path"])
         # 打回重写那一档的逐条说明要进 history：下一轮提示词的"前几轮发生过什么"
@@ -367,13 +386,30 @@ class _Step:
         # P3-6：产物落点也进返回值（调用方不必再读一遍 history 才知道去哪看）。
         if deploy.get("statement_id"):
             out["statement_id"] = str(deploy["statement_id"])
-        # ---- 送审与 V 签（业主 2026-11-02）：`delivered` 只在「已签」时为真 ——
-        # 拿不到 V 签，这一趟就读成没交差（`delivery_state` 是四档里的哪一档）。
+        # ---- 送审与 V 签（业主 2026-11-02）：两件读数分开给。
+        # `v_sign` / `delivery_state` / `delivery_label` 是「这一轮这一份」的四档；
+        # `delivered` 自本批起是「逐条」的读数（有成果、且每一条都已签）——
+        # 语义唯一来源 `agent_f/delivery.py::DELIVERED_MEANS`。
         if deploy.get("v_sign"):
             out["v_sign"] = dict(deploy["v_sign"])
-            out["delivered"] = bool(deploy.get("delivered"))
             out["delivery_state"] = str(deploy.get("delivery_state") or "")
             out["delivery_label"] = str(deploy.get("delivery_label") or "")
+        _delivery = dict(deploy.get("delivery") or {})
+        if not _delivery:
+            # 非 F 自己推理的那几档（E/A/B 的分派）不经过 `_apply_round`：读数照给。
+            _delivery = self._delivery_reading(row)
+        out["delivery"] = _delivery
+        out["delivered"] = bool(_delivery.get("delivered"))
+        for _key in ("signed_count", "pending_count", "unsigned_count",
+                     "coverage", "coverage_reading", "coverage_ratio",
+                     "state", "state_label", "self_assessment"):
+            if _key == "state":
+                out["delivery_state_plan"] = str(_delivery.get("state") or "")
+                continue
+            if _key == "state_label":
+                out["delivery_label_plan"] = str(_delivery.get("label") or "")
+                continue
+            out[_key] = _delivery.get(_key)
         if deploy.get("report_path"):
             out["report_path"] = str(deploy["report_path"])
         # ---- 证明手稿（业主 2026-10-24 最终形态：作者只写内容、B 读稿登记）：

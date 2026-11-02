@@ -1,0 +1,431 @@
+# -*- coding: utf-8 -*-
+"""F 的交差读数：按条读，不是「一条签到手就交差」（业主 2026-11-02 原话）。
+
+口径唯一来源：`draft/179-证明优化两阶段录入口径（2026-11-02）.md` §二之三（逐字）：
+
+    一个F可以产出多条成果，不要暗示它一拿到一条定理的证明就交差。
+    F具体是否收工靠它自己评判：是否全面研究了D交给它的攻坚任务、是否尽力做出了
+    足够多的成果（也可以是没成果）、即使没完成原定任务，是否产出了一些小的阶段性成果。
+
+## 改前（这一格要修掉的读数）
+
+`F.step` 的交差读数只有两格：`delivered: bool` + `delivery_state`（四档），
+而它们读的是「这一轮那一份」证明的签（`agent_f/vsign.py`）。于是：
+
+- 一个任务产出 3 条成果、只有最后那一条拿到签 ⇒ `delivered=True`
+  —— 「有一个签」被读成了「交差完成」；
+- 一个任务「研究了、尽力了、0 条成果」⇒ 没有能读的成果，交差读数无从说起；
+  「什么都没交」与「还没开始」在读数上长得一样。
+
+## 改后（逐条 + 自评）
+
+读数以「成果」为单位。一条成果 = 一个在册命题号（`stmt:<号>`）：同一号被重交
+（改稿再交）仍是同一份成果，不是多条 —— 84/85 的现场就有这种重交
+（`projects/paper-rewrite-84` 计划 `000000` 的第 1–4 轮都是 `stmt:000001`）。
+
+每一条成果各自读一次签（`agent_f/vsign.delivery_reading` 的四档），再汇总：
+
+| 格 | 意思 |
+|---|---|
+| `signed_count` | 「已签」的条数 |
+| `pending_count` | 「待签」的条数（还没送审，或审过、连续次数没到 —— 都不是「没过」） |
+| `unsigned_count` | 「未签」的条数（V 判过、结论不是能签的那一档；或这一份根本没查成） |
+| `coverage` | 已签 ÷ 总数，化成「最简分数」（3/3 读作 `1/1`、1/3 读作 `1/3`） |
+| `coverage_reading` | 未约分的「已签/总数」（`3/3`）—— 要原始条数看这一格 |
+| `coverage_ratio` | 0..1 的数；0 条成果时是 `None`（不是 0 —— 没有分母） |
+| `state` | `signed_all` / `outputs_unsigned` / `not_started`（「没成果」那一档见下一批） |
+| `delivered` | 「有成果、且每一条成果都已签」（不是「有一条签了」；0 条不算交差完成） |
+| `self_assessment` | 三条自评判据各一档（见下） |
+
+## 三条自评判据（`SELF_CRITERIA`）
+
+| 键 | 问的原话 | 档 |
+|---|---|---|
+| `comprehensive` | 是否全面研究了 D 交给它的攻坚任务 | `comprehensive` / `partial` / `not_comprehensive` |
+| `enough_output` | 是否尽力做出了足够多的成果（也可以是没成果） | `enough_output` / `some_output` / `no_output` |
+| `partial_output` | 即使没完成原定任务，是否产出了一些小的阶段性成果 | `partial_output` / `none` |
+
+自评由 「F 自己」写（一轮的 JSON 里 `self_assessment` 那一格，见
+`agent_f.core._attack_prompt` 第 7 段）。F 没写（或写得不成形）时这一格
+「不冒充自评」：`source="derived"` + `checked=False`，三档按盘上证据推
+（怎么推写在 :func:`derived_self_assessment` 里），`why` 明说「这不是 F 的自评」。
+"""
+from __future__ import annotations
+
+from math import gcd
+from typing import Any, Mapping, Sequence
+
+#: 三条自评判据的键（业主原话的三问，键名就是读数格名）。
+SELF_CRITERIA: tuple[str, ...] = ("comprehensive", "enough_output", "partial_output")
+
+#: 三条自评判据各自在问什么（逐字对齐业主原话的三问）。
+SELF_QUESTIONS: dict[str, str] = {
+    "comprehensive": "是否全面研究了 D 交给它的攻坚任务",
+    "enough_output": "是否尽力做出了足够多的成果（也可以是没成果）",
+    "partial_output": "即使没完成原定任务，是否产出了一些小的阶段性成果",
+}
+
+#: 每条判据的受控档位（第一个是"这一条成立"的那一档）。
+SELF_TIERS: dict[str, tuple[str, ...]] = {
+    "comprehensive": ("comprehensive", "partial", "not_comprehensive"),
+    "enough_output": ("enough_output", "some_output", "no_output"),
+    "partial_output": ("partial_output", "none"),
+}
+
+#: 档位 -> 给人看的标签（读数与手册用同一份词，别处不再各写一份）。
+SELF_TIER_LABELS: dict[str, str] = {
+    "comprehensive": "全面研究了",
+    "partial": "只研究了一部分",
+    "not_comprehensive": "还没开始研究",
+    "enough_output": "成果足够（都已签）",
+    "some_output": "有成果、还没全签",
+    "no_output": "没成果（研究了、尽力了 —— 合法的收工理由）",
+    "partial_output": "有小的阶段性成果",
+    "none": "没有阶段性成果",
+}
+
+#: 交差三态。
+STATE_SIGNED_ALL = "signed_all"
+STATE_OUTPUTS_UNSIGNED = "outputs_unsigned"
+STATE_NOT_STARTED = "not_started"
+
+#: 固定顺序：从"交差完成"到"还没开始"。
+DELIVERY_STATES: tuple[str, ...] = (STATE_SIGNED_ALL, STATE_OUTPUTS_UNSIGNED,
+                                    STATE_NOT_STARTED)
+
+STATE_LABELS: dict[str, str] = {
+    STATE_SIGNED_ALL: "有成果已签",
+    STATE_OUTPUTS_UNSIGNED: "有成果未全签",
+    STATE_NOT_STARTED: "还没研究",
+}
+
+#: `delivered` 现在的意思（逐字进读数，别处不再猜）。
+DELIVERED_MEANS = ("有成果、且每一条成果都已签 —— 不是「有一条签了」；0 条成果时它是假"
+                   "（「没成果」是另一种收工理由，与「交差完成」不是一回事）")
+
+
+def empty_reading(why: str, *, state: str = "") -> dict[str, Any]:
+    """没查成时的交差读数（键一个不少，值一律 `None` —— 不许靠"少给键"表达没查成）。"""
+    return {
+        "checked": False, "outputs": [],
+        "total": None, "signed_count": None, "pending_count": None,
+        "unsigned_count": None, "coverage": "", "coverage_reading": "",
+        "coverage_ratio": None, "coverage_why": why,
+        "state": state, "state_label": STATE_LABELS.get(state, ""),
+        "delivered": False, "delivered_means": DELIVERED_MEANS,
+        "researched": {}, "staged": {},
+        "self_assessment": {"checked": False, "source": "absent", "why": why,
+                            "criteria": {}, "problems": []},
+        "conflicts": [], "why": why,
+    }
+
+
+def coverage_of(signed: int, total: int) -> dict[str, Any]:
+    """覆盖率三格（`coverage` 最简分数 / `coverage_reading` 原样 / `coverage_ratio`）。
+
+    为什么最简分数：3 条全签时 `coverage` 读作 `1/1`（覆盖率 = 1），1/3 读作 `1/3`；
+    要"几条签了、总共几条"看 `signed_count` / `total` / `coverage_reading` —— 那是两个
+    不同的问题，别让一个格同时回答。
+    """
+    total = max(0, int(total))
+    signed = max(0, min(int(signed), total))
+    if total <= 0:
+        return {"coverage": "", "coverage_reading": "0/0", "coverage_ratio": None,
+                "coverage_why": "0 条成果 ⇒ 覆盖率没有分母（不是 0%，也不是 100%）"}
+    g = gcd(signed, total) or 1
+    return {"coverage": f"{signed // g}/{total // g}",
+            "coverage_reading": f"{signed}/{total}",
+            "coverage_ratio": round(signed / total, 4),
+            "coverage_why": ""}
+
+
+def outputs_of(history: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """从 `history` 里数出「成果」：一条成果 = 一个登记下来的 `stmt:<号>`。
+
+    判据只有一条：这一轮的 history 行有没有 `statement_id`。同一号重交
+    （改稿再交、或反复送同一份）仍是「同一份」成果 —— 否则 84 计划 `000000`
+    的四轮重交会被读成「四条成果」，覆盖率的分母就假了。
+    """
+    by_sid: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for row in history or ():
+        if not isinstance(row, Mapping):
+            continue
+        sid = str(row.get("statement_id") or "").strip()
+        if not sid:
+            continue
+        try:
+            rnd = int(row.get("round") or 0)
+        except (TypeError, ValueError):
+            rnd = 0
+        cur = by_sid.get(sid)
+        if cur is None:
+            by_sid[sid] = {"statement_id": sid, "round": rnd,
+                           "subgoal": str(row.get("sid") or ""),
+                           "action": str(row.get("action") or ""),
+                           "submissions": 1}
+            order.append(sid)
+            continue
+        cur["submissions"] = int(cur["submissions"]) + 1
+        if rnd >= int(cur.get("round") or 0):
+            cur.update(round=rnd, subgoal=str(row.get("sid") or ""),
+                       action=str(row.get("action") or ""))
+    return [by_sid[sid] for sid in order]
+
+
+def researched_of(*, history: Sequence[Mapping[str, Any]] = (),
+                  subgoals: Sequence[Mapping[str, Any]] = (),
+                  rounds: int = 0) -> dict[str, Any]:
+    """「研究过没有」：推进过的轮次 + 被碰过的子目标（两样都读，缺一样就如实标）。
+
+    「研究过」不是「有成果」：一个任务可以研究了 8 轮、0 条成果（业主原话：
+    「也可以是没成果」）。反过来，一条 history 都没有 ⇒ 那是「还没研究」，
+    不许折进「研究过但无成果」（三态纪律）。
+    """
+    touched: list[str] = []
+    for row in history or ():
+        if not isinstance(row, Mapping):
+            continue
+        sid = str(row.get("sid") or "").strip()
+        action = str(row.get("action") or "").strip()
+        if sid and action not in ("stop", "stall_detected") and sid not in touched:
+            touched.append(sid)
+    all_sids = [str(s.get("sid") or "") for s in (subgoals or ()) if str(s.get("sid") or "")]
+    untouched = [sid for sid in all_sids if sid not in touched]
+    return {"researched": bool(touched) or int(rounds or 0) > 0,
+            "rounds": int(rounds or 0),
+            "subgoals_touched": len(touched),
+            "subgoals_total": len(all_sids),
+            "untouched": untouched,
+            "why": (f"研究过 {len(touched)} 条子目标（共 {len(all_sids)} 条）"
+                    if touched else "一条子目标都没被推进过")}
+
+
+def staged_of(*, history: Sequence[Mapping[str, Any]] = (),
+              subgoals: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """「有没有小的阶段性成果」的机器读数（只认盘上写下来的东西，不认散文）。
+
+    四类证据（任一类非空就 `partial_output`）：
+    ① 归约轮（`product="reduction"`）：把目标化归成更小的子目标 —— 那本身就是阶段性成果；
+    ② `dead_end` 带 `best_partial`：排除的路 / 缩小的范围（`attackround` 强制非空）；
+    ③ 子目标上挂着 `experiment_ids` / `evidence_ids` / `proof_experiment_ids`；
+    ④ 子目标已 `closed` / `supported_not_proved`（有数值或证明级支持）。
+    """
+    items: list[dict[str, Any]] = []
+    for row in history or ():
+        if not isinstance(row, Mapping):
+            continue
+        product = str(row.get("product") or row.get("action") or "")
+        rnd = row.get("round")
+        if product == "reduction":
+            goals = [str(g.get("goal") or g.get("sid") or "")
+                     for g in ((row.get("product_detail") or {}).get("new_subgoals") or [])]
+            items.append({"kind": "reduction", "round": rnd,
+                          "what": f"归约出 {len(goals) or '若干'} 条更小的子目标"
+                                  + (f"：{goals[:3]}" if goals else "")})
+        elif product == "dead_end" and row.get("best_partial"):
+            items.append({"kind": "dead_end_partial", "round": rnd,
+                          "what": f"排除记录 {len(row.get('best_partial') or [])} 条"})
+    for sg in subgoals or ():
+        if not isinstance(sg, Mapping):
+            continue
+        sid = str(sg.get("sid") or "")
+        ids = (list(sg.get("experiment_ids") or ()) + list(sg.get("evidence_ids") or ())
+               + list(sg.get("proof_experiment_ids") or ()))
+        if ids:
+            items.append({"kind": "subgoal_evidence", "subgoal": sid,
+                          "what": f"{sid} 上挂着 {len(ids)} 条证据/实验"})
+        if str(sg.get("status") or "") in ("closed", "supported_not_proved"):
+            items.append({"kind": "subgoal_status", "subgoal": sid,
+                          "what": f"{sid} 已 {sg.get('status')}"})
+    return {"partial_output": bool(items), "items": items,
+            "why": ("有小的阶段性成果：" + "；".join(str(i.get("what")) for i in items[:4])
+                    if items else "盘上没有任何阶段性成果的落点")}
+
+
+def _clean_tier(criterion: str, raw: Any) -> dict[str, Any]:
+    """一条自评判据的一档：接受 `"tier"` 或 `{"tier": ..., "why": ...}`。"""
+    why = ""
+    if isinstance(raw, Mapping):
+        tier = str(raw.get("tier") or raw.get("state") or "").strip()
+        why = str(raw.get("why") or "").strip()
+    else:
+        tier = str(raw or "").strip()
+    allowed = SELF_TIERS[criterion]
+    return {"tier": tier, "ok": tier in allowed, "allowed": list(allowed),
+            "label": SELF_TIER_LABELS.get(tier, ""), "why": why,
+            "question": SELF_QUESTIONS[criterion]}
+
+
+def normalize_self_assessment(raw: Any) -> dict[str, Any]:
+    """F 自己写的自评（`self_assessment` 那一格）⇒ 三档读数（「不猜缺的那一档」）。
+
+    三态：`checked=True, source="self"`（三档都受控）/ `checked=False,
+    source="absent"`（F 这一趟没写）/ `checked=False, source="unreadable"`（写了，
+    但缺格或档位不在词表里 —— 逐条列 `problems`）。缺席与乱写是两件事。
+    """
+    out: dict[str, Any] = {"checked": False, "source": "absent", "why": "",
+                           "criteria": {}, "problems": [], "raw": raw}
+    if raw is None or (isinstance(raw, (str, bytes)) and not str(raw).strip()):
+        out["why"] = ("F 这一趟没写自评（`self_assessment` 缺席）⇒ 下面三档是按盘上证据推的，"
+                      "不是 F 的自评")
+        return out
+    if not isinstance(raw, Mapping):
+        out.update(source="unreadable",
+                   why=f"自评不是对象（收到 {type(raw).__name__}）⇒ 这一格没读成")
+        out["problems"].append("self_assessment 必须是对象（三条判据各一档）")
+        return out
+    problems: list[str] = []
+    for criterion in SELF_CRITERIA:
+        got = _clean_tier(criterion, raw.get(criterion))
+        out["criteria"][criterion] = got
+        if not got["ok"]:
+            problems.append(f"{criterion}={got['tier']!r} 不在 {got['allowed']} 里"
+                            f"（问的是「{got['question']}」）")
+    out["problems"] = problems
+    out["why"] = str(raw.get("why") or "").strip()
+    if problems:
+        out["source"] = "unreadable"
+        out["why"] = ("自评写得不成形 ⇒ 这一格没读成（不是没写）：" + "；".join(problems)
+                      + (f"；F 自己的话：{out['why']}" if out["why"] else ""))
+        return out
+    out.update(checked=True, source="self",
+               why=("F 自己的自评（三条判据逐条写在这一格）："
+                    + "；".join(f"{c}=" + str(out["criteria"][c]["tier"])
+                               for c in SELF_CRITERIA)))
+    for criterion in SELF_CRITERIA:
+        out[criterion] = out["criteria"][criterion]["tier"]
+    return out
+
+
+def derived_self_assessment(*, researched: Mapping[str, Any],
+                            staged: Mapping[str, Any], total: int,
+                            signed: int) -> dict[str, Any]:
+    """F 没写自评时，按盘上证据推的三档（「明确标成推的，不是自评」）。
+
+    推法逐条（每条都只读盘上写下来的东西）：
+
+    - `comprehensive`：每条子目标都被推进过 ⇒ `comprehensive`；推过一部分 ⇒ `partial`；
+      一条都没推 ⇒ `not_comprehensive`。子目标表是空的但推进过轮次 ⇒ 按轮次算
+      （`comprehensive`，理由写"没有子目标表，按推进过的轮次算"）。
+    - `enough_output`：0 条成果 ⇒ `no_output`（业主明说"也可以是没成果"）；成果全签 ⇒
+      `enough_output`；其余 ⇒ `some_output`。
+    - `partial_output`：`staged_of` 有任何一类落点 ⇒ `partial_output`；否则 `none`。
+    """
+    touched = int(researched.get("subgoals_touched") or 0)
+    total_sg = int(researched.get("subgoals_total") or 0)
+    if not researched.get("researched"):
+        comp, comp_why = "not_comprehensive", "一轮都没推进过 ⇒ 没开始研究"
+    elif total_sg <= 0:
+        comp, comp_why = "comprehensive", "没有子目标表，按推进过的轮次算"
+    elif touched >= total_sg:
+        comp, comp_why = "comprehensive", f"{touched}/{total_sg} 条子目标都被研究过"
+    elif touched > 0:
+        comp, comp_why = ("partial",
+                          f"{touched}/{total_sg} 条子目标被研究过；没碰的："
+                          f"{list(researched.get('untouched') or [])[:6]}")
+    else:
+        comp, comp_why = "not_comprehensive", "一条子目标都没被推进过"
+    if total <= 0:
+        enough, enough_why = ("no_output",
+                              "0 条成果 —— 按业主口径这是合法的收工理由"
+                              "（研究了、尽力了、没有成果）")
+    elif signed >= total:
+        enough, enough_why = "enough_output", f"{signed}/{total} 条成果都已签"
+    else:
+        enough, enough_why = ("some_output",
+                              f"有 {total} 条成果、其中 {signed} 条已签 ⇒ 还没全签")
+    partial = "partial_output" if staged.get("partial_output") else "none"
+    criteria = {
+        "comprehensive": {**_clean_tier("comprehensive", comp), "why": comp_why},
+        "enough_output": {**_clean_tier("enough_output", enough), "why": enough_why},
+        "partial_output": {**_clean_tier("partial_output", partial),
+                           "why": str(staged.get("why") or "")},
+    }
+    out: dict[str, Any] = {
+        "checked": False, "source": "derived",
+        "why": "F 这一趟没给（或没给成）自评 ⇒ 下面三档是按盘上证据推的，「不是 F 的自评」",
+        "criteria": criteria, "problems": [],
+    }
+    for criterion in SELF_CRITERIA:
+        out[criterion] = criteria[criterion]["tier"]
+    return out
+
+
+def _assessment_conflicts(assessment: Mapping[str, Any], *, total: int,
+                          signed: int) -> list[str]:
+    """自评与盘上事实打架的地方（自评照录，冲突照报 —— 不悄悄改成盘上的读数）。"""
+    out: list[str] = []
+    if str(assessment.get("source") or "") != "self":
+        return out
+    enough = str(assessment.get("enough_output") or "")
+    if enough == "no_output" and total > 0:
+        out.append(f"自评写「没成果」，但盘上有 {total} 条成果（{signed} 条已签）")
+    if enough == "enough_output" and total > 0 and signed < total:
+        out.append(f"自评写「成果足够」，但盘上只有 {signed}/{total} 条已签")
+    return out
+
+
+def summary(*, outputs: Sequence[Mapping[str, Any]],
+            history: Sequence[Mapping[str, Any]] = (),
+            subgoals: Sequence[Mapping[str, Any]] = (), rounds: int = 0,
+            self_assessment: Any = None) -> dict[str, Any]:
+    """逐条交差读数（纯函数：签的读法不在这里，`outputs` 每项自带 `state`/`signed`）。
+
+    `outputs` 的每一项至少要有 `statement_id` 与 `state`（`vsign` 的四档之一），
+    `signed=True` 也认。返回的键见模块 docstring 的那张表。
+    """
+    items: list[dict[str, Any]] = []
+    signed = pending = unsigned = 0
+    for one in outputs or ():
+        got = dict(one or {})
+        state = str(got.get("state") or "")
+        if state == "signed" or got.get("signed") is True:
+            kind, signed = "signed", signed + 1
+        elif state == "waiting":
+            kind, pending = "pending", pending + 1
+        else:
+            kind, unsigned = "unsigned", unsigned + 1
+        got["counted_as"] = kind
+        items.append(got)
+    total = len(items)
+    cov = coverage_of(signed, total)
+    researched = researched_of(history=history, subgoals=subgoals, rounds=rounds)
+    staged = staged_of(history=history, subgoals=subgoals)
+    assessment = normalize_self_assessment(self_assessment)
+    if not assessment.get("checked"):
+        derived = derived_self_assessment(researched=researched, staged=staged,
+                                          total=total, signed=signed)
+        if assessment.get("source") == "unreadable":
+            derived["problems"] = list(assessment.get("problems") or [])
+            derived["why"] = assessment.get("why") + "；" + str(derived.get("why") or "")
+        assessment = derived
+    conflicts = _assessment_conflicts(assessment, total=total, signed=signed)
+    if total > 0 and signed >= total:
+        state = STATE_SIGNED_ALL
+        why = f"{total}/{total} 条成果全部已签 ⇒ 交差完成"
+    elif total > 0:
+        state = STATE_OUTPUTS_UNSIGNED
+        why = (f"有 {total} 条成果、其中 {signed} 条已签：待签 {pending} 条、未签 "
+               f"{unsigned} 条 ⇒ 还没到收工的时候")
+    else:
+        state = STATE_NOT_STARTED
+        why = "0 条成果 ⇒ 交差读数没有对象（「研究过没成果」与「还没开始」下一批分开）"
+    return {
+        "checked": True,
+        "outputs": items,
+        "total": total,
+        "signed_count": signed,
+        "pending_count": pending,
+        "unsigned_count": unsigned,
+        **cov,
+        "state": state,
+        "state_label": STATE_LABELS[state],
+        "delivered": bool(total > 0 and signed >= total),
+        "delivered_means": DELIVERED_MEANS,
+        "researched": researched,
+        "staged": staged,
+        "self_assessment": assessment,
+        "conflicts": conflicts,
+        "why": why + ("；自评与盘上打架：" + "；".join(conflicts) if conflicts else ""),
+    }
