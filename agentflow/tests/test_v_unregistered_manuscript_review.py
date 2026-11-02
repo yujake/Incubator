@@ -20,7 +20,7 @@
 | ② | 三转里有一转拿不到合法结论（缺材料） | `checked=False`、一个字节都不写（稿上没有签块） |
 | ③ | 同一份正文再送一次 | 不再问模型、不再写（`already`），块仍是一行 |
 | ④ | 反真空：把稿上的签块删掉 | F 的读数从「已签」回落到「待签」 |
-| ⑤ | 第 2 转判「有毛病」 | 只问 2 次就停，块写 `已签=false；判词=有毛病`（F 在稿上读得到） |
+| ⑤ | 第 2 转判「有毛病」 | 只问 2 次就停；不写块（甲口径，2026-11-03：负判不是签），判词随返回值给 F |
 
 零模型调用：V 的审阅缝交出预置回复并计数（与三连判判据共用同一套替身）。
 """
@@ -171,9 +171,16 @@ def test_d_deleting_the_block_falls_back(tmp_path):
 
 
 # ============================================================ ⑤ 有毛病那一转
-def test_e_a_fault_on_round_two_stops_and_stamps_a_rejected_block(tmp_path):
-    """⑤ 第 2 转判「有毛病」⇒ 只问 2 次就停，块写 `已签=false；判词=有毛病`。"""
+def test_e_a_fault_on_round_two_stops_and_writes_no_block(tmp_path):
+    """第 2 转判「有毛病」⇒ 只问 2 次就停，稿上不写块（甲口径：负判不是签）。
+
+    改前这里写一块 `已签=false；判词=有毛病`（`签名者=agent-V`）—— 那是 V 直接写手稿，
+    与 `draft/178` 的「V 不写手稿里的签块、块只由收方秘书落」冲突，也会让读侧把
+    「审过、没过」与「签过一次但没成」混在同一个落点。现在判词只随返回值给 F；
+    手稿一个字节都不写。
+    """
     st = _ws(tmp_path)
+    before = _manuscript_text(st)
     v, seam = _v(st, [CLEAN_REPLY, REJECT_REPLY])
     got = v.verify_proof(proof_manuscript=REL)
 
@@ -182,10 +189,9 @@ def test_e_a_fault_on_round_two_stops_and_stamps_a_rejected_block(tmp_path):
     assert got.get("kind") == "proof_unregistered_rejected", got
     assert got.get("verdict") == "有毛病", got
     assert got.get("defect_step") == 2, got
-    block = VS.manuscript_sign_reading(_manuscript_text(st))
-    assert block["found"] is True, block
-    assert block["signed"] is False, block
-    assert block["verdict"] == "有毛病", block
+    assert got.get("findings"), got
+    assert _manuscript_text(st) == before, "负判改动了手稿（应一个字节都不写）"
+    assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
     assert FVS.delivery_reading(st.root, proof_text=PROOF,
                                 manuscript_paths=(REL,))["state"] == FVS.STATE_REJECTED
 
