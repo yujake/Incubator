@@ -95,6 +95,9 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
                    "review_states", "rows", "vsign", "receipt", "c3",
                    "paper", "checks", "ledger", "findings",
                    "gates", "machine", "cost", "runtime", "content",
+                   # 2026-11-02（84 ④）：machine_pass=false 的两条来源必须上屏 ——
+                   # 格失败与 blocker 分开读、分开画（空 blockers 不等于"门没拦住"）。
+                   "blockers", "blocking_cells", "machine_pass_cause",
                    "failed", "unchecked", "source", "sources"),
     # R90 追加三个：形式化开关本身（`lean_enabled`）、它的来源（`lean_enabled_source`）
     # 与当前模式（`formal_mode`）—— 只看 `lean_ready` 会把"用户关掉了"读成"没装"。

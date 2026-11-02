@@ -1526,7 +1526,7 @@ export interface ClosingView {
   content: ContentAcceptance;
 }
 
-/** 出处：ClosingView.gates —— 收工门八格的四态一张表。 */
+/** 出处：ClosingView.gates —— 收工门八格的四态一张表（＋ machine_pass 的两条来源）。 */
 export interface GateTable {
   cells: GateCell[];
   counts: Record<string, number>;
@@ -1537,6 +1537,17 @@ export interface GateTable {
   closable: boolean;
   verdict_at: string;
   verdict_met: boolean | null;
+  blockers: GateBlocker[];
+  blocking_cells: GateCell[];
+  machine_pass_cause: string;
+}
+
+/** 出处：GateTable.blockers[] —— 不进八格、却拦 machine_pass 的一条 Finding（`closing.Finding.to_dict()` 的 check / code / level / detail）。 */
+export interface GateBlocker {
+  check: string;
+  code: string;
+  level: string;
+  detail: string;
 }
 
 /** 出处：GateTable.cells[] —— 一格（`pass` / `fail` / `unknown` / `na`）。 */

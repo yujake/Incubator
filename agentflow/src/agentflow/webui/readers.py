@@ -368,6 +368,8 @@ UNCHECKED_TYPES: dict[str, str] = {
                  "顶层键由 `ClosingView` 覆盖，行级 `GateCell` 见下一条",
     "GateCell": "八格在夹具上真有 8 行（C 条按 `ClosingView.gates.cells` 取），"
                 "但这里只登记顶层；行形状以 `closing.DEFAULT_CHECKS` 为准",
+    "GateBlocker": "夹具的收工门没有 blocker（`closing.check_closing` 在夹具上八格干净）"
+                   "⇒ `gates.blockers[]` 是空数组；形状以 `closing.Finding.to_dict()` 为准",
     "MachineCaliber": "夹具的 retire/programs 读数存在但节点/程序为空；"
                       "形状以 `closing.machine_caliber` 的返回为准",
     "CostView": "夹具只有一条 usage 行、没有 llm_call 事件 ⇒ 三源里两源是 0/null；"
@@ -2684,14 +2686,40 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                       "detail": "；".join(d for d in detail_of.get(name, []) if d),
                       "source": _gate_source(name, root_p)})
     verdict = getattr(rep, "m_verdict", None) or {}
+    #: `machine_pass` 是"八格全 pass 且没有 blocker"的合取（`closing.ClosingReport`），
+    #: 所以它变假有两条来源：**格失败**（fail / unknown / na 都不算 pass）与 **blocker**
+    #: （不进八格、却拦门，如 `statements_unsigned`）。84 的现场：counts={pass:6,fail:1,na:1}、
+    #: machine_pass=false、blockers=[] —— 只有格那一半。页面要能看出是哪一半（或两半），
+    #: 所以这里把两条来源分别点名，并给一个受控的合成词 `machine_pass_cause`。
+    blockers = [dict(f.to_dict()) for f in (getattr(rep, "blockers", []) or [])
+                if hasattr(f, "to_dict")]
+    blocking_cells = [dict(c) for c in cells if str(c.get("status") or "") != "pass"]
+    machine_pass = bool(getattr(rep, "machine_pass", False))
+    if machine_pass:
+        cause = "pass"
+    elif blockers and blocking_cells:
+        cause = "blockers+cells"
+    elif blockers:
+        cause = "blockers"
+    elif blocking_cells:
+        cause = "cells"
+    else:
+        # 逻辑上到不了（machine_pass 的定义就是这两条的合取）；真到了也不许静默：
+        # 页面会把这一档显成"缺陷读数"，而不是空白。
+        cause = "unknown"
     gates = {"cells": cells, "counts": counts,
-             "machine_pass": bool(getattr(rep, "machine_pass", False)),
+             "machine_pass": machine_pass,
              "m_says_done": bool(getattr(rep, "m_says_done", False)),
              "can_close": getattr(rep, "can_close", None),
              "can_close_reason": str(getattr(rep, "can_close_reason", "") or ""),
              "closable": bool(getattr(rep, "closable", False)),
              "verdict_at": str(verdict.get("at") or ""),
-             "verdict_met": (bool(verdict.get("met")) if verdict else None)}
+             "verdict_met": (bool(verdict.get("met")) if verdict else None),
+             # 两条来源分开点名（2026-11-02，84 ④）：一个空 `blockers` 不等于"门没拦住"，
+             # 也不等于"格失败"—— 读的人必须能看出是哪一半把 machine_pass 打假的。
+             "blockers": blockers,
+             "blocking_cells": blocking_cells,
+             "machine_pass_cause": cause}
 
     # ---- 机器口径（retire / programs）
     retire = dict(feed.get("retire") or {})
@@ -5980,12 +6008,23 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("cost", "CostView"), ("runtime", "RuntimeView"),
       ("content", "ContentAcceptance"))),
     ("GateTable",
-     "ClosingView.gates —— 收工门八格的四态一张表",
+     "ClosingView.gates —— 收工门八格的四态一张表（＋ machine_pass 的两条来源）",
      (("cells", "GateCell[]"), ("counts", "Record<string, number>"),
       ("machine_pass", "boolean"), ("m_says_done", "boolean"),
       ("can_close", "boolean | null"), ("can_close_reason", "string"),
       ("closable", "boolean"), ("verdict_at", "string"),
-      ("verdict_met", "boolean | null"))),
+      ("verdict_met", "boolean | null"),
+      # 2026-11-02（84 ④）：`machine_pass=false` 的两条来源分开点名 —— 只看
+      # `blockers=[]` 会把"格失败"读成"门没拦住"，只看 counts 又会漏掉不进八格的
+      # blocker。`machine_pass_cause` 是受控词：pass / cells / blockers / blockers+cells
+      # / unknown（最后一档是"两条都空而 machine_pass 假"的缺陷读数）。
+      ("blockers", "GateBlocker[]"), ("blocking_cells", "GateCell[]"),
+      ("machine_pass_cause", "string"))),
+    ("GateBlocker",
+     "GateTable.blockers[] —— 不进八格、却拦 machine_pass 的一条 Finding"
+     "（`closing.Finding.to_dict()` 的 check / code / level / detail）",
+     (("check", "string"), ("code", "string"), ("level", "string"),
+      ("detail", "string"))),
     ("GateCell",
      "GateTable.cells[] —— 一格（`pass` / `fail` / `unknown` / `na`）",
      (("name", "string"), ("status", "string"), ("detail", "string"),

@@ -436,6 +436,52 @@ export function Acceptance() {
               </tbody>
             </table>
 
+            {/* 2026-11-02（84 ④）：machine_pass=false 有两条来源 —— 格失败与 blocker。
+                空 blockers 不等于"门没拦住"，只看 counts 又会漏掉不进八格的 blocker。 */}
+            {gates.machine_pass_cause === "pass" ? (
+              <div class="readings">机器口径成立：八格全 pass 且没有 blocker。</div>
+            ) : (
+              <div class="readings">
+                machine_pass=false 的原因：
+                {gates.blocking_cells.some((cell) => cell.status === "fail")
+                  ? `因格失败：${gates.blocking_cells.filter((cell) => cell.status === "fail").map((cell) => `${cell.name}=${cell.status}`).join("、")}；`
+                  : ""}
+                {gates.blocking_cells.some((cell) => cell.status !== "fail")
+                  ? `格没全 pass：${gates.blocking_cells.filter((cell) => cell.status !== "fail").map((cell) => `${cell.name}=${cell.status}`).join("、")}；`
+                  : ""}
+                {gates.blockers.length > 0
+                  ? `blocker ${gates.blockers.length} 条（清单在下面）；`
+                  : ""}
+                {gates.machine_pass_cause === "unknown"
+                  ? "既没有格失败也没有 blocker —— 这是一条缺陷读数（不许静默）。"
+                  : ""}
+              </div>
+            )}
+            {gates.blockers.length === 0 ? null : (
+              <>
+                <div class="caption">blocker（{gates.blockers.length} 条；不进八格，却拦 machine_pass）</div>
+                <table class="grid">
+                  <thead>
+                    <tr>
+                      <th>格</th>
+                      <th>码</th>
+                      <th>级别</th>
+                      <th>原话</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gates.blockers.map((b, i) => (
+                      <tr key={`${b.check}:${b.code}:${i}`}>
+                        <td class="mono">{b.check}</td>
+                        <td class="mono">{b.code}</td>
+                        <td class="mono">{b.level}</td>
+                        <td>{blank(plain(b.detail))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
             <div class="readings">
               机器口径：retire <span class="mono">{String(closing.machine.retire_complete)}</span>
               （在册 <span class="mono">{closing.machine.retire_nodes}</span> · 未消
