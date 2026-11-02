@@ -8,6 +8,30 @@
 （七类扫描 + 台账 join + `closing.check_closing` 的八格门），而页面每翻一次就要等一次。
 这两个面又恰好是只读的：同一份盘、同一批参数，算出来的就是同一份读数。
 
+## 84 那次 2.36 s 的读数（2026-11-02，`projects/paper-rewrite-84` 定格数据）
+
+先给结论：**那是未命中（冷调用），不是键太细、也不是被挤出 8 档**。实测拆分
+（同一次进程内，`package_face` 的墙钟）：
+
+```text
+package_face 总计   2,387 ms
+  closing.check_closing  1,693 ms   ← 71%
+  structure               429 ms   ← 18%
+  acceptance              379 ms   ← 16%
+  closing_block           245 ms
+  machine_feeders          38 ms
+  proofs                   25 ms
+  disk_key                 31 ms   ← 键只占 1.3%（410 个文件 + 事件序号）
+```
+
+同一份静止的盘，第 2/3 次调用 **37–46 ms**、`cache.hit=true`；`_MAX_ENTRIES=8`
+而真正会进缓存的只有 `package` / `artifacts` / `run-digest` 三面（`/api/evidence`
+与 `/api/errors` 不走这一层），远没到淘汰线。业主 2026-11-02 的判据是
+"同一份 84 定格数据连调 3 次 ⇒ 第 2/3 次 ≤ 200 ms 且 hit=true" —— 改前就已成立，
+本次没有再改缓存代码；把读数写在这里，免得下一个人再把"冷启动 2.4 s"当成
+缓存失效的缺陷重查一遍。若要缩短冷调用，下一刀在 `check_closing`（它一次调用里
+把 11 MB 的会话读了 9 遍，约占 71%），那是另一笔改动。
+
 ## 失效键：盘状态，不是时间
 
 ```text
