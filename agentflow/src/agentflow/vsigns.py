@@ -642,7 +642,9 @@ def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
     """
     out: dict[str, Any] = {"state": MANUSCRIPT_WRITE_UNRECORDED,
                            "written": False, "idempotent": False, "missing": False,
-                           "path": "", "line": 0, "why": "", "reading": {}}
+                           "path": "", "line": 0, "why": "", "reading": {},
+                           "code": "", "body_mismatch": None,
+                           "body_sha256": "", "signed_sha256": ""}
     if not isinstance(doc, Mapping):
         out["why"] = "签文件没读成 ⇒ 这一格没查成（不是「没写」）"
         return out
@@ -651,7 +653,8 @@ def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
         out["why"] = ("这份签文件没有 `manuscript_write` 那一格（旧版只把结果留在"
                       "返回值里）⇒ 这一格没记录，不是「没写」")
         return out
-    for key in ("written", "idempotent", "missing", "path", "line", "why", "reading"):
+    for key in ("written", "idempotent", "missing", "path", "line", "why", "reading",
+                "code", "body_mismatch", "body_sha256", "signed_sha256"):
         if key in got:
             out[key] = got[key]
     state = str(got.get("state") or "")
@@ -681,7 +684,22 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     """
     got = manuscript_sign_reading(text, manuscript_path=manuscript_path)
     out = {**got, "state": "unsigned", "checked": True,
-           "sha_matches": None, "why": ""}
+           "sha_matches": None, "body_mismatch": False, "body_sha256": "",
+           "why": ""}
+    # ---- 2026-11-02：「这一块签的正文」与「这份稿现在的正文」是两个问题 ----
+    #
+    # `sha_matches` 回答"签块盖的是不是调用方问的那一份正文"（`proof_sha`）；
+    # `body_mismatch` 回答"签块盖的是不是**这份稿里现在这一份**正文"。两者可以同时
+    # 一真一假（84：块与登记的那一份相符，而盘上这份稿已经是另一版）—— 折成一个
+    # 布尔就会让"签过"把改稿盖过去。
+    try:
+        from . import verifications as _VR
+
+        out["body_sha256"] = _VR.proof_sha(manuscript_proof_body(text))
+    except Exception:  # noqa: BLE001 —— 算不出正文 sha 就留空，不许折成"相符"
+        out["body_sha256"] = ""
+    if out["found"] and got.get("proof_sha256") and out["body_sha256"]:
+        out["body_mismatch"] = got.get("proof_sha256") != out["body_sha256"]
     if not got.get("found"):
         out["why"] = "手稿里没有 V 签块（这一份还没签）"
         return out
@@ -701,6 +719,14 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
                    why=(f"手稿里的签盖的是另一版（{got.get('proof_sha256')[:12]}… ≠ "
                         f"{want[:12]}…）⇒ 签完之后正文改过，要重签"))
         return out
+    if out["body_mismatch"]:
+        # 2026-11-02：签块与调用方问的那一份相符，但**这份稿里现在这一份正文**
+        # 已经不是它了（84 的形态）⇒ 这一块不许给这份稿作证。
+        out.update(state="stale",
+                   why=(f"这份稿的「## 证明」正文 sha 是 {out['body_sha256'][:12]}…，"
+                        f"而签块盖的是 {got.get('proof_sha256')[:12]}… "
+                        "⇒ 不是同一份正文（body_mismatch），要重签"))
+        return out
     if int(got.get("streak") or 0) < int(got.get("need") or 0):
         out.update(state="unsigned",
                    why=(f"签块里的连续读数是 {got.get('streak')}/{got.get('need')}"
@@ -709,6 +735,47 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     out.update(state="signed",
                why=(f"手稿里的签块：连续 {got.get('streak')}/{got.get('need')} 成立、"
                     f"正文 sha 相符（签于 {got.get('at') or '（没有时间）'}）"))
+    return out
+
+
+def manuscript_body_matches(text: str, *, artifact_sha: Any) -> dict[str, Any]:
+    """这一份稿的「## 证明」正文 == 被签的那一份吗（纯读；业主 2026-11-02）。
+
+    返回 `{checked, matches, body_mismatch, body_sha256, signed_sha256, why}`。
+    三态：被签的 sha 认不出 ⇒ `checked=False, matches=None`（没查成，不是"相符"）；
+    查成了 ⇒ `matches` 真/假，且 `body_mismatch` 是它的反面（读侧只读这一格，不自己取反）。
+
+    为什么落块前必须过这一道：`正文sha` 只说明"V 签的是哪一份正文"，不保证**眼前这份稿**
+    还是那一份（84 就是"块盖 #p3、文件正文 #p2"）。少了这一道，改过的稿会被盖上一块
+    不属于它的签，而读侧每一处都会"看起来成功了"。
+    """
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {"checked": False, "matches": None, "body_mismatch": False,
+                           "body_sha256": "", "signed_sha256": "", "why": ""}
+    signed = str(artifact_sha or "").strip().lower()
+    out["signed_sha256"] = signed
+    if len(signed) != 64 or any(ch not in _HEX for ch in signed):
+        out["why"] = (f"被签的正文 sha 认不出（收到 {artifact_sha!r}）⇒ 这一格没查成，"
+                       "不拿它当「相符」")
+        return out
+    out["checked"] = True
+    body = manuscript_proof_body(text)
+    out["body_sha256"] = _VR.proof_sha(body)
+    out["matches"] = out["body_sha256"] == signed
+    out["body_mismatch"] = not out["matches"]
+    if out["matches"]:
+        out["why"] = (f"这一份稿的「## 证明」正文与签块的正文sha 相符"
+                       f"（{signed[:12]}…）")
+    elif "## 证明" not in str(text or ""):
+        out["why"] = (
+            f"稿里没有「## 证明」那一节 ⇒ 它的正文是空的，与签块的正文sha "
+            f"{signed[:12]}… 不是同一份（不拿空正文冒充「签过空集」）")
+    else:
+        out["why"] = (
+            f"这一份稿的「## 证明」正文 sha 是 {out['body_sha256'][:12]}…，"
+            f"而签块盖的是 {signed[:12]}… ⇒ 不是同一份正文（改一个字就不算同一份），"
+            "不盖块")
     return out
 
 
@@ -724,10 +791,14 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     不经过侧文件的形态。两处共用 :func:`stamp_manuscript_sign`，所以块逐字相同。
 
     返回键：`state` / `written` / `idempotent` / `missing` / `path` / `line` /
-    `why` / `reading`。`state` 只取 :data:`MANUSCRIPT_WRITE_STATES` 里的三个词：
+    `why` / `reading`，外加 `body_mismatch` / `body_sha256` / `signed_sha256` / `code`
+    （2026-11-02：落块前核「这份稿的正文 == 被签的那一份」）。`state` 只取
+    :data:`MANUSCRIPT_WRITE_STATES` 里的三个词：
 
     - `written`：块在稿里（`idempotent=True` 表示本来就在、没重写）；
-    - `failed`：有手稿落点、但没写进去（`why` 说为什么；`missing=True` 是稿不在盘上）；
+    - `failed`：有手稿落点、但没写进去（`why` 说为什么；`missing=True` 是稿不在盘上；
+      `code="body_mismatch"` 是"正文不是被签的那一份"——这一档在写盘之前就退回，
+      一个字节都不写）；
     - `not_attempted`：没有手稿路径（这一签本来就只写侧文件，不是"写失败"）。
 
     `line` 是签块在正文里的行号（1 起；没写成 ⇒ 0）—— `write_sign` 会把它和
@@ -735,7 +806,9 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     """
     out: dict[str, Any] = {"state": "not_attempted", "written": False,
                            "idempotent": False, "missing": False,
-                           "path": "", "line": 0, "why": "", "reading": {}}
+                           "path": "", "line": 0, "why": "", "reading": {},
+                           "code": "", "body_mismatch": False,
+                           "body_sha256": "", "signed_sha256": ""}
     rel = str(manuscript_path or "").strip().replace("\\", "/")
     out["path"] = rel
     if not rel:
@@ -749,6 +822,22 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
                    why=(f"手稿读不出来（{type(exc).__name__}: {exc}）⇒ 签块没写成"
                         if path.exists() else
                         f"`{rel}` 不在盘上 ⇒ 签块没写成（未在册送审要指向 F 的那一份手稿）"))
+        return out
+    # ---- 2026-11-02（业主：「落块前要核实这份稿的正文 == 被签的那一份」）----
+    #
+    # 位置在"读到了稿"之后、"写"之前：这一档必须零字节退回 —— 写一半再后悔
+    # （块已经盖进改过的稿）是抹不掉的（手稿是替换式写的，没有历史版本）。
+    match = manuscript_body_matches(old, artifact_sha=proof_sha)
+    out.update(body_mismatch=bool(match.get("body_mismatch")),
+               body_sha256=str(match.get("body_sha256") or ""),
+               signed_sha256=str(match.get("signed_sha256") or ""))
+    if not match.get("checked"):
+        out.update(state="failed", code="body_unreadable",
+                   why=f"不盖块：{match.get('why')}（一个字节都没写）")
+        return out
+    if not match.get("matches"):
+        out.update(state="failed", code="body_mismatch",
+                   why=f"不盖块：{match.get('why')}（一个字节都没写）")
         return out
     new = stamp_manuscript_sign(old, proof_sha=proof_sha, streak=streak, need=need,
                                 verdict=verdict, signer=signer, at=at,

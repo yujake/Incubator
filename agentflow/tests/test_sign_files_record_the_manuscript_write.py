@@ -35,10 +35,11 @@ from __future__ import annotations
 import json
 import pathlib
 
+from agentflow import depsection as _DS
+from agentflow import verifications as _VR
 from agentflow import vsigns as VSP
 
 TS = "2026-11-02T16:43:01+08:00"
-SHA = "d" * 64
 MANUSCRIPT = "reports/f-proof-000000.md"
 PROOF = ("# F 的证明手稿：夹具\n"
          "\n"
@@ -53,6 +54,9 @@ PROOF = ("# F 的证明手稿：夹具\n"
          "\n"
          "1. 夹具第一步。\n"
          "2. 夹具第二步。\n")
+#: 被签正文 = 那一份稿的「## 证明」小节（2026-11-02 起落块前要核它 == 被签 sha；
+#: 夹具用一个与正文相符的 sha，才量得到 `manuscript_write` 这一格本身）。
+SHA = _VR.proof_sha(_DS.proof_body(PROOF).strip("\n"))
 
 
 def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:

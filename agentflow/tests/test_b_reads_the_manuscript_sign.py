@@ -61,9 +61,19 @@ def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    if block:
+    want = sha or VR.proof_sha(PROOF)
+    if block and want != VR.proof_sha(PROOF):
+        # ③ 号那一档要的是"盖着另一版正文的块"：`write_manuscript_sign` 自 2026-11-02
+        # 起会核「这份稿的正文 == 被签的那一份」并拒掉这一笔（body_mismatch），
+        # 所以夹具在这里直接拼块（纯字符串），才量得到"B 不借旧版的签"这件事。
+        path.write_text(VS.stamp_manuscript_sign(
+            text, proof_sha=want, streak=3, need=3, verdict=verdict, signer="V",
+            at="2026-11-02T10:00:00+08:00", ledger=f"{REL}#V签", statement_id="",
+            manuscript_id=VS.manuscript_id_of(REL),
+            signed=(verdict == "成立")), encoding="utf-8")
+    elif block:
         VS.write_manuscript_sign(
-            st.root, REL, proof_sha=sha or VR.proof_sha(PROOF), streak=3,
+            st.root, REL, proof_sha=want, streak=3,
             need=3, verdict=verdict, signer="V", at="2026-11-02T10:00:00+08:00",
             ledger=f"{REL}#V签", statement_id="", signed=(verdict == "成立"))
     return path.read_text(encoding="utf-8")
