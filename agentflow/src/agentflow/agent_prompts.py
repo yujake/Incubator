@@ -2972,10 +2972,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    请 F 先拿 V 签」；并把「册上已有这一条而缺签」分出来（B 自己处理，不许推给 F）。
 #:
 #: 逐格旧值 → 新值（p231 → p232，现算，不是手抄；脚本 `temp/_178_recompute_p232.py`）：
-#:   A 5123ace4→5123ace4 / B 0d5eadea→d942282a / C 90c19871→90c19871 /
+#:   A 5123ace4→5123ace4 / B 0d5eadea→3c47404b / C 90c19871→90c19871 /
 #:   D e5e43b8e→e5e43b8e / E 91cad508→91cad508 / F 00b76d27→00b76d27 /
 #:   G bd3ea65a→bd3ea65a / H 15cc471d→15cc471d / L 40152fe3→40152fe3 /
-#:   M 2c289de9→3cc08f2b / V 1703a9c5→1703a9c5。
+#:   M 2c289de9→9c423a10 / V 1703a9c5→1703a9c5。
 #: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p232）；
 #: `tests/golden/agent_surface_snapshot.json` 带提示词摘要的那几格重冻（逐格 diff 见提交信息）。
 PROMPT_VERSION = "p232"

@@ -56,13 +56,14 @@ def _direct_edge_problems(edges) -> list[str]:
 
 
 #: 提示词/手册里必须读得到的几处字面（`_flat` 之后按"读到的意思"判）：
-#: `B 你可以直接派`（B 是直接边）＋ 经 B 的两跳路 `M→B→V` ＋ F 唯一的进路 `M→D→F`
-#: ＋ 被拒时的读数 `forbidden_edge`。
-_ROUTE_KEEP = ("B你可以直接派", "M→B→V", "经B", "M→D→F", "forbidden_edge")
+#: `B 你可以直接派`（B 是直接边）＋ F 唯一的进路 `M→D→F`
+#: ＋ 被拒时的读数 `forbidden_edge`。2026-11-02 收口之后，`M→B→V` 那条代唤路不再要求出现
+#: （M 没有 V 签的编辑权、也没有获取义务）。
+_ROUTE_KEEP = ("B你可以直接派", "M→D→F", "forbidden_edge")
 #: 2026-10-18 那一版的旧口径：任何一种命中 ⇒ "V 能直接从 M 派"这句话还在。
 _ROUTE_BAN = ("B与V你可以直接派", "出边里已有V", "直接派V", "M→V")
-#: 撤 V 直连之后不许被顺手删掉的义务句（业主：义务挪给 D，不是取消）。
-_HANDOVER_KEEP = ("D去核", "由D让F补签")
+#: 2026-11-02 收口：缺签现场的两条处置（在册缺签让 B 处理 / F 产出无签经 D 让 F 先拿签）。
+_HANDOVER_KEEP = ("命题已在册而缺V签", "让B处理", "经D让F先拿V签")
 
 #: 强调符号与空白：`派 **D** 去核` 与 `派 D 去核` 是同一句话。
 _EMPHASIS = re.compile(r"[\s*`]+")
@@ -326,23 +327,20 @@ def test_the_negative_control_the_old_direct_v_sentence_is_caught() -> None:
 
 
 def test_the_negative_control_dropping_the_handover_sentences_is_caught() -> None:
-    """负控（反真空）：把写着"义务挪给 D"的那一段整段删掉 ⇒ 判据必须红。
+    """负控（反真空）：把写着责任路由的那一段整段删掉 ⇒ 判据必须红。
 
-    防的是"删掉≠转交"：把假陈述删干净，同时把"真发现缺签就派 D 去核、由 D 让 F 补签"
-    一起删掉 —— 表面上"提示词里没有错话了"，实际上 V 的签字义务没人办。
+    防的是"删掉≠转交"：把假陈述删干净，同时把"在册缺签让 B 处理 / F 产出无签经 D 让 F
+    先拿签"一起删掉 —— 表面上"提示词里没有错话了"，实际上缺签现场没有人办。
     """
     from agentflow import specs as SP
 
     policy = SP.builtin_specs()["M"].brief.policy
     text = "\n".join(policy)
-    assert _handover_text_problems(text) == [], "夹具前提：义务句还在"
-    # "派 D 去核 / 由 D 让 F 补签"这几句分散在三段 policy 里 ⇒ 整段删要把它们一起删掉
-    # （只删其中一段的话，另外两段还能读到 ⇒ 判据仍绿，那正好也是"删了一段不等于删干净"）。
+    assert _handover_text_problems(text) == [], "夹具前提：责任路由那几句还在"
     dropped = "\n".join(str(s) for s in policy
                         if not any(n in _flat(str(s)) for n in _HANDOVER_KEEP))
-    assert dropped != text, "夹具前提：policy 里真有写着「派 D 去核 / 由 D 让 F 补签」的段落"
+    assert dropped != text, "夹具前提：policy 里真有写着责任路由的段落"
     got = _handover_text_problems(dropped)
-    assert any("D去核" in p for p in got), got
-    assert any("由D让F补签" in p for p in got), got
+    assert any("命题已在册而缺V签" in p for p in got), got
     # 收尾（负控的负控）
     assert _handover_text_problems(text) == []

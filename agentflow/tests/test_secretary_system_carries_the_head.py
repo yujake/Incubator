@@ -157,9 +157,12 @@ def _head_carried_problem(rows: Iterable[Mapping[str, Any]]) -> str:
     另外钉住"读数不许腐烂"：`system_chars` 必须等于今天代码里那段稳定头的长度。
     """
     hr = _secretary_rows(rows)
-    passes = {int(r.get("pass") or 1) for r in hr}
-    if not {1, 2} <= passes:
-        return f"秘书那一档缺读数（pass={sorted(passes)}）⇒ 第二次调用这一格没量"
+    if not hr:
+        return "秘书那一档缺读数 ⇒ 稳定头这一格没量"
+    # 2026-11-02：不再要求 `pass=1` 与 `pass=2` 都在 —— 预热脚本自 2026-11-01 起把秘书显式
+    # 排除在"必须命中"的样本外（`HIT_SAMPLE_EXCLUDED`：它的 system 头只有三百来字，上游
+    # 对这一段始终报 hit=0），所以今天每趟只有 pass 1 一行。仍然要求的是"有几行就同一个
+    # 稳定头"（下面的 digests 判据）—— 那才是这一格要守的东西。
     digests = {str(r.get("system_sha256") or "") for r in hr}
     if "" in digests:
         return "秘书的读数里有 `system_sha256` 为空的行 ⇒ 稳定头不在 system 位（改前那个形态）"
@@ -178,6 +181,26 @@ def _head_carried_problem(rows: Iterable[Mapping[str, Any]]) -> str:
     return ""
 
 
+def _latest_complete_rows(runs: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """每一档最近一趟"点名了全部目标"的预热里的全部行（2026-11-02：不许把历史读数混进来）。
+
+    为什么不再把历次预热全摊平：`prompt_cache_warm.json` 是累积的（`MAX_RUNS_KEPT` 趟），
+    而秘书的稳定头会随代码变（这一次 304 → 300 字）—— 摊平之后，"今天的稳定头长这样"
+    会被 p230/p231 那几趟的历史行判红，而那不是"今天的读数腐烂了"，是"账本里还有旧账"。
+    选取口径与 `tests/test_prompt_cache_warm.py::_complete_run` 同一套：每档取最近的完整趟。
+    """
+    targets = set(_load_warm().WARM_TARGETS)
+    rank: dict[bool, dict[str, Any]] = {}
+    for run in runs:
+        lean = bool(run.get("lean_enabled"))
+        roles = {str(r) for r in (run.get("roles") or [])}
+        if not targets <= roles:
+            continue
+        rank[lean] = dict(run)  # 后到的覆盖先到的 ⇒ 每一档留下最近那一趟
+    return [row for _lean, run in sorted(rank.items())
+            for row in (run.get("rows") or [])]
+
+
 def test_the_recorded_secretary_calls_carry_the_head_in_system() -> None:
     """判据 ①（读数面）：真机上秘书那两趟都是"稳定头在 system 位"。
 
@@ -191,16 +214,18 @@ def test_the_recorded_secretary_calls_carry_the_head_in_system() -> None:
     if not _READINGS.is_file():
         pytest.skip(f"读数不在盘上：{_READINGS}")
     runs = _load_warm().load_readings(_READINGS)
-    rows = [row for run in runs for row in (run.get("rows") or [])]
+    rows = _latest_complete_rows(runs)
     problem = _head_carried_problem(rows)
     assert problem == "", problem
     hr = _secretary_rows(rows)
-    second = [r for r in hr if int(r.get("pass") or 1) == 2][-1]
+    # 2026-11-02：秘书已不在"必须命中"的样本里 ⇒ 今天每趟只有 pass 1；取最后一行的读数
+    # 照样能回答"稳定头进没进 system 位"（摘要、字数、token 三格都在那一行上）。
+    second = ([r for r in hr if int(r.get("pass") or 1) == 2] or hr)[-1]
     cache = dict(second.get("cache") or {})
-    print(f"（秘书第二次调用：hit {cache.get('hit')} / miss {cache.get('miss')} token；"
+    print(f"（秘书那一趟：hit {cache.get('hit')} / miss {cache.get('miss')} token；"
           f"system {second.get('system_chars')} 字 / tokens_in {cache.get('tokens_in')}；"
           f"system_sha256 {str(second.get('system_sha256'))[:12]}；"
-          f"两次命中率 {cache.get('hit_rate')}）")
+          f"命中率 {cache.get('hit_rate')}）")
     # 读数自洽（三态纪律的另一面）：上游给了两格时，它们相加必须等于 prompt_tokens。
     assert (int(cache.get("hit") or 0) + int(cache.get("miss") or 0)
             == int(cache.get("tokens_in") or 0)), cache
@@ -216,7 +241,7 @@ def test_clearing_the_system_digest_makes_the_criterion_red() -> None:
     if not _READINGS.is_file():
         pytest.skip(f"读数不在盘上：{_READINGS}")
     runs = _load_warm().load_readings(_READINGS)
-    rows = [row for run in runs for row in (run.get("rows") or [])]
+    rows = _latest_complete_rows(runs)
     assert _head_carried_problem(rows) == "", _head_carried_problem(rows)
     cleared: list[dict[str, Any]] = []
     for row in rows:
@@ -227,17 +252,19 @@ def test_clearing_the_system_digest_makes_the_criterion_red() -> None:
     problem = _head_carried_problem(cleared)
     assert problem and "system 位" in problem, (
         f"清空 system_sha256 之后仍判合格 ⇒ 这条判据没在读那一格：{problem!r}")
-    # 同一个负控的第二档：两趟的 system_sha256 不同（= 每问一次换一段前缀）也要红。
+    # 同一个负控的第二档：两档读数的 system_sha256 不同（= 每问一次换一段前缀）也要红。
+    # 两档各留一行秘书读数（`_latest_complete_rows` 把两档的最近完整趟并在一起），
+    # 改掉其中一行就足以让"同一份稳定头"这条判据红。
     mixed: list[dict[str, Any]] = []
-    seen = False
+    seen = 0
     for row in rows:
         copy = dict(row)
-        if str(copy.get("role")) == "secretary" and int(copy.get("pass") or 1) == 2:
+        if str(copy.get("role")) == "secretary" and seen == 0:
             copy["system_sha256"] = "0" * 64
-            seen = True
+            seen += 1
         mixed.append(copy)
-    assert seen, "负控没改到秘书那一行的第二次调用"
-    assert _head_carried_problem(mixed), "两趟的 system_sha256 不同却仍判合格 ⇒ 判据没在读摘要"
+    assert seen == 1, "负控没改到秘书那一行的读数"
+    assert _head_carried_problem(mixed), "两档的 system_sha256 不同却仍判合格 ⇒ 判据没在读摘要"
 
 
 # ---------------------------------------------------------------- 负控：塞回 user

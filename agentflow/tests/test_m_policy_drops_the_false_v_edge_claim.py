@@ -38,12 +38,6 @@ _FALSE_HEADER = "B 与 V 你可以直接派"
 #: 强调符号与空白：`派 **D** 去核` 与 `派 D 去核` 是同一句话（反真空按"读出来的意思"判）。
 _EMPHASIS = re.compile(r"[\s*`]+")
 
-#: `M→B→V` 这条两跳路（③ 认的字面）。
-_TWO_HOP = "M→B→V"
-
-#: "这不是直连"的各种写法（③ 要求其中至少一种出现）。
-_NOT_DIRECT = ("不是直连", "不是你直连", "并非直连")
-
 
 def _flat(text: str) -> str:
     """去掉强调符号与所有空白 —— 判"读到的意思"，不判排版。"""
@@ -99,11 +93,12 @@ def test_negative_control_the_old_sentence_is_caught_when_put_back() -> None:
 
 # ============================================================ ② 义务转交的两句不许被"整段删掉"
 
-#: 义务转交的两句（按"读出来的意思"判：`派 **D** 去核` 也算命中）。
-_ASSIGNED = ("派D去核", "由D让F补签")
+#: 缺签现场的两条处置（按"读出来的意思"判：2026-11-02 的责任路由）。
+_ASSIGNED = ("命题已在册而缺V签", "让B处理", "经D让F先拿V签")
 
-#: 仍然成立、不许被顺手删掉的一句（B 的直接边没撤）。
-_STILL_TRUE = ("B你可以直接派", "证明走查不由你派")
+#: 仍然成立、不许被顺手删掉的三句（B 的直接边没撤；M 的两条义务都是"没有"）。
+_STILL_TRUE = ("B你可以直接派", "证明走查不由你派",
+               "没有V签的编辑权", "获取V签的义务")
 
 
 def _handover_problems(policy) -> list[str]:
@@ -114,10 +109,10 @@ def _handover_problems(policy) -> list[str]:
 
 
 def test_the_handover_sentences_are_still_readable() -> None:
-    """② 正控（反真空）：`派 D 去核` / `由 D 让 F 补签` / `B 你可以直接派` 都还读得到。"""
+    """② 正控（反真空）：缺签现场的两条处置 + `B 你可以直接派` + 两条"没有"都还读得到。"""
     policy = builtin_specs()["M"].brief.policy
     missing = _handover_problems(policy)
-    assert missing == [], "M 的 policy 里读不到义务转交那几句：\n  - " + "\n  - ".join(missing)
+    assert missing == [], "M 的 policy 里读不到责任路由那几句：\n  - " + "\n  - ".join(missing)
 
 
 def test_negative_control_dropping_the_whole_paragraph_is_caught() -> None:
@@ -127,73 +122,40 @@ def test_negative_control_dropping_the_whole_paragraph_is_caught() -> None:
     assert dropped != tuple(policy), "夹具前提：policy 里真有一段写着「证明走查不由你派」"
     assert _handover_problems(dropped) != [], (
         "整段删掉之后判据仍然绿 ⇒ 反真空没有咬合力："
-        "「删掉≠转交」，D 那边接不到就没有人办")
-    # (b) 把"让 F 补签"改回"让 V 补签"（换成 D 自己去派 V 的旧口径）⇒ 也必须红
-    regressed = tuple(str(s).replace("由 D 让 F 补签", "由 D 自己去派 V") for s in policy)
-    assert _handover_problems(regressed) != [], "把『由 D 让 F 补签』改回『D 自己去派 V』之后判据居然绿了"
+        "「删掉≠转交」，B 那边接不到就没有人办")
+    # (b) 把"在册缺签让 B 处理"改回"让 F 补签"（把 B 侧问题推给 F）⇒ 也必须红
+    regressed = tuple(str(s).replace("让 **B** 处理", "让 F 补签") for s in policy)
+    assert regressed != tuple(str(s) for s in policy), "夹具前提：policy 里真有『让 **B** 处理』"
+    assert _handover_problems(regressed) != [], (
+        "把『让 B 处理』改回『让 F 补签』之后判据居然绿了")
     # 收尾（负控的负控）
     assert _handover_problems(policy) == []
 
 
-# ============================================================ ③ `M→B→V` 必须写成"经 B 的两跳路"
+# ============================================================ ③ 代唤 V 那条两跳路必须退场
 
-def _two_hop_problems(policy, m_edges, b_edges) -> list[str]:
-    """提示词里 `M→B→V` 那句话的问题（空列表 = 要么没提、要么写成经 B 的两跳路）。
+#: 2026-11-02 收口之后不许再出现的两种写法。
+_RETIRED_ROUTE = ("M→B→V", "经 B 走那条路")
 
-    两个面一起判，因为它们坏起来是两件事：
 
-    - 数据面：这条路得真的还通（`B ∈ M.edges`、`V ∈ B.edges`）—— 边被撤了而提示词
-      还点着它，就是换了个方向说同一句假话；
-    - 文字面：必须写明"经 B"且"不是你直连 V"—— 只写 `M→B→V` 三个字母，
-      读的人（尤其模型）会把它当成"到 V 的一条路"的另一种写法，与旧直连句分不开。
-    """
+def _retired_route_problems(policy) -> list[str]:
+    """policy 里还写着"经 B 代唤 V"的命中（空列表 = 已退场）。"""
     text = "\n".join(str(s) for s in policy)
-    if _TWO_HOP not in text:
-        return []
-    out: list[str] = []
-    if "B" not in set(m_edges):
-        out.append(f"提示词点着 {_TWO_HOP}，但 M 的出边 {tuple(m_edges)} 里没有 B ⇒ 这条路第一步就走不动")
-    if "V" not in set(b_edges):
-        out.append(f"提示词点着 {_TWO_HOP}，但 B 的出边 {tuple(b_edges)} 里没有 V ⇒ 这条路第二步就走不动")
-    flat = _flat(text)
-    if "经B" not in flat:
-        out.append(f"点了 {_TWO_HOP} 却没写「经 B」⇒ 会被读成一条直连边的别名（这正是 2026-10-20 撤掉的那条边）")
-    if not any(needle in flat for needle in _NOT_DIRECT):
-        out.append(f"点了 {_TWO_HOP} 却没写明「不是你直连 V」⇒ 一句话里两种读法，模型会挑省事的那种")
-    return out
+    return [f"policy 里还写着「{needle}」—— 业主 2026-11-02 收口：M 没有 V 签的编辑权、"
+            f"也没有获取义务，不需要经 B 代唤 V" for needle in _RETIRED_ROUTE if needle in text]
 
 
-def test_the_two_hop_route_is_described_as_going_through_b() -> None:
-    """③ 正控：`M→B→V` 仍在，且写明是经 B 的两跳路、不是 M 直连 V（边表现读核可达）。"""
-    specs = builtin_specs()
-    policy = specs["M"].brief.policy
-    problems = _two_hop_problems(policy, specs["M"].edges, specs["B"].edges)
-    assert problems == [], "`M→B→V` 那句话与边表对不上：\n  - " + "\n  - ".join(problems)
-    # 反真空：这一条真的验到了东西（不是"提示词里干脆没提这件事"）
-    assert _TWO_HOP in "\n".join(str(s) for s in policy), (
-        "policy 里读不到 `M→B→V` ⇒ ③ 这一整条退化成空转；而这条路今天仍可达"
-        "（M.edges 含 B、B.edges 含 V），不该被顺手删掉")
+def test_the_two_hop_route_is_retired_from_the_policy() -> None:
+    """③ 正控：代唤那条路已经退场，而"两条都没有"那句还在。"""
+    policy = builtin_specs()["M"].brief.policy
+    assert _retired_route_problems(policy) == [], _retired_route_problems(policy)
+    flat = _flat("\n".join(str(s) for s in policy))
+    assert "没有V签的编辑权" in flat and "获取V签的义务" in flat, flat[-800:]
 
 
-def test_negative_control_calling_the_two_hop_route_direct_is_caught() -> None:
-    """③ 负控：把 `M→B→V` 说成直连、或让那条路的第二步不存在 ⇒ 判据必须红。"""
-    specs = builtin_specs()
-    m_edges, b_edges = specs["M"].edges, specs["B"].edges
-    base = ["先窄后宽：派 `D` 立题。"]  # 一个干净的起点（不含这条路，也不含义务句）
-    # (a) 说成直连：只留三个字母，不写"经 B / 不是直连"
-    got = _two_hop_problems((*base, "要靠 V 签字就走 `M→B→V` 那条边。"), m_edges, b_edges)
-    assert any("经 B" in p for p in got), got
-    assert any("不是你直连" in p for p in got), got
-    # (b) 明说成"你直连 V"：`经 B` 写在旁边也救不回来这一句的读法
-    got = _two_hop_problems((*base, "`M→B→V` 就是你直连 V 的那条边。"), m_edges, b_edges)
-    assert any("不是你直连" in p for p in got), got
-    # (c) 数据面：`B→V` 被撤掉（那句就成了假话），文字写得再对也必须红
-    got = _two_hop_problems((*base, "这是**经 B** 的两跳路 `M→B→V`，不是你直连 V。"),
-                            m_edges, tuple(e for e in b_edges if e != "V"))
-    assert any("B 的出边" in p for p in got), got
-    # (d) 数据面：`M→B` 被撤掉
-    got = _two_hop_problems((*base, "这是**经 B** 的两跳路 `M→B→V`，不是你直连 V。"),
-                            tuple(e for e in m_edges if e != "B"), b_edges)
-    assert any("M 的出边" in p for p in got), got
-    # 收尾（负控的负控）：真身 + 真边表 ⇒ 全对
-    assert _two_hop_problems(specs["M"].brief.policy, m_edges, b_edges) == []
+def test_negative_control_putting_the_two_hop_route_back_is_caught() -> None:
+    """③ 负控：把 `M→B→V` 那条代唤路加回 policy ⇒ 判据必须红。"""
+    policy = builtin_specs()["M"].brief.policy
+    got = _retired_route_problems((*policy, "要靠 V 签字就走 `M→B→V` 那条路。"))
+    assert got, "把代唤那条路加回去之后判据居然绿了"
+    assert _retired_route_problems(policy) == []
