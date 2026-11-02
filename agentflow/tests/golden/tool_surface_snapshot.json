@@ -1627,7 +1627,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}",
+   "returns": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}。循环里调它时另带三格（只加不减）：'preempted'（本步只等到 CHILD_STEP_WAIT_SEC 就返场）、'dispatched'（已派出的 task_id）、'running'（还没回来的 task_id —— 它们的结局在下一次返场投给你，别因为 status=running 就重派）",
    "roles": [
     "M"
    ],

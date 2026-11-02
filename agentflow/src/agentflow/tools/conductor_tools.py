@@ -395,7 +395,11 @@ def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
              "'concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 "
              "{'role','action','instance','auto_instance','task_id','status','outcome',"
              "'refusal_reason','detail','error','tokens','usd','elapsed_sec','checked',"
-             "'children','roster_name','roster_problem','roster_considered'}"),
+             "'children','roster_name','roster_problem','roster_considered'}。"
+             "循环里调它时另带三格（只加不减）：'preempted'（本步只等到 "
+             "CHILD_STEP_WAIT_SEC 就返场）、'dispatched'（已派出的 task_id）、"
+             "'running'（还没回来的 task_id —— 它们的结局在下一次返场投给你，"
+             "别因为 status=running 就重派）"),
 )
 def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResult:
     """工具体：一次派一批活，走 `Conductor.run_plan`（分波 + 线程池 + 探针）。
