@@ -148,10 +148,22 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
         "|---|---|---|---|\n"
         "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
         encoding="utf-8")
-    reviewed = _as_dict(AgentV(st, llm=_FixedSeam("成立")).verify_proof(
-        proof_manuscript=man_rel))
+    # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份
+    # （生产里由 `AgentLoop._do_tool` 的 `calling_as` 挂；直接调夹具要自己给）。
+    from agentflow import conductor as CND
+    from agentflow import vsigns as VS
+
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        reviewed = _as_dict(AgentV(st, llm=_FixedSeam("成立")).verify_proof(
+            proof_manuscript=man_rel))
     assert reviewed.get("checked") is True, reviewed
     assert reviewed.get("kind") == "proof_unregistered_signed", reviewed
+    # 签块真的落在稿上，且写块的人是收方秘书（不是 V 自己）。
+    block = VS.manuscript_sign_reading(man_path.read_text(encoding="utf-8"),
+                                       manuscript_path=man_rel)
+    assert block.get("found") is True and block.get("signed") is True, block
+    assert str(block.get("signer") or "").startswith("secretary:"), block
 
     req = dict(origin="own_result", statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
                kind="conjecture", proof_text=PROOF, line_range={"start": 1},
