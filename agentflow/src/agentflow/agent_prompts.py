@@ -2935,7 +2935,33 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍是 15 格）；
 #: 两份 golden 重冻；`docs/ROLE-GUIDE.md` 重生成；`tests/fixtures/prompt_cache_warm.json`
 #: 两档重跑（业主已批 `--cap-usd 0.1`）。
-PROMPT_VERSION = "p230"
+#: `p231`（2026-11-02，业主放权动禁改区 · FC-27；裁定「重点是要F侧拿V签，拿到V签F才能交差」
+#: +「F不是直接能派V吗」+「V签先放在F的手稿里让B录入」）：
+#:
+#: ① F 那一格（`specs/f.py`）：policy 里「证明写完之后交给 V 复核：派 V 审这一条…
+#:    `statement_id` 必填」改成「由你派 V（`framework_summon`）+ `proof_manuscript`
+#:    那条未在册入口（V 读稿审、三转干净把签块盖回手稿、B 收录时从稿上读到）；
+#:    并新增 `v_sign` 四档（已签 / 待签 / 未通过 / 没查成）与「没签不是交差」；
+#:    「补完重新送 V」改成「跑一次 step 再派 V 重审」；`deliverable` 加签读数；
+#:    `step` 动作的 returns 说明补 `v_sign` / `delivered` / `delivery_state`。
+#: ② V / D / G / M 四格（派生面）：`specs/v.py` 的 `verify.verify_proof` 参数面 ——
+#:    `statement_id` 不再是根级必填，新增可选 `proof_manuscript`（未在册那条入口）。
+#:    这一笔改的是动作表，而动作表会被渲染进 D / G / M 的「伙伴动作」那一段
+#:    与 V 自己的工具目录 ⇒ 那三格跟着换值（不是手写段文，是派生态）。
+#: ③ 其余六格（A / B / C / E / H / L）逐字未动；`PROMPT_VERSION` 只抬一次。
+#:
+#: 逐格旧值 → 新值（p230 → p231，现算，不是手抄；脚本 `temp/_recompute_p231.py`，
+#: 环境变量与 `tests/conftest.py` 逐条对齐）：
+#:   A 5123ace4→5123ace4 / B 0d5eadea→0d5eadea / C 90c19871→90c19871 /
+#:   D 57802cce→e5e43b8e / E 91cad508→91cad508 / F fa6ad85e→00b76d27 /
+#:   G f38a8a69→bd3ea65a / H 15cc471d→15cc471d / L 40152fe3→40152fe3 /
+#:   M b052a33e→2c289de9 / V 837cdeb4→1703a9c5。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p231）；
+#: `tests/golden/agent_surface_snapshot.json` 里带提示词 / 动作面 / handler 签名的那几格
+#: 重冻（逐格 diff 见提交信息）；`docs/ROLE-GUIDE.md` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.05`，
+#: 实际花费见提交信息）。
+PROMPT_VERSION = "p231"
 
 
 

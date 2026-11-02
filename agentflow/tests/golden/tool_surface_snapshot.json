@@ -5941,6 +5941,10 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "proof_manuscript": {
+      "description": "F 的证明手稿路径（工作区相对；命题还没在册时用它，给了它就可以不给 statement_id）",
+      "type": "string"
+     },
      "proof_no": {
       "description": "第几条证明（1 = canonical，缺省 1）",
       "minimum": 1,
@@ -5961,9 +5965,7 @@
       "type": "string"
      }
     },
-    "required": [
-     "statement_id"
-    ],
+    "required": [],
     "type": "object"
    },
    "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「没查成」冒充「审过了」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）",
@@ -7178,7 +7180,7 @@
   "verify.list_verifications": "(statement_id=None, limit=None)",
   "verify.read_proof": "(statement_id)",
   "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None)",
-  "verify.verify_proof": "(statement_id, proof_text=None, readonly_facts=None, proof_no=None)"
+  "verify.verify_proof": "(statement_id='', proof_text=None, readonly_facts=None, proof_no=None, proof_manuscript=None)"
  },
  "summary": {
   "context_budget": null,

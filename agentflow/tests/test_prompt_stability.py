@@ -733,7 +733,12 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
     {"version": "p230", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p230（2026-11-03 落账，与上一格同日；两笔文案收口在 2026-11-01 定稿）：① 压缩批次回涨到 76.61% 那一格压回 74.95%（table.update 177→126，table.get / text.extract / conductor.summon_many 各压一处；85 件总量 6612→6468，基线 8631，分母与名单一格未动）；② B 的说明面把 `proofauthors.py` 改成「由模块 proofauthors 按来源路径推断」（提示词不许点名不存在的点号工具名）。变化格 = 十一格全换（三条压缩的 summary 分布在多个角色的工具面上）；facts 键集仍 15 格（键名与条数一格未动）"}
+     "note": "抬版本 p230（2026-11-03 落账，与上一格同日；两笔文案收口在 2026-11-01 定稿）：① 压缩批次回涨到 76.61% 那一格压回 74.95%（table.update 177→126，table.get / text.extract / conductor.summon_many 各压一处；85 件总量 6612→6468，基线 8631，分母与名单一格未动）；② B 的说明面把 `proofauthors.py` 改成「由模块 proofauthors 按来源路径推断」（提示词不许点名不存在的点号工具名）。变化格 = 十一格全换（三条压缩的 summary 分布在多个角色的工具面上）；facts 键集仍 15 格（键名与条数一格未动）"},
+    # p230 → p231（2026-11-02，业主裁定「重点是要F侧拿V签」+「F不是直接能派V吗」+
+    # 「V签先放F的手稿里让B录入」）。
+    {"version": "p231", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p231（2026-11-03，账本上界口径：本账 p224–p230 记的都是 2026-11-03，而业主这一笔裁定的日子是 2026-11-02 —— 两个日子并列写在这里，别让 `test_no_ledger_note_is_dated_after_the_current_version` 的上界悬空）：① F 的 policy 改成「由你派 V」+ `proof_manuscript` 未在册入口 + `v_sign` 四档（没签不算交差）；② V 的 `verify.verify_proof` 参数面：`statement_id` 不再根级必填、新增可选 `proof_manuscript` —— 这一笔落在动作表上，D / G / M 的伙伴动作段与 V 自己的工具目录跟着换值；③ 变化格 = D / F / G / M / V，其余六格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
