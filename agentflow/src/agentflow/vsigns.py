@@ -1758,9 +1758,112 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
 
 # ---------------------------------------------------------------- 签 → 五元位（B 收录时用）
 
+#: B 收录时"这一块不能认"的三档原因码（2026-11-02 业主）。
+#:
+#: 每一档都带一句原因 + 一句建议（建议必须点名真工具 / 真字段，收方照着就能改）：
+#:
+#: | 码 | 什么时候 | 建议指向 |
+#: |---|---|---|
+#: | `manuscript_id_missing` | 签块没有第 9 格「手稿号」（旧 8 格块 / 空格） | `vsigns.land` 会写第 9 格 |
+#: | `manuscript_id_unresolved` | 格里的号解析不到在册命题 / 与它所在那份稿对不上 | `register_statement` 拿号，或让 D 的清单把地址写对 |
+#: | `manuscript_not_of_this_statement` | 号解析成了别的命题，或这份稿的正文 sha 与要登记的正文不符 | 交这一条自己的稿 / 用 `vsigns.land` 把签落回它自己的稿 |
+SIGN_GATE_CODES: tuple[str, ...] = ("manuscript_id_missing", "manuscript_id_unresolved",
+                                    "manuscript_not_of_this_statement")
+
+
+def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
+                         registered: Iterable[Any] = ()) -> dict[str, Any]:
+    """B 收录时对签块的两道判据（纯读；2026-11-02 业主）。
+
+    判据一：手稿号 → 在册命题的映射（第 9 格那一族）；
+    判据二：正文逐字相同（`body_mismatch`：签块盖的是不是这份稿里现在这一份正文）。
+    两道都过、且块是「成立」⇒ `admitted=True`；否则 `code` 是 :data:`SIGN_GATE_CODES`
+    里的一档（`code=""` 且 `admitted=False` 的那两档是"没有块"与"块判过没过"，
+    它们由调用方按既有读数处置，不在这里冒充"号有问题"）。
+
+    为什么这一层不写任何东西：它是 B 的读侧判据。B 的写路径一个字都不动
+    （业主：B 的写路径不许改；这里只加只读判据与受控拒信）。
+    """
+    out: dict[str, Any] = {
+        "checked": bool(reading.get("found")), "admitted": False, "code": "",
+        "manuscript_id": str(reading.get("manuscript_id") or ""),
+        "manuscript_key": str(reading.get("manuscript_key") or ""),
+        "identity_state": str(reading.get("identity_state") or ""),
+        "body_mismatch": bool(reading.get("body_mismatch")),
+        "reason": "", "suggestion": ""}
+    if not reading.get("found"):
+        out["reason"] = "手稿里没有 V 签块（这一份还没签）"
+        out["suggestion"] = (
+            "让 F 把这份证明送 V：`summon` V 的 `verify.verify_proof` 带 "
+            "`proof_manuscript`；三转成立后由收方秘书 `vsigns.land(by=\"secretary:F\")` 落块回稿。")
+        return out
+    mid = out["manuscript_id"]
+    ident = out["identity_state"]
+    ids = {str(x) for x in (registered or ()) if str(x)}
+    if ident == "legacy" or not mid:
+        out.update(code="manuscript_id_missing",
+                   reason=("签块里没有「手稿号」这一格（旧 8 格写法 / 空格）⇒ 这一块映射不到"
+                           "任何一条在册命题，B 不拿它作证"),
+                   suggestion=("让收方秘书重落一次：`vsigns.land(by=\"secretary:F\")` 会按稿路径"
+                               "现算并写上第 9 格 `手稿号`（裸稿号），再收录。"))
+        return out
+    if ident == "unmatched" and out["manuscript_key"]:
+        out.update(code="manuscript_id_unresolved",
+                   reason=(f"第 9 格写的手稿号 {mid!r} 与它所在那份稿的裸稿号 "
+                           f"{out['manuscript_key'] or '（认不出）'!r} 对不上 ⇒ 这一块要么被搬过、"
+                           "要么是照别人的稿抄的"),
+                   suggestion=("先确认稿与号是同一份（稿名 `reports/f-proof-<裸稿号>.md`），"
+                               "再用 `vsigns.land(by=\"secretary:F\")` 落块；号与稿不一致时"
+                               "不许拿 `bits_after_sign` 认签。"))
+        return out
+    if ident == "unmatched":
+        # 没有稿路径可比对（`proof_manuscript` 直递 / 走 D 的清单之前的那一档）⇒ 这一格
+        # 没查成，不是"对不上"：不拿它拒，但读数里留一格说清"号没核过"。
+        out["identity_unverified"] = True
+    if ids and mid not in ids and mid != str(statement_id or ""):
+        out.update(code="manuscript_id_unresolved",
+                   reason=(f"第 9 格的手稿号 {mid!r} 在 `statements` 里找不到对应的在册命题 ⇒ "
+                           "这条签挂不到任何一条已收录的命题上"),
+                   suggestion=("先 `register_statement` 登记这一条命题拿到 `stmt_id`（或让 D 的"
+                               "携带单把那一条的 `手稿路径` 写对），再落签。"))
+        return out
+    if str(statement_id or "").strip() and mid != str(statement_id):
+        out.update(code="manuscript_not_of_this_statement",
+                   reason=(f"这一块的手稿号是 {mid!r}，而这一笔要登记的是 stmt:"
+                           f"{str(statement_id).strip()} ⇒ 签是别条命题的"),
+                   suggestion=("要登记哪一条就交哪一条的稿：让 F 用 `proof_manuscript` 递这一条的"
+                               "稿，或用 `vsigns.land(by=\"secretary:F\")` 把这一签落回它自己的稿。"))
+        return out
+    if out["body_mismatch"]:
+        out.update(code="manuscript_not_of_this_statement",
+                   reason=("这份稿的「## 证明」正文 sha 与签块里的 `正文sha` 不是同一份"
+                           "（改一个字就不算同一份）⇒ 不许借这一块"),
+                   suggestion=("让 F 把这一份正文重送 V，重拿签后用 "
+                               "`vsigns.land(by=\"secretary:F\")` 落块（`正文sha` 与 `手稿号` "
+                               "两格会一起更新）。"))
+        return out
+    out["admitted"] = str(reading.get("state") or "") == "signed"
+    if not out["admitted"]:
+        out["reason"] = str(reading.get("why") or "签块不是「成立」那一档")
+    return out
+
+
+def _registered_ids(store: Any) -> tuple[str, ...]:
+    """在册命题号（只读；没有 store / 读不出来 ⇒ 空元组，判据按"没有册"那一档走）。"""
+    if store is None:
+        return ()
+    try:
+        return tuple(str(r.get("stmt_id") or "") for r in store.rows("statements")
+                     if str(r.get("stmt_id") or ""))
+    except Exception:  # noqa: BLE001 —— 读不到册不是"没有命题"：这一格留空，判据退到"没有册"
+        return ()
+
+
 def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                     statement_id: str = "", proof_no: Any = 1,
-                    kind: str = "", manuscript_text: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
+                    kind: str = "", manuscript_text: str = "",
+                    manuscript_path: Any = "", store: Any = None,
+                    ) -> tuple[dict[str, Any], dict[str, Any]]:
     """B 收录时"认签"：有一份对得上这一份正文的签 ⇒ 把第 3 位写成已签。
 
     返回 `(bits, reading)`。`reading` 是这一步的读数（「三态」）：
@@ -1818,10 +1921,26 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
             no = int(_VR.as_proof_no(proof_no) or 1)
         except (TypeError, ValueError):
             no = 1
-        block = manuscript_sign_standing(str(manuscript_text), proof_sha=sha)
+        block = manuscript_sign_standing(str(manuscript_text), proof_sha=sha,
+                                         manuscript_path=manuscript_path)
         out.update(checked=bool(block.get("checked")),
                    found=bool(block.get("found")), artifact_sha=sha,
                    why=str(block.get("why") or ""), block=dict(block))
+        # ---- 2026-11-02：两道判据（业主：「稿号→在册命题 映射 + 正文逐字 sha」）----
+        #
+        # 位置在"块说 signed"之前：块自己说 signed（sha 与连续次数都对）也不够 ——
+        # 它还必须挂得到这一条在册命题上，而且盖的是这份稿里现在这一份正文。
+        # 不过那两道就认签（84 的"块盖 #p3、文件正文 #p2"正是这样被认过去的）。
+        gate = manuscript_sign_gate(block, statement_id=str(statement_id or ""),
+                                    registered=_registered_ids(store))
+        out["gate"] = dict(gate)
+        if gate.get("code"):
+            out.update(applied=False, code=str(gate["code"]),
+                       reason=str(gate.get("reason") or ""),
+                       suggestion=str(gate.get("suggestion") or ""),
+                       why=(f"{gate.get('reason')} ⇒ 不认这一块"
+                            f"（{gate.get('code')}）；建议：{gate.get('suggestion')}"))
+            return dict(bits), out
         if str(block.get("state") or "") == "signed":
             new = _apply_review_to_bits(
                 bits, verification_id="", evidence=str(block.get("ledger") or ""),

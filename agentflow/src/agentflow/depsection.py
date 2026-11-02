@@ -67,6 +67,22 @@ SOURCE_CARRIED = "carried_by_D"
 SOURCE_DISK = "disk"
 SOURCE_NONE = "none"
 
+#: 二次寻址的三种形态（2026-11-02 业主：二次寻址必须是确定性工具，不许消耗 LLM 的 token）。
+#:
+#: | 值 | 什么时候 |
+#: |---|---|
+#: | `auto` | 由本模块的纯函数寻址（`read_carried_manuscript` / `read_manuscript`），零模型调用 |
+#: | `model` | 寻址这一步被模型参与过（本仓的结构里不该出现；出现了要能读出来） |
+#: | `unknown` | 这一趟没有寻址 / 没查成（不许折成「auto」） |
+ADDRESS_MODES: tuple[str, ...] = ("auto", "model", "unknown")
+
+#: 携带单点了名、而那个地址读不到 ⇒ 受控拒绝（2026-11-02 业主）。
+#:
+#: 为什么它必须是拒绝而不是"降级去盘上自己找"：D 的清单是 B 的唯一寻址依据
+#: （业主：「B侧需寻址获得F侧证明及V签」）。清单点名却读不到，说明清单与盘不一致
+#: —— 那时换一条自己找的路，就是把"照单收录"换成了"猜一份稿"。
+REFUSED_ADDRESS = "manuscript_address_unreadable"
+
 #: D 的研究报告里那一节的段标题（携带单；逐字固定，渲染与解析共用一个常量）。
 CARRIED_HEADING = "## 携带的证明手稿"
 #: 携带单的三列（命题号 / 手稿路径 / sha256）。
@@ -588,28 +604,86 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
     return "\n".join(lines) + "\n"
 
 
-def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = ()) -> dict[str, Any]:
-    """在 D 的报告里找"这一条命题的证明手稿"，找到就把正文读回来。
+def _carried_target(base: Path, hit: Mapping[str, Any],
+                    tried: list[dict[str, Any]]) -> tuple[str, str]:
+    """按携带单的一行到盘上去读那份 F 稿 ⇒ `(text, 文件 sha256)`。
 
-    返回 `{checked, source, text, path, sha256, carried_by, tried, why}`：
-    `source=carried_by_D` 只在"携带单里有这个号、文件读得到、sha256 相符（给了就核）"时成立；
+    读不到就回 `("", "")`，并把原因追加进 `tried`（不在这一层抛、也不静默）。
+    判据三条：路径不许越出工作区 / 文件要在盘上 / 携带单给了 sha256 就必须相符。
+    """
+    import hashlib
+
+    rel = str(hit.get("path") or "")
+    raw_target = Path(rel)
+    if raw_target.is_absolute() or ".." in raw_target.parts:
+        tried.append({"statement_id": hit.get("statement_id"), "path": rel,
+                      "why": "携带单里的路径越出工作区（绝对路径或含 ..）⇒ 不读"})
+        return "", ""
+    target = base / raw_target
+    if not target.is_file():
+        tried.append({"statement_id": hit.get("statement_id"), "path": rel,
+                      "why": "携带单点名的文件不在盘上"})
+        return "", ""
+    try:
+        blob = target.read_bytes()
+    except OSError as exc:  # noqa: BLE001 - 读失败与"不在"分得开
+        tried.append({"statement_id": hit.get("statement_id"), "path": rel,
+                      "why": f"读不出来（{type(exc).__name__}: {exc}）"})
+        return "", ""
+    sha = hashlib.sha256(blob).hexdigest()
+    want = str(hit.get("sha256") or "")
+    if want and want != sha:
+        tried.append({"statement_id": hit.get("statement_id"), "path": rel,
+                      "why": (f"sha256 对不上（携带单写 {want[:12]}…，盘上是 {sha[:12]}…）"
+                              "⇒ 这份稿不是 D 交的那一版，不拿它登记")})
+        return "", ""
+    text = blob.decode("utf-8", errors="replace")
+    if not text.strip():
+        tried.append({"statement_id": hit.get("statement_id"), "path": rel,
+                      "why": "文件在，但正文是空的"})
+        return "", ""
+    return text, sha
+
+
+def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
+                            proof_text: Any = "") -> dict[str, Any]:
+    """在 D 的报告里找"这一条命题的证明手稿"，找到就把正文读回来（纯读，零模型调用）。
+
+    返回 `{checked, source, text, path, sha256, carried_by, tried, why, named, address,
+    item, list_report, list_line, list_sha256, matched_by}`。
+
+    ## 怎么认这一笔（两条路，都在清单里找，绝不自己到盘上猜）
+    1. 按候选命题号（`statement_ids`）命中清单里的那一行；
+    2. 号对不上时（首次登记还没有号、`proof_manuscript` 也没给），按正文命中：
+       逐行按地址去读那份 F 稿，谁的「## 证明」正文 sha 等于 `proof_text` 的 sha 就是它。
+       2026-11-02 业主：「B侧需寻址获得F侧证明及V签」—— 号还不知道时，正文是清单里
+       唯一能对上的东西；这一步仍是清单内寻址，不是"按约定路径撞见一份稿"。
+
+    `source=carried_by_D` 只在"清单里有这一条、文件读得到、sha256 相符（给了就核）"时成立；
     任何一处不成立都落到 `none` 并把原因写进 `tried` / `why` —— 静默用一份对不上的稿
     比读不到更坏（依赖边会挂到别人的论证上）。
 
-    为什么这是主路而不是兜底：业主 2026-10-26 的原话是「是通过D传吗」——
-    携带者 D、收方 B；B 自己按约定路径撞见一份稿（`disk`）只算历史调用 / 直调那一档。
+    ## `named`（2026-11-02）
+    `named=True` 表示"清单点了这一笔的名"（按号或按正文命中了那一行）：即便地址读不到，
+    调用方也必须受控拒绝而不是降级去盘上自己找（`depsection.REFUSED_ADDRESS`）。
+    `address` / `item` / `list_report` / `list_line` / `list_sha256` 五格是"按哪条清单、
+    第几项、什么地址"的读数。
     """
     import hashlib
 
     root_text = str(root or "").strip()
     out: dict[str, Any] = {"checked": False, "source": SOURCE_NONE, "text": "", "path": "",
-                           "sha256": "", "carried_by": "", "tried": [], "why": ""}
+                           "sha256": "", "carried_by": "", "tried": [], "why": "",
+                           "named": False, "address": "", "item": 0,
+                           "list_report": "", "list_line": 0, "list_sha256": "",
+                           "matched_by": ""}
     if not root_text:
         out["why"] = "没有工作区根（`root` 是空的）⇒ 读 D 报告里那张携带单这一趟没查成"
         return out
     base = Path(root_text)
     tried: list[dict[str, Any]] = out["tried"]
     index: dict[str, dict[str, Any]] = {}
+    candidates: list[dict[str, Any]] = []
     for rel in d_report_paths(root_text):
         try:
             text = (base / rel).read_text(encoding="utf-8")
@@ -620,9 +694,22 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = ()) -> 
         tried.append({"report": rel, "present": bool(got.get("present")),
                       "rows": len(got.get("rows") or []),
                       "problems": len(got.get("problems") or [])})
-        for row in got.get("rows") or []:
-            index.setdefault(str(row["statement_id"]), {**row, "report": rel})
+        for i, row in enumerate(got.get("rows") or [], 1):
+            one = {**row, "report": rel, "item": i}
+            candidates.append(one)
+            index.setdefault(str(row["statement_id"]), one)
     out["checked"] = True
+
+    def _hit(one: Mapping[str, Any], *, matched_by: str) -> dict[str, Any]:
+        """把清单里的这一行写进读数（按号命中 / 按正文命中共用一处）。"""
+        out.update(named=True, address=str(one.get("path") or ""),
+                   item=int(one.get("item") or 0),
+                   list_report=str(one.get("report") or ""),
+                   list_line=int(one.get("line") or 0),
+                   list_sha256=str(one.get("sha256") or ""),
+                   matched_by=matched_by)
+        return out
+
     for raw in statement_ids or ():
         sid = str(raw or "").strip().split("#", 1)[0].split(":", 1)[-1].strip()
         if not sid:
@@ -630,45 +717,53 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = ()) -> 
         hit = index.get(sid)
         if hit is None:
             continue
-        rel = str(hit.get("path") or "")
-        raw_target = Path(rel)
-        if raw_target.is_absolute() or ".." in raw_target.parts:
-            tried.append({"statement_id": sid, "path": rel,
-                          "why": "携带单里的路径越出工作区（绝对路径或含 ..）⇒ 不读"})
+        text, sha = _carried_target(base, hit, tried)
+        _hit(hit, matched_by="statement_id")
+        if not text:
             continue
-        target = base / raw_target
-        if not target.is_file():
-            tried.append({"statement_id": sid, "path": rel, "why": "携带单点名的文件不在盘上"})
-            continue
-        try:
-            blob = target.read_bytes()
-        except OSError as exc:  # noqa: BLE001 - 读失败与"不在"分得开
-            tried.append({"statement_id": sid, "path": rel,
-                          "why": f"读不出来（{type(exc).__name__}: {exc}）"})
-            continue
-        sha = hashlib.sha256(blob).hexdigest()
-        want = str(hit.get("sha256") or "")
-        if want and want != sha:
-            tried.append({"statement_id": sid, "path": rel,
-                          "why": (f"sha256 对不上（携带单写 {want[:12]}…，盘上是 {sha[:12]}…）"
-                                  "⇒ 这份稿不是 D 交的那一版，不拿它登记")})
-            continue
-        text = blob.decode("utf-8", errors="replace")
-        if not text.strip():
-            tried.append({"statement_id": sid, "path": rel, "why": "文件在，但正文是空的"})
-            continue
-        return {"checked": True, "source": SOURCE_CARRIED, "text": text, "path": rel,
-                "sha256": sha, "carried_by": str(hit.get("report") or ""),
-                "tried": tried, "why": ""}
-    if not index:
+        return {**out, "source": SOURCE_CARRIED, "text": text,
+                "path": str(hit.get("path") or ""), "sha256": sha,
+                "carried_by": str(hit.get("report") or ""), "why": ""}
+    # ---- 2026-11-02：号还不知道时按正文命中（仍在清单内寻址）----
+    want = (hashlib.sha256(str(proof_text or "").encode("utf-8")).hexdigest()
+            if str(proof_text or "").strip() else "")
+    unreadable: list[dict[str, Any]] = []
+    if want and candidates:
+        for hit in candidates:
+            text, sha = _carried_target(base, hit, tried)
+            if not text:
+                unreadable.append(dict(hit))
+                continue
+            body = proof_body(text).strip("\n")
+            got = hashlib.sha256(body.encode("utf-8")).hexdigest()
+            if got != want:
+                tried.append({"statement_id": hit.get("statement_id"),
+                              "path": hit.get("path"),
+                              "why": ("清单里这一份的「## 证明」正文 sha 与这一笔登记的不是"
+                                      "同一份 ⇒ 不是它")})
+                continue
+            _hit(hit, matched_by="proof_sha")
+            return {**out, "source": SOURCE_CARRIED, "text": text,
+                    "path": str(hit.get("path") or ""), "sha256": sha,
+                    "carried_by": str(hit.get("report") or ""), "why": ""}
+        if len(unreadable) == len(candidates):
+            # 清单里的每一条地址都读不到 ⇒ 这不是"清单里没有这一笔"，是"按清单寻址失败"。
+            # 调用方必须受控拒绝（`REFUSED_ADDRESS`），不许降级去盘上自己找一份。
+            first = unreadable[0]
+            _hit(first, matched_by="")
+            out["why"] = ("D 的携带单点了名，而清单里的地址一条都读不到："
+                          + "；".join(str(t.get("why") or "") for t in tried[-len(unreadable):]))
+            return out
+    if not candidates:
         out["why"] = ("D 的报告里没有「携带的证明手稿」那一节（或那一节是空的）"
                       + ("；查过：" + "、".join(str(t.get("report") or "") for t in tried)
                          if tried else "；工作区里连一份 D 报告都没有"))
-    else:
+    elif statement_ids:
         out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，没有一条对得上这一笔的命题号"
                       f"{[str(x) for x in statement_ids][:4]}")
+    else:
+        out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，按正文 sha 一条都没对上这一笔")
     return out
-
 
 def manuscript_statement_id(text: str) -> str:
     """手稿开头元信息里那个"命题号：stmt:<号>"⇒ 裸号（没有 ⇒ 空串）。

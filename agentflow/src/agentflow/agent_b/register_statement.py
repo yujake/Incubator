@@ -1176,6 +1176,7 @@ class _RegisterStatement:
         manuscript_source = _DS.SOURCE_NONE
         manuscript_probe: dict = {}
         manuscript_carried: dict = {}
+        manuscript_path = ""
         manuscript_text = str(proof_manuscript or "")
         probe_ids = _DS.candidate_statement_ids(
             derived_from=derived_from, proof_text=proof_text,
@@ -1190,25 +1191,76 @@ class _RegisterStatement:
             # 这不是"猜谁调的"，判据是盘上那份报告里的三列表与这份正文逐字相符：
             # 携带单没有它、或 sha 对不上 ⇒ 照旧记 `param`（那是别的调用方直递的）。
             probe_carried = _DS.read_carried_manuscript(
-                getattr(self.store, "root", ""), statement_ids=probe_ids)
+                getattr(self.store, "root", ""), statement_ids=probe_ids,
+                proof_text=proof_text)
             if (str(probe_carried.get("source") or "") == _DS.SOURCE_CARRIED
                     and _same_manuscript_text(probe_carried.get("text"), manuscript_text)):
                 manuscript_source = _DS.SOURCE_CARRIED
                 manuscript_carried = probe_carried
+                manuscript_path = str(probe_carried.get("path") or "")
             else:
                 manuscript_source = _DS.SOURCE_PARAM
         else:
             manuscript_carried = _DS.read_carried_manuscript(
-                getattr(self.store, "root", ""), statement_ids=probe_ids)
+                getattr(self.store, "root", ""), statement_ids=probe_ids,
+                proof_text=proof_text)
             if str(manuscript_carried.get("source") or "") == _DS.SOURCE_CARRIED:
                 manuscript_text = str(manuscript_carried.get("text") or "")
                 manuscript_source = _DS.SOURCE_CARRIED
+                manuscript_path = str(manuscript_carried.get("path") or "")
+            elif bool(manuscript_carried.get("named")):
+                # ---- 2026-11-02 业主：「B 按清单寻址；清单地址读不到就受控拒绝，
+                #      不许换一条自己找的路」 ----
+                #
+                # 判据是"清单点了这一笔的名"（`named`），不是"盘上有没有一份看起来像的稿"：
+                # 清单与盘不一致时，兜底读盘会把"照单收录"换成"猜一份稿"，而猜错的那一份
+                # 会带着自己的依赖面与签块记到这一条命题头上（源与收方错配，读数却一切正常）。
+                addressing = {
+                    "checked": True, "mode": "auto",
+                    "source": _DS.SOURCE_NONE, "hit": False,
+                    "address": str(manuscript_carried.get("address") or ""),
+                    "list_report": str(manuscript_carried.get("list_report") or ""),
+                    "list_item": int(manuscript_carried.get("item") or 0),
+                    "list_line": int(manuscript_carried.get("list_line") or 0),
+                    "list_sha256": str(manuscript_carried.get("list_sha256") or ""),
+                    "refusal": _DS.REFUSED_ADDRESS,
+                    "reason": ("D 的携带单点了这一笔的号，而那个地址读不到："
+                               + str(manuscript_carried.get("why") or "没有理由")),
+                    "suggestion": ("让 D 重递一次研究手稿（清单里那一条的 `手稿路径` / `sha256` "
+                                   "要与盘上那份 F 稿一致），或用 `proof_manuscript` 把这一份稿"
+                                   "直接递进来；B 不自己去盘上另找一份。"),
+                }
+                return _refuse(
+                    _DS.REFUSED_ADDRESS,
+                    (f"二次寻址没成：{addressing['reason']} ⇒ 整笔不写"
+                     "（清单是唯一寻址依据，换一条自己找的路就是猜）。"
+                     f"建议：{addressing['suggestion']}"),
+                    addressing=addressing,
+                    manuscript_source=manuscript_source,
+                    manuscript_path=str(manuscript_carried.get("address") or ""))
             else:
                 manuscript_probe = _DS.read_manuscript(
                     getattr(self.store, "root", ""), statement_ids=probe_ids)
                 if str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK:
                     manuscript_text = str(manuscript_probe.get("text") or "")
                     manuscript_source = _DS.SOURCE_DISK
+                    manuscript_path = str(manuscript_probe.get("path") or "")
+        #: 2026-11-02：二次寻址的读数（业主：「二次寻址做成自动工具，不要消耗 LLM 的 token」）。
+        #: `mode` 三态 `auto` / `model` / `unknown`；本仓这条链上全程是纯函数 ⇒ `auto`，
+        #: 没寻址（参数直递 / 三处都没有）⇒ 仍记 `auto` 且 `hit` 说清命中没有（"没查成"
+        #: 只留给函数抛异常那一档，见下面的异常边缘）。`model` 这一档刻意留着：它一旦出现，
+        #: 就是"某条路把寻址交给了模型"，读数要能把它抓出来。
+        addressing = {
+            "checked": True, "mode": "auto",
+            "source": str(manuscript_source or _DS.SOURCE_NONE),
+            "hit": bool(manuscript_text.strip()),
+            "address": str(manuscript_path or ""),
+            "list_report": str(manuscript_carried.get("list_report") or ""),
+            "list_item": int(manuscript_carried.get("item") or 0),
+            "list_line": int(manuscript_carried.get("list_line") or 0),
+            "list_sha256": str(manuscript_carried.get("list_sha256") or ""),
+            "refusal": "", "reason": "", "suggestion": "",
+        }
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
@@ -1754,7 +1806,11 @@ class _RegisterStatement:
                 proof_no=1, kind=str(kind_now or ""),
                 # 2026-11-02（业主：「V 签先放在 F 的手稿里，让 B 录入」）：
                 # 收录时先读手稿里那一行签块（`vsigns.manuscript_sign_standing`）。
-                manuscript_text=str(manuscript_text or ""))
+                manuscript_text=str(manuscript_text or ""),
+                # 2026-11-02（业主：「B侧需寻址获得F侧证明及V签」）：签块的第 9 格
+                # 手稿号要与它所处那份稿对得上；在册命题的集合从 store 现读（只读判据）。
+                manuscript_path=str(manuscript_path or ""),
+                store=self.store)
         except Exception as exc:  # noqa: BLE001 —— 认签那一格读不成不许带走整笔登记
             v_sign = {"checked": False, "found": False, "applied": False,
                       "artifact_sha": "",
@@ -1821,6 +1877,7 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   "addressing": dict(addressing),
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
                    "proof_vs_source": dict(proof_vs_source),
@@ -1865,6 +1922,8 @@ class _RegisterStatement:
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
             out["v_sign"] = dict(v_sign)
+            #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+            out["addressing"] = dict(addressing)
             return out
         if written.get("upgraded") and not written.get("created"):
             # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书「改那一行」
@@ -1888,6 +1947,7 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   "addressing": dict(addressing),
                    "manuscript_washed": manuscript_washed,
                    "manuscript_wash": dict(manuscript_wash),
                    "proof_vs_source": dict(proof_vs_source),
@@ -1925,6 +1985,8 @@ class _RegisterStatement:
             if md:
                 out["manuscript_deps"] = md
             out["v_sign"] = dict(v_sign)
+            #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+            out["addressing"] = dict(addressing)
             return out
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
@@ -1965,6 +2027,7 @@ class _RegisterStatement:
                        "deps_missing": _deps_reading(written),
                        #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                        "manuscript_source": manuscript_source,
+                       "addressing": dict(addressing),
                        "manuscript_washed": manuscript_washed,
                        "manuscript_wash": dict(manuscript_wash),
                        "proof_vs_source": dict(proof_vs_source),
@@ -2018,6 +2081,8 @@ class _RegisterStatement:
                 if md:
                     out["manuscript_deps"] = md
                 out["v_sign"] = dict(v_sign)
+                #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+                out["addressing"] = dict(addressing)
                 return out
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",
@@ -2158,6 +2223,7 @@ class _RegisterStatement:
                 #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
+                "addressing": dict(addressing),
                 "manuscript_washed": manuscript_washed,
                 "manuscript_wash": dict(manuscript_wash),
                 #: 与来源是否逐字一致（信息格，不是门）：`same=None` = 没有可比对的那一份。
