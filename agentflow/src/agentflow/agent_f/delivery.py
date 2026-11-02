@@ -30,7 +30,7 @@
 | `signed_count` | 「已签」的条数 |
 | `pending_count` | 「待签」的条数（还没送审，或审过、连续次数没到 —— 都不是「没过」） |
 | `unsigned_count` | 「未签」的条数（V 判过、结论不是能签的那一档；或这一份根本没查成） |
-| `coverage` | 已签 ÷ 总数，化成「最简分数」（3/3 读作 `1/1`、1/3 读作 `1/3`） |
+| `coverage` | 已签 ÷ 总数，化成「最简分数」（3/3 读作 `1/1`、1/3 读作 `1/3`；0 条已签照实写 `0/N`） |
 | `coverage_reading` | 未约分的「已签/总数」（`3/3`）—— 要原始条数看这一格 |
 | `coverage_ratio` | 0..1 的数；0 条成果时是 `None`（不是 0 —— 没有分母） |
 | `state` | `signed_all` / `outputs_settled` / `outputs_unsigned` / `researched_no_output` / `not_started` |
@@ -275,6 +275,10 @@ def coverage_of(signed: int, total: int) -> dict[str, Any]:
     if total <= 0:
         return {"coverage": "", "coverage_reading": "0/0", "coverage_ratio": None,
                 "coverage_why": "0 条成果 ⇒ 覆盖率没有分母（不是 0%，也不是 100%）"}
+    if signed <= 0:
+        # 0 没有可约的东西：写 0/1 会把「2 条全没签」读成「只有 1 条」。分母照实给。
+        return {"coverage": f"0/{total}", "coverage_reading": f"0/{total}",
+                "coverage_ratio": 0.0, "coverage_why": ""}
     g = gcd(signed, total) or 1
     return {"coverage": f"{signed // g}/{total // g}",
             "coverage_reading": f"{signed}/{total}",

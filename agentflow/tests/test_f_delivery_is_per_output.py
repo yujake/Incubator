@@ -180,6 +180,17 @@ def test_b_three_of_three_signed_reads_as_full_coverage(tmp_path):
     assert reading.get("delivered") is True, reading
 
 
+def test_b2_zero_signed_is_not_read_as_one_output():
+    """0 条已签照实写 `0/N`（0 没有可约的东西）：`0/2` 不许读成「只有 1 条」。"""
+    from agentflow.agent_f import delivery as FD
+
+    assert FD.coverage_of(0, 2)["coverage"] == "0/2", FD.coverage_of(0, 2)
+    assert FD.coverage_of(0, 5)["coverage"] == "0/5", FD.coverage_of(0, 5)
+    assert FD.coverage_of(1, 3)["coverage"] == "1/3"
+    assert FD.coverage_of(3, 3)["coverage"] == "1/1"
+    assert FD.coverage_of(2, 4)["coverage"] == "1/2"
+
+
 # ============================================================ d：反真空
 def test_d_stubbing_back_to_a_single_delivered_turns_a_red(tmp_path, monkeypatch):
     """d 反真空：把「逐条」打桩回改前的单一 `delivered` ⇒ a 那组断言必须红。
