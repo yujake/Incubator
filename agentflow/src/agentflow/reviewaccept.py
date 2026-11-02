@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 #: 五条内容级判据（顺序即交付说明里的顺序）。
 #:
@@ -31,7 +31,8 @@ from typing import Any
 #: （落在 `closing._check_report_shape` 的 `REPORT-STYLE.json` 那一支）。
 #: 附件三件套（来源 / 依据 / 版本 sha）保留判实，由 `attachment_is_honest` 这一条承担。
 CRITERIA: tuple[tuple[str, str], ...] = (
-    ("statements_have_assumptions_and_source", "定理台账每条都有完整假设与出处（含页码）"),
+    ("statements_have_assumptions_and_source",
+     "定理台账每条都有完整假设与出处（引文型命题含页码；概念行与自有结果按各自出处）"),
     ("triage_branch_recorded", "三态分支正确：该问用户的真问了，且问题落盘可查"),
     ("within_cost_cap", "在成本上限内完成"),
     ("hops_have_readable_prompts", "每一跳都留下了可读的输入（`input_key`+台账引用不悬空）"),
@@ -105,19 +106,90 @@ class ReviewAcceptance:
 
 # ------------------------------------------------------------------ 各条判据
 
+#: 概念行的 `kind` 取值（唯一出处：`conceptrows.concept_statement` 写死 `kind="concept"`）。
+#: 判据只用它分开"引文型命题"与"定义型概念行"，不另立一份概念的构造口径。
+CONCEPT_KIND = "concept"
+
+
+def _range_has_start_or_label(value: Any) -> bool:
+    """`page_range` / `line_range` 的"填了内容"判据：`start` 或 `label` 至少一个非空。
+
+    两个字段用同一把尺：`external_lit` 的 `page_range` 与 `own_result` 的
+    `line_range` 是同一件事（出处落在哪儿）的两个落点。不是 Mapping 的旧行
+    （历史上出现过字符串形态）按"没有可用区间"读 —— 与原来那两句判据等价，
+    只是不再因为形态不对而在读侧抛异常。
+    """
+    if not isinstance(value, Mapping):
+        return False
+    return bool(value.get("start") or str(value.get("label") or "").strip())
+
+
+def statement_source_problem(row: Mapping[str, Any]) -> str:
+    """一条 `active` 命题的「出处」那一栏该怎么填 ⇒ 空串 = 合格，否则一句可读的缺项。
+
+    ## 按来源分档（§68 人裁的甲档，2026-10-03）
+
+    - `own_result`（我们自己得的）：出处是「我们自己的产物」⇒ 要 `doc_id` 或
+      `line_range`；对它提 `page_range` 是把"文献第几页"套到"我们自己证的"上来；
+    - `external_lit`（从文献里摘的）：要 `source_lit_id`；引文型命题还要
+      `page_range`（`start` 或 `label` 至少一个非空）—— 缺页码的摘录无法复核；
+    - 词表外的 `origin`：说不出它的出处该填哪一栏 ⇒ 记缺字段（不拿 `external_lit`
+      的规则蒙一个结论）。
+
+    ## 为什么概念行不要页码（2026-11-02，84 收工的 60 条读数全是这一类）
+
+    `kind="concept"` 的行是定义，不是从某一页逐字摘下来的一句：它的
+    `source_lit_id` 记的是"这个术语出自哪一篇"（`agent_b/run_once.py:255-259`
+    逐字这么写），定义本身是 B 在多处说法上综合出来的（真机 84 的 `000002`：
+    `statement_full` 是四种说法用「；」拼起来的）。盘上也没有任何一格能带页码：
+    `schema.Concept` 没有 `page_range`，`conceptrows.concept_statement` 也没有这个
+    参数 ⇒ 对它提页码就是 `verify.py:1727-1734` 记过的"恒红的机器"（那里已经用
+    同一条理由把概念行排除出"逐字回验"）。
+
+    这不是把必填删掉：`external_lit` 的定理/引理/命题缺页码，下面照旧返回缺项
+    （`tests/test_review_acceptance.py` 的一对正负控钉住两边）；缺页码的概念行与
+    自有结果不判失败，但进 `readings["page_range_not_required"]` 单独计数。
+    """
+    sid = str(row.get("stmt_id") or "")
+    if not str(row.get("statement_full") or "").strip():
+        return f"{sid} 缺 statement_full（完整假设）"
+    origin = str(row.get("origin") or "")
+    if origin == "own_result":
+        if not (str(row.get("doc_id") or "").strip()
+                or _range_has_start_or_label(row.get("line_range"))):
+            return f"{sid} 缺 own_result 的出处（doc_id 或 line_range）"
+        return ""
+    if origin == "external_lit":
+        if not str(row.get("source_lit_id") or "").strip():
+            return f"{sid} 缺 source_lit_id（出处）"
+        if str(row.get("kind") or "") == CONCEPT_KIND:
+            return ""
+        if not _range_has_start_or_label(row.get("page_range")):
+            return f"{sid} 缺 page_range（页码）"
+        return ""
+    return (f"{sid} 的 origin={origin!r} 不在 STATEMENT_ORIGINS 里 ⇒ "
+            "说不出它的出处该填哪一栏")
+
+
 def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
-    """② 定理台账每条都有完整假设与出处 —— 而"出处"按来源分档（§68 人裁的甲档）。
+    """② 定理台账每条都有完整假设与出处 —— 而"出处"按来源与 `kind` 分档。
 
     只查 `active` 的那些：`disputed`/`refuted`/`superseded` 本来就不许当依据，
     对它们提"必须有假设与出处"是把处置方向搞反（§17.3 问的是交付里的定理）。
 
-    ## 两种来源要的"出处"不是同一件东西
+    ## 哪一栏必填，口径只有一处
 
-    - `external_lit`（从文献里摘的）：`source_lit_id` 必须有，且 `page_range`
-      的 `start` 或 `label` 至少一个非空 —— 缺页码的摘录无法复核；
-    - `own_result`（我们自己得的）：出处是「我们自己的产物」，要的是
-      `doc_id` 或 `line_range`（`line_range` 的 `start`/`label` 至少一个非空）；
-      对它提 `page_range` 是把"文献第几页"套到"我们自己证的"上来。
+    `statement_source_problem`（本模块的纯函数）说"这一行缺什么"：`own_result`
+    要 `doc_id`/`line_range`，`external_lit` 要 `source_lit_id`，引文型命题
+    还要 `page_range`；概念行（`kind="concept"`）只到文献级、不要页码，
+    理由见那个函数的 docstring（84 的 60 条读数就是这一档）。
+
+    ## 单独计数的两格（不是静默豁免）
+
+    缺页码但不该被要页码的两类行进 `readings["page_range_not_required"]`：
+    概念行（出处是"术语来自哪一篇"）与自有结果（出处是 `doc_id`/`line_range`）。
+    它们不参与 `statements_missing_fields`（那份清单是"真的缺了"），但"有多少条
+    没有页码"仍然要是个读得出来的数 —— 把豁免做成静默的是本项目最忌的形态。
 
     为什么必须与写入口说同一件事：判据要求而写入口放行的字段，会在台账里
     长期躺着"看着有、其实没有"的行（第十三趟那六条空 `page_range` 就是这么进去的）。
@@ -129,29 +201,30 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
         return
     rows = [r for r in store.rows("statements") if str(r.get("status") or "") == "active"]
     bad: list[str] = []
+    not_required: dict[str, list[str]] = {"concept_rows": [], "own_result_rows": []}
     for r in rows:
-        sid = str(r.get("stmt_id"))
+        sid = str(r.get("stmt_id") or "")
+        problem = statement_source_problem(r)
+        if problem:
+            bad.append(problem)
+            continue
+        if _range_has_start_or_label(r.get("page_range")):
+            continue        # 页码真的填了（概念行也可以有，有了不算错）⇒ 不进任何一栏
         origin = str(r.get("origin") or "")
-        if not str(r.get("statement_full") or "").strip():
-            bad.append(f"{sid} 缺 statement_full（完整假设）")
-        page = r.get("page_range") or {}
-        line = r.get("line_range") or {}
         if origin == "own_result":
-            if not (str(r.get("doc_id") or "").strip()
-                    or line.get("start") or str(line.get("label") or "").strip()):
-                bad.append(f"{sid} 缺 own_result 的出处（doc_id 或 line_range）")
-        elif origin == "external_lit":
-            if not str(r.get("source_lit_id") or "").strip():
-                bad.append(f"{sid} 缺 source_lit_id（出处）")
-            if not (page.get("start") or str(page.get("label") or "").strip()):
-                bad.append(f"{sid} 缺 page_range（页码）")
-        else:
-            # 词表外的来源：这一行的"出处该是哪一栏"没有定义 ⇒ 按缺字段记（fail），
-            # 而不是拿 external_lit 的规则蒙一个结论。
-            bad.append(f"{sid} 的 origin={origin!r} 不在 STATEMENT_ORIGINS 里 ⇒ "
-                       "说不出它的出处该填哪一栏")
+            not_required["own_result_rows"].append(sid)
+        elif origin == "external_lit" and str(r.get("kind") or "") == CONCEPT_KIND:
+            not_required["concept_rows"].append(sid)
     acc.readings["active_statements"] = len(rows)
     acc.readings["statements_missing_fields"] = bad
+    acc.readings["page_range_not_required"] = {
+        **not_required,
+        "note": ("这两类行结构上就没有'第几页'：概念行的 `source_lit_id` 只到文献级"
+                 "（定义是 B 综合的，不是某页的逐字摘录）；自有结果的出处是 "
+                 "`doc_id` / `line_range`。它们不构成不通过，也不进 "
+                 "`statements_missing_fields` —— 单独列出来是为了让'有多少条没有页码'"
+                 "仍然读得出来（静默豁免是本项目最忌的形态）。"),
+    }
     if not rows:
         # 台账是空的：这不是"都合规"，而是"没有内容可审" ⇒ fail（不是 unknown：
         # 没东西可审这件事本身是查清楚了的）。
