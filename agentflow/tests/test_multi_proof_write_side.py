@@ -46,6 +46,8 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
+from conftest import seed_statement_row
+
 STATEMENT = "设 G 是 3-正则群；则弦长函数不是常值。"
 STATEMENT_TEXT = "弦长函数不是常值"
 #: 自产命题的两件式（定理内容 + 证明过程）：`doc_id` 与 `quote_reason` 是本动作的硬要求
@@ -149,6 +151,7 @@ def _scrub(row: dict) -> dict:
 
 # ============================================================ ① 老写法逐字兼容
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_a_proof_text_only_call_is_byte_identical_to_a_one_proof_list(tmp_path):
     """① 老写法（只给 `proof_text`）与等价的 `proofs=[#p1]` 落出逐字节相同的行。
 
@@ -181,6 +184,7 @@ def test_a_proof_text_only_call_is_byte_identical_to_a_one_proof_list(tmp_path):
 
 # ============================================================ ② 多证明写入
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_two_proofs_put_p1_in_proof_text_and_p2_in_the_list(tmp_path):
     """② `proofs=[{1,甲},{2,乙}]` ⇒ `proof_text`=甲、清单里有 `{2,乙}`、号唯一。"""
     st = _ws(tmp_path)
@@ -242,53 +246,57 @@ def test_a_duplicate_proof_no_refuses_the_whole_call(tmp_path):
 
 
 def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_path):
-    """③ 的同族（既有行这一侧）：后补的证明追加，同号不同正文不覆盖（canonical 除外）。
+    """③ 的同族（既有行这一侧）—— 期望反转（准入闸变严：无签不再可写）。
 
-    分四步，每一步都判"盘上到底变了什么"：
-    1. 先登记（#p1 + #p2）；
-    2. 再交同一条定理、带 #p3 ⇒ 不新建行，清单追加 #p3（这是"一条定理多条证明"的常态：
-       证明不是一次交齐的）；
-    3. 再交同号 #p2、正文不同 ⇒ `proof_no_taken`，整笔不写（#p2 还是原来那一份，
-       而它的签名可能还挂着）；
-    4. 再交 canonical 正文、与盘上不同 ⇒ 写入成功，旧正文进 `proof_history`
-       （2026-10-22 审计后：签名是读数，不是门锁）。
+    改前：后补的证明追加成功、同号不同正文 ⇒ `proof_no_taken`、canonical 改版 ⇒
+    写入成功（旧正文进 `proof_history`）。
+    改后（2026-11-02 准入闸 strict）：这一笔要写的每一份正文都要有覆盖它的 V 签，
+    而"补 #pN / 改版"的新正文一份签都没有 ⇒ 三笔都读 `proof_without_v_sign`
+    （整笔不写）。盘上原样、台账不增行两条断言保留。
+
+    现场按历史形态铺行（`#p1`+`#p2` 已在册、还没有签）—— strict 下"有证明、无签"
+    经 `register_statement` 造不出来，而这一条测的是写入被拒之后盘上有没有变。
     """
     st = _ws(tmp_path)
     b = _agent(st)
-    first = b.register_statement(
-        **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
-    assert first["ok"] is True, first
-    sid = _row(st)["stmt_id"]
+    seeded = seed_statement_row(
+        st, proof_text=P1, statement_full=OWN["statement_full"],
+        statement_text=OWN["statement_text"], kind="conjecture",
+        label="弦长函数不是常值", origin="own_result", doc_id=S.format_id(0),
+        quote_reason=OWN["quote_reason"],
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    sid = str(seeded["stmt_id"])
+    before = _row(st)
+    assert [no for no, _ in VR.proof_list(before)] == [1, 2], VR.proof_list(before)
 
     P3 = "第三条路线：\n1. 用对偶。\n2. 收尾。"
     more = b.register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 3, "text": P3}])
-    assert more["ok"] is True, more
-    assert more["stmt_id"] == sid and more.get("new_row") is False, more
-    assert len(st.rows("statements")) == 1, st.rows("statements")
-    assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2, 3], VR.proof_list(_row(st))
+    assert more["ok"] is False and more["kind"] == "proof_without_v_sign", more
+    assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2], (
+        "整笔被拒之后盘上的证明清单变了", VR.proof_list(_row(st)))
 
     taken = b.register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1},
                        {"proof_no": 2, "text": P2 + "\n（换了一个版本）"}])
-    assert taken["ok"] is False and taken["kind"] == "proof_no_taken", taken
-    assert "#2" in taken["error"], taken["error"]
+    assert taken["ok"] is False and taken["kind"] == "proof_without_v_sign", taken
     assert VR.proof_text_of(_row(st), 2) == P2, "既有 #p2 的正文不许被覆盖"
-    assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2, 3], VR.proof_list(_row(st))
 
-    # #p1 不同：2026-10-22 审计后 canonical 正文允许覆盖（签名是读数，不是门锁）——
-    # 写入成功，旧正文整段留进行的 `proof_history`。改前的期望值是 `proof_text_taken`
-    # 拒收，那条口径让 canonical 永远改不动，已作废。
     canon = b.register_statement(**OWN, proof_text=P1 + "\n（换了一个版本）")
-    assert canon["ok"] is True and canon.get("canonical_written") is True, canon
+    assert canon["ok"] is False and canon["kind"] == "proof_without_v_sign", canon
     row_now = _row(st)
-    assert row_now["proof_text"] == P1 + "\n（换了一个版本）", row_now["proof_text"]
-    history = row_now["proof_history"]
-    assert len(history) == 1 and history[0]["text"] == P1, history
-    assert history[0]["sha"] == VR.proof_sha(P1), history
+    assert row_now["proof_text"] == P1, row_now["proof_text"]
+    assert not (row_now.get("proof_history") or []), row_now.get("proof_history")
+    # 盘上原样 + 台账不增行（三笔都整笔不写）。
+    assert row_now == before, (row_now, before)
+    assert _ledger(st) == [], _ledger(st)
 
 
 # ============================================================ ④ 签名带对象
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
     """④ 签 `(命题, proof_no=2)` 三票 ⇒ 台账行 `stmt_id` 非空、`proof_no=2`、sha 是 #p2 的。
 
@@ -324,6 +332,10 @@ def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
 def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
     """⑤ 只签 #p1 ⇒ `#p2` 的 reviewed 为 False，而定理级 `bits.reviewed` 仍为 True。
 
+    期望反转（准入闸变严：无签不再可写）：首登带一份无签的 `#p2` ⇒ 整笔
+    `proof_without_v_sign`，盘上零行、台账零行（改前：`ok=True`，两条证明一起落盘）。
+    要读"不借光"的那一行，现场按历史形态铺行（真机多证明行同形）。
+
     两层都要判：
     - 写侧的逐条表 `bits.evidence.reviewed_by_proof`（业主点名的那一格）；
     - 读侧的逐条读数（`statement_review_reading`）—— #p2 自成一档，档位不许被 #p1 抬起来。
@@ -332,9 +344,23 @@ def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
     而 #p2 从头到尾一张票都没有 —— 借光这一条在"一票"与"三票"两种票数下都要成立。
     """
     st = _ws(tmp_path)
-    _agent(st).register_statement(
+    refused = _agent(st).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
-    sid = _row(st)["stmt_id"]
+    assert refused.get("ok") is False, refused
+    assert refused.get("kind") == "proof_without_v_sign", refused
+    assert st.rows("statements") == [], "整笔被拒之后盘上多了行"
+    assert _ledger(st) == [], "整笔被拒之后台账多了行"
+
+    seeded = seed_statement_row(
+        st, proof_text=P1, statement_full=OWN["statement_full"],
+        statement_text=OWN["statement_text"], kind="conjecture",
+        label="弦长函数不是常值", origin="own_result", doc_id=S.format_id(0),
+        quote_reason=OWN["quote_reason"],
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    sid = str(seeded["stmt_id"])
     one = _sign(st, text=P1, proof_no=1)
     assert dict(one.get("statement_writeback") or {}).get("written") is False, one
     assert EB.reviewed_by_proof(_row(st)) == {}, (
@@ -370,6 +396,7 @@ def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
 
 # ============================================================ ⑥ 哈希不是门锁
 
+@pytest.mark.usefixtures("signed_v_handoffs")
 def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
     """⑥ 签完再改 `proof_text` ⇒ 写入成功，台账里仍是签名当时那个 sha。
 
@@ -419,8 +446,3 @@ def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
         tx.upsert("statements", row, note="edit_back")
     assert EB.bits_from_row(_row(st))["reviewed"] is True, _row(st)["bits"]
     assert VR.proof_review_gap(st.root, _row(st))["ok"] is True
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -67,6 +67,8 @@ from agentflow.agent_h import mapping_judge as MJ
 from agentflow.store import Store
 from agentflow.webui import readers as RD
 
+from conftest import seed_statement_row
+
 #: 命题 P（登记工作区里的第一条行，号由 store 发，实得 `000000`）。
 SID = S.format_id(0)
 #: 第二条命题（正文里第二个 theorem 环境用它，好让对应表每一行各有台账归属）。
@@ -294,11 +296,33 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
     st = _ws(tmp_path)
     b = AgentB(st, extractor=None, extract_text=None, config={})
 
-    # ------------------------------------------------------------ L1 写口
-    out = b.register_statement(
+    # ------------------------------------------------------------ L1 写口（期望反转）
+    #
+    # 2026-11-02 准入闸 strict：无签的 `#p2` 整笔拒 `proof_without_v_sign`（新建一条命题
+    # 时 `#p2` 还没有号可挂签 ⇒「首登就带一份有签的 #p2」在结构上不可达）。改前这一笔
+    # 是 `ok=True` 的两证明首登。盘上原样、台账不增行两条断言照旧。
+    refused = b.register_statement(
         **_own("设 G 是 3-正则群；则弦长函数不是常值。", "弦长函数不是常值"),
         proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
-    assert out.get("ok") is True, _broken("L1", "两条证明一次交不进去", out)
+    assert refused.get("ok") is False, _broken("L1", "无签的 #p2 居然写进去了", refused)
+    assert refused.get("kind") == "proof_without_v_sign", _broken(
+        "L1", "拒收码不是准入闸那一档", refused.get("kind"))
+    assert st.rows("statements") == [], _broken("L1", "整笔被拒但盘上多了行", st.rows("statements"))
+    assert VR.list_verifications(st.root, statement_id=SID, limit=None)[0] == [], _broken(
+        "L1", "整笔被拒但台账多了行",
+        VR.list_verifications(st.root, statement_id=SID, limit=None)[0])
+    # 历史形态直接铺行（真机多证明行同形：`bits` 由唯一产出方 `bits_of` 现算），
+    # 下面 L2 起的读侧/签名链照旧跑。
+    seeded = seed_statement_row(
+        st, proof_text=P1, statement_full="设 G 是 3-正则群；则弦长函数不是常值。",
+        statement_text="弦长函数不是常值", kind="conjecture",
+        label="弦长函数不是常值", origin="own_result", doc_id=S.format_id(0),
+        quote_reason="我方自产命题，没有外部引文要比对",
+        proofs=[{"proof_no": 2, "text": P2, "created_at": S.now_iso()}],
+        bits=EB.with_optimized_defaults(
+            EB.bits_of(origin="own_result", proof=True, proof_process=P1,
+                       kind="conjecture"), [1, 2]))
+    out = {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
     assert out.get("stmt_id") == SID, _broken("L1", "落下来的命题号不是工作区里那一条", out)
     row = _row(st)
     assert row["proof_text"] == P1, _broken(
@@ -311,8 +335,15 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
         "L1", "证明号读口径（`verifications.proof_list`）读不出 #1 与 #2", VR.proof_list(row))
 
     # 第二条命题 + 一条实验行：论文包要"每个环境一行"，它们各要一条台账行。
-    q = b.register_statement(**_own("设 H 是有限群；则 H 的阶有限。", "有限群的阶有限"),
-                             proof_text="显然。")
+    # 同样按历史形态铺行（"有证明、无签"经 strict 的 `register_statement` 造不出来）。
+    q_seeded = seed_statement_row(
+        st, proof_text="显然。", statement_full="设 H 是有限群；则 H 的阶有限。",
+        statement_text="有限群的阶有限", kind="conjecture", label="有限群的阶有限",
+        origin="own_result", doc_id=S.format_id(0),
+        quote_reason="我方自产命题，没有外部引文要比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process="显然。",
+                        kind="conjecture"))
+    q = {"ok": True, "stmt_id": str(q_seeded["stmt_id"])}
     assert q.get("ok") is True and q.get("stmt_id") == QID, _broken(
         "L1", "第二条命题没落成 000001", q)
     _put_experiment(st)
@@ -662,8 +693,3 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
         "L9", "产物行的 by_task_id 没反查到那一趟", art_rows[0].get("by_task_id"))
     assert art_rows[0].get("by_task_id_tri") == "event", _broken(
         "L9", "产物行的 by_task_id 三态不是 event", art_rows[0].get("by_task_id_tri"))
-
-
-#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
-#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
