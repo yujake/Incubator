@@ -40,6 +40,8 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from conftest import sign_before_registration
+
 from agentflow import depsection as DS
 from agentflow import schema as S
 from agentflow import secretary as SEC
@@ -210,6 +212,9 @@ def test_a_manuscript_without_citations_and_without_the_section_gets_an_empty_on
     assert again["deps_section_filled"] == "", again
 
     # 补过空节之后，B 那一笔登记读数是 `not_applicable`（不再"缺节"）
+    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的是入参给出的那一份正文
+    # （`proof_text`，非空时手稿正文不覆盖它）⇒ 先给这一份签（先签后登记）。
+    sign_before_registration(store.root, proof_text="1. 由定义直接得到。")
     reg = _b(store).register_statement(
         statement_full="定理：自足的证明（洗稿夹具）。",
         statement_text="自足的证明", proof_text="1. 由定义直接得到。",

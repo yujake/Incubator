@@ -38,7 +38,10 @@ import pathlib
 
 import pytest
 
+from conftest import seed_statement_row, sign_before_registration
+
 from agentflow import agent_loop as AL
+from agentflow import evidencebits as EB
 from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.agent_b.register_statement import _RegisterStatement
@@ -213,10 +216,19 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     st = _ws(tmp_path)
     b = _b(st)
 
-    # (a) 先按猜想登记：不被这条闸拦（它是猜想，本来就要先落库才审得动）
-    first = _ok(b.register_statement(**_own(kind="conjecture")))
-    assert first.get("ok") is True, first
-    sid = str(first.get("stmt_id") or "")
+    # (a) 先按猜想在册（直接铺行造历史形态）
+    #
+    # 2026-11-02 准入闸 strict 之后，"一条在册、有证明、还没签"的猜想不能再经
+    # `register_statement` 造出来（无签正文整笔拒）—— 而这一条判据测的正是
+    # "在册猜想升级到定理级时要不要 V 签"。所以现场改成直接铺行（真机历史形态：
+    # bits={}、没有台账、没有签）；期望值一个字没改。
+    seeded = seed_statement_row(
+        st, proof_text=PROOF, statement_full=FULL, statement_text=FULL,
+        kind="conjecture", label="探针命题 000000", quote_verified=False,
+        quote_reason="自产命题：没有第二份文本可比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=PROOF,
+                        kind="conjecture"))
+    sid = str(seeded["stmt_id"])
     assert sid
 
     # (b) 升档那一步、还没有 V 的签 ⇒ 拒 self_authored_needs_v
@@ -260,6 +272,9 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
 def test_4_a_conjecture_is_still_registrable_without_v(tmp_path: pathlib.Path) -> None:
     """判据 4（正控）：B 登记自产猜想 ⇒ 不被这条拒（别把猜想堵死）。"""
     st = _ws(tmp_path)
+    # 准入闸（2026-11-02 默认 strict）：正文先要有签（先签后登记）。这条正控问的是
+    # "猜想不被 `self_authored_needs_v` 拒"，不是"可以无签入册"。
+    sign_before_registration(st.root, proof_text=PROOF)
     got = _ok(_b(st).register_statement(**_own(kind="conjecture")))
     assert got.get("ok") is True, got
     assert got.get("kind") != "self_authored_needs_v", got
@@ -281,7 +296,14 @@ def test_5_forcing_the_signature_lookup_open_makes_criterion_3_red(
     """
     st = _ws(tmp_path)
     b = _b(st)
-    first = _ok(b.register_statement(**_own(kind="conjecture")))
+    # 在册那一行直接铺（历史形态：没有签）—— 见判据 3 那一段的理由。
+    seeded = seed_statement_row(
+        st, proof_text=PROOF, statement_full=FULL, statement_text=FULL,
+        kind="conjecture", label="探针命题 000000", quote_verified=False,
+        quote_reason="自产命题：没有第二份文本可比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=PROOF,
+                        kind="conjecture"))
+    first = {"ok": True, "stmt_id": str(seeded["stmt_id"])}
     assert first.get("ok") is True, first
 
     # 正控（没打补丁）：判据 3 的那一笔就在这一格被拒。

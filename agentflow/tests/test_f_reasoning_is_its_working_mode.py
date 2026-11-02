@@ -37,6 +37,8 @@ import sys
 
 import pytest
 
+from conftest import sign_before_registration
+
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
@@ -263,7 +265,17 @@ def test_a_stub_seam_really_receives_one_call(tmp_path: pathlib.Path, store: Sto
     这一轮一次调用都不会发生（dead_end"未接线"）；现在它拿到装配期登记的缝、真问一次。
     """
     AF.set_default_llm(None)
-    seam = CountingSeam(_proof_payload())
+    payload = _proof_payload()
+    seam = CountingSeam(payload)
+    # 准入闸（2026-11-02 默认 strict）：F 交给 B 的那一份证明正文先要有 V 签。
+    # 命题还没在册 ⇒ 先落 pending 那一签（先签后登记）。这一份正文按
+    # `agent_f._proof_outlet` 的拼法逐字拼出来（判据要签的就是它）。
+    body = "\n".join(
+        f"{int(s.get('n') or i)}. {s.get('text')}"
+        + (f"（依据：{'、'.join(s.get('cites') or [])}）"
+           if s.get("cites") else "（前提）")
+        for i, s in enumerate(payload["steps"], 1))
+    sign_before_registration(store.root, proof_text=body)
     _wired(tmp_path, store, seam_factory=lambda role: seam)
     reg = AF.install_f_tools(store)
     plan = AF.AgentF(store).create_plan("难题", "PK-TOOL", subgoals=[

@@ -30,6 +30,7 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+from conftest import seed_statement_row
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -156,7 +157,13 @@ class _FSecretary:
 
 
 def _apply_one_proof_round(st: Store) -> dict:
-    """走 `_apply_round` 的 proof 分支（不调模型：产物是直接给的）。"""
+    """走 `_apply_round` 的 proof 分支（不调模型：产物是直接给的）。
+
+    准入闸 strict 之后，"这一份还没签"的现场不能再由这一次登记造出来（无签正文
+    整笔拒）。夹具因此先把稿渲染出来（交给 B 的就是它），直接铺一行 statements
+    （真机历史形态），再走 `_apply_round` 发布 —— 行上的 canonical 与这一笔逐字
+    相同，闸不适用（没有要写的新正文）。期望值一个字没改。
+    """
     f = AgentF(st, config={"workspace_root": str(st.root)})
     f.f_secretary = _FSecretary()
     plan = {"plan_id": "0000", "rounds": 0, "history": [], "subgoals": [],
@@ -167,6 +174,14 @@ def _apply_one_proof_round(st: Store) -> dict:
                           "assumption": False},
                          {"n": 2, "text": "δ 只依赖 ε ⇒ 一致连续。", "cites": []}],
                "best_partial": [], "why_strategy": "直接按定义"}
+    manuscript = f.proof_manuscript(product, sg=sg, plan=plan)
+    body = _DS.proof_body(str(manuscript.get("text") or "")).strip("\n")
+    if not any(str(r.get("statement_full") or "").strip() == FULL.strip()
+               for r in st.rows("statements")):
+        seed_statement_row(
+            st, proof_text=body, statement_full=FULL, statement_text=FULL,
+            kind="conjecture", label=f"F 攻坚 0000 子目标 s1",
+            quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
     return f._apply_round(product, sg, plan=plan, owner="F")
 
 
