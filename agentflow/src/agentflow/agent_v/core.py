@@ -1619,9 +1619,14 @@ class AgentV:
         # 判词改落 `verifications/pending/<正文 sha>.jsonl`（D-34 的未在册台账）：
         # 那一行是 V 自己的账（不是手稿），`pending_sign` 的「最近一次审校说了算」
         # 会把它读成 rejected，F 的 `delivery_reading` 因此仍读得到「未通过」。
-        # 正判且给了手稿 ⇒ 仍走原写口（块是签；反真空见
-        # `tests/test_negative_verdict_writes_no_sign_block.py::test_b`）。
+        #
+        # 正判且给了手稿（2026-11-03 件一）：V 不直接写块，与在册那条路同形 ——
+        # `vsigns.issue()` 出信封（`out/vsigns/<正文 sha>.json`），收方秘书用
+        # `vsigns.land()` 落块。收方 = V 的 parent 那一侧（送审者），身份只从
+        # `conductor.current_parent()` 读；读不到就"能颁发、不能落块"，不猜一个 F/B。
         pending: dict[str, Any] = {}
+        issued: dict[str, Any] = {}
+        landed: dict[str, Any] = {}
         block_write: dict[str, Any] = {
             "written": False, "idempotent": False, "missing": False,
             "state": "not_attempted", "path": rel, "line": 0, "reading": {},
@@ -1630,10 +1635,61 @@ class AgentV:
                     if stopped != "signed" else "没有手稿落点"),
         }
         if stopped == "signed" and rel:
-            block_write = _VS.write_manuscript_sign(
-                self.workspace_root, rel, proof_sha=sha, streak=streak, need=need,
-                verdict=verdict_word, signer=self.actor, at=at,
-                ledger=f"{rel}#V签", statement_id="", signed=True)
+            from .. import conductor as _CND
+
+            try:
+                _pid, prole = _CND.current_parent()
+                who = _VS.secretary_id(prole)
+            except Exception:  # noqa: BLE001 —— 读不到父角色不是失败：就是"没有收方秘书"
+                who = ""
+            try:
+                issued = _VS.issue(
+                    self.workspace_root, artifact_sha=sha, streak=streak, need=need,
+                    artifact_path=rel, ledger=f"{rel}#V签", statement_id="",
+                    proof_no=no, passes=passes, at=at, by=who)
+            except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报
+                issued = {"written": False, "reason": (
+                    f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"), "path": ""}
+            if issued.get("written") or issued.get("idempotent"):
+                try:
+                    landed = _VS.land(
+                        self.workspace_root, artifact_sha=sha, by=who,
+                        manuscript_path=rel, store=None, statement_id="",
+                        proof_no=no,
+                        # 台账位这一路没有命题行可翻（未在册），也不许在这里造一格。
+                        ledger_bit=False)
+                except Exception as exc:  # noqa: BLE001 —— 签已颁发，落签抛了要如实报
+                    landed = {"landed": False, "state": "refused", "code": "land_raised",
+                              "reason": f"落签那一笔抛了（{type(exc).__name__}: {exc}）"}
+            mw = dict(landed.get("manuscript_write") or {})
+            block_write.update(
+                written=bool(mw.get("written")),
+                idempotent=bool(mw.get("idempotent")),
+                missing=bool(mw.get("missing")),
+                state=str(mw.get("state") or (
+                    "failed" if (issued.get("written") or issued.get("idempotent"))
+                    else "not_attempted")),
+                path=str(mw.get("path") or rel),
+                line=int(mw.get("line") or 0),
+                reading=dict(mw.get("reading") or {}),
+                code=str(landed.get("code") or mw.get("code") or ""),
+                body_mismatch=bool(landed.get("body_mismatch")),
+                body_sha256=str(mw.get("body_sha256") or ""),
+                signed_sha256=str(mw.get("signed_sha256") or ""),
+            )
+            if block_write["written"]:
+                block_write["why"] = (
+                    f"签由收方秘书 {who or '（没有收方秘书）'} 落进 `{rel}`"
+                    f"（连续 {streak}/{need} 成立；V 只颁发，不写块）")
+            elif issued.get("written") or issued.get("idempotent"):
+                block_write["why"] = (
+                    f"签已颁发（`{issued.get('path') or '签文件'}`，信封→"
+                    f"{who or '（没有收方秘书）'}），但块没落："
+                    f"{landed.get('reason') or issued.get('reason') or '没有理由'}")
+            else:
+                block_write["why"] = (
+                    f"签发没成（`{issued.get('path') or '签文件'}`）："
+                    f"{issued.get('reason') or '没有理由'}；块没落")
         else:
             # 负判：只落 pending 台账（不写块）；正判而没有手稿落点：签也只能落这里。
             try:
@@ -1648,6 +1704,7 @@ class AgentV:
         reading = dict(block_write.get("reading") or {})
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
+                "issued": issued, "landed": landed,
                 "pending": pending,
                 "verdict": verdict_word, "findings": list(last.get("findings") or []),
                 "defect_step": last.get("defect_step"),
@@ -1671,6 +1728,8 @@ class AgentV:
         block = dict(got.get("block") or {})
         pending = dict(got.get("pending") or {})
         manuscript_write = dict(got.get("block_write") or {})
+        issued = dict(got.get("issued") or {})
+        landed = dict(got.get("landed") or {})
         #: 负判（以及"正判但没有手稿落点"）的台账在 pending；路径与 `_finish_pending` 同形。
         pending_ledger = ""
         if pending:
@@ -1678,14 +1737,22 @@ class AgentV:
             pending_ledger = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl#"
                               f"{pending.get('verification_id') or '?'}")
         if stopped == "signed":
-            record = (f"签块写进了 `{got.get('manuscript')}`（"
-                      f"连续 {block.get('streak')}/{block.get('need')} 成立）——B 收录这条命题时"
-                      "从手稿里读到它，第 3 位就翻上去；这里 `signed_bit3=False` 是诚实的："
-                      "没有命题行可翻。"
-                      if manuscript_write.get("written") else
-                      f"这一份的签落在 `{pending_ledger or '（没有落点）'}`（没有手稿落点，"
-                      "签块未尝试）——B 登记之后按正文 sha 认领；这里 `signed_bit3=False` 是诚实的："
-                      "没有命题行可翻。")
+            if manuscript_write.get("written"):
+                record = (f"签块由收方秘书落进了 `{got.get('manuscript')}`（"
+                          f"连续 {block.get('streak')}/{block.get('need')} 成立）——B 收录这条命题时"
+                          "从手稿里读到它，第 3 位就翻上去；这里 `signed_bit3=False` 是诚实的："
+                          "没有命题行可翻。")
+            elif issued.get("written") or issued.get("idempotent"):
+                # 2026-11-03 件一：V 只颁发。颁发了而没有收方秘书（父角色读不到 / 直调）
+                # ⇒ 块没落，F 的读数仍是「待签」；不许拿"签已颁发"冒充"稿上有块"。
+                record = (f"签已颁发（`{issued.get('path') or '（签文件）'}`，信封→"
+                          f"{issued.get('envelope', {}).get('to') or '（没有收方秘书）'}），"
+                          f"但收方秘书没落块：{landed.get('reason') or '没有理由'}；"
+                          "F 的读数仍是「待签」（块没落 = B 收录时读不到它）。")
+            else:
+                record = (f"这一份的签落在 `{pending_ledger or '（没有落点）'}`（没有手稿落点，"
+                          "签块未尝试）——B 登记之后按正文 sha 认领；这里 `signed_bit3=False` 是诚实的："
+                          "没有命题行可翻。")
         else:
             record = (f"这一份判「{got.get('verdict') or ''}」：负判不写手稿块"
                       "（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；"

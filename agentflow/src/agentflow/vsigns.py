@@ -1154,7 +1154,10 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
     mw = write_manuscript_sign(
         root, rel_manuscript, proof_sha=doc.get("artifact_sha"),
         streak=doc.get("streak"), need=doc.get("need"),
-        verdict=str(doc.get("verdict") or "成立"), signer="V",
+        verdict=str(doc.get("verdict") or "成立"),
+        # 2026-11-03（件一）：块是收方秘书落的，`签名者` 就写落块的那一位
+        # （`secretary:<F|B>`）—— V 只颁发，不再让块冒名说"V 写的"。
+        signer=who,
         at=str(doc.get("at") or ""), ledger=str(doc.get("ledger") or ""),
         statement_id=str(doc.get("statement_id") or ""))
     out["manuscript_write"] = mw

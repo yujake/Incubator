@@ -42,9 +42,11 @@ a1 在改前红（块被写上），a2 改前就绿（在册那一路本来就�
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import pathlib
 
+from agentflow import conductor as CND
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -88,6 +90,13 @@ def _manuscript_file(st: Store, rel: str = REL, text: str = MANUSCRIPT) -> pathl
 def _v(st: Store, replies: list[str]) -> tuple[AgentV, _ReviewSeam]:
     seam = _ReviewSeam(list(replies))
     return AgentV(st, workspace_root=st.root, llm=seam), seam
+
+
+@contextlib.contextmanager
+def _submitted_by_f():
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        yield
 
 
 def _outbox(st: Store) -> list[dict]:
@@ -175,7 +184,8 @@ def test_b_three_clean_passes_still_stamp_a_block(tmp_path):
     path = _manuscript_file(st)
     v, seam = _v(st, [CLEAN_REPLY])
 
-    got = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
 
     assert seam.asked() == 3, seam.asked()
     assert got.get("kind") == "proof_unregistered_signed", got

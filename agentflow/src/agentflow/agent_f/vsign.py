@@ -182,7 +182,10 @@ def delivery_reading(root: Any, *, statement_id: str = "", proof_text: str = "",
         doc = dict(sign.get("sign") or {})
         same_stmt = str(doc.get("statement_id") or "") == sid
         enough = int(doc.get("streak") or 0) >= int(doc.get("need") or 0)
-        if same_stmt and enough:
+        # 2026-11-03 件一：未在册（`sid == ""`）的签不按侧文件认 —— 业主 2026-11-02 指定的
+        # 落点是手稿块（步骤 0）。侧文件只是 V 那一半的档；块没落（收方秘书没拿到 /
+        # 父角色读不到）时它不能冒充"已签"，否则「把 land 摘掉 ⇒ F 回落待签」量不出来。
+        if sid and same_stmt and enough:
             out.update(checked=True, channel=CHANNEL_ON_SHELF,
                        ledger=str(sign.get("path") or ""),
                        verification_id=str((doc.get("passes") or [{}])[-1].get(

@@ -26,10 +26,12 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import pathlib
 
 import pytest
+from agentflow import conductor as CND
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -82,6 +84,14 @@ def _v(st: Store, replies: list[str]) -> tuple[AgentV, _ReviewSeam]:
     return AgentV(st, workspace_root=st.root, llm=seam), seam
 
 
+@contextlib.contextmanager
+def _submitted_by_f():
+    """V 这一趟是 F 派出来的（2026-11-03 件一：收方 = V 的 parent 那一侧）。"""
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        yield
+
+
 def _manuscript_text(st: Store) -> str:
     return (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
 
@@ -91,7 +101,8 @@ def test_a_three_clean_rounds_stamp_a_sign_block_into_the_manuscript(tmp_path):
     """① 未在册手稿 + 三转干净 ⇒ 稿上出现签块；V 不再要求命题号。"""
     st = _ws(tmp_path)
     v, seam = _v(st, [CLEAN_REPLY])
-    got = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
 
     assert seam.asked() == 3, f"只问了 {seam.asked()} 次 ⇒ 不是连判三轮"
     assert got.get("checked") is True, got
@@ -106,6 +117,12 @@ def test_a_three_clean_rounds_stamp_a_sign_block_into_the_manuscript(tmp_path):
     reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert reading["state"] == FVS.STATE_SIGNED, reading
     assert reading["channel"] == FVS.CHANNEL_MANUSCRIPT, reading
+    # 2026-11-03 件一：块是收方秘书落的（V 只颁发），签名者点名是哪一位秘书。
+    assert block["signer"].startswith("secretary:"), block
+    assert block["signer"] == "secretary:F", block
+    doc = json.loads(VS.sign_path(st.root, VR.proof_sha(PROOF)).read_text(encoding="utf-8"))
+    assert doc["written_by"] == "secretary:F", doc["written_by"]
+    assert doc["envelope"]["to"] == "secretary:F", doc.get("envelope")
 
 
 # ============================================================ ② 缺材料 ⇒ 不落
@@ -123,7 +140,8 @@ def test_b_no_usable_reply_writes_nothing(tmp_path):
     st = _ws(tmp_path)
     seam = _Broken([CLEAN_REPLY])
     v = AgentV(st, workspace_root=st.root, llm=seam)
-    got = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
 
     assert got.get("checked") is False, got
     assert "没查成" in str(got.get("detail") or ""), got
@@ -138,13 +156,15 @@ def test_c_the_same_body_is_not_signed_twice(tmp_path):
     """③ 同一份正文再送一次 ⇒ 不再问模型、不再写（块仍是一行）。"""
     st = _ws(tmp_path)
     v, seam = _v(st, [CLEAN_REPLY])
-    first = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        first = v.verify_proof(proof_manuscript=REL)
     assert first.get("checked") is True, first
     asked_once = seam.asked()
     assert asked_once == 3, asked_once
     before = _manuscript_text(st)
 
-    again = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        again = v.verify_proof(proof_manuscript=REL)
     assert again.get("checked") is True, again
     assert "不重复" in str(again.get("reason") or ""), again
     assert seam.asked() == asked_once, "第二次送审又问模型了（同一份正文不重复判）"
@@ -157,7 +177,8 @@ def test_d_deleting_the_block_falls_back(tmp_path):
     """④ 反真空：把稿上的签块删掉 ⇒ F 的读数回落成待签。"""
     st = _ws(tmp_path)
     v, _seam = _v(st, [CLEAN_REPLY])
-    v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        v.verify_proof(proof_manuscript=REL)
     assert FVS.delivery_reading(st.root, proof_text=PROOF,
                                 manuscript_paths=(REL,))["state"] == FVS.STATE_SIGNED
 
@@ -165,6 +186,36 @@ def test_d_deleting_the_block_falls_back(tmp_path):
     stripped = "\n".join(ln for ln in text.split("\n")
                          if not ln.strip().startswith(VS.SIGN_MARK))
     (pathlib.Path(st.root) / REL).write_text(stripped, encoding="utf-8")
+    after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
+    assert after["state"] == FVS.STATE_WAITING, after
+    assert after["delivered"] is False, after
+
+
+# ============================================================ ④之二 反真空（land）
+def test_d2_without_land_the_block_is_absent_and_f_reads_waiting(tmp_path, monkeypatch):
+    """反真空（件一 b）：把 `vsigns.land` 摘掉 ⇒ 块不存在、F 的读数回落待签。
+
+    这一条量的是"块真的由 land 写"：V 仍然颁发（签文件在），但没有收方秘书落块
+    就不能当作已签。`delivery_reading` 也不许拿未在册的侧文件替块作证。
+    """
+    st = _ws(tmp_path)
+    v, seam = _v(st, [CLEAN_REPLY])
+    called = {"n": 0}
+
+    def _refuse(*_a, **_kw):
+        called["n"] += 1
+        return {"landed": False, "state": "refused", "code": "land_removed",
+                "reason": "夹具：把 land 摘掉", "manuscript_write": {},
+                "ledger_bit": "not_attempted"}
+
+    monkeypatch.setattr(VS, "land", _refuse)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert seam.asked() == 3, seam.asked()
+    assert called["n"] == 1, called
+    assert got.get("checked") is True, got
+    assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
     after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert after["state"] == FVS.STATE_WAITING, after
     assert after["delivered"] is False, after
@@ -182,7 +233,8 @@ def test_e_a_fault_on_round_two_stops_and_writes_no_block(tmp_path):
     st = _ws(tmp_path)
     before = _manuscript_text(st)
     v, seam = _v(st, [CLEAN_REPLY, REJECT_REPLY])
-    got = v.verify_proof(proof_manuscript=REL)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
 
     assert seam.asked() == 2, f"判出有毛病之后还接着问（{seam.asked()} 次）"
     assert got.get("checked") is True, got
