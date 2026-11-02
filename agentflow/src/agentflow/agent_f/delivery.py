@@ -514,7 +514,7 @@ def _assessment_conflicts(assessment: Mapping[str, Any], *, total: int,
     return out
 
 
-def summary(*, outputs: Sequence[Mapping[str, Any]],
+def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
             history: Sequence[Mapping[str, Any]] = (),
             subgoals: Sequence[Mapping[str, Any]] = (), rounds: int = 0,
             self_assessment: Any = None) -> dict[str, Any]:

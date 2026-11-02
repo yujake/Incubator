@@ -2003,7 +2003,7 @@ class _Core:
 
     def _delivery_reading(self, plan: Mapping[str, Any], *, current: Mapping[str, Any] | None = None,
                           assessment: Any = None) -> dict:
-        """逐条交差读数（读盘：每一条成果各自读一次签，再交给 `delivery.summary` 汇总）。
+        """逐条交差读数（读盘：每一条成果各自读一次签，再交给 `delivery.delivery_summary` 汇总）。
 
         `current` 是"这一轮刚产出的那一条"（`_apply_round` 在 `step` 把它追加进 history
         之前就要读数）：`{statement_id, reading, proof_text, manuscript, round, subgoal}`。
@@ -2056,7 +2056,7 @@ class _Core:
                 if h.get("self_assessment"):
                     assessment = h.get("self_assessment")
                     break
-        return _DL.summary(outputs=outputs, history=history,
+        return _DL.delivery_summary(outputs=outputs, history=history,
                            subgoals=[dict(s) for s in (row.get("subgoals") or [])],
                            rounds=int(row.get("rounds") or 0),
                            self_assessment=assessment)

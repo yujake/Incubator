@@ -288,7 +288,7 @@ def test_e_stubbing_the_naming_back_to_empty_turns_a_red(tmp_path, monkeypatch):
     """e 反真空：把「点名未签成果」打桩成空（静默收工）⇒ a 那组断言必须红。"""
     st = _ws(tmp_path)
     f, pid, sids = _two_unsigned_outputs(st)
-    real = FD.summary
+    real = FD.delivery_summary
 
     def _silent(*a, **kw):
         got = real(*a, **kw)
@@ -298,7 +298,7 @@ def test_e_stubbing_the_naming_back_to_empty_turns_a_red(tmp_path, monkeypatch):
         got["legal_stop"] = True
         return got
 
-    monkeypatch.setattr(FD, "summary", _silent)
+    monkeypatch.setattr(FD, "delivery_summary", _silent)
     out = _close_reading(f, pid)
     silent = dict(out.get("delivery") or {})
     assert silent.get("legal_stop") is True, silent          # 打桩之后它"静默收工"了
