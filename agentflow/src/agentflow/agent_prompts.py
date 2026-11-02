@@ -2978,7 +2978,30 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   M 2c289de9→9c423a10 / V 1703a9c5→1703a9c5。
 #: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p232）；
 #: `tests/golden/agent_surface_snapshot.json` 带提示词摘要的那几格重冻（逐格 diff 见提交信息）。
-PROMPT_VERSION = "p232"
+#: `p233`（2026-11-03，业主放权动禁改区 · FC-27；179 §二之三的逐条交差口径）：
+#:
+#: ① `specs/f.py` 的 `attack.step` / `attack.status` 的 `returns=` 补齐实现的真返回
+#:    （只加不减）：`attack.step` 多 27 格（`delivery` / `delivered` / 逐条计数 /
+#:    `unfinished` / `trail` / `legal_exits` / 覆盖率四格 / `self_assessment` /
+#:    `delivery_state_plan` / `delivery_label_plan`），`attack.status` 多 `delivery`
+#:    —— 机器可读的 ToolSpec 声明在 `tools/attack_tools.py` 同步（同一个判据读那一份）。
+#: ② `specs/f.py` 的 policy 把「交没交差只看 v_sign / delivered 只有已签时为真」
+#:    改成 179 的逐条口径：`delivery` 逐条读、`delivered` = 「有成果且全部成果已签」、
+#:    「没成果」是合法收工理由。
+#: ③ `agent_skills.py` 的 F 手册把「实际送审是 F.step 的一步、同一步里递给 V」改成
+#:    「F 自己派 V 审这一份手稿」；`F.step` 只回读签（`v_sign` 四档）。
+#:
+#: 变化格 = F 一格（`agent_skills` 正文只落盘、索引行未动；工具层 `returns` 只进
+#: function-calling 的 description，不进任何角色的段）。
+#: 逐格旧值 → 新值（p232 → p233，现算，不是手抄；脚本 `temp/_p233_recompute.py`）：
+#:   F 00b76d27→61be3f62；其余十格（A/B/C/D/E/G/H/L/M/V）逐字同值。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p233）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 两份 golden 重冻（`tool_surface_snapshot.json` 因 `attack.*` 的 returns 变、
+#: `agent_surface_snapshot.json` 因 F 的动作 returns 与提示词变）；`docs/ROLE-GUIDE.md`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，
+#: 实际花费见提交信息）。
+PROMPT_VERSION = "p233"
 
 
 

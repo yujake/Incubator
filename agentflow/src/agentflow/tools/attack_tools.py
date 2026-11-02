@@ -481,8 +481,19 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     # 键名从实现读出（`agent_f.AgentF.step`）：`sid` 是被推进的那个子目标
     # 的代号（没有可推进的子目标时为 null）；`budget_known` / `budget_reading`
     # 是这一轮的预算读数（P-09：读不到也如实给，`status="unknown"` + `why`）。
+    # 2026-11-03（p233）：补齐实现的真返回（只加不减）—— 逐条交差读数
+    # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
+    # 的 `_CLOSE_KEYS`）；键清单取自探针实跑观测，不猜。
     returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
-             "'reason','budget_known','budget_reading'}"),
+             "'reason','budget_known','budget_reading',"
+             "'delivery','delivered',"
+             "'total','signed_count','pending_count','unsigned_count',"
+             "'proof_count','proof_statements','draft_count',"
+             "'abandoned_count','abandoned_statements',"
+             "'unfinished','unfinished_count','trail','trail_required',"
+             "'legal_exits','exits_note','legal_stop','is_failure','close_problems',"
+             "'coverage','coverage_reading','coverage_ratio','coverage_why',"
+             "'delivery_state_plan','delivery_label_plan','self_assessment'}"),
     tags=("attack", "loop"),
 )
 def _attack_step(_need_store, store, plan_id):
@@ -506,8 +517,9 @@ def _attack_step(_need_store, store, plan_id):
     roles=_READ_ROLES,
     # 键名逐个从实现读出（`agent_f.AgentF.status`）：计划不存在时只有
     # `checked`/`plan_id`/`reason` 三个键（`checked=False` ⇒ 没查），存在时
-    # 有全部 19 个键；这里写的是"计划存在"那一支的键集合。
-    returns="{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
+    # 有全部 21 个键；这里写的是"计划存在"那一支的键集合。
+    # 2026-11-03（p233）：`delivery`（逐条交差读数，`agent_f/delivery.py`）补进声明。
+    returns="{'checked','plan_id','delivery','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
     tags=("attack",),
 )
 def _attack_status(_need_store, store, plan_id):

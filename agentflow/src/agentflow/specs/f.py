@@ -44,14 +44,23 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "F", "step",
         "推进一轮（唯一会改计划的方法）",
         _obj({"plan_id": _S}, ("plan_id",)),
-        "dict（本轮做了什么 / 新状态；证明那一支另有 v_sign / delivered / delivery_state）", side_effect="write_local", handler_name="step",
+        # 2026-11-03（p233）：returns 补齐实现的真返回（只加不减）—— 逐条交差读数
+        # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
+        # 的 `_CLOSE_KEYS`）。键清单逐字取自实跑观测，不是猜的。
+        "dict（本轮做了什么 / 新状态；证明那一支另有 v_sign / delivery_state / delivery_label；"
+        "逐条交差读数：delivery / delivered / total / signed_count / pending_count / "
+        "unsigned_count / proof_count / proof_statements / draft_count / abandoned_count / "
+        "abandoned_statements / unfinished / unfinished_count / trail / trail_required / "
+        "legal_exits / exits_note / legal_stop / is_failure / close_problems / coverage / "
+        "coverage_reading / coverage_ratio / coverage_why / delivery_state_plan / "
+        "delivery_label_plan / self_assessment）", side_effect="write_local", handler_name="step",
     ),
 
     ActionSpec(
         "F", "status",
         "只读看一个攻坚计划的当前状态",
         _obj({"plan_id": _S}, ("plan_id",)),
-        "dict", side_effect="read", handler_name="status",
+        "dict（计划视图；外加 `delivery` 逐条交差读数）", side_effect="read", handler_name="status",
     ),
 
     ActionSpec(
@@ -134,10 +143,14 @@ SPEC = AgentSpec(
             "（命题现状 / 台账条数）。**V 只会退回两种结论：成立（没找到缺陷）/ 有毛病"
             "（找到缺陷，指到步号与原句）** —— 读到 `有毛病` 就按那条缺陷"
             "改稿/补步骤，读到 `成立` 就是这一格被审过、不再重交；证明要被 V 签过 `成立`，五元位第 3 位才算数。"
-            "**你这一趟交没交差，只看 `F.step` 返回的那一格 `v_sign`**（也进 `history`）：`delivery_state` / "
-            "`delivery_label` 四档 —— **已签 / 待签 / 未通过 / 没查成**；`delivered` **只有「已签」时为真**。"
-            "没签就不是交差：待签 ⇒ 这一步真的去派 V；未通过 ⇒ 按缺陷改稿再派；没查成 ⇒ 查为什么"
-            "（签块 / 台账读不出来），别把它读成「没毛病」。",
+            "**你这一趟交没交差，按条看 `F.step` 返回的 `delivery` 那一格**（也进 `history`）："
+            "`signed_count` / `pending_count` / `unsigned_count` / `total` 逐条数，`coverage_reading` 是"
+            "「已签/总数」；`delivered` **只在「有成果、且每一条成果都已签」时为真** —— 不是「有一条签了」，"
+            "也不是「这一轮这一份签了」。`delivery_state` / `delivery_label` 仍是这一轮这一份的四档"
+            "（**已签 / 待签 / 未通过 / 没查成**），但**一条签到手不等于交差**。没签的逐条列在 `unfinished`："
+            "待签 ⇒ 这一步真的去派 V；未通过 ⇒ 按缺陷改稿再派；没查成 ⇒ 查为什么（签块 / 台账读不出来），"
+            "别把它读成「没毛病」。**没成果也是合法的收工理由**（研究了、尽力了、0 条成果 ⇒ `legal_stop=true`、"
+            "`is_failure=false`），但它不是交差完成（`delivered` 为假）。",
             # 业主 2026-10-22 的 B-3 裁定（逐字）：「V 的判决必须递到 F（让 F 去修），否则瞎写的证明不能用」。上面那一
             # 条已经说了「按那条缺陷改稿/补步骤」，缺的是后一半：判决在哪读、补完要重新送 V、不许绕开。三件事各写清，因为
             # 改前 V 的「有毛病」只落 `verifications/<命题号>.jsonl`，运行期一个字都递不到 F（真机 t-000026：四条全判有

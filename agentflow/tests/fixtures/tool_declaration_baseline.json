@@ -6387,6 +6387,38 @@
           "to": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}。循环里调它时另带三格（只加不减）：'preempted'（本步只等到 CHILD_STEP_WAIT_SEC 就返场）、'dispatched'（已派出的 task_id）、'running'（还没回来的 task_id —— 它们的结局在下一次返场投给你，别因为 status=running 就重派）"
         }
       ]
+    },
+    {
+      "tools": [
+        "attack.status"
+      ],
+      "key": "returns",
+      "reason": "p233（2026-11-03，业主 2026-11-03 放权动禁改区 · FC-27）：`attack.status` 的 `returns=` 补齐实现的真返回（只加不减）—— 唯一红 `test_tools_returns_declaration::test_no_tool_returns_a_top_level_key_it_does_not_declare` 点名它缺 `delivery`（逐条交差读数，来自 `agent_f/delivery.py`）；原有 20 个键一个未删。",
+      "date": "2026-11-03",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
+          "to": "{'checked','plan_id','delivery','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "attack.step"
+      ],
+      "key": "returns",
+      "reason": "p233（2026-11-03，业主 2026-11-03 放权动禁改区 · FC-27）：`attack.step` 的 `returns=` 补齐实现的真返回（只加不减）—— 唯一红 `test_tools_returns_declaration::test_no_tool_returns_a_top_level_key_it_does_not_declare` 点名它缺 27 个新键：`delivery` / `delivered` / `total` / `signed_count` / `pending_count` / `unsigned_count` / `proof_count` / `proof_statements` / `draft_count` / `abandoned_count` / `abandoned_statements` / `unfinished` / `unfinished_count` / `trail` / `trail_required` / `legal_exits` / `exits_note` / `legal_stop` / `is_failure` / `close_problems` / `coverage` / `coverage_reading` / `coverage_ratio` / `coverage_why` / `delivery_state_plan` / `delivery_label_plan` / `self_assessment`（逐条交差读数与收工几格，来自 `agent_f/step.py::_CLOSE_KEYS` 与 `agent_f/delivery.py`）；原有 10 个键一个未删。",
+      "date": "2026-11-03",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading'}",
+          "to": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading','delivery','delivered','total','signed_count','pending_count','unsigned_count','proof_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','delivery_state_plan','delivery_label_plan','self_assessment'}"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

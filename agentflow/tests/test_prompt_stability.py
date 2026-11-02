@@ -743,6 +743,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p232", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p232（2026-11-03）：① M 的 policy 把「F 产出的证明天生带 V 的签字，缺签就派 D 让 F 补签」与「要 V 的签就经 B 走 M→B→V 两跳」换成业主 2026-11-02 的责任路由：命题在册缺签 ⇒ 让 B 处理（重送 / 补证 / 明确放弃），F 产出无签 ⇒ 经 D 让 F 先拿 V 签；并按同日收口写明 M 没有 V 签的编辑权与获取义务；② B 的 policy 新增「收到没有 V 签的 F 证明 ⇒ 不润色、整笔退回，请 F 先拿 V 签」，并把「册上已有而缺签」分出来（B 自己处理）；③ 变化格 = B / M 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p232 → p233（2026-11-03，179 §二之三的逐条交差口径）。
+    {"version": "p233", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p233（2026-11-03）：① F 的 `attack.step` / `attack.status` 的 `returns=` 补齐实现的真返回（只加不减：step 多 delivery / delivered / 逐条计数 / unfinished / trail / legal_exits / 覆盖率四格 / self_assessment / delivery_state_plan / delivery_label_plan 共 27 格；status 多 delivery）—— 机器可读的 ToolSpec 声明在 tools/attack_tools.py 同步；② F 的 policy 把「交没交差只看 v_sign / delivered 只有已签时为真」改成 179 的逐条口径（delivery 逐条读、delivered = 有成果且全部成果已签、没成果是合法收工理由）；③ agent_skills 的 F 手册把「实际送审是 F.step 的一步」改成「F 自己派 V 审这一份手稿」（正文只落盘、索引行未动）。变化格 = F 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

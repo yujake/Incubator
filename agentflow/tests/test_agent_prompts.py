@@ -2189,7 +2189,13 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：D 5c33db06 → e890bd3a；M d3d81018 → 65646855；其余九格逐字同值。
 # 十一格是 `temp/recompute_digests.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p232"
+# 2026-11-03（p232 → p233，业主放权动禁改区 · FC-27）：F 那一格换值 ——
+# `specs/f.py` 的 `attack.step` / `attack.status` 的 ActionSpec `returns=` 补齐实现的真返回，
+# 且 policy 改成 179 §二之三的逐条交差口径；其余十格逐字未动
+# （`agent_skills` 正文只落盘、工具层 `returns` 只进 function-calling 的 description）。
+# 逐格旧值 → 新值：F 00b76d27→61be3f62。
+# 十一格是 `temp/_p233_recompute.py` 的现算值，不是手抄。
+_FROZEN_PROMPT_VERSION = "p233"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2421,7 +2427,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "C": "90c19871362f11a0145934680de53accc4e3730ce3ad3ae3e74a73a971d9aa28",
     "D": "e5e43b8ef5b330dc899172f21520b961df11444e6c644acb1b962b611c131ef6",
     "E": "91cad508fc2f0a00bc04d3f6e0977f46e6cbf1bca3525c69ed2e6e74d1bf3064",
-    "F": "00b76d27a55322d4f5e4aae6911228d32debff430aeab4c05146d8de99bd1db5",
+    "F": "61be3f622587c9ab3f29e1ba663aaad9431aa30082ce4f9e4bf5e2608a4d4a78",
     "G": "bd3ea65a104580ce4d12dc99749971965ce19494846359599802aeb69f5d594f",
     "H": "15cc471da1b6e43cf97d45437ed7610aa3c853e04e4fe5cfb5021bbebc398ad3",
     "L": "40152fe3b9a31ed62c8f3af93220e6901dc3b567c96c049ea564acf999b39102",
