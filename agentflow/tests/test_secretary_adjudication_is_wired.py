@@ -41,6 +41,8 @@ if self.seam is None:
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 import re
 import sys
@@ -537,3 +539,8 @@ def test_no_construction_site_forgets_the_seam_again():
         f"只读口径的豁免与实际不符：实际 {sorted(seen)}，登记 {sorted(_ALLOWED_READ_ONLY)}")
     # 反真空（第二条）：扫到的装配点不能是 0 —— 否则"没有违规"只是"什么都没扫到"
     assert len(_assembly_sites()) >= 4, len(_assembly_sites())
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

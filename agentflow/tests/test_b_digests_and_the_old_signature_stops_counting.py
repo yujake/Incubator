@@ -398,3 +398,8 @@ def test_e_stubbing_the_rewrite_reading_turns_b_red(tmp_path, monkeypatch):
     # 而既有链没被打桩：读侧仍然是 stale（b 的返回那一格才是这一步给的）
     assert VR.review_standing(st.root, statement_id=sid, proof_text=DIGEST,
                               proof_no=1)["state"] == "stale"
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -161,12 +161,20 @@ def test_proof_and_review_without_evidence_are_problems():
 
 # ============================================================ 引用命题（§3.15 三）
 
-def test_a_verified_citation_credits_bits_2_and_3_with_the_literature_id():
-    """引用命题：逐字核过的文献 ⇒ 第 2+3 位真，凭据是文献代号，等级 = 预备定理级。"""
+def test_a_verified_citation_credits_bit_2_with_the_literature_id():
+    """引用命题：逐字核过的文献 ⇒ 第 2 位真，凭据是文献代号；第 3 位不翻。
+
+    2026-11-02 业主收口（`draft/179` 二之一 / 二之二）：「文献侧第一趟录入时没有V签，
+    是假V签，但要允许进台账」+「`bits.reviewed` 的汇总位不许把占位签读成已签」。
+    于是"文献编号顶第 3 位"这一档从已签降为占位签：凭据还在
+    （`evidence.reviewed_by == {"evidence": "lit:…"}` + `reviewed_source == "citation"`），
+    但汇总位是假、等级回到「猜想」—— 要升档得先逐个优化重写、拿正常 V 签。
+    """
     bits = EB.bits_of(origin="external_lit", source_lit_id="lit-0042", quote_verified=True)
-    assert bits["proof"] is True and bits["reviewed"] is True, bits
+    assert bits["proof"] is True and bits["reviewed"] is False, bits
     assert bits["evidence"]["reviewed_by"] == {"evidence": "lit:lit-0042"}, bits
-    assert bits["grade"] == "pre_theorem", bits
+    assert bits["evidence"]["reviewed_source"] == EB.REVIEWED_SOURCE_CITATION, bits
+    assert bits["grade"] == "conjecture", bits
     assert EB.bit_problems(bits) == [], EB.bit_problems(bits)
 
 
@@ -266,16 +274,26 @@ def test_a_legacy_external_lit_row_keeps_its_citation_credit_only_with_a_span():
     D1（2026-10-22 第二版）：空 `quote_mode` 仍按逐字读，但前提是有区间 ——
     区间是"核了哪一段、在第几页"的唯一载子。改前这一条断言的是"只要 quote_verified
     为真就给学分"，真机 13 行（true + verbatim + 空 span）正是靠那条读法拿到了学分。
+
+    2026-11-02 再降一档（两阶段录入）：`quote_verified=True` + 区间够格 ⇒ 第 2 位与
+    占位签（`reviewed_source == "citation"`），但等级回到「猜想」 ——
+    "文献编号顶第 3 位"不是已签。区间仍然是学分的一部分（`clean_statement_ids`
+    按 `quote_state` 给引用学分，与第 3 位是两件事）。
     """
     with_span = {"stmt_id": "stmt-0002", "origin": "external_lit",
                  "source_lit_id": "lit-0042", "quote_verified": True,
                  "quote_span": "p2:norm[4:44]", "status": "active"}
-    assert EB.bits_from_row(with_span)["grade"] == "pre_theorem", EB.bits_from_row(with_span)
+    bits_span = EB.bits_from_row(with_span)
+    assert bits_span["grade"] == "conjecture", bits_span
+    assert bits_span["proof"] is True and bits_span["reviewed"] is False, bits_span
+    assert bits_span["evidence"]["reviewed_source"] == EB.REVIEWED_SOURCE_CITATION, bits_span
 
     legacy = dict(with_span, quote_span="")
     bits = EB.bits_from_row(legacy)
     assert bits["grade"] == "conjecture", (
         "说通过而拿不出区间 ⇒ 不给引用学分（D1 的读侧那一半）", bits)
+    # 两档的差别在"第 2 位 + 凭据"，不在第 3 位（两档都不是已签）。
+    assert bits["proof"] is False, bits
     assert EB.quote_state(legacy) == EB.QUOTE_NO_EVIDENCE, EB.quote_state(legacy)
 
 

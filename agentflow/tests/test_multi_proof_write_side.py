@@ -28,6 +28,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import pathlib
 import sys
@@ -417,3 +419,8 @@ def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
         tx.upsert("statements", row, note="edit_back")
     assert EB.bits_from_row(_row(st))["reviewed"] is True, _row(st)["bits"]
     assert VR.proof_review_gap(st.root, _row(st))["ok"] is True
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

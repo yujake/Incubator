@@ -192,6 +192,9 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     st = _ws(tmp_path)
     sid = _own(st)
     _foreign_manuscript_on_disk(st)
+    # 准入闸（2026-11-02 默认 strict）：换在册正文也必须有覆盖「新」正文的 V 签
+    # （「改稿要重签」这条口径在写入口上的形态）。旧签仍在台账里，只是被降为历史。
+    _sign_three(st, proof_text=FULL, stmt_id=sid)
 
     out = _agent(st).register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
@@ -242,6 +245,13 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
         "正控：连续 3 次「成立」之后这一位必须是 True")
 
     _foreign_manuscript_on_disk(st)
+    # 准入闸（2026-11-02 strict）：换在册正文需要一份覆盖新正文的签。
+    # 于是这一条读的是"新签进台账之后，旧那三签降为历史读数、但不被删"。
+    # 用 `_sign` 连签三次（不用 `_sign_three`：那一个夹具还断言"第 1、2 次位不翻"，
+    # 而这一行早已被旧正文的三票点亮了 —— 位是命题级汇总，不是逐份）。
+    fresh: dict = {}
+    for _i in range(VR.SIGN_STREAK_NEED):
+        fresh = _sign(st, proof_text=FULL, stmt_id=sid)
     out = _agent(st).register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
@@ -252,14 +262,22 @@ def test_a2_the_old_signature_stops_counting_but_is_not_deleted(tmp_path: pathli
     assert out["ok"] is True and out.get("canonical_written") is True, out
 
     standing = VR.review_standing(st.root, statement_id=sid, proof_text=FULL, proof_no=1)
-    assert standing["state"] == "stale", standing
-    assert standing["ok"] is False and standing["in_sync"] is False, standing
-    assert standing["verification_id"] == signed["verification_id"], standing
-    assert EB.bits_from_row(_row(st))["reviewed"] is False, _row(st).get("bits")
+    assert standing["state"] == "signed", standing
+    assert standing["ok"] is True and standing["in_sync"] is True, standing
+    assert standing["verification_id"] == fresh["verification_id"], standing
+    # "旧签不再算数"由 superseded 说：旧正文那三签 + 新正文前两票都不参与判定
+    # （判定只看最近一签），但它们都还在台账里。
+    assert standing["superseded_total"] == 5, standing
+    kept_ids = [str(r.get("verification_id") or "") for r in standing["superseded"]]
+    assert kept_ids[:3] == [one["verification_id"], two["verification_id"],
+                            signed["verification_id"]], standing
+    # 现行正文有新签 ⇒ 第 3 位按它点亮（旧正文那三签已不在判定里）。
+    assert EB.bits_from_row(_row(st))["reviewed"] is True, _row(st).get("bits")
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert problems == [], problems
     assert [r["verification_id"] for r in rows] == [
-        one["verification_id"], two["verification_id"], signed["verification_id"]], (
+        one["verification_id"], two["verification_id"], signed["verification_id"],
+        fresh["verification_id"]], (
         "旧签被删了 —— 审计链断在这里（连票数也要留在台账上，缺一行就说不清"
         "那一版正文当年够不够 3 票）")
 
@@ -333,8 +351,10 @@ def test_b3_a_foreign_manuscript_never_feeds_the_dependency_face(
     读数里 `manuscript_owner` 点名那份稿属于谁、`manuscript_owner_ok=False`。
     """
     st = _ws(tmp_path)
-    _own(st)
+    sid = _own(st)
     _foreign_manuscript_on_disk(st)
+    # 准入闸（2026-11-02 strict）：这一笔要在册正文换成 FULL ⇒ 先有新正文的签。
+    _sign_three(st, proof_text=FULL, stmt_id=sid)
     out = _agent(st).register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,

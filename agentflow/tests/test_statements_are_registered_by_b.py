@@ -192,3 +192,8 @@ def test_stubbing_the_criterion_reopens_the_wild_road(tmp_path, monkeypatch):
         assert _kind(res) != TT.STATEMENTS_REGISTERED_BY_B, (
             role, "判据被打桩成恒放行之后仍然报同一个码 ⇒ a/b 的绿是恒真的")
     assert st.rows("statements") == [], "这一条不核落行，只核码确实由那道判据给"
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

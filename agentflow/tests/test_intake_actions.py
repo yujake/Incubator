@@ -530,3 +530,8 @@ def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_p
                for i in inbox["items"]), inbox
     # 台账那一行也是 `ok`（它确实登记成功了）——"如实标记"落在 `pending` 与行里的三态上
     assert st.rows("tasks")[0]["outcome"] == "ok", st.rows("tasks")[0]
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

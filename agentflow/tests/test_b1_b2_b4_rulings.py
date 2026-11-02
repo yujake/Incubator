@@ -38,6 +38,8 @@ import pathlib
 
 import pytest
 
+from conftest import sign_before_registration
+
 from agentflow import agent_prompts as AP
 from agentflow import closing
 from agentflow import quoteevidence as QE
@@ -158,6 +160,9 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     assert not store.rows("statements"), "被拒的一笔不许在盘上留下半行"
 
     # 正控：同一笔内容改成 kind="conjecture" ⇒ 通过（红不是写死的）。
+    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
+    # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
+    sign_before_registration(store.root, proof_text=_own()["proof_text"])
     good = _ok(_b(store).register_statement(**_own(kind="conjecture")))
     assert good.get("ok") is True, good
     rows = store.rows("statements")
@@ -204,6 +209,9 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
 
     monkeypatch.setattr(holder, "_self_authored_gate", probe)
     try:
+        # 准入闸（2026-11-02 strict）：证明正文先要有签（先签后登记，见
+        # `conftest.sign_before_registration`）。
+        sign_before_registration(store.root, proof_text=_own()["proof_text"])
         out = _ok(_b(store).register_statement(**_own(kind="  conjecture  ")))
     finally:
         monkeypatch.setattr(holder, "_self_authored_gate", real)
@@ -281,6 +289,7 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     assert "handoffs.jsonl" in err and "out/paper/main.tex" in err, err
     assert not store.rows("statements"), "被拒的一笔不许在盘上留下半行"
 
+    sign_before_registration(store.root, proof_text=_own()["proof_text"])
     good = _ok(_b(store).register_statement(**_no_source(
         quote_reason=f"no_source：原文不在盘上，凭据是我方手稿 {BACKING}")))
     assert good.get("ok") is True, good
@@ -290,6 +299,7 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     # 另外两种写法（裁定给的例子）同样算"指到了哪一处"。
     for reason in ("no_source：见 out/paper/main.tex§3",
                    "no_source：见 stmt:000007"):
+        sign_before_registration(store.root, proof_text=_own()["proof_text"])
         got = _ok(_b(store).register_statement(**_no_source(
             statement_full=f"探针命题：{reason}", quote_reason=reason)))
         assert got.get("ok") is True, (reason, got)

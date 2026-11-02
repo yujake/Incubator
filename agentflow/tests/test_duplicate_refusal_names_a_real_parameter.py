@@ -23,6 +23,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 
 from agentflow import capabilities as C
@@ -127,3 +129,8 @@ def test_the_secretary_duplicate_reading_does_not_name_force_new(
     # 指出的两件真事：既有那行的号 + 差异要写进 statement_full
     assert str(dup.get("stmt_id") or ""), dup
     assert "statement_full" in reason, reason
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

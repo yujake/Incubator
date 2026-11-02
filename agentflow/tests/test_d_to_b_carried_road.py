@@ -37,6 +37,8 @@ F 的出口改成了 `B.register_statement`，于是 F 自己那一轮递交时 
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import pathlib
 import sys
@@ -459,3 +461,8 @@ def test_the_washed_flag_travels_with_the_file(tmp_path: pathlib.Path) -> None:
     reading = DS.manuscript_wash_reading(text)
     assert reading["washed"] is True, (reading, text[:400])
     assert reading["actor"].startswith("secretary"), reading
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

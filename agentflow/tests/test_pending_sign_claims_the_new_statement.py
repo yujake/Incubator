@@ -118,13 +118,18 @@ def test_the_same_body_registered_twice_does_not_claim_the_sign_twice(tmp_path):
 
 # ---------------------------------------------------------------- ③ 反真空：改一个字
 def test_one_changed_character_is_not_claimed(tmp_path):
-    """③ 反真空：pending 签盖的是旧正文；改一个字之后登记 ⇒ 不认领（sha 不符）。"""
+    """③ 反真空：pending 签盖的是旧正文；改一个字之后登记 ⇒ 不认领（sha 不符）。
+
+    2026-11-02 准入闸默认 strict 之后，"不认领"的最终形态是**整笔被拒**
+    （`proof_without_v_sign`）：没有一份盖住这一份正文的签，它就不许进台账。
+    所以这一条读的是"拒收 + pending 那一行仍然没有绑号"，不再是"写进去了但没认签"。
+    """
     st = _ws(tmp_path)
     VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK))
     got = _register(st, proof=PROOF_CHANGED)
-    assert got.get("ok") is True, got
-    row = _row_of(st, str(got["stmt_id"]))
-    assert dict(row.get("bits") or {}).get("reviewed") is not True, row.get("bits")
+    assert got.get("ok") is False, got
+    assert got.get("kind") == "proof_without_v_sign", got
+    assert st.rows("statements") == [], st.rows("statements")
     pending = _pending_row(st)
     assert str(pending.get("statement_id") or "") == "", pending
     v_sign = dict(got.get("v_sign") or {})
@@ -133,32 +138,35 @@ def test_one_changed_character_is_not_claimed(tmp_path):
 
 # ---------------------------------------------------------------- ④ 反真空：没有签
 def test_no_pending_sign_means_no_claim(tmp_path):
-    """④ 反真空：pending 里没有这一份 ⇒ 第 3 位不翻（"没签过"不是"认到了一签"）。"""
+    """④ 反真空：pending 里没有这一份 ⇒ 签不上去、整笔被拒（"没签过"不是"认到了一签"）。"""
     st = _ws(tmp_path)
     got = _register(st)
-    assert got.get("ok") is True, got
-    row = _row_of(st, str(got["stmt_id"]))
-    assert dict(row.get("bits") or {}).get("reviewed") is not True, row.get("bits")
+    assert got.get("ok") is False, got
+    assert got.get("kind") == "proof_without_v_sign", got
+    assert st.rows("statements") == [], st.rows("statements")
     assert VR.pending_rows(st.root)[0] == [], VR.pending_rows(st.root)
 
 
 # ---------------------------------------------------------------- ⑤ 同一把尺
 def test_a_pending_sign_that_cannot_sign_bit3_is_not_claimed(tmp_path):
     """⑤ pending 那一签也要过 `row_signable`（成立 + 无未解决 error）——
-    与 V 那条 pending 台账同一把尺：签不住的签不许被认领成第 3 位。"""
+    与 V 那条 pending 台账同一把尺：签不住的签不许被认领，于是这一笔不许进台账。"""
     st = _ws(tmp_path)
     VR.record_pending_sign(st.root, proof_text=PROOF, verdict={
         "verdict": "成立",
         "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
                       "detail": "第 2 步直接用了结论"}]})
     got = _register(st)
-    assert got.get("ok") is True, got
-    row = _row_of(st, str(got["stmt_id"]))
-    assert dict(row.get("bits") or {}).get("reviewed") is not True, row.get("bits")
+    assert got.get("ok") is False, got
+    assert got.get("kind") == "proof_without_v_sign", got
+    assert st.rows("statements") == [], st.rows("statements")
     pending = _pending_row(st)
     assert str(pending.get("statement_id") or "") == "", pending
-    v_sign = dict(got.get("v_sign") or {})
-    assert "签不住" in str(v_sign.get("why") or "") or "未解决" in str(v_sign.get("why") or ""), v_sign
+    # 拒收那一笔把闸的读数带回来了：这一份正文在闸眼里仍然"没有签"
+    # （签不住的 pending 行没有被认领成第 3 位）。
+    gate = dict(got.get("proof_gate") or {})
+    assert gate.get("applicable") is True, gate
+    assert gate.get("proofs") and gate["proofs"][0]["signed"] is False, gate
 
 
 def test_the_claim_names_a_ledger_that_really_exists(tmp_path):

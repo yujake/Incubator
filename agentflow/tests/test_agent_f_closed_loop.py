@@ -217,7 +217,7 @@ def test_the_retry_budget_is_read_from_the_plan_not_hardcoded(store: Store):
 
 # ============================================================ P3-6：proof 的出口
 
-def test_a_proof_round_hands_the_statement_to_b(store: Store):
+def test_a_proof_round_hands_the_statement_to_b(store: Store, signed_v_handoffs):
     """判据：`proof` 之后，`statements` 那一行是 B 的登记落下来的，不是 F 直写的。
 
     改前红：改前 `_proof_outlet` 在 F 进程里自己 upsert，落下来的行
@@ -279,7 +279,7 @@ def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeyp
     assert "没能**落进 statements" in rec["detail"] or "没能" in rec["detail"], rec["detail"]
 
 
-def test_the_same_proof_twice_is_not_registered_twice(store: Store):
+def test_the_same_proof_twice_is_not_registered_twice(store: Store, signed_v_handoffs):
     """反真空（幂等）：逐字相同的论证不许登记第二行（否则 `statement_rows` 虚高）。"""
     llm = FakeLLM(_proof_round("同一步"), _proof_round("同一步"))
     f = _f(store, llm=llm)

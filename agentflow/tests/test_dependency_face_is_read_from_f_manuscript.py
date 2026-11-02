@@ -50,6 +50,8 @@ F 的出口改成了 `B.register_statement`（"把内容与稿交出去"，F 不
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import pathlib
 import sys
@@ -525,3 +527,8 @@ def test_stub_the_level_judge_open_and_the_negative_control_turns_red(
     assert got.get("ok") is True, got                      # ← b 的"整笔拒绝"在这里是红的
     rows = _deps(store)
     assert len(rows) == 1 and rows[0]["source_stmt_id"] == WEAK, rows
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -21,6 +21,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from conftest import TS, add_literature
 from agentflow import secretary as SEC
 
@@ -241,3 +243,8 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     assert len(defs) == 1 and defs[0]["kind"] == "pending_definition", defs
     assert defs[0]["who"] == "direct_parent" and defs[0]["id"] == out2["stmt_id"], defs
     assert "直接父" in defs[0]["why"], defs
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

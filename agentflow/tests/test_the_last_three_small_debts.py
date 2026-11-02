@@ -261,3 +261,8 @@ def test_the_new_two_layer_file_carries_no_decoration_in_its_comments(r009_scan)
     # 反真空：它不是一棵"没有注释所以没命中"的文件，也没有被"清"成语法错误。
     assert "**" in text, "四颗星号（Python 语法）不见了：是不是被当装饰清掉了？"
     compile(text, str(path), "exec")
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

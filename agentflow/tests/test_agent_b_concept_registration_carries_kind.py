@@ -130,25 +130,32 @@ def test_a_concept_registration_does_not_carry_a_proof_text(store: Store):
 
 @pytest.mark.parametrize("kind", ["theorem", "lemma", "definition", "conjecture"])
 def test_other_kinds_land_with_the_same_grade_as_before(kind: str, store: Store):
-    """② 正控：非概念 kind 的落盘等级仍是 `pre_theorem`（与改前逐字相同）。
+    """② 正控：非概念 kind 的落盘等级仍是 `conjecture`（与改前逐字相同）。
 
     `evidencebits.derive_grade` 只在 `concept` 那一支看 `kind`，所以把 `kind` 传进
     `bits_of` 对别的 kind 应当一个字都不动。这条走的是动作面（落盘那一行），因此
     它不依赖生产端那个新形参的签名 —— 改前改后都该是绿的：真正的"不变"读数。
+
+    2026-11-02（两阶段录入）：这一条原是 `pre_theorem`，因为引用命题的"第 3 位"
+    曾被文献编号点亮。业主收口「汇总位不许把占位签读成已签」之后，引用侧只到第 2 位
+    ⇒ 等级是「猜想」。四个 kind 仍然逐字同档（这正是本条要守的"kind 不混进来"）。
     """
     _store_with_paper(store)
     payload = dict(REAL_R34D_CONCEPT)
     payload["kind"] = kind
     payload["label"] = f"{kind} 的那一行"
-    # 给一段真在盘上的引文：第 2+3 位靠"引文回验通过"撑起来，等级才是 `pre_theorem`
-    # （概念那一档的 `not_applicable` 短路不在这里发生）。
+    # 给一段真在盘上的引文：第 2 位靠"引文回验通过"撑起来，而第 3 位是占位签
+    # （`reviewed_source="citation"`）⇒ 等级停在「猜想」（概念那一档的
+    # `not_applicable` 短路不在这里发生）。
     payload["proof_text"] = PAPER
     out = _agent_b(store).register_statement(**payload)
     assert out.get("ok") is True, out
     (row,) = [r for r in _rows(store) if str(r.get("stmt_id")) == str(out.get("stmt_id"))]
     assert str(row.get("kind")) == kind, row
     bits = dict(row.get("bits") or {})
-    assert str(bits.get("grade")) == "pre_theorem", row
+    assert str(bits.get("grade")) == "conjecture", row
+    assert str(bits.get("reviewed")) == "False", row
+    assert str((bits.get("evidence") or {}).get("reviewed_source")) == "citation", row
     assert EB.bits_shape_problems(bits, kind=kind) == [], row
 
 

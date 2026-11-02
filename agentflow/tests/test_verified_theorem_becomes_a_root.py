@@ -100,3 +100,8 @@ def test_a_flawed_verdict_does_not_make_it_a_root(tmp_path: pathlib.Path) -> Non
     data = rep if isinstance(rep, dict) else rep.to_dict()
     payload = data.get("payload") or {}
     assert payload.get("closed") is False, data.get("summary")
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

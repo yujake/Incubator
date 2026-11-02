@@ -43,6 +43,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 import sys
 
@@ -601,3 +603,8 @@ def test_the_thresholds_are_injectable(tmp_path: pathlib.Path) -> None:
     got = strict.record_statement({**_own(FULL_A_MORPH), "proof_text": PROOF_C}, role="B")
     assert got.get("checked") is True and got.get("created") is True, got
     assert len(_rows(st2)) == 2, "阈值调到 0.99 之后那一对不该再并（键本来就不同）"
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

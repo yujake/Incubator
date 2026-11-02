@@ -743,3 +743,8 @@ def test_criterion5b_stubbing_trivial_detection_makes_the_nontrivial_branch_red(
     monkeypatch.setattr(SEC, "_is_trivial_verdict", lambda *a, **k: True)
     with pytest.raises(AssertionError):
         _assert_nontrivial_branch_keeps_its_tier(store)
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

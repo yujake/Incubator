@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 import sys
 
@@ -102,3 +104,8 @@ def test_empty_quote_reason_says_write_the_reason_and_a_real_one_works(
 #: 不在这一份里钉：镜像号由 `tools/table_tools.py:1148` 先拒（`statements 里没有主键 …`），
 #: 而那条建议要改的是 table_tools.py（FC-27 auth-audit，按主控口径排到 83 之后）。
 #: 秘书那一侧的 `not_found` 是直调内部守卫，模型看不到，按「宁可少一句」不动它。
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

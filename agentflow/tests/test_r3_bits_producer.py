@@ -14,6 +14,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 
 from agentflow import evidencebits as EB
@@ -67,7 +69,12 @@ def _statement_events(store) -> list[dict]:
 # --------------------------------------------------------------- 算得出（产出方落地）
 
 def test_external_lit_with_verbatim_quote_lands_bits_in_the_same_transaction(store):
-    """正控：逐字核过的引用命题 ⇒ 第 2+3 位由 `bits_of` 按「引用」点亮，等级现算。"""
+    """正控：逐字核过的引用命题 ⇒ 第 2 位由 `bits_of` 按「引用」点亮，等级现算。
+
+    2026-11-02（两阶段录入，`draft/179`）：引用侧的点亮只到第 2 位 —— 第 3 位是
+    占位签（`reviewed_source="citation"`，凭据是文献编号），汇总位不许读成已签，
+    所以等级回到「猜想」。要升到预备定理级得先逐个优化重写、拿正常 V 签。
+    """
     lid = _lit(store)
     res = _agent(store).register_statement(source_lit_id=lid, **_external())
 
@@ -75,10 +82,11 @@ def test_external_lit_with_verbatim_quote_lands_bits_in_the_same_transaction(sto
     rows = _bits_rows(store)
     assert len(rows) == 1, f"产出方必须把 bits 写进盘里（改前：带 bits 0 行）：{store.rows('statements')}"
     bits = rows[0]["bits"]
-    assert bits["proof"] is True and bits["reviewed"] is True, bits
+    assert bits["proof"] is True and bits["reviewed"] is False, bits
     assert bits["evidence"]["proof_source"] == "citation", bits["evidence"]
     assert bits["evidence"]["reviewed_by"]["evidence"] == f"lit:{lid}", bits["evidence"]
-    assert bits["grade"] == "pre_theorem", bits
+    assert bits["evidence"]["reviewed_source"] == EB.REVIEWED_SOURCE_CITATION, bits["evidence"]
+    assert bits["grade"] == "conjecture", bits
     assert EB.bit_problems(bits) == [] and EB.bits_shape_problems(bits) == [], bits
     assert EB.bits_from_row(rows[0])["grade"] == bits["grade"], "读侧与写侧必须现算出同一个等级"
 
@@ -177,7 +185,16 @@ def test_negative_control_the_read_side_is_not_the_producer(store):
 
     rows = store.rows("statements")
     assert rows and not rows[0].get("bits"), "旧行的盘上形状就是没有 bits（改前的 138 行同形）"
-    assert EB.bits_from_row(rows[0])["grade"] == "pre_theorem", (
-        "读侧对『逐字核过的引用命题』那条例外本来就在（这不是本次接线的功劳）"
+    # 读侧那条例外仍在（第 2 位按「引用」点亮、凭据是文献编号），但 2026-11-02 起它
+    # 不再点亮第 3 位：占位签不是已签 ⇒ 等级是「猜想」。
+    legacy_bits = EB.bits_from_row(rows[0])
+    assert legacy_bits["proof"] is True and legacy_bits["reviewed"] is False, legacy_bits
+    assert legacy_bits["grade"] == "conjecture", (
+        "读侧对『逐字核过的引用命题』那条例外本来就在（这不是本次接线的功劳）", legacy_bits
     )
     assert _bits_rows(store) == [], "读侧读出什么都不改变这一栏：0 还是 0"
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

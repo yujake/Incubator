@@ -20,6 +20,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 import sys
 
@@ -579,3 +581,8 @@ def test_negative_control_a_folded_bad_tail_turns_the_fifth_cell_red(
     deps = [dict(r) for r in st.rows("dependencies")]
     two_d = _DepGraph(stmts=[_row(st)], deps=deps, exps=[], lits=[]).groups_of(SID)
     assert PL.DEFAULT_PROOF_NO in two_d, two_d
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

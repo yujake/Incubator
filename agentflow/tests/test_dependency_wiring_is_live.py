@@ -341,7 +341,8 @@ def test_the_contract_values_are_the_ones_in_the_code() -> None:
 
 # ------------------------------------------------------------------ a0 时序
 
-def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeypatch) -> None:
+def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeypatch,
+                                                          signed_v_handoffs) -> None:
     """a0 F 的 proof 档：手稿在登记之前就在盘上，登记那一笔收到的就是它。
 
     改前红（逐条）：`AgentF._proof_outlet` 的形参里没有 `proof_manuscript` ⇒ 观察者拿到
@@ -380,6 +381,7 @@ def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeyp
 # ------------------------------------------------------------------ a D 携带
 
 def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
+                                                    signed_v_handoffs,
                                                    monkeypatch) -> None:
     """a D 交研究手稿给 B 时带上 F 的稿 ⇒ B 读那份稿落依赖、来源读 `carried_by_D`。
 
@@ -441,7 +443,8 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
     assert (reading.get("manuscript_probe") or {}) == {}, reading
 
 
-def test_the_delivery_really_hands_the_manuscript_to_b(tmp_path: pathlib.Path) -> None:
+def test_the_delivery_really_hands_the_manuscript_to_b(tmp_path: pathlib.Path,
+                                                        signed_v_handoffs) -> None:
     """a 的第二格（审计 M8）：D 的交付动作真把稿递给 B，读数里 `delivered >= 1`。
 
     为什么单独一条：`test_d_carries_the_f_manuscript_and_b_reads_it` 那一趟的 D 没有
@@ -480,7 +483,8 @@ def _d_report_path(store: Store) -> str:
     return str(AgentD(store).write_report())
 
 
-def test_d_does_not_carry_a_statements_it_has_no_manuscript_for(tmp_path: pathlib.Path) -> None:
+def test_d_does_not_carry_a_statements_it_has_no_manuscript_for(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
     """a 的边界：盘上没有那份稿的命题不出现在携带单里（携带单不是"所有命题"）。"""
     store = _ws(tmp_path)
     _library(store)                      # 两条在册命题，盘上一份 f-proof-*.md 都没有
@@ -493,7 +497,8 @@ def test_d_does_not_carry_a_statements_it_has_no_manuscript_for(tmp_path: pathli
 
 # ------------------------------------------------------------------ b 兜底读盘
 
-def test_an_empty_parameter_reads_the_manuscript_from_disk(tmp_path: pathlib.Path) -> None:
+def test_an_empty_parameter_reads_the_manuscript_from_disk(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
     """b D 没带、盘上有稿 ⇒ 兜底读盘生效、依赖落成、来源读 `disk`（老调用不瘫）。
 
     改前红：兜底读盘这一支一行都没有（0 行）⇒ `dependencies` 一行不落、返回里也没有
@@ -549,7 +554,8 @@ def test_the_two_agreed_names_are_both_recognised(tmp_path: pathlib.Path) -> Non
     assert "都不在盘上" in miss["why"], miss
 
 
-def test_a_given_manuscript_wins_and_the_disk_is_not_read(tmp_path: pathlib.Path) -> None:
+def test_a_given_manuscript_wins_and_the_disk_is_not_read(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
     """b 的正控：参数给了稿 ⇒ `manuscript_source=param`，D 携带与盘上那份都不去读。
 
     改前红：改前没有"参数优先"这一回事（也没有 `manuscript_source` 这一格）——
@@ -599,7 +605,8 @@ def test_no_manuscript_anywhere_with_a_citation_is_refused(tmp_path: pathlib.Pat
     assert len(store.rows("statements")) == before_statements, store.rows("statements")
 
 
-def test_a_self_contained_proof_without_a_manuscript_still_lands(tmp_path: pathlib.Path) -> None:
+def test_a_self_contained_proof_without_a_manuscript_still_lands(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
     """c 的边界：正文一条在册引用都没有 ⇒ 不拒收；有稿时读数是 `not_applicable`。
 
     两档分开钉：
@@ -692,7 +699,8 @@ def _v_secretary(store: Store):
                          seam=_VSecretarySeam(), enable_model=True)
 
 
-def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -> None:
+def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
     """e F 写稿 → D 携带 → B 读稿落依赖 → V 核引用签字（整条链，零模型钱）。
 
     判据三件：
@@ -714,8 +722,12 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     carried = DS.carried_manuscripts(report)
     assert [r["statement_id"] for r in carried["rows"]] == [f_stmt], carried
 
+    # 2026-11-02 准入闸（默认 strict）之后的真实次序：命题行（含依赖面）先落，
+    # 证明正文要等 V 签过才写得进去。所以这一笔先登记成"证明还空着"的形态
+    # （`proof_text=""` 不在闸的适用面上），V 审的是下面那一份 `PROOF_BODY`。
+    PROOF_BODY = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
     got = _register(store, statement_full="定理：研究手稿引用了 F 的证明手稿（整条链）。",
-                    proof_text=f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。",
+                    proof_text="",
                     derived_from=[f_stmt])
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_CARRIED, got
@@ -728,7 +740,7 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     assert {str(r["source_stmt_id"]) for r in rows} == {THEOREM_A, THEOREM_B}, rows
     assert (got.get("deps_missing") or {}).get("state") == "present", got
 
-    # V 读同一份依赖面核引用并签字
+    # V 读同一份依赖面核引用并签字（签的是"这一份要写进台账的正文"）
     reply = json.dumps({"verdict": "成立", "defect_step": None, "why": "",
                         "findings": [], "citation_checks": [
                             {"stmt_id": THEOREM_A, "verdict": "consistent",
@@ -739,11 +751,10 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     v_llm = _VSeam(reply)
     v = AgentV(store, workspace_root=store.root, llm=v_llm,
                secretary=_v_secretary(store))
-    b_row = next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == b_stmt)
     # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要断"前几转不签"；
     # 2026-10-30 起那几次落在同一次调用的多转里（V 判没问题后连续再判，不是 F 三交）
     # ⇒ 逐转读数从 `review_passes` 读，"连续之后才签"这条口径本身没变。
-    signed = v.verify_proof(b_stmt, proof_text=str(b_row.get("proof_text") or ""))
+    signed = v.verify_proof(b_stmt, proof_text=PROOF_BODY)
     assert signed.get("checked") is True, signed
     v_passes = signed.get("review_passes") or []
     assert len(v_passes) == int(VR.SIGN_STREAK_NEED), v_passes
@@ -757,6 +768,11 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(tmp_path: pathlib.Path) -
     prompt = v_llm.prompts[-1]
     assert "## 引用核实" in prompt, prompt[-2500:]
     assert THEOREM_A in prompt and THEOREM_B in prompt, prompt[-2500:]
+    # 签住之后 B 才把这一份正文写进台账（准入闸要的就是这一份正文的签）。
+    late = _register(store, statement_full="定理：研究手稿引用了 F 的证明手稿（整条链）。",
+                     proof_text=PROOF_BODY, derived_from=[f_stmt])
+    assert late.get("ok") is True, late
+    assert str(late.get("stmt_id")) == b_stmt, late
     # 盘上两行：依赖行落在 B 那条命题上，verifications 里那一签是「成立」且签住第 3 位
     ledger, problems = VR.list_verifications(store.root, statement_id=b_stmt, limit=None)
     assert problems == [], problems
@@ -852,7 +868,7 @@ def test_stubbing_the_disk_fallback_out_turns_b_red(tmp_path: pathlib.Path,
 
 
 def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
-                                                     monkeypatch) -> None:
+                                                     monkeypatch, signed_v_handoffs) -> None:
     """d-3 反真空：把"读 D 的携带单"打桩成永远读不到 ⇒ a 必红（改走 disk 兜底）。
 
     这一条与 d-2 合起来才说明主路与兜底是两条真的分开的路：打掉主路，来源读数

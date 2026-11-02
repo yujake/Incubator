@@ -411,3 +411,8 @@ def test_5_stubbing_the_ledger_read_makes_2_and_3_red(
     for body in (_assert_sha_mismatch_cannot_be_proof, _assert_rejected_cannot_be_proof):
         with pytest.raises(AssertionError):
             body(_store(tmp_path / body.__name__))
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

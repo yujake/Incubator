@@ -16,6 +16,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import pathlib
 import sys
@@ -608,3 +610,8 @@ def test_negative_control_a_number_bits_declaration_turns_the_type_reading_red(
     problems = _bits_decl_problems(RD.type_decls())
     assert problems != [], "bits 声明回 number 之后 ③ 仍然全绿 ⇒ 那条判据没有对象"
     assert any("number" in p for p in problems), problems
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -40,6 +40,8 @@ L7 的两档（`proofs_unreviewed` 与 `proofs_stale`）在同一个场景里前
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import pathlib
 import sys
@@ -660,3 +662,8 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
         "L9", "产物行的 by_task_id 没反查到那一趟", art_rows[0].get("by_task_id"))
     assert art_rows[0].get("by_task_id_tri") == "event", _broken(
         "L9", "产物行的 by_task_id 三态不是 event", art_rows[0].get("by_task_id_tri"))
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

@@ -1475,9 +1475,13 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
     assert rep.status["acceptance"] == "pass", rep.to_dict()
     assert row["detail"]["counted"][0]["stmt_id"] == "0001", row["detail"]
     assert row["detail"]["cited_skipped"] == 1, row["detail"]
-    # 0000（只有证明过程、没审过）与 0003（只有老字段）都停在"猜想"；
-    # 0001（我方，算一档）与 0002（引用，`cited_skipped`）都是"预备定理级"。
-    assert row["detail"]["grades"] == {"conjecture": 2, "pre_theorem": 2}, row["detail"]
+    # 0000（只有证明过程、没审过）、0002（引用）与 0003（只有老字段）都停在"猜想"；
+    # 0001（我方，算一档）是"预备定理级"。
+    #
+    # 2026-11-02（两阶段录入）改了这一格：引用命题的第 3 位降成占位签
+    # （凭据是文献编号），于是 0002 不再到预备定理级 —— 它被跳过靠的是 `origin`，
+    # 不再是等级（见 `closing._leg_reading` 里那一段注释）。
+    assert row["detail"]["grades"] == {"conjecture": 3, "pre_theorem": 1}, row["detail"]
 
 
 def test_the_grade_reading_comes_from_bits_from_row(tmp_path: pathlib.Path):

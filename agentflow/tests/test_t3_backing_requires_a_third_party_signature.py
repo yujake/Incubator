@@ -395,3 +395,8 @@ def test_6_an_uncited_row_is_named_exactly_once_by_the_warning(
     assert "没被正文引到" in str(warnings[0].detail), warnings[0].detail
     assert warnings[0].level != "blocker", warnings[0].level      # 只报不拦
     assert rep.readings["suspect_self_signed"]["states"]["unsigned"] == 1, rep.readings
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

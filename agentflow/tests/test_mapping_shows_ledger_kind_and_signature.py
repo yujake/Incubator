@@ -592,3 +592,8 @@ def test_f4_the_marker_sentence_survives(tmp_path: pathlib.Path) -> None:
     assert len(keys) == len(ROWS), keys
     for line in keys:
         assert line.count("|") >= 11, line
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

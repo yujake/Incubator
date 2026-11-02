@@ -27,6 +27,8 @@ import sys
 
 import pytest
 
+from conftest import sign_before_registration
+
 from agentflow import capabilities as CAP
 from agentflow import schema as S
 from agentflow.agent_e import AgentE
@@ -213,6 +215,9 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     # 正控：四级都齐 ⇒ 落一行
     good = dict(_OWN)
     good.update(_OWN_SOURCE)
+    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文必须先有 V 签；
+    # 命题还没在册 ⇒ 走「先签后登记」（V 在册前审的那一签落在 pending 台账，按正文 sha 认领）。
+    sign_before_registration(st.root, proof_text=good["proof_text"])
     res = b.register_statement(**good)
     assert res.get("ok"), res
     assert len(st.rows("statements")) == 1, st.rows("statements")

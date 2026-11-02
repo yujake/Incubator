@@ -28,6 +28,8 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from conftest import sign_before_registration
+
 from agentflow import depsection as DS
 from agentflow import schema as S
 from agentflow import verifications as VR
@@ -111,10 +113,14 @@ _HANDWRITTEN = (
 
 def _register(store: Store):
     b = AgentB(store, extractor=None, extract_text=None, config={})
+    proof = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
+    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
+    # 命题还没在册 ⇒ 先落 pending 那一签，登记时按正文 sha 认领。
+    sign_before_registration(store.root, proof_text=proof)
     return b.register_statement(
         statement_full="引理：由在册定理推出结论（B 读稿的判据夹具）。",
         statement_text="由在册定理推出结论",
-        proof_text=f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。",
+        proof_text=proof,
         derived_from=[THEOREM_A], origin="own_result", kind="conjecture",
         quote_reason="我方自产命题（判据夹具）", doc_id=THEOREM_A,
         # 手稿走"盘上那一份"这条路（与真机兜底读盘同一个入口）

@@ -30,7 +30,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature  # noqa: E402
+from conftest import add_literature, sign_before_registration  # noqa: E402
 from agentflow import capabilities as C  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
@@ -134,6 +134,9 @@ def _chain(tmp_path: pathlib.Path, body: str = EXHAUSTIVE_PROBE,
         "R(3,4)=9（K_9 的二染色穷举）", "ramsey34=9", rel, method="numeric")
     row = store.rows("experiments")[-1]
     column = NP.proof_column(row)
+    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
+    # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
+    sign_before_registration(store.root, proof_text=column)
     filed = AgentB(store, extractor=None, extract_text=None).register_statement(
         origin="own_result", kind="conjecture", label="R(3,4)=9",
         statement_full="对任意正整数 n，R(3,4)=9。", statement_text="R(3,4)=9",

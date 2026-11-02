@@ -24,6 +24,8 @@ B 在 20:54:53 / 20:55:22 两次把同一份内容再交一次、请求 `evidenc
 """
 from __future__ import annotations
 
+import pytest
+
 import pathlib
 import sys
 
@@ -108,3 +110,8 @@ def test_an_unreadable_row_reads_unknown_not_the_requested_tier(tmp_path):
     # 行不存在也是 unknown（不是空串、不是请求值）。
     b.store = _st  # type: ignore[assignment]
     assert b._evidence_kind_on_disk("000999") == "unknown"
+
+
+#: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
+#: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
