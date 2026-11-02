@@ -20,6 +20,7 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+from conftest import seed_statement_row
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -66,17 +67,40 @@ def _plan() -> dict:
 
 
 def _one_output(st: Store) -> tuple[AgentF, dict, str]:
+    """一条"有正文、还没签"的成果（直接铺行造历史形态）。
+
+    准入闸 strict 之后 `_apply_round` 写不进无签的证明正文（整笔拒
+    `proof_without_v_sign`）—— 这一组测的是"无签成果被读成什么"，现场因此改成
+    直接铺一行 statements（真机 3134 行 own_result 的历史形态）＋按约定路径落一份
+    手稿（`_sign` 要在它上面盖签块，所以正文必须与行上的 proof_text 逐字相同）。
+    改的是"怎么造现场"，不是期望值。
+    """
     f = _f(st)
     plan = _plan()
+    body = _proof_body()
+    # `_plan()` 的子目标没有 `testable` ⇒ F 的 full 就是子目标原文（与 `_proof_outlet`
+    # 的拼法一致；full 对不上会让 B 以为这是一条新命题、从而撞上准入闸）。
+    full = "证明引理 A"
+    seeded = seed_statement_row(
+        st, proof_text=body, statement_full=full, statement_text="证明引理 A",
+        kind="conjecture", label="F 攻坚 0000 子目标 s1",
+        quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
+    sid = str(seeded["stmt_id"])
+    # 手稿由 F 自己的渲染写（签块的落点与真机同形）；这一笔登记与在册正文逐字相同
+    # ⇒ 准入闸不适用（没有要写的新正文），照旧把稿按命号发布。
     sg = dict(plan["subgoals"][0])
     deploy = f._apply_round(_proof_product(), sg, plan=plan, owner="F")
-    sid = str(deploy.get("statement_id") or "")
-    assert sid, deploy
+    assert str(deploy.get("statement_id") or "") == sid, deploy
     plan["history"].append({"round": 1, "sid": "s1", "action": "proof",
                             "outcome": "progress", "detail": "", "evidence": [],
                             "statement_id": sid, "at": AT})
     plan["rounds"] = 1
     return f, plan, sid
+
+
+def _proof_body() -> str:
+    """`_proof_product` 交给 B 的那一份正文（`agent_f._proof_outlet` 的拼法）。"""
+    return "1. 取 δ=ε，按定义逐点验证。（前提）"
 
 
 def _proof_product() -> dict:
@@ -165,13 +189,12 @@ def test_d_the_controlled_vocabulary_is_three_values():
 def test_e_the_step_cell_carries_the_same_proof_count(tmp_path):
     """`F.step` 的返回值里也有 `proof_count`（产出统计只在读数一处定义）。"""
     st = _ws(tmp_path)
-    f = _f(st)
-    plan = _plan()
+    f, plan, sid = _one_output(st)
     sg = dict(plan["subgoals"][0])
     first = f._apply_round(_proof_product(), sg, plan=plan, owner="F")
+    assert str(first.get("statement_id") or "") == sid, first
     assert first.get("proof_count") == 0, first
     assert first.get("draft_count") == 1, first
-    sid = str(first.get("statement_id") or "")
     _sign(st, sid)
     second = f._apply_round(_proof_product(), sg, plan=plan, owner="F")
     assert str(second.get("statement_id") or "") == sid, second
