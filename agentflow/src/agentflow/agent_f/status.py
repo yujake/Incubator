@@ -78,6 +78,9 @@ class _Status:
         return {
             "checked": True,
             "plan_id": row.get("plan_id"),
+            # 交差读数（逐条）：`F.status` 是只读视图，但"还有哪些没签"必须是可读的 ——
+            # 收工门 / M / 人看的是同一格（判据在 `agent_f/delivery.py`）。
+            "delivery": self._delivery_reading(row),
             "problem": row.get("problem"),
             "problem_key": row.get("problem_key"),
             "for_question_id": row.get("for_question_id"),

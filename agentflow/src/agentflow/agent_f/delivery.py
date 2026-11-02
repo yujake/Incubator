@@ -33,9 +33,26 @@
 | `coverage` | 已签 ÷ 总数，化成「最简分数」（3/3 读作 `1/1`、1/3 读作 `1/3`） |
 | `coverage_reading` | 未约分的「已签/总数」（`3/3`）—— 要原始条数看这一格 |
 | `coverage_ratio` | 0..1 的数；0 条成果时是 `None`（不是 0 —— 没有分母） |
-| `state` | `signed_all` / `outputs_unsigned` / `not_started`（「没成果」那一档见下一批） |
+| `state` | `signed_all` / `outputs_settled` / `outputs_unsigned` / `researched_no_output` / `not_started` |
 | `delivered` | 「有成果、且每一条成果都已签」（不是「有一条签了」；0 条不算交差完成） |
-| `self_assessment` | 三条自评判据各一档（见下） |
+| `proof_count` | 能叫「证明」的条数（`claim=proof`，只有已签的算） |
+| `unfinished` | 还没签、也没被明确放弃的成果（逐条：命题号 + 手稿 + 签的档位） |
+| `legal_stop` | 现在收工「合不合业主口径」（未签成果没处置 ⇒ 假；「研究过、没成果」⇒ 真） |
+| `self_assessment` | 三条自评判据各一档（见下），外加 F 自己写的 `next_move` / `why` 留痕 |
+
+## 交差不许静默（业主 2026-11-02 追加口径）
+
+「应该是收工的判据拦着说你还有哪些命题未签（也可以选择放弃那些命题），没签的要继续完善
+直到拿到V签」。所以交差读数里：
+
+- `unfinished` 「逐条点名」还没签的成果（命题号 + 手稿路径 + 签的档位），不只是一个数；
+- 它「不替 F 决定」下一步：`LEGAL_EXITS` 只是「举例」（换证明路线 / 拆成更弱的引理 /
+  补缺工具 / 减弱断言 / 明确放弃 / 判断是误判再送一次），不是枚举、不是系统动作；
+- 但 F 「必须留痕」：`self_assessment.next_move` 写它选了什么、`why` 写理由；
+  没留痕 ⇒ `trail.checked=False`、`close_problems` 点名「它申请收工却没说自己怎么办」；
+- 「明确放弃」是合法出路，落法是台账那一行 `status=abandoned` +
+  `quote_reason=abandoned@<ISO8601>@<理由>`（三样缺一不可）。放弃之后的成果
+  按 `abandoned` 读：「不再算「未签」」（但那一条也不计入「产出的证明数」）。
 
 ## 三条自评判据（`SELF_CRITERIA`）
 
@@ -49,6 +66,10 @@
 `agent_f.core._attack_prompt` 第 7 段）。F 没写（或写得不成形）时这一格
 「不冒充自评」：`source="derived"` + `checked=False`，三档按盘上证据推
 （怎么推写在 :func:`derived_self_assessment` 里），`why` 明说「这不是 F 的自评」。
+
+「没成果」是「合法的收工理由」（业主原话「也可以是没成果」）：`enough_output=no_output`
+＋ 研究过（`researched=True`）⇒ `state=researched_no_output`、`is_failure=False`、
+`legal_stop=True`。它不是失败，也不是「交差完成」—— 是第三种结局。
 """
 from __future__ import annotations
 
@@ -84,20 +105,43 @@ SELF_TIER_LABELS: dict[str, str] = {
     "none": "没有阶段性成果",
 }
 
-#: 交差三态。
+#: 交差的五档（三态 + 「已处置」 + 「还没开始」）。
 STATE_SIGNED_ALL = "signed_all"
+STATE_OUTPUTS_SETTLED = "outputs_settled"
 STATE_OUTPUTS_UNSIGNED = "outputs_unsigned"
+STATE_RESEARCHED_NO_OUTPUT = "researched_no_output"
 STATE_NOT_STARTED = "not_started"
 
 #: 固定顺序：从"交差完成"到"还没开始"。
-DELIVERY_STATES: tuple[str, ...] = (STATE_SIGNED_ALL, STATE_OUTPUTS_UNSIGNED,
-                                    STATE_NOT_STARTED)
+DELIVERY_STATES: tuple[str, ...] = (STATE_SIGNED_ALL, STATE_OUTPUTS_SETTLED,
+                                    STATE_OUTPUTS_UNSIGNED,
+                                    STATE_RESEARCHED_NO_OUTPUT, STATE_NOT_STARTED)
 
 STATE_LABELS: dict[str, str] = {
     STATE_SIGNED_ALL: "有成果已签",
+    STATE_OUTPUTS_SETTLED: "有成果、未全签但都已有结局（签或放弃）",
     STATE_OUTPUTS_UNSIGNED: "有成果未全签",
+    STATE_RESEARCHED_NO_OUTPUT: "研究过但无成果",
     STATE_NOT_STARTED: "还没研究",
 }
+
+#: 未签成果的出路 —— 「举例，不是枚举」（业主 2026-11-02：「F 自己调控」）。
+#: 系统只许做两件：如实列出未签的、要求留痕；不许替它选，也不许把选择变成系统动作。
+LEGAL_EXITS: tuple[str, ...] = (
+    "换一条证明路线重做那一步",
+    "把这条命题拆成几条更弱的引理",
+    "去补原证明里缺的工具/引理",
+    "减弱自己的断言（定理→条件性结论/猜想）",
+    "明确放弃该命题（台账 status=abandoned + quote_reason=abandoned@<ISO8601>@<理由>）",
+    "判断这是 V 的误判、带理由再送一次（代价由自己承担）",
+)
+
+EXITS_NOTE = ("以上只是举例，不是枚举：选哪条、要不要继续，由 F 自己定；"
+              "它必须把「选了什么 + 理由」写进 self_assessment.next_move / why，"
+              "系统不替它决定、也不替它驱动")
+
+#: 台账里「明确放弃」那一行的口径（三样缺一不可；只写状态的行仍按未签计）。
+ABANDONED_PREFIX = "abandoned@"
 
 #: `delivered` 现在的意思（逐字进读数，别处不再猜）。
 DELIVERED_MEANS = ("有成果、且每一条成果都已签 —— 不是「有一条签了」；0 条成果时它是假"
@@ -140,13 +184,75 @@ def claim_of(state: str, *, signed: bool = False) -> str:
     return CLAIM_DRAFT
 
 
+def abandoned_of(statement_row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """这一条命题被「明确放弃」了没有（三样缺一不可：状态、时间、理由）。
+
+    台账口径（与 `agent_skills` 的 F 手册同源）：`status=abandoned` 且
+    `quote_reason=abandoned@<ISO8601>@<理由>`。只写状态、不写时间与理由的行
+    「仍按未签计」 —— "我放弃了"这句话本身不是处置，处置要留得下时间与理由。
+
+    放弃是合法出路（业主 2026-11-02：「也可以选择放弃那些命题」）：它之后那一条
+    「不再算「未签」」（`unfinished` 里不再出现），但它也「不计入「产出的证明数」」
+    （`proof_count` 只数已签的）—— 放弃不等于证明了。
+    """
+    row = dict(statement_row or {})
+    status = str(row.get("status") or "")
+    reason = str(row.get("quote_reason") or "")
+    out: dict[str, Any] = {"abandoned": False, "checked": True, "at": "", "why": "",
+                           "problems": [], "status": status}
+    if status != "abandoned":
+        return out
+    if not reason.startswith(ABANDONED_PREFIX):
+        out["problems"].append(
+            f"status=abandoned 但 quote_reason 不是 `{ABANDONED_PREFIX}<ISO8601>@<理由>`"
+            "（只写状态的行仍按未签计）")
+        return out
+    rest = reason[len(ABANDONED_PREFIX):]
+    at, _, why = rest.partition("@")
+    out["at"] = str(at or "").strip()
+    out["why"] = str(why or "").strip()
+    if not out["at"] or not out["why"]:
+        out["problems"].append(
+            "放弃那条线缺时间或理由（`abandoned@<ISO8601>@<理由>` 三样缺一不可）"
+            f"：收到 {reason!r}")
+        return out
+    out["abandoned"] = True
+    return out
+
+
+def trail_of(raw: Any) -> dict[str, Any]:
+    """F 对「还没签的那些怎么办」的「留痕」：选了什么（`next_move`）+ 理由（`why`）。
+
+    系统只要求"留得下"，「不判它选了哪条」（业主 2026-11-02：「F 自己调控」；
+    出路只是举例，不是枚举）。没写 ⇒ `checked=False`，读数里点名"它没留痕"。
+    """
+    out: dict[str, Any] = {"checked": False, "choice": "", "why": "",
+                           "problems": []}
+    if not isinstance(raw, Mapping):
+        out["problems"].append("F 没写 self_assessment（更没有 next_move / why 留痕）")
+        return out
+    out["choice"] = str(raw.get("next_move") or raw.get("choice") or "").strip()
+    out["why"] = str(raw.get("why") or "").strip()
+    if not out["choice"]:
+        out["problems"].append("没写 `self_assessment.next_move`：未签的那些它打算怎么办，"
+                               "读数里读不到")
+    if not out["why"]:
+        out["problems"].append("没写 `self_assessment.why`：选了这条路没留理由")
+    out["checked"] = not out["problems"]
+    return out
+
+
 def empty_reading(why: str, *, state: str = "") -> dict[str, Any]:
     """没查成时的交差读数（键一个不少，值一律 `None` —— 不许靠"少给键"表达没查成）。"""
     return {
         "checked": False, "outputs": [],
         "total": None, "signed_count": None, "pending_count": None,
         "unsigned_count": None, "proof_count": None, "proof_statements": [],
-        "draft_count": None, "coverage": "", "coverage_reading": "",
+        "draft_count": None, "abandoned_count": None, "abandoned_statements": [],
+        "unfinished": [], "unfinished_count": None,
+        "trail": {"checked": False, "choice": "", "why": "", "problems": []},
+        "trail_required": False, "legal_stop": False, "is_failure": False,
+        "close_problems": [], "coverage": "", "coverage_reading": "",
         "coverage_ratio": None, "coverage_why": why,
         "state": state, "state_label": STATE_LABELS.get(state, ""),
         "delivered": False, "delivered_means": DELIVERED_MEANS,
@@ -302,7 +408,7 @@ def normalize_self_assessment(raw: Any) -> dict[str, Any]:
     但缺格或档位不在词表里 —— 逐条列 `problems`）。缺席与乱写是两件事。
     """
     out: dict[str, Any] = {"checked": False, "source": "absent", "why": "",
-                           "criteria": {}, "problems": [], "raw": raw}
+                           "next_move": "", "criteria": {}, "problems": [], "raw": raw}
     if raw is None or (isinstance(raw, (str, bytes)) and not str(raw).strip()):
         out["why"] = ("F 这一趟没写自评（`self_assessment` 缺席）⇒ 下面三档是按盘上证据推的，"
                       "不是 F 的自评")
@@ -321,6 +427,7 @@ def normalize_self_assessment(raw: Any) -> dict[str, Any]:
                             f"（问的是「{got['question']}」）")
     out["problems"] = problems
     out["why"] = str(raw.get("why") or "").strip()
+    out["next_move"] = str(raw.get("next_move") or raw.get("choice") or "").strip()
     if problems:
         out["source"] = "unreadable"
         out["why"] = ("自评写得不成形 ⇒ 这一格没读成（不是没写）：" + "；".join(problems)
@@ -414,7 +521,10 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
     """
     items: list[dict[str, Any]] = []
     signed = pending = unsigned = 0
+    abandoned_count = 0
     proof_statements: list[str] = []
+    abandoned_statements: list[str] = []
+    unfinished: list[dict[str, Any]] = []
     for one in outputs or ():
         got = dict(one or {})
         state = str(got.get("state") or "")
@@ -431,11 +541,32 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
         got["claim_label"] = CLAIM_LABELS.get(claim, "")
         if claim == CLAIM_PROOF:
             proof_statements.append(str(got.get("statement_id") or ""))
+        # ---- 明确放弃的成果：不再算「未签」（也不再计入证明数）。
+        aband = dict(got.get("abandoned") or {}) if isinstance(got.get("abandoned"), Mapping) else {}
+        sid = str(got.get("statement_id") or "")
+        if bool(aband.get("abandoned")):
+            abandoned_count += 1
+            abandoned_statements.append(sid)
+            got["unfinished"] = False
+        else:
+            got["unfinished"] = claim != CLAIM_PROOF
+            if got["unfinished"]:
+                unfinished.append({
+                    "statement_id": sid,
+                    "manuscript": str(got.get("manuscript") or ""),
+                    "state": state,
+                    "label": str(got.get("label") or ""),
+                    "claim": claim,
+                    "claim_label": got["claim_label"],
+                    "abandoned_problems": list(aband.get("problems") or []),
+                    "why": str(got.get("why") or ""),
+                })
         items.append(got)
     total = len(items)
     cov = coverage_of(signed, total)
     researched = researched_of(history=history, subgoals=subgoals, rounds=rounds)
     staged = staged_of(history=history, subgoals=subgoals)
+    trail = trail_of(self_assessment)
     assessment = normalize_self_assessment(self_assessment)
     if not assessment.get("checked"):
         derived = derived_self_assessment(researched=researched, staged=staged,
@@ -445,17 +576,50 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
             derived["why"] = assessment.get("why") + "；" + str(derived.get("why") or "")
         assessment = derived
     conflicts = _assessment_conflicts(assessment, total=total, signed=signed)
+    unfinished_count = len(unfinished)
+    trail_required = unfinished_count > 0
+    close_problems: list[str] = []
+    reopened = signed + abandoned_count
     if total > 0 and signed >= total:
         state = STATE_SIGNED_ALL
         why = f"{total}/{total} 条成果全部已签 ⇒ 交差完成"
+    elif total > 0 and reopened >= total:
+        state = STATE_OUTPUTS_SETTLED
+        why = (f"有 {total} 条成果：已签 {signed} 条、明确放弃 {abandoned_count} 条 ⇒ "
+               "每一条都有结局（放弃的不算未签，但也不计入产出的证明数）")
     elif total > 0:
         state = STATE_OUTPUTS_UNSIGNED
+        named = "、".join(
+            f"stmt:{o.get('statement_id')}"
+            + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
+            + f"[{o.get('claim_label')}]" for o in unfinished[:8])
         why = (f"有 {total} 条成果、其中 {signed} 条已签：待签 {pending} 条、未签 "
                f"{unsigned} 条 ⇒ 还没到收工的时候；"
-               f"能叫「证明」的只有已签的那 {signed} 条（未签的不计入产出的证明数）")
+               f"能叫「证明」的只有已签的那 {signed} 条（未签的不计入产出的证明数）；"
+               f"还没签的 {unfinished_count} 条：" + (named or "（读不到命题号）"))
+        close_problems.append(
+            f"还有 {unfinished_count} 条成果没签、也没被明确放弃 ⇒ 不许静默收工")
+    elif researched.get("researched"):
+        state = STATE_RESEARCHED_NO_OUTPUT
+        why = ("研究了、尽力了、0 条成果 ⇒ 合法收工（不是失败）；"
+               f"自评=没成果（{assessment.get('enough_output')}）")
     else:
         state = STATE_NOT_STARTED
-        why = "0 条成果 ⇒ 交差读数没有对象（「研究过没成果」与「还没开始」下一批分开）"
+        why = "0 条成果 ⇒ 还没研究（不是「研究过但无成果」）"
+    if trail_required and not trail.get("checked"):
+        close_problems.append(
+            "它申请收工却没留痕：未签的那些打算怎么办（`self_assessment.next_move`）"
+            "与理由（`why`）读不到")
+    legal_stop = bool(
+        state in (STATE_SIGNED_ALL, STATE_OUTPUTS_SETTLED)
+        or (state == STATE_RESEARCHED_NO_OUTPUT
+            and str(assessment.get("enough_output") or "") == "no_output"
+            and not close_problems)
+    )
+    if state == STATE_OUTPUTS_UNSIGNED and trail.get("checked"):
+        close_problems.append(
+            "留痕已读到（它选的是："
+            + (trail.get("choice") or "（空）") + "）—— 但未签的还没变成签或放弃")
     return {
         "checked": True,
         "outputs": items,
@@ -467,6 +631,18 @@ def summary(*, outputs: Sequence[Mapping[str, Any]],
         "proof_count": len(proof_statements),
         "proof_statements": proof_statements,
         "draft_count": total - len(proof_statements),
+        # ---- 交差时点名未签成果 + 出路（举例，不替它选）+ 留痕
+        "abandoned_count": abandoned_count,
+        "abandoned_statements": abandoned_statements,
+        "unfinished": unfinished,
+        "unfinished_count": unfinished_count,
+        "trail": trail,
+        "trail_required": trail_required,
+        "legal_exits": list(LEGAL_EXITS),
+        "exits_note": EXITS_NOTE,
+        "legal_stop": legal_stop,
+        "is_failure": False,
+        "close_problems": close_problems,
         **cov,
         "state": state,
         "state_label": STATE_LABELS[state],

@@ -376,9 +376,15 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "（研究了、尽力了、0 条成果 —— 这是**合法的收工理由**）；",
         "3. `partial_output`：即使没完成原定任务，是否产出了一些小的阶段性成果 —— "
         "`partial_output`（归约 / 反例族 / 排除的路 / 部分引理）/ `none`（没有）。",
+        "还有两类要一起写（交差读数会逐条点名还没签的成果，并要你留痕）：",
+        "- `next_move`：还没签的那些你打算怎么办 —— **由你定**，举例（不是枚举）："
+        "换一条证明路线重做那一步 / 把命题拆成几条更弱的引理 / 去补缺的工具或引理 / "
+        "减弱自己的断言（定理→条件性结论/猜想）/ 明确放弃该命题 / 判断是 V 的误判、"
+        "带理由再送一次（代价由你承担）；",
+        "- `why`：为什么这么选（一句你自己的话）。",
         "写法：与产物同一个 JSON 对象，平级一格 —— "
         '`"self_assessment": {"comprehensive": "...", "enough_output": "...", '
-        '"partial_output": "...", "why": "你自己的话"}`。',
+        '"partial_output": "...", "next_move": "...", "why": "你自己的话"}`。',
     ]
     lines += [
         "只输出一个 JSON 对象，不要写解释、不要写 Markdown 围栏。",
@@ -2022,7 +2028,7 @@ class _Core:
             if cur_sid and sid == cur_sid and cur.get("reading") is not None:
                 reading = dict(cur.get("reading") or {})
                 manuscript = str(cur.get("manuscript") or "")
-                statement: dict[str, Any] = {}
+                statement = self._statement_row(sid)
             else:
                 body = self._output_body(sid, plan_id=plan_id)
                 got = self._read_sign(statement_id=sid,
@@ -2030,8 +2036,14 @@ class _Core:
                 reading = dict(got.get("reading") or {})
                 manuscript = str(body.get("manuscript") or "")
                 statement = dict(body.get("statement") or {})
+            # 明确放弃的那一条不再算「未签」（业主：也可以选择放弃那些命题）。
+            abandoned = _DL.abandoned_of(statement)
             outputs.append({**out, "statement_id": sid, "manuscript": manuscript,
                             "statement": statement,
+                            "abandoned": abandoned,
+                            "abandoned_at": str(abandoned.get("at") or ""),
+                            "abandoned_why": str(abandoned.get("why") or ""),
+                            "abandoned_problems": list(abandoned.get("problems") or []),
                             "state": str(reading.get("state") or ""),
                             "label": str(reading.get("label") or ""),
                             "signed": bool(reading.get("delivered")),
@@ -2364,6 +2376,18 @@ class _Core:
                    f"{delivery.get('unsigned_count')} 条）"
                    + ("" if delivery.get("delivered")
                       else " —— 不是「有一条签了」就算交差"))
+        # 未签的逐条点名（业主 2026-11-02：「收工的判据拦着说你还有哪些命题未签」）。
+        # 出路只举例、不替它选；它自己的选择要留痕（`self_assessment.next_move`）。
+        _open = [dict(x) for x in (delivery.get("unfinished") or [])]
+        if _open:
+            detail += ("；还没签的成果（逐条）："
+                       + "、".join(
+                           f"stmt:{o.get('statement_id')}"
+                           + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
+                           + f"[{o.get('claim_label')}]" for o in _open[:8])
+                       + f" 共 {len(_open)} 条；怎么办由你定（举例："
+                       + "、".join(list(delivery.get("legal_exits") or [])[:4])
+                       + "），并把选择与理由写进 self_assessment.next_move / why")
         return {
             "action": kind,
             "outcome": "no_change" if kind == "dead_end" else "progress",

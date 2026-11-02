@@ -6,7 +6,55 @@ from __future__ import annotations
 
 from ._support import AT, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budget_left, _step_outcome
 
+#: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
+_CLOSE_KEYS: tuple[str, ...] = (
+    "total", "signed_count", "pending_count", "unsigned_count",
+    "proof_count", "proof_statements", "draft_count",
+    "abandoned_count", "abandoned_statements",
+    "unfinished", "unfinished_count", "trail", "trail_required",
+    "legal_exits", "exits_note", "legal_stop", "is_failure", "close_problems",
+    "coverage", "coverage_reading", "coverage_ratio", "coverage_why",
+)
+
+
 class _Step:
+    def _close_reading(self, out: dict, row) -> dict:
+        """收工那一趟的逐条读数（业主 2026-11-02：「不许静默收工」）。
+
+        收工的四条出口（终态 / 连续无进展 / 轮数用尽 / 没有可推进的子目标）都走这里：
+        把「还有哪些成果没签」逐条点名、把出路（举例）与它自己的留痕一并带出去，
+        未签且没有处置时把这一句写进 `reason` —— 收工这件事不能只剩一句"停"。
+        """
+        from . import delivery as _DL
+
+        try:
+            got = self._delivery_reading(row)
+        except Exception as exc:  # noqa: BLE001 - 收工读数坏了不许把"停"也带走
+            got = _DL.empty_reading(
+                f"收工读数没跑成（{type(exc).__name__}: {exc}）⇒ 未签的那些没查成")
+        out["delivery"] = got
+        out["delivered"] = bool(got.get("delivered"))
+        for key in _CLOSE_KEYS:
+            out[key] = got.get(key)
+        out["delivery_state_plan"] = str(got.get("state") or "")
+        out["delivery_label_plan"] = str(got.get("state_label") or "")
+        out["self_assessment"] = dict(got.get("self_assessment") or {})
+        problems = [str(x) for x in (got.get("close_problems") or [])]
+        if problems:
+            out["reason"] = (str(out.get("reason") or "").rstrip()
+                             + "；收工读数（逐条）：" + "；".join(problems))
+        # 未签成果逐条点名（收工说明里也要点得到，不只在结构化读数里）
+        open_rows = [dict(x) for x in (got.get("unfinished") or [])]
+        if open_rows:
+            out["reason"] = (str(out.get("reason") or "").rstrip()
+                             + "；未签成果（逐条）："
+                             + "、".join(
+                                 f"stmt:{o.get('statement_id')}"
+                                 + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
+                                 + f"[{o.get('claim_label')}]" for o in open_rows[:8])
+                             + f" 共 {len(open_rows)} 条")
+        return out
+
     def step(self, plan_id: str) -> dict:
         """推进一轮。
         返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason","budget_known","budget_reading"}``。
@@ -54,7 +102,7 @@ class _Step:
 
         # ---- 终结状态：不再推进（终态先到先得，不许被重入改写）
         if status in TERMINAL_STATUSES:
-            return {
+            return self._close_reading({
                 "plan_id": row.get("plan_id"),
                 "round": rounds,
                 "sid": None,
@@ -69,7 +117,7 @@ class _Step:
                     "**「不再推进」不是「推进了但没有进展」**：终态先到先得，"
                     "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
                 ),
-            }
+            }, row)
 
         subgoals: list[dict] = [dict(s) for s in (row.get("subgoals") or [])]
         history: list[dict] = [dict(h) for h in (row.get("history") or [])]
@@ -93,7 +141,7 @@ class _Step:
             row["updated_at"] = self._stamp()
             self._write_plan(row, note=f"f.step:stall_after_{stall_after}_no_progress")
             self._log(f"plan {row.get('plan_id')} stalled after {stall_after} no-progress rounds")
-            out = {
+            out = self._close_reading({
                 "plan_id": row.get("plan_id"),
                 "round": rounds,
                 "sid": None,
@@ -108,7 +156,7 @@ class _Step:
                     "**不是失败，也不是成功**：当前最好的部分结果已写入 best_partial。"
                     "（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
                 ),
-            }
+            }, row)
             self.last_step = out
             return out
         #
@@ -146,7 +194,7 @@ class _Step:
             row["updated_at"] = self._stamp()
             self._write_plan(row, note="f.step:stalled")
             self._log(f"plan {row.get('plan_id')} stalled")
-            return {
+            return self._close_reading({
                 "plan_id": row.get("plan_id"),
                 "round": rounds,
                 "sid": None,
@@ -158,7 +206,7 @@ class _Step:
                 "budget_reading": reading,
                 "best_partial": row["best_partial"],
                 "reason": detail,
-            }
+            }, row)
 
         # ---- [2] 选子目标（复用 attack_tools.pick_next_subgoal）
         #
@@ -191,7 +239,7 @@ class _Step:
             row["updated_at"] = self._stamp()
             row["best_partial"] = self._compose_best_partial(subgoals, rounds + 1)
             self._write_plan(row, note="f.step:no_pickable")
-            return {
+            return self._close_reading({
                 "plan_id": row.get("plan_id"),
                 "round": rounds + 1,
                 "sid": None,
@@ -202,7 +250,7 @@ class _Step:
                 "budget_known": reading["status"] == "known",
                 "budget_reading": reading,
                 "reason": picked["reason"],
-            }
+            }, row)
 
         sg = picked["subgoal"]
         sid = str(sg.get("sid"))
@@ -340,8 +388,12 @@ class _Step:
                 "signed_count": _dl.get("signed_count"),
                 "pending_count": _dl.get("pending_count"),
                 "unsigned_count": _dl.get("unsigned_count"),
+                "proof_count": _dl.get("proof_count"),
+                "abandoned_count": _dl.get("abandoned_count"),
+                "unfinished_count": _dl.get("unfinished_count"),
                 "coverage": str(_dl.get("coverage") or ""),
                 "state": str(_dl.get("state") or ""),
+                "legal_stop": bool(_dl.get("legal_stop")),
                 "delivered": bool(_dl.get("delivered")),
             }
             history_row["delivered"] = bool(_dl.get("delivered"))
@@ -400,17 +452,11 @@ class _Step:
             _delivery = self._delivery_reading(row)
         out["delivery"] = _delivery
         out["delivered"] = bool(_delivery.get("delivered"))
-        for _key in ("signed_count", "pending_count", "unsigned_count",
-                     "coverage", "coverage_reading", "coverage_ratio",
-                     "proof_count", "draft_count", "proof_statements",
-                     "state", "state_label", "self_assessment"):
-            if _key == "state":
-                out["delivery_state_plan"] = str(_delivery.get("state") or "")
-                continue
-            if _key == "state_label":
-                out["delivery_label_plan"] = str(_delivery.get("label") or "")
-                continue
+        for _key in _CLOSE_KEYS:
             out[_key] = _delivery.get(_key)
+        out["delivery_state_plan"] = str(_delivery.get("state") or "")
+        out["delivery_label_plan"] = str(_delivery.get("state_label") or "")
+        out["state"] = str(_delivery.get("state") or "")
         if deploy.get("report_path"):
             out["report_path"] = str(deploy["report_path"])
         # ---- 证明手稿（业主 2026-10-24 最终形态：作者只写内容、B 读稿登记）：
