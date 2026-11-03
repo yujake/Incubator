@@ -389,6 +389,53 @@ def test_2_b_takes_the_e_report_through_the_index(tmp_path: pathlib.Path) -> Non
     assert NP.INDEX_SHA_FIELD in str(bad2.get("error") or ""), bad2.get("error")
 
 
+@pytest.mark.usefixtures("signed_v_handoffs")
+def test_2b_a_signed_exhaustion_is_proof_before_b_files_it(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """回归（2026-11-04）：穷举程序 + V 三转签 ⇒ 行上直接是 `proof`，不是 `proof_review`。
+
+    真回归现场：`0b86db09` 的档位回填在 V 第三转落签时一律写 `proof_review`，而 B 的
+    第二笔登记要 `proof`（`_upgrade_evidence_kind` 的升档梯子只放行 heuristic/cross_check）
+    ⇒ 落 `duplicate_statement`。业主口径（`schema.EVIDENCE_KINDS`）：穷举数值证明 +
+    针对该穷举的 V 签 ⇒ 直接 proof；`proof_review` 是"V 逐行审过文字证明"，而
+    V 不能逐行走查一份程序 ⇒ 穷举题停在 `proof_review` 本身就是错的终态。
+
+    三段都量：① 签落那一刻行上就是 `proof`（不是"再登记一次才升"）；② B 拿着同一份
+    内容来登记仍然 `ok=True`（本来就在终态档，不是重复登记）；③ 反真空：把"按通道给档"
+    的判据摘掉 ⇒ 同一条链必须回到 `proof_review`（否则这条绿可能来自别处）。
+    """
+    store, env, _sid = _e_case(tmp_path / "ok")
+    row = _statement(store)
+    assert row["evidence_kind"] == "proof", row
+    bits = dict(row.get("bits") or {})
+    assert bits.get("proof") is True and bits.get("reviewed") is True, bits
+    trace = dict(row.get(VR.GRADE_RECOMPUTED_KEY) or {})
+    assert trace.get("to") == "proof", trace
+    assert trace.get("from") == NP.SUPPORTED_ONLY_KIND, trace
+    assert trace.get("channel") == "exhaustion", trace
+    assert int(trace.get("proof_no") or 0) == 1, trace
+
+    got = _file(store, column=env["column"])
+    assert got.get("ok") is True, got
+    assert got.get("at_tier") is True, got
+    final = _statement(store)
+    assert final["kind"] == "theorem" and final["evidence_kind"] == "proof", final
+
+    # ---- ③ 反真空：摘掉"按通道给档"⇒ 同一条链必须回到 proof_review ----
+    no_channel = _store(tmp_path / "no-channel")
+    add_literature(no_channel, S.format_id(0))
+    env2 = _run_exhaustive(no_channel)
+    filed2 = _file_conjecture(no_channel, column=env2["column"])
+    assert filed2.get("ok") is True, filed2
+    monkeypatch.setattr(NP, "find_signed_exhaustion_for_column",
+                        lambda *a, **k: None)
+    _verify_three(no_channel, str(filed2["stmt_id"]), env2["column"])
+    row2 = _statement(no_channel)
+    assert row2["evidence_kind"] == "proof_review", (
+        "把穷举通道判据打桩成「找不到」之后仍然是 proof ⇒ 上面那条 a 的绿不是它给的", row2)
+    assert dict(row2.get(VR.GRADE_RECOMPUTED_KEY) or {}).get("to") == "proof_review", row2
+
+
 # ============================================================ ③ F 证明那一路
 def _f_case(tmp_path: pathlib.Path, *, sign_sha: str | None = None) -> tuple[Store, str]:
     """F 的证明 + V 的签 + D 报告里的一行索引（`evidence_kind=proof`）。

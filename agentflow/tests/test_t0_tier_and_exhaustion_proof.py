@@ -46,6 +46,7 @@ from agentflow import closing  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
+from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_loop import AgentLoop  # noqa: E402
@@ -382,6 +383,42 @@ def test_criterion1_an_exhaustive_run_is_proof_signed_by_v_with_a_three_part_col
     graph = PC._DepGraph(stmts=[stmt], deps=[], exps=[], lits=[])
     is_root, why = graph.is_root(f"stmt:{stmt['stmt_id']}")
     assert is_root, f"穷举证明的命题没进定理证明库（{why}）"
+
+
+def test_criterion1c_the_third_clean_sign_backfills_proof_not_proof_review(
+        tmp_path: pathlib.Path) -> None:
+    """回归（2026-11-04）：穷举 + V 三转「成立」⇒ 行上直接 `proof`；B 再登记仍成功。
+
+    与 ① 同一条链，但断言点在"V 落签那一刻"而不是"B 登记之后"：`0b86db09` 的档位回填
+    一律写 `proof_review`，于是 B 的第二笔（要 `proof`）撞 `duplicate_statement`。
+    业主口径（`schema.EVIDENCE_KINDS`）：穷举程序 + 针对该穷举的 V 签 ⇒ 直接 `proof`；
+    `proof_review` 是"V 逐行审过文字证明"，V 不能逐行走查一份程序。
+
+    这里量三件事：① 落签后行上就是 `proof`（回填按通道给档）；② B 拿着同一份内容再
+    登记仍然 `ok=True` 且不新建行（`at_tier`；不是重复登记）；③ 两笔都是 `proof`。
+    """
+    store = _store(tmp_path)
+    _run_exhaustive(store)
+    add_literature(store, S.format_id(0))
+    column = _proof_column_of(store)
+    _sign_with_v(store, column)
+
+    signed = _rows(store, "statements")[0]
+    assert signed["evidence_kind"] == "proof", signed
+    assert signed["kind"] == "theorem", signed
+    bits = dict(signed.get("bits") or {})
+    assert bits.get("proof") is True and bits.get("reviewed") is True, bits
+    trace = dict(signed.get(VR.GRADE_RECOMPUTED_KEY) or {})
+    assert trace.get("to") == "proof", trace
+    assert trace.get("from") == NP.SUPPORTED_ONLY_KIND, trace
+    assert trace.get("channel") == "exhaustion", trace
+    assert int(trace.get("proof_no") or 0) == 1, trace
+
+    filed = _file_via_b(store, proof_text=column)
+    assert filed.get("ok") is True, filed
+    assert filed.get("at_tier") is True, filed
+    final = _rows(store, "statements")[0]
+    assert final["kind"] == "theorem" and final["evidence_kind"] == "proof", final
 
 
 def np_author_not_signer(sig: dict) -> bool:
