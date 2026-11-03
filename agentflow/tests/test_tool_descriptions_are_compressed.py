@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import datetime
 import json
 import re
 import tempfile
@@ -37,6 +38,11 @@ import pytest
 
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
+
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 / 17.4 节）：把 `value_edits()`
+#: 现算出的整份编辑清单渲染成可以直接粘进基线 `contract_amendments` 的 JSON 片段。
+#: 只渲染，不写盘、不重冻 —— 重冻永远是单独一次、人逐格看过。
+import _skeleton as SK
 
 REPO = Path(__file__).resolve().parents[1]
 TESTS = REPO / "tests"
@@ -274,14 +280,15 @@ def amendment_for(amendments: Sequence[dict], name: str, key: str,
     return None
 
 
-def contract_diffs(before: dict[str, dict], after: dict[str, dict],
-                   amendments: Sequence[dict] = ()) -> list[str]:
-    """逐键比对两份声明，返回差异描述（空列表 = 契约完全相同或差异已逐项记账）。"""
-    diffs: list[str] = []
-    for name in sorted(set(before) - set(after)):
-        diffs.append(f"{name}：这件工具不见了（基线里有、现盘上没有）—— 删工具也要在基线里登记")
-    for name in sorted(set(after) - set(before)):
-        diffs.append(f"{name}：多出一件基线里没有的工具 —— 新增工具必须在基线里登记")
+def contract_diff_edits(before: dict[str, dict], after: dict[str, dict],
+                        amendments: Sequence[dict] = ()) -> list[dict]:
+    """逐键比对 ⇒ 未被记账的那些差异的逐项编辑清单。
+
+    每一项形如 `{"tool": 名字, "key": 契约格, "edits": value_edits(...)}`，
+    只收「某一格的值变了」这一类（新增 / 删除工具没有 edits 可记，不走这条路）。
+    它与 `contract_diffs` 共用这一处口径：差异算两份，其中一份迟早与另一份不一致。
+    """
+    out: list[dict] = []
     for name in sorted(set(before) & set(after)):
         for key in CONTRACT_KEYS:
             old, new = before[name][key], after[name][key]
@@ -290,10 +297,23 @@ def contract_diffs(before: dict[str, dict], after: dict[str, dict],
             edits = value_edits(old, new, path=key)
             if amendment_for(amendments, name, key, edits) is not None:
                 continue
-            diffs.append(
-                f"{name}：{key} 变了，基线里没有逐项对上的 reason —— "
-                + "；".join(describe_edit(e) for e in edits)
-            )
+            out.append({"tool": name, "key": key, "edits": edits})
+    return out
+
+
+def contract_diffs(before: dict[str, dict], after: dict[str, dict],
+                   amendments: Sequence[dict] = ()) -> list[str]:
+    """逐键比对两份声明，返回差异描述（空列表 = 契约完全相同或差异已逐项记账）。"""
+    diffs: list[str] = []
+    for name in sorted(set(before) - set(after)):
+        diffs.append(f"{name}：这件工具不见了（基线里有、现盘上没有）—— 删工具也要在基线里登记")
+    for name in sorted(set(after) - set(before)):
+        diffs.append(f"{name}：多出一件基线里没有的工具 —— 新增工具必须在基线里登记")
+    for entry in contract_diff_edits(before, after, amendments):
+        diffs.append(
+            f"{entry['tool']}：{entry['key']} 变了，基线里没有逐项对上的 reason —— "
+            + "；".join(describe_edit(e) for e in entry["edits"])
+        )
     return diffs
 
 
@@ -528,14 +548,18 @@ def frozen() -> dict:
 
 
 def test_declaration_contracts_are_unchanged(current: dict[str, dict], frozen: dict) -> None:
-    """① 契约不变：与压缩前的声明快照逐键相同（参数名/类型/required/枚举/默认值/returns…）。"""
-    diffs = contract_diffs(frozen["declarations"], current,
-                           frozen.get("contract_amendments") or ())
-    assert diffs == [], (
-        "工具的声明契约被改动了 —— 这一批只许改 summary；合法的演进要在基线 "
-        "`contract_amendments` 里留一条带 reason 的**逐项编辑清单**：\n  "
-        + "\n  ".join(diffs)
-    )
+    """① 契约不变：与压缩前的声明快照逐键相同（参数名/类型/required/枚举/默认值/returns…）。
+
+    失败信息里嵌的是「账骨架」：由 `value_edits()` 现算出的整份编辑清单，直接就是
+    基线 `contract_amendments` 数组里要补的那几条（`reason` 留占位）。这是
+    `docs/DEVELOPMENT-SPEC.md` 第 17.1 / 17.4 节的检测面 —— 只把 diff 填进 edits，
+    绝不把基线改成现状：自动重冻会让「改参数名 / 删返回键」从一条红变成一次静默放行。
+    """
+    amendments = frozen.get("contract_amendments") or ()
+    diffs = contract_diffs(frozen["declarations"], current, amendments)
+    assert diffs == [], SK.contract_amendments_message(
+        diffs, contract_diff_edits(frozen["declarations"], current, amendments),
+        date=datetime.date.today().isoformat())
     assert len(current) == frozen["n_tools"], (
         f"名册规模变了：基线 {frozen['n_tools']} 件，现在 {len(current)} 件"
     )

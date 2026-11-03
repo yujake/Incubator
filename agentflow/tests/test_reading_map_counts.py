@@ -29,6 +29,10 @@ from __future__ import annotations
 import pathlib
 import re
 
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 节）：把「三格数字该是多少」
+#: 渲染成开头那一整句原文（粗体星号照抄，可整句粘贴）。只渲染，不写盘。
+import _skeleton as SK
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 READING_MAP = ROOT / "docs" / "READING-MAP.md"
@@ -60,8 +64,36 @@ def _head() -> str:
     return "\n".join(lines)
 
 
+def headline_problems(head: str, files: int, total: int, big: int) -> list[str]:
+    """开头那句的三格与现算对不上的那些（人话，空列表 = 都对得上）。
+
+    判据本体与开发入口 `scripts/render_registration_skeletons.py` 共用这一处口径。
+    「读不出来」也算问题（三态：没读到不等于对得上）—— 否则解析一失配，
+    脚本会以「无缺口」的形态静默通过。
+    """
+    triple = _BOLD_TRIPLE.search(head)
+    found_big = _BIG_FILES.search(head)
+    if not triple or not found_big:
+        return ["开头那句里读不出三格读数（`**N 个 `.py`、M 行**` 或 `N 个文件超过 800 行`）"]
+    out: list[str] = []
+    got_files = int(triple.group("files"))
+    got_lines = int(triple.group("lines").replace(",", ""))
+    got_big = int(found_big.group("big"))
+    if got_files != files:
+        out.append(f"文件数：文档 {got_files} vs 现算 {files}")
+    if got_lines != total:
+        out.append(f"行数：文档 {got_lines:,} vs 现算 {total:,}")
+    if got_big != big:
+        out.append(f"超过 800 行的文件数：文档 {got_big} vs 现算 {big}")
+    return out
+
+
 def test_the_headline_counts_equal_the_disk() -> None:
-    """① 开头那三格 == 现算（今天红：255/209,413/69 vs 257/223,941/70）。"""
+    """① 开头那三格 == 现算（今天红：255/209,413/69 vs 257/223,941/70）。
+
+    失败信息里嵌的是「账骨架」：把三格（连同 `agent_loop.py` 行数）换成现算值之后
+    的那一整句原文，可整句粘贴。这是 `docs/DEVELOPMENT-SPEC.md` 第 17.1 节的检测面。
+    """
     files, total, big, loop = _live()
     assert files > 200 and total > 100_000 and big > 50, (
         f"现算读数看起来不对（{files} 个文件 / {total} 行 / {big} 个大文件）⇒ 先查扫描口径，"
@@ -71,29 +103,20 @@ def test_the_headline_counts_equal_the_disk() -> None:
     assert triple, (
         "`docs/READING-MAP.md` 开头那段里找不到 `**N 个 `.py`、M 行**` 那一句 ⇒ "
         "要么它被改写了（要跟着改这条判据的解析），要么这份文档换了形态")
-    got_files = int(triple.group("files"))
-    got_lines = int(triple.group("lines").replace(",", ""))
     found_big = _BIG_FILES.search(head)
     assert found_big, "开头那段里找不到 `N 个文件超过 800 行`"
-    got_big = int(found_big.group("big"))
-    problems = []
-    if got_files != files:
-        problems.append(f"文件数：文档 {got_files} vs 现算 {files}")
-    if got_lines != total:
-        problems.append(f"行数：文档 {got_lines:,} vs 现算 {total:,}")
-    if got_big != big:
-        problems.append(f"超过 800 行的文件数：文档 {got_big} vs 现算 {big}")
-    assert not problems, (
-        "`docs/READING-MAP.md` 开头那三格过期了（口径见该文档 `:10` 的复跑命令）：\n  - "
-        + "\n  - ".join(problems))
+    problems = headline_problems(head, files, total, big)
+    assert not problems, SK.reading_map_counts_message(problems, files, total, big, loop)
 
 
 def test_the_largest_file_reading_equals_the_disk() -> None:
-    """② `agent_loop.py` 的行数 == 盘上那个文件的行数（正文里出现两次，这里核开头那句）。"""
-    loop = _live()  # 取 4 格，最后一个就是 agent_loop.py
-    assert loop[3] > 1000, f"`agent_loop.py` 只有 {loop[3]} 行 ⇒ 读到别的文件了"
+    """② `agent_loop.py` 的行数 == 盘上那个文件的行数（正文里出现两次，这里核开头那句）。
+
+    失败信息里嵌的同样是那一整句原文（现算值），与 ① 一个形态：改数字只需粘贴。
+    """
+    files, total, big, loop_lines = _live()  # 取 4 格，最后一个就是 agent_loop.py
+    assert loop_lines > 1000, f"`agent_loop.py` 只有 {loop_lines} 行 ⇒ 读到别的文件了"
     found = _LARGEST.search(_head())
     assert found, "开头那段里找不到 `` `agent_loop.py`，M 行 ``"
     got = int(found.group("lines").replace(",", ""))
-    assert got == loop[3], (
-        f"`agent_loop.py` 的行数：文档 {got:,} vs 现算 {loop[3]:,}")
+    assert got == loop_lines, SK.reading_map_largest_message(got, files, total, big, loop_lines)

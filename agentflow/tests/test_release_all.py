@@ -35,6 +35,10 @@ from pathlib import Path
 
 import pytest
 
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 节）：把「差」渲染成可以直接
+#: 粘贴回 `_AGENTFLOW_TOP_LEVEL_MODULES` 的整行。只渲染，不写盘（第 17.3 节）。
+import _skeleton as SK
+
 #: 内层发布门。引它进来只为一条交叉断言（`H-5`）：编排层与发布门对同一批
 #: 逐项 verdict 必须给出同一个汇总，而此前没有任何判据把这两处绑在一起。
 from scripts import release_check as RC
@@ -2897,7 +2901,8 @@ def test_agentflow_top_level_modules_match_the_registry():
     """
     on_disk = _agentflow_top_level_modules_on_disk()
     problems = agentflow_module_inventory_problems(on_disk)
-    assert not problems, problems
+    assert not problems, SK.top_level_modules_message(
+        problems, on_disk, _AGENTFLOW_TOP_LEVEL_MODULES)
     assert len(on_disk) == len(_AGENTFLOW_TOP_LEVEL_MODULES), (
         f"盘上 {len(on_disk)} 个顶层模块、清单 {len(_AGENTFLOW_TOP_LEVEL_MODULES)} 条 —— "
         "两者必须一样多（少了会被上面的'登记了但不存在'分支点名）")

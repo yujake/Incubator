@@ -27,6 +27,10 @@ from collections import Counter
 from agentflow import schema as S
 from agentflow.refusals import PRECONDITION_REASON, refuse
 
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 节）：把「差」渲染成可以直接
+#: 粘贴回 `_FAILURES_NOT_REFUSALS` / `_REPEAT_COUNTS` 的整行。只渲染，不写盘。
+import _skeleton as SK
+
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 
 #: 手写 `{"ok": False, ...}` 的登记表：`(模块相对路径, kind)` → 为什么它不是"拒绝"。
@@ -232,11 +236,13 @@ def test_the_scanner_sees_a_synthetic_hit():
     assert _hand_rolled_ok_false('def f():\n    return {"ok": True, "kind": "x"}\n') == []
 
 
-def test_every_hand_rolled_failure_is_registered_and_the_table_is_not_stale():
-    """双向判据：手写 `ok=False` 的每一处都要登记；表里每一条都要还能扫到。
+def refusal_registration_scan() -> tuple[
+        int, Counter[tuple[str, str]], Counter[tuple[str, str]],
+        Counter[tuple[str, str]], Counter[tuple[str, str]]]:
+    """扫盘并对账 ⇒ `(扫到的模块数, 盘上, 应有, 没登记, 登记过期)`。
 
-    少一条 = 新写的动作漏用了 `refuse`（那一次拒绝又会被记成 ok，回到 T1 的坑）；
-    多一条 = 豁免腐烂（登记的理由已经不成立，表在假装还挡着什么）。
+    判据本体与开发入口 `scripts/render_registration_skeletons.py` 共用这一处口径：
+    两处各扫一遍，就是「同一个差两份实现」，而其中一份迟早会与另一份不一致。
     """
     live: Counter[tuple[str, str]] = Counter()
     scanned = 0
@@ -245,20 +251,30 @@ def test_every_hand_rolled_failure_is_registered_and_the_table_is_not_stale():
         scanned += 1
         for _lineno, kind in _hand_rolled_ok_false(text):
             live[(rel, kind)] += 1
+    want = Counter({pair: _REPEAT_COUNTS.get(pair, 1) for pair in _FAILURES_NOT_REFUSALS})
+    return scanned, live, want, live - want, want - live
+
+
+def test_every_hand_rolled_failure_is_registered_and_the_table_is_not_stale():
+    """双向判据：手写 `ok=False` 的每一处都要登记；表里每一条都要还能扫到。
+
+    少一条 = 新写的动作漏用了 `refuse`（那一次拒绝又会被记成 ok，回到 T1 的坑）；
+    多一条 = 豁免腐烂（登记的理由已经不成立，表在假装还挡着什么）。
+
+    失败信息里嵌的是「账骨架」：没登记的那些直接给成可粘贴的元组行（理由留占位），
+    登记过期的那些给成「删哪一行」。这是 `docs/DEVELOPMENT-SPEC.md` 第 17.1 节的
+    检测面 —— 红照旧红，人只剩「复核 + 补一句理由」。
+    """
+    scanned, live, want, missing, stale = refusal_registration_scan()
     assert scanned >= 8, f"只扫到 {scanned} 个角色动作模块 ⇒ 扫描面接错了"
 
-    want = Counter({pair: _REPEAT_COUNTS.get(pair, 1) for pair in _FAILURES_NOT_REFUSALS})
     # 注：这里原本还有一行把 `package_build_failed` 覆盖成 2（"渲染失败 / 编译失败两处"）。
     # `R2b-⑬` 把那两个手写分支合并成了一条（阶段名走 payload 的 `stage` 那一格），
     # 所以这一档现在只剩一处，覆盖行随之删除。这不是放宽判据：`want` 仍逐条来自登记表，
     # 计数对不上（少一处）照样落进下面的 `stale`。
 
-    missing = live - want
-    stale = want - live
-    assert not missing, (
-        "这些手写的 ok=False 没有登记，也没有走 `agentflow.refusals.refuse`："
-        f"{sorted(missing)} ⇒ 它们的拒绝会再次被台账记成 ok")
-    assert not stale, f"登记表里这些条目已经扫不到了（豁免腐烂，请删）：{sorted(stale)}"
+    assert not missing, SK.refusal_missing_message(missing)
+    assert not stale, SK.refusal_stale_message(stale)
     for (rel, kind), reason in _FAILURES_NOT_REFUSALS.items():
         assert len(reason) > 20, f"{rel}:{kind} 的登记理由太短，等于没写为什么"
 

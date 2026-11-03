@@ -23,6 +23,10 @@ from __future__ import annotations
 import pathlib
 import re
 
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 节）：把「这一行该写多少」渲染成
+#: 第 3 节那张表里的一整行（行数是现算值，后两格留占位）。只渲染，不写盘。
+import _skeleton as SK
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "READING-MAP.md"
 SRC = REPO / "src" / "agentflow"
@@ -178,12 +182,31 @@ def _stale_line_counts(text: str) -> list[str]:
     return out
 
 
+def stale_big_rows(text: str) -> list[tuple[str, int]]:
+    """§3 表里行数过期的那些 `(文件名, 现算行数)`（盘上没有的跳过 —— 那种要删行）。
+
+    与 `_stale_line_counts` 共用「哪些行过期」这一个口径；这里给的是可粘贴的那一格。
+    """
+    out: list[tuple[str, int]] = []
+    for name, claimed in _big_file_rows(text):
+        path = SRC / name
+        if not path.is_file():
+            continue
+        actual = len(path.read_text(encoding="utf-8").splitlines())
+        if actual != claimed:
+            out.append((name, actual))
+    return out
+
+
 def test_the_line_counts_in_the_big_file_table_are_current() -> None:
     """§3 表里的行数是手抄的，所以必须有判据：`T-5`/`T-7` 各改大一次文件后它就漂了。
 
     漂了不算小事：这张表的用途正是"读之前先知道边界"（哪个文件为什么这么大），
     一个偏了 140 行的数字会让读者以为拆分没做、或者以为某个文件比实际更大。
     判据红了就改数字（一行的事），别改判据。
+
+    失败信息里嵌的是可粘贴的整行（行数换成现算值，后两格留占位）——
+    `docs/DEVELOPMENT-SPEC.md` 第 17.1 节的检测面。
     """
     text = DOC.read_text(encoding="utf-8")
     rows = _big_file_rows(text)
@@ -191,7 +214,7 @@ def test_the_line_counts_in_the_big_file_table_are_current() -> None:
         f"§3 表只解析出 {len(rows)} 行 ⇒ 判据没接上（表格格式变了？）—— "
         "『没命中』在这里不等于『没问题』")
     stale = _stale_line_counts(text)
-    assert not stale, "读图 §3 的行数过期了（改数字，别改判据）：" + "；".join(stale)
+    assert not stale, SK.reading_map_rows_message(stale, stale_big_rows(text))
 
 
 def test_the_line_count_judge_catches_a_stale_number() -> None:

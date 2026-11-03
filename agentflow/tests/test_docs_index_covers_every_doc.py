@@ -28,6 +28,10 @@ import re
 
 import pytest
 
+#: 账骨架渲染（`docs/DEVELOPMENT-SPEC.md` 第 17.1 节）：把「缺哪一份」渲染成
+#: `INDEX.md` 里那一整行（入册 / 不入册两种落位各给一行）。只渲染，不写盘。
+import _skeleton as SK
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 DOCS = REPO / "docs"
 INDEX = DOCS / "INDEX.md"
@@ -63,22 +67,33 @@ def _unregistered(text: str) -> dict[str, str]:
     return out
 
 
-def unregistered_problems(names: list[str], text: str) -> list[str]:
+def unregistered_docs(names: list[str], text: str) -> list[str]:
     """`names` 里既不在 INDEX 正文、也没登记进 §6 的那些（纯函数，负控喂它）。"""
     exempt = _unregistered(text)
     body = text.split("## 6.", 1)[0]
+    return [name for name in names if name not in body and name not in exempt]
+
+
+def unregistered_problems(names: list[str], text: str) -> list[str]:
+    """`unregistered_docs` 的人话版（判据与负控一直用的是这一串字符串）。"""
     return [f"{name} 既不在 docs/INDEX.md 里，也没登记进 §6「不入册」"
-            for name in names
-            if name not in body and name not in exempt]
+            for name in unregistered_docs(names, text)]
 
 
 # ====================================================================== 正控
 def test_every_doc_is_registered_or_explicitly_not() -> None:
-    """盘上每一份 `docs/*.md` 都在 INDEX 里有落点（入册或 §6 登记）。"""
+    """盘上每一份 `docs/*.md` 都在 INDEX 里有落点（入册或 §6 登记）。
+
+    失败信息里嵌的是「账骨架」：每一份漏登记的文档给两行 —— 入册行与第 6 节
+    不入册行，格式逐字照 `docs/INDEX.md` 的表，可直接粘贴（理由留占位）。
+    这是 `docs/DEVELOPMENT-SPEC.md` 第 17.1 节的检测面：判据照旧红，人只剩
+    「复核 + 补一句为什么」。
+    """
     names = _disk_docs()
     assert len(names) >= MIN_DOCS, f"盘上只认出 {len(names)} 份文档 ⇒ 扫描可能失配"
-    problems = unregistered_problems(names, _index_text())
-    assert not problems, "；".join(problems)
+    text = _index_text()
+    problems = unregistered_problems(names, text)
+    assert not problems, SK.docs_index_message(unregistered_docs(names, text))
 
 
 def test_the_index_really_names_most_of_them() -> None:
