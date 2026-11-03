@@ -2824,6 +2824,22 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                        "verified_quotes / cited_literature / cited_documents / missing / "
                        "next_steps / reason）—— 判据只有两条：proof_text 非空或 "
                        "quote_verified is True；闸门在 tools/doc_tools._doc_write_mapping",
+    # 2026-11-03（reconnect 批：连接类失败先等再重试）：`agent_loop` 的
+    # `judge_no_reply:<kind>` 那一支从"记一笔、立刻进下一轮"改成"按 DSH 的
+    # `ClientBridgeLifecycle` 有界退避之后重试同一轮"。为什么必须是顶层模块、
+    # 而不是塞进 `agent_loop.py` 或某个角色的包里：① 判据要能在不建 Store、不跑循环的
+    # 情况下单独核退避梯子（抖动与三档配置都可注入，`tests/test_reconnect_backoff.py`
+    # 的前 7 条一条都不碰循环）；② `agent_loop.py` 已经一万三千多行，再把一张带
+    # 状态机的闸塞进去，下一次要单独核它就得拖起整条循环 —— 而这里的错法（多等/
+    # 少等/`attempt` 不归零）不会抛任何异常，只有逐格读数能抓。
+    "reconnect.py": "连接类失败的有界退避闸（从 DSH 的 `ClientBridgeLifecycle` 逐条移植）："
+                    "is_connection_problem（只认 `judge_no_reply:` 带后缀那一族）/ "
+                    "ReconnectConfig.from_settings（base/max/total 三档走 settings 梯子，"
+                    "环境变量 > 设置文件 > 内置 5/60/300）/ gate_from_settings / "
+                    "BackoffGate（`schedule` 单飞 + `cap = min(max, base * 2 ** attempt)` + "
+                    "抖动 + `connected` 归零 + `settle`/`_fire` 累计 `waited_total` 与总等待"
+                    "上限）；唯一调用方是 `agent_loop.AgentLoop._ask_step_with_reconnect`，"
+                    "等待走 `clock.await_io`（真耗墙钟、进主时钟的账）",
 }
 
 
