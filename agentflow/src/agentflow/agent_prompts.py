@@ -3001,6 +3001,33 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_surface_snapshot.json` 因 F 的动作 returns 与提示词变）；`docs/ROLE-GUIDE.md`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，
 #: 实际花费见提交信息）。
+#: `p234`（2026-11-03，业主逐字：「E 在数值证明拿 V 签的时候流程和 F 一模一样，
+#: 若未实现请先实现」）：把 E 的 V 签做成与 F 同一套（四个落点逐个对齐）。
+#:
+#: ① `exhaustionreport` 新增 E 的证明手稿 `reports/e-proof-<实验号>.md`（同目录、同
+#:    `## 命题` / `## 证明` / `## 依赖` 三节，`## 证明` 的正文就是
+#:    `numericproof.compose_proof_column` 那三段）；`agent_e.run_experiment` 穷举那一档
+#:    同时落稿，返回值多 `proof_manuscript` / `manuscript_sha256` /
+#:    `manuscript_proof_sha256` / `manuscript_problems` 四格。
+#: ② `agent_v.core._review_unregistered_exhaustion`（新）：未在册的穷举证明走
+#:    「三轮机械会审 → `vsigns.issue` 出信封 → 收方秘书 `land_unregistered_sign` 落块」，
+#:    与 F 的散文那一支同一个门槛、同一把 sha 尺、同一个落签方法。
+#: ③ `vsigns.SECRETARY_OF` 加 `secretary:E`（收方仍然只有「送审那一方」：
+#:    V / F / E / B 本身仍不许落）。
+#: ④ `agent_skills._e_skills()`：多一条「穷举证明-拿签与上报收养」（手稿 → 派 V 三转 →
+#:    收方落签 → 上报 D 收养），并把「反例优先」第 5 步那句「让 `B.register_statement`
+#:    登记」改成「交 D（由 D 派 B 登记）」—— 它与 `specs/e.py` 的 policy ⑤ 原本矛盾。
+#:
+#: 变化格 = E 一格（A/B/C/D/F/G/H/L/M/V 逐字同值）。逐格旧值 → 新值（p233 → p234，
+#: 现算，不是手抄）：
+#:   E 91cad508→7c174604；其余十格（A/B/C/D/F/G/H/L/M/V）同值。
+#: 本批只动 `agent_skills` 的 E 手册正文（索引行未动）⇒ 段变了、facts 键集一格没动。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p234）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 两份 golden 重冻（`tool_surface_snapshot.json` 因 `verify.run_experiment` 的 `returns=`
+#: 多四格、`agent_surface_snapshot.json` 因十一格提示词里的版本行变）；`docs/ROLE-GUIDE.md`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，
+#: 实际花费见提交信息）。
 PROMPT_VERSION = "p234"
 
 
