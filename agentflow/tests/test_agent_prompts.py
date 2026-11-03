@@ -2195,7 +2195,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # （`agent_skills` 正文只落盘、工具层 `returns` 只进 function-calling 的 description）。
 # 逐格旧值 → 新值：F 00b76d27→61be3f62。
 # 十一格是 `temp/_p233_recompute.py` 的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p233"
+_FROZEN_PROMPT_VERSION = "p234"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2426,7 +2426,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "B": "3c47404b5172168897186da97af29b09596833720fdcf281e373cc9f37736d07",
     "C": "90c19871362f11a0145934680de53accc4e3730ce3ad3ae3e74a73a971d9aa28",
     "D": "e5e43b8ef5b330dc899172f21520b961df11444e6c644acb1b962b611c131ef6",
-    "E": "91cad508fc2f0a00bc04d3f6e0977f46e6cbf1bca3525c69ed2e6e74d1bf3064",
+    "E": "7c17460446aa6d3dde60942403092dc7a6312d1c5e76ffbed76a30aeefe80398",
     "F": "61be3f622587c9ab3f29e1ba663aaad9431aa30082ce4f9e4bf5e2608a4d4a78",
     "G": "bd3ea65a104580ce4d12dc99749971965ce19494846359599802aeb69f5d594f",
     "H": "15cc471da1b6e43cf97d45437ed7610aa3c853e04e4fe5cfb5021bbebc398ad3",

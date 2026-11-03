@@ -1566,6 +1566,68 @@ def _e_skills() -> tuple[Skill, ...]:
     """
     return (
         Skill(
+            slug="穷举证明-拿签与上报收养",
+            title="穷举证明：手稿 → 派 V 三转 → 收方落签 → 上报 D 收养",
+            summary=("E 的数值证明与 F 走同一条链：稿在 `reports/e-proof-<实验号>.md`，"
+                     "V 连判三转「成立」才由收方落签块，B 从稿上读到那一签才收录"),
+            when="跑完一条穷举实验、要把它当「证明」交出去的时候（每一份证明都走一遍）",
+            actions=("E.run_experiment", "V.verify_proof"),
+            tools=("fs.read", "table.get"),
+            body="""# 穷举证明：与 F 同一条拿签链
+
+业主 2026-11-03 逐字：「E 在数值证明拿 V 签的时候流程和 F 一模一样」。
+所以一条穷举证据要变成「证明」，走的不是"我在报告里说它证明了"，而是下面这四步 ——
+**每一步的落点都是盘上的一处**，不是话里的一句。
+
+## 1. 产出：实验行 + ②③ 读数 + 证明手稿（都已经由 `E.run_experiment` 落好）
+
+`E.run_experiment` 一条穷举实验跑完会给你三个落点，各回答一件事：
+
+| 返回值那一格 | 盘上的落点 | 回答什么 |
+|---|---|---|
+| `experiment_id` / 台账行 | `experiments` 一行 | 这次实验跑没跑、读数是多少 |
+| `report_path` / `report_sha256` | `out/experiments/<实验号>/exhaustion.md` | ②③ 写得全不全（程序 / 程序设计 / 穷举论证） |
+| `proof_manuscript` / `manuscript_sha256` | `reports/e-proof-<实验号>.md` | **V 的签盖在哪一份正文上**（`## 证明` 那一节就是证明栏三段） |
+
+第三格是 2026-11-03 才有的：没有它，你手里只有"读数"，没有"被签的那份稿"——
+而 V 的签块只能落在一份手稿里。**把 `proof_manuscript` 记下来**，下一步要用它。
+
+## 2. 送审：你自己派 V，点名那份稿
+
+用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审哪一份，并让 V 调它的
+`verify_proof`：**`proof_manuscript=reports/e-proof-<实验号>.md`**（这时不给
+`statement_id` —— 这一条还没在册），`readonly_facts` 附上实验号与读数。
+**别自己盖"已签"**：`observations.e_signature` 里那个 `signed_by="V"` 是你代写的格子，
+B 的入库闸已经不认它当第三方签字了（它只作读数）。签只能由 V 那一侧发。
+
+## 3. 三转：一轮「成立」不算签
+
+V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐 / 搜索空间与代码对不对得上 /
+剪枝理由 / 边界 / 是不是真穷尽 / 类别格）。**连判三转都「成立」**才算过 ——
+与 F 的证明同一个门槛。返回值这样读：
+
+- `checked=True` + `kind="proof_unregistered_signed"` ⇒ 签块已由收方那一侧（落签者写作 `secretary:E`）
+  落进 `reports/e-proof-<实验号>.md`；稿上那一行 `- V 签：已签=true；连续=3/3；正文sha=…`
+  就是 B 之后认的那一签。V 自己一个字都不写块（它只发信封）。
+- `checked=True` + `kind="proof_unregistered_rejected"` ⇒ 判「有毛病」：按 `defect_step`
+  指到的那一项补材料（缺剪枝说明就补剪枝、抽样就改穷举），补完**再派 V 重审**。
+- `checked=False` + `reason="missing_material"` ⇒ 没查成（缺哪一块在 `detail` 里）：
+  补齐材料再送。**它不是「成立」**，别照着往下走。
+- 稿上已经有盖住这一份正文的签块 ⇒ 不重复判、不重复写（同一份正文一稿一签）。
+
+## 4. 上报：交 D 收养，别自己去找 B
+
+拿到签之后**上报父代理**（父是 D 就报 D；父是 M 就报 M，由 M 派 D）：
+把（程序的相对路径 + 你写的 ②③ + V 的签 + `proof_manuscript` 那个路径）一起交上去。
+D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evidence_path`、
+`evidence_sha256`、`v_signature`），再由 D 派 B 入库；B 收录时按地址读到你那份稿，
+从稿上读到那一签（第 3 位就翻真），并记下这份证明**还没洗过**
+（`optimized=false`）—— 第二阶段它再逐个优化、优化后重拿一次 V 签。
+
+**你既不要写对应表，也不要自己去找 B 的 `register_statement`。**
+""",
+        ),
+        Skill(
             slug="反例优先",
             title="先试能不能造出反例，再动手证",
             summary="动手证明之前先花一步找反例；反例要落 experiments 行，不许只在报告里说",
@@ -1591,8 +1653,9 @@ def _e_skills() -> tuple[Skill, ...]:
 4. **落盘**：`E.run_experiment`（数值实验）或 `E.run_script_experiment`（脚本），
    带 `code_path` / `code_hash` / `exit_code` 与那句可复跑的命令 ——
    **只在报告里写"我试了一个反例"不算**；
-5. **结论二选一**：找到反例 ⇒ 让 `B.register_statement` 把"这一条不成立（反例：exp:…）"
-   如实登记；没找到 ⇒ 把"试了哪几组参数、都没坏"写进依据 —— 它是"没找到"，
+5. **结论二选一**：找到反例 ⇒ **交 D**（由 D 派 B 把"这一条不成立（反例：exp:…）"
+   如实登记；`E → B` 不是你的正路，你不直接写那张表）；
+   没找到 ⇒ 把"试了哪几组参数、都没坏"写进依据 —— 它是"没找到"，
    **不是**"成立"。
 
 ## 一条纪律

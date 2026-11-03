@@ -747,9 +747,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p233", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p233（2026-11-03）：① F 的 `attack.step` / `attack.status` 的 `returns=` 补齐实现的真返回（只加不减：step 多 delivery / delivered / 逐条计数 / unfinished / trail / legal_exits / 覆盖率四格 / self_assessment / delivery_state_plan / delivery_label_plan 共 27 格；status 多 delivery）—— 机器可读的 ToolSpec 声明在 tools/attack_tools.py 同步；② F 的 policy 把「交没交差只看 v_sign / delivered 只有已签时为真」改成 179 的逐条口径（delivery 逐条读、delivered = 有成果且全部成果已签、没成果是合法收工理由）；③ agent_skills 的 F 手册把「实际送审是 F.step 的一步」改成「F 自己派 V 审这一份手稿」（正文只落盘、索引行未动）。变化格 = F 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p233 → p234（2026-11-03，业主：「E 在数值证明拿 V 签的时候流程和 F 一模一样，
+    # 若未实现请先实现」）：`agent_skills._e_skills()` 多一条「穷举证明-拿签与上报收养」
+    # （手稿 → 派 V 三转 → 收方落签 → 上报 D），并把「反例优先」第 5 步里
+    # 「让 B.register_statement 登记」改成「交 D（由 D 派 B 登记）」—— 后者与 policy
+    # 第 ⑤ 条「不要自己去找 B 的 register_statement」原本是矛盾的。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p234", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p234（2026-11-03，业主「E 在数值证明拿 V 签的时候流程和 F 一模一样」）：agent_skills 的 E 手册多一条「穷举证明-拿签与上报收养」（手稿 reports/e-proof-<实验号>.md → 派 V 三转 → 收方落签 → 上报 D 收养），并把「反例优先」第 5 步那句「让 B.register_statement 登记」改成「交 D（由 D 派 B 登记）」（与 specs/e.py 的 policy ⑤ 原本矛盾）。变化格 = E 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
-
 
 def test_facts_migration_must_leave_a_version_trace() -> None:
     """判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。

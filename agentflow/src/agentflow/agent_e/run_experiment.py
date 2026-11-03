@@ -438,12 +438,37 @@ class _RunExperiment:
                                  + "；".join(str(p) for p in report.get("problems") or [])
                                  + " ⇒ 这一条不许标 proof（最多是「有数值实验支持」）")
                 derived["observations"][_ER.REPORT_KEY] = report
+                # ---- [5a2] E 的证明手稿（2026-11-03 业主：E 拿 V 签的流程与 F 一样） ----
+                #
+                # ②③ 的读数（上一格）回答的是「这份穷举证据可不可核」；「手稿」回答的是
+                # "V 的签盖在哪一份正文上"。F 那一侧这两件事是同一份文件
+                # （`reports/f-proof-*.md` 的 `## 证明`），E 这一侧改前只有前者 ⇒
+                # V 的未在册入口读不进去、收方秘书也没有地方落签块，E 的"签"只能靠
+                # `e_signature` 自报（那是 E 自己写的 `signed_by="V"`）。
+                # 现在同一趟实验把 `reports/e-proof-<实验号>.md` 也落下来：
+                # 与 F 同目录、同三节、同一把 sha 尺（`## 证明` 的正文 = 证明栏三段）。
+                manuscript = _ER.land_manuscript(
+                    self.workspace_root, experiment_id=eid, claim=claim,
+                    claim_key=claim_key,
+                    script_path=_relpath(path, self.workspace_root), script_sha256=chash,
+                    design=_blocks["design"], enumeration=_blocks["enumeration"],
+                    search_space=_blocks["search_space"],
+                    result=derived.get("result"),
+                    evidence_kind=derived.get("evidence_kind"))
+                if manuscript.get("problems"):
+                    notes.append("[manuscript] E 的证明手稿没有落成："
+                                 + "；".join(str(p) for p in manuscript.get("problems") or [])
+                                 + " ⇒ 这一条拿不到手稿签块（V 的签没有落点）")
+                derived["observations"][_ER.MANUSCRIPT_KEY] = manuscript
             else:
                 # 一般数值实验：不写报告，也不在 `observations` 里留一格空的落盘事实
                 # （留了会被读侧当成"落过盘但没成"，那是另一种欠账）。
                 report = {"path": "", "bytes": 0, "sha256": "", "ok": False,
                           "problems": [], "blocks": {}, "missing": [],
                           "experiment_id": eid, "at": ""}
+                manuscript = {"path": "", "bytes": 0, "sha256": "", "ok": False,
+                              "problems": [], "experiment_id": eid,
+                              "proof_sha256": "", "at": ""}
             # ---- [5b] 改脚本 ⇒ 撤销老登记（业主 2026-10-24 裁定，唯一权威）
             #
             # 逐字：「改脚本后应该重新登记并把老登记撤销」。
@@ -522,6 +547,13 @@ class _RunExperiment:
             "report_bytes": int(report.get("bytes") or 0),
             "report_blocks": dict(report.get("blocks") or {}),
             "report_problems": [str(p) for p in report.get("problems") or []],
+            # E 的证明手稿（2026-11-03：与 F 同形的那一份；V 的签块落在这里）：
+            # 这三格是"把稿交给 V"的入口 —— `proof_manuscript` 直接就是
+            # `V.verify_proof(proof_manuscript=...)` 收的那一格（不另起名字）。
+            "proof_manuscript": str(manuscript.get("path") or ""),
+            "manuscript_sha256": str(manuscript.get("sha256") or ""),
+            "manuscript_proof_sha256": str(manuscript.get("proof_sha256") or ""),
+            "manuscript_problems": [str(p) for p in manuscript.get("problems") or []],
             "signed_by": str(_sig.get("signed_by") or ""),
             "proof_authors": [str(a) for a in (_sig.get("proof_authors") or [])],
             "notes": row.notes,

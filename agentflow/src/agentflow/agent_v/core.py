@@ -671,6 +671,16 @@ class AgentV:
                 # "那一页还没装订进册"而作废 ⇒ 这一档改走 `verifications/pending/<sha>`：
                 # 那一签按对象内容的 sha 落盘，B 登记之后按同一个 sha 认领
                 # （`numericproof.latest_third_party_sign` 的第二路）。顺序于是不再重要。
+                # ---- 2026-11-03（业主：「E 在数值证明拿 V 签的时候流程和 F 一模一样」）----
+                #
+                # 未在册的穷举证明先走 E 那一支（三轮机械会审 + 收方秘书落签块），
+                # 与下面 F 的散文那一支同一套（同一份手稿形状 / 同一次 `vsigns.issue` /
+                # 同一个 `land_unregistered_sign`）。返回 None = 这一份不是穷举证据、
+                # 或盘上没有 E 的手稿 ⇒ 退回下面两支（pending / 散文），一个字节不写。
+                exhaust = self._review_unregistered_exhaustion(
+                    text=text, manuscript=proof_manuscript, no=no)
+                if exhaust is not None:
+                    return self._finish_unregistered(out, no=no, got=exhaust)
                 pending = self._review_without_statement(text=text, no=no)
                 if pending is not None:
                     return self._finish_pending(out, statement_id=sid, no=no, got=pending)
@@ -1659,6 +1669,184 @@ class AgentV:
                 "defect_step": last.get("defect_step"),
                 "unresolved_errors": int(last.get("unresolved_errors") or 0),
                 "reason": ("（未在册）"
+                           + (str(block_write.get("why") or "") if stopped == "signed"
+                              else (f"判「{verdict_word}」：负判不写手稿块，判词落 "
+                                    f"`{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/`"
+                                    f"（{pending.get('verification_id') or '没编号'}）")))}
+
+    def _review_unregistered_exhaustion(self, *, text: str, manuscript: str = "",
+                                        no: int = 1) -> dict[str, Any] | None:
+        """未在册的一份穷举证明：三轮会审 + 收方秘书落签块（2026-11-03）。
+
+        ## 业主逐字（这是本方法存在的唯一理由）
+
+        > 「E 在数值证明拿 V 签的时候流程和 F 一模一样，若未实现请先实现」
+
+        ## 改前差在哪（三处，逐条对得上真机读数）
+
+        1. E 没有「手稿」：穷举证据只有 `out/experiments/<实验号>/exhaustion.md`
+           （②③ 的读数，没有 `## 证明` 那一节）⇒ `_review_unregistered_prose` 的入口
+           守卫（只认 `reports/f-proof*.md`）把它拒成 `bad_manuscript_path`；
+        2. 收方没有人：`vsigns.SECRETARY_OF` 只有 F / B ⇒ E 派 V 的那一签
+           「能颁发、没人能落」（`not_a_secretary`），稿上永远没有签块；
+        3. 签是自报的：`experiments.observations.e_signature.signed_by="V"` 是 E 在
+           `build_experiment` 里自己写的（`numericproof.suspect_self_signed` 报的就是它）。
+
+        改后这一支与 F 那条路同一套：同一份 `reports/*.md` 手稿形状、同一个三轮门槛
+        （`review_pass_bound()` == `verifications.SIGN_STREAK_NEED`）、同一次
+        `vsigns.issue()` 出信封、同一个收方秘书的落签方法（`land_unregistered_sign`，
+        块的 9 格、`手稿号`、`正文sha` 全由 `vsigns` 那一侧判）。
+        唯一的差别是「判词从哪来」：散文那一支问模型（冷启动逐行读），这一支走七项机械会审
+        （`exhaustionreport.review`，2026-10-23 的既定口径：穷举证据不按逐行读证明文本审）。
+        三轮都过才发签 —— 与 F 一样，"一次成立"不算签。
+
+        ## 为什么正判也要落一行 pending
+
+        B 的入库闸（`numericproof.filing_problems`）认 E 这一路的第三方签字时读的是
+        `verifications/pending/<对象 sha>.jsonl`（`latest_third_party_sign` 的第二路）。
+        F 那一侧 B 读的是手稿块（`manuscript_sign_standing`），E 这一侧两条都读 ——
+        所以正判时"手稿块"与"台账行"都要落：少前者，E 的稿上没有签；少后者，
+        B 即使看到块也过不了 `proof` 档的第三方签字闸。
+
+        返回 `None` = 这一份不是穷举型证据 / 找不到 E 的手稿（交给散文与 pending 那两支）；
+        否则返回与 :meth:`_review_unregistered_prose` 同形的 dict（`_finish_unregistered` 读）。
+        """
+        from .. import depsection as _DS
+        from .. import exhaustionreport as _ER
+        from .. import numericproof as _NP
+        from .. import vsigns as _VS
+
+        body = str(text or "")
+        rel = str(manuscript or "").strip().replace("\\", "/")
+        explicit = bool(rel)
+        exp_rows: list = []
+        try:
+            if self.store is not None:
+                exp_rows = list(self.store.rows("experiments"))
+        except (StoreError, AttributeError, TypeError):
+            exp_rows = []
+        # ---- 只认参数给的那份手稿（与 F 那一支同一条入口守卫） -------------------
+        #
+        # 为什么不按证明栏自己去实验台账里反查一份稿：F 的落块那一路也只认
+        # `proof_manuscript` 参数（`agent_v.core._review_unregistered_prose` 的入口守卫）——
+        # "谁送审"由送审方点名，V 不替它去盘上猜一份（猜错就把签盖到别人那份稿上）。
+        # 两条实验共用同一份程序时，"按 `code_path` 反查"还会挑到第一条（真机形态），
+        # 签核的就会是别人那份报告的 sha。所以 E 要拿到手稿签块，就在送审时点名那份稿
+        # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。
+        if not rel or not _ER.is_manuscript_relpath(rel):
+            return None
+        # 这份稿属于哪条实验：稿名里那个实验号是唯一不会歧义的键（两条实验共用
+        # 同一份程序时，按 `code_path` 反查会挑到第一条 —— 那样签核的是别人那份报告）。
+        eid = _ER.experiment_id_of(rel)
+        row = next((dict(r) for r in exp_rows
+                    if str(r.get("experiment_id") or "") == eid), None)
+        read = _ER.read_proof_manuscript(self.workspace_root, rel)
+        if not read.get("ok"):
+            if not explicit:
+                # 稿是"按证明栏反查出来的"、而盘上没有 ⇒ 这一档不是"送审指错了稿"，
+                # 而是"这一条还没有那份手稿"（存量工作区就是这个形态）⇒ 退回 pending
+                # 那一支（老行为：结论照样落盘，只是没有稿可签）。
+                return None
+            return {"failed": True, "reason": "manuscript_missing",
+                    "detail": (f"`{rel}` 读不出来（{read.get('state')}："
+                               f"{'；'.join(str(p) for p in read.get('problems') or [])}）⇒ "
+                               "这一份没审成（未在册的穷举证明要指向盘上那一份稿）"),
+                    "passes": [], "manuscript": rel}
+        on_disk = str(read.get("proof_body") or "").strip("\n")
+        if not on_disk.strip():
+            return {"failed": True, "reason": "manuscript_empty",
+                    "detail": f"`{rel}` 的 `## 证明` 那一节没有正文 ⇒ 没有可审/可签的对象",
+                    "passes": [], "manuscript": rel}
+        if not body.strip():
+            body = on_disk
+        elif VR.proof_sha(on_disk) != VR.proof_sha(body):
+            return {"failed": True, "reason": "proof_text_mismatch",
+                    "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
+                               f"（参数 sha {VR.proof_sha(body)[:12]}…，盘上 "
+                               f"{VR.proof_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
+                    "passes": [], "manuscript": rel}
+        if not _ER.is_exhaustion_column({"proof_text": body}, exp_rows):
+            return None
+        sha = VR.proof_sha(body)
+        already = _VS.manuscript_sign_standing(read.get("text") or "", proof_sha=sha,
+                                              manuscript_path=rel)
+        if str(already.get("state") or "") == "signed":
+            return {"block": already, "passes": [], "manuscript": rel, "sha": sha,
+                    "already": True,
+                    "reason": (f"`{rel}` 里已经有盖住这一份正文的签块"
+                               f"（{already.get('why')}）⇒ 不重复审、不重复写")}
+        # ---- 三轮：每一轮都重读盘上那一份报告（机械会审，不问模型） ----
+        need = review_pass_bound()
+        judged: list[dict[str, Any]] = []
+        passes: list[dict[str, Any]] = []
+        stopped = ""
+        reviewed: dict[str, Any] = {}
+        for n in range(1, int(need) + 1):
+            reviewed = _ER.review(workspace_root=self.workspace_root,
+                                  statement={"proof_text": body}, experiments=exp_rows,
+                                  # 钉到这份稿自己那条实验（`experiment_row` 优先于按程序反查）
+                                  experiment_row=row)
+            verdict = _ER.verdict_of(reviewed)
+            word = str(verdict.get("verdict") or "")
+            missing = [str(m) for m in (reviewed.get("missing") or [])]
+            missing_detail = missing_material_detail(verdict, missing)
+            if missing_detail:
+                self._emit(f"verify_proof(未在册·穷举)：第 {n} 转缺材料 —— 没查成（{missing}）")
+                return {"failed": True, "reason": MISSING_MATERIAL_REASON,
+                        "detail": missing_detail, "passes": passes, "manuscript": rel}
+            judged.append({"pass": n, "verdict": verdict})
+            passes.append({"pass": n, "verdict": word,
+                           "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
+                           "defect_step": verdict.get("defect_step"),
+                           "terminal": ""})
+            self._emit(f"verify_proof(未在册·穷举)：第 {n} 转 {word}"
+                       f"（{len(reviewed.get('checks') or [])} 项检查）")
+            if word != "成立":
+                stopped = "rejected"
+                passes[-1]["terminal"] = stopped
+                break
+        else:
+            stopped = "signed"
+            if passes:
+                passes[-1]["terminal"] = stopped
+        at = _now_iso()
+        last = judged[-1]["verdict"] if judged else {}
+        verdict_word = "成立" if stopped == "signed" else VR.read_verdict(last)
+        streak = len(judged) if stopped == "signed" else 0
+        pending: dict[str, Any] = {}
+        issued: dict[str, Any] = {}
+        landed: dict[str, Any] = {}
+        block_write: dict[str, Any] = {
+            "written": False, "idempotent": False, "missing": False,
+            "state": "not_attempted", "path": rel, "line": 0, "reading": {},
+            "code": "", "body_mismatch": False, "body_sha256": "", "signed_sha256": "",
+            "why": ("负判不写手稿块（V 只颁发；块只由收方秘书落）"
+                    if stopped != "signed" else "没有手稿落点"),
+        }
+        # ---- 台账那一行：正判也要落（B 的第三方签字闸读的就是它） ----
+        try:
+            pending = VR.record_pending_sign(
+                self.workspace_root, proof_text=body, verdict=last,
+                verifier=self.actor,
+                object_sha256=str(reviewed.get("report_sha256") or ""),
+                object_path=(str(reviewed.get("report_path") or "") or rel))
+        except (VR.VerificationError, OSError) as exc:
+            return {"failed": True, "reason": "ledger_unwritable",
+                    "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
+                               "这一份没查成（判词没有落点，必须重审）"),
+                    "passes": passes, "manuscript": rel}
+        if stopped == "signed":
+            block_write, issued, landed = self._issue_and_land_unregistered(
+                rel=rel, sha=sha, streak=streak, need=need, no=no,
+                passes=passes, at=at, block_write=block_write)
+        reading = dict(block_write.get("reading") or {})
+        return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
+                "stopped": stopped, "block_write": block_write,
+                "issued": issued, "landed": landed, "pending": pending,
+                "verdict": verdict_word, "findings": list(last.get("findings") or []),
+                "defect_step": last.get("defect_step"),
+                "unresolved_errors": int(last.get("unresolved_errors") or 0),
+                "reason": ("（未在册·穷举）"
                            + (str(block_write.get("why") or "") if stopped == "signed"
                               else (f"判「{verdict_word}」：负判不写手稿块，判词落 "
                                     f"`{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/`"

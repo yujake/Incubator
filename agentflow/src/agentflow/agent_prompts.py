@@ -3001,7 +3001,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_surface_snapshot.json` 因 F 的动作 returns 与提示词变）；`docs/ROLE-GUIDE.md`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，
 #: 实际花费见提交信息）。
-PROMPT_VERSION = "p233"
+PROMPT_VERSION = "p234"
 
 
 

@@ -71,6 +71,10 @@ REPORT_DIR = "out/experiments"
 REPORT_NAME = "exhaustion.md"
 #: 落在 `observations` 里的那一格（写侧记录"落过什么"，读侧核它）。
 REPORT_KEY = "exhaustion_report"
+#: E 的证明手稿落在 `observations` 里的那一格（2026-11-03：与 F 同形的那一份手稿）。
+#: 与 :data:`REPORT_KEY` 分两格：一份是"②③ 的读数"、一份是"V 要签的那份正文"，
+#: 两者落成的关系是"都要在"，不是"有其一即可"。
+MANUSCRIPT_KEY = "proof_manuscript"
 
 #: 三块的标题（逐字；`numerictheorem.blocks_missing` 与 G 的正文引的是同一批记号）。
 BLOCK_DESIGN = "程序设计思路"
@@ -356,6 +360,285 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
         "at": _now_iso(),
     })
     return facts
+
+
+# ---------------------------------------------------------------- E 的证明手稿
+#
+# 2026-11-03（业主逐字：「E 在数值证明拿 V 签的时候流程和 F 一模一样，
+# 若未实现请先实现」）：穷举证明此前只有 `out/experiments/<实验号>/exhaustion.md`
+# 那一份「读数」，它不是手稿 —— 没有 `## 证明` 那一节，V 的未在册入口
+# （`agent_v.core._review_unregistered_prose`）读不进去，收方秘书也就没有地方落签块。
+# 于是 E 的"V 签"只剩两条退路：`experiments.observations.e_signature`（E 自己
+# 写的 `signed_by="V"`，那是自报）与 V 的台账行（那是"审过"，不是"签在稿上"）。
+#
+# 这一节补的是"与 F 同形的那一份手稿"：同目录（`reports/`）、同 `## 命题` / `## 证明` /
+# `## 依赖` 三节、同一把 sha 尺（`verifications.proof_sha(## 证明 的正文)`）。
+# 差别只有一处、而且是必须的：正文不是散文，是 `numericproof.compose_proof_column`
+# 那三段（程序 / 程序设计 / 穷举论证）—— 它正是 B 登记时 `proof_text` 要收的那一串，
+# 于是"稿上被签的那一份"与"台账里登记的那一份"逐字相同。
+
+#: E 的证明手稿落在哪（与 F 的证明手稿同一个目录：`reports/`）。
+MANUSCRIPT_DIR = "reports"
+#: 文件名前缀（`reports/e-proof-<实验号>.md`）。
+#:
+#: 为什么不叫 `f-proof-`：`depsection.is_framework_manuscript` 用它认"F 那一份"，
+#: 而 E 的稿不是 F 渲染的（洗稿元信息那一格也不同）—— 两个前缀让"谁写的稿"在路径上
+#: 就分得开，读侧不必去正文里猜。
+MANUSCRIPT_PREFIX = "e-proof-"
+#: 手稿里"被签的那一份正文"的标题（与 F 的手稿逐字相同：`depsection.proof_body` 读它）。
+MANUSCRIPT_PROOF_HEADING = "## 证明"
+#: 手稿里"命题正文"的标题（同上：与 F 同形）。
+MANUSCRIPT_STATEMENT_HEADING = "## 命题"
+#: 依赖段的标题（与 F 的手稿逐字相同：`depsection.SECTION_HEADING`）。
+MANUSCRIPT_DEPENDENCY_HEADING = "## 依赖"
+#: 依赖段的四列表头（与 F 的手稿逐字相同；空表也要给表头 —— 空表是声明）。
+MANUSCRIPT_DEPENDENCY_HEADER = (
+    "| 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |",
+    "|---|---|---|---|",
+)
+
+
+def experiment_id_of(rel: Any) -> str:
+    """从 E 的证明手稿路径里读出实验号（`reports/e-proof-000001.md` ⇒ `"000001"`）。
+
+    为什么需要它：V 会审时要把「这份稿」钉到「它自己那条实验」上，而不是按程序路径去
+    实验台账里猜一条。两条实验共用同一份程序（"同一脚本、换枚举策略"就是优化那一档的
+    常态）时，按 `code_path` 反查会挑到第一条，于是签核的是别人那份报告的 sha，
+    B 的入库闸当场拒（真机形态：`out/experiments/000001/exhaustion.md` 的 sha 与
+    pending 行里的 `object_sha256` 对不上）。稿名里那个实验号是唯一不会歧义的键。
+    """
+    raw = str(rel or "").strip().replace("\\", "/")
+    if not is_manuscript_relpath(raw):
+        return ""
+    name = raw.rsplit("/", 1)[-1][: -len(".md")]
+    return name[len(MANUSCRIPT_PREFIX):]
+
+
+def proof_manuscript_relpath(experiment_id: Any) -> str:
+    """这条实验的证明手稿该落在哪（工作区相对）；实验号不合法 ⇒ 空串（不猜位置）。"""
+    eid = str(experiment_id or "").strip()
+    if not _ID_RE.match(eid):
+        return ""
+    return f"{MANUSCRIPT_DIR}/{MANUSCRIPT_PREFIX}{eid}.md"
+
+
+def is_manuscript_relpath(value: Any) -> bool:
+    """这一串字是不是"E 的证明手稿"那一形态（`reports/e-proof-<数字>.md`）。
+
+    与 :func:`is_report_relpath` 同一条纪律：只判形态、不判它在不在盘上；
+    绝对路径 / 含 `..` / 盘符 / 别的目录一律不认（"稿在哪"不许随机器变）。
+    """
+    raw = str(value or "").strip().replace("\\", "/")
+    if not raw or raw.startswith("/") or ":" in raw:
+        return False
+    parts = raw.split("/")
+    if ".." in parts or len(parts) != 2:
+        return False
+    if parts[0] != MANUSCRIPT_DIR or not parts[1].endswith(".md"):
+        return False
+    name = parts[1][: -len(".md")]
+    if not name.startswith(MANUSCRIPT_PREFIX):
+        return False
+    return bool(_ID_RE.match(name[len(MANUSCRIPT_PREFIX):]))
+
+
+def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
+                       script_path: Any, script_sha256: Any = "",
+                       design: Any, enumeration: Any,
+                       search_space: Any = None, result: Any = "",
+                       evidence_kind: Any = "") -> str:
+    """把 E 的穷举证明拼成一份与 F 同形的证明手稿（纯函数，逐字节可复现）。
+
+    形态（段序固定、标题逐字；V 只读 `## 证明` 那一节，B 登记时也读同一节）::
+
+        # E 的证明手稿：<命题首行>
+
+        - 实验号：exp:000000
+        - 命题：...
+        - 命题键：...
+        - 程序：code/enum.py（sha256 ...）
+
+        ## 命题
+
+        ...
+
+        ## 证明
+
+        程序：code/enum.py
+        程序设计：...
+        穷举论证：...
+
+        ## 依赖
+
+        | 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |
+        |---|---|---|---|
+        （这一份证明没有引用任何在册命题 —— 空表就是声明。）
+    """
+    from . import numericproof as _NP
+
+    eid = str(experiment_id or "").strip()
+    column = _NP.compose_proof_column(script_path=script_path, design=design,
+                                      enumeration=enumeration)
+    title = " ".join(str(claim or "").split())
+    if len(title) > 60:
+        title = title[:60] + "…"
+    head = [
+        f"# E 的证明手稿：{title or '（这一条没有写命题）'}",
+        "",
+        f"- 实验号：{EVIDENCE_PREFIX}{eid}",
+        f"- 命题：{str(claim or '').strip()}",
+        f"- 命题键：{str(claim_key or '').strip()}",
+        f"- 程序：{str(script_path or '').strip()}"
+        + (f"（sha256 {str(script_sha256).strip()}）" if str(script_sha256 or "").strip() else ""),
+    ]
+    if search_space is not None:
+        head.append(f"- 搜索空间：{_json_text(search_space)}")
+    head.append(f"- 结论：{str(result or '').strip() or '（未记）'}"
+                f"（等级 {str(evidence_kind or '').strip() or '（未记）'}）")
+    body = [
+        "",
+        MANUSCRIPT_STATEMENT_HEADING,
+        "",
+        str(claim or "").strip(),
+        "",
+        MANUSCRIPT_PROOF_HEADING,
+        "",
+        column,
+        "",
+        MANUSCRIPT_DEPENDENCY_HEADING,
+        "",
+        *MANUSCRIPT_DEPENDENCY_HEADER,
+        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）",
+        "",
+    ]
+    return "\n".join(head + body)
+
+
+def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
+    """把 E 的证明手稿写进 `reports/e-proof-<实验号>.md`，读回来记下事实。
+
+    与 :func:`land_report` 同一条纪律：写不成就如实记进 `problems`（不抛异常 ——
+    这一趟实验真的跑过了，稿没落成是"这一条拿不到 V 签"，不是"实验不算"）；
+    sha256 算在字节上，与 `read_proof_manuscript` 读回来的那一格同一个值。
+
+    返回 `{"path","bytes","sha256","ok","problems","experiment_id","proof_sha256","at"}`。
+    `proof_sha256` 是 `## 证明` 那一节正文的 sha（`verifications.proof_sha` 的口径）——
+    签块盖的就是它，B 登记时核的也是它。
+    """
+    from . import verifications as _VR
+
+    problems: list[str] = []
+    out: dict[str, Any] = {
+        "path": "", "bytes": 0, "sha256": "", "ok": False,
+        "problems": problems, "experiment_id": str(facts.get("experiment_id") or "").strip(),
+        "proof_sha256": "", "at": "",
+    }
+    rel = proof_manuscript_relpath(facts.get("experiment_id"))
+    if not rel:
+        problems.append(
+            f"实验号 {facts.get('experiment_id')!r} 不合法 ⇒ E 的证明手稿没有固定落点"
+            "（这一条因此拿不到手稿签块）")
+        return out
+    out["path"] = rel
+    text = compose_manuscript(**{k: facts.get(k) for k in (
+        "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
+        "design", "enumeration", "search_space", "result", "evidence_kind")})
+    target, why = _resolve(root, rel)
+    if target is None:
+        problems.append(f"手稿落点解析不了：{why}")
+        return out
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(text.encode("utf-8"))
+        os.replace(tmp, target)
+    except OSError as exc:
+        problems.append(f"手稿写不进去：{rel}（{type(exc).__name__}: {exc}）")
+        return out
+    payload = target.read_bytes()
+    body = proof_body_of(payload.decode("utf-8"))
+    out.update({"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest(),
+                "proof_sha256": _VR.proof_sha(body) if body.strip() else "",
+                "ok": bool(body.strip()), "at": _now_iso()})
+    if not body.strip():
+        problems.append(f"手稿写成了，但 `{MANUSCRIPT_PROOF_HEADING}` 那一节读不出正文：{rel}")
+    return out
+
+
+def proof_body_of(text: Any) -> str:
+    """手稿里 `## 证明` 那一节的正文（与 `depsection.proof_body` 同一口径：去首尾换行）。
+
+    为什么不自己再写一份解析：这一格是"被签的那一份正文"的唯一口径 ——
+    `vsigns.manuscript_proof_body` 与 `agent_v.core._review_unregistered_prose`
+    读的都是 `depsection.proof_body(...).strip("\\n")`。本函数只是把它换个名字给
+    `land_manuscript` 用（那一侧在写盘后要现算 sha），口径仍只有 `depsection` 一处。
+    没有 `## 证明` 那一节 ⇒ 空串（`depsection.proof_body` 在没有那一节时会退到
+    "依赖段之前的全文"，那一档对一份手稿不是"正文"，是"整份稿"—— 这里不许它冒充）。
+    """
+    from . import depsection as _DS
+
+    lines, _start = _DS.section_lines(str(text or ""), _DS.SECTION_PROOF)
+    if not lines:
+        return ""
+    return "\n".join(raw for _ln, raw in lines).strip("\n")
+
+
+def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
+    """读一份 E 的证明手稿：`{"ok","state","path","bytes","sha256","text","proof_body","proof_sha256","problems"}`。
+
+    与 :func:`read_report` 同一条三态纪律：`missing` / `unreadable` / `empty` 都带一条
+    `problems` 说明 —— "读不到"与"读过了、没问题"必须分得开。
+    """
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {
+        "ok": False, "state": "outside",
+        "path": str(rel or "").strip().replace("\\", "/"),
+        "bytes": 0, "sha256": "", "text": "", "proof_body": "",
+        "proof_sha256": "", "problems": [],
+    }
+    raw = str(rel or "").strip().replace("\\", "/")
+    if not raw or not is_manuscript_relpath(raw):
+        out["problems"] = [
+            f"手稿落点不合口径（{raw!r}）：要的是 {MANUSCRIPT_DIR}/{MANUSCRIPT_PREFIX}"
+            "<实验号>.md 这一形态的相对路径"]
+        return out
+    target, why = _resolve(root, raw)
+    if target is None:
+        out["problems"] = [f"手稿落点解析不了：{why}"]
+        return out
+    if not target.is_file():
+        out["state"] = "missing"
+        out["problems"] = [f"手稿不在盘上：{raw}（E 没有把它落成这一份文件）"]
+        return out
+    try:
+        payload = target.read_bytes()
+    except OSError as exc:
+        out["state"] = "unreadable"
+        out["problems"] = [f"手稿读不出来：{raw}（{type(exc).__name__}: {exc}）"]
+        return out
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        out["state"] = "unreadable"
+        out["problems"] = [f"手稿不是 UTF-8 文本：{raw}（{exc}）"]
+        return out
+    body = proof_body_of(text)
+    out.update({"text": text, "bytes": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "proof_body": body,
+                "proof_sha256": _VR.proof_sha(body) if body.strip() else ""})
+    if not text.strip():
+        out["state"] = "empty"
+        out["problems"] = [f"手稿是空文件：{raw}（空文件不等于「这一份写过了」）"]
+        return out
+    if not body.strip():
+        out["state"] = "empty"
+        out["problems"] = [f"手稿里 `{MANUSCRIPT_PROOF_HEADING}` 那一节是空的：{raw}"]
+        return out
+    out["state"] = "present"
+    out["ok"] = True
+    return out
 
 
 # ---------------------------------------------------------------- 读侧

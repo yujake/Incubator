@@ -119,12 +119,20 @@ WRITTEN_BY_DIRECT = "sign_statement(direct)"
 #: 读侧不许因为它是旧值就把它读成"没有写签者"。
 WRITTEN_BY_SECRETARY = "secretary"
 
-#: 收方秘书的身份值（业主 2026-11-02：`by=` 必填，只认这两个）。
+#: 收方秘书的身份值（业主 2026-11-02：`by=` 必填，只认"送审那一方的秘书"）。
 #:
-#: 为什么只认这两个：落签是收方的动作（F 的秘书落 F 的稿、B 的秘书落 B 收录的命题），
-#: 而 V 与 F / B 本身都不许落 —— 这正是「防止F自己给自己签」那条口径的结构落点。
+#: 为什么是这三家：落签是收方的动作（F 的秘书落 F 的稿、E 的秘书落 E 的数值证明稿、
+#: B 的秘书落 B 收录的命题），而 V 与 F / E / B 本身都不许落 —— 这正是
+#: 「防止F自己给自己签」那条口径的结构落点。
 #: 别的值（`secretary:V` 也算）⇒ 受控拒绝 `not_a_secretary`、零字节。
-SECRETARY_OF: tuple[str, ...] = ("secretary:F", "secretary:B")
+#:
+#: 2026-11-03（业主逐字：「E 在数值证明拿 V 签的时候流程和 F 一模一样，若未实现请先实现」）：
+#: 加 `secretary:E`。改前这里只有 F / B ⇒ E 派 V 的那一签「能颁发、没人能落」：
+#: `Secretary.actor_label` 读 `secretary_id("E")` 得到空串 ⇒ `land_unregistered_sign`
+#: 受控拒绝 `not_a_secretary` ⇒ E 的证明稿上永远不会有签块（V 只交信封那一侧是对的，
+#: 缺的是"收方是谁"这一格）。这不是放宽：收方仍然只有"送审的那一方"，
+#: 而 E 是 V 的第三个入口（`specs/e.py` 的 `edges` 含 `V`，2026-10-23 加）。
+SECRETARY_OF: tuple[str, ...] = ("secretary:F", "secretary:B", "secretary:E")
 
 #: 非收方秘书来落签时的原因码（受控拒绝；调用方按它分句，不许折成"系统故障"）。
 NOT_A_SECRETARY = "not_a_secretary"
@@ -140,8 +148,9 @@ ENVELOPE_KIND = "v-sign-issued"
 def secretary_id(role: Any) -> str:
     """角色名 ⇒ 收方秘书的身份值（`"F"` ⇒ `"secretary:F"`；别的角色 ⇒ 空串）。
 
-    只认 F / B：V 是颁发方、M 没有 V 签的编辑权（业主 2026-11-02），其余角色连
+    只认 F / E / B：V 是颁发方、M 没有 V 签的编辑权（业主 2026-11-02），其余角色连
     "收方"都不是。空串 = 这一趟没有可落的秘书（不是"随便谁都能落"）。
+    2026-11-03：E 是 V 的第三个入口（穷举证据会审） ⇒ E 的秘书也是收方之一。
     """
     text = str(role or "").strip()
     want = f"secretary:{text}"
@@ -953,8 +962,8 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     if who and who not in SECRETARY_OF:
         out.update(code=NOT_A_SECRETARY,
                    reason=(f"`by={who!r}` 不是收方秘书 ⇒ 不颁发（一个字节都不写）："
-                           f"只认 {list(SECRETARY_OF)} —— 落签是 F / B 的秘书的动作，"
-                           "V 与 F / B 本身都不许落（防止自己给自己签）"))
+                           f"只认 {list(SECRETARY_OF)} —— 落签是送审那一方（F / E / B）"
+                           "的秘书的动作，V 与 F / E / B 本身都不许落（防止自己给自己签）"))
         return out
     try:
         key = _sha_key(artifact_sha)
@@ -1091,10 +1100,11 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
     """落签：把一份已经颁发的签盖进手稿（第 9 格 = 裸稿号）+ 落台账位。
 
     ## 只有收方秘书能落（`by` 必填）
-    `by` 只认 :data:`SECRETARY_OF`（`secretary:F` / `secretary:B`）；别的一律受控拒绝
-    :data:`NOT_A_SECRETARY`，零字节（不盖块、不改签文件、不翻台账位）。
-    为什么：落签是收方的动作 —— F 的秘书落 F 的稿、B 的秘书落 B 收录的命题。
-    V 与 F / B 本身都不许落，否则「防止F自己给自己签」在结构上就不成立。
+    `by` 只认 :data:`SECRETARY_OF`（`secretary:F` / `secretary:E` / `secretary:B`）；
+    别的一律受控拒绝 :data:`NOT_A_SECRETARY`，零字节（不盖块、不改签文件、不翻台账位）。
+    为什么：落签是收方的动作 —— F 的秘书落 F 的稿、E 的秘书落 E 的数值证明稿、
+    B 的秘书落 B 收录的命题。V 与 F / E / B 本身都不许落，否则「防止F自己给自己签」
+    在结构上就不成立。
 
     ## 两道前置判据（缺一不落）
     1. 信封收件人：签文件里 `envelope.to` 非空而 `!= by` ⇒ `addressed_to_another_secretary`
