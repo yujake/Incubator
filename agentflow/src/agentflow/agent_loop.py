@@ -13,7 +13,11 @@
 数 `run.bad_json` 与连击 `run.bad_json_streak` 分开记，判据是连击，§68）；参数不是合法 JSON（
 `judge_bad_args`）另计 `run.bad_args` ⇒ `bad_args_limit`（§65）；没拿到可用回复（`judge_timeout` /
 `judge_output_limit` / `judge_no_reply:<kind>`）另计 `run.no_reply` ⇒ `model_timeout` / `model_output_limit`
-（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2）；工具/召唤被拒带原因码并原样回
+（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2）；其中连接类
+（`judge_no_reply:<kind>`）另走 `reconnect.BackoffGate`：失败先等（单飞 + 指数退避 + 抖动）
+再重试同一轮，等待写进 `kind=reconnect` 事件；补满 `max_bad_json` 次或总等待超限
+（`AGENTFLOW_RECONNECT_TOTAL_SEC`，默认 300 秒）⇒ `model_unreachable` 停机，收场那句话
+说清"等过多久还是没回来"；工具/召唤被拒带原因码并原样回
 给模型；步数或预算耗尽则停，`stop_reason` 如实写进运行记录。消息落进项目会话记录（`sessions.append`，不新增
 表），"读过哪些"用 append-only 的 `agent_inbox` 事件登记 ⇒ "投递"可复算。
 """
@@ -38,6 +42,7 @@ from . import sessions as SS
 from . import userio as U
 from . import llmseam as LL
 from . import promptstability as PSTAB
+from . import reconnect as RC
 from . import stepdispatch as SD
 from .llmseam import LlmSeam
 
@@ -947,6 +952,17 @@ def _bad_json_line(step: int, problem: str, detail: str) -> str:
 #: 不能写成元组里的一个字面量 —— 成员判据只有 `judge.is_no_reply` 一处，
 #: 本常量留在这里是给读的人看这一档有哪几张脸（不再参与判定）。
 _NO_REPLY_NAMED: tuple[str, ...] = ("judge_timeout", "judge_output_limit")
+
+
+def _sec_text(value: Any) -> str:
+    """把秒数写成一句人话（最多三位小数，末尾的零不写）。
+
+    为什么不用固定的 `:.1f`：等待闸在判据里会被注入很小的步长（0.0075 秒），
+    一位小数会把"等过 0.0225 秒"写成"等过 0.0 秒" —— 那个 0 会被读成"根本没等"，
+    而这一格存在的意义正是把"等过了"与"根本没等"分开。
+    """
+    text = f"{float(value):.3f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _is_no_reply(problem: str) -> bool:
@@ -4379,6 +4395,15 @@ class AgentLoop:
     sid: str | None = None
     token: Any = None
     store: Any = None
+    #: 连接类失败（`judge_no_reply:<kind>`）的等待闸（`reconnect.BackoffGate`）。
+    #:
+    #: 三态，三档各有用途：
+    #: - `None`（缺省）= 每次 run 按设置梯子现造一只（`reconnect.gate_from_settings`）；
+    #: - `False` = 显式摘掉：保持改前行为（失败立刻进入下一轮、不等待），
+    #:   判据 d 的反真空档就走它 —— 没有这一档，判据 a 可以靠"凡失败都写一条
+    #:   reconnect 事件"来骗过；
+    #: - 给了 `BackoffGate` = 用它（判据注入一只秒数很小的闸，免得真睡 5 秒）。
+    reconnect: Any = None
     #: 「用户叫停」的开关文件（`draft/37` §125）。空串 = 不在步循环里查这一条
     #: （多轮自主跑那条路由 `autonomy._stop_before_round` 在「每轮之间」查，
     #: 单趟 `run-agent` 没有那条路，所以由 CLI 把 `--stop-file` 接到这里）。
@@ -7171,6 +7196,102 @@ class AgentLoop:
         }, sid=self.sid)
         return cand
 
+    def _record_invalid_step(self, *, run: "AgentLoop.LoopRun", step: int, call: Any,
+                             cache: Mapping[str, Any]) -> dict[str, Any]:
+        """把一次"没拿到可用的回复"如实落成一步（`LoopStep` + `agent_step` 事件）。
+
+        改前这一段在 `no_reply` 那一支里就地写着；接上等待闸之后，同一段形状要在
+        "等待之前的那几次失败"（重试同一轮）与"外层最后那一次失败"两处落盘。
+        两处各写一份迟早漂移（`detail` / `raw_reply` 的截断口径、事件字段名都是
+        同一件事），所以只留这一份实现。
+        """
+        bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
+                      "raw_reply": _clip(call.text, 600)}
+        dump = _dump_invalid_reply(self.workspace_root, self.sid, step,
+                                    call.text or "", self.role)
+        if dump:
+            bad_result["raw_reply_path"] = dump
+        run.steps.append(LoopStep(step, "invalid", {}, bad_result,
+                                  problem=call.problem, cache=cache))
+        SS.append(self.session_root, {
+            "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+            "payload": {}, "result": dict(bad_result),
+            "prompt_cache": dict(cache),
+        }, sid=self.sid)
+        return bad_result
+
+    def _ask_step_with_reconnect(self, *, messages: Sequence[Mapping[str, Any]],
+                                 system: str, step: int, task_id: str, note: str,
+                                 face: Any, run: "AgentLoop.LoopRun", gate: Any
+                                 ) -> tuple[dict[str, Any] | None, Any, dict[str, Any] | None]:
+        """问模型一次；连接类失败按 `gate` 等待之后重试同一轮。
+
+        为什么重试放在这一层（`ask_step` 的入口处）而不是"失败之后 `continue`"：
+        循环的步号按迭代推进，`continue` 会把它推一格 —— 而这里的语义是"同一轮
+        再问一次"。重试留在这一层，步号不动（判据 a 钉的就是三次失败落在同一个
+        步号上），也只有这一层能在两次调用之间插进等待。
+
+        返回 `(data, call, stop)`：
+        - 普通结局：`stop is None`，交给下面原有的分档（坏 JSON / 超时 / 参数…）；
+        - 连接类且这个闸已经不该再等（总等待到顶）：`stop` 带读数，外层据此停机；
+          这一次失败已经在这里记过账（`_record_invalid_step`），外层不得再记一次。
+        """
+        while True:
+            data, call = self.seam.ask_step(self._prompt(messages, step=step),
+                                            system=system, task_id=task_id,
+                                            note=note, face=face)
+            problem = str(call.problem or "")
+            if not RC.is_connection_problem(problem):
+                # 只要这次不是"没连上"，链路就是通的 => 下一次再断从 base 起算
+                # （DSH 的 connected()：成功即重置）。
+                if gate is not None:
+                    gate.connected()
+                return data, call, None
+            if gate is None:
+                # 反真空那一档：闸被摘掉 ⇒ 保持改前行为（立刻下一轮、不等待）。
+                return data, call, None
+            last_round = run.no_reply_streak + 1 > self.max_bad_json
+            if last_round:
+                # 上限那一次仍归外层那一支：记账与停机的措辞只有一份。
+                # 但"总等待已经超了"要先落在这里 —— ④ 要求停机语说清等过多久，
+                # 而外层那一支的措辞是"连着 N 次"，它不说这个数。
+                if gate.waited_total > gate.total_wait_sec:
+                    wait = None
+                else:
+                    return data, call, None
+            else:
+                wait = gate.schedule()
+                if wait is None:
+                    # 单飞/已关闭：不再重试，交给外层按改前处置（不许在这里空转）。
+                    return data, call, None
+            exhausted = (gate.waited_total + (0.0 if wait is None else wait)
+                         > gate.total_wait_sec)
+            # 这一次失败要在这里记：外层只记它自己那一笔（最后一次），
+            # 否则三次失败会在同一轮里被记成六笔。
+            run.no_reply += 1
+            run.no_reply_streak += 1
+            cache = PSTAB.prompt_cache_record(call)
+            bad_result = self._record_invalid_step(run=run, step=step, call=call, cache=cache)
+            if exhausted:
+                return data, call, {
+                    "problem": problem,
+                    "detail": str(bad_result.get("detail") or ""),
+                    "waited_total": gate.waited_total,
+                    "attempt": gate.attempt,
+                    "attempts": gate.attempts,
+                }
+            time.sleep(wait)
+            gate.settle()
+            SS.append(self.session_root, {
+                "kind": "reconnect", "role": self.role, "step": step,
+                "attempt": gate.attempt,
+                "attempts": gate.attempts,
+                "wait_sec": round(float(wait), 6),
+                "waited_total": round(gate.waited_total, 6),
+                "cap_sec": round(gate.last_cap, 6),
+                "problem": problem,
+            }, sid=self.sid)
+
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
             parent_task_id: str = "", surface: str = "",
             depth: int = 1, resumed: tuple[Sequence[Mapping[str, Any]], int] | None = None,
@@ -7259,6 +7380,13 @@ class AgentLoop:
                                                        sid=self.sid))
         run = LoopRun(role=self.role, task=task)
         run.started_at = S.now_iso()
+        # 连接类失败的等待闸：每次 run 现造一只（`attempt` 是"这一趟的退避"，
+        # 跨 run 复用会把上一趟的翻倍次数带进来）。三态见 `AgentLoop.reconnect`。
+        reconnect_gate = self.reconnect
+        if reconnect_gate is None:
+            reconnect_gate = RC.gate_from_settings()
+        elif reconnect_gate is False:
+            reconnect_gate = None
         # 登记"这一趟起的进程"（`draft/37` §128）：强制的 `agentflow stop --force`
         # 就是按这份登记去 `taskkill /T /F` —— 只杀父进程会留下子孙继续跑
         # （§127 的真机读数：包装进程被 kill 之后子进程又跑了 12 分钟）。
@@ -7655,10 +7783,24 @@ class AgentLoop:
                 # 静态/动态分离之后 system 本该一个字节都不变；这里每步确认一次
                 # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
                 system = self._system_at_step(system_facts, system, step=step)
-                data, call = self.seam.ask_step(self._prompt(messages, step=step),
-                                                system=system, task_id=my_task_id,
-                                                note=f"{self.role}.step{step}",
-                                                face=face)
+                data, call, reconnect_stop = self._ask_step_with_reconnect(
+                    messages=messages, system=system, step=step, task_id=my_task_id,
+                    note=f"{self.role}.step{step}", face=face, run=run,
+                    gate=reconnect_gate)
+                if reconnect_stop is not None:
+                    # ④：等也等过了、还是没回来 ⇒ 停机（与"根本没等"的那一档分开说）。
+                    # 措辞里保留"没拿到可用的回复"：这是 no_reply 这一档的名字，
+                    # 台账的失败原因那一格读的就是它（`task_outcome_of_loop_stop` 的下游）。
+                    run.stop_reason = "model_unreachable"
+                    run.final = (
+                        f"连着 {run.no_reply_streak} 次没拿到可用的回复：第 {step + 1} 步一共等过 "
+                        f"{_sec_text(reconnect_stop.get('waited_total') or 0.0)} 秒还是没回来"
+                        f"（共试了 {int(reconnect_stop.get('attempts') or 0)} 次；"
+                        f"最后一次：{reconnect_stop.get('problem')}；"
+                        f"{_clip(str(reconnect_stop.get('detail') or ''), 200)}）—— "
+                        "这不是它回了坏 JSON，是这台机器到模型的那条路不通；停止。"
+                        "网络/DNS 与本机到 api 的通路恢复之后可以 `--resume` 续跑。")
+                    break
                 # 这一步那次调用的缓存读数（三态：上游没给 ⇒ `hit`/`miss` 都是 `None`，
                 # 不许折成 0）。它随后挂进这一步的 `LoopStep` 与 `agent_step` 事件 ——
                 # 改前上游的读数只到 `SeamCall` 为止，一条 run 记录里都没有它。
@@ -7720,21 +7862,10 @@ class AgentLoop:
                     # 第十二趟更糟：`problem` 是 `judge_bad_json`，而 `detail`（带解析报错
                     # 与原文前 200 字）「根本没进记录」 —— 于是"为什么这两句 JSON 没解析出来"
                     # 又一次只能靠猜。留 detail + raw_reply，两条判据（"说了什么"与
-                    # "框架怎么读的"）都在盘上。
-                    bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
-                                  "raw_reply": _clip(call.text, 600)}
-                    # 整条原文落盘（D40）：报错给了列号，而被剪掉的那一段才是证据。
-                    dump = _dump_invalid_reply(self.workspace_root, self.sid, step,
-                                               call.text or "", self.role)
-                    if dump:
-                        bad_result["raw_reply_path"] = dump
-                    run.steps.append(LoopStep(step, "invalid", {}, bad_result,
-                                              problem=call.problem, cache=step_cache))
-                    SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
-                        "payload": {}, "result": dict(bad_result),
-                        "prompt_cache": dict(step_cache),
-                    }, sid=self.sid)
+                    # "框架怎么读的"）都在盘上。落盘只有这一份实现（等待重试的那几次
+                    # 也走它，见 `_record_invalid_step`）。
+                    bad_result = self._record_invalid_step(run=run, step=step, call=call,
+                                                           cache=step_cache)
                     if call.problem == "judge_not_wired":
                         run.stop_reason = "not_wired"
                         run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
@@ -7782,9 +7913,17 @@ class AgentLoop:
                                 run.stop_reason = "model_unreachable"
                                 nxt = ("没连上那一档要看网络/DNS 与本机到 api 的通路"
                                        "（网关已按 `ModelSpec.max_retries` 重试过）")
+                            # 等待闸接过之后，这里还要说清"等过了没有"：
+                            # 只写"连着 3 次"分不出"根本没等"（闸被摘掉）与
+                            # "等过了还是没回来"（网络一直不通）—— 两者处置不同。
+                            waited_note = (
+                                f"；这一趟为它等过 {_sec_text(reconnect_gate.waited_total)} 秒"
+                                if reconnect_gate is not None
+                                and reconnect_gate.waited_total > 0 else "")
                             run.final = (
                                 f"连着 {run.no_reply_streak} 次没拿到可用的回复"
-                                f"（最后一次：{call.problem}；{_clip(str(bad_result['detail']), 200)}）—— "
+                                f"（最后一次：{call.problem}；{_clip(str(bad_result['detail']), 200)}）"
+                                f"{waited_note} —— "
                                 "这不是它回了坏 JSON，是这一步没有产出可用的东西；停止。"
                                 f"下一趟可以 `--resume` 续跑；{nxt}")
                             break
@@ -8738,6 +8877,11 @@ class AgentLoop:
         # `agent_run_end`（含 `final`/台账读数）已经落盘，再撤信号；反过来一旦写台账失败，
         # 盘上就只剩"开关没了"，没有任何东西说明"该停"。
         self._consume_stop_at_teardown()
+        # 这一趟结束：撤掉等待闸（DSH 的 disposed 那一半：关闭之后不再排下一次）。
+        # 同步用法下它没有后台定时器，但 `close()` 仍然要调 —— 否则"已 dispose"
+        # 这件事只靠对象被回收来表达，而判据 e 的第二半要在停机之后再看一眼闸。
+        if reconnect_gate is not None:
+            reconnect_gate.close()
         return run
 
     def _refusal_beat(self, run: "AgentLoop.LoopRun", result: Any, *,
@@ -12829,7 +12973,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              from_env: bool = True, user_timeout_sec: float | None = None,
              ask_policy: str | None = None, resume: bool = False,
              stop_file: str = "", secretary: Any = None,
-             monitoring_of: str = "") -> LoopRun:
+             monitoring_of: str = "", reconnect: Any = None) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，两处分开写迟早会出现"审计记录落在别处"
@@ -12846,6 +12990,9 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     它让这一趟的第一条增量消息带上这一支的树形读数与出口限定，并把第一步的出口收窄成
     watch / guide / 补派 / 收口（`AgentLoop._monitor_refusal`，框架闸）。空串 = 普通回合，
     改前的行为一个字不变。
+
+    `reconnect`（连接类失败的等待闸，`reconnect.BackoffGate`）：`None` = 按设置梯子
+    现造一只；`False` = 显式摘掉（改前行为）；给了对象 = 用它（判据注入小秒数的闸）。
     """
     root = Path(session_root) if session_root is not None else Path(str(getattr(store, "root", "")))
     if not str(root):
@@ -12891,7 +13038,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
                      sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
                      ask_policy=ask_policy, stop_file=str(stop_file or ""),
-                     secretary=secretary)
+                     secretary=secretary, reconnect=reconnect)
     # ---- D-53：这一趟是不是"被唤醒开起来的监控回合"（由 `autonomy` 在轮边界上判定）。
     # 它让第一条增量消息带上树形读数与出口限定，并在这一步上收窄出口（框架闸，
     # 见 `_monitor_refusal`）。空串 = 普通回合（改前行为一个字不变）。

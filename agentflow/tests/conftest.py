@@ -104,6 +104,11 @@ _MACHINE_ENV_NAMES = (
     "AGENTFLOW_PROVER_PATH",
     "AGENTFLOW_MATHLIB_ROOT",
     "AGENTFLOW_PROJECTS_DIR",
+    # 连接类失败的等待闸（`reconnect.BackoffGate`）：先清掉开发者 shell 里的值，
+    # 再由下面 `_pin_settings_path` 统一钉到毫秒级（判据不随本机配置变形，也不真睡）。
+    "AGENTFLOW_RECONNECT_BASE_SEC",
+    "AGENTFLOW_RECONNECT_MAX_SEC",
+    "AGENTFLOW_RECONNECT_TOTAL_SEC",
 )
 
 
@@ -132,6 +137,14 @@ def _pin_settings_path() -> str:
     except OSError:
         pass
     os.environ["AGENTFLOW_SETTINGS"] = str(target)
+    # 判据里不许真睡几分钟：把连接等待闸钉到毫秒级。缺省的 5 / 60 / 300 由
+    # `tests/test_reconnect_backoff.py` 用 `env={}` 直接钉住（它读的是注入环境，
+    # 不读这里）；这一钉只是让"永远连不上"那类夹具跑到总等待上限时不用真等 300 秒。
+    # 三个数都从环境变量给（与设置文件同一条梯子），免得某台机器的 settings.json
+    # 把判据的时长改掉。
+    os.environ["AGENTFLOW_RECONNECT_BASE_SEC"] = "0.01"
+    os.environ["AGENTFLOW_RECONNECT_MAX_SEC"] = "0.01"
+    os.environ["AGENTFLOW_RECONNECT_TOTAL_SEC"] = "0.05"
     return str(target)
 
 

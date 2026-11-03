@@ -115,6 +115,8 @@ __all__ = [
     "MASKED_KEY",
     "MODEL_KEYS",
     "PROJECT_ROOT",
+    "RECONNECT_KEYS",
+    "RECONNECT_SECTION",
     "TOOLCHAIN_KEYS",
     "WORKSPACE_KEYS",
     "WORKSPACE_ROOT",
@@ -122,6 +124,7 @@ __all__ = [
     "lean_enabled",
     "load_settings",
     "model_settings",
+    "reconnect_settings",
     "resolve_setting_path",
     "settings_path",
     "toolchain_settings",
@@ -198,6 +201,15 @@ DEFAULT_MODEL_SLOT = "default"
 SECRETARY_SECTION = "secretary"
 #: `workspace` 段认识的键（顺序即文档顺序）。
 WORKSPACE_KEYS: tuple[str, ...] = ("projects_dir",)
+#: `reconnect` 段：连接类失败的有界退避（`agent_loop` 的 `judge_no_reply:<kind>` 那一档）。
+#:
+#: 为什么它是一段设置而不是业务代码里的三个数字：DSH 那三个数由启动引导下发
+#: （`reconnectBaseMs` / `reconnectMaxMs`），本仓的等价物就是这条设置梯子。
+#: 三个数都是"等多久"的旋钮（秒），读侧在 `reconnect.ReconnectConfig.from_settings`，
+#: 配错/读不出来的处置也在那里（回落到缺省，见 `reconnect._read_sec`）。
+RECONNECT_SECTION = "reconnect"
+#: `reconnect` 段认识的键（顺序即文档顺序）：基础等待、单次上限、总等待上限。
+RECONNECT_KEYS: tuple[str, ...] = ("base_sec", "max_sec", "total_sec")
 
 
 def settings_path(path: str | Path | None = None, *,
@@ -472,6 +484,18 @@ def workspace_settings(path: str | Path | None = None, *,
     > 本段 > 由本包位置推出的工作区根下的 `projects/`。
     """
     return _section("workspace", WORKSPACE_KEYS, path, env)
+
+
+def reconnect_settings(path: str | Path | None = None, *,
+                       env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`reconnect` 段：`base_sec` / `max_sec` / `total_sec`（缺的补空串）。
+
+    它只负责取出三个字符串，解析与缺省在 `reconnect.ReconnectConfig.from_settings`
+    （那里与 `modelgw._float_env` 同一条口径：读不出来就用缺省）。
+    为什么不让本模块解析成浮点：`settings` 的职责是"取值"，三档梯子只有一个实现
+    （`env_or_setting`）；把"这个数多大算合法"也搬进来，会变成同一件事的第二处判据。
+    """
+    return _section(RECONNECT_SECTION, RECONNECT_KEYS, path, env)
 
 
 def env_or_setting(env_name: str, setting_value: Any, *,

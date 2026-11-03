@@ -8,7 +8,7 @@
 读数是 186 步、两次 `model_unreachable`、$0.16，其中连接失败那几拍就是空转。
 
 新行为（`reconnect.BackoffGate`，从 DSH 的 `ClientBridgeLifecycle` 移植）：
-失败 ⇒ 按 cap = min(max, base * 2 ** attempt) 在 [cap/2, cap] 里随机取一段等待
+失败 ⇒ 按 `cap = min(max, base * 2 ** attempt)` 在 [cap/2, cap] 里随机取一段等待
 ⇒ 等完重试同一轮。等待期间不推进步号、不产生模型调用（于是不计入预算）。
 
 五条判据（与施工单 a-e 一一对应）：
@@ -72,6 +72,34 @@ class _NetworkThenReply:
             "error_kind": "", "error_detail": ""})()
 
 
+class _ScriptedNetwork:
+    """按脚本逐次给结局的替身模型：`None` = 这一次连接失败，字符串 = 一条回复。
+
+    用来造"失败、失败、成功、又失败、收工"这种序列 —— 判据 b 要看的是
+    "成功那一次把 attempt 归零了没有"，而那只有在同一趟运行的后续失败上才看得见。
+    """
+
+    spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
+
+    def __init__(self, script: list[str | None]) -> None:
+        self.script = list(script)
+        self.calls = 0
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        self.calls += 1
+        index = min(self.calls - 1, len(self.script) - 1)
+        text = self.script[index]
+        if text is None:
+            return type("Reply", (), {
+                "ok": False, "text": "", "tokens_in": 0, "tokens_out": 0,
+                "error_kind": "network",
+                "error_detail": "gaierror: [Errno 11002] getaddrinfo failed"})()
+        return type("Reply", (), {
+            "ok": True, "text": text, "tokens_in": 10, "tokens_out": 10,
+            "error_kind": "", "error_detail": ""})()
+
+
 def _run(tmp_path: pathlib.Path, gateway: Any, *, reconnect: Any) -> tuple[Any, pathlib.Path]:
     """跑一趟 M（零模型），把 `reconnect` 原样交给 `run_role`。"""
     root = tmp_path / "ws"
@@ -80,7 +108,7 @@ def _run(tmp_path: pathlib.Path, gateway: Any, *, reconnect: Any) -> tuple[Any, 
     cond = Conductor(st, policy=None)
     built = build_registry(store=st, conductor=cond)
     seam = LlmSeam(role="M", session_root=root, gateway=gateway, price=(0.0, 0.0),
-                   sid=SID, from_env=False)
+                   sid=SID)
     run = run_role("M", "等网络回来", store=st, registry=built.registry, conductor=cond,
                    seam=seam, workspace_root=str(root), sid=SID, reconnect=reconnect)
     return run, root
@@ -99,7 +127,7 @@ def _reconnects(root: pathlib.Path) -> list[dict]:
 # ============================================================ c：退避单调有界
 
 def test_each_wait_is_between_half_and_full_cap_and_cap_is_capped():
-    """c：第 k 次等待 ∈ [cap/2, cap]，cap = min(max, base * 2**k) 且不超过 max。
+    """c：第 k 次等待 ∈ [cap/2, cap]，`cap = min(max, base * 2 ** k)` 且不超过 max。
 
     rng 注入成 0.5 ⇒ 等待恰好是 cap * 0.75（确定值，不用睡眠）。
     """
@@ -170,6 +198,31 @@ def test_a_success_after_three_failures_restarts_from_base():
     assert next_wait == pytest.approx(0.5), "成功之后的失败没有从 base 起算"
 
 
+def test_a_success_between_failures_resets_the_wait_in_the_loop(tmp_path: pathlib.Path):
+    """b（接线层）：同一趟里"两败一成、再败" ⇒ 第三段等待回到 base 那一档。
+
+    序列：失败、失败、成功（`{"note": ...}`）、失败、收工。前两败各等一次
+    （cap 0.01、0.02），成功把 attempt 归零，所以第四次的等待必须回到 0.0075
+    （base 那一档），而不是接着 0.03 往上翻。事件里的 attempt 序列因此是 [1, 2, 1]。
+    """
+    note = json.dumps({"note": "中场一句"}, ensure_ascii=False)
+    final = json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)
+    gateway = _ScriptedNetwork([None, None, note, None, final])
+    gate = RC.BackoffGate(base_delay_sec=0.01, max_delay_sec=0.04,
+                          total_wait_sec=60.0, rng=lambda: 0.5)
+    run, root = _run(tmp_path, gateway, reconnect=gate)
+
+    events = _reconnects(root)
+    assert [e.get("attempt") for e in events] == [1, 2, 1], events
+    waits = [float(e.get("wait_sec") or 0.0) for e in events]
+    assert waits[0] == pytest.approx(0.0075), waits
+    assert waits[1] == pytest.approx(0.015), waits
+    assert waits[2] == pytest.approx(0.0075), waits
+    assert gateway.calls == 5, gateway.calls
+    assert run.stop_reason == "final", run.to_dict()
+    assert gate.attempt == 0, "成功那一次之后 attempt 没归零（收工时闸应停在 0）"
+
+
 # ============================================================ 配置：settings / env
 
 def test_config_defaults_are_five_sixty_and_three_hundred():
@@ -198,7 +251,8 @@ def test_env_and_settings_ladder(tmp_path: pathlib.Path):
 def test_three_connection_failures_produce_two_reconnects(tmp_path: pathlib.Path):
     """a：连续 3 次连接失败 ⇒ 事件流里 2 条 reconnect，而不是 3 次背靠背的调用。
 
-    同一轮里重试 ⇒ 3 次失败落在同一个步号上；第三次是上限那一次，交给外层停机。
+    同一轮里重试 ⇒ 3 次失败落在同一个步号上；等待只发生在第 2、3 次之前
+    （第三次失败是上限那一次，交给外层按 `model_unreachable` 停机）。
     """
     gateway = _NetworkThenReply(failures=3)
     gate = RC.BackoffGate(base_delay_sec=0.01, max_delay_sec=0.02,
@@ -207,12 +261,12 @@ def test_three_connection_failures_produce_two_reconnects(tmp_path: pathlib.Path
 
     events = _reconnects(root)
     assert [e.get("attempt") for e in events] == [1, 2], events
-    assert gateway.calls == 3, f"第三次失败之前应当只调了 3 次，实际 {gateway.calls}"
+    assert gateway.calls == 3, f"三次失败之前只该有 3 次调用，实际 {gateway.calls}"
     assert run.stop_reason == "model_unreachable", run.to_dict()
     assert run.no_reply == 3, run.to_dict()
     invalid = [s for s in run.steps if s.shape == "invalid"]
     assert len(invalid) == 3 and {s.problem for s in invalid} == {"judge_no_reply:network"}
-    assert {s.step for s in invalid} == {0}, "重试必须落在同一轮（步号不许被等待推着走）"
+    assert {s.index for s in invalid} == {0}, "重试必须落在同一轮（步号不许被等待推着走）"
     for event in events:
         assert event.get("step") == 0, event
         assert 0.0 < float(event.get("wait_sec") or 0.0) <= 0.02, event

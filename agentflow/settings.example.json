@@ -10,6 +10,7 @@
   "_MODEL_REASONING_EFFORT": "推理强度，取值只能是 off / low / high / max（词表唯一来源：modelgw.REASONING_EFFORTS，逐字对齐 DSH 的 dsh-llm-deepseek）。留空 = 用内置默认 high —— 所有者 2026-10-10 的裁定是「所有智能体都要能 thinking，且开默认到 High」。off 会发 thinking:{type:disabled}，其余三档发 reasoning_effort。拼成词表外的值（例如 hgih）不会静默按缺省跑：ModelSpec 构造时当场报错，机器面把 model.reasoning_effort 判成 unreadable 并把原值原样回显。",
   "_MODEL_TEMPERATURE": "采样温度（2026-10-29 业主口径：「temperature = 1.0（正常对话的数值）」，只给 V 的审阅调用）。留空 = 内置默认 0.2（别的角色一个字节都不动）。合法区间 [0, 2]，唯一来源 modelgw.TEMPERATURE_RANGE；区间外或非数不会静默按缺省跑：ModelSpec 构造时当场报错。要单独改某一档就写在 models.<角色>.temperature 里；环境变量 AGENTFLOW_MODEL_TEMPERATURE 压在最上面。",
   "_WORKSPACE_KEYS": "workspace 段的键：projects_dir（projects/ 的落点，即 agentflow project 与 M 的 conductor.ensure_project 的缺省落点）。留空则用『由本包位置推出的工作区根 + projects/』——那正是本机改前的那个值。取值顺序：--projects-dir 显式参数 > AGENTFLOW_PROJECTS_DIR > 本键 > 推导默认。",
+  "_RECONNECT_KEYS": "reconnect 段：连接类失败（judge_no_reply:<kind>）之后等多久再重试同一轮。三个键都是秒：base_sec 是基础等待（第 k 次失败按 min(max_sec, base_sec * 2**k) 算上限，实际等待在该上限的一半到上限之间随机）、max_sec 是单次上限、total_sec 是一趟运行累计等待的上限（等过了还是没回来 ⇒ 以 model_unreachable 停机，收场那句话会写『等过 N 秒』）。留空 = 内置默认 5 / 60 / 300；环境变量 AGENTFLOW_RECONNECT_BASE_SEC / AGENTFLOW_RECONNECT_MAX_SEC / AGENTFLOW_RECONNECT_TOTAL_SEC 压在最上面。",
   "toolchain": {
     "lean_bin": "",
     "mathlib_root": "",
@@ -26,5 +27,10 @@
   },
   "workspace": {
     "projects_dir": ""
+  },
+  "reconnect": {
+    "base_sec": "",
+    "max_sec": "",
+    "total_sec": ""
   }
 }
