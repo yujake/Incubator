@@ -36,6 +36,7 @@
 | [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) | 禁改区治理流程：谁能批、批几个、台账怎么写 |
 | [`KNOWN-UNWIRED.md`](KNOWN-UNWIRED.md) | 已知未接线：`src/agentflow/tools/` 下哪个 `*_tools.py` 没被 `tools/__init__.py` 的 `_MODULES` 装配（现读清单——改了装配就要回来改它） |
 | [`WIRING-AUDIT-2026-10-27.md`](WIRING-AUDIT-2026-10-27.md) | 2026-10-27 夜的**接线审计**：逐条「实现了但没接上」的落点与复跑命令（当次读数、带日期；判据本体在 `tests/test_wiring_edges.py`） |
+| [`AUDIT-VSIGN-5ROLES-E-2026-11-03.md`](AUDIT-VSIGN-5ROLES-E-2026-11-03.md) | 2026-11-03 的**五方 × 四步签字审计**：B / D / F / V / E 的产出 / 签字 / 收录 / 优化逐格读数，外加「E 拿 V 签与 F 同一套」这批的实现与反真空（当次读数、带日期；判据本体在 `tests/test_e_gets_its_v_sign_like_f.py` 与 `tests/test_v_unregistered_manuscript_review.py` 一族） |
 
 ## 3. 历史证据（**不构成判据**，但被代码注释与其它文档大量引用，故保留）
 
