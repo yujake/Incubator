@@ -3353,12 +3353,9 @@ class Secretary:
         out["artifact_sha"] = sha
         env = vsigns.sign_envelope(doc)
         out["envelope_to"] = str(env.get("to") or "")
-        if not env.get("recorded"):
-            out.update(code="envelope_missing",
-                       reason=("这份签没有信封（`envelope` 那一格不在）⇒ 不知道它是写给谁的："
-                               "不落（零字节）"))
-            return out
-        if out["envelope_to"] != out["by"]:
+        # 与 `vsigns.land` 同一条判据：信封写了收件人才比对；旧签没有信封（`to=""`）
+        # 按落签那一侧的规矩走，不在秘书这一层凭空收紧（84 的未在册签就是旧写法）。
+        if env.get("to") and env.get("to") != out["by"]:
             out.update(code="addressed_to_another_secretary",
                        reason=(f"这一签的信封写给 {out['envelope_to']!r}，不是 {out['by']!r} ⇒ "
                                "不落（零字节：别的秘书的签不许被这一位落）"))

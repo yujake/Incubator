@@ -287,3 +287,24 @@ def test_j_the_secretary_method_still_refuses_a_non_recipient(tmp_path: pathlib.
     assert got["landed"] is False, got
     assert got["code"] == VS.NOT_A_SECRETARY, got
     assert (pathlib.Path(st.root) / REL).read_bytes() == text_before, "被拒的落签写动了稿"
+
+
+# ====================================================================== k 旧签的信封
+def test_k_an_old_sign_without_an_envelope_still_lands(tmp_path: pathlib.Path) -> None:
+    """2026-11-02 之前的签没有 `envelope` 那一格 ⇒ 不凭这一点收紧（与 `land` 同一判据）。"""
+    st = _ws(tmp_path)
+    issued = _unregistered_issue(st)
+    path = VS.sign_path(st.root, SHA)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc.pop("envelope", None)
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    sec = SEC.Secretary("V", root=st.root, store=st)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = sec.land_unregistered_sign({**issued, "sign": doc})
+
+    assert got["landed"] is True, got
+    assert got["envelope_to"] == "", got
+    assert VS.manuscript_sign_reading(
+        (pathlib.Path(st.root) / REL).read_text(encoding="utf-8"),
+        manuscript_path=REL)["signed"] is True
