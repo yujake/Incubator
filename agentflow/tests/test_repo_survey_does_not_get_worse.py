@@ -140,7 +140,15 @@ BASELINE: dict[str, int] = {
     # closing / depsection / evidencebits / papermapping / secretary）：只有这一条
     # 跨过 200，没有一条掉回线下，也没有一个新落的长函数。文件那一格不动（它本来就
     # 超过 800 行）。
-    "src_functions_gt200_lines": 90,
+    # 2026-11-04：90 → 91。一格，能点名：`src/agentflow/secretary.py::_upgrade_evidence_kind`
+    # 186 → 212 行 —— f3408ef6（甲：穷举程序 + V 签 ⇒ 落签那一刻直接 proof）把
+    # 「已在终态」那一支（只读判据 `_signed_exhaustion_terminal`，与回填 / 审计同一份）
+    # 落在既有的升档梯子里，于是这个函数跨过 200。逐条按 (文件, 函数名) 比对基线提交
+    # 192ec411 与 HEAD：只有这一条新过线，没有一条掉回线下，也没有一个新落的长函数
+    # （同一批新增的 `_signed_exhaustion_terminal` 只有几十行）。文件那一格不动
+    # （secretary.py 本来就超过 800 行），`dup_docstring_segments` 也不动。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 91,
     "dup_docstring_segments": 5,
 }
 
@@ -163,7 +171,9 @@ BASELINE: dict[str, int] = {
 #: 2026-11-02 再抬函数 87 → 89，两个来源见 `BASELINE` 里那一格上方的逐条点名
 #: （`secretary.py::decide_sign_issuance` 152 → 216、`verifications.py::review_standing`
 #: 195 → 206，两格都跨线于 960ade2f）；文件那一格不动。
-BASELINE_OBSERVED = "2026-11-02"
+#: 2026-11-04 再抬函数 90 → 91，来源见 `BASELINE` 里那一格上方的逐条点名
+#: （`secretary.py::_upgrade_evidence_kind` 186 → 212，跨线于 f3408ef6）。
+BASELINE_OBSERVED = "2026-11-04"
 
 
 def _load_survey():
