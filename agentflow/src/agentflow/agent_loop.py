@@ -7280,7 +7280,14 @@ class AgentLoop:
                     "attempt": gate.attempt,
                     "attempts": gate.attempts,
                 }
-            time.sleep(wait)
+            # 等待走主时钟的唯一入口 `clock.await_io`：它照样真睡满 `wait` 秒（不是假等），
+            # 同时把这一段记进主时钟的账。判据
+            # `test_e_waits_outside_clock_is_zero_and_a_raw_sleep_turns_it_red` 盯的正是
+            # "框架里有没有账外的等待"：这里若写回裸 `time.sleep(wait)`，
+            # `clock.raw_wait_census` 会当场点名本行（`waits_outside_clock` 从 0 变 1）。
+            CLK.await_io(wait, "连接类失败之后按退避梯子等待，等完再问同一轮",
+                        kind="retry",
+                        where="agent_loop.AgentLoop._ask_step_with_reconnect")
             gate.settle()
             SS.append(self.session_root, {
                 "kind": "reconnect", "role": self.role, "step": step,
