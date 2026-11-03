@@ -1435,6 +1435,80 @@ def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
     return out
 
 
+def _signed_exhaustion_terminal(*, root: Any, row: Mapping[str, Any],
+                                proof_text: Any, experiments: Any
+                                ) -> dict[str, Any]:
+    """这一行是不是已经停在「穷举程序 + V 签 ⇒ `proof`」那个终态 —— 纯读。
+
+    ## 为什么需要这一格（甲 的落点，2026-11-04 业主裁定）
+    穷举数值证明 + 针对该穷举的 V 签 ⇒ 直接 `proof`（`schema.EVIDENCE_KINDS` 的
+    口径；`proof_review` 是"V 逐行走查文字证明"，V 不能逐行走查一份程序）。于是
+    `verifications._grade_recomputed_from_signature` 在 V 落签那一刻就按通道把这一行
+    定到 `proof` —— 等到 B 拿着 D 的目录来登记同一条内容时，盘上那一行已经是
+    `proof`，B 那一笔没有任何格可改。
+
+    ## 这一格解决什么
+    那样一笔既不是"重复登记"（东西确实在库里、就停在它该在的那一档），也不是"这次
+    升了档"（盘上没动）。秘书的升档梯子只认"弱 → 强"（`WEAKER_THAN_PROOF_REVIEW`），
+    `have == want == "proof"` 落不进任何一支 ⇒ 会掉进 `duplicate_statement` 的拒信里，
+    让"穷举证明已经进库"被读成"没写成"。所以这里给一条只读判据：同一条内容、要的
+    就是 `proof`、而盘上那一行已经是 `proof`，且凭据正是穷举程序 + V 签 ⇒ 终态，这一笔
+    是空操作（`at_tier=True`）。
+
+    ## 判据只有一处（与回填、审计同一份）
+    ① 证明栏要有与它对应的、V 签下的穷举证明：`numericproof.find_signed_exhaustion_for_column`
+    （与 `verify` 的 `proof_stmt_without_formal_backing` 第二条合法背书同一个函数）；
+    ② 这一份正文要被 V 的签盖住：`verifications.proof_review_gap`（写入期闸 / 审计期 /
+    收工门读的都是它）。两条缺一条都不认终态（保守：宁可走原来那一档读数）。
+
+    返回 `{checked, terminal, script, experiment_id, why}`；`terminal=False` 时调用方
+    保持原来的 `duplicate` 路径。
+    """
+    out: dict[str, Any] = {"checked": False, "terminal": False, "script": "",
+                           "experiment_id": "", "why": ""}
+    text = str(proof_text or row.get("proof_text") or "")
+    if not text.strip():
+        out["checked"] = True
+        out["why"] = "这一行没有证明正文 ⇒ 没有可认的穷举证明（不认终态）"
+        return out
+    try:
+        from . import numericproof as _NP   # 惰性：穷举判据的单一口径
+        from . import verifications as _VR  # 惰性：签的判据只有一处
+
+        hit = _NP.find_signed_exhaustion_for_column(experiments or (), text)
+    except Exception as exc:  # noqa: BLE001 —— 判不了就不认终态（不是"认了"）
+        out["why"] = (f"穷举判据读不出来（{type(exc).__name__}: {exc}）"
+                      "⇒ 这一格没查成，按原来的重复读数走")
+        return out
+    out["checked"] = True
+    if hit is None:
+        out["why"] = ("台账里没有与这份证明栏对应的、V 签下的穷举证明 "
+                      "⇒ 不是「穷举程序 + V 签」那一通道")
+        return out
+    out["experiment_id"] = str(hit.get("experiment_id") or hit.get("id") or "")
+    try:
+        out["script"] = _NP.proof_column_script(text)
+        probe = dict(row)
+        probe["proof_text"] = text
+        probe["evidence_kind"] = _VR.PROOF_KIND
+        gap = _VR.proof_review_gap(root, probe)
+    except Exception as exc:  # noqa: BLE001 —— 同上：没查成就不认
+        out["why"] = (f"这一份正文的签读不出来（{type(exc).__name__}: {exc}）"
+                      "⇒ 这一格没查成，按原来的重复读数走")
+        return out
+    if not gap.get("ok"):
+        out["why"] = ("这一份正文没有被 V 的签盖住"
+                      f"（{str(gap.get('why') or '查不到凭据')[:240]}）⇒ 不认终态")
+        return out
+    out["terminal"] = True
+    out["why"] = ("盘上这一行已经是「穷举程序 + V 签 ⇒ proof」的终态："
+                  f"证明栏 ① 段是 {out['script'] or '（空）'}，"
+                  f"台账里 exp:{out['experiment_id'] or '?'} 是 V 签下的穷举证明，"
+                  f"V 的签盖住的就是这一版（{gap.get('ledger') or ''}"
+                  f"#{gap.get('verification_id') or ''}）")
+    return out
+
+
 #: `same_as` 归一化时要剥掉的外壳字符：模型把候选号写成了 Python/JSON 列表字面量
 #: （`"['000003']"`）或加了引号 / 空白（`'"000003"'` / `" 000003 "`）。
 #:
@@ -6802,6 +6876,32 @@ class Secretary:
                 changes.append(f"evidence_kind: {have} → {want}（凭据：{witness}）")
                 evidence_upgraded = True
         if not (kind_upgraded or evidence_upgraded):
+            # ---- 已在终态（甲 的落点，2026-11-04）：穷举程序 + V 签 ⇒ proof 在落签那一刻
+            # 就由 `verifications._grade_recomputed_from_signature` 定好了。B 这一次登记
+            # 因此没有格可改 —— 但它不该被读成"重复登记"：这一条已经在库、就停在它该在
+            # 的那一档。判据只读（`_signed_exhaustion_terminal`），与回填 / 审计同一份；
+            # 只认 `want == have == "proof"`，文字证明（`proof_review`）那一路照旧走
+            # `duplicate_statement`（D-37 的口径不动）。
+            if want == have == VR.PROOF_KIND:
+                body_text = str(body.get("proof_text") or "")
+                disk_text = str(existing.get("proof_text") or "")
+                if not body_text.strip() or body_text == disk_text:
+                    try:
+                        experiments = list(self.store.rows("experiments"))
+                    except Exception:  # noqa: BLE001 —— 读不到就不认终态（保守）
+                        experiments = []
+                    terminal = _signed_exhaustion_terminal(
+                        root=self.store.root, row=existing, proof_text=disk_text,
+                        experiments=experiments)
+                    out["terminal_reading"] = dict(terminal)
+                    if terminal.get("terminal"):
+                        out.update(upgraded=True, at_tier=True, row=row,
+                                   reason=("同一份内容再交一次：盘上那一行已经是 "
+                                           "`proof`（穷举程序 + V 签 —— 落签那一刻按通道"
+                                           "定的档），这一笔没有新东西可写、也没有重复"
+                                           "登记。"
+                                           + str(terminal.get("why") or "")))
+                        return out
             # 三态：一行都没改，而"还差什么"必须留在读数里（D-37）。
             out["reason"] = evidence_gap + self._kind_follow_note(kind_read)
             out["kind_reading"] = dict(kind_read)
@@ -7297,13 +7397,24 @@ class Secretary:
                     # 这是"改表"那一件活的正路，也是 `evidence_kind` 从弱档走到
                     # `proof_review` 的唯一一条路（通用写口 `table.update` 已在
                     # `store.direct_write_refusal` 那一层被拒）。
-                    tx.upsert("statements", upgraded["row"],
-                              note="record_statement:upgrade")
+                    #
+                    # `at_tier` 是"盘上已经是终态档（穷举程序 + V 签 ⇒ proof）"那一支：
+                    # 这一笔不写（没有格可改），但读数与"升档"分开记 ——
+                    # "这次把档改上去了"与"它早就在那一档"是两件事。
+                    at_tier = bool(upgraded.get("at_tier"))
+                    if not at_tier:
+                        tx.upsert("statements", upgraded["row"],
+                                  note="record_statement:upgrade")
                     out.update(checked=True, created=False, duplicate=False,
-                               upgraded=True, stmt_id=str(existing.get("stmt_id") or ""),
-                               row=dict(upgraded["row"]), tables=["statements"],
+                               upgraded=True, at_tier=at_tier,
+                               stmt_id=str(existing.get("stmt_id") or ""),
+                               row=dict(upgraded["row"]),
+                               tables=[] if at_tier else ["statements"],
                                changes=list(upgraded.get("changes") or []),
                                reason=str(upgraded.get("reason") or ""))
+                    if at_tier:
+                        out["terminal_reading"] = dict(
+                            upgraded.get("terminal_reading") or {})
                     return out
                 out.update(checked=True, created=False, duplicate=True,
                            stmt_id=str(existing.get("stmt_id") or ""),

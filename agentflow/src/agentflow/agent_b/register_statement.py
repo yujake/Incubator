@@ -2453,7 +2453,13 @@ class _RegisterStatement:
             # 通用写口 `table.update("statements")` 已被 `store.direct_write_refusal` 拒
             # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
             # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
+            #
+            # `at_tier`（2026-11-04，甲）是同一支里的第二种成功：盘上那一行已经是
+            # `proof`（穷举程序 + V 签在落签那一刻就定好的终态），秘书一个格都没改。
+            # 这一笔仍要回 `ok=True`（东西在库里、就在它该在的那一档），但话不能说成
+            # "档位改上去了"—— 那是另一件事。
             stmt_now = str(written.get("stmt_id") or "")
+            at_tier = bool(written.get("at_tier"))
             attach = self._attach_proofs(stmt_now, attach_entries,
                                          canonical=attach_canonical,
                                          bits=bits)
@@ -2464,6 +2470,8 @@ class _RegisterStatement:
                    "quote_mode": str(quote_mode or ""),
                    "evidence_kind": self._evidence_kind_on_disk(stmt_now),
                    "requested_evidence_kind": evidence_kind, "upgraded": True,
+                   #: 这一笔是不是"盘上已在终态档"（`升级` 与 `本来就在` 分开读）。
+                   "at_tier": at_tier,
                    #: 这一支只改在册那一行，不新建（与 duplicate 那一支同一个读数键：
                    #: 调用方按它判"有没有多一行"，缺了会把"改档"读成"建了新行"）。
                    "new_row": False,
@@ -2481,11 +2489,19 @@ class _RegisterStatement:
                    "manuscript_wash": dict(manuscript_wash),
                    "proof_vs_source": dict(proof_vs_source),
                    "changes": list(written.get("changes") or []),
-                   "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
-                            "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
-                            f"（{written.get('reason') or ''}）。"
-                            "内容面一个字没动；这一笔要改内容，就把差异写进 statement_full "
-                            "重新交（正文按规范化比不同才会落新的一行）。")}
+                   "note": (("这一条没有新建行：同一条 statement_full 已在册，档位已经是 "
+                             "`proof`（穷举程序 + V 签的终态）⇒ 这一笔没有新东西可写、"
+                             "也不是重复登记"
+                             f"（{written.get('reason') or ''}）。"
+                             "内容面一个字没动。")
+                            if at_tier else
+                            ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
+                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
+                             f"（{written.get('reason') or ''}）。"
+                             "内容面一个字没动；这一笔要改内容，就把差异写进 statement_full "
+                             "重新交（正文按规范化比不同才会落新的一行）。"))}
+            if at_tier:
+                out["terminal_reading"] = dict(written.get("terminal_reading") or {})
             #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
             out.update(trunc_reading)
             #: 换正文那一笔的优化态读数（`optimized` / `optimized_blocked`）：没有换

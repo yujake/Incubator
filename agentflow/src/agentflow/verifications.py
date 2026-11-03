@@ -2454,9 +2454,78 @@ PROOF_KIND = str(S.EVIDENCE_KINDS[0])
 GRADE_RECOMPUTED_KEY = "_grade_recomputed"
 
 
+def _exhaustion_proof_channel(row: Mapping[str, Any], *,
+                              root: str | Path) -> dict[str, Any]:
+    """这一行的证明走的是不是「E 的穷举程序 + V 签」那条通道 —— 纯读，不写任何东西。
+
+    ## 为什么回填必须分通道（业主 2026-11-04 的裁定，写死在 `schema.EVIDENCE_KINDS`）
+    穷举数值证明 + 针对该穷举的 V 签 ⇒ 直接 `proof`；`proof_review` 的定义是
+    "V 逐行审过文字证明"，而 V 不能逐行走查一份程序 ⇒ 穷举题停在 `proof_review`
+    本身就是错的终态。所以"V 落签之后按签重算档位"这一格不能一律给 `proof_review`：
+    它得先问一句"这一份证明是哪条通道的"。
+
+    ## 判据只有一处（不另立第二套穷举口径）
+    这一格只问 `numericproof.find_signed_exhaustion_for_column` —— 它内部读
+    `is_signed_exhaustion`（方法属于计算类、`evidence_kind="proof"`、签名主体 V、
+    ②③ 作者含 E、`proof_reason="exhaustion"`），正是 `verify` 审计
+    （`proof_stmt_without_formal_backing` 的第二条合法背书）与 B 的入库闸用的那一个函数。
+    于是"回填给的档"与"审计认的背书"结构上是同一件事，不会分家。
+
+    ## 三态（判不了就不按穷举给档）
+    - `checked=False`：实验台账读不出来（没给根 / 表坏了）⇒ "没查成"，调用方按文字
+      证明通道处理（`proof_review`）—— 不许把"没查成"读成"是穷举"；
+    - `checked=True, found=False`：查过了，台账里没有这份证明栏对应的穷举证明
+      ⇒ 文字证明通道；
+    - `found=True`：`experiment_id` / `script` 指向那一条 E 签的穷举证明。
+
+    返回 `{checked, found, experiment_id, script, why}`。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "experiment_id": "",
+                           "script": "", "why": ""}
+    text = str(row.get("proof_text") or "")
+    if not text.strip():
+        out["checked"] = True
+        out["why"] = "这一行没有证明正文 ⇒ 通道判不了（也就没有任何一档可升）"
+        return out
+    if not str(root or "").strip():
+        out["why"] = "没给工作区根 ⇒ 实验台账读不出来（这一格没查成）"
+        return out
+    try:
+        from . import numericproof as _NP   # 惰性：穷举判据的单一口径
+        from .store import Store           # 惰性：只读一份表，不参与本模块的写事务
+
+        experiments = Store(root).rows("experiments")
+    except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许猜成"是穷举"
+        out["why"] = (f"实验台账读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+                      "（按文字证明通道处理，不按穷举给 proof）")
+        return out
+    out["checked"] = True
+    hit = _NP.find_signed_exhaustion_for_column(experiments, text)
+    if hit is None:
+        out["why"] = ("台账里没有与这份证明栏对应的、V 签下的穷举证明 "
+                      "⇒ 这一行走文字证明通道（`proof_review`）")
+        return out
+    out["found"] = True
+    out["experiment_id"] = str(hit.get("experiment_id") or hit.get("id") or "")
+    out["script"] = _NP.proof_column_script(text)
+    out["why"] = (f"证明栏是穷举证明的三段式（① 程序 {out['script'] or '（空）'} + ②③），"
+                  f"台账里 exp:{out['experiment_id'] or '?'} 是 V 签下的穷举证明")
+    return out
+
+
 def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path,
                                      proof_no: Any = None) -> dict[str, Any]:
     """V 的签刚落位 ⇒ 按现行签把 `evidence_kind` 重算一遍（只升不降）。
+
+    ## 按通道给档（业主 2026-11-04 的裁定）
+    目标档不是写死的 `proof_review`：先由 :func:`_exhaustion_proof_channel` 判"这一份
+    证明是哪条通道的"——
+    - 穷举程序（三段式证明栏 + 台账里对应的 `is_signed_exhaustion` 行）+ V 签 ⇒ `proof`
+      （穷举就是证明，V 的签盖的是那份程序；`proof_review` 的"逐行走查文字证明"
+      对它不适用，停在那档是错的终态）；
+    - 文字证明 + V 签 ⇒ `proof_review`（口径不被上面那条改歪）。
+    通道判据只有一处（`numericproof.find_signed_exhaustion_for_column`）：审计期
+    `proof_stmt_without_formal_backing` 认的穷举背书就是它，读的人不会在两处读到两种说法。
 
     ## 为什么必须在这一刻重算（真机读数，业主 2026-11-04）
     `evidence_kind` 原先只有一条升档路：同一份内容再登记一次时由
@@ -2503,14 +2572,26 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
     ledger = str(gap.get("ledger") or "")
     vid = str(gap.get("verification_id") or "")
     basis = f"{ledger}#{vid}" if ledger and vid else (ledger or vid)
+    # ---- 按通道定目标档（业主 2026-11-04）：穷举程序 + V 签 ⇒ proof，文字证明 ⇒ proof_review
+    channel = _exhaustion_proof_channel(out["row"], root=root)
+    target = PROOF_KIND if channel.get("found") else PROOF_REVIEW_KIND
+    why = (f"V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
+           "⇒ 档位按现行签重算（只升不降）；"
+           + (f"通道是穷举程序（{channel.get('why') or ''}）⇒ 按 `schema.EVIDENCE_KINDS` "
+              "的裁定直接落 `proof`（不是 `proof_review`：V 不能逐行走查一份程序）"
+              if target == PROOF_KIND else
+              f"通道是文字证明（{channel.get('why') or ''}）⇒ 落 `proof_review`"))
     trace: dict[str, Any] = {
-        "from": cur or "（空）", "to": PROOF_REVIEW_KIND, "checked": True,
-        "why": ("V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
-                "⇒ 档位按现行签重算（只升不降）"),
+        "from": cur or "（空）", "to": target, "checked": True,
+        "why": why,
         "basis": basis, "proof_no": int(gap.get("proof_no") or 0) or None,
         "at": _now_iso(),
+        #: 这一格凭哪条通道定的档：`exhaustion`（穷举程序）/ `prose`（文字证明）。
+        #: 与 `why` 分开留一格，读的人不必解一句话才知道判的是哪条路。
+        "channel": "exhaustion" if target == PROOF_KIND else "prose",
+        "experiment_id": str(channel.get("experiment_id") or ""),
     }
-    out["row"]["evidence_kind"] = PROOF_REVIEW_KIND
+    out["row"]["evidence_kind"] = target
     out["row"][GRADE_RECOMPUTED_KEY] = dict(trace)
     out["reading"] = dict(trace)
     return out
