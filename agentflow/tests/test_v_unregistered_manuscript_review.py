@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import ast
 import contextlib
 import json
 import pathlib
@@ -96,6 +97,28 @@ def _manuscript_text(st: Store) -> str:
     return (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
 
 
+#: 签写口的调用名（`vsigns.land` / 手稿块 / 台账位 / 旧的 `write_sign` 都算）。
+#: 按 AST 的"调用末段名"扫，别名（`_VS.land(`）逃不掉；注释与 docstring 没有 Call
+#: 节点，所以文件头那些"改前曾调 `write_manuscript_sign`"的说明不会误报。
+_SIGN_WRITE_CALLS = ("land", "write_manuscript_sign",
+                     "_reviewed_statement_row", "write_sign")
+
+
+def _sign_writer_calls(path: pathlib.Path) -> list[tuple[str, int]]:
+    """这一份源码里对签写口的调用（`[(末段名, 行号)]`；AST，别名也认）。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    hits: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = (func.attr if isinstance(func, ast.Attribute)
+                else func.id if isinstance(func, ast.Name) else "")
+        if name in _SIGN_WRITE_CALLS:
+            hits.append((name, node.lineno))
+    return hits
+
+
 # ============================================================ ① 三转干净 ⇒ 签块
 def test_a_three_clean_rounds_stamp_a_sign_block_into_the_manuscript(tmp_path):
     """① 未在册手稿 + 三转干净 ⇒ 稿上出现签块；V 不再要求命题号。"""
@@ -123,6 +146,34 @@ def test_a_three_clean_rounds_stamp_a_sign_block_into_the_manuscript(tmp_path):
     doc = json.loads(VS.sign_path(st.root, VR.proof_sha(PROOF)).read_text(encoding="utf-8"))
     assert doc["written_by"] == "secretary:F", doc["written_by"]
     assert doc["envelope"]["to"] == "secretary:F", doc.get("envelope")
+
+
+# ============================================================ ①之二 交信封给秘书
+def test_a2_the_positive_verdict_hands_the_envelope_to_the_secretary(tmp_path, monkeypatch):
+    """正判的落签由秘书那一步执行：V 只把 `issue()` 的返回交过去（件三）。"""
+    from agentflow import secretary as SEC
+
+    st = _ws(tmp_path)
+    v, seam = _v(st, [CLEAN_REPLY])
+    calls: list[dict] = []
+    real = SEC.Secretary.land_unregistered_sign
+    def _spy(self, envelope):
+        calls.append(dict(envelope))
+        return real(self, envelope)
+    monkeypatch.setattr(SEC.Secretary, "land_unregistered_sign", _spy)
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert seam.asked() == 3, seam.asked()
+    assert len(calls) == 1, calls
+    passed = calls[0]
+    assert (passed.get("sign") or {}).get("artifact_sha") == VR.proof_sha(PROOF), passed
+    assert (passed.get("sign") or {}).get("artifact_path") == REL, passed
+    block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
+    assert block["found"] and block["signed"] is True, block
+    assert block["signer"] == "secretary:F", block
+    assert (got.get("landed") or {}).get("landed") is True, got.get("landed")
+    assert (got.get("landed") or {}).get("by") == "secretary:F", got.get("landed")
 
 
 # ============================================================ ② 缺材料 ⇒ 不落
@@ -215,6 +266,52 @@ def test_d2_without_land_the_block_is_absent_and_f_reads_waiting(tmp_path, monke
     assert seam.asked() == 3, seam.asked()
     assert called["n"] == 1, called
     assert got.get("checked") is True, got
+    assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
+    after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
+    assert after["state"] == FVS.STATE_WAITING, after
+    assert after["delivered"] is False, after
+
+
+# ============================================================ ④之三 结构判据
+def test_g_the_sign_write_entries_are_reached_only_from_the_secretary():
+    """结构判据：`agent_v/**` 里 0 处签写口；同一扫描在 `secretary.py` 找到 1 处 land。
+
+    反真空：如果 `secretary.py` 里那一处也找不到，说明扫描器失效（或落签又搬回了 V）——
+    这一条必须红。"0 处"不许由"扫不到"冒充。
+    """
+    root = pathlib.Path(__file__).resolve().parents[1]
+    agent_v = sorted((root / "src" / "agentflow" / "agent_v").rglob("*.py"))
+    assert agent_v, "扫描器没找到 `agent_v` 的源码 ⇒ 这一格没查成"
+    found: list[str] = []
+    for path in agent_v:
+        for name, line in _sign_writer_calls(path):
+            found.append(f"{path.relative_to(root)}:{line}: {name}(")
+    assert found == [], "V 的代码里还直接调签写口：\n" + "\n".join(found)
+    sec = root / "src" / "agentflow" / "secretary.py"
+    landed = [line for name, line in _sign_writer_calls(sec) if name == "land"]
+    assert len(landed) == 1, (
+        f"`secretary.py` 里 `land` 调用有 {len(landed)} 处（期望 1 处）⇒ "
+        "扫描失效，或者落签不在秘书那一侧")
+
+
+# ============================================================ ④之四 反真空（结构）
+def test_h_without_the_secretary_landing_method_f_reads_waiting(tmp_path, monkeypatch):
+    """反真空：把 `Secretary.land_unregistered_sign` 摘掉 ⇒ 块不存在、F 回待签。
+
+    签仍由 V 颁发（签文件在盘上）—— 量的是"块真的由秘书那一步落"，不是"V 还发不发签"。
+    """
+    from agentflow import secretary as SEC
+
+    st = _ws(tmp_path)
+    v, seam = _v(st, [CLEAN_REPLY])
+    monkeypatch.delattr(SEC.Secretary, "land_unregistered_sign")
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert seam.asked() == 3, seam.asked()
+    assert got.get("checked") is True, got
+    assert (got.get("issued") or {}).get("written") is True, got.get("issued")
+    assert (got.get("landed") or {}).get("landed") is False, got.get("landed")
     assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
     after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert after["state"] == FVS.STATE_WAITING, after

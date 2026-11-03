@@ -35,7 +35,9 @@ from __future__ import annotations
 import json
 import pathlib
 
+from agentflow import conductor as CND
 from agentflow import evidencebits as EB
+from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.store import Store
@@ -235,3 +237,53 @@ def test_h_the_direct_path_issues_but_cannot_land_by_itself(tmp_path: pathlib.Pa
     assert doc.get("envelope", {}).get("to") == "", doc.get("envelope")
     assert VS.SIGN_MARK not in (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
     assert _bits(st).get("reviewed") is False
+
+
+# ====================================================================== i 秘书落未在册
+def _unregistered_issue(st: Store) -> dict:
+    """未在册那一档的签：没有命题号，落点只有手稿（`statement_id=""`）。"""
+    return VS.issue(
+        st.root, artifact_sha=SHA, streak=3, need=3, artifact_path=REL,
+        ledger=f"{REL}#V签", statement_id="", proof_no=1, at=TS,
+        by="secretary:F")
+
+
+def test_i_the_secretary_lands_an_unregistered_envelope(tmp_path: pathlib.Path) -> None:
+    """`Secretary.land_unregistered_sign()` = 未在册那一签的落签口（块落、台账位不翻）。
+
+    V 只把 `issue()` 的返回交过来；落点由秘书判：块落签文件里的 `artifact_path`，
+    没有命题行 ⇒ `ledger_bit=False`（不造一格）。
+    """
+    st = _ws(tmp_path)
+    issued = _unregistered_issue(st)
+    assert issued["written"] is True, issued
+    sec = SEC.Secretary("V", root=st.root, store=st)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = sec.land_unregistered_sign(issued)
+
+    assert got["landed"] is True, got
+    assert got["by"] == "secretary:F", got
+    assert got["artifact_sha"] == SHA, got
+    assert got["ledger_bit"] == "not_attempted", got
+    text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
+    block = VS.manuscript_sign_reading(text, manuscript_path=REL)
+    assert block["found"] and block["signed"] is True, block
+    assert block["signer"] == "secretary:F", block
+    # 未在册没有命题行可翻：位仍是 false（不许在秘书这一侧造一格）。
+    assert _bits(st).get("reviewed") is False, _bits(st)
+
+
+# ====================================================================== j 非收方
+def test_j_the_secretary_method_still_refuses_a_non_recipient(tmp_path: pathlib.Path) -> None:
+    """没有收方身份（V 的 parent 读不到）⇒ `not_a_secretary`、零字节（校验没被绕过）。"""
+    st = _ws(tmp_path)
+    issued = _unregistered_issue(st)
+    assert issued["written"] is True, issued
+    text_before = (pathlib.Path(st.root) / REL).read_bytes()
+    sec = SEC.Secretary("V", root=st.root, store=st)
+    got = sec.land_unregistered_sign(issued)  # 没有 calling_as ⇒ 没有收方
+
+    assert got["landed"] is False, got
+    assert got["code"] == VS.NOT_A_SECRETARY, got
+    assert (pathlib.Path(st.root) / REL).read_bytes() == text_before, "被拒的落签写动了稿"
