@@ -6169,14 +6169,14 @@
         "verify.run_experiment"
       ],
       "key": "returns",
-      "reason": "同一批：signed_by / proof_authors / report_path / report_sha256 / report_bytes / report_blocks / report_problems 进了返回值 —— 穷举签名的签字主体（V）与 E 写的那份 exhaustion.md 的读数是返回值的一部分，不是旁注。",
+      "reason": "同一批：signed_by / proof_authors / report_path / report_sha256 / report_bytes / report_blocks / report_problems 进了返回值 —— 穷举签名的签字主体（V）与 E 写的那份 exhaustion.md 的读数是返回值的一部分，不是旁注。 ｜ 2026-11-03 并账（E 的真返回进声明，7b9ee8ee）：穷举那一档落手稿后 `verify.run_experiment` 的**真返回**又多了四格 —— `proof_manuscript` / `manuscript_sha256` / `manuscript_proof_sha256` / `manuscript_problems`（V 的签盖在哪份正文、那份正文的 sha、它核的 proof sha、以及读侧的问题清单）。**只加不减**：原有 17 格一个没动，失败分支那一段一字未动。`returns` 是整格一份编辑清单，同一格里三次演进仍用一条「从基线一步记到现值」的账表达（与 `verify.verify_proof` 的 `params` 那条同族）：旧 reason 原文保留在前段，本条 edits 由 `value_edits()` 现算覆盖基线到现值的全部格子。基线里此前没记这四格 ⇒ 契约判据 ① 红了（判据是对的）。",
       "date": "2026-10-26",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
-          "to": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
+          "to": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems','proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
         }
       ]
     },
