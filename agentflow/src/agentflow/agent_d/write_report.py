@@ -622,6 +622,11 @@ class _WriteReport:
         """
         out: dict[str, Any] = {"checked": False, "rows": 0, "delivered": 0,
                                "results": [], "why": "", "report": "",
+                               #: E 的穷举证明稿（`exp:` 行）：不代 B 登记，按携带单寻址 ——
+                               #: 这一格是"没被问"的读数，不是"拒收"，所以它不带 `ok` 那一格
+                               #: （手写 `ok=False` 会被 `tests/test_refusals.py` 当成一次
+                               #: 失败要登记；而这里根本没有人执行过任何登记）。
+                               "addressed": [],
                                # 携带单缺口的读数（2026-10-27）：这一趟不管递没递出去，
                                # "这张单是空的而账上有依赖"这件事都跟着读数走，不许静默。
                                "carried_missing": bool(
@@ -642,13 +647,12 @@ class _WriteReport:
                 # E 的穷举证明稿（`exp:<实验号>`）：这一笔不代 B 登记 —— 命题还没有号，
                 # B 收录时需要的 statement_full / 证明栏由 D 的召唤参数带过去，稿本身
                 # 由 B 按携带单寻址读（同一条 `read_carried_manuscript`）。
-                # 记一条读数而不是"拒收"：拒收是 B 说不行，这里根本没人被问。
-                out["results"].append({
-                    "statement_id": "", "experiment_id": eid, "ok": False,
-                    "skipped": "exp_manuscript", "stmt_id": "", "deps_written": 0,
-                    "manuscript_source": "", "manuscript_washed": False, "kind": "",
-                    "error": ("E 的穷举证明稿按携带单寻址（B 收录时自己读）；"
-                              "D 不代它登记（命题还没有号）")})
+                # 记一条"没被问"的读数（不带 `ok`）：拒收是 B 说不行，这里根本没人被问。
+                out["addressed"].append({
+                    "experiment_id": eid,
+                    "path": str(row.get("path") or ""),
+                    "why": ("E 的穷举证明稿按携带单寻址（B 收录时自己读）；"
+                            "D 不代它登记（命题还没有号）")})
                 continue
             rec: dict[str, Any] = {"statement_id": sid, "ok": False, "stmt_id": "",
                                    "deps_written": 0, "manuscript_source": "",
@@ -716,6 +720,7 @@ class _WriteReport:
             lines.append(f"（这一趟没有递交：{delivery.get('why') or '（原因缺失）'}）")
             return lines
         results = [dict(x) for x in (delivery.get("results") or [])]
+        addressed = [dict(x) for x in (delivery.get("addressed") or [])]
         lines.append(
             f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
             f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
@@ -724,11 +729,6 @@ class _WriteReport:
         lines.append("| 命题号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
         lines.append("|---|---|---|---|---|---|")
         for r in results:
-            if str(r.get("skipped") or "") == "exp_manuscript":
-                lines.append(
-                    f"| exp:{r.get('experiment_id')} | 按携带单寻址（B 收录时自己读） | "
-                    f"- | - | - | {_digest(r.get('error'), 120) or '-'} |")
-                continue
             lines.append(
                 f"| stmt:{r.get('statement_id')} | {'收下' if r.get('ok') else '拒收'} | "
                 f"{int(r.get('deps_written') or 0)} | {r.get('manuscript_source') or '-'} | "
@@ -736,4 +736,11 @@ class _WriteReport:
                 f"{_digest(r.get('kind') or r.get('error'), 120) or '-'} |")
         if not results:
             lines.append("| （空） | - | 0 | - | - | - |")
+        # E 的穷举证明稿（`exp:` 行）：不代 B 登记，只按携带单寻址 —— 这一句把"没被问"
+        # 与上表的"拒收"分开写（同一张表里混着写会把"没人执行"读成"B 说不行"）。
+        for one in addressed:
+            lines.append("")
+            lines.append(
+                f"- `exp:{one.get('experiment_id')}` 的稿 `{one.get('path')}` 不代 B 登记："
+                f"{one.get('why') or '按携带单寻址'}")
         return lines
