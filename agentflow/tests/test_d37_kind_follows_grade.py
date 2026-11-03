@@ -278,9 +278,11 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     再交一次。这一条量的是"V 签「成立」之后 `kind` 有没有跟着到 `theorem`" —— 而它不该
     要求提交方自己声明 `kind="theorem"`（证据在盘上，名字就该跟着证据走）。
 
-    D-69 之后，签那一刻就已经抬上去了（同一个事务里）；"再交一次"只补 `evidence_kind`
-    那一格。所以这里两段都量：签字那一笔留下了升档痕迹，再交一次仍然只动
-    `evidence_kind`（不重复抬 kind）。
+    D-69 之后，签那一刻就已经抬上去了（同一个事务里）；2026-11-04（业主）之后
+    `evidence_kind` 也在同一笔里按现行签回填（`_grade_recomputed_from_signature`），
+    所以"再交一次"现在真的是空操作：秘书查重后不新建行（`duplicate_statement`），
+    盘上那一行一个字不动。这一条把两段都量：签字那一笔同时留下"名字"与"档位"两份
+    升档痕迹；再交一次不改盘、也不产生第二份回填。
     """
     filed = _file(store)
     sid = str(filed["stmt_id"])
@@ -295,25 +297,35 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     # 依据指向签发的那一签（2026-10-29：连续 3 次之后第 3 行才发签，不是第 1 行）
     sign_row = f"verifications/{sid}.jsonl#{signed['verification_id']}"
     assert sign_row in str(trace0.get("basis") or ""), (sign_row, trace0)
-    # 同一笔事务的读数是签名入口给的（`record_verification` 把它挂在
-    # `statement_writeback` 上），不是"事后才补"的一句话。
+    # 2026-11-04：档位在同一笔里按现行签回填（这条夹具进门时是 cross_check）。
+    assert before["evidence_kind"] == "proof_review", before
+    recomputed = dict(before.get("_grade_recomputed") or {})
+    assert recomputed.get("from") == "cross_check", recomputed
+    assert recomputed.get("to") == "proof_review", recomputed
+    assert sign_row in str(recomputed.get("basis") or ""), (sign_row, recomputed)
+    # 同一笔事务的读数（名字与档位两条）都是签名入口给的，不是"事后才补"的一句话。
     writeback = dict(signed.get("statement_writeback") or {})
     assert (writeback.get("kind_upgrade") or {}).get("to") == "theorem", writeback
     assert "conjecture→theorem" in str(writeback.get("upgrade_note") or ""), writeback
+    assert (writeback.get("grade_recomputed") or {}).get("to") == "proof_review", writeback
     read = EB.kind_following_grade(before, root=store.root)
     assert read["state"] == "not_applicable" and read["kind"] == "theorem", read
 
+    # 同一份内容再交一次：名字与档位都已经到位 ⇒ 秘书查重后没有新东西可写。
+    # （改前这一笔承担"补 evidence_kind"的活，因此 ok=True；回填之后它是真正的空操作，
+    #   拒信 `duplicate_statement` 就是"没有第二次写"的读数 —— 断言反而更强了。）
     again = _resubmit(store, evidence_kind="proof_review")
-    assert again.get("ok") is True, again
+    assert again.get("ok") is False, again
+    assert str(again.get("kind") or "") == "duplicate_statement", again
+    assert str(again.get("stmt_id") or sid) == sid, again
     row = _row(store, sid)
     assert row["kind"] == "theorem", row
     assert row["evidence_kind"] == "proof_review", row
     trace = dict(row.get("_kind_upgrade") or {})
     assert trace.get("from") == "conjecture" and trace.get("to") == "theorem", trace
     assert sign_row in str(trace.get("basis") or ""), (sign_row, trace)
-
-    # 读数面也要能看见这次升档（不是只在盘上悄悄改了一格）。
-    assert any("kind" in c for c in (again.get("changes") or [])), again
+    # 幂等：回填只发生过一次（时间戳与依据一起没变），不是"每写一次重算一遍"。
+    assert dict(row.get("_grade_recomputed") or {}) == recomputed, row
 
     # 再读一次：现在读数与盘上一致（已经是 theorem，不是"再升一次"）。
     read2 = EB.kind_following_grade(row, root=store.root)

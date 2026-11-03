@@ -972,7 +972,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         # 2026-10-24：判据 long 期望这一句「不构成 `proof`」—— 它的意思是"
         # 你这一次逐行走查的「成立」本身不是 proof 级凭据：proof 档要那两类里的某一份"
         # （检查器原话 / 穷举那份程序），你这一签是给它们背书的，不是替代它们。
-        "- 要说清强度：你这一次的「成立」本身不构成 `proof`** —— 它是对上面两类里某一份的背书；"
+        "- 要说清强度：你这一次的「成立」本身不构成 `proof` —— 它是对上面两类里某一份的背书；"
         "`proof` 级证据仍然要那一份凭据（检查器原话，或穷举那份程序 + ②③）。\n"
         "- 所以别在理由里写「已形式化验证」（那是第 ① 类的说法）；穷举那一类你要写的是"
         "「穷尽性与会审七项已核」。\n"
@@ -985,7 +985,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 结论落在三格：`exhaustion_review`（整份会审读数）/ `checks`（七项逐项 ok）/ "
         "`missing`（缺哪一块材料）。\n"
         "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格没查成：点名缺哪一块，"
-        "既不判 `成立`、也不判 `有毛病`**，台账里也不留那一行（留一行会把「没查成」"
+        "既不判 `成立`、也不判 `有毛病`，台账里也不留那一行（留一行会把「没查成」"
         "冒充成「审过了」）；材料补齐之后重新送审。\n"
         "- 七项全过才判 `成立`；会不会发签由你的秘书按连续次数判 —— 这一签是「对数值证据的背书」，"
         "不是「你逐行读过一份自然语言证明」。\n"
@@ -1527,6 +1527,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
             "re_sign_required": append_state != "appended", "grade": "",
             "statement_id": str(statement_id), "proof_no": no,
             "proof_sha256": sha, "kind_upgrade": {}, "upgrade_note": "",
+            "grade_recomputed": {},
             "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
             "deferred_to": "secretary",
             "reason": (f"签字权在 V 的秘书手上（业主 2026-10-29）：台账那一行已落"
@@ -2441,6 +2442,80 @@ def _kind_upgrade_from_signature(row: Mapping[str, Any], *, root: str | Path,
     return out
 
 
+#: 机器核过的那一档（`schema.EVIDENCE_KINDS` 的最强端）。回填只认它"比 proof_review 强"。
+PROOF_KIND = str(S.EVIDENCE_KINDS[0])
+
+#: V 落签之后"按现行签把档位重算一遍"那一格的读数键（业主 2026-11-04）。
+#:
+#: 与秘书那一支的 `_evidence_kind_upgrade` 刻意分成两格：那一格记的是"同一份内容再交
+#: 一次、这一回来的声明更强"（提交方声明的来路）；这一格记的是"签刚落位、按盘上那一签
+#: 重算"（盘上凭据的来路）。两件事的来路不同，读的人要能分开看 —— 否则"这一格是谁改的"
+#: 永远查不出来。
+GRADE_RECOMPUTED_KEY = "_grade_recomputed"
+
+
+def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path,
+                                     proof_no: Any = None) -> dict[str, Any]:
+    """V 的签刚落位 ⇒ 按现行签把 `evidence_kind` 重算一遍（只升不降）。
+
+    ## 为什么必须在这一刻重算（真机读数，业主 2026-11-04）
+    `evidence_kind` 原先只有一条升档路：同一份内容再登记一次时由
+    `Secretary._upgrade_evidence_kind` 改。于是"V 签了、之后再没有人登记"的行永远停在
+    旧档 —— `projects/paper-rewrite-84` 的 `000000`、`paper-rewrite-85` 的 `000004` /
+    `000005` 逐条是 `kind=theorem`、`bits.reviewed=true`、`grade=pre_theorem`
+    （D-69 那一笔已经抬过 `kind`），而 `evidence_kind` 仍是 `heuristic`。
+
+    后果不在报告里，在 F 那一侧：F 的"可引用在册命题"清单只收 `proof_review` 及以上
+    （`agent_f/manuscript.py::citable_statements`），这些行一条都进不去 ⇒ F 每一轮都被
+    告知"没有可引的 id" ⇒ 证明里零 `cites` ⇒ 手稿的 `## 依赖` 恒空表 ⇒ `dependencies`
+    0 行。这就是"依赖面几乎没用过"的上游。
+
+    ## 判据只有一处
+    "这一行够不够 `proof_review`"读 `proof_review_gap` —— 写入期闸
+    （`store._refuse_fake_proof_review`）、审计期、收工门读的都是它。这里不另写一份：
+    回填写进去的档与写入期闸放行的档因此结构上是同一件事（不一致会让整笔事务被那道闸
+    回滚，签名跟着失败）。
+
+    ## 只升不降 + 三态（不折平）
+    - 已经是 `proof`（机器核过那档）⇒ 一个字不动：人工审过的档不许覆盖它；
+    - 已经是 `proof_review` ⇒ 不动（幂等：同一份签重算结果不变，不写第二次）；
+    - 凭据读不出来 ⇒ 不动，读数里 `checked=False`（"没查成"既不是"不够格"也不是"升了"）；
+    - 凭据不够（没签 / 签的是旧版 / 判的不是成立）⇒ 不动（negative：没签的命题不许被
+      这一格升上去）。
+
+    返回 `{"row", "reading"}`：`reading` 是 `{from, to, checked, why, basis, proof_no, at}`，
+    没动过就是 `{}` —— 键的存在本身说明"这一笔改过档位"。
+    """
+    out: dict[str, Any] = {"row": dict(row), "reading": {}}
+    cur = str(out["row"].get("evidence_kind") or "").strip()
+    if cur in (PROOF_KIND, PROOF_REVIEW_KIND):
+        return out
+    try:
+        gap = proof_review_gap(root, out["row"], proof_no=proof_no)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许当成"不够格"
+        out["reading"] = {
+            "checked": False, "from": cur, "to": cur,
+            "why": (f"凭据读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
+                    "档位一个字节不动")}
+        return out
+    if not gap.get("ok"):
+        return out
+    ledger = str(gap.get("ledger") or "")
+    vid = str(gap.get("verification_id") or "")
+    basis = f"{ledger}#{vid}" if ledger and vid else (ledger or vid)
+    trace: dict[str, Any] = {
+        "from": cur or "（空）", "to": PROOF_REVIEW_KIND, "checked": True,
+        "why": ("V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
+                "⇒ 档位按现行签重算（只升不降）"),
+        "basis": basis, "proof_no": int(gap.get("proof_no") or 0) or None,
+        "at": _now_iso(),
+    }
+    out["row"]["evidence_kind"] = PROOF_REVIEW_KIND
+    out["row"][GRADE_RECOMPUTED_KEY] = dict(trace)
+    out["reading"] = dict(trace)
+    return out
+
+
 def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
                    sha: str, need: int, holds: Mapping[str, Any]) -> dict[str, Any]:
     """组一份签的内容（纯读：台账 + 手稿路径；不写任何东西）。
@@ -2680,6 +2755,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
 
     返回键：`written` / `reason` / `rolled_back` / `grade` / `statement_id` / `proof_no` /
     `proof_sha256` / `append_state` / `re_sign_required` / `kind_upgrade` / `upgrade_note` /
+    `grade_recomputed` /
     `streak` / `need` / `streak_ok`（业主 2026-10-29 的连续读数；键集合固定 ——
     "这一格没有读数"与"这一格是 0"必须由键的存在区分开）。
     `written=False` 的四种来路各有
@@ -2744,6 +2820,10 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: 抬档的读数原话（「因 V 判成立而抬档：conjecture→theorem（依据 …）」）；
         #: 没抬时是空串。它不写进 `reason`：`reason` 只留"这一签没落成"的那几档。
         "upgrade_note": "",
+        #: 档位回填（业主 2026-11-04）：这一签有没有把 `evidence_kind` 按现行签重算上去。
+        #: `{}` = 没动（已经是那一档 / 凭据不够 / 那一刻不适用），那几档都不改盘；
+        #: 非空时形状见 `_grade_recomputed_from_signature` 的 `reading`。
+        "grade_recomputed": {},
         #: 连续读数（见 :func:`consecutive_holds`）：给了 `sign_issuance.within_call`
         #: 时是这一趟送审内的轮数（2026-11-02 定稿）；不给时是台账尾部连续成立次数
         #: （历史兼容门）。三个键无条件存在。
@@ -2895,10 +2975,19 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 upgraded = _kind_upgrade_from_signature(
                     new, root=getattr(store, "root", ""), verifier=f"verifier-{no}")
                 new = upgraded["row"]
+                # ---- 档位回填（业主 2026-11-04）：同一笔事务里按现行签重算 `evidence_kind`。
+                #
+                # 位置与 D-69 那一格并列、`tx.upsert` 之前：台账那一行刚追加进
+                # `verifications/<号>.jsonl`，`proof_review_gap` 现在读得到它。
+                # 只升不降、幂等、判不了就不写（见 `_grade_recomputed_from_signature`）。
+                recomputed = _grade_recomputed_from_signature(
+                    new, root=getattr(store, "root", ""), proof_no=no)
+                new = recomputed["row"]
                 tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
                 out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
                            kind_upgrade=dict(upgraded["kind_upgrade"]),
-                           upgrade_note=str(upgraded["note"]))
+                           upgrade_note=str(upgraded["note"]),
+                           grade_recomputed=dict(recomputed["reading"]))
             # ---- 业主 2026-11-01：签落成一份按正文 sha 命名的侧文件 -------------------
             #
             # 位置在这里（upsert 之后、事务里）的三个理由：
