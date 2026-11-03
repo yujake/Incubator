@@ -1632,7 +1632,10 @@ D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evi
             title="先试能不能造出反例，再动手证",
             summary="动手证明之前先花一步找反例；反例要落 experiments 行，不许只在报告里说",
             when="拿到一条「应该对」的命题、或准备开始一轮攻坚之前",
-            actions=("E.run_experiment", "B.register_statement"),
+            # 只列 E 自己的动作：`B.register_statement` 是 B 的动作，E 的正路是"交 D
+            # （由 D 派 B 登记）"（`specs/e.py` 的 policy ⑤：「你既不要写对应表，
+            # 也不要自己去找 B 的 register_statement」）。
+            actions=("E.run_experiment",),
             tools=("table.schema", "fs.write"),
             body="""# 反例优先
 
