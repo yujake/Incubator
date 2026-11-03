@@ -914,6 +914,100 @@ def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
     assert {str(r.get("source_stmt_id")) for r in _deps(store)} == {THEOREM_A}, _deps(store)
 
 
+# ------------------------------------------------------------------ f 内容寻址兜底（2026-11-04）
+#
+# 判据 f：盘上只有计划号命名的那一份稿（87 的真机形态：按号命名的 0 份），
+# 而这一笔把证明正文一起交进来 ⇒ B 的兜底读盘按 `## 证明` 的内容认出它、依赖面落行。
+# 反真空 f-：把那一个实参摘掉（`read_manuscript` 收不到正文）⇒ 回到改前形态
+# （整笔受控拒绝 `dependency_section_missing`、`dependencies` 0 行）。
+
+#: 计划号那份稿里的证明正文 —— 与登记时交的 `proof_text` 逐字相同（内容认法的前提）。
+_PLAN_MANUSCRIPT_PROOF = f"1. 由定理甲直接得到（依据：stmt:{THEOREM_A}）。"
+
+
+def _plan_named_manuscript() -> str:
+    """F 在拿到命题号之前写的那一份稿（页头 + 命题 + 证明 + 依赖四列，且已洗过）。"""
+    text = (
+        "# F 的证明手稿：由定理甲推出目标结论（判据夹具）\n\n"
+        "- 命题号：stmt:（还没落号）\n"
+        "- 计划：000009 · 子目标：L1\n\n"
+        "## 命题\n\n"
+        "由定理甲推出目标结论。\n\n"
+        "## 证明\n\n"
+        f"{_PLAN_MANUSCRIPT_PROOF}\n\n"
+        + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A))
+    return DS.mark_washed(text, actor="secretary-F")
+
+
+def _write_plan_manuscript(store: Store,
+                           name: str = "f-proof-plan-000009.md") -> pathlib.Path:
+    d = pathlib.Path(store.root) / MANUSCRIPT_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / name
+    path.write_text(_plan_named_manuscript(), encoding="utf-8")
+    return path
+
+
+def test_f_a_plan_named_manuscript_is_recognised_by_its_proof_body(
+        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
+    """f：只有 `f-proof-plan-*.md` 时，兜底按证明正文认出它，依赖面落行。
+
+    改前红：改前 `read_manuscript` 只查 `f-proof-<命题号>.md`（`tried` 里只有那一处），
+    而 87 里按号命名的稿 0 份 ⇒ 这一笔整笔拒 `dependency_section_missing`、0 行。
+    """
+    store = _ws(tmp_path)
+    _library(store)
+    _write_plan_manuscript(store)
+    got = _register(store, statement_full="定理：由定理甲推出目标结论（计划名稿）。",
+                    proof_text=_PLAN_MANUSCRIPT_PROOF, derived_from=[THEOREM_A])
+    assert got.get("ok") is True, got
+    assert str(got.get("manuscript_source")) == SRC_DISK, got
+    probe = dict((got.get("deps_missing") or {}).get("manuscript_probe") or {})
+    assert probe.get("matched_by") == DS.MATCH_BY_PROOF_BODY, probe
+    assert str(probe.get("path")) == f"{MANUSCRIPT_DIR}/f-proof-plan-000009.md", probe
+    # 两种认法在 `tried` 里分开写：名字那一路 miss、正文那一路命中。
+    assert [t.get("matched_by") for t in probe.get("tried") or []] == [
+        DS.MATCH_BY_PATH, DS.MATCH_BY_PROOF_BODY], probe
+    assert {str(r.get("source_stmt_id")) for r in _deps(store)} == {THEOREM_A}, _deps(store)
+
+
+def test_f_without_the_proof_text_the_backfill_cannot_find_it(
+        tmp_path: pathlib.Path, signed_v_handoffs, monkeypatch) -> None:
+    """f- 反真空：把"把正文交给兜底读盘"这一个实参摘掉 ⇒ 回到改前形态（0 行 / 整笔拒）。"""
+    store = _ws(tmp_path)
+    _library(store)
+    _write_plan_manuscript(store)
+    real = DS.read_manuscript
+
+    def _without_proof_text(root, *, statement_ids=(), plan_id="", proof_text=""):
+        # 模拟"那一行实参没接上"的调用（改前 B 的形态）：正文收不到，只能按名字找。
+        return real(root, statement_ids=statement_ids, plan_id=plan_id)
+
+    monkeypatch.setattr(DS, "read_manuscript", _without_proof_text)
+    got = _register(store, statement_full="定理：由定理甲推出目标结论（反真空）。",
+                    proof_text=_PLAN_MANUSCRIPT_PROOF, derived_from=[THEOREM_A])
+    assert got.get("ok") is False, got
+    assert str(got.get("kind") or "") == "dependency_section_missing", got
+    assert _deps(store) == [], _deps(store)
+
+
+def test_f_a_different_proof_is_never_counted_as_this_one(tmp_path: pathlib.Path) -> None:
+    """f 的负控：盘上那份计划名稿的证明正文与这一笔不同 ⇒ 不许认（认了就是挂错依赖面）。
+
+    这一条守的正是"不许按 glob 取最新"：一份计划会被每一轮覆盖，内容对不上时
+    唯一的正确读法是 `source=none`（B 随后受控拒绝），不许猜。
+    """
+    store = _ws(tmp_path)
+    _library(store)
+    _write_plan_manuscript(store)
+    hit = DS.read_manuscript(store.root, statement_ids=[THEOREM_A],
+                             proof_text="1. 这是另一份证明（与盘上那份不同）。")
+    assert hit["source"] == SRC_NONE, hit
+    assert hit["matched_by"] == "", hit
+    assert any(t.get("matched_by") == DS.MATCH_BY_PROOF_BODY for t in hit["tried"]), hit
+    assert "按证明正文比过" in str(hit["why"]), hit
+
+
 
 
 

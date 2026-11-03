@@ -470,17 +470,86 @@ def manuscript_relpaths(*, statement_ids: Iterable[str] = (), plan_id: str = "")
     return out
 
 
+#: 兜底读盘两种认法（进 `read_manuscript` 的读数 `matched_by`，三态里的"怎么命中的"）。
+MATCH_BY_PATH = "path"
+MATCH_BY_PROOF_BODY = "proof_body"
+
+
+def _proof_body_key(text: Any) -> str:
+    """一份稿 / 一段正文的"证明正文指纹"：`## 证明` 那一节逐行去首尾空白、丢空行。
+
+    为什么是逐行归一而不是逐字：手稿是渲染出来的（`agent_f/manuscript.py` 按步拼行），
+    而 B 收下来的 `proof_text` 可能多/少一个尾随空行 —— 那是排版，不是另一份证明。
+    反过来，改一个字指纹就变（判据里有负控）⇒ 它比"文件名"精确、比"正文包含"严格。
+
+    洗稿元信息那一行（`WASH_MARK`）不算证明内容，指纹里剔掉：`mark_washed` 在
+    "没有 `- 计划：` 那一行"的稿子上会把它插到第 2 行之后 —— 那种形状下它会落进
+    `## 证明` 那一节，留着就会让"同一份证明"读成"不同"（真机手稿有页头，不会撞到；
+    但判据夹具与手写稿会）。
+    """
+    body = str(proof_body(text) or "").replace("\r\n", "\n")
+    return "\n".join(line.strip() for line in body.split("\n")
+                     if line.strip() and not line.strip().startswith(WASH_MARK))
+
+
+def _plan_named_manuscripts(base: Path) -> list[str]:
+    """`reports/f-proof-plan-*.md` 的候选（工作区相对、按名字排序）。
+
+    为什么按名字排序而不是按 mtime：这个兜底要用"内容"认，不用"新旧"认 ——
+    计划号那一份稿每一轮都会被覆盖（87 的 plan-000001 改写 3 次），按 mtime 取最新
+    会把上一轮的证明当成这一轮的。排序只为了让同一批候选的顺序可复现。
+    """
+    directory = base / MANUSCRIPT_DIR
+    try:
+        if not directory.is_dir():
+            return []
+        names = sorted(p.name for p in directory.glob(f"{MANUSCRIPT_PLAN_PREFIX}*.md"))
+    except OSError:  # noqa: BLE001 —— 探不到目录要能如实说，不许当成"没有候选"
+        return []
+    return [f"{MANUSCRIPT_DIR}/{name}" for name in names]
+
+
 def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
-                    plan_id: str = "") -> dict[str, Any]:
-    """按约定路径在盘上找 F 的证明手稿 ⇒ `{checked, source, text, path, tried, why}`。
+                    plan_id: str = "", proof_text: Any = "") -> dict[str, Any]:
+    """按约定路径（必要时按证明正文）在盘上找 F 的证明手稿。
+
+    返回 `{checked, source, text, path, tried, why, matched_by}`。
+
+    ## 两段认法（第二段 2026-11-04 补：业主批的那一条）
+
+    ① 按名字（`manuscript_relpaths`）：`reports/f-proof-<命题号>.md` 优先，
+       其次 `reports/f-proof-plan-<计划号>.md`；命中 ⇒ `matched_by="path"`。
+    ② 按内容（`proof_text` 非空、且第 ① 段一个都没命中时）：扫
+       `reports/f-proof-plan-*.md`，把每一份的 `## 证明` 那一节与这一笔的 `proof_text`
+       逐行归一后比 —— 相同才认，命中 ⇒ `matched_by="proof_body"`。
+
+    ## 为什么必须补第 ② 段（真机读数，ramsey-4-4-87）
+    F 的稿在拿到命题号之前叫 `f-proof-plan-<计划号>.md`，而"登记成功之后改名成
+    `f-proof-<命题号>.md`"只发生在 F 自己的 outlet 登记成功那一笔（`publish_manuscript`）。
+    87 里六份稿全叫 plan 名、按号命名的 0 份（outlet 因"没有覆盖正文的 V 签"整笔拒），
+    于是 B 的兜底读盘永远只查 `f-proof-<号>.md` ⇒ 读到 0 份 ⇒ 依赖面 0 行。第 ② 段补的
+    就是"盘上那份稿还在、只是叫计划名"这一档。
+
+    ## 为什么它只补一半（这一条必须写在读数旁边，不许被读成"补了就好"）
+    内容认法的前提是"盘上那一份还是登记时那一份"。计划号那份稿会被后续轮次覆盖
+    （87 实测：六份里三份的正文与登记进台账的 `proof_text` 已经不是同一份）——
+    那一档必须继续受控拒绝（`source=none` ⇒ 有在册引用时 B 整笔拒
+    `dependency_section_missing`），不许按 glob 取最新去猜一份。真机读数：
+    87 的六份稿里第 ② 段认得出 3 份（000000→stmt:000001、000002→stmt:000003、
+    000003→stmt:000007），另外 3 份正是"被后续轮次覆盖"的那一半。
+
+    ## 本函数不产出证明号（别与携带单第四列混成一个）
+    `#pN` 只有两个来路：调用方给的 `proof_no`、D 携带单第四列（`CARRIED_COLUMNS`）。
+    内容命中的是一份正文，不是"第几条证明" —— 这里不猜号、也不回填号；读数只用
+    `matched_by` 说"是靠名字还是靠正文命中的"（`tried` 逐条也带这一格）。
 
     三态（与全仓同一条纪律，不许折平）：
 
     - `checked=False`：压根没查成（没有工作区根）⇒ `source=none` 只是如实说"没读到"，
       `why` 点名缺的是哪一个上下文；
     - `checked=True` + `source=disk`：真读到了一处，`path` 是那一处、`text` 是全文；
-    - `checked=True` + `source=none`：约定路径逐条查过，一处都不在盘上，
-      `tried` 逐条列出查过哪些路径 —— 于是"我没找"与"找了没有"在读数上分得开。
+    - `checked=True` + `source=none`：约定路径逐条查过、内容也认过，一处都不对，
+      `tried` 逐条列出查过哪些路径 / 比过哪些正文 —— 于是"我没找"与"找了没有"分得开。
 
     读文件本身失败（权限 / 编码）不吞：那一条进 `tried` 的 `why`，继续找下一处；
     全部失败时 `why` 会带上它们，调用方据此知道该修什么。
@@ -488,7 +557,8 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
     root_text = str(root or "").strip()
     if not root_text:
         return {"checked": False, "source": SOURCE_NONE, "text": "", "path": "",
-                "tried": [], "why": "没有工作区根（`root` 是空的）⇒ 按约定路径找手稿这一趟没查成"}
+                "tried": [], "matched_by": "",
+                "why": "没有工作区根（`root` 是空的）⇒ 按约定路径找手稿这一趟没查成"}
     base = Path(root_text)
     tried: list[dict[str, Any]] = []
     for rel in manuscript_relpaths(statement_ids=statement_ids, plan_id=plan_id):
@@ -496,30 +566,58 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
         try:
             exists = path.is_file()
         except OSError as exc:  # noqa: BLE001 - 探一次盘都会失败时要说出来，不许当成"不在"
-            tried.append({"path": rel, "exists": False,
+            tried.append({"path": rel, "exists": False, "matched_by": MATCH_BY_PATH,
                           "why": f"探不到（{type(exc).__name__}: {exc}）"})
             continue
         if not exists:
-            tried.append({"path": rel, "exists": False, "why": ""})
+            tried.append({"path": rel, "exists": False, "matched_by": MATCH_BY_PATH, "why": ""})
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:  # noqa: BLE001 - 读失败与"不在盘上"是两件事
-            tried.append({"path": rel, "exists": True,
+            tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PATH,
                           "why": f"读不出来（{type(exc).__name__}: {exc}）"})
             continue
         if not text.strip():
-            tried.append({"path": rel, "exists": True, "why": "文件在，但正文是空的"})
+            tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PATH,
+                          "why": "文件在，但正文是空的"})
             continue
-        tried.append({"path": rel, "exists": True, "why": ""})
+        tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PATH, "why": ""})
         return {"checked": True, "source": SOURCE_DISK, "text": text, "path": rel,
-                "tried": tried, "why": ""}
+                "tried": tried, "matched_by": MATCH_BY_PATH, "why": ""}
+    # ---- 第 ② 段：按证明正文认（只在第 ① 段全 miss、且调用方给了正文时） -------------
+    want = _proof_body_key(proof_text) if str(proof_text or "").strip() else ""
+    compared = 0
+    if want:
+        for rel in _plan_named_manuscripts(base):
+            path = base / rel
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError as exc:  # noqa: BLE001 —— 读不出来要如实说，继续比下一份
+                tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
+                              "why": f"读不出来（{type(exc).__name__}: {exc}）"})
+                continue
+            compared += 1
+            if _proof_body_key(text) == want:
+                tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
+                              "why": "`## 证明` 与这一笔的 proof_text 逐行相同"})
+                return {
+                    "checked": True, "source": SOURCE_DISK, "text": text, "path": rel,
+                    "tried": tried, "matched_by": MATCH_BY_PROOF_BODY,
+                    "why": (f"按名字没找到；按证明正文认出了 {rel}"
+                            f"（比过 {compared} 份计划名手稿）")}
+            tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
+                          "why": "`## 证明` 与这一笔的 proof_text 不同（不是这一份）"})
     checked_paths = [str(t.get("path") or "") for t in tried]
     why = ("按约定路径找过 " + (f"{len(checked_paths)} 处：" + "、".join(checked_paths)
                                 if checked_paths else "0 处（没有命题号也没有计划号可定位）")
            + " —— 这几种名一处都不在盘上（或者读不出来，原因逐条见 `tried`）")
+    if want:
+        why += (f"；又按证明正文比过 {compared} 份 `{MANUSCRIPT_DIR}/{MANUSCRIPT_PLAN_PREFIX}"
+                "*.md`，没有一份与这一笔的 proof_text 相同"
+                "（那一半只能等 F 在登记成功后把稿改名成按命题号的那一份）")
     return {"checked": True, "source": SOURCE_NONE, "text": "", "path": "",
-            "tried": tried, "why": why}
+            "tried": tried, "matched_by": "", "why": why}
 
 
 # ------------------------------------------------------------------ D 携带（走的正是这条主路）

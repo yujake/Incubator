@@ -1632,8 +1632,12 @@ class _RegisterStatement:
                     manuscript_source=manuscript_source,
                     manuscript_path=str(manuscript_carried.get("address") or ""))
             else:
+                # 2026-11-04：兜底读盘把这一笔的证明正文也交进去 —— 名字一路全 miss 时，
+                # `read_manuscript` 会按 `## 证明` 逐行归一后的内容认 `f-proof-plan-*.md`
+                # （87 的六份稿全叫计划名、按号命名的 0 份；详见 depsection 那一节）。
                 manuscript_probe = _DS.read_manuscript(
-                    getattr(self.store, "root", ""), statement_ids=probe_ids)
+                    getattr(self.store, "root", ""), statement_ids=probe_ids,
+                    proof_text=proof_text)
                 if str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK:
                     manuscript_text = str(manuscript_probe.get("text") or "")
                     manuscript_source = _DS.SOURCE_DISK
