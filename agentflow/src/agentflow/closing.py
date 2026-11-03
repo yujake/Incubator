@@ -97,7 +97,7 @@ PAPER_MAPPING_LEG_KIND = "paper_mapping_rows"
 LEG_CHECK_KINDS: dict[str, str] = {
     "quote_verified_rows": "台账里带逐字比对记录的命题行数（`statements` 或 `relations` "
                            "里 `quote_verified` 非 null 的行）",
-    "proof_experiment_rows": "台账里的 proof 级形式化实验行数（`experiments` 里 "
+    "proof_experiment_rows": "台账里的 proof 级机器核验行数（`experiments` 里 "
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
     "reviewed_proof_rows": "**我方**走完「有证明过程 + 审过」的命题行数（`statements` 里"
                            "五元位派生出 `预备定理级` / `正式定理` 的行，且 `origin != external_lit`）"

@@ -270,7 +270,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `V` | （空 ⇒ 只读：唯一产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表；`READ_ONLY_ROLES` 里的 `"V"` 与 `for_role` 的结构性剥离一起守它） |
-| `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的实验；刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。真身 `specs/l.py` 的 `write_set`） |
+| `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的机器核验行 —— `experiments` 的口径是「机器核验与实验台账」，E 写 `numeric` / `symbolic` / `exhaustive_search`，L 写 `formal`（Lean 核验），形式化行落这里不是数值实验；刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。真身 `specs/l.py` 的 `write_set`） |
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
 
@@ -1635,6 +1635,7 @@ C 的产出有两类，状态语义完全不同。
 
 **产物三样**：盘上的 `code/formal/<声明名>.lean`（带 sha256 与逐步对照 `*.steps.jsonl`）、检查器原话与真实退出码、`experiments` 的一行（`method="formal"`）。
 前两样不是表行，第三样是 —— 所以写集只有 `experiments` 一格。
+那一格的口径是「机器核验与实验台账」：E 写 `numeric` / `symbolic` / `exhaustive_search`，L 写 `formal`（Lean 核验）—— 形式化行落在这张表里不是把它当成数值实验。
 
 ### L.2 职责
 

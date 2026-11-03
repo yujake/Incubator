@@ -1211,11 +1211,14 @@ class AnalysisReport:
 
 # ---------------------------------------------------------------- E/F/G/H 新增：受控词表
 
-#: 实验方法（E）。
-#:   numeric            —— 浮点数值计算（采样、BFS、特征值）
-#:   symbolic           —— 符号计算（精确代数）
-#:   exhaustive_search  —— 在有限范围内穷举
-#:   formal             —— 交给证明检查器（Lean/Coq/…）核验
+#: `experiments` 的方法词表。这张表的口径是「机器核验与实验台账」，收两类账：
+#:   numeric            —— 浮点数值计算（采样、BFS、特征值）；E 写
+#:   symbolic           —— 符号计算（精确代数）；E 写
+#:   exhaustive_search  —— 在有限范围内穷举；E 写
+#:   formal             —— formal（Lean 核验），交给证明检查器核验；L 写
+#:
+#: 业主裁定（逐字）「不新增，直接改口径」：L 的形式化行不新开一张表，就落在本表里 ——
+#: 所以 `method="formal"` 在这里是口径如此，不是把 Lean 核验当成数值实验。
 EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 
 #: 证据等级（FC-22 落地核心）：proof（形式化检查器核验过，只有 `method="formal"` 才可能拿到）·
@@ -1530,7 +1533,11 @@ def experiment_preflight_problems(*, method: str, certificate: Any = None,
 
 @dataclass
 class Experiment:
-    """E 的一次实验记录（DESIGN-ROLES.md §2.1）。
+    """机器核验与实验台账的一行（DESIGN-ROLES.md §2.1）。
+
+    这张表收两类账：E 写 numeric / symbolic / exhaustive_search（数值与穷举实验），
+    L 写 formal（Lean 核验）。业主裁定「不新增，直接改口径」—— L 的形式化行就落在
+    本表里，所以它记的是「机器核过没有」与「算过什么」两种账，不是把两者混成一件事。
 
     本表最重要的一条规矩：`method` 是"计算类"（numeric / symbolic /
     exhaustive_search）时，`evidence_kind` 不得为 `"proof"` —— 除非整个论域
@@ -1549,6 +1556,8 @@ class Experiment:
     experiment_id: str
     claim: str  # 被检验的命题（人话，给人读）
     claim_key: str  # 命题的机器可读键（用于去重与引用，如 "SpecK(m)=[-m,m]"）
+    #: 方法（受控词表 `EXPERIMENT_METHODS`）：E 写 numeric / symbolic /
+    #: exhaustive_search，L 写 formal（Lean 核验）—— 两类账共用这一张机器核验台账。
     method: str
     #: 证据等级。默认 `cross_check` —— 默认值本身就在表达"这不是证明"。
     evidence_kind: str = "cross_check"
@@ -1619,7 +1628,7 @@ class Experiment:
                 f"experiments 表的 evidence_kind 必须是 {EXPERIMENT_EVIDENCE_KINDS} 之一，"
                 f"收到 {self.evidence_kind!r}（`proof_review` 不在这一档：它是**审阅**的等级，"
                 "凭据在 `verifications/<命题号>.jsonl`（文件账本，不是表）里，"
-                "不属于任何一行实验）")
+                "不属于台账里的任何一行（含 L 那类 formal 机器核验行）")
         if self.result not in EXPERIMENT_RESULTS:
             raise ValueError(f"result 必须是 {EXPERIMENT_RESULTS} 之一，收到 {self.result!r}")
         if self.negation_kind is not None and self.negation_kind not in NEGATION_KINDS:

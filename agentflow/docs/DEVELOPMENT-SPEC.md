@@ -801,6 +801,10 @@ C 预算）都踩到同一坑。"
 **计算类方法（`numeric` / `symbolic` / `exhaustive_search`）不得标 `proof`**；
 `proof` 必须另带 `verifier_subject_key`。
 
+> **`experiments` 的口径是「机器核验与实验台账」**：E 写 `numeric` / `symbolic` /
+> `exhaustive_search`，L 写 `formal`（Lean 核验）—— 形式化那一行落在这张表里是口径如此，
+> 不是把 Lean 核验当成数值实验。判据：`tests/test_experiments_ledger_is_machine_verification.py`。
+
 **② 为什么**（`LESSONS.md` FC-22 逐字）：
 "数学里数值实验不构成证明（'验证通过 ≠ 数学正确'）；
 而本项目实测证明了'结构自洽 ≠ 内容正确'与'三个绿灯叠加仍不能证明系统有用'。"

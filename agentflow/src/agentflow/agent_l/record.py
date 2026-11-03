@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """角色 L 的动作 `record`：把一次形式化检查登记成一行 `experiments`（`method="formal"`）。
 
+口径：`experiments` 表是「机器核验与实验台账」—— E 写 numeric / symbolic /
+exhaustive_search（数值与穷举实验），L 写 formal（Lean 核验）。所以本模块写的是这张
+台账里 formal 那一类机器核验行，不是数值实验：两者的凭据形态（检查器原话 vs 程序脚本）
+与读法都不同，共用一张表是账面的口径，不是把两类证据混成一件事。
+
 ## 这一格补的是什么缝
 
 业主 2026-10-22 的第二句施工单（逐字）：
@@ -162,7 +167,7 @@ class _Record:
         for_question_id: str | None = None,
         notes: str = "",
     ) -> dict:
-        """把"命题 `statement_id` × 文件 `code_path`"这一次形式化检查登记成一行实验。
+        """把"命题 `statement_id` × 文件 `code_path`"这一次形式化检查登记成机器核验台账里 formal 那一类的一行。
 
         前两个位置参数是绑定（哪条命题、哪份产物），其余是读数与对账项。
         返回值的键集合见 :data:`_RECORD_KEYS`（每一条分支上都成立）。
@@ -432,7 +437,7 @@ class _Record:
             if str(row.get("stmt_id") or "") == sid:
                 return row, ""
         return None, (f"台账里没有编号为 {sid!r} 的命题 ⇒ 不登记"
-                      "（形式化实验行必须绑定到一条已经登记过的命题）")
+                      "（机器核验台账里的 formal 行必须绑定到一条已经登记过的命题）")
 
     def _record_refuse(self, reason: str, detail: str, **fields: Any) -> dict:
         """受控拒绝（固定键集合 + `recorded=False` + `refused=True` + 一行原因）。

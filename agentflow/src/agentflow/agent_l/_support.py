@@ -116,7 +116,7 @@ DECLARATION_NAME_RX = re.compile(r"^[A-Za-z_][A-Za-z0-9_']{0,63}$")
 #: 包内 + `out/formal`、而全仓没有一步把这里拷进包 ⇒ 这一份源码填不进对应表。
 FORMAL_DIR = "code/formal"
 
-#: 一条形式化实验行的机器可读键：`experiments.claim_key` 取这个形态。
+#: 一条 formal（Lean 核验）行的机器可读键：`experiments.claim_key` 取这个形态。
 #:
 #: 为什么不是人给的任意串：`formal.record` 的绑定对象是台账里的一条命题
 #: （`statements` 那一行），所以"这条检查器输出管的是哪个命题"这件事必须由
