@@ -464,7 +464,7 @@ class _WriteReport:
         return str(path)
 
     def _carried_manuscripts(self) -> tuple[list[dict], str]:
-        """D 交研究手稿给 B 时"一并带上的 F 证明手稿" ⇒ `(携带行, 附注)`。
+        """D 交研究手稿给 B 时"一并带上的证明手稿" ⇒ `(携带行, 附注)`。
 
         ## 为什么由代码生成，而不是让模型在报告里写
         模型写手稿（`reports/RESEARCH.md`）是自由的 markdown，它忘一次"把 F 的稿带上"，
@@ -476,6 +476,13 @@ class _WriteReport:
         `statements` 里 `origin=own_result` 且 `status=active`、并且盘上真有一份按它的命题号
         命名的 `reports/f-proof-<命题号>.md` 的那些行。散文里的声称不算：手稿文件才是要带的
         那一件东西。读不到台账 / 一份都没有时如实说（不是省略 —— 见渲染器的空表那一句）。
+
+        ## 2026-11-04：E 的穷举证明手稿也走同一张单（业主：「E 的穷举论证和 V 签也是委托入库」）
+        键是 `exp:<实验号>`，不是命题号：E 出这条稿的时候命题可能还没进台账
+        （它不像 L —— L 一定是来验一条在册命题的）。携带的东西与 F 那份完全同形：
+        地址 + 文件字节 sha256；B 那边按证明栏正文的 sha 寻址到它（`read_carried_manuscript`）。
+        只带已签的那一份（`vsigns.manuscript_sign_standing` 的 `state="signed"`）：
+        没签的稿不是"入库的证明"，带上它只会让 B 的入库闸当场拒一次。
         """
         import hashlib
 
@@ -506,6 +513,37 @@ class _WriteReport:
                 continue
             seen.add(sid)
             rows.append({"statement_id": sid, "path": str(got["path"]),
+                         "sha256": hashlib.sha256(blob).hexdigest()})
+        # ---- E 的穷举证明手稿（2026-11-04：同一张单，键是 exp:<实验号>） -------------
+        #
+        # 判据全在盘上：台账里有一行 `evidence_kind="proof"` 的实验、它落了
+        # `observations.proof_manuscript`、那份稿在盘上、而且稿里的签块
+        # （`secretary:E` 落的）盖的就是它现在这一份正文。少任何一条都不带 ——
+        # 半成品带过去只会让 B 的入库闸多拒一次，而"没带"与"没签"在读数上必须分得开。
+        from .. import vsigns as _VS
+
+        for row in (self.store.rows("experiments") or []):
+            one = dict(row)
+            if str(one.get("evidence_kind") or "") != "proof":
+                continue
+            if str(one.get("method") or "") == "formal":
+                continue
+            eid = str(one.get("experiment_id") or "")
+            facts = one.get("observations") if isinstance(one.get("observations"), Mapping) else {}
+            pocket = (facts or {}).get("proof_manuscript") if isinstance(facts, Mapping) else None
+            rel = str((pocket or {}).get("path") or "") if isinstance(pocket, Mapping) else ""
+            if not eid or not rel or eid in seen:
+                continue
+            try:
+                blob = (Path(self.store.root) / rel).read_bytes()
+                text = blob.decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            standing = _VS.manuscript_sign_standing(text, manuscript_path=rel)
+            if str(standing.get("state") or "") != "signed":
+                continue
+            seen.add(eid)
+            rows.append({"statement_id": "", "experiment_id": eid, "path": rel,
                          "sha256": hashlib.sha256(blob).hexdigest()})
         note = ""
         if len(rows) > _DS.CARRIED_LIMIT:
@@ -599,6 +637,19 @@ class _WriteReport:
         out["rows"] = len(rows)
         for row in rows:
             sid = str(row.get("statement_id") or "")
+            eid = str(row.get("experiment_id") or "")
+            if not sid and eid:
+                # E 的穷举证明稿（`exp:<实验号>`）：这一笔不代 B 登记 —— 命题还没有号，
+                # B 收录时需要的 statement_full / 证明栏由 D 的召唤参数带过去，稿本身
+                # 由 B 按携带单寻址读（同一条 `read_carried_manuscript`）。
+                # 记一条读数而不是"拒收"：拒收是 B 说不行，这里根本没人被问。
+                out["results"].append({
+                    "statement_id": "", "experiment_id": eid, "ok": False,
+                    "skipped": "exp_manuscript", "stmt_id": "", "deps_written": 0,
+                    "manuscript_source": "", "manuscript_washed": False, "kind": "",
+                    "error": ("E 的穷举证明稿按携带单寻址（B 收录时自己读）；"
+                              "D 不代它登记（命题还没有号）")})
+                continue
             rec: dict[str, Any] = {"statement_id": sid, "ok": False, "stmt_id": "",
                                    "deps_written": 0, "manuscript_source": "",
                                    "manuscript_washed": False, "kind": "", "error": ""}
@@ -665,13 +716,19 @@ class _WriteReport:
             lines.append(f"（这一趟没有递交：{delivery.get('why') or '（原因缺失）'}）")
             return lines
         results = [dict(x) for x in (delivery.get("results") or [])]
-        lines.append(f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
-                     f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
-                     f"{int(delivery.get('delivered') or 0)} 条。")
+        lines.append(
+            f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
+            f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
+            f"{int(delivery.get('delivered') or 0)} 条。")
         lines.append("")
         lines.append("| 命题号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
         lines.append("|---|---|---|---|---|---|")
         for r in results:
+            if str(r.get("skipped") or "") == "exp_manuscript":
+                lines.append(
+                    f"| exp:{r.get('experiment_id')} | 按携带单寻址（B 收录时自己读） | "
+                    f"- | - | - | {_digest(r.get('error'), 120) or '-'} |")
+                continue
             lines.append(
                 f"| stmt:{r.get('statement_id')} | {'收下' if r.get('ok') else '拒收'} | "
                 f"{int(r.get('deps_written') or 0)} | {r.get('manuscript_source') or '-'} | "

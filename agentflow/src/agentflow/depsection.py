@@ -94,7 +94,17 @@ REFUSED_ADDRESS = "manuscript_address_unreadable"
 #: D 的研究报告里那一节的段标题（携带单；逐字固定，渲染与解析共用一个常量）。
 CARRIED_HEADING = "## 携带的证明手稿"
 #: 携带单的三列（命题号 / 手稿路径 / sha256）。
-CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN）", "手稿路径", "sha256")
+#: 携带单第一格认两种键（2026-11-04，业主：「E 的穷举论证和 V 签也是委托入库」）:
+#: `stmt:<命题号>`（F 的证明手稿，命题已在册）与 `exp:<实验号>`（E 的穷举证明手稿，
+#: 命题可能还没进台账 —— 那条链里 E 从来没有命题号可用）。
+#:
+#: 为什么不是另开一张单：携带机制本来就只做三件事（键 → 地址 → 文件 sha256），
+#: E 那一份与 F 那一份在这三件事上完全同形；差别只在"键是什么"。
+#: 第二格是地址，读侧按它到盘上取文件并核 sha（`read_carried_manuscript`）。
+CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN / exp:NNNNNN）", "手稿路径", "sha256")
+
+#: 携带单第一格的前缀（`stmt:` 是命题号、`exp:` 是 E 的实验号）。
+CARRIED_KEYS: tuple[str, ...] = ("stmt:", "exp:")
 
 #: 证明正文那一节的段标题（预览时"引用了哪些 `stmt:`"只在这一节里数 —— 手稿开头的
 #: 元信息（"命题号：stmt:000002"）不是引用，把它数进来会让读数虚高）。
@@ -560,14 +570,16 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
                         f"（{' / '.join(CARRIED_COLUMNS)}）")})
             continue
         raw_id, raw_path, raw_sha = (c.strip().strip("`").strip() for c in cells)
-        if not raw_id.startswith("stmt:"):
-            # 表头那一行（"命题号（stmt:NNNNNN）"）不算坏行：它第一格不以上面的前缀开头
+        if not any(raw_id.startswith(p) for p in CARRIED_KEYS):
+            # 表头那一行（"命题号（stmt:NNNNNN ...）"）不算坏行：它第一格不以上面的前缀开头
             if raw_id.startswith("命题号") or not raw_id:
                 continue
             out["problems"].append({"line": line_no,
-                                    "why": f"命题号那一格要是 `stmt:NNNNNN`（收到 {raw_id!r}）"})
+                                    "why": ("命题号那一格要是 `stmt:NNNNNN` 或 "
+                                            f"`exp:NNNNNN`（收到 {raw_id!r}）")})
             continue
-        sid = raw_id[len("stmt:"):].strip()
+        key = next(p for p in CARRIED_KEYS if raw_id.startswith(p))
+        sid = raw_id[len(key):].strip()
         if not S.is_valid_id(sid):
             out["problems"].append({"line": line_no,
                                     "why": f"命题号的号不是 {S.ID_DIGITS} 位十进制（收到 {sid!r}）"})
@@ -575,10 +587,17 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
         if not raw_path:
             out["problems"].append({"line": line_no, "why": "手稿路径那一格是空的"})
             continue
-        if sid in seen:
+        # 键的身份决定这一行是谁的稿：`stmt:` ⇒ 命题行（F 的稿）；`exp:` ⇒ E 的实验
+        # （那条链里命题可能还没进台账，没有命题号可写）。两档落同一个 `rows` 结构，
+        # 只是 `statement_id` 与 `experiment_id` 各有一格是空的。
+        row_key = f"{key}{sid}"
+        if row_key in seen:
             continue
-        seen.add(sid)
-        out["rows"].append({"statement_id": sid, "path": raw_path,
+        seen.add(row_key)
+        out["rows"].append({"statement_id": sid if key == "stmt:" else "",
+                            "experiment_id": sid if key == "exp:" else "",
+                            "key": row_key,
+                            "path": raw_path,
                             "sha256": raw_sha.lower(), "line": line_no})
     if out["problems"]:
         first = out["problems"][0]
@@ -590,22 +609,35 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
 
 def render_carried_section(rows: Iterable[Mapping[str, Any]],
                            *, note: str = "") -> str:
-    """把携带行渲染成那一节（D 侧写、B 侧读；渲染与解析共用 `CARRIED_HEADING` 与列名）。"""
+    """把携带行渲染成那一节（D 侧写、B 侧读；渲染与解析共用 `CARRIED_HEADING` 与列名）。
+
+    `rows` 的每一行用 `statement_id`（F 的稿，`stmt:`）或 `experiment_id`（E 的稿，
+    `exp:`）其中之一做键；两者都给时以命题号为准（命题已在册时它更精确）。
+    """
     lines = [CARRIED_HEADING, "",
-             "D 交研究手稿给 B 入库时把 F 的证明手稿一并带过来（「是通过D传吗」）：",
+             "D 交研究手稿给 B 入库时把证明手稿一并带过来（「是通过D传吗」）：",
              "下表每一行是 `命题号 → 手稿路径 → 那份文件字节的 sha256`，B 读稿登记依赖面。",
+             "E 的穷举证明手稿用 `exp:<实验号>` 做键：那条链里命题可能还没进台账。",
              ""]
     lines.append("| " + " | ".join(CARRIED_COLUMNS) + " |")
     lines.append("|" + "|".join("---" for _ in CARRIED_COLUMNS) + "|")
     count = 0
     for row in rows:
         sid = str(row.get("statement_id") or "")
-        lines.append(f"| stmt:{sid} | {row.get('path')} | {row.get('sha256') or ''} |")
+        eid = str(row.get("experiment_id") or "")
+        if sid:
+            key = f"stmt:{sid}"
+        elif eid:
+            key = f"exp:{eid}"
+        else:
+            continue
+        lines.append(f"| {key} | {row.get('path')} | {row.get('sha256') or ''} |")
         count += 1
     if not count:
         lines.append("")
-        lines.append("（这一趟没有可携带的 F 证明手稿：不是省略，是确实没有 —— 盘上没有"
-                     "任何一条按命号命名的 `reports/f-proof-<命题号>.md`。）")
+        lines.append("（这一趟没有可携带的证明手稿：不是省略，是确实没有 —— 盘上没有"
+                     "任何一条按命号命名的 `reports/f-proof-<命题号>.md`，也没有一份"
+                     "已签的 `reports/e-proof-<实验号>.md`。）")
     if str(note or "").strip():
         lines.append("")
         lines.append(str(note).strip())
