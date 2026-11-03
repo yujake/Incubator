@@ -5919,7 +5919,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
+   "returns": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems','proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
    "roles": [
     "E",
     "F",

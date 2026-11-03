@@ -871,11 +871,19 @@ def _verify_detect_verifier():
     # 而可机读的键集合里没有 ⇒ 探针核不到它们、模型也只在散文里瞥见。
     # 现在把它们并进键集合：`code_hash`（跑的是哪一版代码）/ `runtime_sec`
     # / `notes` —— 三个都是「来源读数」（可复现性的凭据）。
+    # 2026-11-03（E 的 V 签与 F 同形那批，`agent_e/run_experiment.py:553-556`）：
+    # 穷举那一档多落一份被签的证明手稿 `reports/e-proof-<实验号>.md`，返回值多四格 ——
+    # `proof_manuscript`（送审时点名的那一格）/ `manuscript_sha256` /
+    # `manuscript_proof_sha256` / `manuscript_problems`。只加不减：它们是"把稿交给 V"
+    # 的入口，而工具声明的 `returns` 会拼进 function-calling 的 description（模型看得到）；
+    # 不在声明里 = "跑出来了、模型不知道它在"。
+    # 键清单从实现的真返回读出（`tests/test_tools_returns_declaration.py` 的探针那条路）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
             "'code_hash','runtime_sec','notes',"
             "'signed_by','proof_authors','report_path','report_sha256','report_bytes',"
-            "'report_blocks','report_problems'}"
+            "'report_blocks','report_problems',"
+            "'proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
