@@ -294,6 +294,19 @@ NO_CALL_POINT_TODAY = {
                           "由测试消费（权限面的读数，不是派发点）",
     "merged_decisions": "只读访问器（整角色视图：老文件 + 全部分片）；生产面今天无调用点 —— "
                         "WebUI 那一面直接 glob 目录，这一格留给「按角色审账」的入口",
+    # 2026-11-03（件三：落签只经秘书这一侧）：下面两条在 `agent_v/` 里只能经 `getattr`
+    # 反射调用 —— V 只交信封，签写口（块 + 台账位）在秘书这一侧，`agent_v/**` 里
+    # 0 处签写口。本判据的 `_called_in_production` 是行级正则扫描，认不出反射形态
+    # ⇒ 按它的口径这两条"生产面 0 处"；实际消费点写进登记项里，不是"没人用"。
+    "actor_label": "只读身份值（这一签该由哪位收方秘书落，`secretary:F` / `secretary:B`）。"
+                   "调用点：`agent_v/core.py::_issue_and_land_unregistered` 经 "
+                   "`getattr(sec, 'actor_label')` 反射读取（V 侧不得直接 import 写口，"
+                   "`agent_v/**` 0 处签写口）—— 判据的行级扫描认不出反射调用，故登记在此",
+    "land_unregistered_sign": "未在册 V 签的落点（手稿块 + 台账位；台账位这一路不翻）。"
+                              "调用点：`agent_v/core.py::_issue_and_land_unregistered` 经 "
+                              "`getattr(sec, 'land_unregistered_sign')` 反射调用"
+                              "（V 侧不得直接 import 写口，`agent_v/**` 0 处签写口）—— "
+                              "判据的行级扫描认不出反射形态，故登记在此",
 }
 
 
