@@ -3295,6 +3295,86 @@ class Secretary:
         except Exception:  # noqa: BLE001 —— 读不到就"没有收方秘书"，不猜
             return ""
 
+    @property
+    def actor_label(self) -> str:
+        """这一名秘书在"落签"这一步的身份值（`secretary:F` / `secretary:B`；读不到 ⇒ 空串）。
+
+        为什么不是简单的 `secretary:{self.role}`：V 的秘书不是收方 —— 收方是 V 的 parent
+        那一侧（`sign_recipient()` 读的就是它）。只有收方秘书自己的实例（角色 F / B）才按
+        自己的角色。V 的秘书拿 `secretary:V` 去凑一个 `by=` 会被 `vsigns.land` 受控拒绝
+        `not_a_secretary`；把它折成"随便一个 F/B"更是猜。
+        """
+        from . import vsigns
+
+        own = vsigns.secretary_id(self.role)
+        return own or self.sign_recipient()
+
+    def land_unregistered_sign(self, envelope: Mapping[str, Any]) -> dict[str, Any]:
+        """落一份未在册的 V 签（2026-11-03 件三：落签只经秘书这一侧）。
+
+        `envelope` = :func:`vsigns.issue` 的整份返回（不是里面那个 `envelope` 子字典）：
+        V 只把这一份交过来，落点（块 + 台账位）由本方法判 ——
+
+        - 块：签文件里的 `artifact_path`（未在册没有命题号，落点就是那一份手稿）；
+        - 台账位：未在册没有命题行可翻 ⇒ `ledger_bit=False`（不在这里造一格）；
+        - 落签者：`self.actor_label`（收方那一位；空串 ⇒ `vsigns.land` 的
+          `not_a_secretary` 会把它拒掉，校验不绕过）。
+
+        返回 `vsigns.land` 的读数（另带 `envelope_to` / `artifact_sha`，供调用方核对）。
+        不在颁发这一档里落签：`issue` 没成功（`written` / `idempotent` 都不是真）⇒
+        `code="not_issued"`、零字节 —— 盘上可能残留旧签文件，不许拿它冒充这一趟。
+        """
+        from . import vsigns
+
+        issued = dict(envelope) if isinstance(envelope, Mapping) else {}
+        doc = dict(issued.get("sign") or {}) if isinstance(issued.get("sign"), Mapping) else {}
+        out: dict[str, Any] = {
+            "checked": False, "landed": False, "state": "refused", "code": "",
+            "by": self.actor_label, "artifact_sha": "", "manuscript_id": "",
+            "body_mismatch": False, "manuscript_write": {}, "ledger_bit": "not_attempted",
+            "ledger_why": "", "sign_recorded": False, "reason": "",
+            "envelope_to": "",
+        }
+        if not (issued.get("written") or issued.get("idempotent")):
+            out.update(code="not_issued",
+                       reason=("这一份签没有颁发成功（`written` / `idempotent` 都不是真）⇒ "
+                               "没有可落的东西：不落块、不翻位（零字节）"))
+            return out
+        if out["by"] not in vsigns.SECRETARY_OF:
+            out.update(code=vsigns.NOT_A_SECRETARY,
+                       reason=(f"`by={out['by']!r}` 不是收方秘书 ⇒ 不落签（一个字节都不写）："
+                               f"只认 {list(vsigns.SECRETARY_OF)}"))
+            return out
+        sha = str(doc.get("artifact_sha") or "")
+        if not sha:
+            # `issue` 的返回里 `path` 是 `out/vsigns/<sha>.json`：文件名就是 sha。
+            name = str(issued.get("path") or "").rsplit("/", 1)[-1]
+            sha = name[:-5] if name.endswith(".json") else name
+        out["artifact_sha"] = sha
+        env = vsigns.sign_envelope(doc)
+        out["envelope_to"] = str(env.get("to") or "")
+        if not env.get("recorded"):
+            out.update(code="envelope_missing",
+                       reason=("这份签没有信封（`envelope` 那一格不在）⇒ 不知道它是写给谁的："
+                               "不落（零字节）"))
+            return out
+        if out["envelope_to"] != out["by"]:
+            out.update(code="addressed_to_another_secretary",
+                       reason=(f"这一签的信封写给 {out['envelope_to']!r}，不是 {out['by']!r} ⇒ "
+                               "不落（零字节：别的秘书的签不许被这一位落）"))
+            return out
+        root = self.store.root if self.store is not None else self.root
+        landed = vsigns.land(
+            root, artifact_sha=sha, by=out["by"],
+            manuscript_path=str(doc.get("artifact_path") or ""),
+            store=None, statement_id="", proof_no=doc.get("proof_no"),
+            # 未在册没有命题行可翻：台账位这一路不翻、也不许在这里造一格。
+            ledger_bit=False)
+        out.update(landed)
+        out["by"] = str(landed.get("by") or out["by"])
+        out["artifact_sha"] = str(landed.get("artifact_sha") or out["artifact_sha"])
+        return out
+
     def _land_sign_issuance(self, out: dict[str, Any], *, proof_text: str,
                             proof_no: Any, row: Mapping[str, Any] | None) -> None:
         """把"签发"这个决定落成一次 `sign_statement`（翻位的唯一写口）。

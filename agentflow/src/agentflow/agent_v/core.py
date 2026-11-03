@@ -1621,9 +1621,10 @@ class AgentV:
         # 会把它读成 rejected，F 的 `delivery_reading` 因此仍读得到「未通过」。
         #
         # 正判且给了手稿（2026-11-03 件一）：V 不直接写块，与在册那条路同形 ——
-        # `vsigns.issue()` 出信封（`out/vsigns/<正文 sha>.json`），收方秘书用
-        # `vsigns.land()` 落块。收方 = V 的 parent 那一侧（送审者），身份只从
-        # `conductor.current_parent()` 读；读不到就"能颁发、不能落块"，不猜一个 F/B。
+        # `vsigns.issue()` 出信封（`out/vsigns/<正文 sha>.json`），落签只经收方秘书的
+        # `Secretary.land_unregistered_sign()`（件三：V 这边 0 处签写口）。收方 = V 的
+        # parent 那一侧（送审者），身份由秘书从 `conductor.current_parent()` 读；读不到就
+        # "能颁发、不能落块"，不猜一个 F/B。
         pending: dict[str, Any] = {}
         issued: dict[str, Any] = {}
         landed: dict[str, Any] = {}
@@ -1669,23 +1670,32 @@ class AgentV:
                                      block_write: dict[str, Any]
                                      ) -> tuple[dict[str, Any], dict[str, Any],
                                                 dict[str, Any]]:
-        """未在册正判的那一笔：V 出信封，收方秘书 land（2026-11-03 件一）。
+        """未在册正判的那一笔：V 出信封，秘书落（2026-11-03 件三）。
 
         为什么单独一个方法：`_review_unregistered_prose` 已经接近 200 行（repo survey
         的软判据按函数量体量），把"颁发 + 落签"这一段抽出来，判据那一边一行不增。
 
+        ## V 只做颁发这一半（结构判据，不靠约定）
+        改前这里直接 `vsigns.land(by=<从 conductor 读来的角色>)` —— `by=` 只是 V 的代码
+        写的一句话，"落签在秘书"是约定的。现在落签只经
+        :meth:`Secretary.land_unregistered_sign`：V 把 `vsigns.issue()` 的整份返回交过去，
+        块落哪一份稿、台账位翻不翻，都由秘书那一侧判（`agent_v/**` 里 0 处签写口）。
+
+        收方身份（`by=` 与信封的 `to`）也由秘书给（`Secretary.actor_label`）：它是
+        "这一签该由谁落"的唯一来源；读不到 ⇒ 空串 ⇒ 能颁发、不能落块，不猜一个 F/B。
+
         返回 `(block_write, issued, landed)`：三格都是读数，`block_write` 是收尾
-        （`_finish_unregistered`）读的那一格。收方 = V 的 parent 那一侧（送审者），
-        身份只从 `conductor.current_parent()` 读；读不到 ⇒ 能颁发、不能落块，不猜 F/B。
+        （`_finish_unregistered`）读的那一格。
         """
-        from .. import conductor as _CND
         from .. import vsigns as _VS
 
-        try:
-            _pid, prole = _CND.current_parent()
-            who = _VS.secretary_id(prole)
-        except Exception:  # noqa: BLE001 —— 读不到父角色不是失败：就是"没有收方秘书"
-            who = ""
+        sec = self._secretary()
+        who = ""
+        if sec is not None:
+            try:
+                who = str(getattr(sec, "actor_label", "") or "")
+            except Exception:  # noqa: BLE001 —— 读不到收方不是失败：就是"没有收方秘书"
+                who = ""
         issued: dict[str, Any] = {}
         landed: dict[str, Any] = {}
         try:
@@ -1697,16 +1707,22 @@ class AgentV:
             issued = {"written": False, "reason": (
                 f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"), "path": ""}
         if issued.get("written") or issued.get("idempotent"):
-            try:
-                landed = _VS.land(
-                    self.workspace_root, artifact_sha=sha, by=who,
-                    manuscript_path=rel, store=None, statement_id="",
-                    proof_no=no,
-                    # 台账位这一路没有命题行可翻（未在册），也不许在这里造一格。
-                    ledger_bit=False)
-            except Exception as exc:  # noqa: BLE001 —— 签已颁发，落签抛了要如实报
-                landed = {"landed": False, "state": "refused", "code": "land_raised",
-                          "reason": f"落签那一笔抛了（{type(exc).__name__}: {exc}）"}
+            land_fn = getattr(sec, "land_unregistered_sign", None) if sec is not None else None
+            if not callable(land_fn):
+                # 反真空的那一档：方法被摘掉 / 这一趟没有秘书 ⇒ 签颁发了也没人落块。
+                landed = {
+                    "landed": False, "state": "refused", "code": "no_landing_method",
+                    "reason": (f"{self.secretary_problem or '这一趟没有落签的秘书'}"
+                               " ⇒ 签已颁发，但没有人落块：F 的读数仍是「待签」"),
+                    "manuscript_write": {}, "ledger_bit": "not_attempted", "by": who}
+            else:
+                try:
+                    landed = land_fn(issued)
+                except Exception as exc:  # noqa: BLE001 —— 签已颁发，落签抛了要如实报
+                    landed = {"landed": False, "state": "refused", "code": "land_raised",
+                              "reason": f"落签那一笔抛了（{type(exc).__name__}: {exc}）",
+                              "manuscript_write": {}, "ledger_bit": "not_attempted",
+                              "by": who}
         mw = dict(landed.get("manuscript_write") or {})
         block_write.update(
             written=bool(mw.get("written")),

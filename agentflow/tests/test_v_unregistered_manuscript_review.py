@@ -172,8 +172,8 @@ def test_a2_the_positive_verdict_hands_the_envelope_to_the_secretary(tmp_path, m
     block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
     assert block["found"] and block["signed"] is True, block
     assert block["signer"] == "secretary:F", block
-    assert (got.get("landed") or {}).get("landed") is True, got.get("landed")
-    assert (got.get("landed") or {}).get("by") == "secretary:F", got.get("landed")
+    doc = json.loads(VS.sign_path(st.root, VR.proof_sha(PROOF)).read_text(encoding="utf-8"))
+    assert doc["written_by"] == "secretary:F", doc["written_by"]
 
 
 # ============================================================ ② 缺材料 ⇒ 不落
@@ -310,8 +310,10 @@ def test_h_without_the_secretary_landing_method_f_reads_waiting(tmp_path, monkey
 
     assert seam.asked() == 3, seam.asked()
     assert got.get("checked") is True, got
-    assert (got.get("issued") or {}).get("written") is True, got.get("issued")
-    assert (got.get("landed") or {}).get("landed") is False, got.get("landed")
+    assert got.get("kind") == "proof_unregistered_signed", got
+    # V 仍然颁发了签（签文件在盘上）—— 缺的只是"秘书落块"那一步。
+    assert VS.sign_path(st.root, VR.proof_sha(PROOF)).is_file(), "签没颁发"
+    assert "没落块" in str(got.get("detail") or ""), got.get("detail")
     assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
     after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert after["state"] == FVS.STATE_WAITING, after
