@@ -130,9 +130,11 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "读数格：`rec` 是逐行登记的记录（`{\"statement_id\": ..., \"ok\": False, ...}`），"
         "落进报告的表格里；它不是动作的返回值，也不会被台账当成一次拒绝",
     ("agent_e/run_experiment.py", ""):
-        "读数格：`report` 是「这一趟的报告落没落盘」的局部读数"
-        "（`{\"path\": \"\", \"bytes\": 0, \"sha256\": \"\", \"ok\": False, ...}`），"
-        "只被折进 `observations` 与 `notes`；动作本身的拒绝走 `refuse`（那一族都带 `kind`）",
+        "读数格（`report` / `manuscript` 两处）：一般数值实验既不写报告、也不落手稿的那一支，"
+        "`{\"path\": \"\", \"bytes\": 0, \"sha256\": \"\", \"ok\": False, ...}` 说的是「这一趟没有落盘物」"
+        "（终态 payload 的 `report_path` / `proof_manuscript` 因此读成空串、`problems` 为空），"
+        "只是被折进那几格读数的局部值，不是一次拒绝；动作本身的拒绝走 `refuse`（那一族都带 `kind`）"
+        " ⇒ 要表达「这次调用不成立」请走 `refuse`，不要在这里手写 ok=False",
 }
 
 
@@ -153,6 +155,10 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,
+    # `agent_e/run_experiment.py` 一般数值实验那一支的两处读数格：`report`（报告没落）
+    # 与 `manuscript`（`reports/e-proof-<号>.md` 没落，2026-11-03 E 的手稿读数落地时
+    # 成为第二处）。两处 kind 都是空串，所以靠这张表记处数。
+    ("agent_e/run_experiment.py", ""): 2,
 }
 
 
