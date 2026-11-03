@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-03，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **265 个 `.py`、241,528 行**，**73 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,198 行** —— 批 R40 把它补进了 §3 的表；
+> **266 个 `.py`、241,955 行**，**73 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,352 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -289,6 +289,7 @@
 | 文件 | 是什么 |
 |---|---|
 | `agent_loop.py` | LLM 驱动的角色循环：模型决定调哪个工具、唤起谁、给谁留言，框架负责执行与留痕 |
+| `reconnect.py` | **连接类失败的有界退避闸**（2026-11-03，从 DSH 的 `ClientBridgeLifecycle` 逐条移植）：`agent_loop._ask_step_with_reconnect` 在 `judge_no_reply:<kind>`（"没连上"那一族）之后按 `cap = min(max, base * 2 ** attempt)` 在 `[cap/2, cap]` 里等一段再问同一轮 —— 单飞（`pending` 非 None 就不再排）、成功即归零（`connected`）、抖动可注入（`rng`）、总等待上限（`total_wait_sec`；超了就 `model_unreachable` 并说清"等过 N 秒"）；三个数走 `settings` 梯子（`AGENTFLOW_RECONNECT_*` / `reconnect.base_sec|max_sec|total_sec` / 默认 5·60·300），业务代码不写死。等待本身走 `clock.await_io`（真耗墙钟、进主时钟的账，不在账外的裸 `time.sleep`）。判据 `tests/test_reconnect_backoff.py` |
 | `stepdispatch.py` | **一步一条的入口层**（角色无关的公共层；业主裁定「multi_call 应该让系统自动整理拆分」）：`catch_step_request` 先把"这一步模型要求做什么"整包接住，`StepRequest` / `StepItem` / `StepDispatch` 再拆成有序条目、交给循环逐条执行（每条走完整的准入 / 预算 / 记账），最后汇总成一份读数回给模型。改前的形态是解析层取 `tool_call_list[0]`、其余静默丢弃（真机三趟共 76 个多调用步、被丢 107 条）—— 本层就是那个缺口的落点 |
 | `agent_prompts.py` | A–H + V（含 M）的前置提示词：身份、边界、政策、工具、伙伴、契约、三态、循环协议 |
 | `agent_skills.py` | 各智能体的 skills（业主 2026-10-14「现做现读」）：目录 / 正文 / 索引只有 `CATALOG` 一处定义，正文由 `materialize` 落到工作区 `skills/<角色>/<slug>.md`，前置提示词里只出现 `index_block(role)` 那一小段；`validate()` 逐条核"动作真实存在且够得到、工具在该角色自己的面上、描述无歧义"（`draft/120` §②） |
@@ -383,6 +384,7 @@
 | 动 **V 的证明级验证** | `agent_v/`（包）、`specs/v.py`（禁改区：边与写集在那里） | `verifications.py`（台账 / 冷启动提示词 / 签位）、`tools/verify_tools.py`（禁改区：三件工具） | `tests/test_verifier_role.py`、`tests/test_capabilities_two_layer.py` |
 | 动**主控编队 / 并发** | `conductor.py` | `scheduler.py` → `host.py` → `tools/conductor_tools.py` | `tests/test_conductor.py`、`tests/test_scheduler.py`、`tests/test_host_wiring.py` |
 | 动**角色循环**（模型自己决定） | `agent_loop.py` | `agent_prompts.py` → `host.py` → `llmseam.py` | `tests/test_agent_loop.py`、`tests/test_agent_prompts.py` |
+| 动**连接类失败的等待 / 重试**（"没连上"之后等多久、要不要停） | `reconnect.py`（`BackoffGate`：单飞 / 指数退避 / 抖动 / 成功归零 / 总等待上限；配置走 `settings` 梯子） | `agent_loop.py` 的 `_ask_step_with_reconnect`（唯一调用方）→ `clock.await_io`（等待记账） | `tests/test_reconnect_backoff.py`（a–e 五条，含反真空"摘掉闸"）、`tests/test_clock_governs_all_timed_work.py::test_e_waits_outside_clock_is_zero_and_a_raw_sleep_turns_it_red`（裸 `time.sleep` 会被它抓） |
 | 往**提示词**里加一句话 | `agent_prompts.py` | 它引用的现算来源：`capabilities.py` / `tools.build_registry` | `tests/test_agent_prompts.py`（每条都要与现算一致） |
 | 动**模型调用与花销** | `modelgw.py`（key 的**唯一入口**：环境变量 → 设置文件 → 默认，见 `settings.py`） | `modelclient.py` → `tokenmeter.py` → `modelcost.py` → `llmseam.py` | `tests/test_modelgw.py`、`tests/test_tokenmeter.py` |
 | 换一台机器 / 改**本机的工具链落点与模型 key** | 设置文件的示例 `settings.example.json`（真正那份被 git 忽略，本机键名与优先级见 `settings.py` 的模块 docstring） | `docs/FORMAL-TOOLCHAIN.md` §6（落点表 / 键名表 / 安全阀） | `tests/test_settings.py`（含"真正那份既不在索引里、也确被忽略"与"示例里没有真 key"） |
@@ -402,7 +404,7 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1707 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1707 行）；`agent_d/_support.py` 是模块级 helper 与常量，867 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 13198 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_tier`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 13352 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_tier`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1087 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3334 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 3975 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
