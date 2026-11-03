@@ -93,7 +93,7 @@ REFUSED_ADDRESS = "manuscript_address_unreadable"
 
 #: D 的研究报告里那一节的段标题（携带单；逐字固定，渲染与解析共用一个常量）。
 CARRIED_HEADING = "## 携带的证明手稿"
-#: 携带单的三列（命题号 / 手稿路径 / sha256）。
+#: 携带单的列（命题号 / 手稿路径 / sha256 / 证明号）。
 #: 携带单第一格认两种键（2026-11-04，业主：「E 的穷举论证和 V 签也是委托入库」）:
 #: `stmt:<命题号>`（F 的证明手稿，命题已在册）与 `exp:<实验号>`（E 的穷举证明手稿，
 #: 命题可能还没进台账 —— 那条链里 E 从来没有命题号可用）。
@@ -101,7 +101,16 @@ CARRIED_HEADING = "## 携带的证明手稿"
 #: 为什么不是另开一张单：携带机制本来就只做三件事（键 → 地址 → 文件 sha256），
 #: E 那一份与 F 那一份在这三件事上完全同形；差别只在"键是什么"。
 #: 第二格是地址，读侧按它到盘上取文件并核 sha（`read_carried_manuscript`）。
-CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN / exp:NNNNNN）", "手稿路径", "sha256")
+#:
+#: 第四格 `proof_no`（2026-11-04，缺口 ①）：这一份是这条命题的第几份证明。
+#: 改前交付里没有这一格，于是"一命题多证明"时只能靠 B 猜（canonical 空则 #p1 /
+#: 否则最大号 + 1）。老行只有三格 ⇒ 读成 `#p1`（老数据的读数与改前逐字不变）；
+#: 第四格留空同样读成 `#p1` —— "没写"与"写了 1"在证明号上是同一件事。
+CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN / exp:NNNNNN）", "手稿路径",
+                                    "sha256", "证明号（#pN，可空）")
+
+#: 携带单的最少列数（第四列 `proof_no` 是新增的可省略列：老行三列照读）。
+CARRIED_MIN_COLUMNS = 3
 
 #: 携带单第一格的前缀（`stmt:` 是命题号、`exp:` 是 E 的实验号）。
 CARRIED_KEYS: tuple[str, ...] = ("stmt:", "exp:")
@@ -560,16 +569,18 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
             continue
         if cells and cells[0].lower().startswith("---"):
             continue
-        if len(cells) != len(CARRIED_COLUMNS):
-            # 表头那一行（三列的名字）在三列表里也是三格 ⇒ 用"第一格是不是命题号"区分
+        if len(cells) not in (CARRIED_MIN_COLUMNS, len(CARRIED_COLUMNS)):
+            # 表头那一行（列名的名字）在两种列数里也对不上 ⇒ 用"第一格是不是命题号"区分
             if all(not c.startswith("stmt:") and not S.is_valid_id(c) for c in cells):
                 continue
             out["problems"].append({
                 "line": line_no,
-                "why": (f"这一行读出来 {len(cells)} 列，应有 {len(CARRIED_COLUMNS)} 列"
-                        f"（{' / '.join(CARRIED_COLUMNS)}）")})
+                "why": (f"这一行读出来 {len(cells)} 列，应有 {CARRIED_MIN_COLUMNS} 或 "
+                        f"{len(CARRIED_COLUMNS)} 列（{' / '.join(CARRIED_COLUMNS)}；"
+                        "老行没有第四列 ⇒ 证明号读成 #p1）")})
             continue
-        raw_id, raw_path, raw_sha = (c.strip().strip("`").strip() for c in cells)
+        raw_id, raw_path, raw_sha = (c.strip().strip("`").strip() for c in cells[:3])
+        raw_no = cells[3].strip().strip("`").strip() if len(cells) > 3 else ""
         if not any(raw_id.startswith(p) for p in CARRIED_KEYS):
             # 表头那一行（"命题号（stmt:NNNNNN ...）"）不算坏行：它第一格不以上面的前缀开头
             if raw_id.startswith("命题号") or not raw_id:
@@ -578,6 +589,19 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
                                     "why": ("命题号那一格要是 `stmt:NNNNNN` 或 "
                                             f"`exp:NNNNNN`（收到 {raw_id!r}）")})
             continue
+        proof_no = 1
+        if raw_no:
+            # 第四格写了但认不出 ⇒ 整节读不懂（不许静默折成 #p1：那正是"号给错了"的形态）
+            try:
+                proof_no = int(raw_no) if not raw_no.startswith("#") else int(raw_no[2:])
+            except (TypeError, ValueError):
+                proof_no = 0
+            if proof_no < 1:
+                out["problems"].append({
+                    "line": line_no,
+                    "why": (f"证明号那一格要是 >= 1 的整数（可写 `2` / `#p2`；收到 "
+                            f"{raw_no!r}）—— 留空才是 #p1")})
+                continue
         key = next(p for p in CARRIED_KEYS if raw_id.startswith(p))
         sid = raw_id[len(key):].strip()
         if not S.is_valid_id(sid):
@@ -598,7 +622,10 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
                             "experiment_id": sid if key == "exp:" else "",
                             "key": row_key,
                             "path": raw_path,
-                            "sha256": raw_sha.lower(), "line": line_no})
+                            "sha256": raw_sha.lower(),
+                            #: 这一份是第几份证明（第四格；老行 / 空格 ⇒ #p1）。
+                            "proof_no": int(proof_no),
+                            "line": line_no})
     if out["problems"]:
         first = out["problems"][0]
         out["refused"] = REFUSED_SECTION
@@ -616,7 +643,8 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
     """
     lines = [CARRIED_HEADING, "",
              "D 交研究手稿给 B 入库时把证明手稿一并带过来（「是通过D传吗」）：",
-             "下表每一行是 `命题号 → 手稿路径 → 那份文件字节的 sha256`，B 读稿登记依赖面。",
+             "下表每一行是 `命题号 → 手稿路径 → 那份文件字节的 sha256 → 第几份证明`，",
+             "B 读稿登记依赖面。第四列留空 ⇒ 第 1 份（老行没有这一列，读数相同）。",
              "E 的穷举证明手稿用 `exp:<实验号>` 做键：那条链里命题可能还没进台账。",
              ""]
     lines.append("| " + " | ".join(CARRIED_COLUMNS) + " |")
@@ -631,7 +659,8 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
             key = f"exp:{eid}"
         else:
             continue
-        lines.append(f"| {key} | {row.get('path')} | {row.get('sha256') or ''} |")
+        no = str(row.get("proof_no") or "").strip()
+        lines.append(f"| {key} | {row.get('path')} | {row.get('sha256') or ''} | {no} |")
         count += 1
     if not count:
         lines.append("")
@@ -716,7 +745,7 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                            "sha256": "", "carried_by": "", "tried": [], "why": "",
                            "named": False, "address": "", "item": 0,
                            "list_report": "", "list_line": 0, "list_sha256": "",
-                           "matched_by": ""}
+                           "proof_no": 0, "matched_by": ""}
     if not root_text:
         out["why"] = "没有工作区根（`root` 是空的）⇒ 读 D 报告里那张携带单这一趟没查成"
         return out
@@ -747,6 +776,8 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                    list_report=str(one.get("report") or ""),
                    list_line=int(one.get("line") or 0),
                    list_sha256=str(one.get("sha256") or ""),
+                   #: 携带单第四列（这一份是第几份证明；老行 / 空格 ⇒ #p1）。
+                   proof_no=int(one.get("proof_no") or 1),
                    matched_by=matched_by)
         return out
 
@@ -804,6 +835,32 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
     else:
         out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，按正文 sha 一条都没对上这一笔")
     return out
+
+def manuscript_proof_no(text: str) -> int:
+    """手稿稿头那一行"证明号：<N>"⇒ 这一份是第几份证明（没写 ⇒ 0）。
+
+    为什么是 0 而不是 1：这一格要区分"交付里写了号"与"交付里没写"——
+    后者要回退（`proof_no_source=fallback`），前者要用它（`crafted`）。
+    缺省 `#p1` 的读法由调用方在"没写"那一档自己落（`or 1`），不在这里折平。
+
+    认的写法与 `verifications.as_proof_no` 同源（`2` / `#p2` / `p2`），但只认稿头前
+    12 行里以 `- 证明号` 开头的那一行 —— 正文里出现"证明号"三个字不是元信息。
+    """
+    head = str(text or "").replace("\r\n", "\n").split("\n")[:12]
+    import re as _re
+
+    for raw in head:
+        line = raw.strip()
+        if not line.startswith("- 证明号"):
+            continue
+        hit = _re.search(r"[:：]\s*(?:#?\s*[pP]?\s*)?([0-9]+)", line)
+        if not hit:
+            continue
+        no = int(hit.group(1))
+        if no >= 1:
+            return no
+    return 0
+
 
 def manuscript_statement_id(text: str) -> str:
     """手稿开头元信息里那个"命题号：stmt:<号>"⇒ 裸号（没有 ⇒ 空串）。

@@ -512,8 +512,15 @@ class _WriteReport:
             except OSError:
                 continue
             seen.add(sid)
-            rows.append({"statement_id": sid, "path": str(got["path"]),
-                         "sha256": hashlib.sha256(blob).hexdigest()})
+            #: 第四格（2026-11-04，缺口 ①）：这一份是第几份证明。F 的稿今天不写
+            #: `- 证明号`，所以它通常缺省（读成 #p1）；写了就照写 —— 携带单的四格
+            #: 与手稿稿头读的是同一个函数（`depsection.manuscript_proof_no`）。
+            no = _DS.manuscript_proof_no(str(got.get("text") or ""))
+            one = {"statement_id": sid, "path": str(got["path"]),
+                   "sha256": hashlib.sha256(blob).hexdigest()}
+            if no >= 1:
+                one["proof_no"] = int(no)
+            rows.append(one)
         # ---- E 的穷举证明手稿（2026-11-04：同一张单，键是 exp:<实验号>） -------------
         #
         # 判据全在盘上：台账里有一行 `evidence_kind="proof"` 的实验、它落了
@@ -543,8 +550,14 @@ class _WriteReport:
             if str(standing.get("state") or "") != "signed":
                 continue
             seen.add(eid)
-            rows.append({"statement_id": "", "experiment_id": eid, "path": rel,
-                         "sha256": hashlib.sha256(blob).hexdigest()})
+            one = {"statement_id": "", "experiment_id": eid, "path": rel,
+                   "sha256": hashlib.sha256(blob).hexdigest()}
+            #: 第四格：E 的稿头写了 `- 证明号：N` 就照写（D 不猜；没写就不写，
+            #: 读侧按 #p1 处理）。这一格是"一命题多证明"能落到正确 #pN 的唯一来源之一。
+            no = _DS.manuscript_proof_no(text)
+            if no >= 1:
+                one["proof_no"] = int(no)
+            rows.append(one)
         note = ""
         if len(rows) > _DS.CARRIED_LIMIT:
             note = (f"另有 {len(rows) - _DS.CARRIED_LIMIT} 条没列出来（这张单只列前 "

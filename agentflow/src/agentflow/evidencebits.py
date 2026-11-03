@@ -1100,7 +1100,7 @@ KIND_UPGRADE_TARGETS: tuple[str, ...] = ("theorem", "lemma")
 
 
 def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
-                         requested: str = "") -> dict[str, Any]:
+                         requested: str = "", signed_via: str = "") -> dict[str, Any]:
     """一条命题的 `kind` 该不该跟着证据升（D-37 的唯一口径：写侧的两个落点共用它）。
 
     （它是纯读函数，所以任何读的人 —— 报告、探针、判据 —— 都能调它问"按盘上的证据，
@@ -1125,7 +1125,12 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
           D-34 的"命题还没在册时审的那一签"也由它认领）；
        b. `bits.evidence.formal_by_proof[证明号] == "verified"`（第 4 位逐条里
           真有一条 `verified`；`stale` 不算 —— 那是"验过旧稿"）；
-       两条都没有 ⇒ `state="held"`，`shortfall` 逐条写清还差什么；
+       c. `signed_via`（2026-11-04，缺口 ②）：调用方已经判过"有一份 V 的签覆盖
+          这一份正文"（手稿签块 / `bits.reviewed`），把依据的人话传进来 ——
+          E 那一签在"手稿签块 + pending 台账"里，`verifications/<命题号>.jsonl`
+          读不到它，所以那一条路只能由调用方（秘书的升档支）先判、再把结论交给
+          这一格；判据仍只有一处，这里只负责"有它就算一条依据"；
+       三条都没有 ⇒ `state="held"`，`shortfall` 逐条写清还差什么；
     3. 落下的名字取 `requested`（提交方声明的那个，只在 `theorem` / `lemma` 之间选），
        没给就是 `theorem`。
 
@@ -1201,17 +1206,26 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
         return out
     basis: list[str] = []
     missing: list[str] = []
-    sig = _signature_basis(outer, root)
-    if sig.get("signed"):
+    # `signed_via`（2026-11-04，缺口 ②）：调用方已经判过"有一份 V 的签覆盖这一份正文"，
+    # 并把"凭什么"写成了一句人话。两个调用点今天用它：① 秘书的升档那一支读
+    # 手稿签块 / `bits.reviewed`（E 那一签不在 `verifications/<命题号>.jsonl` 里，
+    # `_signature_basis` 读不到）；② B 的那一支仍走默认（空串 ⇒ 读台账）。
+    # 判据不在这里另写一份：给 `signed_via` 的调用方必须自己已经核过签（三态由它负责）。
+    if str(signed_via or "").strip():
+        basis.append(str(signed_via).strip())
+        sig = {"signed": True, "checked": True, "ledger": "", "verification_id": ""}
+    else:
+        sig = _signature_basis(outer, root)
+    if sig.get("signed") and not basis:
         witness = str(sig.get("ledger") or "")
         vid = str(sig.get("verification_id") or "")
         if vid:
             witness = f"{witness}#{vid}"
         basis.append(f"{witness or 'verifications/（台账）'} 判成立")
-    elif not sig.get("checked"):
+    elif not sig.get("signed") and not sig.get("checked"):
         missing.append("V 的那一签这一格没查成（没给 root / 台账读不出来）—— "
                        "没查成不是「没签」，补齐 root 再判")
-    else:
+    elif not sig.get("signed"):
         missing.append("V 的一签（`verifications/<命题号>.jsonl` 里没有盖住现行正文、"
                        "判「成立」的签）")
     formal_no = _first_verified_path(bits)

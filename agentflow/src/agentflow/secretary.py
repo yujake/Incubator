@@ -1373,6 +1373,68 @@ def _is_proposition_kind(kind: Any) -> bool:
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
 
 
+def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
+                              manuscript_path: Any = "", proof_text: Any = "",
+                              bits: Mapping[str, Any] | None = None
+                              ) -> dict[str, Any]:
+    """这一笔带来的证据里，有哪一路 V 的签 ⇒ `{checked, signed, basis, why, manuscript}`。
+
+    ## 为什么需要这一格（2026-11-04，缺口 ②）
+    同一套代码两个分支结果不一致（真机读数：`stmt 000000`）：命中在册 ⇒
+    `evidence_kind` 停在 `cross_check`、`kind` 停在 `conjecture`；新建 ⇒
+    `kind=theorem`、`evidence_kind=proof`。根因是 `_upgrade_evidence_kind` 只读
+    `verifications.proof_review_gap`（签名台账 `verifications/<命题号>.jsonl`），
+    而 E 这一签在"手稿签块 + pending 台账"里 ⇒ 读不到。
+
+    ## 三档（两路新凭据 + 没签）
+    - 手稿签块：`vsigns.manuscript_sign_standing(手稿正文, proof_sha=证明栏)` 的
+      `state="signed"`（连续次数够、正文 sha 相符、块与稿不互相打脸）；
+    - `bits.reviewed`：B 收录时按正文 sha 认到的签（逐份记在
+      `bits.evidence.reviewed_by_proof[证明号]`），且第 2 位（proof）为真；
+    - 都没有 ⇒ `signed=False`，`why` 说清"没签"（不是"没查成"）。
+    手稿给了但读不出来 ⇒ `checked=False`（没查成不许折成没签）。
+
+    这一格是纯读：不改行、不写盘。判据本体（"这一签算不算"）仍只在
+    `vsigns.manuscript_sign_standing` 与 `bits` 的现算里，这里只把两路结论收拢。
+    """
+    out: dict[str, Any] = {"checked": True, "signed": False, "basis": "",
+                           "why": "", "manuscript": {}}
+    text = str(manuscript_text or "")
+    proof = str(proof_text or "")
+    if text.strip():
+        out["checked"] = False
+        try:
+            from . import verifications as _VR   # 惰性：正文 sha 的口径只有一处
+            from . import vsigns as _VS          # 惰性：签块读数的口径只有一处
+
+            sha = _VR.proof_sha(proof) if proof.strip() else ""
+            ms = _VS.manuscript_sign_standing(
+                text, proof_sha=sha, manuscript_path=str(manuscript_path or ""))
+            out["manuscript"] = {k: ms.get(k) for k in (
+                "state", "signed", "streak", "need", "proof_sha256",
+                "body_mismatch", "why")}
+            out["checked"] = True
+            if str(ms.get("state") or "") == "signed":
+                out.update(
+                    signed=True,
+                    basis=(f"手稿签块（连续 {int(ms.get('streak') or 0)}/"
+                           f"{int(ms.get('need') or 0)} 成立、正文 sha 相符）"))
+                return out
+        except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许折成"没签"
+            out["checked"] = False
+            out["why"] = (f"手稿签块读取失败（{type(exc).__name__}: {exc}）"
+                          "⇒ 这一格没查成，不是「没签」")
+    b = dict(bits or {})
+    if bool(b.get("proof")) and bool(b.get("reviewed")):
+        out.update(checked=True, signed=True,
+                   basis=("bits.reviewed（第 3 位；B 收录时按正文 sha 认到的逐份签）"))
+        return out
+    if not str(out.get("why") or "").strip():
+        out["why"] = ("手稿里没有 V 的签块，`bits.reviewed` 也不是真 ⇒ "
+                      "这一笔没有覆盖这份正文的签（不许因为「命中在册」就升档）")
+    return out
+
+
 #: `same_as` 归一化时要剥掉的外壳字符：模型把候选号写成了 Python/JSON 列表字面量
 #: （`"['000003']"`）或加了引号 / 空白（`'"000003"'` / `" 000003 "`）。
 #:
@@ -6615,19 +6677,66 @@ class Secretary:
         from . import evidencebits as EB   # 惰性：D-37 的 kind 口径只有一处
         from . import verifications as VR   # 惰性：只在重复读数这一支才需要
 
-        out: dict[str, Any] = {"upgraded": False, "row": {}, "changes": [], "reason": ""}
+        out: dict[str, Any] = {"upgraded": False, "row": {}, "changes": [],
+                               "reason": "", "review_basis": {}}
         want = str(body.get("evidence_kind") or "")
         have = str(existing.get("evidence_kind") or "")
         row = dict(existing)
         changes: list[str] = []
+        # ---- 2026-11-04（缺口 ②）：这一笔交付带来的 V 签是哪一路 ------------------
+        #
+        # 判据三路（任一路命中即可升档，与新建那一支算出来的档一致）：
+        #   ① `verifications.proof_review_gap`（既有那一路：在册签名台账）；
+        #   ② 手稿签块（`vsigns.manuscript_sign_standing`）；
+        #   ③ `bits.reviewed`（B 收录时按正文 sha 认到的逐份签）。
+        # ②③ 由 `_manuscript_upgrade_basis` 一处收拢：它们同源（B 的 `bits.reviewed`
+        # 正是从手稿签块认出来的），所以反真空打桩点也只能有一个；两处各判一次会让
+        # "摘掉手稿那一支"之后另一支照样升档，判据就量不到它。
+        review_basis = _manuscript_upgrade_basis(
+            root=self.store.root,
+            manuscript_text=str(body.get("manuscript_text") or ""),
+            manuscript_path=str(body.get("manuscript_path") or ""),
+            proof_text=str(body.get("proof_text") or ""),
+            bits=(dict(body.get("bits") or {}) or dict(existing.get("bits") or {})))
+        signed_via = (str(review_basis.get("basis") or "")
+                      if review_basis.get("signed") else "")
+        out["review_basis"] = dict(review_basis)
+        # ---- 证据侧那一行：这一笔带来的五元位比在册那一行强时，用它判 kind -------
+        #
+        # 为什么不能只看 `existing`：现场那一行是按"证明还空着"落成的猜想（bits.proof
+        # 为空），而这一笔交来的正是那份证明 —— 判据读旧那一份会把"这一条现在有
+        # 证明、也签过"读成"还差第 2 位"，于是 kind 永远升不上去（缺口 ② 的另一半）。
+        probe_row = dict(existing)
+        body_bits = dict(body.get("bits") or {})
+        if bool(body_bits.get("proof")):
+            merged_bits = dict(existing.get("bits") or {})
+            merged_bits["proof"] = body_bits.get("proof")
+            ev = dict(merged_bits.get("evidence") or {})
+            new_ev = dict(body_bits.get("evidence") or {})
+            for key in ("proof_process", "proof_source",
+                        EB.REVIEWED_BY_PROOF_KEY, EB.REVIEWED_SHA_BY_PROOF_KEY,
+                        "reviewed_by", "reviewed_source"):
+                if key in new_ev:
+                    ev[key] = new_ev[key]
+            merged_bits["evidence"] = ev
+            if body_bits.get("reviewed"):
+                merged_bits["reviewed"] = True
+            try:
+                merged_bits["grade"] = EB.derive_grade(merged_bits)
+            except Exception:  # noqa: BLE001 —— 等级算不出来就留给下面那一格判"判不了"
+                pass
+            probe_row["bits"] = merged_bits
         # ---- D-37（2026-10-24 真机 cube 的现场）：kind 跟着证据升。
         #
         # 与下面 `evidence_kind` 那一支各自独立：现场那一行早就升到了 `proof_review`
         # （`have == want`），缺的只是 `kind` 那一步 —— 所以这一格不能挂在"档位还要不要
         # 升"的条件下面。判据只有一处（`evidencebits.kind_following_grade`，纯读；B 同步
         # 第 4 位那一支与它共用同一个），这里只做两件本层的事：改那一格、把依据留痕。
+        # `signed_via` 是"这一笔的 V 签在哪"（缺口 ②）：手稿签块 / `bits.reviewed`
+        # 命中的那一路由调用方判完再交进来（判据仍只有一处）。
         kind_read = EB.kind_following_grade(
-            existing, root=self.store.root, requested=str(body.get("kind") or ""))
+            probe_row, root=self.store.root, requested=str(body.get("kind") or ""),
+            signed_via=signed_via)
         kind_upgraded = False
         if str(kind_read.get("state") or "") == "upgraded":
             target = str(kind_read.get("kind") or "")
@@ -6648,8 +6757,7 @@ class Secretary:
                 kind_upgraded = True
         #: 这一格能升到的两档：`proof_review`（V 逐行走查/会审签过）与 `proof`
         #: （穷举型证据：E 的程序 + ②③ 加上 V 那一签 —— 业主 2026-10-23 晚「穷举能拿
-        #: proof」）。两档的凭据是同一份读数（V 签成立 + `proof_sha256` 与现行正文相符），
-        #: 所以判据仍然只走 `verifications.proof_review_gap` 一处，不另立一套。
+        #: proof」）。凭据三路见上面 `review_basis` 的说明：任一路命中即可升档。
         #: 为什么要开 `proof` 这一档：B 的第三方签字闸（`numericproof.filing_problems`）
         #: 要求 proof 必须有一份盖住这一条命题的 V 签，而 V 只审在册的命题 ⇒
         #: 「先按猜想落库、签完再升成定理级 proof」是唯一正路；这一格不通的话那条路在
@@ -6658,25 +6766,40 @@ class Secretary:
         evidence_gap = ""
         if (want in (VR.PROOF_REVIEW_KIND, "proof") and have != want
                 and have in VR.WEAKER_THAN_PROOF_REVIEW):
-            probe = dict(existing)
+            probe = dict(probe_row)
             probe["evidence_kind"] = want
             gap = VR.proof_review_gap(self.store.root, probe)
-            if not gap.get("ok"):
+            if not gap.get("ok") and not review_basis.get("signed"):
                 evidence_gap = (
-                    f"（这一行没有升到 {want}：`verifications.proof_review_gap` 判"
-                    f"凭据不够 —— {str(gap.get('why') or '查不到凭据')[:240]}）")
+                    f"（这一行没有升到 {want}：签名台账里读不到凭据"
+                    f"（`verifications.proof_review_gap`：{str(gap.get('why') or '查不到凭据')[:240]}）"
+                    f"；手稿签块 / `bits.reviewed` 也没有签"
+                    f"（{str(review_basis.get('why') or '没有这一份交付的签')[:200]}））")
             else:
                 row["evidence_kind"] = want
+                ms = dict(review_basis.get("manuscript") or {})
+                if gap.get("ok"):
+                    how = "verification_ledger"
+                    witness = (f"{gap.get('ledger') or ''}"
+                               f"#{gap.get('verification_id') or ''}")
+                elif str(ms.get("state") or "") == "signed":
+                    how = "manuscript_sign_block"
+                    witness = str(review_basis.get("basis") or "")
+                else:
+                    how = "bits_reviewed"
+                    witness = str(review_basis.get("basis") or "")
                 row["_evidence_kind_upgrade"] = {
                     "from": have, "to": want,
                     "verification_id": str(gap.get("verification_id") or ""),
-                    "ledger": str(gap.get("ledger") or ""),
-                    "proof_sha256_matched": bool(gap.get("sha_matches")),
+                    "ledger": str(gap.get("ledger") or review_basis.get("basis") or ""),
+                    "proof_sha256_matched": (bool(gap.get("sha_matches"))
+                                             or bool(review_basis.get("signed"))),
+                    #: 凭据是哪一路（`verification_ledger` / `manuscript_sign_block` /
+                    #: `bits_reviewed`）：三路都能升档，但读的人必须分得开。
+                    "basis": how,
                     "by": f"secretary-{self.role}", "at": S.now_iso(),
                 }
-                changes.append(f"evidence_kind: {have} → {want}"
-                               f"（凭据：{gap.get('ledger') or ''}"
-                               f"#{gap.get('verification_id') or ''}）")
+                changes.append(f"evidence_kind: {have} → {want}（凭据：{witness}）")
                 evidence_upgraded = True
         if not (kind_upgraded or evidence_upgraded):
             # 三态：一行都没改，而"还差什么"必须留在读数里（D-37）。
@@ -6686,10 +6809,11 @@ class Secretary:
         out.update(upgraded=True, row=row, changes=changes,
                    kind_reading=dict(kind_read))
         if evidence_upgraded:
+            trace = dict(row.get("_evidence_kind_upgrade") or {})
             out["reason"] = (
                 f"同一份内容再交一次、且这一回带了 `{want}` 的凭据 ⇒ 秘书"
-                f"改那一行（不新建）：`{str((row.get('_evidence_kind_upgrade') or {}).get('ledger') or '')}` 里 "
-                f"{str((row.get('_evidence_kind_upgrade') or {}).get('verification_id') or '')} 签「成立」、"
+                f"改那一行（不新建）：凭据是 {trace.get('basis') or '（没记）'}"
+                f"（{trace.get('ledger') or ''}）；"
                 "`proof_sha256` 与现行正文相符（判据与写入期那道闸同一处）。内容面一个字没动。")
         else:
             out["reason"] = (
@@ -7241,8 +7365,29 @@ class Secretary:
                 # 读数：`quote_reason` 是秘书补的（B 只交两样，见 `_statement_from`）——
                 # 补了必须看得见，否则"这一格为什么有值"在盘上无从分辨。
                 out["quote_reason_filled"] = True
-            data = self._annotate_proposition(row.to_dict(), adj, proof_no=1,
-                                              route=route)
+            try:
+                requested_no = int(body.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                requested_no = 0
+            data = self._annotate_proposition(
+                row.to_dict(), adj, proof_no=(requested_no if requested_no >= 1 else 1),
+                route=route)
+            # ---- 交付说这一份是 #pN（N>1）⇒ 它进 `proofs` 清单，不进 canonical ----
+            #
+            # 2026-11-04（缺口 ①）：新建那一支同样要认交付里的号。canonical（`proof_text`）
+            # 只放 #p1；把第 2 份写进那一格会让 `verifications.proof_list` 读出两条 #p1
+            # （一条正文、一条空），而依赖的 `used_by`、V 的逐份签、论文对应表全按号走。
+            # 五元位由 B 现算并随载荷交来，逐份表已经按这个号记（`reviewed_by_proof`），
+            # 这里只搬正文、不改位。
+            if requested_no > 1 and str(data.get("proof_text") or "").strip():
+                text_now = str(data.get("proof_text") or "")
+                data["proof_text"] = ""
+                listed_now = [dict(p) if isinstance(p, Mapping) else p
+                              for p in (data.get(VR.PROOFS_KEY) or [])]
+                listed_now.append({"proof_no": int(requested_no),
+                                   "proof_text": text_now,
+                                   "created_at": S.now_iso()})
+                data[VR.PROOFS_KEY] = listed_now
             # ---- 167/作者（业主 2026-11-01 裁定）：登记的那一刻把"谁写的"记下来。
             #
             # 为什么必须在这里：V 回执的收件人 = 送审者（召唤 V 的那个 task），而
@@ -7335,18 +7480,17 @@ class Secretary:
             out["deps_missing"] = _deps_missing_reading(
                 proof_text=body.get("proof_text") or "", deps_written=dep_count,
                 derived_from=body.get("derived_from") or (), stmt_id=stmt_id,
-                # 这一行刚落成 ⇒ canonical 就是 #p1（`verifications.proof_list` 恒含
-                # (1, proof_text)）。改前这里没传 ⇒ 读数落 0，而模型读到的"proof_no=0"
-                # 正是它随后拿 proofs=[#1] 重交、撞 proof_same_kind 的起点
-                # （真机 85：22:01:08 首登 → 22:03:20 被拒）。
-                proof_no=1, scan=scan)
+                # 这一行刚落成的那一份证明号：交付里给了号就是它（缺口 ①；canonical
+                # 只有在没给号 / 给 1 时才是 #p1）。改前这里写死 1 ⇒ 第 2 份的依赖读数
+                # 也记在 #p1 上（`used_by` 与证明号分家，读的人看不出错位）。
+                proof_no=(requested_no if requested_no >= 1 else 1), scan=scan)
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=data, tables=written, deps_written=len(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts,
-                   # 新建那一行的证明号：canonical 恒为 #1（唯一读口径是
-                   # `verifications.proof_list`）。这一格不许留 0 —— 回执说 0，调用方
-                   # 就会去"修"它，而它本来就是 1。
-                   proof_no=1)
+                   # 新建那一行的证明号：交付给了号就是它，没给才是 canonical（#p1）。
+                   # 这一格不许留 0 —— 回执说 0，调用方就会去"修"它。
+                   proof_no=(requested_no if requested_no >= 1 else 1),
+                   proof_no_source=str(body.get("proof_no_source") or ""))
         if _is_not_applicable_kind(kind):
             # 概念/定义行的档位读数：不适用（没有证明正文）。落在这里而不是上面的
             # `judge_statement` 那一格，是因为这一支的命题正文通过了查重与同一性判定
@@ -7900,13 +8044,38 @@ class Secretary:
                                "（旧正文进行的 proof_history），并要求 V 重签"))
             return out
         # ---- 落成第 N 份证明（或 canonical 那一格还是空的时候的 #p1）
+        #
+        # 2026-11-04（缺口 ①）：交付里可能写着"这是第几份证明"（`body["proof_no"]`，
+        # B 从手稿稿头 / D 的携带单读来）。交付说了号就用交付的号；没写才回退：
+        # canonical 空 ⇒ #p1，否则最大号 + 1。改前这里只有回退 —— 于是 E 说"这是第 2 份"
+        # 的稿会被静默记成 #p1（V 的签、依赖的 `used_by`、论文对应表的 proof_no 全错位）。
         canonical_was_empty = not VR.proof_text_of(row, 1).strip()
-        if canonical_was_empty:
+        try:
+            requested_no = int(body.get("proof_no") or 0)
+        except (TypeError, ValueError):
+            requested_no = 0
+        if requested_no >= 1 and not canonical_was_empty:
+            have_now = {int(no): str(text or "") for no, text in existing}
+            if (requested_no in have_now
+                    and VR.proof_sha(have_now[requested_no]) != VR.proof_sha(proof)):
+                # 号已经被另一份正文占了：不许覆盖（那是"同一份证明两个正文"），
+                # 也不许静默换号（换号就是猜）—— 整笔受控拒绝，说清在册的是哪几号。
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused="proof_no_taken", stmt_id=sid, merged_into=sid,
+                           matched_by=basis, similarity=similarity,
+                           reason=(f"交付说这一份是 #{requested_no}，而在册的 "
+                                   f"#{requested_no} 是另一份正文（sha 不同）⇒ 整笔不写。"
+                                   f"在册的证明号：{sorted(have_now)}。要么让交付写对号"
+                                   "（稿头 `- 证明号：N` 或携带单第四列），要么把这一份"
+                                   "作为新的一份（不给号 ⇒ 回退成最大号 + 1）"))
+                return out
+        if canonical_was_empty and requested_no in (0, 1):
             # 先登记命题、后补证明：这一份就是 #p1，写 canonical 那一格（不进清单）。
             row["proof_text"] = proof
             proof_no = 1
         else:
-            proof_no = max(int(no) for no, _ in existing) + 1
+            proof_no = (requested_no if requested_no >= 1
+                        else max(int(no) for no, _ in existing) + 1)
             listed = [dict(p) if isinstance(p, Mapping) else p
                       for p in (row.get(VR.PROOFS_KEY) or [])]
             listed.append({"proof_no": proof_no, "text": proof,
@@ -7979,6 +8148,10 @@ class Secretary:
             scan={"refs": sum(len(g) for g in (groups or []))})
         out.update(checked=True, created=False, duplicate=False, merged=True,
                    merged_into=sid, stmt_id=sid, proof_no=proof_no,
+                   #: 这个号是哪来的：交付写的就是 `crafted` / `carried`；秘书按回退
+                   #: 算出来的就是 `fallback`（B 那一侧还会覆盖成它自己的读数）。
+                   proof_no_source=str(body.get("proof_no_source") or
+                                       ("fallback" if requested_no < 1 else "")),
                    matched_by=basis, similarity=similarity, same_kind=[],
                    tables=written, row=row, deps_written=deps_written,
                    path_groups=len(groups or []), canonical_written=canonical_was_empty,

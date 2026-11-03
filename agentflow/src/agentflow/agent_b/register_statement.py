@@ -1056,7 +1056,8 @@ class _RegisterStatement:
     @staticmethod
     def _unsigned_proof_gate(*, origin: str, lit_id: str, proof_text: str,
                              proofs_listed: Any, row: Mapping | None,
-                             v_sign: Mapping, store: Any) -> dict:
+                             v_sign: Mapping, store: Any,
+                             proof_no: Any = 1) -> dict:
         """这一笔要写进台账的证明正文，每一份都得有一份覆盖它的签（业主 2026-11-02）。
 
         ## 为什么闸设在这里、且不看 kind / 不看来源
@@ -1093,8 +1094,15 @@ class _RegisterStatement:
                     continue
         pending: list[tuple[int, str]] = []
         want = str(proof_text or "")
+        #: 这一份正文该落在哪个证明号上：交付里给了号就以它为准（缺口 ①）。
+        #: 认签记在 `reviewed_by_proof[证明号]` 上，免签那一门也必须对同一个号开，
+        #: 否则 `#p2` 会拿 `#p1` 的签当通行证（两边的号分家是静默的）。
+        try:
+            want_no = int(proof_no or 1)
+        except (TypeError, ValueError):
+            want_no = 1
         if want.strip() and want != str(now.get("proof_text") or ""):
-            pending.append((1, want))
+            pending.append((want_no, want))
         for entry in (proofs_listed or []):
             if not isinstance(entry, Mapping):
                 continue
@@ -1127,9 +1135,9 @@ class _RegisterStatement:
             return out
         signed: dict[int, str] = {}
         if bool((v_sign or {}).get("applied")):
-            # 手稿签块认下来的一签：它只盖 canonical 那一份（`bits_after_sign` 的
-            # proof_no=1），所以只给 #p1 免签。
-            signed[1] = "manuscript_sign_block"
+            # 手稿签块认下来的一签：它盖的就是这一笔交来的那一份正文（`bits_after_sign`
+            # 按同一个证明号记账），所以免签只开给那一个号。
+            signed[want_no] = "manuscript_sign_block"
         for no, text in pending:
             if no in signed:
                 continue
@@ -1162,6 +1170,37 @@ class _RegisterStatement:
         out["reading"]["why"] = out["reason"]
         out["reading"]["missing"] = missing
         return out
+
+    @staticmethod
+    def _proof_no_from_delivery(*, manuscript_text: str = "",
+                                manuscript_carried: Mapping | None = None
+                                ) -> tuple[int, str]:
+        """这一笔交付说的"第几份证明" ⇒ `(号, 来源)`；两处都没有 ⇒ `(0, "fallback")`。
+
+        ## 来源三档（写进读数，不许折平）
+        - `crafted`：手稿稿头那一行 `- 证明号：N`（`depsection.manuscript_proof_no`）。
+          作者自己写的号最权威 —— 它知道这一份是这条命题的第几条证明。
+        - `carried`：D 的携带单第四列（`read_carried_manuscript` 命中的那一行）。
+          D 转述作者写的号（或者按盘上事实填的号）。
+        - `fallback`：两处都没有。调用方据此走回退口径（canonical 空则 #p1 /
+          否则最大号 + 1），不在这里替它猜一个号。
+        0 是"交付里没有号"的哨兵（与 `verifications.as_proof_no` 的 0 同一个意思）：
+        读侧折成 1 会让"没写"与"写了第 1 份"分不开。
+        """
+        crafted = 0
+        try:
+            crafted = int(_DS.manuscript_proof_no(str(manuscript_text or "")) or 0)
+        except (TypeError, ValueError):
+            crafted = 0
+        if crafted >= 1:
+            return crafted, "crafted"
+        try:
+            carried = int((manuscript_carried or {}).get("proof_no") or 0)
+        except (TypeError, ValueError):
+            carried = 0
+        if carried >= 1:
+            return carried, "carried"
+        return 0, "fallback"
 
     @staticmethod
     def _signature_covers(store: Any, *, stmt_id: str, proof_no: Any, text: str) -> dict:
@@ -1615,6 +1654,16 @@ class _RegisterStatement:
             "list_sha256": str(manuscript_carried.get("list_sha256") or ""),
             "refusal": "", "reason": "", "suggestion": "",
         }
+        # ---- 证明号从交付里读（2026-11-04，缺口 ①） ---------------------------------
+        #
+        # 交付里有两处写"这是第几份证明"：手稿稿头那一行 `- 证明号：N`（作者自己写的，
+        # 最权威）与 D 的携带单第四列（转述）。两处都没有 ⇒ 回退（canonical 空则 #p1 /
+        # 否则最大号 + 1），并把"这一次用的是哪一来源"写进读数（`proof_no_source`）——
+        # 不写的话，"读了"与"猜的"在盘上同形，而猜错的表现是静默的 #pN 错位。
+        proof_no_delivery, proof_no_source = self._proof_no_from_delivery(
+            manuscript_text=manuscript_text, manuscript_carried=manuscript_carried)
+        #: 这一份正文该落在哪个证明号上（1 = canonical 那一格）。
+        proof_no_placement = int(proof_no_delivery) if proof_no_delivery >= 1 else 1
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
@@ -2194,7 +2243,9 @@ class _RegisterStatement:
         # 整表写会把别的证明"洗过"的事实擦掉）。翻真只发生在换正文那一笔（`_attach_proofs`）。
         bits = _EB.with_optimized_defaults(
             bits,
-            ([1] if str(proof_text or "").strip() else [])
+            # 这一笔要落盘的那一份正文的号：交付里给了号就以它为准（`#p1` 不再写死，
+            # 否则 `#p2` 的机械录入态会记到 #p1 头上 —— 逐份表按号各记各的）。
+            ([proof_no_placement] if str(proof_text or "").strip() else [])
             + [int(e.get("proof_no") or 0) for e in proofs_listed])
         # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
         #
@@ -2209,7 +2260,7 @@ class _RegisterStatement:
             bits, v_sign = _VS.bits_after_sign(
                 bits, root=getattr(self.store, "root", ""),
                 proof_text=str(proof_text or ""), statement_id=stmt_id_now,
-                proof_no=1, kind=str(kind_now or ""),
+                proof_no=proof_no_placement, kind=str(kind_now or ""),
                 # 2026-11-02（业主：「V 签先放在 F 的手稿里，让 B 录入」）：
                 # 收录时先读手稿里那一行签块（`vsigns.manuscript_sign_standing`）。
                 manuscript_text=str(manuscript_text or ""),
@@ -2241,7 +2292,7 @@ class _RegisterStatement:
             _pg = self._unsigned_proof_gate(
                 origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
                 proofs_listed=proofs_listed, row=redelivery, v_sign=v_sign,
-                store=self.store)
+                proof_no=proof_no_placement, store=self.store)
             if _pg.get("refused"):
                 return _refuse(str(_pg["refused"]), str(_pg.get("reason") or ""),
                                proof_gate=dict(_pg.get("reading") or {}))
@@ -2266,6 +2317,36 @@ class _RegisterStatement:
             # 秘书照旧走它那条正文扫描（老路一个字不改）。
             "deps": [list(g) for g in deps_groups],
         }
+        # ---- 手稿正文交给秘书（2026-11-04，缺口 ②）：升档那一支要读手稿签块 --------
+        #
+        # 秘书的 `_upgrade_evidence_kind` 判"这一条该不该升档"时，除了读签名台账，
+        # 还要读手稿签块（E 那一签在"手稿签块 + pending 台账"里，台账读不到）。
+        # B 是唯一手里有这份稿正文的人，所以把正文与地址一并递过去；秘书那一侧只读、
+        # 不落盘（`_statement_from` 的白名单会忽略这两个键，它们不进 schema）。
+        payload["manuscript_text"] = str(manuscript_text or "")
+        payload["manuscript_path"] = str(manuscript_path or "")
+        # ---- 证明号（缺口 ①）：交付里给了号才透传 --------------------------------
+        #
+        # 不给（`fallback`）时不传这一格：秘书那一支的 `_merge_target` 把
+        # `body["proof_no"]` 当"合并稿要覆盖哪一份"的显式号 —— 回退不是显式号，
+        # 传进去会让"回退"变成"指定覆盖 #p1"。回退口径由秘书自己算（canonical 空则
+        # #p1 / 否则最大号 + 1）。
+        if proof_no_delivery >= 1:
+            payload["proof_no"] = int(proof_no_delivery)
+            payload["proof_no_source"] = str(proof_no_source)
+        # ---- 落点：交付说这一份是 #pN（N>1）⇒ 它进 `proofs` 清单，不进 canonical ----
+        #
+        # canonical（`proof_text`）只放 #p1；把第 2 份写进那一格会让 `proof_list` 读出
+        # 两条 #p1（一条正文、一条空），而 `used_by` / 对应表 / V 的签全按号走。
+        # 只在"这一笔没有另交清单"时拆分：清单里的号是调用方显式给的，两套号不许叠。
+        attach_canonical = str(proof_text or "")
+        attach_entries = [dict(e) for e in proofs_listed]
+        if (proof_no_placement > 1 and attach_canonical.strip()
+                and not attach_entries):
+            attach_entries = [{"proof_no": int(proof_no_placement),
+                               "text": attach_canonical,
+                               "created_at": S.now_iso()}]
+            attach_canonical = ""
         written = sec.record_statement(payload, role="B")
         if written.get("merged") and not written.get("created"):
             # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为
@@ -2291,6 +2372,9 @@ class _RegisterStatement:
                    "matched_by": str(written.get("matched_by") or ""),
                    "similarity": float(written.get("similarity") or 0.0),
                    "proof_no": proof_no,
+                   #: 这一次的号是哪来的（`crafted` / `carried` / `fallback`）——
+                   #: "读了"与"猜的"在读数上必须分得开（缺口 ①）。
+                   "proof_no_source": str(proof_no_source),
                    "duplicate_reading": bool(written.get("duplicate")),
                    # ---- 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，
                    # 让秘书判」）。四样都要透出来，否则调用方看不见"这一条被并进去了"
@@ -2366,8 +2450,8 @@ class _RegisterStatement:
             # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
             # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
             stmt_now = str(written.get("stmt_id") or "")
-            attach = self._attach_proofs(stmt_now, proofs_listed,
-                                         canonical=str(proof_text or ""),
+            attach = self._attach_proofs(stmt_now, attach_entries,
+                                         canonical=attach_canonical,
                                          bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
                    "self_authored_review": self._self_authored_reading(self_authored),
@@ -2376,6 +2460,11 @@ class _RegisterStatement:
                    "quote_mode": str(quote_mode or ""),
                    "evidence_kind": self._evidence_kind_on_disk(stmt_now),
                    "requested_evidence_kind": evidence_kind, "upgraded": True,
+                   #: 这一支只改在册那一行，不新建（与 duplicate 那一支同一个读数键：
+                   #: 调用方按它判"有没有多一行"，缺了会把"改档"读成"建了新行"）。
+                   "new_row": False,
+                   "proof_no": int(proof_no_placement),
+                   "proof_no_source": str(proof_no_source),
                    "row": dict(written.get("row") or {}),
                    #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
@@ -2438,8 +2527,8 @@ class _RegisterStatement:
             # 正文（`proof_text`），既可能是"登记时还没有证明、现在补上了"，也可能是
             # 改稿。两者都要真写进去；后者还负责把旧正文留进 `proof_history`。
             stmt_dup = str(written.get("stmt_id") or "")
-            attach = self._attach_proofs(stmt_dup, proofs_listed,
-                                         canonical=str(proof_text or ""),
+            attach = self._attach_proofs(stmt_dup, attach_entries,
+                                         canonical=attach_canonical,
                                          bits=bits)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
@@ -2463,6 +2552,8 @@ class _RegisterStatement:
                        "quote_mode": str(quote_mode or ""),
                        "evidence_kind": self._evidence_kind_on_disk(stmt_dup),
                        "requested_evidence_kind": evidence_kind, "new_row": False,
+                       "proof_no": int(proof_no_placement),
+                       "proof_no_source": str(proof_no_source),
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": _deps_reading(written),
                        #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
@@ -2569,8 +2660,8 @@ class _RegisterStatement:
                            stmt_id=str(written.get("stmt_id") or ""), **extra)
         stmt_id = str(written["stmt_id"])
         data = dict(written.get("row") or {})
-        attach = self._attach_proofs(stmt_id, proofs_listed,
-                                     canonical=str(proof_text or ""),
+        attach = self._attach_proofs(stmt_id, attach_entries,
+                                     canonical=attach_canonical,
                                      bits=bits)
         if attach.get("refused"):
             # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
@@ -2686,6 +2777,10 @@ class _RegisterStatement:
                 "manuscript_wash": dict(manuscript_wash),
                 #: 与来源是否逐字一致（信息格，不是门）：`same=None` = 没有可比对的那一份。
                 "proof_vs_source": dict(proof_vs_source),
+                #: 证明号与它的来源（缺口 ①）：`crafted` / `carried` / `fallback` ——
+                #: 回退也要说，否则"读了"与"猜的"在读数上分不开。
+                "proof_no": int(proof_no_placement),
+                "proof_no_source": str(proof_no_source),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为

@@ -446,7 +446,7 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
                        script_path: Any, script_sha256: Any = "",
                        design: Any, enumeration: Any,
                        search_space: Any = None, result: Any = "",
-                       evidence_kind: Any = "") -> str:
+                       evidence_kind: Any = "", proof_no: Any = None) -> str:
     """把 E 的穷举证明拼成一份与 F 同形的证明手稿（纯函数，逐字节可复现）。
 
     形态（段序固定、标题逐字；V 只读 `## 证明` 那一节，B 登记时也读同一节）::
@@ -454,6 +454,7 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         # E 的证明手稿：<命题首行>
 
         - 实验号：exp:000000
+        - 证明号：2
         - 命题：...
         - 命题键：...
         - 程序：code/enum.py（sha256 ...）
@@ -473,6 +474,12 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         | 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |
         |---|---|---|---|
         （这一份证明没有引用任何在册命题 —— 空表就是声明。）
+
+    ## `proof_no`（2026-11-04，缺口 ①）
+    这一份是这条命题的第几份证明。给了就写一行 `- 证明号：<N>`；不给就省略 ——
+    "不知道"等于第 1 份（读侧按 `#p1` 处理），不许猜成别的号。
+    为什么不给个默认 1 写死：写死会让"E 知道这是第 3 份"与"E 不知道"在稿上一个样，
+    而前者正是 B 收录时要用的那一格（`depsection.manuscript_proof_no` 读它）。
     """
     from . import numericproof as _NP
 
@@ -482,15 +489,24 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     title = " ".join(str(claim or "").split())
     if len(title) > 60:
         title = title[:60] + "…"
+    try:
+        no = int(proof_no or 0)
+    except (TypeError, ValueError):
+        no = 0
     head = [
         f"# E 的证明手稿：{title or '（这一条没有写命题）'}",
         "",
         f"- 实验号：{EVIDENCE_PREFIX}{eid}",
+    ]
+    if no >= 1:
+        # 只在知道时写（不知道就省略这一行 = 第 1 份，读侧按 #p1 处理）。
+        head.append(f"- 证明号：{no}")
+    head.extend([
         f"- 命题：{str(claim or '').strip()}",
         f"- 命题键：{str(claim_key or '').strip()}",
         f"- 程序：{str(script_path or '').strip()}"
         + (f"（sha256 {str(script_sha256).strip()}）" if str(script_sha256 or "").strip() else ""),
-    ]
+    ])
     if search_space is not None:
         head.append(f"- 搜索空间：{_json_text(search_space)}")
     head.append(f"- 结论：{str(result or '').strip() or '（未记）'}"
@@ -531,7 +547,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     out: dict[str, Any] = {
         "path": "", "bytes": 0, "sha256": "", "ok": False,
         "problems": problems, "experiment_id": str(facts.get("experiment_id") or "").strip(),
-        "proof_sha256": "", "at": "",
+        "proof_no": 0, "proof_sha256": "", "at": "",
     }
     rel = proof_manuscript_relpath(facts.get("experiment_id"))
     if not rel:
@@ -542,7 +558,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     out["path"] = rel
     text = compose_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
-        "design", "enumeration", "search_space", "result", "evidence_kind")})
+        "design", "enumeration", "search_space", "result", "evidence_kind", "proof_no")})
     target, why = _resolve(root, rel)
     if target is None:
         problems.append(f"手稿落点解析不了：{why}")
@@ -558,6 +574,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     payload = target.read_bytes()
     body = proof_body_of(payload.decode("utf-8"))
     out.update({"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest(),
+                "proof_no": int(facts.get("proof_no") or 0),
                 "proof_sha256": _VR.proof_sha(body) if body.strip() else "",
                 "ok": bool(body.strip()), "at": _now_iso()})
     if not body.strip():
