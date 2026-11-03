@@ -1937,6 +1937,14 @@ def verifier_problems(statement: Mapping[str, Any],
 FORMAL_SLOT_NUMERIC = "numeric_program"
 FORMAL_SLOT_LEAN = "lean_program"
 FORMAL_SLOT_KINDS: tuple[str, ...] = (FORMAL_SLOT_NUMERIC, FORMAL_SLOT_LEAN)
+
+#: 证明通道的三个取值（`proof_channel` 的返回值；空串 = 这一格对它不适用）。
+#:
+#: 为什么单独拎出来：`formal_slot` 的 `channel` 与 `kind` 是两件事 —— `kind` 说"该填哪一类"
+#: （`FORMAL_SLOT_KINDS`），`channel` 说"这条命题的证明走哪条路"（这里这三个）。
+#: 把两者混用（拿 `kind` 去比 `channel`）会让"通道是空的"与"通道是数值的"读成同一个。
+PROOF_CHANNEL_NUMERIC = "numeric"
+PROOF_CHANNEL_FORMAL = "formal"
 #: Lean 源码的后缀（理论定理那一格只认它）。
 LEAN_SUFFIXES: tuple[str, ...] = (".lean",)
 
@@ -1963,15 +1971,15 @@ def proof_channel(statement: Mapping[str, Any],
     text = str(row.get("proof_text") or "").strip()
     script = proof_column_script(text)
     if script and find_signed_exhaustion_for_column(experiments, text) is not None:
-        return "numeric"
+        return PROOF_CHANNEL_NUMERIC
     if script and is_lean_path(script):
-        return "formal"
+        return PROOF_CHANNEL_FORMAL
     lean_rows = [r for r in (experiments or ()) if isinstance(r, Mapping)
                  and str(r.get("method") or "") == FORMAL_METHOD
                  and str(r.get("evidence_kind") or "") == "proof"
                  and is_lean_path(r.get("code_path") or r.get("proof_location"))]
     if lean_rows and not script:
-        return "formal"
+        return PROOF_CHANNEL_FORMAL
     return ""
 
 
@@ -2001,7 +2009,7 @@ def formal_slot(statement: Mapping[str, Any],
     if not channel:
         return {"channel": "", "kind": "", "path": "", "problems": [],
                 "why": "这条命题没有数值/形式化证明通道 ⇒ 形式化那一格对它不适用"}
-    if channel == "numeric":
+    if channel == PROOF_CHANNEL_NUMERIC:
         path = proof_column_script(text)
         kind = FORMAL_SLOT_NUMERIC
         if given and is_lean_path(given):

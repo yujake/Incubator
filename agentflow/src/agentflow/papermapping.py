@@ -30,8 +30,8 @@
 | `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
 | `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
 | `citation_loc_reason` | 视来源 | 不给 `citation_loc` 时那句理由 |
-| `lean_file` | 有 Lean 产出时 | Lean 程序的真实位置：项目根相对路径（`code/formal/000004.lean` —— L 把源码落在这里）；论文包内那种写法（`formal/000004.lean`）也认。绝对路径与两个根之外的路径都红 |
-| `lean_target` | 有 Lean 产出时 | 它验的是哪一条：Lean 里那个声明的名字（`FreeGroupFactor.isII1`），必须真的出现在 `lean_file` 里 |
+| `lean_file` | 有机器核验凭据时 | 机器核验凭据（Lean 程序 / 数值证明程序）：这一格说的是「这条命题有机器核验过的凭据（百分百为真）」，填什么由这条命题的证明通道决定。形式化通道 ⇒ Lean 程序的真实位置（项目根相对路径 `code/formal/000004.lean` —— L 把源码落在这里；论文包内那种写法 `formal/000004.lean` 也认）；数值证明通道 ⇒ 证明栏第 ① 段那份数值程序（`code/r34_check.py`，必须是同一份，`norm_rel` 比）；没有通道 ⇒ 这一格允许为空（不适用）。绝对路径与两个根之外的路径都红 |
+| `lean_target` | 有形式化凭据时 | 它验的是哪一条：Lean 里那个声明的名字（`FreeGroupFactor.isII1`），必须真的出现在 `lean_file` 里。数值证明通道没有声明名可填（那一格填的是程序地址）—— 那两半不是一回事，填错一格就是拿 Lean 的名字给一份数值程序背书 |
 
 `file` 与 `citation_loc.file` 都是包内相对路径：绝对路径在别人的机器上等于不存在，
 而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
@@ -40,6 +40,8 @@
 L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文包是 `out/paper/`，
 全仓没有任何一步把前者拷进后者 —— 只认包内相对路径时，那条真实存在的源码永远填不进
 这一格（三个落点各说各话）。所以这一格两个根都解析：先按包内找，找不到再按项目根找。
+字段名保持 `lean_file`（不改名：表头、解析与两份渲染产物都不动），但它的语义从
+2026-11-04 起是「机器核验凭据」那一格，不再只是 Lean 源码的位置。
 
 ### `proof_no` 的口径
 
@@ -59,26 +61,34 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 区间三种任选其一（至少一种），值写成 `[起点, 终点]` 或 `{"start": ..., "end": ...}`，
 两者都必须是正整数且起点不大于终点。
 
-### Lean 那两格的三态（业主 2026-10-22 追加）
+### 机器核验凭据那一格的三态（业主 2026-11-04：Lean 程序与数值证明程序同用一格）
 
-业主原话：「有 Lean 产出时，还要写明 Lean 程序的位置与它验的是哪条定理/哪条证明」。五档：
+业主原话：「lean 和数值证明程序同用一格不会打架，这一格的功能就是说这个命题是百分百真的」。
+所以 `lean_file` 那一格的语义是「这条命题有机器核验过的凭据（百分百为真）」，而不是
+「Lean 开关开着时必填的一格」。填的类别必须与这条命题的证明通道一致 —— 通道只有一处判据
+（`numericproof.formal_slot`，本模块只接线，不另写一套）：
 
-- Lean 开关关（读 `settings.lean_enabled`，与 `closing` 那一处是同一个口径）=> 两格允许为空，
-  读数里写「未开 Lean」；空绝不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校；
-- 开关开、且盘上有 Lean 产物（论文包内任意 `*.lean`，或 `<项目根>/out/formal/` / `<项目根>/code/formal/`
-  下的产物）=> 每条 theorem / lemma / proposition / corollary 行必须给这两格，缺就是
-  `mapping_lean_missing`；
-- `lean_file` 不是 `.lean`、或在论文包与项目根两处都找不到 => `mapping_lean_file_missing`；
-- `lean_target` 在那一份 `.lean` 里找不到（做词边界匹配，`foo` 不算命中 `foobar`）
-  => `mapping_lean_target_missing`；
-- 同一个 `lean_target` 出现在两行 => `mapping_lean_target_ambiguous`。一条命题有多条证明时，
-  允许两行共用一个 `lean_file`，但那两行的 `lean_target` 必须各自不同（各自那份 `.lean`
-  里验它的声明名）。
+- 通道 `numeric`（数值证明：证明栏第 ① 段是程序、台账里有 E 签的那条穷举）⇒ 必填，且必须
+  是证明栏第 ① 段那份程序（`norm_rel` 比）—— 一份 `.py`。填 `.lean`、或填另一份程序都是
+  `mapping_lean_file_missing`：两类凭据不许互相冒充。这一档只要求 `lean_file` 一格
+  （程序没有声明名那一半，`lean_target` 不填；填了同样是受控拒绝）；
+- 通道 `formal`（形式化）⇒ 必有 `lean_file` 与 `lean_target` 两格：`.lean` 结尾、在论文包与
+  项目根两处之一里读得到、`lean_target` 真的出现在那份源码里（词边界匹配，`foo` 不算命中
+  `foobar`）；
+- 通道空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 这一格允许为空 —— 那是
+  「不适用」，不是「没填」。盘上有没有 Lean 产物都不改变这一条：有产物是一个读数，
+  不是这一条命题的凭据（改前"有产物 ⇒ 定理行必须给两格"正是把不适用读成没填的形态）；
+
+`lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；同一个
+`lean_target` 出现在两行 => `mapping_lean_target_ambiguous`。一条命题有多条证明时，
+允许两行共用一个 `lean_file`，但那两行的 `lean_target` 必须各自不同（各自那份 `.lean`
+里验它的声明名）。
 
 开关开、却一个 Lean 产物都没有 => 读数里有一档 `lean_on_but_no_artifact`（`warnings`，
-不拦门；见 `LEAN_WARN_KINDS`）：两格无从填起这件事必须看得见，但它说的不是
-"表与正文对不上"。两格里只要填了一格（哪怕开关关着），就要当真核 —— 只填一半同样是
-`mapping_lean_missing`：填了就是声称，声称就得能复核。
+不拦门；见 `LEAN_WARN_KINDS`）：这一趟一个形式化文件都没落这件事必须看得见，但它说的不是
+"表与正文对不上"。两格里只要填了一格（哪怕通道是空的），就要当真核 —— 只填一半同样是
+`mapping_lean_missing`：填了就是声称，声称就得能复核。空着也绝不等于「验过了」：
+它说的是「这一条命题没有机器核验凭据」，读数里说得出来。
 
 ### 数值实验定理那两格（业主 2026-10-23 的裁定 E-1）
 
@@ -275,9 +285,11 @@ ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
 
-#: 有 Lean 产出时必须给 `lean_file` + `lean_target` 的那几类环境（业主 2026-10-22 追加）。
+#: 数值实验定理那一支管哪几类环境（`is_numeric_row` 与正文"一条命题一个环境"用）。
 #:
-#: 为什么不是全部六类：例子与实验不是"被 Lean 验的命题"，它们没有声明名可写。
+#: 为什么不是全部六类：例子与实验不是"被证明的命题"，它们没有证明栏可指。
+#: 凭据那一格（`lean_file`）不按这一组裁：它按这一条命题的证明通道判
+#: （见 `_lean_problems`）—— 通道非空就要填，与正文里排成哪类环境无关。
 LEAN_TARGETED_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
 
 #: "一条命题对一个环境"这条口径管哪几类环境（业主 2026-10-24，D-40）。
@@ -310,10 +322,20 @@ NON_PROPOSITION_KINDS: tuple[str, ...] = (
 _NEWTHEOREM_RE = re.compile(
     r"\\newtheorem\*?\s*\{(?P<name>[^{}]+)\}\s*(?:\[[^{}]*\]\s*)?\{(?P<title>[^{}]*)\}")
 
-#: Lean 那两格（`lean_file` / `lean_target`）：有 Lean 产出时必填，其余时候允许为空。
+#: 机器核验凭据那一格（字段名仍是 `lean_file`）在文档与人读产物里的叫法（业主 2026-11-04）。
+#:
+#: 为什么字段名不改：表头、`MAPPING.json` 的解析、md 与附录两份渲染产物都按 `lean_file`
+#: 走；改名要同时动这四处，而这一改的语义（两类凭据同用一格）不需要动它们。
+#: 名字进 docstring、`MAPPING.md` 的说明段与正文附录的说明段；列头照旧。
+CREDENTIAL_CELL_NAME = "机器核验凭据（Lean 程序 / 数值证明程序）"
+
+#: 凭据那两格（`lean_file` / `lean_target`）：通道非空时必填，通道为空时允许为空。
+#:
+#: 两格是一对（`lean_target` 是 Lean 声明名那一半），但数值证明通道只要 `lean_file`：
+#: 一份数值程序没有 Lean 声明名可填（见 `numericproof.formal_slot` 的两类填法）。
 LEAN_ROW_FIELDS: tuple[str, ...] = ("lean_file", "lean_target")
 
-#: Lean 产物的后缀（`lean_file` 必须是它结尾）。
+#: 凭据是 Lean 程序时，`lean_file` 必须以它结尾（数值证明通道那一类不查这一条）。
 LEAN_SUFFIX = ".lean"
 
 #: 除论文包之外，Lean 产物还落在哪（项目根相对）。
@@ -327,7 +349,10 @@ LEAN_ARTIFACT_DIRS: tuple[str, ...] = ("out/formal", "code/formal")
 #: 扫 Lean 产物时不进的目录（`.lake` 里是整份 Mathlib 的源码与编译产物）。
 LEAN_SKIP_DIRS: tuple[str, ...] = (".lake", ".git", ".hg", "node_modules", "__pycache__")
 
-#: Lean 那两格的三种占位写法（空着时按开关状态印出来，不印空白）。
+#: 凭据那两格的三种占位写法（空着时按开关状态印出来，不印空白）。
+#:
+#: 渲染器不知道每条命题的证明通道（那要读台账），所以空着只有"开关关"与"没填"两档：
+#: "不适用"那一档由 `mapping_lean_*` 在 `problems` 里说清，渲染只负责不印空白。
 LEAN_OFF_CELL = "（未开 Lean）"
 LEAN_UNFILLED_CELL = "（没填）"
 
@@ -488,11 +513,12 @@ PAPER_KINDS: tuple[str, ...] = (
     "mapping_package_missing", "mapping_not_in_paper", "mapping_paper_mismatch",
 )
 
-#: Lean 那两格的四条（业主 2026-10-22 追加；口径见模块 docstring 的 Lean 三态）。
+#: 凭据那一组四条（业主 2026-10-22 追加；口径见模块 docstring 的凭据三态）。
 #:
-#: `mapping_lean_missing`：开关开、有 Lean 产出，而某条定理/引理/命题/推论行没给两格
-#: （或只给了一格 —— 填了就是声称，声称就得能复核）；
-#: `mapping_lean_file_missing`：`lean_file` 不是 `.lean`，或不在论文包里；
+#: `mapping_lean_missing`：这一条命题有证明通道（数值 / 形式化），而两格没填
+#: （或只填了一格 —— 填了就是声称，声称就得能复核）；
+#: `mapping_lean_file_missing`：凭据的类别与证明通道不一致（数值通道填 `.lean`、
+#: 形式化通道填 `.py`、空通道填程序），或那份 `.lean` 不在论文包 / 项目根里；
 #: `mapping_lean_target_missing`：`lean_target` 在那一份 `.lean` 里找不到（词边界匹配）；
 #: `mapping_lean_target_ambiguous`：同一个 `lean_target` 被两行共用（谁验的哪一条就说不清了）。
 LEAN_KINDS: tuple[str, ...] = (
@@ -505,7 +531,8 @@ LEAN_KINDS: tuple[str, ...] = (
 #: 为什么是 warning 而不是 blocker：这一档说的是"形式化一个文件都没落"，不是
 #: "表与正文对不上"。把它拦成 blocker 会让每一份不使用形式化的论文都交不了表，
 #: 而承重结论没有形式化背书那件事已经由收工门的 `load_bearing` 与形式化门在管；
-#: 但"两格无从填起"这件事必须看得见（空着与"验过了"要分得开），所以它在 `warnings` 里。
+#: 但"这一趟一个形式化文件都没落"必须看得见（空着与"验过了"要分得开），所以它在
+#: `warnings` 里。它不再是"两格必填"的触发器（2026-11-04：那一档按证明通道判）。
 LEAN_WARN_KINDS: tuple[str, ...] = ("lean_on_but_no_artifact",)
 
 #: 数值实验定理那一组（业主 2026-10-23，E-1）：证明栏是程序、三块与署名由 E 给。
@@ -702,6 +729,13 @@ class Row:
     ledger_id: str
     proof_no: int
     file: str
+    #: ---- 机器核验凭据那一格（字段名不变，语义见 `CREDENTIAL_CELL_NAME`） ----------
+    #:
+    #: `lean_file`：这一条命题的机器核验凭据（百分百为真）—— 形式化通道是那份 `.lean`
+    #: 的位置，数值证明通道是证明栏第 ① 段那份 `.py` 程序；没有证明通道时允许为空。
+    #: 字段名保持 `lean_file`（不改名：表头、解析、两份渲染产物都不动）。
+    #: `lean_target`：形式化通道那一半（那份 `.lean` 里字面出现的声明名）；数值证明
+    #: 通道不填它（一份数值程序没有 Lean 声明名）。
     lean_file: str = ""
     lean_target: str = ""
     page_or_section: str = ""
@@ -1456,6 +1490,11 @@ def fill_ledger_cells(ledger_root: str | Path,
     三态：`ledger_id` 解析不到、或台账里没有那一行 ⇒ 两格都写 `未读到`（这一格
     没查成，不是"未审"、也不是"不是定理"）。`ledger=None` 时按 `ledger_root` 读盘。
 
+    凭据那一格（`lean_file`，语义是「机器核验凭据（Lean 程序 / 数值证明程序）」）不在
+    这里填：它填的是提交方声称的凭据（类别与通道一致与否由 `_lean_problems` 判），而这里
+    只填台账自己的事实（`ledger_kind` / `reviewed` / `optimized` / `proof_source`）——
+    凭证是"声称"，签与审是"事实"，两件事不混在一个填充口里。
+
     审校台账那份三态在开头按命题号归并读一遍（`_review_ledger_states`），同一份
     只读一次：一行一次 `open` 会让一张长表的填充退化成 N 次读盘。
     """
@@ -1577,8 +1616,10 @@ def lean_artifacts(project_root: str | Path) -> list[str]:
     如 `code/formal/000004.lean`）。三处都是 `lean_file` 能填的写法
     （2026-10-25：`code/formal` 是 L 的真实落点，见 `LEAN_ARTIFACT_DIRS`）。
 
-    返回值是"盘上到底有没有 Lean 产出、以及它在哪"这个事实的读数；它同时是
-    `mapping_reading` 里"两格必填"那一档的判据（有产物 ⇒ 定理类那四类行必须给两格）。
+    返回值是"盘上到底有没有 Lean 产出、以及它在哪"这个事实的读数。它不再是
+    "两格必填"的触发器（2026-11-04 业主口径：那一格是「这条命题有机器核验过的凭据」，
+    按每条命题的证明通道判）；它仍然进读数（`lean` 那一格）与
+    `lean_on_but_no_artifact` 那一档警告 —— "一个形式化文件都没落"必须看得见。
     """
     project = Path(project_root)
     package = package_dir(project)
@@ -1721,65 +1762,157 @@ def _citation_problems(row: Row, package_root: Path,
     return problems
 
 
-def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
-                   artifacts: Sequence[str],
-                   project_root: Path | None = None) -> list[dict[str, Any]]:
-    """Lean 那两格（业主 2026-10-22 追加）：什么时候必填、填了要真。
+def _credential_statement(row: Row,
+                          ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                          ) -> Mapping[str, Any] | None:
+    """这一行压在台账里的那条命题（带上这一号证明的正文）；读不到 ⇒ `None`。
 
-    三件事分开报，一条坏不遮蔽另一条：
-    1. 必填而缺（或只填了一半）=> `mapping_lean_missing`；
-    2. `lean_file` 不是 `.lean` / 两个根里都找不到 => `mapping_lean_file_missing`；
-    3. `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；
-    外加一条横向的：同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`。
+    证明正文按 `proof_no` 取（`verifications.proof_text_of`：`#p1` 是行上的
+    `proof_text`，`#p2` 及以上在 `proofs` 清单里）—— 一条命题有多条证明时，
+    "这一行走哪条通道"问的是这一份证明，不是 canonical 那一份。
+    """
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+        return None
+    target = ledger_row(ledger, "statements", str(resolved["row_id"]))
+    if not isinstance(target, Mapping):
+        return None
+    return {**dict(target), "proof_text": V.proof_text_of(target, row.proof_no)}
 
-    "必填"的口径见模块 docstring：开关开、且盘上真有 Lean 产物，才要求定理类那四行给两格。
-    这一条只在 `LEAN_KINDS` 非空时才被调用（见 `mapping_reading`）：清空那一组就是关掉这一档，
-    反真空用例靠它证明"这些红真的靠那组 kind"。
+
+def _credential_slot(row: Row,
+                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                     experiments: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """这一行的凭据格该填哪一类（真身在 `numericproof.formal_slot`，本模块只接线）。
+
+    通道判据只有那一处（`proof_channel` + `formal_slot`）：数值证明 / 形式化 / 空。
+    这里不另写一套，否则"这一条命题该填什么"会长出第二个答案。
+    """
+    statement = _credential_statement(row, ledger)
+    if statement is None:
+        return {"channel": "", "kind": "", "path": "", "problems": [],
+                "why": "台账里读不到这一行压着哪条命题 ⇒ 通道读不出来"}
+    return NP.formal_slot(statement, experiments, filled=str(row.lean_file or "").strip())
+
+
+def _lean_problems(rows: Sequence[Row], package_root: Path,
+                   project_root: Path | None = None,
+                   ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                   ) -> list[dict[str, Any]]:
+    """凭据那一格（`lean_file`，字段名照旧）：什么时候必填、填的类别要与通道一致。
+
+    四件事分开报，一条坏不遮蔽另一条：
+    1. 通道非空而缺（或两格只填了一格）=> `mapping_lean_missing`；
+    2. 凭据的类别与证明通道不一致（数值通道填 `.lean`、形式化通道填 `.py`、空通道填程序）
+       => `mapping_lean_file_missing`（判据本体是 `numericproof.formal_slot`，这里只加一句
+       「类别与通道不一致」的定位，不另判一次）；
+    3. 形式化通道的 `.lean` 两个根里都找不到 => `mapping_lean_file_missing`；
+       `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；
+    4. 同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`。
+
+    "必填"按这一条命题的证明通道判（`numericproof.formal_slot` 的 numeric / formal /
+    空），不再按"盘上有没有 Lean 产物"判：后者是一个全局读数，不是某一条命题的凭据
+    （2026-11-04 业主口径：这一格说的是「这个命题是百分百真的」）。通道为空 ⇒ 这一格
+    允许为空（不适用）。这一条只在 `LEAN_KINDS` 非空时才被调用（见 `mapping_reading`）：
+    清空那一组就是关掉这一档，反真空用例靠它证明这些红真的靠那组 kind。
 
     `lean_file` 的解析走 :func:`_lean_source_state`（包内优先、项目根兜底）：
     L 的源码在 `code/formal/`，它填不进"只认包内"的那一版（2026-10-25 第 4 条）。
     """
     problems: list[dict[str, Any]] = []
-    required = bool(lean_on) and bool(artifacts)
+    experiments = [dict(item) for item in ((ledger or {}).get("experiments") or ())
+                   if isinstance(item, Mapping)]
     seen_targets: dict[str, Row] = {}
     for row in rows:
         lean_file = str(row.lean_file or "").strip()
         lean_target = str(row.lean_target or "").strip()
-        missing = [name for name, value in (("lean_file", lean_file),
-                                            ("lean_target", lean_target)) if not value]
-        need = required and row.kind in LEAN_TARGETED_KINDS
-        half = bool(lean_file) != bool(lean_target)
+        slot = _credential_slot(row, ledger, experiments)
+        channel = str(slot.get("channel") or "")
+        # 通道的两个取值在 `numericproof.PROOF_CHANNEL_*`（`channel` 与 `kind` 是两件事：
+        # 前者是"证明走哪条路"，后者是"这一格该填哪一类"）。
+        numeric = channel == NP.PROOF_CHANNEL_NUMERIC
+        formal = channel == NP.PROOF_CHANNEL_FORMAL
+        # 数值通道那两格里只有一格（程序地址）：程序没有 Lean 声明名那一半。
+        wants = ("lean_file",) if numeric else LEAN_ROW_FIELDS
+        values = {"lean_file": lean_file, "lean_target": lean_target}
+        missing = [name for name in wants if not values[name]]
+        half = (any(values[name] for name in LEAN_ROW_FIELDS)
+                and not all(values[name] for name in LEAN_ROW_FIELDS))
+        need = numeric or formal
         if missing and (need or half):
-            why = (f"盘上已经有 {len(artifacts)} 份 Lean 产物（{list(artifacts[:3])}），"
-                   "这一行必须说清验它的是哪一份 `.lean` 里的哪一个声明名"
-                   if need else
-                   "两格是一对：只填一格时，另一格没有任何东西可以复核它")
+            if numeric:
+                why = ("这条命题的证明通道是数值证明（证明栏第 ① 段是程序 "
+                       f"{str(slot.get('path') or '')!r}）⇒ 这一格必须填那份程序"
+                       "（相对仓库根，.py）—— 这一格的功能就是「这条命题有机器核验过的"
+                       "凭据」")
+                tail = ("数值证明通道：`lean_file` 填证明栏第 ① 段那份程序（如 "
+                        "code/r34_check.py）；`lean_target` 不用填（数值程序没有 Lean 声明名）")
+            elif formal:
+                why = ("这条命题的证明通道是 Lean（形式化）⇒ 这一格必须填那份 `.lean` 与它"
+                       "验的声明名（`lean_target`）")
+                tail = ("形式化通道：`lean_file` 写那份源码的真实位置（项目根相对路径，如 "
+                        "code/formal/000004.lean；论文包内的写法 formal/000004.lean 也认），"
+                        "`lean_target` 写 Lean 里那个声明的名字（如 FreeGroupFactor.isII1）")
+            else:
+                why = "两格是一对：只填一格时，另一格没有任何东西可以复核它"
+                tail = ("这一条命题没有数值/形式化证明通道 ⇒ 这一格本可以留空；现在是只填了"
+                        "一半，才要求补齐（`lean_file` 与 `lean_target` 是一对）")
             problems.append(_problem(
                 "mapping_lean_missing",
                 f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）缺 {missing} —— "
-                f"{why}。`lean_file` 写那份源码的真实位置（项目根相对路径，如 "
-                "code/formal/000004.lean；论文包内的写法 formal/000004.lean 也认），"
-                "`lean_target` 写 Lean 里那个声明的名字（如 FreeGroupFactor.isII1）",
+                f"{why}。`lean_file` 是「{CREDENTIAL_CELL_NAME}」那一格。{tail}",
                 label=row.label, where=MAPPING_JSON_NAME))
         file_ok = False
         if lean_file:
-            state = _lean_source_state(package_root, project_root, lean_file)
-            if not lean_file.lower().endswith(LEAN_SUFFIX):
-                problems.append(_problem(
-                    "mapping_lean_file_missing",
-                    f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 不是 Lean 源码"
-                    f"（要以 {LEAN_SUFFIX} 结尾）—— 它指的是那份真的被检查器读过的文件",
-                    label=row.label, where=MAPPING_JSON_NAME))
-            elif state["state"] in ("missing", "directory", "outside"):
-                problems.append(_problem(
-                    "mapping_lean_file_missing",
-                    f"表里 label={row.label!r} 的 `lean_file` 读不到：{state['reason']} —— "
-                    "它必须是项目根相对路径（如 code/formal/000004.lean，L 的落点）或论文包内"
-                    "相对路径（如 formal/000004.lean）；绝对路径在别人的机器上等于不存在",
-                    label=row.label, where=MAPPING_JSON_NAME))
+            if numeric:
+                # 类别与通道要一致、地址还要是证明栏第 ① 段那一份（`norm_rel` 比）：
+                # 两条判据都在 `formal_slot` 里，这里只把它的理由与定位转发出来。
+                for detail in slot.get("problems") or ():
+                    problems.append(_problem(
+                        "mapping_lean_file_missing",
+                        f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 类别与通道不一致"
+                        "（通道 = 数值证明程序，这一格要填的是证明栏第 ① 段"
+                        f"那份程序 {str(slot.get('path') or '')!r}）：{detail}",
+                        label=row.label, where=MAPPING_JSON_NAME))
+                file_ok = not (slot.get("problems") or ())
+            elif not lean_file.lower().endswith(LEAN_SUFFIX):
+                if formal or NP.is_script_path(lean_file):
+                    got_channel = (
+                        "Lean 程序（形式化）⇒ 这一格只收 `.lean` 路径"
+                        if formal else
+                        "空（这一条没有数值证明通道：`proof_text` 不是程序、台账里也没有 E "
+                        "签的穷举）⇒ 不能把一份数值程序填进这一格")
+                    problems.append(_problem(
+                        "mapping_lean_file_missing",
+                        f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 类别与通道不一致："
+                        f"通道 = {got_channel} —— 凭据的类别必须与通道一致（两类不许互相冒充）",
+                        label=row.label, where=MAPPING_JSON_NAME))
+                else:
+                    problems.append(_problem(
+                        "mapping_lean_file_missing",
+                        f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 不是 Lean 源码"
+                        f"（要以 {LEAN_SUFFIX} 结尾）—— 它指的是那份真的被检查器读过的文件",
+                        label=row.label, where=MAPPING_JSON_NAME))
             else:
-                file_ok = True
-        if lean_target and lean_file and file_ok:
+                state = _lean_source_state(package_root, project_root, lean_file)
+                if state["state"] in ("missing", "directory", "outside"):
+                    problems.append(_problem(
+                        "mapping_lean_file_missing",
+                        f"表里 label={row.label!r} 的 `lean_file` 读不到：{state['reason']} —— "
+                        "它必须是项目根相对路径（如 code/formal/000004.lean，L 的落点）或论文包内"
+                        "相对路径（如 formal/000004.lean）；绝对路径在别人的机器上等于不存在",
+                        label=row.label, where=MAPPING_JSON_NAME))
+                else:
+                    file_ok = True
+        if numeric and lean_target:
+            # 数值证明通道那一格填的是程序地址：`lean_target` 是 Lean 声明名，两者不是一回事。
+            problems.append(_problem(
+                "mapping_lean_missing",
+                f"表里 label={row.label!r} 的 `lean_target` = {lean_target!r} 在数值证明通道上"
+                "没有落点：这一格是 Lean 声明名，而这一条命题的凭据是那份数值程序"
+                "（`lean_file`）—— 填了就是拿 Lean 的名字给一份数值程序背书",
+                label=row.label, where=MAPPING_JSON_NAME))
+        elif lean_target and lean_file and file_ok:
             absolute = Path(state["abs"])
             try:
                 text = absolute.read_text(encoding="utf-8")
@@ -1799,7 +1932,7 @@ def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
                     "`namespace X` 里写短名，就写短名；写全名，就与源码逐字一致。"
                     "正文里的 LaTeX label 不是它",
                     label=row.label, where=MAPPING_JSON_NAME))
-        if lean_target:
+        if not numeric and lean_target:
             prev = seen_targets.get(lean_target)
             if prev is not None:
                 problems.append(_problem(
@@ -1877,7 +2010,8 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
         if bad_lean:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 {bad_lean} 必须是字符串（`lean_file` 是包内相对路径、"
+                f"第 {i} 行的 {bad_lean} 必须是字符串（`lean_file` 是「"
+                + CREDENTIAL_CELL_NAME + "」那一格的路径 —— Lean 程序或数值证明程序；"
                 "`lean_target` 是 Lean 里那个声明的名字）",
                 label=label))
             continue
@@ -2008,9 +2142,15 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "by hand. The \\texttt{file} column is a path relative to the paper package and therefore "
             "names the same file on another machine; for a theorem proved by an exhaustive numerical "
             "experiment, \\texttt{file} is the path of that program relative to the repository root. "
-            "The Lean column says where the source that checks the statement lives and which "
-            "declaration it checks; both are mandatory whenever Lean output exists, and with the "
-            "switch off the cell reads ``(Lean off)'' (an empty cell never means checked). "
+            "The column headed ``Lean (file / declaration)'' is the machine-checked credential slot: "
+            "it holds the program by which this statement is known to be true. For a statement whose "
+            "proof goes through formalization it holds the Lean source and the declaration that source "
+            "checks; for a statement proved by an exhaustive numerical experiment it holds that "
+            "numerical proof program (a ``.py`` path, the same one named as the proof program) and the "
+            "declaration half stays empty. What belongs in that slot follows the proof channel of that "
+            "statement -- an entry of the other kind is refused -- and an empty cell means that "
+            "statement has no machine-checked credential: an empty cell never means checked, and with "
+            "the switch off the cell reads ``(Lean off)''. "
             "The last two columns belong to theorems proved by numerical experiment: the reading of "
             "E's exhaustive run (\\texttt{" + NT.EVIDENCE_PREFIX + "NNNNNN}) and where E's two written "
             "blocks (design note and exhaustion argument) live; when absent they read "
@@ -2039,8 +2179,11 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "不许手抄第二份；这一段说明由渲染函数按论文语言生成，不许手抄、不许混语言。"
             "\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件；"
             "数值实验定理那一行的 \\texttt{file} 是那份穷举程序的相对路径（相对仓库根）。"
-            "Lean 那一列是「验它的那份源码在哪」与「验的是哪个声明」两部分：有 Lean 产出时这两部分必填，"
-            "开关关时印「" + LEAN_OFF_CELL + "」（空不等于验过）。"
+            "Lean 那一列（\\texttt{lean\\_file} / \\texttt{lean\\_target}）是「" + CREDENTIAL_CELL_NAME
+            + "」：形式化通道填验它的那份源码在哪（\\texttt{.lean}）与验的是哪个声明；"
+            "数值证明通道填证明栏第 ① 段那份数值程序（\\texttt{.py}，与证明栏同一份），"
+            "声明那一半留空。填什么由这一条命题的证明通道决定（填错类别就是受控拒绝）；"
+            "空着是「这一条没有机器核验凭据」，绝不等于验过；开关关时印「" + LEAN_OFF_CELL + "」。"
             "最后两列是数值实验定理的：E 的那条穷举读数（\\texttt{" + NT.EVIDENCE_PREFIX
             + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
             + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。"
@@ -2200,11 +2343,16 @@ def _cell(text: Any, *, mono: bool = False) -> str:
 
 
 def _lean_cell(value: str, lean_on: bool, language: str = PAPER_LANGUAGE_ZH) -> str:
-    """Lean 那两格在表格里的一格：空着时按开关状态写占位，不印空白。
+    """凭据那一格在表格里的一格：空着时按开关状态写占位，不印空白。
 
     "空"与"验过了"必须分得开：开关关时印「未开 Lean」（这一趟没走形式化，不是没写），
     开关开而没填就印「没填」——它是不是红的由 `mapping_lean_*` 那几档判，
     这一格只负责不让读者把空白读成"没问题"。
+
+    为什么渲染器不按证明通道印第三档（「不适用」）：通道要读台账（这一号证明的正文 +
+    E 签的穷举），而渲染函数是纯函数、只拿得到行；把读盘塞进来会让 md / 附录的
+    "逐字相同"判据变成第二份通道口径。空着这一格在不适用与漏填之间两种可能都由
+    `mapping_lean_*` 那一档在 `problems` 里说清，渲染只负责"不印空白"。
 
     `language` 只决定占位那句怎么写：英文论文的附录里不许出现中文（D-45）。
     默认值是中文（人读的 `MAPPING.md` 恒中文，走的就是默认值）。
@@ -2334,10 +2482,11 @@ def _appendix_ledger_kind(cell: Any, language: str) -> str:
 
 
 def _lean_pair(row: Row, lean_on: bool, language: str) -> str:
-    """Lean 那一格（D-46 把文件与声明并成一列）：`文件 / 声明`。
+    """凭据那一格（D-46 把文件与声明并成一列）：`文件 / 声明`。
 
-    两格都空（按开关印出同一句占位）时只印一次：`（未开 Lean）/（未开 Lean）`
-    会让读者以为漏填了一格。
+    形式化通道那两半都在（Lean 程序 + 声明名）；数值证明通道只填前半（程序地址），
+    声明那一半空着 —— 空着时按开关印占位。两格都空（按开关印出同一句占位）时只印一次：
+    `（未开 Lean）/（未开 Lean）` 会让读者以为漏填了一格。
     """
     left = _lean_cell(row.lean_file, lean_on, language)
     right = _lean_cell(row.lean_target, lean_on, language)
@@ -2458,9 +2607,12 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         "等于不存在，指到包外的相对路径同样过不了复核。",
         "`file` 的指向：`proof_no` = 1 指台账行本身或附录里那一段正文；2 及以上指那一份"
         "证明自己的文件。",
-        "`lean_file` 与 `lean_target`：有 Lean 产出时，每条定理/引理/命题/推论还要说清"
-        "验它的是论文包内哪一份 `.lean`、以及那份源码里的哪个声明名。开关关时这两列印"
-        "「" + LEAN_OFF_CELL + "」—— 空不等于验过。",
+        "`lean_file` 那一格是「" + CREDENTIAL_CELL_NAME + "」：它说的是「这条命题有机器核验过"
+        "的凭据（百分百为真）」，填的类别要与这条命题的证明通道一致 —— 形式化通道填 `.lean`"
+        "（另带 `lean_target`：那份源码里字面出现的声明名）；数值证明通道填证明栏第 ① 段"
+        "那份数值程序（`.py`，与证明栏指同一份）；没有通道时这一格允许为空（不适用）。"
+        "开关关或没填时这两列印「" + LEAN_OFF_CELL + "」/「" + LEAN_UNFILLED_CELL
+        + "」—— 空不等于验过。",
         "`numeric_evidence` 与 `exhaustion_note`：数值实验定理那一行（证明栏是程序）多这两格 ——"
         "E 的那条穷举读数编号（`" + NT.EVIDENCE_PREFIX + "NNNNNN`）与 E 写的那两块"
         "（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION + "）落在哪一份读数里；"
@@ -3241,17 +3393,23 @@ def mapping_reading(project_root: str | Path, *,
     if not lean_on:
         lean_state = "off"
         lean_reason = ("未开 Lean（`toolchain.lean_enabled` 为假，来源："
-                       + (lean_source or "缺省") + "）⇒ `lean_file` / `lean_target` 允许为空；"
-                       "空不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校")
+                       + (lean_source or "缺省") + "）⇒ 没有证明通道的行，`lean_file` / "
+                       "`lean_target` 允许为空；空不等于验过 —— 这一趟的证明走 `proof_text` "
+                       "与 V 的逐行审校。凭据那一格按每条命题的证明通道判（形式化通道仍要 "
+                       "`.lean`，数值证明通道仍要那份程序）")
     elif artifacts:
         lean_state = "on"
         lean_reason = (f"Lean 开关开着、盘上有 {len(artifacts)} 份 Lean 产物（{list(artifacts[:3])}）"
-                       "⇒ 定理/引理/命题/推论那几行必须写 `lean_file` 与 `lean_target`")
+                       "—— 这是读数，不是「必须填」的理由：`lean_file` 是「"
+                       + CREDENTIAL_CELL_NAME + "」那一格，按每条命题的证明通道判"
+                       "（形式化通道 ⇒ 必填 `.lean` 与 `lean_target`；数值证明通道 ⇒ 必填"
+                       "证明栏第 ① 段那份程序；没有通道 ⇒ 允许为空）")
     else:
         lean_state = "on_no_artifact"
         lean_reason = ("Lean 开关开着，但盘上一个 Lean 产物都没有（找过论文包内的 `"
                        + LEAN_SUFFIX + "` 与 `<项目根>/" + "`, `<项目根>/".join(LEAN_ARTIFACT_DIRS)
-                       + "`）⇒ 这两格无从填起：说它是「没开 Lean」不真，说它是「验过了」更不真")
+                       + "`）⇒ 这一趟一个形式化文件都没落：说它是「没开 Lean」不真，说它是"
+                       "「验过了」更不真")
     reading: dict[str, Any] = {
         "checked": False,
         "state": "unknown",
@@ -3347,11 +3505,13 @@ def mapping_reading(project_root: str | Path, *,
     problems += appendix_problems
 
     problems += _orphan_problems(envs, rows)
-    # Lean 那四类只在 `LEAN_KINDS` 非空时才判（见 `_lean_problems` 的 docstring：
-    # 清空那一组就是关掉这一档，反真空用例靠它）。
-    if LEAN_KINDS:
-        problems += _lean_problems(rows, package, lean_on, artifacts, project)
     known = ledger if ledger is not None else read_ledger_tables(workspace)
+    # 凭据那一档（`mapping_lean_*`）只在 `LEAN_KINDS` 非空时才判（见 `_lean_problems`
+    # 的 docstring：清空那一组就是关掉这一档，反真空用例靠它）。它要台账：那一条命题
+    # 的证明通道（数值 / 形式化 / 空）的真身在 `numericproof.formal_slot`，而通道要
+    # 读这一号证明的正文与 E 签的穷举实验行 —— 所以这里先读台账，再判凭据格。
+    if LEAN_KINDS:
+        problems += _lean_problems(rows, package, project, known)
     # 审校台账那份三态按命题号归并读一遍（`reviewed` 那一格的四档要用它，
     # 渲染函数自己不读盘 —— 见 `reviewed_cell`）。
     review_states = _review_ledger_states(workspace, rows, known)

@@ -161,12 +161,17 @@ def _row(**over) -> dict:
     D-34 起还带索引四格（业主 2026-10-23 夜：D 的报告是目录）：
     `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature` —— 四格指的就是
     `NOTE` 那一份读数的字节与 V 签的那一版，所以按 `NOTE_TEXT` 现算 sha256。
+
+    2026-11-04 起 `lean_file` 那一格是机器核验凭据（业主：「这一格的功能就是说这个
+    命题是百分百真的」）：数值证明通道填的就是证明栏第 ① 段那份程序 —— 所以干净那一行
+    必须填 `PROGRAM`，它不再只是 Lean 源码的位置。
     """
     note_sha = hashlib.sha256(NOTE_TEXT.encode("utf-8")).hexdigest()
     row = {
         "kind": "theorem", "label": "thm:r34", "env_no": 1,
         "ledger_id": f"stmt:{SID}", "proof_no": 1,
         "file": PROGRAM,
+        "lean_file": PROGRAM,
         "numeric_evidence": f"exp:{EID}",
         "exhaustion_note": NOTE,
         "evidence_kind": "report",
@@ -346,7 +351,7 @@ def test_4_an_incomplete_experiment_may_not_be_written_as_a_theorem(
 def test_4b_a_theorem_whose_statement_has_no_program_is_left_alone(
         tmp_path: pathlib.Path) -> None:
     """判据 4（反方向，防误伤）：证明栏是自然语言的那一类定理一行都不许被这条拦到。"""
-    rows = [_row(file="proofs/thm.tex", numeric_evidence="", exhaustion_note="")]
+    rows = [_row(file="proofs/thm.tex", numeric_evidence="", exhaustion_note="", lean_file="")]
     root = _workspace(tmp_path / "ws", rows=rows, statement="由定义直接得到。")
     (PM.package_dir(root) / "proofs").mkdir(parents=True, exist_ok=True)
     (PM.package_dir(root) / "proofs" / "thm.tex").write_bytes(b"proof\n")

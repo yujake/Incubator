@@ -348,11 +348,13 @@ def test_lean_on_without_any_artifact_is_visible_and_not_silent(
 
 def test_an_artifact_outside_the_package_still_counts_as_lean_output(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`out/formal/` 下也有产物：那也算"有 Lean 产出"，两格因此必填。
+    """`out/formal/` 下也有产物：那也算"有 Lean 产出"（这是一个读数）。
 
     它今天也能直接填进 `lean_file`（项目根相对路径 `out/formal/000004.lean` —— 2026-10-25
-    第 4 条把项目根加进解析面），而这条用例钉的是另一件事："产出在包外也不算没有产出"
-    这个读数，不许静默放过。
+    第 4 条把项目根加进解析面）。2026-11-04 起这一档只进读数：凭据那一格按每条命题的
+    证明通道判（`numericproof.formal_slot`），盘上有产物不再把通道为空的行判成"必须填" ——
+    否则「这一格不适用」会被读成「漏填」。通道为空那一档的判据在
+    `tests/test_mapping_credential_slot_holds_both_programs.py` 的 e。
     """
     _lean(monkeypatch, True)
     root = _workspace(tmp_path, rows=_rows(lean=False), lean_source=None)
@@ -363,7 +365,9 @@ def test_an_artifact_outside_the_package_still_counts_as_lean_output(
     assert got["lean_state"] == "on", got["lean"]
     assert "out/formal/000004.lean" in got["lean"]["artifacts"], got["lean"]
     assert got["warnings"] == [], got["warnings"]
-    assert set(_kinds(got)) == {"mapping_lean_missing"}, _details(got)
+    # 通道为空 ⇒ 两格留空是 pass（盘上有产物这个读数不改变这一条）。
+    assert got["problems"] == [], _details(got)
+    assert got["state"] == "pass", got["reason"]
 
 
 # ---------------------------------------------------------------- 7 同一个目标

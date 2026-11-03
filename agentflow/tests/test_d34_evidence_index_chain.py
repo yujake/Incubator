@@ -224,6 +224,9 @@ def _mapping_workspace(root: pathlib.Path, *, cells: dict | None = None) -> path
     sha = _bytes_sha(report)
     row = {"kind": "theorem", "label": "thm:r34", "env_no": 1,
            "ledger_id": f"stmt:{sid}", "proof_no": 1, "file": SCRIPT_REL,
+           # 2026-11-04：`lean_file` 是「机器核验凭据」那一格 —— 数值证明通道填的就是
+           # 证明栏第 ① 段那份程序（与 `file` 同一份），不再只是 Lean 源码的位置。
+           "lean_file": SCRIPT_REL,
            "numeric_evidence": f"exp:{env['experiment_id']}",
            "exhaustion_note": env["report_rel"],
            "evidence_kind": NP.INDEX_KIND_REPORT,
