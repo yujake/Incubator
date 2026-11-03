@@ -592,6 +592,17 @@ def _bits_after_canonical_write(row: Mapping, fresh: Mapping | None) -> dict:
     所以这里只动两格：第 2 位换成这一笔的读数，证据里的 `proof_process` 与
     `proof_source` 换成这一笔的正文来源；签名那几格原样保留，由读侧的
     `evidencebits._stale_review_cleared` 按"记下来的 sha 与现行正文不符"判过期。
+
+    ## 第 3 位那两张表：`fresh` 里有的必须带过来（2026-11-03，第 ② 处）
+    `fresh` 不是"与签名无关的现算值"：调用方在它上面已经走过 `vsigns.bits_after_sign`
+    （按这一笔要落盘的正文 sha 认签），所以它可能带着覆盖新正文的那一签
+    （`reviewed_by_proof` / `reviewed_sha_by_proof` / `reviewed_by`）。改前这里只从
+    `fresh` 取 `proof_process` / `proof_source`，等于把刚认到的那一签整份丢掉 ——
+    盘上留下的还是"签旧稿"的那一套（或根本没有），而 `optimized=true` 却照着台账另判
+    一次。87 的 000002 连 `reviewed_by_proof` 这一格都没有，就是这一句造成的。
+    现在的口径：`fresh` 有哪几格就覆盖哪几格（它是"按现行正文重新判定后"的结果），
+    `fresh` 没有的保留 `old` 的（旧签作为历史仍在，读侧按 sha 判 stale）——
+    两边都不许清空即通过。
     """
     old = dict(row.get("bits") or {})
     new = dict(fresh or {})
@@ -605,9 +616,43 @@ def _bits_after_canonical_write(row: Mapping, fresh: Mapping | None) -> dict:
     fresh_ev = dict(new.get("evidence") or {})
     ev["proof_process"] = str(fresh_ev.get("proof_process") or "")
     ev["proof_source"] = str(fresh_ev.get("proof_source") or "")
+    # 第 3 位：这一笔按现行正文认到的签（`bits_after_sign` 的产物）要跟着正文一起落，
+    # 不是"换正文顺手把旧的签擦掉"，也不是"留着旧的那一套就算签过"。
+    for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY, "reviewed_by"):
+        if key in fresh_ev:
+            ev[key] = fresh_ev[key]
+    if bool(new.get("reviewed")):
+        out["reviewed"] = True
     out["evidence"] = ev
     return _EB.normalize_raw(out, origin=str(row.get("origin") or "own_result"),
                              kind=str(row.get("kind") or ""))
+
+
+def _optimized_gate(bits: Mapping | None, *, proof_no: Any, proof_text: str) -> dict:
+    """`optimized=true` 能不能打：判据只有一处（`evidencebits.optimized_signature`）。
+
+    ## 为什么它必须是一个能被打桩的单点
+    87 的漏洞是"`optimized=true` 能在没有签的情况下被打上"（8 条命题里 4 条有正文
+    无签、却全被记成已优化）。所以这一笔要有一个唯一的判据点：核
+    `reviewed_by_proof[证明号] is True` 且 `reviewed_sha_by_proof[证明号] ==
+    proof_sha(现行正文)`。反真空判据把它打成恒 true ⇒ "无签的替换"必须当场又能打上
+    true（见 `tests/test_optimized_requires_a_sign.py` 的 d）—— 打桩点就在这里，
+    不在读侧、也不在调用方。
+    """
+    return _EB.optimized_signature(dict(bits or {}), proof_no, proof_text=proof_text)
+
+
+def _optimized_reading(attach: Mapping) -> dict:
+    """把 `_attach_proofs` 里算好的优化态读数摊到返回值上（键与写侧同一个）。
+
+    只在换正文那一笔有话说：`optimized` 逐份、`optimized_blocked` 是被拦下的原因
+    （空串 = 没被拦）。老写法（没有换正文）的返回值因此逐字不变。
+    """
+    got = dict(attach or {})
+    if not got.get("optimized"):
+        return {}
+    return {"optimized": [dict(x) for x in (got.get("optimized") or [])],
+            "optimized_blocked": str(got.get("optimized_blocked") or "")}
 
 
 class _RegisterStatement:
@@ -708,11 +753,23 @@ class _RegisterStatement:
         `already` 是"号在册、正文逐字相同"；`canonical_written` 是"canonical 真被覆盖"；
         `canonical_pending` 是"这一笔要写 canonical，但没有可写的 store / 行" —— 调用方
         据此给 `canonical_not_written`，不许折成 `duplicate_statement`（那会让正文静默消失）。
+
+        ## 换正文那一笔的两条硬口径（2026-11-03，87 真机暴露的漏洞）
+        ① `optimized=true` 只能在"这一份正文已经有签、且那一签盖的就是它"时打
+        （判据只在 `evidencebits.optimized_signature`，`_optimized_gate` 是它的打桩点）。
+        不满足 ⇒ 整笔受控拒绝、`optimized_blocked` 说原因（`no_sign` / `sha_mismatch`），
+        在册正文一个字都不动（不许"落个 false 然后照样换"）。
+        ② 换正文这一笔不许把 `reviewed_by_proof` / `reviewed_sha_by_proof` 清掉：
+        `_bits_after_canonical_write` 把这一笔按现行正文认到的签（`fresh` 里那几格）
+        带过来，没认到的保留旧的（读侧按 sha 判 stale）—— 两边都不是"清空即通过"。
         """
         out: dict = {"written": False, "attached": [], "already": [],
                      "refused": "", "reason": "", "canonical_differs": False,
                      "canonical_written": False, "canonical_pending": False,
                      "canonical_history": [],
+                     #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。没换正文时是
+                     #: 空列表 / 空串 —— 老返回形状因此逐字不变。
+                     "optimized": [], "optimized_blocked": "",
                      #: 第 4 位这一笔同步过没有（见 `_bits_with_formal`）：它与
                      #: "写了什么"分开报，因为"没验过"与"验过没变化"都是 `False`，
                      #: 而两者该给调用方的话不同（前者不用再登记一次）。
@@ -788,6 +845,107 @@ class _RegisterStatement:
             # 调用方以为交上去了，而盘上那一份的 sha 没变（签名也不会转 stale）。
             canonical_changed = bool(want) and raw_want != have_raw
             if canonical_changed:
+                # ---- ① 换正文之前先核：这一份正文有没有签、那一签盖的是不是它 ----
+                #
+                # 业主 2026-11-03（87 真机暴露的漏洞）：「洗过的肯定能保证V签」
+                # 「优化后拿V签，用有V签的优化后的证明精准替换原证明并将那条证明记为
+                # 已优化」⇒ `optimized=true` 的前提是"这份替换进来的正文已经有签"。
+                # 改前这一格拿 `_signature_covers`（只读 V 的台账）当判据，于是台账里
+                # 有三次「成立」、而命题行上没有那一签时，true 照样被打上（87 的
+                # 000001 / 000002 / 000004 / 000007）。判据现在只有一处：
+                # `evidencebits.optimized_signature` —— 逐份表 `reviewed_by_proof`
+                # 为真，且 `reviewed_sha_by_proof` 等于现在这一份正文的 sha。
+                #
+                # 不满足时正文也不换：一次"优化后的精准替换"若带不来签，那它就不是
+                # 替换，只是把一份没签的稿盖掉在册那一份（那会让盘上多一份谁也追不到的
+                # 正文）。读数给 `optimized_blocked`（no_sign / sha_mismatch），
+                # 整笔受控拒绝 —— 不是静默落 false 然后照样换。
+                #
+                # 先按现行正文的 sha 再认一次签（第 ② 处的另一半）：主路在上面已经
+                # 认过手稿块 / pending，这里补的是"V 曾对这份正文连判到发签、签文件在
+                # 盘上"那一档（真机 87：正文换上来的时候签已经发过了）。判据仍是
+                # `vsigns.bits_after_sign` 一处（sha 相符 + 连续次数 + 命题号相符），
+                # 这一格只把它的结论带进这一笔的 bits。
+                fresh_bits = dict(bits or {})
+                try:
+                    from agentflow import vsigns as _VS
+
+                    _claimed, _sign_claim = _VS.bits_after_sign(
+                        fresh_bits, root=getattr(store, "root", ""),
+                        proof_text=raw_want, statement_id=str(stmt_id), proof_no=1,
+                        kind=str(row.get("kind") or ""), store=store)
+                    if _sign_claim.get("applied"):
+                        fresh_bits = _claimed
+                    out["sign_claim"] = {
+                        "checked": bool(_sign_claim.get("checked")),
+                        "found": bool(_sign_claim.get("found")),
+                        "applied": bool(_sign_claim.get("applied")),
+                        "artifact_sha": str(_sign_claim.get("artifact_sha") or ""),
+                        "why": str(_sign_claim.get("why") or "")}
+                except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许折成"没签"
+                    out["sign_claim"] = {
+                        "checked": False, "found": False, "applied": False,
+                        "why": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
+                                "⇒ 这一格不是「没有签」")}
+                # ---- 第二次认签：签文件没认到、而台账里这一份已经签满 ----
+                #
+                # E 那条路（真机 87 同形）的签文件是"未在册"形态：`artifact_sha` 对得上、
+                # 但 `statement_id` 是空的（签是在命题还没登记时发的、落盘那一刻还没绑号）。
+                # 这时 `bits_after_sign` 按"同一段正文被别的命题复用不算签过"会拒认 ——
+                # 而 V 的台账里这一份明明连判到发签。判据仍是唯一那一处
+                # （`verifications.review_standing`）；这里只做"按现行正文重新判定后重写"
+                # 那一步（业主 2026-11-03 的第 ② 处），只认 `state="signed"`：
+                # `holding`（票数没到）不落这两格 —— 有签与"审过一票"是两件事。
+                want_sha = _VR.proof_sha(raw_want)
+                if str(_EB.reviewed_sha_by_proof(fresh_bits).get(1) or "") != want_sha:
+                    _standing_now = self._review_after_rewrite(
+                        getattr(store, "root", None), stmt_id=str(stmt_id),
+                        proof_text=raw_want)
+                    if str(_standing_now.get("state") or "") == "signed":
+                        from agentflow import vsigns as _VS
+
+                        fresh_bits = _VS.bits_with_review(
+                            fresh_bits, proof_no=1, proof_sha256=want_sha,
+                            kind=str(row.get("kind") or ""),
+                            verification_id=str(_standing_now.get("verification_id") or ""),
+                            evidence=(f"{_VR.VERIFICATIONS_DIR}/{stmt_id}.jsonl"))
+                        out["sign_claim"] = {
+                            "checked": True, "found": True, "applied": True,
+                            "artifact_sha": want_sha,
+                            "why": ("台账里这一份已连续签满（`review_standing=signed`）⇒ "
+                                    "按现行正文重写 `reviewed_by_proof` / "
+                                    "`reviewed_sha_by_proof`（不是清空即通过）")}
+                candidate = _bits_after_canonical_write(row, fresh_bits)
+                gate = _optimized_gate(candidate, proof_no=1, proof_text=raw_want)
+                out["optimized"] = [{
+                    "proof_no": 1,
+                    "optimized": bool(gate.get("optimized")),
+                    "state": ("true" if gate.get("optimized") else "false"),
+                    "blocked": str(gate.get("optimized_blocked") or ""),
+                    "why": str(gate.get("why") or ""),
+                }]
+                out["optimized_blocked"] = str(gate.get("optimized_blocked") or "")
+                if not gate.get("optimized"):
+                    out["canonical_differs"] = True
+                    blocked = (out["optimized_blocked"]
+                               or _EB.OPTIMIZED_BLOCKED_NO_SIGN)
+                    out["optimized"][0]["blocked"] = blocked
+                    out["refused"] = (
+                        "proof_without_v_sign"
+                        if blocked == _EB.OPTIMIZED_BLOCKED_NO_SIGN
+                        else "proof_sha_mismatch")
+                    out["reason"] = (
+                        "这一笔要换掉在册的 canonical 正文，而它没有资格被记成「已优化」："
+                        + str(gate.get("why") or "")
+                        + "。业主 2026-11-03 的口径是「优化后拿V签，用有V签的优化后的"
+                        "证明精准替换原证明」—— 没有签的正文不许盖掉在册那一份，也不许"
+                        "打 `optimized=true`。两条出路：① 让 V 先签这一份新正文"
+                        "（`V.verify_proof` 带 `statement_id` + `proof_no`，连续 "
+                        f"{int(getattr(_VR, 'SIGN_STREAK_NEED', 3) or 3)} 次「成立」）；"
+                        "② 确实只是改稿、不是优化替换 ⇒ 仍要一份覆盖新正文的签"
+                        "（改稿要重签是既有口径）。盘上正文一个字都没动"
+                        "（`proof_text` 仍是旧那一份，`proof_history` 也没有多一条）。")
+                    return out
                 if have_canon:
                     # 旧正文先留痕，再换：顺序反了就会出现"新正文已落、旧正文已经丢了"
                     # 的窗口（事务失败时内存里那一份改动的可见性没法靠调用方保证）。
@@ -801,26 +959,18 @@ class _RegisterStatement:
                     out["canonical_differs"] = True
                     row["proof_history"] = history
                 row["proof_text"] = raw_want
-                merged = _bits_after_canonical_write(row, bits)
-                if merged:
-                    row["bits"] = merged
-                # ---- 换正文 ⇒ 这一份的优化态重判（业主 2026-11-02 的两阶段录入） ----
+                # `candidate` 就是"换完正文之后这一行的 bits"（上面为判 gate 已经算过；
+                # 纯函数，不读 proof_text），不再算第二遍。
+                if candidate:
+                    row["bits"] = candidate
+                # ---- 换正文 ⇒ 这一份的优化态（业主 2026-11-02 的两阶段录入） ----
                 #
                 # 口径（`draft/179` 二之一）：「洗过的肯定能保证V签。所以二阶段只用看是否
-                # 优化过」。于是这一格的语义只有一句：这一份正文是被洗过的那一版吗。
-                # 判据不在这里新写：一份正文"有没有签覆盖它"的唯一判定口是
-                # `verifications.review_standing`（现行正文的 sha + 连续次数）。有 ⇒ `true`；
-                # 没有 ⇒ `false`（新正文还没洗过，旧的那一格必须跟着退回去，不许留在 true 上）。
-                #
-                # 为什么这一笔不改"收不收"：改稿是正常动作（2026-10-22 审计口径：签名是读数、
-                # 不是门锁）。这一格只回答"洗没洗过" —— 拿它当"不许写"的闸是另一条口径的活。
-                _sig = self._signature_covers(store, stmt_id=str(stmt_id), proof_no=1,
-                                              text=raw_want)
-                row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, 1,
-                                                      bool(_sig.get("signed")))
-                out["optimized"] = [{"proof_no": 1, "optimized": bool(_sig.get("signed")),
-                                     "state": str(_sig.get("state") or ""),
-                                     "why": str(_sig.get("why") or "")}]
+                # 优化过」。上面那道核已经判过"这一份有签、签的就是它" ⇒ 这里落 `true`；
+                # 落盘的 true 与 `reviewed_by_proof` / `reviewed_sha_by_proof` 是同一笔
+                # 事务写下去的（第 ② 处：那两张表不许被换正文这一笔清掉）。
+                row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, 1, True)
+                out["optimized_blocked"] = ""
                 # ---- 改写过 ⇒ 旧签不算数（业主 2026-10-26 Q14 的唯一硬机制）。
                 #
                 # 判据不在这里：`verifications.review_standing` 是唯一判定口（它拿
@@ -2245,6 +2395,9 @@ class _RegisterStatement:
                             "重新交（正文按规范化比不同才会落新的一行）。")}
             #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
             out.update(trunc_reading)
+            #: 换正文那一笔的优化态读数（`optimized` / `optimized_blocked`）：没有换
+            #: 正文时这两格不出现（老返回形状逐字不变）。
+            out.update(_optimized_reading(attach))
             if proofs_listed:
                 out.update(self._proofs_reading(attach))
                 pd = self._write_attached_proof_deps(sec, stmt_now, proofs_listed, attach)
@@ -2290,7 +2443,8 @@ class _RegisterStatement:
                                          bits=bits)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
-                               stmt_id=stmt_dup)
+                               stmt_id=stmt_dup,
+                               **_optimized_reading(attach))
             if attach.get("canonical_pending"):
                 # 这一笔要写 canonical 而写不进去（没有 store / 行不在）⇒ 必须给一条
                 # 明确的拒绝码。折成 duplicate_statement 会让"正文一行没落"看起来
@@ -2326,6 +2480,8 @@ class _RegisterStatement:
                                    if str(written.get("reason") or "").strip() else ""))}
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
+                #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。
+                out.update(_optimized_reading(attach))
                 if attach.get("canonical_written"):
                     out["canonical_written"] = True
                     out["canonical_history"] = list(attach.get("canonical_history") or [])
@@ -2416,6 +2572,11 @@ class _RegisterStatement:
         attach = self._attach_proofs(stmt_id, proofs_listed,
                                      canonical=str(proof_text or ""),
                                      bits=bits)
+        if attach.get("refused"):
+            # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
+            # 成功返回：盘上那一份 `proof_text` 一个字都没动，读数在 `_optimized_reading`。
+            return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
+                           stmt_id=stmt_id, **_optimized_reading(attach))
         if proofs_listed and not attach.get("written"):
             # 行已经由秘书落好了（#p1 在盘上），而清单没挂上 —— 不许当成功返回：
             # 调用方会以为"这条定理的第二份证明交上去了"。如实报，并给出 stmt_id。
@@ -2475,7 +2636,11 @@ class _RegisterStatement:
                            if attach.get("canonical_written") else {})
         rewrite_note = (str(attach.get("rewrite_note") or "")
                         if attach.get("canonical_written") else "")
+        #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。没有换正文时是空字典 ——
+        #: 老写法的返回值逐字不变。
+        optimized_reading = _optimized_reading(attach)
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
+                **optimized_reading,
                 #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
                 "self_authored_review": self._self_authored_reading(self_authored),
                 "quote_verified": quote_verified, "origin": origin,

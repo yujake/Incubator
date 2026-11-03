@@ -308,6 +308,12 @@ def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
     _agent(st).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
     sid = _row(st)["stmt_id"]
+    # 2026-11-03（87 的漏洞）：入场那笔的 #p1 是"签过才写得进来"的（准入闸），所以
+    # 它现在会带着自己的签（`reviewed_by_proof` 里为真）。这一条要量的不是"#p1 没签"，
+    # 而是"这一笔写回只翻被签的那一份" —— 于是先记下 #p1 的原值，签完 #p2 之后
+    # #p1 必须一个字都没变，而 #p2 从假翻真。
+    before = EB.reviewed_by_proof(_row(st))
+    assert before.get(2) is not True, before
 
     signed = _sign_n(st, text=P2, proof_no=2)
     assert signed["stmt_id"] == sid, signed
@@ -320,11 +326,13 @@ def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
     assert disk["stmt_id"] == sid and disk["statement_id"] == sid, disk
     assert disk["proof_no"] == 2, disk
     assert disk["proof_sha256"] == VR.proof_sha(P2), disk
-    # 写回只翻被签的那一份（#p1 不是"被审过"，哪怕它排在前面）。
+    # 写回只翻被签的那一份：#p1 的原值原样保留（它排在前面也不借光、也不被顺手改掉）。
     wb = signed["statement_writeback"]
     assert wb["written"] is True and wb["rolled_back"] is False, wb
     assert wb["proof_no"] == 2 and wb["statement_id"] == sid, wb
-    assert EB.reviewed_by_proof(_row(st)) == {1: False, 2: True}, _row(st)["bits"]
+    after = EB.reviewed_by_proof(_row(st))
+    assert after == {1: True, 2: True}, (after, _row(st)["bits"])
+    assert after.get(1) == before.get(1), ("#p1 被这一笔顺手改了", before, after)
 
 
 # ============================================================ ⑤ 负控：不许借光

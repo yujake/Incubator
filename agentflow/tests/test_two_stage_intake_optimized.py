@@ -157,18 +157,40 @@ def test_optimized_is_three_state_and_a_missing_cell_is_not_false(tmp_path):
     assert EB.optimized_by_proof(row) == {}
 
     # 两种记录过的那一档各读各的。
+    #
+    # 2026-11-03（87 的漏洞）：`optimized_state` 现在读的是"能不能声称已优化" ——
+    # 记着 true 的那一份必须真有签、且那一签盖的是现在这一份正文（判据只在
+    # `evidencebits.optimized_signature`）。所以这一格把 #2 的正文与它的签一起铺上：
+    # 没有签的 true 是这次要挡的那一档，不该出现在"三态读得对"的夹具里。
+    p2 = "另一条路线：\n1. 先证引理。\n2. 由引理得结论。"
     bits = dict(row["bits"])
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": False, "2": True}
+    ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True, "2": True}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1), "2": VR.proof_sha(p2)}
     bits["evidence"] = ev
-    _put(st, dict(row, bits=EB.normalize_raw(bits, origin="own_result",
-                                            kind="conjecture")))
+    _put(st, dict(row,
+                  proofs=[{"proof_no": 2, "text": p2, "created_at": TS}],
+                  bits=EB.normalize_raw(bits, origin="own_result", kind="conjecture")))
     row2 = _row(st)
     assert EB.optimized_state(row2, 1) == "false"
     assert EB.optimized_state(row2, 2) == "true"
     assert EB.optimized_state(row2, 3) == "not_recorded"
     # 三态是一个受控词表（R011 的死取值普查认它）。
     assert set(EB.OPTIMIZED_STATES) == {"true", "false", "not_recorded"}
+
+    # 反真空（与 87 同形）：把 #2 的签拆掉 ⇒ 盘上那一格仍是 true，而"能不能声称"
+    # 变成 false + no_sign。没有这一条，上面的 true 可能来自"只读那一张表"。
+    bare = dict(row2)
+    assert EB.optimized_by_proof(bare) == {1: False, 2: True}
+    bare_bits = dict(bare["bits"])
+    bare_ev = dict(bare_bits.get("evidence") or {})
+    bare_ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True}
+    bare_bits["evidence"] = bare_ev
+    bare["bits"] = EB.normalize_raw(bare_bits, origin="own_result", kind="conjecture")
+    standing = EB.optimized_standing(bare, 2)
+    assert standing["state"] == "false", standing
+    assert standing["optimized_blocked"] == EB.OPTIMIZED_BLOCKED_NO_SIGN, standing
 
 
 # ============================================================ ③ 占位签不翻汇总位
@@ -242,11 +264,14 @@ def test_the_carried_manuscript_body_lands_in_proof_text(store):
     _write_manuscript(store, sid, body)
 
     # 准入闸（2026-11-02 strict）：从稿里取出来的那一份正文也要先有签
-    # （命题已在册 ⇒ 走该命题台账；一票「成立」就够 `_signature_covers` 的
-    # `holding` 那一档，不翻第 3 位）。
+    # （命题已在册 ⇒ 走该命题台账）。2026-11-03（87 的漏洞）之后"有签"不再只是
+    # `_signature_covers` 的 `holding` 一档：换正文要打 `optimized=true`，而那一格
+    # 要求 `reviewed_by_proof` / `reviewed_sha_by_proof` 真的在 —— 一票（holding）
+    # 不落这两格，所以这里按发签门槛签满（`SIGN_STREAK_NEED` 次「成立」，并传
+    # `store` 让签文件真的发出来）。
     from conftest import sign_for_the_gate
 
-    sign_for_the_gate(store.root, statement_id=sid, proof_text=body, times=1)
+    sign_for_the_gate(store.root, statement_id=sid, proof_text=body, store=store)
     got = b.register_statement(**{**OWN, "proof_text": ""})
     assert got["ok"] is True, got
     assert got.get("proof_text_source") == "manuscript", got
@@ -349,13 +374,19 @@ def test_the_closing_gate_splits_unoptimized_by_source(store):
     assert classes[S.format_id(2)] == "unoptimized_source_not_recorded", classes
 
     # 正控：把 A 标成已优化 ⇒ 它退出这三档，逐条数减一。
+    # 2026-11-03（87 的漏洞）：`optimized=true` 要真有签才作数（`optimized_state` 现在
+    # 走 `optimized_standing`）⇒ 夹具把 A 那一份的签一起铺上，否则这一笔只是"记着
+    # true、没有签"，收工门会（正确地）继续把它算成欠洗。
     row = _row(store, S.format_id(0))
     bits = dict(row["bits"])
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": True}
+    ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1)}
     bits["evidence"] = ev
     _put(store, dict(row, bits=EB.normalize_raw(bits, origin="own_result",
                                                kind="conjecture")))
+    assert EB.optimized_state(_row(store, S.format_id(0)), 1) == "true"
     again = closing.statements_unoptimized_reading(store)
     assert int(again["count"]) == 2, again
     assert S.format_id(0) not in {str(r["stmt_id"]) for r in again["rows"]}, again["rows"]
@@ -442,15 +473,25 @@ def test_the_literature_placeholder_sign_is_the_only_unsigned_door(store, monkey
 # ============================================================ ⑦ MAPPING 的优化态
 
 def test_mapping_shows_the_optimized_state(store):
-    """⑦ 论文对应表那一格：已优化 / 未优化 / 未记录 三档，按证明号读。"""
+    """⑦ 论文对应表那一格：已优化 / 未优化 / 未记录 三档，按证明号读。
+
+    2026-11-03（87 的漏洞）之后"已优化"要真有签（`optimized_state` →
+    `optimized_standing`）：#2 的正文与它的签表一起铺上，否则那一格会（正确地）
+    读成"记着 true、没有签"⇒ 未优化 —— 那就不是这一条要量的三档了。
+    """
+    p2 = "另一条路线：\n1. 先证引理。\n2. 由引理得结论。"
     row = _statement_row(bits=EB.bits_of(origin="own_result", proof=True,
                                          proof_process=P1, kind="conjecture"))
     bits = dict(row["bits"])
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": False, "2": True}
+    ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True, "2": True}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1), "2": VR.proof_sha(p2)}
     bits["evidence"] = ev
-    _put(store, dict(row, bits=EB.normalize_raw(bits, origin="own_result",
-                                               kind="conjecture")))
+    _put(store, dict(row,
+                     proofs=[{"proof_no": 2, "text": p2, "created_at": TS}],
+                     bits=EB.normalize_raw(bits, origin="own_result",
+                                           kind="conjecture")))
 
     ledger = _row(store)
     assert PM.optimized_cell(ledger, 1) == PM.OPTIMIZED_NO, PM.optimized_cell(ledger, 1)

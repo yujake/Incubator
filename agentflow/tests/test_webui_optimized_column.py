@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import hashlib
 from typing import Any
 
 import pytest
@@ -63,11 +64,16 @@ TS = "2026-11-03T00:00:00+08:00"
 #: `evidencebits.OPTIMIZED_STATES` 的三个 token，映射只在页面那一处）。
 OPTIMIZED_WORDS: tuple[str, ...] = ("已优化", "未优化", "未记录")
 
+#: 夹具里那一份证明的正文。2026-11-03（87 的漏洞）之后 `optimized_state` 走
+#: `optimized_standing`：记着 true 的那一份必须真有签、且签盖的正是这一份正文
+#: （sha 对得上）。所以夹具要给一条真正文，不能再用空串 + 一个假 sha。
+_PROOF_TEXT = "偶数平方仍是偶数的证明正文（夹具）。"
+
 #: 逐条签那一张表（与验收表同形：`#p1` 签过、`#p2` 没签）—— 它让"三张表的并集"
 #: 这件事在夹具上真的有两个证明号，而不是只有 optimized 那一张自说自话。
 _BITS_REVIEWED: dict[str, Any] = {
     "reviewed_by_proof": {"1": True, "2": False},
-    "reviewed_sha_by_proof": {"1": "a" * 64},
+    "reviewed_sha_by_proof": {"1": hashlib.sha256(_PROOF_TEXT.encode("utf-8")).hexdigest()},
 }
 
 
@@ -87,7 +93,7 @@ def _statement_ws(tmp_path: pathlib.Path, evidence: dict[str, Any] | None,
     row: dict[str, Any] = {
         "stmt_id": "000001", "origin": "own_result", "kind": "theorem",
         "statement_text": "偶数平方仍是偶数", "statement_full": "对任意整数 n，n² 为偶数当且仅当 n 为偶数。",
-        "proof_text": "", "created_by": "B", "created_at": TS,
+        "proof_text": _PROOF_TEXT, "created_by": "B", "created_at": TS,
     }
     if not bits_missing:
         row["bits"] = {
@@ -252,17 +258,19 @@ def test_a_negative_control_a_page_without_the_column_is_reported() -> None:
 # ====================================================================== 判据 c（反真空 · 后端）
 def test_c_stubbing_the_reading_to_constant_true_makes_a_red(
         ws_two_states: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """判据 c：把读口 `optimized_by_proof` 打桩成恒 true ⇒ 判据 a 必须红。
+    """判据 c：把读口 `optimized_state` 打桩成恒 true ⇒ 判据 a 必须红。
 
-    为什么打这一层而不是 `optimized_state`：`optimized_state` 是唯一读口，
-    它内部读的就是这张表 —— 把表打桩，测的是"读模型真的经那个读口取数"
-    这件事本身；只打 `optimized_state` 会把"读模型自己另判了一次"这种错放过。
+    为什么打这一层：读模型取"优化态"只经 `optimized_state` 一处（2026-11-03 起它
+    内部走 `optimized_standing`，会核"那一格 true 有没有签撑着"）。把这一格打桩，
+    测的是"读模型真的经这个读口取数"这件事本身；只打 `optimized_by_proof` 不够了
+    —— 现在真正的判定在 standing 那一层，打表会让"记着 true、没有签"照旧读成 false，
+    于是这个反真空量不到"读模型绕开读口"。
     """
     before = R.evidence_chain(ws_two_states)["statements"]
     assert _two_state_problems(before) == [], _two_state_problems(before)
 
-    monkeypatch.setattr(EB, "optimized_by_proof",
-                        lambda row: {1: True, 2: True}, raising=True)
+    monkeypatch.setattr(EB, "optimized_state",
+                        lambda row, proof_no: "true", raising=True)
     after = R.evidence_chain(ws_two_states)["statements"]
     problems = _two_state_problems(after)
     assert problems, "读口打桩成恒 true 之后，判据 a 居然还绿着（读数没走那个读口）"

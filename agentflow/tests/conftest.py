@@ -266,7 +266,8 @@ def sync_counters(store: Store) -> None:
 
 
 def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
-                       proof_no: int = 1, times: int | None = None) -> int:
+                       proof_no: int = 1, times: int | None = None,
+                       store=None) -> int:
     """把一条命题的第 3 位签住（夹具用）：连续几次干净的「成立」，返回签了几行。
 
     为什么夹具需要它（2026-11-01，业主裁定「每个命题和证明的产出最终必须以V签收尾，
@@ -282,6 +283,12 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
     走真写口 `verifications.record_verification`：第 3 位要连续
     `verifications.SIGN_STREAK_NEED` 次「成立」才翻，所以缺省就写那么多次。
     秘书轴写 `clean`（不写就按"没判过"计入；写上更接近真机）。
+
+    ## `store` 那一格（2026-11-03）
+    不给 `store` 时只追加台账（`record_verification` 的老行为）：位不翻、签文件也不发。
+    而"换正文要打 `optimized=true`"这条判据要的是真签（`reviewed_by_proof` /
+    `reviewed_sha_by_proof` 都落），所以需要那两格的夹具必须把 `store` 传进来 ——
+    否则造出来的是"审过几次、没有签"，而用例说的却是「这一份签过了」。
     """
     from agentflow import verifications as VR
 
@@ -292,7 +299,7 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
             verdict={"verdict": "成立"},
             secretary_judge={"axis": "clean", "checked": True,
                              "reason": "夹具：把第 3 位签住"},
-            proof_no=int(proof_no))
+            proof_no=int(proof_no), store=store)
     return need
 
 
@@ -486,6 +493,10 @@ def signed_v_handoffs(monkeypatch):
         # "一次交 #p1+#p2 且两份都有签"在结构上只能走两步：命题先行、签后落证明。
         # 这正是业主两阶段录入的真实次序（机械录入那一版先入册，洗过、签过再交正文）。
         #
+        # 2026-11-03（87 的漏洞）：换正文那一笔要打 `optimized=true`，而那一格现在
+        # 要求 `reviewed_by_proof` / `reviewed_sha_by_proof` 真的覆盖新正文。一票
+        # （`holding`）不落这两格 ⇒ 这里的"已签"必须按发签门槛签满，否则夹具造出来的
+        # 是"审过一票、没有签"，而用例要的是「两份各自签过再交正文」。
         # 只在这一笔「真的合法」时走这一档：`proofs` 里两份以上 / 有 `#p2` 及以后、
         # 号不重复、正文非空。负控（重号 / 空正文 / 坏号）不许先落一行 ——
         # 那些用例断言的就是"整笔不写"，夹具替它铺行会把那条判据造坏。
@@ -527,9 +538,13 @@ def signed_v_handoffs(monkeypatch):
                 one = dict(item) if hasattr(item, "items") else {}
                 body = str(one.get("text") or "")
                 if body.strip():
+                    # 签满（不是一票）：见上面那一段 —— `optimized=true` 的判据要求
+                    # `reviewed_by_proof` / `reviewed_sha_by_proof` 真的覆盖这一份正文。
+                    # 传 `store` 才会发签文件（不给就只追加台账，位不翻）。
                     sign_for_the_gate(self.store.root, statement_id=sid,
                                       proof_text=body,
-                                      proof_no=int(one.get("proof_no") or 1), times=1)
+                                      proof_no=int(one.get("proof_no") or 1),
+                                      store=self.store)
         return real(self, **kw)
 
     monkeypatch.setattr(AgentB, "register_statement", signed)

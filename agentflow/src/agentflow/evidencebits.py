@@ -664,16 +664,171 @@ def optimized_state(row: Mapping[str, Any], proof_no: Any) -> str:
 
     号认不出（`0` / `"abc"`）⇒ `not_recorded`：那不是"没洗"，是"问的是哪一份都没有答案"，
     与逐份签那一侧"号认不出 ⇒ unreadable"同一条纪律（`verifications.review_standing`）。
+
+    ## 它读的是"能不能声称已优化"，不是"盘上那一格写着什么"（2026-11-03 改）
+    87 的漏洞暴露了这两件事的分家：四条命题的 `optimized_by_proof` 写着 true，而
+    `reviewed_by_proof` 里根本没有那一份 —— "优化过"成了比签更强、却可以是空的声称。
+    所以这一格现在走 :func:`optimized_standing`：true 只在"这一格写着 true、且那一签
+    真的盖着现在这一份正文"时才给；否则给 false（原因由 :func:`optimized_standing`
+    的 `optimized_blocked` 说）。盘上原值仍可查（:func:`optimized_by_proof`），
+    历史读数不追溯改写 —— 改的只是"能不能声称"。
+
+    三态的形状不变（缺格仍是 `not_recorded`，不是 false）：缺格是存量行的合法初态，
+    它没有声称过 true，也就不存在"被拦下"。
     """
-    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+    return str(optimized_standing(row, proof_no).get("state") or "not_recorded")
+
+
+#: `optimized=true` 被打不上的两档原因（写侧读数 `optimized_blocked` 的两个取值）。
+#:
+#: 它们不是"优化态"的第四、第五档（那是 :data:`OPTIMIZED_STATES` 的事），而是
+#: "这一格声称 true、而它没有资格"时的那句话：没签 ⇒ `no_sign`；签盖的不是现在这一份
+#: 正文 ⇒ `sha_mismatch`。写进读数（而不是只写日志）的理由与三态纪律同源：
+#: "打不上"与"没试过"必须分得开，否则第二阶段只看得到一句 "false"，看不到为什么。
+OPTIMIZED_BLOCKED_NO_SIGN = "no_sign"
+OPTIMIZED_BLOCKED_SHA_MISMATCH = "sha_mismatch"
+
+
+def optimized_signature(row: Mapping[str, Any], proof_no: Any, *,
+                        proof_text: str | None = None) -> dict[str, Any]:
+    """① 那条核：这一份正文有没有签、那一签盖住的是不是它（打 `optimized=true` 前的唯一判据）。
+
+    ## 判据两件（业主 2026-11-03，逐字）
+    「洗过的肯定能保证V签」「优化后拿V签，用有V签的优化后的证明精准替换原证明」——
+    于是"这份替换进来的正文已经有签"落成两句可机器判的：
+
+    1. `bits.evidence.reviewed_by_proof[证明号] is True`（这一份签过）；
+    2. `bits.evidence.reviewed_sha_by_proof[证明号] == proof_sha(现行正文)`
+       （那一签盖的是这一份，不是旧稿）。
+
+    不满足 ⇒ `optimized=False` 且 `optimized_blocked` 说原因：
+    :data:`OPTIMIZED_BLOCKED_NO_SIGN`（没签）/ :data:`OPTIMIZED_BLOCKED_SHA_MISMATCH`
+    （签的是别的正文）。不许静默折成 false：87 的漏洞正是"true 被打上了、而没有
+    任何一格说它凭什么"。
+
+    ## 它不读 `optimized_by_proof`
+    这一格回答"能不能打 true"（写侧那一笔），所以它不要求那一格已经是 true ——
+    那一格正是这一笔的产物。要读"盘上已经声称过的那一格还算不算数"，用
+    :func:`optimized_standing`（它先读表、再调本函数）。
+
+    ## 边界
+    `proof_text` 不给时按证明号从行里取（`verifications.proof_text_of`）；写侧传的是
+    这一笔要落盘的原文（`raw_want`），避免拿盘上旧那一行去比。
+    """
+    from . import verifications as _VR   # 惰性：证明号与 sha 的口径各只有一处
 
     no = _VR.as_proof_no(proof_no)
+    if proof_text is None:
+        text = _VR.proof_text_of(row, no) if no >= 1 else ""
+    else:
+        text = str(proof_text)
+    want = _VR.proof_sha(text) if no >= 1 else ""
+    out: dict[str, Any] = {
+        "checked": True, "proof_no": int(no), "optimized": False,
+        "optimized_blocked": "", "signed": False,
+        "proof_sha256": want, "recorded_sha256": "", "why": "",
+    }
     if no < 1:
-        return "not_recorded"
+        out.update(optimized_blocked=OPTIMIZED_BLOCKED_NO_SIGN,
+                   why=(f"证明号认不出（收到 {proof_no!r}）⇒ 不知道这一签盖的是哪一份，"
+                        "不许打 true（optimized_blocked=no_sign）"))
+        return out
+    per = reviewed_by_proof(row)
+    if per.get(no) is not True:
+        out.update(optimized_blocked=OPTIMIZED_BLOCKED_NO_SIGN,
+                   why=(f"`reviewed_by_proof[{no}]` 不是 true（{per.get(no)!r}）⇒ "
+                        "这一份没有签，不许打 true（optimized_blocked=no_sign）"))
+        return out
+    out["signed"] = True
+    recorded = str(reviewed_sha_by_proof(row).get(no) or "")
+    out["recorded_sha256"] = recorded
+    if not recorded or recorded != want:
+        out.update(optimized_blocked=OPTIMIZED_BLOCKED_SHA_MISMATCH,
+                   why=(f"`reviewed_sha_by_proof[{no}]` 是 "
+                        f"{recorded[:12] + '…' if recorded else '（空）'}、现行正文 sha 是 "
+                        f"{want[:12] + '…' if want else '（空）'} ⇒ 那一签盖的不是现在这一份"
+                        "正文，不许打 true（optimized_blocked=sha_mismatch）"))
+        return out
+    out.update(optimized=True,
+               why=("`reviewed_by_proof` 为真、`reviewed_sha_by_proof` 与现行正文 sha "
+                    "逐字一致 ⇒ 这一份有签，可以记成已优化"))
+    return out
+
+
+def optimized_standing(row: Mapping[str, Any], proof_no: Any, *,
+                       proof_text: str | None = None) -> dict[str, Any]:
+    """这一份证明"能不能声称已优化"：盘上那一格 true + ① 那条核（读侧重放走它）。
+
+    ## 它回答什么
+    业主 2026-11-03 的口径：「洗过的肯定能保证V签」「优化后拿V签，用有V签的优化后的
+    证明精准替换原证明并将那条证明记为已优化」。于是 `optimized=true` 不是"我们打算
+    洗这一份"，而是"这一份正文已经带签、且它就是现在盘上这一份"。所以它必须同时满足
+    三件（缺一不许 true）：
+
+    1. `bits.evidence.optimized_by_proof[证明号] is True`（这一格被写成 true 过）；
+    2. `bits.evidence.reviewed_by_proof[证明号] is True`（这一份真签过）；
+    3. `bits.evidence.reviewed_sha_by_proof[证明号] == proof_sha(现行正文)`
+       （那一签盖住的正是现在这一份，不是旧版）。
+
+    第 2、3 条只在 :func:`optimized_signature` 一处判（写侧与重放共用同一条核）；
+    这一格多做的是第 1 条：先得有人声称过 true。没有这一条，任何一份签过的正文
+    （包括第一阶段机械录入那一版 —— 准入闸要求它有签）都会被读成"已优化"。
+
+    ## 与 :func:`optimized_state` 的分工
+    `optimized_state` 只回答"记过的是什么"（盘上那一格的三态，不做任何交叉核对）；
+    这一格回答"现在能不能声称已优化"。两个问题必须分开：历史读数不许被追溯改写，
+    而"声称"必须能被打回。87 定格重放只走这一格。
+
+    ## 边界（三态，不折平）
+    - 号认不出 ⇒ `state="not_recorded"`、`optimized=False`（与 :func:`optimized_state`
+      同一条纪律：问的是哪一份都没有答案）；
+    - 缺格（存量行）⇒ `not_recorded`、`optimized_blocked=""`：它没有声称过 true，
+      所以不是"被拦下"；
+    - 记过 `false` ⇒ `state="false"`、`optimized_blocked=""`：它已经如实说没洗过。
+    `proof_text` 不给时按证明号从行里取（`verifications.proof_text_of`）；给了就用它
+    （写侧传的是这一笔要落盘的那一份原文，避免"比的是旧盘上那一行"）。
+    """
+    from . import verifications as _VR   # 惰性：证明号与 sha 的口径各只有一处
+
+    no = _VR.as_proof_no(proof_no)
+    if proof_text is None:
+        text = _VR.proof_text_of(row, no) if no >= 1 else ""
+    else:
+        text = str(proof_text)
+    want = _VR.proof_sha(text) if no >= 1 else ""
+    out: dict[str, Any] = {
+        "checked": True, "proof_no": int(no), "state": "not_recorded",
+        "optimized": False, "optimized_blocked": "",
+        "proof_sha256": want, "recorded_sha256": "", "signed": False,
+        "why": "",
+    }
+    if no < 1:
+        out["why"] = (f"证明号认不出（收到 {proof_no!r}）⇒ 不知道问的是哪一份，"
+                      "这一格读成 not_recorded（不是「被拦下」）")
+        return out
     table = optimized_by_proof(row)
     if no not in table:
-        return "not_recorded"
-    return "true" if table[no] else "false"
+        out["why"] = ("这一行没有记过这一份的优化态（not_recorded）⇒ 它没有声称过 "
+                      "true，也就不是「被拦下」")
+        return out
+    if not table[no]:
+        out["state"] = "false"
+        out["why"] = "记过：这一份还没洗过（optimized=false）"
+        return out
+    # 第 2、3 条只走 `optimized_signature` 一处（与写侧打 true 之前那条核同一个函数）。
+    got = optimized_signature(row, no, proof_text=proof_text)
+    out.update(signed=bool(got.get("signed")),
+               recorded_sha256=str(got.get("recorded_sha256") or ""))
+    if not got.get("optimized"):
+        out.update(state="false",
+                   optimized_blocked=str(got.get("optimized_blocked")
+                                         or OPTIMIZED_BLOCKED_NO_SIGN),
+                   why=("这一份记着 optimized=true，而 —— " + str(got.get("why") or "")))
+        return out
+    out.update(state="true", optimized=True,
+               why=("记着 optimized=true，且 `reviewed_by_proof` 为真、"
+                    "`reviewed_sha_by_proof` 与现行正文 sha 逐字一致"))
+    return out
 
 
 def with_optimized_defaults(bits: Mapping[str, Any], proof_numbers: Any) -> dict[str, Any]:

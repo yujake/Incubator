@@ -2000,6 +2000,32 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     return new, out
 
 
+def bits_with_review(bits: Mapping[str, Any], *, proof_no: Any,
+                     proof_sha256: str, kind: str = "", verdict: str = "成立",
+                     verification_id: str = "", evidence: str = "",
+                     findings: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """把"这一份正文已经签过"写进五元位第 3 位（:func:`_apply_review_to_bits` 的公开入口）。
+
+    ## 谁用、为什么必须有这一个入口（2026-11-03，87 的第 ② 处）
+    `agent_b.register_statement` 换正文那一笔要"按现行正文重新判定后重写"
+    `reviewed_by_proof` / `reviewed_sha_by_proof` 那两张表（不许清空即通过）。而这两张
+    表的唯一写法是 `_apply_review_to_bits`（签文件 / pending / 手稿块三条路共用）。
+    让调用方各写一份，两张表迟早分家 —— 那正是这一批要修的形态。所以这里只加一个
+    公开入口，判据与落点一个字都不新写。
+
+    ## 它不判"该不该签"
+    调用方必须自己先判过（`verifications.review_standing` 的唯一结论 /
+    `vsigns.bits_after_sign` 的认签）。这一格只负责把"有这一签"落成五元位的形状。
+    """
+    from . import verifications as _VR
+
+    no = _VR.as_proof_no(proof_no)
+    return _apply_review_to_bits(
+        bits, verification_id=str(verification_id or ""), evidence=str(evidence or ""),
+        findings=findings, verdict=str(verdict or "成立"), proof_no=int(no),
+        sha=str(proof_sha256 or ""), kind=str(kind or ""))
+
+
 def _apply_review_to_bits(bits: Mapping[str, Any], *, verification_id: str,
                           evidence: str, findings: Sequence[Mapping[str, Any]],
                           verdict: str, proof_no: int, sha: str,

@@ -250,6 +250,12 @@ def test_a_later_canonical_proof_is_written_not_reported_as_a_duplicate(tmp_path
     assert str(row.get("proof_text") or "") == "", row["proof_text"]
     assert bool((row.get("bits") or {}).get("proof")) is False, row.get("bits")
 
+    # 2026-11-03（87 的漏洞）：换正文这一笔要打 `optimized=true`，判据是"这一份正文
+    # 已经有签"（`reviewed_by_proof` / `reviewed_sha_by_proof` 覆盖现行正文）。
+    # 于是这一笔不能再靠 `signed_v_handoffs` 的一票（holding）进来 —— 按发签门槛签满。
+    for _i in range(VR.SIGN_STREAK_NEED):
+        _sign(st, text=P2)
+
     second = _agent(st).register_statement(**OWN, proof_text=P2)
     assert second["ok"] is True, second
     assert second.get("canonical_written") is True, second
