@@ -1212,6 +1212,12 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 讲的是"这两格留痕各自只留最近 20 条"这一条同族的读数纪律。
     "_statement_amend_history",    # 字符串键：`Secretary.amend_statement_meta` 往 statements 行里留的"谁、何时、从什么改成什么"（`row.get("_statement_amend_history")`，只留最近 20 条）
     "_proposition_matches",        # 字符串键：并进已有命题那条路留的"并进来"的痕（`row.get("_proposition_matches")`，同样只留最近 20 条）
+    # —— 2026-11-04（全量红清单那一批）：两条新登记，逐条写在下面 ——
+    # 两条都是"引用正当、符号面为零"：一条是行内字符串键，一条是 pytest 的内部函数名。
+    # 按本表纪律登记并写清类别，不改引用处的文本（改键名会改磁盘上的行形状，
+    # 改 pytest 内部名会把"这条判据在还原谁的行为"说丢）。
+    "_evidence_kind_upgrade",      # 字符串键：秘书 `_upgrade_evidence_kind` 往 statements 行里留的"同一份内容再交一次、这一回来的声明更强"的痕（`row["_evidence_kind_upgrade"]`；与 V 落签那一支 `_grade_recomputed_from_signature` 写的那一格刻意分成两格记）；引用处是 `verifications._grade_recomputed_from_signature` 的 docstring（0b86db09 起）
+    "_format_assertmsg",           # 外部符号：pytest 自己的内部函数（`_pytest.assertion.util`：把 `assert x, msg` 的续行统一补两格缩进），不是本仓符号；引用处是 `tests/test_registration_skeletons.py` 的 `plain_failure_message` docstring（它还原的正是它做的事）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
