@@ -2005,6 +2005,10 @@ class _RegisterStatement:
                         deps_written=int(written_row.get("deps_written") or 0),
                         derived_from=manuscript_refs,
                         stmt_id=str(written_row.get("stmt_id") or ""),
+                        # 2026-11-04（甲）：走手稿这一支时读数同样要带"这是第几份
+                        # 证明"。不传就是 0，而回执里的 `proof_no=0` 会让模型以为
+                        # 这一笔没记上号 —— 与"首登的回执说 proof_no=1"同一条判据。
+                        proof_no=int(written_row.get("proof_no") or 0) or 1,
                         refs=len(manuscript_refs), section=manuscript))
             base["manuscript_source"] = manuscript_source
             #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
