@@ -433,7 +433,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 两条出路，没有第三条：
 
-1. **重送**：补齐之后让 D / F 把那一份重新送 V 审，拿到干净的「成立」；
+1. **重送**：补齐之后由 D 让 F 把那一份重新送 V 审（**D 没有到 V 的边**，别派 D 去送审），拿到干净的「成立」；
 2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，**同时**把 `quote_reason`
    写成 `abandoned@<ISO8601>@<理由>`。状态、时间、理由三样缺一不可 —— 只写状态的行仍按
    未签计（读数是 `abandoned_without_reason`）。
@@ -441,6 +441,21 @@ def _m_skills() -> tuple[Skill, ...]:
 放弃会把该命题名下那条 `v-resubmit@` 重送板项一并作废。但**只经通用表写口改状态与标记时，
 这一半不会发生** —— 所以走第 2 条之后要回头看板：还开着的重送项按未消项处理，它会挡销号
 与收工。
+
+## 还有一格读数：哪些证明还没洗过（`statements_unoptimized`）
+
+同一份 `conductor.closing` 的 `readings.statements_unoptimized` 回答的是另一个问题 ——
+**不是「签了没有」**（那是 `statements_unsigned`），而是**哪些证明还没洗过**。三档按来源分，
+处置各不同：
+
+- `unoptimized_from_f`：F 刚产出的那一版（机械录入），等洗；
+- `unoptimized_from_lit`：文献侧录入的那一版（V 签位填的是文献编号，占位签），等洗；
+- `unoptimized_source_not_recorded`：来源读不出来（旧行没有 `proof_source`）—— **不许折成 from_f**。
+
+三条读法：① `checked=false` ⇒ 这一格没查成，**不是「一条都不欠洗」**；② 一条命题有多份证明时
+按 `proof_no` 逐份列，别把一条命题读成「洗过 / 没洗过」两态；③ 它是**读数、不拦门**（今天不产生
+blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口径洗，`from_f` 的归产出的那一侧；
+第二阶段只看 `optimized[proof_no]` —— 为 true 的不再动，false / not_recorded 的要洗。
 
 ## 手上真的没事了：交差，不空转
 
@@ -599,12 +614,14 @@ def _m_skills() -> tuple[Skill, ...]:
   （**第 10 趟 T5 实测**：主控在这里猜了一个 D 上的"建计划"动词 ⇒ `unknown_action`，
   攻坚那一环最后整环为 0。那次教训就是这一节要挡住的事。）
 - **V（逐行走查）**：**V 不在你的出边里**（2026-10-20 业主裁定：M 不再直连 V）——
-  **V 签不经你的手**（业主 2026-11-02）：签在 V 那一侧颁发、由**收方（F / B）那一侧**落，
+  **V 签不经你的手**（业主 2026-11-02）：签在 V 那一侧颁发、由**收方（F / E / B）那一侧**落，
   所以那两条路都不需要（既不是你直连的那条，也不是经 B 再转给 V 的那条）——
   **M 没有 V 签的编辑权，也没有获取 V 签的义务**。缺签的现场分两种：**命题已在册而缺 V 签
   ⇒ 那是 B 侧的问题，让 B 处理**（重送 / 补证 / 明确放弃，B 不许推给 F）；**F 产出但没签
   ⇒ 那是 F 侧的工作异常**，经 D 让 F 先拿 V 签（谁产出谁送审），B 不处理、不润色无签的证明。
-  **F 与 B 各有直连 V 的边**（谁直连谁、几条边，逐格看伙伴表 ——
+  **E 的穷举稿同理**：D 的携带单只带已签的那一份，没签的稿连 D 那一关都过不去 ——
+  经 D 让 E 先把稿拿去签。
+  **F、E 与 B 各有直连 V 的边**（谁直连谁、几条边，逐格看伙伴表 ——
   真身是 `capabilities.ALLOWED_EDGES`，这一条不再抄第二份路线）。
   研究型项目里有证明级断言而
   `reviewed_proof_rows` 记 0 时，必须在验收表上写清为什么，以及这条缺口转给了谁去办。
@@ -696,7 +713,21 @@ A → B → C → D → F → V → B(收录证明)
 | **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | `conjectures` 一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
-| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符 | `statements` 一行：`evidence_kind=proof_review`、`proof_text` 逐字、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符 | `statements` 一行：`evidence_kind` 按通道给（文字证明 `proof_review`；**穷举程序 + V 签 ⇒ `proof`**）、`proof_text` 逐字、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+
+### B 的正文与签从哪来（F 与 E 同一套）
+
+F / E 的稿**不是**直接递给 B 的：D 收齐之后写进研究手稿的 `## 携带的证明手稿` 那一节
+（第一格 `stmt:<命题号>` 或 `exp:<实验号>`，第四格是证明号），B 按那一节的地址**寻址**去读
+正文与 V 签块，读数 `manuscript_source=carried_by_D`。**兜底读盘只是清单缺失时的降级**：
+清单里给的地址读不到 ⇒ 受控拒绝（让 D 重递清单或补地址），**不许自己猜一个路径**。
+
+### 依赖面那一格（`deps_missing`）
+
+B 收完会给三态：`present`（落了依赖边）/ `missing`（正文引了在册命题、而手稿没有
+`## 依赖` 那一节 —— B 整笔拒收 `dependency_section_missing`）/ `not_applicable`
+（正文一条在册引用都没有 ⇒ 自足证明合法）。**`not_applicable` 不是「缺依赖」，
+`missing` 也不是「依赖为零」**；处置是让 F 补那一节再交，不是让 B 硬登。
 
 ## 三条调度纪律（这一节才是"怎么派"）
 
