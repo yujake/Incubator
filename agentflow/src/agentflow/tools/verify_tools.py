@@ -1003,6 +1003,11 @@ _ROLES_V = ("V",)
     "verify.verify_proof",
     (
             "把一份证明按写成后的样子整体重读（V 的唯一主动作）：两态结论（成立 / 有毛病）+ 问题指到步号，并写 verifications/<命题号>.jsonl。`"
+            "**命题已登记时必须给 `proof_manuscript`**（签落在稿上）；只给 `proof_text`（内联正文）"
+            "在册这一档会被受控拒绝（`proof_text_needs_a_manuscript`）—— 内联正文没有签块、"
+            "没有 `## 依赖` 段、也没有按号命名的稿可寻址，不能单独过审。`"
+            "未在册（不给 `statement_id`）那一档可以只给 `proof_text`：那一档只给「看过、没签」"
+            "的读数，不签发。`"
             "side_effect=read`：V 不写表。"
             ),
     {
@@ -1014,16 +1019,21 @@ _ROLES_V = ("V",)
                 "maxLength": S.ID_DIGITS,
                 "description": f"命题号（{S.ID_DIGITS} 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）",
             },
-            # 三处口径必须说同一句话（2026-10-26 收口）：声明里的 `required`、这行
-            # description、以及实现（`agent_v.AgentV.verify_proof` 在参数为空时取
-            # `verifications.proof_text_of(命中行, proof_no)`）。改前 `required` 里
-            # 有它，而另外两处都说"可以不给" —— 于是模型只给命题号就被参数门拒成
-            # `param_invalid`，而那条路在实现里本来是通的（真机 15 条 param_invalid 里
-            # 7 条死在这里）。判据：`tests/test_verify_proof_takes_text_from_the_shelf.py`。
+            # 三处口径必须说同一句话（2026-11-04 业主裁定 甲；上一版是 2026-10-26 的
+            # 「只给命题号即可、正文从 statements 取」）：在册命题**必须有手稿**。
+            # 声明里的 `required` 表达不了"有 statement_id 才必填"这种条件（工具层的
+            # `validate_params` 只认根级 required），所以它仍是空表；必填由实现
+            # （`agent_v.AgentV._manuscript_gate`）以受控拒绝（`proof_text_needs_a_manuscript`）
+            # 执行。放进 `required` 会把"未在册 + 只给 proof_text"那一档（合法、但不签发）
+            # 也一并堵死 —— 那是另一条口径。判据：`tests/test_verify_proof_takes_text_from_the_shelf.py`
+            # 的声明那一半 + `temp/probe_manuscript_gate.py` 的 a / c。
             "proof_text": {"type": "string", "description":
-                           "待审的证明全文。可以不给：不给（或给空串）时从 statements 里取 "
-                           "`proof_no` 指的那一份，取到的正文由返回里的 proof_sha256 / "
-                           "proof_chars 给出读数"},
+                           "待审的证明全文（**内联正文**）。未在册那一档（不给 statement_id）"
+                           "可以独自给：它只作临时核对，读数是「看过、没签」，**不签发**。"
+                           "命题已登记时它只能与 `proof_manuscript` 一起给、且必须与稿里 "
+                           "`## 证明` 逐字同 sha（只作核对）；只给它会受控拒绝 "
+                           "`proof_text_needs_a_manuscript`。不给时不再从 statements 取正文 —— "
+                           "在册那一档正文一律以手稿为准"},
             # 业主 2026-10-22（多证明模型）：签的是"第几条证明"。缺省 1 = canonical（行上的 proof_text）。
             # 不加它，V 在"只派活不点名动作"的召唤下只能签 #p1，而 #p2 永远签不了 —— 且没有任何判据会报。
             "proof_no": {"type": "integer", "minimum": 1, "description": "第几条证明（1 = canonical，缺省 1）"},
@@ -1043,16 +1053,22 @@ _ROLES_V = ("V",)
             # 一律收、B 那一份由 `bmanuscript.is_relpath` 判）。说明照三类写，
             # 并把"不带它"的后果写清 —— 那一档不是"审过了没毛病"，是"这签没落在任何一份稿上"。
             "proof_manuscript": {"type": "string", "description":
-                                 "证明手稿路径（工作区相对，只收约定命名的那三种：F 的 "
-                                 "`reports/f-proof-*.md`、E 的 `reports/e-proof-<实验号>.md`、"
-                                 "B 的 `reports/b-proof-<命题号>.md`）；命题还没在册时用它，"
-                                 "给了它就可以不给 `statement_id` —— 签会盖回这一份稿里"
-                                 "（`## 证明` 那一节）。不带它只会落 pending、稿上没有签块："
-                                 "那一档只有台账那一行，B 收录时从稿上读不到盖在正文上的签"},
+                                 "**证明手稿**（工作区相对路径、盘上那一份文件）。命题已登记时"
+                                 "必须给：签块（`- V 签：`）盖回这一份稿、依赖面从它的 "
+                                 "`## 依赖` 段读、稿按号寻址（约定命名 "
+                                 "`reports/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，"
+                                 "只要是文件且有一节非空的 `## 证明`）。给稿时正文以稿为准，"
+                                 "`proof_text` 只作对 sha 的核对。命题还没在册时也用它："
+                                 "给了它就可以不给 `statement_id`，三转成立后签块由收方秘书"
+                                 "落回这一份稿（E 的 `reports/e-proof-<实验号>.md`、B 的 "
+                                 "`reports/b-proof-<命题号>.md` 同一个入口）。没给稿的在册送审"
+                                 "一律受控拒绝（`proof_text_needs_a_manuscript`）"},
            },
            # 2026-11-02：不再要求 `statement_id` —— 未在册那一档不给号、给手稿路径；
-           # 两个入口键一个都不给时由实现按 `checked=False` + `no_proof_text` 如实拒
-           # （那是"没查成"，不是"审过了"）。
+           # 2026-11-04（甲）：在册那一档必须给 `proof_manuscript`，但这一条是**条件**
+           # 必填（有 statement_id 才要），根级 `required` 放不下一句"如果" ⇒ 仍留空表，
+           # 由实现受控拒绝。两个入口键一个都不给时由实现按 `checked=False` +
+           # `no_proof_text` 如实拒（那是"没查成"，不是"审过了"）。
            "required": [],
            "additionalProperties": False,
            },
@@ -1096,7 +1112,9 @@ _ROLES_V = ("V",)
             "'review_passes',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
-            "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "
+            "no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / "
+            "bad_manuscript_path / manuscript_missing / manuscript_unreadable / "
+            "manuscript_has_no_proof_section / ledger_unwritable / ledger_row_lost —— "
             # 2026-10-30（业主批准改 FC-27；E 那一笔）：这一句原本写「绝不拿『看不出来』
             # 冒充『审过了』」—— 而 V 从 2026-11-01 起只产两态（成立 / 有毛病），
             # 旧档那一格已经不存在。指向一个产不出的档，模型会以为自己的结论能落在那儿；
@@ -1117,6 +1135,11 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id="", proof_text=None
     所以模型看到的签名与它声明的 properties 逐字对上。
     `statement_id` 有缺省（2026-11-02）：未在册那一档不给号、只给
     `proof_manuscript`，参数门不再拦它。
+    `proof_manuscript` 也有缺省（2026-11-04，业主裁定 甲）：在册那一档它**实质上必填**，
+    但这是条件必填（有号才要），而工具层的 `required` 只能写"根级一律必填" ⇒ 由
+    `AgentV._manuscript_gate` 在实现里受控拒绝（`proof_text_needs_a_manuscript`）。
+    参数门放行、实现拒绝：拒信才带得出"落一份稿再来"那句处置（参数门的
+    `param_invalid` 只有一句"缺少必填参数"）。
     """
     return (
     _need_store("verify.verify_proof")

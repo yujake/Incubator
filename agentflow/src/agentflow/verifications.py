@@ -1331,6 +1331,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            used_faces: Iterable[str] = (), submission_id: str = "",
            store: Any = None, proof_no: Any = None,
            object_sha256: Any = "", object_path: Any = "",
+           manuscript: str = "",
            citation_gate: Mapping[str, Any] | None = None,
            secretary_judge: Mapping[str, Any] | None = None,
            sign_issuance: Mapping[str, Any] | None = None,
@@ -1363,6 +1364,14 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     `statement_writeback`（写没写成、为什么、回滚了没有、追加落在哪一态）—— 台账那一行
     是权威记录，位是它的缓存；写位失败不回滚签名（签名确实发生过），但必须如实报出来。
     不给 `store` ⇒ 只追加台账（老行为，夹具与自检走这条）。
+
+    ## `manuscript`：这一签的载体（2026-11-04，业主裁定 甲）
+
+    工作区相对路径。给了它就把这一格写进台账行（条件写入 ⇒ 老行逐字节不变）；
+    :func:`sign_statement` 翻位时从行上读它、交给 :func:`_vsigns_write_after_flip`，
+    于是 `vsigns.land` 把签块盖回**送审方点名的那一份稿**，而不是按约定路径扫盘猜一份。
+    未在册那一支不走这里（它落 `verifications/pending/<sha>.jsonl`，手稿由
+    `Secretary.land_unregistered_sign` 落）。
 
     ## 返回行上的三格：这一签到底有没有落地（2026-10-22 审计第 1 条）
     `checked` / `re_sign_required` / `reason`：撤回（`_rollback_append`）发生在
@@ -1472,6 +1481,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if str(object_sha256 or "").strip():
         row["object_sha256"] = str(object_sha256).strip().lower()
         row["object_path"] = str(object_path or "").strip().replace("\\", "/")
+    #: 2026-11-04（业主裁定 甲）：这一签的载体（工作区相对路径）。在册命题也必须
+    #: 有一份手稿：签块要盖回它，`sign_statement` 翻位时从这一格读到它、交给
+    #: `vsigns.land`（`_vsign_payload` 不再靠"按约定路径扫盘"猜一份）。只在给了稿时
+    #: 写（条件写入 ⇒ 老行逐字节不变；未在册那一支走的是 pending 台账，不经这里）。
+    if str(manuscript or "").strip():
+        row["manuscript"] = str(manuscript).strip().replace("\\", "/")
     #: 引用核实那一档的判据本行（`citation_gate` 的五格）。只在"这一档没查成"
     #: （`problem` 非空）时写：那时 `citation_checks` 往往是空数组（没有条目可核），
     #: 而空数组什么都不挡 —— 没有这一格，读侧（`signs_bit3`）就分不开"没查成"与
@@ -2607,7 +2622,8 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
 
 
 def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
-                   sha: str, need: int, holds: Mapping[str, Any]) -> dict[str, Any]:
+                   sha: str, need: int, holds: Mapping[str, Any],
+                   manuscript: str = "") -> dict[str, Any]:
     """组一份签的内容（纯读：台账 + 手稿路径；不写任何东西）。
 
     业主 2026-11-01（逐字）：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
@@ -2620,8 +2636,10 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
       为什么要它：同一段正文可能先被判有毛病、后来连续三次成立拿到签（V 改判 / 秘书在
       「V 写成立」的回复上读出缺陷那一档）—— 那段痕迹必须留在签上，否则"先有毛病、后有签"
       这件事在签这一份文件里看不见（跨 sha 的改版链不在这里，那是台账 `superseded` 的事）；
-    - `artifact_path`：`depsection.manuscript_relpaths` 找得到就写（「只作定位，不参与判据」）；
-      找不到留空 —— `ledger` 那一格永远有，所以定位不会丢。
+    - `artifact_path`：这一签的载体。给了 `manuscript` 就用它（在册那一支从台账行带来，
+      2026-11-04 甲：手稿是签的唯一载体）；没给才退回 `depsection.manuscript_relpaths`
+      扫"按号命名的 f-proof 稿"（旧行为）。两者都找不到就留空 —— `ledger` 那一格永远有，
+      所以定位不会丢。
 
     `written_by` 不在这里定（本函数只组内容）：它由调用方那一格
     :func:`_vsigns_write_after_flip` 按 `append_ledger` 分两档 —— 秘书落地那条路
@@ -2706,13 +2724,26 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
                            "axis": axis,
                            "defect_steps": _VS.defect_steps(row)})
     out["objections"] = objections
+    # ---- 载体：点名的那一份优先（2026-11-04 甲）---------------------------------
+    #
+    # 改前只按 `depsection.manuscript_relpaths` 扫"按号命名的 f-proof 稿"：真机里稿
+    # 叫 `notes/...` 或 B 的 `b-proof-<号>.md` 时就扫不到，签只落进台账、稿上没有签块。
+    # 现在在册那一支把 `proof_manuscript` 随台账行带进来（`record_verification` 的
+    # `manuscript` 参数）⇒ 就盖回送审方点名的那一份；没点名时才退回扫盘（旧行为）。
+    named = str(manuscript or "").strip().replace("\\", "/")
     try:
-        from . import depsection as _DS
+        if named:
+            if (Path(str(root)) / named).is_file():
+                out["artifact_path"] = named
+            # 点名了而盘上没有 ⇒ 不退回扫盘：签会盖到另一份稿上，那比"没有落点"更坏。
+            # 这一档由 `_registered_manuscript_body` 在更早处拒掉，到这里只作兜底。
+        else:
+            from . import depsection as _DS
 
-        for rel in _DS.manuscript_relpaths(statement_ids=[statement_id]):
-            if (Path(str(root)) / rel).is_file():
-                out["artifact_path"] = str(rel)
-                break
+            for rel in _DS.manuscript_relpaths(statement_ids=[statement_id]):
+                if (Path(str(root)) / rel).is_file():
+                    out["artifact_path"] = str(rel)
+                    break
     except Exception:  # noqa: BLE001 —— 定位那一格读不成不算失败（它不参与判据）
         out["artifact_path"] = ""
     return out
@@ -2721,7 +2752,8 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
 def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path,
                              statement_id: str, proof_no: int, sha: str,
                              holds: Mapping[str, Any],
-                             append_ledger: bool, by: str = "") -> dict[str, Any]:
+                             append_ledger: bool, by: str = "",
+                             manuscript: str = "") -> dict[str, Any]:
     """翻位之后把签落成侧文件（「永不抛」：这一格的三态由调用方读）。
 
     为什么与落签拆成两步（2026-11-02 业主口径）：V 只颁发（`vsigns.issue`），
@@ -2759,7 +2791,8 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
             who = ""
     try:
         payload = _vsign_payload(root=root, ledger=ledger, statement_id=statement_id,
-                                 proof_no=proof_no, sha=sha, need=need, holds=holds)
+                                 proof_no=proof_no, sha=sha, need=need, holds=holds,
+                                 manuscript=manuscript)
     except Exception as exc:  # noqa: BLE001 —— 组内容失败要留读数，但不许带走翻位
         out["payload_problem"] = f"{type(exc).__name__}: {exc}"
         payload = {"passes": [], "objections": [], "artifact_path": "", "ledger": "",
@@ -3089,7 +3122,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             sign_out = _vsigns_write_after_flip(
                 store, row=dict(row), ledger=ledger, statement_id=sid, proof_no=no,
                 sha=str(row.get("proof_sha256") or ""), holds=holds,
-                append_ledger=bool(append_ledger), by=str(by or ""))
+                append_ledger=bool(append_ledger), by=str(by or ""),
+                # 2026-11-04（甲）：载体随台账行来（`record_verification(manuscript=…)`）。
+                manuscript=str(row.get("manuscript") or ""))
             out["vsign"] = dict(sign_out)
             if not (sign_out.get("written") or sign_out.get("idempotent")):
                 if sign_out.get("refused_below_need"):

@@ -79,7 +79,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "V", "verify_proof",
         "把一份证明按写成后的样子整体重读：两态结论 + 每条问题指到步号，"
-        "并写 verifications/<命题号>.jsonl",
+        "并写 verifications/<命题号>.jsonl（在册命题必须带手稿 `proof_manuscript`，"
+        "签落在稿上）",
         _obj(
             {
                 # 长度上界从「唯一那处宽度」取（`schema.ID_DIGITS`，2026-10-14 业主裁定
@@ -95,6 +96,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 正文从 statements 里 `proof_no` 指的那一份取。两层根级 required
                 # 必须逐字相同，判据是 `assert_capabilities()` 第 [9] 条与第 [9c] 条
                 # （`_PARAMS_DERIVED_FROM_TOOL` 里登记了 ("V", "verify_proof")）。
+                #
+                # 2026-11-04（业主裁定 甲）：上面那一段的"只给命题号即可"作废 ——
+                # 在册那一档必须给 `proof_manuscript`（内联正文不能单独过审）。
+                # 它仍是**条件**必填（有 statement_id 才要），根级 required 放不下"如果"，
+                # 所以这里仍不是必填项；拒绝由实现（`_manuscript_gate`）出，
+                # 码 `proof_text_needs_a_manuscript`。
                 "proof_text": _S,
                 # 业主 2026-10-22（多证明模型）：签的是"第几条证明"，1 = canonical。
                 # 下界 1 的真身在工具层（`verify.verify_proof` 的 `proof_no.minimum=1`，
@@ -113,6 +120,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 不给（空串 = 还没在册），落点不是 `verifications/<号>.jsonl`。
                 # 为什么不是新动作：V 做的还是同一件事（重读一份证明、给两态结论），
                 # 变的只是对象从"在册命题的正文"扩到"手稿里的那一段正文"。
+                #
+                # 2026-11-04（业主裁定 甲）：在册那一档**必须**给这一格 ——
+                # 签块 / `## 依赖` 段 / 按号寻址这三样只在文件上；只给内联正文的
+                # 在册送审由实现受控拒绝（`proof_text_needs_a_manuscript`）。
                 "proof_manuscript": _S,
             },
             # 2026-11-02：`statement_id` 不再是唯一的入口键 —— 未在册那一档不给号，
@@ -198,6 +209,16 @@ SPEC = AgentSpec(
             "**你签的是「第几条证明」**：`verify_proof` 收 `proof_no`（1 = canonical / 缺省值，"
             "2 起是该行 `proofs` 清单里的那一份）—— 逐份独立，别把 `#p1` 的那一签借给 `#p2`："
             "读数里第 3 位与第 4 位都按 `proof_no` 分开记（`bits.evidence.reviewed_by_proof[证明号]`）。",
+            # 2026-11-04（业主裁定 甲）：V 的可见面必须说清"什么情况下能签、什么情况下
+            # 只能给看过但没签"。判据：`temp/probe_manuscript_gate.py` 的 a / c 与
+            # `tests/test_v_unregistered_manuscript_review.py`（手稿那一支）。
+            "**在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 "
+            "`proof_manuscript`（约定命名 `reports/f-proof-<命题号>.md`；`notes/…` 等别的"
+            "工作区相对文件也收，只要盘上有、且有一节非空的 `## 证明`）。只给内联正文"
+            "（`proof_text`）会被受控拒绝（`proof_text_needs_a_manuscript`）—— 签要落在稿上"
+            "（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、稿要能被按号寻址，"
+            "这三样内联正文都做不到。命题还没在册时可以只给正文：那一档只给「看过、没签」"
+            "的读数，**不签发**（没有可落签的载体）；要签就先落一份稿再带 `proof_manuscript` 送审。",
             "只有 `成立` 且 findings 里没有未解决的 error，才轮到你**颁发**这一签（写 `out/vsigns/<被审正文的 sha>.json`，把信封交给收方秘书）；真正让五元位第 3 位置真的是收方秘书的落签，不在你手上 —— 你那一格只负责把两态结论与缺陷步写清楚，别拿“我大致看过了”去替它补。"
             "“检查器自己没跑成”（输出不是合法 JSON、字段缺、取值不在词表里）不是这两个结论之一：它是没查成，要如实报出来，绝不许拿 "
             "一个假结论冒充“审过了”。",
