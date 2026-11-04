@@ -5333,15 +5333,17 @@ PAPER_PACK = """\
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
 同样以它的当次读数为准。
-**八格之外还有一类 blocker（它不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` —— 既没有 V 签、
-也没有被明确放弃的命题（业主 2026-11-01 的裁定）。两条出路：重送 V 拿到干净的「成立」，或明确放弃
-（`status=abandoned` + `quote_reason=abandoned@<ISO8601>@<理由>`）。同类 blocker 还有 `acceptance_unmet` /
-`paper_pdf_is_stale` / `MAPPING_NOT_WRITTEN` 等 —— 只要 `closing` 的读数里 `blockers` 非空，就不算交付。
+**blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` ——
+既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是重送 V 拿到干净的「成立」，或明确放弃
+（`status=abandoned` + `quote_reason=abandoned@<ISO8601>@<理由>`）；`mapping_not_written` —— 有命题、已成稿而论文包里
+没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
+`acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 落在 `paper` 那一格（改完正文没重编）。
+只要 `closing` 的读数里 `blockers` 非空，就不算交付。
 1. **正文与 PDF 对得上**（收工门那一格叫 `paper`，判据只有一条）：编译回执里的
    `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
    这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/paper/main.tex`
-   ⇒ 记 `not_applicable`（没写正文，不是"写坏了"）；有正文而回执不是它的 ⇒ `failed`
-   （`paper_pdf_is_stale`：PDF 是旧正文编的）；回执读不到或摘要算不出 ⇒ `unknown`
+   ⇒ 记 `not_applicable`（没写正文，不是"写坏了"）；有正文而回执不是它的 ⇒ 那一格记 `fail`、
+   读数里 `verdict="drifted"`（`paper_pdf_is_stale`：PDF 是旧正文编的）；回执读不到或摘要算不出 ⇒ `unknown`
    （没查成，**不是**通过）。
    G 在交付说明里写回执的 `tex_sha256` 与 `pages`；M 跑 `conductor.closing` 自己核这一格
    （别拿 G 的一句话当读数）；H 独立看时用 `fs.read` 读回执与正文，写明是哪一种读数。
