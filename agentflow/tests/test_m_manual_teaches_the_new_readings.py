@@ -58,7 +58,7 @@ _UNOPTIMIZED: tuple[str, ...] = (
     "不许折成 from_f",
     "checked=false",
     "读数、不拦门",
-    "optimized[proof_no]",
+    "bits.evidence.optimized_by_proof[proof_no]",
 )
 
 #: 研究攻坚链必须读到的那一组（第 2、3 条 + 穷举那一路的档位）。

@@ -455,7 +455,9 @@ def _m_skills() -> tuple[Skill, ...]:
 三条读法：① `checked=false` ⇒ 这一格没查成，**不是「一条都不欠洗」**；② 一条命题有多份证明时
 按 `proof_no` 逐份列，别把一条命题读成「洗过 / 没洗过」两态；③ 它是**读数、不拦门**（今天不产生
 blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口径洗，`from_f` 的归产出的那一侧；
-第二阶段只看 `optimized[proof_no]` —— 为 true 的不再动，false / not_recorded 的要洗。
+第二阶段只看 `bits.evidence.optimized_by_proof[proof_no]`（三态字符串 `true` / `false` /
+`not_recorded`，读 `evidencebits.optimized_state`）或 `statements_unoptimized.rows[*]` 里逐份的
+`optimized` —— 为 `true` 的不再动，`false` / `not_recorded` 的要洗。
 
 ## 手上真的没事了：交差，不空转
 
@@ -1689,7 +1691,8 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evidence_path`、
 `evidence_sha256`、`v_signature`），再由 D 派 B 入库；B 收录时按地址读到你那份稿，
 从稿上读到那一签（第 3 位就翻真），并记下这份证明**还没洗过**
-（`optimized=false`）—— 第二阶段它再逐个优化、优化后重拿一次 V 签。
+（`bits.evidence.optimized_by_proof[proof_no]` 记 `"false"`）—— 第二阶段它再逐个优化、
+优化后重拿一次 V 签。
 
 **你既不要写对应表，也不要自己去找 B 的 `register_statement`。**
 
