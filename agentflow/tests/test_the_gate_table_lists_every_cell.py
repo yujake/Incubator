@@ -48,7 +48,7 @@ def test_the_table_is_not_vacuous() -> None:
 def test_the_artifact_ledger_row_does_not_contradict_d9() -> None:
     """③ 说明书那一行的结局词必须与 D9 的收窄一致：只有 `changed` ⇒ `pass` + warning。
 
-    为什么这一条要单独钉：①② 只核"有没有这一行、顺序对不对"，**不核那一行说的判据**。
+    为什么这一条要单独钉：①② 只核"有没有这一行、顺序对不对"，不核那一行说的判据。
     改前 `artifact_ledger` 那一行写的是「只有 `changed` ⇒ `unknown`」，而实现
     （`_check_artifact_ledger`，D9 业主 2026-10-09 裁"收窄"）与读数自己的 note
     （`artifact_ledger_reading`）都说 `pass` + warning —— 同一份判据两个口径。
