@@ -1052,6 +1052,12 @@ def _set_doc_status(
             f"review_checked=True 时 review_verdict 必须是 {S.REVIEW_VERDICTS} 里的非空值，"
             f"收到 {review_verdict!r}"
         )
+    if not review_checked and not str(review_reason or "").strip():
+        # 「没查成」也要有理由：否则"没审过"与"查了但没查成"在回执上同形。
+        raise ValueError(
+            "review_checked=False（没查成）必须给非空 review_reason —— "
+            "这一档不写裁决，理由是它在回执里唯一的读数"
+        )
     cur = next(
         (str(r.get("status")) for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)),
         "",
