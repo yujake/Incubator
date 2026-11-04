@@ -467,6 +467,14 @@ class _Step:
         # 里塞一整篇手稿不划算，而 D/B 需要时按路径读。
         if deploy.get("manuscript_path"):
             out["manuscript_path"] = str(deploy["manuscript_path"])
+        # 2026-11-04（改名与签拆开）：改名到哪一步、签块搬没搬，必须进返回值。
+        # 只给 `manuscript_path` 的话，"改名了但标题没重写"与"完整改名"在调用方
+        # 眼里长得一样（两者都是按号的名字）。
+        for _key in ("manuscript_published", "manuscript_renamed_from",
+                     "manuscript_retitled", "manuscript_sign_moved",
+                     "manuscript_publish_problem", "manuscript_sign_step"):
+            if _key in deploy:
+                out[_key] = deploy[_key]
         if deploy.get("deps_preview"):
             out["deps_preview"] = dict(deploy.get("deps_preview") or {})
         # ---- 登记那一刻手上的稿是从哪来的（`param` / `none`）：这一格要能被机械读出来，

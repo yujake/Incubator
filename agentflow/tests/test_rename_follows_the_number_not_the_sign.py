@@ -17,7 +17,7 @@
 
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
-| a | 登记拿到号、**没有签** ⇒ 稿已改名成 `f-proof-<号>.md`，正文逐字不变 | F 的 proof 档拿不到号（`statement_id` 空），稿仍是计划名 |
+| a | 登记拿到号、没有签 ⇒ 稿已改名成 `f-proof-<号>.md`，正文逐字不变 | F 的 proof 档拿不到号（`statement_id` 空），稿仍是计划名 |
 | b | 有签 ⇒ 改名 + 签块跟着搬；sha 不符 ⇒ 搬失败并记 `publish_problem` | 搬块失败是静默的（只有 `except: pass`），也没有"搬没搬"的读数 |
 | c | 没有号 ⇒ 不许改名（名字里不许凭空造号） | 改前已绿：负控，防止"先改名再补号" |
 | d | 读侧不许把「文件名叫 `f-proof-<号>.md`」读成「已签」 | a 的改前红会先挡住；删掉签块后必须回落到待签 |
@@ -56,7 +56,7 @@ DEP_TABLE = (
 
 # ------------------------------------------------------------------ 夹具
 
-def _plan_text() -> str:
+def _plan_text(body: str = BODY) -> str:
     """登记之前那一份（计划名）手稿：页头 + 命题 + 证明 + 依赖四列表，且已洗过。"""
     text = (
         "# F 的证明手稿：由定理甲推出目标结论（判据夹具）\n\n"
@@ -65,7 +65,7 @@ def _plan_text() -> str:
         "## 命题\n\n"
         "由定理甲推出目标结论。\n\n"
         "## 证明\n\n"
-        f"{BODY}\n\n"
+        f"{body}\n\n"
         + DEP_TABLE
     )
     return DS.mark_washed(text, actor="secretary-F")
@@ -175,7 +175,7 @@ def test_a_a_registered_number_renames_the_manuscript_without_any_sign(store: St
 
 
 def test_a2_f_registration_gets_a_number_and_publishes_without_a_sign(store: Store) -> None:
-    """a2：F 的 proof 档在**没有签**时也拿得到号，拿到号就按号命名。
+    """a2：F 的 proof 档在没有签时也拿得到号，拿到号就按号命名。
 
     改前红（真机 87 的形态）：`B.register_statement` 的 `proof_without_v_sign` 整笔拒
     ⇒ `out["statement_id"]` 不存在 ⇒ `publish_manuscript` 一次都没被调用。
@@ -297,3 +297,34 @@ def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
     back = f._read_sign(statement_id=sid, proof_text=body)["reading"]
     assert back.get("state") == "waiting", back
     assert back.get("delivered") is False, back
+
+
+# ------------------------------------------------------------------ e 不毁签
+
+def test_e_an_unsigned_draft_does_not_overwrite_a_signed_version(store: Store) -> None:
+    """e：按号命名的那份已经签住旧版时，一份没有签的新稿不许整文件覆盖它。
+
+    改前红：`publish_manuscript` 直接整文件写目标名，旧签块随旧正文一起消失
+    （签另算不是毁签）。这一条是 a/b 的必要边界：改名只看号，但"号已经有了"
+    不等于"可以拿没签的草稿把签过的那一版盖掉"。
+    """
+    old_body = "1. 签住的旧版证明（依据：stmt:000000）。"
+    old_text = _plan_text(old_body)
+    old_sha = VR.proof_sha(VS.manuscript_proof_body(old_text))
+    signed_old = _sign(old_text, proof_sha=old_sha, manuscript_id=SID,
+                       statement_id=SID)
+    _write(store, f"{MANUSCRIPT_DIR}/f-proof-{SID}.md", signed_old)
+
+    new_body = "1. 这一轮的新草稿，还没有签（依据：stmt:000000）。"
+    new_text = _plan_text(new_body)
+    _write(store, PLAN_REL, new_text)
+
+    out = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": new_text, "rows": [], "named_by": "plan"},
+        statement_id=SID)
+    assert out.get("published") is False, out
+    assert dict(out.get("publish_problem") or {}).get(
+        "kind") == "target_holds_a_signed_version", out
+    assert _read(store, f"{MANUSCRIPT_DIR}/f-proof-{SID}.md") == signed_old, (
+        "已签的那一版被一份没签的草稿覆盖了")
+    assert (pathlib.Path(store.root) / PLAN_REL).is_file(), "草稿也不许因此丢"

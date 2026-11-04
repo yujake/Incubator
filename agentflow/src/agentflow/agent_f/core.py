@@ -1766,11 +1766,42 @@ class _Core:
             existing = []
             self._log(f"statements 读不到：{type(exc).__name__}: {exc}")
         existing_row: dict[str, Any] = {}
+        exact_match = False
+        #: 只在"同一条命题"这一层命中、但证明正文与盘上那一行不同（或那一行还没有正文）。
+        #: 这一档不是"新建一条命题"：向 B 交的命题正文要换成盘上那一行的 canonical 版，
+        #: 否则每一轮重跑都会多一条号（"同一子目标交第二次"在真机里很常见：步骤文字会变、
+        #: assumption 后缀会变），号在变 ⇒ 稿的名字也跟着变，正好是这次要消灭的不稳定。
+        same_proposition: dict[str, Any] = {}
+        plan_id = str(plan.get("plan_id") or "")
+        label_for_sid = f"F 攻坚 {plan_id} 子目标 {sid}"
         for row in existing:
-            if (str(row.get("statement_full") or "").strip() == full.strip()
-                    and str(row.get("proof_text") or "").strip() == body.strip()):
+            if str(row.get("statement_full") or "").strip() != full.strip():
+                continue
+            if str(row.get("proof_text") or "").strip() == body.strip():
                 existing_row = dict(row)
+                exact_match = True
                 break
+            if not same_proposition:
+                same_proposition = dict(row)
+        if not existing_row:
+            existing_row = same_proposition
+        weak_match = bool(existing_row) and not exact_match
+        if not existing_row:
+            # 弱一档的认法：同一个子目标交出来的命题（`statement_text` + 派活标签）。
+            # 为什么需要它：`full` 里带着"可检验形式"与"显式前提"两段，而这两段会随
+            # 这一轮的产物变（同一子目标第二轮多写了一句前提，`full` 就不同了）。
+            # 没有这一档，重跑一轮就会多一条命题 —— 号在变，稿的名字也跟着变。
+            for row in existing:
+                if (str(row.get("statement_text") or "").strip() == text
+                        and str(row.get("label") or "").strip() == label_for_sid):
+                    existing_row = dict(row)
+                    weak_match = True
+                    break
+        if weak_match and existing_row:
+            # 同一条命题的重跑：交给 B 的命题正文必须是盘上那一行（canonical），
+            # 这一轮漂移过的 `full` / `text` 只用于渲染稿，不用来造新号。
+            full = str(existing_row.get("statement_full") or full)
+            text = str(existing_row.get("statement_text") or text)
         if existing_row:
             tier = self._proof_tier(str(existing_row.get("stmt_id") or ""), body)
         else:
@@ -1830,27 +1861,60 @@ class _Core:
             from ..agent_b import AgentB
 
             reviewer = AgentB(self.store, extractor=None, extract_text=None)
-            got = reviewer.register_statement(
-                statement_full=full,
-                statement_text=str(row_now.get("statement_text") or text),
-                proof_text=body,
-                proof_manuscript=str(manuscript_text or ""),
-                kind=kind_now,
-                label=f"F 攻坚 {plan_id} 子目标 {sid}",
-                origin="own_result",
-                evidence_kind=str(tier.get("kind") or "heuristic"),
-                quote_verified=None,
-                quote_reason=("这一条是 F 自己写的论证，不是从文献里摘的 ⇒ 没有逐字比对的对象；"
-                              f"等级按 V 的账本现算 = `{tier.get('kind')}`（{tier.get('why')}）"),
-                line_range=line_range,
-                derived_from=deps,
-            )
+
+            def _register(*, with_proof: bool) -> dict:
+                """交给 B 的那一笔；`with_proof=False` 是「先只落命题、拿号」那一档。
+
+                2026-11-04（业主口径）：改名只看号，签另算 ⇒ 没有 V 签时不再把整笔
+                登记让 `proof_without_v_sign` 拒掉，而是先按 B 的两步法只落命题
+                （87 的真机里 B 就是这样手工绕开互锁的：先拿号、签另算）。
+                命题行与证明正文是两笔：这一笔不写正文，正文等 V 签之后再交。
+                """
+                return reviewer.register_statement(
+                    statement_full=full,
+                    statement_text=str(row_now.get("statement_text") or text),
+                    proof_text=body if with_proof else "",
+                    proof_manuscript=(str(manuscript_text or "") if with_proof else ""),
+                    kind=kind_now,
+                    label=f"F 攻坚 {plan_id} 子目标 {sid}",
+                    origin="own_result",
+                    evidence_kind=str(tier.get("kind") or "heuristic"),
+                    quote_verified=None,
+                    quote_reason=("这一条是 F 自己写的论证，不是从文献里摘的 ⇒ 没有逐字比对的对象；"
+                                  f"等级按 V 的账本现算 = `{tier.get('kind')}`（{tier.get('why')}）"),
+                    line_range=line_range,
+                    derived_from=deps,
+                )
+
+            got = _register(with_proof=True)
         except Exception as exc:  # noqa: BLE001 - 交不出去要说出来，不许当成登记过了
             return {"ok": False, "kind": "statement_handoff_failed", "statement_id": "",
                     "reused": bool(row_now), "promoted": False,
                     "manuscript_received": manuscript_received,
-                    "proof_text": body,
+                    "proof_text": body, "proof_attached": False,
                     "why": f"{type(exc).__name__}: {exc}", "cites": cites}
+
+        # ---- 没有 V 签 ⇒ 改用 B 的两步法：先只落命题、拿到号（签另算） ----------
+        #
+        # 判据只看 B 的受控码 `proof_without_v_sign`：别的拒收（缺依赖段 / 档位不够 /
+        # 命题正文不合规）照旧整笔不写，不许拿"先落个号"把那些门绕过去。
+        proof_refusal: dict[str, Any] = {}
+        proof_attached = True
+        if (not got.get("ok") or not str(got.get("stmt_id") or "")) and (
+                str(got.get("kind") or "") == "proof_without_v_sign"):
+            proof_refusal = dict(got)
+            proof_attached = False
+            try:
+                got = _register(with_proof=False)
+            except Exception as exc:  # noqa: BLE001 - 同上：交不出去要说出来
+                return {"ok": False, "kind": "statement_handoff_failed", "statement_id": "",
+                        "reused": bool(row_now), "promoted": False,
+                        "manuscript_received": manuscript_received,
+                        "proof_text": body, "proof_attached": False,
+                        "proof_refusal": proof_refusal,
+                        "why": (f"无签那一笔被拒之后，先落命题这一笔也没交出去"
+                                f"（{type(exc).__name__}: {exc}）"),
+                        "cites": cites}
 
         stmt_id = str(got.get("stmt_id") or "")
         if not got.get("ok") or not stmt_id:
@@ -1862,13 +1926,14 @@ class _Core:
                         "evidence_kind": str(row_now.get("evidence_kind") or tier.get("kind") or ""),
                         "tier_why": str(tier.get("why") or ""),
                         "manuscript_received": manuscript_received, "why": "",
-                        "cites": cites, "proof_text": body,
-                        "handoff_reading": dict(got)}
+                        "cites": cites, "proof_text": body, "proof_attached": True,
+                        "proof_refusal": {}, "handoff_reading": dict(got)}
             return {"ok": False, "kind": "statement_handoff_refused",
                     "refused_kind": str(got.get("kind") or ""),
                     "statement_id": stmt_id, "reused": False, "promoted": False,
                     "manuscript_received": manuscript_received,
-                    "proof_text": body,
+                    "proof_text": body, "proof_attached": proof_attached,
+                    "proof_refusal": proof_refusal,
                     "why": str(got.get("error") or got.get("reason") or got.get("kind") or ""),
                     "cites": cites}
 
@@ -1894,7 +1959,10 @@ class _Core:
                 "tier_why": str(tier.get("why") or ""), "row": landed,
                 "handoff_reading": dict(got), "nontriviality_note": judge_note,
                 "manuscript_received": manuscript_received, "why": "", "cites": cites,
-                "proof_text": body}
+                "proof_text": body, "proof_attached": proof_attached,
+                "proof_refusal": proof_refusal,
+                "proof_gate": dict((proof_refusal or {}).get("proof_gate") or {}),
+                "proof_gate_why": str((proof_refusal or {}).get("reason") or "")}
 
     # ------------------------------------------------------ 送审与「V 签」读数
     #
@@ -2261,18 +2329,46 @@ class _Core:
                     + ("（与既有那一行逐字相同 ⇒ 复用，不重复登记）" if outlet.get("reused") else "")
                     + ("；并已就地升档（V 那一签在盘上，原来登记成弱档）"
                        if outlet.get("promoted") else ""))
+                if not outlet.get("proof_attached", True):
+                    # 2026-11-04（业主口径）：无签不再把整笔登记卡死 —— 先只落命题拿号，
+                    # 正文等 V 签到手再交（"签另算"）。这一句必须能读出"正文没进去"，
+                    # 否则"号有了"会被误读成"证明也进去了"。
+                    outlet_note += (
+                        "；但证明正文这一笔没有随登记入库（B 的 `proof_without_v_sign`："
+                        "无签不入正文，签另算 —— 先拿号改名，签到手再补正文）")
                 evidence = [f"stmt:{statement_id}"]
+            else:
+                outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
+                evidence = []
+            # ---- 改名只看号（业主 2026-11-04）：「登记成功（拿到命题号）就改名，签另算」
+            #
+            # 位置在"登记那一笔"之外、判据只有 `statement_id` 非空：这样 B 的证明正文
+            # 准入闸（`proof_without_v_sign`）不再决定稿叫什么名字。旧实现把改名写在
+            # `outlet.ok and statement_id` 里面，于是没有签 ⇒ 没号 ⇒ 一次也不改名
+            # （87 的 6 份稿里 0 份按号命名，正是这一形态）。
+            if statement_id:
                 # 登记拿到号之后把稿改成按命号的名字（收方兜底读盘的第一个候选名）。
                 manuscript = self.publish_manuscript(manuscript, statement_id=statement_id)
-                if manuscript.get("ok"):
+                _problem = dict(manuscript.get("publish_problem") or {})
+                if manuscript.get("published"):
                     outlet_note += (
                         f"；证明手稿 `{manuscript['path']}`（依赖段 "
                         f"{len(manuscript.get('rows') or [])} 行，交 B 读稿登记）"
                         + (f"；登记前它叫 `{manuscript['renamed_from']}`"
                            if manuscript.get("renamed_from") else ""))
+                    if manuscript.get("sign_moved"):
+                        outlet_note += "；V 签块跟着改名搬过来了（sha 相符）"
+                    elif str(_problem.get("kind") or "") == "sign_sha_mismatch":
+                        outlet_note += ("；V 签块没搬（签盖的是另一版正文 —— "
+                                        "改名照做，签另算）")
+                    if _problem:
+                        outlet_note += (
+                            f"；改名读数 `publish_problem.{_problem.get('kind')}`："
+                            f"{_problem.get('why')}")
                 else:
-                    outlet_note += (f"；证明手稿没写成（{manuscript.get('why')}）"
-                                    "—— 那 B 读不到依赖段，依赖面这一趟建不起来")
+                    _why = str(_problem.get("why") or manuscript.get("why") or "")
+                    outlet_note += (f"；证明手稿没改名（{_why}）"
+                                    "—— 稿还在计划名下，按号找稿的读方会找不到它")
                 outlet_note += (
                     f"；登记那一刻手上的稿：`manuscript_source={received.get('source')}`"
                     + (f"、{int(received.get('chars') or 0)} 字、依赖段 "
@@ -2282,8 +2378,7 @@ class _Core:
                        if received.get("source") == "param" else
                        "（参数是空的）"))
             else:
-                outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
-                evidence = []
+                outlet_note += "；没有命题号 ⇒ 手稿保持计划名（不凭空造号）"
             # ---- 回读 V 签（业主 2026-11-02：「拿到V签F才能交差」）-----------------
             #
             # 不在这里送审：送审是 F 自己的动作（`framework_summon`，`F -> V` 的边在）。
@@ -2363,12 +2458,19 @@ class _Core:
         # 交出去的每一条成果各自签没签"的汇总。为什么必须在这里读一遍：
         # 一条签到手不等于交差 —— 旧的单一 `delivered` 恰好把这两件事混成了一件。
         # `current` 让这一轮刚产出的那一条用刚读到的签（不必再读一次盘）。
+        # 例外：号是从既有行复用的、而这一轮手上的正文没进台账（`proof_attached=False`）
+        # ⇒ 不能拿这一轮的草稿顶掉盘上那一份（它可能已经签住）。交给 `_delivery_reading`
+        # 按号回读 canonical，否则"重跑一轮"会把已签读成未签。
+        _current: dict[str, Any] | None = None
+        if statement_id and (outlet.get("proof_attached", True)
+                             or not outlet.get("reused")):
+            _current = {"statement_id": statement_id,
+                        "reading": dict(v_sign.get("reading") or {}),
+                        "proof_text": str(outlet.get("proof_text") or ""),
+                        "manuscript": str(manuscript.get("path") or ""),
+                        "round": round_no, "subgoal": sid}
         delivery = self._delivery_reading(
-            plan,
-            current={"statement_id": statement_id, "reading": dict(v_sign.get("reading") or {}),
-                     "proof_text": str(outlet.get("proof_text") or ""),
-                     "manuscript": str(manuscript.get("path") or ""),
-                     "round": round_no, "subgoal": sid},
+            plan, current=_current,
             assessment=(product.get("self_assessment")
                         if isinstance(product, Mapping) else None))
         detail += (f"；交差（逐条）：已签 {delivery.get('coverage_reading') or '0/0'}"
@@ -2437,6 +2539,13 @@ class _Core:
             "manuscript_received": received,
             "manuscript_published": bool(manuscript.get("published")),
             "manuscript_renamed_from": str(manuscript.get("renamed_from") or ""),
+            # 2026-11-04（改名与签拆开）：三格分开给 —— 名字改了没有、稿头重写了没有、
+            # 签块搬了没有。任何半改名都落在 `publish_problem` 里（受控 kind/stage/why），
+            # 不许靠"published=True"一句话把"改到哪一步"盖过去。
+            "manuscript_retitled": bool(manuscript.get("retitled")),
+            "manuscript_sign_moved": bool(manuscript.get("sign_moved")),
+            "manuscript_publish_problem": dict(manuscript.get("publish_problem") or {}),
+            "manuscript_sign_step": dict(manuscript.get("sign_step") or {}),
             # ---- 秘书那一遍洗稿的读数（业主 2026-10-26 晚）：这一份交出去之前被
             # 改过没有、补了什么、洗了哪几条命题号。打回那一档走上面那条提前 return
             # （同样的键，`manuscript_washed=False` + `deps_refused*`）。
