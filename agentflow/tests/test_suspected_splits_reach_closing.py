@@ -42,6 +42,8 @@ from agentflow import verifications as VR
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 
+from _proof_manuscript_fixture import carry_proof_manuscript
+
 #: 同一命题的两种写法：确定性键相同（"设/假设"、"是/为"、"；则/，于是" 都被规范化掉）。
 NO_PROOF_A = "设 G 是 3-正则群；则弦长函数不是常值。"
 NO_PROOF_B = "假设 G 为 3-正则群，于是弦长函数不是常值。"
@@ -184,7 +186,9 @@ def test_d_the_reading_does_not_block_the_gate(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
     for full in (MORPH_A, MORPH_B):
-        got = sec.record_statement({**_own(full), "proof_text": PROOF}, role="B")
+        got = sec.record_statement(
+            carry_proof_manuscript(st.root, {**_own(full), "proof_text": PROOF}),
+            role="B")
         assert got.get("created") is True, got
     rows = _rows(st)
     assert len(rows) == 2, rows

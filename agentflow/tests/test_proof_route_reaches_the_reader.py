@@ -44,6 +44,8 @@ from agentflow.store import Store
 from agentflow.tools import table_tools
 from agentflow.tools.base import ToolRegistry
 
+from _proof_manuscript_fixture import carry_proof_manuscript
+
 #: 命题正文（判定与登记都要它）；路线由打桩的缝给，判据不依赖真实模型。
 FULL = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在且两两共轭。"
 LABEL = "Sylow I（存在性）"
@@ -90,7 +92,7 @@ def _own() -> dict[str, Any]:
 def _record(st: Store) -> str:
     """走生产写路：`record_statement` 落一行 statements（带 `secretary.PROOF_ROUTES_KEY`）。"""
     sec = for_role_wired("B", root=st.root, store=st, seam=_RouteSeam())
-    got = sec.record_statement(_own(), role="B")
+    got = sec.record_statement(carry_proof_manuscript(st.root, _own()), role="B")
     assert got.get("created") is True, got
     assert got.get("proof_route") == ROUTE, got
     return str(got.get("stmt_id") or "")

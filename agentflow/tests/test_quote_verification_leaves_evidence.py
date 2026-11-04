@@ -19,6 +19,8 @@ import pathlib
 
 import pytest
 
+from _proof_manuscript_fixture import carry_proof_manuscript
+
 #: 真机里逐字命中的那一句（`tests/test_agent_b_gates.py` 用的是同一句）。
 QUOTE = "The distance is the number of walls crossed."
 
@@ -69,11 +71,12 @@ def test_a_verbatim_hit_leaves_a_span_and_a_readable_reason(tmp_path: pathlib.Pa
     st.init()
     sec = Secretary("B", root=st.root, store=st)
     got = sec.record_statement(
-        {"statement_full": "设 G 是有限群；则 G 的阶有限。", "origin": "own_result",
-         "kind": "theorem", "doc_id": "000000", "proof_text": "证明：由定义直接得到。",
-         "quote_verified": out["quote_verified"], "quote_mode": out["quote_mode"],
-         "quote_span": out["quote_span"], "quote_call_sha256": out["quote_call_sha256"],
-         "quote_reason": out["quote_reason"]},
+        carry_proof_manuscript(st.root, {
+            "statement_full": "设 G 是有限群；则 G 的阶有限。", "origin": "own_result",
+            "kind": "theorem", "doc_id": "000000", "proof_text": "证明：由定义直接得到。",
+            "quote_verified": out["quote_verified"], "quote_mode": out["quote_mode"],
+            "quote_span": out["quote_span"], "quote_call_sha256": out["quote_call_sha256"],
+            "quote_reason": out["quote_reason"]}),
         role="B")
     assert got.get("created"), got
     row = dict(st.rows("statements")[0])
@@ -201,9 +204,10 @@ def test_full_without_a_text_is_red_and_the_read_side_falls_back_to_full(tmp_pat
     sec = Secretary("B", root=st.root, store=st)
     full = "设 G 是有限群；则 G 的阶整除 |G|。"
     got = sec.record_statement(
-        {"statement_full": full, "origin": "own_result", "kind": "theorem",
-         "doc_id": "000000", "proof_text": "证明：拉格朗日。", "quote_verified": None,
-         "quote_reason": "这一条还没做逐字比对（没有第二份文本可比）"},
+        carry_proof_manuscript(st.root, {
+            "statement_full": full, "origin": "own_result", "kind": "theorem",
+            "doc_id": "000000", "proof_text": "证明：拉格朗日。", "quote_verified": None,
+            "quote_reason": "这一条还没做逐字比对（没有第二份文本可比）"}),
         role="B")
     assert got.get("created"), got
     row = dict(st.rows("statements")[0])
