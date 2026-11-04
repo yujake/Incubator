@@ -6419,6 +6419,86 @@
           "to": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading','delivery','delivered','total','signed_count','pending_count','unsigned_count','proof_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','delivery_state_plan','delivery_label_plan','self_assessment'}"
         }
       ]
+    },
+    {
+      "tools": [
+        "doc.write_mapping"
+      ],
+      "key": "params",
+      "reason": "2026-11-04 业主口径：`lean_file` 是「机器核验凭据」那一格，功能是「这条命题是百分百真的」，按这条命题的证明通道填（numeric ⇒ 证明栏第 ① 段那份 .py、`lean_target` 留空；formal ⇒ .lean 与 `lean_target`；通道为空两格可空）⇒ row 参数里 file / lean_file / lean_target 三处 description 改写（判据 tests/test_lean_file_is_taught_by_channel.py）。同一份 params 里另有六个 add_key（numeric_evidence / exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 它们是本轮之前已在盘上（D-34 索引四格、E-1 数值定理两格）而基线从未记过账的键，这次按内容寻址一并补记：只补账，不改 required / 类型，也不改 max_ratio。",
+      "date": "2026-11-04",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/evidence_kind",
+          "value": {
+            "type": "string",
+            "enum": [
+              "proof",
+              "report"
+            ],
+            "description": "这一行的正文是哪一本：proof（F 的证明）/ report（E 的报告）。数值实验定理那一行填 report"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/evidence_path",
+          "value": {
+            "type": "string",
+            "description": "正文在仓库里的相对路径（如 out/experiments/000000/exhaustion.md）"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/evidence_sha256",
+          "value": {
+            "type": "string",
+            "description": "那份文件字节的 sha256（不是文本归一化之后的）"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/exhaustion_note",
+          "value": {
+            "type": "string",
+            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）"
+          }
+        },
+        {
+          "op": "set_scalar",
+          "path": "params/properties/rows/items/properties/file/description",
+          "from": "该条完整证明/实验所在的文件（论文包内的相对路径）",
+          "to": "该条完整证明/实验所在的文件：理论定理行写论文包内的相对路径；数值实验定理行写程序相对仓库根的路径（如 code/r34_check.py，不在包里是正常的）"
+        },
+        {
+          "op": "set_scalar",
+          "path": "params/properties/rows/items/properties/lean_file/description",
+          "from": "验它的那份 Lean 源码在论文包里的相对路径（如 formal/000004.lean）。盘上有 Lean 产出时，定理/引理/命题/推论这几行必填",
+          "to": "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；formal 填那份 .lean（项目根相对路径，如 code/formal/000004.lean；包内写法 formal/000004.lean 也认）；通道为空时允许为空（不适用，不是没填）"
+        },
+        {
+          "op": "set_scalar",
+          "path": "params/properties/rows/items/properties/lean_target/description",
+          "from": "那份源码里哪个声明验了它（写源码里字面出现的名字，如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。与 lean_file 成对：有 Lean 产出时同样必填",
+          "to": "那份源码里哪个声明验了它（写源码里字面出现的名字，如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。只有 formal 通道写它；numeric 通道必须留空 —— 数值程序没有 Lean 声明名，填了反受控拒绝"
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/numeric_evidence",
+          "value": {
+            "type": "string",
+            "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/rows/items/properties/v_signature",
+          "value": {
+            "type": "object",
+            "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"
+          }
+        }
+      ]
     }
   ],
   "summary_lens_before": {
