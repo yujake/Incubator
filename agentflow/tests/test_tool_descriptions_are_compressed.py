@@ -717,6 +717,31 @@ def test_the_two_semantic_pins_hold(current: dict[str, dict]) -> None:
     )
 
 
+def test_the_manuscript_rule_survives_the_compression(current: dict[str, dict]) -> None:
+    """语义钉子（2026-11-04 p239）：summary 压回 104 字符后，仍必须读出那条规则。
+
+    `b2f39f05` 把「在册送审必须有手稿」写进 `verify.verify_proof` 的 summary 时，
+    那一句是 319 字符 ⇒ 压缩批次比例 0.7749 > 0.75。处置是把细则移进 params 的
+    `proof_manuscript` description，summary 只留一句能翻成人话的规则 + 指路。
+    这一句是模型在 function-calling 面上唯一会读到的教法：压没了，V 就会只给内联
+    `proof_text` 去送审（然后在写入期被 `proof_text_needs_a_manuscript` 拒）。
+
+    反真空三条：① 不许压到只剩「给稿」两个字 —— 参数名 `proof_manuscript` 要在；
+    ② 「在册」也要给」要读得出来（不是只教未在册那一档）；③ 「只给 proof_text 会被拒」
+    要读得出来，且细则（拒信码）仍留在 params 的 description 里。
+    """
+    row = current["verify.verify_proof"]
+    summary = row["summary"]
+    assert "proof_manuscript" in summary, summary
+    assert "在册" in summary and "给" in summary, summary
+    assert "proof_text" in summary, summary
+    assert "拒" in summary, summary
+    # 反真空：空话/只剩两个字的说明不算教过；104 是 p239 的等长上限（压缩预算内）。
+    assert 40 <= len(summary) <= 104, (len(summary), summary)
+    detail_cell = row["params"]["properties"]["proof_manuscript"]["description"]
+    assert "proof_text_needs_a_manuscript" in detail_cell, detail_cell
+
+
 # ---------------------------------------------------------------- 负控（五条）
 
 

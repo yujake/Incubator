@@ -3151,13 +3151,20 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    未在册那一档可以只给正文（只给「看过、没签」读数，不签发）。`verify_proof` 的 summary
 #:    与 spec 的 action 说明同步。
 #: ⑤ A / C / D / E / L 五格**没有自己的改动**，只随共用段那条 handoff 重命名各换一次。
+#: ⑥ 收口时的一笔（压缩预算）：`b2f39f05` 曾把「在册送审必须有手稿」写进 `verify.verify_proof`
+#:    的 summary（104 → 319 字符），而压缩批次比例因此 0.7749 > 0.75（分母是压缩前 8631）。
+#:    处置是把细则留在 params 的 `proof_manuscript` description 里、summary 压回 104 字符
+#:    （「在册也要给 `proof_manuscript`；只给 `proof_text` 会被拒。」），并加一条措辞判据钉住
+#:    这一句（`test_tool_descriptions_are_compressed.py::test_the_manuscript_rule_survives_the_compression`）。
+#:    这段 summary 印在 V 的 `tools_lines` 那一行 ⇒ V 那一格再换一次（aef2f211 → 4daa02d9）；
+#:    其余十格不受影响。这里没有改 `max_ratio` / `baseline_summary_chars` / 任何断言强度。
 #:
 #: 变化格 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']（十一格全换；原因是共用段）。
 #: 逐格旧值 → 新值（p238 → p239；Lean 开档口径，与 `conftest.py` 同一条）：
 #:   A e8be2e68→4cb3a8cc / B 8a9a5f98→4d4b9182 / C 395a6def→81d3f27a /
 #:   D d72edfac→67112d39 / E ce0984eb→b286172d / F 76657779→df5f7909 /
 #:   G 9dd228d8→5275d24f / H ba7efe69→5673c870 / L 8cb3e956→0c32f9cd /
-#:   M 8807868b→be33fa21 / V 2403f0f1→aef2f211。
+#:   M 8807868b→be33fa21 / V 2403f0f1→4daa02d9（V 的那一格在收口时又换了一次：见下）。
 #: 十一格是 `temp/_p239_recompute.py` 的现算值（导入判据文件自己的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
 #: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p239）；

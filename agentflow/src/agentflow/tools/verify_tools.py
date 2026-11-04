@@ -1002,13 +1002,8 @@ _ROLES_V = ("V",)
 @tool(
     "verify.verify_proof",
     (
-            "把一份证明按写成后的样子整体重读（V 的唯一主动作）：两态结论（成立 / 有毛病）+ 问题指到步号，并写 verifications/<命题号>.jsonl。`"
-            "**命题已登记时必须给 `proof_manuscript`**（签落在稿上）；只给 `proof_text`（内联正文）"
-            "在册这一档会被受控拒绝（`proof_text_needs_a_manuscript`）—— 内联正文没有签块、"
-            "没有 `## 依赖` 段、也没有按号命名的稿可寻址，不能单独过审。`"
-            "未在册（不给 `statement_id`）那一档可以只给 `proof_text`：那一档只给「看过、没签」"
-            "的读数，不签发。`"
-            "side_effect=read`：V 不写表。"
+            "把一份证明按写成后的样子整体重读：两态结论 + 问题指到步号，写 verifications/<命题号>.jsonl。"
+            "在册也要给 `proof_manuscript`；只给 `proof_text` 会被拒。"
             ),
     {
            "type": "object",

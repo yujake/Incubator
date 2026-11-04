@@ -2459,7 +2459,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "H": "5673c8706b501211e7ecba996e676cb688edf064cfc1fa75face0d5a691657f4",
     "L": "0c32f9cd738e6b1f0c0065b488a20b34c77434a56b2180d7339d22e5ecd17828",
     "M": "be33fa21272854fbfe18f3d72c9addefaecbde4f0a99fb756da556ad289e80bd",
-    "V": "aef2f211e1a9f7cc6d98ec56bcf7ea17daaeb3d23f56bef50f19180f6ea7ddf0",
+    "V": "4daa02d928a34c4c6acd28ee10aad6f6defaa74813ca842fdd286949a046e681",
 }
 
 
