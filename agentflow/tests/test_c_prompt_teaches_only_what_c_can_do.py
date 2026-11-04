@@ -105,7 +105,13 @@ def _c_manual_text() -> str:
 
 
 def _manual_problems(text: str) -> list[str]:
-    """C 的手册里"教了做不到的事"的地方（空列表 = 干净）。"""
+    """C 的手册里"教了做不到的事"的地方（空列表 = 干净）。
+
+    2026-11-04：`347d6267` 把"交接手稿（handoff）"那一串改名插进了这一句
+    （`manuscripts.read`（交接手稿，handoff）只有 `id` 那一格）—— 判据要的是"手册说清
+    它只有 `id` 这一个实参"，不是"逐字连在一起"，所以这一格跟着新措辞走；强度不变
+    （没有这句话，下面第一条照样点名）。
+    """
     out: list[str] = []
     if "产出登记口只有 `C.handle`" in text:
         out.append("还说 `C.handle` 是产出登记口：它是动作、不在 C 的工具面上")
@@ -113,7 +119,7 @@ def _manual_problems(text: str) -> list[str]:
         out.append("没有点名真登记口 `analysis.register_report`")
     if "`manuscripts.read` 同理" in text:
         out.append("还说 `manuscripts.read` 能截段：它只有 `id`，没有 start_line / max_lines")
-    if "`manuscripts.read` **只有 `id`**" not in text:
+    if "`manuscripts.read`（交接手稿，handoff）**只有 `id`**" not in text:
         out.append("没有把 `manuscripts.read` 的实参说清（只有 `id`）")
     if "`path_shape.join_segments" in text and "没有工具面入口" not in text:
         out.append("还把 `path_shape.join_segments` 写成可调用的读数（没有工具面入口）")
@@ -137,7 +143,7 @@ def test_the_manual_checker_is_not_vacuous() -> None:
     assert any("C.handle" in one for one in hit), hit
 
     hit = _manual_problems(text.replace(
-        "`manuscripts.read` **只有 `id`**", "`manuscripts.read` 同理"))
+        "`manuscripts.read`（交接手稿，handoff）**只有 `id`**", "`manuscripts.read` 同理"))
     assert any("manuscripts.read" in one for one in hit), hit
 
     hit = _manual_problems(text.replace("没有工具面入口", ""))

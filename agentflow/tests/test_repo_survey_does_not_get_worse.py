@@ -88,7 +88,15 @@ BASELINE: dict[str, int] = {
     # HEAD；只有这一条新过线，没有一条掉回线下）：`src/agentflow/agent_d/write_report.py`
     # 新过 800 行 —— 今晚的索引四格 / 阅读路收口落在同一个写报告的模块里。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_files_gt800_lines": 74,
+    # 2026-11-04 再抬 74 → 75。一格，能点名（逐条按文件比对基线提交 2bd8efc4 与
+    # HEAD；只有这一条新过线，没有一条掉回线下）：`src/agentflow/agent_f/manuscript.py`
+    # 620 → 890 行 —— 业主裁定 甲（正文必须由手稿承载）那一批把「转正 / 按号改名 /
+    # 搬签块 / 补命题号行」四件事落在同一个写稿模块里（新增 `promote_manuscript`、
+    # `carry_sign_block`、`ensure_statement_line`、`formal_shape_problem` 与
+    # `_norm_rel` / `_rel_is_inside` 两个路径守卫）。是「既有单职责模块被写胖过线」，
+    # 不是新落的模块 —— 但那一批的载体读写本来就只有这一处，拆开会让"哪一份稿在盘上、
+    # 叫什么名"有两个实现。判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_files_gt800_lines": 75,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -161,7 +169,15 @@ BASELINE: dict[str, int] = {
     #   · `src/agentflow/papermapping.py::mapping_cells` 354 行 —— 838a7d87 新落的只读
     #     读数口（对应表那一行该填的格；doc.mapping_cells 的实现）。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 94,
+    # 2026-11-04 再抬 94 → 95。一格，能点名（逐条按 (文件, 函数名) 比对基线提交
+    # 2bd8efc4 与 HEAD；只有这一条新过线，没有一条掉回线下，也没有既有函数新过线）：
+    #   · `src/agentflow/agent_v/core.py::_review_unregistered_prose` 0 → 224 行 ——
+    #     新落的函数（基线提交里没有它）：业主裁定 甲之后，"未在册的一份散文证明"
+    #     走的就是它 —— 三转判完把签块盖回稿（`vsigns.issue` + 收方秘书
+    #     `land_unregistered_sign`），并分辨 `reviews_unsigned` / 负判落 pending /
+    #     路径不合约定三类终局。它是「新落的长函数」，不是把既有函数写胖。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 95,
     "dup_docstring_segments": 5,
 }
 
@@ -189,6 +205,9 @@ BASELINE: dict[str, int] = {
 #: 2026-11-04 收口再抬两格：文件 73 → 74（`agent_d/write_report.py` 新过 800）与
 #: 函数 91 → 94（`agent_skills.py::_e_skills` / `_g_skills` / `papermapping.py::mapping_cells`），
 #: 来源逐条见 `BASELINE` 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
+#: 2026-11-04 载体迁移再抬两格：文件 74 → 75（`agent_f/manuscript.py` 620 → 890）与
+#: 函数 94 → 95（`agent_v/core.py::_review_unregistered_prose` 0 → 224），来源逐条见
+#: `BASELINE` 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
 BASELINE_OBSERVED = "2026-11-04"
 
 

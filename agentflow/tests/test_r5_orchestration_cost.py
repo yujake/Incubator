@@ -1218,6 +1218,13 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 改 pytest 内部名会把"这条判据在还原谁的行为"说丢）。
     "_evidence_kind_upgrade",      # 字符串键：秘书 `_upgrade_evidence_kind` 往 statements 行里留的"同一份内容再交一次、这一回来的声明更强"的痕（`row["_evidence_kind_upgrade"]`；与 V 落签那一支 `_grade_recomputed_from_signature` 写的那一格刻意分成两格记）；引用处是 `verifications._grade_recomputed_from_signature` 的 docstring（0b86db09 起）
     "_format_assertmsg",           # 外部符号：pytest 自己的内部函数（`_pytest.assertion.util`：把 `assert x, msg` 的续行统一补两格缩进），不是本仓符号；引用处是 `tests/test_registration_skeletons.py` 的 `plain_failure_message` docstring（它还原的正是它做的事）
+    # —— 2026-11-04（载体迁移那一批）：三条新登记，逐条写在下面 ——
+    # 三条都是「引用正当、符号面为零」：两条是行内字符串键（键值不是标识符），
+    # 一条是改名前那个实现的墓碑句。按本表纪律登记并写清类别，不改引用处的文本
+    # （改键值会改磁盘上的行形状，改墓碑句会把"改前叫什么"说丢）。
+    "_finish_pending",             # 改名前那个实现（2026-11-04 裁定 甲之后：没有手稿就不落 pending 台账）：`src/agentflow/agent_v/core.py` 原处那段墓碑句在讲"这一格改前叫什么、为什么不再落"。留痕按纪律必须点名被删的东西
+    "_grade_recomputed",           # 字符串键：`verifications.GRADE_RECOMPUTED_KEY` 的值（`row["_grade_recomputed"]` 记"这一档是谁按哪一签重算的"）—— 是键值不是符号；引用处是 `cli.py` 的 CLI 回执那句与 `tests/test_repair_backfill_grades.py` 的验收表
+    "_kind_upgrade",               # 字符串键的旧称：`secretary._upgrade_evidence_kind` 落在 statements 行上的那一格（今天的键值是 `_evidence_kind_upgrade`，这一条已在表内）—— 引用处是 `tests/test_multi_proof_write_side.py` 的注释，讲的是"有签时会多出这一格内部留痕、与 #p1 两种写法的等价性无关"
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
