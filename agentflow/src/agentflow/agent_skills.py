@@ -860,9 +860,11 @@ def _b_skills() -> tuple[Skill, ...]:
 
 1. **定理内容**：含**完整假设**的正文（`statement_full`）—— 省掉假设的命题会被下游
    当成无条件成立，这一条是本表最硬的门；
-2. **证明过程**（`proof_text`）：外部文献来的就是原文那一段逐字摘录（`quote_verified`
-   的比对对象，别改写）；自产命题（`origin="own_result"`）的正文是**你消化后的自然
-   语言** —— F 的手稿是来源，不是要照抄的正文（三条口径见下面「消化」那一节）；
+2. **证明过程**：外部文献来的写进 `proof_text`（原文那一段逐字摘录 —— `quote_verified`
+   的比对对象，别改写）；自产命题（`origin="own_result"`）的正文**由手稿
+   `proof_manuscript` 带进来**（在册也给稿；F/E 的稿，或你改写后的 b-proof），
+   `proof_text` 只是它收进台账后的那一列 —— F 的手稿是来源，不是要照抄的正文
+   （三条口径见下面「消化」那一节）；
 3. **出处**：`external_lit` 要 `source_lit_id` + `page_range`；`own_result` 要
    `doc_id` 或 `line_range`。**出处不在库整笔不写**。
 

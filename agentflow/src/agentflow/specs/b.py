@@ -305,7 +305,9 @@ SPEC = AgentSpec(
             "没有逐字引文支撑的关系不许产出。",
             "缺模型、缺正文、抽取失败都不许假装整理过。",
             "同一篇文献不要重复抽取；已有关系的重复判定交给判重口径，不要自己另立标准。",
-            "命题台账（statements）三件套缺一不可：含完整假设的命题正文（statement_full）、逐字的证明摘录（proof_text）、出处（source_lit_id + page_range）。省掉假设的命题会被下游当成无条件成立 —— 那是 FC-23 在命题级的同一种病。",
+            "命题台账（statements）三件套缺一不可：含完整假设的命题正文（statement_full）、"
+            "证明正文（**自产命题由手稿 `proof_manuscript` 带进来** —— 在册也给稿；文献侧是逐字 `proof_text`）、"
+            "出处（source_lit_id + page_range）。省掉假设的命题会被下游当成无条件成立 —— 那是 FC-23 在命题级的同一种病。",
             "quote_verified 是三态：true 逐字通过 / false 比对不一致 / null 还没查。不是 true 就必须写 quote_reason（哪里不一致、或者为什么还没查）。",
         ),
         policy=(
