@@ -4360,9 +4360,13 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     if written.get("missing") and not already_missing:
         detail = (
             f"{written['reason']}。处置：派 G 调 `doc.write_mapping` 一次落三份"
-            "（`MAPPING.json` / `MAPPING.md` / 正文附录），数值实验定理那一行的三格"
-            "（`file` / `numeric_evidence` / `exhaustion_note`）与 Lean 那两格"
-            "（`lean_file` / `lean_target`）齐了才算写完，再重编 PDF")
+            "（`MAPPING.json` / `MAPPING.md` / 正文附录）；每一行按这条命题的证明通道把该有的"
+            "格子填齐 —— 数值实验定理那一行：`file`（证明栏第 ① 段那份 `.py`，相对仓库根）、"
+            "`lean_file`（同一份程序）、`numeric_evidence`、`exhaustion_note` 与索引四格 "
+            "`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`"
+            "（`lean_target` 留空）；形式化定理那一行：`file`（论文包内相对路径）、`lean_file`"
+            "（`.lean`）与 `lean_target`；通道为空的行 `lean_file` / `lean_target` 允许为空。"
+            "填齐再重编 PDF")
         rep.findings.append(Finding("mapping", MAPPING_NOT_WRITTEN_CODE, "blocker", detail))
         got["findings"] = int(got.get("findings") or 0) + 1
         got["blockers"] = int(got.get("blockers") or 0) + 1

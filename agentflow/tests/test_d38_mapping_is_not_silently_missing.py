@@ -123,6 +123,33 @@ def _one_detail(rep) -> str:
     return "；".join(str(f.detail) for f in _mapping_findings(rep))
 
 
+#: 2026-11-04（`lean_file` 按通道教）：blocker 的处置文案必须按证明通道列格子。
+_CHANNEL_REQUIRED: tuple[str, ...] = (
+    "按这条命题的证明通道",
+    "`lean_file`（同一份程序）",
+    "`lean_target` 留空",
+    "索引四格",
+    "evidence_kind",
+    "evidence_path",
+    "evidence_sha256",
+    "v_signature",
+    "相对仓库根",
+    "论文包内相对路径",
+)
+
+#: 改前那一句（把两类凭据混成「三格 + 两格」）。
+_CHANNEL_STALE: tuple[str, ...] = (
+    "数值实验定理那一行的三格",
+    "与 Lean 那两格",
+)
+
+
+def _channel_problems(text: str) -> list[str]:
+    bad = [f"读不到 {needle!r}" for needle in _CHANNEL_REQUIRED if needle not in text]
+    bad += [f"仍写着旧句 {needle!r}" for needle in _CHANNEL_STALE if needle in text]
+    return bad
+
+
 # ============================================================ ① 有命题 + 已成稿 + 无表 => 拦门
 
 
@@ -157,6 +184,29 @@ def test_1_statements_and_a_finished_document_without_a_mapping_blocks_the_gate(
     assert PM.MAPPING_JSON_NAME in detail, detail
     # 处置必须写得出可派的动作（只报错不给路，等于把球踢回给人）
     assert "doc.write_mapping" in detail, detail
+
+
+def test_1b_the_blocker_spells_the_cells_by_proof_channel(tmp_path: pathlib.Path) -> None:
+    """①-b：`mapping_not_written` 的处置按通道列格子（数值那一行含索引四格与 `.py`）。
+
+    改前那一句把两类凭据混成「数值定理的三格 + Lean 两格」—— 数值通道在关档会话里也必填
+    `lean_file`（那份 `.py`），而且数值定理那一行还带索引四格；照旧句写必然缺件。
+    """
+    root = _ws(tmp_path / "ws", statements=1, documents=1)
+    detail = _one_detail(_gate(root))
+    assert _channel_problems(detail) == [], "\n".join(_channel_problems(detail))
+
+
+def test_1c_putting_the_old_cell_grouping_back_turns_the_blocker_red(
+        tmp_path: pathlib.Path) -> None:
+    """①-c（反真空）：把「数值定理的三格与 Lean 那两格」回灌 ⇒ 同一读法必红。"""
+    root = _ws(tmp_path / "ws", statements=1, documents=1)
+    detail = _one_detail(_gate(root))
+    broken = detail + (
+        "；数值实验定理那一行的三格（`file` / `numeric_evidence` / `exhaustion_note`）"
+        "与 Lean 那两格（`lean_file` / `lean_target`）齐了才算写完。")
+    problems = _channel_problems(broken)
+    assert any("数值实验定理那一行的三格" in one for one in problems), problems
 
 
 # ============================================================ ② 表在且三格齐 => 放行
