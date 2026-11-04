@@ -24,6 +24,7 @@ from __future__ import annotations
 import pytest
 
 from conftest import TS, add_literature
+from _proof_manuscript_fixture import carry_proof_manuscript
 from agentflow import secretary as SEC
 
 
@@ -36,11 +37,17 @@ def _deps_of(store, stmt_id: str) -> list[dict]:
 
 
 def _two_things(store, **extra) -> dict:
-    """B 交的那两样：定理内容 + 证明过程（其余一概不给 —— 这正是这一批的契约）。"""
+    """B 交的那两样：定理内容 + 证明过程（其余一概不给 —— 这正是这一批的契约）。
+
+    2026-11-04（业主裁定：正文必须由手稿承载）：这一笔要写正文就必须有稿。
+    `carry_proof_manuscript` 在 `tmp_path` 下写 `reports/f-proof-<号>.md`、让 V 先审
+    那一份稿（pending 台账），再把稿的路径与本笔的五元位补上；定理内容与证明过程
+    仍然是调用方在 `extra` 里给的那两样，断言一个字没动。
+    """
     payload = {"kind": "theorem", "label": "T1", "origin": "own_result",
                "statement_full": "定理：对任意群 G，命题 ph 成立。"}
     payload.update(extra)
-    return payload
+    return carry_proof_manuscript(store.root, payload)
 
 
 # ==================================================== 一、正控：依赖从证明文本里出来

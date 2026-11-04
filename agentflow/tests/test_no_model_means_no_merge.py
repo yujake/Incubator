@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import pathlib
 import sys
+from typing import Any, Mapping
 
 # 与 `tests/conftest.py` 同一个注入方式（这一份也要能在一棵临时源码树上单独跑）。
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
@@ -36,6 +37,8 @@ from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.secretary import MERGED_BY_ADJUDICATION, Secretary
 from agentflow.store import Store
+
+from _proof_manuscript_fixture import carry_proof_manuscript
 
 #: 件1 判据 a 的那一对：条件有强弱关系（素数 / 奇素数）⇒ 语义不一致 ⇒ 两条。
 #: 改前的读数：`state=same`、`similarity=0.8889`、`basis="prose_similarity"`。
@@ -69,6 +72,11 @@ def _ws(path: pathlib.Path) -> Store:
 
 def _rows(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("statements")]
+
+
+def _record(sec: Secretary, st: Store, payload: Mapping[str, Any]) -> dict:
+    """秘书直收的一笔：先给正文补手稿载体（稿 + 手稿签 + 五元位），再登记。"""
+    return sec.record_statement(carry_proof_manuscript(st.root, payload), role="B")
 
 
 def _proof_nos(row: dict) -> list[int]:
@@ -121,8 +129,8 @@ def test_a_two_condition_strengths_stay_two_rows_without_the_model(
 
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)   # 没有缝 ⇒ 判定没查成
-    first = sec.record_statement({**_own(PAIR_WEAK), "proof_text": PROOF_1}, role="B")
-    second = sec.record_statement({**_own(PAIR_STRONG), "proof_text": PROOF_3}, role="B")
+    first = _record(sec, st, {**_own(PAIR_WEAK), "proof_text": PROOF_1})
+    second = _record(sec, st, {**_own(PAIR_STRONG), "proof_text": PROOF_3})
 
     rows = _rows(st)
     assert len(rows) == 2, f"条件强弱不同的两条命题落成了 {len(rows)} 行（应 2 行）"
@@ -160,11 +168,11 @@ def test_b_the_morph_pair_still_merges_when_the_model_says_same(
 
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
-    first = sec.record_statement({**_own(MORPH_A), "proof_text": PROOF_1}, role="B")
+    first = _record(sec, st, {**_own(MORPH_A), "proof_text": PROOF_1})
     assert first.get("created") is True, first
     _stub_model_says_same(monkeypatch, target=str(first.get("stmt_id") or ""))
 
-    second = sec.record_statement({**_own(MORPH_B), "proof_text": PROOF_2}, role="B")
+    second = _record(sec, st, {**_own(MORPH_B), "proof_text": PROOF_2})
     rows = _rows(st)
     assert len(rows) == 1, f"模型判 same 之后仍然落成 {len(rows)} 行（应 1 行）"
     assert second.get("merged") is True, second
@@ -185,8 +193,8 @@ def test_c_dropping_fail_closed_brings_the_one_row_back(
     _drop_fail_closed(monkeypatch)
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
-    first = sec.record_statement({**_own(PAIR_WEAK), "proof_text": PROOF_1}, role="B")
-    second = sec.record_statement({**_own(PAIR_STRONG), "proof_text": PROOF_3}, role="B")
+    first = _record(sec, st, {**_own(PAIR_WEAK), "proof_text": PROOF_1})
+    second = _record(sec, st, {**_own(PAIR_STRONG), "proof_text": PROOF_3})
     rows = _rows(st)
     assert len(rows) == 1, f"摘掉 fail-closed 之后仍然是 {len(rows)} 行 ⇒ 那组断言不是对着它"
     assert second.get("merged") is True, second
@@ -213,8 +221,8 @@ def test_d_similarity_does_not_decide_a_merge_even_at_099(
     monkeypatch.setattr(PK, "same_proposition", _always_similar)
     st = _ws(tmp_path / "fail-closed")
     sec = Secretary("B", root=st.root, store=st)
-    sec.record_statement({**_own(PAIR_WEAK), "proof_text": PROOF_1}, role="B")
-    second = sec.record_statement({**_own(PAIR_STRONG), "proof_text": PROOF_3}, role="B")
+    _record(sec, st, {**_own(PAIR_WEAK), "proof_text": PROOF_1})
+    second = _record(sec, st, {**_own(PAIR_STRONG), "proof_text": PROOF_3})
     assert len(_rows(st)) == 2, (
         f"词面相似度被抬到 0.99 之后仍然并了：在册 {len(_rows(st))} 行（应 2 行）")
     assert second.get("merged") is not True, second
@@ -226,7 +234,7 @@ def test_d_similarity_does_not_decide_a_merge_even_at_099(
     _drop_fail_closed(monkeypatch)
     st2 = _ws(tmp_path / "before")
     sec2 = Secretary("B", root=st2.root, store=st2)
-    sec2.record_statement({**_own(PAIR_WEAK), "proof_text": PROOF_1}, role="B")
-    again = sec2.record_statement({**_own(PAIR_STRONG), "proof_text": PROOF_3}, role="B")
+    _record(sec2, st2, {**_own(PAIR_WEAK), "proof_text": PROOF_1})
+    again = _record(sec2, st2, {**_own(PAIR_STRONG), "proof_text": PROOF_3})
     assert len(_rows(st2)) == 1, f"摘掉 fail-closed 之后同一根桩应当并成 1 行：{len(_rows(st2))}"
     assert again.get("merged") is True and again.get("matched_by") == PK.BASIS_SIMILARITY, again

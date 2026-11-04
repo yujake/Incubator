@@ -51,6 +51,8 @@ from agentflow import schema as S
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 
+from _proof_manuscript_fixture import carry_proof_manuscript
+
 #: 错并那一对：条件有强弱关系（素数 / 奇素数）⇒ 语义不一致 ⇒ 本来不许并。
 PAIR_WEAK = "设 p 是素数；则 p 是奇数。"
 PAIR_STRONG = "设 p 是奇素数；则 p 是奇数。"
@@ -292,14 +294,15 @@ def _bad_merge(tmp_path: pathlib.Path) -> tuple[Store, dict]:
     """造一对"错并"：打桩让秘书把条件强弱不同的两条判成 same（打桩只在造这一笔时生效）。"""
     st = _ws(tmp_path / "bad")
     sec = Secretary("B", root=st.root, store=st)
-    first = sec.record_statement({**_own(PAIR_WEAK, label="素数引理"),
-                                  "proof_text": PROOF_1}, role="B")
+    first = sec.record_statement(carry_proof_manuscript(st.root, {
+        **_own(PAIR_WEAK, label="素数引理"), "proof_text": PROOF_1}), role="B")
     assert first.get("created") is True, first
     real = Secretary.adjudicate_proposition
     Secretary.adjudicate_proposition = _judge_same_always(str(first.get("stmt_id") or ""))
     try:
-        second = sec.record_statement({**_own(PAIR_STRONG, label="奇素数引理"),
-                                       "proof_text": PROOF_2}, role="B")
+        second = sec.record_statement(carry_proof_manuscript(st.root, {
+            **_own(PAIR_STRONG, label="奇素数引理"), "proof_text": PROOF_2},
+            statement_id="000001"), role="B")
     finally:
         Secretary.adjudicate_proposition = real
     return st, second
@@ -334,11 +337,12 @@ def _ok_merge_by_key(tmp_path: pathlib.Path) -> tuple[Store, dict]:
     """正常合并（粗筛档）：同一命题的两种写法（确定性键相同）⇒ 1 行 + 第 2 份证明。"""
     st = _ws(tmp_path / "ok")
     sec = Secretary("B", root=st.root, store=st)
-    first = sec.record_statement({**_own(SAME_A, label="弦长引理"),
-                                  "proof_text": PROOF_1}, role="B")
+    first = sec.record_statement(carry_proof_manuscript(st.root, {
+        **_own(SAME_A, label="弦长引理"), "proof_text": PROOF_1}), role="B")
     assert first.get("created") is True, first
-    second = sec.record_statement({**_own(SAME_B, label="弦长引理"),
-                                   "proof_text": PROOF_3}, role="B")
+    second = sec.record_statement(carry_proof_manuscript(st.root, {
+        **_own(SAME_B, label="弦长引理"), "proof_text": PROOF_3},
+        statement_id="000001"), role="B")
     return st, second
 
 
@@ -346,11 +350,12 @@ def _ok_merge_by_name(tmp_path: pathlib.Path) -> tuple[Store, dict]:
     """正常合并（模型档）：同样的定理名、两种写法 ⇒ 模型判 same ⇒ 1 行 + 第 2 份证明。"""
     st = _ws(tmp_path / "model-ok")
     sec = Secretary("B", root=st.root, store=st, seam=_FakeSeam(), enable_model=True)
-    first = sec.record_statement({**_own(SAME_A, label="弦长引理"),
-                                  "proof_text": PROOF_1}, role="B")
+    first = sec.record_statement(carry_proof_manuscript(st.root, {
+        **_own(SAME_A, label="弦长引理"), "proof_text": PROOF_1}), role="B")
     assert first.get("created") is True, first
-    second = sec.record_statement({**_own(SAME_B, label="弦长引理"),
-                                   "proof_text": PROOF_3}, role="B")
+    second = sec.record_statement(carry_proof_manuscript(st.root, {
+        **_own(SAME_B, label="弦长引理"), "proof_text": PROOF_3},
+        statement_id="000001"), role="B")
     return st, second
 
 

@@ -74,6 +74,9 @@ def _write_one_concept(store: Store, *, definition: str = "边上权重的倒数
     sec = Secretary("B", root=store.root, store=store)
     got = sec.record_statement(
         {"statement_full": "定理：对任意群 G，命题 ph 成立。", "kind": "theorem",
+         # 概念行的 origin 按来源分档；这一笔的命题从文献 0000 来 ⇒ external_lit。
+         # （2026-11-04 起 origin 在概念分支之前就要过词表，空串不再被推断。）
+         "origin": "external_lit",
          "source_lit_id": source_lit_id, "page_range": {"start": 1, "end": 1},
          "quote_verified": True, "quote_mode": "verbatim",
          "concepts": [{"name": label, "definition": definition,

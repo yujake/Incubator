@@ -56,7 +56,11 @@ def _concept(reg, store, label: str) -> str:
     """
     sec = Secretary("B", root=store.root, store=store)
     out = sec.record_statement({"kind": "concept", "label": label,
-                                "statement_full": f"{label}（夹具定义）"}, role="B")
+                                "statement_full": f"{label}（夹具定义）",
+                                # 本行要造的是"没有出处的自撰概念"：origin 的那道
+                                # 闸（2026-11-04 起在概念分支之前）要求显式声明
+                                # `self_authored`，不再接受空 origin 的推断。
+                                "origin": "own_result", "self_authored": True}, role="B")
     assert out["checked"] and out["created"], out
     return str(out["stmt_id"])
 
