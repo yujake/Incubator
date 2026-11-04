@@ -51,9 +51,19 @@ def _pending(st: Store, *, object_path: str = "") -> dict:
         st.root, proof_text=PROOF, verdict=dict(OK), object_path=object_path)
 
 
+def _manuscript_text() -> str:
+    """B 登记这一笔必须带的手稿（2026-11-04 甲之后在册也要稿）。"""
+    from agentflow import depsection as DS
+
+    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n- 计划：0000\n\n"
+            "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + PROOF + "\n\n"
+            + DS.render_dependency_section([]) + "\n")
+
+
 def _register(st: Store) -> dict:
     return AgentB(st, extractor=None, extract_text=None).register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
+        proof_manuscript=_manuscript_text(),
         kind="conjecture", label="探针命题", origin="own_result",
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
