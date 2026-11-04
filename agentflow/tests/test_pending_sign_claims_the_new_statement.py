@@ -74,7 +74,7 @@ def _row_of(st: Store, stmt_id: str) -> dict:
 def test_a_pending_sign_is_claimed_by_the_statement_that_gets_registered(tmp_path):
     """① 先有 pending 签（命题还没在册时审的）⇒ 再登记同一份正文时第 3 位认到它。"""
     st = _ws(tmp_path)
-    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK))
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md")
 
     got = _register(st)
     assert got.get("ok") is True, got
@@ -99,7 +99,7 @@ def test_a_pending_sign_is_claimed_by_the_statement_that_gets_registered(tmp_pat
 def test_the_same_body_registered_twice_does_not_claim_the_sign_twice(tmp_path):
     """② 同一份正文登记两次 ⇒ 只认领一次（第二次不许把同一签再认给另一条命题）。"""
     st = _ws(tmp_path)
-    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK))
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md")
     first = _register(st)
     assert first.get("ok") is True, first
     sid = str(first["stmt_id"])
@@ -125,7 +125,7 @@ def test_one_changed_character_is_not_claimed(tmp_path):
     所以这一条读的是"拒收 + pending 那一行仍然没有绑号"，不再是"写进去了但没认签"。
     """
     st = _ws(tmp_path)
-    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK))
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md")
     got = _register(st, proof=PROOF_CHANGED)
     assert got.get("ok") is False, got
     assert got.get("kind") == "proof_without_v_sign", got
@@ -155,7 +155,8 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_claimed(tmp_path):
     VR.record_pending_sign(st.root, proof_text=PROOF, verdict={
         "verdict": "成立",
         "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
-                      "detail": "第 2 步直接用了结论"}]})
+                      "detail": "第 2 步直接用了结论"}]},
+        object_path="reports/f-proof-000000.md")
     got = _register(st)
     assert got.get("ok") is False, got
     assert got.get("kind") == "proof_without_v_sign", got
@@ -172,7 +173,7 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_claimed(tmp_path):
 def test_the_claim_names_a_ledger_that_really_exists(tmp_path):
     """可达性：认领读数点名的那个台账文件真的在盘上（不是编一句"认到了"）。"""
     st = _ws(tmp_path)
-    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK))
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md")
     got = _register(st)
     v_sign = dict(got.get("v_sign") or {})
     ledger = str(v_sign.get("claim", {}).get("ledger") or "")

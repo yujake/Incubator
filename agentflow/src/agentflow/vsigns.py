@@ -2134,6 +2134,42 @@ def _apply_review_to_bits(bits: Mapping[str, Any], *, verification_id: str,
                                 kind=str(kind or ""))
 
 
+#: pending 台账行允许的载体（2026-11-04 业主裁定 · 乙-14）。
+#:
+#: 为什么要有这一格：pending 台账是"命题还没在册时 V 审过"的落点，`bits_after_sign`
+#: 在新建命题那一档按正文 sha 认领它、直接写 `bits.reviewed=True` —— 这一笔没有签文件、
+#: 也没有手稿签块。改前只要 pending 里有这一份正文就能认领，于是纯内联旧行
+#: （`object_path=""`）也能把第 3 位翻上去。业主要的口径：只认 pending 行的
+#: `object_path` 是一份手稿（`reports/{f,e,b}-proof-*.md`）或 E 的穷举读数报告
+#: （`out/experiments/<实验号>/exhaustion.md`）的认领；纯内联旧行不认。
+PENDING_CARRIER_PREFIXES: tuple[str, ...] = (
+    "reports/f-proof-", "reports/e-proof-", "reports/b-proof-")
+
+
+def _pending_carrier_path(row: Mapping[str, Any]) -> str:
+    """pending 行的载体路径（空串 = 这一行没有载体，不许认领）。
+
+    三态（判不了就不认）：
+    - 手稿：`reports/{f,e,b}-proof-<号>.md`，且 `manuscript_id_of` 认得出裸稿号
+      （"按号命名"是硬条件 —— 认不出号的块 B 自己也不认，见 `manuscript_sign_gate`
+      的 `manuscript_id_missing`）；
+    - E 的穷举读数报告：`out/experiments/<实验号>/exhaustion.md`（E 的 pending 行
+      按对象 sha 落的就是这一份报告，B 的第三方签字闸读它）；
+    - 其余（含空串 / 纯内联旧行 / 任意别的路径）⇒ 空串，不认。
+    """
+    path = str((row or {}).get("object_path") or "").strip().replace("\\", "/")
+    if not path:
+        return ""
+    if path.startswith(PENDING_CARRIER_PREFIXES) and path.endswith(".md") \
+            and manuscript_id_of(path):
+        return path
+    parts = path.split("/")
+    if (len(parts) == 4 and parts[0] == "out" and parts[1] == "experiments"
+            and parts[2] and parts[3] == "exhaustion.md"):
+        return path
+    return ""
+
+
 def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
                         proof_no: Any, kind: str,
                         out: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -2142,6 +2178,12 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
     判据与 V 那条 pending 台账同一把尺（`verifications.row_signable`：结论「成立」、
     没有未解决的 error、引用核实不挡；连续次数这一档在 pending 这条路上结构上不存在，
     理由见 `verifications._gap_from_pending`）。四个结局都写进 `out["why"]`，拒绝折平。
+
+    ## 2026-11-04（业主裁定 · 乙-14）：先看这一行有没有载体
+
+    pending 认领是"没有签文件、没有签块也能翻第 3 位"的唯一一条正路。它的合法性来自
+    「V 在命题还没在册时对一份稿出的结论」—— 那一份稿是这一签的载体。纯内联旧行
+    （`object_path=""`）没有载体，不许认领（`_pending_carrier_path`）。
     """
     from . import verifications as _VR
 
@@ -2172,6 +2214,15 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
         out["claim"] = claim
         out["why"] = (f"{ledger} 这一签已经认给 stmt:{bound} ⇒ 不再认领"
                       "（同一份正文只认领一次；改稿请重签，登记不产生第二份签）")
+        return dict(bits), out
+    carrier = _pending_carrier_path(row)
+    out["carrier"] = carrier
+    if not carrier:
+        out["why"] = (
+            f"{ledger} 这一行没有载体（`object_path` 不是 `reports/{{f,e,b}}-proof-*.md`，"
+            "也不是 `out/experiments/<实验号>/exhaustion.md`）⇒ 不认领："
+            "纯内联正文的 pending 行不给第 3 位。处置：让 V 带 `proof_manuscript` 重审"
+            "（签块落回那一份稿），或让 E 交 `reports/e-proof-<实验号>.md`。")
         return dict(bits), out
     if not _VR.row_signable(row):
         out["why"] = ("命题还没在册时 V 审过这一份，但那一签签不住"
