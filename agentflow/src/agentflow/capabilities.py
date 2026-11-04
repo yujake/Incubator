@@ -144,11 +144,22 @@ def unmapped_actions() -> list[tuple[str, str]]:
 #: 能力层有两个动作（`A.run` / `B.run`），工具层有一个工具（`ocr.run`）；不加这张表两条动作会被
 #: 同一个工具"对上"，于是报告里出现一条纯属拼写巧合的"不一致"（最反对的那种假报警）。
 #: 每组都写理由是因为"这个角色会不会经由这一组工具落地"是设计判断、推不出来：`B`/`ocr`（`AgentB.run`
-#: 调 OCR 读 PDF，声明 `network`）· `A`/`D` = `search`/`research` · `E`/`F` = `verify`/`attack` ·
+#: 调 OCR 读 PDF，声明 `network`）· `A`/`search`、`D`/`research`+`search`（缺口工作台归 D，A 只找文献）·
+#: `E`/`F` = `verify`/`attack` ·
 #: `G`/`H` = `doc`/`review` · 通用组（`fs`/`table`/`graph`/`trace`）任何角色都可能用到、只在唯一命中
 #: 时才算对上。表里没有的角色组合 ⇒ 报"两层声明没有比对"（info，三态里的 unknown），不猜映射。
 _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
-    "A": ("search", "table", "fs", "research", "trace", "graph"),
+    # 2026-11-04（A 区声明面收口）：这一行原来挂六组
+    # `("search","table","fs","research","trace","graph")`，而 A 的 54 件工具里
+    # 一件 `research.*` / 一件 `graph.*` 都没有 —— `research` 是 D 的缺口工作台
+    # （`research_tools`），`graph` 是概念关系图（`graph_tools`，C/D/B 的落点）。
+    # 多写的两组的危害不是报错，而是把"这条动作可能落到 D 的检索台上"写进权限面：
+    # 这一行是 `_candidates_impl` 的名字消歧依据，组写宽了，同名的另一组工具就会
+    # 充当候选（`ambiguous` 长大 ⇒ `assert_capabilities` 第 [7b] 条才报，而在那之前
+    # 它只是"看起来能对上"）。收成 A 真有的四组：`search`（找文献）+
+    # 通用三组 `table`/`fs`/`trace`（任何角色都可能用到、只在唯一命中时才算对上）。
+    # 判据：`temp/n6_p5_A_groups.py`（A 的组表 == 它实际工具前缀集合，现读注册表）。
+    "A": ("search", "table", "fs", "trace"),
     "B": ("ocr", "table", "fs", "trace", "graph"),
     "C": ("graph", "table", "fs", "trace"),
     "D": ("research", "search", "trace", "graph", "table", "fs", "conjecture"),
