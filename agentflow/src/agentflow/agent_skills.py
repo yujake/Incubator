@@ -1994,7 +1994,7 @@ def _f_skills() -> tuple[Skill, ...]:
 ## 送审：你自己派 V 审这一份手稿，参数是这些
 
 送审**是你自己的一次派活**：用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审
-**哪一份**（命题号，或还没登记时的手稿路径 `reports/f-proof-*.md`），让 V 调它的
+**哪一份**（手稿路径 `reports/f-proof-*.md`，**在册了也点同一份稿**；命题号一并写上），让 V 调它的
 `verify_proof`（那是 V 的工具面，不是你的）。它带过去的参数按工具面给全，
 `statement_id` 与 `proof_manuscript` 是两根入口键：**`proof_manuscript` 一律给**
 （手稿路径，签块要落回这一份稿），在册后再加 `statement_id`（把签与那一行绑起来）。

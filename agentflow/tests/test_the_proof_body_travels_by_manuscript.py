@@ -3,16 +3,16 @@
 
 ## 为什么要有这一条
 
-今晚业主把四件事判定为「老路」，其中第一件是**内联正文**：
+今晚业主把四件事判定为「老路」，其中第一件是「内联正文」：
 
 > `verify_proof(proof_text=…)` / `register_statement(proofs=[…])` 能换到签、能进台账
 > ⇒ 甲：在册命题也要给 `proof_manuscript`。
 
 代码面的闸由另一条 lane 落在 `agent_v/core.py` / `tools/verify_tools.py` / `specs/v.py` /
-`agent_b/register_statement.py`；这一条只钉**提示词教了什么** —— 因为老路在提示词里
+`agent_b/register_statement.py`；这一条只钉「提示词教了什么」 —— 因为老路在提示词里
 留下的形态不是一句错话，而是四种「可以不给稿」的教法：
 
-1. F 的 policy 说 `proof_text` 可以不给、`proof_manuscript` 是**还没在册**时那条入口；
+1. F 的 policy 说 `proof_text` 可以不给、`proof_manuscript` 是「还没在册」时那条入口；
 2. F 的送审表只有四行（`statement_id` / `proof_no` / `proof_text` / `readonly_facts`），
    没有 `proof_manuscript`；
 3. B 的 policy 教「`proofs=[{proof_no: 1..N, text: …}]` 一次交清」——那条路没有稿，
@@ -23,7 +23,7 @@
 ## 判据（每条都两向）
 
 - 正控：改后的渲染结果 / 手册正文里读得到「在册也给稿」与「正文的唯一载体是手稿」；
-- 反真空：把**改前那句原话**喂给同一个读法 ⇒ 必须报缺（判据不是橡皮图章）。
+- 反真空：把「改前那句原话」喂给同一个读法 ⇒ 必须报缺（判据不是橡皮图章）。
 
 零模型钱：只读 `system_prompt` / `CATALOG` 里的字符串，不起任何进程。
 """
