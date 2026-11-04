@@ -1351,15 +1351,12 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     # 2026-10-23 晚：`("E", "run_experiment")` 的 `run_name` 与
     # `("E", "check_formal")` 的 `checker_name` 两对已删 —— 前者随工具 schema 一起
     # 退场（那两个参数只服务 formal，而 E 不做形式化），后者随动作整条摘掉。
-    ("G", "compose_claim"): (
-        frozenset({"allowed_use", "counterexamples", "errata_ids", "freeze_reason", "frozen",
-                   "kind", "numeric_evidence", "proof_location", "revision_hash",
-                   "scope_caveat", "status"}),
-        "`doc.compose_claim` 是**通用写入口**（十一个可选字段覆盖冻结/勘误/数值证据等），"
-        "而 `G.compose_claim` 这个动作用的是它的一小部分契约 ⇒ 这个方向的不对称"
-        "很可能是**刻意的**（动作面就是比工具面窄）。登记它是因为"
-        "「刻意」必须被写下来才算刻意 —— 不写下来，它与前面六处的形态完全一样。",
-    ),
+    # 2026-11-04：`("G", "compose_claim")` 那一对已删（登记过期）—— 动作面把那十一格
+    # 补齐了（`specs/g.py` 的 `compose_claim`，业主 2026-11-04 放权动禁改区那一批）：
+    # 它是"刻意比工具面窄"的最后一个登记项，而业主裁定窄的那一格正是**交付不了 proof
+    # 断言**的那一格（没有 `proof_location` 就过不了 `build_document`）⇒ 不再是刻意，
+    # 于是这条登记失去对象。删它之前 `stale_missing_in_action_entries()` 会一直报它过期
+    # （`tests/test_capabilities_reverse_param_gaps.py::test_the_registration_has_no_stale_entries`）。
     ("H", "verify_fixes"): (
         frozenset({"max_review_rounds"}),
         "`review.verify_fixes` 有 `max_review_rounds`，动作面没声明。",

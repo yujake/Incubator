@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from .. import claimanatomy as CA
 from .. import schema as S
 from ..agentspec import (
     _ARR_I,
@@ -36,7 +37,33 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 而工具层必然拒收（判据：`capabilities.param_type_divergences()`）。
               "citations": {**_ARR_S, "minItems": 1},
               "evidence_kind": _S, "section": _S,
-              "is_negative": _B, "negation_kind": _S, "claim_id": _S},
+              "is_negative": _B, "negation_kind": _S, "claim_id": _S,
+              # ---- 2026-11-04（业主裁定）：把实现**已经接收**的 11 格补进动作面。
+              #
+              # 这三行不是新行为：`agent_g/compose_claim.py:20-30` 的签名早就逐个接收
+              # 它们（`kind` / `status` / `proof_location` / `numeric_evidence` /
+              # `counterexamples` / `frozen` / `freeze_reason` / `allowed_use` /
+              # `scope_caveat` / `revision_hash` / `errata_ids`），并在 `:50-60` 原样
+              # 转发给 `doc_tools.compose_claim`，后者把它们逐格写进 claim dict
+              # （`doc_tools.py:1104-1121` 那个 `extra` 循环；`frozen` 在 `:1142-1143`）。
+              # 类型/边界逐字对齐工具面的 `@tool` 声明（`doc_tools.py:2164-2174`）。
+              #
+              # 为什么这 11 格必须进动作面：没有 `proof_location`（D-1 写入期判据要的
+              # 那一格）就造不出一条能过 `build_document` 的 proof 断言 —— 主控只能
+              # 派「无法交付的活」。判据：`temp/n6_p1_compose_claim.py`
+              # （a 参数门放行 / b 端到端过 build_document / c 摘掉就回到被拒）。
+              "kind": {"type": "string", "enum": list(CA.CLAIM_KINDS)},
+              "status": {"type": "string", "enum": list(CA.CLAIM_STATUSES)},
+              "proof_location": _S,
+              "numeric_evidence": _OBJ,
+              # 工具面这一格只写 `{"type": "array"}`（不约束 items），这里逐字照抄：
+              # 写成 `_ARR_OBJ` 会在 `items.type` 上造出一条 `param_type_divergences`
+              # （一侧声明了那个键、另一侧没声明 = 差第三态）。
+              "counterexamples": {"type": "array"},
+              "frozen": _B, "freeze_reason": _S,
+              "allowed_use": {"type": "string", "enum": list(CA.ALLOWED_USE_KINDS)},
+              "scope_caveat": _S, "revision_hash": _S,
+              "errata_ids": _ARR_S},
              ("text", "citations", "evidence_kind", "section")),
         "claim dict", side_effect="none", handler_name="compose_claim",
     ),
