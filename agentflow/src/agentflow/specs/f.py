@@ -129,7 +129,8 @@ SPEC = AgentSpec(
             # 2026-11-01（审计 171 F-08/F-09）：改前这一句只说"用 summon 唤起 V 的 verify_proof，
             # 把 proof_text 与只读读数一起交过去"—— 一个必填键都没写，而 summon 形状没有 action
             # 那一格（`agent_loop` 的 S2 口径），所以"唤起某个动作"这句话本身也落不了地。
-            # 现在按工具面写：`statement_id` 必填，另两个键名给真名（`proof_no` / `readonly_facts`）。
+            # 现在按工具面写：`statement_id` 在册后必填、`proof_manuscript` 一律给（在册也给），
+            # 另两个键名给真名（`proof_no` / `readonly_facts`）。
             # 2026-11-02（业主逐字：「重点是要F侧拿V签，拿到V签F才能交差」「F不是直接能派V吗」）：
             # 送审是你自己派 V（`framework_summon` 形状：`role="V"` + `task` 写清要审哪一份），
             # 不是等别人代派；`F.step` 不再代你送审，它只回读签（下面这一格 `v_sign`）。
