@@ -461,6 +461,26 @@ SPEC = AgentSpec(
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
             ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
              "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的计数**（`file` + 数值那两格，或 `file` + Lean 那两格）：表里每一行都要齐，但「齐」不等于「这一行写完」—— 凭据格（`lean_file`，以及 formal 通道的 `lean_target`）与数值定理的索引四格也要填；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。"),
+            # 业主 2026-11-04 的裁定（逐字）：「如果数据位置都知道，要给 G 开发辅助工具直接拿到」。
+            # 这一条把「哪几格怎么拿」从"读台账自己拼"改成"先调工具"：工具只读、判据只有一处
+            # （`papermapping.mapping_cells` → `numericproof.proof_channel` / `formal_slot`、
+            # `papermapping._lean_problems`、`numerictheorem.evidence_index_problems`）。
+            # 判据：tests/test_doc_mapping_cells_tool.py（a–g 七条）。
+            "**对应表那几格先调 `doc.mapping_cells` 直接取，别自己拼**（业主 2026-11-04）：给它 "
+            "`project` 与命题号（`statement_id=\"000004\"` 或 `\"stmt:000004\"`，多证明时带 "
+            "`proof_no`；也可以只给 `claim_key` 反查），它按这一行的证明通道逐格交回 —— "
+            "`cells` 是**该填的值**（`file` / `lean_file` / `lean_target` / `numeric_evidence` / "
+            "`exhaustion_note` / 索引四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / "
+            "`v_signature`），`sources` 是**每格的来路**（哪张表哪一行哪一格，或「现算 sha256」），"
+            "`problems` 是**逐格的问题**（判据原话：读不到 / 没签 / sha 不符 / 表里没有这一行）。"
+            "**值以 `cells` 为准**：`lean_file` 按通道（numeric ⇒ 证明栏第 ① 段那份 `.py`；"
+            "formal ⇒ `.lean` 且 `lean_target` 是那份源码里的声明名；通道为空 ⇒ 空，不适用）；"
+            "`evidence_sha256` 与 `v_signature.sha256` 都是**现算**的，不许抄表里旧值。"
+            "**抄不到时再按下表回退，顺序不许颠倒**：① 先看 `cells` 里有没有这一格；② 没有再读 "
+            "`sources` 指的那一处（`data/statements`、`data/experiments`、"
+            "`verifications/<命题号>.jsonl`、`out/vsigns/`、盘上那份文件）；③ 还取不到就照 "
+            "`problems` 的原话把那一格当缺口上报，**不许先填一个像样的值**。它只读：不改台账、"
+            "不改对应表、不起子进程（逐格回退表见 `agent_skills` 的「成稿」那一条）。",
             # 2026-10-23（业主裁定 E-1 与随后那条硬口径）：纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
             "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 的三段（`程序：` / `程序设计：` / `穷举论证：`，由 `exhaustionreport` 写盘），把它登记成 `statements` 那一行的是 B（B 原样收进 `proof_text`）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",

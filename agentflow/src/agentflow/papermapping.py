@@ -1682,6 +1682,39 @@ def lean_declares(text: str, name: Any) -> bool:
     return bool(_declaration_re(raw).search(str(text or "")))
 
 
+#: Lean 顶层声明那一行的写法（`@[…]` 属性、修饰词、声明关键字、名字）。
+#:
+#: 只认行首：`have h : …` / `rw [foo]` 里的名字不是声明。`namespace` / `section` 不改名
+#: （`lean_target` 既允许写短名、也允许与源码逐字一致的全名）。
+_DECLARATION_LINE_RE = re.compile(
+    r"^[ \t]*(?:@\[[^\]]*\][ \t]*)*"
+    r"(?:(?:private|protected|noncomputable|partial|unsafe|scoped)[ \t]+)*"
+    r"(?:theorem|lemma|def|abbrev|instance|structure|class|inductive)[ \t]+"
+    r"(?P<name>[^\s:{([]+)",
+    re.MULTILINE,
+)
+
+
+def lean_declarations(text: Any) -> list[dict[str, Any]]:
+    """一段 Lean 源码里顶层写了哪些声明（`[{"name", "line"}]`，按出现顺序）。
+
+    为什么放在这里：`lean_target` 那一格的来源就是"那份 `.lean` 里的声明名"，而
+    "声明名长什么样"与 :func:`lean_declares` 是同一件事的两面 —— 一处认名字、一处列名字，
+    分开写就会漂（认的是全名、列的却是短名，等于两套口径）。
+
+    刻意只认行首的声明关键字（理由见 `_DECLARATION_LINE_RE`）：注释里的 `theorem foo`
+    与 tactic 块里的名字都不是声明。列不出来时返回空清单，由调用方报"读不出声明名"，
+    绝不拿文件的路径去凑一个名字。
+    """
+    out: list[dict[str, Any]] = []
+    for lineno, line in enumerate(str(text or "").splitlines(), start=1):
+        hit = _DECLARATION_LINE_RE.match(line)
+        if hit is None:
+            continue
+        out.append({"name": str(hit.group("name")), "line": lineno})
+    return out
+
+
 def _range_problem(value: Any) -> str:
     """一个区间的形态问题（空串 = 合法：两个正整数、起点不大于终点）。"""
     if isinstance(value, Mapping):
@@ -1795,6 +1828,19 @@ def _credential_slot(row: Row,
     return NP.formal_slot(statement, experiments, filled=str(row.lean_file or "").strip())
 
 
+def credential_fields(channel: Any) -> tuple[str, ...]:
+    """这一条证明通道"该填"哪几个凭据格（`_lean_problems` 与 `mapping_cells` 共用这一处）。
+
+    数值通道只要 `lean_file` 一格（一份数值程序没有 Lean 声明名那一半）；形式化与空通道
+    都是 :data:`LEAN_ROW_FIELDS` 那两格。空通道返回两格是刻意的：`_lean_problems` 要判
+    「只填了一半」（那时缺的那一格才是它报的格），而「通道为空 ⇒ 这一格不适用」由
+    调用方按 `bool(channel)` 决定 —— 通道的判据只有 `numericproof.proof_channel` 一处。
+    """
+    if str(channel or "") == NP.PROOF_CHANNEL_NUMERIC:
+        return ("lean_file",)
+    return LEAN_ROW_FIELDS
+
+
 def _lean_problems(rows: Sequence[Row], package_root: Path,
                    project_root: Path | None = None,
                    ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
@@ -1833,7 +1879,8 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
         numeric = channel == NP.PROOF_CHANNEL_NUMERIC
         formal = channel == NP.PROOF_CHANNEL_FORMAL
         # 数值通道那两格里只有一格（程序地址）：程序没有 Lean 声明名那一半。
-        wants = ("lean_file",) if numeric else LEAN_ROW_FIELDS
+        # 这份清单只有一处（`credential_fields`）：`doc.mapping_cells` 读的是同一个函数。
+        wants = credential_fields(channel)
         values = {"lean_file": lean_file, "lean_target": lean_target}
         missing = [name for name in wants if not values[name]]
         half = (any(values[name] for name in LEAN_ROW_FIELDS)
@@ -3232,6 +3279,437 @@ def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
             f"表里 label={label!r} 的正文那一段里指不回 E 的读数：要写出那份程序"
             f"（{row.file}）或 E 的读数编号（{want}）—— 业主口径是「在正文里标出它们来自 E 的"
             "那条读数」；把 E 的两块改写成没有出处的叙述，等于把 E 的读数换成我们自己的说法")
+    return out
+
+
+# ---------------------------------------------------------------- 逐格取数（`doc.mapping_cells`）
+
+#: `mapping_cells` 的 `problems[].cell` 里"不是某一格"的那一档（整表 / 整行）。
+WHOLE_ROW_CELL = "*"
+
+#: `mapping_cells` 交出去的那九格（顺序固定：读的人按它看，diff 才读得懂）。
+MAPPING_CELL_FIELDS: tuple[str, ...] = (
+    "file", "lean_file", "lean_target",
+    NT.EVIDENCE_FIELD, NT.NOTE_FIELD,
+    NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD, NP.INDEX_SIGN_FIELD,
+)
+
+
+def _body_env_for_label(project_root: str | Path, label: Any) -> tuple[BodyEnv | None, str]:
+    """正文里 `label` 那个定理类环境（`None` + 理由 = 读不到 / 没有这个环境）。
+
+    只做"定位"：环境数、顺序、`env_no` 那些判据在 `_orphan_problems` /
+    `_statement_surplus_problems` 里，这里不另判一次。
+    """
+    package = package_dir(project_root)
+    main_path = package / PC.TEX_NAME
+    if not main_path.is_file():
+        return None, f"没有正文（{main_path} 不在盘上）"
+    try:
+        main_text = main_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"正文读不出来（{type(exc).__name__}: {exc}）"
+    envs, _statement_envs, _files, problems = _body_envs_of_package(
+        package, main_path, main_text)
+    want = str(label or "")
+    for env in envs:
+        if env.label == want:
+            return env, ""
+    if problems:
+        return None, f"正文没读完（{problems[0].get('detail')}）"
+    return None, f"正文里没有 label={want!r} 的环境"
+
+
+def _cell_of_problem(problem: Mapping[str, Any], row: Row, channel: Any) -> str:
+    """一条既有判据的问题落到哪一「格」（只做显示归位；判据本身不在这里重写）。
+
+    归位的依据是问题类别（`_problem` 的 `kind`）—— 每一类本来就是围着某一格说的
+    （见 `_lean_problems` / `_numeric_problems` 的 docstring）。`mapping_numeric_evidence_missing`
+    那一类还兼任索引四格的载体，所以先看它在原话里点了哪个 `INDEX_*` 字段名。
+    """
+    kind = str(problem.get("kind") or "")
+    detail = str(problem.get("detail") or "")
+    if kind == "mapping_lean_missing":
+        empty = [name for name in credential_fields(channel)
+                 if not str(getattr(row, name, "") or "").strip()]
+        return empty[0] if empty else "lean_file"
+    if kind == "mapping_lean_file_missing":
+        return "lean_file"
+    if kind in ("mapping_lean_target_missing", "mapping_lean_target_ambiguous"):
+        return "lean_target"
+    if kind in ("mapping_proof_program_missing", "mapping_file_missing"):
+        return "file"
+    if kind == NT.PROOF_PROGRAM_UNBACKED:
+        return NT.EVIDENCE_FIELD
+    if kind == NT.EXHAUSTION_NOTE_MISSING:
+        return NT.NOTE_FIELD
+    if kind == NT.NUMERIC_EVIDENCE_MISSING:
+        for name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+                     NP.INDEX_SIGN_FIELD):
+            if name in detail:
+                return name
+        if "索引" in detail:
+            return NP.INDEX_PATH_FIELD
+        return NT.EVIDENCE_FIELD
+    if kind == NT.NUMERIC_CITATION_MISSING:
+        # 正文那一段指不回 E：它不是某一格的值，是"这一行在正文里那一段"。
+        return WHOLE_ROW_CELL
+    return WHOLE_ROW_CELL
+
+
+def mapping_cells(project_root: str | Path, *,
+                  workspace_root: str | Path | None = None,
+                  statement_id: Any = "",
+                  claim_key: Any = "",
+                  proof_no: Any = None) -> dict[str, Any]:
+    """给 G 直接取「对应表那一行该填的每一格」：值 + 每格来源 + 逐格问题（纯读，不写盘）。
+
+    业主 2026-11-04 的裁定：「如果数据位置都知道，要给 G 开发辅助工具直接拿到」。
+
+    ## 这个函数只做"取数 + 归位"，判据一条都不重写
+
+    - 通道与「该填哪几格」：`_credential_slot` → `numericproof.formal_slot` →
+      `numericproof.proof_channel`；凭据格的清单是 :func:`credential_fields`（`_lean_problems`
+      读的是同一个函数）；
+    - 这一行算不算数值实验定理：`is_numeric_row`（`_row_checks` / `_numeric_problems`
+      同一个判据）；
+    - 逐格问题：`_row_checks` / `_lean_problems` / `_numeric_problems` 的原话，
+      按问题类别归位到格（:func:`_cell_of_problem`）—— 于是"工具说齐、判据说拒"在结构上
+      不可能：同一份 `problems` 一半来自这些判据本身；
+    - 索引四格：`NT.evidence_index_problems`（它再转发 `numericproof.resolve_index`）。
+
+    ## 三态与"不许猜"
+
+    - `checked=False` ⇒ 没查成（比如连表都读不出来），绝不是"这行齐了"；
+    - 拿得到的格进 `cells`，且 `sources[格]` 指回"哪张表哪一行哪一格"或"现算"；
+    - 拿不到的格不进 `cells`（不留一个像样的空值），在 `problems` 里点名缺哪格、为什么；
+    - 通道为空的那两格是"不适用"：进 `cells` 的是空串，`sources` 写明"不适用（可留空）"——
+      空串在这里是判据说过的取值，不是"缺失"的冒充；
+    - `evidence_sha256` / `v_signature.sha256` 一律现算（`numericproof.object_sha256`），
+      与表里抄的值不符时由 `NT.evidence_index_problems` 报"抄来的数与盘上不符"。
+
+    ## 认行的三种写法
+
+    `statement_id` 收裸号（`000004`）、`stmt:000004`、以及带证明号的 `stmt:000004#p2`；
+    也可以只给 `claim_key`（台账 `experiments.claim_key`，它指到唯一一条命题号时用它）。
+    `proof_no` 显式给了就压过 `statement_id` 里的尾巴。表里对不上那一行 / 对上不止一行
+    都落 `problems`（`cell="*"`），不挑一行"看着像"的。
+    """
+    project = Path(project_root)
+    workspace = Path(workspace_root) if workspace_root is not None else project
+    package = package_dir(project)
+    out: dict[str, Any] = {"ok": False, "cells": {}, "sources": {}, "problems": [],
+                           "channel": "", "checked": False}
+    problems: list[dict[str, Any]] = out["problems"]
+
+    def whole(why: Any) -> None:
+        problems.append({"cell": WHOLE_ROW_CELL, "why": str(why)})
+
+    json_path = package / MAPPING_JSON_NAME
+    if not json_path.is_file():
+        out["checked"] = True
+        whole(f"论文包里没有对应表：{json_path} —— 这一行还没有可取的格"
+              "（先 `doc.write_mapping` 落表）")
+        return out
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        out["checked"] = True
+        whole(f"对应表在包里但读不出来：{json_path}（{type(exc).__name__}: {exc}）")
+        return out
+    rows, row_problems = parse_rows(payload)
+    out["checked"] = True
+    for item in row_problems:
+        whole(item.get("detail") or item)
+
+    ledger = read_ledger_tables(workspace)
+    experiments = [dict(r) for r in (ledger.get("experiments") or ())
+                   if isinstance(r, Mapping)]
+
+    # ---- 认这一条命题（裸号 / stmt: / claim_key 三种写法）
+    raw = str(statement_id or "").strip()
+    key = str(claim_key or "").strip()
+    if raw and ":" not in raw:
+        raw = f"stmt:{raw}"
+    if not raw and key:
+        hits = [r for r in experiments if str(r.get("claim_key") or "") == key]
+        sids = sorted({str(r.get("statement_id") or "") for r in hits} - {""})
+        if len(sids) > 1:
+            whole(f"claim_key={key!r} 在 `experiments` 台账里指到不止一条命题"
+                  f"（{sids}）⇒ 不知道要取哪一行")
+            return out
+        if not sids:
+            whole(f"claim_key={key!r} 在 `experiments` 台账里没有对应的命题号 ⇒ 取不到这一行")
+            return out
+        raw = f"stmt:{sids[0]}"
+    if not raw:
+        whole("没给 `statement_id` / `claim_key` ⇒ 不知道要取哪一条命题的格"
+              "（这是「没查成」，不是「这一行齐了」）")
+        return out
+    resolved = resolve_ledger_id(raw, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+        whole(f"`statement_id` = {raw!r} 在台账里解析不到：{resolved.get('reason')}")
+        return out
+    sid = str(resolved["row_id"])
+    try:
+        want_no = int(proof_no) if proof_no is not None else int(resolved["proof_no"])
+    except (TypeError, ValueError):
+        whole(f"`proof_no` 读不成正整数：{proof_no!r}")
+        return out
+    if want_no < 1:
+        whole(f"`proof_no` 必须是 1 起的整数（1 = canonical），收到 {proof_no!r}")
+        return out
+    statement_raw = ledger_row(ledger, "statements", sid)
+    if not isinstance(statement_raw, Mapping):
+        whole(f"台账 `statements` 里没有 stmt:{sid} ⇒ 这一条命题没在册")
+        return out
+
+    hits: list[Row] = []
+    for row in rows:
+        got = resolve_ledger_id(row.ledger_id, ledger)
+        if not got["ok"] or str(got.get("table") or "") != "statements":
+            continue
+        if str(got["row_id"]) != sid or int(row.proof_no) != want_no:
+            continue
+        hits.append(row)
+    if not hits:
+        others = [f"{one.label}#p{int(one.proof_no)}" for one in rows
+                  if str(one.ledger_id).startswith(f"stmt:{sid}")]
+        whole(f"对应表里没有一行指到 stmt:{sid} 的第 {want_no} 条证明"
+              + (f"（表里同一条命题登记的是 {'、'.join(others)}）" if others else "")
+              + " —— 先给这一条登记一行")
+        return out
+    if len(hits) > 1:
+        whole(f"对应表里有 {len(hits)} 行都指到 stmt:{sid} 的第 {want_no} 条证明"
+              f"（labels={'、'.join(repr(one.label) for one in hits)}）⇒ 不知道取哪一行")
+        return out
+    row = hits[0]
+
+    # ---- 通道：只调既有判据（`_credential_slot` → `formal_slot` → `proof_channel`）
+    statement = {**dict(statement_raw), "proof_text": V.proof_text_of(statement_raw, want_no)}
+    slot = _credential_slot(row, ledger, experiments)
+    channel = str(slot.get("channel") or "")
+    out["channel"] = channel
+    numeric = is_numeric_row(row, statement_raw)
+    cells: dict[str, Any] = {}
+    sources: dict[str, str] = {}
+
+    def put(cell: str, value: Any, source: str) -> None:
+        cells[cell] = value
+        sources[cell] = str(source)
+
+    def miss(cell: str, why: Any) -> None:
+        problems.append({"cell": str(cell), "why": str(why)})
+
+    # ---- `file`：数值行 = 仓库根相对的那份程序；理论行 = 论文包内那份 tex
+    exp_row: dict[str, Any] | None = None
+    if numeric:
+        exp_row = (NP.find_signed_exhaustion_for_column(experiments,
+                                                        statement.get("proof_text"))
+                   or NP.find_signed_exhaustion(experiments, slot.get("path") or row.file))
+        script = (NP.norm_rel(NP.proof_column_script(NP.proof_column(exp_row)))
+                  if exp_row is not None else "")
+        if not script:
+            script = NP.norm_rel(slot.get("path") or "")
+        if script:
+            src = (f"experiments#{NT.evidence_id_of(exp_row) or '?'} 的证明栏第 ① 段"
+                   "（`numericproof.proof_column`）"
+                   if exp_row is not None else
+                   f"statements#stmt:{sid}#p{want_no} 的 proof_text 第 ① 段"
+                   "（`numericproof.proof_column_script`）")
+            put("file", script, f"{src} —— 数值实验定理这一行的 `file` 是**仓库根相对**的那份程序")
+        else:
+            miss("file", "这一行按 `papermapping.is_numeric_row` 是数值实验定理，而证明栏第 ① 段"
+                         "读不出那份程序的路径（`numericproof.proof_column_script` 返回空）"
+                         " ⇒ 这一格拿不到")
+    else:
+        env, why = _body_env_for_label(project, row.label)
+        if env is not None:
+            put("file", env.file,
+                f"正文 {env.file}:{int(env.line)} 的定理环境（label={row.label!r}）—— "
+                "理论定理这一行的 `file` 是**论文包内相对**的路径")
+        elif str(row.file or "").strip():
+            put("file", str(row.file).strip(),
+                "表里这一格现有的值（正文里读不到那个环境 ⇒ 没独立复核）")
+            miss("file", f"正文里读不到 label={row.label!r} 那个环境（{why or '没有正文'}）"
+                         " ⇒ 这一格的值没法独立复核（只把表里现值原样交回）")
+        else:
+            miss("file", f"正文里读不到 label={row.label!r} 那个环境（{why or '没有正文'}），"
+                         "表里这一格也是空的 ⇒ 这一格拿不到")
+
+    # ---- `lean_file`：numeric ⇒ 证明栏第 ① 段那份 .py；formal ⇒ .lean；空通道 ⇒ 不适用
+    if channel == NP.PROOF_CHANNEL_NUMERIC:
+        lean = NP.norm_rel(slot.get("path") or "") or str(cells.get("file") or "")
+        if lean:
+            put("lean_file", lean,
+                f"证明栏第 ① 段那份程序（statements#stmt:{sid}#p{want_no}；"
+                "通道=numeric，`numericproof.formal_slot`）—— 数值通道只有这一格，"
+                "`lean_target` 不填")
+        else:
+            miss("lean_file", "通道是数值证明（`numericproof.proof_channel`），而证明栏第 ① 段"
+                              "读不出那份 `.py` 的路径 ⇒ 这一格拿不到")
+    elif channel == NP.PROOF_CHANNEL_FORMAL:
+        lean = NP.norm_rel(slot.get("path") or "")
+        if lean:
+            put("lean_file", lean,
+                f"形式化通道的那份 `.lean`（statements#stmt:{sid}#p{want_no} 的证明栏第 ① 段 / "
+                "`experiments` 里那条 formal 行；通道=formal）")
+        else:
+            miss("lean_file", "通道是形式化（`numericproof.proof_channel`），而证明栏第 ① 段与"
+                              "台账的 formal 行都读不到一份 `.lean` 路径 ⇒ 这一格拿不到")
+    else:
+        put("lean_file", "",
+            "通道为空 ⇒ 这一格不适用（`numericproof.formal_slot` 的 why：可留空，空≠已验）")
+
+    # ---- `lean_target`：只有 formal 通道有它；来源是那份 `.lean` 里的声明名
+    if channel == NP.PROOF_CHANNEL_FORMAL:
+        lean_file = str(cells.get("lean_file") or "")
+        state = (_lean_source_state(package, project, lean_file) if lean_file
+                 else {"state": "missing", "abs": "", "reason": "`lean_file` 没取到"})
+        text = ""
+        if state.get("state") in ("present", "empty"):
+            try:
+                text = Path(str(state.get("abs") or "")).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                miss("lean_target", f"{lean_file!r} 读不出文本（{type(exc).__name__}: {exc}）"
+                                    " ⇒ 声明名没核过，这一格不算命中")
+        elif lean_file:
+            miss("lean_target", f"`lean_file` 那份源码读不到：{state.get('reason')}"
+                                " ⇒ 声明名没处核")
+        if text:
+            names = lean_declarations(text)
+            given = str(row.lean_target or "").strip()
+            if given and lean_declares(text, given):
+                put("lean_target", given,
+                    f"{lean_file} 里字面出现的声明名（`papermapping.lean_declares` 词边界命中）")
+            elif len(names) == 1:
+                put("lean_target", names[0]["name"],
+                    f"{lean_file}:{names[0]['line']} 的顶层声明名（那份源码只有这一个声明）")
+            elif not names:
+                miss("lean_target", f"{lean_file} 里读不出任何顶层声明名"
+                                    "（`theorem` / `lemma` / `def` …）⇒ 这一格拿不到")
+            else:
+                shown = "、".join(f"{one['name']}（:{one['line']}）" for one in names[:8])
+                miss("lean_target", f"{lean_file} 里有 {len(names)} 个顶层声明（{shown}）"
+                                    "—— 没有一处说明哪一个是这一条命题的 ⇒ 不许猜："
+                                    "写源码里字面出现的那个声明名")
+    else:
+        put("lean_target", "",
+            "只有 formal 通道填这一格（数值程序没有 Lean 声明名；通道为空更不适用）")
+
+    # ---- 数值那两格：E 的那条读数与两块读数的落点（判据在 `numerictheorem`）
+    if numeric:
+        if exp_row is not None:
+            eid = NT.evidence_id_of(exp_row)
+            if eid:
+                put(NT.EVIDENCE_FIELD, eid,
+                    f"experiments#{eid}（`numericproof.find_signed_exhaustion_for_column`："
+                    "E 签的穷举行，它与证明栏第 ① 段是同一份程序）")
+            else:
+                miss(NT.EVIDENCE_FIELD, "找到的那条 E 签穷举行没有 `experiment_id` ⇒ 读数编号拿不到")
+            put(NT.NOTE_FIELD, NT.note_relpath(exp_row),
+                "`exhaustionreport.report_relpath(experiments#"
+                f"{eid or '?'})`（E 的 ②③ 的唯一落点）")
+        else:
+            miss(NT.EVIDENCE_FIELD, "台账里没有一条 E 签的穷举证明与证明栏第 ① 段对得上"
+                                    "（`numericproof.find_signed_exhaustion_for_column` 返回 None）"
+                                    " ⇒ 这一格拿不到")
+            miss(NT.NOTE_FIELD, "没有那条 E 的读数 ⇒ 两块读数的落点也无从取")
+    else:
+        put(NT.EVIDENCE_FIELD, "",
+            "这一行不是数值实验定理（`papermapping.is_numeric_row` 为假）⇒ 这一格不适用")
+        put(NT.NOTE_FIELD, "", "同上：两块读数只对数值实验定理那一行")
+
+    # ---- 索引四格：正文是哪一档 / 在哪 / 现算的指纹 / V 的签
+    note = str(cells.get(NT.NOTE_FIELD) or "")
+    fresh_sha = ""
+    if numeric and exp_row is not None:
+        put(NP.INDEX_KIND_FIELD, NP.INDEX_KIND_REPORT,
+            "这一行的正文是 E 的报告（`exhaustionreport.report_relpath` 指的那份读数）⇒ "
+            f"{NP.INDEX_KIND_REPORT}（受控词表 `numericproof.INDEX_KINDS`）")
+        put(NP.INDEX_PATH_FIELD, note,
+            "与 `exhaustion_note` 同一处（`numerictheorem.evidence_index_problems` 要求两格"
+            "指同一份）")
+        note_abs, why = NT._resolve(workspace, note) if note else (None, "落点没取到")
+        if note_abs is None or not note_abs.is_file():
+            miss(NP.INDEX_SHA_FIELD, f"`{NT.NOTE_FIELD}` 指的那份读数读不到"
+                                     f"（{why if note_abs is None else note + ' 不在盘上'}）"
+                                     " ⇒ sha 现算不了（不抄别人写的数）")
+        else:
+            try:
+                fresh_sha = NP.object_sha256(note_abs)
+            except OSError as exc:
+                miss(NP.INDEX_SHA_FIELD, f"{note} 读不出来（{type(exc).__name__}: {exc}）"
+                                         " ⇒ sha 现算不了（不抄别人写的数）")
+            else:
+                put(NP.INDEX_SHA_FIELD, fresh_sha,
+                    f"现算（`numericproof.object_sha256`）：{note} 的字节 sha256")
+    elif numeric:
+        for field_name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+                           NP.INDEX_SIGN_FIELD):
+            miss(field_name, "找不到那条 E 的读数（见 `numeric_evidence` 那一格）"
+                             " ⇒ 索引四格都无从取")
+    else:
+        for field_name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+                           NP.INDEX_SIGN_FIELD):
+            put(field_name, "",
+                "索引四格只对数值实验定理那一行判（`numerictheorem.evidence_index_problems`）"
+                " ⇒ 这一行不适用")
+
+    if fresh_sha and NP.INDEX_SIGN_FIELD not in cells:
+        signed = NP.latest_third_party_sign(workspace, statement_id=sid,
+                                            object_sha256=fresh_sha, object_path=note)
+        verdict, sign_src = "", ""
+        if signed.get("checked") and signed.get("found"):
+            verdict = str(signed.get("verdict") or "")
+            sign_src = (f"{signed.get('ledger') or f'verifications/{sid}.jsonl'}"
+                        "（`numericproof.latest_third_party_sign`：V 的最近一签，"
+                        "盖的是这一份对象的字节）")
+        else:
+            from . import vsigns as _VS   # 惰性：`vsigns` 只在 v_signature 这一格用到
+            got_sign = _VS.sign_of(workspace, fresh_sha)
+            if got_sign.get("checked") and got_sign.get("found"):
+                verdict = str(dict(got_sign.get("sign") or {}).get("verdict") or "")
+                sign_src = f"{got_sign.get('path')}（`vsigns` 台账里签这一份对象的那一签）"
+        if not sign_src:
+            if not signed.get("checked"):
+                miss(NP.INDEX_SIGN_FIELD, f"V 的签没查成（{signed.get('why')}）"
+                                          " —— 不许当成签过，也不许拿空串冒充")
+            elif signed.get("stale"):
+                miss(NP.INDEX_SIGN_FIELD, f"V 的签盖的是旧版：{signed.get('why')}"
+                                          " ⇒ 这一版没有被签住")
+            else:
+                miss(NP.INDEX_SIGN_FIELD,
+                     "没有 V 的签：`verifications/<命题号>.jsonl` 与 `out/vsigns/<sha>.json` "
+                     "里都没有盖住这一份对象的签 ⇒ 这一格拿不到（空串不许冒充「签过」）")
+        else:
+            put(NP.INDEX_SIGN_FIELD, {"verdict": verdict, "sha256": fresh_sha}, sign_src)
+            if verdict != NP.THIRD_PARTY_VERDICT_OK:
+                miss(NP.INDEX_SIGN_FIELD,
+                     f"V 的结论是 {verdict!r}（要 {NP.THIRD_PARTY_VERDICT_OK!r}）"
+                     " ⇒ 这一行不许当 proof")
+
+    # ---- 既有判据的原话（与 `mapping_reading` 同一批调用），按问题类别归位到格
+    judged: list[Mapping[str, Any]] = list(
+        _row_checks(row, ledger, package, workspace).problems)
+    if LEAN_KINDS:
+        judged.extend(item for item in _lean_problems(rows, package, project, ledger)
+                      if str(item.get("label") or "") == str(row.label))
+    if NT.NUMERIC_KINDS and numeric:
+        judged.extend(_numeric_problems(row, statement_raw, ledger, workspace,
+                                        theorem_segments(project)))
+    seen = {(str(item.get("cell")), str(item.get("why"))) for item in problems}
+    for item in judged:
+        cell = _cell_of_problem(item, row, channel)
+        why = str(item.get("detail") or "")
+        if (cell, why) in seen:
+            continue
+        seen.add((cell, why))
+        problems.append({"cell": cell, "why": why})
+
+    out["cells"] = {name: cells[name] for name in MAPPING_CELL_FIELDS if name in cells}
+    out["sources"] = {name: sources[name] for name in out["cells"]}
+    out["ok"] = bool(out["checked"] and not problems)
     return out
 
 

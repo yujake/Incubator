@@ -2697,9 +2697,41 @@ def _doc_write_mapping(workspace: Path | None, project: str,
     })
 
 
+def _doc_mapping_cells(workspace: Path | None, project: str, statement_id: str = "",
+                      claim_key: str = "", proof_no: int | None = None) -> Any:
+    """`doc.mapping_cells`：按命题号取对应表那一行该填的每一格（只读，不写盘）。
+
+    业主 2026-11-04 的裁定：「如果数据位置都知道，要给 G 开发辅助工具直接拿到」。
+    判据一条都不在这里：通道 / 该填哪几格 / 逐格问题全部由 `papermapping.mapping_cells`
+    转给既有判据（`numericproof.proof_channel` → `formal_slot`、`papermapping._lean_problems`、
+    `numerictheorem.evidence_index_problems`）。这一层只做两件事：把 `project` 解析成
+    工作区内一个真实目录（与 `doc.write_mapping` 同一个守卫），以及把读数的 `ok` 翻成
+    工具层的 `ok`（失败时逐格读数照样带回去 —— 它是"怎么补"的唯一清单）。
+    """
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PM.mapping_cells(root, workspace_root=workspace,
+                           statement_id=statement_id or "",
+                           claim_key=claim_key or "",
+                           proof_no=proof_no)
+    if got.get("ok"):
+        return ok(got)
+    return fail(
+        "这一行还有 {} 处没取到 / 没过判据（逐条见 problems；`cells` 里是现算出来的格，"
+        "没列出来的格就是拿不到）".format(len(got.get("problems") or [])),
+        kind="mapping_cells_incomplete",
+        cells=dict(got.get("cells") or {}),
+        sources=dict(got.get("sources") or {}),
+        problems=list(got.get("problems") or []),
+        channel=str(got.get("channel") or ""),
+        checked=bool(got.get("checked")),
+    )
+
+
 def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                           store: Any = None) -> None:
-    """把论文这一层的两条工具注册进 G 的工具面。
+    """把论文这一层的三条工具注册进 G 的工具面。
 
     一条工具、一件事：`doc.paper_compile`。它 `declared_external="exec"` 是刻意的 ——
     它真的起 LaTeX 引擎（`pdflatex` / `xelatex` / `lualatex` 取第一个在 PATH 上的），
@@ -2708,7 +2740,60 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
     `doc.write_mapping` 是"先有对应表，再写正文"那条顺序的写入口（业主 2026-10-22）：
     `papermapping` 的三份产物此前没有任何调用方，而判据要求 md 与附录与渲染器逐字相同
     ⇒ 手抄不可达。它只写 `out/paper/` 下的三份（`write_local`），不起子进程。
+
+    `doc.mapping_cells`（业主 2026-11-04）是那三份的读侧：G 不必再从台账里翻
+    "这一行该填什么"，直接调它取逐格的值、逐格来源与逐格问题。`side_effect="read"`、
+    `declared_external="none"`：它一个字节都不写、不碰外部。
     """
+    registry.register(
+        ToolSpec(
+            name="doc.mapping_cells",
+            summary="取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；"
+                    "先调它，拿不到的格才按通道手填。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "statement_id": {
+                        "type": "string",
+                        "description": "命题号：`000004` 或 `stmt:000004`（也可写 "
+                                       "`stmt:000004#p2` 指名第几条证明）",
+                    },
+                    "claim_key": {
+                        "type": "string",
+                        "description": "台账 `experiments.claim_key`：不给 statement_id 时用它"
+                                       "反查命题号（它指到唯一一条命题号时才认）",
+                    },
+                    "proof_no": {"type": "integer", "minimum": 1,
+                                 "description": "第几号证明（1 = canonical；缺省按 "
+                                                "statement_id 里的 #pN，再缺省 1）"},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, statement_id="", claim_key="", proof_no=None:
+                _doc_mapping_cells(workspace, project, statement_id=statement_id,
+                                   claim_key=claim_key, proof_no=proof_no),
+            side_effect="read",
+            declared_external="none",
+            roles=("G",),
+            returns=(
+                "{'ok','cells','sources','problems','channel','checked'}；"
+                "cells 的键 = file / lean_file / lean_target / numeric_evidence / "
+                "exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / "
+                "v_signature（只给拿得到的格；空串 = 通道为空、这一格不适用）；"
+                "sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / "
+                "`v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；"
+                "problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话："
+                "读不到 / 没签 / sha 不符 / 表里没有这一行）；"
+                "channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；"
+                "checked=False = 没查成（不是「这一行齐了」）；"
+                "失败：ok=False + kind=mapping_cells_incomplete（逐格读数仍在 cells / problems "
+                "里）/ bad_project（项目根不在工作区里）"
+            ),
+            tags=("document", "paper", "mapping", "read"),
+        )
+    )
     registry.register(
         ToolSpec(
             name="doc.paper_compile",

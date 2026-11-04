@@ -3057,7 +3057,8 @@ def _g_skills() -> tuple[Skill, ...]:
             summary="散文体正文 fs.write 到 out/paper/main.tex，再 paper_compile",
             when="任务说「整理成论文 / 交付论文 / 稿件」，或要一份可编译的正文时",
             actions=("G.build_document", "G.register_dependency", "G.compose_claim"),
-            tools=("fs.write", "doc.paper_compile", "doc.write_mapping", "doc.scan_claim"),
+            tools=("fs.write", "doc.paper_compile", "doc.write_mapping", "doc.scan_claim",
+                   "doc.mapping_cells"),
             body="""# 成稿
 
 ## 业主 2026-10-13 裁定（逐条落地）
@@ -3085,6 +3086,34 @@ def _g_skills() -> tuple[Skill, ...]:
   台账里也没有穷举或形式化实验）⇒ 两格都可以留空（不适用，不是没填）。
   顺序是死的：先写/改正文 → 再 `doc.write_mapping` → 再核每行该有的格 → 最后 `doc.paper_compile`（改完正文
   必须重编一次）。
+
+## 对应表那几格：先调 `doc.mapping_cells`（业主 2026-11-04）
+
+业主原话：「如果数据位置都知道，要给 G 开发辅助工具直接拿到」。
+
+**首选**：`doc.mapping_cells(project=..., statement_id="000004")`（或 `stmt:000004`；多证明带
+`proof_no`；也可以只给 `claim_key` 反查命题号）。它按这一行的证明通道逐格交回：
+
+- `cells`：该填的值（`file` / `lean_file` / `lean_target` / `numeric_evidence` /
+  `exhaustion_note` / 索引四格 `evidence_kind` / `evidence_path` / `evidence_sha256` /
+  `v_signature`）——**值以它为准**；
+- `sources`：每格的来路（哪张表哪一行哪一格，或「现算 sha256」）；
+- `problems`：逐格的问题（判据原话）。
+
+`evidence_sha256` 与 `v_signature.sha256` 是它**现算**的，别抄表里或别人报告里的旧数。
+
+**抄不到时再按下表回退**（顺序不许颠倒：① 先看 `cells` 有没有这一格 → ② 再读 `sources`
+指的那一处 → ③ 还取不到就照 `problems` 的原话当缺口上报，**不许先填一个像样的值**）：
+
+| 格 | 工具从哪取（`sources` 指的就是它） | 抄不到时回退到 |
+|---|---|---|
+| `file` | 数值行：`experiments` 里那条 E 签的穷举行的证明栏第 ① 段（相对仓库根）；理论行：正文里 `label` 那个环境所在的文件（相对论文包） | 读 `data/statements` 那一行的 `proof_text` 第 ① 段；理论行读 `out/paper/main.tex` 里那个环境 |
+| `lean_file` | `numericproof.formal_slot`：numeric ⇒ 证明栏第 ① 段那份 `.py`；formal ⇒ 那份 `.lean`；空通道 ⇒ 空（不适用） | 同一条命题的 `proof_text` 第 ① 段；formal 再看 `data/experiments` 里 `method=formal` 那一行的 `code_path` |
+| `lean_target` | 仅 formal：那份 `.lean` 里字面出现的声明名（`papermapping.lean_declarations`） | 读 `code/formal/`（或包内 `formal/`）那份源码，抄那个声明的名字；**一个文件里不止一个声明时不许猜** |
+| `numeric_evidence` / `exhaustion_note` | `experiments` 里 E 签的那条穷举行：`exp:NNNNNN` 与 `exhaustionreport.report_relpath`（`out/experiments/` 下那份读数） | 读 `data/experiments` 那一行（`experiment_id` / `method` / `observations.e_signature`） |
+| `evidence_kind` / `evidence_path` | 数值定理那一行的正文是 E 的报告 ⇒ `report`；路径与 `exhaustion_note` **同一处** | 同上，两格必须指同一份读数 |
+| `evidence_sha256` | **现算**：盘上那份读数的字节 sha256（`numericproof.object_sha256`） | 自己算（`hashlib.sha256` 读字节）；**不许抄表里或别人报告里的数** |
+| `v_signature` | `verifications/` 下这条命题最近一签（`numericproof.latest_third_party_sign`）或 `out/vsigns/` 里签这一份对象的那一签（`vsigns.sign_of`） | 读那两个落点；**没有签就留空并上报**（`problems` 会说"没有 V 的签"），不许拿空串冒充「签过」 |
 
 ## 定理结构以 B 台账的命题为准（业主 2026-10-24，D-40）
 
