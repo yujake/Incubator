@@ -248,6 +248,38 @@ DUTIES: dict[str, dict[str, object]] = {
                "（`vsigns.land`）—— V 必须知道签字不归它落，否则它会把「我写了成立」"
                "读成「已经签上了」，而第 3 位其实一次都没翻",
     },
+    # 2026-11-04（业主裁定 A 甲）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
+    # 这条走法在 B 的 policy 里是一句完整承诺（交正文 → 框架落稿 → 派 V → 签到位 → 再入库），
+    # 而它有两个真身、各管一半，所以拆成两条登记（探针也各认那一半）：
+    #   ① 落稿：`bmanuscript.land_rewrite`，生产调用点 `agent_b/register_statement.py`
+    #      的 `_land_b_manuscript`（B 交改写正文时由框架写 `reports/b-proof-<号>.md`）；
+    #   ② 落签：`vsigns.land`，生产调用点 `secretary.py` 的 `land_unregistered_sign`
+    #      （收方 = V 的 parent ⇒ `secretary:B`；V 只颁发）。
+    # 可见性 `conditional ("B",)`：这条走法只有 B 会走（它自己的动作 + 它自己的稿）。
+    "b_rewrite_carrier": {
+        "code": "land_rewrite",
+        "where": "bmanuscript.py",
+        "call": ("agent_b/register_statement.py 的 _land_b_manuscript"
+                 "（B 交改写正文时落稿）",),
+        "visibility": "conditional",
+        "roles": ("B",),
+        "probe": ("改写之后先拿签",),
+        "why": "B 的改写要有可签的载体：B 没有文件写口，框架在它的登记入口把改写后的正文"
+               "落成 `reports/b-proof-<命题号>.md`（三节与 F/E 同形），B 才有东西送 V 审；"
+               "没有这一份稿，改写正文只能被整笔拒（`self_authored_needs_v`）",
+    },
+    "b_rewrite_sign_landing": {
+        "code": "land",
+        "where": "vsigns.py",
+        "call": ("secretary.py 的 land_unregistered_sign"
+                 "（收方 = V 的 parent ⇒ secretary:B，再转 `vsigns.land` 写块）",),
+        "visibility": "conditional",
+        "roles": ("B",),
+        "probe": ("签块由收方秘书",),
+        "why": "签回稿那一半：V 只颁发（`vsigns.issue`），签块由送审方（B）的秘书落"
+               "（`land_unregistered_sign` → `vsigns.land`）；B 再带这份稿入库时，"
+               "`manuscript_sign_standing` 从稿上读到它、第 3 位才翻真",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，
