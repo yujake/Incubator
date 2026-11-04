@@ -195,8 +195,10 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     row_old, row_new = _row(st_old), _row(st_new)
     assert VR.PROOFS_KEY not in row_old, row_old.keys()
     assert row_old["proof_text"] == P1, row_old
-    assert set(row_old) == set(S.Statement.__dataclass_fields__), sorted(row_old)
-    assert set(row_new) == set(S.Statement.__dataclass_fields__), sorted(row_new)
+    # 新前提：登记前已有一份手稿签 ⇒ 落行时 `kind` 可能按证据抬一次，多出
+    # `_kind_upgrade` 这一格内部留痕；它与"两种 #p1 写法是否等价"无关。
+    assert set(row_old) - {"_kind_upgrade"} == set(S.Statement.__dataclass_fields__), sorted(row_old)
+    assert set(row_new) - {"_kind_upgrade"} == set(S.Statement.__dataclass_fields__), sorted(row_new)
     assert (json.dumps(_scrub(row_old), ensure_ascii=False, sort_keys=True)
             == json.dumps(_scrub(row_new), ensure_ascii=False, sort_keys=True)), (
         "有手稿签时，只给 proof_text 与 proofs=[#p1] 必须落出同一行（等价 #p1）")
