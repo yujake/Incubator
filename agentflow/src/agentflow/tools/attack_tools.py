@@ -484,9 +484,18 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     # 2026-11-03（p233）：补齐实现的真返回（只加不减）—— 逐条交差读数
     # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
     # 的 `_CLOSE_KEYS`）；键清单取自探针实跑观测，不猜。
+    # 2026-11-04：再补三格（只加不减，原有 37 个键一个未删）—— `v_sign` /
+    # `delivery_state` / `delivery_label`。它们在 `agent_f/step.py:445-448` 真写
+    # （`if deploy.get("v_sign"): out["v_sign"] = …` 那三行），`specs/f.py:50` 也声明了，
+    # 而 `agent_skills.py:1915-1916` 直接教模型去读这三格（"F.step 不替你送审，它只回读签：
+    # 返回值的 `v_sign` 那一格与 `history` 里是这一轮这一份的四档 `delivery_state` /
+    # `delivery_label`"）—— 声明里没有它们，模型就不知道这一格存在。
+    # 与已声明的 `delivery_state_plan` / `delivery_label_plan` 是两件事：那两个是**整份任务**
+    # 的读数（`delivery_summary` 的 `state`），这三个是**这一轮这一份**的四档。
     returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
              "'reason','budget_known','budget_reading',"
              "'delivery','delivered',"
+             "'v_sign','delivery_state','delivery_label',"
              "'total','signed_count','pending_count','unsigned_count',"
              "'proof_count','proof_statements','draft_count',"
              "'abandoned_count','abandoned_statements',"

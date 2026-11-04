@@ -1534,6 +1534,14 @@ def _declared_minus_actual(returns: str, obs: Observation) -> set[str] | None:
 #: 删掉这三行登记，通用判据立刻会报"声明了但实现没给"。
 CONDITIONAL_KEYS: dict[str, frozenset[str]] = {
     "conductor.summon_many": frozenset({"preempted", "dispatched", "running"}),
+    # 2026-11-04：`attack.step` 的这三格只在 `agent_f/step.py:445-448` 的
+    # `if deploy.get("v_sign")` 那一支产出 —— 即「这一轮真的拿到 / 回读到 V 的签」。
+    # 探针那一次调用走的是「计划里没有可推进的子目标」那一档（`attack.create_plan`
+    # 的探针参数不给 `subgoals`），必然看不到它们；而把这三格从 `returns=` 里删掉
+    # 会让模型不知道这一格存在（`agent_skills.py:1915-1916` 正教它读这三格）。
+    # 取样路径见 `test_the_proof_path_returns_the_conditional_v_sign_keys`（把
+    # `_deploy` 打桩成「这一轮拿到签」，其余走同一条 `out` 装配）。
+    "attack.step": frozenset({"v_sign", "delivery_state", "delivery_label"}),
 }
 
 
@@ -1805,6 +1813,68 @@ def test_the_loop_path_returns_the_conditional_keys_it_declares(
         "其余声明键在阻塞档上缺席了 —— 条件键的登记不该顺带放过任何一条：",
         sorted(rest - (blocking.keys or set())),
     )
+def test_the_proof_path_returns_the_conditional_v_sign_keys(
+    registry: ToolRegistry, observations: dict[str, Observation],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """条件键按「这一轮拿到 V 的签」那一支取样：`v_sign` / `delivery_state` /
+    `delivery_label` 三格真的在。
+
+    这条补的是上一条同类口径（见 `CONDITIONAL_KEYS` 的第二条）：那三格只在
+    `agent_f/step.py:445-448` 的 `if deploy.get("v_sign")` 那一支产出，而探针那一次
+    `attack.step` 调用落在「计划里没有可推进的子目标」那一档（`attack.create_plan` 的
+    探针参数不给 `subgoals`）⇒ 阻塞档那次观测必然看不到它们。扣掉三格之后，其余声明键
+    仍由 `observations` 里那一次真实调用逐格核 —— 两条路子合起来，`returns=` 里的每一条
+    都仍然有过一次"实现真给了"的读数。
+
+    取样路径是**同一条写入路径**（`step()` 末尾那份 `out` 的装配），只把「分派」这一层
+    打桩成「这一轮拿到签」（`_deploy` 是 `step` 唯一的分派接缝）：这不是绕开实现，
+    而是把那条分支的输入造出来 —— 否则那三行在测试里永远不会被执行。
+
+    读数的另一半同样是判据：三格若是空壳（`{}` / `""`），"声明 ⊆ 实跑"照样成立而
+    承诺的东西没发生。
+    """
+    from agentflow.agent_f.core import AgentF
+
+    def fake_deploy(self, sg, *, plan):  # noqa: ANN001, ARG001 - 替身只用参数名对齐
+        return {"action": "proof", "outcome": "progress",
+                "detail": "桩：这一轮拿到 V 的签（三格按实现的形状给）",
+                "v_sign": {"submitted": True, "skipped": False,
+                           "reading": {"state": "signed", "label": "已签"}},
+                "delivery_state": "signed", "delivery_label": "已签"}
+
+    monkeypatch.setattr(AgentF, "_deploy", fake_deploy)
+    with calling_as("t-probe", "M"):
+        made = registry.call(
+            "attack.create_plan", problem="P-vsign", problem_key="pk-vsign",
+            subgoals=[{"sid": "s1", "text": "把命题 P-vsign 证掉", "owner": "F",
+                       # `testable` 是花钱闸的入口条件（`create_plan` 拒收没有可检验
+                       # 形式的子目标：`subgoal_without_testable`），不是这条用例的读数。
+                       "testable": "盘上出现 reports/f-proof-*.md，且 V 判「成立」"}],
+            budget=dict(BUDGET))
+        assert made.ok, (made.meta.get("kind"), made.error)
+        plan_id = made.data["plan_id"]
+        res = registry.call("attack.step", plan_id=plan_id)
+    assert res.ok, (res.meta.get("kind"), res.error)
+
+    for key in sorted(CONDITIONAL_KEYS["attack.step"]):
+        assert key in res.data, (f"声明里承诺的 `{key}` 在这一支上也没出现",
+                                sorted(res.data))
+    assert res.data["v_sign"]["submitted"] is True, res.data["v_sign"]
+    assert res.data["delivery_state"] == "signed", res.data["delivery_state"]
+    assert res.data["delivery_label"] == "已签", res.data["delivery_label"]
+
+    # 阻塞档那一次观测必须仍然是"其余声明键一条不缺"（否则这条只是把缺口挪走了）。
+    blocking = observations["attack.step"]
+    assert blocking.comparable, (blocking.ok, blocking.kind, blocking.error)
+    rest = (shared_declaration.declared_keys(registry.get("attack.step").returns)
+            - CONDITIONAL_KEYS["attack.step"])
+    assert not (rest - (blocking.keys or set())), (
+        "其余声明键在阻塞档上缺席了 —— 条件键的登记不该顺带放过任何一条：",
+        sorted(rest - (blocking.keys or set())),
+    )
+
+
 def test_negative_control_a_declared_key_the_handler_never_returns_makes_the_subset_check_red(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
