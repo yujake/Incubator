@@ -2390,7 +2390,7 @@
          "type": "string"
         },
         "exhaustion_note": {
-         "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）",
+         "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）；通道为空时同样不许填",
          "type": "string"
         },
         "file": {
@@ -2414,7 +2414,7 @@
          "type": "string"
         },
         "lean_file": {
-         "description": "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；formal 填那份 .lean（项目根相对路径，如 code/formal/000004.lean；包内写法 formal/000004.lean 也认）；通道为空时允许为空（不适用，不是没填）",
+         "description": "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；formal 填那份 .lean（项目根相对路径，如 code/formal/000004.lean；包内写法 formal/000004.lean 也认）；通道为空时两格必须留空（不适用，不是没填）—— 填了就是无依据的声称（没有通道就没有凭据，受控拒绝）",
          "type": "string"
         },
         "lean_target": {
@@ -2426,7 +2426,7 @@
          "type": "string"
         },
         "numeric_evidence": {
-         "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填",
+         "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填；通道为空时不许填（那是在自称有数值证据、却没有数值证明通道）",
          "type": "string"
         },
         "page_or_section": {
@@ -2463,13 +2463,13 @@
     ],
     "type": "object"
    },
-   "returns": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）/ no_evidence_chain（研究成果不足，**一个字节都没写**）/ ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，字段名只有一处真身，见 researchbase.research_base）与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）",
+   "returns": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— 空通道两格必须空，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格仍按通道判）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）/ no_evidence_chain（研究成果不足，**一个字节都没写**）/ ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，字段名只有一处真身，见 researchbase.research_base）与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）",
    "roles": [
     "G"
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；md 与附录由 json 渲染，别手写。`lean_file` 按证明通道填（numeric ⇒ 证明栏那份 .py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格可空）。`file` 有两种落点：理论定理行写包内相对路径，数值实验定理行写程序相对仓库根的路径。数值定理那一行另写 numeric_evidence / exhaustion_note 与索引四格（evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 缺任何一块都会拒。",
+   "summary": "写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；md 与附录由 json 渲染，别手写。`lean_file` 按证明通道填（numeric ⇒ 证明栏那份 .py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格必须留空，填了受控拒绝 —— 没有通道就没有凭据）。`file` 有两种落点：理论定理行写包内相对路径，数值实验定理行写程序相对仓库根的路径。数值定理那一行另写 numeric_evidence / exhaustion_note 与索引四格（evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 缺任何一块都会拒。",
    "tags": [
     "document",
     "paper",
