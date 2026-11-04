@@ -1105,7 +1105,9 @@ _ROLES_V = ("V",)
             # 为什么不复用 `secretary_judge` / `sign_issuance`：那两格只装最后一趟，读不出
             # 这一趟判了几次、从第几次开始不行 —— 而那是这一批口径的正题。
             "'review_passes',"
-            "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
+            "'ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`"
+            "（`有毛病` 时 `defect_step` 指到第几步）。"
+            "（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / "
             "bad_manuscript_path / manuscript_missing / manuscript_unreadable / "
