@@ -335,9 +335,10 @@ SPEC = AgentSpec(
             "的任何一格上**（八格全绿也照样拦）。出路只有两条：① **重送**：派 D 让 F 把这一份补齐之后重新送 V 审，拿到干净的"
             "「成立」；② **明确放弃原命题**：派 B 用通用表写口把该命题 `status` 标成 `abandoned`，**同时**把 `quote_reason` "
             "写成 `abandoned@<ISO8601>@<理由>`（状态、时间、理由三样缺一不可；只写状态的行仍按未签计，读数是 "
-            "`abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项 —— 那一半由放弃那一步"
-            "（`apply_abandonment`）办；只经通用表写口改状态与标记时它**不会**发生，所以走 ② 之后要回头看板："
-            "开着的重送项按未消项处理（它会挡销号与收工）。",
+            "`abandoned_without_reason`）。通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / "
+            "`quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
+            "正文仍需走证明入口。所以走 ② 之后要回头看板：确认那条重送项已 closed/expired"
+            "（还开着就按未消项处理，它会挡销号与收工）。",
             "**「攻」里出现 `statement_id` 就当场交给 D 去核签**：你派 `F.status` 拿回来的 `attack.status` 里，`history_tail` "
             "每一轮可能带 `statement_id`（F 那一轮把论证落成了 `statements` 的一行）—— 看到它就在**同一轮**里派 `D` 去办："
             "D 会核那一条带没带 V 的签字，缺签由 D 让 F 补签（那一签由 F 去办），**不要等收工再想起**来；F 产出时已经签过的"

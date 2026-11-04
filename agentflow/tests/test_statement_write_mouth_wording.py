@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""判据：四处提示词对「通用写口能改 statements 什么」说的是同一件事（业主 2026-11-04 裁定 C）。
+"""判据：五处提示词对「通用写口能改 statements 什么」说的是同一件事（业主 2026-11-04 裁定 C）。
 
 ## 业主裁定（逐字）
 
@@ -8,7 +8,7 @@
 
 ## 为什么必须统一
 
-改前这四处说的是两件相反的事：
+改前这几处说的是两件相反的事：
 
 - `specs/b.py`：`table.update` 那类通用写口对 statements 已被封；
 - `specs/d.py` / `agent_skills.py`（两处）：只在通用表写口改状态时，作废不会发生。
@@ -19,13 +19,20 @@
 模型照旧文字走只有两种下场：不敢用这条出口，或者用了之后以为板项还开着、
 回头再补一遍 —— 两者都不是"措辞问题"，是把一条活着的出口在提示词里写成死的。
 
+## 第五处（2026-11-04 收口）
+
+改前 `specs/m.py` 仍写着「只经通用表写口改状态与标记时它**不会**发生」——
+与上面统一后的口径相反。业主已就同一条口径裁定过"按建议"，所以这一处也改成
+同一句；判据随之从四处扩到五处。
+
 ## 判据
 
 | # | 判据 | 改前为什么红 |
 |---|---|---|
-| a | 四个落点各自同时出现「非正文三格」与「会触发作废」，且都带「正文仍需走证明入口」 | 改前 0 处这样写：b 说"已被封"、d 与 skills 说"不会发生" |
-| b | 反真空：把任一句从对应文本里删掉 ⇒ 校验函数必须红 | 证明 a 的绿不是"随便出现两个词"，而是那两句真的在 |
-| c | 端到端 `test_statements_unsigned_and_resubmit.py` 的那一组仍绿（只改措辞，实现不动） | —— |
+| a | 五个落点各自同时出现「非正文三格」与「会触发作废」，且都带「正文仍需走证明入口」 | 改前 0 处这样写：b 说"已被封"、d 与 skills 说"不会发生"、m 说"不会发生" |
+| b | 反真空：把任一句从任一落点的文本里删掉 ⇒ 校验函数必须红 | 证明 a 的绿不是"随便出现两个词"，而是那两句真的在 |
+| c | 五处逐字同义：源码里那整句归一到同一串之后，每一处都找得到 | 改前 m 那一处根本没有这一句 |
+| d | 端到端 `test_statements_unsigned_and_resubmit.py` 的那一组仍绿（只改措辞，实现不动） | —— |
 
 本文件只读源码文本（不导入 `specs/*`、不跑动作）：它量的是"模型看得到的那句话"。
 """
@@ -36,11 +43,12 @@ import re
 
 PROJECT = pathlib.Path(__file__).resolve().parents[1]
 
-#: 四个落点（业主逐一点名；行号会漂，所以按文件 + 落点计数找，不写死行号）。
+#: 五个落点（业主逐一点名；行号会漂，所以按文件 + 落点计数找，不写死行号）。
 #: `count` 是这一份文件里应当出现的次数（agent_skills 有两处手册）。
 SITES: tuple[tuple[str, int], ...] = (
     ("src/agentflow/specs/b.py", 1),
     ("src/agentflow/specs/d.py", 1),
+    ("src/agentflow/specs/m.py", 1),
     ("src/agentflow/agent_skills.py", 2),
 )
 
@@ -48,6 +56,13 @@ SITES: tuple[tuple[str, int], ...] = (
 CELLS = "非正文三格"
 ABANDON = "会触发作废"
 BODY_ENTRY = "正文仍需走证明入口"
+
+#: 统一后的那整句（五处逐字同义，只有源码里的换行位置不同）。
+CANONICAL = (
+    "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
+    "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
+    "正文仍需走证明入口。"
+)
 
 #: 改前那两句相反的话（统一之后一句都不许留）。
 STALE: tuple[str, ...] = (
@@ -62,8 +77,17 @@ def _read(rel: str) -> str:
     return (PROJECT / rel).read_text(encoding="utf-8")
 
 
+def _squash(text: str) -> str:
+    """去掉源码里的引号与全部空白 —— 用来比"相邻字面量拼出来的那句话"。
+
+    两处都做同一个归一（源码一侧与 `CANONICAL` 一侧），所以换行位置、
+    行内缩进、三引号与相邻字面量的差别都不影响比对。
+    """
+    return re.sub(r"\s+", "", text.replace('"', ""))
+
+
 def _problems(text: str, *, want: int) -> list[str]:
-    """这一份文本离「四处措辞统一」还差什么（空列表 = 合格）。"""
+    """这一份文本离「五处措辞统一」还差什么（空列表 = 合格）。"""
     out: list[str] = []
     got_cells = text.count(CELLS)
     got_abandon = text.count(ABANDON)
@@ -77,12 +101,14 @@ def _problems(text: str, *, want: int) -> list[str]:
     for stale in STALE:
         if stale in text:
             out.append(f"还留着改前那句相反的话：{stale!r}")
+    if _squash(CANONICAL) not in _squash(text):
+        out.append("找不到与另外四处逐字同义的那一整句（口径分家了）")
     return out
 
 
-# ============================================================ a 四处同口径
+# ============================================================ a 五处同口径
 def test_a_each_site_says_non_body_cells_and_will_abandon() -> None:
-    """a：每个落点都同时写着「非正文三格」与「会触发作废」（缺一句就红）。"""
+    """a+c：每个落点都同时写着那两句，且五处逐字同义（缺一句就红）。"""
     for rel, want in SITES:
         text = _read(rel)
         problems = _problems(text, want=want)
@@ -111,3 +137,22 @@ def test_b_removing_either_sentence_turns_the_check_red() -> None:
         broken_body = real.replace(BODY_ENTRY, "")
         assert _problems(broken_body, want=want) != [], (
             f"{rel}：删掉「{BODY_ENTRY}」之后校验仍然绿 —— a 量的不是这句话")
+
+
+# ============================================================ c 反真空（整句）
+def test_c_rewording_one_site_back_to_the_old_line_turns_it_red() -> None:
+    """c：把任一处那整句改回旧口径（三个词一个不少）⇒ 逐字同义这一条必须红。"""
+    tail = "（`v-resubmit`项随之closed/expired）；正文仍需走证明入口。"
+    rewound_tail = "；作废落在`v-resubmit`项上（closed/expired）；正文仍需走证明入口。"
+    for rel, want in SITES:
+        squashed = _squash(_read(rel))
+        assert _squash(CANONICAL) in squashed, f"{rel}：盘上没有改后那整句 ⇒ 反真空打不中"
+        rewound = squashed.replace(tail, rewound_tail)
+        assert rewound != squashed, f"{rel}：那一句的尾巴没找到 ⇒ 反真空打不中"
+        # 三个词都还在 ⇒ 这一条红不能是"少了一个词"，只能是同一句口径被改散了。
+        for word in (CELLS, ABANDON, BODY_ENTRY):
+            assert word in rewound, f"{rel}：反真空把 {word!r} 也删了（那就不是 c 这一条）"
+        problems = _problems(rewound, want=want)
+        assert problems != [], (
+            f"{rel}：把口径改回旧写法之后校验仍然绿 —— a 量的不是同一句口径")
+        assert any("逐字同义" in p for p in problems), problems
