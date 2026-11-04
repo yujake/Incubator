@@ -2216,7 +2216,13 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 十一格是 `temp/_p235_recompute.py`（导入本文件的 `_surface_digest`，环境变量与
 # `conftest.py` 逐条对齐）的现算值，不是手抄；逐笔出处写在
 # `agent_prompts.PROMPT_VERSION` 上方 p235 那一格。
-_FROZEN_PROMPT_VERSION = "p235"
+# 2026-11-04（p235 → p236，`6fb014f5` 三条已知缝隙那一批）：只有 G / H 两格换值 ——
+# 凭据格在「通道为空」时从「可留空」改成「必须留空」（填了受控拒绝），
+# `doc.write_mapping` 的 `lean_state` 不再把「关档 / 有产物」当凭据格判据；
+# 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
+#   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
+# 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
+_FROZEN_PROMPT_VERSION = "p236"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2449,8 +2455,8 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "d72edfac6fd7079bc1a758b8c8ae8adb28b3cef2c1956476d40e98194c7140e7",
     "E": "ce0984eb17d8bde20ec2b469ca22288404768628cbedb46badc1c71da6f5c6f9",
     "F": "766577794c101e03a765dde5bc00d610b69e4b7e5d2eba6691b5bfc742c5ef3b",
-    "G": "2aca56d9c259b0f50c4af278085eb8d8843f98d33594f2d883ec7c72d92d1acc",
-    "H": "4715fc6658af7a72eb06063edd7c7b8fcbe1e3e4282d2d2777d86d69ae1d3700",
+    "G": "fc79c5df8a6aa049f6eb0919446ac801426d5884a1af4272c397e47e1ac08c6d",
+    "H": "ba7efe69881fa9f9053912186d7919bd7d48976333ebfb6461f83732fbf9cceb",
     "L": "8cb3e956d80b6c5a6280ce0f4d116aff2c1063054a24d010a5cb834a09dce535",
     "M": "8807868bcbd6934364e501362f36a8070081591fcca119988772b943d5cd456c",
     "V": "2403f0f1f2a1d23ed8af32472154c09d7c4dbf53211c037693e12ecd74b52e41",

@@ -3065,7 +3065,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_surface_snapshot.json` 因十一格提示词里的版本行与 G 的工具面变）；
 #: `docs/ROLE-GUIDE.md` 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑
 #: （业主已批 `--cap-usd 0.1`，实际花费见提交信息）。
-PROMPT_VERSION = "p235"
+#: `p236`（2026-11-04，业主「必要的提示词改动不许静默不改，代价可以付」；
+#: `6fb014f5` 三条已知缝隙那一批）：只有 G / H 两格换值。
+#:
+#: ① `specs/g.py` 与 `agent_skills._g_skills()`：凭据格（`lean_file` / `lean_target`）
+#:    与 `numeric_evidence` / `exhaustion_note` 在「通道为空」时从「可以留空」改成
+#:    「必须留空」—— 填了就是无依据的声称（没有通道就没有凭据，`doc.write_mapping`
+#:    受控拒绝）；`doc.write_mapping` 的 `lean_state` 不再把「关档 / 有产物」当凭据格判据。
+#: ② `specs/h.py` 与 `agent_skills._h_skills()`：H 的逐行核对应同步这条口径。
+#: ③ 工具说明面：`doc.write_mapping` 的 summary 与 rows 四格 description（params / returns）
+#:    同步（进 G 的 `tools_lines`，也进 function-calling 的 description）。
+#:
+#: 变化格 = ['G', 'H']（其余九格 A/B/C/D/E/F/L/M/V 逐字同值）。
+#: 逐格旧值 → 新值（p235 → p236；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
+#: 十一格是 `temp/_p235_recompute.py` 的现算值（脚本名沿用，摘要口径未变）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p236）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 两份 golden 重冻（agent 面 G / H 两格 prompt 与 G 的 rows 两格；tool 面
+#: `doc.write_mapping` 的 summary / params / returns）；`tests/fixtures/tool_declaration_baseline.json`
+#: 的 `doc.write_mapping` 两条 compression 演进按现值重记；`docs/ROLE-GUIDE.md` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，实际花费见提交信息）。
+PROMPT_VERSION = "p236"
 
 
 

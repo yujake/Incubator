@@ -756,6 +756,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p234", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p234（2026-11-03，业主「E 在数值证明拿 V 签的时候流程和 F 一模一样」）：agent_skills 的 E 手册多一条「穷举证明-拿签与上报收养」（手稿 reports/e-proof-<实验号>.md → 派 V 三转 → 收方落签 → 上报 D 收养），并把「反例优先」第 5 步那句「让 B.register_statement 登记」改成「交 D（由 D 派 B 登记）」（与 specs/e.py 的 policy ⑤ 原本矛盾）。变化格 = E 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p234 → p235（2026-11-04，收口批）：十一格全换 —— p234 冻结之后提示词 / 工具面一侧
+    # 落了 42 笔（子任务被拒格改名 subtask_refusals、doc.mapping_cells 等）。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p235", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p235（2026-11-04 收口批）：p234 冻结之后提示词 / 工具面一侧落了 42 笔 —— 八份 spec 的「子任务被拒」格改名 subtask_refusals（十一条都有监控下级那一条 ⇒ 十一格全换）、新只读工具 doc.mapping_cells（只进 G 面）、A/B/E/F/G/H/L/M/V 各自的 policy / returns 收口、PAPER_PACK 的 blocker 两类读法。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p235 → p236（2026-11-04，6fb014f5 三条已知缝隙）：只有 G / H 两格换值。
+    {"version": "p236", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p236（2026-11-04，6fb014f5 三条已知缝隙）：凭据格 lean_file / lean_target 在通道为空时从「可留空」改成「必须留空」（填了受控拒绝），numeric_evidence / exhaustion_note 空通道也不许填；doc.write_mapping 的 lean_state 不再把「关档 / 有产物」当凭据格判据。变化格 = G / H 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
