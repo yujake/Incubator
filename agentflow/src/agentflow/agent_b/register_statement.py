@@ -77,6 +77,7 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Mapping, Sequence
 
 from ._support import S
@@ -99,6 +100,54 @@ from ..refusals import refuse as _refuse
 #: （加一个取值就是加一种"强于猜想"的说法），黑名单会在那种时候
 #: 静默放行 —— 白名单不会。
 CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
+
+
+#: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
+#: 同一个口径：`notes/` 是草稿本、`reports/` 是正式落点）。别的根一律当"正文"处理，
+#: 不按路径读盘 —— 这一格不许变成"从任意路径读一个文件当证明"。
+_MANUSCRIPT_PATH_ROOTS: tuple[str, ...] = ("notes", "reports")
+
+
+def _norm_manuscript_rel(value: Any) -> str:
+    """`proof_manuscript` 的形状归一（只换分隔符；不猜、不补前缀）。"""
+    return str(value or "").strip().replace("\\", "/")
+
+
+def _is_manuscript_rel(rel: str) -> bool:
+    """这一格看起来是不是一个工作区相对路径（而不是一份正文）。
+
+    判据只认形状：单行（正文必然带换行）、带 `/`、以 `.md` 结尾、落在
+    `notes/` 或 `reports/` 下、没有盘符 / 不以 `/` 开头 / 不含 `..`。
+    """
+    text = _norm_manuscript_rel(rel)
+    if not text or "\n" in text or "\r" in text:
+        return False
+    if not text.casefold().endswith(".md") or "/" not in text:
+        return False
+    if text.startswith("/") or ":" in text:
+        return False
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if len(parts) < 2 or any(p == ".." for p in parts):
+        return False
+    return parts[0] in set(_MANUSCRIPT_PATH_ROOTS)
+
+
+def _should_promote_to_formal(rel: str) -> bool:
+    """这一份稿该不该在"登记成功"那一刻转成 `reports/f-proof-<号>.md`。
+
+    三种情形不转：已经是按号命名的正式稿（目标就是它自己）、B 的改写稿
+    （`reports/b-proof-*` —— 那不是 F 的稿）、以及不认识的路径。
+    """
+    text = _norm_manuscript_rel(rel)
+    if not text:
+        return False
+    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_PLAN_PREFIX}"):
+        return True
+    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}"):
+        return False
+    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/b-proof-"):
+        return False
+    return text.startswith("notes/")
 
 
 def _same_manuscript_text(left: Any, right: Any) -> bool:
@@ -1558,6 +1607,38 @@ class _RegisterStatement:
         manuscript_carried: dict = {}
         manuscript_path = ""
         manuscript_text = str(proof_manuscript or "")
+        # ---- `proof_manuscript` 也收「工作区相对路径」（2026-11-04，转正那一笔）----------
+        #
+        # 这一格在 V 的召唤参数里是路径（`verify_proof(proof_manuscript="notes/…")`），
+        # 在这里历史上只当正文。同一格两个意思是真机形态分叉的根源：F 把
+        # `notes/F-conj000000-proof.md` 交给 V（路径），B 这一侧没有人接得住它 ——
+        # 于是"登记成功即改名"那条路一次都没走到（真机 `projects/paper-rewrite-big`：
+        # F 的稿在 notes/、`reports/f-proof-*.md` 0 份）。
+        #
+        # 判据只看形状：单行、带 `/`、以 `.md` 结尾、落在 `notes/` 或 `reports/` 下。
+        # 是路径就按盘上那一份读（读了之后 `manuscript_source` 仍是 `param` —— 这一笔的
+        # 稿是调用方点名递上来的，只是它把地址给了，不是把正文粘了）；盘上没有 ⇒
+        # 受控拒绝 `manuscript_missing`，绝不把路径字符串当正文继续走。
+        param_manuscript_path = ""
+        _raw_param = _norm_manuscript_rel(manuscript_text)
+        if _is_manuscript_rel(_raw_param):
+            if not (Path(getattr(self.store, "root", "") or ".") / _raw_param).is_file():
+                return _refuse(
+                    "manuscript_missing",
+                    (f"`proof_manuscript` 给的是路径 `{_raw_param}`，而盘上没有这一份文件 ⇒ "
+                     "整笔不写：路径与正文是两种写法，路径读不到时不许把它当正文继续。"
+                     "处置：先让作者把稿落到工作区里，或改成把正文直接传进来。"),
+                    manuscript_source=_DS.SOURCE_NONE, manuscript_path=_raw_param)
+            try:
+                manuscript_text = (Path(getattr(self.store, "root", "") or ".")
+                                   / _raw_param).read_text(encoding="utf-8")
+            except OSError as exc:
+                return _refuse(
+                    "manuscript_unreadable",
+                    (f"`proof_manuscript` 点的 `{_raw_param}` 读不出来"
+                     f"（{type(exc).__name__}: {exc}）⇒ 整笔不写（读不到的稿不能当没有）"),
+                    manuscript_source=_DS.SOURCE_NONE, manuscript_path=_raw_param)
+            param_manuscript_path = _raw_param
         #: 这一条命题是不是已经在册（按 `statement_full` 的规范化值，判据在
         #: `_existing_statement_for`）。为什么要在寻址之前算出来：D 的携带单是按
         #: 命题号点名的，而 B 在"命题已在册、这一笔只是把 D 的稿收进来"这一档上手里
@@ -1589,6 +1670,9 @@ class _RegisterStatement:
                 manuscript_path = str(probe_carried.get("path") or "")
             else:
                 manuscript_source = _DS.SOURCE_PARAM
+            if param_manuscript_path:
+                # 调用方点名的那一份稿：地址也要留在读数里（转正要用它）。
+                manuscript_path = param_manuscript_path
         else:
             manuscript_carried = _DS.read_carried_manuscript(
                 getattr(self.store, "root", ""), statement_ids=probe_ids,
@@ -1927,13 +2011,25 @@ class _RegisterStatement:
         # 并且把这份稿的依赖面在那一笔之后补落（`_manuscript_deps_after_write`）。
         if manuscript_text.strip() and not manuscript_foreign and not carries_write:
             if redelivery is not None:
-                return self._receive_carried_manuscript(
+                received = self._receive_carried_manuscript(
                     redelivery, deps_groups=deps_groups, manuscript=manuscript,
                     manuscript_refs=manuscript_refs, manuscript_source=manuscript_source,
                     manuscript_washed=manuscript_washed, manuscript_wash=manuscript_wash,
                     proofs=proofs_listed, proof_text=proof_text, deps_reading=_deps_reading,
                     proof_text_source=proof_text_source,
                     proof_vs_source=proof_vs_source)
+                # ---- 2026-11-04：收方读稿登记这一支也要转正 ----------------------
+                #
+                # 这一支是"命题已经在册、这一趟只是把稿交过来"（F 先拿号、后交签过
+                # 的稿就是它）。真机上"V 签过 ⇒ 转正"最常落在这一刻 —— 号已经在，
+                # 稿也已经有签，缺的只是把 `notes/…` 复制成 `reports/f-proof-<号>.md`。
+                promotion = self._promote_formal_manuscript(
+                    stmt_id=str(redelivery.get("stmt_id") or ""),
+                    rel=(manuscript_path or ""), text=manuscript_text,
+                    source=str(manuscript_source or ""))
+                if promotion:
+                    received = {**received, "promoted_manuscript": promotion}
+                return received
 
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
@@ -2284,6 +2380,39 @@ class _RegisterStatement:
             # 否则 `#p2` 的机械录入态会记到 #p1 头上 —— 逐份表按号各记各的）。
             ([proof_no_placement] if str(proof_text or "").strip() else [])
             + [int(e.get("proof_no") or 0) for e in proofs_listed])
+        # ---- 2026-11-04：号已经在册 ⇒ 先把攻坚稿转正，再认签 -------------------------
+        #
+        # 这一刻是"F 先拿号、V 在 `notes/…` 上签、F 把签过的稿交回 B"那条链的落点。
+        # 必须在 `bits_after_sign` 之前转正：签块的第 9 格 `手稿号` 按稿路径现算，
+        # `notes/…` 算不出号（`vsigns.manuscript_id_of` 返回空）⇒ B 的签块闸会判
+        # `manuscript_id_missing`，那一签永远认不上（真机就是这么丢的）。
+        # 转正之后从正式稿重读正文：块被搬过去时第 9 格已按新名重算成这个号。
+        # 首次登记（`stmt_id_now` 为空）不走这一格：号是秘书在事务里现发的，转正只能在
+        # 拿到号之后（见下面 `promotion` 那一笔）。
+        pre_gate_promotion: dict = {}
+        if (stmt_id_now and manuscript_text.strip()
+                and _should_promote_to_formal(manuscript_path)):
+            promotion = self._promote_formal_manuscript(
+                stmt_id=stmt_id_now, rel=manuscript_path, text=manuscript_text,
+                source=str(manuscript_source or ""))
+            if promotion.get("promoted"):
+                pre_gate_promotion = dict(promotion)
+                _promoted_rel = str(promotion.get("path") or "")
+                try:
+                    manuscript_text = (Path(getattr(self.store, "root", "") or ".")
+                                       / _promoted_rel).read_text(encoding="utf-8")
+                except OSError as exc:  # noqa: BLE001 —— 转正了却读不回来：不许当没发生
+                    return _refuse(
+                        "promoted_manuscript_unreadable",
+                        (f"攻坚稿已转成 `{_promoted_rel}`，而那一份读不出来"
+                         f"（{type(exc).__name__}: {exc}）⇒ 整笔不写（读不回来就认不了签）"),
+                        promoted_manuscript=dict(promotion))
+                manuscript_path = _promoted_rel
+                # 转正之后它是盘上那一份正式稿：签块认签与洗稿闸都按它读。
+                manuscript_source = _DS.SOURCE_DISK
+                manuscript_washed = bool(
+                    _DS.manuscript_wash_reading(manuscript_text).get("washed"))
+                manuscript_wash = _DS.manuscript_wash_reading(manuscript_text)
         # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
         #
         # 原话：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
@@ -2403,6 +2532,9 @@ class _RegisterStatement:
             proof_no = int(written.get("proof_no") or 0)
             out = {"ok": True, "stmt_id": stmt_now, "new_row": False, "merged": True,
                    "merged_into": str(written.get("merged_into") or stmt_now),
+                   #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
+                **({"promoted_manuscript": dict(pre_gate_promotion)}
+                   if pre_gate_promotion else {}),
                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
@@ -2502,6 +2634,9 @@ class _RegisterStatement:
                                          canonical=attach_canonical,
                                          bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
+                   #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
+                **({"promoted_manuscript": dict(pre_gate_promotion)}
+                   if pre_gate_promotion else {}),
                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
@@ -2606,7 +2741,10 @@ class _RegisterStatement:
                                stmt_id=stmt_dup)
             if attach.get("written"):
                 out = {"ok": True, "stmt_id": stmt_dup,
-                       #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                       #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
+                    **({"promoted_manuscript": dict(pre_gate_promotion)}
+                       if pre_gate_promotion else {}),
+                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                     **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                     #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
@@ -2723,6 +2861,11 @@ class _RegisterStatement:
                            str(written.get("reason") or "秘书没写这一笔"),
                            stmt_id=str(written.get("stmt_id") or ""), **extra)
         stmt_id = str(written["stmt_id"])
+        #: 2026-11-04：登记成功（号已经有了）⇒ 把这一笔交来的那份稿转成按号命名的
+        #: 正式稿（`reports/f-proof-<号>.md`）。判据本体在 `agent_f.manuscript`。
+        promotion = self._promote_formal_manuscript(
+            stmt_id=stmt_id, rel=(manuscript_path or ""), text=manuscript_text,
+            source=str(manuscript_source or ""))
         data = dict(written.get("row") or {})
         attach = self._attach_proofs(stmt_id, attach_entries,
                                      canonical=attach_canonical,
@@ -2796,6 +2939,8 @@ class _RegisterStatement:
         optimized_reading = _optimized_reading(attach)
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 **optimized_reading,
+                #: 2026-11-04：这一笔有没有把稿转成按号命名的正式稿（有才带这一格）。
+                **({"promoted_manuscript": dict(promotion)} if promotion else {}),
                 #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
                 #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
@@ -3006,6 +3151,40 @@ class _RegisterStatement:
             if T.normalize(str(row.get("statement_full") or "")) == key:
                 return row
         return None
+
+    def _promote_formal_manuscript(self, *, stmt_id: str, rel: str, text: str,
+                                   source: str = "") -> dict:
+        """登记拿到号之后，把盘上那一份稿转成 `reports/f-proof-<号>.md`（能转才转）。
+
+        业主 2026-11-04 的口径是「登记成功（拿到命题号）就改名，签另算」。改前这一步
+        只发生在 F 自己的 proof 档里（`publish_manuscript`，改的是它手上那一份）；
+        盘上已经存在的攻坚稿（真机 `notes/F-conj000000-proof.md`）没有任何代码把它
+        变成正式稿 ⇒ `reports/f-proof-*.md` 0 份。本方法就是那个缺口的外壳：判据本体
+        只有一处（`agent_f.manuscript.promote_manuscript`），这里只回答"这一份要不要转"。
+
+        不转的三种：没有地址（正文是直递的，B 不知道它落在哪）、已经是按号命名的
+        正式稿、B 自己的改写稿（`reports/b-proof-*`）。转正失败不许让整笔登记
+        回滚：命题行已经落了，转正是它的后续读数（`promoted_manuscript` 里如实报）。
+        """
+        rel_now = _norm_manuscript_rel(rel)
+        if not rel_now or not _should_promote_to_formal(rel_now):
+            return {}
+        try:
+            from ..agent_f.manuscript import promote_manuscript as _promote
+
+            got = dict(_promote(
+                getattr(self.store, "root", ""), statement_id=str(stmt_id),
+                source=rel_now, text=str(text or ""),
+                # 计划名那份稿是同一份稿的旧名（`rename` 语义）⇒ 转正后删旧名；
+                # `notes/…` 是作者的草稿 ⇒ 留着（删掉不可逆）。
+                delete_source=rel_now.startswith(
+                    f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_PLAN_PREFIX}")))
+        except Exception as exc:  # noqa: BLE001 —— 转正失败要留读数，不带走登记
+            return {"promoted": False, "source": rel_now,
+                    "problem": {"kind": "promotion_failed", "stage": "call",
+                                "why": f"{type(exc).__name__}: {exc}"}}
+        got["manuscript_source"] = str(source or "")
+        return got
 
     def _receive_carried_manuscript(self, row: Mapping[str, Any], *, deps_groups: Any,
                                     manuscript: Mapping[str, Any],
