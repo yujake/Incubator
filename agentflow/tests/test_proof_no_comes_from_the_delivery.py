@@ -16,7 +16,7 @@ E 的交付里没有"这是第几份证明"这一格：`exhaustionreport.compose
 | a | 稿头写 `- 证明号：2` ⇒ 收录后那一份落在 `#p2`（不是 `#p1`），`proof_no_source=crafted` | 交付里没有这一格可读；B 的落点只看"canonical 空不空" ⇒ 落在 `#p1`，返回值里也没有 `proof_no_source` |
 | b | 稿头没写、携带单第四列写 2 ⇒ 同一结果，`proof_no_source=carried` | 携带单只有三列（列数不对就整节拒），没有第四列可读 |
 | c | 两处都没写 ⇒ 回退（canonical 空则 `#p1` / 否则最大号 + 1），`proof_no_source=fallback`，且不覆盖已有 `#p1` | 返回值里没有 `proof_no_source`；这一档是"猜"还是"读了"，盘上分不开 |
-| c2 | 两处都没写、且**没有模型缝** ⇒ 判不了就不并：第二笔落新行 000001，`adjudication.fail_closed=True` + `why_not_merged` 点名在册那一条 | 2026-11-04（件1 76dd2971）之后的新口径：fail-closed 不并；这一条把"没查成会怎样"也钉住，test_c 的缝才有对照 |
+| c2 | 两处都没写、且「没有模型缝」 ⇒ 判不了就不并：第二笔落新行 000001，`adjudication.fail_closed=True` + `why_not_merged` 点名在册那一条 | 2026-11-04（件1 76dd2971）之后的新口径：fail-closed 不并；这一条把"没查成会怎样"也钉住，test_c 的缝才有对照 |
 | d | 反真空：把"读交付里的号"那一支打桩成恒缺席 ⇒ a 必须回落到 `#p1` | 没有那一支可打桩（`AttributeError`）⇒ 先红 |
 
 ## 口径
@@ -94,8 +94,8 @@ def _stub_model_says_same(monkeypatch: pytest.MonkeyPatch, *, target: str) -> No
     与 `tests/test_no_model_means_no_merge.py::_stub_model_says_same` 同形：打的是
     `Secretary.adjudicate_proposition`（判据入口），不是 `_same_proposition_candidate`
     （兜底那一档）。为什么 test_c 需要它（2026-11-04，件1 76dd2971 之后）：
-    "第二份是同一套的改写 ⇒ 秘书判同一条 ⇒ 落成第 N 份证明"这条期望**以模型判得成
-    为前提**；没有缝时秘书按 fail-closed 不并（那是新的、更严的读数，由同文件的
+    "第二份是同一套的改写 ⇒ 秘书判同一条 ⇒ 落成第 N 份证明"这条期望「以模型判得成
+    为前提」；没有缝时秘书按 fail-closed 不并（那是新的、更严的读数，由同文件的
     `test_c2_...` 单独钉住）。不补这一道缝，test_c 测的就不再是"回退编号"，
     而是"没缝时不许并"—— 两件事混在一条用例里，改哪一端都说不清。
     """
@@ -170,8 +170,8 @@ def test_c_without_a_number_the_fallback_does_not_overwrite_p1(
         store, signed_v_handoffs, monkeypatch: pytest.MonkeyPatch) -> None:
     """c：两处都没有号 ⇒ 回退到最大号 + 1（`#p2`），已有 `#p1` 一个字不动。
 
-    前提（2026-11-04，件1 76dd2971 之后）：第二份要并进同一条命题，**必须模型判
-    `same`**（没有缝时秘书按 fail-closed 不并 —— 那一档由下面 `test_c2` 钉住）。
+    前提（2026-11-04，件1 76dd2971 之后）：第二份要并进同一条命题，「必须模型判
+    `same`」（没有缝时秘书按 fail-closed 不并 —— 那一档由下面 `test_c2` 钉住）。
     所以这里按判据入口打一道"模型判 same"的缝，让"回退编号"这条被测的规则不变。
     """
     b = AgentB(store, extractor=None, extract_text=None, config={})
@@ -203,7 +203,7 @@ def test_c_without_a_number_the_fallback_does_not_overwrite_p1(
 # ============================================================ c2 没缝 ⇒ fail-closed 落新行
 def test_c2_without_a_model_the_second_proof_lands_a_new_row(
         store, signed_v_handoffs) -> None:
-    """c2（反真空）：**没有**模型缝时不许并 ⇒ 落新行 000001，且读数说清"为什么没并"。
+    """c2（反真空）：「没有」模型缝时不许并 ⇒ 落新行 000001，且读数说清"为什么没并"。
 
     件1（76dd2971）之后的硬口径：判不了就是不并，词面相似度只排序、不替模型表态。
     没有这一条，test_c 的那道缝就成了"唯一被看到的路径"——"没查成会怎样"只剩
@@ -211,7 +211,7 @@ def test_c2_without_a_model_the_second_proof_lands_a_new_row(
 
     期望（改后的新行为，2026-11-04 8d4046f5 的同族读数）：
     `adjudication.checked=False`（没查成，不是"查过了、不同"）、`attempted=False`、
-    `fail_closed=True`、`why_not_merged` 点名在册的 stmt:000000；第二笔落**新行**
+    `fail_closed=True`、`why_not_merged` 点名在册的 stmt:000000；第二笔落「新行」
     000001，编号回退到 `#p1`（新行没有 canonical 的 #1），旧行 `#p1` 一个字不动。
     """
     b = AgentB(store, extractor=None, extract_text=None, config={})
