@@ -52,6 +52,24 @@ V 只与 F 交互：F 提交、V 退回；不给 D、不给 E 当对话对象。
 是「不动 `PROMPT_VERSION`、不重冻 golden」，所以渲染面那一句落在 V 的真实入口
 `verifications.cold_start_prompt`（它才是 V 每次审校读到的提示词），这一格只留声明侧
 的同一条政策。抬版本那一轮把这一段并进 `policy` 即可，口径一个字不用改。
+
+## 发签权的边界（业主 2026-11-04 裁定 · 乙-5，这是明文例外）
+
+2026-10-29 的「V 只产审稿意见；发不发签由 V 的秘书决定」只约束在册档。
+
+未在册档（`reports/f-proof-*.md` / `reports/e-proof-*.md` / `reports/b-proof-*.md`
+那一支，`agent_v/core.py::_review_unregistered_prose` 与
+`_review_unregistered_exhaustion`）常常没有「收方秘书在场」这个前提：F / E 的稿在被
+收方接手之前就要签，强行要求秘书判定会把这一档变成死路。所以：
+
+- 未在册三转 clean（穷举档是三轮机械会审 clean）即由 V 颁发 —— `vsigns.issue` 写
+  `out/vsigns/<正文 sha>.json`、把信封交给收方；
+- 手稿签块仍只由收方秘书落（`Secretary.land_unregistered_sign`），V 在这个档里
+  一处签写口都没有 —— 一句话：未在册档「V 颁发、落块仍由收方秘书做」；
+- 这是明文例外，不是暗中放宽：判据
+  `tests/test_unregistered_issuance_is_an_explicit_exception.py` 同时钉住
+  「这一段在」与「未在册两支没有插入秘书判定」；谁把秘书判定插进未在册档，
+  那一条判据会红。
 """
 
 from __future__ import annotations
