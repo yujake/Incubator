@@ -28,6 +28,8 @@ import pathlib
 
 import pytest
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import verifications as VR
@@ -174,8 +176,11 @@ def test_a_flawed_verdict_does_not_make_it_a_root(tmp_path: pathlib.Path) -> Non
     """负控：审成有毛病 ⇒ 同样不许作根。"""
     st = _store(tmp_path)
     sid = _seed_statement(st)
+    # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿（按号命名的那一份）。
+    # 这一条判的是"有毛病 ⇒ 不作根"，判据一个字没改；补的只是签的载体。
+    rel = write_proof_manuscript(st.root, sid, PROOF, statement_full=FULL)
     v = AgentV(st, llm=_FixedSeam("有毛病"))
-    got = v.verify_proof(sid, PROOF)
+    got = v.verify_proof(sid, PROOF, proof_manuscript=rel)
     got = got if isinstance(got, dict) else got.to_dict()
     assert got.get("verdict") == "有毛病", got
     rep = AgentC(st).proof_chain(target=sid)

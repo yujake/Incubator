@@ -134,13 +134,16 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
     from agentflow import verifications as VR
     from agentflow.agent_v import AgentV
 
-    man_rel = DS.manuscript_relpath(plan_id="probe-no-lit")
+    # 稿名必须让 `vsigns.manuscript_id_of` 认得出裸稿号（`reports/f-proof-<号>.md` /
+    # `f-proof-plan-<数字>.md`）：签块第 9 格「手稿号」按它写，认不出号的块 B 不认
+    # （2026-11-04 裁定 乙-2）。计划号因此用数字形态，不用"probe-no-lit"这种可读名。
+    man_rel = DS.manuscript_relpath(plan_id="000001")
     man_path = ws / man_rel
     man_path.parent.mkdir(parents=True, exist_ok=True)
     man_path.write_text(
         "# F 的证明手稿：自证命题\n\n"
         "- 命题号：stmt:（还没落号）\n"
-        "- 计划：probe-no-lit · 子目标：s1\n\n"
+        "- 计划：000001 · 子目标：s1\n\n"
         "## 命题\n\n若 n≥3 则 n^2+n 是偶数（自证）。\n\n"
         f"## 证明\n\n{PROOF}\n\n"
         "## 依赖\n\n"

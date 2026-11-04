@@ -42,7 +42,9 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from conftest import add_literature, sync_counters  # noqa: E402
+from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from agentflow import closing  # noqa: E402
+from agentflow import depsection as DS  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
@@ -195,6 +197,25 @@ def _file_as_conjecture(store: Store, *, proof_text: str,
         quote_verified=False, quote_reason="own_result：我方推导，没有第二份文本可比对")
 
 
+def _e_manuscript(store: Store, sid: str, column: str, *,
+                  statement_full: str = "") -> str:
+    """E 的按号证明手稿 `reports/e-proof-<号>.md`：V 在册送审的载体。
+
+    2026-11-04（业主裁定 甲）：在册命题送审必须带手稿。穷举这一档的真机载体是 E
+    自己那一趟落的 `reports/e-proof-<实验号>.md`（`exhaustionreport.land_manuscript`），
+    这里用共享夹具落同样的三节内容、再按 E 的命名写一份（不另造一套格式）：
+    `## 证明` 与证明栏逐字一致、`## 依赖` 是空表声明。
+    """
+    rel_f = write_proof_manuscript(store.root, sid, column, statement_full=statement_full)
+    src = pathlib.Path(store.root) / rel_f
+    rel = f"reports/e-proof-{sid}.md"
+    (pathlib.Path(store.root) / rel).write_text(
+        DS.mark_washed(src.read_text(encoding="utf-8"), actor="secretary-E"),
+        encoding="utf-8")
+    src.unlink()
+    return rel
+
+
 def _sign_with_v(store: Store, column: str,
                  statement_full: str = "对任意正整数 n，R(3,4)=9。") -> dict:
     """按业主 2026-10-23 晚的正路签一签：先立成猜想 → V 会审穷举证据 → 签「成立」。
@@ -210,13 +231,18 @@ def _sign_with_v(store: Store, column: str,
     filed = _file_as_conjecture(store, proof_text=column, statement_full=statement_full)
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
+    # 2026-11-04（业主裁定 甲）：在册命题的 V 审也必须带手稿 —— 签块 / `## 依赖` /
+    # 按号寻址三样只在文件上。夹具把这一份证明栏落成 `reports/f-proof-<号>.md`
+    # （`## 证明` 与证明栏逐字一致，`## 依赖` 空表），送审时带同一个路径。
+    # 判据一个字没改：连续 3 次「成立」才翻第 3 位这条口径原样在下面判。
+    manuscript = _e_manuscript(store, sid, column, statement_full=statement_full)
     v = AgentV(store, workspace_root=store.root, secretary=_secretary_v(store))
-    first = v.verify_proof(sid, proof_text=column)
+    first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert first.get("checked") is True and first.get("verdict") == "成立", first
     assert first.get("signed_bit3") is False, (
         "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
-    v.verify_proof(sid, proof_text=column)
-    got = v.verify_proof(sid, proof_text=column)
+    v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+    got = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert got.get("checked") is True and got.get("verdict") == "成立", got
     assert got.get("signed_bit3") is True, got
     return got

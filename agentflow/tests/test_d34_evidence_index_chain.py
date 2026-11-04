@@ -176,18 +176,22 @@ def _b(store: Store) -> AgentB:
 
 
 def _file(store: Store, *, column: str, kind: str = "theorem",
-          evidence_kind: str = "proof", body: str = BODY) -> dict:
+          evidence_kind: str = "proof", body: str = BODY,
+          manuscript: str = "") -> dict:
     return _b(store).register_statement(
         origin="own_result", kind=kind, label="R(3,4)=9", statement_full=body,
         statement_text=body[:40], proof_text=column, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
-        quote_reason="own_result：我方推导，没有第二份文本可比对")
+        quote_reason="own_result：我方推导，没有第二份文本可比对",
+        proof_manuscript=manuscript)
 
 
-def _file_conjecture(store: Store, *, column: str, body: str = BODY) -> dict:
+def _file_conjecture(store: Store, *, column: str, body: str = BODY,
+                     manuscript: str = "") -> dict:
     """先按猜想落库（V 只审在册的命题 ⇒ 会审之前这一条只能是猜想）。"""
     return _file(store, column=column, kind="conjecture",
-                 evidence_kind=NP.SUPPORTED_ONLY_KIND, body=body)
+                 evidence_kind=NP.SUPPORTED_ONLY_KIND, body=body,
+                 manuscript=manuscript)
 
 
 def _statement(store: Store, body: str = BODY) -> dict:
@@ -325,22 +329,28 @@ class _VSecretarySeam:
         return dict(answers.get(kind, {})), _Call()
 
 
-def _verify_three(store: Store, sid: str, column: str) -> tuple[dict, dict]:
+def _verify_three(store: Store, sid: str, column: str,
+                  *, exp_id: str = "") -> tuple[dict, dict]:
     """让 V 审三次同一份证明栏（会审是机械的，不用模型），返回 (第 1 次, 第 3 次)。
 
     第 1 次必须"不签上"、第 3 次必须"签上"：业主 2026-10-29 的连续 3 次口径。
+
+    2026-11-04（业主裁定 甲）：在册送审必须带手稿（签要落在稿上）⇒ 穷举这一档的
+    载体是 E 自己那一趟落下的 `reports/e-proof-<实验号>.md`（`run_experiment` 的
+    `land_manuscript` 写的，`## 证明` 与证明栏逐字同源）。判据一个字没改。
     """
     from agentflow import secretary as SEC
 
     sec = SEC.Secretary("V", root=store.root, store=store,
                         seam=_VSecretarySeam(), enable_model=True)
     v = AgentV(store, workspace_root=store.root, secretary=sec)
-    first = v.verify_proof(sid, proof_text=column)
+    manuscript = ER.proof_manuscript_relpath(exp_id) if str(exp_id or "").strip() else ""
+    first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert first.get("checked") is True, first
     assert first.get("signed_bit3") is False, (
         "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
-    v.verify_proof(sid, proof_text=column)
-    third = v.verify_proof(sid, proof_text=column)
+    v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+    third = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert third.get("checked") is True and third.get("verdict") == "成立", third
     assert third.get("signed_bit3") is True, third
     assert dict(third.get("sign_issuance") or {}).get("issued") is True, third
@@ -355,7 +365,7 @@ def _e_case(tmp_path: pathlib.Path) -> tuple[Store, dict, str]:
     filed = _file_conjecture(store, column=env["column"])
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
-    _verify_three(store, sid, env["column"])
+    _verify_three(store, sid, env["column"], exp_id=str(env["experiment_id"]))
     _index_for_e_report(store, env)
     return store, env, sid
 
@@ -429,7 +439,8 @@ def test_2b_a_signed_exhaustion_is_proof_before_b_files_it(
     assert filed2.get("ok") is True, filed2
     monkeypatch.setattr(NP, "find_signed_exhaustion_for_column",
                         lambda *a, **k: None)
-    _verify_three(no_channel, str(filed2["stmt_id"]), env2["column"])
+    _verify_three(no_channel, str(filed2["stmt_id"]), env2["column"],
+                  exp_id=str(env2["experiment_id"]))
     row2 = _statement(no_channel)
     assert row2["evidence_kind"] == "proof_review", (
         "把穷举通道判据打桩成「找不到」之后仍然是 proof ⇒ 上面那条 a 的绿不是它给的", row2)
@@ -478,7 +489,8 @@ def test_3b_the_old_statement_ledger_route_still_works(tmp_path: pathlib.Path) -
     env = _run_exhaustive(store)
     filed = _file_conjecture(store, column=env["column"])
     sid = str(filed["stmt_id"])
-    _first, signed = _verify_three(store, sid, env["column"])
+    _first, signed = _verify_three(store, sid, env["column"],
+                                   exp_id=str(env["experiment_id"]))
     assert signed.get("verdict") == "成立", signed
     # 没有 MAPPING.json（`index_rows` 空）⇒ 走原来那一路
     assert PM.index_rows(store.root) == []
@@ -518,16 +530,29 @@ def test_5_a_sign_made_before_registration_is_not_lost(tmp_path: pathlib.Path) -
     连续计数因此从 0 起变成 1 起，认领那一档也被它抢走），把"先签后登记"这个现场
     造坏。这里的一签是显式的 `verifications.record_pending_sign`（V 的未在册那一支
     走的正是它），认领与否只由正文 sha 决定。
+
+    2026-11-04（业主裁定 甲）之后这一条有两处按新口径走：
+    - 在册/未在册的正判都必须带手稿（签块只在文件上）⇒ 送审带
+      `reports/e-proof-<实验号>.md`（E 自己那一趟落的那一份，`## 证明` 与证明栏
+      逐字同源），`kind` 因此是 `proof_unregistered_signed`（按号稿那一支），
+      不再是只给内联正文时的 `numeric_evidence_unregistered`；
+    - 登记那一笔也要带同一份稿（`proof_manuscript`），否则整笔拒
+      `proof_manuscript_required`。
+    判据本体（那一签不丢、按内容 sha 认领得到）一个字没改：下面仍逐条判
+    pending 行、verdict、object_sha256 与 `route=pending`。
     """
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     env = _run_exhaustive(store)
     assert list(store.rows("statements")) == []
 
+    man_rel = ER.proof_manuscript_relpath(env["experiment_id"])
     signed = AgentV(store, workspace_root=store.root).verify_proof(
-        S.format_id(0), proof_text=env["column"])
+        S.format_id(0), proof_text=env["column"], proof_manuscript=man_rel)
     assert signed.get("checked") is True, signed
-    assert signed.get("kind") == "numeric_evidence_unregistered", signed
+    # 改前（只给内联正文）：`numeric_evidence_unregistered`。甲之后走按号稿那一支：
+    # `proof_unregistered_signed`（签要落在稿上，那一支才有落点）。
+    assert signed.get("kind") == "proof_unregistered_signed", signed
     assert signed.get("verdict") == "成立", signed
     assert signed.get("signed_bit3") is False, signed
     pending_dir = pathlib.Path(store.root) / VR.VERIFICATIONS_DIR / VR.PENDING_DIR_NAME
@@ -538,9 +563,9 @@ def test_5_a_sign_made_before_registration_is_not_lost(tmp_path: pathlib.Path) -
     assert len(str(row.get("object_sha256") or "")) == 64, row
 
     # 登记：先猜想、再升定理级（B-2/B-3 的既有顺序），索引不需要 —— 认的是内容 sha。
-    filed = _file_conjecture(store, column=env["column"])
+    filed = _file_conjecture(store, column=env["column"], manuscript=man_rel)
     assert filed.get("ok") is True, filed
-    got = _file(store, column=env["column"])
+    got = _file(store, column=env["column"], manuscript=man_rel)
     assert got.get("ok") is True, (
         f"命题登记之前审的那一签丢了：{got}")
     final = _statement(store)

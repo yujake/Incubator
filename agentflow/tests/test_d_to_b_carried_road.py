@@ -394,14 +394,19 @@ def _v_with_secretary(store: Store, llm) -> AgentV:
     return AgentV(store, workspace_root=store.root, llm=llm, secretary=sec)
 
 
-def _v_reviews_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
+def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
+                            manuscript: str = "") -> list[dict]:
     """同一份正文审到发签门槛（在这一趟的多转里：前几转只落台账，最后一转才签）。
 
     2026-10-30 起"连审到门槛"发生在同一次调用里（业主口径：V 判没问题后连续再判，
     不是 F 交三次）⇒ 正控改从 `review_passes` 的逐转 `issued` 里读，对手方没变。
+
+    2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 —— 签块 / `## 依赖` / 按号
+    寻址三样只在文件上。`manuscript` 就是 F 那一轮已经落在盘上的那一份
+    （`_run_f_proof` 的返回给出）。判据一个字没改。
     """
     need = int(VR.SIGN_STREAK_NEED)
-    got = agent.verify_proof(sid, proof_text=text)
+    got = agent.verify_proof(sid, proof_text=text, proof_manuscript=manuscript)
     assert got.get("checked") is True, got
     passes = got.get("review_passes") or []
     assert len(passes) == need, (
@@ -447,7 +452,8 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     row = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == f_stmt)
     # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签
-    reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""))
+    reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""),
+                                      str(proof.get("manuscript_path") or ""))
     signed = reviewed[-1]
     assert signed.get("signed_bit3") is True, signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {THEOREM_A}, signed

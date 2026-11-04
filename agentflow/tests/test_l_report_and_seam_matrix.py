@@ -352,7 +352,24 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     assert sid, seeded
 
     v1 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("有毛病", step=STEPS)]))
-    signed1 = v1.verify_proof(sid, proof_text=old_proof)
+    # 2026-11-04（业主裁定 甲）：在册命题的 V 审必须带手稿（签块 / `## 依赖` /
+    # 按号寻址三样只在文件上）。这一趟判的是旧稿「有毛病」⇒ 落的是旧稿那一份；
+    # 判据一个字没改（下面仍按 verdict / verification_id 判）。
+    old_rel = _DS.manuscript_relpath(statement_id=sid)
+    assert old_rel, sid
+    old_path = ws / old_rel
+    old_path.parent.mkdir(parents=True, exist_ok=True)
+    old_path.write_text(
+        "# F 的证明手稿：加零不改变自然数\n\n"
+        f"- 命题号：stmt:{sid}\n\n"
+        f"## 命题\n\n{CLAIM}\n\n"
+        f"## 证明\n\n{old_proof}\n\n"
+        "## 依赖\n\n"
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n"
+        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
+    signed1 = v1.verify_proof(sid, proof_text=old_proof, proof_manuscript=old_rel)
     assert signed1.get("checked") is True, signed1
     assert signed1.get("verdict") == "有毛病", signed1
     assert str(signed1.get("verification_id") or "").startswith("v-"), signed1

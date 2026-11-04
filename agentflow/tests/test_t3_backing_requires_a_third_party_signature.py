@@ -42,7 +42,9 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from conftest import add_literature, sync_counters  # noqa: E402
+from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from agentflow import closing as CL  # noqa: E402
+from agentflow import depsection as DS  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -165,6 +167,25 @@ def _file_conjecture(store: Store, column: str) -> dict:
         quote_reason="own_result：我方推导，没有第二份文本可比对")
 
 
+def _e_manuscript(store: Store, row: dict, column: str) -> str:
+    """E 的按号证明手稿 `reports/e-proof-<实验号>.md`：V 在册送审的载体。
+
+    2026-11-04（业主裁定 甲）：在册命题送审必须带手稿（签块 / `## 依赖` / 按号寻址
+    三样只在文件上）。穷举这一档的真机载体就是 E 自己那一趟落的这一份；这里用共享
+    夹具落同样的三节内容、再按 E 的命名写一份（`## 证明` 与证明栏逐字一致、
+    `## 依赖` 空表声明）。判据一个字没改：台账行那两格仍按真签核。
+    """
+    eid = str(row.get("experiment_id") or "")
+    rel_f = write_proof_manuscript(store.root, eid or "000000", column)
+    src = pathlib.Path(store.root) / rel_f
+    rel = f"reports/e-proof-{eid}.md"
+    (pathlib.Path(store.root) / rel).write_text(
+        DS.mark_washed(src.read_text(encoding="utf-8"), actor="secretary-E"),
+        encoding="utf-8")
+    src.unlink()
+    return rel
+
+
 def _v(store: Store) -> AgentV:
     """真 V ＋ 真秘书（`enable_model=False` ⇒ 判不了发签，但台账行是 V 自己落的）。"""
     sec = SEC.Secretary("V", root=pathlib.Path(store.root), store=store, enable_model=False)
@@ -217,7 +238,8 @@ def test_1_a_signature_on_the_current_report_backs_the_claim(
     assert NP.is_signed_exhaustion(row), row
     filed = _file_conjecture(st, column)
     assert filed.get("ok") is True, filed
-    signed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column)
+    signed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column,
+                                 proof_manuscript=_e_manuscript(st, row, column))
     assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
     assert signed.get("kind") == "numeric_evidence", signed
 
@@ -245,7 +267,8 @@ def _assert_defective_cannot_back(tmp_path: pathlib.Path) -> None:
     column = NP.proof_column(row)
     filed = _file_conjecture(st, column)
     assert filed.get("ok") is True, filed
-    reviewed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column)
+    reviewed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column,
+                                   proof_manuscript=_e_manuscript(st, row, column))
     assert reviewed.get("checked") is True, reviewed
     assert reviewed.get("verdict") == "有毛病", reviewed
     assert reviewed.get("defect_step") == 4, reviewed
@@ -314,7 +337,8 @@ def _assert_stale_cannot_back(tmp_path: pathlib.Path) -> None:
     column = NP.proof_column(row)
     filed = _file_conjecture(st, column)
     assert filed.get("ok") is True, filed
-    signed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column)
+    signed = _v(st).verify_proof(str(filed["stmt_id"]), proof_text=column,
+                                 proof_manuscript=_e_manuscript(st, row, column))
     assert signed.get("verdict") == "成立", signed
 
     # E 重写报告：②③ 原文不变（证明栏同一个 sha），但读数变了 ⇒ 对象 sha 换了。
