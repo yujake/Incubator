@@ -350,7 +350,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 
 ---
 
-## R0. 全局工具总表（123 个，逐条；Lean 关着时 120 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（124 个，逐条；Lean 关着时 121 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -1286,7 +1286,7 @@ C 的产出有两类，状态语义完全不同。
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（54 个，实测）
+### G.4 工具面（55 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role G`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §G.4 —— 那里逐格现算，本节不抄会变的分份数。
 
