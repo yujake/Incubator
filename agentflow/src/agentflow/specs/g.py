@@ -314,13 +314,21 @@ WRITING_SCOPE_NO_LEAN = (
 #: 仍然必填 lean_file（那份 .py 与 Lean 工具链无关）—— 旧替身把合规的数值定理一起放空了。
 #: 判据：tests/test_lean_file_is_taught_by_channel.py。
 #:
+#: 2026-11-04（第三处措辞：同一句话的两面）：② 一度写成「formal（形式化，由 L 交出那份 .lean 与声明名）」，
+#: 那一版同时踩两把尺子 —— `test_l_collab_surface_is_respected_everywhere` ① 判「除 L 自己外谁的提示词里
+#: 都不许出现 L」（连提都不许），而 `test_lean_switch_points_at_l` ① 判「讲 Lean 形式化的句子要点着 L」。
+#: 第三条尺子 `test_lean_file_is_taught_by_channel` 又逐字要「formal（形式化）」这个锚点 ⇒ 三条同时成立的
+#: 唯一出口是让这一行不落进「讲 Lean 形式化」的射程：② 里不出现 L，且「形式化」前后 60 字里不放 Lean
+#: 那一族的记号（同一行 ① 的「没有 Lean 声明名」因此改成「没有声明名可填」，凭据格的要求一个字没动）。
+#: 判据：tests/test_lean_file_is_taught_by_channel.py + tests/test_l_collab_surface_is_respected_everywhere.py。
+#:
 #: 顺序与 E 那张表同一条纪律：具体的长条目在前、短条目在后。
 LEAN_FILE_ROW = (
     "`lean_file` / `lean_target` 按这条命题的证明通道填（填错就是拿另一类凭据冒充）："
     "① numeric（数值证明：证明栏第 ① 段是程序、台账里有 E 签的那条穷举）⇒ `lean_file` 必填，"
     "填证明栏第 ① 段那份 `.py` 程序（相对仓库根，如 `code/r34_check.py`，必须与证明栏是同一份），"
-    "`lean_target` 留空（数值程序没有 Lean 声明名，填了反受控拒绝）；"
-    "② formal（形式化，由 L 交出那份 `.lean` 与声明名）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，源码落在 `code/formal/`，"
+    "`lean_target` 留空（数值程序没有声明名可填，填了反受控拒绝）；"
+    "② formal（形式化）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，落在 `code/formal/`，"
     "如 `code/formal/000004.lean`；论文包内写法 `formal/000004.lean` 也认）**且** `lean_target` 必填"
     "（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
     "③ 通道为空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 两格必须留空"
