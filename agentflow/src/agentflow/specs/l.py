@@ -403,8 +403,9 @@ SPEC = AgentSpec(
 #:   变成流水线的一步，而业主的裁定把这件事留给 B（B 有那条命题的登记与证明）。
 #: - `E → L`：E 与 L 是同一个桥接层的两个门面（`agent_l._CheckFormalL` 继承
 #:   `agent_e._CheckFormal`）。开它等于让做实验的人绕过攻坚的人直接派形式化，
-#:   而它在今天也不必要：E 自己的 `run_experiment(method="formal")` 仍然能落
-#:   proof 级实验行。
+#:   而它在今天也不必要：形式化只走 L 的 `formal.formalize` / `formal.check_formal` /
+#:   `formal.record`；E 的 `run_experiment(method="formal")` 已由动作面第一句以理由码
+#:   `formal_not_in_e` 拒绝（它落不出 proof 行，也不起任何检查器）。
 #: - `D → L`：D 是研究总控。裁定给 D 的位置是"B 判断缺陷严重时才被通知去开展研究"
 #:   （`B → D`），不是"D 直接派 L"。D 派 L 会把"这一条值不值得付检查器成本"这个
 #:   判断从 B 手上拿走，而那个判断跟着登记证明的人。
@@ -416,7 +417,8 @@ LATER_EDGES: tuple[tuple[str, str], ...] = (
     ("F", "本批曾开又撤回：F 的攻坚是流水线一环，挂它下面就把形式化变成流水线一步。"
           "2026-10-22 晚的裁定把入口给 B（B 有那条命题的登记与证明）。"),
     ("E", "E 与 L 是同一桥接层的两个门面；开它等于让做实验的人绕过攻坚的人直接派形式化。"
-          "今天也不必要（E 的 run_experiment(method='formal') 仍能落 proof 行）。"),
+          "今天也不必要（形式化只走 L 的 formal.*；E 的 run_experiment(method='formal')"
+          " 已由 formal_not_in_e 拒）。"),
     ("D", "裁定给 D 的位置是「B 判断缺陷严重时才被通知去开展研究」（B → D），"
           "不是「D 直接派 L」：那一格是“这一条值不值得付检查器成本”，跟着登记证明的人。"),
     ("M", "主控不许直连 L（与 M → F / M → V 同一族：只走间接）。"),
