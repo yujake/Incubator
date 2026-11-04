@@ -3086,7 +3086,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `doc.write_mapping` 的 summary / params / returns）；`tests/fixtures/tool_declaration_baseline.json`
 #: 的 `doc.write_mapping` 两条 compression 演进按现值重记；`docs/ROLE-GUIDE.md` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，实际花费见提交信息）。
-PROMPT_VERSION = "p236"
+#: `p237`（2026-11-04，业主批准：判据/工具面与提示词不一致，必要就改、不许静默不改；
+#: 两笔合并成一次抬版本）：只有 B / G 两格换值，而且两笔都是「文案与判据对齐」，不是换口径。
+#:
+#: ① `specs/b.py`：policy 里「派 V 审这一份手稿（`framework_summon` 的
+#:    `verify.verify_proof`…）」→ `V.verify_proof` —— B 的工具面上没有那件工具，
+#:    原文是"教了做不到的事"（`test_policy_never_names_a_tool_the_role_lacks` 红）。
+#:    同文件 271 / 328 行一直是「派 V」写法，这一处只是写成了工具全名。
+#: ② `specs/g.py` 的 `LEAN_FILE_ROW`：「② formal（形式化）⇒ …」→
+#:    「② formal（形式化，由 L 交出那份 `.lean` 与声明名）⇒ …」—— 2026-10-22 业主口径
+#:    「受 Lean 开关控制的提示词一律指向 L」；凭据格该填什么一个字没动
+#:    （`test_lean_switch_points_at_l` ① 红）。
+#:
+#: 变化格 = ['B', 'G']（其余九格 A/C/D/E/F/H/L/M/V 逐字同值）。
+#: 逐格旧值 → 新值（p236 → p237；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   B 07a9cfcf→8a9a5f98 / G fc79c5df→7edc4042。
+#: 十格摘要现算（`temp/p237_digests.py`，口径同 `_surface_digest`）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p237）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 一份 golden 重冻（`tests/golden/agent_surface_snapshot.json` 的 B / G 两格 prompt；
+#: `tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json` 不动）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
+PROMPT_VERSION = "p237"
 
 
 

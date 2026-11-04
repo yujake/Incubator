@@ -766,6 +766,11 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p236", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p236（2026-11-04，6fb014f5 三条已知缝隙）：凭据格 lean_file / lean_target 在通道为空时从「可留空」改成「必须留空」（填了受控拒绝），numeric_evidence / exhaustion_note 空通道也不许填；doc.write_mapping 的 lean_state 不再把「关档 / 有产物」当凭据格判据。变化格 = G / H 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p236 → p237（2026-11-04，两笔合并抬）：只有 B / G 两格换值，都是文案与判据对齐。
+    # 一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p237", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p237（2026-11-04，业主批「必要的提示词改动不许静默不改」）：① specs/b.py 的 policy 把「派 V 审手稿（framework_summon 的 verify.verify_proof）」改成 V.verify_proof（B 的工具面上没有那件工具，原文教了做不到的事）；② specs/g.py 的 LEAN_FILE_ROW 把「② formal（形式化）」改成「② formal（形式化，由 L 交出那份 .lean 与声明名）」（受 Lean 开关控制的提示词一律指向 L）。变化格 = B / G 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
