@@ -3077,7 +3077,7 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
-- **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核「这一行该有的格子齐」→ ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
+- **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：⓪ 先用 `doc.build_document` 落一行 `documents`（H 的审校对象；没有它 `doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 写正文 → ② 落对应表 → ③ 逐行核「这一行该有的格子齐」→ ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
   你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
   `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
   `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
