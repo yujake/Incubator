@@ -50,6 +50,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ._support import Any, Mapping, Path, S, Sequence, _short
 
 from .. import depsection as _DS
@@ -303,83 +305,13 @@ class _Manuscript:
         搬的时候把第 9 格 `手稿号` 按新名重算：只换文件名、格还写着 `plan-000001`
         会让 `manuscript_sign_reading` 读成 `identity_state=unmatched` —— 签在盘上，
         而任何按稿号核对它的读方都不认。
-        """
-        out: dict[str, Any] = {
-            "text": titled, "moved": False,
-            "reading": {"checked": False, "found": False, "sha_match": None,
-                        "moved": False, "candidates": [], "why": ""},
-            "problem": {},
-        }
-        try:
-            from .. import vsigns as _VS
 
-            # 与「登记时那一份正文」对齐（`vsigns.manuscript_proof_body` 的同一归一）：
-            # `depsection.proof_body` 带首尾空行，而 F 交给 B 的 `proof_text` 不带。
-            body_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
-            candidates: list[tuple[str, str]] = []
-            for rel in (old_rel, new_rel):
-                rel = str(rel or "").strip().replace("\\", "/")
-                if not rel or any(rel == seen for seen, _text in candidates):
-                    continue
-                path = Path(root) / rel
-                if not path.is_file():
-                    continue
-                try:
-                    candidates.append((rel, path.read_text(encoding="utf-8")))
-                except OSError:
-                    continue
-            out["reading"]["candidates"] = [rel for rel, _text in candidates]
-            for rel, cand in candidates:
-                block = _VS.manuscript_sign_reading(cand, manuscript_path=rel)
-                if not block.get("found"):
-                    continue
-                out["reading"].update(checked=True, found=True)
-                if block.get("proof_sha256") != body_sha:
-                    out["reading"].update(
-                        sha_match=False,
-                        why=(f"`{rel}` 里的签块盖的是 "
-                             f"{str(block.get('proof_sha256') or '（空）')[:12]}…，"
-                             f"而这一份正文是 {body_sha[:12]}… ⇒ 不搬（那不是这一份的签）"))
-                    continue
-                stamped = _VS.stamp_manuscript_sign(
-                    titled, proof_sha=body_sha,
-                    streak=block.get("streak"), need=block.get("need"),
-                    verdict=str(block.get("verdict") or "成立"),
-                    signer=str(block.get("signer") or "V"),
-                    at=str(block.get("at") or ""),
-                    ledger=str(block.get("ledger") or ""),
-                    statement_id=str(statement_id or ""),
-                    signed=bool(block.get("signed")),
-                    manuscript_id=_VS.manuscript_id_of(new_rel))
-                out.update(text=stamped, moved=True)
-                out["reading"].update(
-                    sha_match=True, moved=True,
-                    why=(f"`{rel}` 里的签块与这份正文 sha 相符（{body_sha[:12]}…）"
-                         "⇒ 跟着改名搬过来，第 9 格按新稿号重算"))
-                return out
-            if out["reading"]["found"]:
-                # 「搬失败」要真的不搬：把旧块留在按号命名的那一份里，读侧会把它读成
-                # `stale`/`unmatched`，看起来像"搬过去了、只是不认" —— 那是另一种静默。
-                # 这一份正文没有覆盖它的签 ⇒ 新稿从"没有签块"开始（签另算）。
-                out["text"] = "\n".join(
-                    line for line in str(titled or "").replace("\r\n", "\n").split("\n")
-                    if not line.strip().startswith(_VS.SIGN_MARK))
-                out["problem"] = {
-                    "kind": "sign_sha_mismatch", "stage": "sign",
-                    "why": (str(out["reading"].get("why") or "")
-                            + "；改名照做，签块不搬（签另算）"),
-                }
-            return out
-        except Exception as exc:  # noqa: BLE001 —— 搬块失败不许静默，也不带走改名
-            out["reading"].update(
-                checked=False,
-                why=f"搬签块这一格没跑成（{type(exc).__name__}: {exc}）")
-            out["problem"] = {
-                "kind": "sign_block_unreadable", "stage": "sign",
-                "why": (f"搬签块这一格没跑成（{type(exc).__name__}: {exc}）"
-                        "⇒ 这一格没查成，不是「没有签」"),
-            }
-            return out
+        实现本体在 :func:`carry_sign_block`（模块级）："转正"（`promote_manuscript`，
+        把盘上已有的一份攻坚稿变成按号命名的正式稿）用的是同一段搬块逻辑 —— 两处各写
+        一遍必然漂，而漂的那一处正好会是"这块签到底属于哪一份稿"。
+        """
+        return carry_sign_block(root, titled, old_rel=old_rel, new_rel=new_rel,
+                                statement_id=statement_id)
 
     def publish_manuscript(self, manuscript: Mapping[str, Any], *,
                            statement_id: str) -> dict[str, Any]:
@@ -606,6 +538,19 @@ class _Manuscript:
             refs=len(refs), section=section)
         return out
 
+    def promote_manuscript(self, source: str, *, statement_id: str,
+                           text: str = "", delete_source: bool = False) -> dict[str, Any]:
+        """把盘上已经存在的一份攻坚稿转成 `reports/f-proof-<号>.md`（实现见模块级函数）。
+
+        这是 `publish_manuscript` 的盘上稿入口：后者只改"这一轮刚写完、手上还拿着
+        正文"的那一份；这一件读盘上那一份（`notes/…` 或 `reports/f-proof-plan-*.md`）。
+        签块跟着搬、第 9 格手稿号按新名重算、形状不对就受控拒绝 —— 判据本体只有一处
+        （模块级 :func:`promote_manuscript`）。
+        """
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        return promote_manuscript(root, statement_id=statement_id, source=source,
+                                  text=text, delete_source=delete_source)
+
     def manuscript_path(self, statement_id: str = "", sid: str = "",
                         plan_id: str = "") -> str:
         """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。
@@ -618,3 +563,328 @@ class _Manuscript:
         if rel:
             return rel
         return f"{self.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md"
+
+
+# ---------------------------------------------------------------- 转正（攻坚稿 → 正式稿）
+#
+# 业主口径（2026-11-04 交接的那条链）：「登记成功（拿到命题号）就改名，签另算」。
+# `publish_manuscript` 覆盖的是F 自己手上那一份（`_apply_round` 的 proof 档写完就改名）；
+# 盘上已经存在的一份稿（真机 `projects/paper-rewrite-big` 的
+# `notes/F-conj000000-proof.md`，F 自己 `fs.write` 写的攻坚稿）此前没有任何代码把它
+# 变成 `reports/f-proof-<号>.md` —— 于是按号命名的正式稿 0 份，B 的兜底读盘、D 的携带单、
+# V 的签块落点全都找不到它。下面这一支就是那一步。
+
+#: 转正只收工作区相对路径里的这两种根：`notes/`（草稿本，攻坚手稿）与 `reports/`
+#: （正式落点；计划名那份稿也在这里）。别的根一律不收 —— 转正是"把作者的稿收进正式面"，
+#: 不是"从任意路径复制一份到 reports/"。
+PROMOTE_SOURCE_ROOTS: tuple[str, ...] = ("notes", "reports")
+
+#: 一份「正式形状」的手稿有几节：`## 命题` 与 `## 证明` 各恰好一节。
+_PROPOSITION_HEAD_RE = re.compile(r"^##\s*命题", re.M)
+_PROOF_HEAD_RE = re.compile(r"^##\s*证明", re.M)
+
+
+def _norm_rel(rel: Any) -> str:
+    """工作区相对路径的归一（只换分隔符；不猜、不补前缀）。"""
+    return str(rel or "").strip().replace("\\", "/")
+
+
+def _rel_is_inside(rel: str, roots: Sequence[str]) -> bool:
+    """`rel` 是不是一个安全的工作区相对路径、且落在 `roots` 之一里。"""
+    text = _norm_rel(rel)
+    if not text or text.startswith("/") or ":" in text:
+        return False
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return False
+    if len(parts) < 2:
+        return False
+    return parts[0] in set(roots) and text.casefold().endswith(".md")
+
+
+def carry_sign_block(root: Any, titled: str, *, old_rel: str, new_rel: str,
+                     statement_id: str) -> dict[str, Any]:
+    """把「覆盖这一份正文」的签块搬到新稿名上（纯字符串 + 只读旧稿；不写盘）。
+
+    三态（都不是"失败"）：没块 ⇒ `moved=False`、`problem={}`（签另算）；有块但 sha
+    不符 ⇒ `moved=False` + `sign_sha_mismatch`；读块抛异常 ⇒ `sign_block_unreadable`
+    （"没查成"不是"没签"）。搬的时候第 9 格 `手稿号` 按新名重算。
+    """
+    out: dict[str, Any] = {
+        "text": titled, "moved": False,
+        "reading": {"checked": False, "found": False, "sha_match": None,
+                    "moved": False, "candidates": [], "why": ""},
+        "problem": {},
+    }
+    try:
+        from .. import vsigns as _VS
+
+        # 与「登记时那一份正文」对齐（`vsigns.manuscript_proof_body` 的同一归一）：
+        # `depsection.proof_body` 带首尾空行，而 F 交给 B 的 `proof_text` 不带。
+        body_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
+        candidates: list[tuple[str, str]] = []
+        for rel in (old_rel, new_rel):
+            rel = _norm_rel(rel)
+            if not rel or any(rel == seen for seen, _text in candidates):
+                continue
+            path = Path(root) / rel
+            if not path.is_file():
+                continue
+            try:
+                candidates.append((rel, path.read_text(encoding="utf-8")))
+            except OSError:
+                continue
+        out["reading"]["candidates"] = [rel for rel, _text in candidates]
+        for rel, cand in candidates:
+            block = _VS.manuscript_sign_reading(cand, manuscript_path=rel)
+            if not block.get("found"):
+                continue
+            out["reading"].update(checked=True, found=True)
+            if block.get("proof_sha256") != body_sha:
+                out["reading"].update(
+                    sha_match=False,
+                    why=(f"`{rel}` 里的签块盖的是 "
+                         f"{str(block.get('proof_sha256') or '（空）')[:12]}…，"
+                         f"而这一份正文是 {body_sha[:12]}… ⇒ 不搬（那不是这一份的签）"))
+                continue
+            stamped = _VS.stamp_manuscript_sign(
+                titled, proof_sha=body_sha,
+                streak=block.get("streak"), need=block.get("need"),
+                verdict=str(block.get("verdict") or "成立"),
+                signer=str(block.get("signer") or "V"),
+                at=str(block.get("at") or ""),
+                ledger=str(block.get("ledger") or ""),
+                statement_id=str(statement_id or ""),
+                signed=bool(block.get("signed")),
+                manuscript_id=_VS.manuscript_id_of(new_rel))
+            out.update(text=stamped, moved=True)
+            out["reading"].update(
+                sha_match=True, moved=True,
+                why=(f"`{rel}` 里的签块与这份正文 sha 相符（{body_sha[:12]}…）"
+                     "⇒ 跟着改名搬过来，第 9 格按新稿号重算"))
+            return out
+        if out["reading"]["found"]:
+            # 「搬失败」要真的不搬：把旧块留着会让读侧读成 `stale`/`unmatched`，看起来像
+            # "搬过去了、只是不认" —— 那是另一种静默。新稿从"没有签块"开始（签另算）。
+            out["text"] = "\n".join(
+                line for line in str(titled or "").replace("\r\n", "\n").split("\n")
+                if not line.strip().startswith(_VS.SIGN_MARK))
+            out["problem"] = {
+                "kind": "sign_sha_mismatch", "stage": "sign",
+                "why": (str(out["reading"].get("why") or "")
+                        + "；改名照做，签块不搬（签另算）"),
+            }
+        return out
+    except Exception as exc:  # noqa: BLE001 —— 搬块失败不许静默，也不带走改名
+        out["reading"].update(
+            checked=False,
+            why=f"搬签块这一格没跑成（{type(exc).__name__}: {exc}）")
+        out["problem"] = {
+            "kind": "sign_block_unreadable", "stage": "sign",
+            "why": (f"搬签块这一格没跑成（{type(exc).__name__}: {exc}）"
+                    "⇒ 这一格没查成，不是「没有签」"),
+        }
+        return out
+
+
+def ensure_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
+    """稿头那行 `- 命题号：stmt:<号>`：有就改、没有就插在标题之后（前 12 行内）。
+
+    为什么"没有就插"：攻坚稿（`notes/…`）是作者自由写的，常常只写了
+    `- 计划：…`；不补这一行，正式稿就会出现"文件叫 `f-proof-000011.md`、正文认不出
+    是哪一条命题"的双读数（`depsection.manuscript_statement_id` 读不到号 ⇒ 携带单
+    与所有权判据全部对不上）。
+    """
+    sid = str(statement_id or "").strip()
+    raw = str(text or "").replace("\r\n", "\n")
+    if not sid:
+        return raw, False
+    lines = raw.split("\n")
+    want = f"- 命题号：stmt:{sid}"
+    for i, line in enumerate(lines[:12]):
+        if line.strip().startswith("- 命题号"):
+            if line.strip() == want:
+                return raw, True
+            lines[i] = want
+            return "\n".join(lines), True
+    at = 1 if lines and lines[0].lstrip().startswith("# ") else 0
+    lines.insert(at, want)
+    return "\n".join(lines), True
+
+
+def formal_shape_problem(text: str) -> tuple[str, str]:
+    """这份稿能不能当一份正式手稿：`(受控码, 人话)`；空串 = 可以。
+
+    机械判据只有两条（不判数学对错）：
+    - `## 命题` 恰好一节 —— 多于一节就是"一个文件里写了好几条命题"（真机
+      `notes/F-conj000000-proof.md` 有 P1/P2 两节），机械转正只能产出"挂着第一条的号、
+      却带着别条证明"的正式稿，那比没有稿更坏 ⇒ 受控拒绝，让作者按命题拆开再交；
+    - `## 证明` 恰好一节、且那一节非空 —— 没有可签的正文，转正没有意义。
+    """
+    body = str(text or "").replace("\r\n", "\n")
+    props = _PROPOSITION_HEAD_RE.findall(body)
+    proofs = _PROOF_HEAD_RE.findall(body)
+    if not props:
+        return "no_proposition_section", "稿里没有 `## 命题` 那一节 ⇒ 这不是一份可转正的正式手稿"
+    if len(props) > 1:
+        return ("multiple_propositions",
+                f"稿里有 {len(props)} 节 `## 命题`：机械转正只能把整份文件落成一个命题号的"
+                "正式稿（其余命题的正文会跟着挂到这一条头上）⇒ 拒绝；按命题拆成一份一份再交")
+    if not proofs:
+        return "no_proof_section", "稿里没有 `## 证明` 那一节 ⇒ 没有可签的正文"
+    if len(proofs) > 1:
+        return ("multiple_proof_sections",
+                f"稿里有 {len(proofs)} 节 `## 证明`：一份正式稿只承载一条命题的一份证明")
+    if not _DS.proof_body(body).strip():
+        return "empty_proof_section", "`## 证明` 那一节是空的 ⇒ 没有可签的正文"
+    return "", ""
+
+
+def promote_manuscript(root: Any, *, statement_id: str, source: str = "",
+                       text: str = "", delete_source: bool = False) -> dict[str, Any]:
+    """把盘上已经存在的一份攻坚稿转成 `reports/f-proof-<号>.md`（签块跟着搬）。
+
+    ## 这一步为什么必须存在（真机读数，2026-11-04 `projects/paper-rewrite-big`）
+
+    F 的稿落在 `notes/F-conj000000-proof.md`，而 `reports/f-proof-*.md` 0 份。
+    `publish_manuscript` 只改名它自己手上那一份（同一轮 proof 档里先写完再登记的那份），
+    盘上已有的稿它一个字节都读不到 ⇒ 从"攻坚稿"到"正式稿"这一步在代码里不存在。
+
+    ## 口径
+
+    - 只搬不写：正文一个字不改，只补/改稿头 `- 命题号：stmt:<号>` 那一行；
+    - 签块跟着搬：源稿里的签块覆盖这一份正文（sha 相符）才搬，第 9 格 `手稿号`
+      按新名重算（`vsigns.manuscript_id_of`）；不符就只转正文、签另算（不毁签）；
+    - 源稿留着：攻坚稿是作者的草稿，删掉不可逆；正式稿是复制过去的那一份
+      （`delete_source=True` 只给"计划名那份稿"用 —— 那本来就是同一份稿的旧名）；
+    - 形状不对就拒：多命题 / 没有 `## 证明` ⇒ 受控拒绝（`problem.kind`），零写入；
+    - 不许毁签：目标名上已经签住另一版正文、而这一份没有覆盖它的签 ⇒ 不覆盖。
+
+    返回 `{promoted, path, source, renamed_from, retitled, sign_moved, sign_step,
+    problem, source_kept, why}`；`problem` 是受控读数（`kind`/`stage`/`why`）。
+    """
+    out: dict[str, Any] = {
+        "promoted": False, "path": "", "source": _norm_rel(source),
+        "renamed_from": "", "retitled": False, "sign_moved": False,
+        "sign_step": {"checked": False, "found": False, "sha_match": None,
+                      "moved": False, "candidates": [], "why": ""},
+        "problem": {}, "source_kept": False, "why": "",
+    }
+    sid = str(statement_id or "").strip()
+    rel = _norm_rel(source)
+    if root is None:
+        out["problem"] = {"kind": "no_workspace_root", "stage": "read",
+                          "why": "没有工作区根 ⇒ 读不到攻坚稿，也写不出正式稿"}
+        return out
+    if not S.is_valid_id(sid):
+        out["problem"] = {"kind": "bad_statement_id", "stage": "arg",
+                          "why": f"命题号必须是 {S.ID_DIGITS} 位十进制（旧四位仍可读），"
+                                 f"收到 {statement_id!r}"}
+        return out
+    if rel and not _rel_is_inside(rel, PROMOTE_SOURCE_ROOTS):
+        out["problem"] = {"kind": "bad_source_path", "stage": "arg",
+                          "why": (f"转正的源稿只收工作区相对路径、且落在 "
+                                  f"{'/'.join(PROMOTE_SOURCE_ROOTS)}/ 下（`.md`），"
+                                  f"收到 {source!r}")}
+        return out
+    body = str(text or "")
+    if not body.strip():
+        if not rel:
+            out["problem"] = {"kind": "source_missing", "stage": "read",
+                              "why": "没有给源稿路径，也没有给正文 ⇒ 没有可转正的东西"}
+            return out
+        try:
+            body = (Path(root) / rel).read_text(encoding="utf-8")
+        except OSError as exc:
+            out["problem"] = {"kind": "source_missing", "stage": "read",
+                              "why": (f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）"
+                                      "⇒ 没有可转正的稿")}
+            return out
+    kind, why = formal_shape_problem(body)
+    if kind:
+        out["problem"] = {"kind": kind, "stage": "shape", "why": why}
+        return out
+    #: 正式稿必须是洗过的那一份（B 的收录闸读同一行元信息，`is_framework_manuscript`
+    #: + `manuscript_wash_reading`）：转正不许变成"绕过洗稿"的第二条入口。没洗过 ⇒
+    #: 受控拒绝，让作者把稿交给 F 的秘书洗一遍（`depsection.mark_washed`）再转。
+    wash = _DS.manuscript_wash_reading(body)
+    if not bool(wash.get("washed")):
+        out["problem"] = {
+            "kind": "not_washed", "stage": "wash",
+            "why": ("这一份稿没有 `- 依赖面洗稿：` 那一行（或 `已洗` 不是 true）⇒ 它不是"
+                    "F 的秘书洗过的那一版，转正会绕过 B 的洗稿闸；先洗一遍再转正")}
+        return out
+    dest = _DS.manuscript_relpath(statement_id=sid)
+    titled, retitled = ensure_statement_line(body, sid)
+    out["retitled"] = retitled
+    if rel == dest:
+        # 已经叫正式名了：只补稿头（如果手上有不同版本），不搬块、不回写旧名。
+        try:
+            if titled != body or not (Path(root) / dest).is_file():
+                target = Path(root) / dest
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(titled, encoding="utf-8")
+        except OSError as exc:
+            out["problem"] = {"kind": "promote_failed", "stage": "write",
+                              "why": (f"`{dest}` 没写成功（{type(exc).__name__}: {exc}）")}
+            return out
+        out.update(promoted=True, path=dest)
+        return out
+    # ---- 不许用一份没签的草稿覆盖「已经签住」的那一版（与 publish_manuscript 同一条）----
+    from .. import vsigns as _VS
+
+    target = Path(root) / dest
+    if target.is_file():
+        try:
+            target_text = target.read_text(encoding="utf-8")
+        except OSError as exc:
+            out["problem"] = {
+                "kind": "target_unreadable", "stage": "read",
+                "why": (f"按号命名的那份稿读不出来（{type(exc).__name__}: {exc}）"
+                        "⇒ 不敢覆盖它（它可能已经是签住的那一版）")}
+            return out
+        block_now = _VS.manuscript_sign_reading(target_text, manuscript_path=dest)
+        old_body_sha = _VR.proof_sha(_VS.manuscript_proof_body(target_text))
+        new_body_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
+        new_block = _VS.manuscript_sign_reading(titled, manuscript_path=(rel or dest))
+        new_signed = bool(new_block.get("found") and new_block.get("signed")
+                          and new_block.get("proof_sha256") == new_body_sha)
+        if (block_now.get("found") and block_now.get("signed")
+                and block_now.get("proof_sha256") == old_body_sha
+                and old_body_sha != new_body_sha and not new_signed):
+            out["problem"] = {
+                "kind": "target_holds_a_signed_version", "stage": "write",
+                "why": (f"`{dest}` 已经是签住的那一版（正文 sha {old_body_sha[:12]}…），"
+                        f"而这一份草稿的正文是 {new_body_sha[:12]}… 且它自己没有覆盖它的签 "
+                        "⇒ 不覆盖（签另算不是毁签）")}
+            return out
+    carried = carry_sign_block(root, titled, old_rel=rel, new_rel=dest,
+                               statement_id=sid)
+    out["text"] = str(carried.get("text") or titled)
+    out["sign_step"] = dict(carried.get("reading") or {})
+    out["sign_moved"] = bool(carried.get("moved"))
+    if carried.get("problem"):
+        out["problem"] = dict(carried["problem"])
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(out["text"], encoding="utf-8")
+    except OSError as exc:
+        out["problem"] = {"kind": "promote_failed", "stage": "write",
+                          "why": (f"`{dest}` 没写成功（{type(exc).__name__}: {exc}）"
+                                  "⇒ 正式稿没落盘（源稿一个字没动）")}
+        return out
+    out.update(promoted=True, path=dest, renamed_from=rel, source_kept=True)
+    if delete_source and rel:
+        try:
+            (Path(root) / rel).unlink()
+        except OSError as exc:  # noqa: BLE001 - 旧名删不掉不影响新名可读
+            out["old_name_kept"] = True
+            out["problem"] = {
+                "kind": "old_name_kept", "stage": "cleanup",
+                "why": (f"新名写成了，旧名 {rel} 没删掉（{type(exc).__name__}: {exc}）"
+                        "—— 盘上会有两份同一份稿")}
+        else:
+            out["source_kept"] = False
+    out["why"] = ""
+    return out
+
