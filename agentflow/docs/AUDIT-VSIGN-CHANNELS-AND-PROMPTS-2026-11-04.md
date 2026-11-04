@@ -404,6 +404,38 @@ dry-run 是只读探针 `temp/probe_backfill_four_columns.py`，逐行调
 再谈执行。落点：`tools/legacy_cli/repair.py` 的 `main(args)` 或新命令；执行时按四栏表
 逐条落 `evidence_kind`，不碰 `statements` 正文。
 
+> **更正（2026-11-04，`repair --backfill-grades` 接进 CLI 之后）**：上面那张表由只读探针
+> `temp/probe_backfill_four_columns.py` 产出，而探针在 `proof_review_gap().state` 为空串时
+> 用 `or "unsigned"` 猜了一个值。历史读数不改，结论以本段为准：
+>
+> 1. `paper-rewrite-84` 的 65 行里有 60 行是 `kind="concept"`。概念不参与等级链
+>    （`evidencebits.derive_grade` 对 `kind="concept"` 短路成 `not_applicable`）⇒ 它们既不是
+>    "凭据不够"，也不在本命令这条轴上：单列、不计入四栏。84 的真实四栏是
+>    会升 1 / 已是最高 0 / 凭据不够 4 / 没查成 0，另概念行 60（1 + 0 + 4 + 0 + 60 = 65）。
+> 2. 表里那批 `unsigned` 有一批其实是 `state == ""`：`proof_review_gap` 在"台账文件不在
+>    盘上 / 空文件 / 没有证明正文"三支提前 return，没写 `state`（该函数是写入期闸与审计
+>    共用的判据，本次一个字都没改）。命令按"打印原值、不许自造枚举"的口径把它打成
+>    `state=（空；ledger_missing=true，…）`（从来没送审）/
+>    `state=（空；ledger_present=true、rows=0，…）`（台账在、但一行都没有）/
+>    `state=（空；gap 没给台账路径…）`（没有证明正文）。
+> 3. 下面那句"执行前的一个硬前提"已经过期：`--backfill-grades` 已接进
+>    `src/agentflow/cli.py`（parser 的 func 是 `_repair_dispatch`；`cmd_repair` 本身一字未动，
+>    不带旗标仍原样转发 legacy）。`--apply` 仍没有在 `projects/` 上执行过。
+>
+> 接进 CLI 之后现跑的四栏（`agentflow repair --backfill-grades`，dry-run，2026-11-04）：
+>
+> | 工作区 | 行数（概念行） | 会升 | 已是最高 | 凭据不够 | 没查成 |
+> |---|---|---|---|---|---|
+> | `paper-rewrite-84` | 65（60） | 1（000000 → `proof_review`） | 0 | 4（rejected 2 / stale 1 / state=（空：台账不在盘上）1） | 0 |
+> | `paper-rewrite-85` | 16（0） | 2（000004 / 000005 → `proof_review`） | 0 | 14（state=（空：台账不在盘上）10 / holding 1 / rejected 2 / stale 1） | 0 |
+> | `ramsey-4-4-87` | 8（0） | 0 | 5 | 3（state=（空：台账不在盘上）1 / state=（空：没有证明正文）2） | 0 |
+> | `ramsey-4-5-clean` | 2（0） | 1（000000 → `proof`） | 0 | 1（state=（空：没有证明正文）1） | 0 |
+> | `ramsey-4-5-88` | 0（0） | 0 | 0 | 0 | 0 |
+> | `paper-rewrite-big`（5 小时真机跑动中，只读） | 0（0） | 0 | 0 | 0 | 0 |
+> | **合计** | **91（60）** | **4** | **5** | **22** | **0** |
+>
+> 合计那一列的关系：会升 4 + 已是最高 5 + 凭据不够 22 + 没查成 0 + 概念行 60 = 91 行。
+
 ### 5.3 F 的发布解耦已做（甲），但 `projects/` 里的历史 plan 名稿不回填
 
 - 已做：`ab7e4fe8` 把「改名」从「有没有 V 签」里拆出来，`_apply_round` 的改名判据只剩
