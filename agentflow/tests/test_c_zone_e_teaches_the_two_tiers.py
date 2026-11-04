@@ -3,28 +3,28 @@
 
 ## 缺的是什么（2026-11-04 审 C 区，逐条给代码真身）
 
-实现里那两档是**分开**的，界在 `agent_e/run_experiment.py` 的 `wants_numeric_proof`
+实现里那两档是分开的，界在 `agent_e/run_experiment.py` 的 `wants_numeric_proof`
 （:421 那一行）：
 
-- **一般数值实验**：不写 `out/experiments/<号>/exhaustion.md`、不落
+- 一般数值实验：不写 `out/experiments/<号>/exhaustion.md`、不落
   `reports/e-proof-<号>.md`（:463-471 那一支把 report / manuscript 都留成空壳）、不派 V、
   没有签；`evidence_kind` 最多 `cross_check`（`numericproof.SUPPORTED_ONLY_KIND`）
   ⇒ 命题行的等级最多 `strong_conjecture`（`evidencebits.derive_grade` 只在
   `numeric` 位 verified 时给这一档）。
-- **穷举证明**：三件套齐 + ②③ 落盘 + 手稿，V 三转「成立」之后由收方秘书落块；
-  `evidence_kind` 按**通道**给 `proof`（**不是** `proof_review` —— V 不能逐行走查一份
+- 穷举证明：三件套齐 + ②③ 落盘 + 手稿，V 三转「成立」之后由收方秘书落块；
+  `evidence_kind` 按通道给 `proof`（不是 `proof_review` —— V 不能逐行走查一份
   程序），真身是 `verifications._grade_recomputed_from_signature` 与
   `secretary._upgrade_evidence_kind` 两条落点共用的那条判据。
 
 而 E 的可见面（`specs/e.py` 的 policy 第四段 + `skills/E/穷举证明-拿签与上报收养.md`）
-只教了"穷举 → 派 V → 上报 D"这一条路，**三件事一个字都没有**：
+只教了"穷举 → 派 V → 上报 D"这一条路，三件事一个字都没有：
 
 1. 一般数值实验到不了 proof、最多 `strong_conjecture`（于是"我跑了实验"与"我有证明"
    在 E 眼里可能是一档）；
-2. 稿上那一行签块是**九格**、`签名者` 是收方秘书（不是 V）、第 9 格 `手稿号` 与读侧的
+2. 稿上那一行签块是九格、`签名者` 是收方秘书（不是 V）、第 9 格 `手稿号` 与读侧的
    `identity_state` 三态（`vsigns.MANUSCRIPT_ID_STATES`：`resolved` / `unmatched` / `legacy`）；
 3. 稿头 `- 证明号：` 省略即 `#p1`（`depsection.manuscript_proof_no` 读成 0 ⇒ canonical），
-   **不许猜**一个号（`exhaustionreport.compose_manuscript` 的注释逐字：「不知道就省略 —
+   不许猜一个号（`exhaustionreport.compose_manuscript` 的注释逐字：「不知道就省略 —
    — 不知道等于第 1 份，不许猜成别的号」）。
 
 ## 判据怎么判

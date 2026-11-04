@@ -976,7 +976,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "`proof` 级证据仍然要那一份凭据（检查器原话，或穷举那份程序 + ②③）。\n"
         # 2026-11-04（审 C 区）：这一句此前一个字都没有 —— 而档位回填
         # （`_grade_recomputed_from_signature`）正是由这一签触发的：在册那一行在签落位那一刻
-        # 按现行签把 `evidence_kind` 重算一遍，目标档**按通道**给。V 不知道这件事，就会把
+        # 按现行签把 `evidence_kind` 重算一遍，目标档按通道给。V 不知道这件事，就会把
         # "穷举那一篇"读成"我审过了、所以是 proof_review"（那是错的终态，`draft/178`）。
         "- **档位（`evidence_kind`）按通道给**：你这一签落地之后，在册那一行的档位按现行签"
         "重算（只升不降，`_grade_recomputed_from_signature`）—— 通道是穷举程序"

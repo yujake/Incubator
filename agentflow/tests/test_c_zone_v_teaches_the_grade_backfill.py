@@ -3,8 +3,8 @@
 
 ## 缺的是什么（2026-11-04 审 C 区）
 
-`verifications._grade_recomputed_from_signature`（:2516）在**签落位的那一刻**按现行签把
-`evidence_kind` 重算一遍，目标档**按通道**给（同文件 :2575-2583）：
+`verifications._grade_recomputed_from_signature`（:2516）在签落位的那一刻按现行签把
+`evidence_kind` 重算一遍，目标档按通道给（同文件 :2575-2583）：
 
 - 通道是穷举程序（三段式证明栏 + 实验台账里那条 `is_signed_exhaustion` 的行）+ V 签
   ⇒ `proof`（`proof_review` 的定义是"V 逐行审过文字证明"，V 不能逐行走查一份程序）；
@@ -14,7 +14,7 @@
 `proof_stmt_without_formal_backing` 认的穷举背书也是它）。
 
 而 V 的真实入口（`verifications.cold_start_prompt`，V 每次审阅读到的就是它）只写了
-"你这一次的「成立」本身不构成 `proof`"，**没有**写这一签落地之后档位会怎么变 ——
+"你这一次的「成立」本身不构成 `proof`"，没有写这一签落地之后档位会怎么变 ——
 于是"穷举那一篇落签就是 `proof`"这条 2026-11-04 的裁定在 V 的可见面上一个字节都没有
 （`proof_review` / `按现行签重算` / `只升不降` 三个记号在冷启动提示词里 0 次）。
 
