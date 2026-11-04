@@ -1097,12 +1097,16 @@ def _fake_seam_class(hits: Mapping[tuple[str, int], tuple[int, int]]) -> type:
 
 def _fake_warm(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path, *,
                sample: Sequence[str] = ("M", "C", W.SECRETARY),
-               misses: Sequence[str] = ()) -> tuple[int, dict[str, Any]]:
+               misses: Sequence[str] = (),
+               targets: Sequence[str] | None = None) -> tuple[int, dict[str, Any]]:
     """零花费跑一遍真 `warm()`：十一个角色全命中、秘书 `hit=0`（可以再点名真 miss）。
 
     `misses` 里的目标第二次调用给 `hit=0 / miss=1000` —— 那是反真空的刀：
     真有一个普通角色没命中时，`incomplete` 必须照样出现。
+    `targets` 不给就是全集；给一个退化目标集（例如只点秘书）用来判"缺省诊断
+    不许落到不成立的目标上"。
     """
+    chosen = tuple(W.WARM_TARGETS) if targets is None else tuple(targets)
     hits: dict[tuple[str, int], tuple[int, int]] = {
         (role, 1): (1000, 100) for role in W.ROLES
     }
@@ -1129,7 +1133,7 @@ def _fake_warm(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path, *,
     os.environ["AGENTFLOW_LEAN_ENABLED"] = "1"   # 与套件那一档一致（L 在场）
     AP.reset_toolchain_readings()
     try:
-        return W.warm(targets=tuple(W.WARM_TARGETS), cap_usd=0.10,
+        return W.warm(targets=chosen, cap_usd=0.10,
                       hit_sample=tuple(sample), out_path=tmp_path / "warm.json",
                       lean="on")
     finally:
@@ -1358,3 +1362,28 @@ def test_removing_the_fixed_diagnostic_makes_the_roll_lose_the_reading(
         "把「诊断是 warm 的固定组成部分」摘掉之后，滚存仍然读得到诊断 ⇒ "
         "正控没有牙（它守的不是这个修法）")
     assert any("没有一次带" in p for p in problems), problems
+
+
+def test_a_secretary_only_run_does_not_fake_a_tool_face_reading(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """退化趟（只点秘书）不许伪造"去工具面"的诊断。
+
+    秘书没有工具面，也不是跨 run 探针的合法目标。缺省诊断若退到它身上，会落出一条
+    `tools_in_prefix` 读数（实际量的是"没有工具面的目标去掉工具面"，同义反复），
+    更糟的是它会被 `_diagnostic_runs` 当成"最近一趟带诊断的预热"，把具名判据带红。
+    所以缺省退让要避开秘书；显式点名不在此列（调用方要哪个就哪个）。
+    """
+    code, result = _fake_warm(monkeypatch, tmp_path, targets=(W.SECRETARY,),
+                              sample=(W.SECRETARY,))
+
+    assert code == W.EXIT_WARMED, result.get("note")
+    assert result["tools_in_prefix"] is None, result["tools_in_prefix"]
+    assert result["tools_probe"] == "" and result["cross_run_probe"] == "", (
+        result["tools_probe"], result["cross_run_probe"])
+    diagnostics = result.get("diagnostics") or {}
+    assert diagnostics.get("carried") is False, diagnostics
+
+    runs = W.load_readings(tmp_path / "warm.json")
+    assert _newest_diagnostic_run(runs) is None, (
+        "只点秘书的退化趟被当成「最近一趟带诊断的预热」⇒ 具名判据会读到一条"
+        "同义反复的工具面读数")

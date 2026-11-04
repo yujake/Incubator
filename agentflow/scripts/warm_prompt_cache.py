@@ -108,9 +108,13 @@ def _resolve_probe(explicit: str | None, default: str, *, present: Sequence[str]
 
     为什么要有"来源"：`--roles M` 这种只点一部分目标的趟也要带诊断，而此时缺省的
     `V` / `H` 不在 `present` 里。规则是：先认显式点名（调用方要哪个就哪个），
-    再认缺省；缺省不在这一趟的目标里就退到第一个不是 `avoid` 的目标（例如跨 run
-    探针不许落在秘书身上）。退让必须记下来（来源 = `fallback`），否则读数里
-    "这一趟诊断的是 V"会被读成调用方的意思。
+    再认缺省；缺省不在这一趟的目标里就退到第一个不是 `avoid` 的目标。退让必须
+    记下来（来源 = `fallback`），否则读数里"这一趟诊断的是 V"会被读成调用方的意思。
+
+    缺省诊断刻意避开秘书（两条探针都 `avoid=(SECRETARY,)`）：它没有工具面，
+    也不是跨 run 目标。否则 `--roles secretary` 这种退化趟会落出一条"去工具面"的
+    读数，而它并没有量到工具面 —— 更糟的是它会被判据当成"最近一趟带诊断的预热"。
+    显式点名不在此列：调用方要秘书，那是调用方的判断，照做。
     """
     wanted = str(explicit or "").strip()
     if wanted and wanted in present:
@@ -836,7 +840,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
     # 诊断目标在这一刻定死（不是"调用方给了才做"）：见 `DEFAULT_TOOLS_PROBE`。
     # 落盘时要记来源，所以两格一起解出来。
     probe, probe_source = _resolve_probe(tools_probe, DEFAULT_TOOLS_PROBE,
-                                         present=present)
+                                         present=present, avoid=(SECRETARY,))
     cross, cross_source = _resolve_probe(cross_run_probe, DEFAULT_CROSS_RUN_PROBE,
                                          present=present, avoid=(SECRETARY,))
 
