@@ -6,9 +6,9 @@
 `doc.paper_compile` 在 2026-11-04 加了一道门：没有 `documents` 行 ⇒ 受控拒绝
 `paper_not_registered`（判据 `tests/test_paper_compile_needs_a_registered_document.py`）。
 两处"成稿四步序列"还停在旧口径（① 写正文 → ② 落对应表 → ③ 逐行核 → ④ 编译），
-照它做到第 ④ 步会撞门 —— 而序列本身是**教学面**，读的人会以为 ① 是第一步。
+照它做到第 ④ 步会撞门 —— 而序列本身是教学面，读的人会以为 ① 是第一步。
 
-⇒ 序列改成 **⓪ 先 `doc.build_document` → ① … → ④ `doc.paper_compile`**。
+⇒ 序列改成 ⓪ 先 `doc.build_document` → ① … → ④ `doc.paper_compile`。
 两处落点：`src/agentflow/specs/g.py` 的 G 动作描述、`src/agentflow/agent_skills.py`
 的 G 手册「成稿-正文自己写」。
 
@@ -20,7 +20,7 @@
 | b | 反真空：把真身里 ⓪ 那一格删掉 ⇒ 同一份判据必须报缺 | 没有这一格可删，判据会读别处 |
 | c | 覆盖：序列只在这两处教（少一处 / 多一处都红） | 两处各缺 ⓪ |
 
-b 为什么必要：`specs/g.py` 那一句的开头（D-38 的引子里）**本来就**有
+b 为什么必要：`specs/g.py` 那一句的开头（D-38 的引子里）本来就有
 `doc.build_document` 四个字 —— 只比 "`build_document` 在 `paper_compile` 之前"的话，
 把 ⓪ 整格删掉判据仍然绿（它读到的是引子里那一处）。所以判据钉的是"⓪ 这一格"，
 不是"这四个字在不在这一段里"。
