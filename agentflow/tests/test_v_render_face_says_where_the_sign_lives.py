@@ -10,11 +10,13 @@
 - `agent_skills.py:1522`「你签的字落在 `verifications/<命题号>.jsonl` 那一行上」（错）；
 - 而 `tools/verify_tools.py:997` 的工具说明仍写「三态结论」（V 从 2026-11-01 起只产两态）。
 
-## 现行设计（三处必须同一口径）
+## 现行设计（三处必须同一口径；2026-11-04 业主裁定 ① 之后的拆分）
 
-- 签 = 秘书在 `streak ≥ need` 且干净成立时写 `out/vsigns/<被审正文的 sha>.json`（一稿一签；
-  正文改一个字，那一签就作废）；
-- V 的产出是判定（成立 / 有毛病）与逐条缺陷；它不签、不写签文件、不翻第 3 位；
+- **颁发**那一步就写 `out/vsigns/<被审正文的 sha>.json`（一稿一签；正文改一个字，那一签
+  就作废）—— 写它的是 `vsigns.issue`，留在 V 这一侧；
+- **落签**（手稿签块 + 台账位）由**收方秘书**做（`vsigns.land`，`by=` 只认
+  `secretary:F|B|E`）；
+- V 的产出是判定（成立 / 有毛病）与逐条缺陷；它**只颁发**，不落块、不翻第 3 位；
 - 三态措辞退役：只剩两态，「看不出错」读成成立。
 
 ## 三条判据（每条都带反真空）
@@ -96,7 +98,8 @@ def test_s2_the_v_manual_puts_the_sign_in_out_vsigns() -> None:
 
     bad = _sign_home_problems(text, where="V 的手册")
     assert bad == [], "\n".join(bad)
-    assert "秘书判定并落盘" in text, "手册里那一条「签由秘书判定并落盘」被顺手删掉了"
+    assert "vsigns.issue" in text, "手册里那一条「签文件在**颁发**那一步就写」被顺手删掉了"
+    assert "收方秘书" in text, "手册里没有说清「落签（手稿块 + 台账位）由收方秘书做」"
 
     probe = text + "\n（补一句改前口径）你签的字落在 `verifications/<命题号>.jsonl` 那一行上。"
     hit = _sign_home_problems(probe, where="V 的手册")
