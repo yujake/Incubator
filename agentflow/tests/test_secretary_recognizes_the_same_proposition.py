@@ -278,11 +278,20 @@ def test_non_propositional_kinds_do_not_merge(tmp_path: pathlib.Path) -> None:
     """
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
-    definition = sec.record_statement({**_own(FULL_A + "（本行是定义）"), "kind": "definition",
-                                       "proof_text": PROOF_A}, role="B")
+    # 这一条判的是"definition 不是命题"这条边界，不是 B-2 / 正文闸：
+    # 交给秘书时带一份算好的 `bits`（生产里由 B 的 `register_statement` 算），
+    # 正文闸就按"B 已经判过"那一档让路（`defer_without_sign`）。
+    def _with_bits(kind: str, proof: str) -> dict:
+        return EB.bits_of(origin="own_result", proof=True, proof_process=proof,
+                          quote_verified=None, kind=kind)
+
+    definition = sec.record_statement({**_own(FULL_A + "（本行是定义）"),
+                                       "kind": "definition", "proof_text": PROOF_A,
+                                       "bits": _with_bits("definition", PROOF_A)}, role="B")
     assert definition.get("checked") is True and definition.get("created") is True, definition
     theorem = sec.record_statement({**_own(FULL_A), "kind": "theorem",
-                                    "proof_text": PROOF_C}, role="B")
+                                    "proof_text": PROOF_C,
+                                    "bits": _with_bits("theorem", PROOF_C)}, role="B")
     assert theorem.get("checked") is True and theorem.get("created") is True, theorem
     assert theorem.get("merged") is False, theorem
     rows = _rows(st)
@@ -459,7 +468,7 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
 # ============================================================ ④ merge=true ⇒ 覆盖 + 要重签
 
 def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
-        tmp_path: pathlib.Path) -> None:
+        tmp_path: pathlib.Path, monkeypatch) -> None:
     """④ `merge=true` ⇒ 覆盖 canonical、旧正文进 `proof_history`、未重签前不算成立。
 
     负控（同一条判据里就地核两回）：
@@ -479,6 +488,16 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     assert refused.get("ok") is False and refused.get("kind") == "proof_same_kind", refused
 
     sec = Secretary("B", root=st.root, store=st)
+    # 这一条判的是合并机制（覆盖 / proof_history / 重签），不是"正文必须有手稿签"那道闸：
+    # 后者由 `test_proof_text_intake_needs_a_manuscript_sign.py` 单独钉。这里把那道闸
+    # 打桩放行，好让合并那一笔走到本用例要判的几格上。
+    import agentflow.secretary as SEC
+
+    monkeypatch.setattr(SEC, "proof_text_manuscript_sign_gate",
+                        lambda *a, **k: {"checked": True, "required": True,
+                                         "ok": True, "refused": "", "reason": "",
+                                         "statement_id": "", "proof_no": 1,
+                                         "sha256": "", "covering": []})
     merged = sec.record_statement({**_own(FULL_A_KEY), "proof_text": MERGED,
                                    "merge": True}, role="B")
     assert merged.get("checked") is True, merged
@@ -599,7 +618,10 @@ def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) 
     # 里没有任何"这一笔被判成什么"的读数，所以这条断言在改前是 NameError 式的红）。
     st2 = _ws(tmp_path / "reading")
     sec = Secretary("B", root=st2.root, store=st2)
-    got = sec.record_statement({**_own("显然。"), "proof_text": "显然。"}, role="B")
+    bits = EB.bits_of(origin="own_result", proof=True, proof_process="显然。",
+                      quote_verified=None, kind="conjecture")
+    got = sec.record_statement({**_own("显然。"), "proof_text": "显然。", "bits": bits},
+                               role="B")
     assert got.get("checked") is True and got.get("created") is True, got
     assert got.get("proposition_state") == PK.STATE_UNKNOWN, got.get("proposition_state")
     assert "判不了" in got.get("proposition_reason", ""), got.get("proposition_reason")
@@ -629,8 +651,10 @@ def test_the_thresholds_are_injectable(tmp_path: pathlib.Path) -> None:
     b2 = _agent(st2)
     assert b2.register_statement(**_own(FULL_A), proof_text=PROOF_A).get("ok") is True
     strict = Secretary("B", root=st2.root, store=st2, same_proposition_jaccard=0.99)
-    got = strict.record_statement({**_own(FULL_A_MORPH), "proof_text": PROOF_C}, role="B")
-    assert got.get("checked") is True and got.get("created") is True, got
+    b3 = AgentB(st2, extractor=None, extract_text=None, secretary=strict,
+                auto_secretary=False)
+    got = b3.register_statement(**_own(FULL_A_MORPH), proof_text=PROOF_C)
+    assert got.get("ok") is True and got.get("stmt_id"), got
     assert len(_rows(st2)) == 2, "0.99 之下也不该并（那一档已经不许决定并）"
     # 阈值是可注入的，而且它现在只落在读数里（"当年会不会并"这件事读得出来）。
     assert strict.same_proposition_jaccard == 0.99, strict.same_proposition_jaccard

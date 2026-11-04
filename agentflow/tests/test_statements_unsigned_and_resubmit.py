@@ -326,12 +326,31 @@ def _agent_row(st: Store, *, role: str = "F", parent: str = "t-root",
         }, note="probe:agent")
 
 
+def _manuscript(st: Store, sid: str, proof: str) -> str:
+    """把这一份证明栏写成 `reports/f-proof-<号>.md`（在册 V 审的载体）。"""
+    rel = f"reports/f-proof-{sid}.md"
+    target = pathlib.Path(str(st.root)) / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        f"# F 的证明手稿\n\n- 命题号：stmt:{sid}\n\n## 命题\n\n{FULL}\n\n"
+        f"## 证明\n\n{proof}\n\n"
+        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
+    return rel
+
+
 def _verify_v(st: Store, sid: str, *, parent: str, proof: str = PROOF,
               reply: str = REPLY_DEFECT) -> dict:
-    """走 V 的真入口（投递钩子在它里面）。"""
+    """走 V 的真入口（投递钩子在它里面）。
+
+    2026-11-04（甲）：在册命题的 V 审也要手稿 —— 夹具把这一份证明栏写成一份
+    `reports/f-proof-<号>.md` 的「## 证明」，V 从稿里取正文、签块也落回稿。
+    """
     agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply))
+    rel = _manuscript(st, sid, proof)
     with CND.calling_as("t-v1", "V", parent_task_id=parent, parent_role="F"):
-        return agent.verify_proof(sid, proof_text=proof)
+        return agent.verify_proof(sid, proof_text=proof, proof_manuscript=rel)
 
 
 def _resubmit_items(st: Store) -> list[dict]:
@@ -406,7 +425,8 @@ def test_an_unowned_fault_opens_nothing_and_reads_as_owner_unknown(tmp_path):
     _put(st)
     # 不在任何召唤里 ⇒ current_parent 为空 ⇒ undelivered
     agent = AgentV(st, workspace_root=st.root, llm=_Seam(REPLY_DEFECT))
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF,
+                             proof_manuscript=_manuscript(st, SID, PROOF))
     assert got.get("checked") is True, got
     assert _resubmit_items(st) == [], [r.get("input_key") for r in _resubmit_items(st)]
     one = _unsigned(st)["rows"][0]

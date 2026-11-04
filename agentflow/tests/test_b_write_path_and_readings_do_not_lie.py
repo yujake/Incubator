@@ -138,7 +138,7 @@ def _sign(store: Store, *, text: str = P1,
     return VR.record_verification(
         store.root, statement_id=SID, proof_text=text,
         verdict=dict(verdict or _OK), verifier="agent-V", store=store,
-        proof_no=1)
+        proof_no=1, manuscript="reports/f-proof-000000.md")
 
 
 def _sign_votes(store: Store, count: int, *, text: str = P1) -> list[dict]:

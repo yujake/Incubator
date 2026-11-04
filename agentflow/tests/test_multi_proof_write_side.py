@@ -149,17 +149,43 @@ def _scrub(row: dict) -> dict:
     return out
 
 
-# ============================================================ ① 老写法逐字兼容
+# ============================================================ ① 正文必须有手稿签
 
-@pytest.mark.usefixtures("signed_v_handoffs")
-def test_a_proof_text_only_call_is_byte_identical_to_a_one_proof_list(tmp_path):
-    """① 老写法（只给 `proof_text`）与等价的 `proofs=[#p1]` 落出逐字节相同的行。
+def _empty_then_sign(st: Store, *, text: str, manuscript: str) -> None:
+    """先落一条没有正文的猜想行拿号，再按 `manuscript` 签这一份正文。"""
+    made = _agent(st).register_statement(**OWN)
+    assert made["ok"] is True, made
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            str(st.root), statement_id=str(made["stmt_id"]), proof_text=text,
+            verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1,
+            manuscript=manuscript)
 
-    两个工作区各登记一次同一条命题：#1 走老路（`proof_text`），#2 走新路
-    （`proofs=[{"proof_no": 1, "text": 同]`）。除了编号与时间戳，两行必须逐字节相同 ——
-    等价 `#p1` 的意思就是"新写法不许在那条老路上多写一个键、多改一个字"。
+
+def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
+    """① 只有内联签的正文 ⇒ 拒；换一份手稿签 ⇒ 老写法与 `proofs=[#p1]` 逐字节相同。
+
+    老判据断言"只给 `proof_text` 与 `proofs=[#p1]` 落出同一行"，那是内联老路本身。
+    新判据先钉住"内联签不够"（正文要有审的是手稿的签），再在"有手稿签"的前提下
+    保留原来那一半：两种 #p1 写法落出的行逐字节相同。
     """
+    # 负控：签是内联审出来的（台账行没有 `manuscript`）⇒ 整笔拒。
+    st_bad = _ws(tmp_path / "inline")
+    made = _agent(st_bad).register_statement(**OWN)
+    assert made["ok"] is True, made
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            str(st_bad.root), statement_id=str(made["stmt_id"]), proof_text=P1,
+            verdict=dict(_OK), verifier="agent-V", store=st_bad, proof_no=1)
+    bad = _agent(st_bad).register_statement(**OWN, proof_text=P1)
+    assert bad["ok"] is False, bad
+    assert bad.get("kind") == "proof_text_needs_a_manuscript_sign", bad
+    assert str(_row(st_bad).get("proof_text") or "") == "", _row(st_bad)
+
+    # 正控：同一份正文，签的是手稿 ⇒ 两种 #p1 写法逐字节相同。
     st_old, st_new = _ws(tmp_path / "old"), _ws(tmp_path / "new")
+    _empty_then_sign(st_old, text=P1, manuscript="reports/f-proof-000000.md")
+    _empty_then_sign(st_new, text=P1, manuscript="reports/f-proof-000000.md")
     out_old = _agent(st_old).register_statement(**OWN, proof_text=P1)
     out_new = _agent(st_new).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}])
@@ -167,17 +193,13 @@ def test_a_proof_text_only_call_is_byte_identical_to_a_one_proof_list(tmp_path):
     assert out_new["ok"] is True, out_new
 
     row_old, row_new = _row(st_old), _row(st_new)
-    # 老路上不许冒出 `proofs` 键（只有 #p1 时不建清单：那一份就是 proof_text）。
     assert VR.PROOFS_KEY not in row_old, row_old.keys()
     assert row_old["proof_text"] == P1, row_old
-    # 两行的键集都恰好是 schema 的字段（多一个键就是"新写法改动了老行"）。
     assert set(row_old) == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) == set(S.Statement.__dataclass_fields__), sorted(row_new)
-    # 逐字节等价：同一份内容、同一组位、同一份正文。
     assert (json.dumps(_scrub(row_old), ensure_ascii=False, sort_keys=True)
             == json.dumps(_scrub(row_new), ensure_ascii=False, sort_keys=True)), (
-        "只给 proof_text 与 proofs=[#p1] 必须落出同一行（等价 #p1）")
-    # 返回值也不许多一格（老调用方读到的形状今天是什么样，明天还是）。
+        "有手稿签时，只给 proof_text 与 proofs=[#p1] 必须落出同一行（等价 #p1）")
     assert "proofs" not in out_old and "proofs" not in out_new, (out_old, out_new)
     assert sorted(out_old) == sorted(out_new), (sorted(out_old), sorted(out_new))
 

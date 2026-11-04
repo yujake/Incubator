@@ -185,8 +185,20 @@ def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
     才落签 ⇒ 夹具按同一份正文连审，并在这里钉住"前几次不签"这条正控。
     """
     outs: list[dict] = []
+    # 2026-11-04（甲）：在册命题的 V 审也要手稿；穷举这一档的载体是 e-proof 稿。
+    # 夹具把这一份证明栏写成一份稿的「## 证明」，V 从稿里取正文、签块也落回稿。
+    rel = f"reports/e-proof-{sid}.md"
+    target = pathlib.Path(str(agent.workspace_root)) / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "# E 的穷举证明手稿\n\n"
+        f"- 实验号：exp:{sid}\n\n## 命题\n\n（夹具：这一份审的是证明栏）\n\n"
+        f"## 证明\n\n{text}\n\n"
+        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
     for i in range(1, int(VR.SIGN_STREAK_NEED) + 1):
-        got = agent.verify_proof(sid, proof_text=text)
+        got = agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
         outs.append(got)
         assert got.get("checked") is True, got
         assert got.get("verdict") == "成立", got

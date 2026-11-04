@@ -280,7 +280,7 @@ def sync_counters(store: Store) -> None:
 
 def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
                        proof_no: int = 1, times: int | None = None,
-                       store=None) -> int:
+                       store=None, manuscript: str = "") -> int:
     """把一条命题的第 3 位签住（夹具用）：连续几次干净的「成立」，返回签了几行。
 
     为什么夹具需要它（2026-11-01，业主裁定「每个命题和证明的产出最终必须以V签收尾，
@@ -306,13 +306,16 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
     from agentflow import verifications as VR
 
     need = int(times if times is not None else VR.SIGN_STREAK_NEED)
+    # 2026-11-04（甲）：正路那一签审的是手稿。夹具默认把它记在
+    # `reports/f-proof-<号>.md` 上 —— 不写这一格，新正文闸会把它读成"内联签"。
+    rel = str(manuscript or f"reports/f-proof-{statement_id}.md")
     for _ in range(need):
         VR.record_verification(
             str(root), statement_id=str(statement_id), proof_text=str(proof_text),
             verdict={"verdict": "成立"},
             secretary_judge={"axis": "clean", "checked": True,
                              "reason": "夹具：把第 3 位签住"},
-            proof_no=int(proof_no), store=store)
+            proof_no=int(proof_no), store=store, manuscript=rel)
     return need
 
 
@@ -334,10 +337,31 @@ def sign_before_registration(root, *, proof_text: str,
     """
     from agentflow import verifications as VR
 
+    # 2026-11-04（乙-14 / 甲）：pending 认领要有一份载体。夹具不落盘（落盘会被
+    # `depsection.read_manuscript` 当成 B 的兜底稿读走，反而改坏现场），只把这一签
+    # 该有的手稿路径写上（与真路同形：`reports/f-proof-<号>.md`）。
     out = VR.record_pending_sign(
         str(root), proof_text=str(proof_text),
-        verdict={"verdict": "成立", "findings": []})
+        verdict={"verdict": "成立", "findings": []},
+        object_path="reports/f-proof-000000.md")
     _ = times  # pending 档不数连续次数（那一档结构上没有"同一趟三行"）
+    return out
+
+
+def sign_before_registration_legacy(root, *, proof_text: str,
+                                    times: int | None = None) -> dict:
+    """历史形态的 pending 签（没有载体文件）。只给"要读旧 pending 行"的用例显式使用。
+
+    正常夹具一律走 :func:`sign_before_registration`（必须有一份稿）。名字里带
+    `legacy` 是为了让"这是一条历史形态、不是正路"在调用点就看得见。
+    """
+    from agentflow import verifications as VR
+
+    out = VR.record_pending_sign(
+        str(root), proof_text=str(proof_text),
+        verdict={"verdict": "成立", "findings": []},
+        object_path="reports/f-proof-000000.md")
+    _ = times
     return out
 
 

@@ -1373,6 +1373,163 @@ def _is_proposition_kind(kind: Any) -> bool:
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
 
 
+#: 证明正文进台账的唯一收口闸（2026-11-04，业主裁定：正文必须由手稿承载）。
+#:
+#: 规则：`proof_text` 与在册那一份不同（或这一行还不存在）⇒ 必须有一份盖住这一份正文、
+#: 而且审的是手稿的 V 签。判据只认台账行上的 `manuscript` 非空（`verifications.<号>.jsonl`）：
+#: 内联审出来的签（今晚 14:22 那种）没有载体，签块 / `## 依赖` / 按号寻址三样都落不了盘。
+PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN = "proof_text_needs_a_manuscript_sign"
+
+
+def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
+                                    statement_full: Any = "",
+                                    statement_id: Any = "", proof_no: Any = 1,
+                                    origin: Any = "", source_lit_id: Any = "",
+                                    defer_without_sign: bool = False
+                                    ) -> dict[str, Any]:
+    """这一份要写进 `statements.proof_text` 的正文，有没有一份"手稿签"覆盖它。
+
+    ## 为什么判据只在这一处
+    写 `statements.proof_text` 的路不止一条：B 的 `register_statement`（新建 / 升档 /
+    重复支的 canonical 覆盖）、`table.create` / `table.update` 的 `routed` 分支、
+    秘书的合并支 —— 它们最后都落在同一个字段上。把判据放在字段的写入口（本函数由
+    `Secretary.record_statement` 与 `B._attach_proofs` 共用），才谈得上"唯一收口"；
+    每条路各写一份判据，下一支新写口就会静默漏过去。
+
+    ## 判据（三态，不折平）
+    - 这一笔没有正文 / 正文与在册逐字相同 ⇒ `required=False`（不是"查过了、有签"，是
+      "这一笔没有要写的新正文"）：升档、重复读数、D 的读稿登记都走这一档，不能被堵死；
+    - 文献侧占位签（`origin="external_lit"` 且有 `source_lit_id`）⇒ 放行，理由与
+      `register_statement._unsigned_proof_gate` 的文献档同一条（业主 2026-11-02：
+      「F 的签 或 文献编号」）；
+    - 其余 ⇒ 在 `verifications/<命题号>.jsonl` 里找 `proof_sha256` 等于这一份正文、
+      `proof_no` 相同、结论「成立」、`unresolved_errors=0`、且 `manuscript` 非空的
+      那一行；找不到 ⇒ 受控拒绝。
+    台账读不出来 ⇒ `checked=False` + 拒绝（"没查成"不是"没有签"，两者都不放行，但
+    理由必须分开）。
+
+    ## 为什么行不存在也拒绝
+    新建一条命题时先落"没有正文"的猜想行拿号、V 审稿签字、再把正文交回来（今晚 14:16
+    的现场就是这个顺序）；正文与命题同一次落库且没有号，就无从有"盖住它的台账签"。
+    放行它等于把"先签后登记"折成"没签也能登记"。
+
+    返回（键集合固定）：`{checked, required, ok, refused, reason, statement_id,
+    proof_no, sha256, covering}`。`covering` 是命中的台账行摘要（`verification_id` /
+    `manuscript`），给读的人核对"是哪一份稿上的签"。
+    """
+    from . import textutil as _T
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {"checked": True, "required": False, "ok": True,
+                           "refused": "", "reason": "", "statement_id": "",
+                           "proof_no": 0, "sha256": "", "covering": []}
+    text = str(proof_text or "").strip()
+    if not text:
+        out["reason"] = "这一笔没有要写进 proof_text 的正文 ⇒ 这一格不适用"
+        return out
+    try:
+        no = int(_VR.as_proof_no(proof_no) or 1)
+    except (TypeError, ValueError):
+        no = 1
+    out["proof_no"] = no
+    sha = _VR.proof_sha(text)
+    out["sha256"] = sha
+    sid = str(statement_id or "").strip()
+    row: Mapping[str, Any] | None = None
+    try:
+        rows = [dict(r) for r in store.rows("statements")]
+    except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
+        out.update(checked=False, ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=(f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                           "判不了这一份正文有没有手稿签（没查成不是通过）"))
+        return out
+    if sid:
+        row = next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)
+    elif str(statement_full or "").strip():
+        key = _T.normalize(str(statement_full or ""))
+        row = next((r for r in rows
+                    if _T.normalize(str(r.get("statement_full") or "")) == key), None)
+    if row is not None:
+        out["statement_id"] = str(row.get("stmt_id") or "")
+    if row is not None and str(row.get("proof_text") or "").strip() == text:
+        out["reason"] = "与在册那一份正文逐字相同 ⇒ 这一笔不写正文（升档 / 重复读数）"
+        return out
+    out["required"] = True
+    origin_now = str(origin or (row or {}).get("origin") or "")
+    lit_now = str(source_lit_id or (row or {}).get("source_lit_id") or "").strip()
+    if origin_now == "external_lit" and lit_now:
+        out["reason"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账"
+                         "（与 `register_statement` 的文献档同一条口径）")
+        return out
+    if row is None:
+        if defer_without_sign:
+            out["reason"] = ("命题还没在册：有没有签由 B 的 `_unsigned_proof_gate` 判"
+                             "（这一道只判'签有没有手稿载体'）")
+            return out
+        out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=("这一条命题还没有在册行，而这一笔要写证明正文 ⇒ 没有可落签的号，"
+                           "也没有一份盖住它的手稿签。正路：先落一条没有正文的猜想行拿号"
+                           "（`kind=\"conjecture\"`）→ 让 V 审那一份手稿（带 `proof_manuscript`）"
+                           "→ 再把这一份正文交回同一 `statement_full`。"))
+        return out
+    try:
+        ledger, bad = _VR.list_verifications(store.root, statement_id=out["statement_id"],
+                                             limit=None)
+    except Exception as exc:  # noqa: BLE001 —— 读不到不许折成"没有签"
+        out.update(checked=False, ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=(f"验证台账读不出来（{type(exc).__name__}: {exc}）⇒ "
+                           "判不了这一份正文有没有手稿签（没查成不是通过）"))
+        return out
+    if bad:
+        out.update(checked=False, ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=("验证台账有读不出来的行：" + "；".join(str(b) for b in bad[:3])
+                           + " ⇒ 判不了这一份正文有没有手稿签（没查成不是通过）"))
+        return out
+    any_cover: list[dict[str, Any]] = []
+    covers: list[dict[str, Any]] = []
+    for item in ledger:
+        if str(item.get("proof_sha256") or "").lower() != sha:
+            continue
+        try:
+            if int(item.get("proof_no") or 1) != no:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if not _VR.row_signable(item):
+            continue
+        one = {"verification_id": str(item.get("verification_id") or ""),
+               "manuscript": str(item.get("manuscript") or ""),
+               "at": str(item.get("at") or "")}
+        any_cover.append(one)
+        if one["manuscript"]:
+            covers.append(one)
+    out["covering"] = covers[:5]
+    if not covers:
+        if any_cover:
+            out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                       reason=("这一份正文（sha {sha}…）在 V 的台账里有签，但那一签是"
+                               "**内联**审出来的（台账行上没有 `manuscript`）—— 内联签没有"
+                               "载体，签块 / `## 依赖` / 按号寻址三样都落不了盘。正路：先把"
+                               "正文落成一份稿（`reports/f-proof-*.md` / `notes/*.md`）→ "
+                               "派 V 用 `verify.verify_proof` 带 `proof_manuscript` 审那一份"
+                               "稿 → 签块落回稿 → 再入库。").format(sha=sha[:12]))
+            return out
+        if defer_without_sign:
+            out["reason"] = ("这一份正文还没有任何覆盖它的签：有没有签由 B 的 "
+                             "`_unsigned_proof_gate` 判（这一道只判'签有没有手稿载体'）")
+            return out
+        out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=("这一份正文（sha {sha}…）一次都没有被 V 签过 ⇒ 不能进台账。"
+                           "正路：先把正文落成一份稿（`reports/f-proof-*.md` / `notes/*.md`）"
+                           "→ 派 V 用 `verify.verify_proof` 带 `proof_manuscript` 审那一份稿"
+                           "→ 签块落回稿 → 再入库。").format(sha=sha[:12]))
+        return out
+    out["reason"] = (f"有手稿签覆盖这一份正文（{len(covers)} 行："
+                     + "、".join(str(c.get("verification_id") or "?") for c in covers[:3])
+                     + "）")
+    return out
+
+
 def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
                               manuscript_path: Any = "", proof_text: Any = "",
                               bits: Mapping[str, Any] | None = None
@@ -6657,6 +6814,37 @@ class Secretary:
                                    "补上这两栏，或把 quote_verified 改成 None/False 并写明"
                                    "为什么（三态纪律：没查不许折成查过了没问题）"))
                 return out
+        # ---- 出处档的词表：与 B 的 `bad_origin` 同一个码（路由过来的非法载荷也要
+        # 在"正文闸"之前被按这一格拒：否则拒信会说"缺手稿签"，而真正错的是 origin）。
+        _origin_now = str(body.get("origin") or "")
+        if _origin_now not in S.STATEMENT_ORIGINS:
+            out.update(checked=False, created=False, duplicate=False, upgraded=False,
+                       merged=False, refused="bad_origin",
+                       reason=(f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，"
+                               f"收到 {_origin_now!r}"))
+            return out
+        # ---- 2026-11-04（业主裁定：正文必须由手稿承载）：`proof_text` 的唯一收口闸 ----
+        #
+        # 位置在"判同一性"之前：这一笔如果连正文都不该写，就不该先花一次模型调用去
+        # 判它跟谁同一条；而且判词会诱导调用方以为"只差一个合并"。
+        # 闸本身是纯读（`proof_text_manuscript_sign_gate`）：它只回答"这一份正文有没有
+        # 一份审的是手稿、且盖住这份正文的签"，不写盘、不改正文。
+        if body.get("merge") is not True and kind != "concept":
+            _intake = proof_text_manuscript_sign_gate(
+                self.store, proof_text=body.get("proof_text"),
+                statement_full=full, proof_no=body.get("proof_no"),
+                origin=body.get("origin"), source_lit_id=body.get("source_lit_id"),
+                defer_without_sign=bool(body.get("bits")))
+            out["proof_text_gate"] = dict(_intake)
+            if _intake.get("refused"):
+                out.update(checked=False, created=False, duplicate=False, upgraded=False,
+                           merged=False, refused=str(_intake.get("refused") or ""),
+                           reason=str(_intake.get("reason") or ""))
+                return out
+        # 合并那一支的 `statement_full` 是"近似写法"（逐字相同会先撞 duplicate 早退），
+        # 它要落到哪一条在册行由同一性判定给出 ⇒ 这一闸必须在判定之后、拿到 `same_as`
+        # 再判一次（`_merge_into_proposition` 里）。先在这里跳过，免得把一条合法的
+        # 合并判成"没有在册行"。
         # ---- 命题同一性：让秘书洗定理名、让秘书判（业主 2026-10-24）。
         #
         # 位置在"落盘之前、事务之外"：这一步会发一次模型调用（可以慢、可以超时），
@@ -8235,10 +8423,23 @@ class Secretary:
                                    "整笔不写（合并要落到一份具体的证明上：合并稿覆盖谁的正文、"
                                    "谁的旧正文进 proof_history、谁的签要重拿，都由它决定）"))
                 return out
+            # 合并稿也是"要进 statements.proof_text 的正文"：落到哪一条在册行已经由
+            # 同一性判定给出（`sid`），这里用同一个闸判一次 —— 不满足 ⇒ 整笔不写。
+            _mgate = proof_text_manuscript_sign_gate(
+                self.store, statement_id=sid, proof_text=proof,
+                proof_no=int(target), origin=str(body.get("origin") or ""),
+                source_lit_id=str(body.get("source_lit_id") or ""))
+            out["proof_text_gate"] = dict(_mgate)
+            if _mgate.get("refused"):
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused=str(_mgate.get("refused") or ""),
+                           reason=str(_mgate.get("reason") or ""))
+                return out
             return self._merge_same_kind_version(tx, row=row, sid=sid, full=full,
                                                  proof_no=int(target), merged_text=proof,
                                                  verdict=verdict, kind_hits=kind_hits,
-                                                 merge_note=how, out=out)
+                                                 merge_note=how, out=out,
+                                                 body=body, groups=groups)
         # ---- 同种证明：不新增证明号
         if kind_hits:
             top = kind_hits[0]
@@ -8432,7 +8633,10 @@ class Secretary:
                                  verdict: Mapping[str, Any],
                                  kind_hits: list[dict[str, Any]],
                                  merge_note: str,
-                                 out: dict[str, Any]) -> dict[str, Any]:
+                                 out: dict[str, Any],
+                                 body: Mapping[str, Any] | None = None,
+                                 groups: list[list[dict[str, Any]]] | None = None
+                                 ) -> dict[str, Any]:
         """`merge=True` 那一档：把合并稿作为"那一份证明的新版本"，并要求 V 重签。
 
         ## 写什么
@@ -8488,6 +8692,21 @@ class Secretary:
                         "proof_no": int(proof_no), "at": S.now_iso(),
                         "by": f"secretary-{self.role}", "merged": True})
         row["_proposition_matches"] = matches[-20:]
+        # ---- 2026-11-04（业主裁定）：合并稿的依赖边与正文同一次事务落盘 ----------
+        #
+        # 改前这一支不写依赖：`_merge_into_proposition` 收到的 `groups` 在这一支里被整份
+        # 丢掉，盘上留下的是旧正文的依赖边 —— 而 `proof_text` 已经换成合并稿，"这一条
+        # 证明依赖什么"与"它的正文"从此各说一件事，且没有任何读数会说它们分家了。
+        # 判据与"新建 / 第 N 份证明"那两支共用 `_resolve_write_steps` + `_write_dep_steps`：
+        # 显式 `deps` 指着不在册的号 ⇒ 整笔不写；扫出来的引用照旧落 `dangling` / 点名。
+        # 旧边不删（它们可能仍被合并稿用到）：这一笔只追加，`used_by` 落到同一个证明号。
+        body_for_deps = dict(body or {})
+        body_for_deps["proof_no"] = int(proof_no)
+        steps = self._resolve_write_steps(tx, body_for_deps, out,
+                                          [list(g) for g in (groups or [])])
+        if steps is None:
+            return out
+        deps_written = self._write_dep_steps(tx, steps, stmt_id=sid, body=body_for_deps)
         tx.upsert("statements", row, note="record_statement:merge_same_kind")
         standing: dict[str, Any] = {}
         try:
@@ -8502,18 +8721,20 @@ class Secretary:
                    merged_same_kind=True, merged_into=sid, stmt_id=sid,
                    proof_no=int(proof_no), matched_by=str(verdict.get("basis") or ""),
                    similarity=float(verdict.get("similarity") or 0.0),
-                   same_kind=kind_hits, tables=["statements"],
+                   same_kind=kind_hits,
+                   tables=(["statements", "dependencies"] if deps_written else ["statements"]),
+                   deps_written=deps_written,
                    row=row, canonical_written=int(proof_no) == 1,
                    proof_history=list(row["proof_history"]),
                    proof_standing=standing, resign_required=True,
                    reviewed=state == "signed",
                    reason=(f"合并稿已作为 stmt:{sid} 第 {proof_no} 份证明的新版本落盘"
                            f"（{merge_note}；旧正文整段进 `proof_history`，sha 可与签名"
-                           "台账的 `proof_sha256` 直接对上）；这一笔是同种证明合成一份，"
+                           "台账的 `proof_sha256` 直接对上）；这一笔的依赖边同时落进 "
+                           f"`dependencies`（{deps_written} 条，`used_by=\"stmt:{sid}#p{proof_no}\"`，"
+                           "旧边不删）；这一笔是同种证明合成一份，"
                            f"按业主口径要 V 重签 —— 现行签名状态是 `{state}`，"
-                           "未重签之前不算成立（读侧现算，不由本函数声明）。合并稿不新增"
-                           "依赖边：两条原稿的依赖面各自在册，要补新依赖走 G 的 "
-                           "`register_dependency`"))
+                           "未重签之前不算成立（读侧现算，不由本函数声明）"))
         return out
 
     def _statement_from(self, body: Mapping[str, Any], *, full: str, kind: str,

@@ -25,6 +25,7 @@ from __future__ import annotations
 from conftest import TS
 
 from agentflow import conductor as CND
+from agentflow import evidencebits as EB
 from agentflow import secretary as SEC
 from agentflow import vreceipts as VRC
 from agentflow import vsigns as VSP
@@ -43,6 +44,11 @@ def _payload(**kw) -> dict:
         proof_text="1. 取 G = C_n：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。",
         evidence_kind="heuristic",
         quote_verified=None, quote_reason="自产命题：没有第二份文本可比对",
+        # 生产里这一格由 B 的 `register_statement` 算好交来；直接调秘书的夹具带一份
+        # 合法的 bits，正文闸才按"B 已经判过"那一档让路（`defer_without_sign`）。
+        bits=EB.bits_of(origin="own_result", proof=True,
+                        proof_process="1. 取 G = C_n：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。",
+                        quote_verified=None, kind="conjecture"),
     )
     base.update(kw)
     return base

@@ -229,7 +229,9 @@ def _rewrite_note(reading: Mapping) -> str:
     got = dict(reading or {})
     state = str(got.get("state") or "")
     call = ("`V.verify_proof`（`statement_id` 必填；要审第几条证明就带 "
-            "`proof_no`）。")
+            "`proof_no`；`proof_manuscript` 必须给 —— 在册也要给稿，V 只从稿的 "
+            "`## 证明` 读正文、签块也落回稿，如 `reports/f-proof-<命题号>.md` / "
+            "B 的改写稿 `reports/b-proof-<命题号>.md`）。")
     where = ("读数是读侧现算的（`verifications.review_standing`：拿现行正文的 sha 与"
              "台账里那一签比）；台账那一行不删、旧签仍然可查，只是不再算数。")
     if state == "signed":
@@ -324,30 +326,41 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "⇒ 整笔不写。改稿是正确动作，建议：请重新拿 V 签 —— "
             "① 把这一版按 kind=\"conjecture\" 再交一次（同一 statement_full + 新 proof_text）："
             "正文上盘、旧正文进 proof_history；"
-            f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1)"
-            "（不传 proof_text，读盘上新正文）审这一份 ⇒ 签到位后签文件落在 "
+            f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
+            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿；"
+            "B 的改写稿则是 reports/b-proof-<号>.md）⇒ 签到位后签文件落在 "
             "out/vsigns/<新正文sha>.json，kind 会自动抬成 theorem；不必再交一次登记。"
-            "禁令：不许拿别的命题的签来顶，也不许绕开 V 当定理用。")
+            "禁令：不给 proof_manuscript 的内联正文现在过不了 V（`proof_text_needs_a_manuscript`），"
+            "不许拿别的命题的签来顶，也不许绕开 V 当定理用。")
     if state == "unsigned":
         return (
             f"{head}在 V 的台账里一次都没签过 ⇒ 整笔不写。"
             f"建议：请拿 V 签 —— 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", "
-            "proof_no=1)（不传 proof_text，读盘上这一份）审这一份 ⇒ 签到位后"
+            f"proof_no=1, proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
+            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿；"
+            "B 的改写稿则是 reports/b-proof-<号>.md）⇒ 签到位后"
             "签文件落在 out/vsigns/<正文sha>.json，kind 会自动抬成 theorem。"
             "这一版已经在盘上，不必再按 kind=\"conjecture\" 交一次。"
-            "禁令：不许绕开 V 直接当定理用。")
+            "禁令：不给 proof_manuscript 的内联正文现在过不了 V（`proof_text_needs_a_manuscript`），"
+            "不许绕开 V 直接当定理用。")
     if state == "rejected":
         return (
             f"{head}最近那一签的结论不是「成立」（{verification_id or '（没有号）'}）"
             "⇒ 整笔不写。建议：按 findings 改完再送，不要原样重送 —— 先把证明改好，"
             "把改稿按 kind=\"conjecture\" 再交一次（旧正文进 proof_history），"
-            f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) 重审。"
-            "禁令：原样重送不会改变结论；签的还是这份正文。")
+            f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 重审 "
+            "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿）。"
+            "禁令：原样重送不会改变结论；不给稿的内联正文现在过不了 V"
+            "（`proof_text_needs_a_manuscript`）。")
     if state == "holding":
         return (
             f"{head}的签还没到位（V 判过「成立」，但这一版正文上还没有签块）⇒ 整笔不写。"
-            f"建议：再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) "
-            "审这一份，签到位后签块由收方秘书落回稿 —— 不必改稿、不必再交登记。")
+            f"建议：再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
+            "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿），"
+            "签到位后签块由收方秘书落回稿 —— 不必改稿、不必再交登记。")
     return (
         f"{head}在 V 的台账里查不到能签住它的那一签，而这一格没查成 "
         f"（{why[:120] if why else '台账读不出来'}）⇒ 整笔不写。"
@@ -869,6 +882,28 @@ class _RegisterStatement:
                              "第 2 份起无处可写）")
             out["canonical_pending"] = bool(want)
             return out
+        # ---- 2026-11-04（业主裁定：正文必须由手稿承载）：这一格也写 `proof_text` ----
+        #
+        # `_attach_proofs` 是 B 的写侧唯一一处直接改 `statements`（秘书的字段白名单里没有
+        # `proofs`），所以它不能只靠 `Secretary.record_statement` 那道闸：新建 / 升档 /
+        # 重复支的 canonical 覆盖、#p2 及以后的正文追加，最后都落在这一格里。判据与秘书
+        # 那一处共用同一个函数（`proof_text_manuscript_sign_gate`），不另写一份。
+        from ..secretary import proof_text_manuscript_sign_gate as _intake_gate
+
+        _intake_targets: list[tuple[int, str]] = []
+        if raw_want.strip():
+            _intake_targets.append((1, raw_want))
+        # #p2 及以后的正文由 `_unsigned_proof_gate` 在登记入口按份判签（它看得见
+        # `proofs_listed`）；这一格只补 canonical —— 否则"先写 #p2、再让 V 签 #p2"
+        # 这个两阶段次序会被闸反锁死（签 #p2 要求行里已有 #p2）。
+        for _no, _text in _intake_targets:
+            _got = _intake_gate(store, statement_id=stmt_id, proof_text=_text,
+                                proof_no=_no, defer_without_sign=bool(bits))
+            if _got.get("refused"):
+                out["refused"] = str(_got.get("refused") or "")
+                out["reason"] = str(_got.get("reason") or "")
+                out["proof_text_gate"] = dict(_got)
+                return out
         #: 第 4 位的台账（L 的 `record` 落的那张表）。在事务外先读好：它只被
         #: `_bits_with_formal` 用来算"这一位现在是什么"，不参与这一笔的内容判据。
         experiments = [dict(r) for r in store.rows("experiments")]
@@ -1700,8 +1735,8 @@ class _RegisterStatement:
                     "reason": ("D 的携带单点了这一笔的号，而那个地址读不到："
                                + str(manuscript_carried.get("why") or "没有理由")),
                     "suggestion": ("让 D 重递一次研究手稿（清单里那一条的 `手稿路径` / `sha256` "
-                                   "要与盘上那份 F 稿一致），或用 `proof_manuscript` 把这一份稿"
-                                   "直接递进来；B 不自己去盘上另找一份。"),
+                                   "要与盘上那份 F 稿一致），并必须用 `proof_manuscript` 把这一份稿"
+                                   "直接递进来（稿是必需的，不是可选项）；B 不自己去盘上另找一份。"),
                 }
                 return _refuse(
                     _DS.REFUSED_ADDRESS,
@@ -1829,8 +1864,9 @@ class _RegisterStatement:
                 (f"这份稿属于 stmt:{declared_owner}，不是 stmt:{stmt_id_now} —— "
                  "它是按证明正文里的引用 / 携带单找到的，不是这条命题的稿。"
                  "拿它给这一条登记依赖面等于把别条命题的依赖记到这条头上，整笔不写。"
-                 "要登记这一条的依赖面，请交这条命题自己的稿（或用 `proof_manuscript` "
-                 "把这条命题的手稿直接递进来）；要改这一条的正文，请把 `proof_text` "
+                 "要登记这一条的依赖面，请交这条命题自己的稿 —— 必须用 "
+                 "`proof_manuscript` 把这条命题的手稿直接递进来（在册也要给稿；"
+                 "内联正文现在过不了 V）；要改这一条的正文，请把 `proof_text` "
                  "一起交上来（那一笔走 canonical 覆盖，旧正文进 `proof_history`）。"),
                 manuscript_source=manuscript_source,
                 manuscript_path=foreign_path,
