@@ -2495,6 +2495,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                        "directory/outside）、render_mapping_markdown / render_appendix /"
                        " write_appendix / write_package / sync_markdown（人读那份与正文附录都"
                        "只由 json 生成）、mapping_reading（三态）",
+    # 2026-11-04（业主裁定 A 甲：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」）：
+    # B 改写正文的可签载体。为什么必须是顶层模块：V 的签只认两处 —— 在册命题台账行、
+    # 或一份手稿里的签块；B 改写在册证明后旧签读成 stale，它需要自己那份
+    # `reports/b-proof-<命题号>.md`（与 F/E 同形）。渲染与三态（written / preserved /
+    # conflict）要被 B 的登记入口、V 的读稿与收方秘书三处共用，挂在某个角色包里就会长出
+    # 第二份「这一稿是不是同一份正文」的口径。
+    "bmanuscript.py": "B 的改写手稿（2026-11-04 A 甲）：MANUSCRIPT_DIR / PREFIX / "
+                      "PROOF_NO_PREFIX、relpath / is_relpath、render（`## 命题` / `## 证明` / "
+                      "`## 依赖` 三节，与 F/E 同形）、land_rewrite（三态：written / "
+                      "preserved（同一份正文的已签版 ⇒ 一个字节不动）/ problem（已签而这份正文"
+                      "不同 ⇒ 不覆盖））、read_rewrite —— B 的登记入口落盘、V 读稿三转、"
+                      "收方秘书 `secretary:B` 把签块落回稿里，三处共用同一份渲染",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
