@@ -7852,7 +7852,7 @@ class Secretary:
 
         三态读数全在这一处写（`adjudication` / `proposition_state` / `proposition_reason`）：
         判 different / unknown 与"没查成"都不许折成"并"，也不许折成"查过了、不同"。
-        "这一笔带不带证明正文"**不参与**这个判断（2026-11-04：没有正文的重复登记也要
+        「这一笔带不带证明正文」不参与这个判断（2026-11-04：没有正文的重复登记也要
         判归属）—— 它只决定命中之后落成"第 N 份证明"还是"一次重复读数"。
         """
         if adj.get("checked"):
