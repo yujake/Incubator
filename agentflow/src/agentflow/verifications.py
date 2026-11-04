@@ -974,6 +974,15 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         # （检查器原话 / 穷举那份程序），你这一签是给它们背书的，不是替代它们。
         "- 要说清强度：你这一次的「成立」本身不构成 `proof` —— 它是对上面两类里某一份的背书；"
         "`proof` 级证据仍然要那一份凭据（检查器原话，或穷举那份程序 + ②③）。\n"
+        # 2026-11-04（审 C 区）：这一句此前一个字都没有 —— 而档位回填
+        # （`_grade_recomputed_from_signature`）正是由这一签触发的：在册那一行在签落位那一刻
+        # 按现行签把 `evidence_kind` 重算一遍，目标档**按通道**给。V 不知道这件事，就会把
+        # "穷举那一篇"读成"我审过了、所以是 proof_review"（那是错的终态，`draft/178`）。
+        "- **档位（`evidence_kind`）按通道给**：你这一签落地之后，在册那一行的档位按现行签"
+        "重算（只升不降，`_grade_recomputed_from_signature`）—— 通道是穷举程序"
+        "（三段式证明栏 + 实验台账里那条由你签下的穷举证明）⇒ `proof`；通道是文字证明 ⇒ "
+        "`proof_review`。判据只有一处（`numericproof.find_signed_exhaustion_for_column`）："
+        "穷举那一篇停在 `proof_review` 是错的终态，因为 V 不能逐行走查一份程序。\n"
         "- 所以别在理由里写「已形式化验证」（那是第 ① 类的说法）；穷举那一类你要写的是"
         "「穷尽性与会审七项已核」。\n"
         "\n## 穷举型证据会审（证明栏第 ① 段是程序、且不是 `.lean` 时走这一档）\n"
