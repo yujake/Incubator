@@ -122,12 +122,18 @@ ACTIONS: tuple[ActionSpec, ...] = (
             required=("lit_id",),
         ),
         (
-            "dict（逐键：lit_id / doi / openalex_id / direction / count / candidates / note；"
+            # 2026-11-04（审 F 区）：键表逐个抄 `agent_a/walk_citations.py` 末尾那个 return 字典
+            # （改前漏了 ok / kind / truncated_to_tool_max —— 判三态与判截断要用的正是这三格）；
+            # 失败档也改成描述动作自己（工具那句 error 拼进 note，动作返回里没有 error 键）。
+            # 判据：tests/test_a_action_declarations_match_their_return_keys.py。
+            "dict（逐键：ok / kind / lit_id / doi / openalex_id / direction / count / "
+            "candidates / truncated_to_tool_max / note；"
             "`candidates[]` 每项是 title / year / doi / type_code / authors / venue / language / "
             "summary / pdf_url / landing_url / provider / is_oa / oa_source / openalex_id）；"
-            "失败档走工具层的 `fail(...)`：`ok=False` ＋ 一句 `error`，`kind` 是 "
+            "`ok=True` 只说走查做完了，走到什么看 `count` / `candidates`；`ok=True` 且 `count=0` "
+            "才是「这一篇这一侧没有邻居」（有效结论）。失败档（走查没做成）：`ok=False` ＋ `kind` 是 "
             "no_store / table_unreadable / unknown_lit_id / no_source_key / "
-            "provider_cannot_walk / walk_failed 之一"
+            "provider_cannot_walk / walk_failed 之一，原因原话在 `note` 里"
         ),
         side_effect="read", handler_name="walk_citations",
         external="egress",
@@ -153,7 +159,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
             },
             required=("books_dir",),
         ),
-        "IngestReport dict（含 counts / books[] / literature_ids / resolved / provenance）",
+        # 2026-11-04（审 F 区）：键表逐个抄 `agent_a/ingest_local.py` 末尾那个 return 字典。
+        # 改前写「含 counts / …」，而实现返回的是 17 个平铺的键（没有 counts 这一格）——
+        # 照 counts 去读的人会读到 None，再把「没读到」当「没入库」。
+        # 判据：tests/test_a_action_declarations_match_their_return_keys.py。
+        "IngestReport dict（逐键：ok / kind / resolved / root / dry_run / limit / books[] / "
+        "count / ingested / already_present / skipped / unreadable / text_layer_ok / "
+        "pages_total / literature_ids / provenance / note）",
         side_effect="write_local", handler_name="ingest_local",
         external="none",
     ),
