@@ -6558,7 +6558,8 @@ class Secretary:
         不决定并 —— 业主 2026-11-04：「词面相似度只许用于候选表排序，不许决定并」）。
         命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明
         落 `proofs` 清单（canonical 空时落 `proof_text`）、依赖落 `used_by="stmt:#pN"`。
-        没有证明正文的重复登记不进这一支（它不产生"第 N 份证明"，老口径原样保留）。
+        没有证明正文的重复登记也判归属（2026-11-04）：判得成同一条 ⇒ 不新建第二行，
+        回 `duplicate=True` + `no_proof=True`（重复读数，不是第 N 份证明）；判不成 ⇒ 照常新建。
         同一命题下新交来的证明与在册某一份同种（`proof_same_kind`，相似度 ≥
         `proof_same_jaccard`）⇒ 不新增证明号，受控拒绝并点名第几份；调用方给 `merge=True`
         并交合并稿时，合并稿成为那一份证明的新版本、旧正文进 `proof_history`，且要求 V 重签
@@ -7837,6 +7838,81 @@ class Secretary:
         candidates.sort(key=lambda c: (-c["similarity"], str(c["stmt_id"])))
         return candidates[0]
 
+    def _proposition_owner(self, tx: Any, full: str, *, kind: str,
+                           adj: Mapping[str, Any],
+                           out: dict[str, Any]) -> dict[str, Any] | None:
+        """这一笔归属于哪一条在册命题（`None` = 不归任何一条 ⇒ 调用方照常新建）。
+
+        判据只有两档，顺序固定（业主 2026-10-24 定、2026-11-04 收紧兜底）：
+
+        | 档 | 谁说了算 | 命中 |
+        |---|---|---|
+        | `adjudication.checked`（秘书判成了） | 它：`same` + 点名的 `same_as` 且那一行还在/还可并 | 那一条 |
+        | 没查成（没缝 / 超时 / 坏 JSON / 正文截断） | fail-closed：只认「确定性键相同」这一档等价改写；词面相似度只排序、不决定并 | 键相同那一条 |
+
+        三态读数全在这一处写（`adjudication` / `proposition_state` / `proposition_reason`）：
+        判 different / unknown 与"没查成"都不许折成"并"，也不许折成"查过了、不同"。
+        "这一笔带不带证明正文"**不参与**这个判断（2026-11-04：没有正文的重复登记也要
+        判归属）—— 它只决定命中之后落成"第 N 份证明"还是"一次重复读数"。
+        """
+        if adj.get("checked"):
+            verdict_word = str(adj.get("verdict") or _PK.STATE_UNKNOWN)
+            out["adjudication"] = self._adjudication_reading(adj)
+            out["proposition_reason"] = (str(adj.get("basis") or "")
+                                         or str(adj.get("reason") or ""))
+            if verdict_word != _PK.STATE_SAME:
+                out["proposition_state"] = (verdict_word if verdict_word in
+                                            (_PK.STATE_DIFFERENT, _PK.STATE_UNKNOWN)
+                                            else _PK.STATE_UNKNOWN)
+                # 判 different / unknown ⇒ 不并，这一支一个字节都不写（调用方照常新建）。
+                # `unknown` 尤其不许拿相似度去猜：那是把"没人判过"冒充"判过了、不同"的
+                # 同一类错，只是方向相反。
+                return None
+            target_id = str(adj.get("same_as") or "")
+            # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是登记那一刻的候选，
+            # 到了事务里它可能已经被否证/被取代/改成非命题 kind —— 那时不许把新证明挂上去。
+            hit = next(({"row": dict(r), "stmt_id": str(r.get("stmt_id") or ""),
+                         "verdict": {"state": _PK.STATE_SAME,
+                                     "basis": MERGED_BY_ADJUDICATION,
+                                     "similarity": 0.0,
+                                     "reason": str(adj.get("basis") or "")}}
+                        for r in tx.rows("statements")
+                        if str(r.get("stmt_id") or "") == target_id
+                        and _is_proposition_kind(r.get("kind"))
+                        and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES), None)
+            if hit is None:
+                out["proposition_state"] = _PK.STATE_UNKNOWN
+                out["proposition_reason"] = (
+                    f"秘书判 same 并点名 stmt:{target_id or '（空）'}，而事务快照里读不到那一条"
+                    "（或它的状态已不可并）⇒ 不并、照常新建（不在一条读不到的行上写证明）")
+                return None
+            return hit
+        # ---- 没查成：fail-closed（业主 2026-11-04 裁定）
+        #
+        # 改前这一支退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"两档，
+        # 于是「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」（键不同、
+        # 词面相似度 0.8889 ≥ 0.85）被并成一行。而"素数 / 奇素数"正是业主点名的
+        # 「条件强弱关系」⇒ 语义不一致 ⇒ 不并。
+        #
+        # 现在的口径（两条，缺一条都不成立）：
+        # - 确定性键相同 ⇒ 仍并：那是"条件与结论的等价改写 + 分句顺序 / 记号排版"
+        #   （业主的判准里「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、可复算，
+        #   不是阈值判据；
+        # - 词面相似度一个字节都不决定并：它只给候选表排序（`_proposition_candidates`
+        #   与 `_fail_closed_reason` 的读数）。
+        # 没并的那一档必须留下读数（`adjudication.checked=False` + `fail_closed` +
+        # `why_not_merged`）：三态纪律 —— "没查成"不许折成"查过了、不同"。
+        out["adjudication"] = self._adjudication_reading(adj)
+        hit = self._same_proposition_candidate(tx, full, kind=kind, key_only=True)
+        if hit is None:
+            why = self._fail_closed_reason(tx, full, kind=kind)
+            out["proposition_state"] = _PK.STATE_UNKNOWN
+            out["proposition_reason"] = why
+            out["adjudication"]["fail_closed"] = True
+            out["adjudication"]["why_not_merged"] = why
+            return None
+        return hit
+
     def _fail_closed_reason(self, tx: Any, full: str, *, kind: str = "") -> str:
         """没查成时"为什么没并"的那句话（读数，不是判据；不改任何一格的去向）。
 
@@ -8017,6 +8093,7 @@ class Secretary:
         | 结局 | 返回里的读数 |
         |---|---|
         | 并成第 N 份证明 | `merged=True` + `merged_into` + `proof_no=N` + `matched_by` |
+        | 同一条命题、但这一笔没有证明正文 | `checked=True` + `created=False` + `duplicate=True` + `no_proof=True` + `stmt_id=<既有>` |
         | 同种证明、且没给 merge | `checked=False` + `refused="proof_same_kind"` + 点名第几份 |
         | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
         | 同一个概念（概念行） | `checked=True` + `created=False` + `duplicate=True` + `stmt_id=<既有>` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
@@ -8078,72 +8155,32 @@ class Secretary:
                 "不参与同一命题判定（不并）")
             return None
         proof = str(body.get("proof_text") or "")
+        # ---- 归属判断（"这一笔是不是在册某一条命题的又一次登记"）只在这一处判 ------
+        #
+        # 带不带证明正文都先问这一句（2026-11-04 业主裁定）：改前"没有证明正文"在下面
+        # 直接返回 None，于是同一命题换一种写法、两次都没带证明时会落第二行 —— 而它
+        # 并不产生第二份证明，也没有任何读数说"这是同一条"。
+        hit = self._proposition_owner(tx, full, kind=kind, adj=adj, out=out)
         if not proof.strip():
-            # 没有证明正文 ⇒ 这一笔不产生"第 N 份证明"，也就不进这一支：
-            # 合并解决的是"两份证明被并列记录"，而没有正文的重复登记只是一次重复读数。
-            # 老口径（按规范化正文精确查重）在这一支上原样保留 —— 不在这一笔里顺手
-            # 改掉"命题级重复登记"的处置（那会让 `record_statement` 的返回值在
-            # "带不带证明"两种情形下变成两个意思只差一个字的读数）。
-            out["proposition_reason"] = (str(probe["reason"]) if not probe["ok"] else
-                                         "这一笔没有带证明正文 ⇒ 不并（合并只针对第 N 份证明）")
-            return None
-        if adj.get("checked"):
-            # ---- 秘书判过了：三种结论各自落地，机械判据一律不再插话。
-            verdict_word = str(adj.get("verdict") or _PK.STATE_UNKNOWN)
-            out["adjudication"] = self._adjudication_reading(adj)
-            out["proposition_reason"] = (str(adj.get("basis") or "")
-                                         or str(adj.get("reason") or ""))
-            if verdict_word != _PK.STATE_SAME:
-                out["proposition_state"] = (verdict_word if verdict_word in
-                                            (_PK.STATE_DIFFERENT, _PK.STATE_UNKNOWN)
-                                            else _PK.STATE_UNKNOWN)
-                # 判 different / unknown ⇒ 不并，这一支一个字节都不写（调用方照常新建）。
-                # `unknown` 尤其不许拿相似度去猜：那是把"没人判过"冒充"判过了、不同"的
-                # 同一类错，只是方向相反。
-                return None
-            target_id = str(adj.get("same_as") or "")
-            # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是登记那一刻的候选，
-            # 到了事务里它可能已经被否证/被取代/改成非命题 kind —— 那时不许把新证明挂上去。
-            hit = next(({"row": dict(r), "stmt_id": str(r.get("stmt_id") or ""),
-                         "verdict": {"state": _PK.STATE_SAME,
-                                     "basis": MERGED_BY_ADJUDICATION,
-                                     "similarity": 0.0,
-                                     "reason": str(adj.get("basis") or "")}}
-                        for r in tx.rows("statements")
-                        if str(r.get("stmt_id") or "") == target_id
-                        and _is_proposition_kind(r.get("kind"))
-                        and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES), None)
             if hit is None:
-                out["proposition_state"] = _PK.STATE_UNKNOWN
                 out["proposition_reason"] = (
-                    f"秘书判 same 并点名 stmt:{target_id or '（空）'}，而事务快照里读不到那一条"
-                    "（或它的状态已不可并）⇒ 不并、照常新建（不在一条读不到的行上写证明）")
+                    str(out.get("proposition_reason") or "")
+                    + "；这一笔没有带证明正文 ⇒ 不进「第 N 份证明」那一支，"
+                    "但归属判断已经做过：没命中 ⇒ 照常新建一行")
                 return None
-        else:
-            # ---- 没查成：fail-closed（业主 2026-11-04 裁定，本笔改口径）
-            #
-            # 改前这一支退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"
-            # 两档，于是「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」
-            # （键不同、词面相似度 0.8889 ≥ 0.85）被并成一行。而"素数 / 奇素数"正是
-            # 业主点名的「条件强弱关系」⇒ 语义不一致 ⇒ 不并。
-            #
-            # 现在的口径（两条，缺一条都不成立）：
-            # - 确定性键相同 ⇒ 仍并：那是"条件与结论的等价改写 + 分句顺序 / 记号
-            #   排版"（业主的判准里「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、
-            #   可复算，不是阈值判据；
-            # - 词面相似度一个字节都不决定并：它只给候选表排序（`_proposition_candidates`
-            #   与 `_fail_closed_reason` 的读数）。
-            # 没并的那一档必须留下读数（`adjudication.checked=False` + `fail_closed` +
-            # `why_not_merged`）：三态纪律 —— "没查成"不许折成"查过了、不同"。
-            out["adjudication"] = self._adjudication_reading(adj)
-            hit = self._same_proposition_candidate(tx, full, kind=kind, key_only=True)
-            if hit is None:
-                why = self._fail_closed_reason(tx, full, kind=kind)
-                out["proposition_state"] = _PK.STATE_UNKNOWN
-                out["proposition_reason"] = why
-                out["adjudication"]["fail_closed"] = True
-                out["adjudication"]["why_not_merged"] = why
-                return None
+            sid = str(hit["stmt_id"])
+            basis = str(dict(hit.get("verdict") or {}).get("basis") or "")
+            out["proposition_state"] = _PK.STATE_SAME
+            out["proposition_reason"] = str(dict(hit.get("verdict") or {}).get("reason") or "")
+            out.update(checked=True, created=False, duplicate=True, stmt_id=sid,
+                       matched_by=basis, no_proof=True,
+                       reason=(f"同一条命题已在册（stmt:{sid}；依据："
+                               f"{self._basis_text(basis, 0.0)}）⇒ 不新建第二行；"
+                               "这一笔没有带证明正文，所以也不产生第 N 份证明"
+                               "（没有正文的重复登记是一次重复读数，不是第 2 份证明）"))
+            return out
+        if hit is None:
+            return None
         row = dict(hit["row"])
         sid = str(hit["stmt_id"])
         verdict = dict(hit["verdict"])
