@@ -61,6 +61,12 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/research_questions.json`", "写", "立问题、追进度、记失败原因"),
         ("`data/conjectures.json`", "写", "register_conjecture（D 的主力动作，判重命中即返回既有行）"),
         ("`data/attack_plans.json` 与 `attack_rounds.json`", "写", "攻坚计划与每轮进展"),
+        # 2026-11-04（业主裁定：D 只提供想法，证明的落稿与拿签归 F）：`out/proofs/` 是 D 的
+        # 攻坚过程记录，不是证明稿的落点 —— 这一格与新口径逐字一致（判据
+        # `tests/test_system_docs_are_generated.py::test_the_attack_record_permission_...`）。
+        ("`out/proofs/*.md`", "写",
+         "攻坚过程记录：`## 思路` / `## 依赖面参考`；带 `## 证明` 节 ⇒ 受控拒"
+         "（`reserved_framework_artifact`），要落稿就派 F"),
         ("`out/review/*.md`", "写", "研究报告"),
     ),
     "E": (
@@ -69,7 +75,8 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/conjectures.json` 与 `statements.json`", "只读", "读被判定的东西；改判档不由 E 做"),
     ),
     "F": (
-        ("`out/proofs/*.md`", "写", "证明正文（manuscripts 那套读的正是它）"),
+        ("`reports/f-proof-*.md`", "写",
+         "证明正文（框架渲染：`## 命题` / `## 证明` / `## 依赖`；由 `F.step` 的 proof 动作落）"),
         ("`data/statements.json`", "只读", "确认要证的是哪一条"),
         ("`data/dependencies.json`", "写", "依赖面表格（depsection 解析，V 会核引用）"),
     ),
@@ -85,7 +92,7 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
     ),
     "V": (
         ("`data/verifications/<命题号>.jsonl`", "写", "每次审校一行（判决 / 发现项 / 引用核实 / 批注）"),
-        ("`out/proofs/*.md`", "只读", "被审的证明正文"),
+        ("`reports/f-proof-*.md`（以及 `e-proof-*.md` / `b-proof-*.md`）", "只读", "被审的证明正文"),
         ("`data/statements.json`", "只读", "被审命题的档位与依赖"),
     ),
     "L": (
@@ -278,7 +285,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "证明正文与论文的落盘形态，以及把 out/paper/main.tex 编成 PDF。",
         "manuscripts（write 与 row_of 与 read_rows，带解析缓存）、depsection（四列依赖表解析）、"
         "papermapping（论文到命题的对应表）、papercompile（xelatex 三遍，失败分类）。",
-        "写 out/proofs 与 out/paper",
+        "写 manuscripts/ 与 out/paper；读 reports/*-proof-*.md",
         "tests/test_manuscript_handoff.py、tests/test_paper_pack.py",
     ),
     (

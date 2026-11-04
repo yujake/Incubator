@@ -128,3 +128,141 @@ def test_both_documents_are_registered_in_the_docs_index() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for name in ("ROLE-GUIDE.md", "SYSTEM-COMPONENTS.md"):
         assert name in text, f"docs/INDEX.md 里没有 {name}"
+
+
+# ============================================================ 2026-11-04：D 的攻坚过程记录
+#
+# 生成器与产物必须同时对新口径负责：`out/proofs/` 是 D 的攻坚过程记录（`## 思路` /
+# `## 依赖面参考`），带 `## 证明` 节在 D 的 `fs.write` / `fs.edit` 上受控拒（要落稿就派 F）。
+# 改前生成器把这一格写成「写 | 证明正文（manuscripts 那套读的正是它）」—— 那是 F 的证明稿
+# 落点，早已搬到 `reports/f-proof-*.md`；只改 `docs/ROLE-GUIDE.md` 是改产物，下次重生成
+# 就会被覆盖，所以这一条同时核生成器与产物。
+
+#: `out/proofs/` 那一格在生成器与产物里的路径格。
+ATTACK_RECORD_PATH = "`out/proofs/*.md`"
+#: 新口径必须读得到的几个词（少一个都说明措辞被改回去了）。
+ATTACK_RECORD_NEEDLES: tuple[str, ...] = (
+    "攻坚过程记录", "`## 思路`", "`## 依赖面参考`", "`## 证明`", "受控拒", "派 F",
+)
+#: 改前那一格的细节措辞（逐字；反真空把它塞回去 ⇒ 判据必须红）。
+OLD_ATTACK_RECORD_DETAIL = "证明正文（manuscripts 那套读的正是它）"
+
+
+def _role_section(text: str, role: str) -> str:
+    """`docs/ROLE-GUIDE.md` 里某个角色那一节（从 `## 角色 X` 到下一个 `## 角色 `）。"""
+    start = text.find(f"## 角色 {role}\n")
+    if start < 0:
+        return ""
+    end = text.find("\n## 角色 ", start + 1)
+    return text[start:] if end < 0 else text[start:end]
+
+
+def _rows_for(rows, path: str) -> list[tuple[str, str, str]]:
+    """生成器里某个角色的 `(路径, 读/写, 细节)` 逐行（路径格逐字相等的那些）。"""
+    return [tuple(row) for row in (rows or ()) if str(row[0]) == path]
+
+
+def _guide_attack_rows(guide_text: str) -> list[tuple[str, str, str]]:
+    """产品文档里 D 那一节的 `out/proofs/*.md` 行（按表格切格）。"""
+    out: list[tuple[str, str, str]] = []
+    for line in _role_section(guide_text, "D").splitlines():
+        if not line.strip().startswith(f"| {ATTACK_RECORD_PATH} |"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split(" | ")]
+        if len(cells) >= 3:
+            out.append((cells[0], cells[1], " | ".join(cells[2:])))
+    return out
+
+
+def _attack_record_problems(artifacts, guide_text: str) -> list[str]:
+    """生成器那一格与 `ROLE-GUIDE.md` 那一行对不对得上（空列表 = 对得上）。
+
+    纯函数（喂一份旧措辞的副本就能给反真空做牙）。它查四件事：
+      ① `out/proofs/*.md` 只归 D（改前 F / V 两格也写着它 —— 同一个落点两个含义）；
+      ② D 那一格是「写」且读得到攻坚过程记录那几句话；
+      ③ F 的证明正文落点是 `reports/f-proof-*.md`、V 读的也是它（不再指 out/proofs）；
+      ④ 产物里 D 那一行与生成器逐字一致，且旧措辞（证明正文）不在 `out/proofs` 行上。
+    """
+    problems: list[str] = []
+    owners = sorted(role for role, rows in artifacts.items()
+                    if _rows_for(rows, ATTACK_RECORD_PATH))
+    if owners != ["D"]:
+        problems.append(
+            f"生成器里 `out/proofs/*.md` 应当只在 D 名下（它是 D 的攻坚过程记录），"
+            f"实得 {owners} —— F / V 的证明正文落点是 reports/f-proof-*.md")
+
+    d_rows = _rows_for(artifacts.get("D"), ATTACK_RECORD_PATH)
+    detail = ""
+    if len(d_rows) != 1:
+        problems.append(f"D 的生成器里 `out/proofs/*.md` 应当恰好一行，实得 {len(d_rows)} 行")
+    else:
+        _path, permission, detail = d_rows[0]
+        if permission != "写":
+            problems.append(f"D 的 `out/proofs/*.md` 权限应当是「写」，实得 {permission!r}")
+        missing = [needle for needle in ATTACK_RECORD_NEEDLES if needle not in detail]
+        if missing:
+            problems.append(f"D 的 `out/proofs/*.md` 细节少了这些词：{missing}")
+        if OLD_ATTACK_RECORD_DETAIL in detail:
+            problems.append("D 的 `out/proofs/*.md` 还写着旧措辞「证明正文」")
+
+    if not _rows_for(artifacts.get("F"), "`reports/f-proof-*.md`"):
+        problems.append("F 的证明正文落点不是 `reports/f-proof-*.md`")
+    v_rows = [row for row in (artifacts.get("V") or ())
+              if str(row[0]).startswith("`reports/f-proof-*.md`")]
+    if not v_rows:
+        problems.append("V 读的证明正文落点不是 `reports/f-proof-*.md`")
+
+    guide_rows = _guide_attack_rows(guide_text)
+    if len(guide_rows) != 1:
+        problems.append(
+            f"`docs/ROLE-GUIDE.md` 的 D 那一节里 `out/proofs/*.md` 应当恰好一行，"
+            f"实得 {len(guide_rows)} 行 ⇒ 先跑 `python -B tools/write_system_docs.py`")
+    elif detail and guide_rows[0][2] != detail:
+        problems.append(
+            "`docs/ROLE-GUIDE.md` 的 D/`out/proofs/*.md` 行与生成器不一致："
+            f"产物 {guide_rows[0][2]!r} / 生成器 {detail!r}")
+    old_row = f"| {ATTACK_RECORD_PATH} | 写 | {OLD_ATTACK_RECORD_DETAIL} |"
+    if old_row in guide_text:
+        problems.append("`docs/ROLE-GUIDE.md` 里还留着旧措辞那一行（证明正文）")
+    return problems
+
+
+def test_the_attack_record_permission_is_written_in_the_generator_and_the_guide() -> None:
+    """正控：生成器那一格与 ROLE-GUIDE 那一行同时是「攻坚过程记录」新口径。
+
+    业主 2026-11-04：「D 可提供证明思路，甚至提供依赖面参考，最终的证明落稿拿签必须派给
+    F 完成」⇒ `out/proofs/` 不是证明稿的落点。只改 `docs/ROLE-GUIDE.md` 会在下一次
+    `write_system_docs.py` 重生成时被覆盖，所以两边一起核。
+    """
+    mod = _module()
+    assert len(mod.ARTIFACTS.get("D") or ()) >= 3, "生成器的 D 那一格太小 ⇒ 这条判据没有对象"
+    problems = _attack_record_problems(mod.ARTIFACTS, ROLE_GUIDE.read_text(encoding="utf-8"))
+    assert not problems, "生成器与产物对 `out/proofs/` 的口径不一致：\n  " + "\n  ".join(problems)
+
+
+def test_putting_the_old_attack_record_row_back_goes_red() -> None:
+    """反真空：把生成器那一格改回旧措辞 ⇒ 同一个尺子必须点红。
+
+    两个方向都钉：① 生成器旧（证明正文）而产物新；② 只改产物（产物新、生成器旧）。
+    只钉其中一个方向的话，"生成器改回去了"与"产物没重生成"这两种事故里必有一种看不见。
+    """
+    mod = _module()
+    guide = ROLE_GUIDE.read_text(encoding="utf-8")
+    assert _attack_record_problems(mod.ARTIFACTS, guide) == [], "基线就不绿 ⇒ 反真空没有意义"
+
+    # ① 生成器那一格改回旧措辞（D 名下放一行旧的「证明正文」）
+    dirty = {role: tuple(rows) for role, rows in mod.ARTIFACTS.items()}
+    dirty["D"] = tuple(row for row in dirty["D"] if row[0] != ATTACK_RECORD_PATH) + (
+        (ATTACK_RECORD_PATH, "写", OLD_ATTACK_RECORD_DETAIL),)
+    assert _attack_record_problems(dirty, guide), (
+        "生成器改回旧措辞，尺子却没点红 ⇒ 正控的绿不来自生成器那一格")
+
+    # ② 只改产物：把 guide 的 D 行换成旧措辞、生成器保持新口径
+    live = _rows_for(mod.ARTIFACTS.get("D"), ATTACK_RECORD_PATH)[0]
+    old_line = f"| {ATTACK_RECORD_PATH} | {live[1]} | {OLD_ATTACK_RECORD_DETAIL} |"
+    new_line = f"| {ATTACK_RECORD_PATH} | {live[1]} | {live[2]} |"
+    assert new_line in guide, "产物里找不到基线那一行 ⇒ 反真空没有对象"
+    only_product_changed = guide.replace(new_line, old_line)
+    assert _attack_record_problems(mod.ARTIFACTS, only_product_changed), (
+        "只改产物（生成器新、产物旧）却没点红 ⇒ 这条判据只看了产物")
+
