@@ -3956,7 +3956,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         out["why"] = (str(chosen.get("why") or "")
                       + "；改稿是正确动作，建议：请重新拿 V 签 —— 派 V 用 "
                       f"`verify_proof(statement_id=\"{sid}\", proof_no={chosen_no})` "
-                      "审现行正文（连判 3 次干净成立后秘书发签）")
+                      "审现行正文（签还没到位：这一版正文上还没有签块）")
         return out
     if state == "holding":
         # 签过、判成立、签的也是现行这一版 —— 就是连续次数没到（业主 2026-10-29）。
@@ -3971,9 +3971,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         checks[2]["detail"] = "签的就是现行这一版（不是过期），只是连续次数还没到"
         out["checked"] = checked
         out["why"] = (f"命题 {sid} 的证明签过、也判了「成立」，但连续次数只到 {got}/{need}"
-                      f"⇒ 第 3 位不发签（业主 2026-10-29：连续 {need} 次没问题才发签；"
-                      "第 1、2 次只落台账、不翻位）。建议：再送 V 审够次数，"
-                      "不许把这两票当成一次签")
+                      "⇒ 签还没到位（V 判过「成立」，但这一版正文上还没有签块），"
+                      "不能当「审过」。建议：再送 V 审，直到签到位；"
+                      "不许把这几票当成一次签")
         return out
     if state == "unsigned":
         # 台账读得出、只是这一份（以及别的证明）一次都没签 ⇒ 查过了，结论是"没凭据"。
@@ -3987,7 +3987,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                          f"`{out['ledger']}` 里没有这一份证明的签 ⇒ 一次都没签")
         out["why"] += ("；建议：请拿 V 签 —— 派 V 用 "
                        f"`verify_proof(statement_id=\"{sid}\", proof_no={chosen_no})` 审这一份"
-                       "（连判 3 次干净成立后秘书发签）")
+                       "（签还没到位：这一版正文上还没有签块）")
         return out
     checks[1]["detail"] = "台账读不出来（没查成）"
     checks[2]["detail"] = "同上"
