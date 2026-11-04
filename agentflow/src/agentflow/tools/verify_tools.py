@@ -1036,9 +1036,19 @@ _ROLES_V = ("V",)
             # （`reports/f-proof-*.md`），V 读稿审、三转干净就把签块盖回那一份手稿
             # （`vsigns.write_manuscript_sign`）。此时 `statement_id` 不给：空号 =
             # 「这一条还没在册」。落点不是 `verifications/<号>.jsonl`，而是手稿里那一行签块。
+            # 2026-11-04（三类稿都能走这一格）：这一格原先只写"F 的证明手稿路径"，
+            # 而 E（`reports/e-proof-<实验号>.md`，`exhaustionreport.MANUSCRIPT_PREFIX`）
+            # 与 B（`reports/b-proof-<命题号>.md`，`bmanuscript.PREFIX`）走的是同一个入口
+            # （`agent_v.core._review_unregistered_prose` 的路径守卫：`f-proof*` / `e-proof*`
+            # 一律收、B 那一份由 `bmanuscript.is_relpath` 判）。说明照三类写，
+            # 并把"不带它"的后果写清 —— 那一档不是"审过了没毛病"，是"这签没落在任何一份稿上"。
             "proof_manuscript": {"type": "string", "description":
-                                 "F 的证明手稿路径（工作区相对；命题还没在册时用它，"
-                                 "给了它就可以不给 statement_id）"},
+                                 "证明手稿路径（工作区相对，只收约定命名的那三种：F 的 "
+                                 "`reports/f-proof-*.md`、E 的 `reports/e-proof-<实验号>.md`、"
+                                 "B 的 `reports/b-proof-<命题号>.md`）；命题还没在册时用它，"
+                                 "给了它就可以不给 `statement_id` —— 签会盖回这一份稿里"
+                                 "（`## 证明` 那一节）。不带它只会落 pending、稿上没有签块："
+                                 "那一档只有台账那一行，B 收录时从稿上读不到盖在正文上的签"},
            },
            # 2026-11-02：不再要求 `statement_id` —— 未在册那一档不给号、给手稿路径；
            # 两个入口键一个都不给时由实现按 `checked=False` + `no_proof_text` 如实拒
