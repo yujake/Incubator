@@ -672,15 +672,19 @@ class _WriteReport:
             sid = str(row.get("statement_id") or "")
             eid = str(row.get("experiment_id") or "")
             if not sid and eid:
-                # E 的穷举证明稿（`exp:<实验号>`）：这一笔不代 B 登记 —— 命题还没有号，
-                # B 收录时需要的 statement_full / 证明栏由 D 的召唤参数带过去，稿本身
-                # 由 B 按携带单寻址读（同一条 `read_carried_manuscript`）。
-                # 记一条"没被问"的读数（不带 `ok`）：拒收是 B 说不行，这里根本没人被问。
-                out["addressed"].append({
-                    "experiment_id": eid,
-                    "path": str(row.get("path") or ""),
-                    "why": ("E 的穷举证明稿按携带单寻址（B 收录时自己读）；"
-                            "D 不代它登记（命题还没有号）")})
+                # ---- 2026-11-04（业主裁定 B）：E 的 `exp:` 行也由 D 代递 ------------
+                #
+                # 改前这一支只记一条"没被问"的读数（"命题还没有号 ⇒ D 不代它登记"），
+                # 于是 E 的穷举证明稿虽然写在携带单上，B 却从未被 D 直接调用过 ——
+                # 业主的口径是「与 F 行同形」：F 行由 D 调 `register_statement` 递，
+                # E 行也照同样的形状递（命题号不需要先有：B 的登记入口本来就接受
+                # 首次登记）。参数从 experiment 行 + 稿拼（statement_full / 证明栏 /
+                # doc_id / line_range），判据在 `_deliver_exp_row` 一处。
+                rec = self._deliver_exp_row(row)
+                if rec is not None:
+                    out["results"].append(rec)
+                    if rec.get("ok"):
+                        out["delivered"] = int(out["delivered"]) + 1
                 continue
             rec: dict[str, Any] = {"statement_id": sid, "ok": False, "stmt_id": "",
                                    "deps_written": 0, "manuscript_source": "",
@@ -733,6 +737,111 @@ class _WriteReport:
             out["why"] = "携带单是空的（盘上没有任何一条按命号命名的 F 证明手稿）"
         return out
 
+    def _deliver_exp_row(self, row: Mapping[str, Any]) -> dict[str, Any] | None:
+        """把携带单上一条 E 的 `exp:` 稿递给 B（与 F 行同形；业主 2026-11-04 裁定 B）。
+
+        ## 业主口径（逐字）
+
+        > 「E 的 exp: 行也由 D 代递（与 F 行同形）」
+
+        ## 参数从哪来（experiment 行 + 稿）
+
+        - `statement_full`：experiment 行的 `claim`（E 写在台账里的被检验命题）；
+        - 证明栏 `proof_text`：稿里 `## 证明` 那一节（`exhaustionreport.proof_body_of`）——
+          与 `numericproof.compose_proof_column` 逐字同源，B 的第三方签字闸按它的 sha 认签；
+        - `doc_id` / `line_range`：E 的出处不是文献页，`line_range.label` 指回那条
+          experiment 行（`exp:<实验号>`），`doc_id` 留空 —— 编一个不存在的 doc 号比留空更坏；
+        - `proof_manuscript`：整份稿（B 从稿里读签块与依赖段）。
+
+        ## 三态（不折平）
+
+        - 稿上没有覆盖它的签（`manuscript_sign_standing != signed`）⇒ 不递，读数
+          `kind="exp_proof_unsigned"`：没签的稿不是"入库的证明"，带上它只会让 B 白拒一次；
+        - 实验行读不到 / 稿读不到 ⇒ `checked=False` 的读数（`error` 里点名原因），不猜；
+        - B 拒收 ⇒ `ok=False` + 拒信原文；B 收下 ⇒ `ok=True` + `stmt_id` / 依赖边数。
+
+        返回一条 result（键与 F 行同形，另带 `experiment_id`）；`None` = 这一行不该由本方法
+        处理（反真空打桩点就落在这里：摘掉它 ⇒ B 侧收不到、`statements` 里没有那一行）。
+        """
+        from .. import depsection as _DS
+        from .. import exhaustionreport as _ER
+        from .. import vsigns as _VS
+
+        eid = str(row.get("experiment_id") or "")
+        rel = str(row.get("path") or "")
+        rec: dict[str, Any] = {
+            "statement_id": "", "experiment_id": eid, "ok": False, "stmt_id": "",
+            "deps_written": 0, "manuscript_source": "", "manuscript_washed": False,
+            "kind": "", "error": ""}
+        if self.b is None:
+            rec["error"] = ("这一趟手上没有 B 的入口（直调 `AgentD(store)` 时没有 `b=`）"
+                            " ⇒ 这一条 exp 稿没有递出去")
+            return rec
+        exp_row = None
+        try:
+            exp_row = next((dict(r) for r in self.store.rows("experiments")
+                            if str(r.get("experiment_id") or "") == eid), None)
+        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有这条实验"
+            rec["error"] = f"读不到 experiments：{type(exc).__name__}: {exc}"
+            return rec
+        if exp_row is None:
+            rec["error"] = f"携带单上的 exp:{eid} 在 experiments 台账里找不到 ⇒ 不递（不猜）"
+            return rec
+        try:
+            text = (Path(self.store.root) / rel).read_text(encoding="utf-8")
+        except OSError as exc:
+            rec["error"] = (f"读不到手稿 {rel}（{type(exc).__name__}: {exc}）"
+                            " ⇒ 这一条 exp 稿递不出去")
+            return rec
+        # ---- 没签的 exp 行不代递（沿用 `_carried_manuscripts` 的同一把尺） ----------
+        #
+        # 携带单理论上只收已签的稿（`_carried_manuscripts` 已筛过一遍），但这里是
+        # 代递的最后一道：打桩/直调/清单漂移都可能把一份没签的稿送进来，而"没签"
+        # 与"B 说不行"是两件事，不许在读数上混成一条 `ok=False` 的拒收。
+        standing = _VS.manuscript_sign_standing(text, manuscript_path=rel)
+        if str(standing.get("state") or "") != "signed":
+            rec["kind"] = "exp_proof_unsigned"
+            rec["error"] = (f"exp:{eid} 的稿没有覆盖它的 V 签块"
+                            f"（{standing.get('state') or 'unsigned'}："
+                            f"{standing.get('why') or '没有签'}）⇒ D 不代递："
+                            "没签的稿不是入库的证明，先让 E 派 V 拿签再带")
+            return rec
+        proof_text = _ER.proof_body_of(text)
+        if not proof_text.strip():
+            rec["error"] = f"exp:{eid} 的稿里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
+            return rec
+        claim = str(exp_row.get("claim") or "").strip()
+        try:
+            got = dict(self.b.register_statement(
+                statement_full=claim,
+                statement_text=str(exp_row.get("claim_key") or "").strip(),
+                label=" ".join(claim.split())[:80],
+                proof_text=proof_text,
+                proof_manuscript=text,
+                origin="own_result",
+                kind="theorem",
+                evidence_kind=str(exp_row.get("evidence_kind") or "proof"),
+                # E 的出处是那条实验行（不是文献页）：编一个 doc 号比留空更坏。
+                doc_id="",
+                line_range={"label": f"exp:{eid}"},
+                quote_verified=None,
+                quote_reason=(f"E 的穷举证明（exp:{eid}）：引文面不适用 —— 数值证据由"
+                              "程序与穷举论证签，V 的签在手稿块上"),
+                # 依赖面由 B 读稿里的 `## 依赖` 那一节（与 F 行同一条路）。
+                derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or [])],
+            ) or {})
+        except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
+            rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"
+            return rec
+        rec.update(ok=bool(got.get("ok")),
+                   stmt_id=str(got.get("stmt_id") or ""),
+                   deps_written=int(got.get("deps_written") or 0),
+                   manuscript_source=str(got.get("manuscript_source") or ""),
+                   manuscript_washed=bool(got.get("manuscript_washed")),
+                   kind=str(got.get("kind") or ""),
+                   error=str(got.get("error") or ""))
+        return rec
+
     def _delivery_section(self, delivery: Mapping[str, Any]) -> list[str]:
         """这一趟"把稿交给 B"的回执（写进报告：递了没递、B 落了几条依赖边）。
 
@@ -754,21 +863,24 @@ class _WriteReport:
             f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
             f"{int(delivery.get('delivered') or 0)} 条。")
         lines.append("")
-        lines.append("| 命题号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
+        lines.append("| 命题号 / 实验号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
         lines.append("|---|---|---|---|---|---|")
         for r in results:
+            key = (f"stmt:{r.get('statement_id')}" if str(r.get("statement_id") or "")
+                   else f"exp:{r.get('experiment_id')}")
             lines.append(
-                f"| stmt:{r.get('statement_id')} | {'收下' if r.get('ok') else '拒收'} | "
+                f"| {key} | {'收下' if r.get('ok') else '拒收'} | "
                 f"{int(r.get('deps_written') or 0)} | {r.get('manuscript_source') or '-'} | "
                 f"{'是' if r.get('manuscript_washed') else '否'} | "
                 f"{_digest(r.get('kind') or r.get('error'), 120) or '-'} |")
         if not results:
             lines.append("| （空） | - | 0 | - | - | - |")
-        # E 的穷举证明稿（`exp:` 行）：不代 B 登记，只按携带单寻址 —— 这一句把"没被问"
-        # 与上表的"拒收"分开写（同一张表里混着写会把"没人执行"读成"B 说不行"）。
+        # 旧读数：改前 D 对 `exp:` 行只记"按携带单寻址、不代 B 登记"（`addressed`）。
+        # 2026-11-04 起 exp 行也由 D 代递（与 F 行同形）⇒ 这一格正常情况下是空的，
+        # 保留它只为读得回旧工作区里那一批报告。
         for one in addressed:
             lines.append("")
             lines.append(
-                f"- `exp:{one.get('experiment_id')}` 的稿 `{one.get('path')}` 不代 B 登记："
+                f"- `exp:{one.get('experiment_id')}` 的稿 `{one.get('path')}` 这一趟没有代 B 登记："
                 f"{one.get('why') or '按携带单寻址'}")
         return lines
