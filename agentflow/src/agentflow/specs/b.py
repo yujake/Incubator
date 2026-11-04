@@ -330,8 +330,10 @@ SPEC = AgentSpec(
             "① 请 V 走查（`V.verify_proof`，产物就是 `verifications/<命题号>.jsonl` 那一行）签完再写 `proof_review`"
             "（签不够次数就再走查几次 —— 第 1、2 次「成立」不算 `signed`）；"
             "② 如实降档，并在 `quote_reason` 里写「还没有 V 的签名」—— 别把'拿不准'写成默认值。"
-            "改命题的档位或正文：把同一份内容**再交一次** `own.register_statement`；`table.update` 那类通用写口对 "
-            "statements 已被封，撞了只会白跑一趟。",
+            "改命题的正文：把同一份内容**再交一次** `own.register_statement`。"
+            "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
+            "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
+            "正文仍需走证明入口。",
             # 2026-10-20 业主裁定（逐字："B 负责定理及证明入库时可让 V 审核签字，这是对文献侧引入的内容
             # 需要看的，因为我们自己经 F 产出的证明天生带 V 签字"）：V 的签字有两个入口，B 只管文献那一侧。
             # 2026-11-01 业主澄清（逐字）：「一句说"F 的证明天生带签"，一句说"改一字签就作废"。
