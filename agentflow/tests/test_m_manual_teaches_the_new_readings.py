@@ -7,15 +7,15 @@
 |---|---|---|---|
 | 1 | `statements_unoptimized`（哪些证明还没洗过，按来源三档） | `closing.statements_unoptimized_reading`（进 `conductor.closing` 的 `readings`） | 0 处 —— M 只被教了 `statements_unsigned`，会把"未优化"读成"未签"或当成没有 |
 | 2 | `deps_missing`（依赖面的三态） | `secretary._deps_missing_reading` → `agent_b/register_statement.py` 的返回值；拒收码 `dependency_section_missing` | 0 处 —— M 读不懂 B 的拒收，只会让 B "再试一次" |
-| 3 | F / E 的稿到 B 的**第一来源**（D 的 `## 携带的证明手稿` → B 寻址） | `depsection.carried_manuscripts` / `SOURCE_CARRIED="carried_by_D"`（178 §五之二、2026-11-04「E 的穷举论证和 V 签也是委托入库」） | 手册的链在 `V` 之后直接写「B 收录证明」，没写 D 那一跳 |
+| 3 | F / E 的稿到 B 的第一来源（D 的 `## 携带的证明手稿` → B 寻址） | `depsection.carried_manuscripts` / `SOURCE_CARRIED="carried_by_D"`（178 §五之二、2026-11-04「E 的穷举论证和 V 签也是委托入库」） | 手册的链在 `V` 之后直接写「B 收录证明」，没写 D 那一跳 |
 
-第 4 条是同一节里一句**做不到的动作**：改前写「让 D / F 把那一份重新送 V 审」，
+第 4 条是同一节里一句做不到的动作：改前写「让 D / F 把那一份重新送 V 审」，
 而 `D` 没有到 `V` 的边（`ALLOWED_EDGES["D"]` 不含 `V`）—— 照它派 D，只拿得到
 `forbidden_edge`。
 
 ## 判据（正控 / 负控）
 
-1. 三处读数的**名字与三档取值**都能在 M 的手册正文里读到；
+1. 三处读数的名字与三档取值都能在 M 的手册正文里读到；
 2. 第 3 条另外要读到"兜底读盘只是降级 / 读不到清单是受控拒绝"这层语义；
 3. 第 4 条：旧写法不在、新写法在；
 4. 负控：把每一组针喂给一段缺它们的文本 ⇒ 同一个读法必须报缺（判据不是橡皮图章）。
@@ -27,7 +27,7 @@ import re
 from agentflow import agent_skills as AS
 from agentflow import capabilities as C
 
-#: 强调符号与空白：`**F 与 E**` 与 `F 与 E` 是同一句话（按"读出来的意思"判）。
+#: 强调符号与空白：`F 与 E` 与 `F 与 E` 是同一句话（按"读出来的意思"判）。
 _EMPHASIS = re.compile(r"[\s*`]+")
 
 #: 手册里「收工」那一条。
