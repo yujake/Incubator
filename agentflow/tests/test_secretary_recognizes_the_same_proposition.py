@@ -59,7 +59,7 @@ from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.agent_c.proof_chain import _DepGraph
-from agentflow.secretary import Secretary
+from agentflow.secretary import MERGED_BY_ADJUDICATION, Secretary
 from agentflow.store import Store
 
 #: 第一条命题（登记工作区里的第一行，号由 store 发，实得 `000000`）。
@@ -111,6 +111,23 @@ def _ws(path: pathlib.Path) -> Store:
 def _agent(st: Store) -> AgentB:
     """B 的真实现（零模型调用：这条路只碰秘书与 store）。"""
     return AgentB(st, extractor=None, extract_text=None, config={})
+
+
+def _model_says_same(stmt_id: str):
+    """把"模型说了什么"填成 `verdict=same / same_as=<stmt_id>`（只替换那一处判定）。
+
+    2026-11-04 起词面相似度不再决定并（fail-closed），所以"词形变体也要并"那一档
+    必须由模型判 —— 这个桩只提供"模型判了、判的是同一条"这个前提，判据本体仍在
+    秘书那一处（`adjudicate_proposition`）。
+    """
+    def _judge(self, stmt_like, **_kw):
+        return {"checked": True, "verdict": PK.STATE_SAME, "same_as": str(stmt_id),
+                "basis": "打桩：条件组与结论组一致", "canonical_name": "", "route": "",
+                "condition": "打桩：条件未读", "conclusion": "打桩：结论未读",
+                "reason": "打桩：模型判 same", "candidates": [], "cost": {},
+                "reused": False, "cached": False}
+
+    return _judge
 
 
 def _own(full: str) -> dict:
@@ -305,11 +322,13 @@ def test_the_key_is_stable_under_the_six_normalizations() -> None:
 # ============================================================ ① 同一命题 ⇒ 一条 + 第 2 份证明
 
 def test_two_phrasings_of_one_proposition_become_one_row_with_proof_two(
-        tmp_path: pathlib.Path) -> None:
+        tmp_path: pathlib.Path, monkeypatch) -> None:
     """① 两条表述不同但同一命题的登记 ⇒ 落成一条 `stmt` + `proof_no=2`。
 
-    两档依据各核一次：键相同（引导词/记号/编号的差异被规范化掉）与词面相似度兜底
-    （键不同、表述高度重合）。返回值必须如实说明"并入了哪一条、作为第几份、凭什么"。
+    两档依据各核一次：键相同（引导词/记号/编号的差异被规范化掉）走没查成时的确定性
+    兜底；词形变体（键不同、词面相似度 0.9118）走模型判——2026-11-04 起相似度只排序、
+    不决定并（业主裁定），所以"并得成"这件事在这一档上必须由模型说。
+    返回值必须如实说明"并入了哪一条、作为第几份、凭什么"。
     """
     st = _ws(tmp_path)
     b = _agent(st)
@@ -337,16 +356,21 @@ def test_two_phrasings_of_one_proposition_become_one_row_with_proof_two(
     assert variants and variants[-1].get("statement_full") == FULL_A_KEY, variants
     assert variants[-1].get("proof_no") == 2, variants
 
-    # 相似度兜底那一档：键不同（常值 / 常数值），词面相似度 0.9118 >= 0.85。
+    # 词形变体那一档（常值 / 常数值：键不同、词面相似度 0.9118 ≥ 0.85）。
+    # 2026-11-04 业主裁定「词面相似度只许用于候选表排序，不许决定并」⇒ 这一档现在
+    # 必须走模型：秘书判 same 就照样落成第 2 份证明（"判得了就并"那一半仍然在），
+    # 而没查成时它落两行（判据 `tests/test_no_model_means_no_merge.py` 钉那一半）。
+    morph_pair = PK.same_proposition(FULL_A, FULL_A_MORPH)
+    assert float(morph_pair.get("similarity") or 0) >= PK.SAME_PROPOSITION_JACCARD, morph_pair
     st2 = _ws(tmp_path / "morph")
     b2 = _agent(st2)
     assert b2.register_statement(**_own(FULL_A), proof_text=PROOF_A).get("ok") is True
+    monkeypatch.setattr(Secretary, "adjudicate_proposition",
+                        _model_says_same(str(_rows(st2)[0]["stmt_id"])))
     morph = b2.register_statement(**_own(FULL_A_MORPH), proof_text=PROOF_C)
     assert morph.get("ok") is True and morph.get("merged") is True, morph
-    assert morph.get("matched_by") == PK.BASIS_SIMILARITY, morph
-    assert float(morph.get("similarity") or 0) >= PK.SAME_PROPOSITION_JACCARD, morph
-    assert f"{float(morph.get('similarity')):.4f}" in morph.get("note", "") or \
-        "prose_similarity" in morph.get("note", ""), morph.get("note")
+    assert morph.get("matched_by") == MERGED_BY_ADJUDICATION, morph
+    assert "秘书判的" in morph.get("note", ""), morph.get("note")
     assert len(_rows(st2)) == 1 and _proof_nos(_rows(st2)[0]) == [1, 2], _rows(st2)
 
 
@@ -585,16 +609,21 @@ def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) 
 # ============================================================ 阈值可注入
 
 def test_the_thresholds_are_injectable(tmp_path: pathlib.Path) -> None:
-    """阈值是构造参数（口径可调，判据不变）。
+    """阈值仍是构造参数，但它不再决定并（2026-11-04 业主裁定）。
 
-    把命题轴的阈值调到 0.99 ⇒ 那对 0.9118 的词形变体不再被并（两条命题行）；
-    默认阈值下它并成一条（同一份读数里核正反两档）。
+    改前这一条钉的是"把命题轴的阈值调到 0.99 ⇒ 那对 0.9118 的词形变体不再被并"，
+    也就是"相似度达阈值 ⇒ 并"这条判据本身。业主 2026-11-04 把它裁掉了（「词面相似度
+    只许用于候选表排序，不许决定并」），所以现在两档都应当是两行：阈值能被注入、
+    能进读数（`adjudication.why_not_merged` 点名阈值），但一个字节都不决定并。
     """
     st = _ws(tmp_path / "default")
     b = _agent(st)
     assert b.register_statement(**_own(FULL_A), proof_text=PROOF_A).get("ok") is True
-    assert b.register_statement(**_own(FULL_A_MORPH), proof_text=PROOF_C).get("ok") is True
-    assert len(_rows(st)) == 1, "默认阈值下词形变体应当并成一条"
+    second = b.register_statement(**_own(FULL_A_MORPH), proof_text=PROOF_C)
+    assert second.get("ok") is True, second
+    assert len(_rows(st)) == 2, "默认阈值下词形变体也不许并（相似度不再决定并）"
+    adj = dict(second.get("adjudication") or {})
+    assert adj.get("checked") is False and adj.get("fail_closed") is True, adj
 
     st2 = _ws(tmp_path / "strict")
     b2 = _agent(st2)
@@ -602,7 +631,11 @@ def test_the_thresholds_are_injectable(tmp_path: pathlib.Path) -> None:
     strict = Secretary("B", root=st2.root, store=st2, same_proposition_jaccard=0.99)
     got = strict.record_statement({**_own(FULL_A_MORPH), "proof_text": PROOF_C}, role="B")
     assert got.get("checked") is True and got.get("created") is True, got
-    assert len(_rows(st2)) == 2, "阈值调到 0.99 之后那一对不该再并（键本来就不同）"
+    assert len(_rows(st2)) == 2, "0.99 之下也不该并（那一档已经不许决定并）"
+    # 阈值是可注入的，而且它现在只落在读数里（"当年会不会并"这件事读得出来）。
+    assert strict.same_proposition_jaccard == 0.99, strict.same_proposition_jaccard
+    why = str(dict(got.get("adjudication") or {}).get("why_not_merged") or "")
+    assert "0.99" in why and "0.9118" in why, why
 
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份

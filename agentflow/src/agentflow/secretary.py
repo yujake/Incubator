@@ -6551,10 +6551,12 @@ class Secretary:
         洗不动）、`unresolved_dependency`（依赖指着一个不在册的 id）、`unknown_lit_id`（出处不在册）、
         `empty_statement`（命题缺 `statement_full` —— 只有短版不算数）。概念的定义空着不是拒绝：它落成
         `pending_definition` + 待补标记（`D12` 甲）。
-        ## 同一命题 / 同种证明（业主 2026-10-24）
+        ## 同一命题 / 同种证明（业主 2026-10-24；2026-11-04 改口径）
         登记时先按 `statement_full` 的规范化值查重（老口径，逐字不变）；老口径没命中时再判
-        "是不是同一条命题"（`propositionkey.same_proposition`：确定性键相同，或词面相似度
-        ≥ `same_proposition_jaccard`）。命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明
+        「是不是同一条命题」：秘书判得成（`adjudicate_proposition`）⇒ 它说了算；没查成 ⇒
+        fail-closed，只认「确定性键相同」这一档等价改写（词面相似度那一档只给候选表排序，
+        不决定并 —— 业主 2026-11-04：「词面相似度只许用于候选表排序，不许决定并」）。
+        命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明
         落 `proofs` 清单（canonical 空时落 `proof_text`）、依赖落 `used_by="stmt:#pN"`。
         没有证明正文的重复登记不进这一支（它不产生"第 N 份证明"，老口径原样保留）。
         同一命题下新交来的证明与在册某一份同种（`proof_same_kind`，相似度 ≥
@@ -7789,11 +7791,14 @@ class Secretary:
         return out
 
     def _same_proposition_candidate(self, tx: Any, full: str, *,
-                                    kind: str = "") -> dict[str, Any] | None:
+                                    kind: str = "",
+                                    key_only: bool = False) -> dict[str, Any] | None:
         """在册的命题里找"同一条"：命中就返回那一条（含依据与读数），否则 `None`。
 
         判据只有一处（`propositionkey.same_proposition`）：先比确定性键，键不同再比
-        词面相似度。本函数只做"在哪儿找、怎么选"这两件本层的事：
+        词面相似度。`key_only=True` 时只认"键相同"那一档 —— 秘书判定没查成时走的就是
+        这一支（业主 2026-11-04：「词面相似度只许用于候选表排序，不许决定并」）。
+        本函数只做"在哪儿找、怎么选"这两件本层的事：
         - 只在命题性的 kind 之间判（`PROPOSITION_KINDS`；定义/概念/认不出的 kind 不并，
           理由见 `PROPOSITION_KINDS`）；
         - 跳过概念行（概念不是命题，键与相似度对它没有意义）；
@@ -7820,12 +7825,55 @@ class Secretary:
                                            threshold=self.same_proposition_jaccard)
             if str(verdict.get("state") or "") != _PK.STATE_SAME:
                 continue
+            if key_only and str(verdict.get("basis") or "") != _PK.BASIS_KEY:
+                # 词面相似度那一档不决定并（业主 2026-11-04）：它只给候选表排序用。
+                # 「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」相似度
+                # 0.8889 —— 条件的强弱关系正是业主点名的不一致形态，不许并。
+                continue
             candidates.append({"similarity": float(verdict.get("similarity") or 0.0),
                                "stmt_id": sid, "row": dict(r), "verdict": verdict})
         if not candidates:
             return None
         candidates.sort(key=lambda c: (-c["similarity"], str(c["stmt_id"])))
         return candidates[0]
+
+    def _fail_closed_reason(self, tx: Any, full: str, *, kind: str = "") -> str:
+        """没查成时"为什么没并"的那句话（读数，不是判据；不改任何一格的去向）。
+
+        为什么要有它：fail-closed 之后最常见的追问就是"它明明看起来是同一条，凭什么都
+        不并"。答案必须落在返回值里 —— 而且要点名那个相似度读数（读的人才核得动
+        "阈值那一档当年会不会并"），同时说清它现在只是候选表排序用的量。
+
+        相似度取自 `propositionkey.same_proposition`（判据唯一那一处），不另算一遍：
+        同一个对子在两处给出不同的读数，是本仓反复登记过的缺陷形态。
+        """
+        head = ("没查成（adjudication.checked=False：没有模型缝 / 超时 / 坏 JSON / 正文截断）"
+                " ⇒ fail-closed 不并：")
+        if not _is_proposition_kind(kind):
+            return head + f"kind={kind!r} 不是命题性的那几档，本来就不并"
+        best: tuple[float, str] | None = None
+        for r in tx.rows("statements"):
+            sid = str(r.get("stmt_id") or "")
+            other = str(r.get("statement_full") or "")
+            if not sid or not other.strip():
+                continue
+            if not _is_proposition_kind(r.get("kind")):
+                continue
+            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
+                continue
+            got = _PK.same_proposition(full, other, threshold=self.same_proposition_jaccard)
+            score = float(got.get("similarity") or 0.0)
+            if best is None or score > best[0]:
+                best = (score, sid)
+        threshold = float(self.same_proposition_jaccard)
+        if best is None:
+            return (head + "在册没有「键相同」的等价改写，而词面相似度不决定并"
+                    "（这一条与在册各行都判不了 ⇒ 连相似度读数都没有）")
+        score, sid = best
+        reach = ("达到阈值" if score >= threshold else "未达阈值")
+        return (head + f"在册 stmt:{sid} 与这一条的词面相似度 {score:.4f} {reach} "
+                f"{threshold:.2f}，但词面相似度只用于候选表排序、不决定并"
+                "（词面重合不等于条件与结论一致）；确定性键不同 ⇒ 两条")
 
     def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> list[dict[str, Any]]:
         """这条命题在册的证明里，与新交来的这一份同种的那些（相似度降序）。
@@ -7999,9 +8047,10 @@ class Secretary:
         - `adjudication.checked`（秘书判成了）⇒ 它说了算：`same` ⇒ 并进它点名的
           `same_as` 那一条；`different` / `unknown` ⇒ 不并（`unknown` 也一律不许拿
           相似度去猜 —— 判不了就是不并，台账里留 basis 给人看）；
-        - 没查成（没缝 / 开关关着 / 超时 / 坏 JSON）⇒ 退回既有机械判据
-          （`_same_proposition_candidate`：键相同或词面相似度达阈值）。这一档必须留着：
-          秘书没接上时整条写入路不能因此瘫掉，而"一模一样才并"比"什么都不并"更接近真相。
+        - 没查成（没缝 / 开关关着 / 超时 / 坏 JSON / 正文截断）⇒ fail-closed 不并
+          （2026-11-04 业主裁定）：只认"确定性键相同"这一档等价改写，词面相似度一个字节
+          都不决定并（它只给候选表排序）；没并的那一档留 `adjudication.fail_closed` +
+          `why_not_merged` 两个读数 —— 判不了就是不并，相似度不替它表态。
         """
         from . import verifications as VR   # 惰性：证明清单 / 签名状态的唯一读口径
 
@@ -8071,12 +8120,29 @@ class Secretary:
                     "（或它的状态已不可并）⇒ 不并、照常新建（不在一条读不到的行上写证明）")
                 return None
         else:
-            # ---- 没查成：退回既有机械判据（键相同 / 词面相似度达阈值）。
+            # ---- 没查成：fail-closed（业主 2026-11-04 裁定，本笔改口径）
+            #
+            # 改前这一支退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"
+            # 两档，于是「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」
+            # （键不同、词面相似度 0.8889 ≥ 0.85）被并成一行。而"素数 / 奇素数"正是
+            # 业主点名的「条件强弱关系」⇒ 语义不一致 ⇒ 不并。
+            #
+            # 现在的口径（两条，缺一条都不成立）：
+            # - 确定性键相同 ⇒ 仍并：那是"条件与结论的等价改写 + 分句顺序 / 记号
+            #   排版"（业主的判准里「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、
+            #   可复算，不是阈值判据；
+            # - 词面相似度一个字节都不决定并：它只给候选表排序（`_proposition_candidates`
+            #   与 `_fail_closed_reason` 的读数）。
+            # 没并的那一档必须留下读数（`adjudication.checked=False` + `fail_closed` +
+            # `why_not_merged`）：三态纪律 —— "没查成"不许折成"查过了、不同"。
             out["adjudication"] = self._adjudication_reading(adj)
-            hit = self._same_proposition_candidate(tx, full, kind=kind)
+            hit = self._same_proposition_candidate(tx, full, kind=kind, key_only=True)
             if hit is None:
-                # 三态：没命中也要能读出来"判过、判的是不同"，但这一支不写任何内容 ——
-                # 返回值里 `merged` 保持 False 就是那个读数（`out` 的初值）。
+                why = self._fail_closed_reason(tx, full, kind=kind)
+                out["proposition_state"] = _PK.STATE_UNKNOWN
+                out["proposition_reason"] = why
+                out["adjudication"]["fail_closed"] = True
+                out["adjudication"]["why_not_merged"] = why
                 return None
         row = dict(hit["row"])
         sid = str(hit["stmt_id"])
