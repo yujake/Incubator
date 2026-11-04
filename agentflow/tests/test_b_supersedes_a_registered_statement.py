@@ -149,7 +149,7 @@ def _sign(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
     return VR.record_verification(
         st.root, statement_id=stmt_id or SID, proof_text=proof_text,
         verdict={"verdict": "成立", "findings": []}, verifier="agent-V", store=st,
-        proof_no=1)
+        proof_no=1, manuscript=f"reports/f-proof-{stmt_id or SID}.md")
 
 
 def _sign_three(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
