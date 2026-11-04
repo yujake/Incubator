@@ -199,3 +199,129 @@ statement 的 `reviewed_by.evidence` 也指向那里；它没有进 `issued.json
 - 稿与论文：`notes/F-conj000000-proof.md`、`reports/b-proof-000004.md`、
   `out/paper/COMPILE-RECEIPT.json`、`out/paper/ACCEPTANCE-CHECKS.json`、`data/documents.json`。
 - 代码版本：`src/agentflow/agent_prompts.py:3132`；`git show -s 28b813d6`。
+
+## 九、更正
+
+> 本节只做更正，不修改上文任何历史读数。
+>
+> 本节追加在文末（上文含「读数来源（复跑）」一字未动）；读数现算于 2026-11-04 17:46。
+> 每条按「原读数 → 盘上读数 → 出处（文件行号）→ 我为什么会读错（一句）」写。
+
+### 9.1 巡查口径的三处错读
+
+§三 第 7 条留的「记为待查」，与 §八 第 3 / 4 / 7 条的对照，在此一并结案。
+
+**① `reconnect`：「0 次」→ 盘上 10 次**
+
+- 原读数：**0 次**（按 `data/events.jsonl` 扫，全文 0 命中）。
+- 盘上读数：**10 次** —— `judge_no_reply:unknown` 4 + `judge_no_reply:network` 6；
+  单次 `wait_sec` 2.617–9.730 秒（2.6–9.7 秒），`attempts` 1/2，全部恢复。
+- 出处：`sessions/20261104.jsonl:2273,2274,2277,2278,2292-2297`（10 行，逐行
+  `"kind": "reconnect"`）；`data/events.jsonl` 全文检索 `reconnect` = **0 命中**。
+- 我为什么会读错：**扫错了文件** —— `reconnect` 只写进会话（`sessions/`），不写进事件
+  （`events/`），按 events 扫必然得 0；这是「文件选错 ⇒ 读数恒为 0」的教训。
+
+**② `bits.grade`：「15 条全空」→ 12 `conjecture` / 3 `pre_theorem`**
+
+- 原读数：15 条 `bits.grade` 全空。
+- 盘上读数：**15 行全有值** —— `pre_theorem` **3**（000000 / 000001 / 000004）+
+  `conjecture` **12**（000002、000003、000005–000014）；全 `pending` 的是
+  `bits.formal` / `bits.numeric`（各 **15/15**）。
+- 出处：`data/statements.json:61,162,410`（3 条 `pre_theorem`）、
+  `:273,327,493,558,651,705,775,843,913,978,1043,1108`（12 条 `conjecture`）、
+  `:25,28`（每行同构；两格全文各 15 个 `"pending"`）；旁证
+  `out/review/STATUS-20261104-1516.md:40`（「pre_theorem 3 条、conjecture 12 条」）。
+- 我为什么会读错：把 `bits.formal` / `bits.numeric` 两格的 `pending` 当成了
+  `bits.grade` 的空 —— 前者是形式化 / 数值两轴「还没做」，后者是档位，不是同一格。
+
+**③ `reviewed_by_proof`：「为空」→ 3 条有值**
+
+- 原读数：`reviewed_by_proof` 为空（0 条）。
+- 盘上读数：**3 条有值**，位置在 **`bits.evidence.reviewed_by_proof`**，值均为
+  `{"1": true}`；配套的 `bits.evidence.reviewed_sha_by_proof["1"]` 与正文 sha 逐条相同：
+  000000 `3ad12fc1…`（403 字）、000001 `b048ea6e…`（292 字）、000004 `2603f7c5…`（1309 字）。
+- 出处：`data/statements.json:50-55` / `:151-156` / `:399-404`（两个键各三处）；
+  正文在 `:11` / `:112` / `:360`；现算 sha 与 `:54` / `:155` / `:403` 一致。
+- 我为什么会读错：只读到 `bits.evidence.reviewed_by`（一条审核记录）就收手，没有下钻到
+  同层的 `reviewed_by_proof` —— 键名相似，位置差一层。
+
+### 9.2 「甲」这条裁定的理由重述
+
+裁定本身不变：**在册命题这一档也必须给 `proof_manuscript`，内联正文不再能单独过审**。
+但原写法给出的理由里有两条经盘上核对不成立，**作废**；业主裁定的依据只保留下面三条
+有效理由。
+
+- 原读数（原写法）：签块不落稿，加上「逐份签位没落」「`reviewed_by_proof` 为空」。
+- 盘上读数：签块不落稿成立；后两条不成立；真正成立的第三条是「稿没按号命名」。
+- 出处：`data/statements.json:50-55` / `:151-156` / `:399-404`（3 条 `reviewed_by_proof`）；
+  `out/vsigns/*.json` 的 `artifact_path` / `manuscript_write`；`data/dependencies.json:1-4`；
+  `notes/F-conj000000-proof.md:91-92`；`reports/` 与 `manuscripts/` 目录实测。
+- 我为什么会读错：把 `bits.evidence` 下的 `reviewed_by_proof` 当成没有（同 9.1③），
+  又把「F 稿上没有签块」扩大成了「所有逐份签位都没落」。
+
+**作废理由（盘上证明不成立）**
+
+- 「逐份签位没落」（即 `reviewed_by_proof`）—— 盘上 `bits.evidence.reviewed_by_proof`
+  **3 条有值**（见 9.1③）。
+- 「`reviewed_by_proof` 为空」—— 同上，3 条有值，且 `reviewed_sha_by_proof["1"]`
+  与正文 sha 相符。
+
+**有效理由（三条，均为真机证据，也就是业主裁定「甲」的依据）**
+
+1. **签块不落在稿上**：000000 / 000001 的签 `artifact_path=""`、
+   `manuscript_write.state="not_attempted"`、`why="没有手稿路径 ⇒ 签块没地方写"`
+   （`out/vsigns/3ad12fc1….json`、`out/vsigns/b048ea6e….json`）；`out/vsigns/issued.json`
+   里这两条的 `artifact_path` 同样为空；F 的 `notes/F-conj000000-proof.md` 全文没有
+   `- V 签：` 签块（96 行；第 95 行只自述尚未取得 V 的「成立」签）。000000 / 000001 的签只落在
+   台账与内联正文上，没有落在任何「稿」上。
+2. **依赖面不从稿读**：`data/dependencies.json` **0 行**（`:1-4`）；F 稿的 `## 依赖`
+   只写「本稿是自足的（无在册命题引用，无外部文献引文），故不设引用四列表」
+   （`notes/F-conj000000-proof.md:91-92`）；`reports/b-proof-000004.md` 的 `## 依赖`
+   是空表（`:45-50`）。⇒ 依赖面在盘上没有可读的四列表，不能声称「从稿上读到了依赖」。
+3. **稿没按号命名**：F 稿叫 `notes/F-conj000000-proof.md`，不带命题号；`reports/` 的
+   16 份 `.md` 里没有一份 `f-proof-*.md`；`manuscripts/` 只有 `handoffs.jsonl`。
+   出处：`reports/`、`manuscripts/` 目录实测；本文件 §二 2.2 的 63–64 行同读数。
+
+一句话：三条有效理由指向同一件事 —— **载体不是「按号命名、能落签块、能读依赖」的稿**；
+甲裁定不是「F 没写」，而是「写的地方 / 命名不对」。
+
+### 9.3 F 并没有「绕过手稿」
+
+- 原读数（§五 引的叫停原文）：「F 绕过手稿直接写在册命题正文，先停下来查这条路」
+  （`runs/stop-history.jsonl:1-6`）。
+- 盘上读数：F 写了攻坚手稿 `notes/F-conj000000-proof.md`（现版 96 行 / **14,376 B** /
+  sha `9537e028…`），并且两次送审都用了 `proof_manuscript=notes/F-conj000000-proof.md`：
+  14:46:15 首送（旧版 sha `5414d811…`）、15:14:26 重送（新版 sha `9537e028…`，
+  `t-000098` / `t-000099`）。
+- 出处：`sessions/20261104.jsonl:1874`（F 的 `summon_many`；两个 V 目标的
+  `params.proof_manuscript` 都是 `notes/F-conj000000-proof.md`）、`:1892`（F 自述
+  「都给的是 proof_manuscript=notes/F-conj000000-proof.md」）、`:2432`（重送两个 V 目标的
+  `manuscript_sha256=9537e028…`）；手稿现算 14,376 B / `9537e028…`；重送任务起于 15:14:26
+  （`data/tasks.json` 的 `t-000098` / `t-000099` 行）。
+- 缺的一步：把 `notes/` 的稿转成 `reports/f-proof-<号>.md`。盘上 `reports/` 的
+  `f-proof-*` = **0 份**，`manuscripts/` 只有 `handoffs.jsonl` ⇒ 缺的是「转成按号命名的
+  `reports/` 稿」这一步，不是「没写稿」。
+- 我为什么会读错：把「签块没落在稿上 / 稿不在 `reports/`」读成了「F 没写手稿」；
+  `proof_manuscript` 的送审参数就在会话里，查一下就能看到。
+
+### 9.4 G 已编出论文 PDF，但论文包没入库
+
+- 原读数：G / H 的论文包「没走到」（笼统记成没做）。
+- 盘上读数：`out/paper/main.pdf` **17 页 / 396,066 B / 编译于 14:33:29 /
+  `exit_codes=[0,0]`**；但 `data/documents.json` **0 行**、`tasks` 里 **H 角色 0 条**、
+  `out/paper/ACCEPTANCE-CHECKS.json` 只有 **13 条清单、没有 pass/fail**，
+  `out/paper/ACCEPTANCE.md` 不在盘上 ⇒「论文包」这条链 **只走到编译**，没到「入库 + 收工门」。
+- 出处：`out/paper/COMPILE-RECEIPT.json:6-13`（`exit_codes` / `pages` / `pdf_bytes` /
+  `compiled_at`）；`data/documents.json:1-4`（`"rows": []`）；`data/tasks.json` 逐行
+  （H = 0）；`out/paper/ACCEPTANCE-CHECKS.json:1-17`（13 条 check，无 verdict）。
+- 我为什么会读错：把「`documents` 0 行 / 收工门没跑」笼统写成了「论文包没走到」，
+  抹掉了 G 已经把 PDF 编出来这一步 —— 该记的是「编译完成、入库未做」，不是「没做」。
+
+### 9.5 四条更正的一句话结论
+
+| # | 一句话 |
+|---|---|
+| ① | 巡查三处错读：`reconnect` **10 次**（不在 `events.jsonl`）、`bits.grade` **12 + 3**（全 pending 的是 `bits.formal` / `bits.numeric`）、`reviewed_by_proof` **3 条**（在 `bits.evidence` 下）。 |
+| ② | 「甲」保留三条有效理由（签块不落在稿上 / 依赖面不从稿读 / 稿没按号命名），作废两条（逐份签位没落 / `reviewed_by_proof` 为空）。 |
+| ③ | F 写了 `notes/F-conj000000-proof.md` 并用 `proof_manuscript=notes/…` 送审；缺的是转成 `reports/f-proof-<号>.md`。 |
+| ④ | G 的 `main.pdf` 已编（17 页 / 396,066 B / 14:33:29 / exit `[0,0]`），`documents` 0 行、H 未出场、收工门未跑 ⇒ 只到编译。 |
