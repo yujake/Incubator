@@ -732,6 +732,33 @@ def _block_verdict_allows_sign(reading: Mapping[str, Any]) -> bool:
     return _VR.read_verdict({"verdict": str(reading.get("verdict") or "")}) == "成立"
 
 
+def _block_identity_conflicts(reading: Mapping[str, Any]) -> bool:
+    """这一块签的是不是**它所在那一份稿**（第 9 格 `手稿号` 的读侧判据）。
+
+    ## 为什么这一格要参与"算不算签"
+
+    `manuscript_sign_reading` 已经把三态读出来了（`resolved` / `unmatched` /
+    `legacy`），`test_sign_block_ninth_cell_is_the_manuscript_id` 也逐字写着
+    `unmatched` **不许**读成"签过了"。但 `manuscript_sign_standing`（F 的交付读数、
+    B 的收录认签、V 的"已经签过"短接、秘书的升档依据都走它）改前不看这一格：
+    同一份正文的签块从 000000 的稿搬进 000001 的稿，照样读成 signed。
+
+    ## 三态（判不了就不判）
+
+    只在**两边的号都认得出、而且不同**时判"搬过"：
+    - 块没写第 9 格（旧 8 格）⇒ `legacy`，不是搬块（当时真的签过）；
+    - 没给稿路径 / 稿名认不出裸稿号 ⇒ `identity_state=unmatched` 但 `manuscript_key`
+      为空 ⇒ 判不了，原样往下走（旧调用点逐字不变）；
+    - 块的号是空的（例如签在 `notes/…` 这种认不出号的稿上）⇒ 同样判不了 ——
+      那一档由 B 的 `manuscript_sign_gate`（`manuscript_id_missing`）在收录时挡。
+    """
+    if str(reading.get("identity_state") or "") != "unmatched":
+        return False
+    mid = str(reading.get("manuscript_id") or "")
+    key = str(reading.get("manuscript_key") or "")
+    return bool(mid and key and mid != key)
+
+
 def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
                              manuscript_path: Any = "") -> dict[str, Any]:
     """签块相对"现在这一份正文"的读数（`signed` / `stale` / `rejected` / `unsigned`）。
@@ -741,12 +768,13 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     - 块在、`已签=true`、`连续>=require`、且块里的 `正文sha` == 这一份正文的 sha
       ⇒ `signed`；sha 不符 ⇒ `stale`（签完之后正文改过）；
     - 块在但 `已签=false`，**或判词不是「成立」**（两个格子互相矛盾时按负判读）
-      ⇒ `rejected`（负判不是签，业主 2026-11-03 甲）。
+      ⇒ `rejected`（负判不是签，业主 2026-11-03 甲）；
+    - 块与它所在的稿对不上号（第 9 格 `手稿号` 与稿的裸稿号都认得出、而不同）
+      ⇒ `unsigned`（块被搬过 / 号写错了：它不给这一份稿作证）。
 
-    `manuscript_path` 只喂给 :func:`manuscript_sign_reading` 的第 9 格那一族
-    （`identity_state` / `manuscript_id` / `manuscript_key`，2026-11-02）：
-    它不参与 `signed` 这一档的判定（那一档只认正文 sha 与连续次数），所以旧调用点
-    不传它时行为逐字不变 —— 但 `identity_state` 会如实落 `unmatched`（没给稿，对不上）。
+    `manuscript_path` 除了喂给 :func:`manuscript_sign_reading` 的第 9 格那一族，
+    也参与"这一块属于哪一份稿"的判定（上面最后一条）。旧调用点不传它时
+    `identity_state` 落 `unmatched` 而 `manuscript_key` 为空 ⇒ 判不了，行为逐字不变。
     """
     got = manuscript_sign_reading(text, manuscript_path=manuscript_path)
     out = {**got, "state": "unsigned", "checked": True,
@@ -788,6 +816,14 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
                    why=(f"签块写「已签=true」，但判词是「{got.get('verdict') or '（空）'}」"
                         " ⇒ 负判不是签（两个格子自相矛盾时按判词读）；"
                         "要让这一份算签，V 得重新审成「成立」"))
+        return out
+    if _block_identity_conflicts(got):
+        # 第 9 格写的稿号与这一份稿对不上：块被搬过 / 号写错了。它不给这一份稿作证 ——
+        # 正文 sha 对得上也不行（签是"随稿走的那一份"，不是"谁抄到谁名下都算"）。
+        out.update(state="unsigned",
+                   why=(f"签块的手稿号是 {got.get('manuscript_id')!r}，而它所在的这份稿是 "
+                        f"{got.get('manuscript_key')!r} ⇒ 对不上（块被搬过 / 号写错了）："
+                        "这一块不给这份稿作证"))
         return out
     if not out["sha_matches"]:
         out.update(state="stale",

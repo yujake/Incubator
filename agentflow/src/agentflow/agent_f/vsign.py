@@ -107,7 +107,7 @@ def _manuscript_block(root: Any, paths: Sequence[str], *, sha: str) -> dict[str,
             text = (Path(str(root or "")) / rel).read_text(encoding="utf-8")
         except OSError:
             continue
-        got = VS.manuscript_sign_standing(text, proof_sha=sha)
+        got = VS.manuscript_sign_standing(text, proof_sha=sha, manuscript_path=rel)
         got["path"] = rel
         return got
     return {}
