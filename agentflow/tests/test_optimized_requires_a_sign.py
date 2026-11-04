@@ -50,6 +50,8 @@ from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_b import register_statement as RS  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
+from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
 #: 87 的定格现场（只读；`projects/**` 一个字节都不许写）。
@@ -108,13 +110,19 @@ def _seed(st: Store, *, proof_text: str, stmt_id: str = "000001") -> str:
     return stmt_id
 
 
-def _sign_three(st: Store, *, proof_text: str, stmt_id: str, proof_no: int = 1) -> None:
-    """V 对同一份正文连判「成立」到发签门槛（真签：签文件 + 逐条表都落）。"""
+def _sign_three(st: Store, *, proof_text: str, stmt_id: str, proof_no: int = 1,
+                manuscript: str = "") -> None:
+    """V 对同一份正文连判「成立」到发签门槛（真签：签文件 + 逐条表都落）。
+
+    `manuscript` 是这一签审的那份稿（2026-11-04 裁定甲：正文的载体是手稿；台账行
+    只认带 `manuscript` 的签）。不给时退回内联签 —— 只有"测内联签不算数"那一类
+    用例才该这么用。
+    """
     for _ in range(VR.SIGN_STREAK_NEED):
         VR.record_verification(
             st.root, statement_id=str(stmt_id), proof_text=str(proof_text),
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=st, proof_no=int(proof_no))
+            store=st, proof_no=int(proof_no), manuscript=str(manuscript or ""))
 
 
 def _relaxed(monkeypatch) -> None:
@@ -164,13 +172,18 @@ def test_b_a_signed_replacement_flips_optimized_and_keeps_the_review_tables(
     """
     st = _ws(tmp_path)
     sid = _seed(st, proof_text=P_MECH)
+    # 2026-11-04（业主裁定甲）：V 的签必须审在手稿上（台账行带 `manuscript`）。
+    # 旧正文那一签与优化版那一签各自落稿；稿名仍按号（`f-proof-<号>.md`）。
+    rel = write_proof_manuscript(st.root, sid, P_MECH, statement_full=STATEMENT)
     # 旧正文那一签（历史）：换正文之后它不再算数，但表里那一格不许被清掉。
-    _sign_three(st, proof_text=P_MECH, stmt_id=sid, proof_no=1)
+    _sign_three(st, proof_text=P_MECH, stmt_id=sid, proof_no=1, manuscript=rel)
     assert EB.reviewed_by_proof(_row(st, sid)) == {1: True}, _row(st, sid)["bits"]
     # 优化版那一签：签的时候命题行上还是旧正文 ⇒ 位不翻，但签文件照发（87 的次序）。
-    _sign_three(st, proof_text=P_OPT, stmt_id=sid, proof_no=1)
+    rel = write_proof_manuscript(st.root, sid, P_OPT, statement_full=STATEMENT)
+    _sign_three(st, proof_text=P_OPT, stmt_id=sid, proof_no=1, manuscript=rel)
 
-    out = _agent(st).register_statement(**OWN, proof_text=P_OPT)
+    out = _agent(st).register_statement(**OWN, proof_text=P_OPT,
+                                        proof_manuscript=rel)
 
     assert out.get("ok") is True, out
     assert out.get("optimized_blocked") == "", out

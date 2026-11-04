@@ -223,11 +223,15 @@ def test_the_on_record_work_name_is_repaired_when_a_proof_merges_in(
     """
     st = _ws(tmp_path)
     # 第一笔：把确定性洗名打桩成恒 None，精确复现"改前落的那一行"。
+    # 只还原这一格：`monkeypatch.undo()` 会把 `signed_v_handoffs` 对
+    # `AgentB.register_statement` 的包装一起撤掉（同一只 monkeypatch），
+    # 于是第二笔又回到"没补稿"的形态 —— 那测的就不是这一条判据了。
+    real_wash = SEC.wash_working_name
     monkeypatch.setattr(SEC, "wash_working_name", lambda *a, **k: None)
     first = _agent(st).register_statement(**_own(FULL_A, REAL_LABEL), proof_text="")
     assert first.get("ok") is True, first
     assert _labels(st) == [REAL_LABEL], _labels(st)
-    monkeypatch.undo()
+    monkeypatch.setattr(SEC, "wash_working_name", real_wash)
     # 第二笔：同一条命题的另一种写法 + 一份证明 ⇒ 并进去，顺手修名。
     #
     # 2026-11-02 准入闸 strict：并进来的那一份正文必须已有一份覆盖它的 V 签。
@@ -266,3 +270,4 @@ def test_before_this_feature_exists_the_work_name_lands_verbatim(
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

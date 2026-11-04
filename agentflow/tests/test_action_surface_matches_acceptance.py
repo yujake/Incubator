@@ -28,6 +28,7 @@ import sys
 import pytest
 
 from conftest import sign_before_registration
+from _proof_manuscript_fixture import write_proof_manuscript
 
 from agentflow import capabilities as CAP
 from agentflow import schema as S
@@ -216,6 +217,11 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     # 正控：四级都齐 ⇒ 落一行
     good = dict(_OWN)
     good.update(_OWN_SOURCE)
+    # 2026-11-04（业主裁定甲）：正文的载体是手稿。这一笔要写正文 ⇒ 先落稿、再登记；
+    # 稿的 `## 证明` 与这一笔送审的正文逐字一致（签按正文 sha 认）。
+    good["proof_manuscript"] = write_proof_manuscript(
+        st.root, S.format_id(0), good["proof_text"],
+        statement_full=good["statement_full"])
     # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文必须先有 V 签；
     # 命题还没在册 ⇒ 走「先签后登记」（V 在册前审的那一签落在 pending 台账，按正文 sha 认领）。
     sign_before_registration(st.root, proof_text=good["proof_text"])
@@ -269,12 +275,24 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
                                   "page_range": {"label": "全文未分页"}})
     assert r1c.get("ok") is False and r1c.get("kind") == "missing_source", r1c
 
-    r2 = b.register_statement(**_bump("②"), proof_text="证明")       # 缺 doc_id/line_range
+    r2 = b.register_statement(
+        **_bump("②"), proof_text="证明",
+        proof_manuscript=write_proof_manuscript(
+            st.root, S.format_id(1), "证明",
+            statement_full=_bump("②")["statement_full"]))  # 缺 doc_id/line_range
     assert r2.get("ok") is False and r2.get("kind") == "missing_own_source", r2
     no_reason = {k: v for k, v in _bump("③").items() if k != "quote_reason"}
-    r3 = b.register_statement(**no_reason, **_OWN_SOURCE)            # 缺 quote_reason
+    r3 = b.register_statement(
+        **no_reason, **_OWN_SOURCE,
+        proof_manuscript=write_proof_manuscript(
+            st.root, S.format_id(2), _OWN_SOURCE["proof_text"],
+            statement_full=_bump("③")["statement_full"]))  # 缺 quote_reason
     assert r3.get("ok") is False and r3.get("kind") == "missing_quote_reason", r3
-    r4 = b.register_statement(**_bump("④"), doc_id="doc:0000", proof_text="证明")  # ID 形态
+    r4 = b.register_statement(
+        **_bump("④"), doc_id="doc:0000", proof_text="证明",
+        proof_manuscript=write_proof_manuscript(
+            st.root, S.format_id(3), "证明",
+            statement_full=_bump("④")["statement_full"]))  # ID 形态
     assert r4.get("ok") is False and r4.get("kind") == "bad_id", r4
     # 同一级的另一半：`source_lit_id` 走的是同一个谓词（两条路都要具名，不能只保一条）
     r5 = b.register_statement(**{**_bump("⑤"), "origin": "external_lit"},

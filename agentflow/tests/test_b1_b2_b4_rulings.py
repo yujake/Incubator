@@ -39,6 +39,7 @@ import pathlib
 import pytest
 
 from conftest import sign_before_registration
+from _proof_manuscript_fixture import write_proof_manuscript
 
 from agentflow import agent_prompts as AP
 from agentflow import closing
@@ -101,6 +102,22 @@ def _ok(out) -> dict:
     return got
 
 
+def _with_manuscript(store: Store, payload: dict, *, statement_id: str = "000000") -> dict:
+    """给 B 的这一笔补上正文载体（2026-11-04 甲：要写正文就必须带稿）。
+
+    稿是 `reports/f-proof-<号>.md`，三节齐、`## 证明` 与这一笔送审的正文逐字一致。
+    这些用例量的是 B-2 / B-4 那两道闸，不是"缺稿该不该拒" —— 补稿只是补前提，
+    断言一个字不动。
+    """
+    out = dict(payload)
+    text = str(out.get("proof_text") or "")
+    if text.strip():
+        out["proof_manuscript"] = write_proof_manuscript(
+            store.root, statement_id, text,
+            statement_full=str(out.get("statement_full") or ""))
+    return out
+
+
 # ------------------------------------------------------------------ ① B-1 提示词
 def test_b1_a_and_b_prompts_say_untrusted_literature_is_reference_only() -> None:
     """① B-1：A 与 B 的渲染提示词里都有那条提醒（其余角色不受它影响）。
@@ -152,7 +169,8 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     拒信要给出两条正路（改 kind / 走猜想登记那条路）—— 一次只点名一条，等于让智能体
     多跑两趟（`test_b_register_all_missing_hint.py` 的同一个口径）。
     """
-    got = _ok(_b(store).register_statement(**_own(kind="lemma")))
+    got = _ok(_b(store).register_statement(
+        **_with_manuscript(store, _own(kind="lemma"))))
     assert got.get("ok") is False, got
     assert got.get("kind") == "must_start_as_conjecture", got
     err = str(got.get("error") or "")
@@ -163,7 +181,8 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
     # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
     sign_before_registration(store.root, proof_text=_own()["proof_text"])
-    good = _ok(_b(store).register_statement(**_own(kind="conjecture")))
+    good = _ok(_b(store).register_statement(
+        **_with_manuscript(store, _own(kind="conjecture"))))
     assert good.get("ok") is True, good
     rows = store.rows("statements")
     assert len(rows) == 1 and str(rows[0].get("kind")) == "conjecture", rows
@@ -212,7 +231,8 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
         # 准入闸（2026-11-02 strict）：证明正文先要有签（先签后登记，见
         # `conftest.sign_before_registration`）。
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
-        out = _ok(_b(store).register_statement(**_own(kind="  conjecture  ")))
+        out = _ok(_b(store).register_statement(
+            **_with_manuscript(store, _own(kind="  conjecture  "))))
     finally:
         monkeypatch.setattr(holder, "_self_authored_gate", real)
 
@@ -221,8 +241,8 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
     assert store.rows("statements")[0]["kind"] == "conjecture", store.rows("statements")[0]
 
     # 拒收路径上标的也是同一个值（不是原始入参那个带空白的串）。
-    bad = _ok(_b(store).register_statement(**_own(kind="  lemma  ",
-                                                 statement_full="另一条探针命题。")))
+    bad = _ok(_b(store).register_statement(**_with_manuscript(store, _own(
+        kind="  lemma  ", statement_full="另一条探针命题。"))))
     assert bad.get("kind") == "must_start_as_conjecture", bad
     assert bad.get("statement_kind") == "lemma", bad
 
@@ -282,7 +302,8 @@ def _no_source(**kw) -> dict:
 
 def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     """④ B-4：说「无来源可核」而不给手稿位置 ⇒ 拒；给了 ⇒ 通过且理由里带那个位置。"""
-    bad = _ok(_b(store).register_statement(**_no_source()))
+    bad = _ok(_b(store).register_statement(
+        **_with_manuscript(store, _no_source())))
     assert bad.get("ok") is False, bad
     assert bad.get("kind") == "no_source_without_backing", bad
     err = str(bad.get("error") or "")
@@ -290,8 +311,8 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     assert not store.rows("statements"), "被拒的一笔不许在盘上留下半行"
 
     sign_before_registration(store.root, proof_text=_own()["proof_text"])
-    good = _ok(_b(store).register_statement(**_no_source(
-        quote_reason=f"no_source：原文不在盘上，凭据是我方手稿 {BACKING}")))
+    good = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
+        quote_reason=f"no_source：原文不在盘上，凭据是我方手稿 {BACKING}"))))
     assert good.get("ok") is True, good
     row = store.rows("statements")[0]
     assert BACKING in str(row.get("quote_reason") or ""), row.get("quote_reason")
@@ -300,13 +321,13 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     for reason in ("no_source：见 out/paper/main.tex§3",
                    "no_source：见 stmt:000007"):
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
-        got = _ok(_b(store).register_statement(**_no_source(
-            statement_full=f"探针命题：{reason}", quote_reason=reason)))
+        got = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
+            statement_full=f"探针命题：{reason}", quote_reason=reason))))
         assert got.get("ok") is True, (reason, got)
 
     # 只写文件名不算"哪一处"（读的人仍然要在整篇里找）。
-    loose = _ok(_b(store).register_statement(**_no_source(
-        statement_full="探针命题：只写文件名", quote_reason="no_source：见 out/paper/main.tex")))
+    loose = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
+        statement_full="探针命题：只写文件名", quote_reason="no_source：见 out/paper/main.tex"))))
     assert loose.get("ok") is False and loose.get("kind") == "no_source_without_backing", loose
 
 

@@ -301,12 +301,17 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
     # 2026-11-02 准入闸 strict：无签的 `#p2` 整笔拒 `proof_without_v_sign`（新建一条命题
     # 时 `#p2` 还没有号可挂签 ⇒「首登就带一份有签的 #p2」在结构上不可达）。改前这一笔
     # 是 `ok=True` 的两证明首登。盘上原样、台账不增行两条断言照旧。
+    #
+    # 2026-11-04（业主裁定甲）：正文必须由手稿承载。这一笔只交了内联的
+    # `proofs=[…]`、没有 `proof_manuscript` ⇒ 现在先撞的是「载体」那一档
+    # （`proof_manuscript_required`），走不到更里面的"#p2 有没有签"。这是老路
+    # （只给正文）在新口径下的正确拒绝；反真空（整笔不写：0 行 / 0 台账行）照旧。
     refused = b.register_statement(
         **_own("设 G 是 3-正则群；则弦长函数不是常值。", "弦长函数不是常值"),
         proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
     assert refused.get("ok") is False, _broken("L1", "无签的 #p2 居然写进去了", refused)
-    assert refused.get("kind") == "proof_without_v_sign", _broken(
-        "L1", "拒收码不是准入闸那一档", refused.get("kind"))
+    assert refused.get("kind") == "proof_manuscript_required", _broken(
+        "L1", "拒收码不是正文载体那一档", refused.get("kind"))
     assert st.rows("statements") == [], _broken("L1", "整笔被拒但盘上多了行", st.rows("statements"))
     assert VR.list_verifications(st.root, statement_id=SID, limit=None)[0] == [], _broken(
         "L1", "整笔被拒但台账多了行",
