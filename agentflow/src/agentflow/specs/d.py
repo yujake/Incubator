@@ -438,7 +438,10 @@ SPEC = AgentSpec(
     # 带 V 的签字，没有就让 F 去补签（F 会派 V）」，见 `brief.policy` 里「立了猜想就必须在
     # 同一趟里派 F」那一条。`specs/m.py` 里那两条"要有人走查"的文句同样转交到 D 名下
     # （D 再让 F 去办）—— 判据见 `tests/test_v_signing_belongs_to_b_e_f.py`。
-    # 别在这里补 `'V'`：V 的签字只有两个入口（F 产出时签、B 入库文献侧内容时签）。
+    # 别在这里补 `'V'`：V 的签字有三个入口（F 产出时签、B 入库文献侧内容时签、
+    # E 跑出穷举证据时签）—— 第三个入口 E 是 2026-10-23 晚追加的（业主逐字：「E 写的
+    # 报告要能落下来，且 V 也要会审这种东西，加 E 派 V 的边」），边表里 `F` / `B` / `E`
+    # 各有一条到 `V` 的边（`ALLOWED_EDGES`，判据 `tests/test_v_signing_belongs_to_b_e_f.py`）。
     edges=(
         'A',
         'B',
