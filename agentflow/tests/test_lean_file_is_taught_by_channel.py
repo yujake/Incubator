@@ -30,6 +30,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from agentflow import agent_prompts as AP      # noqa: E402
+from agentflow import agent_skills as AS       # noqa: E402
 from agentflow import settings as SET         # noqa: E402
 from agentflow.tools import build_registry    # noqa: E402
 
@@ -113,3 +114,91 @@ def test_the_closed_tier_still_requires_lean_file_for_the_numeric_channel(
     assert "`lean_target` 留空" in text, "关档的 G 提示词里丢了「numeric ⇒ lean_target 留空」"
     assert "这两格留空" not in text, (
         "关档的 G 提示词仍写着「这两格留空」—— 数值通道在关档会话里仍然必填")
+
+
+# ============================================================ 手册（G / H 的按需面）
+
+G_MANUAL_SLUG = "成稿-正文自己写"
+H_MANUAL_SLUG = "审校-每条发现都要能复核"
+
+
+def _manual_body(role: str, slug: str) -> str:
+    return next(skill for skill in AS.CATALOG[role] if skill.slug == slug).body
+
+
+G_MANUAL_REQUIRED: tuple[str, ...] = (
+    "证明通道",
+    "`lean_file`",
+    "`lean_target` 留空",
+    "`.py`",
+    "`.lean`",
+    "索引四格",
+    "evidence_kind",
+    "evidence_path",
+    "evidence_sha256",
+    "v_signature",
+    "论文包内",
+    "相对仓库根",
+)
+
+G_MANUAL_STALE: tuple[str, ...] = (
+    "③ 逐行核三格齐",
+    "`file` 写**论文包内的相对路径**（绝对路径",
+)
+
+H_MANUAL_REQUIRED: tuple[str, ...] = (
+    "证明通道",
+    "`lean_file`",
+    "`.py`",
+    "`lean_target` 留空",
+    "`.lean`",
+    "索引四格",
+    "evidence_kind",
+    "evidence_path",
+    "evidence_sha256",
+    "v_signature",
+    "不在包里是正常的",
+)
+
+H_MANUAL_STALE: tuple[str, ...] = (
+    "`file` 指向的那份文件在不在论文包里",
+)
+
+
+def check_manual(text: str, required: tuple[str, ...],
+                 stale: tuple[str, ...]) -> list[str]:
+    bad = [f"读不到 {needle!r}" for needle in required if needle not in text]
+    bad += [f"仍写着旧句 {needle!r}" for needle in stale if needle in text]
+    return bad
+
+
+def test_g_manual_teaches_lean_file_by_the_proof_channel() -> None:
+    """a / b（手册面）：G 的成稿手册按通道教凭据格，并带索引四格与 file 的两种落点。"""
+    body = _manual_body("G", G_MANUAL_SLUG)
+    assert len(body) > 2000, f"G 的成稿手册只有 {len(body)} 字符 ⇒ 这一条没有落脚点"
+    assert check_manual(body, G_MANUAL_REQUIRED, G_MANUAL_STALE) == [], "\n".join(
+        check_manual(body, G_MANUAL_REQUIRED, G_MANUAL_STALE))
+
+
+def test_h_manual_checks_file_and_lean_file_by_the_proof_channel() -> None:
+    """a / b（手册面）：H 的对应表手册也按通道核，不再只按「包内」判 file。"""
+    body = _manual_body("H", H_MANUAL_SLUG)
+    assert len(body) > 1000, f"H 的对应表手册只有 {len(body)} 字符 ⇒ 这一条没有落脚点"
+    assert check_manual(body, H_MANUAL_REQUIRED, H_MANUAL_STALE) == [], "\n".join(
+        check_manual(body, H_MANUAL_REQUIRED, H_MANUAL_STALE))
+
+
+def test_putting_the_old_g_manual_lines_back_turns_it_red() -> None:
+    """c：把 G 手册里那两句旧话逐句回灌 ⇒ 同一读法必须红。"""
+    body = _manual_body("G", G_MANUAL_SLUG)
+    for stale in G_MANUAL_STALE:
+        problems = check_manual(body + "\n" + stale, G_MANUAL_REQUIRED, G_MANUAL_STALE)
+        assert any(stale in one for one in problems), (stale, problems)
+
+
+def test_putting_the_h_package_only_file_rule_back_turns_it_red() -> None:
+    """c：把 H 手册「file 只在论文包里」那句回灌 ⇒ 必红。"""
+    body = _manual_body("H", H_MANUAL_SLUG)
+    for stale in H_MANUAL_STALE:
+        problems = check_manual(body + "\n" + stale, H_MANUAL_REQUIRED, H_MANUAL_STALE)
+        assert any(stale in one for one in problems), (stale, problems)

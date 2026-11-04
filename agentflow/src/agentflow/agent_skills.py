@@ -1227,7 +1227,12 @@ def _h_skills() -> tuple[Skill, ...]:
 拿到论文稿先读 `out/paper/MAPPING.json`（人读那份 `out/paper/MAPPING.md` 由它生成），
 再**逐行**核：正文里每个定理类环境在表里有没有一行、表里每一行在正文里有没有那个环境
 （label 与 `env_no` 都要对）、`ledger_id` 与 `proof_no` 能不能在台账里解析到、`file`
-指向的那份文件在不在论文包里、正文附录「附录：产出对应表」与 json 渲染出来的是否逐字一致。
+的落点对不对（**两种落点都对，不许只按一种拦**：理论定理行写在论文包内；数值实验定理行写
+程序相对仓库根的路径，**不在包里是正常的**）、`lean_file` 按这条命题的证明通道核
+（numeric ⇒ 证明栏第 ① 段那份 `.py` 程序、`lean_target` 留空；formal ⇒ `.lean` + `lean_target`；
+通道为空 ⇒ 两格允许为空）、数值实验定理那一行的索引四格（`evidence_kind` / `evidence_path` /
+`evidence_sha256` / `v_signature`）与 `numeric_evidence` / `exhaustion_note` 是否都在、
+正文附录「附录：产出对应表」与 json 渲染出来的是否逐字一致。
 这一档是**客观问题（可拦）**：判出来就写成 error 级发现，kind 用
 `mapping_package_missing` / `mapping_missing` / `mapping_orphan` / `mapping_unresolvable` /
 `mapping_file_missing` / `mapping_citation_loc_missing` / `mapping_citation_file_missing` /
@@ -3051,7 +3056,7 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
-- **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核三格齐 → ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
+- **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核「这一行该有的格子齐」→ ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
   你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
   `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
   `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
@@ -3059,8 +3064,14 @@ def _g_skills() -> tuple[Skill, ...]:
   （`md_drifted` / `mapping_paper_mismatch`），手抄一遍就对不上。
   正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
   有一个环境 —— 两个方向都不许有孤儿。多证明时每条证明各占一行（`#p1` / `#p2`）。
-  `file` 写**论文包内的相对路径**（绝对路径在别人机器上等于不存在）。
-  顺序是死的：先写/改正文 → 再 `doc.write_mapping` → 再核三格齐 → 最后 `doc.paper_compile`（改完正文
+  `file` 的落点分两种：理论定理那一行写**论文包内的相对路径**（绝对路径在别人机器上等于不存在）；
+  数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的**）。
+  **凭据格 `lean_file` 按这条命题的证明通道填**：numeric 通道（证明栏第 ① 段是程序、台账里有 E 签的
+  穷举）⇒ `lean_file` 必填证明栏第 ① 段那份 `.py` 程序（相对仓库根，必须与证明栏同一份），
+  `lean_target` 留空（数值程序没有 Lean 声明名，填了反受控拒绝）；formal 通道 ⇒ `.lean`（项目根
+  相对路径，如 `code/formal/000004.lean`）与 `lean_target` 两格都要有；通道为空（没有 `proof_text`、
+  台账里也没有穷举或形式化实验）⇒ 两格都可以留空（不适用，不是没填）。
+  顺序是死的：先写/改正文 → 再 `doc.write_mapping` → 再核每行该有的格 → 最后 `doc.paper_compile`（改完正文
   必须重编一次）。
 
 ## 定理结构以 B 台账的命题为准（业主 2026-10-24，D-40）
@@ -3079,8 +3090,10 @@ def _g_skills() -> tuple[Skill, ...]:
 - **形式化细节不进正文**：不搬 Lean 的 lemma / step 标题、不写 tactic、不贴检查器
   输出；**附录与脚注也不进**。正文最多一句结论性表述（"这一条已由检查器验证"），
   并指向对应表里那一行。
-- **凭据的落点只有两处**：`out/paper/MAPPING.json` 那一行（`lean_file` /
-  `lean_target`；数值实验定理是 `numeric_evidence` / `exhaustion_note`）与
+- **凭据的落点只有两处**：`out/paper/MAPPING.json` 那一行（凭据格 `lean_file` 按通道 —— numeric ⇒
+  那份 `.py`、`lean_target` 留空；formal ⇒ `.lean` + `lean_target`；数值实验定理另带
+  `numeric_evidence` / `exhaustion_note` 与索引四格 `evidence_kind` / `evidence_path` /
+  `evidence_sha256` / `v_signature`）与
   `experiments` 台账那一行 —— 路径、三态、sha 都在那两处；读者要看凭据就去那里看。
 - **`claim` 宏不得用来伪装定理类环境**：它是给"证明过程中的中间步骤"用的，
   且不冒充 Lemma 标签 —— `\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成
@@ -3124,13 +3137,18 @@ def _g_skills() -> tuple[Skill, ...]:
 - **E 没给那两块时，不许写成「定理」或「已证明」** —— 只能写「有数值实验支持」，
   并点名缺的是哪一块（这一条由 `numeric_evidence` / `exhaustion_note` 两格盯住）。
 
-对应表那两格怎么写（缺任何一格 `doc.write_mapping` 会受控拒绝）：
+对应表那几格怎么写（缺任何一格 `doc.write_mapping` 会受控拒绝）：
 
 | 格 | 写什么 |
 |---|---|
 | `file` | 那份穷举程序的相对仓库路径（这一行的证明栏就是它，不是论文包内的 tex） |
+| `lean_file` | **同一份程序**（数值通道必填，相对仓库根；这一档 `lean_target` 留空，填了反受控拒绝） |
 | `numeric_evidence` | E 那条穷举读数的编号（`exp:000000`），台账里必须是 V 签、E 写 ②③ 的那一条 |
 | `exhaustion_note` | E 那份读数的落点（相对仓库根，`out/experiments/000000/exhaustion.md`） |
+| `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature` | 索引四格：正文是哪一档（`report` = E 的报告 / `proof` = F 的证明）、相对仓库根的路径、那份文件字节的 sha256、V 的签（`{"verdict": "成立", "sha256": <被签那一份的 sha256>}`） |
+
+这五档合起来才是这一行该有的格；「三格齐」只是收工门那一档按 `file` 加两格数的读数，不是
+「这一行写完」的全部。
 
 ## 引用与断言
 
