@@ -3171,7 +3171,38 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
 #: 三份冻结物重冻（agent 面十一格 prompt、tool 面、`tool_declaration_baseline.json`）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
-PROMPT_VERSION = "p239"
+#: `p240`（2026-11-04 今晚最后一次冻结：p239 之后三条 lane 的模型可见文本一次对齐）：
+#: 变化格 = ['B', 'M']（其余九格 A/C/D/E/F/G/H/L/V 逐字同值）。
+#: ① B（`5f29ec24` / `646adcb5`，业主 2026-11-04 放权动禁改区 · auth-audit）：
+#:    policy 把「再派 V 审这一份稿」写回裁定原话「再派 V 审核签字（`V.verify_proof`：
+#:    `statement_id` + `proof_manuscript=<这份稿>`）」—— 那是 `test_v_signing_belongs_to_b_e_f.py`
+#:    ④ 逐字读的锚；`register_statement` 的动作摘要把「（证明稿，proof manuscript）」从
+#:    参数名后面移到「是证明正文的载体」之后；同一格的参数说明给「是证明正文的载体」
+#:    加一对星号（强调）—— `test_handoff_and_proof_manuscript_are_different_things.py`
+#:    的裸锚点因此在 `specs/b.py` 里只剩 policy 一处首提。policy 与动作表都印在 B 的段上
+#:    ⇒ 只有 B 换值。
+#: ② M（`8d80a398`，同一次放权 · auth-audit）：policy 首提
+#:    「交接工作前先写一份交接手稿（handoff 形状）」改成
+#:    「交接工作前先写一份手稿（交接手稿，handoff）」—— 旧判据针
+#:    「交接工作前先写一份手稿」重新连通，改名信息（交接手稿 / handoff）一个字没丢
+#:    ⇒ 只有 M 换值。
+#: ③ V 那一格这次没有换值（p239 的 `4daa02d9` 仍成立）：`6efb3079` 给
+#:    `verify.verify_proof` 的 `returns` 补了「`verdict` 是两态之一：`成立` / `有毛病`」，
+#:    summary 一个字符未动（仍 104）。但 `tools_lines` 只渲染「名字 + 摘要 + 必填参数 +
+#:    副作用」，`returns` 只拼进 function-calling 的 description ⇒ 不进任何角色的段。
+#:    （p239 那一笔的提交信息预期「V 的提示词摘要会 stale」，实测为准：不进段。）
+#:    这一笔在模型可见面上的落点是工具面 —— 见 `tool_surface_snapshot.json` 的
+#:    `declarations."verify.verify_proof".returns` 与 `cli."--role V"` 两格。
+#: 逐格旧值 → 新值（p239 → p240；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   B 4d4b9182→4341b37e / M be33fa21→8e23eb4d。
+#: 十一格是 `temp/_p240_recompute.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p240）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 三份冻结物按现值看一眼（agent 面 B/M 两格 prompt + B 的动作面；tool 面因 `returns`
+#: 那一格变；`tool_declaration_baseline.json` 在补针 lane 已按现值重记 ⇒ 本次未动）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
+PROMPT_VERSION = "p240"
 
 
 
