@@ -96,11 +96,6 @@ def _dependency_rows(source_manuscript: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _dependency_section(source_manuscript: Any) -> str:
-    """从来源手稿（F / E / D 递过来的那一份）抄下 `## 依赖` 那一节；没有 ⇒ 空表声明。"""
-    return _DS.render_dependency_section(_dependency_rows(source_manuscript))
-
-
 def render(*, statement_full: Any, proof_text: Any, statement_id: Any = "",
            label: Any = "", proof_no: Any = 0,
            dependency_section: str = "", proposition: Any = None,
