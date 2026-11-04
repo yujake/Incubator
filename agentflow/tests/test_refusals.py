@@ -121,11 +121,20 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "受控理由与 `refusal_reason` 都在那一侧。所以这里没有一次独立的拒绝可记。"
         "不走 `refuse` 的理由同 `agent_c/path_shape.py` 那一格：会给一条正常的"
         "「换一条证明路径」的读数贴上 `refusal_reason=invalid_params`。",
+    # 2026-11-05（p241 手稿统一之后复核）：这一格只剩 `preview_dependencies()` 的 `out`
+    # 那一处；`proof_manuscript()` 的写盘失败已随 910b3031 搬进
+    # `manuscriptform.commit_manuscript`（那里返回 `{"ok": False, ...}` 的 `got`，由
+    # `proof_manuscript` 折成 `"ok": bool(got.get("ok"))`，不再是手写字面量）。
+    # 不删这一条：盘上实测仍有一处（`preview_dependencies()` 的 `out` 初值），处数见
+    # `_REPEAT_COUNTS` 的 1。`manuscriptform.py` 那几处 `{"ok": False, ...}` 不进本表：
+    # 本判据的扫描面是 `_role_action_modules()`（只收 `agent_a` … `agent_h` 下的模块），
+    # 而它是跨族共用的实现层，那几处都是子结果（命名 / 形状 / 落盘事务的读数），
+    # 由 F/B 的转发层折进各自返回，从不直接作为角色动作的终态 payload。
     ("agent_f/manuscript.py", ""):
-        "子结果：`proof_manuscript()` 的 `{\"ok\": False, ...}` 是「这份手稿没写成」"
-        "（写盘 OSError 那一支），`preview_dependencies()` 的 `out` 是「这一节读不出"
-        "依赖边」的读数；两者都被 `agent_f/core.py` 折进 `detail` / `history`，"
-        "从不冒充动作的终态拒绝，也没有受控 `kind` 可记",
+        "子结果：`preview_dependencies()` 的 `out` 是「这一节读不出依赖边」的读数，"
+        "被 `agent_f/core.py` 折进 `detail` / `history`，从不冒充动作的终态拒绝，"
+        "也没有受控 `kind` 可记（同族的写盘失败已搬进 `manuscriptform.commit_manuscript`，"
+        "那一层不是角色动作模块、不归本表）",
     ("agent_f/core.py", ""):
         "子结果：手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给调用方"
         "看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 payload，"
@@ -154,8 +163,9 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # L 的形式化入口：十一条"这一条候选不成立"的子结果（`_pick_statement` 五条、
     # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串。
     ("agent_l/formalize.py", ""): 11,
-    # `proof_manuscript()` 的写盘失败一条 + `preview_dependencies()` 的读数一条。
-    ("agent_f/manuscript.py", ""): 2,
+    # 只剩 `preview_dependencies()` 的读数一条（2026-11-05 复核：`proof_manuscript()` 的
+    # 写盘失败已随 910b3031 搬进 `manuscriptform.commit_manuscript`，不再是这里的字面量）。
+    ("agent_f/manuscript.py", ""): 1,
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,
