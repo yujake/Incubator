@@ -11,7 +11,7 @@
 | `verifications.LEGACY_VERDICTS` | 已经取消的那一档的历史值（2026-11-02：连历史兼容读也不留） | `看不出来` | 真身的历史值（读得出、按成立读并计票、写不出） |
 | `numericproof.THIRD_PARTY_VERDICT_OK` | 第三方签字那一档"签住了"的取值 | `"成立"` | 真身的最后一档（按位置引用，不抄字面量） |
 | `exhaustionreport.VERDICT_OK` / `VERDICT_BAD` / `VERDICT_UNKNOWN` | 穷举型证据的会审机器读数 | 三个词 | 前两个与真身逐字相同；`VERDICT_UNKNOWN` 是兼容读值（V 不再产出它，见下） |
-| `schema.REVIEW_VERDICTS` | `documents.review_verdict`（另一根轴：文档审校结论） | 三个词 + 一个空串 | 两态 + 历史值逐字相同；空串表示"还没审" |
+| `schema.REVIEW_VERDICTS` | `documents.review_verdict`（另一根轴：文档审校结论） | 两态 + 一个空串 | 与真身逐字相同；空串表示"还没审"。2026-10-30 之后这一轴也不再收「看不出来」 |
 
 ## 2026-11-01：V 的结论收成两态，这一份跟着改口径（不是放宽）
 
@@ -23,8 +23,14 @@
 - `exhaustionreport` 的三格是机械会审自己的读数（`review()` 的返回值），V 会在
   缺材料时把它读成"没查成"，所以那一格仍是 `看不出来` 这个词：它是另一份读数的
   兼容值，不是 V 的结论。这一条判据因此钉"它与历史值逐字相同"，而不是"它等于真身"；
-- `schema.REVIEW_VERDICTS` 是 H 的文档审校轴（另一根轴、另一份台账），这一批不动
-  （业主 2026-11-01 只裁 V 的结论词）。它现在等于"两态 + 历史值"，仍逐字可对。
+- `schema.REVIEW_VERDICTS` 是 H 的文档审校轴（另一根轴、另一份台账）。它此前等于
+  "两态 + 历史值"，因为 2026-11-01 那一批只裁 V 的结论词；2026-10-30 的业主裁定
+  在 2026-11-04 落到这一轴上（施工单：「H 的『看不出来』不是第三态，必须从数据层
+  删掉」）：于是它也只剩两态，旧值降到 `schema.REVIEW_LEGACY_VERDICTS`。
+  这一轴与 V 轴的读法不同（这不是漂移，是两份读数）：V 的旧值按「成立（没找到
+  缺陷）」读；H 的旧值按「没查成」（`checked=False`）读 —— H 的「看不出来」记的是
+  "这一轮没查成"，不是"查了没找到缺陷"。判据在这里钉两件事：词表逐字相同、
+  旧值是同一个词，但读侧各按各的口径。
 
 ## 为什么钉"顺序"而不只钉集合
 
@@ -80,17 +86,25 @@ def test_the_same_axis_copies_are_word_for_word_identical() -> None:
     assert all(word not in VR.VERDICTS for word in (ER.VERDICT_UNKNOWN,))
 
 
-def test_schema_review_verdicts_is_another_axis_and_therefore_has_extra_cells() -> None:
-    """`schema.REVIEW_VERDICTS` 是另一根轴：两态 + 历史值逐字相同，多一个空串。
+def test_schema_review_verdicts_is_another_axis_without_a_third_state() -> None:
+    """`schema.REVIEW_VERDICTS` 是另一根轴：与真身逐字一致，另加一个空串。
 
     空串不是又一动判决，是"这份文档还没有审校结论"（`documents.review_verdict` 的
-    缺省）。所以这里判"去掉空串之后与真身 + 历史值逐字相同 + 恰好多一格"，
-    不判"两者相等" —— 那会把另一根轴折成本轴。
+    缺省）。「看不出来」在 2026-10-30 的业主裁定之后不再是这一轴的取值，旧行里的
+    那四个字降到 `schema.REVIEW_LEGACY_VERDICTS`，读侧按「没查成」读（`checked=False`）
+    —— 不许折成「成立」，也不许折成「有毛病」。
     """
-    assert set(S.REVIEW_VERDICTS) - {""} == set(VR.VERDICTS) | set(VR.LEGACY_VERDICTS), (
-        f"文档审校结论的词表与真身（含历史值）分家了：{S.REVIEW_VERDICTS}")
+    assert set(S.REVIEW_VERDICTS) - {""} == set(VR.VERDICTS), (
+        f"文档审校结论的词表与真身分家了：{S.REVIEW_VERDICTS}")
+    assert "看不出来" not in S.REVIEW_VERDICTS, S.REVIEW_VERDICTS
+    assert S.REVIEW_LEGACY_VERDICTS == VR.LEGACY_VERDICTS, (
+        "两根轴的历史值必须是同一个词（V 的旧值按成立读、H 的旧值按没查成读，"
+        f"但词本身要对得上）：{S.REVIEW_LEGACY_VERDICTS} vs {VR.LEGACY_VERDICTS}")
     assert "" in S.REVIEW_VERDICTS, "空串是'还没审'这一档，删掉它会把'没审'折成一档判决"
-    assert len(S.REVIEW_VERDICTS) == len(VR.VERDICTS) + len(VR.LEGACY_VERDICTS) + 1
+    assert len(S.REVIEW_VERDICTS) == len(VR.VERDICTS) + 1
+    legacy = S.read_review_verdict({"review_verdict": S.REVIEW_LEGACY_VERDICTS[0]})
+    assert legacy["verdict"] == "" and legacy["checked"] is False, legacy
+    assert legacy["legacy"] is True, legacy
 
 
 def test_parse_verdict_accepts_exactly_the_authority() -> None:
