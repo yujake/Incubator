@@ -54,7 +54,7 @@ LINKS: dict[str, dict[str, object]] = {
         "file": "tests/test_multi_proof_write_side.py",
         "tests": ("test_two_proofs_put_p1_in_proof_text_and_p2_in_the_list",),
         "also": (("tests/test_multi_proof_write_side.py",
-                  ("test_a_proof_text_only_call_is_byte_identical_to_a_one_proof_list",)),),
+                  ("test_a_proof_text_only_call_needs_a_manuscript_sign",)),),
     },
     "L2": {
         "file": "tests/test_proof_review_reaches_the_statement.py",
