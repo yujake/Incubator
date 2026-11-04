@@ -327,11 +327,11 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "证明有毛病：V 判`有毛病`或 `unresolved_errors > 0` ⇒ 产出不达标"
      "（判据读 `verifications/<号>.jsonl`；记命题作者 `proof_authors`，不是记 V）"),
     # 2026-11-04（业主：「受控拒绝在 errorstats 上不可见」）：`conductor_tools._out` 的最后
-    # 一句是 `return ok(data, **data)` ⇒ 一次"拒绝"在工具层是 `ok=True`，拒因住在
-    # `data.state == "refused"` / `data.refusal_code` 里。而本模块此前只认 `ok is False`，
-    # 于是真形受控拒绝 **total 0**（真机夹具：`conductor.ack(close="nope")`）。
+    # 一句把 `data` 的每一格都当 meta 再交给 `ok(...)` ⇒ 一次"拒绝"在工具层是 `ok=True`，
+    # 拒因住在 `data.state == "refused"` / `data.refusal_code` 里。而本模块此前只认
+    # `ok is False`，于是真形受控拒绝 total 0（真机夹具：`conductor.ack(close="nope")`）。
     # 有 `data.refusal_code` 的按那个码登记的类目记（`target_not_silent` 等）；只有
-    # `state=="refused"` 而没有码的落这一类 —— **码位留空**：状态不是码，不把
+    # `state=="refused"` 而没有码的落这一类 —— 码位留空：状态不是码，不把
     # `data.state` 的状态值登记成假码（那是"状态≠码"的折平）。
     ("tool_refused_controlled",
      "工具层受控拒绝（无码那一档）：`result.ok is True` 而 `data.state == 'refused'`、"
@@ -709,7 +709,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/schema.py::TASK_OUTCOMES（被叫停的终态；算不算错看 runs/stop-history.jsonl）"),
     ("repaired", "roster_repaired",
      "src/agentflow/secretary.py::Secretary.roster_repair（补登记行的标记）"),
-    # ---- 2026-11-04：12 个**模型面拒因码**（受控拒绝的码）。
+    # ---- 2026-11-04：12 个「模型面拒因码」（受控拒绝的码）。
     #
     # 它们都是"框架按受控理由拒了模型这一次操作"的码：有的写在工具结果的
     # `data.refusal_code` 里（`target_not_silent`），有的写在写入口的结论里
@@ -717,7 +717,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 统一归 `tool_refused_controlled`：与"参数形状坏"（`param_invalid`）分开 ——
     # 那两件事混在一个类目里，参数错误那一族的读数就会说谎。
     #
-    # 码名一个都不新造：这里只登记**已经在源码里产出的那些字面量**（判据走 AST 核
+    # 码名一个都不新造：这里只登记已经在源码里产出的那些字面量（判据走 AST 核
     # 字面量与符号，注释里提过不算）。出处仍写符号名，不写行号。
     ("target_not_silent", "tool_refused_controlled",
      "src/agentflow/conductor.py::RETIRE_REFUSAL_TARGET_NOT_SILENT"
@@ -1181,9 +1181,9 @@ def _step_text(record: Mapping[str, Any]) -> str:
     只取 `result.error` / `result.warn` / `result.problem` / `result.kind` 与记录自己的
     `problem`，不取 `payload`（理由见模块 docstring：模型"提到一个码"不等于"撞上那个码"）。
 
-    2026-11-04 补一档（受控拒绝）：`result.data` 里 **`refusal_code` / `reason`** 两格也进
+    2026-11-04 补一档（受控拒绝）：`result.data` 里 `refusal_code` / `reason` 两格也进
     可扫段 —— 前提是这一条是受控拒绝形状（`ok=True` + `data.state=="refused"`，或
-    `data.refusal_code` 非空）。理由：这两格是**受控码 / 受控理由**，不是模型自由文本
+    `data.refusal_code` 非空）。理由：这两格是受控码 / 受控理由，不是模型自由文本
     （与 `table.describe` 把 schema 词表铺进 `data` 那一档严格分开：形状不对时 `data`
     一个字都不读）。
     """
@@ -1544,10 +1544,10 @@ def _controlled_refusal_shape(result: Mapping[str, Any]) -> bool:
 def _controlled_refusal_family(result: Mapping[str, Any]) -> tuple[str, str] | None:
     """一条受控拒绝属于哪一类：`(码, 类目)`；认不出 ⇒ None。
 
-    - `data.refusal_code` 非空 ⇒ 按**那个码**记；码表里登记了就用它登记的类目，
+    - `data.refusal_code` 非空 ⇒ 按那个码记；码表里登记了就用它登记的类目，
       码表里没有 ⇒ None（调用方记 `unclassified["tool"]`，不猜一个类目出来）；
     - 只有 `data.state == "refused"`、没有码 ⇒ 记 `tool_refused_controlled`，
-      **码位留空**（`""`）：这一笔只有状态、没有受控码 —— 状态不是码，不把
+      码位留空（`""`）：这一笔只有状态、没有受控码 —— 状态不是码，不把
       `data.state` 的取值登记成假码（"状态≠码"的折平）。
     """
     if not _controlled_refusal_shape(result):

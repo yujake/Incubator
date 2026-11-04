@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""判据：工具层的**受控拒绝**必须在 `errorstats` 上看得见（一条都不许消失）。
+"""判据：工具层的受控拒绝必须在 `errorstats` 上看得见（一条都不许消失）。
 
 ## 改前实测的形态（根因）
 
-`conductor_tools.py::_out` 最后一句是 `return ok(data, **data)`：一条"拒绝"在工具层
-是 `ok=True`，拒因写在 `data.state == "refused"` / `data.refusal_code` 里。
-而 `errorstats` 的 `agent_step` 分支只认 `result.ok is False`（`_tool_refusal_family`
-也只读 `result.error` / `result.detail`）⇒ 真形受控拒绝 **total 0、连 unclassified
-都没有**。用真工具 `conductor.ack(close="nope")` 的返回当夹具，改前计数是 0。
+`conductor_tools.py::_out` 最后一句把 `data` 的每一格都当 meta 再交给 `ok(...)`：
+一条"拒绝"在工具层是 `ok=True`，拒因写在 `data.state == "refused"` / `data.refusal_code`
+里。而 `errorstats` 的 `agent_step` 分支只认 `result.ok is False`（`_tool_refusal_family`
+也只读 `result.error` / `result.detail`）⇒ 真形受控拒绝 total 0、连 unclassified
+都没有。用真工具 `conductor.ack(close="nope")` 的返回当夹具，改前计数是 0。
 
 ## 四条
 
@@ -17,7 +17,7 @@ c. 反真空：把结构判据摘掉 ⇒ a 回到 0（数出来的确实是这�
 d. 同一次拒绝不重复计两次：`data.reason` 里已经有一个可扫的码时，只记一次。
 
 码与类目的口径：受控拒绝记进 `tool_refused_controlled`（与既有 `tool_refused_*` 并列），
-**不硬塞进参数错误那一族** —— "你的参数形状不合法"与"框架按受控码拒了这次操作"不是
+不硬塞进参数错误那一族 —— "你的参数形状不合法"与"框架按受控码拒了这次操作"不是
 同一件事，混在一起会让参数错误那一族的读数说谎。
 """
 from __future__ import annotations

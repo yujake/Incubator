@@ -4,13 +4,13 @@
 ## 为什么单列一份
 
 `errorstats.CODE_TABLE` 的出处口径是 `文件::符号名`（`R-BE4`）。"登记过"这件事本身
-不能靠文本 grep 证明 —— 今晚已经吃过一次假绿：码只出现在一句**注释**里，`grep` 命中
+不能靠文本 grep 证明 —— 今晚已经吃过一次假绿：码只出现在一句注释里，`grep` 命中
 而代码根本不产它。所以这一份判据走 AST：
 
 1. 每个码都在 `CODE_TABLE` 里，类目是 `tool_refused_controlled`；
 2. 出处里的 `文件::符号名` 逐条对上 EXPECTED（指到别处也红），且那个符号真的定义在
    那个文件里（函数 / 类 / 方法 / 模块级赋值都认，注释不在 AST 里）；
-3. 那个**码字符串本身**真的作为 AST 字面量出现在出处文件里（不是注释里提过）。
+3. 那个码字符串本身真的作为 AST 字面量出现在出处文件里（不是注释里提过）。
 
 反真空：EXPECTED 是显式清单。删掉 `CODE_TABLE` 里任意一行 ⇒ 这里当场红（第 1 条点名
 那个码），不是"少了一行也照样绿"。
@@ -70,7 +70,7 @@ def _defined_names(path: pathlib.Path) -> set[str]:
 
 
 def _string_constants(path: pathlib.Path) -> set[str]:
-    """文件里**会被执行到**的字符串字面量（注释不在 `ast` 里，这正是要用 AST 的理由）。"""
+    """文件里会被执行到的字符串字面量（注释不在 `ast` 里，这正是要用 AST 的理由）。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {n.value for n in ast.walk(tree)
             if isinstance(n, ast.Constant) and isinstance(n.value, str)}
