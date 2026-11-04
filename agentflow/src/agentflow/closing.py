@@ -16,7 +16,7 @@
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
 | `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
-| `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`，只有 `changed` ⇒ `unknown`（登记后被正常改写是常态） |
+| `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（D9 收窄，业主 2026-10-09：按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
 
 维护规则（2026-10-27，R-BE1 的 ③-8）：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应
 （一格一行、顺序相同）。改前它少了一行（`acceptance`）而没有任何判据会红 —— 门的实现
@@ -6519,7 +6519,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         _run_reading(rep, "mapping", _check_mapping, rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
-    # 为什么不进 `DEFAULT_CHECKS`（十八格之一）、也不进退出码：业主逐字
+    # 为什么不进 `DEFAULT_CHECKS`（它不是八格之一，是八格之外的读数）、也不进退出码：业主逐字
     # 「不一定要 fail，但必须可见」。它是一格读数，落 `readings`（`to_dict()`
     # 与服务端都能读到）+ 一条 `warning`（`summons_unconsumed > 0` 时，它会被
     # `agentflow closing` 逐条打出来）—— `machine_pass` 只看 `blocker`，
