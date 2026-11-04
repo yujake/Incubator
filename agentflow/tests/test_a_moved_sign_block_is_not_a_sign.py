@@ -5,8 +5,8 @@
 
 第 9 格 `手稿号` 是 2026-11-02 加的，`manuscript_sign_reading` 也如实给出三态
 （`resolved` / `unmatched` / `legacy`），`test_sign_block_ninth_cell_is_the_manuscript_id`
-逐字写着 `unmatched` **不许**读成"签过了"。但 `manuscript_sign_standing`（F 的交付读数、
-B 的收录认签、V 的"已经签过"短接、秘书的升档依据都走它）当时**不看**这一格：
+逐字写着 `unmatched` 不许读成"签过了"。但 `manuscript_sign_standing`（F 的交付读数、
+B 的收录认签、V 的"已经签过"短接、秘书的升档依据都走它）当时不看这一格：
 只认正文 sha 与连续次数。于是"同一份正文的签块从 000000 的稿搬进 000001 的稿"照样
 读成 signed —— 第 9 格写了、读了，却没有一处拿它拦。
 
@@ -15,7 +15,7 @@ B 的收录认签、V 的"已经签过"短接、秘书的升档依据都走它�
 | # | 造什么 | 期望 |
 |---|---|---|
 | a | 块与所在稿同号（`f-proof-000000.md`） | `signed`（正控） |
-| b | 同一块搬到 `f-proof-000001.md` | **不是** `signed`；`why` 点名手稿号对不上 |
+| b | 同一块搬到 `f-proof-000001.md` | 不是 `signed`；`why` 点名手稿号对不上 |
 | c | 不给稿路径 | 仍 `signed`（三态：判不了就不判，旧调用点行为逐字不变） |
 | d | 旧 8 格块搬到别的稿 | 仍 `signed`（`legacy` 是当时真的签过，不许读成没签） |
 | e | 反真空：把搬块闸打桩成恒放行 | b 的那一块回到 `signed` —— b 量的是这道闸 |

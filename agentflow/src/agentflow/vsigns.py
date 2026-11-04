@@ -733,19 +733,19 @@ def _block_verdict_allows_sign(reading: Mapping[str, Any]) -> bool:
 
 
 def _block_identity_conflicts(reading: Mapping[str, Any]) -> bool:
-    """这一块签的是不是**它所在那一份稿**（第 9 格 `手稿号` 的读侧判据）。
+    """这一块签的是不是它所在那一份稿（第 9 格 `手稿号` 的读侧判据）。
 
     ## 为什么这一格要参与"算不算签"
 
     `manuscript_sign_reading` 已经把三态读出来了（`resolved` / `unmatched` /
     `legacy`），`test_sign_block_ninth_cell_is_the_manuscript_id` 也逐字写着
-    `unmatched` **不许**读成"签过了"。但 `manuscript_sign_standing`（F 的交付读数、
+    `unmatched` 不许读成"签过了"。但 `manuscript_sign_standing`（F 的交付读数、
     B 的收录认签、V 的"已经签过"短接、秘书的升档依据都走它）改前不看这一格：
     同一份正文的签块从 000000 的稿搬进 000001 的稿，照样读成 signed。
 
     ## 三态（判不了就不判）
 
-    只在**两边的号都认得出、而且不同**时判"搬过"：
+    只在两边的号都认得出、而且不同时判"搬过"：
     - 块没写第 9 格（旧 8 格）⇒ `legacy`，不是搬块（当时真的签过）；
     - 没给稿路径 / 稿名认不出裸稿号 ⇒ `identity_state=unmatched` 但 `manuscript_key`
       为空 ⇒ 判不了，原样往下走（旧调用点逐字不变）；
@@ -767,7 +767,7 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     - 没有块 ⇒ `unsigned`（"这一份还没签"，不是"查不成"）；
     - 块在、`已签=true`、`连续>=require`、且块里的 `正文sha` == 这一份正文的 sha
       ⇒ `signed`；sha 不符 ⇒ `stale`（签完之后正文改过）；
-    - 块在但 `已签=false`，**或判词不是「成立」**（两个格子互相矛盾时按负判读）
+    - 块在但 `已签=false`，或判词不是「成立」（两个格子互相矛盾时按负判读）
       ⇒ `rejected`（负判不是签，业主 2026-11-03 甲）；
     - 块与它所在的稿对不上号（第 9 格 `手稿号` 与稿的裸稿号都认得出、而不同）
       ⇒ `unsigned`（块被搬过 / 号写错了：它不给这一份稿作证）。

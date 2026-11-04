@@ -12,7 +12,7 @@
   格子拼错了。
 
 `manuscript_sign_standing` 改前只读 `已签` 那一格：`已签=true` + `判词=有毛病`
-⇒ `state="signed"`。那等于把**一条负判**读成了签 —— 而业主逐字的口径是
+⇒ `state="signed"`。那等于把一条负判读成了签 —— 而业主逐字的口径是
 「负判不是签」（`draft/178`，写侧当时修的是"不写块"，读侧这一半没跟上）。
 
 ## 判据（每条都两向）
@@ -20,11 +20,11 @@
 | # | 造什么 | 期望 |
 |---|---|---|
 | a | `已签=true；判词=成立` | `state=signed`（正控，修法不误伤） |
-| b | `已签=true；判词=有毛病` | **不是** `signed`（`rejected`），`why` 点名判词 |
+| b | `已签=true；判词=有毛病` | 不是 `signed`（`rejected`），`why` 点名判词 |
 | c | 反真空：把判词闸打桩成"恒放行" | b 的那一块回到 `signed` —— 证明 b 量的是这道闸 |
 
 `manuscript_sign_reading` 仍然如实报两格（`signed=True`、`verdict="有毛病"`）：
-本判据改的是**结论**那一层，不是把块读成"没有块"。
+本判据改的是结论那一层，不是把块读成"没有块"。
 """
 from __future__ import annotations
 
