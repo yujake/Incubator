@@ -34,7 +34,7 @@ argparse 的 `set_defaults(func=…)` 挂点、后一个是注册表按名字取
 | 7 | D 携带 | `agent_d/write_report.py:568 _deliver_carried_to_b`、`depsection.py:498 carried_manuscripts` | `write_report:456` | WIRED |
 | 8 | B 读稿落依赖（四档） | `agent_b/register_statement.py:932-967`、`:1868`、`secretary.py:3799` | `register_statement` 本体（B 的写入口） | WIRED |
 | 9 | V 引用核实 | `verifications.py:166 citation_material`、`:281 reconcile_citation_checks`、`:393 apply_citation_gate`、`:1368 signs_bit3`、`:123 CITATION_EVIDENCE_FLOOR` | `agent_v/core.py:127 / 215 / 456`；`signs_bit3` 七处 | WIRED |
-| 10 | 保留产物闸 | `tools/fs_tools.py:264 RESERVED_ARTIFACT_TABLE`、`:316 _reserved_artifact`、`:336 _reserved_refusal` | `fs_write` 与 `fs_edit` 两道闸共用 | WIRED（身份来源是 `conductor.current_caller_role()`，见第三节 e） |
+| 10 | 保留产物闸 | `tools/fs_tools.py:264 RESERVED_ARTIFACT_TABLE`、`:316 _reserved_artifact_rule`（2026-11-05 复核：此处原记的旧名称实测是零调用的 bool 壳、已删；真身是 `_reserved_artifact_rule`）、`:336 _reserved_refusal` | `fs_write` / `fs_edit` / `fs_delete` / `fs_move` 四道闸共用（`_reserved_refusal` 里 `rule = _reserved_artifact_rule(...)` 是唯一调用点） | WIRED（身份来源是 `conductor.current_caller_role()`，见第三节 e） |
 | 11 | testable 闸 | `agent_f/create_plan.py:99-113`（受控码 `subgoal_without_testable`） | `attack_tools.py:451`（`attack.create_plan`） | WIRED |
 | 12 | 非平凡度 | `secretary.py:6622 proof_effort_readings`、`:6705 nontriviality_from_effort`、`:6747 material_truncation` | `Secretary.judge_statement`（`:1772 / :1843 / :1796`） | WIRED |
 | 13 | 命题同一性 | `secretary.py:3543 adjudicate_proposition`、`:6779 append_proposition_verdict`、`:6814 proposition_verdict_of`、`:6844 proof_routes_of`、`:6866 proof_route_of` | `record_statement:3997`（B 与 `table_tools` 的直写路由都走它） | 判定链 WIRED；**`proof_route_of` / `proof_routes_of` 是 ORPHAN** |

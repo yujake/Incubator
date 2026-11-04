@@ -540,7 +540,15 @@ WIRED: dict[str, str] = {
     "apply_citation_gate": "AgentV.verify_proof",
     "signs_bit3": "verifications.record_verification 等七处",
     # 10 保留产物闸
-    "_reserved_artifact": "fs_tools._reserved_refusal（fs_write / fs_edit 两道闸共用）",
+    # 2026-11-05 复核：台账原写的那个名字实测 0 个非测试调用点 —— D 侧那批闸
+    # 把它拆成了 `_reserved_artifact_path` / `_reserved_artifact_rule` / `_reserved_refusal`
+    # 三支，其中旧壳只剩一层返回 bool 的转发、没人调（已删）。真身是
+    # `_reserved_artifact_rule`：`_reserved_refusal` 里 `rule = _reserved_artifact_rule(...)`
+    # 那一句是唯一调用点，而 `_reserved_refusal` 由四个写口（fs.write / fs.edit /
+    # fs.delete / fs.move）共用。
+    "_reserved_artifact_rule": (
+        "fs_tools._reserved_refusal（唯一调用点：`rule = _reserved_artifact_rule(rel, role)`；"
+        "`_reserved_refusal` 由 fs_write / fs_edit / fs_delete / fs_move 四道闸共用）"),
     # 12 非平凡度
     "proof_effort_readings": "Secretary.judge_statement",
     "material_truncation": "Secretary.judge_statement",

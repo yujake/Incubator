@@ -301,7 +301,7 @@ RESERVED_MAPPING_MESSAGE = (
 
 #: 手稿 / 报告的推荐落点目录名（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir`
 #: 缺省都是它）。它只出现在拒信里当指路，不参与判据：判据只看文件名（见
-#: :func:`_reserved_artifact` 与 D6 那段注释）。
+#: :func:`_reserved_artifact_rule` 与 D6 那段注释）。
 _RESERVED_DIR = "reports"
 
 #: D 的"证明稿形状"规则（2026-11-04 业主裁定：证明的落稿与拿签不属于 D）。
@@ -328,7 +328,7 @@ D_ATTACK_RECORD_DIR = "out/proofs/"
 #: 角色列决定按哪条判据读：
 #:
 #: - 角色 `*`：按整条工作区相对路径判（`_reserved_ledger`），框架账本区，没有角色豁免；
-#: - 具体角色：按文件名判（`_reserved_artifact`），框架渲染的手稿，只对表上角色生效。
+#: - 具体角色：按文件名判（`_reserved_artifact_rule`），框架渲染的手稿，只对表上角色生效。
 #:
 #: 手稿那几行的理由见上面那段（F 写内容 / D 交研究稿 / M 是主控）；账本区那几行的理由见
 #: 2026-10-26 那一段（文件口不许把表口架空）。目录要两行才挡得住：`exact:data` 挡目录本身，
@@ -489,7 +489,7 @@ def _path_rule_matches(rule: str, rel: str) -> bool:
 def _reserved_artifact_path(rel: str) -> bool:
     """`rel` 是不是"任何角色都不许手写"的框架渲染产物（路径级）。
 
-    与 :func:`_reserved_artifact` 分开：后者按文件名判、只对表上角色生效，且只收
+    与 :func:`_reserved_artifact_rule` 分开：后者按文件名判、只对表上角色生效，且只收
     `.md`；这一条按整条路径判、对全部角色生效，且不限扩展名 —— 论文对应表的三份
     是 `MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`，唯一写口是
     `doc.write_mapping`（`papermapping.write_package`）。表里的角色列用 `@` 标这一档。
@@ -510,11 +510,13 @@ def _reserved_ledger(rel: str) -> bool:
 
 
 def _reserved_artifact_rule(rel: str, role: str) -> str | None:
-    """`rel` 命中的那条手稿规则（没命中 ⇒ None）；判据与 :func:`_reserved_artifact` 同一份。
+    """`rel` 命中的那条手稿规则（没命中 ⇒ None）；判据只读 :data:`RESERVED_ARTIFACT_TABLE`。
 
     多返回一个"是哪一行"是为了分档拒信：D 的证明稿（`D_PROOF_PATH_RULES`）必须指路
     "派 F"，研究稿则指路"走 D 的交付动作"。规则本身仍只有 `RESERVED_ARTIFACT_TABLE`
-    一处 —— 这里不另写判断，只把命中的字符串带出来。
+    一处 —— 这里不另写判断，只把命中的字符串带出来。本函数就是手稿那一半的唯一实现：
+    2026-11-05 之前它外面还有一层只返回 bool 的旧壳，那个壳的调用点为 0
+    （真机唯一调用点是 `_reserved_refusal` 里这一句），已删；别再长出第二个名字。
     """
     owner = str(role or "")
     rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
@@ -530,24 +532,6 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
         if _rule_matches(rule, name):
             return rule
     return None
-
-
-def _reserved_artifact(rel: str, role: str) -> bool:
-    """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架手稿。
-
-    这一条只管手稿那一半（表里角色是具体字母的那几行）；账本区那一半是
-    :func:`_reserved_ledger`，两者的结论由 :func:`_reserved_refusal` 合并成一处。
-
-    两层判据，缺一不命中：① 文件名以 `.md` 结尾（手稿是 markdown：`depsection` 读的
-    就是它）；② `(角色, 规则)` 那一行命中文件名。表外角色（G/L 的排版产物、M 的
-    其它报告）连第二层都不进 —— 保留表只对表上那三行角色（F / D / M）负责。
-
-    目录不在判据里（2026-10-27，D6）：改前这里是"路径在 `reports/` 下 且 规则
-    命中"，于是 `notes/f-proof-x.md` 换个目录就绕过去了（真机 7595 B 的手稿就是这么进
-    的盘）。判据改成只看文件名之后，同一个名字在哪个目录下都是同一份框架产物；`reports/`
-    只是推荐落点（见 `_RESERVED_DIR`），不是豁免条件。
-    """
-    return _reserved_artifact_rule(rel, role) is not None
 
 
 #: 一份研究手稿里"引用/转载 F 的稿"的两种写法（只认盘上真有的那几份）。
