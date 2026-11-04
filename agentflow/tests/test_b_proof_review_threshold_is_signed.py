@@ -7,7 +7,7 @@
 最近那一签是「成立」（`proof_sha256` 与现行正文相符）⇒ 它的 `evidence_kind` 就是
 `proof_review`」。而写入期的判据 `verifications.proof_review_gap` 只认 `signed`：
 
-- `review_standing` 的 `signed` 要 `streak >= SIGN_STREAK_NEED`（连续 3 次「成立」）、
+- `review_standing` 的 `signed` 要 `streak >= SIGN_STREAK_NEED`（框架判满门槛）、
   引用核实全 `consistent` / `weaker`、且 findings 里没有未解决的 error；
 - `holding`（签过、判成立、盖的也是现行这一版，但连续次数没到）明确不算
   （`verifications.py` 里 `holding` 那一格的定义逐字：「它与 `unsigned`（一次都没签）
@@ -20,7 +20,7 @@
 
 | # | 它守什么 | 改前为什么红 |
 |---|---|---|
-| s1 | 渲染后的 B 提示词里，门槛句写的是 `signed`（连续 3 次干净成立 + 引用核实通过） | 只说「最近那一签是成立」，一个门槛都没说 |
+| s1 | 渲染后的 B 提示词里，门槛句写的是 `signed`（框架判满它的门槛 + 引用核实通过） | 只说「最近那一签是成立」，一个门槛都没说 |
 | s2 | 同一条必须点名 `holding` / 单次成立不够，并点名 gap 的三个条件 | 一个字都没提 |
 | s3 | 行为钉：造 holding（只落 1 次「成立」）⇒ `proof_review_gap` 非空、写入期 gate 拒收；反真空：连落 3 次 ⇒ 同一行收得进去 | —（这一条改前改后都绿；它钉的是"文案说的门槛就是闸用的门槛"） |
 
@@ -55,7 +55,7 @@ def _threshold_problems(text: str) -> list[str]:
     """门槛句的判据本体（s1/s2 共用；反真空也喂它）。
 
     两件事各判一次：
-    ① 门槛词：`signed` 必须在、`holding` 必须被点名为"不够"，且要写出连续 3 次
+    ① 门槛词：`signed` 必须在、`holding` 必须被点名为"不够"，且要写出「框架判满它的门槛」
        与引用核实这两道闸 —— 只说「签过」等于把 `holding` 放进门；
     ② 旧话不再：改前那一句（"最近那一签是成立 ⇒ 就是 proof_review"）一个字都不许留。
     """
@@ -66,7 +66,7 @@ def _threshold_problems(text: str) -> list[str]:
     for needle, why in (
             ("signed", "没有点名 signed（写入期闸只认它）"),
             ("holding", "没有点名 holding（签过但连续次数没到的那一档）"),
-            ("连续 3 次", "没有写出「连续 3 次」（SIGN_STREAK_NEED）"),
+            ("框架判满它的门槛", "没有写出「框架判满它的门槛」（SIGN_STREAK_NEED）"),
             ("引用核实", "没有写出引用核实这一道闸"),
             ("`proof_text` 非空", "没有写出 gap 的第 1 个条件（proof_text 非空）"),
             ("proof_sha256", "没有写出 gap 的第 3 个条件（proof_sha256 与现行正文相符）"),
@@ -75,6 +75,10 @@ def _threshold_problems(text: str) -> list[str]:
     ):
         if needle not in text:
             bad.append(f"{why}（缺 {needle!r}）")
+    # 2026-11-04 裁定 D：V 内部连判的转数不进 B 的提示词 —— 旧 needle 钉的正是这句。
+    for word in ("三转", "连判", "连续三次", "连续 3 次", "第 1、2 次"):
+        if word in text:
+            bad.append(f"仍在教 V 的内部机制：{word!r}")
     return bad
 
 
