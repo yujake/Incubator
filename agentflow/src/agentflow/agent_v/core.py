@@ -2470,7 +2470,7 @@ class AgentV:
             "detail": (f"命题 {statement_id or '（还没落号）'} 不在 statements 里："
                        "穷举型证据的会审跑完了（七项读数在 `exhaustion_review` / "
                        "`checks` / `missing` 里），判定只作读数、不构成签，"
-                       "也没有按对象 sha 可认领的 pending 行。要签就让 E 带 "
+                       "也不落任何 pending 台账行。要签就让 E 带 "
                        "`proof_manuscript=reports/e-proof-<实验号>.md` 送审："
                        "签块由收方秘书落回那一份稿，B 收录时从稿上读到。"),
         })
