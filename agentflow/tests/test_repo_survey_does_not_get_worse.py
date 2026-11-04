@@ -84,7 +84,11 @@ BASELINE: dict[str, int] = {
     # 逐类三态、旧行折算与反真空的读数都落在 `_scan` 那一段里。此前有过"是不是
     # stale_loop 那笔写胖的"的猜测，逐提交量过：不是（d46cdbaf 那笔只动 5 行）。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_files_gt800_lines": 73,
+    # 2026-11-04 再抬 73 → 74。一格，能点名（逐条按文件比对基线提交 f3408ef6 与
+    # HEAD；只有这一条新过线，没有一条掉回线下）：`src/agentflow/agent_d/write_report.py`
+    # 新过 800 行 —— 今晚的索引四格 / 阅读路收口落在同一个写报告的模块里。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_files_gt800_lines": 74,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -148,7 +152,16 @@ BASELINE: dict[str, int] = {
     # （同一批新增的 `_signed_exhaustion_terminal` 只有几十行）。文件那一格不动
     # （secretary.py 本来就超过 800 行），`dup_docstring_segments` 也不动。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 91,
+    # 2026-11-04 再抬 91 → 94。三格，都能点名（逐条按 (文件, 函数名) 比对基线提交
+    # f3408ef6 与 HEAD；没有一条掉回线下）：
+    #   · `src/agentflow/agent_skills.py::_e_skills` 218 行 —— p234 的 E 手册
+    #     （穷举证明-拿签与上报收养）落在这一份技能表里；
+    #   · `src/agentflow/agent_skills.py::_g_skills` 243 行 —— G 的对应表格子与凭据格
+    #     口径（doc.mapping_cells / 6fb014f5）落在这一份技能表里；
+    #   · `src/agentflow/papermapping.py::mapping_cells` 354 行 —— 838a7d87 新落的只读
+    #     读数口（对应表那一行该填的格；doc.mapping_cells 的实现）。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 94,
     "dup_docstring_segments": 5,
 }
 
@@ -173,6 +186,9 @@ BASELINE: dict[str, int] = {
 #: 195 → 206，两格都跨线于 960ade2f）；文件那一格不动。
 #: 2026-11-04 再抬函数 90 → 91，来源见 `BASELINE` 里那一格上方的逐条点名
 #: （`secretary.py::_upgrade_evidence_kind` 186 → 212，跨线于 f3408ef6）。
+#: 2026-11-04 收口再抬两格：文件 73 → 74（`agent_d/write_report.py` 新过 800）与
+#: 函数 91 → 94（`agent_skills.py::_e_skills` / `_g_skills` / `papermapping.py::mapping_cells`），
+#: 来源逐条见 `BASELINE` 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
 BASELINE_OBSERVED = "2026-11-04"
 
 
