@@ -293,11 +293,13 @@ def _source_texts() -> dict[str, str]:
     return out
 
 
-#: 只由读侧结构判据产出、**码位留空**的类目（2026-11-04 新增 `tool_refused_controlled`）。
-#: 为什么允许没有码：这一类的判据是"受控拒绝的形状"（`ok=True` + `data.state=="refused"`），
-#: 而那一笔**没有受控码** —— 逼它"必须有一个码"只会把 `data.state` 的状态值（`refused`）
-#: 登记成假码，那正是"状态≠码"的折平。反真空放在下面：这里每一条都必须真的由
+#: 允许"暂时没有码"的类目（2026-11-04 新增 `tool_refused_controlled`）。
+#: 这一类的判据是"受控拒绝的形状"（`ok=True` + `data.state=="refused"`）：那一笔可能
+#: **没有受控码**，码位就留空 —— 逼它"必须有一个码"只会把 `data.state` 的状态值登记成
+#: 假码，那正是"状态≠码"的折平。反真空在下面：这里每一条都必须真的由
 #: `errorstats._controlled_refusal_family` 产出（喂一条无码受控拒绝，看它落哪一类）。
+#: 注意：等有码登记进来（件 2 的 12 个码），这一类照常走下面的"码必须在源码里"那一档 ——
+#: 这条豁免只覆盖"一个码都还没有"的中间形态，不是永久免检。
 SHAPE_ONLY_CATEGORIES: frozenset[str] = frozenset({"tool_refused_controlled"})
 
 
@@ -322,11 +324,10 @@ def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
         assert meaning.strip(), f"类目 {category} 没有写含义"
         assert "\n" not in meaning
         codes = [code for code, cat, _w in ES.CODE_TABLE if cat == category]
-        if category in SHAPE_ONLY_CATEGORIES:
-            assert not codes, (
-                f"{category} 是'无码'类目，码表里却登记了码 {codes} —— 口径漂了")
+        if not codes:
+            assert category in SHAPE_ONLY_CATEGORIES, (
+                f"类目 {category} 在 CODE_TABLE 里一个码都没有 —— 那就是编出来的类目")
             continue
-        assert codes, f"类目 {category} 在 CODE_TABLE 里一个码都没有 —— 那就是编出来的类目"
         found = False
         for code in codes:
             where = ES.CODE_PROVENANCE[code]

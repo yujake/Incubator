@@ -709,6 +709,48 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/schema.py::TASK_OUTCOMES（被叫停的终态；算不算错看 runs/stop-history.jsonl）"),
     ("repaired", "roster_repaired",
      "src/agentflow/secretary.py::Secretary.roster_repair（补登记行的标记）"),
+    # ---- 2026-11-04：12 个**模型面拒因码**（受控拒绝的码）。
+    #
+    # 它们都是"框架按受控理由拒了模型这一次操作"的码：有的写在工具结果的
+    # `data.refusal_code` 里（`target_not_silent`），有的写在写入口的结论里
+    # （`proof_review_without_evidence`），有的写在词表里（`formal_moved_to_l`）。
+    # 统一归 `tool_refused_controlled`：与"参数形状坏"（`param_invalid`）分开 ——
+    # 那两件事混在一个类目里，参数错误那一族的读数就会说谎。
+    #
+    # 码名一个都不新造：这里只登记**已经在源码里产出的那些字面量**（判据走 AST 核
+    # 字面量与符号，注释里提过不算）。出处仍写符号名，不写行号。
+    ("target_not_silent", "tool_refused_controlled",
+     "src/agentflow/conductor.py::RETIRE_REFUSAL_TARGET_NOT_SILENT"
+     "（`retire_refusal` 的码；工具层把它写进 `data.refusal_code`）"),
+    ("not_yours", "tool_refused_controlled",
+     "src/agentflow/conductor.py::Conductor.ack_items"
+     "（别人的板项 ⇒ 逐条 `code=\"not_yours\"`；`conductor.ack` 的工具结果里）"),
+    ("not_mine", "tool_refused_controlled",
+     "src/agentflow/agent_loop.py::AgentLoop._do_interrupt（打断别人那一档的受控码）"),
+    ("not_conductor", "tool_refused_controlled",
+     "src/agentflow/userio.py::ASK_NOT_CONDUCTOR（非主控提未决问题 ⇒ 挡回）"),
+    ("not_caller", "tool_refused_controlled",
+     "src/agentflow/conductor.py::Conductor.escalate（没有召唤者的顶层调用）"),
+    ("public_is_not_a_conversation", "tool_refused_controlled",
+     "src/agentflow/agent_loop.py::AgentLoop._public_face_refusal"
+     "（公告栏点名某个代理 ⇒ 那不是一次对话）"),
+    ("formal_moved_to_l", "tool_refused_controlled",
+     "src/agentflow/agent_e/_support.py::FORMAL_REASONS"
+     "（历史理由码；E 不再产出它，但词表里留着，历史台账仍带着）"),
+    ("formal_not_in_e", "tool_refused_controlled",
+     "src/agentflow/agent_e/_support.py::E_NO_FORMAL_REASON"
+     "（E 的动作面拒绝 `method=\"formal\"` 的唯一字面量）"),
+    ("missing_relevance", "tool_refused_controlled",
+     "src/agentflow/litstage.py::admission_plan"
+     "（这一条没写「为什么与本次检索相关」⇒ 逐条拒收）"),
+    ("dependency_section_missing", "tool_refused_controlled",
+     "src/agentflow/depsection.py::REFUSED_SECTION_MISSING"
+     "（手稿没有 `## 依赖` 段而正文引用了在册命题 ⇒ 整笔拒收）"),
+    ("dependency_section_unreadable", "tool_refused_controlled",
+     "src/agentflow/depsection.py::REFUSED_SECTION（依赖段解析失败 ⇒ 整笔拒收）"),
+    ("proof_review_without_evidence", "tool_refused_controlled",
+     "src/agentflow/verifications.py::CODE_WRITE"
+     "（写入期闸：声称 `proof_review` 却没有证据 ⇒ 当场拒收）"),
 )
 
 #: 码 → 类目（由 `CODE_TABLE` 派生，只有这一处真身）。
