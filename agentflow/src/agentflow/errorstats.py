@@ -621,7 +621,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("run_evidence_unreadable", "unreadable", "src/agentflow/closing.py::RUN_EVIDENCE_UNREADABLE_CODE（RUN_EVIDENCE_UNREADABLE_CODE）"),
     ("context_graph_unreadable", "unreadable", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     # ---- 流程层
-    ("mapping_not_written", "closing_blocked", "src/agentflow/closing.py::_check_acceptance（MAPPING_NOT_WRITTEN_CODE）"),
+    ("mapping_not_written", "closing_blocked", "src/agentflow/closing.py::_check_mapping（MAPPING_NOT_WRITTEN_CODE）"),
     ("run_evidence_unbacked", "closing_blocked", "src/agentflow/closing.py::RUN_EVIDENCE_UNBACKED_CODE（RUN_EVIDENCE_UNBACKED_CODE）"),
     ("quote_verified_without_span", "closing_blocked", "src/agentflow/closing.py::check_closing（收工门 quote_evidence 格）"),
     ("mapping_orphan", "paper_mapping_gap", "src/agentflow/papermapping.py::MAPPING_KINDS"),
