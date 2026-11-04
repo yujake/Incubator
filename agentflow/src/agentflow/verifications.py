@@ -2027,6 +2027,41 @@ def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any
     }
 
 
+def _already_signed_locator(reviewed_by: Mapping[str, Any],
+                            per: Mapping[int, bool],
+                            sha_by: Mapping[int, str], no: int) -> str:
+    """「这一位签过」能不能定位到一次具体签名（空串 = 判不了）。
+
+    ## 为什么裸布尔不够（业主 2026-11-04 裁定 · 乙-11）
+
+    `bits.reviewed=True` 是写侧留下的一个布尔。有台账的行由台账现算
+    （`review_standing`）；而 `bit3_already_signed` 是 V 的短接判据 —— 它若拿一个
+    没有任何定位凭据的裸布尔说"已经签过"，V 就不会再读一眼、直接返回
+    `signed_bit3=True`。可定位 = `reviewed_by` 里有 `verification_id` 或
+    `proof_sha256`，或逐条表（`reviewed_by_proof` / `reviewed_sha_by_proof`）里
+    至少一条「为真且有 sha」。四者都没有 ⇒ 判不了、按没签过处理（照常送审）。
+    这与 `closing._review_locator` 是同一把尺（那边早就是这么判的），只是这一格
+    不 import closing（会成环）。
+    """
+    by = dict(reviewed_by or {})
+    vid = str(by.get("verification_id") or "").strip()
+    if vid:
+        return f"verification_id={vid}"
+    sha = str(by.get("proof_sha256") or "").strip()
+    if sha:
+        return f"proof_sha256={sha[:12]}"
+    own = str((sha_by or {}).get(no) or "").strip()
+    if own:
+        return f"proof_sha256={own[:12]}"
+    for n, ok in (per or {}).items():
+        if not ok:
+            continue
+        got = str((sha_by or {}).get(n) or "").strip()
+        if got:
+            return f"proof_sha256={got[:12]}"
+    return ""
+
+
 def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF_NO,
                         proof_text: str = "") -> dict[str, Any]:
     """命题行上这一份证明的第 3 位是不是已经为真（纯读；2026-10-31）。
@@ -2051,10 +2086,15 @@ def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF
     写者）⇒ 汇总位与 `reviewed_by` 是唯一凭据，此时按 `reviewed_by.proof_no` 判
     「签的是哪一份」；那一格也没有 ⇒ 按 canonical 读（老数据不带证明号）。
 
+    ## 无可定位的凭据 ⇒ 不短接（业主 2026-11-04 裁定 · 乙-11）
+    位写着真、而 `reviewed_by` 里既没有 `verification_id` 也没有 `proof_sha256`、
+    逐条表里也没有任一条「为真且有 sha」⇒ 判不了，`signed=False`，照常送审。
+    旧行 / repair / 手改行里可能只剩一个裸布尔；不拿它当"已经签过"。
+
     ## 返回（键集合固定；判不了也照样给全）
     `signed` / `proof_no` / `proof_sha256` / `reviewed_by` / `bits` / `why`。
     `signed=False` 的 `why` 写清是哪一档（位没翻 / 签过但正文改过 / 签的是别的证明 /
-    没有命题行 / 证明号认不出），读的人不必从几个假值里反推。
+    没有命题行 / 证明号认不出 / 位没有可定位的凭据），读的人不必从几个假值里反推。
     """
     from . import evidencebits as _EB   # 惰性：与 `_reviewed_statement_row` 同一条纪律
 
@@ -2102,6 +2142,13 @@ def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF
     if want and sha_now and want != sha_now:
         out["why"] = (f"#{no} 那一签盖住的正文不是现在这一份"
                       f"（签的 sha {want[:12]}…，现在 {sha_now[:12]}…）")
+        return out
+    if not _already_signed_locator(out["reviewed_by"], per, sha_by, no):
+        # 位写着真、而凭据里没有任何可定位的签名 ⇒ 判不了，按没签过处理。
+        # 这一支必须排在 `signed=True` 之前：短接是"省掉一次审校"，不能拿裸布尔换。
+        out["why"] = ("第 3 位写着审过，但凭据里没有可定位的签名（`reviewed_by` 无 "
+                      "`verification_id` / `proof_sha256`，逐条表也没有任一为真且有 sha）"
+                      " ⇒ 判不了，按没签过处理：照常送审，不拿一个裸布尔短接")
         return out
     out["signed"] = True
     return out
