@@ -157,12 +157,88 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 "minItems": 1,
                 # 一行一条（正文里每个定理类环境各占一行、多证明每条各占一行）；
                 # 六格与 `doc_tools._MAPPING_ROW_PARAMS["required"]` 同一份口径。
-                # 另外两格（`numeric_evidence` / `exhaustion_note`）不进必填：它们是
-                # 「数值实验定理」那一行的条件必填，由 `papermapping` 读侧判
-                # （缺了就是 `mapping_numeric_*` / `mapping_exhaustion_note_missing`）。
+                #
+                # 除这六格之外的格都是条件必填，由 `papermapping` 读侧判（所以不进
+                # `required` —— 一律 required 会把「这一格不适用」读成「这一格没填」）：
+                # `lean_file` / `lean_target` 按这条命题的证明通道（numeric 只要前者、
+                # formal 两格都要、通道为空两格可空）；`numeric_evidence` /
+                # `exhaustion_note` 按行的种类（数值实验定理那一行必填）；索引四格
+                # （`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`）
+                # 按正文落在哪（D 是目录、正文在 F 的证明或 E 的报告里时必填）。
+                # 缺了它们分别报 `mapping_numeric_*` / `mapping_exhaustion_note_missing`
+                # 与 `mapping_lean_*`。
+                #
+                # 这些格必须在这里逐格声明：M 的派活面读的是这一份 schema，而
+                # JSON-Schema 的 `additionalProperties` 默认放行只保证「能跑」，不保证
+                # 「派活面看得见」—— 声明漏了，判据会核、M 却派不出一张合规的表。
+                # 判据：tests/test_g_mapping_rows_declare_the_papermapping_cells.py。
                 "items": {**_OBJ,
-                          "properties": {"numeric_evidence": _S,
-                                         "exhaustion_note": _S},
+                          "properties": {
+                              # 数值实验定理那两格（业主 2026-10-23，E-1）。
+                              "numeric_evidence": _S,
+                              "exhaustion_note": _S,
+                              # `file` 有两种落点，都对。
+                              "file": {
+                                  "type": "string",
+                                  "description":
+                                      "该条完整证明 / 实验所在的真实文件。**两种落点都对**："
+                                      "理论定理那一行写论文包内的相对路径"
+                                      "（如 `proofs/000004-p1.md`）；数值实验定理那一行写"
+                                      "程序相对仓库根的路径（如 `code/r34_check.py`，"
+                                      "**不在论文包里是正常的** —— 按「必须在包里」去核会把"
+                                      "每一条合规的数值定理都误判成错）。",
+                              },
+                              # 机器核验凭据那一格（业主 2026-11-04：Lean 程序与数值证明
+                              # 程序同用一格，功能是「这条命题是百分百真的」）。
+                              "lean_file": {
+                                  "type": "string",
+                                  "description":
+                                      "机器核验凭据（这一格说的是「这条命题是百分百真的」），"
+                                      "按这条命题的证明通道填：numeric（证明栏第 ① 段是程序、"
+                                      "台账里有 E 签的那条穷举）⇒ 填证明栏第 ① 段那份 `.py` "
+                                      "程序（相对仓库根，必须与证明栏是同一份）；formal ⇒ "
+                                      "填那份 `.lean`（项目根相对路径，如 "
+                                      "`code/formal/000004.lean`；论文包内写法 "
+                                      "`formal/000004.lean` 也认）；通道为空 ⇒ 允许为空"
+                                      "（不适用，不是没填）。",
+                              },
+                              "lean_target": {
+                                  "type": "string",
+                                  "description":
+                                      "那份源码里哪个声明验了它（写源码里字面出现的名字，"
+                                      "如 `FreeGroupFactor.isII1`；不是正文里的 LaTeX "
+                                      "label）。**只有 formal 通道写它**：numeric 通道没有 "
+                                      "Lean 声明名，必须留空（填了反受控拒绝）；通道为空 ⇒ "
+                                      "可空。",
+                              },
+                              # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文
+                              # （F 的证明 / E 的报告）。列义只有一份（`numericproof.INDEX_*`）。
+                              "evidence_kind": {
+                                  "type": "string",
+                                  "description":
+                                      "这一行的正文是哪一档：`report`（E 的报告）/ "
+                                      "`proof`（F 的证明）。数值实验定理那一行填 `report`。",
+                              },
+                              "evidence_path": {
+                                  "type": "string",
+                                  "description":
+                                      "正文在仓库里的相对路径（相对仓库根，如 "
+                                      "`out/experiments/000000/exhaustion.md`）—— B 顺索引"
+                                      "去取正文。",
+                              },
+                              "evidence_sha256": {
+                                  "type": "string",
+                                  "description":
+                                      "那份文件字节的 sha256（不是文本归一化之后的），"
+                                      "用来核「取到的是不是签名时那一份」。",
+                              },
+                              "v_signature": {
+                                  "type": "object",
+                                  "description":
+                                      "V 的签：`{\"verdict\": \"成立\", \"sha256\": "
+                                      "<被签那一份的 sha256>}` —— 结论与它签的那一份的指纹。",
+                              },
+                          },
                           "required": ["kind", "label", "env_no", "ledger_id",
                                        "proof_no", "file"]},
             },
