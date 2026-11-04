@@ -433,7 +433,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 两条出路，没有第三条：
 
-1. **重送**：补齐之后由 D 让 F 把那一份重新送 V 审（**D 没有到 V 的边**，别派 D 去送审），拿到干净的「成立」；
+1. **重送**：补齐之后由 D 让 F 把那一份手稿重新送 V 审（`proof_manuscript`，在册也给；**D 没有到 V 的边**，别派 D 去送审），拿到干净的「成立」；
 2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，**同时**把 `quote_reason`
    写成 `abandoned@<ISO8601>@<理由>`。状态、时间、理由三样缺一不可 —— 只写状态的行仍按
    未签计（读数是 `abandoned_without_reason`）。
@@ -715,7 +715,7 @@ A → B → C → D → F → V → B(收录证明)
 | **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | `conjectures` 一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
-| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符 | `statements` 一行：`evidence_kind` 按通道给（文字证明 `proof_review`；**穷举程序 + V 签 ⇒ `proof`**）、`proof_text` 逐字、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`） | `statements` 一行：`evidence_kind` 按通道给（文字证明 `proof_review`；**穷举程序 + V 签 ⇒ `proof`**）、`proof_text` 从稿上收进、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
 
 ### B 的正文与签从哪来（F 与 E 同一套）
 
@@ -913,11 +913,12 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 > 设 ℓ ⇒ 常值 ⇒ 平行弦同值 ⇒ 对调半轴 ⇒ 弦长变 ⇒ 矛盾 ⇒ 不存在等弦点。
 
 不设机械闸：没有人会数你的箭头、也没有人判你写的是不是散文 —— 这三条是口径，
-不是判据。但有一件事是硬的：改写过就是换了一份正文。把 `proof_text` 换成与在册
-那一版不同的字，盖在旧正文上的那一签就不再算数（读侧现算 `review_standing=stale`），
-你必须派 V 重新签（`V.verify_proof`：`statement_id` 必填，要审第几条证明就带
-`proof_no`）；工具结果里带 `review_standing` 与 `resign_required`，它点名
-「派 V 重新签」时照做。
+不是判据。但有一件事是硬的：改写过就是换了一份正文。**改后的正文先落成一份手稿**
+（`reports/b-proof-<命题号>.md`，由 `own.register_statement` 那一笔替你把正文落稿），
+盖在旧正文上的那一签就不再算数（读侧现算 `review_standing=stale`），
+你必须派 V 审这一份稿（`V.verify_proof`：`statement_id` 给号、`proof_manuscript` 给这份稿的路径
+—— **在册也给稿**；要审第几条证明就带 `proof_no`）；工具结果里带 `review_standing` 与
+`resign_required`，它点名「派 V 重新签」时照做。
 
 逐字只对文献引文要求，不对我们自己的证明要求：`external_lit` 的 `proof_text` 是
 原文那一段逐字摘录（`quote_verified` 的比对对象）；要消化外部证明时，逐字那一格留给
@@ -1478,7 +1479,8 @@ def _v_skills() -> tuple[Skill, ...]:
 
 ## 结论是 `verify.verify_proof` 的**产出**，不是你的入参（2026-10-28 真机踩过）
 
-这件工具只收 `statement_id`（可选 `proof_no` / `proof_text` / `readonly_facts`）——
+这件工具收 `statement_id` 与 `proof_manuscript`（**在册也给稿**：你读的正文与签块都落在那一份稿上），
+另可选 `proof_no` / `readonly_facts` ——
 **结论由它自己判**（它内部走你的判据缝），返回里就有 `verdict` / `defect_step` /
 `findings` / `unresolved_errors`。把 `verdict` / `findings` / `defect_step` 当参数传进去
 会被参数门拒成 `param_invalid`（真机：`projects/paper-rewrite-78c` 的 V 在 17:42 / 17:43
@@ -1572,8 +1574,8 @@ def _v_skills() -> tuple[Skill, ...]:
 论域、以及要判的那条结论，**都在那一行里**。缺任何一格，你核的是**另一个命题**，
 而两条都"复核通过"时没人分得清差别在哪。
 
-所以：`table.get` 读 `statements` 那一行（`statement_full` / `proof_text`），
-`V.read_proof` 读回被审的证明全文。**读不到就如实回，不要凭题目猜内容。**
+所以：`table.get` 读 `statements` 那一行（`statement_full`；`proof_text` 只用来对字面），
+被审的正文读 `proof_manuscript` 指的那一份手稿（在册也给稿）。**读不到就如实回，不要凭题目猜内容。**
 
 ## 第二步：三轴逐轴看（任一看不过，整条不过）
 
@@ -1925,11 +1927,11 @@ def _f_skills() -> tuple[Skill, ...]:
 - **"审过"由 V 签**（`verifications`）：`F → V` 是直接边 —— 你产出的证明**由你派 V 签**；
   B 入库文献侧引入的定理/证明时也会派 V 审一次。**你签过的不要再要求别人替你签**。
   **送审是你自己派 V 审这一份手稿**（`framework_summon` 形状：`role="V"`，`task` 写清要审
-  **哪一份** —— 有命题号就点号、还没登记就点手稿路径 `reports/f-proof-*.md`；V 用
-  `verify_proof`，还没在册就给 `proof_manuscript`）。`F.step` **不替你送审**，它只回读签：
+  **哪一份** —— 一律点手稿路径 `reports/f-proof-*.md`；V 用 `verify_proof`，**在册也给
+  `proof_manuscript`** —— 签块只能落在稿里，B 收录时从稿上读到那一签）。`F.step` **不替你送审**，它只回读签：
   返回值的 `v_sign` 那一格与 `history` 里是这一轮这一份的四档 `delivery_state` / `delivery_label`：
-  **已签 / 待签 / 未通过 / 没查成**。**没签就不是交差**：待签 ⇒ 你自己派 V 审这一份；
-  未通过 ⇒ 按缺陷改稿再派 V；没查成 ⇒ 查为什么（没有命题号 / 台账读不出来 / 送审没成），
+  **已签 / 待签 / 未通过 / 没查成**。**没签就不是交差**：待签 ⇒ 你自己派 V 审这一份手稿（带
+  `proof_manuscript`，在册也给）；未通过 ⇒ 按缺陷改稿再派 V；没查成 ⇒ 查为什么（稿不在盘上 / 稿读不出来 / 送审没成），
   别把它读成「没毛病」。
 - **自报的 `proof` 一律降级成 `cross_check`**（结构强制）：别指望"我说我证了"能算数。
 
@@ -1982,7 +1984,7 @@ def _f_skills() -> tuple[Skill, ...]:
   （`proof-corrector` 的工作逻辑：**定点修**，改动面越大越难复核）；
 - **成立** ⇒ 这一格被审过、不再重交（没找到缺陷就没有要改的东西，别为了"再确认一遍"
   把同一份正文重送一次）；
-- 改完**自己再派 V 审这一份**：复核结论是**逐次**的读数，上一轮签过的字不覆盖这一轮的新文本
+- 改完**自己再派 V 审这一份手稿（带 `proof_manuscript`，在册也给）**：复核结论是**逐次**的读数，上一轮签过的字不覆盖这一轮的新文本
   （同一份正文 V 不会重复判，改了字才重判）。
 
 历史台账里若出现 `verdict="看不出来"`，那一行是**历史行**（2026-10-30 之前写下的）：只作兼容读 —— 按「成立（没找到缺陷）」读，它不是第三个结论，别照着它去补什么。
@@ -1992,14 +1994,15 @@ def _f_skills() -> tuple[Skill, ...]:
 送审**是你自己的一次派活**：用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审
 **哪一份**（命题号，或还没登记时的手稿路径 `reports/f-proof-*.md`），让 V 调它的
 `verify_proof`（那是 V 的工具面，不是你的）。它带过去的参数按工具面给全，
-`statement_id` 在册后是**必填** ——
-这条要知道，因为它是「为什么没号就送不了审」的答案（还没在册就走 `proof_manuscript`）：
+`statement_id` 与 `proof_manuscript` 是两根入口键：**`proof_manuscript` 一律给**
+（手稿路径，签块要落回这一份稿），在册后再加 `statement_id`（把签与那一行绑起来）。
+只点号、不给稿，签就没有落在任何一份正文上：
 
 | 键 | 必填 | 意思 |
 |---|---|---|
-| `statement_id` | **是** | 这条命题的号（`statements.stmt_id`）；不给 ⇒ 参数门当场拒，V 也没法落那一行 |
+| `statement_id` | 在册后**是** | 这条命题的号（`statements.stmt_id`）；还没在册就不给（空串 = 还没在册） |
 | `proof_no` | 否（缺省 1） | 第几条证明（一条命题多份证明时逐份签） |
-| `proof_text` | 否 | 这一份的全文；不给或给空串时 V 从 `statements` 取 `proof_no` 指的那一份 |
+| `proof_manuscript` | **是** | 这一份证明的手稿路径（`reports/f-proof-*.md`）；**在册也给** —— 不给它，签没有落点，B 从稿上读不到那一签 |
 | `readonly_facts` | 否 | 你附的只读读数（命题现状 / 台账条数） |
 
 ## 板上那条 `v-resubmit@`：不是回执，ack 关不掉
@@ -2114,7 +2117,8 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 ## 与台账的分工（两处都要，别只做一处）
 
 - **盘上这一份**是给人读的推进台账（D 与下一趟的你看的就是它，比 `history` 好读）；
-- **够格的中间结论交 `B.register_statement`** —— 那才是**可复核**的那一份
+- **够格的中间结论交 `B.register_statement`** —— 正文走手稿（`F.step` 把这一份证明落成
+  `reports/f-proof-<命题号>.md`，B 读稿登记），那才是**可复核**的那一份
   （有逐字证明文本、能进五元位、能被 V 逐行走查）。
 
 **只在回报里说"我证到了 L3"不算**：那句话既进不了台账也进不了手稿 —— 下一个接手的人

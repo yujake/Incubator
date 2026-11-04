@@ -235,7 +235,11 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     AP.reset_toolchain_readings()
     off_facts, off_formal = AP.toolchain_facts_text(), AP.toolchain_formal_text()
     assert "已关闭" in off_facts, off_facts
-    assert "verify.verify_proof" in off_formal and "proof_text" in off_formal, off_formal
+    # 2026-11-04（裁定甲）：关档替代路线的载体是手稿，不是内联的 `proof_text`。
+    # 旧期望「`proof_text` 在关档文案里」钉的是老路（写正文进参数再请 V 走查）。
+    assert "verify.verify_proof" in off_formal and "proof_manuscript" in off_formal, off_formal
+    assert "`proof_text`" not in off_formal, (
+        "关档替代路线仍把正文教成参数（老路：内联正文能送审）")
     assert "lean_disabled" in off_formal, "要告诉模型见到这个状态别再重试"
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     AP.reset_toolchain_readings()

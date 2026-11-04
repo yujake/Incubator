@@ -184,7 +184,8 @@ def test_the_conditional_ladder_of_register_statement_is_advertised():
 
     T1 第 2 趟实测：`origin='own_result'` 先撞 `doc_id`/`line_range`（8 次），
     改对之后再撞 `proof_text`（6 次），14 次召唤全废、`statements` 始终 0 行。
-    四级分别是：① 出处（`doc_id` 或 `line_range`）；② `proof_text`；
+    四级分别是：① 出处（`doc_id` 或 `line_range`）；② 证明正文的载体 `proof_manuscript`
+    （2026-11-04 裁定甲：在册也给稿；`proof_text` 只作文献侧摘录与核对）；
     ③ `quote_verified` 不是 true ⇒ `quote_reason`；④ `doc_id` 的格式（4 位十进制）。
     """
     action = next(a for a in CAP.actions_for("B") if a.action == "register_statement")
@@ -192,7 +193,7 @@ def test_the_conditional_ladder_of_register_statement_is_advertised():
     summary = str(action.summary or "")
     assert "proof_text" in summary and "quote_reason" in summary, summary
     assert "external_lit" in summary and "source_lit_id" in summary, summary
-    for field, needle in (("origin", "proof_text"), ("doc_id", "6 位十进制"),
+    for field, needle in (("origin", "proof_manuscript"), ("doc_id", "6 位十进制"),
                           ("proof_text", "own_result"), ("source_lit_id", "external_lit"),
                           ("page_range", "external_lit"), ("quote_reason", "必需")):
         desc = str((props.get(field) or {}).get("description") or "")

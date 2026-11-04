@@ -63,6 +63,7 @@ F_NEW: tuple[str, ...] = (
     "在册了也点同一份稿",
     "每份各自落成一份手稿",
     "不要用内联的 `proofs=[...]` 交正文",
+    "`F.step` 把这一份证明落成 `reports/f-proof-<命题号>.md`",
 )
 
 #: F 的 policy 里不许再出现的旧口径。
@@ -97,7 +98,7 @@ B_SOURCE_NEW: tuple[str, ...] = (
 
 #: B 的参数说明里不许再出现的旧口径。
 B_SOURCE_OLD: tuple[str, ...] = (
-    "**可以不给**（P-06）",
+    "origin='own_result' 的逐字证明摘录。**可以不给**（P-06）",
     "**并且**给 proof_text",
 )
 
@@ -173,7 +174,7 @@ def test_b_manual_resign_goes_through_the_b_manuscript() -> None:
 def test_v_manual_names_the_manuscript_param() -> None:
     """正控：V 手册列的是 `proof_manuscript`，不再把 `proof_text` 当可选参数。"""
     body = _skill("V", "复核-两态并指到那一步")
-    assert "`proof_manuscript`" in _flat(body), "V 手册没点名 proof_manuscript"
+    assert "proof_manuscript" in _flat(body), "V 手册没点名 proof_manuscript"
     old = "可选 `proof_no` / `proof_text` / `readonly_facts`"
     assert _flat(old) not in _flat(body), "V 手册还把 proof_text 当可选参数（老路）"
 

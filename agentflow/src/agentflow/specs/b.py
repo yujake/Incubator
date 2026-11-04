@@ -95,7 +95,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "把一条命题登记进命题台账（`statement_full` 是含完整假设的正文；写库前逐条硬校验，"
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
         "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
-        "`proof_text` 可缺（缺则落最低等级并进待办）；`quote_verified` 是三态（不传 = 还没查），"
+        "`proof_manuscript` 是证明正文的载体（在册也给稿：F/E 的稿，或你自己改写的 "
+        "`reports/b-proof-<命题号>.md`）；只给 `proof_text` / 内联 `proofs` 的正文不算交了稿，"
+        "依赖面也读不出来。**没有稿不拒收**：落最低等级（「猜想」）并进待办 —— 但补的是稿，"
+        "不是往参数里贴一段正文。`quote_verified` 是三态（不传 = 还没查），"
         "不是 true 时必须给 `quote_reason`；是 true 时用 `quote_mode` 说清**怎么**通过的"
         "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）"
         # 2026-11-01（真机 82 · C-2）：说明面必须自己回答"作者那一格谁写"。
@@ -116,8 +119,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                   "origin='external_lit' 必需：论文那一行的 lit_id"
                                   "（必须是 literature 表里真实存在的行，写库前会核）"},
                 "proof_text": {**_S, "description":
-                               "origin='own_result' 的逐字证明摘录。**可以不给**（P-06）："
-                               "缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，"
+                               "文献侧（origin='external_lit'）的逐字证明摘录，`quote_verified` 的比对对象。"
+                               "**自产命题（origin='own_result'）的正文不走这一格**：它由手稿 "
+                               "`proof_manuscript` 带进来（在册也给稿），这一格只作核对。"
+                               "**可以不给**（P-06）：缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，"
                                "**不拒收** —— 那条硬要求实测一条真猜想都没挡住，"
                                "只挡住了如实登记"},
                 "proofs": {"type": "array", "items": {"type": "object"}},
@@ -148,7 +153,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                            "来源。**它决定还要给哪些字段**（写库前逐条硬校验）："
                            "external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；"
                            "own_result（我们自己的）⇒ 必须给 doc_id 或 line_range 之一，"
-                           "**并且**给 proof_text"},
+                           "**并且**交一份证明手稿（`proof_manuscript`；在册命题也给稿）"},
                 "page_range": {**_OBJ, "description":
                                "origin='external_lit' 必需：出处页码（start，或 label —— "
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
@@ -202,6 +207,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # `## 依赖`（四列表），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
                 # ＋ `path_group` ＋ `source_stmt_id`）。F 自己不写依赖台账。
                 "proof_manuscript": {**_S, "description":
+                                     "**证明正文的载体（自产命题在册与否都交它）**：F/E 的稿，"
+                                     "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
+                                     "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
                                      "F 的证明手稿正文：里面那一节 `## 依赖` 由 B 读出来落依赖边。"
                                      "四列表，列固定："
                                      "`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
@@ -341,7 +349,8 @@ SPEC = AgentSpec(
             # 这两句都是我的口径。若 B 想完善 F 提交的证明再入库，重写后需重新获得 V 签」
             # ⇒ 两句不是矛盾，是同一条时间线的两端：签跟着正文走（一稿一签），原样入库认签、
             # 改过的正文重新送审。落地判据是现有那条 sha 比对（`verifications.proof_review_gap`）。
-            "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 派 V 审核签字，签了才写 `proof_review`**；"
+            "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 先把它交一次 `own.register_statement`"
+            "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审这一份稿、签了才写 `proof_review`**；"
             "**F 产的证明天生带 V 签字**（那是 F 送审时拿到的、盖在**F 那一版正文**上的签）—— 原样入库时"
             "认这份签，不要重复要求签（你若改写正文，见下一条：改写之后原签不算数、要再派 V 签一次 —— "
             "那不是「撤销」，是**对不上**这一版）。",
@@ -372,7 +381,8 @@ SPEC = AgentSpec(
             #   · 收到 F 的稿而它没有 V 签（还没在册）⇒ 退回，要求 F 先拿签，B 不润色；
             #   · 册上已有这一条而缺签 ⇒ B 自己处理（重送 / 补证 / 明确放弃），不推给 F。
             "**收到没有 V 签的 F 证明 ⇒ 不润色、整笔退回**（业主 2026-11-02：B 不处理、不润色"
-            "无签证明）：拒信会写明「请 F 先拿 V 签」—— 让 F 派 V 审这一份证明（签到位才算签上了），"
+            "无签证明）：拒信会写明「请 F 先拿 V 签」—— 让 F 派 V 审这一份手稿"
+            "（`proof_manuscript`，在册也给；签到位才算签上了），"
             "落签由收方那一侧完成；拿到签再交给你入库。"
             "**册上已有这一条而缺签时不同**：那是你这一侧的问题，"
             "自己重送 / 补证 / 明确放弃，不许推给 F，也不许拿「顺手润色一下」当出路。",
@@ -434,9 +444,11 @@ SPEC = AgentSpec(
             # 对应表的 `proof_no`），缺的是"用户要几种证明时该落成什么形状"的口径，
             # 所以这一条是正向政策：写清形状，也写一句反向判据（别拆成几条命题）。
             "**同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立"
-            "路径」时，目标是同一条命题的 `proof_no` 1..N，不是 N 条独立命题。登记时一次交清："
-            "`own.register_statement` 的 `proofs=[{proof_no: 1..N, text: …}]`（`#p1` 落行上的 "
-            "`proof_text`，`#p2` 起落同一行的 `proofs` 清单）。**每条证明各自要 V 的签**："
+            "路径」时，目标是同一条命题的 `proof_no` 1..N，不是 N 条独立命题。登记时**逐份交稿**："
+            "每份证明各自有一份手稿（稿头的 `- 证明号：<N>` 说它属于第几条），你按稿登记成 "
+            "`#p1` / `#p2`…（`#p1` 落行上的 `proof_text`，`#p2` 起落同一行的 `proofs` 清单）；"
+            "**不要用内联的 `proofs=[{proof_no: 1..N, text: …}]` 交正文**（那条路没有稿、依赖面恒 0、"
+            "签也没有落点）。**每条证明各自要 V 的签**："
             "`bits.evidence.reviewed_by_proof` 按 `proof_no` 逐份记（`{\"1\": true, \"2\": false}`），"
             "一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 "
             "`used_by=\"stmt:<命题号>#pN\"` ＋ `path_group` 标明它属于第几条证明（`deps` 两维："

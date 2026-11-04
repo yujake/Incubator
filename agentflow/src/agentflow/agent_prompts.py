@@ -5400,8 +5400,9 @@ PAPER_PACK = """\
   「证明」「定理」「必然」这类词（机械半会逐条查，语义半会再判一次）。
 - **没有 Lean 时论文照样要写得出来**（业主 2026-10-12）：「写论文那一档原先卡每个定理都要到
   proof 水平，但没 Lean 显然做不到，但也要能写」。那一档的用词上限是 **`proof_review`**：
-  一份证明的正文在 `statements` 表的 `proof_text` 列里逐字写着、并由 V 的
-  `verify.verify_proof` 逐行走查签了「成立」—— 这类断言可以写「定理 / 证明」，
+  一份证明的正文由 B 从**手稿**（`reports/f-proof-*` / `b-proof-*` / `e-proof-*`）收进
+  `statements` 表的 `proof_text` 列、并由 V 的 `verify.verify_proof`（带 `proof_manuscript`，
+  在册也给）逐行走查签了「成立」—— 这类断言可以写「定理 / 证明」，
   **但必须带那句声明**（`disclaimer`：逐行审阅过的证明，未经机器检查），
   且不许写「已形式化验证」（那是 `proof` 档才有的说法）。TOOLCHAIN_FACTS 第一行说
   「形式化已关闭」时就走这一档；开关开着时这一档不成立（老套路：只有检查器说的才算证明）。
@@ -5480,8 +5481,11 @@ PAPER_PACK = """\
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 - **「形式化已关闭」那一档的替代路线**（第一行读数说「已关闭」时走这条）：
   这条路换成**自然语言逐行审阅**，交付形状是：
-  1. 证明过程逐字进 `statements` 的 `proof_text`（含假设、每一步依据、你接不上的那一步）；
-  2. 派 V 的 `verify_proof`（命题号 + 第几条证明 `proof_no`（缺省 1）+ 证明全文）逐行走查，
+  1. 证明过程逐字由框架落成一份手稿（F 的 `reports/f-proof-<命题号>.md` / E 的
+     `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、每一步依据、
+     你接不上的那一步）；
+  2. 派 V 的 `verify_proof`（**`proof_manuscript` 给那一份稿 —— 在册也给**；命题号 +
+     第几条证明 `proof_no`（缺省 1））逐行走查，
      结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）——
      这是本会话**唯一**的"审过"凭据（收工门与 H 的采信都改看它）；
   3. 审阅报告里逐条写清：哪几步站得住、哪几步是缺口、缺口缺的是哪一类依据。
@@ -8391,11 +8395,11 @@ def toolchain_facts_text() -> str:
 
 
 
-            "- 这一趟走替代路线（这条路上唯一的「审过」凭据）：把证明过程写进 `statements` 的 "
+            "- 这一趟走替代路线（这条路上唯一的「审过」凭据）：证明正文先落成一份手稿（F 的 "
 
 
 
-            "`proof_text`，再请 V 用 `verify.verify_proof` 逐行走查 —— 结论进 "
+            "`reports/f-proof-<命题号>.md` / E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
 
 
 
@@ -8649,9 +8653,11 @@ def toolchain_formal_text() -> str:
         return ("你这一岗怎么写形式化（由上面那份读数现算；读数是这一刻的，变了它跟着变）：\n"
                 "- 本会话 Lean 形式化**已关闭**（`lean_enabled=false`（`toolchain` 段））⇒ "
                 "这一趟的证明审阅走**自然语言逐行**那条路，交付形状是：\n"
-                "  1. 把证明过程逐字写进 `statements` 的 `proof_text`"
-                "（含假设、每一步的依据、以及你没能接上的那一步）；\n"
-                "  2. 派 V（`summon` 它的 `verify.verify_proof`，交命题号 + 证明全文）逐行走查 —— "
+                "  1. 把证明过程逐字交给框架落成一份手稿（F 的 `reports/f-proof-<命题号>.md` / "
+                "E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、"
+                "每一步的依据、以及你没能接上的那一步）；\n"
+                "  2. 派 V（`summon` 它的 `verify.verify_proof`，交 `proof_manuscript`（在册也给）"
+                "+ 命题号）逐行走查 —— "
                 "它的两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`，这是本会话**唯一**的「审过」凭据；\n"
                 "  3. 结论强度：`evidence_kind=\"proof\"` 产不出来 ⇒ 断言最高只能到"
                 "「cross_check / heuristic」，正文里不许出现「已形式化验证」这类词；\n"
