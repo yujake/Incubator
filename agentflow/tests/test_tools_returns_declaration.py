@@ -10,7 +10,7 @@
 1. `test_every_tool_returns_declaration_is_machine_readable`
 —— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。它不能证明「声明的键是对的」
 —— 那是第 2 条的事。`test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
-—— 对全部 123 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
+—— 对全部 124 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
 LLM 少看到有用的键，但不会让调用方读错。这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
 - 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
 - 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
@@ -134,7 +134,9 @@ TS = "2026-01-01T00:00:00+00:00"
 #: `findings[]` 那七个键与 `detail[]` 那六个键因此都能观察到；`counts` 留一个非零
 #: （`zero_width=1`）—— 六档全零的那一支由 `tests/test_h_can_audit_text_integrity.py`
 #: 的 g2 钉着，两条判据分工不同（这一条问"实现到底给不给这些键"）。
-TOOL_COUNT = 123
+#: 2026-11-04：123 → 124（`doc.mapping_cells` —— 业主逐字「如果数据位置都知道，要给 G
+#: 开发辅助工具直接拿到」：G 按命题号直接取对应表那一行该填的每一格，只读）。
+TOOL_COUNT = 124
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -147,12 +149,12 @@ SUBSET_CHECK_SCOPE = (
     "所以『元素 A 有、元素 B 没有』这种漂移**这一条**抓不到。"
     "⚠️ 2026-10-15 起，那两个盲区**各有一条判据**了（三条各管一件事，别把强度混起来）：\n"
     "  ① 『给了却没声明』：`test_no_tool_returns_a_top_level_key_it_does_not_declare`"
-    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 123 个工具**零缺键**）。"
+    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 124 个工具**零缺键**）。"
     "为什么它值得单独一条：`tools/base.py:721` 把 `returns` 拼进 function-calling 的 "
     "`description` ⇒ **模型看得到**，于是「声明里没有」= 「模型不知道这个字段存在」"
     "（`doc.scan_claim` 的 `status_axis`/`undecided_reason` 就是这一类 —— 那两格**正是三态**）；\n"
     "  ② 『数组里逐元素不一致』：`test_every_element_of_an_array_carries_the_same_top_level_keys`"
-    "（实测全 123 个工具里只有 `table.schema` 犯过，132 处，已修）。"
+    "（实测全 124 个工具里只有 `table.schema` 犯过，132 处，已修）。"
 )
 
 # ---------------------------------------------------------------- 豁免清单
@@ -323,6 +325,55 @@ def _seed_a_proof_statement(registry: "ToolRegistry") -> None:
         tx.upsert("statements", stmt.to_dict(), note="doc.write_mapping probe")
 
 
+#: `doc.mapping_cells` 探针的现场根（业主 2026-11-04 新加的那件只读工具）。
+#:
+#: 为什么不复用 `PAPER_PROJECT`（`projects/p2`）：那是 `doc.write_mapping` / `doc.paper_compile`
+#: 的现场，正文里只有 `exp:fixture` 那一个实验环境；`mapping_cells` 要的是「对应表里有这一行、
+#: 正文里也有那个环境」的一对。往 `p2` 里加一个定理环境会让 `doc.write_mapping` 的探针多出
+#: 一条"正文有、表里没有"的孤儿（`_orphan_problems`）⇒ 两条判据互相拆台。所以另起一个项目根。
+MAPPING_CELLS_PROJECT = "projects/cells"
+
+#: `MAPPING_CELLS_PROJECT` 的正文：一个定理环境，label 与探针行那一格逐字相同。
+MAPPING_CELLS_TEX = (
+    "\\documentclass{article}\n"
+    "\\begin{document}\n"
+    "\\begin{theorem}\\label{thm:probe}\n"
+    "The probe theorem.\n"
+    "\\end{theorem}\n"
+    "\\end{document}\n"
+)
+
+
+def _seed_mapping_cells_probe(registry: "ToolRegistry") -> None:
+    """给 `doc.mapping_cells` 铺一个「理论行、九格都取得到」的最小现场。
+
+    为什么不是"让它落在受控拒绝那一支"：`MAX_SKIPPED = 0` 要求每个工具都走到 ok 分支，
+    而 `doc.mapping_cells` 的 `data` 只在 `ok=True` 时才是那个六键字典。所以现场必须
+    自洽：一条在册命题（理论行 —— 证明栏不是程序 ⇒ 通道为空、凭据两格按"不适用"填空串）、
+    一张表里真有一行指到它、正文里真有那个定理环境。三样都齐，`papermapping.mapping_cells`
+    才判 `ok=True`（判据原话在 `tests/test_doc_mapping_cells_tool.py`，这里不重判一次）。
+    """
+    import json
+
+    from agentflow import papermapping as PM
+
+    # 命题 `9001` 由共用的 `_seed_a_proof_statement` 落（`doc.write_mapping` 的前置也用它）。
+    _seed_a_proof_statement(registry)
+    root = Path(registry.probe_store.root)
+    project = root / MAPPING_CELLS_PROJECT
+    package = PM.package_dir(project)
+    package.mkdir(parents=True, exist_ok=True)
+    (package / "main.tex").write_text(MAPPING_CELLS_TEX, encoding="utf-8", newline="")
+    rows = [{
+        "kind": "theorem", "label": "thm:probe", "env_no": 1,
+        "ledger_id": "stmt:9001", "proof_no": 1, "file": "main.tex",
+        "citation_loc_reason": "探针：我方自产命题，没有外部引文",
+    }]
+    (package / PM.MAPPING_JSON_NAME).write_text(
+        json.dumps({"rows": rows}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8", newline="")
+
+
 #: 前置的两档：`(工具名, 参数)` = 先跑那次工具调用；直接给一个可调用 = 铺数据（不走工具）。
 _PREREQS: dict[str, Any] = {
     "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
@@ -344,6 +395,9 @@ _PREREQS: dict[str, Any] = {
     # 夹具原来没有这样的命题行 ⇒ 门会正确地拒掉它，而这条判据问的是"声明 ⊆ 实跑"
     # ⇒ 前置必须补上（见 `_seed_a_proof_statement` 的 docstring：为什么不加进 `_seed`）。
     "doc.write_mapping": _seed_a_proof_statement,
+    # 对应表逐格取数（2026-11-04，业主「如果数据位置都知道，要给 G 开发辅助工具直接拿到」）：
+    # 现场见 `_seed_mapping_cells_probe`（另起一个项目根，不往 `p2` 里加定理环境）。
+    "doc.mapping_cells": _seed_mapping_cells_probe,
 }
 
 
@@ -363,7 +417,7 @@ def _write_integrity_probe(root: Path) -> None:
 
 
 def tool_params() -> dict[str, dict]:
-    """123 个工具各自那一次调用的参数。"""
+    """124 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
     probe_root = _ALLOCATED.get("probe_task_root") or ""
     probe_child = _ALLOCATED.get("probe_task_child") or ""
@@ -548,6 +602,10 @@ def tool_params() -> dict[str, dict]:
             "status_reason": "不在可得范围内",
         },
         "doc.scan_claim": {"claim": dict(CLAIM)},
+        # 对应表逐格取数（2026-11-04）：现场由 `_PREREQS` 里的 `_seed_mapping_cells_probe` 铺
+        # （命题 9001 + `projects/cells` 的正文与对应表各一份）⇒ 这一趟真的走到 `ok=True` 那一支，
+        # `cells` 九格与 `sources` 九格都能一次观察全。
+        "doc.mapping_cells": {"project": MAPPING_CELLS_PROJECT, "statement_id": "9001"},
         "doc.paper_compile": {"project": PAPER_PROJECT, "timeout_sec": 60},
         # 论文对应表（2026-10-22）：一行实验类环境，指向夹具里真有的 `exp:0000`。
         # 走的是成功支（三份写出来、现读 `state="pass"`）—— 声明里的键集合就是它给的。
@@ -745,6 +803,11 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.paper_compile",
         # 论文对应表（2026-10-22）：探针真跑到了成功支（三份写出来、现读 pass）⇒ 键名读自实跑观测。
         "doc.write_mapping",
+        # 对应表逐格取数（2026-11-04，业主「给 G 开发辅助工具直接拿到」）：探针真跑到了
+        # `ok=True` 那一支（理论行、九格齐全）⇒ `cells` / `sources` / `channel` / `checked`
+        # 的键名读自实跑观测；失败支那两格（`problems[].cell` / `why`）另按条件键取样，见
+        # `CONDITIONAL_KEYS` 与 `test_the_incomplete_path_returns_the_problem_cells_it_declares`。
+        "doc.mapping_cells",
         "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
         "manuscripts.list", "manuscripts.read",
@@ -1313,7 +1376,7 @@ def _seed(store: Store, root: Path) -> None:
 class _RoleGateBypassedRegistry(ToolRegistry):
     """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 123 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 124 个工具 —— 那是设计意图（只读角色拿不到写工具）。
     本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
 
     为什么这是可接受的、而不是"测试把门拆了"：
@@ -1348,7 +1411,7 @@ def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
 
 @pytest.fixture
 def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
-    """一个装齐 123 个工具的注册表（联网工具用桩注入，不动装配代码）。
+    """一个装齐 124 个工具的注册表（联网工具用桩注入，不动装配代码）。
 
     `monkeypatch` 在夹具结束时自动还原，所以打桩不会泄漏到别的测试文件 ——
     这一点很重要：判据测试里的桩若泄漏，「别的测试变成了在测桩」是没有任何报错的。
@@ -1443,7 +1506,7 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
 
 @pytest.fixture
 def observations(registry: ToolRegistry) -> dict[str, Observation]:
-    """对 123 个工具各调一次，记录观测结果。
+    """对 124 个工具各调一次，记录观测结果。
 
     调用顺序 = 非破坏性工具在前、破坏性工具在后（见 `MUTATING_LAST`）。
     """
@@ -1542,6 +1605,13 @@ CONDITIONAL_KEYS: dict[str, frozenset[str]] = {
     # 取样路径见 `test_the_proof_path_returns_the_conditional_v_sign_keys`（把
     # `_deploy` 打桩成「这一轮拿到签」，其余走同一条 `out` 装配）。
     "attack.step": frozenset({"v_sign", "delivery_state", "delivery_label"}),
+    # 2026-11-04：`doc.mapping_cells` 的 `problems` 是「逐格的问题」清单，`ok=True` 那一支
+    # 它必然是空数组 ⇒ `cell` / `why` 两格在主路径那次观测上永远观察不到。它们只在
+    # `ok=False`（这一行不全 / 表里没有这一行）那一支产出，而那一支的 `data` 是 `None`
+    # （`fail(...)` 把逐格读数放在 meta 里）⇒ 由
+    # `test_the_incomplete_path_returns_the_problem_cells_it_declares` 单独取样。
+    # 这不是放宽：主路径那次观测仍逐格核其余声明键，两条路子合起来每条声明都见过一次实跑。
+    "doc.mapping_cells": frozenset({"cell", "why"}),
 }
 
 
@@ -1636,7 +1706,7 @@ def test_registry_ships_exactly_the_expected_number_of_tools(registry: ToolRegis
 
 
 def test_every_tool_returns_declaration_is_machine_readable(registry: ToolRegistry) -> None:
-    """反真空：123 个工具逐个，`returns=` 必须能被机器读出键集合。
+    """反真空：124 个工具逐个，`returns=` 必须能被机器读出键集合。
 
     放行条件只有一个：工具在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么没有键集合」）。
     失败信息带上原始 `returns=` 字符串 —— 否则人不知道该改什么。
@@ -1731,16 +1801,16 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """全部 123 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    """全部 124 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
     分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
     被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
-    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 123 个工具全部走到 ok 分支。
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 124 个工具全部走到 ok 分支。
     把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。`ok=False` 与「豁免的工具」
     是两种不同的"没法比对"：`ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；* 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data
     是标量/行对象）⇒ 查成了，只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控`test_negative_control_an_exempted_tool_is_still_probed_for_real`
     盯着它的行为）。但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。`MAX_SKIPPED = 0` 的依据：本文件的
     `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片
-    ⇒ 123 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
+    ⇒ 124 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
     """
     mismatches: list[str] = []
     skipped: list[str] = []
@@ -1873,6 +1943,41 @@ def test_the_proof_path_returns_the_conditional_v_sign_keys(
         "其余声明键在阻塞档上缺席了 —— 条件键的登记不该顺带放过任何一条：",
         sorted(rest - (blocking.keys or set())),
     )
+
+
+def test_the_incomplete_path_returns_the_problem_cells_it_declares(
+    registry: ToolRegistry, observations: dict[str, Observation],
+) -> None:
+    """条件键按「这一行不全」那一支取样：`problems[].cell` / `why` 真的在。
+
+    这条补的是上一条的取样口径（见 `CONDITIONAL_KEYS` 的第三条）：那两格只在
+    `doc.mapping_cells` 判"这一行还有没取到的格 / 表里没有这一行"时产出，而成功支的
+    `problems` 必然是空数组。取样给一个台账里没有的命题号 ⇒ 工具走受控的
+    `mapping_cells_incomplete`（`ok=False`，逐格读数仍在 meta 里），于是两格被观察到。
+
+    读数的另一半同样是判据：`checked` 必须是 `True`（那是"查过了、没有这一条"，不是
+    "没查成"），`problems` 必须非空且每条都带 `cell` / `why` —— 三格若是空壳
+    （`False` / `[]` / 缺键），"声明 ⊆ 实跑"照样成立而承诺的东西没发生。
+    """
+    name = "doc.mapping_cells"
+    res = registry.call(name, project=MAPPING_CELLS_PROJECT, statement_id="9999")
+    assert not res.ok, "台账里没有 9999 这一条，工具却回了 ok"
+    assert res.meta.get("checked") is True, res.meta
+    problems = res.meta.get("problems") or []
+    assert problems, "这一支必须给出逐格问题清单（否则不是'没查到那一行'）"
+    for item in problems:
+        assert {"cell", "why"} <= set(item), item
+    assert [str(item.get("cell")) for item in problems] == ["*"], (
+        "整行/整表那一档的 `cell` 是 `*`（`papermapping.WHOLE_ROW_CELL`）：", problems)
+
+    # 主路径那次观测必须仍然是"其余声明键一条不缺"（条件键的登记不许顺带放过别的）。
+    blocking = observations[name]
+    assert blocking.comparable, (blocking.ok, blocking.kind, blocking.error)
+    rest = (shared_declaration.declared_keys(registry.get(name).returns)
+            - CONDITIONAL_KEYS[name])
+    assert not (rest - (blocking.keys or set())), (
+        "其余声明键在成功支上缺席了 —— 条件键的登记不该顺带放过任何一条：",
+        sorted(rest - (blocking.keys or set())))
 
 
 def test_negative_control_a_declared_key_the_handler_never_returns_makes_the_subset_check_red(
@@ -2103,7 +2208,7 @@ def test_every_element_of_an_array_carries_the_same_top_level_keys(
     上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
     在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
     ## 实测（2026-10-15）
-    全 123 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    全 124 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
     那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。修法是每个元素都给这三格、不适用时给如实空值（`[]` / `None`）。
     ## 一条不许混进来的东西（我第一版判据就栽在这）
     比的是元素的顶层键，不是递归取并集之后的键集合。递归取键会把元素`default` 里嵌套的 `{"start","end","label"}` 算进那个元素，于是"两个元素的 `default` 形状不同"（合法：默认值本来就各不相同）

@@ -28,7 +28,14 @@ TOOLS = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "tools"
 #: 它保守、可复算：任何一处新增/删除都会让 `test_invisible_ok_sites_do_not_grow_silently` 变红。
 INVISIBLE_OK_SITES: dict[str, int] = {
     "attack_tools.py": 1,
-    "doc_tools.py": 2,
+    # 2026-11-04（业主「如果数据位置都知道，要给 G 开发辅助工具直接拿到」）：`doc_tools.py`
+    # 2 → 3 —— 新增的 `doc.mapping_cells` 是 `return ok(got)`：`got` 是
+    # `papermapping.mapping_cells` 的运行时返回值（六键 dict，键由
+    # `MAPPING_CELL_FIELDS` 与那份函数的契约决定），静态扫描在工具层读不出字面量键。
+    # 为什么不在调用点抄成字面量：抄一遍就是第二套「该交哪几格」的口径，而这一格的
+    # 判据只有一处（`papermapping.mapping_cells`）；`returns=` 已逐字声明六格与九格，
+    # 由 `tests/test_tools_returns_declaration.py` 的实跑观测钉住。
+    "doc_tools.py": 3,
     "fs_tools.py": 7,
     "ocr_tools.py": 1,
     # 2026-11-02（业主「给 H 加个工具审」）：多了一处 `ok(scan_text_integrity(...))` ——
