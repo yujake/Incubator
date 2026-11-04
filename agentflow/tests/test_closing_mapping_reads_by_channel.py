@@ -24,6 +24,19 @@
 | d | 空通道行两格留空 ⇒ 不报缺（负控：不适用 ≠ 缺） | 改前在「开关开 + 盘上有产物」时把两格读成缺 |
 | e | 判据只有一处：把 `numericproof.proof_channel` 打桩成恒空 ⇒ a 的回落到旧形态 | 改前它本来就不看通道（打桩前后同一个答案） |
 
+## 第二笔：凭据格「多填 / 填错」也要跟判据同一结论（g–k）
+
+这一族的判法不在 closing：读数只调 `papermapping._lean_problems`，它报红 ⇒ 这一行不齐；
+它说没问题 ⇒ 读数不许自己再判一次。
+
+| # | 判据 | 改前红在哪 |
+|---|---|---|
+| g | 空通道只填 `lean_file` ⇒ 不齐，点名「通道为空却填了 lean_file」 | 改前旧读数只看两格空不空 ⇒ 报齐 |
+| h | 空通道两格都空 ⇒ 齐（负控） | 改前也是齐 |
+| i | 空通道两格都填 ⇒ 不齐，两格都点名（`_lean_problems` 判类别不符） | 改前报齐 |
+| j | 打桩 `_lean_problems` 恒空 ⇒ g 的现场立刻报齐（判法只在那一处） | 改前本来就不调它 |
+| k | numeric 行填了 `lean_target` ⇒ 不齐，点名「lean_target（数值通道不填）」 | 改前报齐 |
+
 夹具复用 `test_numeric_theorem_writing_spec` 里那一份「合规数值实验定理」（同一个仓库里
 只留一份形状）；全部在 `tmp_path` 里自建，零模型调用。
 """
@@ -36,10 +49,11 @@ import pytest
 
 from agentflow import closing as CL
 from agentflow import numericproof as NP
+from agentflow import papermapping as PM
 from agentflow import schema as S
 from agentflow.settings import ENV_LEAN_ENABLED
 
-from test_numeric_theorem_writing_spec import _row, _workspace
+from test_numeric_theorem_writing_spec import PROGRAM, _row, _workspace
 
 #: formal 通道那一份 Lean 源码（项目根相对：L 的真实落点 `code/formal/`）。
 FORMAL_LEAN = "code/formal/000004.lean"
@@ -65,11 +79,13 @@ def _formal_row_without_target() -> dict:
                 evidence_kind="", evidence_path="", evidence_sha256="", v_signature=None)
 
 
-def _empty_channel_row() -> dict:
-    """d 的现场：空通道（证明是散文），凭据两格留空。"""
-    return _row(file="main.tex", lean_file="", lean_target="",
-                numeric_evidence="", exhaustion_note="",
-                evidence_kind="", evidence_path="", evidence_sha256="", v_signature=None)
+def _empty_channel_row(**over: object) -> dict:
+    """空通道那一行的现场（证明是散文），凭据两格默认留空；`over` 用来造「多填」。"""
+    row = _row(file="main.tex", lean_file="", lean_target="",
+               numeric_evidence="", exhaustion_note="",
+               evidence_kind="", evidence_path="", evidence_sha256="", v_signature=None)
+    row.update(over)
+    return row
 
 
 def _write_lean_artifact(root: pathlib.Path) -> None:
@@ -197,5 +213,78 @@ def test_f_a_numeric_row_missing_index_cells_is_counted_by_the_existing_criterio
     assert set(one["missing"]) == {"evidence_sha256", "v_signature"}, got
     assert one["index_problems"], got
     assert got["complete"] == 0, got
+
+
+# ============================================================ 空通道凭据格：「多填」也要读成不齐
+#
+# 这一组的判法不在这里：整组只看 `papermapping._lean_problems` 的结论（读数只做落位）。
+# 改前红：旧读数对空通道只看「两格空不空」，多填一格/两格都算齐。
+
+
+def test_g_an_empty_channel_row_with_one_credential_cell_filled_is_incomplete(
+        tmp_path: pathlib.Path) -> None:
+    """空通道只填 `lean_file`（一份数值程序）⇒ 不齐，点名「通道为空却填了 lean_file」。"""
+    root = _workspace(tmp_path / "ws",
+                      rows=[_empty_channel_row(lean_file=PROGRAM)], statement=PROSE_PROOF)
+    got = _reading(root)
+
+    one = got["incomplete"][0]
+    assert one["missing"] == ["通道为空却填了 lean_file"], got
+    assert one["channel"] == "", got
+    assert got["complete"] == 0, got
+    # `problems` 是 `_lean_problems` 的原话（不是这里另写的一句）。
+    assert any("类别与通道不一致" in text for text in one["problems"]), got
+
+
+def test_h_an_empty_channel_row_with_both_credential_cells_blank_is_complete(
+        tmp_path: pathlib.Path) -> None:
+    """负控：空通道两格都空 ⇒ 齐（「不适用」不是「缺」）。"""
+    root = _workspace(tmp_path / "ws", rows=[_empty_channel_row()], statement=PROSE_PROOF)
+    got = _reading(root)
+
+    assert got["incomplete"] == [], got
+    assert got["complete"] == 1, got
+
+
+def test_i_an_empty_channel_row_with_both_credential_cells_filled_is_incomplete(
+        tmp_path: pathlib.Path) -> None:
+    """空通道两格都填（`.py` + 声明名）⇒ 不齐，两格都点名（`_lean_problems` 同结论）。"""
+    root = _workspace(tmp_path / "ws",
+                      rows=[_empty_channel_row(lean_file=PROGRAM, lean_target="R34.isThm")],
+                      statement=PROSE_PROOF)
+    got = _reading(root)
+
+    one = got["incomplete"][0]
+    assert one["missing"] == ["通道为空却填了 lean_file", "通道为空却填了 lean_target"], got
+    assert got["complete"] == 0, got
+    assert one["problems"], got
+
+
+def test_j_stubbing_the_lean_problems_criterion_clears_the_multi_fill_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """空通道「多填」的判法只许来自 `_lean_problems`：打桩成恒空 ⇒ 同一现场立刻报齐。"""
+    root = _workspace(tmp_path / "ws",
+                      rows=[_empty_channel_row(lean_file=PROGRAM)], statement=PROSE_PROOF)
+    assert _reading(root)["complete"] == 0
+
+    monkeypatch.setattr(PM, "_lean_problems", lambda *a, **k: [])
+    after = _reading(root)
+
+    assert after["incomplete"] == [], after
+    assert after["complete"] == 1, after
+
+
+def test_k_a_numeric_row_with_lean_target_filled_is_incomplete(
+        tmp_path: pathlib.Path) -> None:
+    """数值通道填了 `lean_target` ⇒ 不齐，点名「lean_target（数值通道不填）」。"""
+    root = _workspace(tmp_path / "ws", rows=[_row(lean_target="R34.isThm")])
+    got = _reading(root)
+
+    one = got["incomplete"][0]
+    assert one["missing"] == ["lean_target（数值通道不填）"], got
+    assert one["channel"] == "numeric", got
+    assert any("在数值证明通道上没有落点" in text for text in one["problems"]), got
+    assert got["complete"] == 0, got
+
 
 

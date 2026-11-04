@@ -215,7 +215,8 @@ LEG_CHECK_KINDS: dict[str, str] = {
     # 解析坏记「没查成」（不是 0）。数格口径不在这里重写：每一行按它自己的证明通道数
     # （判据本体 `numericproof.proof_channel`，经 `papermapping._credential_slot` 读）——
     # 数值证明通道要 `lean_file`、形式化通道要 `lean_file` + `lean_target`、空通道那两格
-    # 不计；数值通道另计索引四格（`numerictheorem.evidence_index_problems`）。
+    # 不计；数值通道另计索引四格（`numerictheorem.evidence_index_problems`）。凭据格
+    # 「多填 / 填错」那一族不另判：`papermapping._lean_problems` 报红 ⇒ 这一行也不齐。
     "paper_mapping_rows": "论文对应表里「该有的格子都齐」的行数（`out/paper/MAPPING.json`）："
                           "每一行按**这一条命题的证明通道**数（通道判据只有一处："
                           "`numericproof.proof_channel`，经 `papermapping._credential_slot`"
@@ -224,8 +225,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "（`evidence_kind` / `evidence_path` / `evidence_sha256` / "
                           "`v_signature`；判据 `numerictheorem.evidence_index_problems`）；"
                           "形式化通道要 `file`、`lean_file` 与 `lean_target`；通道为空的行"
-                          "只数 `file`（凭据两格是「不适用」不是「缺」）。表不在盘上 ⇒ 0 行"
-                          "（没产出，不是没查成）；表在而解析坏 ⇒ 这一行记「没查成」"
+                          "只数 `file`（凭据两格是「不适用」不是「缺」）。凭据格「填了但不该"
+                          "填 / 填错类别 / 声明名找不到」这一族跟 `papermapping._lean_problems`"
+                          " 同一结论判：它报红 ⇒ 这一行也不齐（空通道点名「通道为空却填了 "
+                          "lean_*」、数值通道点名「lean_target（数值通道不填）」）。表不在盘上"
+                          " ⇒ 0 行（没产出，不是没查成）；表在而解析坏 ⇒ 这一行记「没查成」"
                           "（不是 0，也不判 pass）",
     "analysis_report_rows": "分析报告行数（`analysis_reports`）—— 这一档的**写者是 "
                             "`AgentC.handle`**（`capabilities.py` 逐字登记：analysis_reports 是 "
@@ -4194,6 +4198,45 @@ def _mapping_row_missing_cells(row: Any, *, channel: str) -> list[str]:
     return [name for name in fields if not str(getattr(row, name, "") or "").strip()]
 
 
+def _lean_problem_cells(row: Any, channel: str,
+                        problems: Sequence[Mapping[str, Any]]) -> list[str]:
+    """`_lean_problems` 已经判红之后，补上「填了但不该填 / 填错」那一格的格名。
+
+    只在判据已经报红时才会被调用 —— 本函数不判断「空通道该不该填凭据格」，也不判断
+    「数值通道能不能填 `lean_target`」，那些结论全部来自 `papermapping._lean_problems`
+    的原话；这里只做落位。空格子由 `_mapping_row_missing_cells` 按通道列，不在这里重复。
+
+    - 空通道而凭据格有填：点名「通道为空却填了 lean_file」这种说法 —— 否则
+      「缺 lean_file」会把「多填」读成「少填」；
+    - 数值通道而 `lean_target` 填了：点名「lean_target（数值通道不填）」；
+    - 其余（`.lean` 读不到 / 类别与通道不一致 / 声明名找不到 / 声明名被两行共用）：
+      按问题类别落到那一格（类别码只有 `_lean_problems` 会产出）。
+
+    `problems` 为空 ⇒ 返回空清单：判据说没问题，这里就不许自己再判一次。
+    """
+    if not problems:
+        return []
+    from . import papermapping as PM
+    from . import numericproof as NP
+
+    if not channel:
+        filled = [name for name in PM.LEAN_ROW_FIELDS
+                  if str(getattr(row, name, "") or "").strip()]
+        # 空通道两格都空时 `_lean_problems` 不报红，走不到这里；报红必有一格填了。
+        return [f"通道为空却填了 {name}" for name in filled]
+    if channel == NP.PROOF_CHANNEL_NUMERIC \
+            and str(getattr(row, "lean_target", "") or "").strip():
+        return ["lean_target（数值通道不填）"]
+    labels: list[str] = []
+    for one in problems:
+        kind = str(one.get("kind") or "")
+        if kind == "mapping_lean_file_missing":
+            labels.append("lean_file")
+        elif kind in ("mapping_lean_target_missing", "mapping_lean_target_ambiguous"):
+            labels.append("lean_target")
+    return labels
+
+
 def _numeric_row_index_problems(row: Any, workspace: Path,
                                 ) -> tuple[list[str], list[str]]:
     """数值通道那一行的索引四格：返回 `(缺的格名, 判据原话)`。
@@ -4234,10 +4277,14 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
     - 读到 ⇒ `rows`（分母）/ `complete`（格子齐的行数）/ `incomplete`（逐行点名缺哪格），
       缺省下限 = 表里的行数：这一档问的是「表里每一行都齐了吗」，不是「至少有一行齐」。
 
-    口径不在这里重写（2026-11-04 按通道改口径）：
+    口径不在这里重写（2026-11-04 按通道改口径，第二笔补凭据格的「多填/错填」）：
 
     - 通道由 `papermapping._credential_slot` 现算（真身只有一处：
       `numericproof.proof_channel`），`_mapping_row_missing_cells` 只按它列格子；
+    - 凭据两格「填了但不该填 / 填错类别 / 声明名找不到」这一族，结论整段来自
+      `papermapping._lean_problems`（与 `mapping_reading` 同一个调用）：它报红 ⇒ 这一行
+      不齐；原话收进该行的 `problems`（新键），`missing` 里补上对应格名
+      （空通道点名「通道为空却填了 lean_*」、数值通道点名「lean_target（数值通道不填）」）；
     - 数值通道那一行另要索引四格（判据 `numerictheorem.evidence_index_problems`）；
       判据原话收进该行的 `index_problems`（新键），缺的格名收进 `missing`（旧键照旧）；
       每一行的通道收进该行的 `channel`（新键，读的人据此知道为什么是这几格）；
@@ -4245,7 +4292,8 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
       `implicit_min` / `lean` / `note`），M 与 webui 的读法不用跟着改。
 
     反真空用例把 `_mapping_row_missing_cells` 打桩成恒真 ⇒ 不齐的行也会被数成齐的
-    （这一档的绿必须靠那一处判据，而不是靠这里没查）。
+    （这一档的绿必须靠那一处判据，而不是靠这里没查）；把 `_lean_problems` 打桩成恒空
+    ⇒ 凭据格那一族的红必须跟着消失（它的判法只在那一处）。
     """
     from . import papermapping as PM
     from . import numericproof as NP
@@ -4283,21 +4331,36 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
     ledger = PM.read_ledger_tables(workspace)
     experiments = [dict(item) for item in (ledger.get("experiments") or ())
                    if isinstance(item, Mapping)]
+    # 凭据格那一族（填错类别 / 空通道多填 / 数值通道填了 lean_target / 声明名找不到 ……）
+    # 的判法只有一处：`papermapping._lean_problems`。它在 `mapping_reading` 里也是同一个
+    # 调用（那里按 `LEAN_KINDS` 非空开关这一档，这里照同一开关）。一次算全表：`lean_target`
+    # 被两行共用这一条要跨行才判得出来。结果按 label 归到每一行。
+    lean_problems: dict[str, list[dict[str, Any]]] = {}
+    if PM.LEAN_KINDS:
+        package = PM.package_dir(project)
+        for one in PM._lean_problems(table_rows, package, project, ledger):
+            label = str(one.get("label") or "")
+            lean_problems.setdefault(label, []).append(dict(one))
     for row in table_rows:
         # 通道只在这里算一次：`_credential_slot` → `numericproof.formal_slot` →
         # `numericproof.proof_channel`。`_mapping_row_missing_cells` 只消费它，不另判。
         slot = PM._credential_slot(row, ledger, experiments)
         channel = str(slot.get("channel") or "")
         missing = _mapping_row_missing_cells(row, channel=channel)
+        row_lean_problems = list(lean_problems.get(str(row.label), []))
+        missing += [name for name in _lean_problem_cells(row, channel, row_lean_problems)
+                    if name not in missing]
         index_problems: list[str] = []
         if channel == NP.PROOF_CHANNEL_NUMERIC:
             index_missing, index_problems = _numeric_row_index_problems(row, workspace)
             missing += [name for name in index_missing if name not in missing]
-        if not missing and not index_problems:
+        if not missing and not index_problems and not row_lean_problems:
             continue
         item: dict[str, Any] = {"label": str(row.label), "kind": str(row.kind),
                                 "ledger_id": str(row.ledger_id),
                                 "missing": list(missing), "channel": channel}
+        if row_lean_problems:
+            item["problems"] = [str(one.get("detail") or "") for one in row_lean_problems]
         if index_problems:
             item["index_problems"] = list(index_problems)
         out["incomplete"].append(item)
@@ -4312,11 +4375,13 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
                        f"{len(out['incomplete'])} 行不齐 ⇒ 缺的格子逐行见 `incomplete` "
                        f"（齐 {out['complete']} 行 < 表里 {len(table_rows)} 行；"
                        "口径：numeric 通道要 `lean_file`、formal 通道要 `lean_file` 与 "
-                       "`lean_target`、空通道那两格不计；numeric 通道另计索引四格）")
+                       "`lean_target`、空通道那两格不计；numeric 通道另计索引四格；凭据格"
+                       "「多填 / 填错类别」按 `_lean_problems` 同一结论判）")
     else:
         out["note"] = (f"{json_path} 的 {len(table_rows)} 行都齐了（每行按它自己的证明通道"
                        "数：numeric 通道要 `lean_file` 与索引四格、formal 通道要 "
-                       "`lean_file` 与 `lean_target`、空通道那两格不计）")
+                       "`lean_file` 与 `lean_target`、空通道那两格不计；凭据格"
+                       "「多填 / 填错类别」按 `_lean_problems` 同一结论判）")
     return out
 
 
