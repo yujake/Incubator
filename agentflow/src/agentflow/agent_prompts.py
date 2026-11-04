@@ -3137,7 +3137,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ① B（`3bb87297` / `4e43a81b`）：三件式的证明正文载体改成手稿（`proof_manuscript`，在册也给稿）；
 #:    「逐份交稿」替代内联 `proofs=[...]`（`#p1` / `#p2`… 按稿登记）；`register_statement` 的
 #:    说明把「`proof_text` 可缺」改成「没有稿不拒收：落最低等级并进待办」。
-#: ② F（`4e43a81b`）：派 V 审的是**那一份证明稿**（`proof_manuscript` 一律给，在册也给）；
+#: ② F（`4e43a81b`）：派 V 审的是那一份证明稿（`proof_manuscript` 一律给，在册也给）；
 #:    中间结论「正文走手稿」（`F.step` 落 `reports/f-proof-<命题号>.md`，B 读稿登记）；
 #:    多证明每份各自落稿（`- 证明号：<N>`）。
 #: ③ G / H / M（`7970eacc` / `4e43a81b`）：`PAPER_PACK` 的 `proof_review` 档改成「正文由 B 从
@@ -3145,12 +3145,12 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    同步改成「证明过程先落成手稿（F/E/B 三种命名的 `*-proof-*.md`），再派 V 带稿走查」。
 #:    G 另加 `7970eacc` 的 ⓪ 步：先 `doc.build_document` 落一行 `documents`，否则
 #:    `doc.paper_compile` 受控拒绝 `paper_not_registered`；M 另加 `347d6267` 的
-#:    「交接工作前先写一份**交接手稿**（handoff 形状）」措辞。
+#:    「交接工作前先写一份交接手稿（handoff 形状）」措辞。
 #: ④ V（`b2f39f05` / `347d6267`）：policy 新增「在册命题只经手稿过审」——带 `statement_id`
 #:    必须给 `proof_manuscript`，只给内联 `proof_text` 受控拒绝 `proof_text_needs_a_manuscript`；
 #:    未在册那一档可以只给正文（只给「看过、没签」读数，不签发）。`verify_proof` 的 summary
 #:    与 spec 的 action 说明同步。
-#: ⑤ A / C / D / E / L 五格**没有自己的改动**，只随共用段那条 handoff 重命名各换一次。
+#: ⑤ A / C / D / E / L 五格没有自己的改动，只随共用段那条 handoff 重命名各换一次。
 #: ⑥ 收口时的一笔（压缩预算）：`b2f39f05` 曾把「在册送审必须有手稿」写进 `verify.verify_proof`
 #:    的 summary（104 → 319 字符），而压缩批次比例因此 0.7749 > 0.75（分母是压缩前 8631）。
 #:    处置是把细则留在 params 的 `proof_manuscript` description 里、summary 压回 104 字符
