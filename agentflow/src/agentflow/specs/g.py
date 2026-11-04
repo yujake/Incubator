@@ -161,9 +161,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 除这六格之外的格都是条件必填，由 `papermapping` 读侧判（所以不进
                 # `required` —— 一律 required 会把「这一格不适用」读成「这一格没填」）：
                 # `lean_file` / `lean_target` 按这条命题的证明通道（numeric 只要前者、
-                # formal 两格都要、通道为空两格可空）；`numeric_evidence` /
-                # `exhaustion_note` 按行的种类（数值实验定理那一行必填）；索引四格
-                # （`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`）
+                # formal 两格都要、通道为空两格必须空）；`numeric_evidence` /
+                # `exhaustion_note` 按行的种类（数值实验定理那一行必填；通道为空时不许填）；
+                # 索引四格（`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`）
                 # 按正文落在哪（D 是目录、正文在 F 的证明或 E 的报告里时必填）。
                 # 缺了它们分别报 `mapping_numeric_*` / `mapping_exhaustion_note_missing`
                 # 与 `mapping_lean_*`。
@@ -199,8 +199,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "程序（相对仓库根，必须与证明栏是同一份）；formal ⇒ "
                                       "填那份 `.lean`（项目根相对路径，如 "
                                       "`code/formal/000004.lean`；论文包内写法 "
-                                      "`formal/000004.lean` 也认）；通道为空 ⇒ 允许为空"
-                                      "（不适用，不是没填）。",
+                                      "`formal/000004.lean` 也认）；通道为空 ⇒ 必须留空"
+                                      "（不适用；填了就是无依据的声称 —— 没有通道就没有"
+                                      "凭据，判据受控拒绝）。",
                               },
                               "lean_target": {
                                   "type": "string",
@@ -209,7 +210,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "如 `FreeGroupFactor.isII1`；不是正文里的 LaTeX "
                                       "label）。**只有 formal 通道写它**：numeric 通道没有 "
                                       "Lean 声明名，必须留空（填了反受控拒绝）；通道为空 ⇒ "
-                                      "可空。",
+                                      "必须留空（填了同受控拒绝：没有通道就没有凭据）。",
                               },
                               # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文
                               # （F 的证明 / E 的报告）。列义只有一份（`numericproof.INDEX_*`）。
@@ -306,7 +307,8 @@ WRITING_SCOPE_NO_LEAN = (
 #:
 #: 2026-11-04（业主口径：`lean_file` 是「机器核验凭据」那一格，功能是「这条命题是百分百真的」）：
 #: 这一行按证明通道写 —— numeric 通道填证明栏第 ① 段那份 .py 程序、lean_target 留空；
-#: formal 通道填 .lean 与它验的声明名；通道为空两格才可空。
+#: formal 通道填 .lean 与它验的声明名；通道为空两格必须空（填了受控拒绝：
+#: 没有通道就没有凭据），空通道时 numeric_evidence / exhaustion_note 也不许填。
 #:
 #: 关档替身只能说"formal 这一条这一档走不到"，不许再说"两格留空"：数值通道在关档会话里
 #: 仍然必填 lean_file（那份 .py 与 Lean 工具链无关）—— 旧替身把合规的数值定理一起放空了。
@@ -321,14 +323,19 @@ LEAN_FILE_ROW = (
     "② formal（形式化）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，源码落在 `code/formal/`，"
     "如 `code/formal/000004.lean`；论文包内写法 `formal/000004.lean` 也认）**且** `lean_target` 必填"
     "（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
-    "③ 通道为空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 两格都可以留空（不适用，不是没填）。"
+    "③ 通道为空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 两格必须留空"
+    "（不适用，不是没填）；填了任一格就是无依据的声称 —— 没有通道就没有凭据，"
+    "`doc.write_mapping` 会受控拒绝；同理，通道为空时 `numeric_evidence` / "
+    "`exhaustion_note` 也不许填（那是在自称有数值证据、却没有数值证明通道，判据判不一致）。"
 )
 LEAN_FILE_ROW_NO_LEAN = (
     "`lean_file` / `lean_target` 按这条命题的证明通道填：① numeric（证明栏第 ① 段是程序、"
     "台账里有 E 签的那条穷举）⇒ `lean_file` 必填，填证明栏第 ① 段那份 `.py` 程序（相对仓库根，"
     "如 `code/r34_check.py`），`lean_target` 留空（填了反受控拒绝）—— 这一档没有 Lean 工具链，"
     "也不改变数值通道这一格必填；② formal（这一档产不出 `.lean`）⇒ `lean_file` 与 `lean_target` "
-    "两格按形式化通道填（正常走不到这一档）；③ 通道为空 ⇒ 两格都可以留空（不适用，不是没填）。"
+    "两格按形式化通道填（正常走不到这一档）；③ 通道为空 ⇒ 两格必须留空（不适用，"
+    "不是没填）；填了任一格会被拒（没有通道就没有凭据），`numeric_evidence` / "
+    "`exhaustion_note` 也不许填。"
 )
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (LEAN_FILE_ROW, LEAN_FILE_ROW_NO_LEAN),

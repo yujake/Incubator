@@ -1236,7 +1236,9 @@ def _h_skills() -> tuple[Skill, ...]:
 的落点对不对（**两种落点都对，不许只按一种拦**：理论定理行写在论文包内；数值实验定理行写
 程序相对仓库根的路径，**不在包里是正常的**）、`lean_file` 按这条命题的证明通道核
 （numeric ⇒ 证明栏第 ① 段那份 `.py` 程序、`lean_target` 留空；formal ⇒ `.lean` + `lean_target`；
-通道为空 ⇒ 两格允许为空）、数值实验定理那一行的索引四格（`evidence_kind` / `evidence_path` /
+通道为空 ⇒ 两格必须为空：填了任一格就是无依据的声称，判据会拒；空通道时
+`numeric_evidence` / `exhaustion_note` 也不许填 —— 那是自称有数值证据却没有数值证明通道）、
+数值实验定理那一行的索引四格（`evidence_kind` / `evidence_path` /
 `evidence_sha256` / `v_signature`）与 `numeric_evidence` / `exhaustion_note` 是否都在、
 正文附录「附录：产出对应表」与 json 渲染出来的是否逐字一致。
 这一档是**客观问题（可拦）**：判出来就写成 error 级发现，kind 用
@@ -3083,7 +3085,9 @@ def _g_skills() -> tuple[Skill, ...]:
   穷举）⇒ `lean_file` 必填证明栏第 ① 段那份 `.py` 程序（相对仓库根，必须与证明栏同一份），
   `lean_target` 留空（数值程序没有 Lean 声明名，填了反受控拒绝）；formal 通道 ⇒ `.lean`（项目根
   相对路径，如 `code/formal/000004.lean`）与 `lean_target` 两格都要有；通道为空（没有 `proof_text`、
-  台账里也没有穷举或形式化实验）⇒ 两格都可以留空（不适用，不是没填）。
+  台账里也没有穷举或形式化实验）⇒ 两格必须留空（不适用，不是没填）：填了任一格就是无依据的声称
+  —— 没有通道就没有凭据，`doc.write_mapping` 会受控拒绝；空通道时 `numeric_evidence` /
+  `exhaustion_note` 也不许填（自称有数值证据但没有数值证明通道 ⇒ 判不一致）。
   顺序是死的：先写/改正文 → 再 `doc.write_mapping` → 再核每行该有的格 → 最后 `doc.paper_compile`（改完正文
   必须重编一次）。
 

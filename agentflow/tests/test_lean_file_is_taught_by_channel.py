@@ -5,7 +5,8 @@
 
 `papermapping._credential_slot` 把每一行交给 `numericproof.formal_slot`，通道只有三档：
 numeric（证明栏第 ① 段是程序、台账里有 E 签的穷举）⇒ `lean_file` 必填，填的就是那份 .py 程序，
-`lean_target` 填了反受控拒绝；formal ⇒ .lean 与它验的声明名两格都要有；通道为空 ⇒ 两格允许为空。
+`lean_target` 填了反受控拒绝；formal ⇒ .lean 与它验的声明名两格都要有；通道为空 ⇒ 两格必须留空
+（填了就是无依据的声称，受控拒绝；空通道时 `numeric_evidence` / `exhaustion_note` 也不许填）。
 `file` 的落点分两种：理论定理行写论文包内的相对路径，数值实验定理行写程序相对仓库根的路径
 （不在包里是正常的）。数值实验定理那一行另带索引四格（`numericproof.INDEX_*`，判据
 `numerictheorem.evidence_index_problems`），B 顺它取正文。
@@ -49,7 +50,9 @@ G_REQUIRED: tuple[str, ...] = (
     "`lean_target` 必填",
     "`.lean`",
     "通道为空",
-    "两格都可以留空",
+    "两格必须留空",
+    "无依据的声称",
+    "自称有数值证据",
     "`file` 有两种落点",
     "论文包内的相对路径",
     "相对仓库根",
@@ -125,6 +128,8 @@ H_REQUIRED: tuple[str, ...] = (
     "`lean_target` 留空",
     "formal 通道",
     "`.lean`",
+    "两格必须为空",
+    "自称有数值证据",
     "索引四格",
     "evidence_kind",
     "evidence_path",
@@ -176,6 +181,8 @@ G_MANUAL_REQUIRED: tuple[str, ...] = (
     "`lean_target` 留空",
     "`.py`",
     "`.lean`",
+    "两格必须留空",
+    "自称有数值证据",
     "索引四格",
     "evidence_kind",
     "evidence_path",
@@ -196,6 +203,8 @@ H_MANUAL_REQUIRED: tuple[str, ...] = (
     "`.py`",
     "`lean_target` 留空",
     "`.lean`",
+    "两格必须为空",
+    "自称有数值证据",
     "索引四格",
     "evidence_kind",
     "evidence_path",

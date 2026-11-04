@@ -2568,7 +2568,8 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                                      "E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；"
                                      "formal 填那份 .lean（项目根相对路径，如 "
                                      "code/formal/000004.lean；包内写法 formal/000004.lean 也认）；"
-                                     "通道为空时允许为空（不适用，不是没填）"},
+                                     "通道为空时两格必须留空（不适用，不是没填）—— "
+                                     "填了就是无依据的声称（没有通道就没有凭据，受控拒绝）"},
         "lean_target": {"type": "string",
                         "description": "那份源码里哪个声明验了它（写源码里字面出现的名字，"
                                        "如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。"
@@ -2583,11 +2584,13 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
         # 条件必填（定理类行、且那条命题的证明栏是程序）由读侧判，不在这里进 `required`。
         "numeric_evidence": {"type": "string",
                              "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。"
-                                            "证明栏是程序的那几行必填"},
+                                            "证明栏是程序的那几行必填；通道为空时不许填"
+                                            "（那是在自称有数值证据、却没有数值证明通道）"},
         "exhaustion_note": {"type": "string",
                             "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境"
                                            "落在哪一份读数里（相对仓库根，如 "
-                                           "out/experiments/000000/exhaustion.md）"},
+                                           "out/experiments/000000/exhaustion.md）；"
+                                           "通道为空时同样不许填"},
         # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文（F 的证明 / E 的报告）。
         # 名字与列义只有一份（`numericproof.INDEX_*`），这里只是把形状告诉模型。
         "evidence_kind": {"type": "string", "enum": list(NP.INDEX_KINDS),
@@ -2833,7 +2836,8 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
             summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
             "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
             "md 与附录由 json 渲染，别手写。`lean_file` 按证明通道填（numeric ⇒ 证明栏那份 "
-            ".py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格可空）。"
+            ".py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格必须留空，"
+            "填了受控拒绝 —— 没有通道就没有凭据）。"
             "`file` 有两种落点：理论定理行写包内相对路径，数值实验定理行写程序相对仓库根的"
             "路径。数值定理那一行另写 numeric_evidence / exhaustion_note 与索引四格"
             "（evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 缺任何一块都会拒。",
