@@ -70,6 +70,24 @@ def _tmp_workspace() -> tuple:
     return store, tmp
 
 
+def _write_manuscript(tmp: Path, sid: str, body: str,
+                      statement_full: str = "若 G 是有限群，则 |G| 有限。") -> str:
+    """给在册命题落一份带空依赖表的手稿（2026-11-04 甲：在册送审必须带稿）。
+
+    `## 依赖` 的四列表头不能省：V 读稿时缺这一节是受控拒绝
+    （`dependency_section_missing`），空表（表头在、0 行）才是合法形态。
+    """
+    rel = f"reports/f-proof-{sid}.md"
+    path = Path(tmp) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# 证明手稿\n\n- 命题号：stmt:{sid}\n\n"
+        f"## 命题\n\n{statement_full}\n\n"
+        f"## 证明\n\n{body}\n\n" + DS.render_dependency_section([]),
+        encoding="utf-8")
+    return rel
+
+
 # ---------------------------------------------------------------- 不加标记的判据
 
 
@@ -230,9 +248,10 @@ def test_citation_problem_blocks_the_verdict_and_the_signature(monkeypatch) -> N
                                "citation_checks": []}, ensure_ascii=False)
 
     problem = "dependencies 台账读不到（判据打桩）"
+    rel = _write_manuscript(tmp, sid, "1. 由定义直接得到。")
     monkeypatch.setattr(AVC, "_citation_material", lambda *_a, **_k: ([], problem))
     out = dict(AgentV(store, workspace_root=tmp, llm=_Seam()).verify_proof(
-        statement_id=sid) or {})
+        statement_id=sid, proof_manuscript=rel) or {})
     assert out.get("checked") is True, out.get("reason")
     assert out["citation_gate"]["problem"] == problem, out["citation_gate"]
     assert out["citation_gate"]["ok"] is False, out["citation_gate"]
@@ -259,7 +278,7 @@ def test_citation_problem_blocks_the_verdict_and_the_signature(monkeypatch) -> N
     # ---------------- 反真空：同一份夹具，problem 为空 ⇒ 这一签本来就签得住 ----------------
     monkeypatch.setattr(AVC, "_citation_material", lambda *_a, **_k: ([], ""))
     clean = dict(AgentV(store, workspace_root=tmp, llm=_Seam()).verify_proof(
-        statement_id=sid) or {})
+        statement_id=sid, proof_manuscript=rel) or {})
     assert clean.get("checked") is True, clean.get("reason")
     # 2026-10-29（业主口径：连续 3 次「没问题」才发签、签由 V 的秘书判定并落盘）：
     # 这里只跑了一次审校 ⇒ 结论是「成立」，但不许签上第 3 位；
@@ -314,7 +333,8 @@ def test_verify_proof_declares_every_key_of_its_success_branch() -> None:
                                "citation_checks": []}, ensure_ascii=False)
 
     data = dict(AgentV(store, workspace_root=tmp, llm=_Seam()).verify_proof(
-        statement_id=sid) or {})
+        statement_id=sid,
+        proof_manuscript=_write_manuscript(tmp, sid, "1. 由定义直接得到。")) or {})
     assert data.get("checked") is True, data.get("reason")
     declared = _declared(build_registry(store=store, workspace_root=tmp).registry,
                          "verify.verify_proof")

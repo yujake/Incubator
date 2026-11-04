@@ -1114,7 +1114,8 @@ _ROLES_V = ("V",)
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / "
             "bad_manuscript_path / manuscript_missing / manuscript_unreadable / "
-            "manuscript_has_no_proof_section / ledger_unwritable / ledger_row_lost —— "
+            "manuscript_has_no_proof_section / dependency_section_missing / "
+            "dependency_section_unreadable / ledger_unwritable / ledger_row_lost —— "
             # 2026-10-30（业主批准改 FC-27；E 那一笔）：这一句原本写「绝不拿『看不出来』
             # 冒充『审过了』」—— 而 V 从 2026-11-01 起只产两态（成立 / 有毛病），
             # 旧档那一格已经不存在。指向一个产不出的档，模型会以为自己的结论能落在那儿；

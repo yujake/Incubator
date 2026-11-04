@@ -223,11 +223,17 @@ def test_d_the_second_stage_gets_a_fresh_sign_and_flips_optimized(tmp_path):
     new_column = ER.proof_body_of(new_text)
     assert new_column != first_column, "第二阶段那一版与第一版逐字相同 ⇒ 这一条判据量不到替换"
 
-    # 在册那一路：同一份正文连判三转（门槛与 F 那一份同源）
+    # 在册那一路：必须带 e-proof 手稿（2026-11-04 甲：在册命题也要手稿），
+    # 同一份正文连判三转（门槛与 F 那一份同源）。命题行上的 canonical 还是第一版，
+    # 这一签盖的是稿里的新版 ⇒ 第 3 位不翻（`signed_bit3=False` 是诚实的：
+    # `body_gate=sha_mismatch`），签文件照旧颁发；B 收录新正文时按 sha 认领。
     got: dict = {}
-    for _i in range(VR.SIGN_STREAK_NEED):
-        got = env["v"].verify_proof(sid, proof_text=new_column)
-    assert got.get("signed_bit3") is True, got
+    with _submitted_by_e():
+        for _i in range(VR.SIGN_STREAK_NEED):
+            got = env["v"].verify_proof(sid, proof_manuscript=new_rel)
+    assert got.get("signed_bit3") is False, got
+    assert VS.sign_path(env["store"].root, VR.proof_sha(new_column)).is_file(), (
+        "在册这一档带稿送审之后签没有颁发")
 
     filed = _register(env, text=new_text, column=new_column, reason="我方推导（优化版）")
     assert filed.get("ok") is True, filed
@@ -288,18 +294,24 @@ def test_f_without_the_e_secretary_there_is_no_block_and_b_reads_no_manuscript_s
 
 # ============================================================ ⑦ 反真空：手稿是签的载体
 def test_g_without_the_manuscript_the_sign_has_no_carrier(tmp_path):
-    """⑦ 反真空：不点名手稿（只给证明栏）⇒ 退回 pending（老行为），稿上没有块。
+    """⑦ 反真空：不点名手稿（只给证明栏）⇒ 看过、没签；稿上没有块、也不落 pending 签行。
 
     这一条量的是"块不是凭空出现的"：V 认得出手稿的入口，才落得下块。同一份稿就在盘上、
     只是这一次送审没点名它 —— 块仍然不会出现（V 不替送审方去盘上猜一份稿）。
+    2026-11-04（甲）之后这一档更严：没有稿就不签发，连"按对象 sha 可认领"的 pending
+    签行也不落（那一行会被 B 当成第三方签）。
     """
     env = _env(tmp_path)
     rel, _before = _manuscript(env)
     with _submitted_by_e():
         got = env["v"].verify_proof(proof_text=_column(env))
     assert got.get("checked") is True, got
-    # 没有点名稿 ⇒ 走 pending 那一支（老行为）
-    assert got.get("kind") == "numeric_evidence_unregistered", got
+    # 没有点名稿 ⇒ 看过、没签（不落签、不落 pending、不落块）
+    assert got.get("kind") == "numeric_evidence_reviewed_not_signed", got
+    assert got.get("signed_bit3") is False, got
+    pend = pathlib.Path(env["store"].root) / "verifications" / "pending"
+    assert not (pend.is_dir() and list(pend.glob("*.jsonl"))), (
+        "没有手稿的一档落了 pending 签行 —— 那一行按对象 sha 可认领，会被当成第三方签")
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     assert VS.manuscript_sign_reading(now)["found"] is False, now
     # 迟到的那一份稿再点名送审 ⇒ 这时候才落块（同一份稿、同一条入口）

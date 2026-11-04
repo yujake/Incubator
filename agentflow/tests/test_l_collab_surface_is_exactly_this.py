@@ -549,13 +549,22 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
 
     bad_replies = [_verdict_json("有毛病", step=LINKS + 1)] * int(VR.SIGN_STREAK_NEED)
     v = _v_agent(st, ws, bad_replies)
-    signed1 = v.verify_proof(sid, proof_text=old)
+    # 2026-11-04（甲）：在册命题送审必须带手稿。旧稿先落成按号命名的那一份
+    # （空依赖表也是声明）；下一段再把同一路径改写成新稿，走"改稿重签"。
+    man_rel = _DS.manuscript_relpath(statement_id=sid)
+    assert man_rel, sid
+    old_man = ("# F 的证明手稿：加零不改变自然数\n\n"
+               f"- 命题号：stmt:{sid}\n\n"
+               f"## 命题\n\n{CLAIM}\n\n"
+               f"## 证明\n\n{old}\n\n" + _DS.render_dependency_section([]))
+    (ws / man_rel).parent.mkdir(parents=True, exist_ok=True)
+    (ws / man_rel).write_text(old_man, encoding="utf-8")
+    signed1 = v.verify_proof(sid, proof_manuscript=man_rel)
     assert signed1.get("checked") is True, signed1
     assert signed1.get("verdict") == "有毛病", signed1
 
     # ---- 新稿先过 V：一次调用连判三转（3 转「成立」⇒ 签块盖回手稿）
     new = _proof_text(LINKS + 1)
-    man_rel = _DS.manuscript_relpath(statement_id=sid)
     assert man_rel, sid
     man_text = ("# F 的证明手稿：加零不改变自然数\n\n"
                 "- 命题号：stmt:（还没落号）\n"
