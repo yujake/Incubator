@@ -85,10 +85,10 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "论证落 `statements` 失败（`_proof_outlet` 的事务里抛了，含 store 写入期那道"
         "「假 proof_review 拒收」）：这是「写不进表」，不是「这次调用不成立」——"
         "同一条纪律：F 的论证没有出口要如实说，而不是把参数问题推给调用方",
-    ("agent_f/core.py", "statement_handoff_failed"):
-        "把证明交给 B 的登记那一笔时抛了（`_hand_proof_to_b` 里 `B.register_statement` "
-        "的异常，含 B 的秘书不可达）：这是「这一跳没做成」，不是「F 的参数不对」⇒ "
-        "执行失败，不许冒充一次拒绝",
+    # 2026-11-04：上面那个键在盘上出现两处（同一 `(模块, kind)` 只能写一条理由 ⇒
+    # 处数记进 `_REPEAT_COUNTS`）。这一处是把证明交给 B 的登记那一笔时抛了
+    # （`_hand_proof_to_b` 里 `B.register_statement` 的异常，含 B 的秘书不可达）：这是
+    # 「这一跳没做成」，不是「F 的参数不对」⇒ 执行失败，不许冒充一次拒绝。
     ("agent_f/core.py", "statement_handoff_refused"):
         "B 的登记按它自己的判据拒了这一笔（`must_start_as_conjecture` / "
         "`dependency_section_*` 等）：拒绝是兜底方给的，不是 F 的调用不成立 ⇒ "
@@ -163,6 +163,13 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 与 `manuscript`（`reports/e-proof-<号>.md` 没落，2026-11-03 E 的手稿读数落地时
     # 成为第二处）。两处 kind 都是空串，所以靠这张表记处数。
     ("agent_e/run_experiment.py", ""): 2,
+    # 2026-11-04（件 A 那一批补登）：同一 `(模块, kind)` 在盘上是两处 ——
+    # `_proof_outlet` 落 `statements` 失败、`_hand_proof_to_b` 把证明交给 B 时抛。
+    # 登记表只能给这个键写一条理由（两处同属「这一跳没做成」），处数记在这里。
+    ("agent_f/core.py", "statement_handoff_failed"): 2,
+    # 2026-11-04（同上）：`agent_d/write_report.py` 的 `rec` 是逐行记录的读数格，
+    # 盘上有两处 —— `statement` 那一张与 `experiment` 那一张；两处 kind 都是空串。
+    ("agent_d/write_report.py", ""): 2,
 }
 
 
