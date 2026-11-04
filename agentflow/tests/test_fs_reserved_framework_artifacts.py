@@ -15,7 +15,7 @@ D 手写 reports/RESEARCH.md（没有携带单）
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
 | a F 写 `reports/f-proof-x.md` | 受控拒绝 `reserved_framework_artifact`，盘上零写入 | 改前写得进去 |
-| b D 写 `reports/RESEARCH.md` / `reports/0001-research.md` | 同上 | 改前写得进去 |
+| b D 写 `reports/RESEARCH.md` / `reports/0001-research.md` | 2026-11-04 补充裁定：`reports/RESEARCH.md` 是 D 的研究手稿（既有交付物）⇒ 允许；`reports/0001-research.md`（`write_report` 渲染的每问题工作稿，携带单在同一处生成）仍拒。D 在 RESEARCH.md 里自己写 `## 证明` 节那一档由 `tests/test_d_does_not_land_the_proof.py` 钉 | 改前两条都拒（2026-11-01 审计 D-08 的口径）；改后期望如上 |
 | c F 写 `notes/x.md`（正控） | 放行 —— 保留表不许扩成"谁都不许写文件" | —— |
 | d 反真空 | 把保留表打桩成空 ⇒ a/b 必红（于是 a/b 的绿来自那张表） | —— |
 | e `fs.edit` 同一条闸 | 改正文等于绕过同一条保留表 ⇒ 也拒（且盘上那一份逐字未动） | 改前改得进去 |
@@ -24,13 +24,22 @@ D 手写 reports/RESEARCH.md（没有携带单）
 | m-c M 写 `notes/m-plan.md` / `reports/m-review.md`（正控） | 放行 —— 别把主控的正常产出也堵了 | —— |
 | m-d 反真空 | 把表里 M 那三行摘掉 ⇒ m-a/m-b 必红 | —— |
 | n-a F 写 `notes/f-proof-x.md`（任何目录） | 拒 `reserved_framework_artifact`、零写入 | 改前写得进去：真机 `projects/mp3-r2/notes/f-proof-S1-stmt000008.md` 7595 B / 54 行就是这么进盘的 |
-| n-b `reports/` 那一档不回退 | 拒（与 a/b 同一个受控码）；D 的 `notes/RESEARCH.md` / `notes/0001-research.md` 也在同一道闸下 | —— |
+| n-b `reports/` 那一档不回退 | 拒（与 a/b 同一个受控码）；D 的 `notes/0001-research.md` 也在同一道闸下。2026-11-04 补充裁定：D 的 `RESEARCH.md`（研究手稿）在哪个目录都允许 —— 那不是"框架渲染的产物"，内容闸只看里面有没有自己写的 `## 证明` 节 | —— |
 | n-c `notes/x.md`（正控） | 放行 —— "任何目录"不等于"任何文件名" | —— |
 | n-d 反真空 | 把文件名规则打桩成"一条都不命中" ⇒ n-a/n-b 必红（于是它们的绿来自文件名规则，不是别的路径判据） | —— |
 
-表上三个角色各有各的理由（F 写内容 / D 交研究稿 / M 是主控，三类都不许手写框架产物）；
-G/L 的排版产物与 M 的其它报告不在表上（c、m-c 与"G 写 reports/ 下的 `f-proof-*.md`
-放行"一起钉住"别扩大"）。
+表上三个角色各有各的理由（F 写证明内容 / D 写研究手稿但不落证明稿 / M 是主控，
+三类都不许手写框架渲染的产物）；G/L 的排版产物与 M 的其它报告不在表上（c、m-c 与
+"G 写 reports/ 下的 `f-proof-*.md` 放行"一起钉住"别扩大"）。
+
+## 2026-11-04（补充裁定）：D 的研究手稿回到"既有形式"
+
+改前（2026-11-01 审计 D-08）D 的 `reports/RESEARCH.md` 与 `*-research.md` 一起被拒；
+业主 2026-11-04 的补充裁定把它分开：研究手稿是 D 的既有交付物（收录 F/E 侧成果、
+交 B 时随稿带携带单），而证明的落稿与拿签归 F。于是本表的 D 行收成两类：
+证明稿形状（`D_PROOF_PATH_RULES`）与每问题工作稿（`suffix:-research.md`，携带单由
+`write_report` 生成）；研究手稿那一档改由内容闸判（自己写的 `## 证明` 节才拒），
+判据在 `tests/test_d_does_not_land_the_proof.py`。
 
 ## 2026-10-27（D6）：目录不再是豁免条件
 改前那条闸要求"路径在 `reports/` 下 且 规则命中文件名"。真机发现只要换个目录（`notes/`）
@@ -87,14 +96,30 @@ def test_a_f_cannot_hand_write_his_proof_manuscript(tmp_path: pathlib.Path) -> N
         assert not (root / rel).exists(), f"{rel} 被拒了却仍落盘"
 
 
-def test_b_d_cannot_hand_write_his_research_manuscript(tmp_path: pathlib.Path) -> None:
-    """b 判据：D 写研究报告那几条命名 ⇒ 拒（`RESEARCH.md` 与 `*-research.md` 两种都在表上）。"""
+def test_b_d_can_write_the_research_manuscript_but_not_the_working_paper(
+        tmp_path: pathlib.Path) -> None:
+    """b 判据：D 的研究手稿（`reports/RESEARCH.md`）可写；每问题工作稿仍拒。
+
+    2026-11-01 审计 D-08 曾按「`RESEARCH.md` 没有渲染器」把两条都收进保留表；
+    2026-11-04 的补充裁定把它翻了回来（「D 侧落的研究手稿就是既有指定形式的那种
+    （收录 F、E 侧成果以及其他一些东西）」）⇒ 研究手稿是 D 的既有交付物。
+    仍拒的是 `reports/000001-research.md`：它由 `D.write_report` 渲染，携带单
+    （F 的证明稿 + 文件 sha256）就在同一处生成，手写它等于把携带单跳过。
+
+    研究手稿里"自己写一节 `## 证明`"那一档在
+    `tests/test_d_does_not_land_the_proof.py::test_a_*` 里（内容闸，不在这张路径表上）。
+    """
     root, reg = _ws(tmp_path)
-    for rel in ("reports/RESEARCH.md", "reports/000001-research.md"):
-        res = _call(reg, "D", "fs.write", path=rel, content="手写的研究报告")
-        assert res.ok is False, (rel, res)
-        assert res.meta.get("kind") == KIND, (rel, res.meta)
-        assert not (root / rel).exists(), f"{rel} 被拒了却仍落盘"
+    # 既有交付物：允许（改前的期望是"拒"；见 docstring 里那条 2026-11-04 的翻转）
+    res = _call(reg, "D", "fs.write", path="reports/RESEARCH.md", content="手写的研究手稿")
+    assert res.ok is True, ("D 的研究手稿 `reports/RESEARCH.md` 被拒了 —— 它是既有交付物", res)
+    assert (root / "reports" / "RESEARCH.md").is_file()
+
+    # 工作稿仍走 write_report（携带单不许被手写跳过）
+    res = _call(reg, "D", "fs.write", path="reports/000001-research.md", content="手写的每问题工作稿")
+    assert res.ok is False, res
+    assert res.meta.get("kind") == KIND, res.meta
+    assert not (root / "reports" / "000001-research.md").exists(), "被拒了却仍落盘"
 
 
 def test_c_other_paths_are_not_touched(tmp_path: pathlib.Path) -> None:
@@ -263,23 +288,31 @@ def test_n_a_the_proof_manuscript_is_refused_outside_reports(tmp_path: pathlib.P
 
 
 def test_n_b_the_reports_directory_still_refuses(tmp_path: pathlib.Path) -> None:
-    """n-b 判据：`reports/` 那一路一个字都没放宽（既有行为不回退）。
+    """n-b 判据：`reports/` 那一路（证明稿 + 每问题工作稿）一个字都没放宽。
 
-    两件事一起钉：① F 写 `reports/f-proof-x.md` 仍拒、D 写 `reports/RESEARCH.md` 仍拒
-    （与 a/b 同一个受控码）；② D 的两种命名换到 `notes/` 也照样拒 —— 目录不再是豁免
-    条件这条规则对三行角色一视同仁，不是只给 F 开了一格。
+    三件事一起钉：① F 写 `reports/f-proof-x.md` 仍拒；② D 的每问题工作稿
+    （`reports/…-research.md` / `notes/…-research.md`）仍拒 —— 它由 `write_report`
+    渲染、携带单在同一处生成；③ M 的证明稿仍拒（目录不是豁免条件）。
+
+    2026-11-04 补充裁定之后，D 的研究手稿（`RESEARCH.md` 这一族名字）不再受这张
+    路径表管：它在 `reports/` 与 `notes/` 都允许（正控在下面最后一段）—— 改前它也在
+    这一批"应拒"的清单里，那是 2026-11-01 的口径；见 `test_b_*` 的 docstring。
     """
     root, reg = _ws(tmp_path)
     for role, rel in (("F", "reports/f-proof-x.md"),
-                      ("D", "reports/RESEARCH.md"),
                       ("D", "reports/000001-research.md"),
-                      ("D", "notes/RESEARCH.md"),
                       ("D", "notes/000001-research.md"),
                       ("M", "notes/f-proof-cli.md")):
         res = _call(reg, role, "fs.write", path=rel, content="手写的框架产物")
         assert res.ok is False, (role, rel, res)
         assert res.meta.get("kind") == KIND, (role, rel, res.meta)
         assert not (root / rel).exists(), f"{role} 写 {rel} 被拒了却仍落盘"
+
+    # 正控（2026-11-04 补充裁定）：D 的研究手稿换个目录也允许 —— 它不是"框架渲染的产物"，
+    # 内容闸只看里面有没有 D 自己写的 `## 证明` 节（不在本文件的射程里）。
+    for rel in ("notes/RESEARCH.md", "reports/RESEARCH.md"):
+        res = _call(reg, "D", "fs.write", path=rel, content="D 的研究手稿（七节）")
+        assert res.ok is True, (f"D 的研究手稿 {rel} 被误伤了", res)
 
 
 def test_n_c_notes_are_still_writable_for_other_names(tmp_path: pathlib.Path) -> None:

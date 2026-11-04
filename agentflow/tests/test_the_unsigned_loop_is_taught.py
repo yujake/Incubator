@@ -10,7 +10,7 @@
 | u2 | `vreceipts` 的重送义务板项：幂等键 `v-resubmit@<命题号>@<proof_sha256>`、`expects="work"`、关闭条件是更新的干净「成立」行（`settle_resubmitted`），不是 ack | `specs/f.py` 与 `_f_skills()` 全文 `resubmit` 0 次 |
 | u3 | `verify.verify_proof` 的必填是 `statement_id`，只读读数的键名是 `readonly_facts` | F 只说"唤起 V 的 verify_proof，把 proof_text 与只读读数交过去" —— 一个必填键都没写 |
 | u4 | 手稿由 `agent_f/manuscript.py::proof_manuscript` 写、`## 依赖` 由 `dependency_rows` 按 `steps[].cites` 渲染；`fs` 保留表拒 F 写 `f-proof-*` | F 教「手稿里必须有一节 `## 依赖` ……引用一条就写进这一节」 |
-| u5 | 项目级 `reports/RESEARCH.md` 被 `fs` 保留表拒（`contains:RESEARCH`）、且没有渲染器；D 的真落点是 `research.write_note`（按问题追加）与 `D.write_report` 的工作稿 | D 教「先 fs.read 读回来，再 fs.write 覆盖或 fs.edit 定点改」 |
+| u5 | 项目级 `reports/RESEARCH.md` 是 D 的研究手稿（七节、先读后改；2026-11-04 的补充裁定把它从"保留面"翻回既有交付物）；自己写的 `## 证明` 节才被 `fs` 拒 | D 教「`RESEARCH.md` 是保留面、别手写」 |
 
 每条判据都同时核渲染后的提示词与该角色的手册：前者是每一趟真正读到的，后者是它按需翻的
 那一本；只补一处等于换个地方继续不教。
@@ -134,14 +134,27 @@ def test_f_is_taught_to_hand_cites_not_the_dependency_section() -> None:
     assert not bad, "F 的依赖面仍教了做不到的写法：\n  " + "\n  ".join(bad)
 
 
-def test_d_is_not_taught_to_hand_write_the_research_manuscript() -> None:
-    """u5：`reports/RESEARCH.md` 是保留面；D 的记忆落点是 `research.write_note`。"""
+def test_d_is_taught_the_research_manuscript_and_that_proofs_belong_to_f() -> None:
+    """u5：`reports/RESEARCH.md` 是 D 的研究手稿（先读后改、收录 F/E 成果）；禁区是自写证明。
+
+    2026-11-04 的补充裁定把 u5 的口径翻了过来：改前（2026-11-01 审计 D-08）D 被教
+    「`reports/RESEARCH.md` 是框架保留面、别手写」；现在它是 D 的既有交付物
+    （收录 F 的证明手稿与 E 的实验成果，交 B 时随稿带携带单），所以：
+      ① 要教"七节 / 先读后改"，不许再把"保留面 / 别手写"教回去；
+      ② 禁区改成"自己新写 `## 证明` 节"（`reserved_framework_artifact` 拒的那一档）；
+      ③ 记忆的另一处落点 `research.write_note` 仍在。
+    """
     bad: list[str] = []
     for label, text in (("prompt", _prompt("D")), ("manual", _manual("D"))):
-        if "先 `fs.read` 读回来，再 `fs.write` 覆盖或 `fs.edit` 定点改" in text:
-            bad.append(f"D/{label} 还在教先读后改 `reports/RESEARCH.md` —— 那是保留面，写了会被拒")
+        if "先读后改" not in text:
+            bad.append(f"D/{label} 没教「`reports/RESEARCH.md` 先读后改」")
         if "research.write_note" not in text:
-            bad.append(f"D/{label} 没点名真落点 `research.write_note`")
+            bad.append(f"D/{label} 没点名另一处记忆落点 `research.write_note`")
+        if "## 证明" not in text:
+            bad.append(f"D/{label} 没说清禁区是「自己新写 `## 证明` 节」")
         if "reserved_framework_artifact" not in text:
-            bad.append(f"D/{label} 没说手写 `RESEARCH.md` 会被 `reserved_framework_artifact` 拒")
-    assert not bad, "D 的手稿落点仍教了做不到的写法：\n  " + "\n  ".join(bad)
+            bad.append(f"D/{label} 没说那一档会被 `reserved_framework_artifact` 拒")
+        for stale in ("RESEARCH.md 是框架保留面", "别去手写它"):
+            if stale in text:
+                bad.append(f"D/{label} 把 2026-11-04 已翻转的旧口径教回来了：{stale!r}")
+    assert not bad, "D 的研究手稿落点与证明禁区没教对：\n  " + "\n  ".join(bad)

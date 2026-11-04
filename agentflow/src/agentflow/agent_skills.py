@@ -2742,6 +2742,25 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
   V 只能由 **F** 派（`F → V`）。所以"要 V 核一遍"这句话的落法是
   **把这件事写进给 F 的派活**，不是自己去派 V（派了会被 `forbidden_edge` 拒）。
 
+## 三步循环：想法 → 派 F → 读回 → 新想法（业主 2026-11-04 裁定）
+
+```text
+D 的想法（猜想 / 思路 / 依赖面参考）
+   ↓  派 F：`F.create_plan`（problem_key 用 conjecture_id，subgoals 一到三个可判定的）
+F 攻坚（`F.step` 推进；证明正文由 F 的手稿承载）
+   ↓  同一趟读回 F 的结果（message / `F.status` / 手稿路径）
+D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再派 F
+```
+
+- **你可以给「证明思路」与「依赖面参考」**：哪些引理要引、按什么顺序、用哪条已证命题
+  （`stmt:` 号）—— 写进给 F 的派活，或写进 `F.create_plan` 的 `problem` / `subgoals`。
+- **证明的落稿与拿签不属于你**：`reports/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；
+  你的手稿 `reports/RESEARCH.md` 是**收录者/引用者** —— 引用 F 的
+  `reports/f-proof-<号>.md`（或带它的 sha256），不自己写一节 `## 证明`。
+- **`out/proofs/` 不是证明稿的落点**：它是攻坚过程记录，可以写 `## 思路` /
+  `## 依赖面参考`，**不能带 `## 证明` 节**（带这一节的写入会被 `reserved_framework_artifact`
+  拒，detail 会说"要落稿就派 F"）。
+
 ## 有界与归因
 
 - 每一轮的产出要落台账（`research_questions` / `conjectures` / `experiments`）；
@@ -2794,7 +2813,7 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
         Skill(
             slug="手稿-研究记忆就这一份",
             title="研究手稿：落点是 write_report 渲染的那份工作稿",
-            summary="研究记忆落在 research.write_note（按问题追加、七节）与 write_report 的工作稿；RESEARCH.md 是保留面、别手写",
+            summary="研究记忆落在 reports/RESEARCH.md（七节、先读后改，收录 F/E 成果）与 research.write_note、write_report 的工作稿；证明的落稿与拿签归 F",
             when="一趟研究开始（先读它）或收尾（更新它）的时候；也是别人把料交给你的时候",
             actions=("D.write_report", "D.propose_question", "D.register_conjecture"),
             tools=("fs.read", "fs.write", "fs.edit", "table.get"),
@@ -2812,13 +2831,17 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
 5. **未解问题**：还开着的 `research_questions` / 缺口清单；
 6. **下一步**：如果明天有人接手，他该先动哪一件。
 
-落点是两处你真能写的地方：① `research.write_note`（按研究问题**追加**一条笔记 —— 追加
-而非覆盖，七节逐条写进去）；② `D.write_report` 渲染的 `reports/<qid>-research.md`
-（一份问题一份的工作稿，结构由框架渲染）。
+落点是三处你真能写的地方：① 项目级 `reports/RESEARCH.md`（**七节、先读后改**：先 `fs.read`
+看现在这一版，再用 `fs.edit` 定点改或 `fs.write(overwrite=true)` 整份更新；它是**收录者/引用者**，
+把 F 的证明手稿（`reports/f-proof-<号>.md`）与 E 的实验成果收进来、带上引用）；② `research.write_note`
+（按研究问题**追加**一条笔记 —— 追加而非覆盖，七节逐条写进去）；③ `D.write_report` 渲染的
+`reports/<qid>-research.md`（一份问题一份的工作稿，结构由框架渲染；**携带单也在同一处生成** ——
+交 B 时 F 的证明稿随这张单一起走）。
 
-项目级那份 `reports/RESEARCH.md` 是**框架保留面**：`fs.write` / `fs.edit` 对它是受控拒绝
-（`reserved_framework_artifact`，拒信逐字说"这一份是框架渲染的产物，不许手写"）——
-**不要去手写它**，撞上去只是白跑一趟。
+**证明的落稿与拿签不属于你**（业主 2026-11-04）：`reports/RESEARCH.md` 里出现你自己新写的
+`## 证明` 节会被 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）—— 那一节只许是
+引用/转载 F 的稿（点名 `reports/f-proof-<号>.md` 或带它的 sha256）。`out/proofs/` 是攻坚过程记录，
+可以写 `## 思路` / `## 依赖面参考`，同样不能带 `## 证明` 节；要落稿就派 F。
 
 ## 成果概述那一段：每句声称都要有落点
 

@@ -304,6 +304,19 @@ RESERVED_MAPPING_MESSAGE = (
 #: :func:`_reserved_artifact` 与 D6 那段注释）。
 _RESERVED_DIR = "reports"
 
+#: D 的"证明稿形状"规则（2026-11-04 业主裁定：证明的落稿与拿签不属于 D）。
+#:
+#: 为什么单列成一个常量：`RESERVED_ARTIFACT_TABLE` 里那两行由它展开（判据仍只有那张表），
+#: 而 :func:`_reserved_refusal` 要按"命中的是哪一行"换拒信 —— 证明稿的拒信必须指路
+#: 「要落稿就派 F」，研究稿的拒信指路「走 D 的交付动作」。两处字面量只在这里写一次。
+#: 名字是判据、目录不是（与 2026-10-27 D6 同一口径）：`f-proof-*` 与 `*-proof.md`
+#: 换个目录仍然是 F 的框架产物。
+D_PROOF_PATH_RULES: tuple[str, ...] = ("prefix:f-proof-", "suffix:-proof.md")
+
+#: D 的攻坚过程记录目录（2026-11-04 裁定）：可以写 `## 思路` / `## 依赖面参考`，
+#: 不能带 `## 证明` 节 —— 那不是"过程记录"，那是一份可提交的证明稿。
+D_ATTACK_RECORD_DIR = "out/proofs/"
+
 #: 保留路径表：`(角色, 规则)` 逐行，判据的唯一落点。规则四档，每档只比较一个字符串：
 #:
 #: - `exact:`   整条相等（路径级：挡目录本身，递归删与整棵移动走的就是这一档）；
@@ -348,7 +361,18 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 产物换个名字就绕过去了。`suffix:-proof.md` 把"证明稿"这个形状收进来：F / M 的
     # 框架证明稿不许手写（`reports/` 只是推荐落点，名字才是判据）。
     ("F", "suffix:-proof.md"),
-    ("D", "contains:RESEARCH"),
+    # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
+    # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
+    # 然后再提出新的想法」）：D 的两类框架产物分开 ——
+    #   · 证明稿（下面两行）不归 D 落：名字是 F 的证明稿形状，换目录也照拒；
+    #   · 研究手稿（`reports/RESEARCH.md`）是 D 的既有交付物，不在这张表里：
+    #     它由内容闸管（`_d_proof_body_refusal`）—— 里面出现 D 自己写的 `## 证明` 节才拒。
+    #   改前这里有一行 `("D", "contains:RESEARCH")`（2026-11-01 审计 D-08 立的"RESEARCH.md
+    #   没有渲染器、别手写"）；2026-11-04 的补充裁定把它翻了回来：D 的研究手稿就是既有
+    #   指定形式（收录 F/E 侧成果），所以"名字里带 RESEARCH"不再等于"不许 D 写"。
+    *[("D", rule) for rule in D_PROOF_PATH_RULES],
+    # 每问题工作稿仍由 `D.write_report` 渲染（携带单在同一处生成）：手写 `*-research.md`
+    # 等于把携带单跳过，B 那一侧就会读到"没有可携带的稿"（与"自足"同形）。
     ("D", "suffix:-research.md"),
     ("M", "prefix:f-proof-"),
     ("M", "suffix:-proof.md"),
@@ -365,6 +389,30 @@ RESERVED_ARTIFACT_MESSAGE = (
     "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
     "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
     f"；推荐落点是 {_RESERVED_DIR}/，但换到别的目录同样受这一道闸管"
+)
+
+#: D 的证明稿路径拒信（2026-11-04）：指路必须具体到"派 F"，而不是"走你的渲染动作"——
+#: D 没有渲染证明稿的动作，它有的是"派 F 落稿、由 F 带 V 的签"。
+D_PROOF_LANDING_MESSAGE = (
+    "拒绝 {path}：证明的落稿与拿签不属于 D —— 要落稿就派 F："
+    "用 `F.create_plan` 立项（`problem_key` 用猜想的 `conjecture_id`）、`F.step` 推进，"
+    "由 F 落成 `reports/f-proof-<号>.md` 并带 V 的签。"
+    "D 只提供想法（`## 思路` / `## 依赖面参考`）与收获（数值实验结果、理论攻坚的成果）。"
+)
+
+#: `out/proofs/` 那一档的拒信（2026-11-04）：它是攻坚过程记录，不是证明稿的落点。
+D_ATTACK_RECORD_MESSAGE = (
+    "拒绝 {path}：`out/proofs/` 是攻坚过程记录，不是证明稿的落点 —— 这一份里有一节 "
+    "`## 证明`，那是一份可提交的证明稿。要落稿就派 F（`F.create_plan` → `F.step`，"
+    "由它落 `reports/f-proof-<号>.md` 并带 V 的签）；这里只写 `## 思路` / `## 依赖面参考`。"
+)
+
+#: 研究手稿里"自己写的 `## 证明` 节"的拒信（2026-11-04 补充裁定：D 的研究手稿是收录者/
+#: 引用者）。detail 逐字给出去处：引用 F 的稿或转载它的 sha，不要自己落稿。
+D_RESEARCH_PROOF_MESSAGE = (
+    "拒绝 {path}：D 的研究手稿是收录者/引用者，不是证明的作者 —— 这一份里有一节 "
+    "`## 证明`，而它既没有引用盘上 F 的 `reports/f-proof-<号>.md`，也没有转载那份稿的 "
+    "sha256。证明要 F 落稿拿签，你只引用它的 `reports/f-proof-<号>.md`（或带 sha）。"
 )
 
 #: 受控码：这一笔写的是框架账本区（表 / 事件日志 / 锁），不是角色产物。
@@ -461,6 +509,29 @@ def _reserved_ledger(rel: str) -> bool:
                for who, rule in RESERVED_ARTIFACT_TABLE)
 
 
+def _reserved_artifact_rule(rel: str, role: str) -> str | None:
+    """`rel` 命中的那条手稿规则（没命中 ⇒ None）；判据与 :func:`_reserved_artifact` 同一份。
+
+    多返回一个"是哪一行"是为了分档拒信：D 的证明稿（`D_PROOF_PATH_RULES`）必须指路
+    "派 F"，研究稿则指路"走 D 的交付动作"。规则本身仍只有 `RESERVED_ARTIFACT_TABLE`
+    一处 —— 这里不另写判断，只把命中的字符串带出来。
+    """
+    owner = str(role or "")
+    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
+    if not rules:
+        return None
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts:
+        return None
+    name = parts[-1]
+    if not name.casefold().endswith(".md"):
+        return None
+    for rule in rules:
+        if _rule_matches(rule, name):
+            return rule
+    return None
+
+
 def _reserved_artifact(rel: str, role: str) -> bool:
     """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架手稿。
 
@@ -476,26 +547,105 @@ def _reserved_artifact(rel: str, role: str) -> bool:
     的盘）。判据改成只看文件名之后，同一个名字在哪个目录下都是同一份框架产物；`reports/`
     只是推荐落点（见 `_RESERVED_DIR`），不是豁免条件。
     """
-    owner = str(role or "")
-    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
-    if not rules:
+    return _reserved_artifact_rule(rel, role) is not None
+
+
+#: 一份研究手稿里"引用/转载 F 的稿"的两种写法（只认盘上真有的那几份）。
+_F_MANUSCRIPT_REF = re.compile(r"reports[/\\]f-proof-[A-Za-z0-9_.\-]+\.md", re.IGNORECASE)
+_SHA256_HEX = re.compile(r"\b[0-9a-f]{64}\b", re.IGNORECASE)
+
+
+def _has_proof_section(text: Any) -> bool:
+    """这一段正文里有没有一节独立的 `## 证明` 标题（逐字与 `depsection` 同源）。
+
+    只认整行就是那个标题：`## 证明思路` / `## 证明（草稿）` 不是证明正文那一节，
+    把 `## 思路` 误判成证明稿会让这条闸变成噪音（而噪音会让判据失去作用）。
+    逐行比而不是正则：`re.search` 会被 R010 的网络标记表按末段相等命中（那是一条
+    已登记的假阳性形态），这里不需要正则就不引入它。
+    """
+    from ..depsection import SECTION_PROOF  # 延迟 import：本模块被 tools 包在导入期拉起
+
+    heading = str(SECTION_PROOF or "").strip()
+    if not heading:
         return False
+    return any(line.strip() == heading for line in str(text or "").splitlines())
+
+
+def _is_research_manuscript(rel: str) -> bool:
+    """`rel` 是不是 D 的研究手稿（`RESEARCH.md` 这一族名字；2026-11-04 补充裁定）。"""
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
-    if not parts:
-        return False
-    name = parts[-1]
-    if not name.casefold().endswith(".md"):
-        return False
-    return any(_rule_matches(rule, name) for rule in rules)
+    name = parts[-1] if parts else ""
+    return name.casefold().endswith(".md") and "research" in name.casefold()
 
 
-def _reserved_refusal(rel: str, role: str) -> ToolResult | None:
+def _cites_an_f_manuscript(root: Path | None, content: Any) -> bool:
+    """内容有没有引用盘上 F 的证明稿：点名它的路径，或带上那份文件的 sha256。
+
+    三态纪律：`root` 拿不到（直接调 handler 的旧入口）⇒ 判"没有引用"而不是猜有；
+    目录读不出来 ⇒ 也判"没有引用" —— 这条闸只在"能证明这是引用"时放行。
+    """
+    if root is None:
+        return False
+    text = str(content or "")
+    named = {m.group(0).replace("\\", "/").casefold() for m in _F_MANUSCRIPT_REF.finditer(text)}
+    shas = {m.group(0).casefold() for m in _SHA256_HEX.finditer(text)}
+    if not named and not shas:
+        return False
+    directory = Path(root) / _RESERVED_DIR
+    try:
+        candidates = sorted(directory.glob("f-proof-*.md")) if directory.is_dir() else []
+    except OSError:  # noqa: BLE001 —— 读不到目录 = 判不出"这是引用"，按不放行处理
+        return False
+    for candidate in candidates:
+        if f"{_RESERVED_DIR}/{candidate.name}".casefold() in named:
+            return True
+        if not shas:
+            continue
+        try:
+            digest = hashlib.sha256(candidate.read_bytes()).hexdigest().casefold()
+        except OSError:  # noqa: BLE001 —— 这一份读不出来不影响别的候选
+            continue
+        if digest in shas:
+            return True
+    return False
+
+
+def _d_proof_body_refusal(rel: str, role: str, content: Any,
+                          root: Path | None) -> ToolResult | None:
+    """D 的写入里"这一节是可提交的证明稿"的受控拒（2026-11-04 业主裁定）。
+
+    只对角色 D 生效，两档：
+      · `out/proofs/` 下：任何 `## 证明` 节都拒 —— 那是攻坚过程记录，不是落稿点；
+      · 研究手稿（`reports/RESEARCH.md` 这一族）：只有当那一节不是引用/转载 F 的稿
+        时才拒（引用者可以引，作者这一位不属于 D）。
+    返回值是 :func:`fail` 的结果（不在这一档 ⇒ None）。
+    """
+    if str(role or "") != "D" or content is None:
+        return None
+    if not _has_proof_section(content):
+        return None
+    low = str(rel or "").replace("\\", "/").casefold()
+    if low.startswith(D_ATTACK_RECORD_DIR):
+        return fail(D_ATTACK_RECORD_MESSAGE.format(path=rel), path=rel,
+                    kind=RESERVED_ARTIFACT_KIND, role="D")
+    if _is_research_manuscript(rel) and not _cites_an_f_manuscript(root, content):
+        return fail(D_RESEARCH_PROOF_MESSAGE.format(path=rel), path=rel,
+                    kind=RESERVED_ARTIFACT_KIND, role="D")
+    return None
+
+
+def _reserved_refusal(rel: str, role: str, content: Any = None,
+                      root: Path | None = None) -> ToolResult | None:
     """保留路径的统一拒绝（不在保留表里 ⇒ None，调用方照旧往下走）。
 
     这一处是"保留"的唯一结论：四个写口（`fs.write` / `fs.edit` / `fs.delete` /
     `fs.move`）都只调它，接入点只决定"在哪一步拒"（越早越好，且必须在任何写入、
     删除、改名之前）。先账本区、后手稿：账本区的拒信不提任何去处（模型对 `data/`
     没有合法正路），手稿的拒信仍然指向各自的渲染动作。
+
+    `content` / `root`（2026-11-04）：D 的证明稿那一档要按内容判（`## 证明` 节）与
+    按盘上 F 的稿判"是不是引用"。写口在拿到"将要写进去的那一段"之后传进来；`fs.delete` /
+    `fs.move` 不传（它们不产生新正文，路径形状那一半照样生效）。
     """
     if _reserved_artifact_path(rel):
         # 路径级的框架渲染产物（论文对应表三份）：全角色生效，拒信指向唯一写口。
@@ -508,12 +658,16 @@ def _reserved_refusal(rel: str, role: str) -> ToolResult | None:
             RESERVED_LEDGER_MESSAGE.format(path=rel),
             path=rel, kind=RESERVED_LEDGER_KIND,
         )
-    if not _reserved_artifact(rel, role):
-        return None
-    return fail(
-        RESERVED_ARTIFACT_MESSAGE,
-        path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
-    )
+    rule = _reserved_artifact_rule(rel, role)
+    if rule is not None:
+        if str(role or "") == "D" and rule in D_PROOF_PATH_RULES:
+            return fail(D_PROOF_LANDING_MESSAGE.format(path=rel), path=rel,
+                        kind=RESERVED_ARTIFACT_KIND, role="D")
+        return fail(
+            RESERVED_ARTIFACT_MESSAGE,
+            path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
+        )
+    return _d_proof_body_refusal(rel, role, content, root)
 
 
 def _rel(ctx: FsContext, path: Path) -> str:
@@ -951,7 +1105,9 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     # 保留路径闸在最前面（零写入：连"已存在"那条分支都不该先给它）：
     # 框架账本区（data/ / locks/ / events.jsonl）与框架渲染的手稿（F 的证明稿、D 的
     # 研究稿）都由这一处判 —— 手写会把依赖面 / 携带单 / 账本整条链跳过。
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    # `content` / `root` 是 2026-11-04 才传的：D 的证明稿那一档要按"写进去的这一段正文"
+    # 判（`## 证明` 节）并按盘上 F 的稿判"是不是引用"。
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), content=content, root=ctx.root)
     if denied is not None:
         return denied
     if target.exists() and target.is_dir():
@@ -1055,8 +1211,8 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     target = _resolve(ctx, path)
     # 保留路径闸同样在最前面（`fs.edit` 能改正文，等于绕过同一条保留表）：
     # 与 `fs.write` 共用 `_reserved_refusal` 这一个入口（账本区 + 手稿两半都在里面），
-    # 不是两份表、也不是每个口各判一遍。
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用。
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
     if denied is not None:
         return denied
     # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
@@ -1126,6 +1282,12 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
             max_bytes=MAX_EDIT_BYTES,
         )
     after_text = text.replace(old_string, new_string)
+    # 内容闸（2026-11-04）：`fs.edit` 能把一份"只有思路"的记录改成"带一节 `## 证明`"，
+    # 那就是绕过 `fs.write` 的那一条 —— 用改完之后那一份正文再判一次（判的是落盘那一份，
+    # 不是调用方给的那一小段 `new_string`）。放在任何写入之前。
+    denied = _d_proof_body_refusal(rel, _caller_role(), after_text, ctx.root)
+    if denied is not None:
+        return denied
     after_bytes = after_text.encode("utf-8")
     _atomic_write_bytes(target, after_bytes)
     # 改完之后重新观察"改后版本"（DSH `FSL:850`、`TFS:810`）——
