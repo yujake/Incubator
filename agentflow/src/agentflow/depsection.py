@@ -442,14 +442,15 @@ def manuscript_relpath(*, statement_id: str = "", plan_id: str = "") -> str:
     两种名是同一件事的两个时刻：立项那一轮还没有命题号（`f-proof-plan-<plan>.md`），
     登记取到号之后叫 `f-proof-<号>.md`。兜底读盘两种都认（:func:`manuscript_relpaths`），
     于是"登记之前写的稿"与"登记之后写的稿"都能被收方找到。
+
+    2026-11-04（业主裁定，F/B 两族形式统一）：拼接与解析本体收在
+    `manuscriptform.name_reading`（内部只走 `vsigns.parse_manuscript_name`）。这里
+    只留一个薄转发 —— 低层常量仍由本模块持有，命名规则不许有两个落点。
     """
-    sid = str(statement_id or "").strip()
-    pid = str(plan_id or "").strip()
-    if sid:
-        return f"{MANUSCRIPT_DIR}/{MANUSCRIPT_STMT_PREFIX}{sid}.md"
-    if pid:
-        return f"{MANUSCRIPT_DIR}/{MANUSCRIPT_PLAN_PREFIX}{pid}.md"
-    return ""
+    from . import manuscriptform as _MF
+
+    got = _MF.name_reading(_MF.FAMILY_F, statement_id=statement_id, plan_id=plan_id)
+    return str(got.get("path") or "") if got.get("ok") else ""
 
 
 def manuscript_relpaths(*, statement_ids: Iterable[str] = (), plan_id: str = "") -> list[str]:

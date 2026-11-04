@@ -2502,11 +2502,23 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # conflict）要被 B 的登记入口、V 的读稿与收方秘书三处共用，挂在某个角色包里就会长出
     # 第二份「这一稿是不是同一份正文」的口径。
     "bmanuscript.py": "B 的改写手稿（2026-11-04 A 甲）：MANUSCRIPT_DIR / PREFIX / "
-                      "PROOF_NO_PREFIX、relpath / is_relpath、render（`## 命题` / `## 证明` / "
-                      "`## 依赖` 三节，与 F/E 同形）、land_rewrite（三态：written / "
-                      "preserved（同一份正文的已签版 ⇒ 一个字节不动）/ problem（已签而这份正文"
-                      "不同 ⇒ 不覆盖））、read_rewrite —— B 的登记入口落盘、V 读稿三转、"
-                      "收方秘书 `secretary:B` 把签块落回稿里，三处共用同一份渲染",
+                      "PROOF_NO_PREFIX、relpath / is_relpath、render（转发到 "
+                      "`manuscriptform.render_proof_manuscript`）、land_rewrite（转发到 "
+                      "`manuscriptform.commit_manuscript`；三态 written / preserved / problem）、"
+                      "read_rewrite —— B 的登记入口落盘、V 读稿三转、收方秘书 `secretary:B` "
+                      "把签块落回稿里；渲染与落盘实体在 `manuscriptform.py`（F/B 共用）",
+    # 2026-11-04（业主裁定）：F 的证明手稿与 B 的改写手稿在形式上完全统一 ⇒ 命名 /
+    # 渲染 / 搬签 / 落盘事务 / 拒信码收成一份。为什么必须是顶层模块：F 与 B 分属两个
+    # 角色包，挂在任一边都会让另一边"再写一份"（改前正是这样，两份页头一开始就不同）。
+    "manuscriptform.py": "证明手稿的唯一实现（F/B 两族共用）：FAMILIES / PREFIX / "
+                         "MULTIPLE_PROPOSITIONS / NOT_WASHED / BAD_MANUSCRIPT_NAME / "
+                         "NO_PROOF_SECTION / DEPENDENCY_SECTION_MISSING（同一批码与 detail 模板）、"
+                         "name_reading（只走 `vsigns.parse_manuscript_name`）/ "
+                         "render_proof_manuscript（三节 + 洗稿行 + 命题号行）/ "
+                         "validate_manuscript / carry_sign_block（sha 相符才搬、第 9 格重算）/ "
+                         "commit_manuscript（写稿 + 依赖段 + 落边同一事务，落边失败回滚）/ "
+                         "promote_formal（转正，含签块跟搬）—— `agent_f/manuscript.py` 与 "
+                         "`bmanuscript.py` 只做转发",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
