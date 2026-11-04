@@ -1,0 +1,299 @@
+# -*- coding: utf-8 -*-
+"""判据：改名只看命题号，V 签另算（业主 2026-11-04 口径）。
+
+业主口径（逐字）：
+
+    把"改名"从"有没有 V 签"里拆出来 —— 登记成功（拿到命题号）就改名，签另算。
+
+## 改前是什么样（87 的真机形态）
+
+`reports/f-proof-plan-*.md` 有 6 份、按号命名的 0 份。追下去不是"没人写稿"，而是
+「拿到号」这一步本身被 V 签卡住：`B.register_statement` 的机械录入闸要求"每一份要写进
+台账的证明正文都有一份覆盖它的 V 签"⇒ F 的手稿没有签时整笔登记被拒 ⇒ F 手上永远没有
+`stmt_id` ⇒ `publish_manuscript` 永远没被调用 ⇒ 稿一直叫计划名。计划名又会被下一轮覆盖，
+于是依赖面内容寻址认不出被覆盖过的那 3/6 份。
+
+## 这一份钉的四条
+
+| 判据 | 它要证明的事 | 改前红在哪 |
+|---|---|---|
+| a | 登记拿到号、**没有签** ⇒ 稿已改名成 `f-proof-<号>.md`，正文逐字不变 | F 的 proof 档拿不到号（`statement_id` 空），稿仍是计划名 |
+| b | 有签 ⇒ 改名 + 签块跟着搬；sha 不符 ⇒ 搬失败并记 `publish_problem` | 搬块失败是静默的（只有 `except: pass`），也没有"搬没搬"的读数 |
+| c | 没有号 ⇒ 不许改名（名字里不许凭空造号） | 改前已绿：负控，防止"先改名再补号" |
+| d | 读侧不许把「文件名叫 `f-proof-<号>.md`」读成「已签」 | a 的改前红会先挡住；删掉签块后必须回落到待签 |
+
+全部 tmp 工作区，不读写 `projects/`（真机工作区只读）。
+"""
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+# 与 `tests/conftest.py` 同一个注入方式：这一份也要能在一棵临时源码树上单独跑。
+_SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from agentflow import depsection as DS
+from agentflow import verifications as VR
+from agentflow import vsigns as VS
+from agentflow.agent_f import AgentF
+from agentflow.store import Store
+
+MANUSCRIPT_DIR = "reports"
+SID = "000001"
+PLAN = "000000"
+PLAN_REL = f"{MANUSCRIPT_DIR}/f-proof-plan-{PLAN}.md"
+BODY = "1. 由定理甲直接得到（依据：stmt:000000）。"
+DEP_TABLE = (
+    "## 依赖\n\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+    "|---|---|---|---|\n"
+    "| 由定理甲，G 有 p 阶元 | stmt:000000 | 第 1 步 | 1 |\n"
+)
+
+
+# ------------------------------------------------------------------ 夹具
+
+def _plan_text() -> str:
+    """登记之前那一份（计划名）手稿：页头 + 命题 + 证明 + 依赖四列表，且已洗过。"""
+    text = (
+        "# F 的证明手稿：由定理甲推出目标结论（判据夹具）\n\n"
+        "- 命题号：stmt:（还没落号）\n"
+        f"- 计划：{PLAN} · 子目标：s1\n\n"
+        "## 命题\n\n"
+        "由定理甲推出目标结论。\n\n"
+        "## 证明\n\n"
+        f"{BODY}\n\n"
+        + DEP_TABLE
+    )
+    return DS.mark_washed(text, actor="secretary-F")
+
+
+def _write(store: Store, rel: str, text: str) -> pathlib.Path:
+    path = pathlib.Path(store.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _read(store: Store, rel: str) -> str:
+    return (pathlib.Path(store.root) / rel).read_text(encoding="utf-8")
+
+
+def _f(store: Store, *, llm=None) -> AgentF:
+    return AgentF(store, config={"workspace_root": store.root}, llm=llm)
+
+
+def _without_proposition_line(text: str) -> str:
+    """去掉开头那行"命题号"之后的正文。
+
+    改名那一刻它从"还没落号"换成真号 —— 这是 `publish_manuscript` 明确要写的那一格
+    （否则盘上出现"文件叫 f-proof-000001.md、正文说还没落号"的双读数）。除这一行，
+    正文一个字都不许变：那是「改名」不是「改稿」。
+    """
+    return "\n".join(
+        line for line in str(text or "").replace("\r\n", "\n").split("\n")
+        if not line.strip().startswith("- 命题号"))
+
+
+def _sign(text: str, *, proof_sha: str, manuscript_id: str,
+          statement_id: str = "") -> str:
+    return VS.stamp_manuscript_sign(
+        text, proof_sha=proof_sha, streak=3, need=3, verdict="成立",
+        at="2026-11-03T15:00:00+08:00",
+        ledger=f"verifications/{SID}.jsonl", statement_id=statement_id,
+        manuscript_id=manuscript_id)
+
+
+class _Seam:
+    """假模型缝（`judge.judge_json` 认 `complete(prompt) -> str` 这一种形状）。"""
+
+    def __init__(self, product: dict) -> None:
+        self.product = product
+        self.prompts: list[str] = []
+
+    def complete(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return json.dumps(self.product, ensure_ascii=False)
+
+
+def _proof_product() -> dict:
+    """一条自足证明（不引在册命题）⇒ 不会撞上依赖面引用档位那道门。"""
+    return {"product": "proof", "strategy": "套用已知定理",
+            "why_strategy": "结论由已知定理逐条读出，不需要新构造",
+            "steps": [
+                {"n": 1, "text": "设目标结论的反面成立（前提）。", "cites": [],
+                 "assumption": True},
+                {"n": 2, "text": "由定义逐条推出矛盾（前提）。", "cites": [],
+                 "assumption": True},
+            ]}
+
+
+def _run_proof_round(store: Store) -> dict:
+    """跑一轮 F 的 proof 档（没有 V 签）。返回 `F.step` 的读数。"""
+    seam = _Seam(_proof_product())
+    f = _f(store, llm=seam)
+    plan = f.create_plan(
+        "引理：由定义推出目标结论", "PK-RENAME-SIGN", subgoals=[
+            {"sid": "s1", "text": "由定义推出目标结论", "owner": "F",
+             "testable": "手稿按命题号命名、签另算"}])
+    assert plan.get("created") is True, plan
+    return f.step(str(plan["plan_id"]))
+
+
+def _number_of(out: dict) -> str:
+    """这一轮拿到的命题号（没有 ⇒ 空串；不许从文件名里猜）。"""
+    return str(out.get("statement_id") or "")
+
+
+# ------------------------------------------------------------------ a 改名
+
+def test_a_a_registered_number_renames_the_manuscript_without_any_sign(store: Store) -> None:
+    """a：登记拿到号、没有签 ⇒ 稿改名成 `f-proof-<号>.md`，正文逐字不变。
+
+    改前红：`publish_manuscript` 返回里没有 `sign_moved` / `publish_problem` 这两格，
+    而端到端那一半更直接 —— 没有签时 F 连号都拿不到，稿一直是计划名。
+    """
+    text = _plan_text()
+    _write(store, PLAN_REL, text)
+    out = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": text, "rows": [], "named_by": "plan"},
+        statement_id=SID)
+
+    assert out.get("published") is True, out
+    assert out.get("path") == f"{MANUSCRIPT_DIR}/f-proof-{SID}.md", out
+    # 没有块 ⇒ 不改签、也不报问题（"签另算"不是"搬签失败"）。
+    assert out.get("sign_moved") is False, out
+    assert out.get("publish_problem") == {}, out
+    assert not (pathlib.Path(store.root) / PLAN_REL).exists(), "计划名那份还在盘上"
+
+    final = _read(store, out["path"])
+    assert _without_proposition_line(final) == _without_proposition_line(text)
+    assert f"- 命题号：stmt:{SID}" in final
+
+
+def test_a2_f_registration_gets_a_number_and_publishes_without_a_sign(store: Store) -> None:
+    """a2：F 的 proof 档在**没有签**时也拿得到号，拿到号就按号命名。
+
+    改前红（真机 87 的形态）：`B.register_statement` 的 `proof_without_v_sign` 整笔拒
+    ⇒ `out["statement_id"]` 不存在 ⇒ `publish_manuscript` 一次都没被调用。
+    """
+    out = _run_proof_round(store)
+    assert out.get("action") == "proof", out
+
+    sid = _number_of(out)
+    assert sid, f"没有签时 F 连命题号都没拿到：{out.get('reason') or out}"
+    assert out.get("manuscript_path") == f"{MANUSCRIPT_DIR}/f-proof-{sid}.md", out
+    assert not (pathlib.Path(store.root) / PLAN_REL).exists(), (
+        "按号命名之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
+    assert out.get("delivery_state") == "waiting", out
+    assert out.get("delivered") is False, out
+
+
+# ------------------------------------------------------------------ b 搬签
+
+def test_b_a_matching_sign_block_moves_with_the_rename(store: Store) -> None:
+    """b：有签 ⇒ 改名 + 签块跟着搬（sha 相符才搬）。
+
+    改前红：改名那一笔把块搬过去时没给新稿号（`手稿号` 格是空的）⇒ 读侧是
+    `identity_state=unmatched`；而且返回值里没有 `sign_moved` 可读。
+    """
+    text = _plan_text()
+    sha = VR.proof_sha(VS.manuscript_proof_body(text))
+    signed = _sign(text, proof_sha=sha, manuscript_id=f"plan-{PLAN}")
+    _write(store, PLAN_REL, signed)
+
+    out = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": signed, "rows": [], "named_by": "plan"},
+        statement_id=SID)
+    assert out.get("published") is True, out
+    assert out.get("sign_moved") is True, out
+    assert out.get("publish_problem") == {}, out
+
+    final = _read(store, out["path"])
+    block = VS.manuscript_sign_reading(final, manuscript_path=out["path"])
+    assert block.get("found") is True, block
+    assert block.get("signed") is True, block
+    assert block.get("proof_sha256") == sha, block
+    # 块要属于改名后的那一份（第 9 格跟着搬），否则读侧只能读成 unmatched。
+    assert block.get("manuscript_id") == SID, block
+    assert block.get("identity_state") == "resolved", block
+
+
+def test_b2_a_stale_sign_block_is_not_moved_and_the_problem_is_read(store: Store) -> None:
+    """b2：块盖的是另一版正文 ⇒ 不搬，并把「为什么没搬」记成 `publish_problem`。
+
+    改前红：`except Exception: titled = titled` 那一句把搬块的所有失败吞掉，返回值里
+    没有一格说"块没搬" —— 静默半改名。
+    """
+    text = _plan_text()
+    stale = _sign(text, proof_sha="0" * 64, manuscript_id=f"plan-{PLAN}")
+    assert f"- V 签：" in stale
+    _write(store, PLAN_REL, stale)
+
+    out = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": stale, "rows": [], "named_by": "plan"},
+        statement_id=SID)
+    assert out.get("published") is True, out
+    assert out.get("sign_moved") is False, out
+    assert dict(out.get("publish_problem") or {}).get("kind") == "sign_sha_mismatch", out
+
+    final = _read(store, out["path"])
+    assert VS.SIGN_MARK not in final, "sha 不符的块被搬进了按号命名的那一份"
+
+
+# ------------------------------------------------------------------ c 负控
+
+def test_c_without_a_number_the_manuscript_keeps_its_plan_name(store: Store) -> None:
+    """c（负控）：还没有号 ⇒ 一个字都不许改名，名字里也不许凭空造号。"""
+    text = _plan_text()
+    _write(store, PLAN_REL, text)
+
+    out = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": text, "rows": [], "named_by": "plan"},
+        statement_id="")
+    assert out.get("published") is False, out
+    assert (pathlib.Path(store.root) / PLAN_REL).is_file(), "没有号却把计划名那份弄丢了"
+    numbered = sorted(p.name for p in (pathlib.Path(store.root) / MANUSCRIPT_DIR).glob(
+        "f-proof-*.md") if not p.name.startswith("f-proof-plan-"))
+    assert numbered == [], numbered
+
+
+# ------------------------------------------------------------------ d 反向
+
+def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
+    """d：名字叫 `f-proof-<号>.md` 不等于已签；删掉签块必须回落到「待签」。
+
+    改前红：第一步就红 —— 没有签时 F 拿不到号，盘上根本没有按号命名的稿。
+    """
+    out = _run_proof_round(store)
+    sid = _number_of(out)
+    assert sid, out
+    rel = str(out.get("manuscript_path") or "")
+    assert rel == f"{MANUSCRIPT_DIR}/f-proof-{sid}.md", out
+
+    final = _read(store, rel)
+    body = VS.manuscript_proof_body(final)
+    sha = VR.proof_sha(body)
+    f = _f(store)
+
+    waiting = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    assert waiting.get("state") == "waiting", waiting
+    assert waiting.get("delivered") is False, waiting
+
+    # 盖一块真的签（sha 相符）⇒ 已签。这一步证明读侧认的是块，不是名字。
+    _write(store, rel, _sign(final, proof_sha=sha, manuscript_id=sid,
+                             statement_id=sid))
+    signed = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    assert signed.get("state") == "signed", signed
+
+    # 把签块删掉：名字仍然是 `f-proof-<号>.md`，读数必须回到「待签」。
+    stripped = "\n".join(
+        line for line in _read(store, rel).replace("\r\n", "\n").split("\n")
+        if not line.strip().startswith(VS.SIGN_MARK))
+    _write(store, rel, stripped)
+    back = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    assert back.get("state") == "waiting", back
+    assert back.get("delivered") is False, back
