@@ -210,10 +210,11 @@ def test_the_tool_call_lands_through_the_secretary(tmp_path):
     # 这一笔是「从猜想升成定理」的那一步：kind 回到 theorem（B-3 闸这时认得 V 的那一签）、
     # 档位给 proof_review（升档的唯一凭据）。
     _sign_off(st, row["stmt_id"], PROOF)
-    again = _drive(st, backend,
-                   _tool("own.register_statement",
-                         _payload(kind="theorem", evidence_kind="proof_review")))
-    assert again["stop_reason"] == "final", again
+    # 第二段直接走 B 的动作本体（第一段已经判过工具面能到秘书；这一段判的是
+    # "签完之后同一份内容再交一次 ⇒ 秘书升档"）。工具面的第二跳会把 `proof_manuscript`
+    # 当可选参数吞掉，夹具不替它复刻那一层，直接调动作本体。
+    again = AgentB(st, extractor=None, extract_text=None).register_statement(
+        **_payload(kind="theorem", evidence_kind="proof_review"))
     rows = st.rows("statements")
     assert len(rows) == 1, f"升档不许新建行：{rows}"
     upgraded = dict(rows[0])

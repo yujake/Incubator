@@ -2045,7 +2045,11 @@ class _RegisterStatement:
         # "D 递稿、B 读稿登记依赖面"的通道，不是"改正文"的通道。带了正文的那一笔交给下面的
         # `duplicate` 那一支（它已经会覆盖 canonical、旧正文进 `proof_history`、读侧转 stale），
         # 并且把这份稿的依赖面在那一笔之后补落（`_manuscript_deps_after_write`）。
-        if manuscript_text.strip() and not manuscript_foreign and not carries_write:
+        #: 这一笔是不是只想"读稿登记依赖面"（正文/清单都没变，证据档也没要求变强）。
+        _wants_stronger_evidence = (
+            str(evidence_kind or "") != str((redelivery or {}).get("evidence_kind") or ""))
+        if (manuscript_text.strip() and not manuscript_foreign and not carries_write
+                and not _wants_stronger_evidence):
             if redelivery is not None:
                 received = self._receive_carried_manuscript(
                     redelivery, deps_groups=deps_groups, manuscript=manuscript,
@@ -2113,14 +2117,12 @@ class _RegisterStatement:
                                              # 读不到 ⇒ 空清单 ⇒ 索引那一路取不到对象，
                                              # 闸按"目录里没有这一条"拒（不是放行）。
                                              index_rows=self._report_index_rows())
-        if _sign_problems:
-            return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
         # ---- 2026-11-04（业主裁定 ⑥-1-b）：要写正文/依赖面的这一笔必须带稿 ----------
         #
         # 裁定：「闸要求本笔必须带 `proof_manuscript`，不靠台账签行反查」。
         # 反查会造出第二载体（同一份稿经两个入口进同一行依赖面），而"这一笔带没带稿"
-        # 是调用方当场能验证的事实。位置在第三方签字闸之后：一张真的要 proof 的数值
-        # 证明，先让"缺哪一份第三方签"这一句被说出来，而不是被"缺稿"盖掉。
+        # 是调用方当场能验证的事实。位置在第三方签字闸之前：不带稿这一档连"要 proof
+        # 的那份材料"都不完整，先说这一句；带了稿、只是没有第三方签 ⇒ 下一闸照旧咬住。
         # 文献侧的占位签（external_lit + source_lit_id）与概念行不在这一档。
         if (carries_write and not str(manuscript_text or "").strip()
                 and kind_now != "concept"
@@ -2134,6 +2136,8 @@ class _RegisterStatement:
                  "`## 命题` / `## 证明` / `## 依赖` 写全，再把这一份稿原文传进 "
                  "`proof_manuscript`。签行里记过 `manuscript` 也不能替代这一格："
                  "这一笔带了哪份稿，必须是本笔当场说得出的。"))
+        if _sign_problems:
+            return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
         # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
         # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并
@@ -2242,7 +2246,8 @@ class _RegisterStatement:
             origin=str(origin), kind=kind_now, lit_id=lit_id,
             statement_full=full, proof_text=str(proof_text or ""),
             # 2026-11-02：手稿签块也在这道闸的可见面上（业主：B 收录时从稿上读到签）。
-            manuscript_text=str(manuscript_text or ""))
+            manuscript_text=str(manuscript_text or ""),
+            manuscript_path=str(manuscript_path or ""))
         if self_authored.get("refused"):
             # 两条裁定的分工按"阶段"分，拒收码也跟着阶段走（同一件事的两种说法：
             # 一个说"你一开始就不该叫定理"，一个说"现在欠的是 V 的一签"）：
@@ -3516,7 +3521,8 @@ class _RegisterStatement:
         return out
 
     def _v_signature_for(self, *, statement_full: str, proof_text: str,
-                         manuscript_text: str = "") -> dict:
+                         manuscript_text: str = "",
+                         manuscript_path: str = "") -> dict:
         """这一条自产命题有没有「V 签成立、且盖的正是这一份正文」的签（纯读）。
 
         ## 判据只有一处
@@ -3584,7 +3590,8 @@ class _RegisterStatement:
             from agentflow import vsigns as _VS_BLOCK
 
             block = _VS_BLOCK.manuscript_sign_standing(
-                str(manuscript_text or ""), proof_sha=sha)
+                str(manuscript_text or ""), proof_sha=sha,
+                manuscript_path=str(manuscript_path or ""))
         except Exception as exc:  # noqa: BLE001 —— 块读不动 ⇒ 这一格没查成，不是"没有签"
             block = {"state": "", "checked": False,
                      "why": f"手稿签块读不出来（{type(exc).__name__}: {exc}）"}
@@ -3706,7 +3713,8 @@ class _RegisterStatement:
 
     def _self_authored_gate(self, *, origin: str, kind: str, lit_id: str,
                             statement_full: str, proof_text: str,
-                            manuscript_text: str = "") -> dict:
+                            manuscript_text: str = "",
+                            manuscript_path: str = "") -> dict:
         """业主 B-3 的写侧闸：自产的定理级命题要么有 V 的签，要么受控拒绝。
 
         返回 `{"needs_v": bool, "refused": str, "reason": str, "reading": {...}}`：
@@ -3774,7 +3782,8 @@ class _RegisterStatement:
             return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
         sig = self._v_signature_for(statement_full=statement_full,
                                     proof_text=proof_text,
-                                    manuscript_text=manuscript_text)
+                                    manuscript_text=manuscript_text,
+                                    manuscript_path=manuscript_path)
         reading.update(
             checked=bool(sig.get("checked")),
             needs_v=True,

@@ -340,7 +340,7 @@ def sign_before_registration(root, *, proof_text: str,
     # 2026-11-04（业主裁定 ⑥-2）：正常夹具必须落一份真手稿文件（"不落盘也能签"只许
     # 以 `sign_before_registration_legacy` 的形式存在）。落点用正文 sha 命名，避开
     # B 的按号兜底读盘（`reports/f-proof-<号>.md`）—— 那一格读到的是另一层现场。
-    rel = "reports/f-proof-000000.md"
+    rel = "reports/f-proof-999999.md"
     target = Path(str(root)) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(

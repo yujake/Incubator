@@ -209,12 +209,23 @@ def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
     return outs
 
 
+def _manuscript(column: str, body: str = BODY) -> str:
+    """这一笔的证明稿（⑥-1-b：要写正文的这一笔必须带 `proof_manuscript`）。"""
+    return ("# E 的穷举证明手稿（夹具）\n\n- 实验号：exp:（夹具）\n"
+            "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
+            f"## 命题\n\n{body}\n\n## 证明\n\n{column}\n\n"
+            "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+            "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+
+
 def _file(store: Store, *, column: str, kind: str = "theorem",
-          evidence_kind: str = "proof", body: str = BODY) -> dict:
+          evidence_kind: str = "proof", body: str = BODY,
+          manuscript: str = "") -> dict:
     return _b(store).register_statement(
         origin="own_result", kind=kind, label="R(3,4)=9", statement_full=body,
         statement_text=body[:40], proof_text=column, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
+        proof_manuscript=manuscript,
         quote_reason="own_result：我方推导，没有第二份文本可比对")
 
 
@@ -262,8 +273,15 @@ def test_1_without_v_review_b_cannot_register_proof(tmp_path: pathlib.Path) -> N
 
     got = _file(store, column=column)
     assert got.get("ok") is False, f"V 没审却登记成 proof 了：{got}"
-    assert got.get("kind") == "proof_needs_third_party_signature", got
-    error = str(got.get("error") or "")
+    # ⑥-1-b 的新闸先说话：这一笔没带稿。
+    assert got.get("kind") == "proof_manuscript_required", got
+    assert list(store.rows("statements")) == [], list(store.rows("statements"))
+
+    # b 带稿、但没有第三方签 ⇒ 原闸仍然咬住（两道闸各有一条用例守着）。
+    got2 = _file(store, column=column, manuscript=_manuscript(column))
+    assert got2.get("ok") is False, f"V 没审却登记成 proof 了：{got2}"
+    assert got2.get("kind") == "proof_needs_third_party_signature", got2
+    error = str(got2.get("error") or "")
     assert "缺 V 的会审签名" in error, error
     # 一行都没落（受控拒绝，不是"落了再改"）
     assert list(store.rows("statements")) == [], list(store.rows("statements"))
@@ -287,7 +305,9 @@ def test_1b_e_self_signature_is_not_a_third_party_signature(
         tx.upsert("experiments", row, note="forge")
     sync_counters(store)
     got = _file(store, column=env["column"])
-    assert got.get("ok") is False and got.get("kind") == "proof_needs_third_party_signature", got
+    assert got.get("ok") is False and got.get("kind") == "proof_manuscript_required", got
+    got2 = _file(store, column=env["column"], manuscript=_manuscript(env["column"]))
+    assert got2.get("ok") is False and got2.get("kind") == "proof_needs_third_party_signature", got2
 
 
 # ------------------------------------------------------------------ ② sha 对不上

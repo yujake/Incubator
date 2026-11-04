@@ -196,10 +196,11 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
     # （业主 2026-11-02：「V 签不直接进台账，进手稿，随 B 侧收录时读到」）：
     # 把握要交的新正文写成一份稿 → V 走"手稿"那条审稿入口连判 3 转、签块落回稿
     # → 再把正文交 B（闸按手稿签块认那一份签）。
-    man_rel = "reports/f-proof-rewrite.md"
+    man_rel = "reports/f-proof-000000.md"
     man_path = pathlib.Path(st.root) / man_rel
     man_path.parent.mkdir(parents=True, exist_ok=True)
-    man_text = (f"# F 的证明手稿：{TEXT}\n\n- 命题号：stmt:{SID}\n\n"
+    man_text = (f"# F 的证明手稿：{TEXT}\n\n- 命题号：stmt:{SID}\n"
+                "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
                 f"## 命题\n\n{FULL}\n\n## 证明\n\n{P2}\n\n"
                 "## 依赖\n\n"
                 "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
