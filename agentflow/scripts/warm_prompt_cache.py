@@ -74,6 +74,60 @@ DEFAULT_CAP_USD = 0.10
 #: 挑规则：`M` 是最大的一份（历史真机读数就是它），`C` 是最小的一份（最便宜的对照）。
 DEFAULT_HIT_SAMPLE: tuple[str, ...] = ("M", "C")
 
+#: 诊断档是 warm 的固定组成部分（2026-11-04 复发缺陷的修法 ①）。
+#:
+#: ## 缺陷
+#:
+#: 读数文件只留最近 `MAX_RUNS_KEPT` 趟，而"带 `--probe-no-tools` 的那一趟"曾经是
+#: 唯一一条诊断：p241 两趟预热把它挤出去 ⇒
+#: `test_the_two_diagnostic_readings_say_what_they_measured` 红；当时靠补跑两趟
+#: （$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，不是修：下一次滚存照样复发。
+#:
+#: ## 修法（为什么不是把窗口调大）
+#:
+#: 调大 `MAX_RUNS_KEPT` 只是把复发推迟一个常数。这里改成让"诊断"不再是一趟特殊的
+#: 历史读数，而是每一趟的固定组成：每一趟都带一次"去掉工具面"的探针
+#: （`DEFAULT_TOOLS_PROBE`）与一次"换一趟活"的探针（`DEFAULT_CROSS_RUN_PROBE`），
+#: 并把这一趟带了什么记进 run 记录的 `diagnostics`（见 `warm()`）。
+#: 于是窗口怎么滚，"最近一趟"都带着两条诊断 —— 判据不必再从历史里捞唯一那一条。
+#:
+#: 为什么两条都要固定：`test_the_two_diagnostic_readings_say_what_they_measured`
+#: 读的是同一趟里的两条读数（`tools_in_prefix` 与 `cross_run_hit`）。只固定其中
+#: 一条，它就会在"最近一趟没有另一条"时红 —— 那不是修好了，只是换一条路复发。
+#:
+#: 代价：每趟多 3 次调用（1 次去工具面 + 2 次换一趟活）。它们都在同一份前缀上，
+#: 真机实测比主趟便宜一个量级（见读数里 `usd` 那一格）；换来的是诊断不再随滚存消失。
+#: `--probe-no-tools` / `--probe-cross-run` 仍可点别的目标；但"不做诊断"不再是可选项。
+DEFAULT_TOOLS_PROBE = "V"
+DEFAULT_CROSS_RUN_PROBE = "H"
+
+
+def _resolve_probe(explicit: str | None, default: str, *, present: Sequence[str],
+                   avoid: Sequence[str] = ()) -> tuple[str, str]:
+    """这一趟实际要发的诊断目标与它的来源（`explicit` / `default` / `fallback` / `""`）。
+
+    为什么要有"来源"：`--roles M` 这种只点一部分目标的趟也要带诊断，而此时缺省的
+    `V` / `H` 不在 `present` 里。规则是：先认显式点名（调用方要哪个就哪个），
+    再认缺省；缺省不在这一趟的目标里就退到第一个不是 `avoid` 的目标（例如跨 run
+    探针不许落在秘书身上）。退让必须记下来（来源 = `fallback`），否则读数里
+    "这一趟诊断的是 V"会被读成调用方的意思。
+    """
+    wanted = str(explicit or "").strip()
+    if wanted and wanted in present:
+        return wanted, "explicit"
+    target = str(default or "").strip()
+    if not target:
+        return "", ""
+    if target in present:
+        return target, "default"
+    if wanted:                              # 显式点名不在这一趟里：先别静默换目标
+        return "", ""
+    for name in present:
+        if name not in avoid:
+            return name, "fallback"
+    return "", ""
+
+
 #: 命中样本里显式排除的目标与理由（排除了就单列，不是默默跳过）。
 #:
 #: ## 秘书为什么被排除（不是"跳过不量"）
@@ -221,6 +275,11 @@ def lean_mode() -> bool:
 #: 秘书的第二次调用）本来就是更早跑出来的 —— 两趟新预热就会把仅有的那条诊断读数挤出
 #: 窗口，届时 `test_cross_run_prefix_is_reused.py` 会以"没有探针 ⇒ 这次没量"变红。
 #: 加 8 格不是"多留点历史"，是为了让"两档 + 诊断"同时待在窗口里。
+#:
+#: 2026-11-04：16 这个数字不再承担"把诊断留在窗口里"的职责。那次复发证明它担不起：
+#: p241 两趟照样把唯一带 `--probe-no-tools` 的 p234 那趟挤了出去（见
+#: `DEFAULT_TOOLS_PROBE`）。现在诊断是每一趟的固定组成 ⇒ 这个窗口只回答"留几趟历史"，
+#: 不再回答"诊断还在不在"。所以这里不调大（调大只是把复发推迟）。
 MAX_RUNS_KEPT = 16
 
 
@@ -240,7 +299,12 @@ def load_readings(path: Path) -> list[dict[str, Any]]:
 
 
 def save_readings(path: Path, runs: list[dict[str, Any]]) -> None:
-    """把历次预热写回去（只留最近 `MAX_RUNS_KEPT` 趟）。"""
+    """把历次预热写回去（只留最近 `MAX_RUNS_KEPT` 趟）。
+
+    这里没有"必保某一条诊断"的特判：诊断是每一趟的固定组成
+    （`DEFAULT_TOOLS_PROBE`），最近一趟天然带着它。给滚存加一条"保留最后一条诊断"
+    的例外，反而会让"最近一趟"不再是这一档的代表，且窗口会为了旧的例外膨胀。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     doc = {"schema": 1, "runs": runs[-MAX_RUNS_KEPT:]}
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
@@ -708,8 +772,9 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
          hit_sample: tuple[str, ...] = DEFAULT_HIT_SAMPLE, model: str = "",
          effort: str = "off", out_path: Path | None = None,
          dry_run: bool = False, keep_session: bool = False,
-         session_root: Path | None = None, tools_probe: str = "",
-         cross_run_probe: str = "", lean: str = "auto") -> tuple[int, dict[str, Any]]:
+         session_root: Path | None = None, tools_probe: str | None = None,
+         cross_run_probe: str | None = None,
+         lean: str = "auto") -> tuple[int, dict[str, Any]]:
     """按目标各发一次最小请求（再给样本各补一次），把读数写成 JSON。
 
     `effort="off"` 是省钱不是省字节：推理强度不进 `messages`，不改变缓存前缀，
@@ -721,11 +786,24 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
     为这个形态准备的）。设完 env 之后必须清 `agent_prompts` 的 `lru_cache`，
     否则渲染还读着上一档的开关。
 
-    `tools_probe`（可选）回答一个本脚本必须回答的问题：工具面在不在缓存前缀里？
-    做法：拿一个已经带工具面预热过的目标，把同一个 system 在不带工具面的情况下再发一次。
+    `tools_probe` / `cross_run_probe` 是每一趟的固定组成部分（2026-11-04）：
+    缺省（`None`）取 `DEFAULT_TOOLS_PROBE` / `DEFAULT_CROSS_RUN_PROBE`，显式点名则
+    覆盖目标。为什么不再允许"不做诊断"：读数文件只留 `MAX_RUNS_KEPT` 趟，而这两种
+    诊断曾经是历史里的"唯一一趟" —— 滚存会把它挤掉，判据随即变红（见
+    `DEFAULT_TOOLS_PROBE` 的说明）。每一趟都带 ⇒ 窗口怎么滚，最近一趟都有诊断。
+
+    `tools_probe` 回答：工具面在不在缓存前缀里？做法：拿一个已经带工具面预热过的
+    目标，把同一个 system 在不带工具面的情况下再发一次。
 
     - `hit > 0` ⇒ 缓存只按 `messages` 建索引（工具面不在前缀里）；
     - `hit == 0` ⇒ 工具面在它的前缀里（去掉工具 = 换了一段前缀）。
+
+    `cross_run_probe` 回答"换一趟活之后还剩多少前缀"，发两遍（pass 4 / 5，见下）。
+    这一趟带了什么诊断，写进 run 记录的 `diagnostics` 一格（带来源）：
+    `{"tools_probe": ..., "cross_run_probe": ..., "sources": {...}, "carried": ...}`。
+    `carried` 读的是实况而不是计划：两条诊断在这一趟里都量到了才为 true。预算停在
+    探针之前、或目标集里连一个非秘书目标都没有（`--roles secretary` 这种退化趟）
+    都会是 false —— 那两种情形下"诊断还在"不是这一趟的事实，不许记成 true。
     """
     if lean not in ("auto", "on", "off"):
         return EXIT_UNKNOWN, {"verdict": "unknown",
@@ -754,6 +832,13 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
                              "lean_enabled": lean_mode(),
                              "hidden": absent,
                              "note": "只渲染，没发请求，花费 0 美元"}
+
+    # 诊断目标在这一刻定死（不是"调用方给了才做"）：见 `DEFAULT_TOOLS_PROBE`。
+    # 落盘时要记来源，所以两格一起解出来。
+    probe, probe_source = _resolve_probe(tools_probe, DEFAULT_TOOLS_PROBE,
+                                         present=present)
+    cross, cross_source = _resolve_probe(cross_run_probe, DEFAULT_CROSS_RUN_PROBE,
+                                         present=present, avoid=(SECRETARY,))
 
     # 配置走生产那一口 `spec_from_env()`（唯一入口：key 的取值梯子只有一份）。
     # 覆盖模型名 / 推理强度用 `dataclasses.replace` 而不是自己拼一份 env ——
@@ -798,17 +883,17 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
         sample = tuple(t for t in hit_sample if t in present)
         plan: list[tuple[str, int]] = [(t, 1) for t in present]
         plan += [(t, 2) for t in sample]
-        if tools_probe in present:
-            plan.append((tools_probe, 3))       # 诊断行：同一 system、不带工具面
-        if cross_run_probe in present:
+        if probe:
+            plan.append((probe, 3))             # 诊断行：同一 system、不带工具面
+        if cross:
             # 诊断行（两次）：另一趟活的 system 发两遍。
             # 为什么必须两遍：第一遍回答"换一趟活还剩多少（=0）"，第二遍回答
             # "同一份 system 再发一次会不会命中（=会）"。只发一遍的话，第二次跑本脚本时
             # 那一份 system 已经被上一次探针写进缓存了 ⇒ 读数从 0 变成 99%，
             # 而读者分不出是"这次变了"还是"这次是第二次"。`_other_facts()` 因此给
             # 每一次调用生成一个没被发过的 task_id，让第一遍永远是"第一次见"。
-            plan.append((cross_run_probe, 4))
-            plan.append((cross_run_probe, 5))
+            plan.append((cross, 4))
+            plan.append((cross, 5))
 
         for target, pass_no in plan:
             spent, source = seam.spent_usd()
@@ -885,10 +970,22 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "sample_without_hit": judgement["sample_without_hit"],
             "hit_sample_excluded": judgement["hit_sample_excluded"],
             "hit_sample_measured": judgement["hit_sample_measured"],
-            # 工具面在不在缓存前缀里（None = 没做这个诊断 / 上游没给读数）。
+            # 工具面在不在缓存前缀里（None = 上游没给读数 / 这一趟没走到探针，
+            # 例如预算中途停下；正常趟一定有值，见 `diagnostics`）。
             "tools_in_prefix": tools_in_prefix,
-            "tools_probe": tools_probe,
-            "cross_run_probe": cross_run_probe,
+            "tools_probe": probe,
+            "cross_run_probe": cross,
+            # 这一趟带了哪些诊断、目标是哪来的（`explicit` / `default` / `fallback`）。
+            # 2026-11-04 起诊断是 warm 的固定组成部分：判据不必再从历史里捞"唯一那趟"，
+            # 滚存也就挤不掉它（`carried=True` 是正常趟的形态）。
+            "diagnostics": {
+                "tools_probe": probe,
+                "cross_run_probe": cross,
+                "sources": {"tools_probe": probe_source,
+                            "cross_run_probe": cross_source},
+                # 实况：两条诊断在这一趟里都量到了才是 true（预算停下会是 false）。
+                "carried": bool(probe_rows and len(cross_rows) == 2),
+            },
             # "换一趟活（不同 task/task_id/depth）之后实测还能命中多少"：
             # 这一格比 `cross_run_prefix_chars`（离线算的字符数）硬 —— 那边是推理，这边是读数。
             # 两行：`pass=4` 是第一次见这份 system（应当 0 命中），
@@ -971,13 +1068,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--keep-session", action="store_true",
                         help="保留这一趟的会话记录（缺省用临时目录并在收尾删净）")
     parser.add_argument("--probe-no-tools", default="",
-                        help="诊断：拿这个目标（须在 --roles 里、且是最后一步）"
-                             "在不带工具面的情况下再发一次，用来看"
-                             "「工具面在不在缓存前缀里」；空 = 不做")
+                        help="诊断目标（须在 --roles 里）：在不带工具面的情况下再发一次，"
+                             "用来看「工具面在不在缓存前缀里」。空 = 用固定缺省 "
+                             f"{DEFAULT_TOOLS_PROBE}；诊断是每一趟的固定组成部分，"
+                             "不接受「不做」")
     parser.add_argument("--probe-cross-run", default="",
-                        help="诊断：拿这个目标换一份「另一趟活」的 system（不同 "
-                             "task/task_id/depth）再发一次，用来看「换一趟活还剩多少前缀"
-                             "能复用」；空 = 不做")
+                        help="诊断目标（须在 --roles 里、不能是秘书）：换一份「另一趟活」的 "
+                             "system（不同 task/task_id/depth）再发两次，用来看「换一趟活"
+                             f"还剩多少前缀能复用」。空 = 用固定缺省 {DEFAULT_CROSS_RUN_PROBE}；"
+                             "诊断是每一趟的固定组成部分，不接受「不做」")
     args = parser.parse_args(argv)
 
     targets = tuple(x.strip() for x in str(args.roles).split(",") if x.strip())
