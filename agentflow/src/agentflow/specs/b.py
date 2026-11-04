@@ -357,7 +357,7 @@ SPEC = AgentSpec(
             "**改写之后先拿签，再入库**：把改写后的正文交一次 `own.register_statement` —— 框架会把它落成"
             "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节），"
             "拒信里点名这条稿的路径与下一步；然后派 V 审这一份手稿（`framework_summon` 的 "
-            "`verify.verify_proof`，带 `statement_id` + `proof_manuscript`），签到位后签块由收方秘书 "
+            "`V.verify_proof`，带 `statement_id` + `proof_manuscript`），签到位后签块由收方秘书 "
             "`secretary:B` 落回稿里；再把这一份稿用 `proof_manuscript` 交回 `own.register_statement` 入库"
             "（第 3 位翻真、旧正文进 `proof_history`）。",
             # 2026-11-01（业主逐字：「要鼓励B的改写，即改后无V签就想入库时报告"请重新拿V签"，
