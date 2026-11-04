@@ -1225,6 +1225,13 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_finish_pending",             # 改名前那个实现（2026-11-04 裁定 甲之后：没有手稿就不落 pending 台账）：`src/agentflow/agent_v/core.py` 原处那段墓碑句在讲"这一格改前叫什么、为什么不再落"。留痕按纪律必须点名被删的东西
     "_grade_recomputed",           # 字符串键：`verifications.GRADE_RECOMPUTED_KEY` 的值（`row["_grade_recomputed"]` 记"这一档是谁按哪一签重算的"）—— 是键值不是符号；引用处是 `cli.py` 的 CLI 回执那句与 `tests/test_repair_backfill_grades.py` 的验收表
     "_kind_upgrade",               # 字符串键的旧称：`secretary._upgrade_evidence_kind` 落在 statements 行上的那一格（今天的键值是 `_evidence_kind_upgrade`，这一条已在表内）—— 引用处是 `tests/test_multi_proof_write_side.py` 的注释，讲的是"有签时会多出这一格内部留痕、与 #p1 两种写法的等价性无关"
+    # —— 2026-11-05（p241 手稿统一之后复核）：两条历史名字，符号面已经为 0 ——
+    # 两条都是"改名/删除之前的名字"：910b3031 把手稿的命名 / 渲染 / 搬签 / 转正收成
+    # `manuscriptform.py` 一份实现，下面两个名字都不再是活符号。引用处是历史叙述
+    # （repo_survey 的基线抬格说明 / 2026-11-04 的审计记录），按本表纪律登记并写清类别，
+    # 不改引用处文本（改了就丢掉"改前叫什么"）。
+    "_rel_is_inside",              # 已删的路径守卫（旧 `agent_f/manuscript.py`）：2026-11-04 的基线注释在讲"那一批把两个路径守卫写进同一个模块"，910b3031 之后只剩 `manuscriptform._norm_rel`
+    "_retitle_applied",            # 已删的改名读数（旧 `agent_f/manuscript.py`）：2026-11-04 的审计记录在讲"今天新加的那个读数只处理调用方手里这一份"，910b3031 之后由 `commit_manuscript` 的 `retitled` 格承担
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

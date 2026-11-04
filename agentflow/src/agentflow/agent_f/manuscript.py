@@ -247,22 +247,6 @@ class _Manuscript:
             out["why"] = str(got.get("why") or "") or out["why"]
         return out
 
-    def _carry_sign_block(self, titled: str, *, root: Any, old_rel: str,
-                          new_rel: str, statement_id: str) -> dict[str, Any]:
-        """可选第二步：把「覆盖这一份正文」的签块跟着改名搬过去（没块就只改名）。
-
-        三态纪律（都不是"失败"）：
-        - 没有块 ⇒ `moved=False`、`problem={}`：这就是业主 2026-11-04 的「签另算」；
-        - 有块但 `正文sha` 与这一份正文不符 ⇒ `moved=False` +
-          `problem={kind: sign_sha_mismatch}`（那一签签的是旧版，搬过去会让读侧认错）；
-        - 读块本身抛异常 ⇒ `problem={kind: sign_block_unreadable}`（"没查成"不是"没签"）。
-
-        实现本体在 :func:`manuscriptform.carry_sign_block`（F 的转正与 B 的改写落稿
-        共用）：两处各写一遍必然漂，而漂的那一处正好会是"这块签到底属于哪一份稿"。
-        """
-        return _MF.carry_sign_block(root, titled, old_rel=old_rel, new_rel=new_rel,
-                                    statement_id=statement_id)
-
     def publish_manuscript(self, manuscript: Mapping[str, Any], *,
                            statement_id: str) -> dict[str, Any]:
         """登记拿到命题号之后，把那一份手稿改名为 `reports/f-proof-<命题号>.md`。
@@ -278,7 +262,7 @@ class _Manuscript:
         ⇒ 拿不到号 ⇒ 一次也没改名（87 的 6 份稿里 0 份按号命名）。现在两条纪律：
 
         - 改名只看号：`statement_id` 非空就改名 + 重写标题，有没有签都不影响；
-        - 搬签是可选第二步（`_carry_sign_block`）：有块且 sha 相符才搬；没块只改名
+        - 搬签是可选第二步（`carry_sign_block`）：有块且 sha 相符才搬；没块只改名
           （`sign_moved=False`、`publish_problem={}`，那是「签另算」不是失败）。
 
         三件纪律（读数面）：
