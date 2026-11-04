@@ -11,7 +11,7 @@ def _carried_key(kind: str, ident: Any) -> str:
     """携带单的去重键：`stmt:<命题号>` / `exp:<实验号>`（这一个落点是唯一的一处）。
 
     为什么不能拿裸号去重：`statements` 与 `experiments` 的号各自从头编（都从 000000
-    起），所以 `stmt:000000` 与 `exp:000000` 同时存在是**常态**。同一个 `seen` 收裸号
+    起），所以 `stmt:000000` 与 `exp:000000` 同时存在是常态。同一个 `seen` 收裸号
     时，先扫到的那一类会把另一类静默挤掉 —— 而携带单少一行、B 按清单寻址不到 E 的稿，
     与"那条 e-proof 没签"在读数上完全同形（`carried_missing` 还因为单非空而不报）。
     判据：`tests/test_carried_sheet_keeps_exp_rows_with_matching_numbers.py`。

@@ -3,11 +3,11 @@
 
 ## 缺口（2026-11-04 审查 B 区读出来的）
 
-`AgentD._carried_manuscripts` 用**同一个** `seen` 集合去重 F 的证明手稿
+`AgentD._carried_manuscripts` 用同一个 `seen` 集合去重 F 的证明手稿
 （键 `stmt:<命题号>`）与 E 的穷举证明手稿（键 `exp:<实验号>`），而两处加进去的都是
 裸号（`seen.add(sid)` / `eid in seen`）。两张表的号各自从头编（都从 000000 起）⇒
 一条已在册的命题 `stmt:000000` 在盘上有一份 `reports/f-proof-000000.md` 时，
-E 的 `exp:000000` 那条**已签**的 e-proof 会被当成"已经带过"而静默从携带单里消失。
+E 的 `exp:000000` 那条已签的 e-proof 会被当成"已经带过"而静默从携带单里消失。
 
 后果与"没签"同形：B 按清单寻址不到 E 的稿（`read_carried_manuscript` 除了按
 正文 sha 那一条之外没有别的入口），入库闸按"无签"拒，而 D 的报告里那张单看起来
