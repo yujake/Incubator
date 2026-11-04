@@ -72,6 +72,10 @@ _CHAIN: tuple[str, ...] = (
     "carried_by_D",
     "兜底读盘",
     "不许自己猜一个路径",
+    # `tests/test_skill_staleness.py::_rule_dependency_section`：讲了 `## 依赖` 就
+    # 必须给出四列表与被引档位下限 —— 只讲"缺那一节就拒"等于没讲那一节该长什么样。
+    "四列",
+    "inadmissible",
     # 2026-11-04「穷举程序 + V 签 ⇒ proof」：表里改前把收录档写死成 proof_review。
     "穷举程序 + V 签 ⇒ `proof`",
 )
