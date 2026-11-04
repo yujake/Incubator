@@ -67,6 +67,9 @@ REJECT_REPLY = json.dumps({"verdict": "有毛病", "defect_step": 2,
                           ensure_ascii=False)
 
 #: 与 `agent_f/manuscript.py::proof_manuscript` 同一个形状（V 只读 `## 证明` 那一节）。
+#: `## 依赖` 必须是可解析的四列空表（表头在、0 行）—— 只有一句"空表就是声明"的散文
+#: 会被 `_registered_manuscript_body` 读成 `dependency_section_unreadable`（空表也是声明，
+#: 但声明要写成表）。渲染走唯一实现，夹具不手抄表头。
 MANUSCRIPT = ("# F 的证明手稿：弦长函数\n\n"
               "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
@@ -74,8 +77,7 @@ MANUSCRIPT = ("# F 的证明手稿：弦长函数\n\n"
               f"{FULL}\n\n"
               "## 证明\n\n"
               f"{PROOF}\n\n"
-              "## 依赖\n\n"
-              "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+              + _DS.render_dependency_section([]))
 PROOF_BODY = _DS.proof_body(MANUSCRIPT).strip("\n")
 REL = "reports/f-proof-plan-0000.md"
 
@@ -150,7 +152,9 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     before = path.read_text(encoding="utf-8")
     v, seam = _v(st, [REJECT_REPLY])
 
-    got = v.verify_proof(SID, proof_text=PROOF)
+    # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 —— 这份稿就是 a2 要判的
+    # "负判不写字"的载体（`rel` 上面已经落好，正文与 PROOF 逐字一致）。
+    got = v.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
 
     assert seam.asked() == 1, seam.asked()
     assert got.get("checked") is True, got

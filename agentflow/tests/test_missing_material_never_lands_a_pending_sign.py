@@ -34,6 +34,7 @@ import pathlib
 
 from conftest import add_literature  # noqa: E402
 
+from agentflow import exhaustionreport as ER
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
@@ -121,10 +122,19 @@ def test_2_a_complete_material_still_lands_its_pending_sign(tmp_path: pathlib.Pa
     env = _run_exhaustive(store)
     assert _pending_files(store) == []
 
-    got = AgentV(store, workspace_root=store.root).verify_proof(SID, proof_text=env["column"])
+    got = AgentV(store, workspace_root=store.root).verify_proof(
+        SID, proof_text=env["column"],
+        # 2026-11-04（业主裁定 甲）：E 的穷举证据要签，载体是 `reports/e-proof-<实验号>.md`
+        # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。不带稿的那一趟
+        # 只给「看过、没签」的读数 —— 那正是 `test_1` 守的另一半，不是这一条要防的。
+        proof_manuscript=ER.proof_manuscript_relpath(env["experiment_id"]))
 
     assert got["checked"] is True, got
-    assert got["kind"] == "numeric_evidence_unregistered", got
+    # 改期望（2026-11-04 甲）：`numeric_evidence_unregistered`（内联正文那一支的老 kind）
+    # → `proof_unregistered_signed`。同一件事仍被这条判据防着：材料齐、会审判成立 ⇒
+    # 那一签照样有落点（pending 台账按对象 sha 落行，下面三行逐字判），护栏没有把这一档
+    # 整个关掉。换的只是"签落在哪条路"：甲把载体从内联正文挪到了 E 的按号手稿上。
+    assert got["kind"] == "proof_unregistered_signed", got
     assert got["verdict"] == "成立", got
     assert got["signed_bit3"] is False, got
     landed = _pending_files(store)

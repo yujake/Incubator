@@ -40,6 +40,8 @@ import pytest
 
 from conftest import seed_statement_row, sign_before_registration
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 from agentflow import agent_loop as AL
 from agentflow import evidencebits as EB
 from agentflow import verifications as VR
@@ -206,6 +208,15 @@ def _ok(out) -> dict:
     return out if isinstance(out, dict) else out.to_dict()
 
 
+def _ms(st: Store, *, sid: str = "000000", proof: str = PROOF) -> str:
+    """2026-11-04（业主裁定 甲 / ⑥-1-b）：要写证明正文的登记必须带手稿。
+
+    给这一笔要写的正文落一份按号命名的稿（`## 证明` 与 `proof_text` 逐字一致、
+    `## 依赖` 空表），返回工作区相对路径 —— 与 V 侧送审用的是同一份载体。
+    """
+    return write_proof_manuscript(st.root, sid, proof, statement_full=FULL)
+
+
 def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> None:
     """判据 3：B 登记自产定理级 ⇒ 拒 `self_authored_needs_v`；先造成立签 ⇒ 通过。
 
@@ -232,7 +243,8 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     assert sid
 
     # (b) 升档那一步、还没有 V 的签 ⇒ 拒 self_authored_needs_v
-    bad = _ok(b.register_statement(**_own(kind="theorem")))
+    bad = _ok(b.register_statement(**_own(kind="theorem"),
+                                   proof_manuscript=_ms(st, sid=sid)))
     assert bad.get("ok") is False, bad
     assert bad.get("kind") == "self_authored_needs_v", bad
     err = str(bad.get("error") or "")
@@ -262,7 +274,8 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     holds3 = VR.consecutive_holds(st.root, sid)
     assert int(holds3["streak"]) == VR.SIGN_STREAK_NEED and holds3["streak_ok"] is True, holds3
     assert sign["verdict"] == "成立" and VR.signs_bit3(sign, streak=holds3), sign
-    good = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review")))
+    good = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review"),
+                                    proof_manuscript=_ms(st, sid=sid)))
     assert good.get("ok") is True, good
     reading = dict(good.get("self_authored_review") or {})
     assert reading.get("needs_v") is True and reading.get("signed") is True, reading
@@ -275,7 +288,8 @@ def test_4_a_conjecture_is_still_registrable_without_v(tmp_path: pathlib.Path) -
     # 准入闸（2026-11-02 默认 strict）：正文先要有签（先签后登记）。这条正控问的是
     # "猜想不被 `self_authored_needs_v` 拒"，不是"可以无签入册"。
     sign_before_registration(st.root, proof_text=PROOF)
-    got = _ok(_b(st).register_statement(**_own(kind="conjecture")))
+    got = _ok(_b(st).register_statement(**_own(kind="conjecture"),
+                                        proof_manuscript=_ms(st)))
     assert got.get("ok") is True, got
     assert got.get("kind") != "self_authored_needs_v", got
     reading = dict(got.get("self_authored_review") or {})
@@ -307,18 +321,22 @@ def test_5_forcing_the_signature_lookup_open_makes_criterion_3_red(
     assert first.get("ok") is True, first
 
     # 正控（没打补丁）：判据 3 的那一笔就在这一格被拒。
-    plain = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review")))
+    plain = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review"),
+                                     proof_manuscript=_ms(st, sid=str(first.get("stmt_id")))))
     assert plain.get("kind") == "self_authored_needs_v", plain
 
     def _always_signed(self, *, statement_full: str, proof_text: str,
-                       manuscript_text: str = "") -> dict:
+                       manuscript_text: str = "", manuscript_path: str = "") -> dict:
+        # 2026-11-04（甲）：真判定多了 `manuscript_path` 一格（签要认载体）；
+        # 打桩只回答"签过了没有"，那一格照收不用。
         return {"checked": True, "signed": True, "in_ledger": True,
                 "stmt_id": str(first.get("stmt_id") or ""),
                 "verification_id": "v-999999", "proof_sha256": "",
                 "why": "（探针：恒回签过了）"}
 
     monkeypatch.setattr(_RegisterStatement, "_v_signature_for", _always_signed)
-    forced = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review")))
+    forced = _ok(b.register_statement(**_own(kind="theorem", evidence_kind="proof_review"),
+                                      proof_manuscript=_ms(st, sid=str(first.get("stmt_id")))))
     # 判据 3 的断言是"拒收 `self_authored_needs_v`"。把那一份判定换成恒通过之后，
     # 这一格不再由它来拒（改由更后面的一级说话）⇒ 判据 3 必红。
     assert forced.get("kind") != "self_authored_needs_v", (

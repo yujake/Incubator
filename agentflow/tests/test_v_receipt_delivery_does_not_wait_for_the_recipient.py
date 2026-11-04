@@ -36,6 +36,8 @@ import time
 
 import pytest
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 from agentflow import closing as CL
 from agentflow import conductor as CND
 from agentflow import reviewaccept as RX
@@ -130,10 +132,20 @@ def _conductor(st: Store):
 
 def _verify(st: Store, sid: str, *, v_task: str, parent: str,
             role: str = "B", reply: str = REPLY_DEFECT) -> dict:
-    """走 V 的真入口：`AgentV.verify_proof`（投递钩子在它里面）。"""
+    """走 V 的真入口：`AgentV.verify_proof`（投递钩子在它里面）。
+
+    2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 ⇒ 夹具给被审的那一份正文落一份
+    按号命名的稿（`## 证明` 与 `proof_text` 逐字一致、`## 依赖` 空表），再带
+    `proof_manuscript` 送审。投递判据一个字没改：量的是同一份判定照旧投出去。
+    """
+    row = next((dict(r) for r in st.rows("statements")
+                if str(r.get("stmt_id") or "") == str(sid)), {})
+    text = str(row.get("proof_text") or PROOF)
+    rel = write_proof_manuscript(st.root, str(sid), text,
+                                 statement_full=str(row.get("statement_full") or ""))
     agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply))
     with CND.calling_as(v_task, "V", parent_task_id=parent, parent_role=role):
-        return agent.verify_proof(sid, proof_text=PROOF)
+        return agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
 
 
 def _items(st: Store) -> list[dict]:

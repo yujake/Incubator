@@ -58,6 +58,8 @@ if str(_SRC) not in sys.path:
 
 import pytest
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 from agentflow import proofloc as PL
 from agentflow import schema as S
 from agentflow import verifications as VR
@@ -214,7 +216,15 @@ def _three(agent: AgentV, main: str, **kw: Any) -> dict:
 
     为什么不是一次：业主 2026-10-29「V 签门槛 = 连续 3 次没问题」—— 第 1、2 次只落台账、
     不翻位。这一份判据量的是"签住之后引用核实读得对不对"，所以夹具要把那一签真的签住。
+
+    2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 ⇒ 这一格给被审的那一份正文落
+    一份按号命名的稿（`## 证明` 与 `proof_text` 逐字一致，`## 依赖` 空表），再带
+    `proof_manuscript` 送审。判据一个字没改：签要落在稿上，引用核实读的仍是同一份正文。
     """
+    text = str(kw.get("proof_text") or "")
+    if text.strip():
+        kw["proof_manuscript"] = write_proof_manuscript(
+            agent.workspace_root, main, text, proof_no=int(kw.get("proof_no") or 1))
     out: dict = {}
     for _i in range(VR.SIGN_STREAK_NEED):
         out = agent.verify_proof(main, **kw)

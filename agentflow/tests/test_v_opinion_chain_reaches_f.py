@@ -48,6 +48,8 @@ import pathlib
 
 import pytest
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 from agentflow import agent_loop as AL
 from agentflow import agent_v as AV
 from agentflow import evidencebits as EB
@@ -114,6 +116,16 @@ def _put(store: Store, *, proof: str = PROOF, sid: str = SID) -> dict:
 
 def _row(store: Store) -> dict:
     return dict(store.rows("statements")[0])
+
+
+def _ms(store: Store, *, sid: str = SID, proof: str = PROOF) -> str:
+    """2026-11-04（业主裁定 甲）：在册送审要带手稿。
+
+    给被审的那一份正文落一份按号命名的稿（`## 证明` 与 `proof_text` 逐字一致、
+    `## 依赖` 空表），返回工作区相对路径。签块与依赖面都落在这份稿上，于是
+    "V 的意见怎么到达 F"这一条链读的仍是同一份判定。
+    """
+    return write_proof_manuscript(store.root, sid, proof, statement_full=FULL)
 
 
 class _Call:
@@ -213,7 +225,7 @@ def _ask_v(st: Store, seam: _Seam, *replies: str) -> tuple[AgentV, dict, dict]:
     """走 V 的真入口一次（`AgentV.verify_proof`，秘书是真装配的那个对象）。"""
     sec = _sec(st, seam)
     agent = AgentV(st, workspace_root=st.root, llm=_ReviewSeam(*replies), secretary=sec)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=_ms(st))
     return agent, got, sec
 
 
@@ -353,7 +365,7 @@ def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_is_no_longer_a_c
     seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN), _axis("判不了")]})
     agent = AgentV(st, workspace_root=st.root,
                    llm=_ReviewSeam(REPLY_CLEAN, REPLY_UNSURE), secretary=_sec(st, seam))
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=_ms(st))
     # 没查成（框架失败）：不是"审过了"，也不是"有毛病"
     assert got["checked"] is False, got
     assert "secretary_unjudged" in str(got["reason"]), got["reason"]
@@ -527,7 +539,8 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     declared = declared_keys(spec.returns)
     assert declared, "这条判据抽不到声明 ⇒ 差集永远是空集（真空通过）"
     got = reg.call("verify.verify_proof",
-                   {"statement_id": SID, "proof_text": PROOF}, role="V")
+                   {"statement_id": SID, "proof_text": PROOF,
+                    "proof_manuscript": _ms(st)}, role="V")
     assert got.ok is True, got.error
     data = dict(got.data or {})
     keys = sorted(data)
@@ -558,7 +571,8 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     monkeypatch.setattr(AV, "default_llm", lambda: _ReviewSeam(REPLY_CLEAN))
     monkeypatch.setattr(SEC, "for_role_wired", _factory(clean_seam))
     got2 = reg2.call("verify.verify_proof",
-                     {"statement_id": SID, "proof_text": PROOF}, role="V")
+                     {"statement_id": SID, "proof_text": PROOF,
+                      "proof_manuscript": _ms(st2)}, role="V")
     assert got2.ok is True, got2.error
     data2 = dict(got2.data or {})
     keys2 = sorted(data2)
@@ -577,7 +591,8 @@ def test_c_tool_entry_reports_keys_its_declaration_does_not_promise(tmp_path, mo
     monkeypatch.setattr(AV, "default_llm", lambda: _ReviewSeam(REPLY_HOLDS))
     monkeypatch.setattr(SEC, "for_role_wired", _factory(fault_seam))
     got3 = reg3.call("verify.verify_proof",
-                     {"statement_id": SID, "proof_text": PROOF}, role="V")
+                     {"statement_id": SID, "proof_text": PROOF,
+                      "proof_manuscript": _ms(st3)}, role="V")
     assert got3.ok is True, got3.error
     data3 = dict(got3.data or {})
     keys3 = sorted(data3)

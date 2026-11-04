@@ -47,7 +47,7 @@ from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
 
 from test_v_reviews_three_times_before_signing import (
-    PROOF, SID, _axis, _ReviewSeam, _Seam, _put, _secretary, _ws)
+    PROOF, REL, SID, _axis, _ReviewSeam, _Seam, _put, _secretary, _ws)
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "src" / "agentflow" / "agent_v" / "core.py"
@@ -94,7 +94,10 @@ def _run(tmp: Path, *, replies: list[str], answers: dict, twice: bool = False,
                    secretary=_secretary(st, seam))
 
     def _once() -> dict:
-        return agent.verify_proof(SID, proof_text=PROOF)
+        # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿。`_put` 已经把被审的那一份
+        # 正文落成 `reports/f-proof-<号>.md`（`## 证明` 逐字一致、`## 依赖` 空表），
+        # 这里带路径送审 —— 终态判据读的仍是同一趟连判，一个字没改。
+        return agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     if patch is None:
         got = _once()

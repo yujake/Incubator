@@ -30,6 +30,7 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow.secretary import Secretary
 from agentflow.store import Store
@@ -80,6 +81,21 @@ def _body(full: str) -> dict:
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
+def _proofed(full: str, proof: str) -> dict:
+    """带证明正文的那一笔（`bits` 按生产口算好）。
+
+    2026-11-04 的正文闸（`proof_text_manuscript_sign_gate`）只判"这一份正文有没有一份
+    审的是手稿的 V 签"；生产里 B 先算好 `bits` 再交给秘书，闸按"B 已经判过"那一档让路
+    （`defer_without_sign`），签的判据仍由 `B._attach_proofs` / `_unsigned_proof_gate`
+    照旧执行。这一份判据测的是 `same_as` 的归一化，不是那道闸（闸自己有四条判据，
+    `test_proof_text_intake_needs_a_manuscript_sign.py`），所以夹具照生产形态把 `bits`
+    带上 —— 用例的四个断言一个字没改。
+    """
+    return {**_body(full), "proof_text": proof,
+            "bits": EB.bits_of(origin="own_result", proof=True, proof_process=proof,
+                               quote_verified=None, kind="conjecture")}
+
+
 def _rows(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("statements")]
 
@@ -100,7 +116,7 @@ def _first_row(base: pathlib.Path) -> tuple[Store, dict]:
     st = _ws(base)
     sec = Secretary("B", root=st.root, store=st,
                     seam=_Seam([{"decision": "different"}]), enable_model=True)
-    got = sec.record_statement({**_body(FULL_A), "proof_text": PROOF_A}, role="B")
+    got = sec.record_statement(_proofed(FULL_A, PROOF_A), role="B")
     assert got.get("created") is True, got
     return st, _rows(st)[0]
 
@@ -147,11 +163,10 @@ def test_the_second_submission_merges_instead_of_creating_a_row(tmp_path):
         {"decision": "different"},
         {"decision": "same", "same_as": "['000000']"},
     ]))
-    first = sec.record_statement({**_body(FULL_A), "proof_text": PROOF_A}, role="B")
+    first = sec.record_statement(_proofed(FULL_A, PROOF_A), role="B")
     assert first.get("created") is True, first
     sid = str(first["stmt_id"])
-    second = sec.record_statement({**_body(FULL_A_ALT), "proof_text": PROOF_B},
-                                  role="B")
+    second = sec.record_statement(_proofed(FULL_A_ALT, PROOF_B), role="B")
     assert second.get("checked") is True, second
     assert second.get("created") is False, second
     assert second.get("merged") is True, second
