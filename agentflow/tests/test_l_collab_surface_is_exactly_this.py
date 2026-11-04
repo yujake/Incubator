@@ -51,7 +51,7 @@ SID = "t"
 #: 本机那一版真 Lean（绝对路径；PATH 上的 lean 可能是另一个东西）。
 #: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
 #: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
-from conftest import lean_path
+from conftest import lean_path, restore_lean_baseline
 
 LEAN = lean_path()
 
@@ -353,46 +353,50 @@ def test_two_lean_off_hides_all_four_edges_and_the_role_itself(
 
     # ---- 正控：开着时这条边必须在（否则"关着时看不见"是真空）
     _lean_env(monkeypatch, True)
-    pol = P.Policy()
-    assert P.check(pol, P.Decision(frm="B", to="L", action="", depth=2)) is None, (
-        "开关开着时 B → L 都不通 ⇒ 判据 2 读的不是这条边")
-    on_reg = build_registry()
-    on_names = {spec.name for spec in on_reg.registry.for_role("L")}
-    assert "formal.formalize" in on_names, f"开着时 L 的工具面是空的：{sorted(on_names)}"
+    try:
+        pol = P.Policy()
+        assert P.check(pol, P.Decision(frm="B", to="L", action="", depth=2)) is None, (
+            "开关开着时 B → L 都不通 ⇒ 判据 2 读的不是这条边")
+        on_reg = build_registry()
+        on_names = {spec.name for spec in on_reg.registry.for_role("L")}
+        assert "formal.formalize" in on_names, f"开着时 L 的工具面是空的：{sorted(on_names)}"
 
-    # ---- 关掉
-    _lean_env(monkeypatch, False)
-    assert LS.is_hidden("L") is True
-    reg = builtin_registry()
-    assert "L" not in reg.roles(), f"角色表里还有 L：{reg.roles()}"
-    assert "L" not in reg.summonable_roles(), reg.summonable_roles()
-    # 四条边：B→L / L→C / 其余→L / M→L 一律不可见
-    for frm, to in (("B", "L"), ("L", "C"), ("M", "L"), ("D", "L")):
-        got = P.check(pol, P.Decision(frm=frm, to=to, action="", depth=2))
-        assert got is not None, f"{frm} → {to} 在开关关着时仍然通"
-        assert got.reason == "forbidden_edge", (frm, to, got.reason)
-        assert "lean" in got.detail, (frm, to, got.detail)
-    # 工具面：formal.* 一件都不装配，L 自己那面是空的
-    build = build_registry()
-    assembled = set(build.registry.names())
-    assert not sorted(x for x in assembled if str(x).startswith("formal.")), (
-        f"形式化工具仍然装配了：{sorted(x for x in assembled if str(x).startswith('formal.'))}")
-    assert build.registry.for_role("L") == [], "关着时 L 的工具面不是空的"
-    # 名册：接线态读数里没有 L
-    from agentflow.host import _Builder
+        # ---- 关掉
+        _lean_env(monkeypatch, False)
+        assert LS.is_hidden("L") is True
+        reg = builtin_registry()
+        assert "L" not in reg.roles(), f"角色表里还有 L：{reg.roles()}"
+        assert "L" not in reg.summonable_roles(), reg.summonable_roles()
+        # 四条边：B→L / L→C / 其余→L / M→L 一律不可见
+        for frm, to in (("B", "L"), ("L", "C"), ("M", "L"), ("D", "L")):
+            got = P.check(pol, P.Decision(frm=frm, to=to, action="", depth=2))
+            assert got is not None, f"{frm} → {to} 在开关关着时仍然通"
+            assert got.reason == "forbidden_edge", (frm, to, got.reason)
+            assert "lean" in got.detail, (frm, to, got.detail)
+        # 工具面：formal.* 一件都不装配，L 自己那面是空的
+        build = build_registry()
+        assembled = set(build.registry.names())
+        assert not sorted(x for x in assembled if str(x).startswith("formal.")), (
+            f"形式化工具仍然装配了：{sorted(x for x in assembled if str(x).startswith('formal.'))}")
+        assert build.registry.for_role("L") == [], "关着时 L 的工具面不是空的"
+        # 名册：接线态读数里没有 L
+        from agentflow.host import _Builder
 
-    assert "L" not in sorted(_Builder().status()), sorted(_Builder().status())
-    # 提示词：其余角色 0 处提到 L；按名取 L 的入口受控拒绝（理由 lean_off）
-    import re
+        assert "L" not in sorted(_Builder().status()), sorted(_Builder().status())
+        # 提示词：其余角色 0 处提到 L；按名取 L 的入口受控拒绝（理由 lean_off）
+        import re
 
-    role_name = re.compile(r"(?<![A-Za-z0-9_])L(?![A-Za-z0-9_])")
-    for role in OTHER_ROLES:
-        text = AP.system_prompt(role, registry=build.registry)
-        hits = role_name.findall(text)
-        assert not hits, f"{role} 的提示词里出现了 {len(hits)} 处 L 这个角色名"
-    res = CT.conductor_role_spec(None, "L")
-    assert res.ok is False, res
-    assert str((res.meta or {}).get("reason") or "") == "lean_off", res.meta
+        role_name = re.compile(r"(?<![A-Za-z0-9_])L(?![A-Za-z0-9_])")
+        for role in OTHER_ROLES:
+            text = AP.system_prompt(role, registry=build.registry)
+            hits = role_name.findall(text)
+            assert not hits, f"{role} 的提示词里出现了 {len(hits)} 处 L 这个角色名"
+        res = CT.conductor_role_spec(None, "L")
+        assert res.ok is False, res
+        assert str((res.meta or {}).get("reason") or "") == "lean_off", res.meta
+    finally:
+        # 这一条以"关"收尾：不显式回基线，关档读数会留给后面渲染提示词的用例。
+        restore_lean_baseline(monkeypatch)
 
 
 # ============================================================ 3. 消费 B 的定理证明库

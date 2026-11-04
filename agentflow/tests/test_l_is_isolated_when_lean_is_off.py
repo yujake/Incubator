@@ -44,6 +44,8 @@ from agentflow import settings as SET
 from agentflow.tools import TOOL_ROLES, build_registry
 from agentflow.tools import conductor_tools as CT
 
+from conftest import restore_lean_baseline
+
 #: L 这个角色名。
 ROLE_L = "L"
 
@@ -337,48 +339,65 @@ def test_off_no_role_prompt_mentions_l(monkeypatch: pytest.MonkeyPatch) -> None:
     """开关关：任一角色（A–H / M / V）的渲染提示词里没有 L 这个角色名。
 
     改前红：改前主控的伙伴表里有 `L：…` 一行（实测关着时全树 3 处，其中主控 1 处）。
+
+    收尾必须走共用助手（`tests/conftest.py::restore_lean_baseline`）：这一条在关档下
+    真的渲染过提示词，而 `agent_prompts` 的 `_lean_switch` 是 `lru_cache` ——
+    `monkeypatch` 的 undo 在用例之后才跑，不显式收回基线，后面渲染提示词的用例
+    就会读到关档那一份（2026-11-05 实测：按 node-id 抽跑时 G 缺五条开档锚点）。
     """
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     _reload_switch()
-    registry = build_registry().registry
-    counts = {role: len(ROLE_NAME.findall(_prompt(role, registry))) for role in OTHER_ROLES}
-    assert all(n == 0 for n in counts.values()), (
-        f"关着时仍有角色在提示词里提到 L：{ {k: v for k, v in counts.items() if v} }")
-    # 反真空：提示词本身不是空的（十个角色的提示词加起来必须远大于 0 字）
-    assert sum(len(_prompt(r, registry)) for r in OTHER_ROLES) > 20000, \
-        "提示词被清空了 ⇒ 上一条是真空的"
+    try:
+        registry = build_registry().registry
+        counts = {role: len(ROLE_NAME.findall(_prompt(role, registry))) for role in OTHER_ROLES}
+        assert all(n == 0 for n in counts.values()), (
+            f"关着时仍有角色在提示词里提到 L：{ {k: v for k, v in counts.items() if v} }")
+        # 反真空：提示词本身不是空的（十个角色的提示词加起来必须远大于 0 字）
+        assert sum(len(_prompt(r, registry)) for r in OTHER_ROLES) > 20000, \
+            "提示词被清空了 ⇒ 上一条是真空的"
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 def test_off_l_has_no_prompt_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
     """开关关：L 自己那份提示词不生成（受控拒绝，理由 `lean_off`）。"""
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     _reload_switch()
-    problem = _l_prompt_problem()
-    assert problem == "", problem
+    try:
+        problem = _l_prompt_problem()
+        assert problem == "", problem
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 def test_off_the_readouts_do_not_list_l(monkeypatch: pytest.MonkeyPatch) -> None:
     """开关关：画像文件与接线态读数里没有 L（不是"它存在但没用到"）。"""
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     _reload_switch()
-    profiles = AP.profiles_markdown(registry=build_registry().registry)
-    assert not ROLE_NAME.search(profiles), "画像文件里还有 L"
-    assert not ROW_L.search(profiles), "画像文件里还有 `L：` 这一行"
-    from agentflow.host import _Builder
+    try:
+        profiles = AP.profiles_markdown(registry=build_registry().registry)
+        assert not ROLE_NAME.search(profiles), "画像文件里还有 L"
+        assert not ROW_L.search(profiles), "画像文件里还有 `L：` 这一行"
+        from agentflow.host import _Builder
 
-    wiring = sorted(_Builder().status())
-    assert ROLE_L not in wiring, f"接线态读数里还有 L：{wiring}"
-    # 反真空：画像文件里其余角色照旧（不是整份文件被清空）
-    for role in ("E", "V"):
-        assert f"{role}：" in profiles, f"画像文件里没有 {role} 了"
+        wiring = sorted(_Builder().status())
+        assert ROLE_L not in wiring, f"接线态读数里还有 L：{wiring}"
+        # 反真空：画像文件里其余角色照旧（不是整份文件被清空）
+        for role in ("E", "V"):
+            assert f"{role}：" in profiles, f"画像文件里没有 {role} 了"
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 def test_off_the_whole_isolation_holds(monkeypatch: pytest.MonkeyPatch) -> None:
     """关着时上面六条合起来（判据 1 的整体形态，供反真空那两条复用）。"""
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     _reload_switch()
-    bad = _isolation_violations()
-    assert bad == [], "关着时仍然没有完全隔绝：\n  - " + "\n  - ".join(bad)
+    try:
+        bad = _isolation_violations()
+        assert bad == [], "关着时仍然没有完全隔绝：\n  - " + "\n  - ".join(bad)
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 # --------------------------------------------------------------------------- 判据 2
@@ -451,35 +470,39 @@ def test_the_same_process_follows_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     """
     from agentflow import leanscope as LS
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
-    _reload_switch()
-    off_first = _face_snapshot()
+    try:
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+        _reload_switch()
+        off_first = _face_snapshot()
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
-    # 判定入口本身不许缓存：一次 reload 都不调，它也必须立刻说"开"
-    assert LS.lean_on() is True, "改 env 之后判定入口还停在旧值（缓存了）"
-    _reload_switch()
-    on = _face_snapshot()
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+        # 判定入口本身不许缓存：一次 reload 都不调，它也必须立刻说"开"
+        assert LS.lean_on() is True, "改 env 之后判定入口还停在旧值（缓存了）"
+        _reload_switch()
+        on = _face_snapshot()
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
-    assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
-    _reload_switch()
-    off_again = _face_snapshot()
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+        assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
+        _reload_switch()
+        off_again = _face_snapshot()
 
-    print("\n[同进程切换] 关着 =", off_first)
-    print("[同进程切换] 开着 =", on)
-    print("[同进程切换] 再关 =", off_again)
+        print("\n[同进程切换] 关着 =", off_first)
+        print("[同进程切换] 开着 =", on)
+        print("[同进程切换] 再关 =", off_again)
 
-    assert off_first == off_again, "关 → 开 → 关 之后读数没有回到第一次那一档（缓存停在中间态）"
-    assert on != off_first, "换到开着那一档之后读数一个都没变（判定没接上）"
-    # 逐项：关着那两档是"不存在"，开着那一档是"存在"
-    assert off_first["in_registry"] is False and on["in_registry"] is True
-    assert off_first["in_tool_roles"] is False and on["in_tool_roles"] is True
-    assert off_first["role_spec_ok"] is False and on["role_spec_ok"] is True
-    assert off_first["role_spec_reason"] == "lean_off" and on["role_spec_reason"] is None
-    assert off_first["formal_in_l_face"] == [] and on["formal_in_l_face"] == sorted(FORMAL_TOOLS)
-    assert off_first["l_prompt_chars"] == 0 and on["l_prompt_chars"] > 0
-    assert off_first["m_mentions_l"] is False and on["m_mentions_l"] is True
+        assert off_first == off_again, "关 → 开 → 关 之后读数没有回到第一次那一档（缓存停在中间态）"
+        assert on != off_first, "换到开着那一档之后读数一个都没变（判定没接上）"
+        # 逐项：关着那两档是"不存在"，开着那一档是"存在"
+        assert off_first["in_registry"] is False and on["in_registry"] is True
+        assert off_first["in_tool_roles"] is False and on["in_tool_roles"] is True
+        assert off_first["role_spec_ok"] is False and on["role_spec_ok"] is True
+        assert off_first["role_spec_reason"] == "lean_off" and on["role_spec_reason"] is None
+        assert off_first["formal_in_l_face"] == [] and on["formal_in_l_face"] == sorted(FORMAL_TOOLS)
+        assert off_first["l_prompt_chars"] == 0 and on["l_prompt_chars"] > 0
+        assert off_first["m_mentions_l"] is False and on["m_mentions_l"] is True
+    finally:
+        # 这一条以"再关"收尾：不显式回基线，关档读数会留给后面渲染提示词的用例。
+        restore_lean_baseline(monkeypatch)
 
 
 def test_an_unreadable_value_is_treated_as_off_and_says_so(
@@ -518,13 +541,16 @@ def test_never_isolating_turns_criterion_one_red(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     _reload_switch()
-    assert _isolation_violations() == [], "正控没成立（关着时本来就没隔绝？）"
-    monkeypatch.setattr(LS, "is_hidden", lambda role: False)
-    bad = _isolation_violations()
-    assert bad, (
-        "把隔绝判定改成恒 False 之后判据 1 仍然全绿 ⇒ 判据 1 是真空的"
-        "（它没有读那个判定入口）")
-    print("\n[反真空] 恒 False 时报出来的违反项共", len(bad), "条：", bad[:6])
+    try:
+        assert _isolation_violations() == [], "正控没成立（关着时本来就没隔绝？）"
+        monkeypatch.setattr(LS, "is_hidden", lambda role: False)
+        bad = _isolation_violations()
+        assert bad, (
+            "把隔绝判定改成恒 False 之后判据 1 仍然全绿 ⇒ 判据 1 是真空的"
+            "（它没有读那个判定入口）")
+        print("\n[反真空] 恒 False 时报出来的违反项共", len(bad), "条：", bad[:6])
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 def test_always_isolating_turns_criterion_two_red(monkeypatch: pytest.MonkeyPatch) -> None:

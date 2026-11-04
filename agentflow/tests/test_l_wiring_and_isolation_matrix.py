@@ -46,6 +46,8 @@ from agentflow.store import Store
 from agentflow.tools import TOOL_ROLES, build_registry
 from agentflow.tools import conductor_tools as CT
 
+from conftest import restore_lean_baseline
+
 #: 被形式化的那条命题（与 A3 送进去的"没有定理的源码"无关：那一条不写盘）。
 CLAIM = "forall n : Nat, n + 0 = n"
 #: 命题台账里那一行的标题。
@@ -394,36 +396,40 @@ def test_e12_when_off_every_face_has_zero_l_and_zero_formal(
     "提示词是空的"）。
     """
     _lean_env(monkeypatch, True)
-    on = _faces()
-    assert "L" in on["roles"], on["roles"]
-    assert on["formal_assembled"], on["formal_assembled"]
-    assert ROLE_NAME.search(on["prompts"].get(S.CONDUCTOR_ROLE) or ""), (
-        "开着时主控的伙伴表里没有 L ⇒ 下面那个计数器的分辨力没被证明")
+    try:
+        on = _faces()
+        assert "L" in on["roles"], on["roles"]
+        assert on["formal_assembled"], on["formal_assembled"]
+        assert ROLE_NAME.search(on["prompts"].get(S.CONDUCTOR_ROLE) or ""), (
+            "开着时主控的伙伴表里没有 L ⇒ 下面那个计数器的分辨力没被证明")
 
-    _lean_env(monkeypatch, False)
-    off = _faces()
-    bad = _off_violations(off)
-    assert bad == [], "关着时仍然没有完全隔绝：\n  - " + "\n  - ".join(bad)
+        _lean_env(monkeypatch, False)
+        off = _faces()
+        bad = _off_violations(off)
+        assert bad == [], "关着时仍然没有完全隔绝：\n  - " + "\n  - ".join(bad)
 
-    # 逐条读出来（读者不看判据函数也知道关着时是什么样）
-    assert "L" not in off["roles"], off["roles"]
-    assert "L" not in off["summonable"], off["summonable"]
-    assert "L" not in off["tool_roles"], off["tool_roles"]
-    assert off["formal_assembled"] == [], off["formal_assembled"]
-    assert off["l_tool_face"] == [], off["l_tool_face"]
-    assert "L" not in off["roster"], off["roster"]
-    assert "L" in off["hidden"], sorted(off["hidden"])
-    assert "lean_off" in off["hidden"]["L"], off["hidden"]["L"]
+        # 逐条读出来（读者不看判据函数也知道关着时是什么样）
+        assert "L" not in off["roles"], off["roles"]
+        assert "L" not in off["summonable"], off["summonable"]
+        assert "L" not in off["tool_roles"], off["tool_roles"]
+        assert off["formal_assembled"] == [], off["formal_assembled"]
+        assert off["l_tool_face"] == [], off["l_tool_face"]
+        assert "L" not in off["roster"], off["roster"]
+        assert "L" in off["hidden"], sorted(off["hidden"])
+        assert "lean_off" in off["hidden"]["L"], off["hidden"]["L"]
 
-    counts = {role: len(ROLE_NAME.findall(text))
-              for role, text in off["prompts"].items() if role != "L"}
-    assert set(counts.values()) == {0}, counts
-    formal_counts = {role: text.count("formal.")
-                     for role, text in off["prompts"].items() if role != "L"}
-    assert set(formal_counts.values()) == {0}, formal_counts
-    assert sum(len(text) for text in off["prompts"].values()) > 20000, (
-        "十个角色的提示词加起来太短 ⇒ 「0 处 L」可能是真空的")
-    assert "L：" not in off["profiles"], "画像文件里还有 L 那一行"
+        counts = {role: len(ROLE_NAME.findall(text))
+                  for role, text in off["prompts"].items() if role != "L"}
+        assert set(counts.values()) == {0}, counts
+        formal_counts = {role: text.count("formal.")
+                         for role, text in off["prompts"].items() if role != "L"}
+        assert set(formal_counts.values()) == {0}, formal_counts
+        assert sum(len(text) for text in off["prompts"].values()) > 20000, (
+            "十个角色的提示词加起来太短 ⇒ 「0 处 L」可能是真空的")
+        assert "L：" not in off["profiles"], "画像文件里还有 L 那一行"
+    finally:
+        # 这一条以"关"收尾：不显式回基线，关档读数会留给后面渲染提示词的用例。
+        restore_lean_baseline(monkeypatch)
 
 
 # ============================================================ E13 开
@@ -493,39 +499,43 @@ def test_e14_the_same_process_follows_off_on_off(
     """
     _lean_env(monkeypatch, True)
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
-    assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
-    _reset_readings()
-    off_first = _snapshot(_faces())
+    try:
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+        assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
+        _reset_readings()
+        off_first = _snapshot(_faces())
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
-    assert LS.lean_on() is True, "改 env 之后判定入口还停在旧值（缓存了）"
-    _reset_readings()
-    on = _snapshot(_faces())
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+        assert LS.lean_on() is True, "改 env 之后判定入口还停在旧值（缓存了）"
+        _reset_readings()
+        on = _snapshot(_faces())
 
-    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
-    assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
-    _reset_readings()
-    off_again = _snapshot(_faces())
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+        assert LS.lean_on() is False, "改 env 之后判定入口还停在旧值（缓存了）"
+        _reset_readings()
+        off_again = _snapshot(_faces())
 
-    print("\n[同进程切换] 关着 =", off_first)
-    print("[同进程切换] 开着 =", on)
-    print("[同进程切换] 再关 =", off_again)
+        print("\n[同进程切换] 关着 =", off_first)
+        print("[同进程切换] 开着 =", on)
+        print("[同进程切换] 再关 =", off_again)
 
-    assert off_first == off_again, (
-        "关 → 开 → 关 之后读数没有回到第一次那一档（缓存停在中间态）："
-        f"{off_first} vs {off_again}")
-    assert on != off_first, "换到开着那一档之后读数一个都没变（开关没接上）"
-    # 逐项：关着那两档是"不存在"，开着那一档是"存在且可用"
-    assert off_first["registry_has_l"] is False and on["registry_has_l"] is True
-    assert off_first["summonable_has_l"] is False and on["summonable_has_l"] is True
-    assert off_first["formal_assembled"] is False and on["formal_assembled"] is True
-    assert off_first["l_face_size"] == 0 and on["l_face_size"] >= len(FORMAL_TOOLS)
-    assert off_first["roster_has_l"] is False and on["roster_has_l"] is True
-    assert off_first["l_prompt_hidden"] is True and on["l_prompt_hidden"] is False
-    assert off_first["prompt_l_total"] == 0 and on["prompt_l_total"] > 0
-    assert off_first["prompt_formal_total"] == 0 and on["prompt_formal_total"] > 0
-    assert off_first["profiles_has_l"] is False and on["profiles_has_l"] is True
+        assert off_first == off_again, (
+            "关 → 开 → 关 之后读数没有回到第一次那一档（缓存停在中间态）："
+            f"{off_first} vs {off_again}")
+        assert on != off_first, "换到开着那一档之后读数一个都没变（开关没接上）"
+        # 逐项：关着那两档是"不存在"，开着那一档是"存在且可用"
+        assert off_first["registry_has_l"] is False and on["registry_has_l"] is True
+        assert off_first["summonable_has_l"] is False and on["summonable_has_l"] is True
+        assert off_first["formal_assembled"] is False and on["formal_assembled"] is True
+        assert off_first["l_face_size"] == 0 and on["l_face_size"] >= len(FORMAL_TOOLS)
+        assert off_first["roster_has_l"] is False and on["roster_has_l"] is True
+        assert off_first["l_prompt_hidden"] is True and on["l_prompt_hidden"] is False
+        assert off_first["prompt_l_total"] == 0 and on["prompt_l_total"] > 0
+        assert off_first["prompt_formal_total"] == 0 and on["prompt_formal_total"] > 0
+        assert off_first["profiles_has_l"] is False and on["profiles_has_l"] is True
+    finally:
+        # 这一条以"再关"收尾：不显式回基线，关档读数会留给后面渲染提示词的用例。
+        restore_lean_baseline(monkeypatch)
 
 
 # ============================================================ E15 反真空
@@ -542,14 +552,18 @@ def test_e15_never_hiding_turns_e12_red(monkeypatch: pytest.MonkeyPatch) -> None
     改前红：改前没有 `leanscope`（连钉的对象都不存在）⇒ ImportError / AttributeError 红。
     """
     _lean_env(monkeypatch, False)
-    faces = _faces()
-    assert _off_violations(faces) == [], "正控没成立：关着时本来就没隔绝？"
+    try:
+        faces = _faces()
+        assert _off_violations(faces) == [], "正控没成立：关着时本来就没隔绝？"
 
-    monkeypatch.setattr(LS, "is_hidden", lambda role: False)
-    patched = _faces()
-    bad = _off_violations(patched)
-    assert bad, ("把 is_hidden 钉成恒 False 之后 E12 的判据仍然全绿 ⇒ 它读的不是那个入口")
-    blob = "\n".join(bad)
-    print("\n[反真空] 恒 False 时报出来的违反项共", len(bad), "条：", bad[:8])
-    for word in ("角色表", "名册", "提示词"):
-        assert word in blob, f"违反项里没有点到{word}（判据只读了其中一格）：{bad}"
+        monkeypatch.setattr(LS, "is_hidden", lambda role: False)
+        patched = _faces()
+        bad = _off_violations(patched)
+        assert bad, ("把 is_hidden 钉成恒 False 之后 E12 的判据仍然全绿 ⇒ 它读的不是那个入口")
+        blob = "\n".join(bad)
+        print("\n[反真空] 恒 False 时报出来的违反项共", len(bad), "条：", bad[:8])
+        for word in ("角色表", "名册", "提示词"):
+            assert word in blob, f"违反项里没有点到{word}（判据只读了其中一格）：{bad}"
+    finally:
+        # 这一条以"关"收尾：不显式回基线，关档读数会留给后面渲染提示词的用例。
+        restore_lean_baseline(monkeypatch)
