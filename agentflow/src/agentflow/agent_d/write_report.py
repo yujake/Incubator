@@ -6,6 +6,19 @@ from __future__ import annotations
 
 from ._support import Any, CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _conf_label, _digest, json
 
+
+def _carried_key(kind: str, ident: Any) -> str:
+    """携带单的去重键：`stmt:<命题号>` / `exp:<实验号>`（这一个落点是唯一的一处）。
+
+    为什么不能拿裸号去重：`statements` 与 `experiments` 的号各自从头编（都从 000000
+    起），所以 `stmt:000000` 与 `exp:000000` 同时存在是**常态**。同一个 `seen` 收裸号
+    时，先扫到的那一类会把另一类静默挤掉 —— 而携带单少一行、B 按清单寻址不到 E 的稿，
+    与"那条 e-proof 没签"在读数上完全同形（`carried_missing` 还因为单非空而不报）。
+    判据：`tests/test_carried_sheet_keeps_exp_rows_with_matching_numbers.py`。
+    """
+    return f"{str(kind or '').strip()}:{str(ident or '').strip()}"
+
+
 class _WriteReport:
     def write_report(self, out_path: str | Path | None = None) -> str:
         """汇总成较详细的初步研究报告（结构照 §4.5），返回写出的路径。
@@ -502,7 +515,8 @@ class _WriteReport:
             if str(row.get("status") or "") != "active":
                 continue
             sid = str(row.get("stmt_id") or "")
-            if not sid or sid in seen:
+            key = _carried_key("stmt", sid)
+            if not sid or key in seen:
                 continue
             got = _DS.read_manuscript(self.store.root, statement_ids=[sid])
             if str(got.get("source") or "") != _DS.SOURCE_DISK:
@@ -511,7 +525,7 @@ class _WriteReport:
                 blob = (Path(self.store.root) / str(got["path"])).read_bytes()
             except OSError:
                 continue
-            seen.add(sid)
+            seen.add(key)
             #: 第四格（2026-11-04，缺口 ①）：这一份是第几份证明。F 的稿今天不写
             #: `- 证明号`，所以它通常缺省（读成 #p1）；写了就照写 —— 携带单的四格
             #: 与手稿稿头读的是同一个函数（`depsection.manuscript_proof_no`）。
@@ -539,7 +553,8 @@ class _WriteReport:
             facts = one.get("observations") if isinstance(one.get("observations"), Mapping) else {}
             pocket = (facts or {}).get("proof_manuscript") if isinstance(facts, Mapping) else None
             rel = str((pocket or {}).get("path") or "") if isinstance(pocket, Mapping) else ""
-            if not eid or not rel or eid in seen:
+            key = _carried_key("exp", eid)
+            if not eid or not rel or key in seen:
                 continue
             try:
                 blob = (Path(self.store.root) / rel).read_bytes()
@@ -549,7 +564,7 @@ class _WriteReport:
             standing = _VS.manuscript_sign_standing(text, manuscript_path=rel)
             if str(standing.get("state") or "") != "signed":
                 continue
-            seen.add(eid)
+            seen.add(key)
             one = {"statement_id": "", "experiment_id": eid, "path": rel,
                    "sha256": hashlib.sha256(blob).hexdigest()}
             #: 第四格：E 的稿头写了 `- 证明号：N` 就照写（D 不猜；没写就不写，
