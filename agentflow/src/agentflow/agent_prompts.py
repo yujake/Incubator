@@ -3028,7 +3028,44 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 多四格、`agent_surface_snapshot.json` 因十一格提示词里的版本行变）；`docs/ROLE-GUIDE.md`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（业主已批 `--cap-usd 0.1`，
 #: 实际花费见提交信息）。
-PROMPT_VERSION = "p234"
+#: `p235`（2026-11-04，收口批：把今晚所有改过的提示词面 / 工具面一次性对齐）。
+#: p234 冻结（2026-11-03 13:27）之后，提示词 / 工具面这一侧落了 42 笔（`git log
+#: 979c5934..HEAD -- agent_prompts.py agent_skills.py specs/ tools/`），其中进段的有：
+#:
+#: ① 十一格共变的那一笔：八份 spec 的「子任务被拒」格从 `refusals` 改成真名
+#:    `subtask_refusals`（`agenttrace.node_facts` 的键；eaba3971 / bac5bc98）—— 每份
+#:    spec 的 policy 都有「监控直接下级」那一条，十一条都不例外 ⇒ 这一笔单独就让
+#:    十一格全换。
+#: ② 新只读工具 `doc.mapping_cells`（838a7d87，`roles=("G",)`，`side_effect="read"`）：
+#:    它的 summary 进 G 的 `tools_lines` 那一行 ⇒ G 的工具面 54 → 55、ROLE-GUIDE 的
+#:    G 表多一行、`tool_surface_snapshot` 的工具总数 123 → 124。
+#: ③ A：两个动作的 `returns=` 改抄实现（2f21d59f / bdfb5092 之后 A 的工具组表收成四组）。
+#: ④ B：`proof_review` 门槛换成「框架判满它的门槛」（754f013c）、`evidence_kind` 只教
+#:    可观察的「V 签到位」（38f22c7e / 80477fb5）、改写要有可签载体（e91eb6e9 / 9c5b1d3d）。
+#: ⑤ E：V 签的真凭据指到 V 台账那一行（cf346a0e）；V：签只由 V 颁发、落签归收方秘书
+#:    （54d08e83 / 7927fb88）；H：审核轴两态、`lean_file` 按证明通道、索引四格
+#:    （df703c1c / 91b5affc / 3e35b2c7）；G：对应表 3 + 索引四格 + `file` 两种落点
+#:    （f364a792 / 1c57a029 / ff67a154 / 8bc13565）；D / M：`statements` 非正文三格与
+#:    会触发作废（dd881f33 / 02d39de2）；F：手稿签块盖回稿的读法（48dc9d5e）＋
+#:    `attack.step` 的 returns 补三格（e922ff66）；L：`record` 落一行 `method=formal`
+#:    与第 4 位（17e731e8）。另有共用段 `PAPER_PACK` 的 blocker 两类读法（5b258d55，
+#:    只进 G / H / M）。
+#: ⑥ 工具说明面：`doc_tools` / `review_tools` / `verify_tools` / `attack_tools` 的
+#:    summary / returns（进 `tools_lines` 或 function-calling description）。
+#:
+#: 变化格 = 十一格全换（逐格现算，不是手抄；脚本 `temp/_p235_recompute.py`）。
+#: 逐格旧值 → 新值（p234 → p235）：
+#:   A 5123ace4→e8be2e68 / B 3c47404b→07a9cfcf / C 90c19871→395a6def /
+#:   D e5e43b8e→d72edfac / E 7c174604→ce0984eb / F 61be3f62→76657779 /
+#:   G bd3ea65a→2aca56d9 / H 15cc471d→4715fc66 / L 40152fe3→8cb3e956 /
+#:   M 9c423a10→8807868b / V 1703a9c5→2403f0f1。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p235）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 两份 golden 重冻（`tool_surface_snapshot.json` 因 `doc.mapping_cells` 多一件、
+#: `agent_surface_snapshot.json` 因十一格提示词里的版本行与 G 的工具面变）；
+#: `docs/ROLE-GUIDE.md` 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑
+#: （业主已批 `--cap-usd 0.1`，实际花费见提交信息）。
+PROMPT_VERSION = "p235"
 
 
 

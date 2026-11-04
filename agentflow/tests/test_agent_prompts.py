@@ -764,6 +764,14 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
+    # 2026-11-04（p235 收口）：今晚三处新写的说明面点名了台账 / 读数里的字段名，不是工具 ——
+    # 三条都是「表.列」或「行.键」形态，模型照着念读数不会拿到 `unknown_action`。
+    # `statements.derived_from`：`schema.py` 的 statements 表那一列（C 的污染面说明用它做对照）；
+    # `observations.e_signature`：experiments 行的 observations 里那一格（E 的结构标记，不是签）；
+    # `v_signature.sha256`：对应表那一行 v_signature 里的 sha256 键（G 的 `doc.mapping_cells` 读数）。
+    "statements.derived_from": "台账字段（statements 表的 derived_from 列），不是工具",
+    "observations.e_signature": "台账字段（experiments 行的 observations 里那一格：结构标记），不是工具",
+    "v_signature.sha256": "对应表那一行的 v_signature 里的 sha256 键，不是工具",
     # 2026-11-01（审计 171 D-08 的修法）：D 的跨趟记忆落点。它与 `research.set_status` 同型 ——
     # 真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`、`roles=('D',)`），
     # 本文件的夹具不带 store ⇒ 那一组按契约跳过。它替换掉的是被 fs 保留表拒的
@@ -2195,7 +2203,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # （`agent_skills` 正文只落盘、工具层 `returns` 只进 function-calling 的 description）。
 # 逐格旧值 → 新值：F 00b76d27→61be3f62。
 # 十一格是 `temp/_p233_recompute.py` 的现算值，不是手抄。
-_FROZEN_PROMPT_VERSION = "p234"
+# 2026-11-04（p234 → p235，收口批）：十一格全换 —— p234 冻结（2026-11-03 13:27）之后，
+# 提示词 / 工具面一侧落了 42 笔。其中进段的有：八份 spec 的「子任务被拒」格从
+# `refusals` 改成真名 `subtask_refusals`（每份 spec 都有「监控直接下级」那一条 ⇒
+# 十一条全部换值）；新只读工具 `doc.mapping_cells`（`roles=("G",)`，只进 G 的
+# `tools_lines`）；A / B / E / F / G / H / L / M / V 各自的 policy / returns 收口；
+# `PAPER_PACK` 的 blocker 两类读法（只进 G / H / M）。逐格旧值 → 新值：
+#   A 5123ace4→e8be2e68 / B 3c47404b→07a9cfcf / C 90c19871→395a6def /
+#   D e5e43b8e→d72edfac / E 7c174604→ce0984eb / F 61be3f62→76657779 /
+#   G bd3ea65a→2aca56d9 / H 15cc471d→4715fc66 / L 40152fe3→8cb3e956 /
+#   M 9c423a10→8807868b / V 1703a9c5→2403f0f1。
+# 十一格是 `temp/_p235_recompute.py`（导入本文件的 `_surface_digest`，环境变量与
+# `conftest.py` 逐条对齐）的现算值，不是手抄；逐笔出处写在
+# `agent_prompts.PROMPT_VERSION` 上方 p235 那一格。
+_FROZEN_PROMPT_VERSION = "p235"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2422,17 +2443,17 @@ _FROZEN_PROMPT_VERSION = "p234"
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "5123ace4547172aebe19884fd3e78159f067696ba133157c2301cb5fc5e7d4da",
-    "B": "3c47404b5172168897186da97af29b09596833720fdcf281e373cc9f37736d07",
-    "C": "90c19871362f11a0145934680de53accc4e3730ce3ad3ae3e74a73a971d9aa28",
-    "D": "e5e43b8ef5b330dc899172f21520b961df11444e6c644acb1b962b611c131ef6",
-    "E": "7c17460446aa6d3dde60942403092dc7a6312d1c5e76ffbed76a30aeefe80398",
-    "F": "61be3f622587c9ab3f29e1ba663aaad9431aa30082ce4f9e4bf5e2608a4d4a78",
-    "G": "bd3ea65a104580ce4d12dc99749971965ce19494846359599802aeb69f5d594f",
-    "H": "15cc471da1b6e43cf97d45437ed7610aa3c853e04e4fe5cfb5021bbebc398ad3",
-    "L": "40152fe3b9a31ed62c8f3af93220e6901dc3b567c96c049ea564acf999b39102",
-    "M": "9c423a10e5a5be505e04eb707be0e20dab624e46140bc7c8e6b208983eb594fd",
-    "V": "1703a9c50f70c8a88c1d113f827936c1aa7153107e896b28767d3e1428fb3382",
+    "A": "e8be2e68c8253860d3351a18ad9fe60734da7516dce4df0b152a29c63d5596e4",
+    "B": "07a9cfcfd2a354a5e625cdc2c30063f82cca81fb64771a5fcc4cd0a1ed80a3c1",
+    "C": "395a6def3ca3e0ab261dbab7f895161e5b16b67df1e8fb7bf684d58321d4eaea",
+    "D": "d72edfac6fd7079bc1a758b8c8ae8adb28b3cef2c1956476d40e98194c7140e7",
+    "E": "ce0984eb17d8bde20ec2b469ca22288404768628cbedb46badc1c71da6f5c6f9",
+    "F": "766577794c101e03a765dde5bc00d610b69e4b7e5d2eba6691b5bfc742c5ef3b",
+    "G": "2aca56d9c259b0f50c4af278085eb8d8843f98d33594f2d883ec7c72d92d1acc",
+    "H": "4715fc6658af7a72eb06063edd7c7b8fcbe1e3e4282d2d2777d86d69ae1d3700",
+    "L": "8cb3e956d80b6c5a6280ce0f4d116aff2c1063054a24d010a5cb834a09dce535",
+    "M": "8807868bcbd6934364e501362f36a8070081591fcca119988772b943d5cd456c",
+    "V": "2403f0f1f2a1d23ed8af32472154c09d7c4dbf53211c037693e12ecd74b52e41",
 }
 
 
