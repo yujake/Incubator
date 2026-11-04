@@ -41,6 +41,8 @@ from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
+
+from _proof_manuscript_fixture import write_proof_manuscript
 from agentflow.store import Store
 
 TS = "2026-10-22T00:00:00+08:00"
@@ -174,9 +176,13 @@ def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
     """
     agent = AgentV(store, workspace_root=store.root, llm=_Seam(),
                    secretary=_v_secretary(store))
+    no = int(proof_no or 1)
+    body = proof_text or (P2 if no == 2 else P1)
+    # 2026-11-04（甲）：在册送审必须带按号手稿；p2 走 `f-proof-<号>-p2.md`。
+    rel = write_proof_manuscript(store.root, SID, body, statement_full=FULL, proof_no=no)
     out: dict = {}
     for _i in range(max(1, int(times))):
-        kw = {"proof_no": proof_no}
+        kw = {"proof_no": proof_no, "proof_manuscript": rel}
         if proof_text:
             kw["proof_text"] = proof_text
         out = agent.verify_proof(SID, **kw)
@@ -322,8 +328,9 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     seam = _Seam()
     # 三次（连续 3 次「成立」才翻位、且翻位由 V 的秘书做 —— 2026-10-29）
     agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_v_secretary(st))
+    rel2 = write_proof_manuscript(st.root, SID, P2, statement_full=FULL, proof_no=2)
     for _i in range(VR.SIGN_STREAK_NEED):
-        out = agent.verify_proof(SID, proof_no=2)
+        out = agent.verify_proof(SID, proof_no=2, proof_manuscript=rel2)
 
     assert seam.prompts, "没有问过模型 ⇒ 这条判据没有对象"
     assert seam.prompts[0], seam.prompts
@@ -365,7 +372,8 @@ def test_text_without_proof_no_never_mismatches_the_recorded_number(
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
     seam = _Seam()
-    out = _v(st, seam).verify_proof(SID, proof_text=P2)      # 漏了 proof_no
+    rel1 = write_proof_manuscript(st.root, SID, P1, statement_full=FULL)
+    out = _v(st, seam).verify_proof(SID, proof_text=P2, proof_manuscript=rel1)
 
     if out["checked"]:
         # 记到 #p1 那一支：sha 必须是 #p1 的，否则就是错配。
@@ -493,7 +501,7 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
         # V 那一侧：同一个失败必须读成 `checked=False`，不许报"签住了第 3 位"。
         agent = AgentV(st, workspace_root=st.root, llm=_Seam(),
                        secretary=_v_secretary(st))
-        out = agent.verify_proof(SID, proof_text=P1, proof_no=1)
+        out = agent.verify_proof(SID, proof_text=P1, proof_no=1, proof_manuscript=write_proof_manuscript(st.root, SID, P1, statement_full=FULL))
         assert out["checked"] is False, out
         assert out["signed_bit3"] is False, out
         assert "台账那一行" in out["reason"], out["reason"]

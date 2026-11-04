@@ -25,6 +25,8 @@ from agentflow.agent_b import AgentB
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 
 def _ws(tmp_path: pathlib.Path) -> Store:
     store = Store(tmp_path / "ws")
@@ -79,7 +81,10 @@ def test_an_existing_statement_takes_the_normal_review_path(tmp_path: pathlib.Pa
     sid = _register_a_statement(store)
     assert sid, "没种出命题"
     v = AgentV(store)
-    out = v.verify_proof(sid, "Proof. 一步。")
+    # 2026-11-04（甲）：在册命题要带按号手稿；这一条量的是"在册 ⇒ 走正常审校路径"。
+    rel = write_proof_manuscript(store.root, sid, "Proof. 一步。",
+                                 statement_full="探针命题：若 n≥3 则无解（V 判据用）")
+    out = v.verify_proof(sid, "Proof. 一步。", proof_manuscript=rel)
     got = out if isinstance(out, dict) else out.to_dict()
     assert got.get("kind") != "statement_missing", f"在册命题被误报成不在册：{got}"
     assert str(got.get("reason") or "") != "statement_missing", got

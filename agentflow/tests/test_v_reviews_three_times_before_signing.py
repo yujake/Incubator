@@ -69,9 +69,13 @@ from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+from _proof_manuscript_fixture import write_proof_manuscript
+
 TS = "2026-10-30T00:00:00+08:00"
 SID = "000007"
 PROOF = "1. 取 G = C_n（n ≥ 3）：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。"
+#: 2026-11-04（甲）：在册送审要带的那一份按号手稿。
+REL = f"reports/f-proof-{SID}.md"
 FULL = "设 G 是 3-正则群；则弦长函数不是常值。"
 
 #: 一次 clean 的审阅回复（三档里「没问题」那一档的原料：结论写成立、没指出缺陷）。
@@ -105,6 +109,7 @@ def _put(store: Store) -> dict:
     }
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
+    write_proof_manuscript(store.root, SID, PROOF, statement_full=FULL)
     return row
 
 
@@ -221,7 +226,7 @@ def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
 
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     # 这一次调用真的自己问了三次模型（不是 F 又提交了三次）。
     assert review.asked() == 3, (
@@ -284,7 +289,7 @@ def test_t2_a_fault_on_the_second_pass_stops_and_is_washed_to_f(tmp_path):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
 
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 2, (
         f"第 2 次已经判了 fault，却又问了 {review.asked()} 次模型 ⇒ 「立刻停」没做到")
@@ -345,7 +350,7 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 1)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review.asked() == 1, (
         f"门槛 1 时问了 {review.asked()} 次模型 ⇒ 停的条件没跟着门槛走")
     assert len(got.get("review_passes") or []) == 1, got.get("review_passes")
@@ -361,7 +366,7 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     agent2 = AgentV(st2, workspace_root=st2.root, llm=review2,
                     secretary=_secretary(st2, sec_seam2))
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 5)
-    got2 = agent2.verify_proof(SID, proof_text=PROOF)
+    got2 = agent2.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     passes = got2.get("review_passes") or []
     assert len(passes) == 5, f"门槛 5 时判了 {len(passes)} 次 ⇒ 上界没有等于门槛"
     assert review2.asked() == 5, (review2.asked(), passes)
@@ -385,7 +390,7 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     agent3 = AgentV(st3, workspace_root=st3.root, llm=review3,
                     secretary=_secretary(st3, sec_seam3))
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 0)
-    got3 = agent3.verify_proof(SID, proof_text=PROOF)
+    got3 = agent3.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review3.asked() == 0, (
         f"门槛 0 时仍然问了 {review3.asked()} 次模型 ⇒ 上界没有跟着门槛走")
     assert got3["review_passes"] == [], got3["review_passes"]
@@ -442,7 +447,7 @@ def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
 
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 2, (
         f"第 2 转已经判成 fault，却又问了 {review.asked()} 次模型 ⇒ 「立刻终止」没做到")
@@ -523,7 +528,7 @@ def test_t5_a_secretary_that_cannot_answer_is_not_a_verdict(tmp_path):
                    secretary=SEC.Secretary("V", root=st.root, store=st, seam=dead,
                                            enable_model=True))
 
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     # 连判在第一转就停了（V 问了一次模型、秘书问了一次）。
     assert review.asked() == 1, review.asked()

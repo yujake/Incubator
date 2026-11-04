@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -510,24 +511,74 @@ MANUSCRIPT_WRITE_STATES: tuple[str, ...] = ("written", "failed", "not_attempted"
 MANUSCRIPT_WRITE_UNRECORDED = "unrecorded"
 
 
-def manuscript_id_of(path: Any) -> str:
-    """手稿路径 ⇒ 裸稿号（`reports/f-proof-000000.md` ⇒ `000000`；`...-plan-0001.md` ⇒ `plan-0001`）。
+#: 多证明手稿名认不出来时的受控码（2026-11-04 业主裁定）。
+MANUSCRIPT_NAME_BAD = "bad_manuscript_name"
 
-    认不出就回空串（不猜一个号）：第 9 格宁可落 `unmatched`，也不许把 `notes/foo.md`
-    读成 `foo` 然后冒充"这一块属于它"。认得两种写成：
-    `f-proof-<号>.md`（F 的证明手稿）与任意 `*-proof-<号>.md`（一样取最后一段）。
-    号里允许带前缀（`plan-0001`）：只去文件名前缀，不动号本身，所以两种号不会撞车。
+#: 证明手稿名的显式规则（2026-11-04 业主裁定）：
+#: `<prefix>-proof-<号>[-p<N>].md` ⇒ `(裸稿号, proof_no=N)`。
+#: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮）；
+#: - `-p<N>`：N 是 ≥1 的十进制，缺省 1（canonical）；`-p0` / `-pabc` / 号里带别的
+#:   后缀一律不认（认不出就受控拒绝，不猜）。
+_MANUSCRIPT_NAME_RE = re.compile(
+    r"^(?P<prefix>.*?)-proof-(?P<id>\d{4,6}|plan-\d+)(?:-p(?P<no>[1-9]\d*))?$")
+
+
+def parse_manuscript_name(path: Any) -> dict[str, Any]:
+    """把手稿文件名解析成 `(裸稿号, proof_no)`（显式规则，认不出不猜）。
+
+    返回 `{"checked", "family", "manuscript_id", "proof_no", "code", "reason", "name"}`：
+
+    | 名字 | 结果 |
+    |---|---|
+    | `reports/f-proof-000000.md` | `family=True, id=000000, proof_no=1` |
+    | `reports/f-proof-000000-p2.md` | `family=True, id=000000, proof_no=2` |
+    | `reports/f-proof-plan-0001.md` | `family=True, id=plan-0001, proof_no=1` |
+    | `notes/proof.md` | `family=False, id="", checked=True`（不是这个家族，不拒绝） |
+    | `reports/f-proof-abc.md` | `checked=False, code=bad_manuscript_name`（受控拒） |
+
+    `family=False` 与 `checked=False` 是两件事：前者是"这个文件名不在 `*-proof-<号>`
+    家族里"（V 仍可签别的文件，只是第 9 格认不出号），后者是"它明明像一份证明手稿，
+    号却认不出"（写块那一步必须拒，不能猜一个号）。
     """
+    out: dict[str, Any] = {"checked": True, "family": False, "manuscript_id": "",
+                           "proof_no": 0, "code": "", "reason": "", "name": ""}
     name = str(path or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
     if name.lower().endswith(".md"):
         name = name[:-3]
+    out["name"] = name
     if not name:
-        return ""
-    if name.startswith("f-proof-"):
-        return name[len("f-proof-"):]
-    if "-proof-" in name:
-        return name.rsplit("-proof-", 1)[-1]
-    return ""
+        return out
+    matched = _MANUSCRIPT_NAME_RE.match(name)
+    if matched is None:
+        if "-proof-" not in name:
+            out["reason"] = ("不是 `*-proof-<号>` 家族的名字（没有可解析的稿号；"
+                             "例如 `notes/proof.md` 仍可签，只是第 9 格认不出号）")
+            return out
+        out.update(checked=False, family=True, code=MANUSCRIPT_NAME_BAD,
+                   reason=(f"手稿名 {name!r} 认不出号：要 "
+                           "`<prefix>-proof-<号>[-p<证明号>].md`（号是 4–6 位十进制，"
+                           "或 `plan-<数字>`；`-p<N>` 的 N 是 ≥1 的十进制）"))
+        return out
+    no = int(matched.group("no") or 1)
+    out.update(family=True, manuscript_id=str(matched.group("id")), proof_no=no,
+               reason=(f"`{name}` ⇒ 稿号 {matched.group('id')}、证明号 {no}"))
+    return out
+
+
+def manuscript_id_of(path: Any) -> str:
+    """手稿路径 ⇒ 裸稿号（`reports/f-proof-000000.md` ⇒ `000000`；`...-plan-0001.md` ⇒ `plan-0001`）。
+
+    2026-11-04（业主裁定，多证明命名）：`f-proof-000000-p2.md` 的裸稿号是 `000000`
+    （`-p2` 是证明号，不是稿号的一部分）—— 否则 B 的签块闸会拿 `000000-p2` 去
+    `statements` 里找，永远对不上。解析本体在 :func:`parse_manuscript_name`；
+    认不出就回空串（不猜一个号），第 9 格宁可落 `unmatched`。
+    """
+    return str(parse_manuscript_name(path).get("manuscript_id") or "")
+
+
+def manuscript_proof_no_of(path: Any) -> int:
+    """手稿路径 ⇒ 证明号（`...-p2.md` ⇒ 2；缺省 1；认不出 ⇒ 0，不猜）。"""
+    return int(parse_manuscript_name(path).get("proof_no") or 0)
 
 
 def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
@@ -1229,6 +1280,17 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
                            "（零字节：别的秘书的签不许被这一位落）"))
         return out
     rel_manuscript = str(manuscript_path or doc.get("artifact_path") or "").strip()
+    # ---- 2026-11-04（业主裁定）：像证明手稿、号却认不出 ⇒ 受控拒，不猜 ----------
+    #
+    # `notes/proof.md` 这类"不在 `*-proof-<号>` 家族里"的名字仍可签（第 9 格落空、
+    # B 按 unmatched 处理）；但 `f-proof-abc.md` / `f-proof-000000-p0.md` 这种"明明
+    # 是证明手稿、号却认不出"的名字必须在这里拒：猜一个号会把签盖到别的命题头上。
+    _parsed_name = parse_manuscript_name(rel_manuscript)
+    if _parsed_name.get("family") and not _parsed_name.get("checked"):
+        out.update(code=str(_parsed_name.get("code") or MANUSCRIPT_NAME_BAD),
+                   reason=(f"落签没成：{_parsed_name.get('reason') or '手稿名认不出号'}"
+                           " ⇒ 一个字节都不写"))
+        return out
     mw = write_manuscript_sign(
         root, rel_manuscript, proof_sha=doc.get("artifact_sha"),
         streak=doc.get("streak"), need=doc.get("need"),

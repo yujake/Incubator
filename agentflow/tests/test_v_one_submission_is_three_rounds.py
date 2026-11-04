@@ -45,6 +45,7 @@ from test_v_reviews_three_times_before_signing import (
     CLEAN_REPLY,
     FAULT_REPLY,
     PROOF,
+    REL,
     SID,
     WASHED,
     _axis,
@@ -98,7 +99,7 @@ def test_a_one_call_asks_three_rounds_and_signs(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 3, f"一次送审只问了 {review.asked()} 次 ⇒ 不是连判三轮"
     passes = got.get("review_passes") or []
@@ -140,7 +141,7 @@ def test_b_fault_on_round_two_stops_after_two_and_rejects(tmp_path):
                                         "findings": [{"quote": "第 2 步的记号没有定义",
                                                       "why": "记号没有定义就没法核这一步"}]}],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 2, (
         f"第 2 轮已经判 fault，却又问了 {review.asked()} 次 ⇒ 「立刻停」没做到")
@@ -172,7 +173,7 @@ def test_c_fault_on_round_one_stops_after_one_and_rejects(tmp_path):
                                         "findings": [{"quote": "第 2 步的记号没有定义",
                                                       "why": "记号没有定义就没法核这一步"}]}],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 1, (
         f"第 1 轮已经判 fault，却又问了 {review.asked()} 次 ⇒ 不是「立刻停」")
@@ -217,7 +218,7 @@ def test_d_two_legacy_clean_rounds_cannot_add_up_to_this_submission(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 3, (
         f"旧台账 2 行 clean + 本次第 1 轮 clean 就出签 ⇒ 跨送审累计（只问了 "
@@ -275,7 +276,7 @@ def test_d2_a_second_submission_does_not_inherit_the_first_calls_two_rounds(tmp_
     first_review = _BrokenAfterOne([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    _agent(st, first_review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    _agent(st, first_review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert first_review.asked() == 2, "夹具前提：第一趟第二轮失败（第一轮 clean 已落一行）"
     rows = _rows(st)
     assert len(rows) == 1 and str(rows[0].get("review_call") or ""), rows
@@ -284,7 +285,7 @@ def test_d2_a_second_submission_does_not_inherit_the_first_calls_two_rounds(tmp_
 
     # 第二趟：三轮 clean。改前第 2 轮就会凑到 3（1+2），只问 2 次；改后问满 3。
     second_review = _ReviewSeam([CLEAN_REPLY])
-    got = _agent(st, second_review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, second_review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert second_review.asked() == 3, (
         f"第二趟送审只问了 {second_review.asked()} 次就签 ⇒ 把第一趟的 1 轮 clean "
         "累计进来了（跨送审累计）")
@@ -311,7 +312,7 @@ def test_e_the_sign_file_is_not_a_vacuous_pass(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF)
+    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["signed_bit3"] is True, got
 
     doc = _sign_doc(st)

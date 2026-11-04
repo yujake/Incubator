@@ -48,6 +48,7 @@ from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
 
 import test_v_reviews_three_times_before_signing as T3
+from _proof_manuscript_fixture import write_proof_manuscript
 
 
 def _signed_agent(st):
@@ -73,7 +74,7 @@ def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
     T3._put(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF)
+    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
     assert first["signed_bit3"] is True, first["sign_issuance"]
     assert T3._stmt_row(st)["bits"]["reviewed"] is True, T3._stmt_row(st)["bits"]
     signed_rows = T3._rows(st)
@@ -82,7 +83,7 @@ def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF)
+    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
     assert again["checked"] is True, again
     assert again["signed_bit3"] is True, again
     assert again["review_passes"] == [], (
@@ -93,7 +94,7 @@ def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
     assert again["bits"]["reviewed"] is True, again["bits"]
 
     # 不给正文那一趟（读盘上那一份）也必须同样短接：M 派 V 时常走这一支。
-    without_text = agent.verify_proof(T3.SID)
+    without_text = agent.verify_proof(T3.SID, proof_manuscript=T3.REL)
     assert without_text["checked"] is True, without_text
     assert without_text["review_passes"] == [], without_text["review_passes"]
     assert without_text["reason"] == "already_signed", without_text["reason"]
@@ -124,7 +125,7 @@ def test_r2_clearing_the_bit_lets_the_same_call_review_again(tmp_path):
     T3._put(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF)
+    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
     assert first["signed_bit3"] is True, first["sign_issuance"]
     rows_before = len(T3._rows(st))
     assert rows_before == VR.SIGN_STREAK_NEED, T3._rows(st)
@@ -143,7 +144,7 @@ def test_r2_clearing_the_bit_lets_the_same_call_review_again(tmp_path):
         tx.upsert("statements", cleared)
     assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
 
-    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF)
+    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
 
     passes = again["review_passes"] or []
     assert again["reason"] != "already_signed", (
@@ -166,7 +167,7 @@ def test_r3_an_unsigned_statement_still_reviews_three_times(tmp_path):
     assert T3._stmt_row(st)["bits"]["reviewed"] is False, "夹具前提：这一行一次都没签过"
     agent, review, sec_seam = _signed_agent(st)
 
-    got = agent.verify_proof(T3.SID, proof_text=T3.PROOF)
+    got = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
 
     assert review.asked() == VR.SIGN_STREAK_NEED, (
         f"未签的命题只问了 {review.asked()} 次模型 ⇒ 短接做宽了（历史行为变了）")
@@ -195,6 +196,8 @@ def _put_two_proofs(st):
     }
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
+    write_proof_manuscript(st.root, T3.SID, T3.PROOF, statement_full=T3.FULL)
+    write_proof_manuscript(st.root, T3.SID, proof_2, statement_full=T3.FULL, proof_no=2)
     return proof_2
 
 
@@ -210,14 +213,14 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
     proof_2 = _put_two_proofs(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_no=1)
+    first = agent.verify_proof(T3.SID, proof_no=1, proof_manuscript=T3.REL)
     assert first["signed_bit3"] is True, first["sign_issuance"]
     assert EB.reviewed_by_proof(T3._stmt_row(st)) == {1: True, 2: False}, (
         EB.reviewed_by_proof(T3._stmt_row(st)))
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    second = agent.verify_proof(T3.SID, proof_no=2)
+    second = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=f"reports/f-proof-{T3.SID}-p2.md")
 
     assert second["reason"] != "already_signed", (
         "#p2 一次都没审过，这一趟却短接了 ⇒ 短接读的是命题级汇总位（借了 #p1 的光）")
@@ -234,7 +237,7 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
 
     # 两份都签了之后，再问 #p2 才该短接。
     review.prompts.clear()
-    third = agent.verify_proof(T3.SID, proof_no=2)
+    third = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=f"reports/f-proof-{T3.SID}-p2.md")
     assert third["reason"] == "already_signed", third["reason"]
     assert third["review_passes"] == [], third["review_passes"]
     assert review.asked() == 0, review.asked()

@@ -137,15 +137,21 @@ def _chain(tmp_path: pathlib.Path, body: str = EXHAUSTIVE_PROBE,
     # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
     # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
     sign_before_registration(store.root, proof_text=column)
+    # 2026-11-04（甲）：B 的入库面也要那份按号手稿（E 的 e-proof 稿就是它）。
+    manuscript_text = (pathlib.Path(store.root) / str(out["proof_manuscript"])).read_text(
+        encoding="utf-8")
     filed = AgentB(store, extractor=None, extract_text=None).register_statement(
         origin="own_result", kind="conjecture", label="R(3,4)=9",
         statement_full="对任意正整数 n，R(3,4)=9。", statement_text="R(3,4)=9",
-        proof_text=column, evidence_kind="cross_check", doc_id=S.format_id(0),
+        proof_text=column, proof_manuscript=manuscript_text,
+        evidence_kind="cross_check", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导")
     assert filed.get("ok") is True, filed
     statement = store.rows("statements")[-1]
     return {"store": store, "out": out, "row": row, "column": column,
+            # 2026-11-04（甲）：在册穷举送审也要带 E 的按号手稿。
+            "manuscript": str(out.get("proof_manuscript") or ""),
             "statement": statement, "v": AgentV(store, workspace_root=store.root,
                                                 secretary=_v_secretary(store))}
 
@@ -166,11 +172,11 @@ def _v_secretary(store: Store):
                          enable_model=True)
 
 
-def _three(agent: AgentV, sid: str, column: str) -> dict:
+def _three(agent: AgentV, sid: str, column: str, *, manuscript: str = "") -> dict:
     """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值（第 3 次才翻位）。"""
     got: dict = {}
     for _i in range(VR.SIGN_STREAK_NEED):
-        got = agent.verify_proof(sid, proof_text=column)
+        got = agent.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     return got
 
 
@@ -184,7 +190,8 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
     ⇒ 三次会审之后取最后一次（`_three`），台账因此有三行（改前一行）。
     """
     env = _chain(tmp_path)
-    got = _three(env["v"], env["statement"]["stmt_id"], env["column"])
+    got = _three(env["v"], env["statement"]["stmt_id"], env["column"],
+                 manuscript=env["manuscript"])
     assert got["checked"] is True, got
     assert got["kind"] == "numeric_evidence", got
     assert got["verdict"] == ER.VERDICT_OK, (got["verdict"], got.get("findings"))
@@ -203,7 +210,8 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
 def test_4b_a_broken_exhaustive_note_is_faulty_and_named(tmp_path: pathlib.Path) -> None:
     """③-2 把穷尽说明改坏（说成抽样、代码里也有抽样）⇒ `有毛病`，点名那一项。"""
     env = _chain(tmp_path, SAMPLING_PROBE, "code/sample_ramsey34.py")
-    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"])
+    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"],
+                                         proof_manuscript=env["manuscript"])
     assert got["checked"] is True, got
     assert got["verdict"] == ER.VERDICT_BAD, (got["verdict"], got.get("findings"))
     assert got["defect_step"] == 6, got["defect_step"]
@@ -217,7 +225,8 @@ def test_4c_a_search_space_that_the_code_does_not_support_is_faulty(
         tmp_path: pathlib.Path) -> None:
     """③-3 搜索空间与代码对不上（③ 报 2^40，代码里只有 2^36）⇒ `有毛病`，点名那个数。"""
     env = _chain(tmp_path, OVERCLAIM_SPACE_PROBE, "code/overclaim_ramsey34.py")
-    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"])
+    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"],
+                                         proof_manuscript=env["manuscript"])
     assert got["verdict"] == ER.VERDICT_BAD, (got["verdict"], got.get("findings"))
     assert got["defect_step"] == 3, got["defect_step"]
     kinds = [str(f.get("kind")) for f in got["findings"]]
@@ -238,7 +247,8 @@ def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Pa
     report = pathlib.Path(env["store"].root) / env["out"]["report_path"]
     assert report.is_file()
     report.unlink()
-    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"])
+    got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"],
+                                         proof_manuscript=env["manuscript"])
     assert got["checked"] is False, got
     assert got["reason"] == "missing_material", got["reason"]
     # 不许出现"成立"：这是这一档最容易糊过去的地方
@@ -312,7 +322,8 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
     # 明写 `checked=False`。装配补齐之后（`AgentV._secretary` 现造 / 调用方传 `secretary=`）
     # 这一条应当改成"三次之后 signed_bit3 为真"，那是下一半的判据。
     got = cond.summon("V", "verify_proof",
-                      {"statement_id": sid, "proof_text": env["column"]}, by="E")
+                      {"statement_id": sid, "proof_text": env["column"],
+                       "proof_manuscript": env["manuscript"]}, by="E")
     assert got.status == "done", (got.status, got.outcome, getattr(got, "detail", ""))
     assert str(got.outcome) != "refused", (got.outcome, getattr(got, "refusal_reason", ""))
     payload = dict(getattr(got, "payload", None) or {})

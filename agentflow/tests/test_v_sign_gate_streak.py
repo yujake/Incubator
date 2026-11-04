@@ -72,11 +72,15 @@ from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
+
+from _proof_manuscript_fixture import write_proof_manuscript
 from agentflow.tools import build_registry
 
 TS = "2026-10-29T00:00:00+08:00"
 SID = "000007"
 PROOF = "1. 取 G = C_n（n ≥ 3）：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。"
+#: 2026-11-04（甲）：在册送审要带的那一份按号手稿。
+REL = f"reports/f-proof-{SID}.md"
 PROOF_B = PROOF + "\n3. 补上一步（改稿之后才有的那一句）。"
 FULL = "设 G 是 3-正则群；则弦长函数不是常值。"
 #: V 的回复正文里那一句"独特"的话：洗稿之后不许再出现在递给 F 的 detail 里。
@@ -106,6 +110,7 @@ def _put(store: Store, *, proof: str = PROOF, sid: str = SID) -> dict:
     }
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
+    write_proof_manuscript(store.root, sid, proof, statement_full=FULL)
     return row
 
 
@@ -343,7 +348,7 @@ def test_a6_the_secretary_performs_the_flip(tmp_path):
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     sec = _sec(st, seam)
     agent = _agent(st, sec)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["checked"] is True, got
     passes = got.get("review_passes") or []
     assert [p["streak"] for p in passes] == [1, 2, 3], passes
@@ -387,7 +392,7 @@ def test_a7_no_secretary_means_no_signature_at_all(tmp_path):
     agent._secretary_tried = True          # 夹具：不让它去现造（没 key ⇒ 现造也是 None）
     agent.secretary_problem = "夹具：这一趟没有 V 的秘书"
     for i in (1, 2, 3):
-        got = agent.verify_proof(SID, proof_text=PROOF)
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
         assert got["checked"] is True, got
         assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
         # 2026-10-30 第三次裁定：没有判断面 ⇒ 没有轴（空串）。"判不了"不是一种结论，
@@ -450,7 +455,7 @@ def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     agent = _agent(st, _sec(st, seam))
     callers, flips = _spy_signing(monkeypatch)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["checked"] is True, got
     assert len(got.get("review_passes") or []) == 3, got.get("review_passes")
     assert got["signed_bit3"] is True, (got["signed_bit3"], got["sign_issuance"])
@@ -504,7 +509,7 @@ def test_a9_a_secretary_that_decides_but_does_not_land_cannot_sign(tmp_path):
     _put(st)
     agent = _agent(st, _LazyButApproving())
     for i in (1, 2, 3):
-        got = agent.verify_proof(SID, proof_text=PROOF)
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
         assert got["sign_issuance"]["issue"] is True, got["sign_issuance"]
         assert got["sign_issuance"]["streak_ok"] is True, got["sign_issuance"]
         assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
@@ -542,7 +547,7 @@ def test_a10_the_tool_path_assembles_its_own_secretary_or_reports_checked_false(
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2
     agent = AgentV(st, workspace_root=st.root,
                    llm=_ReviewSeam(json.dumps(_OK, ensure_ascii=False)))
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert made, "AgentV 没有去装配秘书 ⇒ 工具路径那一侧的缺口仍然没补上"
     assert got["checked"] is True, got
     assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
@@ -831,7 +836,7 @@ def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_
     _put(st)
     seam = _ReviewSeam(json.dumps(_OK, ensure_ascii=False))
     agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_LazyButApproving())
-    agent.verify_proof(SID, proof_text=PROOF)
+    agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     sent = seam.prompts[0] if seam.prompts else ""
     assert sent, "这一趟没有提示词 ⇒ 判据扫不到可见面（假绿）"
     body = "\n".join(s.body for s in SK.skills_for("V"))
@@ -913,7 +918,7 @@ def test_c6_vs_review_call_asks_at_temperature_one(tmp_path):
     seam = LS.LlmSeam.for_role("V", session_root=st.root, gateway=gw)
     # 秘书用"判了不落盘"的替身：这一条只量请求体，不让它写盘、也不让它联网
     agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_LazyButApproving())
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["checked"] is True and got["verdict"] == "成立", got
     assert bodies, "V 的审阅一次请求都没发 ⇒ 这一条没测到请求体"
     assert bodies[-1]["temperature"] == 1.0, (

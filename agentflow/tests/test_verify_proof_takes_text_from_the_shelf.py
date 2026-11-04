@@ -156,7 +156,7 @@ def test_the_three_faces_of_proof_text_say_the_same_sentence(tmp_path: pathlib.P
     assert data.get("checked") is False, data
     assert data.get("reason") == "proof_text_needs_a_manuscript", data
     assert data.get("kind") == "proof_manuscript_required", data
-    assert "落一份稿" in str(data.get("detail") or ""), data.get("detail")
+    assert "按号命名的稿" in str(data.get("detail") or ""), data.get("detail")
     assert _ledger_names(st, with_proof) == [], "受控拒绝却落了台账行"
 
 
