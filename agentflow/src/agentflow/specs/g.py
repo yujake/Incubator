@@ -201,21 +201,31 @@ WRITING_SCOPE_NO_LEAN = (
 #: 与 `specs/b.py` / `specs/e.py` 那两张表同一机制：左边与右边都是本文件的常量，
 #: 应用点唯一（`agent_prompts._apply_no_lean_variant`）。
 #:
-#: 2026-10-25（审计 G/H/V/L 第 4 条）：`lean_file` 那一句改成「项目根相对路径 + 源码落在
-#: `code/formal/`」之后，它在关档那一档也成立（那一档盘上没有 Lean 产出 ⇒ 两格应当留空），
-#: 所以替身说的不是"这一岗不存在"，而是"这一档没有可填的东西"。替身里那句"本会话产不出
-#: Lean 产出"是关档的读数，不是把这一岗的工作藏起来。
+#: 2026-11-04（业主口径：`lean_file` 是「机器核验凭据」那一格，功能是「这条命题是百分百真的」）：
+#: 这一行按证明通道写 —— numeric 通道填证明栏第 ① 段那份 .py 程序、lean_target 留空；
+#: formal 通道填 .lean 与它验的声明名；通道为空两格才可空。
+#:
+#: 关档替身只能说"formal 这一条这一档走不到"，不许再说"两格留空"：数值通道在关档会话里
+#: 仍然必填 lean_file（那份 .py 与 Lean 工具链无关）—— 旧替身把合规的数值定理一起放空了。
+#: 判据：tests/test_lean_file_is_taught_by_channel.py。
 #:
 #: 顺序与 E 那张表同一条纪律：具体的长条目在前、短条目在后。
 LEAN_FILE_ROW = (
-    "有 Lean 产出时每行还要写 `lean_file`（验它的那份源码的真实位置：**项目根相对路径** —— 源码落在 "
-    "`code/formal/`，所以写 `code/formal/000004.lean`；论文包内那种写法（`formal/000004.lean`）也认，"
-    "两种写法解析的都是盘上同一份）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
-    "空着不算验过。"
+    "`lean_file` / `lean_target` 按这条命题的证明通道填（填错就是拿另一类凭据冒充）："
+    "① numeric（数值证明：证明栏第 ① 段是程序、台账里有 E 签的那条穷举）⇒ `lean_file` 必填，"
+    "填证明栏第 ① 段那份 `.py` 程序（相对仓库根，如 `code/r34_check.py`，必须与证明栏是同一份），"
+    "`lean_target` 留空（数值程序没有 Lean 声明名，填了反受控拒绝）；"
+    "② formal（形式化）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，源码落在 `code/formal/`，"
+    "如 `code/formal/000004.lean`；论文包内写法 `formal/000004.lean` 也认）**且** `lean_target` 必填"
+    "（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
+    "③ 通道为空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 两格都可以留空（不适用，不是没填）。"
 )
 LEAN_FILE_ROW_NO_LEAN = (
-    "有 Lean 产出时每行还要写 `lean_file` 与 `lean_target`（本会话产不出 Lean 产出 ⇒ 这两格留空，"
-    "不许自己编一个路径）；空着不算验过。"
+    "`lean_file` / `lean_target` 按这条命题的证明通道填：① numeric（证明栏第 ① 段是程序、"
+    "台账里有 E 签的那条穷举）⇒ `lean_file` 必填，填证明栏第 ① 段那份 `.py` 程序（相对仓库根，"
+    "如 `code/r34_check.py`），`lean_target` 留空（填了反受控拒绝）—— 这一档没有 Lean 工具链，"
+    "也不改变数值通道这一格必填；② formal（这一档产不出 `.lean`）⇒ `lean_file` 与 `lean_target` "
+    "两格按形式化通道填（正常走不到这一档）；③ 通道为空 ⇒ 两格都可以留空（不适用，不是没填）。"
 )
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (LEAN_FILE_ROW, LEAN_FILE_ROW_NO_LEAN),
@@ -346,7 +356,8 @@ SPEC = AgentSpec(
             # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
             # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
-            "**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「三格齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径（这一条只管理论定理那一行）；**例外：这一行是数值实验定理时，`file` 写程序相对仓库根的路径，不是包内路径** —— 它的证明栏就是那份程序，对应表里另有两格要一起填：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码的真实位置：**项目根相对路径** —— 源码落在 `code/formal/`，所以写 `code/formal/000004.lean`；论文包内那种写法（`formal/000004.lean`）也认，两种写法解析的都是盘上同一份）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过。**「三格齐」才算这一行写完**：理论定理行 = `file` 那一格，数值实验定理行另加 `numeric_evidence` / `exhaustion_note`（这三格），有 Lean 产出的定理类行另加 `lean_file` / `lean_target`（那两格）；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。",
+            ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（如 `proofs/000004-p1.md`，它在包里）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
+             "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的计数**（`file` + 数值那两格，或 `file` + Lean 那两格）：表里每一行都要齐，但「齐」不等于「这一行写完」—— 凭据格（`lean_file`，以及 formal 通道的 `lean_target`）与数值定理的索引四格也要填；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。"),
             # 2026-10-23（业主裁定 E-1 与随后那条硬口径）：纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
             "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 的三段（`程序：` / `程序设计：` / `穷举论证：`，由 `exhaustionreport` 写盘），把它登记成 `statements` 那一行的是 B（B 原样收进 `proof_text`）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",

@@ -238,6 +238,16 @@ def check_4(t: Corpus, *, dirs: Any = None, state_fn: Any = None) -> list[str]:
     if "项目根相对路径" not in spec_g:
         out.append(f"[④] G 的文案没写清 `lean_file` 是项目根相对路径"
                    f"（{_at('specs/g.py', 'lean_file')}）")
+    # 2026-11-04（`lean_file` 按通道教）：`file` 有两种落点，两种都要说明 ——
+    # 理论定理行写论文包内相对路径；数值实验定理行写程序相对仓库根的路径（不在包里是正常的）。
+    # 这不是放宽：两条落点各点一次，缺一条就是红。
+    if "`file` 有两种落点" not in spec_g:
+        out.append(f"[④] G 的文案没写「`file` 有两种落点」"
+                   f"（{_at('specs/g.py', 'file')}）")
+    for needle in ("论文包内的相对路径", "相对仓库根"):
+        if needle not in spec_g:
+            out.append(f"[④] G 的文案没说明 `file` 的落点 {needle!r}"
+                       f"（{_at('specs/g.py', 'file')}）")
     return out
 
 

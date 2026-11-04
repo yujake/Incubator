@@ -2559,15 +2559,21 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
         "proof_no": {"type": "integer", "minimum": 1,
                      "description": "第几号证明：1 = canonical（行上的 proof_text）"},
         "file": {"type": "string",
-                 "description": "该条完整证明/实验所在的文件（论文包内的相对路径）"},
+                 "description": "该条完整证明/实验所在的文件：理论定理行写论文包内的相对路径；"
+                                "数值实验定理行写程序相对仓库根的路径（如 code/r34_check.py，"
+                                "不在包里是正常的）"},
         "lean_file": {"type": "string",
-                      "description": "验它的那份 Lean 源码在论文包里的相对路径"
-                                     "（如 formal/000004.lean）。盘上有 Lean 产出时，"
-                                     "定理/引理/命题/推论这几行必填"},
+                      "description": "机器核验凭据（这一格说的是「这条命题是百分百真的」），"
+                                     "按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 "
+                                     "E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；"
+                                     "formal 填那份 .lean（项目根相对路径，如 "
+                                     "code/formal/000004.lean；包内写法 formal/000004.lean 也认）；"
+                                     "通道为空时允许为空（不适用，不是没填）"},
         "lean_target": {"type": "string",
                         "description": "那份源码里哪个声明验了它（写源码里字面出现的名字，"
                                        "如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。"
-                                       "与 lean_file 成对：有 Lean 产出时同样必填"},
+                                       "只有 formal 通道写它；numeric 通道必须留空 —— "
+                                       "数值程序没有 Lean 声明名，填了反受控拒绝"},
         "page_or_section": {"type": "string", "description": "给人看的定位（可缺省）"},
         "citation_loc": {"type": "object",
                          "description": "引文的本地位置 {file, page_range|line_range|char_range}"},
@@ -2741,10 +2747,11 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
             name="doc.write_mapping",
             summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
             "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
-            "md 与附录由 json 渲染，别手写。有 Lean 产出时每行还要写 lean_file 与 "
-            "lean_target（验它的源码在哪、验的是哪个声明）。数值实验定理那一行的证明栏"
-            "写程序的相对路径（相对仓库根），另写 numeric_evidence（E 的 exp 读数）与 "
-            "exhaustion_note（E 那两块读数落在哪）—— 缺任何一块都会拒。",
+            "md 与附录由 json 渲染，别手写。`lean_file` 按证明通道填（numeric ⇒ 证明栏那份 "
+            ".py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格可空）。"
+            "`file` 有两种落点：理论定理行写包内相对路径，数值实验定理行写程序相对仓库根的"
+            "路径。数值定理那一行另写 numeric_evidence / exhaustion_note 与索引四格"
+            "（evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 缺任何一块都会拒。",
             params={
                 "type": "object",
                 "properties": {
