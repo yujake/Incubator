@@ -6,7 +6,7 @@
 `specs/g.py` 的 `ACTIONS` 是 M 的派活面（`capabilities.CAPABILITIES` 由它派生），
 而 `papermapping` / `numericproof` 的判据在写表时逐格核。两边一旦不同步，形态不是
 报错而是"侥幸能跑"：JSON-Schema 的 `additionalProperties` 默认放行没声明的那几格，
-于是**派活面看不见它们，判据却要求它们** —— M 会派出一张必然被工具层拒收的表。
+于是派活面看不见它们、判据却要求它们 —— M 会派出一张必然被工具层拒收的表。
 
 ## 判据的来源（现读，不手抄清单）
 
@@ -24,7 +24,7 @@
 
 无条件必填的只有 `ROW_FIELDS` 那六格（与工具层 `_MAPPING_ROW_PARAMS["required"]`
 同一份口径）；凭据两格按证明通道、数值两格与索引四格按行的种类条件必填 —— 这些由
-读侧判，**不进 `required`**（一律 required 会把"不适用"读成"没填"）。
+读侧判，不进 `required`（一律 required 会把"不适用"读成"没填"）。
 
 ## 反向（反真空）
 
