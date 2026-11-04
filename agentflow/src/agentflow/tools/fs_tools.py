@@ -286,6 +286,19 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 # 但这一段判的是"谁能写哪里" —— 按 FC-27 的口径它属于权限面变更：作者只做实现与判据，
 # 合入前需要人逐行走查一次这段判据与四个写口的接入位置。
 
+#: 保留表里"路径级 + 产物档"的角色标记（`@` = 任何角色都不许手写）：
+#: 与 `*`（框架账本区，拒信不给去处）分开，这一档的拒信指向各自的渲染动作。
+_ARTIFACT_PATH_ROLE = "@"
+
+#: 论文对应表三份的拒信（2026-11-04）：说清"这三份是同一份表的三个投影、唯一写口在哪"。
+RESERVED_MAPPING_MESSAGE = (
+    "拒绝 {path}：论文对应表三份（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`）"
+    "由 `doc.write_mapping` 从同一批行渲染（md 与正文附录都是 json 的投影），"
+    "不许手写 —— 手抄的那一份与 json 必然对不上（`md_drifted` / `mapping_paper_mismatch` "
+    "只在事后读时才报）。要改就改 `rows` 再调一次 `doc.write_mapping`"
+    "（`doc.mapping_cells` 给每一格该填的值与来路）。"
+)
+
 #: 手稿 / 报告的推荐落点目录名（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir`
 #: 缺省都是它）。它只出现在拒信里当指路，不参与判据：判据只看文件名（见
 #: :func:`_reserved_artifact` 与 D6 那段注释）。
@@ -319,11 +332,26 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("*", "exact:locks"),
     ("*", "prefix:locks/"),
     ("*", "suffix:events.jsonl"),
+    # 论文对应表三份（2026-11-04 收口）：唯一写口是 `doc.write_mapping`
+    # （`papermapping.write_package` 从同一批行渲染 json / md / 正文附录）。
+    # 真机读数（`projects/paper-rewrite-big`）：`fs.write("out/paper/MAPPING.json")`
+    # 放行 ⇒ "手写第二份"在盘上能成功，而 md / 附录与 json 必然漂（`md_drifted` /
+    # `mapping_paper_mismatch` 只在事后读时才报）。路径级（`@` = 全角色、产物档）：
+    # 换哪个目录、哪个角色都不该能手写这三份 —— 它们不是"草稿"，是同一份表的三个投影。
+    ("@", "suffix:MAPPING.json"),
+    ("@", "suffix:MAPPING.md"),
+    ("@", "suffix:mapping-appendix.tex"),
     # 框架渲染的手稿（文件名级；只对表上角色生效）。
     ("F", "prefix:f-proof-"),
+    # 2026-11-04：换名绕过（真机 `notes/F-conj000000-proof.md`，14,376 B）。保留表原先
+    # 只认 `prefix:f-proof-`，而攻坚稿的名字可以是 `F-conj000000-proof.md` —— 同一个
+    # 产物换个名字就绕过去了。`suffix:-proof.md` 把"证明稿"这个形状收进来：F / M 的
+    # 框架证明稿不许手写（`reports/` 只是推荐落点，名字才是判据）。
+    ("F", "suffix:-proof.md"),
     ("D", "contains:RESEARCH"),
     ("D", "suffix:-research.md"),
     ("M", "prefix:f-proof-"),
+    ("M", "suffix:-proof.md"),
     ("M", "contains:RESEARCH"),
     ("M", "suffix:-research.md"),
 )
@@ -410,6 +438,18 @@ def _path_rule_matches(rule: str, rel: str) -> bool:
     return False
 
 
+def _reserved_artifact_path(rel: str) -> bool:
+    """`rel` 是不是"任何角色都不许手写"的框架渲染产物（路径级）。
+
+    与 :func:`_reserved_artifact` 分开：后者按文件名判、只对表上角色生效，且只收
+    `.md`；这一条按整条路径判、对全部角色生效，且不限扩展名 —— 论文对应表的三份
+    是 `MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`，唯一写口是
+    `doc.write_mapping`（`papermapping.write_package`）。表里的角色列用 `@` 标这一档。
+    """
+    return any(who == _ARTIFACT_PATH_ROLE and _path_rule_matches(rule, rel)
+               for who, rule in RESERVED_ARTIFACT_TABLE)
+
+
 def _reserved_ledger(rel: str) -> bool:
     """`rel`（工作区内相对路径）是不是框架账本区。
 
@@ -457,6 +497,12 @@ def _reserved_refusal(rel: str, role: str) -> ToolResult | None:
     删除、改名之前）。先账本区、后手稿：账本区的拒信不提任何去处（模型对 `data/`
     没有合法正路），手稿的拒信仍然指向各自的渲染动作。
     """
+    if _reserved_artifact_path(rel):
+        # 路径级的框架渲染产物（论文对应表三份）：全角色生效，拒信指向唯一写口。
+        return fail(
+            RESERVED_MAPPING_MESSAGE.format(path=rel),
+            path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
+        )
     if _reserved_ledger(rel):
         return fail(
             RESERVED_LEDGER_MESSAGE.format(path=rel),
