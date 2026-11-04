@@ -48,10 +48,10 @@ _BASELINE_LEAN = "1"
 
 
 def _restore_baseline_settings(monkeypatch) -> None:
-    """回到基线档，并且**把被本文件重载过的模块一起重载回来**。
+    """回到基线档，并且把被本文件重载过的模块一起重载回来。
 
     只回 settings 不够：_prompts()/_verifications() 也用过 importlib.reload，
-    而在关档那一刻重载出来的 gent_prompts 模块会把**关档那一段的段文本**留在模块里；
+    而在关档那一刻重载出来的 agent_prompts 模块会把关档那一段的段文本留在模块里；
     后面的用例再渲染提示词就会读到那一版（2026-11-04 全量实测：G 的提示词缺五条只在开档段里出现的锚点）。
     """
     monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", _BASELINE_LEAN)
