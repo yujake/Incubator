@@ -503,9 +503,32 @@ def signed_v_handoffs(monkeypatch):
                     text = str(_one.get("text") or "")
                     if text:
                         break
+        row = self._existing_statement_for(str(kw.get("statement_full") or "")) or {}
+        sid = str(row.get("stmt_id") or "")
         # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
         # 夹具替它造一份三节稿（正文就是这一笔要写的那一份；依赖面空表）。
-        if text.strip() and not str(kw.get("proof_manuscript") or "").strip():
+        #
+        # 只在"这一笔真的要写新正文 / 挂新证明 / 改证据档"时补：同一条正文原样再交
+        # 一次是 duplicate（`test_duplicate_refusal…`）或"收方读稿登记"那一支
+        # （`test_intake_actions` 的 bad_page_range 第二次、own_bare）—— 无条件补稿
+        # 会把这些负控提前推进收稿分支，量不到它们本来要测的拒绝。
+        # 五元位 / 新证明号也按同一口径判：new_texts 里任何一份在册没有 ⇒ 要载体。
+        existing_texts = {str(row.get("proof_text") or "")}
+        for _item in list(row.get("proofs") or []):
+            existing_texts.add(str((dict(_item) if hasattr(_item, "items") else {}).get(
+                "text") or ""))
+        new_texts: list[str] = [text] if text.strip() else []
+        for _item in list(kw.get("proofs") or []):
+            _one = dict(_item) if hasattr(_item, "items") else {}
+            _body = str(_one.get("text") or "")
+            if _body.strip():
+                new_texts.append(_body)
+        wants_carrier = bool(new_texts) and (
+            not sid
+            or any(_body not in existing_texts for _body in new_texts)
+            or (str(kw.get("evidence_kind") or "")
+                and str(kw.get("evidence_kind") or "") != str(row.get("evidence_kind") or "")))
+        if (wants_carrier and not str(kw.get("proof_manuscript") or "").strip()):
             from agentflow import depsection as _DS
 
             kw["proof_manuscript"] = (
@@ -513,8 +536,6 @@ def signed_v_handoffs(monkeypatch):
                 "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
                 f"## 命题\n\n{str(kw.get('statement_full') or '')}\n\n"
                 f"## 证明\n\n{text}\n\n" + _DS.render_dependency_section([]))
-        row = self._existing_statement_for(str(kw.get("statement_full") or "")) or {}
-        sid = str(row.get("stmt_id") or "")
 
         def covered(body: str, no: int) -> bool:
             if not sid or not body.strip():
@@ -526,6 +547,21 @@ def signed_v_handoffs(monkeypatch):
                 return False
             return bool(got.get("signed"))
 
+        _pending_manuscripts: list[Path] = []
+
+        def _pending_sign(body: str) -> None:
+            """落一份 pending 签，并记下它写的那份稿（收尾要清）。
+
+            `sign_before_registration` 的稿固定落在 `reports/f-proof-999999.md`；
+            同一份正文第二次递交时，B 的兜底读盘会按 `## 证明` 认出它、把这一笔读成
+            "收方读稿登记"（`ok=True / received_manuscript=True`），于是 duplicate
+            那类负控量不到原本要测的拒绝。这一份稿只是签名时的载体，调用返回后
+            就不该再留在工作区里冒充"这一笔带了稿"。
+            """
+            sign_before_registration(self.store.root, proof_text=body)
+            _pending_manuscripts.append(
+                Path(str(self.store.root)) / "reports" / "f-proof-999999.md")
+
         if text.strip() and not covered(text, 1):
             if sid:
                 # 已在册：一票「成立」就够准入闸（`_signature_covers` 把 `holding`
@@ -534,7 +570,7 @@ def signed_v_handoffs(monkeypatch):
                 sign_for_the_gate(self.store.root, statement_id=sid, proof_text=text,
                                   times=1)
             else:
-                sign_before_registration(self.store.root, proof_text=text)
+                _pending_sign(text)
         for item in list(kw.get("proofs") or []):
             one = dict(item) if hasattr(item, "items") else {}
             body = str(one.get("text") or "")
@@ -553,7 +589,7 @@ def signed_v_handoffs(monkeypatch):
             else:
                 # 新建命题：这一份还没号可挂 ⇒ 先落 pending 那一签（`#p1` 的免签门
                 # 走的正是它）；`#p2` 及以后靠下面那段"先落行、再按份签"。
-                sign_before_registration(self.store.root, proof_text=body)
+                _pending_sign(body)
         # ---- 新命题一次交多份证明：先落一行"证明还空着"的命题，再按份签 ----
         #
         # 为什么这一档要特殊处理：准入闸的免签门只给 `#p1`（手稿签块 / pending 认领
@@ -614,7 +650,14 @@ def signed_v_handoffs(monkeypatch):
                                       proof_text=body,
                                       proof_no=int(one.get("proof_no") or 1),
                                       store=self.store)
-        return real(self, **kw)
+        try:
+            return real(self, **kw)
+        finally:
+            for _path in _pending_manuscripts:
+                try:
+                    _path.unlink()
+                except FileNotFoundError:
+                    pass
 
     monkeypatch.setattr(AgentB, "register_statement", signed)
 
