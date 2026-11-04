@@ -8,7 +8,7 @@
 ## 改前是什么形态
 
 `_deliver_carried_to_b` 对 `exp:` 行只记一条 `addressed`（"命题还没有号 ⇒ D 不代它登记"），
-于是 E 的穷举证明稿虽然写在携带单上，**B 从未被 D 直接调用过**：`statements` 里那一行
+于是 E 的穷举证明稿虽然写在携带单上，B 从未被 D 直接调用过：`statements` 里那一行
 只能等下一次 B 自己（或 D 派 B 的模型 args）去补。A 的裁定把这一环定成"与 F 行同形"：
 D 在代码里调 `B.register_statement`，参数从 experiment 行 + 稿拼：
 `statement_full`（experiment.claim）/ 证明栏（稿的 `## 证明`）/ `doc_id` / `line_range`。

@@ -3,19 +3,19 @@
 
 ## 业主裁定（逐字）
 
-    C 按建议 —— 放弃命题：统一成"通用写口可改非正文三格（含 status），且**会**触发作废"，
+    C 按建议 —— 放弃命题：统一成"通用写口可改非正文三格（含 status），且会触发作废"，
     三处一起改
 
 ## 为什么必须统一
 
-改前这四处说的是**两件相反的事**：
+改前这四处说的是两件相反的事：
 
-- `specs/b.py`：`table.update` 那类通用写口对 statements **已被封**；
-- `specs/d.py` / `agent_skills.py`（两处）：只在通用表写口改状态时，作废**不会发生**。
+- `specs/b.py`：`table.update` 那类通用写口对 statements 已被封；
+- `specs/d.py` / `agent_skills.py`（两处）：只在通用表写口改状态时，作废不会发生。
 
 而实现早就是另一件事（`tools/table_tools.py::_route_to_secretary` 的非正文 patch 分支 +
-`_abandon_reading`）：通用写口**能**改 `status` / `kind` / `quote_reason` 三格，
-而且改 `status=abandoned` **会**当场作废名下的 `v-resubmit@` 项。
+`_abandon_reading`）：通用写口能改 `status` / `kind` / `quote_reason` 三格，
+而且改 `status=abandoned` 会当场作废名下的 `v-resubmit@` 项。
 模型照旧文字走只有两种下场：不敢用这条出口，或者用了之后以为板项还开着、
 回头再补一遍 —— 两者都不是"措辞问题"，是把一条活着的出口在提示词里写成死的。
 
@@ -23,7 +23,7 @@
 
 | # | 判据 | 改前为什么红 |
 |---|---|---|
-| a | 四个落点**各自**同时出现「非正文三格」与「会触发作废」，且都带「正文仍需走证明入口」 | 改前 0 处这样写：b 说"已被封"、d 与 skills 说"不会发生" |
+| a | 四个落点各自同时出现「非正文三格」与「会触发作废」，且都带「正文仍需走证明入口」 | 改前 0 处这样写：b 说"已被封"、d 与 skills 说"不会发生" |
 | b | 反真空：把任一句从对应文本里删掉 ⇒ 校验函数必须红 | 证明 a 的绿不是"随便出现两个词"，而是那两句真的在 |
 | c | 端到端 `test_statements_unsigned_and_resubmit.py` 的那一组仍绿（只改措辞，实现不动） | —— |
 

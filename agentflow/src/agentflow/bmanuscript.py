@@ -9,8 +9,8 @@
 
 V 的签落点只有两处：在册命题的台账行、或一份手稿里的签块（`vsigns`）。
 B 改写在册证明时，正文与在册那一版不同 ⇒ 旧签读成 stale、台账行也盖不住新正文；
-它需要的是一份**自己的**手稿：`reports/b-proof-<命题号>.md`，与 F / E 同形
-（`## 命题` / `## 证明` / `## 依赖` 三节）。V 读这一份、三转成立后由**收方秘书**
+它需要的是一份自己的手稿：`reports/b-proof-<命题号>.md`，与 F / E 同形
+（`## 命题` / `## 证明` / `## 依赖` 三节）。V 读这一份、三转成立后由收方秘书
 （`secretary:B`）把签块落回稿里；B 再带这份稿调 `own.register_statement`，
 `vsigns.manuscript_sign_standing` 读到「签到位」⇒ 第 3 位翻真、`reviewed=true`。
 
@@ -24,7 +24,7 @@ B 交的是内容，落盘的是框架，签由收方秘书落。这与 F/E 的�
 ## 三态（写侧）
 
 - `written=True`：这一趟把稿写下了（或重写成新正文，旧稿没有签可毁）；
-- `written=False, preserved=True, signed=True`：目标稿已经是**同一份正文**的已签版
+- `written=False, preserved=True, signed=True`：目标稿已经是同一份正文的已签版
   ⇒ 一个字节都不动（不许用一份新正文盖掉签住的那一份）；
 - `written=False, problem={...}`：目标稿已签、而这一笔要写的是另一份正文 ⇒ 不覆盖，
   把冲突留在读数里（签另算不是毁签）；B 要改这一版，得先让旧签失效/换一份稿。
@@ -79,7 +79,7 @@ def is_relpath(value: Any) -> bool:
 def _dependency_section(source_manuscript: Any) -> str:
     """从来源手稿（F / E / D 递过来的那一份）抄下 `## 依赖` 那一节；没有 ⇒ 空表声明。
 
-    为什么抄而不是让 B 重写：B 改写的是**证明正文**，依赖面（引了哪几条在册命题）
+    为什么抄而不是让 B 重写：B 改写的是证明正文，依赖面（引了哪几条在册命题）
     通常没变；让模型重抄一张四列表，唯一稳定的结果是把行抄丢。解析 → 渲染走的是
     `depsection` 同一对函数（B 收稿时读的也是它们），所以"抄过去"与"读得回"同一把尺。
     """
@@ -97,7 +97,7 @@ def render(*, statement_full: Any, proof_text: Any, statement_id: Any = "",
     """渲染一份 B 的改写手稿（纯函数，逐字节可复现）。
 
     三节与 F/E 同形：`## 命题` 是这条命题的完整正文（含假设），`## 证明` 是 B 改写后
-    的正文（**被签的就是这一节**），`## 依赖` 是四列表（空表也是声明）。
+    的正文（被签的就是这一节），`## 依赖` 是四列表（空表也是声明）。
     """
     sid = str(statement_id or "").strip()
     body = str(proof_text or "").strip()
@@ -130,12 +130,12 @@ def render(*, statement_full: Any, proof_text: Any, statement_id: Any = "",
     return "\n".join(head)
 
 
-def land(root: Any, *, statement_id: Any, statement_full: Any, proof_text: Any,
+def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any, proof_text: Any,
          label: Any = "", proof_no: Any = 0, source_manuscript: Any = "") -> dict[str, Any]:
     """把 B 的改写手稿写到 `reports/b-proof-<号>.md`（三态见模块 docstring）。
 
     返回 `{ok, path, written, preserved, signed, text, why, problem}`；
-    `problem` 非空时**一个字节都不写**（已签的是另一份正文 / 目标读不出来）。
+    `problem` 非空时一个字节都不写（已签的是另一份正文 / 目标读不出来）。
     """
     from . import verifications as _VR
     from . import vsigns as _VS
@@ -197,7 +197,7 @@ def land(root: Any, *, statement_id: Any, statement_full: Any, proof_text: Any,
     return out
 
 
-def read(root: Any, rel: Any) -> dict[str, Any]:
+def read_rewrite(root: Any, rel: Any) -> dict[str, Any]:
     """读一份 B 的改写手稿（V 与 B 用同一处口径）。"""
     raw = str(rel or "").strip().replace("\\", "/")
     out: dict[str, Any] = {"ok": False, "state": "outside", "path": raw, "text": "",

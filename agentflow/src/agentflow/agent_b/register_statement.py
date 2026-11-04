@@ -1721,7 +1721,8 @@ class _RegisterStatement:
         # 它需要一份自己的手稿（`reports/b-proof-<命题号>.md`，三节与 F/E 同形），
         # 由 B 派 V 审、收方秘书（`secretary:B`）落签块，B 再带这份稿入库。
         # B 没有文件写口 ⇒ 稿由框架在 B 的登记入口按 B 交上来的正文渲染（作者交内容、
-        # 框架落盘、收方落签）。三态都在 `bmanuscript.land` 的返回值里，一个字节都不猜。
+        # 框架落盘、收方落签）。三态都在 `bmanuscript.land_rewrite` 的返回值里，
+        # 一个字节都不猜。
         b_manuscript: dict = {}
         _rewrite_body = bool(
             stmt_id_now and proof_no_placement == 1
@@ -2138,7 +2139,7 @@ class _RegisterStatement:
                 + (
                     f"；这一笔的改写正文已经落成可签的载体 `{b_manuscript.get('path')}` —— "
                     "派 V 审这一份手稿（`framework_summon` 的 `verify.verify_proof`，"
-                    "只给 `proof_manuscript` 这一格），三转成立后签块由收方秘书 "
+                    "只给 `proof_manuscript` 这一格），签到位后签块由收方秘书 "
                     "`secretary:B` 落回稿里，再带这份稿重交 `own.register_statement`"
                     if b_manuscript.get("path") else ""),
                 **({"b_manuscript": b_manuscript,
@@ -3269,7 +3270,7 @@ class _RegisterStatement:
                        why="这一趟没有 store ⇒ B 的改写手稿没有落点（不是「没有改写」）")
             return out
         try:
-            got = _BM.land(root, statement_id=statement_id,
+            got = _BM.land_rewrite(root, statement_id=statement_id,
                            statement_full=statement_full, proof_text=proof_text,
                            label=label, proof_no=proof_no,
                            source_manuscript=source_manuscript)
