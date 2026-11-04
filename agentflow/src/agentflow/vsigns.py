@@ -710,6 +710,28 @@ def manuscript_write_reading(doc: Mapping[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+def _block_verdict_allows_sign(reading: Mapping[str, Any]) -> bool:
+    """签块里的「判词」是不是「成立」那一档（负判不是签；业主 2026-11-03 甲）。
+
+    ## 为什么这一格必须单独判
+
+    `render_manuscript_sign` 的 `已签` 与 `判词` 是两个独立格子：前者是一个布尔，
+    后者是 V 的结论。生产写口从 2026-11-03 起只写正判块（负判落 pending 台账），
+    但盘上仍可能有自相矛盾的块（`已签=true；判词=有毛病`：手工改过、别的写者把
+    两格拼错、或旧版本留下的）。`manuscript_sign_standing` 改前只读 `已签` 那一格
+    ⇒ 一条负判会被读成签，而业主逐字的口径是「负判不是签」。
+
+    ## 三态
+
+    `read_verdict` 是结论的唯一读口：老行上的 `看不出来` 读成 `成立`（2026-11-02
+    的追加裁定），`有毛病` 原样留下，空串不是成立 ⇒ 一律不许当签（fail-closed：
+    缺了判词格子的块，宁可读成 rejected，也不拿 `已签=true` 冒充签）。
+    """
+    from . import verifications as _VR   # 惰性：与 manuscript_sign_standing 同一条纪律
+
+    return _VR.read_verdict({"verdict": str(reading.get("verdict") or "")}) == "成立"
+
+
 def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
                              manuscript_path: Any = "") -> dict[str, Any]:
     """签块相对"现在这一份正文"的读数（`signed` / `stale` / `rejected` / `unsigned`）。
@@ -718,7 +740,8 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     - 没有块 ⇒ `unsigned`（"这一份还没签"，不是"查不成"）；
     - 块在、`已签=true`、`连续>=require`、且块里的 `正文sha` == 这一份正文的 sha
       ⇒ `signed`；sha 不符 ⇒ `stale`（签完之后正文改过）；
-    - 块在但 `已签=false`（判词不是成立）⇒ `rejected`。
+    - 块在但 `已签=false`，**或判词不是「成立」**（两个格子互相矛盾时按负判读）
+      ⇒ `rejected`（负判不是签，业主 2026-11-03 甲）。
 
     `manuscript_path` 只喂给 :func:`manuscript_sign_reading` 的第 9 格那一族
     （`identity_state` / `manuscript_id` / `manuscript_key`，2026-11-02）：
@@ -756,6 +779,15 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
         out.update(state="rejected",
                    why=(f"手稿里的签块是「{got.get('verdict') or '（空）'}」"
                         "⇒ 审过了、没过，按缺陷改稿后再送"))
+        return out
+    if not _block_verdict_allows_sign(got):
+        # 两个格子互相矛盾：`已签=true`，而判词是负判（或缺失）。按负判读 ——
+        # 业主 2026-11-03 甲：「负判不是签」。这一支排在 sha / 连续次数之前：
+        # 负判就是负判，不因为"sha 恰好相符、次数恰好够"变成签。
+        out.update(state="rejected",
+                   why=(f"签块写「已签=true」，但判词是「{got.get('verdict') or '（空）'}」"
+                        " ⇒ 负判不是签（两个格子自相矛盾时按判词读）；"
+                        "要让这一份算签，V 得重新审成「成立」"))
         return out
     if not out["sha_matches"]:
         out.update(state="stale",
