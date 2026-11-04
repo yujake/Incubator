@@ -286,13 +286,28 @@ def test_the_carried_manuscript_body_lands_in_proof_text(store):
 
 # ============================================================ ⑤ 同一份正文重交
 
-def test_resubmitting_the_same_proof_is_not_a_same_kind_refusal(store, signed_v_handoffs):
+def test_resubmitting_the_same_proof_is_not_a_same_kind_refusal(
+        store, signed_v_handoffs, tmp_path, monkeypatch):
     """⑤ 同一份正文重交 ⇒ 不新增证明号，也不许报 proof_same_kind。
 
     真机 22:03:20（projects/paper-rewrite-85/sessions/20261102.jsonl:2980）：
     B 为了把 proof_no 落成 1，拿 proofs=[{proof_no:1, text: 同一份正文}] 重交 ⇒
     「与 stmt:000012 的第 #1 份证明同种（相似度 1.0000 >= 阈值 0.80）」⇒ 整笔拒。
     同一份正文与自己同种不是「第二种证法」——那是同一条记录再交一次。
+
+    ## 2026-11-04（件1 收口之后重判）：这一笔的「并」要模型说，而这一条没有缝
+
+    改前这一段期望「更新在册 000000」。件1 之后「没查成 ⇒ 不并（词面相似度只排序、
+    不决定并）」是业主裁定的正确行为，而本用例的两笔都没有提供模型缝
+    （`_agent(store)` 造出来的秘书 `adjudication.checked=False`、`fail_closed=True`），
+    这一对的确定性键又不同（`不是常值` / `不为常值`、`依赖` / `依赖于`）⇒
+    fail-closed 只能落新行。所以「更新 000000」这条期望过时，改成钉
+    「落新行 + 三态读数」；原意（同一份正文重交不许报 proof_same_kind、证明号不许
+    多出第 2 号）一个字不改。
+
+    但光改期望会把它改松（那就成了「fail-closed 什么都不并」的同谋）：同一条用例
+    末尾另起一个工作区做正控 —— 输入一个字不改，只给一条「模型判 same」的缝 ⇒
+    必须更新 000000、proof_no 仍是 1。
     """
     long_a = ("设 G 是 3-正则群，且 H 是 G 的子群；则弦长函数不是常值，"
               "且它的下界只依赖 G 的度数。")
@@ -300,19 +315,79 @@ def test_resubmitting_the_same_proof_is_not_a_same_kind_refusal(store, signed_v_
               "且它的下界只依赖于 G 的度数。")
     own_a = {**OWN, "statement_full": long_a, "statement_text": "弦长函数不是常值"}
     own_b = {**OWN, "statement_full": long_b, "statement_text": "弦长函数不是常值"}
+
+    # 夹具前提：这一对的确定性键不同（「键相同 ⇒ 仍并」那一档救不了它），而词面
+    # 相似度 0.9651 ≥ 0.85 —— 改前正是这一档把它并成一行（改后的读数会点名这两个数）。
+    from agentflow import propositionkey as PK
+
+    assert PK.proposition_key(long_a) != PK.proposition_key(long_b), (
+        "夹具前提：这一对的确定性键不同（所以只有词面相似度那一档会并）")
+    verdict = PK.same_proposition(long_a, long_b)
+    assert verdict["state"] == PK.STATE_SAME, verdict
+    assert float(verdict["similarity"]) >= PK.SAME_PROPOSITION_JACCARD, verdict
+
     b = _agent(store)
     first = b.register_statement(**own_a, proof_text=P1)
     assert first["ok"] is True, first
     sid = first["stmt_id"]
+    assert sid == S.format_id(0), first
 
     again = b.register_statement(**own_b, proofs=[{"proof_no": 1, "text": P1}])
     assert again["ok"] is True, again
     assert again.get("kind") != "proof_same_kind", again
-    assert str(again.get("stmt_id") or "") == sid, again
+    # 2026-11-04：没查成 ⇒ 不并。新落一行 `000001` —— 它不是「在册那一条的第 2 份
+    # 证明」，而是「一条新命题的第 1 份证明」：证明号仍是 1，没有多出第 2 号。
+    assert str(again.get("stmt_id") or "") == S.format_id(1), again
     assert int(again.get("proof_no") or 0) == 1, again
-    # 证明号没有因此多出来一条。
+    # 读数：没查成不许折成「查过了、不同」，也不许折成「并进去了」。
+    adj = dict(again.get("adjudication") or {})
+    assert adj.get("checked") is False, adj
+    assert adj.get("fail_closed") is True, adj
+    why = str(adj.get("why_not_merged") or "")
+    assert f"stmt:{sid}" in why, why
+    assert "0.9651" in why, why          # 点名那一对的实际相似度（读的人才核得动）
+    assert "不决定并" in why, why
+    # 证明号没有因此多出来一条：两行各自只有 #1。
     assert [no for no, _ in VR.proof_list(_row(store, sid))] == [1], VR.proof_list(_row(store, sid))
-    assert len(store.rows("statements")) == 1, store.rows("statements")
+    assert [no for no, _ in VR.proof_list(_row(store, S.format_id(1)))] == [1], (
+        VR.proof_list(_row(store, S.format_id(1))))
+    assert len(store.rows("statements")) == 2, store.rows("statements")
+
+    # ================================================ 正控：给模型缝 ⇒ 必须更新 000000
+    #
+    # 同一笔输入（long_b + 同一份正文 P1），只多一条「模型判 same」的缝。打桩打的是
+    # 判据入口 `adjudicate_proposition`（模型的结论在真机上就是从这一处返回的），
+    # 不是兜底那一档。这一格要证明：fail-closed 关掉的只是「没查成」那一档，
+    # 「查成了、判 same」仍然并得进在册那一条。
+    from agentflow.secretary import MERGED_BY_ADJUDICATION, Secretary
+    from agentflow.store import Store
+
+    pos = Store(str(tmp_path / "model-same-ws"))
+    pos.init()
+    pos_b = AgentB(pos, extractor=None, extract_text=None, config={})
+    pos_first = pos_b.register_statement(**own_a, proof_text=P1)
+    assert pos_first["ok"] is True, pos_first
+    pos_sid = str(pos_first.get("stmt_id") or "")
+    assert pos_sid == S.format_id(0), pos_first
+
+    def _model_says_same(self, stmt_like, **_kw):
+        return {"checked": True, "verdict": PK.STATE_SAME, "same_as": pos_sid,
+                "basis": "打桩：条件组与结论组一致", "canonical_name": "", "route": "",
+                "condition": "打桩：条件未读", "conclusion": "打桩：结论未读",
+                "reason": "打桩：模型判 same", "candidates": [], "cost": {},
+                "reused": False, "cached": False, "statement_sha256": "",
+                "attempted": True, "seam_source": "打桩"}
+
+    monkeypatch.setattr(Secretary, "adjudicate_proposition", _model_says_same)
+    merged = pos_b.register_statement(**own_b, proofs=[{"proof_no": 1, "text": P1}])
+    assert merged["ok"] is True, merged
+    assert str(merged.get("stmt_id") or "") == pos_sid, merged
+    assert merged.get("kind") != "proof_same_kind", merged
+    assert int(merged.get("proof_no") or 0) == 1, merged
+    assert merged.get("matched_by") == MERGED_BY_ADJUDICATION, merged
+    pos_rows = [dict(r) for r in pos.rows("statements")]
+    assert len(pos_rows) == 1, pos_rows
+    assert [no for no, _ in VR.proof_list(pos_rows[0])] == [1], VR.proof_list(pos_rows[0])
 
 
 def test_a_created_statement_reports_proof_no_one(store, signed_v_handoffs):
