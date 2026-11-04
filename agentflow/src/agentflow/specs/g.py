@@ -320,7 +320,7 @@ LEAN_FILE_ROW = (
     "① numeric（数值证明：证明栏第 ① 段是程序、台账里有 E 签的那条穷举）⇒ `lean_file` 必填，"
     "填证明栏第 ① 段那份 `.py` 程序（相对仓库根，如 `code/r34_check.py`，必须与证明栏是同一份），"
     "`lean_target` 留空（数值程序没有 Lean 声明名，填了反受控拒绝）；"
-    "② formal（形式化）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，源码落在 `code/formal/`，"
+    "② formal（形式化，由 L 交出那份 `.lean` 与声明名）⇒ `lean_file` 必填那份 `.lean`（项目根相对路径，源码落在 `code/formal/`，"
     "如 `code/formal/000004.lean`；论文包内写法 `formal/000004.lean` 也认）**且** `lean_target` 必填"
     "（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
     "③ 通道为空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 两格必须留空"
