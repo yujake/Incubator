@@ -116,6 +116,50 @@ def test_the_closed_tier_still_requires_lean_file_for_the_numeric_channel(
         "关档的 G 提示词仍写着「这两格留空」—— 数值通道在关档会话里仍然必填")
 
 
+# ============================================================ H 的渲染面（specs/h.py）
+
+H_REQUIRED: tuple[str, ...] = (
+    "按这条命题的证明通道核",
+    "numeric 通道",
+    "证明栏第 ① 段那份 `.py` 程序",
+    "`lean_target` 留空",
+    "formal 通道",
+    "`.lean`",
+    "索引四格",
+    "evidence_kind",
+    "evidence_path",
+    "evidence_sha256",
+    "v_signature",
+    "不在包里是正常的",
+)
+
+H_STALE: tuple[str, ...] = (
+    # 改前那个示例把「包内相对路径」写成了仓库根相对路径（`out/paper/...`）—— 它会解析到
+    # `out/paper/out/paper/...`，是一条照它写就必然 `mapping_file_missing` 的示例。
+    "`out/paper/proofs/thm.tex`",
+)
+
+
+def check_h(text: str) -> list[str]:
+    bad = [f"[H] 读不到 {needle!r}" for needle in H_REQUIRED if needle not in text]
+    bad += [f"[H] 仍写着旧句 {needle!r}" for needle in H_STALE if needle in text]
+    return bad
+
+
+def test_h_renders_the_file_and_credential_cells_by_channel() -> None:
+    """a / b：H 的渲染提示词按通道核凭据格，并带索引四格与 file 的两种落点。"""
+    text = _prompt("H")
+    assert len(text) > 5000, f"H 的渲染只有 {len(text)} 字符 ⇒ 这一条没有落脚点"
+    assert check_h(text) == [], "\n".join(check_h(text))
+
+
+def test_putting_the_workspace_relative_package_example_back_turns_h_red() -> None:
+    """c：把「包内相对路径 = `out/paper/...`」那个错示例回灌 ⇒ 必红。"""
+    broken = _prompt("H") + "\n理论定理那一行写（`out/paper/proofs/thm.tex` 这一形态）。"
+    problems = check_h(broken)
+    assert any("out/paper/proofs/thm.tex" in one for one in problems), problems
+
+
 # ============================================================ 手册（G / H 的按需面）
 
 G_MANUAL_SLUG = "成稿-正文自己写"
