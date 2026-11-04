@@ -3107,7 +3107,29 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 一份 golden 重冻（`tests/golden/agent_surface_snapshot.json` 的 B / G 两格 prompt；
 #: `tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json` 不动）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
-PROMPT_VERSION = "p237"
+#: `p238`（2026-11-04，`0ed46fb3` 的收口：只改 G 一格模型可见文本，不动口径、不动凭据要求）：
+#: `specs/g.py` 的 `LEAN_FILE_ROW` 两处措辞（同一行）——
+#: ① 「数值程序没有 Lean 声明名，填了反受控拒绝」→「数值程序没有声明名可填，填了反受控拒绝」；
+#: ② 「formal（形式化，由 L 交出那份 `.lean` 与声明名）」→「formal（形式化）」，且
+#:    「源码落在 `code/formal/`」→「落在 `code/formal/`」。
+#: 为什么：这一行同时落在三把尺子的射程里 —— `test_lean_file_is_taught_by_channel` 逐字要
+#: 「formal（形式化）」这个锚点且 numeric 那一半在前；`test_l_collab_surface_is_respected_everywhere`
+#: 判「除 L 自己外谁的提示词里都不许出现 L（连提都不许）」；`test_lean_switch_points_at_l`
+#: 判「讲 Lean 形式化的句子要点着 L」。三条同时成立的唯一出口是让这一行不落进「讲 Lean 形式化」
+#: 的射程：不提 L，且「形式化」前后 60 字里不放 Lean 族记号。凭据格该填什么一个字没动
+#: （numeric ⇒ 那份 `.py` + `lean_target` 留空；formal ⇒ 那份 `.lean` + 源码里真出现的声明名；
+#: 空通道 ⇒ 两格留空）。
+#:
+#: 变化格 = ['G']（其余十格 A/B/C/D/E/F/H/L/M/V 逐字同值）。
+#: 逐格旧值 → 新值（p237 → p238；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   G 7edc4042→9dd228d8。
+#: 十一格摘要现算（`temp/p238_digests.py`，口径同 `_surface_digest`）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p238）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 一份 golden 重冻（`tests/golden/agent_surface_snapshot.json` 的 G 格 prompt；
+#: `tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json` 不动）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
+PROMPT_VERSION = "p238"
 
 
 

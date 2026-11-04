@@ -771,6 +771,11 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p237", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p237（2026-11-04，业主批「必要的提示词改动不许静默不改」）：① specs/b.py 的 policy 把「派 V 审手稿（framework_summon 的 verify.verify_proof）」改成 V.verify_proof（B 的工具面上没有那件工具，原文教了做不到的事）；② specs/g.py 的 LEAN_FILE_ROW 把「② formal（形式化）」改成「② formal（形式化，由 L 交出那份 .lean 与声明名）」（受 Lean 开关控制的提示词一律指向 L）。变化格 = B / G 两格，其余九格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p237 → p238（2026-11-04，`0ed46fb3` 的收口）：只有 G 一格换值 —— 同一行两处措辞，
+    # 只改模型可见文本、不改凭据要求，也不挪任何一格事实的落点。
+    {"version": "p238", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p238（2026-11-04，0ed46fb3 的收口）：specs/g.py 的 LEAN_FILE_ROW 两处措辞 —— ① numeric 那一半的「数值程序没有 Lean 声明名」改成「没有声明名可填」；② formal 那一半去掉「由 L 交出那份 .lean 与声明名」、只留「formal（形式化）」（这一行同时落在 test_lean_file_is_taught_by_channel / test_l_collab_surface_is_respected_everywhere / test_lean_switch_points_at_l 三把尺子的射程里，唯一同时成立的出口是不提 L、且「形式化」前后 60 字里不放 Lean 族记号）；凭据格该填什么一个字没动。变化格 = G 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

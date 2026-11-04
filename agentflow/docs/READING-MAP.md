@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-04，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **267 个 `.py`、245,491 行**，**74 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,352 行** —— 批 R40 把它补进了 §3 的表；
+> **267 个 `.py`、245,521 行**，**74 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,352 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -107,6 +107,12 @@
 > `agent_loop.py` 13,352 行都不变）。这 +21 行是 p237 的账本注（`agent_prompts.py` 的
 > p237 段，只写注释、不改模型可见文本 —— 段只动 B / G 两格）；golden（agent 面）与
 > warm 读数重冻之后按 `:10` 的复跑命令再算的一次；判据 `tests/test_reading_map_counts.py` 钉着。
+> **2026-11-04 p238 收口再抓**：245,491 → **245,521**（文件数 267、`>800 行` 74 与
+> `agent_loop.py` 13,352 行都不变）。这 +30 行分两处：+22 是 p238 的账本注（`agent_prompts.py`
+> 的 p238 段，只写注释、不改模型可见文本 —— 段只动 G 一格）；另 +8 是 `0ed46fb3` 在
+> `specs/g.py` 的 `LEAN_FILE_ROW` 上方加的口径注（改的是三处字，注是解释为什么）。
+> golden（agent 面）与 warm 读数重冻之后按 `:10` 的复跑命令再算的一次；判据
+> `tests/test_reading_map_counts.py` 钉着。
 > **2026-11-04 p235 收口重抓**：243,001 → **245,449**（文件数 266 → **267**，`>800 行`
 > 73 → **74**；`agent_loop.py` 13,352 行不变）。逐文件对账基线提交 `74d7c646`：
 > · 文件数 +1 是新增模块 `bmanuscript.py`（221 行：B 的改写手稿，`reports/b-proof-<命题号>.md`
