@@ -210,7 +210,7 @@ SPEC = AgentSpec(
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
-            "逐个给子任务的状态、被拒次数与类目（`refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
+            "逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
