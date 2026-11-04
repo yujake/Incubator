@@ -784,6 +784,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p239", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p239（2026-11-04，今晚五条 lane 的提示词 / 工具面一次对齐）：变化格 = 全部十一格 —— 共用段 HANDOFF_PROTOCOL 的首提从「交接手稿（交接工作前的标准动作…）」改成「交接手稿（handoff；交接工作前的标准动作…）」（347d6267 的命名裁定），B / F / G / H / M / V 另有各自改动（证明正文的载体改成手稿、G 的 ⓪ 步、V 的在册只经手稿过审 等），收口时 verify_proof 的 summary 又按压缩预算压回 104 字符（aa4231cb，V 那一格再换一次）。facts 键集仍 15 格（键名与条数一格未动，一格事实的落点都没挪）"},
+    # p239 → p240（2026-11-04，今晚最后一次冻结：p239 之后三条 lane 的模型可见文本
+    # 一次对齐）：变化格 = ['B', 'M'] —— B 是 policy 补回「派 V 审核签字」锚词 + 动作摘要
+    # 与参数说明的「证明正文的载体」位置 / 强调（5f29ec24 / 646adcb5）；M 是交接首提改成
+    # 「交接工作前先写一份手稿（交接手稿，handoff）」（8d80a398）。V 那一格这次没有换值
+    # （p239 的 4daa02d9 仍成立）：6efb3079 改的是 verify.verify_proof 的 returns，而
+    # `tools_lines` 只渲染「名字 + 摘要 + 必填参数 + 副作用」，returns 只拼进
+    # function-calling 的 description ⇒ 它不进任何角色的段（p239 提交信息里「V 的摘要会
+    # stale」是预期落空，实测为准）。一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格
+    # 同值（现算值，不手抄）。
+    {"version": "p240", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p240（2026-11-04，今晚最后一次冻结）：变化格 = B / M 两格，其余九格逐字未动。B：policy 把「再派 V 审这一份稿」写回裁定原话「再派 V 审核签字（`V.verify_proof`：`statement_id` + `proof_manuscript=<这份稿>`）」；`register_statement` 的动作摘要把「（证明稿，proof manuscript）」移到「是证明正文的载体」之后、参数说明给这一句加 `**` 强调（5f29ec24 / 646adcb5）。M：policy 首提改成「交接工作前先写一份手稿（交接手稿，handoff）」，旧判据针重新连通（8d80a398）。V 未变：6efb3079 给 verify.verify_proof 的 returns 补了两态词，但 returns 不进 tools_lines（只进 function-calling 的 description）⇒ V 的提示词一个字没变，那一笔的模型可见落点在工具面 golden。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
