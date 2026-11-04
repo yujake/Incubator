@@ -677,6 +677,12 @@ class AgentV:
                 # 与下面 F 的散文那一支同一套（同一份手稿形状 / 同一次 `vsigns.issue` /
                 # 同一个 `land_unregistered_sign`）。返回 None = 这一份不是穷举证据、
                 # 或盘上没有 E 的手稿 ⇒ 退回下面两支（pending / 散文），一个字节不写。
+                # 2026-11-04（业主裁定 A 甲）：B 的改写手稿若没带命题号（B 只交稿），
+                # 也走「签在稿上」这一支 —— 与下面 F 那支同一个判据，只是入口命名不同。
+                b_got = self._review_b_manuscript(
+                    text=text, manuscript=proof_manuscript, no=no)
+                if b_got is not None:
+                    return self._finish_unregistered(out, no=no, got=b_got)
                 exhaust = self._review_unregistered_exhaustion(
                     text=text, manuscript=proof_manuscript, no=no)
                 if exhaust is not None:
@@ -704,6 +710,18 @@ class AgentV:
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
                 return out
             statement_full = _SB.body_of(hit)
+            # ---- 2026-11-04（业主裁定 A 甲）：B 的改写手稿也走「签在稿上」这一支 ----
+            #
+            # B 改写在册证明时，正文与在册那一版不同 ⇒ 旧签 stale、台账也盖不住新正文；
+            # 它需要一份自己的载体（`reports/b-proof-<命题号>.md`），由 B 派 V 审、
+            # 收方秘书（`secretary:B`）落签块，B 再带这份稿入库。入口只认 B 手稿的命名
+            # （别的路径不在这里开口子），其余判据与 F/E 同一条：三转、`vsigns.issue`、
+            # 收方秘书落块 —— 一条代码路径，不分叉。
+            b_got = self._review_b_manuscript(
+                text=text, manuscript=proof_manuscript, no=no,
+                statement_full=statement_full)
+            if b_got is not None:
+                return self._finish_unregistered(out, no=no, got=b_got)
             # ---- 2026-10-23 晚（业主：「E 写的报告要能落下来，且 V 也要会审这种东西」）
             #
             # 穷举型证据（证明栏第 ① 段是一份数值实验程序）不按"逐行读证明文本"审：
@@ -1501,8 +1519,37 @@ class AgentV:
                 "既不是「有毛病」，也不是「没问题」："
                 f"{str(judgment.get('reason') or '没有给理由')[:200]}")
 
+    def _review_b_manuscript(self, *, text: str, manuscript: str = "", no: int = 1,
+                             statement_full: str = "") -> dict[str, Any] | None:
+        """B 的改写手稿：与 F / E 同一条链（三轮成立 + 收方秘书落签块）。
+
+        ## 业主裁定（逐字，2026-11-04）
+
+            A 甲 —— B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）
+
+        ## 为什么单开一个入口
+
+        B 的稿是在**在册命题**上改写的：`verify_proof` 若按在册那一支走，会写
+        `verifications/<号>.jsonl`、并按台账认签 —— 而这一笔要签的是"B 改写后的
+        那一版正文"，它的载体是 `reports/b-proof-<号>.md` 里那一行签块。所以这里
+        只做一件事：认出 B 手稿的命名，把它交给与 F/E 完全相同的未在册散文那一支
+        （三转 + `vsigns.issue` + `Secretary.land_unregistered_sign`）。收方是 V 的
+        parent（B）⇒ `secretary:B` 落块；V 自己一处签写口都没有。
+
+        返回 `None` = 这一份不是 B 的改写手稿（别的路径不在这里开口子）。
+        """
+        from .. import bmanuscript as _BM
+
+        rel = str(manuscript or "").strip().replace("\\", "/")
+        if not _BM.is_relpath(rel):
+            return None
+        return self._review_unregistered_prose(
+            text=text, manuscript=rel, no=no, b_manuscript=True,
+            statement_full=str(statement_full or ""))
+
     def _review_unregistered_prose(self, *, text: str, manuscript: str = "",
-                                   no: int = 1) -> dict[str, Any] | None:
+                                   no: int = 1, b_manuscript: bool = False,
+                                   statement_full: str = "") -> dict[str, Any] | None:
         """未在册的一份散文证明：三转判完把签块盖回它那一份手稿（2026-11-02）。
 
         业主逐字：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到。」
@@ -1530,6 +1577,7 @@ class AgentV:
         返回 `{"block":…, "passes":…, "manuscript":…, "sha":…}`；
         没查成 / 路径不合法 / 稿不在盘上 ⇒ `{"reason","detail","passes"}`。
         """
+        from .. import bmanuscript as _BM
         from .. import depsection as _DS
         from .. import vsigns as _VS
 
@@ -1537,13 +1585,20 @@ class AgentV:
         body = str(text or "")
         raw_manuscript = ""
         if rel:
-            # 入口只认 F 那一份证明手稿的命名（`reports/f-proof*.md`）：V 读什么由这里
-            # 定死，不给"按任意路径读一盘"的口子。
-            if not (rel.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}")
-                    or rel.startswith(f"{_DS.MANUSCRIPT_DIR}/f-proof")):
+            # 入口只认约定命名（`reports/f-proof*.md` / `reports/e-proof-*.md`，以及
+            # 2026-11-04 起的 `reports/b-proof-*.md`）：V 读什么由这里定死，
+            # 不给"按任意路径读一盘"的口子。
+            if b_manuscript:
+                _ok_path = _BM.is_relpath(rel)
+                _what = "B 的改写手稿（`reports/b-proof-*.md`）"
+            else:
+                _ok_path = bool(
+                    rel.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}")
+                    or rel.startswith(f"{_DS.MANUSCRIPT_DIR}/f-proof"))
+                _what = f"F 的证明手稿（`{_DS.MANUSCRIPT_DIR}/f-proof*.md`）"
+            if not _ok_path:
                 return {"failed": True, "reason": "bad_manuscript_path",
-                        "detail": (f"`proof_manuscript` 只收 F 的证明手稿"
-                                   f"（`{_DS.MANUSCRIPT_DIR}/f-proof*.md`），收到 {rel!r}")}
+                        "detail": (f"`proof_manuscript` 只收 {_what}，收到 {rel!r}")}
             try:
                 raw_manuscript = (Path(self.workspace_root) / rel).read_text(encoding="utf-8")
             except OSError as exc:
@@ -1572,11 +1627,22 @@ class AgentV:
                         "already": True,
                         "reason": (f"`{rel}` 里已经有盖住这一份正文的签块"
                                    f"（{already.get('why')}）⇒ 不重复审、不重复写")}
+        if b_manuscript:
+            # B 的改写手稿：命题可能已经在册（改写就是在册那一版的替身），但被签的
+            # 对象始终是这份稿里「## 证明」那一节 —— 审阅口径与 F/E 同一份提示词，
+            # 只把"这是谁的稿、签往哪落"如实说清。
+            _facts = (
+                "这一份是 B 改写后的证明手稿"
+                + (f"（在册命题的完整正文：{statement_full.strip()[:400]}）"
+                   if str(statement_full or "").strip() else "（命题还没在册）")
+                + "：你只按下面这份证明正文本身重读；三转成立后签会落回这一份手稿"
+                  "（`reports/b-proof-<命题号>.md` 里的签块），B 带这份稿入库时读到它。")
+        else:
+            _facts = ("这一条命题还没在册（`statements` 里没有它，正文读不到）："
+                      "你只按下面这份证明正文本身重读；签会落进这一份手稿，"
+                      "等 B 收录这条命题时随稿读到。")
         prompt = VR.cold_start_prompt(
-            UNREGISTERED_STATEMENT_PAGE, body,
-            readonly_facts=("这一条命题还没在册（`statements` 里没有它，正文读不到）："
-                            "你只按下面这份证明正文本身重读；签会落进这一份手稿，"
-                            "等 B 收录这条命题时随稿读到。"))
+            UNREGISTERED_STATEMENT_PAGE, body, readonly_facts=_facts)
         need = review_pass_bound()
         judged: list[dict[str, Any]] = []
         passes: list[dict[str, Any]] = []

@@ -1714,6 +1714,32 @@ class _RegisterStatement:
         #: 形态就是真机那次"四个入口都不收"。
         carries_write = self._carries_canonical_write(
             proof_text=proof_text, proofs_listed=proofs_listed, row=redelivery)
+        # ---- 2026-11-04（业主裁定 A 甲）：B 的改写要有可签的载体 --------------------
+        #
+        # 业主逐字：「A 甲 —— B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
+        # B 改写在册正文时，正文与在册那一版不同 ⇒ 旧签 stale、台账也盖不住新正文；
+        # 它需要一份自己的手稿（`reports/b-proof-<命题号>.md`，三节与 F/E 同形），
+        # 由 B 派 V 审、收方秘书（`secretary:B`）落签块，B 再带这份稿入库。
+        # B 没有文件写口 ⇒ 稿由框架在 B 的登记入口按 B 交上来的正文渲染（作者交内容、
+        # 框架落盘、收方落签）。三态都在 `bmanuscript.land` 的返回值里，一个字节都不猜。
+        b_manuscript: dict = {}
+        _rewrite_body = bool(
+            stmt_id_now and proof_no_placement == 1
+            and str(proof_text or "").strip()
+            and str(proof_text) != str((redelivery or {}).get("proof_text") or ""))
+        if _rewrite_body:
+            b_manuscript = self._land_b_manuscript(
+                statement_id=stmt_id_now, statement_full=full,
+                proof_text=str(proof_text or ""), label=label,
+                proof_no=proof_no_placement, source_manuscript=manuscript_text)
+            # 稿已经是签住的那一版 ⇒ 这一笔的"手稿正文"就是它（不必让 B 再传一遍）；
+            # 刚写下的那一版没有签，交给下面的闸去说「先拿签」（签块由 V 审后落）。
+            if not manuscript_text.strip() and b_manuscript.get("text"):
+                manuscript_text = str(b_manuscript.get("text") or "")
+                manuscript_source = _DS.SOURCE_DISK
+                manuscript_path = str(b_manuscript.get("path") or "")
+                manuscript_probe = {"checked": True, "source": _DS.SOURCE_DISK,
+                                    "path": manuscript_path, "matched_by": "b_manuscript"}
         if manuscript_foreign and not carries_write:
             foreign_path = (str(manuscript_carried.get("path") or "")
                             or str(manuscript_probe.get("path") or ""))
@@ -2106,8 +2132,18 @@ class _RegisterStatement:
                         stmt_id=str(stmt_id_now or ""))
                 return _must_start_as_conjecture_refusal(kind_now=kind_now,
                                                          origin=str(origin))
-            return _refuse(str(self_authored["refused"]),
-                           str(self_authored.get("reason") or ""))
+            return _refuse(
+                str(self_authored["refused"]),
+                str(self_authored.get("reason") or "")
+                + (
+                    f"；这一笔的改写正文已经落成可签的载体 `{b_manuscript.get('path')}` —— "
+                    "派 V 审这一份手稿（`framework_summon` 的 `verify.verify_proof`，"
+                    "只给 `proof_manuscript` 这一格），三转成立后签块由收方秘书 "
+                    "`secretary:B` 落回稿里，再带这份稿重交 `own.register_statement`"
+                    if b_manuscript.get("path") else ""),
+                **({"b_manuscript": b_manuscript,
+                    "manuscript_path": str(b_manuscript.get("path") or "")}
+                   if b_manuscript else {}))
 
         # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
         # 定义（当前宽度六位；旧四位读侧兼容），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
@@ -2299,7 +2335,10 @@ class _RegisterStatement:
                 proof_no=proof_no_placement, store=self.store)
             if _pg.get("refused"):
                 return _refuse(str(_pg["refused"]), str(_pg.get("reason") or ""),
-                               proof_gate=dict(_pg.get("reading") or {}))
+                               proof_gate=dict(_pg.get("reading") or {}),
+                               **({"b_manuscript": b_manuscript,
+                                   "manuscript_path": str(b_manuscript.get("path") or "")}
+                                  if b_manuscript else {}))
         sec = self._statement_secretary()
         if sec is None:
             return _refuse("secretary_unavailable",
@@ -2367,7 +2406,9 @@ class _RegisterStatement:
             proof_no = int(written.get("proof_no") or 0)
             out = {"ok": True, "stmt_id": stmt_now, "new_row": False, "merged": True,
                    "merged_into": str(written.get("merged_into") or stmt_now),
-                   "self_authored_review": self._self_authored_reading(self_authored),
+                   #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
+                "self_authored_review": self._self_authored_reading(self_authored),
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
                    "quote_mode": str(quote_mode or ""),
@@ -2464,7 +2505,9 @@ class _RegisterStatement:
                                          canonical=attach_canonical,
                                          bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
-                   "self_authored_review": self._self_authored_reading(self_authored),
+                   #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
+                "self_authored_review": self._self_authored_reading(self_authored),
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
                    "quote_mode": str(quote_mode or ""),
@@ -2566,7 +2609,11 @@ class _RegisterStatement:
                                stmt_id=stmt_dup)
             if attach.get("written"):
                 out = {"ok": True, "stmt_id": stmt_dup,
-                       "self_authored_review": self._self_authored_reading(self_authored),
+                       #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                    **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
+                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
+                "self_authored_review": self._self_authored_reading(self_authored),
                        "source_lit_id": lit_id or None,
                        "quote_verified": quote_verified, "origin": origin,
                        "quote_mode": str(quote_mode or ""),
@@ -2753,6 +2800,8 @@ class _RegisterStatement:
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 **optimized_reading,
                 #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
+                #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
                 "quote_verified": quote_verified, "origin": origin,
                 "quote_mode": str(quote_mode or ""),
@@ -2787,6 +2836,9 @@ class _RegisterStatement:
                 #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
+                #: 2026-11-04（业主裁定 A 甲）：这一笔有没有（以及怎么）落 B 的改写手稿。
+                #: 只在真落了/真检查过时出现 —— 老返回形状逐字不变。
+                **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 #: 这一笔的正文是从哪来的（2026-11-02，D 侧是主路）：`param`（调用方直递）/
                 #: `manuscript`（按 D 的携带单寻址到的那份稿的 `## 证明` 那一节）/ 空串。
                 #: 与 `manuscript_source` 分开：那一格说稿从哪来，这一格说落进 `proof_text`
@@ -3189,6 +3241,48 @@ class _RegisterStatement:
             return list(_PM.index_rows(root))
         except Exception:  # noqa: BLE001 —— 坏 json / 读不出来 ⇒ 同上
             return []
+
+    def _land_b_manuscript(self, *, statement_id: str, statement_full: str,
+                           proof_text: str, label: str = "", proof_no: int = 1,
+                           source_manuscript: str = "") -> dict:
+        """把 B 的改写正文落成 `reports/b-proof-<命题号>.md`（可签的载体）。
+
+        ## 为什么在 B 的动作里落盘（而不是让 B 自己写文件）
+
+        B 的工具面没有文件写口（只有 `table.*` / `manuscripts.read|list` 这类）。而业主
+        2026-11-04 的裁定 A 甲要的是「B 的改写要有可签的载体」⇒ 作者（B）交内容、
+        框架落盘、V 审、收方秘书落签。渲染与三态判据全在 `agentflow.bmanuscript`：
+        这里只把读数原样带回（`written` / `preserved` / `signed` / `problem`），
+        并把"稿在哪"给调用方（拒信里要点名，B 下一次要按那个路径送审）。
+
+        一个字节都不写的那几档（目标已签且是另一份正文 / 目标读不出来）不许折成
+        "写成了"：签另算不是毁签。
+        """
+        from .. import bmanuscript as _BM
+
+        out: dict = {"checked": True, "path": "", "written": False,
+                     "preserved": False, "signed": False, "text": "",
+                     "why": "", "problem": {}}
+        root = getattr(getattr(self, "store", None), "root", "") or ""
+        if not root:
+            out.update(checked=False,
+                       why="这一趟没有 store ⇒ B 的改写手稿没有落点（不是「没有改写」）")
+            return out
+        try:
+            got = _BM.land(root, statement_id=statement_id,
+                           statement_full=statement_full, proof_text=proof_text,
+                           label=label, proof_no=proof_no,
+                           source_manuscript=source_manuscript)
+        except Exception as exc:  # noqa: BLE001 —— 落稿失败要如实说，不许静默
+            out.update(checked=False,
+                       why=(f"B 的改写手稿没落成（{type(exc).__name__}: {exc}）⇒ "
+                            "这一份没有可签的载体"))
+            return out
+        out.update({k: got.get(k) for k in ("path", "written", "preserved",
+                                            "signed", "text", "why")})
+        out["problem"] = dict(got.get("problem") or {})
+        out["ok"] = bool(got.get("ok"))
+        return out
 
     def _v_signature_for(self, *, statement_full: str, proof_text: str,
                          manuscript_text: str = "") -> dict:
