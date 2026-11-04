@@ -154,14 +154,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
                 "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS),
                                   "description":
-                                  "证据强度。**有 `proof_text` 且 V 在 "
-                                  "`verifications/<命题号>.jsonl` 里签了「成立」（且签的就是现行"
-                                  "这一版正文）⇒ 就该写 `proof_review`** —— 定义只在 "
-                                  "`schema.EVIDENCE_KINDS`，写入期按它核，不多要别的字段；"
-                                  "只有**真没有那一签**时才退 `heuristic` / `cross_check`。"
-                                  "两条出口：① 先请 V 走查（`V.verify_proof`）签完再写 "
-                                  "`proof_review`；② 如实写弱档，并在 `quote_reason` 里写清"
-                                  "「还没有 V 的签名」"},
+                                  "证据强度。只看**可观察状态**：**V 签到位**（`bits.reviewed` "
+                                  "为真，或签块 / 台账那一行）就算审过；档位按通道给"
+                                  "（穷举⇒`proof`、文字⇒`proof_review`），"
+                                  "具体怎么给由框架判，你不必也不该推断内部过程。"
+                                  "只有**真没有那一签**时才退 `heuristic` / `cross_check`，"
+                                  "并在 `quote_reason` 里写清「还没有 V 的签名」"},
                 # 三态那一栏：`true`/`false` 直接给；"还没查"（None）靠不传这个参数表达
                 # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
                 # 会在校验期抛 `unhashable type: 'list'`，实测撞过）。不传 = None = 还没查，
