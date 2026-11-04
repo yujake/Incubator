@@ -3202,7 +3202,32 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 三份冻结物按现值看一眼（agent 面 B/M 两格 prompt + B 的动作面；tool 面因 `returns`
 #: 那一格变；`tool_declaration_baseline.json` 在补针 lane 已按现值重记 ⇒ 本次未动）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
-PROMPT_VERSION = "p240"
+#: `p241`（2026-11-04 今晚最后一次冻结：p240 之后 D 的模型可见面一次对齐）：
+#: 变化格 = ['D']（其余十格 A/B/C/E/F/G/H/L/M/V 逐字同值）。
+#: ① D（`035b7365`，业主 2026-11-04 逐字裁定「D 侧提示词里明确 D 可提供证明思路，甚至提供
+#:    依赖面参考，最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论
+#:    攻坚的成果，然后再提出新的想法」）：policy 新增一条三句 —— ① 想法由你给（写进
+#:    `F.create_plan` 的 `problem` / `subgoals`）；② 落稿与拿签不属于 D（在 `out/proofs/`、
+#:    `notes/`、`reports/` 里写「可提交的证明稿」受控拒 `reserved_framework_artifact`，
+#:    要落稿就派 F）；③ D 的产物 = 想法 + 收获 + 新想法。同一格里的研究手稿落点从
+#:    「`reports/RESEARCH.md` 是框架保留面、别手写」改回既有七节形式（七节、先读后改、
+#:    收录 F/E 成果并带引用；自己新写 `## 证明` 节受控拒）。
+#: ② 同一格还换了一次（`agent_skills.py` 的 D 手册）：手册新增「想法 → 派 F → 读回 →
+#:    新想法」循环与「`out/proofs/` 不是证明稿落点（攻坚过程记录，不能带 `## 证明` 节）」；
+#:    技能索引那一行（`summary`）随之改成「落在 reports/RESEARCH.md（七节、先读后改，
+#:    收录 F/E 成果）…证明的落稿与拿签归 F」—— 索引行印在 D 的段上 ⇒ 与 ① 同一格。
+#: ③ `tools/write_system_docs.py` 与 `docs/ROLE-GUIDE.md` 的 `out/proofs` 那一行同批改成
+#:    「攻坚过程记录」（`4cca5c27`）：那是给人读的生成物，不进任何角色的提示词 ⇒ 摘要不动。
+#: 逐格旧值 → 新值（p240 → p241；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   D 67112d39→3ed71c7a。
+#: 十一格是 `temp/_p241_recompute.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p241）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 三份冻结物按现值重冻（agent 面十一格 prompt 因版本行、D 的正文另算；tool 面与
+#: `tool_declaration_baseline.json` 本笔无工具面改动 ⇒ 预期不动，实测为准）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
+PROMPT_VERSION = "p241"
 
 
 
