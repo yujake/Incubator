@@ -104,8 +104,8 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "—— 引用命题不算：它的第 2 位凭据是文献代号，不是我们造的东西"
                            "（`draft/39` §3.17 A5：非数值方向的项目靠这一档满足「算或造」）",
     "accepted_documents": "**通过**了我方稿件行数：`documents` 里 `review_verdict == '成立'` 的行（「通过」与 V 的裁决同形；与「审过」是两件事）",
-    "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
-                          "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
+    "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里审核轴上是「成立」或"
+                          "「有毛病」的行；旧值「看不出来」按没查成读，不算审过）",
     "reviewed_current_rows": "现行版本被审校记录钉住的稿件份数（`doc-signatures` 里该 `doc_id` 有一条"
                              "签名的 `content_sha256` 等于稿件行现在的 `content_sha256`）—— 缺省阈值 "
                              "= 台账里自称被审过的稿件份数（status ∈ accepted/revised 或 "
@@ -5056,6 +5056,64 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     return out
 
 
+def suspected_split_reading(store: Any) -> dict[str, Any]:
+    """D-54 ③ 那一格：疑似把一条定理拆成多条独立命题（只报不拦，与 `statements_unoptimized` 同档）。
+
+    判据本体不在这里：它是 `statementfission.suspected_splits`（纯函数、确定性、零模型
+    调用：两两判同一性 → 成簇 → 簇内没有一条有 `proof_no>1` ⇒ 报一簇）。这一格只做
+    "把它接上收工读数"这一件本层的事 —— 改前那个函数在生产面 0 个调用点。
+
+    返回：
+
+    | 键 | 含义 |
+    |---|---|
+    | `checked` | `statements` 读得到 = True；读不到 = False + `reason`（没查成不是"没有拆命题"） |
+    | `count` / `rows` | 疑似拆分的簇数 / 逐簇 `{stmt_ids, count, max_proof_no, pairs, why}` |
+    | `comparable` | 进入两两比较的命题条数（< 2 = 没得比，`reason` 会写明） |
+    | `same_pairs` / `different_pairs` / `unknown_pairs` | 两两判定的三档计数（判不了单列） |
+    | `scope` | 永远是 `"closing"`（读数要能分辨这是收工那一刻扫的） |
+
+    不拦门：这里不产生 blocker、不写 `status`、不改退出码（`report.findings` 里只有
+    "没查成"那一条 warning，与 `statements_unoptimized` 的处置逐字同档）。
+    """
+    from . import statementfission as _SF
+
+    out: dict[str, Any] = {"checked": False, "count": 0, "comparable": 0,
+                           "rows": [], "same_pairs": 0, "different_pairs": 0,
+                           "unknown_pairs": 0, "scope": "closing", "reason": ""}
+    rows, why = _statement_rows(store)
+    if rows is None:
+        out["reason"] = why
+        return out
+    got = _SF.suspected_splits(list(rows.values()), scope="closing")
+    out["checked"] = True
+    out["comparable"] = int(got.get("checked") or 0)
+    out["same_pairs"] = int(got.get("same_pairs") or 0)
+    out["different_pairs"] = int(got.get("different_pairs") or 0)
+    out["unknown_pairs"] = int(got.get("unknown_pairs") or 0)
+    for one in list(got.get("readings") or []):
+        ids = [str(x) for x in (one.get("stmt_ids") or [])]
+        out["rows"].append({
+            "stmt_ids": ids,
+            "count": len(ids),
+            "max_proof_no": int(one.get("max_proof_no") or 1),
+            "pairs": [dict(p) for p in (one.get("pairs") or [])],
+            "why": _SF.describe(one),
+        })
+    out["count"] = len(out["rows"])
+    if str(got.get("reason") or ""):
+        # 没得比（可比命题 < 2）：这是"查过了、但没有可比对象"，不是"没有拆命题"。
+        out["reason"] = (f"可比命题只有 {out['comparable']} 条 ⇒ 形态检测没得比"
+                         "（这不是「没有拆命题」）")
+    elif not out["count"]:
+        out["reason"] = f"查过了：{out['comparable']} 条可比命题里没有疑似拆分（0 簇）"
+    else:
+        named = "、".join("/".join(r["stmt_ids"]) for r in out["rows"])
+        out["reason"] = (f"查过了：{out['count']} 簇疑似把一条定理拆成了多条命题"
+                         f"（{named}；读数，不拦门）")
+    return out
+
+
 def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     """I3 的另一格读数：明确放弃的命题（带理由与时间）。
 
@@ -6624,6 +6682,21 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         rep.findings.append(Finding(
             "statements_unoptimized", "statements_unoptimized_self_inconsistent",
             "warning", f"「哪些证明还没洗过」这一格自相矛盾：{_p}"))
+    # ---- D-54 ③ 那一格（业主 2026-11-04）：疑似把一条定理拆成多条独立命题 --------
+    #
+    # 与上面 `statements_unoptimized` 同档：只落 `readings`、不产生 blocker、不动
+    # `status` 与退出码 ⇒ 门的强度一格没改。为什么必须接：`statementfission.suspected_splits`
+    # 此前在生产面 0 个调用点（"只报不拦"= 没报），真机 sylow3 的三行同一条定理
+    # （`000000` / `000003` / `000006`，`proof_no` 恒 1、`path_group` 只有一组）没有任何
+    # 读数看得见。
+    rep.readings["suspected_splits"] = _run_reading(
+        rep, "suspected_splits", suspected_split_reading, store)
+    _sp = rep.readings["suspected_splits"]
+    if not _sp.get("checked"):
+        rep.findings.append(Finding(
+            "suspected_splits", "suspected_splits_unreadable", "warning",
+            f"「疑似拆命题」那一格没查成（{_sp.get('reason') or '没给原因'}）⇒ "
+            "这个形态数不出来（没查成不是「没有拆命题」）"))
     # ---- 门：悬着的命题拦门（业主 2026-11-01 裁定）
     #
     # 这是收工门强度变更（不是读数变化）：改前"打回之后没人重送"只活在台账里，
