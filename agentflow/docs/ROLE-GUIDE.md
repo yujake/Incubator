@@ -1097,7 +1097,7 @@
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.list_verifications` | 列验证台账（只读，可按命题过滤）。 | `read` | （无） |
 | `verify.read_proof` | 按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。 | `read` | `statement_id` |
-| `verify.verify_proof` | 把一份证明按写成后的样子整体重读（V 的唯一主动作）：两态结论（成立 / 有毛病）+ 问题指到步号，并写 verifications/<命题号>.jsonl。`**命题已登记时必须给 `proof_manuscript`**（签落在稿上）；只给 `proof_text`（内联正文）在册这一档会被受控拒绝（`proof_text_needs_a_manuscript`）—— 内联正文没有签块、没有 `## 依赖` 段、也没有按号命名的稿可寻址，不能单独过审。`未在册（不给 `statement_id`）那一档可以只给 `proof_text`：那一档只给「看过、没签」的读数，不签发。`side_effect=read`：V 不写表。 | `read` | （无） |
+| `verify.verify_proof` | 把一份证明按写成后的样子整体重读：两态结论 + 问题指到步号，写 verifications/<命题号>.jsonl。在册也要给 `proof_manuscript`；只给 `proof_text` 会被拒。 | `read` | （无） |
 
 共 **28** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
 
