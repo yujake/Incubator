@@ -1809,7 +1809,7 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
         out["reason"] = "手稿里没有 V 签块（这一份还没签）"
         out["suggestion"] = (
             "让 F 把这份证明送 V：`summon` V 的 `verify.verify_proof` 带 "
-            "`proof_manuscript`；三转成立后由收方秘书 `vsigns.land(by=\"secretary:F\")` 落块回稿。")
+            "`proof_manuscript`；签到位后由收方秘书 `vsigns.land(by=\"secretary:F\")` 落块回稿。")
         return out
     mid = out["manuscript_id"]
     ident = out["identity_state"]
