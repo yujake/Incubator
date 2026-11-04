@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""判据：V 的签字只有两个入口 —— F 产出时签、B 入库文献侧内容时签（2026-10-20 业主裁定）。
+"""判据：V 的签字有三个入口 —— F 产出时签、B 入库文献侧内容时签（2026-10-20 业主裁定），
+E 跑出穷举证据时签（2026-10-23 追加）。
 ## 裁定逐字（业主）
 > "F 产出的证明带 V 签字后不该反复要求签字，所以最早版本只有 F 能派 V；B 负责定理及证明> 入库时可让 V 审核签字，这是对文献侧引入的内容需要看的，因为我们自己经 F 产出的证明> 天生带 V 签字。"
 所以四件事要同时成立，缺一件模型就会照着错的那一句派活：
-- 边表（①）：`D.edges` 与 `capabilities.ALLOWED_EDGES["D"]` 都不含 V，而且 V 只有两个入口：`F`（自产证明时签）与
-`B`（文献侧内容入库时签）。`M→V` 已撤（2026-10-20业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」），边总数 33 → 32。`M→B→V` 与 `M→D→F→V` 两条间接路都还在 ⇒
+- 边表（①）：`D.edges` 与 `capabilities.ALLOWED_EDGES["D"]` 都不含 V，而且 V 只有三个入口：`F`（自产证明时签）、
+`B`（文献侧内容入库时签）与 `E`（穷举证据时签）。`M→V` 已撤（2026-10-20业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」，2026-10-23 晚再加 E），边总数 33 → 32。`M→B→V` 与 `M→D→F→V` 两条间接路都还在 ⇒
 撤这条边不会让 V 变成孤儿（判据里有反真空）。此前"树根可派任何人"那一句（2026-10-18 的裁定）已被本裁定取代 —— 派 V 走查证明这件事由 F 在交出证明时办好，M 不再直连 V；见 ②。- M
 的文字面（②）：`specs/m.py` 的 policy 里不再有"派 V / `verify_proof`"这一类义务句。原来那两条（`reviewed_proof_rows` 记 0；`history` 里出现
 `statement_id`）都改成"派 D 去办"。- D 的文字面（③）：D 的义务是"确认 F 交回的证明带 V 的签字；没有就让 F 去补签"，并明说"你不要自己派 V"。- B 的文字面（④）：B
@@ -73,7 +74,8 @@ def _edge_problems(d_edges, table, m_edges=None) -> list[str]:
     total = sum(len(v) for v in table.values())
     if total != EXPECTED_EDGE_TOTAL:
         out.append(f"边总数是 {total}，不是 {EXPECTED_EDGE_TOTAL} —— "
-                   "2026-10-20 的裁定：D→V 没有加，`M→V` 撤掉一条（33 → 32）")
+                   "2026-10-20 的裁定：D→V 没有加，`M→V` 撤掉一条（33 → 32）；"
+                   "2026-10-22/23 追加 L 与 E 之后才是今天的数（见 EXPECTED_EDGE_TOTAL 的沿革）")
     lost = sorted(D_EDGES - derived)
     if lost:
         out.append(f"D 少了这些边 {lost} —— 反真空：其余五条（A/B/C/E/F）一条都不许少")
@@ -91,12 +93,12 @@ def _edge_problems(d_edges, table, m_edges=None) -> list[str]:
 
 
 def test_d_has_no_edge_to_v_and_the_total_is_unchanged() -> None:
-    """① 正控：D 的出边里没有 `V`、M 的出边里也没有 `V`，边总数 32，两边的其余边一条没少。"""
+    """① 正控：D 的出边里没有 `V`、M 的出边里也没有 `V`，边总数 36，两边的其余边一条没少。"""
     specs = builtin_specs()
     problems = _edge_problems(specs["D"].edges, C.ALLOWED_EDGES, specs["M"].edges)
     assert problems == [], ("D/M 的出边与 2026-10-20 的裁定不一致：\n  - "
                             + "\n  - ".join(problems))
-    # 反真空（正控的另一半）：V 的两个入口（F 与 B）都还在，否则上面那条"不含 V"
+    # 反真空（正控的另一半）：V 的三个入口（F / B / E）都还在，否则上面那条"不含 V"
     # 可能只是"整个 V 都没人够得着"。
     assert set(V_ENTRANCES) == {r for r, tos in C.ALLOWED_EDGES.items() if "V" in tos}, (
         "V 的入口集合变了（2026-10-20 裁定：F 与 B；2026-10-23 晚再加 E）",
@@ -128,7 +130,7 @@ def test_negative_control_putting_v_back_on_m_is_caught() -> None:
     """① 负控（2026-10-20 那一半）：把 `V` 加回 M（声明层 / 派生层各一次）⇒ 判据必须红。
 
     没有这一条，"M 不含 V"就只能靠人记得 —— 而它是这一天业主裁定的核心那一格：
-    把 V 加回去等于让 M 又能直连 V，而 V 的两个入口（F / B）不再独占。
+    把 V 加回去等于让 M 又能直连 V，而 V 的三个入口（F / B / E）不再独占。
     """
     m_spec = builtin_specs()["M"]
     d_spec = builtin_specs()["D"]
