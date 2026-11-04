@@ -15,9 +15,14 @@
 3. 被挪走的事实还在 user 消息里：跑一趟真的循环，从 `agent_run_start.opening_facts` 读回十格原值，
 逐格断言它①在 user 消息里、②不在 system 里；负控：把某一格整段删掉（喂空串 ⇒ 只剩缺省句）⇒ 必红。
 
-读数面（真机）：`cross_run_hit`（`scripts/warm_prompt_cache.py --probe-cross-run`）的两行是"另一趟活"
-的同一份 system 连发两次：改前 = `0 / 满`，改后 = 两次都该 ≥90%。`tests/test_prompt_cache_warm.py`
-与这里各判一次（那边判读数自洽，这里判比例）。"""
+读数面（真机）：`cross_run_hit`（`scripts/warm_prompt_cache.py --probe-cross-run`）是"另一趟活"
+的同一份 system 连发两次：改前 = `0 / 满`，改后 = 两次都该 ≥90%。
+
+2026-11-05 起每趟固定量两个伙伴（H 与 M）⇒ `cross_run_hit` 是 4 行（每个伙伴 2 行，
+每行带 `role` 与 `pass`）。为什么是两个：`test_two_partner_configs_...` 要两者都命中，
+"某一段只在另一个角色的模板里"只量一个角色看不见；而只固定一个伙伴时，滚存会把
+另一个挤掉（p241 滚存把 M 挤掉，这两条判据当时以 `KeyError: 'M'` 红）。
+`tests/test_prompt_cache_warm.py` 与这里各判一次（那边判读数自洽，这里判比例）。"""
 from __future__ import annotations
 
 import hashlib
@@ -461,16 +466,37 @@ def _load_warm() -> Any:
     return mod
 
 
+def _cross_run_rows_by_partner(
+        run: Mapping[str, Any]) -> dict[str, list[Mapping[str, Any]]]:
+    """一趟读数里的跨 run 探针按目标分组（每个目标应有 pass 4 / 5 两行）。
+
+    2026-11-05 起一趟量两个伙伴（H 与 M）⇒ `cross_run_hit` 是 4 行。判据不假设
+    总行数，只按 `role` 分组 —— 旧记录（只有 H 的 2 行）也读得出来，而"缺了 M"
+    由每个判据自己点名（不许把缺格读成合格）。
+    """
+    out: dict[str, list[Mapping[str, Any]]] = {}
+    for got in run.get("cross_run_hit") or []:
+        out.setdefault(str(got.get("role") or ""), []).append(dict(got))
+    return out
+
+
 def _cross_run_problem(cross: list[Mapping[str, Any]], *, floor: float = 0.90) -> str:
-    """`cross_run_hit` 那两行合不合格（空串 = 合格）。判据本体只这一处。
+    """一个伙伴的两行合不合格（空串 = 合格）。判据本体只这一处。
 
     口径：两行都是"另一趟活的 system"（不同 `task` / `task_id` / `depth` /
     `workspace_root`）—— 第一行是它第一次见，第二行是同一份再发一次。
     改前：`0 / 满`；改后：两行都该 ≥ `floor`。
+
+    2026-11-05：参数从"一趟的全部 cross 行"收窄成"一个伙伴的两行"。调用方先按
+    `role` 分组（`_cross_run_rows_by_partner`），再逐伙伴问这一句 —— 两个伙伴的
+    命中率不再被平均成一个数。
     """
+    cross = sorted((dict(got) for got in cross), key=lambda got: int(got.get("pass") or 0))
     if not cross or len(cross) != 2:
         return f"跨 run 探针该有 2 行（第一次见 / 第二次见），实得 {cross!r}"
     first, second = cross[0], cross[1]
+    if not (first.get("pass") == 4 and second.get("pass") == 5):
+        return f"跨 run 探针的 pass 不是 4/5：{[g.get('pass') for g in cross]}"
     for tag, got in (("第一次见", first), ("第二次见", second)):
         tokens = int(got.get("tokens_in") or 0)
         hit = int(got.get("hit") or 0)
@@ -488,8 +514,11 @@ def _cross_run_problem(cross: list[Mapping[str, Any]], *, floor: float = 0.90) -
 def test_the_recorded_cross_run_probe_reuses_the_prefix() -> None:
     """判据 ①（读数面）：真机上"另一趟活"的 system 两次都 ≥90% 命中。
 
-    读数由 `scripts/warm_prompt_cache.py --probe-cross-run <角色>` 产出（它把另一份
-    事实的 system 连发两次）。这一条只读读数，不联网、不花钱 —— 与
+    读数由 `scripts/warm_prompt_cache.py` 默认产出：每趟带 `--probe-no-tools V`
+    与 `--probe-cross-run H,M`，每个伙伴把另一份事实的 system 连发两次。
+    2026-11-05 起这一条要求最近一趟同时有 H 与 M 的各两行（共 4 行）：
+    只量一个伙伴时，滚存会把另一个的读数挤掉（p241 滚存把 M 挤掉 ⇒ 这两条判据
+    以 `KeyError: 'M'` 红）。这一条只读读数，不联网、不花钱 —— 与
     `tests/test_prompt_cache_warm.py` 的分工：那边判"读数自洽/新鲜"，
     这里判"换一趟活到底命中多少"。
     """
@@ -498,15 +527,26 @@ def test_the_recorded_cross_run_probe_reuses_the_prefix() -> None:
     runs = _load_warm().load_readings(_READINGS)
     probes = [r for r in runs if r.get("cross_run_hit")]
     assert probes, "读数里一次跨 run 探针都没有 ⇒ 这一格没量（不是'合格'）"
-    cross = list(probes[-1]["cross_run_hit"])
-    problem = _cross_run_problem(cross)
-    assert problem == "", problem
+    latest = probes[-1]
+    cross = [dict(got) for got in latest["cross_run_hit"]]
+    assert len(cross) == 4, (
+        f"最近一趟的 `cross_run_hit` 是 {len(cross)} 行，不是 4 行 ⇒ "
+        "每趟固定量 H 与 M 两个伙伴（各 2 行），少了谁都是在把'只量一个'放回来")
+
+    by_partner = _cross_run_rows_by_partner(latest)
+    missing = [role for role in _REAL_MACHINE_ROLES if role not in by_partner]
+    assert not missing, (
+        f"最近一趟跨 run 探针缺 {missing} ⇒ 每趟都该量 H 与 M 两个伙伴"
+        f"（实得 {sorted(by_partner)}）")
+    for role in _REAL_MACHINE_ROLES:
+        problem = _cross_run_problem(by_partner[role])
+        assert problem == "", f"{role}：{problem}"
     # 计数器口径也要自洽：hit + miss == tokens_in（上游两格与 prompt_tokens 该相等）。
     for got in cross:
         assert int(got["hit"]) + int(got["miss"]) == int(got["tokens_in"]), got
     # 落盘的那一格 `cross_run_prefix_chars` 必须等于整份 system 的长度（离线读数）。
-    rows = [r for r in probes[-1]["rows"] if int(r.get("pass") or 1) in (4, 5)]
-    assert rows, probes[-1].get("rows")
+    rows = [r for r in latest["rows"] if int(r.get("pass") or 1) in (4, 5)]
+    assert len(rows) == 4, latest.get("rows")
     for row in rows:
         assert int(row["cross_run_prefix_chars"]) == int(row["system_chars"]), (
             f"跨 run 可复用前缀只有 {row['cross_run_prefix_chars']} / 整份 "
@@ -514,49 +554,68 @@ def test_the_recorded_cross_run_probe_reuses_the_prefix() -> None:
 
 
 def test_setting_the_recorded_cross_run_hit_to_zero_makes_the_criterion_red() -> None:
-    """负控（① 的读法）：把读数里的 `hit` 改成 0 ⇒ 同一个判据必须红。
+    """负控（① 的读法）：把任一伙伴的 `hit` 改成 0 ⇒ 同一个判据必须红。
 
     守的是"这个数字真的在被读"：判据若把 `hit` 折掉（或只判 `tokens_in` 非零），
     改成 0 也照样绿 —— 而"换一趟活的第一次调用命中 0"正是这一批要修掉的那个数。
+    两个伙伴各来一刀：只毒 H 时，M 那一格不能把结论糊过去。
     """
     if not _READINGS.is_file():
         pytest.skip(f"读数不在盘上：{_READINGS}")
     runs = _load_warm().load_readings(_READINGS)
     probes = [r for r in runs if r.get("cross_run_hit")]
     assert probes, "读数里没有跨 run 探针 ⇒ 这条负控没有素材"
-    cross = [dict(got) for got in probes[-1]["cross_run_hit"]]
-    assert _cross_run_problem(cross) == "", _cross_run_problem(cross)
-    poisoned = [dict(cross[0], hit=0), dict(cross[1])]
-    assert _cross_run_problem(poisoned), "把第一次见的 hit 改成 0 之后仍判合格 ⇒ 判据没在读那个数"
-    poisoned_both = [dict(cross[0], hit=0), dict(cross[1], hit=0)]
-    assert "hit=0" in _cross_run_problem(poisoned_both), poisoned_both
+    by_partner = _cross_run_rows_by_partner(probes[-1])
+    for role in _REAL_MACHINE_ROLES:
+        assert role in by_partner, (
+            f"{role} 没有跨 run 探针 ⇒ 这条负控没有素材（先按默认 H,M 重跑一趟）")
+        cross = by_partner[role]
+        assert _cross_run_problem(cross) == "", (role, _cross_run_problem(cross))
+        ordered = sorted(cross, key=lambda got: int(got.get("pass") or 0))
+        poisoned = [dict(ordered[0], hit=0), dict(ordered[1])]
+        problem = _cross_run_problem(poisoned)
+        assert problem, f"{role}：把第一次见的 hit 改成 0 之后仍判合格 ⇒ 判据没在读那个数"
+        assert "hit=0" in problem, (role, problem)
+        poisoned_both = [dict(ordered[0], hit=0), dict(ordered[1], hit=0)]
+        assert "hit=0" in _cross_run_problem(poisoned_both), poisoned_both
 
 
 #: 真机只要这两个角色（省钱样本）：`M` 是最大的一份（51,726 字符），`H` 是
 #: 107k→37k 那一档里"节点最多"的一份（41 件工具）。两份都换过伙伴配置之后
 #: 都该 ≥90% —— 只挑一个角色的话，"某一段只在另一个角色的模板里"就漏掉了。
+#: 2026-11-05 起它们也是 warm 每趟固定量的两个伙伴（`DEFAULT_CROSS_RUN_PROBES`）。
 _REAL_MACHINE_ROLES: tuple[str, ...] = ("M", "H")
 
 
 def _latest_cross_run_by_role(runs: list[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
-    """每个角色最近一趟的跨 run 探针（两行：第一次见 / 第二次见）。"""
+    """每个角色最近一趟的跨 run 探针（两行：第一次见 / 第二次见）。
+
+    按 `role` 分组取"最近"，不是按"一趟总共 2 行"判：2026-11-05 起一趟有 4 行
+    （H、M 各 2），旧记录只有 H 的 2 行 —— 两种形状都要读得出来，缺的角色由
+    调用方点名。
+    """
     out: dict[str, list[Mapping[str, Any]]] = {}
     for run in runs:
-        cross = list(run.get("cross_run_hit") or [])
-        if len(cross) == 2:
-            out[str(cross[0].get("role"))] = cross
+        for role, cross in _cross_run_rows_by_partner(run).items():
+            if len(cross) == 2:
+                out[role] = cross
     return out
 
 
 def test_two_partner_configs_hit_ninety_percent_on_the_real_machine() -> None:
     """判据 ③（真机，M 与 H 各两次）：换一份伙伴配置之后仍 ≥90% 命中。
 
-    读数由 `scripts/warm_prompt_cache.py --roles <角色> --hit-sample <角色>
-    --probe-cross-run <角色>` 产出：`pass=4/5` 那两行发的是 `OTHER_RUN_FACTS` 的
+    读数由 `scripts/warm_prompt_cache.py` 的默认趟产出（每趟固定
+    `--probe-cross-run H,M`）：`pass=4/5` 那几行发的是 `OTHER_RUN_FACTS` 的
     system —— 它既是另一件活（task / task_id / depth / 收件箱全不同），也是
     另一份伙伴配置（`availability` 换了一份、`parent_limits` 换了一份 Policy）。
     改前：那份 system 从 63% / 88% 处就断了 ⇒ 第一次见它命中不了多少；
-    改后：整份 system 都是前缀 ⇒ 两行都该接近满。
+    改后：整份 system 都是前缀 ⇒ 每个伙伴的两行都该接近满。
+
+    2026-11-05：这一条原本只读"每角色最近一趟"，于是 M 的读数被 p241 滚存挤掉时
+    以 `KeyError: 'M'` 红。现在 M 与 H 都是每趟固定量的伙伴（见
+    `_REAL_MACHINE_ROLES` 与 `warm_prompt_cache.DEFAULT_CROSS_RUN_PROBES`），
+    "缺一个角色"仍然判红（不是跳过）。
 
     这一条只读盘上的读数（不联网、不花钱）；"换配置之后还剩多少"这个数由它守。
     """
@@ -566,7 +625,7 @@ def test_two_partner_configs_hit_ninety_percent_on_the_real_machine() -> None:
     missing = [role for role in _REAL_MACHINE_ROLES if role not in by_role]
     assert not missing, (
         f"读数里没有 {missing} 这两角色的跨 run 探针 ⇒ 这一次没量（不是'合格'）："
-        f"盘上有的是 {sorted(by_role)}；重跑 warm_prompt_cache.py --probe-cross-run")
+        f"盘上有的是 {sorted(by_role)}；按默认 H,M 重跑 warm_prompt_cache.py")
     problems: list[str] = []
     for role in _REAL_MACHINE_ROLES:
         cross = by_role[role]
@@ -591,9 +650,10 @@ def test_setting_the_partner_config_hit_to_zero_makes_the_criterion_red() -> Non
         pytest.skip(f"读数不在盘上：{_READINGS}")
     by_role = _latest_cross_run_by_role(_load_warm().load_readings(_READINGS))
     for role in _REAL_MACHINE_ROLES:
+        assert role in by_role, f"{role} 没有跨 run 探针 ⇒ 这条负控没有素材"
         assert _cross_run_problem(by_role[role]) == "", (role, _cross_run_problem(by_role[role]))
-        cross = by_role[role]
-        poisoned = [dict(cross[0], hit=0), dict(cross[1])]
+        ordered = sorted(by_role[role], key=lambda got: int(got.get("pass") or 0))
+        poisoned = [dict(ordered[0], hit=0), dict(ordered[1])]
         problem = _cross_run_problem(poisoned)
         assert problem, f"{role}：把第一次见的 hit 改成 0 之后仍判合格 ⇒ 判据没在读那个数"
         assert "hit=0" in problem, (role, problem)

@@ -1543,17 +1543,18 @@ python scripts/warm_prompt_cache.py --lean on `
 > `M` 50,671）是更早那一版。**本轮没有真发请求复跑**（那要花真钱）⇒ 表里三栏**不是当次值**，
 > 要当次值就按 §14.5 重跑一遍。
 
-**另外两条诊断读数**（2026-11-04 起是每一趟的固定组成：缺省目标 `V` / `H`；
-`--probe-*` 可点别的目标，但"不做诊断"不再是选项）：
+**另外两类诊断读数**（2026-11-04 起是每一趟的固定组成：工具面缺省目标 `V`，
+跨 run 缺省伙伴 `H` 与 `M`；`--probe-cross-run` 是追加，不能减；"不做诊断"或
+"只量一个伙伴"不再是选项）：
 
 | 问题 | 读数 | 那句话 |
 |---|---|---|
 | 工具面在不在缓存前缀里？ | 去掉工具面再发一次：`hit=11,904 / tokens_in=12,126`（98.2%） | **不在**。缓存按 `messages` 建索引，`tools` 不参与前缀 ⇒ 工具面省不进/废不掉缓存 |
-| 换一趟活（不同 task / task_id / depth）还能命中多少？ | 第一次见：`hit=0 / 18,635`；同一份第二次见：`hit=18,432 / 18,635`（98.9%） | **第一次 0**。可复用前缀只有 112–145 字符（AGENT_IDENTITY 里带 `task_id` / `depth`，第 ~95 个字符起就不同），够不到一个缓存块 |
+| 换一趟活（不同 task / task_id / depth）还能命中多少？ | 每个伙伴（H、M）两行：第一次见 / 同一份第二次见。2026-11-05 起 `cross_run_hit` 每趟 4 行（每伙伴 2 行，每行带 `role` / `pass`） | 改前第一次 0；改后每个伙伴的两行都该 ≥90%。可复用前缀 == 整份 system（`cross_run_prefix_chars`）。为什么是两个伙伴：`test_two_partner_configs_...` 要两者都命中，"某一段只在另一个角色的模板里"只量一个角色看不见 |
 
 ### §14.4 这条判据在哪、它怎么红
 
-判据本体 = `tests/test_prompt_cache_warm.py`（9 条，逐条带负控；**不发请求、不联网**，
+判据本体 = `tests/test_prompt_cache_warm.py`（每条带负控；**不发请求、不联网**，
 只读 §14.3 那份读数并重算十个角色的摘要）：
 
 | 判据 | 正控 | 负控（必须红） |
@@ -1563,7 +1564,7 @@ python scripts/warm_prompt_cache.py --lean on `
 | ② 第二次调用命中（样本只有 2 个：`M` / `C`） | `hit>0` 且 `hit/(hit+miss)>0` | 把样本那一行的 `hit` 改成 0 ⇒ 红 |
 | ③ 同一角色两次调用的 `prompt_sha256` 相同 | 每一行都同摘要 + 两次独立渲染逐字节相同 | **把 `budget_left` 塞回 system**（改前那个形态）⇒ 红，并报出"从第几个字符起不同"与段名 `TASK_BUDGET` / `TASK_NOTEBOOK` |
 | ④ 读数不许烂 | 盘上记的 `prompt_sha256` = 今天重算的 | 提示词一改（`agent_prompts.py` / `specs/*` / 预设）⇒ 红，处置是"重跑 §14.5 那条命令"，**不是**改测试 |
-| ⑤ 两条诊断读数与本节一致 | 工具面不在前缀里 / 换一趟活第一次 0 命中 | 探针口径被改（例如 task_id 没变），或滚存把唯一一趟诊断挤掉 ⇒ 红（2026-11-04 起另有一条滚存判据：塞到 `MAX_RUNS_KEPT + 2` 趟、旧诊断最旧 ⇒ 仍读得到；把"每趟都带诊断"摘掉 ⇒ 同一刀红） |
+| ⑤ 诊断读数与本节一致 | 工具面不在前缀里 / 每个跨 run 伙伴（H、M）各自两行都 ≥90% | 探针口径被改（例如 task_id 没变），或滚存把唯一一趟诊断挤掉 ⇒ 红。另有滚存判据：塞到 `MAX_RUNS_KEPT + 2` 趟、旧诊断最旧 ⇒ 仍读得到；把"每趟都带诊断"摘掉，或把 M 从固定伙伴里摘掉 ⇒ 同一刀红 |
 
 `③` 的负控是这一节最要紧的一条：它证明这条判据守的是**"提示词不许抖"**，
 而不是"两边都不是空的"。§13.4 那条纪律（每步会变的东西不许进 system）就靠它咬人。
@@ -1588,14 +1589,17 @@ python scripts/warm_prompt_cache.py --lean on `
 - **L 在关档是缺席**：`leanscope.LEAN_ONLY_ROLES` 只有 `L`，Lean 关着时
   `system_prompt("L")` 按产品规则抛 `RoleHidden`。所以关档那一趟 L 记 `kind=absent`，
   不伪造一段预热；开档那一趟 L 真预热，并用 `--hit-sample M,C,L` 拿到第二次命中。
-- **诊断是每一趟的固定组成**（2026-11-04）：每趟自动带 `--probe-no-tools V` 与
-  `--probe-cross-run H`（多 3 次调用），把目标与来源写进 run 的 `diagnostics` 一格。
-  为什么：读数文件只留最近 16 趟，而这两条诊断曾经是历史里的"唯一一趟" —— p241
-  两趟预热把 p234 那趟挤出窗口后
-  `test_the_two_diagnostic_readings_say_what_they_measured` 红；补跑两趟只是花钱掩盖，
-  调大窗口只是把复发推迟。每趟都带 ⇒ 窗口怎么滚，最近一趟都有诊断
-  （判据 `test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest`）。
-  显式 `--probe-*` 仍可点别的目标；但"不做诊断"不再是可选项。
+- **诊断是每一趟的固定组成**（2026-11-04，跨 run 双侧 2026-11-05 补齐）：每趟自动带
+  `--probe-no-tools V` 与 `--probe-cross-run H,M`（多 5 次调用：1 次去工具面 +
+  两个伙伴各 2 次），把目标与来源写进 run 的 `diagnostics` 一格；`cross_run_hit`
+  因此是每趟 4 行（H、M 各 2 行），不是 2 行。为什么：读数文件只留最近 16 趟，
+  而这些诊断曾经是历史里的"唯一一趟" —— p241 两趟预热把 p234 那趟挤出窗口后
+  `test_the_two_diagnostic_readings_say_what_they_measured` 红；同一滚存又把 M 的
+  跨 run 探针挤掉，`test_cross_run_prefix_is_reused.py` 的两条以 `KeyError: 'M'` 红。
+  补跑只是花钱掩盖，调大窗口只是把复发推迟。每趟都带全部诊断 ⇒ 窗口怎么滚，
+  最近一趟都有它们（判据 `test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest`
+  与只盯 M 的两条）。显式 `--probe-*` 是追加别的目标；但"不做诊断""只量一个伙伴"
+  不再是可选项。
 
 - **幂等**：同一 scenario 再跑一遍，`prompt_sha256` 不变、`hit` 接近满、`write` 接近 0
   （读数文件里多一趟，前一趟不动）。

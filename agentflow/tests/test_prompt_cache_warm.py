@@ -79,6 +79,13 @@ ROLES: tuple[str, ...] = tuple(W.ROLES)
 EXPECTED_ROLES: tuple[str, ...] = (
     "A", "B", "C", "D", "E", "F", "G", "H", "V", "M", "L")
 
+#: 跨 run 探针每趟必须量的伙伴（H 与 M 各一条）。
+#:
+#: 为什么不取 `W.DEFAULT_CROSS_RUN_PROBES`：2026-11-05 这条判据要能抓住"把 M 从
+#: 固定目标里摘掉"这一改。若期望集跟着 W 的缺省走，摘掉 M 之后期望也会变窄，
+#: 反真空那一条就空转了 —— 与 `EXPECTED_ROLES` 不取 `W.ROLES` 是同一条纪律。
+EXPECTED_CROSS_RUN_PARTNERS: tuple[str, ...] = ("H", "M")
+
 
 # ---------------------------------------------------------------- 读读数
 
@@ -932,17 +939,32 @@ def _newest_diagnostic_run(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any] 
     return got[-1] if got else None
 
 
+def _cross_run_by_partner(run: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """一趟读数里的跨 run 探针按目标分组（每个目标应当有 pass 4 / 5 两行）。
+
+    2026-11-05 起一淌量两个伙伴（H 与 M）⇒ `cross_run_hit` 4 行；旧的 2 行记录
+    （只有 H）也按"一个伙伴两行"的形状读得出来。判据不假设总行数，只问每个
+    固定伙伴在不在、是不是两行。
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for got in run.get("cross_run_hit") or []:
+        out.setdefault(str(got.get("role") or ""), []).append(dict(got))
+    return out
+
+
 def _diagnostic_presence_problems(runs: Iterable[Mapping[str, Any]]) -> list[str]:
-    """滚存之后"两条诊断读数还读不读得到" —— 判据本体只这一处。
+    """滚存之后"诊断读数还读不读得到" —— 判据本体只这一处。
 
     2026-11-04 复发缺陷：读数文件只留最近 `MAX_RUNS_KEPT` 趟，而 p241 两趟预热
     把唯一带 `--probe-no-tools` 的 p234 那趟挤出了窗口 ⇒
     `test_the_two_diagnostic_readings_say_what_they_measured` 红。当时靠补跑两趟
     （$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，不是修：下一次滚存照样复发。
+    2026-11-05 同根复发一次：跨 run 探针只固定了 H，p241 滚存把 M 挤掉 ⇒
+    `test_cross_run_prefix_is_reused.py` 的两条以 `KeyError: 'M'` 红。
 
     所以这里问的不是"历史上有没有过诊断"，而是"最近一趟带不带"：修法把诊断
-    做成 warm 的固定组成部分之后，窗口怎么滚，最新那趟都带着这两条读数
-    （`tools_in_prefix` + `cross_run_hit`，它们在同一个 run 记录里）。
+    做成 warm 的固定组成部分之后，窗口怎么滚，最新那趟都带着全部读数
+    （`tools_in_prefix` + 每伙伴 2 行 `cross_run_hit`，都在同一个 run 记录里）。
     """
     run = _newest_diagnostic_run(runs)
     if run is None:
@@ -951,9 +973,13 @@ def _diagnostic_presence_problems(runs: Iterable[Mapping[str, Any]]) -> list[str
     probe = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) == 3]
     if not probe:
         return ["`tools_in_prefix` 有值却没有 pass=3 那一行 ⇒ 读数自相矛盾"]
-    cross = run.get("cross_run_hit")
-    if not cross or len(cross) != 2:
-        return [f"最近一趟诊断（{run.get('at')}）没有跨 run 探针（要 2 行）：{cross!r}"]
+    by_partner = _cross_run_by_partner(run)
+    missing = [t for t in EXPECTED_CROSS_RUN_PARTNERS
+               if len(by_partner.get(t) or []) != 2]
+    if missing:
+        got = {k: len(v) for k, v in sorted(by_partner.items())}
+        return [f"最近一趟诊断（{run.get('at')}）的跨 run 探针缺少/不全：{missing}"
+                f"（要每个伙伴 2 行；实得 {got}）"]
     return []
 
 
@@ -979,26 +1005,32 @@ def _diagnostic_problems(runs: Iterable[Mapping[str, Any]]) -> list[str]:
         problems.append(f"`tools_in_prefix` 是 {run.get('tools_in_prefix')!r}，"
                         "不是 False ⇒ 与 pass=3 那一行的读数对不上")
 
-    cross = run.get("cross_run_hit")
-    first, second = cross[0], cross[1]
-    if not (first.get("pass") == 4 and second.get("pass") == 5):
-        problems.append(f"跨 run 探针的 pass 不是 4/5：{[r.get('pass') for r in cross]}")
-    # 口径（2026-10-21）：两行都是"另一趟活"的 system，两行都该命中。
+    # 口径（2026-10-21）：每个伙伴的两行都是"另一趟活"的 system，都该命中。
     # 改前：第一行 `hit=0`（另一份 system 从第 95 个字符起就不同）。
-    for tag, got in (("第一次见", first), ("第二次见", second)):
-        tokens = int(got.get("tokens_in") or 0)
-        hit = int(got.get("hit") or 0)
-        if not tokens:
-            problems.append(f"另一趟活的 system {tag}：tokens_in=0 ⇒ 这一格没量到")
-        elif hit <= 0:
-            problems.append(
-                f"另一趟活的 system {tag}没有命中（hit=0，tokens_in={tokens}）⇒ "
-                "前缀里还有跨 run 会变的东西"
-                "（登记表见 `promptstability.STEP_VOLATILE_FACTS`）")
-        elif hit / tokens < 0.90:
-            problems.append(
-                f"另一趟活的 system {tag}只命中 {hit / tokens * 100:.1f}%"
-                f"（hit {hit} / {tokens} token）⇒ 与'跨 run 同一份前缀'对不上")
+    # 2026-11-05：伙伴从 1 个变成 2 个（H 与 M）⇒ 逐伙伴判，不再假设"一趟只有两行"。
+    by_partner = _cross_run_by_partner(run)
+    for partner in EXPECTED_CROSS_RUN_PARTNERS:
+        ordered = sorted(by_partner.get(partner) or [],
+                         key=lambda r: int(r.get("pass") or 0))
+        passes = [int(r.get("pass") or 0) for r in ordered]
+        if passes != [4, 5]:
+            problems.append(f"{partner}：跨 run 探针的 pass 不是 4/5：{passes}")
+        for tag, got in zip(("第一次见", "第二次见"), ordered):
+            tokens = int(got.get("tokens_in") or 0)
+            hit = int(got.get("hit") or 0)
+            if not tokens:
+                problems.append(f"{partner} 的另一趟活 system {tag}："
+                                "tokens_in=0 ⇒ 这一格没量到")
+            elif hit <= 0:
+                problems.append(
+                    f"{partner} 的另一趟活 system {tag}没有命中"
+                    f"（hit=0，tokens_in={tokens}）⇒ "
+                    "前缀里还有跨 run 会变的东西"
+                    "（登记表见 `promptstability.STEP_VOLATILE_FACTS`）")
+            elif hit / tokens < 0.90:
+                problems.append(
+                    f"{partner} 的另一趟活 system {tag}只命中 {hit / tokens * 100:.1f}%"
+                    f"（hit {hit} / {tokens} token）⇒ 与'跨 run 同一份前缀'对不上")
     # 离线那一格：跨 run 可复用的前缀 == 整份 system（一格都没断）。
     rows = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) in (4, 5)]
     if not rows:
@@ -1017,16 +1049,22 @@ def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
     - 工具面不在缓存前缀里：同一份 system，带工具面预热过之后去掉工具面
     再发一次仍然命中（`tools_in_prefix=False`，实测 hit 11,904 / 12,126）；
     - 换一趟活也命中（2026-10-21 之后的口径）：另一份 system（不同 `task` /
-    `task_id` / `depth` / `workspace_root`）在 system 里逐字节等于原来那一份（跨 run 会变的十格已经挪进 user 消息）⇒ `cross_run_hit` 的两行都该
+    `task_id` / `depth` / `workspace_root`）在 system 里逐字节等于原来那一份（跨 run 会变的十格已经挪进 user 消息）⇒ 每个伙伴的 `cross_run_hit` 两行都该
     ≥90%。改前那两行是 `0 / 满`，那正是"预热只买到同一份前缀的第二次"的读数。
+    2026-11-05 起伙伴固定成两个（H 与 M），所以这一条判每个伙伴的两行（共 4 行），
+    不再假设"一趟只有 H 那两行"。
 
     这两条决定了"预热到底买到了什么"：改前买到的是"同一份前缀的第二次调用能省"；现在还包括"另一趟活能用同一段前缀"。`cross_run_prefix_chars`（离线算的字符数）因此必须等于整份 system 的长度
     —— 这是同一条判据的另一半。
 
     2026-11-04 起这一条还必须过"滚存"那一刀：诊断是每一趟的固定组成，
     所以 `test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest`
-    把同一份 `_diagnostic_problems` 跑在滚存后的读数上。
+    把同一份 `_diagnostic_problems` 跑在滚存后的读数上；2026-11-05 又追加了
+    只盯 M 的那一刀（见第 7 节末两条）。
     """
+    assert tuple(W.DEFAULT_CROSS_RUN_PROBES) == EXPECTED_CROSS_RUN_PARTNERS, (
+        f"固定跨 run 伙伴是 {W.DEFAULT_CROSS_RUN_PROBES}，判据认的是 "
+        f"{EXPECTED_CROSS_RUN_PARTNERS} ⇒ 有人把伙伴改窄了（这会重新打开复发）")
     problems = _diagnostic_problems(_runs())
     assert not problems, "；".join(problems)
 
@@ -1257,16 +1295,14 @@ def test_the_newest_real_run_per_tier_is_judged_only_by_the_in_sample_targets() 
 # 红，靠补跑两趟（$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，下一次滚存照样复发。
 #
 # 修法不是把窗口调大（那只是把复发推迟），而是让诊断成为 warm 的固定组成部分：
-# 每一趟都带"去掉工具面"与"换一趟活"两条探针，并把"这一趟带诊断"记进 run 记录
-# （`diagnostics` / `tools_probe` / `cross_run_probe` / `tools_in_prefix` /
-# `cross_run_hit`）。窗口怎么滚，最新那趟都带着诊断。
+# 每一趟都带"去掉工具面"与两个"换一趟活"的伙伴（H、M），并把"这一趟带诊断"
+# 记进 run 记录（`diagnostics` / `tools_probe` / `cross_run_probes` /
+# `tools_in_prefix` / `cross_run_hit`）。窗口怎么滚，最新那趟都带着诊断。
 #
-# 下面两条判据是那起复发的机器版本：
-# - 正控：把临时读数塞到 `MAX_RUNS_KEPT` 条、让诊断在最旧那一端，再落两趟
-#   （= `MAX_RUNS_KEPT + 2`）。旧诊断被挤出去之后，诊断仍然读得到，且读得到是
-#   因为最新的那趟带着它，不是因为窗口变大；
-# - 反真空：把"固定诊断"那一段摘掉（缺省探针置空）⇒ 同一刀必须红。没有这一刀，
-#   正控可能只是"窗口里另有别人留下的诊断"。
+# 2026-11-05 同根再复发一次：跨 run 只固定了 H，p241 滚存把 M 挤掉 ⇒
+# `test_cross_run_prefix_is_reused.py` 的两条 `KeyError: 'M'` 红。所以下面除了
+# 总的正控/反真空，还有两条只盯 M 的刀（M 的探针在最旧端 ⇒ 仍读得到；把 M 从
+# 固定伙伴里摘掉 ⇒ 同一刀红）。
 
 def _seed_readings_with_the_oldest_diagnostic(path: pathlib.Path) -> str:
     """把临时读数塞到 `MAX_RUNS_KEPT` 条，且唯一一条诊断在最旧那一端。
@@ -1275,10 +1311,14 @@ def _seed_readings_with_the_oldest_diagnostic(path: pathlib.Path) -> str:
     没有真的发生，下面那条正控就是空转。
     """
     runs = _runs()
-    diagnostic = next((run for run in runs if run.get("tools_in_prefix") is not None), None)
+    # 借"最近一趟诊断"而不是"历史上第一趟"：2026-11-05 起最新那趟才同时带 H 与 M
+    # （旧趟只有 H）；借错趟会让 M 的判据没有素材。
+    diagnostic = _newest_diagnostic_run(runs)
     assert diagnostic is not None, (
         "盘上读数里没有可借用的诊断趟 ⇒ 这条判据的夹具搭不起来（先修好盘上那份读数，"
         "不要把它改成不读诊断）")
+    assert "M" in _cross_run_by_partner(diagnostic), (
+        "最近一趟诊断没有 M 的跨 run 探针 ⇒ 先按默认 H,M 真跑一趟（M 是固定伙伴之一）")
     oldest = dict(diagnostic)
     oldest["at"] = "diagnostic-oldest"
     seeded: list[dict[str, Any]] = [oldest]
@@ -1290,7 +1330,7 @@ def _seed_readings_with_the_oldest_diagnostic(path: pathlib.Path) -> str:
             "lean_enabled": bool(index % 2),
             "tools_in_prefix": None,
             "tools_probe": "",
-            "cross_run_probe": "",
+            "cross_run_probes": [],
             "cross_run_hit": None,
             "rows": [],
             "roles": [],
@@ -1337,9 +1377,13 @@ def test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest(
     diagnostics = newest.get("diagnostics") or {}
     assert diagnostics.get("carried") is True, diagnostics
     assert newest.get("tools_probe") == W.DEFAULT_TOOLS_PROBE, newest.get("tools_probe")
-    assert newest.get("cross_run_probe") == W.DEFAULT_CROSS_RUN_PROBE, (
-        newest.get("cross_run_probe"))
-    assert len(newest.get("cross_run_hit") or []) == 2, newest.get("cross_run_hit")
+    assert newest.get("cross_run_probes") == list(W.DEFAULT_CROSS_RUN_PROBES), (
+        newest.get("cross_run_probes"))
+    by_partner = _cross_run_by_partner(newest)
+    assert sorted(by_partner) == sorted(EXPECTED_CROSS_RUN_PARTNERS), by_partner
+    assert all(len(rows) == 2 for rows in by_partner.values()), (
+        {k: len(v) for k, v in by_partner.items()})
+    assert len(newest.get("cross_run_hit") or []) == 4, newest.get("cross_run_hit")
 
 
 def test_removing_the_fixed_diagnostic_makes_the_roll_lose_the_reading(
@@ -1353,7 +1397,7 @@ def test_removing_the_fixed_diagnostic_makes_the_roll_lose_the_reading(
     path = tmp_path / "warm.json"
     dropped_at = _seed_readings_with_the_oldest_diagnostic(path)
     monkeypatch.setattr(W, "DEFAULT_TOOLS_PROBE", "", raising=False)
-    monkeypatch.setattr(W, "DEFAULT_CROSS_RUN_PROBE", "", raising=False)
+    monkeypatch.setattr(W, "DEFAULT_CROSS_RUN_PROBES", (), raising=False)
     runs = _roll_two_more_runs(monkeypatch, tmp_path)
 
     assert dropped_at not in {run.get("at") for run in runs}, "滚存没有真的发生"
@@ -1362,6 +1406,60 @@ def test_removing_the_fixed_diagnostic_makes_the_roll_lose_the_reading(
         "把「诊断是 warm 的固定组成部分」摘掉之后，滚存仍然读得到诊断 ⇒ "
         "正控没有牙（它守的不是这个修法）")
     assert any("没有一次带" in p for p in problems), problems
+
+
+def test_a_roll_keeps_the_m_partner_even_when_the_old_m_probe_is_the_oldest(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """判据 a（只盯 M）：M 的探针在最旧端 ⇒ 滚存后 M 仍读得到。
+
+    这就是 2026-11-05 `test_cross_run_prefix_is_reused.py` 那两条
+    `KeyError: 'M'` 的机器版本：修前跨 run 只固定 H，两趟新预热都没有 M，
+    唯一一条 M 又被窗口挤掉 ⇒ M 读不到。修后每趟都量 H 与 M ⇒ 最近一趟就有 M。
+    """
+    path = tmp_path / "warm.json"
+    dropped_at = _seed_readings_with_the_oldest_diagnostic(path)
+    seeded = W.load_readings(path)[0]
+    assert "M" in _cross_run_by_partner(seeded), (
+        "夹具里最旧那趟没有 M 的跨 run 探针 ⇒ 这条判据没有素材（先修好盘上那份读数）")
+
+    runs = _roll_two_more_runs(monkeypatch, tmp_path)
+    assert dropped_at not in {run.get("at") for run in runs}, (
+        "那条最旧的 M 没有被挤出窗口 ⇒ 这次「滚存」没有真的滚，这条判据是空转")
+
+    newest = runs[-1]
+    by_partner = _cross_run_by_partner(newest)
+    assert "M" in by_partner, (
+        f"滚存后最近一趟没有 M 的跨 run 探针（只有 {sorted(by_partner)}）⇒ "
+        "M 又被窗口挤掉了")
+    assert len(by_partner["M"]) == 2, by_partner["M"]
+    assert _diagnostic_problems(runs) == [], _diagnostic_problems(runs)
+
+
+def test_removing_m_from_the_fixed_cross_run_targets_makes_the_roll_lose_it(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """反真空（c，只盯 M）：把 M 从固定伙伴里摘掉 ⇒ 同一刀立刻红。
+
+    与上一条走同一份夹具、同一个滚存、同一个判据本体，只把缺省伙伴改成只有 H。
+    若这样仍然读得到 M，说明上一条读的其实是窗口里别人留下的 M —— 那这个修法
+    没有守住 M。
+    """
+    path = tmp_path / "warm.json"
+    dropped_at = _seed_readings_with_the_oldest_diagnostic(path)
+    seeded = W.load_readings(path)[0]
+    assert "M" in _cross_run_by_partner(seeded), "夹具里没有 M 的探针 ⇒ 反真空没有素材"
+
+    monkeypatch.setattr(W, "DEFAULT_CROSS_RUN_PROBES", ("H",), raising=False)
+    runs = _roll_two_more_runs(monkeypatch, tmp_path)
+    assert dropped_at not in {run.get("at") for run in runs}, "滚存没有真的发生"
+
+    by_partner = _cross_run_by_partner(runs[-1])
+    assert "M" not in by_partner, (
+        f"把 M 从固定伙伴里摘掉之后，新落的趟仍然量了 M：{sorted(by_partner)}")
+    problems = _diagnostic_presence_problems(runs)
+    assert problems, (
+        "把 M 从固定跨 run 伙伴里摘掉之后，滚存仍然读得到 M ⇒ "
+        "上一条判据没有牙（它守的不是这个修法）")
+    assert any("M" in p for p in problems), problems
 
 
 def test_a_secretary_only_run_does_not_fake_a_tool_face_reading(
@@ -1378,8 +1476,8 @@ def test_a_secretary_only_run_does_not_fake_a_tool_face_reading(
 
     assert code == W.EXIT_WARMED, result.get("note")
     assert result["tools_in_prefix"] is None, result["tools_in_prefix"]
-    assert result["tools_probe"] == "" and result["cross_run_probe"] == "", (
-        result["tools_probe"], result["cross_run_probe"])
+    assert result["tools_probe"] == "" and result["cross_run_probes"] == [], (
+        result["tools_probe"], result["cross_run_probes"])
     diagnostics = result.get("diagnostics") or {}
     assert diagnostics.get("carried") is False, diagnostics
 
