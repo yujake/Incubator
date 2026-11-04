@@ -25,6 +25,8 @@ import pytest
 
 from agentflow.store import Store
 
+from conftest import restore_lean_baseline
+
 
 @pytest.fixture()
 def lean_off(tmp_path, monkeypatch):
@@ -37,7 +39,9 @@ def lean_off(tmp_path, monkeypatch):
 
     importlib.reload(S)
     yield S
-    importlib.reload(S)
+    # 收尾统一走共用助手（`tests/conftest.py`）：关档那一份读数留在 `agent_prompts`
+    # 的 `lru_cache` 里，只重载 settings 收不回来（详见助手的 docstring）。
+    restore_lean_baseline(monkeypatch)
 
 
 def test_the_switch_really_reads_off(lean_off):

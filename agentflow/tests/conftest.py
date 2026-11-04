@@ -19,6 +19,7 @@
 "跑一次全量 ⇒ 仓库根不新增目录"这条判据不再依赖环境变量对不对。"""
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -176,6 +177,52 @@ def lean_path() -> Path:
 #: `test_settings.py::test_the_suite_pins_the_lean_switch_on` 守着。子进程（`python -m agentflow.agent_e`
 #: 这类自检）继承 `os.environ`，所以它们也在这条钉上。
 os.environ["AGENTFLOW_LEAN_ENABLED"] = "1"
+
+#: 套件基线档（就是上面那一行钉的值；夹具收尾要显式回到它，见 :func:`restore_lean_baseline`）。
+LEAN_BASELINE_ENABLED = "1"
+
+
+def restore_lean_baseline(monkeypatch) -> None:
+    """把 Lean 开关与提示词层的读数显式放回套件基线（关档夹具的收尾统一走这里）。
+
+    ## 为什么必须显式回到基线（monkeypatch 的 undo 在本 fixture 之后才跑）
+
+    `monkeypatch.setenv` / `delenv` 记下的是"怎么撤销"，而撤销发生在夹具收尾之后：
+    夹具函数体里那一刻，环境变量仍是这条用例设的那一档（关档 ＋ 临时设置文件）。
+    所以收尾不能按"当前环境"重载 —— 那样算出来的"基线"其实是关档那一份。
+
+    ## 只 `importlib.reload(settings)` 不够：读数不在 settings 里
+
+    `settings` 是现读的（没有模块级缓存），重载它等于什么都没做。真正留在进程里的是
+    `agent_prompts` 的那几个 `lru_cache`（`_lean_switch` / `_toolchain_readings` /
+    `toolchain_facts_text`）：关档下渲染过一次提示词之后，缓存里就是关档那一份，
+    后面的用例再渲染时读到的是它，而不是环境变量。2026-11-05 全量实测的形态：
+    `test_lean_file_is_taught_by_channel` 单独跑绿，串跑缺五条只在开档出现的锚点
+    （`numeric（数值证明` / `formal（形式化）` / `` `lean_target` 必填 `` /
+    `无依据的声称` / `自称有数值证据`）。
+
+    ## 三件事按这个顺序做
+
+    1. 显式 `setenv` 回基线档 —— 不依赖"撤销会把它放回去"（那一刻还没撤销）；
+    2. 把 `AGENTFLOW_SETTINGS` 从夹具指过去的临时文件上摘掉（那份文件里写着
+       `lean_enabled=false`，而且它在 `tmp_path` 下、下一次会话就没了），
+       再钉回套件基线 —— 本文件导入期钉的是一个不存在的设置文件；不钉回去，
+       接下来的读会退到本机那份 `agentflow/settings.json` 上（判据随机器变形）；
+    3. 依次重载 `settings` / `agent_prompts` / `verifications`：前两个清缓存是必须的；
+       `verifications` 与提示词同属"会被夹具重载"的那一族，一起重载回来才不会有第二次
+       —— `test_lean_modes_matrix` 2026-11-04 的修法就是这三件，现在收成这一处。
+    """
+    from agentflow import agent_prompts as _AP
+    from agentflow import settings as _SET
+    from agentflow import verifications as _VR
+
+    monkeypatch.setenv(_SET.ENV_LEAN_ENABLED, LEAN_BASELINE_ENABLED)
+    monkeypatch.delenv(_SET.ENV_SETTINGS, raising=False)
+    if PINNED_SETTINGS_PATH:
+        monkeypatch.setenv(_SET.ENV_SETTINGS, PINNED_SETTINGS_PATH)
+    importlib.reload(_SET)
+    importlib.reload(_AP)
+    importlib.reload(_VR)
 
 from agentflow import conceptrows as _CR  # noqa: E402  （并表过渡期：夹具也要两处同号）
 from agentflow import schema as S  # noqa: E402

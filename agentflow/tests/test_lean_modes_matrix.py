@@ -16,6 +16,8 @@ import importlib
 
 import pytest
 
+from conftest import restore_lean_baseline
+
 
 def _reload_settings():
     from agentflow import settings as SET
@@ -38,34 +40,22 @@ def _verifications():
     return VR
 
 
-#: 本套件的基线档（conftest.py:178 在导入期把 AGENTFLOW_LEAN_ENABLED 钉成 "1"）。
-#: 收尾必须显式回到这一档再 reload：monkeypatch 的 undo 在本 fixture 之后才跑，
-#: 所以收尾时环境变量仍是我这一次设的那一档/已被删。若在这里按"当前环境"reload，
-#: settings 会把「关档」读数缓存下来，泄漏给后面所有渲染提示词的用例
+#: 本套件的基线档（conftest.py 在导入期把 AGENTFLOW_LEAN_ENABLED 钉成 "1"）。
+#: 收尾必须显式回到这一档再重载：monkeypatch 的 undo 在本 fixture 之后才跑，
+#: 所以收尾时环境变量仍是我这一次设的那一档/已被删。若按"当前环境"重载，
+#: `agent_prompts` 会把「关档」读数缓存下来，泄漏给后面所有渲染提示词的用例
 #: （2026-11-04 全量实测：test_lean_file_is_taught_by_channel 单独跑绿、成套跑红，
 #:   缺的正是只在开档那一段里出现的五条锚点）。
-_BASELINE_LEAN = "1"
-
-
-def _restore_baseline_settings(monkeypatch) -> None:
-    """回到基线档，并且把被本文件重载过的模块一起重载回来。
-
-    只回 settings 不够：_prompts()/_verifications() 也用过 importlib.reload，
-    而在关档那一刻重载出来的 agent_prompts 模块会把关档那一段的段文本留在模块里；
-    后面的用例再渲染提示词就会读到那一版（2026-11-04 全量实测：G 的提示词缺五条只在开档段里出现的锚点）。
-    """
-    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", _BASELINE_LEAN)
-    _reload_settings()
-    _prompts()
-    _verifications()
-
-
+#:
+#: 收尾那一手（显式 setenv 基线 + 重载 settings/agent_prompts/verifications）现在
+#: 只有一处实现：`tests/conftest.py::restore_lean_baseline`。两个夹具、关档那条
+#: 不挂夹具的用例、以及 `test_no_proof_without_lean.py::lean_off` 都调它。
 @pytest.fixture()
 def lean_off(monkeypatch):
     monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)
     _reload_settings()
     yield
-    _restore_baseline_settings(monkeypatch)
+    restore_lean_baseline(monkeypatch)
 
 
 @pytest.fixture()
@@ -73,7 +63,7 @@ def lean_on(monkeypatch):
     monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", "1")
     _reload_settings()
     yield
-    _restore_baseline_settings(monkeypatch)
+    restore_lean_baseline(monkeypatch)
 
 
 # ---------------------------------------------------------------- 1. 第一行
@@ -122,17 +112,25 @@ def test_detect_verifier_reports_permission_not_just_environment(lean_off):
 
 # ---------------------------------------------------------------- 5. settings 读不懂
 def test_an_unreadable_switch_falls_back_to_off(tmp_path, monkeypatch):
-    """读不懂 ⇒ 按关处理（fail-closed，S4）。"""
+    """读不懂 ⇒ 按关处理（fail-closed，S4）。
+
+    这一条不挂夹具，但它与两个夹具做的是同一件事（摘开关 + 重载 settings + 重载
+    提示词层再渲染），所以收尾也必须走同一个助手 —— 2026-11-05 实测：漏了它，
+    同一进程里后面渲染 G 的用例就缺那五条开档锚点（它是第二处泄漏真正的落点）。
+    """
     # `conftest.py` 在导入期就把 `AGENTFLOW_LEAN_ENABLED=1` 钉住了 ⇒ 这条用例必须先摘掉它，
     # 否则读到的是"环境变量说开"，根本走不到"设置文件读不懂"那一支。
     monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)
     cfg = tmp_path / "settings.json"
     cfg.write_text('{"toolchain": {"lean_enabled": "maybe"}}', encoding="utf-8")
     monkeypatch.setenv("AGENTFLOW_SETTINGS", str(cfg))
-    _reload_settings()
-    first = _prompts().toolchain_facts_text().splitlines()[0]
-    assert "已关闭" in first
-    assert "fail-closed" in first
+    try:
+        _reload_settings()
+        first = _prompts().toolchain_facts_text().splitlines()[0]
+        assert "已关闭" in first
+        assert "fail-closed" in first
+    finally:
+        restore_lean_baseline(monkeypatch)
 
 
 # ---------------------------------------------------------------- 6. 三个角色的义务句
