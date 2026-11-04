@@ -60,6 +60,8 @@ from agentflow.agent_f import AgentF
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+from conftest import sign_before_registration
+
 #: 契约字面量（业主 2026-10-26 定的那几个读数取值）。实现侧与它们对齐由
 #: `test_the_contract_values_are_the_ones_in_the_code` 一处钉住 —— 其余判据用字面量，
 #: 于是"改前红"红的是行为，而不是"模块里还没有那个常量"。
@@ -382,7 +384,6 @@ def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeyp
 # ------------------------------------------------------------------ a D 携带
 
 def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
-                                                    signed_v_handoffs,
                                                    monkeypatch) -> None:
     """a D 交研究手稿给 B 时带上 F 的稿 ⇒ B 读那份稿落依赖、来源读 `carried_by_D`。
 
@@ -425,8 +426,14 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
                     "`write_report` 里那一笔 `_deliver_carried_to_b` 没有接上")
     assert [r["statement_id"] for r in handed[0]] == [f_stmt], handed[0]
 
+    # 2026-11-04（业主裁定 甲）：这一笔要写进台账的正文也要有一份手稿签。
+    # 签在登记之前落（pending 台账按正文 sha 认领），而必须排在 D 的报告之后 ——
+    # 携带单只列 `reports/f-proof-*.md`，签名载体不是被携带的那一份。
+    # 这一条量的"稿从哪来"一个字没改：它读的仍是 D 交过来的那一份。
+    body = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
+    sign_before_registration(store.root, proof_text=body)
     got = _register(store, statement_full="定理：D 的研究手稿引用了 F 的证明手稿。",
-                    proof_text=f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。",
+                    proof_text=body,
                     derived_from=[f_stmt])
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_CARRIED, got
@@ -499,11 +506,15 @@ def test_d_does_not_carry_a_statements_it_has_no_manuscript_for(
 # ------------------------------------------------------------------ b 兜底读盘
 
 def test_an_empty_parameter_reads_the_manuscript_from_disk(
-        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
+        tmp_path: pathlib.Path) -> None:
     """b D 没带、盘上有稿 ⇒ 兜底读盘生效、依赖落成、来源读 `disk`（老调用不瘫）。
 
     改前红：兜底读盘这一支一行都没有（0 行）⇒ `dependencies` 一行不落、返回里也没有
     `manuscript_source` 这一格。
+
+    2026-11-04（业主裁定 甲）：正文要有一份手稿签才准写进台账 ⇒ 先按同一份正文落一份
+    pending 签（按正文 sha 认领）。签名载体不是按号命名的那一份，所以兜底读盘读到的
+    仍然是下面这份 `reports/f-proof-<被引命题号>.md`（`manuscript_source=disk`）。
     """
     store = _ws(tmp_path)
     _library(store)
@@ -511,9 +522,11 @@ def test_an_empty_parameter_reads_the_manuscript_from_disk(
     target = pathlib.Path(store.root) / MANUSCRIPT_DIR / f"f-proof-{THEOREM_A}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_MANUSCRIPT_FOR_A, encoding="utf-8")
+    body = f"1. 由定理甲直接得到结论（见 stmt:{THEOREM_A}）。"
+    sign_before_registration(store.root, proof_text=body)
 
     got = _register(store, statement_full="定理：由定理甲推出目标结论。",
-                    proof_text=f"1. 由定理甲直接得到结论（见 stmt:{THEOREM_A}）。",
+                    proof_text=body,
                     derived_from=[THEOREM_A])
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_DISK, got
@@ -607,7 +620,7 @@ def test_no_manuscript_anywhere_with_a_citation_is_refused(tmp_path: pathlib.Pat
 
 
 def test_a_self_contained_proof_without_a_manuscript_still_lands(
-        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
+        tmp_path: pathlib.Path) -> None:
     """c 的边界：正文一条在册引用都没有 ⇒ 不拒收；有稿时读数是 `not_applicable`。
 
     两档分开钉：
@@ -615,11 +628,18 @@ def test_a_self_contained_proof_without_a_manuscript_still_lands(
       不是拒收 —— "没引"与"引了没交稿"是两件事；
     - 有稿、稿里的依赖表是空的（作者显式声明自足）⇒ `not_applicable`（业主那句
       "无引用 ⇒ not_applicable"说的就是这一档）。
+
+    2026-11-04（业主裁定 甲）：正文的签要有手稿载体 ⇒ 两档各自先落一份 pending 签
+    （按正文 sha 认领）。签名载体不按命题号命名、也不在内容认法的扫描面里
+    （`reports/f-proof-plan-*.md`），所以第一档的 `manuscript_source=none` 仍然是
+    "三处都找过了、一处都不对"的读数，不是"没找"。
     """
     store = _ws(tmp_path)
     _library(store)
+    lone = "1. 由定义直接得到，本证明不引用任何在册命题。"
+    sign_before_registration(store.root, proof_text=lone)
     got = _register(store, statement_full="定理：自足的证明（判据夹具）。",
-                    proof_text="1. 由定义直接得到，本证明不引用任何在册命题。")
+                    proof_text=lone)
     assert got.get("ok") is True, got
     reading = got.get("deps_missing") or {}
     assert reading.get("state") == "missing", reading
@@ -632,8 +652,10 @@ def test_a_self_contained_proof_without_a_manuscript_still_lands(
                    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
                    "|---|---|---|---|\n\n"
                    "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+    lone2 = "1. 由定义直接得到，不引用任何在册命题。"
+    sign_before_registration(store.root, proof_text=lone2)
     got2 = _register(store, statement_full="定理：自足的证明（空依赖表，判据夹具）。",
-                     proof_text="1. 由定义直接得到，不引用任何在册命题。",
+                     proof_text=lone2,
                      proof_manuscript=empty_table)
     assert got2.get("ok") is True, got2
     reading2 = got2.get("deps_missing") or {}
@@ -701,7 +723,7 @@ def _v_secretary(store: Store):
 
 
 def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
-        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
+        tmp_path: pathlib.Path) -> None:
     """e F 写稿 → D 携带 → B 读稿落依赖 → V 核引用签字（整条链，零模型钱）。
 
     判据三件：
@@ -764,10 +786,26 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     v_llm = _VSeam(reply)
     v = AgentV(store, workspace_root=store.root, llm=v_llm,
                secretary=_v_secretary(store))
+    # 2026-11-04（业主裁定 甲）：在册命题的 V 审必须带手稿（签块 / `## 依赖` /
+    # 按号寻址三样只在文件上）。上面第 ① 步为了"正文空着"把 F 稿的证明段搬走了，
+    # 所以这里按这条命题的号落一份可签的载体（正文就是第 ③ 步要交的那一份、
+    # 依赖段用同一个四列空表）。判据一个字没改：它读的仍是"这一份正文的三转"。
+    b_man_rel = f"{MANUSCRIPT_DIR}/f-proof-{b_stmt}.md"
+    _b_man = pathlib.Path(store.root) / b_man_rel
+    _b_man.write_text(
+        "# F 的证明手稿（整条链夹具）\n\n"
+        f"- 命题号：stmt:{b_stmt}\n\n"
+        f"## 命题\n\n定理：研究手稿引用了 F 的证明手稿（整条链）。\n\n"
+        f"## 证明\n\n{PROOF_BODY}\n\n"
+        "## 依赖\n\n"
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n"
+        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
     # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要断"前几转不签"；
     # 2026-10-30 起那几次落在同一次调用的多转里（V 判没问题后连续再判，不是 F 三交）
     # ⇒ 逐转读数从 `review_passes` 读，"连续之后才签"这条口径本身没变。
-    signed = v.verify_proof(b_stmt, proof_text=PROOF_BODY)
+    signed = v.verify_proof(b_stmt, proof_text=PROOF_BODY, proof_manuscript=b_man_rel)
     assert signed.get("checked") is True, signed
     v_passes = signed.get("review_passes") or []
     assert len(v_passes) == int(VR.SIGN_STREAK_NEED), v_passes
@@ -891,11 +929,15 @@ def test_stubbing_the_disk_fallback_out_turns_b_red(tmp_path: pathlib.Path,
 
 
 def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
-                                                     monkeypatch, signed_v_handoffs) -> None:
+                                                     monkeypatch) -> None:
     """d-3 反真空：把"读 D 的携带单"打桩成永远读不到 ⇒ a 必红（改走 disk 兜底）。
 
     这一条与 d-2 合起来才说明主路与兜底是两条真的分开的路：打掉主路，来源读数
     必须变成 `disk`（而不是仍然自称 `carried_by_D`）。
+
+    2026-11-04（业主裁定 甲）：这一笔要写的正文要先有一份手稿签 ⇒ 在 D 的报告之后
+    落一份 pending 签（按正文 sha 认领）。签名载体不按号命名，兜底读盘读到的仍是
+    F 那一轮落下的 `reports/f-proof-<F 的命题号>.md`（`manuscript_source=disk`）。
     """
     store = _ws(tmp_path)
     _library(store)
@@ -906,8 +948,10 @@ def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
                                           "text": "", "path": "", "sha256": "",
                                           "carried_by": "", "tried": [],
                                           "why": "（反真空：携带单被打桩成读不到）"})
+    body = f"1. 由 F 的稿直接得到（见 stmt:{out['statement_id']}）。"
+    sign_before_registration(store.root, proof_text=body)
     got = _register(store, statement_full="定理：携带单被打桩（判据夹具）。",
-                    proof_text=f"1. 由 F 的稿直接得到（见 stmt:{out['statement_id']}）。",
+                    proof_text=body,
                     derived_from=[str(out["statement_id"])])
     assert str(got.get("manuscript_source")) == SRC_DISK, got
     assert _carried_holds(got, store, cited=THEOREM_A) is False, got
@@ -949,15 +993,20 @@ def _write_plan_manuscript(store: Store,
 
 
 def test_f_a_plan_named_manuscript_is_recognised_by_its_proof_body(
-        tmp_path: pathlib.Path, signed_v_handoffs) -> None:
+        tmp_path: pathlib.Path) -> None:
     """f：只有 `f-proof-plan-*.md` 时，兜底按证明正文认出它，依赖面落行。
 
     改前红：改前 `read_manuscript` 只查 `f-proof-<命题号>.md`（`tried` 里只有那一处），
     而 87 里按号命名的稿 0 份 ⇒ 这一笔整笔拒 `dependency_section_missing`、0 行。
+
+    2026-11-04（业主裁定 甲）：这一笔要写的正文要先有一份手稿签 ⇒ 先落一份 pending 签。
+    签名载体不叫 `f-proof-plan-*`（内容认法的扫描面只有那一族），所以兜底读盘仍然
+    命中下面这份计划名稿：`probe.matched_by=proof_body` 的断言一个字没改。
     """
     store = _ws(tmp_path)
     _library(store)
     _write_plan_manuscript(store)
+    sign_before_registration(store.root, proof_text=_PLAN_MANUSCRIPT_PROOF)
     got = _register(store, statement_full="定理：由定理甲推出目标结论（计划名稿）。",
                     proof_text=_PLAN_MANUSCRIPT_PROOF, derived_from=[THEOREM_A])
     assert got.get("ok") is True, got
@@ -972,11 +1021,16 @@ def test_f_a_plan_named_manuscript_is_recognised_by_its_proof_body(
 
 
 def test_f_without_the_proof_text_the_backfill_cannot_find_it(
-        tmp_path: pathlib.Path, signed_v_handoffs, monkeypatch) -> None:
-    """f- 反真空：把"把正文交给兜底读盘"这一个实参摘掉 ⇒ 回到改前形态（0 行 / 整笔拒）。"""
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """f- 反真空：把"把正文交给兜底读盘"这一个实参摘掉 ⇒ 回到改前形态（0 行 / 整笔拒）。
+
+    2026-11-04（业主裁定 甲）：先给这一笔要写的正文落一份 pending 签（按正文 sha 认领），
+    否则红的是"没带稿"而不是"内容认不出"——那这条反真空就没接到它要测的那根线上。
+    """
     store = _ws(tmp_path)
     _library(store)
     _write_plan_manuscript(store)
+    sign_before_registration(store.root, proof_text=_PLAN_MANUSCRIPT_PROOF)
     real = DS.read_manuscript
 
     def _without_proof_text(root, *, statement_ids=(), plan_id="", proof_text=""):
