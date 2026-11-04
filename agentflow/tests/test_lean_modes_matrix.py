@@ -39,10 +39,10 @@ def _verifications():
 
 
 #: 本套件的基线档（conftest.py:178 在导入期把 AGENTFLOW_LEAN_ENABLED 钉成 "1"）。
-#: 收尾必须**显式回到这一档再 reload**：monkeypatch 的 undo 在本 fixture 之后才跑，
+#: 收尾必须显式回到这一档再 reload：monkeypatch 的 undo 在本 fixture 之后才跑，
 #: 所以收尾时环境变量仍是我这一次设的那一档/已被删。若在这里按"当前环境"reload，
 #: settings 会把「关档」读数缓存下来，泄漏给后面所有渲染提示词的用例
-#: （2026-11-04 全量实测：	est_lean_file_is_taught_by_channel 单独跑绿、成套跑红，
+#: （2026-11-04 全量实测：test_lean_file_is_taught_by_channel 单独跑绿、成套跑红，
 #:   缺的正是只在开档那一段里出现的五条锚点）。
 _BASELINE_LEAN = "1"
 
