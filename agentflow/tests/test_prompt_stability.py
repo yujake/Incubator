@@ -776,6 +776,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p238", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p238（2026-11-04，0ed46fb3 的收口）：specs/g.py 的 LEAN_FILE_ROW 两处措辞 —— ① numeric 那一半的「数值程序没有 Lean 声明名」改成「没有声明名可填」；② formal 那一半去掉「由 L 交出那份 .lean 与声明名」、只留「formal（形式化）」（这一行同时落在 test_lean_file_is_taught_by_channel / test_l_collab_surface_is_respected_everywhere / test_lean_switch_points_at_l 三把尺子的射程里，唯一同时成立的出口是不提 L、且「形式化」前后 60 字里不放 Lean 族记号）；凭据格该填什么一个字没动。变化格 = G 一格，其余十格逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p238 → p239（2026-11-04，今晚五条 lane 的提示词 / 工具面一次对齐）：十一格全换 ——
+    # 共用段 HANDOFF_PROTOCOL 首提改名（347d6267）命中每一格；B / F / G / H / M / V 另有
+    # 自己的改动（4e43a81b / 3bb87297 / 7970eacc / b2f39f05）；收口时 verify_proof 的
+    # summary 按压缩预算压回 104 字符（aa4231cb）⇒ V 那一格再换一次。一格事实的落点都
+    # 没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p239", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p239（2026-11-04，今晚五条 lane 的提示词 / 工具面一次对齐）：变化格 = 全部十一格 —— 共用段 HANDOFF_PROTOCOL 的首提从「交接手稿（交接工作前的标准动作…）」改成「交接手稿（handoff；交接工作前的标准动作…）」（347d6267 的命名裁定），B / F / G / H / M / V 另有各自改动（证明正文的载体改成手稿、G 的 ⓪ 步、V 的在册只经手稿过审 等），收口时 verify_proof 的 summary 又按压缩预算压回 104 字符（aa4231cb，V 那一格再换一次）。facts 键集仍 15 格（键名与条数一格未动，一格事实的落点都没挪）"},
 
 )
 
