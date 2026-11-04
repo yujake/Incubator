@@ -619,48 +619,51 @@ def test_no_manuscript_anywhere_with_a_citation_is_refused(tmp_path: pathlib.Pat
     assert len(store.rows("statements")) == before_statements, store.rows("statements")
 
 
-def test_a_self_contained_proof_without_a_manuscript_still_lands(
+def test_a_self_contained_proof_lands_with_a_manuscript(
         tmp_path: pathlib.Path) -> None:
-    """c 的边界：正文一条在册引用都没有 ⇒ 不拒收；有稿时读数是 `not_applicable`。
+    """c 的边界（2026-11-04 业主裁定 甲之后的新口径）：自足证明不是"缺依赖"。
 
-    两档分开钉：
-    - 连稿都没有、正文也没有引用 ⇒ 照常入库，读数仍是秘书那一份（`missing`，带 why），
-      不是拒收 —— "没引"与"引了没交稿"是两件事；
-    - 有稿、稿里的依赖表是空的（作者显式声明自足）⇒ `not_applicable`（业主那句
-      "无引用 ⇒ not_applicable"说的就是这一档）。
+    改前这一条叫 `..._without_a_manuscript_still_lands`，钉的是"连稿都没有也照常入库、
+    读 `missing`"——那个前提已被裁定作废（B 的载体闸：要写正文就必须有稿）。按新口径
+    拆成同一份正文的两档，三态纪律不删：
 
-    2026-11-04（业主裁定 甲）：正文的签要有手稿载体 ⇒ 两档各自先落一份 pending 签
-    （按正文 sha 认领）。签名载体不按命题号命名、也不在内容认法的扫描面里
-    （`reports/f-proof-plan-*.md`），所以第一档的 `manuscript_source=none` 仍然是
-    "三处都找过了、一处都不对"的读数，不是"没找"。
+    - a 带稿、稿的 `## 依赖` 是空表（作者显式声明自足）、正文零 `stmt:` 引用
+      ⇒ 照常入库，读数是 `not_applicable`（这正是原来防的"自足证明被当成缺依赖"
+      的反面：它仍然不是 `missing`），`manuscript_source=param`；
+    - b 同一份正文、不带稿 ⇒ 整笔拒 `proof_manuscript_required`（新口径的正控：
+      载体是硬条件；零写入）。这一档就是原句"没有稿也能过"的反面。
+
+    签名仍是手稿签：两档各自先落一份 pending 签（按正文 sha 认领）。
     """
     store = _ws(tmp_path)
     _library(store)
-    lone = "1. 由定义直接得到，本证明不引用任何在册命题。"
-    sign_before_registration(store.root, proof_text=lone)
-    got = _register(store, statement_full="定理：自足的证明（判据夹具）。",
-                    proof_text=lone)
-    assert got.get("ok") is True, got
-    reading = got.get("deps_missing") or {}
-    assert reading.get("state") == "missing", reading
-    assert str(reading.get("why") or "").strip(), reading
-    assert reading.get("manuscript_source") == SRC_NONE, reading
-    assert _deps(store) == [], _deps(store)
-
     empty_table = ("## 证明\n\n1. 由定义直接得到，不引用任何在册命题。\n\n"
                    "## 依赖\n\n"
                    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
                    "|---|---|---|---|\n\n"
                    "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
-    lone2 = "1. 由定义直接得到，不引用任何在册命题。"
-    sign_before_registration(store.root, proof_text=lone2)
-    got2 = _register(store, statement_full="定理：自足的证明（空依赖表，判据夹具）。",
-                     proof_text=lone2,
-                     proof_manuscript=empty_table)
-    assert got2.get("ok") is True, got2
-    reading2 = got2.get("deps_missing") or {}
-    assert reading2.get("state") == "not_applicable", reading2
-    assert reading2.get("manuscript_source") == SRC_PARAM, reading2
+    lone = "1. 由定义直接得到，不引用任何在册命题。"
+
+    # ---- a 带稿：自足 ⇒ not_applicable（不是 missing）----
+    sign_before_registration(store.root, proof_text=lone)
+    got = _register(store, statement_full="定理：自足的证明（空依赖表，判据夹具）。",
+                    proof_text=lone, proof_manuscript=empty_table)
+    assert got.get("ok") is True, got
+    reading = got.get("deps_missing") or {}
+    assert reading.get("state") == "not_applicable", reading
+    assert str(reading.get("why") or "").strip(), reading
+    assert reading.get("manuscript_source") == SRC_PARAM, reading
+    assert int(got.get("deps_written") or 0) == 0, got
+    assert _deps(store) == [], _deps(store)
+
+    # ---- b 不带稿：同一份正文 ⇒ 受控拒绝、零写入 ----
+    before = len(store.rows("statements"))
+    refused = _register(store, statement_full="定理：自足的证明（不带稿，判据夹具）。",
+                        proof_text=lone)
+    assert refused.get("ok") is False, refused
+    assert refused.get("kind") == "proof_manuscript_required", refused
+    assert str(refused.get("error") or "").strip(), refused
+    assert len(store.rows("statements")) == before, store.rows("statements")
     assert _deps(store) == [], _deps(store)
 
 
