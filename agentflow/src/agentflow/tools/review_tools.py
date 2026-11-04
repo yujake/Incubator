@@ -912,7 +912,8 @@ def scan_document(
         # 2026-10-17（业主：「通过标准和 V 一样」）：「语义层没查 ⇒ 不许判通过」。
         # 真机 t5e（`t5e-5`）现场：`semantic_check.checked=false`（没接线）却落了
         # `verdict=accepted`，于是审核轴被写成「成立」—— 把"没查"说成了"通过"。
-        # 这一档与"依赖闭合没查"是同族，统一记 `unverified`（三态里的"看不出来"）。
+        # 这一档与"依赖闭合没查"是同族，统一记 `unverified`（就是「没查成」那一档：
+        # 不写裁决、checked=False；业主 2026-10-30 已取消「看不出来」）。
         verdict = "unverified"
     elif warnings:
         verdict = "accepted_with_warnings"
@@ -1012,19 +1013,45 @@ def _resolve_deps(store: Any, doc_id: str, dependencies: Any) -> tuple[Any, bool
     return [dict(d) for d in dependencies], True
 
 
-def _set_doc_status(store: Any, doc_id: str, target: str, *, actor: str) -> tuple[bool, str | None, str]:
-    """只改 `documents` 行的 `status` 字段。返回 (是否写成, 错误, 当前状态)。
-    
+def _set_doc_status(
+    store: Any,
+    doc_id: str,
+    target: str,
+    *,
+    actor: str,
+    review_verdict: str = "",
+    review_checked: bool = False,
+    review_reason: str = "",
+) -> tuple[bool, str | None, str]:
+    """只改 `documents` 行的 `status` 字段，并按调用方给的结论写审核轴。
+
+    返回 (是否写成, 错误, 当前状态)。
+
+    ## 审核轴不再从 status 推
+
+    改前这里按 status 反推裁决（`in_review` ⇒ 有毛病、其余 ⇒ 看不出来）。那是把
+    「这一维没查」折成一条裁决 —— 最贵的一种折平（业主 2026-10-30：「不应该有
+    『看不出来』」）。现在 status 只表生命周期，裁决由调用方按这一轮真实的结论
+    显式传进来：只有 `review_checked=True` 才写 `review_verdict` / `reviewed_at` /
+    `reviewed_by`；没查成时这三格一个字节都不写（台账不留行），理由由调用方带回去。
+
     ## 为什么只改 status，连 `updated_at` 都不碰
-    
-    "H 只读"必须有一个可核对的形式：调用前后逐字节比对 `documents.json`，变化点应当有且只有 status。顺手更新 `updated_at` 看起来无害，
+
+    "H 只读"必须有一个可核对的形式：调用前后逐字节比对 `documents.json`，变化点应当有且只有 status（加审核轴三格）。
+    顺手更新 `updated_at` 看起来无害，
     但它会让"H 到底动了什么"从"一眼看清"退化成"要逐字段 diff 才知道"。
-    
+
     ## 为什么这个写会失败（而且必须如实报告）
-    
+
     `Document.validate` 会在提交时校验整张 documents 表。若盘上这份稿件本身不合 schema（例如是手工改坏的、或旧版本写的），那么连"把它的状
     态改成 in_review"都写不进去。这不是可以掩盖的细节：发现照样落库，状态更新失败这件事本身也要出现在返回值里，否则调用方会以为"审校流程正常结束了"。
     """
+    if review_checked and (not review_verdict or review_verdict not in S.REVIEW_VERDICTS):
+        # 调用方说"查过了"却没给一个合法裁决 ⇒ 程序错误，当场抛（不许静默写成空串）。
+        raise ValueError(
+            f"review_checked=True 时 review_verdict 必须是 {S.REVIEW_VERDICTS} 里的非空值，"
+            f"收到 {review_verdict!r}"
+        )
     cur = next(
         (str(r.get("status")) for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)),
         "",
@@ -1043,16 +1070,13 @@ def _set_doc_status(store: Any, doc_id: str, target: str, *, actor: str) -> tupl
             # 这一笔是 `closing.accepted_documents` 唯一的数据来源。
             from datetime import datetime as _dt
 
-            # 三态映射（与 V 同形）：通过 ⇒ 成立；判成有毛病 ⇒ 有毛病；
-            # 「没查成/没结论」 ⇒ 看不出来 —— 不许把"没查"折成"有毛病"或"成立"。
-            if target in ("accepted", "accepted_with_warnings"):
-                row["review_verdict"] = "成立"
-            elif target in ("rejected", "in_review"):
-                row["review_verdict"] = "有毛病"
-            else:
-                row["review_verdict"] = "看不出来"
-            row["reviewed_at"] = _dt.now().astimezone().isoformat(timespec="seconds")
-            row["reviewed_by"] = str(actor or "agent-H")
+            # 2026-10-30（业主裁定，2026-11-04 施工单）：H 的「看不出来」不是第三态。
+            # 没查成 / 没结论 ⇒ 不写裁决（这三格一个字节都不动），`checked=False` +
+            # 理由由调用方带回；只有真判出了结论才写两态之一。
+            if review_checked:
+                row["review_verdict"] = str(review_verdict)
+                row["reviewed_at"] = _dt.now().astimezone().isoformat(timespec="seconds")
+                row["reviewed_by"] = str(actor or "agent-H")
             tx.upsert("documents", row)
     except Exception as e:  # noqa: BLE001 - 见 docstring：失败必须被记录，不能被吞掉或上抛
         return False, f"{type(e).__name__}: {e}", cur
@@ -1420,7 +1444,30 @@ def review_document(
     target_status = (
         "accepted" if (scan["error_count"] == 0 and dep_checked and claims_total) else "in_review"
     )
-    status_updated, status_error, status_now = _set_doc_status(store, doc_id, target_status, actor=actor)
+    # ---- 审核轴：只有真判出了结论才写裁决（业主 2026-10-30，2026-11-04 施工单）
+    #
+    # 两态裁决只覆盖"查过之后"的两种结局：
+    #   成立   = 查了、没找到缺陷（含只有 warning 的 accepted_with_warnings）
+    #   有毛病 = 查了、找到了缺陷
+    # 「没查成」不是裁决：覆盖率 0 / 依赖闭合没查 ⇒ review_verdict 留空，
+    # review_checked=False + 理由；盘上审核轴一个字节都不写（台账不留行）。
+    if verdict in ("accepted", "accepted_with_warnings"):
+        _axis_verdict, _axis_checked, _axis_reason = "成立", True, ""
+    elif verdict == "rejected":
+        _axis_verdict, _axis_checked, _axis_reason = "有毛病", True, ""
+    else:
+        _missing = []
+        if not claims_total:
+            _missing.append("这一趟没有一条断言可查（覆盖率 0）")
+        if not dep_checked:
+            _missing.append("依赖闭合没查")
+        _axis_verdict, _axis_checked = "", False
+        _axis_reason = "没查成：" + "；".join(_missing) + " ⇒ 不写裁决（台账不留行）"
+    status_updated, status_error, status_now = _set_doc_status(
+        store, doc_id, target_status, actor=actor,
+        review_verdict=_axis_verdict, review_checked=_axis_checked,
+        review_reason=_axis_reason,
+    )
     # `T4-B`：判 accepted 就签一条（`draft/29` §8.8.3"接受档签一条，毫不犹豫"）。
     # 签在状态写成之后：签名钉的是那一版的内容哈希与它读到的发现，
     # 与状态更新是两个动作（状态失败时仍然可以签 —— 但那会让 signature 与 status 不符，
@@ -1791,7 +1838,26 @@ def verify_fixes(
             accepted_without_signature_for_this_revision = True
         else:
             signed_revision_at = str(_pinned.get("at") or "")
-    status_updated, status_error, status_now = _set_doc_status(store, doc_id, target_status, actor=actor)
+    # ---- 审核轴：与 `review_document` 同一口径（业主 2026-10-30，2026-11-04 施工单）
+    #
+    #   成立   = 这一轮复审没找到缺陷（且依赖闭合查过）
+    #   有毛病 = 这一轮复审仍有缺陷（`revise_again` 有 error、或到上限 `unresolved_review`）
+    #   没查成 = 依赖闭合没查 / 只因为语义判据没重跑而被卡在 `revise_again` ⇒ 不写裁决
+    if verdict in ("revise_again", "unresolved_review") and blocking:
+        _axis_verdict, _axis_checked, _axis_reason = "有毛病", True, ""
+    elif verdict == "accepted" and dep_checked:
+        _axis_verdict, _axis_checked, _axis_reason = "成立", True, ""
+    elif verdict == "accepted":
+        _axis_verdict, _axis_checked = "", False
+        _axis_reason = "没查成：依赖闭合没查 ⇒ 不写裁决（台账不留行）"
+    else:
+        _axis_verdict, _axis_checked = "", False
+        _axis_reason = "没查成：本轮没有重跑语义判据 ⇒ 不写裁决（台账不留行）"
+    status_updated, status_error, status_now = _set_doc_status(
+        store, doc_id, target_status, actor=actor,
+        review_verdict=_axis_verdict, review_checked=_axis_checked,
+        review_reason=_axis_reason,
+    )
 
     unresolved = [f for f in blocking]
     reason_bits = [

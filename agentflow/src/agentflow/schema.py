@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable, Literal, Mapping
 
 #: 磁盘格式契约的版本号（`F-7`：读期 fail-closed，版本不符一律拒读）。
 #:
@@ -1345,10 +1345,55 @@ SUBGOAL_OWNERS = ("F", "A", "B", "C", "D", "E", "G")
 DOC_KINDS = ("reproduction_report", "survey", "paper", "note")
 DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unresolved_review")
 
-#: 一次审核的裁决（与 V 的 `verify_proof` 同形）。空串 = 还没审过。
+#: 一次审核的裁决。空串 = 还没审过。
 #: 为什么单列一根轴：`status` 兼表"通过"，而"审过"与"通过"是完全不同的状态
 #: （业主 2026-10-17）。`reviewed_documents` 读这根轴；`accepted_documents` 读 `成立`。
-REVIEW_VERDICTS = ("", "成立", "有毛病", "看不出来")
+#:
+#: 2026-10-30 业主裁定（逐字）：「不应该有『看不出来』，『看不出错』就是没毛病」——
+#: 这条裁定在 2026-11-04 落到 H 这一轴：H 的「看不出来」不是第三种结论，必须从数据层
+#: 删掉。于是这里只剩三格（空串 + 两态）。旧行里可能残留「看不出来」（2026-10-30 之前
+#: 写侧才产得出它）：读侧一律折成「没查成」（checked=False + 一条「这是旧数据」的读数），
+#: 不是「成立」，也不是「有毛病」—— 那两格都是查过之后的裁决，而「没查成」恰恰不是。
+#: 读侧唯一入口是下面的 `read_review_verdict`；写侧只许写这里的三格。
+REVIEW_VERDICTS = ("", "成立", "有毛病")
+
+#: 旧行里可能残留、而写侧再也写不出的那一格（2026-10-30 之前写下的「看不出来」）。
+#: 它只在读侧有意义：按「没查成」读（不是第三态，也不是「成立」）。
+REVIEW_LEGACY_VERDICTS = ("看不出来",)
+
+
+def read_review_verdict(row: Mapping[str, Any]) -> dict[str, Any]:
+    """读 `documents` 行的审核轴 —— 这一格的唯一读口。
+
+    返回 ``{"raw", "verdict", "checked", "legacy", "reason"}``。
+    三态纪律落在这里：只有真裁决才 ``checked=True``；旧值 / 空串 / 词表外的值一律
+    ``checked=False``，并给一条读得懂的理由（旧值那一条会写明「这是旧数据」）。
+
+    ## 为什么旧值「看不出来」读成「没查成」，而不是「成立」
+
+    V 那一轴的历史值按「成立（没找到缺陷）」读（V 的 2026-11-01 裁定）；H 这一轴不同：
+    H 写下「看不出来」时说的是"这一轮我没查成"（缺材料 / 没跑），不是"我查了、没找到
+    缺陷"。把它读成「成立」正是业主 2026-10-30 点名的最贵折平 —— 没查过的东西变成
+    一条通过裁决。所以这里折成 ``checked=False``，且 ``legacy=True`` 让读的人看得见
+    "这条读数来自旧数据"，不许静默当成没审过。
+    """
+    raw = str(row.get("review_verdict") or "")
+    if raw in REVIEW_LEGACY_VERDICTS:
+        return {
+            "raw": raw, "verdict": "", "checked": False, "legacy": True,
+            "reason": (
+                "旧数据：这一行的 review_verdict 是 2026-10-30 之前写下的「看不出来」，"
+                "按「没查成」读（checked=False）—— 它不是「成立」（H 没查成不等于没找到缺陷），"
+                "也不是「有毛病」；不计入「审过」，也不计入「通过」"
+            ),
+        }
+    if raw == "":
+        return {"raw": raw, "verdict": "", "checked": False, "legacy": False,
+                "reason": "空串 = 这一行还没有审校裁决（没审过，不是「成立」）"}
+    if raw not in REVIEW_VERDICTS:
+        return {"raw": raw, "verdict": "", "checked": False, "legacy": False,
+                "reason": f"词表外的裁决 {raw!r} ⇒ 按「没查成」读（不许折成「成立」或「有毛病」）"}
+    return {"raw": raw, "verdict": raw, "checked": True, "legacy": False, "reason": ""}
 
 #: 依赖类型（FC-23）。`external_unavailable` 是必须存在的一档：
 #: 引用了但拿不到的来源（例如论文里"companion book [6, Thm 6.5]"）
@@ -1993,8 +2038,10 @@ class Document:
     open_problems: list[str] = field(default_factory=list)
     status: str = "draft"
     review_rounds: int = 0
-    #: 一次审核的裁决：`""`（未审）/ `成立` / `有毛病` / `看不出来`（与 V 同形）。
+    #: 一次审核的裁决：`""`（未审）/ `成立` / `有毛病`（`REVIEW_VERDICTS`）。
     #: 与 `status` 分开：审过 ≠ 通过（`status` 只表生命周期与历史上的通过/驳回）。
+    #: 旧行里的 `看不出来` 只作兼容读：`read_review_verdict` 把它折成「没查成」
+    #: （`checked=False`），不是「成立」（业主 2026-10-30 裁定）。
     review_verdict: str = ""
     #: 裁决写下时的时间与主（谁审的）。空串 = 没审过。
     reviewed_at: str = ""
@@ -2021,7 +2068,8 @@ class Document:
         if self.review_verdict not in REVIEW_VERDICTS:
             raise ValueError(
                 f"review_verdict 必须是 {REVIEW_VERDICTS} 之一，收到 {self.review_verdict!r}"
-                "（空串 = 还没审过；`成立`/`有毛病`/`看不出来` 与 V 的裁决同形）")
+                "（空串 = 还没审过；`成立`/`有毛病` 是两态裁决，2026-10-30 业主裁定"
+                "之后不再收「看不出来」—— 没查成走 checked=False + 理由，不落裁决）")
         if self.revision < 0:
             raise ValueError(f"revision 不能为负，收到 {self.revision!r}")
         if self.content_sha256:

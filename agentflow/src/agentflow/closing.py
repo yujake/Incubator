@@ -1621,16 +1621,37 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
     if kind in ("reviewed_documents", "accepted_documents"):
         # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：
-        # 审过读 `review_verdict != ""`；通过才读 `review_verdict == "成立"`
-        # （与 V 的「成立」同形）。不再用 `status ∈ accepted/revised` 冒充"审过" ——
-        # 那是把"通过"折成"审过"，而 T5 第 9 趟正是靠这个折平才七格全绿。
-        want = "成立" if kind == "accepted_documents" else None
-        rows = [r for r in store.rows("documents")
-                if (str(r.get("review_verdict") or "") == want if want is not None
-                    else str(r.get("review_verdict") or "") != "")]
-        return len(rows), {"documents": [
-            {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
-             "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]]}
+        # 审过读审核轴上的真裁决；通过才读 `成立`（与 V 的「成立」同形）。
+        # 不再用 `status ∈ accepted/revised` 冒充"审过" —— 那是把"通过"折成"审过"，
+        # 而 T5 第 9 趟正是靠这个折平才七格全绿。
+        #
+        # 2026-10-30 业主裁定：「不应该有『看不出来』」—— 旧行里那四个字不是第三态。
+        # 它按「没查成」读（`checked=False`），于是既不算「审过」也不算「通过」；
+        # 读点统一走 `schema.read_review_verdict`，这里只读它的两栏（verdict / checked）。
+        readings = [(r, S.read_review_verdict(r)) for r in store.rows("documents")]
+        if kind == "accepted_documents":
+            rows = [r for r, rd in readings if rd["checked"] and rd["verdict"] == "成立"]
+        else:
+            rows = [r for r, rd in readings if rd["checked"] and rd["verdict"] != ""]
+        legacy = [
+            {"doc_id": str(r.get("doc_id") or ""), "raw": rd["raw"], "reason": rd["reason"]}
+            for r, rd in readings if rd["legacy"]
+        ]
+        detail: dict[str, Any] = {
+            "documents": [
+                {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
+                 "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]
+            ],
+            # 旧行读数必须显形：把它们静默排除会让"少算了"与"本来就没有"同形。
+            "legacy_unchecked": legacy[:8],
+            "legacy_unchecked_total": len(legacy),
+            "legacy_note": (
+                "旧行 review_verdict='看不出来' 按「没查成」读（checked=False），"
+                "不计入「审过」也不计入「通过」—— 业主 2026-10-30 裁定"
+                if legacy else ""
+            ),
+        }
+        return len(rows), detail
     if kind == "reviewed_current_rows":
         # 「改完之后有没有再复核」那一档（`draft/39` §6.46 的 D57）。
         #
