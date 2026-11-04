@@ -95,7 +95,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "把一条命题登记进命题台账（`statement_full` 是含完整假设的正文；写库前逐条硬校验，"
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
         "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
-        "`proof_manuscript`（证明稿，proof manuscript）是证明正文的载体（在册也给稿：F/E 的稿，或你自己改写的 "
+        "`proof_manuscript` 是证明正文的载体（证明稿，proof manuscript；在册也给稿：F/E 的稿，或你自己改写的 "
         "`reports/b-proof-<命题号>.md`）；只给 `proof_text` / 内联 `proofs` 的正文不算交了稿，"
         "依赖面也读不出来。**没有稿不拒收**：落最低等级（「猜想」）并进待办 —— 但补的是稿，"
         "不是往参数里贴一段正文。`quote_verified` 是三态（不传 = 还没查），"
@@ -207,7 +207,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # `## 依赖`（四列表），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
                 # ＋ `path_group` ＋ `source_stmt_id`）。F 自己不写依赖台账。
                 "proof_manuscript": {**_S, "description":
-                                     "**证明正文的载体（自产命题在册与否都交它）**：F/E 的稿，"
+                                     "`proof_manuscript` 是证明正文的载体"
+                                     "（自产命题在册与否都交它）：F/E 的稿，"
                                      "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
                                      "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
                                      "F 的证明手稿正文：里面那一节 `## 依赖` 由 B 读出来落依赖边。"
@@ -352,7 +353,8 @@ SPEC = AgentSpec(
             # ⇒ 两句不是矛盾，是同一条时间线的两端：签跟着正文走（一稿一签），原样入库认签、
             # 改过的正文重新送审。落地判据是现有那条 sha 比对（`verifications.proof_review_gap`）。
             "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 先把它交一次 `own.register_statement`"
-            "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审这一份稿、签了才写 `proof_review`**；"
+            "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审核签字（`V.verify_proof`："
+            "`statement_id` + `proof_manuscript=<这份稿>`）、签了才写 `proof_review`**；"
             "**F 产的证明天生带 V 签字**（那是 F 送审时拿到的、盖在**F 那一版正文**上的签）—— 原样入库时"
             "认这份签，不要重复要求签（你若改写正文，见下一条：改写之后原签不算数、要再派 V 签一次 —— "
             "那不是「撤销」，是**对不上**这一版）。",
