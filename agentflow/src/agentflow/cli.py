@@ -856,6 +856,156 @@ def cmd_repair(args) -> int:
     return _legacy_module("repair").main(args)
 
 
+def _repair_dispatch(args) -> int:
+    """`repair` 的前置分派：带 `--backfill-grades` 走新实现，否则原样转发 legacy。
+
+    为什么这一层不写在 `cmd_repair` 里（与"给 `cmd_repair` 加前置分支"差一层，理由
+    可机器复核）：`tests/test_legacy_cli_forwards.py::test_each_forward_is_exactly_one_layer`
+    把 `cmd_repair` 的函数体钉成「只有一处 return，且就是 `_legacy_module('repair').main(args)`」，
+    连一个 `if` 都不许有 —— 在它里面加分支不是实现新功能，是把那条判据改绿。
+    所以前置分派落在这一层：不带旗标时调到的仍然是 `cmd_repair` 本身（legacy 一个
+    字节不动），带旗标才换实现。
+
+    `--apply` 单独出现是用法错（退出码 2）：legacy 不认识它，静默忽略会让"我以为
+    写了"变成一次没发生的写操作。
+
+    读写：这一层自己不读不写任何文件；带旗标时交给 `cmd_repair_backfill_grades`
+    （dry-run 只读、`--apply` 写 `statements`），不带旗标时交给 legacy。
+    实现方式一句话：一个二选一的分派，判据仍是 `args.backfill_grades`。
+    """
+    if bool(getattr(args, "backfill_grades", False)):
+        return cmd_repair_backfill_grades(args)
+    if bool(getattr(args, "apply", False)):
+        print("[用法错误] `--apply` 只与 `--backfill-grades` 连用；不带旗标时 `repair` "
+              "仍走 legacy（它不认识 `--apply`，不会写任何东西）。", file=sys.stderr)
+        return 2
+    return cmd_repair(args)
+
+
+def _backfill_state_key(entry: Mapping[str, Any]) -> str:
+    """四栏汇总里的 `state` 键：有原值就用原值；空串按 gap 的台账读数分两种空。"""
+    state = str(entry.get("state") or "")
+    if state:
+        return state
+    ledger = str(entry.get("ledger") or "")
+    present = entry.get("ledger_present")
+    if not ledger:
+        return "（空：没有证明正文）"
+    if present is False:
+        return "（空：台账不在盘上）"
+    if present is True and int(entry.get("rows") or 0) == 0:
+        return "（空：台账是空文件）"
+    return "（空）"
+
+
+def _backfill_state_text(entry: Mapping[str, Any]) -> str:
+    """把"凭据不够"那一栏的 `state` 原值打出来；空串时说清是哪一种空。
+
+    `proof_review_gap` 在"台账文件不在盘上 / 空文件 / 没有证明正文"这几支提前 return，
+    `state` 原值就是空串。这里不补枚举（业主 2026-11-04：打印原值），而是把 gap 自己
+    交回来的 `ledger` / `ledger_present` / `rows` 原样打出来，让读的人分得清
+    "从来没送过审"（ledger_missing）与"台账在、但没签"（ledger_present、rows）。
+    """
+    state = str(entry.get("state") or "")
+    if state:
+        return f"state={state}"
+    ledger = str(entry.get("ledger") or "")
+    present = entry.get("ledger_present")
+    rows = int(entry.get("rows") or 0)
+    if not ledger:
+        detail = "gap 没给台账路径（这一行没有证明正文）"
+    elif present is False:
+        detail = f"ledger_missing=true，`{ledger}` 不在盘上（一次都没送审）"
+    elif present is True and rows == 0:
+        detail = f"ledger_present=true、rows=0，`{ledger}` 是空文件（一次都没落过）"
+    else:
+        detail = f"ledger_present={str(present).lower()}、rows={rows}，`{ledger}`"
+    return f"state=（空；{detail}）"
+
+
+def _print_grade_backfill(out: Mapping[str, Any]) -> None:
+    """把 `verifications.recompute_grades` 的四栏读数打成人能读的表（`--json` 不走这里）。"""
+    cols = out["columns"]
+    mode = "apply（会写盘）" if out.get("apply") else "dry-run（一个字节都不写）"
+    print(f"按现行 V 签重算 evidence_kind：{out.get('root') or '（没给根）'}    {mode}")
+    if not out.get("checked"):
+        print(f"没查成：{out.get('why') or '（没有理由）'}", file=sys.stderr)
+        return
+    concepts = list(out.get("concepts") or [])
+    print(f"读 statements：{out.get('rows')} 行；"
+          f"概念行 {len(concepts)} 行不参与四栏（概念不参与等级链）")
+
+    will = list(cols.get("will_upgrade") or [])
+    print(f"会升 {len(will)}：")
+    for entry in will:
+        print(f"  - {entry.get('statement_id')}  {entry.get('from')} → {entry.get('to')}"
+              f"  （{entry.get('basis') or '凭据见 why'}；通道 {entry.get('channel') or '?'}）")
+
+    top = list(cols.get("already_top") or [])
+    print(f"已是最高 {len(top)}：")
+    for entry in top:
+        print(f"  - {entry.get('statement_id')}  evidence_kind={entry.get('evidence_kind')}")
+
+    short = list(cols.get("not_enough") or [])
+    states: dict[str, int] = {}
+    for entry in short:
+        key = _backfill_state_key(entry)
+        states[key] = states.get(key, 0) + 1
+    summary = " / ".join(f"{k} {v}" for k, v in states.items()) or "（无）"
+    print(f"凭据不够 {len(short)}：{summary}")
+    for entry in short:
+        # `state` 原值（`proof_review_gap().state`），不是本命令自造的枚举 —— 业主 2026-11-04。
+        print(f"  - {entry.get('statement_id')}  evidence_kind={entry.get('evidence_kind')}"
+              f"  {_backfill_state_text(entry)}")
+
+    unknown = list(cols.get("unchecked") or [])
+    print(f"没查成 {len(unknown)}：")
+    for entry in unknown:
+        print(f"  - {entry.get('statement_id')}  {entry.get('why') or '（没有理由）'}")
+
+    if out.get("apply"):
+        written = list(out.get("written") or [])
+        unmoved = list(out.get("unmoved") or [])
+        failed = list(out.get("failed") or [])
+        print(f"写后回读：已写 {len(written)} / 未动 {len(unmoved)} / 写失败 {len(failed)}")
+        for entry in written:
+            print(f"  已写 {entry.get('statement_id')} → {entry.get('to')}"
+                  f"（{entry.get('basis') or '依据见 _grade_recomputed'}；"
+                  f"at={entry.get('at') or '（空）'}）")
+        for entry in unmoved:
+            print(f"  未动 {entry.get('statement_id')}：{entry.get('why')}")
+        for entry in failed:
+            print(f"  写失败 {entry.get('statement_id')}：{entry.get('why')}")
+
+
+def cmd_repair_backfill_grades(args) -> int:
+    """按现行 V 签重算 `statements.evidence_kind`：缺省 dry-run，`--apply` 才写。
+
+    判据只有一处：每一行都调 `verifications._grade_recomputed_from_signature`
+    （签落位那一刻用的是同一个函数）。四栏（业主 2026-11-04 定稿）：
+    会升 / 已是最高 / 凭据不够（`state` 打印 `proof_review_gap()` 的原值）/
+    没查成（`checked=False` + 原因）。
+
+    读写：dry-run 只读 `statements` 与 `verifications/`，一个字节都不写；`--apply`
+    逐条走 `store.tx("statements")`（一行一笔），写完逐条再读一次盘落"已写 / 未动"。
+    退出码：0 = 四栏都查成且没有写失败；1 = 有行没查成 / 有写失败；2 = 整张表读不出来
+    （或 `--apply` 缺 `--backfill-grades` 的用法错）。
+    """
+    from . import verifications as VR
+
+    root = _root_of(args)
+    st = make_store(root)
+    out = VR.recompute_grades(root, st, apply=bool(getattr(args, "apply", False)))
+    code = 0 if out.get("checked") else 2
+    if out.get("checked") and (out["columns"].get("unchecked") or out.get("failed")):
+        code = 1
+    if getattr(args, "json", False):
+        print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
+        return code
+    _print_grade_backfill(out)
+    return code
+
+
 def cmd_demo(args) -> int:
     """离线端到端演示（不联网、不花钱；`--keep` 保留上次的演示数据）。
 
@@ -4958,7 +5108,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("repair", help="重算派生字段")
     sp.add_argument("--related", action="store_true", help="重算 related_concepts")
-    sp.set_defaults(func=cmd_repair)
+    # 2026-11-04：`--backfill-grades` 接进 CLI（只做 dry-run 入口；`--apply` 是写入口）。
+    # 分派在 `_repair_dispatch`：不带旗标 ⇒ `cmd_repair`（legacy 一个字节不动）。
+    sp.add_argument("--backfill-grades", action="store_true",
+                    help="按现行 V 签重算 evidence_kind（缺省 dry-run，一个字节都不写）")
+    sp.add_argument("--apply", action="store_true",
+                    help="与 --backfill-grades 连用：真的写盘（一行一笔、幂等）")
+    sp.add_argument("--json", action="store_true", help="四栏读数打成 JSON")
+    sp.set_defaults(func=_repair_dispatch)
 
     sp = sub.add_parser("demo", help="离线端到端演示（不访问网络）")
     sp.add_argument("--keep", action="store_true", help="保留上次演示数据")

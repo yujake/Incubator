@@ -4083,6 +4083,220 @@ def proof_review_gaps(root: str | Path, rows: Iterable[Mapping[str, Any]]) -> li
     return out
 
 
+#: `recompute_grades` 的四栏（顺序 = CLI 的打印顺序；业主 2026-11-04 定稿）。
+#:
+#: 名字是字符串而不是枚举，是因为它们直接进 `--json` 与四栏表：读的人拿到的就是
+#: 这四个键。`not_enough` 里的 `state` 逐字取自 :func:`proof_review_gap`（不在本命令
+#: 里另造一套词表），`unchecked` 只收 `checked=False` 的那一档。
+GRADE_BACKFILL_COLUMNS: tuple[str, ...] = ("will_upgrade", "already_top",
+                                           "not_enough", "unchecked")
+
+
+def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> dict[str, Any]:
+    """按现行 V 的签把 `statements.evidence_kind` 重算一遍（四栏读数；`apply` 才写）。
+
+    ## 这个函数在补哪条断链（业主 2026-11-04）
+    `evidence_kind` 原先只有一条升档路：同一份内容再登记一次时由
+    `Secretary._upgrade_evidence_kind` 改。于是"V 签了、之后没有人再登记"的行永远停在
+    旧档 —— 真机 `projects/paper-rewrite-84` 的 `000000`、`paper-rewrite-85` 的
+    `000004` / `000005` 逐条有签、档位却是 `heuristic`。`_grade_recomputed_from_signature`
+    已经在签落位那一刻按签重算；本函数只是把这同一个判据搬到"事后补一遍"这个入口上。
+
+    ## 判据只有一处
+    每一行都调 :func:`_grade_recomputed_from_signature`；本函数一个字都不重写"够不够
+    `proof_review`"的判据。四栏里"凭据不够"那一栏的 `state` 是
+    :func:`proof_review_gap` 的原值（`signed` / `holding` / `stale` / `rejected` /
+    `unsigned` / `unreadable`），不是本命令自造的枚举。
+
+    ## 四栏（业主 2026-11-04 定稿）
+    - `will_upgrade`：`_grade_recomputed_from_signature` 给出 `to` 且与现行档不同
+      （只升不降，所以 `to` 只可能是 `proof` / `proof_review`）；
+    - `already_top`：现行档已经是 `proof` / `proof_review`（重算不会有第二个结果）；
+    - `not_enough`：查过了、结论是凭据不够 —— `state` 逐字是 `proof_review_gap().state`；
+    - `unchecked`：`checked=False`（台账读不出来 / 坏行 / 这一行根本查不了）＋ `why`。
+    概念行（`kind="concept"`）不进四栏：概念不参与等级链（`evidencebits.derive_grade` 对
+    它 `not_applicable`），把它折进任何一栏都是错读数。它们逐条记在 `concepts` 里，
+    并在 `--json` / CLI 摘要里报出条数。
+
+    ## `apply`
+    `apply=True` 时逐条落盘（一行一笔 `store.tx("statements")`）：事务内重新读这一行、
+    再调一次 `_grade_recomputed_from_signature`（盘在两次读之间可能变过），只有仍然
+    "会升"才 `tx.upsert`。读不出来的行一个字不写；写入失败记 `failed`、继续下一条。
+    写完逐条再读一次盘，只有盘上 `evidence_kind` 与 `_grade_recomputed.to` 都对上
+    才记 `written`，否则记 `unmoved`（"已写 / 未动"是两条不同的读数）。
+
+    幂等：已经是 `proof` / `proof_review` 的行在 `_grade_recomputed_from_signature` 里
+    第一句就返回 `{}`（不写第二个时间戳）⇒ 第二次 `apply` 全部落 `already_top`。
+
+    返回键：`checked`（整张表读出来了吗）/ `apply` / `root` / `rows`（总行数）/
+    `columns`（上面四栏）/ `concepts` / `written` / `unmoved` / `failed` / `why`。
+    `not_enough` 每条还带 `ledger` / `ledger_present` / `rows`：`proof_review_gap` 在
+    "台账文件不在盘上 / 空文件 / 没有证明正文"这几支会给出空的 `state`，这几格用 gap
+    自己的读数说清"空"是哪一种 —— 不在这里补一个枚举。
+    """
+    root_p = Path(root) if str(root or "").strip() else Path(getattr(store, "root", "") or "")
+    out: dict[str, Any] = {
+        "checked": False, "apply": bool(apply), "root": str(root_p),
+        "rows": 0, "columns": {name: [] for name in GRADE_BACKFILL_COLUMNS},
+        "concepts": [], "written": [], "unmoved": [], "failed": [], "why": "",
+    }
+    if not str(root_p).strip():
+        out["why"] = "没给工作区根 ⇒ 台账读不出来（四栏都没查成）"
+        return out
+    if not (root_p / "data" / str(S.TABLES["statements"]["file"])).is_file():
+        out["why"] = (f"`{root_p / 'data' / str(S.TABLES['statements']['file'])}` 不在盘上"
+                      " ⇒ 这不像一个工作区（四栏都没查成）")
+        return out
+    try:
+        rows = [dict(r) for r in store.rows("statements")]
+    except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许假装"0 行"
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 四栏都没查成"
+        return out
+    out["checked"] = True
+    out["rows"] = len(rows)
+    pending: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+        cur = str(row.get("evidence_kind") or "").strip()
+        if str(row.get("kind") or "") == "concept":
+            # 概念不参与等级链：它既不该被升档，也不是"凭据不够"。单列出来是为了
+            # 不让"四栏加起来比行数少"变成一条看不见的缺口。
+            out["concepts"].append({
+                "statement_id": sid, "evidence_kind": cur,
+                "why": "概念行不参与等级链（`evidencebits.derive_grade` 对它是 "
+                       "`not_applicable`）⇒ 不归本命令管",
+            })
+            continue
+        got = _grade_recomputed_from_signature(row, root=root_p)
+        reading = dict(got.get("reading") or {})
+        target = str(reading.get("to") or "")
+        if reading.get("checked") is False:
+            # 判据自己报"没查成"（异常那一支）。注意 reading 里也带 `to`（= 现行档），
+            # 所以必须先按 `checked=False` 分出去，不能看见 `to` 就当"会升"。
+            out["columns"]["unchecked"].append({
+                "statement_id": sid, "evidence_kind": cur, "state": "",
+                "why": str(reading.get("why") or "凭据没查成（读不出来）"),
+            })
+            continue
+        if target and target != cur:
+            out["columns"]["will_upgrade"].append({
+                "statement_id": sid, "from": cur or "（空）", "to": target,
+                "basis": str(reading.get("basis") or ""),
+                "channel": str(reading.get("channel") or ""),
+                "why": str(reading.get("why") or ""),
+            })
+            pending.append((out["columns"]["will_upgrade"][-1], dict(got["row"])))
+            continue
+        if cur in (PROOF_KIND, PROOF_REVIEW_KIND):
+            out["columns"]["already_top"].append(
+                {"statement_id": sid, "evidence_kind": cur})
+            continue
+        # 判据内部"不够"那一支不把 gap 交回来（`reading` 是空的）；这一栏要的是
+        # `proof_review_gap` 的原值 `state` ⇒ 在这里再读一次。读的是同一个判据，
+        # 不是第二份判档规则。
+        gap = proof_review_gap(root_p, row)
+        ledger = str(gap.get("ledger") or "")
+        # `state` 可能是空串（`proof_review_gap` 在"台账文件不在盘上 / 空文件 /
+        # 没有证明正文"这几支提前 return，没写 state）。不许在这里补一个枚举，但要把
+        # "空的原因"用 gap 自己的键（`ledger` / `rows` / `why`）原样交出去：
+        # `ledger_present=None` 表示 gap 连台账路径都没给（例如 proof_text 为空）。
+        ledger_present = (bool((root_p / ledger).is_file()) if ledger else None)
+        entry = {
+            "statement_id": sid, "evidence_kind": cur,
+            "state": str(gap.get("state") or ""),
+            "ledger": ledger,
+            "ledger_present": ledger_present,
+            "rows": int(gap.get("rows") or 0),
+            "why": str(gap.get("why") or ""),
+        }
+        if not gap.get("checked"):
+            out["columns"]["unchecked"].append(entry)
+        else:
+            out["columns"]["not_enough"].append(entry)
+    if apply and pending:
+        _apply_grade_backfill(root_p, store, pending, out)
+    return out
+
+
+def _apply_grade_backfill(root: Path, store: Any,
+                          pending: list[tuple[dict[str, Any], dict[str, Any]]],
+                          out: dict[str, Any]) -> None:
+    """`recompute_grades(apply=True)` 的写盘半：一行一笔事务 + 写后逐条读盘。
+
+    事务内重新读这一行、再跑一次 `_grade_recomputed_from_signature`：调用方手上那份
+    `pending` 是几毫秒前算的，而盘可能已经变过（另一个进程刚补过签 / 刚改过正文）。
+    判据仍然只有那一处；这里只决定"还写不写"。
+    """
+    attempted: list[tuple[dict[str, Any], str]] = []
+    for entry, _planned in pending:
+        sid = str(entry.get("statement_id") or "")
+        try:
+            with store.tx("statements", actor="repair",
+                          note=f"repair.backfill_grades:{sid}") as tx:
+                current = next(
+                    (r for r in tx.rows("statements")
+                     if str(r.get("stmt_id") or r.get("statement_id") or "") == sid), None)
+                if current is None:
+                    out["unmoved"].append({
+                        "statement_id": sid,
+                        "why": "事务里找不到这一行（两次读之间盘变过）⇒ 没动",
+                    })
+                    continue
+                fresh = _grade_recomputed_from_signature(current, root=root)
+                trace = dict(fresh.get("reading") or {})
+                cur_now = str(current.get("evidence_kind") or "").strip()
+                target = str(trace.get("to") or "")
+                if trace.get("checked") is False or not target or target == cur_now:
+                    out["unmoved"].append({
+                        "statement_id": sid,
+                        "why": str(trace.get("why")
+                                   or "重算结果不再是「会升」（盘在两次读之间变过）⇒ 没动"),
+                    })
+                    continue
+                tx.upsert("statements", fresh["row"],
+                          note=f"repair.backfill_grades:{sid}")
+            attempted.append((entry, target))
+        except Exception as exc:  # noqa: BLE001 —— 一条写失败不许拖住其余行
+            out["failed"].append({
+                "statement_id": sid,
+                "why": f"{type(exc).__name__}: {exc}",
+            })
+    if not attempted:
+        return
+    # ---- 写后逐条再读一次盘（业主 2026-11-04）：事务返回 ≠ 盘上是那个样子。
+    try:
+        from .store import Store as _Store   # 惰性：只为一个"全新的读"开一个新句柄
+
+        disk_rows = {str(r.get("stmt_id") or r.get("statement_id") or ""): dict(r)
+                     for r in _Store(root).rows("statements")}
+    except Exception as exc:  # noqa: BLE001 —— 读不回来就逐条记"没查成"
+        for entry, _target in attempted:
+            out["unmoved"].append({
+                "statement_id": str(entry.get("statement_id") or ""),
+                "why": (f"写完之后再读盘失败（{type(exc).__name__}: {exc}）"
+                        "⇒ 这一条是「没查成」，不是「没动」"),
+            })
+        return
+    for entry, target in attempted:
+        sid = str(entry.get("statement_id") or "")
+        disk = disk_rows.get(sid) or {}
+        trace = dict(disk.get(GRADE_RECOMPUTED_KEY) or {})
+        if (str(disk.get("evidence_kind") or "").strip() == target
+                and str(trace.get("to") or "") == target):
+            out["written"].append({
+                "statement_id": sid, "from": str(entry.get("from") or ""),
+                "to": target, "at": str(trace.get("at") or ""),
+                "basis": str(trace.get("basis") or ""),
+            })
+        else:
+            out["unmoved"].append({
+                "statement_id": sid,
+                "why": (f"写完之后再读盘：evidence_kind={disk.get('evidence_kind')!r}、"
+                        f"{GRADE_RECOMPUTED_KEY}.to="
+                        f"{str(trace.get('to') or '（没有痕）')!r} ⇒ 这一条没落到目标档"),
+            })
+
+
 def unverified_statement_refs(root: str | Path,
                               plans: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """攻坚计划的 `history` 里点名了哪些 `statement_id`、而 `verifications` 里没有对应行。
