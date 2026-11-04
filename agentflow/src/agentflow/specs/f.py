@@ -136,7 +136,7 @@ SPEC = AgentSpec(
             # 不是等别人代派；`F.step` 不再代你送审，它只回读签（下面这一格 `v_sign`）。
             # 判据：`tests/test_f_delivery_needs_v_sign.py` 与
             # `tests/test_v_unregistered_manuscript_review.py`。
-            "**证明写完之后由你派 V 审这一份手稿**（`framework_summon` 形状：`role=\"V\"`，`task` 写清要审**哪一份** —— "
+            "**证明写完之后由你派 V 审这一份证明稿（proof manuscript）**（`framework_summon` 形状：`role=\"V\"`，`task` 写清要审**哪一份** —— "
             "点手稿路径 `reports/f-proof-*.md`，**在册了也点同一份稿**）。V 的 `verify_proof` 参数按工具面给全："
             "`statement_id`（在册后给这条命题的号；还没在册就不给，空号 = 还没在册）；`proof_no` 是第几条证明（缺省 1）；"
             "`proof_manuscript` **一律给**（在册与否都给：那是 V 读的正文，也是签块要盖回的那一份稿）—— "

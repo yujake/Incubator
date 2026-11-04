@@ -97,7 +97,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "V", "verify_proof",
         "把一份证明按写成后的样子整体重读：两态结论 + 每条问题指到步号，"
-        "并写 verifications/<命题号>.jsonl（在册命题必须带手稿 `proof_manuscript`，"
+        "并写 verifications/<命题号>.jsonl（在册命题必须带证明稿 `proof_manuscript`（proof manuscript），"
         "签落在稿上）",
         _obj(
             {

@@ -95,7 +95,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "把一条命题登记进命题台账（`statement_full` 是含完整假设的正文；写库前逐条硬校验，"
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
         "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
-        "`proof_manuscript` 是证明正文的载体（在册也给稿：F/E 的稿，或你自己改写的 "
+        "`proof_manuscript`（证明稿，proof manuscript）是证明正文的载体（在册也给稿：F/E 的稿，或你自己改写的 "
         "`reports/b-proof-<命题号>.md`）；只给 `proof_text` / 内联 `proofs` 的正文不算交了稿，"
         "依赖面也读不出来。**没有稿不拒收**：落最低等级（「猜想」）并进待办 —— 但补的是稿，"
         "不是往参数里贴一段正文。`quote_verified` 是三态（不传 = 还没查），"

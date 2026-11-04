@@ -2414,7 +2414,7 @@ def _c_skills() -> tuple[Skill, ...]:
 2. **缺口这一层**：`C.gaps`（结构缺口候选，可显式选择是否提交检索请求）/
    `C.structural_duplicates`（I5 的输入）—— 回答"哪里还薄"；
 3. **原文这一层**（贵）：真要看正文，抓**那一段**而不是全文（`fs.read` 带
-   `start_line` / `max_lines`；`manuscripts.read` **只有 `id`** —— 按编号读全文，
+   `start_line` / `max_lines`；`manuscripts.read`（交接手稿，handoff）**只有 `id`** —— 按编号读全文，
    没有分段参数，要读哪一段先用 `fs.read` 定位，别指望它替你截）。
 
 ## 产出怎么落
