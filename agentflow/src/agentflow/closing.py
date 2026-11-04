@@ -4126,7 +4126,12 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     json_path = PM.package_dir(project) / PM.MAPPING_JSON_NAME
     out: dict[str, Any] = {
         "checked": False, "statements": 0, "documents": 0, "by_status": {},
-        "mapping_json": str(json_path), "exists": None, "missing": False, "reason": "",
+        "mapping_json": str(json_path), "exists": None, "missing": False,
+        #: 论文包在不在盘上（`out/paper/main.tex` 或 `main.pdf`）。2026-11-04 真机
+        #: （`projects/paper-rewrite-big`）：PDF 编出来了、`documents` 0 行 ⇒ 改前这一档
+        #: 判"还没有成稿 ⇒ 不适用"，于是"有 PDF 却没有对应表"在收工门上没有任何读数。
+        "paper_package": False,
+        "reason": "",
     }
     if store is None:
         out["reason"] = "没有 store ⇒ 有命题 / 已成稿这两格读不出来（没查成）"
@@ -4150,14 +4155,34 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
         key = str(row.get("status") or "")
         by_status[key] = by_status.get(key, 0) + 1
     exists = _mapping_json_exists(json_path)
+    # ---- "已成稿"不许只看 `documents`（2026-11-04 真机读数） ----------------------
+    #
+    # 论文的交付面是 `out/paper/main.tex` + `main.pdf` + `MAPPING.json` + 验收表；
+    # `documents` 是研究手稿那一档（ROLE-GUIDE 的交付物第 ①/② 两类是两件事）。
+    # 真机 `projects/paper-rewrite-big`：PDF 17 页、`documents` 0 行 ⇒ 改前这一档走
+    # "还没有成稿 ⇒ 不适用"，D-38 的 blocker 永远不会触发。"盘上有论文包"本身就是
+    # "成稿了"（`doc.paper_compile` 的门只要 `main.tex` 在），所以这一格把论文包也算进来：
+    # 它不改变 `paper_compile` 的合法性（编译不要求先建 `documents` 行），只改变收工门
+    # 怎么读那份 PDF —— 有 PDF 而没有对应表，不许读成"论文已入库 / 不适用"。
+    package = project / "out" / "paper"
+    paper_package = bool((package / PC.TEX_NAME).is_file()
+                         or (package / PC.PDF_NAME).is_file())
     out.update(checked=True, statements=int(statements), documents=len(documents),
-               by_status=by_status, exists=bool(exists))
-    if not exists and statements >= 1 and documents:
+               by_status=by_status, exists=bool(exists),
+               paper_package=paper_package)
+    if not exists and statements >= 1 and (documents or paper_package):
         out["missing"] = True
-        out["reason"] = (
-            f"有 {statements} 条命题、{len(documents)} 份已成稿的稿件（`documents` 有行 = "
-            f"`doc.build_document` 成功过），论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
-            "论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
+        if documents:
+            out["reason"] = (
+                f"有 {statements} 条命题、{len(documents)} 份已成稿的稿件（`documents` 有行 = "
+                f"`doc.build_document` 成功过），论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
+                "论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
+        else:
+            out["reason"] = (
+                f"有 {statements} 条命题、论文包已经在盘上（{package / PC.TEX_NAME} 或 "
+                f"{package / PC.PDF_NAME}），`documents` 却是 0 行 —— 那不是「还没成稿」，"
+                f"是「论文没入库」；而论文包里也没有 {json_path} ⇒ 缺对应表 ⇒ "
+                "这份 PDF 追溯不回台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
     elif exists:
         out["reason"] = f"对应表在盘上（{json_path}）；表与正文对不对得上归 mapping 那几格"
     else:
