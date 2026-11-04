@@ -20,9 +20,13 @@ a. 先跑真的"关档夹具"（`test_no_proof_without_lean.py::lean_off` 当夹
    收尾之后渲染 G 的提示词 ⇒ 五条开档锚点必须都在；
 b. 反真空：共用助手 :func:`conftest.restore_lean_baseline` 必须在 monkeypatch 的 undo
    之前就把环境扳回基线 —— 摘掉那一句 `setenv("1")`，同一个读法必须当场红；
-c. 扫全 `tests/`：凡摘掉 `AGENTFLOW_LEAN_ENABLED` 的夹具，收尾必须调用同一个助手；
-   助手的定义只许有 `conftest.py` 一处（防止出现第三处"各自的修法"）；另外把这次
-   真正漏掉的那条"不挂夹具的用例"单独钉住。
+c. 扫全 `tests/`，三档写法一起量（凡"关档 + 渲染过提示词"都必须把读数收回基线）：
+   ① 夹具里的 `delenv` / `setenv(假值)`；② 本地包装的实参绑定（`_lean_env(monkeypatch,
+   False)` 里那句 `"1" if on else "0"`）；③ 直接赋值 `os.environ[SWITCH] = 假值`。
+   收尾只认两档：调用共用助手，或在豁免表里且能自证收干净（finally 里有重载口 /
+   写回真值之后重载）。另有一条更窄的：凡 `delenv` 开关的夹具（哪怕它不渲染提示词）
+   也必须调同一个助手 —— 助手的定义只许 `conftest.py` 一处；最后把这次真正漏掉的
+   那条"不挂夹具的用例"单独钉住。
 """
 from __future__ import annotations
 
@@ -74,6 +78,10 @@ KNOWN_OFF_RENDER_FIXED: tuple[tuple[str, str], ...] = (
     ("test_l_wiring_and_isolation_matrix.py", "test_e15_never_hiding_turns_e12_red"),
     ("test_l_collab_surface_is_exactly_this.py",
      "test_two_lean_off_hides_all_four_edges_and_the_role_itself"),
+    # 三条直接 `os.environ[...] = ...` 关档的用例（第三档扫描面加进来之后才看见）。
+    ("test_lean_switch_points_at_l.py", "test_off_leaves_no_trace_of_l"),
+    ("test_lean_switch_points_at_l.py", "test_the_same_process_follows_the_switch"),
+    ("test_lean_switch_points_at_l.py", "test_never_hiding_turns_the_zero_trace_criterion_red"),
 )
 
 #: "渲染过提示词层"的调用面：它们都会读 `agent_prompts` 的那几个 `lru_cache`。
@@ -103,6 +111,11 @@ EXEMPT_TAIL_RESET: frozenset[tuple[str, str]] = frozenset({
     ("test_lean_switch.py", "test_the_prompt_blocks_follow_the_switch"),
     ("test_lean_switch.py", "test_the_no_lean_variant_rewrites_every_role_face"),
     ("test_lean_switch.py", "test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name"),
+    # 直接写 `os.environ[...] = "0"` 的两处（第三档扫描面见到的）：都在 finally 里
+    # 按原值放回环境变量并 `AP.reset_toolchain_readings()` —— 与另外三处同一种收法。
+    ("test_g_h_v_l_prompt_has_no_stale_design.py", "corpus"),
+    ("test_g_h_v_l_prompt_has_no_stale_design.py",
+     "test_the_g_no_lean_table_rewrites_every_left"),
 })
 
 
@@ -206,6 +219,12 @@ def _names_the_switch(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == "ENV_LEAN_ENABLED"
 
 
+def _is_os_environ(node: ast.AST) -> bool:
+    """这个表达式是不是 `os.environ`（直接赋值那一档的落点）。"""
+    return (isinstance(node, ast.Attribute) and node.attr == "environ"
+            and isinstance(node.value, ast.Name) and node.value.id == "os")
+
+
 def _literal_value(node: ast.AST, bindings: dict[str, object]):
     """一个字面量实参在 `bindings` 下的取值（`"1" if on else "0"` 这种写法也解）。"""
     if isinstance(node, ast.Constant):
@@ -223,14 +242,27 @@ def _literal_value(node: ast.AST, bindings: dict[str, object]):
 def _turns_switch_off(node: ast.AST, defs: dict[str, ast.AST],
                       bindings: dict[str, object] | None = None,
                       seen: set[tuple] | None = None) -> bool:
-    """这个函数会不会把 Lean 开关摘掉 / 写成假值（含本地包装的实参绑定）。
+    """这个函数会不会把 Lean 开关摘掉 / 写成假值（三档写法一起认）。
 
-    `_lean_env(monkeypatch, False)` 这种写法是扩面时才发现的盲区：包装里的
-    `setenv(SWITCH, "1" if on else "0")` 只有把实参代进去才知道这一档是关。
+    三档：
+    ① `monkeypatch.delenv` / `setenv(SWITCH, 假值)`；
+    ② 本地包装的实参绑定（`_lean_env(monkeypatch, False)` 里的
+       `"1" if on else "0"` 只有把实参代进去才知道这一档是关）；
+    ③ 直接赋值 `os.environ[SWITCH] = 假值`（2026-11-05 补的一档：先做过全树普查，
+       当时 0 处"关档 + 渲染 + 不收回"，所以加进扫描面没有可修对象；加它是防将来
+       有人用这种写法泄漏、而判据看不见）。
     """
     bindings = {} if bindings is None else bindings
     seen = set() if seen is None else seen
     for sub in ast.walk(node):
+        if isinstance(sub, ast.Assign) and len(sub.targets) == 1:
+            target = sub.targets[0]
+            if isinstance(target, ast.Subscript) and _is_os_environ(target.value) \
+                    and _names_the_switch(target.slice):
+                value = _literal_value(sub.value, bindings)
+                if value is not None and str(value).strip().lower() in FALSE_WORDS:
+                    return True
+            continue
         if not isinstance(sub, ast.Call):
             continue
         callee = _call_name(sub.func)
@@ -448,6 +480,13 @@ def test_every_off_tier_render_restores_the_baseline() -> None:
     自己在用例里关档渲染的写法 —— 2026-11-05 按 node-id 抽跑时 G 缺五条锚点，
     漏的就是 `test_l_is_isolated_when_lean_is_off.py` 里那 5 条（见
     :data:`KNOWN_OFF_RENDER_FIXED`）。
+
+    三档写法一起量（见 :func:`_turns_switch_off`）：`monkeypatch.delenv/setenv`、
+    本地包装的实参绑定、直接赋值 `os.environ[SWITCH] = 假值`。第三档是 2026-11-05
+    补进来的：先做过全树普查（当时没有"关档 + 渲染 + 不收回"的对象），加它是防将来
+    有人用这种写法泄漏而判据看不见；加进来之后按同一把尺子又看见 5 处 —— 3 条用例
+    收尾改调助手，2 处（一个 module 夹具 + 一条用例）本来就在 finally 里按原值放回
+    环境并重载，进豁免面。
 
     豁免面见 :data:`EXEMPT_TAIL_RESET`：每条都必须能自证"自己把读数清干净了"
     （:func:`_ends_clean_by_itself`），而且豁免表不许留永不生效的条目 ——
