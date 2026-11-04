@@ -210,19 +210,23 @@ LEG_CHECK_KINDS: dict[str, str] = {
     # ---- 论文对应表（D-38 第二步，2026-10-24）：让「表写完了没有」也变成机器可判的一档。
     #
     # 第一步（bae5524）只让 M 的人读验收表能写「未完成」，机器可判那张表里没有对应的一档
-    # ⇒ 同一条缺口在两张表上只能是两句话。这一档把「三格齐」做成计数：`got` 是三格齐的
-    # 行数，分母是表里的行数（由表自己给，不由人拍）。表不在盘上读 0（没产出）；表在而
-    # 解析坏记「没查成」（不是 0）。三格的判据不在这里重写：数值定理那一支走
-    # `papermapping.is_numeric_row`（它再问 `numerictheorem.is_program_proof`），Lean 那一支
-    # 走 `papermapping.lean_switch` / `lean_artifacts` / `LEAN_TARGETED_KINDS` —— 与
-    # `papermapping.mapping_reading` 同一套口径。
-    "paper_mapping_rows": "论文对应表里三格齐的行数（`out/paper/MAPPING.json`）：每一行的 "
-                          "`file` 加上它那一类该有的另外两格 —— 数值实验定理要 `numeric_evidence`"
-                          "（E 那条穷举读数）与 `exhaustion_note`（两块读数与署名落在哪份文件），"
-                          "Lean 那一档要 `lean_file` 与 `lean_target`（开关关着、或盘上没有 Lean "
-                          "产物时那两格允许为空，与 `papermapping` 同一口径）；例子 / 实验这一类"
-                          "只要求 `file`。表不在盘上 ⇒ 0 行（没产出，不是没查成）；表在而解析坏 "
-                          "⇒ 这一行记「没查成」（不是 0，也不判 pass）",
+    # ⇒ 同一条缺口在两张表上只能是两句话。这一档把「该有的格子齐不齐」做成计数：`got` 是
+    # 齐的行数，分母是表里的行数（由表自己给，不由人拍）。表不在盘上读 0（没产出）；表在而
+    # 解析坏记「没查成」（不是 0）。数格口径不在这里重写：每一行按它自己的证明通道数
+    # （判据本体 `numericproof.proof_channel`，经 `papermapping._credential_slot` 读）——
+    # 数值证明通道要 `lean_file`、形式化通道要 `lean_file` + `lean_target`、空通道那两格
+    # 不计；数值通道另计索引四格（`numerictheorem.evidence_index_problems`）。
+    "paper_mapping_rows": "论文对应表里「该有的格子都齐」的行数（`out/paper/MAPPING.json`）："
+                          "每一行按**这一条命题的证明通道**数（通道判据只有一处："
+                          "`numericproof.proof_channel`，经 `papermapping._credential_slot`"
+                          " 读）—— 数值证明通道要 `file`（证明栏第 ① 段的程序）、`lean_file`"
+                          "（同一份程序）、`numeric_evidence`、`exhaustion_note` 与索引四格"
+                          "（`evidence_kind` / `evidence_path` / `evidence_sha256` / "
+                          "`v_signature`；判据 `numerictheorem.evidence_index_problems`）；"
+                          "形式化通道要 `file`、`lean_file` 与 `lean_target`；通道为空的行"
+                          "只数 `file`（凭据两格是「不适用」不是「缺」）。表不在盘上 ⇒ 0 行"
+                          "（没产出，不是没查成）；表在而解析坏 ⇒ 这一行记「没查成」"
+                          "（不是 0，也不判 pass）",
     "analysis_report_rows": "分析报告行数（`analysis_reports`）—— 这一档的**写者是 "
                             "`AgentC.handle`**（`capabilities.py` 逐字登记：analysis_reports 是 "
                             "C 自己的产出登记行），D 只是它的读者（`D.ingest(report)`）。"
@@ -4158,38 +4162,68 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     return out
 
 
-def _mapping_row_missing_cells(row: Any, ledger_row: Mapping[str, Any] | None, *,
-                               lean_required: bool) -> list[str]:
-    """这一行按「三格齐」还缺哪几格 —— 这一档的唯一判据（反真空用例只打这一处桩）。
+def _mapping_row_missing_cells(row: Any, *, channel: str) -> list[str]:
+    """这一行按它的证明通道还缺哪几格 —— 这一档的唯一判据（反真空用例只打这一处桩）。
 
-    口径全部复用现有判据，不在这里抄第二份：
+    口径全部复用现有判据，不在这里另写一套「这一行是不是数值定理」：
 
-    - 这一行是不是数值实验定理 ⇒ `papermapping.is_numeric_row`（它再问
-      `numerictheorem.is_program_proof`：那一行的证明栏就是一份程序，或它自己填了那两格）；
-    - Lean 两格什么时候必填 ⇒ 与 `papermapping` 判那一档的前提同一处（开关开、且盘上
-      真有 Lean 产物），由调用方按同一套函数算好 `lean_required` 传进来；
-    - 哪些 kind 属于被 Lean 验的命题 ⇒ `papermapping.LEAN_TARGETED_KINDS`。
+    - 「这一行走哪条通道」由调用方用 `papermapping._credential_slot` 现算后传进来
+      （那条链路只通向一处真身：`numericproof.proof_channel` —— 这里不再判一次，
+      否则「这一行算不算数值定理」会长出第二个答案，就是本档要修的那个缺陷）；
+    - 数格清单与 `papermapping._lean_problems` 对齐：数值通道 ⇒ `file` +
+      `numeric_evidence` + `exhaustion_note` + `lean_file`（证明栏第 ① 段那份程序；
+      `lean_target` 不填，数值程序没有 Lean 声明名）；形式化通道 ⇒ `file` +
+      `lean_file` + `lean_target`；空通道 ⇒ 只数 `file`（凭据两格是「不适用」，不是
+      「缺」）；
+    - 索引四格不在这里数：它们由 `numerictheorem.evidence_index_problems` 一处判
+      （见 :func:`_numeric_row_index_problems`）。
 
     返回空列表 = 这一行该有的格子都齐了（例子 / 实验只有 `file` 一格，因此恒齐）。
-    数值定理与 Lean 那一档是一对互斥的填法（三格 = `file` + 另外两格），不要求一行
-    同时满足两套：`papermapping` 的 docstring 里那两格就是「证明栏换成程序」的另一形态。
     """
     from . import papermapping as PM
+    from . import numericproof as NP
 
     if not str(getattr(row, "file", "") or "").strip():
         return ["file"]
-    if PM.is_numeric_row(row, ledger_row):
-        return [f for f in PM.NUMERIC_ROW_FIELDS
-                if not str(getattr(row, f, "") or "").strip()]
-    if lean_required and str(getattr(row, "kind", "") or "") in PM.LEAN_TARGETED_KINDS:
-        return [f for f in PM.LEAN_ROW_FIELDS
-                if not str(getattr(row, f, "") or "").strip()]
-    return []
+    if channel == NP.PROOF_CHANNEL_NUMERIC:
+        fields: tuple[str, ...] = ("file",) + tuple(PM.NUMERIC_ROW_FIELDS) + ("lean_file",)
+    elif channel == NP.PROOF_CHANNEL_FORMAL:
+        fields = ("file",) + tuple(PM.LEAN_ROW_FIELDS)
+    else:
+        fields = ("file",)
+    return [name for name in fields if not str(getattr(row, name, "") or "").strip()]
+
+
+def _numeric_row_index_problems(row: Any, workspace: Path,
+                                ) -> tuple[list[str], list[str]]:
+    """数值通道那一行的索引四格：返回 `(缺的格名, 判据原话)`。
+
+    判据本体只有一处：`numerictheorem.evidence_index_problems`（它再转发
+    `numericproof.resolve_index`）—— 这里只做两件读侧的事：
+
+    1. 判据说「缺 X」时把 X 记进「缺哪几格」（读的人照那句话去补那一格）；
+    2. 判据原话整段收进 `index_problems`：形状对不上 / 顺索引取不到对象 / sha 对不上
+       这类问题不是「少填一格」，但它们同样让这一行不齐 —— 强行归到某个格名会指错格子。
+
+    空清单 = 四格齐、并且顺索引真的取到了盘上那一份。
+    """
+    from . import numerictheorem as NT
+    from . import numericproof as NP
+
+    entry = row.to_dict() if hasattr(row, "to_dict") else dict(row)
+    problems = [str(one) for one in
+                NT.evidence_index_problems(row=entry, workspace_root=workspace)]
+    if not problems:
+        return [], []
+    fields = (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+              NP.INDEX_SIGN_FIELD)
+    blank = [name for name in fields if any(f"缺 {name}" in one for one in problems)]
+    return blank, problems
 
 
 def paper_mapping_cell_reading(project_root: Path | str, *,
                                workspace_root: Path | str | None = None) -> dict[str, Any]:
-    """论文对应表里「三格齐」的行数（D-38 第二步的唯一实现；`_leg_reading` 只转发）。
+    """论文对应表里「该有的格子都齐」的行数（D-38 第二步的唯一实现；`_leg_reading` 只转发）。
 
     三态：
 
@@ -4197,15 +4231,24 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
       （0 行不是异常：这是没产出，由收工门那一侧按阈值判红）；
     - 表在、`papermapping.parse_rows` 读不懂（坏 JSON / 形状不对 / 有行缺必填字段）
       ⇒ 抛 `RuntimeError`：这一档没查成，调用方落 unknown（不许折成 0）；
-    - 读到 ⇒ `rows`（分母）/ `complete`（三格齐的行数）/ `incomplete`（逐行点名缺哪格），
+    - 读到 ⇒ `rows`（分母）/ `complete`（格子齐的行数）/ `incomplete`（逐行点名缺哪格），
       缺省下限 = 表里的行数：这一档问的是「表里每一行都齐了吗」，不是「至少有一行齐」。
 
-    口径不在这里重写：`parse_rows` 是表唯一的读侧，`is_numeric_row` 是数值定理唯一的
-    判定，Lean 那两格的前提与 `papermapping.mapping_reading` 同一个（`lean_switch` +
-    `lean_artifacts`）。反真空用例把 `_mapping_row_missing_cells` 打桩成恒真 ⇒ 不齐的
-    行也会被数成齐的（这一档的绿必须靠那一处判据，而不是靠这里没查）。
+    口径不在这里重写（2026-11-04 按通道改口径）：
+
+    - 通道由 `papermapping._credential_slot` 现算（真身只有一处：
+      `numericproof.proof_channel`），`_mapping_row_missing_cells` 只按它列格子；
+    - 数值通道那一行另要索引四格（判据 `numerictheorem.evidence_index_problems`）；
+      判据原话收进该行的 `index_problems`（新键），缺的格名收进 `missing`（旧键照旧）；
+      每一行的通道收进该行的 `channel`（新键，读的人据此知道为什么是这几格）；
+    - 旧键一个不改（`path` / `exists` / `rows` / `complete` / `incomplete` /
+      `implicit_min` / `lean` / `note`），M 与 webui 的读法不用跟着改。
+
+    反真空用例把 `_mapping_row_missing_cells` 打桩成恒真 ⇒ 不齐的行也会被数成齐的
+    （这一档的绿必须靠那一处判据，而不是靠这里没查）。
     """
     from . import papermapping as PM
+    from . import numericproof as NP
 
     project = Path(project_root)
     workspace = Path(workspace_root) if workspace_root is not None else project
@@ -4229,7 +4272,7 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         payload = json.loads(json_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(
-            f"{json_path} 在盘上但读不出来（{type(exc).__name__}: {exc}）⇒ 三格齐的行数"
+            f"{json_path} 在盘上但读不出来（{type(exc).__name__}: {exc}）⇒ 对齐的行数"
             "算不出来（没查成，不是 0）") from exc
     table_rows, problems = PM.parse_rows(payload)
     if problems:
@@ -4238,28 +4281,42 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
             f"{json_path} 有 {len(problems)} 处读不懂（{kinds}）⇒ 表里的行数本身不可信"
             "（读不懂的行会被丢掉，分母就不是表里真正的行数）⇒ 这一档没查成，不是 0")
     ledger = PM.read_ledger_tables(workspace)
+    experiments = [dict(item) for item in (ledger.get("experiments") or ())
+                   if isinstance(item, Mapping)]
     for row in table_rows:
-        resolved = PM.resolve_ledger_id(row.ledger_id, ledger)
-        target = (PM.ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
-                  if resolved.get("ok") else None)
-        missing = _mapping_row_missing_cells(row, target, lean_required=lean_required)
-        if missing:
-            out["incomplete"].append({"label": str(row.label), "kind": str(row.kind),
-                                      "ledger_id": str(row.ledger_id),
-                                      "missing": list(missing)})
+        # 通道只在这里算一次：`_credential_slot` → `numericproof.formal_slot` →
+        # `numericproof.proof_channel`。`_mapping_row_missing_cells` 只消费它，不另判。
+        slot = PM._credential_slot(row, ledger, experiments)
+        channel = str(slot.get("channel") or "")
+        missing = _mapping_row_missing_cells(row, channel=channel)
+        index_problems: list[str] = []
+        if channel == NP.PROOF_CHANNEL_NUMERIC:
+            index_missing, index_problems = _numeric_row_index_problems(row, workspace)
+            missing += [name for name in index_missing if name not in missing]
+        if not missing and not index_problems:
+            continue
+        item: dict[str, Any] = {"label": str(row.label), "kind": str(row.kind),
+                                "ledger_id": str(row.ledger_id),
+                                "missing": list(missing), "channel": channel}
+        if index_problems:
+            item["index_problems"] = list(index_problems)
+        out["incomplete"].append(item)
     out["rows"] = len(table_rows)
     out["complete"] = len(table_rows) - len(out["incomplete"])
     out["implicit_min"] = len(table_rows)
     if not table_rows:
-        out["note"] = (f"{json_path} 在盘上、一行都没有 ⇒ 三格齐 0 行（表里没有可数的"
+        out["note"] = (f"{json_path} 在盘上、一行都没有 ⇒ 0 行齐（表里没有可数的"
                        "环境，这一档不要求非零；表与正文对不对得上归 mapping 那几格）")
     elif out["incomplete"]:
         out["note"] = (f"{json_path} 有 {len(table_rows)} 行，其中 "
                        f"{len(out['incomplete'])} 行不齐 ⇒ 缺的格子逐行见 `incomplete` "
-                       f"（三格齐 {out['complete']} 行 < 表里 {len(table_rows)} 行）")
+                       f"（齐 {out['complete']} 行 < 表里 {len(table_rows)} 行；"
+                       "口径：numeric 通道要 `lean_file`、formal 通道要 `lean_file` 与 "
+                       "`lean_target`、空通道那两格不计；numeric 通道另计索引四格）")
     else:
-        out["note"] = (f"{json_path} 的 {len(table_rows)} 行都齐了"
-                       f"（Lean：{'两格必填' if lean_required else '两格允许为空'}）")
+        out["note"] = (f"{json_path} 的 {len(table_rows)} 行都齐了（每行按它自己的证明通道"
+                       "数：numeric 通道要 `lean_file` 与索引四格、formal 通道要 "
+                       "`lean_file` 与 `lean_target`、空通道那两格不计）")
     return out
 
 
