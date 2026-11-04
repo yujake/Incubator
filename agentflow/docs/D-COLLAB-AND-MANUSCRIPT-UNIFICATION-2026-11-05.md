@@ -148,7 +148,7 @@ out/proofs                3 份（D 自写，89,983 B）         不存在
 | 读数 | 怎么读出来的 |
 |---|---|
 | F / V / D / B 任务数 | `data/tasks.json` 的 `rows[*].role` 计数：81 = M17/E8/D20/A3（F 0、V 0、B 0）；87 = M8/A7/D26/E6/**F29**/B1/**V12** |
-| statements | `data/statements.json`：两趟都是 4 行，`evidence_kind` 全 `heuristic`，`reviewed` 字段没有，`bits.reviewed=false`，`proof_text` 长度 0 |
+| statements | `data/statements.json`：81 是 **0 行**；87 是 **4 行**（`evidence_kind` 全 `heuristic`，`reviewed` 字段没有，`bits.reviewed=false`，`proof_text` 长度 0） |
 | dependencies | `data/dependencies.json`：81 是 `[]`；87 是 3 行 |
 | f-proof | `reports/f-proof-*.md`：81 无；87 三份 000000 / 000002 / 000003，共 10,846 B（4,950 + 3,065 + 2,831） |
 | RESEARCH.md | 87 的 `reports/RESEARCH.md`，8,255 B；`^## ` 标题 7 个（0–6） |
@@ -301,8 +301,8 @@ out/proofs                3 份（D 自写，89,983 B）         不存在
 
 ### ① 位置按"闸实际拒谁"，不按施工单写的行号
 
-施工单让改 `tools/write_system_docs.py:72`，但那一行在 `ARTIFACTS["F"]` 里（角色 F 的读写表），
-不是 D 的。照字面把"带 `## 证明` ⇒ 受控拒 / 要落稿就派 F"写给 F 会变成三处假话：
+施工单让改 `tools/write_system_docs.py:72`（**改前那一版**的行号；改后该行已不在原位），
+但那一行在 `ARTIFACTS["F"]` 里（角色 F 的读写表），不是 D 的。照字面把"带 `## 证明` ⇒ 受控拒 / 要落稿就派 F"写给 F 会变成三处假话：
 闸只拒 D 的 `out/proofs/*.md`（F 写它并不受控拒）；对 F 说"要落稿就派 F"等于让它派自己；
 F 的证明正文早就不在 `out/proofs/`。所以 `4cca5c27` 按语义落位到 D 新增一行、F 与 V 各自改到
 `reports/f-proof-*.md`。**先问"这道闸实际拒谁"，再决定文档写给谁。**
