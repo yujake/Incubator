@@ -193,6 +193,27 @@ def test_the_receipt_on_disk_carries_the_engine_tail(tmp_path: pathlib.Path):
 # ============================================================ 四、工具面与权限面
 
 
+def _seed_a_document(workspace: pathlib.Path) -> None:
+    """给这一份论文落一行 `documents`（`doc.paper_compile` 的门，2026-11-04 裁定）。"""
+    import json as _json
+
+    from agentflow import schema as _S
+
+    row = {"doc_id": "000000", "kind": "note", "title": "论文正文的稿件行",
+           "markdown_path": "documents/000000.md",
+           "sections": [{"heading": "结论", "body": "正文结论。"}],
+           "claims": [{"claim_id": "claim-1", "text": "正文结论。",
+                       "citations": ["stmt:000000"], "evidence_kind": "heuristic",
+                       "section": "结论"}],
+           "open_problems": [], "status": "accepted", "review_rounds": 0,
+           "review_verdict": "成立", "created_at": "2026-11-04T15:00:00+08:00",
+           "created_by": "agent-G"}
+    path = workspace / "data" / str(_S.TABLES["documents"]["file"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps({"schema_version": 2, "rows": [row]}, ensure_ascii=False),
+                    encoding="utf-8")
+
+
 def _registry(tmp_path: pathlib.Path):
     return build_registry(workspace_root=str(tmp_path)).registry
 
@@ -223,6 +244,7 @@ def test_the_tool_separates_no_source_from_compile_failed(tmp_path: pathlib.Path
     assert res.meta.get("tri") == "not_applicable", res.meta
 
     FX.write_paper(project)
+    _seed_a_document(tmp_path)
     engine = FX.fake_engine(project / "_engine", exit_code=1, writes_pdf=False,
                             stderr="boom\n")
     with FX.use_engine(engine):
@@ -236,6 +258,7 @@ def test_the_tool_compiles_a_written_paper(tmp_path: pathlib.Path):
     reg = _registry(tmp_path)
     project = tmp_path / "projects/p1"
     FX.write_paper(project)
+    _seed_a_document(tmp_path)
     engine = FX.fake_engine(project / "_engine")
     with FX.use_engine(engine):
         res = reg.call("doc.paper_compile", role="G", project="projects/p1")

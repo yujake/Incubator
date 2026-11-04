@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import replace
 from functools import partial
@@ -2500,7 +2501,41 @@ def _paper_root(workspace: Path | None, project: str) -> Any:
         return fail(f"论文包：{problem}", kind="bad_project", project=project)
     return target
 
-def _paper_compile(workspace: Path | None, project: str, timeout_sec: float) -> Any:
+def _paper_documents_count(workspace: Any, store: Any) -> tuple[int | None, str]:
+    """这个工作区里 `documents` 有几行 —— `(行数, 读不成的理由)`。
+
+    论文包必须有 `documents` 行（业主 2026-11-04 裁定）：H 的审校对象是 `documents`
+    行，没有行 ⇒ H 永远不审 ⇒ 论文包这一环没有第三方。判据与 `doc.build_document`
+    的成功判据同源（那一行是它建的），这里只读：不建行、不改行。
+
+    三态：`(None, why)` = 没查成（表读不出来）；`(0, "")` = 确实一行都没有；
+    `(n, "")` = n 行。没接线（`store is None`，判据夹具常这么建注册表）时读工作区里
+    那张表文件（与 `Store` 同一个落点、同一个文件名定义 `schema.TABLES`），不因为
+    "夹具没给 store" 就把这一格跳成通过。
+    """
+    if store is not None:
+        try:
+            return len(list(store.rows("documents"))), ""
+        except Exception as exc:  # noqa: BLE001 —— 读不到是"没查成"，不是"没有行"
+            return None, f"{type(exc).__name__}: {exc}"
+    if workspace is None:
+        return None, "装配时既没给 store 也没给 workspace_root ⇒ 读不到 documents"
+    path = Path(workspace) / "data" / str(
+        (S.TABLES.get("documents") or {}).get("file") or "documents.json")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return 0, ""
+    except (OSError, ValueError) as exc:  # noqa: BLE001
+        return None, f"`{path}` 读不出来（{type(exc).__name__}: {exc}）"
+    rows = payload.get("rows") if isinstance(payload, Mapping) else payload
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return None, f"`{path}` 的 rows 不是数组（读到 {type(rows).__name__}）"
+    return len(rows), ""
+
+
+def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
+                   *, store: Any = None) -> Any:
     """`doc.paper_compile`：把 `<项目根>/out/paper/main.tex` 编成 `main.pdf`（框架内置编译）。
 
     它「不跑项目脚本」。旧路那一整套（`paper_render` / `paper_anchor` / `paper_build` /
@@ -2508,10 +2543,36 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float) -> 
     「paper_package 里那些东西都是古早废案了，我们要智能体写文章」——
     正文由智能体自己写进 `out/paper/main.tex`，框架只负责把它编成 PDF 并留下回执
     （现状与理由逐条写在 `draft/117`，实现只有一处：`agentflow.papercompile`）。
+
+    ## 2026-11-04（业主裁定）：论文包必须先有 `documents` 行
+
+    编译之前核一次 `documents`：一行都没有 ⇒ 受控拒绝（`paper_not_registered`，
+    一个字节都不写），拒信点路「先用 `doc.build_document` 把这份论文落一行，再由
+    H 审那一行」。理由逐字：收工门的 `paper` 那一格判的是"论文正文与回执一致"，
+    而 H 的审校对象是 `documents` 行；没有行 ⇒ H 永远不审 ⇒ 论文包没有第三方。
+    这一条不改 `papercompile.compile_paper`（它是纯编译器，判据夹具直调它不建表）；
+    位置在工具层，与 `doc.write_mapping` 的成文门同一条纪律。
     """
     root = _paper_root(workspace, project)
     if not isinstance(root, Path):
         return root
+    # 没有正文就先报 `paper_no_source`（保持原有三态：先看正文，再看登记）。
+    if (root / "out" / "paper" / PC.TEX_NAME).is_file():
+        count, why = _paper_documents_count(workspace, store)
+        if count is None:
+            return fail(
+                (f"论文包的 `documents` 读不出来（{why}）⇒ 这一格没查成、不编译："
+                 "读不到「有没有论文行」就不许把 PDF 当论文包。"),
+                kind="documents_unreadable", project=project)
+        if int(count) <= 0:
+            return fail(
+                ("这份论文还没有 `documents` 行（`doc.build_document` 一次都没成功过）⇒ "
+                 "不编译：没有那一行，H 就没有可审对象，论文包这一环没有第三方。"
+                 "处置：先用 `doc.build_document` 把这份论文落一行（正文、断言、"
+                 "引用一起交），再调 `doc.write_mapping`，最后回来 `doc.paper_compile`。"),
+                kind="paper_not_registered", project=project,
+                documents=0,
+                next_steps=["doc.build_document", "doc.write_mapping", "doc.paper_compile"])
     got = PC.compile_paper(root, timeout_sec=timeout_sec)
     body = {
         "tri": got["tri"], "ok": got["ok"], "reason": got["reason"],
@@ -2811,7 +2872,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                 "additionalProperties": False,
             },
             handler=lambda project, timeout_sec=1800.0: _paper_compile(
-                workspace, project, timeout_sec),
+                workspace, project, timeout_sec, store=store),
             side_effect="write_local",
             declared_external="exec",
             roles=("G",),

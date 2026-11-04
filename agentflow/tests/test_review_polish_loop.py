@@ -33,6 +33,27 @@ AFTER_OLD = "Theorem 1.5 states that the walk converges."
 AFTER_NEW = "Theorem 1.5 states that the walk converges in distribution."
 
 
+def _seed_a_document(root: pathlib.Path) -> None:
+    """论文包要有 `documents` 行（2026-11-04 裁定：没有行 H 就没有审校对象）。"""
+    import json as _json
+
+    from agentflow import schema as _S
+
+    row = {"doc_id": "000000", "kind": "note", "title": "被 polish 的论文稿件行",
+           "markdown_path": "documents/000000.md",
+           "sections": [{"heading": "结论", "body": "正文结论。"}],
+           "claims": [{"claim_id": "claim-1", "text": "正文结论。",
+                       "citations": ["stmt:000000"], "evidence_kind": "heuristic",
+                       "section": "结论"}],
+           "open_problems": [], "status": "accepted", "review_rounds": 0,
+           "review_verdict": "成立", "created_at": "2026-11-04T15:00:00+08:00",
+           "created_by": "agent-G"}
+    path = root / "data" / str(_S.TABLES["documents"]["file"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps({"schema_version": 2, "rows": [row]}, ensure_ascii=False),
+                    encoding="utf-8")
+
+
 def _project(tmp_path: pathlib.Path, monkeypatch) -> tuple[Store, object, pathlib.Path]:
     """一个"正文与回执对得上"的项目 + 角色面上的工具注册表。
 
@@ -46,6 +67,7 @@ def _project(tmp_path: pathlib.Path, monkeypatch) -> tuple[Store, object, pathli
     engine = FX.fake_engine(tmp_path / "_engine")
     monkeypatch.setenv(PC.ENGINE_ENV, str(engine))
     FX.write_paper(tmp_path, BEFORE)
+    _seed_a_document(tmp_path)
     assert PC.compile_paper(tmp_path)["tri"] == "computed", "夹具前提：起手能编出 PDF"
     reg = build_registry(store=st, workspace_root=str(tmp_path)).registry
     return st, reg, out
