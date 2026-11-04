@@ -3273,6 +3273,21 @@ def _l_skills() -> tuple[Skill, ...]:
   （`lean_selfcheck_unusable`）、没有检查器、超时、缺库。它既不是通过、也不是
   "命题可疑"：把原因写清，然后收手（同一条失败别重试第二遍）。
 
+## 登记：跑出 `verified` 之后用 `L.record` 落一行 `method="formal"`
+
+`formalize` 只写盘 + 报三态，**它不登记**。要让这一趟变成"机器核验台账里的一行"，
+用 `L.record`（工具名 `formal.record`）：
+
+- 它按 `statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**
+  检查器，把现跑得到的 `status` / `verified` / `checker` / `output_sha256` 写进那一行；
+  你给的 `status` / `verified` 只是调用方读数、**只用于对账**（与现跑不一致 ⇒
+  受控拒绝 `reading_mismatch`，一行都不写）；
+- 它**不动 `statements`**：形式化 ≠ 审过，命题的等级仍由五元位现算；
+- 这一行是第 4 位（`formal`）的**唯一凭据** —— B 收录那条命题时按 `method="formal"`
+  的行把它翻成 `verified`（`evidencebits.formal_ledger_reading`）。所以
+  `proof_no` / `path_id` / `path_source` 要写对：第 4 位是**二维**的（一条命题的
+  每一份证明各占一格），号写错就是给别人的那一份背书。
+
 ## 开关开着时的那条义务（业主 2026-10-12 的开关；2026-10-22 起归 L）
 
 任务里凡出现「能机器验证的定理」「形式化验证」这类要求，你**至少要真的试一次**：
