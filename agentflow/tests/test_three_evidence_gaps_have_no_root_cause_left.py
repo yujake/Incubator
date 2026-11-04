@@ -13,11 +13,21 @@
 
 | 判据 | 它钉住的事 | 改前红在哪 |
 |---|---|---|
-| a | 命题带证明正文而零依赖 ⇒ 结果里有 `deps_missing`（三态） | 改前返回值里没有这个键（KeyError），0 行是静默的 |
+| a | 命题带证明正文而依赖面没建起来 ⇒ 结果里有 `deps_missing`（三档：`missing` / `not_applicable` / `present`，外加两条受控拒） | 改前返回值里没有这个键（KeyError），0 行是静默的 |
 | b | 验证台账一处真身：文件是正本、同名表不存在（`rows=None` 不是 0）、派生副本分家能被抓；读数面读得到"已签 N 份" | 改前没有 `verifications.ledger_reading`（AttributeError），收工门读数里也没有这一格 |
 | c | 一条命题交 3 份证明 ⇒ `proof_no=1..3`、三条 `path_group`、三份各签；后补的第 4 份也落 `#p4` | 改前只有 #p1 的正文进引用扫描 ⇒ 依赖表只有一条 `used_by="stmt:<号>"`、`path_group=1`，`#p2` 起的依赖面一条都没有 |
 | d | 反真空：把 a 的护栏打桩成空 ⇒ a 必红；把 b 的"两面一致"打桩成恒相等 ⇒ b 必红 | 判据若没接在这两根线上，打桩不会让它变 |
 | e | 用 sylow3 的三条命题做只读夹具复算：① 与 ③ 的读数在改后各自怎么出现 | 无（它是 a/b/c 的真机读数面） |
+
+## 2026-11-04（业主裁定：`missing` 钉在只读预览层，不退役）
+
+`missing`（作者没写依赖段）与 `not_applicable`（这份证明本来就自足）是两件事。
+B 那一侧对"正文引了在册命题、而稿里没有 `## 依赖` 段"整笔拒
+`dependency_section_missing`（没有那一段就没有依赖边可落）—— 那是对的；但读数层
+不该跟着把这一档删掉，否则再也说不清"这份稿为什么进不来"。所以判据 a 的 `missing`
+读的是只读预览层（`depsection.deps_missing_reading` 的直调，该函数 docstring 写明
+这一档"留给只读预览与别的调用方"），`_a_holds` 原样套在它返回的 dict 上；
+B 那一侧同一形态另有一条独立的拒收判据。三档一档不少，每档带反真空。
 
 e 只读 `projects/sylow3`（工作区已结束）：不写、不删、不改它的任何字节，
 读不到就 skip（"没查成"不是"没有缺口"）。
@@ -34,6 +44,7 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import secretary as SEC
@@ -41,7 +52,7 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
-from conftest import seed_statement_row, sign_before_registration
+from conftest import seed_statement_row
 
 #: 真机夹具（只读）。用例在这一棵树不存在时 skip，不去凭空造一份"像 sylow3"的东西。
 SYLOW3 = pathlib.Path(__file__).resolve().parents[1] / "projects" / "sylow3"
@@ -130,17 +141,6 @@ def _seed(store: Store, *, full: str, proof_text: str,
     return {"ok": True, "stmt_id": str(seeded["stmt_id"]), "new_row": True}
 
 
-def _register_after_pending_sign(store: Store, full: str, proof_text: str) -> dict:
-    """V 先审、B 再收录（单份散文证明的合法次序；`deps_missing` 由真登记那一笔给出）。
-
-    2026-11-02 准入闸 strict：无签的证明正文写不进去，而这一格要读的正是
-    "带证明正文却零依赖"时返回值里那一句。pending 那一签按正文 sha 认领
-    （`verifications.record_pending_sign` 的真写口），不是放宽闸。
-    """
-    sign_before_registration(store.root, proof_text=proof_text)
-    return _agent(store).register_statement(**own(full), proof_text=proof_text)
-
-
 def _promote_to_proof_review(store: Store, stmt_id: str, proof_text: str) -> None:
     """把一条在册命题抬到 `proof_review`（先落 V 的签，再改档位 —— 顺序不许反）。
 
@@ -215,47 +215,151 @@ def _a_holds(out: dict) -> bool:
             and bool(str(got.get("next_step") or "").strip()))
 
 
+#: 手稿正文（夹具）：三节里只有「命题」「证明」，没有 `## 依赖` 那一节。
+#: 这是"作者没写依赖段"的形状本身 —— B 对它是整笔拒（`dependency_section_missing`），
+#: 而读数层必须能把这件事说出来（`missing`）。
+def _manuscript_missing_dependency_section(body: str) -> str:
+    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n\n"
+            "## 命题\n\n（夹具命题）\n\n"
+            f"## 证明\n\n{body}\n\n")
+
+
+#: 手稿正文（夹具）：`## 依赖` 是空表（表头在、0 行）—— 这是合法的"自足"声明。
+def _manuscript_empty_dependency_table(body: str) -> str:
+    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n\n"
+            "## 命题\n\n（夹具命题）\n\n"
+            f"## 证明\n\n{body}\n\n"
+            "## 依赖\n\n"
+            "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+            "|---|---|---|---|\n\n"
+            "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
+
+
+def _read_only_deps_reading(body: str, *, manuscript: str = "",
+                            deps_written: int = 0) -> dict:
+    """只读预览层的依赖面读数（`depsection.deps_missing_reading` 的直调）。
+
+    2026-11-04（业主裁定：`missing` 钉在只读预览层，不退役）：
+    B 那一侧对"正文引了在册命题、而稿里没有 `## 依赖` 段"整笔拒
+    `dependency_section_missing` —— 那一侧必须拒（没有依赖段就没有依赖边可落）。
+    但读数层不该跟着把这一档删掉：删了就再也说不清"这份稿为什么进不来"。
+    该函数自己的 docstring 写的正是"这一档读数留给只读预览与别的调用方"，
+    所以这一档在这里读（`section` 就是那份稿的 `## 依赖` 段 `parse_dependency_section`
+    的原始形状；`deps_written` 由调用方给 —— 预览时是 0）。
+    """
+    text = manuscript or _manuscript_missing_dependency_section(body)
+    section = DS.parse_dependency_section(text)
+    refs = DS.stmt_refs(body)
+    return DS.deps_missing_reading(
+        proof_text=body, deps_written=int(deps_written), derived_from=refs,
+        refs=len(refs), section=section)
+
+
+
 @pytest.mark.usefixtures("signed_v_handoffs")
 def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
-    """判据 a：带证明正文而依赖 0 行 ⇒ 结果里出现 `deps_missing`（三态，逐档分开）。
+    """判据 a：带证明正文而依赖面没建起来 ⇒ 读数要按三档说出来，拒绝也要被解释。
 
     真机读数（sylow3）：七条命题各带 2700 到 6300 字证明，`dependencies` 全表 0 行，
     而返回值里只有 `deps_written=0` —— 没有任何一格因为这件事变红。
 
-    这里三档一起钉：
-    - 自足证明（扫了、确实是空）⇒ `state=missing`；
-    - 依赖信息在 `derived_from` 上而无依赖行 ⇒ 同一档，但 `derived_from` 原样交回；
-    - 真落了依赖 ⇒ `state=present`；
-    - 没有证明正文（概念行）⇒ `state=not_applicable`（三档不许折平）。
+    2026-11-04（业主裁定：`missing` 钉在只读预览层，不退役；B 那一侧照旧整笔拒）。
+    三档 + 两条拒，逐档钉，每档旁边带反真空（把形态换一格，读数必须换）：
+    - `missing`：正文引了在册命题，而稿里没有 `## 依赖` 段（"作者没写依赖段"）——
+      在只读预览层读（`_read_only_deps_reading`）；`_a_holds` 原样套在那份 dict 上；
+    - `missing`（第二形态）：同一段正文 + 稿里是一张空表（说辞与表打架）——预览层
+      同样读 `missing`，`derived_from` 点名被引的那一条；
+    - `not_applicable`：稿的 `## 依赖` 是空表 + 正文零引用（自足，不是"缺依赖"）；
+    - `present`：正文引了、稿里也登记了 ⇒ 依赖落成；
+    - 拒 ①：missing 的同一形态交 B ⇒ `dependency_section_missing`（零写入）；
+    - 拒 ②：稿的表点名一条不在册的号 ⇒ `dependency_source_not_registered`。
     """
     st = _ws(tmp_path, "a")
     b = _agent(st)
 
-    lone = b.register_statement(**own("孤命题：证明里一条在册引用都没有。"),
-                                proof_text="证明：由定义与假设直接计算，不引用任何在册命题。")
+    # ① 自足（空表 + 零引用）⇒ not_applicable；"扫了、确实是空"看 deps_state
+    lone_body = "证明：由定义与假设直接计算，不引用任何在册命题。"
+    lone = b.register_statement(
+        **own("孤命题：证明里一条在册引用都没有。"),
+        proof_text=lone_body,
+        proof_manuscript=_manuscript_empty_dependency_table(lone_body))
     assert lone.get("ok") is True, lone
-    assert _a_holds(lone), lone
-    got = dict(lone["deps_missing"])
-    assert got["derived_from"] == [], got
+    lone_reading = dict(lone.get("deps_missing") or {})
+    assert lone_reading.get("state") == SEC.DEPS_MISSING_NOT_APPLICABLE, lone
+    assert lone_reading.get("derived_from") == [], lone_reading
     # "扫了、确实是空"与"没扫"必须分开：扫描的三态还在（`none_in_proof`）。
     assert lone.get("deps_state") == "none_in_proof", lone
+    assert int(lone.get("deps_written") or 0) == 0, lone
 
-    # 依赖信息其实在盘上的另一处（命题行的 `derived_from`）⇒ 这一档要点名它去了哪儿
+    # 上下文引理 C（在册）
     ctx = b.register_statement(**own("上下文引理 C：用来被引用的那一条。"),
                                proof_text="证明：略。")
     assert ctx.get("ok") is True, ctx
     cid = str(ctx["stmt_id"])
-    with_ctx = b.register_statement(
-        **own("命题 D：证明里点名了上下文引理 C，而正文没有任何带前缀的引用。"),
-        proof_text="证明：由上述上下文引理直接推出（正文里没有写 stmt: 前缀）。",
-        derived_from=[cid])
-    assert with_ctx.get("ok") is True, with_ctx
-    missed = dict(with_ctx["deps_missing"])
-    assert missed["state"] == SEC.DEPS_MISSING_ABSENT, with_ctx
-    assert missed["derived_from"] == [cid], missed
-    assert "derived_from" in missed["why"], missed
 
-    # 正控：真引用了在册的号 ⇒ 依赖落成，`state=present`（护栏不是"凡带证明就报缺"）
+    # ② 只读预览层：正文引在册 C + 稿缺 `## 依赖` 段 ⇒ missing（why / next_step 都在）
+    missing_body = f"证明：由 stmt:{cid} 直接推出。"
+    missing = _read_only_deps_reading(missing_body)
+    assert missing.get("state") == SEC.DEPS_MISSING_ABSENT, missing
+    assert _a_holds({"deps_missing": missing, "deps_written": 0}), missing
+    assert int(missing.get("proof_chars") or 0) > 0, missing
+    assert str(missing.get("why") or "").strip(), missing
+    assert str(missing.get("next_step") or "").strip(), missing
+    # 反真空：同一段正文、稿里补上一张空表（段在）且依赖真落了 ⇒ present（不是恒 missing）
+    wrote = _read_only_deps_reading(
+        missing_body, manuscript=_manuscript_empty_dependency_table(missing_body),
+        deps_written=1)
+    assert wrote.get("state") == SEC.DEPS_MISSING_PRESENT, wrote
+    # 反真空：正文零引用 ⇒ 自足档（not_applicable），不是 missing
+    quiet = _read_only_deps_reading("证明：由定义直接得到，不引用任何在册命题。")
+    assert quiet.get("state") == SEC.DEPS_MISSING_NOT_APPLICABLE, quiet
+    # 反真空：`_a_holds` 的每一格都真的被读（逐格拧掉 ⇒ 必红）
+    for knob, value in (("why", ""), ("next_step", ""), ("proof_chars", 0)):
+        broken = dict(missing, **{knob: value})
+        assert not _a_holds({"deps_missing": broken, "deps_written": 0}), (knob, broken)
+    assert not _a_holds({"deps_missing": missing, "deps_written": 1}), missing
+
+    # ③ missing 的第二形态（说辞与表打架）：同一段正文 + 空表、预览时 deps_written=0
+    #    ⇒ 同一档 missing，`derived_from` 原样交回（旧 `:254-256` 那两条断言落在这里）。
+    #    注意：真交给 B 时秘书的正文扫描会把那条边写进去（deps_written=1）⇒ B 读成
+    #    `present`（见 ④）—— 这正是"读数层解释拒绝、写库层不许静默"的分工。
+    conflicts = _read_only_deps_reading(
+        missing_body, manuscript=_manuscript_empty_dependency_table(missing_body))
+    assert conflicts.get("state") == SEC.DEPS_MISSING_ABSENT, conflicts
+    assert _a_holds({"deps_missing": conflicts, "deps_written": 0}), conflicts
+    assert conflicts.get("derived_from") == [cid], conflicts
+    assert "derived_from" in str(conflicts.get("why") or ""), conflicts
+    # 反真空：同一张空表 + 正文换成零引用 ⇒ 这一档变成 not_applicable（不是 missing）
+    conflicts_quiet = _read_only_deps_reading(
+        "证明：由定义直接得到，不引用任何在册命题。",
+        manuscript=_manuscript_empty_dependency_table(
+            "证明：由定义直接得到，不引用任何在册命题。"))
+    assert conflicts_quiet.get("state") == SEC.DEPS_MISSING_NOT_APPLICABLE, conflicts_quiet
+
+    # ④ 同一形态交给 B ⇒ 整笔拒 `dependency_section_missing`（拒信要指回缺的那一节）
+    before_statements = len(st.rows("statements"))
+    before_deps = [dict(r) for r in st.rows("dependencies")]
+    refused = b.register_statement(
+        **own("命题 D：引了在册命题，而手稿里没有依赖段。"),
+        proof_text=missing_body,
+        proof_manuscript=_manuscript_missing_dependency_section(missing_body))
+    assert refused.get("ok") is False, refused
+    assert refused.get("kind") == DS.REFUSED_SECTION_MISSING, refused
+    err = str(refused.get("error") or "")
+    assert f"stmt:{cid}" in err and "依赖" in err, err
+    assert len(st.rows("statements")) == before_statements, st.rows("statements")
+    assert [dict(r) for r in st.rows("dependencies")] == before_deps
+    # 反真空（拒 ↔ 收）：同一份"没有依赖段"的稿、正文换成零引用 ⇒ 照常入库
+    accepted = b.register_statement(
+        **own("命题 D2：稿里没有依赖段，但正文也零引用。"),
+        proof_text="证明：由定义直接得到，不引用任何在册命题。",
+        proof_manuscript=_manuscript_missing_dependency_section(
+            "证明：由定义直接得到，不引用任何在册命题。"))
+    assert accepted.get("ok") is True, accepted
+    assert (accepted.get("deps_missing") or {}).get("state") == (
+        SEC.DEPS_MISSING_NOT_APPLICABLE), accepted
+
+    # ⑤ 正控：真引用了在册的号、稿里也登记 ⇒ 依赖落成，`state=present`
     _promote_to_proof_review(st, cid, "证明：略。")
     cited = b.register_statement(
         **own("命题 E：证明里引用了上下文引理 C。"),
@@ -264,17 +368,30 @@ def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
         # 否则整笔拒收 —— 这里按 F 的手稿格式把那一节递进来。
         proof_manuscript=_proof_manuscript([(cid, "由上下文引理 C，结论直接得到", 1)]))
     assert cited.get("ok") is True, cited
-    assert (cited["deps_missing"] or {}).get("state") == SEC.DEPS_MISSING_PRESENT, cited
+    cited_reading = dict(cited.get("deps_missing") or {})
+    assert cited_reading.get("state") == SEC.DEPS_MISSING_PRESENT, cited
     assert int(cited.get("deps_written") or 0) >= 1, cited
+    assert cited_reading.get("derived_from") == [cid], cited_reading
 
-    # 三态不许折平：还没有证明正文的那一笔 ⇒ 不适用（不是"缺依赖"，也不是"零依赖"）
+    # ⑥ 拒 ②：稿的依赖表点名一条不在册的号 ⇒ dependency_source_not_registered
+    unknown = "000098"
+    ghost = b.register_statement(
+        **own("命题 G：稿的依赖表点名了一条不在册的命题。"),
+        proof_text=f"证明：由 stmt:{unknown} 直接推出。",
+        proof_manuscript=_proof_manuscript([(unknown, "某条不存在的引理", 1)]))
+    assert ghost.get("ok") is False, ghost
+    assert ghost.get("kind") == DS.REFUSED_UNKNOWN_SOURCE, ghost
+    assert unknown in str(ghost.get("error") or ""), ghost
+
+    # ⑦ 还没有证明正文 ⇒ not_applicable（不是"缺依赖"，也不是"零依赖"）
     pending = b.register_statement(**own("命题 F：证明还没写。"))
     assert pending.get("ok") is True, pending
-    missing_state = (pending.get("deps_missing") or {})
-    assert missing_state.get("state") == SEC.DEPS_MISSING_NOT_APPLICABLE, pending
-    assert missing_state.get("proof_chars") == 0, pending
-    states = {(lone["deps_missing"])["state"], (pending["deps_missing"])["state"],
-              (cited["deps_missing"])["state"]}
+    pending_reading = dict(pending.get("deps_missing") or {})
+    assert pending_reading.get("state") == SEC.DEPS_MISSING_NOT_APPLICABLE, pending
+    assert pending_reading.get("proof_chars") == 0, pending
+
+    # 三档不许折平（missing 取自只读预览层那一份 —— 同一份正文的读数）
+    states = {lone_reading["state"], missing["state"], cited_reading["state"]}
     assert len(states) == 3, f"三档被折平了：{sorted(states)}"
 
 
@@ -459,20 +576,19 @@ def test_d_anti_vacuum_both_guards_are_load_bearing(tmp_path, monkeypatch):
 
     两半都要先证明"正控是绿的"，再打桩；否则这一条测的是桩本身。
     """
-    # ---- 正控（a）：真护栏下，孤命题这一笔是"说出来了"的
-    st_a = _ws(tmp_path, "da")
-    lone = _register_after_pending_sign(
-        st_a, "孤命题：证明里一条在册引用都没有。",
-        "证明：由定义与假设直接计算，不引用任何在册命题。")
-    assert _a_holds(lone), lone
+    # ---- 正控（a）：真读数下，`missing` 那一档是"说出来了"的
+    #
+    # 2026-11-04（业主裁定：`missing` 钉在只读预览层）：这一档的形态是"正文引了在册
+    # 命题、而稿里没有 `## 依赖` 段"。B 那一侧同一形态整笔拒（见判据 a 的 ④），
+    # 所以正控读的是只读预览层那一份 dict —— 判据函数 `_a_holds` 原样套上去。
+    miss_body = "证明：由 stmt:000098 直接推出。"
+    missing = _read_only_deps_reading(miss_body)
+    assert _a_holds({"deps_missing": missing, "deps_written": 0}), missing
 
     # 打桩：把读数函数换成空字典（= 改前那一格根本不存在）
     monkeypatch.setattr(SEC, "_deps_missing_reading", lambda **kw: {})
-    st_a2 = _ws(tmp_path, "da2")
-    stubbed = _register_after_pending_sign(
-        st_a2, "孤命题：证明里一条在册引用都没有。",
-        "证明：由定义与假设直接计算，不引用任何在册命题。")
-    assert not _a_holds(stubbed), (
+    stubbed = _read_only_deps_reading(miss_body)
+    assert not _a_holds({"deps_missing": stubbed, "deps_written": 0}), (
         "把 `deps_missing` 的读数打桩成空之后判据 a 还是绿的 ⇒ a 没接在那根线上")
 
     # ---- 正控（b）：真口径下，文件 6 行 vs 派生副本 0 行是"分家"
