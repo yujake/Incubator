@@ -1369,7 +1369,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
 
     工作区相对路径。给了它就把这一格写进台账行（条件写入 ⇒ 老行逐字节不变）；
     :func:`sign_statement` 翻位时从行上读它、交给 :func:`_vsigns_write_after_flip`，
-    于是 `vsigns.land` 把签块盖回**送审方点名的那一份稿**，而不是按约定路径扫盘猜一份。
+    于是 `vsigns.land` 把签块盖回送审方点名的那一份稿，而不是按约定路径扫盘猜一份。
     未在册那一支不走这里（它落 `verifications/pending/<sha>.jsonl`，手稿由
     `Secretary.land_unregistered_sign` 落）。
 
