@@ -1220,6 +1220,10 @@ def _h_skills() -> tuple[Skill, ...]:
 所以"报告在哪"不用猜，读 `report_path` 就行。它需要的轮次参数是**关键字** `round_no`
 （位置传会报 `takes 2 positional arguments but 3 were given`）。
 
+`own_errors` **必填**：没有自身错误就交 `[]` 显式零错误（读数
+`own_errors_registered=True` / `own_error_count=0`）；不传会被退回 ——
+"没写"不等于"没犯错"，G15 的判据就是"缺失则退回"。
+
 ## 复核修法
 
 别人说"改了"，用 `H.verify_fixes` 逐条核**改没改对**，而不是重头再审一遍。
