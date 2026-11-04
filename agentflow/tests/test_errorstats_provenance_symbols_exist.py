@@ -117,7 +117,7 @@ def _function_node(rel: str, name: str) -> ast.AST | None:
 
 
 def _emitted_names(node: ast.AST) -> set[str]:
-    """函数体里**会被执行到**的名字与字符串字面量。
+    """函数体里会被执行到的名字与字符串字面量。
 
     刻意走 AST 而不是读源码文本：注释不在 AST 里。改前的错法正是"码只出现在
     `_check_acceptance` 的一句注释里"（真正的产出点在 `_check_mapping`），
@@ -143,12 +143,12 @@ def test_a_closing_code_row_names_the_function_that_emits_it() -> None:
     改前真身在 `_check_mapping`：`Finding("mapping", MAPPING_NOT_WRITTEN_CODE, …)`。
 
     口径边界（如实写在这里，免得下一个人把命中数当精确值）：
-    - 只核出处**点名函数**的那些行（`closing.py::_check_*` 与 `check_closing`）；
+    - 只核出处点名函数的那些行（`closing.py::_check_*` 与 `check_closing`）；
       其余行的出处写的是常量 / 类 / 字段名（如 `RUN_EVIDENCE_UNBACKED_CODE`），
       那几行的"产出点"是常量本身，由第 3 条核存在性；
     - 码由常量产出时，函数体里出现的是常量名而不是字面量 ⇒ 出处括注的那个
       常量名也算命中（`（MAPPING_NOT_WRITTEN_CODE）` 这一档）；
-    - 只看 AST（会被执行到的字面量与名字），**注释不算** —— 按文本 grep 会被
+    - 只看 AST（会被执行到的字面量与名字），注释不算 —— 按文本 grep 会被
       "只在注释里提过这个码"骗过（本判据第一版实测）。
     """
     bad: list[str] = []
