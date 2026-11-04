@@ -276,15 +276,15 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "① 把这一版按 kind=\"conjecture\" 再交一次（同一 statement_full + 新 proof_text）："
             "正文上盘、旧正文进 proof_history；"
             f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1)"
-            "（不传 proof_text，读盘上新正文）连判 3 次干净成立 ⇒ 秘书发签 "
+            "（不传 proof_text，读盘上新正文）审这一份 ⇒ 签到位后签文件落在 "
             "out/vsigns/<新正文sha>.json，kind 会自动抬成 theorem；不必再交一次登记。"
             "禁令：不许拿别的命题的签来顶，也不许绕开 V 当定理用。")
     if state == "unsigned":
         return (
             f"{head}在 V 的台账里一次都没签过 ⇒ 整笔不写。"
             f"建议：请拿 V 签 —— 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", "
-            "proof_no=1)（不传 proof_text，读盘上这一份）连判 3 次干净成立 ⇒ "
-            "秘书发签 out/vsigns/<正文sha>.json，kind 会自动抬成 theorem。"
+            "proof_no=1)（不传 proof_text，读盘上这一份）审这一份 ⇒ 签到位后"
+            "签文件落在 out/vsigns/<正文sha>.json，kind 会自动抬成 theorem。"
             "这一版已经在盘上，不必再按 kind=\"conjecture\" 交一次。"
             "禁令：不许绕开 V 直接当定理用。")
     if state == "rejected":
@@ -295,13 +295,10 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) 重审。"
             "禁令：原样重送不会改变结论；签的还是这份正文。")
     if state == "holding":
-        got = int(streak or 0)
-        want = int(need or 0) or int(_VR.SIGN_STREAK_NEED)
         return (
-            f"{head}已经连续「成立」{got}/{want} 次，还不够发签 ⇒ 整笔不写。"
+            f"{head}的签还没到位（V 判过「成立」，但这一版正文上还没有签块）⇒ 整笔不写。"
             f"建议：再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1) "
-            "审够次数（第 1、2 次只落台账、不翻位；够次数那一次秘书发签）—— "
-            "不必改稿、不必再交登记。")
+            "审这一份，签到位后签块由收方秘书落回稿 —— 不必改稿、不必再交登记。")
     return (
         f"{head}在 V 的台账里查不到能签住它的那一签，而这一格没查成 "
         f"（{why[:120] if why else '台账读不出来'}）⇒ 整笔不写。"
@@ -940,8 +937,7 @@ class _RegisterStatement:
                         + "。业主 2026-11-03 的口径是「优化后拿V签，用有V签的优化后的"
                         "证明精准替换原证明」—— 没有签的正文不许盖掉在册那一份，也不许"
                         "打 `optimized=true`。两条出路：① 让 V 先签这一份新正文"
-                        "（`V.verify_proof` 带 `statement_id` + `proof_no`，连续 "
-                        f"{int(getattr(_VR, 'SIGN_STREAK_NEED', 3) or 3)} 次「成立」）；"
+                        "（`V.verify_proof` 带 `statement_id` + `proof_no`，签到位后再来替换）；"
                         "② 确实只是改稿、不是优化替换 ⇒ 仍要一份覆盖新正文的签"
                         "（改稿要重签是既有口径）。盘上正文一个字都没动"
                         "（`proof_text` 仍是旧那一份，`proof_history` 也没有多一条）。")
@@ -1162,7 +1158,7 @@ class _RegisterStatement:
             "不许再出现 proofs=0 绕行」—— 判据是这份正文有没有签，与 kind（猜想不是"
             "免签通行证）、与来源（param / carried_by_D / disk / 进程内直交）都无关。"
             "三条出路：① F 先拿签（F 用 `summon` V 的 `verify.verify_proof`，"
-            "带 `proof_manuscript`；三转成立后签落回稿，再交来入库）；"
+            "带 `proof_manuscript`；签到位后签落回稿，再交来入库）；"
             "② B 自己把这一份送 V（`V.verify_proof` 带 `statement_id` + `proof_no`），"
             "拿到「成立」再交；③ 这一条是文献来的 ⇒ 按 `origin=\"external_lit\"` + "
             "`source_lit_id` 登记（V 签位填文献编号 = 占位签，允许入台账）。"
@@ -2120,7 +2116,7 @@ class _RegisterStatement:
                 source = str(manuscript_source or "").strip()
                 if source in (_DS.SOURCE_CARRIED, _DS.SOURCE_DISK):
                     suggestion = ("请 F 先拿 V 签：F 用 `summon` V 的 `verify.verify_proof`"
-                                  "（带 `proof_manuscript`）；三转成立后由收方秘书 "
+                                  "（带 `proof_manuscript`）；签到位后由收方秘书 "
                                   "`vsigns.land(by=\"secretary:F\")` 把签落回稿，拿到签再把"
                                   "这一份交来入库（B 不改写无签的证明）")
                     return _refuse(
