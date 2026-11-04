@@ -3129,7 +3129,42 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 一份 golden 重冻（`tests/golden/agent_surface_snapshot.json` 的 G 格 prompt；
 #: `tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json` 不动）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
-PROMPT_VERSION = "p238"
+#: `p239`（2026-11-04 今晚最后一次冻结：p238 之后五条 lane 的提示词 / 工具面改动一次对齐）：
+#: 十一格全换。共用段那一条是全局的 —— `HANDOFF_PROTOCOL` 的首提从「交接手稿（交接工作前的
+#: 标准动作…）」改成「交接手稿（handoff；交接工作前的标准动作…）」（`347d6267` 的命名裁定：
+#: 交接手稿 handoff 与证明稿 proof manuscript 是两个东西，六处首提都要点族名）⇒ 十一格各换一次。
+#: 另外五格各自的改动：
+#: ① B（`3bb87297` / `4e43a81b`）：三件式的证明正文载体改成手稿（`proof_manuscript`，在册也给稿）；
+#:    「逐份交稿」替代内联 `proofs=[...]`（`#p1` / `#p2`… 按稿登记）；`register_statement` 的
+#:    说明把「`proof_text` 可缺」改成「没有稿不拒收：落最低等级并进待办」。
+#: ② F（`4e43a81b`）：派 V 审的是**那一份证明稿**（`proof_manuscript` 一律给，在册也给）；
+#:    中间结论「正文走手稿」（`F.step` 落 `reports/f-proof-<命题号>.md`，B 读稿登记）；
+#:    多证明每份各自落稿（`- 证明号：<N>`）。
+#: ③ G / H / M（`7970eacc` / `4e43a81b`）：`PAPER_PACK` 的 `proof_review` 档改成「正文由 B 从
+#:    手稿收进 `proof_text`，V 带 `proof_manuscript` 审」；「形式化已关闭」那一档的交付形状
+#:    同步改成「证明过程先落成手稿（F/E/B 三种命名的 `*-proof-*.md`），再派 V 带稿走查」。
+#:    G 另加 `7970eacc` 的 ⓪ 步：先 `doc.build_document` 落一行 `documents`，否则
+#:    `doc.paper_compile` 受控拒绝 `paper_not_registered`；M 另加 `347d6267` 的
+#:    「交接工作前先写一份**交接手稿**（handoff 形状）」措辞。
+#: ④ V（`b2f39f05` / `347d6267`）：policy 新增「在册命题只经手稿过审」——带 `statement_id`
+#:    必须给 `proof_manuscript`，只给内联 `proof_text` 受控拒绝 `proof_text_needs_a_manuscript`；
+#:    未在册那一档可以只给正文（只给「看过、没签」读数，不签发）。`verify_proof` 的 summary
+#:    与 spec 的 action 说明同步。
+#: ⑤ A / C / D / E / L 五格**没有自己的改动**，只随共用段那条 handoff 重命名各换一次。
+#:
+#: 变化格 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']（十一格全换；原因是共用段）。
+#: 逐格旧值 → 新值（p238 → p239；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   A e8be2e68→4cb3a8cc / B 8a9a5f98→4d4b9182 / C 395a6def→81d3f27a /
+#:   D d72edfac→67112d39 / E ce0984eb→b286172d / F 76657779→df5f7909 /
+#:   G 9dd228d8→5275d24f / H ba7efe69→5673c870 / L 8cb3e956→0c32f9cd /
+#:   M 8807868b→be33fa21 / V 2403f0f1→aef2f211。
+#: 十一格是 `temp/_p239_recompute.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p239）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 三份冻结物重冻（agent 面十一格 prompt、tool 面、`tool_declaration_baseline.json`）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
+PROMPT_VERSION = "p239"
 
 
 

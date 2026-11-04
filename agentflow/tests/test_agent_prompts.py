@@ -1385,7 +1385,7 @@ def test_availability_section_lists_states_and_marks_unwired_partners(registry: 
 _ANCHOR_KINDS: dict[str, tuple[str, ...]] = {
     "身份": ("号角色，职责是：",),                      # `AGENT_IDENTITY`
     "上报": ("干不了 / 干不着就上报",),                 # `PARENT_STOP`（十个角色都有）
-    "交接": ("交接手稿（交接工作前的标准动作",),         # `HANDOFF_PROTOCOL`
+    "交接": ("交接手稿（handoff；交接工作前的标准动作",),  # `HANDOFF_PROTOCOL`
 }
 #: 「边界」不能只认抬头那一行：`brief_sections` 在 `boundary=()` 时只印抬头
 #: （实测：`'边界（这些是硬约束，越过它们做的事一律不算数）：\n'`）—— 只认抬头的话，
@@ -1458,7 +1458,7 @@ def test_deleting_a_safety_clause_makes_the_anchor_criterion_red(
     assert _missing_anchors(_prompt(victim, registry)) == []
     # ② 交接：把那份协议换成一份块数相同（2 块，`_block_sections` 按空行切、
     # 块数与 `_HANDOFF_BLOCK_NAMES` 不等会当场抛）但没有那句锚的正文 —— 于是
-    # "交接手稿（交接工作前的标准动作" 不再出现，而提示词其余部分照常渲染。
+    # "交接手稿（handoff；交接工作前的标准动作" 不再出现，而提示词其余部分照常渲染。
     monkeypatch.setattr(AP, "HANDOFF_PROTOCOL",
                         "交接（探针）：锚点那一句被删掉了。\n\n规则（探针）：照旧。\n\n")
     assert _missing_anchors(_prompt(victim, registry)) == ["交接"], (
@@ -2222,7 +2222,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p238"
+_FROZEN_PROMPT_VERSION = "p239"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2449,17 +2449,17 @@ _FROZEN_PROMPT_VERSION = "p238"
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "e8be2e68c8253860d3351a18ad9fe60734da7516dce4df0b152a29c63d5596e4",
-    "B": "8a9a5f98fb90ee9d84e8213676072eec01fb554f69c73fef41f0e789d121302f",
-    "C": "395a6def3ca3e0ab261dbab7f895161e5b16b67df1e8fb7bf684d58321d4eaea",
-    "D": "d72edfac6fd7079bc1a758b8c8ae8adb28b3cef2c1956476d40e98194c7140e7",
-    "E": "ce0984eb17d8bde20ec2b469ca22288404768628cbedb46badc1c71da6f5c6f9",
-    "F": "766577794c101e03a765dde5bc00d610b69e4b7e5d2eba6691b5bfc742c5ef3b",
-    "G": "9dd228d81ca83fbdfeca27b064e8490e85f83c5d22b166a23a4252cb01b84894",
-    "H": "ba7efe69881fa9f9053912186d7919bd7d48976333ebfb6461f83732fbf9cceb",
-    "L": "8cb3e956d80b6c5a6280ce0f4d116aff2c1063054a24d010a5cb834a09dce535",
-    "M": "8807868bcbd6934364e501362f36a8070081591fcca119988772b943d5cd456c",
-    "V": "2403f0f1f2a1d23ed8af32472154c09d7c4dbf53211c037693e12ecd74b52e41",
+    "A": "4cb3a8cc77d429d8787b5fda15b6b9599d8aa85d1d36a01532fcd311213db40c",
+    "B": "4d4b9182f08f6f14ba228b2e76128311f6b594dd12e8e58789ccd92fbe2eda00",
+    "C": "81d3f27a9213d2b146c1541953dcfe61a9954041a539457205d5aa11fa029915",
+    "D": "67112d3941ee80bb1ba72e434b9e35ed8ef46be8d58bd64d0cea0689a3aeb904",
+    "E": "b286172d6f1d0b253e8817c7459481eadd78110eba64d9f6beb15e8b64661a4d",
+    "F": "df5f79095ade6a9872b3d912dbd7ac9c0a1e8799a3a7e1a581d36faffea4680f",
+    "G": "5275d24fa308e0f67003576c84968151ef8f10a36deec8b8d079c51c7dc40cb0",
+    "H": "5673c8706b501211e7ecba996e676cb688edf064cfc1fa75face0d5a691657f4",
+    "L": "0c32f9cd738e6b1f0c0065b488a20b34c77434a56b2180d7339d22e5ecd17828",
+    "M": "be33fa21272854fbfe18f3d72c9addefaecbde4f0a99fb756da556ad289e80bd",
+    "V": "aef2f211e1a9f7cc6d98ec56bcf7ea17daaeb3d23f56bef50f19180f6ea7ddf0",
 }
 
 
