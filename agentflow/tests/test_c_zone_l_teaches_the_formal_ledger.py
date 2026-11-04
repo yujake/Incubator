@@ -3,7 +3,7 @@
 
 ## 缺的是什么（2026-11-04 审 C 区）
 
-L 落 `experiments`（`method="formal"`）之后，是 **B 把它读成第 4 位**的：
+L 落 `experiments`（`method="formal"`）之后，是 B 把它读成第 4 位的：
 `agent_b/register_statement.py` 的 `_bits_with_formal`（:545）调
 `evidencebits.formal_ledger_reading`（:534 的注释逐字：「只认绑到这条命题的
 `method="formal"` 行」），写出 `bits.formal`（二维 `{证明号: 状态}`）与
