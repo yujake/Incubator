@@ -2865,8 +2865,10 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                 "numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填："
                 "缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 "
                 "problems 并让 state 落到 fail（工具随之 ok=False）；"
-                "lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ "
-                "on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ "
+                "lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— 空通道两格"
+                "必须空，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ "
+                "on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格"
+                "仍按通道判）/ "
                 "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"
                 "json / md / appendix 是三个落点的绝对路径；"
                 # 2026-10-28 成文门（业主口径「G 只能用研究产出」）：失败要多两格 ——
