@@ -1614,8 +1614,9 @@ class AgentV:
         ## 拒信要指路（不暗示"补个正文就行"）
 
         `proof_text` 不是缺的那一格：缺的是载体。所以 detail 说三件事 ——
-        签块 / `## 依赖` / 按号寻址都只在文件上；落一份稿（`reports/…` 或 `notes/…`
-        皆可，必须是盘上那一份文件）；再来。一个字节都不审、不落。
+        签块 / `## 依赖` / 按号寻址都只在文件上；落一份稿（只收
+        `reports/{f,e,b}-proof-<号>.md`，按号命名是硬条件；`notes/…` 先走转正）；再来。
+        一个字节都不审、不落。
         """
         if str(manuscript or "").strip():
             return None
@@ -1630,12 +1631,12 @@ class AgentV:
             "detail": (
                 f"命题 {sid} 已登记，而{why} ⇒ 不审、不落签。在册命题也要手稿："
                 "签要落在稿上（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、"
-                "稿要能被按号寻址（`reports/f-proof-<号>.md`）—— 内联正文这三样都做不到，"
-                "所以它不能单独过审。处置：先落一份稿（工作区相对路径；约定命名 "
-                "`reports/f-proof-<号>.md`，`notes/…` 等别的相对路径也收，只要它是盘上"
-                "那一份文件），三节按 `## 命题` / `## 证明` / `## 依赖` 写；写完再带 "
-                "`proof_manuscript=<那个路径>` 送审。这一趟的正文不必再传：V 从稿里取那"
-                "一段（参数里同时给 `proof_text` 只作对 sha 的核对）。"
+                "稿要能被按号寻址（`reports/{f,e,b}-proof-<号>.md`）—— 内联正文这三样都"
+                "做不到，所以它不能单独过审。处置：先落一份按号命名的稿（"
+                "`reports/f-proof-<号>.md`；`notes/…` 这种认不出裸稿号的稿先走转正，"
+                "落成按号命名的那一份），三节按 `## 命题` / `## 证明` / `## 依赖` 写；"
+                "写完再带 `proof_manuscript=<那个路径>` 送审。这一趟的正文不必再传："
+                "V 从稿里取那一段（参数里同时给 `proof_text` 只作对 sha 的核对）。"
             ),
         }
 
@@ -1647,16 +1648,19 @@ class AgentV:
         取 `## 证明`、与参数给的正文对 sha。两处各写一遍必然漂，而漂的那一处正好会
         是"散文路读了稿、穷举路还在用内联正文"。
 
-        ## 路径判据（比未在册那两支宽，但仍然是结构判据）
+        ## 路径判据
 
         - 工作区相对、不含盘符 / 以 `/` 开头 / `..`；
+        - 稿名必须能被 `vsigns.manuscript_id_of` 认出一个裸稿号
+          （`reports/{f,e,b}-proof-<号>.md`）—— 按号命名是硬条件（业主 2026-11-04 裁定
+          乙-2）：第 9 格 `手稿号` 与 B 的收录认签都按它；`notes/…` 这种认不出号的稿
+          先走转正（`fd9a5e33` 的那一步），落成按号命名的那一份再来；
         - 必须是盘上那一份文件（不收目录、不收不存在的路径）；
         - 必须有一节 `## 证明` 且那一节非空 —— 没有可签的正文，签就没有对象。
 
-        为什么不要求 `reports/f-proof-*.md` 这一种命名：业主 2026-11-04 逐字
-        「`reports/f-proof-*.md` / `notes/...` 皆可，但必须是文件」。约定命名是
-        `reports/f-proof-<号>.md`（它让第 9 格 `手稿号` 能被 B 读成 `resolved`），
-        但"按号命名"是 B 认签时的需要，不是 V 拒收别的路径的理由。
+        为什么"按号命名"从口味变成硬条件：认不出号的稿会写出第 9 格为空串的签块，
+        而 B 的 `manuscript_sign_gate` 对 `manuscript_id_missing` 一律不认 ——
+        V 签了、没人能认，等于白签。
 
         返回 `{"manuscript": 相对路径, "body": 正文}`；失败时
         `{"failed": True, "kind": ..., "reason": ..., "detail": ...}`（`reason` 是
@@ -1671,6 +1675,19 @@ class AgentV:
                     "reason": "bad_manuscript_path",
                     "detail": (f"`proof_manuscript` 要的是工作区相对路径（盘上那一份文件），"
                                f"收到 {manuscript!r} ⇒ 这一格没审、不落签")}
+        from .. import vsigns as _VS
+        if not _VS.manuscript_id_of(rel):
+            # 2026-11-04（业主裁定 · 乙-2）：按号命名是硬条件。认不出号的稿会写出
+            # 第 9 格为空串的签块，而 B 的 `manuscript_sign_gate` 对
+            # `manuscript_id_missing` 一律不认 —— V 签了、没人能认。
+            return {"failed": True, "kind": "bad_manuscript_name",
+                    "reason": "bad_manuscript_name",
+                    "detail": (f"`{rel}` 的稿名认不出裸稿号（只收 "
+                               "`reports/{f,e,b}-proof-<号>.md`：第 9 格 `手稿号` 与 B 的"
+                               "收录认签都按它）⇒ 这一格没审、不落签。处置：把这份稿"
+                               "转正成按号命名的那一份（`reports/f-proof-<命题号>.md`，"
+                               "`notes/…` 稿走转正那一步）再来；认不出号的签块 B 不认，"
+                               "签了也白签")}
         path = Path(self.workspace_root) / rel
         if not path.is_file():
             return {"failed": True, "kind": "manuscript_missing",
@@ -1721,7 +1738,8 @@ class AgentV:
                     "detail": (f"参数给的正文与 `{rel}` 的 `## 证明` 不是同一份"
                                f"（参数 sha {VR.proof_sha(given)[:12]}…，盘上 "
                                f"{VR.proof_sha(body)[:12]}…）⇒ 拒绝：签会盖错一份正文；"
-                               "在册这一档正文以稿为准，参数里那份只作核对")}
+                               "在册这一档正文以稿为准，参数里那份只作核对 —— "
+                               "要么把 `proof_text` 换成稿里那一份，要么把 `proof_no` 指对")}
         return {"manuscript": rel, "body": body}
 
     def _review_b_manuscript(self, *, text: str, manuscript: str = "", no: int = 1,
