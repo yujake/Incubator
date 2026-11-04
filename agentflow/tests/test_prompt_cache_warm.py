@@ -921,6 +921,96 @@ def test_unreadable_readings_are_unknown_not_found(tmp_path: pathlib.Path) -> No
     assert got["run"] is None
 
 
+def _diagnostic_runs(runs: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """带 `--probe-no-tools` 的趟（`tools_in_prefix is None` = 这一趟没带那条诊断）。"""
+    return [dict(run) for run in runs if run.get("tools_in_prefix") is not None]
+
+
+def _newest_diagnostic_run(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """最近一趟带诊断的预热（没有 ⇒ `None`，不折成"没问题是"）。"""
+    got = _diagnostic_runs(runs)
+    return got[-1] if got else None
+
+
+def _diagnostic_presence_problems(runs: Iterable[Mapping[str, Any]]) -> list[str]:
+    """滚存之后"两条诊断读数还读不读得到" —— 判据本体只这一处。
+
+    2026-11-04 复发缺陷：读数文件只留最近 `MAX_RUNS_KEPT` 趟，而 p241 两趟预热
+    把唯一带 `--probe-no-tools` 的 p234 那趟挤出了窗口 ⇒
+    `test_the_two_diagnostic_readings_say_what_they_measured` 红。当时靠补跑两趟
+    （$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，不是修：下一次滚存照样复发。
+
+    所以这里问的不是"历史上有没有过诊断"，而是"最近一趟带不带"：修法把诊断
+    做成 warm 的固定组成部分之后，窗口怎么滚，最新那趟都带着这两条读数
+    （`tools_in_prefix` + `cross_run_hit`，它们在同一个 run 记录里）。
+    """
+    run = _newest_diagnostic_run(runs)
+    if run is None:
+        return ["读数里没有一次带 `--probe-no-tools` 的诊断 ⇒ "
+                "'工具面在不在前缀里'这一格没量"]
+    probe = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) == 3]
+    if not probe:
+        return ["`tools_in_prefix` 有值却没有 pass=3 那一行 ⇒ 读数自相矛盾"]
+    cross = run.get("cross_run_hit")
+    if not cross or len(cross) != 2:
+        return [f"最近一趟诊断（{run.get('at')}）没有跨 run 探针（要 2 行）：{cross!r}"]
+    return []
+
+
+def _diagnostic_problems(runs: Iterable[Mapping[str, Any]]) -> list[str]:
+    """两条诊断读数合不合格（空表 = 合格）—— 具名判据与滚存判据共用这一处。
+
+    为什么把整条判据做成函数：`test_the_two_diagnostic_readings_say_what_they_measured`
+    读的是盘上那趟真读数；滚存判据要问的是同一个问题落在滚存后的读数上。
+    两处各写一份，滚存那条就会漂成"只看 `tools_in_prefix` 在不在"——
+    那正是复发时要防的那种"看起来绿了"。
+    """
+    problems = _diagnostic_presence_problems(runs)
+    if problems:
+        return problems
+    run = _newest_diagnostic_run(runs)
+    assert run is not None                   # presence 已经保证它在
+
+    probe = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) == 3]
+    if not int((probe[0].get("cache") or {}).get("hit") or 0) > 0:
+        problems.append("去掉工具面之后仍应命中 system 那一段（实测 11,904 token）；"
+                        f"读数是 {probe[0]['cache']}")
+    if run.get("tools_in_prefix") is not False:
+        problems.append(f"`tools_in_prefix` 是 {run.get('tools_in_prefix')!r}，"
+                        "不是 False ⇒ 与 pass=3 那一行的读数对不上")
+
+    cross = run.get("cross_run_hit")
+    first, second = cross[0], cross[1]
+    if not (first.get("pass") == 4 and second.get("pass") == 5):
+        problems.append(f"跨 run 探针的 pass 不是 4/5：{[r.get('pass') for r in cross]}")
+    # 口径（2026-10-21）：两行都是"另一趟活"的 system，两行都该命中。
+    # 改前：第一行 `hit=0`（另一份 system 从第 95 个字符起就不同）。
+    for tag, got in (("第一次见", first), ("第二次见", second)):
+        tokens = int(got.get("tokens_in") or 0)
+        hit = int(got.get("hit") or 0)
+        if not tokens:
+            problems.append(f"另一趟活的 system {tag}：tokens_in=0 ⇒ 这一格没量到")
+        elif hit <= 0:
+            problems.append(
+                f"另一趟活的 system {tag}没有命中（hit=0，tokens_in={tokens}）⇒ "
+                "前缀里还有跨 run 会变的东西"
+                "（登记表见 `promptstability.STEP_VOLATILE_FACTS`）")
+        elif hit / tokens < 0.90:
+            problems.append(
+                f"另一趟活的 system {tag}只命中 {hit / tokens * 100:.1f}%"
+                f"（hit {hit} / {tokens} token）⇒ 与'跨 run 同一份前缀'对不上")
+    # 离线那一格：跨 run 可复用的前缀 == 整份 system（一格都没断）。
+    rows = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) in (4, 5)]
+    if not rows:
+        problems.append("跨 run 探针没有 pass=4/5 的行 ⇒ 离线那一格没量")
+    for row in rows:
+        if int(row["cross_run_prefix_chars"]) != int(row["system_chars"]):
+            problems.append(
+                f"跨 run 可复用前缀只有 {row['cross_run_prefix_chars']} / 整份 "
+                f"{row['system_chars']} 字符 ⇒ system 里还有跨 run 会变的东西")
+    return problems
+
+
 def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
     """两条诊断读数必须与文档 §14 的两句话一致（否则改的是文档，不是读数）。
 
@@ -932,39 +1022,13 @@ def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
 
     这两条决定了"预热到底买到了什么"：改前买到的是"同一份前缀的第二次调用能省"；现在还包括"另一趟活能用同一段前缀"。`cross_run_prefix_chars`（离线算的字符数）因此必须等于整份 system 的长度
     —— 这是同一条判据的另一半。
-    """
-    runs_with_probe = [run for run in _runs() if run.get("tools_in_prefix") is not None]
-    assert runs_with_probe, (
-        "读数里没有一次带 `--probe-no-tools` 的诊断 ⇒ '工具面在不在前缀里'这一格没量")
-    run = runs_with_probe[-1]
-    probe = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) == 3]
-    assert probe, "`tools_in_prefix` 有值却没有 pass=3 那一行 ⇒ 读数自相矛盾"
-    assert probe[0]["cache"]["hit"] > 0, (
-        "去掉工具面之后仍应命中 system 那一段（实测 11,904 token）；"
-        f"读数是 {probe[0]['cache']}")
-    assert run["tools_in_prefix"] is False, run["tools_in_prefix"]
 
-    cross = run.get("cross_run_hit")
-    assert cross and len(cross) == 2, cross
-    first, second = cross[0], cross[1]
-    assert first["pass"] == 4 and second["pass"] == 5, cross
-    # 口径（2026-10-21）：两行都是"另一趟活"的 system，两行都该命中。
-    # 改前：第一行 `hit=0`（另一份 system 从第 95 个字符起就不同）。
-    for tag, got in (("第一次见", first), ("第二次见", second)):
-        assert got["hit"] > 0, (
-            f"另一趟活的 system {tag}没有命中（hit=0，tokens_in={got['tokens_in']}）⇒ "
-            "前缀里还有跨 run 会变的东西（登记表见 `promptstability.STEP_VOLATILE_FACTS`）")
-        rate = got["hit"] / got["tokens_in"]
-        assert rate >= 0.90, (
-            f"另一趟活的 system {tag}只命中 {rate * 100:.1f}%（hit {got['hit']} / "
-            f"{got['tokens_in']} token）⇒ 与'跨 run 同一份前缀'对不上：{got}")
-    # 离线那一格：跨 run 可复用的前缀 == 整份 system（一格都没断）。
-    rows = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) in (4, 5)]
-    assert rows, run.get("rows")
-    for row in rows:
-        assert int(row["cross_run_prefix_chars"]) == int(row["system_chars"]), (
-            f"跨 run 可复用前缀只有 {row['cross_run_prefix_chars']} / 整份 "
-            f"{row['system_chars']} 字符 ⇒ system 里还有跨 run 会变的东西")
+    2026-11-04 起这一条还必须过"滚存"那一刀：诊断是每一趟的固定组成，
+    所以 `test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest`
+    把同一份 `_diagnostic_problems` 跑在滚存后的读数上。
+    """
+    problems = _diagnostic_problems(_runs())
+    assert not problems, "；".join(problems)
 
 
 # ---------------------------------------------------------------- 6. 命中样本的口径
@@ -1048,6 +1112,12 @@ def _fake_warm(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path, *,
     hits[(W.SECRETARY, 2)] = (0, 176)
     for target in misses:
         hits[(target, 2)] = (0, 1000)
+    # 诊断行（2026-11-04 起每一趟的固定组成）：给一组与真机同形的读数，好让
+    # "两条诊断读数"那条判据能整条地跑在滚存后的读数上，而不只是问"这一格在不在"。
+    for target in W.WARM_TARGETS:
+        hits[(target, 3)] = (12000, 200)    # 去掉工具面仍命中 ⇒ tools_in_prefix=False
+        hits[(target, 4)] = (17000, 1000)   # 另一趟活第一次见（94.4%）
+        hits[(target, 5)] = (18400, 100)    # 同一份再发一次（99.5%）
 
     fake_spec = W.MG.ModelSpec(api_key="sk-假", model="deepseek-flash",
                                base_url="https://api.deepseek.com/v1",
@@ -1173,3 +1243,118 @@ def test_the_newest_real_run_per_tier_is_judged_only_by_the_in_sample_targets() 
             assert row is not None, f"{label}：进样本的 {target} 没有第二次调用的行"
             assert int((row.get("cache") or {}).get("hit") or 0) > 0, (
                 f"{label}：进样本的 {target} 第二次调用 hit=0 ⇒ 不该判 warmed")
+
+
+# ---------------------------------------------------------------- 7. 滚存不许挤掉诊断
+#
+# 2026-11-04 的复发缺陷（修法 ①）：`prompt_cache_warm.json` 只留最近
+# `MAX_RUNS_KEPT` 趟，而"带 `--probe-no-tools` 的那一趟"曾经是唯一一条诊断。
+# p241 两趟预热把它挤出去 ⇒ `test_the_two_diagnostic_readings_say_what_they_measured`
+# 红，靠补跑两趟（$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，下一次滚存照样复发。
+#
+# 修法不是把窗口调大（那只是把复发推迟），而是让诊断成为 warm 的固定组成部分：
+# 每一趟都带"去掉工具面"与"换一趟活"两条探针，并把"这一趟带诊断"记进 run 记录
+# （`diagnostics` / `tools_probe` / `cross_run_probe` / `tools_in_prefix` /
+# `cross_run_hit`）。窗口怎么滚，最新那趟都带着诊断。
+#
+# 下面两条判据是那起复发的机器版本：
+# - 正控：把临时读数塞到 `MAX_RUNS_KEPT` 条、让诊断在最旧那一端，再落两趟
+#   （= `MAX_RUNS_KEPT + 2`）。旧诊断被挤出去之后，诊断仍然读得到，且读得到是
+#   因为最新的那趟带着它，不是因为窗口变大；
+# - 反真空：把"固定诊断"那一段摘掉（缺省探针置空）⇒ 同一刀必须红。没有这一刀，
+#   正控可能只是"窗口里另有别人留下的诊断"。
+
+def _seed_readings_with_the_oldest_diagnostic(path: pathlib.Path) -> str:
+    """把临时读数塞到 `MAX_RUNS_KEPT` 条，且唯一一条诊断在最旧那一端。
+
+    返回那条诊断趟的 `at`。它必须在那两趟新预热之后被挤出去 —— 否则这次"滚存"
+    没有真的发生，下面那条正控就是空转。
+    """
+    runs = _runs()
+    diagnostic = next((run for run in runs if run.get("tools_in_prefix") is not None), None)
+    assert diagnostic is not None, (
+        "盘上读数里没有可借用的诊断趟 ⇒ 这条判据的夹具搭不起来（先修好盘上那份读数，"
+        "不要把它改成不读诊断）")
+    oldest = dict(diagnostic)
+    oldest["at"] = "diagnostic-oldest"
+    seeded: list[dict[str, Any]] = [oldest]
+    for index in range(W.MAX_RUNS_KEPT - 1):
+        seeded.append({
+            "at": f"filler-{index:02d}",
+            "schema": 1,
+            "verdict": "warmed",
+            "lean_enabled": bool(index % 2),
+            "tools_in_prefix": None,
+            "tools_probe": "",
+            "cross_run_probe": "",
+            "cross_run_hit": None,
+            "rows": [],
+            "roles": [],
+        })
+    W.save_readings(path, seeded)
+    assert W.load_readings(path)[0]["at"] == oldest["at"], (
+        "夹具没把诊断放在最旧那一端 ⇒ 这条判据守错了位置")
+    return str(oldest["at"])
+
+
+def _roll_two_more_runs(monkeypatch: pytest.MonkeyPatch,
+                        tmp_path: pathlib.Path) -> list[dict[str, Any]]:
+    """在这份临时读数上再落两趟真 `warm()`（假 seam，零花费）—— 就是一次滚存。"""
+    _fake_warm(monkeypatch, tmp_path)
+    _fake_warm(monkeypatch, tmp_path)
+    return W.load_readings(tmp_path / "warm.json")
+
+
+def test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """判据 a：塞到 `MAX_RUNS_KEPT + 2` 条、旧诊断最旧 ⇒ 滚存后诊断仍读得到。
+
+    修前（诊断不是固定组成部分）这一条红：两趟新预热都没有诊断，唯一那条又被窗口
+    挤掉 ⇒ `_diagnostic_presence_problems` 非空 —— 这正是 2026-11-04 那晚的红。
+    """
+    path = tmp_path / "warm.json"
+    dropped_at = _seed_readings_with_the_oldest_diagnostic(path)
+    runs = _roll_two_more_runs(monkeypatch, tmp_path)
+
+    assert len(runs) == W.MAX_RUNS_KEPT, (
+        f"滚存之后留下 {len(runs)} 趟，不是 {W.MAX_RUNS_KEPT} 趟 ⇒ 这一刀没有走真的滚存")
+    assert dropped_at not in {run.get("at") for run in runs}, (
+        "那条最旧的诊断没有被挤出窗口 ⇒ 这次「滚存」没有真的滚，这条判据是空转")
+
+    problems = _diagnostic_problems(runs)
+    assert not problems, "；".join(problems)
+
+    newest = runs[-1]
+    latest_diagnostic = _newest_diagnostic_run(runs) or {}
+    assert latest_diagnostic.get("at") == newest.get("at"), (
+        f"最近一趟（{newest.get('at')}）不是带诊断的那一趟"
+        f"（最近一条诊断在 {latest_diagnostic.get('at')}）⇒ "
+        "诊断仍靠更早的趟撑着，下一次滚存还会复发")
+    diagnostics = newest.get("diagnostics") or {}
+    assert diagnostics.get("carried") is True, diagnostics
+    assert newest.get("tools_probe") == W.DEFAULT_TOOLS_PROBE, newest.get("tools_probe")
+    assert newest.get("cross_run_probe") == W.DEFAULT_CROSS_RUN_PROBE, (
+        newest.get("cross_run_probe"))
+    assert len(newest.get("cross_run_hit") or []) == 2, newest.get("cross_run_hit")
+
+
+def test_removing_the_fixed_diagnostic_makes_the_roll_lose_the_reading(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """反真空（c）：把"诊断是固定组成部分"摘掉 ⇒ 同一刀立刻红。
+
+    这一刀与上面那条正控走同一份夹具、同一个滚存、同一个判据本体：只把缺省探针
+    置空。若摘掉之后仍然读得到诊断，说明正控读的其实是窗口里别人留下的诊断 ——
+    那这个"修法"什么也没守住。
+    """
+    path = tmp_path / "warm.json"
+    dropped_at = _seed_readings_with_the_oldest_diagnostic(path)
+    monkeypatch.setattr(W, "DEFAULT_TOOLS_PROBE", "", raising=False)
+    monkeypatch.setattr(W, "DEFAULT_CROSS_RUN_PROBE", "", raising=False)
+    runs = _roll_two_more_runs(monkeypatch, tmp_path)
+
+    assert dropped_at not in {run.get("at") for run in runs}, "滚存没有真的发生"
+    problems = _diagnostic_presence_problems(runs)
+    assert problems, (
+        "把「诊断是 warm 的固定组成部分」摘掉之后，滚存仍然读得到诊断 ⇒ "
+        "正控没有牙（它守的不是这个修法）")
+    assert any("没有一次带" in p for p in problems), problems

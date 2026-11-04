@@ -1493,6 +1493,12 @@ python scripts/warm_prompt_cache.py --lean on `
 而诊断读数（带 `tools_in_prefix` / `cross_run_hit` 的那几趟）本来就是更早跑出来的，
 8 趟的窗口会被两趟新预热挤掉）。
 
+> 2026-11-04 更正：16 这个数字不再承担"把诊断留在窗口里"的职责。诊断现在是
+> 每一趟的固定组成（见 §14.5），窗口只回答"留几趟历史"。此前 p241 两趟预热把
+> 唯一带 `--probe-no-tools` 的 p234 那趟挤出窗口 ⇒
+> `test_the_two_diagnostic_readings_say_what_they_measured` 红，补跑两趟
+> （$0.001223 + $0.002201）只是花钱掩盖；调大窗口也只是把复发推迟。
+
 | 角色 | system 字符 | 工具函数 | 冷写 `write`（第一趟 pass1，= miss） | 重落一次命中（最新趟 pass1） | 命中率 | 二调样本命中（pass2） | 跨 run 可复用前缀（字符） |
 |---|---|---|---|---|---|---|---|
 | A | 27,305 | 47 | 24,909 | 24,704 / 24,909 | 99.2% | — | 114 |
@@ -1537,7 +1543,8 @@ python scripts/warm_prompt_cache.py --lean on `
 > `M` 50,671）是更早那一版。**本轮没有真发请求复跑**（那要花真钱）⇒ 表里三栏**不是当次值**，
 > 要当次值就按 §14.5 重跑一遍。
 
-**另外两条诊断读数**（同一趟，`--probe-*` 打出来的）：
+**另外两条诊断读数**（2026-11-04 起是每一趟的固定组成：缺省目标 `V` / `H`；
+`--probe-*` 可点别的目标，但"不做诊断"不再是选项）：
 
 | 问题 | 读数 | 那句话 |
 |---|---|---|
@@ -1556,7 +1563,7 @@ python scripts/warm_prompt_cache.py --lean on `
 | ② 第二次调用命中（样本只有 2 个：`M` / `C`） | `hit>0` 且 `hit/(hit+miss)>0` | 把样本那一行的 `hit` 改成 0 ⇒ 红 |
 | ③ 同一角色两次调用的 `prompt_sha256` 相同 | 每一行都同摘要 + 两次独立渲染逐字节相同 | **把 `budget_left` 塞回 system**（改前那个形态）⇒ 红，并报出"从第几个字符起不同"与段名 `TASK_BUDGET` / `TASK_NOTEBOOK` |
 | ④ 读数不许烂 | 盘上记的 `prompt_sha256` = 今天重算的 | 提示词一改（`agent_prompts.py` / `specs/*` / 预设）⇒ 红，处置是"重跑 §14.5 那条命令"，**不是**改测试 |
-| ⑤ 两条诊断读数与本节一致 | 工具面不在前缀里 / 换一趟活第一次 0 命中 | 探针口径被改（例如 task_id 没变）⇒ 红 |
+| ⑤ 两条诊断读数与本节一致 | 工具面不在前缀里 / 换一趟活第一次 0 命中 | 探针口径被改（例如 task_id 没变），或滚存把唯一一趟诊断挤掉 ⇒ 红（2026-11-04 起另有一条滚存判据：塞到 `MAX_RUNS_KEPT + 2` 趟、旧诊断最旧 ⇒ 仍读得到；把"每趟都带诊断"摘掉 ⇒ 同一刀红） |
 
 `③` 的负控是这一节最要紧的一条：它证明这条判据守的是**"提示词不许抖"**，
 而不是"两边都不是空的"。§13.4 那条纪律（每步会变的东西不许进 system）就靠它咬人。
@@ -1581,6 +1588,14 @@ python scripts/warm_prompt_cache.py --lean on `
 - **L 在关档是缺席**：`leanscope.LEAN_ONLY_ROLES` 只有 `L`，Lean 关着时
   `system_prompt("L")` 按产品规则抛 `RoleHidden`。所以关档那一趟 L 记 `kind=absent`，
   不伪造一段预热；开档那一趟 L 真预热，并用 `--hit-sample M,C,L` 拿到第二次命中。
+- **诊断是每一趟的固定组成**（2026-11-04）：每趟自动带 `--probe-no-tools V` 与
+  `--probe-cross-run H`（多 3 次调用），把目标与来源写进 run 的 `diagnostics` 一格。
+  为什么：读数文件只留最近 16 趟，而这两条诊断曾经是历史里的"唯一一趟" —— p241
+  两趟预热把 p234 那趟挤出窗口后
+  `test_the_two_diagnostic_readings_say_what_they_measured` 红；补跑两趟只是花钱掩盖，
+  调大窗口只是把复发推迟。每趟都带 ⇒ 窗口怎么滚，最近一趟都有诊断
+  （判据 `test_a_roll_keeps_a_diagnostic_run_even_when_the_old_one_is_the_oldest`）。
+  显式 `--probe-*` 仍可点别的目标；但"不做诊断"不再是可选项。
 
 - **幂等**：同一 scenario 再跑一遍，`prompt_sha256` 不变、`hit` 接近满、`write` 接近 0
   （读数文件里多一趟，前一趟不动）。
