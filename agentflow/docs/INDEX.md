@@ -38,6 +38,7 @@
 | [`WIRING-AUDIT-2026-10-27.md`](WIRING-AUDIT-2026-10-27.md) | 2026-10-27 夜的**接线审计**：逐条「实现了但没接上」的落点与复跑命令（当次读数、带日期；判据本体在 `tests/test_wiring_edges.py`） |
 | [`AUDIT-VSIGN-5ROLES-E-2026-11-03.md`](AUDIT-VSIGN-5ROLES-E-2026-11-03.md) | 2026-11-03 的**五方 × 四步签字审计**：B / D / F / V / E 的产出 / 签字 / 收录 / 优化逐格读数，外加「E 拿 V 签与 F 同一套」这批的实现与反真空（当次读数、带日期；判据本体在 `tests/test_e_gets_its_v_sign_like_f.py` 与 `tests/test_v_unregistered_manuscript_review.py` 一族） |
 | [`AUDIT-VSIGN-CHANNELS-AND-PROMPTS-2026-11-04.md`](AUDIT-VSIGN-CHANNELS-AND-PROMPTS-2026-11-04.md) | 2026-11-04 的**提示词↔工具面一致性审查 + 两条凭据通道 + 委托入库 + 依赖面**交接：8 条口径（附业主原话 / draft 出处）、按面分组的 commit 与一句话、4 条已知缝隙、p234–p238 的 warm 账与冻结账、FC-27 待批 16 条清单（当次读数、带日期；判据本体散在 `tests/test_mapping_three_known_gaps.py` / `tests/test_e_gets_its_v_sign_like_f.py` / `tests/test_no_model_means_no_merge.py` 一族） |
+| [`RUN-2026-11-04-PAPER-REWRITE-BIG.md`](RUN-2026-11-04-PAPER-REWRITE-BIG.md) | 2026-11-04 大真机（`projects/paper-rewrite-big`）的**收工总账**：逐格读数 / 八条巡查裁决 / 两条 V 判词 / `stmt:000000` 的内联正文断点 / 可续跑位置 / 诚实清单（当次读数、带日期；不构成判据） |
 
 ## 3. 历史证据（**不构成判据**，但被代码注释与其它文档大量引用，故保留）
 
@@ -115,4 +116,4 @@ python scripts/noai_gate.py --git
 
 | 文件 | 为什么不入册 |
 |---|---|
-| （今天没有这一档） | 37 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |
+| （今天没有这一档） | 38 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |
