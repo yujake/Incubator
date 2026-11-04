@@ -326,16 +326,29 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("proof_defect_found",
      "证明有毛病：V 判`有毛病`或 `unresolved_errors > 0` ⇒ 产出不达标"
      "（判据读 `verifications/<号>.jsonl`；记命题作者 `proof_authors`，不是记 V）"),
+    # 2026-11-04（业主：「受控拒绝在 errorstats 上不可见」）：`conductor_tools._out` 的最后
+    # 一句是 `return ok(data, **data)` ⇒ 一次"拒绝"在工具层是 `ok=True`，拒因住在
+    # `data.state == "refused"` / `data.refusal_code` 里。而本模块此前只认 `ok is False`，
+    # 于是真形受控拒绝 **total 0**（真机夹具：`conductor.ack(close="nope")`）。
+    # 有 `data.refusal_code` 的按那个码登记的类目记（`target_not_silent` 等）；只有
+    # `state=="refused"` 而没有码的落这一类 —— **码位留空**：状态不是码，不把
+    # `data.state` 的状态值登记成假码（那是"状态≠码"的折平）。
+    ("tool_refused_controlled",
+     "工具层受控拒绝（无码那一档）：`result.ok is True` 而 `data.state == 'refused'`、"
+     "且 `data.refusal_code` 为空 ⇒ 框架按受控理由拒了这次调用，工具层却把它记成成功"
+     "（判据读结构字段，不读 `data` 的自由文本；码位留空 —— 这一笔只有状态、没有受控码。"
+     "有受控码的那一档按码表登记的类目记，例如 `target_not_silent`）"),
 )
 
-#: 2026-11-01 扩面追加的 11 个角色侧类目（全部是结构化类目，判据读字段不读文案）。
+#: 2026-11-01 扩面追加的 11 个角色侧类目 + 2026-11-04 的 `tool_refused_controlled`
+#: （全部是结构化类目，判据读字段不读文案）。
 #: 显式列出而不是拿 `ERROR_CATEGORIES[-11:]` 切片：切片会在有人再追加一类时静默变形，
 #: 而这张表是"哪些类目不参与文案匹配"的唯一依据。
 EXPANDED_ROLE_CATEGORIES: frozenset[str] = frozenset({
     "roster_write_refused", "tool_refused_path", "tool_refused_reserved",
     "tool_refused_edit_window", "experiment_failed", "experiment_refused",
     "reply_shape_rejected", "child_cut_off", "verdict_missing",
-    "verdict_understated", "proof_defect_found",
+    "verdict_understated", "proof_defect_found", "tool_refused_controlled",
 })
 
 #: 系统侧类目：这些不是"哪个角色做错了"，是"系统哪里坏了"。它们不进
@@ -1125,6 +1138,12 @@ def _step_text(record: Mapping[str, Any]) -> str:
 
     只取 `result.error` / `result.warn` / `result.problem` / `result.kind` 与记录自己的
     `problem`，不取 `payload`（理由见模块 docstring：模型"提到一个码"不等于"撞上那个码"）。
+
+    2026-11-04 补一档（受控拒绝）：`result.data` 里 **`refusal_code` / `reason`** 两格也进
+    可扫段 —— 前提是这一条是受控拒绝形状（`ok=True` + `data.state=="refused"`，或
+    `data.refusal_code` 非空）。理由：这两格是**受控码 / 受控理由**，不是模型自由文本
+    （与 `table.describe` 把 schema 词表铺进 `data` 那一档严格分开：形状不对时 `data`
+    一个字都不读）。
     """
     parts: list[str] = []
     problem = record.get("problem")
@@ -1136,6 +1155,12 @@ def _step_text(record: Mapping[str, Any]) -> str:
             value = result.get(key)
             if value:
                 parts.append(str(value))
+        data = result.get("data")
+        if isinstance(data, Mapping) and _controlled_refusal_shape(result):
+            for key in ("refusal_code", "reason"):
+                value = data.get(key)
+                if value:
+                    parts.append(str(value))
     elif isinstance(result, str):
         parts.append(result)
     return " ".join(parts)
@@ -1458,6 +1483,41 @@ def _tool_refusal_family(result: Mapping[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+def _controlled_refusal_shape(result: Mapping[str, Any]) -> bool:
+    """这一条结果是不是"工具层受控拒绝"（结构判据，不读文案）。
+
+    形状（`conductor_tools._out` 那一族）：`result.ok is True`，而拒因写在
+    `data.state == "refused"` 或 `data.refusal_code`（非空）里 —— 工具把"拒了"当成
+    "成功"返回，于是 `ok is False` 那条老路一条都数不到（2026-11-04 实测）。
+    """
+    if result.get("ok") is not True:
+        return False
+    data = result.get("data")
+    if not isinstance(data, Mapping):
+        return False
+    return (str(data.get("state") or "") == "refused"
+            or bool(str(data.get("refusal_code") or "")))
+
+
+def _controlled_refusal_family(result: Mapping[str, Any]) -> tuple[str, str] | None:
+    """一条受控拒绝属于哪一类：`(码, 类目)`；认不出 ⇒ None。
+
+    - `data.refusal_code` 非空 ⇒ 按**那个码**记；码表里登记了就用它登记的类目，
+      码表里没有 ⇒ None（调用方记 `unclassified["tool"]`，不猜一个类目出来）；
+    - 只有 `data.state == "refused"`、没有码 ⇒ 记 `tool_refused_controlled`，
+      **码位留空**（`""`）：这一笔只有状态、没有受控码 —— 状态不是码，不把
+      `data.state` 的取值登记成假码（"状态≠码"的折平）。
+    """
+    if not _controlled_refusal_shape(result):
+        return None
+    data = result["data"]
+    code = str(data.get("refusal_code") or "")
+    if not code:
+        return ("", "tool_refused_controlled")
+    category = CODE_TO_CATEGORY.get(code)
+    return (code, category) if category is not None else None
+
+
 def _role_of(value: Any) -> str:
     """从 `created_by` / `proof_authors` 这种"带前缀的角色名"里取角色。
 
@@ -1775,6 +1835,16 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                             # 没审成：命题还没登记就送审 ⇒ 记送审方（它是这次送审的发起方）
                             _bump(_caller_or_actor(record, role), "statement_missing",
                                   "verdict_missing")
+                        elif _controlled_refusal_shape(result):
+                            # 受控拒绝（2026-11-04）：工具把"拒了"写在 `data` 里，`ok` 位却
+                            # 仍是 True（`conductor_tools._out` 的最后一句）。有受控码就按
+                            # 码表登记的类目记；只有 `state=="refused"` 的落
+                            # `tool_refused_controlled`（码位留空）；码认不出 ⇒ 不猜，记兜底。
+                            family = _controlled_refusal_family(result)
+                            if family is None:
+                                unclassified["tool"] += 1
+                            else:
+                                _bump(role, *family)
                         elif result.get("ok") is False:
                             if str(result.get("outcome") or "") == _CANCELLED_OUTCOME:
                                 # 与 `tasks` 行那个 `cancelled` 是同一件事（召唤被叫停）：

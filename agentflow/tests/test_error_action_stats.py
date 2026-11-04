@@ -293,10 +293,28 @@ def _source_texts() -> dict[str, str]:
     return out
 
 
+#: 只由读侧结构判据产出、**码位留空**的类目（2026-11-04 新增 `tool_refused_controlled`）。
+#: 为什么允许没有码：这一类的判据是"受控拒绝的形状"（`ok=True` + `data.state=="refused"`），
+#: 而那一笔**没有受控码** —— 逼它"必须有一个码"只会把 `data.state` 的状态值（`refused`）
+#: 登记成假码，那正是"状态≠码"的折平。反真空放在下面：这里每一条都必须真的由
+#: `errorstats._controlled_refusal_family` 产出（喂一条无码受控拒绝，看它落哪一类）。
+SHAPE_ONLY_CATEGORIES: frozenset[str] = frozenset({"tool_refused_controlled"})
+
+
+def test_shape_only_categories_are_really_produced() -> None:
+    """反真空：上面的例外表不是免检通道 —— 每一条都得真有产出点。"""
+    for category in SHAPE_ONLY_CATEGORIES:
+        family = ES._controlled_refusal_family(
+            {"ok": True, "data": {"state": "refused", "reason": "夹具"}})
+        assert family == ("", category), (
+            f"{category} 登记成'无码例外'，但结构判据并不产出它：{family}")
+
+
 def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
     """每个类目都要有一个真实拒绝码，且那个码就在出处文件里（防"编出来的类目"）。
 
     两张类目表都查：错误类目与过程读数类目（拆分那两格也是读数，名字同样不许凭空造）。
+    `SHAPE_ONLY_CATEGORIES` 那几类没有码（判据是形状，不是码），单独由上面那条反真空守。
     """
     source = _source_texts()
     assert source, "夹具前提变了：扫不到 src/agentflow 下的 .py"
@@ -304,6 +322,10 @@ def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
         assert meaning.strip(), f"类目 {category} 没有写含义"
         assert "\n" not in meaning
         codes = [code for code, cat, _w in ES.CODE_TABLE if cat == category]
+        if category in SHAPE_ONLY_CATEGORIES:
+            assert not codes, (
+                f"{category} 是'无码'类目，码表里却登记了码 {codes} —— 口径漂了")
+            continue
         assert codes, f"类目 {category} 在 CODE_TABLE 里一个码都没有 —— 那就是编出来的类目"
         found = False
         for code in codes:
@@ -352,7 +374,10 @@ def test_the_category_table_has_no_duplicate_or_unknown_categories() -> None:
         assert where.strip(), f"{code} 没写出处"
     assert ES.CODE_TO_CATEGORY == {c: cat for c, cat, _w in ES.CODE_TABLE}
     # 反真空：扩面的 15 类必须真的进了某一张表（否则"扩了"只是文档里的一句话）
-    assert len(ES.EXPANDED_ROLE_CATEGORIES) == 11
+    assert len(ES.EXPANDED_ROLE_CATEGORIES) == 12
+    # 2026-11-04：第 12 类是 `tool_refused_controlled`（受控拒绝），逐字点名 ——
+    # 只数个数的话，下次有人换掉一个类目也照样 12。
+    assert "tool_refused_controlled" in ES.EXPANDED_ROLE_CATEGORIES
     assert len(ES.SYSTEM_CATEGORY_NAMES) == 3 and len(ES.STATE_CATEGORY_NAMES) == 1
     assert ES.EXPANDED_ROLE_CATEGORIES <= groups[0]
     assert ES.STRUCTURAL_ONLY_CATEGORIES == (ES.EXPANDED_ROLE_CATEGORIES
