@@ -2115,6 +2115,25 @@ class _RegisterStatement:
                                              index_rows=self._report_index_rows())
         if _sign_problems:
             return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
+        # ---- 2026-11-04（业主裁定 ⑥-1-b）：要写正文/依赖面的这一笔必须带稿 ----------
+        #
+        # 裁定：「闸要求本笔必须带 `proof_manuscript`，不靠台账签行反查」。
+        # 反查会造出第二载体（同一份稿经两个入口进同一行依赖面），而"这一笔带没带稿"
+        # 是调用方当场能验证的事实。位置在第三方签字闸之后：一张真的要 proof 的数值
+        # 证明，先让"缺哪一份第三方签"这一句被说出来，而不是被"缺稿"盖掉。
+        # 文献侧的占位签（external_lit + source_lit_id）与概念行不在这一档。
+        if (carries_write and not str(manuscript_text or "").strip()
+                and kind_now != "concept"
+                and not (str(origin) == "external_lit"
+                         and str(source_lit_id or "").strip())):
+            return _refuse(
+                "proof_manuscript_required",
+                ("这一笔要写证明正文 / 依赖面，却没有带 `proof_manuscript` ⇒ 整笔不写。"
+                 "正文必须由一份稿承载：先落一份 `reports/f-proof-<命题号>.md`"
+                 "（B 的改写稿是 `reports/b-proof-<命题号>.md`），三节 "
+                 "`## 命题` / `## 证明` / `## 依赖` 写全，再把这一份稿原文传进 "
+                 "`proof_manuscript`。签行里记过 `manuscript` 也不能替代这一格："
+                 "这一笔带了哪份稿，必须是本笔当场说得出的。"))
         # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
         # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并

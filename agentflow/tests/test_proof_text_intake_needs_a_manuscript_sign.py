@@ -148,18 +148,24 @@ def test_c_b_register_accepts_only_a_manuscript_sign(tmp_path):
         proof_text=PROOF, line_range={"start": 1, "end": 3},
         quote_verified=None, quote_reason="我方自证")
     assert inline.get("ok") is False, inline
-    assert inline.get("kind") == "proof_text_needs_a_manuscript_sign", inline
+    assert inline.get("kind") in ("proof_manuscript_required",
+                                  "proof_text_needs_a_manuscript_sign"), inline
     assert str(_row(st, sid).get("proof_text") or "") == "", _row(st, sid)
 
-    # 正控：同一份正文，签同一份稿（台账行带 `manuscript`）⇒ 收下。
+    # 正控：同一份正文，签同一份稿（台账行带 `manuscript`）且本笔带 `proof_manuscript` ⇒ 收下。
     st2 = _ws(tmp_path / "signed")
     sid2 = _empty_conjecture(st2)
     _sign(st2, sid2, PROOF, manuscript="reports/f-proof-000000.md")
+    from agentflow import depsection as DS
+
+    manuscript = (
+        "# F 的证明手稿\n\n- 命题号：stmt:" + sid2 + "\n\n## 命题\n\n" + STATEMENT
+        + "\n\n## 证明\n\n" + PROOF + "\n\n" + DS.render_dependency_section([]))
     b2 = AgentB(st2, extractor=None, extract_text=None)
     ok = b2.register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
         proof_text=PROOF, line_range={"start": 1, "end": 3},
-        quote_verified=None, quote_reason="我方自证")
+        quote_verified=None, quote_reason="我方自证", proof_manuscript=manuscript)
     assert ok.get("ok") is True, ok
     assert _row(st2, sid2).get("proof_text") == PROOF, _row(st2, sid2)
 

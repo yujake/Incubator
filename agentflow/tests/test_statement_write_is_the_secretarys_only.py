@@ -52,6 +52,13 @@ _PAYLOAD: dict[str, Any] = {
     "line_range": {"start": 17, "end": 83},
     "quote_verified": None,
     "quote_reason": "own_result：我方推导，没有第二份文本可比对；证明未机器检查",
+    # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
+    "proof_manuscript": (
+        "# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n"
+        "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
+        f"## 命题\n\n{STATEMENT}\n\n## 证明\n\n{PROOF}\n\n"
+        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n"),
 }
 
 
@@ -164,7 +171,8 @@ def _sign_off(st: Store, stmt_id: str, proof_text: str) -> dict[str, Any]:
     for wanted in (1, 2, 3):
         out = VR.record_verification(
             st.root, statement_id=stmt_id, proof_text=proof_text,
-            verdict={"verdict": "成立", "why": "逐行走查三步都成立"})
+            verdict={"verdict": "成立", "why": "逐行走查三步都成立"},
+            manuscript=f"reports/f-proof-{stmt_id}.md")
         holds = VR.consecutive_holds(st.root, stmt_id)
         assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
         if wanted < VR.SIGN_STREAK_NEED:

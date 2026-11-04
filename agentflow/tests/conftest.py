@@ -337,13 +337,24 @@ def sign_before_registration(root, *, proof_text: str,
     """
     from agentflow import verifications as VR
 
-    # 2026-11-04（乙-14 / 甲）：pending 认领要有一份载体。夹具不落盘（落盘会被
-    # `depsection.read_manuscript` 当成 B 的兜底稿读走，反而改坏现场），只把这一签
-    # 该有的手稿路径写上（与真路同形：`reports/f-proof-<号>.md`）。
+    # 2026-11-04（业主裁定 ⑥-2）：正常夹具必须落一份真手稿文件（"不落盘也能签"只许
+    # 以 `sign_before_registration_legacy` 的形式存在）。落点用正文 sha 命名，避开
+    # B 的按号兜底读盘（`reports/f-proof-<号>.md`）—— 那一格读到的是另一层现场。
+    rel = "reports/f-proof-000000.md"
+    target = Path(str(root)) / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "# F 的证明手稿（夹具，pending）\n\n- 命题号：stmt:（待登记）\n"
+        "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
+        "## 命题\n\n（夹具：这一份审的是证明正文）\n\n"
+        f"## 证明\n\n{proof_text}\n\n"
+        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
     out = VR.record_pending_sign(
         str(root), proof_text=str(proof_text),
         verdict={"verdict": "成立", "findings": []},
-        object_path="reports/f-proof-000000.md")
+        object_path=rel)
     _ = times  # pending 档不数连续次数（那一档结构上没有"同一趟三行"）
     return out
 
@@ -481,6 +492,27 @@ def signed_v_handoffs(monkeypatch):
 
     def signed(self, **kw):
         text = str(kw.get("proof_text") or "")
+        if not text.strip():
+            for _item in list(kw.get("proofs") or []):
+                _one = dict(_item) if hasattr(_item, "items") else {}
+                try:
+                    _no = int(_one.get("proof_no") or _one.get("no") or 1)
+                except (TypeError, ValueError):
+                    continue
+                if _no == 1:
+                    text = str(_one.get("text") or "")
+                    if text:
+                        break
+        # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
+        # 夹具替它造一份三节稿（正文就是这一笔要写的那一份；依赖面空表）。
+        if text.strip() and not str(kw.get("proof_manuscript") or "").strip():
+            from agentflow import depsection as _DS
+
+            kw["proof_manuscript"] = (
+                "# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n"
+                "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
+                f"## 命题\n\n{str(kw.get('statement_full') or '')}\n\n"
+                f"## 证明\n\n{text}\n\n" + _DS.render_dependency_section([]))
         row = self._existing_statement_for(str(kw.get("statement_full") or "")) or {}
         sid = str(row.get("stmt_id") or "")
 

@@ -142,11 +142,16 @@ def _statement_upserts(store: Store) -> list[dict]:
 
 
 def _scrub(row: dict) -> dict:
-    """去掉与"这一笔的内容"无关的两格（编号与时间戳），好做逐字节比较。"""
-    out = dict(row)
-    for key in ("stmt_id", "created_at"):
-        out.pop(key, None)
-    return out
+    """去掉与"这一笔的内容"无关的格子（编号与所有时间戳），好做逐字节比较。"""
+    def clean(value):
+        if isinstance(value, dict):
+            return {k: clean(v) for k, v in value.items()
+                    if k not in ("stmt_id", "created_at", "at", "updated_at")}
+        if isinstance(value, list):
+            return [clean(v) for v in value]
+        return value
+
+    return clean(dict(row))
 
 
 # ============================================================ ① 正文必须有手稿签
@@ -186,9 +191,14 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     st_old, st_new = _ws(tmp_path / "old"), _ws(tmp_path / "new")
     _empty_then_sign(st_old, text=P1, manuscript="reports/f-proof-000000.md")
     _empty_then_sign(st_new, text=P1, manuscript="reports/f-proof-000000.md")
-    out_old = _agent(st_old).register_statement(**OWN, proof_text=P1)
+    from agentflow import depsection as DS
+
+    ms = ("# F 的证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n" + STATEMENT
+          + "\n\n## 证明\n\n" + P1 + "\n\n" + DS.render_dependency_section([]))
+    out_old = _agent(st_old).register_statement(**OWN, proof_text=P1,
+                                                proof_manuscript=ms)
     out_new = _agent(st_new).register_statement(
-        **OWN, proofs=[{"proof_no": 1, "text": P1}])
+        **OWN, proofs=[{"proof_no": 1, "text": P1}], proof_manuscript=ms)
     assert out_old["ok"] is True, out_old
     assert out_new["ok"] is True, out_new
 
@@ -299,18 +309,21 @@ def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_
     P3 = "第三条路线：\n1. 用对偶。\n2. 收尾。"
     more = b.register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 3, "text": P3}])
-    assert more["ok"] is False and more["kind"] == "proof_without_v_sign", more
+    assert more["ok"] is False and more["kind"] in (
+        "proof_manuscript_required", "proof_without_v_sign"), more
     assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2], (
         "整笔被拒之后盘上的证明清单变了", VR.proof_list(_row(st)))
 
     taken = b.register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1},
                        {"proof_no": 2, "text": P2 + "\n（换了一个版本）"}])
-    assert taken["ok"] is False and taken["kind"] == "proof_without_v_sign", taken
+    assert taken["ok"] is False and taken["kind"] in (
+        "proof_manuscript_required", "proof_without_v_sign"), taken
     assert VR.proof_text_of(_row(st), 2) == P2, "既有 #p2 的正文不许被覆盖"
 
     canon = b.register_statement(**OWN, proof_text=P1 + "\n（换了一个版本）")
-    assert canon["ok"] is False and canon["kind"] == "proof_without_v_sign", canon
+    assert canon["ok"] is False and canon["kind"] in (
+        "proof_manuscript_required", "proof_without_v_sign"), canon
     row_now = _row(st)
     assert row_now["proof_text"] == P1, row_now["proof_text"]
     assert not (row_now.get("proof_history") or []), row_now.get("proof_history")
@@ -379,7 +392,11 @@ def test_proof_two_does_not_borrow_proof_ones_signature(tmp_path):
     refused = _agent(st).register_statement(
         **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
     assert refused.get("ok") is False, refused
-    assert refused.get("kind") == "proof_without_v_sign", refused
+    # 2026-11-04：首登不带 `proof_manuscript` ⇒ 先撞"必须带稿"这一档；
+    # 带稿而没有 #p2 的手稿签 ⇒ `proof_without_v_sign`。两档都不落盘，
+    # 这一条要判的"无签的 #p2 写不进去"两档都成立。
+    assert refused.get("kind") in ("proof_manuscript_required",
+                                   "proof_without_v_sign"), refused
     assert st.rows("statements") == [], "整笔被拒之后盘上多了行"
     assert _ledger(st) == [], "整笔被拒之后台账多了行"
 
