@@ -38,13 +38,34 @@ def _verifications():
     return VR
 
 
+#: 本套件的基线档（conftest.py:178 在导入期把 AGENTFLOW_LEAN_ENABLED 钉成 "1"）。
+#: 收尾必须**显式回到这一档再 reload**：monkeypatch 的 undo 在本 fixture 之后才跑，
+#: 所以收尾时环境变量仍是我这一次设的那一档/已被删。若在这里按"当前环境"reload，
+#: settings 会把「关档」读数缓存下来，泄漏给后面所有渲染提示词的用例
+#: （2026-11-04 全量实测：	est_lean_file_is_taught_by_channel 单独跑绿、成套跑红，
+#:   缺的正是只在开档那一段里出现的五条锚点）。
+_BASELINE_LEAN = "1"
+
+
+def _restore_baseline_settings(monkeypatch) -> None:
+    """回到基线档，并且**把被本文件重载过的模块一起重载回来**。
+
+    只回 settings 不够：_prompts()/_verifications() 也用过 importlib.reload，
+    而在关档那一刻重载出来的 gent_prompts 模块会把**关档那一段的段文本**留在模块里；
+    后面的用例再渲染提示词就会读到那一版（2026-11-04 全量实测：G 的提示词缺五条只在开档段里出现的锚点）。
+    """
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", _BASELINE_LEAN)
+    _reload_settings()
+    _prompts()
+    _verifications()
+
+
 @pytest.fixture()
 def lean_off(monkeypatch):
     monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)
     _reload_settings()
     yield
-    monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)
-    _reload_settings()
+    _restore_baseline_settings(monkeypatch)
 
 
 @pytest.fixture()
@@ -52,8 +73,7 @@ def lean_on(monkeypatch):
     monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", "1")
     _reload_settings()
     yield
-    monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)
-    _reload_settings()
+    _restore_baseline_settings(monkeypatch)
 
 
 # ---------------------------------------------------------------- 1. 第一行
