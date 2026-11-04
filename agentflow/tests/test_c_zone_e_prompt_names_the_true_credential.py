@@ -9,15 +9,15 @@
 |---|---|---|
 | 1 | 「三态结论」 | `verifications.VERDICTS` 早已两态（`有毛病` / `成立`） |
 | 2 | 「签名者是 V」 | 手稿签块的 `签名者=` 是收方秘书（`vsigns.SECRETARY_OF` 里的 `secretary:E`；`vsigns.land` 的 `by=` 只认那三个） |
-| 3 | 「`signed_by=V` 那三格是唯一凭据」 | 真凭据是 V 台账那一行（`verifications/pending/<对象sha>.jsonl` 或 `verifications/<号>.jsonl`）；`observations.e_signature` 只是 E 自己写的**结构标记**，不算第三方签字（`numericproof.suspect_self_signed` 读的就是它） |
+| 3 | 「`signed_by=V` 那三格是唯一凭据」 | 真凭据是 V 台账那一行（`verifications/pending/<对象sha>.jsonl` 或 `verifications/<号>.jsonl`）；`observations.e_signature` 只是 E 自己写的结构标记，不算第三方签字（`numericproof.suspect_self_signed` 读的就是它） |
 
-第 3 段还漏了**入口那一格**：E 送审必须把 `proof_manuscript`（手稿路径）交上去 ——
+第 3 段还漏了入口那一格：E 送审必须把 `proof_manuscript`（手稿路径）交上去 ——
 `agent_v.core._review_unregistered_prose` 的入口守卫只认它；不带它，`verify_proof`
 只会把判词落进 pending，稿上永远没有签块。
 
 ## 判据怎么判
 
-只钉 E 的**渲染提示词**（`agent_prompts.system_prompt("E")`）：
+只钉 E 的渲染提示词（`agent_prompts.system_prompt("E")`）：
 - 五条新口径必须出现（两态 / 签名者=收方秘书 / 真凭据是 V 台账那一行 /
   `e_signature` 只是结构标记 / `proof_manuscript` 与「不带它只落 pending」）；
 - 四条旧口径一个字都不许留（`三态结论落` / `签名者是 V` / `signed_by=V` /
