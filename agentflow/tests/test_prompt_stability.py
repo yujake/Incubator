@@ -796,6 +796,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p240", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p240（2026-11-04，今晚最后一次冻结）：变化格 = B / M 两格，其余九格逐字未动。B：policy 把「再派 V 审这一份稿」写回裁定原话「再派 V 审核签字（`V.verify_proof`：`statement_id` + `proof_manuscript=<这份稿>`）」；`register_statement` 的动作摘要把「（证明稿，proof manuscript）」移到「是证明正文的载体」之后、参数说明给这一句加 `**` 强调（5f29ec24 / 646adcb5）。M：policy 首提改成「交接工作前先写一份手稿（交接手稿，handoff）」，旧判据针重新连通（8d80a398）。V 未变：6efb3079 给 verify.verify_proof 的 returns 补了两态词，但 returns 不进 tools_lines（只进 function-calling 的 description）⇒ V 的提示词一个字没变，那一笔的模型可见落点在工具面 golden。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p240 → p241（2026-11-04，今晚最后一次冻结：p240 之后 D 的可见面一次对齐）：
+    # 变化格 = ['D'] —— `specs/d.py` 的 policy 新增「想法 / 落稿与拿签 / 产物」三句并把研究
+    # 手稿落点改回 `reports/RESEARCH.md` 七节（035b7365），`agent_skills.py` 的 D 手册新增
+    # 「想法 → 派 F → 读回 → 新想法」循环、技能索引那一行的 summary 随之改写。一格事实的
+    # 落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
+    {"version": "p241", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p241（2026-11-04，今晚最后一次冻结）：变化格 = D 一格，其余十格逐字未动。D：`specs/d.py` 的 policy 新增一条三句（业主 2026-11-04 逐字裁定：D 可给证明思路与依赖面参考，最终落稿拿签必须派 F；D 的产物 = 想法 + 收获 + 新想法），同一格的研究手稿落点从「reports/RESEARCH.md 是框架保留面」改回既有七节形式（七节、先读后改、收录 F/E 成果，自写 `## 证明` 节受控拒）；`agent_skills.py` 的 D 手册新增「想法 → 派 F → 读回 → 新想法」循环，技能索引那一行的 summary 随之改写（索引行印在 D 的段上）。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
