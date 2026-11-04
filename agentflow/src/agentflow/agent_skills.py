@@ -2402,13 +2402,15 @@ def _c_skills() -> tuple[Skill, ...]:
 2. **缺口这一层**：`C.gaps`（结构缺口候选，可显式选择是否提交检索请求）/
    `C.structural_duplicates`（I5 的输入）—— 回答"哪里还薄"；
 3. **原文这一层**（贵）：真要看正文，抓**那一段**而不是全文（`fs.read` 带
-   `start_line` / `max_lines`；`manuscripts.read` 同理）。
+   `start_line` / `max_lines`；`manuscripts.read` **只有 `id`** —— 按编号读全文，
+   没有分段参数，要读哪一段先用 `fs.read` 定位，别指望它替你截）。
 
 ## 产出怎么落
 
-C 的**产出登记口只有 `C.handle` 一处**（报告 ok 时由它收口落 `analysis_reports`）。
-所以：先跑分析器，再由 `handle` 收口 —— 只在对话里报一堆读数、没有落 `analysis_reports` 行，
-这一趟等于没有产出。
+C 的**产出登记口只有 `analysis.register_report` 一处**（`C.handle` 那些是动作、不在你的
+工具面上 —— 只有派你的人 `summon` 得动它们；工具面上能落 `analysis_reports` 的只有这一件）。
+所以：先跑分析器、把读数算出来，再用 `analysis.register_report` 登记 —— 只在对话里报
+一堆读数、没有落 `analysis_reports` 行，这一趟等于没有产出。
 
 ## 一条纪律
 
@@ -2577,7 +2579,10 @@ C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）
    框架侧另有一份核对读数 `path_shape.join_segments([批1, 批2])`：它把 `segments`
    （每段的起点 / 终点 / 跳数）与 `seams`（接缝节点）摊开，并按拼后的边重算
    `hops` / `steps`（不是把两批的数字相加 —— 前一批报的跳数里含着"越界那一跳"）。
-   它是核对材料，不是替你把链拼好了：这么拼对不对、拼起来自不自然，仍由你判。
+   但它是**框架内部读数，没有工具面入口**：你的工具面上没有 `path_shape.*`，
+   拿不到这份 `join_segments` 的结果 —— 接缝只能按上面那三样（`node` / `from` /
+   `via_dep_id`）自己核。它是框架侧对同一件事的核对材料，不是替你把链拼好了：
+   这么拼对不对、拼起来自不自然，仍由你判。
 6. **拼不起来就如实报哪一段缺，补全之后仍绕弯就上报**：接缝对不上、成环、某一段
    断了（`checked=False`，`note` 点名断在第几批）时，把那条 `note` 的实质写进结论：
    "缺的是哪一批到哪一批之间那一段"。**不许**把"没搜完"说成"没有这条路"，也不许

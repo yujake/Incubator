@@ -92,3 +92,55 @@ def test_the_checker_is_not_vacuous() -> None:
 
     # ④ 空串 ⇒ 全部事实都报缺（检查函数不是对任何串都返回空）
     assert len(_problems("")) >= 12, _problems("")
+
+
+# ---------------------------------------------------------------- 手册三句（同一件）
+
+
+def _c_manual_text() -> str:
+    """C 的三条 skill 正文（`agent_skills.CATALOG["C"]`，真跑时进提示词的那一份）。"""
+    from agentflow import agent_skills as AS
+
+    return "\n\n".join(skill.body for skill in AS.CATALOG["C"])
+
+
+def _manual_problems(text: str) -> list[str]:
+    """C 的手册里"教了做不到的事"的地方（空列表 = 干净）。"""
+    out: list[str] = []
+    if "产出登记口只有 `C.handle`" in text:
+        out.append("还说 `C.handle` 是产出登记口：它是动作、不在 C 的工具面上")
+    if "产出登记口只有 `analysis.register_report`" not in text:
+        out.append("没有点名真登记口 `analysis.register_report`")
+    if "`manuscripts.read` 同理" in text:
+        out.append("还说 `manuscripts.read` 能截段：它只有 `id`，没有 start_line / max_lines")
+    if "`manuscripts.read` **只有 `id`**" not in text:
+        out.append("没有把 `manuscripts.read` 的实参说清（只有 `id`）")
+    if "`path_shape.join_segments" in text and "没有工具面入口" not in text:
+        out.append("还把 `path_shape.join_segments` 写成可调用的读数（没有工具面入口）")
+    if "没有工具面入口" not in text:
+        out.append("没有说清 `join_segments` 没有工具面入口")
+    return out
+
+
+def test_c_manual_does_not_teach_the_impossible() -> None:
+    """a（手册三句）：登记口 / `manuscripts.read` 的参数 / `join_segments` 的入口都改成真话。"""
+    bad = _manual_problems(_c_manual_text())
+    assert not bad, "C 的手册还在教做不到的事：\n  " + "\n  ".join(bad)
+
+
+def test_the_manual_checker_is_not_vacuous() -> None:
+    """b（手册三句）：逐处回灌旧句 ⇒ 检查函数必须点名。"""
+    text = _c_manual_text()
+
+    hit = _manual_problems(text.replace(
+        "产出登记口只有 `analysis.register_report`", "产出登记口只有 `C.handle`"))
+    assert any("C.handle" in one for one in hit), hit
+
+    hit = _manual_problems(text.replace(
+        "`manuscripts.read` **只有 `id`**", "`manuscripts.read` 同理"))
+    assert any("manuscripts.read" in one for one in hit), hit
+
+    hit = _manual_problems(text.replace("没有工具面入口", ""))
+    assert any("join_segments" in one or "没有工具面入口" in one for one in hit), hit
+
+    assert len(_manual_problems("")) >= 3, _manual_problems("")
