@@ -207,7 +207,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # `## 依赖`（四列表），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
                 # ＋ `path_group` ＋ `source_stmt_id`）。F 自己不写依赖台账。
                 "proof_manuscript": {**_S, "description":
-                                     "`proof_manuscript` 是证明正文的载体"
+                                     "`proof_manuscript` 是**证明正文的载体**"
                                      "（自产命题在册与否都交它）：F/E 的稿，"
                                      "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
                                      "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
