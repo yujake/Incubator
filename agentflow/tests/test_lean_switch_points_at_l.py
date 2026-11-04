@@ -54,6 +54,8 @@ from agentflow import schema as S
 from agentflow import settings as SET
 from agentflow.tools import build_registry
 
+from conftest import restore_lean_baseline
+
 #: 那个只在开关打开时存在的角色。
 ROLE_L = "L"
 
@@ -250,18 +252,22 @@ def test_off_leaves_no_trace_of_l(monkeypatch: pytest.MonkeyPatch) -> None:
     而 M 的伙伴表里还印着 `L：…` 那一行。
     """
     _set(False)
-    registry = _registry()
-    counts = _counts()
-    assert ROLE_L not in counts, f"关着时 L 仍被算作可见角色：{sorted(counts)}"
-    bad = {role: row for role, row in counts.items()
-           if row["role_L"] or row["formal_dot"]}
-    assert not bad, f"关着时仍有角色的提示词里留着 L 的痕迹：{bad}"
-    for role in counts:
-        text = _prompt(role, registry)
-        assert not ROW_L.search(text), f"{role} 的伙伴表里还有 `L：` 那一行"
-        assert "形式化那一岗是 L" not in text, f"{role} 的提示词里还点着 L 那一岗"
-    # 反真空：这一档的文本不是空的（十个角色加起来远大于 0，且 L 那一岗确实不在）
-    assert sum(len(_prompt(r, registry)) for r in counts) > 20000, "关着时提示词被清空了"
+    try:
+        registry = _registry()
+        counts = _counts()
+        assert ROLE_L not in counts, f"关着时 L 仍被算作可见角色：{sorted(counts)}"
+        bad = {role: row for role, row in counts.items()
+               if row["role_L"] or row["formal_dot"]}
+        assert not bad, f"关着时仍有角色的提示词里留着 L 的痕迹：{bad}"
+        for role in counts:
+            text = _prompt(role, registry)
+            assert not ROW_L.search(text), f"{role} 的伙伴表里还有 `L：` 那一行"
+            assert "形式化那一岗是 L" not in text, f"{role} 的提示词里还点着 L 那一岗"
+        # 反真空：这一档的文本不是空的（十个角色加起来远大于 0，且 L 那一岗确实不在）
+        assert sum(len(_prompt(r, registry)) for r in counts) > 20000, "关着时提示词被清空了"
+    finally:
+        # 这一条以"关"收尾：显式回基线（文件级 autouse `_restore` 只是第二层）。
+        restore_lean_baseline(monkeypatch)
 
 
 # --------------------------------------------------------------------------- ④
@@ -271,25 +277,29 @@ def test_the_same_process_follows_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     改前红：③ 那一行（技能索引末尾的"Lean 形式化关闭"）在任何档位下都出现，
     所以"关"与"开"两档在它上面完全相同 —— 它证明不了开关接上了。
     """
-    _set(False)
-    off_first = _counts()
-    _set(True)
-    on_counts = _counts()
-    on_l_text = _prompt(ROLE_L, _registry())
-    _set(False)
-    off_again = _counts()
+    try:
+        _set(False)
+        off_first = _counts()
+        _set(True)
+        on_counts = _counts()
+        on_l_text = _prompt(ROLE_L, _registry())
+        _set(False)
+        off_again = _counts()
 
-    print("\n[同进程切换] 关着 role_L 合计 =", sum(r["role_L"] for r in off_first.values()))
-    print("[同进程切换] 开着 role_L 合计 =", sum(r["role_L"] for r in on_counts.values()))
-    print("[同进程切换] 再关 role_L 合计 =", sum(r["role_L"] for r in off_again.values()))
+        print("\n[同进程切换] 关着 role_L 合计 =", sum(r["role_L"] for r in off_first.values()))
+        print("[同进程切换] 开着 role_L 合计 =", sum(r["role_L"] for r in on_counts.values()))
+        print("[同进程切换] 再关 role_L 合计 =", sum(r["role_L"] for r in off_again.values()))
 
-    assert off_first == off_again, "关 → 开 → 关 之后读数没回到第一次那一档（缓存停在中间态）"
-    assert on_counts != off_first, "换到开着那一档之后一个读数都没变（判定没接上）"
-    assert sum(r["role_L"] for r in off_first.values()) == 0
-    assert sum(r["role_L"] for r in on_counts.values()) >= 10
-    assert sum(r["formal_dot"] for r in off_first.values()) == 0
-    assert sum(r["formal_dot"] for r in on_counts.values()) > 0
-    assert all(needle in on_l_text for needle in L_MUST_HAVE)
+        assert off_first == off_again, "关 → 开 → 关 之后读数没回到第一次那一档（缓存停在中间态）"
+        assert on_counts != off_first, "换到开着那一档之后一个读数都没变（判定没接上）"
+        assert sum(r["role_L"] for r in off_first.values()) == 0
+        assert sum(r["role_L"] for r in on_counts.values()) >= 10
+        assert sum(r["formal_dot"] for r in off_first.values()) == 0
+        assert sum(r["formal_dot"] for r in on_counts.values()) > 0
+        assert all(needle in on_l_text for needle in L_MUST_HAVE)
+    finally:
+        # 这一条以"再关"收尾：显式回基线（文件级 autouse `_restore` 只是第二层）。
+        restore_lean_baseline(monkeypatch)
 
 
 # --------------------------------------------------------------------------- ⑧
@@ -352,17 +362,21 @@ def test_never_hiding_turns_the_zero_trace_criterion_red(
     所以钉成找不到之后，L 那一份提示词必须被当成"可见角色"算进来，③ 当场红。
     """
     _set(False)
-    registry = _registry()
-    live = {role: _prompt(role, registry) for role in LS.visible_roles(_roles())}
-    assert all(len(ROLE_NAME.findall(t)) == 0 for t in live.values()), \
-        "正控没成立（关着时本来就有 L 的痕迹？）"
-    monkeypatch.setattr(LS, "is_hidden", lambda role: False)
-    widened = {role: _prompt(role, registry) for role in LS.visible_roles(_roles())}
-    assert ROLE_L in widened, "把判定改成恒 False 之后 L 仍不在可见角色里"
-    dirty = {role: len(ROLE_NAME.findall(t)) + t.count("formal.")
-             for role, t in widened.items()}
-    assert dirty[ROLE_L] > 0, (
-        "恒 False 之后 L 那份提示词里一个 L 记号都没有 ⇒ ③ 在这种改动下不会红，它是真空的")
+    try:
+        registry = _registry()
+        live = {role: _prompt(role, registry) for role in LS.visible_roles(_roles())}
+        assert all(len(ROLE_NAME.findall(t)) == 0 for t in live.values()), \
+            "正控没成立（关着时本来就有 L 的痕迹？）"
+        monkeypatch.setattr(LS, "is_hidden", lambda role: False)
+        widened = {role: _prompt(role, registry) for role in LS.visible_roles(_roles())}
+        assert ROLE_L in widened, "把判定改成恒 False 之后 L 仍不在可见角色里"
+        dirty = {role: len(ROLE_NAME.findall(t)) + t.count("formal.")
+                 for role, t in widened.items()}
+        assert dirty[ROLE_L] > 0, (
+            "恒 False 之后 L 那份提示词里一个 L 记号都没有 ⇒ ③ 在这种改动下不会红，它是真空的")
+    finally:
+        # 这一条以"关"收尾：显式回基线（文件级 autouse `_restore` 只是第二层）。
+        restore_lean_baseline(monkeypatch)
 
 
 # --------------------------------------------------------------------------- ⑥
