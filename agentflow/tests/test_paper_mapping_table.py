@@ -36,6 +36,7 @@ import pytest
 
 from agentflow import closing as CL
 from agentflow import numerictheorem as NT
+from agentflow import numericproof as NP
 from agentflow import papercompile as PC
 from agentflow import papermapping as PM
 from agentflow import schema as S
@@ -727,7 +728,16 @@ def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathl
 
     # Lean 那两格的四条（业主 2026-10-22 追加）：开关开（套件钉着开着，见
     # `tests/conftest.py`）、包里有 `.lean`，才要求定理行给两格；四种坏法各来一次。
-    lean = _workspace(tmp_path / "f", rows=_lean_rows())
+    # 2026-11-04 缝隙三之后凭据格按证明通道判：这两行填了两格，所以台账里必须真的
+    # 登记一条 formal 证明（通道为空而填凭据 = 无依据的声称，那一档由
+    # `test_mapping_credential_slot_holds_both_programs.py` 的 e 与
+    # `test_mapping_names_the_lean_artifact.py` 的 8 守着）。
+    lean_ledger = {table: [dict(row) for row in table_rows]
+                   for table, table_rows in CLEAN_LEDGER.items()}
+    lean_ledger["experiments"].append({
+        "experiment_id": "000008", "method": NP.FORMAL_METHOD,
+        "evidence_kind": "proof", "code_path": "formal/000004.lean"})
+    lean = _workspace(tmp_path / "f", rows=_lean_rows(), ledger=lean_ledger)
     artifact = PM.package_dir(lean) / "formal" / "000004.lean"
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_bytes(LEAN_SOURCE.encode("utf-8"))

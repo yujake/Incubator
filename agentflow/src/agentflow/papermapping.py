@@ -285,11 +285,13 @@ ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
 
-#: 数值实验定理那一支管哪几类环境（`is_numeric_row` 与正文"一条命题一个环境"用）。
+#: 数值实验定理那一支管哪几类环境（正文"一条命题一个环境"用；`is_numeric_row` 不按它判）。
 #:
 #: 为什么不是全部六类：例子与实验不是"被证明的命题"，它们没有证明栏可指。
 #: 凭据那一格（`lean_file`）不按这一组裁：它按这一条命题的证明通道判
 #: （见 `_lean_problems`）—— 通道非空就要填，与正文里排成哪类环境无关。
+#: 数值定理那一支同理：`is_numeric_row` 只按通道判（2026-11-04 缝隙一），
+#: 这一组只留给"一条命题对一个环境"与读数里的 `target_kinds`。
 LEAN_TARGETED_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
 
 #: "一条命题对一个环境"这条口径管哪几类环境（业主 2026-10-24，D-40）。
@@ -1828,6 +1830,46 @@ def _credential_slot(row: Row,
     return NP.formal_slot(statement, experiments, filled=str(row.lean_file or "").strip())
 
 
+def _experiment_rows(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                     ) -> list[dict[str, Any]]:
+    """台账里 `experiments` 那几行（判通道要读它；读不到就是空表，不是"随便一条"）。"""
+    return [dict(item) for item in ((ledger or {}).get("experiments") or ())
+            if isinstance(item, Mapping)]
+
+
+def _numeric_row_reading(row: Row,
+                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                         experiments: Sequence[Mapping[str, Any]] | None = None
+                         ) -> dict[str, Any]:
+    """这一行的「证明通道 / 是否按数值定理判 / 证明栏是不是程序」——三件事的唯一读法。
+
+    判据本体只有一处：通道由 `numericproof.proof_channel` 判（经 `_credential_slot` 读，
+    而 `_credential_slot` 只接线 `numericproof.formal_slot`）。`kind` 不参与 ——
+    `kind="example"` 的行只要证明栏是程序，它照样是数值定理那一支要管的行。
+
+    通道判不出来（空串）时用 E-1 的入口 `numerictheorem.is_program_proof`
+    （它再转发 `numericproof.proof_column_script`）兜底：证明栏第 ① 段就是一份程序 ⇒
+    这一行按数值定理那一支判。为什么必须有这条兜底：程序还没被 E 签成穷举时
+    `proof_channel` 也返回空串，而那一档要报的是 `mapping_proof_program_unbacked`
+    （"只能记成有数值实验支持"）—— 兜底去掉，那条红会静默消失。
+
+    兜底只决定"按哪一支判"，不决定通道：凭据格该不该填仍按 `channel`（空通道两格必须空）。
+    本模块里没有第二处判断"这一行算不算数值定理"：`is_numeric_row` 读的就是这里。
+    """
+    if experiments is None:
+        experiments = _experiment_rows(ledger)
+    slot = _credential_slot(row, ledger, experiments)
+    channel = str(slot.get("channel") or "")
+    statement = _credential_statement(row, ledger)
+    program = bool(statement) and NT.is_program_proof(statement.get("proof_text"))
+    return {
+        "channel": channel,
+        "program": program,
+        "slot": slot,
+        "numeric": channel == NP.PROOF_CHANNEL_NUMERIC or (not channel and program),
+    }
+
+
 def credential_fields(channel: Any) -> tuple[str, ...]:
     """这一条证明通道"该填"哪几个凭据格（`_lean_problems` 与 `mapping_cells` 共用这一处）。
 
@@ -1847,41 +1889,76 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
                    ) -> list[dict[str, Any]]:
     """凭据那一格（`lean_file`，字段名照旧）：什么时候必填、填的类别要与通道一致。
 
-    四件事分开报，一条坏不遮蔽另一条：
+    六件事分开报，一条坏不遮蔽另一条：
     1. 通道非空而缺（或两格只填了一格）=> `mapping_lean_missing`；
     2. 凭据的类别与证明通道不一致（数值通道填 `.lean`、形式化通道填 `.py`、空通道填程序）
        => `mapping_lean_file_missing`（判据本体是 `numericproof.formal_slot`，这里只加一句
        「类别与通道不一致」的定位，不另判一次）；
     3. 形式化通道的 `.lean` 两个根里都找不到 => `mapping_lean_file_missing`；
        `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；
-    4. 同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`。
+    4. 同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`；
+    5. 空通道（证明栏里既没有程序也没有 Lean 源码、台账里也没有 E 签的穷举）而凭据格填了
+       任一格 => `mapping_lean_file_missing`：没有通道就没有凭据，两格必须都空
+       （2026-11-04 缝隙三，业主口径「这一格的功能是这条命题百分百为真」）；
+    6. 空通道而 `numeric_evidence` / `exhaustion_note` 有值 => `mapping_numeric_evidence_missing`：
+       "这一行自称有数值证据，但没有数值证明通道"（2026-11-04 缝隙二；`mapping_reading` 与
+       收工门读数都读这一条，两边同时报，不再一边报一边不报）。
 
     "必填"按这一条命题的证明通道判（`numericproof.formal_slot` 的 numeric / formal /
     空），不再按"盘上有没有 Lean 产物"判：后者是一个全局读数，不是某一条命题的凭据
     （2026-11-04 业主口径：这一格说的是「这个命题是百分百真的」）。通道为空 ⇒ 这一格
-    允许为空（不适用）。这一条只在 `LEAN_KINDS` 非空时才被调用（见 `mapping_reading`）：
-    清空那一组就是关掉这一档，反真空用例靠它证明这些红真的靠那组 kind。
+    不许填（不是"允许为空"而是"必须为空"，见第 5 条）。这一条只在 `LEAN_KINDS` 非空时
+    才被调用（见 `mapping_reading`）：清空那一组就是关掉这一档，反真空用例靠它证明这些红
+    真的靠那组 kind。
+
+    通道与"证明栏是不是程序"的唯一读法是 :func:`_numeric_row_reading`（它只接线
+    `numericproof.proof_channel` 与 `numerictheorem.is_program_proof`）：这里不另判一次
+    "这一行算不算数值定理"。
 
     `lean_file` 的解析走 :func:`_lean_source_state`（包内优先、项目根兜底）：
     L 的源码在 `code/formal/`，它填不进"只认包内"的那一版（2026-10-25 第 4 条）。
     """
     problems: list[dict[str, Any]] = []
-    experiments = [dict(item) for item in ((ledger or {}).get("experiments") or ())
-                   if isinstance(item, Mapping)]
+    experiments = _experiment_rows(ledger)
     seen_targets: dict[str, Row] = {}
     for row in rows:
         lean_file = str(row.lean_file or "").strip()
         lean_target = str(row.lean_target or "").strip()
-        slot = _credential_slot(row, ledger, experiments)
-        channel = str(slot.get("channel") or "")
+        reading = _numeric_row_reading(row, ledger, experiments)
+        slot = reading["slot"]
+        channel = str(reading["channel"] or "")
         # 通道的两个取值在 `numericproof.PROOF_CHANNEL_*`（`channel` 与 `kind` 是两件事：
         # 前者是"证明走哪条路"，后者是"这一格该填哪一类"）。
         numeric = channel == NP.PROOF_CHANNEL_NUMERIC
         formal = channel == NP.PROOF_CHANNEL_FORMAL
+        values = {"lean_file": lean_file, "lean_target": lean_target}
+        if not channel and not reading["program"]:
+            # 空通道：证明栏里既没有程序也没有 Lean 源码、台账里也没有 E 签的穷举。
+            # 这一行的凭据格必须两格都空（第 5 条）；填了就是无依据的声称。
+            claimed = [name for name in (NT.EVIDENCE_FIELD, NT.NOTE_FIELD)
+                       if str(getattr(row, name, "") or "").strip()]
+            if claimed:
+                problems.append(_problem(
+                    NT.NUMERIC_EVIDENCE_MISSING,
+                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）填了 {claimed}，"
+                    "而这一行没有数值证明通道（证明栏里既没有程序也没有 Lean 源码、台账里"
+                    "也没有 E 签的穷举）⇒ 这一行自称有数值证据，但没有数值证明通道 —— 两边"
+                    "不一致：要么把证明栏第 ① 段写成那份程序并让 E 签下穷举，要么把这两格清空",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            filled = [name for name in LEAN_ROW_FIELDS if values[name]]
+            if filled:
+                problems.append(_problem(
+                    "mapping_lean_file_missing",
+                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的凭据格填了 "
+                    f"{filled}，而这一行没有证明通道（证明栏里既没有程序也没有 Lean 源码）"
+                    "⇒ 凭据格不许填，填了就是无依据的声称 —— 类别与通道不一致："
+                    f"`lean_file` 是「{CREDENTIAL_CELL_NAME}」那一格，它说的是「这条命题"
+                    "百分百为真」；没有通道就没有凭据，两格都必须留空",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            continue
         # 数值通道那两格里只有一格（程序地址）：程序没有 Lean 声明名那一半。
         # 这份清单只有一处（`credential_fields`）：`doc.mapping_cells` 读的是同一个函数。
         wants = credential_fields(channel)
-        values = {"lean_file": lean_file, "lean_target": lean_target}
         missing = [name for name in wants if not values[name]]
         half = (any(values[name] for name in LEAN_ROW_FIELDS)
                 and not all(values[name] for name in LEAN_ROW_FIELDS))
@@ -1923,12 +2000,15 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
                         label=row.label, where=MAPPING_JSON_NAME))
                 file_ok = not (slot.get("problems") or ())
             elif not lean_file.lower().endswith(LEAN_SUFFIX):
+                if formal:
+                    got_channel = "Lean 程序（形式化）⇒ 这一格只收 `.lean` 路径"
+                elif reading["program"]:
+                    got_channel = ("空（这一行有程序但还没有 E 签的穷举 ⇒ 证明通道判不出来）"
+                                   "⇒ 不能把一份数值程序填进这一格")
+                else:
+                    got_channel = ("空（这一条没有证明通道：`proof_text` 不是程序、台账里"
+                                   "也没有 E 签的穷举）⇒ 不能把一份数值程序填进这一格")
                 if formal or NP.is_script_path(lean_file):
-                    got_channel = (
-                        "Lean 程序（形式化）⇒ 这一格只收 `.lean` 路径"
-                        if formal else
-                        "空（这一条没有数值证明通道：`proof_text` 不是程序、台账里也没有 E "
-                        "签的穷举）⇒ 不能把一份数值程序填进这一格")
                     problems.append(_problem(
                         "mapping_lean_file_missing",
                         f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 类别与通道不一致："
@@ -3128,7 +3208,7 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                         f"而 `stmt:{row_id}` 的证明清单里只有 {known}（`proofs` 那一条）"
                         "—— 证明号必须能被台账解析到",
                         label=row.label, where=MAPPING_JSON_NAME)
-    numeric = is_numeric_row(row, got.ledger_row)
+    numeric = is_numeric_row(row, ledger)
     if numeric:
         # 数值实验定理那一行的证明栏是程序（相对仓库根），与论文包内那份 tex 是两回事：
         # 走同一张 `file_state` 会把 `code/…` 判成"指到包外"，于是每一条真的穷举证明都红。
@@ -3151,25 +3231,28 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
     return got
 
 
-def is_numeric_row(row: Row, ledger_row: Mapping[str, Any] | None) -> bool:
-    """这一行是不是数值实验定理（证明栏是程序，或它自己填了那两格）。
+def is_numeric_row(row: Row,
+                   ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                   experiments: Sequence[Mapping[str, Any]] | None = None) -> bool:
+    """这一行算不算数值实验定理 —— 只按证明通道判，`kind` 不参与（2026-11-04 修）。
 
-    两个来源都要认：
-      - 台账说它的证明就是一份程序（`stmt` 行的 `proof_text` 过了
-        `numerictheorem.is_program_proof`）—— 这是 E-1 的权威判据；
-      - 或者这一行自己填了 `numeric_evidence` / `exhaustion_note` —— 填了就是声称，
-        声称就得能复核（与 Lean 那两格同一条纪律）。
+    判法只有一处：:func:`_numeric_row_reading`（通道的真身是
+    `numericproof.proof_channel`；通道判不出来时用 E-1 的"证明栏是不是程序"兜底）。
+    这一版删掉的两条旧口径，逐条说明为什么：
 
-    只对命题类环境算（`LEAN_TARGETED_KINDS`）：例子与实验不是"被证明的命题"，
-    它们的 `file` 仍然是论文包内那份材料。
+    - 旧口径有"`kind` 必须在 `LEAN_TARGETED_KINDS` 里"这一道门。于是 `kind="example"`
+      而台账里那条命题的证明栏是程序（`proof_channel == numeric`）时，收工门读数按通道
+      要 `numeric_evidence` / `exhaustion_note` / 索引四格（`complete=0`），而这里被
+      kind 门挡住 ⇒ `mapping_reading` 报 `pass`：同一张表两个答案（2026-11-04 缝隙一）。
+      现在 `kind` 一格都不参与 —— 一条命题的证明走哪条通道，与它在正文里排成哪类环境无关。
+    - 旧口径有"这一行自己填了 `numeric_evidence` / `exhaustion_note` 就算数值定理"。
+      那会把空通道的自称读成判据：现在空通道而填了那两格是"两边不一致"，由
+      `_lean_problems` 第 6 条报 `mapping_numeric_evidence_missing`（缝隙二）。
+
+    `ledger` 是整张台账（要读 `experiments` 判 E 签的穷举）；`experiments` 不给就从
+    `ledger` 现取。
     """
-    if row.kind not in LEAN_TARGETED_KINDS:
-        return False
-    if row.numeric_evidence or row.exhaustion_note:
-        return True
-    if isinstance(ledger_row, Mapping) and NT.is_program_proof(ledger_row.get("proof_text")):
-        return True
-    return False
+    return bool(_numeric_row_reading(row, ledger, experiments)["numeric"])
 
 
 def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
@@ -3334,6 +3417,13 @@ def _cell_of_problem(problem: Mapping[str, Any], row: Row, channel: Any) -> str:
                  if not str(getattr(row, name, "") or "").strip()]
         return empty[0] if empty else "lean_file"
     if kind == "mapping_lean_file_missing":
+        if not str(channel or ""):
+            # 空通道那一族（第 5 条：两格必须都空）：问题落在"填了的那一格"，
+            # 只填 `lean_target` 时不能读成 `lean_file`。
+            filled = [name for name in LEAN_ROW_FIELDS
+                      if str(getattr(row, name, "") or "").strip()]
+            if filled:
+                return filled[0]
         return "lean_file"
     if kind in ("mapping_lean_target_missing", "mapping_lean_target_ambiguous"):
         return "lean_target"
@@ -3490,7 +3580,7 @@ def mapping_cells(project_root: str | Path, *,
     slot = _credential_slot(row, ledger, experiments)
     channel = str(slot.get("channel") or "")
     out["channel"] = channel
-    numeric = is_numeric_row(row, statement_raw)
+    numeric = is_numeric_row(row, ledger, experiments)
     cells: dict[str, Any] = {}
     sources: dict[str, str] = {}
 
@@ -4028,16 +4118,13 @@ def mapping_reading(project_root: str | Path, *,
         if isinstance(got.ledger_row, Mapping) and str(row.ledger_id).startswith("stmt:"):
             origin = str(got.ledger_row.get("origin") or "")
         problems += _citation_problems(row, package, origin)
-        if NUMERIC_KINDS and is_numeric_row(row, got.ledger_row):
+        if NUMERIC_KINDS and is_numeric_row(row, known):
             if segments is None:
                 segments = theorem_segments(project, tex=tex_text if tex is not None else None)
             problems += _numeric_problems(row, got.ledger_row, known, workspace, segments)
 
     for row in rows:
-        resolved = resolve_ledger_id(row.ledger_id, known)
-        target = (ledger_row(known, str(resolved["table"]), str(resolved["row_id"]))
-                  if resolved["ok"] else None)
-        state = (NT.program_state(workspace, row.file) if is_numeric_row(row, target)
+        state = (NT.program_state(workspace, row.file) if is_numeric_row(row, known)
                  else file_state(package, row.file))
         if state["state"] == "empty":
             reading["empty_files"].append(state["file"])

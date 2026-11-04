@@ -35,6 +35,7 @@ import re
 
 import pytest
 
+from agentflow import numericproof as NP
 from agentflow import papermapping as PM
 from agentflow import settings as SET
 from agentflow.agent_h import mapping_judge as MJ
@@ -136,11 +137,27 @@ def _workspace(root: pathlib.Path, *, rows: list[dict],
     """造一个工作区：台账三张表 + 正文 + 包内真实文件 +（可选）Lean 产物 + 对应表三份。
 
     `lean_source=None` 时盘上一个 `.lean` 都没有（测"开关开着却没有产物"那一档）。
+
+    2026-11-04 缝隙三之后，凭据格按证明通道判：通道为空（既没有数值证明、也没有
+    formal 证明）而两格填了 `.lean` + 声明名 ⇒ 受控拒绝（"没有通道就没有凭据"）。
+    所以凡是要测"两格填得对"的那几档，台账里必须真的登记一条 formal 证明
+    （`method="formal"` + `evidence_kind="proof"` + 那份 `.lean`）；两格留空的档
+    （开关关 / 没有产物）反过来不登记 —— 那一档的通道本来就是空的。
+    判据由 `rows` 自己带没带凭据格决定，不另加开关：这样"填了两格"与"台账里有 formal
+    证明"是同一件事，不会造出"填了凭据却没有通道"的假现场。
     """
     root = pathlib.Path(root)
     store = Store(root)
     store.init()
-    for table, table_rows in LEDGER.items():
+    formal_proof = any(str(row.get("lean_file") or "").strip()
+                       or str(row.get("lean_target") or "").strip() for row in rows)
+    ledger = {table: [dict(row) for row in table_rows]
+              for table, table_rows in LEDGER.items()}
+    if formal_proof:
+        ledger["experiments"].append({
+            "experiment_id": "000008", "method": NP.FORMAL_METHOD,
+            "evidence_kind": "proof", "code_path": LEAN_REL})
+    for table, table_rows in ledger.items():
         path = root / "data" / str(PM.S.TABLES[table]["file"])
         doc = json.loads(path.read_text(encoding="utf-8"))
         doc["rows"] = [dict(row) for row in table_rows]

@@ -227,8 +227,8 @@ def test_e_stubbing_proof_channel_falls_back_to_the_old_shape(monkeypatch, tmp_p
     assert got["cells"]["lean_target"] == ""
     assert "不适用" in got["sources"]["lean_file"]
     assert got["cells"].get("lean_file") != SPEC.PROGRAM
-    # 这一条打桩只影响"通道"这一处判据：数值那两格仍由 `is_numeric_row` 判（行自己填了
-    # `numeric_evidence`）—— 证明通道清单不是这里另写的一套
+    # 这一条打桩只影响"通道"这一处判据：数值那两格仍由 `is_numeric_row` 判
+    # （通道判不出来，但证明栏第 ① 段就是那份程序）—— 证明通道清单不是这里另写的一套
     assert got["cells"]["numeric_evidence"] == f"exp:{SPEC.EID}"
 
 
@@ -315,8 +315,8 @@ FORMAL_TEX = (
 def _formal_scene(tmp_path: pathlib.Path) -> pathlib.Path:
     """一个形式化通道的现场：正文是自然语言证明，形式化那一行在 `experiments` 里。
 
-    刻意不让 `proof_text` 本身就是 `.lean` 路径：`numericproof.is_script_path` 认 `.lean`，
-    于是那种写法在 `papermapping.is_numeric_row` 眼里是"证明栏是程序"（`file` 要写成
+    刻意不让 `proof_text` 本身就是 `.lean` 路径：那种写法 `proof_channel` 会直接判成
+    formal（`is_lean_path`），`is_numeric_row` 于是也说"不是数值定理"（`file` 要写成
     仓库根相对）。这一条要测的是 formal 通道那两格，所以走正常的形态 —— 证明正文是
     散文、`.lean` 落在 `experiments` 的 `code_path`（`numericproof.formal_slot` 的 formal 支路）。
     """
