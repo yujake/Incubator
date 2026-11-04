@@ -90,7 +90,7 @@ def _cells_of(problems: list[dict]) -> list[str]:
     return [str(item.get("cell")) for item in problems]
 
 
-def _write_row(root: pathlib.Path, row: dict) -> None:
+def _rewrite_mapping_row(root: pathlib.Path, row: dict) -> None:
     """按盘的形状重写 json（只改行，不动 md/附录 —— 这一组不看那两份）。"""
     path, _md = PM.mapping_paths(root)
     path.write_bytes((json.dumps({"rows": [row]}, ensure_ascii=False, indent=2)
@@ -357,7 +357,7 @@ def _formal_scene(tmp_path: pathlib.Path) -> pathlib.Path:
         "lean_file": "code/formal/000001.lean", "lean_target": "main_result",
         "citation_loc_reason": "我方自产命题，没有外部引文",
     }
-    _write_row(root, row)
+    _rewrite_mapping_row(root, row)
     return root
 
 
@@ -389,7 +389,7 @@ def test_the_tool_face_carries_the_cells_back_in_both_states(tmp_path) -> None:
     assert res.ok, (res.error, res.meta)
     assert res.data["cells"]["file"] == SPEC.PROGRAM
 
-    _write_row(root, {**SPEC._row(), "lean_file": ""})
+    _rewrite_mapping_row(root, {**SPEC._row(), "lean_file": ""})
     res2 = surface.call("doc.mapping_cells", role="G", project=".",
                         statement_id=f"stmt:{SPEC.SID}")
     assert not res2.ok, "缺一格却回了 ok"
