@@ -79,8 +79,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "quote_verified / quote_mode。没有模型缝（没有 key）时如实回「没查」",
         _obj({"quote": _S, "span": _S, "statement": _S, "where": _S,
               "relation_id": _S, "stmt_id": _S}),
-        "dict（tri / verdict / same_meaning / quote_mode / quote_reason / judge / "
-        "call / span / where / relation_id / stmt_id / reason）",
+        "dict（tri / verdict / same_meaning / quote_mode / quote_reason / quote_span / "
+        "quote_call_sha256 / judge / call / span / where / relation_id / stmt_id / reason）",
         side_effect="read", handler_name="judge_quote_semantics",
     ),
 
