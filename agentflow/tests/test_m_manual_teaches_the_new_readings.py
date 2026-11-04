@@ -61,7 +61,7 @@ _UNOPTIMIZED: tuple[str, ...] = (
     "optimized[proof_no]",
 )
 
-#: 研究攻坚链必须读到的那一组（第 2、3 条）。
+#: 研究攻坚链必须读到的那一组（第 2、3 条 + 穷举那一路的档位）。
 _CHAIN: tuple[str, ...] = (
     "deps_missing",
     "present",
@@ -72,6 +72,8 @@ _CHAIN: tuple[str, ...] = (
     "carried_by_D",
     "兜底读盘",
     "不许自己猜一个路径",
+    # 2026-11-04「穷举程序 + V 签 ⇒ proof」：表里改前把收录档写死成 proof_review。
+    "穷举程序 + V 签 ⇒ `proof`",
 )
 
 #: 第 4 条：改前那句（做不到的动作）与改后那句。
@@ -112,6 +114,16 @@ def test_the_carried_sheet_is_not_written_as_a_direct_handoff() -> None:
     flat = _flat(_body(_CHAIN_SLUG))
     assert "受控拒绝" in flat, "手册没写清单地址读不到时的出路（受控拒绝）"
     assert "降级" in flat, "手册没写兜底读盘只是清单缺失时的降级"
+
+
+def test_the_chain_manual_does_not_hardcode_proof_review_for_every_proof() -> None:
+    """穷举程序 + V 签 ⇒ `proof`（2026-11-04 口径）：表里改前把收录档写死成 `proof_review`。"""
+    body = _body(_CHAIN_SLUG)
+    assert "`evidence_kind=proof_review`、`proof_text`" not in body, (
+        "研究攻坚链的 B 收录行还把 evidence_kind 写死成 proof_review —— "
+        "穷举题停在 proof_review 是错的终态（`verifications._exhaustion_proof_channel`）")
+    assert "穷举程序 + V 签 ⇒ `proof`" in body, "手册读不到「穷举程序 + V 签 ⇒ proof」这一档"
+    assert "proof_review" in body, "手册读不到文字证明那一档（proof_review）"
 
 
 # ============================================================ 4 送审：D 没有到 V 的边
