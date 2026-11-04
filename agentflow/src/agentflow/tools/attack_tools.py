@@ -490,8 +490,8 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     # 而 `agent_skills.py:1915-1916` 直接教模型去读这三格（"F.step 不替你送审，它只回读签：
     # 返回值的 `v_sign` 那一格与 `history` 里是这一轮这一份的四档 `delivery_state` /
     # `delivery_label`"）—— 声明里没有它们，模型就不知道这一格存在。
-    # 与已声明的 `delivery_state_plan` / `delivery_label_plan` 是两件事：那两个是**整份任务**
-    # 的读数（`delivery_summary` 的 `state`），这三个是**这一轮这一份**的四档。
+    # 与已声明的 `delivery_state_plan` / `delivery_label_plan` 是两件事：那两个是整份任务
+    # 的读数（`delivery_summary` 的 `state`），这三个是"这一轮这一份"的四档。
     returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
              "'reason','budget_known','budget_reading',"
              "'delivery','delivered',"
