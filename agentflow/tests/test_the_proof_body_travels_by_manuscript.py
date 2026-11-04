@@ -79,6 +79,7 @@ B_NEW: tuple[str, ...] = (
     "在册也给稿",
     "不要用内联的 `proofs=",
     "依赖面恒 0",
+    "自产命题由手稿 `proof_manuscript` 带进来",
 )
 
 #: B 的 policy（与动作摘要）里不许再出现的旧口径。
@@ -165,8 +166,8 @@ def test_b_manual_resign_goes_through_the_b_manuscript() -> None:
     """正控：B 手册在「改写后重签」处点名 b-proof 稿，而不是只给 statement_id。"""
     body = _skill("B", "登记-三件式与证据三态")
     assert _missing(body, ("reports/b-proof-<命题号>.md", "`proof_manuscript` 给这份稿的路径",
-                           "在册也给稿")) == [], (
-        "B 手册的「改写后重签」还没有把稿写成载体")
+                           "在册也给稿", "`proof_text` 只是它收进台账后的那一列")) == [], (
+        "B 手册的「三件式 / 改写后重签」还没有把稿写成载体")
     old = "`V.verify_proof`：`statement_id` 必填，要审第几条证明就带 `proof_no`"
     assert _flat(old) not in _flat(body), "B 手册还教「只给 statement_id 就能重签」"
 
