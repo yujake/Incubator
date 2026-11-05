@@ -543,7 +543,13 @@ def _no_cite_product() -> dict:
 
 
 def _stamp(st: Store, rel: str, *, sid: str, body: str) -> None:
-    """把一张盖住 body 的 V 签块写进稿里（B 的无签闸要它；不落台账）。"""
+    """把一张盖住 body 的 V 签块写进稿里，并落下它的独立台账行。
+
+    2026-11-05 晚（业主裁定「签必须有独立台账背书」）：B 的收录认签（`vsigns.
+    bits_after_sign`）现在会按签块上 `台账=` 那格去读 `verifications/<号>.jsonl`，
+    `ledger_row_missing` ⇒ 不认这一块。所以夹具不能再只盖块（那只是稿上的一句话）：
+    同一份正文先由 V 连判三转「成立」，签块锚到第 3 行。
+    """
     path = pathlib.Path(st.root) / rel
     text = path.read_text(encoding="utf-8")
     path.write_text(VS.stamp_manuscript_sign(
@@ -551,6 +557,11 @@ def _stamp(st: Store, rel: str, *, sid: str, body: str) -> None:
         need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
         ledger=f"verifications/{sid}.jsonl#v-000003",
         statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
+    for _i in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            str(st.root), statement_id=str(sid), proof_text=str(body),
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            proof_no=1, manuscript=str(rel))
 
 
 def _real_entries_run(st: Store) -> tuple[str, str, str]:
