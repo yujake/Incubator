@@ -2129,11 +2129,11 @@ def guard_result(fn: Any) -> Any:
     side_effect="none",
     roles=_ROLES,
     # 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
-    # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 会拼进
-    # function-calling 的 `description`（`tools/base.py:721`：`summary + "\n返回：" + returns`）
-    # ⇒ 「模型看得到」。而它此前看不到 `status_axis` / `undecided_reason` ——
-    # 那两格「正是三态」（"这条没查成"与"这条查过没问题"靠它们分开）。
-    # 模型不知道存在的字段，它不会用；那样三态纪律在「模型这一侧」又折回去了。
+    # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 只是台账/冻结快照的
+    # 声明契约（`tools/base.py:674-679`：description 不带 returns，模型面看不到它）。
+    # 声明与实跑分家时，`status_axis` / `undecided_reason` 这两格三态读数就少了一处
+    # 书面口径（判据/探针会红）—— 那不是"模型看不到"，模型面本来就不看 returns。
+    # 而"没查成"与"查过没问题"必须靠这两格分开，这条三态纪律在台账与快照侧同样成立。
     returns="{'checked','claim_id','ok','findings','error_count','warning_count',"
             "'checked_fields','decided','revision_hash','status_axis','undecided_reason'}",
     tags=("document", "gate"),
@@ -2390,7 +2390,8 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
     # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个；
     # 2026-10-15 补 `source_claim_id` / `source_doc_id` —— 它们是"这条依赖的「来源」"
-    # 那一族的两格，此前只写在声明之外，而 `returns` 会进模型看得到的 `description`）。
+    # 那一族的两格，此前只写在声明之外 —— `returns` 只是台账/冻结快照的契约
+    # （`tools/base.py:674-679`：description 不带 returns，模型面看不到它）。
     returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','source_claim_id','source_doc_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
     tags=("document", "dependency", "write"),
 )
