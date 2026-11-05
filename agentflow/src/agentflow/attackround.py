@@ -51,6 +51,24 @@ STRATEGIES: tuple[str, ...] = (
 F_BANNED_MARKERS: tuple[str, ...] = (
     "易证", "显然", "trivial", "clearly", "it is easy to see", "无须证明", "显然成立",
 )
+
+#: 一步正文里的"推导接词"—— 只用于读数（不是判据：不会因此拒收任何一轮）。
+#:
+#: 为什么需要这一格（`temp/dep_probe/REPORT-dependency-surface.md` 的结论）：可引池为空时，
+#: `assumption: true` 是唯一合法出口，于是 83/84/85/87 的 262 个编号步骤里 244 个标成
+#: 「（前提）」—— 而它们逐字都是「由 H 的分段定义得到…」「因此…」「故…」。这里把一句话
+#: 读成两类：前提步（真的先接受一个条件）与推导步被声明成前提（把要推的一步
+#: 声明成前提）。后者只落一条 `problem` 读数，判据强度一个字不动。
+#:
+#: 为什么用接词而不是 `cites`：合法形态里就有"前提本身挂在一条在册命题上"的写法
+#: （`tests/test_attack_round.py` 的 I11 边界：`设 stmt:0007 成立（本轮前提）`）——
+#: 把"有 cites"读成"推导步"会误伤它。
+DERIVATION_MARKERS: tuple[str, ...] = (
+    "因此", "所以", "故", "从而", "由此", "于是",
+    "可得", "得到", "推出", "进而", "可知",
+    "hence", "thus", "therefore", "consequently",
+)
+
 #: `dead_end` 的受控理由（"这条路死了"也要说清是哪一种死法）。
 DEAD_END_REASONS: tuple[str, ...] = (
     "反例", "方法不适用", "缺定义", "缺文献", "缺工具", "超出本轮预算", "需要先证别的命题",
@@ -77,7 +95,8 @@ PRODUCT_SPECS: dict[str, str] = {
     "proof": (
         "给出逐步论证。要给 `steps`（非空数组，每步 {text, cites, assumption}）—— "
         "`text` 是这一步说了什么，`cites` 是它引到的**在册 id**（只许引这一轮列出的那些），"
-        "确实没有依据可引时必须把这一步显式声明成前提（`assumption: true`）："
+        "**前提步**才可以声明成前提（`assumption: true`）；**推导步声明成前提 = 这一步没做**"
+        "（V 会按这个读）："
         "**缝是正确的事实变成错误证明的地方**，不许用措辞跳过去。"),
     "dead_end": (
         "这一轮走不下去。要给受控 `reason`（" + "、".join(DEAD_END_REASONS) + " 之一）、"
@@ -310,6 +329,9 @@ def parse_round(text: str) -> dict[str, Any]:
         if not isinstance(steps, (list, tuple)) or not steps:
             raise RoundError("proof 要给逐步论证（steps 非空）")
         out["steps"] = [_clean_step(s, i) for i, s in enumerate(steps, 1)]
+        # 读数（不是判据）：把"前提步"与"推导步被声明成前提"分开交回去 ——
+        # 后者一进 `history` 的 `product_detail`，下一轮谁读这一轮都看得见。
+        out["problems"] = [str(s["problem"]) for s in out["steps"] if s.get("problem")]
     elif product == "counterexample_request":
         spec = got.get("script_spec")
         if not isinstance(spec, Mapping):
@@ -347,6 +369,30 @@ def parse_round(text: str) -> dict[str, Any]:
     return out
 
 
+def _read_step_role(n: int, text: str, is_assumption: bool) -> tuple[str, str]:
+    """读一步的角色，并给"推导步被声明成前提"造一条 `problem`（空串 = 不报）。
+
+    两类分开读（`temp/dep_probe/REPORT-dependency-surface.md`）：
+
+    - 前提步：`assumption: true`，正文里没有推导接词 —— 这一步是先接受一个条件，
+      合法，不报；
+    - 推导步：正文带推导接词（「因此」「由…得到」那类）—— 它本来就该被写出来
+      （给出推导或 `cites`）。它被声明成前提 ⇒ 读成"这一步没做"，落一条 `problem`。
+
+    这只是读数：`parse_round` 照旧收下这一轮，不改任何判据的强度。
+    """
+    if not is_assumption:
+        return "推导步", ""
+    hit = [m for m in DERIVATION_MARKERS if m in text]
+    if not hit:
+        return "前提步", ""
+    return "推导步（被声明成前提）", (
+        f"第 {n} 步：这一步被声明成前提，但它是推导步（正文带「{hit[0]}」这类推导接词）"
+        "—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），"
+        "要么它本来就只是前提。"
+    )
+
+
 def _clean_step(step: Any, n: int) -> dict[str, Any]:
     """规范化一步证明，并把 #5 的硬禁令与"同段依据"判在这里。"""
     if not isinstance(step, Mapping):
@@ -374,7 +420,9 @@ def _clean_step(step: Any, n: int) -> dict[str, Any]:
             "（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态"
             "（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）"
         )
-    return {"n": n, "text": text, "cites": cites, "assumption": is_assumption}
+    role, problem = _read_step_role(n, text, is_assumption)
+    return {"n": n, "text": text, "cites": cites, "assumption": is_assumption,
+            "role": role, "problem": problem}
 
 
 def inherit_defects(round_row: Mapping[str, Any], *, clean_ids: Iterable[str]) -> list[dict[str, Any]]:
@@ -569,6 +617,14 @@ def selftest() -> int:
     ok = parse_round(json.dumps({"product": "proof", "strategy": "反证", "why_strategy": "反设",
                                  "steps": [{"text": "显然成立", "assumption": True}]}, default=str))
     checks.append(("声明成前提即合法", ok["steps"][0]["assumption"] is True))
+    read = parse_round(json.dumps({"product": "proof", "strategy": "反证", "why_strategy": "反设",
+                                   "steps": [
+                                       {"text": "假设 G 是 3-正则图", "assumption": True},
+                                       {"text": "由上面的假设得到 n=14，因此结论成立",
+                                        "assumption": True}]}, default=str))
+    checks.append(("前提步不报，推导步被声明成前提报一条（并指到步号）",
+                   read["steps"][0]["problem"] == "" and len(read["problems"]) == 1
+                   and "第 2 步" in read["problems"][0]))
     gate = pre_spend_gate(goal="证 n=3", testable="枚举", deps_refuted=["stmt:0007"])
     checks.append(("作废依赖 ⇒ 不花钱", gate["spend"] is False and gate["reasons"]))
     checks.append(("超预算 ⇒ too_large",
