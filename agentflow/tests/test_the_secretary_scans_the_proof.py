@@ -6,9 +6,12 @@
 ⇒ 出处、依赖、编号、去重都由秘书从这两样里推出来：依赖 = 证明过程里引用到的那些号。这一组守五件容易悄悄做错的事：
 
 1. 正控：B 交两样 ⇒ `statements` 一行 + 由证明文本扫出的 `dependencies` 若干行
-（`used_by="stmt:<新号>"`、每条边一个 `path_group`）；
-2. 负控（不许整笔拒）：证明里出现一个不在册的号 ⇒ 那条边落 `dangling` 并在读数里
-点名，整笔照写（拒了等于把整条定理丢掉，而"引了一个还不存在的号"最该留痕）；
+（`used_by="stmt:<新号>"`、每条边一个 `path_group`）；被引的命题先要够格
+（在册 ∧ 等级 ≥ `pre_theorem`）—— 业主口径：「F 只可引用准定理级及以上」；
+2. 负控（受控拒）：证明里出现一个不在册的号 ⇒ 整笔不写并点名那个号 ——
+业主 2026-11-06 逐字：「F 应该无法读到尚未在册的命题，特别地，F 只可引用
+proof review（或者说准定理级）及以上等级的命题」。所以这种正文不是"待接的
+悬空边"，而是这一笔写错了（F 读不到它，不可能是在引用它）；
 3. 点名（不许静默丢）：在册但 `Dependency` 没有承载格的前缀（`rel:` / `eval:`）
 进 `deps_unmappable` 并逐条写清为什么；
 4. 三态：`deps_state` = `from_proof` / `none_in_proof` / `unknown` 严格分开 ——
@@ -23,8 +26,9 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import TS, add_literature
+from conftest import TS, add_literature, sign_for_the_gate
 from _proof_manuscript_fixture import carry_proof_manuscript
+from agentflow import depsection as DS
 from agentflow import secretary as SEC
 
 
@@ -53,22 +57,36 @@ def _two_things(store, **extra) -> dict:
 # ==================================================== 一、正控：依赖从证明文本里出来
 
 def test_the_dependencies_come_out_of_the_proof_text(store):
-    """正控：只交两样 ⇒ 行落库、边从证明文本里扫出来、号与出处都对得上。"""
+    """正控：只交两样 ⇒ 行落库、边从证明文本里扫出来、号与出处都对得上。
+
+    2026-11-06（业主口径的纠正）：被引的那条命题先要够格 —— 在册 ∧ 等级
+    `pre_theorem` 及以上。所以这一条先登记一条引理、用 V 的真签把它抬到
+    `pre_theorem`（贴读数），再让第二条证明引它。
+    """
     add_literature(store, "0003", title="群论引理", processed=True)
-    out = _sec(store).record_statement(_two_things(
-        store, proof_text="证明：由 lit:0003 的引理直接推出，再用 stmt:0002 的结论。"))
+    sec = _sec(store)
+    first = sec.record_statement(_two_things(
+        store, proof_text="证明：由定义直接得到。"))
+    assert first["checked"] and first["created"], first
+    citable = str(first["stmt_id"])
+    sign_for_the_gate(store.root, statement_id=citable,
+                      proof_text="证明：由定义直接得到。", store=store)
+    row = next(dict(r) for r in store.rows("statements")
+               if str(r.get("stmt_id")) == citable)
+    assert DS.statement_grade(row) == "pre_theorem", (
+        f"夹具要把这条引理抬到可引门槛；实得 {DS.statement_grade(row)!r}")
+    out = sec.record_statement(_two_things(
+        store, label="T1b", statement_full="定理：由在册引理推出结论。",
+        proof_text=f"证明：由 lit:0003 的引理直接推出，再用 stmt:{citable} 的结论。"))
     assert out["checked"] and out["created"], out
     assert out["deps_state"] == "from_proof" and out["deps_from"] == "proof", out
-    row = store.rows("statements")[0]
-    assert row["stmt_id"] == out["stmt_id"], (row, out["stmt_id"])
     deps = {d["label"]: d for d in _deps_of(store, out["stmt_id"])}
-    assert set(deps) == {"lit:0003", "stmt:0002"}, deps
+    assert set(deps) == {"lit:0003", f"stmt:{citable}"}, deps
     assert deps["lit:0003"]["status"] == "closed" and deps["lit:0003"]["source_lit_id"] == "0003"
-    assert deps["stmt:0002"]["status"] == "dangling", "不在册的那个号必须落成 dangling"
+    assert deps[f"stmt:{citable}"]["status"] == "closed", (
+        "够格的引用必须落成 closed 边", deps[f"stmt:{citable}"])
     assert all(d["path_group"] == 1 for d in deps.values()), deps
-    # 读数里两条都点名（一条 closed、一条 dangling），且悬空那条给出为什么
-    assert [d["ref"] for d in out["deps_dangling"]] == ["stmt:0002"], out["deps_dangling"]
-    assert out["deps_dangling"][0]["why"], out["deps_dangling"]
+    assert out["deps_dangling"] == [], out["deps_dangling"]
 
 
 def test_the_two_things_contract_gets_a_controlled_quote_reason(store):
@@ -101,21 +119,29 @@ def test_the_two_things_contract_gets_a_controlled_quote_reason(store):
     assert t2["quote_reason"].startswith("人工给的理由"), t2["quote_reason"]
 
 
-# ==================================================== 二、负控：悬空不整笔拒、不成格的要点名
+# ==================================================== 二、负控：不可引的号 = 受控拒
 
-def test_a_missing_id_in_the_proof_is_dangling_not_a_refusal(store):
-    """负控（业主 §14.11 逐字）：悬空引用 ⇒ 那条边 `dangling` + 点名，不整笔拒。"""
+def test_a_missing_id_in_the_proof_is_refused_not_written(store):
+    """负控（业主 2026-11-06 逐字）：「F 应该无法读到尚未在册的命题」。
+
+    所以正文点一个不在册的号不是"待接的悬空边"，而是这一笔写错了：F 读不到它，
+    不可能在引用它。处置是受控拒 —— 点名那个号、说清"它不在册，F 读不到它"、
+    `statements` 一行不增、`dependencies` 一行不落。
+
+    改前红（`53ec0477` 据 §14.11 乙 做的裁定）：这一档落一条 `dangling` 边、
+    整笔照写，还把它读成"已声明"。业主纠正：那种号 F 根本读不到 ⇒ 照写等于把
+    一条不可能发生的引用记成依赖。
+    """
     add_literature(store, "0003", title="引理", processed=True)
     out = _sec(store).record_statement(_two_things(
         store, proof_text="证明：只引用一个不存在的号 stmt:0777，其余靠 lit:0003。"))
-    assert out["checked"] and out["created"], ("悬空引用不许把整笔拒掉", out)
-    assert store.rows("statements"), "命题那一行必须落下去"
-    deps = {d["label"]: d for d in _deps_of(store, out["stmt_id"])}
-    assert deps["stmt:0777"]["status"] == "dangling", deps
-    assert deps["stmt:0777"]["source_stmt_id"] == "0777", (
-        "悬空边也要带来源（不带就是一条'四选一都没有'的行）", deps["stmt:0777"])
-    assert deps["stmt:0777"]["status_reason"], "`Dependency.validate` 要求 dangling 写理由"
-    assert [d["ref"] for d in out["deps_dangling"]] == ["stmt:0777"], out["deps_dangling"]
+    assert out.get("checked") is False, out
+    assert out.get("refused") == DS.REFUSED_UNKNOWN_SOURCE, out
+    why = str(out.get("reason") or "")
+    assert "stmt:0777" in why, why
+    assert "不在册" in why and "F 读不到它" in why, why
+    assert store.rows("statements") == [], "受控拒 ⇒ 命题一行都不许落"
+    assert store.rows("dependencies") == [], "受控拒 ⇒ 依赖一行都不许落"
 
 
 def test_a_registered_prefix_without_a_carrier_is_named(store):
@@ -156,17 +182,28 @@ def test_the_three_dependency_states_are_not_folded(store):
 # ==================================================== 四、路径分组：给就分、不给不猜
 
 def test_explicit_proof_paths_become_path_groups(store):
-    """多段可选证明（B 自己分的段）⇒ `path_group` 1,2,…；不给 ⇒ 全归第 1 组。"""
+    """多段可选证明（B 自己分的段）⇒ `path_group` 1,2,…；不给 ⇒ 全归第 1 组。
+
+    2026-11-06：第二段引的命题号必须先够格（在册 ∧ `pre_theorem`）—— 引一个不在册的
+    号现在整笔受控拒（见本节其余用例），所以夹具先登记一条引理并签上。
+    """
     add_literature(store, "0003", title="引理", processed=True)
     add_literature(store, "0004", title="另一篇", processed=True)
     sec = _sec(store)
+    first = sec.record_statement(_two_things(
+        store, proof_text="证明：由定义直接得到。"))
+    assert first["checked"] and first["created"], first
+    citable = str(first["stmt_id"])
+    sign_for_the_gate(store.root, statement_id=citable,
+                      proof_text="证明：由定义直接得到。", store=store)
     out = sec.record_statement(_two_things(
         store, label="P1", statement_full="定理：两条路。",
         proof_text="（这一段只说明有两条路，本身不引号）",
-        proof_paths=["路一：由 lit:0003 推出。", "路二：由 lit:0004 与 stmt:0002 推出。"]))
+        proof_paths=["路一：由 lit:0003 推出。",
+                     f"路二：由 lit:0004 与 stmt:{citable} 推出。"]))
     assert out["checked"] and out["path_groups"] == 2, out
     groups = {d["label"]: d["path_group"] for d in _deps_of(store, out["stmt_id"])}
-    assert groups == {"lit:0003": 1, "lit:0004": 2, "stmt:0002": 2}, groups
+    assert groups == {"lit:0003": 1, "lit:0004": 2, f"stmt:{citable}": 2}, groups
     # 不给分段标记 ⇒ 一段（不按空行或"证明一/证明二"这种字样去猜）
     out2 = sec.record_statement(_two_things(
         store, label="P2", statement_full="定理：一条路。",
@@ -178,11 +215,28 @@ def test_explicit_proof_paths_become_path_groups(store):
 # ==================================================== 五、两条路的口径不许互相污染
 
 def test_explicit_deps_keep_the_strict_path(store):
-    """显式给的 `deps` 仍走严格那一条（指着一个不在册的号 = 整笔不写）：两条路不许混。"""
+    """显式给的 `deps` 仍走严格那一条（指着一个不在册的号 = 整笔不写）：两条路不许混。
+
+    2026-11-06（业主口径的纠正）把这一条分成两档：
+
+    - 命题来源：不在册 ⇒ 与正文那一路同一个受控码（`dependency_source_not_registered`），
+      拒信逐字点名那个号 + "F 读不到它"（业主：「F 应该无法读到尚未在册的命题」）；
+    - 非命题来源（文献 / 实验 / 文档）：显式依赖仍是整笔不写（`unresolved_dependency`）
+      —— 那条 `dangling` 只留给正文扫描那一路，两条路不许混。
+    """
     out = _sec(store).record_statement(_two_things(
         store, proof_text="证明：由 stmt:0777 推出。",
         deps=[[{"stmt_id": "0777", "kind": "theorem", "label": "不存在的命题"}]]))
-    assert not out["checked"] and out["refused"] == "unresolved_dependency", out
+    assert not out["checked"] and out["refused"] == DS.REFUSED_UNKNOWN_SOURCE, out
+    assert "F 读不到它" in str(out.get("reason") or ""), out
+    assert store.rows("statements") == [], "显式依赖悬空 ⇒ 一行都不许落"
+    assert store.rows("dependencies") == []
+    # 非命题来源那一档：同一份严格路径照旧是 `unresolved_dependency`（不进 dangling）
+    out2 = _sec(store).record_statement(_two_things(
+        store, label="X2", statement_full="定理：由一篇不在库的文献推出。",
+        proof_text="证明：由 lit:0099 推出。",
+        deps=[[{"lit_id": "0099", "kind": "theorem", "label": "不存在的文献"}]]))
+    assert not out2["checked"] and out2["refused"] == "unresolved_dependency", out2
     assert store.rows("statements") == [], "显式依赖悬空 ⇒ 一行都不许落"
     assert store.rows("dependencies") == []
 
@@ -221,12 +275,12 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     out = b.register_statement(
         origin="own_result", kind="conjecture", label="T1",
         statement_full="定理：对任意群 G，命题 ph 成立。",
-        proof_text="证明：由 lit:0003 的引理推出，并用 stmt:0777（还没进库）。",
+        proof_text="证明：由 lit:0003 的引理推出。",
         quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",
         line_range={"start": 1, "end": 9})
     assert out["ok"] is True, out
-    assert out["deps_state"] == "from_proof" and out["deps_written"] == 2, out
-    assert [d["ref"] for d in out["deps_dangling"]] == ["stmt:0777"], out["deps_dangling"]
+    assert out["deps_state"] == "from_proof" and out["deps_written"] == 1, out
+    assert out["deps_dangling"] == [], out["deps_dangling"]
     assert out["pending_definitions"] == [], "命题不缺定义 ⇒ 这一档不许凭空冒出来"
     # `own_result` 也要给 `quote_reason`（三态纪律不按 origin 放宽：本轮试过，被
     # `test_action_surface_matches_acceptance` 的"每一级缺失都被拒"判红）⇒ 给一个理由就落得下
@@ -250,6 +304,31 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     assert len(defs) == 1 and defs[0]["kind"] == "pending_definition", defs
     assert defs[0]["who"] == "direct_parent" and defs[0]["id"] == out2["stmt_id"], defs
     assert "直接父" in defs[0]["why"], defs
+
+
+def test_b_refuses_a_proof_that_cites_an_unregistered_statement(store):
+    """B 的第二道兜底（业主 2026-11-06）：正文点一个不在册的号 ⇒ 整笔受控拒。
+
+    第一道防线在 V（`agent_v.core` 的依赖面审计）；这一条钉的是"V 没挡住时 B 不许照写"。
+    拒信必须点名那个号，并说清"它不在册，F 读不到它" —— 不是"表与正文对不上"，
+    也不是"落一条 dangling 之后照写"。
+    """
+    from agentflow.agent_b import AgentB
+
+    add_literature(store, "0003", title="群论引理", processed=True)
+    b = AgentB(store, extractor=None, extract_text=None)
+    out = b.register_statement(
+        origin="own_result", kind="conjecture", label="T1",
+        statement_full="定理：证明里点了一个不在册的号。",
+        proof_text="证明：由 stmt:0777 直接推出。",
+        quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",
+        line_range={"start": 1, "end": 9})
+    assert out.get("ok") is False, out
+    assert out.get("kind") == DS.REFUSED_UNKNOWN_SOURCE, out
+    err = str(out.get("error") or "")
+    assert "stmt:0777" in err and "不在册" in err and "F 读不到它" in err, err
+    assert store.rows("statements") == [], "受控拒 ⇒ 命题一行都不许落"
+    assert store.rows("dependencies") == [], "受控拒 ⇒ 依赖一行都不许落"
 
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份

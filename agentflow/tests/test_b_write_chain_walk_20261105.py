@@ -357,10 +357,15 @@ def test_d2_c_reverse_vacuum_without_the_manuscript_evidence_stays_weak(
 
 # ============================================================ D3
 def _two_routes_reading(st: Store, *, kind: str, label: str) -> None:
-    """两路描述同一条边：第一路 derived_from 形态、第二路稿里 `## 依赖` 形态。"""
+    """两路描述同一条边：第一路 derived_from 形态、第二路稿里 `## 依赖` 形态。
+
+    2026-11-06（业主口径的纠正）：被引的那条要先够格（在册 ∧ `pre_theorem`）——
+    引一条 `conjecture` 现在整笔受控拒，D3 量的是"同一身份键怎么算"而不是那道引用门。
+    """
     sec = Secretary("B", root=st.root, store=st)
     a = str(st.rows("statements")[0].get("stmt_id") or "")
     b = str(st.rows("statements")[1].get("stmt_id") or "")
+    _promote_to_proof_review(st, a, "证明：夹具：被引的那一条。")
     g1 = [[{"stmt_id": a, "kind": kind, "label": label, "quote": "", "path_group": 1}]]
     sec.record_manuscript_dependency_face(b, g1, note="test:d3:route-1")
     rows = [{"stmt_id": a, "quote": "由定理甲", "step": "第 1 步", "path_group": 1}]
@@ -389,6 +394,8 @@ def test_d3_b_two_different_edges_still_take_two_rows(tmp_path: pathlib.Path) ->
     ids = [str(r.get("stmt_id")) for r in st.rows("statements")]
     a, c = ids[0], ids[1]
     for src in (a, c):
+        #: 2026-11-06：被引的两条都要够格（在册 ∧ pre_theorem），否则引用门先拒。
+        _promote_to_proof_review(st, src, f"证明：夹具：被引的 {src}。")
         groups = [[{"stmt_id": src, "kind": "theorem", "label": f"stmt:{src}",
                     "quote": "", "path_group": 1}]]
         sec.record_manuscript_dependency_face(b, groups, note="test:d3:diff")

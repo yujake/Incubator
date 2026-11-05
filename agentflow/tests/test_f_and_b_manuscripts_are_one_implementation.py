@@ -69,7 +69,20 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _seed(st: Store, stmt_id: str, *, kind: str = "theorem") -> None:
+def _seed(st: Store, stmt_id: str, *, kind: str = "theorem",
+          reviewed: bool = False) -> None:
+    """铺一条在册命题。`reviewed=True` ⇒ 现算 `pre_theorem`（可引那一档）。
+
+    2026-11-06（业主口径的纠正）：引用了不可引的号是整笔受控拒，所以凡是被
+    依赖表引用的那条夹具（`DEP`）都要真的站到 `pre_theorem` 级 —— 这与真机里
+    "被引的定理必须先过 V 的逐行走审"同一条口径，不是放宽判据。
+    """
+    bits: dict = {}
+    if reviewed:
+        from agentflow import evidencebits as _EB
+
+        bits = _EB.bits_of(proof=True, proof_process="夹具证明正文", reviewed=True,
+                           reviewed_by={"verification_id": "v-000001"}, kind=kind)
     row = {
         "stmt_id": stmt_id, "origin": "own_result", "kind": kind,
         "label": f"夹具命题 {stmt_id}", "statement_full": f"夹具命题 {stmt_id}。",
@@ -78,7 +91,7 @@ def _seed(st: Store, stmt_id: str, *, kind: str = "theorem") -> None:
         "quote_verified": None, "quote_reason": "判据夹具",
         "line_range": {"start": None, "end": None, "label": "夹具"},
         "created_at": "2026-11-04T12:00:00+08:00", "created_by": "secretary-B",
-        "bits": {},
+        "bits": bits,
     }
     with st.tx("statements") as tx:
         tx.upsert("statements", row, note="fixture:unify")
@@ -149,7 +162,7 @@ def _role_normalized(text: str) -> str:
 def test_a_the_two_families_land_the_same_manuscript(tmp_path: pathlib.Path) -> None:
     """a：同一份正文 + 同一个号 ⇒ 两稿除前缀与角色名外逐字相同。"""
     st = _ws(tmp_path)
-    _seed(st, DEP)
+    _seed(st, DEP, reviewed=True)
     _seed(st, SID)
     f_text = _f_text(st)
     bout = BM.land_rewrite(
@@ -188,7 +201,7 @@ def test_a2_putting_b_render_back_makes_a_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """a2 反真空：把 B 的渲染改回它自己那一套 ⇒ a 立刻不再逐字相同。"""
     st = _ws(tmp_path)
-    _seed(st, DEP)
+    _seed(st, DEP, reviewed=True)
     _seed(st, SID)
     f_text = _f_text(st)
 
@@ -333,7 +346,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
     """d：两族各落一份带四列表的稿 ⇒ 各 1 条依赖边；落边打桩失败 ⇒ 两边都不留半截。"""
     # F 那一族：转正（notes/ → reports/f-proof-<号>.md）
     st_f = _ws(tmp_path / "f")
-    _seed(st_f, DEP)
+    _seed(st_f, DEP, reviewed=True)
     _seed(st_f, SID)
     _write(st_f, "notes/f-dep.md", _draft())
     fout = promote_f(st_f.root, statement_id=SID, source="notes/f-dep.md",
@@ -346,7 +359,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
 
     # B 那一族：改写落稿（reports/b-proof-<号>.md）
     st_b = _ws(tmp_path / "b")
-    _seed(st_b, DEP)
+    _seed(st_b, DEP, reviewed=True)
     _seed(st_b, SID)
     bout = BM.land_rewrite(
         st_b.root, statement_id=SID, statement_full=PROPOSITION,
@@ -364,7 +377,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
                 "reason": "判据打桩：落边这一步失败"}
 
     st_f2 = _ws(tmp_path / "f-broken")
-    _seed(st_f2, DEP)
+    _seed(st_f2, DEP, reviewed=True)
     _seed(st_f2, SID)
     _write(st_f2, "notes/f-dep.md", _draft())
     fout2 = promote_f(st_f2.root, statement_id=SID, source="notes/f-dep.md",
@@ -377,7 +390,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
     assert not list(st_f2.rows("dependencies")), "F：落边失败却留下了依赖行"
 
     st_b2 = _ws(tmp_path / "b-broken")
-    _seed(st_b2, DEP)
+    _seed(st_b2, DEP, reviewed=True)
     _seed(st_b2, SID)
     bout2 = BM.land_rewrite(
         st_b2.root, statement_id=SID, statement_full=PROPOSITION,

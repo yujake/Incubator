@@ -102,17 +102,20 @@ class _Manuscript:
         if unreadable:
             return [], [], (f"（`statements` 这一次读不出来：{unreadable} ⇒ 本轮没有可引的"
                             "在册命题可列；那是「读不到」，不是「台账里没有」）")
+        #: 可引池只有一处定义（`depsection.citable_pool` = 在册 ∧ 等级 ≥ pre_theorem）：
+        #: 提示词里列的这几条与 B / V 收稿时允许引的那一批同一个判据。两份各算
+        #: 一份的形态是"提示词里列了、交上去却被拒"（或反过来），而那种漂没有读数。
+        pool = _DS.citable_pool(rows)
         usable = [r for r in rows if str(r.get("status") or "") == "active"]
         usable.sort(key=lambda r: str(r.get("stmt_id") or ""))
         eligible: list[dict[str, Any]] = []
         below = 0
         unknown_level = 0
         for row in usable:
-            level = _DS.statement_grade(row)
-            if not level:
-                unknown_level += 1
-            elif _DS.citation_level_allowed(level):
+            if str(row.get("stmt_id") or "") in pool:
                 eligible.append(row)
+            elif not _DS.statement_grade(row):
+                unknown_level += 1
             else:
                 below += 1
         lines: list[str] = []
@@ -364,18 +367,20 @@ class _Manuscript:
         # 2026-11-05（缺陷甲）：表在、但 0 行数据而正文点了在册号 ⇒ 预览就必须说"会退"。
         # 改前预览与 B 的登记入口都只看 `present`，于是"交出去会不会被退"这一格会亮 ok。
         #
-        # 2026-11-05（裁定 A 优先于 B）：这一道只对在册引用要求表里有行。"在册"要真读
-        # 台账 ⇒ 读 `statements` 提前到一致性判据之前（与 B 的登记入口同一顺序、同一判据）。
+        # 2026-11-06（业主口径的纠正）：正文里的号必须是"可引"的（在册 ∧ 等级
+        # ≥ pre_theorem）；不在册 / 等级不够的号 ⇒ 这一笔写错了（F 读不到它），
+        # 预览就报受控拒，拒信点名那个号。可引池只有一处定义（`citable_pool`），
+        # 与提示词那份清单、B 的登记入口、V 的依赖面审计同源。
         try:
             stmt_rows = [dict(r) for r in self.store.rows("statements")]
         except Exception as exc:  # noqa: BLE001 - 读不到就不许说"够格"
             out.update(refused=str(_DS.REFUSED_LEVEL_UNREADABLE),
-                       reason=(f"预览要核每条来源的档位、并判正文的引用在不在册，"
+                       reason=(f"预览要核每条来源的档位、并判正文的引用在不在可引池里，"
                                f"而 `statements` 读不出来"
                                f"（{type(exc).__name__}: {exc}）⇒ 这次预览没查成"))
             return out
         _code, _why = _DS.dependency_consistency_problem(
-            text, known_ids=[str(r.get("stmt_id") or "") for r in stmt_rows])
+            text, known_ids=_DS.citable_pool(stmt_rows), statement_rows=stmt_rows)
         if _code:
             out.update(refused=str(_code), reason=str(_why))
             out["deps_missing"] = _DS.deps_missing_reading(
@@ -384,9 +389,6 @@ class _Manuscript:
             return out
         gate = _DS.gate_rows(rows, stmt_rows)
         out["levels"] = dict(gate.get("levels") or {})
-        #: 不在册的那些行：预览同样读成 dangling（边上落 dangling + 点名 + 照写），
-        #: 不是"整笔退回" —— 只有"数得进依赖面"的行才进 `would_write`。
-        out["dangling"] = [dict(d) for d in (gate.get("dangling") or [])]
         if not gate.get("ok"):
             out.update(refused=str(gate.get("refused") or ""),
                        reason=str(gate.get("reason") or ""))
@@ -394,10 +396,9 @@ class _Manuscript:
                 proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
                 section=section)
             return out
-        writable = len(rows) - len(out["dangling"])
-        out.update(ok=True, would_write=writable)
+        out.update(ok=True, would_write=len(rows))
         out["deps_missing"] = _DS.deps_missing_reading(
-            proof_text=body, deps_written=writable, derived_from=refs,
+            proof_text=body, deps_written=len(rows), derived_from=refs,
             refs=len(refs), section=section)
         return out
 

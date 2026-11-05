@@ -252,6 +252,74 @@ def citation_level_allowed(level: str) -> bool:
     return str(level or "").strip() in CITATION_LEVELS
 
 
+def citable_pool(statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """可引池：`{命题号: 等级}`，只含在册（`status=active`）且等级 ≥ `pre_theorem` 的。
+
+    业主 2026-11-06 逐字：「F 应该无法读到尚未在册的命题，特别地，F 只可引用
+    proof review（或者说准定理级）及以上等级的命题」。于是"F 能读到什么"与
+    "B / V 收稿时允许引什么"必须是同一张表（两处各算一份 ⇒ 一处宽一处严，而
+    宽的那处会把一条读不到的引用记成依赖）：
+
+    - `agent_f/manuscript._Manuscript.citable_statements` 用它算提示词里那份清单；
+    - `gate_rows` / `dependency_review` 用它判正文与依赖表里点名的号能不能引；
+    - B 的登记入口与 V 的依赖面审计吃的是同一个池子。
+
+    不在册 / 非 `active` / 等级算不出来 / 等级不够 ⇒ 一律不在池子里（fail-closed：
+    读不到不是"够格"）。
+    """
+    pool: dict[str, str] = {}
+    for row in statement_rows:
+        if str(row.get("status") or "").strip() != "active":
+            continue
+        level = statement_grade(row)
+        if level and citation_level_allowed(level):
+            pool[str(row.get("stmt_id") or "")] = level
+    return pool
+
+
+def uncitable_statement_problem(
+        sid: str, statement_rows: Iterable[Mapping[str, Any]] | None, *,
+        where: str = "") -> tuple[str, str]:
+    """`stmt:<sid>` 为什么不可引：`(受控码, 人话)`；空串对 = 可引（在册 ∧ 等级够）。
+
+    三态不折平：不在册 / 状态不可用 / 等级算不出来 / 等级不够，各有各的受控码与
+    人话 —— 把它们折成一句"不够格"，读的人就不知道该去登记、该去签、还是该改号。
+
+    拒信逐字点名那个号与理由（业主 2026-11-06 的两句原话都落在人话里）：
+    不在册 ⇒「它不在册，F 读不到它」；等级不够 ⇒「等级 X 低于 pre_theorem，不可引」。
+
+    `statement_rows=None` = 调用方手里没有台账（只拿得到可引集合）：这一档只报
+    "不在可引池里"，不冒充知道原因。
+    """
+    if statement_rows is None:
+        return REFUSED_UNKNOWN_SOURCE, (
+            f"{where}点名的 `stmt:{sid}` 不在这一轮的可引池里（在册 ∧ "
+            f"{CITATION_MIN_LEVEL} 级及以上才可引）—— F 读不到它，所以这个号只能是"
+            "这一笔写错了 ⇒ 整笔不写")
+    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    anchor = index.get(str(sid))
+    if anchor is None:
+        return REFUSED_UNKNOWN_SOURCE, (
+            f"{where}点名的 `stmt:{sid}` 不在册（台账里现有 {len(index)} 条命题）："
+            "它不在册，F 读不到它 ⇒ 这不是待接的悬空边，而是这一笔写错了，整笔不写")
+    status = str(anchor.get("status") or "").strip()
+    if status != "active":
+        return REFUSED_SOURCE_STATUS, (
+            f"{where}点名的 `stmt:{sid}` 现在不可用（statements.status="
+            f"{status or '（空）'!r}，只有 active 才算已收录）：F 读不到它 ⇒ 整笔不写")
+    level = statement_grade(anchor)
+    if not level:
+        return REFUSED_LEVEL_UNREADABLE, (
+            f"{where}点名的 `stmt:{sid}` 等级算不出来（五元位读不出 / 现算出空）"
+            " ⇒ 读不到等级就不许放行，整笔不写")
+    if not citation_level_allowed(level):
+        return REFUSED_LEVEL_TOO_LOW, (
+            f"{where}点名的 `stmt:{sid}` 等级 `{level}` 低于 {CITATION_MIN_LEVEL}，"
+            f"不可引（引用要求 {CITATION_MIN_LEVEL} 级及以上；F 只可引用准定理级及以上）"
+            "⇒ 整笔不写")
+    return "", ""
+
+
 def dep_kind_of(statement_kind: str) -> str:
     """来源那一行的 `statements.kind` 该记成哪一档 `schema.DEP_KINDS`。
 
@@ -470,29 +538,35 @@ def stmt_refs(text: str) -> list[str]:
 
 
 def dependency_consistency_problem(
-        text: str, *, known_ids: Iterable[str] | None = None) -> tuple[str, str]:
+        text: str, *, known_ids: Iterable[str] | None = None,
+        statement_rows: Iterable[Mapping[str, Any]] | None = None) -> tuple[str, str]:
     """`## 依赖` 那张表与证明正文说的是不是同一件事：`(受控码, 人话)`；空串 = 一致。
 
     三态（不折平）：
 
     - 那一节缺了 / 读不懂：不是本函数的事（调用方那两支已各有受控码），返回空串；
-    - 那一节在、表 0 行、正文点了 N 条在册 `stmt:` ⇒ 对不上
+    - 正文点了不可引的号（不在册 / 等级不够）：受控拒，`why` 逐字点名那个号与
+      原因（``REFUSED_UNKNOWN_SOURCE`` / ``REFUSED_LEVEL_TOO_LOW`` 等）；
+    - 那一节在、表 0 行、正文点了 N 条可引命题 ⇒ 对不上
       （``REFUSED_TABLE_DISAGREES``），`why` 逐条点名"哪个号在第几步"；
-    - 那一节在、表 0 行、正文一条在册引用都没点 ⇒ 放行（自足，或引用全是不在册的号）。
+    - 那一节在、表 0 行、正文一条可引引用都没点 ⇒ 放行（自足）。
 
-    ## "在册"这一格是判据的一部分（2026-11-05 业主裁定，两条裁定冲突的落点）
+    ## `known_ids` 是"可引池"，不是"在册号集合"（2026-11-06 业主口径的纠正）
 
-    业主 §14.11 乙（逐字）：「证明里出现一个不在册的号 ⇒ 那条边落 dangling 并在读数里
-    点名，整笔照写（拒了等于把整条定理丢掉）」；B 的裁定（33e25783）：「`## 依赖`
-    表与正文对不上 ⇒ 整份退回」。两条都对，冲突在实现：本函数此前的 `stmt_refs` 把
-    所有 `stmt:` 引用都算进"表里必须有行"，于是"正文点了一个不在册的号、表 0 行"
-    被读成"表与正文对不上"整份退回 —— 与它自己的拒信（"点了 N 条在册命题"）都不符。
+    业主逐字：「F 应该无法读到尚未在册的命题，特别地，F 只可引用 proof review
+    （或者说准定理级）及以上等级的命题」。所以：
 
-    所以：只有台账里真的有的号（`known_ids`）才参与本判据；不在册的引用不参与
-    比对，它走 dangling 那条路（边上落 `dangling`、读数点名、整笔照写）。
-    调用方要判"在册"就必须把台账交进来 —— 读不到台账的那一层（`manuscriptform`
-    的落稿校验没有 store）只能按全量比：这是保守的那一档，它至多多退回一份手写稿，
-    不会把一条不在册的边静默丢掉（那一档的处置在 B 的登记入口）。
+    - `known_ids` = 在册 ∧ 等级 ≥ pre_theorem 的那一批（:func:`citable_pool`）；
+    - 正文里出现一个不在这张表里的号 ⇒ 不是"合法的待接边"，而是这一笔写错了 ——
+      F 读不到它，不可能在引用它 ⇒ 受控拒，不许照写、也不许落 dangling；
+    - `statement_rows` 只用来把拒信写准（不在册 / 状态不可用 / 等级读不到 / 等级不够
+      四档各有各的话）；不给它时只报"不在可引池里"，不冒充知道原因。
+
+    改前（`53ec0477`）的做法是"不在册的引用不参与比对，走 dangling 那条路、整笔照写"
+    —— 那一条据的是另一条裁定，业主 2026-11-06 当场纠正：那种号 F 根本读不到。
+    调用方要判"可引"就必须把同一个池子交进来；读不到台账的那一层
+    （`manuscriptform` 的落稿校验没有 store）交不出两格，只能按全量比表与正文 ——
+    那一档至多多退回一份手写稿，池子那一道在 B 的登记入口与 V 的审计里。
 
     为什么这一道必须是门而不是读数（2026-11-05 现场）：`deps_missing_reading` 早就把
     这一形态读成"说不一致"，但读数不拦人 —— `manuscriptform.validate_manuscript` 与
@@ -504,13 +578,19 @@ def dependency_consistency_problem(
     section = parse_dependency_section(raw)
     if not section.get("present") or section.get("refused"):
         return "", ""
-    if section.get("rows"):
-        return "", ""
     refs = stmt_refs(proof_body(raw))
     if known_ids is not None:
-        #: 只有"台账里真的有"的号才参与比对（`known_ids=None` = 调用方没给台账）。
         known = {str(x) for x in known_ids}
+        for ref in refs:
+            if str(ref) in known:
+                continue
+            #: 池子与台账由调用方从同一次 `statements` 读里算出来 ⇒ 不在这里另立一条
+            #: "池子少了它"的判据：不可引的原因只有 `uncitable_statement_problem` 一处。
+            return uncitable_statement_problem(
+                str(ref), statement_rows, where="证明正文")
         refs = [ref for ref in refs if str(ref) in known]
+    if section.get("rows"):
+        return "", ""
     if not refs:
         return "", ""
     #: 每个号出现在第几步（步号取 `## 证明` 里行首的 `N.`，与 F 的渲染器同形）。
@@ -1130,60 +1210,31 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
               statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """逐条核"来源在册 / 可用 / 档位够不够" ⇒ 一份可整笔拒绝的读数。
 
-    返回 `{"checked", "ok", "refused", "reason", "levels": {号: 档},
-    "dangling": [{"stmt_id", "line", "why"}]}`。
+    返回 `{"checked", "ok", "refused", "reason", "levels": {号: 档}}`。
+    判据顺序：在册 → 状态可用 → 档位读得到 → 档位够。先报最具体的那一条
+    （"这条号不在册"比"档位不够"更能让人立刻改对）。
 
-    判据顺序：在册 → 状态可用 → 档位读得到 → 档位够。先报最具体的那一条。
+    ## 不在册 / 等级不够 ⇒ 受控拒（2026-11-06 业主口径的纠正）
 
-    ## 不在册的那一行不是"整笔不写"，是 dangling（2026-11-05 业主裁定）
-
-    改前：表里点名一个不在册的号 ⇒ `REFUSED_UNKNOWN_SOURCE` ⇒ 整笔不写。业主 §14.11 乙
-    的裁定是相反的：「证明里出现一个不在册的号 ⇒ 那条边落 dangling 并在读数里点名，
-    整笔照写（拒了等于把整条定理丢掉）」。所以这一档不再在本函数里拒，而是把这
-    一行放进 `dangling` 交回调用方 —— 它落不了"档位"这一层（没有行可核），但它是
-    一条已声明的依赖，由收方按"扫出来的悬空引用"那条路落成 `dangling` 边并点名。
-    其余在册的行照旧逐条核：状态不可用 / 等级读不到 / 等级不够仍然整笔拒。
+    改前（`53ec0477`）不许整笔拒：不在册的那一行落 `dangling` 交回调用方、整笔照写。
+    业主 2026-11-06 纠正：「F 应该无法读到尚未在册的命题」—— 那种号 F 读不到，
+    所以依赖表里点它只可能是这一笔写错了。这一档恢复成 `REFUSED_UNKNOWN_SOURCE`
+    （受控拒），拒信逐字点名那个号、说清"它不在册，F 读不到它"；等级不够那一档
+    照旧 `REFUSED_LEVEL_TOO_LOW`（`pre_theorem` 以下不可引）。两档都由
+    :func:`uncitable_statement_problem` 一处产生，与 F 的可引池同源。
     """
     index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
     levels: dict[str, str] = {}
-    dangling: list[dict[str, Any]] = []
     for row in rows:
         sid = str(row.get("stmt_id") or "")
-        anchor = index.get(sid)
-        if anchor is None:
-            #: 不在册 ⇒ 不参与"档位"这一层，交给 dangling 那条路（见 docstring）。
-            dangling.append({
-                "stmt_id": sid,
-                "line": int(row.get("line") or 0),
-                "why": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 不在册"
-                        f"（台账里现有 {len(index)} 条命题）⇒ 这条边落 `dangling` 并点名，"
-                        "整笔照写（业主 §14.11 乙：拒了等于把整条定理丢掉）"),
-            })
-            continue
-        status = str(anchor.get("status") or "").strip()
-        if status != "active":
-            return {"checked": True, "ok": False, "refused": REFUSED_SOURCE_STATUS,
-                    "levels": levels, "dangling": dangling,
-                    "reason": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 不可用："
-                               f"statements.status={status or '（空）'!r}，只有 active 才算已收录"
-                               f"（这几档都不是依据：{S.STATEMENT_UNUSABLE_STATUSES}）⇒ 整笔不写")}
-        level = statement_grade(anchor)
-        levels[sid] = level
-        if not level:
-            return {"checked": True, "ok": False, "refused": REFUSED_LEVEL_UNREADABLE,
-                    "levels": levels, "dangling": dangling,
-                    "reason": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 等级算不出来"
-                               "（五元位读不出 / 现算出空）⇒ 整笔不写：读不到它的等级就"
-                               "不许放行，先确认它现在的五元位记录")}
-        if not citation_level_allowed(level):
-            return {"checked": True, "ok": False, "refused": REFUSED_LEVEL_TOO_LOW,
-                    "levels": levels, "dangling": dangling,
-                    "reason": (f"被引命题 stmt:{sid} 现在是 `{level}`，引用要求 "
-                               f"{CITATION_MIN_LEVEL} 级及以上 —— 先让它过 V 的逐行走审"
-                               "（或等它形式化/穷举到 theorem 级），再来引"
-                               f"（依赖段第 {row.get('line')} 行）")}
-    return {"checked": True, "ok": True, "refused": "", "reason": "",
-            "levels": levels, "dangling": dangling}
+        if sid in index:
+            levels[sid] = statement_grade(index[sid])
+        code, why = uncitable_statement_problem(
+            sid, index.values(), where=f"依赖段第 {row.get('line')} 行")
+        if code:
+            return {"checked": True, "ok": False, "refused": code,
+                    "levels": levels, "reason": why}
+    return {"checked": True, "ok": True, "refused": "", "reason": "", "levels": levels}
 
 
 def deps_groups(rows: Iterable[Mapping[str, Any]],
@@ -1194,20 +1245,15 @@ def deps_groups(rows: Iterable[Mapping[str, Any]],
     `stmt:<命题号>#pN`，`path_group` 也是 N —— 与多证明模型的两维口径同一个意思
     （组内 AND／组间 OR）。第 1 组不带 `#pN` 尾巴（`proofloc` 的既有口径）。
 
-    ## 不在册的那一行要落成 dangling，不是整笔不写（2026-11-05 业主裁定）
-
-    `kinds` 是台账里那批命题的 `{号: kind}`（调用方按 `statements` 现读）。一个号
-    不在这张表里 ⇒ 这一行是"引用了尚未在册的命题"：§14.11 乙 的处置是边上落
-    `dangling` + 读数点名 + 整笔照写，所以这里给它打上 `declared_dangling`。
-    秘书那一侧（`_resolve_write_steps`）只对带这一个标记的缺号步骤放行成悬空边；
-    调用方显式给 `deps` 的那条路（G 的契约）没有这个标记，照旧整笔不写 ——
-    两条路不许混。
+    `kinds` 是台账里那批命题的 `{号: kind}`（调用方按 `statements` 现读）。不在册的
+    行到不了这里：`gate_rows` 已经在上一道把它们受控拒了（2026-11-06 业主口径：
+    F 读不到尚未在册的命题）。所以这里只负责把已核实过的行翻成步骤。
     """
     groups: dict[int, list[dict[str, Any]]] = {}
     for row in rows:
         sid = str(row.get("stmt_id") or "")
         group = int(row.get("path_group") or 1)
-        step: dict[str, Any] = {
+        groups.setdefault(group, []).append({
             "stmt_id": sid,
             "kind": str(kinds.get(sid) or "theorem"),
             "label": f"手稿依赖段（第 {row.get('line')} 行）：{row.get('quote')}",
@@ -1217,16 +1263,139 @@ def deps_groups(rows: Iterable[Mapping[str, Any]],
             "proof_no": group,
             # 手稿里点名的步骤（读数用，不参与落库）
             "manuscript_step": str(row.get("step") or ""),
-        }
-        if sid not in kinds:
-            step["declared_dangling"] = True
-            step["status"] = "dangling"
-            step["status_reason"] = (
-                f"手稿的 `{SECTION_HEADING}` 表点名 stmt:{sid}，而它不在册 ⇒ 这条边按 "
-                "`dangling` 落并点名（业主 §14.11 乙：拒了等于把整条定理丢掉）；"
-                "等那一行进库之后由下一次核对闭合")
-        groups.setdefault(group, []).append(step)
+        })
     return [groups[no] for no in sorted(groups)]
+
+
+def dependency_review(text: str,
+                      statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """V 审稿时对 `## 依赖` 面的六项逐条核 ⇒ 一份可并入 verdict 的读数。
+
+    业主 2026-11-06 逐字：「引用未在册命题应该在 V 审阅时就被打回，轮不到 B」。
+    所以 V 是第一道（主要防线），B 的受控拒是第二道兜底；两道都保留，判据同源
+    （同一个 :func:`citable_pool` / :func:`uncitable_statement_problem`）。
+
+    ## 六项（任一项不成立 ⇒ 一条 `level=error` 的 finding，点名哪个号、差在哪）
+
+    | # | 项目 | 判据 |
+    |---|---|---|
+    | ① | 正文里每个 `stmt:<号>` 都在册 | `uncitable_statement_problem` |
+    | ② | 每个被引号等级 ≥ `pre_theorem` | 同上（`conjecture` / `strong_conjecture` 不可引） |
+    | ③ | `## 依赖` 表每一行点名的号同样满足 ① 与 ② | 同上，`where` 写行号 |
+    | ④ | 表与正文的引用集合一致 | 两边的差集逐条点名（正文点了没写行 / 表里多一行） |
+    | ⑤ | 表里"用在哪一步"与正文那一步的 `cites` 对得上（可核时） | 步号不在正文 / 那一步没引这个号 |
+    | ⑥ | 引用强度（不得把被引命题写强） | 不在这里：已有那一档（`citation_checks` / `citation_gate`） |
+
+    ⑤的边界（如实说）：手稿的四列表里没有被引命题的 `proof_no` / 正文 sha 这两格，
+    所以"proof_no / sha"那一半没有可核的载体；能核的是"表里说用在第几步"与
+    "正文那一步的 `cites`"对不对得上。正文没有编号行（`proof_steps` 为空）时这一项
+    不核（"可核时"），不猜。
+
+    返回 `{"checked", "ok", "findings", "defect_step", "why"}`。`findings` 的每一项
+    是 `{"level": "error", "step": 步号, "kind": 受控码, "detail": 人话}` —— 与
+    `verifications.parse_verdict` 的 finding 形状逐格对齐（它要落台账）。
+    """
+    raw = str(text or "")
+    ledger = [dict(r) for r in statement_rows]
+    steps = proof_steps(raw)
+    body_refs = stmt_refs(proof_body(raw))
+    section = parse_dependency_section(raw)
+    rows = [dict(r) for r in (section.get("rows") or [])]
+    findings: list[dict[str, Any]] = []
+    flagged: set[str] = set()
+
+    def _step_of(ref: str) -> int | None:
+        nos = [no for no, step in steps.items()
+               if str(ref) in (str(x) for x in (step.get("cites") or []))]
+        return min(nos) if nos else None
+
+    def _row_step(row: Mapping[str, Any]) -> int | None:
+        nos = _step_numbers(row.get("step"))
+        present = [n for n in nos if n in steps]
+        if present:
+            return min(present)
+        if nos:
+            return min(nos)
+        return _step_of(str(row.get("stmt_id") or ""))
+
+    def _add(step: int | None, kind: str, detail: str) -> None:
+        findings.append({"level": "error", "step": step, "kind": kind,
+                         "detail": detail})
+
+    # ①② 正文里的号：在册 ∧ 等级够。
+    for ref in body_refs:
+        code, why = uncitable_statement_problem(ref, ledger, where="证明正文")
+        if not code:
+            continue
+        flagged.add(ref)
+        _add(_step_of(ref), code, why)
+
+    # ③ `## 依赖` 表里的号：同样要在册 ∧ 等级够（同一个判据，`where` 换成行号）。
+    table_ids: list[str] = []
+    for row in rows:
+        sid = str(row.get("stmt_id") or "")
+        if sid not in table_ids:
+            table_ids.append(sid)
+        if sid in flagged:
+            continue
+        code, why = uncitable_statement_problem(
+            sid, ledger, where=f"依赖段第 {row.get('line')} 行")
+        if code:
+            flagged.add(sid)
+            _add(_row_step(row), code, why)
+
+    # ④ 表与正文的引用集合必须一致：两边差集逐条点名（表多一行也是缺陷）。
+    body_set = set(body_refs)
+    table_set = set(table_ids)
+    for ref in body_refs:
+        if ref in table_set:
+            continue
+        _add(_step_of(ref), REFUSED_TABLE_DISAGREES,
+             (f"证明正文点了 `stmt:{ref}`，而手稿的 `{SECTION_HEADING}` 表里没有这一行"
+              " —— 表与正文说的不是同一件事（缺的那一行要补上；正文是 F 的署名作品，"
+              "表按它补齐）"))
+    for row in rows:
+        sid = str(row.get("stmt_id") or "")
+        if sid in body_set:
+            continue
+        _add(_row_step(row), REFUSED_TABLE_DISAGREES,
+             (f"手稿的 `{SECTION_HEADING}` 表第 {row.get('line')} 行点了 `stmt:{sid}`，"
+              "而证明正文没有点它 —— 表里多出来的一行也是缺陷"
+              "（表与正文必须说的是同一件事）"))
+
+    # ⑤ 表里"用在哪一步"与正文那一步的 cites 对得上（正文有编号行时才核）。
+    if steps:
+        for row in rows:
+            sid = str(row.get("stmt_id") or "")
+            nos = _step_numbers(row.get("step"))
+            if not nos or sid in flagged:
+                continue
+            absent = [n for n in nos if n not in steps]
+            if absent:
+                _add(min(absent), "dependency_step_mismatch",
+                     (f"依赖段第 {row.get('line')} 行说 `stmt:{sid}` 用在第 "
+                      f"{'、'.join(str(n) for n in absent)} 步，而证明正文里没有那一步"
+                      " —— 步号对不上，读的人会照着去改错误的一步"))
+                continue
+            cited_here: set[str] = set()
+            for n in nos:
+                cited_here.update(str(x) for x in (steps[n].get("cites") or []))
+            if sid not in cited_here:
+                shown = "、".join(f"stmt:{x}" for x in sorted(cited_here)) or "（没有引用）"
+                _add(min(nos), "dependency_step_mismatch",
+                     (f"依赖段第 {row.get('line')} 行说 `stmt:{sid}` 用在第 "
+                      f"{'、'.join(str(n) for n in nos)} 步，而正文那些步引的是 {shown}"
+                      " —— 表里那一格与正文对不上"))
+
+    if not findings:
+        return {"checked": True, "ok": True, "findings": [], "defect_step": None,
+                "why": ""}
+    stepped = [int(f["step"]) for f in findings if isinstance(f.get("step"), int)]
+    defect_step = min(stepped) if stepped else (min(steps) if steps else 1)
+    shown = "；".join(str(f["detail"]) for f in findings[:3])
+    more = f"；另有 {len(findings) - 3} 条" if len(findings) > 3 else ""
+    return {"checked": True, "ok": False, "findings": findings,
+            "defect_step": defect_step, "why": shown + more}
 
 
 # ------------------------------------------------------------------ 渲染（唯一实现）

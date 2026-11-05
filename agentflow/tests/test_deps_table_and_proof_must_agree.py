@@ -37,6 +37,9 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+import pytest
+
+from conftest import sign_for_the_gate
 from agentflow import depsection as DS
 from agentflow import manuscriptform as MF
 from agentflow import schema as S
@@ -106,14 +109,52 @@ def test_d_without_the_consistency_check_a_goes_red(monkeypatch) -> None:
 
 
 # ============================================================ e 收方同一个判据
-def _registered_target(store: Store) -> str:
+#: 2026-11-06（业主口径的纠正）：这一条被测的"可引"是"在册 ∧ 等级 ≥ pre_theorem"。
+#: 所以夹具分两档造目标：`_registered_citable`（够格，正路）与
+#: `_registered_conjecture`（在册但不够格 ⇒ 引用它本身就是缺陷，见 f）。
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+
+_TARGET_TEXT = "证明：判据夹具，由定义直接得到。"
+
+
+def _register_target(store: Store, *, proof_text: str = "") -> dict:
     b = AgentB(store, extractor=None, extract_text=None, config={})
-    got = b.register_statement(
+    return b.register_statement(
         statement_full="引理：由在册定理推出结论（判据夹具）。",
-        statement_text="由在册定理推出结论", proof_text="", origin="own_result",
-        kind="conjecture", quote_reason="判据夹具：自产命题", doc_id=SID)
+        statement_text="由在册定理推出结论", proof_text=proof_text,
+        origin="own_result", kind="conjecture",
+        quote_reason="判据夹具：自产命题", doc_id=SID)
+
+
+def _registered_citable(store: Store) -> str:
+    """落一条真正够格被引的引理：在册 且 `pre_theorem`（读数逐格断言）。"""
+    got = _register_target(store, proof_text=_TARGET_TEXT)
     assert got.get("ok") is True, got
-    return str(got["stmt_id"])
+    sid = str(got["stmt_id"])
+    sign_for_the_gate(store.root, statement_id=sid, proof_text=_TARGET_TEXT,
+                      store=store)
+    row = next(dict(r) for r in store.rows("statements")
+               if str(r.get("stmt_id")) == sid)
+    grade = DS.statement_grade(row)
+    assert grade == DS.CITATION_MIN_LEVEL, (
+        f"夹具要把被引的这条抬到可引门槛；实得等级 {grade!r}")
+    assert sid in DS.citable_pool([row]), (
+        f"可引池里必须有它：{DS.citable_pool([row])}")
+    return sid
+
+
+def _registered_conjecture(store: Store) -> str:
+    """落一条在册但"不够格"的引理：等级停在 `conjecture`（只可作反例，不可作依据）。"""
+    got = _register_target(store)
+    assert got.get("ok") is True, got
+    sid = str(got["stmt_id"])
+    row = next(dict(r) for r in store.rows("statements")
+               if str(r.get("stmt_id")) == sid)
+    grade = DS.statement_grade(row)
+    assert grade == "conjecture", f"夹具要的是不够格那一档；实得 {grade!r}"
+    assert sid not in DS.citable_pool([row]), (
+        f"可引池里不许有它：{DS.citable_pool([row])}")
+    return sid
 
 
 def _register_again(store: Store):
@@ -123,19 +164,7 @@ def _register_again(store: Store):
         kind="conjecture", quote_reason="判据夹具：自产命题", doc_id=SID)
 
 
-def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> None:
-    """e：收方（B）读稿登记走同一个判据 —— 表 0 行而正文点了在册号 ⇒ 整笔受控拒。
-
-    为什么还要这一条：`commit_manuscript` 与 B 的登记入口是两条路（作者落稿 / 收方
-    读稿），只堵一处的话"绕过落稿那一道、直接把稿交给 B"仍然静默。
-
-    2026-11-05（业主裁定 A 优先于 B）：这一道只对在册引用生效（"在册"要真读台账）；
-    正文点一个不在册的号 ⇒ 走 §14.11 乙的 dangling（整笔照写），不是这一档。所以这份
-    夹具的正文必须引一条真的在册命题 —— 把正文里的 `stmt:000013` 换成刚登记出来的号。
-    """
-    store = Store(tmp_path / "ws")
-    store.init()
-    sid = _registered_target(store)
+def _write_manuscript(store: Store, sid: str) -> None:
     rel = DS.manuscript_relpath(statement_id=sid)
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +173,22 @@ def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> N
                        actor="secretary-F"),
         encoding="utf-8")
 
+
+def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> None:
+    """e：收方（B）读稿登记走同一个判据 —— 表 0 行而正文点了可引号 ⇒ 整笔受控拒。
+
+    为什么还要这一条：`commit_manuscript` 与 B 的登记入口是两条路（作者落稿 / 收方
+    读稿），只堵一处的话"绕过落稿那一道、直接把稿交给 B"仍然静默。
+
+    2026-11-06（业主口径的纠正）：被引的那个号必须"真够格"才轮得到"表与正文对不上"
+    这一档 —— 口径是 `在册 ∧ 等级 ≥ pre_theorem`。所以夹具先把目标签成 `pre_theorem`
+    （`_registered_citable` 逐格断言），正文引它。
+    """
+    store = Store(tmp_path / "ws")
+    store.init()
+    sid = _registered_citable(store)
+    _write_manuscript(store, sid)
+
     got = _register_again(store)
     assert got.get("ok") is False, got
     assert got.get("kind") == DS.REFUSED_TABLE_DISAGREES, got
@@ -151,3 +196,24 @@ def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> N
     # 整笔不写：不许顺手落一行命题或依赖边。
     assert [r for r in store.rows("dependencies")
             if str(r.get("used_by") or "") == f"stmt:{sid}"] == [], store.rows("dependencies")
+
+
+def test_f_the_same_target_below_the_citation_floor_is_refused(tmp_path: pathlib.Path) -> None:
+    """f：在册但 `conjecture` 的号被正文引用 ⇒ 受控拒（等级不够），拒信点名等级与门槛。
+
+    这一条是 2026-11-06 口径的直接钉子：在册不够，还要等级够。拒信不能说成
+    "表与正文对不上"（那是另一档），而要点名"它现在是 conjecture，低于 pre_theorem"。
+    """
+    store = Store(tmp_path / "ws")
+    store.init()
+    sid = _registered_conjecture(store)
+    _write_manuscript(store, sid)
+
+    got = _register_again(store)
+    assert got.get("ok") is False, got
+    assert got.get("kind") == DS.REFUSED_LEVEL_TOO_LOW, got
+    err = str(got.get("error") or "")
+    assert f"stmt:{sid}" in err, err
+    assert "conjecture" in err, err
+    assert DS.CITATION_MIN_LEVEL in err, err
+    assert store.rows("dependencies") == [], store.rows("dependencies")

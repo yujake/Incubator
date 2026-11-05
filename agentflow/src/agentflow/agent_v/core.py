@@ -324,6 +324,41 @@ def missing_material_detail(verdict: Mapping[str, Any],
         "补上缺的那几块之后重新送审（会审的七项读数在 exhaustion_review 里）。")
 
 
+def merge_dependency_audit(verdict: Mapping[str, Any],
+                           audit: Mapping[str, Any] | None) -> dict[str, Any]:
+    """把依赖面六项审计并进 V 的结论（纯函数；在册 / 未在册两支共用）。
+
+    业主 2026-11-06：「引用未在册命题应该在 V 审阅时就被打回，轮不到 B」。
+    这一格是那条口径的接线：`depsection.dependency_review` 逐条给出 error finding，
+    这里把它们并进 `parse_verdict` 的同一形态（`verdict` / `defect_step` /
+    `findings` / `unresolved_errors`），于是
+
+    - `verdict` 改判「有毛病」⇒ 连判在第一转就停（V 自己的结论不是成立就是终局）；
+    - `defect_step` 指到审计点的第一步（机械判据比模型的指针具体，覆盖它；
+      模型自己的 findings 一条不丢，仍在清单里）；
+    - `unresolved_errors` 重算 ⇒ `row_signable` 不放签（双重保险）。
+
+    审计为空（`ok=True` / 没有 findings）⇒ 结论一个字不动（好稿不许被挡）。
+    """
+    out = dict(verdict)
+    findings = [dict(f) for f in (out.get("findings") or [])]
+    added = [dict(f) for f in ((audit or {}).get("findings") or [])]
+    if not added:
+        return out
+    findings.extend(added)
+    out["findings"] = findings
+    out["verdict"] = "有毛病"
+    out["unresolved_errors"] = sum(
+        1 for f in findings if str(f.get("level")) == "error")
+    step = (audit or {}).get("defect_step")
+    if isinstance(step, int):
+        out["defect_step"] = step
+    why = str((audit or {}).get("why") or "")
+    if why:
+        out["why"] = (str(out.get("why") or "") + "；" + why).strip("；")
+    return out
+
+
 def _read_only_facts(store: Any, statement_id: str) -> str:
     """只读读数（命题现状 + 文献/实验条数）—— I12 里"只读查询面"那一半。
 
@@ -661,6 +696,31 @@ class AgentV:
         """
         return VR.reconcile_citation_checks(checks, material)
 
+    def _dependency_audit(self, manuscript_text: str) -> dict[str, Any]:
+        """依赖面的机械审计（六项逐条核）—— V 是第一道防线（业主 2026-11-06）。
+
+        判据本体在 `depsection.dependency_review`（与 B 的登记入口、F 的可引池同源）；
+        这里只负责"读一次 `statements`"与"没有稿就跳过"。读不到台账 ⇒ 如实说
+        `checked=False`（这一格没查成），不冒充"核过、没问题"；台账读不出来的那一档
+        另由引用材料那一格挡签（`citations_problem`）。
+        """
+        from .. import depsection as _DS
+
+        if not str(manuscript_text or "").strip():
+            return {"checked": False, "ok": True, "findings": [],
+                    "defect_step": None, "why": "（这一趟没有手稿文本 ⇒ 依赖面不核）"}
+        if self.store is None:
+            return {"checked": False, "ok": True, "findings": [],
+                    "defect_step": None, "why": "（没有 store ⇒ 读不到台账，依赖面不核）"}
+        try:
+            rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到就是没查成，不许当没问题
+            return {"checked": False, "ok": True, "findings": [],
+                    "defect_step": None,
+                    "why": (f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
+                            "⇒ 依赖面这一格没查成")}
+        return _DS.dependency_review(manuscript_text, rows)
+
     # ------------------------------------------------------------------ 三个动作
 
     def verify_proof(self, statement_id: str = "", proof_text: str = "",
@@ -806,6 +866,8 @@ class AgentV:
         #: 这一趟签的载体（工作区相对路径；空串 = 没有手稿）。在册那一支由参数给、
         #: 随台账行交给 `sign_statement`（签块落回同一份稿）；未在册那两支各自处理。
         manuscript_rel = ""
+        #: 这一趟读到的手稿全文（六项依赖面审计要用 `## 依赖` 段；空串 = 没有稿）。
+        manuscript_raw = ""
         statement_full = ""
         if self.store is not None:
             try:
@@ -921,6 +983,7 @@ class AgentV:
                     return out
                 if not str(text or "").strip():
                     text = str(_ms.get("body") or "")
+                manuscript_raw = str(_ms.get("raw") or "")
             else:
                 # 老路（内联）：参数给的正文 / statements 上那一份。这一段只在
                 # `_manuscript_gate` 被摘掉时才走得到（反真空判据 d 打的就是它）：
@@ -1240,6 +1303,8 @@ class AgentV:
         # 上界动态等于门槛（`review_pass_bound()` 现读）：跑满门槛时 clean 那一档必然攒够
         # 门槛票，于是"要么签、要么打回"必然命中。跑完两头都没有 ⇒ 内部不一致（见下）。
         need = review_pass_bound()
+        #: 依赖面的机械审计（业主 2026-11-06：V 是第一道）：算一次、三转共用。
+        dependency_audit = self._dependency_audit(manuscript_raw)
         passes: list[dict[str, Any]] = []
         last: dict[str, Any] = {}
         #: 终局是哪一种："" = 循环跑完还没命中终局（= 内部不一致）/ signed / fault /
@@ -1258,7 +1323,8 @@ class AgentV:
                                      citations=citations,
                                      citations_problem=citations_problem,
                                      pass_no=pass_no, review_call=review_call,
-                                     manuscript=manuscript_rel)
+                                     manuscript=manuscript_rel,
+                                     dependency_audit=dependency_audit)
             if not once.get("ok"):
                 # 这一转没查成（没接线 / 结论不合法 / 台账写不进去）。已经读到的读数
                 # 照改前的顺序摊回返回值：秘书判定与引用核实在改前也是先落再写的，
@@ -1507,7 +1573,8 @@ class AgentV:
     def _review_pass(self, *, sid: str, text: str, no: int, prompt: str,
                      citations: list[dict[str, Any]], citations_problem: str,
                      pass_no: int, review_call: str = "",
-                     manuscript: str = "") -> dict[str, Any]:
+                     manuscript: str = "",
+                     dependency_audit: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """一份证明的一次独立审阅（业主 2026-10-30 的"连续再判"里的那一转）。
 
         一转做五件事，一件都不许省：
@@ -1560,6 +1627,9 @@ class AgentV:
         checks = self._citation_checks(list(verdict.get("citation_checks") or []), citations)
         gate = VR.citation_gate(checks, problem=citations_problem)
         verdict = VR.apply_citation_gate(dict(verdict, citation_checks=checks), gate)
+        #: 依赖面六项审计（业主 2026-11-06：V 是第一道）：机械判据并进结论 ——
+        #: 不在册 / 等级不够 / 表与正文不一致 / 步号对不上 ⇒ 判「有毛病」、点名。
+        verdict = merge_dependency_audit(verdict, dependency_audit)
         self._emit(f"verify_proof({sid})：引用核实 {len(checks)} 条，"
                    f"挡签 {len(gate.get('blocking') or [])} 条"
                    + (f"，弱形式 {len(gate.get('weaker') or [])} 条"
@@ -1928,7 +1998,7 @@ class AgentV:
                                f"{VR.proof_sha(body)[:12]}…）⇒ 拒绝：签会盖错一份正文；"
                                "在册这一档正文以稿为准，参数里那份只作核对 —— "
                                "要么把 `proof_text` 换成稿里那一份，要么把 `proof_no` 指对")}
-        return {"manuscript": rel, "body": body}
+        return {"manuscript": rel, "body": body, "raw": raw}
 
     def _review_b_manuscript(self, *, text: str, manuscript: str = "", no: int = 1,
                              statement_full: str = "") -> dict[str, Any] | None:
@@ -2049,6 +2119,9 @@ class AgentV:
                                    f"（{_section.get('refused')}）⇒ 不审、不落签")}
         if not body.strip():
             return None
+        #: 依赖面的机械审计（业主 2026-11-06：V 是第一道）：与在册那一支同一份判据，
+        #: 只是台账按 `statements` 现读；没有稿（只有内联正文）时这一格不核。
+        dependency_audit = self._dependency_audit(raw_manuscript)
         sha = VR.proof_sha(body)
         if raw_manuscript:
             already = _VS.manuscript_sign_standing(raw_manuscript, proof_sha=sha)
@@ -2093,6 +2166,8 @@ class AgentV:
                         "detail": (f"第 {n} 转的输出不是合法结论（{exc}）⇒ 这一份没查成："
                                    "一个字节都不写"),
                         "passes": passes, "manuscript": rel}
+            #: 依赖面六项审计（业主 2026-11-06）：机械缺陷并进这一转的结论。
+            verdict = merge_dependency_audit(verdict, dependency_audit)
             word = VR.read_verdict(verdict)
             unresolved = int(verdict.get("unresolved_errors") or 0)
             judged.append({"pass": n, "verdict": verdict})

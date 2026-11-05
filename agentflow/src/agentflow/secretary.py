@@ -8079,32 +8079,72 @@ class Secretary:
         "新建一条命题"与"并进已有命题的第 N 份证明"。两处必须用同一套判据 ——
         各写一份的形态是"两条路径对同一条悬空依赖给出两种处置"，而那种漂移没有
         任何读数会响（与 `_resolve_dep_steps` 的注释同一条理由）。
-        三态：`None` = 拒（显式给的依赖指着不在册的号）；列表 = 可写（悬空边落
-        `dangling` 并点名，扫不动的进 `deps_unmappable`）。
+
+        ## 命题这一档：不可引 ⇒ 受控拒（2026-11-06 业主口径的纠正）
+
+        正文里点一个不可引的号（不在册 / 等级 < `pre_theorem`）不是"待接的
+        悬空边"：业主逐字「F 应该无法读到尚未在册的命题」「F 只可引用准定理级及以上
+        的命题」⇒ F 读不到它，不可能在引用它，所以这种正文只可能是这一笔写错了。
+        判据与 F 的可引池、B 的登记入口同源（`depsection.citable_pool` /
+        `uncitable_statement_problem`）；拒信逐字点名那个号。
+
+        三态：`None` = 拒（命题不可引 / 显式给的依赖指着不在册的号）；列表 = 可写
+        （"非命题"来源的悬空边落 `dangling` 并点名，扫不动的进 `deps_unmappable`）。
+
+        ## 仍然保留 dangling 的只有"非命题来源"这一档
+
+        文献 / 实验 / 文档这三种来源的号不在册时，边照旧落 `dangling` 并点名：
+        它们不是"F 读不到的命题"，业主 2026-11-06 那条口径没有覆盖它们；把它们
+        也改成整笔拒会顺手改掉 G 契约里那一档（`body["deps"]` 直给的那条路本来
+        就更严：它整笔不写）。命题来源不走这条 —— 它在上面的 `blocked` 那一支就拒了。
         """
         steps, missing = _resolve_dep_steps(groups, tx)
-        #: `depsection.deps_groups` 给"手稿的 `## 依赖` 表点名了不在册的号"打的标记：
-        #: 那一档按业主 §14.11 乙 落 `dangling`（整笔照写），不是"显式依赖的严格
-        #: 那一条"。两条路的区别只在"这一步是谁给的"：调用方直给的 `deps`（G 的契约）
-        #: 没有这个标记，照旧整笔不写；手稿读出来的行带它（`declared_dangling`）。
-        def _declared_dangling(m: Mapping[str, Any]) -> bool:
-            stp = dict(m.get("step") or {})
-            return (bool(stp.get("declared_dangling"))
-                    and str(stp.get("status") or "") == "dangling"
-                    and "表里没有" in str(m.get("why") or ""))
-        undeclared = [m for m in missing if not _declared_dangling(m)]
-        if undeclared and body.get("deps"):
+        #: 可引判据的唯一定义在 `depsection`（与 F 的提示词清单、B 的登记入口同源）。
+        from . import depsection as _DS
+        try:
+            ledger = [dict(r) for r in tx.rows("statements")]
+        except Exception:  # noqa: BLE001 —— 读不到台账就不许判"可引"
+            out.update(refused=str(_DS.REFUSED_LEVEL_UNREADABLE),
+                       reason=("依赖的这一批来源要判可引，而 `statements` 读不出来 ⇒ "
+                               "整笔不写：读不到台账就不许把一条引不成的号记成依赖"))
+            return None
+        blocked: list[dict[str, Any]] = []
+        for stp in steps:
+            sid = str(stp.get("source_stmt_id") or "").strip()
+            if not sid:
+                continue
+            _code, _why = _DS.uncitable_statement_problem(
+                sid, ledger, where="依赖步骤里")
+            if _code:
+                blocked.append({"path_group": int(stp.get("path_group") or 1),
+                                "step": dict(stp), "code": _code, "why": _why})
+        for m in missing:
+            _stp = dict(m.get("step") or {})
+            _sid = str(_stp.get("stmt_id") or "").strip()
+            if not _sid or "表里没有" not in str(m.get("why") or ""):
+                continue
+            _code, _why = _DS.uncitable_statement_problem(
+                _sid, ledger, where="依赖步骤里")
+            if _code:
+                blocked.append(dict(m, code=_code, why=_why))
+        if blocked:
+            first = blocked[0]
+            out.update(refused=str(first.get("code") or ""),
+                       reason=str(first.get("why") or ""),
+                       unresolved=blocked)
+            return None
+        if missing and body.get("deps"):
             # 显式给的依赖指着不在册的号 ⇒ 整笔不写（G 那一族的契约）
             out.update(refused="unresolved_dependency",
                        reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
                                "依赖：那正是'依赖图静默少一环'的成因）"),
-                       unresolved=undeclared)
+                       unresolved=missing)
             return None
         if not missing:
             return steps
-        # 从证明文本里扫出来的引用：业主 §14.11 的判据是"那条边落 `dangling`
-        # 并在读数里点名，不整笔拒" —— 拒了等于把整条定理丢掉，而"证明里引了
-        # 一个还不存在的号"正是最该留下痕迹的那件事。
+        # 走到这里的 `missing` 只剩"非命题来源"这一类（文献 / 实验 / 文档的号不在册）：
+        # 业主 §14.11 乙 的处置是"那条边落 `dangling` 并在读数里点名，不整笔拒"。
+        # 命题这一档不在其中 —— 它在上面 `blocked` 那一支已经受控拒了（2026-11-06）。
         #
         # 两档必须分开（`_resolve_dep_steps` 的 `why` 把它们区分开）：
         # "表里没有这个号" ⇒ 落一条 `dangling` 边；"这一步本身不合法"
@@ -8127,11 +8167,10 @@ class Secretary:
                         break
                 # `Dependency.validate` 的硬要求：`status="dangling"` 必须写
                 # `status_reason`（"只标状态不说原因 = 记了一笔没人能接手"）。
-                if not str(stp.get("status_reason") or "").strip():
-                    stp["status_reason"] = (
-                        f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
-                        f"而{why} ⇒ 这条依赖边留着并标 `dangling`（不整笔拒、也不丢掉它："
-                        "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
+                stp["status_reason"] = (
+                    f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
+                    f"而{why} ⇒ 这条依赖边留着并标 `dangling`（不整笔拒、也不丢掉它："
+                    "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
                 kept.append(stp)
                 out["deps_dangling"].append(
                     {"ref": _dep_ref(stp),

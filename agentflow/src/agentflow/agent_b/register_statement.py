@@ -2164,21 +2164,23 @@ class _RegisterStatement:
                 # "正文里引了、表里没写"整份静默通过。判据本体只有一处
                 # （`depsection.dependency_consistency_problem`），与 F 落稿前那道同源。
                 #
-                # 2026-11-05（裁定 A 优先于 B）：这一道只对在册命题的引用要求表里有行。
-                # 正文点了一个不在册的号、表 0 行 ⇒ 不是"表与正文对不上"，而是 §14.11 乙
-                # 那一条悬空边（落 dangling + 点名 + 整笔照写）。"在册"要真读台账，
-                # 所以读 `statements` 提到这一判据之前；读不到 ⇒ 不许猜，整笔不写。
+                # 2026-11-06（业主口径的纠正）：正文里出现的 `stmt:` 号必须是"可引"的
+                # —— 在册 ∧ 等级 ≥ `pre_theorem`（F 只可引用准定理级及以上）。不在册 /
+                # 等级不够的号不是"待接的悬空边"，而是这一笔写错了（F 读不到它，不可能
+                # 在引用它）⇒ 受控拒，拒信点名那个号。"在册"要真读台账，所以读
+                # `statements` 提到这一判据之前；读不到 ⇒ 不许猜，整笔不写。
                 try:
                     stmt_rows = [dict(r) for r in self.store.rows("statements")]
                 except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
                     return _refuse(
                         str(_DS.REFUSED_LEVEL_UNREADABLE),
-                        f"手稿的依赖段要核每条来源的档位、并判正文的引用在不在册，"
+                        f"手稿的依赖段要核每条来源的档位、并判正文的引用在不在可引池里，"
                         f"而 `statements` 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 整笔不写：读不到档位就不许放行")
                 _code, _why = _DS.dependency_consistency_problem(
                     manuscript_text,
-                    known_ids=[str(r.get("stmt_id") or "") for r in stmt_rows])
+                    known_ids=_DS.citable_pool(stmt_rows),
+                    statement_rows=stmt_rows)
                 if _code:
                     return _refuse(
                         str(_code), str(_why),
@@ -2192,27 +2194,27 @@ class _RegisterStatement:
                         str(gate.get("reason") or ""),
                         source_levels=dict(gate.get("levels") or {}),
                         required=sorted(_DS.CITATION_LEVELS))
-                #: 不在册的那些行（`gate_rows` 的 `dangling`）也原样进 `deps_groups`：
-                #: 它按"号在不在 `kinds` 里"给那一行打 `declared_dangling`，秘书那一侧
-                #: 只对这一档放行成悬空边（§14.11 乙"落 dangling + 点名 + 整笔照写"）。
-                #: 调用方直给的 `deps` 没有这个标记，照旧整笔不写（G 那一族的契约）——
-                #: 两条路的区别只在"这一步是谁给的"，不在"号在不在册"。
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
                          for r in stmt_rows}
                 deps_groups = _DS.deps_groups(manuscript.get("rows") or (), kinds)
         elif not manuscript_text.strip():
             # ---- 参数空、盘上也没有稿：不许静默跳过（2026-10-26，业主的裁定） ------
             #
-            # 正文引用了在册命题 ⇒ 这份证明的依赖面必须写在手稿里，而这一笔交不出手稿
-            # （参数空、约定路径也找不到）⇒ 整笔受控拒绝 `dependency_section_missing`。
-            # 一条在册引用都没有 ⇒ `not_applicable`（自足的证明合法，不拒收），
+            # 正文引用了可引命题（在册 ∧ 等级 ≥ pre_theorem）⇒ 这份证明的依赖面必须
+            # 写在手稿里，而这一笔交不出手稿（参数空、约定路径也找不到）⇒ 整笔受控
+            # 拒绝 `dependency_section_missing`。
+            # 一条可引引用都没有 ⇒ `not_applicable`（自足的证明合法，不拒收），
             # 依赖面仍由秘书那条正文扫描的既有口径给读数。
-            # 判"在册"要真读一次 `statements`：读不到就不许把"读不到"折成"没有引用"，
+            # 判"可引"要真读一次 `statements`：读不到就不许把"读不到"折成"没有引用"，
             # 也不能凭引用形状就拒（一条指向不存在号的引用不是这一档的事）。
             probe_refs = _DS.stmt_refs(proof_text)
             if probe_refs:
                 try:
-                    known_ids = {str(r.get("stmt_id") or "") for r in self.store.rows("statements")}
+                    #: 这一格问的是"正文引了在册命题没有"（用于判"这一笔该不该带稿"），
+                    #: 不是可引池：「在册但等级不够」由稿那一侧 / 秘书那一侧的受控拒点名，
+                    #: 不在这里折成"缺稿"（缺的确实不是稿）。
+                    known_ids = {str(r.get("stmt_id") or "")
+                                 for r in self.store.rows("statements")}
                 except Exception:  # noqa: BLE001 - 读不到就只按形状判，理由里写清
                     known_ids = set(probe_refs)
                 on_ledger = [rid for rid in probe_refs if rid in known_ids]
@@ -2221,7 +2223,7 @@ class _RegisterStatement:
                     more = f" 等 {len(on_ledger)} 条" if len(on_ledger) > 3 else ""
                     return _refuse(
                         str(_DS.REFUSED_SECTION_MISSING),
-                        (f"这一笔的证明正文引用了在册命题 {shown}{more}，而它没有交出手稿"
+                        (f"这一笔的证明正文引用了可引命题 {shown}{more}，而它没有交出手稿"
                          "（`proof_manuscript` 是空的）。三处都找过了："
                          "① 参数里没有；"
                          "② D 的研究报告里没有携带它（" + str(manuscript_carried.get("why")

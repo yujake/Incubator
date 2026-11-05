@@ -13,15 +13,18 @@
 `path_group`）；⑤ 反真空一：没装 store ⇒ 受控拒绝且一行不落（不许退回"B 自己写"）；⑥ 反真空二：
 `Secretary.writes` 必须真是这两张表（空集 = 这句声明没有内容）。
 
-三态纪律在这条路上的落点：依赖里有一条指着不在册的 id ⇒ 整笔不写（`unresolved_dependency`），
-而不是"少写一条边"：依赖图上少一环没有任何地方会报错，那正是这套东西要堵的形态。概念的定义空着
+三态纪律在这条路上的落点：依赖里有一条指着不在册的 id ⇒ 整笔不写。命题来源在
+2026-11-06 之后是 `dependency_source_not_registered`（点名"F 读不到它"）；非命题来源
+（文献 / 实验 / 文档）仍是 `unresolved_dependency` —— 两条都不许"少写一条边"：依赖图
+上少一环没有任何地方会报错，那正是这套东西要堵的形态。概念的定义空着
 ⇒ `concept_definition_pending`（`draft/93·续` D12 未裁之前不落那种行）。"""
 
 from __future__ import annotations
 
 import importlib
 
-from conftest import TS, add_literature, sync_counters
+from conftest import TS, add_literature, sign_for_the_gate, sync_counters
+from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import secretary as SEC
@@ -69,10 +72,16 @@ def test_a_statement_lands_in_one_transaction_with_its_dependency_groups(store):
     add_literature(store, S.format_id(0))
     _exp(store, S.format_id(1))
     sec = _sec(store)
-    # 路径 1 要指一条在册的命题 ⇒ 先落一条（依赖不许挂空号，见负控）
+    # 路径 1 要指一条在册的命题 ⇒ 先落一条（依赖不许挂空号，见负控）；
+    # 2026-11-06 起"在册"之外还要够格（`pre_theorem`）—— 可引池 = 在册 ∧ 等级够。
     target = sec.record_statement(_payload(statement_full="引理 A：电导有正下界", label="引理 A"),
                                   role="B")
     assert target["created"], target
+    sign_for_the_gate(store.root, statement_id=str(target["stmt_id"]),
+                      proof_text=str(_payload()["proof_text"]), store=store)
+    target_row = next(dict(r) for r in _rows(store, "statements")
+                      if str(r.get("stmt_id")) == str(target["stmt_id"]))
+    assert DS.statement_grade(target_row) == DS.CITATION_MIN_LEVEL, target_row
     bits = EB.bits_of(proof=True, proof_process="逐步论证……")
     out = sec.record_statement(_payload(bits=bits, deps=[
         [{"kind": "theorem", "stmt_id": target["stmt_id"], "label": "引理 A"}],   # 路径 1
@@ -163,13 +172,18 @@ def test_the_same_statement_twice_is_a_duplicate_reading(store):
 
 
 def test_a_dependency_on_a_missing_id_writes_nothing(store):
-    """依赖指着不在册的 id ⇒ 整笔不写（不许少写一条边了事）。"""
+    """依赖指着不在册的 id ⇒ 整笔不写（不许少写一条边了事）。
+
+    2026-11-06（业主口径的纠正）：命题来源的受控码与正文那一路同源 ——
+    `dependency_source_not_registered`，拒信点名那个号 + "F 读不到它"。
+    """
     add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(deps=[[{"kind": "theorem", "stmt_id": "9999"}]]),
                                role="B")
-    assert out["refused"] == "unresolved_dependency" and not out["created"], out
-    assert "9999" in str(out["reason"]) or out.get("unresolved"), out
+    assert out["refused"] == DS.REFUSED_UNKNOWN_SOURCE and not out["created"], out
+    assert "9999" in str(out["reason"]), out
+    assert "F 读不到它" in str(out["reason"]), out
     assert out["unresolved"][0]["path_group"] == 1
     assert _rows(store, "statements") == [] and _rows(store, "dependencies") == []
 

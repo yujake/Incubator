@@ -907,18 +907,18 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     # 2026-11-04（业主裁定 甲）：在册命题的 V 审必须带手稿（签块 / `## 依赖` /
     # 按号寻址三样只在文件上）。上面第 ① 步为了"正文空着"把 F 稿的证明段搬走了，
     # 所以这里按这条命题的号落一份可签的载体（正文就是第 ③ 步要交的那一份、
-    # 依赖段用同一个四列空表）。判据一个字没改：它读的仍是"这一份正文的三转"。
+    # 依赖段用正文自己的那一张四列表 —— 2026-11-06 起 V 会逐条核"表与正文
+    # 一致"，空表配一份引了号的正文是缺陷，不是声明）。判据一个字没改：它读的
+    # 仍是"这一份正文的三转"。
     b_man_rel = f"{MANUSCRIPT_DIR}/f-proof-{b_stmt}.md"
     _b_man = pathlib.Path(store.root) / b_man_rel
+    _dep_rows = DS.parse_dependency_section(text).get("rows") or []
     _b_man.write_text(
         "# F 的证明手稿（整条链夹具）\n\n"
         f"- 命题号：stmt:{b_stmt}\n\n"
         f"## 命题\n\n定理：研究手稿引用了 F 的证明手稿（整条链）。\n\n"
         f"## 证明\n\n{PROOF_BODY}\n\n"
-        "## 依赖\n\n"
-        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-        "|---|---|---|---|\n"
-        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        + DS.render_dependency_section(_dep_rows),
         encoding="utf-8")
     # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要断"前几转不签"；
     # 2026-10-30 起那几次落在同一次调用的多转里（V 判没问题后连续再判，不是 F 三交）
