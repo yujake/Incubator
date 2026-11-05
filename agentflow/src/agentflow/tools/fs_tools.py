@@ -365,8 +365,10 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——
     #   · 证明稿（下面两行）不归 D 落：名字是 F 的证明稿形状，换目录也照拒；
-    #   · 研究手稿（`reports/RESEARCH.md`）是 D 的既有交付物，不在这张表里：
-    #     它由内容闸管（`_d_proof_body_refusal`）—— 里面出现 D 自己写的 `## 证明` 节才拒。
+    #   · 研究手稿（`RESEARCH.md`）是 D 的既有交付物，不在这张表里：
+    #     它由内容闸管（`_d_proof_body_refusal`）—— 正文里出现 D 自己写的 `## 证明` 节
+    #     才拒（2026-11-05 起任何路径都判，名字不再参与这一档；例外只有 `RESEARCH.md`
+    #     里引用/转载盘上 F 的稿）。
     #   改前这里有一行 `("D", "contains:RESEARCH")`（2026-11-01 审计 D-08 立的"RESEARCH.md
     #   没有渲染器、别手写"）；2026-11-04 的补充裁定把它翻了回来：D 的研究手稿就是既有
     #   指定形式（收录 F/E 侧成果），所以"名字里带 RESEARCH"不再等于"不许 D 写"。
@@ -405,6 +407,27 @@ D_ATTACK_RECORD_MESSAGE = (
     "拒绝 {path}：`out/proofs/` 是攻坚过程记录，不是证明稿的落点 —— 这一份里有一节 "
     "`## 证明`，那是一份可提交的证明稿。要落稿就派 F（`F.create_plan` → `F.step`，"
     "由它落 `reports/f-proof-<号>.md` 并带 V 的签）；这里只写 `## 思路` / `## 依赖面参考`。"
+)
+
+#: 内容闸的模型可见口径（2026-11-05）。这一句是 `fs.write` / `fs.edit` 的 summary 与
+#: D 的正文拒信共读的那一处事实 —— 判据（`tests/test_fs_summary_matches_reserved_table.py`
+#: 的 `test_the_summary_and_the_content_gate_agree_case_by_case`）同时读它、两条 summary
+#: 与 `_d_proof_body_refusal` 的实际判定：三处不许各写一份（summary 单独写"照拒"而不写
+#: 例外、或实现单独放宽而不改这句，都会红）。
+D_PROOF_BODY_RULE = (
+    "D 在任何路径写带 `## 证明` 的正文都照拒（`notes/` / `reports/` / `out/proofs/*.md` "
+    "一样；唯一例外是 `RESEARCH.md` 里引用盘上 `reports/f-proof-<号>.md`，或带那份文件"
+    "字节的 sha256）"
+)
+
+#: 其余任何路径上"D 自己写的 `## 证明` 节"的拒信（2026-11-05 业主裁定：教法说任何路径，
+#: 实现却只查 `out/proofs/` 与 `*research*` 名 ⇒ 补上这一族）。指路两条：落稿派 F；
+#: 引用/转载收进 `RESEARCH.md`（那一处是这条闸唯一的例外）。口径那一句与 summary 同源。
+D_PROOF_BODY_MESSAGE = (
+    "拒绝 {path}：这一份里有一节 `## 证明` —— 那不是随手记一笔，是一份可提交的证明稿，"
+    "而证明的落稿与拿签不属于 D。" + D_PROOF_BODY_RULE + "。"
+    "要落稿就派 F（`F.create_plan` → `F.step`，由它落 `reports/f-proof-<号>.md` 并带 V 的签）；"
+    "你自己只写 `## 思路` / `## 依赖面参考`。"
 )
 
 #: 研究手稿里"自己写的 `## 证明` 节"的拒信（2026-11-04 补充裁定：D 的研究手稿是收录者/
@@ -556,10 +579,15 @@ def _has_proof_section(text: Any) -> bool:
 
 
 def _is_research_manuscript(rel: str) -> bool:
-    """`rel` 是不是 D 的研究手稿（`RESEARCH.md` 这一族名字；2026-11-04 补充裁定）。"""
+    """`rel` 是不是 D 的研究手稿（文件名就是 `RESEARCH.md`；2026-11-04 补充裁定）。
+
+    2026-11-05 收窄：改前这里认"名字里带 research"的 `.md`（`notes/foo-research.md`
+    也算），于是内容闸的例外面比教法宽。例外只属于那一份研究手稿，不是"带 research
+    字样的任何笔记"；目录不论（`reports/RESEARCH.md` 与 `notes/RESEARCH.md` 同名同权）。
+    """
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
     name = parts[-1] if parts else ""
-    return name.casefold().endswith(".md") and "research" in name.casefold()
+    return name.casefold() == "research.md"
 
 
 def _cites_an_f_manuscript(root: Path | None, content: Any) -> bool:
@@ -594,28 +622,53 @@ def _cites_an_f_manuscript(root: Path | None, content: Any) -> bool:
     return False
 
 
+def _d_proof_body_scope_refused(rel: str, content: Any, root: Path | None) -> bool:
+    """这一份正文是不是"D 落的一份可提交证明稿"（2026-11-05 业主裁定）。
+
+    判据只有一条：正文里出现整行 `## 证明`（逐行整行比，`## 证明思路` 不算）。
+
+      · 任何路径都拒 —— 换目录、换个"更像笔记"的名字都不是豁免条件；
+      · 唯一例外：研究手稿（`RESEARCH.md`）里那一节是引用/转载盘上 F 的稿
+        （点名 `reports/f-proof-<号>.md`，或带那份文件字节的 sha256）。
+      · `out/proofs/` 里连这个例外都没有：那是攻坚过程记录，明确不许带证明正文。
+
+    这个谓词单独一层是为了让"任何路径"这一步可被打桩（判据的反真空：把它换回
+    只查 `out/proofs/` 的旧口径 ⇒ 同一批写入必须放行）。
+    """
+    if not _has_proof_section(content):
+        return False
+    low = str(rel or "").replace("\\", "/").casefold()
+    if low.startswith(D_ATTACK_RECORD_DIR):
+        return True
+    if _is_research_manuscript(rel) and _cites_an_f_manuscript(root, content):
+        return False
+    return True
+
+
 def _d_proof_body_refusal(rel: str, role: str, content: Any,
                           root: Path | None) -> ToolResult | None:
-    """D 的写入里"这一节是可提交的证明稿"的受控拒（2026-11-04 业主裁定）。
+    """D 的写入里"这一节是可提交的证明稿"的受控拒（2026-11-04 起，2026-11-05 扩到任何路径）。
 
-    只对角色 D 生效，两档：
-      · `out/proofs/` 下：任何 `## 证明` 节都拒 —— 那是攻坚过程记录，不是落稿点；
-      · 研究手稿（`reports/RESEARCH.md` 这一族）：只有当那一节不是引用/转载 F 的稿
-        时才拒（引用者可以引，作者这一位不属于 D）。
+    只对角色 D 生效；判据在 :func:`_d_proof_body_scope_refused`（任何路径，
+    例外只有 `RESEARCH.md` 里引用 F 的稿）。拒信按落点分三档，指路都是"要落稿就派 F"：
+      · `out/proofs/`：攻坚过程记录，不是落稿点；
+      · 研究手稿（`RESEARCH.md`）：没有引用/转载 F 的稿；
+      · 其余任何路径：D 的正文里出现 `## 证明`。
     返回值是 :func:`fail` 的结果（不在这一档 ⇒ None）。
     """
     if str(role or "") != "D" or content is None:
         return None
-    if not _has_proof_section(content):
+    if not _d_proof_body_scope_refused(rel, content, root):
         return None
     low = str(rel or "").replace("\\", "/").casefold()
     if low.startswith(D_ATTACK_RECORD_DIR):
-        return fail(D_ATTACK_RECORD_MESSAGE.format(path=rel), path=rel,
-                    kind=RESERVED_ARTIFACT_KIND, role="D")
-    if _is_research_manuscript(rel) and not _cites_an_f_manuscript(root, content):
-        return fail(D_RESEARCH_PROOF_MESSAGE.format(path=rel), path=rel,
-                    kind=RESERVED_ARTIFACT_KIND, role="D")
-    return None
+        message = D_ATTACK_RECORD_MESSAGE
+    elif _is_research_manuscript(rel):
+        message = D_RESEARCH_PROOF_MESSAGE
+    else:
+        message = D_PROOF_BODY_MESSAGE
+    return fail(message.format(path=rel), path=rel,
+                kind=RESERVED_ARTIFACT_KIND, role="D")
 
 
 def _reserved_refusal(rel: str, role: str, content: Any = None,
@@ -1064,12 +1117,12 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 #: 两处口径必须一致（D8，2026-11-05 走查）：改前这两句说 `RESEARCH.md` 对 D 拒写，而表里
 #: D 那一行已按 2026-11-04 的裁定删掉（D 的研究手稿是既有交付物）⇒ 工具面在教错 ——
 #: 模型会因此不敢写自己的研究手稿。判据同时读这两句与那张表：
-#: `temp/walk-fix-20261105/probe_d8.py`（表里没有 D 的 `RESEARCH` 行 ⇒ 这两句必须说 D 可写；
-#: 表里 F/D/M 的证明稿形状 ⇒ 这两句必须说拒；`out/proofs/` 与 `RESEARCH.md` 里自写
-#: `## 证明` 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
+#: `tests/test_fs_summary_matches_reserved_table.py`（表里没有 D 的 `RESEARCH` 行 ⇒ 这两句
+#: 必须说 D 可写；表里 F/D/M 的证明稿形状 ⇒ 这两句必须说拒；任何路径上自写 `## 证明`
+#: 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`，但自写 `## 证明`（含 `out/proofs/*.md`）照拒 —— 要落稿就派 F。",
+    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1080,8 +1133,13 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
     ),
     side_effect="write_local",
     roles=TOOL_ROLES,
-    # 键名从一个真实调用读出（`fs_write`）。
-    returns="{'path','bytes','sha256','created'}",
+    # 键名从一个真实调用读出（`fs_write`）。失败档 2026-11-05 补上（走查 D5）：
+    # 两句 returns 原先只声明成功键，而保留面拒的两个受控码是真的会产出的。
+    returns=(
+        "{'path','bytes','sha256','created'}"
+        "；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/"
+        "path_denied/exists/too_large/not_observed/stale_version) + data=None"
+    ),
     tags=("fs", "write"),
 )
 @_guard
@@ -1167,7 +1225,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换一段文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；保留面与拒写口径同 fs.write（D 可写 `RESEARCH.md`，自写 `## 证明` 才拒）。",
+    "定点替换一段文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；保留面与拒写口径同 fs.write —— 名字级（`f-proof-*` / `*-proof.md` 对 F/D/M，`*-research.md` 对 D/M，`RESEARCH.md` 对 M）与内容级两道都在；D 可写 `RESEARCH.md`，但内容级仍守着：" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1182,7 +1240,13 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     ),
     side_effect="write_local",
     roles=TOOL_ROLES,
-    returns="{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}",
+    # 失败档 2026-11-05 补上（走查 D5；与 `fs.write` 同一族）：原先只声明成功键。
+    returns=(
+        "{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}"
+        "；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/"
+        "path_denied/not_found/too_large/not_utf8/empty_old_string/not_found_old_string/"
+        "ambiguous/sha_mismatch/not_observed/stale_version) + data=None"
+    ),
     tags=("fs", "write", "edit"),
 )
 @_guard

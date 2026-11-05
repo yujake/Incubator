@@ -23,14 +23,24 @@ D 全程没派 F，自己在 out/proofs/ 写了 3 份证明
 
 ## 判据
 
-| 判据 | 它要证明的事 | 改前红在哪 |
-|---|---|---|
-| a | D 写 `reports/RESEARCH.md` 允许（既有交付物）；但这一份里出现 D 自己新写的 `## 证明` 节（没引用 F 的稿、没转载 F 的 sha）⇒ 拒 `reserved_framework_artifact`，且盘上逐字未动 | 改前没有这条内容闸：D 写 `## 证明` 与写七节手稿一样放行（而 RESEARCH.md 改前被整份拒） |
-| a2 | D 写 F 的证明稿名字（`f-proof-*` / `*-proof.md`，任何目录）⇒ 拒、指路「要落稿就派 F」 | 改前 D 的手写证明稿就是经 `fs.write` 落进 `out/proofs/` 的（81 那趟 3 份） |
-| b | D 写 `out/proofs/x.md` 且正文含 `## 证明` 节 ⇒ 拒、detail 指路「要落稿就派 F」；`fs.edit` 加同一节同样拒 | 改前写得进去（这就是 81 那趟的实际形态） |
-| c | D 写 `out/proofs/x.md` 只含 `## 思路` / `## 依赖面参考` ⇒ 允许（业主说的"提供想法"） | 改前允许（这一格不许被 a/b 误伤） |
-| d | D 交研究手稿给 B 时没带 F 的证明稿 ⇒ 既有携带单口径报 `缺携带单`（`write_report.py:630`），不是静默 | 既有口径已在；这一条把它钉进本组（防止 a 的"允许写 RESEARCH.md"被读成"携带单可以不带"） |
-| e | 反真空：把 a/b 的闸打桩成放行 ⇒ 同一批写入必须成功（于是 a/b 的红来自这两道闸） | —— |
+2026-11-05 收紧（业主口径：D 在任何路径写"带 `## 证明` 的证明正文"都要受控拒，例外只有
+`RESEARCH.md` 里引用 F 的稿 —— 教法比实现严，以教法为准）。改前内容闸只查 `out/proofs/`
+与 `*research*` 名，于是 `notes/x.md` / `reports/x.md` 带 `## 证明` 一律放行（真机读数：
+`temp/audit_d_fs_gate2.py`）。
+
+| 判据 | 它要证明的事 | 落在哪条判据 | 改前红在哪 |
+|---|---|---|---|
+| a | D 写 `notes/x.md` 带 `## 证明` ⇒ 拒 `reserved_framework_artifact`、detail 指路「要落稿就派 F」、盘上零写入 | `test_f_*` | 改前放行（内容闸只认 `out/proofs/` 与 research 名） |
+| b | D 写 `reports/x.md` 带 `## 证明` ⇒ 同上（`fs.edit` 把 `## 思路` 改成带这一节同样拒） | `test_f_*` | 改前放行（同上） |
+| c | D 写 `out/proofs/x.md` 带 `## 证明` ⇒ 同上（既有行为不变） | `test_b_*` | 改前写得进去（81 那趟的实际形态） |
+| d | `RESEARCH.md` 带 `## 证明`，且点名盘上真有的 `reports/f-proof-<号>.md` 或带那份文件字节的 sha256 ⇒ 通过（例外仍在） | `test_a_*` ③ / `test_g_*` | 改前 `*research*` 名一律例外（比这宽） |
+| e | `RESEARCH.md` 带 `## 证明` 但没点名 / 没 sha（或点了一个盘上没有的稿）⇒ 拒 | `test_a_*` ② / `test_g_*` | 改前没有这条内容闸 |
+| f | 反真空：把"任何路径"那一步换回旧口径（只查 `out/proofs/` 与 research 名）⇒ a/b 必红 | `test_i_*` | —— |
+| g | 不误伤：`## 证明思路` / `## 证明要点` 不是那一行（逐行整行比）⇒ 通过 | `test_h_*` | —— |
+| h | `fs.write` / `fs.edit` 的 summary 与 `RESERVED_ARTIFACT_TABLE` 不一致 ⇒ 红（两个方向各一发） | `tests/test_fs_summary_matches_reserved_table.py` | 改前 summary 说 `RESEARCH.md` 对 D 拒写，而表里那一行已删 |
+| a2 | D 写 F 的证明稿名字（`f-proof-*` / `*-proof.md`，任何目录）⇒ 拒、指路「要落稿就派 F」 | `test_a2_*` | 改前 D 的手写证明稿就是经 `fs.write` 落进 `out/proofs/` 的（81 那趟 3 份） |
+| —— | D 交研究手稿给 B 时没带 F 的证明稿 ⇒ 既有携带单口径报 `缺携带单`，不是静默 | `test_d_*` | 既有口径已在；钉进本组防止 a 被读成"携带单可以不带" |
+| —— | 反真空（2026-11-04）：把路径闸与内容闸一起打桩成放行 ⇒ 同一批写入必须成功 | `test_e_*` | —— |
 
 ## 收口选层
 
@@ -285,3 +295,130 @@ def test_e_stubbing_the_gates_out_turns_a_and_b_green(tmp_path: pathlib.Path,
     assert b.ok is True, ("闸被打桩成放行之后 b 仍然被拒 ⇒ b 的红不来自这两道闸", b)
     assert (root / "reports" / "RESEARCH.md").is_file()
     assert (root / "out" / "proofs" / "x.md").is_file()
+
+
+# ============================================================ a / b / c 任何路径都受控拒
+#: 一份"可提交的证明稿"正文（`## 证明` 是整行）。
+OWN_PROOF = "# 随手记\n\n## 证明\n\n1. 设 G 是 p-群，由归纳法得证。\n"
+
+
+def test_f_any_path_refuses_d_own_proof_body(tmp_path: pathlib.Path) -> None:
+    """a/b/c：内容闸不按目录、不按名字 —— 任何路径上带 `## 证明` 都受控拒。
+
+    改前只有 `out/proofs/` 与 `*research*` 名受这条闸（真机读数
+    `temp/audit_d_fs_gate2.py`：`notes/随手记.md` / `reports/随手记.md` 带 `## 证明`
+    都放行）⇒ 这两格就是本轮的 a/b。`out/proofs/` 是 c：既有行为不变。
+    `fs.edit` 走同一条闸 —— 判的是"改完之后那一份正文"，不是调用方给的那一小段。
+    """
+    root, reg = _ws(tmp_path)
+    for rel in ("notes/x.md", "reports/x.md", "notes/deep/dir/x.md",
+                "out/proofs/x.md", "notes/随手记.md"):
+        res = _call(reg, "D", "fs.write", path=rel, content=OWN_PROOF)
+        assert res.ok is False, (rel, res)
+        assert res.meta.get("kind") == KIND, (rel, res.meta)
+        detail = str(res.error or "")
+        assert "要落稿就派 F" in detail, (rel, detail)
+        assert "`## 证明`" in detail, (rel, detail)
+        assert not (root / rel).exists(), f"{rel} 被拒了却仍落盘"
+
+    # fs.edit：把"只有思路"的记录改成"带一节证明" —— 能改正文就等于能绕过 fs.write
+    rel = "notes/x.md"
+    seed = "# 随手记\n\n## 思路\n\n先试归纳法。\n"
+    assert _call(reg, "D", "fs.write", path=rel, content=seed).ok is True
+    got = _call(reg, "D", "fs.edit", path=rel, old_string="先试归纳法。",
+                new_string="先试归纳法。\n\n## 证明\n\n1. 我自己写完了。")
+    assert got.ok is False, got
+    assert got.meta.get("kind") == KIND, got.meta
+    assert "要落稿就派 F" in str(got.error or ""), got.error
+    assert (root / rel).read_text(encoding="utf-8") == seed, "被拒了却改了盘上那一份"
+
+
+# ============================================================ d / e 例外只有 RESEARCH.md
+def test_g_the_only_exception_is_a_research_manuscript_citing_a_real_f_proof(
+        tmp_path: pathlib.Path) -> None:
+    """d/e：例外只属于 `RESEARCH.md` 里引用盘上真有的 F 稿；不点名或点空气稿都拒。
+
+    d 的"点名路径 + 带 sha256"已由 `test_a_*` ③ 钉过；这里补三格：
+    ① 只带那份文件字节的 sha256（不点名路径）⇒ 通过；
+    ② 点名一个盘上不存在的号 ⇒ 拒（"写了 `f-proof-` 这几个字"不算引用）；
+    ③ 同一段引用放进 `notes/other-research.md` ⇒ 拒 —— 例外只有一个落点，
+       不是"名字里带 research 就放行"（2026-11-05 把 `_is_research_manuscript`
+       从"名字含 research"收窄成"文件名就是 `RESEARCH.md`"）。
+    """
+    root, reg = _ws(tmp_path)
+    f_rel, f_sha = _land_f_manuscript(root)
+    # 去掉夹具正文里那句"见 reports/f-proof-000001.md"，让这一组的引用只来自我们加的那一段。
+    plain = RESEARCH.replace("见 `reports/f-proof-000001.md`", "见携带单点名的那一份")
+
+    cited_by_sha = plain + f"\n## 证明\n\n（转载 F 的稿，sha256={f_sha}）\n"
+    ok = _call(reg, "D", "fs.write", path="reports/RESEARCH.md", content=cited_by_sha)
+    assert ok.ok is True, ("只带 F 稿的 sha256 仍被拒 ⇒ 例外被收窄成必须点名路径", ok)
+
+    missing = plain + "\n## 证明\n\n（引用 `reports/f-proof-999999.md`）\n"
+    bad = _call(reg, "D", "fs.write", path="reports/RESEARCH.md", content=missing,
+                overwrite=True)
+    assert bad.ok is False, ("点名了一个盘上不存在的 F 稿却放行", bad)
+    assert bad.meta.get("kind") == KIND, bad.meta
+    assert "证明要 F 落稿拿签" in str(bad.error or ""), bad.error
+    assert (root / "reports" / "RESEARCH.md").read_text(encoding="utf-8") == cited_by_sha
+
+    for rel in ("notes/other-research.md", "notes/RESEARCH-notes.md"):
+        res = _call(reg, "D", "fs.write", path=rel,
+                    content="# 笔记\n\n## 证明\n\n（引用 `" + f_rel + "`）\n")
+        assert res.ok is False, (f"例外被扩到了 {rel}（它不是那份研究手稿）", res)
+        assert res.meta.get("kind") == KIND, (rel, res.meta)
+
+    # 目录不是判据（2026-11-04 既有裁定）：同名的研究手稿换个目录仍是那一份。
+    anywhere = plain + f"\n## 证明\n\n（引用 `{f_rel}`）\n"
+    here = _call(reg, "D", "fs.write", path="notes/RESEARCH.md", content=anywhere)
+    assert here.ok is True, ("同名的研究手稿换目录被误伤", here)
+
+
+# ============================================================ g 不误伤
+def test_h_the_proof_section_is_matched_line_by_line(tmp_path: pathlib.Path) -> None:
+    """g：`## 证明思路` / `## 证明要点` 不是 `## 证明` 那一行 ⇒ 放行。
+
+    `_has_proof_section` 逐行整行比（与 `depsection.SECTION_PROOF` 同源），不误伤
+    "提供证明思路"这一档 —— 那正是业主 2026-11-04 说 D 可以给的东西。
+    """
+    root, reg = _ws(tmp_path)
+    cases = {
+        "notes/思路.md": "# 思路\n\n## 证明思路\n\n先引 `stmt:000000`，再按 X → Y 走。\n",
+        "reports/要点.md": "# 要点\n\n## 证明要点\n\n- 归纳。\n- 滤环。\n",
+        "notes/正文里提一句.md": "# 笔记\n\n正文里提到 `## 证明` 这个词，但它不是一节标题。\n",
+    }
+    for rel, content in cases.items():
+        res = _call(reg, "D", "fs.write", path=rel, content=content)
+        assert res.ok is True, (rel, res)
+        assert (root / rel).read_text(encoding="utf-8") == content, rel
+
+
+# ============================================================ f 反真空
+def test_i_the_old_scope_lets_notes_and_reports_through(tmp_path: pathlib.Path,
+                                                        monkeypatch) -> None:
+    """f（反真空）：把"任何路径"那一步换回旧口径 ⇒ a/b 必须放行。
+
+    打桩点就是这一步本身（`_d_proof_body_scope_refused`，2026-11-05 新加的分离层）：
+    换成"只查 `out/proofs/` 与 research 名"的旧实现之后，同一批写入必须成功 ——
+    于是 a/b 的"被拒"只可能来自"任何路径"这一刀，不是别处顺手写的判断。
+    `out/proofs/` 在旧口径下照拒（这一格没被放宽）。
+    """
+    def _old_scope(rel, content, root):
+        if not FT._has_proof_section(content):
+            return False
+        low = str(rel or "").replace("\\", "/").casefold()
+        if low.startswith(FT.D_ATTACK_RECORD_DIR):
+            return True
+        return bool(FT._is_research_manuscript(rel)
+                    and not FT._cites_an_f_manuscript(root, content))
+
+    monkeypatch.setattr(FT, "_d_proof_body_scope_refused", _old_scope)
+    root, reg = _ws(tmp_path)
+    for rel in ("notes/x.md", "reports/x.md"):
+        res = _call(reg, "D", "fs.write", path=rel, content=OWN_PROOF)
+        assert res.ok is True, (
+            f"旧口径下 {rel} 仍被拒 ⇒ a/b 的红不来自「任何路径」这一刀", res)
+        assert (root / rel).is_file(), rel
+    still = _call(reg, "D", "fs.write", path="out/proofs/x.md", content=OWN_PROOF)
+    assert still.ok is False, still
+    assert still.meta.get("kind") == KIND, still.meta
