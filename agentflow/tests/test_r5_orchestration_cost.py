@@ -30,6 +30,7 @@ import re
 import sys
 import time
 import tokenize
+from typing import Iterable
 
 import pytest
 
@@ -1318,41 +1319,27 @@ def _python_identifiers_in_text(p: pathlib.Path, text: str) -> list[str]:
     """该文件里"算真符号"的标识符（只在 `.py` 上有；`.md` 返回空表）。
 
     口径（`FIX11` 的 `C2`，第 2 条；`FIX12` 的 `R5-AN-11-3` 更正了这里的实现与说法）：用 `tokenize` 取 `NAME` 记号 ⇒
-    字符串字面量里的提及、`.md` 正文里的提及一律不算；再把 docstring 所在的行剔掉（那是字符串常量，同样不产生 `NAME` 记号）⇒"docstring 里随手写下的名字"不算。
-    剩下的就是这个文件里真的写在代码上的名字。注释不需要额外剔除，也不该被剔除：注释正文本来就不是 `NAME` 记号—— `tokenize` 把 `# 注释里的 _foo` 整个吐成一个 `COMMENT` 记号，
+    字符串字面量里的提及、`.md` 正文里的提及一律不算；剩下的就是这个文件里真的写在代码上的名字。注释不需要额外剔除，也不该被剔除：注释正文本来就不是 `NAME` 记号—— `tokenize` 把 `# 注释里的 _foo` 整个吐成一个 `COMMENT` 记号，
     注释里的名字根本不会进 `out`。改前这里按 `COMMENT` 记号的行号去剔 `NAME`（第二遍里`tok.start[0] not in drop`），而那条规则剔不掉任何注释，只能把同一行上的真代码整行吃掉：
     实测整棵树被吃掉 2533 个真代码 `NAME` 记号，330 个被 tick 的 token 里有 14 个两种口径计数不同（`_callable_for` 2 vs 4、`_store` 13 vs
     21、`_search` 26 vs 30）。方向是保守的（只会假红、不会假绿），但"真符号计数"这个口径名不副实，所以那条规则被删掉。为什么用 `tokenize` 而不是正则：正则会把一个更长的名字（它以
     `_ROLE_PAT` 开头）数成 `_ROLE_PAT` 的一次命中。读不到（`OSError`）或记不过（`TokenError` / `IndentationError`，例如半截写坏的`.py`）
     的文件当作"没有真符号"：宁可把它当可疑，也不假装它干净。
+
+    ## 2026-11-06：删掉那一次 `ast.parse`（与 `tokenize` 重复，逐字证明过）
+    上面那段删掉 `COMMENT` 规则之后，`drop` 里剩下的只有"docstring 所在的行"。而
+    `tokenize` 本来就不会给字符串常量发 `NAME` 记号 ⇒ 这个 `drop` 是空操作。实测
+    1,277 个参与计数（非 `temp/`）的 `.py`：现版（`tokenize` + `ast` 剔 docstring 行）
+    与"只 `tokenize`"的标识符列表逐文件逐字相同（0 个文件不同；读数脚本
+    `temp/_f4cc_ident_variants.py`）。所以把那一次 `ast.parse`（+ 每个节点 `ast.walk`）
+    删掉：口径不变，单次扫描少 7.9s。`ast` 在本文件别处仍在用。
     """
     if p.suffix != ".py":
         return []
-    try:
-        lines = text.splitlines()
-    except Exception:  # pragma: no cover —— 只有异常文本才会走到这里
-        return []
-    #: 只剔 docstring 所在的行（字符串常量，不产生 `NAME`）。刻意不剔注释行：
-    #: 注释正文不是 `NAME` 记号，按行剔只会连带吃掉同一行上的真代码
-    #: （`FIX12` 的 `R5-AN-11-3`：改前那条规则实测吃掉整棵树 2533 个真代码记号）。
-    drop: set[int] = set()
-    try:
-        tree: ast.Module | None = ast.parse(text)
-    except SyntaxError:
-        tree = None
-    if tree is not None:
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                body = getattr(node, "body", [])
-                if body and isinstance(body[0], ast.Expr) \
-                        and isinstance(body[0].value, ast.Constant) \
-                        and isinstance(body[0].value.value, str):
-                    doc = body[0]
-                    drop.update(range(doc.lineno, (getattr(doc, "end_lineno", None) or doc.lineno) + 1))
     out: list[str] = []
     try:
         for tok in tokenize.generate_tokens(io.StringIO(text).readline):
-            if tok.type == tokenize.NAME and tok.start[0] not in drop:
+            if tok.type == tokenize.NAME:
                 out.append(tok.string)
     except (tokenize.TokenError, IndentationError):
         pass
@@ -1438,10 +1425,27 @@ def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
     （2026-10-05 真机：模型在自己的报告里引了两个它没写的脚本 ⇒ 判据被一次运行点红）。
 
     排序只是为了让读数是确定的 —— 同一棵树两次跑给出同一份清单。
+
+    ## 为什么用 `os.walk` 剪枝而不是先 `rglob` 再过滤
+    改前是 `tree.rglob("*")` 把 64k 个文件全造出来、再用 `p.parts` 过滤 ——
+    `projects/`（16k 文件）、`out/`、`node_modules/` 这些判据本来就看不见的目录
+    每个文件都白 stat 一遍。本机实测（2026-11-06，共享工作区）这一步 31.1s，
+    而真正的扫描面只有 17.5k 个文件。现在改成 `os.walk` + 在进入子目录之前把
+    `dirnames` 里的跳过项剪掉：跳过的是同一批目录、同一批文件，返回清单逐字相同
+    （`temp/_f4cc_iter_baseline.json` 与剪枝后清单比对：17,538 条全等），
+    只是不再为它们付 stat 的钱。`tree` 本身落在跳过目录里时（老口径会一个都不返回）
+    仍然返回空表，保持同一条口径。
     """
-    out = [p for p in tree.rglob("*")
-           if p.is_file() and p.suffix in _REF_SCAN_SUFFIXES
-           and not any(part in _REF_SCAN_SKIP_DIRS for part in p.parts)]
+    if any(part in _REF_SCAN_SKIP_DIRS for part in tree.parts):
+        return []
+    out: list[pathlib.Path] = []
+    for dirpath, dirnames, filenames in os.walk(tree):
+        dirnames[:] = [d for d in dirnames if d not in _REF_SCAN_SKIP_DIRS]
+        base = pathlib.Path(dirpath)
+        for name in filenames:
+            p = base / name
+            if p.suffix in _REF_SCAN_SUFFIXES:
+                out.append(p)
     return sorted(out)
 
 
@@ -1494,7 +1498,8 @@ def _temp_reference_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Pat
     return (ws_root / ref).exists() or (tree / ref).exists()
 
 
-def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
+def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path,
+                            *, ref_tree: pathlib.Path | None = None) -> dict:
     """扫整棵树里反引号包着的引用 ⇒ 读数（键：`files` / `tokens` / `paths` /
     `dangling` / `missing` / `exempted` / `dangling_tokens` / `symbol_counts` /
     `symbol_count_files` / `symbol_count_skipped`）。
@@ -1503,22 +1508,35 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     每个文件只读一遍：份数按命令当次读（别抄定值，`F9` 写下的 214 已经过期；
     复算 `python -c "import pathlib as p; r=p.Path('.'); skip={'__pycache__','.pytest_cache','.git','.mypy_cache'}; print(sum(1 for f in r.rglob('*') if f.is_file() and f.suffix in ('.py','.md') and not any(x in skip for x in f.parts)))"`
     —— 观测 2026-09-27 15:01 +08:00 ⇒ 216），读两遍是白花的时间。
+
+    `ref_tree`（2026-11-06）：路径存在性 + 文件清单 + `temp/` 内容按哪棵树解析。
+    缺省 = `tree`（原口径）。`_probe_tree_copy` 的扫描面副本只复制非 `temp/` 的
+    `.py`/`.md`：`temp/` 是未跟踪 scratch（判据不注入它、只读它），副本里保留一份
+    它是白花 IO（本机实测 16.8k 个文件、`copy2` 60.7s / `copyfile` 30.5s）。
+    副本的两次扫描因此传 `ref_tree=<真树>`：清单与 `temp/` 内容读真树、其余内容读
+    副本（注入落点都在非 `temp/`），路径存在性也按真树 —— 两条读数才与真树逐字可比
+    （否则副本会凭空多出一批 `missing`，那是装置差异、不是判据发现）。
     """
-    pairs: list[tuple[pathlib.Path, str]] = []
-    for p in _iter_ref_scan_files(tree):
+    source = tree if ref_tree is None else ref_tree
+    ref_tree = source
+    pairs: list[tuple[pathlib.Path, str, str]] = []
+    for p in _iter_ref_scan_files(source):
+        rel = p.relative_to(source).as_posix()
+        # 副本档：非 `temp/` 的内容读副本（注入在那里），`temp/` 的内容读真树。
+        read_from = p if (ref_tree is None or rel.startswith("temp/")) else tree / rel
         try:
-            pairs.append((p, p.read_text(encoding="utf-8", errors="replace")))
+            pairs.append((p, rel, read_from.read_text(encoding="utf-8",
+                                                      errors="replace")))
         except OSError:  # 读不到就当它不在体检范围里：既不报，也不假装干净
             continue
-    blob = "\n".join(text for _, text in pairs)
     #: 口径第 2 条用的计数面：整棵树里每个名字作为真符号出现几次
-    #: （见 `_python_identifiers_in_text`）。与 `blob` 的关键区别：它不含注释/docstring、
-    #: 不含字符串字面量、不含 `.md` 正文 —— 所以"在判据文件里随手写下一个 token"
-    #: 抬不动它（`R5-AN-10-1` 的假绿就是靠抬 `blob` 实现的）。
+    #: （见 `_python_identifiers_in_text`）。它不含注释/docstring、不含字符串字面量、
+    #: 不含 `.md` 正文 —— 所以"在判据文件里随手写下一个 token"抬不动它
+    #: （`R5-AN-10-1` 的假绿就是靠抬"文本面"实现的）。
     symbol_counts: dict[str, int] = {}
     symbol_count_files = 0
-    for p, text in pairs:
-        if _symbol_count_skipped(p, tree):
+    for p, _rel, text in pairs:
+        if _symbol_count_skipped(p, source):
             # 未跟踪的 scratch（仓的草稿目录）不是"这个名字在仓里的出处"：
             # 它进了扫描面（悬空提及照旧要报），但不许参与计数这一维。
             continue
@@ -1533,19 +1551,28 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     tokens: set[str] = set()
     paths: set[tuple[str, str]] = set()
     #: 第三族（`R7-㉒`）的已知面：树里/工作区 temp 下出现过的 `.py` 基名与相对路径。
-    known_names = {p.name for p, _ in pairs}
-    rel_paths = {p.relative_to(tree).as_posix() for p, _ in pairs}
+    known_names = {p.name for p, _rel, _text in pairs}
+    rel_paths = {rel for _p, rel, _text in pairs}
     temp_dir = ws_root / "temp"
     if temp_dir.is_dir():
         for p in temp_dir.glob("*.py"):
             known_names.add(p.name)
             rel_paths.add(f"temp/{p.name}")
+    rel_suffixes = _ref_suffixes(rel_paths)
     missing_test_files: list[str] = []
     missing_test_named: set[str] = set()
     seen_test_refs: set[tuple[str, str]] = set()
-    for p, text in pairs:
-        rel = p.relative_to(tree).as_posix()
+    for _p, rel, text in pairs:
+        # 三条正则都要求反引号：整份文本里一个反引号都没有 ⇒ 这一遍不可能命中。
+        # 沙箱的 `temp/` 里有大量没有反引号的日志/副本，先跳过能省下 splitlines
+        # 与三趟正则（读数不变：没有反引号 ⇒ 没有引用）。
+        if "`" not in text:
+            continue
         for lineno, line in enumerate(text.splitlines(), 1):
+            # 三条正则都要反引号：这一行没有反引号 ⇒ 三个 `findall` 与三次
+            # `sorted(set(...))` 全是白做（扫描面上 2,200 万行里绝大多数如此）。
+            if "`" not in line:
+                continue
             marked = _REF_EXEMPT_MARK in line
             for tok in sorted(set(_TICKED_PRIVATE.findall(line))):
                 tokens.add(tok)
@@ -1568,7 +1595,7 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
                 if (rel, ref) in paths:
                     continue
                 paths.add((rel, ref))
-                if not _temp_reference_exists(ref, tree=tree, ws_root=ws_root):
+                if not _temp_reference_exists(ref, tree=ref_tree, ws_root=ws_root):
                     if marked:
                         exempted.append((rel, lineno, f"`{ref}`"))
                     else:
@@ -1578,8 +1605,9 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
                 if (rel, ref) in seen_test_refs:
                     continue
                 seen_test_refs.add((rel, ref))
-                if _test_file_exists(ref, tree=tree, ws_root=ws_root,
-                                     known_names=known_names, rel_paths=rel_paths):
+                if _test_file_exists(ref, tree=ref_tree, ws_root=ws_root,
+                                     known_names=known_names,
+                                     rel_suffixes=rel_suffixes):
                     continue
                 missing_test_named.add(ref)
                 if not marked:
@@ -1608,17 +1636,34 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     }
 
 
+def _ref_suffixes(rel_paths: Iterable[str]) -> set[str]:
+    """`rel_paths` 里"某个 `/` 之后的尾巴"的集合（供 `_test_file_exists` 做 O(1) 查）。
+
+    改前是 `any(r.endswith("/" + ref) for r in rel_paths)`：每问一个 test 文件名，
+    就要把 1.7 万条相对路径逐条 `endswith` 一遍。扫描面上的 test 文件名提及有几百条
+    ⇒ 这一处是 O(提及数 × 文件数) 的隐藏热点（2026-11-06 本机实测的一部分）。
+    换成语义相同的前缀集合：`r.endswith("/" + ref)` 为真 ⇔ `ref` 等于 `r` 的某个
+    "从第二个段开始的后缀"（整条 `r` 不算 —— 原判据要求前面有一个 `/`）。
+    """
+    out: set[str] = set()
+    for rel in rel_paths:
+        parts = str(rel).split("/")
+        for i in range(1, len(parts)):
+            out.add("/".join(parts[i:]))
+    return out
+
+
 def _test_file_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Path,
-                      known_names: set[str], rel_paths: set[str]) -> bool:
+                      known_names: set[str], rel_suffixes: set[str]) -> bool:
     """反引号里点名的 `test_*.py` 在树里（或工作区 `temp/` 下）存在吗（`R7-㉒`）。
 
     三档解析，缺一档就会把真引用判成缺：
     ① 基名命中扫描面里出现过的 `.py` 基名（带路径的写法与裸基名写法用的是同一个名字空间）；
-    ② 相对路径的后缀命中（省略了 `src/agentflow/` 前缀的那种写法）；
+    ② 相对路径的后缀命中（省略了 `src/agentflow/` 前缀的那种写法；见 `_ref_suffixes`）；
     ③ 直接在树根/工作区根下找（`tests/` 与 `temp/` 两种前缀）。
     """
     name = ref.rsplit("/", 1)[-1]
-    if name in known_names or any(r.endswith("/" + ref) for r in rel_paths):
+    if name in known_names or ref in rel_suffixes:
         return True
     return (tree / ref).is_file() or (ws_root / ref).is_file()
 
@@ -1838,10 +1883,11 @@ def test_a_wrong_test_file_name_in_a_comment_is_caught() -> None:
     pairs = [(p, "") for p in _iter_ref_scan_files(tree)]
     known_names = {p.name for p, _ in pairs}
     rel_paths = {p.relative_to(tree).as_posix() for p, _ in pairs}
+    rel_suffixes = _ref_suffixes(rel_paths)
 
     def _exists(ref: str) -> bool:
         return _test_file_exists(ref, tree=tree, ws_root=ws_root,
-                                 known_names=known_names, rel_paths=rel_paths)
+                                 known_names=known_names, rel_suffixes=rel_suffixes)
 
     good = "tests/test_agent_split_is_one_action_one_file.py"
     bad = "tests/test_agent_split_is_" + "verbatim.py"
@@ -1932,23 +1978,66 @@ def _module_with_the_probe_token_in_a_comment() -> dict:
 
 @contextlib.contextmanager
 def _probe_tree_copy(tree: pathlib.Path, ws_root: pathlib.Path):
-    """整树真副本（`shutil.copytree`，不是硬链接），落在工作区 `temp/` 下；退出时删掉。
+    """扫描面真副本（`shutil.copyfile`，不是硬链接），落在工作区 `temp/` 下；退出时删掉。
 
     为什么必须有这个装置（`FIX12` 的 `R5-AN-11-1`）：机制守卫要在"别处真的有一条悬空引用"的树上跑判据，而改前它把那一行直接写进真仓的
     `src/agentflow/runflow.py`（`finally` 里再还原）。那条注入在盘上存活 7.13–7.68 秒，于是
 
     - 硬杀 pytest（`finally` 不跑）⇒ 受审源码留在盘上：多一行假引用，外加 `write_text`
     的默认换行翻译把整份文件转成 CRLF（+1958 字节）⇒ 四道门的读数当场作废；
-    - 同树并发的另一个 pytest 读到瞬时注入 ⇒ 假红。复制范围 = 判据扫描所需的全集：`_iter_ref_scan_files` 会 `rglob` 整棵树，所以副本必须覆盖全部 `.py` /
-    `.md`（少一份，副本的符号计数就不再等于真树）；缓存目录按判据自己的跳过表 `_REF_SCAN_SKIP_DIRS` 跳过 —— 判据本来就看不见它们，读数不受影响。实测（本机 2026-09-27 16:52:23，
-    UTC+8）：整树 274 个文件、其中 216 个被扫文件，`copytree` 0.63 秒。
+    - 同树并发的另一个 pytest 读到瞬时注入 ⇒ 假红。
+
+    ## 复制范围 = 判据读得到的那些文件（2026-11-06，`_probe_tree_copy` 只复制扫描面）
+    改前是 `shutil.copytree(tree, dest, ignore=跳过的缓存目录)`：整棵树 52k 个文件全复制
+    （本机实测一次 `copytree` 是这条用例的主要成本之一），而判据只读 `.py` / `.md`
+    （`_iter_ref_scan_files` 的口径）与"包能不能 import"（`_probe_apparatus_reading`）。
+    现在复制两批：
+      1. 扫描面：`_iter_ref_scan_files(tree)` 里的非 `temp/` 文件（.py / .md）；
+         `temp/` 不复制 —— 它是未跟踪 scratch，判据只读它、不注入它，副本扫描
+         按 `ref_tree=<真树>` 从真树读那一段（见 `_scan_ticked_references`）；
+      2. 装置面：`src/agentflow/**` 的非 .py/.md 资产（包导入时可能读到的随包文件）。
+    副本的扫描读数必须与真树逐字相同 —— 那一条由本用例自己的
+    `copy_plain["dangling"] == plain["dangling"]` 等断言钉着（如果少复制了判据真会读的
+    文件，它当场红，不会安静变绿）。实测（本机 2026-09-27 16:52:23，UTC+8）：整树
+    274 个文件、其中 216 个被扫文件，`copytree` 0.63 秒；2026-11-06 本机扫描面
+    17.5k 个文件（`temp/` 占 16.8k），扣掉 `temp/` 后副本只有约 700 个文件。
     """
     import os
     import shutil
 
     dest = ws_root / "temp" / f"fix12a-probe-tree-{os.getpid()}-{int(time.time() * 1000)}"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(tree, dest, ignore=shutil.ignore_patterns(*_REF_SCAN_SKIP_DIRS))
+    dest.mkdir(parents=True, exist_ok=True)
+    made_dirs: set[str] = set()
+
+    def _place(src: pathlib.Path) -> None:
+        target = dest / src.relative_to(tree)
+        parent = str(target.parent)
+        if parent not in made_dirs:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            made_dirs.add(parent)
+        # `copyfile` 而不是 `copy2`：副本只用于"读文本 + import"，mtime/权限一位都
+        # 不会被判据读到；`copy2` 每个文件多两次 stat + 一次 utime，17.5k 个文件
+        # 实测 60.7s（2026-11-06 本机），`copyfile` 把这一段压到个位秒级。
+        shutil.copyfile(src, target)
+
+    for p in _iter_ref_scan_files(tree):
+        # `temp/` 是未跟踪 scratch：判据只读它、从不注入它 ⇒ 副本里不复制
+        # （16.8k 个文件是副本这段的主要成本）。副本扫描用 `ref_tree=tree`
+        # 从真树读 `temp/` 的内容（见 `_scan_ticked_references`）。
+        if p.relative_to(tree).parts[:1] == ("temp",):
+            continue
+        _place(p)
+    pkg = tree / "src" / "agentflow"
+    if pkg.is_dir():
+        for dirpath, dirnames, filenames in os.walk(pkg):
+            dirnames[:] = [d for d in dirnames if d not in _REF_SCAN_SKIP_DIRS]
+            base = pathlib.Path(dirpath)
+            for name in filenames:
+                src = base / name
+                if src.suffix in _REF_SCAN_SUFFIXES:
+                    continue
+                _place(src)
     try:
         yield dest
     finally:
@@ -2047,7 +2136,10 @@ def test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference() ->
             f"反真空不成立：真仓档读到的也是 {from_real} ⇒ 上一条断言认不出'读错了树'"
         )
         # 副本必须与真树读数逐字相同，否则"副本上多出来的那一条"归因不到注入上。
-        copy_plain = _scan_ticked_references(copy_root, ws_root)
+        # `ref_tree=tree`：内容读副本，`temp/…` 路径的存在性仍按真树解析（见
+        # `_scan_ticked_references` 的 `ref_tree` 说明）—— 否则副本会凭空多出
+        # 一批"非 .py/.md 的 temp 文件不存在"的 `missing`，那是装置差异。
+        copy_plain = _scan_ticked_references(copy_root, ws_root, ref_tree=tree)
         assert copy_plain["dangling"] == plain["dangling"] and (
             copy_plain["missing"] == plain["missing"]
         ) and copy_plain["dangling_tokens"] == plain["dangling_tokens"], (
@@ -2068,7 +2160,7 @@ def test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference() ->
             copy_holder.read_bytes()
             + f"\n#: 机制守卫（FIX11-d）：这里引用一个不存在的名字 `{_PROBE_TOKEN}`。\n".encode()
         )
-        after = _scan_ticked_references(copy_root, ws_root)
+        after = _scan_ticked_references(copy_root, ws_root, ref_tree=tree)
 
     # 这条用例自己的正控（`R5-AN-11-1` 的验收）：真仓那份受审源码的字节与 mtime 都没变。
     now_bytes = holder.read_bytes()
