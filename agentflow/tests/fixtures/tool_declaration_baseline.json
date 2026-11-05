@@ -5670,6 +5670,22 @@
   "contract_amendments": [
     {
       "tools": [
+        "verify.verify_proof"
+      ],
+      "key": "side_effect",
+      "reason": "把声明说真（2026-11-05）：`verify.verify_proof` 一直写 V 自己维护的凭据台账 `verifications/<命题号>.jsonl`（`verifications.record_verification`），未在册档还写 `out/vsigns/<正文 sha>.json`（`vsigns.issue`），并让收方秘书把签块盖回送审的那份手稿（`vsigns.land`）—— 三者都是**工作区写**。`side_effect` 那根轴的定义是『数据表 / 工作区』（`tools/base.py::EFFECT`），所以它的真值是 `write_local`，不是 `read`。改前的 `read` 与仓库里那句『V 不写表，只产出一份文件』互相支撑，但那句话把『写不写数据表』与『写不写工作区』折成了同一件事。V 仍拿得到它：走 `tools/base.py::READONLY_CALL_EXCEPTIONS[\"V\"]` 的逐条例外（权限面未放宽；`WRITE_SETS[\"V\"]` 仍是空集、`statements` 未进 V 的表级例外）。这一条只改副作用声明，参数 / 返回 / roles / tags / handler 一格未动。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "side_effect",
+          "from": "read",
+          "to": "write_local"
+        }
+      ]
+    },
+    {
+      "tools": [
         "table.count",
         "table.create",
         "table.delete",

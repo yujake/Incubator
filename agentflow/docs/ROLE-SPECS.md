@@ -66,7 +66,7 @@ python -c "import tempfile,pathlib;from agentflow.store import Store;from agentf
 > `tests/test_universal_tools_are_for_everyone.py` 判。
 >
 > `cli tools` 会把上面两族都打出来并标"!! 有泄漏"——那一行是**声明面的读数**，行为面已被 `for_role`
-> 拦下：H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V 那一栏只有那 9 件通用写工具；C 那一栏是
+> 拦下：H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V 那一栏是 `verify.verify_proof` 一件自己的凭据写入面 + 那 9 件通用写工具；C 那一栏是
 > `analysis.register_report` 一件落库代理 + 那 9 件通用写工具**（逐件清单见附录 §R0.3 的"只读角色泄漏"那一行）。
 
 ### 0.3 复跑命令（本文所有工具数字的出处）
@@ -279,7 +279,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | `F` | `attack_plans`, `search_requests`, `reprocess_requests`（**没有 `statements`，也没有 `dependencies`**：2026-10-26 收口批把 `statements` 从 F 的写集里拿掉 —— 命题只经秘书 / B 登记（`secretary.STATEMENT_WRITER_ROLES = ("B",)`）；依赖边由 B 读 F 的证明手稿登记（`used_by="stmt:<命题号>#pN"` + `path_group`）。F 的活是把证明与手稿里那一节 `## 依赖` 四列表写清楚（`reports/f-proof-<命题号>.md`），登记由收方读稿产生；`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
-| `V` | （空 ⇒ 只读：唯一产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表；`READ_ONLY_ROLES` 里的 `"V"` 与 `for_role` 的结构性剥离一起守它） |
+| `V` | （空 ⇒ 不写任何**数据表**：它写的是自己维护的凭据台账 `verifications/<命题号>.jsonl`（工作区文件）与签的侧文件；`READ_ONLY_ROLES` 里的 `"V"` 与 `READONLY_CALL_EXCEPTIONS["V"]` 一起守它） |
 | `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的机器核验行 —— `experiments` 的口径是「机器核验与实验台账」，E 写 `numeric` / `symbolic` / `exhaustive_search`，L 写 `formal`（Lean 核验），形式化行落这里不是数值实验；刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。真身 `specs/l.py` 的 `write_set`） |
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
@@ -447,7 +447,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 64 | `verify.evidence_for` | 查一条命题（`claim_key`）或一个研究问题（`for_question_id`）已有的实验证据。两个参数都不给 ⇒ `checked=False` | `read` | 否 | E F G H | claim_key, for_question_id | `{checked,experiments,best_evidence_kind,proved,reason}` | `test_agent_e.py` | INVENTORY 4.3(b)：`StoreError` 逃逸；4.7⑪ 排序键与 `list_experiments` 逐字重复 |
 | 65 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）：没有它就无法回答"这件事到底做过没有" | `read` | 否 | E F G H | claim_key, limit | `{checked,total,returned,truncated,experiments}` | `test_agent_e.py` | 同上 4.7⑪ |
 | 66 | `verify.run_experiment` | 在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会被**降级**为 `cross_check`；崩溃一律记 `inconclusive` | `write_local` | **是** | E F G | **claim**,**claim_key**,**script_path**；for_question_id, method, params, timeout | `{experiment_id,recorded,result,evidence_kind,negation_kind,exit_code,reason,code_hash,runtime_sec,notes}` | `test_agent_e.py` | INVENTORY 4.4：跑工作区脚本子进程，**子进程继承完整环境（可联网）**；4.3(b) `ExperimentError`/`ValueError` 全部逃逸；4.5#8 `returns=` 漏 FC-10 的 `count`/`result_counts`/`negation_counts` |
-| 67 | `verify.verify_proof` | 把一份证明按写成后的样子整体重读一遍（V 的唯一主动作）：三态结论 + 每条问题指到步号，并写一行 `verifications/<命题号>.jsonl`。`side_effect=read` 是刻意的：V 不写任何表，它唯一的产物是一个文件（自己的台账） | `read` | 否 | V | **statement_id**,**proof_text**；readonly_facts | `{'checked','statement_id','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}`（三条返回路径键集合相同；`checked=False` = 没查成：`reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id` —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」） | `test_verifier_role.py` | **本轮新增**（F-02，`draft/54` §1.1）：V 是唯一"写文件不写表"的角色 ⇒ `side_effect=read` 与它在 `tools.READ_ONLY_ROLES` 里同时成立，两者互为判据 |
+| 67 | `verify.verify_proof` | 把一份证明按写成后的样子整体重读一遍（V 的唯一主动作）：三态结论 + 每条问题指到步号，并写一行 `verifications/<命题号>.jsonl`。`side_effect=write_local` 是据实的（2026-11-05 改真）：V 不写任何**数据表**，但它写**自己维护的凭据台账**（`verifications/<命题号>.jsonl`，工作区文件）与它颁的签（`out/vsigns/*.json`、收方秘书落回送审手稿的签块）—— 三者都是工作区写。V 仍拿得到它，走 `tools/base.py::READONLY_CALL_EXCEPTIONS["V"]` 的逐条例外 | `write_local` | **是** | V | **statement_id**,**proof_text**；readonly_facts | `{'checked','statement_id','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}`（三条返回路径键集合相同；`checked=False` = 没查成：`reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id` —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」） | `test_verifier_role.py` | **本轮新增**（F-02，`draft/54` §1.1）；2026-11-05 改真：这条工具写的是 V **自己维护的那张表**（凭据台账）与签的侧文件，所以 `side_effect=write_local`；它能留在 V 的面上是 `READONLY_CALL_EXCEPTIONS["V"]` 的逐条例外，不是「只读角色不能有副作用」。只读约束的是**不能改别人的东西**（判据 `tests/test_v_writes_only_its_own_ledger.py`） |
 | 68 | `verify.list_verifications` | 列验证台账（只读，可按命题过滤）：没有它就无法回答『这份证明到底审过没有』 | `read` | 否 | V | statement_id, limit | `{'checked','total','items','problems','truncated','reason'}`（`problems` 是坏行说明 —— 照实列出，不静默跳过） | `test_verifier_role.py` | **本轮新增**（F-02）：`limit=None` 是全量、`limit=0` 是零条（`out[-0:]` 那个"零条 == 全量"的运算符巧合已修，见 `verifications.list_verifications` 的 docstring） |
 | 69 | `verify.read_proof` | 按命题号读回被审的那份证明全文 + 它的 sha256 + 最近一次结论（只读） | `read` | 否 | V | **statement_id** | `{'checked','statement_id','proof_text','source','sha256','proof_chars','verifications','last_verdict','last_verification_id','problems','reason'}`（三条返回路径键集合相同；`source` 为空 = 台账里没有这个命题的证明全文） | `test_verifier_role.py` | **本轮新增**（F-02）："没读到"由 `source` 与 `reason` 说出，不靠少给键来表达（三态纪律） |
 | 70 | `conductor.summon` | 派活：召唤某角色做某动作；闸门在主控内部（允许的边 / 动作表 / 参数接缝 / 四类上限 / 预算），被拒也落台账并给 `refusal_reason` | `write_local` | **是** | M | **target_role**,**action**,params,input_key | `{task_id,role,action,status,outcome,refusal_reason,detail,error,tokens,usd,depth,elapsed_sec,children,checked}` | `tests/test_conductor_tools.py` | 形参刻意不叫 `role`/`name`：那是 `ToolRegistry.call` 自己的形参（撞名会让调用方身份被当成目标角色） |
@@ -1524,13 +1524,14 @@ C 的产出有两类，状态语义完全不同。
 **签不在 V 手上**：发签由它的秘书判定并落盘（`out/vsigns/<被审正文的 sha>.json`，一稿一签）；V 只把结论写进台账那一行。
 它回答：**"这份证明站不站得住？站不住的是哪一步？"**
 
-**V 是只读角色 —— 口径是「对其它智能体的产出只读；自己侧的产物可写」**（业主 2026-11-01 的定义；同一口径写在 `specs/v.py` 的 `boundary` 与 `docs/ROLE-GUIDE.md`）。自己侧的产物是一个**文件**而不是一张表：
-`<工作区>/verifications/<命题号>.jsonl`（追加式，一行 = 一次审校），以及签的侧文件
-`out/vsigns/<被审正文的 sha>.json`（后者由框架侧的签发判定落盘）；簿记是 7 件 `clock.*` +
-`conductor.ack` / `conductor.post_task`。
+**V 是只读角色 —— 口径是「对其它智能体的产出只读；自己侧的产物可写」**（业主 2026-11-01 的定义；同一口径写在 `specs/v.py` 的 `boundary` 与 `docs/ROLE-GUIDE.md`）。自己侧的产物是 `verifications/<命题号>.jsonl`（追加式，一行 = 一次审校）与签的侧文件
+`out/vsigns/<被审正文的 sha>.json`；它们都是**工作区文件**，所以 `verify.verify_proof` 据实声明
+`side_effect=write_local`（2026-11-05 改真），V 拿得到它走 `READONLY_CALL_EXCEPTIONS["V"]` 的逐条例外。
+面上其余 9 件 `write_local` 是通用簿记：7 件 `clock.*` + `conductor.ack` / `conductor.post_task`。
 `capabilities.WRITE_SETS["V"] == frozenset()`（空集）与 `tools.READ_ONLY_ROLES = ("C","H","V")`
-一起说这件事：**在"会写哪几张表"这根轴上是只读的，而它确实要落一样东西** ——
-两者不矛盾，只是分处两根轴（`schema.TABLES` 是 **17** 张，V 一张都没加）。
+一起说这件事：**在"会写哪几张数据表"这根轴上是只读的，而它确实要落一样东西** ——
+两者不矛盾，只是分处两根轴（`schema.TABLES` 是 **17** 张，V 一张都没加；只读约束的是
+"不能改别人的东西"，不是"不能有副作用"）。
 
 ### V.2 职责
 
@@ -1551,7 +1552,7 @@ C 的产出有两类，状态语义完全不同。
 | **写、改证明的任何一句** | V 是判定者："你是判定者，你的产出只有一个两态结论与逐条 findings"（`specs/v.py` 的 `local_notes['敢创新']` 逐字）；能改稿的人不能同时是判它过没过的人 | **F** |
 | 判"这条命题值不值得做、下一步往哪儿走" | 那是**方向判断**，不是证明判断；V 的官能表里 `敢创新` 是 `denied` | **D** |
 | 稿件级正式审查（体例 / 引用是否得当 / 依赖闭合） | 那是**五元位第 5 位**，owner 是 H；V 只看证明本身 | **H** |
-| 写任何一张表 | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 把 `fs.*` / `table.*` 一类写工具剥掉，留下的 9 件 `write_local` 全是自己侧的簿记（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）；产物那一份文件由 `verify.verify_proof` 落（见 §V.8） | **B / D / E / G**（各自的写面） |
+| 写任何一张**数据表**（改别人的东西） | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 把 `fs.*` / `table.*` 一类写工具剥掉。面上的 10 件 `write_local` 全是自己侧或簿记：9 件通用能力（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）+ `verify.verify_proof`（V 自己维护的凭据台账与签，逐条登记在 `READONLY_CALL_EXCEPTIONS["V"]`） | **B / D / E / G**（各自的写面） |
 | 自己补证据、自己提新方向 | 引用到"不干净的命题"时，缺陷**沿依赖边上溯**并如实报出 —— 修是 F/D 的事 | **F**（改证明）/ **D**（改方向） |
 | 拿"看不出来"冒充"审过了" | 它不是两态之外的第三个结论：判不出来 = 没找到缺陷 ⇒ 按「成立」收；缺材料那一档是**没查成**（不落行、如实报），两件事不许折平 | —（结构性禁止） |
 | 靠"再问 F 一句"补齐判断所需的信息 | 那会把冷启动绕过去；判不出来就是没找到缺陷 ⇒ 按「成立」收（没有第三个词可以拿来当退路） | — |
@@ -1598,14 +1599,14 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.8 不变式
 
-- **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：别人的台账一张表都不写；自己侧的产物是 `verifications/<号>.jsonl` 与签的侧文件，写工具是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`（簿记，工具面共 9 件 `write_local`）。
+- **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：别人的数据表一张都不写；自己侧的产物是 `verifications/<号>.jsonl` 与签的侧文件（工作区文件）。工具面共 10 件 `write_local`：9 件通用簿记（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）+ `verify.verify_proof`（自己的凭据台账与签，`READONLY_CALL_EXCEPTIONS["V"]` 逐条例外）。
 - **输出不合法绝不落台账行**。
 - **台账只追加、编号由脚本发**。
 - **第 3 位只在 `成立` 且无未解决 error 时被签**。
 - **冷启动没有句柄**。
 - **命题号必须是六位十进制（旧四位可读）**。
 - **`limit=0` 是零条**。
-- **V 不写任何表**。
+- **V 不写任何数据表**（它写自己维护的凭据台账与签：`verifications/<号>.jsonl` / `out/vsigns/*.json`，以及收方秘书落回送审手稿的签块）。
 - **V 只能召唤 F**。
 - **V 只能被 `B` / `F` 召唤**。
 - **V 的只读读数由调用方取好传进来**。

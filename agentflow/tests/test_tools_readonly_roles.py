@@ -47,8 +47,10 @@ def _spec(name: str, side_effect: str, roles: tuple[str, ...], *, external: str 
 def test_read_only_roles_are_exactly_c_h_v():
     """只读角色的单一来源。改动这里必须同时改设计文档与 C/H/V 的实现。
 
-    V（验证者，F-02 起）在这里的理由：它不写任何表（`capabilities.WRITE_SETS["V"]`
-    是空集），唯一的产物是 `verifications/<命题号>.jsonl` 这个文件。
+    V（验证者，F-02 起）在这里的理由：它不写任何「数据表」（`capabilities.WRITE_SETS["V"]`
+    是空集），但「写它自己维护的那张凭据台账」 `verifications/<命题号>.jsonl`（工作区文件）
+    与它颁的签 —— 所以 `verify.verify_proof` 据实是 `write_local`（2026-11-05 改真），
+    它进 V 的面走的是逐条登记的例外，不是"只读角色不能有副作用"。
     """
     assert READ_ONLY_ROLES == ("C", "H", "V")
     assert set(READ_ONLY_ROLES) <= set(ROLES)
@@ -133,7 +135,7 @@ def test_real_registry_gives_no_write_tool_to_read_only_roles(store):
         _ex = {n for n, _w in _EXC.get(role, ())}
         universal_write = [n for n in leaks if n not in _ex and n in _uni]
         leaks = [n for n in leaks if n not in _ex and n not in _uni]
-        assert leaks == [], f"{role} 的工具面里有**未登记**的写工具：{leaks}"
+        assert leaks == [], f"{role} 的工具面里有「未登记」的写工具：{leaks}"
         # 正向：被剔掉的那几件确实是登记在案的通用能力，而且真的在面上 ——
         # 没有这一半，上面那条断言就算被一张空名单掏空也照样绿。
         assert universal_write, (
@@ -327,6 +329,12 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
 #: 拿它当期望值时，往它里面塞一件 `table.create` 会让比较的两侧一起变、判据照旧绿
 #: （`test_injecting_a_knowledge_table_writer_into_the_declaration_goes_red` 量的就是这件事）。
 #: 所以这里写的是审过的落点清单：改它必须是人逐条看过的一改。
+#:
+#: 2026-11-05（把声明说真）：V 这一格从空集改成 `{"verify.verify_proof"}` —— 改的不是权限，
+#: 是「读数」。`verify.verify_proof` 一直会写 `verifications/<号>.jsonl` 与签的侧文件/签块
+#: （工作区写），只是此前把 `side_effect` 谎报成 `read` 才看起来"V 面上 0 件写工具"。
+#: 现在它据实声明 `write_local`、经 `READONLY_CALL_EXCEPTIONS["V"]` 拿到，于是这张台账必须
+#: 显式列出它；"多一件、少一件都红"的强度一点没降 —— 它从"0 件"变成"恰好 1 件、且就是这一件"。
 DECLARED_READONLY_WRITE_TOOLS: dict[str, frozenset[str]] = {
     "C": frozenset({"analysis.register_report"}),
     "H": frozenset({
@@ -335,7 +343,7 @@ DECLARED_READONLY_WRITE_TOOLS: dict[str, frozenset[str]] = {
         "review.review_document",
         "review.verify_fixes",
     }),
-    "V": frozenset(),
+    "V": frozenset({"verify.verify_proof"}),
 }
 
 
@@ -429,14 +437,14 @@ def test_declared_write_tools_are_exactly_the_non_universal_write_tools(store):
             role, role_write_tools(reg, role), tree=reg
         )
 
-    # 差分一：声明那一档三个角色互不相同（H 四件 / C 一件 / V 零件），
+    # 差分一：声明那一档三个角色互不相同（H 四件 / C 一件 / V 一件），
     # 所以"逐个核"真的核了三份不同的东西。
     declared_reading = {r: sorted(DECLARED_READONLY_WRITE_TOOLS[r]) for r in READ_ONLY_ROLES}
     assert declared_reading == {
         "C": ["analysis.register_report"],
         "H": ["review.record_finding", "review.report", "review.review_document",
               "review.verify_fixes"],
-        "V": [],
+        "V": ["verify.verify_proof"],
     }, declared_reading
     # 差分二：通用轴那一档三个角色完全一样 —— 同一个集合，不按角色分配。
     expected_universal = universal_write_tools(reg)

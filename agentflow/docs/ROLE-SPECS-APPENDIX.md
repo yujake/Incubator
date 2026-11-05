@@ -103,9 +103,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 |---|---|---|---|
 | 工具总数 | 55 | **124**（`python -m agentflow.cli tools`；Lean 关着时 121） | ⚠️ |
 | 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A54 B39 C36 D59 E40 F52 G55 H46 V28 L39 M42`（同一命令读"各角色工具数"那一行） | ⚠️ |
-| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 61 / write_local 58 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 60 / write_local 56 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
-| 需审批 | 17 / 55 | **62 / 124** | ⚠️ |
-| 只读角色泄漏 | 0 | **32 件**：`H` 13 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 9 件通用能力：`clock.*` 的七件写工具 + `conductor.ack` + `conductor.post_task`）+ `C` 10 件（`analysis.register_report` 一件落库代理 + 同样那 9 件通用能力）+ `V` 9 件（只有那 9 件通用能力） | ⚠️ |
+| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 60 / write_local 59 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 59 / write_local 57 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
+| 需审批 | 17 / 55 | **63 / 124** | ⚠️ |
+| 只读角色泄漏 | 0 | **33 件**：`H` 13 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 9 件通用能力：`clock.*` 的七件写工具 + `conductor.ack` + `conductor.post_task`）+ `C` 10 件（`analysis.register_report` 一件落库代理 + 同样那 9 件通用能力）+ `V` 10 件（`verify.verify_proof` 一件自己的凭据写入面 + 那 9 件通用能力） | ⚠️ |
 | 零测试工具 | 7 个（`table.list` `table.count` `table.schema` `table.search` `fs.list` `search.register` `search.download`） | 用"工具名字符串是否出现在 `tests/`"口径，**本次未复算** | ⚠️ |
 | `INVENTORY` 未覆盖的 schema 对象 | 无 `Task`/`UsageEntry`/`EvalResult` | **有**（`schema.EvalResult`） | ❌ **INVENTORY 落后** |
 
@@ -292,9 +292,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **28** |
-| `side_effect` | `read 19 / write_local 9 / none 0` |
+| `side_effect` | `read 18 / write_local 10 / none 0` |
 | `external` | `none 28` |
-| 需审批 | **9** |
+| 需审批 | **10** |
 
 **逐件清单（按模块，共 28）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 3（`list_verifications` `read_proof` `verify_proof`）。
 
@@ -913,7 +913,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 | 不变式 | 检查项名 / 判据 | 级别 |
 |---|---|---|
-| **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义） | 自己侧的产物是 `verifications/<命题号>.jsonl`（由 `verify.verify_proof` 落）与签的侧文件；簿记是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`；`for_role("V")` 只剥 `fs.*` / `table.*` 一类 | 实测 9 件 `write_local`（2026-11-02 现读：7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）/ 0 件 `fs.*` / `table.*` 写工具 |
+| **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义） | 自己侧的产物是 `verifications/<命题号>.jsonl`（由 `verify.verify_proof` 落）与签的侧文件；簿记是 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`；`for_role("V")` 只剥 `fs.*` / `table.*` 一类 | 实测 10 件 `write_local`（2026-11-05 现读：`verify.verify_proof` + 7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）/ 0 件 `fs.*` / `table.*` 写工具 |
 | **输出不合法绝不落台账行** | `verifications.parse_verdict` 抛 `VerificationError` ⇒ `record_verification` 不写行 | 自检 `[PASS] 没查成不落行` |
 | **台账只追加、编号由脚本发** | `v-{S.format_id(len(rows) + 1)}`（六位，与手稿编号、台账 id 同一套做法） | 自检 `[PASS] 编号从 v-000001 起（六位；旧四位号读侧兼容）` —— **2026-10-18 修复轮后转绿**；采集当天红在写死四位的断言上（F-5，判为断言过期） |
 | **第 3 位只在 `成立` 且无未解决 error 时被签** | `verifications.signs_bit3` / `bit3_payload`（签不了 ⇒ 返回 `{}`：**"没签"不是"忘了写"**） | 自检 `[PASS] 成立才签第 3 位` / `[PASS] 有毛病不签第 3 位` |
@@ -1138,7 +1138,7 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 
 | # | 命令 | 当次实测输出（摘要） | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：124（已装模块 18…）`；`各角色工具数：{'A': 54, 'B': 39, 'C': 36, 'D': 59, 'E': 40, 'F': 52, 'G': 55, 'H': 46, 'V': 28, 'L': 39, 'M': 42}`；`只读角色写工具泄漏：{'C': ['analysis.register_report', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task'], 'H': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes'], 'V': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task']}（!! 有泄漏）`（现读于 2026-10-26；Lean 关着时是 `工具总数：121`） | 0 |
+| 1 | `python -m agentflow.cli tools` | `工具总数：124（已装模块 18…）`；`各角色工具数：{'A': 54, 'B': 39, 'C': 36, 'D': 59, 'E': 40, 'F': 52, 'G': 55, 'H': 46, 'V': 28, 'L': 39, 'M': 42}`；`只读角色写工具泄漏：{'C': ['analysis.register_report', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task'], 'H': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes'], 'V': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'verify.verify_proof']}（!! 有泄漏）`（现读于 2026-10-26；Lean 关着时是 `工具总数：121`） | 0 |
 | 2 | `python -m agentflow.cli tools --role E` | 正常输出 E 的工具清单（**不再是 `invalid choice`**） | 0 |
 | 3 | `python -m pytest --collect-only -q` | `5433/5461 tests collected (28 deselected) in 8.28s` | 0 |
 | 4 | `python -m agentflow.agent_a` | `[agent_a 自检] 24/24 项通过` | 0 |
