@@ -41,11 +41,27 @@
 
 ## 等级机械派生（不许任何角色自报等级）
 
+等级是唯一的轴（业主 2026-11-05 裁定，逐字：「cross_check 等价于强猜想等价于有普通
+数值实验支撑的猜想（这很坏，为啥要叫 cross_check）。不妨就用等级制平替掉」+
+「穷举证书相当于 lean 形式化，表示绝对正确」）：
+
+```
+conjecture        = 没有证据
+strong_conjecture = 有普通数值实验支撑（原 cross_check）
+pre_theorem       = 有 V 签、但不是机器可核（原 proof_review）
+theorem           = V 签 ∧ 机器可核（Lean 形式化 或 穷举证书，两者同级）← 原 proof
+```
+
 - 全空/false ⇒ 猜想；
-- 第 1 位 `verified` ⇒ 强猜想（封顶：数值堆再多也不能变成定理 —— 用户口径"数值验证不构成证明"）；
+- 第 1 位 `verified` ⇒ 强猜想；
 - 第 2 位 + 第 3 位 ⇒ 预备定理级；
-- 第 2 位 + 第 4 位（二维里任一路径 `verified`）⇒ 正式定理；
+- 第 2 位 + 第 4 位（二维里任一路径 `verified`）或 第 2 位 + 第 1 位 `verified`
+  ⇒ 正式定理（穷举证书与 Lean 同级：两者都是"机器可核"，业主 2026-11-05）；
 - 第 5 位 ⇒ 追加"已过正式审查"（并列，不覆盖）。
+
+`evidence_kind`（`proof` / `proof_review` / `cross_check` / `heuristic`）自此只是一列
+历史：它若还出现，只能由等级反算（:func:`kind_from_grade` / :func:`kind_from_bits`），
+不许有第二套真值；判定面一律读等级。
 
 ## 作废（`draft/39` §3.15/§3.18）
 
@@ -103,6 +119,33 @@ GRADE_LABELS: dict[str, str] = {
     "theorem": "正式定理",
     GRADE_NOT_APPLICABLE: "不适用（概念行不参与等级）",
 }
+
+#: 等级 ⇒ 历史档位（`statements.evidence_kind` 的唯一反算表，业主 2026-11-05）。
+#:
+#: ## 为什么方向只能是这一边
+#: 档位是等级的历史别名，不是第二个真值：`evidence_kind` 一列仅作存量保留，
+#: 判定面读等级。任何写档位的地方都必须从这里反算（:func:`kind_from_grade`），
+#: 不许把调用方声明的档位原样落盘 —— 那就等于允许"自报档位"绕过五元位。
+#:
+#: 映射逐字取自业主裁定：
+#: `conjecture → heuristic`、`strong_conjecture → cross_check`、
+#: `pre_theorem → proof_review`、`theorem → proof`。
+GRADE_TO_KIND: dict[str, str] = {
+    "conjecture": "heuristic",
+    "strong_conjecture": "cross_check",
+    "pre_theorem": "proof_review",
+    "theorem": "proof",
+}
+#: 反算表里的档位（顺序 = 由弱到强；与 `schema.EVIDENCE_KINDS` 的声明序互逆）。
+LEGACY_KINDS: tuple[str, ...] = tuple(GRADE_TO_KIND[g] for g in GRADES)
+
+#: 历史档位 ⇒ 等级（读存量时的反方向；只用于读数/审计，不是第二套真值）。
+#:
+#: 为什么两个方向都要有：判定面读等级，而存量行上只有档位。审计要回答"这一行按档位
+#: 自报的是哪一档、按五元位现算的是哪一档"，两列并列才看得见 :data:`GRADE_TO_KIND`
+#: 之外的漂移（真机 362 行里 169 行不一致）。它绝不参与 `derive_grade` —— 那会把
+#: 自报档位变成证据。
+KIND_TO_GRADE: dict[str, str] = {v: k for k, v in GRADE_TO_KIND.items()}
 #: 五位的名字（对外读数、台账字段都用这一套）。
 BIT_NAMES: tuple[str, ...] = ("numeric", "proof", "reviewed", "formal", "audited")
 #: 每一位的 owner（引用命题的第 3 位 owner 是"引用"，不是 V）。
@@ -1060,8 +1103,17 @@ def bits_shape_problems(raw: Mapping[str, Any] | None, *,
 def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     """五元位 ⇒ 等级（唯一的等级来源；任何角色自报的等级都不认）。
 
-    第 1 位只做一件事：把"猜想"抬成"强猜想"——封顶就在这一条：
-    数值验证再多、再强，也到不了"定理"（用户口径：数值验证不构成证明）。
+    ## 正式定理 = 第 2 位 + 一条机器可核的凭据（业主 2026-11-05 裁定）
+    「穷举证书相当于 lean 形式化，表示绝对正确」。所以 `theorem` 的两个入口同级：
+
+    - 第 2 位（证明）∧ 第 4 位任一形式化路径 `verified`（Lean/Coq/Isabelle 真编译过）；
+    - 第 2 位（证明）∧ 第 1 位 `verified`（E 的穷举证书：程序穷尽了整个论域，
+      V 签下的那一份 —— `numericproof` 的 `is_signed_exhaustion` 口径）。
+
+    改前第 1 位只把等级抬到强猜想（"数值验证不构成证明"）；业主 2026-11-05 把
+    穷举证书与"普通数值实验"分开：前者穷尽论域、是可机器复核的证书，后者只是抽样。
+    第 1 位不区分这两者的形态由 `numericproof` 负责（位的凭据里指名的实验必须是
+    签下的穷举行）；本函数只读位。第 1 位 `pending`/`na`/`failed` 都不构成定理。
 
     `kind="concept"` 短路（`draft/97` §14.5，业主 2026-10-09「concept 表真并进
     statements……proof 里就证这个概念为什么是良定义的」）：概念不参与这条链。
@@ -1076,17 +1128,39 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
         return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
     has_proof = bool(bits.get("proof"))
     reviewed = bool(bits.get("reviewed"))
+    # 第 1/4 位都是"机器可核"的入口：穷举证书与 Lean 形式化同级（业主 2026-11-05）。
     # 第 4 位是二维的：这里读的是汇总（任一路径通过即通过，业主 2026-10-22 裁定的第二句）。
     # 逐条路径各自的等级由 `verifications.statement_review_reading` 的 `proofs[*]` 给 ——
     # 函数级只回答"这条命题到不到定理"，不回答"是哪一条路径撑起来的"。
     formal = _bit_state(bits, FORMAL_BIT) == "verified"
-    if has_proof and formal:
+    numeric = _bit_state(bits, "numeric") == "verified"
+    if has_proof and (formal or numeric):
         return "theorem"
     if has_proof and reviewed:
         return "pre_theorem"
-    if _bit_state(bits, "numeric") == "verified":
+    if numeric:
         return "strong_conjecture"
     return "conjecture"
+
+
+def kind_from_grade(grade: Any) -> str:
+    """等级 ⇒ 历史档位（唯一反算口；认不出的等级 ⇒ 空串，不是猜一档）。
+
+    空串 / `not_applicable` 都返回空串：概念行没有档位可言（它不是"最弱的猜想"），
+    认不出的词同样不许被当成某一档 —— 三态纪律在这里是"反算不出来就不写"。
+    """
+    return GRADE_TO_KIND.get(str(grade or "").strip(), "")
+
+
+def kind_from_bits(bits: Mapping[str, Any], *, kind: str = "") -> str:
+    """五元位 ⇒ 历史档位（先现算等级、再反算；写 `evidence_kind` 的唯一入口）。
+
+    为什么还要这一层：`evidence_kind` 只作历史列保留，而它每次被写都必须与
+    "按五位现算的等级"逐字对应（:data:`GRADE_TO_KIND`）。任何调用方拿"提交方声明的
+    档位"来写这一列，都是第二套真值 —— 业主 2026-11-05：「档位不再是一套词表」。
+    `kind="concept"` 经 :func:`derive_grade` 短路成 `not_applicable` ⇒ 这里返回空串。
+    """
+    return kind_from_grade(derive_grade(bits, kind=kind))
 
 
 #: D-37（2026-10-24）：`kind` 能跟着证据走的起点与终点。

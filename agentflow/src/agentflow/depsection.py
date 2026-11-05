@@ -23,9 +23,11 @@
 
 1. 解析：段标题 `## 依赖`，下面一张四列表；缺表头 / 缺列 / 列数不对 / 命题号形状不对 /
    路径号不是正整数 ⇒ 逐条进 `problems`（带行号与列名），调用方整笔受控拒绝；
-2. 引用档位（业主加码裁定，逐字：「proof_review级及以上才可引用」）：来源那一行的
-   `evidence_kind` 必须站到 `proof_review` 及以上；允许集合从等级序现算
-   （:func:`citation_levels`），不写死字面量；档位读不到 ⇒ fail-closed；
+2. 引用门槛（2026-11-05 起读等级）：来源那一行的可引资格只由
+   `evidencebits.derive_grade` 现算的等级决定，`pre_theorem` 及以上才可引
+   （= 有 V 签；业主原话「proof_review 级及以上才可引用」在新等级制下的落点）。
+   允许集合从等级序现算（:func:`citation_levels`），不写死字面量；等级算不出来 ⇒
+   fail-closed。`statements.evidence_kind` 只是一列历史，判定面不再读它；
 3. 三态读数（`present` / `missing` / `not_applicable`）：读数实现仍是秘书那一份
    （`secretary._deps_missing_reading`），本文件只负责把"手稿里有没有依赖段"这件事
    如实叠上去 —— 手稿没有段而证明正文里出现了 `stmt:` 引用，是 `missing`，不是 0。
@@ -41,6 +43,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import evidencebits as EB
 from . import schema as S
 
 
@@ -131,7 +134,12 @@ COLUMN_KEYS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 #: 引用门槛的那一档（业主 2026-10-24，逐字：「proof_review级及以上才可引用」）。
-CITATION_MIN_LEVEL = "proof_review"
+#:
+#: 2026-11-05 起这是等级不是档位：`proof_review` 在新等级制里的对应值是
+#: `pre_theorem`（= 有 V 签、但不是机器可核）。判据面一律读等级（业主裁定：
+#: 「cross_check 等价于强猜想等价于有普通数值实验支撑的猜想……不妨就用等级制平替掉」），
+#: 所以门槛写在 `EB.GRADES` 的坐标系里；档位词表只剩历史列。
+CITATION_MIN_LEVEL = "pre_theorem"
 
 #: 解析失败的受控码（B 那一侧据此整笔拒绝）。
 REFUSED_SECTION = "dependency_section_unreadable"
@@ -187,46 +195,53 @@ def is_framework_manuscript(rel: Any) -> bool:
 
 
 def citation_levels() -> frozenset[str]:
-    """`CITATION_MIN_LEVEL` 及以上那几档 —— 从等级序现算，不写死一个字面量列表。
+    """`CITATION_MIN_LEVEL` 及以上那几档等级 —— 从等级序现算，不写死字面量。
 
     两处声明的交叉核对（缺一条就是"读错顺序也能过"）：
 
-    - `schema.EVIDENCE_KINDS` 的声明序（由强到弱：`proof` · `proof_review` ·
-      `cross_check` · `heuristic`，见那一格的注释）；
-    - `tools/verify_tools.py::_EVIDENCE_ORDER` 的证据力序（由弱到强），它在导入期
-      已经断言自己是 `EVIDENCE_KINDS` 的一个排列 —— 这里再核一次"它恰好是逆序"，
-      于是"顺序口径"只有一份，漂开就在导入期炸。
+    - 等级序 `evidencebits.GRADES`（由弱到强：`conjecture` · `strong_conjecture` ·
+      `pre_theorem` · `theorem`）—— 唯一的等级排序声明；
+    - 档位只是历史列：`evidencebits.LEGACY_KINDS` 必须与 `schema.EVIDENCE_KINDS`
+      互逆（两套词表的换算只有 :data:`evidencebits.GRADE_TO_KIND` 一处）。漂开就在
+      导入期炸 —— 否则"档位若还出现只能由等级反算"这句话在代码里没有守卫。
 
     返回的集合从 `CITATION_MIN_LEVEL` 那一位切到最强端：今天是
-    `{proof_review, proof}`，但它是算出来的（换一档门槛或调等级序会跟着变）。
+    `{pre_theorem, theorem}`，但它是算出来的（换一档门槛会跟着变）。
     """
-    # 私名 import：`_EVIDENCE_ORDER` 是本仓唯一的"证据力排序"声明（弱 → 强），
-    # 它在自己的模块里已经与 `schema.EVIDENCE_KINDS` 对过账。这里不另写一份排序。
-    from .tools.verify_tools import _EVIDENCE_ORDER as weak_to_strong
-
+    ordered = tuple(EB.GRADES)
     declared = tuple(S.EVIDENCE_KINDS)
-    ordered = tuple(weak_to_strong)
-    assert set(ordered) == set(declared), (
-        f"`verify_tools._EVIDENCE_ORDER`={ordered} 与 `schema.EVIDENCE_KINDS`={declared} "
-        "不是同一批取值 ⇒ 引用档位算不出来（等级序必须只有一份定义）")
-    assert ordered == tuple(reversed(declared)), (
-        f"`schema.EVIDENCE_KINDS` 的声明序 {declared} 与证据力序 {ordered} 不是互逆关系 "
-        "⇒ 「proof_review 级及以上」会算错，而错的那一侧放行的是弱档"
-        "（两份顺序声明必须互为逆序，改一处就得改另一处）")
+    legacy = tuple(EB.LEGACY_KINDS)
+    assert legacy == tuple(reversed(declared)), (
+        f"`evidencebits.LEGACY_KINDS`={legacy} 与 `schema.EVIDENCE_KINDS`={declared} "
+        "不是互逆关系 ⇒ 档位反算表与历史词表漂开了（等级序必须只有一份定义）")
     assert CITATION_MIN_LEVEL in ordered, (
-        f"引用门槛 {CITATION_MIN_LEVEL!r} 不在证据力序 {ordered} 里 ⇒ 门槛切不出来")
+        f"引用门槛 {CITATION_MIN_LEVEL!r} 不在等级序 {ordered} 里 ⇒ 门槛切不出来")
     return frozenset(ordered[ordered.index(CITATION_MIN_LEVEL):])
 
 
-#: 允许被引用的档位集合（导入期算一次；值来自 `citation_levels()`，不是手抄的列表）。
+#: 允许被引用的等级集合（导入期算一次；值来自 `citation_levels()`，不是手抄的列表）。
 CITATION_LEVELS: frozenset[str] = citation_levels()
 
 
+def statement_grade(row: Mapping[str, Any]) -> str:
+    """一条 `statements` 行的等级（可引门槛与洗稿判据的唯一读数）。
+
+    唯一入口是 `evidencebits.bits_from_row`（它内部现算 `derive_grade`，并做占位签 /
+    旧稿 / 形式化过期那三档读侧降档）。空行 / 读不出来 ⇒ 空串（"判不了"），
+    调用方必须 fail-closed —— 空串不是"最弱的猜想"。
+    """
+    try:
+        return str(EB.bits_from_row(dict(row or {})).get("grade") or "")
+    except Exception:  # noqa: BLE001 —— 算不出来要如实说，不许猜一档
+        return ""
+
+
 def citation_level_allowed(level: str) -> bool:
-    """这一档够不够「proof_review 级及以上」（判据只有这一处，三条路径都读它）。
+    """这一档等级够不够「pre_theorem 级及以上」（判据只有这一处，三条路径都读它）。
 
     空串 / 词表外的取值一律返回假：排不出等级的档位不许当成"合格"
-    （三态纪律：读不到不是"查过了、够格"）。
+    （三态纪律：读不到不是"查过了、够格"）。传历史档位词（`proof_review` 等）同样返回假
+    —— 判定面只认等级；档位要走 `evidencebits.kind_from_grade` 先换算。
     """
     return str(level or "").strip() in CITATION_LEVELS
 
@@ -1112,20 +1127,20 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
                     "reason": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 不可用："
                                f"statements.status={status or '（空）'!r}，只有 active 才算已收录"
                                f"（这几档都不是依据：{S.STATEMENT_UNUSABLE_STATUSES}）⇒ 整笔不写")}
-        level = str(anchor.get("evidence_kind") or "").strip()
+        level = statement_grade(anchor)
         levels[sid] = level
-        if not level or level not in S.EVIDENCE_KINDS:
+        if not level:
             return {"checked": True, "ok": False, "refused": REFUSED_LEVEL_UNREADABLE,
                     "levels": levels,
-                    "reason": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 档位读不到"
-                               f"（`evidence_kind`={level!r}，不在词表 {S.EVIDENCE_KINDS} 里）"
-                               "⇒ 整笔不写：读不到它的档位就不许放行，先确认它现在是哪一档")}
+                    "reason": (f"依赖段第 {row.get('line')} 行点名的 `stmt:{sid}` 等级算不出来"
+                               "（五元位读不出 / 现算出空）⇒ 整笔不写：读不到它的等级就"
+                               "不许放行，先确认它现在的五元位记录")}
         if not citation_level_allowed(level):
             return {"checked": True, "ok": False, "refused": REFUSED_LEVEL_TOO_LOW,
                     "levels": levels,
-                    "reason": (f"被引命题 stmt:{sid} 现在是 {level}，引用要求 "
+                    "reason": (f"被引命题 stmt:{sid} 现在是 `{level}`，引用要求 "
                                f"{CITATION_MIN_LEVEL} 级及以上 —— 先让它过 V 的逐行走审"
-                               "（或等它形式化/穷举到 proof 档），再来引"
+                               "（或等它形式化/穷举到 theorem 级），再来引"
                                f"（依赖段第 {row.get('line')} 行）")}
     return {"checked": True, "ok": True, "refused": "", "reason": "", "levels": levels}
 
@@ -1422,13 +1437,13 @@ def wash_dependency_section(text: str, *,
                 how_to_fix=(f"把 `stmt:{sid}` 改成台账里真实的一条在册命题号"
                             "（`attack.step` 的返回值里有本轮可引 id 清单），并让正文那一步写明依据")))
             continue
-        level = str(anchor.get("evidence_kind") or "").strip()
-        if not level or level not in S.EVIDENCE_KINDS:
+        level = statement_grade(anchor)
+        if not level:
             findings.append(_finding(
-                line=line, quote=quote, got=f"stmt:{sid}（evidence_kind={level!r}）",
+                line=line, quote=quote, got=f"stmt:{sid}（等级算不出来）",
                 expected=f"{CITATION_MIN_LEVEL} 级及以上",
-                why=(f"第 {line} 行点名的 `stmt:{sid}` 档位读不到"
-                     f"（不在词表 {S.EVIDENCE_KINDS} 里）⇒ 读不到就不许引"),
+                why=(f"第 {line} 行点名的 `stmt:{sid}` 等级算不出来"
+                     "（五元位读不出 / 现算出空）⇒ 读不到就不许引"),
                 how_to_fix=("先让 V 走查签「成立」（或形式化 / 穷举核过）把它升到 "
                             f"{CITATION_MIN_LEVEL} 级，再引它")))
             continue
@@ -1436,7 +1451,7 @@ def wash_dependency_section(text: str, *,
             findings.append(_finding(
                 line=line, quote=quote, got=f"stmt:{sid}（{level}）",
                 expected=f"{CITATION_MIN_LEVEL} 级及以上",
-                why=(f"第 {line} 行点名的 `stmt:{sid}` 现在是 {level}，"
+                why=(f"第 {line} 行点名的 `stmt:{sid}` 现在是 `{level}`，"
                      f"引用要求 {CITATION_MIN_LEVEL} 级及以上"),
                 how_to_fix=(f"先让它过 V 的逐行走审站到 {CITATION_MIN_LEVEL} 级"
                             "（或换一条已经够格的命题），再来引它")))

@@ -94,6 +94,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import depsection as _DS  # 可引门槛的唯一定义（`CITATION_MIN_LEVEL`）
+from . import evidencebits as EB  # 等级的唯一派生口（`derive_grade` / 反算表）
 from . import jsonlfile as JF
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
 from . import statementbody as _SB  # 命题正文的唯一读口（被引命题的正文从这里取）
@@ -202,31 +204,42 @@ CITATION_DIGEST_CHARS = 600
 #: 老写法把话写在 `label` / `quote` / `status_reason` 里，所以那几个也认）。
 DEP_NOTE_KEYS: tuple[str, ...] = ("note", "label", "quote", "status_reason")
 
-#: 被引命题的档位下限（业主 2026-10-26 逐字：「proof_review级及以上才可引用」）。
+#: 被引命题的等级下限 —— 直接引用 `depsection.CITATION_MIN_LEVEL`（唯一门槛定义）。
 #:
-#: 为什么只写这一档的名字、不写允许清单：`schema.EVIDENCE_KINDS` 是"从强到弱"排的
-#: （`proof` / `proof_review` / `cross_check` / `heuristic`），所以允许集合是它的前缀
-#: （:func:`admissible_evidence_kinds` 现算）。在同一处再抄一份字面量清单，等于给这条
-#: 口径造第二个真身 —— 词表加一档（例如将来插一个"审过 + 机器部分核"）时，两边会分家，
-#: 而没有任何东西会报。
-CITATION_EVIDENCE_FLOOR = "proof_review"
+#: 2026-11-05 改口径前这里是档位字面量 `"proof_review"`，与 `depsection` 各写一份；
+#: 真机反例 `mp3-r3/000000`（档位 `proof_review`、等级 `conjecture`）上两处给相反答案：
+#: B 拒、V 放行。业主裁定「判定面一律读等级」之后，这里不再写第二份字面量：
+#: 阈值与允许集合都从 `depsection` 那一个定义取。
+CITATION_EVIDENCE_FLOOR = _DS.CITATION_MIN_LEVEL
 
 
 def admissible_evidence_kinds() -> tuple[str, ...]:
-    """够格被引的档位（按 `schema.EVIDENCE_KINDS` 的强弱顺序现算，不抄字面量）。
+    """够格被引的等级（按由强到弱的顺序；唯一来源是 `depsection.CITATION_LEVELS`）。
 
-    词表读不到 / 里面没有下限那一档 ⇒ 返回空元组（"判不了"）：空集会让每一条引用都判
-    `inadmissible`，那是可见的失败；反过来在词表坏掉时放行，就是"没查成"折成"通过"。
+    返回空元组 = 判不了（门槛定义读不到）：空集会让每一条引用都判 `inadmissible`，
+    那是可见的失败；反过来在门槛坏掉时放行，就是"没查成"折成"通过"。
     """
-    kinds = tuple(getattr(S, "EVIDENCE_KINDS", ()) or ())
-    if CITATION_EVIDENCE_FLOOR not in kinds:
+    try:
+        levels = tuple(_DS.CITATION_LEVELS)
+    except Exception:  # noqa: BLE001 —— 读不到门槛 ⇒ 空集（fail-closed）
         return ()
-    return kinds[: kinds.index(CITATION_EVIDENCE_FLOOR) + 1]
+    return tuple(g for g in reversed(EB.GRADES) if g in levels)
+
+
+def citation_grade_admissible(grade: Any) -> bool:
+    """这一级够不够格被引（空串 / 认不出的等级 ⇒ 不够格；判据只有一处）。"""
+    return _DS.citation_level_allowed(str(grade or "").strip())
 
 
 def evidence_kind_admissible(kind: Any) -> bool:
-    """这一档够不够格被引（空串 —— 没有档位 —— 不够格）。"""
-    return str(kind or "").strip() in admissible_evidence_kinds()
+    """历史档位入参的兼容口：先按 `GRADE_TO_KIND` 反算成等级，再走等级门槛。
+
+    为什么保留这个名字：`agent_v` 的缝与 V 的审查材料仍按历史档位字段取值（那是存量行的
+    形状）。但它不另有门槛 —— 档位在这里只是"等级的反算名"的逆读，两步都不离开
+    `depsection.CITATION_MIN_LEVEL` 那一个定义。判定面请直接用 `citation_grade_admissible`。
+    """
+    grade = EB.KIND_TO_GRADE.get(str(kind or "").strip(), "")
+    return citation_grade_admissible(grade)
 
 
 def dep_note(row: Mapping[str, Any]) -> tuple[str, str]:
@@ -321,10 +334,17 @@ def citation_material(*, statement_id: str, proof_no: Any = None,
         item["statement_digest"] = _digest(body) if hit is not None else ""
         item["statement_missing"] = hit is None
         item["statement_label"] = str((hit or {}).get("label") or "")
+        # 2026-11-05：可引门槛读等级（同一行、同一个 `derive_grade`，与 B 的门同源）。
+        # 历史 `evidence_kind` 只留着给提示词显示；判定不看它。
+        try:
+            item["grade"] = EB.derive_grade(
+                EB.bits_from_row(dict(hit or {})), kind=str((hit or {}).get("kind") or ""))
+        except Exception:  # noqa: BLE001 —— 算不出来 ⇒ 空串（不够格，可见的失败）
+            item["grade"] = ""
         item["evidence_kind"] = str((hit or {}).get("evidence_kind") or "")
         # 档位判据的缺省答案在这里算一次（`agent_v` 会用自己的缝再盖一次：
         # 那是可打桩的那一格，判据 b 的反真空就打在它上面）。
-        item["admissible"] = evidence_kind_admissible(item["evidence_kind"])
+        item["admissible"] = citation_grade_admissible(item["grade"])
         item["path_groups"] = sorted(item["path_groups"])
     out.sort(key=lambda it: (it["stmt_id"], it["path_groups"]))
     return out
@@ -409,20 +429,24 @@ def reconcile_citation_checks(checks: Sequence[Mapping[str, Any]],
             got = {"stmt_id": sid, "verdict": "unknown", "quote_verbatim": False,
                    "note": "V 没有对这条被引命题给出结论（材料里有它）",
                    "in_material": True}
-        kind = str(item.get("evidence_kind") or "")
-        # 先判"这一条在不在册"（它比档位更根本：不在册的命题连档位都没有），
-        # 再判档位 —— 两档都是挡签的，但点名要说清是哪一种。
+        grade = str(item.get("grade") or "")
+        # 先判"这一条在不在册"（它比等级更根本：不在册的命题连等级都没有），
+        # 再判等级 —— 两档都是挡签的，但点名要说清是哪一种。
         if bool(item.get("statement_missing")) and got["verdict"] in CITATION_SIGNABLE:
             got = dict(got, verdict="unknown",
                        note=(f"被引命题 {sid} 不在册 ⇒ 判不了「一致」"
                              f"（V 原文：{got['note'] or '（无）'}）"))
         admitted = item.get("admissible")
         if admitted is None:
-            admitted = evidence_kind_admissible(kind)
+            # 兼容旧材料的形状：没有 `grade` 那一格时，先把历史档位反算成等级
+            # （`evidence_kind_admissible` 只做这一步换算，门槛仍是同一个）。新材料
+            # （`citation_material`）一定带 `grade`，走的是上面那条正路。
+            admitted = (citation_grade_admissible(grade) if "grade" in item
+                        else evidence_kind_admissible(item.get("evidence_kind")))
         if not bool(item.get("statement_missing")) and not admitted:
             tail = f"（V 原文：{got['note']}）" if got["note"] else ""
             got = dict(got, verdict="inadmissible",
-                       note=(f"被引命题 {sid} 现在只是 {kind or '（空：没有档位）'}，"
+                       note=(f"被引命题 {sid} 现在只是 {grade or '（空：等级算不出来）'}，"
                              f"够不上 {CITATION_EVIDENCE_FLOOR} 级 ⇒ 不够格被引{tail}"))
         out.append(dict(got, in_material=True))
     for sid, got in by_id.items():
@@ -2624,57 +2648,43 @@ def _exhaustion_proof_channel(row: Mapping[str, Any], *,
 
 def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path,
                                      proof_no: Any = None) -> dict[str, Any]:
-    """V 的签刚落位 ⇒ 按现行签把 `evidence_kind` 重算一遍（只升不降）。
+    """V 的签刚落位 ⇒ 按现行签现算等级（只算等级，不再写档位）。
 
-    ## 按通道给档（业主 2026-11-04 的裁定）
-    目标档不是写死的 `proof_review`：先由 :func:`_exhaustion_proof_channel` 判"这一份
-    证明是哪条通道的"——
-    - 穷举程序（三段式证明栏 + 台账里对应的 `is_signed_exhaustion` 行）+ V 签 ⇒ `proof`
-      （穷举就是证明，V 的签盖的是那份程序；`proof_review` 的"逐行走查文字证明"
-      对它不适用，停在那档是错的终态）；
-    - 文字证明 + V 签 ⇒ `proof_review`（口径不被上面那条改歪）。
-    通道判据只有一处（`numericproof.find_signed_exhaustion_for_column`）：审计期
-    `proof_stmt_without_formal_backing` 认的穷举背书就是它，读的人不会在两处读到两种说法。
+    ## 业主 2026-11-05 的裁定（为什么这一格从"写档"改成"只算等级"）
+    「档位不再是一套词表：`evidence_kind` 只作历史列保留，判定面一律读等级」。
+    于是这一格不再回答"该把 `evidence_kind` 写成哪一档"，只回答"按五元位现算，
+    这一行现在是哪一级"。签落位之后 `bits.reviewed` 已被 `_reviewed_statement_row`
+    翻真 ⇒ 等级自然升到 `pre_theorem`（或第 1/4 位本就 verified 时到 `theorem`）；
+    这一格不复制那份真值，它只是把"凭什么"（哪一份台账的哪一签）与档位的历史反算名
+    （`kind_from_grade`）写进读数，供回执与审计用。
 
-    ## 为什么必须在这一刻重算（真机读数，业主 2026-11-04）
-    `evidence_kind` 原先只有一条升档路：同一份内容再登记一次时由
-    `Secretary._upgrade_evidence_kind` 改。于是"V 签了、之后再没有人登记"的行永远停在
-    旧档 —— `projects/paper-rewrite-84` 的 `000000`、`paper-rewrite-85` 的 `000004` /
-    `000005` 逐条是 `kind=theorem`、`bits.reviewed=true`、`grade=pre_theorem`
-    （D-69 那一笔已经抬过 `kind`），而 `evidence_kind` 仍是 `heuristic`。
+    ## 三态（不折平）
+    - 凭据读不出来 ⇒ `checked=False`（"没查成"既不是"不够格"也不是"没变"）；
+    - 凭据不够（没签 / 签的是旧版 / 判的不是成立）⇒ `reading={}`（negative：
+      没签的命题不许被这一格说成"升了"）；
+    - 算出来了 ⇒ `to` 是等级、`to_kind` 是它的历史反算名。
 
-    后果不在报告里，在 F 那一侧：F 的"可引用在册命题"清单只收 `proof_review` 及以上
-    （`agent_f/manuscript.py::citable_statements`），这些行一条都进不去 ⇒ F 每一轮都被
-    告知"没有可引的 id" ⇒ 证明里零 `cites` ⇒ 手稿的 `## 依赖` 恒空表 ⇒ `dependencies`
-    0 行。这就是"依赖面几乎没用过"的上游。
+    ## 只读
+    本函数一个字节都不写：`out["row"]` 是入参的副本、`evidence_kind` 不动。
+    写档位的地方（若还有）必须走 `EB.kind_from_grade` 反算，不许拿这一格的
+    `to` 直接当档位（那是把等级又译回第二套真值）。`_apply_grade_backfill`
+    是那唯一一处写者，写的是反算名，不是"这一格给的目标档"。
 
-    ## 判据只有一处
-    "这一行够不够 `proof_review`"读 `proof_review_gap` —— 写入期闸
-    （`store._refuse_fake_proof_review`）、审计期、收工门读的都是它。这里不另写一份：
-    回填写进去的档与写入期闸放行的档因此结构上是同一件事（不一致会让整笔事务被那道闸
-    回滚，签名跟着失败）。
-
-    ## 只升不降 + 三态（不折平）
-    - 已经是 `proof`（机器核过那档）⇒ 一个字不动：人工审过的档不许覆盖它；
-    - 已经是 `proof_review` ⇒ 不动（幂等：同一份签重算结果不变，不写第二次）；
-    - 凭据读不出来 ⇒ 不动，读数里 `checked=False`（"没查成"既不是"不够格"也不是"升了"）；
-    - 凭据不够（没签 / 签的是旧版 / 判的不是成立）⇒ 不动（negative：没签的命题不许被
-      这一格升上去）。
-
-    返回 `{"row", "reading"}`：`reading` 是 `{from, to, checked, why, basis, proof_no, at}`，
-    没动过就是 `{}` —— 键的存在本身说明"这一笔改过档位"。
+    返回 `{"row", "reading"}`：`reading` 是
+    `{checked, from, to, from_kind, to_kind, why, basis, proof_no, at}`；
+    没动过就是 `{}` —— 键的存在本身说明"这一签改变了等级读数"。
     """
     out: dict[str, Any] = {"row": dict(row), "reading": {}}
-    cur = str(out["row"].get("evidence_kind") or "").strip()
-    if cur in (PROOF_KIND, PROOF_REVIEW_KIND):
+    if str(out["row"].get("kind") or "") == "concept":
+        # 概念不参与等级链：既不是"升了"也不是"不够格"，这一格没有它的事。
         return out
     try:
         gap = proof_review_gap(root, out["row"], proof_no=proof_no)
     except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许当成"不够格"
         out["reading"] = {
-            "checked": False, "from": cur, "to": cur,
+            "checked": False, "from": "", "to": "",
             "why": (f"凭据读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
-                    "档位一个字节不动")}
+                    "等级与档位一个字节不动")}
         return out
     if not gap.get("ok"):
         return out
@@ -2684,31 +2694,38 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
     # 已经带着号（`verifications/pending/<sha>.jsonl#u-000001`，见 `pending_sign` 的
     # `ledger`）。这里只在"还没带号"时补一次 —— 否则 pending 支会拼成
     # `…jsonl#u-000001#u-000001`：同一个锚点写两遍，读的人会以为那是两层定位。
-    # 只改拼法，不改读数含义：`basis` 仍然逐字回答"凭哪一份台账的哪一行"。
     basis = (f"{ledger}#{vid}" if ledger and vid and not ledger.endswith(f"#{vid}")
              else (ledger or vid))
-    # ---- 按通道定目标档（业主 2026-11-04）：穷举程序 + V 签 ⇒ proof，文字证明 ⇒ proof_review
-    channel = _exhaustion_proof_channel(out["row"], root=root)
-    target = PROOF_KIND if channel.get("found") else PROOF_REVIEW_KIND
-    why = (f"V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
-           "⇒ 档位按现行签重算（只升不降）；"
-           + (f"通道是穷举程序（{channel.get('why') or ''}）⇒ 按 `schema.EVIDENCE_KINDS` "
-              "的裁定直接落 `proof`（不是 `proof_review`：V 不能逐行走查一份程序）"
-              if target == PROOF_KIND else
-              f"通道是文字证明（{channel.get('why') or ''}）⇒ 落 `proof_review`"))
-    trace: dict[str, Any] = {
-        "from": cur or "（空）", "to": target, "checked": True,
-        "why": why,
+    try:
+        bits = EB.bits_from_row(out["row"])
+        target = EB.derive_grade(bits, kind=str(out["row"].get("kind") or ""))
+    except Exception as exc:  # noqa: BLE001 —— 同上：算不出来就是没查成
+        out["reading"] = {
+            "checked": False, "from": "", "to": "",
+            "why": (f"五元位算不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
+                    "等级与档位一个字节不动")}
+        return out
+    from_kind = str(out["row"].get("evidence_kind") or "").strip()
+    from_grade = EB.KIND_TO_GRADE.get(from_kind, "")
+    # ---- 幂等（不写第二个时间戳）：两件都算"这一签没有新消息" ----------------
+    # ① 历史列反算出来的等级与现算等级相同（例如位没翻 ⇒ 两边都是 conjecture）；
+    # ② 行上已经有一条 `to` 相同的回执（同一份签再签一次）。
+    # 只读行上的回执，不读 `evidence_kind` 当第二套真值 —— 后者只是 `from` 的读数。
+    prior = out["row"].get(GRADE_RECOMPUTED_KEY)
+    if from_grade and from_grade == target:
+        return out
+    if isinstance(prior, Mapping) and str(prior.get("to") or "") == target:
+        return out
+    out["reading"] = {
+        "checked": True,
+        "from": from_grade, "to": target,
+        "from_kind": from_kind, "to_kind": EB.kind_from_grade(target),
+        "why": ("V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
+                "⇒ 按五元位现算等级（只算等级，不写档位）；"
+                f"历史列 `evidence_kind`={from_kind or '（空）'} 只是读数，判定面读 `{target}`"),
         "basis": basis, "proof_no": int(gap.get("proof_no") or 0) or None,
         "at": _now_iso(),
-        #: 这一格凭哪条通道定的档：`exhaustion`（穷举程序）/ `prose`（文字证明）。
-        #: 与 `why` 分开留一格，读的人不必解一句话才知道判的是哪条路。
-        "channel": "exhaustion" if target == PROOF_KIND else "prose",
-        "experiment_id": str(channel.get("experiment_id") or ""),
     }
-    out["row"]["evidence_kind"] = target
-    out["row"][GRADE_RECOMPUTED_KEY] = dict(trace)
-    out["reading"] = dict(trace)
     return out
 
 
@@ -3264,14 +3281,16 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 upgraded = _kind_upgrade_from_signature(
                     new, root=getattr(store, "root", ""), verifier=f"verifier-{no}")
                 new = upgraded["row"]
-                # ---- 档位回填（业主 2026-11-04）：同一笔事务里按现行签重算 `evidence_kind`。
+                # ---- 等级现算（2026-11-05 改口径）：只算等级、不再写档位 --------------
                 #
                 # 位置与 D-69 那一格并列、`tx.upsert` 之前：台账那一行刚追加进
                 # `verifications/<号>.jsonl`，`proof_review_gap` 现在读得到它。
-                # 只升不降、幂等、判不了就不写（见 `_grade_recomputed_from_signature`）。
+                # 这一格只把"按现行签现算的等级 + 凭什么"写进回执（`GRADE_RECOMPUTED_KEY`）；
+                # `evidence_kind` 一个字不动 —— 它只是历史列，判定面读等级。
                 recomputed = _grade_recomputed_from_signature(
                     new, root=getattr(store, "root", ""), proof_no=no)
-                new = recomputed["row"]
+                if recomputed["reading"]:
+                    new[GRADE_RECOMPUTED_KEY] = dict(recomputed["reading"])
                 tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
                 out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
                            kind_upgrade=dict(upgraded["kind_upgrade"]),
@@ -4221,57 +4240,72 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     return out
 
 
-#: 比 `proof_review` 更弱的证据档（降档告警用；顺序 = 由弱到强里的两档）。
+#: 比 `pre_theorem` 更弱的等级（降档告警用；2026-11-05 起读等级，不读档位）。
+WEAKER_THAN_PRE_THEOREM_GRADES: tuple[str, ...] = ("conjecture", "strong_conjecture")
+
+#: 历史档位名（保留导出只因 `secretary.py` 仍读它；那条 lane 的"声明档位退场"后延）。
+#: 判定面不再用它：`weaker_than_evidence_gaps` 读的是 :data:`WEAKER_THAN_PRE_THEOREM_GRADES`。
 WEAKER_THAN_PROOF_REVIEW: tuple[str, ...] = ("heuristic", "cross_check")
 
 
 def weaker_than_evidence_gaps(root: str | Path,
                               rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """一组 `statements` 行里够格 `proof_review` 却登记成更弱档的那些 —— 纯读。
+    """一组 `statements` 行里够格 `pre_theorem` 却现算成更弱等级的那些 —— 纯读。
+
+    ## 2026-11-05：这条读数改读等级
+    改前它读 `evidence_kind` 在 :data:`WEAKER_THAN_PROOF_REVIEW` 里（`heuristic` /
+    `cross_check`）；业主动裁「判定面一律读等级」之后，判据换成"现算等级低于
+    `pre_theorem`、而凭据已经够 `pre_theorem`"。这两件事在旧口径下几乎等价
+    （档位弱 ⇔ 等级弱），但新口径能看见旧口径看不见的那一类：档位写着 `proof`、
+    现算等级却只有 `strong_conjecture` 的行（真机 169 条不一致里有一批正是它）。
 
     ## 这条读数在说什么（2026-10-19，接 `proof_review_gap` 的反方向）
-    `proof_review_gap` 管"自称审过、其实没签"（虚报）；这里是它的镜像：凭据齐全、档位却写低了
-    （`heuristic` / `cross_check`）。真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text`
-    1909 字、`verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行正文
-    相符 ⇒ 按 `schema.EVIDENCE_KINDS` 的定义这条就是 `proof_review`，而盘上落的是 `heuristic`。
-    它不是虚报，所以不是 error：降档是安全方向，可以是有意的选择；但它必须是看得见的选择，不是
-    默认值 —— 长期把强结果写成弱档，论文的强度声明会系统性偏低，而没有任何读数会指出这一点。
-    判据只三条（与 `proof_review_gap` 同一处口径）：
-    1. `evidence_kind` 在 :data:`WEAKER_THAN_PROOF_REVIEW` 里；
+    `proof_review_gap` 管"自称审过、其实没签"（虚报）；这里是它的镜像：凭据齐全、
+    等级却现算得低。真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text` 1909 字、
+    `verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行正文
+    相符 ⇒ 按五元位现算就是 `pre_theorem`，而盘上落的是 `heuristic`。
+    它不是虚报，所以不是 error：降档是安全方向，可以是有意的选择；但它必须是看得见的
+    选择，不是默认值 —— 长期把强结果写成弱档，论文的强度声明会系统性偏低。
+
+    判据只三条：
+    1. 现算等级在 :data:`WEAKER_THAN_PRE_THEOREM_GRADES` 里；
     2. `proof_text` 非空（没有证明就谈不上"这份证明被审过"）；
-    3. `proof_review_gap(...)` 判 `ok=True`（把那一行按 `proof_review` 重判一遍：V 最近一签是
-       「成立」且 `proof_sha256` 等于现行正文）。
-    概念行（`kind="concept"`）跳过：概念不参与等级链（`evidencebits.derive_grade` 的 `not_applicable`）。
+    3. `proof_review_gap(...)` 判 `ok=True`（V 最近一签是「成立」且 `proof_sha256`
+       等于现行正文）。
+    概念行（`kind="concept"`）跳过：概念不参与等级链（`evidencebits.derive_grade` 的
+    `not_applicable`）。
     """
     out: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, Mapping):
             continue
-        ek = str(row.get("evidence_kind") or "")
-        if ek not in WEAKER_THAN_PROOF_REVIEW:
-            continue
         if str(row.get("kind") or "") == "concept":
+            continue
+        try:
+            bits = EB.bits_from_row(dict(row))
+            grade = EB.derive_grade(bits, kind=str(row.get("kind") or ""))
+        except Exception:  # noqa: BLE001 —— 算不出来不是"档位写低了"（三态：判不了就不判）
+            continue
+        if grade not in WEAKER_THAN_PRE_THEOREM_GRADES:
             continue
         if not str(row.get("proof_text") or "").strip():
             continue
-        probe = dict(row)
-        probe["evidence_kind"] = PROOF_REVIEW_KIND
-        gap = proof_review_gap(root, probe)
+        gap = proof_review_gap(root, row)
         if not gap.get("ok"):
             continue
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
         out.append({
             "statement_id": sid,
-            "evidence_kind": ek,
+            "grade": grade,
+            "evidence_kind": str(row.get("evidence_kind") or ""),
             "verification_id": gap.get("verification_id") or "",
             "ledger": gap.get("ledger") or "",
-            "why": (f"命题 {sid} 登记成 evidence_kind={ek!r}，而它的凭据已经够 "
-                    f"`proof_review`：`proof_text` 非空、`{gap.get('ledger') or ''}` 里 "
+            "why": (f"命题 {sid} 现算等级是 `{grade}`（低于 `pre_theorem`），而它的凭据"
+                    f"已经够 `pre_theorem`：`proof_text` 非空、`{gap.get('ledger') or ''}` 里 "
                     f"{gap.get('verification_id')} 签「成立」、`proof_sha256` 与现行正文相符"
                     "（判据与 `proof_review` 写入期那道闸同一处）。"
                     "降档是安全方向，所以这是 warning、不是 error；但它必须是有意的："
-                    "要么把这一行升成 `proof_review`（判据已够格，写入不会被拒），"
-                    "要么在报告里写清为什么故意留弱档。"),
+                    "要么让这一行的五元位如实反映那一签，要么在报告里写清为什么故意留弱档。"),
         })
     return out
 
@@ -4308,36 +4342,37 @@ def proof_review_gaps(root: str | Path, rows: Iterable[Mapping[str, Any]]) -> li
     return out
 
 
-#: `recompute_grades` 的四栏（顺序 = CLI 的打印顺序；业主 2026-11-04 定稿）。
+#: `recompute_grades` 的四栏（顺序 = CLI 的打印顺序；2026-11-05 改口径后第二栏
+#: 从"已是最高"改成"已经一致"—— 重刷不只往上升，也纠 105 条虚报）。
 #:
 #: 名字是字符串而不是枚举，是因为它们直接进 `--json` 与四栏表：读的人拿到的就是
 #: 这四个键。`not_enough` 里的 `state` 逐字取自 :func:`proof_review_gap`（不在本命令
 #: 里另造一套词表），`unchecked` 只收 `checked=False` 的那一档。
-GRADE_BACKFILL_COLUMNS: tuple[str, ...] = ("will_upgrade", "already_top",
+GRADE_BACKFILL_COLUMNS: tuple[str, ...] = ("will_upgrade", "already_consistent",
                                            "not_enough", "unchecked")
 
 
 def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> dict[str, Any]:
-    """按现行 V 的签把 `statements.evidence_kind` 重算一遍（四栏读数；`apply` 才写）。
+    """按现行 V 的签重算每一行的等级（四栏读数；`apply` 才把历史列反算回去）。
 
-    ## 这个函数在补哪条断链（业主 2026-11-04）
-    `evidence_kind` 原先只有一条升档路：同一份内容再登记一次时由
-    `Secretary._upgrade_evidence_kind` 改。于是"V 签了、之后没有人再登记"的行永远停在
-    旧档 —— 真机 `projects/paper-rewrite-84` 的 `000000`、`paper-rewrite-85` 的
-    `000004` / `000005` 逐条有签、档位却是 `heuristic`。`_grade_recomputed_from_signature`
-    已经在签落位那一刻按签重算；本函数只是把这同一个判据搬到"事后补一遍"这个入口上。
+    ## 2026-11-05 改口径：这一格从"补档位"变成"算等级"
+    业主动裁：「等级是唯一的轴……`evidence_kind` 只作历史列保留，判定面一律读等级」。
+    于是本命令的主读数从"该把 `evidence_kind` 写成哪一档"变成"按五元位现算，这一行
+    现在哪一级"：等级是 :func:`evidencebits.derive_grade` 的现算值，不是本命令造的目标。
 
     ## 判据只有一处
-    每一行都调 :func:`_grade_recomputed_from_signature`；本函数一个字都不重写"够不够
-    `proof_review`"的判据。四栏里"凭据不够"那一栏的 `state` 是
-    :func:`proof_review_gap` 的原值（`signed` / `holding` / `stale` / `rejected` /
-    `unsigned` / `unreadable`），不是本命令自造的枚举。
+    每一行都调 :func:`_grade_recomputed_from_signature`（它只算等级、不写档位）；
+    本函数一个字都不重写"够不够 `pre_theorem`"的判据。四栏里"凭据不够"那一栏的
+    `state` 是 :func:`proof_review_gap` 的原值（`signed` / `holding` / `stale` /
+    `rejected` / `unsigned` / `unreadable`），不是本命令自造的枚举。
 
-    ## 四栏（业主 2026-11-04 定稿）
-    - `will_upgrade`：`_grade_recomputed_from_signature` 给出 `to` 且与现行档不同
-      （只升不降，所以 `to` 只可能是 `proof` / `proof_review`）；
-    - `already_top`：现行档已经是 `proof` / `proof_review`（重算不会有第二个结果）；
-    - `not_enough`：查过了、结论是凭据不够 —— `state` 逐字是 `proof_review_gap().state`；
+    ## 四栏（顺序不变，语义改成等级）
+    - `will_upgrade`：现算等级与"历史档位反算出来的等级"不一致 —— 两个方向都收，
+      `direction` 逐条写 `up`/`down`。存量里 106 条 `cross_check→heuristic` 会降、
+      30 条 `cross_check→proof_review` 会升（分布见 `temp/grade_audit.py`）。
+    - `already_consistent`：现算等级与历史列的反算名已经一致（重刷不会动它）；
+    - `not_enough`：现算等级算不出来、而凭据闸有话说 —— `state` 逐字是
+      `proof_review_gap().state`；
     - `unchecked`：`checked=False`（台账读不出来 / 坏行 / 这一行根本查不了）＋ `why`。
     概念行（`kind="concept"`）不进四栏：概念不参与等级链（`evidencebits.derive_grade` 对
     它 `not_applicable`），把它折进任何一栏都是错读数。它们逐条记在 `concepts` 里，
@@ -4346,12 +4381,14 @@ def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> di
     ## `apply`
     `apply=True` 时逐条落盘（一行一笔 `store.tx("statements")`）：事务内重新读这一行、
     再调一次 `_grade_recomputed_from_signature`（盘在两次读之间可能变过），只有仍然
-    "会升"才 `tx.upsert`。读不出来的行一个字不写；写入失败记 `failed`、继续下一条。
-    写完逐条再读一次盘，只有盘上 `evidence_kind` 与 `_grade_recomputed.to` 都对上
-    才记 `written`，否则记 `unmoved`（"已写 / 未动"是两条不同的读数）。
+    "等级与历史档位不一致"才 `tx.upsert`。写的是反算名
+    （`evidencebits.kind_from_grade(等级)`）—— 档位若还出现，只能由等级反算
+    （业主原话），不是"本命令选了一个目标档"。读不出来的行一个字不写；写入失败记
+    `failed`、继续下一条。写完逐条再读一次盘，只有盘上现算等级与 `_grade_recomputed.to`
+    都对上才记 `written`，否则记 `unmoved`（"已写 / 未动"是两条不同的读数）。
 
-    幂等：已经是 `proof` / `proof_review` 的行在 `_grade_recomputed_from_signature` 里
-    第一句就返回 `{}`（不写第二个时间戳）⇒ 第二次 `apply` 全部落 `already_top`。
+    幂等：等级与反算名已经一致的行在 `_grade_recomputed_from_signature` 之后不会再动
+    ⇒ 第二次 `apply` 全部落 `already_top` 或 `not_enough`。
 
     返回键：`checked`（整张表读出来了吗）/ `apply` / `root` / `rows`（总行数）/
     `columns`（上面四栏）/ `concepts` / `written` / `unmoved` / `failed` / `why`。
@@ -4380,6 +4417,11 @@ def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> di
     out["checked"] = True
     out["rows"] = len(rows)
     pending: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    order = {g: i for i, g in enumerate(EB.GRADES)}
+
+    def _rank(grade: str) -> int:
+        return order.get(str(grade or ""), -1)
+
     for row in rows:
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
         cur = str(row.get("evidence_kind") or "").strip()
@@ -4394,50 +4436,45 @@ def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> di
             continue
         got = _grade_recomputed_from_signature(row, root=root_p)
         reading = dict(got.get("reading") or {})
-        target = str(reading.get("to") or "")
         if reading.get("checked") is False:
-            # 判据自己报"没查成"（异常那一支）。注意 reading 里也带 `to`（= 现行档），
-            # 所以必须先按 `checked=False` 分出去，不能看见 `to` 就当"会升"。
+            # 判据自己报"没查成"（异常那一支）。先按 `checked=False` 分出去。
             out["columns"]["unchecked"].append({
                 "statement_id": sid, "evidence_kind": cur, "state": "",
                 "why": str(reading.get("why") or "凭据没查成（读不出来）"),
             })
             continue
-        if target and target != cur:
+        # 现算等级直接读五元位（唯一入口 `derive_grade`）；`reading` 只提供
+        # "凭什么"（basis）与幂等判据，不提供等级 —— 后者由 `bits_from_row` 现算，
+        # 这样"没签 / 凭据不够"的行也能被如实判成"该降档"（纠虚报那 105+ 条）。
+        doc_kind = str(row.get("kind") or "")
+        try:
+            live_grade = EB.derive_grade(EB.bits_from_row(dict(row)), kind=doc_kind)
+        except Exception:  # noqa: BLE001 —— 算不出来按"没查成"记，不折成"一致"
+            out["columns"]["unchecked"].append({
+                "statement_id": sid, "evidence_kind": cur, "state": "",
+                "why": "五元位算不出来 ⇒ 这一行没查成（不是「一致」）",
+            })
+            continue
+        cur_grade = EB.KIND_TO_GRADE.get(cur, "")
+        if live_grade != cur_grade:
+            direction = "up" if _rank(live_grade) > _rank(cur_grade) else "down"
             out["columns"]["will_upgrade"].append({
-                "statement_id": sid, "from": cur or "（空）", "to": target,
+                "statement_id": sid,
+                # `from` / `to` 是等级；档位两列并列给出，读的人不必自己换算。
+                "from": cur_grade or "（空）", "to": live_grade,
+                "from_kind": cur or "（空）",
+                "to_kind": EB.kind_from_grade(live_grade),
+                "direction": direction,
                 "basis": str(reading.get("basis") or ""),
-                "channel": str(reading.get("channel") or ""),
-                "why": str(reading.get("why") or ""),
+                "why": str(reading.get("why") or (
+                    "历史档位与现算等级不一致：判定面读等级，重刷会按反算名改这一列"
+                    "（两个方向都改；降档是纠虚报）")),
             })
             pending.append((out["columns"]["will_upgrade"][-1], dict(got["row"])))
             continue
-        if cur in (PROOF_KIND, PROOF_REVIEW_KIND):
-            out["columns"]["already_top"].append(
-                {"statement_id": sid, "evidence_kind": cur})
-            continue
-        # 判据内部"不够"那一支不把 gap 交回来（`reading` 是空的）；这一栏要的是
-        # `proof_review_gap` 的原值 `state` ⇒ 在这里再读一次。读的是同一个判据，
-        # 不是第二份判档规则。
-        gap = proof_review_gap(root_p, row)
-        ledger = str(gap.get("ledger") or "")
-        # `state` 可能是空串（`proof_review_gap` 在"台账文件不在盘上 / 空文件 /
-        # 没有证明正文"这几支提前 return，没写 state）。不许在这里补一个枚举，但要把
-        # "空的原因"用 gap 自己的键（`ledger` / `rows` / `why`）原样交出去：
-        # `ledger_present=None` 表示 gap 连台账路径都没给（例如 proof_text 为空）。
-        ledger_present = (bool((root_p / ledger).is_file()) if ledger else None)
-        entry = {
-            "statement_id": sid, "evidence_kind": cur,
-            "state": str(gap.get("state") or ""),
-            "ledger": ledger,
-            "ledger_present": ledger_present,
-            "rows": int(gap.get("rows") or 0),
-            "why": str(gap.get("why") or ""),
-        }
-        if not gap.get("checked"):
-            out["columns"]["unchecked"].append(entry)
-        else:
-            out["columns"]["not_enough"].append(entry)
+        out["columns"]["already_consistent"].append(
+            {"statement_id": sid, "grade": live_grade, "evidence_kind": cur})
+        continue
     if apply and pending:
         _apply_grade_backfill(root_p, store, pending, out)
     return out
@@ -4448,6 +4485,9 @@ def _apply_grade_backfill(root: Path, store: Any,
                           out: dict[str, Any]) -> None:
     """`recompute_grades(apply=True)` 的写盘半：一行一笔事务 + 写后逐条读盘。
 
+    ## 写的是什么（2026-11-05）
+    写的是反算名：`evidencebits.kind_from_grade(等级)`。`_grade_recomputed_from_signature`
+    只算等级、不写档位；这一格是"档位若还出现，只能由等级反算"那条纪律的唯一写者。
     事务内重新读这一行、再跑一次 `_grade_recomputed_from_signature`：调用方手上那份
     `pending` 是几毫秒前算的，而盘可能已经变过（另一个进程刚补过签 / 刚改过正文）。
     判据仍然只有那一处；这里只决定"还写不写"。
@@ -4469,18 +4509,39 @@ def _apply_grade_backfill(root: Path, store: Any,
                     continue
                 fresh = _grade_recomputed_from_signature(current, root=root)
                 trace = dict(fresh.get("reading") or {})
+                try:
+                    live = EB.derive_grade(EB.bits_from_row(dict(current)),
+                                           kind=str(current.get("kind") or ""))
+                except Exception:  # noqa: BLE001 —— 算不出来 ⇒ 没查成，不动
+                    out["unmoved"].append({
+                        "statement_id": sid,
+                        "why": "事务内重算五元位失败 ⇒ 没查成，不动",
+                    })
+                    continue
+                target_kind = EB.kind_from_grade(live)
                 cur_now = str(current.get("evidence_kind") or "").strip()
-                target = str(trace.get("to") or "")
-                if trace.get("checked") is False or not target or target == cur_now:
+                if not target_kind or target_kind == cur_now:
                     out["unmoved"].append({
                         "statement_id": sid,
                         "why": str(trace.get("why")
-                                   or "重算结果不再是「会升」（盘在两次读之间变过）⇒ 没动"),
+                                   or "重算结果与历史列已经一致（盘在两次读之间变过）⇒ 没动"),
                     })
                     continue
-                tx.upsert("statements", fresh["row"],
+                if not trace:
+                    # 凭据那一支没给出回执（没签 / 凭据不够），而等级与历史列确实不一致
+                    # ⇒ 写盘仍要留痕。痕里的 `from`/`to` 是等级，`basis` 留空（没有签可指）。
+                    trace = {
+                        "checked": True, "from": EB.KIND_TO_GRADE.get(cur_now, ""),
+                        "to": live, "from_kind": cur_now, "to_kind": target_kind,
+                        "why": ("重刷：历史档位与现算等级不一致 ⇒ 按 `kind_from_grade` "
+                                "反算改写这一列（没有签可指，basis 为空）"),
+                        "basis": "", "proof_no": None, "at": _now_iso(),
+                    }
+                current["evidence_kind"] = target_kind
+                current[GRADE_RECOMPUTED_KEY] = dict(trace)
+                tx.upsert("statements", current,
                           note=f"repair.backfill_grades:{sid}")
-            attempted.append((entry, target))
+            attempted.append((entry, live))
         except Exception as exc:  # noqa: BLE001 —— 一条写失败不许拖住其余行
             out["failed"].append({
                 "statement_id": sid,
@@ -4506,19 +4567,27 @@ def _apply_grade_backfill(root: Path, store: Any,
         sid = str(entry.get("statement_id") or "")
         disk = disk_rows.get(sid) or {}
         trace = dict(disk.get(GRADE_RECOMPUTED_KEY) or {})
-        if (str(disk.get("evidence_kind") or "").strip() == target
+        try:
+            live_grade = EB.derive_grade(EB.bits_from_row(disk),
+                                         kind=str(disk.get("kind") or ""))
+        except Exception:  # noqa: BLE001 —— 读不回来按"没落到"记
+            live_grade = ""
+        if (live_grade == target
+                and str(disk.get("evidence_kind") or "").strip() == EB.kind_from_grade(target)
                 and str(trace.get("to") or "") == target):
             out["written"].append({
                 "statement_id": sid, "from": str(entry.get("from") or ""),
-                "to": target, "at": str(trace.get("at") or ""),
+                "to": target, "to_kind": EB.kind_from_grade(target),
+                "at": str(trace.get("at") or ""),
                 "basis": str(trace.get("basis") or ""),
             })
         else:
             out["unmoved"].append({
                 "statement_id": sid,
-                "why": (f"写完之后再读盘：evidence_kind={disk.get('evidence_kind')!r}、"
+                "why": (f"写完之后再读盘：现算等级={live_grade!r}、"
+                        f"evidence_kind={disk.get('evidence_kind')!r}、"
                         f"{GRADE_RECOMPUTED_KEY}.to="
-                        f"{str(trace.get('to') or '（没有痕）')!r} ⇒ 这一条没落到目标档"),
+                        f"{str(trace.get('to') or '（没有痕）')!r} ⇒ 这一条没落到目标等级"),
             })
 
 

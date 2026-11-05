@@ -628,15 +628,16 @@ class AgentV:
 
     # ---------------------------------------------------- 引用核实（业主 2026-10-26）
 
-    def _citation_admissibility(self, kind: str) -> bool:
-        """被引命题的档位够不够格被引（逐字：「proof_review级及以上才可引用」）。
+    def _citation_admissibility(self, grade: str) -> bool:
+        """被引命题的等级够不够格被引（2026-11-05：门槛读等级，`pre_theorem` 及以上）。
 
-        为什么单独一个具名方法：这一格是"档位判据"的唯一落点，而它必须能被打桩 ——
-        判据里的反真空就是把它打成恒放行 / 恒拒绝，看档位那两条是不是跟着红。
-        真身只有一处（`verifications.evidence_kind_admissible`，允许集合按
-        `schema.EVIDENCE_KINDS` 的强弱顺序现算），这里不抄第二份词表。
+        为什么单独一个具名方法：这一格是"可引判据"的唯一落点，而它必须能被打桩 ——
+        判据里的反真空就是把它打成恒放行 / 恒拒绝，看那两条是不是跟着红。
+        真身只有一处（`verifications.citation_grade_admissible` → 转发
+        `depsection.citation_level_allowed`，门槛字面量只在 `depsection.CITATION_MIN_LEVEL`
+        一处），这里不抄第二份词表、也不读历史档位。
         """
-        return VR.evidence_kind_admissible(kind)
+        return VR.citation_grade_admissible(grade)
 
     def _citation_checks(self, checks: list[dict[str, Any]],
                          material: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1121,9 +1122,9 @@ class AgentV:
                 signed_row = _signed_ledger_row(self.workspace_root, sid, no)
                 citations, citations_problem = _citation_material(self.store, sid, no)
                 for item in citations:
-                    # 档位判据走可打桩的那一格（`_citation_admissibility`，与循环里同一处）。
+                    # 可引判据走可打桩的那一格（`_citation_admissibility`，与循环里同一处）。
                     item["admissible"] = bool(
-                        self._citation_admissibility(item.get("evidence_kind") or ""))
+                        self._citation_admissibility(item.get("grade") or ""))
                 # 引用闸也是纯函数（`citation_gate`）：台账只在"这一档没查成"时存那一格
                 # （`problem` 非空，见 `record_verification`），其余情况按行上的逐条结论现算
                 # —— 两处读法必须与循环里那一趟相同，否则回放出来的闸与那一签当时的闸不同。
@@ -1194,8 +1195,8 @@ class AgentV:
         # 悄悄变成"三份不同东西的判断"。
         citations, citations_problem = _citation_material(self.store, sid, no)
         for item in citations:
-            # 档位判据走可打桩的那一格（`_citation_admissibility`），材料里存的是它的答案。
-            item["admissible"] = bool(self._citation_admissibility(item.get("evidence_kind") or ""))
+            # 可引判据走可打桩的那一格（`_citation_admissibility`），材料里存的是它的答案。
+            item["admissible"] = bool(self._citation_admissibility(item.get("grade") or ""))
         out["citations"] = citations
         facts = str(readonly_facts or "") or (
             _read_only_facts(self.store, sid) if self.store is not None else "")
@@ -2440,7 +2441,7 @@ class AgentV:
         改前这里直接 `vsigns.land(by=<从 conductor 读来的角色>)` —— `by=` 只是 V 的代码
         写的一句话，"落签在秘书"是约定的。现在落签只经
         :meth:`Secretary.land_unregistered_sign`：V 把 `vsigns.issue()` 的整份返回交过去，
-        块落哪一份稿、台账位翻不翻，都由秘书那一侧判（`agent_v/**` 里 0 处签写口）。
+        块落哪一份稿、台账位翻不翻，都由秘书那一侧判（`agent_v/` 里 0 处签写口）。
 
         收方身份（`by=` 与信封的 `to`）也由秘书给（`Secretary.actor_label`）：它是
         "这一签该由谁落"的唯一来源；读不到 ⇒ 空串 ⇒ 能颁发、不能落块，不猜一个 F/B。
