@@ -4866,6 +4866,19 @@ class Conductor:
     }
 
     @staticmethod
+    def _evidence_closed_item_prefixes() -> tuple[str, ...]:
+        """只能由框架凭证据收口的义务项前缀（`b-register@` / `v-resubmit@`）。
+
+        为什么是这两族（业主 2026-11-05）：「必须收录」与「必须重送」都是 `expects=work`
+        的活，它们的收口条件是盘上的事实（正文 + `reviewed=true` / 更新的干净「成立」行），
+        不是收件人的一句话。前缀的定义只有一处（`vreceipts.REGISTER_PREFIX` /
+        `RESUBMIT_PREFIX`），这里惰性读过去，不抄第二份字符串。
+        """
+        from . import vreceipts as _VRC   # 惰性：conductor 是底层，模块顶层不引它
+
+        return (str(_VRC.REGISTER_PREFIX), str(_VRC.RESUBMIT_PREFIX))
+
+    @staticmethod
     def item_move(cur: str, state: str) -> str:
         """合法迁移图的唯一读数：`(现态, 想去)` ⇒ `forward` / `same` / `back`。
 
@@ -5159,6 +5172,32 @@ class Conductor:
                     "reason": (f"{tid} 的 expects={expects_of or '（空）'} 与 close={close!r} "
                                "不配对（acked 只收 ack 类、completed 只收 work 类）⇒ "
                                "这一条一个字都没动")})
+                continue
+            # ---- 2026-11-05（业主）：义务项不许被 ack 关掉 --------------------
+            #
+            # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §A-4）：
+            # 6 条 `b-register@`「必须收录」义务从 20:5x 起一直 queued，收工时 30 条
+            # notice 未 ack —— 义务排在队里没人跑。业主的裁定：
+            #
+            #   「ack 只表示"看到了"」（`expects=ack` 的语义），而
+            #   `b-register@` / `v-resubmit@` 是"要交付的活"（`expects=work`）；
+            #   收口只有两条路：① 正文 + `reviewed=true`（框架凭证据收：`vreceipts` 的
+            #   `ensure_registration` / `settle_resubmitted` 调 `close_item_by_evidence`）；
+            #   ② 明确放弃 + 理由（`statement.abandon` → 那两条义务带 `expired` 收口）。
+            #
+            # 所以 `completed` / `expired` 这两个"看起来像办完了 / 作废了"的收口方式，
+            # 对这两族一律在这里拒：收件人自报"我办完了"不是证据。`acked` 那一档已被
+            # 上面的配对判据拒掉（acked 只配 ack 类），这里补的是"换个 close 自报完成"。
+            _obligation_prefixes = self._evidence_closed_item_prefixes()
+            if (str(row.get("input_key") or "").startswith(_obligation_prefixes)
+                    and close in ("completed", "expired")):
+                out["refused"].append({
+                    "item_id": tid, "code": "obligation_needs_evidence",
+                    "reason": (f"{tid} 是「必须收录 / 必须重送」义务"
+                               f"（`{str(row.get('input_key') or '')}`）⇒ 收件人不能自己把它"
+                               f"收成 {close!r}：ack 只表示看到了，办完与否由框架按盘上的事实"
+                               "核（正文 + `reviewed=true`），放弃要 `statement.abandon` 并"
+                               "带理由。这一条一个字都没动")})
                 continue
             # 已在终态的项不在这里另判一次（2026-10-26 Q24）：那只手是"同一终态重复
             # 设置"在状态机外面的第二份实现。改后照状态机的结论 —— `_set_item` 把它判成

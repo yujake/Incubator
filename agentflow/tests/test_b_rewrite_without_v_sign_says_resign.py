@@ -214,7 +214,9 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
 
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
                         parent_role="F"):
-        got = _agent_v(st, review, seam).verify_proof(proof_manuscript=man_rel)
+        # 2026-11-05：没有命题号就没有可签的对象 ⇒ 这一走要带号（命题已在册）。
+        got = _agent_v(st, review, seam).verify_proof(
+            SID, proof_manuscript=man_rel)
     assert review.asked() == 3, (
         f"一次 verify_proof 只问了 {review.asked()} 次模型 ⇒ 「连续 3 次」还得靠人送三次")
     assert got.get("checked") is True, got

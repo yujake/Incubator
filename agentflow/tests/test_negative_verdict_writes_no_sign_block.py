@@ -178,11 +178,13 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     assert VS.SIGN_MARK not in after, after
 
 
-# ============================================================ b 反真空
-def test_b_three_clean_passes_still_stamp_a_block(tmp_path):
-    """反真空：三转全干净 ⇒ 块必须出现（甲不是"永远不写块"）。
+# ============================================================ b 不产签（2026-11-05）
+def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
+    """三转全干净 ⇒ 读数成立，但计划稿不是签的载体、又没有命题号 ⇒ 不产签、不写块。
 
-    这一条同时钉第 9 格：块里 `手稿号=plan-0000`，读侧 `identity_state=resolved`。
+    改前这一条是"块必须出现"的反真空（甲不是"永远不写块"）。2026-11-05 的裁定反过来了：
+    没有命题号就没有可签的对象；要验"块真的会写"，看 `test_b_rewrite_*`（在册那一支，
+    带号）。这一条保留的是它的另一半：计划稿上不许出现签块。
     """
     st = _ws(tmp_path)
     path = _manuscript_file(st)
@@ -192,21 +194,11 @@ def test_b_three_clean_passes_still_stamp_a_block(tmp_path):
         got = v.verify_proof(proof_manuscript=REL)
 
     assert seam.asked() == 3, seam.asked()
-    assert got.get("kind") == "proof_unregistered_signed", got
+    assert got.get("kind") == "proof_reviewed_not_signed", got
+    assert got.get("reason") == "statement_id_missing", got
     text = path.read_text(encoding="utf-8")
-    assert text.count(VS.SIGN_MARK) == 1, text
-    block = VS.manuscript_sign_reading(text, manuscript_path=REL)
-    assert block["found"] is True and block["signed"] is True, block
-    assert (block["streak"], block["need"]) == (3, 3), block
-    assert block["proof_sha256"] == VR.proof_sha(PROOF_BODY), block
-    assert block["manuscript_id"] == "plan-0000", block
-    assert block["identity_state"] == "resolved", block
-    # 9 格都在（第 9 格 = 手稿号）。
-    cells = [c.split("=", 1)[0] for c in block["mark"][len(VS.SIGN_MARK):].split("；")]
-    assert tuple(cells) == VS.SIGN_BLOCK_KEYS, cells
-    standing = VS.manuscript_sign_standing(text, proof_sha=VR.proof_sha(PROOF_BODY),
-                                           manuscript_path=REL)
-    assert standing["state"] == "signed", standing
+    assert text.count(VS.SIGN_MARK) == 0, text
+    assert not VS.sign_path(st.root, VR.proof_sha(PROOF_BODY)).exists()
 
 
 # ============================================================ c 读侧兼容
@@ -225,13 +217,15 @@ def test_c_legacy_and_signed_blocks_keep_reading_as_signed(tmp_path):
     assert reading["identity_state"] == "legacy", reading
     assert VS.manuscript_sign_standing(legacy_text, proof_sha=sha,
                                        manuscript_path=REL)["state"] == "signed"
-    # 85 的形状：9 格、手稿号与稿名相同。
+    # 85 的形状：9 格、手稿号与稿名相同。计划稿是合法落稿名，但不是签的载体
+    # （2026-11-05）⇒ 身份只到 `unmatched`，不许读成 resolved。
     fresh = VS.stamp_manuscript_sign(
         MANUSCRIPT, proof_sha=sha, streak=3, need=3, verdict="成立", signer="V",
         at="2026-11-02T21:53:55+08:00", ledger="verifications/000004.jsonl#v-000004",
         statement_id="000004", manuscript_id="plan-0000")
     got = VS.manuscript_sign_reading(fresh, manuscript_path=REL)
-    assert got["signed"] is True and got["identity_state"] == "resolved", got
+    assert got["signed"] is True and got["identity_state"] == "unmatched", got
+    assert "不是签的载体" in str(got.get("identity_why") or ""), got
     assert VS.manuscript_sign_standing(fresh, proof_sha=sha,
                                        manuscript_path=REL)["state"] == "signed"
 
@@ -245,7 +239,8 @@ def test_c2_an_unsigned_block_is_not_read_as_signed(tmp_path):
         manuscript_id="plan-0000", signed=False)
     reading = VS.manuscript_sign_reading(unsigned, manuscript_path=REL)
     assert reading["found"] is True and reading["signed"] is False, reading
-    assert reading["identity_state"] == "resolved", reading
+    # 计划稿不是签的载体（2026-11-05）：号对得上也只到 `unmatched`。
+    assert reading["identity_state"] == "unmatched", reading
     assert reading["verdict"] == "有毛病", reading
     standing = VS.manuscript_sign_standing(unsigned, proof_sha=sha, manuscript_path=REL)
     assert standing["state"] == "rejected", standing

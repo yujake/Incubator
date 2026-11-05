@@ -79,11 +79,18 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
+def _passes() -> list[dict]:
+    """2026-11-05：签的三道必填闸要求 `passes` 逐转带读数（verification_id / at /
+    proof_sha256），最后一转就是 `ledger` 指的那一行。夹具给三条同 sha 的读数。"""
+    return [{"verification_id": f"v-{i:06d}", "at": TS, "proof_sha256": SHA,
+             "why": "夹具：这一转判「成立」"} for i in (1, 2, 3)]
+
+
 def _issue(st: Store, *, by: str = "secretary:F") -> dict:
     return VS.issue(
         st.root, artifact_sha=SHA, streak=3, need=3, artifact_path=REL,
-        ledger=f"verifications/{SID}.jsonl#v-000010", statement_id=SID,
-        proof_no=1, at=TS, by=by)
+        ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
+        proof_no=1, passes=_passes(), at=TS, by=by)
 
 
 def _land(st: Store, *, by: str = "secretary:F") -> dict:
@@ -239,13 +246,17 @@ def test_h_the_direct_path_issues_but_cannot_land_by_itself(tmp_path: pathlib.Pa
     assert _bits(st).get("reviewed") is False
 
 
-# ====================================================================== i 秘书落未在册
+# ====================================================================== i 秘书落签
 def _unregistered_issue(st: Store) -> dict:
-    """未在册那一档的签：没有命题号，落点只有手稿（`statement_id=""`）。"""
+    """一份合法的签（2026-11-05 起：没有命题号就没有签，所以这里带号）。
+
+    这一组量的是 `Secretary.land_unregistered_sign()` 这个落签口本身（旧工作区里有
+    没有命题号的历史签要走它），不是"未在册还能不能签发"。
+    """
     return VS.issue(
         st.root, artifact_sha=SHA, streak=3, need=3, artifact_path=REL,
-        ledger=f"{REL}#V签", statement_id="", proof_no=1, at=TS,
-        by="secretary:F")
+        ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
+        proof_no=1, passes=_passes(), at=TS, by="secretary:F")
 
 
 def test_i_the_secretary_lands_an_unregistered_envelope(tmp_path: pathlib.Path) -> None:

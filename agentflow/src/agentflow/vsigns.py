@@ -138,6 +138,32 @@ SECRETARY_OF: tuple[str, ...] = ("secretary:F", "secretary:B", "secretary:E")
 #: 非收方秘书来落签时的原因码（受控拒绝；调用方按它分句，不许折成"系统故障"）。
 NOT_A_SECRETARY = "not_a_secretary"
 
+#: 「签」的三道必填闸（业主 2026-11-05；每个码都是受控拒绝，零字节）。
+#:
+#: 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §A-1/A-2）：
+#: `out/vsigns/issued.json` 里 8 条「连续 3/3 成立」的签，4 条的 `statement_id` 是空串、
+#: 4 条的 `ledger` 指向稿头自己那一行签块（`reports/<稿>#V签`），`passes` 三格全是占位。
+#: 三件事合起来就是「稿头自己写已签 3/3」也能拿到一份签 —— 签不再是证据，只是一句话。
+#:
+#: | 码 | 什么被拒 | 判据 |
+#: |---|---|---|
+#: | `statement_id_missing` | 没有命题号 | 签的对象是 `statements` 里的那一条；没有号就没有可签的对象 |
+#: | `ledger_not_verification` | 台账不是 V 自己那本 | 必须 `verifications/<命题号>.jsonl#v-…`；稿头自述（`#V签`）不是证据 |
+#: | `passes_incomplete` | 三转里有一转没有读数 | 每一转都要 `verification_id` / `at` / `proof_sha256`；三格全空的占位不算「成立」 |
+STATEMENT_ID_MISSING = "statement_id_missing"
+LEDGER_NOT_VERIFICATION = "ledger_not_verification"
+PASSES_INCOMPLETE = "passes_incomplete"
+
+#: 命题号的形态（与 `schema.is_valid_id` 同一套：当前六位、旧四位读侧兼容）。
+#: 这里不 import `schema`：`vsigns` 是产物层，判据只认"号是不是号"这一件事。
+_STATEMENT_ID_RE = re.compile(r"^\d{4,6}$")
+
+#: V 台账的锚点形状：`verifications/<命题号>.jsonl#v-<号>`。
+#: 只有这一种形状的 `ledger` 算证据 —— 稿头自述（`reports/… #V签`）、pending 台账
+#: （`verifications/pending/<sha>.jsonl`）都不在这条射程内。
+_LEDGER_ANCHOR_RE = re.compile(
+    r"^verifications/(?P<sid>\d{4,6})\.jsonl#(?P<vid>v-[0-9]+)$")
+
 #: 颁发时写给收方秘书的那个信封的 `kind`（它是签文件里的一格，不是另一份文件）。
 #:
 #: 为什么要有它：颁发（V）与落签（收方）拆开之后，"这签该由谁落"必须有一处写得下来
@@ -514,13 +540,79 @@ MANUSCRIPT_WRITE_UNRECORDED = "unrecorded"
 #: 多证明手稿名认不出来时的受控码（2026-11-04 业主裁定）。
 MANUSCRIPT_NAME_BAD = "bad_manuscript_name"
 
-#: 证明手稿名的显式规则（2026-11-04 业主裁定）：
+#: 计划稿不是签的载体（业主 2026-11-05）。
+#:
+#: 现场（`REPORT-R-mk-infinite-90-20261105.md` §A-8）：`reports/f-proof-plan-000011.md`
+#: 拿到了 3/3 的 V 签，签块第 9 格写 `plan-000011`、`identity_state=resolved` ——
+#: 计划稿被当成了一份手稿。
+#:
+#: ## 两件事必须分开（父裁定，2026-11-05）
+#: ```text
+#: 计划稿不是签的载体   ⇒ 签发 / 落签 / 认签只认 `reports/(f|b|e)-proof-<数字>.md`
+#: 计划稿是合法的落稿名 ⇒ `manuscriptform.name_reading` 仍按计划名拼、仍能解析
+#: ```
+#: 「先落计划名、拿到号再改名」是 F 的既有工作流；所以 :func:`parse_manuscript_name`
+#: 一个字节都不改（`plan-<数字>` 仍是它认得的一种号），只在签的那三个入口
+#: （:func:`is_sign_carrier` / :func:`manuscript_sign_reading` 的身份判定 /
+#: :func:`land`）上把计划稿排除掉。
+MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
+
+#: 证明手稿名的显式规则（业主 2026-11-04 裁定）：
 #: `<prefix>-proof-<号>[-p<N>].md` ⇒ `(裸稿号, proof_no=N)`。
-#: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮）；
+#: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮，落稿名合法）；
 #: - `-p<N>`：N 是 ≥1 的十进制，缺省 1（canonical）；`-p0` / `-pabc` / 号里带别的
 #:   后缀一律不认（认不出就受控拒绝，不猜）。
 _MANUSCRIPT_NAME_RE = re.compile(
     r"^(?P<prefix>.*?)-proof-(?P<id>\d{4,6}|plan-\d+)(?:-p(?P<no>[1-9]\d*))?$")
+
+#: 「签的载体」这一族的名字（2026-11-05）：只认 `reports/(f|b|e)-proof-<数字>[-p<N>].md`。
+#: 计划稿（`f-proof-plan-<数字>`）不在这里 —— 它是合法的落稿名，但不是签的载体。
+_SIGN_CARRIER_RE = re.compile(
+    r"^(?P<prefix>f|b|e)-proof-(?P<id>\d{4,6})(?:-p(?P<no>[1-9]\d*))?$")
+
+
+def sign_carrier_reading(path: Any) -> dict[str, Any]:
+    """这一份稿是不是「签的载体」（2026-11-05 业主：计划稿不是）。
+
+    判据刻意只排除计划稿（`*-proof-plan-<数字>`），不把别的名字一并拒掉：
+    既有口径允许 `notes/proof.md` 这类认不出号的名字被签（第 9 格落空、B 按
+    `unmatched` 处理），而「先落计划名、拿到号再改名」是 F 的落稿流程。两件事分开：
+
+    - 计划稿：合法的落稿名，不是签的载体 ⇒ `ok=False`、码
+      :data:`MANUSCRIPT_NAME_PLAN`；
+    - 正式手稿名（`reports/(f|b|e)-proof-<数字>.md`）：签的载体，第 9 格能认出号；
+    - 其余名字：`ok=True`（不是计划稿就不在这一条判据上拒），但第 9 格可能认不出号
+      （由 :func:`manuscript_id_of` 判，空号 ⇒ 身份 `unmatched`）。
+
+    返回 `{ok, code, reason, name}`；`ok=False` 不许折成"可以签"。
+    """
+    name = str(path or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
+    if name.lower().endswith(".md"):
+        name = name[:-3]
+    out: dict[str, Any] = {"ok": False, "code": MANUSCRIPT_NAME_BAD,
+                           "reason": "", "name": name}
+    if not name:
+        out["reason"] = "没有手稿名 ⇒ 不是签的载体（签要有对象，稿要有名字）"
+        return out
+    if _SIGN_CARRIER_RE.match(name):
+        out.update(ok=True, code="")
+        return out
+    if re.match(r"^(?:f|b|e)-proof-plan-\d+(?:-p[1-9]\d*)?$", name) \
+            or re.match(r"^.*-proof-plan-\d+$", name):
+        out.update(code=MANUSCRIPT_NAME_PLAN,
+                   reason=(f"`{name}` 是计划稿（`*-proof-plan-<数字>`）：它是合法的落稿名"
+                           "（F 先落计划名、拿到号再改名），但不是签的载体 —— "
+                           "签要盖在一条命题的证明上，计划稿写的是下一步怎么做。"
+                           "要签就把它转成 `reports/{f,b,e}-proof-<命题号>.md`"))
+        return out
+    # 既不是正式手稿名、也不是计划稿：沿用既有口径（可以签，第 9 格按号认不认得出走）。
+    out.update(ok=True, code="")
+    return out
+
+
+def is_sign_carrier(path: Any) -> bool:
+    """`sign_carrier_reading(path)["ok"]` 的布尔读法（判据只走那一个函数）。"""
+    return bool(sign_carrier_reading(path).get("ok"))
 
 
 def parse_manuscript_name(path: Any) -> dict[str, Any]:
@@ -532,13 +624,16 @@ def parse_manuscript_name(path: Any) -> dict[str, Any]:
     |---|---|
     | `reports/f-proof-000000.md` | `family=True, id=000000, proof_no=1` |
     | `reports/f-proof-000000-p2.md` | `family=True, id=000000, proof_no=2` |
-    | `reports/f-proof-plan-0001.md` | `family=True, id=plan-0001, proof_no=1` |
+    | `reports/f-proof-plan-0001.md` | `family=True, id=plan-0001, proof_no=1`（落稿名合法；签的载体另判，见 :func:`sign_carrier_reading`） |
     | `notes/proof.md` | `family=False, id="", checked=True`（不是这个家族，不拒绝） |
     | `reports/f-proof-abc.md` | `checked=False, code=bad_manuscript_name`（受控拒） |
 
     `family=False` 与 `checked=False` 是两件事：前者是"这个文件名不在 `*-proof-<号>`
     家族里"（V 仍可签别的文件，只是第 9 格认不出号），后者是"它明明像一份证明手稿，
     号却认不出"（写块那一步必须拒，不能猜一个号）。
+
+    2026-11-05（父裁定）：这里不改 —— 计划稿仍是合法的落稿名（F 的流程是"先落计划名、
+    拿到号再改名"）。不许拿它当签的载体是另一条判据，落在 :func:`sign_carrier_reading`。
     """
     out: dict[str, Any] = {"checked": True, "family": False, "manuscript_id": "",
                            "proof_no": 0, "code": "", "reason": "", "name": ""}
@@ -689,8 +784,19 @@ def manuscript_sign_reading(text: str, *, manuscript_path: Any = "") -> dict[str
                 out["identity_why"] = ("读的时候没给手稿路径 ⇒ 这一格对不上任何一份稿"
                                        "（不是「签过了」）")
             elif out["manuscript_key"] and out["manuscript_id"] == out["manuscript_key"]:
-                out["identity_state"] = "resolved"
-                out["identity_why"] = (f"签块的手稿号 {out['manuscript_id']} 与这一份稿相同")
+                # 2026-11-05（父裁定）：号对上还不够 —— 它必须是签的载体。
+                # 计划稿（`f-proof-plan-*`）的号是 `plan-<数字>`，与它所在的稿同名，
+                # 改前因此被判 `resolved`（真机 883c3097：`plan-000011` 拿到 3/3 签）。
+                # 签的载体只认 `reports/(f|b|e)-proof-<数字>.md`。
+                _carrier = sign_carrier_reading(manuscript_path)
+                if not _carrier.get("ok"):
+                    out["identity_state"] = "unmatched"
+                    out["identity_why"] = (
+                        f"签块的手稿号 {out['manuscript_id']} 与这一份稿相同，"
+                        f"但这一份稿不是签的载体：{_carrier.get('reason')}")
+                else:
+                    out["identity_state"] = "resolved"
+                    out["identity_why"] = (f"签块的手稿号 {out['manuscript_id']} 与这一份稿相同")
             else:
                 out["identity_state"] = "unmatched"
                 out["identity_why"] = (
@@ -1383,6 +1489,91 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
 
 # ---------------------------------------------------------------- 颁发（V 的动作）
 
+def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
+                     passes: Any, need: Any) -> dict[str, Any]:
+    """「这一份签有没有对象、有没有证据」的三道必填闸（纯读；一个字节都不写）。
+
+    业主 2026-11-05 的裁定落在三件事上（现场见模块常量那一段）：
+
+    1. 没有命题号就没有可签的对象：签的对象是 `statements` 里的那一条命题，
+       `statement_id` 是空串（或不是编号形态）⇒ 受控拒绝 :data:`STATEMENT_ID_MISSING`；
+    2. 台账只能是 V 自己那本：`ledger` 必须形如
+       `verifications/<命题号>.jsonl#v-<号>`，且号就是这一条命题 —— 稿头自己写的
+       「已签 3/3」（`reports/<稿>#V签`）不是证据，受控拒绝 :data:`LEDGER_NOT_VERIFICATION`；
+    3. 三转都要有读数：`passes` 至少 `need` 条，每条都要带
+       `verification_id` / `at` / `proof_sha256`，且 sha 就是被签的正文 sha；末尾那一转
+       必须正是 `ledger` 指的那一签 —— 三格全空的占位不许被数成「连续 3/3」，
+       受控拒绝 :data:`PASSES_INCOMPLETE`。
+
+    三态：返回 `{ok, code, reason}`。`ok=False` 的每一档都是"这一签不成立"，
+    调用方按 `code` 分句；这里不抛异常（拒绝是读数，不是故障）。
+
+    为什么闸放在 :func:`issue` 里：它是写签的唯一入口（模块 docstring 那一句
+    「本函数是写签的唯一入口」）。放在调用点各判一次，等于给第二条写入口留缝。
+    """
+    out: dict[str, Any] = {"ok": False, "code": "", "reason": ""}
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out.update(code=STATEMENT_ID_MISSING, reason=(
+            "没有命题号就没有可签的对象：`statement_id` 是空的 ⇒ 这一签不颁发"
+            "（一个字节都不写）。签的对象是 `statements` 里的那一条命题 —— 先让 B "
+            "登记这一条拿到号，再带 `statement_id=<号>` + `proof_manuscript` 送审；"
+            "只给手稿、不给号的「未在册」那一档不再产签，它的读数只到「看过、没签」。"))
+        return out
+    if not _STATEMENT_ID_RE.match(sid):
+        out.update(code=STATEMENT_ID_MISSING, reason=(
+            f"`statement_id={sid!r}` 不是命题号形态（4–6 位十进制，与 "
+            "`statements.stmt_id` 同一套）⇒ 这一签不颁发（一个字节都不写）："
+            "没有可指认的对象，签就没有落点"))
+        return out
+    anchor = _LEDGER_ANCHOR_RE.match(str(ledger or "").strip())
+    if anchor is None:
+        out.update(code=LEDGER_NOT_VERIFICATION, reason=(
+            f"`ledger={str(ledger or '')!r}` 不是 V 自己那本台账"
+            "（要 `verifications/<命题号>.jsonl#v-<号>`）⇒ 这一签不颁发"
+            "（一个字节都不写）。稿头上自己写的「已签 3/3」（`reports/<稿>#V签`）"
+            "不是证据：它只是这份稿的一句话，拿它当台账等于自己给自己作证；"
+            "`verifications/pending/` 那一档也不在射程内（命题还没在册，没有可签的对象）"))
+        return out
+    if str(anchor.group("sid")) != sid:
+        out.update(code=LEDGER_NOT_VERIFICATION, reason=(
+            f"台账 `{str(ledger or '')}` 是命题 {anchor.group('sid')} 的，而这一签要签 "
+            f"stmt:{sid} ⇒ 不颁发（同一份正文被别的命题复用不算签过）"))
+        return out
+    entries = [dict(p) for p in (passes or ()) if isinstance(p, Mapping)]
+    want = max(1, int(need or 1))
+    if len(entries) < want:
+        out.update(code=PASSES_INCOMPLETE, reason=(
+            f"`passes` 只有 {len(entries)} 条，而门槛是连续 {want} 次「成立」⇒ 不算 "
+            f"{want}/{want}（一个字节都不写）：每一转都要有自己的读数，"
+            "没有读数的「成立」不是票"))
+        return out
+    #: 被签正文的 sha（调用方已经过 `_sha_key`；这里再取一次，闸自己判）。
+    sha = str(artifact_sha or "").strip().lower()
+    for i, one in enumerate(entries, 1):
+        missing = [k for k in ("verification_id", "at", "proof_sha256")
+                   if not str(one.get(k) or "").strip()]
+        if missing:
+            out.update(code=PASSES_INCOMPLETE, reason=(
+                f"第 {i} 转的 `passes` 缺 {missing} ⇒ 三格全空的占位不算「成立」："
+                "每一转都要点名台账行（`verification_id`）、时间、被签正文的 sha，"
+                "否则「连续 3/3」只是三个空对象（这一签不颁发，一个字节都不写）"))
+            return out
+        if str(one.get("proof_sha256") or "").strip().lower() != sha:
+            out.update(code=PASSES_INCOMPLETE, reason=(
+                f"第 {i} 转的 `proof_sha256` 不是被签正文的 sha（{sha[:12]}…）⇒ "
+                "这三转不是同一份正文的票，不算连续「成立」（这一签不颁发）"))
+            return out
+    if str(entries[-1].get("verification_id") or "").strip() != str(anchor.group("vid")):
+        out.update(code=PASSES_INCOMPLETE, reason=(
+            f"`ledger` 指向 `{anchor.group('vid')}`，而 `passes` 最后一转是 "
+            f"`{entries[-1].get('verification_id')}` ⇒ 台账与票不是同一次送审，"
+            "这一签不颁发（一签只认同一趟的那几转）"))
+        return out
+    out.update(ok=True)
+    return out
+
+
 def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
           artifact_path: str = "", ledger: str = "", statement_id: str = "",
           proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
@@ -1441,6 +1632,16 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out.update(refused_below_need=True,
                    reason=(f"连续「成立」{int(streak)}/{int(need)} 次 ⇒ 一个字节都不写："
                            "未达门槛就没有签（业主：只有连续三次审核通过这才叫 V 签）"))
+        return out
+    # ---- 2026-11-05：签的对象与证据（三道必填闸，零字节）----------------------
+    #
+    # 位置在"门槛"之后、"建目录/写文件"之前：拒绝要发生在任何一个字节落盘之前
+    # （与上面 `by` 与 sha 两道前置判据同一条纪律）。三档各自有码，调用方按码分句。
+    gate = sign_object_gate(artifact_sha=key, statement_id=statement_id,
+                            ledger=ledger, passes=passes, need=need)
+    if not gate.get("ok"):
+        out.update(code=str(gate.get("code") or ""),
+                   reason=str(gate.get("reason") or ""))
         return out
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
                 "issued_by": "V"}
@@ -1645,6 +1846,17 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
     if _parsed_name.get("family") and not _parsed_name.get("checked"):
         out.update(code=str(_parsed_name.get("code") or MANUSCRIPT_NAME_BAD),
                    reason=(f"落签没成：{_parsed_name.get('reason') or '手稿名认不出号'}"
+                           " ⇒ 一个字节都不写"))
+        return out
+    # ---- 2026-11-05（父裁定）：计划稿不是签的载体，落签也不许盖到它上面 --------
+    #
+    # `parse_manuscript_name` 照旧认计划名（F 的落稿流程要用），但"签的载体"是另一条
+    # 判据：只认 `reports/(f|b|e)-proof-<数字>.md`。计划稿的签块会让 B 的收录认签读到
+    # 一个 `plan-<数字>` 的稿号（真机 883c3097），而那个号在 `statements` 里不存在。
+    _carrier = sign_carrier_reading(rel_manuscript)
+    if str(rel_manuscript or "").strip() and not _carrier.get("ok"):
+        out.update(code=str(_carrier.get("code") or MANUSCRIPT_NAME_BAD),
+                   reason=(f"落签没成：{_carrier.get('reason') or '这不是签的载体'}"
                            " ⇒ 一个字节都不写"))
         return out
     # ---- 缺陷 A（2026-11-05）：块上那两格从台账现锚，不再抄签文件的旧值 --------

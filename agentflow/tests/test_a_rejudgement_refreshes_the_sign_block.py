@@ -110,10 +110,18 @@ def _sign(st: Store, *, streak: int = 3, need: int = 3, at: str = OLD_AT,
     """走真写口发签 + 落签（收方秘书 = F 的秘书）。"""
     rows, _bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
     sha = str(rows[-1].get("proof_sha256") or "")
+    # 2026-11-05：签的三道必填闸要求 `passes` 逐转带读数（verification_id / at /
+    # proof_sha256），最后一转就是 `ledger` 指的那一行。夹具从真台账取这三条，
+    # 不手编 id —— 手编的 id 正是"三格全空的占位"那一档要堵的形态。
+    passes = [{"verification_id": str(r.get("verification_id") or ""),
+               "at": str(r.get("at") or ""),
+               "proof_sha256": str(r.get("proof_sha256") or ""),
+               "why": str(r.get("why") or "")}
+              for r in rows[-int(need):]]
     issued = VS.issue(
         st.root, artifact_sha=sha, streak=streak, need=need, artifact_path=REL,
         ledger=(ledger or f"verifications/{SID}.jsonl#{rows[-1]['verification_id']}"),
-        statement_id=SID, proof_no=1, at=at, by="secretary:F")
+        statement_id=SID, proof_no=1, passes=passes, at=at, by="secretary:F")
     landed = VS.land(st.root, artifact_sha=sha, by="secretary:F",
                      manuscript_path=REL, store=None, statement_id=SID, proof_no=1)
     return {"issued": issued, "landed": landed, "sha": sha}

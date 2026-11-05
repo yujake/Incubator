@@ -136,56 +136,56 @@ def test_a_e_writes_a_proof_manuscript_in_the_f_shape(tmp_path):
         assert heading in text, heading
 
 
-# ============================================================ ② V 三轮 ⇒ 秘书落块
-def test_b_three_rounds_stamp_the_block_through_the_e_secretary(tmp_path):
-    """② E 派 V（未在册）⇒ 三轮都成立 ⇒ 块由 `secretary:E` 落进稿，信封也给她。"""
+# ============================================================ ② E 三轮 ⇒ 不产签
+def test_b_three_rounds_still_do_not_produce_a_sign_without_a_statement_id(tmp_path):
+    """② E 派 V（未在册）⇒ 三轮都成立，但没有命题号 ⇒ 不产签（2026-11-05）。"""
     env = _env(tmp_path)
     rel, text = _manuscript(env)
     with _submitted_by_e():
         got = env["v"].verify_proof(proof_manuscript=rel)
 
     assert got.get("checked") is True, got
-    assert got.get("kind") == "proof_unregistered_signed", got
+    assert got.get("kind") == "proof_reviewed_not_signed", got
+    assert got.get("reason") == "statement_id_missing", got
     passes = list(got.get("review_passes") or [])
     assert [p["pass"] for p in passes] == [1, 2, 3], passes
     assert [p["verdict"] for p in passes] == ["成立"] * VR.SIGN_STREAK_NEED, passes
 
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     block = VS.manuscript_sign_reading(now, manuscript_path=rel)
-    assert block["found"] is True and block["signed"] is True, block
-    assert (block["streak"], block["need"]) == (VR.SIGN_STREAK_NEED, VR.SIGN_STREAK_NEED), block
-    assert block["signer"] == "secretary:E", block
-    assert block["proof_sha256"] == VR.proof_sha(_column(env)), block
+    assert block["found"] is False, block
+    assert not VS.sign_path(env["store"].root, VR.proof_sha(_column(env))).exists(), (
+        "没有命题号却产出了签文件")
 
-    doc = json.loads(VS.sign_path(env["store"].root,
-                                  VR.proof_sha(_column(env))).read_text(encoding="utf-8"))
-    assert doc["written_by"] == "secretary:E", doc["written_by"]
-    assert doc["envelope"]["to"] == "secretary:E", doc.get("envelope")
-    assert doc["artifact_path"] == rel, doc["artifact_path"]
-
-    # B 的第三方签字闸读的是 pending 台账（按对象 sha）：她那一行必须落在报告的真 sha 上
+    # 审阅本身仍然留账（pending 台账是"审过的记录"，不是签；它按对象 sha 落在报告上）。
     pend = pathlib.Path(env["store"].root) / "verifications" / "pending"
     rows = [json.loads(ln) for p in sorted(pend.glob("*.jsonl"))
             for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert rows, "pending 台账一行都没有 ⇒ B 的入库闸认不到这一签"
+    assert rows, "pending 台账一行都没有 ⇒ 这一趟的会审没有留下任何记录"
     assert any(str(r.get("object_sha256") or "") == env["out"]["report_sha256"]
                and str(r.get("verdict")) == "成立" for r in rows), rows
 
 
-# ============================================================ ③ B 收录：读到签 + optimized=false
-def test_c_b_collects_the_signed_manuscript_and_records_optimized(tmp_path):
-    """③ B 从稿上读到签（`v_sign.applied`）⇒ 第 3 位翻真 + `optimized=false` 记下来。"""
+# ============================================================ ③ B 收录：认到 pending 那一行
+def test_c_b_collects_the_pending_review_and_records_optimized(tmp_path):
+    """③ 未在册不再落签块 ⇒ B 只能按 pending 台账那一行认（`why` 里会点名它）。
+
+    2026-11-05 之后稿上没有签块（没有命题号就没有可签的对象）；这一条留着量"B 的认签
+    面不许因为签块没了就退化成'什么都算有'"：它认到的是 `verifications/pending` 那一行
+    （`why` 点名 pending，不点名手稿），且第 3 位 / optimized 的写法与以前逐字相同。
+    """
     env = _env(tmp_path)
     rel, _before = _manuscript(env)
     with _submitted_by_e():
         env["v"].verify_proof(proof_manuscript=rel)
     text = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
+    assert "手稿签块" not in text or VS.SIGN_MARK not in text, "未在册不该有签块"
 
     filed = _register(env, text=text, column=_column(env))
     assert filed.get("ok") is True, filed
     v_sign = dict(filed.get("v_sign") or {})
     assert v_sign.get("applied") is True, v_sign
-    assert "手稿" in str(v_sign.get("why") or ""), v_sign
+    assert "手稿" not in str(v_sign.get("why") or ""), v_sign
 
     row = [dict(r) for r in env["store"].rows("statements")][-1]
     bits = dict(row.get("bits") or {})
@@ -261,13 +261,11 @@ def test_e_without_the_e_to_v_edge_the_summon_is_forbidden(monkeypatch):
 
 
 # ============================================================ ⑥ 反真空：收方秘书
-def test_f_without_the_e_secretary_there_is_no_block_and_b_reads_no_manuscript_sign(
-        tmp_path, monkeypatch):
-    """⑥ 反真空（落签那一环）：把 `secretary:E` 从收方表里摘掉 ⇒ 稿上没有块。
+def test_f_without_the_e_secretary_the_reading_is_unchanged(tmp_path, monkeypatch):
+    """⑥ 反真空（落签那一环）：把 `secretary:E` 从收方表里摘掉 ⇒ 读数一模一样。
 
-    签仍由 V 颁发（签文件在盘上）—— 量的是"块真的由 E 的秘书落"，不是"V 还发不发签"。
-    读数上的红是 `v_sign.applied`：有块时它由「手稿」那一支认领（`why` 里写着「手稿」），
-    没有块时它只能退回 V 的 pending 台账那一支（那是 F 那条路的老来源，不是"签在稿上"）。
+    改前这一条量的是"签仍由 V 颁发、缺的只是落块"；2026-11-05 之后未在册这一支不产签
+    （没有命题号），所以收方表里有没有 E 的秘书都不改变任何读数。
     """
     env = _env(tmp_path)
     rel, _before = _manuscript(env)
@@ -276,17 +274,16 @@ def test_f_without_the_e_secretary_there_is_no_block_and_b_reads_no_manuscript_s
         got = env["v"].verify_proof(proof_manuscript=rel)
 
     assert got.get("checked") is True, got
-    assert got.get("kind") == "proof_unregistered_signed", got
-    assert "没落块" in str(got.get("detail") or ""), got.get("detail")
+    assert got.get("kind") == "proof_reviewed_not_signed", got
+    assert got.get("reason") == "statement_id_missing", got
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     assert VS.manuscript_sign_reading(now)["found"] is False, now
-    assert VS.sign_path(env["store"].root, VR.proof_sha(_column(env))).is_file(), (
-        "签没颁发：这一条负控量的是「没有收方秘书 ⇒ 没人落块」，不是「V 不发签」")
+    assert not VS.sign_path(env["store"].root, VR.proof_sha(_column(env))).exists(), (
+        "没有命题号却产出了签文件")
 
+    # B 的认签面仍然只按盘上的事实：没有签块 ⇒ `why` 不点名「手稿」。
     filed = _register(env, text=now, column=_column(env))
-    assert filed.get("ok") is True, (
-        "pending 那一支仍然让这一条进得了台账（那是 F 那条路的老来源）；"
-        "本判据量的是「手稿签块那一支没了」，见下面的 `v_sign.applied`")
+    assert filed.get("ok") is True, filed
     v_sign = dict(filed.get("v_sign") or {})
     assert "手稿" not in str(v_sign.get("why") or ""), v_sign
     assert (v_sign.get("block") or {}).get("found") is not True, v_sign
@@ -314,9 +311,10 @@ def test_g_without_the_manuscript_the_sign_has_no_carrier(tmp_path):
         "没有手稿的一档落了 pending 签行 —— 那一行按对象 sha 可认领，会被当成第三方签")
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     assert VS.manuscript_sign_reading(now)["found"] is False, now
-    # 迟到的那一份稿再点名送审 ⇒ 这时候才落块（同一份稿、同一条入口）
+    # 迟到的那一份稿再点名送审 ⇒ 仍然不产签（没有命题号，块没有出现的理由）
     with _submitted_by_e():
         again = env["v"].verify_proof(proof_manuscript=rel)
-    assert again.get("kind") == "proof_unregistered_signed", again
+    assert again.get("kind") == "proof_reviewed_not_signed", again
+    assert again.get("reason") == "statement_id_missing", again
     assert VS.manuscript_sign_reading(
-        (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8"))["found"] is True
+        (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8"))["found"] is False

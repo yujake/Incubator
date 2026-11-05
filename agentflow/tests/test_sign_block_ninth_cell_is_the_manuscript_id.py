@@ -96,7 +96,11 @@ def test_a_the_ninth_cell_is_the_bare_manuscript_id(tmp_path: pathlib.Path) -> N
 
 
 def test_a2_a_prefixed_manuscript_id_keeps_its_prefix(tmp_path: pathlib.Path) -> None:
-    """`f-proof-plan-0001.md` ⇒ `plan-0001`（带前缀，不与 `0001` 撞车）。"""
+    """`f-proof-plan-0001.md` ⇒ `plan-0001`（带前缀，不与 `0001` 撞车）。
+
+    2026-11-05（父裁定）：计划稿仍是合法落稿名（号照旧解析成 `plan-0001`），但**不是
+    签的载体** ⇒ 签块身份只到 `unmatched`（改前这里读成 `resolved`，真机 883c3097）。
+    """
     root = _ws(tmp_path)
     rel = "reports/f-proof-plan-0001.md"
     _put(root, rel)
@@ -104,7 +108,8 @@ def test_a2_a_prefixed_manuscript_id_keeps_its_prefix(tmp_path: pathlib.Path) ->
     assert got["state"] == "written", got
     reading = VS.manuscript_sign_reading(_text(root, rel), manuscript_path=rel)
     assert reading["manuscript_id"] == "plan-0001", reading
-    assert reading["identity_state"] == "resolved", reading
+    assert reading["identity_state"] == "unmatched", reading
+    assert "不是签的载体" in str(reading.get("identity_why") or ""), reading
     # 反真空：同一份正文换成 `f-proof-0001.md` 时它是另一个号（不许在数字上撞车）。
     assert VS.manuscript_id_of("reports/f-proof-0001.md") == "0001"
     assert VS.manuscript_id_of(rel) == "plan-0001"

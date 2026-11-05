@@ -68,7 +68,14 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
     root = pathlib.Path(__import__("tempfile").mkdtemp(prefix="manuscript-name-"))
     body = "1. 由定义直接得到。"
     issued = VS.issue(root, artifact_sha=VR.proof_sha(body), streak=3, need=3,
-                      artifact_path=rel, by="secretary:F")
+                      artifact_path=rel,
+                      ledger="verifications/000000.jsonl#v-000003",
+                      statement_id="000000",
+                      # 2026-11-05：签的三道必填闸要求 `passes` 逐转带读数。
+                      passes=[{"verification_id": f"v-{i:06d}", "at": "t",
+                               "proof_sha256": VR.proof_sha(body), "why": "夹具"}
+                              for i in (1, 2, 3)],
+                      by="secretary:F")
     assert issued.get("written") is True, issued
     landed = VS.land(root, artifact_sha=VR.proof_sha(body), by="secretary:F",
                      manuscript_path=rel)

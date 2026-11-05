@@ -1,26 +1,32 @@
 # -*- coding: utf-8 -*-
-"""V 对「还没在册」的一份散文手稿的审校入口（业主 2026-11-02）。
+"""「未在册」那一支不产签（业主 2026-11-05 裁定，取代 2026-11-02 的旧口径）。
 
 ## 这一组守什么
 
-业主逐字（2026-11-01，`vsigns.py` 的模块头也引着）：
+业主 2026-11-05 逐字（现场：`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md`）：
 
-    「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到。」
+    「没有命题号就没有可签的对象」——`statement_id` 是空的 ⇒ 不许产出「签」。
 
-改前 `verify_proof` 只认在册命题（`statement_id` 必填、不在册 ⇒ `statement_missing`），
-散文证明必须先让 B 登记才拿得到签 —— F 的交差因此挂在 B 的动作上。2026-11-02 业主把
-入口定成「F 直接派 V」+「签进手稿」：`verify_proof` 多了 `proof_manuscript` 这一条
-（不给 `statement_id`），V 读稿审、三转干净就把签块盖回那一份稿。
+2026-11-02 的旧口径是「F 直接派 V、签进手稿（不给 `statement_id`）」；它落成的签文件
+`statement_id=""`、`ledger=reports/<稿>#V签`，真机 90 里 4 条孤儿签正是这一档（其中一条
+还是 `f-proof-plan-000011.md` —— 计划稿）。现在这一支只剩两种结局：
+
+- 三转照判、读数照给（`checked=True`、`passes` 三转都在），但一个签字节都不落：
+  `kind="proof_reviewed_not_signed"`、`reason="statement_id_missing"`、拒绝原文里
+  写清「没有命题号就没有可签的对象」；
+- 要签就先把这一条登记进 `statements` 拿到号，再带 `statement_id` + 手稿送审
+  （在册那一支：真台账 `verifications/<号>.jsonl#v-…`、签成即升档）。
 
 ## 判据（先红后绿）
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| ① | 未在册手稿 + 三转干净 | 手稿里出现签块（`已签=true；连续=3/3；正文sha=…`），V 返回 checked=True |
-| ② | 三转里有一转拿不到合法结论（缺材料） | `checked=False`、一个字节都不写（稿上没有签块） |
-| ③ | 同一份正文再送一次 | 不再问模型、不再写（`already`），块仍是一行 |
-| ④ | 反真空：把稿上的签块删掉 | F 的读数从「已签」回落到「待签」 |
-| ⑤ | 第 2 转判「有毛病」 | 只问 2 次就停；不写块（甲口径，2026-11-03：负判不是签），判词随返回值给 F |
+| ① | 未在册手稿 + 三转干净 | 三转照问；没有签文件、稿上没有签块；F 读数「待签」；拒绝原文点名"没有命题号" |
+| ② | 三转里有一转拿不到合法结论（缺材料） | `checked=False`、一个字节都不写 |
+| ③ | 同一份正文再送一次 | 仍然不产签（没有签就没有「已签」可读） |
+| ④ | 反真空（结构）：删掉稿上的签块 | 本来就没有块（这条量的是"签不由 V 写"） |
+| ⑤ | 第 2 转判「有毛病」 | 只问 2 次就停；不写块；判词随返回值给 F |
+| ⑥ | 入口守卫 | 只收 F 那一份手稿的命名 |
 
 零模型调用：V 的审阅缝交出预置回复并计数（与三连判判据共用同一套替身）。
 """
@@ -98,6 +104,25 @@ def _manuscript_text(st: Store) -> str:
     return (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
 
 
+def _assert_no_sign(st: Store, got: dict, seam, *, asked: int = 3) -> None:
+    """2026-11-05 的终局：三转照判、读数照给，但没有签（不是"签了没落块"）。"""
+    assert seam.asked() == asked, f"只问了 {seam.asked()} 次（期望 {asked}）"
+    assert got.get("checked") is True, got
+    assert got.get("kind") == "proof_reviewed_not_signed", got
+    assert got.get("reason") == "statement_id_missing", got
+    detail = str(got.get("detail") or "")
+    assert "没有命题号就没有可签的对象" in detail, detail
+    # 一个签字节都不落：没有签文件、稿上没有签块。
+    files = [p for p in VS.signs_dir(st.root).glob("*.json")
+             if p.name != VS.INDEX_NAME] if VS.signs_dir(st.root).is_dir() else []
+    assert files == [], f"没有命题号却产出了签文件：{files}"
+    block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
+    assert block["found"] is False, block
+    reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
+    assert reading["state"] == FVS.STATE_WAITING, reading
+    assert reading["delivered"] is False, reading
+
+
 #: 签写口的调用名（`vsigns.land` / 手稿块 / 台账位 / 旧的 `write_sign` 都算）。
 #: 按 AST 的"调用末段名"扫，别名（`_VS.land(`）逃不掉；注释与 docstring 没有 Call
 #: 节点，所以文件头那些"改前曾调 `write_manuscript_sign`"的说明不会误报。
@@ -120,38 +145,24 @@ def _sign_writer_calls(path: pathlib.Path) -> list[tuple[str, int]]:
     return hits
 
 
-# ============================================================ ① 三转干净 ⇒ 签块
-def test_a_three_clean_rounds_stamp_a_sign_block_into_the_manuscript(tmp_path):
-    """① 未在册手稿 + 三转干净 ⇒ 稿上出现签块；V 不再要求命题号。"""
+# ============================================================ ① 三转干净 ⇒ 不产签
+def test_a_three_clean_rounds_still_do_not_produce_a_sign(tmp_path):
+    """① 未在册手稿 + 三转干净 ⇒ 读数成立，但不产签（没有命题号就没有可签的对象）。"""
     st = _ws(tmp_path)
     v, seam = _v(st, [CLEAN_REPLY])
     with _submitted_by_f():
         got = v.verify_proof(proof_manuscript=REL)
 
-    assert seam.asked() == 3, f"只问了 {seam.asked()} 次 ⇒ 不是连判三轮"
-    assert got.get("checked") is True, got
-    assert got.get("kind") == "proof_unregistered_signed", got
-    assert got.get("signed_bit3") is False, "未在册没有第 3 位可翻，这里必须诚实为假"
-    block = VS.manuscript_sign_reading(_manuscript_text(st))
-    assert block["found"] and block["signed"] is True, block
-    assert (block["streak"], block["need"]) == (3, 3), block
-    assert block["proof_sha256"] == VR.proof_sha(PROOF), block
-    assert block["statement_id"] == "", block
-    # F 的读数：已签（渠道 = 手稿签块）。
-    reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
-    assert reading["state"] == FVS.STATE_SIGNED, reading
-    assert reading["channel"] == FVS.CHANNEL_MANUSCRIPT, reading
-    # 2026-11-03 件一：块是收方秘书落的（V 只颁发），签名者点名是哪一位秘书。
-    assert block["signer"].startswith("secretary:"), block
-    assert block["signer"] == "secretary:F", block
-    doc = json.loads(VS.sign_path(st.root, VR.proof_sha(PROOF)).read_text(encoding="utf-8"))
-    assert doc["written_by"] == "secretary:F", doc["written_by"]
-    assert doc["envelope"]["to"] == "secretary:F", doc.get("envelope")
+    assert got.get("verdict") == "成立", got
+    assert len(list(got.get("review_passes") or [])) == 3, got.get("review_passes")
+    _assert_no_sign(st, got, seam)
+    # 签的写入面一个字节都没动（连 `out/vsigns/` 都不建）。
+    assert not VS.signs_dir(st.root).exists(), "没有命题号却建了签目录"
 
 
-# ============================================================ ①之二 交信封给秘书
-def test_a2_the_positive_verdict_hands_the_envelope_to_the_secretary(tmp_path, monkeypatch):
-    """正判的落签由秘书那一步执行：V 只把 `issue()` 的返回交过去（件三）。"""
+# ============================================================ ①之二 不交信封
+def test_a2_no_envelope_is_handed_to_the_secretary_without_a_statement_id(tmp_path, monkeypatch):
+    """没有命题号 ⇒ 连信封都不出：收方秘书收不到任何东西（它是签才有的那一半）。"""
     from agentflow import secretary as SEC
 
     st = _ws(tmp_path)
@@ -165,16 +176,9 @@ def test_a2_the_positive_verdict_hands_the_envelope_to_the_secretary(tmp_path, m
     with _submitted_by_f():
         got = v.verify_proof(proof_manuscript=REL)
 
-    assert seam.asked() == 3, seam.asked()
-    assert len(calls) == 1, calls
-    passed = calls[0]
-    assert (passed.get("sign") or {}).get("artifact_sha") == VR.proof_sha(PROOF), passed
-    assert (passed.get("sign") or {}).get("artifact_path") == REL, passed
-    block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
-    assert block["found"] and block["signed"] is True, block
-    assert block["signer"] == "secretary:F", block
-    doc = json.loads(VS.sign_path(st.root, VR.proof_sha(PROOF)).read_text(encoding="utf-8"))
-    assert doc["written_by"] == "secretary:F", doc["written_by"]
+    _assert_no_sign(st, got, seam)
+    assert calls == [], f"没有命题号却把签交给了秘书：{calls}"
+    assert not VS.sign_path(st.root, VR.proof_sha(PROOF)).exists()
 
 
 # ============================================================ ② 缺材料 ⇒ 不落
@@ -203,53 +207,39 @@ def test_b_no_usable_reply_writes_nothing(tmp_path):
                                 manuscript_paths=(REL,))["state"] == FVS.STATE_WAITING
 
 
-# ============================================================ ③ 只签一次
-def test_c_the_same_body_is_not_signed_twice(tmp_path):
-    """③ 同一份正文再送一次 ⇒ 不再问模型、不再写（块仍是一行）。"""
+# ============================================================ ③ 再送一次也不产签
+def test_c_the_same_body_is_never_signed_without_a_statement_id(tmp_path):
+    """③ 同一份正文再送一次 ⇒ 仍然不产签（没有签就没有「已签」可读）。"""
     st = _ws(tmp_path)
     v, seam = _v(st, [CLEAN_REPLY])
     with _submitted_by_f():
         first = v.verify_proof(proof_manuscript=REL)
-    assert first.get("checked") is True, first
-    asked_once = seam.asked()
-    assert asked_once == 3, asked_once
+    _assert_no_sign(st, first, seam)
     before = _manuscript_text(st)
 
     with _submitted_by_f():
         again = v.verify_proof(proof_manuscript=REL)
-    assert again.get("checked") is True, again
-    assert "不重复" in str(again.get("reason") or ""), again
-    assert seam.asked() == asked_once, "第二次送审又问模型了（同一份正文不重复判）"
-    assert _manuscript_text(st) == before, "第二次送审又写了一行签块"
-    assert _manuscript_text(st).count(VS.SIGN_MARK) == 1, _manuscript_text(st)
+    _assert_no_sign(st, again, seam, asked=6)
+    assert _manuscript_text(st) == before, "第二次送审把稿写动了"
+    assert _manuscript_text(st).count(VS.SIGN_MARK) == 0, _manuscript_text(st)
 
 
-# ============================================================ ④ 反真空
-def test_d_deleting_the_block_falls_back(tmp_path):
-    """④ 反真空：把稿上的签块删掉 ⇒ F 的读数回落成待签。"""
+# ============================================================ ④ 一个字节都没写
+def test_d_no_sign_block_is_written_at_all(tmp_path):
+    """④ 反真空：没有签块可删 —— 这一支从头到尾一个签字节都不写。"""
     st = _ws(tmp_path)
-    v, _seam = _v(st, [CLEAN_REPLY])
+    before = _manuscript_text(st)
+    v, seam = _v(st, [CLEAN_REPLY])
     with _submitted_by_f():
-        v.verify_proof(proof_manuscript=REL)
-    assert FVS.delivery_reading(st.root, proof_text=PROOF,
-                                manuscript_paths=(REL,))["state"] == FVS.STATE_SIGNED
-
-    text = _manuscript_text(st)
-    stripped = "\n".join(ln for ln in text.split("\n")
-                         if not ln.strip().startswith(VS.SIGN_MARK))
-    (pathlib.Path(st.root) / REL).write_text(stripped, encoding="utf-8")
-    after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
-    assert after["state"] == FVS.STATE_WAITING, after
-    assert after["delivered"] is False, after
+        got = v.verify_proof(proof_manuscript=REL)
+    _assert_no_sign(st, got, seam)
+    assert _manuscript_text(st) == before, "被拒的一趟改动了手稿"
+    assert _manuscript_text(st).count(VS.SIGN_MARK) == 0, _manuscript_text(st)
 
 
 # ============================================================ ④之二 反真空（land）
-def test_d2_without_land_the_block_is_absent_and_f_reads_waiting(tmp_path, monkeypatch):
-    """反真空（件一 b）：把 `vsigns.land` 摘掉 ⇒ 块不存在、F 的读数回落待签。
-
-    这一条量的是"块真的由 land 写"：V 仍然颁发（签文件在），但没有收方秘书落块
-    就不能当作已签。`delivery_reading` 也不许拿未在册的侧文件替块作证。
-    """
+def test_d2_the_landing_hook_is_never_reached(tmp_path, monkeypatch):
+    """反真空：把 `vsigns.land` 摘掉 ⇒ 读数一模一样（这一支根本走不到落签）。"""
     st = _ws(tmp_path)
     v, seam = _v(st, [CLEAN_REPLY])
     called = {"n": 0}
@@ -264,13 +254,8 @@ def test_d2_without_land_the_block_is_absent_and_f_reads_waiting(tmp_path, monke
     with _submitted_by_f():
         got = v.verify_proof(proof_manuscript=REL)
 
-    assert seam.asked() == 3, seam.asked()
-    assert called["n"] == 1, called
-    assert got.get("checked") is True, got
-    assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
-    after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
-    assert after["state"] == FVS.STATE_WAITING, after
-    assert after["delivered"] is False, after
+    _assert_no_sign(st, got, seam)
+    assert called["n"] == 0, f"没有签却调用了落签：{called}"
 
 
 # ============================================================ ④之三 结构判据
@@ -296,10 +281,11 @@ def test_g_the_sign_write_entries_are_reached_only_from_the_secretary():
 
 
 # ============================================================ ④之四 反真空（结构）
-def test_h_without_the_secretary_landing_method_f_reads_waiting(tmp_path, monkeypatch):
-    """反真空：把 `Secretary.land_unregistered_sign` 摘掉 ⇒ 块不存在、F 回待签。
+def test_h_without_the_secretary_landing_method_the_reading_is_unchanged(tmp_path, monkeypatch):
+    """反真空：把 `Secretary.land_unregistered_sign` 摘掉 ⇒ 读数一模一样。
 
-    签仍由 V 颁发（签文件在盘上）—— 量的是"块真的由秘书那一步落"，不是"V 还发不发签"。
+    改前这一条量的是"签仍由 V 颁发、缺的只是落块"；2026-11-05 之后这一支根本不产签，
+    所以摘掉落签方法也不该改变任何读数（"没签"不是"签了没落块"）。
     """
     from agentflow import secretary as SEC
 
@@ -309,16 +295,9 @@ def test_h_without_the_secretary_landing_method_f_reads_waiting(tmp_path, monkey
     with _submitted_by_f():
         got = v.verify_proof(proof_manuscript=REL)
 
-    assert seam.asked() == 3, seam.asked()
-    assert got.get("checked") is True, got
-    assert got.get("kind") == "proof_unregistered_signed", got
-    # V 仍然颁发了签（签文件在盘上）—— 缺的只是"秘书落块"那一步。
-    assert VS.sign_path(st.root, VR.proof_sha(PROOF)).is_file(), "签没颁发"
-    assert "没落块" in str(got.get("detail") or ""), got.get("detail")
-    assert VS.manuscript_sign_reading(_manuscript_text(st))["found"] is False, _manuscript_text(st)
-    after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
-    assert after["state"] == FVS.STATE_WAITING, after
-    assert after["delivered"] is False, after
+    _assert_no_sign(st, got, seam)
+    assert not VS.sign_path(st.root, VR.proof_sha(PROOF)).exists(), "签没颁发"
+    assert "没落块" not in str(got.get("detail") or ""), got.get("detail")
 
 
 # ============================================================ ⑤ 有毛病那一转

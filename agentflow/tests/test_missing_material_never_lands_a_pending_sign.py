@@ -110,12 +110,14 @@ def test_1_missing_material_lands_no_pending_row_and_says_so(tmp_path: pathlib.P
 
 # ------------------------------------------------------------------ ③ 反真空
 
-def test_2_a_complete_material_still_lands_its_pending_sign(tmp_path: pathlib.Path) -> None:
-    """③ 反真空：材料齐 + 判成立 ⇒ 照旧落 pending 行（护栏不许把这一档整个关掉）。
+def test_2_complete_material_is_reviewed_but_not_signed_without_a_statement_id(
+        tmp_path: pathlib.Path) -> None:
+    """③ 反真空：材料齐 + 判成立 ⇒ 会审照跑、pending 记录照落，但不产签。
 
-    这一条与 `test_d34_evidence_index_chain::test_5` 同形、但独立跑一遍：本文件的
-    护栏只认「缺材料」这一格，别的档一个字节都不该变（D-34 的"盖章与入册是两件事"
-    仍然成立 —— 命题没在册时那一签按对象 sha 落 pending，B 登记之后可认领）。
+    2026-11-05（业主）：没有命题号就没有可签的对象。这一条防两头：
+    ① 护栏别把这一档整个关掉 —— 会审七项照跑、`verdict=成立`、pending 那一行照落；
+    ② 别把"审过"冒充成"签过" —— `kind` 是 `proof_reviewed_not_signed`、
+       `reason=statement_id_missing`、没有签文件、第 3 位不翻。
     """
     store = _store(tmp_path / "ws")
     add_literature(store, S.format_id(0))
@@ -125,20 +127,17 @@ def test_2_a_complete_material_still_lands_its_pending_sign(tmp_path: pathlib.Pa
     got = AgentV(store, workspace_root=store.root).verify_proof(
         SID, proof_text=env["column"],
         # 2026-11-04（业主裁定 甲）：E 的穷举证据要签，载体是 `reports/e-proof-<实验号>.md`
-        # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。不带稿的那一趟
-        # 只给「看过、没签」的读数 —— 那正是 `test_1` 守的另一半，不是这一条要防的。
+        # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。
         proof_manuscript=ER.proof_manuscript_relpath(env["experiment_id"]))
 
     assert got["checked"] is True, got
-    # 改期望（2026-11-04 甲）：`numeric_evidence_unregistered`（内联正文那一支的老 kind）
-    # → `proof_unregistered_signed`。同一件事仍被这条判据防着：材料齐、会审判成立 ⇒
-    # 那一签照样有落点（pending 台账按对象 sha 落行，下面三行逐字判），护栏没有把这一档
-    # 整个关掉。换的只是"签落在哪条路"：甲把载体从内联正文挪到了 E 的按号手稿上。
-    assert got["kind"] == "proof_unregistered_signed", got
+    assert got["kind"] == "proof_reviewed_not_signed", got
+    assert got["reason"] == "statement_id_missing", got
     assert got["verdict"] == "成立", got
     assert got["signed_bit3"] is False, got
+    # 会审的记录仍在（那是"审过"的证据，不是签）：pending 台账按对象 sha 落行。
     landed = _pending_files(store)
-    assert landed, "材料齐、会审判成立，那一签却没有落盘（护栏把这一档整个关掉了）"
+    assert landed, "材料齐、会审判成立，却连会审记录都没有（护栏把这一档整个关掉了）"
     row = json.loads(landed[0].read_text(encoding="utf-8").splitlines()[0])
     assert row["verdict"] == "成立", row
     assert len(str(row.get("object_sha256") or "")) == 64, row

@@ -8,7 +8,7 @@
 `reports/f-proof-000000.md` 里明明有一行：
 
 ```text
-- V 签：已签=true；…；台账=verifications/000000.jsonl#v-000010；命题号=000000
+- V 签：已签=true；…；台账=verifications/000000.jsonl#v-000003；命题号=000000
 ```
 
 那一行正是 `write_sign` 里"顺手把签块盖进手稿"那一步盖的（V 未在册那一支写的是
@@ -74,7 +74,11 @@ def _issue(root: pathlib.Path, *, artifact_path: str = MANUSCRIPT) -> dict:
     """
     issued = VSP.issue(
         root, artifact_sha=SHA, streak=3, need=3, artifact_path=artifact_path,
-        ledger="verifications/000000.jsonl#v-000010", statement_id="000000",
+        ledger="verifications/000000.jsonl#v-000003", statement_id="000000",
+        # 2026-11-05：签的三道必填闸要求 `passes` 逐转带读数（verification_id /
+        # at / proof_sha256），最后一转就是 `ledger` 指的那一行。
+        passes=[{"verification_id": f"v-{i:06d}", "at": TS, "proof_sha256": SHA,
+                 "why": "夹具：这一转判「成立」"} for i in (1, 2, 3)],
         proof_no=1, at=TS, by="secretary:F")
     landed = VSP.land(root, artifact_sha=SHA, by="secretary:F",
                       manuscript_path=artifact_path, statement_id="000000",

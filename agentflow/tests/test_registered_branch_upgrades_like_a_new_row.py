@@ -52,7 +52,9 @@ if str(SRC) not in sys.path:
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
+from agentflow.store import Store  # noqa: E402
 
+from conftest import seed_statement_row  # noqa: E402
 from test_e_gets_its_v_sign_like_f import (  # noqa: E402
     FULL, _column, _env, _manuscript, _register, _submitted_by_e,
 )
@@ -76,87 +78,84 @@ def _register_conjecture(env: dict) -> str:
     return str(first.get("stmt_id") or "")
 
 
-def _signed_delivery(env: dict) -> tuple[str, str]:
-    """E 的稿先拿 V 签（未在册那一路），再读回盘上那份带签块的全文。"""
+def _signed_delivery(env: dict, sid: str = "") -> tuple[str, str, str]:
+    """E 的稿在在册那一支拿 V 签（2026-11-05：没有命题号就没有可签的对象）。
+
+    改前这里走"未在册"那一路（不给 `statement_id`），签块由 V 直接落进稿；2026-11-05
+    之后那条路不产签 —— 所以这一格先把命题号准备好（不给就铺一行，等价于"新建那一行
+    的盘上状态"），再带号送审。返回 `(sid, rel, 带签块的稿全文)`。
+    """
+    if not str(sid or "").strip():
+        seeded = seed_statement_row(
+            env["store"], proof_text="", statement_full=FULL,
+            statement_text="R(3,4)=9", kind="conjecture", label="R(3,4)=9",
+            origin="own_result", evidence_kind="cross_check", bits={})
+        sid = str(seeded["stmt_id"])
     rel, _before = _manuscript(env)
     with _submitted_by_e():
-        got = env["v"].verify_proof(proof_manuscript=rel)
-    assert got.get("kind") == "proof_unregistered_signed", got
+        for _ in range(int(VR.SIGN_STREAK_NEED)):
+            env["v"].verify_proof(sid, proof_manuscript=rel)
     text = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
-    return rel, text
+    return sid, rel, text
 
 
-# ============================================================ e 在册 = 新建
-def test_e_the_registered_branch_upgrades_to_the_new_row_result(
+# ============================================================ e 在册（无模型缝）
+def test_e_the_registered_branch_does_not_sign_without_a_review_seam(
         tmp_path: pathlib.Path) -> None:
-    """e：在册命题 + 带 V 签的手稿交付 ⇒ kind / evidence_kind 与新建逐字相同。"""
-    # ---- 新建（对照）：同一份签字稿，直接落成一行 ----
-    fresh_env = _env(tmp_path / "fresh")
-    _rel_f, fresh_text = _signed_delivery(fresh_env)
-    fresh = _register(fresh_env, text=fresh_text, column=_column(fresh_env))
-    assert fresh.get("ok") is True, fresh
-    fresh_row = _row(fresh_env)
-    fresh_pair = (str(fresh_row.get("kind") or ""),
-                  str(fresh_row.get("evidence_kind") or ""))
-    assert fresh_pair == ("theorem", "proof"), fresh_pair
+    """e：在册的穷举题要"按写成后的样子重读"⇒ 没有模型缝就 `judge_not_wired`。
 
-    # ---- 在册（本案）：先落成猜想、证明空着，再交同一份签字稿 ----
+    改前这一条量的是"在册分支与新建分支结果一致"，而它的现场靠的是未在册那一签
+    （V 直接把块落进稿）。2026-11-05（业主）之后未在册不产签，在册这一支就必须自己
+    走模型会审 —— 这套夹具（`_env`）没有给 V 模型缝，于是它只到"没查成"：
+
+      - 台账一行都不落（"没查成"不许冒充"审过了"）；
+      - 签文件没有、稿上没有签块、档位停在 `cross_check`（没有签就没有升档）；
+      - 拒绝码是 `judge_not_wired`，不是静默通过。
+
+    这不是把判据放宽：同一组断言在"有模型缝、三转成立"那一档由
+    `tests/test_sign_integrity_gates.py::test_g` 正向量着（prose 在册那一支）。
+    """
     env = _env(tmp_path / "registered")
     sid = _register_conjecture(env)
-    _rel_r, text = _signed_delivery(env)
-    filed = _register(env, text=text, column=_column(env))
-    assert filed.get("ok") is True, filed
-    assert str(filed.get("stmt_id") or "") == sid, filed
+    rel, _before = _manuscript(env)
+    with _submitted_by_e():
+        got = env["v"].verify_proof(sid, proof_manuscript=rel)
+
+    assert got.get("checked") is False, got
+    assert str(got.get("reason") or "").startswith("judge_not_wired"), got
+    rows, _bad = VR.list_verifications(env["store"].root, statement_id=sid, limit=None)
+    assert rows == [], rows
     row = _row(env)
-    pair = (str(row.get("kind") or ""), str(row.get("evidence_kind") or ""))
-    assert pair == fresh_pair, (
-        f"在册那一支是 {pair}，新建那一支是 {fresh_pair} —— 同一套代码两个结果")
+    assert (str(row.get("kind") or ""),
+            str(row.get("evidence_kind") or "")) == ("conjecture", "cross_check"), row
+    text = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
+    assert "V 签" not in text, text
 
 
 # ============================================================ f 反真空
-def _no_gap(*_a, **_kw) -> dict:
-    """`verifications.proof_review_gap` 的"没有凭据"读数（台账 / pending 那一支不存在）。"""
-    return {"ok": False, "checked": True, "why": "打桩：台账 / pending 那一支不存在",
-            "state": "unsigned", "verification_id": "", "ledger": "",
-            "sha_matches": None, "proof_no": None, "rows": 0,
-            "problems": [], "checklist": []}
+def test_f_an_unsigned_delivery_never_upgrades(tmp_path: pathlib.Path) -> None:
+    """f：没有签的交付 ⇒ 在册那一支一个字节都不升（负控；"命中在册"不是凭据）。
 
-
-def test_f_stubbing_the_manuscript_evidence_falls_back_to_conjecture(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """f：把升档的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 /
-    pending）⇒ e 回落到猜想 / cross_check。
-
-    2026-11-05 补：B 的预写那一格改成与秘书同口径（三路任一路命中）之后，只摘手稿
-    那一支不再足以让 e 回落 —— 这份交付的 pending 台账里也有一签。反真空的打桩点
-    跟着判据走：两路全摘；断言与 e 同一组，一个字没放宽。
+    改前 f 打桩的是升档的"三路凭据"；2026-11-05 之后那一组凭据的前提是"手稿上有一块
+    签"，而未在册不产签 ⇒ 打桩点改成更硬的一件：根本没有签。这一条与 e 互为反真空：
+    e 说"没缝 ⇒ 不产签、不升档"，f 说"没签 ⇒ 不升档"（哪怕正文逐字相同、命题在册）。
     """
-    def _absent(**kw):
-        return {"checked": True, "signed": False, "basis": "",
-                "why": "打桩：这一支不存在", "manuscript": {}}
-
-    monkeypatch.setattr(SEC, "_manuscript_upgrade_basis", _absent)
-    monkeypatch.setattr(VR, "proof_review_gap", _no_gap)
-
-    # 在册那一支：签过的稿也升不上去（回落）
     env = _env(tmp_path / "registered")
-    _register_conjecture(env)
-    _rel, text = _signed_delivery(env)
-    filed = _register(env, text=text, column=_column(env))
-    assert filed.get("ok") is True, filed
+    sid = _register_conjecture(env)
+    rel, _before = _manuscript(env)
+    unsigned = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
+    filed = env["b"].register_statement(
+        origin="own_result", kind="theorem", label="R(3,4)=9",
+        statement_full=FULL, statement_text="R(3,4)=9", proof_text=_column(env),
+        proof_manuscript=unsigned, evidence_kind="proof", doc_id=S.format_id(0),
+        line_range={"start": 1}, quote_verified=False,
+        quote_reason="own_result：我方推导")
+    assert filed.get("ok") is False, filed
+    assert filed.get("kind") in ("proof_without_v_sign",
+                                 "proof_needs_third_party_signature"), filed
     row = _row(env)
     assert (str(row.get("kind") or ""),
-            str(row.get("evidence_kind") or "")) == ("conjecture", "cross_check"), (
-        row.get("kind"), row.get("evidence_kind"))
-
-    # 新建那一支不受影响（同一份稿仍然叫定理、proof）—— 于是"回落"只落在在册那一支
-    fresh_env = _env(tmp_path / "fresh")
-    _rel_f, fresh_text = _signed_delivery(fresh_env)
-    fresh = _register(fresh_env, text=fresh_text, column=_column(fresh_env))
-    assert fresh.get("ok") is True, fresh
-    fresh_row = _row(fresh_env)
-    assert (str(fresh_row.get("kind") or ""),
-            str(fresh_row.get("evidence_kind") or "")) == ("theorem", "proof")
+            str(row.get("evidence_kind") or "")) == ("conjecture", "cross_check"), row
 
 
 # ============================================================ g negative

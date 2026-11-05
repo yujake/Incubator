@@ -102,9 +102,24 @@ def _ws(tmp_path: pathlib.Path, row: dict) -> Store:
 
 
 def _write_ledger(st: Store, row: dict, sid: str = SID) -> pathlib.Path:
+    """落一整趟送审的三转（`review_pass` 1..3、同一 `review_call`）。
+
+    2026-11-05：签的必填闸要求 `passes` 逐转带读数且最后一转正是 `ledger` 指的那一行
+    —— 只写第 3 转会让 `_vsign_payload` 只捞到一条票（那是"三格全空的占位"的同族，
+    只是缺的那两格更长）。夹具因此按真台账的形状落三行；`row` 仍是第 3 转那一行。
+    """
     path = VR.verification_ledger_path(st.root, sid)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+    lines = []
+    last_id = str(row.get("verification_id") or "v-000003")
+    call = "call-1"   # `_issuance()` 点名的是这一趟送审
+    for n in (1, 2, 3):
+        one = dict(row)
+        one["verification_id"] = last_id if n == 3 else f"v-{n:06d}"
+        one["review_pass"] = n
+        one["review_call"] = call
+        lines.append(json.dumps(one, ensure_ascii=False))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
@@ -139,9 +154,9 @@ def test_a_a_statements_row_without_a_body_is_not_flipped(tmp_path: pathlib.Path
     per = EB.reviewed_by_proof(latest)
     assert per.get(1) is not True, per
     assert EB.bits_from_row(latest)["reviewed"] is False, latest.get("bits")
-    # 台账那一行是签的正本：它不许被这道闸带走。
+    # 台账那三行是签的正本（一整趟送审的三转）：它们不许被这道闸带走。
     rows, bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
-    assert not bad and len(rows) == 1, (rows, bad)
+    assert not bad and len(rows) == 3, (rows, bad)
 
 
 # ====================================================================== b 相符

@@ -160,7 +160,10 @@ def test_a_b_rewrite_gets_a_signed_manuscript_then_lands_reviewed(
 
     got = _review(st, rel, sid)
     assert got.get("checked") is True, got
-    assert got.get("kind") == "proof_unregistered_signed", got
+    # 2026-11-05：B 的改写稿带上命题号送审 ⇒ 走在册那条路（`kind=""`），
+    # 不再落到 `proof_unregistered_signed`（那一路的签 `statement_id=""`、台账自引）。
+    assert got.get("kind") == "", got
+    assert got.get("statement_id") == sid, got
     block = VS.manuscript_sign_reading(_manuscript_text(st, rel), manuscript_path=rel)
     assert block["found"] is True and block["signed"] is True, block
     assert block["signer"] == "secretary:B", block

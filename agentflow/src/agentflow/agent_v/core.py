@@ -183,6 +183,7 @@ V_VERIFY_PROOF_REASONS: tuple[str, ...] = (
     "proof_text_mismatch",
     "proof_text_needs_a_manuscript",
     "secretary_unjudged",
+    "statement_id_missing",
     "statement_missing",
     "unparsable",
 )
@@ -818,18 +819,14 @@ class AgentV:
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
                 return out
             statement_full = _SB.body_of(hit)
-            # ---- 2026-11-04（业主裁定 A 甲）：B 的改写手稿也走「签在稿上」这一支 ----
+            # ---- 2026-11-05（业主）：「未在册」不再是一条签的路 ------------------
             #
-            # B 改写在册证明时，正文与在册那一版不同 ⇒ 旧签 stale、台账也盖不住新正文；
-            # 它需要一份自己的载体（`reports/b-proof-<命题号>.md`），由 B 派 V 审、
-            # 收方秘书（`secretary:B`）落签块，B 再带这份稿入库。入口只认 B 手稿的命名
-            # （别的路径不在这里开口子），其余判据与 F/E 同一条：三转、`vsigns.issue`、
-            # 收方秘书落块 —— 一条代码路径，不分叉。
-            b_got = self._review_b_manuscript(
-                text=text, manuscript=proof_manuscript, no=no,
-                statement_full=statement_full)
-            if b_got is not None:
-                return self._finish_unregistered(out, no=no, got=b_got)
+            # 改前这里（在册命题）也先问 `_review_b_manuscript`：只要稿名是
+            # `reports/b-proof-*.md`，就整条走"未在册散文"那一支 ⇒ 签文件里
+            # `statement_id=""`、台账是 `reports/<稿>#V签`（真机 000014 / 000016）。
+            # 命题明明在册、号也给了，签却按"没有号"落 —— 这是 2026-11-05 那四条
+            # 孤儿签里两条的直接来路。现在未在册那一支只在 `not sid` 时进（上面的
+            # 分支），在册命题一律走下面那条带台账、带号的路。
             # ---- 2026-11-04（业主裁定 甲）：在册命题的证明必须由一份手稿承载 ----------
             #
             # 业主逐字：「V 审在册命题时也必须给手稿（`proof_manuscript`），内联正文
@@ -863,7 +860,7 @@ class AgentV:
             if manuscript_rel:
                 # 载体在手：正文以稿为准（穷举那一支的稿里 `## 证明` 就是证明栏）。
                 _ms = self._registered_manuscript_body(
-                    text=text, manuscript=manuscript_rel)
+                    text=text, manuscript=manuscript_rel, statement_id=sid)
                 if _ms.get("failed"):
                     out.update(checked=False,
                                kind=str(_ms.get("kind") or "manuscript_unreadable"),
@@ -1752,7 +1749,7 @@ class AgentV:
         }
 
     def _registered_manuscript_body(self, *, text: str,
-                                     manuscript: str) -> dict[str, Any]:
+                                     manuscript: str, statement_id: str = "") -> dict[str, Any]:
         """在册命题点名的那一份手稿：读 `## 证明` 那一节（2026-11-04，业主裁定 甲）。
 
         为什么单独一个方法：在册的散文路与穷举路都要做同一件事 —— 认路径、读盘、
@@ -1787,7 +1784,17 @@ class AgentV:
                     "detail": (f"`proof_manuscript` 要的是工作区相对路径（盘上那一份文件），"
                                f"收到 {manuscript!r} ⇒ 这一格没审、不落签")}
         from .. import vsigns as _VS
-        if not _VS.manuscript_id_of(rel):
+        _mid = _VS.manuscript_id_of(rel)
+        _carrier = _VS.sign_carrier_reading(rel)
+        if not _carrier.get("ok"):
+            # 2026-11-05（父裁定）：计划稿是合法的落稿名，但不是签的载体。
+            # 这里只判签的那一侧，`parse_manuscript_name` 一个字节都不改（F 的
+            # 「先落计划名、拿到号再改名」还要用它）。
+            return {"failed": True, "kind": "bad_manuscript_name",
+                    "reason": "bad_manuscript_name",
+                    "detail": (f"`{rel}` 不是签的载体：{_carrier.get('reason')}"
+                               " ⇒ 这一格没审、不落签")}
+        if not _mid:
             # 2026-11-04（业主裁定 · 乙-2）：按号命名是硬条件。认不出号的稿会写出
             # 第 9 格为空串的签块，而 B 的 `manuscript_sign_gate` 对
             # `manuscript_id_missing` 一律不认 —— V 签了、没人能认。
@@ -1799,6 +1806,19 @@ class AgentV:
                                "转正成按号命名的那一份（`reports/f-proof-<命题号>.md`，"
                                "`notes/…` 稿走转正那一步）再来；认不出号的签块 B 不认，"
                                "签了也白签")}
+        if (str(statement_id or "").strip() and _mid != str(statement_id).strip()
+                # E 的数值证明稿按实验号寻址（`reports/e-proof-<实验号>.md`），
+                # 命题号在登记那一行上 ⇒ 这一族的稿号与命题号本来就不同名。
+                # 其余两族（F 的证明稿 / B 的改写稿）必须是同一条命题的稿。
+                and not rel.startswith("reports/e-proof")):
+            # 2026-11-05（业主）：稿号必须就是这一条命题。改前只要求"认得出一个号"，
+            # 于是 `reports/b-proof-000016.md` 可以被当成 000014 的证明签下去（第 9 格
+            # 写 000016、台账写 000014）—— 签盖错了对象，而没有任何一处会报。
+            return {"failed": True, "kind": "bad_manuscript_name",
+                    "reason": "bad_manuscript_name",
+                    "detail": (f"`{rel}` 的稿号是 {_mid}，而这一签要给 stmt:"
+                               f"{str(statement_id).strip()} ⇒ 不审、不落签：签盖的必须是"
+                               "这一条命题自己的那一份稿（`reports/{f,b,e}-proof-<命题号>.md`）")}
         path = Path(self.workspace_root) / rel
         if not path.is_file():
             return {"failed": True, "kind": "manuscript_missing",
@@ -2381,6 +2401,10 @@ class AgentV:
                 f"签已颁发（`{issued.get('path') or '签文件'}`，信封→"
                 f"{who or '（没有收方秘书）'}），但块没落："
                 f"{landed.get('reason') or issued.get('reason') or '没有理由'}")
+        elif str(issued.get("code") or "") == _VS.STATEMENT_ID_MISSING:
+            # 2026-11-05（业主）：没有命题号就没有可签的对象。这一档不是"签发失败"
+            # （那会让调用方去重试），是"这一份稿还不能签"：先登记拿到号，再带号送审。
+            block_write.update(state="refused", why=str(issued.get("reason") or ""))
         else:
             block_write["why"] = (
                 f"签发没成（`{issued.get('path') or '签文件'}`）："
@@ -2435,7 +2459,14 @@ class AgentV:
             pending_ledger = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl#"
                               f"{pending.get('verification_id') or '?'}")
         if stopped == "signed":
-            if manuscript_write.get("written"):
+            if issued.get("code") == "statement_id_missing":
+                # 2026-11-05（业主）：「没有命题号就没有可签的对象」。三转读数照给，
+                # 但它不构成签 —— 这一档与"看过、没签"同一个诚实度（`signed_bit3=False`），
+                # 区别只在原因：缺的是号，不是手稿。
+                record = (str(issued.get("reason") or "")
+                          + f"这一趟的三转判定（{got.get('verdict') or '（无结论）'}，"
+                            f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
+            elif manuscript_write.get("written"):
                 record = (f"签块由收方秘书落进了 `{got.get('manuscript')}`（"
                           f"连续 {block.get('streak')}/{block.get('need')} 成立）——B 收录这条命题时"
                           "从手稿里读到它，第 3 位就翻上去；这里 `signed_bit3=False` 是诚实的："
@@ -2467,10 +2498,12 @@ class AgentV:
                       "负判不是签）。判词已落 "
                       f"`{pending_ledger or '（pending 台账）'}`，F 的读数是「未通过」；"
                       "按缺陷改稿后再送，不签第 3 位、也不写重复块。")
+        _no_statement = bool(issued.get("code") == "statement_id_missing")
         out.update({
             "checked": True,
-            "kind": ("proof_unregistered_signed" if stopped == "signed"
-                     else "proof_reviewed_not_signed" if stopped == "reviewed_unsigned"
+            "kind": ("proof_reviewed_not_signed"
+                     if (_no_statement or stopped == "reviewed_unsigned")
+                     else "proof_unregistered_signed" if stopped == "signed"
                      else "proof_unregistered_rejected"),
             "verification_id": str(pending.get("verification_id") or ""),
             "verdict": str(got.get("verdict") or block.get("verdict") or ""),
@@ -2483,7 +2516,8 @@ class AgentV:
             "signed_bit3": False,
             "review_passes": list(got.get("passes") or []),
             "ledger": pending_ledger or str(got.get("manuscript") or ""),
-            "reason": str(got.get("reason") or ""),
+            "reason": ("statement_id_missing" if _no_statement
+                       else str(got.get("reason") or "")),
             "detail": record,
         })
         self._emit(f"verify_proof(未在册)：{out['kind']}（{out['reason']}）")
