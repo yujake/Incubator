@@ -63,6 +63,17 @@ def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
     root = tmp_path / "ws"
     (root / "reports").mkdir(parents=True)
     (root / MANUSCRIPT).write_text(PROOF, encoding="utf-8")
+    # 2026-11-05 晚（业主裁定）：签必须有独立台账背书 —— `issue()` 的
+    # `sign_ledger_backing` 会按 `ledger` 锚点真读 `verifications/<号>.jsonl`，
+    # 行不在盘上就不发签（`ledger_row_missing`）。这一格补的是"那一签真的审过"
+    # 这一事实（三转「成立」，最后一行正是 `_issue` 的 `v-000003`）；只给历史列
+    # / 只给手稿签块都不算签，本文件量的是"签文件记没记下写稿结果"。
+    body = _DS.proof_body(PROOF).strip("\n")
+    for _i in range(int(_VR.SIGN_STREAK_NEED)):
+        _VR.record_verification(
+            str(root), statement_id="000000", proof_text=body,
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            proof_no=1, manuscript=MANUSCRIPT)
     return root
 
 
