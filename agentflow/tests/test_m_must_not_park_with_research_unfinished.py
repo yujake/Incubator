@@ -3,33 +3,32 @@
 
 ## 现场（只读取证，`projects/R-mk-infinite-93`）
 
-    tasks=10（M4 / D3 / E2 / A1）· statements 0 · documents 0 · experiments 10
-    （其中 7 条 result ∈ supports/refutes）· research_questions 1 条 open
+    tasks=M6 / D4 / E2 / A1 / C0 · statements 0 · experiments 11
+    （其中 supports/refutes 是有结论的）· research_questions 有开着的
     板上未结项 0
-    会话：M agent_children → M agent_mailbox → agent_park（每 20 分钟醒一次再 park）
+    三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮实验/穷举"，
+    C 一次都没派过 ⇒ 没有 concept ⇒ F 的可引池是空的 ⇒ 没有命题可立 ⇒
+    没有稿可签 ⇒ 等级永远上不去。
 
-D 已交出「手稿 000001：C1/C2/C3 成立」，但没有任何人把「立命题 → 派 F 落稿 →
-派 V 签 → 派 B 收录」排进板子。根本原因是 `agent_loop._pending_work` 的三条判据
-（新投递 / 未消板项 / 待消费子产出）只问"有没有人找我"，不问"盘上的研究做完了
-没有"：板上未结项 0 ⇒ 它每一拍都读成"无事可做" ⇒ 挂机。
+## 这一份钉的九件事
 
-## 这一份钉的六件事（a–e；f 是"只挡 M"；lint 另算）
+两个分支各一条"现场形状 ⇒ 必须排出该动作"、各一条反真空；其余是"真·无事可做"
+与两条不空转的边界。判据本身只有一处实现（`agentflow.researchpending.pending_reading`）：
 
-a. 现场形状复刻：statements=0 + 有结论的实验 + 开着的 research_question
-   ⇒ M 这一拍 `decision="run"`（不 park），提示词里逐字带着读数与 `next_action`
-   （"立命题并派 F 落稿"）。
-b. 反真空：把「研究未尽」读数打桩成空 ⇒ 同一个现场又允许 park（且 a 的断言
-   当场变红）。没有这一条，a 可以靠"什么情况下都不 park"骗过去。
-c. 真·无事可做（有命题、有签、有收录、有稿）⇒ 允许 park（M 不是永动机）。
+a1. 分支甲（无概念面）：研究型项目里 concept 行 = 0（现场有实验/问题）
+    ⇒ M 这一拍 `decision="run"`（不 park），提示词逐字带 `concepts=0` 与
+    `next_action=concept_missing`（"派 C 梳理概念"）。
+a2. 分支乙（有核验结论未命题化）：已有 concept，`experiments` 里有 7 条有结论的、
+    而非概念 `statements` = 0 ⇒ `next_action=candidate_unfiled`
+    （"立命题并派 F 落稿"）。
+b1. 反真空（甲）：把 `_gap_concept_missing` 打桩成空 ⇒ 同一现场又允许 park，
+    且 a1 的断言当场变红。
+b2. 反真空（乙）：把 `_gap_candidate_unfiled` 打桩成空 ⇒ 同一现场又允许 park，
+    且 a2 的断言当场变红。
+c. 真·无事可做（有 concept、有命题、有签、有收录义务清零、有稿）⇒ 允许 park。
 d. 同一读数连续挡到 `RESEARCH_STALL_LIMIT` ⇒ 报一次受控告警并放开（不许无限空转）。
-e. 读数坏掉（`checked=False` / fingerprint 为空）也走同一条上限，不许变成
-   "没查成 ⇒ 永远挡"的无限空转。
-f. 只挡 M：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 的三条口径
-   一个字没改）。
-
-判据本身只有一处实现（`agentflow.researchpending.pending_reading`）：`conductor.patrol`
-的异常清单与挂机判据读的是同一份，本文件另有一条直接读它；`conductor.state` 给的是
-同一批表的逐表读数（`tables.statements / documents / experiments`），不另写第二套口径。
+e. 读数坏掉（`checked=False` / fingerprint 为空）也走同一条上限。
+f. 只挡 M：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 三条口径一个字没改）。
 
 边界：全部 tmp 工作区、假时钟、替身模型（`_Gate` 照剧本回答），零真实模型调用。
 """
@@ -145,8 +144,20 @@ def _experiment(store: Store, eid: str, result: str) -> None:
         tx.upsert("experiments", row.to_dict())
 
 
-def _seed_field_shape(store: Store) -> None:
-    """复刻真机现场的台账形状：10 条实验（7 条有结论）+ 1 条开着的题，0 命题 0 稿。"""
+def _add_concepts(store: Store, n: int = 1) -> list[dict]:
+    """铺 concept 行（concept 面的正控）。"""
+    rows: list[dict] = []
+    for i in range(n):
+        rows.append(seed_statement_row(
+            store, kind="concept",
+            statement_full=f"定义 {i}：R(m,k)-example 是 m-正则、围长恰为 k、"
+                           "每条边至少落在两个不同的 k-圈上的连通简单图。",
+            statement_text=f"R(m,k)-example 的定义 {i}"))
+    return rows
+
+
+def _seed_conclusive_experiments(store: Store) -> None:
+    """真机现场的 10 条实验（7 条有结论、3 条 inconclusive）。"""
     for eid, result in (("000001", "refutes"), ("000004", "refutes"),
                         ("000005", "refutes"), ("000006", "refutes"),
                         ("000009", "refutes"), ("000007", "supports"),
@@ -154,6 +165,14 @@ def _seed_field_shape(store: Store) -> None:
         _experiment(store, eid, result)
     for eid in ("000000", "000002", "000003"):
         _experiment(store, eid, "inconclusive")
+
+
+def _seed_branch_a_shape(store: Store) -> None:
+    """分支甲现场：研究型项目、0 个 concept、有实验与开着的题。
+
+    与 R-mk-infinite-93 同形（C0 / statements 0 / experiments 有结论 / 题开着）。
+    """
+    _seed_conclusive_experiments(store)
     with store.tx("research_questions", actor="test") as tx:
         tx.upsert("research_questions", {
             "question_id": "000000",
@@ -163,8 +182,20 @@ def _seed_field_shape(store: Store) -> None:
         })
 
 
+def _seed_branch_b_shape(store: Store) -> None:
+    """分支乙现场：已有 concept 面，有结论的实验还没有任何命题在册。"""
+    _add_concepts(store)
+    _seed_conclusive_experiments(store)
+
+
+def _seed_concept_only_gap(store: Store) -> None:
+    """只缺概念面的研究型现场（一条 inconclusive 实验 ⇒ 研究型；没有别的 gap）。"""
+    _experiment(store, "000000", "inconclusive")
+
+
 def _seed_finished_research(store: Store, ws: pathlib.Path) -> dict[str, Any]:
-    """真·无事可做：一条有证明的命题、V 签住、稿子落行。"""
+    """真·无事可做：concept 一行、有证明的命题一行、V 签住、稿子落行。"""
+    _add_concepts(store)
     row = seed_statement_row(
         store, proof_text="Proof. 每条边恰好落在两个不同的 k-圈上。",
         statement_full="定理：R(6,3) 的候选族 C1 满足每条边恰有 2 个 3-圈。",
@@ -205,71 +236,61 @@ def _park_once_then_stop(bench, ws: pathlib.Path):
     return park_slice
 
 
-def _assert_a_holds(run: Any, gate: _Gate) -> None:
-    """a 的那组断言（b 用它证明"打桩成空之后 a 会红"）。"""
+def _assert_branch_holds(run: Any, gate: _Gate, *, action: str,
+                         needles: Sequence[str]) -> None:
+    """一个分支的 a 组断言（b 用它证明"打桩成空之后 a 会红"）。"""
     assert str(run.park.get("decision") or "") == "run", run.park
     assert gate.prompts, "研究未尽却一拍都没问模型 ⇒ 挂机支没被挡住"
     prompt = gate.prompts[0]
-    assert "【未尽研究" in prompt, prompt[-1200:]
-    assert "立命题" in prompt, prompt[-1200:]
-    assert "派 F" in prompt, prompt[-1200:]
-    assert "statements=0" in prompt, prompt[-1200:]
-    assert "experiments_conclusive=7" in prompt, prompt[-1200:]
+    assert "【未尽研究" in prompt, prompt[-1500:]
+    for needle in needles:
+        assert needle in prompt, (needle, prompt[-1500:])
+    assert (run.park.get("research", {}).get("next_action") or {}).get("code") == action, \
+        run.park
 
 
-# ------------------------------------------------------------------ a 现场形状
+# ------------------------------------------------------------------ a1 分支甲
 
-def test_field_shape_does_not_park_and_names_the_next_action(
+def test_branch_a_no_concept_face_dispatches_c(
         tmp_path: pathlib.Path, bench) -> None:
-    """a：D 已交候选族、statements=0、板上未结项 0 ⇒ M 这一拍不许 park。
-
-    改前红：同一现场 `run.park["decision"] == "park"`、`gate.prompts == []`
-    （真机的 `agent_park` 每一拍都在）。
-    """
-    st, cond, ws = _ws(tmp_path, "field")
+    """a1：concept=0 的研究型现场 ⇒ M 不许 park，必须排"派 C 梳理概念"。"""
+    st, cond, ws = _ws(tmp_path, "branch-a")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
-    _seed_field_shape(st)
+    _seed_branch_a_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
 
     def stop_after_first(index: int, prompt: str) -> None:
         if index == 0:
-            _stop_now(ws, "判据 a：第一拍不许 park")
+            _stop_now(ws, "判据 a1：第一拍不许 park")
 
     gate = _Gate([_tool("clock.now")], on_call=stop_after_first)
     run = _loop(st, cond, ws, gate, me).run(
         TASK, summoned_by="user", my_task_id=me, depth=1)
 
     assert run.stop_reason == "stop_file", run.to_dict()
-    _assert_a_holds(run, gate)
-    # 判据本身（与 conductor.state / patrol / 挂机判据同一份实现）
+    _assert_branch_holds(run, gate, action="concept_missing",
+                         needles=("concepts=0", "派 C", "梳理概念"))
     reading = RP.pending_reading(st)
     assert reading["checked"] is True, reading
     assert reading["pending"] is True, reading
-    assert reading["gaps"][0]["code"] == "candidate_unfiled", reading
-    assert reading["next_action"]["code"] == "candidate_unfiled", reading
-    assert reading["next_action"]["target"] == "D", reading
-    assert reading["counts"]["statements"] == 0, reading
-    assert reading["counts"]["experiments_conclusive"] == 7, reading
-    assert reading["counts"]["questions_open"] == 1, reading
-    # 同一份判据的底座必须能从 M 的两处看盘面上读到：state 给逐表读数，
-    # patrol 的异常清单给这一句（顶层键集被冻结快照钉着，所以异常清单是既有出口）。
+    assert reading["counts"]["concepts"] == 0, reading
+    assert reading["counts"]["research_shaped"] is True, reading
+    assert reading["gaps"][0]["code"] == "concept_missing", reading
+    assert reading["next_action"] == {
+        "code": "concept_missing", "target": "C",
+        "summary": ("派 C 梳理概念：从已有文献/实验里抽出概念与关系（concept 行是 F 的"
+                    "可引池；没有它，命题立不出来、稿也没得签）")}, reading
+    # 同一份底座能从 M 的两处看盘面读到：state 给逐表读数，patrol 异常清单给这一句。
     reg = build_registry(store=st, conductor=cond, workspace_root=ws).registry
     state = reg.call("conductor.state", role="M")
     assert state.ok, state.error
     assert state.data["tables"]["statements"] == 0, state.data.get("tables")
-    assert state.data["tables"]["documents"] == 0, state.data.get("tables")
-    assert state.data["tables"]["experiments"] == 10, state.data.get("tables")
     patrol = reg.call("conductor.patrol", role="M")
     assert patrol.ok, patrol.error
-    assert any("未尽研究" in str(x) for x in (patrol.data.get("anomalies") or ())), \
+    assert any("concept_missing" in str(x) for x in (patrol.data.get("anomalies") or ())), \
         patrol.data.get("anomalies")
-    # 挂机读数那一格：这一拍读到了什么、挡没挡、排了什么动作
-    assert run.park["research"]["pending"] is True, run.park
-    assert run.park["research"]["next_action"]["code"] == "candidate_unfiled", run.park
-    assert run.park["research_blocked"] is True, run.park
-    # 盘上没有"这一拍挂了机"的事件（改前是每一拍都有一条）
     events, problems = SS.read_session(ws, sid=SID)
     assert not problems, problems
     parked = [e for e in events
@@ -277,46 +298,101 @@ def test_field_shape_does_not_park_and_names_the_next_action(
     assert parked == [], parked
 
 
-# ------------------------------------------------------------------ b 反真空
+# ------------------------------------------------------------------ a2 分支乙
 
-def test_the_research_reading_is_load_bearing(
-        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    """b：把「研究未尽」读数打桩成空 ⇒ 同一个现场又允许 park，且 a 的断言当场变红。
-
-    没有这一条，a 可以靠"任何情况下都不 park"骗过去（那会把 M 变成永动机）。
-    """
-    st, cond, ws = _ws(tmp_path, "vacuum")
+def test_branch_b_verified_conclusions_are_propositionalized(
+        tmp_path: pathlib.Path, bench) -> None:
+    """a2：concept 面在、7 条有结论的实验、非概念命题 0 ⇒ 必须排"立命题并派 F"。"""
+    st, cond, ws = _ws(tmp_path, "branch-b")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
-    _seed_field_shape(st)
+    _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
 
-    empty = {"checked": True, "pending": False, "gaps": [], "next_action": None,
-             "counts": {}, "fingerprint": "", "reason": "打桩：没有未尽研究"}
-    monkeypatch.setattr(AgentLoop, "_research_reading", lambda self_: dict(empty))
+    def stop_after_first(index: int, prompt: str) -> None:
+        if index == 0:
+            _stop_now(ws, "判据 a2：第一拍不许 park")
+
+    gate = _Gate([_tool("clock.now")], on_call=stop_after_first)
+    run = _loop(st, cond, ws, gate, me).run(
+        TASK, summoned_by="user", my_task_id=me, depth=1)
+
+    assert run.stop_reason == "stop_file", run.to_dict()
+    _assert_branch_holds(run, gate, action="candidate_unfiled",
+                         needles=("concepts=1", "statements=0",
+                                  "experiments_conclusive=7", "立命题", "派 F"))
+    reading = RP.pending_reading(st)
+    assert reading["pending"] is True, reading
+    assert reading["counts"]["concepts"] == 1, reading
+    assert reading["counts"]["statements"] == 0, reading
+    assert reading["counts"]["experiments_conclusive"] == 7, reading
+    assert reading["gaps"][0]["code"] == "candidate_unfiled", reading
+    assert reading["next_action"]["code"] == "candidate_unfiled", reading
+    assert reading["next_action"]["target"] == "D", reading
+    events, problems = SS.read_session(ws, sid=SID)
+    assert not problems, problems
+    parked = [e for e in events
+              if e.get("kind") == AL.PARK_EVENT and str(e.get("decision")) == "park"]
+    assert parked == [], parked
+
+
+# ------------------------------------------------------------------ b1 反真空（甲）
+
+def test_branch_a_criterion_is_load_bearing(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    """b1：把 concept 面那一条打桩成空 ⇒ 同一现场又允许 park，且 a1 的断言变红。"""
+    st, cond, ws = _ws(tmp_path, "vacuum-a")
+    me = cond.open_top_level_run("M", TASK)
+    child = _child(cond, me)
+    _seed_concept_only_gap(st)
+    CLK.start_timer(ws, reason="等 D", wait_for=f"task:{child}", task_id=me, role="M")
+    assert [g["code"] for g in RP.pending_reading(st)["gaps"]] == ["concept_missing"]
+    monkeypatch.setattr(RP, "_gap_concept_missing", lambda counts: None)
     monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
     gate = _Gate([_tool("clock.now")])
     run = _loop(st, cond, ws, gate, me).run(
         TASK, summoned_by="user", my_task_id=me, depth=1)
 
     assert run.stop_reason == "stop_file", run.to_dict()
-    assert gate.prompts == [], ("打桩成空之后仍然问了模型 ⇒ 判据 a 读的不是这一格",
-                                gate.prompts)
+    assert gate.prompts == [], ("concept 面板打桩成空之后仍然问了模型", gate.prompts)
     assert str(run.park.get("decision") or "") == "park", run.park
-    assert run.park["research"]["pending"] is False, run.park
     with pytest.raises(AssertionError):
-        _assert_a_holds(run, gate)
+        _assert_branch_holds(run, gate, action="concept_missing", needles=("派 C",))
+
+
+# ------------------------------------------------------------------ b2 反真空（乙）
+
+def test_branch_b_criterion_is_load_bearing(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    """b2：把"有结论未命题化"那一条打桩成空 ⇒ 同一现场又允许 park，a2 变红。"""
+    st, cond, ws = _ws(tmp_path, "vacuum-b")
+    me = cond.open_top_level_run("M", TASK)
+    child = _child(cond, me)
+    _seed_branch_b_shape(st)
+    CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
+                    task_id=me, role="M")
+    assert [g["code"] for g in RP.pending_reading(st)["gaps"]] == ["candidate_unfiled"]
+    monkeypatch.setattr(RP, "_gap_candidate_unfiled",
+                        lambda counts, conclusive: None)
+    monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
+    gate = _Gate([_tool("clock.now")])
+    run = _loop(st, cond, ws, gate, me).run(
+        TASK, summoned_by="user", my_task_id=me, depth=1)
+
+    assert run.stop_reason == "stop_file", run.to_dict()
+    assert gate.prompts == [], ("候选族那一判据打桩成空之后仍然问了模型", gate.prompts)
+    assert str(run.park.get("decision") or "") == "park", run.park
+    with pytest.raises(AssertionError):
+        _assert_branch_holds(run, gate, action="candidate_unfiled",
+                             needles=("立命题", "派 F"))
 
 
 # ------------------------------------------------------------------ c 真·无事可做
 
 def test_finished_research_still_parks(
         tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    """c：有命题、有签、有收录义务清零、有稿 ⇒ 允许 park（不许变成永动机）。
-
-    改前/改后都该 park；这一条钉的是"新判据不会把已完成的研究永远挡住"。
-    """
+    """c：有 concept、有命题、有签、有收录、有稿 ⇒ 允许 park（不变成永动机）。"""
     st, cond, ws = _ws(tmp_path, "done")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
@@ -332,29 +408,24 @@ def test_finished_research_still_parks(
     reading = RP.pending_reading(st)
     assert reading["checked"] is True, reading
     assert reading["pending"] is False, reading
+    assert reading["counts"]["concepts"] == 1, reading
     assert reading["counts"]["statements"] == 1, reading
     assert reading["counts"]["statements_unsigned"] == 0, reading
     assert reading["counts"]["documents"] == 1, reading
     assert gate.prompts == [], ("研究已收工却还问了模型 ⇒ 允许 park 的那一档被挡坏了",
                                 gate.prompts)
     assert str(run.park.get("decision") or "") == "park", run.park
-    assert run.park["research"]["pending"] is False, run.park
 
 
-# ------------------------------------------------------------------ e 不许无限空转
+# ------------------------------------------------------------------ d 同一读数有上限
 
 def test_the_same_reading_only_blocks_for_a_bounded_number_of_beats(
         tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    """e：同一读数连续挡到 `RESEARCH_STALL_LIMIT` ⇒ 报一次受控告警并放开挂机。
-
-    这一条钉的是"不许无限空转"：模型连着不排动作、读数也不变时，强迫它每一拍都
-    问一次模型就是把睡 20 分钟换成 0.5 秒一次烧钱。到上限之后：事件只落一条、
-    `decision` 回到 `park`、轮查计时器照旧；读数一变（下一次有进展）会重新从 1 数起。
-    """
+    """d：同一读数连续挡到 `RESEARCH_STALL_LIMIT` ⇒ 报一次受控告警并放开挂机。"""
     st, cond, ws = _ws(tmp_path, "stall")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
-    _seed_field_shape(st)
+    _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
     monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
@@ -381,17 +452,15 @@ def test_the_same_reading_only_blocks_for_a_bounded_number_of_beats(
     assert len(parked) == 1, parked
 
 
+# ------------------------------------------------------------------ e 读不成也有上限
+
 def test_an_unreadable_reading_is_bounded_too(
         tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    """读不成那一档也要有上限：fail-closed 挡，但连续挡到上限同样放开并告警。
-
-    没有这一条，`checked=False`（fingerprint 为空）会让 streak 永远从 1 数起 ——
-    "没查成 ⇒ 不许挂机"在读数坏掉时就变成真正的无限空转。
-    """
+    """e：fail-closed 挡，但连续挡到上限同样放开并告警（读坏不是无限挡）。"""
     st, cond, ws = _ws(tmp_path, "unreadable")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
-    _seed_field_shape(st)
+    _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
     broken = {"checked": False, "pending": True, "gaps": [], "next_action": None,
@@ -417,11 +486,11 @@ def test_an_unreadable_reading_is_bounded_too(
 
 def test_the_new_block_is_m_side_only(
         tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    """d：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 三条口径一个字没改）。"""
+    """f：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 三条口径一个字没改）。"""
     st, cond, ws = _ws(tmp_path, "dside")
     me = cond.open_top_level_run("D", TASK)
     child = _child(cond, me, role="E")
-    _seed_field_shape(st)
+    _seed_branch_a_shape(st)
     CLK.start_timer(ws, reason="等 E 交回穷举读数", wait_for=f"task:{child}",
                     task_id=me, role="D")
     monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))

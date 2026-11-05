@@ -18,17 +18,25 @@
 
 | 档 | 判据（可读） | 下一动作（按 `specs/m.py` 的边表） |
 |---|---|---|
+| `concept_missing` | 研究型项目（有实验/开着的问题/文献/稿子）里，`statements` 的 concept 行 = 0 | 派 C 梳理概念（概念面是 F 的可引池：没有它，命题立不出来、稿没得签） |
 | `candidate_unfiled` | 有结论的 `experiments`（`result ∈ supports/refutes` 且 `evidence_kind ∈ proof/cross_check`）> 0，而非概念 `statements` = 0 | 立命题并派 F 落稿：派 D 立项，由 D 派 F 写命题与证明（M 不直连 F） |
 | `statements_unsigned` | `closing.statements_unsigned_reading` 的 `count` > 0（既没有 V 签、也没有被明确放弃的命题） | 派 D 让 F 补签（谁产出谁送 V）；命题已在册的缺签由 B 处置；拿不到签就明确放弃 |
 | `signed_unregistered` | 板上开着的 `b-register@` 义务 > 0（稿上已有成立的 V 签、`statements` 里还没入库） | 派 B 收录 |
 | `open_questions` | `research_questions` 里还有 `open` / `needs_evidence` / `researching` | 派 A 补检索 / 派 D 继续攻 |
 | `manuscript_missing` | 非概念 `statements` > 0 而 `documents` = 0（研究已落成命题，稿子还没有一行） | 派 G 成文（或派 D 先出手稿） |
 
+`concept_missing` 与 `candidate_unfiled` 是两条独立的分支，缺一不可：
+真机 R-mk-infinite-93 的三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮
+实验/穷举"，C 一次都没派过 —— 没有 concept ⇒ F 的可引池是空的 ⇒ 没有命题可立 ⇒
+没有稿可签 ⇒ 等级永远上不去。所以概念面先于命题面（上表就是这么排的），而两条
+各自的判据都必须能单独触发（判据见 `tests/test_m_must_not_park_with_research_unfinished.py`
+的 a1/a2 与 b1/b2）。
+
 `pending = bool(gaps)`：任何一条非空都算"研究未尽"。"一件事都没开始"不算：
-一个从来没有任何实验/命题/问题的空工作区不产生 gap —— 它是"没有研究对象"，不是
-"研究没做完"，这一档不归本读数判（M 的其它政策照旧）。"做完了"也不产生 gap：
-有命题、有签（`statements_unsigned = 0`）、没有未收录义务、没有开着的题、有稿
-⇒ `pending=False`，挂机照旧允许（不许把 M 变成永动机）。
+一个从来没有任何实验/命题/问题/文献/稿子的空工作区不产生 gap —— 它是"没有研究
+对象"，不是"研究没做完"，这一档不归本读数判（M 的其它政策照旧）。"做完了"也不
+产生 gap：有 concept、有命题、有签（`statements_unsigned = 0`）、没有未收录义务、
+没有开着的题、有稿 ⇒ `pending=False`，挂机照旧允许（不许把 M 变成永动机）。
 
 ## 三态
 
@@ -72,6 +80,11 @@ def _verified_kinds() -> tuple[str, ...]:
 #: 下一条动作的说明（按 gap code 取；`target` 是这条动作该落到谁身上）。
 #: 为什么把"派谁"写在这里：M 的边表不许在这里重写一遍，但动作要能落到一个具体角色才叫"排出动作"；`target` 只是那句话的主语，不是权限面。
 _GAP_ACTIONS: dict[str, dict[str, str]] = {
+    "concept_missing": {
+        "target": "C",
+        "summary": ("派 C 梳理概念：从已有文献/实验里抽出概念与关系（concept 行是 F 的"
+                    "可引池；没有它，命题立不出来、稿也没得签）"),
+    },
     "candidate_unfiled": {
         "target": "D",
         "summary": ("立命题并派 F 落稿：派 D 立项，由 D 派 F 把候选族写成命题与证明"
@@ -118,6 +131,56 @@ def _ids(rows: list[Mapping[str, Any]], field: str, limit: int = 12) -> list[str
     return out
 
 
+def _gap_concept_missing(counts: Mapping[str, Any]) -> dict[str, Any] | None:
+    """分支甲：概念面是不是空的（研究型项目里 concept 行 = 0）。
+
+    为什么要先于"候选族"那一条：真机 R-mk-infinite-93 的三次轮查每次都只排
+    "再做一轮实验/穷举"，C 零次 —— 没有 concept ⇒ F 的可引池空 ⇒ 没有命题可立。
+    没有这一条，"有结论的实验"那条会一直排在 C 前面，而它是立不出来的。
+
+    作用域：只对"研究型项目"触发（`research_shaped=True`）。一个空工作区
+    （没有实验 / 问题 / 文献 / 稿子）不产生这一条 —— 它是"没有研究对象"，
+    不是"概念面缺席"，否则 M 在任何空工作区里都挂不了机（连"打个招呼"的任务
+    也会被派去梳理概念）。
+    """
+    if int(counts.get("concepts") or 0) > 0:
+        return None
+    if not bool(counts.get("research_shaped")):
+        return None
+    return {
+        "code": "concept_missing",
+        "count": 1,
+        "observed": 0,
+        "ids": [],
+        "why": ("研究型项目里 statements 的 concept 行是 0 —— 概念面还没建："
+                "F 的可引池是空的，命题立不出来、稿也没得签"),
+    }
+
+
+def _gap_candidate_unfiled(counts: Mapping[str, Any],
+                           conclusive: list[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """分支乙：已有核验结论、而对应命题不存在（非概念 statements = 0）。
+
+    "对应命题不存在"取的是可读的那一格：非概念 `statements` = 0。不做"实验 claim
+    与命题正文逐条配对"—— 那种配对要靠相似度，配不上时读数永远非空（永动机），
+    而"一条命题都还没立"是它确定性的下界：只要还有任何一条命题在册，这一条就消失，
+    剩下的候选族由 `open_questions` / 后续轮次继续盯。
+    """
+    if int(counts.get("experiments_conclusive") or 0) <= 0:
+        return None
+    if int(counts.get("statements") or 0) > 0:
+        return None
+    ids = _ids(list(conclusive), "experiment_id")
+    return {
+        "code": "candidate_unfiled",
+        "count": int(counts["experiments_conclusive"]),
+        "observed": int(counts["experiments_conclusive"]),
+        "ids": ids,
+        "why": (f"{counts['experiments_conclusive']} 条有结论的实验（"
+                f"{'、'.join(ids)}）还没有任何命题在册 —— 候选族还没有被立成命题"),
+    }
+
+
 def pending_reading(store: Any) -> dict[str, Any]:
     """本工作区"研究还没做完"的读数（纯读；返回 `checked / pending / gaps ...`）。
 
@@ -125,7 +188,8 @@ def pending_reading(store: Any) -> dict[str, Any]:
 
     - `checked`：这一格查成了没有（`False` ⇒ `pending=True`，fail-closed）；
     - `pending`：`bool(gaps)` —— 还有未尽研究，挂机判据据此挡；读不成也置真；
-    - `gaps`：按优先级排好的未尽项，每项 `{code, count, ids, why}`；
+    - `gaps`：按优先级排好的未尽项，每项 `{code, count, ids, why}`（`concept_missing`
+      那一档另有 `observed=0`：缺的是概念面本身，不是"0 条待办"）；
     - `next_action`：第一条 gap 的下一动作 `{code, target, summary}`（没有 gap ⇒ None）；
     - `counts`：判据用到的全部读数（人在报告里能逐格复核）；
     - `fingerprint`：`gaps` 的稳定指纹（`agent_loop` 的"同一读数连续 N 拍"用它记账）；
@@ -146,6 +210,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
         statements = [dict(r) for r in store.rows("statements")]
         documents = [dict(r) for r in store.rows("documents")]
         questions = [dict(r) for r in store.rows("research_questions")]
+        literature = [dict(r) for r in store.rows("literature")]
         tasks = [dict(r) for r in store.rows("tasks")]
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不许折成"做完了"
         out["reason"] = f"台账读不出来（{type(exc).__name__}: {exc}）⇒ 研究是否做完判不了"
@@ -158,6 +223,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
                   if str(r.get("result") or "") in conclusive_results
                   and str(r.get("evidence_kind") or "") in verified_kinds]
     propositions = [r for r in statements if str(r.get("kind") or "") != "concept"]
+    concepts = [r for r in statements if str(r.get("kind") or "") == "concept"]
     # 被明确放弃的命题不算"在册的命题"：它的义务已经作废（`closing.statements_unsigned`
     # 对放过的那一档也不计入）。这里与它同一把尺。
     live_statements = [r for r in propositions
@@ -179,13 +245,19 @@ def pending_reading(store: Any) -> dict[str, Any]:
                         "reason": f"{type(exc).__name__}: {exc}"}
 
     counts: dict[str, Any] = {
+        "concepts": len(concepts),
         "experiments_active": len(active_experiments),
         "experiments_conclusive": len(conclusive),
         "statements": len(live_statements),
         "statements_unsigned": int(unsigned.get("count") or 0),
         "documents": len(documents),
+        "literature": len(literature),
         "questions_open": len(open_questions),
         "registration_open": len(register_items),
+        # 「研究型项目」= 盘上已有任何可供研究的对象。空工作区不适用概念面那一条
+        # （见 `_gap_concept_missing` 的 docstring）。
+        "research_shaped": bool(active_experiments or open_questions
+                                or literature or documents),
     }
     out["counts"] = counts
     if not _flag(unsigned.get("checked")):
@@ -194,15 +266,13 @@ def pending_reading(store: Any) -> dict[str, Any]:
         return out
 
     gaps: list[dict[str, Any]] = []
-    if counts["experiments_conclusive"] > 0 and counts["statements"] == 0:
-        ids = _ids(conclusive, "experiment_id")
-        gaps.append({
-            "code": "candidate_unfiled",
-            "count": counts["experiments_conclusive"],
-            "ids": ids,
-            "why": (f"{counts['experiments_conclusive']} 条有结论的实验（"
-                    f"{'、'.join(ids)}）还没有任何命题在册 —— 候选族还没有被立成命题"),
-        })
+    # 分支甲先于分支乙：没有概念面时，"立命题"立不出来（F 的可引池是空的）。
+    concept_gap = _gap_concept_missing(counts)
+    if concept_gap is not None:
+        gaps.append(concept_gap)
+    candidate_gap = _gap_candidate_unfiled(counts, conclusive)
+    if candidate_gap is not None:
+        gaps.append(candidate_gap)
     if counts["statements_unsigned"] > 0:
         rows = [dict(r) for r in (unsigned.get("rows") or ()) if isinstance(r, Mapping)]
         ids = _ids(rows, "stmt_id")
@@ -242,8 +312,8 @@ def pending_reading(store: Any) -> dict[str, Any]:
     out["checked"] = True
     out["pending"] = bool(gaps)
     out["gaps"] = gaps
-    out["reason"] = ("查过了：没有未尽研究（有命题 / 有签 / 没有未收录义务 / 没有开着的题"
-                     " / 有稿）" if not gaps else
+    out["reason"] = ("查过了：没有未尽研究（有概念面 / 有命题 / 有签 / 没有未收录义务"
+                     " / 没有开着的题 / 有稿）" if not gaps else
                      f"查过了：{len(gaps)} 类未尽研究 —— " + "；".join(
                          f"{g['code']}×{g['count']}" for g in gaps))
     if gaps:
