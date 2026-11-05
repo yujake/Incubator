@@ -739,7 +739,12 @@ def test_criterion8_the_formal_slot_is_filled_by_the_right_kind(tmp_path: pathli
                   label="理论定理一条")
     formal_exp = {"experiment_id": S.format_id(3), "method": "formal",
                   "evidence_kind": "proof", "code_path": "formal/000003.lean",
-                  "verifier_output": "verified", "claim": "理论定理一条", "claim_key": "k"}
+                  "verifier_output": "verified", "claim": "理论定理一条",
+                  # 绑到 theory 这一条命题（2026-11-05 起 formal 通道按命题号绑，
+                  # 谓词是 `evidencebits.formal_row_bound_to`）：改前这里写的是 "k"，
+                  # 那是一行"没绑到任何命题"的 formal 行 —— 旧口径把它当成 theory 的凭据，
+                  # 正是 78c 缺陷的形状。
+                  "claim_key": f"stmt:{S.format_id(7)}"}
     slot2 = NP.formal_slot(theory, [formal_exp])
     assert (slot2["channel"], slot2["kind"], slot2["path"]) == (
         "formal", NP.FORMAL_SLOT_LEAN, "formal/000003.lean"), slot2

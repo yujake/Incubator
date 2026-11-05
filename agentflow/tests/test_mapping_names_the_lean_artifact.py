@@ -149,14 +149,23 @@ def _workspace(root: pathlib.Path, *, rows: list[dict],
     root = pathlib.Path(root)
     store = Store(root)
     store.init()
-    formal_proof = any(str(row.get("lean_file") or "").strip()
-                       or str(row.get("lean_target") or "").strip() for row in rows)
     ledger = {table: [dict(row) for row in table_rows]
               for table, table_rows in LEDGER.items()}
-    if formal_proof:
+    # 每一行填了凭据的定理，各要一条绑到它自己命题的 formal 行（2026-11-05 起
+    # `numericproof.proof_channel` 的 formal 分支按命题号绑，谓词是
+    # `evidencebits.formal_row_bound_to`）：一条 formal 行只证明它绑的那一条命题，
+    # 不再给同一张表里别的行当凭据（78c 缺陷：没绑的行让整表都读成 formal）。
+    for offset, row in enumerate(rows):
+        if not (str(row.get("lean_file") or "").strip()
+                or str(row.get("lean_target") or "").strip()):
+            continue
+        resolved = PM.resolve_ledger_id(row.get("ledger_id"), ledger)
+        if not resolved.get("ok") or str(resolved.get("table") or "") != "statements":
+            continue
         ledger["experiments"].append({
-            "experiment_id": "000008", "method": NP.FORMAL_METHOD,
-            "evidence_kind": "proof", "code_path": LEAN_REL})
+            "experiment_id": f"{8 + offset:06d}", "method": NP.FORMAL_METHOD,
+            "evidence_kind": "proof", "code_path": LEAN_REL,
+            "claim_key": f"stmt:{resolved['row_id']}"})
     for table, table_rows in ledger.items():
         path = root / "data" / str(PM.S.TABLES[table]["file"])
         doc = json.loads(path.read_text(encoding="utf-8"))

@@ -1956,6 +1956,37 @@ def is_lean_path(path: Any) -> bool:
         and not text.startswith("/") and ".." not in text.split("/")
 
 
+def _bound_formal_rows(statement: Mapping[str, Any],
+                       experiments: Sequence[Mapping[str, Any]]
+                       ) -> list[Mapping[str, Any]]:
+    """台账里绑到这条命题的 formal 证明行（`evidence_kind="proof"` 的 `.lean` 产物）。
+
+    绑定口径只有一处：`evidencebits.formal_row_bound_to`（四处绑定点，与
+    `evidencebits.formal_ledger_reading` 同一份）。这里不再写第三套判断。
+
+    为什么必须绑：改前这里只筛 method / evidence_kind / 产物后缀 —— 那是整张表的
+    读数（"这台机器上有一条 formal 行"），不是"这条命题被形式化过"。于是 L 只给一条
+    命题记 formal，同一张表里别的散文证明的命题也被判成 formal 通道
+    （2026-11-05 手工走查 78c：`prop:siegel` / `prop:region` / `prop:barrier` 各多报
+    一条 `mapping_lean_missing`，而 L 从未碰过它们）。
+    """
+    from . import evidencebits as _EB   # 惰性：绑定口径只有一处（也避开模块级环）
+    rows: list[Mapping[str, Any]] = []
+    for row in (experiments or ()):
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("method") or "") != FORMAL_METHOD:
+            continue
+        if str(row.get("evidence_kind") or "") != "proof":
+            continue
+        if not is_lean_path(row.get("code_path") or row.get("proof_location")):
+            continue
+        if not _EB.formal_row_bound_to(row, statement):
+            continue
+        rows.append(row)
+    return rows
+
+
 def proof_channel(statement: Mapping[str, Any],
                   experiments: Sequence[Mapping[str, Any]] = ()) -> str:
     """这条命题的证明走的是哪一条通道：`"numeric"` / `"formal"` / `""`（没有通道）。
@@ -1963,9 +1994,12 @@ def proof_channel(statement: Mapping[str, Any],
     判据（顺序即口径）：
     1. 证明栏能用 `proof_column_script` 取出程序，且台账里有一条与之对应的穷举证明
        ⇒ `numeric`（数值实验定理）；
-    2. 否则证明栏是程序（.lean）且台账里有 `method="formal"` + `evidence_kind="proof"` 的行
-       ⇒ `formal`（理论定理的 Lean 程序）；
+    2. 否则证明栏是程序（.lean）且台账里有一条 `method="formal"` + `evidence_kind="proof"`
+       的行、且那一行绑到这条命题上 ⇒ `formal`（理论定理的 Lean 程序）；
     3. 都不是 ⇒ 空串（没有这一类证明栏，这一格对它不适用）。
+
+    "绑到这条命题"的四处绑定点只有一份口径（`evidencebits.formal_row_bound_to`）：
+    台账里别的命题的 formal 行不是这一条的凭据。
     """
     row = _as_mapping(statement)
     text = str(row.get("proof_text") or "").strip()
@@ -1974,10 +2008,7 @@ def proof_channel(statement: Mapping[str, Any],
         return PROOF_CHANNEL_NUMERIC
     if script and is_lean_path(script):
         return PROOF_CHANNEL_FORMAL
-    lean_rows = [r for r in (experiments or ()) if isinstance(r, Mapping)
-                 and str(r.get("method") or "") == FORMAL_METHOD
-                 and str(r.get("evidence_kind") or "") == "proof"
-                 and is_lean_path(r.get("code_path") or r.get("proof_location"))]
+    lean_rows = _bound_formal_rows(row, experiments)
     if lean_rows and not script:
         return PROOF_CHANNEL_FORMAL
     return ""
@@ -1998,7 +2029,9 @@ def formal_slot(statement: Mapping[str, Any],
 
     - `channel`：`"numeric"` / `"formal"` / `""`（这一格对它不适用）；
     - `kind`：这一格应当填哪一类（`FORMAL_SLOT_KINDS` 之一；通道为空时也空）；
-    - `path`：这一格应当填的那份程序（通道为空时为空）；
+    - `path`：这一格应当填的那份程序（通道为空时为空）；formal 通道取的那一行必须
+      绑到这条命题（`evidencebits.formal_row_bound_to` 的四处绑定点）—— 台账里别的命题
+      的 formal 行不是这一条的凭据；
     - `problems`：空清单 = 填对了（或"没填"——三态：没填不是填错）。
     """
     row = _as_mapping(statement)
@@ -2023,10 +2056,7 @@ def formal_slot(statement: Mapping[str, Any],
                 "同一件事两个地址，读的人不知道验的到底是哪一份")
     else:
         lean = next((str(r.get("code_path") or r.get("proof_location") or "")
-                     for r in (experiments or ()) if isinstance(r, Mapping)
-                     and str(r.get("method") or "") == FORMAL_METHOD
-                     and str(r.get("evidence_kind") or "") == "proof"
-                     and is_lean_path(r.get("code_path") or r.get("proof_location"))), "")
+                     for r in _bound_formal_rows(row, experiments)), "")
         if not lean and is_lean_path(proof_column_script(text)):
             lean = proof_column_script(text)
         kind = FORMAL_SLOT_LEAN

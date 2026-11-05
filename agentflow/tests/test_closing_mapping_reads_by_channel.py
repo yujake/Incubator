@@ -53,7 +53,7 @@ from agentflow import papermapping as PM
 from agentflow import schema as S
 from agentflow.settings import ENV_LEAN_ENABLED
 
-from test_numeric_theorem_writing_spec import PROGRAM, _row, _workspace
+from test_numeric_theorem_writing_spec import PROGRAM, SID, _row, _workspace
 
 #: formal 通道那一份 Lean 源码（项目根相对：L 的真实落点 `code/formal/`）。
 FORMAL_LEAN = "code/formal/000004.lean"
@@ -102,6 +102,10 @@ def _make_experiment_formal(root: pathlib.Path) -> None:
     `method="formal"` + `evidence_kind="proof"` 的 `.lean` 行），也认证明栏直接写
     `.lean` 的那一种。这一条用前者：证明栏不是程序，所以旧口径的 `is_numeric_row` 不会
     把它抢到数值那一支 —— c 才是真正的"formal 行缺 target"回归。
+
+    这一行同时要绑到这条命题（2026-11-05 起 formal 通道按命题号绑，谓词是
+    `evidencebits.formal_row_bound_to`）：这一条命题是 `stmt:{SID}`，
+    不绑的 formal 行不是它的凭据。
     """
     path = root / "data" / str(S.TABLES["experiments"]["file"])
     doc = json.loads(path.read_text(encoding="utf-8"))
@@ -109,6 +113,7 @@ def _make_experiment_formal(root: pathlib.Path) -> None:
         item["method"] = NP.FORMAL_METHOD
         item["code_path"] = FORMAL_LEAN
         item["evidence_kind"] = "proof"
+        item["claim_key"] = f"stmt:{SID}"
     path.write_bytes((json.dumps(doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 

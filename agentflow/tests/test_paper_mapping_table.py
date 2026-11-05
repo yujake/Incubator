@@ -734,9 +734,17 @@ def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathl
     # `test_mapping_names_the_lean_artifact.py` 的 8 守着）。
     lean_ledger = {table: [dict(row) for row in table_rows]
                    for table, table_rows in CLEAN_LEDGER.items()}
-    lean_ledger["experiments"].append({
-        "experiment_id": "000008", "method": NP.FORMAL_METHOD,
-        "evidence_kind": "proof", "code_path": "formal/000004.lean"})
+    # 两条定理行各填了两格 ⇒ 台账里各要一条绑到它自己命题的 formal 证明
+    # （2026-11-05 起 formal 通道按命题号绑，谓词是 `evidencebits.formal_row_bound_to`）：
+    # 一条 formal 行只证明它绑的那一条命题，不再给同一张表里别的行当凭据。
+    for offset, row in enumerate(_lean_rows()):
+        if not str(row.get("lean_file") or "").strip():
+            continue
+        resolved = PM.resolve_ledger_id(row["ledger_id"], lean_ledger)
+        lean_ledger["experiments"].append({
+            "experiment_id": f"{8 + offset:06d}", "method": NP.FORMAL_METHOD,
+            "evidence_kind": "proof", "code_path": "formal/000004.lean",
+            "claim_key": f"stmt:{resolved['row_id']}"})
     lean = _workspace(tmp_path / "f", rows=_lean_rows(), ledger=lean_ledger)
     artifact = PM.package_dir(lean) / "formal" / "000004.lean"
     artifact.parent.mkdir(parents=True, exist_ok=True)

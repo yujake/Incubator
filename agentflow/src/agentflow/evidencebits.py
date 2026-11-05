@@ -1418,6 +1418,42 @@ def bit_ledger(bit: str) -> dict[str, str]:
     return dict(BIT_LEDGERS.get(str(bit), {}))
 
 
+def formal_row_bound_to(experiment: Mapping[str, Any],
+                        statement: Mapping[str, Any]) -> bool:
+    """这条 `method="formal"` 的实验行是不是绑到这条命题上（四处绑定点，唯一口径）。
+
+    "绑定"问的是"检查器那一趟管的是哪条命题"，不是"这台机器上有没有 Lean 产物"：
+    台账里别的命题的 formal 行不构成这一条命题的凭据。四处任一命中就算绑上：
+
+    - `observations.statement_id`（L 记录那一行时写的那一处）；
+    - `params.statement_id`；
+    - `claim_key`（`"stmt:<命题号>"`）；
+    - `verifier_subject_key`（检查器输出管的是哪条命题；schema 要求它等于 `claim_key`）。
+
+    命题号按裸号与 `stmt:<号>` 两种写法比（`:data:`agent_l._support.STATEMENT_CLAIM_KEY_PREFIX`
+    是词表的唯一来源；读不到就按正名比 —— 拒认比错认好）。
+
+    这一处是共用的：写侧 `formal_ledger_reading`（第 4 位）与读侧
+    `numericproof.proof_channel` / `formal_slot`（凭据格）都调它。绑定口径只有这一份 ——
+    再写一套就是四个答案的开始（2026-11-05 手工走查 78c 的缺陷正是 `proof_channel`
+    不看绑定，只筛 method / evidence_kind / 产物后缀）。
+    """
+    sid = str(statement.get("stmt_id") or statement.get("id") or "").strip()
+    if not sid:
+        return False
+    try:
+        from .agent_l._support import STATEMENT_CLAIM_KEY_PREFIX as _PREFIX   # 惰性：口径只有一处
+    except Exception:   # noqa: BLE001 - 读不到词表就按正名比（拒认比错认好）
+        _PREFIX = "stmt:"
+    wanted = f"{_PREFIX}{sid}"
+    obs = dict(experiment.get("observations") or {})
+    params = dict(experiment.get("params") or {})
+    bound = {str(obs.get("statement_id") or ""), str(params.get("statement_id") or ""),
+             str(experiment.get("claim_key") or ""),
+             str(experiment.get("verifier_subject_key") or "")}
+    return sid in bound or wanted in bound
+
+
 def formal_ledger_reading(row: Mapping[str, Any], experiments: Iterable[Mapping[str, Any]]
                           ) -> dict[int, dict[str, Any]]:
     """从 `experiments` 台账读第 4 位（写侧唯一的派生点：B 的登记那条路用它）。
@@ -1431,7 +1467,9 @@ def formal_ledger_reading(row: Mapping[str, Any], experiments: Iterable[Mapping[
 
     ## 判据（一条实验行怎么变成一条路径的状态）
     - 只认 `method="formal"` 且绑到这条命题上的行（`params.statement_id` /
-      `observations.statement_id` / `claim_key="stmt:<命题号>"` 三处任一）；
+      `observations.statement_id` / `claim_key="stmt:<命题号>"` /
+      `verifier_subject_key` 四处任一；谓词是 :func:`formal_row_bound_to`，读侧
+      `numericproof.proof_channel` 调的是同一份）；
     - 证明号取那一行的 `proof_no`（`observations` 优先，`params` 次之），没写就是
       `#p1`（老行的读法与 `prooflib` 一致）；
     - 状态只认两种：`evidence_kind="proof"`（检查器说通过）⇒ `verified`；
@@ -1451,11 +1489,6 @@ def formal_ledger_reading(row: Mapping[str, Any], experiments: Iterable[Mapping[
     sid = str(row.get("stmt_id") or row.get("id") or "").strip()
     if not sid:
         return {}
-    try:
-        from .agent_l._support import STATEMENT_CLAIM_KEY_PREFIX as _PREFIX   # 惰性：口径只有一处
-    except Exception:   # noqa: BLE001 - 读不到词表就按正名比（拒写比猜错好，见下面的三道绑定点）
-        _PREFIX = "stmt:"
-    wanted = f"{_PREFIX}{sid}"
     from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
 
     found: dict[int, dict[str, Any]] = {}
@@ -1464,13 +1497,10 @@ def formal_ledger_reading(row: Mapping[str, Any], experiments: Iterable[Mapping[
             continue
         if str(experiment.get("method") or "") != "formal":
             continue
+        if not formal_row_bound_to(experiment, row):
+            continue
         obs = dict(experiment.get("observations") or {})
         params = dict(experiment.get("params") or {})
-        bound = {str(obs.get("statement_id") or ""), str(params.get("statement_id") or ""),
-                 str(experiment.get("claim_key") or ""),
-                 str(experiment.get("verifier_subject_key") or "")}
-        if sid not in bound and wanted not in bound:
-            continue
         no = _VR.as_proof_no(obs.get("proof_no") or params.get("proof_no")) or 1
         if str(experiment.get("evidence_kind") or "") == "proof":
             state = "verified"

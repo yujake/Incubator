@@ -131,6 +131,9 @@ def _formal_ws(root: pathlib.Path, *, lean_file: str, lean_target: str = LEAN_DE
     experiment = {
         "experiment_id": FORMAL_EID, "method": NP.FORMAL_METHOD,
         "evidence_kind": "proof", "code_path": LEAN_REL,
+        # 绑到这条命题（2026-11-05 起 formal 通道按命题号绑，谓词是
+        # `evidencebits.formal_row_bound_to`；不绑的行不是这一条的凭据）。
+        "claim_key": f"stmt:{FORMAL_SID}",
     }
     return _workspace(
         root, statements=[statement], experiments=[experiment],
