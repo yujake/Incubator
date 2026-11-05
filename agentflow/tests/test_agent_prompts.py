@@ -2250,7 +2250,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 2026-11-03（p232 → p233，业主放权动禁改区 · FC-27）：F 那一格换值 ——
 # `specs/f.py` 的 `attack.step` / `attack.status` 的 ActionSpec `returns=` 补齐实现的真返回，
 # 且 policy 改成 179 §二之三的逐条交差口径；其余十格逐字未动
-# （`agent_skills` 正文只落盘、工具层 `returns` 只进 function-calling 的 description）。
+# （`agent_skills` 正文只落盘、工具层 `returns` 只进声明快照，不进 function-calling 的 description）。
 # 逐格旧值 → 新值：F 00b76d27→61be3f62。
 # 十一格是 `temp/_p233_recompute.py` 的现算值，不是手抄。
 # 2026-11-04（p234 → p235，收口批）：十一格全换 —— p234 冻结（2026-11-03 13:27）之后，
@@ -2318,7 +2318,7 @@ _FROZEN_PROMPT_VERSION = "p241"
 # ① 新工具 `clock.wait_any` 进 `tools_lines` 那一行（名 + 摘要 + 必填参数 + 副作用），
 #    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
 # ② `conductor.retire_child` 的 summary 文案换了（补「待机」那一档与 refusal_code 的三态
-#    读数）⇒ M 那一格再换一次。`returns=` 不进段（只进 function-calling 的 description）。
+#    读数）⇒ M 那一格再换一次。`returns=` 不进段（只进声明快照，不进 function-calling 的 description）。
 # 逐格的旧值 → 新值：
 #   A 0ff3434f→a5e29d79 / B 61153920→8cc47b71 / C ed603919→fc1387da /
 #   D 7126df90→446f2a2d / E e44a6a90→1ea126e2 / F 7cd0c83a→7005c3d7 /
@@ -2326,10 +2326,10 @@ _FROZEN_PROMPT_VERSION = "p241"
 #   M 08567b14→96bc2568 / V 19ba4aa7→01ef0b27。
 # 十一格是那支重算脚本（当时写在 temp 下，已随 scratch 清理）的现算值，不是手抄。
 # 2026-10-27（p206 收口批）：十一格全换，三笔一起动。
-# ① 工具面 returns / summary 十一处进 `tools_lines` 那一行（attack.create_plan /
+# ① 工具面 summary 十一处进 `tools_lines` 那一行（attack.create_plan /
 #    clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any /
 #    conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof），
-#    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
+#    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免（同批的 `returns` 只进声明快照）；
 # ② 十一份 specs 的时钟段补 `clock.wait_any` 的行为口径（requested=true / waiting=false
 #    那一档不是「没在等」；无计时而手头也没活就按交差处理）⇒ 同样十一格；
 # ③ `specs/m.py` 的 `delivered_to` 改成「列表，只有一个元素」⇒ M 那一格再换一次。

@@ -559,15 +559,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
     {"version": "p205", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p205（2026-10-27 第二批收口）：① 新工具 clock.wait_any（业主第三条裁定的后半个动作「直到它认为无事可做时，可启动计时器等待任意计时器返回」）进 tools_lines 那一行（名 + 摘要 + 必填参数 + 副作用），tools_lines 对每个角色都渲染 ⇒ 十一格全换；工具数 110 → 111，登记在 tools/UNIVERSAL_TOOLS（写集空：只写 out/clock/wait_any.json 这份意图账），只读角色 C/H/V 的 clock 件数 8 → 9；② conductor.retire_child 的 summary 文案换了（补「待机」那一档与 refusal_code 走 Conductor.retire_state_of 的三态读数）⇒ M 那一格再换一次；它的 returns= 不进段（只进 function-calling 的 description，动的是工具面 golden 的 declarations 那一格）。facts 键集仍 15 格（键名与条数一格未动）"},
-    # p205 → p206（2026-10-27 第三批收口）：工具面 returns / summary 十一处进 tools_lines、
+     "note": "抬版本 p205（2026-10-27 第二批收口）：① 新工具 clock.wait_any（业主第三条裁定的后半个动作「直到它认为无事可做时，可启动计时器等待任意计时器返回」）进 tools_lines 那一行（名 + 摘要 + 必填参数 + 副作用），tools_lines 对每个角色都渲染 ⇒ 十一格全换；工具数 110 → 111，登记在 tools/UNIVERSAL_TOOLS（写集空：只写 out/clock/wait_any.json 这份意图账），只读角色 C/H/V 的 clock 件数 8 → 9；② conductor.retire_child 的 summary 文案换了（补「待机」那一档与 refusal_code 走 Conductor.retire_state_of 的三态读数）⇒ M 那一格再换一次；它的 returns= 不进段（只进声明快照，动的是工具面 golden 的 declarations 那一格）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p205 → p206（2026-10-27 第三批收口）：工具面 summary 十一处进 tools_lines（
+    # returns 只进声明快照，不进 tools_lines、也不进 function-calling 的 description）、
     # 十一份 specs 的时钟段补 clock.wait_any 的行为口径、specs/m.py 的 delivered_to 改成列表、
     # conductor.retire_child 的 returns/docstring 补早拒支口径、attackround.BUDGET_GUARD_NOTE
     # 去行号并接上读者。五笔都只动段文本与工具声明，一格事实的落点都没挪 ⇒ `count` 与
     # `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
     {"version": "p206", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p206（2026-10-27 第三批收口）：① 工具面 returns / summary 十一处进 tools_lines 那一行（attack.create_plan / clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any / conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof —— 实现早就在，这一批才与声明对齐）⇒ 十一格全换；② 十一份 specs 的时钟段补 clock.wait_any 的行为口径（要求过等、且没有可等的东西 ⇒ requested=true / waiting=false，它不是「没在等」；这一档无计时而手头也没活就按交差处理）；③ specs/m.py 的 delivered_to 从「链尾那个绝对编号」改成「列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它先取 [0]）」⇒ M 那一格再换一次；④ conductor.retire_child 的 returns 与 docstring 补早拒支那两格（target_state 空串 = 三态还没读；refusal_code 的充要条件是静默闸说话了）；⑤ attackround.BUDGET_GUARD_NOTE 去掉两个已漂的 file:line、改成符号名并接上读者（test_p09_the_guard_note_names_live_symbols）。facts 键集仍 15 格（键名与条数一格未动）"},
+     "note": "抬版本 p206（2026-10-27 第三批收口）：① 工具面 summary 十一处进 tools_lines 那一行（attack.create_plan / clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any / conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof —— 实现早就在，这一批才与声明对齐；同批的 returns 只进声明快照）⇒ 十一格全换；② 十一份 specs 的时钟段补 clock.wait_any 的行为口径（要求过等、且没有可等的东西 ⇒ requested=true / waiting=false，它不是「没在等」；这一档无计时而手头也没活就按交差处理）；③ specs/m.py 的 delivered_to 从「链尾那个绝对编号」改成「列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它先取 [0]）」⇒ M 那一格再换一次；④ conductor.retire_child 的 returns 与 docstring 补早拒支那两格（target_state 空串 = 三态还没读；refusal_code 的充要条件是静默闸说话了）；⑤ attackround.BUDGET_GUARD_NOTE 去掉两个已漂的 file:line、改成符号名并接上读者（test_p09_the_guard_note_names_live_symbols）。facts 键集仍 15 格（键名与条数一格未动）"},
     # p206 → p207（2026-10-27 第四批收口）：十四段提示词正文 ＋ 一条只读判据
     # （prompt_text_problems），一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值。
     # 它们仍是 PS.volatile_facts_digest() 的现算值，不手抄。
@@ -789,13 +790,13 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 与参数说明的「证明正文的载体」位置 / 强调（5f29ec24 / 646adcb5）；M 是交接首提改成
     # 「交接工作前先写一份手稿（交接手稿，handoff）」（8d80a398）。V 那一格这次没有换值
     # （p239 的 4daa02d9 仍成立）：6efb3079 改的是 verify.verify_proof 的 returns，而
-    # `tools_lines` 只渲染「名字 + 摘要 + 必填参数 + 副作用」，returns 只拼进
-    # function-calling 的 description ⇒ 它不进任何角色的段（p239 提交信息里「V 的摘要会
-    # stale」是预期落空，实测为准）。一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格
-    # 同值（现算值，不手抄）。
+    # `tools_lines` 只渲染「名字 + 摘要 + 必填参数 + 副作用」，returns 只进声明快照
+    # （不进 function-calling 的 description，见 `tools/base.py:674-679`）⇒ 它不进任何
+    # 角色的段（p239 提交信息里「V 的摘要会 stale」是预期落空，实测为准）。一格事实的
+    # 落点都没挪 ⇒ count / keys_sha256 与上一格同值（现算值，不手抄）。
     {"version": "p240", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
-     "note": "抬版本 p240（2026-11-04，今晚最后一次冻结）：变化格 = B / M 两格，其余九格逐字未动。B：policy 把「再派 V 审这一份稿」写回裁定原话「再派 V 审核签字（`V.verify_proof`：`statement_id` + `proof_manuscript=<这份稿>`）」；`register_statement` 的动作摘要把「（证明稿，proof manuscript）」移到「是证明正文的载体」之后、参数说明给这一句加 `**` 强调（5f29ec24 / 646adcb5）。M：policy 首提改成「交接工作前先写一份手稿（交接手稿，handoff）」，旧判据针重新连通（8d80a398）。V 未变：6efb3079 给 verify.verify_proof 的 returns 补了两态词，但 returns 不进 tools_lines（只进 function-calling 的 description）⇒ V 的提示词一个字没变，那一笔的模型可见落点在工具面 golden。facts 键集仍 15 格（键名与条数一格未动）"},
+     "note": "抬版本 p240（2026-11-04，今晚最后一次冻结）：变化格 = B / M 两格，其余九格逐字未动。B：policy 把「再派 V 审这一份稿」写回裁定原话「再派 V 审核签字（`V.verify_proof`：`statement_id` + `proof_manuscript=<这份稿>`）」；`register_statement` 的动作摘要把「（证明稿，proof manuscript）」移到「是证明正文的载体」之后、参数说明给这一句加 `**` 强调（5f29ec24 / 646adcb5）。M：policy 首提改成「交接工作前先写一份手稿（交接手稿，handoff）」，旧判据针重新连通（8d80a398）。V 未变：6efb3079 给 verify.verify_proof 的 returns 补了两态词，但 returns 不进 tools_lines、也不进 function-calling 的 description（只进声明快照，见 `tools/base.py:674-679`）⇒ V 的提示词一个字没变，那一笔的模型可见落点在工具面 golden。facts 键集仍 15 格（键名与条数一格未动）"},
     # p240 → p241（2026-11-04，今晚最后一次冻结：p240 之后 D 的可见面一次对齐）：
     # 变化格 = ['D'] —— `specs/d.py` 的 policy 新增「想法 / 落稿与拿签 / 产物」三句并把研究
     # 手稿落点改回 `reports/RESEARCH.md` 七节（035b7365），`agent_skills.py` 的 D 手册新增

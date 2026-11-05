@@ -362,7 +362,8 @@ def test_the_cli_surfaces_the_shelf_on_role_a_and_the_registry_holds_the_new_key
     assert re.search(r"角色 A 可用工具（\d+ 个）", out), f"CLI 输出形状变了：{out[-800:]}"
     assert "search.shelf" in out, f"A 的工具面上没有 search.shelf：{out[-800:]}"
 
-    # 同一条装配的声明面：新键必须在 `returns=` 里（模型看得到的就是它）
+    # 同一条装配的声明面：新键必须在 `returns=` 里（`returns` 只是台账/快照的契约，
+    # 模型面看不到它；判据 `test_tools_returns_declaration` 要求声明与实跑对上）
     reg = build_registry(store=None, workspace_root=None, roles=tuple(ROLES)).registry
     returns = reg.get("search.shelf").returns
     assert "'coverage'" in returns, f"`returns=` 里没有 coverage：{returns!r}"
