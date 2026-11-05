@@ -2012,22 +2012,29 @@ def _dep_label(step: Mapping[str, Any]) -> str:
 
 
 def _dep_step_key(row: Mapping[str, Any]) -> tuple:
-    """一条依赖边的身份（幂等判据：同一使用点 + 路径组 + 来源 + 标签 ⇒ 同一条边）。
+    """一条依赖边的身份（幂等判据：同一使用点 + 路径组 + 来源 ⇒ 同一条边）。
 
     为什么需要它：`dependencies` 没有"唯一键"这回事（一张账本表，允许同一对
     (使用点, 来源) 出现在不同路径组里 —— 多证明模型）。而"同一份手稿再携带一次"
     必须不重复落边，所以身份要按"这条边说的是什么"来算，不能按 `dep_id`（每次
     分配都会变）。
+
+    ## `kind` / `label` 不算身份（2026-11-05 走查 D3）
+    改前这两格也算进身份，于是同一条边经两路描述时会落两行：`derived_from`
+    那一支（证明正文扫描）落 `kind=theorem, label="stmt:000000"`，稿里 `## 依赖`
+    表那一支落 `kind=proposition, label="手稿依赖段（第 22 行）：…"` —— 两行的
+    `used_by` / `path_group` / 来源号三格逐字相同，只有这两格不同。同一对
+    (使用点, 来源) 图上是一条边："这条引用是定理还是命题"与"它被写成哪句话"
+    都是这条边的描述，不是它的身份。收紧之后 `dependencies` 不再虚高，两条不同
+    的边（来源号 / 路径组 / 使用点任一不同）仍然各占一行。
     """
     return (
         str(row.get("used_by") or ""),
         int(row.get("path_group") or 1),
-        str(row.get("kind") or ""),
         str(row.get("source_stmt_id") or ""),
         str(row.get("source_lit_id") or ""),
         str(row.get("source_experiment_id") or ""),
         str(row.get("source_doc_id") or ""),
-        str(row.get("label") or ""),
     )
 
 
@@ -6867,8 +6874,22 @@ class Secretary:
                                              force_new=bool(force_new), out=out,
                                              adjudication=adjudication)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
-            out.update(checked=False, created=False, refused="write_failed",
-                       reason=f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
+            # ---- 写入期闸的拒收要留住它自己的码（2026-11-05 走查 D2）------------
+            #
+            # 改前这一格把所有异常折成 `write_failed`，于是"升档这一笔被
+            # `proof_review_without_evidence` 拒了"在返回值里只剩一个泛码 —— 调用方
+            # （B）既看不出该去补哪一份签，也没法据码分辨"参数不对"与"证据不够"。
+            # 判据仍是那个异常自己的码（`verifications.CODE_WRITE`），这里只做翻译。
+            code = "write_failed"
+            message = f"{type(exc).__name__}: {exc}"
+            try:
+                from . import verifications as _VR   # 惰性：只在这条异常路上需要
+                if str(exc).startswith(_VR.CODE_WRITE):
+                    code = _VR.CODE_WRITE
+            except Exception:  # noqa: BLE001 —— 翻译失败仍回泛码（不许因此吞掉异常）
+                pass
+            out.update(checked=False, created=False, upgraded=False, refused=code,
+                       reason=f"落盘没成（{message}）⇒ 这一笔按'没写成'读")
             return out
 
     @staticmethod

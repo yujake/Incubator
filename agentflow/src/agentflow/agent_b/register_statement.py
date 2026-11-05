@@ -714,6 +714,43 @@ def _optimized_reading(attach: Mapping) -> dict:
             "optimized_blocked": str(got.get("optimized_blocked") or "")}
 
 
+def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
+                       stmt_id_now: Any = "", matched_by: Any = "") -> bool:
+    """这一份稿是不是本行自己的（D1 的第二道：命中了也要问所有权）。
+
+    判据只有三句：
+    - 按证明正文认出来的（`matched_by == proof_body`）⇒ 是：那一份的 `## 证明`
+      与这一笔交的正文逐行相同，不存在"借别人的正文"；
+    - 稿头声明了号（`- 命题号：stmt:<号>`）⇒ 号必须等于本行在册号；本行还没在册 ⇒
+      不是自己的（被引命题的号不是"本行"的）—— 改前 `stmt:000001` 就是这样把
+      `stmt:000000` 的稿连正文带签一起读走的；
+    - 稿头一个号都没声明（历史形态 / F 渲染前那一版）⇒ 本行还没在册时按既有语义
+      （盘上那份稿就是这一笔的）放行；本行在册时只认按本行命名的那个文件。
+
+    这一格就是 D1 反真空的打桩点：把它打成恒真 ⇒ `stmt:000001` 又会把
+    `stmt:000000` 的稿读成自己的（判据 a 立刻红）。
+    """
+    from .. import vsigns as _VS
+
+    if str(matched_by or "") == _DS.MATCH_BY_PROOF_BODY:
+        return True
+    own = str(stmt_id_now or "").strip()
+    declared = _DS.manuscript_statement_id(str(manuscript_text or ""))
+    if str(declared or "").strip():
+        return bool(own) and str(declared).strip() == own
+    if not own:
+        return True
+    return str(_VS.manuscript_id_of(str(manuscript_path or "")) or "").strip() == own
+
+
+def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any) -> bool:
+    """兜底读盘命中的那一份稿能不能用（读数 `source=disk` 的门）。"""
+    got = dict(probe or {})
+    return _manuscript_is_own(
+        manuscript_text=got.get("text"), manuscript_path=got.get("path"),
+        stmt_id_now=stmt_id_now, matched_by=got.get("matched_by"))
+
+
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
@@ -1681,6 +1718,14 @@ class _RegisterStatement:
         #: （`read_carried_manuscript` 只剩"按正文 sha 撞"那一条路，而正文恰好也还没写）。
         redelivery = self._existing_statement_for(full)
         stmt_id_now = str((redelivery or {}).get("stmt_id") or "")
+        # ---- D1（2026-11-05）：命中之后要问"这份稿是不是本行的" ---------------------
+        #
+        # 改前兜底读盘把 `derived_from`（承重链：这条证明引用了谁）与正文里的 `stmt:`
+        # 引用也当成了稿的地址候选，命中就直接用 —— 真机走查 `walk-e2e` 的
+        # `stmt:000001` 这么读到了 `reports/f-proof-000000.md`，把 P0 的论证当成自己的
+        # `proof_text`（连 P0 的签一起借来）。候选表那一格只影响读数 `tried`（"按哪些号
+        # 找过"）；用哪一份由下面两道判据决定：`_manuscript_usable`（兜底读盘命中）
+        # 与 `_manuscript_is_own`（取正文那一段，见下）。
         probe_ids = _DS.candidate_statement_ids(
             derived_from=derived_from, proof_text=proof_text,
             # 手稿头那一行"命题号：stmt:<号>"：D 递过来的那一份稿用它自己的号
@@ -1753,6 +1798,29 @@ class _RegisterStatement:
                 manuscript_probe = _DS.read_manuscript(
                     getattr(self.store, "root", ""), statement_ids=probe_ids,
                     proof_text=proof_text)
+                # ---- D1（2026-11-05）：命中之后还要问"这是不是这一条的稿" --------
+                #
+                # 候选表里有 `derived_from` / 正文引用（那是"试哪些名字"，读数要能说清），
+                # 但用哪一份是另一道判据：号必须是本行的，或者它是按证明正文认出来的
+                # （内容逐行相同 ⇒ 正文本来就是这一笔交的那一份，不存在"借别人的正文"）。
+                # 改前缺这一道：`stmt:000001` 按 `derived_from=["000000"]` 读到了
+                # `reports/f-proof-000000.md`（号不是本行），把 P0 的正文与签当成了自己的。
+                #
+                # 边界（老调用不许瘫）：这一笔自己带了正文时，命中的那份稿只被用来读
+                # 它 `## 依赖` 面（历史调用 / 直调的既有语义），正文与签一律不取
+                # （`proof_text` 已由调用方给出；下面的取正文那一段另有 `_manuscript_is_own`）。
+                # 这一笔没有正文时，号不是本行的稿连读都不读 —— 那一档唯一的用途就是
+                # "借别人的正文"，正是 D1 要堵的。
+                _hit_ok = _manuscript_usable(manuscript_probe,
+                                             stmt_id_now=stmt_id_now)
+                _deps_only_read = (not _hit_ok and bool(str(proof_text or "").strip()))
+                if (str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK
+                        and not _hit_ok and not _deps_only_read):
+                    manuscript_probe = dict(
+                        manuscript_probe, source=_DS.SOURCE_NONE, text="", path="",
+                        why=("按名字命中的那一份稿不是这一条命题的（号不是本行）⇒ 不用它："
+                             "`derived_from` / 正文引用是承重链，不是这份稿的地址。"
+                             + str(manuscript_probe.get("why") or "")))
                 if str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK:
                     manuscript_text = str(manuscript_probe.get("text") or "")
                     manuscript_source = _DS.SOURCE_DISK
@@ -1816,9 +1884,21 @@ class _RegisterStatement:
         # 三点边界：① 调用方显式给了正文 ⇒ 一律以它为准（`param`）；
         # ② 稿是别人的（`manuscript_foreign`）⇒ 不取（那一档下面另有拒信）；
         # ③ 与在册那一行的正文相同 ⇒ 也算取过了（读数照给，写入由 `carries_write` 决定）。
+        #
+        # 2026-11-05（走查 D1）：还要问"这份稿是不是本行的"。调用方点名递上来的
+        # （`param`）不算——那是"本笔给的 proof_manuscript"，允许；
+        # 兜底读盘 / D 的携带单找来的，号必须是本行、或它是按证明正文认出来的。
+        # 改前缺这一道：按 `derived_from` 读到的被引命题的稿被当成了这一条的稿，
+        # `proof_text` 与第 3 位（签）一起借来（真机 `walk-e2e` 的 stmt:000001）。
         proof_text_source = "param" if str(proof_text or "").strip() else ""
+        _body_owner_ok = (str(manuscript_source or "") == _DS.SOURCE_PARAM
+                          or _manuscript_is_own(
+                              manuscript_text=manuscript_text,
+                              manuscript_path=manuscript_path,
+                              stmt_id_now=stmt_id_now,
+                              matched_by=manuscript_probe.get("matched_by")))
         if (not proof_text_source and manuscript_text.strip()
-                and not manuscript_foreign):
+                and not manuscript_foreign and _body_owner_ok):
             from_manuscript = str(_DS.proof_body(manuscript_text) or "").strip()
             if from_manuscript:
                 proof_text = from_manuscript
@@ -1991,18 +2071,26 @@ class _RegisterStatement:
                         manuscript_probe=dict(manuscript_probe),
                         manuscript_carried=dict(manuscript_carried))
 
-        def _deps_reading(written_row: Mapping) -> dict:
+        def _deps_reading(written_row: Mapping, *, extra_deps: int = 0) -> dict:
             """这一笔的依赖面三态读数（没有手稿 ⇒ 秘书那一份原样透出）。
 
             读数里多带几格（2026-10-26，死结 2 的读数面）：`manuscript_source` 说稿是从
             参数来的、D 带过来的、从盘上读的、还是没有；`manuscript_probe` 是兜底读盘查过的
             路径、`manuscript_carried` 是 D 那一侧查过的报告（三处逐条留痕，于是"没收到稿"
             与"收到了但那份稿没有依赖段"在读数上分不开这件事被修掉了）。
+
+            ## `extra_deps`：把"正文写完之后才落的边"也算进来（2026-11-05 走查 D6）
+            秘书那一笔返回的 `deps_missing` 是在它写完自己的边之后算的；而 B 的
+            手稿依赖面（`_manuscript_deps_after_write`）是在那之后才落的（D7 的 A）。
+            改前回执直接用秘书那一份 ⇒ 同一份返回里"刚写了 1 条"（`manuscript_deps`）
+            与"一条依赖行都没有"（`deps_missing=missing`）互相打架。这一格把后落的那几条
+            加进 `deps_written` 重算，读数才是"这一笔写完之后"的状态。
             """
             base = (dict(written_row.get("deps_missing") or {}) if not manuscript
                     else _DS.deps_missing_reading(
                         proof_text=proof_text,
-                        deps_written=int(written_row.get("deps_written") or 0),
+                        deps_written=(int(written_row.get("deps_written") or 0)
+                                      + int(extra_deps or 0)),
                         derived_from=manuscript_refs,
                         stmt_id=str(written_row.get("stmt_id") or ""),
                         # 2026-11-04（甲）：走手稿这一支时读数同样要带"这是第几份
@@ -2010,6 +2098,16 @@ class _RegisterStatement:
                         # 这一笔没记上号 —— 与"首登的回执说 proof_no=1"同一条判据。
                         proof_no=int(written_row.get("proof_no") or 0) or 1,
                         refs=len(manuscript_refs), section=manuscript))
+            if int(extra_deps or 0) > 0 and not manuscript:
+                # 没有手稿时读的是秘书那一份，同样要把后落的边补进去（否则
+                # "刚写了一条"与 `state=missing` 仍然打架）。
+                base["deps_written"] = (int(base.get("deps_written") or 0)
+                                        + int(extra_deps or 0))
+                if str(base.get("state") or "") in ("", "missing"):
+                    base["state"] = "present"
+                    base["why"] = (f"这一笔落了 {int(base['deps_written'])} 条依赖，"
+                                   "依赖面建起来了（含正文写完之后补落的那几条）")
+                    base["next_step"] = ""
             base["manuscript_source"] = manuscript_source
             #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
             base["manuscript_washed"] = manuscript_washed
@@ -2580,7 +2678,99 @@ class _RegisterStatement:
                                "text": attach_canonical,
                                "created_at": S.now_iso()}]
             attach_canonical = ""
+        # ---- D2①（2026-11-05 走查）：先把正文写进那一行，再请求升档 ----------------
+        #
+        # 路径：`secretary.py` 的升档那一支（`_record_statement_tx`，改前在
+        # `:7585` 先算档）拿盘上那一行组"要写的行"，而这一笔的正文还没写进去 ⇒
+        # 写入期闸（`store._refuse_fake_proof_review`）看到 `proof_text` 是空的，
+        # 整笔拒 `proof_review_without_evidence`。真机走查 `walk-e2e` 的 P0 那一趟
+        # 就是它：`refused=write_failed`，而档位永远升不上去。
+        #
+        # 正确顺序与写入期闸的判据一致：闸核的是"这一行将要是"什么。所以先让
+        # `_attach_proofs`（B 的写侧唯一一处直接改那一行的地方：正文 / `proof_history` /
+        # 五元位 / 认签）把正文落到那一行，再让秘书在同一内容上请求升档 —— 此刻
+        # 盘上那一行已经有正文，闸按它现算就能过。
+        _have_ek = str((redelivery or {}).get("evidence_kind") or "")
+        _stronger = (str(evidence_kind or "") in (_VR.PROOF_REVIEW_KIND, _VR.PROOF_KIND)
+                     and str(evidence_kind or "") != _have_ek
+                     and _have_ek in _VR.WEAKER_THAN_PROOF_REVIEW)
+        pre_write: dict = {}
+        if (redelivery is not None and _stronger
+                and str(attach_canonical or "").strip()):
+            # 这一笔的升档凭据在不在（纯读，判据只有一处：与秘书 `_upgrade_evidence_kind`
+            # 读的是同一个 `_manuscript_upgrade_basis`）。不在 ⇒ 不预写正文：那一笔本来
+            # 就升不动（重复读数），正文仍走下面 duplicate 那一支的老路。
+            # 判据刻意不看成"盘上那一行现在有没有正文"—— 那正是 D2 要修的顺序。
+            from ..secretary import _manuscript_upgrade_basis as _upgrade_basis
+            _basis = _upgrade_basis(
+                root=getattr(self.store, "root", ""),
+                manuscript_text=str(manuscript_text or ""),
+                manuscript_path=str(manuscript_path or ""),
+                proof_text=str(proof_text or ""), bits=bits)
+            # 还要过写入期闸那一关（它核的是"这一行将要是"什么）：升档能不能落，
+            # 取决于闸认不认这一份正文的签。闸不认（例如签只在 `out/vsigns/` 的签文件里、
+            # 没有台账/待认领那一行）⇒ 预写正文也没有意义 —— 那一笔本来就只能落重复读数。
+            _gate_ready = False
+            if _basis.get("signed"):
+                if str(evidence_kind or "") == _VR.PROOF_KIND:
+                    _gate_ready = True
+                else:
+                    _probe_row = dict(redelivery or {})
+                    _probe_row["proof_text"] = str(attach_canonical or "")
+                    _probe_row["evidence_kind"] = str(evidence_kind or "")
+                    try:
+                        _gate_ready = bool(_VR.proof_review_gap(
+                            getattr(self.store, "root", ""), _probe_row).get("ok"))
+                    except Exception:  # noqa: BLE001 —— 读不出来就当"闸不认"（保守）
+                        _gate_ready = False
+        else:
+            _basis = {}
+        #: 这一笔请求的档位落不了（闸不会认这一份正文的签）⇒ 只登记正文，不请求升档。
+        #: 读数 `upgrade_refused` 把"请求了什么 / 拒码 / 为什么"一起交出去 —— 于是
+        #: `ok=true` 只代表"正文登记了"，绝不被读成"档位也升了"（D2 的"两件事不许糊成
+        #: 一个 true"）。升档请求本身不发给秘书，是因为那一笔注定整笔被写入期闸拒；
+        #: 把它发出去再把拒收折成 ok 就是改前那个谎。
+        upgrade_skipped: dict = {}
+        if (_stronger and not (_basis.get("signed") and _gate_ready)
+                and str(attach_canonical or "").strip()):
+            upgrade_skipped = {
+                "requested_evidence_kind": str(evidence_kind or ""),
+                "refused": _VR.CODE_WRITE,
+                "why": ("这一笔的正文还没有能签住它的台账 / 待认领那一签"
+                        "（写入期闸会整笔拒 `proof_review_without_evidence`）"
+                        "⇒ 只登记正文、不请求升档；去让 V 对现行正文再签一次，"
+                        "或如实按弱档读"),
+            }
+            payload["evidence_kind"] = _have_ek
+        if _basis.get("signed") and _gate_ready:
+            pre_write = self._attach_proofs(stmt_id_now, attach_entries,
+                                            canonical=attach_canonical,
+                                            bits=bits)
+            # 正文写不进去 ⇒ 升档这一笔也不用问了（闸只会拒）：照实回这一笔的拒码。
+            if pre_write.get("refused"):
+                return _refuse(str(pre_write.get("refused") or "proof_text_not_written"),
+                               str(pre_write.get("reason") or ""),
+                               stmt_id=stmt_id_now, upgraded=False,
+                               requested_evidence_kind=str(evidence_kind or ""),
+                               canonical_written=False,
+                               **trunc_reading)
         written = sec.record_statement(payload, role="B")
+        # ---- D2②：拒绝要看，不许把它读成成功 ------------------------------------
+        #
+        # 改前 `if written.get("upgraded") and not written.get("created")` 不看
+        # `checked` / `refused`：秘书那一笔整笔被拒（`write_failed`，档位没升）之后，
+        # B 继续 `_attach_proofs` 写正文并返回 `ok=true / upgraded=true`。
+        # 现在：受控拒绝一律回 `ok=false` + 拒绝码，并分开说清正文写没写
+        # （`canonical_written`）—— "正文进去了"与"档位升上去了"是两件事，不许糊成
+        # 一个 true。
+        if not written.get("checked") and str(written.get("refused") or ""):
+            return _refuse(str(written.get("refused") or "write_failed"),
+                           str(written.get("reason") or "秘书没写这一笔"),
+                           stmt_id=stmt_id_now, upgraded=False,
+                           requested_evidence_kind=str(evidence_kind or ""),
+                           canonical_written=bool(pre_write.get("canonical_written")),
+                           **({"canonical_history": list(pre_write.get("canonical_history") or [])}
+                              if pre_write.get("canonical_written") else {}))
         if written.get("merged") and not written.get("created"):
             # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为
             # 同种证明，可选各取所长混合成一份、重拿 V 签）：秘书把这一笔判成了"已有命题"。
@@ -2694,9 +2884,11 @@ class _RegisterStatement:
             # "档位改上去了"—— 那是另一件事。
             stmt_now = str(written.get("stmt_id") or "")
             at_tier = bool(written.get("at_tier"))
-            attach = self._attach_proofs(stmt_now, attach_entries,
-                                         canonical=attach_canonical,
-                                         bits=bits)
+            #: 正文已经在 D2① 那一笔里写进这一行 ⇒ 不再写第二遍（同一份正文两个
+            #: 写者），但那一次写的读数（正文 / 历史 / 认签 / 优化态）要照原样带回。
+            attach = pre_write or self._attach_proofs(stmt_now, attach_entries,
+                                                      canonical=attach_canonical,
+                                                      bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
                    #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                 **({"promoted_manuscript": dict(pre_gate_promotion)}
@@ -2771,6 +2963,13 @@ class _RegisterStatement:
             md = self._manuscript_deps_after_write(sec, stmt_now, deps_groups)
             if md:
                 out["manuscript_deps"] = md
+                # ---- D6（2026-11-05 走查）：回执要读"写完之后"的依赖面 ----------
+                #
+                # `out["deps_missing"]` 是在上面用秘书那一份返回算的（那时这份稿的
+                # 依赖边还没落）⇒ 同一份回执里"刚写了 1 条"与"一条依赖行都没有"
+                # 互相打架。把后落的那几条加进去重算，读数才是这一笔写完的状态。
+                out["deps_missing"] = _deps_reading(
+                    written, extra_deps=int(md.get("deps_written") or 0))
             out["v_sign"] = dict(v_sign)
             #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
             out["addressing"] = dict(addressing)
@@ -2786,9 +2985,10 @@ class _RegisterStatement:
             # 正文（`proof_text`），既可能是"登记时还没有证明、现在补上了"，也可能是
             # 改稿。两者都要真写进去；后者还负责把旧正文留进 `proof_history`。
             stmt_dup = str(written.get("stmt_id") or "")
-            attach = self._attach_proofs(stmt_dup, attach_entries,
-                                         canonical=attach_canonical,
-                                         bits=bits)
+            #: D2① 已经写过正文的那一笔不写第二遍（读数照原样带回，见升档那一支）。
+            attach = pre_write or self._attach_proofs(stmt_dup, attach_entries,
+                                                      canonical=attach_canonical,
+                                                      bits=bits)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
                                stmt_id=stmt_dup,
@@ -2881,9 +3081,21 @@ class _RegisterStatement:
                 md = self._manuscript_deps_after_write(sec, stmt_dup, deps_groups)
                 if md:
                     out["manuscript_deps"] = md
+                    # ---- D6（2026-11-05 走查）：同升档那一支，读"写完之后"的依赖面。
+                    out["deps_missing"] = _deps_reading(
+                        written, extra_deps=int(md.get("deps_written") or 0))
                 out["v_sign"] = dict(v_sign)
                 #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
                 out["addressing"] = dict(addressing)
+                if upgrade_skipped:
+                    # D2：升档没有请求（闸不会认这一份的签）⇒ 这一格单独说清楚。
+                    # `ok=true` 只代表正文登记了；`upgraded=false` + 拒码是另一件事。
+                    out["upgraded"] = False
+                    out["upgrade_refused"] = dict(upgrade_skipped)
+                    out["note"] += (
+                        "这一笔只登记了正文，没有请求升档："
+                        f"请求的档位是 `{upgrade_skipped['requested_evidence_kind']}`，"
+                        f"拒码 `{upgrade_skipped['refused']}`（{upgrade_skipped['why']}）。")
                 return out
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",
@@ -3497,6 +3709,14 @@ class _RegisterStatement:
 
         一个字节都不写的那几档（目标已签且是另一份正文 / 目标读不出来）不许折成
         "写成了"：签另算不是毁签。
+
+        ## 页头三格从来源稿读出来传全（2026-11-05 走查 D4）
+        改前这里只传 `label`，于是运行期落下来的 b-稿缺 `- 计划：`、缺洗稿行、还多
+        一行 `- 标签：` —— 与 f-族不是同一个骨架。页头那几格只活在来源稿里，所以
+        这里先把来源稿的页头读出来（`bmanuscript.header_reading`），把
+        `plan_id` / `sid` / `wash_actor`（以及 `wash_filled` / 标题 / `- 标签：`）
+        原样交给 `land_rewrite` ⇒ 两族除前缀与角色名外逐字相同。
+        没有来源稿（B 只给内联正文）⇒ 沿用调用方的 `label`（老形状）。
         """
         from .. import bmanuscript as _BM
 
@@ -3508,11 +3728,22 @@ class _RegisterStatement:
             out.update(checked=False,
                        why="这一趟没有 store ⇒ B 的改写手稿没有落点（不是「没有改写」）")
             return out
+        head = _BM.header_reading(source_manuscript)
+        from_source = bool(head.get("checked"))
         try:
-            got = _BM.land_rewrite(root, statement_id=statement_id,
-                           statement_full=statement_full, proof_text=proof_text,
-                           label=label, proof_no=proof_no,
-                           source_manuscript=source_manuscript)
+            got = _BM.land_rewrite(
+                root, statement_id=statement_id,
+                statement_full=statement_full, proof_text=proof_text,
+                # 页头跟着来源稿走：来源有 `- 标签：` 才写那一行；标题用来源稿标题那一段。
+                # 没有来源稿 ⇒ 两份都用调用方的 label（老调用方的形状逐字不变）。
+                label=(str(head.get("label") or "") if from_source else str(label or "")),
+                title=(str(head.get("title") or "") if from_source else str(label or "")),
+                proof_no=proof_no,
+                source_manuscript=source_manuscript,
+                plan_id=str(head.get("plan_id") or ""),
+                sid=str(head.get("sid") or ""),
+                wash_actor=str(head.get("wash_actor") or ""),
+                wash_filled=str(head.get("wash_filled") or ""))
         except Exception as exc:  # noqa: BLE001 —— 落稿失败要如实说，不许静默
             out.update(checked=False,
                        why=(f"B 的改写手稿没落成（{type(exc).__name__}: {exc}）⇒ "

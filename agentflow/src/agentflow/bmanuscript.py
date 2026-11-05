@@ -96,21 +96,73 @@ def _dependency_rows(source_manuscript: Any) -> list[dict[str, Any]]:
     return []
 
 
+def header_reading(text: Any) -> dict[str, Any]:
+    """读一份稿的页头元信息（纯读；B 的改写稿据此与来源稿同骨架）。
+
+    ## 为什么需要它（2026-11-05 走查 D4）
+    B 的改写稿与 F 的证明手稿必须"除前缀与角色名外逐字相同"，而页头那几行不是渲染
+    函数自己能猜出来的：`- 计划：` / 洗稿行 / `- 标签：` / 标题那一段都只活在来源稿
+    里。改前 `_land_b_manuscript` 只把正文与依赖段递进去，于是 b-稿缺 `- 计划：`、
+    缺洗稿行、还多一行 `- 标签：`（渲染函数把 `label` 当标题用的副产物）。判据
+    `test_f_and_b_manuscripts_are_one_implementation` 只测 `land_rewrite` 直调，
+    看不见运行期两种入参。
+
+    返回 `{checked, title, statement_id, plan_id, sid, label, wash_actor, wash_filled}`：
+    读不出来的格子回空串（不猜）；`checked=False` = 这一份没有页头可读（空稿）。
+    """
+    raw = str(text or "").replace("\r\n", "\n")
+    out: dict[str, Any] = {
+        "checked": bool(raw.strip()), "title": "", "statement_id": "",
+        "plan_id": "", "sid": "", "label": "", "wash_actor": "", "wash_filled": ""}
+    if not raw.strip():
+        return out
+    lines = raw.split("\n")
+    for line in lines[:16]:
+        stripped = line.strip()
+        if stripped.startswith("#") and not out["title"]:
+            # `# <族> 的证明手稿：<标题>`：取最后一个全角冒号之后那一段（标题里允许有冒号）。
+            head, sep, tail = stripped.rpartition("：")
+            out["title"] = tail.strip() if sep else stripped.lstrip("# ").strip()
+            continue
+        if stripped.startswith(_MF.STATEMENT_MARK):
+            out["statement_id"] = stripped[len(_MF.STATEMENT_MARK):].strip()
+            continue
+        if stripped.startswith(_MF.PLAN_MARK):
+            body = stripped[len(_MF.PLAN_MARK):].strip()
+            parts = [p.strip() for p in body.split("·")]
+            for part in parts:
+                if part.startswith("子目标："):
+                    out["sid"] = part[len("子目标："):].strip()
+                elif part:
+                    out["plan_id"] = part
+            continue
+        if stripped.startswith(_MF.LABEL_MARK):
+            out["label"] = stripped[len(_MF.LABEL_MARK):].strip()
+            continue
+    wash = _DS.manuscript_wash_reading(raw)
+    out["wash_actor"] = str(wash.get("actor") or "")
+    out["wash_filled"] = str(wash.get("filled") or "")
+    return out
+
+
 def render(*, statement_full: Any, proof_text: Any, statement_id: Any = "",
            label: Any = "", proof_no: Any = 0,
            dependency_section: str = "", proposition: Any = None,
            plan_id: Any = "", sid: Any = "", wash_actor: Any = "",
-           wash_filled: Any = "") -> str:
+           wash_filled: Any = "", title: Any = "") -> str:
     """渲染一份 B 的改写手稿（纯函数，逐字节可复现）。
 
     三节与 F/E 同形：`## 命题` 是这条命题的完整正文（含假设），`## 证明` 是 B 改写后
     的正文（被签的就是这一节），`## 依赖` 是四列表（空表也是声明）。实现本体是
     `manuscriptform.render_proof_manuscript`（F 的证明手稿走同一段代码），本函数只把
     B 的入参名换成那一套。
+
+    `title` 与 `label` 分开：标题那一段来自来源稿的标题行，而 `- 标签：` 只有来源稿
+    真有那一行时才写（2026-11-05 走查 D4：b-稿不许凭自己的 `label` 多出一行）。
     """
     full = statement_full if proposition is None else proposition
     return _MF.render_proof_manuscript(
-        _MF.FAMILY_B, title=label, statement_id=statement_id,
+        _MF.FAMILY_B, title=(title or label), statement_id=statement_id,
         proposition=full, proof_text=proof_text,
         dependency_section=dependency_section, plan_id=plan_id, sid=sid,
         label=label, proof_no=proof_no, wash_actor=wash_actor,
@@ -120,7 +172,8 @@ def render(*, statement_full: Any, proof_text: Any, statement_id: Any = "",
 def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
                  proof_text: Any, label: Any = "", proof_no: Any = 0,
                  source_manuscript: Any = "", plan_id: Any = "",
-                 sid: Any = "", write_dependencies: Callable[
+                 sid: Any = "", wash_actor: Any = "", wash_filled: Any = "",
+                 title: Any = "", write_dependencies: Callable[
                      [Sequence[Mapping[str, Any]]],
                      Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """把 B 的改写手稿写到 `reports/b-proof-<号>.md`（三态见模块 docstring）。
@@ -130,6 +183,10 @@ def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
 
     `source_manuscript` 给了就先用与 F 同一套 `validate_manuscript` 判它（形状 /
     依赖段）：来源稿多命题或没有依赖段 ⇒ 两族同一个受控码与同一句 detail。
+
+    `plan_id` / `sid` / `wash_actor` / `wash_filled` / `title` / `label` 是页头那几格
+    （2026-11-05 走查 D4）：运行期由调用点从来源稿读出来传全，于是 b-稿与 f-稿
+    除前缀与角色名外逐字相同。不给就照旧（老调用方的返回形状不变）。
     """
     sid_text = str(statement_id or "").strip()
     name = _MF.name_reading(_MF.FAMILY_B, statement_id=sid_text,
@@ -163,7 +220,8 @@ def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
     text = render(statement_full=statement_full, proof_text=proof_text,
                   statement_id=sid_text, label=label, proof_no=proof_no,
                   dependency_section=_DS.render_dependency_section(rows),
-                  plan_id=plan_id, sid=sid)
+                  plan_id=plan_id, sid=sid,
+                  wash_actor=wash_actor, wash_filled=wash_filled, title=title)
     got = _MF.commit_manuscript(
         root, family=_MF.FAMILY_B, text=text, statement_id=sid_text,
         proof_no=proof_no or 1, old_rel="", retitle="none",

@@ -983,7 +983,16 @@ def manuscript_statement_id(text: str) -> str:
 
 def candidate_statement_ids(*, derived_from: Iterable[Any] = (), proof_text: Any = "",
                             extra: Iterable[Any] = ()) -> list[str]:
-    """收方"这一份手稿可能挂在哪些命题号下"⇒ 候选号（裸号，按出现次序去重）。
+    """"去盘上试哪几个命题号"⇒ 候选号（裸号，按出现次序去重）。
+
+    ## 这一格只回答"试哪些名字"，不回答"能不能用那份稿"（2026-11-05 走查 D1）
+
+    候选表里有 `derived_from`（承重链：这条证明引用了谁）与证明正文里的 `stmt:` 引用，
+    是因为读数 `tried` 要能说清"按哪些号找过"（真机排障靠这一格）。但命中之后，
+    那份稿能不能当这一条命题的稿用是另一件事，判据在收方
+    （`agent_b/register_statement.py::_manuscript_usable`）：兜底读盘命中一份
+    "号不是本行"的稿时不许用它 —— 改前正是缺了这一道，`walk-e2e-20261105` 的
+    `stmt:000001` 才把 `stmt:000000` 的稿读成了自己的正文（连签一起借来）。
 
     - `derived_from`：B 交上来的承重链（自己的或外部的上下文命题）；
     - 证明正文里的 `stmt:` 引用（`stmt_refs` 是全仓唯一那条扫描，这里不另写一份）；
