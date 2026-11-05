@@ -1,4 +1,4 @@
-"""策略层：允许哪些召唤、以及四类上限（`DESIGN-CONDUCTOR.md` §3）。
+"""策略层：允许哪些召唤、以及三道结构性上限 + 全局并发（缺省不设限）（`DESIGN-CONDUCTOR.md` §3）。
 
 ## 为什么本模块只做判定、不做执行
 
@@ -6,23 +6,31 @@
 `Refusal` 或 `None`。它不是"试着召唤一下看看行不行" —— 那种试错的副作用
 （真的写了台账、真的调了 handler）与"我只是想知道行不行"完全不是一回事。
 
-## 为什么四类上限缺一不可（FC-18）
+## 三道结构性上限缺一不可（FC-18）
 
 | 只有 | 会被怎么绕过 |
 |---|---|
-| `max_tasks_per_run`（总量） | 瞬时把并发打爆：总量对了，但 200 个任务同时开跑 |
-| `max_concurrency`（瞬时） | 扇出可以无限持续：每秒 4 个，跑一天 |
+| `max_tasks_per_run`（总量） | 链可以无限深、扇出可以无限宽（总量对了，但一棵树能在任意一层铺开） |
 | `max_chain_depth` | 每一层都能无限宽（链上 7 个代理 = 台账 6 跳，每层 9999 个直接子） |
 | `max_direct_children` | 链可以无限深（每次只派生 1 个，但派生 10000 层） |
 
-所以 `Policy.validate()` 要求四个都是正数，"没设上限"这种事在本层
-不存在 —— 要放宽就把数字调大，而不是把它变成 None。这是一条刻意的
-不可配置：`None` 会让"我忘了设"与"我决定不限"长得一模一样。
+2026-11-05 业主裁定（逐字）：「丙：全局不设限」 ⇒ 原来那第四格
+`max_concurrency` 不再装闸：`Policy.max_concurrency` 的缺省值是 `None` =
+不设限。它不是"被调大了"，是"这道闸不装"—— 判据代码还在（显式给一个正整数的
+policy 照旧判），缺省这一档整段跳过（见 `check()` 的第 [6] 步）。
+理由：真机 `1703d44f` 里 16 格有 8 格被 1–2 小时不终态的任务占着，65 次
+`concurrency_exceeded` 里 42 次目标是 V —— 它挡住的不是花钱，是"本来就该等"的
+那一类派活；而钱与墙钟这两道资源闸一格没动。
 
-`wall_clock_sec` / `usd_budget` 则允许是 None
-（`None` = 不限），因为它们不是"防爆炸"的结构性上限，而是资源上限；
-但 `None` 在台账里必须能被读出来（`Policy.to_dict()` 里它原样是 None，
-不会被折叠成 0）。
+所以 `Policy.validate()` 对上面那三道仍然要求正数（"没设上限"在它们身上不成立）：
+`None` 会让"我忘了设"与"我决定不限"长得一模一样。并发那一格是唯一的例外，
+而且它的 `None` 是裁定明确要的那一档：要放宽别的轴请调大数字，不要顺手把它们
+改成 None / 0。
+
+`wall_clock_sec` / `usd_budget` 也允许是 None（`None` = 不限），因为它们不是
+"防爆炸"的结构性上限，而是资源上限；`None` 在台账里必须能被读出来
+（`Policy.to_dict()` 里它原样是 None，不会被折叠成 0）—— 并发那一格沿用同一条
+台账纪律，所以它在 `to_dict()` 里也是 None，不是 0。
 
 > 2026-10-15 业主裁定：这一层本来还有第三格 `token_budget`，
 > 它删掉了（「我们不卡 token，只卡总花销的钱」）。
@@ -103,8 +111,8 @@ Z就不能再派子代理。」补的下一句是：「12是只管直接子，�
   立刻开跑 —— 不需要等 D#1，也不会被 D#1 的满额挡住。这就是"另起一个 D2"在台账上的形态；
 - 相乘关系因此成立：每个实例各自有 `max_direct_children` 个位，沿链相乘；
   `max_chain_depth=6`（链上 7 个代理）把链截断
-  （理论上界 = 主控档 100 乘以链上每一跳的 25，实际由 `max_concurrency` 与
-  `max_tasks_per_run` 卡住）。
+  （理论上界 = 主控档 100 乘以链上每一跳的 25，实际由 `max_tasks_per_run`、
+  墙钟与钱卡住 —— 并发那一格 2026-11-05 起不设限，不再参与截断）。
 
 ## 拒信的形状：四样在前，解释在后（Q31）
 
@@ -136,7 +144,8 @@ from . import schema as S
 
 @dataclass(frozen=True)
 class Policy:
-    """一次 run 的策略。四类上限必须同时存在且为正数（FC-18）。"""
+    """一次 run 的策略。三道结构性上限必须同时存在且为正数（FC-18）；
+    全局并发（`max_concurrency`）缺省 `None` = 不设限（业主 2026-11-05 裁定）。"""
 
     #: 委派链长上限，按台账口径数：`Task.depth` 是跳数，主控的直接子 = 1。
     #:
@@ -180,9 +189,11 @@ class Policy:
     #: 2026-10-24 业主按上引原话改回"链上 5 个代理"，台账口径落成 4。
     #: 2026-11-05 业主把台账口径抬到 6（「将深度锁调到6，不然 M->D->F->A->B->V 是
     #: 做不到的」）⇒ 链上 7 个代理，业主点名的那条 6 代理链（台账 depth 1..5）通得过。
-    #: 每一次都只动这一格：扇出那一族（25 / 主控 100）、并发 16、总量 5000、墙钟 4h
+    #: 每一次都只动这一格：扇出那一族（25 / 主控 100）、总量 5000、墙钟 4h
     #: 一个数没动 —— 深度与扇出是两根轴，判据
     #: `tests/test_depth_lock_is_six_and_fanout_is_not_depth.py` 按"一起放宽必须各自红"守着。
+    #: （并发那一格当天还是 16，后来由 2026-11-05「丙：全局不设限」改成 None，
+    #: 见 `max_concurrency` 那一格 —— 那是另一根轴，与这次深度调整无关。）
     max_chain_depth: int = 6
     #: 「审稿人不是下级」：这些角色不占链（业主 2026-11-02 裁定，取"乙"）。
     #:
@@ -220,13 +231,34 @@ class Policy:
     #: 业主 2026-10-24 补的口径（逐字）：「12是只管直接子，不管隔着几层的子」
     #: —— 所以这一格与"整棵树多大"无关，也不与链长那一格换算。
     max_direct_children: int = 25
-    #: 全局同时运行的任务数（瞬时上限）。
+    #: 全局同时运行的任务数（瞬时上限）。`None` = 不设限（业主 2026-11-05 裁定）。
     #:
     #: 2026-10-15 业主裁定 C5：4 → 16。4 是本框架早期"离线单机"时代的数 ——
     #: 那时候每个任务几乎都是纯计算；现在每个任务几乎都是等一次上游回复
     #: （实测一次 20–180 秒），并发度直接决定一趟研究的墙钟。真正的刹车是钱
     #: （`usd_budget`）：并发 16 只会让钱花得更快，而不会让钱花得更多。
-    max_concurrency: int = 16
+    #:
+    #: ## 2026-11-05：16 → None（业主裁定，逐字）：「丙：全局不设限」
+    #:
+    #: 真机 `1703d44f` 的读数把上面那句"真正的刹车是钱"证到了反面：16 格里 8 格
+    #: 被 1–2 小时不终态的任务占着；65 次 `concurrency_exceeded` 里 42 次目标是 V。
+    #: 也就是说这道闸挡住的不是花钱，是"本来就该等"的那一类派活，而它把等待变成了
+    #: 拒绝（拒了之后召唤方可执行的只有"过 25 秒再撞一次"）。
+    #:
+    #: ## 为什么是 `None`，不是 0，也不是一个很大的数
+    #:
+    #: - `0` 在这份 `Policy` 里的自然读法是"0 个名额"（真闸门：谁都派不动），
+    #:   而且 `d.running >= 0` 的极性正好相反 —— 它会拒掉一切；
+    #: - 一个很大的数只是把同一个比较换了个常数：闸还在，只是难以触顶。裁定要的是
+    #:   "这道闸不装"，所以缺省这一段必须整段跳过（见 `check()` 第 [6] 步）；
+    #: - `None` 已经是本 dataclass 里"不限"的写法（`wall_clock_sec` / `usd_budget`），
+    #:   `to_dict()` 原样保留 None ⇒ 台账上"不设限"与"限 0"读得出来。
+    #:
+    #: 显式给一个正整数仍然有效（`check()` 第 [6] 步的 `is not None` 边界就是它：
+    #: 给了数照旧比大小、照旧落 `concurrency_exceeded`）—— 缺省不装闸 ≠ 把闸拆了；
+    #: 只是生产路径不再传这个数。`schema.REFUSAL_REASONS` 里那个码也因此仍是活值
+    #: （历史台账里 162 处带着它，删值会让历史台账变非法）。
+    max_concurrency: int | None = None
     #: 一次 run 的召唤总数（生命周期总量）。
     #:
     #: 2026-10-15 业主裁定 C5：200 → 5000。T5 第 8 趟 52 分钟只用了 24 条，
@@ -279,18 +311,30 @@ class Policy:
         return self.max_direct_children
 
     def validate(self) -> None:
-        """四类上限必须都是正数。不合法抛 ValueError（不返回布尔）。"""
+        """三道结构性上限必须都是正数；`max_concurrency` 允许 `None`（不设限）。
+
+        不合法抛 ValueError（不返回布尔）。
+        """
         for name in ("max_chain_depth", "max_direct_children", "max_concurrency",
                      "max_tasks_per_run"):
             v = getattr(self, name)
+            if name == "max_concurrency" and v is None:
+                # 2026-11-05 业主裁定「丙：全局不设限」⇒ 这一格的 None 是裁定要的
+                # 那一档，不再是"忘了设"：真机 1703d44f 里它挡住的 65 次里有 42 次
+                # 目标是 V（本来就该等）。0 仍非法 —— 0 读起来是"0 个名额"（真闸门）。
+                continue
             if isinstance(v, bool) or not isinstance(v, int):
-                raise ValueError(f"Policy.{name} 必须是 int，收到 {v!r}")
+                raise ValueError(f"Policy.{name} 必须是 int"
+                                 f"{'或 None（None = 不设限）' if name == 'max_concurrency' else ''}，"
+                                 f"收到 {v!r}")
             if v <= 0:
                 raise ValueError(
-                    f"Policy.{name}={v} 必须为正数。四类上限缺任一类，另三类都可以被绕过"
-                    "（FC-18）：只有总量则瞬时并发可被打爆；只有并发则扇出可无限持续；"
-                    "只有深度则每层可无限宽；只有扇出则链可无限深。"
-                    "要放宽请调大数字，**不要**把它变成 None/0 —— 那会让『我忘了设』"
+                    f"Policy.{name}={v} 必须为正数"
+                    f"{'（None 才是「不设限」）' if name == 'max_concurrency' else ''}。"
+                    "三道结构性上限缺任一类，另两类都可以被绕过"
+                    "（FC-18）：只有总量则链可无限深、扇出可无限宽；只有深度则每层可"
+                    "无限宽；只有扇出则链可无限深。"
+                    "要放宽请调大数字，不要把它变成 None/0 —— 那会让『我忘了设』"
                     "与『我决定不限』长得一模一样。"
                 )
         if self.wall_clock_sec is not None and not (self.wall_clock_sec > 0):
@@ -324,6 +368,22 @@ def max_agents_on_chain(policy: Policy) -> int:
     只负责把台账跳数翻成人话（拒绝报文与文档都读它，免得各自 +1 各自错）。
     """
     return int(policy.max_chain_depth) + 1
+
+
+def concurrency_reading(policy: Policy) -> str:
+    """并发这一格的人话读数（开场那段提示词与它同源，见 `agent_prompts`）。
+
+    唯一落点：`None` = 不设限（业主 2026-11-05 裁定「丙：全局不设限」），
+    正整数 = 仍是一道闸。放在 `policy` 里而不是在拼提示词那一处再写一遍，
+    是为了让"读数"与"判据"永远说同一句话（改一处就两处一起变，不会漂）。
+
+    为什么读数里要把裁定原文写上：这句话是模型读到的唯一一处"这一格今天
+    还拦不拦我"。写"不设限"而不带出处，读的人分不清它是裁定还是缺省；带上
+    「丙：全局不设限」这句逐字，事后审计能直接对到业主的原话。
+    """
+    if policy.max_concurrency is None:
+        return "不设限（业主 2026-11-05 裁定「丙：全局不设限」）"
+    return f"{int(policy.max_concurrency)} 个（超了落 `concurrency_exceeded`）"
 
 
 # ---------------------------------------------------------------- 逐角色的上限覆盖
@@ -1035,7 +1095,12 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
         )
 
     # ---- [6] 并发（瞬时）
-    if d.running >= policy.max_concurrency:
+    #
+    # 2026-11-05 业主裁定（逐字）：「丙：全局不设限」⇒ 缺省 `Policy.max_concurrency
+    # = None` 时整段跳过：不是"拿一个很大的数去比"（那是换了个常数、闸还在），
+    # 而是这一条判据不装。显式给了正整数（库的调用方 / 判据夹具）时照旧判 ——
+    # 缺省不装闸 ≠ 把闸拆了。
+    if policy.max_concurrency is not None and d.running >= policy.max_concurrency:
         return Refusal(
             "concurrency_exceeded",
             refusal_detail(
@@ -1190,6 +1255,10 @@ def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int
     于是"波内并发数 ≤ max_concurrency"由划分保证，不需要再靠信号量兜底。
     （两者都留着：划分保证不超，运行时信号量保证即使调用方绕过划分也不超。）
 
+    `limit=None` = 不设上限（2026-11-05 业主裁定「丙：全局不设限」之后
+    `Policy.max_concurrency` 的缺省值就是它）：分波只按写集互斥，不再有"满员"
+    这一档 —— 写集不冲突的调用可以全都落在同一波里。
+
     返回的是下标而不是调用对象：调用对象可能包含不可哈希/不可比较的
     字段（dict 参数、lambda），用 `list.index()` 去定位会得到错误的下标
     （重复元素全部指向第一个）。下标从一开始就是真的。
@@ -1218,21 +1287,23 @@ def _role_of(call: Any) -> Any:
 
 
 def assert_policy_complete(policy: Policy) -> None:
-    """"run 启动时断言四类都在"（设计 §3 末段）。
+    """"run 启动时断言三道结构性上限都在"（设计 §3 末段）。
 
-    与 `Policy.validate()` 的区别：`validate` 查取值合法性（正数），
-    这里查这一类是否被显式声明过。目前两者等价（dataclass 有默认值，
+    与 `Policy.validate()` 的区别：`validate` 查取值合法性（正数 / 并发那一格
+    允许 None），这里查这一类是否被显式声明过。目前两者等价（dataclass 有默认值，
     不可能缺席），但把这条断言单列出来，是为了将来有人把某个字段改成
     `Optional` 时，在这里炸 —— 而不是让一个 `None` 悄悄流向判定函数。
+
+    并发那一格不在断言里（2026-11-05 业主裁定「丙：全局不设限」⇒ 它的 None 就是
+    "不设限"这一档合法值，不是缺席）；另外三道仍然一个都不许缺。
     """
     absent = [
-        n for n in ("max_chain_depth", "max_direct_children", "max_concurrency",
-                    "max_tasks_per_run")
+        n for n in ("max_chain_depth", "max_direct_children", "max_tasks_per_run")
         if getattr(policy, n, None) is None
     ]
     if absent:
         raise ValueError(
-            f"policy 缺少四类上限中的 {absent}（FC-18：缺任一类，另三类都可以被绕过）"
+            f"policy 缺少结构性上限中的 {absent}（FC-18：缺任一类，另两类都可以被绕过）"
         )
 
 

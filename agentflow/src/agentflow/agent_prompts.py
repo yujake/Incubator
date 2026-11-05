@@ -9181,7 +9181,7 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
 
 
 
-        f"- 全局同时运行 {int(policy.max_concurrency)} 个（超了落 `concurrency_exceeded`）；"
+        f"- 全局同时运行 {POL.concurrency_reading(policy)}；"
 
 
 

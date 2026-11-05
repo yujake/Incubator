@@ -437,9 +437,22 @@ def test_policy_validate_rejects_each_missing_limit():
 
 
 def test_policy_validate_rejects_non_int_limits():
-    """负控：`None` 不能通过 —— 那会让"我忘了设"与"我决定不限"长得一模一样。"""
-    with pytest.raises(ValueError, match="max_concurrency"):
-        P.Policy(max_concurrency=None)  # type: ignore[arg-type]
+    """负控：非整数一律不许过；三道结构性上限连 `None` 都不许过。
+
+    2026-11-05 业主裁定（逐字）「丙：全局不设限」之后，`max_concurrency` 是
+    唯一允许 `None` 的那一格（`None` = 不设限，是裁定要的那一档）；
+    其余三格仍然是"没设上限这种事在本层不存在" —— 那会让"我忘了设"与"我决定不限"
+    长得一模一样。这条判据的两个方向都在这里：并发那格收 None，别的格不收。
+    """
+    # 并发：None 合法（不设限），非整数仍非法
+    assert P.Policy(max_concurrency=None).max_concurrency is None
+    for bad in ("16", 16.0, True):
+        with pytest.raises(ValueError, match="max_concurrency"):
+            P.Policy(max_concurrency=bad)  # type: ignore[arg-type]
+    # 另外三格：None 与 0 一样是"缺了/废了"，照样拒
+    for field_name in ("max_chain_depth", "max_direct_children", "max_tasks_per_run"):
+        with pytest.raises(ValueError, match=field_name):
+            P.Policy(**{field_name: None})
 
 
 def test_policy_defaults_have_all_four_limits():

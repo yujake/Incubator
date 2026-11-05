@@ -18,6 +18,9 @@
 3. 峰值并发 ≤ max_concurrency —— 两道闸：划分时单波容量就是上限
    （`policy.waves_of(limit=...)`），运行时再加一个 `Semaphore`。
    两道都要：划分保证正常路径不超，信号量保证即使有人绕过划分也不超。
+   2026-11-05 业主裁定「丙：全局不设限」之后这一条只在 policy 显式给了数时
+   成立（`max_concurrency=None` ⇒ 不设上限：`waves_of(limit=None)` 只按写集分波，
+   信号量整个不拿）。缺省不装闸 ≠ 把闸拆了：显式设数的调用方行为逐字不变。
    为什么不靠 `ThreadPoolExecutor(max_workers=...)` 兜底：那只是线程数上限，
    而"同时运行的任务数"是可以大于线程数的（一个线程里串行跑两个任务时，
    两个任务的重叠窗口仍然只有一个线程，但线程池不是那个语义的判据来源）。
@@ -344,7 +347,11 @@ class WaveHandle:
         self._new: list[int] = []
         self._all_done = threading.Event()
         self._coordinator: threading.Thread | None = None
-        self._sem = threading.Semaphore(max(1, int(policy.max_concurrency)))
+        # 并发名额：policy 显式给了数才有这道闸（`None` = 不设限 ⇒ 不拿信号量）。
+        # 2026-11-05 业主裁定「丙：全局不设限」：缺省不装闸；`waves_of(limit=None)`
+        # 只按写集分波，波内并发数由写集互斥决定，不由一个数决定。
+        self._sem = (None if policy.max_concurrency is None
+                     else threading.Semaphore(max(1, int(policy.max_concurrency))))
         self._started_at = _time()
 
     # ---------------------------------------------------------- 只读读数
@@ -588,7 +595,8 @@ class WaveHandle:
             self._close_window(label, began, peak)
             handle.settle(start.refusal)
             return
-        self._sem.acquire()
+        if self._sem is not None:      # None = 不设限（2026-11-05 裁定）：不拿名额
+            self._sem.acquire()
         try:
             res = self.conductor.summon_run(start)
         except BaseException as exc:  # noqa: BLE001 - 后台没人接的异常会丢结果
@@ -597,7 +605,8 @@ class WaveHandle:
             handle.settle(res)
         finally:
             self._close_window(label, began, peak)
-            self._sem.release()
+            if self._sem is not None:
+                self._sem.release()
 
     def _close_window(self, label: str, began: float, peak: int) -> None:
         self.probe.record(label, began, _time(), peak)

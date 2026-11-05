@@ -135,9 +135,11 @@ def _cases() -> list[tuple[str, Callable[[], Any]]]:
          lambda: P.check(deep, P.Decision(frm=S.CONDUCTOR_ROLE, to="A", action="run_once",
                                           direct_children=100,
                                           direct_children_seats=all_silent))),
+        # 并发那一档 2026-11-05 起缺省不装闸（业主裁定「丙：全局不设限」）⇒
+        # 这里显式造一份带数的 policy：拒信的形状判据还在这条路上。
         ("concurrency_exceeded",
-         lambda: P.check(deep, P.Decision(frm="M", to="A", action="run_once",
-                                          running=deep.max_concurrency))),
+         lambda: P.check(P.Policy(max_concurrency=4),
+                         P.Decision(frm="M", to="A", action="run_once", running=4))),
         ("budget_exceeded.tasks",
          lambda: P.check(deep, P.Decision(frm="M", to="A", action="run_once",
                                           total=deep.max_tasks_per_run))),
