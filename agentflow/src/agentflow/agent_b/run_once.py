@@ -94,7 +94,7 @@ class _RunOnce:
         #
         # 缺陷 1（2026-11-05）之后：存量 `library/…` 行在 `_claim` 里已经归一并落盘，
         # 所以这里若照常解盘上那一份，`path_base=workspace` 永远不会出现。`_claim`
-        # 因此把"归一化**之前**解原串"的读数一起带回来 —— 那个读数才是"这一行当时
+        # 因此把"归一化之前解原串"的读数一起带回来 —— 那个读数才是"这一行当时
         # 按哪个基准读得到"的证据，`res.path_base` 用它。
         legacy = claim.legacy_path_reading
         if legacy is not None:

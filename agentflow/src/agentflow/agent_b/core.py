@@ -164,18 +164,18 @@ class _Core:
         """领取前把存量 `library/` 前缀的 `literature.path` 归一化，并留下 `path_base` 读数。
 
         ## 为什么必须在这里（而不是把整表校验放宽）
-        `Store.tx` 提交时校验**整张** literature 表（`store.py` 的提交块），而一条历史行
+        `Store.tx` 提交时校验整张 literature 表（`store.py` 的提交块），而一条历史行
         `path=library/…` 会被 `schema.literature_path_problem` 当场拒 ⇒ `_claim` 的事务
-        整笔失败：不是这一行领不到，是**整张表**一条都领不到（现场见
+        整笔失败：不是这一行领不到，是整张表一条都领不到（现场见
         `temp/_five_verify_20261105/evidence/item3.json` 的 `legacy_normal_path`）。
         改校验粒度是 FC-27（schema-migration）的事，不在本轮；这里只做写侧本来就会做的那件事
-        —— 按 `table_tools._normalize_literature_path` 的**同一条规则**（不另写一份）剥掉
+        —— 按 `table_tools._normalize_literature_path` 的同一条规则（不另写一份）剥掉
         多余的 `library/` 前缀，改动落在盘上（事件 `note="claim-normalize"` 可查）。
         只剥一层、其余形状一个字节不碰的边界也在那个函数里（`library/library/x` 仍被拒：
         不递归猜；`downloads/x.pdf` 是另一个合法坐标系，不动）。
 
         ## 为什么读数要在归一化之前取
-        `litread.resolve_literature_path` 的 workspace 回退**只对以 `library/` 开头的串**
+        `litread.resolve_literature_path` 的 workspace 回退只对以 `library/` 开头的串
         启用。若归一化后再解，`library/000003/x.txt` 已经变成 `000003/x.txt`，那条
         workspace 读数就永远出不来了 —— 而它正是"这一行当时按哪个基准读得到"的唯一证据。
         所以先用原串解一次、把 `ResolvedLiteraturePath` 交给领取结果，归一化只改盘。

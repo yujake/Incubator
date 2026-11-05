@@ -227,7 +227,7 @@ class BClaimOutcome:
     #: 读数形状：`{"lit_id", "before", "after"}` —— "我改过你的盘"这件事必须可查，不是静默修。
     path_normalizations: list[dict] = field(default_factory=list)
     #: 被领到那一行的"归一化前"读数：`{"before", "after", "resolution"}`，其中
-    #: `resolution` 是 `litread.ResolvedLiteraturePath`（在归一化**之前**解原串得到的，
+    #: `resolution` 是 `litread.ResolvedLiteraturePath`（在归一化之前解原串得到的，
     #: 所以 `path_base` 保留的是存量写法真正落在哪个基准上）。`None` = 这一行本来就规范。
     #:
     #: 为什么读数要在归一化之前取：`litread` 的 workspace 回退只对带 `library/` 前缀的串
