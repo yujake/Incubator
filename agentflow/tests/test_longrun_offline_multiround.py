@@ -134,10 +134,14 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
     from agentflow import verifications as VR
     from agentflow.agent_v import AgentV
 
-    # 稿名必须让 `vsigns.manuscript_id_of` 认得出裸稿号（`reports/f-proof-<号>.md` /
-    # `f-proof-plan-<数字>.md`）：签块第 9 格「手稿号」按它写，认不出号的块 B 不认
-    # （2026-11-04 裁定 乙-2）。计划号因此用数字形态，不用"probe-no-lit"这种可读名。
-    man_rel = DS.manuscript_relpath(plan_id="000001")
+    # 稿名必须让 `vsigns.manuscript_id_of` 认得出裸稿号（`reports/f-proof-<号>.md`）：
+    # 签块第 9 格「手稿号」按它写，认不出号的块 B 不认（2026-11-04 裁定 乙-2）。
+    # 2026-11-06：计划稿不是签的载体 —— `f-proof-plan-<数字>` 是合法落稿名（F 先按
+    # 计划落稿、拿到命题号再改名），但 V 的签只盖在"一条命题的证明"上，计划稿写的是
+    # 下一步怎么做 ⇒ 拿计划稿送审会落 `proof_reviewed_not_signed`（看过、没签，一个字
+    # 节都不写）。这一步要的是"未在册先签"的真实形态，所以稿名按命题号形态写：本工作区
+    # 此前没有 `statements` 行，第一条命题登记的号就是 000000（下面 B 的登记沿用它）。
+    man_rel = DS.manuscript_relpath(statement_id="000000")
     man_path = ws / man_rel
     man_path.parent.mkdir(parents=True, exist_ok=True)
     man_path.write_text(
