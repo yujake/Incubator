@@ -29,6 +29,7 @@ from . import conceptrows as CR
 from . import dedup as D
 from . import evidencebits as EB
 from . import interactions as IX
+from . import litread as LR
 from . import schema as S
 from . import signatures as SIG
 from . import textutil as T
@@ -405,20 +406,58 @@ def _check_2(rep, lit_by_id, literature, requests, store):
             ))
 
     # ---- 文献：文件是否真的在
+    #
+    # 缺陷 2（2026-11-05）：改前这里只认 `library/` 一个基准（`store.library_path`），
+    # 而 B 的抽取入口已改用 `litread.resolve_literature_path` 的两基准解析 —— 于是
+    # 同一份盘上文件，B 说"找到了（path_base=workspace）"，审计说"文件不存在"
+    # （现场 `ws03_legacy` 的 000003，见 `temp/_five_verify_20261105/evidence/item3.json`）。
+    # 判据不另写一份：与抽取入口调**同一个** `litread.resolve_literature_path`，并把
+    # `base` 读数带进报告 —— `checked.literature_path_base_*` 计数，加上 workspace 那一档
+    # 单独一条 warning（点名"这一行是存量写法、B 领取时会归一"）。
     for l in literature:
         lid = l.get("lit_id")
         p = l.get("path")
         dl = l.get("download") or {}
         if p:
             try:
-                ap = store.library_path(p)
-            except Exception as e:
-                rep.issues.append(Issue("error", "literature", lid, "path_escape", str(e)))
+                resolved = LR.resolve_literature_path(store.root, store.library, p)
+            except (OSError, ValueError) as e:
+                rep.issues.append(
+                    Issue("error", "literature", lid, "path_escape", str(e)))
                 continue
-            if ap is None or not ap.exists():
+            if resolved.found:
+                key = (f"literature_path_base_{resolved.base}"
+                       if resolved.base else "literature_path_base_unresolved")
+                rep.checked[key] = int(rep.checked.get(key) or 0) + 1
+                if resolved.base == LR.BASE_WORKSPACE:
+                    # 只在"按 workspace 基准才读到"这一档报：它说明行上还是存量写法
+                    # （`library/…` 多一层）。这不是错误 —— 文件确实在，只是坐标系多了一层；
+                    # B 领取时会把这一格归一化后落盘（`agent_b/core._normalize_legacy_literature_paths`）。
+                    rep.issues.append(Issue(
+                        "warning", "literature", lid, "path_workspace_base",
+                        f"文献 {lid} 的 path={p} 只按 workspace 基准读得到"
+                        f"（path_base=workspace，解析到 {resolved.path}）：这一行是 "
+                        "`library/` 前缀的存量写法，B 领取时会归一化后落盘；也可以 "
+                        "`table.update(... patch={'path': ...})` 手动修成规范形态"))
+            elif not resolved.candidates:
+                # 形状本身越界（绝对路径 / `..`）：沿用 `store.library_path` 的拒信 ——
+                # "路径非法"与"文件不存在"是两件事，不能折成一个读数。
+                try:
+                    store.library_path(p)
+                except Exception as e:  # noqa: BLE001
+                    rep.issues.append(
+                        Issue("error", "literature", lid, "path_escape", str(e)))
+                else:  # 解析器给不出候选、library 基准也不拒：如实报出解析器原话
+                    rep.issues.append(
+                        Issue("error", "literature", lid, "file_missing",
+                              f"表里登记了 path={p} 但文件不存在（B 会跳过它）："
+                              f"{resolved.reason}"))
+            else:
+                # 两基准都缺 ⇒ 候选绝对路径一个都不许省（`reason` 已逐个列出）。
                 rep.issues.append(
                     Issue("error", "literature", lid, "file_missing",
-                          f"表里登记了 path={p} 但文件不存在（B 会跳过它）")
+                          f"表里登记了 path={p} 但文件不存在（B 会跳过它）："
+                          f"{resolved.reason}")
                 )
         elif dl.get("status") == "ok":
             rep.issues.append(
