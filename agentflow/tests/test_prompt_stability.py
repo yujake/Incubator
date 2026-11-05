@@ -816,6 +816,12 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p242", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p242（2026-11-05，今晚最后一次冻结）：变化格 = 全部十一格。① `conductor.post_task`（Universal）summary 补「要让别人办一件事，有出边就走派活那一形（`summon`）；没有出边时把这件事写进交回结论」（88a203c7）⇒ tools_lines 对每个角色都渲染；② `conductor.escalate` 的 side_effect `read → write_local`（8aa92286，业主裁定「乙」）⇒ 那行换值 + 「手 / 眼睛」两行件数变；③ 压缩批 510280a3：fs.write / fs.edit / search.download / verify.run_experiment 的 summary 换文案（D 的正文口径句 138→103、fs.edit 不再复制、两句细则挪进 params description），压缩批次 78.86% → 74.60%；④ `table.list.fields` / `table.search.select`（068cc9d9）进「可选 ?…」段；⑤ C 的唤起骨架与手段行（88a203c7）、D 的入边表去 F（50c4a1d2）、F 的「交给 E 去验」与三句新教法（50c4a1d2 / 08b7d2c3 / 05067047 / b26cd7e4）、V 的出边清空 + `verify.verify_proof` 变 write_local + 只读边界那一族（911b9e1f / db83d025 / 100a9074 / 327b617f）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p242 → p243（2026-11-06 等级是唯一的轴 · 提示词/技能/规范文本一次对齐）：只改模型可见
+    # 文本（specs 的 policy / 参数说明、agent_prompts 的共用段与 PAPER_PACK、agent_skills 手册、
+    # agent_e/_support 的列表句），一格事实都没挪 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p243", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p243（2026-11-06，等级是唯一的轴）：变化格 = 全部十一格（共用段 `STRUCTURE_NOT_PROMPT` 与各角色自己的 policy / 动作说明都改了）。口径：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；可引门槛 = `pre_theorem`；穷举与 Lean 同级都到 `theorem`；`evidence_kind` 只是历史列（由等级反算，判定面不读）；V 不假定有号（没号先落 `verifications/pending/<正文 sha>.jsonl`，B 登记后按正文 sha 认领，三票齐）。判据：`tests/test_agent_prompts.py` 的十一格 + `test_the_prompt_version_moves_with_the_sections`。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

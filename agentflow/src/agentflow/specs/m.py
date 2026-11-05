@@ -309,7 +309,7 @@ SPEC = AgentSpec(
             "—— `reviewed_proof_rows` 数的是**五位现算**到我方命题「预备定理级 / 正式定理」的行，引用命题（`origin=external_lit`）"
             "到高档不算；它写成 0 时先读 `statements_without_bits` 分清两种 0：**等于** `statements` ⇒ 产出方根本没走过位记录"
             "（去派签位的人：实验 E、证明 F、审过 V、正式审查 H；写位的是 B 的 `register_statement`），**小于**它 ⇒ 算了"
-            "只是不够档；自报的 `status=proved` / `evidence_kind=proof` 不算凭据 —— 非数值方向走「造」这条腿，并在验收表里写清"
+            "只是不够档；自报的 `status=proved` / 等级 `theorem` 不算凭据 —— 非数值方向走「造」这条腿，并在验收表里写清"
             "为什么不用数值（那就是第 1 位 `na` 的理由）；④想（`conjecture_rows` / `statement_rows` / `counterexample_or_proof_rows`）；"
             "⑤**看（关系分析）**：`c_analysis_runs`（数 `tasks` 里 role=C 跑过的行）—— 要么真的派过 C 的关系分析，要么写 `na` + 理由；"
             "⑥**攻（攻坚推进）**：**只认 `plan_progress_rows`** —— `attack_plan_rows` 只是**立项计数（informational）**，写它不会让"
@@ -323,7 +323,7 @@ SPEC = AgentSpec(
             "把这四个键凑成 `run_evidence` 交给 H：`{'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}`。"
             "H 只判「回执合不合格」：缺 `exit_code` 就分不出绿与红（⇒ G8 记 `unknown`），`exit_code != 0` ⇒ G8 记 `fail`；**没跑就写 "
             "`{checked: false, reason: '…为什么没跑…'}`，理由必填**（不写理由等于把「权限不允许」和「忘了跑」混成一件事）。",
-            "**要有人走查就派 D 去办**（D 会通过 F 让 V 签）：正文或 `statements` 里存在**证明级断言**（`proof_review` / `proof`）"
+            "**要有人走查就派 D 去办**（D 会通过 F 让 V 签）：正文或 `statements` 里存在**证明级断言**（等级 `pre_theorem` / `theorem`）"
             "而 `reviewed_proof_rows` 记 0 时，不许当成「这一档天然为 0」—— 要么派 `D` 去核签（缺签的由 D 让 F 补签，产物落 "
             "`verifications`），要么在验收表那一行写清为什么没有任何一签。",
             # 2026-11-01（业主裁定，审计 171 M-19/M-20）：改前这一格写着「0 不是失败，静默的 0
@@ -344,10 +344,10 @@ SPEC = AgentSpec(
             "D 会核那一条带没带 V 的签字，缺签由 D 让 F 补签（那一签由 F 去办），**不要等收工再想起**来；F 产出时已经签过的"
             "（`verifications` 最近一签「成立」且 `proof_sha256` 与现行正文相符）**不许要求再签**。①**落点必须是 `verifications`**：产物就是 "
             "`verifications/<命题号>.jsonl` 的那一行（`成立` 且无未解决 error 才签得住），**不收口头结论**；②**不许**让 F 或 B "
-            "直接把等级写成 `proof_review`：那一档的定义是「V 的 `verifications` 里那一条签『成立』」，写入期**当场拒收**查不到签的 "
-            "`proof_review`（错误码 `proof_review_without_evidence`，整笔事务一行都不写）；**反过来也一样**：那一签已经在盘上"
-            "（`proof_text` 非空＋最近一签「成立」＋`proof_sha256` 与现行正文相符）而这一行还写着 `heuristic`/`cross_check` ⇒ 那是"
-            "把强结果登记成弱档，`verify` 会报 `weaker_than_evidence`（warning）—— 该升就升（判据够格的写入不会被拒）；③计划 "
+            "直接把等级写成 `pre_theorem`：那一级的定义是「V 的 `verifications` 里那一条签『成立』」，写入期**当场拒收**查不到签的 "
+            "`pre_theorem`（错误码 `proof_review_without_evidence`，历史名；闸读的是凭据不是那一格历史值，整笔事务一行都不写）；**反过来也一样**：那一签已经在盘上"
+            "（`proof_text` 非空＋最近一签「成立」＋`proof_sha256` 与现行正文相符）而这一行还停在 `conjecture` / `strong_conjecture` ⇒ 那是"
+            "把强结果登记成弱等级，`verify` 会报 `weaker_than_evidence`（warning）—— 该升就升（判据够格的写入不会被拒）；③计划 "
             "`history` 里有 `statement_id` 而 `verifications` 里没有对应的行 ⇒ 「攻」那一格记 `unknown`（**不是 `pass`**）。",
             "**交付物按任务那句话说**：说「研究…交付研究手稿」⇒ `documents` + `out/review/REPORT.md` 就够；说「整理成论文 / 交付"
             "论文 / 稿件」⇒ 让 G **自己写正文**（`fs.write` 到 `out/paper/main.tex`）再调 `doc.paper_compile` 编出 "
@@ -397,16 +397,16 @@ SPEC = AgentSpec(
             "**不是整张表没查成**（CC-05 的口径）。",
             "**挑哪一档要看你实际做的是什么**（D54）—— 「算或造」那一环不是只有 `numeric_experiment_rows`：它**只数 "
             "`method=numeric` 的行**；穷举/枚举类（`method=exhaustive_search`）**带 `search_bound` 的**要用 `search_frontier_rows`；"
-            "优化类用 `enumeration_optimization_rows`。**proof 那一栏有两个来源，两个都算 proof 级**："
-            "(a) **E 的穷举 / 数值论证** —— `method=\"exhaustive_search\"` 且整个论域被穷尽验证过 ⇒ `evidence_kind=\"proof\"`"
+            "优化类用 `enumeration_optimization_rows`。**`theorem` 那一栏有两个来源，两个同级**："
+            "(a) **E 的穷举 / 数值论证** —— `method=\"exhaustive_search\"` 且整个论域被穷尽验证过 ⇒ 等级 `theorem`"
             "（要的是可核的几件：搜索空间、布尔 true 的 `exhaustive`、程序设计、穷举论证、程序相对路径；"
             "判据本体是 `numericproof` 模块的 `exhaustion_problems`）；(b) **形式化那一岗** —— 只有**用户指定**过才有："
             "指定之后你把这条要求交给 B（`M→B`），由 B 逐条安排（本会话形式化关着时这一支产不出来，"
-            "`TOOLCHAIN_FACTS` 第一行会说「已关闭」）。读数看 `evidence_kind=\"proof\"` 与那几件可核条件，"
+            "`TOOLCHAIN_FACTS` 第一行会说「已关闭」）。读数看等级 `theorem` 与那几件可核条件，"
             "**不是**看 `method` 是不是 `formal`；`counterexample_or_proof_rows` 数得到这两个来源的行"
             "（它还数带反例的 `refutes`，读的时候分开看），`proof_experiment_rows` 只数 `method=formal` 那一支"
-            "—— 别把它当成 proof 栏的全部，那等于把 E 的穷举 proof 漏在外面。**不许只认 Lean**"
-            "（把 E 的穷举 proof 读成 `cross_check` 是同一类错的反面），也**不许要求 E 拿 `formal` 那一支来凑**。"
+            "—— 别把它当成 `theorem` 栏的全部，那等于把 E 的穷举漏在外面。**不许只认 Lean**"
+            "（把 E 的穷举读成 `strong_conjecture` 是同一类错的反面），也**不许要求 E 拿 `formal` 那一支来凑**。"
             "**两者都没有时**这一行才写 `na` + 理由（「E 的穷举那一支没做 / 论域没穷到」或「用户未指定形式化」）"
             "—— **不要写 0，也不许自己补做**：`na` ≠ 通过 ≠ 失败。",
             "**某一档对这个项目天然不适用时，写 `\"na\": true` 并在 `note` 里写明理由**（`na` ≠ 通过 ≠ 失败）：例如**调查型任务**"
@@ -414,8 +414,8 @@ SPEC = AgentSpec(
             "两条守卫：`na` 不写理由 ⇒ 整张表判没查成；**整张表全是 `na`** ⇒ 判 fail。",
             "**「交付一份清单 / 综述 / 表格」这一类任务：清单本体是 `documents` 里的行**（派 G 落 `documents`，每条带 `citations` "
             "与 `evidence_kind`），报告只是说明 —— 验收表里对应那一行要引它（`statement_rows` / `supported_claims` / "
-            "`document_literature_citations` 任一档）。**清单的每一条要写题目问的那个领域里的事**（引 `lit:` 为据、`evidence_kind` "
-            "按证据等级如实写）；C 的关系读数（`rel:` 引用）与 D 的研究问题进交付面时是**依据** —— 依据也要真的被引到（交付物里"
+            "`document_literature_citations` 任一档）。**清单的每一条要写题目问的那个领域里的事**（引 `lit:` 为据；`evidence_kind` "
+            "这一格按**等级**如实填 —— 等级是唯一的轴，`evidence_kind` 只是它的历史列名）；C 的关系读数（`rel:` 引用）与 D 的研究问题进交付面时是**依据** —— 依据也要真的被引到（交付物里"
             "至少引一条 `rel:`，否则收工门会报「C 跑了 N 次而产物一条都没进交付面」），但它**不代替清单本体**：把结构洞、度数中心性"
             "这类「我们自己的图读数」当成清单的条目，等于答的不是题面上那个问题（`draft/95` §6r）。",
             "**调查 / 探索 / 综述这一类任务要把 C 用起来**：文献进来了不等于看过 —— 派 C 的关系分析动作（`C.hottest` 看热点概念、"

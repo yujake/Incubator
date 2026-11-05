@@ -716,7 +716,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 | **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | `conjectures` 一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
-| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`） | `statements` 一行：`evidence_kind` 按通道给（文字证明 `proof_review`；**穷举程序 + V 签 ⇒ `proof`**）、`proof_text` 从稿上收进、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`） | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
 
 ### B 的正文与签从哪来（F 与 E 同一套）
 
@@ -733,7 +733,7 @@ B 收完会给三态：`present`（落了依赖边）/ `missing`（正文引了�
 `missing` 也不是「依赖为零」**；处置是让 F 补那一节再交，不是让 B 硬登。
 
 那一节长什么样：一张**四列**表 —— **引用**（那一步的原话）/ **命题号** / **用在哪一步** /
-**路径号**（第几条证明）。被引的命题要 `proof_review` 级及以上（不够格被引 ⇒ `inadmissible`）；
+**路径号**（第几条证明）。被引的命题等级要 `pre_theorem` 及以上（不够格被引 ⇒ `inadmissible`）；
 缺列、列数不对、号形不对都算没有这一节。
 
 ## 三条调度纪律（这一节才是"怎么派"）
@@ -885,8 +885,8 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 - **`## 依赖` 那一节由你读出来落依赖边**，四列固定：**引用**（F 那一步的原话）/ **命题号** /
   **用在哪一步** / **路径号**（第几条证明）。缺列、列数不对、号形不对 ⇒ 整笔拒
   `dependency_section_unreadable`，拒信点明第几行第几列；
-- **被引命题必须在册、且档位站到 `proof_review` 及以上**（业主 2026-10-24 逐字：
-  「proof_review级及以上才可引用」）：不够 ⇒ 整笔拒 `citation_below_proof_review`；
+- **被引命题必须在册、且等级站到 `pre_theorem` 及以上**（业主 2026-10-24 的原话是
+  「proof_review级及以上才可引用」，按**等级是唯一的轴**就是 `pre_theorem`）：不够 ⇒ 整笔拒 `citation_below_proof_review`；
   手稿没有那一节而证明正文引了 `stmt:` ⇒ 整笔拒 `dependency_section_missing`
   （一条在册引用都没有的自足证明不适用这一条，读数是 `not_applicable`，不是"缺"）；
 - **稿要是框架渲染的那一份**（头部带洗稿元信息）：手写、或换名绕过的 ⇒ 整笔拒
@@ -1386,6 +1386,11 @@ def _v_skills() -> tuple[Skill, ...]:
 - 同一份正文审过、签到位之后秘书才发得出这一签；
 - 它判不了、或者这一趟没有秘书 ⇒ 不发签。那不是「没问题」，也不是「再签几次就有了」。
 
+**未在册那一档是明文例外**（2026-11-04 业主裁定 乙-5）：命题还没在册、没有「收方秘书在场」这个
+前提时，V 读稿判干净「成立」即由你颁发签信封（`out/vsigns/<正文 sha>.json`）、手稿签块仍由收方秘书落。
+**没号也能签**：这一签先按正文 sha 落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后
+按同一个 sha 认领（`verification_id` / `at` / `proof_sha256` 三票齐）。
+
 所以别在回复里写「我已经签过了」「这一条签住了」—— 你签不了，你只能给出你的判断。
 
 ## 三、你看不到审阅之外的东西
@@ -1522,7 +1527,7 @@ def _v_skills() -> tuple[Skill, ...]:
    六档（`verifications.CITATION_VERDICTS`，业主 2026-10-26 的口径是「正常写证明就是不会逐字的」）：
    `consistent`（措辞不同但条件与结论一致）/ `weaker`（只用到弱形式，能签但要点名）/
    `stronger`（引用被夸大，或悄悄去掉了它要的假设）/ `unrelated`（引错了）/
-   `inadmissible`（被引命题档位低于 `proof_review`，不够格被引）/ `unknown`（判不了）。
+   `inadmissible`（被引命题等级低于 `pre_theorem`，不够格被引）/ `unknown`（判不了）。
    **不要求逐字**：判的是"条件与结论有没有被换掉"，不是"字面像不像"。
    `stronger` / `unrelated` / `inadmissible` / `unknown` 任一出现 ⇒ 这一份不许签「成立」。
 
@@ -1554,9 +1559,9 @@ def _v_skills() -> tuple[Skill, ...]:
   命题 / 实验）？两处都找不到 ⇒ 那一步没有依据；
 - 找到一条被引用的册子行，就去看它**自己的假设**有没有被满足
   （`table.get` 读那一行的 `statement_full`）—— 引用链上第一处不满足就是毛病所在；
-- 另有一格常被漏掉：那条行**够不够格被引**。档位低于 `proof_review`（`cross_check` /
-  `heuristic` / 空）⇒ 不管用法一致不一致，这一条都判 `inadmissible`（引用核实六档之一，
-  它挡签）；先把那条补到证明级，再来谈它撑不撑得住这一步；
+- 另有一格常被漏掉：那条行**够不够格被引**。等级低于 `pre_theorem`（`conjecture` /
+  `strong_conjecture` / 空）⇒ 不管用法一致不一致，这一条都判 `inadmissible`（引用核实六档之一，
+  它挡签）；先把那条补到 `pre_theorem`（V 签过），再来谈它撑不撑得住这一步；
 - 读不到证明全文时如实回 `reason`，不要凭题目猜内容。
 
 ## 与形式化那一档的关系
@@ -1665,6 +1670,8 @@ def _e_skills() -> tuple[Skill, ...]:
 用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审哪一份，并让 V 调它的
 `verify_proof`：**`proof_manuscript=reports/e-proof-<实验号>.md`**（这时不给
 `statement_id` —— 这一条还没在册），`readonly_facts` 附上实验号与读数。
+**没号也能签**：V 不假定有号 —— 这一签先落 `verifications/pending/<正文 sha>.jsonl`，
+B 登记拿到号后按正文 sha 认领（`verification_id` / `at` / `proof_sha256` 三票齐）。
 **别自己盖"已签"**：`observations.e_signature` 里那个 `signed_by="V"` 是你代写的格子，
 B 的入库闸已经不认它当第三方签字了（它只作读数）。签只能由 V 那一侧发。
 
@@ -1710,22 +1717,22 @@ D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evi
 
 **你既不要写对应表，也不要自己去找 B 的 `register_statement`。**
 
-## 5. 两档分野：跑的是哪一档，决定它到不到 `proof`
+## 5. 两档分野：跑的是哪一档，决定它到哪一级
 
-| 你跑的是 | 落什么 | 派不派 V | 拿不拿签 | 档位 |
+| 你跑的是 | 落什么 | 派不派 V | 拿不拿签 | 等级（唯一的轴） |
 |---|---|---|---|---|
-| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 | **不派 V** | **不拿签** | `evidence_kind` 最多 `cross_check`（脚本自报的 `proof` 一律降成它）⇒ 五元位等级最多 `strong_conjecture` |
-| **穷举证明**（三件套齐 + ②③ 落盘 + 手稿） | 实验行 + 报告 + 手稿 | 派 | 拿（收方秘书落块） | `evidence_kind=proof` —— **按通道**给，**不是** `proof_review`（文字证明那一档才是 `proof_review`） |
+| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 | **不派 V** | **不拿签** | 最多 `strong_conjecture`（有普通数值实验支撑）；脚本自报的 `proof` 一律按凭据降级（历史列 `evidence_kind` 最多 `cross_check`） |
+| **穷举证明**（三件套齐 + ②③ 落盘 + 手稿） | 实验行 + 报告 + 手稿 | 派 | 拿（收方秘书落块） | 等级按通道给：穷举证书 + V 签 ⇒ **`theorem`** —— 与 Lean **同级**（历史列 `evidence_kind=proof`）；**不是** `pre_theorem`（文字证明那一档才停在 `pre_theorem`，它的历史列名是 `proof_review`） |
 
-两档**不许写成同一档**：
+两档**不许写成同一级**：
 
-- 一般数值实验没有 V 的签，所以它到不了 `proof`：`strong_conjecture` 是"强猜想"，
-  不是"定理"（等级由 `evidencebits.derive_grade` 按五元位现算，任何角色自报的都不认）；
+- 一般数值实验没有 V 的签，所以它到不了 `theorem`：`strong_conjecture` 是"强猜想"，
+  不是"定理"（等级由 `evidencebits.derive_grade` 按凭据现算，任何角色自报的都不认）；
 - 穷举那一档不要求先有一份"文字证明"：它的凭据就是那份程序 + ②③ + V 的签，
   所以 V 不会"逐行走查"它（V 走的是七项机械会审）；
-- 落签那一刻档位按**现行签**重算（`verifications._grade_recomputed_from_signature`，只升不降）：
-  **穷举程序 + V 签 ⇒ `proof`；文字证明 + V 签 ⇒ `proof_review`**。所以"我交了一份穷举证据、
-  V 也签了"之后，别再按 `proof_review` 去理解这一行 —— 它已经是 `proof`。
+- 落签那一刻等级按**现行签**重算（`verifications._grade_recomputed_from_signature`，只升不降）：
+  **穷举程序 + V 签 ⇒ `theorem`；文字证明 + V 签 ⇒ `pre_theorem`**。所以"我交了一份穷举证据、
+  V 也签了"之后，别再按 `pre_theorem` 去理解这一行 —— 它已经是 `theorem`。
 """,
         ),
         Skill(
@@ -1765,7 +1772,7 @@ D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evi
 ## 一条纪律
 
 数值"看起来对"不是证明：收敛慢、浮点误差、参数太特殊都会骗人。
-它只能当**证据的一档**（落 `cross_check` / `heuristic` —— `numeric` 是实验方法、不是证据档），等级由五元位现算。
+它只能当**弱等级**（最多 `strong_conjecture`；`numeric` 是实验方法、不是等级），等级由凭据现算。
 """,
         ),
         Skill(
@@ -1926,9 +1933,10 @@ def _f_skills() -> tuple[Skill, ...]:
 - **`## 依赖` 那四列是固定形状**（缺列、列数不对、号形不对都整笔拒，`dependency_section_unreadable`）：
   **引用**（你这一步的原话）/ **命题号**（`stmt:NNNNNN`）/ **用在哪一步** / **路径号**（这是第几条证明，
   正整数）。手稿开头那几行元信息不是引用 —— 只数 `## 证明` 那一节里出现的 `stmt:`；
-- **能引的只有站到 `proof_review` 级及以上的在册命题**（业主 2026-10-24 逐字：
-  「proof_review级及以上才可引用」）：引一条 `cross_check` / `heuristic` 或没有档位的行 ⇒ 整笔拒
-  `citation_below_proof_review`。要引它，先把那一条补到证明级（V 签过）再来引 ——
+- **能引的只有等级站到 `pre_theorem` 及以上的在册命题**（业主 2026-10-24 的原话是
+  「proof_review级及以上才可引用」，按等级口径就是 `pre_theorem`）：引一条停在 `conjecture` / `strong_conjecture`
+  或等级算不出来的行 ⇒ 整笔拒
+  `citation_below_proof_review`。要引它，先把那一条补到 `pre_theorem`（V 签过）再来引 ——
   这一档 V 核引用时会判 `inadmissible`，签不下来；
 - **"审过"由 V 签**（`verifications`）：`F → V` 是直接边 —— 你产出的证明**由你派 V 签**；
   B 入库文献侧引入的定理/证明时也会派 V 审一次。**你签过的不要再要求别人替你签**。
@@ -1939,7 +1947,7 @@ def _f_skills() -> tuple[Skill, ...]:
   **已签 / 待签 / 未通过 / 没查成**。**没签就不是交差**：待签 ⇒ 你自己派 V 审这一份手稿（带
   `proof_manuscript`，在册也给）；未通过 ⇒ 按缺陷改稿再派 V；没查成 ⇒ 查为什么（稿不在盘上 / 稿读不出来 / 送审没成），
   别把它读成「没毛病」。
-- **自报的 `proof` 一律降级成 `cross_check`**（结构强制）：别指望"我说我证了"能算数。
+- **自报的「proof 级」一律按凭据降级**（结构强制）：别指望"我说我证了"能算数。
 
 ## 台账里没有够格的命题：直接派 A 去补库，别把'没查'写成'自足'
 
@@ -1979,8 +1987,7 @@ def _f_skills() -> tuple[Skill, ...]:
 
 ## 还有没签的：点名、留痕，不替你决定
 
-收工之前先读 `delivery.unfinished`：那里逐条列着还没签的成果（命题号 + 手稿路径 + 签的
-档位）。**还有没签的就不许静默收工** —— 收工读数会点名它们，并把「没留痕」也报出来。
+收工之前先读 `delivery.unfinished`：那里逐条列着还没签的成果（命题号 + 手稿路径 + 等级）。**还有没签的就不许静默收工** —— 收工读数会点名它们，并把「没留痕」也报出来。
 
 怎么办**由你自己定**（举例，不是枚举）：换一条证明路线重做那一步 / 把这条命题拆成几条
 更弱的引理 / 去补原证明里缺的工具或引理 / 减弱自己的断言（定理→条件性结论/猜想）/
@@ -2022,6 +2029,10 @@ def _f_skills() -> tuple[Skill, ...]:
 | `proof_no` | 否（缺省 1） | 第几条证明（一条命题多份证明时逐份签） |
 | `proof_manuscript` | **是** | 这一份证明的手稿路径（`reports/f-proof-*.md`）；**在册也给** —— 不给它，签没有落点，B 从稿上读不到那一签 |
 | `readonly_facts` | 否 | 你附的只读读数（命题现状 / 台账条数） |
+
+**没号也能签**（V 不假定有号）：命题还没在册时就不给 `statement_id` —— 这一签先按**正文 sha** 落
+`verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha 认领；
+`verification_id` / `at` / `proof_sha256` 三票必须齐。
 
 ## 板上那条 `v-resubmit@`：不是回执，ack 关不掉
 
@@ -3259,7 +3270,7 @@ def _g_skills() -> tuple[Skill, ...]:
 | 键 | 写什么 | 我撞到的 |
 |---|---|---|
 | `citations` | **带受控前缀的字符串**：`lit:000000` / `rel:000010` / `exp:…` / `stmt:…` / `doc:…` / `eval:…` | 写成 `{"lit_id": "000000"}` ⇒ 拒：`code=bad_citation_prefix`（前缀表里没有 `{'lit_id'`） |
-| `evidence_kind` | **`proof` / `proof_review` / `cross_check` / `heuristic`**（证据**强度**） | 我借了 `origin` 的词写 `external_lit` ⇒ 拒：不在受控词表里（**族 2**） |
+| `evidence_kind` | **`proof` / `proof_review` / `cross_check` / `heuristic`**（证据强度的**历史列**；等级是唯一的轴：`theorem` / `pre_theorem` / `strong_conjecture` / `conjecture`，由凭据现算） | 我借了 `origin` 的词写 `external_lit` ⇒ 拒：不在受控词表里（**族 2**） |
 | `section` | 这一条断言归哪一节（必填） | 漏 ⇒ 关键字必填，一次性点名三个 |
 | `sections`（建稿件时） | 每项是**含 `heading`** 的对象（不是 `title`） | 写成 `{"title": …}` ⇒ 拒：`sections[1] 必须是含 heading 的对象` |
 
@@ -3272,7 +3283,7 @@ def _g_skills() -> tuple[Skill, ...]:
 | 键 | 词表 |
 |---|---|
 | 命题的 `origin` | `external_lit` …（来源**可追**） |
-| 断言的 `evidence_kind` | `proof` / `proof_review` / `cross_check` / `heuristic`（**强度**） |
+| 断言的 `evidence_kind` | `proof` / `proof_review` / `cross_check` / `heuristic`（**强度的历史列**；等级口径见上一节：`theorem` / `pre_theorem` / `strong_conjecture` / `conjecture`） |
 | 依赖的 `kind` | `theorem` / `definition` / `lemma` / `proposition` / `dataset` / `experiment` / `prior_art`（**依赖是什么**） |
 
 ⚠️ **同一个键在不同工具里形状可能不同**：`page_range` 在 `register_statement` 里是
@@ -3291,9 +3302,9 @@ def _g_skills() -> tuple[Skill, ...]:
 `G.render` 与 `G.refresh_markdown` 是"**只动文本/文件**"的动作 ⇒ 返回的是**文本/路径**，
 别对它们取 `.get(...)`。要判成不成，看**盘上的那份 markdown 变没变**。
 
-## `cross_check` 那一档必须自带独立 `disclaimer` 栏（最常被拒的一格）
+## `strong_conjecture` 那一级（历史列 `cross_check`）必须自带独立 `disclaimer` 栏（最常被拒的一格）
 
-`evidence_kind='cross_check'`（数值交叉验证、文献级判断、经验推理）的断言，
+`evidence_kind='cross_check'`（历史列名；等级是 `strong_conjecture`：数值交叉验证、文献级判断、经验推理）的断言，
 **必须显式写明**「数值交叉验证，不构成证明」—— 而且要找的是这条断言对象里
 **独立的一栏 `disclaimer`**：**写进 `text` 不算，写在别的断言里也不算**。
 
@@ -3494,10 +3505,10 @@ def _shared_skills() -> tuple[Skill, ...]:
 ## 三层证据（强度不同，别混）
 
 - `numeric`（E 签）/ `formal`（L 签）：可复现的算与机器核验；
-- `proof`（F 写、V 核）：证明过程在 `statements.proof_text`，审过由 V 的两态结论（成立 / 有毛病）签；
-- `cross_check` / `heuristic`：交叉比对与经验判断 —— 它们**不是**定理级证据。
+- **文字证明**（F 写、V 核）：等级到 `pre_theorem`；证明过程在 `statements.proof_text`，审过由 V 的两态结论（成立 / 有毛病）签；
+- **普通数值实验 / 经验判断**（历史列 `cross_check` / `heuristic`）：等级最多 `strong_conjecture` / `conjecture` —— 它们**不是**定理级证据。
 
-自报的 `proof` 一律降级成 `cross_check`（结构强制），所以别指望"我说我证了"能算数。
+自报的「proof 级」一律按凭据降级（结构强制），所以别指望"我说我证了"能算数。
 
 ## 引文那一格
 

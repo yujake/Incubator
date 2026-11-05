@@ -159,11 +159,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
                 "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS),
                                   "description":
-                                  "证据强度。只看**可观察状态**：**V 签到位**（`bits.reviewed` "
-                                  "为真，或签块 / 台账那一行）就算审过；档位按通道给"
-                                  "（穷举⇒`proof`、文字⇒`proof_review`），"
-                                  "具体怎么给由框架判，你不必也不该推断内部过程。"
-                                  "只有**真没有那一签**时才退 `heuristic` / `cross_check`，"
+                                  "历史列（写盘时由等级反算，判定面不读它）。等级是唯一的轴："
+                                  "`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；"
+                                  "判定只看**可观察状态**：**V 签到位**（`bits.reviewed` "
+                                  "为真，或签块 / 台账那一行）⇒ 等级到 `pre_theorem`；"
+                                  "穷举证书或 Lean 核查也到位（同级）⇒ `theorem`；"
+                                  "只有普通数值实验支撑 ⇒ `strong_conjecture`；什么凭据都没有 ⇒ `conjecture`。"
+                                  "具体怎么算由框架现算，你不必也不该推断内部过程。"
+                                  "只有**真没有那一签**时才停在 `conjecture` / `strong_conjecture`，"
                                   "并在 `quote_reason` 里写清「还没有 V 的签名」"},
                 # 三态那一栏：`true`/`false` 直接给；"还没查"（None）靠不传这个参数表达
                 # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
@@ -215,9 +218,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                      "四列表，列固定："
                                      "`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
                                      "路径号（第几条证明） |`。"
-                                     "被引命题必须在册、且站到 `proof_review` 级及以上"
+                                     "被引命题必须在册、且等级站到 `pre_theorem` 及以上"
                                      "（不够 ⇒ 整笔受控拒绝 `citation_below_proof_review` 并点名；"
-                                     "档位读不到 ⇒ 也不放行）。缺列 / 列数不对 / 命题号或路径号"
+                                     "等级算不出来 ⇒ 也不放行）。缺列 / 列数不对 / 命题号或路径号"
                                      "形状不对 ⇒ 整笔受控拒绝 `dependency_section_unreadable` 并"
                                      "点明第几行。**手稿里没有这一节而证明正文引用了在册命题 ⇒ "
                                      "整笔受控拒绝 `dependency_section_missing`**（依赖面必须写进"
@@ -325,7 +328,7 @@ SPEC = AgentSpec(
             # B 没有到 F 的边，回执就走「派它入库的那一方」（summon 的返回值），不让 B 去猜该通知谁。
             "**入库完成后，向派你入库的那一方汇报**（回执点名你新登记的号、落了哪几行、哪几行没成）—— "
             "派你入库的人知道这件事是为了什么，不需要你去猜该通知谁；**也不要等别人来问**。"
-            "**若你在入库时发现材料不够**（比如候选命题够不上 `proof_review`、或缺正文），"
+            "**若你在入库时发现材料不够**（比如候选命题的等级够不上 `pre_theorem`、或缺正文），"
             "**同样回给派你的那一方**，写明缺哪一格。",
             # 2026-11-05（审计② 第 ⑩ 条）：`b-register@` 义务此前在 B 的可见面 0 处。
             "**V 签过一份稿之后，板上会多一条 `b-register@<命题号>@<被签正文的 sha>` 的「必须收录」义务项**"
@@ -338,20 +341,23 @@ SPEC = AgentSpec(
             "**你是审校这条链的第一环**：你写下的逐字 `quote` / `quote_verified` / `proof_text` 是下游唯一能「拿原文比一比」的东西 "
             "—— H 的采信、V 的逐行走查、以及收工门那几档（`quote_verified_rows` / `reviewed_proof_rows`）都读它；所以出处指错、"
             "`quote_verified` 把「还没查」写成 false，坏的都不是这一行，而是整条链。",
-            "**证据档按「有什么凭据」定，不按「怕不怕」定**（2026-10-19 晚；2026-11-01 收口）：`proof_review` 的凭据只认 "
+            "**等级按「有什么凭据」定，不按「怕不怕」定**（2026-10-19 晚；2026-11-01 收口）：`pre_theorem` 的凭据只认 "
             "`verifications/<命题号>.jsonl` 里那一签**是 `signed`**，而 `signed` 要三条同时成立 ——"
             "① 这条命题的 `proof_text` 非空（没有被审的那份证明，「审过」无从谈起）；"
             "② 那一签盖的是**现行这一份正文**（`proof_sha256` 与现在这一版的 sha256 相符）；"
             "③ 同一份正文上**框架判满它的门槛**（`SIGN_STREAK_NEED`）干净「成立」：引用核实全是 `consistent` / `weaker`，"
             "且 findings 里没有未解决的 error。"
-            "**只有 `signed`（框架判满它的门槛、干净成立且引用核实通过）才够 `proof_review`**：`holding`（签过、判成立、"
+            "**只有 `signed`（框架判满它的门槛、干净成立且引用核实通过）才够 `pre_theorem`**：`holding`（签过、判成立、"
             "盖的也是现行这一版，但框架的门槛还没判满）与**单次「成立」**都不够 —— 它们只是「还没到位」的读数"
-            "（`state=holding`），照它写 `proof_review` 会被写入期闸按 `proof_review_without_evidence` 整笔拒收。"
-            "**只有真没有那一签时**才退到 `heuristic` / `cross_check` —— 退档不是错，但它是安全方向的偷懒：一条够格的强结果"
-            "写成弱档，论文的强度声明会长期虚低，而 `verify` 会报 `weaker_than_evidence`（warning）把它点出来。两条出口写清："
-            "① 请 V 走查（`V.verify_proof`，产物就是 `verifications/<命题号>.jsonl` 那一行）签完再写 `proof_review`"
+            "（`state=holding`），照它报 `pre_theorem` 会被写入期闸按 `proof_review_without_evidence` 整笔拒收"
+            "（拒收码是历史名：闸读的是**凭据**，不是那一格历史值）。"
+            "**只有真没有那一签时**才退到 `conjecture` / `strong_conjecture` —— 退档不是错，但它是安全方向的偷懒：一条够格的强结果"
+            "写成弱等级，论文的强度声明会长期虚低，而 `verify` 会报 `weaker_than_evidence`（warning）把它点出来。两条出口写清："
+            "① 请 V 走查（`V.verify_proof`，产物就是 `verifications/<命题号>.jsonl` 那一行）签完再报 `pre_theorem`"
             "（签还没到位就再走查 —— 单次「成立」不算 `signed`）；"
-            "② 如实降档，并在 `quote_reason` 里写「还没有 V 的签名」—— 别把'拿不准'写成默认值。"
+            "② 如实降到弱等级，并在 `quote_reason` 里写「还没有 V 的签名」—— 别把'拿不准'写成默认值。"
+            "**`evidence_kind` 只是历史列**：它由等级反算（`evidencebits` 的 `kind_from_grade`）落盘，判定面不读它；"
+            "你要说的是**等级**，别去挑那个历史列的名字。"
             "改命题的正文：把同一份内容**再交一次** `own.register_statement`。"
             "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
             "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
@@ -367,7 +373,7 @@ SPEC = AgentSpec(
             # 改过的正文重新送审。落地判据是现有那条 sha 比对（`verifications.proof_review_gap`）。
             "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 先把它交一次 `own.register_statement`"
             "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审核签字（`V.verify_proof`："
-            "`statement_id` + `proof_manuscript=<这份稿>`）、签了才写 `proof_review`**；"
+            "`statement_id` + `proof_manuscript=<这份稿>`）、签了才够 `pre_theorem`**；"
             "**F 产的证明天生带 V 签字**（那是 F 送审时拿到的、盖在**F 那一版正文**上的签）—— 原样入库时"
             "认这份签，不要重复要求签（你若改写正文，见下一条：改写之后原签不算数、要再派 V 签一次 —— "
             "那不是「撤销」，是**对不上**这一版）。",

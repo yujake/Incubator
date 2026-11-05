@@ -29,7 +29,7 @@ from ..experiment_methods import COMPUTATIONAL_METHODS
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "E", "run_experiment",
-        "跑一个实验脚本并登记一行 experiments（证据等级由 schema 机械约束）",
+        "跑一个实验脚本并登记一行 experiments（证据等级由凭据机械约束，不由脚本自报）",
         _obj({"claim": _S, "claim_key": _S, "script_path": _S, "params": _OBJ,
               # `method` 的枚举是 E 收得下的三种计算法（`COMPUTATIONAL_METHODS`），
               # 不是 `schema.EXPERIMENT_METHODS` 全表：`formal` 仍留在 schema 里（L 的
@@ -131,7 +131,7 @@ SPEC = AgentSpec(
         duty="数值实验：把一条断言变成可复现的实验或反例",
         boundary=(
             "数值结果的判读必须是确定性的：脚本输出的数字由代码判，不许过模型。",
-            "脚本自报的 proof 级证据一律降级为 cross_check：让被判定的对象自己当判官是最容易被绕过的地方。",
+            "脚本自报的「proof 级证据」一律按凭据降级：计算类最多到 `strong_conjecture`（让被判定的对象自己当判官是最容易被绕过的地方）。",
             "实验失败、代码跑不过、读数不存在，都要如实落 failed 或 unknown，不许补写结论。",
             "引文无法核实的关系要退回 B；发现反例时把结论交回 D，不要自己改别人的结论。",
         ),
@@ -143,14 +143,17 @@ SPEC = AgentSpec(
             "`reports/e-proof-<实验号>.md`（`E.run_experiment` 的 `proof_manuscript` 那一格就是它），"
             "交给 B / V 时都要给 `proof_manuscript` 这个路径 —— 签只落在稿里、B 从稿上读到那一签"
             "（不给它，`proof_manuscript_required` 会整份退回）；再请 V 用 `verify_proof` 逐行走查 —— "
-            "两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**），"
-            "是这一档**唯一**的「审过」凭据。你这一岗产 `proof` 档只有一条路：穷举（见下面「穷举要按一份协议跑」那一条，"
+            "两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**；没号时先落 "
+            "`verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领），"
+            "是这一档**唯一**的「审过」凭据。文字证明签完等级到 `pre_theorem`；你这一岗要把等级推到 `theorem` "
+            "只有一条路：穷举（与 Lean 同级，见下面「穷举要按一份协议跑」那一条，"
             "签名者=收方秘书（`secretary:E`））；交付里不许出现凭空写下的「已证明」。",
             "**脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122/§126）：数值脚本必须在 stdout 打印一行 "
             "`REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}` —— **行首就是这五个字加冒号**，后面直接跟"
             "一个 JSON 对象（单独一行；别当成某个 JSON 对象的键）。`result=refutes` 时**必须同时给 `counterexample`**（非空；框架会"
-            "拒收没有反例的证否 —— 证否必须可复核）。有这一行且 `result=supports`，那条实验才落 `cross_check`；没有或格式非法一律落 "
-            "`heuristic/inconclusive`。脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，或按协议自己"
+            "拒收没有反例的证否 —— 证否必须可复核）。有这一行且 `result=supports`，那条实验的等级才到 "
+            "`strong_conjecture`（`evidence_kind` 历史列写 `cross_check`）；没有或格式非法一律是 `conjecture`"
+            "（`evidence_kind` 历史列写 `heuristic`）。脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，或按协议自己"
             "改写它。**实验的价值在于能判**：优先设计能推翻的方案，每条落库时写清它支持 / 反驳了哪条 `claim`、读数是多少"
             "（`result` / `search_bound`）；只跑通不判定的不算产出。",
             "**收到叫停就把你自己起的子进程停掉**：停机开关（`.agentflow-stop`）一落盘，框架会在 0.2 s 内终止你正在跑的实验脚本，"
@@ -196,7 +199,7 @@ SPEC = AgentSpec(
             "不带它只会落 pending，稿上永远没有签块。真凭据是 **V 台账那一行**"
             "（`verifications/pending/<对象sha>.jsonl` 或 `verifications/<号>.jsonl`）；`observations.e_signature` 只是**结构标记**，"
             "不算第三方签字，你自己签不了。④ 不完全的实验（抽样、只扫了一批点、`exhaustive` 不是布尔 `true`）"
-            "只能记「有数值实验支持」，不许写成「已证明」或「定理」，也不许自己给这一条签 proof —— 这是业主点名的分界。"
+            "只能记「有数值实验支持」（`strong_conjecture`），不许写成「已证明」或「定理」，也不许自己把这一条的等级报到 `theorem` —— 这是业主点名的分界。"
             # 2026-10-23 夜（业主的三句话，D-34）：「E 拿着有 V 签名的报告上报 D 找 B 入库，和 F 拿着 V 签名的证明
             # 上报 D 找 B 入库是一个逻辑」；「一般 D 会是 E 和 F 的父代理，所以我的用词是上报，即向上找 D 而非向下派 D。
             # 如果向上直接是 M 也无所谓，M 会派 D」。于是 ④ 之后还差最后一步：上报（不是自己去入库）。

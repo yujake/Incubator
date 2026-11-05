@@ -2288,7 +2288,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p242"
+_FROZEN_PROMPT_VERSION = "p243"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2515,17 +2515,17 @@ _FROZEN_PROMPT_VERSION = "p242"
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "042615b3ab4a8a2301f423a89744e67406e6933c51e1cd9ae73700a3c040e62d",
-    "B": "82bb7841a12105d741aa4c4052c7e4f2208ea26ed7ce477de7f68b413841e0d9",
-    "C": "be89857768eea02b5e5a7a9057ef5ca7548644448e452f8fc1f1f86fc60f509f",
-    "D": "21724439535a7d0c4881be23a330e2ec1a5b681bc4437e53625e53be5cb764dc",
-    "E": "dde7c0abe2120a850ef483098192ff69496c718c8839b8da79271fe5ab47d543",
-    "F": "4692fecc93a658ca8ac5f396b7fbb4371283a4b1ba66924eafcd1564445159bd",
-    "G": "fac7c4e03b4fd428915394b8710fee2bf874c929e50302dce605d747a2d10779",
-    "H": "c6851bccff04f34b33748ac7da43c1c39c44c69ee3064b68258e0d21d9d90c6f",
-    "L": "2baa84d85d69122965121a3d5989802d2dc6d1d887d2fcfa38a1f71497deb204",
-    "M": "b287bcdf151e279c067f4d8fd55b7ad4c5051f5a9801b611bfd406b09ae55373",
-    "V": "f59ca74c75a2eb850faa5f8d0b5acc4dd2cc03e1f5cac5e391012368ecd5756c",
+    "A": "b6fefb150896bd8c3fa77b4fa0407bf5d0def18e75e4ab143411037b0462a900",
+    "B": "2555d58bcf2165f16ec10b46b9b7d9beda09f0534b5e2898c4caf00cb30efc54",
+    "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
+    "D": "1040f2aa3a5ed429749b0d6d5277bf79079ad53708daa30199f6abd29eed99e7",
+    "E": "d5472af2e4bb7a41fb4de9ff919e28a70f973ac46c501e3a1140fcc6c198318f",
+    "F": "092feb370f732989b4a010d506871ad6d356a75e398c18ee6b9b5e0d1af9885b",
+    "G": "a3d910f6b46583af72694798d5164ebeb674914919c9ce12b8d88e92f8b0d793",
+    "H": "1e4c2b9de0485d4c866373d42aae6f31b144b8b9fef9b650c4fb756620697911",
+    "L": "98d5d49ee7a3717d2a3bb652a9a9b76bde919c278b2199b2fc108501cb41a620",
+    "M": "946f49f275beda58d06a0ea44a6f331716c80418cdf82e3a4f6aa8e6525580a4",
+    "V": "d22929bcc4764cedace99dac986c08c121380e6d80aa215353cd3b421d513cf8",
 }
 
 

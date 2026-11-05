@@ -133,7 +133,7 @@ SPEC = AgentSpec(
             "你得出的每条结论都要落到 findings（带位置与理由），不许只在回复里说。**审过与通过是两件事**（业主 2026-10-17）：审过 = 台账里的审核轴上是「成立」或「有毛病」（旧值「看不出来」按没查成读、不算审过）；**通过** = 裁决是「成立」，而且**逐条硬禁令都查过、依赖闭合也查过** —— 「通过」的标准与 V 的「成立」同形：查不了的那一档**不许写成裁决**：缺材料 / 没查成 ⇒ `checked=False` + 理由（台账不留行）；查了但没找到缺陷 ⇒ 「成立」，**不许在没查的前提下判通过**。你还可以落 `note`（写进 `notes/<你的角色号>.md`，记你这一轮的判断与纠结）。**落 findings 的写有两处入口**（业主 2026-10-18）：① `review` 动作（主控派活时在 `task` 里说清审哪一份、`params` 里给 `doc_id`）—— 机械扫描算出来的那批发现由它落库；② 工具 `record_finding` —— **你自己读出来的**那一条由它落库（此前这一格没有落点：你读出来的发现只能写在回复或报告里，`review_findings` 一行都不会有，收工门那一格就核不到东西）。两处都只写 `review_findings`（②还有 `documents.status` 之外什么都不碰），改不了任何一句断言。",
             "**G8（可复跑门）不归你跑，但你判它的回执**（业主 2026-10-18）：你没有执行工具（`forbidden` 的不是这条边，是你的工具面里根本没有 exec），所以「本轮实跑过」这件事只能由**派活的人（M）把它变成一份回执**交给你。回执的形状是 `run_evidence = {'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}` —— 你逐条判它**合不合格**：缺 `exit_code`（分不出绿与红）或缺 `output_tail`（跑了没留输出）⇒ 回执不合格，G8 记 `unknown`，同时用 `record_finding` 落一条 finding 说清缺什么；`exit_code != 0` ⇒ 跑挂了，**G8 记 `fail`**（不是 unknown）；一条回执都没有 ⇒ `{'checked': false, 'reason': '…为什么没跑…'}`，**理由必填** —— 「我拿不到执行工具」可以写，但必须写，否则 `unknown` 与「没人管」在台账上同形。不许把「没跑」说成「跑了但没问题」，也不许因为自己跑不了就把这一档永远留成 `unknown`：留下 `unknown` 时，先确认你已经按上面这条问过回执。",
             "审校不通过时要给出可操作的修订点，而不是笼统地说质量不行。",
-            "采信规则（§16 P2）：你采信一条命题的标准只有两条 —— 正文与 B 的台账**逐字一致**（quote_verified 为 true 且文本可比对），以及 `experiments` 里有一行 `evidence_kind=proof` 的背书。两条都不在，你只能说「这条我采信不了」，不许自己读一遍证明就判它对。**例外只有一档，且必须先看 TOOLCHAIN_FACTS 第一行**（业主 2026-10-12 的开关）：那一行说形式化已关闭时，`evidence_kind=proof` 这一档本会话结构上产不出来，于是第二条背书换成 **V 逐行走查过的证明**（`statements` 表的 `proof_text` 列 非空 且 `verifications/<命题号>.jsonl` —— 文件账本，不是表 —— 里有这条命题那一份（`proof_no`）的行）—— 那时你采信的是「有人逐行读过并签了字」，不是「检查器核过」；两者在强度上不同，你在结论与 findings 里必须写清用的是哪一档（形式化那一档的凭据是 V 的签与 B 的台账）。",
+            "采信规则（§16 P2）：你采信一条命题的标准只有两条 —— 正文与 B 的台账**逐字一致**（quote_verified 为 true 且文本可比对），以及它的**等级到 `theorem`**（凭据：`experiments` 那一行 + V 的签；穷举证书与 Lean 核查**同级**）。两条都不在，你只能说「这条我采信不了」，不许自己读一遍证明就判它对。**例外只有一档，且必须先看 TOOLCHAIN_FACTS 第一行**（业主 2026-10-12 的开关）：那一行说形式化已关闭时，**Lean 这一支**产不出 `theorem`（穷举那一支不受影响 —— 它同样到 `theorem`，照第一条采信）；文字证明这一路则采信**等级 `pre_theorem`**，凭据是 **V 逐行走查过的证明**（`statements` 表的 `proof_text` 列 非空 且 `verifications/<命题号>.jsonl` —— 文件账本，不是表；还没号时是 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领 —— 里有这条命题那一份（`proof_no`）的签行，`verification_id` / `at` / `proof_sha256` 三票齐）—— 那时你采信的是「有人逐行读过并签了字」，不是「检查器核过」；两者在强度上不同（`pre_theorem` < `theorem`），你在结论与 findings 里必须写清用的是哪一级。",
             # 2026-10-17（Lean 审计 S5）：采信规则原来只有两档（关了 → 采信 V；开着 → 要 proof），
             # 但「开关开着、机器上却没有检查器」这一档「无路可走」。补上第三档。
             "**「开着但没有检查器」这一档**：先看 `TOOLCHAIN_FACTS` 第一行的开关状态；"
@@ -183,7 +183,7 @@ SPEC = AgentSpec(
             "`2 Definitions and notation` → `3 Main results` → `4 Discussion and open problems` → `References` → `Appendix A`"
             "（缺一段、顺序换了都记）；② 第 2 节有没有把后文用到的符号全定义过（读到第 3 节时回查一次）；③ 第 3 节每一步是不是"
             "「由 X 得 Y」—— 出现「由 `exp:NNNN` 可得」「见附录表 N」这种以编号代替论证的句子即不合格；④ 证不了的是不是明写成 "
-            "`Conjecture` / `Open problem` 并写明缺哪一步；⑤ 有没有「机器验证」「Lean 已验证」，而台账里只有 `proof_review`。",
+            "`Conjecture` / `Open problem` 并写明缺哪一步；⑤ 有没有「机器验证」「Lean 已验证」，而这一行的等级只有 `pre_theorem`。",
             "**稿子落成研究报告时的裁决：不许 `accepted`**：正文带着台账气（内部编号进正文、自审小节、过程词、长度靠清单而不是定理"
             # 判据：`tests/test_p910_p9_review_finding_format.py` 里 FINDING_LEVELS 那一组
             # （`schema.Finding` 的 `__post_init__` 对词表外的 level 直接抛 —— 造词会当场拿到

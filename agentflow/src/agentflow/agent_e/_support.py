@@ -413,7 +413,7 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
         # "你自报的那一档没被当真"留在 notes 里。
         notes.append(
             f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ "
-            "拒绝并降级为 cross_check（自报的档位不采信）：档位由 E 按穷尽证据现算 —— "
+            "拒绝并降级为 cross_check（自报的「proof 级」不采信；等级最多到 `strong_conjecture`）：等级由 E 按穷尽证据现算 —— "
             "脚本要在结构化结论里给 `exhaustive: true`、搜索空间与覆盖说明"
             "（`numericproof.EXHAUSTIVE_KEY` / `SPACE_KEYS` / `ENUMERATION_KEY` / `DESIGN_KEY`），"
             "齐备才算穷举证明。理由：数学里数值/符号/穷举实验只在'整个论域枚举完'"
@@ -723,16 +723,16 @@ def _result_reason(row: S.Experiment) -> str:
         if _NP.is_signed_exhaustion(row.to_dict()):
             sig = _NP.signature_of(row.to_dict())
             return (
-                f"{row.method} 实验穷尽了整个论域 ⇒ 证据档位 {row.evidence_kind}"
-                f"（签名者 E，理由 {sig.get('proof_reason')}，"
+                f"{row.method} 实验穷尽了整个论域 ⇒ 等级 `theorem`"
+                f"（历史列 evidence_kind={row.evidence_kind}；签名者 E，理由 {sig.get('proof_reason')}，"
                 f"证明栏写程序 {sig.get('script_path')}；覆盖说明已入台账）")
         return (
-            f"{row.method} 实验支持该命题，证据档位 {row.evidence_kind}"
-            "（有形式化检查器输出）"
+            f"{row.method} 实验支持该命题 ⇒ 等级 `theorem`"
+            f"（历史列 evidence_kind={row.evidence_kind}；有形式化检查器输出）"
             + _formal_status_suffix(row)
         )
     if row.result == "supports":
-        return f"{row.method} 实验支持该命题，证据档位 {row.evidence_kind}（不构成证明）"
+        return f"{row.method} 实验支持该命题 ⇒ 等级 `strong_conjecture`（历史列 evidence_kind={row.evidence_kind}；不构成证明）"
     if row.result == "refutes":
         return "实验给出反例 ⇒ disproved（已证否，且反例已登记）"
     return (

@@ -3264,7 +3264,48 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tool_declaration_baseline.json` 已随压缩批记过账，本次不再动）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
 #: `--probe-no-tools V`；花费见提交信息）。
-PROMPT_VERSION = "p242"
+#: `p243`（2026-11-06 等级是唯一的轴 · 提示词/技能/规范文本一次对齐）：
+#: 变化格 = 十一格全变（A/B/C/D/E/F/G/H/L/M/V）。
+#: 口径（业主 2026-11-05 裁定；代码侧已落 `e0b49d89` / `e8ca6ccc`）：等级是唯一的轴 ——
+#:   `conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；
+#:   `conjecture` = 没证据 / `strong_conjecture` = 有普通数值实验支撑（原 `cross_check`）/
+#:   `pre_theorem` = 有 V 签（原 `proof_review`）/ `theorem` = V 签 ∧ 机器可核
+#:   （Lean 或 穷举，同级）；可引门槛 = `pre_theorem`；
+#:   `evidence_kind` 只是历史列（落盘由等级反算，判定面不读它）。
+#:   签的正统路：V 不假定有号（`命题号=未在册` 合法）—— 没号就先落
+#:   `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领；
+#:   三票（`verification_id` / `at` / `proof_sha256`）必须齐。
+#: 逐条（只动模型可见文本，不动任何判定逻辑）：
+#: ① `specs/b.py`：`register_statement` 的 `evidence_kind` 说明改成「历史列 + 等级口径」；
+#:    依赖门槛（`proof_manuscript` 那一格）改 `pre_theorem`；policy「证据档按凭据定」改
+#:    「等级按凭据定」，补「`evidence_kind` 由等级反算、判定面不读它」。
+#: ② `specs/f.py`：引用门槛改 `pre_theorem`；「V 签过之后档位是 `proof_review`」改等级；
+#:    送审参数说明补「没号也能签：先落 pending，B 登记拿到号后按正文 sha 认领」。
+#: ③ `specs/v.py`：引用闸那一节改等级（`pre_theorem`，允许集合从 `EB.GRADES` 现算）；
+#:    policy 里「命题还没在册 ⇒ 不签发」改成「没号先落 pending，拿到号后按正文 sha 认领」。
+#: ④ `specs/e.py`：穷举 ⇒ `theorem`（与 Lean 同级），文字证明 ⇒ `pre_theorem`；
+#:    `specs/m.py`：`theorem` 两个来源同级、可引/承重读数改等级；`specs/g.py` / `h.py` /
+#:    `d.py`：采信规则与用词上限改等级口径（索引四格 `evidence_kind` 不动：同名字段、不同词表）。
+#: ⑤ `agent_prompts.py`：`STRUCTURE_NOT_PROMPT` 的「自报 proof 级证据」、G/H/M 共用
+#:    `PAPER_PACK`（同一段里两套词混用 ⇒ 全部按等级）、Lean 关档的两处「产不出来」。
+#: ⑥ `agent_skills.py`：B / V / E / F / G 手册里的门槛、E 的「两档分野」表、三层证据、
+#:    断言的 `evidence_kind` 词表注（降为历史列）；`agent_e/_support.py` 实验列表那一句。
+#: ⑦ 文档面：`tools/write_system_docs.py` 生成器随 specs 重生成（`ROLE-GUIDE.md` /
+#:    `ROLE-SPECS.md` / `ROLE-SPECS-APPENDIX.md` 不许手改）。
+#: 逐格旧值 → 新值（p242 → p243；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   A 042615b3→b6fefb15 / B 82bb7841→2555d58b / C be898577→232128db /
+#:   D 21724439→1040f2aa / E dde7c0ab→d5472af2 / F 4692fecc→092feb37 /
+#:   G fac7c4e0→a3d910f6 / H c6851bcc→1e4c2b9d / L 2baa84d8→98d5d49e /
+#:   M b287bcdf→946f49f2 / V f59ca74c→d22929bc。
+#: 十一格是 `temp/_p243_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p243）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格；
+#: 三份冻结物按现值重冻（agent 面十一格 prompt + 角色 actions / edges；tool 面按受影响的声明与
+#: CLI 行；`tool_declaration_baseline.json` 若有工具声明改动，按判据的可粘贴账骨架逐条记）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
+#: `--probe-no-tools V`；花费见提交信息）。
+PROMPT_VERSION = "p243"
 
 
 
@@ -4586,7 +4627,7 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
 
 
 
-    ("自报的 proof 级证据", "一律降级为 cross_check（`DESIGN-ROLES.md` §2.1）"),
+    ("自报的「proof 级」证据", "一律按凭据降级：计算类最多 `strong_conjecture`（`evidence_kind` 只是历史列）"),
 
 
 
@@ -5552,18 +5593,20 @@ PAPER_PACK = """\
 三、claims 台账的语义（P3）
 - `documents.claims` 每条断言四列：来源（自证/文献/未决）、证据等级、
   我方核到什么程度、能否证伪（**条数由当次台账读数给，这里不写死**）。
-- `cross_check` 不等于证明：它只说明"我们独立核过一遍"。每条 cross_check 断言都必须带
+- **`strong_conjecture` 不等于证明**（历史列名 `cross_check`）：它只说明"我们独立核过一遍"。每条这样的断言都必须带
   「不构成证明」的声明；把检索到的文献说成自己的结论，是这份交付物里最严重的错。
-- 结论不许强于它挂的证据：**用词上限**（`proof` 永远到顶）之外，断言里不许出现
+- 结论不许强于它挂的证据：**用词上限**（等级 `theorem` 永远到顶；`evidence_kind=proof` 是它的历史列名）之外，断言里不许出现
   「证明」「定理」「必然」这类词（机械半会逐条查，语义半会再判一次）。
 - **没有 Lean 时论文照样要写得出来**（业主 2026-10-12）：「写论文那一档原先卡每个定理都要到
-  proof 水平，但没 Lean 显然做不到，但也要能写」。那一档的用词上限是 **`proof_review`**：
+  proof 水平，但没 Lean 显然做不到，但也要能写」。那一档的用词上限是等级 **`pre_theorem`**
+  （历史列名 `proof_review`）：
   一份证明的正文由 B 从**手稿**（`reports/f-proof-*` / `b-proof-*` / `e-proof-*`）收进
   `statements` 表的 `proof_text` 列、并由 V 的 `verify.verify_proof`（带 `proof_manuscript`，
   在册也给）逐行走查签了「成立」—— 这类断言可以写「定理 / 证明」，
   **但必须带那句声明**（`disclaimer`：逐行审阅过的证明，未经机器检查），
-  且不许写「已形式化验证」（那是 `proof` 档才有的说法）。TOOLCHAIN_FACTS 第一行说
+  且不许写「已形式化验证」（那是 `theorem` 级才有的说法）。TOOLCHAIN_FACTS 第一行说
   「形式化已关闭」时就走这一档；开关开着时这一档不成立（老套路：只有检查器说的才算证明）。
+  穷举证书与 Lean **同级**：带 V 签的穷举证明（`numericproof` 三件套齐）等级到 `theorem`，用词按 `theorem` 那一档走。
 
 四、体例与工作循环
 - 主稿保持**论文自己的体例**：正文是给读者读的论文，改它的时候不要为了塞台账去换文档类、
@@ -8563,7 +8606,7 @@ def toolchain_facts_text() -> str:
 
 
 
-            "`verifications/<命题号>.jsonl`（文件账本，不是表）；`evidence_kind=\"proof\"` 这一档本会话**产不出来**，"
+            "`verifications/<命题号>.jsonl`（文件账本，不是表；还没号时先落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领）；文字证明这一路本会话最高到等级 `pre_theorem`（`evidence_kind=\"proof_review\"` 是它的历史列名），"
 
 
 
@@ -8819,8 +8862,8 @@ def toolchain_formal_text() -> str:
                 "  2. 派 V（`summon` 它的 `verify.verify_proof`，交 `proof_manuscript`（在册也给）"
                 "+ 命题号）逐行走查 —— "
                 "它的两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`，这是本会话**唯一**的「审过」凭据；\n"
-                "  3. 结论强度：`evidence_kind=\"proof\"` 产不出来 ⇒ 断言最高只能到"
-                "「cross_check / heuristic」，正文里不许出现「已形式化验证」这类词；\n"
+                "  3. 结论强度：等级 `theorem` 靠这一岗（Lean）产不出来 ⇒ 文字证明最高只能到等级"
+                "「`pre_theorem`」（穷举证书仍到 `theorem`，与 Lean 同级），正文里不许出现「已形式化验证」这类词；\n"
                 "  4. 检查器状态那一栏会如实报 `lean_disabled`（不是 `no_backend`："
                 "前者是用户关掉了这条路，后者是机器上没装）—— 见到它别再重试，改走上面三步")
 

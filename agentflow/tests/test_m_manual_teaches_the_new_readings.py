@@ -76,8 +76,10 @@ _CHAIN: tuple[str, ...] = (
     # 必须给出四列表与被引档位下限 —— 只讲"缺那一节就拒"等于没讲那一节该长什么样。
     "四列",
     "inadmissible",
-    # 2026-11-04「穷举程序 + V 签 ⇒ proof」：表里改前把收录档写死成 proof_review。
-    "穷举程序 + V 签 ⇒ `proof`",
+    # 2026-11-04「穷举程序 + V 签 ⇒ proof」、2026-11-06（p243）改成等级口径：
+    # 穷举与 Lean 同级 ⇒ `theorem`；文字证明 ⇒ `pre_theorem`。
+    "穷举程序 + V 签 ⇒ `theorem`",
+    "pre_theorem",
 )
 
 #: 第 4 条：改前那句（做不到的动作）与改后那句。
@@ -126,8 +128,8 @@ def test_the_chain_manual_does_not_hardcode_proof_review_for_every_proof() -> No
     assert "`evidence_kind=proof_review`、`proof_text`" not in body, (
         "研究攻坚链的 B 收录行还把 evidence_kind 写死成 proof_review —— "
         "穷举题停在 proof_review 是错的终态（`verifications._exhaustion_proof_channel`）")
-    assert "穷举程序 + V 签 ⇒ `proof`" in body, "手册读不到「穷举程序 + V 签 ⇒ proof」这一档"
-    assert "proof_review" in body, "手册读不到文字证明那一档（proof_review）"
+    assert "穷举程序 + V 签 ⇒ `theorem`" in body, "手册读不到「穷举程序 + V 签 ⇒ theorem」这一级"
+    assert "pre_theorem" in body, "手册读不到文字证明那一级（pre_theorem）"
 
 
 # ============================================================ 4 送审：D 没有到 V 的边

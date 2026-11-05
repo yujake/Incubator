@@ -14,7 +14,7 @@
 | D5 | 论文对应表归 G 写；D 只把那一行的格凑齐 |
 | F1 | 预算写「四类键」，不再叫「三维预算」 |
 | F4 | `attack_plans` 子目标状态六档 |
-| E7 | `numeric` 是实验方法，不是证据档（证据档是 `cross_check` / `heuristic`） |
+| E7 | `numeric` 是实验方法，不是等级（等级是唯一的轴；它最多到 `strong_conjecture`） |
 | S4 | `block` 不是 `done` 的下一档 —— 画成两个并列出口 |
 | S5 | 五位（谁签）与四档等级拆成两句 |
 | E3 / E4 | E 的 policy 只剩一句「形式化以 V 的签与 B 的台账为准」；「与形式化」半句与重复的整条都删了 |
@@ -183,13 +183,17 @@ def test_f4_the_subgoal_status_vocabulary_is_six(prompts) -> None:
 
 # ============================================================ E7
 def test_e7_numeric_is_a_method_not_an_evidence_tier(prompts) -> None:
-    """E7：`numeric` 不是证据档；证据档是 `cross_check` / `heuristic`。"""
+    """E7：`numeric` 不是等级（等级是唯一的轴）；弱等级最多 `strong_conjecture`。
+
+    2026-11-06（p243）：改前这一条钉的是档位口径（`cross_check` / `heuristic` 两档），
+    现在按等级口径钉 —— 同一件事（"`numeric` 只是做法，不是强度"），读数换了轴。
+    """
     from agentflow import agent_skills as AS
 
     body = "\n".join(s.body for s in AS.skills_for("E"))
-    assert _has(body, "`numeric` 是实验方法、不是证据档"), (
+    assert _has(body, "`numeric` 是实验方法、不是等级"), (
         "[E7] 技能书里仍把 `numeric` 写成「证据的一档」")
-    assert _has(body, "落 `cross_check` / `heuristic`"), "[E7] 没有写清证据档的两档"
+    assert _has(body, "最多 `strong_conjecture`"), "[E7] 没有写清弱等级的上限"
 
 
 # ============================================================ S4

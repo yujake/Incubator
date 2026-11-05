@@ -40,7 +40,8 @@ V 只被这三方唤起：F 交证明、E 交穷举证据、B 交文献侧引入
 
 「V侧审查也应对F报告的引用进行核实（F引用可能非逐字，需要V自行判断）」；
 配套两句：「正常写证明就是不会逐字的」（判据不是字面像不像）、
-「proof_review级及以上才可引用」（被引命题的档位门槛）。落法（实现只有一处）：
+「proof_review级及以上才可引用」（2026-10-26 的原话；按**等级是唯一的轴**，它的
+口径就是等级 `pre_theorem` 及以上）。落法（实现只有一处）：
 
 - V 的审查材料里必须同时有 F 对每条被引命题的说法（`dependencies` 那一行）
   与被引命题的正文摘要 —— 只给编号，V 核不出"F 是不是这么用的"；
@@ -49,14 +50,14 @@ V 只被这三方唤起：F 交证明、E 交穷举证据、B 交文献侧引入
   `quote_verbatim` 只作信息、不参与判定）；
 - 有一条 `stronger` / `unrelated` / `inadmissible` / `unknown` ⇒ 不许签「成立」
   （点名哪一条、差在哪）；`weaker` 可以签，但读数里点名"只用到了弱形式"；
-- 档位闸是事实、不是判断：被引命题低于 `proof_review`（含空档）一律 `inadmissible`，
-  允许集合从 `schema.EVIDENCE_KINDS` 现算（`verifications.evidence_kind_admissible`）。
+- 等级闸是事实、不是判断：被引命题的等级低于 `pre_theorem`（含空档）一律 `inadmissible`，
+  允许集合从 `evidencebits.GRADES` 现算（`verifications.citation_grade_admissible`）；
+  `evidence_kind` 只是历史列，判定面不读它。
 
 为什么这段写在模块 docstring 而不是 `policy` 元组里：`policy` 会渲染进 V 的提示词、
-挂进 `tests/test_agent_prompts.py` 的冻结摘要与 `PROMPT_VERSION` 那一轴；本轮业主边界
-是「不动 `PROMPT_VERSION`、不重冻 golden」，所以渲染面那一句落在 V 的真实入口
-`verifications.cold_start_prompt`（它才是 V 每次审校读到的提示词），这一格只留声明侧
-的同一条政策。抬版本那一轮把这一段并进 `policy` 即可，口径一个字不用改。
+挂进 `tests/test_agent_prompts.py` 的冻结摘要与 `PROMPT_VERSION` 那一轴；本文件这一格
+留声明侧的同一条政策，渲染面那一句落在 V 的真实入口 `verifications.cold_start_prompt`
+（它才是 V 每次审校读到的提示词），两处说的是同一条口径。
 
 ## 发签权的边界（业主 2026-11-04 裁定 · 乙-5，这是明文例外）
 
@@ -240,13 +241,18 @@ SPEC = AgentSpec(
             # 2026-11-04（业主裁定 甲）：V 的可见面必须说清"什么情况下能签、什么情况下
             # 只能给看过但没签"。判据：`temp/probe_manuscript_gate.py` 的 a / c 与
             # `tests/test_v_unregistered_manuscript_review.py`（手稿那一支）。
+            # 2026-11-06（等级是唯一的轴 · 签的正统路）：改前这一格教"命题还没在册 ⇒ 不签发"，
+            # 而 D-34 起未在册那一签就落 `verifications/pending/<正文 sha>.jsonl`（业主 2026-11-05：
+            # 「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签」）⇒ 这一格改成"没号先落 pending"。
             "**在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 "
             "`proof_manuscript`（约定命名 `reports/f-proof-<命题号>.md`；`notes/…` 等别的"
             "工作区相对文件也收，只要盘上有、且有一节非空的 `## 证明`）。只给内联正文"
             "（`proof_text`）会被受控拒绝（`proof_text_needs_a_manuscript`）—— 签要落在稿上"
             "（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、稿要能被按号寻址，"
-            "这三样内联正文都做不到。命题还没在册时可以只给正文：那一档只给「看过、没签」"
-            "的读数，**不签发**（没有可落签的载体）；要签就先落一份稿再带 `proof_manuscript` 送审。",
+            "这三样内联正文都做不到。**命题还没在册也照样能签**（你不假定有号）：带一份稿送审，"
+            "签按**正文 sha** 落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha "
+            "认领；三票（`verification_id` / `at` / `proof_sha256`）必须齐。只给内联正文、没有稿时"
+            "才只给「看过、没签」的读数 —— 签块只在稿上，没有可落签的载体。",
             "只有 `成立` 且 findings 里没有未解决的 error，才轮到你**颁发**这一签（写 `out/vsigns/<被审正文的 sha>.json`，把信封交给收方秘书）；真正让五元位第 3 位置真的是收方秘书的落签，不在你手上 —— 你那一格只负责把两态结论与缺陷步写清楚，别拿“我大致看过了”去替它补。"
             "“检查器自己没跑成”（输出不是合法 JSON、字段缺、取值不在词表里）不是这两个结论之一：它是没查成，要如实报出来，绝不许拿 "
             "一个假结论冒充“审过了”。",

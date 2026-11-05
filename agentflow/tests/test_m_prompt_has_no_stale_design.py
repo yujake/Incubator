@@ -168,7 +168,7 @@ _REQUIRED_IN_PROMPT: tuple[tuple[int, str, pathlib.Path, str], ...] = (
     (24, "造新子代理给它名册名", PROMPTS, "派活口径换成名册名"),
     (26, "conductor.retire_child(child_name=", M_SPEC, "政策里明写走这一件、且收 child_name"),
     (27, '`to="ALL"`', M_SPEC, "公共频道写法统一到 ALL"),
-    (28, "proof 那一栏有两个来源", M_SPEC,
+    (28, "`theorem` 那一栏有两个来源", M_SPEC,
      "两个来源要并列写出来（E 的穷举 ＋ 形式化那一岗），这一层在提示词里必须读得到"),
     (28, "E 的穷举", M_SPEC, "漏了 E 那一半就是只认 Lean（业主 2026-10-25 的更正）"),
     (28, "形式化那一岗", M_SPEC, "那一岗只有用户指定过才有，指定之后由 B 逐条安排"),
@@ -588,14 +588,14 @@ def _render_m(registry) -> str:
 
 #: M 的提示词里必须读到的几层：`(这一层叫什么, 必须出现的几串)`。
 _PROOF_LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("两个来源并列", ("proof 那一栏有两个来源", "两个都算 proof 级")),
+    ("两个来源并列", ("theorem 那一栏有两个来源", "两个同级")),
     ("(a) 那一半：E 的穷举 / 数值论证",
-     ("E 的穷举", "exhaustive_search", 'evidence_kind="proof"',
+     ("E 的穷举", "exhaustive_search", "等级 `theorem`",
       "exhaustion_problems")),
     ("(b) 那一半：形式化那一岗（用户指定后交 B）", ("形式化那一岗", "用户指定", "交给 B")),
-    ("读法：看 evidence_kind，不看 method",
+    ("读法：看等级，不看 method",
      ("不是看 method 是不是 formal", "counterexample_or_proof_rows")),
-    ("不许只认 Lean", ("不许只认 Lean", "cross_check")),
+    ("不许只认 Lean", ("不许只认 Lean", "strong_conjecture")),
     ("两者都没有才写 na", ("两者都没有时", "用户未指定形式化", "不要写 0")),
 )
 
