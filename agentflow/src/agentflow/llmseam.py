@@ -32,6 +32,7 @@ from typing import Any, Mapping
 
 import json
 import re
+import threading
 
 from . import judge as J
 from . import modelcost as MC
@@ -219,6 +220,51 @@ def set_role_seam(role: str, llm: Any) -> None:
 def role_seam(role: str) -> Any:
     """取某个角色登记的默认模型缝（没登记就是 `None`，也就是没接线）。"""
     return _ROLE_SEAMS.get(str(role))
+
+
+#: 逐 `(工作区, 会话, 角色, 召唤号)` 的模型调用序号（幂等键的 `call_index`）。
+#:
+#: ## 为什么它必须在模块级、而不是 `LlmSeam` 的实例字段（判据 a 的根因之一）
+#:
+#: 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §A-5）：V 的 61 笔账散在
+#: 35 个 `task_id` 上却只有 `t-000054` 一行有 token，A/B/E/F 的钱同样挤在"每个角色
+#: 头几次召唤"那几行上。根因是幂等键：`_charge_ledger` 把 `f"{sid}:{role}"` 当
+#: `task_id` 传进 `modelcost.idempotency_key`，而 `call_index` 取的是「这条缝自己的」
+#: 计数器 —— 缝是每次召唤现造的（`host._default_seam` / `AgentV._seam` 都现造），
+#: 计数器于是每次都从 0 开始。「第一次」召唤把 0,1,2… 这些键全占了，后面每一次召唤的
+#: 第 i 次调用都撞上它 ⇒ 被判 `duplicate`、静默不记账。账本上"钱落在角色第一行"
+#: 正是这么来的（不是有意按行首记，是后到的账全被吞了）。
+#:
+#: 序号因此挂在"这一次召唤"上（模块级、按召唤号索引）：缝可以现造，序号不回退；
+#: 同一个召唤的第 i 次调用与别的召唤的第 i 次调用是两个键。跨进程不做假设 ——
+#: 一次召唤只由一个进程执行，进程重启后的那一次是新召唤（新号）。
+_CALL_SEQ: dict[tuple[str, str, str, str], int] = {}
+_CALL_SEQ_LOCK = threading.Lock()
+
+
+def _next_call_index(session_root: Any, sid: Any, role: Any, task_id: Any) -> int:
+    """这个 `(工作区, 会话, 角色, 召唤号)` 上的第几次模型调用（从 0 起，单调递增）。"""
+    key = (str(session_root or ""), str(sid or ""), str(role or ""), str(task_id or ""))
+    with _CALL_SEQ_LOCK:
+        idx = _CALL_SEQ.get(key, 0)
+        _CALL_SEQ[key] = idx + 1
+        return idx
+
+
+def ambient_task_id() -> str:
+    """当前调用上下文里的召唤号（不在任何一次召唤里 ⇒ 空串）。
+
+    为什么它存在：不是每一次模型调用都由循环那一路发生（V 的审阅工具、抽取那一路、
+    秘书的判断都会单独发调用），而那些调用点手上的 `task_id` 常常是空串。空串不是
+    "没有台账号"，是"没写"——`conductor.calling_as` / `summon` 的 `[6]` 步已经把
+    "这一趟是谁"挂进了 ContextVar（`conductor.current_task_id`），所以这里能如实取到
+    当时「真正在跑」的那个号，而不是让账本那一行永远 `task_id=None`。
+    """
+    try:
+        from .conductor import current_task_id
+        return str(current_task_id() or "").strip()
+    except Exception:  # noqa: BLE001 —— 取不到就是取不到（空串），不猜一个号
+        return ""
 
 
 #: 逐 `(角色, 工作区根)` 登记的装配期配置（同一张表的旁边，不另开第二处注册表）。
@@ -615,17 +661,44 @@ class LlmSeam:
            （账本设计②：`没记账` 与 `花了零` 必须分得开）；
         4. 失败也记（`ok=False` 但发过请求）：钱可能已经花了，而且"这次尝试"
            本身就是要被看见的事实。
+
+        ## 归口（判据 a）：这笔钱记到「当时真正在跑的那一次召唤」上
+
+        两个来源，优先级从高到低（`task_id` 的取值规则只有这一处）：
+
+        1. 调用方显式给的 `task_id`（循环那一路会给）；
+        2. 没给 ⇒ `ambient_task_id()`（`conductor.current_task_id()`：召唤上下文里
+           挂着"这一趟是谁"）。V 的审阅工具、抽取那一路、秘书的判断都走这一档 ——
+           改前它们一律传空串，于是那些账落在 `task_id=None` 上（真机 18 笔、$0.0322），
+           既不属于任何一行 `tasks`、也点不出名；
+        3. 两处都没有（不在任何一次召唤里）⇒ 如实 `task_id=None`，并在 `note` 里
+           写 `unattributed` 与原因。这一档是「说得出为什么」的空，不是"忘了填"：
+           `reconcile_usage` 会把它单列一栏，判据 b 要求"要么 0 笔、要么全部点名"。
+
+        ## 幂等键（判据 a 的另一半根因）
+
+        键必须是「这一次召唤的第 i 次调用」，不是"这条缝的第 i 次调用"：缝是每次召唤
+        现造的（`host._default_seam` / `AgentV._seam`），用缝自己的计数器会让第一次
+        召唤把 `(sid, role, 0..n)` 全占满，后面每一次召唤的同号调用都被判 `duplicate`
+        —— 钱静默不记（现场：V 的 61 笔账只有 27 笔真的落账，其余 34 笔撞键被吞）。
+        所以 `call_index` 取自 `_next_call_index(...)`（模块级、按召唤号索引），
+        键里的命名空间也带上召唤号（`task_id` 为空时退回 `(sid, role)`）。
         """
         from . import tokenmeter as TM
 
         if self.meter is None:
             return {"charged": False, "usage_id": "", "reason": "no_meter",
                     "note": "这个缝没有接账本（meter=None）⇒ 本次没有入账（不是记了一笔零）"}
-        idx = self.ledger_calls
-        self.ledger_calls += 1
-        tid = str(task_id or "").strip() or None   # `""` 会被 schema 拒；None = 不挂任务
+        given = str(task_id or "").strip()
+        tid = (given or ambient_task_id()) or None
+        idx = _next_call_index(self.session_root, self.sid, self.role, tid or "")
+        self.ledger_calls += 1          # 读数：这条缝试过几次（不参与键的构造）
         outcome = "ok" if call.ok else (call.problem or "failed")
         note = f"source=llmseam;role={self.role};call_index={idx};outcome={outcome}"
+        if tid is None:
+            note += ("；unattributed：这一次调用没有台账号可挂"
+                     "（调用方没给 task_id，且不在任何一次召唤的上下文里）"
+                     "⇒ 这一行的 task_id 为空，它进不了任何一行 tasks.usd")
         # 花销口径的留痕（业主 2026-10-14：「花销计算标准与供应商定价吻合」）：
         # 账本那一行自己要说得清这笔钱按哪一档价算的 —— 否则"和供应商账单对不上"
         # 只能靠翻会话事件才查得出来。四格都从 `SeamCall.billing` 现抄（不另算一份）。
@@ -650,10 +723,10 @@ class LlmSeam:
             tokens_in=tokens_in, tokens_out=tokens_out,
             usd=float(call.usd or 0.0), attempts=1, task_id=tid, note=note,
         )
-        # 幂等键的命名空间必须含角色（`modelcost.idempotency_key` 的用法说明）：
-        # 只用 sid 的话，两个角色各自的第 0 次调用会撞同一个键，
-        # 后到的那一笔被静默判成 `duplicate` —— 一笔真实花销凭空消失。
-        key = MC.idempotency_key(f"{self.sid or ''}:{self.role}", idx)
+        # 键的命名空间：有召唤号就用它（同一召唤的第 i 次调用只与它自己比）；
+        # 没有就退回 `(sid, role)`，并把"第几次"取自模块级序号 —— 两条都不会跨召唤撞键。
+        namespace = f"task:{tid}" if tid else f"{self.sid or ''}:{self.role}"
+        key = MC.idempotency_key(namespace, idx)
         try:
             logged = self.meter.charge_once(charge, idem_key=key)
         except Exception as exc:  # 记账失败必须看得见（它是审计面，不是可选项）
@@ -670,13 +743,17 @@ class LlmSeam:
               note: str, charged: bool = True) -> SeamCall:
         # 先记账、再写会话事件：万一中间崩了，宁可留一条"账上有钱、事件没有"
         # （钱记下了），也不要"事件有钱、账上没有"（那正是本次要修的漏记方向）。
-        ledger = (self._charge_ledger(call, task_id=task_id) if charged
+        #
+        # 归口只解析一次：账本行与会话事件必须说同一个号（`_charge_ledger` 自己的
+        # 解析在"给了号"时与这里逐字相同，两处不会分家）。
+        resolved = str(task_id or "").strip() or ambient_task_id()
+        ledger = (self._charge_ledger(call, task_id=resolved) if charged
                   else {"charged": False, "usage_id": "", "reason": "no_request",
                         "note": "这次没有发请求（没接线 / 预算已尽）⇒ 没有钱要记"})
         event = {
             "kind": "llm_call",
             "role": self.role,
-            "task_id": task_id,
+            "task_id": resolved,
             "note": note,
             "prompt_chars": len(prompt),
             **call.to_dict(),

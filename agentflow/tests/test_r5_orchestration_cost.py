@@ -785,10 +785,17 @@ def test_a_failed_settle_is_visible_in_the_manifest(monkeypatch, store: Store,
     改前 `_settle_run_task` 的返回值从未被读过，而它的 docstring 说写失败"会被记进 detail 并让这一项在返回值里可见" —— 两件都不成立：写失败恰恰意味着那一行 `tasks` 不在，
     于是连 `detail` 都留不下来，消费者完全看不出来。注入的是 `store.tx("tasks")`（不是把整个函数换掉）：被测对象就是"那一笔写入失败之后会发生什么"。
 
-    `R5-AN-1` 之后这一条的判据变了（见模块 docstring）：占位行在开跑时已经落库，所以"settle 失败"不再等于"表里 0 行"，而是等于"那一行仍是 `running`、字段一个都没被改写"。
+    `R5-AN-1` 之后这一条的判据变了（见模块 docstring）：占位行在开跑时已经落库，所以"settle 失败"不再等于"表里 0 行"，而是等于"那一行仍是 `running`、终态字段一个都没被改写"。
     这个新口径比旧口径强：它同时证明"占位行没有被失败的那次写入污染"。
 
-    这是真负控：把 `_settle_run_task` 里的改写改回"不写"（注入本身），断言就必须红 —— 因为那时表里连占位行都不会有（改前形态表里是 0 行），而这条用例的两条断言（有那一行、且它是 running）
+    `2026-11-05`（判据 a）之后这一条又多了一格读数：每次 `llm_call` 记账都会把该号的
+    `tokens/usd` 回写进 `tasks`（`tokenmeter._sync_task_usage`，与记账同一笔事务）——
+    所以 settle 失败之后那一行仍然`running`，但它的两格花销与账本逐分相等。这不是放宽：
+    改前那种"settle 一失败、钱就从 `tasks` 上消失"的形态，正是 A-5 里 17 条 running 行
+    `usd=0` 的成因。终态字段（`status` / `ended_at` / `detail` / `inputs`）仍逐字段比对。
+
+    这是真负控：把 `_settle_run_task` 里的改写改回"不写"（注入本身），断言就必须红 ——
+    因为那时表里连占位行都不会有（改前形态表里是 0 行），而这条用例的两条断言（有那一行、且它是 running）
     都会落空。
     """
     real_tx = store.tx
@@ -797,8 +804,12 @@ def test_a_failed_settle_is_visible_in_the_manifest(monkeypatch, store: Store,
 
     @contextlib.contextmanager
     def _boom(*tables, **kw):
-        if "tasks" in tables and injected["fired"]:
-            # 取号那一次已经过去了 ⇒ 这一笔就是收工时的终态改写。
+        if ("tasks" in tables and injected["fired"]
+                and str(kw.get("note") or "").startswith("runflow settle")):
+            # 取号那一次（`runflow allocate`）已经过去了 ⇒ 这一笔就是收工时的终态改写
+            # （`_settle_run_task` 的 note 是 `runflow settle <号>`）。
+            # 记账回写（`tokenmeter` 那一笔）不在这里拦：它写的是花销两格，
+            # 与"终态改写被拒之后会怎样"是两件事，拦它只会让这条用例测到一个假的失败点。
             raise RuntimeError("注入：tasks 写不进去（磁盘满 / 校验拒了都长这样）")
         # 其余情况跑真的 tx。占位行那一次跑完之后把盘上的行记下来，
         # 作为"收工失败之后这一行该是什么样"的对照物。
@@ -821,10 +832,20 @@ def test_a_failed_settle_is_visible_in_the_manifest(monkeypatch, store: Store,
         f"失败的 settle 不许把这一行写成终态，实际 status={row['status']!r}：{row}"
     )
     assert row.get("ended_at") is None, row
-    assert int(row["tokens"]) == 0 and float(row["usd"]) == 0.0, row
-    # 逐字段比对：盘上的行与"取号那一刻的行"必须逐字节相同（没有被改写）。
-    assert dict(row) == state["rows"][0], (
-        f"占位行被改写了：\n改前 {state['rows'][0]}\n改后 {row}"
+    # 花销两格：与账本上挂这个号的那些行逐分相等（判据 a：每一次 llm_call 都回写）。
+    _ledger = [u for u in store.rows("usage_ledger")
+               if str(u.get("task_id") or "") == str(row["task_id"])]
+    _want_tokens = sum(int(u.get("tokens_total") or 0) for u in _ledger)
+    _want_usd = round(sum(float(u.get("usd") or 0.0) for u in _ledger), 6)
+    assert int(row["tokens"]) == _want_tokens and float(row["usd"]) == _want_usd, (
+        f"花销两格必须等于账本上这个号的汇总（settle 失败不影响记账回写）："
+        f"{row['tokens']}/{row['usd']} vs {_want_tokens}/{_want_usd}")
+    # 逐字段比对：除了上面已单独判过的两格花销，盘上的行与"取号那一刻的行"必须逐字段相同
+    # （终态字段没有被失败的那次写入改写）。
+    _before = {k: v for k, v in state["rows"][0].items() if k not in ("tokens", "usd")}
+    _after = {k: v for k, v in row.items() if k not in ("tokens", "usd")}
+    assert _after == _before, (
+        f"占位行的终态字段被改写了：\n改前 {_before}\n改后 {_after}"
     )
 
     man = json.loads((tmp_path / "a" / "run-manifest.json").read_text(encoding="utf-8"))

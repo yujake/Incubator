@@ -63,6 +63,7 @@ __all__ = [
     "NOTE_SEP",
     "marker_of",
     "note_tokens",
+    "reconcile_usage",
     "row_with_idem_key",
 ]
 
@@ -95,6 +96,101 @@ def marker_of(namespace: str, *parts: Any) -> str:
 def note_tokens(note: str) -> list[str]:
     """把 `note` 拆成 `NOTE_SEP` 分隔的片段（去空白、丢空片）。"""
     return [t.strip() for t in str(note or "").split(NOTE_SEP) if t.strip()]
+
+
+def _micro(usd: Any) -> int:
+    """美元 ⇒ 微美元整数（对账不许用浮点相等：0.1+0.2 这类误差会被读成"差一分钱"）。"""
+    return int(round(float(usd or 0.0) * 1_000_000))
+
+
+def _settled_mark() -> str:
+    """"这一行已经结算过"的标记（唯一来源在 `conductor._SETTLED_MARK`）。
+
+    这里刻意不抄一份字面量：两处各写一个常量，改一处就会让对账把"已结算"读成
+    "还没结算"（那个读数是给人判断"这个差值是不是允许的那一类"用的）。
+    惰性导入：`conductor` 在模块级 import 本模块，函数体里取不会成环。
+    """
+    try:
+        from .conductor import _SETTLED_MARK
+        return str(_SETTLED_MARK)
+    except Exception:  # noqa: BLE001 —— 拿不到就返回空串（对账照给，标记读成 False）
+        return ""
+
+
+def reconcile_usage(store: Any) -> dict:
+    """`Σ tasks.usd` 与 `Σ usage_ledger.usd` 的对账读数（只读；差值逐笔点名）。
+
+    ## 它回答什么（判据 a 的机器读数）
+
+    两处各记一笔账（`usage_ledger` 是权威账、`tasks.tokens/usd` 是回写读数）时，
+    "相差多少"不是结论 —— 必须能说出"差在谁的头上、为什么"。所以这里给三栏：
+
+    | 栏 | 内容 |
+    |---|---|
+    | `ledger_usd` / `tasks_usd` / `diff_usd` | 两个总额与它们的差（微美元整数相等才算 `equal`） |
+    | `unattributed` | `task_id` 为 `None` 的账（逐笔 `usage_id` 点名）：这些钱不属于任何一行 `tasks` |
+    | `named_residual` | 逐行点名的差额：`task_id`、`status`、`tasks.usd`、账本在该号上的汇总 |
+
+    ## 为什么只有"未结算 / 没有台账号"才允许差
+
+    仍在跑的那一行还没有终态，所以它的 `tasks.usd` 可能落后于账本（本次修复之后
+    每次记账都会回写，这种落后只剩"记账与回写之间的那一瞬"）；`task_id=None` 的账
+    没有可回写的行。两种都必须逐笔点名，不许折成一句"总体对得上"——
+    `usage_task_total_mismatch`（`verify.py`）判的是逐行相等，这里补的是"总额差在哪"。
+
+    第三个允许出现的名字是 `dangling`：账本挂着一个 `tasks` 里不存在的号。那是
+    写入侧的缺陷（`verify.dangling_usage_task` 会报 error），这里只如实点名。
+    """
+    ledger = [dict(r) for r in store.rows("usage_ledger")]
+    tasks = [dict(r) for r in store.rows("tasks")]
+    task_rows = {str(r.get("task_id") or ""): r for r in tasks}
+    per_task: dict[str, int] = {}
+    unattributed_micro = 0
+    unattributed_ids: list[str] = []
+    ledger_micro = 0
+    for row in ledger:
+        amount = _micro(row.get("usd"))
+        ledger_micro += amount
+        tid = str(row.get("task_id") or "")
+        if not tid:
+            unattributed_micro += amount
+            unattributed_ids.append(str(row.get("usage_id") or ""))
+            continue
+        per_task[tid] = per_task.get(tid, 0) + amount
+    unattributed = {"count": len(unattributed_ids),
+                    "usd": round(unattributed_micro / 1_000_000, 6),
+                    "usage_ids": unattributed_ids}
+    tasks_micro = sum(_micro(r.get("usd")) for r in tasks)
+    named: list[dict] = []
+    dangling: list[dict] = []
+    for tid, amount in sorted(per_task.items()):
+        row = task_rows.get(tid)
+        if row is None:
+            dangling.append({"task_id": tid, "ledger_usd": round(amount / 1_000_000, 6)})
+            continue
+        declared = _micro(row.get("usd"))
+        if declared == amount:
+            continue
+        named.append({
+            "task_id": tid,
+            "role": str(row.get("role") or ""),
+            "status": str(row.get("status") or ""),
+            "tasks_usd": round(declared / 1_000_000, 6),
+            "ledger_usd": round(amount / 1_000_000, 6),
+            "diff_usd": round((amount - declared) / 1_000_000, 6),
+            "settled": _settled_mark() in [str(x) for x in (row.get("inputs") or [])],
+        })
+    return {
+        "ledger_rows": len(ledger),
+        "task_rows": len(tasks),
+        "ledger_usd": round(ledger_micro / 1_000_000, 6),
+        "tasks_usd": round(tasks_micro / 1_000_000, 6),
+        "diff_usd": round((ledger_micro - tasks_micro) / 1_000_000, 6),
+        "equal": ledger_micro == tasks_micro,
+        "unattributed": unattributed,
+        "named_residual": named,
+        "dangling": dangling,
+    }
 
 
 def row_with_idem_key(rows: Any, idem_key: str) -> dict | None:
@@ -372,6 +468,62 @@ class TokenMeter:
             idem_key=idem_key,
         )
 
+    # ---------------------------------------------------------------- 回写 tasks
+
+    def _sync_task_usage(self, tx: Any, task_id: Any) -> dict:
+        """在「记账的同一笔事务里」把 `tasks.tokens/usd` 抄成账本上该号的汇总。
+
+        ## 为什么必须在同一笔事务里（判据 a 的实现本体）
+
+        现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §A-5）：389 行
+        `tasks` 里只有 9 行有 tokens/usd，而账本 416 行 —— 差的 $0.3146 里 17 条是
+        "还在跑、永远不会结算"的行（钱在账本上、行上永远是 0）。病因是回写只发生在
+        召唤结束那一刻（`conductor._charge_and_settle` ⇒ `_set_usage`）：一次召唤
+        只要没走到收尾，它花过的钱就一条都不在 `tasks` 上。
+
+        这里把回写挪到"每一笔记账"上：账本一行落下去的同时，它挂的那个 `task_id`
+        的 `tasks` 行就被改成账本上的累计值。于是"两处相等"从「时序假设」
+        （"收尾一定会跑到"）变成「构造」（同一笔事务同时写两处），而且对"根本没
+        收尾的 running 行"一样成立。
+
+        ## 口径（与 `conductor._set_usage` 逐字同一套，不是第二份算法）
+
+        - `tokens` / `usd` 都是「从账本现读的汇总」（`tx.rows("usage_ledger")` 里
+          已经有本笔刚 upsert 的那一行），不是"本笔累加到旧值"——累加会在重放/并发
+          下变成"同一笔算两遍"，而现读是幂等的；
+        - `usd` 与 `UsageEntry.usd` 同一精度（6 位小数），对账用微美元整数比
+          （`reconcile_usage`），不许浮点相等；
+        - 只改 `tokens` / `usd` 两格，不碰 `status` / `outcome` / `inputs`
+          （"结算标记"仍由 `conductor._set_usage` 写：那是召唤级的收口事实，
+          与"这一笔记账"不是同一件事）；
+        - `task_id` 为空、或者挂着 `tasks` 里不存在的号（dangling）⇒ 如实回
+          `written=False` + 理由，不抛：钱已经花了，不许因为回写失败把账吞掉
+          （那个缺口由 `verify.dangling_usage_task` 报 error）。
+        """
+        tid = str(task_id or "").strip()
+        if not tid:
+            return {"written": False, "reason": "no_task_id"}
+        row = tx.find("tasks", task_id=tid)
+        if row is None:
+            return {"written": False, "reason": "task_not_in_tasks", "task_id": tid}
+        ledger = tx.rows("usage_ledger")
+        tokens = sum(int(r.get("tokens_total") or 0) for r in ledger
+                     if str(r.get("task_id") or "") == tid)
+        usd = round(sum(float(r.get("usd") or 0.0) for r in ledger
+                        if str(r.get("task_id") or "") == tid), 6)
+        if (int(row.get("tokens") or 0) == tokens
+                and _micro(row.get("usd")) == _micro(usd)):
+            return {"written": False, "reason": "already_in_sync",
+                    "tokens": tokens, "usd": usd}
+        row["tokens"] = int(tokens)
+        row["usd"] = float(usd)
+        # 与 `conductor._set_usage` 同一条纪律：写回前按 `schema.Task` 校一遍。
+        # 走到这里的那一行刚刚还在跑（或刚落终态），两格都是合法读数。
+        S.Task(**{k: v for k, v in row.items()
+                  if k in S.Task.__dataclass_fields__}).validate()
+        tx.upsert("tasks", row, note="charge:writeback")
+        return {"written": True, "tokens": tokens, "usd": usd}
+
     def charge(self, c: Charge, *, now: str | None = None) -> dict:
         """把一笔花销写进账本。永远写（包括零值与超预算）。
 
@@ -381,6 +533,12 @@ class TokenMeter:
 
         `over_budget=True` 时照样写：钱已经花了，账必须记。
         拦住新工作的权力在 :meth:`guard`。
+
+        ## 一笔账 = 一处账本行 + 一处 `tasks` 回写（判据 a）
+
+        事务声明里带 `tasks`：回写与记账同生共死（见 :meth:`_sync_task_usage`）。
+        只有给了 `task_id` 的那一笔才需要它；不给的账没有可回写的行，如实留
+        `task_id=None`（"没有台账号"是合法读数，不是缺一个字符串）。
         """
         self._reject_information_free_zero(c)
         at = now or S.now_iso()
@@ -391,13 +549,16 @@ class TokenMeter:
         # 那会直接抛 `usage_id 必须是 4 位十进制字符串，收到 'PENDING'`。
         # 这条错很浅，但它示范了一条纪律：4 位 ID 的合法性只能在拿到真号之后判断，
         # 因为号是 `alloc_id` 在持锁事务内发的。用占位符"先校验后换号"在结构上不可能成立。
-        with self.store.tx("usage_ledger", "counters", actor=f"tokenmeter:{c.role}",
+        tables = ("usage_ledger", "counters", "tasks") if c.task_id else (
+            "usage_ledger", "counters")
+        with self.store.tx(*tables, actor=f"tokenmeter:{c.role}",
                            note=f"charge:{c.scope}") as tx:
             uid = tx.alloc_id("usage")
             row = self._row_for(c, uid=uid, at=at, note=note)
             # 早炸：不合法就别写（与 store 的"先校验后落盘"同一条纪律）
             row.validate()
             tx.upsert("usage_ledger", row.to_dict(), note=f"charge:{c.scope}")
+            self._sync_task_usage(tx, c.task_id)
 
         after = self.spent()
         over = self._over(after["tokens"], after["usd"])
@@ -470,14 +631,24 @@ class TokenMeter:
             )
         at = now or S.now_iso()
         note = self._note_for(c, extra_token=key)
+        # 与 :meth:`charge` 同一条：给了 `task_id` 就把 `tasks` 拉进同一笔事务，
+        # 记账与回写同生共死（见 :meth:`_sync_task_usage`）。
+        tables = ("usage_ledger", "counters", "tasks") if c.task_id else (
+            "usage_ledger", "counters")
 
-        with self.store.tx("usage_ledger", "counters", actor=f"tokenmeter:{c.role}",
+        with self.store.tx(*tables, actor=f"tokenmeter:{c.role}",
                            note=f"charge:{c.scope}") as tx:
             # 这一读必须在锁内。它读的是本事务取到排他锁之后磁盘上的内容，
             # 所以另一个进程刚刚提交的那一行在这里一定看得见；
             # 反过来，若把这一读挪到 `with` 之外（无锁快照读），窗口就回来了。
             prior = row_with_idem_key(tx.rows("usage_ledger"), key)
             if prior is not None:
+                # 判重这一支也要回写：典型现场是"账已落、`tasks` 还没写回就断了"
+                # （或两个写者竞争、其中一个先落了账）。早退会把回写一起跳过，
+                # 于是两处又分家 —— 与 `conductor._charge_and_settle` 的 `G-8` 同一条理由。
+                # 只按**本笔**的 `task_id` 回写：`task_id` 为空时 `tables` 里没有
+                # `tasks`（省一把锁），而 `prior` 那一行的回写属于当初写它的那一笔。
+                self._sync_task_usage(tx, c.task_id)
                 return {
                     "recorded": False,
                     "duplicate": True,
@@ -488,6 +659,7 @@ class TokenMeter:
             row = self._row_for(c, uid=uid, at=at, note=note, idem_key=key)
             row.validate()
             tx.upsert("usage_ledger", row.to_dict(), note=f"charge:{c.scope}")
+            self._sync_task_usage(tx, c.task_id)
             return {
                 "recorded": True,
                 "duplicate": False,
