@@ -48,7 +48,16 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # `tests/test_texaudit.py` 的形状判据一起钉住（同一个理由：在调用点抄一遍就是第二个口径）。
     "review_tools.py": 3,
     "search_tools.py": 3,
-    "table_tools.py": 7,
+    "table_tools.py": 8,
+    # 2026-11-05（068cc9d9「字段投影」）：7 → 8 —— 第 8 处是 `table_list` 现在写
+    # `ok(data, ...)`（原来那一处是 `ok({……字面量……}, ...)`）：投影分支要按
+    # `fields is None` 决定 data 里的 `rows` 与 meta 里的 `fields`，`data` 由运行时拼，
+    # 静态扫描读不出键集。为什么走"改数字并在提交信息里说明"这一档而不是改回字面量：
+    # `data` 正是「投影只改每一行回哪几个键、不改 data 的键」那条读数的载体
+    # （`test_table_list_projects_fields.py` 的 a/b 两支都读它）；在调用点再抄一份
+    # 字面量等于把"默认路径（不给投影）逐字不变"变成第二份口径。键集本身仍由
+    # `tests/test_tools_returns_declaration.py` 的实跑逐工具钉住，这条表只记处数。
+    # 判据强度一格未动：仍是"盘上处数 == 本表数字"的等额。
     # 2026-10-01（`draft/28` §218.3）：`T-8` 把工具体从 `register` 里搬到模块级之后，
     # 这两个数字当场减半（22 → 11、18 → 9）—— 不是因为代码变了，而是因为原来的
     # 数法是 `ast.walk` 每层函数各数一遍（嵌套的 `ok(...)` 被外层与内层各走到一次）。
