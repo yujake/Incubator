@@ -1005,12 +1005,18 @@ def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, lim
                )
     )
 
-#: V 的只读工具面（`draft/54 §1.2` 步 7）：三件都加进本模块 —— 加进既有模块省掉
+#: V 的工具面（`draft/54 §1.2` 步 7）：三件都加进本模块 —— 加进既有模块省掉
 #: "新模块的五个落点"（`_MODULES` / `capabilities._TOOL_MODULES` / `_TOOL_GROUP_PREFIXES` /
 #: `READING-MAP` / `test_release_all.py` 的顶层模块表）。
 #:
 #: 只声明 `"V"`：这是验证者的面。"把证明交给 V"这件事走的是召唤（`F → V` 那条边），
 #: 不是让 F 自己拿着 V 的台账工具去审自己。
+#:
+#: 2026-11-05：**三件不等价** —— `verify.list_verifications` / `verify.read_proof` 是
+#: `read`，`verify.verify_proof` 据实是 `write_local`（它写 V 自己维护的那张台账
+#: `verifications/<号>.jsonl` 与签的侧文件/签块）。V 仍拿得到它，走的是
+#: `tools/base.py::READONLY_CALL_EXCEPTIONS["V"]` 这条逐条登记的例外，不是把副作用写成
+#: `read` 换可达性（那正是 2026-10-24 通用能力那一节记下的"谎报换可达性"）。
 _ROLES_V = ("V",)
 
 
@@ -1082,7 +1088,14 @@ _ROLES_V = ("V",)
            "required": [],
            "additionalProperties": False,
            },
-    side_effect="read",
+    # 2026-11-05：`read` → `write_local`（把声明说真）。`side_effect` 那根轴的定义是
+    # "数据表 / 工作区"（`tools/base.py` 的 `EFFECT`）：这件工具写
+    # `verifications/<命题号>.jsonl`（`verifications.record_verification`）、未在册档还写
+    # `out/vsigns/<正文 sha>.json`（`vsigns.issue`），并让收方秘书把签块盖回送审的那份手稿
+    # —— 三者都是**工作区写**，所以它的真值就是 `write_local`。
+    # "V 仍拿得到它"不靠谎报副作用，而靠逐条登记的例外
+    # （`tools/base.py::READONLY_CALL_EXCEPTIONS["V"]`，理由写在那里）。
+    side_effect="write_local",
     roles=_ROLES_V,
     # 三条返回路径的键集合完全相同（与 verify.evidence_for 同一纪律）：
     # `checked=False` 是"没查成"（没接线 / 结论不合法）而「不是」工具失败 ——

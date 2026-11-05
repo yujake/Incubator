@@ -18,12 +18,16 @@ H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五�
    引用的命题是否干净），每条问题指到那一步。
 3. I17 整篇重读：把证明按写成后的样子当一次输入整体读，不只逐单元核对。
 
-## 权限面：只读 + 自己的台账
+## 权限面：只读 + 自己维护的那张台账
 
-`read_only=True`、`write_set=frozenset()`：V 不写任何表。它唯一的产物是
-`verifications/<命题号>.jsonl` 这个文件（追加式，与手稿同一形态，不新增表）——
-`capabilities.WRITE_SETS` 描述的是"会写哪几张表"，所以那里是空集，
-而这一点由 `tools.READ_ONLY_ROLES` 里的 `"V"` 与 `for_role` 的结构性剥离一起守住。
+`read_only=True`、`write_set=frozenset()`：V 不写任何**数据表**。它写的是**自己维护的那张表**
+`verifications/<命题号>.jsonl`（追加式，与手稿同一形态，不新增 `schema.TABLES`）与它颁的签
+（`out/vsigns/<正文 sha>.json`、收方秘书落回送审手稿的签块）—— 三者都是工作区写，所以
+`verify_proof` 这个动作**据实**声明 `side_effect="write_local"`（2026-11-05 起；改前写 `read` 是谎报）。
+`capabilities.WRITE_SETS` 描述的是"会写哪几张**数据表**"，所以那里是空集；V 拿得到那件写工具走的是
+`tools/base.py::READONLY_CALL_EXCEPTIONS["V"]` 的逐条例外，而 `tools.READ_ONLY_ROLES` 里的 `"V"`
+与 `for_role` 的结构性剥离继续保证**别人的**写工具一件都进不了它的面 —— 只读约束的是
+"不能改别人的东西"，不是"不能有副作用"。
 
 ## 边：入边 `B` / `E` / `F`，出边为空（2026-11-05 起）
 
@@ -90,10 +94,15 @@ from ..agentspec import (
 
 #: 本角色的动作表。
 #:
-#: 三条动作全部声明 `side_effect="read"`（用户裁定）：V 在"会写哪几张表"这根轴上是
-#: 只读的 —— 它的台账是一个文件，不是表。若把 `verify_proof` 写成 `write_local`，
-#: `for_role("V")` 会把它从 V 自己看得见的工具面上剥掉（只读角色的结构性剥离）
-#: ⇒ "动作登记了却永远调不到"，而判据只看名单、看不见这件事。
+#: 三件动作里两件是 `read`，`verify_proof` 据实是 `write_local`（2026-11-05 起）：
+#: 它写 V **自己维护的那张台账** `verifications/<命题号>.jsonl`、未在册档的签信封
+#: `out/vsigns/<正文 sha>.json`，并让收方秘书把签块盖回送审的那份手稿。
+#: 改前它声明 `read`，理由是"台账是文件不是表" —— 那是把"写不写数据表"与
+#: "写不写工作区"折成了同一件事；`side_effect` 的轴定义是"数据表 / 工作区"
+#: （`tools/base.py::EFFECT`），所以真值就是 `write_local`。
+#: 它仍留在 V 的工具面上，走的是 `tools/base.py::READONLY_CALL_EXCEPTIONS["V"]`
+#: 那条逐条例外（不是靠把副作用写成 `read` 换可达性）。这条两层声明必须同名同值：
+#: `capabilities.assert_capabilities` 第 [7] 条把"工具说写、能力说读"判成 error。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "V", "verify_proof",
@@ -152,7 +161,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
             required=(),
         ),
         "一行验证台账（含 v-NNNN / verdict / findings / proof_sha256）",
-        side_effect="read", handler_name="verify_proof",
+        side_effect="write_local", handler_name="verify_proof",
     ),
     ActionSpec(
         "V", "list_verifications",
