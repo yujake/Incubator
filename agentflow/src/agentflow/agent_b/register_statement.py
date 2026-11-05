@@ -1189,6 +1189,12 @@ class _RegisterStatement:
                 row, root=getattr(store, "root", ""), proof_no=1)
             if _recomputed.get("reading"):
                 row = dict(_recomputed.get("row") or row)
+                # 读数必须落盘，不只是"算过"：这一格与 `sign_statement` 那一笔
+                # （`verifications.py` 的 `new[GRADE_RECOMPUTED_KEY] = reading`）
+                # 是同一件事的两个落点。改前这里只把 row 拷回来、丢掉了 reading 本身，
+                # 于是"B 登记期按签重算等级"在返回值里说得清、在盘上查不到 ——
+                # 而这条回执正是"这一档凭什么"的唯一可读凭据。
+                row[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
                 out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。

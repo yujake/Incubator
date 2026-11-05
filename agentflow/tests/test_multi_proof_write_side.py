@@ -207,19 +207,24 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     assert row_old["proof_text"] == P1, row_old
     # 新前提：登记前已有一份手稿签（`_empty_then_sign`）⇒ 这一笔按盘上凭据留两处痕：
     # - `_kind_upgrade`：`kind` 按第 3 位抬一次（conjecture → theorem）；
-    # - `_grade_recomputed`：`evidence_kind` 按现行签重算一次（2026-11-05 的登记期回填，
+    # - `_grade_recomputed`：按现行签重算等级（2026-11-05 的登记期回填，
     #   `verifications._grade_recomputed_from_signature`）。
     # 两者都是"这一档是从盘上哪一签读出来的"，不是调用方自报；它们与"两种 #p1 写法
     # 是否等价"无关，所以从"只差内部留痕"的集合里各自排除，并逐格断言来路。
+    # 2026-11-05：`_grade_recomputed` 的 `from` / `to` 是等级，历史档位由
+    # `from_kind` / `to_kind` 反算给出；`evidence_kind` 只是历史列，登记期不再回填
+    # （判定面读 `derive_grade`）。
     allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY}
     assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
     for row, store in ((row_old, st_old), (row_new, st_new)):
-        # 键的存在本身要有凭据面兜底：这一行确实被按签升到 `proof_review`。
-        assert row["evidence_kind"] == VR.PROOF_REVIEW_KIND, row
+        # 键的存在本身要有凭据面兜底：这一行确实被按签升到 `pre_theorem`。
+        assert EB.derive_grade(EB.bits_from_row(row),
+                               kind=str(row.get("kind") or "")) == "pre_theorem", row
         trace = dict(row.get(VR.GRADE_RECOMPUTED_KEY) or {})
         assert trace.get("checked") is True, trace
-        assert trace.get("to") == VR.PROOF_REVIEW_KIND, trace
+        assert trace.get("to") == "pre_theorem", trace
+        assert trace.get("to_kind") == VR.PROOF_REVIEW_KIND, trace
         assert trace.get("from") and trace.get("from") != trace.get("to"), trace
         assert trace.get("proof_no") == 1, trace
         last = _ledger(store)[-1]
