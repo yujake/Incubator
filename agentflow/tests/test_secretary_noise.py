@@ -420,10 +420,15 @@ def test_the_delegator_set_used_here_is_registered_not_derived() -> None:
     """本文件跑职责 2 的那批角色是登记的，不是从代码推出来的。
 
     我第一版把这条写成"`DELEGATORS` 必须等于出边非空的角色集"，那是错的：
-    真身算出来是 9 个（A/B/D/E/F/G/H/M/V 都有出边），而登记的可见集是 5 个
+    真身算出来是 8 个（A/B/D/E/F/G/H/M 有出边），而登记的可见集是 5 个
     （D/E/F/G/M，见 `tests/test_secretary_prompt_alignment.py` 的 `duty2_assess.roles`——
     它在提示词侧的实测命中就是这 5 个）。两个事实不是一回事，把它们写成等额会造出一个假红。
     所以这里只断言那个弱事实（每个 DELEGATOR 都得有出边）+ 把另一批登记在案（供人裁）。
+
+    V 曾经在这 8 个里（出边 `[F]`）：2026-11-05 的权限面裁定把 V 的出边清空
+    （`ALLOWED_EDGES["V"] == ()`；golden `agent_surface_snapshot.json` 的
+    `roles.V.edges` 已按现值重冻），于是它从"有出边"那一批里退出。这是"读数跟着
+    权限面走"，不是本判据放宽：下面仍是"恰好等于"。
     """
     registered = set(DELEGATORS)
     with_edges = set(_roles_with_out_edges())
@@ -431,7 +436,7 @@ def test_the_delegator_set_used_here_is_registered_not_derived() -> None:
         f"登记的 DELEGATORS {sorted(registered)} 里有角色其实没有出边（{sorted(registered - with_edges)}）⇒ 登记错了")
     assert registered, "表是空的 ⇒ 这一格没查成"
     # 登记在案（不参与断言）：有出边但不在这一批里的角色 —— 它们是"能派活但提示词没提职责2"的那一批。
-    assert with_edges - registered == {"A", "B", "H", "V"}, (
+    assert with_edges - registered == {"A", "B", "H"}, (
         f"有出边却不在登记批里的角色变了：{sorted(with_edges - registered)} ⇒ "
         "要么提示词侧变了（去核 `test_secretary_prompt_alignment.py`），要么 `ALLOWED_EDGES` 变了（那是权限面）")
 

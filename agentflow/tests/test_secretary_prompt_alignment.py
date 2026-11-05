@@ -280,6 +280,26 @@ DUTIES: dict[str, dict[str, object]] = {
                "（`land_unregistered_sign` → `vsigns.land`）；B 再带这份稿入库时，"
                "`manuscript_sign_standing` 从稿上读到它、第 3 位才翻真",
     },
+    # 2026-11-05（审计② 第 ⑭ 条 · `specs/f.py` 新加的那一句）：F 的 policy 现在逐字写着
+    # 「引的号必须在册 … 秘书洗不动，整份手稿退回（`dependency_source_not_registered`）」。
+    # 那是一句对角色的承诺（秘书会核依赖面的命题号、核不过就整份打回）⇒ 按本文件纪律
+    # 必须有一条职责认领它，否则方向二红（承诺了一个没人接住的接住方）。
+    # 真身是 `Secretary.wash_dependency_face`（secretary.py；解析与渲染的唯一实现在
+    # `depsection.wash_dependency_section`，`depsection.REFUSED_UNKNOWN_SOURCE` 就是那个
+    # `dependency_source_not_registered`）。`agent_f/core.py:1655` 在 `_proof_outlet` 之前调它。
+    # 可见性 `conditional ("F",)`：这一遍洗稿只发生在 F 写完、提交给 V 之前；别的角色的
+    # 秘书不洗证明稿，「秘书洗不动」那句话也只出现在 F 那一份提示词里。
+    "f_dependency_wash": {
+        "code": "wash_dependency_face",
+        "where": "secretary.py",
+        "call": ("agent_f/core.py:1655 的 proof 分支（`_proof_outlet` 之前）",),
+        "visibility": "conditional",
+        "roles": ("F",),
+        "probe": ("秘书洗不动",),
+        "why": "依赖面洗稿：F 的稿里 `cites` / `## 依赖` 点名一条不在册的 `stmt:<号>` ⇒ "
+               "秘书整份退回（`dependency_source_not_registered`，逐行点名哪一行、哪个号），"
+               "这一份不交给 V；F 必须知道有这一遍，否则它会把「交上去了」读成「已经在审了」",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，
