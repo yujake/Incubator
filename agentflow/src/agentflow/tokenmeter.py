@@ -646,7 +646,7 @@ class TokenMeter:
                 # 判重这一支也要回写：典型现场是"账已落、`tasks` 还没写回就断了"
                 # （或两个写者竞争、其中一个先落了账）。早退会把回写一起跳过，
                 # 于是两处又分家 —— 与 `conductor._charge_and_settle` 的 `G-8` 同一条理由。
-                # 只按**本笔**的 `task_id` 回写：`task_id` 为空时 `tables` 里没有
+                # 只按本笔的 `task_id` 回写：`task_id` 为空时 `tables` 里没有
                 # `tasks`（省一把锁），而 `prior` 那一行的回写属于当初写它的那一笔。
                 self._sync_task_usage(tx, c.task_id)
                 return {
