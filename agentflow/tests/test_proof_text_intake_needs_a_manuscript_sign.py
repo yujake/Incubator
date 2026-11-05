@@ -135,6 +135,24 @@ def test_b_table_update_may_not_smuggle_a_new_row_with_proof_text(tmp_path):
     assert len(rows) == 1, ("这一笔不是改，是建新行", rows)
     assert str(_row(st, sid).get("proof_text") or "") == "", _row(st, sid)
 
+    # 反真空：把"bits 里有没有真凭据"那条判据退回按 truthiness 判 ⇒ 洞回来。
+    # 盘上那一行的 bits 是 10 键规范化字典（恒 truthy），table.update 把它叠进
+    # body ⇒ 旧条件 `bool(body.get("bits"))` 会 defer 掉正文闸，建出一条无签的新行。
+    import agentflow.secretary as SEC
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(SEC, "_bits_bear_evidence", lambda bits: bool(bits),
+                            raising=False)
+        with calling_as("t-000001", "B"):
+            res2 = reg.call("table.update", table="statements", id=sid,
+                            patch={"statement_full": "设 h 是连续函数；则 h 在闭区间上一致连续。",
+                                   "proof_text": PROOF}, role="B")
+        assert res2.ok is True, res2
+        assert len(st.rows("statements")) == 2, st.rows("statements")
+    finally:
+        monkeypatch.undo()
+
 
 # ============================================================ c  B 的内联签
 

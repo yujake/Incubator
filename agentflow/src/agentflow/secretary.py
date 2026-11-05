@@ -1597,6 +1597,39 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
     return out
 
 
+def _bits_bear_evidence(bits: Any) -> bool:
+    """`bits` 里有没有「调用方显式给的真凭据」（决定正文闸 defer 不 defer）。
+
+    ## 为什么不能按 truthiness 判（2026-11-06 真退化）
+
+    2026-11-05「等级是唯一的轴」之后，盘上每一行的 `bits` 是 10 键规范化的字典
+    （`numeric/proof/reviewed/formal/audited/origin/evidence/voided_by/grade/
+    audited_badge` 全在，值可以是 pending/false）—— 它恒 truthy。而
+    `table.update` 的 routed 分支会把盘上整行叠进 body（`merged = dict(current)`），
+    于是 `bool(body.get("bits"))` 把"盘上那一行原样带回来的空 bits"读成了
+    "调用方给了证据" ⇒ 正文闸被 defer，一条没有手稿签的新行照样建出来
+    （`table.update(statements, patch={statement_full, proof_text})` 实测建出 000001）。
+
+    判据：只有第 2/3 位为真，或第 1/4 位 `verified`，才算"带真凭据"。全
+    pending/false 的规范化空位不算 —— 它不是证据，只是"这一行有位记录"。
+    """
+    if not isinstance(bits, Mapping):
+        return False
+    raw = dict(bits)
+    if not raw:
+        return False
+    if bool(raw.get("proof")) or bool(raw.get("reviewed")):
+        return True
+    for name in ("numeric", "formal"):
+        value = raw.get(name)
+        if isinstance(value, Mapping):
+            if any(str(one).strip().lower() == "verified" for one in value.values()):
+                return True
+        elif str(value or "").strip().lower() == "verified":
+            return True
+    return False
+
+
 def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
                               manuscript_path: Any = "", proof_text: Any = "",
                               bits: Mapping[str, Any] | None = None
@@ -6931,7 +6964,7 @@ class Secretary:
                 self.store, proof_text=body.get("proof_text"),
                 statement_full=full, proof_no=body.get("proof_no"),
                 origin=body.get("origin"), source_lit_id=body.get("source_lit_id"),
-                defer_without_sign=bool(body.get("bits")))
+                defer_without_sign=_bits_bear_evidence(body.get("bits")))
             out["proof_text_gate"] = dict(_intake)
             if _intake.get("refused"):
                 out.update(checked=False, created=False, duplicate=False, upgraded=False,
