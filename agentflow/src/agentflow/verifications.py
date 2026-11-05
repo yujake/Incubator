@@ -2698,13 +2698,43 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
              else (ledger or vid))
     try:
         bits = EB.bits_from_row(out["row"])
-        target = EB.derive_grade(bits, kind=str(out["row"].get("kind") or ""))
     except Exception as exc:  # noqa: BLE001 —— 同上：算不出来就是没查成
         out["reading"] = {
             "checked": False, "from": "", "to": "",
             "why": (f"五元位算不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
                     "等级与档位一个字节不动")}
         return out
+    # ---- 穷举通道：签住的是 E 的穷举程序 ⇒ 第 1 位落 verified ---------------
+    #
+    # 2026-11-05 业主裁定「穷举证书相当于 Lean 形式化，表示绝对正确」，于是
+    # `derive_grade` 的 `theorem` 有两条同级入口：第 2 位 + 第 4 位（formal verified）
+    # 或第 2 位 + 第 1 位（numeric verified）。但"V 签住这一份穷举证明"这件事此前
+    # 没有任何写者把它落到第 1 位：`_exhaustion_proof_channel` 还在，却没人调用
+    # ⇒ 穷举题签完停在 `pre_theorem`，永远到不了 `theorem`。
+    #
+    # 位置与 `_reviewed_statement_row` 的 reviewed 同一步：签已经落位（gap.ok），
+    # 这一格只把"签住的那份证明是哪条通道"翻译成第 1 位。通道判据只有一处
+    # （`numericproof.find_signed_exhaustion_for_column`），这里不另写一份。
+    channel = "text"
+    try:
+        _exhaustion = _exhaustion_proof_channel(out["row"], root=root)
+    except Exception:  # noqa: BLE001 —— 通道判不了就按文字证明（不猜成穷举）
+        _exhaustion = {"checked": False, "found": False, "why": ""}
+    if _exhaustion.get("found"):
+        evidence = dict(bits.get("evidence") or {})
+        evidence["numeric"] = {
+            "experiment_id": str(_exhaustion.get("experiment_id") or ""),
+            "script": str(_exhaustion.get("script") or ""),
+            "why": str(_exhaustion.get("why") or ""),
+        }
+        bits = dict(bits, numeric="verified", evidence=evidence)
+        kind_now = str(out["row"].get("kind") or "")
+        out["row"]["bits"] = EB.normalize_raw(
+            bits, origin=str(out["row"].get("origin") or "own_result"),
+            voided_by=dict(bits.get("voided_by") or {}), kind=kind_now)
+        bits = out["row"]["bits"]
+        channel = "exhaustion"
+    target = EB.derive_grade(bits, kind=str(out["row"].get("kind") or ""))
     from_kind = str(out["row"].get("evidence_kind") or "").strip()
     from_grade = EB.KIND_TO_GRADE.get(from_kind, "")
     # ---- 幂等（不写第二个时间戳）：两件都算"这一签没有新消息" ----------------
@@ -2720,6 +2750,7 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
         "checked": True,
         "from": from_grade, "to": target,
         "from_kind": from_kind, "to_kind": EB.kind_from_grade(target),
+        "channel": channel,
         "why": ("V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 "
                 "⇒ 按五元位现算等级（只算等级，不写档位）；"
                 f"历史列 `evidence_kind`={from_kind or '（空）'} 只是读数，判定面读 `{target}`"),
@@ -3290,6 +3321,10 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 recomputed = _grade_recomputed_from_signature(
                     new, root=getattr(store, "root", ""), proof_no=no)
                 if recomputed["reading"]:
+                    # 2026-11-06：这一格不只算等级，还会按穷举通道落第 1 位
+                    # （`numeric=verified`）—— 那一份 `row` 必须一起落盘，否则
+                    # "算过 theorem"只活在返回值里，盘上仍是 pre_theorem。
+                    new = dict(recomputed.get("row") or new)
                     new[GRADE_RECOMPUTED_KEY] = dict(recomputed["reading"])
                 tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
                 out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),

@@ -45,6 +45,7 @@ from conftest import add_literature, sync_counters  # noqa: E402
 from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from agentflow import closing  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
+from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
@@ -413,15 +414,17 @@ def test_criterion1_an_exhaustive_run_is_proof_signed_by_v_with_a_three_part_col
 
 def test_criterion1c_the_third_clean_sign_backfills_proof_not_proof_review(
         tmp_path: pathlib.Path) -> None:
-    """回归（2026-11-04）：穷举 + V 三转「成立」⇒ 行上直接 `proof`；B 再登记仍成功。
+    """回归（2026-11-04，2026-11-05 改读等级）：穷举 + V 三转「成立」⇒ `theorem`。
 
-    与 ① 同一条链，但断言点在"V 落签那一刻"而不是"B 登记之后"：`0b86db09` 的档位回填
-    一律写 `proof_review`，于是 B 的第二笔（要 `proof`）撞 `duplicate_statement`。
-    业主口径（`schema.EVIDENCE_KINDS`）：穷举程序 + 针对该穷举的 V 签 ⇒ 直接 `proof`；
-    `proof_review` 是"V 逐行审过文字证明"，V 不能逐行走查一份程序。
+    与 ① 同一条链，但断言点在"V 落签那一刻"而不是"B 登记之后"：旧回填一律写
+    `proof_review`，于是 B 的第二笔（要 `proof`）撞 `duplicate_statement`。
+    业主口径（`evidencebits.derive_grade`）：穷举程序 + 针对该穷举的 V 签 ⇒
+    与 Lean 同级，都算 `theorem`（历史列反算名 `proof`）；`pre_theorem` 是
+    "V 逐行审过文字证明"那一档，V 不能逐行走查一份程序。
 
-    这里量三件事：① 落签后行上就是 `proof`（回填按通道给档）；② B 拿着同一份内容再
-    登记仍然 `ok=True` 且不新建行（`at_tier`；不是重复登记）；③ 两笔都是 `proof`。
+    这里量三件事：① 落签后等级现算就是 `theorem`（按通道落 numeric 位）；
+    ② B 拿着同一份内容再登记仍然 `ok=True` 且不新建行（`at_tier`；不是重复登记）；
+    ③ 最终那一行仍是 `theorem`。
     """
     store = _store(tmp_path)
     _run_exhaustive(store)
@@ -430,21 +433,27 @@ def test_criterion1c_the_third_clean_sign_backfills_proof_not_proof_review(
     _sign_with_v(store, column)
 
     signed = _rows(store, "statements")[0]
-    assert signed["evidence_kind"] == "proof", signed
+    assert EB.bits_from_row(signed)["grade"] == "theorem", signed
     assert signed["kind"] == "theorem", signed
     bits = dict(signed.get("bits") or {})
     assert bits.get("proof") is True and bits.get("reviewed") is True, bits
+    assert bits.get("numeric") == "verified", bits
     trace = dict(signed.get(VR.GRADE_RECOMPUTED_KEY) or {})
-    assert trace.get("to") == "proof", trace
-    assert trace.get("from") == NP.SUPPORTED_ONLY_KIND, trace
+    assert trace.get("to") == "theorem", trace
+    assert trace.get("to_kind") == "proof", trace
+    assert trace.get("from") == "strong_conjecture", trace
     assert trace.get("channel") == "exhaustion", trace
     assert int(trace.get("proof_no") or 0) == 1, trace
 
     filed = _file_via_b(store, proof_text=column)
     assert filed.get("ok") is True, filed
-    assert filed.get("at_tier") is True, filed
+    # B 这一笔是"同一条已在册、证据档到位"：不新建行，历史列按现算等级反算成 proof。
+    assert filed.get("new_row") is False, filed
+    assert filed.get("evidence_kind") == "proof", filed
     final = _rows(store, "statements")[0]
-    assert final["kind"] == "theorem" and final["evidence_kind"] == "proof", final
+    assert final["kind"] == "theorem", final
+    assert final["evidence_kind"] == "proof", final
+    assert EB.bits_from_row(final)["grade"] == "theorem", final
 
 
 def np_author_not_signer(sig: dict) -> bool:
