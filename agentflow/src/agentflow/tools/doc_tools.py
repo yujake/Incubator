@@ -2605,32 +2605,201 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
 # ---------------------------------------------------------------- 论文对应表（`doc.write_mapping`）
 
 
+#: `doc.write_mapping` / `doc.mapping_cells` 的声明文案所依据的实现事实 —— 唯一来源。
+#:
+#: 声明文案（summary / 参数说明 / returns）由 :func:`_mapping_declaration_texts` 从这里
+#: 渲染；判据 `tests/test_doc_write_mapping_declaration_matches_papermapping.py` 读同一份
+#: 事实，再拿 `papermapping` 的实际判定（`mapping_cells` / `is_numeric_theorem_row` /
+#: `_lean_problems`）交叉核对 —— 声明与判据两边不各写一份字面量。
+#:
+#: 2026-11-05（`8b48065b` 之后）的四条实现事实（判据是 `8b48065b` 的实现，不是旧声明）：
+#: 1. 凭据按通道：证明栏第 ① 段那份 `.py` 存在就填它（例子 / 实验不要求 E 已签成穷举）；
+#: 2. 附加义务按档位：`numeric_evidence` / `exhaustion_note` / 索引四格 / 正文指回 E
+#:    只压在定理类行（:data:`papermapping.STATEMENT_ENV_KINDS`）上；
+#: 3. `file` 三档落点：理论定理行 = 包内相对；数值实验定理行 = 仓库根相对的程序；
+#:    例子 / 实验行按通道也一样是仓库根相对；
+#: 4. `doc.mapping_cells` 的空串有两种含义：通道为空（不适用）与「通道非空但这一档没有这一格」。
+MAPPING_DECLARATION_FACTS: dict[str, Any] = {
+    # 1. 凭据按通道：False = 不要求 E 先把它签成穷举（例子 / 实验的证明栏 ① 段就是凭据）。
+    "credential_requires_signature": False,
+    "credential_program_suffix": ".py",
+    # 空通道（证明栏 ① 段既没有程序也没有 Lean 源码）时凭据两格必须都空。
+    "empty_channel_requires_blank": True,
+    # 2. 附加义务的档位（现读 `papermapping` 的唯一口径，不在这里另抄一份名单）。
+    "additional_duty_kinds": tuple(PM.STATEMENT_ENV_KINDS),
+    # 3. `file` 的三档落点：(档位代号, 声明里的那句落点)。代号只给判据读行为用。
+    "file_tiers": (
+        ("theory", "理论定理行写论文包内的相对路径"),
+        ("numeric_theorem", "数值实验定理行写程序相对仓库根"),
+        ("example_by_channel", "例子/实验行按通道写也相对仓库根"),
+    ),
+    # 4. `cells` 空串的两种含义：(代号, 声明里的那句含义)。代号只给判据读行为用。
+    "empty_cell_meanings": (
+        ("empty_channel", "通道为空、这一格不适用"),
+        ("tier_not_present", "通道非空但这一档没有这一格"),
+    ),
+}
+
+#: 中文数量词：`file` 几档 / 空串几种含义按事实条数现算（别在这里另写一个「三」）。
+_NUM_CN: dict[int, str] = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五", 6: "六"}
+
+
+def _signature_clause(facts: Mapping[str, Any] | None = None) -> str:
+    """「凭据那份程序要不要 E 先签成穷举」那半句（声明与判据共用这一个开关）。"""
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    return ("要求 E 已把它签成穷举" if got["credential_requires_signature"]
+            else "不要求 E 已把它签成穷举")
+
+
+def _credential_sentence(facts: Mapping[str, Any] | None = None) -> str:
+    """凭据那一句：有程序就填那份 `.py`（签不签穷举由 :func:`_signature_clause` 说）。"""
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    return (f"凭据按通道：证明栏第 ① 段那份 `{got['credential_program_suffix']}` "
+            f"存在就填它（{_signature_clause(got)}）")
+
+
+def _duty_sentence(facts: Mapping[str, Any] | None = None) -> str:
+    """附加义务那一句：哪几格、只压在哪几类行上。"""
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    kinds = " / ".join(got["additional_duty_kinds"])
+    return ("附加义务按档位：`numeric_evidence` / `exhaustion_note` / 索引四格 / "
+            f"正文指回 E 只压定理类行（{kinds}）")
+
+
+def _file_tiers_sentence(facts: Mapping[str, Any] | None = None) -> str:
+    """`file` 的落点那一句（档数按事实条数现算）。"""
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    tiers = got["file_tiers"]
+    body = "；".join(line for _, line in tiers)
+    return f"`file` 有{_NUM_CN[len(tiers)]}种落点：{body}"
+
+
+def _empty_cells_sentence(facts: Mapping[str, Any] | None = None) -> str:
+    """`cells` 里空串的几种含义（种数按事实条数现算）。"""
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    meanings = got["empty_cell_meanings"]
+    body = "，或".join(line for _, line in meanings)
+    return f"空串有{_NUM_CN[len(meanings)]}种含义：{body}"
+
+
+def _mapping_declaration_texts(
+        facts: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """`doc.write_mapping` / `doc.mapping_cells` 的声明文案 —— 唯一渲染入口。
+
+    注册（`register`）与判据读的是同一份输出：改声明只能改
+    :data:`MAPPING_DECLARATION_FACTS`，不能在这儿另写一份字面量。
+    """
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    suffix = str(got["credential_program_suffix"])
+    kinds = " / ".join(got["additional_duty_kinds"])
+    signature = _signature_clause(got)
+    credential = _credential_sentence(got)
+    duty = _duty_sentence(got)
+    tiers = _file_tiers_sentence(got)
+    empty = _empty_cells_sentence(got)
+    blank_rule = ("通道为空（证明栏 ① 段既没有程序也没有 Lean 源码）时两格必须留空，"
+                  "填了受控拒绝"
+                  if got["empty_channel_requires_blank"] else
+                  "通道为空时两格可以填")
+    return {
+        "summary": (
+            "写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + "
+            "mapping-appendix.tex，并把 \\input 一行放进正文）。先写表、再写正文、"
+            "最后 paper_compile；md 与附录由 json 渲染，别手写。" + credential + "；"
+            + duty + "。" + tiers + "。"
+        ),
+        "file": "该条完整证明/实验所在的文件。" + tiers + "。",
+        "lean_file": (
+            "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填："
+            "numeric（证明栏第 ① 段是程序）以及例子/实验（证明栏第 ① 段是程序，"
+            f"{signature}）都填那份 `{suffix}` 程序（相对仓库根，必须与证明栏同一份）；"
+            "formal 填那份 `.lean`（项目根相对路径，如 code/formal/000004.lean；"
+            "包内写法 formal/000004.lean 也认）；" + blank_rule
+            + " —— 那时填了就是无依据的声称（没有通道就没有凭据，受控拒绝）"
+        ),
+        "numeric_evidence": (
+            "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。只定理类行（" + kinds
+            + "）在证明栏是程序时必填 —— 例子/实验不承担这一格（它们的凭据是证明栏"
+            f"第 ① 段那份 `{suffix}`）；通道为空时不许填（那是在自称有数值证据、"
+            "却没有数值证明通道）"
+        ),
+        "exhaustion_note": (
+            "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里"
+            "（相对仓库根，如 out/experiments/000000/exhaustion.md）；只定理类行（"
+            + kinds + "）在证明栏是程序时必填 —— 例子/实验不承担这一格；"
+            "通道为空时同样不许填"
+        ),
+        "returns": (
+            "{'project','json','md','appendix','rows','state','md_state',"
+            "'appendix_state','lean_state','lean','warnings','problems','reason'}；"
+            "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/ "
+            "unknown（没有正文，表没有可对的东西）；"
+            "只定理类行（" + kinds + "，且证明栏是程序）另写 `numeric_evidence` / "
+            "`exhaustion_note` 与索引四格：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / "
+            "正文那一段指不回 E，都会进 problems 并让 state 落到 fail"
+            "（工具随之 ok=False）；"
+            "lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— "
+            + blank_rule + "，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ "
+            "on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格"
+            "仍按通道判）/ "
+            "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"
+            "json / md / appendix 是三个落点的绝对路径；"
+            # 2026-10-28 成文门（业主口径「G 只能用研究产出」）：失败要多两格 ——
+            # `research_base` 是那条读数的全文（三态 + 逐格计数 + 缺哪一格），
+            # `next_steps` 是"怎么补 / 怎么上报"的人话清单。
+            "失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ "
+            "mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ "
+            "io_error（写盘失败）/ bad_project（项目根不在工作区里）/ "
+            "no_evidence_chain（研究成果不足，**一个字节都没写**）/ "
+            "ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 "
+            "research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，"
+            "字段名只有一处真身，见 researchbase.research_base）"
+            "与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
+        ),
+        "mapping_cells_returns": (
+            "{'ok','cells','sources','problems','channel','checked'}；"
+            "cells 的键 = file / lean_file / lean_target / numeric_evidence / "
+            "exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / "
+            "v_signature（只给拿得到的格；" + empty + "）；"
+            "sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / "
+            "`v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；"
+            "problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话："
+            "读不到 / 没签 / sha 不符 / 表里没有这一行）；"
+            "channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；"
+            "checked=False = 没查成（不是「这一行齐了」）；"
+            "失败：ok=False + kind=mapping_cells_incomplete（逐格读数仍在 cells / problems "
+            "里）/ bad_project（项目根不在工作区里）"
+        ),
+    }
+
+
+#: 声明文案的导入期快照：`_MAPPING_ROW_PARAMS` 的四个描述从它取。
+#: 写成模块级常量（而不是把 `_MAPPING_ROW_PARAMS` 做成函数）是因为
+#: `capabilities._resolve_const` 按源码 AST 解析嵌套的 `items` 常量 —— 函数调用会让
+#: 两层参数对账读不到 `items.type` / `items.required`（`tests/test_two_layer_constraints_*`）。
+_MAPPING_DECLARATION_TEXTS: dict[str, str] = _mapping_declaration_texts()
+
 #: 对应表一行的必填字段（与 `papermapping.ROW_FIELDS` 同源：那边的 schema 也不在这里
 #: 另写一份）。行的解析与校验一律走 `papermapping.parse_rows`。
+#: 四个描述由 :func:`_mapping_declaration_texts` 从 :data:`MAPPING_DECLARATION_FACTS` 渲染。
 _MAPPING_ROW_PARAMS: dict[str, Any] = {
     "type": "object",
     "properties": {
         "kind": {"type": "string", "enum": list(PM.ENV_KINDS),
                  "description": "正文里的环境种类（与那个 \\begin{...} 一致）"},
-        "label": {"type": "string", "description": "正文里 \\label{...} 的值（不带花括号）"},
+        "label": {"type": "string",
+                  "description": "正文里 \\label{...} 的值（不带花括号）"},
         "env_no": {"type": "integer", "minimum": 1,
                    "description": "正文里第几个该环境（按类计数，1 起）"},
         "ledger_id": {"type": "string",
-                      "description": "stmt:NNNNNN / exp:NNNNNN；多证明带 #pN（stmt:000004#p2）"},
+                      "description": "stmt:NNNNNN / exp:NNNNNN；多证明带 #pN"
+                                     "（stmt:000004#p2）"},
         "proof_no": {"type": "integer", "minimum": 1,
                      "description": "第几号证明：1 = canonical（行上的 proof_text）"},
         "file": {"type": "string",
-                 "description": "该条完整证明/实验所在的文件：理论定理行写论文包内的相对路径；"
-                                "数值实验定理行写程序相对仓库根的路径（如 code/r34_check.py，"
-                                "不在包里是正常的）"},
+                 "description": _MAPPING_DECLARATION_TEXTS["file"]},
         "lean_file": {"type": "string",
-                      "description": "机器核验凭据（这一格说的是「这条命题是百分百真的」），"
-                                     "按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 "
-                                     "E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；"
-                                     "formal 填那份 .lean（项目根相对路径，如 "
-                                     "code/formal/000004.lean；包内写法 formal/000004.lean 也认）；"
-                                     "通道为空时两格必须留空（不适用，不是没填）—— "
-                                     "填了就是无依据的声称（没有通道就没有凭据，受控拒绝）"},
+                      "description": _MAPPING_DECLARATION_TEXTS["lean_file"]},
         "lean_target": {"type": "string",
                         "description": "那份源码里哪个声明验了它（写源码里字面出现的名字，"
                                        "如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。"
@@ -2638,20 +2807,16 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                                        "数值程序没有 Lean 声明名，填了反受控拒绝"},
         "page_or_section": {"type": "string", "description": "给人看的定位（可缺省）"},
         "citation_loc": {"type": "object",
-                         "description": "引文的本地位置 {file, page_range|line_range|char_range}"},
+                         "description": "引文的本地位置 "
+                                        "{file, page_range|line_range|char_range}"},
         "citation_loc_reason": {"type": "string",
                                 "description": "不给 citation_loc 时那句理由"},
         # 数值实验定理那两格（业主 2026-10-23，E-1）：与 `papermapping.Row` 同一份口径，
         # 条件必填（定理类行、且那条命题的证明栏是程序）由读侧判，不在这里进 `required`。
         "numeric_evidence": {"type": "string",
-                             "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。"
-                                            "证明栏是程序的那几行必填；通道为空时不许填"
-                                            "（那是在自称有数值证据、却没有数值证明通道）"},
+                             "description": _MAPPING_DECLARATION_TEXTS["numeric_evidence"]},
         "exhaustion_note": {"type": "string",
-                            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境"
-                                           "落在哪一份读数里（相对仓库根，如 "
-                                           "out/experiments/000000/exhaustion.md）；"
-                                           "通道为空时同样不许填"},
+                            "description": _MAPPING_DECLARATION_TEXTS["exhaustion_note"]},
         # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文（F 的证明 / E 的报告）。
         # 名字与列义只有一份（`numericproof.INDEX_*`），这里只是把形状告诉模型。
         "evidence_kind": {"type": "string", "enum": list(NP.INDEX_KINDS),
@@ -2661,9 +2826,11 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                           "description": "正文在仓库里的相对路径（如 "
                                          "out/experiments/000000/exhaustion.md）"},
         "evidence_sha256": {"type": "string",
-                            "description": "那份文件字节的 sha256（不是文本归一化之后的）"},
+                            "description": "那份文件字节的 sha256"
+                                           "（不是文本归一化之后的）"},
         "v_signature": {"type": "object",
-                        "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"},
+                        "description": "{verdict, sha256}：V 的结论与它签的那一份的 "
+                                       "sha256"},
     },
     "required": ["kind", "label", "env_no", "ledger_id", "proof_no", "file"],
 }
@@ -2841,20 +3008,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
             side_effect="read",
             declared_external="none",
             roles=("G",),
-            returns=(
-                "{'ok','cells','sources','problems','channel','checked'}；"
-                "cells 的键 = file / lean_file / lean_target / numeric_evidence / "
-                "exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / "
-                "v_signature（只给拿得到的格；空串 = 通道为空、这一格不适用）；"
-                "sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / "
-                "`v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；"
-                "problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话："
-                "读不到 / 没签 / sha 不符 / 表里没有这一行）；"
-                "channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；"
-                "checked=False = 没查成（不是「这一行齐了」）；"
-                "失败：ok=False + kind=mapping_cells_incomplete（逐格读数仍在 cells / problems "
-                "里）/ bad_project（项目根不在工作区里）"
-            ),
+            returns=_mapping_declaration_texts()["mapping_cells_returns"],
             tags=("document", "paper", "mapping", "read"),
         )
     )
@@ -2894,14 +3048,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
     registry.register(
         ToolSpec(
             name="doc.write_mapping",
-            summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
-            "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
-            "md 与附录由 json 渲染，别手写。`lean_file` 按证明通道填（numeric ⇒ 证明栏那份 "
-            ".py、`lean_target` 留空；formal ⇒ .lean + `lean_target`；通道为空两格必须留空，"
-            "填了受控拒绝 —— 没有通道就没有凭据）。"
-            "`file` 有两种落点：理论定理行写包内相对路径，数值实验定理行写程序相对仓库根的"
-            "路径。数值定理那一行另写 numeric_evidence / exhaustion_note 与索引四格"
-            "（evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 缺任何一块都会拒。",
+            summary=_mapping_declaration_texts()["summary"],
             params={
                 "type": "object",
                 "properties": {
@@ -2918,32 +3065,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                                                              store=store),
             side_effect="write_local",
             roles=("G",),
-            returns=(
-                "{'project','json','md','appendix','rows','state','md_state',"
-                "'appendix_state','lean_state','lean','warnings','problems','reason'}；"
-                "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/"
-                "unknown（没有正文，表没有可对的东西）；"
-                "numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填："
-                "缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 "
-                "problems 并让 state 落到 fail（工具随之 ok=False）；"
-                "lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— 空通道两格"
-                "必须空，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ "
-                "on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格"
-                "仍按通道判）/ "
-                "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"
-                "json / md / appendix 是三个落点的绝对路径；"
-                # 2026-10-28 成文门（业主口径「G 只能用研究产出」）：失败要多两格 ——
-                # `research_base` 是那条读数的全文（三态 + 逐格计数 + 缺哪一格），
-                # `next_steps` 是"怎么补 / 怎么上报"的人话清单。
-                "失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ "
-                "mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ "
-                "io_error（写盘失败）/ bad_project（项目根不在工作区里）/ "
-                "no_evidence_chain（研究成果不足，**一个字节都没写**）/ "
-                "ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 "
-                "research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，"
-                "字段名只有一处真身，见 researchbase.research_base）"
-                "与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
-            ),
+            returns=_mapping_declaration_texts()["returns"],
             tags=("document", "paper", "write"),
         )
     )
