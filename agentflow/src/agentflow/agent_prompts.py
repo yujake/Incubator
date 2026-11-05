@@ -3290,8 +3290,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    `PAPER_PACK`（同一段里两套词混用 ⇒ 全部按等级）、Lean 关档的两处「产不出来」。
 #: ⑥ `agent_skills.py`：B / V / E / F / G 手册里的门槛、E 的「两档分野」表、三层证据、
 #:    断言的 `evidence_kind` 词表注（降为历史列）；`agent_e/_support.py` 实验列表那一句。
-#: ⑦ 文档面：`tools/write_system_docs.py` 生成器随 specs 重生成（`ROLE-GUIDE.md` /
-#:    `ROLE-SPECS.md` / `ROLE-SPECS-APPENDIX.md` 不许手改）。
+#: ⑦ 文档面：`docs/ROLE-GUIDE.md` 由 `tools/write_system_docs.py` 随 specs 重生成（不许手改）；
+#:    `ROLE-SPECS.md` / `ROLE-SPECS-APPENDIX.md` 不是该生成器的产物，本笔未动。
 #: 逐格旧值 → 新值（p242 → p243；Lean 开档口径，与 `conftest.py` 同一条）：
 #:   A 042615b3→b6fefb15 / B 82bb7841→2555d58b / C be898577→232128db /
 #:   D 21724439→1040f2aa / E dde7c0ab→d5472af2 / F 4692fecc→092feb37 /
