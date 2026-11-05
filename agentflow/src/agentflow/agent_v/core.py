@@ -2350,38 +2350,11 @@ class AgentV:
                                f"（{already.get('why')}）⇒ 不重复审、不重复写")}
         # ---- 三轮：每一轮都重读盘上那一份报告（机械会审，不问模型） ----
         need = review_pass_bound()
-        judged: list[dict[str, Any]] = []
-        passes: list[dict[str, Any]] = []
-        stopped = ""
-        reviewed: dict[str, Any] = {}
-        for n in range(1, int(need) + 1):
-            reviewed = _ER.review(workspace_root=self.workspace_root,
-                                  statement={"proof_text": body}, experiments=exp_rows,
-                                  # 钉到这份稿自己那条实验（`experiment_row` 优先于按程序反查）
-                                  experiment_row=row)
-            verdict = _ER.verdict_of(reviewed)
-            word = str(verdict.get("verdict") or "")
-            missing = [str(m) for m in (reviewed.get("missing") or [])]
-            missing_detail = missing_material_detail(verdict, missing)
-            if missing_detail:
-                self._emit(f"verify_proof(未在册·穷举)：第 {n} 转缺材料 —— 没查成（{missing}）")
-                return {"failed": True, "reason": MISSING_MATERIAL_REASON,
-                        "detail": missing_detail, "passes": passes, "manuscript": rel}
-            judged.append({"pass": n, "verdict": verdict})
-            passes.append({"pass": n, "verdict": word,
-                           "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
-                           "defect_step": verdict.get("defect_step"),
-                           "terminal": ""})
-            self._emit(f"verify_proof(未在册·穷举)：第 {n} 转 {word}"
-                       f"（{len(reviewed.get('checks') or [])} 项检查）")
-            if word != "成立":
-                stopped = "rejected"
-                passes[-1]["terminal"] = stopped
-                break
-        else:
-            stopped = "signed"
-            if passes:
-                passes[-1]["terminal"] = stopped
+        failure, judged, passes, stopped, reviewed = self._review_exhaustion_rounds(
+            body=body, exp_rows=exp_rows, row=row, rel=rel, need=need)
+        if failure is not None:
+            # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）
+            return failure
         at = _now_iso()
         last = judged[-1]["verdict"] if judged else {}
         verdict_word = "成立" if stopped == "signed" else VR.read_verdict(last)
@@ -2441,6 +2414,65 @@ class AgentV:
                               else (f"判「{verdict_word}」：负判不写手稿块，判词落 "
                                     f"`{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/`"
                                     f"（{pending.get('verification_id') or '没编号'}）")))}
+
+    def _review_exhaustion_rounds(
+        self, *, body: str, exp_rows: list, row: dict[str, Any] | None, rel: str,
+        need: int,
+    ) -> tuple[dict[str, Any] | None,
+               list[dict[str, Any]], list[dict[str, Any]], str, dict[str, Any]]:
+        """未在册穷举证明的机械会审：三轮都过才发签，返回 `(缺材料读数, judged, passes, stopped, reviewed)`。
+
+        ## 为什么是七项机械会审而不是逐行读
+        穷举证据的既定口径（`exhaustionreport.review`，2026-10-23）：它不按散文证明那样
+        逐行问模型，而是每一轮都重读盘上那一份报告（`out/experiments/<实验号>/exhaustion.md`
+        的 ②③ 读数）。门槛与 F 那条路同一个 `need`（`review_pass_bound()` ==
+        `verifications.SIGN_STREAK_NEED`）：一轮成立不算签，三轮都成立才算。
+
+        ## 三态（第一个返回值）
+        `None` = 这一趟审下来了，`stopped` 是 `"signed"` / `"rejected"`；
+        非 `None` = 某一轮缺材料 ⇒ 调用方原样返回它，那是「没查成」
+        （`reason=MISSING_MATERIAL_REASON`），不是负判 —— 负判是审了、结论不是成立。
+
+        ## `passes` 里的 `terminal`
+        只有最后一转带 `terminal`（签的那一转 / 判负的那一转）；中间那几转是空串。
+        `judged` 与 `passes` 一一对位（`judged[i]["verdict"]` 是第 i 转的判词整份读数）。
+        """
+        from .. import exhaustionreport as _ER
+
+        judged: list[dict[str, Any]] = []
+        passes: list[dict[str, Any]] = []
+        stopped = ""
+        reviewed: dict[str, Any] = {}
+        for n in range(1, int(need) + 1):
+            reviewed = _ER.review(workspace_root=self.workspace_root,
+                                  statement={"proof_text": body}, experiments=exp_rows,
+                                  # 钉到这份稿自己那条实验（`experiment_row` 优先于按程序反查）
+                                  experiment_row=row)
+            verdict = _ER.verdict_of(reviewed)
+            word = str(verdict.get("verdict") or "")
+            missing = [str(m) for m in (reviewed.get("missing") or [])]
+            missing_detail = missing_material_detail(verdict, missing)
+            if missing_detail:
+                self._emit(f"verify_proof(未在册·穷举)：第 {n} 转缺材料 —— 没查成（{missing}）")
+                return ({"failed": True, "reason": MISSING_MATERIAL_REASON,
+                         "detail": missing_detail, "passes": passes, "manuscript": rel},
+                        judged, passes, stopped, reviewed)
+            judged.append({"pass": n, "verdict": verdict})
+            passes.append({"pass": n, "verdict": word,
+                           "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
+                           "defect_step": verdict.get("defect_step"),
+                           "terminal": ""})
+            self._emit(f"verify_proof(未在册·穷举)：第 {n} 转 {word}"
+                       f"（{len(reviewed.get('checks') or [])} 项检查）")
+            if word != "成立":
+                stopped = "rejected"
+                passes[-1]["terminal"] = stopped
+                break
+        else:
+            stopped = "signed"
+            if passes:
+                passes[-1]["terminal"] = stopped
+        return None, judged, passes, stopped, reviewed
 
     def _issue_and_land_unregistered(self, *, rel: str, sha: str, streak: int,
                                      need: int, no: int,
