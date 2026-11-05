@@ -549,6 +549,31 @@ _LIMIT_PROP = {
 }
 _FILTER_PROP = {"type": "object", "description": "等值过滤：{字段: 期望值}；模糊匹配请用 table.search"}
 
+#: 字段投影参数（`table.list` 那一格叫 `fields`）。
+#:
+#: 为什么需要它（`temp/dep_probe/REPORT-dependency-surface.md` 第 4 条，2026-11-05 实测）：
+#: 50 行 `statements` = 250 KB（`proof_text` 全文就在行里），而 F 唯一便宜的清单是每轮
+#: 第 4.1 段（最多 20 条、只收 `proof_review` 及以上）—— 想"浏览一下台账里有什么"的代价
+#: 是 250 KB 级。有搜索、没有浏览，这是"查得到但不顺手"的最后一件。
+_PROJECTION_PROP = {
+    "type": "array",
+    "items": {"type": "string"},
+    "minItems": 1,
+    "description": ("字段投影：只回这几个键（例如 statements 的 "
+                    "stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，"
+                    "含 proof_text 全文）"),
+}
+#: 同一件事在 `table.search` 那一格的名字叫 `select`：它的 `fields` 已经是"搜哪些字段"，
+#: 两个含义不能共用一个参数名（改 `fields` 的语义就是改既有调用方的行为）。
+#: 两者都只做一件事：投影 —— 只回这些键。
+_SELECT_PROP = {
+    "type": "array",
+    "items": {"type": "string"},
+    "minItems": 1,
+    "description": ("字段投影（与 table.list 的 `fields` 是同一件事）：只回这几个键；"
+                    "省略=整行。注意它不参与搜索：搜哪些字段仍由 `fields` 决定"),
+}
+
 
 def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
     """构造 object 根 schema 的小工具（`additionalProperties=False` 让拼错的参数立刻报错）。"""
@@ -1476,6 +1501,49 @@ def _route_to_lit_backstop(ctx: TableContext, *, entry: str, intent: str,
 # ---------------------------------------------------------------- 工具实现
 
 
+#: 读侧派生格的键（`_with_proof_routes` 现算的那几格）：投影可以点名它们，
+#: 否则"我只想看命题的名字与路线"这件事在 `table.list` 上做不到。
+_DERIVED_ROW_KEYS: dict[str, tuple[str, ...]] = {
+    "statements": ("route", "proof_routes", "proof_routes_problem"),
+}
+
+
+def _projection_problem(table: str, names: Sequence[str] | None, *,
+                        derived: bool) -> str:
+    """投影参数的名字判据：回空串 = 都认得，回一句可读拒信 = 不许这么投。
+
+    三态纪律：名字认不出就受控拒绝，不许"悄悄少一格"（那会让调用方以为台账里没有这字段）；
+    空列表也拒 —— 它会把每一行删成 `{}`，与"省略投影（整行）"是两件完全不同的事。
+    `derived` 决定要不要把读侧派生格算进可用名：`table.list` 会补那几格，`table.search` 不会。
+    """
+    if names is None:
+        return ""
+    allowed = set(_field_names(table))
+    if derived:
+        allowed |= set(_DERIVED_ROW_KEYS.get(table, ()))
+    given = [str(x) for x in names]
+    if not given:
+        return (f"投影参数是空列表 ⇒ 每一行都会被删成空字典；要么省略它（整行），要么"
+                f"给出要回的字段（{table} 的可用字段：{sorted(allowed)}）")
+    bad = sorted({name for name in given if name not in allowed})
+    if bad:
+        return (f"{table} 没有字段 {bad}；可投影的字段：{sorted(allowed)}"
+                "（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）")
+    return ""
+
+
+def _project_row(row: Mapping[str, Any], fields: Sequence[str] | None) -> dict[str, Any]:
+    """只留 `fields` 点到的键（`None` ⇒ 整行原样 —— 默认形态一个字都不动）。
+
+    键一个不多、一个不少：`set(结果) == set(fields)`。值取 `row.get`：投影到的那一格
+    若这一行本来就没有（`proof_routes_problem` 只在算不出来时才有），如实给 `None`，
+    而不是"这一行少一个键"（少键会让调用方以为这张表没有这个字段）。
+    """
+    if fields is None:
+        return dict(row)
+    return {str(name): row.get(name) for name in fields}
+
+
 def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
     """`statements` 行的读侧派生格：这一份证明走的是哪条路（读侧接线点）。
 
@@ -1517,6 +1585,7 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
             "limit": _LIMIT_PROP,
             "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "跳过的行数"},
             "filter": _FILTER_PROP,
+            "fields": _PROJECTION_PROP,
         },
         required=("table",),
     ),
@@ -1534,8 +1603,9 @@ def table_list(
     limit: int = LIST_LIMIT_DEFAULT,
     offset: int = 0,
     filter: Mapping[str, Any] | None = None,
+    fields: Sequence[str] | None = None,
 ) -> ToolResult:
-    """列表 + 总数。
+    """列表 + 总数（`fields` 给了就只回这几个键，见 :func:`_projection_problem`）。
 
     `total` 是过滤后的总数而不是本页条数：调用方要靠它判断"还有没有下一页"，
     只给 `len(rows)` 的话分页逻辑只能靠"这页是不是满的"来猜，最后一页正好装满时会多跑一轮。
@@ -1544,22 +1614,33 @@ def table_list(
         _spec_of(table)
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
+    problem = _projection_problem(table, fields, derived=True)
+    if problem:
+        return fail(problem, table=table, kind="param_error")
     matched = _match_filter(_rows(ctx, table), filter)
     page = matched[offset : offset + limit]
+    # 默认路径（`fields is None`）逐字保留改前的样子：整行 + `statements` 的派生格。
+    rows = [_with_proof_routes(table, row) for row in page]
+    data: dict[str, Any] = {
+        "table": table,
+        "rows": rows,
+        "total": len(matched),
+        "returned": len(page),
+        "limit": limit,
+        "offset": offset,
+    }
+    if fields is not None:
+        # 投影只改"每一行回哪几个键"，不改 data 的键（调用方的分页逻辑不用跟着改）；
+        # 只回投影的名字，另落一格读数 —— 否则"这一页为什么这么小"在返回里看不出来。
+        data["rows"] = [_project_row(row, fields) for row in rows]
     return ok(
-        {
-            "table": table,
-            "rows": [_with_proof_routes(table, row) for row in page],
-            "total": len(matched),
-            "returned": len(page),
-            "limit": limit,
-            "offset": offset,
-        },
+        data,
         table=table,
         total=len(matched),
         returned=len(page),
         offset=offset,
         limit=limit,
+        **({"fields": list(fields)} if fields is not None else {}),
     )
 
 
@@ -1982,6 +2063,7 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
             "table": _TABLE_PROP,
             "query": {"type": "string", "minLength": 1, "description": "要查找的子串（不做正则解释）"},
             "fields": {"type": "array", "items": {"type": "string"}, "description": "限定字段；省略=全部标量字符串字段"},
+            "select": _SELECT_PROP,
             "limit": {
                 "type": "integer",
                 "minimum": SEARCH_LIMIT_MIN,
@@ -2004,13 +2086,17 @@ def table_search(
     table: str,
     query: str,
     fields: Sequence[str] | None = None,
+    select: Sequence[str] | None = None,
     limit: int = SEARCH_LIMIT_DEFAULT,
 ) -> ToolResult:
-    """子串搜索。
+    """子串搜索（`select` 给了就只回这几个键，见 :func:`_projection_problem`）。
 
     刻意不做正则：这是数据面的"找一找"，正则属于文本面（`fs.search`）。
     大小写不敏感用 `casefold()` 而不是 `lower()` —— 后者对某些语言（如德语 ß）会漏匹配，
     而"大小写不敏感"的承诺必须是字面成立的。
+
+    `fields` 与 `select` 是两件事，别混：前者说"搜哪些字段"，后者说"回哪几个键"。
+    合并成一个名字会让"只想看 id 与名字"的调用方被迫改搜索范围。
     """
     try:
         _spec_of(table)
@@ -2024,6 +2110,9 @@ def table_search(
         return fail(f"{table} 没有字段 {bad}；可用字段：{sorted(known)}", table=table, kind="param_error")
     if not scanned:
         return fail(f"{table} 没有可用于子串搜索的标量字符串字段；请用 fields 显式指定", table=table, kind="param_error")
+    problem = _projection_problem(table, select, derived=False)
+    if problem:
+        return fail(problem, table=table, kind="param_error")
 
     needle = query.casefold()
     hits: list[dict] = []
@@ -2042,6 +2131,9 @@ def table_search(
             rid = str(row.get(_spec_of(table)["id_field"]))
             matched[rid] = found_in
     page = hits[:limit]
+    if select is not None:
+        # 投影只动"每一行回哪几个键"：`fields` 仍是本次实际扫描的字段名，分页读数不变。
+        page = [_project_row(row, select) for row in page]
     return ok(
         {"table": table, "query": query, "fields": scanned, "rows": page, "total": len(hits), "returned": len(page)},
         table=table,
@@ -2049,6 +2141,7 @@ def table_search(
         returned=len(page),
         matched_fields=matched,
         truncated=len(hits) > len(page),
+        **({"select": list(select)} if select is not None else {}),
     )
 
 
