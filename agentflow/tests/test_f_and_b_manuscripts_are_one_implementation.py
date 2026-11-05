@@ -512,3 +512,109 @@ def test_e_there_is_no_second_implementation_to_come_back() -> None:
         "`bmanuscript.py` 又长出了自己的编号正则")
     assert "re.compile" not in af.read_text(encoding="utf-8"), (
         "`agent_f/manuscript.py` 又长出了自己的形状正则")
+
+
+# ------------------------------------------------------------------ a-真入口（走查 D4）
+#
+# 2026-11-05 走查 walk-e2e 的 D4：改前的 a 只测 `land_rewrite` 直调，而运行期
+# `B.register_statement` 只把 `label` 递给落稿函数 ⇒ 真落下来的 b-稿缺 `- 计划：`、
+# 缺洗稿行、还多一行 `- 标签：`（与 f-族不是同一个骨架）。这一条改走两个真实入口：
+# F 的 `proof_manuscript` → `publish_manuscript` 落 f-稿；B 的 `register_statement`
+# 拿同一份稿落 b-稿；两稿除标题里的角色名外逐字比。
+
+def _role_only(text: str) -> str:
+    return _role_normalized(text)
+
+
+def _no_cite_product() -> dict:
+    """不引用任何在册命题的证明（这样稿里是空依赖表，不用抬被引命题的档位）。"""
+    return {"product": "proof", "strategy": "直接计算", "why_strategy": "由定义与假设直接得到",
+            "steps": [{"n": 1, "text": STEP_TEXT, "cites": [], "assumption": False}]}
+
+
+def _stamp(st: Store, rel: str, *, sid: str, body: str) -> None:
+    """把一张盖住 body 的 V 签块写进稿里（B 的无签闸要它；不落台账）。"""
+    path = pathlib.Path(st.root) / rel
+    text = path.read_text(encoding="utf-8")
+    path.write_text(VS.stamp_manuscript_sign(
+        text, proof_sha=VR.proof_sha(body), streak=VR.SIGN_STREAK_NEED,
+        need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
+        ledger=f"verifications/{sid}.jsonl#v-000003",
+        statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
+
+
+def _real_entries_run(st: Store) -> tuple[str, str, str]:
+    """跑一遍真实入口：返回 (f-稿签之前的全文, b-稿全文, b-稿路径)。"""
+    from agentflow.agent_b import AgentB
+
+    proposition = PROPOSITION
+    _seed(st, SID)
+    row = next(dict(r) for r in st.rows("statements")
+               if str(r.get("stmt_id")) == SID)
+    row["statement_full"] = proposition
+    row["statement_text"] = proposition
+    row["proof_text"] = "旧正文（B 要改写的那一版）。"
+    with st.tx("statements", actor="test", note="fixture:d4") as tx:
+        tx.upsert("statements", row)
+
+    f = AgentF(st, config={"workspace_root": st.root})
+    got = f.proof_manuscript(_no_cite_product(),
+                             sg={"sid": SGID, "text": proposition, "testable": ""},
+                             plan={"plan_id": PLAN})
+    assert got.get("ok") is True, got
+    # F 的秘书在 proof_manuscript 之后、publish 之前洗一遍（真实入口的次序）。
+    got["text"] = DS.mark_washed(str(got["text"]), actor="secretary-F")
+    published = f.publish_manuscript(got, statement_id=SID)
+    assert published.get("published") is True, published
+    rel_f = str(published["path"])
+    f_unsigned = (pathlib.Path(st.root) / rel_f).read_text(encoding="utf-8")
+    body = DS.proof_body(f_unsigned).strip("\n")
+    # B 的入库闸要一份盖住正文的签（签块在稿上；签另算）。
+    _stamp(st, rel_f, sid=SID, body=body)
+
+    out = AgentB(st, extractor=None, extract_text=None).register_statement(
+        statement_full=proposition, statement_text=proposition,
+        origin="own_result", kind="conjecture", label=proposition,
+        proof_text=body, proof_manuscript=rel_f, evidence_kind="heuristic",
+        doc_id="000000", line_range={"start": 1}, quote_verified=False,
+        quote_reason="判据夹具：自产命题")
+    assert out.get("ok") is True, out
+    rel_b = str((out.get("b_manuscript") or {}).get("path") or "")
+    assert rel_b == f"reports/b-proof-{SID}.md", out
+    return f_unsigned, _read(st, rel_b), rel_b
+
+
+def test_a2_the_real_entries_land_the_same_manuscript(tmp_path: pathlib.Path) -> None:
+    """D4 a：经 `B.register_statement` 落的 b-稿与经 `F.publish_manuscript` 落的 f-稿
+    逐字相同（只差标题里的角色名）。"""
+    st = _ws(tmp_path)
+    f_unsigned, b_text, _rel_b = _real_entries_run(st)
+    assert _role_only(f_unsigned) == _role_only(b_text), (
+        "两族经真实入口落下来的稿不是同一个骨架：\n--- F ---\n"
+        f"{f_unsigned}\n--- B ---\n{b_text}")
+    # 三行页头与三节都在（改前 B 缺 `- 计划：` / 洗稿行、多 `- 标签：`）
+    for mark in ("- 命题号：stmt:", "- 计划：", "- 依赖面洗稿：", "- 证明号："):
+        assert mark in b_text, (mark, b_text.split("\n")[:8])
+    assert "- 标签：" not in b_text, b_text.split("\n")[:8]
+
+
+def test_a2b_reverse_vacuum_dropping_the_three_arguments_makes_it_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D4 b：把 `plan_id` / `sid` / `wash_actor` 从调用点摘掉 ⇒ a 变红。"""
+    from agentflow import bmanuscript as BM
+
+    real = BM.header_reading
+
+    def _without_three(text):
+        got = dict(real(text))
+        got.update(plan_id="", sid="", wash_actor="", wash_filled="")
+        return got
+
+    monkeypatch.setattr(BM, "header_reading", _without_three)
+    st = _ws(tmp_path)
+    f_unsigned, b_text, _rel_b = _real_entries_run(st)
+    assert _role_only(f_unsigned) != _role_only(b_text), (
+        "摘掉 plan_id / sid / wash_actor 之后两稿仍逐字相同 ⇒ a 的绿不是那三样给的")
+    # c：f-族自己的稿一个字不许变（同一份渲染，b 侧的参数改动不回写 f）
+    assert "- 计划：" in f_unsigned and "- 依赖面洗稿：" in f_unsigned, (
+        f_unsigned.split("\n")[:8])
