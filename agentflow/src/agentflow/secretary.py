@@ -6824,9 +6824,9 @@ class Secretary:
         什么由 `wash_working_name` 的三级兜底决定（剩下一截 / 正文里的第一句 / 待命名），
         读数在 `label_washed` 里逐条给「原标签 → 洗过的名字 + 触发了哪一类」。
         ## `candidate_id`：把稿名 / 稿头的号当候选号（D2 口径①，2026-11-05）
-        B 在"新建"这一档把稿名 / 稿头算出来的号当候选交进来：**可用就用它发号**
-        （并 `raise_counter_to` 把计数器抬到它之后，下一笔不会又撞）；**已被占 ⇒ 受控
-        拒绝 `stmt_id_taken`，不另发一个号**（改前是静默另发 ⇒ 稿 000001、命题 000000，
+        B 在"新建"这一档把稿名 / 稿头算出来的号当候选交进来：可用就用它发号
+        （并 `raise_counter_to` 把计数器抬到它之后，下一笔不会又撞）；已被占 ⇒ 受控
+        拒绝 `stmt_id_taken`，不另发一个号（改前是静默另发 ⇒ 稿 000001、命题 000000，
         第 5 步 `manuscript_owner_mismatch`、扫盘 `b-register@000001@…` 的义务永远关不上）。
         不给 ⇒ 与改前逐字一致（按计数器发）。
         ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）：派活洗不动可以原样发出去，让下游闸门去拒
@@ -7758,11 +7758,11 @@ class Secretary:
             # 过渡期的号空间只有一个权威（老表还在时是 `concept`，迁移之后是 `stmt`）
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else stmt_kind)
-            # ---- D2（2026-11-05 走查）：稿名 / 稿头的号当候选号，**不另发一个** -------
+            # ---- D2（2026-11-05 走查）：稿名 / 稿头的号当候选号，「不另发一个」 -------
             #
             # 现场（`temp/e2e-sign-20261105-b` 主链）：稿名 / 稿头是 000001，而计数器从 0
             # 起 ⇒ 登记拿到 000000。第 4 步靠"新命题还没有号"使 owner 判据短路才过；
-            # 第 5 步同一条命令就撞 `manuscript_owner_mismatch`；收工扫盘按**稿名**开
+            # 第 5 步同一条命令就撞 `manuscript_owner_mismatch`；收工扫盘按「稿名」开
             # `b-register@000001@…` 的义务永远收不了口（`reconcile_registrations` left=1）。
             #
             # 口径①（业主 2026-11-05 选定）：候选号可用 ⇒ 就用它（并把计数器抬到它之后，
@@ -11749,12 +11749,12 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
 
     ## 账（2026-11-05，缺陷 3：这条缝没接电表）
 
-    改前这一处造缝只传了 `owner_role/session_root/sid`，**没传 `meter=`** —— 而
+    改前这一处造缝只传了 `owner_role/session_root/sid`，没传 `meter=` —— 而
     `LlmSeam.for_secretary` 的 `**kw` 本来就支持它。后果是每条秘书判定都在
     `llmseam._charge_ledger` 的第一道闸上落 `{"charged": False, "reason": "no_meter"}`：
     现场 `temp/_five_verify_20261105/ws02/sessions/20261105.jsonl` 里 3 条 `llm_call`、
-    `$0.002101`，而 `usage_ledger` 是 **0 行** —— 这笔钱在 `reconcile_usage` 里既不是
-    已归口、也不是 `unattributed`，是**没有下落**。
+    `$0.002101`，而 `usage_ledger` 是 0 行 —— 这笔钱在 `reconcile_usage` 里既不是
+    已归口、也不是 `unattributed`，是没有下落。
 
     所以这里按"有账本就必须接上"取值：`meter` 显式给了就用；没给而有 `store` ⇒
     现造 `TokenMeter(store)`；两样都没有（单测里的裸缝 / 没有工作区可落账）⇒
@@ -11762,7 +11762,7 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
     接上之后每一笔都进账：在召唤上下文里 ⇒ 记到那次召唤的 `task_id` 上（并由
     `TokenMeter._sync_task_usage` 回写 `tasks.usd`）；不在任何召唤里 ⇒ `task_id=None`
     且 `note` 写明 `unattributed`，由 `reconcile_usage` 单列一栏点名 ——
-    三态纪律：**发了请求的钱只有"已归口"与"点名说清为什么归不了"两种，没有第三种**。
+    三态纪律：发了请求的钱只有"已归口"与"点名说清为什么归不了"两种，没有第三种。
     """
     if seam is not None:
         return seam, "body（调用方给的缝）"
