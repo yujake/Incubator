@@ -116,7 +116,12 @@ B_STEPS: tuple[tuple[str, str], ...] = (
 M_DISPATCH: tuple[str, str] = ("M 的动作为派 B（M→B）", "你的动作是派 B")
 
 #: 判据 2 里"升级路径"那一步的锚点（缺陷严重 ⇒ B 通知 D 开展研究）。
-B_ESCALATION = "escalate_proof_research"
+#:
+#: 2026-11-05（审计② 第 ⑪ 条）：原来锚的是 `escalate_proof_research` —— 那是
+#: `AgentB` 上的一个方法，**不在 `CAPABILITIES["B"]` 的 7 件动作里**，模型照它
+#: 调只会拿到 `unknown_action`。改锚到模型真能走的入口：`summon` 形状派 D
+#: （`B → D` 是直接边）。方法本身仍在（`agent_b/proof_research.py`），不动动作面。
+B_ESCALATION = "用 `summon` 形状直接派 D"
 
 #: 判据 3 的尺子：非 B 角色的提示词里不许再拿"禁止自己做形式化"顶替权限判断。
 #: 这一族句子的共同形态是"别 / 不要 + 动作"，而它管的事（越权、伪造、越界）由判据钉住：

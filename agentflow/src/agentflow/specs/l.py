@@ -191,7 +191,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "形式化 ≠ 审过，命题升档仍然要 V 的那一签。proof_no 记这一行绑的是第几份证明"
         "（号不在册 / 多路径未给号 ⇒ 受控拒绝，一行都不写）、path_id 记 C 给那条路径的显示名、"
         "proof_sha256 是这一份正文的指纹（读侧拿它与现行正文比，不符就是「验过、过期了」）、"
-        "path_source 记这个号是谁选的",
+        "path_source 记这个号是谁选的。只收 `.lean`（`code_path` 不是 .lean ⇒ 受控拒绝 "
+        "`artifact_not_lean`）；数值脚本不归你，走 E 的 `run_experiment`",
         # 参数与工具面 `formal.record` 逐名同类型（两层对账第 [9] 条逐个比）。
         # `status` / `verified` 是"调用方看到的读数"，只用于对账（不采信）：
         # 采信它们等于让 `evidence_kind="proof"` 变成可随手搬运的标签。

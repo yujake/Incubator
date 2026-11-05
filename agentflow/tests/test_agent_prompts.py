@@ -1870,17 +1870,18 @@ def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistr
     （`agent_prompts.loop_protocol_for`）—— 主控那一版仍是 `LOOP_PROTOCOL` 本身，其余九个少掉三块只有
     M 用得到的文本，其中 [c] 就是 `2b) summon_many` 那一段。
     于是成立的替换命题：每个角色的提示词里都有它那一版协议的整张形状表（逐字节等于
-    `loop_protocol_for(role)` 里那一段）；`agent_loop.SHAPES` 里被它漏掉的形状恰好是 `summon_many`，
-    且只有非 M 会漏。这个缺口不是静默放过：下面那半句逐字钉住（多缺一个/少缺一个都红），而
-    `summon_many` 的形状骨架仍由 `agent_loop.JSON_TAIL` 在每一步发给所有人（撤的只是"对 M 说的那一段
-    说明"）。`R6` §2-⑥ 的作用域更正（2026-10-07，主控裁定）：会缺它的不是"所有非 M"，而是出边为空、
-    一个伙伴都唤不动的角色（`_summon_capable_roles` 从 `capabilities.ALLOWED_EDGES` 现算；今天只有 C）。"""
+    `loop_protocol_for(role)` 里那一段）；`agent_loop.SHAPES` 里被它漏掉的形状恰好是 `summon` 与
+    `summon_many`，且只有出边为空的角色会漏。这个缺口不是静默放过：下面那半句逐字钉住（多缺一个/
+    少缺一个都红），而这两个形状的骨架仍由 `agent_loop.JSON_TAIL` 在每一步发给所有人（撤的只是
+    "对没有协作边的角色说的那段用法说明"）。`R6` §2-⑥ 的作用域更正（2026-10-07，主控裁定）：会缺它的
+    不是"所有非 M"，而是出边为空、一个伙伴都唤不动的角色（`_summon_capable_roles` 从
+    `capabilities.ALLOWED_EDGES` 现算；今天 C / V）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         seg = _shape_table(AP.loop_protocol_for(role))
         assert seg in text, f"{role} 的提示词里没有它那一版协议里的形状表那一段"
         missing = [n for n in AL.SHAPES if not re.search(rf'"{re.escape(n)}"', text)]
-        want_missing = [] if role in _summon_capable_roles() else ["summon_many"]
+        want_missing = [] if role in _summon_capable_roles() else ["summon", "summon_many"]
         assert missing == want_missing, (
             f"{role} 的形状表缺的形状是 {missing}，而它那一版协议该缺的是 {want_missing} —— "
             "这一版协议与 `agent_loop.SHAPES` 分家了（多缺一个形状等于那种形状在这一版里"
@@ -1951,13 +1952,50 @@ _BLOCK_C = '''\
    所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。'''
 
+#: 出边为空的角色用不到的两块（`2)` 派活骨架 / `2b)` 一次唤起一批）。
+#:
+#: 与 `_BLOCK_A`/`_BLOCK_B`/`_BLOCK_C` 同一条纪律：逐字副本，不读被测常量。
+_BLOCK_2 = '''\
+2) 唤起一个伙伴去做一件事（`role` 写**伙伴表里那个角色名**，不是角色级通配）：
+   {"summon": {"role": "<伙伴表里的角色名>", "task": "<要它干什么：一件可判定的活；可捎上你的起手建议>",
+               "params": {<交给它的结构化数据：材料路径、编号、口径这类；不点动作 ⇒ 没有参数表可核>}, "why": "<一句话说明为什么找他>",
+               "brief": "<一句任务简介，单行、不超过 60 字>",
+               "name": "<可选：名册标签，不是职责编码；写成 probe-a-1 这种一眼看得出是标签的样子>",
+               "reuse": "<可选：复用已有子代理时写它的名册标签（上一次 name 给的那一个）>"}}
+   这一形**没有 `action` 那一格**（业主口径 S2：一致改成 `task` 必填、动作不填）：派活只写
+   "做什么"，由接活的人按自己的工具面自己选动作。所以 `params` 不是"动作参数表"里那一套 ——
+   它是你顺手交给它的结构化数据（材料路径、编号、口径），核不了对错也不会因为写了它被拒。
+   名册（业主口径）：**造一个新子代理就给一句 `brief`** —— 它进名册，退役时读的人靠它认人；
+   **复用已有的子代理也要给一句 `brief`**（名册登记先看简介、再看 `reuse`：只给 `reuse`
+   那一笔名册绑定不落，读数 `roster_problem` 里会写明，**而这次派活照样进行**）；
+   要给**已有的**子代理再派一件活就写 `reuse:"D1"`（复用**不新增名册项**，只多一次调用）；
+   父可以自己提名（`name`），也可以只给角色由秘书分配 —— 名字一经分配**不再改**
+   （名字被占用或已销号 ⇒ 被受控拒绝的是**那一笔名册登记**：这次派活照跑、名字不落、
+   读数里写明理由；别自己换一个名字硬发）。但**它不会因此永久无名**：这一次**真跑完**
+   之后，收口时的兜底会给它补一个**从未用过的新名字**（名册行里留着 `requested_name`
+   与 `refusal_code`：你当初点的那个名字、为什么没落），下次看名册就知道它叫什么；
+   没跑过的号（被并发 / 深度 / 扇出这类闸拒掉的）永远不会拿到名字。
+   要点名时先 `{"roster": {"of": "self"}}` 看一眼活跃名册（名字 · 简介 · 状态 ·
+   在飞几件）；要某一个子代理**停下当前那一轮**就用 `{"interrupt": {"name": "D1"}}`
+   （只停它那一轮：排队消息还在、它自己的子代理继续跑），**不要用全局叫停**。
+   主控（M）派活时**留痕**：这一句里可以带一张 `notify` 表
+   （`{"summary": "<一句话：派了什么活>", "body": "<markdown>", "refs": [...]}`，`to` 可省略，
+   缺省就是被派的那个角色），框架会把它交给秘书写成一份交接手稿并发给对方；
+   不带或填错也**照样派活** —— 留痕退回框架据派活本身派生的那一行
+   （"谁派了谁做什么、参数、为什么"，注明"框架据派活派生"：那一行是日志，不算交接），
+   格式问题如实记进这一次运行。别的角色派活不必带。'''
+
+#: `_BLOCK_2` 里 A 之前的那一段（非 M 的派活骨架：A 会被单独摘掉，所以只切前半）。
+_BLOCK_2_HEAD = _BLOCK_2.split(_BLOCK_A)[0]
+
 #: 出边为空的角色那一版里 `2b)` 的残桩（判据自己那份逐字副本）。
 #:
 #: 为什么是残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文
 #: （不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）。整块删掉之后，
 #: 这一档会读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住表头与 8 项枚举的自洽。
-_STUB = ("2b) 一次唤起一批（这一档你用不到：你没有任何协作边，派不出活 —— "
-         "骨架见每步的 JSON 尾巴）。")
+_STUB = ("2) 唤起一个伙伴：**这一档你用不到** —— 你没有任何协作边，派不出活"
+         "（骨架仍见每步的 JSON 尾巴）。\n\n"
+         "2b) 一次唤起一批：同上 —— 你没有任何协作边，一个伙伴都唤不动。")
 
 
 def _summon_capable_roles() -> list[str]:
@@ -2014,7 +2052,10 @@ def _blank_block(protocol: str, block: str) -> str:
 #: 外加"整块清空、不留残桩"的那一版 —— 它只用来做反负控（那是作用域更正前那一版的形状）。
 _WITHOUT_CONDUCTOR_BLOCKS = _excise(AP.LOOP_PROTOCOL, (_BLOCK_A + "\n", _BLOCK_B + "\n"))
 _WITHOUT_ALL_THREE = _blank_block(_WITHOUT_CONDUCTOR_BLOCKS, _BLOCK_C)
-_WITH_STUB = _WITHOUT_CONDUCTOR_BLOCKS.replace(_BLOCK_C, _STUB, 1)
+_WITH_STUB = _excise(
+    AP.LOOP_PROTOCOL.replace(_BLOCK_2 + "\n\n" + _BLOCK_C + "\n\n",
+                             _STUB + "\n\n", 1),
+    (_BLOCK_B + "\n",))
 
 
 def _roles_with_block(block: str, registry: ToolRegistry) -> list[str]:
@@ -2061,20 +2102,21 @@ def test_the_conductor_blocks_reach_only_the_conductor(
 
 def test_the_summon_many_block_reaches_every_role_that_can_summon(
         registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
-    """[c] `2b)` 那一段：出边非空的角色拿到整段说明，出边为空的角色拿到残桩。
+    """2) 与 2b) 那两段：出边非空的角色拿到整段说明，出边为空的角色拿到两行残桩。
 
-    作用域是主控 2026-10-07 更正过的那一条：不是"所有非 M"，而是"一个伙伴都唤不动的角色"——今天只有 C
+    作用域是主控 2026-10-07 更正过的那一条：不是"所有非 M"，而是"一个伙伴都唤不动的角色"——今天 C / V
     （`ALLOWED_EDGES["C"]` 是空的）。判据按真身现算（`capabilities.ALLOWED_EDGES`），不写死角色名。
     2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原形态恢复（2026-10-19 那一版为 C→D
     临时改用过合成角色；"出边为空"那一档又回到真实角色 C）。
 
-    留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）；整块删掉后这一档读到"八种"却只数得出 7 项 ——
-    描述与自身矛盾。残桩保住表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
+    留残桩而不是整块删：表头「十一种形状，互斥，每次只取其一：」是常量自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 11 个）；整块删掉后这一档读到"十一种"却只数得出 9 项 ——
+    描述与自身矛盾。残桩保住表头为真、枚举仍是 11 项，而 2) 与 2b) 的用法说明不再进这一档的提示词。
     反真空：至少一个角色拿到整段（八个非 M），且出边为空的那个拿到的是残桩；反负控四端都走真渲染：
     ① 恒真（谁拿的都是全量协议）⇒"该没有的没有"红；② 恒假（[c] 换残桩那版发给所有人）⇒"主控含整段"
     红；③ 旧作用域（把 [c] 当成 M 专段）⇒"该有的有"红；④ 整块删、不留残桩 ⇒"出边为空的有残桩"红。"""
     m = _prompt(S.CONDUCTOR_ROLE, registry)
     assert _BLOCK_C in m, "反真空：主控那一版里没有 2b 整段 ⇒ 下面的断言证明不了任何事"
+    assert _BLOCK_2 in m, "反真空：主控那一版里没有 2) 整段 ⇒ 下面的断言证明不了任何事"
     capable, edgeless = _summon_capable_roles(), _edgeless_roles()
     assert capable, "反真空：没有任何角色有出边 ⇒ 这一条判据失去对象"
     assert edgeless, "反真空：没有出边为空的角色 ⇒ 这一条判据失去对象"
@@ -2082,8 +2124,11 @@ def test_the_summon_many_block_reaches_every_role_that_can_summon(
     assert _roles_with_block(_BLOCK_C, registry) == capable, (
         f"2b 整段该给这些角色：{capable}；实际给的是：{_roles_with_block(_BLOCK_C, registry)}；"
         f"出边为空的角色（{edgeless}）不该有它")
+    assert _roles_with_block(_BLOCK_2_HEAD, registry) == capable, (
+        f"2) 整段该给这些角色：{capable}；实际给的是：{_roles_with_block(_BLOCK_2_HEAD, registry)}；"
+        f"出边为空的角色（{edgeless}）不该有它")
     assert _roles_with_block(_STUB, registry) == edgeless, (
-        f"2b 残桩该给这些角色：{edgeless}；实际给的是：{_roles_with_block(_STUB, registry)}")
+        f"2) / 2b) 残桩该给这些角色：{edgeless}；实际给的是：{_roles_with_block(_STUB, registry)}")
     for role in edgeless:
         assert _STUB in _prompt(role, registry), f"{role} 那一版里没有 2b 残桩"
 
@@ -2124,8 +2169,8 @@ def test_each_rendered_protocol_is_exactly_the_constant_minus_its_own_blocks(
     （而主控那一版照样逐字节不变、没有任何读数会红）。这条判据把"只搬这几块"
     这句话变成可判的：判据用它自己那三份副本算三版，两边必须逐字节相同。
 
-    三版（作用域不同）：出边非空的那八个少 319 字符（[a]+[b]）；出边为空的 C 少 832
-    （再把 567 字符的 [c] 换成 54 字符的残桩：−567+54 = −513，319+513 = 832）。
+    三版（作用域不同）：出边非空的那八个少 319 字符（[a]+[b]）；出边为空的 C / V 少 2578
+    （再把 2) 与 2b) 两块换成两行残桩，账见下面那条断言）。
     """
     with_conductor = _WITHOUT_CONDUCTOR_BLOCKS
     with_stub = _WITH_STUB
@@ -2143,8 +2188,8 @@ def test_each_rendered_protocol_is_exactly_the_constant_minus_its_own_blocks(
     assert len(AP.LOOP_PROTOCOL) - len(with_conductor) == \
         len(_BLOCK_A) + len(_BLOCK_B) + 2, "减 [a]/[b] 的字符账不对（边界上多删或少删了）"
     assert len(AP.LOOP_PROTOCOL) - len(with_stub) == \
-        len(_BLOCK_A) + len(_BLOCK_B) + len(_BLOCK_C) + 4 - len(_STUB) - 2, \
-        "「[c] 换残桩」的字符账不对（边界上多删或少删了）"
+        len(_BLOCK_2) + len(_BLOCK_C) + 2 - len(_STUB) + len(_BLOCK_B) + 1, \
+        "「2) / 2b) 换残桩」的字符账不对（边界上多删或少删了）"
     for role in ALL_ROLES:
         if role == S.CONDUCTOR_ROLE:
             want = AP.LOOP_PROTOCOL

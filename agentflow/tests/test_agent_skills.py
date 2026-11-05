@@ -682,7 +682,7 @@ def test_the_research_chain_skill_lists_the_seven_hops_in_order():
     skill = next(s for s in AS.CATALOG["M"] if s.slug == "研究攻坚链-文献到收录证明")
     assert chain_order_problems(skill.body) == [], chain_order_problems(skill.body)
     # ③ 那一行链本身也在（与表格是两处写法，任一处被改坏都该有人看一眼）
-    assert "A → B → C → D → F → V → B" in skill.body, skill.body[:400]
+    assert "A → B → C → D → F → V；再 D → B" in skill.body, skill.body[:400]
     # 反真空：这条判据扫的确实是这一条 skill 的正文（不是一段空文本）
     assert len(skill.body) > 800, len(skill.body)
 

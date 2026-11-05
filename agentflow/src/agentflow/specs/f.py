@@ -175,8 +175,9 @@ SPEC = AgentSpec(
             # 欠签的主要来源，而改前 F 的提示词里 `statements_unsigned` / `abandoned` 各 0 次。
             "**你的证明最终必须有 V 签，或者那条命题被明确放弃**：既没有签、也没有被放弃的命题会让收工门的 "
             "`statements_unsigned` 大于 0 —— 那是 **blocker**（`machine_pass` 假、退出码 1，而且它不落在八格里任何一格上，"
-            "八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 请 D / B 把它**明确放弃**"
-            "（`status=abandoned` ＋ `quote_reason=abandoned@<ISO8601>@<理由>`，状态、时间、理由三样缺一不可）。"
+            "八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**"
+            "（B 走 `table.update`：`status=abandoned` ＋ `quote_reason=abandoned@<ISO8601>@<理由>`，"
+            "状态、时间、理由三样缺一不可）。"
             "**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。",
             # 2026-10-24 业主裁定（D-54，逐字要点）：「Sylow 第一定理，会有几种证明语言，会有不同的
             # 依赖面……让 C 从不同的依赖面起点追依赖链就能完整显示不同证明路径」。多证明机制早就在
@@ -224,6 +225,10 @@ SPEC = AgentSpec(
             "一条在册引用都没有的自足证明不适用这一条（B 不拒收，`deps_missing` 读成 "
             "`not_applicable`）。你不写 `dependencies` 那张表："
             "作者的活是把引用写进 `cites`，登记是收方的活。",
+            # 2026-11-05（审计② 第 ⑭ 条）：`dependency_source_not_registered` 此前只拦不教。
+            "**引的号必须在册**：`cites` 或 `## 依赖` 里出现一个不在 `statements` 的 `stmt:<号>` ⇒ "
+            "秘书洗不动，**整份手稿退回**（`dependency_source_not_registered`，点名第几行、哪个号）—— "
+            "这是整份退回、不是「打回重写那一句」；写之前先用 `table.get` 核那个号在不在册。",
             # 2026-11-05（调查报告 temp/dep_probe/REPORT-dependency-surface.md 的结论；
             # 业主 2026-11-04 放权动禁改区 · FC-27 · 类别 auth-audit）：上面那一条是
             # "引了才要写"的条件句，而盘上 84/85/87 三个工作区的可引池是 0 条 ⇒ F 每轮被

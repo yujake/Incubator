@@ -2844,7 +2844,8 @@ POST_TASK_STATES: tuple[str, ...] = ("posted", "existing", "refused", "unknown")
     "智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息"
     "读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项："
     "办完用 `conductor.ack`（`close=\"completed\"`）收口，没办完它就一直在板上、"
-    "销号门也看得见它。只许给自己落项：要让别人办一件事，走派活那一件工具。",
+    "销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形"
+    "（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。",
     {"type": "object",
      "properties": {
          "summary": {"type": "string", "minLength": 1, "maxLength": 200,

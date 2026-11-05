@@ -214,15 +214,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#:   [c] `2b) 一次唤起一批（并发…）`那 11 行 —— 只有"出边为空"的角色用不到
+#:   [c] `2)` 与 `2b)` 那两块（派活骨架 + 一次唤起一批）—— 只有"出边为空"的角色用不到
 
 
 
-#:       （它一个伙伴都唤不动，一段"一次唤起一批"无从填；今天只有 C 的出边是空的）。
+#:       （它一个伙伴都唤不动，那两块"怎么派活"都无从填；今天 C 与 V 的出边都是空的）。
 
 
 
-#:       这一档不整块删，换一行残桩（保住表头"十一种形状"与 11 项枚举的自洽，
+#:       这一档不整块删，换成两行残桩（2) / 2b) 各一行，保住表头"十一种形状"与 11 项枚举的自洽，
 
 
 
@@ -234,7 +234,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#:       "是不是主控"、也不是写死某个角色名 —— 非 M 的角色各有 1–6 条边，
+#:       "是不是主控"、也不是写死某个角色名 —— 非 M 的角色出边 0–5 条（C/V 为空，其余 1–5 条），
 
 
 
@@ -246,11 +246,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 字符：出边非空的九个（A/B/D/E/F/G/H/L/V）各少 319，出边为空的 C 少 539（见
+#: 字符：出边非空的八个（A/B/D/E/F/G/H/L）各少 319，出边为空的 C / V 少 2578（见
 
 
 
-#: `_LOOP_EDGELESS_STUB` 的长度）。一字未删的规矩：
+#: 2) 与 2b) 换成两行 `_LOOP_EDGELESS_STUB` 的账）。一字未删的规矩：
 
 
 
@@ -4053,7 +4053,7 @@ PARENT_STOP_TEXT = """\
 
 
 
-#   - 出边为空的角色用不到的那一块（[c] 2b 整段）：只对"一个伙伴都唤不动"的角色无关
+#   - 出边为空的角色用不到的那两块（2) 派活骨架 / 2b) 一次唤起一批）：只对"一个伙伴都唤不动"的角色无关
 
 
 
@@ -4153,6 +4153,38 @@ _LOOP_BLOCK_C = '''\
 
 
 
+_LOOP_BLOCK_2 = '''\
+2) 唤起一个伙伴去做一件事（`role` 写**伙伴表里那个角色名**，不是角色级通配）：
+   {"summon": {"role": "<伙伴表里的角色名>", "task": "<要它干什么：一件可判定的活；可捎上你的起手建议>",
+               "params": {<交给它的结构化数据：材料路径、编号、口径这类；不点动作 ⇒ 没有参数表可核>}, "why": "<一句话说明为什么找他>",
+               "brief": "<一句任务简介，单行、不超过 60 字>",
+               "name": "<可选：名册标签，不是职责编码；写成 probe-a-1 这种一眼看得出是标签的样子>",
+               "reuse": "<可选：复用已有子代理时写它的名册标签（上一次 name 给的那一个）>"}}
+   这一形**没有 `action` 那一格**（业主口径 S2：一致改成 `task` 必填、动作不填）：派活只写
+   "做什么"，由接活的人按自己的工具面自己选动作。所以 `params` 不是"动作参数表"里那一套 ——
+   它是你顺手交给它的结构化数据（材料路径、编号、口径），核不了对错也不会因为写了它被拒。
+   名册（业主口径）：**造一个新子代理就给一句 `brief`** —— 它进名册，退役时读的人靠它认人；
+   **复用已有的子代理也要给一句 `brief`**（名册登记先看简介、再看 `reuse`：只给 `reuse`
+   那一笔名册绑定不落，读数 `roster_problem` 里会写明，**而这次派活照样进行**）；
+   要给**已有的**子代理再派一件活就写 `reuse:"D1"`（复用**不新增名册项**，只多一次调用）；
+   父可以自己提名（`name`），也可以只给角色由秘书分配 —— 名字一经分配**不再改**
+   （名字被占用或已销号 ⇒ 被受控拒绝的是**那一笔名册登记**：这次派活照跑、名字不落、
+   读数里写明理由；别自己换一个名字硬发）。但**它不会因此永久无名**：这一次**真跑完**
+   之后，收口时的兜底会给它补一个**从未用过的新名字**（名册行里留着 `requested_name`
+   与 `refusal_code`：你当初点的那个名字、为什么没落），下次看名册就知道它叫什么；
+   没跑过的号（被并发 / 深度 / 扇出这类闸拒掉的）永远不会拿到名字。
+   要点名时先 `{"roster": {"of": "self"}}` 看一眼活跃名册（名字 · 简介 · 状态 ·
+   在飞几件）；要某一个子代理**停下当前那一轮**就用 `{"interrupt": {"name": "D1"}}`
+   （只停它那一轮：排队消息还在、它自己的子代理继续跑），**不要用全局叫停**。
+   主控（M）派活时**留痕**：这一句里可以带一张 `notify` 表
+   （`{"summary": "<一句话：派了什么活>", "body": "<markdown>", "refs": [...]}`，`to` 可省略，
+   缺省就是被派的那个角色），框架会把它交给秘书写成一份交接手稿并发给对方；
+   不带或填错也**照样派活** —— 留痕退回框架据派活本身派生的那一行
+   （"谁派了谁做什么、参数、为什么"，注明"框架据派活派生"：那一行是日志，不算交接），
+   格式问题如实记进这一次运行。别的角色派活不必带。'''
+
+
+
 #: 要从任何非 M 角色那一版里删掉的逐字字节（块本体 + 它自己的行尾换行）。
 
 
@@ -4201,7 +4233,7 @@ _LOOP_CONDUCTOR_ONLY_BLOCKS: tuple[str, ...] = (
 
 
 
-#: 描述与自身矛盾。留一行残桩 ⇒ 表头仍然为真、列表仍然枚举 8 项，
+#: 描述与自身矛盾。留残桩 ⇒ 表头仍然为真、列表仍然枚举 11 项，
 
 
 
@@ -4237,7 +4269,7 @@ _LOOP_EDGELESS_ONLY_BLOCKS: tuple[str, ...] = (
 
 
 
-    _LOOP_BLOCK_C + "\n\n",
+    _LOOP_BLOCK_2 + "\n\n" + _LOOP_BLOCK_C + "\n\n",
 
 
 
@@ -4249,15 +4281,14 @@ _LOOP_EDGELESS_ONLY_BLOCKS: tuple[str, ...] = (
 
 
 
-#: 出边为空的角色那一版里的 `2b)`（残桩：一行，说明这一档用不到 + 骨架在哪看）。
+#: 出边为空的角色那一版里的 `2)` / `2b)`（两行残桩：说明这一档用不到 + 骨架在哪看；
+#: 两行之间的空行保住块数 15，见 `_LOOP_BLOCK_NAMES`）。
 
 
 
-_LOOP_EDGELESS_STUB = ("2b) 一次唤起一批（这一档你用不到：你没有任何协作边，派不出活 —— "
-
-
-
-                       "骨架见每步的 JSON 尾巴）。")
+_LOOP_EDGELESS_STUB = ("2) 唤起一个伙伴：**这一档你用不到** —— 你没有任何协作边，派不出活"
+                       "（骨架仍见每步的 JSON 尾巴）。\n\n"
+                       "2b) 一次唤起一批：同上 —— 你没有任何协作边，一个伙伴都唤不动。")
 
 
 
@@ -4325,7 +4356,7 @@ def loop_protocol_for(role: str) -> str:
 
 
 
-      - 再加上：出边为空的角色把 [c] 2b 整段换成一行残桩（`_LOOP_EDGELESS_STUB`）
+      - 再加上：出边为空的角色把 2) 与 2b) 两块换成两行残桩（`_LOOP_EDGELESS_STUB`）
 
 
 
@@ -4381,27 +4412,19 @@ def loop_protocol_for(role: str) -> str:
 
 
 
+    if not C.ALLOWED_EDGES.get(str(role), ()):
+        # 一个伙伴都唤不动（今天 C / V）：2) 与 2b) 两块对它都无从填起，
+        # 合并成一行残桩（保住表头「十一种形状」与 11 项枚举的自洽）。
+        old = _LOOP_EDGELESS_ONLY_BLOCKS[0]
+        out = out.replace(old, _LOOP_EDGELESS_STUB + "\n\n", 1)
+
+
+
     for block in _LOOP_CONDUCTOR_ONLY_BLOCKS:
 
 
 
         out = out.replace(block, "", 1)
-
-
-
-    if not C.ALLOWED_EDGES.get(str(role), ()):
-
-
-
-        # 一个伙伴都唤不动（今天只有 C）：2b 那一段对它无从填起，换一行残桩。
-
-
-
-        old, new = _LOOP_EDGELESS_ONLY_BLOCKS[0], _LOOP_EDGELESS_STUB + "\n\n"
-
-
-
-        out = out.replace(old, new, 1)
 
 
 
@@ -6748,7 +6771,9 @@ def faculties_text(role: str, registry: Any) -> str:
 
 
 
-        "能讨论": "message（公共频道 to=ALL / 私聊）+ 唤起伙伴；结论要落盘",
+        "能讨论": (("message（公共频道 to=ALL / 私聊）+ 回执（结论 / 指到第几步）；结论要落盘")
+                   if not C.ALLOWED_EDGES.get(str(role), ())
+                   else "message（公共频道 to=ALL / 私聊）+ 唤起伙伴；结论要落盘"),
 
 
 
@@ -7724,7 +7749,7 @@ def _numbered_sections(prefix: str, lines: Sequence[str], base_order: int) -> li
 
 
 
-#: 十个角色的块数都是 15（实测：出边为空的 C 用一行残桩替掉 `2b)` 那一块，块数不变；
+#: 十个角色的块数都是 15（实测：出边为空的 C / V 用两行残桩替掉 2) 与 2b) 两块，块数不变；
 
 
 
@@ -9056,6 +9081,16 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
 
 
 
+    if not C.ALLOWED_EDGES.get(str(role), ()):
+        # 出边为空（今天 C / V）：四类派活上限对它都不存在 —— 只留墙钟。
+        # 不念"同时在飞的子代理最多 N 个"：它一个伙伴都唤不动。
+        return ("- 你没有任何协作边：派不了活 ⇒ 扇出（同时在飞）/ 召唤链深度 / "
+                "全局并发 / 召唤总数四类上限对你都不适用（不是「上限为 0」，是这条路不存在）。\n"
+                f"{wall_line}\n"
+                "- 你仍然会收到消息、也要把结论落盘；要别人办的事写进交回派你那一方的结论里。")
+
+
+
     fanout = int(POL.fanout_limit_for(policy, role))
 
 
@@ -9093,11 +9128,19 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
 
 
 
-        f"- 召唤链深度上限 {int(policy.max_depth)}（主控发起 = 1）。你现在在深度 {depth_text}"
+        f"- 召唤链深度上限 {int(policy.max_depth)} 跳（台账口径：主控的直接子 = 1；"
 
 
 
-        f" ⇒ 到 {int(policy.max_depth)} 就到底，再往下派会落 `depth_exceeded`。\n"
+        f"**链上代理数 = 跳数 + 1** ⇒ 最多 {int(policy.max_depth) + 1} 个代理）。你现在在深度 {depth_text}"
+
+
+
+        f"（台账跳数；链上第几个 = 这个数 + 1）⇒ 到 {int(policy.max_depth)} 跳就到底，再往下派会落 "
+
+
+
+        f"`depth_exceeded`；**目标是 V 时这条不拦** —— V 是审稿人，不占链（`reviewer_roles`）。\n"
 
 
 

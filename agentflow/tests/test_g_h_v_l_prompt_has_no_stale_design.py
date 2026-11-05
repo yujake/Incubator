@@ -800,8 +800,8 @@ def test_mutation_control_characters_turn_rendering_red(corpus: Corpus) -> None:
 
 
 def test_mutation_out_edge_comment_turns_red(corpus: Corpus) -> None:
-    """反真空（出边）：把那句注释改回「八个」⇒ 必红。"""
-    broken = corpus.replaced(rel="agent_prompts.py", old="出边非空的九个（A/B/D/E/F/G/H/L/V）",
-                             new="出边非空的八个（A/B/D/E/F/G/H/V）")
+    """反真空（出边）：把那句注释改回「九个（…V）」⇒ 必红。"""
+    broken = corpus.replaced(rel="agent_prompts.py", old="出边非空的八个（A/B/D/E/F/G/H/L）",
+                             new="出边非空的九个（A/B/D/E/F/G/H/L/V）")
     problems = check_out_edges_comment(broken)
     assert any(problem.startswith("[出边]") for problem in problems), problems
