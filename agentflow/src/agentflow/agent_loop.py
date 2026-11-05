@@ -2272,6 +2272,22 @@ PARK_SLICE_MAX_SEC: float = 300.0
 #: 仍是上面那条退避算出来的（0.5, 1, 2, 4, 8, ...），片只是它的细分。
 PARK_STOP_POLL_SEC: float = 5.0
 
+#: 挂机判据里「研究未尽」那一档的会话事件 `kind`（受控告警；append-only）。
+#:
+#: 它回答的是"同一个读数连续挡了 N 拍、框架凭什么不再挡"——没有这一条，那一步
+#: 在盘上只剩一句 `run.notes`，而人看不出"到底是谁把挂机放开的"。
+RESEARCH_STALL_EVENT: str = "agent_research_stalled"
+
+#: 「研究未尽」连续挡几次挂机之后报一次受控告警、并放开挂机（不许无限空转）。
+#:
+#: 判据：`agentflow.researchpending.pending_reading` 的 `pending=true` ⇒ 这一拍不许 park，
+#: 必须把 `next_action` 排给模型。而"M 就是不排、读数也不变"是真实存在的形态
+#: （模型连着说"我再看看"），所以同一 `fingerprint` 连续挡到本值就报一次告警并放开
+#: 这一档的挡 —— 之后按既有挂机口径走（20 分钟轮查照旧），直到读数变化再重新挡。
+#: 为什么是 3：与 `dead_loop_nudge` 同一档（"已经重复到不像在办事了"的最低门槛），
+#: 而"报一次"必须真的只有一次（按 `fingerprint` 记账，同一读数只发一条事件）。
+RESEARCH_STALL_LIMIT: int = 3
+
 #: 可抢占派活（D-64）：派完在"这一步"里最多等多久（秒）。
 #:
 #: 真机读数（sylow3 只读复算）说这个数不能是"无上限"：M（t-000001）第 5 步的
@@ -4761,6 +4777,7 @@ class AgentLoop:
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
                 f"{ask}"
+                f"{self._research_block()}"
                 f"{face_note}"
                 f"{JSON_TAIL}")
 
@@ -6042,6 +6059,128 @@ class AgentLoop:
                     "purpose": "", "wait_id": "",
                     "reason": f"等待意图读不成：{type(exc).__name__}: {exc}"}
 
+    def _research_reading(self) -> dict[str, Any]:
+        """M 这一拍「研究还没做完」的读数（唯一实现在 `agentflow.researchpending`）。
+
+        为什么只在 M 身上读：这一档挡的是编排空转（D 已经把候选族交回来，而没有人
+        把它排成"立命题 → 派 F 落稿 → 派 V 签 → 派 B 收录"）。非 M 的"手上有活"口径
+        一个字不动（它们的挂机由 `_pending_work` 那三条照旧判）；把这一档发给所有角色
+        会让执行侧的 park 语义跟着变，那是另一件事。
+
+        三态：读不成 ⇒ `checked=False` 且 `pending=True`（fail-closed：不知道研究做没
+        做完的时候，不许把它读成"做完了"然后挂机），理由原样带回。
+        """
+        empty = {"checked": True, "pending": False, "gaps": [], "next_action": None,
+                 "counts": {}, "fingerprint": "", "reason": ""}
+        if str(self.role) != S.CONDUCTOR_ROLE:
+            return empty
+        if self.store is None:
+            return {"checked": False, "pending": True, "gaps": [], "next_action": None,
+                    "counts": {}, "fingerprint": "",
+                    "reason": "没有 store ⇒ 研究是否做完读不了（不是「做完了」）"}
+        try:
+            from . import researchpending as RP
+
+            return dict(RP.pending_reading(self.store))
+        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"研究做完了"
+            return {"checked": False, "pending": True, "gaps": [], "next_action": None,
+                    "counts": {}, "fingerprint": "",
+                    "reason": f"研究未尽读数没查成（{type(exc).__name__}: {exc}）"}
+
+    def _research_guard(self, *, step: int, run: "AgentLoop.LoopRun",
+                        reading: Mapping[str, Any]) -> dict[str, Any]:
+        """这一拍要不要因为「研究未尽」而不许挂机（以及连续挡了几次）。
+
+        返回 `{pending, checked, blocked, stalled, streak, fingerprint, reason}`：
+        `blocked=True` ⇒ 调用方把这一拍落成 `decision="run"`（问模型，`next_action`
+        进提示词），不许 park；`stalled=True` ⇒ 同一读数已经连续挡到
+        `RESEARCH_STALL_LIMIT`，这一拍报过（只报一次）受控告警之后放开挡 —— 于是
+        "模型就是不排动作"不会变成无限空转。
+
+        记账只在本方法：`run.park["research_fp"]` / `["research_streak"]` /
+        `["research_warned"]`。读数一变（`fingerprint` 换了）就重新从 1 数起。
+        """
+        out: dict[str, Any] = {"pending": bool(reading.get("pending")),
+                               "checked": bool(reading.get("checked")),
+                               "blocked": False, "stalled": False, "streak": 0,
+                               "fingerprint": str(reading.get("fingerprint") or ""),
+                               "reason": ""}
+        if str(self.role) != S.CONDUCTOR_ROLE or not out["pending"]:
+            run.park["research_fp"] = ""
+            run.park["research_streak"] = 0
+            return out
+        fp = out["fingerprint"]
+        previous = str(run.park.get("research_fp") or "")
+        streak = int(run.park.get("research_streak") or 0) + 1 if (fp and fp == previous) else 1
+        run.park["research_fp"] = fp
+        run.park["research_streak"] = streak
+        out["streak"] = streak
+        counts = dict(reading.get("counts") or {})
+        action = dict(reading.get("next_action") or {})
+        gap_text = "；".join(
+            f"{g.get('code')}×{g.get('count')}"
+            for g in (reading.get("gaps") or ()) if isinstance(g, Mapping)) or "读数没查成"
+        out["reason"] = (
+            f"研究未尽（{gap_text}；读数 "
+            + "，".join(f"{k}={v}" for k, v in counts.items())
+            + f"）⇒ 这一拍不许挂机干等，必须当场排一个动作："
+            + str(action.get("summary") or "先查 `conductor.state` 的 research 读数"))
+        if streak < RESEARCH_STALL_LIMIT:
+            out["blocked"] = True
+            return out
+        out["stalled"] = True
+        out["reason"] += (f"（同一读数连续第 {streak} 次仍没有排出行程 ⇒ "
+                          "报一次受控告警并放开这一档的挡，不许无限空转）")
+        warned = [str(x) for x in (run.park.get("research_warned") or ())]
+        if fp and fp not in warned:
+            run.park["research_warned"] = warned + [fp]
+            run.notes.append("研究未尽 · 受控告警：" + out["reason"])
+            try:
+                SS.append(self.session_root, {
+                    "kind": RESEARCH_STALL_EVENT, "role": self.role,
+                    "task_id": str(self.my_task_id or ""), "step": int(step),
+                    "fingerprint": fp, "streak": streak,
+                    "counts": counts, "gaps": [dict(g) for g in (reading.get("gaps") or ())
+                                               if isinstance(g, Mapping)],
+                    "next_action": action, "reason": out["reason"],
+                }, sid=self.sid)
+            except Exception as exc:  # noqa: BLE001 —— 落不成告警不许拦住这一拍
+                run.notes.append(f"研究未尽告警没落成（{type(exc).__name__}: {exc}）")
+        return out
+
+    @staticmethod
+    def _note_research_gate(out: dict[str, Any],
+                            guard: Mapping[str, Any]) -> None:
+        """把这一拍「研究未尽」的结论抄进 `agent_park` 读数（不另算一遍）。"""
+        out["research_blocked"] = bool(guard.get("blocked"))
+        out["research_stalled"] = bool(guard.get("stalled"))
+        out["research_streak"] = int(guard.get("streak") or 0)
+
+    def _research_block(self) -> str:
+        """提示词里那段「未尽研究」读数（M 专用；没有未尽项 ⇒ 空串）。
+
+        为什么提示词里要有这一段：只把挂机挡住、不把"为什么被挡住、下一步该排什么"
+        念给模型，它下一拍看到的还是一份没有新事实的上下文 —— 那只是把 20 分钟一次的
+        空转换成 0.5 秒一次的空转。所以判据值 + `next_action` 必须进它读到的那段话。
+        """
+        if str(self.role) != S.CONDUCTOR_ROLE:
+            return ""
+        reading = getattr(self, "_research_cache", None)
+        if not isinstance(reading, Mapping) or not reading.get("pending"):
+            return ""
+        counts = dict(reading.get("counts") or {})
+        gaps = [g for g in (reading.get("gaps") or ()) if isinstance(g, Mapping)]
+        action = dict(reading.get("next_action") or {})
+        lines = ["【未尽研究（机制读数，不是建议）】",
+                 "- 判据：" + ("，".join(f"{k}={v}" for k, v in counts.items()) or "读数没查成"),
+                 "- 未尽项：" + ("；".join(
+                     f"{g.get('code')}×{g.get('count')}（"
+                     + "、".join(str(x) for x in (g.get("ids") or ())[:6]) + "）"
+                     for g in gaps) or "没查成"),
+                 "- 这一拍不许挂机干等；必须当场排一个动作："
+                 + str(action.get("summary") or "先查 `conductor.state` 的 research 读数")]
+        return "\n".join(lines) + "\n"
+
     def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
         """本趟"手上有活吗"的读数（`_park_gate` 第三个判据的输入）。
 
@@ -6288,6 +6427,13 @@ class AgentLoop:
         want = self._wait_any_reading()
         work = self._pending_work(mailbox)
         back = self._return_reading(parked=parked, work=work, wakes=wakes, run=run)
+        # ---- 「研究未尽」这一档（真机 R-mk-infinite-93）：挂机的前提是"无事可做"，
+        # 而"无事可做"此前的三条判据（新投递 / 未消板项 / 待消费子产出）都只问
+        # "有没有人找我"，不问"盘上的研究做完了没有"。于是 D 交了候选族、statements
+        # 还是 0 的时候，M 每一拍都读成无事可做 ⇒ 每 20 分钟醒一次再 park。
+        # 判据本体在 `researchpending.pending_reading`（纯读、可复核）；这里只消费它的结论。
+        research = self._research_reading()
+        self._research_cache = research
         pending_timers = list(want.get("pending") or ())
         out: dict[str, Any] = {"skip_model": False, "decision": "run", "woke_reason": "",
                                "waited_sec": 0.0, "reason": "",
@@ -6296,6 +6442,17 @@ class AgentLoop:
                                "timers": pending_timers,
                                "pending_work": bool(work.get("busy")),
                                "work_reason": str(work.get("why_text") or ""),
+                               "research": {"checked": bool(research.get("checked")),
+                                            "pending": bool(research.get("pending")),
+                                            "fingerprint": str(research.get("fingerprint") or ""),
+                                            "counts": dict(research.get("counts") or {}),
+                                            "next_action": (dict(research.get("next_action") or {})
+                                                            or None),
+                                            "gaps": [dict(g) for g in (research.get("gaps") or ())
+                                                     if isinstance(g, Mapping)]},
+                               "research_blocked": False,
+                               "research_stalled": False,
+                               "research_streak": 0,
                                "waiters": [str(w.get("timer_id") or "")
                                            for w in parked["waiters"]],
                                "reentry": bool(back.get("owed")),
@@ -6327,31 +6484,52 @@ class AgentLoop:
                                    f"（{work.get('why_text')}）⇒ 不挂机，先给模型一拍"))
                 run.notes.append("等任意计时器时被打断：" + str(work.get("why_text") or ""))
             else:
-                # ---- 无事可做、要挂机等的那一下：先把下一轮轮查计时器挂上（业主 2026-10-27
-                # 傍晚：「M 无事可做后启动轮查计时」）。恰好一条由 `clock.start_patrol_timer`
-                # 保证（`skipped="already"` 是常态）；这里只把读数带回 `run.park`。
-                patrol = self._arm_patrol_timer()
-                run.park["patrol"] = patrol
-                if patrol.get("mounted"):
-                    run.notes.append(f"轮查：{patrol.get('reason')}")
-                slept = self._park_sleep_once(run=run, parked=parked)
-                out.update(skip_model=True, decision="park",
-                           waited_sec=float(slept.get("waited_sec") or 0.0),
-                           patrol=patrol,
-                           reason=(str(slept.get("reason") or "") or
-                                   f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
-                                   "（这一拍不调模型）"))
-                run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
-                run.park["wait_any"] = True
+                # ---- 「研究未尽」先问一次（真机 R-mk-infinite-93）：显式要求等也不许把
+                # 这一拍睡过去。判据与告警的记账只在 `_research_guard` 一处。
+                guard = self._research_guard(step=step, run=run, reading=research)
+                self._note_research_gate(out, guard)
+                if guard.get("blocked"):
+                    out.update(skip_model=False, decision="run",
+                               reason=str(guard.get("reason") or ""))
+                    run.notes.append("研究未尽 ⇒ 不挂机：" + str(guard.get("reason") or ""))
+                else:
+                    # ---- 无事可做、要挂机等的那一下：先把下一轮轮查计时器挂上（业主
+                    # 2026-10-27 傍晚：「M 无事可做后启动轮查计时」）。恰好一条由
+                    # `clock.start_patrol_timer` 保证（`skipped="already"` 是常态）；
+                    # 这里只把读数带回 `run.park`。
+                    patrol = self._arm_patrol_timer()
+                    run.park["patrol"] = patrol
+                    if patrol.get("mounted"):
+                        run.notes.append(f"轮查：{patrol.get('reason')}")
+                    slept = self._park_sleep_once(run=run, parked=parked)
+                    out.update(skip_model=True, decision="park",
+                               waited_sec=float(slept.get("waited_sec") or 0.0),
+                               patrol=patrol,
+                               reason=(str(slept.get("reason") or "") or
+                                       f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
+                                       "（这一拍不调模型）"))
+                    run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+                    run.park["wait_any"] = True
         elif want.get("requested") and not pending_timers:
             # ② 显式要求等 + 一条计时器都没有 ⇒ 无事可做 ⇒ 交差
             # 兜底表在这里挂（而不是起跑处）：它只在"这一趟要静默了"的这一刻存在。
             # 起跑处挂会让活跃期间的每次投递都被它命中 —— 那正是前三次挂死的原因。
-            self._arm_lifeline_once()
-            out.update(skip_model=True, decision="handoff",
-                       reason=("它要求等任意计时器返回，而一条计时器都没有 ⇒ "
-                               "无事可做且无计时器 ⇒ 交差（向父代理报告）"))
-            run.park["handoff_turns"] = int(run.park.get("handoff_turns") or 0) + 1
+            #
+            # 「研究未尽」先挡：研究没做完时，"无事可做 ⇒ 交差"会把整盘活静默地放掉
+            # （真机 R-mk-infinite-93 的同族形态）。这一档只把交差换成"排动作"，
+            # 不新造任何终止态。
+            guard = self._research_guard(step=step, run=run, reading=research)
+            self._note_research_gate(out, guard)
+            if guard.get("blocked"):
+                out.update(skip_model=False, decision="run",
+                           reason=str(guard.get("reason") or ""))
+                run.notes.append("研究未尽 ⇒ 不交差：" + str(guard.get("reason") or ""))
+            else:
+                self._arm_lifeline_once()
+                out.update(skip_model=True, decision="handoff",
+                           reason=("它要求等任意计时器返回，而一条计时器都没有 ⇒ "
+                                   "无事可做且无计时器 ⇒ 交差（向父代理报告）"))
+                run.park["handoff_turns"] = int(run.park.get("handoff_turns") or 0) + 1
         elif wakes["park"] and not wakes["timed"]:
             # ③ 这一拍消费到的是"等谁"的唤醒：内容已进上下文，下一拍再问
             reason = str(wakes["park"][-1].get("woke_reason") or "")
@@ -6372,24 +6550,34 @@ class AgentLoop:
             run.notes.append(f"返场（Q22）：{reason}")
         elif parked["count"] and not work.get("busy"):
             # ④ 有计时器在等 + 本趟确实无事可做 ⇒ 挂机
-            # ---- 第 ① 支同一句话：挂机的那一下才挂下一轮轮查计时器（不是每拍都挂）。
-            patrol = self._arm_patrol_timer()
-            run.park["patrol"] = patrol
-            if patrol.get("mounted"):
-                run.notes.append(f"轮查：{patrol.get('reason')}")
-            slept = self._park_sleep_once(run=run, parked=parked)
-            note = ""
-            if back.get("own_waiters") and not back.get("owed"):
-                # 这一批确实是我派的、确实还在跑，而返场判据这一拍已经不成立了
-                # （那一拍给过）—— 把这句话写进读数，免得读的人再把它当成 Q22 的形态。
-                note = ("（这一批我派出去的子还在跑；返场那一拍已经按判据给过，"
-                        "从这一拍起按挂机口径等）")
-            out.update(skip_model=True, decision="park",
-                       waited_sec=float(slept.get("waited_sec") or 0.0),
-                       patrol=patrol,
-                       reason=(str(slept.get("reason") or "") or
-                               "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note))
-            run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+            # ---- 但"无事可做"还要过「研究未尽」这一关（真机 R-mk-infinite-93）：
+            # 板上未结项 0 ≠ 研究做完了；`researchpending.pending_reading` 非空 ⇒ 这一拍
+            # 不许 park，必须把 next_action 排给模型（提示词那一段由 `_research_block` 拼）。
+            guard = self._research_guard(step=step, run=run, reading=research)
+            self._note_research_gate(out, guard)
+            if guard.get("blocked"):
+                out.update(skip_model=False, decision="run",
+                           reason=str(guard.get("reason") or ""))
+                run.notes.append("研究未尽 ⇒ 不挂机：" + str(guard.get("reason") or ""))
+            else:
+                # ---- 第 ① 支同一句话：挂机的那一下才挂下一轮轮查计时器（不是每拍都挂）。
+                patrol = self._arm_patrol_timer()
+                run.park["patrol"] = patrol
+                if patrol.get("mounted"):
+                    run.notes.append(f"轮查：{patrol.get('reason')}")
+                slept = self._park_sleep_once(run=run, parked=parked)
+                note = ""
+                if back.get("own_waiters") and not back.get("owed"):
+                    # 这一批确实是我派的、确实还在跑，而返场判据这一拍已经不成立了
+                    # （那一拍给过）—— 把这句话写进读数，免得读的人再把它当成 Q22 的形态。
+                    note = ("（这一批我派出去的子还在跑；返场那一拍已经按判据给过，"
+                            "从这一拍起按挂机口径等）")
+                out.update(skip_model=True, decision="park",
+                           waited_sec=float(slept.get("waited_sec") or 0.0),
+                           patrol=patrol,
+                           reason=(str(slept.get("reason") or "") or
+                                   "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note))
+                run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
         elif parked["count"]:
             # ⑤ 有计时器在等，但手上有活 ⇒ 照常调模型（"计时器不阻塞动作"）
             out["reason"] = (f"有 {int(parked['count'])} 条计时器在后台走，但手上有活"
@@ -6441,6 +6629,12 @@ class AgentLoop:
                 run.park["reentry_reasons"] = list(
                     run.park.get("reentry_reasons") or []) + [str(back.get("why") or "")]
         run.park["decision"] = str(out["decision"])
+        # ---- 「研究未尽」那一档的收口读数（与 `agent_park` 事件同源）：
+        # 这一拍读到了什么、挡没挡、连续第几次、被放开时告警过没有。
+        run.park["research"] = dict(out["research"])
+        run.park["research_blocked"] = bool(out["research_blocked"])
+        run.park["research_stalled"] = bool(out["research_stalled"])
+        run.park["research_streak"] = int(out["research_streak"])
         run.park["waiters"] = [
             {"timer_id": str(w.get("timer_id") or ""), "wait_for": str(w.get("wait_for") or ""),
              "purpose": str(w.get("purpose") or ""), "parked_sec": w.get("parked_sec"),
@@ -6457,6 +6651,7 @@ class AgentLoop:
                 "parked": int(out["parked"]), "waiters": list(out["waiters"]),
                 "wait_any": bool(out["wait_any"]), "timers": list(pending_timers),
                 "pending_work": bool(out["pending_work"]),
+                "research": dict(out["research"]),
                 "checked": bool(out["checked"]), "reason": str(out["reason"]),
             }, sid=self.sid)
         return out

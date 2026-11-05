@@ -801,6 +801,48 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
             "created": created, "ingested": ingested}
     return ok(data, **data)
 
+
+def _research_reading(store_: Any) -> dict[str, Any]:
+    """「研究还没做完」的读数（唯一实现在 `agentflow.researchpending`）。
+
+    为什么收在这里：`conductor.patrol` 的异常清单（M 轮查读的就是它）与挂机判据
+    （`agent_loop._park_gate`）必须是同一份读数 —— 两份口径会让"轮查时觉得做完了、
+    挂机时觉得没做完"，而两边都不会报错。
+
+    这一格只拼进 `patrol` 的 `anomalies` 那一列（字符串），不新增顶层键：顶层键集
+    被 `tests/golden/tool_surface_snapshot.json` 冻结（FC-27 的 eval-criteria），
+    改它要重冻快照并由两名 reviewer 逐格看过。声明面与实现面的既有不对称
+    （判据只查"声明 ⊆ 实返"，见 `tests/test_tools_returns_declaration.py`）
+    不允许先加一个未声明的顶层键，所以这里走既有的异常清单。
+    """
+    try:
+        from .. import researchpending as RP
+
+        return dict(RP.pending_reading(store_))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"研究做完了"
+        return {"checked": False, "pending": True, "gaps": [], "next_action": None,
+                "counts": {}, "fingerprint": "",
+                "reason": f"研究未尽读数没查成（{type(exc).__name__}: {exc}）"}
+
+
+def _research_anomaly_line(reading: Mapping[str, Any]) -> str:
+    """把「研究未尽」读数拼成巡查异常清单里的一句（没有未尽项 ⇒ 空串）。
+
+    为什么不塞结构体：`anomalies` 是给 M 轮查时念的清单，一句一条；结构化读数在
+    `agent_loop._park_gate` 的 `run.park["research"]` 与提示词那一段里（同一份实现）。
+    """
+    if not reading.get("pending"):
+        return ""
+    counts = dict(reading.get("counts") or {})
+    gaps = [g for g in (reading.get("gaps") or ()) if isinstance(g, Mapping)]
+    action = dict(reading.get("next_action") or {})
+    gap_text = "；".join(f"{g.get('code')}×{g.get('count')}"
+                        for g in gaps) or "读数没查成"
+    values = "，".join(f"{k}={v}" for k, v in counts.items()) or "读数没查成"
+    return (f"未尽研究：{gap_text}（读数 {values}）⇒ 不许挂机干等；"
+            f"下一动作：{str(action.get('summary') or '先查盘上研究读数')}")
+
+
 def _states_reading(c: Any) -> dict[str, Any]:
     """三态合计（业主 2026-10-29：`conductor.state` 此前零三态，是审计点名的漏点）。
 
@@ -3956,6 +3998,11 @@ def conductor_patrol(_conductor: Any) -> ToolResult:
         return fail(f"没有主控句柄（{type(exc).__name__}: {exc}）⇒ 本次没查成",
                     kind="no_conductor", checked=False)
     got = _patrol_reading(c, here=str(current_task_id() or ""))
+    anomalies = list(got.get("anomalies") or ())
+    research = _research_reading(getattr(c, "store", None))
+    line = _research_anomaly_line(research)
+    if line:
+        anomalies.append(line)
     return ok({
         "checked": bool(got.get("checked")),
         "root": str(got.get("root") or ""),
@@ -3963,7 +4010,7 @@ def conductor_patrol(_conductor: Any) -> ToolResult:
         "order": list(got.get("order") or ()),
         "by_state": dict(got.get("by_state") or {}),
         "items": [dict(i) for i in (got.get("items") or ())],
-        "anomalies": list(got.get("anomalies") or ()),
+        "anomalies": anomalies,
         "clock": dict(got.get("clock") or {}),
         "reason": str(got.get("reason") or ""),
     })
