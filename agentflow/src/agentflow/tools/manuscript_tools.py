@@ -38,8 +38,9 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
     side_effect="read",
     roles=_READ_ROLES,
     # 2026-10-15 补齐（`draft/124` §17）：实跑返回的是整份手稿行（含正文 `body`），
-    # 而声明里只列了 `text` 那一格 ⇒ 模型看不到 `body`/`refs`/`format`/`sid`/`created_at`/`task_id`。
-    # `returns` 会拼进 function-calling 的 `description`（`tools/base.py:721`）⇒ 模型看得到。
+    # 而声明里只列了 `text` 那一格 ⇒ 声明契约与实跑分家（`body`/`refs`/`format`/`sid`/
+    # `created_at`/`task_id` 六格没进键集合）。`returns` 只是台账/冻结快照的契约
+    # （`tools/base.py:674-679`：description 不带 returns，模型面看不到它）。
     returns="{'id','path','sender','to','summary','text','sha256','bytes',"
             "'body','created_at','format','note','refs','sid','task_id'}",
 )

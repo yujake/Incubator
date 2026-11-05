@@ -1008,8 +1008,9 @@ def _ocr_backends(ctx, refresh=False):
     # 键名从一个真实调用读出（`_h_detect_text_layer`）。
     # 2026-10-15 补齐：`page_count_known` / `page_count_source` 是"这个页数是怎么来的"
     # （三态：数出来的 / 猜的 / 数不了），`failed_pages` 是"哪几页没做成"。
-    # `returns` 会拼进 function-calling 的 `description`（模型看得到）⇒ 缺这三格
-    # 等于模型不知道"页数可能是未知的"，于是会把 `page_count=0` 读成"真的没有页"。
+    # `returns` 只是台账/冻结快照的声明契约（`tools/base.py:674-679`：description 不带
+    # returns，模型面看不到它）；缺这三格会让契约与实跑分家（判据/探针会红），而
+    # `page_count=0` 的"未知 vs 真没有页"就少了一处书面口径。
     returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule','page_count_known','page_count_source','failed_pages'}；"
             "失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error)"
             "（unknown_lit_id 会把盘上有的编号一起给出来）",

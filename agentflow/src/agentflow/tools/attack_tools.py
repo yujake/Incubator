@@ -368,8 +368,10 @@ def _plan_error_type() -> type:
            },
     side_effect="none",
     roles=_READ_ROLES,
-    # 2026-10-15 补齐（`draft/124` §17）：`returns` 会拼进 function-calling 的
-    # `description`（`tools/base.py:721`）⇒ 「模型看得到」；缺的键模型就不知道它存在。
+    # 2026-10-15 补齐（`draft/124` §17）：`returns` 只是台账/冻结快照的声明契约
+    # （`tools/base.py:674-679`：ToolFace 的 description 不带 returns，模型面看不到
+    # 它）；缺的键会让契约与实跑分家，`test_no_tool_returns_a_top_level_key_it_does_not_declare`
+    # 会红。
     # `blocked_by` 是"被谁挡住的"（预算不完整 / 已终结 / 该换下一层）。
     returns="{'checked','complete','missing','allowed','reason','blocked_by'}",
     tags=("attack", "budget"),
