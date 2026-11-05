@@ -1,5 +1,5 @@
 {
-  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。",
+  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
   "n_tools": 124,
   "n_cohort": 85,
@@ -5686,44 +5686,17 @@
     },
     {
       "tools": [
-        "table.count",
-        "table.create",
-        "table.delete",
-        "table.get",
-        "table.list",
-        "table.search",
-        "table.update"
-      ],
-      "key": "params",
-      "reason": "表枚举新增 lit_candidates（16→17）",
-      "date": "2026-10-20",
-      "edits": [
-        {
-          "op": "set_scalar",
-          "path": "params/properties/table/description",
-          "from": "16 张表之一",
-          "to": "17 张表之一"
-        },
-        {
-          "op": "append_item",
-          "path": "params/properties/table/enum",
-          "item": "lit_candidates"
-        }
-      ]
-    },
-    {
-      "tools": [
         "verify.verify_proof"
       ],
       "key": "returns",
-      "reason": "多证明模型（业主 2026-10-22）：`verify_proof` 的 `checked=False` 理由码从 4 个扩到 9 个 —— 新增 `bad_proof_no` / `no_such_proof` / `proof_text_mismatch` / `ledger_unwritable` / `ledger_row_lost`（证明号越界 / 那一号证明不在台账行上 / 签名钉的正文与当前 `proof_text` 不符 / 台账写不进去 / 写完又读丢了）。这五档都必须与 `unparsable` 分开：合成一档会让「没查成」的处置全部变成同一个动作。声明面的这一次演进此前只改了实现，没在基线里记账 ⇒ 契约判据红了（判据是对的）。2026-10-26 并账：这一条原来只记到 2026-10-22 那一版，此后引用核实那一档又扩了同一格（`returns` 是整格一个标量，旧账的 to 已经不是现值）；判据的正控只认「退回一步就落在 from 上」，两次演进它表达不了，所以并成一条从 2026-10-20基线一步记到现值。旧 reason 原文保留在前段。补记的理由：多证明模型（业主 2026-10-22 / 2026-10-27 引用核实那一档）：新增 exhaustion_review / checks / missing / signer / proof_authors / report_path / citations / citation_checks / citation_gate / review_write；reason 词表扩到 bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost；引用核实有一条不合格（citation_gate.why 点名）或 citation_gate.problem 非空（依赖台账读不出来）⇒ 这一签不许落地。 ｜ 2026-10-29 并账：V 签门槛又给同一格加 `secretary_judge`（秘书语义三档）与 `sign_issuance`（发签决定与连续读数）——`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值，所以仍按「一条从基线一步记到现值」处理，不新加一条。 ｜ 2026-10-30 并账：同一格又加 `review_passes`（一次 `verify_proof` 自己连着判到门槛为止的逐次读数：pass/axis/decision/streak/need/streak_ok/issue/issued/verdict/verification_id）——`returns` 仍是字符串标量，`set_scalar` 的 `to` 必须等于现值，所以照旧按「一条从基线一步记到现值」处理，不新加一条。 ｜ 2026-10-30 并账（业主批准动禁改区，E 那一笔）：同一格里那句措辞从「绝不拿『看不出来』冒充『审过了』」改成「绝不拿『没查成』冒充『审过了』」——V 从 2026-11-01 起只产两态（成立 / 有毛病），旧档那一格已经取消，而 `checked=False` 那一档不许被读成「审过了、没问题」这条语义一个字没动。只改措辞：键集合、次序、reason 词表全部逐字未变 ⇒ `set_scalar` 的 to 必须等于现值，所以仍按「一条从基线一步记到现值」处理，不新加一条。 2026-11-04 p239（b2f39f05「业主裁定 甲 · V 的在册送审必须有手稿」+ 今晚 verify_tools 的返回整批）：returns 扩出手稿 / 依赖段 / 引用核实这一批键（`exhaustion_review` / `checks` / `missing` / `signer` / `proof_authors` / `report_path` / `citations` / `citation_checks` / `citation_gate` / `review_write` / `secretary_judge` / `sign_issuance` / `review_passes`），失败码同步扩到 `bad_proof_no` / `no_such_proof` / `proof_text_mismatch` / `proof_text_needs_a_manuscript` / `bad_manuscript_path` / `manuscript_missing` / `manuscript_unreadable` / `manuscript_has_no_proof_section` / `dependency_section_missing` / `dependency_section_unreadable` / `ledger_unwritable` / `ledger_row_lost`。这一条按现值重记（内容寻址的逐项清单），不是放宽。 ｜ 2026-11-04 重记（两态写进 `returns` 的声明面）：`verdict` 那两句（两态之一：`成立` / `有毛病`，`有毛病` 时 `defect_step` 指到第几步）写进了返回说明，返回键集合一格未动（只加措辞、没加/删任何返回键）⇒ 本条 amendment 的 `to` 按现值重记一次（同一格只能有一条账：`amendment_for` 按整份 edits 全等匹配，多一条或留着旧 `to` 都对不上）。`from` 仍是基线那一版，键集合与 ① 的强度一个字未动。",
-      "date": "2026-11-04",
+      "reason": "按现值重记（2026-11-05）：2696cb93（D13/D14）把 `kind` / `reason` 两个词表从实现现算 —— kind 补在册送审那一族的拒信码与 statement_missing（空串 = 这一趟没有档），reason 补 checked=False 的整族（含 manuscript_* / proof_text_needs_a_manuscript / secretary_unjudged / ledger_row_lost 等）与 checked=True 的 already_signed；旧文案里已漂的集合一并去掉。2026-11-04 那条（补「verdict 是两态之一」）已按现值合入本条、不再单列。",
+      "date": "2026-11-05",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
-          "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / bad_manuscript_path / manuscript_missing / manuscript_unreadable / manuscript_has_no_proof_section / dependency_section_missing / dependency_section_unreadable / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「没查成」冒充「审过了」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
+          "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
         }
       ],
       "date_amended": "2026-11-04"
@@ -5910,77 +5883,15 @@
       "tools": [
         "doc.write_mapping"
       ],
-      "key": "params",
-      "reason": "数值实验定理那一行的证据面：rows[] 每行多六格候选 evidence_kind / evidence_path / evidence_sha256 / numeric_evidence / exhaustion_note / v_signature（证明栏是程序的那几行必填），让映射表能指回 E 写的那份 exhaustion.md 与 V 签的 sha256。",
-      "date": "2026-10-26",
-      "edits": [
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/evidence_kind",
-          "value": {
-            "type": "string",
-            "enum": [
-              "proof",
-              "report"
-            ],
-            "description": "这一行的正文是哪一本：proof（F 的证明）/ report（E 的报告）。数值实验定理那一行填 report"
-          }
-        },
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/evidence_path",
-          "value": {
-            "type": "string",
-            "description": "正文在仓库里的相对路径（如 out/experiments/000000/exhaustion.md）"
-          }
-        },
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/evidence_sha256",
-          "value": {
-            "type": "string",
-            "description": "那份文件字节的 sha256（不是文本归一化之后的）"
-          }
-        },
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/exhaustion_note",
-          "value": {
-            "type": "string",
-            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）；通道为空时同样不许填"
-          }
-        },
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/numeric_evidence",
-          "value": {
-            "type": "string",
-            "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填；通道为空时不许填（那是在自称有数值证据、却没有数值证明通道）"
-          }
-        },
-        {
-          "op": "add_key",
-          "path": "params/properties/rows/items/properties/v_signature",
-          "value": {
-            "type": "object",
-            "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"
-          }
-        }
-      ]
-    },
-    {
-      "tools": [
-        "doc.write_mapping"
-      ],
       "key": "returns",
-      "reason": "同一批：返回值点名 numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填 ——缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False），不再只在文档里写。 2026-10-28（成文门，业主逐字：「G写论文时能依赖的只有系统侧的研究成果（B侧原文或B侧有引用记录的其它角色的手稿与参考文献），总之G写论文只能用研究产出，如果产出不足不可杜撰，应上报父代理要求扩大研究面」）：doc.write_mapping 在写表之前先问 researchbase.research_base ——研究成果不足 ⇒ 受控拒绝（kind=no_evidence_chain，一个字节都不写）并交回 next_steps；台账读不到是另一档（kind=ledger_unreadable，没查成）。失败那一侧因此多两个键：research_base（读数全文，字段名见 researchbase.research_base）与 next_steps。（本条账按判据的口径就地把 to 推进到今天；同一条 (工具, key) 只留一条账 —— 再加一条会让上一条的 to 过期，那条判据会红。） 2026-11-04 p236（6fb014f5 三条已知缝隙）：凭据格在通道为空时必须留空、numeric_evidence / exhaustion_note 空通道不许填；lean_state 不再把「关档 / 有产物」当凭据格判据。这一条按现值重记（内容寻址的逐项清单），不是放宽。",
-      "date": "2026-10-26",
+      "reason": "按现值重记（2026-11-05）：5670d42c（审计 D6–D12）把 `state` 那一档扩到「只定理类行（且证明栏是程序）另写 numeric_evidence / exhaustion_note 与索引四格，缺一项就 state=fail、工具随之 ok=False」，并把 `lean_state` 从「开关开着就必须填两格」改成「这只是读数，凭据格仍按证明通道判」，另补两档失败 kind `no_evidence_chain`（研究成果不足，一个字节都没写）/ `ledger_unreadable`（台账读不到 ⇒ 没查成），后两档带 research_base 与 next_steps。2026-10-26 那条旧账已按现值合入本条、不再单列。",
+      "date": "2026-11-05",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）",
-          "to": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— 空通道两格必须空，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格仍按通道判）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）/ no_evidence_chain（研究成果不足，**一个字节都没写**）/ ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，字段名只有一处真身，见 researchbase.research_base）与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
+          "to": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/ unknown（没有正文，表没有可对的东西）；只定理类行（theorem / lemma / proposition / corollary，且证明栏是程序）另写 `numeric_evidence` / `exhaustion_note` 与索引四格：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 problems 并让 state 落到 fail（工具随之 ok=False）；lean_state ∈ off（没开 Lean；凭据格仍按这条命题的证明通道判 —— 通道为空（证明栏 ① 段既没有程序也没有 Lean 源码）时两格必须留空，填了受控拒绝，numeric 通道仍要证明栏第 ① 段那份 `.py`）/ on（开关开着且有 Lean 产物 —— 这只是读数，不是「必须填」的理由：凭据格仍按通道判）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）/ no_evidence_chain（研究成果不足，**一个字节都没写**）/ ledger_unreadable（台账读不到 ⇒ 没查成）—— 后两档另带 research_base（那份读数的全文：三态 state、逐格计数、缺哪一格，字段名只有一处真身，见 researchbase.research_base）与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
         }
       ]
     },
@@ -6163,8 +6074,8 @@
         "verify.run_experiment"
       ],
       "key": "params",
-      "reason": "把两种用途拆开：形式化的 imports / run_name 两格随 Lean 侧归 L 一起删掉（script_path 也不再要求 .lean）；穷举证明的凭据 design / enumeration / exhaustive / search_space 四格加进来 —— 缺任一块，这一条实验只能落 cross_check。",
-      "date": "2026-10-26",
+      "reason": "整格按现值重记（2026-11-05）：本格三次演进合成一条 —— ① 2026-10-26 Lean 侧清场（形式化那一路归 L）：删 `imports` / `run_name` 两格，`script_path` 的说明去掉「formal 时必须是 .lean」；② 同一轮加穷举证明四格 `design` / `enumeration` / `exhaustive` / `search_space`（穷举与数值实验的凭据面）；③ 2696cb93（D15，2026-11-05）把 `method.enum` 里 E 收不下的 `formal` 去掉，只广告三种计算法。enum 一变，旧账（7 条）与现值差异（8 条：多出的那条是 remove_item formal）不再逐项全等 ⇒ 整格按现值重记一条，`edits` 覆盖以上全部八项。这不是新改动，是重记必须连带覆盖的历史键。",
+      "date": "2026-11-05",
       "edits": [
         {
           "op": "add_key",
@@ -6200,6 +6111,11 @@
             },
             "description": "formal：这次检查要加载的库（不给时用检查器的默认值）"
           }
+        },
+        {
+          "op": "remove_item",
+          "path": "params/properties/method/enum",
+          "item": "formal"
         },
         {
           "op": "remove_key",
@@ -6304,7 +6220,8 @@
           "from": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out'}；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）",
           "to": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out','coverage'}；coverage 是**整张文献表**的全文覆盖率 {'total','with_fulltext','rate','missing','no_location','checked'}（rate=with_fulltext/total，total=0 时给 null 而不是 0；**no_location 是「我们连可取全文的地址都没有 ⇒ 没去取」，不是「这篇不存在」**——有地址但还没取的篇落进 missing，不落进 no_location）；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）"
         }
-      ]
+      ],
+      "date": "2026-10-28"
     },
     {
       "key": "returns",
@@ -6319,7 +6236,8 @@
           "from": "{'provider','mode','topic','description','limit','count','new_count','existing_count','unknown_count','batch_duplicate_count','store_checked','store_read_error','existing_table_size','candidates','elapsed_s','diagnostics','warnings','providers_requested','sources','source_count','source_failures','source_refusals','cost'}；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing','existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel','cited_by_count'}；sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；cost 是 {'provider_calls','elapsed_s'}",
           "to": "{'provider','mode','topic','description','limit','count','new_count','existing_count','unknown_count','batch_duplicate_count','store_checked','store_read_error','existing_table_size','candidates','elapsed_s','diagnostics','warnings','providers_requested','sources','source_count','source_failures','source_refusals','cost'}；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing','existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel','cited_by_count','topic_selfcheck'}；topic_selfcheck 是 broad 的主题自检 {'state','note'}（state ∈ related/off_topic/unknown；**unknown 是机器判不了、不是跑题**；非 broad 模式为 null）；sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；cost 是 {'provider_calls','elapsed_s'}"
         }
-      ]
+      ],
+      "date": "2026-10-28"
     },
     {
       "tools": [
@@ -6487,8 +6405,8 @@
         "doc.write_mapping"
       ],
       "key": "params",
-      "reason": "2026-11-04 业主口径：`lean_file` 是「机器核验凭据」那一格，功能是「这条命题是百分百真的」，按这条命题的证明通道填（numeric ⇒ 证明栏第 ① 段那份 .py、`lean_target` 留空；formal ⇒ .lean 与 `lean_target`；通道为空两格可空）⇒ row 参数里 file / lean_file / lean_target 三处 description 改写（判据 tests/test_lean_file_is_taught_by_channel.py）。同一份 params 里另有六个 add_key（numeric_evidence / exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / v_signature）—— 它们是本轮之前已在盘上（D-34 索引四格、E-1 数值定理两格）而基线从未记过账的键，这次按内容寻址一并补记：只补账，不改 required / 类型，也不改 max_ratio。 2026-11-04 p236（6fb014f5 三条已知缝隙）：凭据格在通道为空时必须留空、numeric_evidence / exhaustion_note 空通道不许填；lean_state 不再把「关档 / 有产物」当凭据格判据。这一条按现值重记（内容寻址的逐项清单），不是放宽。",
-      "date": "2026-11-04",
+      "reason": "整格按现值重记（2026-11-05）：本格三次演进合成一条 —— ① 2026-10-26 数值实验定理那一行的证据面（rows[] 每行多 evidence_kind / evidence_path / evidence_sha256 / exhaustion_note / numeric_evidence / v_signature 六格）；② 2026-11-04 业主口径「`lean_file` 是机器核验凭据」（7398d759 / 12de46fd 随判据同步）；③ 5670d42c（审计 D6–D12，2026-11-05）把七处声明改到与 8b48065b 的实现事实一致：`file` / `lean_file` / `lean_target` 三格的说明按证明通道写清，四格候选键的说明改准。enum 与键集之外，`from` / `to` 都取自现值，2026-10-26 与 2026-11-04 那两条旧账因此与现值不再逐项全等、已删（它们被本条完全覆盖）。",
+      "date": "2026-11-05",
       "edits": [
         {
           "op": "add_key",
@@ -6523,20 +6441,20 @@
           "path": "params/properties/rows/items/properties/exhaustion_note",
           "value": {
             "type": "string",
-            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）；通道为空时同样不许填"
+            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）；只定理类行（theorem / lemma / proposition / corollary）在证明栏是程序时必填 —— 例子/实验不承担这一格；通道为空时同样不许填"
           }
         },
         {
           "op": "set_scalar",
           "path": "params/properties/rows/items/properties/file/description",
           "from": "该条完整证明/实验所在的文件（论文包内的相对路径）",
-          "to": "该条完整证明/实验所在的文件：理论定理行写论文包内的相对路径；数值实验定理行写程序相对仓库根的路径（如 code/r34_check.py，不在包里是正常的）"
+          "to": "该条完整证明/实验所在的文件。`file` 有三种落点：理论定理行写论文包内的相对路径；数值实验定理行写程序相对仓库根；例子/实验行按通道写也相对仓库根。"
         },
         {
           "op": "set_scalar",
           "path": "params/properties/rows/items/properties/lean_file/description",
           "from": "验它的那份 Lean 源码在论文包里的相对路径（如 formal/000004.lean）。盘上有 Lean 产出时，定理/引理/命题/推论这几行必填",
-          "to": "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填：numeric（证明栏第 ① 段是程序、台账里有 E 签的穷举）填那份 .py 程序（相对仓库根，必须与证明栏同一份）；formal 填那份 .lean（项目根相对路径，如 code/formal/000004.lean；包内写法 formal/000004.lean 也认）；通道为空时两格必须留空（不适用，不是没填）—— 填了就是无依据的声称（没有通道就没有凭据，受控拒绝）"
+          "to": "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填：numeric（证明栏第 ① 段是程序）以及例子/实验（证明栏第 ① 段是程序，不要求 E 已把它签成穷举）都填那份 `.py` 程序（相对仓库根，必须与证明栏同一份）；formal 填那份 `.lean`（项目根相对路径，如 code/formal/000004.lean；包内写法 formal/000004.lean 也认）；通道为空（证明栏 ① 段既没有程序也没有 Lean 源码）时两格必须留空，填了受控拒绝 —— 那时填了就是无依据的声称（没有通道就没有凭据，受控拒绝）"
         },
         {
           "op": "set_scalar",
@@ -6549,7 +6467,7 @@
           "path": "params/properties/rows/items/properties/numeric_evidence",
           "value": {
             "type": "string",
-            "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。证明栏是程序的那几行必填；通道为空时不许填（那是在自称有数值证据、却没有数值证明通道）"
+            "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。只定理类行（theorem / lemma / proposition / corollary）在证明栏是程序时必填 —— 例子/实验不承担这一格（它们的凭据是证明栏第 ① 段那份 `.py`）；通道为空时不许填（那是在自称有数值证据、却没有数值证明通道）"
           }
         },
         {
@@ -6559,6 +6477,130 @@
             "type": "object",
             "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"
           }
+        }
+      ]
+    },
+    {
+      "tools": [
+        "doc.mapping_cells"
+      ],
+      "key": "returns",
+      "reason": "5670d42c（doc.write_mapping 声明 · 审计 D6–D12，2026-11-05）：`doc.mapping_cells` 的 `returns` 把「空串」的第二种含义补齐 —— 旧文案只说「空串 = 通道为空、这一格不适用」，可实现里空串还可能是「通道非空、但这一档没有这一格」；两种情形读数一样，含义不同（后者才是「该有值却没有」）。这一格自 838a7d87（2026-11-04 新增本工具）以来从未记过，按现值补记一条。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'ok','cells','sources','problems','channel','checked'}；cells 的键 = file / lean_file / lean_target / numeric_evidence / exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / v_signature（只给拿得到的格；空串 = 通道为空、这一格不适用）；sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / `v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话：读不到 / 没签 / sha 不符 / 表里没有这一行）；channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；checked=False = 没查成（不是「这一行齐了」）；失败：ok=False + kind=mapping_cells_incomplete（逐格读数仍在 cells / problems 里）/ bad_project（项目根不在工作区里）",
+          "to": "{'ok','cells','sources','problems','channel','checked'}；cells 的键 = file / lean_file / lean_target / numeric_evidence / exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / v_signature（只给拿得到的格；空串有两种含义：通道为空、这一格不适用，或通道非空但这一档没有这一格）；sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / `v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话：读不到 / 没签 / sha 不符 / 表里没有这一行）；channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；checked=False = 没查成（不是「这一行齐了」）；失败：ok=False + kind=mapping_cells_incomplete（逐格读数仍在 cells / problems 里）/ bad_project（项目根不在工作区里）"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "fs.edit"
+      ],
+      "key": "returns",
+      "reason": "d3aedd1b（fs 内容闸 · 审计 D，2026-11-05）：编辑与写入走同一道内容闸（带 `## 证明` 的正文一律受控拒），`returns` 补 ok=False 时的 kind 词表（reserved_framework_artifact / reserved_framework_ledger / path_denied / not_found / too_large / not_utf8 / empty_old_string / not_found_old_string / ambiguous / sha_mismatch / not_observed / stale_version）。理由同 fs.write：失败档不进声明面，读者就分不清「没改成」与「改成了」。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}",
+          "to": "{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/path_denied/not_found/too_large/not_utf8/empty_old_string/not_found_old_string/ambiguous/sha_mismatch/not_observed/stale_version) + data=None"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "fs.write"
+      ],
+      "key": "returns",
+      "reason": "d3aedd1b（fs 内容闸 · 审计 D，2026-11-05）：写带 `## 证明` 的证明正文一律受控拒（唯一例外是RESEARCH.md 引 F 的稿），失败面因此成形 —— `returns` 补上 ok=False 时的 kind 词表（reserved_framework_artifact / reserved_framework_ledger / path_denied / exists / too_large / not_observed / stale_version）。旧文案只列四个成功键，模型在声明面上看不见「被拒时读到什么」，于是会把「没写成」当成「写了」。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'path','bytes','sha256','created'}",
+          "to": "{'path','bytes','sha256','created'}；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/path_denied/exists/too_large/not_observed/stale_version) + data=None"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.list"
+      ],
+      "key": "params",
+      "reason": "068cc9d9（工具面 · 字段投影，2026-11-05）：`table.list` 加 `fields` —— 查台账不必读整本（statements 的 proof_text 全文动辄数千字符）；省略 = 整行，与改前逐字相同。它是可选投影，不新增语义。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/fields",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）"
+          }
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.list"
+      ],
+      "key": "returns",
+      "reason": "e257485f（审计 D1/D2，2026-11-05）：补「给了投影时 meta 多一格」—— 给了 `fields` 时 `meta` 多一格 `fields`（本次投影的字段名，按请求顺序）；不给就没有这一格（不适用，不是空串）。不写这一句，读的人会把「没投影」与「投影成空」当成同一件事。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。",
+          "to": "{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。给了 `fields` 时 meta 多一格 `fields`（本次投影的字段名，按请求顺序）；不给就没有这一格（不适用，不是空串）。"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.search"
+      ],
+      "key": "params",
+      "reason": "068cc9d9（工具面 · 字段投影，2026-11-05）：`table.search` 加 `select`（与 table.list 的 `fields` 是同一件事：只回这几个键）；它不参与搜索 —— 搜哪些字段仍由 `fields` 决定。两个名字分工不同，说明里写清才不会被当成同义词。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/select",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "字段投影（与 table.list 的 `fields` 是同一件事）：只回这几个键；省略=整行。注意它不参与搜索：搜哪些字段仍由 `fields` 决定"
+          }
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.search"
+      ],
+      "key": "returns",
+      "reason": "e257485f（审计 D1/D2，2026-11-05）：补「给了投影时 meta 多一格」—— 给了 `select` 时 `meta` 多一格 `select`（本次投影的字段名，按请求顺序）；不给就没有这一格（不适用，不是空串）。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。",
+          "to": "{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。给了 `select` 时 meta 多一格 `select`（本次投影的字段名，按请求顺序）；不给就没有这一格（不适用，不是空串）。"
         }
       ]
     }
