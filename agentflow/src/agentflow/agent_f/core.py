@@ -997,6 +997,17 @@ class _Core:
                     cites = [str(c) for s in steps for c in (s.get("cites") or [])]
                     lines.append(f"  · 这一轮的论证 {len(steps)} 步，引到 {cites[:6] or ['（无）']}；"
                                  "首步：" + _clip(str(steps[0].get("text") or ""), 120))
+                # 读数回灌（业主 2026-11-05）：`attackround.parse_round` 把"推导步被声明成前提"
+                # 之类的读数写进 `problems`（照旧收下这一轮，不改判据强度）—— 但改前这一格
+                # 只念 `steps` / `cites`，`problems` 只进台账 ⇒ F 下一轮读不到自己上一轮被读出
+                # 的那条问题（「教 + 读数但不拦」里最弱的一环：读数没有任何读者）。
+                # 逐条原文回灌，不加摘要、不合并（problem 自带"第 N 步"，合并就丢了步号）；
+                # 没有 problems 的轮次一行都不加 —— 空就是空，补一句"没有发现问题"会让
+                # "这一轮没报"与"这一轮报了但被吞了"再次同形（三态纪律）。
+                for raw_problem in (product.get("problems") or []):
+                    problem = str(raw_problem or "").strip()
+                    if problem:
+                        lines.append("  · 这一轮的问题读数（不拒收）：" + problem)
                 if product.get("script_spec"):
                     lines.append("  · 这一轮派给 E 的判据：" + _clip(str(product["script_spec"]), 160))
             if h.get("best_partial"):
