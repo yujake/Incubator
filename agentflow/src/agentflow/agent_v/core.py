@@ -1035,7 +1035,12 @@ class AgentV:
                         review_pass=1, review_call=review_call,
                         # 业主 2026-10-29 追加口径：V 只落台账，翻位交给秘书。
                         flip=False)
-                except (VR.VerificationError, OSError) as exc:
+                except Exception as exc:  # noqa: BLE001 —— 台账写口的任何异常都落成红读数
+                    # 2026-11-05（D4）：改前只收 `VerificationError` / `OSError`，别的异常
+                    # 会「穿透 `verify_proof`」（真跑 `ws-vacuum2` 的 `RuntimeError`）—— 调用方
+                    # 拿到的是一次崩溃而不是一条读数。三态纪律：写口自己坏了也是「这一格
+                    # 没查成」，异常类型与原话必须能被人读到，不许穿透。
+                    out["checked"] = False
                     out["reason"] = "ledger_unwritable"
                     out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                      "这一格没查成（不落台账、不改位、必须重签）")
@@ -1589,11 +1594,12 @@ class AgentV:
                                          # 秘书翻位时 `sign_statement` 从行上读到它、
                                          # 让 `vsigns.land` 把签块盖回同一份稿。
                                          manuscript=manuscript)
-        except (VR.VerificationError, OSError) as exc:
-            # 台账写不进去（坏行 / 权限 / 磁盘 / 目录）⇒ 这是"没查成"，不是"签住了"。
-            # 不接住它会让异常穿透到工具层，而那一层读不到"这一签没落地"这句话。
+        except Exception as exc:  # noqa: BLE001 —— 台账写口的任何异常都落成红读数（D4）
+            # 台账写不进去（坏行 / 权限 / 磁盘 / 目录 / 写口自己抛的任何异常）⇒ 这是
+            # "没查成"，不是"签住了"。不接住它会让异常穿透到工具层，而那一层读不到
+            # "这一签没落地"这句话（2026-11-05 D4：改前只收 VerificationError / OSError）。
             self._emit(f"verify_proof({sid})：台账写不进去（{type(exc).__name__}: {exc}）—— 没查成")
-            return {"ok": False, "reason": "ledger_unwritable",
+            return {"ok": False, "checked": False, "reason": "ledger_unwritable",
                     "detail": (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
                                "（不落台账、不改位、必须重签）"),
                     "emit": "", "judgment": judgment, "wash": wash,
@@ -2164,8 +2170,10 @@ class AgentV:
                     self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
                     verifier=self.actor, object_path=rel)
                     for i in range(len(judged))]
-            except (VR.VerificationError, OSError) as exc:
-                return {"failed": True, "reason": "ledger_unwritable",
+            except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
+                # 2026-11-05（D4）：改前只收 `VerificationError` / `OSError`，写口抛别的
+                # 异常（反真空探针 `ws-vacuum2` 的 `RuntimeError`）会穿透 `verify_proof`。
+                return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                         "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                    "这一份没查成（签没有落点，必须重审）"),
                         "passes": passes, "manuscript": rel}
@@ -2189,8 +2197,9 @@ class AgentV:
                 pending = VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=last,
                     verifier=self.actor, object_path=rel)
-            except (VR.VerificationError, OSError) as exc:
-                return {"failed": True, "reason": "ledger_unwritable",
+            except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
+                # 同上一支：判词没有落点也是「这一份没查成」，不许把异常抛给调用方。
+                return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                         "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                    "这一份没查成（判词没有落点，必须重审）"),
                         "passes": passes, "manuscript": rel}
@@ -2396,8 +2405,9 @@ class AgentV:
                     verifier=self.actor,
                     object_sha256=str(reviewed.get("report_sha256") or ""),
                     object_path=(str(reviewed.get("report_path") or "") or rel))
-        except (VR.VerificationError, OSError) as exc:
-            return {"failed": True, "reason": "ledger_unwritable",
+        except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
+            # 穷举那一支的 pending 写口同理：改前只收 VerificationError / OSError。
+            return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                     "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                "这一份没查成（判词没有落点，必须重审）"),
                     "passes": passes, "manuscript": rel}
