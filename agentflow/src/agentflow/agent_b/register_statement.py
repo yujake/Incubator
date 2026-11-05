@@ -2708,8 +2708,18 @@ class _RegisterStatement:
                 proofs_listed=proofs_listed, row=redelivery, v_sign=v_sign,
                 proof_no=proof_no_placement, store=self.store)
             if _pg.get("refused"):
+                # ---- 2026-11-05（D3）：拒信要带"认签那一格"的读数 ------------------
+                #
+                # 第二笔同正文 sha 的登记被 `already_claimed` 挡住时，拒码是
+                # `proof_without_v_sign`；"为什么认不到签"（这一签已认给谁）原本只在
+                # `bits_after_sign` 的返回值里，而那条路已经 return 了 —— 调用方只看到
+                # 一句"没有一份覆盖它的 V 签"，会去重签（重签也只会被同一把锁挡住）。
+                # 这里把认签读数（去掉逐字签块，留三态 + claim）随拒信带回去。
+                _v_sign_reading = {k: v for k, v in dict(v_sign or {}).items()
+                                   if k != "block"}
                 return _refuse(str(_pg["refused"]), str(_pg.get("reason") or ""),
                                proof_gate=dict(_pg.get("reading") or {}),
+                               v_sign=_v_sign_reading,
                                **({"b_manuscript": b_manuscript,
                                    "manuscript_path": str(b_manuscript.get("path") or "")}
                                   if b_manuscript else {}))

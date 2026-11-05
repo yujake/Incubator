@@ -2865,6 +2865,32 @@ def _registered_ids(store: Any) -> tuple[str, ...]:
         return ()
 
 
+def _pending_claim_from_backing(*, backing: Mapping[str, Any], ledger: Any,
+                                sha: str) -> dict[str, Any] | None:
+    """签块那条路认到的是 **pending** 台账行时，产出与 `_claim_pending_sign` 同形的 claim。
+
+    D3（2026-11-05）：签块与"按正文 sha 的 pending 认领"认的是同一份证据（同一行 V 的
+    台账），回写（`bind_pending_claim`）就必须两条路都交得出来 —— 否则"同一份正文只
+    认领一次"的锁只在没有签块那一半生效。签块走的是有号台账（`verifications/<号>.jsonl`）
+    时回 `None`：那不是一次"待认领"，不需要回写。
+
+    返回 `{ledger, verification_id, proof_sha256, object_sha256, bound_id, bound}`；
+    `bound_id` 非空 = 这一行早被某条命题认过（调用方判"是不是同一号"）。
+    """
+    from . import verifications as _VR
+
+    path = str((backing or {}).get("path") or "")
+    if not path.startswith(f"{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/"):
+        return None
+    row = dict((backing or {}).get("row") or {})
+    bound = str(row.get("stmt_id") or row.get("statement_id") or "")
+    return {"ledger": str(ledger or ""),
+            "verification_id": str((backing or {}).get("verification_id") or ""),
+            "proof_sha256": str(row.get("proof_sha256") or sha or ""),
+            "object_sha256": str(row.get("object_sha256") or ""),
+            "bound_id": bound, "bound": bool(bound)}
+
+
 def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                     statement_id: str = "", proof_no: Any = 1,
                     kind: str = "", manuscript_text: str = "",
@@ -2901,10 +2927,15 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     `register_statement` 调 :func:`bind_pending_claim`）—— 那就是"同一份正文只认领一次"
     的锁：第二笔同文登记看到台账行已经绑了号，就不再认。
 
-    ## 返回的 `claim`（只在 pending 认领这一档出现）
+    ## 返回的 `claim`（签块这一支与 pending 认领这一支都交）
     `{ledger, verification_id, proof_sha256, object_sha256, bound_id, bound}`：
-    `bound_id` 非空 = 这一签早被别的命题认过（`bound=True`，这一笔不认）；
-    空 = 这一笔刚认下、等登记回写。老返回形状不变（`claim` 只在 pending 这一档出现）。
+    `bound_id` 非空 = 这一签早被别的命题认过（`bound=True`，这一笔不认；`code`
+    给 `already_claimed`）；空 = 这一笔刚认下、等登记回写。
+    2026-11-05（D3）：签块这一支认到 **pending** 背书时也交同一形状的 `claim`
+    （改前只有 `_claim_pending_sign` 交，签块那条路 return 时不带 —— 于是
+    `register_statement` 的 `bind_pending_claim` 那一笔从来没跑过，"同一份正文只认领
+    一次"的锁不落）。有号台账（`verifications/<号>.jsonl`）那一档不产生 `claim`：
+    那不是"待认领"。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "applied": False,
                            "artifact_sha": "", "why": ""}
@@ -2980,6 +3011,29 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                                 f"（{backing.get('code')}）：稿上的「已签 3/3」只是一句话，"
                                 "要有 V 的台账行记过它才算签"))
                 return dict(bits), out
+            # ---- 2026-11-05（D3，证据级）：签块这条认领路也要交 claim --------------
+            #
+            # 改前这一支认到 pending 背书之后**不带 `claim`** 就 return：`register_statement`
+            # 只在 `v_sign.claim` 存在时调 `bind_pending_claim`（那里的注释写着同一句
+            # 纪律），于是 pending 行的 `statement_id` 一直是空的 —— "同一份正文只认领
+            # 一次"那把锁从来没落上。第二笔（同一正文 sha、另一条命题、另一份没有签块的稿）
+            # 于是又认了同一签，两条命题都凭同一组三票拿到 proof_review（#p2 借 #p1 的光）。
+            # 现在：签块这一支与 `_claim_pending_sign` 交同一形状的 claim（ledger /
+            # verification_id / sha / bound_id），登记拿到号之后照常回写；
+            # 已经认给别的命题 ⇒ 当场 `already_claimed`（不认、不覆盖）。
+            _claim = _pending_claim_from_backing(
+                backing=backing, ledger=str(block.get("ledger") or ""), sha=sha)
+            if _claim is not None:
+                out["claim"] = dict(_claim)
+                _bound = str(_claim.get("bound_id") or "")
+                if _bound and _bound != str(statement_id or "").strip():
+                    out.update(applied=False, code="already_claimed",
+                               reason=(f"`{block.get('ledger')}` 这一签已经认给 "
+                                       f"stmt:{_bound} ⇒ 不再认领"),
+                               why=(f"`{block.get('ledger')}` 这一签已经认给 stmt:{_bound} ⇒ "
+                                    "不再认领（同一份正文只认领一次；改稿请重签，"
+                                    "登记不产生第二份签）"))
+                    return dict(bits), out
             new = _apply_review_to_bits(
                 bits,
                 verification_id=str(backing.get("verification_id") or ""),
@@ -3250,13 +3304,19 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
     （`#p2` 不许借 `#p1` 的光，反方向同理）。
 
     ## 写什么
-    只改那一行（按 `verification_id` 定位）：`statement_id` / `stmt_id` 两键同值
-    （与 `record_verification` 同一个双写口径），另加 `claimed_at`（什么时候认的）。
-    已经绑了别的号 ⇒ 一个字节都不写，返回 `bound_elsewhere`（不覆盖前一笔的认领）。
+    这一份 pending 台账里的**每一行**（一行是一转）：`statement_id` / `stmt_id` 两键
+    同值（与 `record_verification` 同一个双写口径），另加 `claimed_at`（什么时候认的）。
+    为什么不是只改锚点那一行：pending 台账按对象内容分文件（`<sha>.jsonl`），里面的行
+    是同一份签的几转 —— 只绑最后一转，"这一份正文被谁认领了"在读侧就取决于"从哪一行
+    读"，而 D3 的现场正是这样漏的（第一笔之后三行仍全空，第二笔又认了同一签）。
+    整份文件一起绑，`already_claimed` 才是在"这一份正文"的粒度上判的。
+
+    任何一行已经绑了别的号 ⇒ 一个字节都不写，返回 `bound_elsewhere`（不覆盖前一笔的认领）；
+    每一行都早就绑给同一个号 ⇒ `already=True`（幂等，一个字节都不写）。
 
     ## 怎么写的（全仓唯一一处写 pending 台账）
     pending 台账是 append-only 的（`verifications.record_pending_sign` 追加）；
-    这一格是唯一的"回写"——只重写那一行，其余行逐字节原样
+    这一格是唯一的"回写"——只重写这些行，其余行逐字节原样
     （`splitlines(keepends=True)` 保住行尾），写临时文件再 `replace`（与
     `_write_atomic` 同一手法）。三态：`checked=False` = 没写成（读不出来 / 行不见了 /
     写盘失败），不许折成"已经绑了"。
@@ -3283,6 +3343,8 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
         return out
     lines = raw.splitlines(keepends=True)
     hit = -1
+    bound_elsewhere = ""
+    targets: list[tuple[int, dict[str, Any]]] = []
     for i, line in enumerate(lines):
         if not line.strip():
             continue
@@ -3290,28 +3352,35 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
             row = json.loads(line)
         except (ValueError, TypeError):
             continue
-        if str(row.get("verification_id") or "") != vid:
+        if not isinstance(row, dict):
             continue
-        hit = i
+        if str(row.get("verification_id") or "") == vid:
+            hit = i
         current = str(row.get("stmt_id") or row.get("statement_id") or "")
         if current and current != sid:
-            out.update(checked=True, bound_elsewhere=current,
-                       why=(f"这一签已经认给 stmt:{current} ⇒ 不覆盖"
-                            "（同一份正文只认领一次）"))
-            return out
+            bound_elsewhere = current
+            break
         if current == sid:
-            out.update(checked=True, already=True, bound=True,
-                       why=f"这一签早就认给 stmt:{sid}（幂等：一个字节都没写）")
-            return out
-        row["statement_id"] = sid
-        row["stmt_id"] = sid
-        row["claimed_at"] = _now_iso()
-        lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
-        break
+            continue                      # 已绑给同一号：一个字不动
+        targets.append((i, row))
+    if bound_elsewhere:
+        out.update(checked=True, bound_elsewhere=bound_elsewhere,
+                   why=(f"这一签已经认给 stmt:{bound_elsewhere} ⇒ 不覆盖"
+                        "（同一份正文只认领一次）"))
+        return out
     if hit < 0:
         out["why"] = (f"`{rel}` 里没有 {vid or '（没有号）'} 那一行 ⇒ 没写成"
                       "（不是「已经绑了」）")
         return out
+    if not targets:
+        out.update(checked=True, already=True, bound=True,
+                   why=f"这一签早就认给 stmt:{sid}（幂等：一个字节都没写）")
+        return out
+    for i, row in targets:
+        row["statement_id"] = sid
+        row["stmt_id"] = sid
+        row["claimed_at"] = _now_iso()
+        lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
     tmp = path.with_name(path.name + ".claim.tmp")
     try:
         tmp.write_text("".join(lines), encoding="utf-8")
