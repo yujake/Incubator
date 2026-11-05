@@ -2640,6 +2640,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 收工门的 `reviewed_proof_rows` 与（批⑥）状态报告都调 `bits_from_row`。
     "evidencebits.py": "命题的五元证据位与派生等级（哪位角色欠哪一位 / 四态 / 等级机械派生 / "
                        "引用命题凭文献代号 / 作废四条）；纯函数层，读入口 `bits_from_row`",
+    # 2026-11-05（D15 走查）：E 收得下的三种计算法的唯一来源。为什么必须是顶层模块：
+    # 动作面（`specs/e.py`）与工具面（`tools/verify_tools.py` 的 `verify.run_experiment`）
+    # 必须读同一份枚举，而 `specs/e.py` 从 `agent_e._support` 取它会成环（`_support`
+    # 末尾反向 `from ..specs.e import SPEC`）—— 常量先落地到中立模块，两条导入方向才都成立。
+    "experiment_methods.py": "E 的三种计算法（numeric / symbolic / exhaustive_search）的唯一来源："
+                             "COMPUTATIONAL_METHODS（formal 不在其中，形式化归 L）—— "
+                             "specs/e.py 的动作面与 verify.run_experiment 的工具面都从它取 method.enum",
     "extract.py": "文本抽取层 `extract_text` 及其 PDF 后端",
     "fetch.py": "下载层：流式下载、原子落盘、限速重试、镜像回退",
     "formalgw.py": "Lean 形式化验证后端（`evidence_kind=\"proof\"` 这句话的落点）",

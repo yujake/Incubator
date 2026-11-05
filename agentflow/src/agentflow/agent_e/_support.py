@@ -58,19 +58,21 @@ import time
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from .. import schema as S
+from ..experiment_methods import COMPUTATIONAL_METHODS as COMPUTATIONAL_METHODS
 from ..formalgw import STATUSES as _FORMALGW_STATUSES
 from ..formalgw import DeclarationNameError, sole_declaration_name
 from ..store import Store
 
 #: E 的三种计算法（`schema.EXPERIMENT_METHODS` 去掉 `formal`）。
 #:
-#: 为什么它定义在 `from ..tools import verify_tools as VT` 之前：`verify_tools` 的
-#: `verify.run_experiment` 声明要从这里读它（模型面的 `method.enum` 只许广告 E 真能
-#: 收下的三种），而 `verify_tools` 又被本模块导入 —— 常量先落地，两条导入方向才都
-#: 成立（`import agentflow.agent_e` 先起、`import agentflow.tools.verify_tools` 先起
-#: 都实测过）。`formal` 不在这里：它仍留在 `schema.EXPERIMENT_METHODS`（L 的
-#: `formal.record` 要写那张表），但 E 的动作面第一句就以 `formal_not_in_e` 拒它。
-COMPUTATIONAL_METHODS = ("numeric", "symbolic", "exhaustive_search")
+#: 常量本体在 `agentflow.experiment_methods`（中立模块）：`specs/e.py` 的动作面也要读它，
+#: 而 `specs/e.py` 从本模块 import 会成环 —— 本模块末尾反向 `from ..specs.e import SPEC`，
+#: 先导入 `specs.e` 时 `SPEC` 还没定义。这里只 re-export，既有 import 面不变
+#: （`tools/verify_tools.py` 仍从本模块取）。
+#: 上面那个 import 仍必须排在 `from ..tools import verify_tools as VT` 之前：`verify_tools`
+#: 又反向从本模块导入这个名字，常量要先落地，两条导入方向才都成立（都实测过）。
+#: `formal` 不在这里：它仍留在 `schema.EXPERIMENT_METHODS`（L 的 `formal.record` 要写
+#: 那张表），但 E 的动作面第一句就以 `formal_not_in_e` 拒它。
 assert set(COMPUTATIONAL_METHODS) | {"formal"} == set(S.EXPERIMENT_METHODS), (
     f"COMPUTATIONAL_METHODS={COMPUTATIONAL_METHODS} 与 schema.EXPERIMENT_METHODS="
     f"{S.EXPERIMENT_METHODS} 不一致 —— '哪些方法拿不到 proof' 必须只有一处定义"

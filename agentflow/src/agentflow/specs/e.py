@@ -8,7 +8,6 @@
 """
 from __future__ import annotations
 
-from .. import schema as S
 from ..agentspec import (
     _ARR_I,
     _ARR_OBJ,
@@ -24,6 +23,7 @@ from ..agentspec import (
     BuilderDeps,
     _obj,
 )
+from ..experiment_methods import COMPUTATIONAL_METHODS
 
 #: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
 ACTIONS: tuple[ActionSpec, ...] = (
@@ -31,7 +31,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "E", "run_experiment",
         "跑一个实验脚本并登记一行 experiments（证据等级由 schema 机械约束）",
         _obj({"claim": _S, "claim_key": _S, "script_path": _S, "params": _OBJ,
-              "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
+              # `method` 的枚举是 E 收得下的三种计算法（`COMPUTATIONAL_METHODS`），
+              # 不是 `schema.EXPERIMENT_METHODS` 全表：`formal` 仍留在 schema 里（L 的
+              # `formal.record` 要写那张表），但 `AgentE.run_experiment` 第一句就以
+              # `formal_not_in_e` 拒它 ⇒ 广告一个必然被拒的值，模型就会按 schema 传参、
+              # 再拿回一次拒绝（D15，2026-11-05 走查）。工具面同轮改
+              # （`verify_tools.py` 的 `verify.run_experiment`）；常量落在中立模块
+              # `experiment_methods.py`，因为从 `agent_e._support` 取它会成环。
+              "method": {"type": "string", "enum": list(COMPUTATIONAL_METHODS)},
               "for_question_id": _S, "timeout": _I,
               # `sleep` 不在真实 `AgentE.run_experiment` 的具名形参里，它也不收
               # `inspect.Parameter.VAR_KEYWORD`（实测 `inspect.signature`：
