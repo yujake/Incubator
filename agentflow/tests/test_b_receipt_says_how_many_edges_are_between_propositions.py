@@ -26,6 +26,7 @@ if str(_SRC) not in sys.path:
 from agentflow import depsection as DS
 from agentflow import schema as S
 from agentflow.agent_b import AgentB
+from agentflow import evidencebits as EB
 from agentflow.store import Store
 
 
@@ -59,6 +60,7 @@ def _add_theorem(store: Store, stmt_id: str) -> None:
         statement_full=f"命题 {stmt_id} 的完整正文。",
         proof_text=proof,
         evidence_kind="heuristic", status="active", quote_verified=None,
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=proof, kind="theorem"),
         quote_reason="判据夹具：自产命题，没有外部引文要比对",
         created_at=S.now_iso(), created_by="agent-B")
     row.validate()
