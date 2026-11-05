@@ -3953,10 +3953,19 @@ class ClosingReport:
                 map_note += (f"；论文里排成定理而 V 签没签读不到 "
                              f"{len(mapgaps['theorem_unsigned_unreadable'])} 条"
                              "（这一格没查成，不是没签）")
+        # 依赖面那一格（2026-11-05）：读数本身是一句话（`present N / 自足 M / 缺节 K / 未读 U`）。
+        # 这一屏里必须能读到它 —— 「依赖面 0 行」之所以静默，正是因为收工那一行从来没提过。
+        # 它不拦门：只在读数里点名，`m_says_done` 与退出码一格不动。
+        dep = self.readings.get("dependency_face") or {}
+        dep_note = ""
+        if isinstance(dep, Mapping) and dep.get("note"):
+            dep_note = f"；{dep['note']}"
+            if dep.get("checked") and int(dep.get("inconsistent") or 0):
+                dep_note += f"（说不一致 {int(dep['inconsistent'])} 条，读数不拦门）"
         if not self.m_verdict:
             return (f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
                     f"『活做完了没有』）⇒ `m_says_done=false`{sum_note}{ros_note}{cc_note}"
-                    f"{map_note}")
+                    f"{map_note}{dep_note}")
         tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
         done = sum(1 for t in tasks if str(t.get("state") or "") == "done")
         list_note = f"；任务列表 {done}/{len(tasks)} done" if tasks else "；任务列表：没提交"
@@ -3968,7 +3977,7 @@ class ClosingReport:
         return (f"收工门：M 判「我这一趟的活{met}」⇒ m_says_done={self.m_says_done}"
                 f"（机器口径 can_close={self.can_close}，{self.can_close_reason or '已接线'}"
                 f"{machine}{list_note}{tail}{gap_note}{sum_note}{ros_note}{cc_note}"
-                f"{map_note}）")
+                f"{map_note}{dep_note}）")
 
 
 # ------------------------------------------------------------------ 各条实现
@@ -5219,6 +5228,234 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     out["reason"] = ("查过了：没有待洗的证明（三档都是 0）" if not out["count"] else
                      (f"查过了：{out['count']} 份证明还没洗过（按来源：{out['by_class']}；"
                       f"扫了 {out['scanned']} 条非概念命题）"))
+    return out
+
+
+#: 依赖面那一格的四个主桶。前三个就是 `secretary._deps_missing_reading` 的三态
+#: （`present` / `missing` / `not_applicable`）在收工读数里的名字；第四个是"读不到"——
+#: 它是三态纪律的一半，所以单独一桶，绝不折进 0（"没查成"与"查过了是 0"必须分得开）。
+DEPENDENCY_FACE_BUCKETS: tuple[tuple[str, str], ...] = (
+    ("present", "present"),
+    ("self_sufficient", "自足"),
+    ("section_missing", "缺节"),
+    ("unread", "未读"),
+)
+
+
+def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
+    """`<项目>/reports/` 里的证明手稿 ⇒ `{命题号: [{name, path, proof_no}, …]}`。
+
+    只收名字落在 `*-proof-<号>[-p<N>].md` 家族里的（解析走 `vsigns.parse_manuscript_name`
+    —— 全仓唯一的手稿名解析口）：`reports/000003-proof-*.md` 那种论文分节稿文件名里
+    没有这个家族的前缀，`family` 判不出来，就不进这一格（它们本来也没有 `## 依赖`，
+    把"论文分节稿缺节"算成缺节会造出一条永远红的读数）。
+    """
+    from .vsigns import parse_manuscript_name
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    reports = Path(root) / "reports"
+    if not reports.is_dir():
+        return out
+    try:
+        paths = sorted(reports.glob("*.md"))
+    except OSError:
+        return out
+    for path in paths:
+        got = parse_manuscript_name(path.name)
+        if not (got.get("checked") and got.get("family")):
+            continue
+        sid = str(got.get("manuscript_id") or "")
+        if not sid or sid.startswith("plan-"):
+            continue
+        out.setdefault(sid, []).append({
+            "name": path.name, "path": path,
+            "proof_no": int(got.get("proof_no") or 1)})
+    for items in out.values():
+        # 优先级：证明号升序（#p1 先）→ 名字（确定性）。同一号排在后面的只作 `also`。
+        items.sort(key=lambda one: (int(one["proof_no"]), str(one["name"])))
+    return out
+
+
+def dependency_face_reading(store: Any, project_root: Any = None) -> dict[str, Any]:
+    """收工门的依赖面那一格：`present N / 自足 M / 缺节 K / 未读 U`（只报不拦）。
+
+    ## 为什么需要这一格（`temp/dep_probe/REPORT-dependency-surface.md` 第 2 条 / 第 5 条）
+
+    改前收工门不数 `dependencies`（`secretary.py` 那一段的源码自证逐字：「收工门不数
+    `dependencies`、读侧也没有一格问过这件事 ⇒ 依赖面 0 行是静默的」）。后果是
+    「写 0 条与写 5 条在收工读数上同价」：`verify` 对 0 行不产生一条 issue，收工门
+    也没有一格点名，盘上 35 份空表的手稿就这么一路静默过去。
+
+    这一格只做"让 0 被看见"这件事：它是一格读数（`readings`），不进 `status`、
+    不产生 blocker、不动退出码 —— 自足的证明仍然是合法形态，必须放行。
+
+    ## 四个桶（口径只有一处：`depsection.deps_missing_reading`）
+
+    | 桶 | 判据 |
+    |---|---|
+    | `present N` | 台账里这一条命题有 ≥1 条依赖边（`dependencies.used_by = stmt:<号>[#pN]`） |
+    | `自足 M` | 有证明正文、依赖 0 条，而手稿里 `## 依赖` 那一节在、表是空的（0 行、正文 0 条 `stmt:` 引用） |
+    | `缺节 K` | 有证明正文、依赖 0 条，而手稿里没有 `## 依赖` 那一节（这是"格式没交"，与自足分开） |
+    | `未读 U` | 读不到：`statements` / `dependencies` 表读不出来，或这一条命题在 `reports/` 里找不到手稿、那一节读不懂 |
+
+    另有两个子因单独数（都只在非 0 时出现在 `note` 里）：
+    `说不一致`（正文有 `stmt:` 引用而表 0 行；或表里有行而台账 0 条边）与
+    `表读不懂`（那一节在、但 `parse_dependency_section` 报了格式问题/受控拒绝）。
+    它们是 `missing` 里的两种子因，不是第四态，所以不并进上面四个数。
+
+    ## 三态（这一格本身）
+
+    `statements` / `dependencies` 读不出来 ⇒ `checked=False` + `reason`，四个计数是
+    `None` 而不是 0，`note` 写「未读到」—— 没查成不是「依赖面都建起来了」。
+    逐条读数在 `rows` 里（`stmt_id` / `bucket` / `edges` / `manuscript` / `refs` /
+    `table_rows` / `why`），读的人据此知道每个数是哪几条凑出来的。
+
+    ## 手稿从哪读
+
+    依赖段只在手稿里（命题行的 `proof_text` 是证明正文，不含那一节）。所以这一格读
+    `<项目>/reports/` 下这一条命题的手稿；同一命题有多份稿时优先读有 `## 依赖` 那一节
+    的那一份，其余按证明号升序 —— 读数里 `manuscript` 逐条点名读的是哪一份（不猜）。
+    """
+    from . import depsection as _DS
+    from . import verifications as _VR
+    from .proofloc import parse_used_by
+
+    out: dict[str, Any] = {
+        "checked": False, "reason": "", "note": "",
+        "present": None, "self_sufficient": None, "section_missing": None, "unread": None,
+        "inconsistent": None, "malformed": None,
+        "scanned": 0, "rows": [], "problems": [],
+    }
+    rows_by_id, why = _statement_rows(store)
+    if rows_by_id is None:
+        out["reason"] = why
+        out["note"] = f"依赖面：未读到（{why}）"
+        return out
+    try:
+        edges_by_id: dict[str, int] = {}
+        for dep in store.rows("dependencies"):
+            head, _no = parse_used_by(str(dep.get("used_by") or ""))
+            if not head.startswith("stmt:"):
+                continue
+            sid = head[len("stmt:"):].strip()
+            if sid:
+                edges_by_id[sid] = int(edges_by_id.get(sid) or 0) + 1
+    except Exception as exc:  # noqa: BLE001 —— 读不到就是没查成（不是 0 条边）
+        out["reason"] = f"`dependencies` 读不到（{type(exc).__name__}: {exc}）⇒ 没查成"
+        out["note"] = f"依赖面：未读到（{out['reason']}）"
+        return out
+    root = (Path(resolve_under_workspace(store, project_root))
+            if str(project_root or "").strip()
+            else Path(str(getattr(store, "root", "") or ".")))
+    manuscripts = _manuscripts_by_statement(root)
+    counts = {key: 0 for key, _label in DEPENDENCY_FACE_BUCKETS}
+    counts["inconsistent"] = 0
+    counts["malformed"] = 0
+    for sid in sorted(rows_by_id):
+        row = dict(rows_by_id[sid] or {})
+        # 没有正文的行（概念 / 定义 / 还没写证明）不进这一格：依赖面那一格对它是
+        # "不适用"，不是"零依赖"（与 `_deps_missing_reading` 的三态逐字对齐）。
+        texts = [str(text or "") for _no, text in _VR.proof_list(row)]
+        if not any(text.strip() for text in texts):
+            continue
+        out["scanned"] += 1
+        edges = int(edges_by_id.get(sid) or 0)
+        item: dict[str, Any] = {
+            "stmt_id": sid, "kind": str(row.get("kind") or ""), "edges": edges,
+            "manuscript": "", "refs": None, "table_rows": None, "bucket": "", "why": ""}
+        if edges > 0:
+            item.update(bucket="present",
+                        why=f"台账里这一条命题有 {edges} 条依赖边（依赖面建起来了）")
+            counts["present"] += 1
+            out["rows"].append(item)
+            continue
+        files = manuscripts.get(sid) or []
+        if not files:
+            item.update(bucket="unread",
+                        why=("有证明正文，而 `reports/` 里没有这一条命题的手稿 ⇒ "
+                             "依赖面那一节读不到（不是「依赖为零」）"))
+            counts["unread"] += 1
+            out["rows"].append(item)
+            continue
+        # 优先"有那一节"的那一份：同一命题多份稿时，缺节的那一份不该把整条命题
+        # 判成缺节（另一份可能把依赖交齐了）。同级按证明号升序（`files` 已排好）。
+        chosen = files[0]
+        section: dict[str, Any] = {}
+        body = ""
+        for cand in files:
+            try:
+                text = cand["path"].read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:  # noqa: BLE001 —— 这一份读不到，试下一份
+                item["why"] = f"手稿 {cand['name']} 读不到（{type(exc).__name__}）"
+                continue
+            got = _DS.parse_dependency_section(text)
+            if got.get("present") or not section:
+                chosen, section, body = cand, got, text
+            if got.get("present"):
+                break
+        item["manuscript"] = str(chosen.get("name") or "")
+        if not section and item["why"]:
+            item["bucket"] = "unread"
+            counts["unread"] += 1
+            out["rows"].append(item)
+            continue
+        refs = len(_DS.stmt_refs(_DS.proof_body(body)))
+        item["refs"] = refs
+        table_rows = len(section.get("rows") or [])
+        item["table_rows"] = table_rows
+        if section.get("refused") or section.get("problems"):
+            item.update(bucket="malformed",
+                        why=("手稿里的依赖段读不懂（"
+                             + str(section.get("reason") or "; ".join(
+                                 str(x.get("why") or "") for x in
+                                 (section.get("problems") or [])[:2]))
+                             + "）⇒ 读不懂就不许说它「自足」"))
+            counts["malformed"] += 1
+            out["rows"].append(item)
+            continue
+        if not section.get("present"):
+            item.update(bucket="section_missing",
+                        why=(f"有证明正文、依赖边 0 条，而手稿 {chosen['name']} 里没有 "
+                             "`## 依赖` 那一节 ⇒ 这是格式没交（与「自足」分开）"))
+            counts["section_missing"] += 1
+            out["rows"].append(item)
+            continue
+        if table_rows == 0 and refs > 0:
+            item.update(bucket="inconsistent",
+                        why=(f"说不一致：证明正文里有 {refs} 条 `stmt:` 引用，而手稿的 "
+                             "`## 依赖` 表 0 行 ⇒ 表与正文对不上（不该读成自足）"))
+            counts["inconsistent"] += 1
+            out["rows"].append(item)
+            continue
+        if table_rows == 0:
+            item.update(bucket="self_sufficient",
+                        why=("这一份有正文、0 条依赖边，作者在手稿里交了一张空的 "
+                             "`## 依赖` 表（声明自足）⇒ 合法形态，只记读数，不判红"))
+            counts["self_sufficient"] += 1
+            out["rows"].append(item)
+            continue
+        # 表里有行、台账 0 条边 ⇒ B 没把这一份稿的依赖落成边（表与台账对不上）。
+        item.update(bucket="inconsistent",
+                    why=(f"说不一致：手稿的 `## 依赖` 表里有 {table_rows} 行，而 "
+                         f"`dependencies` 台账里这一条命题 0 条边 ⇒ 表没落成边"))
+        counts["inconsistent"] += 1
+        out["rows"].append(item)
+    out["checked"] = True
+    for key in counts:
+        out[key] = int(counts[key])
+    total = sum(int(v) for v in counts.values())
+    if total != len(out["rows"]):
+        # 防空集：桶之和必须等于逐条数（同一个事实两个算法不一致 = 这一格自己坏了）。
+        out["problems"].append(
+            f"四个桶与两个子因之和 {total} 与逐条数 {len(out['rows'])} 不一致，这一格自己坏了")
+    note = (f"依赖面：present {counts['present']} / 自足 {counts['self_sufficient']} / "
+            f"缺节 {counts['section_missing']} / 未读 {counts['unread']}")
+    if counts["inconsistent"]:
+        note += f" / 说不一致 {counts['inconsistent']}"
+    if counts["malformed"]:
+        note += f" / 表读不懂 {counts['malformed']}"
+    out["note"] = note
+    out["reason"] = (f"查过了：扫了 {out['scanned']} 条带正文的命题；" + note.split("：", 1)[1])
     return out
 
 
@@ -6863,6 +7100,40 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             "suspected_splits", "suspected_splits_unreadable", "warning",
             f"「疑似拆命题」那一格没查成（{_sp.get('reason') or '没给原因'}）⇒ "
             "这个形态数不出来（没查成不是「没有拆命题」）"))
+    # ---- 依赖面那一格（2026-11-05）：present / 自足 / 缺节 / 未读 ----------------
+    #
+    # 与上面两格同一套纪律：只落 `readings`、不产生 blocker、不动 `status` 与退出码
+    # ⇒ 门的强度一格没改。为什么必须接：`secretary.py` 那一段的源码自证写着
+    # 「收工门不数 `dependencies`、读侧也没有一格问过这件事 ⇒ 依赖面 0 行是静默的」，
+    # 于是盘上 35 份空表的手稿（`temp/dep_probe/REPORT-dependency-surface.md` 第三节）
+    # 在收工输出上一格都看不见 —— 写 0 条与写 5 条同价。
+    #
+    # 口径在 `dependency_face_reading`：三态照 `depsection.deps_missing_reading`，
+    # 自足仍然放行（业主 2026-10-24 的口径：自足证明合法），只把"0 行"变成可见读数；
+    # 读不到写「未读到」，不许折成 0（三态纪律）。
+    rep.readings["dependency_face"] = _run_reading(
+        rep, "dependency_face", dependency_face_reading, store, project_dir)
+    _df = rep.readings["dependency_face"]
+    if _df.get("checked"):
+        for _p in list(_df.get("problems") or []):
+            rep.findings.append(Finding(
+                "dependency_face", "dependency_face_self_inconsistent", "warning",
+                f"依赖面那一格自相矛盾：{_p}"))
+        # 说不一致 / 表读不懂只在真的出现时留一条 warning（它们不是寻常日子：
+        # 盘上 41 份手稿里这个形态今天是 0 份）。不升 blocker —— 这一格是读数。
+        if int(_df.get("inconsistent") or 0):
+            _named = [f"{one.get('stmt_id')}（{one.get('manuscript') or '手稿读不到'}）"
+                      for one in (_df.get("rows") or [])
+                      if str(one.get("bucket")) == "inconsistent"][:6]
+            rep.findings.append(Finding(
+                "dependency_face", "dependency_face_inconsistent", "warning",
+                f"依赖面有 {int(_df['inconsistent'])} 条「表与正文/台账说不一致」："
+                f"{'、'.join(_named)}（读数，不拦门）"))
+    else:
+        rep.findings.append(Finding(
+            "dependency_face", "dependency_face_unreadable", "warning",
+            f"依赖面那一格没查成（{_df.get('reason') or '没给原因'}）⇒ "
+            "「present / 自足 / 缺节 / 未读」四个数数不出来（没查成不是全 0）"))
     # ---- 门：悬着的命题拦门（业主 2026-11-01 裁定）
     #
     # 这是收工门强度变更（不是读数变化）：改前"打回之后没人重送"只活在台账里，
