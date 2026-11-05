@@ -96,6 +96,32 @@ from ..store import Store, StoreError
 #: V 在台账里的默认实例名（`bit3_payload` 的 `reviewed_by.verifier` 就是它）。
 DEFAULT_VERIFIER = "agent-V"
 
+#: V 的受控拒绝码表：`kind` 是档，`reason` 是细则。
+#:
+#: 为什么两个名字都留（2026-11-05 走查 D7：同一个拒绝给出
+#: `kind=proof_manuscript_required` / `reason=proof_text_needs_a_manuscript`）：
+#: `kind` 回答"这一笔拒的是哪一档"，它与 B 侧同一件事的码同名
+#: （`agent_b/register_statement.py` 的 `proof_manuscript_required`），下游可以按它把
+#: V / B 两处的拒绝并成一类；`reason` 回答"这一档里具体缺什么"，而工具声明
+#: （`tools/verify_tools.py` 的 reason 词表）与既有判据读的都是它。收敛成一个词
+#: 会把"档"与"细则"折平（下游再也分不出"同一档的两种细则"），也会让已登记的
+#: reason 词表变成第二个口径 —— 所以两格都留，但对应关系只在这一张表里写一次：
+#: :meth:`AgentV._manuscript_gate` 从它取 `reason`，判据也读它核对两处可对上
+#: （改掉本表而两个码仍不同名 ⇒ 判据红，见 `temp/walk-fix-20261105/probe_d7.py`）。
+#:
+#: 表里那两行就是"档 ↔ 细则"的全部映射（一档一格细则；加第二格细则要在这里登记，
+#: 不许在调用点各写一份字符串）::
+#:
+#:     kind（档）                     reason（细则）
+#:     proof_manuscript_required      proof_text_needs_a_manuscript
+V_REFUSAL_CODES: dict[str, dict[str, str]] = {
+    "proof_manuscript_required": {
+        "reason": "proof_text_needs_a_manuscript",
+        "means": ("在册命题送审没带手稿（只给了内联正文，或什么都没给）：签块 / "
+                  "`## 依赖` / 按号寻址都只在文件上，所以这一档一个字节都不审、不落签"),
+    },
+}
+
 #: 未在册那一支的"命题页"占位（2026-11-02，业主：「V 签先放在 F 的手稿里，让 B 录入」）。
 #:
 #: `verifications.cold_start_prompt` 的 `## 命题（含完整假设）` 那一段在未在册时没有正文：
@@ -1617,6 +1643,11 @@ class AgentV:
         签块 / `## 依赖` / 按号寻址都只在文件上；落一份稿（只收
         `reports/{f,e,b}-proof-<号>.md`，按号命名是硬条件；`notes/…` 先走转正）；再来。
         一个字节都不审、不落。
+
+        ## 返回里的两个码（D7，2026-11-05 走查）
+
+        `kind` 是档、`reason` 是细则 —— 映射只在 `V_REFUSAL_CODES` 里写一次，
+        这里从它取细则码（两格都留的理由见那张表）。
         """
         if str(manuscript or "").strip():
             return None
@@ -1624,10 +1655,11 @@ class AgentV:
             why = "这一趟只给了内联正文（`proof_text`）"
         else:
             why = "这一趟既没有正文、也没有手稿（`proof_manuscript`）"
+        _code = "proof_manuscript_required"
         return {
             "checked": False,
-            "kind": "proof_manuscript_required",
-            "reason": "proof_text_needs_a_manuscript",
+            "kind": _code,
+            "reason": V_REFUSAL_CODES[_code]["reason"],
             "detail": (
                 f"命题 {sid} 已登记，而{why} ⇒ 不审、不落签。在册命题也要手稿："
                 "签要落在稿上（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、"
