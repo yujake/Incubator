@@ -1240,7 +1240,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）；名单见论文段。每格三态、unknown 不是通过；`substance` 那一格要 `statements` 等表非空。`m_says_done` 是你的判断，不交 ⇒ `false`；`can_close` 是机器口径（`bool | None`，`can_close=None` 不是通过）；`closable` 是给调用方的布尔。另回 `review_acceptance`：内容级验收五条 + 辅助读数；`cap_usd` 判成本上限。",
+    "只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance`（内容级验收五条 + 辅助读数）与 `cap_usd`（成本上限）。",
     {
         "type": "object",
         "properties": {
@@ -1259,7 +1259,8 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
             "goal_met": {"type": "boolean",
                          "description": "**你的判断**：目标达成了没有（业主 2026-10-09："
                                         "「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。"
-                                        "不给 ⇒ 这一趟没有收工判据（`m_says_done=false`）"},
+                                        "不给 ⇒ 这一趟没有收工判据（`m_says_done` 是你的判断，"
+                                        "不交即 `false`）"},
             "basis": {"type": "string",
                       "description": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / "
                                      "与机器八格不一致时你为什么不认它）"},

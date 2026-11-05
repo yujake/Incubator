@@ -6074,7 +6074,7 @@
         "verify.run_experiment"
       ],
       "key": "params",
-      "reason": "整格按现值重记（2026-11-05）：本格三次演进合成一条 —— ① 2026-10-26 Lean 侧清场（形式化那一路归 L）：删 `imports` / `run_name` 两格，`script_path` 的说明去掉「formal 时必须是 .lean」；② 同一轮加穷举证明四格 `design` / `enumeration` / `exhaustive` / `search_space`（穷举与数值实验的凭据面）；③ 2696cb93（D15，2026-11-05）把 `method.enum` 里 E 收不下的 `formal` 去掉，只广告三种计算法。enum 一变，旧账（7 条）与现值差异（8 条：多出的那条是 remove_item formal）不再逐项全等 ⇒ 整格按现值重记一条，`edits` 覆盖以上全部八项。这不是新改动，是重记必须连带覆盖的历史键。",
+      "reason": "整格按现值重记（2026-11-05，p242 压缩）：本格四次演进合成一条 —— ① 2026-10-26 Lean 侧清场（形式化那一路归 L）：删 `imports` / `run_name` 两格，`script_path` 的说明去掉「formal 时必须是 .lean」；② 同一轮加穷举证明四格 `design` / `enumeration` / `exhaustive` / `search_space`；③ 2696cb93（D15，2026-11-05）把 `method.enum` 里 E 收不下的 `formal` 去掉，只广告三种计算法；④ 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：`method` 多一格 `description`，把「`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）」逐字从 summary 挪到参数面（p239 的同一手法：细则进参数 description，模型仍看得见）。enum 一变旧账就与现值不再逐项全等 ⇒ 整格按现值重记一条，`edits` 覆盖以上全部九项；这不是新改动，是重记必须连带覆盖的历史键与压缩挪位。",
       "date": "2026-11-05",
       "edits": [
         {
@@ -6111,6 +6111,11 @@
             },
             "description": "formal：这次检查要加载的库（不给时用检查器的默认值）"
           }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/method/description",
+          "value": "三种计算法之一（E 收得下的就这三种）；`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）"
         },
         {
           "op": "remove_item",
@@ -6276,14 +6281,14 @@
         "conductor.closing"
       ],
       "key": "params",
-      "reason": "153-U-01/U-02（`can_close` 拆成两个名字，2026-10-31 1449d314）：`goal_met` 的参数说明里『不交 ⇒ 这一趟没有收工判据（`can_close=false`）』改成『`m_says_done=false`』—— 旧 `can_close`（= M 的判断）已改名 `m_says_done`，`can_close` 改成机器口径（`bool | None`）。说明若继续写旧名，读声明的人会把机器那一格当成 M 的判断。",
-      "date": "2026-10-31",
+      "reason": "按现值重记（2026-11-05，p242 压缩）：① 2026-10-31 153-U-01/U-02（`can_close` 拆成两个名字）：`goal_met` 的说明从「不给 ⇒ 没有收工判据（`can_close=false`）」改成指向 `m_says_done`；② 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：把 summary 里「`m_says_done` 是你的判断，不交即 `false`」逐字挪进 `goal_met` 的 description（p239 同一手法：细则进参数面，模型仍看得见），summary 只留指针。两笔都只动说明文字，参数名 / 类型 / required / 其余格一格未动。",
+      "date": "2026-11-05",
       "edits": [
         {
           "op": "set_scalar",
           "path": "params/properties/goal_met/description",
           "from": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`can_close=false`）",
-          "to": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`m_says_done=false`）"
+          "to": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`m_says_done` 是你的判断，不交即 `false`）"
         }
       ]
     },

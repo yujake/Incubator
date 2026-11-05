@@ -1811,7 +1811,7 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完了。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
     {
            "type": "object",
            "properties": {

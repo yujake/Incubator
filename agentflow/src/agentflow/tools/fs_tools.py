@@ -415,9 +415,8 @@ D_ATTACK_RECORD_MESSAGE = (
 #: 与 `_d_proof_body_refusal` 的实际判定：三处不许各写一份（summary 单独写"照拒"而不写
 #: 例外、或实现单独放宽而不改这句，都会红）。
 D_PROOF_BODY_RULE = (
-    "D 在任何路径写带 `## 证明` 的正文都照拒（`notes/` / `reports/` / `out/proofs/*.md` "
-    "一样；唯一例外是 `RESEARCH.md` 里引用盘上 `reports/f-proof-<号>.md`，或带那份文件"
-    "字节的 sha256）"
+    "D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 "
+    "`RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256"
 )
 
 #: 其余任何路径上"D 自己写的 `## 证明` 节"的拒信（2026-11-05 业主裁定：教法说任何路径，
@@ -1225,7 +1224,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换一段文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；保留面与拒写口径同 fs.write —— 名字级（`f-proof-*` / `*-proof.md` 对 F/D/M，`*-research.md` 对 D/M，`RESEARCH.md` 对 M）与内容级两道都在；D 可写 `RESEARCH.md`，但内容级仍守着：" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
+    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},

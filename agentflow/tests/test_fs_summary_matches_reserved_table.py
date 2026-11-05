@@ -137,6 +137,27 @@ def summary_problems(name: str, summary: str,
     return out
 
 
+def rule_source_problems(write_summary: str, edit_summary: str, rule: str) -> list[str]:
+    """口径句的**单源**判据：`fs.write` 逐字读它，`fs.edit` 只许指到它。
+
+    为什么不再要求两条 summary 都逐字复制（2026-11-05 改，改的不是宽度而是口径）：
+    同一句话在同一个角色面上印两遍不是"更清楚"，只是把 summary 预算吃掉 ——
+    压缩批次的分子里，`fs.edit` 那 103 字符的复制正是把比例顶回 76.35% 的那一笔
+    （p239 压缩 `verify_proof` 那次的同一类问题：规则留在该在的那一格，别处只指路）。
+    语义要求一条没少：模型从 `fs.edit` 这一格仍要能知道"规则在哪"。
+
+    两条都判（缺一红），且两条各有反真空：
+      a `rule` 逐字出现在 `fs.write` 的 summary 里；
+      b `fs.edit` 的 summary 用「同 / 见 / 按 fs.write」这种**可判定**的说法指到它。
+    """
+    problems: list[str] = []
+    if rule not in str(write_summary or ""):
+        problems.append("fs.write 的 summary 没逐字读同一处口径句（`D_PROOF_BODY_RULE`）")
+    if not re.search(r"(同|见|按)\s*`?fs\.write`?", str(edit_summary or "")):
+        problems.append("fs.edit 的 summary 没指到规则在哪（要写「口径同 fs.write」这类说法）")
+    return problems
+
+
 def _registry(tmp_path: pathlib.Path):
     store = Store(tmp_path / "ws")
     store.init()
@@ -259,11 +280,21 @@ def test_the_summary_and_the_content_gate_agree_case_by_case(
         ("reports/RESEARCH.md", with_heading_idea, False),
     ]
 
-    # ① 口径句同一份：两条 summary 与 D 的正文拒信都读 `D_PROOF_BODY_RULE`。
+    # ① 口径句只有一处：`fs.write` 逐字读它，`fs.edit` 只许指到它（判据见
+    #    `rule_source_problems`；不只是"读得到"，还要求 `fs.edit` 指得回 `fs.write`）。
     rule = FT.D_PROOF_BODY_RULE
-    for name in ("fs.write", "fs.edit"):
-        assert rule in str(reg.get(name).summary), (name, "summary 没读同一处口径句")
+    write_summary = str(reg.get("fs.write").summary)
+    edit_summary = str(reg.get("fs.edit").summary)
+    assert rule_source_problems(write_summary, edit_summary, rule) == [], (
+        rule_source_problems(write_summary, edit_summary, rule))
     assert rule in FT.D_PROOF_BODY_MESSAGE.format(path="x"), "正文拒信没读同一处口径句"
+
+    # 反真空：两条各删一处 ⇒ 同一条判据必须红（否则上面那句"指到规则"是纸面通过）。
+    assert rule_source_problems(write_summary.replace(rule, ""), edit_summary, rule), (
+        "把 RULE 从 fs.write 的 summary 里删掉却没红 ⇒ 单源判据没在看那一格")
+    assert rule_source_problems(
+        write_summary, edit_summary.replace("同 fs.write", "同 fs.writx"), rule), (
+        "把 fs.edit 里「同 fs.write」那句删掉却没红 ⇒ 「指到规则在哪」是纸面通过")
 
     for rel, body, refused in cases:
         direct = FT._d_proof_body_refusal(rel, "D", body, root)

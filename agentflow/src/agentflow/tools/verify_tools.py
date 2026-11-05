@@ -779,7 +779,7 @@ def _verify_detect_verifier():
 @tool(
     "verify.run_experiment",
     (
-            "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场拒，`formal_not_in_e`）。"
+            "跑工作区内脚本并登记一条 Experiment 行。自报 `evidence_kind='proof'` 降级为 `cross_check`；崩溃记 `inconclusive`。"
             ),
     {
            "type": "object",
@@ -795,7 +795,9 @@ def _verify_detect_verifier():
             # 模型就会按 schema 传参、再拿回一次必然的拒绝（D15，2026-11-05 走查）。
             # 判据：模型面 `method.enum` 不含 `formal`；`verify.run_experiment(method="formal")`
             # 仍受控拒绝（拒绝码不变）；三种计算法照旧可用。
-            "method": {"type": "string", "enum": list(COMPUTATIONAL_METHODS)},
+            "method": {"type": "string", "enum": list(COMPUTATIONAL_METHODS),
+                       "description": ("三种计算法之一（E 收得下的就这三种）；"
+                                       "`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）")},
             "for_question_id": {"type": "string"},
             "timeout": {"type": "integer", "minimum": 1},
     # 这里没有 `run_name` / `imports`：它们只服务 `method='formal'`，而 2026-10-23 晚
