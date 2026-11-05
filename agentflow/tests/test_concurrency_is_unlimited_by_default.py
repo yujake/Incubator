@@ -21,16 +21,17 @@
 
 ## 为什么不跟着抬 `PROMPT_VERSION`（2026-11-05 实测，免得下次又有人抬）
 
-这一句落在开场那条 user 消息的 `parent_limits` 一格里（2026-10-21 从 system
-挪出来的 volatile fact，见 `promptstability.STEP_VOLATILE_FACTS`）。而
-`tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 钉的是 `system_prompt(...)`
-的段文本，`_surface_digest` 还把 `parent_limits` 显式替换成夹具串
-`_SURFACE_FIXTURE_LIMITS` ⇒ 只改这一格，十一格摘要一格不动。实测把
-`PROMPT_VERSION` 抬到 p243 会让 `test_the_prompt_version_moves_with_the_sections`
-报「PROMPT_VERSION 动了而十格摘要一格没变」⇒ 那一版号是假账。同一原因，两份
-golden（agent_surface / tool_surface）里根本没有这一串，重冻格数 = 0；
-warm 的前缀也不含它（`scripts/warm_prompt_cache.py` 发的是 system + 固定那句
-user）⇒ 这次改动不重冻、不抬版本、不需要重跑 warm。
+可核的一句话：这次改的是开场那条 user 消息里 `parent_limits` 一格的值
+（从「16 个」变成「不设限」），而那一格被 `promptstability.split_facts` 归进
+`STEP_VOLATILE_FACTS`（system 里只留静态指路语）、又被
+`tests/test_agent_prompts.py::_surface_digest` 显式替换成夹具串
+`_SURFACE_FIXTURE_LIMITS` 之后才算摘要 ⇒ 值怎么变，`_FROZEN_PROMPT_DIGESTS`
+的十一格都一格不动。实测把 `PROMPT_VERSION` 抬到 p243 会让
+`test_the_prompt_version_moves_with_the_sections` 报「PROMPT_VERSION 动了而
+十格摘要一格没变」⇒ 那一版号是假账。同一原因，两份 golden（agent_surface /
+tool_surface）里根本没有这一串，重冻格数 = 0；warm 的前缀也不含它
+（`scripts/warm_prompt_cache.py` 发的是 system + 固定那句 user）⇒ 这次改动
+不重冻、不抬版本、不需要重跑 warm。
 
 ## 为什么是 `None` 而不是 0
 
