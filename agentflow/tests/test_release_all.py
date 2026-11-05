@@ -2529,6 +2529,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 它同样只被循环面与质量面读，故按上面那条同一口径登记：事实登记，不是"批准它存在"。
     "litstage.py": "「待新增文献列表」的实现核心（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告；"
                    "条数上限 / 重叠口径 / 状态机 / 筛选理由词表都在这里，与 `tools/search_tools.py` 分工如 `dedup.py`",
+    # 2026-11-05（M2 + M3）：文献读侧两件事的唯一实现。为什么必须是顶层模块：
+    # 写侧（`agent_b/run_once.py` 的抽取入口）与读侧/工具侧（`tools/search_tools.py`
+    # 的候选入库与重取写点）必须共用同一份判据 —— 两处各写一份必然漂移，改前的
+    # `library/library/…` 与"status=ok 却写着 no_fulltext"就是那么来的。
+    "litread.py": "文献读侧的两个口径：`literature.path` 的两基准解析（library 优先，"
+                  "仅以 `library/` 开头的串才回退 workspace 且钉在工作区内，读数带 "
+                  "`path_base`；两基准都没有时 `file_missing` 写出两个候选绝对路径）与 "
+                  "`download.fulltext` 的三档现算（ok / no_text_layer / no_fulltext；"
+                  "有字节但这一处没抽过 ⇒ None，由同一处的 `with_fulltext` 清掉旧标签 —— "
+                  "写点与清除点成对）",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件

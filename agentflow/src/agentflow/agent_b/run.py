@@ -54,6 +54,11 @@ class _Run:
             ):
                 setattr(total, f, getattr(total, f) + getattr(r, f))
             total.details.extend(r.details)
+            # `path_base` 是逐篇的读数（`run_once` 那一趟领到的那一篇是按哪个基准解析的）；
+            # 一轮可能两种基准都有，所以汇总只保留第一条非空的，逐篇来路在
+            # `details[*stage=resolve]` 里一条不少。
+            if not total.path_base:
+                total.path_base = r.path_base
             n += 1
         out = total.to_dict()
         # 这一轮配额的「总」读数：`concepts_created` 只说得清"写了多少"，

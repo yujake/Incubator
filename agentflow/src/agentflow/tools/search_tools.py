@@ -34,6 +34,7 @@ from typing import Any, Callable, Iterable, Mapping
 from .base import ToolError, ToolRegistry, ToolSpec, fail, ok, tool
 from .. import dedup as D
 from .. import fetch as F
+from .. import litread as LR
 from .. import providers as P
 from .. import schema as S
 from .. import textutil as T
@@ -1245,12 +1246,17 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
                     item.update(outcome="got", path=rel_path, bytes=size, sha256=sha,
                                 note="字节已进 library/、path 已写回 ⇒ 现在可离线引用。")
                     dl_old = dict(row.get("download") or {})
-                    _save_retried_row(ctx, row, path=rel_path, download={
+                    # M3（2026-11-05）：`**dl_old` 会把旧的 `fulltext` 标签原样带下去 ——
+                    # 这一处只知道"现在有字节了"，有没有可抽文本要等 B 抽取时现算。
+                    # 所以按三档口径算出来的是 `None`（有字节、这一处没抽过）⇒ 交给
+                    # `with_fulltext` 把旧标签清掉，而不是让 `status=ok` 的行继续写着
+                    # "没有全文"（真机 6 条自相矛盾的来源之一）。
+                    _save_retried_row(ctx, row, path=rel_path, download=LR.with_fulltext({
                         **dl_old, "status": "ok", "http_status": res.http_status,
                         "bytes": size, "sha256": sha, "error": None, "url": url,
                         "retry_attempts": int(dl_old.get("retry_attempts") or 0) + 1,
                         "retried_at": S.now_iso(),
-                    })
+                    }, LR.fulltext_tier(bytes_on_disk=size, pages=None)))
                 else:
                     item.update(
                         outcome="failed", kind="adopt_failed",
@@ -1266,13 +1272,18 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
         if item["outcome"] != "got":
             counts["failed"] += 1
             dl_old = dict(row.get("download") or {})
-            _save_retried_row(ctx, row, path=row.get("path"), download={
+            # 失败那一支同样按盘上事实重算：这一行如果本来就有字节，`fulltext` 不该
+            # 因为"这次重取失败"被写成没有全文（两件事：有没有字节 / 这次取没取到）。
+            kept = row.get("path")
+            _save_retried_row(ctx, row, path=kept, download=LR.with_fulltext({
                 **dl_old, "status": "failed", "error": str(item.get("error") or ""),
                 "kind": item.get("kind"), "last_kind": item.get("kind"),
                 "http_status": item.get("http_status"), "url": url,
                 "retry_attempts": int(dl_old.get("retry_attempts") or 0) + 1,
                 "retried_at": S.now_iso(),
-            })
+            }, LR.fulltext_tier(
+                bytes_on_disk=LR.bytes_on_disk(_lit_file(ctx, str(kept or ""))),
+                pages=None)))
             if item.get("kind") == "http_429" and scope:
                 # 429 ⇒ 给这个源记一段冷却，后面的行不再打它（跳过，不是失败）。
                 P.start_provider_cooldown(scope)
@@ -2035,12 +2046,13 @@ def _stage_fail(exc: Exception) -> Any:
     return fail(f"{type(exc).__name__}: {exc}", kind="unexpected")
 
 
-#: "本次没有全文"这一档的标记值（写进 `literature.download.fulltext`，不新增列）。
+#: `download.fulltext` 的三档口径只有一份实现（`litread.fulltext_tier`）。
 #:
-#: 为什么它必须是一个受控取值而不是一句散文：B 的读侧要按它把"这一篇有定位符、
-#: 只是这次没下字节"与"这一篇从哪来都不知道"分开（见 `agent_b.run_once`
-#: 的 acquire 段）。散文只能被人读，机器读不出两档的差别。
-NO_FULLTEXT_THIS_TIME = "no_fulltext_this_time"
+#: 为什么这里不再留一个"本次没有全文"的私有标记值：改前全仓只有这一个写点
+#: （`_mark_candidate_locator`）、清除点为零，于是 `status=ok` 的行也一直挂着它
+#: （真机 19 条 `no_fulltext` 里 6 条自相矛盾）。现在写点与清除点都调
+#: `litread.with_fulltext`：没有字节 ⇒ `no_fulltext`；有字节但这一处没抽过文本
+#: ⇒ 不算档（`None`）并清掉旧标签 —— 猜一个档位就是让读数重新说谎。
 
 
 def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> bool:
@@ -2054,20 +2066,36 @@ def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> b
 
     为什么写 download 栏而不是新加一列：`download` 是既有字段（`schema` 是禁改区，
     列不许加），它本来就是"这一篇的字节从哪来、到了没有"的落点。写入的键：
-    `url`（定位符）、`fulltext`（本次没拿到全文的标记）、`error`、`note`。
+    `url`（定位符）、`fulltext`（三档现算的结果）、`error`、`note`。
 
-    已登记行如果真的有本地全文（`path` 非空），一律不碰："本次无全文"不许
-    覆盖一个真的有字节的行。返回是否真的写了（幂等：同一个 url 且已标过就不写）。
+    2026-11-05（M3）：这一处原来只管"path 为空 ⇒ 写标记"，path 非空时直接返回
+    —— 那是半条：一行后来有了字节（下载/重取/收编），旧的"没有全文"标签没有任何
+    人清。现在两条分支成对：有字节就只清旧标签（这一处没抽过文本，不猜档位；
+    url 与 note 也不动，那属于"真的有全文"的行）；没字节才写 `no_fulltext`。
+    返回是否真的改了盘上的行（幂等：同一个 url 且档位已是 no_fulltext 就不写）。
     """
     url = str(row.get("url") or "").strip()
     if not url or not lit_id or ctx.store is None:
         return False
     with ctx.store.tx("literature", actor=ctx.actor, note="search.register.locate") as tx:
         got = tx.find("literature", lit_id=lit_id)
-        if got is None or got.get("path"):
+        if got is None:
             return False
         dl = dict(got.get("download") or {})
-        if dl.get("url") == url and dl.get("fulltext") == NO_FULLTEXT_THIS_TIME:
+        # 字节数按 `_lit_file` 的两基准口径现算（与 `search.shelf` 同一个读法）。
+        on_disk = LR.bytes_on_disk(_lit_file(ctx, str(got.get("path") or "")))
+        tier = LR.fulltext_tier(bytes_on_disk=on_disk, pages=None)
+        if tier is None:
+            # 有字节：这一处没有抽过文本，所以不猜档位；但旧标签必须清掉，
+            # 否则"status=ok 却写着没有全文"会一直留着。
+            if "fulltext" not in dl:
+                return False
+            got["download"] = LR.with_fulltext(dl, None)
+            S.Literature(**{k: got[k] for k in got
+                            if k in S.Literature.__dataclass_fields__}).validate()
+            tx.upsert("literature", got, note="search.register.locate.clear")
+            return True
+        if dl.get("url") == url and dl.get("fulltext") == tier:
             return False
         dl.setdefault("status", "skipped")
         have = str(dl.get("url") or "").strip()
@@ -2076,11 +2104,10 @@ def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> b
             # 两个 url 都是真的，覆盖等于让"上一次登记的是哪个"不可查。
             dl["url_previous"] = have
         dl["url"] = url
-        dl["fulltext"] = NO_FULLTEXT_THIS_TIME
-        dl["error"] = dl.get("error") or NO_FULLTEXT_THIS_TIME
+        dl["error"] = dl.get("error") or tier
         dl["note"] = ("本次无全文：只登记了候选源给出的定位链接（url 这一格），"
                       "没有下载字节；要全文请按它重取")
-        got["download"] = dl
+        got["download"] = LR.with_fulltext(dl, tier)
         S.Literature(**{k: got[k] for k in got
                         if k in S.Literature.__dataclass_fields__}).validate()
         tx.upsert("literature", got, note="search.register.locate")

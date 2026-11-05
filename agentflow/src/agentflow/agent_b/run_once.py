@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
+from .. import litread as _LR       # M2/M3：`path` 两基准解析 + `download.fulltext` 三档的唯一实现
 from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间/理由/调用指纹
 from ..extract import DocumentText as _DT
 from pathlib import Path as _Path
@@ -78,7 +79,25 @@ class _RunOnce:
 
         lit_id = lit["lit_id"]
         dl_status = (lit.get("download") or {}).get("status")
-        path = self.store.library_path(lit.get("path"))
+        # ---- M2（2026-11-05）：`literature.path` 的读侧有两个基准，而抽取入口改前
+        # 只走 `store.library_path`（只认 `library/`）。写入侧 `_adopt_file` 明写
+        # 「先 `library/`，不存在再按 workspace」—— 于是一条按工作区相对写下的
+        # `library/000001/…` 在这里被解析成 `library/library/000001/…`，判
+        # `file_missing`，而读数上"文件真的不在"与"在另一个基准下"同形。
+        # 解析口径不另发明：`litread.resolve_literature_path` 与 `search_tools._lit_file`
+        # 同一套（先 library、再 workspace、两条路都钉在工作区内），区别只有一条 ——
+        # workspace 回退只对以 `library/` 开头的串启用（其余旧行仍只认 `library/`）。
+        resolved = _LR.resolve_literature_path(self.store.root, self.store.library,
+                                               lit.get("path"))
+        path = resolved.path
+        if path is not None:
+            # 哪一基准解析的必须能读出来：`path_base=workspace` 是这一档的唯一读数，
+            # 没有它，下次再有人读到 `file_missing` 仍然分不清是"没文件"还是"基准错"。
+            res.path_base = resolved.base
+            res.details.append({"lit_id": lit_id, "stage": "resolve",
+                                "path_base": resolved.base,
+                                "path": str(lit.get("path") or ""),
+                                "resolved": str(path)})
         # 三种"没有可抽取内容"的情况都要标为已处理并记明原因，否则它们会永远
         # 堵在队首（每次 run 都重新领取同一行）。注意 content_mismatch 单独列出来：
         # 文件其实存在（是证据），只是它按内容类型判定不是论文 —— 实测碰到过
@@ -86,9 +105,9 @@ class _RunOnce:
         unreadable_reason = None
         if dl_status == "content_mismatch":
             unreadable_reason = f"content_type_mismatch: {path.name if path else '?'}"
-        elif path is None:
+        elif not str(lit.get("path") or "").strip():
             # 行上没有本地字节，但可能带着定位符（一键迁移登记的行会把候选 url
-            # 写进 `download.url`，并标 `fulltext=no_fulltext_this_time`）。
+            # 写进 `download.url`，并标 `fulltext=no_fulltext`）。
             # 那种情形的原因必须点到定位符：一句说不出位置的原因，在读数上与
             # "这一篇从哪来都不知道"同形 —— 而两者的处置相反（前者可以按 url
             # 重取，后者要人去补来源）。
@@ -96,8 +115,11 @@ class _RunOnce:
             locator = str(dl_row.get("url") or "").strip()
             unreadable_reason = (f"no_fulltext_this_time: {locator}" if locator
                                  else "no_local_file")
-        elif not path.exists():
-            unreadable_reason = f"file_missing:{path}"
+        elif path is None:
+            # 两个基准都不存在 ⇒ 原因里必须写出「两个」候选绝对路径（只写一个会让
+            # "另一个基准下其实有文件"这件事在读数上消失，`file_missing` 也就说不出
+            # 到底试过哪两处）。
+            unreadable_reason = resolved.reason
 
         if unreadable_reason is not None:
             with self.store.tx("literature", actor=self.actor, note="unreadable") as tx:
@@ -106,6 +128,13 @@ class _RunOnce:
                 row["claimed_by"] = None
                 row["lease_until"] = None
                 row["last_mine_error"] = unreadable_reason
+                # ---- M3（2026-11-05）：这一支是"这一趟没抽"的落点，`download.fulltext`
+                # 要按「盘上事实」现算一次：没有字节 ⇒ `no_fulltext`；有字节（例如
+                # content_mismatch 存下来的落地页）⇒ 这一处没抽过文本 ⇒ 不算档（None），
+                # 由 `with_fulltext` 把改前留下的旧标签清掉。写点与清除点是同一个函数。
+                row["download"] = _LR.with_fulltext(
+                    dict(row.get("download") or {}),
+                    _LR.fulltext_tier(bytes_on_disk=_LR.bytes_on_disk(path), pages=None))
                 tx.upsert("literature", row, note="skipped_unreadable")
             res.unreadable += 1
             res.processed = 1
@@ -483,6 +512,19 @@ class _RunOnce:
             # `res.details[*stage=concept_quota]`），它随这一趟的 task 结果进台账 ——
             # "不许静默丢弃"要的是它出现在读数里，而不是它被塞进一个语义不符的字段。
             lit_row["last_mine_error"] = None
+            # ---- M3（2026-11-05）：`download.fulltext` 的三档现算，写点在这里、
+            # 清除点也在这里（同一个 `with_fulltext`）—— 改前全仓只有一处写点
+            # （`search_tools._mark_candidate_locator`）而清除点为零，于是"上次的标签"
+            # 永远留着：真机 6 条 `download.status=ok` 的行却写着"没有全文"。
+            # 这一趟真的抽过 ⇒ docs 的逐页文本是机器证据，档位按它判：
+            # 有非空页 ⇒ ok；有字节但一页可抽文本都没有（扫描件）⇒ no_text_layer。
+            doc_pages = list(getattr(doc, "pages", []) or [])
+            tier = _LR.fulltext_tier(
+                bytes_on_disk=_LR.bytes_on_disk(path), pages=doc_pages)
+            lit_row["download"] = _LR.with_fulltext(
+                dict(lit_row.get("download") or {}), tier)
+            res.details.append({"lit_id": lit_id, "stage": "fulltext",
+                                "fulltext": tier, "pages": len(doc_pages)})
             # `R3-⑩`：真抽过了（抽取器返回了结果）⇒ 这一格 +1，与失败那一支同一个计数点。
             lit_row["mine_attempts"] = int(lit_row.get("mine_attempts") or 0) + 1
             tx.upsert("literature", lit_row, note="processed")

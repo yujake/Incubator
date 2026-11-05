@@ -171,7 +171,10 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
     dl = dict(row.get("download") or {})
     assert row["path"] is None, row
     assert dl.get("url") == url, dl
-    assert dl.get("fulltext") == "no_fulltext_this_time", dl
+    # 2026-11-05（M3）：`download.fulltext` 改成现算三档后，这一档的受控取值是
+    # `no_fulltext`（改前是只有写点、没有清除点的 `no_fulltext_this_time`）。
+    # 判据守的东西一个字没变：盘上"这一篇没有字节"必须是一个机器读得出来的档位。
+    assert dl.get("fulltext") == "no_fulltext", dl
 
     # B 的读侧实跑：原因必须点到那个定位符（不是一条说不出位置的 unreadable）
     b = AgentB(store, extractor=_StubExtractor(), extract_text=None,

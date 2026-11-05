@@ -118,6 +118,15 @@ class BRunResult:
     #: `refused` / `refused_count` / `why`）。空 dict = 这一趟没走到建概念那一步。
     concept_quota: dict = field(default_factory=dict)
     skipped_reason: str | None = None
+    #: 这一趟领到的那篇文献，`literature.path` 是按哪个基准解析出来的
+    #: （`library` / `workspace`；没领到或没解析出来 = 空串）。
+    #:
+    #: 为什么这一格要进读数：`literature.path` 的写入侧有两个坐标系（`search_tools._adopt_file`
+    #: 先 `library/` 后 workspace），而抽取入口改前只认 `library/` ⇒ 一条按工作区相对写下的
+    #: `library/000001/…` 被解析成 `library/library/…`、判 `file_missing`，而读数上
+    #: "文件真的不在"与"在另一个基准下"同形。把基准记下来，这两种才分得开。
+    #: `run` 汇总时保留第一条非空的（逐篇的来路在 `details[*stage=resolve]`）。
+    path_base: str = ""
     details: list[dict] = field(default_factory=list)
 
     #: 「真消化」过几篇 = `processed` − `unreadable`（2026-10-15 加，T5 第 8 趟的真机读数）。
