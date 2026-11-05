@@ -842,11 +842,45 @@ class _WriteReport:
                    error=str(got.get("error") or ""))
         return rec
 
+    def _dependency_edges(self, stmt_id: str) -> tuple[int, int, str]:
+        """这一条命题在 `dependencies` 台账里的依赖边读数 `(全部 N, 命题→命题 M, 读不到原因)`。
+
+        为什么按台账现算而不是照抄 B 的 `deps_written`：报告是"这一刻盘上有什么"的书面
+        痕迹，而 `deps_written` 只说"这一笔新落了几条"（幂等重交时它是 0，盘上却有边）。
+        两件事都要读得出来，但报告里那一列问的是前者 —— 所以这里读台账，并在同一格里
+        把"其中命题→命题几条"分开：文献/实验/文档来的边与命题来的边混成一个数，
+        读者就看不出"这条定理在依赖图上到底有没有上游"。
+
+        `used_by` 的 `#pN` 尾巴走 `proofloc.parse_used_by`（全仓唯一解析口）：
+        `stmt:000004#p2` 与 `stmt:000004` 是同一个命题号。
+        三态：台账读不出来 ⇒ `(-1, -1, 原因)`，报告里写"未读到"，不写 0。
+        """
+        from ..proofloc import parse_used_by
+
+        total = 0
+        from_statement = 0
+        try:
+            for row in self.store.rows("dependencies"):
+                head, _no = parse_used_by(str(row.get("used_by") or ""))
+                if head != f"stmt:{stmt_id}":
+                    continue
+                total += 1
+                if str(row.get("source_stmt_id") or "").strip():
+                    from_statement += 1
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许折成 0
+            return -1, -1, f"{type(exc).__name__}: {exc}"
+        return total, from_statement, ""
+
     def _delivery_section(self, delivery: Mapping[str, Any]) -> list[str]:
         """这一趟"把稿交给 B"的回执（写进报告：递了没递、B 落了几条依赖边）。
 
         为什么写进报告而不是只留在内存：D 的报告是这一趟交接的唯一书面痕迹；
         "D 递了、B 收下了几条边"必须能被下一个人从盘上读到，而不是去翻会话记录。
+
+        2026-11-05（缺陷 1c）：依赖边那一列拆成两个数 —— `全部 / 其中命题→命题`。
+        改前只有一个数，于是 87 真机那种"3 条边全是文献来的、一条命题→命题都没有"
+        在报告上与"依赖面建起来了"长得一模一样（见
+        `temp/dep_probe/REPORT-dependency-surface.md` 第三节 B 表：`source_stmt_id` 非空 0 行）。
         """
         lines = ["## D 交给 B 的登记回执（D→B）", ""]
         if delivery.get("carried_missing"):
@@ -862,15 +896,45 @@ class _WriteReport:
             f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
             f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
             f"{int(delivery.get('delivered') or 0)} 条。")
-        lines.append("")
-        lines.append("| 命题号 / 实验号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
+        # 依赖边读数（全部 N / 其中命题→命题 M）：逐条现算，合计写一行 —— 这一行是
+        # "依赖面到底建起来没有"在报告里的唯一一句话（改前只有逐行的单个数）。
+        edge_rows: list[tuple[str, int, int, str]] = []
+        for r in results:
+            sid = str(r.get("statement_id") or "")
+            if not sid:
+                continue
+            total, from_statement, why = self._dependency_edges(sid)
+            edge_rows.append((sid, total, from_statement, why))
+        unread = [(sid, why) for sid, total, _m, why in edge_rows if total < 0]
+        if edge_rows:
+            if unread:
+                lines.append(
+                    f"- 依赖边：未读到（{len(unread)} 条命题的 `dependencies` 台账读不出来："
+                    + "、".join(f"stmt:{sid}（{why}）" for sid, why in unread[:4])
+                    + "）⇒ 没查成不是「零依赖」")
+            else:
+                total_all = sum(total for _sid, total, _m, _why in edge_rows)
+                from_stmt = sum(m for _sid, _t, m, _why in edge_rows)
+                lines.append(
+                    f"- 依赖边 {total_all} 条（其中命题→命题 {from_stmt} 条）—— "
+                    "按 `dependencies` 台账现算（`used_by=\"stmt:<号>#pN\"`；"
+                    "命题→命题 = `source_stmt_id` 非空）")
+            lines.append("")
+        lines.append("| 命题号 / 实验号 | B 的结果 | 依赖边（台账：全部 / 其中命题→命题） | "
+                     "稿的来源 | 秘书洗过 | 拒因 |")
         lines.append("|---|---|---|---|---|---|")
         for r in results:
             key = (f"stmt:{r.get('statement_id')}" if str(r.get("statement_id") or "")
                    else f"exp:{r.get('experiment_id')}")
+            sid = str(r.get("statement_id") or "")
+            if sid:
+                total, from_statement, _why = self._dependency_edges(sid)
+                cell = ("未读到" if total < 0 else f"{total} / {from_statement}")
+            else:
+                cell = "-"
             lines.append(
                 f"| {key} | {'收下' if r.get('ok') else '拒收'} | "
-                f"{int(r.get('deps_written') or 0)} | {r.get('manuscript_source') or '-'} | "
+                f"{cell} | {r.get('manuscript_source') or '-'} | "
                 f"{'是' if r.get('manuscript_washed') else '否'} | "
                 f"{_digest(r.get('kind') or r.get('error'), 120) or '-'} |")
         if not results:
