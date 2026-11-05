@@ -160,6 +160,72 @@ class _Core:
         `None`，让"没检查"这条分支可被触发、可被观察，而不是停留在纸面上。
         """
         return tx.rows("relations")
+    def _normalize_legacy_literature_paths(self) -> tuple[list[dict], dict[str, dict]]:
+        """领取前把存量 `library/` 前缀的 `literature.path` 归一化，并留下 `path_base` 读数。
+
+        ## 为什么必须在这里（而不是把整表校验放宽）
+        `Store.tx` 提交时校验**整张** literature 表（`store.py` 的提交块），而一条历史行
+        `path=library/…` 会被 `schema.literature_path_problem` 当场拒 ⇒ `_claim` 的事务
+        整笔失败：不是这一行领不到，是**整张表**一条都领不到（现场见
+        `temp/_five_verify_20261105/evidence/item3.json` 的 `legacy_normal_path`）。
+        改校验粒度是 FC-27（schema-migration）的事，不在本轮；这里只做写侧本来就会做的那件事
+        —— 按 `table_tools._normalize_literature_path` 的**同一条规则**（不另写一份）剥掉
+        多余的 `library/` 前缀，改动落在盘上（事件 `note="claim-normalize"` 可查）。
+        只剥一层、其余形状一个字节不碰的边界也在那个函数里（`library/library/x` 仍被拒：
+        不递归猜；`downloads/x.pdf` 是另一个合法坐标系，不动）。
+
+        ## 为什么读数要在归一化之前取
+        `litread.resolve_literature_path` 的 workspace 回退**只对以 `library/` 开头的串**
+        启用。若归一化后再解，`library/000003/x.txt` 已经变成 `000003/x.txt`，那条
+        workspace 读数就永远出不来了 —— 而它正是"这一行当时按哪个基准读得到"的唯一证据。
+        所以先用原串解一次、把 `ResolvedLiteraturePath` 交给领取结果，归一化只改盘。
+
+        返回 `(这一趟改了哪几行, {lit_id: 读数})`；没有存量坏行时两个都为空，且不写盘。
+        """
+        # 局部 import：`tools` 那一层依赖 `schema`/`store`，模块级 import 会把
+        # `agent_b → tools → …` 装成环（`textutil` 对 `table_tools` 的 `verify` 同一条写法）。
+        from .. import litread as _LR
+        from ..tools.table_tools import _normalize_literature_path
+
+        def _reading(lit_id: str, before: str, after: str) -> dict:
+            res = _LR.resolve_literature_path(self.store.root, self.store.library, before)
+            return {"lit_id": lit_id, "before": before, "after": after, "resolution": res}
+
+        # 无锁预读：没有存量坏行就一行都不写（空事务也会拿锁，没必要每趟都拿两次）。
+        pending: list[tuple[str, str, str]] = []
+        for row in self.store.rows("literature"):
+            before = row.get("path")
+            if not isinstance(before, str):
+                continue
+            probe = {"path": before}
+            if _normalize_literature_path("literature", probe):
+                pending.append((str(row.get("lit_id")), before, probe["path"]))
+        if not pending:
+            return [], {}
+
+        normalized: list[dict] = []
+        readings: dict[str, dict] = {}
+        with self.store.tx("literature", actor=self.actor, note="claim-normalize") as tx:
+            for lit_id, before, after in pending:
+                row = tx.find("literature", lit_id=lit_id)
+                if row is None:
+                    continue
+                current = row.get("path")
+                if current != before:
+                    # 预读与写之间被别人改过 ⇒ 不猜：按盘上那一份重新判一次形状。
+                    if not isinstance(current, str):
+                        continue
+                    probe = {"path": current}
+                    if not _normalize_literature_path("literature", probe):
+                        continue
+                    before, after = current, probe["path"]
+                reading = _reading(lit_id, before, after)
+                row["path"] = after
+                tx.upsert("literature", row, note="claim-normalize")
+                readings[lit_id] = reading
+                normalized.append({"lit_id": lit_id, "before": before, "after": after})
+        return normalized, readings
+
     def _claim(self) -> BClaimOutcome:
         """在锁内领一条未处理文献：置 `claimed_by` / `lease_until` / `mine_attempts+=1`。
         返回 :class:`BClaimOutcome` 而不是 `dict | None` —— 理由见那个类的 docstring："队列空了" / "全被别人持着" / "
@@ -170,7 +236,14 @@ class _Core:
         抽"那一档（本机没有够格的抽取器 ⇒ `run_once` 直接拒抽）在数据面上就是`mine_attempts == 0` + 
         `last_mine_error == no_llm_extractor` —— 不再需要靠`_give_up_note` 的文字去分辨。旧行里的这个数记的是"领取次数"（改
         前的口径），比真抽次数大，是上界而不是等值。
+
+        2026-11-05（缺陷 1）：事务之前先 `_normalize_legacy_literature_paths()` ——
+        盘上若还有 `path=library/…` 的历史行，整表校验会让这一笔（以及之后每一笔）
+        `tx` 都以 `ValueError` 失败（`schema.literature_path_problem`）；先按写侧同一条
+        规则归一化，才能让存量工作区重新可领。读数（归一化了哪几行、被领那行的
+        `path_base`）随 `BClaimOutcome` 出去，不静默改盘。
         """
+        normalizations, readings = self._normalize_legacy_literature_paths()
         with self.store.tx("literature", actor=self.actor, note="claim") as tx:
             rows = tx.rows("literature")
             cands = sorted(
@@ -225,6 +298,8 @@ class _Core:
                     skipped_lease_active=skipped_lease_active,
                     skipped_lease_backoff=skipped_lease_backoff,
                     gave_up=gave_up,
+                    path_normalizations=normalizations,
+                    legacy_path_reading=readings.get(str(r.get("lit_id"))),
                 )
             if pending == 0:
                 reason = "no_unprocessed_literature"
@@ -242,6 +317,7 @@ class _Core:
                 skipped_lease_backoff=skipped_lease_backoff,
                 gave_up=gave_up,
                 skipped_reason=reason,
+                path_normalizations=normalizations,
             )
     @staticmethod
     def _is_fallback_extractor(extractor: Any) -> bool:

@@ -67,6 +67,10 @@ class _RunOnce:
             quota = _CR.ConceptQuota()
             self._concept_quota = quota
         claim = self._claim()
+        # 领取前归一化掉了哪些存量 `library/` 前缀行 —— 改盘必须可查（缺陷 1 的处置读数）。
+        if claim.path_normalizations:
+            res.details.append({"stage": "claim",
+                                "normalized_paths": list(claim.path_normalizations)})
         # 取文献侧的审计信息先落进结果，再决定要不要早退 —— 否则"有活但全被别人
         # 占着"这类信息会随着 skipped_reason 一起丢掉，外部只剩一个"什么都没做"。
         res.skipped_lease_active = claim.skipped_lease_active
@@ -87,17 +91,31 @@ class _RunOnce:
         # 解析口径不另发明：`litread.resolve_literature_path` 与 `search_tools._lit_file`
         # 同一套（先 library、再 workspace、两条路都钉在工作区内），区别只有一条 ——
         # workspace 回退只对以 `library/` 开头的串启用（其余旧行仍只认 `library/`）。
-        resolved = _LR.resolve_literature_path(self.store.root, self.store.library,
-                                               lit.get("path"))
+        #
+        # 缺陷 1（2026-11-05）之后：存量 `library/…` 行在 `_claim` 里已经归一并落盘，
+        # 所以这里若照常解盘上那一份，`path_base=workspace` 永远不会出现。`_claim`
+        # 因此把"归一化**之前**解原串"的读数一起带回来 —— 那个读数才是"这一行当时
+        # 按哪个基准读得到"的证据，`res.path_base` 用它。
+        legacy = claim.legacy_path_reading
+        if legacy is not None:
+            resolved = legacy["resolution"]
+        else:
+            resolved = _LR.resolve_literature_path(self.store.root, self.store.library,
+                                                   lit.get("path"))
         path = resolved.path
         if path is not None:
             # 哪一基准解析的必须能读出来：`path_base=workspace` 是这一档的唯一读数，
             # 没有它，下次再有人读到 `file_missing` 仍然分不清是"没文件"还是"基准错"。
             res.path_base = resolved.base
-            res.details.append({"lit_id": lit_id, "stage": "resolve",
-                                "path_base": resolved.base,
-                                "path": str(lit.get("path") or ""),
-                                "resolved": str(path)})
+            detail = {"lit_id": lit_id, "stage": "resolve",
+                      "path_base": resolved.base,
+                      "path": str(lit.get("path") or ""),
+                      "resolved": str(path)}
+            if legacy is not None:
+                # 归一化改了盘：这里同时给出归一化前那一串（`path_base` 是对它解的）。
+                detail["path_before_normalize"] = legacy["before"]
+                detail["normalized_to"] = legacy["after"]
+            res.details.append(detail)
         # 三种"没有可抽取内容"的情况都要标为已处理并记明原因，否则它们会永远
         # 堵在队首（每次 run 都重新领取同一行）。注意 content_mismatch 单独列出来：
         # 文件其实存在（是证据），只是它按内容类型判定不是论文 —— 实测碰到过

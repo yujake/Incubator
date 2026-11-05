@@ -223,6 +223,17 @@ class BClaimOutcome:
     gave_up: int = 0
     #: 没取到文献时的原因；取到时为 `None`。
     skipped_reason: str | None = None
+    #: 领取前归一化掉的存量 `library/` 前缀行（这一趟改了哪几行；空列表 = 一行都没改）。
+    #: 读数形状：`{"lit_id", "before", "after"}` —— "我改过你的盘"这件事必须可查，不是静默修。
+    path_normalizations: list[dict] = field(default_factory=list)
+    #: 被领到那一行的"归一化前"读数：`{"before", "after", "resolution"}`，其中
+    #: `resolution` 是 `litread.ResolvedLiteraturePath`（在归一化**之前**解原串得到的，
+    #: 所以 `path_base` 保留的是存量写法真正落在哪个基准上）。`None` = 这一行本来就规范。
+    #:
+    #: 为什么读数要在归一化之前取：`litread` 的 workspace 回退只对带 `library/` 前缀的串
+    #: 启用 —— 归一化之后再解，`path_base=workspace` 这一档就永远读不出来了（缺陷 1 的
+    #: 另一半）。归一化只改盘，不改"这一行当时按哪个基准读得到"的事实。
+    legacy_path_reading: dict | None = None
 
     @property
     def claimed(self) -> bool:
