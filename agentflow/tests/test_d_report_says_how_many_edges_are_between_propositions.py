@@ -3,7 +3,7 @@
 
 ## 现场（`temp/dep_probe/REPORT-dependency-surface.md` 第三节 B 表）
 
-盘上五个工作区的 `dependencies` 一共 3 行，`source_stmt_id` 非空 **0 行** ——
+盘上五个工作区的 `dependencies` 一共 3 行，`source_stmt_id` 非空 0 行 ——
 全是文献来的边。改前 D 的报告只有一列「依赖边 0/1/3」，读者看不出"这条定理在依赖
 图上有没有上游"，也看不出"依赖面建起来了"与"只有文献边"的区别。
 
