@@ -29,9 +29,41 @@ import pytest
 from agentflow.tools import build_registry
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
+PROJ = SRC.parent.parent
 BASE_PY = SRC / "tools" / "base.py"
 VERIFY_TOOLS_PY = SRC / "tools" / "verify_tools.py"
 CAPABILITIES_PY = SRC / "capabilities.py"
+
+#: 扫描根：框架自己的源码树。与 `scripts/lint_rules.py:34-36` 的
+#: `SRC_REL` / `TESTS_REL` / `SCRIPTS_REL` 加 `tools/` 是同一组四项
+#: （该文件 `scan_roots` 也这么取），所以"什么算源码"这个口径在本仓库里只此一份。
+#: 刻意不含 `temp/`：那里是探针与整棵副本树（2026-11-05 实测 5584 个 `.py`），
+#: 仓库历史上出过"整棵临时树被扫描器误当源码"的事故；也不含 `projects/`
+#: （各专题的只读工作区，480 个 `.py`）与 `out/`（运行产物）—— 三者都不是框架源码。
+SCAN_ROOTS = ("src/agentflow", "tests", "tools", "scripts")
+
+#: 在子进程里扫，避免把上千个文件读进测试进程；`FILES n` 这一行是读数的一部分。
+_SCAN_SNIPPET = """\
+import pathlib
+import sys
+
+base = pathlib.Path(sys.argv[1])
+files = []
+for name in sys.argv[2:]:
+    root = base / name
+    if not root.exists():
+        continue
+    for p in sorted(root.rglob("*.py")):
+        if "__pycache__" in p.parts:
+            continue
+        files.append(p)
+print("FILES %d" % len(files))
+for p in files:
+    text = p.read_text(encoding="utf-8", errors="replace")
+    for i, line in enumerate(text.splitlines(), 1):
+        if "SANDBOX_AVAILABLE" in line:
+            print("%s:%d:%s" % (p.relative_to(base).as_posix(), i, line.strip()))
+"""
 
 
 def _undecorated(text: str) -> str:
@@ -140,7 +172,28 @@ def test_sandbox_available_is_none_and_has_no_wiring() -> None:
     判据用"grep 每一处出现都能归类"：定义 / 读取 / 未使用的导入 / 测试注入。
     出现第五类（例如 `build_registry(..., sandbox_available=...)`）就该更新本用例 ——
     那意味着有人补齐了入口，而 `axes-3` 的口径随之变化。
+
+    ## 2026-11-05：这次红是扫描器自己崩了，不是符号被删
+
+    断言原文是 `assert []`（"扫描没读到任何出现"）。被扫的那个东西一直在：
+    `SANDBOX_AVAILABLE` 在 `src/agentflow/tools/base.py:112` 上定义了，源码树里多处提及
+    （改前 `git grep` 数到 24 行，其中包括本判据自己的四行）。
+    读到空集的机制是两个缺陷叠在一起：
+
+    1. 扫描根是工程根 `rglob('*.py')` —— 它会走进 `temp/` 那 5584 个探针副本
+       （"整棵临时树被当源码"的同一形态）；
+    2. `read_text(encoding='utf-8')` 没给 `errors=`，于是 `temp/head-check/` 里一份
+       截断的 UTF-8 文件（`test_agent_a_backoff.py`，`0xe6` 断在第 21624 字节）
+       让整个子进程抛 `UnicodeDecodeError`、`returncode=1`、stdout 全空。
+       空集于是与"扫过了、干净"长得一模一样 —— 三态被折叠成一态。
+
+    修法三件：扫描根换成上面那四项并显式断言命中里没有 `temp/`；读文件带
+    `errors="replace"`、子进程的 `returncode` / `FILES n` 都进判据（扫描器不许
+    静默空转）；再加一条正控 —— `base.py` 那行定义必须出现在命中里。
+    没有正控时，`allowed` 里那个 `SANDBOX_AVAILABLE` 粗筛会把本文件自己源码里的
+    几处字面量也算成命中，于是定义被改名后判据照样绿（假绿）。
     """
+    import os
     import subprocess
     import sys
 
@@ -151,24 +204,46 @@ def test_sandbox_available_is_none_and_has_no_wiring() -> None:
         "若这是有意补齐的入口，请连同 draft/28 的 axes-3 一起更新"
     )
     out = subprocess.run(
-        [sys.executable, "-c",
-         "import pathlib,sys\n"
-         "root=pathlib.Path(sys.argv[1])\n"
-         "hits=[]\n"
-         "for p in list(root.rglob('*.py')):\n"
-         "    for i,l in enumerate(p.read_text(encoding='utf-8').splitlines(),1):\n"
-         "        if 'SANDBOX_AVAILABLE' in l:\n"
-         "            hits.append(f\"{p.relative_to(root)}:{i}:{l.strip()}\")\n"
-         "print(chr(10).join(hits))\n",
-         str(SRC.parent.parent)],
+        [sys.executable, "-c", _SCAN_SNIPPET, str(PROJ), *SCAN_ROOTS],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
+        # 子进程的 stdout 默认走 locale 编码；被扫的注释里有 CJK，一旦 locale 装不下
+        # 就会在编码侧抛错、把 stdout 变成空集 —— 与上面那个解码坑同一个失败形态。
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert out.returncode == 0, (
+        f"扫描器自己以退出码 {out.returncode} 结束 —— 这是'没查成'，不是'没问题'："
+        f"{out.stderr.strip()[-500:]}"
     )
     lines = [ln for ln in out.stdout.splitlines() if ln.strip()]
-    assert lines, "扫描没读到任何出现 —— 判据没接上（不是'没问题'）"
+    assert lines and lines[0].startswith("FILES "), (
+        f"扫描器没报出读了多少个文件（首行应是 `FILES n`）：{lines[:1]}"
+    )
+    n_files = int(lines[0].split()[1])
+    assert n_files > 1000, (
+        f"扫描只读到 {n_files} 个 .py 文件 —— 扫描根没接上，判据在空气上通过；"
+        "这不是'没有出现'（2026-11-05 实测这四个根合计 1258 个）"
+    )
+    hits = lines[1:]
+    assert hits, "扫描没读到任何出现 —— 判据没接上（不是'没问题'）"
+    assert not any(h.startswith("temp/") for h in hits), (
+        "命中里出现了 `temp/` 下的副本 —— 扫描根把整棵临时树当成了源码"
+        "（17 个 temp 副本搅读数那次事故的形态）"
+    )
+    # 正控：定义点必须在命中里。少了这一条，符号被改名后仍然有注释与测试里的
+    # 字面量撑着 `hits` 非空，判据会绿着不动（假绿）。
+    assert any(
+        h.startswith("src/agentflow/tools/base.py:")
+        and h.endswith(":SANDBOX_AVAILABLE: bool | None = None")
+        for h in hits
+    ), (
+        "定义点 `src/agentflow/tools/base.py` 里那行 "
+        f"`SANDBOX_AVAILABLE: bool | None = None` 没被扫到：{hits[:3]}"
+    )
     # 允许的四类：定义、from-import 那一行、读取点、测试里的 monkeypatch/setattr
+    # 这一层是粗筛（每一项里都含 `SANDBOX_AVAILABLE` 这个字面量），防真空靠上面那条定义点锚。
     allowed = ("SANDBOX_AVAILABLE: bool | None = None", "SANDBOX_AVAILABLE",
                "import SANDBOX_AVAILABLE", "monkeypatch.setattr", "setattr(")
-    for ln in lines:
+    for ln in hits:
         assert any(a in ln for a in allowed), f"出现了一处未归类的地方：{ln}"
     # 装配层不得接受它作为参数 —— 那是 axes-3 里"补齐入口"的另一条口径
     assert "sandbox_available=" not in out.stdout, \
