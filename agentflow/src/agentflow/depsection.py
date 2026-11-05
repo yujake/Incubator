@@ -1456,10 +1456,31 @@ def deps_missing_reading(*, proof_text: Any, deps_written: int,
     if int(refs) <= 0:
         # 一条在册引用都没有 ⇒ 依赖面这一格不适用（自足证明合法）。
         # 这一档刻意与 `missing` 分开：`missing` 说的是"引了却没记"，不是"没引"。
+        #
+        # 2026-11-05（缺陷 1a）：三态词表一个字不改（自足的证明仍必须放行），但"有证明
+        # 正文而依赖 0 行"必须变成看得见的读数 —— 改前这一支只说"没有引用任何在册命题"，
+        # 于是"写了 5000 字证明、一条依赖边都没有"与"这一格没查"在读数上分不开；底层
+        # `secretary._deps_missing_reading` 本来给的是 `missing`，被这一支盖掉了
+        # （读数面与后果见 `temp/dep_probe/REPORT-dependency-surface.md` 第 5 条）。
+        chars = int(base.get("proof_chars") or 0)
+        edges = int(base.get("deps_written") or 0)
         base["state"] = "not_applicable"
-        base["why"] = ("这一份证明没有引用任何在册命题 ⇒ 依赖面这一格不适用"
-                       "（自足的证明合法：既不拒收，也不记成「缺依赖」）；"
-                       "一旦正文引用了在册命题，手稿就必须有那一节")
+        if chars > 0 and edges <= 0:
+            if sec.get("present"):
+                base["why"] = (
+                    f"这一份有 {chars} 字正文、0 条依赖边，作者在手稿里交了一张空的 "
+                    f"`{SECTION_HEADING}` 表（声明自足）⇒ 依赖面这一格不适用"
+                    "（自足的证明合法：既不拒收，也不记成「缺依赖」）；"
+                    "一旦正文引用了在册命题，手稿就必须有那一节")
+            else:
+                base["why"] = (
+                    f"这一份有 {chars} 字正文、0 条依赖边，而手稿里没有 "
+                    f"`{SECTION_HEADING}` 那一节 ⇒ 缺节（格式没交，与自足是两件事）；"
+                    "这一格按三态仍记「不适用」：正文没有引用在册命题时，B 不会因此拒收")
+        else:
+            base["why"] = ("这一份证明没有引用任何在册命题 ⇒ 依赖面这一格不适用"
+                           "（自足的证明合法：既不拒收，也不记成「缺依赖」）；"
+                           "一旦正文引用了在册命题，手稿就必须有那一节")
         base["next_step"] = ""
         return base
     if not sec.get("present"):
@@ -1469,4 +1490,18 @@ def deps_missing_reading(*, proof_text: Any, deps_written: int,
                        "是「作者没写依赖段」）；B 入库时会整笔拒收 `dependency_section_missing`")
         base["next_step"] = (f"让 F 在证明手稿里补一节 `{SECTION_HEADING}`（四列表，见 "
                              "`agentflow.depsection.COLUMN_KEYS`），再由 B 重新入库")
+        return base
+    if not (sec.get("rows") or []) and int(base.get("deps_written") or 0) <= 0:
+        # 2026-11-05（缺陷 1a 的第二档）：表在、但 0 行，而正文点了 N 条在册命题。
+        # 这不是自足 —— 表与正文对不上。`state` 仍走三态里的 `missing`（不判红、
+        # 不新增词），但 `why` 必须自己说清"正文点了 N 条"，否则读的人分不清
+        # "真自足"与"该写没写"（业主 2026-11-05 的追加裁定）。
+        base["state"] = "missing"
+        base["why"] = (f"说不一致：证明正文里点了 {refs} 条在册命题（`stmt:` 引用），"
+                       f"而手稿的 `{SECTION_HEADING}` 表 0 行 ⇒ 表与正文对不上，"
+                       "不该读成「自足」；这些引用在读数里落在 `derived_from`"
+                       f"（{list(base.get('derived_from') or [])}）—— 依赖信息在盘上，"
+                       "没落成依赖边")
+        base["next_step"] = ("把那几条引用写进 `cites`（框架会按它渲染那一节），或者把表里"
+                             "那几行补齐 —— 正文与表必须说的是同一件事")
     return base

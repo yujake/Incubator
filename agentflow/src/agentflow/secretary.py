@@ -2038,6 +2038,20 @@ def _dep_step_key(row: Mapping[str, Any]) -> tuple:
     )
 
 
+def _stmt_edge_count(steps: Any) -> int:
+    """这一批依赖步骤里有几条是"命题→命题"（`source_stmt_id` 非空）。
+
+    为什么要它（2026-11-05 缺陷 1c）：台账里"依赖边 N 条"与"其中命题→命题 M 条"是两个
+    数。87 真机的 3 条边全是文献来的 —— N=3、M=0，而报告/回执里只有一个 N 时，
+    "依赖面建起来了"与"一条命题→命题都没有"长得一模一样
+    （`temp/dep_probe/REPORT-dependency-surface.md` 第三节 B 表：五区合计 3 行、
+    `source_stmt_id` 非空 0 行）。
+    """
+    return sum(1 for step in (steps or ())
+               if isinstance(step, Mapping)
+               and str(step.get("source_stmt_id") or "").strip())
+
+
 def _deps_missing_reading(*, proof_text: Any, deps_written: int,
                           derived_from: Any = (), stmt_id: str = "",
                           proof_no: int = 0, scan: Mapping[str, Any] | None = None) -> dict:
@@ -6553,6 +6567,8 @@ class Secretary:
                     return out
                 written = self._write_dep_steps(tx, keep, stmt_id=sid, body=body)
                 out.update(checked=True, deps_written=int(written),
+                           #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                           deps_stmt_edges=_stmt_edge_count(keep),
                            path_groups=len(groups), tables=["dependencies"])
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             out.update(checked=False, refused="write_failed",
@@ -7809,6 +7825,8 @@ class Secretary:
                 proof_no=(requested_no if requested_no >= 1 else 1), scan=scan)
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=data, tables=written, deps_written=len(steps),
+                   #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                   deps_stmt_edges=_stmt_edge_count(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts,
                    # 新建那一行的证明号：交付给了号就是它，没给才是 canonical（#p1）。
                    # 这一格不许留 0 —— 回执说 0，调用方就会去"修"它。
@@ -7988,6 +8006,8 @@ class Secretary:
                     return out
                 out["deps_written"] = self._write_dep_steps(tx, steps, stmt_id=out["stmt_id"],
                                                             body=body)
+                #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                out["deps_stmt_edges"] = _stmt_edge_count(steps)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             out.update(checked=False, refused="write_failed",
                        reason=f"依赖落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
@@ -8590,6 +8610,8 @@ class Secretary:
                                        ("fallback" if requested_no < 1 else "")),
                    matched_by=basis, similarity=similarity, same_kind=[],
                    tables=written, row=row, deps_written=deps_written,
+                   #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                   deps_stmt_edges=_stmt_edge_count(steps),
                    path_groups=len(groups or []), canonical_written=canonical_was_empty,
                    reason=(f"并入已有命题 stmt:{sid}，作为第 {proof_no} 份证明"
                            f"（依据：{self._basis_text(basis, similarity)}）；"
@@ -8745,6 +8767,8 @@ class Secretary:
                    same_kind=kind_hits,
                    tables=(["statements", "dependencies"] if deps_written else ["statements"]),
                    deps_written=deps_written,
+                   #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                   deps_stmt_edges=_stmt_edge_count(steps),
                    row=row, canonical_written=int(proof_no) == 1,
                    proof_history=list(row["proof_history"]),
                    proof_standing=standing, resign_required=True,

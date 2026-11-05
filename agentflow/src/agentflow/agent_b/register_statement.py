@@ -2122,7 +2122,40 @@ class _RegisterStatement:
                 # D 那一侧查过什么也留下来（携带单里有几条 / 为什么没对上），
                 # 否则"主路没走到"与"主路走了但没找到"在读数上分不开。
                 base["manuscript_carried"] = dict(manuscript_carried)
+            # ---- 2026-11-05（缺陷 1c）：回执里那一行"依赖边 N 条（其中命题→命题 M 条）" --
+            #
+            # 为什么必须有两个数：87 真机的 3 条边全是文献来的（`source_stmt_id` 非空 0 行），
+            # 只报 N=3 时"依赖面建起来了"与"一条命题→命题都没有"在回执上长得一模一样
+            # （`temp/dep_probe/REPORT-dependency-surface.md` 第三节 B 表）。
+            # N 是"这一笔写完之后"的边数；M 只有秘书知道（它落边时逐条数过）⇒ 从它那份
+            # 返回值里读；缺格记 0（这一笔没有边，就没有"其中"可言）。
+            total_edges = int(base.get("deps_written") or 0)
+            from_stmt = int(written_row.get("deps_stmt_edges") or 0)
+            base["deps_receipt"] = (f"依赖边 {total_edges} 条"
+                                    f"（其中命题→命题 {from_stmt} 条）")
+            #: 同一组数的机器读数（`deps_receipt` 是给人读的那一行，这一格给调用方读）。
+            base["deps_stmt_edges"] = from_stmt
+            if total_edges > 0:
+                # `present` 那档的 why 也带上这两个数（读的人不必再去翻别的键）。
+                base["why"] = (f"这一行落了 {total_edges} 条依赖"
+                               f"（其中命题→命题 {from_stmt} 条），依赖面建起来了")
             return base
+
+        def _deps_receipt(out_row: dict) -> dict:
+            """把回执里那一行「依赖边 N 条（其中命题→命题 M 条）」补进 `out["note"]`。
+
+            2026-11-05（缺陷 1c）：`_deps_reading` 已经把那一句放在 `deps_missing`
+            的 `deps_receipt` 里；这一步只把它复述到人读的那一行 `note` 上（同一句，
+            不另写一份口径）。取不到就一个字都不加 —— 不编一句"依赖边 0 条"给那些
+            根本没有依赖面的出口（概念行 / 受控拒绝）。
+            """
+            line = str((out_row.get("deps_missing") or {}).get("deps_receipt") or "")
+            if line:
+                note_now = str(out_row.get("note") or "")
+                out_row["note"] = f"{note_now}；{line}" if note_now else line
+                out_row["deps_stmt_edges"] = int(
+                    (out_row.get("deps_missing") or {}).get("deps_stmt_edges") or 0)
+            return out_row
 
         # ---- 收方读稿登记（业主 2026-10-26 晚：「D 到 B 没有路吗？加」） --------------
         #
@@ -2828,6 +2861,7 @@ class _RegisterStatement:
                    "manuscript_wash": dict(manuscript_wash),
                    "proof_vs_source": dict(proof_vs_source),
                    "note": str(written.get("reason") or "")}
+            _deps_receipt(out)
             #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
             #: 这一笔交上来的正文超了上限这件事，与"有没有新建行"无关。
@@ -2931,6 +2965,7 @@ class _RegisterStatement:
                              f"（{written.get('reason') or ''}）。"
                              "内容面一个字没动；这一笔要改内容，就把差异写进 statement_full "
                              "重新交（正文按规范化比不同才会落新的一行）。"))}
+            _deps_receipt(out)
             if at_tier:
                 out["terminal_reading"] = dict(written.get("terminal_reading") or {})
             #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
@@ -3035,6 +3070,7 @@ class _RegisterStatement:
                        "note": ("这一条没有新建行（同一条命题已在册）。"
                                 + (str(written.get("reason") or "")
                                    if str(written.get("reason") or "").strip() else ""))}
+                _deps_receipt(out)
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
                 #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。
@@ -3213,6 +3249,10 @@ class _RegisterStatement:
         #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。没有换正文时是空字典 ——
         #: 老写法的返回值逐字不变。
         optimized_reading = _optimized_reading(attach)
+        #: 2026-11-05（缺陷 1c）：依赖面读数（三态）只算一次，回执那一行也从它取 ——
+        #: 同一件事不许在 `deps_missing` 与 `note` 里各算一遍（两个口径迟早分家）。
+        deps_reading_now = _deps_reading(written)
+        deps_line = str(deps_reading_now.get("deps_receipt") or "")
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 **optimized_reading,
                 #: 2026-11-04：这一笔有没有把稿转成按号命名的正式稿（有才带这一格）。
@@ -3242,12 +3282,14 @@ class _RegisterStatement:
                 "proof_route": str(written.get("proof_route") or ""),
                 "deps_state": str(written.get("deps_state") or ""),
                 "deps_written": int(written.get("deps_written") or 0),
+                #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                "deps_stmt_edges": int(written.get("deps_stmt_edges") or 0),
                 "deps_dangling": list(written.get("deps_dangling") or []),
                 "deps_unmappable": list(written.get("deps_unmappable") or []),
                 #: 依赖面建起来没有（三态）：带证明正文而一条依赖都没落 ⇒ `state=missing`
                 #: （改前这件事只活在 `deps_written=0` 里，没有任何一格会因此变红 ——
                 #: 真机 sylow3 七条命题、依赖全表 0 行，就是静默过去的）。
-                "deps_missing": _deps_reading(written),
+                "deps_missing": deps_reading_now,
                 #: 认签读数（只在真认到一签时出现：新建那一档的老返回形状逐字不变）：
                 #: 键与另外三条"没有新建行"的出口同名（`v_sign`），三态都在读数里。
                 **({"v_sign": dict(v_sign)} if v_sign.get("found") else {}),
@@ -3329,7 +3371,7 @@ class _RegisterStatement:
                             f"逐条证明的状态 {attach.get('formal_paths')}"
                             "（键是证明号；汇总按任一路径通过就算通过）。"
                             if attach.get("formal_synced") else "")
-                         + rewrite_note)}
+                         + rewrite_note + (f"；{deps_line}" if deps_line else ""))}
 
     # ------------------------------------------------- 收方读稿登记（D 携带来的那一份）
     #
@@ -3490,7 +3532,10 @@ class _RegisterStatement:
             return _refuse(str(written.get("refused") or "dependency_face_not_written"),
                            str(written.get("reason") or ""))
         reading = deps_reading({"stmt_id": stmt_id,
-                                "deps_written": int(written.get("deps_written") or 0)})
+                                "deps_written": int(written.get("deps_written") or 0),
+                                #: 2026-11-05（缺陷 1c）：回执那一行要两个数，秘书那一份
+                                #: 逐条数过"其中命题→命题几条"，这里原样透传。
+                                "deps_stmt_edges": int(written.get("deps_stmt_edges") or 0)})
         received_proofs = [{"proof_no": int(e.get("proof_no") or 0)}
                            for e in (proofs or []) if isinstance(e, Mapping)]
         note = ("收方读稿登记：命题行不动（这条命题已经在册），只把这份手稿的依赖段落成 "
@@ -3499,6 +3544,9 @@ class _RegisterStatement:
             note += (f"；这一遍有 {len(written['duplicates'])} 条已经在表里（幂等，没有重复落）")
         if written.get("deps_written"):
             note += f"；这一遍新落 {int(written['deps_written'])} 条依赖边"
+        #: 2026-11-05（缺陷 1c）：回执里那一行逐字「依赖边 N 条（其中命题→命题 M 条）」。
+        if reading.get("deps_receipt"):
+            note += f"；{reading['deps_receipt']}"
         return {"ok": True, "stmt_id": stmt_id, "new_row": False, "received_manuscript": True,
                 "manuscript_source": manuscript_source,
                 #: 这一支不写正文（命题行不动）⇒ 正文来源是空串或"在册原样"。要给调用方
@@ -3509,6 +3557,8 @@ class _RegisterStatement:
                 #: 与来源是否逐字一致（信息格，不是门）：这一支不改正文，读数照给。
                 "proof_vs_source": dict(proof_vs_source or {}),
                 "deps_written": int(written.get("deps_written") or 0),
+                #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。
+                "deps_stmt_edges": int(written.get("deps_stmt_edges") or 0),
                 "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
                 #: 依赖面建起来没有（三态；与新建那一支同一份读数实现）。
                 "deps_missing": reading,
