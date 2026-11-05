@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
 """判据：`docs/TWO-AXES-GRADE-AND-KIND.md` 那几张表 == 从代码与现场现算（逐格）。
 
+## 2026-11-05 业主裁定之后（这是本文件的第二次生命）
+「cross_check 等价于强猜想等价于有普通数值实验支撑的猜想……不妨就用等级制平替掉」+
+「穷举证书相当于 lean 形式化，表示绝对正确」。于是本文件钉的东西从"两个轴"换成
+"等级是唯一的轴"：档位只是等级的历史反算名，判定面（可引门槛）读等级。
+
+旧的"两个轴"结论不删，进文档 §6 历史（判据 `test_doc_keeps_the_history` 钉住日期、
+裁定原文与 362 行里 169 行不一致这个读数）。
+
 ## 这条判据钉什么
 
-1. 文档的表不许手抄：表一（五元位 ⇒ 等级）、表二（五元位 ⇒ 档位）、表三（等级 ⇄ 档位，
-   真机 + 夹具两张横表）、表 3X（"不是函数"的现场反例）逐格与现算比对；
-2. 表过期 ⇒ 红：`derive_grade` 的一条规则改了、档位那一列的写法改了、现场快照换了，
-   这里都会红 —— 不是"差不多"，是 `第 N 行第 M 格: 文档 'x' ≠ 现算 'y'`；
+1. 文档的表不许手抄：表一（五元位 ⇒ 等级）、表二（五元位 ⇒ `signed` + 档位反算名）、
+   表三（等级 × 历史档位的存量审计横表）、表 3X（存量漂移的现场样本）逐格与现算比对；
+2. 表过期 ⇒ 红：`derive_grade` / 反算表改了、现场快照换了，这里都会红 ——
+   不是"差不多"，是 `第 N 行第 M 格: 文档 'x' ≠ 现算 'y'`；
 3. 反真空（三条负控，见文件末）：
    - 把文档里任意一格改错 ⇒ 比对必须报出来；
    - 把 `derive_grade` 的一条规则改掉而不改文档 ⇒ 比对必须报出来，且先断言
@@ -20,17 +28,6 @@
 那正是本仓反复踩过的"没查成被读成查过了"。所以现场先冻成
 `tests/fixtures/two_axes_scene.json`（带 `captured_at` 与复跑命令），判据读它，
 文档 §8 给刷新命令。
-
-## 三张表各自"从哪段代码现算"
-
-- 表一：`evidencebits.derive_grade`（`src/agentflow/evidencebits.py:1060`）+ `bits_of` 的
-  `audited_badge`（`:273`）；
-- 表二：`secretary._manuscript_upgrade_basis`（`src/agentflow/secretary.py:1533`，
-  五元位唯一能决定的那一格 `signed`，`:1585`）+ `verifications._grade_recomputed_from_signature`
-  （`src/agentflow/verifications.py:2625`，通道 ⇒ 档位 `:2685-2686`，32×2 的那个实验）；
-- 表三：`derive_grade` 逐行现算 `grade`，按 `evidence_kind` 做横表；现场是
-  `tests/fixtures/two_axes_scene.json`（真机频次快照）与
-  `tests/fixtures/paper_rewrite_86_reviewed_bit.json`（夹具工作区）。
 """
 from __future__ import annotations
 
@@ -49,9 +46,15 @@ from agentflow import schema as S
 _BEGIN = re.compile(r"^<!--\s*TWO-AXES:([A-Z0-9]+):BEGIN\s*-->$")
 _END = re.compile(r"^<!--\s*TWO-AXES:([A-Z0-9]+):END\s*-->$")
 
-#: 业主那句话（逐字），它必须还在文档里 —— 两张换算表可以被改写，这句话不行。
-ONE_SENTENCE = ("「**可引**」读**档位**（`evidence_kind`）；「**多硬**」读**等级**（`grade`）。\n"
-                "两者不是同一个轴，谁也替不了谁")
+#: 裁定之后的一句话（逐字）。文档 §0 必须写着它。
+ONE_SENTENCE = ("**等级是唯一的轴**：`conjecture < strong_conjecture < pre_theorem < theorem`；\n"
+                "档位（`evidence_kind`）只是等级的历史反算名（`kind_from_grade`）。")
+
+#: 文档 §6 历史那一段必须逐字保留的三件：日期、裁定原文、存量不一致读数。
+HISTORY_DATE = "2026-11-05"
+HISTORY_RULING = "cross_check等价于强猜想等价于有普通数值实验支撑的猜想"
+HISTORY_RULING_2 = "穷举证书相当于lean形式化"
+HISTORY_COUNT = "169"
 
 
 # ------------------------------------------------------------------ 解析
@@ -141,9 +144,14 @@ def test_all_markers_present_and_not_vacuous() -> None:
     assert badges == {"true", "false"}, f"`audited_badge` 两档应当都出现，实际 {sorted(badges)}"
     table2 = blocks["TABLE2"]
     assert len(table2) == 33, f"表二应当是表头 + 32 行，实际 {len(table2)} 行"
-    assert {row[7] for row in table2[1:]} == {TA.NOT_FROM_BITS}, (
-        "表二的档位那一列必须逐格写「不由五元位决定」；出现了别的值 ⇒ "
-        "要么真有函数了（那要先改代码与文档），要么有人在那一列手抄了档位")
+    # 2026-11-05：表二最后一列从「不由五元位决定」改成档位反算名 —— 它必须是
+    # `kind_from_bits` 的真输出（逐格 == 现算），不是手抄的字面量。
+    want_kinds = [row[-1] for row in TA.表二行()]
+    got_kinds = [row[7] for row in table2[1:]]
+    assert got_kinds == want_kinds, (
+        "表二的档位列与 `kind_from_bits` 的现算不一致 ⇒ 要么表过期，要么有人手抄了档位")
+    assert set(got_kinds) == set(EB.LEGACY_KINDS), (
+        f"表二的档位只出现了 {sorted(set(got_kinds))} —— 反算表里四档应当都出现")
 
 
 def test_table1_is_a_function_of_bits_but_ignores_audited() -> None:
@@ -157,42 +165,57 @@ def test_table1_is_a_function_of_bits_but_ignores_audited() -> None:
                         "`derive_grade`，本文件 §3.3 与表一都得重写")
 
 
-def test_numeric_only_verified_lifts_the_grade() -> None:
-    """第 1 位四态里只有 `verified` 抬等级（`pending`/`na`/`failed` 等价）。"""
-    got = {state: EB.derive_grade(
-        EB.bits_of(numeric=state, proof=True, reviewed=False, formal="pending", audited=False))
-        for state in EB.BIT_STATES}
-    assert got["verified"] == "strong_conjecture", got
-    assert {got[s] for s in ("pending", "na", "failed")} == {"conjecture"}, got
+def test_numeric_verified_with_a_proof_is_a_theorem() -> None:
+    """2026-11-05：穷举证书与 Lean 同级 ⇒ numeric=verified ∧ proof ⇒ `theorem`。
+
+    负控（反真空的另一半）：没有证明时，数值怎么翻都到不了定理 ——
+    `theorem = 证明 ∧ 机器可核` 里的"证明"那一半不许被这一条改掉。
+    """
+    with_proof = EB.bits_of(numeric="verified", proof=True, reviewed=False, formal="pending",
+                            audited=False)
+    assert with_proof["grade"] == "theorem", with_proof
+    for state in EB.BIT_STATES:
+        without = EB.bits_of(numeric=state, proof=False, reviewed=False, formal="pending",
+                             audited=False)
+        assert without["grade"] in ("conjecture", "strong_conjecture"), (state, without)
 
 
-def test_kind_is_not_a_function_of_bits() -> None:
-    """档位对五元位不敏感、对证明通道敏感 —— 32 组 × 2 条通道，现跑。"""
-    got = TA.档位换通道的实验()
-    assert set(got) == {"文字证明", "穷举程序"}, sorted(got)
-    文字, 穷举 = got["文字证明"], got["穷举程序"]
-    assert len(文字) == len(穷举) == 32, (len(文字), len(穷举))
-    assert set(文字) == {"proof_review"}, (
-        f"文字证明通道下 32 组五元位给出了 {sorted(set(文字))} —— 多于一个值意味着"
-        "五元位参与了选档（那与本文件表二的说法相反，先改代码再说）")
-    assert set(穷举) == {"proof"}, f"穷举通道下 32 组五元位给出了 {sorted(set(穷举))}"
-    assert 文字[0] != 穷举[0], (
-        "两条通道给出同一个档位 ⇒ 这条实验什么都没量到（反真空：通道必须真的改变档位）")
+def test_legacy_kind_is_a_function_of_the_grade() -> None:
+    """档位只由等级反算：`kind_from_grade(derive_grade(bits)) == kind_from_bits(bits)`。
+
+    这条是旧判据 `test_kind_is_not_a_function_of_bits` 的反面（业主 2026-11-05：
+    「不妨就用等级制平替掉」）。它比旧的那条更强：旧条只证"档位不是五元位的函数"，
+    这条证"档位是同一个函数的反算值"—— 32 组逐格核，任何一格漂开就红。
+    """
+    for numeric, proof, reviewed, formal, audited in TA.COMBO_GRID:
+        bits = EB.bits_of(numeric=numeric, proof=proof, reviewed=reviewed,
+                          formal=formal, audited=audited)
+        grade = EB.derive_grade(bits)
+        assert EB.kind_from_bits(bits) == EB.kind_from_grade(grade), (
+            numeric, proof, reviewed, formal, audited, grade)
+        assert EB.kind_from_bits(bits) in EB.LEGACY_KINDS, bits
+    # 反真空：五档等级确实落到四个不同的反算名上（不是"全返回同一个"）。
+    assert {EB.kind_from_grade(g) for g in EB.GRADES} == set(EB.LEGACY_KINDS)
 
 
-def test_two_vocabularies_do_not_overlap_and_the_gate_judges_the_kind() -> None:
-    """两套词表不相交；"可引"那道闸吃的是档位，等级传进去只会静默落空。"""
+def test_two_vocabularies_do_not_overlap_and_the_gate_judges_the_grade() -> None:
+    """两套词表不相交；"可引"那道闸吃的是等级（2026-11-05 改口径）。
+
+    反向断言（不许两套词表再分家）：把历史档位词传进可引闸必须落空 ——
+    判定面只认等级；档位要先走 `kind_from_grade` 换算。
+    """
     assert not (set(EB.GRADES) & set(S.EVIDENCE_KINDS)), "等级与档位出现同名取值"
     assert EB.GRADE_NOT_APPLICABLE not in S.EVIDENCE_KINDS, (
         "`not_applicable` 混进了档位词表 —— 它是等级的「不适用」那一档，不是档位")
-    assert DS.CITATION_MIN_LEVEL == "proof_review", DS.CITATION_MIN_LEVEL
-    assert DS.CITATION_LEVELS == frozenset({"proof_review", "proof"}), (
-        f"可引集合变了：{sorted(DS.CITATION_LEVELS)}（改它要同时改本文件 §1 与表三）")
-    for ek in S.EVIDENCE_KINDS:
-        assert DS.citation_level_allowed(ek) == (ek in DS.CITATION_LEVELS), ek
+    assert DS.CITATION_MIN_LEVEL == "pre_theorem", DS.CITATION_MIN_LEVEL
+    assert DS.CITATION_LEVELS == frozenset({"pre_theorem", "theorem"}), (
+        f"可引集合变了：{sorted(DS.CITATION_LEVELS)}（它是从 `evidencebits.GRADES` 切的，"
+        "改门槛要同时改本文件与文档）")
     for grade in [*EB.GRADES, EB.GRADE_NOT_APPLICABLE]:
-        assert DS.citation_level_allowed(grade) is False, (
-            f"等级 {grade!r} 被判成「够格被引」 —— 两套词表串了")
+        assert DS.citation_level_allowed(grade) == (grade in DS.CITATION_LEVELS), grade
+    for ek in S.EVIDENCE_KINDS:
+        assert DS.citation_level_allowed(ek) is False, (
+            f"历史档位 {ek!r} 被判成「够格被引」—— 两套词表串了（判定面读等级）")
 
 
 def test_scene_snapshot_is_consistent() -> None:
@@ -229,9 +252,22 @@ def test_scene_snapshot_is_consistent() -> None:
 
 
 def test_doc_keeps_the_one_sentence() -> None:
-    """业主那一句"两个轴"的话必须逐字还在（表可以改，结论不许悄悄改）。"""
+    """文档 §0 必须逐字写着"等级是唯一的轴 / 档位只是反算名"（2026-11-05 裁定）。"""
     assert ONE_SENTENCE in 文档(), (
-        "文档 §0 那句结论被改写了：两套读法的关系是这次任务的核心，改它要先改判据")
+        "文档 §0 那句结论不是裁定后的口径 —— 判定面已经读等级了，文档不许还写两个轴")
+
+
+def test_doc_keeps_the_history() -> None:
+    """旧的双轴结论不删，进 §6 历史：日期 + 裁定原文 + 存量 169 条不一致都必须还在。
+
+    为什么钉这三样：这次改造是语义变更，不是"原来写错了"。后来的读者必须能看见
+    "2026-11-05 之前确实是两个轴、确有 362 行里 169 行对不上"，否则会把这段历史
+    误读成"从来就只有一个轴"，下次又把它分回去。
+    """
+    text = 文档()
+    for needle in (HISTORY_DATE, HISTORY_RULING, HISTORY_RULING_2, HISTORY_COUNT):
+        assert needle in text, f"文档 §6 历史缺了 {needle!r} —— 历史被删掉了"
+    assert "两个轴" in text, "文档 §6 必须写明「之前是两个轴」，否则历史读不出对比"
 
 
 # ------------------------------------------------------------------ 反真空

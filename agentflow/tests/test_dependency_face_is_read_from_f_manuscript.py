@@ -62,6 +62,7 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
@@ -151,6 +152,17 @@ def _sign(store: Store, stmt_id: str) -> dict:
 def _set_level(store: Store, stmt_id: str, level: str) -> None:
     row = next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == stmt_id)
     row["evidence_kind"] = level
+    # 2026-11-05：可引门槛读等级。夹具把"够格被引"落进五元位（proof 位）；
+    # 只改历史列的话现算等级仍是 conjecture，B/F 的门会拒它（这正是新口径）。
+    bits = dict(row.get("bits") or {})
+    if level in ("proof", "proof_review"):
+        bits["proof"] = True
+        ev = dict(bits.get("evidence") or {})
+        if not str(ev.get("proof_process") or "").strip():
+            ev["proof_process"] = str(row.get("proof_text") or "（夹具：证明正文）")
+        bits["evidence"] = ev
+    bits["grade"] = EB.derive_grade(bits, kind=str(row.get("kind") or ""))
+    row["bits"] = bits
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
 
@@ -158,7 +170,9 @@ def _set_level(store: Store, stmt_id: str, level: str) -> None:
 def _theorem(store: Store, stmt_id: str, *, label: str = "",
              level: str = "proof_review", kind: str = "theorem") -> dict:
     _add_statement(store, stmt_id, kind=kind, label=label)
-    if level == "proof_review":
+    # 2026-11-05：可引门槛读等级 ⇒ `pre_theorem` 要求 `proof ∧ reviewed`。
+    # 两个"够格"的档位在夹具里都先过 V 的签（历史列只是反算名，不再是依据）。
+    if level in ("proof_review", "proof"):
         _sign(store, stmt_id)
     _set_level(store, stmt_id, level)
     return next(dict(r) for r in store.rows("statements")
@@ -265,7 +279,14 @@ def test_f_manuscript_section_is_read_by_b_and_lands_a_dependency(store: Store) 
     assert (preview.get("deps_missing") or {}).get("state") == "present", preview
 
     # ---- B 那一侧：读同一份手稿，落出两行依赖
-    got = _register(store, text)
+    #
+    # 2026-11-05（D2）：B 新建档会把稿头/稿名里的号当候选号，被占则受控拒收。
+    # 这一条要的是"同一份依赖段再登记一次"，不是"把已占的号再要一次" —— 所以
+    # 递进去之前把稿头的 `- 命题号：stmt:` 那一行去掉（正文与依赖段逐字不动）。
+    text_for_b = "\n".join(
+        line for line in text.splitlines()
+        if not line.lstrip().startswith("- 命题号"))
+    got = _register(store, text_for_b)
     assert got.get("ok") is True, got
     stmt_id = str(got["stmt_id"])
     # 2026-10-26（D8）之后 F 的出口就是 `B.register_statement`：F 自己那一轮已经把同一份稿
@@ -327,8 +348,9 @@ def test_a_cross_check_source_makes_the_whole_registration_refused(store: Store)
     assert got.get("ok") is False, got
     assert got.get("kind") == "citation_below_proof_review", got
     assert WEAK in got.get("error", ""), got
-    assert "cross_check" in got.get("error", ""), got
-    assert "引用要求 proof_review 级及以上" in got.get("error", ""), got
+    # 2026-11-05：门槛读等级，拒信点名的是这一行现算的等级（历史列只是反算名）。
+    assert "conjecture" in got.get("error", ""), got
+    assert "引用要求 pre_theorem 级及以上" in got.get("error", ""), got
     # 整笔不写：命题一行没多，依赖一行都没有
     assert _deps(store) == [], _deps(store)
     assert len(store.rows("statements")) == before_statements, store.rows("statements")

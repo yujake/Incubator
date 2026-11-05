@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""「等级 × 档位」三张表的唯一现算处（`docs/TWO-AXES-GRADE-AND-KIND.md` 的那三张表）。
+"""「等级 → 档位」三张表的唯一现算处（`docs/TWO-AXES-GRADE-AND-KIND.md` 的那三张表）。
+
+> 2026-11-05 业主裁定之后，这里只剩一根轴：等级。档位是等级的历史反算名
+> （`evidencebits.kind_from_grade`）。文件名与标记名保留（文档 §历史 仍引用它们），
+> 但它们钉的不再是"两个轴"。
 
 ## 这个模块为什么在 `tests/` 下、而不是 `src/`
 三张表是文档的读数，不是框架的行为：框架不读它们、运行期用不到它们。
@@ -10,10 +14,12 @@
 
 ## 三张表各自钉什么
 - 表一 `表一行()`：32 组五元位 ⇒ `evidencebits.derive_grade` 的真输出 + `audited_badge`；
-- 表二 `表二行()`：同一批 32 组 ⇒ 五元位唯一能决定的那一格（`signed`，来自
-  `secretary._manuscript_upgrade_basis`），而档位那一列逐格写"不由五元位决定" ——
-  这句话不是口号，`档位换通道的实验` 会把它跑成读数（32 组五元位 × 2 条通道）；
-- 表三 `表三行()` / `表三夹具行()`：把冻结现场的 `(等级, 档位)` 横表算出来。
+- 表二 `表二行()`：同一批 32 组 ⇒ 五元位唯一能决定的两格：`signed`（来自
+  `secretary._manuscript_upgrade_basis`，那条 lane 未动）与档位反算名
+  （`evidencebits.kind_from_bits`）—— 后者 2026-11-05 之前写的是"不由五元位决定"，
+  裁定之后它是五元位的函数；
+- 表三 `表三行()` / `表三夹具行()`：把冻结现场的 `(等级, 历史档位)` 横表算出来 ——
+  它现在是一条审计读数（存量档位与现算等级差多少），不再是"两轴"的证据。
 
 ## 现场从哪来
 `tests/fixtures/two_axes_scene.json` 是 `projects/*/data/statements.json` 的频次快照
@@ -45,8 +51,8 @@ SCENE_PATH = REPO / "tests" / "fixtures" / "two_axes_scene.json"
 #: 夹具侧现场（与快照不同源：那份夹具是一个工作区的逐行快照）。
 FIXTURE_WORKSPACE_PATH = REPO / "tests" / "fixtures" / "paper_rewrite_86_reviewed_bit.json"
 
-#: 表二那一列逐格写的字面量（它不是从代码算出来的）：五元位算不出档位。
-NOT_FROM_BITS = "不由五元位决定"
+#: 表二那一列的表头（2026-11-05 之前它是"不由五元位决定"；裁定之后它是反算名）。
+LEGACY_TIER_FROM_BITS = "档位（= 等级反算名）"
 
 #: 32 组枚举里每一位取的"就绪/未就绪"代表值。
 #: `numeric` 取 `verified` / `pending`（四态里只有 `verified` 抬等级，见 `numeric_states()`）；
@@ -60,7 +66,7 @@ COMBO_GRID: tuple[tuple[Any, ...], ...] = tuple(itertools.product(
 TABLE1_HEADER: tuple[str, ...] = ("#", "numeric", "proof", "reviewed", "formal", "audited",
                                   "等级", "`audited_badge`")
 TABLE2_HEADER: tuple[str, ...] = ("#", "numeric", "proof", "reviewed", "formal", "audited",
-                                  "`signed`（五元位唯一能决定的那一格）", "档位（`evidence_kind`）")
+                                  "`signed`（五元位唯一能决定的那一格）", LEGACY_TIER_FROM_BITS)
 MATRIX_HEADER: tuple[str, ...] = ("档位 \\ 等级", *EB.GRADES, EB.GRADE_NOT_APPLICABLE, "合计")
 
 
@@ -190,7 +196,7 @@ def 表一行() -> list[tuple[str, ...]]:
 
 
 def 表二行() -> list[tuple[str, ...]]:
-    """32 组五元位 ⇒ 五元位唯一能决定的那一格（`signed`）+ 档位（不由五元位决定）。"""
+    """32 组五元位 ⇒ `signed` + 档位反算名（`kind_from_bits` = 等级的同一个函数）。"""
     out: list[tuple[str, ...]] = []
     for i, (numeric, proof, reviewed, formal, audited) in enumerate(COMBO_GRID):
         bits = EB.bits_of(numeric=numeric, proof=proof, reviewed=reviewed, formal=formal,
@@ -199,74 +205,10 @@ def 表二行() -> list[tuple[str, ...]]:
         out.append((
             f"{i:02d}", str(numeric), _bool(proof), _bool(reviewed),
             "verified" if isinstance(formal, Mapping) else str(formal),
-            _bool(audited), _bool(bool(got.get("signed"))), NOT_FROM_BITS,
+            _bool(audited), _bool(bool(got.get("signed"))),
+            EB.kind_from_bits(bits),
         ))
     return out
-
-
-def 档位换通道的实验() -> dict[str, list[str]]:
-    """同一批 32 组五元位、只换证明通道 ⇒ 档位落在哪一档。
-
-    这是"档位不由五元位决定"的读数，不是注解：`verifications._grade_recomputed_from_signature`
-    在同一份凭据下按通道给档（穷举程序 ⇒ `proof`，文字证明 ⇒ `proof_review`），
-    而 32 种五元位在每条通道内产出的档位逐字相同。
-
-    两处打桩，各自钉住一个被隔离的输入（都是为了把"五元位"变成唯一在变的那个量）：
-    - `verifications.proof_review_gap`：凭据那一格（这里固定成"签住了"，否则 32 格都落在
-      "凭据不够 ⇒ 不动"，实验就什么都没量到 —— 那正是这条实验要避免的真空）；
-    - `numericproof.find_signed_exhaustion_for_column`：通道那一个判据（穷举 / 非穷举）。
-
-    返回 `{"文字证明": [...32 个档位...], "穷举程序": [...]}`。
-    """
-    from agentflow import numericproof as NP
-    from agentflow import verifications as VR
-
-    def _gap(root: Any, row: Mapping[str, Any], proof_no: Any = None) -> dict[str, Any]:
-        return {"ok": True, "checked": True, "state": "signed", "why": "（实验用的固定读数）",
-                "ledger": "verifications/000000.jsonl", "verification_id": "v-000001",
-                "sha_matches": True, "proof_no": 1, "statement_id": "000000"}
-
-    real_gap, real_find = VR.proof_review_gap, NP.find_signed_exhaustion_for_column
-    out: dict[str, list[str]] = {}
-    try:
-        VR.proof_review_gap = _gap  # type: ignore[assignment]
-        for label, hit in (("文字证明", None), ("穷举程序", {"experiment_id": "000001"})):
-            NP.find_signed_exhaustion_for_column = (  # type: ignore[assignment]
-                lambda experiments, text, _hit=hit: _hit)
-            kinds: list[str] = []
-            for numeric, proof, reviewed, formal, audited in COMBO_GRID:
-                row = {"stmt_id": "000000", "kind": "conjecture", "evidence_kind": "heuristic",
-                       "proof_text": "证明：……∎",
-                       "bits": {"numeric": numeric, "proof": proof, "reviewed": reviewed,
-                                "formal": formal, "audited": audited}}
-                got = VR._grade_recomputed_from_signature(row, root=_空工作区())
-                kinds.append(str(got["row"].get("evidence_kind") or ""))
-            out[label] = kinds
-    finally:
-        VR.proof_review_gap = real_gap  # type: ignore[assignment]
-        NP.find_signed_exhaustion_for_column = real_find  # type: ignore[assignment]
-    return out
-
-
-_SCRATCH: Any = None
-
-
-def _空工作区() -> pathlib.Path:
-    """一个只有空 `experiments` 表的临时工作区（通道判据读它；读不到会变成"没查成"）。
-
-    复用同一个（模块级 `TemporaryDirectory`，进程退出时自动清掉）：这条实验会调它 64 次，
-    每次新建一个目录既慢、又会往系统临时区漏东西。
-    """
-    global _SCRATCH
-    import tempfile
-
-    if _SCRATCH is None:
-        _SCRATCH = tempfile.TemporaryDirectory(prefix="two-axes-scene-")
-        root = pathlib.Path(_SCRATCH.name)
-        (root / "data").mkdir(exist_ok=True)
-        (root / "data" / "experiments.json").write_text(
-            json.dumps({"schema_version": S.SCHEMA_VERSION, "rows": []}), encoding="utf-8")
-    return pathlib.Path(_SCRATCH.name)
 
 
 # ------------------------------------------------------------------ 表三

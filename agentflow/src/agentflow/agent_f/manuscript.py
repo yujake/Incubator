@@ -93,7 +93,8 @@ class _Manuscript:
         于是"引用在册定理"这件事在真机里没有发生的机会。
 
         列入的条件与 B 读稿时那一条判据同源（`depsection.citation_level_allowed`）：
-        只有 `proof_review` 级及以上的才既读得到又引得成。低于该档的、档位读不到的
+        只有等级 `pre_theorem` 及以上的才既读得到又引得成（2026-11-05 起门槛读等级，
+        不再读 `statements.evidence_kind` 那一列历史）。低于该档的、等级算不出来的
         只报条数并说清"引用它们会被受控拒绝" —— 不列出来，是因为"能引"与"列在这里"
         必须是同一件事（两份清单漂开，模型就会照着引一条注定被拒的）。
         """
@@ -107,8 +108,8 @@ class _Manuscript:
         below = 0
         unknown_level = 0
         for row in usable:
-            level = str(row.get("evidence_kind") or "").strip()
-            if not level or level not in S.EVIDENCE_KINDS:
+            level = _DS.statement_grade(row)
+            if not level:
                 unknown_level += 1
             elif _DS.citation_level_allowed(level):
                 eligible.append(row)
@@ -120,19 +121,19 @@ class _Manuscript:
             sid = str(row.get("stmt_id") or "")
             kind = str(row.get("kind") or "")
             label = " ".join(str(row.get("label") or row.get("statement_text") or "").split())
-            ek = str(row.get("evidence_kind") or "")
+            grade = _DS.statement_grade(row)
             line = (f"stmt:{sid}（kind={kind or '（没写）'}，label={label or '（没有标签）'}，"
-                    f"evidence_kind={ek or '（没写）'}）")
+                    f"grade={grade or '（算不出来）'}）")
             if len(line) > self.STATEMENT_ITEM_CHARS:
                 line = _short(line, self.STATEMENT_ITEM_CHARS)
             lines.append(line)
             ids.append(f"stmt:{sid}")
         rest: list[str] = []
         if below:
-            rest.append(f"{below} 条的档位低于 {_DS.CITATION_MIN_LEVEL}（cross_check / heuristic "
-                        "那一档）—— 引用它们会被受控拒绝")
+            rest.append(f"{below} 条的等级低于 {_DS.CITATION_MIN_LEVEL}（conjecture / "
+                        "strong_conjecture 那一档）—— 引用它们会被受控拒绝")
         if unknown_level:
-            rest.append(f"{unknown_level} 条的档位读不到 —— 也不许引（读不到就不放行）")
+            rest.append(f"{unknown_level} 条的等级算不出来 —— 也不许引（读不到就不放行）")
         if len(eligible) > len(lines):
             rest.append(f"另有 {len(eligible) - len(lines)} 条够格但没列出来（这一块只列前 "
                         f"{self.CITABLE_STATEMENTS} 条）")

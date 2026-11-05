@@ -305,7 +305,10 @@ def test_a_new_row_with_bits_is_re_normalised_and_the_grade_is_recomputed():
                     "evidence": {"proof_process": "（逐步论证）",
                                  "reviewed_by": {"round": "V-0003"}}}}
     bits = EB.bits_from_row(row)
-    assert bits["grade"] == "pre_theorem", bits          # 现算覆盖缓存
+    # 2026-11-05 业主裁定：穷举证书与 Lean 同级 ⇒ numeric=verified + 证明 = 定理。
+    # 改前这一条断言的是 `pre_theorem`（"数值验证不构成证明"）；裁定把"穷举证书"
+    # 与普通数值实验分开之后，这一行的第 1 位是 verified ⇒ 机器可核 ⇒ theorem。
+    assert bits["grade"] == "theorem", bits          # 现算覆盖缓存
     assert bits["numeric"] == "verified", bits           # 四态规范化（"true" ⇒ verified）
     assert bits["formal"] == "failed", bits              # ("false" ⇒ failed)
 

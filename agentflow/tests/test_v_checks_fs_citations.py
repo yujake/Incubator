@@ -60,6 +60,7 @@ import pytest
 
 from _proof_manuscript_fixture import write_proof_manuscript
 
+from agentflow import evidencebits as _EB
 from agentflow import proofloc as PL
 from agentflow import schema as S
 from agentflow import verifications as VR
@@ -136,6 +137,18 @@ def _set_evidence_kind(store: Store, sid: str, kind: str) -> None:
     row = next(r for r in store.rows("statements") if str(r.get("stmt_id") or "") == sid)
     row = dict(row)
     row["evidence_kind"] = kind
+    # 2026-11-05：判定面读等级。夹具把"被引命题够格"这件事落进五元位（proof 位），
+    # 不再只改历史列 —— 只改列的话现算等级仍是 conjecture，新门槛会拒它（这正是
+    # 本次改造要的行为，夹具必须按新规则造行）。
+    bits = dict(row.get("bits") or {})
+    if kind in ("proof", "proof_review"):
+        bits["proof"] = True
+        ev = dict(bits.get("evidence") or {})
+        if not str(ev.get("proof_process") or "").strip():
+            ev["proof_process"] = str(row.get("proof_text") or "（夹具：证明正文）")
+        bits["evidence"] = ev
+    bits["grade"] = _EB.derive_grade(bits, kind=str(row.get("kind") or ""))
+    row["bits"] = bits
     with store.tx("statements", actor="test", note="fixture:evidence_kind") as tx:
         tx.upsert("statements", row, note="fixture:evidence_kind")
 
@@ -417,11 +430,12 @@ def test_a_cross_check_citation_is_inadmissible_and_cannot_sign(tmp_path: pathli
 
     out = _three(agent, main, proof_text=MAIN_PROOF)
     assert out["citations"][0]["evidence_kind"] == "cross_check", out["citations"]
+    assert out["citations"][0]["grade"] == "conjecture", out["citations"]
     assert out["citations"][0]["admissible"] is False
     assert _blocked_by(out, "inadmissible"), out
-    assert "cross_check" in out["citation_checks"][0]["note"], (
-        "挡签的点名要写清它现在是什么档", out["citation_checks"])
-    assert "proof_review" in out["citation_checks"][0]["note"]
+    assert "conjecture" in out["citation_checks"][0]["note"], (
+        "挡签的点名要写清它现在的**等级**（判定面读等级）", out["citation_checks"])
+    assert "pre_theorem" in out["citation_checks"][0]["note"], out["citation_checks"]
     assert "不够格" in seam.prompts[0], "提示词里要教这条档位口径（否则模型无从判）"
     disk = _ledger_row(store, main)
     assert disk["verdict"] == "有毛病" and VR.signs_bit3(disk) is False
@@ -603,29 +617,34 @@ def test_dependencies_of_another_proof_do_not_enter_this_proofs_material(
 # ============================================================ 护栏：读侧硬闸
 
 def test_the_allowed_level_set_is_computed_from_the_shared_evidence_order() -> None:
-    """护栏：允许集合是从"证据力序"现算的，不是抄的一份字面量。
+    """护栏：允许集合是从等级序现算的，不是抄的一份字面量（2026-11-05 改口径）。
 
-    两处对账：① 它必须等于 `schema.EVIDENCE_KINDS` 从 `proof_review` 那一位切到最强端
-    （业主的「proof_review级及以上」逐字）；② 它必须与 `verify_tools._EVIDENCE_ORDER`
-    （本仓唯一的证据力序声明，弱到强）切出来的是同一集合 —— 两处漂开就是"报告说够格、
-    判据说不够"，而那种错没有任何东西会红。词表里没有门槛那一档 ⇒ 空集（fail-closed：
-    空集会让每一条引用都判 inadmissible，那是可见的失败，不是静默放行）。
+    三处对账：① 它必须等于 `depsection.CITATION_LEVELS`（门槛的唯一定义）；
+    ② 它必须等于 `evidencebits.GRADES` 从 `CITATION_MIN_LEVEL` 切到最强端；③ 门槛
+    常量在 `verifications` 里必须是对 `depsection` 的引用，不是第二份字面量。
+    词表里没有门槛那一档 ⇒ 空集（fail-closed：空集会让每一条引用都判 inadmissible，
+    那是可见的失败，不是静默放行）。
     """
-    from agentflow.tools.verify_tools import _EVIDENCE_ORDER
+    from agentflow import depsection as _DS
+    from agentflow import evidencebits as _Eb
 
-    kinds = tuple(S.EVIDENCE_KINDS)
     floor = VR.CITATION_EVIDENCE_FLOOR
-    assert floor in kinds and floor in _EVIDENCE_ORDER, (kinds, _EVIDENCE_ORDER)
-    # ① schema 的声明序（强到弱）：门槛那一位切到最强端。
-    expected = set(kinds[: kinds.index(floor) + 1])
-    # ② 证据力序（弱到强）：门槛那一位切到最强端。
-    ordered = set(_EVIDENCE_ORDER[_EVIDENCE_ORDER.index(floor):])
+    assert floor == _DS.CITATION_MIN_LEVEL == "pre_theorem", floor
+    assert floor in _Eb.GRADES, (floor, _Eb.GRADES)
+    # ① 唯一定义切出来的集合。
+    expected = set(_DS.CITATION_LEVELS)
+    # ② 等级序（弱到强）门槛那一位切到最强端。
+    ordered = set(_Eb.GRADES[_Eb.GRADES.index(floor):])
     live = set(VR.admissible_evidence_kinds())
     assert live == expected == ordered, (sorted(live), sorted(expected), sorted(ordered))
-    assert live == {"proof", "proof_review"}, sorted(live)
-    # 反方向：低于门槛的三档一个都不许进（空串也算"读不到档位"）。
-    for kind in ("cross_check", "heuristic", ""):
-        assert VR.evidence_kind_admissible(kind) is False, kind
+    assert live == {"pre_theorem", "theorem"}, sorted(live)
+    # 反方向：低于门槛的两级一个都不许进（空串也算"读不到等级"）。
+    for grade in ("conjecture", "strong_conjecture", ""):
+        assert VR.citation_grade_admissible(grade) is False, grade
+    # 历史档位的兼容口只做换算，不另设门槛：proof_review → pre_theorem（够格），
+    # cross_check → strong_conjecture（不够格）。
+    assert VR.evidence_kind_admissible("proof_review") is True
+    assert VR.evidence_kind_admissible("cross_check") is False
 
 
 def test_signs_bit3_refuses_a_row_whose_citation_check_blocks() -> None:
