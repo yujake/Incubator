@@ -5686,23 +5686,6 @@
     },
     {
       "tools": [
-        "verify.verify_proof"
-      ],
-      "key": "returns",
-      "reason": "按现值重记（2026-11-05）：2696cb93（D13/D14）把 `kind` / `reason` 两个词表从实现现算 —— kind 补在册送审那一族的拒信码与 statement_missing（空串 = 这一趟没有档），reason 补 checked=False 的整族（含 manuscript_* / proof_text_needs_a_manuscript / secretary_unjudged / ledger_row_lost 等）与 checked=True 的 already_signed；旧文案里已漂的集合一并去掉。2026-11-04 那条（补「verdict 是两态之一」）已按现值合入本条、不再单列。",
-      "date": "2026-11-05",
-      "edits": [
-        {
-          "op": "set_scalar",
-          "path": "returns",
-          "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
-          "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
-        }
-      ],
-      "date_amended": "2026-11-04"
-    },
-    {
-      "tools": [
         "lit.stage_add"
       ],
       "key": "returns",
@@ -5992,22 +5975,6 @@
     },
     {
       "tools": [
-        "table.create"
-      ],
-      "key": "returns",
-      "reason": "返回值写清两件事：meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）；被兜底接管那一档 data 是对象（backstop / routed_to / routed_from / state / what_happened / row / id / requested_id / dropped_keys / refused_by_backstop）。",
-      "date": "2026-10-26",
-      "edits": [
-        {
-          "op": "set_scalar",
-          "path": "returns",
-          "from": "data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
-          "to": "data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"
-        }
-      ]
-    },
-    {
-      "tools": [
         "table.delete"
       ],
       "key": "returns",
@@ -6035,22 +6002,6 @@
           "path": "params/properties/id/description",
           "from": "主键值（4 位字符串，或 r-NNNN）",
           "to": "主键值（6 位十进制字符串如 `000000`，或 `r-000001`；旧数据里的 4 位号仍可读）"
-        }
-      ]
-    },
-    {
-      "tools": [
-        "table.update"
-      ],
-      "key": "returns",
-      "reason": "同一批：meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）；被兜底接管那一档 data 是对象（backstop / state / what_happened / row / refused_by_backstop …）。",
-      "date": "2026-10-26",
-      "edits": [
-        {
-          "op": "set_scalar",
-          "path": "returns",
-          "from": "data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
-          "to": "data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。"
         }
       ]
     },
@@ -6622,6 +6573,54 @@
           "path": "side_effect",
           "from": "read",
           "to": "write_local"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.create"
+      ],
+      "key": "returns",
+      "reason": "M4（literature.path 写入闸）：`meta.normalized` 现在也会列出被剥掉多余 `library/` 前缀的 `literature.path`；顺带把旧措辞“标量，无键集合”追平。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
+          "to": "data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 `literature.path`（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "table.update"
+      ],
+      "key": "returns",
+      "reason": "M4（literature.path 写入闸）：同上（update 的归一化只在 patch 真写 path 时发生）。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
+          "to": "data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 `literature.path`（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "verify.verify_proof"
+      ],
+      "key": "returns",
+      "reason": "2026-11-05 那批（kind/reason 词表按实现现算 + 可引门槛改读等级）：`returns` 由实现现拼，词表规模随之变化。",
+      "date": "2026-11-05",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
+          "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_id_missing / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
         }
       ]
     }
