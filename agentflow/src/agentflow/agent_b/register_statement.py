@@ -2872,8 +2872,8 @@ class _RegisterStatement:
         candidate_stmt_id = ""
         candidate_source = ""
         #: 候选号只从"明确递进来的稿"取：`param`（调用方点名给 `proof_manuscript`）与
-        #: `carried_by_D`（D 的携带单点了名、且 sha 与盘上那份相符）。**`disk` 兜底读盘
-        #: 不算**：那一支可能捡到被引命题的稿（真机 `walk-e2e` 就是按 `derived_from` 读到
+        #: `carried_by_D`（D 的携带单点了名、且 sha 与盘上那份相符）。「`disk` 兜底读盘
+        #: 不算」：那一支可能捡到被引命题的稿（真机 `walk-e2e` 就是按 `derived_from` 读到
         #: 别条命题的 `reports/f-proof-<别人的号>.md`），拿它的稿名当新命题的候选号 =
         #: 把别人的号借来用；稿是不是本行的由 `_manuscript_is_own` 判，那一判据管正文，
         #: 这一格管号 —— 两条都不能让"捡来的稿"说话。
