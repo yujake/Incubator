@@ -2145,6 +2145,23 @@ def _dep_step_key(row: Mapping[str, Any]) -> tuple:
     )
 
 
+def _dep_ref(step: Mapping[str, Any]) -> str:
+    """一条依赖步骤在读数里的指称（形如 `stmt:000777`）。
+
+    为什么不能只读 `label`（2026-11-05 裁定 A 的读数面）：手稿依赖段那一路的 `label`
+    是人读的"手稿依赖段（第 N 行）：…"（它要落进依赖行），而 `deps_dangling` 的 `ref`
+    必须点名那个号 —— 从来源字段现算，读的人一眼看到是哪一条。前缀只从
+    `schema.CITATION_PREFIXES` 反查（前缀只有一处声明），查不到就退回 `label`。
+    """
+    for _key, field, table, _idf, _dkind in STEP_SOURCE_KEYS:
+        val = str(step.get(field) or "").strip()
+        if not val:
+            continue
+        prefix = next((p for p, t in S.CITATION_PREFIXES.items() if t == table), "")
+        return f"{prefix}:{val}" if prefix else val
+    return str(step.get("label") or step.get("code") or "")
+
+
 def _stmt_edge_count(steps: Any) -> int:
     """这一批依赖步骤里有几条是"命题→命题"（`source_stmt_id` 非空）。
 
@@ -8066,12 +8083,22 @@ class Secretary:
         `dangling` 并点名，扫不动的进 `deps_unmappable`）。
         """
         steps, missing = _resolve_dep_steps(groups, tx)
-        if missing and body.get("deps"):
+        #: `depsection.deps_groups` 给"手稿的 `## 依赖` 表点名了不在册的号"打的标记：
+        #: 那一档按业主 §14.11 乙 落 `dangling`（整笔照写），不是"显式依赖的严格
+        #: 那一条"。两条路的区别只在"这一步是谁给的"：调用方直给的 `deps`（G 的契约）
+        #: 没有这个标记，照旧整笔不写；手稿读出来的行带它（`declared_dangling`）。
+        def _declared_dangling(m: Mapping[str, Any]) -> bool:
+            stp = dict(m.get("step") or {})
+            return (bool(stp.get("declared_dangling"))
+                    and str(stp.get("status") or "") == "dangling"
+                    and "表里没有" in str(m.get("why") or ""))
+        undeclared = [m for m in missing if not _declared_dangling(m)]
+        if undeclared and body.get("deps"):
             # 显式给的依赖指着不在册的号 ⇒ 整笔不写（G 那一族的契约）
             out.update(refused="unresolved_dependency",
                        reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
                                "依赖：那正是'依赖图静默少一环'的成因）"),
-                       unresolved=missing)
+                       unresolved=undeclared)
             return None
         if not missing:
             return steps
@@ -8100,13 +8127,14 @@ class Secretary:
                         break
                 # `Dependency.validate` 的硬要求：`status="dangling"` 必须写
                 # `status_reason`（"只标状态不说原因 = 记了一笔没人能接手"）。
-                stp["status_reason"] = (
-                    f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
-                    f"而{why} ⇒ 这条依赖边留着并标 `dangling`（不整笔拒、也不丢掉它："
-                    "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
+                if not str(stp.get("status_reason") or "").strip():
+                    stp["status_reason"] = (
+                        f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
+                        f"而{why} ⇒ 这条依赖边留着并标 `dangling`（不整笔拒、也不丢掉它："
+                        "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
                 kept.append(stp)
                 out["deps_dangling"].append(
-                    {"ref": str(stp.get("label") or stp.get("code") or ""),
+                    {"ref": _dep_ref(stp),
                      "path_group": int(m.get("path_group") or 1), "why": why})
             else:
                 out["deps_unmappable"].append({

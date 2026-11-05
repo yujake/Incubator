@@ -363,22 +363,30 @@ class _Manuscript:
         rows = section.get("rows") or []
         # 2026-11-05（缺陷甲）：表在、但 0 行数据而正文点了在册号 ⇒ 预览就必须说"会退"。
         # 改前预览与 B 的登记入口都只看 `present`，于是"交出去会不会被退"这一格会亮 ok。
-        _code, _why = _DS.dependency_consistency_problem(text)
+        #
+        # 2026-11-05（裁定 A 优先于 B）：这一道只对在册引用要求表里有行。"在册"要真读
+        # 台账 ⇒ 读 `statements` 提前到一致性判据之前（与 B 的登记入口同一顺序、同一判据）。
+        try:
+            stmt_rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 - 读不到就不许说"够格"
+            out.update(refused=str(_DS.REFUSED_LEVEL_UNREADABLE),
+                       reason=(f"预览要核每条来源的档位、并判正文的引用在不在册，"
+                               f"而 `statements` 读不出来"
+                               f"（{type(exc).__name__}: {exc}）⇒ 这次预览没查成"))
+            return out
+        _code, _why = _DS.dependency_consistency_problem(
+            text, known_ids=[str(r.get("stmt_id") or "") for r in stmt_rows])
         if _code:
             out.update(refused=str(_code), reason=str(_why))
             out["deps_missing"] = _DS.deps_missing_reading(
                 proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
                 section=section)
             return out
-        try:
-            stmt_rows = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 - 读不到就不许说"够格"
-            out.update(refused=str(_DS.REFUSED_LEVEL_UNREADABLE),
-                       reason=(f"预览要核每条来源的档位，而 `statements` 读不出来"
-                               f"（{type(exc).__name__}: {exc}）⇒ 这次预览没查成"))
-            return out
         gate = _DS.gate_rows(rows, stmt_rows)
         out["levels"] = dict(gate.get("levels") or {})
+        #: 不在册的那些行：预览同样读成 dangling（边上落 dangling + 点名 + 照写），
+        #: 不是"整笔退回" —— 只有"数得进依赖面"的行才进 `would_write`。
+        out["dangling"] = [dict(d) for d in (gate.get("dangling") or [])]
         if not gate.get("ok"):
             out.update(refused=str(gate.get("refused") or ""),
                        reason=str(gate.get("reason") or ""))
@@ -386,9 +394,10 @@ class _Manuscript:
                 proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
                 section=section)
             return out
-        out.update(ok=True, would_write=len(rows))
+        writable = len(rows) - len(out["dangling"])
+        out.update(ok=True, would_write=writable)
         out["deps_missing"] = _DS.deps_missing_reading(
-            proof_text=body, deps_written=len(rows), derived_from=refs,
+            proof_text=body, deps_written=writable, derived_from=refs,
             refs=len(refs), section=section)
         return out
 

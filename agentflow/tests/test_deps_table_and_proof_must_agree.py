@@ -124,10 +124,14 @@ def _register_again(store: Store):
 
 
 def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> None:
-    """e：收方（B）读稿登记走同一个判据 —— 表 0 行而正文点号 ⇒ 整笔受控拒。
+    """e：收方（B）读稿登记走同一个判据 —— 表 0 行而正文点了在册号 ⇒ 整笔受控拒。
 
     为什么还要这一条：`commit_manuscript` 与 B 的登记入口是两条路（作者落稿 / 收方
     读稿），只堵一处的话"绕过落稿那一道、直接把稿交给 B"仍然静默。
+
+    2026-11-05（业主裁定 A 优先于 B）：这一道只对在册引用生效（"在册"要真读台账）；
+    正文点一个不在册的号 ⇒ 走 §14.11 乙的 dangling（整笔照写），不是这一档。所以这份
+    夹具的正文必须引一条真的在册命题 —— 把正文里的 `stmt:000013` 换成刚登记出来的号。
     """
     store = Store(tmp_path / "ws")
     store.init()
@@ -136,7 +140,8 @@ def test_e_b_registration_refuses_the_same_mismatch(tmp_path: pathlib.Path) -> N
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        DS.mark_washed(_manuscript(body=CITES, sid=sid), actor="secretary-F"),
+        DS.mark_washed(_manuscript(body=CITES.replace(SID, sid), sid=sid),
+                       actor="secretary-F"),
         encoding="utf-8")
 
     got = _register_again(store)

@@ -264,7 +264,7 @@ def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
     而返回值里只有 `deps_written=0` —— 没有任何一格因为这件事变红。
 
     2026-11-04（业主裁定：`missing` 钉在只读预览层，不退役；B 那一侧照旧整笔拒）。
-    三档 + 两条拒，逐档钉，每档旁边带反真空（把形态换一格，读数必须换）：
+    三档 + 一条拒 + 一条不拒，逐档钉，每档旁边带反真空（把形态换一格，读数必须换）：
     - `missing`：正文引了在册命题，而稿里没有 `## 依赖` 段（"作者没写依赖段"）——
       在只读预览层读（`_read_only_deps_reading`）；`_a_holds` 原样套在那份 dict 上；
     - `missing`（第二形态）：同一段正文 + 稿里是一张空表（说辞与表打架）——预览层
@@ -272,7 +272,9 @@ def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
     - `not_applicable`：稿的 `## 依赖` 是空表 + 正文零引用（自足，不是"缺依赖"）；
     - `present`：正文引了、稿里也登记了 ⇒ 依赖落成；
     - 拒 ①：missing 的同一形态交 B ⇒ `dependency_section_missing`（零写入）；
-    - 拒 ②：稿的表点名一条不在册的号 ⇒ `dependency_source_not_registered`。
+    - 不拒（2026-11-05 业主裁定 A 优先于 B）：稿的表点名一条不在册的号 ⇒
+      落 `dangling` + 读数点名、整笔照写（`dependency_source_not_registered`
+      从收方这条路上退役：拒了等于把整条定理丢掉）。
     """
     st = _ws(tmp_path, "a")
     b = _agent(st)
@@ -373,15 +375,23 @@ def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
     assert int(cited.get("deps_written") or 0) >= 1, cited
     assert cited_reading.get("derived_from") == [cid], cited_reading
 
-    # ⑥ 拒 ②：稿的依赖表点名一条不在册的号 ⇒ dependency_source_not_registered
+    # ⑥ 不在册的号（2026-11-05 业主裁定 A 优先于 B）：稿的依赖表点名一条不在册的号
+    #    ⇒ 不再整笔拒（`dependency_source_not_registered` 已从收方这条路上退役），
+    #    而是落 dangling + 读数点名、整笔照写（业主 §14.11 乙：「拒了等于把整条定理丢掉」）。
+    #    反真空：同一份稿里那条号换成在册的 C ⇒ 落成 closed 边（见 ⑤），不是恒 dangling。
     unknown = "000098"
     ghost = b.register_statement(
         **own("命题 G：稿的依赖表点名了一条不在册的命题。"),
         proof_text=f"证明：由 stmt:{unknown} 直接推出。",
         proof_manuscript=_proof_manuscript([(unknown, "某条不存在的引理", 1)]))
-    assert ghost.get("ok") is False, ghost
-    assert ghost.get("kind") == DS.REFUSED_UNKNOWN_SOURCE, ghost
-    assert unknown in str(ghost.get("error") or ""), ghost
+    assert ghost.get("ok") is True, ghost
+    #: 这一笔的依赖来源是稿里那张表（`deps_groups`）⇒ `deps_state` 不置（它只说"从正文扫"）；
+    #: 读数面用 `deps_missing.state` 与 `deps_dangling` 两格，两格都必须点名这一条。
+    assert (ghost.get("deps_missing") or {}).get("state") == SEC.DEPS_MISSING_PRESENT, ghost
+    assert [d["ref"] for d in ghost.get("deps_dangling") or []] == [f"stmt:{unknown}"], ghost
+    assert ghost.get("kind") != DS.REFUSED_UNKNOWN_SOURCE, ghost
+    assert any(str(r.get("stmt_id") or "") == str(ghost.get("stmt_id"))
+               for r in st.rows("statements")), "整笔照写：那一行必须落下去"
 
     # ⑦ 还没有证明正文 ⇒ not_applicable（不是"缺依赖"，也不是"零依赖"）
     pending = b.register_statement(**own("命题 F：证明还没写。"))

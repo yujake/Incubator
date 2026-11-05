@@ -2163,20 +2163,28 @@ class _RegisterStatement:
                 # 对不上。改前这一笔照收（`present` 就算合格），依赖边 0 行而读数正常 ——
                 # "正文里引了、表里没写"整份静默通过。判据本体只有一处
                 # （`depsection.dependency_consistency_problem`），与 F 落稿前那道同源。
-                _code, _why = _DS.dependency_consistency_problem(manuscript_text)
+                #
+                # 2026-11-05（裁定 A 优先于 B）：这一道只对在册命题的引用要求表里有行。
+                # 正文点了一个不在册的号、表 0 行 ⇒ 不是"表与正文对不上"，而是 §14.11 乙
+                # 那一条悬空边（落 dangling + 点名 + 整笔照写）。"在册"要真读台账，
+                # 所以读 `statements` 提到这一判据之前；读不到 ⇒ 不许猜，整笔不写。
+                try:
+                    stmt_rows = [dict(r) for r in self.store.rows("statements")]
+                except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
+                    return _refuse(
+                        str(_DS.REFUSED_LEVEL_UNREADABLE),
+                        f"手稿的依赖段要核每条来源的档位、并判正文的引用在不在册，"
+                        f"而 `statements` 读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 整笔不写：读不到档位就不许放行")
+                _code, _why = _DS.dependency_consistency_problem(
+                    manuscript_text,
+                    known_ids=[str(r.get("stmt_id") or "") for r in stmt_rows])
                 if _code:
                     return _refuse(
                         str(_code), str(_why),
                         refs_in_proof=list(manuscript_refs),
                         manuscript_source=manuscript_source,
                         manuscript_path=manuscript_path)
-                try:
-                    stmt_rows = [dict(r) for r in self.store.rows("statements")]
-                except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
-                    return _refuse(
-                        str(_DS.REFUSED_LEVEL_UNREADABLE),
-                        f"手稿的依赖段要核每条来源的档位，而 `statements` 读不出来"
-                        f"（{type(exc).__name__}: {exc}）⇒ 整笔不写：读不到档位就不许放行")
                 gate = _DS.gate_rows(manuscript.get("rows") or (), stmt_rows)
                 if not gate.get("ok"):
                     return _refuse(
@@ -2184,6 +2192,11 @@ class _RegisterStatement:
                         str(gate.get("reason") or ""),
                         source_levels=dict(gate.get("levels") or {}),
                         required=sorted(_DS.CITATION_LEVELS))
+                #: 不在册的那些行（`gate_rows` 的 `dangling`）也原样进 `deps_groups`：
+                #: 它按"号在不在 `kinds` 里"给那一行打 `declared_dangling`，秘书那一侧
+                #: 只对这一档放行成悬空边（§14.11 乙"落 dangling + 点名 + 整笔照写"）。
+                #: 调用方直给的 `deps` 没有这个标记，照旧整笔不写（G 那一族的契约）——
+                #: 两条路的区别只在"这一步是谁给的"，不在"号在不在册"。
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
                          for r in stmt_rows}
                 deps_groups = _DS.deps_groups(manuscript.get("rows") or (), kinds)

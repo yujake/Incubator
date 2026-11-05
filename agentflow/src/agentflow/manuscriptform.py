@@ -305,6 +305,14 @@ def dependency_section_problem(text: Any) -> tuple[str, str]:
     对不上，整份退回并点名第几步 —— 判据本体在
     `depsection.dependency_consistency_problem`，两处共用同一份）；
     段缺了而正文一条引用都没有 ⇒ 合法（自足的证明）。
+
+    ## 这一层拿不到台账 ⇒ 按"全部引用"比对（保守的那一档）
+
+    `dependency_consistency_problem` 的判据是"只有在册的引用才要求表里有行"
+    （2026-11-05 业主裁定：不在册的号走 dangling、整笔照写）。这一层是落稿 / 落 B 稿
+    的校验，手里没有 store ⇒ 交不出 `known_ids`，只能按全量比。这一档至多把一份
+    "正文点了不在册的号、表 0 行"的手写稿多退回一次；它不会把那条边静默丢掉 ——
+    那一档的处置（落 dangling + 点名 + 照写）在 B 的登记入口，那里手里有台账。
     """
     raw = str(text or "")
     section = _DS.parse_dependency_section(raw)
