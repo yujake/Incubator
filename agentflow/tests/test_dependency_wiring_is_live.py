@@ -52,9 +52,9 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import depsection as DS
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
-from agentflow import vsigns as VS
 import agentflow.agent_b.register_statement as RS
 from agentflow.agent_b import AgentB
 from agentflow.agent_d import AgentD
@@ -112,13 +112,21 @@ def _ws(path: pathlib.Path) -> Store:
 
 
 def _add_statement(store: Store, stmt_id: str, *, label: str = "") -> dict:
+    body = _PROOF_TEXT.format(sid=stmt_id)
+    # 等级是唯一的轴（2026-11-05 口径）：被引命题的档位不再由 `evidence_kind` 声明，
+    # 而是由五元位现算。第 2 位（有证明）先落真、正文就是这一份，V 的三次「成立」
+    # 之后第 3 位翻真 ⇒ 等级现算 `pre_theorem`，正好够可引门槛。
+    bits = EB.bits_of(origin="own_result", proof=True, proof_process=body,
+                      kind="theorem")
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=label or f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",
-        proof_text=_PROOF_TEXT.format(sid=stmt_id),
-        evidence_kind="heuristic", status="active",
+        proof_text=body,
+        bits=bits,
+        evidence_kind=EB.kind_from_bits(bits, kind="theorem"),
+        status="active",
         quote_verified=None,
         quote_reason="判据夹具：自产命题，没有外部引文要比对",
         created_at=S.now_iso(), created_by="agent-B",
@@ -153,7 +161,10 @@ def _library(store: Store) -> None:
             "连续 3 次成立之后仍然没发签", signed.get("statement_writeback"))
         row = next(dict(r) for r in store.rows("statements")
                    if str(r.get("stmt_id")) == sid)
-        row["evidence_kind"] = "proof_review"
+        # 历史列照等级反算（判定面仍只读五元位现算的等级）。
+        row["evidence_kind"] = EB.kind_from_bits(row["bits"],
+                                                 kind=row.get("kind") or "")
+        assert row["evidence_kind"] == "proof_review", row["evidence_kind"]
         with store.tx("statements", actor="test") as tx:
             tx.upsert("statements", row)
 
@@ -453,6 +464,31 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
     assert (reading.get("manuscript_probe") or {}) == {}, reading
 
 
+def test_a_cited_statements_carried_manuscript_does_not_lend_its_number(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空（候选号）：把"被引命题的稿不是本笔自己的稿"摘掉 ⇒ 又撞 000002。
+
+    D 的携带单里那份稿属于 F 的在册命题（稿头 `stmt:<F 的号>`），它是「被引命题」
+    的依赖面来源，不是这一笔要登记的新命题的稿。候选号只许来自"本笔自己的稿"：
+    把那条判据打桩成恒 False（= 摘掉）之后，同一条链必须回到
+    `stmt_id_taken`（000002 已被 F 的命题占用）—— 那正是修前的红。
+    """
+    store = _ws(tmp_path)
+    _library(store)
+    out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
+    f_stmt = str(out["statement_id"])
+    _d_report(store)
+    body = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
+    sign_before_registration(store.root, proof_text=body)
+    monkeypatch.setattr(RS, "_manuscript_belongs_to_a_cited_statement",
+                        lambda **kw: False, raising=False)
+    got = _register(store,
+                    statement_full="定理：D 的研究手稿引用了 F 的证明手稿（反真空）。",
+                    proof_text=body, derived_from=[f_stmt])
+    assert got.get("ok") is False, got
+    assert got.get("kind") == "stmt_id_taken", got
+
+
 def test_the_delivery_really_hands_the_manuscript_to_b(tmp_path: pathlib.Path,
                                                         signed_v_handoffs) -> None:
     """a 的第二格（审计 M8）：D 的交付动作真把稿递给 B，读数里 `delivered >= 1`。
@@ -597,14 +633,16 @@ def test_a_rows_own_numbered_manuscript_is_read_for_its_dependency_face(
         "## 命题\n\n" + full + "\n\n## 证明\n\n" + body + "\n\n"
         + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A))
     text = DS.mark_washed(text, actor="secretary-F")
-    text = VS.stamp_manuscript_sign(
-        text, proof_sha=VR.proof_sha(body), streak=VR.SIGN_STREAK_NEED,
-        need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
-        ledger=f"verifications/{sid}.jsonl#v-000003",
-        statement_id=sid, manuscript_id=VS.manuscript_id_of(rel))
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+    # 签必须有一个盘上读得出来的台账背书（`sign_ledger_backing`）：走真写口落三票，
+    # 签块由 `_vsigns_write_after_flip` 盖回这份按号稿（手写 `#v-…` 的假锚点不算签）。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(
+            store.root, statement_id=sid, proof_text=body,
+            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+            store=store, proof_no=1, manuscript=rel)
 
     got = _register(store, statement_full=full, proof_text=body)
     assert got.get("ok") is True, got

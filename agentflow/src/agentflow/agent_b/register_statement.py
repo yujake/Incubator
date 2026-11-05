@@ -757,6 +757,33 @@ def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any) -> bool:
         stmt_id_now=stmt_id_now, matched_by=got.get("matched_by"))
 
 
+def _manuscript_belongs_to_a_cited_statement(*, declared_id: Any = "",
+                                             derived_from: Any = (),
+                                             proof_text: Any = "") -> bool:
+    """这份稿的号是不是「被引命题」的号（而不是本笔要登记的新命题的号）。
+
+    ## 为什么候选号要问这一句（2026-11-06 真退化）
+
+    D 的携带单按命题号点名，而 B 新登记一条派生命题时，`derived_from` 与正文里的
+    `stmt:` 引用会把「被引命题」的稿一并带进来（`read_carried_manuscript` 的候选
+    就是这些号）。那些稿的号属于被引命题，不是这一笔将要发的号；把它当候选号，
+    B 就会撞在被引命题自己头上（`stmt_id_taken`）—— D 携带 F 稿 → B 登记派生命题
+    这条主链整笔拒。
+
+    判据只有一句：稿名 / 稿头认出来的号在"这一笔引了谁"（`derived_from` ∪
+    正文里的 `stmt:` 引用）里 ⇒ 它是被引命题的稿，不许当本笔的候选号。
+
+    与"稿是不是本行的"（`_manuscript_is_own`）分工：那一格管正文 / 签 / 依赖面
+    用不用这份稿；这一格管「号」。两格都不许让被引命题的稿说话。
+    """
+    declared = str(declared_id or "").strip()
+    if not declared:
+        return False
+    cited = {str(x).strip() for x in (derived_from or ()) if str(x).strip()}
+    cited.update(str(x) for x in _DS.stmt_refs(str(proof_text or "")))
+    return declared in cited
+
+
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
@@ -2891,10 +2918,17 @@ class _RegisterStatement:
 
             _from_path = _VS_CAND.manuscript_id_of(str(manuscript_path or ""))
             _from_head = _DS.manuscript_statement_id(str(manuscript_text))
-            if _from_path and S.is_valid_id(_from_path):
-                candidate_stmt_id, candidate_source = str(_from_path), "manuscript_name"
-            elif _from_head and S.is_valid_id(_from_head):
-                candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
+            # 被引命题的稿不是本笔的稿（2026-11-06）：`derived_from` / 正文的
+            # `stmt:` 引用把它们的号带进来是正常的；拿那个号当候选号会撞在被引
+            # 命题自己头上（`stmt_id_taken`），主链整笔拒（D 携带 F 稿 → B 登记）。
+            _cited_manuscript = _manuscript_belongs_to_a_cited_statement(
+                declared_id=(_from_path or _from_head),
+                derived_from=derived_from, proof_text=proof_text)
+            if not _cited_manuscript:
+                if _from_path and S.is_valid_id(_from_path):
+                    candidate_stmt_id, candidate_source = str(_from_path), "manuscript_name"
+                elif _from_head and S.is_valid_id(_from_head):
+                    candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
         written = sec.record_statement(payload, role="B",
                                        candidate_id=candidate_stmt_id)
         # ---- D2②：拒绝要看，不许把它读成成功 ------------------------------------
