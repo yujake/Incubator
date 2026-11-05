@@ -26,6 +26,7 @@
 | [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md) | `ROLE-SPECS.md` 的**实测附录**：工具面明细 / 自检实测 / R0.1–R0.3 / M.4.2–M.4.3 / S1–S3（**读数带日期、不构成判据**） |
 | [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md) | 各角色自检的**失败项台账**（待修缺陷证据，不是文档问题） |
 | [`LEAN-MODES.md`](LEAN-MODES.md) | 有 Lean / 无 Lean 两模式的完整矩阵：开关、动作可用面、证据上限、收工门各格 |
+| [`TWO-AXES-GRADE-AND-KIND.md`](TWO-AXES-GRADE-AND-KIND.md) | **等级（`GRADES`）与档位（`EVIDENCE_KINDS`）是两个轴**：五元位 ⇒ 等级（32 组现算）、五元位 ⇒ 档位（逐格标"不由五元位决定"并给出三处真落点）、等级 ⇄ 档位的现场横表（真机 77 工作区 / 3627 行 + 夹具）与两组反例；术语校准表（"证据等级"→"证据档位"）逐处登记。表由 `tests/test_two_axes_grade_and_kind.py` 逐格比对（改错一格即红） |
 | [`READING-MAP.md`](READING-MAP.md) | 大文件的行数与「该读哪一段」的索引 |
 | [`USER-GUIDE.md`](USER-GUIDE.md) | 用户视角：从哪进、怎么建项目、产物在哪、出错先看哪（CLI 一节含四个入口与 28 行新老对照表） |
 | [`CLI-CONTRACT.md`](CLI-CONTRACT.md) | `inspect` 那一组 `--json` 的机器可读契约：外层四格 / 每条命令的 `data` 字段 / 三态语义 |
@@ -117,4 +118,4 @@ python scripts/noai_gate.py --git
 
 | 文件 | 为什么不入册 |
 |---|---|
-| （今天没有这一档） | 39 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |
+| （今天没有这一档） | 41 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |

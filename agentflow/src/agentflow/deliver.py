@@ -172,8 +172,8 @@ def _mechanical_checks(store: Any, artifact: str, *, claimed_pairs: Sequence[Seq
             out.append({"kind": "unsupported_pair",
                         "detail": f"{pair['pair']} 在图里没有边也没有路径"})
     if store is not None:
-        # 断言强度（`draft/28` §189，第 7 步）：把稿件的每一条断言与它挂的证据等级
-        # 逐条比一遍。判不了"这句话证明了没有"（那是语义半），但"证据等级是 cross_check
+        # 断言强度（`draft/28` §189，第 7 步）：把稿件的每一条断言与它挂的证据档位
+        # 逐条比一遍。判不了"这句话证明了没有"（那是语义半），但"证据档位是 cross_check
         # 却写着『证明』"这种形态不需要模型就能判。
         claims: list[dict[str, Any]] = []
         try:

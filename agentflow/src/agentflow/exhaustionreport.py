@@ -21,7 +21,7 @@ B 登记时指它、G 在正文里引它、V 审它，四处说的是同一份�
 转发（那一侧的 `exhaustion_problems` 是穷尽判定的唯一入口），所以：
 
 - E 写侧：报告没落成 / 三块不齐 ⇒ 那条证据降档（`numericproof.sign_experiment` 的
-  等级由 `exhaustion_problems` 单点决定 ⇒ 落成 cross_check，不是 proof）；
+  档位由 `exhaustion_problems` 单点决定 ⇒ 落成 cross_check，不是 proof）；
 - B 的入库闸：证明栏三段齐但落盘核查不过 ⇒ 受控拒绝（`numericproof.filing_problems`）；
 - V 的会审：缺材料 ⇒ `看不出来` 并点名缺哪一块，不许判 `成立`。
 

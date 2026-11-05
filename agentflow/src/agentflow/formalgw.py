@@ -1266,11 +1266,11 @@ def _conclude(result: dict, status: str, reason: str) -> dict:
 
 
 def evidence_of(result: Mapping[str, Any]) -> dict:
-    """这次检查实际到达了什么证据等级 —— 三态，而不是一个布尔。
+    """这次检查实际到达了什么证据档位 —— 三态，而不是一个布尔。
 
     - `verified` ⇒ `checked=True, proved=True, evidence_kind="proof"`；
     - 跑了但没通过（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）
-      ⇒ `checked=True, proved=False, evidence_kind=None`（这次没有拿到任何等级的证据）。
+      ⇒ `checked=True, proved=False, evidence_kind=None`（这次没有拿到任何档位的证据）。
       为什么不是 `cross_check`：那是"另一个方法旁证过"，而这里"没通过"给不出旁证；
       把它写成 `cross_check` 会让"检查失败"变成一条正面证据。
     - `timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /

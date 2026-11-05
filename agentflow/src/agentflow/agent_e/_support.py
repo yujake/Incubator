@@ -396,7 +396,7 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
     两半都需要 —— schema 拦得住"存进去的谎话"，拦不住"脚本以为自己证明了"。
     """
     if raw is None:
-        # 脚本没报证据等级：默认 cross_check（"这不是证明"本身就写在默认值里）。
+        # 脚本没报证据档位：默认 cross_check（"这不是证明"本身就写在默认值里）。
         return "cross_check"
     kind = str(raw)
     if kind not in S.EVIDENCE_KINDS:

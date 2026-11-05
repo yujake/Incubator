@@ -1498,7 +1498,7 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     `retrieval_timeout_sec` 只影响检索本身。`fulltext` 缺省关闭（全文获取是逐条网络下载，打开后逐条六态：`no_pdf` / `download_failed` …）：关闭时它如实写进
     未接线清单，理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，与 `lean` 那条同形；常量里"没有接进本流程"是关于流程的断言，真相是"接了、本次没要"，见 `X-NEW-2` / `draft/28` §98.4）。
     `lean` 缺省关闭；打开后每个 `` ```lean `` 代码块都交给 `formalgw.check_lean` 真跑一次，结论与到达的证据
-    等级写进 `claims.json` 的 `lean` 段与报告的形式化验证小节 —— 它是 `evidence_kind="proof"` 的唯一来源，
+    档位写进 `claims.json` 的 `lean` 段与报告的形式化验证小节 —— 它是 `evidence_kind="proof"` 的唯一来源，
     所以默认关、且真跑过之前不许把 lean 从"未接线"清单摘掉（`lean_run_fn` 是它唯一的测试接缝）。`claims_parse_fn` 缺省 `None`（纯启发式，同一答复必得同一结论）；注入它只提供候选，编号、去重、截断与
     指纹仍由 `claims.split_claims` 决定，用没用它写进产物。`claims_max` 是断言上限，截掉的条数写进 `claims.json`、清单与 unknowns —— 静默截断会让"登记了 200 条"读成"一共只有 200 条"。
     两种"没查成"（没有模型 key、检索没查成）都不调模型、直接退出码 2：产物本该由"材料 + 逐字引文"支撑，缺一半跑下去只会得到无法回验的结论。全文获取失败不改退出码（摘要在手上就还能回验，只是级别停在摘要级）；

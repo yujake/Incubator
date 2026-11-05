@@ -190,7 +190,7 @@ class _RunExperiment:
         `out/experiments/<实验号>/exhaustion.md` 的那几段）。为什么要从参数面收：
         提示词要求 E「跑之前先报三件套 + 把 exhaustive 写成布尔」，而这三格此前不在任何
         schema 里 ⇒ 模型只能传空 params，报告落不成、4 条 exhaustive_search 全落
-        cross_check。等级由 `numericproof` 现算，不由这里判：缺任何一格，
+        cross_check。档位由 `numericproof` 现算，不由这里判：缺任何一格，
         那一条就是 cross_check（有数值实验支持，不构成证明）。
         调用方显式给的那一格胜过脚本在 REPRO_RESULT 里自报的同名键（与 `search_bound`
         同一个优先级），两者不一致时 `notes` 里留一句话 —— 本方法不替它们折中。
@@ -338,7 +338,7 @@ class _RunExperiment:
         # search_space）落在 observations 里 —— 下游三处读的是同一份，不各写一份转换。
         #
         # 真机读数（r34b，2026-10-23 夜）：4 条 exhaustive_search 的 observations 里
-        # ②③ 一格都没有，exhaustion.md 于是缺三块里的前两块，等级全落 cross_check。
+        # ②③ 一格都没有，exhaustion.md 于是缺三块里的前两块，档位全落 cross_check。
         # 根因不在提示词（它要求 E 跑之前先报三件套），而在工具面收不下那三格 ——
         # 这一轮把参数面补齐之后，它们在这里落到行上：
         #   ① `exhaustionreport.blocks_from` 从这里读 design / enumeration /
