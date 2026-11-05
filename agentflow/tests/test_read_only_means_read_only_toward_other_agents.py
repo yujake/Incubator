@@ -6,10 +6,15 @@
 > 可以观察到这三个"只读"角色的写工具都是产出自己侧的文件，不会更改其它智能体的产出，
 > 所以"只读"的意思是对其它智能体的产出只读。
 
-于是 C / H / V 现行的 `write_local` 件数（H 13 / C 10 / V 9）与这条口径不矛盾；
+于是 C / H / V 现行的 `write_local` 件数（H 14 / C 11 / V 11）与这条口径不矛盾；
 矛盾的是文案说得太绝对：`specs/c.py` 与 `specs/h.py` 都写着「工具面全量只读
-（拿不到任何写工具）」，而 `tools_lines` 自己印着 13 / 10 行 `write_local`；
+（拿不到任何写工具）」，而 `tools_lines` 自己印着 14 / 11 行 `write_local`；
 `STRUCTURE_NOT_PROMPT`（十一格共用）也写着「只读角色拿不到写工具」。
+
+2026-11-05 两笔「把声明说真」（业主裁定）：`verify.verify_proof`（写 V 自己维护的那张
+台账）与 `conductor.escalate`（往会话事件流写 `agent_message` / `agent_escalation`）
+的 `side_effect` 从 `read` 改成 `write_local` ⇒ 三家的读数各 +1 件 `conductor.escalate`，
+V 另 +1 件 `verify.verify_proof`。判据本体（逐件相等）一个字没动，动的只有基线。
 
 ## 三条判据
 
@@ -38,24 +43,30 @@ from agentflow.tools import (                                    # noqa: E402
 from agentflow.tools import conductor_tools as CT               # noqa: E402
 from agentflow.tools.base import ToolRegistry                    # noqa: E402
 
-#: 三家的 write_local 逐件（现算于 2026-11-01；H 13 / C 10 / V 9）。
+#: 三家的 write_local 逐件（现算于 2026-11-05；H 14 / C 11 / V 11）。
+#: 2026-11-05 的两笔声明修正（业主裁定，`911b9e1f` + `8aa92286`）把
+#: `verify.verify_proof` 与 `conductor.escalate` 从 `read` 改成真成 `write_local`：
+#: 前者写 V 自己那张 `verifications/` 台账，后者往会话事件流写 `agent_message` /
+#: `agent_escalation`。判据仍是"逐件相等"（多一件就是权限面漂了），没有放宽。
 _CLOCK7 = ("clock.alarm_start", "clock.periodic_start", "clock.periodic_stop",
            "clock.timer_cancel", "clock.timer_purpose", "clock.timer_start",
            "clock.wait_any")
 _BOOK2 = ("conductor.ack", "conductor.post_task")
+#: 2026-11-05 起三家都据实声明的一件（通信事件也是工作区写）。
+_ESCALATE = ("conductor.escalate",)
 EXPECTED: dict[str, tuple[str, ...]] = {
-    "C": tuple(sorted(_CLOCK7 + _BOOK2 + ("analysis.register_report",))),
-    "H": tuple(sorted(_CLOCK7 + _BOOK2 + (
+    "C": tuple(sorted(_CLOCK7 + _BOOK2 + _ESCALATE + ("analysis.register_report",))),
+    "H": tuple(sorted(_CLOCK7 + _BOOK2 + _ESCALATE + (
         "review.record_finding", "review.report", "review.review_document",
         "review.verify_fixes"))),
-    "V": tuple(sorted(_CLOCK7 + _BOOK2)),
+    "V": tuple(sorted(_CLOCK7 + _BOOK2 + _ESCALATE + ("verify.verify_proof",))),
 }
 #: 本角色自己侧的业务写工具（文案里必须逐件点名）。
 OWN_SIDE: dict[str, tuple[str, ...]] = {
     "C": ("analysis.register_report",),
     "H": ("review.review_document", "review.verify_fixes", "review.report",
           "review.record_finding"),
-    "V": (),
+    "V": ("verify.verify_proof",),
 }
 #: 改前那句话（判据要能点名它）。
 STALE = "拿不到任何写工具"
