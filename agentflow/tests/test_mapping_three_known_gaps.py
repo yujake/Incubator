@@ -45,7 +45,7 @@ b / c 两条不动。这一改不退回 11-04 修掉的 kind 门：那道门问�
 | a3 | example + 证明栏是程序但还没被 E 签成穷举（`proof_channel` 为空）⇒ 凭据格认那份 `.py`；同现场 theorem 仍受控拒 | 改前「凭据不够」三处：缺 `lean_target`、`.py` 类别不符、缺 `numeric_evidence` |
 | b | 空通道 + `numeric_evidence`/`exhaustion_note` 有值 ⇒ 两边同时报「没有数值证明通道」 | 改前一边 `mapping_proof_program_missing`、一边齐 |
 | c | 空通道 + 合法 `.lean` + 真声明名 ⇒ 两边都不齐，点名「凭据格不许填」 | 改前两边都齐、`_lean_problems` 说无问题 |
-| d | 把各自的修法摘掉（打桩/过滤）⇒ a/b/c 各回红 | 打桩前它们本来是绿的 —— 证明绿真的靠那几处判据 |
+| d | 把各自的修法摘掉（打桩/过滤）⇒ a/b/c/a3 各回红（d1 档位边界 / d4 程序凭据那一支 / d2 自称判据 / d3 凭据拒绝） | 打桩前它们本来是绿的 —— 证明绿真的靠那几处判据 |
 
 夹具复用 `test_numeric_theorem_writing_spec` 的构造器（同一个仓库里只留一份形状）。
 """
@@ -442,6 +442,30 @@ def test_d1_putting_the_numeric_theorem_obligations_back_reopens_gap_one(
     assert "mapping_numeric_evidence_missing" in _kinds(after), _details(after)
     assert gate["complete"] == 0, gate
     assert "numeric_evidence" in _incomplete(gate)["missing"], gate
+
+
+def test_d4_dropping_the_program_credential_branch_reopens_a3(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """d-a3（反真空）：把「例子 / 实验的证明栏第 ① 段就是凭据」那一支摘掉 ⇒ a3 回红。
+
+    打桩：`_proof_column_program` 恒返回空串（取不到那份 `.py`）⇒ `program_credential`
+    为假，凭据格回到「空通道 + 一份 `.py`」的旧判法 —— 缺 `lean_target` 与「不能把一份
+    数值程序填进这一格」两条立刻回来。a3 的绿真的靠那一条通道认法。
+    """
+    root = SPEC._workspace(tmp_path / "ws", rows=[_example_credential_only()],
+                           tex=_example_tex(), experiment="cross_check")
+    before, gate_before = _reading(root)
+    assert before["state"] == "pass", _details(before)
+    assert gate_before["complete"] == 1 and gate_before["incomplete"] == [], gate_before
+
+    monkeypatch.setattr(PM, "_proof_column_program", lambda statement: "")
+    after, gate = _reading(root)
+    kinds = _kinds(after)
+    assert after["state"] == "fail", _details(after)
+    assert "mapping_lean_file_missing" in kinds, _details(after)
+    assert "mapping_lean_missing" in kinds, _details(after)
+    assert gate["complete"] == 0, gate
+    assert _incomplete(gate)["missing"] == ["通道为空却填了 lean_file"], gate
 
 
 def test_d2_dropping_the_claim_check_reopens_gap_two(
