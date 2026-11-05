@@ -37,6 +37,7 @@ import pathlib
 
 import pytest
 
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import store as ST
 from agentflow import verifications as VR
@@ -54,14 +55,36 @@ _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据"
 _PROOF = "1. 由定义直接得到 c(G) ≤ 1。\n2. 由 1 与假设 n ≥ 3 得结论。"
 
 
+def _bits(*, reviewed: bool = False, kind: str = "lemma",
+          text: str = _PROOF) -> dict:
+    """这条命中的五元位（2026-11-05 口径：先预置位，档位只由等级反算）。
+
+    `_row()` 是有证明正文的一行 ⇒ 第 2 位为真；`reviewed` 说这一行有没有把 V
+    那一签读进第 3 位（本文件量的正是"签在台账里、位/档位各读成什么"）。
+    """
+    return EB.bits_of(origin="own_result", proof=True, proof_process=text,
+                      reviewed=reviewed, kind=kind,
+                      reviewed_by=({"evidence": "verifications/000000.jsonl#v-000003"}
+                                   if reviewed else None))
+
+
 def _row(stmt_id: str = "000000", **kw) -> dict:
-    """一条合法的 `statements` 行（除 `evidence_kind` 外都过 `Statement.validate`）。"""
-    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": "lemma",
+    """一条合法的 `statements` 行（除 `evidence_kind` 外都过 `Statement.validate`）。
+
+    2026-11-05 起 `evidence_kind` 只是历史列：判定面读的是 `bits` 现算的等级。
+    所以这里的默认行也带上第 2 位（有证明）；要第 3 位为真的行显式传
+    `bits=_bits(reviewed=True)` —— 不再靠"只写历史列"造"已签"的现场。
+    默认 `bits` 按这一行的 `kind` 现算（概念行是 `not_applicable`，与
+    `Statement.validate` 用同一个 kind）。
+    """
+    kind = str(kw.get("kind") or "lemma")
+    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": kind,
            "statement_full": "设 G 是 3-正则图；则 c(G) ≤ 1。",
            "statement_text": "c(G) ≤ 1", "proof_text": _PROOF,
            "quote_reason": "我方自产命题，没有外部引文要比对",
            "evidence_kind": "proof_review", "status": "active",
-           "created_at": "2026-10-19T00:00:00+08:00", "created_by": "test"}
+           "bits": _bits(kind=kind), "created_at": "2026-10-19T00:00:00+08:00",
+           "created_by": "test"}
     row.update(kw)
     S.Statement(**row).validate()
     return row
@@ -76,22 +99,32 @@ def ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _sign(store: Store, stmt_id: str, proof_text: str = _PROOF, verdict: dict | None = None,
-          *, times: int | None = None) -> dict:
+          *, times: int | None = None, flip: bool = False) -> dict:
     """替 V 落一签（与 `verify.verify_proof` 落盘的是同一行，只是不经模型）。
 
     2026-10-29（业主「V 签门槛 = 连续 3 次没问题」）之后，「成立」要连续
     `SIGN_STREAK_NEED` 次才签住 ⇒ 默认落三次（同一份正文）；「有毛病」那一档只落一次
     （它本来就不签）。返回最后一次那一行。
+
+    `flip=True` 走真写口（`store`）：最后一转会把第 3 位翻进命题行 —— 那是 2026-11-05
+    口径下"行上的五元位反映这一签"的唯一正路。默认 False 只落台账，用于"签在台账里、
+    行上还没读进第 3 位"的历史形态（本文件量那两态的差）。
     """
     want = verdict or _OK
     n = int(times if times is not None
             else (VR.SIGN_STREAK_NEED if str(want.get("verdict")) == "成立" else 1))
     row: dict = {}
+    flipped: dict = {}
     for _i in range(max(1, n)):
         row = VR.record_verification(store.root, statement_id=stmt_id,
                                      proof_text=proof_text, verdict=want,
-                                     verifier="agent-V")
-    return row
+                                     verifier="agent-V",
+                                     store=(store if flip else None),
+                                     proof_no=1)
+        # 翻位那一转才是"这一签"（后面再投的几票是复查读数，回填痕不会重写）
+        if not flipped and bool((row.get("statement_writeback") or {}).get("written")):
+            flipped = row
+    return flipped or row
 
 
 def _write(store: Store, row: dict) -> None:
@@ -252,17 +285,22 @@ def test_a_row_meeting_the_definition_is_accepted_and_needs_nothing_else(ws: Sto
     """正控（⑥）：只按 `schema.EVIDENCE_KINDS` 那句定义判 ⇒ 这一行必须写得进去。
 
         "不多要别的字段"这件事在这里被钉成断言：行里没有 `disclaimer`（`Statement`
-        根本没有这一栏）、没有 `verification_id`、没有 `reviewed_by`、`bits` 是 `{}` ——
-        而它照样得写得进去。负控：把写入期闸改回"要 `disclaimer` 才放行"，这条当场红
+        根本没有这一栏）、没有 `verification_id`、没有 `reviewed_by` —— 而它照样得
+        写得进去。负控：把写入期闸改回"要 `disclaimer` 才放行"，这条当场红
         （实测：临时给闸加一条 `and not row.get("disclaimer")` 的判据 ⇒
-        `test_fake_proof_review.py` 里 6 条红，其中就有这一条）。"""
+        `test_fake_proof_review.py` 里 6 条红，其中就有这一条）。
+
+        2026-11-05：`bits` 不再是"可省的第 4 个字段"，而是判定面本身 ——
+        这一行带着第 2、3 位的真（`proof ∧ reviewed` ⇒ 现算 `pre_theorem`），
+        所以审计侧不会把它读成"够格却降档"。"""
     _sign(ws, "000000")
-    row = _row()
+    row = _row(bits=_bits(reviewed=True))
     assert "disclaimer" not in row and "verification_id" not in row
-    assert row.get("bits") in (None, {}), row.get("bits")
+    assert row["bits"]["proof"] is True and row["bits"]["reviewed"] is True, row["bits"]
     _write(ws, row)
     written = ws.rows("statements")[0]
     assert written["evidence_kind"] == "proof_review", written
+    assert EB.derive_grade(EB.bits_from_row(written)) == "pre_theorem", written["bits"]
     # 审计侧对"够格且登记对了"的一行一个字都不说
     rep = VY.verify_all(ws)
     codes = [i.code for i in rep.issues if i.table == "statements"]
@@ -323,9 +361,14 @@ def test_a_signed_statement_written_as_heuristic_is_reported_as_a_downgrade(ws: 
         会系统性偏低，而此前没有任何读数会指出这一点。
 
         负控：同一条凭据写成 `proof_review` ⇒ 这条告警不出现（所以它是"降档"那一格
-        的判据，不是恒真的一句）。把 `verify._check_13` 里那一段删掉 ⇒ 本条红（实测过）。"""
+        的判据，不是恒真的一句）。把 `verify._check_13` 里那一段删掉 ⇒ 本条红（实测过）。
+
+        2026-11-05 改读等级之后，这条警告的判据是"第 2 位为真、V 那一签在台账里，
+        而第 3 位没翻、现算等级仍低于 `pre_theorem`"：所以弱档那一行的 `bits` 只写
+        第 2 位；负控那行把第 3 位也落真（档位由等级反算，历史列不再自己说话）。
+        """
     _sign(ws, "000000")
-    _write(ws, _row(evidence_kind="heuristic"))
+    _write(ws, _row(evidence_kind="heuristic", bits=_bits(reviewed=False)))
     rep = VY.verify_all(ws)
     hits = [i for i in rep.issues if i.code == "weaker_than_evidence"]
     assert len(hits) == 1, rep.issues
@@ -336,9 +379,9 @@ def test_a_signed_statement_written_as_heuristic_is_reported_as_a_downgrade(ws: 
     assert not [i for i in rep.issues if i.code == "weaker_than_evidence" and i.level == "error"]
     assert len(rep.warnings) >= 1, rep.issues
 
-    # 负控：同样凭据、写成 proof_review ⇒ 告警消失
+    # 负控：同样凭据、把第 3 位也落真、写成 proof_review ⇒ 等级算出 pre_theorem，告警消失
     with pytest.MonkeyPatch.context():
-        _write(ws, _row(evidence_kind="proof_review"))
+        _write(ws, _row(evidence_kind="proof_review", bits=_bits(reviewed=True)))
     rep2 = VY.verify_all(ws)
     assert [i for i in rep2.issues if i.code == "weaker_than_evidence"] == [], rep2.issues
 
@@ -392,6 +435,9 @@ def _outlet_fixture(ws: Store) -> tuple[dict, dict, dict, str]:
         ws, proof_text=_OUTLET_BODY, statement_full=full, statement_text=sg["text"],
         kind="conjecture", label="F 攻坚 000000 子目标 s1",
         evidence_kind="heuristic",
+        # 2026-11-05：历史行也要带第 2 位 —— 这一行有证明正文；第 3 位留假（还没签）。
+        # 只铺 proof_text / evidence_kind 的旧现场在新口径下现算仍是 conjecture。
+        bits=_bits(reviewed=False, kind="conjecture", text=_OUTLET_BODY),
         quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
     return sg, product, plan, str(seeded["stmt_id"])
 
@@ -400,9 +446,13 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     """正控（⑨）：F 的 `_proof_outlet` 按 V 那一签定档，并在复用时就地升档。
 
         真机的时间线（`projects/mp2`）：F/B 在 21:06 落行（那一刻还没有签 ⇒ 只能
-        `heuristic`），V 在 21:09 才签。没有任何东西回头改那一行 —— 于是够格的强结果
-        永远停在弱档。这条判据钉住修法：同样的论证再交一遍时，F 认出"这一行现在够格了"，
-        就地升档（一行 update，走同一个写入闸），并报 `promoted=True`。
+        `heuristic`），V 在 21:09 才签。改前那一签只进台账、没人回头改这一行 ——
+        于是够格的强结果永远停在弱档。这条判据钉住修法：同样的论证再交一遍时，F
+        认出"这一行现在够格了"，就地升档（一行 update，走同一个写入闸），并报
+        `promoted=True`。
+
+        2026-11-05：V 的签走真写口（`_sign(..., flip=True)`）会翻第 3 位，
+        `_grade_recomputed` 的回填痕由那一笔落下；F 这一笔再把历史列按等级升上去。
     """
     from agentflow.agent_f import AgentF
 
@@ -421,7 +471,7 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     assert VR.proof_review_gap(ws.root, row).get("ok") is False, row
     assert VR.GRADE_RECOMPUTED_KEY not in row, row
 
-    signed = _sign(ws, stmt_id, proof_text=str(row["proof_text"]))
+    signed = _sign(ws, stmt_id, proof_text=str(row["proof_text"]), flip=True)
     assert signed.get("verification_id"), signed
 
     second = f._proof_outlet(product, sg, plan=plan)     # 同样的论证再交一遍
@@ -435,9 +485,14 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     # 之后 kind 跟着证据升离 conjecture。改前 F 一进门就写 lemma（跳过 conjecture 阶段）。
     assert str(after[0].get("kind")) != "conjecture", after[0]
     # 升档的来路必须是盘上那一签（不是自报）：回填痕逐格点名台账与证明号。
+    # 2026-11-05：`from` / `to` 是「等级」（`conjecture → pre_theorem`），历史档位
+    # 由同一条回执的 `from_kind` / `to_kind` 反算给出（`heuristic → proof_review`）；
+    # 判据的意思不变（"按盘上那一签现算"），只是轴换成了等级。
     trace = dict(after[0].get(VR.GRADE_RECOMPUTED_KEY) or {})
     assert trace.get("checked") is True, trace
-    assert (trace.get("from"), trace.get("to")) == ("heuristic", "proof_review"), trace
+    assert (trace.get("from"), trace.get("to")) == ("conjecture", "pre_theorem"), trace
+    assert (trace.get("from_kind"), trace.get("to_kind")) == (
+        "heuristic", "proof_review"), trace
     assert trace.get("proof_no") == 1, trace
     assert trace.get("basis") == (
         f"verifications/{stmt_id}.jsonl#{signed['verification_id']}"), trace
