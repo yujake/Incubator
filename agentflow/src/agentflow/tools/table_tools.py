@@ -1593,7 +1593,9 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
     roles=TOOL_ROLES,
     # 键名逐个从 `table_list` 的 ok(...) 读出。注意 `filtered` 不在 data 里，
     # 它只出现在 `table.count` 的 meta 里（两处不同，别混）。
-    returns="{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。",
+    returns="{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。"
+            "给了 `fields` 时 meta 多一格 `fields`（本次投影的字段名，按请求顺序）；"
+            "不给就没有这一格（不适用，不是空串）。",
     tags=("table", "crud"),
 )
 def table_list(
@@ -2077,7 +2079,9 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
     roles=TOOL_ROLES,
     # 键名从实现读出（`table_search` 的 ok(...)）：`fields` 是本次实际扫描的字段名
     # （不是 data 里的字典键）；`matched_fields` 在 meta 里，键是主键值。
-    returns="{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。",
+    returns="{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。"
+            "给了 `select` 时 meta 多一格 `select`（本次投影的字段名，按请求顺序）；"
+            "不给就没有这一格（不适用，不是空串）。",
     tags=("table", "read"),
 )
 def table_search(
