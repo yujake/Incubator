@@ -1529,6 +1529,9 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         }
     if store is None:
         _append_verification(path, row)
+        # 缺陷 A（2026-11-05）：重判之后把签块那两格刷到台账最新那一行。
+        row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
+                                                       manuscript=manuscript)
         return row
     if flip is False:
         # ---- 业主 2026-10-29 追加口径：V 不再自己发签 ----
@@ -1560,6 +1563,9 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         }
         row["statement_writeback"] = writeback
         _mark_landed(row, writeback)
+        # 缺陷 A（2026-11-05）：台账那一行落下之后刷签块（`vsigns.refresh_manuscript_sign`）。
+        row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
+                                                       manuscript=manuscript)
         return row
     if not row_signable(row):
         # 签不住的结论也要落台账（它是"看过、结论是没过"的证据），但它不翻任何位。
@@ -1591,12 +1597,44 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
                         + str(writeback.get("reason") or "")))
         row["statement_writeback"] = writeback
         _mark_landed(row, writeback)
+        row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
+                                                       manuscript=manuscript)
         return row
     writeback = sign_statement(store, row=row, proof_text=proof_text,
                                path=path, proof_no=no, sign_issuance=sign_issuance)
     row["statement_writeback"] = writeback
     _mark_landed(row, writeback)
+    row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
+                                                   manuscript=manuscript)
     return row
+
+
+def _retrack_sign_block(root: str | Path, *, row: Mapping[str, Any],
+                        manuscript: str = "") -> dict[str, Any]:
+    """台账那一行落下之后：把这一份正文的签块刷到台账最新那一行（缺陷 A；永不抛）。
+
+    为什么挂在这里（2026-11-05，真机 87 的读数）：签块上 `台账=` / `时间=` 两格此前
+    只有 :func:`sign_statement` -> `vsigns.land` 一个写者，而它只在发签那一刻跑。
+    同一份正文之后的每一次重判（同 sha 的新台账行）只追加台账、没人碰块 ⇒ 块永远停在
+    第一次发签那一行（87：块说 v-000008，账上最新 v-000011；而且 v-000009 判了「有毛病」
+    之后块还挂着旧签）。
+
+    判据一个字都不在这里（唯一实现是 :func:`vsigns.refresh_manuscript_sign`）：这一格只
+    负责"行落了就叫它一声"，并把它那一笔的三态读数带进返回值 —— 刷块失败不许带走这一签
+    （台账那一行已经落了，它是正本）。读数的键是 `sign_block_refresh`（不落盘：
+    它在追加之后才写进返回行，与 `statement_writeback` 同一条纪律）。
+    """
+    from . import vsigns as _VS
+
+    try:
+        return dict(_VS.refresh_manuscript_sign(
+            root, artifact_sha=str(row.get("proof_sha256") or ""),
+            statement_id=str(row.get("stmt_id") or row.get("statement_id") or ""),
+            proof_no=row.get("proof_no"), manuscript=str(manuscript or "")))
+    except Exception as exc:  # noqa: BLE001 —— 刷块失败不许带走这一签（台账已落）
+        return {"checked": False, "state": "error",
+                "why": (f"签块刷新没跑成（{type(exc).__name__}: {exc}）"
+                        "⇒ 块可能停在旧那一签上（这一格没查成）")}
 
 
 def _mark_landed(row: dict[str, Any], writeback: Mapping[str, Any]) -> None:
@@ -2796,6 +2834,81 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
     return out
 
 
+def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any],
+                              statement_id: str, proof_no: int,
+                              sha: str) -> dict[str, Any]:
+    """`sign_statement` 那一笔事务之外：签块落成了就给 B 开一条「必须收录」义务。
+
+    为什么必须在事务之外（2026-11-05 实测）：`_vsigns_write_after_flip` 跑在
+    `store.tx("statements")` 里面，而开板项要拿 `tasks` / `counters` 的锁 ⇒ 在里面开项
+    直接撞 `StoreError: 获取 counters 的锁超时（30.0s）`（同一进程已经持有那把锁）。
+    所以这一格落在事务落定之后（`sign_statement` 的返回之前）。
+
+    为什么以"块真的落成"为闸：义务的凭据是稿上那一块成立的签。没落成（未在册 / 秘书
+    不在场 / 正文不符那几档）不是"签了没人收录"，那一档由收工扫盘
+    （`vreceipts.sweep_registrations`）按盘上的事实兜底 —— 这里不编一条。
+    """
+    land = dict(vsign.get("land") or {}) if isinstance(vsign, Mapping) else {}
+    if not land.get("landed"):
+        return {"checked": True, "state": "skipped", "code": "sign_not_landed",
+                "reason": ("签块没落成 ⇒ 这一档不是「签了没人收录」（收工扫盘按盘上的"
+                           "事实兜底），不在这里开义务")}
+    sign = dict(vsign.get("sign") or {}) if isinstance(vsign, Mapping) else {}
+    mw = dict(land.get("manuscript_write") or {})
+    rel = str(mw.get("path") or sign.get("artifact_path") or "")
+    return _registration_after_sign(store=store, root=root,
+                                    statement_id=str(statement_id or ""),
+                                    proof_no=int(proof_no or 1), sha=str(sha or ""),
+                                    manuscript=rel, at=str(sign.get("at") or ""))
+
+
+def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_no: int,
+                             sha: str, manuscript: str, at: str = "") -> dict[str, Any]:
+    """签发（签块落成）之后：给 B 开一条「必须收录」义务（缺陷 B；永不抛）。
+
+    为什么在这里（业主 2026-11-05）：87 的现场是"签了但没人收录"——
+    `reports/f-proof-000000.md` 上有 `secretary:F` 的成立签，而 `statements:000000`
+    仍是 `正文=0 / reviewed=false`；盘上的根因是 D 从头没派 B 收录（B 在 87 里只被派过
+    1 次，还是文献侧的 `t-000027`）。教学里那句话（`specs/d.py`「那一行写进你的报告之后
+    派 B 入库」）在，但"教"不是"义务"：签发之后必须有东西把"这一份还没入库"摆到 B 面前。
+
+    判据一个字都不在这里（唯一实现是 `vreceipts.registration_gap` /
+    `vreceipts.ensure_registration` 与它们的幂等键 `b-register@<命题号>@<sha>`）。
+    这一格只做两件事：认出"这一签的载体是不是 `reports/{f,b}-proof-…`"（不是就不开：
+    那一档不在这一条义务的射程内），然后把读数带进返回值。失败不许带走这一签。
+
+    三态：`checked` / `state`（`opened` / `existing` / `closed` / `cleared` / `expired` /
+    `skipped` / `error`）/ `reason`；`skipped` 里 `code=not_a_proof_carrier` 说的是
+    "这一签的稿不在这一条义务的射程内"，不是"已经收录了"。
+    """
+    from . import vreceipts as _VRC
+
+    out: dict[str, Any] = {"checked": False, "state": "skipped", "key": "", "item_id": "",
+                           "owner": "", "owner_known": False, "code": "", "reason": ""}
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    if not rel:
+        out.update(code="no_manuscript",
+                   reason="这一签没有手稿载体 ⇒ 这一条义务不知道要收录哪一份（不是「已收录」）")
+        return out
+    if not any(rel.startswith(prefix) for prefix in _VRC.REGISTRATION_CARRIERS):
+        out.update(code="not_a_proof_carrier",
+                   reason=(f"`{rel}` 不是 `reports/{{f,b}}-proof-…` 那一类载体 "
+                           f"{list(_VRC.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
+        return out
+    label = f"{str(statement_id or '')}#p{int(proof_no or 1)}"
+    try:
+        got = _VRC.ensure_registration(store=store, root=root, label=label,
+                                       proof_sha=str(sha or ""), manuscript=rel,
+                                       called_by="V", at=str(at or ""))
+    except Exception as exc:  # noqa: BLE001 —— 开义务失败不许带走这一签
+        out.update(code="registration_raised",
+                   reason=(f"开「必须收录」义务那一笔抛了（{type(exc).__name__}: {exc}）"
+                           "⇒ 这一格没查成（收工扫盘会再试一次）"))
+        return out
+    out.update(dict(got))
+    return out
+
+
 def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path,
                              statement_id: str, proof_no: int, sha: str,
                              holds: Mapping[str, Any],
@@ -3208,6 +3321,16 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             re_sign_required=(not rolled
                               and append_state not in ("appended", "appended_by_caller")),
             reason=reason)
+    # ---- 缺陷 B（2026-11-05）：签发落成之后，给 B 开一条「必须收录」义务 ----
+    #
+    # 位置在事务之外（理由见 `_registration_after_vsign`：事务里开板项会撞锁）。
+    # 87 的现场：`reports/f-proof-000000.md` 上有成立的签，而 `statements:000000` 仍是
+    # 「正文=0 / reviewed=false」—— 签发之后没有任何东西把"这一份还没入库"摆到 B 面前
+    # （D 从头没派 B 收录；B 在 87 里只被派过 1 次，还是文献侧的 `t-000027`）。
+    out["registration"] = _registration_after_vsign(
+        store=store, root=getattr(store, "root", ""), vsign=dict(out.get("vsign") or {}),
+        statement_id=sid, proof_no=int(no),
+        sha=str(row.get("proof_sha256") or ""))
     return out
 
 

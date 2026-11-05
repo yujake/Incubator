@@ -475,6 +475,531 @@ def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
     return out
 
 
+# ------------------------------------------------------------------ 「签了但没人收录」（B 侧，I2 的同形）
+#
+# 真机 `projects/paper-rewrite-87` 2026-11-05 现场：
+#
+# ```text
+# reports/f-proof-000000.md 有 `secretary:F` 的成立签块；b-proof-000000/2/3 也已落盘。
+# 而 statements:000000 仍是 ek=heuristic / 正文=0 / reviewed=false —— 没人登记。
+# ```
+#
+# 盘上核过的根因：87 里 B 只被派过 1 次（`t-000027`，called_by=A，文献侧），D 从头没派 B
+# 收录。教学里其实有那条（`specs/d.py`：「② 那一行写进你的报告之后派 B 入库」），
+# D 没走到 ⇒ 缺的不是"教"，是义务：签发之后没有任何东西把"这一份还没入库"摆到 B 面前。
+#
+# 所以这一档与 `v-resubmit@` 同形（同一个 `conductor.open_item`、同一种"凭证据收口"，
+# 不靠 ack）：
+#
+# - 幂等键 `b-register@<命题号>@<被签正文的 sha>`：不带收件人后缀（同一命题的同一份
+#   正文只该有一条义务；重判只刷签块，不重开这条）；
+# - 触发：一份 `reports/{f,b}-proof-<号>.md` 上有成立的签块，而 `statements` 对应行
+#   拿不出"正文 + reviewed=true"（签发那一刻由 `_vsigns_write_after_flip` 开；收工前
+#   由 :func:`sweep_registrations` 补开 —— 漏开不许靠"下一次有人想起来"补）；
+# - 收口只有一条：那一行出现正文 且 `reviewed=true`（逐份口径，`#p2` 不借 `#p1` 的
+#   光）；另一条明确出口是"明确不收录并给理由"—— 它落在既有载体上：命题被标成
+#   `abandoned` 且 `quote_reason` 是一条可解析的放弃标记（`statementabandon.parse_abandon`
+#   的同一份判据，理由与时间缺一不可），届时这一项作废 `expired`；
+# - 负责人：这一条只有"角色"（B），没有"事实上的收件人"。所以不猜：调用方给了台账号
+#   就用；没给就认那一刻唯一在飞的 B 台账号（0 或 ≥2 ⇒ 不认）；一个都认不出时
+#   `owner=""` 而照样开项（与 `v-resubmit` 的 `unowned` 不开项不同：那一条的负责人是
+#   事实"谁送审"，猜不得；这一条的责任是角色 B，项本身必须存在 —— 它由 `board_view`
+#   亮给主控去派，且父为空的项不挂在任何人的销号闸上）。
+
+#: 「签了但没人收录」义务的幂等键前缀（缺陷 B，2026-11-05）。与 `v-resubmit@` 分开。
+REGISTER_PREFIX = "b-register@"
+
+#: 这一条义务认的载体（业主 2026-11-05 逐字：`reports/f-proof-<号>.md` 或
+#: `b-proof-<号>.md`）。E 的穷举证据稿不在这一档（它走 `bits.proof` 那条通道）。
+REGISTRATION_CARRIERS: tuple[str, ...] = ("reports/f-proof-", "reports/b-proof-")
+
+#: 这一条义务的负责人角色（收口是 B 的动作）。
+REGISTER_ROLE = "B"
+
+
+def register_key(label: str, proof_sha: str) -> str:
+    """「必须收录」义务的幂等键：`b-register@<命题号>@<被签正文的 sha>`。
+
+    为什么键里是 sha：同一命题的两份证明各自独立（`#p2` 不许借 `#p1` 的光），而"这一份
+    正文还没有被收录"是按正文说的 —— 换了 sha 就是另一份正文，该开新的义务。
+    刻意不带收件人后缀（与 `resubmit_key` 同一条理由：带后缀会为每一次起跑各开一条）。
+    """
+    sid = str(label or "").split("#", 1)[0]
+    return f"{REGISTER_PREFIX}{sid}@{str(proof_sha or '').strip()}"
+
+
+def register_sha_of(key: str) -> str:
+    """从这条义务的键里取回 `proof_sha256`（认不出 ⇒ 空串，不猜）。"""
+    raw = str(key or "")
+    if not raw.startswith(REGISTER_PREFIX):
+        return ""
+    rest = raw[len(REGISTER_PREFIX):]
+    _sid, sep, sha = rest.partition("@")
+    return sha if sep else ""
+
+
+def _register_items(conductor: Any) -> list[dict[str, Any]]:
+    """板上所有「必须收录」义务（读不成 ⇒ 空列表，由调用方的话说清）。
+
+    没有 conductor 时回空列表不是把"没做"折成"没有结果"：这一格是"板上有没有
+    这一条"的纯读口，没有 conductor 就是"读不到板"。调用方（`ensure_registration` /
+    `reconcile_registrations` / `registration_digest`）在调它之前已经单独判过
+    `_conductor()` 是否为 None，并把那一档记成 `skipped` / `checked=False` + `reason`
+    —— 那一句话落在那里，不在这里。
+    """
+    if conductor is None:  # 未接板 ⇒ 没有可读的板项；这是「没接上」，由调用方写 skipped + reason
+        return []
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001 —— 读不成不是"没有义务"
+        return []
+    return [r for r in rows if str(r.get("input_key") or "").startswith(REGISTER_PREFIX)]
+
+
+def _register_item_by_key(conductor: Any, key: str) -> dict[str, Any]:
+    """板上有没有这一条（精确键：不带收件人后缀）。
+
+    空字典的两档与 `_register_items` 同一条纪律：没有 conductor / 读不成都是"读不到板"，
+    由调用方记 `skipped` + 原因；这一格不冒充"板上没有这一条"这个结论。
+    """
+    if conductor is None:  # 未接板 ⇒ 空字典是「读不到板」，调用方记 skipped + reason（不是"板上没有"）
+        return {}
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001
+        return {}
+    for row in rows:
+        if str(row.get("input_key") or "") == str(key or ""):
+            return row
+    return {}
+
+
+def _label_parts(label: str) -> tuple[str, int]:
+    """`<命题号>#p<号>` ⇒ `(命题号, 证明号)`；没有 `#p` 后缀 ⇒ 证明号 1。"""
+    sid = str(label or "").split("#", 1)[0]
+    tail = str(label or "").partition("#")[2]
+    if tail.startswith("p") and tail[1:].isdigit() and int(tail[1:]) >= 1:
+        return sid, int(tail[1:])
+    return sid, 1
+
+
+def _proof_body_present(row: Mapping[str, Any], proof_no: int) -> bool:
+    """那一行里第 `proof_no` 份证明有没有正文（`proof_text` 与 `proofs[]` 两处都认）。"""
+    if int(proof_no or 1) == 1 and str(row.get("proof_text") or "").strip():
+        return True
+    for one in (row.get("proofs") or ()):
+        if not isinstance(one, Mapping):
+            continue
+        try:
+            no = int(one.get("proof_no") or 1)
+        except (TypeError, ValueError):
+            no = 1
+        if no != int(proof_no or 1):
+            continue
+        if str(one.get("proof_text") or "").strip():
+            return True
+    return False
+
+
+def _proof_reviewed(row: Mapping[str, Any], proof_no: int) -> bool:
+    """那一行的第 `proof_no` 份证明有没有被 reviewed（逐份表优先，`#p2` 不借 `#p1` 的光）。"""
+    from . import evidencebits as _EB
+
+    bits = dict(row.get("bits") or {})
+    per = dict(_EB.reviewed_by_proof(bits) or {})
+    if per:
+        # `reviewed_by_proof` 把证明号归一成 int 键（`{1: True}`），而盘上是 JSON：
+        # 两个键形都认一遍（手写行 / 别的写者的 `"1"` 不许读成"没签"）。
+        want = int(proof_no or 1)
+        if want in per:
+            return bool(per[want])
+        return bool(per.get(str(want)))
+    return bool(bits.get("reviewed"))
+
+
+def registration_gap(*, store: Any, label: str, proof_sha: str = "",
+                     manuscript: str = "") -> dict[str, Any]:
+    """这一份签过的正文入库了没有（收口判据的唯一实现；纯读、不写任何东西）。
+
+    判据（缺一不可）：`statements` 那一行拿得出这一份证明的正文，且那一份被
+    `reviewed=true`（`bits.evidence.reviewed_by_proof` 的逐份表优先）。两条都齐 ⇒
+    `gap=False`（义务已清）；否则 `gap=True`（义务还在）。
+
+    「明确不收录并给理由」那一档：`status="abandoned"` 且 `quote_reason` 是一条可解析的
+    放弃标记（理由与时间都在）⇒ `abandoned=True, gap=False`（义务作废，不是"收录了"）。
+    只写 `status=abandoned` 而没有可解析标记 ⇒ 不算明确不收录，`gap` 仍为真
+    （与 `closing.statements_unsigned` 的 `abandoned_without_reason` 同一把尺）。
+
+    三态：`checked=False` 只在 `statements` 读不出来 / 没给 store 时出现 ——
+    它说的是"这一格没查成"，不许折成"已经收录了"。
+
+    返回键：`checked` / `gap` / `abandoned` / `body` / `reviewed` / `status` /
+    `statement_id` / `proof_no` / `manuscript` / `reviewed_why` / `reason`。
+    """
+    from . import statementabandon as _SA
+
+    sid, no = _label_parts(label)
+    out: dict[str, Any] = {"checked": False, "gap": None, "abandoned": False,
+                           "body": False, "reviewed": False, "status": "",
+                           "statement_id": sid, "proof_no": no,
+                           "manuscript": str(manuscript or ""),
+                           "reviewed_why": "", "reason": ""}
+    if store is None:
+        out["reason"] = "没有 store ⇒ 收录状态查不了（不是「已经收录了」）"
+        return out
+    if not sid:
+        out["reason"] = "这一条没有命题号 ⇒ 判不了要查哪一行（不猜）"
+        return out
+    try:
+        row = next((dict(r) for r in store.rows("statements")
+                    if str(r.get("stmt_id") or "") == sid), None)
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    out["checked"] = True
+    if row is None:
+        out.update(gap=True,
+                   reason=(f"`statements` 里没有命题 {sid} 那一行 ⇒ 这一份签还没有被收录"
+                           "（先要 B 把它登记进册）"))
+        return out
+    out["status"] = str(row.get("status") or "")
+    if out["status"] == "abandoned":
+        parsed = _SA.parse_abandon(row.get("quote_reason"))
+        if parsed.get("checked"):
+            out.update(gap=False, abandoned=True,
+                       reason=(f"命题 {sid} 已被明确放弃（{parsed.get('at')}："
+                               f"{parsed.get('reason')}）⇒ 明确不收录，义务作废"))
+            return out
+        out.update(gap=True,
+                   reason=(f"命题 {sid} 写着 status=abandoned，而放弃标记读不出来"
+                           f"（{parsed.get('why')}）⇒ 不算明确不收录（义务仍在）"))
+        return out
+    out["body"] = _proof_body_present(row, no)
+    out["reviewed"] = _proof_reviewed(row, no)
+    if out["body"] and out["reviewed"]:
+        out.update(gap=False,
+                   reason=(f"{sid}#p{no} 已经入库（有正文、reviewed=true）⇒ 义务已清"))
+        return out
+    out["gap"] = True
+    out["reviewed_why"] = ("正文在" if out["body"] else "正文是空的")
+    out["reviewed_why"] += ("、reviewed=true" if out["reviewed"] else "、reviewed 不是 true")
+    out["reason"] = (f"{sid}#p{no} 还没入库（{out['reviewed_why']}）"
+                     f"⇒ 这一份稿的签没有任何人登记过")
+    return out
+
+
+def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
+                   at: str = "") -> tuple[str, str]:
+    """这一条义务的一句话摘要 + 正文（≤400 字：`set_item_detail` 是给人读的那一格）。"""
+    sid = str(detail.get("statement_id") or label.split("#", 1)[0])
+    no = int(detail.get("proof_no") or 1)
+    sha = str(detail.get("proof_sha256") or "")
+    path = str(manuscript or detail.get("manuscript") or "")
+    summary = f"待收录：{sid}#p{no}（稿上已有成立的 V 签，`statements` 里还没入库）"
+    body = (
+        f"这是一条必须收录的义务，不是通知：`{path or '（稿路径没读到）'}` 上有成立的 V 签"
+        f"（命题 {sid}#p{no}，被签正文 sha {sha or '（没读到）'}，签于 {at or '（时刻没读到）'}），"
+        f"而 `statements` 那一行仍然{detail.get('reviewed_why') or '没有正文 / 未 reviewed'}。\n"
+        "收口条件只有一条：那一行出现正文 且 reviewed=true（逐份口径，`#p2` 不借 `#p1` 的光）"
+        " —— 届时这一项由框架自动收口（completed），不靠 ack；退回一句「知道了」不会让它消失。\n"
+        "两条路：① 从稿上把正文收进 `statements`（B 的 `own.register_statement`；稿上的签块会被"
+        "认成第 3 位）；② 确实不收录就明确放弃原命题（`status=abandoned` + 可解析的放弃标记，"
+        "理由与时间缺一不可）—— 放弃时这一项同时作废。"
+    )
+    return summary, body[:400]
+
+
+def _live_role_task(store: Any, role: str) -> dict[str, Any]:
+    """那一刻唯一在飞的该角色台账号（0 或 ≥2 ⇒ 不认，不猜）。
+
+    与 `resolve_recipient` 的"唯一才认"同一条纪律：这里问的是"现在有没有一个确定的 B
+    可以接这条义务"，两趟以上在飞时"哪一趟接"不可判 —— 那时宁可记 `owner=""`，也不拿
+    "谁醒着"当负责人。
+    """
+    out: dict[str, Any] = {"checked": False, "task_id": "", "candidates": [], "why": ""}
+    if store is None:
+        out["why"] = "没有 store ⇒ 读不到台账号"
+        return out
+    try:
+        from .conductor import UNFINISHED_STATUSES
+
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception as exc:  # noqa: BLE001
+        out["why"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    alive = [r for r in rows
+             if str(r.get("role") or "") == str(role)
+             and not str(r.get("kind") or "")
+             and str(r.get("status") or "") in UNFINISHED_STATUSES]
+    out["checked"] = True
+    out["candidates"] = [str(r.get("task_id") or "") for r in alive]
+    if len(alive) == 1:
+        out["task_id"] = str(alive[0].get("task_id") or "")
+        out["why"] = f"那一刻只有一趟 {role} 在飞（{out['task_id']}）"
+        return out
+    out["why"] = (f"那一刻有 {len(alive)} 趟 {role} 在飞（{out['candidates']}）"
+                  "⇒ 负责人不可判（不猜）" if alive else
+                  f"那一刻没有 {role} 在飞 ⇒ 负责人不可判（不猜）")
+    return out
+
+
+def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: str,
+                        manuscript: str = "", owner: str = "", called_by: str = "V",
+                        depth: int = 1, at: str = "") -> dict[str, Any]:
+    """开一条「必须收录」义务项（幂等；已清掉的不开，已收口的收口）。
+
+    返回 `{"checked","state","key","item_id","owner","owner_known","reason","problems"}`，
+    `state` 取：`opened` / `existing` / `closed`（板上那条已经 done）/ `cleared`（盘上
+    已经入库 ⇒ 义务本来就没了，顺手把板上那条按证据收口）/ `expired`（命题已被明确放弃）/
+    `skipped`（没有 conductor / 查不成 / 做不出幂等键）/ `error`（开项抛了）。
+
+    `owner`：给了就用；没给就认那一刻唯一的 B 台账号；一个都认不出 ⇒ `owner=""` 而
+    照样开项（`owner_known=False`，由 `registration_digest` 的 `unowned` 数出来，
+    `board_view` 把这一条亮给主控去派）。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
+                           "owner": str(owner or ""), "owner_known": False,
+                           "owner_why": "", "reason": "", "problems": []}
+    sid, no = _label_parts(label)
+    sha = str(proof_sha or "").strip()
+    if not sid or not sha:
+        out.update(state="skipped",
+                   reason="这一条没有命题号 / 没有被签正文的 sha ⇒ 做不出幂等键（不猜）")
+        return out
+    key = register_key(label, sha)
+    out["key"] = key
+    gap = registration_gap(store=store, label=label, proof_sha=sha, manuscript=manuscript)
+    if not gap.get("checked"):
+        out.update(state="skipped",
+                   reason=(f"{gap.get('reason')}；不拿'读不出来'当'还没收录'去开一条待办"))
+        out["problems"].append(str(gap.get("reason") or "收录状态读不成"))
+        return out
+    conductor = _conductor(store)
+    if not gap.get("gap"):
+        row = _register_item_by_key(conductor, key)
+        if row and conductor is not None and str(row.get("item_state") or "") != "done":
+            close = "expired" if gap.get("abandoned") else "completed"
+            _state, why = conductor.close_item_by_evidence(
+                str(row.get("task_id") or ""), close=close,
+                why=f"义务已清：{gap.get('reason')}")
+            if why:
+                out["problems"].append(why)
+            out.update(checked=True, item_id=str(row.get("task_id") or ""),
+                       state=("expired" if gap.get("abandoned") else "cleared"),
+                       reason=str(gap.get("reason") or "义务已清"))
+            return out
+        out.update(checked=True, item_id=str((row or {}).get("task_id") or ""),
+                   state="cleared", reason=str(gap.get("reason") or "义务已清"))
+        return out
+    row = _register_item_by_key(conductor, key)
+    if row:
+        state = str(row.get("item_state") or "")
+        out.update(checked=True, item_id=str(row.get("task_id") or ""),
+                   owner=str(row.get("parent_task_id") or ""),
+                   owner_known=bool(row.get("parent_task_id")),
+                   state=("closed" if state == "done" else "existing"),
+                   reason=(f"同键的板项已存在（{row.get('task_id')}，item_state={state}）"
+                           "⇒ 不重开"))
+        return out
+    if conductor is None:
+        out.update(state="skipped",
+                   reason=("这一趟没有 conductor ⇒ 板项开不了（义务不落盘 = 没人会看到；"
+                           "不是「已经收录了」）"))
+        return out
+    if not str(out["owner"] or "").strip():
+        who = _live_role_task(store, REGISTER_ROLE)
+        out["owner"] = str(who.get("task_id") or "")
+        out["owner_known"] = bool(out["owner"])
+        # 「负责人记 unknown」是读数、不是失败：它不进 `problems`（那会让收工读数把
+        # "没人在飞"报成"这一条没办成"），由 `registration_digest` 的 `unowned` 数出来。
+        out["owner_why"] = str(who.get("why") or "")
+    else:
+        out["owner_known"] = True
+        out["owner_why"] = "调用方点名了负责人"
+    # 深度：有负责人 ⇒ 它那一行 depth + 1（`capabilities.audit_task_ledger` 的
+    # `task_depth_discontinuous` 按这条链核）；没有负责人 ⇒ 无父的项必须是 1。
+    if out["owner"]:
+        item_depth = max(1, int(_task_row(store, out["owner"]).get("depth") or 1)) + 1
+    else:
+        item_depth = 1
+    summary, body = _register_body(
+        label=label,
+        detail={"statement_id": sid, "proof_no": no, "proof_sha256": sha,
+                "manuscript": str(manuscript or ""),
+                "reviewed_why": str(gap.get("reviewed_why") or "")},
+        manuscript=manuscript, at=at)
+    try:
+        item_id = conductor.open_item(
+            kind="notice", role=REGISTER_ROLE, expects="work", action="notice",
+            summary=summary, called_by=str(called_by or "V"),
+            parent_task_id=(str(out["owner"]) or None),
+            depth=item_depth, input_key=key)
+        conductor.set_item_detail(item_id, body)
+    except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走这一签
+        out.update(state="error", reason=f"板项没开成（{type(exc).__name__}: {exc}）")
+        out["problems"].append(out["reason"])
+        return out
+    out.update(checked=True, state="opened", item_id=item_id,
+               reason=(f"新开「必须收录」义务 {item_id}"
+                       + (f"（负责人 {out['owner']}）" if out["owner"]
+                          else "（负责人记 unknown，由主控派人）")))
+    return out
+
+
+def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
+                        at: str = "") -> dict[str, Any]:
+    """扫一遍 `reports/{f,b}-proof-*.md`：带成立的签而没入库 ⇒ 逐份开义务（幂等）。
+
+    为什么还要扫盘（签发那一刻已经会开一条）：义务不能只依赖"签发那一路跑到了"——
+    87 的病根正是"没有任何东西把这件事摆到 B 面前"。这一趟是收工前的看门：谁漏开、
+    谁在签发之后才改的稿，都在这里被数一遍。判据只认手上这份稿：`manuscript_sign_standing`
+    说 signed 才算（负判 / stale / 没块 ⇒ 不是这一档的事）。
+    """
+    out: dict[str, Any] = {"checked": False, "scanned": 0, "signed": 0,
+                           "opened": [], "existing": [], "closed": [],
+                           "cleared": [], "expired": [], "skipped": [],
+                           "problems": [], "reason": ""}
+    from . import verifications as _VR
+    from . import vsigns as _VS
+
+    if store is None:
+        out["reason"] = "没有 store ⇒ 这一格没查成（不是「没有欠收录的稿」）"
+        return out
+    reports = Path(str(root or "")) / "reports"
+    files: list[Path] = []
+    for prefix in REGISTRATION_CARRIERS:
+        name = prefix.rsplit("/", 1)[-1]
+        if not reports.is_dir():
+            continue
+        files.extend(sorted(reports.glob(f"{name}*.md")))
+    out["checked"] = True
+    for path in files:
+        if len(out["opened"]) + len(out["existing"]) >= max(1, int(limit)):
+            out["skipped"].append({"path": _VS.rel(path, root),
+                                   "why": f"到了一次扫盘的上限 {int(limit)} 条"})
+            break
+        rel = _VS.rel(path, root)
+        out["scanned"] += 1
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            out["problems"].append(f"{rel}：读不出来（{type(exc).__name__}: {exc}）")
+            continue
+        block = _VS.manuscript_sign_standing(text, manuscript_path=rel)
+        if str(block.get("state") or "") != "signed":
+            out["skipped"].append({"path": rel,
+                                   "why": f"这一份稿不是「签着」那一档（{block.get('why')}）"})
+            continue
+        sid = _VS.manuscript_id_of(rel)
+        if not sid:
+            out["skipped"].append({"path": rel, "why": "稿名认不出裸稿号 ⇒ 不猜命题号"})
+            continue
+        out["signed"] += 1
+        sha = str(block.get("proof_sha256") or "")
+        label = f"{sid}#p{_VR.as_proof_no(_VS.manuscript_proof_no_of(rel)) or 1}"
+        got = ensure_registration(store=store, root=root, label=label, proof_sha=sha,
+                                  manuscript=rel, called_by="vreceipts.sweep",
+                                  at=str(block.get("at") or at or ""))
+        out["problems"].extend(str(x) for x in (got.get("problems") or []))
+        state = str(got.get("state") or "")
+        if state == "opened":
+            out["opened"].append(str(got.get("item_id") or ""))
+        elif state == "existing":
+            out["existing"].append(str(got.get("item_id") or ""))
+        elif state in ("closed", "cleared"):
+            out[state].append(str(got.get("item_id") or ""))
+        elif state == "expired":
+            out["expired"].append(str(got.get("item_id") or ""))
+        else:
+            out["skipped"].append({"path": rel,
+                                  "why": str(got.get("reason") or "这一份没开成")})
+    out["reason"] = (f"扫到 {out['scanned']} 份证明稿（签着的 {out['signed']} 份）："
+                     f"新开 {len(out['opened'])} 条、已在板上 {len(out['existing'])} 条、"
+                     f"顺手收口 {len(out['closed']) + len(out['cleared'])} 条、"
+                     f"作废 {len(out['expired'])} 条、跳过 {len(out['skipped'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
+def reconcile_registrations(*, store: Any, root: str | Path) -> dict[str, Any]:
+    """板上开着的「必须收录」义务与盘上的事实对一次账（收工前的收敛点）。
+
+    两条来源要知道它：签发那一刻（`_vsigns_write_after_flip`）与收工扫盘
+    （`backfill` → `sweep_registrations`）。而"收录完了"这件事发生在 B 的写口里 ——
+    那一层不认识板项。所以这里按盘上的事实收口：`statements` 那一行已经有正文 +
+    reviewed ⇒ `completed`；命题被明确放弃 ⇒ `expired`。都不靠 ack。
+
+    幂等：已经收口的项不在 `_register_items` 的未终态里，重跑是零写入。三态：板项读不出来
+    / `statements` 读不出来 ⇒ `checked=False`（不是"没有要收口的"）。
+    """
+    out: dict[str, Any] = {"checked": False, "closed": [], "expired": [], "left": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有收录义务」）"
+        return out
+    out["checked"] = True
+    for row in _register_items(conductor):
+        key = str(row.get("input_key") or "")
+        if str(row.get("item_state") or "") == "done":
+            continue
+        task_id = str(row.get("task_id") or "")
+        label = key[len(REGISTER_PREFIX):].partition("@")[0]
+        if "#p" not in label:
+            label = f"{label}#p1"
+        gap = registration_gap(store=store, label=label,
+                              proof_sha=register_sha_of(key))
+        if not gap.get("checked"):
+            out["left"].append({"key": key, "why": str(gap.get("reason") or "查不成")})
+            continue
+        if gap.get("gap"):
+            out["left"].append({"key": key,
+                                "why": f"义务还在（{gap.get('reason')}）"})
+            continue
+        close = "expired" if gap.get("abandoned") else "completed"
+        _state, problem = conductor.close_item_by_evidence(
+            task_id, close=close, why=f"义务已清：{gap.get('reason')}")
+        if problem:
+            out["problems"].append(f"{task_id}：{problem}")
+            continue
+        out["closed"].append(task_id)
+        if close == "expired":
+            out["expired"].append(task_id)
+    out["reason"] = (f"对账：收口 {len(out['closed'])} 条"
+                     f"（其中明确不收录作废 {len(out['expired'])} 条），"
+                     f"仍开着 {len(out['left'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
+def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
+    """「必须收录」义务的一眼读数：开着的 / 认不出负责人的 / 逐条明细。"""
+    out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "rows": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有收录义务」）"
+        return out
+    out["checked"] = True
+    for row in _register_items(conductor):
+        if str(row.get("item_state") or "") == "done":
+            continue
+        owner = str(row.get("parent_task_id") or "")
+        out["open"] += 1
+        if not owner:
+            out["unowned"] += 1
+        out["rows"].append({"task_id": str(row.get("task_id") or ""),
+                            "key": str(row.get("input_key") or ""),
+                            "owner": owner or "unknown",
+                            "item_state": str(row.get("item_state") or ""),
+                            "role": str(row.get("role") or ""),
+                            "detail": str(row.get("detail") or "")[:200]})
+    out["reason"] = (f"板上开着 {out['open']} 条收录义务"
+                     + (f"（其中 {out['unowned']} 条负责人 unknown，等主控派人）"
+                        if out["unowned"] else ""))
+    return out
+
+
 def _prefix() -> str:
     from .agent_loop import V_VERDICT_ITEM_PREFIX
 
@@ -1322,6 +1847,26 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
         out["resubmit_reconcile"] = {"checked": False, "closed": [], "expired": [],
                                      "left": [], "problems": [],
                                      "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
+    # ---- 缺陷 B（2026-11-05）：收工前再把"签了但没人收录"扫一遍（看门的那一半）----
+    #
+    # 签发那一刻已经会开一条（`_vsigns_write_after_flip`），但义务不能只依赖"那一路跑到了"
+    # —— 87 的病根正是"没有任何东西把这件事摆到 B 面前"。这一趟做两件事，顺序固定：
+    # ① 扫盘补开漏的（`sweep_registrations`，幂等：同键只一条）；
+    # ② 与盘上的事实对账收口（`reconcile_registrations`：入库了就 completed、明确放弃就
+    #    expired，都不靠 ack）。
+    try:
+        out["registration"] = sweep_registrations(store=store, root=root)
+    except Exception as exc:  # noqa: BLE001 —— 扫盘没跑成不许带走收工读数
+        out["registration"] = {"checked": False, "scanned": 0, "signed": 0,
+                               "opened": [], "existing": [], "closed": [], "cleared": [],
+                               "expired": [], "skipped": [], "problems": [],
+                               "reason": f"扫盘没跑成（{type(exc).__name__}: {exc}）"}
+    try:
+        out["registration_reconcile"] = reconcile_registrations(store=store, root=root)
+    except Exception as exc:  # noqa: BLE001
+        out["registration_reconcile"] = {
+            "checked": False, "closed": [], "expired": [], "left": [], "problems": [],
+            "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
     out["reason"] = (f"回执 {out['receipts']} 条；补投新开 {len(out['opened'])} 条、"
                      f"认领 {len(out['adopted'])} 条、已在板上 {len(out['existing'])} 条、"
                      f"收件人不可判 {len(out['undelivered'])} 条；"

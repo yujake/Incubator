@@ -1033,6 +1033,354 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     return out
 
 
+# ---------------------------------------------------------------- 重判之后刷签块（缺陷 A）
+#
+# 真机 `projects/paper-rewrite-87` 2026-11-05 的读数（这一笔的现场）：
+#
+# ```text
+# reports/f-proof-000000.md:5
+#   - V 签：已签=true；判词=成立；连续=3/3；正文sha=43a2b34…685e；时间=2026-11-05T02:50:58+08:00；
+#     签名者=secretary:F；台账=verifications/000000.jsonl#v-000008；…
+# 同一 sha 之后还有：v-000009（02:53:31，判词=有毛病，defect_step=6）→ v-000010（成立）→ v-000011（成立）
+# ```
+#
+# 签本身有效（V 确实发过、收方秘书确实落过），不一致的是记录：块说"最新一签是
+# v-000008"，账上最新是 v-000011。
+#
+# 病根两处，都在本模块：
+#
+# 1. :func:`land` 把签文件里的 `at` / `ledger` 原样抄进块。而 :func:`issue` 是"一稿一签"：
+#    同一份正文重签时它走 `idempotent`、一个字节都不重写（那是刻意的 —— 第 need+1 次成立
+#    不改签）⇒ 块上那两格永远是第一次发签那一行。重签之后它还会退回旧那一行。
+# 2. 重判（同 sha 的新台账行）没有任何写者去碰块：`record_verification` 只追加台账，
+#    签块那边一个调用点都没有。
+#
+# 修法（业主 2026-11-05 择 a）：块是给人读的「这一份现在凭什么算签过」，指旧签会让
+# 人以为没重判过。于是：
+#
+# - 每一行同 sha 的新台账行落下之后，把块的 `台账=` / `时间=` 两格刷到那一行；
+# - 那一行是「有毛病」⇒ 整块降为未签（`已签=false`、`判词=`该行判词、`连续=0/need`、
+#   `台账=`/`时间=` 两格=该行）：负判之后还挂着旧签，正是这一笔要堵的形态；
+# - 降为未签之后，后续的「成立」行不把它翻回来（发签门槛是同一趟连续 need 次，
+#   单行成立不足以重签）：块停在那条打回上 —— 它是"现在凭什么不算签"的依据 ——
+#   直到新签由 :func:`land` 整块重写；
+# - :func:`land` 里那两格改成从台账现锚（:func:`ledger_anchor`），不再是抄签文件：
+#   重签同一份正文时 `issue` 不动签文件，抄它就会退回旧那一行。
+#
+# 三态：刷块的每一档结局都写在 :data:`SIGN_REFRESH_STATES` 里，没有一档叫"没事"；
+# `checked=False` 只用于"这一格没查成"（手稿读不出来 / 台账读不出来），不许折成
+# "刷过了"或"没有要刷的"。
+
+#: 签块里「跟着台账走」的那两格（业主 2026-11-05 择 a：只刷这两格）。
+SIGN_BLOCK_TRACKED_KEYS: tuple[str, ...] = ("台账", "时间")
+
+#: :func:`refresh_manuscript_sign` 的结局词表（每一次刷块都要落在其中一档上）。
+SIGN_REFRESH_STATES: tuple[str, ...] = (
+    #: 两格刷到了台账上更新的那一行（`成立` 那一档）
+    "refreshed",
+    #: 已经是最新那一行（幂等：一个字节都没写）
+    "unchanged",
+    #: 同 sha 的新行判的是「有毛病」⇒ 整块降为未签
+    "demoted",
+    #: 这一份稿里没有签块（"没有可刷的"，不是"刷过了"）
+    "no_block",
+    #: 块盖的是另一份正文（sha 不同）⇒ 不拿这一行去刷别人的块
+    "not_this_sha",
+    #: 这份稿的「## 证明」正文已经不是被签的那一份 ⇒ 块是 stale，不许给它一个新锚
+    "body_changed",
+    #: 块没有命题号（未在册那一档）⇒ 没有台账可锚
+    "no_statement",
+    #: 台账里没有盖着这个 sha 的行 ⇒ 不猜
+    "no_row",
+    #: 已经是「未签」那一档：单行成立不足以重签，块停在打回那一行
+    "unsigned_until_resigned",
+    #: 找不到这一份正文的落点（没点名、也没有签文件）
+    "manuscript_missing",
+    #: 稿读不出来（OSError / 非 UTF-8）—— 这一格没查成
+    "unreadable",
+    #: 台账读不出来 —— 这一格没查成
+    "ledger_unreadable",
+)
+
+
+def manuscript_path_for(root: Any, *, artifact_sha: Any = "", statement_id: str = "",
+                        manuscript: str = "") -> dict[str, Any]:
+    """这一份正文的签块落点（三处按序找；只算路径，不建也不写）。
+
+    次序与 :func:`_vsign_payload` 同一口径（那一条是"签该盖在哪一份稿"的唯一判据）：
+
+    1. 调用方点名的那一份（`manuscript`，本行台账带来的载体）—— 在盘上才算；
+    2. 签文件里的 `artifact_path`（颁发那一刻写下的载体）—— 在盘上才算；
+    3. 按号扫盘（`depsection.manuscript_relpaths`，只在这一份正文真有签文件时才扫：
+       没有签文件就不可能有块，"扫盘猜一份"在这里只会把别人的稿当成落点）。
+
+    返回 `{checked, found, path, source, why}`。三态：`checked=False` 只在第 3 步扫盘
+    抛异常时出现（"没查成"），其余两档是"找到了 / 没有"。
+    """
+    out: dict[str, Any] = {"checked": True, "found": False, "path": "", "source": "",
+                           "why": ""}
+    root_p = Path(str(root or ""))
+    named = str(manuscript or "").strip().replace("\\", "/")
+    if named and (root_p / named).is_file():
+        out.update(found=True, path=named, source="named")
+        return out
+    try:
+        key = _sha_key(artifact_sha)
+    except VsignError:
+        out["why"] = (f"被签的正文 sha 认不出（收到 {artifact_sha!r}）⇒ 找不到签块的落点"
+                      "（没查成，不是「没有签块」）")
+        out["checked"] = False
+        return out
+    got = sign_of(root, key)
+    if not got.get("found"):
+        out["why"] = (f"`{got.get('path')}` 不在盘上 ⇒ 这一份正文没有签、也没有签块"
+                      "（不扫盘猜一份稿）")
+        return out
+    from_file = str(dict(got.get("sign") or {}).get("artifact_path") or "").strip()
+    from_file = from_file.replace("\\", "/")
+    if from_file and (root_p / from_file).is_file():
+        out.update(found=True, path=from_file, source="sign_file")
+        return out
+    if not str(statement_id or "").strip():
+        out["why"] = (f"签文件里有签，但 `artifact_path` 是 {from_file!r}（不在盘上），"
+                      "而这一签没有命题号可扫 ⇒ 找不到落点")
+        return out
+    try:
+        from . import depsection as _DS
+
+        for rel in _DS.manuscript_relpaths(statement_ids=[str(statement_id)]):
+            if (root_p / str(rel)).is_file():
+                out.update(found=True, path=str(rel), source="scan",
+                           why=(f"签文件里的载体 {from_file!r} 不在盘上 ⇒ 按号扫到 "
+                                f"`{rel}`"))
+                return out
+    except Exception as exc:  # noqa: BLE001 —— 扫盘抛异常 = 这一格没查成
+        out.update(checked=False,
+                   why=f"按号扫盘时抛了（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
+        return out
+    out["why"] = (f"签文件里的载体 {from_file!r} 不在盘上，按号也没扫到一份稿 "
+                  "⇒ 这一格的落点找不到")
+    return out
+
+
+def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
+                  artifact_sha: Any, clean_only: bool = False) -> dict[str, Any]:
+    """这一份正文在台账上的锚：最后一行盖着这个 sha 的台账行（纯读）。
+
+    `clean_only=True` 时只认干净的「成立」行（`:func:`land` 用它：签落在一条成立行上，
+    一条「有毛病」永远不是签的依据）；`clean_only=False` 时最后一行是谁就是谁
+    （:func:`refresh_manuscript_sign` 用它：它要看得见打回才能把块降为未签）。
+
+    返回 `{checked, found, ledger, verification_id, at, verdict, clean, defect_steps, why}`：
+
+    - `checked=False` ⇒ 台账读不出来 / 命题号不是编号形态（"没查成"，不是"没有行"）；
+    - `found=False` ⇒ 查成了，台账里没有盖着这个 sha 的行（不猜一行出来）。
+
+    `clean` 与 `verifications.signs_bit3` 同一把尺：结论词是「成立」，且秘书没有判
+    fault（`vsigns.verdict_axis` 为空）—— 两档合起来才算"这一行不是打回"。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "ledger": "",
+                           "verification_id": "", "at": "", "verdict": "",
+                           "clean": False, "defect_steps": [], "why": ""}
+    from . import verifications as _VR
+
+    sid = str(statement_id or "").strip()
+    sha = str(artifact_sha or "").strip().lower()
+    if not sid:
+        out["why"] = "没有命题号（未在册那一档）⇒ 台账上没有可锚的行"
+        out["checked"] = True
+        return out
+    if len(sha) != 64 or any(ch not in _HEX for ch in sha):
+        out["why"] = f"被签的正文 sha 认不出（收到 {artifact_sha!r}）⇒ 这一格没查成"
+        return out
+    try:
+        no = int(_VR.as_proof_no(proof_no) or 1)
+    except (TypeError, ValueError):
+        no = 1
+    try:
+        rows, problems = _VR.list_verifications(root, statement_id=sid, limit=None)
+    except Exception as exc:  # noqa: BLE001 —— 台账读不出来 = 这一格没查成
+        out["why"] = f"台账读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    if problems:
+        out["why"] = ("台账里有读不出来的行（" + "；".join(str(p) for p in problems[:2])
+                      + "）⇒ 这一格没查成（不拿读了一半的账当判据）")
+        return out
+    out["checked"] = True
+    out["ledger"] = f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl"
+    picked: dict[str, Any] | None = None
+    for row in rows:
+        one = dict(row)
+        if int(_VR.as_proof_no(one.get("proof_no")) or 1) != no:
+            continue
+        if str(one.get("proof_sha256") or "").strip().lower() != sha:
+            continue
+        if clean_only and (verdict_axis(one) or _VR.read_verdict(one) != "成立"):
+            continue
+        picked = one
+    if picked is None:
+        out["why"] = (f"台账里没有盖着 {sha[:12]}… 的"
+                      + ("干净「成立」" if clean_only else "")
+                      + "行 ⇒ 没有可锚的那一行（不猜）")
+        return out
+    vid = str(picked.get("verification_id") or "")
+    out.update(found=True, verification_id=vid, at=str(picked.get("at") or ""),
+               verdict=_VR.read_verdict(picked),
+               clean=(not verdict_axis(picked)) and _VR.read_verdict(picked) == "成立",
+               defect_steps=defect_steps(picked))
+    out["ledger"] = f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#{vid}"
+    if out["clean"]:
+        out["why"] = f"台账上最后一行盖着这个 sha 的是 {vid}（成立，{out['at']}）"
+    else:
+        out["why"] = (f"台账上最后一行盖着这个 sha 的是 {vid}"
+                      f"（判词 {out['verdict'] or '（空）'}，{out['at']}）⇒ 这一份不是签着的")
+    return out
+
+
+def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: str = "",
+                            proof_no: Any = 1, manuscript: str = "") -> dict[str, Any]:
+    """重判之后把签块刷到台账最新那一行（缺陷 A 的修法 a；唯一写口之一，永不抛）。
+
+    什么时候调：每一行台账落下之后（`verifications.record_verification` 的三个追加
+    分支），以及任何"想确认块与账对得上"的地方。
+
+    判据（缺一条就走对应的那一档，见 :data:`SIGN_REFRESH_STATES`）：
+
+    1. 这一份正文有签块（没有 ⇒ `no_block`）；
+    2. 块盖的就是这一行落的 sha（不是 ⇒ `not_this_sha`：不拿别人的签刷这一份）；
+    3. 这份稿的「## 证明」正文仍是被签的那一份（不是 ⇒ `body_changed`：块本来就 stale，
+       给它一个新锚等于把改过的稿盖成"刚重判过"）；
+    4. 块有命题号（没有 ⇒ `no_statement`：未在册那一档没有台账）；
+    5. 台账读得出来、且有一行盖着这个 sha（否则 `ledger_unreadable` / `no_row`）。
+
+    然后按锚那一行分两档：
+
+    - 干净「成立」⇒ `已签=true`、`判词=成立`、`连续=` 块上原值（签是那一签的，不重写），
+      `台账=`/`时间=` 两格换成那一行；
+    - 「有毛病」⇒ 整块降为未签：`已签=false`、`判词=`该行判词、`连续=0/need`、
+      `台账=`/`时间=` 两格换成那一行。
+
+    已经是未签的块（`unsigned_until_resigned`）不再被后续的「成立」行翻回来。
+
+    返回键：`checked` / `state` / `path` / `line` / `artifact_sha` / `ledger` / `at` /
+    `before`（刷之前那几格）/ `after`（刷之后那几格）/ `why`。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "", "path": "", "line": 0,
+                           "artifact_sha": "", "ledger": "", "at": "",
+                           "before": {}, "after": {}, "why": ""}
+    try:
+        key = _sha_key(artifact_sha)
+    except VsignError as exc:
+        out.update(state="skipped", why=f"{exc} ⇒ 刷不了签块（这一格没查成）")
+        return out
+    out["artifact_sha"] = key
+    where = manuscript_path_for(root, artifact_sha=key, statement_id=statement_id,
+                                manuscript=manuscript)
+    if not where.get("found"):
+        out.update(checked=bool(where.get("checked")), state="manuscript_missing",
+                   why=f"{where.get('why')} ⇒ 没有可刷的签块")
+        return out
+    rel = str(where.get("path") or "")
+    out["path"] = rel
+    path = Path(str(root or "")) / rel
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        out.update(state="unreadable",
+                   why=(f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）"
+                        "⇒ 这一格没查成（不是「刷过了」）"))
+        return out
+    out["checked"] = True
+    block = manuscript_sign_reading(text, manuscript_path=rel)
+    if not block.get("found"):
+        out.update(state="no_block",
+                   why=f"`{rel}` 里没有 V 签块 ⇒ 没有可刷的（不是「刷过了」）")
+        return out
+    if str(block.get("proof_sha256") or "") != key:
+        out.update(state="not_this_sha",
+                   why=(f"`{rel}` 的签块盖的是 "
+                        f"{str(block.get('proof_sha256') or '（空）')[:12]}…，"
+                        f"而这一行落的是 {key[:12]}… ⇒ 不拿这一行去刷别人的块"))
+        return out
+    match = manuscript_body_matches(text, artifact_sha=key)
+    if not match.get("matches"):
+        out.update(state="body_changed", why=f"块本来就 stale：{match.get('why')}")
+        return out
+    sid = str(block.get("statement_id") or "")
+    if not sid:
+        out.update(state="no_statement",
+                   why="签块没有命题号（未在册那一档）⇒ 没有台账可锚，两格保持原值")
+        return out
+    anchor = ledger_anchor(root, statement_id=sid, proof_no=proof_no,
+                           artifact_sha=key, clean_only=False)
+    out["ledger"] = str(anchor.get("ledger") or "")
+    out["at"] = str(anchor.get("at") or "")
+    if not anchor.get("checked"):
+        out.update(state="ledger_unreadable", checked=False,
+                   why=f"{anchor.get('why')} ⇒ 这一格没查成（块一个字节都没动）")
+        return out
+    if not anchor.get("found"):
+        out.update(state="no_row", why=f"{anchor.get('why')} ⇒ 不拿一行猜的去刷块")
+        return out
+    before = {"signed": bool(block.get("signed")), "verdict": str(block.get("verdict") or ""),
+              "streak": int(block.get("streak") or 0), "need": int(block.get("need") or 0),
+              "at": str(block.get("at") or ""), "ledger": str(block.get("ledger") or ""),
+              "signer": str(block.get("signer") or "")}
+    out["before"] = before
+    need = int(block.get("need") or 0)
+    if (not block.get("signed")) or (not _block_verdict_allows_sign(block)):
+        out.update(state="unsigned_until_resigned",
+                   why=("这一块已经是「未签」那一档 ⇒ 后续的单行「成立」不把它翻回来"
+                        "（发签门槛是同一趟连续 "
+                        f"{need} 次）；要它重新算签，得由 V 重签、收方秘书重落"))
+        return out
+    if anchor.get("clean"):
+        state = "refreshed"
+        want = {"signed": True, "verdict": "成立", "streak": before["streak"],
+                "need": need, "at": str(anchor.get("at") or ""),
+                "ledger": str(anchor.get("ledger") or ""), "signer": before["signer"]}
+    else:
+        state = "demoted"
+        want = {"signed": False, "verdict": str(anchor.get("verdict") or ""),
+                "streak": 0, "need": need, "at": str(anchor.get("at") or ""),
+                "ledger": str(anchor.get("ledger") or ""), "signer": before["signer"]}
+    stamped = stamp_manuscript_sign(
+        text, proof_sha=key, streak=want["streak"], need=want["need"],
+        verdict=want["verdict"], signer=want["signer"], at=want["at"],
+        ledger=want["ledger"], statement_id=sid,
+        manuscript_id=manuscript_id_of(rel), signed=want["signed"])
+    out["after"] = dict(want)
+    if stamped == text:
+        out.update(state="unchanged",
+                   why=("块上那两格已经指着台账最新那一行（幂等：一个字节都没写）"
+                        if state == "refreshed" else
+                        "块已经是这一档（幂等：一个字节都没写）"))
+        return out
+    tmp = path.with_name(path.name + ".refresh.tmp")
+    try:
+        tmp.write_text(stamped, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        out.update(state=state, checked=False,
+                   why=(f"刷块没写成（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+                        "（块还是刷之前那一版）"))
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass  # 清临时文件失败不许带走"这一笔没写成"这件事（与 `write_manuscript_sign` 同一处理）
+        return out
+    out["line"] = _sign_block_line(stamped)
+    out["state"] = state
+    if state == "demoted":
+        out["why"] = (f"同 sha 的新行判「{want['verdict']}」（{want['ledger']}）"
+                      f"⇒ `{rel}` 第 {out['line']} 行的签块降为未签（连续 0/{need}）")
+    else:
+        out["why"] = (f"`{rel}` 第 {out['line']} 行的签块跟上台账："
+                      f"台账={want['ledger']}、时间={want['at']}")
+    return out
+
+
 # ---------------------------------------------------------------- 颁发（V 的动作）
 
 def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
@@ -1232,7 +1580,11 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
        （:func:`manuscript_body_matches`）⇒ 不符即 `body_mismatch`，零字节。
 
     ## 落什么
-    - 手稿块：:func:`write_manuscript_sign`（9 格，`手稿号` 由稿路径现算）；
+    - 手稿块：:func:`write_manuscript_sign`（9 格，`手稿号` 由稿路径现算）。块上
+      `台账=` / `时间=` 两格从台账现锚（:func:`ledger_anchor`，`clean_only=True`，
+      只认干净的「成立」行），不再抄签文件：`issue` 是一稿一签，重签同一份正文时签文件
+      不重写，抄它会让块退回旧那一签（缺陷 A，真机 87）。锚不到时逐字回到改前那一版
+      （抄签文件），读数在 `anchor` / `anchor_source` 两格里；
     - 签文件：补 `manuscript_write`（三态 + `path`/`line`），`written_by` 改成 `by`
       （2026-11-02：点名是哪一位收方秘书；只在新落成时改写，旧签不回头补）；
     - 台账位：给了 `store` 才落（`bits.evidence.reviewed_by_proof` /
@@ -1242,13 +1594,17 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
 
     返回键：`checked` / `landed` / `state`（`landed` / `refused` / `no_sign`）/
     `code` / `by` / `artifact_sha` / `manuscript_id` / `body_mismatch` /
-    `manuscript_write` / `ledger_bit` / `ledger_why` / `sign_recorded` / `reason`。
+    `manuscript_write` / `ledger_bit` / `ledger_why` / `sign_recorded` / `anchor` /
+    `anchor_source` / `reason`。
     """
     out: dict[str, Any] = {
         "checked": False, "landed": False, "state": "refused", "code": "",
         "by": str(by or "").strip(), "artifact_sha": str(artifact_sha or "").strip().lower(),
         "manuscript_id": "", "body_mismatch": False, "manuscript_write": {},
         "ledger_bit": "not_attempted", "ledger_why": "", "sign_recorded": False,
+        #: 块上那两格（`台账=` / `时间=`）从哪来：`anchor` 是台账现锚的读数，
+        #: `anchor_source` 取 `ledger`（锚到了）/ `sign_file`（退回抄签文件）。
+        "anchor": {}, "anchor_source": "",
         "reason": ""}
     who = str(by or "").strip()
     if who not in SECRETARY_OF:
@@ -1291,6 +1647,27 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
                    reason=(f"落签没成：{_parsed_name.get('reason') or '手稿名认不出号'}"
                            " ⇒ 一个字节都不写"))
         return out
+    # ---- 缺陷 A（2026-11-05）：块上那两格从台账现锚，不再抄签文件的旧值 --------
+    #
+    # `issue` 是"一稿一签"：同一份正文重签时它 `idempotent`、签文件一个字都不重写 ⇒
+    # 签文件里的 `at` / `ledger` 永远是第一次发签那一行。抄它，块就退回旧那一签
+    # （真机 87：块停在 v-000008，而账上最新是 v-000011）。
+    #
+    # 锚只认干净的「成立」行（`clean_only=True`）：一条「有毛病」永远不是签的依据。
+    # 锚不到（未在册 / 台账里还没有这一行 / 直调夹具）⇒ 逐字回到改前那一版（抄签文件）。
+    _sid_for_anchor = str(statement_id or doc.get("statement_id") or "").strip()
+    _no_for_anchor = proof_no if proof_no is not None else doc.get("proof_no")
+    _anchor = ledger_anchor(root, statement_id=_sid_for_anchor,
+                            proof_no=_no_for_anchor, artifact_sha=key,
+                            clean_only=True) if _sid_for_anchor else {
+        "checked": True, "found": False, "why": "这一签没有命题号（未在册那一档）⇒ 没有台账可锚"}
+    out["anchor"] = dict(_anchor)
+    at_for_block = str(_anchor.get("at") or doc.get("at") or "")
+    ledger_for_block = str(_anchor.get("ledger") or doc.get("ledger") or "")
+    if _anchor.get("checked") and _anchor.get("found"):
+        out["anchor_source"] = "ledger"
+    else:
+        out["anchor_source"] = "sign_file"
     mw = write_manuscript_sign(
         root, rel_manuscript, proof_sha=doc.get("artifact_sha"),
         streak=doc.get("streak"), need=doc.get("need"),
@@ -1298,7 +1675,7 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
         # 2026-11-03（件一）：块是收方秘书落的，`签名者` 就写落块的那一位
         # （`secretary:<F|B>`）—— V 只颁发，不再让块冒名说"V 写的"。
         signer=who,
-        at=str(doc.get("at") or ""), ledger=str(doc.get("ledger") or ""),
+        at=at_for_block, ledger=ledger_for_block,
         statement_id=str(doc.get("statement_id") or ""))
     out["manuscript_write"] = mw
     out["manuscript_id"] = manuscript_id_of(rel_manuscript)
