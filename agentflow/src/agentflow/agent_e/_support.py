@@ -61,6 +61,21 @@ from .. import schema as S
 from ..formalgw import STATUSES as _FORMALGW_STATUSES
 from ..formalgw import DeclarationNameError, sole_declaration_name
 from ..store import Store
+
+#: E 的三种计算法（`schema.EXPERIMENT_METHODS` 去掉 `formal`）。
+#:
+#: 为什么它定义在 `from ..tools import verify_tools as VT` 之前：`verify_tools` 的
+#: `verify.run_experiment` 声明要从这里读它（模型面的 `method.enum` 只许广告 E 真能
+#: 收下的三种），而 `verify_tools` 又被本模块导入 —— 常量先落地，两条导入方向才都
+#: 成立（`import agentflow.agent_e` 先起、`import agentflow.tools.verify_tools` 先起
+#: 都实测过）。`formal` 不在这里：它仍留在 `schema.EXPERIMENT_METHODS`（L 的
+#: `formal.record` 要写那张表），但 E 的动作面第一句就以 `formal_not_in_e` 拒它。
+COMPUTATIONAL_METHODS = ("numeric", "symbolic", "exhaustive_search")
+assert set(COMPUTATIONAL_METHODS) | {"formal"} == set(S.EXPERIMENT_METHODS), (
+    f"COMPUTATIONAL_METHODS={COMPUTATIONAL_METHODS} 与 schema.EXPERIMENT_METHODS="
+    f"{S.EXPERIMENT_METHODS} 不一致 —— '哪些方法拿不到 proof' 必须只有一处定义"
+)
+
 from ..tools import verify_tools as VT
 from ..tools.base import ToolError, ToolRegistry
 from ..agentspec import AgentBrief, AgentSpec
@@ -79,11 +94,6 @@ REPRO_RESULT_PREFIX = "REPRO_RESULT:"
 #: 进度行的前缀（`draft/37` §133）：脚本每完成一个 n 打一行 `PROGRESS: {json}`。
 #: 它让"被超时杀掉"的那次实验也留下"搜到哪儿"的读数。
 PROGRESS_PREFIX = "PROGRESS:"
-COMPUTATIONAL_METHODS = ("numeric", "symbolic", "exhaustive_search")
-assert set(COMPUTATIONAL_METHODS) | {"formal"} == set(S.EXPERIMENT_METHODS), (
-    f"COMPUTATIONAL_METHODS={COMPUTATIONAL_METHODS} 与 schema.EXPERIMENT_METHODS="
-    f"{S.EXPERIMENT_METHODS} 不一致 —— '哪些方法拿不到 proof' 必须只有一处定义"
-)
 _NO_EVIDENCE_KIND = "heuristic"
 _STDOUT_SCAN_LIMIT = 4 * 1024 * 1024
 _OUTPUT_DIGEST_WIDTH = 300

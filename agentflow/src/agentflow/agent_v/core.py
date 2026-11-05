@@ -122,6 +122,85 @@ V_REFUSAL_CODES: dict[str, dict[str, str]] = {
     },
 }
 
+
+#: `verify.verify_proof` 会写进返回值的 `kind` 码全集（非空；空串 = 这一趟没有档）。
+#:
+#: 这是唯一的 kind 词表：`tools/verify_tools.py` 的 `returns` 从它拼出模型可见的
+#: 词表（不再手抄一份），`temp/probe_verify_tool_face.py` 用 AST 从本文件的实现里现算
+#: 同一个集合，两个方向都对账（实现多一个 / 声明多一个都红）。
+#:
+#: 扫法（判据见那个探针）：以 `AgentV.verify_proof` 为根、沿 `self.<方法>()` 与模块级
+#: 调用求可达闭包，取其中所有 `"kind": <码>` / `out["kind"] = <码>` /
+#: `out.update(kind=<码>)` 的字面量（含 `IfExp` 两支；经 `V_REFUSAL_CODES` 的除外）。
+#: 2026-11-05 走查 D13：`proof_manuscript_required` 此前没进声明（`:1652-1673`）。
+V_VERIFY_PROOF_KINDS: tuple[str, ...] = (
+    "bad_manuscript_name",
+    "bad_manuscript_path",
+    "dependency_section_missing",
+    "dependency_section_unreadable",
+    "manuscript_has_no_proof_section",
+    "manuscript_missing",
+    "manuscript_unreadable",
+    "numeric_evidence",
+    "numeric_evidence_reviewed_not_signed",
+    "proof_manuscript_required",
+    "proof_reviewed_not_signed",
+    "proof_text_mismatch",
+    "proof_unregistered_rejected",
+    "proof_unregistered_signed",
+    "statement_missing",
+)
+
+#: `verify.verify_proof` 会写进返回值的 `reason` 码全集（受控拒绝 / 终局读数）。
+#:
+#: 与 `V_VERIFY_PROOF_KINDS` 同一条纪律：声明与探针都读这一份。三档带冒号细则
+#: 的码在 :data:`V_VERIFY_PROOF_SUFFIXED_REASONS` 里说明形状 —— 实现写的是
+#: `<code>：<detail>`，声明里不许再把它印成裸码。
+#:
+#: `already_signed` 是 `checked=True` 的终局（已签过、这一趟零转）；其余都是
+#: `checked=False` 的没查成码。`judge_not_wired` / `empty_reply` 是模型缝自己的
+#: problem，经 `_review_pass` 原样透传进 `reason`，所以也在全集里。
+V_VERIFY_PROOF_REASONS: tuple[str, ...] = (
+    "already_signed",
+    "bad_manuscript_name",
+    "bad_manuscript_path",
+    "bad_proof_no",
+    "bad_statement_id",
+    "dependency_section_missing",
+    "dependency_section_unreadable",
+    "empty_reply",
+    "internal_inconsistency",
+    "judge_not_wired",
+    "ledger_row_lost",
+    "ledger_unwritable",
+    "manuscript_empty",
+    "manuscript_has_no_proof_section",
+    "manuscript_missing",
+    "manuscript_unreadable",
+    "missing_material",
+    "no_proof_text",
+    "no_such_proof",
+    "proof_text_mismatch",
+    "proof_text_needs_a_manuscript",
+    "secretary_unjudged",
+    "statement_missing",
+    "unparsable",
+)
+
+#: 实现写 `<code>：<detail>` 的那几个 reason（冒号后是细则，不是码的一部分）。
+#:
+#: 声明按这张表把它们印成带细则的形状（D14）：`ledger_row_lost` 此前被声明成裸码，
+#: 而实现写的是 `ledger_row_lost：<reason>`（`:1311` / `:2548`）。
+V_VERIFY_PROOF_SUFFIXED_REASONS: dict[str, str] = {
+    "internal_inconsistency": "：<detail>",
+    "ledger_row_lost": "：<reason>",
+    "secretary_unjudged": "：<detail>",
+}
+assert set(V_VERIFY_PROOF_SUFFIXED_REASONS) <= set(V_VERIFY_PROOF_REASONS), (
+    f"V_VERIFY_PROOF_SUFFIXED_REASONS={sorted(V_VERIFY_PROOF_SUFFIXED_REASONS)} "
+    "必须全部在 V_VERIFY_PROOF_REASONS 里 —— 带细则的码也是全集的一部分"
+)
+
 #: 未在册那一支的"命题页"占位（2026-11-02，业主：「V 签先放在 F 的手稿里，让 B 录入」）。
 #:
 #: `verifications.cold_start_prompt` 的 `## 命题（含完整假设）` 那一段在未在册时没有正文：

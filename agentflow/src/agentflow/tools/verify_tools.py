@@ -45,6 +45,12 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .. import schema as S
+from ..agent_e._support import COMPUTATIONAL_METHODS
+from ..agent_v.core import (
+    V_VERIFY_PROOF_KINDS,
+    V_VERIFY_PROOF_REASONS,
+    V_VERIFY_PROOF_SUFFIXED_REASONS,
+)
 from ..store import StoreError
 from .base import ParamError, ToolError, ToolResult, ToolRegistry, ToolSpec, fail, ok, tool
 
@@ -781,7 +787,14 @@ def _verify_detect_verifier():
             "claim_key": {"type": "string"},
             "script_path": {"type": "string", "description": "工作区内的相对路径"},
             "params": {"type": "object"},
-            "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
+            # `method` 的枚举是 E 收得下的三种计算法（`COMPUTATIONAL_METHODS`），
+            # 不是 `schema.EXPERIMENT_METHODS` 全表：`formal` 仍留在 schema 里（L 的
+            # `formal.record` 要写那张表），但 `AgentE.run_experiment` 第一句就以
+            # `formal_not_in_e` 拒它（`agent_e/run_experiment.py`）⇒ 把它广告给模型，
+            # 模型就会按 schema 传参、再拿回一次必然的拒绝（D15，2026-11-05 走查）。
+            # 判据：模型面 `method.enum` 不含 `formal`；`verify.run_experiment(method="formal")`
+            # 仍受控拒绝（拒绝码不变）；三种计算法照旧可用。
+            "method": {"type": "string", "enum": list(COMPUTATIONAL_METHODS)},
             "for_question_id": {"type": "string"},
             "timeout": {"type": "integer", "minimum": 1},
     # 这里没有 `run_name` / `imports`：它们只服务 `method='formal'`，而 2026-10-23 晚
@@ -1107,17 +1120,22 @@ _ROLES_V = ("V",)
             "'review_passes',"
             "'ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`"
             "（`有毛病` 时 `defect_step` 指到第几步）。"
-            "（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
-            "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
-            "no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / "
-            "bad_manuscript_path / manuscript_missing / manuscript_unreadable / "
-            "manuscript_has_no_proof_section / dependency_section_missing / "
-            "dependency_section_unreadable / ledger_unwritable / ledger_row_lost —— "
-            # 2026-10-30（业主批准改 FC-27；E 那一笔）：这一句原本写「绝不拿『看不出来』
-            # 冒充『审过了』」—— 而 V 从 2026-11-01 起只产两态（成立 / 有毛病），
-            # 旧档那一格已经不存在。指向一个产不出的档，模型会以为自己的结论能落在那儿；
-            # 而真正要守的那件事是"`checked=False` 不许被读成审过了" ⇒ 措辞改钉这一档。
-            "此时**不落台账行**，绝不拿「没查成」冒充「审过了」；"
+            # 2026-11-05 走查 D13/D14：`kind` / `reason` 两个词表从实现的唯一真身
+            # （`agent_v/core.py` 的 `V_VERIFY_PROOF_KINDS` / `V_VERIFY_PROOF_REASONS`）
+            # 现拼，不在这里手抄第二份；`temp/probe_verify_tool_face.py` 用 AST 从
+            # 实现现算同一个集合，两个方向都对账（实现多一个 / 声明多一个都红）。
+            "（三条返回路径键集合相同；`kind` ∈ "
+            + " / ".join(V_VERIFY_PROOF_KINDS)
+            + "（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、"
+            "不落台账行）**）；checked=False = 没查成：reason ∈ "
+            + " / ".join(r for r in V_VERIFY_PROOF_REASONS if r != "already_signed")
+            + "（其中 "
+            + " / ".join(f"{code}{shape}" for code, shape in
+                         V_VERIFY_PROOF_SUFFIXED_REASONS.items())
+            + " 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，"
+            "不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；"
+            "`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位"
+            "已经为真、这一趟零转），它不属于「没查成」；"
             "引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地"
             "（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；"
             "`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是"
