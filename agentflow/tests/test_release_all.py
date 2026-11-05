@@ -2539,6 +2539,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                   "`download.fulltext` 的三档现算（ok / no_text_layer / no_fulltext；"
                   "有字节但这一处没抽过 ⇒ None，由同一处的 `with_fulltext` 清掉旧标签 —— "
                   "写点与清除点成对）",
+    # 2026-11-06（M 挂机 · 真机 `projects/R-mk-infinite-93`）：把"研究还没做完"从
+    # "感觉没活"换成台账上数得出来的判据，并给出一条确定的下一动作。为什么必须是顶层
+    # 模块：读它的两处是 `agent_loop._pending_work`（"不许挂机"那一条）与状态读数，
+    # 二者都不属于任何角色；挂进 `agent_loop` 会让"哪一档算未尽"出现第二份口径，
+    # 而那一份的口径错只会表现为"M 又挂机了"，没有任何一条判据会红。
+    "researchpending.py": "「研究还没做完」的唯一判据（M 挂机，2026-11-06）："
+                          "pending_reading（台账读数 → 六档 gap：concept_missing / "
+                          "candidate_unfiled / statements_unsigned / signed_unregistered / "
+                          "open_questions / manuscript_missing）+ _GAP_ACTIONS（每档一条"
+                          "确定的下一动作，按 `specs/m.py` 的边表）；纯读、零模型调用、不写盘",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件
