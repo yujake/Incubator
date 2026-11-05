@@ -79,16 +79,29 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
     「成立」且同一份正文"的签；改前它读的是"有一次「成立」"。所以夹具按同一份正文、
     同一证明号连签，并在这里钉住"第 1、2 次不翻位、第 3 次才翻"这条正控 ——
     `evidence_kind='proof_review'` 那一档的准入判据一个字都没放宽。
+
+    ## 2026-11-05 口径：先预置五元位，再让签翻第 3 位
+    可引门槛（`depsection.CITATION_MIN_LEVEL = pre_theorem`）读的是
+    `evidencebits.derive_grade` 从五元位现算的等级，`evidence_kind` 只是历史列。
+    所以这一格必须先把第 2 位（`proof`）落真 —— 只写 `proof_text` / 只改
+    `evidence_kind` 的旧夹具在新口径下现算仍是 `conjecture`，F 的可引清单会如实
+    拒掉它（本文件每一条都从这里开始）。第 3 位由下面三次真签翻真；档位随后只由
+    等级反算（`kind_from_bits`），不再由夹具自报。
     """
+    body = f"命题 {stmt_id} 的证明正文（判据夹具）。"
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=label or f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",
-        proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+        proof_text=body,
         evidence_kind="heuristic", status="active", quote_verified=None,
         quote_reason="判据夹具：自产命题，没有外部引文要比对",
         created_at=S.now_iso(), created_by="agent-B")
+    from agentflow import evidencebits as EB
+
+    row.bits = EB.bits_of(origin="own_result", proof=True, proof_process=body,
+                          kind="conjecture")
     row.validate()
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row.to_dict())
@@ -97,7 +110,7 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
         for i in range(1, need + 1):
             signed = VR.record_verification(
                 store.root, statement_id=stmt_id,
-                proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+                proof_text=body,
                 verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
                 store=store, proof_no=1)
             assert signed.get("checked") is True, signed
@@ -107,7 +120,9 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
                 f"连续 {need} 次才发签，第 1..{need - 1} 次只落台账", signed)
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
-    got["evidence_kind"] = level
+    # 档位只由等级反算：`proof ∧ reviewed` ⇒ `pre_theorem`，反算名 `proof_review`。
+    got["evidence_kind"] = EB.kind_from_bits(got.get("bits") or {},
+                                             kind=str(got.get("kind") or ""))
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", got)
     return got
