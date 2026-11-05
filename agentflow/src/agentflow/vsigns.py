@@ -2714,6 +2714,30 @@ SIGN_GATE_CODES: tuple[str, ...] = ("manuscript_id_missing", "manuscript_id_unre
                                     "manuscript_not_of_this_statement")
 
 
+def _mark_pending_candidate(out: dict[str, Any], *, statement_id: Any,
+                            code: Any, why: str = "") -> None:
+    """`manuscript_id_unresolved` 遇到"正在新建命题"时留一格"可以继续按正文 sha 认领"。
+
+    2026-11-05（D1）：空号（`statement_id=""`）这一档的 `manuscript_id_unresolved`
+    不是硬拒 —— 号还没发，签块与在册册子的关系是**登记之后**才可能为真的事；这一签
+    仍然可能由 `verifications/pending/<正文 sha>.jsonl` 那一行独立背书。所以判据只留
+    读数（`pending_candidate=True` + 一句为什么），由 :func:`bits_after_sign` 继续走
+    :func:`_claim_pending_sign`（按正文 sha，号无关）。
+
+    非空号（已在册那一档）不设这一格：那一档的号必须在册，是硬判据。
+    `why` 让调用点说清"这一格的 unresolved 是哪一种"（例如签块被搬过 / 计划稿不是载体）。
+    """
+    if str(statement_id or "").strip():
+        return
+    if str(code or "") != "manuscript_id_unresolved":
+        return
+    out["pending_candidate"] = True
+    out["pending_candidate_why"] = why or (
+        "这一笔正在新建命题（`statement_id` 为空）：第 9 格的号在不在册是登记之后才可能"
+        "为真的事 ⇒ 这一道不硬拒；继续按正文 sha 去 pending 台账认那一签"
+        "（签块必须真的盖着这份正文，且要有一行 V 的台账记过它）")
+
+
 def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
                          registered: Iterable[Any] = ()) -> dict[str, Any]:
     """B 收录时对签块的两道判据（纯读；2026-11-02 业主）。
@@ -2763,18 +2787,52 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
                    suggestion=("先确认稿与号是同一份（稿名 `reports/f-proof-<裸稿号>.md`），"
                                "再用 `vsigns.land(by=\"secretary:F\")` 落块；号与稿不一致时"
                                "不许拿 `bits_after_sign` 认签。"))
+        # ---- 2026-11-05（D1 的第二半）：签块与稿号对不上时不直接 return ----------
+        #
+        # 这一档的签块**不能**给这份稿作证（块被搬过 / 号写错了），但它盖的那一份正文
+        # 仍可能由 `verifications/pending/<正文 sha>.jsonl` 独立背书（V 在命题还没在册
+        # 时审的就是这一份正文）⇒ 空号这一档继续落到 pending 认领，由那一行自己判
+        # "签的是不是这一版"。计划稿（`identity_why` 说它不是签的载体）不在此列：
+        # `mid == manuscript_key`，那是"这份稿永远不该有签"，继续认领只会把拒信说成
+        # 另一件事 —— 仍是硬拒。
+        if mid != str(out["manuscript_key"] or ""):
+            _mark_pending_candidate(
+                out, statement_id=statement_id, code=out["code"],
+                why=("签块的第 9 格手稿号与它所在那份稿对不上（块被搬过 / 号写错了）⇒ "
+                     "这一块不直接作证；改按正文 sha 去 pending 台账认那一签"
+                     "（那一行自己的 sha 对得上才算）"))
         return out
     if ident == "unmatched":
         # 没有稿路径可比对（`proof_manuscript` 直递 / 走 D 的清单之前的那一档）⇒ 这一格
         # 没查成，不是"对不上"：不拿它拒，但读数里留一格说清"号没核过"。
         out["identity_unverified"] = True
     if ids and mid not in ids and mid != str(statement_id or ""):
-        out.update(code="manuscript_id_unresolved",
-                   reason=(f"第 9 格的手稿号 {mid!r} 在 `statements` 里找不到对应的在册命题 ⇒ "
-                           "这条签挂不到任何一条已收录的命题上"),
-                   suggestion=("先 `register_statement` 登记这一条命题拿到 `stmt_id`（或让 D 的"
-                               "携带单把那一条的 `手稿路径` 写对），再落签。"))
-        return out
+        if str(statement_id or "").strip():
+            out.update(code="manuscript_id_unresolved",
+                       reason=(f"第 9 格的手稿号 {mid!r} 在 `statements` 里找不到对应的在册命题 ⇒ "
+                               "这条签挂不到任何一条已收录的命题上"),
+                       suggestion=("先 `register_statement` 登记这一条命题拿到 `stmt_id`（或让 D 的"
+                                   "携带单把那一条的 `手稿路径` 写对），再落签。"))
+            return out
+        # ---- 2026-11-05（D1，阻断级）：正在新建的命题不判"号必须在册" ------------
+        #
+        # `statement_id=""` 是「这一笔还没登记、号还没发」那一档：号在不在册是**登记
+        # 之后**才可能为真的事。改前这条判据对空号也生效，于是判据量的不是"号对不对"，
+        # 而是"册子里有没有别人"：空册（`ids` 为空）短路通过，非空册一律拒
+        # （`manuscript_id_unresolved`）⇒ 真实工作区里"先签后登记"的正统路整条不通。
+        # 所以这里只留读数，不进 `code`：签块照旧走下面那两道（正文 sha 相符 +
+        # `sign_ledger_backing` 的独立台账背书）—— 空册与非空册同一把尺，与册子里
+        # 有没有别人无关。已登记命题（非空号）那一支仍是硬拒，一个字都不改。
+        #
+        # 这一档**不设** `pending_candidate`：门既然放行了，就该用签块自己那条路
+        # （它会把 `backing` 带出来）；`pending_candidate` 只留给"门确实判
+        # `manuscript_id_unresolved`、而这一笔还没号"的那一档（见
+        # `_mark_pending_candidate`：签块与稿号对不上时，仍可按正文 sha 去 pending 认）。
+        out["new_statement_number_unregistered"] = True
+        out["new_statement_number_why"] = (
+            f"第 9 格的手稿号 {mid!r} 还不在 `statements` 里 —— 这一笔正在新建命题"
+            "（`statement_id` 为空），号在不在册是登记之后才可能为真的事 ⇒ 这一道不拒；"
+            "改由正文 sha 与独立台账背书继续判")
     if str(statement_id or "").strip() and mid != str(statement_id):
         out.update(code="manuscript_not_of_this_statement",
                    reason=(f"这一块的手稿号是 {mid!r}，而这一笔要登记的是 stmt:"
@@ -2882,14 +2940,31 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
         gate = manuscript_sign_gate(block, statement_id=str(statement_id or ""),
                                     registered=_registered_ids(store))
         out["gate"] = dict(gate)
-        if gate.get("code"):
+        # ---- 2026-11-05（D1）：`manuscript_id_unresolved` 在"新建命题"这一档不硬拒 ----
+        #
+        # 改前这里按 `gate.code` 一律提前 return，于是 `vsigns.py` 末尾那段"按正文 sha
+        # 认领 pending"（`:func:`_claim_pending_sign``）根本走不到：非空册的第 4 步整笔
+        # 被拒 `proof_without_v_sign`，而 pending 三票（u-000001/2/3）就在盘上。
+        # 门那一侧已经把"空号不判在册"的理由写进 `pending_candidate`（见
+        # `_mark_pending_candidate`）：这一档继续往下走，按正文 sha 认那一签；
+        # 已登记命题（非空号）那一档仍是硬拒，一个字都不改。
+        if gate.get("code") and not gate.get("pending_candidate"):
             out.update(applied=False, code=str(gate["code"]),
                        reason=str(gate.get("reason") or ""),
                        suggestion=str(gate.get("suggestion") or ""),
                        why=(f"{gate.get('reason')} ⇒ 不认这一块"
                             f"（{gate.get('code')}）；建议：{gate.get('suggestion')}"))
             return dict(bits), out
-        if str(block.get("state") or "") == "signed":
+        if gate.get("pending_candidate"):
+            # 读数（不是静默放过）：签块这一道没判成"号在册"，改由下面的 pending 认领
+            # 按正文 sha 判；块自己的读数留在 `out["block"]` / `out["gate"]` 里。
+            out["gate_pending_claim"] = {
+                "code": str(gate.get("code") or ""),
+                "why": str(gate.get("pending_candidate_why") or ""),
+                "suggestion": str(gate.get("suggestion") or "")}
+            out["why"] = (str(gate.get("pending_candidate_why") or "")
+                          or "新建命题：号在不在册不在这一道判")
+        if not gate.get("pending_candidate") and str(block.get("state") or "") == "signed":
             # ---- 2026-11-05 晚（业主）：真假只看「有没有独立台账背书」 --------------
             #
             # 判据在 `sign_ledger_backing` 一处（签块与签文件两条来源共用）：块的

@@ -247,15 +247,25 @@ def test_e1_a_legacy_block_is_manuscript_id_missing() -> None:
     assert "vsigns.land" in gate["suggestion"] and "手稿号" in gate["suggestion"], gate
 
 
-def test_e2_an_unknown_id_is_manuscript_id_unresolved() -> None:
-    """e2 第 9 格的号不在册 ⇒ `manuscript_id_unresolved`；建议点名 `register_statement`。"""
+def test_e2_an_unknown_id_is_manuscript_id_unresolved_for_a_registered_statement() -> None:
+    """e2 第 9 格的号不在册 ⇒ 在册命题那一档 `manuscript_id_unresolved`；建议点名 `register_statement`。
+
+    2026-11-05（D1，阻断级）：**新建命题**（`statement_id=""`）那一档不再判"号必须在册"
+    —— 号是登记之后才可能有的。同一个块在那一档放行（判据改由正文 sha +
+    `sign_ledger_backing` 的独立台账背书继续判），读数留 `new_statement_number_unregistered`。
+    """
     text = _manuscript(manuscript_id="000777")
     read = VS.manuscript_sign_standing(text, proof_sha=_body_sha(),
                                        manuscript_path="reports/f-proof-000777.md")
     assert read["identity_state"] == "resolved", read
-    gate = _gate(read, statement_id="", registered=(SID,))
+    # 在册命题那一档（非空号）：号不在册仍是硬拒。
+    gate = _gate(read, statement_id=SID, registered=(SID,))
     assert gate["code"] == "manuscript_id_unresolved", gate
     assert "register_statement" in gate["suggestion"], gate
+    # 新建命题那一档（空号）：不在册是常态，不拒（读数在 `new_statement_number_*`）。
+    new = _gate(read, statement_id="", registered=(SID,))
+    assert new["code"] == "" and new["admitted"] is True, new
+    assert new.get("new_statement_number_unregistered") is True, new
 
 
 def test_e3_another_statement_or_another_body_is_not_of_this_statement() -> None:
