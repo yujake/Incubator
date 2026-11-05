@@ -108,9 +108,15 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 `exp:` 编号都算），指不回去 => `mapping_numeric_citation_missing`。词汇与判定只有一份，
 在 `numerictheorem`（本模块只接线，不另写一套口径）。
 
-哪一行算"数值实验定理"：它是 theorem / lemma / proposition / corollary，且它登记的那条
-命题的 `proof_text` 本身就是程序（`numericproof.is_script_path`），或者它自己填了那两格。
-其余行（例子、实验、自然语言证明的定理）一格都不要动 —— 防误伤那一条判据就在
+哪一行算"数值实验定理"：它登记的那条命题的证明栏是程序（`numericproof.proof_column_script`；
+真正的数值通道还要台账里有一条 E 签的穷举，见 `numericproof.proof_channel`），而且正文里
+把它排成 theorem / lemma / proposition / corollary（`STATEMENT_ENV_KINDS`）。例子与实验不是
+被证明的命题：它们照旧按通道填「机器核验凭据」那一格（`lean_file` = 证明栏第 ① 段那份程序；
+E 还没签成穷举时那份 `.py` 也认 —— 例子 / 实验的凭据就是它），
+但没有「这条定理压在哪条 E 的读数上」那几格（`numeric_evidence` / `exhaustion_note` / 索引四格）
+—— 2026-11-05 缺陷 1：`kind` 只决定要不要这几格附加义务，凭据格始终按通道判
+（:func:`is_numeric_theorem_row` 是这条边界的唯一落点）。
+其余行（自然语言证明的定理）一格都不要动 —— 防误伤那一条判据就在
 `tests/test_numeric_theorem_writing_spec.py` 第 4b 条。
 
 ### 索引四格（D-34，业主 2026-10-23 夜：D 的报告是目录）
@@ -291,7 +297,8 @@ ENV_KINDS: tuple[str, ...] = (
 #: 凭据那一格（`lean_file`）不按这一组裁：它按这一条命题的证明通道判
 #: （见 `_lean_problems`）—— 通道非空就要填，与正文里排成哪类环境无关。
 #: 数值定理那一支同理：`is_numeric_row` 只按通道判（2026-11-04 缝隙一），
-#: 这一组只留给"一条命题对一个环境"与读数里的 `target_kinds`。
+#: 这一组只留给"一条命题对一个环境"、读数里的 `target_kinds`，以及
+#: `is_numeric_theorem_row` 那一道「附加义务」的边界（2026-11-05 缺陷 1）。
 LEAN_TARGETED_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
 
 #: "一条命题对一个环境"这条口径管哪几类环境（业主 2026-10-24，D-40）。
@@ -1815,6 +1822,18 @@ def _credential_statement(row: Row,
     return {**dict(target), "proof_text": V.proof_text_of(target, row.proof_no)}
 
 
+def _proof_column_program(statement: Mapping[str, Any] | None) -> str:
+    """证明栏第 ① 段那份程序的相对路径（读不到 ⇒ 空串）。
+
+    2026-11-05 缺陷 1：例子 / 实验的「数值凭据通道」按证明栏判 —— 第 ① 段是程序，
+    这一行就填那份 `.py`。本函数只取那一格的地址，不另判通道（通道仍只问
+    `numericproof.proof_channel`）。
+    """
+    if not isinstance(statement, Mapping):
+        return ""
+    return NP.norm_rel(NP.proof_column_script(statement.get("proof_text")))
+
+
 def _credential_slot(row: Row,
                      ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
                      experiments: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -1902,7 +1921,11 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
        （2026-11-04 缝隙三，业主口径「这一格的功能是这条命题百分百为真」）；
     6. 空通道而 `numeric_evidence` / `exhaustion_note` 有值 => `mapping_numeric_evidence_missing`：
        "这一行自称有数值证据，但没有数值证明通道"（2026-11-04 缝隙二；`mapping_reading` 与
-       收工门读数都读这一条，两边同时报，不再一边报一边不报）。
+       收工门读数都读这一条，两边同时报，不再一边报一边不报）；
+    7. 例子 / 实验（`STATEMENT_ENV_KINDS` 之外）的证明栏第 ① 段是程序、而 E 还没把它签成
+       穷举（`proof_channel` 为空）时，凭据格填的就是那份 `.py`：这一支认它，不要求
+       `lean_target`、也不按「类别与通道不一致」拒（2026-11-05 缺陷 1）。命题类环境不认这一支
+       —— 定理的「百分百为真」必须由 E 签下的穷举背书，没签的那份程序仍受控拒。
 
     "必填"按这一条命题的证明通道判（`numericproof.formal_slot` 的 numeric / formal /
     空），不再按"盘上有没有 Lean 产物"判：后者是一个全局读数，不是某一条命题的凭据
@@ -1931,6 +1954,13 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
         # 前者是"证明走哪条路"，后者是"这一格该填哪一类"）。
         numeric = channel == NP.PROOF_CHANNEL_NUMERIC
         formal = channel == NP.PROOF_CHANNEL_FORMAL
+        # 证明栏第 ① 段是程序、而 E 还没把它签成穷举时，`proof_channel` 返回空串。
+        # 例子 / 实验不是被证明的命题：那份程序本身就是它们的「数值凭据」，
+        # 凭据格填它就齐 —— 不因 kind 不是命题类环境而挡（2026-11-05 缺陷 1）。
+        program_path = ""
+        if reading["program"] and not channel:
+            program_path = _proof_column_program(_credential_statement(row, ledger))
+        program_credential = bool(program_path) and row.kind not in STATEMENT_ENV_KINDS
         values = {"lean_file": lean_file, "lean_target": lean_target}
         if not channel and not reading["program"]:
             # 空通道：证明栏里既没有程序也没有 Lean 源码、台账里也没有 E 签的穷举。
@@ -1958,7 +1988,8 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
             continue
         # 数值通道那两格里只有一格（程序地址）：程序没有 Lean 声明名那一半。
         # 这份清单只有一处（`credential_fields`）：`doc.mapping_cells` 读的是同一个函数。
-        wants = credential_fields(channel)
+        # 例子 / 实验按「证明栏第 ① 段是程序」这一支同样只要那两格里的第一格。
+        wants = ("lean_file",) if program_credential else credential_fields(channel)
         missing = [name for name in wants if not values[name]]
         half = (any(values[name] for name in LEAN_ROW_FIELDS)
                 and not all(values[name] for name in LEAN_ROW_FIELDS))
@@ -1999,6 +2030,20 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
                         f"那份程序 {str(slot.get('path') or '')!r}）：{detail}",
                         label=row.label, where=MAPPING_JSON_NAME))
                 file_ok = not (slot.get("problems") or ())
+            elif program_credential:
+                # 例子 / 实验的凭据就是证明栏第 ① 段那份程序（不必等 E 签成穷举）：
+                # 填同一份 `.py` 就齐；换成 `.lean` 或另一份程序都是类别与通道不一致。
+                if NP.is_script_path(lean_file) and NP.norm_rel(lean_file) == program_path:
+                    file_ok = True
+                else:
+                    problems.append(_problem(
+                        "mapping_lean_file_missing",
+                        f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 "
+                        f"`lean_file` = {lean_file!r} 与证明栏第 ① 段那份程序 "
+                        f"{program_path!r} 不一致：这一行按数值凭据通道判（例子 / 实验不是"
+                        "被证明的命题，证明栏第 ① 段就是它们的凭据）⇒ 这一格必须是那一份 "
+                        "`.py`（相对仓库根；换成 Lean 源码或另一份程序都是两类凭据互相冒充）",
+                        label=row.label, where=MAPPING_JSON_NAME))
             elif not lean_file.lower().endswith(LEAN_SUFFIX):
                 if formal:
                     got_channel = "Lean 程序（形式化）⇒ 这一格只收 `.lean` 路径"
@@ -3251,8 +3296,42 @@ def is_numeric_row(row: Row,
 
     `ledger` 是整张台账（要读 `experiments` 判 E 签的穷举）；`experiments` 不给就从
     `ledger` 现取。
+
+    它只管「凭据那一格与 `file` 走哪一类」：数值那一档要再带 `numeric_evidence` /
+    `exhaustion_note` / 索引四格的那几行由 :func:`is_numeric_theorem_row` 判（`kind` 决定
+    档位，2026-11-05 缺陷 1）—— 本函数对六类环境一视同仁，不因 `kind` 是 example /
+    experiment 就把按通道填好的 `.py` 判成「凭据不够」。凭据格对这一档的认法（例子 / 实验
+    的证明栏第 ① 段是程序时，那份 `.py` 就是凭据）在 `_lean_problems` 第 7 条。
     """
     return bool(_numeric_row_reading(row, ledger, experiments)["numeric"])
+
+
+def is_numeric_theorem_row(row: Row,
+                           ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                           experiments: Sequence[Mapping[str, Any]] | None = None) -> bool:
+    """这一行要不要「数值实验定理」那几格附加义务 —— 通道优先，`kind` 只决定档位。
+
+    2026-11-05 缺陷 1（误拦）：`kind="example"` / `"experiment"` 的行按数值通道填了
+    `lean_file`（= 证明栏第 ① 段那份 `.py`），读数却还要 `numeric_evidence` /
+    `exhaustion_note` / 索引四格，于是被判成「凭据不够」。修法是把两件事拆开：
+
+    - 凭据格按通道判（`:func:`is_numeric_row` + `_lean_problems` + `credential_fields`
+      那一支，六类环境一视同仁）：证明栏是程序 ⇒ `lean_file` 填那份程序就齐，与正文里
+      排成哪类环境无关；
+    - 附加义务按档位判（本函数）：`numeric_evidence` / `exhaustion_note` / 索引四格 /
+      正文指回 E 这几格问的是「这条定理压在哪条 E 的穷举读数上」—— 只有
+      `STATEMENT_ENV_KINDS`（theorem / lemma / proposition / corollary）那几行才有这一问；
+      例子与实验不是被证明的命题（`STATEMENT_ENV_KINDS` 的 docstring 已经这么说），
+      它们没有这一档。
+
+    这不退回 2026-11-04 修掉的那道 kind 门：那道门问的是「这一行算不算数值行」，
+    `file` 与凭据格都跟着 `kind` 走（例子行按通道填的 `.py` 反而被判凭据不够）；
+    这里的门只问「要不要再要那四格附加义务」，凭据格仍按通道 —— 例子 / 实验的证明栏
+    第 ① 段是程序时，那份 `.py` 在 `_lean_problems` 第 7 条里认（连 E 还没签成穷举时也认）。
+    """
+    if str(row.kind or "").strip() not in STATEMENT_ENV_KINDS:
+        return False
+    return is_numeric_row(row, ledger, experiments)
 
 
 def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
@@ -3461,12 +3540,14 @@ def mapping_cells(project_root: str | Path, *,
     - 通道与「该填哪几格」：`_credential_slot` → `numericproof.formal_slot` →
       `numericproof.proof_channel`；凭据格的清单是 :func:`credential_fields`（`_lean_problems`
       读的是同一个函数）；
-    - 这一行算不算数值实验定理：`is_numeric_row`（`_row_checks` / `_numeric_problems`
-      同一个判据）；
+    - 这一行算不算数值凭据那一档：`is_numeric_row`（`_row_checks` 的 `file` 与凭据格
+      走它）；要不要再带数值实验定理那几格附加义务：`is_numeric_theorem_row`
+      （`kind` 决定档位；`_numeric_problems` 只对命题类环境跑，2026-11-05 缺陷 1）；
     - 逐格问题：`_row_checks` / `_lean_problems` / `_numeric_problems` 的原话，
       按问题类别归位到格（:func:`_cell_of_problem`）—— 于是"工具说齐、判据说拒"在结构上
       不可能：同一份 `problems` 一半来自这些判据本身；
-    - 索引四格：`NT.evidence_index_problems`（它再转发 `numericproof.resolve_index`）。
+    - 索引四格：`NT.evidence_index_problems`（它再转发 `numericproof.resolve_index`；
+      同样只对数值实验定理那一档判）。
 
     ## 三态与"不许猜"
 
@@ -3581,6 +3662,11 @@ def mapping_cells(project_root: str | Path, *,
     channel = str(slot.get("channel") or "")
     out["channel"] = channel
     numeric = is_numeric_row(row, ledger, experiments)
+    theorem_numeric = is_numeric_theorem_row(row, ledger, experiments)
+    # 证明栏第 ① 段是程序、E 还没签成穷举时，那份 `.py` 就是例子 / 实验的数值凭据
+    # （2026-11-05 缺陷 1：凭据格按通道判，`kind` 只决定要不要那几格附加义务）。
+    program_path = "" if channel else _proof_column_program(statement)
+    program_credential = bool(program_path) and row.kind not in STATEMENT_ENV_KINDS
     cells: dict[str, Any] = {}
     sources: dict[str, str] = {}
 
@@ -3600,7 +3686,7 @@ def mapping_cells(project_root: str | Path, *,
         script = (NP.norm_rel(NP.proof_column_script(NP.proof_column(exp_row)))
                   if exp_row is not None else "")
         if not script:
-            script = NP.norm_rel(slot.get("path") or "")
+            script = NP.norm_rel(slot.get("path") or "") or program_path
         if script:
             src = (f"experiments#{NT.evidence_id_of(exp_row) or '?'} 的证明栏第 ① 段"
                    "（`numericproof.proof_column`）"
@@ -3609,7 +3695,8 @@ def mapping_cells(project_root: str | Path, *,
                    "（`numericproof.proof_column_script`）")
             put("file", script, f"{src} —— 数值实验定理这一行的 `file` 是**仓库根相对**的那份程序")
         else:
-            miss("file", "这一行按 `papermapping.is_numeric_row` 是数值实验定理，而证明栏第 ① 段"
+            miss("file", "这一行按 `papermapping.is_numeric_row` 是数值凭据那一档，"
+                         "而证明栏第 ① 段"
                          "读不出那份程序的路径（`numericproof.proof_column_script` 返回空）"
                          " ⇒ 这一格拿不到")
     else:
@@ -3638,6 +3725,11 @@ def mapping_cells(project_root: str | Path, *,
         else:
             miss("lean_file", "通道是数值证明（`numericproof.proof_channel`），而证明栏第 ① 段"
                               "读不出那份 `.py` 的路径 ⇒ 这一格拿不到")
+    elif program_credential:
+        put("lean_file", program_path,
+            f"证明栏第 ① 段那份程序（statements#stmt:{sid}#p{want_no}；"
+            f"这一行排成 {str(row.kind or '')!r}，不是被证明的命题 ⇒ 这份 `.py` 就是它的"
+            "数值凭据；`lean_target` 不填）")
     elif channel == NP.PROOF_CHANNEL_FORMAL:
         lean = NP.norm_rel(slot.get("path") or "")
         if lean:
@@ -3688,7 +3780,10 @@ def mapping_cells(project_root: str | Path, *,
             "只有 formal 通道填这一格（数值程序没有 Lean 声明名；通道为空更不适用）")
 
     # ---- 数值那两格：E 的那条读数与两块读数的落点（判据在 `numerictheorem`）
-    if numeric:
+    #
+    # 只有「数值实验定理」那一档（命题类环境）才要这两格：例子 / 实验按数值通道填凭据格
+    # 就够了，它们没有「这条定理压在哪条 E 的穷举读数上」这一问（2026-11-05 缺陷 1）。
+    if theorem_numeric:
         if exp_row is not None:
             eid = NT.evidence_id_of(exp_row)
             if eid:
@@ -3705,15 +3800,22 @@ def mapping_cells(project_root: str | Path, *,
                                     "（`numericproof.find_signed_exhaustion_for_column` 返回 None）"
                                     " ⇒ 这一格拿不到")
             miss(NT.NOTE_FIELD, "没有那条 E 的读数 ⇒ 两块读数的落点也无从取")
+    elif numeric:
+        put(NT.EVIDENCE_FIELD, "",
+            "这一行是数值凭据那一档（证明栏第 ① 段是程序），而正文里排成 "
+            f"{str(row.kind or '')!r}（不是被证明的命题）⇒ 数值实验定理那两格不适用；"
+            "凭据那一格仍按数值通道填（`lean_file` = 证明栏第 ① 段那份程序）")
+        put(NT.NOTE_FIELD, "", "同上：两块读数的落点只对定理类环境那一行（不适用）")
     else:
         put(NT.EVIDENCE_FIELD, "",
             "这一行不是数值实验定理（`papermapping.is_numeric_row` 为假）⇒ 这一格不适用")
-        put(NT.NOTE_FIELD, "", "同上：两块读数只对数值实验定理那一行")
+        put(NT.NOTE_FIELD, "", "同上：两块读数只对数值实验定理那一行（不适用）")
 
     # ---- 索引四格：正文是哪一档 / 在哪 / 现算的指纹 / V 的签
+    # 与上面两格同一个边界：只对定理类环境判（例子 / 实验没有「正文是哪一份 E 报告」这一问）。
     note = str(cells.get(NT.NOTE_FIELD) or "")
     fresh_sha = ""
-    if numeric and exp_row is not None:
+    if theorem_numeric and exp_row is not None:
         put(NP.INDEX_KIND_FIELD, NP.INDEX_KIND_REPORT,
             "这一行的正文是 E 的报告（`exhaustionreport.report_relpath` 指的那份读数）⇒ "
             f"{NP.INDEX_KIND_REPORT}（受控词表 `numericproof.INDEX_KINDS`）")
@@ -3734,7 +3836,7 @@ def mapping_cells(project_root: str | Path, *,
             else:
                 put(NP.INDEX_SHA_FIELD, fresh_sha,
                     f"现算（`numericproof.object_sha256`）：{note} 的字节 sha256")
-    elif numeric:
+    elif theorem_numeric:
         for field_name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
                            NP.INDEX_SIGN_FIELD):
             miss(field_name, "找不到那条 E 的读数（见 `numeric_evidence` 那一格）"
@@ -3785,7 +3887,7 @@ def mapping_cells(project_root: str | Path, *,
     if LEAN_KINDS:
         judged.extend(item for item in _lean_problems(rows, package, project, ledger)
                       if str(item.get("label") or "") == str(row.label))
-    if NT.NUMERIC_KINDS and numeric:
+    if NT.NUMERIC_KINDS and theorem_numeric:
         judged.extend(_numeric_problems(row, statement_raw, ledger, workspace,
                                         theorem_segments(project)))
     seen = {(str(item.get("cell")), str(item.get("why"))) for item in problems}
@@ -4118,7 +4220,7 @@ def mapping_reading(project_root: str | Path, *,
         if isinstance(got.ledger_row, Mapping) and str(row.ledger_id).startswith("stmt:"):
             origin = str(got.ledger_row.get("origin") or "")
         problems += _citation_problems(row, package, origin)
-        if NUMERIC_KINDS and is_numeric_row(row, known):
+        if NUMERIC_KINDS and is_numeric_theorem_row(row, known):
             if segments is None:
                 segments = theorem_segments(project, tex=tex_text if tex is not None else None)
             problems += _numeric_problems(row, got.ledger_row, known, workspace, segments)

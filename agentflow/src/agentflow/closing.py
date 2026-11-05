@@ -4191,7 +4191,8 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     return out
 
 
-def _mapping_row_missing_cells(row: Any, *, channel: str) -> list[str]:
+def _mapping_row_missing_cells(row: Any, *, channel: str,
+                               numeric_theorem: bool = True) -> list[str]:
     """这一行按它的证明通道还缺哪几格 —— 这一档的唯一判据（反真空用例只打这一处桩）。
 
     口径全部复用现有判据，不在这里另写一套「这一行是不是数值定理」：
@@ -4204,10 +4205,15 @@ def _mapping_row_missing_cells(row: Any, *, channel: str) -> list[str]:
       `lean_target` 不填，数值程序没有 Lean 声明名）；形式化通道 ⇒ `file` +
       `lean_file` + `lean_target`；空通道 ⇒ 只数 `file`（凭据两格是「不适用」，不是
       「缺」）；
+    - `numeric_theorem` 是「要不要那两格附加义务」的唯一判据（调用方传
+      `papermapping.is_numeric_theorem_row` 的结论，2026-11-05 缺陷 1）：例子 / 实验按
+      通道填了 `lean_file` 就齐，不再被 `numeric_evidence` / `exhaustion_note` 判成
+      「凭据不够」；它不按 `kind` 在这里重判一次 —— 判据只有 `papermapping` 那一处；
     - 索引四格不在这里数：它们由 `numerictheorem.evidence_index_problems` 一处判
       （见 :func:`_numeric_row_index_problems`）。
 
-    返回空列表 = 这一行该有的格子都齐了（例子 / 实验只有 `file` 一格，因此恒齐）。
+    返回空列表 = 这一行该有的格子都齐了（例子 / 实验只有 `file` 与 `lean_file` 两格，
+    没有附加义务）。
     """
     from . import papermapping as PM
     from . import numericproof as NP
@@ -4215,7 +4221,8 @@ def _mapping_row_missing_cells(row: Any, *, channel: str) -> list[str]:
     if not str(getattr(row, "file", "") or "").strip():
         return ["file"]
     if channel == NP.PROOF_CHANNEL_NUMERIC:
-        fields: tuple[str, ...] = ("file",) + tuple(PM.NUMERIC_ROW_FIELDS) + ("lean_file",)
+        fields: tuple[str, ...] = ("file",) + (
+            tuple(PM.NUMERIC_ROW_FIELDS) if numeric_theorem else ()) + ("lean_file",)
     elif channel == NP.PROOF_CHANNEL_FORMAL:
         fields = ("file",) + tuple(PM.LEAN_ROW_FIELDS)
     else:
@@ -4313,6 +4320,10 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
     - 数值通道那一行另要索引四格（判据 `numerictheorem.evidence_index_problems`）；
       判据原话收进该行的 `index_problems`（新键），缺的格名收进 `missing`（旧键照旧）；
       每一行的通道收进该行的 `channel`（新键，读的人据此知道为什么是这几格）；
+    - 数值实验定理那两格（`numeric_evidence` / `exhaustion_note`）与索引四格只压在
+      `papermapping.is_numeric_theorem_row` 为真的行上：例子 / 实验按通道填了
+      `lean_file`（= 证明栏第 ① 段那份 `.py`）就齐，不因 `kind` 不是命题类环境被读成
+      「凭据不够」（2026-11-05 缺陷 1）；这条边界也只有 `papermapping` 一处判据；
     - 旧键一个不改（`path` / `exists` / `rows` / `complete` / `incomplete` /
       `implicit_min` / `lean` / `note`），M 与 webui 的读法不用跟着改。
 
@@ -4371,12 +4382,16 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         # `numericproof.proof_channel`。`_mapping_row_missing_cells` 只消费它，不另判。
         slot = PM._credential_slot(row, ledger, experiments)
         channel = str(slot.get("channel") or "")
-        missing = _mapping_row_missing_cells(row, channel=channel)
+        # 附加义务（numeric_evidence / exhaustion_note / 索引四格）只压在数值实验定理
+        # 那一档上：判据只有 `papermapping.is_numeric_theorem_row` 一处（2026-11-05 缺陷 1）。
+        numeric_theorem = PM.is_numeric_theorem_row(row, ledger, experiments)
+        missing = _mapping_row_missing_cells(row, channel=channel,
+                                             numeric_theorem=numeric_theorem)
         row_lean_problems = list(lean_problems.get(str(row.label), []))
         missing += [name for name in _lean_problem_cells(row, channel, row_lean_problems)
                     if name not in missing]
         index_problems: list[str] = []
-        if channel == NP.PROOF_CHANNEL_NUMERIC:
+        if numeric_theorem and channel == NP.PROOF_CHANNEL_NUMERIC:
             index_missing, index_problems = _numeric_row_index_problems(row, workspace)
             missing += [name for name in index_missing if name not in missing]
         if not missing and not index_problems and not row_lean_problems:
@@ -4399,12 +4414,16 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         out["note"] = (f"{json_path} 有 {len(table_rows)} 行，其中 "
                        f"{len(out['incomplete'])} 行不齐 ⇒ 缺的格子逐行见 `incomplete` "
                        f"（齐 {out['complete']} 行 < 表里 {len(table_rows)} 行；"
-                       "口径：numeric 通道要 `lean_file`、formal 通道要 `lean_file` 与 "
-                       "`lean_target`、空通道那两格不计；numeric 通道另计索引四格；凭据格"
+                       "口径：numeric 通道要 `lean_file`（数值实验定理那一档另计 "
+                       "`numeric_evidence` / `exhaustion_note` 与索引四格；例子 / 实验只计 "
+                       "`lean_file`）、formal 通道要 `lean_file` 与 "
+                       "`lean_target`、空通道那两格不计；凭据格"
                        "「多填 / 填错类别」按 `_lean_problems` 同一结论判）")
     else:
         out["note"] = (f"{json_path} 的 {len(table_rows)} 行都齐了（每行按它自己的证明通道"
-                       "数：numeric 通道要 `lean_file` 与索引四格、formal 通道要 "
+                       "数：numeric 通道要 `lean_file`（数值实验定理那一档另计 "
+                       "`numeric_evidence` / `exhaustion_note` 与索引四格；例子 / 实验只计 "
+                       "`lean_file`）、formal 通道要 "
                        "`lean_file` 与 `lean_target`、空通道那两格不计；凭据格"
                        "「多填 / 填错类别」按 `_lean_problems` 同一结论判）")
     return out
