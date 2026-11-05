@@ -655,20 +655,26 @@ def test_depth_limit_is_hard_at_the_boundary(tmp_path):
 def test_cycle_detected_on_repeated_key(tmp_path):
     """循环：同一 `(role, action, input_key)` 出现在祖先链上 ⇒ `cycle_detected`。
 
-    链：`M →D(probe_c, same-key)→ F(status)→ D(probe_c, same-key)`。
+    链：`M →D(probe_c, same-key)→ B(run_once)→ D(probe_c, same-key)`。
+
+    中间那一跳为什么是 `B`（2026-11-05 业主裁定 `50c4a1d2` 之后）：造环需要一条
+    "去了还能回来"的边。`F → D` 已随那条裁定取消（`V` 也清空了出边），
+    原来的 `D → F → D` 会先在第 [2] 步的边闸拿到 `forbidden_edge`，
+    于是这条判据测到的是边闸、不是第 [4] 步的循环。盘上仍然双向的只有
+    `B ↔ D` 与 `D ↔ E`，这里取 `B ↔ D`（`D.probe_c` / `B.run_once` 都合法）。
     """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_chain_depth=6, max_concurrency=4, max_direct_children=5,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
-        "D": ("object", TwoStep()), "F": ("object", TwoStep()),
+        "D": ("object", TwoStep()), "B": ("object", TwoStep()),
     })
     d1 = c.summon("D", "probe_c", {"qid": "0000"}, input_key="same-key")
-    f1 = c.summon("F", "status", {"plan_id": "0000"}, by="D",
+    b1 = c.summon("B", "run_once", {}, by="D",
                   parent_task_id=d1.task_id, input_key="f-key")
-    assert (d1.outcome, f1.outcome) == ("ok", "ok")
-    d2 = c.summon("D", "probe_c", {"qid": "0000"}, by="F",
-                  parent_task_id=f1.task_id, input_key="same-key")
+    assert (d1.outcome, b1.outcome) == ("ok", "ok")
+    d2 = c.summon("D", "probe_c", {"qid": "0000"}, by="B",
+                  parent_task_id=b1.task_id, input_key="same-key")
     assert d2.status == "done" and d2.outcome == "refused"
     assert d2.refusal_reason == "cycle_detected"
     assert "same-key" in d2.detail
@@ -678,18 +684,21 @@ def test_cycle_negative_control_different_key_passes(tmp_path):
     """负控（循环）：同样的 (role, action)、不同 input_key ⇒ 放行。
 
     否则"对第二个问题问同一个角色"会被误判成活锁 —— 而那是正常进展。
+
+    链与上一条同形（`M → D → B → D`，见那条的说明）：这里只把最后一跳的
+    input_key 换掉，用来证明被挡下的那个变量确实是 key 而不是边。
     """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_chain_depth=6, max_concurrency=4, max_direct_children=5,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
-        "D": ("object", TwoStep()), "F": ("object", TwoStep()),
+        "D": ("object", TwoStep()), "B": ("object", TwoStep()),
     })
     d1 = c.summon("D", "probe_c", {"qid": "0000"}, input_key="key-1")
-    f1 = c.summon("F", "status", {"plan_id": "0000"}, by="D",
+    b1 = c.summon("B", "run_once", {}, by="D",
                   parent_task_id=d1.task_id, input_key="f")
-    d2 = c.summon("D", "probe_c", {"qid": "0001"}, by="F",
-                  parent_task_id=f1.task_id, input_key="key-2")
+    d2 = c.summon("D", "probe_c", {"qid": "0001"}, by="B",
+                  parent_task_id=b1.task_id, input_key="key-2")
     assert d2.outcome == "ok", "不同 input_key 是进展，不是循环"
     assert d2.depth == 3
 
