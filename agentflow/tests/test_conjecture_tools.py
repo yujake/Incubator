@@ -54,7 +54,7 @@ def _experiment(st: Store, eid: str = "0000", **patch) -> dict:
 
 def _literature(st: Store, lid: str = "0000") -> dict:
     row = {"lit_id": lid, "title": "某文献", "type": "J", "summary": "摘要",
-           "path": f"library/{lid}.txt", "status": "unread",
+           "path": f"{lid}.txt", "status": "unread",
            "created_at": TS, "created_by": "agent-A"}
     with st.tx("literature", actor="test") as tx:
         tx.upsert("literature", row)

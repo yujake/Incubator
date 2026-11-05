@@ -793,7 +793,7 @@ def test_the_manuscript_must_cite_the_literature_it_retrieved(tmp_path: pathlib.
 
     # 先往库里放一条可引的文献（三态纪律：读数要能区分"引了 0 条"与"库里本来没有"）
     lit = S.Literature(lit_id="0000", title="一篇外部论文", type="J",
-                       summary="外部文献的一句话摘要", path="library/0000/x.pdf")
+                       summary="外部文献的一句话摘要", path="0000/x.pdf")
     lit.validate()
     with st.tx("literature", actor="test", note="lit-cite probe") as tx:
         tx.upsert("literature", lit.to_dict(), note="lit-cite probe")
@@ -2105,12 +2105,12 @@ def test_the_citation_fit_check_catches_swapped_and_irrelevant_citations(tmp_pat
                         search_bound={"exponents": [3], "n": 2000})
     with st.tx("literature", actor="test") as tx:
         tx.upsert("literature", S.Literature(lit_id="0000", title="PRIMES is in P", type="J",
-                                             path="library/0000/a.pdf",
+                                             path="0000/a.pdf",
                                              summary="AKS primality test.").to_dict())
     with st.tx("literature", actor="test") as tx:
         tx.upsert("literature", S.Literature(
             lit_id="0001", title="Fermat's Last Theorem for regular primes", type="J",
-            path="library/0001/b.pdf",
+            path="0001/b.pdf",
             summary="Kummer's approach via regular primes.").to_dict())
     _doc_with(st, doc_id="0009", sections=None, claims=[
         {"claim_id": "c1", "evidence_kind": "heuristic", "section": "s",

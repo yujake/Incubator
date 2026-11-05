@@ -211,6 +211,78 @@ def _fill_derived(table: str, data: dict, *, create: bool, patch: Mapping[str, A
         data["dedup_key"] = _dedup.relation_dedup_key(data.get("concept_group_key", ""), data.get("quote") or "")
 
 
+# ------------------------------------------------- `literature.path` 的写侧两格
+
+
+def _normalize_literature_path(table: str, data: dict) -> bool:
+    """剥掉 `literature.path` 上多余的 `library/` 前缀；`True` = 改动过（进 `meta.normalized`）。
+
+    ## 为什么只剥一层、其余形状一个字节不碰（2026-11-05，M4 补写入闸）
+    真机事故：B 用 `table.update` 把 `library/000001/…txt`（比库根多一层）原样写了进去，
+    下游按 `library` 基准拼成 `library/library/000001/…` ⇒ `file_missing`（逐字证据与
+    "注释承诺了一句它没做的事"写在 `schema.literature_path_problem` 的 docstring 里）。
+    `library/` 只是把库根又写了一遍，剥掉它不改变任何语义，所以这一档归一化而不是拒
+    —— 但改动必须回在 `meta.normalized` 上（"我改过你的输入"可查，不是静默改）。
+
+    除此之外一个字节都不改，三条边界各有理由：
+    - `downloads/x.pdf` 是另一个合法坐标系（`search_tools._lit_file` 认它：先 library、
+      再 workspace）。猜它会改掉一条已经跑通的路径；
+    - `../x` / 盘符 / 绝对路径是非法形状，交给 `schema` 的闸拒 —— 在这里"修"等于替调用方
+      猜他想指哪个文件，而猜错的那条路没有任何下游会报错；
+    - `library/library/x` 只剥一层 ⇒ 剩下的 `library/x` 仍被闸拒：不递归猜。
+    """
+    if table != "literature":
+        return False
+    rel = data.get("path")
+    if not isinstance(rel, str) or not rel.startswith(S.LIT_PATH_PREFIX):
+        return False
+    rest = rel[len(S.LIT_PATH_PREFIX):]
+    if not rest:
+        # 只有 `library/` 本身：不是"多一层"，是空路径。别在这里造一个空串交给下游 ——
+        # 空串在盘上同形于"没有 path"，而那个坑（`ok_without_path`）归 schema 的闸去拒。
+        return False
+    data["path"] = rest
+    return True
+
+
+def _literature_path_refusal(ctx: TableContext, *, table: str, rel: Any,
+                             id: str | None = None) -> ToolResult | None:
+    """`literature.path` 的落地判据（形状之外那一半：需要盘）。`None` = 放行。
+
+    ## 为什么"文件不在"放行、"不是普通文件"拒（两条口径分开写清）
+    - 文件不在是可修的状态：这一格本来就是三态（`None` = 没下到 / 有路径 = 声称有
+      全文 / 文件真的在盘上），落地与否由审计期 `verify` 的 `file_missing` 与 B 的
+      `last_mine_error` 点名（与 `relations.dangling_concept` 同一条口径：存在性不归写侧
+      管）。写侧拒它会误伤"先写行、后补字节"的正路（A 的 backfill / `search.retry_pending`）。
+    - 是目录 / 其它非普通文件不是状态，是形状：这一格的承诺就是"能取到正文"，而目录
+      没有任何一个下游读得懂。这一档在写侧就拒。
+    - 解析之后越出 `library/`（软链/`..` 绕过了 `schema` 那一层的形状判据）同样拒：
+      `Store.library_path` 是防穿越的最后一道闸，这里只是把它提前到写侧说清楚。
+    """
+    if table != "literature" or not isinstance(rel, str) or not rel:
+        return None
+    store = getattr(ctx, "store", None)
+    if store is None:
+        # 没有工作区就没有盘可查。这不是"查过了没问题"，只是这一层不在场；工具装配处
+        # （`register(reg, store=...)`）保证了拿得到 store 的调用方不会走到这里。
+        return None
+    try:
+        ap = store.library_path(rel)
+    except StoreError as e:
+        return fail(f"literature.path 解析越出 library/：{e}", table=table, path=rel,
+                    kind="validation", **({"id": id} if id is not None else {}))
+    if ap is not None and ap.exists() and not ap.is_file():
+        what = "一个目录" if ap.is_dir() else "一个非普通文件"
+        return fail(
+            f"literature.path 指向的不是普通文件：{rel!r} 在盘上是{what}。"
+            "这一格要写的是能取到正文的那份文件的相对路径（相对 library/，"
+            "如 `000001/xxx.pdf`）。",
+            table=table, path=rel, kind="validation",
+            **({"id": id} if id is not None else {}),
+        )
+    return None
+
+
 def assert_request_id_in_space(new_id: str) -> str:
     """`r-NNNN` 的编号空间守卫（全项目唯一实现）。
     ## 为什么"转发给 `next_prefixed_id`"还不够
@@ -1695,7 +1767,8 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是新主键字符串（标量），声明不出键集合。
     returns=("data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized "
-             "列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。"
+             "列出这一笔被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 "
+             "`literature.path`（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, "
              "what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"),
     tags=("table", "crud", "write"),
@@ -1710,6 +1783,10 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
       1. 手填主键 ⇒ 受控拒绝（`_hand_typed_id_refusal`，D4）；
       2. 集合字段 ⇒ 排序去重后照收（`schema.normalize_set_fields`，D5），
          改动过的字段名回在 `meta.normalized` 上。
+
+    2026-11-05（M4，FC-27 放权）：`literature.path` 另有两格，判据同样是各自唯一一处 ——
+    `_normalize_literature_path`（剥掉多余的 `library/` 前缀，读数进 `meta.normalized`）与
+    `_literature_path_refusal`（存在但不是普通文件 ⇒ 拒；文件不在 ⇒ 放行，归审计期）。
     """
     try:
         spec = _spec_of(table)
@@ -1735,11 +1812,22 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
         return refused
 
     data: dict[str, Any] = dict(row or {})
+    # ---- `literature.path` 写入前归一化（M4，2026-11-05）：剥掉多余的 `library/` 前缀。
+    # 位置与集合字段归一同一处（预演校验之前）⇒ 预演看到的就是要落盘的那一份；
+    # 只剥一层、其余形状不猜的边界见 `_normalize_literature_path`。
+    path_normalized = _normalize_literature_path(table, data)
     # ---- 集合字段写入前归一（D5，2026-10-28）：把 [`000004`,`000002`] 排成落盘形态而不是拒收。
     # 归一化必须发生在 `_fill_derived` 之前 ⇒ `concept_group_key` / `dedup_key` 看的是
     # 真正落盘的次序；也必须在预演校验之前 ⇒ 预演不会被"未升序"这一档挡下来。
     # 判据只有一处（`schema.normalize_set_fields`），"哪些字段是集合"由 `ARRAY_FIELD_KINDS` 声明。
     normalized = S.normalize_set_fields(table, data)
+    if path_normalized:
+        normalized.append("path")
+    # ---- `literature.path` 的落地判据（需要盘）：存在但不是普通文件 / 解析越界 ⇒ 拒；
+    # "文件不在"放行（口径与理由见 `_literature_path_refusal`）。
+    path_refused = _literature_path_refusal(ctx, table=table, rel=data.get("path"))
+    if path_refused is not None:
+        return path_refused
     explicit_id = data.get(idf)
     probe = str(explicit_id) if explicit_id not in (None, "") else _probe_id(table)
     try:
@@ -1792,7 +1880,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是主键字符串（标量），声明不出键集合。
     returns=("data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔"
-             "被排序去重过的集合字段（空列表 = 一个字节都没动）。"
+             "被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 `literature.path`"
+             "（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / "
              "refused_by_backstop …）。"),
     tags=("table", "crud", "write"),
@@ -1805,6 +1894,9 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     整行验证则天然保证"改完之后这一行仍然是合法的"（比如 `concept_ids` 改完必须仍是
     升序去重的形态 —— 那一档现在由 `schema.normalize_set_fields` 在写前排好序，
     读数落在 `meta.normalized` 上，见 `_hand_typed_id_refusal` 同批的 D5）。
+
+    `literature.path` 的两格（M4，2026-11-05）见 `table.create` 的同名一段：归一化只在
+    这一笔真的写了 path 时做（patch 里没有 path ⇒ 存量原样保留，不替业主改盘）。
     """
     try:
         idf = _spec_of(table)["id_field"]
@@ -1845,9 +1937,20 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                 )
             merged_raw = dict(current)  # 整行起步 = 未在 patch 里出现的字段自动保留
             merged_raw.update(patch)
+            # ---- `literature.path` 写入前归一化（M4）：只在"这一笔真的写 path"时做
+            # （patch 里没有 path ⇒ 盘上那一份原样保留）。存量坏行由业主另行处置，工具不
+            # 替它悄悄改（"不擅自改存量"）；它若挡住这一笔，会由形状闸以可读的拒信点名。
+            path_normalized = ("path" in patch) and _normalize_literature_path(table, merged_raw)
             # ---- 集合字段写入前归一（D5）：与 `table.create` 同一处判据、同一份读数。
             # 位置同样在 `_fill_derived` 之前（派生字段要看落盘的那一份次序）。
             normalized = S.normalize_set_fields(table, merged_raw)
+            if path_normalized:
+                normalized.append("path")
+            if "path" in patch:
+                path_refused = _literature_path_refusal(ctx, table=table,
+                                                        rel=merged_raw.get("path"), id=id)
+                if path_refused is not None:
+                    return path_refused
             _touch_timestamps(table, merged_raw, create=False, patch=patch)
             _fill_derived(table, merged_raw, create=False, patch=patch)
             try:

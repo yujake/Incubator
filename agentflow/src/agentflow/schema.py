@@ -389,6 +389,53 @@ class SearchRequest:
         return asdict(self)
 
 
+#: `literature.path` 的坐标系前缀。这一格永远不写它 —— 见 `literature_path_problem`。
+LIT_PATH_PREFIX = "library/"
+
+
+def literature_path_problem(path: str | None) -> str | None:
+    """`literature.path` 的形状判据（唯一实现）：合法 ⇒ `None`，否则 ⇒ 拒信正文。
+
+    ## 为什么这里专门拒 `library/` 前缀（2026-11-05，M4 补写入闸）
+    改前 `Literature.validate` 的注释逐字写着「path 必须是 `library/` 下的相对路径」，
+    而代码只查了绝对路径 / 盘符 / `..` —— 注释承诺了一句它没做的事。后果在真机上可量：
+    B 用 `table.update` 把 `library/000001/…txt`（比库根多一层）原样写了进去，抽取器按
+    `library` 基准拼成 `library/library/000001/…` ⇒ `file_missing`。真机证据：
+    `literature[000001].path`、`last_mine_error=file_missing:…\\library\\library\\000001\\…`。
+    同族先例：`search_tools._lit_file` 的 docstring 记着 paper-rewrite-78 的同一事故。
+
+    口径：这一格存的是相对 `library/` 的路径（`000001/x.pdf`），库根本身不写进来。
+    所以 `library/` 前缀不是"风格"，是多一层：带它必然解析到库里不存在的
+    `library/library/…`。拒信必须说清该怎么写 —— 只说"不合法"，模型只能再猜一次。
+
+    ## 为什么只判形状、不判盘（"文件在不在"不在这里）
+    `validate()` 是字段级的，手上没有工作区根（同样的话写在 `store._refuse_fake_proof_review`
+    的注释里：那条判据要读盘，所以它落在事务提交块而不是 `validate`）。而且 `validate()` 在
+    `Store.rebuild()` 重放历史时也会被调用 —— 「读历史不是改历史」：存量里的坏行由审计期
+    `verify.file_missing` 点名，不该让重建整个失败。写入期的"落地"判据在
+    `tools/table_tools.py`（那里有 `Store`）：路径存在但不是普通文件 ⇒ 拒；文件不在 ⇒ 放行
+    （可修的状态，存在性归审计期，同 `relations.dangling_concept` 的口径）。
+    """
+    if path is None:
+        return None
+    p = path.replace("\\", "/")
+    if p.startswith(LIT_PATH_PREFIX):
+        rest = p[len(LIT_PATH_PREFIX):]
+        how = f"`{rest}`" if rest else "`000001/xxx.pdf`"
+        return (
+            f"path 不要带 library/ 前缀：这一格存的是相对 **library/** 的路径，"
+            f"写成 {how} 这种形态（库根本身不写进这一格）。"
+            f"带前缀会被下游按 library 基准再拼一层，变成 library/library/… ⇒ file_missing。"
+            f"收到 {path!r}"
+        )
+    if p.startswith("/") or ":" in p or ".." in p.split("/"):
+        return (
+            f"path 必须是 library/ 下的相对路径（工程内相对、不带盘符、不含 `..` 段），"
+            f"收到 {path!r}"
+        )
+    return None
+
+
 @dataclass
 class Literature:
     """文献表的一行。需求字段：文献代号/名称/类型/简述/地址/处理情况。"""
@@ -431,11 +478,14 @@ class Literature:
             raise ValueError(f"type 必须是 {LIT_TYPES} 之一，收到 {self.type!r}")
         if not isinstance(self.processed, bool):
             raise ValueError("processed 必须是 bool")
-        # path 允许为 None（下载失败），但不能是绝对路径或越出 library/ 的相对路径
+        # path 允许为 None（下载失败），但不能是绝对路径、越出 library/ 的相对路径，
+        # 也不能带多余的 `library/` 前缀。判据本体在 `literature_path_problem`（唯一实现，
+        # 那句"为什么注释改前承诺了一句它没做的事"也写在那里）：`table_tools` 的归一化
+        # 与反真空都钉同一个函数名，判据不许有第二份。
         if self.path is not None:
-            p = self.path.replace("\\", "/")
-            if p.startswith("/") or ":" in p or ".." in p.split("/"):
-                raise ValueError(f"path 必须是 library/ 下的相对路径，收到 {self.path!r}")
+            problem = literature_path_problem(self.path)
+            if problem is not None:
+                raise ValueError(problem)
         for i in self.source_request_ids:
             if not i:
                 raise ValueError("source_request_ids 含空值")
