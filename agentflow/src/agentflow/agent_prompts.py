@@ -484,7 +484,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，其余五格
+#: H→[A,E,G]、V→[]（2026-11-05 起 V 没有出边）都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，其余五格
 
 
 
