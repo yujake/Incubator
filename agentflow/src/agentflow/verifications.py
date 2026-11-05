@@ -2680,7 +2680,13 @@ def _grade_recomputed_from_signature(row: Mapping[str, Any], *, root: str | Path
         return out
     ledger = str(gap.get("ledger") or "")
     vid = str(gap.get("verification_id") or "")
-    basis = f"{ledger}#{vid}" if ledger and vid else (ledger or vid)
+    # 两支的 `ledger` 形状不同：台账支是路径（`verifications/<号>.jsonl`），pending 支
+    # 已经带着号（`verifications/pending/<sha>.jsonl#u-000001`，见 `pending_sign` 的
+    # `ledger`）。这里只在"还没带号"时补一次 —— 否则 pending 支会拼成
+    # `…jsonl#u-000001#u-000001`：同一个锚点写两遍，读的人会以为那是两层定位。
+    # 只改拼法，不改读数含义：`basis` 仍然逐字回答"凭哪一份台账的哪一行"。
+    basis = (f"{ledger}#{vid}" if ledger and vid and not ledger.endswith(f"#{vid}")
+             else (ledger or vid))
     # ---- 按通道定目标档（业主 2026-11-04）：穷举程序 + V 签 ⇒ proof，文字证明 ⇒ proof_review
     channel = _exhaustion_proof_channel(out["row"], root=root)
     target = PROOF_KIND if channel.get("found") else PROOF_REVIEW_KIND
@@ -3896,9 +3902,11 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     #: 恒是初始值 `None`。为什么这不是"少一格装饰"：`_grade_recomputed_from_signature`
     #: 把 gap 的这一格原样抄进 `_grade_recomputed.proof_no`（那条读数的形状写死在它的
     #: docstring 里，含 `proof_no`），而 `register_statement` 自 2026-11-05 起在"正文落行
-    #: 之后、tx.upsert 之前"就调回填 —— 那一笔的签通常还只在 pending 台账里 ⇒ 行上的
-    #: `_grade_recomputed.proof_no` 写成 `None`，读的人只能按 canonical 猜，正是
-    #: `_read_proof_no` 的 docstring 点名的"读数里看不出号给错了"。
+    #: 之后、tx.upsert 之前"就调回填 —— 那一笔的签通常还只在 pending 台账里 ⇒ 改前
+    #: 行上的 `_grade_recomputed.proof_no` 写成 `None`。`_read_proof_no` 对"没写号"的
+    #: 约定仍是 canonical（缺省 ⇒ 1；给了坏值 ⇒ 0），所以那条读数丢的不是"号怎么读"，
+    #: 而是"这一签挂的是哪一份"：读的人只能按 canonical 猜，分不出"真的是 #p1"与
+    #: "写的人没填"（3640a508 起由本函数末尾那一行 `proof_no_of(row)` 补上）。
     out["proof_no"] = proof_no_of(row)
     out["verdict"] = verdict_word
     out["rows"] = 1

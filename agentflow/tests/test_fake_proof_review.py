@@ -43,6 +43,8 @@ from agentflow import verifications as VR
 from agentflow import verify as VY
 from agentflow.store import Store
 
+from conftest import seed_statement_row
+
 #: 一条「成立」的审校结论（`record_verification` 会把它规范化再落盘）。
 _OK = {"verdict": "成立", "findings": []}
 _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据",
@@ -364,30 +366,63 @@ def test_the_concept_rows_are_not_judged_by_the_grade_chain(ws: Store):
 
 
 # --------------------------------------- ⑨ 正控走真实的写者：F 的 `_proof_outlet`
+#: `_proof_outlet` 按 steps 拼出来的那一份正文（`1. …（前提）`）；要铺历史行时，
+#: 行上的 `proof_text` 必须与它逐字相同，F 才会把这一笔认成"同一条论证再交一遍"。
+_OUTLET_BODY = "1. 由定义得 L²/4 = N/A²（前提）"
+
+
+def _outlet_fixture(ws: Store) -> tuple[dict, dict, dict, str]:
+    """⑨ 的现场：先铺一条无签历史行（真机 21:06 那一形态），返回 (f 的入参…)。
+
+    为什么不能走"新建一行"那条路（2026-11-05）：严格准入闸下"无签的证明正文"
+    不能经 `register_statement` 落盘；而 `signed_v_handoffs` 又会在登记入口给
+    "即将写的那一份正文"补一份真 pending 签 —— 于是新建那一档会被 2026-11-05 的
+    登记期回填（`verifications._grade_recomputed_from_signature`）当场升到
+    `proof_review`（签是真的，不是 F 自报）。本组要量的"没有签时停在 `heuristic`"
+    因此只能按真机历史行的形态造现场：直接铺一行（不经过准入闸）。改的是
+    "怎么造现场"，不是判据与期望值（同 `test_f_unsigned_output_is_not_a_proof` 的
+    现行做法）。
+    """
+    sg = {"sid": "s1", "text": "对每个内点 P，弦长函数不是常值", "testable": "L_P 不恒等"}
+    product = {"product": "proof", "strategy": "三角多项式",
+               "steps": [{"n": 1, "text": "由定义得 L²/4 = N/A²"}]}
+    plan = {"plan_id": "000000"}
+    full = sg["text"] + "；这一条的可检验形式：" + sg["testable"]
+    seeded = seed_statement_row(
+        ws, proof_text=_OUTLET_BODY, statement_full=full, statement_text=sg["text"],
+        kind="conjecture", label="F 攻坚 000000 子目标 s1",
+        evidence_kind="heuristic",
+        quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
+    return sg, product, plan, str(seeded["stmt_id"])
+
+
 def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     """正控（⑨）：F 的 `_proof_outlet` 按 V 那一签定档，并在复用时就地升档。
 
         真机的时间线（`projects/mp2`）：F/B 在 21:06 落行（那一刻还没有签 ⇒ 只能
         `heuristic`），V 在 21:09 才签。没有任何东西回头改那一行 —— 于是够格的强结果
         永远停在弱档。这条判据钉住修法：同样的论证再交一遍时，F 认出"这一行现在够格了"，
-        就地升档（一行 update，走同一个写入闸），并报 `promoted=True`。"""
+        就地升档（一行 update，走同一个写入闸），并报 `promoted=True`。
+    """
     from agentflow.agent_f import AgentF
 
+    sg, product, plan, stmt_id = _outlet_fixture(ws)
     f = AgentF(ws, config={"workspace_root": str(ws.root)})
-    sg = {"sid": "s1", "text": "对每个内点 P，弦长函数不是常值", "testable": "L_P 不恒等"}
-    product = {"product": "proof", "strategy": "三角多项式",
-               "steps": [{"n": 1, "text": "由定义得 L²/4 = N/A²"}]}
-    plan = {"plan_id": "000000"}
 
     first = f._proof_outlet(product, sg, plan=plan)
-    assert first["ok"] and not first["reused"], first
+    assert first["ok"] and first["reused"], first
+    assert first["promoted"] is False, first
     assert first["evidence_kind"] == "heuristic", first   # 还没有签 ⇒ 不许自报强档
-    stmt_id = first["statement_id"]
     row = next(r for r in ws.rows("statements") if str(r.get("stmt_id")) == stmt_id)
     # B-2：首次登记没有 V 签 ⇒ 必须从猜想进；改前 F 直写 lemma（跳过这一阶段）。
     assert row["kind"] == "conjecture", row
+    assert row["evidence_kind"] == "heuristic", row
+    # 反真空：这一行真的还没有签 —— 凭据面判"不够格"，也没有登记期回填的痕。
+    assert VR.proof_review_gap(ws.root, row).get("ok") is False, row
+    assert VR.GRADE_RECOMPUTED_KEY not in row, row
 
-    _sign(ws, stmt_id, proof_text=str(row["proof_text"]))
+    signed = _sign(ws, stmt_id, proof_text=str(row["proof_text"]))
+    assert signed.get("verification_id"), signed
 
     second = f._proof_outlet(product, sg, plan=plan)     # 同样的论证再交一遍
     assert second["ok"] and second["reused"], second
@@ -399,27 +434,42 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     # B-2 的升档那条路：首次按 conjecture 登记（没有 V 签），V 签完再交一次
     # 之后 kind 跟着证据升离 conjecture。改前 F 一进门就写 lemma（跳过 conjecture 阶段）。
     assert str(after[0].get("kind")) != "conjecture", after[0]
+    # 升档的来路必须是盘上那一签（不是自报）：回填痕逐格点名台账与证明号。
+    trace = dict(after[0].get(VR.GRADE_RECOMPUTED_KEY) or {})
+    assert trace.get("checked") is True, trace
+    assert (trace.get("from"), trace.get("to")) == ("heuristic", "proof_review"), trace
+    assert trace.get("proof_no") == 1, trace
+    assert trace.get("basis") == (
+        f"verifications/{stmt_id}.jsonl#{signed['verification_id']}"), trace
 
 
 def test_fs_outlet_does_not_promote_without_a_signature(ws: Store):
     """反真空（⑨）：没有那一签时 F 不许升档 —— 走同一条路要落回 `heuristic`。
 
         这条与上一条成对：没有它，"升档"可能被写成"每次都写 proof_review"，
-        而那正是这道闸要堵的虚报。"""
+        而那正是这道闸要堵的虚报。签的是**另一版**证明（不是行上那一份）："有签"
+        与"这次交的这一份有签"在这里被分开量。
+    """
     from agentflow.agent_f import AgentF
 
+    sg, product, plan, stmt_id = _outlet_fixture(ws)
     f = AgentF(ws, config={"workspace_root": str(ws.root)})
-    sg = {"sid": "s1", "text": "对每个内点 P，弦长函数不是常值", "testable": "L_P 不恒等"}
-    product = {"product": "proof", "strategy": "三角多项式",
-               "steps": [{"n": 1, "text": "由定义得 L²/4 = N/A²"}]}
-    plan = {"plan_id": "000000"}
     first = f._proof_outlet(product, sg, plan=plan)
-    _sign(ws, first["statement_id"], proof_text="这是**另一版**证明（不是被审的那一份）")
+    assert first["ok"] and first["reused"], first
+    assert first["promoted"] is False, first
+    assert first["evidence_kind"] == "heuristic", first
+    _sign(ws, stmt_id, proof_text="这是**另一版**证明（不是被审的那一份）")
     second = f._proof_outlet(product, sg, plan=plan)
     assert second["ok"] and second["reused"] and second["promoted"] is False, second
+    assert second["evidence_kind"] == "heuristic", second
     row = next(r for r in ws.rows("statements")
-               if str(r.get("stmt_id")) == second["statement_id"])
+               if str(r.get("stmt_id")) == stmt_id)
     assert row["evidence_kind"] == "heuristic", row
+    # 反真空：那一签盖的是另一版 ⇒ 现行这一份的凭据面仍然不成立，也没有回填痕。
+    gap = VR.proof_review_gap(ws.root, row)
+    assert gap.get("ok") is False, gap
+    assert gap.get("state") != "signed", gap
+    assert VR.GRADE_RECOMPUTED_KEY not in row, row
 
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份

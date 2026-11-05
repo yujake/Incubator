@@ -205,10 +205,26 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     row_old, row_new = _row(st_old), _row(st_new)
     assert VR.PROOFS_KEY not in row_old, row_old.keys()
     assert row_old["proof_text"] == P1, row_old
-    # 新前提：登记前已有一份手稿签 ⇒ 落行时 `kind` 可能按证据抬一次，多出
-    # `_kind_upgrade` 这一格内部留痕；它与"两种 #p1 写法是否等价"无关。
-    assert set(row_old) - {"_kind_upgrade"} == set(S.Statement.__dataclass_fields__), sorted(row_old)
-    assert set(row_new) - {"_kind_upgrade"} == set(S.Statement.__dataclass_fields__), sorted(row_new)
+    # 新前提：登记前已有一份手稿签（`_empty_then_sign`）⇒ 这一笔按盘上凭据留两处痕：
+    # - `_kind_upgrade`：`kind` 按第 3 位抬一次（conjecture → theorem）；
+    # - `_grade_recomputed`：`evidence_kind` 按现行签重算一次（2026-11-05 的登记期回填，
+    #   `verifications._grade_recomputed_from_signature`）。
+    # 两者都是"这一档是从盘上哪一签读出来的"，不是调用方自报；它们与"两种 #p1 写法
+    # 是否等价"无关，所以从"只差内部留痕"的集合里各自排除，并逐格断言来路。
+    allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY}
+    assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
+    assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
+    for row, store in ((row_old, st_old), (row_new, st_new)):
+        # 键的存在本身要有凭据面兜底：这一行确实被按签升到 `proof_review`。
+        assert row["evidence_kind"] == VR.PROOF_REVIEW_KIND, row
+        trace = dict(row.get(VR.GRADE_RECOMPUTED_KEY) or {})
+        assert trace.get("checked") is True, trace
+        assert trace.get("to") == VR.PROOF_REVIEW_KIND, trace
+        assert trace.get("from") and trace.get("from") != trace.get("to"), trace
+        assert trace.get("proof_no") == 1, trace
+        last = _ledger(store)[-1]
+        assert trace.get("basis") == (
+            f"verifications/{S.format_id(0)}.jsonl#{last['verification_id']}"), trace
     assert (json.dumps(_scrub(row_old), ensure_ascii=False, sort_keys=True)
             == json.dumps(_scrub(row_new), ensure_ascii=False, sort_keys=True)), (
         "有手稿签时，只给 proof_text 与 proofs=[#p1] 必须落出同一行（等价 #p1）")
