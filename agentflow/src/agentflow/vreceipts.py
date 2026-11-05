@@ -690,7 +690,16 @@ def registration_gap(*, store: Any, label: str, proof_sha: str = "",
 
 def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
                    at: str = "") -> tuple[str, str]:
-    """这一条义务的一句话摘要 + 正文（≤400 字：`set_item_detail` 是给人读的那一格）。"""
+    """这一条义务的一句话摘要 + 正文（上限 = `agent_loop.BOARD_DETAIL_CHARS`，480 字）。
+
+    为什么上限不在这里另拍一个数（2026-11-05，业主裁定「同一笔做」）：改前这里是
+    `body[:400]`，而完整正文 462 字 ⇒ 第 ② 条「明确放弃 + 理由与时间」在进板之前
+    就被切掉了（存进 `tasks.detail` 的结尾是"…；② 确"）。渲染层再怎么调都读不回来 ——
+    写入侧定"存多少"，渲染侧定"念多少"，念的那个不许小于存的；两层共用一个常量，
+    这条缝才在结构上不存在（`agent_loop.BOARD_DETAIL_CHARS` 的注释里写着 480 的实测依据）。
+    """
+    from .agent_loop import BOARD_DETAIL_CHARS
+
     sid = str(detail.get("statement_id") or label.split("#", 1)[0])
     no = int(detail.get("proof_no") or 1)
     sha = str(detail.get("proof_sha256") or "")
@@ -706,7 +715,7 @@ def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
         "认成第 3 位）；② 确实不收录就明确放弃原命题（`status=abandoned` + 可解析的放弃标记，"
         "理由与时间缺一不可）—— 放弃时这一项同时作废。"
     )
-    return summary, body[:400]
+    return summary, body[:int(BOARD_DETAIL_CHARS)]
 
 
 def _live_role_task(store: Any, role: str) -> dict[str, Any]:

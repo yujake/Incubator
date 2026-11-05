@@ -203,6 +203,45 @@ def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
     return text[:limit] + f"…（原文 {len(text)} 字，已截断）"
 
 
+#: 板项正文（`tasks.detail`）的上限 —— 写入侧与渲染侧共用这一个数，不许两处各拍一个。
+#:
+#: 关系一句话（交接口径）：写入侧定"存多少"，渲染侧定"念多少"，念的那个不许小于存的。
+#: 两条都在这个常量上收口：`vreceipts._register_body` 按它截（存多少），
+#: `_clip_board_detail` 也按它截（念多少）；两处调同一个数，就不存在"写者认为完整、
+#: 读者却被再切一刀"的缝（改前正是这样：写者 400、读者 300）。
+#:
+#: 480 是量出来的，不是拍的（2026-11-05 实测，见 `temp/_gapfix_20261105/`）：
+#:
+#: - `b-register` 的完整正文 462 字：收口条件起于 211、"两条路"起于 319、第 ② 条
+#:   「明确放弃…理由与时间…作废」的句号落在 462 —— 480 = 462 + 18 字余量（命题号 /
+#:   稿路径 / 时刻在正常范围内变长）；
+#: - `v-resubmit` 的完整正文 306 字（同一档义务，两条出路在 217–300）。
+#:
+#: 改前的 300 把两条出路都切了：`v-resubmit` 只剩到"…同时"（`作废` 没了），
+#: `b-register` 连第 ② 条都看不见 —— 收件人读到的是"只有必须收录这一条路"。
+#: 超过 480 的只可能来自旧台账 / 别的写者，那时照旧截断并指路
+#: （`BOARD_DETAIL_TRUNCATED`）—— 只留一个省略号，收件人会以为那条路本来就不存在。
+BOARD_DETAIL_CHARS = 480
+#: 板项正文被渲染层截断时补的那句指路（"完整内容在哪"必须写出来）。
+BOARD_DETAIL_TRUNCATED = "…（正文截断过，完整内容在台账 detail）"
+
+
+def _clip_board_detail(value: Any, limit: int | None = None) -> str:
+    """板项正文进提示词的那一格：不超上限原样给；超了才截，并指路"全的在台账 detail"。
+
+    为什么不复用 `_clip`：它截断后只说"原文 N 字，已截断"—— 读的人知道少了，却不知道
+    少的那一段去哪里读。对"两条出路"这种必须完整读到的正文，那等于把第二条路藏起来。
+
+    `limit` 默认取模块级的 `BOARD_DETAIL_CHARS`（调用时才读，不绑死在签名上）：
+    判据要能把上限打回 300 做反真空。
+    """
+    cap = max(1, int(BOARD_DETAIL_CHARS if limit is None else limit))
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    if len(text) <= cap:
+        return text
+    return text[:cap] + BOARD_DETAIL_TRUNCATED
+
+
 #: 观测层渲染单个字段时的下限（给最短的那个字段也不能给到 0 字）。
 FIELD_CHARS_MIN = 120
 #: 落进"审计记录/台账"的字符串上限。观测层给模型看的是预算内的视图，
@@ -2135,7 +2174,7 @@ def board_digest(conductor: Any, *, my_task_id: str,
         mark = "（新）" if fresh else "（已读）"
         lines.append(f"- {mark}[{r['task_id']}] {r.get('kind')}"
                      f"·要{'一个回执' if str(r.get('expects') or '') == 'ack' else '一件活'}"
-                     f" 来自 {r.get('called_by')}：{_clip(r.get('detail'), 300)}")
+                     f" 来自 {r.get('called_by')}：{_clip_board_detail(r.get('detail'))}")
     backlog = len(rows) - len(pick)
     if backlog > 0:
         # 积压必须是可读的事实：否则"读不完"与"没有新东西"在提示词里长得一样。
@@ -2319,7 +2358,7 @@ def _board_item_line(row: Mapping[str, Any]) -> str:
     """一条板项在提示词里的那一行（`board_digest` 与信箱共用同一句话）。"""
     return (f"- （新）[{row['task_id']}] {row.get('kind')}"
             f"·要{'一个回执' if str(row.get('expects') or '') == 'ack' else '一件活'}"
-            f" 来自 {row.get('called_by')}：{_clip(row.get('detail'), 300)}")
+            f" 来自 {row.get('called_by')}：{_clip_board_detail(row.get('detail'))}")
 
 
 def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
