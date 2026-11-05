@@ -160,19 +160,19 @@ _register(Criterion(
 _register(Criterion(
     id="claims.conclusion_strength", faculty="能思辨",
     name="结论有没有强于它挂的证据",
-    question="台账里每一条断言说得有多强，与它挂的证据等级对得上吗？"
+    question="台账里每一条断言说得有多强，与它挂的证据档位对得上吗？"
              "（cross_check 只说明「独立核过一遍」，不是证明）",
     artifact_kind="claims",
     verdicts=("within_evidence", "overclaimed", "unjudgeable"),
     pass_verdicts=("within_evidence",),
     template=(
         "你在审一份数学产出的断言台账，只判一件事：有没有哪一条的结论**强于**它挂的证据。\n"
-        "within_evidence = 每一条的措辞都没有超出它的证据等级"
-        "（例如证据等级是 cross_check 的条目只说「我们独立核过」「数值上一致」，"
+        "within_evidence = 每一条的措辞都没有超出它的证据档位"
+        "（例如证据档位是 cross_check 的条目只说「我们独立核过」「数值上一致」，"
         "没有说「证明」「必然成立」）；\n"
-        "overclaimed = 至少有一条的措辞超出了它挂的证据等级"
+        "overclaimed = 至少有一条的措辞超出了它挂的证据档位"
         "（把 cross_check 写成证明、把数值一致写成一般结论、把转述写成已核对）；\n"
-        "unjudgeable = 文本里看不出证据等级，或条目残缺到判不了（这不是「没问题」）。\n"
+        "unjudgeable = 文本里看不出证据档位，或条目残缺到判不了（这不是「没问题」）。\n"
         "注意：断言本身对不对不由你判（那是实验与形式化的事），你只判「说得比证据强没强」。\n"
         "把每一条超出证据的断言逐字引出来（quote 必须是被审文本里逐字出现的一段）。\n\n"
         "额外上下文：{context}\n\n被审文本：\n---\n{artifact}\n---\n\n" + _JSON_RULES
@@ -204,9 +204,9 @@ NEGATIVE_CONTROLS: dict[str, tuple[str, ...]] = {
         "这是该领域的经典结论，教材上都这么写，所以不必再核。\n",
     ),
     "claims.conclusion_strength": (
-        "| 断言 | 证据等级 | 结论 |\n|---|---|---|\n"
+        "| 断言 | 证据档位 | 结论 |\n|---|---|---|\n"
         "| 主坐标的涨落收敛到正态 | cross_check | 我们证明了该涨落服从中心极限定理 |\n",
-        "| 断言 | 证据等级 | 结论 |\n|---|---|---|\n"
+        "| 断言 | 证据档位 | 结论 |\n|---|---|---|\n"
         "| 距离二阶矩的表达式 | 数值一致 | 该公式对一切维数必然成立 |\n",
     ),
 }
@@ -373,11 +373,11 @@ def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_stre
         level = str(claim.get("evidence_kind") or "（未标）")
         cid = str(claim.get("claim_id") or "")
         title = str((doc or {}).get("title") or "")
-        artifact = (f"断言（claim_id={cid}，证据等级={level}）：\n{text}\n"
+        artifact = (f"断言（claim_id={cid}，证据档位={level}）：\n{text}\n"
                     + (f"（所属稿件：{title}）\n" if title else "")
                     + (doc_context or ""))
         got = judge(criterion_id, artifact, seam=seam,
-                    context=f"逐条判这一条断言。证据等级={level}。")
+                    context=f"逐条判这一条断言。证据档位={level}。")
         if got.problem:
             return {"verdict": "unknown",
                     "reason": f"判据没判成（{got.problem}）：{got.detail or got.why or ''}"[:200]}

@@ -65,7 +65,7 @@ CROSS_CHECK_DISCLAIMER = "数值交叉验证，不构成证明"
 #: 旁边就看到"这一档凭什么"。两档的差别只在这句话里，所以这句话不许被合并成一句。
 PROOF_REVIEW_DISCLAIMER = "逐行审阅过的证明，未经机器检查"
 
-#: 证据等级 → 那一档必须自带的声明（没有的档给空串）。一处定义，写入口与读入口共用。
+#: 证据档位 → 那一档必须自带的声明（没有的档给空串）。一处定义，写入口与读入口共用。
 DISCLAIMER_BY_EVIDENCE_KIND = {
     "cross_check": CROSS_CHECK_DISCLAIMER,
     "proof_review": PROOF_REVIEW_DISCLAIMER,
@@ -78,7 +78,7 @@ def _disclaimer_for(evidence_kind: str) -> str:
 
 
 def wording_ceiling() -> tuple[str, ...]:
-    """允许「定理 / 证明 / 必然」这类措辞的证据等级（唯一口径，两处消费者共用）。
+    """允许「定理 / 证明 / 必然」这类措辞的证据档位（唯一口径，两处消费者共用）。
     
     业主 2026-10-12 的口径（逐字）：「比如写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，但也要能写」。
     
@@ -119,7 +119,7 @@ OVERCLAIM_MARKERS = (
     "proved", "we prove", "is proved", "rigorous proof",
 )
 
-#: 证据等级的中文标签（渲染层用）。英文枚举名是给机器用的受控词表，
+#: 证据档位的中文标签（渲染层用）。英文枚举名是给机器用的受控词表，
 #: 直接出现在给人读的稿件里会让人需要额外翻译一次才能确认它没被夸大。
 EVIDENCE_LABELS = {
     "proof": "形式化核验（proof）",
@@ -851,7 +851,7 @@ def check_proofs(
     测（`temp/r2-d1-probe.txt`）下面四种形态全部写库成功：
     ① `proof_location="PROOF-DOES-NOT-EXIST.lean:1"`（文件根本不在盘上）；② 连 `proof_location` 都不给；③ 只引 `lit:`（不引任何 `exp:` —— 没有任何实验参与过）；
     ④ 引一条 `evidence_kind="cross_check"` 的数值实验却声称 proof。四种的共同后果：`documents` 里出现一条"看起来有形式化背书"的断言，而没有任何检查器参与过；下游（报告、gates）把 
-    `evidence_kind` 当证据等级读。`verify` 侧只有"引用了 `exp:` 时才查那条实验的等级"（`verify.py` 的`proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条
+    `evidence_kind` 当证据档位读。`verify` 侧只有"引用了 `exp:` 时才查那条实验的档位"（`verify.py` 的`proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条
     exp: 都不引"的形态连事后也查不出来。
     ==========================================  ==========================================条件
     要求==========================================  ==========================================引用的 `exp:` 行
@@ -952,7 +952,7 @@ def check_proofs(
                         "claim_id": cid,
                         "kind": "proof_claim_rests_on_weaker_evidence",
                         "detail": (
-                            f"声称 evidence_kind='proof'，但它引用的实验 {ref} 的等级是 "
+                            f"声称 evidence_kind='proof'，但它引用的实验 {ref} 的档位是 "
                             f"{str(row.get('evidence_kind'))!r} ⇒ 断言不能强于它的依据"
                             "（与 `verify.proof_claim_rests_on_weaker_evidence` 同一条口径，"
                             "只是提前到写入现场）"
@@ -1174,7 +1174,7 @@ def render_markdown(
     """把稿件渲染成人可读的 markdown（中文、表格优先、每条断言带代号）。
     风格沿用 `agent_d.write_report`：中文、表格优先、每条结论带代号。
     ====================================  ==========================================表
-    对应约束====================================  ==========================================证据等级统计（proof / cross_check /      FC-10：
+    对应约束====================================  ==========================================证据档位统计（proof / cross_check /      FC-10：
     三档分开计数，禁止单一通过率 heuristic）否定型结论分类（未证明/已证否/未搜索）   FC-25：四种否定分开计数依赖表（带 external_unavailable 标注）
     FC-23：引用的外部结论必须显式可见断言清单（每条带 citations）            FC-02：每条断言都能回答"我引用谁
     "====================================  ==========================================
@@ -1218,16 +1218,16 @@ def render_markdown(
     lines.append("1. **每条断言都带引用**（`citations`，形如 "
                  + citation_prefix_examples() + "）。")
     lines.append("   没有引用的断言在结构上无法进入本稿（`schema.Document.validate` 强制）。")
-    # 证据等级那一段从词表现算（2026-10-13 修）：此前这里写死"只有三档"并列了
+    # 证据档位那一段从词表现算（2026-10-13 修）：此前这里写死"只有三档"并列了
     # 三档（`proof` / `cross_check` / `heuristic`），而下面第 1 节的表按
     # `S.EVIDENCE_KINDS` 逐档出行 —— `proof_review` 加进来之后，同一篇稿子的第 0 节
     # 说"三档"、第 1 节的表却列出四行，自相矛盾。真机读数：
     # `projects/p6t2-research-20261012b/documents/0002.md`（无 Lean 模式那一趟）第 11 行
-    # 逐字是"证据等级只有三档"，而第 19–24 行的表里赫然有 `proof_review` 一行。
+    # 逐字是"只有三档"，而第 19–24 行的表里赫然有 `proof_review` 一行。
     # 后果不只是难看：没有 Lean 的用户读到这句话，会以为"逐行审阅过的证明"这一档
     # 不存在 —— 而那一档正是他这个模式下唯一能承载"定理 / 证明"的凭据。
     _levels = "、".join(f"`{k}`（{EVIDENCE_LABELS.get(k, '')}）" for k in S.EVIDENCE_KINDS)
-    lines.append(f"2. 证据等级共 {len(S.EVIDENCE_KINDS)} 档，且**必须分列**：{_levels}。")
+    lines.append(f"2. 证据档位共 {len(S.EVIDENCE_KINDS)} 档，且**必须分列**：{_levels}。")
     lines.append(f"3. **`cross_check` 不是证明**：这类断言后面自动附「{CROSS_CHECK_DISCLAIMER}」；")
     _pr = DISCLAIMER_BY_EVIDENCE_KIND.get("proof_review", "")
     if _pr and "proof_review" in S.EVIDENCE_KINDS:
@@ -1236,7 +1236,7 @@ def render_markdown(
     lines.append("   合并计数会让人把「没搜过」读成「已证否」。")
     lines.append("")
 
-    # ---- 1. 证据等级统计（FC-10）
+    # ---- 1. 证据档位统计（FC-10）
     ek_count: dict[str, int] = {k: 0 for k in S.EVIDENCE_KINDS}
     unknown_ek = 0
     for c in claims:
@@ -1245,14 +1245,14 @@ def render_markdown(
             ek_count[ek] += 1
         else:
             unknown_ek += 1
-    lines.append("## 1. 证据等级统计（分档计数，不是单一通过率）")
+    lines.append("## 1. 证据档位统计（分档计数，不是单一通过率）")
     lines.append("")
-    lines.append("| 证据等级 | 含义 | 条数 |")
+    lines.append("| 证据档位 | 含义 | 条数 |")
     lines.append("|---|---|---|")
     for k in S.EVIDENCE_KINDS:
         lines.append(f"| `{k}` | {EVIDENCE_LABELS.get(k, '')} | {ek_count[k]} |")
     if unknown_ek:
-        lines.append(f"| （非法等级） | 不在 {S.EVIDENCE_KINDS} 里的取值 | {unknown_ek} |")
+        lines.append(f"| （非法档位） | 不在 {S.EVIDENCE_KINDS} 里的取值 | {unknown_ek} |")
     lines.append("")
     lines.append(
         "说明：一个「通过率 80%」会掩盖「另外 20% 是失败还是没校验」这个决定性差异，"
@@ -1302,7 +1302,7 @@ def render_markdown(
             cid = str(c.get("claim_id") or "?")
             ek = str(c.get("evidence_kind") or "")
             cites = [str(x) for x in (c.get("citations") or [])]
-            lines.append(f"**`{cid}`**｜证据等级 `{ek}`｜引用：{('、'.join(f'`{x}`' for x in cites)) or '**（无引用 —— 违规）**'}")
+            lines.append(f"**`{cid}`**｜证据档位 `{ek}`｜引用：{('、'.join(f'`{x}`' for x in cites)) or '**（无引用 —— 违规）**'}")
             lines.append("")
             # ---- §8.3 的生命周期字段（有才显示；没有就不写，见三态纪律）
             meta: list[str] = []

@@ -576,7 +576,7 @@ CLAIM_FIELDS: dict[str, FieldSpec] = {
         domain=None,
         why=(
             "论文该环境的逐字原文。刻意不放进 `statement`：论文自己会用"
-            "「we prove」「is proved」这类措辞，而台账给同一环境的证据等级往往是"
+            "「we prove」「is proved」这类措辞，而台账给同一环境的证据档位往往是"
             "`cross_check` —— 把原话抄进正文，会让过度声称检查对着论文的措辞报警，"
             "或者诱使作者为了过检而删掉原话。原文留在这里、正文写我方转述，"
             "忠实与不过度声称两件事同时成立。"
@@ -653,7 +653,7 @@ class ClaimIssue:
     `missing_disclaimer`                5       `cross_check` 缺那句"不构成证明"声明
     `uncontrolled_disclaimer`           5       声明写了，但不是这一档的受控那一句
                                                  （2026-10-13 加：自造近义声明此前一路过关）
-    `overclaim`                         6       证据等级 < proof 却用了"证明/定理/必然"这类词
+    `overclaim`                         6       证据档位 < proof 却用了"证明/定理/必然"这类词
     `incomplete_numeric_evidence`       7       `numeric_evidence` 四元组缺键
     `duplicate_claim_id`                8       同一稿件里代号重复
     `checker_error`                     0       检查器自己没跑成（异常被捕获并如实登记）
@@ -1079,7 +1079,7 @@ def _proof_review_disclaimer() -> str:
 
 
 def _wording_ceiling() -> tuple[str, ...]:
-    """哪些证据等级允许用「定理 / 证明 / 必然」这类措辞（唯一实现在 `doc_tools`）。
+    """哪些证据档位允许用「定理 / 证明 / 必然」这类措辞（唯一实现在 `doc_tools`）。
 
     业主 2026-10-12：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
     但也要能写」—— 关掉 Lean 时上限换成 `proof_review`（逐行审阅过的证明），
@@ -1315,7 +1315,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                     )
                 )
 
-    # ---- 2b. 证据等级的两条硬约束（FC-22，本框架既有，参考体例里没有）
+    # ---- 2b. 证据档位的两条硬约束（FC-22，本框架既有，参考体例里没有）
     #
     # 它们与 `schema.Document.validate` 的两条逐字对应（`:1091-1095` 与
     # `scan_claim` 原有的过度声称检查）。放在这一处而不是各写一遍：

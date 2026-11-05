@@ -269,8 +269,8 @@ def test_build_document_writes_row_and_renders_required_tables(g: AgentG, g_stor
         for cite in c["citations"]:
             assert cite in text
     assert DT.CROSS_CHECK_DISCLAIMER in text, "cross_check 的「不构成证明」必须出现在稿件里"
-    # ---- 证据等级三分档统计（FC-10，禁止单一通过率）
-    assert "证据等级统计" in text
+    # ---- 证据档位三分档统计（FC-10，禁止单一通过率）
+    assert "证据档位统计" in text
     for k in S.EVIDENCE_KINDS:
         assert f"| `{k}` |" in text, f"三分档统计缺 {k}"
     # ---- FC-25 的四种否定分开计数

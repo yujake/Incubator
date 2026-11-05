@@ -227,7 +227,7 @@ def compose_report(*, experiment_id: Any, claim: Any, claim_key: Any,
         - 命题：...
         - 程序：code/enum.py（sha256 ...）
         - 搜索空间：{...}
-        - 结论：supports（等级 cross_check）
+        - 结论：supports（档位 cross_check）
 
         ## 程序设计思路
 
@@ -257,7 +257,7 @@ def compose_report(*, experiment_id: Any, claim: Any, claim_key: Any,
         header.append(f"- 搜索空间：{_json_text(search_space)}")
     header.append(
         f"- 结论：{str(result or '').strip() or '（未记）'}"
-        f"（等级 {str(evidence_kind or '').strip() or '（未记）'}）")
+        f"（档位 {str(evidence_kind or '').strip() or '（未记）'}）")
     header.append(f"- 读数落点：{rel or '（实验号不合法，没有落点）'}")
     body = [
         "",
@@ -510,7 +510,7 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     if search_space is not None:
         head.append(f"- 搜索空间：{_json_text(search_space)}")
     head.append(f"- 结论：{str(result or '').strip() or '（未记）'}"
-                f"（等级 {str(evidence_kind or '').strip() or '（未记）'}）")
+                f"（档位 {str(evidence_kind or '').strip() or '（未记）'}）")
     body = [
         "",
         MANUSCRIPT_STATEMENT_HEADING,

@@ -122,7 +122,7 @@ _FOUR_GATE_KEYS_OF_KIND: dict[str, tuple[str, str, str]] = {
     "unsupported_claim": ("证据", "yes",
                           "给这条断言补上出处（`citations` 非空），或把它降为 remark"),
     "overclaim": ("体例", "yes",
-                  "把证明性措辞改成它实际的证据等级；`cross_check` 另需补 `disclaimer`"),
+                  "把证明性措辞改成它实际的证据档位；`cross_check` 另需补 `disclaimer`"),
     "missing_negation_kind": ("体例", "yes",
                               "补 `negation_kind`，或把 `is_negative` 与它改成同一轴"),
     "inconsistent_number": ("体例", "yes",
@@ -525,7 +525,7 @@ def scan_document(
     # "检查器自己没跑成"必须与"跑过、没问题"分开）。只报一个比例会把两者折平 ——
     # 而"审了 100%"与"审的时候检查器崩了"是完全不同的两件事。
     #
-    # 这一格只覆盖"稿件有没有把自己说清楚"（引用/证据等级/否定分类/字段合规），
+    # 这一格只覆盖"稿件有没有把自己说清楚"（引用/证据档位/否定分类/字段合规），
     # 不覆盖"数学对不对" —— 后者的判据是 proof 级证据（FC-22），要另给。
     # 说清这一点是覆盖率可被信任的前提：一个声称"我审过全部断言"的自动审校器
     # 会被读成"数学被验过了"，那不是本函数做的事。
@@ -581,7 +581,7 @@ def scan_document(
                         quote=repr(cites),
                     )
                 )
-        # ---- 证据等级是否合法（与 `doc_tools.scan_claim:217-224` 对齐）
+        # ---- 证据档位是否合法（与 `doc_tools.scan_claim:217-224` 对齐）
         #
         # 这一条曾经只有 G 侧有：H 遇到非法的 `evidence_kind` 时会因为
         # `ek in S.EVIDENCE_KINDS` 这个守卫而直接跳过下面两组检查，
@@ -593,7 +593,7 @@ def scan_document(
                     level="error",
                     target=cid,
                     evidence=f"claim_id={cid} 的 evidence_kind={ek!r} 不在 {S.EVIDENCE_KINDS} 里",
-                    message=f"证据等级必须是 {S.EVIDENCE_KINDS} 之一",
+                    message=f"证据档位必须是 {S.EVIDENCE_KINDS} 之一",
                     quote=repr(ek),
                 )
             )
@@ -945,7 +945,7 @@ def scan_document(
         # `accepted` 读成"两层都查过"。
         "claims_semantically_judged": semantic_check["claims_judged"],
         "note": (
-            "`claims_reviewed` = 逐条字段/引用/证据等级检查真的跑过的断言数；"
+            "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；"
             "`claims_decided` = 其中校验器判成了的（判不了的另计）；"
             "`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数"
             "（没接线时为 0 = **没查**，不是'没问题'）。"

@@ -364,7 +364,7 @@ def _faculty_mechanics(store: Any, documents: list[dict[str, Any]]) -> dict[str,
 
     为什么是这两项：状态报告是"现在什么情况"，而这两项能只用台账算出来 ——
     `conjecture_hygiene` 查猜想卫生（有没有反例路径、有没有把猜想写成结论），
-    `claim_strength_findings` 逐条比"断言说了多强"与"它挂的证据等级"。
+    `claim_strength_findings` 逐条比"断言说了多强"与"它挂的证据档位"。
     另三项（`overview_findings` / `style_findings` / `progress_findings`）要稿件正文
     或前后两次计数快照，状态报告里没有那个输入 —— 不给它编一个。
     """

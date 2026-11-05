@@ -518,12 +518,12 @@ def _lean_md(lean: Mapping[str, Any] | None) -> list[str]:
         "",
         f"- 本次是否开启：{'是' if lean.get('enabled') else '否'}",
         f"- 结论：{lean.get('reason')}",
-        f"- 本次到达的证据等级：{lean.get('evidence_kind') or '无（没有任何一条通过 Lean 检查）'}",
+        f"- 本次到达的证据档位：{lean.get('evidence_kind') or '无（没有任何一条通过 Lean 检查）'}",
     ]
     for c in lean.get("checks") or []:
         lines.append(
             f"- 片段 {c.get('name') or '(无名)'}：{c.get('status')}；"
-            f"证据等级 {c.get('evidence_kind') or '无'}；{c.get('reason')}"
+            f"证据档位 {c.get('evidence_kind') or '无'}；{c.get('reason')}"
         )
     lines.append(
         "- 只有 `verified` 才等于 proof 级证据：含 `sorry` 的文件在 Lean 里"
@@ -589,7 +589,7 @@ def _lean_stage(records: list[CallRecord], *, enabled: bool, run_fn: Any = None)
                 "elapsed_sec": res["elapsed_sec"], "backend_version": res["backend_version"],
                 "source_sha256": res["source_sha256"], "axioms": list(res["axioms"]),
                 "sorry_count": res["sorry_count"], "decl_matches": res["decl_matches"],
-                # 证据等级直接取 `check_lean` 已经算好的那一份口径，
+                # 证据档位直接取 `check_lean` 已经算好的那一份口径，
                 # 不在这里再写一遍 "status == verified 就是 proof"。
                 "evidence_kind": res["evidence"]["evidence_kind"],
                 "proved": res["evidence"]["proved"],
@@ -1367,7 +1367,7 @@ def _phase_5(acquisition, base_prompt, budget_usd, calls_usd, cfg, evidence, exi
         "claims_ledger": split_result.to_dict(),
         # 未接线清单在本次运行里是动态的：真的拆过之后 `claims_ledger` 就不在这里。
         "not_wired": [n["name"] for n in not_wired if n["name"] == "claims_ledger"],
-        # 形式化验证的逐条结果与实际到达的证据等级。只有 `verified` 的那几条
+        # 形式化验证的逐条结果与实际到达的证据档位。只有 `verified` 的那几条
         # 才带 `evidence_kind="proof"` —— 这一层决定 `proof` 是不是谎话，
         # 所以它必须落在产物里，而不是只存在于某次运行的日志里。
         "lean": dict(lean_doc),

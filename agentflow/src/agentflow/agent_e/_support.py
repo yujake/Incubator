@@ -390,7 +390,7 @@ def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str], str]:
         return None, notes, "out_of_vocab"
     return payload, notes, source
 def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
-    """把脚本自报的证据等级规整成 schema 允许的值，并把越权记进 notes。
+    """把脚本自报的证据档位规整成 schema 允许的值，并把越权记进 notes。
 
     这条函数是 FC-22 在运行期的那一半：schema 是写入期的那一半。
     两半都需要 —— schema 拦得住"存进去的谎话"，拦不住"脚本以为自己证明了"。
@@ -407,13 +407,13 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
     if kind == "proof" and method != "formal":
         # 2026-10-23 业主裁定之后，"计算类能不能拿 proof"有了一道真的判据
         # （`numericproof`：搜索空间 + exhaustive + 覆盖说明齐备才够）。
-        # 但脚本自报的等级仍然一个字都不采信 —— 让被判定的对象自己决定"算不算证明"
+        # 但脚本自报的档位仍然一个字都不采信 —— 让被判定的对象自己决定"算不算证明"
         # 等于没有判官。所以这里照旧落到 cross_check（"有数值实验支持"那一档），
-        # 真正的等级由 `build_experiment` 里的 E 签名现算；这一句只负责把
+        # 真正的档位由 `build_experiment` 里的 E 签名现算；这一句只负责把
         # "你自报的那一档没被当真"留在 notes 里。
         notes.append(
             f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ "
-            "拒绝并降级为 cross_check（自报的等级不采信）：等级由 E 按穷尽证据现算 —— "
+            "拒绝并降级为 cross_check（自报的档位不采信）：档位由 E 按穷尽证据现算 —— "
             "脚本要在结构化结论里给 `exhaustive: true`、搜索空间与覆盖说明"
             "（`numericproof.EXHAUSTIVE_KEY` / `SPACE_KEYS` / `ENUMERATION_KEY` / `DESIGN_KEY`），"
             "齐备才算穷举证明。理由：数学里数值/符号/穷举实验只在'整个论域枚举完'"
@@ -642,7 +642,7 @@ def build_experiment(
     与调用方给的 `certificate` / `search_bound`，并把这些事实与该签的结论一起写进
     `observations[E_SIGNATURE_KEY]`（签名者 E、证明理由 exhaustion、程序路径与哈希）。
     脚本自己报的 `evidence_kind` 仍然不采信（`_normalize_evidence_kind` 那一支照旧降级）：
-    等级由 E 现算，不由被判定的对象自报。
+    档位由 E 现算，不由被判定的对象自报。
     """
     from .. import numericproof as _NP
 
@@ -723,16 +723,16 @@ def _result_reason(row: S.Experiment) -> str:
         if _NP.is_signed_exhaustion(row.to_dict()):
             sig = _NP.signature_of(row.to_dict())
             return (
-                f"{row.method} 实验穷尽了整个论域 ⇒ 证据等级 {row.evidence_kind}"
+                f"{row.method} 实验穷尽了整个论域 ⇒ 证据档位 {row.evidence_kind}"
                 f"（签名者 E，理由 {sig.get('proof_reason')}，"
                 f"证明栏写程序 {sig.get('script_path')}；覆盖说明已入台账）")
         return (
-            f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}"
+            f"{row.method} 实验支持该命题，证据档位 {row.evidence_kind}"
             "（有形式化检查器输出）"
             + _formal_status_suffix(row)
         )
     if row.result == "supports":
-        return f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}（不构成证明）"
+        return f"{row.method} 实验支持该命题，证据档位 {row.evidence_kind}（不构成证明）"
     if row.result == "refutes":
         return "实验给出反例 ⇒ disproved（已证否，且反例已登记）"
     return (

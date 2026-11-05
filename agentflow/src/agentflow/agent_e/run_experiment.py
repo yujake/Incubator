@@ -221,7 +221,7 @@ class _RunExperiment:
         if not search_like and (certificate is not None or search_bound is not None):
             raise ExperimentError(
                 f"certificate / search_bound 只对穷举/枚举类方法有效（收到 method={method!r}）——"
-                "它们是「在 B 内没有反例」这类结论的证书与适用范围；别的 method 的证据等级"
+                "它们是「在 B 内没有反例」这类结论的证书与适用范围；别的 method 的证据档位"
                 "由 `_derive` 推导，没有任何地方会读它们"
             )
 
@@ -247,7 +247,7 @@ class _RunExperiment:
             raise ExperimentError(
                 f"E 不做形式化（理由码 {E_NO_FORMAL_REASON}）⇒ name / imports 没有意义"
                 f"（收到 method={method!r}）—— 它们是给检查器的参数，而本岗不起检查器；"
-                "证据等级由 `_derive` 推导。静默忽略会让调用方以为自己指定了检查条件"
+                "证据档位由 `_derive` 推导。静默忽略会让调用方以为自己指定了检查条件"
                 "（说明了 imports，实际什么也没发生）"
             )
 
@@ -343,7 +343,7 @@ class _RunExperiment:
         # 这一轮把参数面补齐之后，它们在这里落到行上：
         #   ① `exhaustionreport.blocks_from` 从这里读 design / enumeration /
         #      search_space 写进报告（报告与台账因此是同一句话）；
-        #   ② `numericproof.exhaustion_problems` 从这里读同一批事实判等级；
+        #   ② `numericproof.exhaustion_problems` 从这里读同一批事实判档位；
         #   ③ 读的人打开 experiments 那一行就能看见 E 报了什么。
         # 优先级与下面 [4d] 的 `search_bound` 一致：调用方显式给 > 脚本自报；
         # 两者不一致时留一句 note（不替它们折中 —— 折中会造出第三个值，
@@ -513,7 +513,7 @@ class _RunExperiment:
             # 与 F 同目录、同三节、同一把 sha 尺（`## 证明` 的正文 = 证明栏三段）。
             #
             # 为什么落在 `row` 之后（2026-11-05 走查 D5）：稿头那一行
-            # `- 结论：…（等级 X）` 必须与台账这一行的 `evidence_kind` 同源，而那一格是
+            # `- 结论：…（档位 X）` 必须与台账这一行的 `evidence_kind` 同源，而那一格是
             # `_support.build_experiment` 里 `numericproof.sign_experiment` 现算的
             # （可能把 `cross_check` 升成 `proof`，也可能因落盘读数不齐降档）——
             # 它要等 `row` 建好才存在。改前这里传的是 `derived["evidence_kind"]`

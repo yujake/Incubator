@@ -7,7 +7,7 @@
 1. 提示词段只给该看的角色：论文段里有 P1–P11 的判据表位置、claims 台账语义、
 期刊体例与完成定义。它给 M/G/H；给 A/B/C/E/F 是噪音 —— 而噪音会稀释它们真正要看的东西。这一条用"该有的都有、不该有的都没有"两个方向钉住。
 2. 结论强于引文：机械半（`faculty_checks.claim_strength_findings`）逐条比对
-"这条断言说了多强"与"它挂的证据等级"，语义半（`judges` 的`claims.conclusion_strength`）带负控准入。两半都由判据本体检查，不靠我口头保证。
+"这条断言说了多强"与"它挂的证据档位"，语义半（`judges` 的`claims.conclusion_strength`）带负控准入。两半都由判据本体检查，不靠我口头保证。
 
 ## 2026-10-13 这一轮改了什么（业主裁定：「paper_package 里那些东西都是古早废案了，
 ## 我们要智能体写文章」）
@@ -333,7 +333,7 @@ def test_claim_strength_accepts_strong_words_only_with_proof_level():
 
 
 def test_claim_strength_separates_cannot_judge_from_within_evidence():
-    """负控（三态）：没有证据等级的断言记 `unjudgeable`，不许折成"没问题"。"""
+    """负控（三态）：没有证据档位的断言记 `unjudgeable`，不许折成"没问题"。"""
     got = FC.claim_strength_findings([{"claim_id": "C3", "text": "随便一句话"}])
     assert got["verdict"] == "unjudgeable", got
     assert got["missing_evidence"] and got["overclaimed"] == [], got
@@ -371,7 +371,7 @@ def test_the_new_criterion_is_registered_with_negative_controls():
 
 def test_the_judge_is_not_wired_without_a_seam(tmp_path: pathlib.Path):
     """负控（三态）：没有接线时这条判据必须落 `judge_not_wired`（不是"通过"）。"""
-    got = JG.judge("claims.conclusion_strength", "| 断言 | 证据等级 |\n|---|---|\n| A | cross_check |",
+    got = JG.judge("claims.conclusion_strength", "| 断言 | 证据档位 |\n|---|---|\n| A | cross_check |",
                    seam=None)
     assert got.problem == "judge_not_wired" and got.ok is False, got.to_dict()
 

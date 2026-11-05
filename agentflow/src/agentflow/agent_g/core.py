@@ -328,7 +328,7 @@ def _selftest() -> int:
     md_path = g.refresh_markdown(doc_id)
     text = Path(md_path).read_text(encoding="utf-8")
     line(f"[6] 重渲染（补上依赖表）：{md_path}（{len(text)} 字符 / {text.count(chr(10))} 行）")
-    for marker in (DT.CROSS_CHECK_DISCLAIMER, "证据等级统计", "否定型结论分类", "依赖（FC-23", "外部不可得"):
+    for marker in (DT.CROSS_CHECK_DISCLAIMER, "证据档位统计", "否定型结论分类", "依赖（FC-23", "外部不可得"):
         line(f"    含「{marker}」：{marker in text}")
     line("    —— 渲染片段 ——")
     for ln in text.splitlines()[:14]:

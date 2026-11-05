@@ -336,12 +336,12 @@
 判据的断言语义（`git diff --numstat` 逐文件 1/1 或 2/2 —— 增删行数相等，
 `docs/READING-MAP.md` 开头那三个读数因此不动）。
 
-### 7.2 未改，逐处登记（改它要动别的东西，先报）
+### 7.2 逐处登记（已改 / 未改分开写）
 
-| 类别 | 落点 | 为什么没动 |
+| 类别 | 落点 | 处置（已改 / 为什么不动） |
 |---|---|---|
 | 同族注释，但**与另一条线共用文件** | `depsection.py:27,190,201,211`、`agent_b/register_statement.py:1692`、`agent_f/core.py:1769` | 本笔开工时这三个文件带着另一条线的未提交改动（那一笔已作为 `33e25783` 落地，改的正是依赖面），同一时间段里 `secretary.py` / `agent_v/core.py` / `conductor.py` 仍在被改。本仓的提交纪律是 `git commit -F 消息 -- 精确路径`，而 pathspec 提交的是**整份文件** ⇒ 与别线共用文件时不碰，免得把别人写了一半的东西卷进这笔提交。这几处的改法就是同一句"等级"→"档位"，留给人手批 |
-| 运行期文案（报告 / 拒信里的字） | `agent_e/_support.py:416,726,730,735`、`exhaustionreport.py:230,260,513`、`judges.py:171`、`runflow.py:521,526` | 改它们会同时改报告与拒信的输出，`tests/test_agent_e.py` / `test_paper_pack.py` / `test_runflow_lean.py` 一族是按字面断言的 ⇒ 要改就得同批改断言（属于"改判据面"，不是改注释） |
+| 运行期文案（报告 / 拒信里的字） | `agent_e/_support.py`、`agent_e/run_experiment.py`、`exhaustionreport.py`、`judges.py`、`runflow.py`、`tools/doc_tools.py`（阅读须知 / 统计表）、`tools/review_tools.py`、`faculty_checks.py`、`claimanatomy.py`、`statusreport.py`、`closing.py`、`formalgw.py`、`agent_g/*` | **2026-11-05 第二批已改**：报告、拒信与读数里的「证据等级」统一成「证据档位」；同批把钉旧字面量的断言迁到新字面量（`test_runflow_lean.py` / `test_agent_g.py` / `test_paper_pack.py`），判定条件一字未改。工具声明（进 golden）与禁改区（`schema.py` / `verify.py` / `tools/verify_tools.py`）仍按下面两行原样登记 |
 | FC-27 禁改区（要 2 名 reviewer） | `schema.py:1224,1239,1607,1674,2335`、`verify.py:887` | 这两份文件在 `.noai-paths` 里（`[schema-migration]` / `[eval-criteria]` / `[auth-audit]`）；`scripts/noai_gate.py --git` 会以退出码 1 要求 2 名 reviewer ⇒ 本笔不碰 |
 | 工具声明（进 golden） | `doc_tools.py:2260`、`review_tools.py:125,596`、`tools/verify_tools.py:23` | 工具描述进 `tests/fixtures/tool_declaration_baseline.json`；改字就要重冻 golden ⇒ 本笔不碰 |
 | 提示词 / 技能文本（进提示词缓存） | `agent_prompts.py:2044`、`agent_skills.py:1717,1768,4037`、`specs/m.py:347` | 改它们要抬 `PROMPT_VERSION` 并重冻 warm fixture（`tests/fixtures/prompt_cache_warm.json`）⇒ 按纪律先报业主，本笔不动 |

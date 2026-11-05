@@ -1256,7 +1256,7 @@ def _file_text(source: str, imports: Sequence[str], audit_name: str) -> str:
 
 
 def _conclude(result: dict, status: str, reason: str) -> dict:
-    """收口：写 status/reason，并把"实际到达的证据等级"一并算好（只此一处）。"""
+    """收口：写 status/reason，并把"实际到达的证据档位"一并算好（只此一处）。"""
     if status not in STATUSES:
         raise ValueError(f"status 必须是 {STATUSES} 之一，收到 {status!r}")
     result["status"] = status

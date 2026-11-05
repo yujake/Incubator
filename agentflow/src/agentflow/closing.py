@@ -5695,7 +5695,7 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
     pollution_unreadable: list[str] = []
     #: 被证否、且确实有结论压在它上面的那些（§9：压在上面的结论不能再算数）。
     #: 与 `own_hole` 分开：`own_hole` 说的是"我们的 proof 级证明压在不可用的命题上"，
-    #: 而这一条不管压在上面的那几条是什么证据等级 —— 只要有人用，就必须处置。
+    #: 而这一条不管压在上面的那几条是什么证据档位 —— 只要有人用，就必须处置。
     pollution_items: list[str] = []
     #: 正文断言层的逐条读数：`{命题号: [{doc_id, claim_id, citation}]}`。
     #: `draft/68` 题 1 选 A 之前这一格不存在（数据形式都没有）；现在它是

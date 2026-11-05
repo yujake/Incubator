@@ -324,7 +324,7 @@ CLAIM_STRENGTH_CODES: tuple[str, ...] = ("overclaim", "inconsistent_status")
 def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
                             codes: Sequence[str] = CLAIM_STRENGTH_CODES,
                             ) -> dict[str, Any]:
-    """逐条比对"这条断言说了多强"与"它挂的证据等级"（能思辨的机械半）。
+    """逐条比对"这条断言说了多强"与"它挂的证据档位"（能思辨的机械半）。
 
     返回 `{"checked", "verdict", "total", "overclaimed", "missing_evidence", "findings"}`：
     - `overclaimed`：`claimanatomy` 判成 `inconsistent_status` 的那些断言（逐条带 code/message）；
@@ -332,7 +332,7 @@ def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
       两栏分开报（三态纪律）。
 
     判不了"这句话到底证明了没有"（那是语义半 `judges.claims.conclusion_strength` 的事），
-    也不自己判"证据等级够不够"（那是 `claimanatomy` 的事）。
+    也不自己判"证据档位够不够"（那是 `claimanatomy` 的事）。
     """
     from . import claimanatomy as CA
 
@@ -341,7 +341,7 @@ def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
     for i, claim in enumerate(claims or ()):
         cid = str(claim.get("claim_id") or f"#{i + 1}")
         if not str(claim.get("evidence_kind") or "").strip():
-            missing.append({"claim_id": cid, "why": "没有证据等级 ⇒ 这一条判不了"})
+            missing.append({"claim_id": cid, "why": "没有证据档位 ⇒ 这一条判不了"})
             continue
         try:
             issues = CA.validate_claim(claim).issues

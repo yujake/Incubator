@@ -9,7 +9,7 @@
 本文件的判据四条：
 
 1. 缺省（`lean=False`）时 lean 仍在未接线清单里，且写的是"没有开启"；
-2. 开着、检查器真跑过 ⇒ 从未接线清单里摘掉，`claims.json` 记下逐条结论与证据等级；
+2. 开着、检查器真跑过 ⇒ 从未接线清单里摘掉，`claims.json` 记下逐条结论与证据档位；
 3. 开着但没跑成（没后端 / 没有片段 / 片段没有具名声明）⇒ 留在清单里，理由写明具体原因；
 4. 开着、跑过、但结论不是 `verified`（含 sorry 那种）⇒ 摘牌，但绝不产出 proof 级证据，
    且进入 unknowns。
@@ -123,7 +123,7 @@ def test_lean_on_and_verified_is_taken_off_the_not_wired_list(store: Store, tmp_
     assert man["lean"]["proved"] == 1 and man["lean"]["evidence_kind"] == "proof"
     md = (tmp_path / "ok" / "report.md").read_text(encoding="utf-8")
     assert "### 形式化验证（Lean）" in md
-    assert "本次到达的证据等级：proof" in md
+    assert "本次到达的证据档位：proof" in md
     assert out["lean"]["ran"] is True
 
 
@@ -201,7 +201,7 @@ def test_sorry_with_exit_zero_never_becomes_proof_evidence(store: Store, tmp_pat
     assert lean["checks"][0]["evidence_kind"] is None
     assert lean["checks"][0]["sorry_count"] == 1
     md = (tmp_path / "sorry" / "report.md").read_text(encoding="utf-8")
-    assert "uses_sorry" in md and "本次到达的证据等级：无" in md
+    assert "uses_sorry" in md and "本次到达的证据档位：无" in md
     man = _load(tmp_path / "sorry" / "run-manifest.json")
     item = next(n for n in man["not_wired"] if n["name"] == "lean")
     assert "uses_sorry" in item["reason"]
@@ -244,7 +244,7 @@ def test_declaration_mismatch_with_exit_zero_never_becomes_proof_evidence(store:
 
 
 def test_timeout_is_recorded_as_not_checked(store: Store, tmp_path: Path):
-    """超时 ⇒ 没查成：证据等级为无、`ran` 为假（检查器还没回话），理由写明超时。"""
+    """超时 ⇒ 没查成：证据档位为无、`ran` 为假（检查器还没回话），理由写明超时。"""
     def _hang(cmd, *, cwd, timeout_sec):  # noqa: ARG001 - 接缝契约
         return {"exit_code": None, "stdout": "elaborating…", "stderr": "", "timed_out": True}
 
