@@ -927,7 +927,7 @@ def _print_grade_backfill(out: Mapping[str, Any]) -> None:
     """把 `verifications.recompute_grades` 的四栏读数打成人能读的表（`--json` 不走这里）。"""
     cols = out["columns"]
     mode = "apply（会写盘）" if out.get("apply") else "dry-run（一个字节都不写）"
-    print(f"按现行 V 签重算 evidence_kind：{out.get('root') or '（没给根）'}    {mode}")
+    print(f"按现行 V 签重算等级：{out.get('root') or '（没给根）'}    {mode}")
     if not out.get("checked"):
         print(f"没查成：{out.get('why') or '（没有理由）'}", file=sys.stderr)
         return
@@ -936,15 +936,19 @@ def _print_grade_backfill(out: Mapping[str, Any]) -> None:
           f"概念行 {len(concepts)} 行不参与四栏（概念不参与等级链）")
 
     will = list(cols.get("will_upgrade") or [])
-    print(f"会升 {len(will)}：")
+    print(f"会动 {len(will)}：")
     for entry in will:
-        print(f"  - {entry.get('statement_id')}  {entry.get('from')} → {entry.get('to')}"
-              f"  （{entry.get('basis') or '凭据见 why'}；通道 {entry.get('channel') or '?'}）")
+        # `from`/`to` 是等级；档位两列并列给出（2026-11-05：判定面读等级）。
+        print(f"  - {entry.get('statement_id')}  等级 {entry.get('from')} → {entry.get('to')}"
+              f"  （档位 {entry.get('from_kind') or '（空）'} → "
+              f"{entry.get('to_kind') or '（空）'}；{entry.get('direction') or '?'}；"
+              f"{entry.get('basis') or '没有签可指'}）")
 
-    top = list(cols.get("already_top") or [])
-    print(f"已是最高 {len(top)}：")
+    top = list(cols.get("already_consistent") or [])
+    print(f"已经一致 {len(top)}：")
     for entry in top:
-        print(f"  - {entry.get('statement_id')}  evidence_kind={entry.get('evidence_kind')}")
+        print(f"  - {entry.get('statement_id')}  等级={entry.get('grade')}、"
+              f"evidence_kind={entry.get('evidence_kind')}")
 
     short = list(cols.get("not_enough") or [])
     states: dict[str, int] = {}
@@ -3734,7 +3738,7 @@ def cmd_answer(args) -> int:
 # ---------------------------------------------------------------- 启动自检（包内源码）
 #
 # 业主 2026-10-22 记下的 F8：一次误伤就能把整条 CLI 打掉 —— 批量替换把
-# `{**q.to_dict(), …}` 变成 `{「q.to_dict(), …}`，于是所有子命令一起 SyntaxError。
+# `{q.to_dict(), …}` 变成 `{「q.to_dict(), …}`，于是所有子命令一起 SyntaxError。
 #
 # 两级，因为两级的代价差三个数量级：
 #   1. `main()` 那一级（`_broken_source_notice`）：只捕 SyntaxError / ImportError，

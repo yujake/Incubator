@@ -5737,10 +5737,14 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
                                    f"（{str(row.get('label') or '')[:40]}）")
         if st in ("refuted", "disputed"):
             # ③ 我们自己的证明压在一条不可用的命题上 ⇒ 洞在我们这边
+            #
+            # 2026-11-05：这里改读等级（`theorem`），不再读 `statements.evidence_kind`
+            # 那一列历史。改前判的是"自报档位 == proof"；一句自报就能让一条
+            # 没有机器可核凭据的命题进 `own_hole`，或者反过来把真定理漏掉。
             for other in stmt_rows:
                 if str(other.get("status") or "") != "active":
                     continue
-                if str(other.get("evidence_kind") or "") != "proof":
+                if _statement_grade(other) != "theorem":
                     continue
                 if str(row.get("stmt_id")) in {str(x) for x in (other.get("derived_from") or [])}:
                     own_hole.append(f"命题 {other.get('stmt_id')} 的证明压在 {row.get('stmt_id')}"
@@ -5838,6 +5842,37 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             rep.status["contradictions"] = "unknown"
 
 
+def _statement_grade(row: Mapping[str, Any]) -> str:
+    """一条 `statements` 行现算的等级（收工门所有命题级判据的唯一读口）。
+
+    唯一入口是 `evidencebits.bits_from_row`（内部 `derive_grade`）；算不出来 ⇒ 空串
+    （"判不了"），调用方按保守方向处理 —— 空串不是 `conjecture`，也不是 `theorem`。
+    """
+    try:
+        return EB.derive_grade(EB.bits_from_row(dict(row)),
+                               kind=str(row.get("kind") or ""))
+    except Exception:  # noqa: BLE001 —— 算不出来要如实说，不许猜一档
+        return ""
+
+
+def _tier_grade(row: Mapping[str, Any]) -> str:
+    """非命题行（`experiments` / `documents.claims`）的档位反算成等级。
+
+    这两张表各有自己的词表（`schema.EXPERIMENT_EVIDENCE_KINDS` / `claimanatomy` 的
+    status × evidence_kind），与命题等级不同名不同义；但收工门判"承重"时用的是同一个
+    等级阈值（`theorem`），所以把它们的档位经 `evidencebits.KIND_TO_GRADE` 反算一次，
+    而不是在三个地方各写一份字面量。反算不出来 ⇒ 空串（不够格）。
+    """
+    return EB.KIND_TO_GRADE.get(str(row.get("evidence_kind") or ""), "")
+
+
+#: T3 是否接受"穷举证书"那一条通道（业主 2026-11-03 裁定接受；2026-11-05 的
+#: "穷举 = Lean = 绝对正确"与它同向）。待裁定：业主正在复核"T3 对穷举的取舍"，
+#: 所以把它留成一个显式常量而不是散在 `_has_t3` 里的分支 —— 改这一格就是改门，
+#: 不需要改判据本体。`True` = 穷举证书与形式化同级（当前口径）。
+T3_ACCEPTS_EXHAUSTION = True
+
+
 def _has_t3(exp: Mapping[str, Any], *, root: Any = None,
             statements: Sequence[Mapping[str, Any]] = ()) -> bool:
     """T3 的机械形态（§10.2）：形式化方法 + proof 级 + 检查器真的说过话。
@@ -5859,10 +5894,16 @@ def _has_t3(exp: Mapping[str, Any], *, root: Any = None,
     "穷举也能拿 proof"这句话在收工门上永远是一个 blocker —— 那一条由下面这个入口解决
     （核 V 的真签），而不是靠不核签解决。
     """
-    if str(exp.get("evidence_kind") or "") != "proof":
+    # 2026-11-05：口径统一到等级（`theorem`）。这一行是 `experiments` 表的一行，
+    # 它的 `evidence_kind` 属实验轴（`schema.EXPERIMENT_EVIDENCE_KINDS`），与命题等级
+    # 词表不同名不同义；所以这里走 `KIND_TO_GRADE` 反算成等级再与 `theorem` 比 ——
+    # 三支（承重命题 / 承重断言 / T3 实验）用的是同一个等级阈值，不是三份档位字面量。
+    if _tier_grade(exp) != "theorem":
         return False
     if str(exp.get("method") or "") == "formal":
         return bool(str(exp.get("verifier_output") or "").strip())
+    if not T3_ACCEPTS_EXHAUSTION:
+        return False
     from . import numericproof as _NP
 
     if not _NP.is_signed_exhaustion(exp):
@@ -6008,8 +6049,11 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         for claim in doc.get("claims") or []:
             if not isinstance(claim, Mapping):
                 continue
-            if str(claim.get("evidence_kind") or "") != "proof":
-                continue          # 非承重（cross_check / heuristic）⇒ 这条门不管它
+            # 2026-11-05：承重断言的口径统一到等级（`theorem`）。这是 `documents.claims`
+            # 自己的证据轴（`claimanatomy` 的 status × evidence_kind），词表与命题等级不同名；
+            # 走 `KIND_TO_GRADE` 反算成等级再比 —— 与承重命题支、T3 实验支同一个阈值。
+            if _tier_grade(claim) != "theorem":
+                continue          # 非承重（conjecture / strong_conjecture）⇒ 这条门不管它
             load_bearing += 1
             cites = {str(c) for c in (claim.get("citations") or [])}
             cited = [(eid, row) for eid, row in exps.items() if f"exp:{eid}" in cites]
@@ -6058,7 +6102,10 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         if not downstream.get(str(s.get("stmt_id"))):
             continue
         stmt_load_bearing += 1
-        if str(s.get("evidence_kind") or "") != "proof":
+        # 2026-11-05：承重命题"是不是已降档"读等级，不读 `evidence_kind`。
+        # 改前判的是"这一列 != 'proof'"；那一列只是历史，可能写着 proof 而五元位
+        # 只支撑到 strong_conjecture（存量 169 条不一致里有一批正是它）。
+        if _statement_grade(s) != "theorem":
             downgraded += 1          # 已降档：这正是允许的出路
     # 四结局的逐条分布（去重后按实验号数；一条行被两条断言引到只算一条）。
     backing_states: dict[str, list[str]] = {s: [] for s in _NP.EXHAUSTION_BACKING_STATES}
