@@ -13,7 +13,7 @@ D 已交出「手稿 000001：C1/C2/C3 成立」，但没有任何人把「立�
 （新投递 / 未消板项 / 待消费子产出）只问"有没有人找我"，不问"盘上的研究做完了
 没有"：板上未结项 0 ⇒ 它每一拍都读成"无事可做" ⇒ 挂机。
 
-## 这一份钉的四件事（a–d；e 是 lint，不进代码）
+## 这一份钉的六件事（a–e；f 是"只挡 M"；lint 另算）
 
 a. 现场形状复刻：statements=0 + 有结论的实验 + 开着的 research_question
    ⇒ M 这一拍 `decision="run"`（不 park），提示词里逐字带着读数与 `next_action`
@@ -21,7 +21,10 @@ a. 现场形状复刻：statements=0 + 有结论的实验 + 开着的 research_q
 b. 反真空：把「研究未尽」读数打桩成空 ⇒ 同一个现场又允许 park（且 a 的断言
    当场变红）。没有这一条，a 可以靠"什么情况下都不 park"骗过去。
 c. 真·无事可做（有命题、有签、有收录、有稿）⇒ 允许 park（M 不是永动机）。
-d. 只挡 M：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 的三条口径
+d. 同一读数连续挡到 `RESEARCH_STALL_LIMIT` ⇒ 报一次受控告警并放开（不许无限空转）。
+e. 读数坏掉（`checked=False` / fingerprint 为空）也走同一条上限，不许变成
+   "没查成 ⇒ 永远挡"的无限空转。
+f. 只挡 M：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 的三条口径
    一个字没改）。
 
 判据本身只有一处实现（`agentflow.researchpending.pending_reading`）：`conductor.patrol`
@@ -378,9 +381,42 @@ def test_the_same_reading_only_blocks_for_a_bounded_number_of_beats(
     assert len(parked) == 1, parked
 
 
+def test_an_unreadable_reading_is_bounded_too(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    """读不成那一档也要有上限：fail-closed 挡，但连续挡到上限同样放开并告警。
+
+    没有这一条，`checked=False`（fingerprint 为空）会让 streak 永远从 1 数起 ——
+    "没查成 ⇒ 不许挂机"在读数坏掉时就变成真正的无限空转。
+    """
+    st, cond, ws = _ws(tmp_path, "unreadable")
+    me = cond.open_top_level_run("M", TASK)
+    child = _child(cond, me)
+    _seed_field_shape(st)
+    CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
+                    task_id=me, role="M")
+    broken = {"checked": False, "pending": True, "gaps": [], "next_action": None,
+              "counts": {}, "fingerprint": "", "reason": "打桩：读数坏了"}
+    monkeypatch.setattr(AgentLoop, "_research_reading", lambda self_: dict(broken))
+    monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
+    gate = _Gate([_tool("clock.now")])
+    run = _loop(st, cond, ws, gate, me).run(
+        TASK, summoned_by="user", my_task_id=me, depth=1)
+
+    assert run.stop_reason == "stop_file", run.to_dict()
+    limit = int(AL.RESEARCH_STALL_LIMIT)
+    assert len(gate.prompts) == limit - 1, gate.prompts
+    assert str(run.park.get("decision") or "") == "park", run.park
+    events, problems = SS.read_session(ws, sid=SID)
+    assert not problems, problems
+    warned = [e for e in events if e.get("kind") == AL.RESEARCH_STALL_EVENT]
+    assert len(warned) == 1, warned
+    assert warned[0]["fingerprint"] == "unreadable", warned[0]
+
+
 # ------------------------------------------------------------------ f 只挡 M
 
-def test_the_new_block_is_m_side_only(        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_new_block_is_m_side_only(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
     """d：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 三条口径一个字没改）。"""
     st, cond, ws = _ws(tmp_path, "dside")
     me = cond.open_top_level_run("D", TASK)

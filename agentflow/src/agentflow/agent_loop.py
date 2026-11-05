@@ -6109,9 +6109,12 @@ class AgentLoop:
             run.park["research_fp"] = ""
             run.park["research_streak"] = 0
             return out
-        fp = out["fingerprint"]
+        # 读不成的那一档没有 gap、也就没有 fingerprint：给它一个固定键，否则
+        # `fp` 恒空 ⇒ streak 永远从 1 数起 ⇒ 永远挡下去（那正是"无限空转"）。
+        fp = out["fingerprint"] or "unreadable"
+        out["fingerprint"] = fp
         previous = str(run.park.get("research_fp") or "")
-        streak = int(run.park.get("research_streak") or 0) + 1 if (fp and fp == previous) else 1
+        streak = int(run.park.get("research_streak") or 0) + 1 if (fp == previous) else 1
         run.park["research_fp"] = fp
         run.park["research_streak"] = streak
         out["streak"] = streak
