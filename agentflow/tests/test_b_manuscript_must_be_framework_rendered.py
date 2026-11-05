@@ -161,6 +161,13 @@ def _stamp_own_manuscript(store: Store, *, sid: str, rel: str) -> None:
     proof = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
     path = pathlib.Path(store.root) / rel
     text = path.read_text(encoding="utf-8")
+    # 2026-11-05 晚（业主）：签块必须有独立台账背书（`vsigns.sign_ledger_backing`）——
+    # 块里写 `verifications/<号>.jsonl#v-000003`，那三行就得真的在台账里。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(str(store.root), statement_id=sid, proof_text=proof,
+                               verdict={"verdict": "成立", "findings": []},
+                               verifier="agent-V", store=store, flip=False,
+                               manuscript=rel)
     path.write_text(VS.stamp_manuscript_sign(
         text, proof_sha=VR.proof_sha(proof), streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",

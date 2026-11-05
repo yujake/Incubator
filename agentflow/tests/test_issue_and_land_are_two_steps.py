@@ -76,6 +76,13 @@ def _ws(tmp_path: pathlib.Path) -> Store:
             "created_at": TS, "created_by": "test",
             "bits": EB.bits_of(proof=True, proof_process=PROOF, kind="theorem"),
         })
+    # 2026-11-05 晚：签必须有独立台账背书（`vsigns.sign_ledger_backing`）——
+    # `issue(ledger="verifications/000000.jsonl#v-000003")` 要真的有一行在前。
+    # 这里落三行真台账（`flip=False`：这一组量的是颁发/落签两步，不是第 3 位）。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(str(st.root), statement_id=SID, proof_text=PROOF,
+                               verdict={"verdict": "成立", "findings": []},
+                               verifier="agent-V", store=st, proof_no=1, flip=False)
     return st
 
 

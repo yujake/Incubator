@@ -110,14 +110,15 @@ def test_1_missing_material_lands_no_pending_row_and_says_so(tmp_path: pathlib.P
 
 # ------------------------------------------------------------------ ③ 反真空
 
-def test_2_complete_material_is_reviewed_but_not_signed_without_a_statement_id(
+def test_2_complete_material_is_reviewed_and_signed_without_a_statement_id(
         tmp_path: pathlib.Path) -> None:
-    """③ 反真空：材料齐 + 判成立 ⇒ 会审照跑、pending 记录照落，但不产签。
+    """③ 反真空：材料齐 + 判成立 ⇒ 会审照跑、三转三行 pending、签落稿上（没号也签）。
 
-    2026-11-05（业主）：没有命题号就没有可签的对象。这一条防两头：
-    ① 护栏别把这一档整个关掉 —— 会审七项照跑、`verdict=成立`、pending 那一行照落；
-    ② 别把"审过"冒充成"签过" —— `kind` 是 `proof_reviewed_not_signed`、
-       `reason=statement_id_missing`、没有签文件、第 3 位不翻。
+    2026-11-05 晚（业主）：「V 就不能假定有号，全签在稿上」—— `命题号=未在册` 是合法
+    形态（真机 `f-proof-000019.md`）。这一条防两头：
+    ① 护栏别把这一档整个关掉 —— 会审七项照跑、`verdict=成立`、pending 三行照落；
+    ② 别把"审过"冒充成"三票齐全的签" —— 每一行都要有 `verification_id` / `at` /
+       `proof_sha256`，签文件的 `passes` 就是那三行。
     """
     store = _store(tmp_path / "ws")
     add_literature(store, S.format_id(0))
@@ -131,13 +132,24 @@ def test_2_complete_material_is_reviewed_but_not_signed_without_a_statement_id(
         proof_manuscript=ER.proof_manuscript_relpath(env["experiment_id"]))
 
     assert got["checked"] is True, got
-    assert got["kind"] == "proof_reviewed_not_signed", got
-    assert got["reason"] == "statement_id_missing", got
+    assert got["kind"] == "proof_unregistered_signed", got
     assert got["verdict"] == "成立", got
-    assert got["signed_bit3"] is False, got
-    # 会审的记录仍在（那是"审过"的证据，不是签）：pending 台账按对象 sha 落行。
+    assert got["signed_bit3"] is False, got   # 没有命题行可翻
+    # 会审的记录仍在（那是"审过"的证据）：pending 台账按对象 sha 落行，一转一行。
     landed = _pending_files(store)
     assert landed, "材料齐、会审判成立，却连会审记录都没有（护栏把这一档整个关掉了）"
-    row = json.loads(landed[0].read_text(encoding="utf-8").splitlines()[0])
-    assert row["verdict"] == "成立", row
-    assert len(str(row.get("object_sha256") or "")) == 64, row
+    rows = [json.loads(ln) for ln in
+            landed[0].read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) == int(VR.SIGN_STREAK_NEED), rows
+    for row in rows:
+        assert row["verdict"] == "成立", row
+        assert len(str(row.get("object_sha256") or "")) == 64, row
+        for key in ("verification_id", "at", "proof_sha256"):
+            assert str(row.get(key) or "").strip(), (key, row)
+    # 签文件的三票就是那三行（不是三个空对象）。
+    sign = json.loads(
+        (pathlib.Path(store.root) / "out" / "vsigns" / f"{got['proof_sha256']}.json")
+        .read_text(encoding="utf-8"))
+    assert [p["verification_id"] for p in sign["passes"]] == [
+        r["verification_id"] for r in rows], sign["passes"]
+    assert sign["ledger"].startswith("verifications/pending/"), sign["ledger"]

@@ -56,26 +56,37 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
-                verdict: str = "成立", sha: str = "") -> str:
+                verdict: str = "成立", sha: str = "", body: str = PROOF) -> str:
     text = MANUSCRIPT
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    want = sha or VR.proof_sha(PROOF)
+    want = sha or VR.proof_sha(body)
+    # 2026-11-05 晚（业主）：签块必须有独立台账背书 —— 稿头自述（`reports/… #V签`）
+    # 是假签。夹具在这里先落一行 pending 台账，再把它的锚点写进块里（真签的形状）。
+    row = VR.record_pending_sign(
+        st.root, proof_text=body,
+        verdict=({"verdict": verdict} if verdict == "成立" else {
+            "verdict": verdict, "defect_step": 2,
+            "quote": "夹具：第 1 步直接取 δ=ε", "why": "夹具：对一般连续函数不成立"}),
+        verifier="agent-V", object_path=REL)
+    ledger = (f"verifications/pending/"
+              f"{str(row.get('object_sha256') or row.get('proof_sha256'))}.jsonl"
+              f"#{row.get('verification_id')}")
     if block and want != VR.proof_sha(PROOF):
         # ③ 号那一档要的是"盖着另一版正文的块"：`write_manuscript_sign` 自 2026-11-02
         # 起会核「这份稿的正文 == 被签的那一份」并拒掉这一笔（body_mismatch），
         # 所以夹具在这里直接拼块（纯字符串），才量得到"B 不借旧版的签"这件事。
         path.write_text(VS.stamp_manuscript_sign(
             text, proof_sha=want, streak=3, need=3, verdict=verdict, signer="V",
-            at="2026-11-02T10:00:00+08:00", ledger=f"{REL}#V签", statement_id="",
+            at="2026-11-02T10:00:00+08:00", ledger=ledger, statement_id="",
             manuscript_id=VS.manuscript_id_of(REL),
             signed=(verdict == "成立")), encoding="utf-8")
     elif block:
         VS.write_manuscript_sign(
             st.root, REL, proof_sha=want, streak=3,
             need=3, verdict=verdict, signer="V", at="2026-11-02T10:00:00+08:00",
-            ledger=f"{REL}#V签", statement_id="", signed=(verdict == "成立"))
+            ledger=ledger, statement_id="", signed=(verdict == "成立"))
     return path.read_text(encoding="utf-8")
 
 
@@ -128,7 +139,7 @@ def test_b_without_the_block_a_self_authored_theorem_is_refused(tmp_path):
 def test_c_a_block_for_another_body_is_not_accepted(tmp_path):
     """③ 签块盖的是另一版 ⇒ 不许借（sha 不符 = stale，不是签过）。"""
     st = _ws(tmp_path)
-    text = _manuscript(st, sha=VR.proof_sha(PROOF + "改一个字"))
+    text = _manuscript(st, body=PROOF + "改一个字")
     got = _register(st, text)
     assert got.get("ok") is not True, got
     assert len(st.rows("statements")) == 0, st.rows("statements")

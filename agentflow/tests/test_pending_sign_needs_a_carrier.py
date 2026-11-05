@@ -138,15 +138,22 @@ def test_d_without_the_carrier_gate_the_inline_row_is_claimed(
 
 # ====================================================================== e 载体形状
 def test_e_the_carrier_shapes() -> None:
-    """纯读：手稿三前缀 / e-proof 报告认；空串、notes、普通文件、目录不认。"""
+    """纯读：正式手稿三前缀 / e-proof 报告认；计划稿、空串、notes、别的路径不认。
+
+    2026-11-05 晚（业主）：`reports/f-proof-plan-<数字>` 与 `reports/f-proof-<数字>.md`
+    长得只差一个 `plan-`，但它是计划稿——合法的落稿名，不是签的载体。真机
+    `f-proof-plan-000011` 上那块 3/3 就是拿它当载体换来的假签，所以它从 `yes` 搬到 `no`。
+    """
     yes = [
         "reports/f-proof-000000.md", "reports/e-proof-000001.md",
-        "reports/b-proof-000002.md", "reports/f-proof-plan-0001.md",
+        "reports/b-proof-000002.md", "reports/f-proof-000000-p2.md",
         "out/experiments/000000/exhaustion.md",
     ]
     no = ["", "notes/proof.md", "foo.txt", "reports/f-proof-000000",
           "reports/f-proof-.md", "out/experiments/000000/report.md",
-          "out/experiments//exhaustion.md", "reports/x/f-proof-000000.md"]
+          "out/experiments//exhaustion.md", "reports/x/f-proof-000000.md",
+          "reports/f-proof-plan-0001.md", "reports/f-proof-plan-0001-p2.md",
+          "reports/b-proof-plan-000016.md"]
     for path in yes:
         assert VS._pending_carrier_path({"object_path": path}) == path, path
     for path in no:

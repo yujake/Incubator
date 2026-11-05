@@ -180,11 +180,12 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
 
 # ============================================================ b 不产签（2026-11-05）
 def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
-    """三转全干净 ⇒ 读数成立，但计划稿不是签的载体、又没有命题号 ⇒ 不产签、不写块。
+    """三转全干净 ⇒ 读数成立，但计划稿不是签的载体 ⇒ 不产签、不写块、不落 pending。
 
-    改前这一条是"块必须出现"的反真空（甲不是"永远不写块"）。2026-11-05 的裁定反过来了：
-    没有命题号就没有可签的对象；要验"块真的会写"，看 `test_b_rewrite_*`（在册那一支，
-    带号）。这一条保留的是它的另一半：计划稿上不许出现签块。
+    2026-11-05 晚（业主）：`命题号=未在册` 是合法形态、签先落稿上（正统路见
+    `test_v_unregistered_manuscript_review.py::test_a_three_clean_rounds_*`）。这一条
+    保留的是它的另一半：计划稿（真机 `f-proof-plan-000011`）拿不到签 ——
+    它是合法落稿名，不是签的载体。
     """
     st = _ws(tmp_path)
     path = _manuscript_file(st)
@@ -195,10 +196,13 @@ def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
 
     assert seam.asked() == 3, seam.asked()
     assert got.get("kind") == "proof_reviewed_not_signed", got
-    assert got.get("reason") == "statement_id_missing", got
+    assert "计划稿" in str(got.get("reason") or ""), got
     text = path.read_text(encoding="utf-8")
     assert text.count(VS.SIGN_MARK) == 0, text
     assert not VS.sign_path(st.root, VR.proof_sha(PROOF_BODY)).exists()
+    pending = pathlib.Path(st.root) / "verifications" / "pending"
+    assert not pending.is_dir() or not list(pending.glob("*.jsonl")), (
+        "计划稿却落了 pending 行（那一行会被当成可按 sha 认领的第三方签）")
 
 
 # ============================================================ c 读侧兼容

@@ -7,8 +7,8 @@
 
 | # | 缺陷（真机读数） | 判据 | 反真空（摘掉闸 ⇒ 红） |
 |---|---|---|---|
-| a | 8 条 3/3 签里 4 条 `statement_id=""` | 没有命题号 ⇒ 受控拒绝、一个字节都不写 | 打桩 `sign_object_gate` 恒放行 ⇒ 签文件出现 |
-| b | 4 条 `ledger` 是稿头自引（`reports/<稿>#V签`） | 台账只认 `verifications/<号>.jsonl#v-…` | 同上（同一道闸） |
+| a | 8 条 3/3 签里 4 条 `statement_id=""` | 没有号不是拒签理由（业主 2026-11-05 晚：`命题号=未在册` 合法）；拒的是"连 pending 台账都没有" | 打桩 `sign_object_gate` 恒放行 ⇒ 签文件出现 |
+| b | 4 条 `ledger` 是稿头自引（`reports/<稿>#V签`） | 台账只认 `verifications/<号>.jsonl#v-…` 与 `verifications/pending/<正文sha>.jsonl#u-…` | 同上（同一道闸） |
 | c | 那 4 条的 `passes` 是三个空占位 | 每一转都要 `verification_id`/`at`/`proof_sha256` | 同上 |
 | d | `f-proof-plan-000011.md` 拿到 3/3 签、`identity_state=resolved` | 计划稿是合法落稿名、但不是签的载体；身份不得 `resolved` | 打桩 `sign_carrier_reading` 恒 ok ⇒ 身份又 `resolved` |
 | e | 000014/000016 只跑了第一步，`evidence_kind` 停在 `heuristic` | 签成之后同一笔里重算 `evidence_kind`（不必第二条命令） | 打桩 `_grade_recomputed_from_signature` ⇒ 停在旧档 |
@@ -96,7 +96,12 @@ def _sign_three(st: Store, sid: str, rel: str) -> dict:
 # ====================================================================== a / b / c
 
 def test_a_a_sign_without_a_statement_id_is_refused(tmp_path: pathlib.Path) -> None:
-    """a：`statement_id=""` ⇒ 受控拒绝，签文件一个都不许出现。"""
+    """a：连台账都不给（`statement_id=""` + `ledger=""`）⇒ 受控拒绝，签文件一个都不许出现。
+
+    2026-11-05 晚（业主）改口径后这一条拒的不是"没有命题号"（`命题号=未在册` 是
+    合法形态），而是"这一签没有任何独立台账背书"：没号要落
+    `verifications/pending/<正文sha>.jsonl#u-<号>`，那才是这一档的落点。
+    """
     st = _ws(tmp_path)
     sha = VR.proof_sha(PROOF)
     got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
@@ -104,7 +109,8 @@ def test_a_a_sign_without_a_statement_id_is_refused(tmp_path: pathlib.Path) -> N
                    statement_id="", passes=_passes(sha), by="secretary:F")
     assert got["written"] is False, got
     assert got["code"] == VS.STATEMENT_ID_MISSING, got
-    assert "没有命题号就没有可签的对象" in got["reason"], got["reason"]
+    assert "没有可签的对象" in got["reason"], got["reason"]
+    assert "没有号不是拒签理由" in got["reason"], got["reason"]
     assert not VS.signs_dir(st.root).exists(), "被拒的颁发建了签目录"
 
 
@@ -244,20 +250,30 @@ def test_the_registration_obligation_cannot_be_closed_by_ack(tmp_path: pathlib.P
 # ====================================================================== f 反真空
 
 def _unplug_sign_gate(monkeypatch) -> None:
-    """把三道必填闸打桩成恒放行（"改前"的现场：唯一写口不再核这三件事）。"""
+    """把必填闸打桩成恒放行（"改前"的现场：唯一写口不再核这些事）。
+
+    2026-11-05 晚这一批是两道：形状闸（`sign_object_gate`：对象 / 台账形状 / 三票）
+    与背书闸（`sign_ledger_backing`：那一行在不在盘上、是不是这一份正文、签不签得住）。
+    反真空要摘的是"这一签凭什么成立"的全部判据，所以两道一起摘。
+    """
     monkeypatch.setattr(VS, "sign_object_gate",
-                        lambda **_kw: {"ok": True, "code": "", "reason": ""})
+                        lambda **_kw: {"ok": True, "code": "", "reason": "",
+                                       "ledger_kind": ""})
+    monkeypatch.setattr(VS, "sign_ledger_backing",
+                        lambda root, ledger, *, proof_sha256: {
+                            "checked": True, "ok": True, "code": "", "row": {},
+                            "path": "", "verification_id": "", "why": "夹具：摘掉背书闸"})
 
 
-def test_f_a_without_the_gate_an_empty_statement_id_writes_a_sign(tmp_path, monkeypatch) -> None:
-    """f-a：摘掉闸 ⇒ a 当场红（没有命题号也写出了签文件）。"""
+def test_f_a_without_the_gate_an_empty_ledger_anchor_writes_a_sign(
+        tmp_path, monkeypatch) -> None:
+    """f-a：摘掉闸 ⇒ a 当场红（连台账都没有也写出了签文件）。"""
     _unplug_sign_gate(monkeypatch)
     st = _ws(tmp_path)
     sha = VR.proof_sha(PROOF)
     wrote = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
-                     artifact_path="reports/f-proof-000013.md",
-                     ledger=f"verifications/{SID}.jsonl#v-000003", statement_id="",
-                     passes=_passes(sha), by="secretary:F")
+                     artifact_path="reports/f-proof-000013.md", ledger="",
+                     statement_id="", passes=_passes(sha), by="secretary:F")
     assert wrote["written"] is True, wrote
     assert VS.sign_path(st.root, sha).is_file()
 

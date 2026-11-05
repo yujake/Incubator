@@ -86,7 +86,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from .. import schema as S   # 命题号形态的唯一来源（当前宽度 + 旧四位读侧兼容）
 from .. import statementbody as _SB   # D2：命题正文的唯一读口
@@ -315,7 +315,7 @@ def missing_material_detail(verdict: Mapping[str, Any],
         return ""
     return (
         f"穷举型证据会审缺材料（{'; '.join(missing) or '没点名'}）⇒ 这一格"
-        "**没查成**：既不判「成立」（缺材料不许判成立）、也不判「有毛病」"
+        "没查成：既不判「成立」（缺材料不许判成立）、也不判「有毛病」"
         "（没有找到缺陷，不许按缺陷打回 F），台账里不留行。"
         "补上缺的那几块之后重新送审（会审的七项读数在 exhaustion_review 里）。")
 
@@ -334,7 +334,7 @@ def _read_only_facts(store: Any, statement_id: str) -> str:
         rows = []
     hit = next((r for r in rows if str(r.get("stmt_id") or "") == str(statement_id)), None)
     if hit is None:
-        lines.append(f"- 命题 {statement_id}：台账里没有这一行（**没登记 ≠ 不存在**）")
+        lines.append(f"- 命题 {statement_id}：台账里没有这一行（没登记 ≠ 不存在）")
     else:
         lines.append(
             f"- 命题 {statement_id}：kind={hit.get('kind')!r} status={hit.get('status')!r} "
@@ -392,6 +392,41 @@ def _signed_ledger_row(root: Any, statement_id: str, proof_no: int) -> dict[str,
     one = [r for r in rows if VR.proof_no_of(r) == int(proof_no)]
     signed = VR.signed_rows(one)
     return dict(signed[-1]) if signed else {}
+
+
+def _pending_ledger_ref(row: Mapping[str, Any]) -> str:
+    """pending 台账行 ⇒ 锚点 `verifications/pending/<key>.jsonl#<verification_id>`。
+
+    为什么单独一格（2026-11-05 晚）：没号先签那一档的"背书"就是这一串，签文件、签块、
+    返回值三处都要指向同一行 —— 三处各拼一次，拼法迟早分家（`object_sha256` 与
+    `proof_sha256` 谁在前、`u-` 前缀带不带）。全仓只在这里拼。
+    """
+    key = str(row.get("object_sha256") or row.get("proof_sha256") or "").strip()
+    vid = str(row.get("verification_id") or "").strip()
+    if not key or not vid:
+        return ""
+    return f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl#{vid}"
+
+
+def _passes_with_tickets(passes: list[dict[str, Any]],
+                         rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把每一转的读数与它刚落下的那一行 pending 台账并成一张真票。
+
+    没号先签那一档的三票必须是 `verification_id` / `at` / `proof_sha256` 三格齐全
+    （业主 2026-11-05 晚：「三票有空/不齐 ⇒ 拒」）。改前这一档的 `passes` 只有
+    `pass` / `verdict` / `unresolved_errors` 三格，三格全空的占位一样的形状 ——
+    `vsigns.sign_object_gate` 的 `passes_incomplete` 因此永远会拒它。
+    这里按同一趟的第 i 转配第 i 行（`pending_rows` 的追加序 = 转序）。
+    """
+    out: list[dict[str, Any]] = []
+    for i, one in enumerate(passes):
+        ticket = dict(one)
+        row = dict(rows[i]) if i < len(rows) and isinstance(rows[i], Mapping) else {}
+        ticket["verification_id"] = str(row.get("verification_id") or "")
+        ticket["at"] = str(row.get("at") or "")
+        ticket["proof_sha256"] = str(row.get("proof_sha256") or "")
+        out.append(ticket)
+    return out
 
 
 class AgentV:
@@ -799,11 +834,13 @@ class AgentV:
                 pending = self._review_without_statement(text=text, no=no)
                 if pending is not None:
                     return self._finish_unsigned_review(out, statement_id=sid, no=no, got=pending)
-                # ---- 2026-11-02（业主：「V 签先放在 F 的手稿里，让 B 录入」）----
+                # ---- 2026-11-02 / 2026-11-05 晚（业主：「V 就不能假定有号，全签在稿上，
+                #      B 侧录入时从稿拿签。这是已有口径」）----
                 #
                 # 未在册 + 给了手稿（或正文）⇒ 走「读稿审、签块盖回手稿」那一支。
-                # 落点不是 `verifications/<号>.jsonl`（没有号），也不是 pending 台账
-                # （业主 2026-11-02 否掉了那个落点）—— 是手稿里那一行签块。
+                # 落点有两处、互不替代：签块在 `reports/(f|b|e)-proof-<数字>.md` 上，
+                # 独立背书在 `verifications/pending/<正文 sha>.jsonl`（三转三行）。
+                # 改前这一支在 `vsigns.issue` 的「没有命题号 ⇒ 不许签」那道闸上整条死掉。
                 if not sid and (str(text or "").strip()
                                 or str(proof_manuscript or "").strip()):
                     unregistered = self._review_unregistered_prose(
@@ -812,8 +849,8 @@ class AgentV:
                         return self._finish_unregistered(out, no=no, got=unregistered)
                 out["kind"] = "statement_missing"
                 out["reason"] = "statement_missing"
-                out["detail"] = (f"命题 {sid} 不在 statements 里 ⇒ **没审**"
-                                 "（不是「审了、有毛病」）；台账里**不留行** —— "
+                out["detail"] = (f"命题 {sid} 不在 statements 里 ⇒ 没审"
+                                 "（不是「审了、有毛病」）；台账里不留行 —— "
                                  "留一行会把「没查成」冒充成「审过了」。"
                                  "先把这条命题登记了（B 的 register_statement）再来审。")
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
@@ -1904,24 +1941,31 @@ class AgentV:
     def _review_unregistered_prose(self, *, text: str, manuscript: str = "",
                                    no: int = 1, b_manuscript: bool = False,
                                    statement_full: str = "") -> dict[str, Any] | None:
-        """未在册的一份散文证明：三转判完把签块盖回它那一份手稿（2026-11-02）。
+        """未在册的一份散文证明：三转判完把签块盖回它那一份手稿（2026-11-02 起）。
 
-        业主逐字：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到。」
-        改前 pending 落点只对穷举型证据开放（:meth:`_review_without_statement`），而散文
-        证明必须先让 B 登记才拿得到号 ⇒ F 的交差挂在 B 的动作上。这一支让 V 直接对
-        还没在册的一份手稿落签：签块进手稿（`vsigns.write_manuscript_sign`），
-        B 收录时从手稿里读到（`vsigns.manuscript_sign_reading`）。
+        业主 2026-11-05 晚逐字（这一版的口径）：
+        「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签。这是已有口径」。
+
+        所以这一支是正统主路，不是"未在册的例外"：
+
+        - 签的载体是稿上那一行签块（`reports/(f|b|e)-proof-<数字>.md`）；
+        - 独立背书的台账是 `verifications/pending/<正文 sha>.jsonl`（三转三行，
+          `verification_id` / `at` / `proof_sha256` 三票齐全）；
+        - 签块上的 `命题号=未在册` 是合法形态（真机 `f-proof-000019.md` 就是）；
+        - B 收录时按正文 sha 从稿上拿签（`vsigns.bits_after_sign` → `sign_ledger_backing`：
+          台账指得回 V 的行才算真签，指向稿自己的是假签）。
 
         ## 判据（与在册那一支同一把尺，判据本体都在 `verifications` / `vsigns`）
 
         - 三转（`review_pass_bound()` == `verifications.SIGN_STREAK_NEED`）都判「成立」、
-          无未解决 error ⇒ 写签块（`已签=true；连续=need/need`）；
+          无未解决 error ⇒ 三转各落一行 pending 台账，再写签块（`已签=true；连续=need/need`）；
         - 任一转判出「有毛病」⇒ 立刻停；不写块（2026-11-03 甲口径：负判不是签，
           `draft/178`「V 不写手稿里的签块」），判词落
           `verifications/pending/<正文 sha>.jsonl`，F 的 `delivery_reading` 读成「未通过」；
         - 任一转拿不到合法结论（没缝 / 空回复 / 解析失败）⇒ `checked=False`、一个字节都
           不写（"没查成"不许冒充"审过了"，与 `no_proof_text` 同一条纪律）；
-        - 已经签过（稿里已有 sha 相符的签块）⇒ 不重复审、不重复写（同一份正文不重复判）。
+        - 已经签过（稿里已有 sha 相符的签块）⇒ 不重复审、不重复写（同一份正文不重复判）；
+        - 计划稿（`*-proof-plan-<数字>`）是合法落稿名，但不是签的载体 ⇒ 签不落它。
 
         ## 为什么先判满三转再写块
 
@@ -2089,15 +2133,55 @@ class AgentV:
                     if stopped != "signed" else "没有手稿落点"),
         }
         if stopped == "signed" and rel:
+            # ---- 2026-11-05 晚（业主）：计划稿是合法落稿名，但不是签的载体 --------
+            #
+            # 「先落计划名、拿到号再改名」是 F 的既有工作流，`parse_manuscript_name`
+            # 一个字节都不改；但签只认 `reports/(f|b|e)-proof-<数字>.md`。真机
+            # `f-proof-plan-000011` 上那块 3/3 就是从这里放进来的。判在写 pending 台账
+            # 之前：盘上不留"永远认领不了"的行。三转读数照给（看过、没签），只是不构成签。
+            _carrier = _VS.sign_carrier_reading(rel)
+            if not _carrier.get("ok"):
+                stopped = "reviewed_unsigned"
+                block_write["code"] = str(_carrier.get("code") or "not_a_sign_carrier")
+                block_write["why"] = (
+                    f"`{rel}` 不是签的载体：{_carrier.get('reason') or ''}"
+                    " ⇒ 看过、没签（三转读数照给，一个签字节都不落：不落 pending 台账、"
+                    "不颁发签文件、稿上不写签块）")
+        if stopped == "signed" and rel:
+            # ---- 2026-11-05 晚（业主）：没号先签是正统主路 --------------------
+            #
+            # 原话：「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签。这是已有口径」。
+            # 所以这一档不是「被拒的未在册」，而是主路：
+            #   ① 三转各落一行 `verifications/pending/<正文 sha>.jsonl`（一行一转 ⇒
+            #      `verification_id` / `at` / `proof_sha256` 三票齐全，不是三个空对象）；
+            #   ② 签照旧由收方秘书落回稿上（`reports/(f|b|e)-proof-<数字>.md` 的签块）；
+            #   ③ 签文件里的 `ledger` 指最后一转那一行（pending 台账 = 这一签的独立背书）。
+            # 改前这一档在 `vsigns.issue` 的 "没有命题号 ⇒ 不签" 那道闸上整条死掉：
+            # 三转判完一个字节都不写（探针 `before.txt` ①：盘上连 `verifications/` 都没有）。
+            try:
+                pending_rows = [VR.record_pending_sign(
+                    self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
+                    verifier=self.actor, object_path=rel)
+                    for i in range(len(judged))]
+            except (VR.VerificationError, OSError) as exc:
+                return {"failed": True, "reason": "ledger_unwritable",
+                        "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
+                                   "这一份没查成（签没有落点，必须重审）"),
+                        "passes": passes, "manuscript": rel}
+            pending = pending_rows[-1] if pending_rows else {}
+            passes = _passes_with_tickets(passes, pending_rows)
             block_write, issued, landed = self._issue_and_land_unregistered(
                 rel=rel, sha=sha, streak=streak, need=need, no=no,
-                passes=passes, at=at, block_write=block_write)
+                passes=passes, at=at, block_write=block_write,
+                ledger=_pending_ledger_ref(pending))
         elif stopped == "reviewed_unsigned":
-            # 看过、没签：这一档一个字节都不写（没有稿就没有签的落点）。
+            # 看过、没签：这一档一个字节都不写（没有稿 / 计划稿都没有签的落点）。
             # 不落 pending：那一行按正文 sha 可认领，B 会把它当"有人签过"。
-            block_write["why"] = (
-                "没有手稿（`proof_manuscript`）⇒ 只能看过、不能签："
-                "签块 / `## 依赖` 段 / 按号命名这三样都只在文件上")
+            # 计划稿那一档的 `why` 已经在上面写好（`code` 非空）⇒ 不覆盖它。
+            if not str(block_write.get("code") or "").strip():
+                block_write["why"] = (
+                    "没有手稿（`proof_manuscript`）⇒ 只能看过、不能签："
+                    "签块 / `## 依赖` 段 / 按号命名这三样都只在文件上")
         else:
             # 负判：只落 pending 台账（不写块）；正判而没有手稿落点：签也只能落这里。
             try:
@@ -2117,8 +2201,9 @@ class AgentV:
                 "verdict": verdict_word, "findings": list(last.get("findings") or []),
                 "defect_step": last.get("defect_step"),
                 "unresolved_errors": int(last.get("unresolved_errors") or 0),
-                "reason": (("（未在册）看过、没签：没有手稿（`proof_manuscript`）"
-                            "⇒ 这一签没有载体，签只能落在稿上")
+                "reason": (("（未在册）" + (str(block_write.get("why") or "")
+                                            or ("看过、没签：没有手稿（`proof_manuscript`）"
+                                                "⇒ 这一签没有载体，签只能落在稿上")))
                            if stopped == "reviewed_unsigned"
                            else ("（未在册）"
                                  + (str(block_write.get("why") or "") if stopped == "signed"
@@ -2289,12 +2374,27 @@ class AgentV:
                     if stopped != "signed" else "没有手稿落点"),
         }
         # ---- 台账那一行：正判也要落（B 的第三方签字闸读的就是它） ----
+        #
+        # 2026-11-05 晚：正判那一档与散文那条路同一把尺 —— 一转一行，三转就是三张
+        # 真票（`verification_id` / `at` / `proof_sha256` 齐全），签的 `passes` 直接从
+        # 这三行取；负判只落判词那一行（负判不是签）。改前正判也只落一行、`passes` 三格
+        # 是空的 ⇒ `sign_object_gate` 的 `passes_incomplete` 会拒它。
         try:
-            pending = VR.record_pending_sign(
-                self.workspace_root, proof_text=body, verdict=last,
-                verifier=self.actor,
-                object_sha256=str(reviewed.get("report_sha256") or ""),
-                object_path=(str(reviewed.get("report_path") or "") or rel))
+            if stopped == "signed":
+                pending_rows = [VR.record_pending_sign(
+                    self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
+                    verifier=self.actor,
+                    object_sha256=str(reviewed.get("report_sha256") or ""),
+                    object_path=(str(reviewed.get("report_path") or "") or rel))
+                    for i in range(len(judged))]
+                pending = pending_rows[-1] if pending_rows else {}
+                passes = _passes_with_tickets(passes, pending_rows)
+            else:
+                pending = VR.record_pending_sign(
+                    self.workspace_root, proof_text=body, verdict=last,
+                    verifier=self.actor,
+                    object_sha256=str(reviewed.get("report_sha256") or ""),
+                    object_path=(str(reviewed.get("report_path") or "") or rel))
         except (VR.VerificationError, OSError) as exc:
             return {"failed": True, "reason": "ledger_unwritable",
                     "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
@@ -2303,7 +2403,8 @@ class AgentV:
         if stopped == "signed":
             block_write, issued, landed = self._issue_and_land_unregistered(
                 rel=rel, sha=sha, streak=streak, need=need, no=no,
-                passes=passes, at=at, block_write=block_write)
+                passes=passes, at=at, block_write=block_write,
+                ledger=_pending_ledger_ref(pending))
         reading = dict(block_write.get("reading") or {})
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
@@ -2320,13 +2421,20 @@ class AgentV:
     def _issue_and_land_unregistered(self, *, rel: str, sha: str, streak: int,
                                      need: int, no: int,
                                      passes: list[dict[str, Any]], at: str,
-                                     block_write: dict[str, Any]
+                                     block_write: dict[str, Any],
+                                     ledger: str = ""
                                      ) -> tuple[dict[str, Any], dict[str, Any],
                                                 dict[str, Any]]:
         """未在册正判的那一笔：V 出信封，秘书落（2026-11-03 件三）。
 
         为什么单独一个方法：`_review_unregistered_prose` 已经接近 200 行（repo survey
         的软判据按函数量体量），把"颁发 + 落签"这一段抽出来，判据那一边一行不增。
+
+        ## `ledger`：这一签的独立背书（2026-11-05 晚，业主）
+        没号那一档的 `ledger` 必须是 `verifications/pending/<正文sha>.jsonl#u-<号>`
+        （调用方给，:func:`_pending_ledger_ref` 是唯一的拼法）。改前这里写死
+        `f"{rel}#V签"` —— 那正是「稿头自述当台账」的假签形状（真机
+        `b-proof-000016` / `f-proof-plan-000011`），`vsigns.sign_object_gate` 现在会拒它。
 
         ## V 只做颁发这一半（结构判据，不靠约定）
         改前这里直接 `vsigns.land(by=<从 conductor 读来的角色>)` —— `by=` 只是 V 的代码
@@ -2354,7 +2462,7 @@ class AgentV:
         try:
             issued = _VS.issue(
                 self.workspace_root, artifact_sha=sha, streak=streak, need=need,
-                artifact_path=rel, ledger=f"{rel}#V签", statement_id="",
+                artifact_path=rel, ledger=ledger, statement_id="",
                 proof_no=no, passes=passes, at=at, by=who)
         except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报
             issued = {"written": False, "reason": (
@@ -2451,33 +2559,25 @@ class AgentV:
         manuscript_write = dict(got.get("block_write") or {})
         issued = dict(got.get("issued") or {})
         landed = dict(got.get("landed") or {})
-        #: 负判的判词仍在 pending；正判而没有手稿的那一档不落签（见
-        #: `_finish_unsigned_review`）。
-        pending_ledger = ""
-        if pending:
-            key = str(pending.get("object_sha256") or pending.get("proof_sha256") or "")
-            pending_ledger = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl#"
-                              f"{pending.get('verification_id') or '?'}")
+        #: 负判的判词仍在 pending；正判那一档的 pending 三行就是这一签的票（没有手稿
+        #: 的那一档不落签，见 `_finish_unsigned_review`）。
+        pending_ledger = _pending_ledger_ref(pending) if pending else ""
         if stopped == "signed":
-            if issued.get("code") == "statement_id_missing":
-                # 2026-11-05（业主）：「没有命题号就没有可签的对象」。三转读数照给，
-                # 但它不构成签 —— 这一档与"看过、没签"同一个诚实度（`signed_bit3=False`），
-                # 区别只在原因：缺的是号，不是手稿。
-                record = (str(issued.get("reason") or "")
-                          + f"这一趟的三转判定（{got.get('verdict') or '（无结论）'}，"
-                            f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
-            elif manuscript_write.get("written"):
+            if manuscript_write.get("written"):
                 record = (f"签块由收方秘书落进了 `{got.get('manuscript')}`（"
-                          f"连续 {block.get('streak')}/{block.get('need')} 成立）——B 收录这条命题时"
-                          "从手稿里读到它，第 3 位就翻上去；这里 `signed_bit3=False` 是诚实的："
-                          "没有命题行可翻。")
+                          f"连续 {block.get('streak')}/{block.get('need')} 成立；"
+                          f"背书台账 `{pending_ledger or '（没有）'}`）——B 收录这条命题时"
+                          "从稿上读到它、按正文 sha 认领；这里 `signed_bit3=False` 是诚实的："
+                          "没有命题行可翻。没有命题号是这一档的常态（业主 2026-11-05："
+                          "V 不假定有号，全签在稿上）。")
             elif issued.get("written") or issued.get("idempotent"):
                 # 2026-11-03 件一：V 只颁发。颁发了而没有收方秘书（父角色读不到 / 直调）
                 # ⇒ 块没落，F 的读数仍是「待签」；不许拿"签已颁发"冒充"稿上有块"。
                 record = (f"签已颁发（`{issued.get('path') or '（签文件）'}`，信封→"
                           f"{issued.get('envelope', {}).get('to') or '（没有收方秘书）'}），"
                           f"但收方秘书没落块：{landed.get('reason') or '没有理由'}；"
-                          "F 的读数仍是「待签」（块没落 = B 收录时读不到它）。")
+                          f"背书台账已在 `{pending_ledger or '（没有）'}`，B 收录时按正文 sha "
+                          "认领（F 的读数仍是「待签」：块没落 = 稿上没有那一行）。")
             else:
                 record = (f"这一份的签落在 `{pending_ledger or '（没有落点）'}`（没有手稿落点，"
                           "签块未尝试）——B 登记之后按正文 sha 认领；这里 `signed_bit3=False` 是诚实的："
@@ -2485,24 +2585,32 @@ class AgentV:
         elif stopped == "reviewed_unsigned":
             # 2026-11-04（甲）：没有稿 ⇒ 只能"看过"，不能签。这一档不落任何签、
             # 不落 pending 台账（按 sha 可认领的那一行会被当成第三方签）。
-            record = ("看过、没签：这一趟只给了内联正文、没给 `proof_manuscript` ⇒ "
-                      "没有可落签的载体 —— 签块、`## 依赖` 段、按号命名的稿这三样都只在"
-                      "文件上，内联正文一样都做不到，所以这一签不签发、台账里也不留 "
-                      "sign 行。要签就把这份正文落成一份稿（`reports/…` 或 `notes/…` 皆可，"
-                      "三节 `## 命题` / `## 证明` / `## 依赖`），再带 `proof_manuscript` 送审。"
-                      f"这一趟的判定（{got.get('verdict') or '（无结论）'}，"
-                      f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
+            # 2026-11-05 晚：计划稿（不是签的载体）也走这一档 —— 三转读数照给、不构成签，
+            # 理由用 `block_write.why` 那一条（它点名"计划稿"），不冒充"没有手稿"。
+            from .. import vsigns as _VS2
+
+            if str(manuscript_write.get("code") or "") == _VS2.MANUSCRIPT_NAME_PLAN:
+                record = (str(manuscript_write.get("why") or "")
+                          + f"这一趟的三转判定（{got.get('verdict') or '（无结论）'}，"
+                            f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
+            else:
+                record = ("看过、没签：这一趟只给了内联正文、没给 `proof_manuscript` ⇒ "
+                          "没有可落签的载体 —— 签块、`## 依赖` 段、按号命名的稿这三样都只在"
+                          "文件上，内联正文一样都做不到，所以这一签不签发、台账里也不留 "
+                          "sign 行。要签就把这份正文落成一份稿（`reports/…` 或 `notes/…` 皆可，"
+                          "三节 `## 命题` / `## 证明` / `## 依赖`），再带 `proof_manuscript` 送审。"
+                          f"这一趟的判定（{got.get('verdict') or '（无结论）'}，"
+                          f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
         else:
             record = (f"这一份判「{got.get('verdict') or ''}」：负判不写手稿块"
                       "（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；"
                       "负判不是签）。判词已落 "
                       f"`{pending_ledger or '（pending 台账）'}`，F 的读数是「未通过」；"
                       "按缺陷改稿后再送，不签第 3 位、也不写重复块。")
-        _no_statement = bool(issued.get("code") == "statement_id_missing")
         out.update({
             "checked": True,
             "kind": ("proof_reviewed_not_signed"
-                     if (_no_statement or stopped == "reviewed_unsigned")
+                     if stopped == "reviewed_unsigned"
                      else "proof_unregistered_signed" if stopped == "signed"
                      else "proof_unregistered_rejected"),
             "verification_id": str(pending.get("verification_id") or ""),
@@ -2516,8 +2624,7 @@ class AgentV:
             "signed_bit3": False,
             "review_passes": list(got.get("passes") or []),
             "ledger": pending_ledger or str(got.get("manuscript") or ""),
-            "reason": ("statement_id_missing" if _no_statement
-                       else str(got.get("reason") or "")),
+            "reason": str(got.get("reason") or ""),
             "detail": record,
         })
         self._emit(f"verify_proof(未在册)：{out['kind']}（{out['reason']}）")
@@ -2770,7 +2877,7 @@ class AgentV:
             "last_verification_id": (last or {}).get("verification_id"),
             "problems": list(problems),
             "reason": ("读到了证明全文" if text else
-                       "台账里没有这个命题的证明全文（**没读到 ≠ 没有毛病**）"),
+                       "台账里没有这个命题的证明全文（没读到 ≠ 没有毛病）"),
         })
         return out
 

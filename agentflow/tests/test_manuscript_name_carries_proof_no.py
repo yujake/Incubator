@@ -67,6 +67,12 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
     # `land` 那一层：签文件在、收方在，但稿名认不出 ⇒ 不落块。
     root = pathlib.Path(__import__("tempfile").mkdtemp(prefix="manuscript-name-"))
     body = "1. 由定义直接得到。"
+    # 2026-11-05 晚（业主）：签必须有独立台账背书 —— `issue` 的 `ledger` 指的
+    # `verifications/000000.jsonl#v-000003` 那一行要真的在盘上（这里只造这一行）。
+    for _ in range(3):
+        VR.record_verification(str(root), statement_id="000000", proof_text=body,
+                               verdict={"verdict": "成立", "findings": []},
+                               verifier="agent-V", flip=False)
     issued = VS.issue(root, artifact_sha=VR.proof_sha(body), streak=3, need=3,
                       artifact_path=rel,
                       ledger="verifications/000000.jsonl#v-000003",

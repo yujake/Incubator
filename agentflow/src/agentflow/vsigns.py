@@ -145,24 +145,60 @@ NOT_A_SECRETARY = "not_a_secretary"
 #: 4 条的 `ledger` 指向稿头自己那一行签块（`reports/<稿>#V签`），`passes` 三格全是占位。
 #: 三件事合起来就是「稿头自己写已签 3/3」也能拿到一份签 —— 签不再是证据，只是一句话。
 #:
+#: ## 2026-11-05 晚 业主裁定（这一版的口径，取代同日上午那一条）
+#:
+#: > 「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签。这是已有口径」
+#:
+#: 所以「没有命题号」不是拒签理由：`命题号=未在册` 是合法形态（真机
+#: `f-proof-000019.md` 就是这样，它是真签）。真假只由「有没有独立台账背书」判：
+#:
 #: | 码 | 什么被拒 | 判据 |
 #: |---|---|---|
-#: | `statement_id_missing` | 没有命题号 | 签的对象是 `statements` 里的那一条；没有号就没有可签的对象 |
-#: | `ledger_not_verification` | 台账不是 V 自己那本 | 必须 `verifications/<命题号>.jsonl#v-…`；稿头自述（`#V签`）不是证据 |
+#: | `statement_id_missing` | 连对象都没有 | `statement_id` 空 且 `ledger` 也空 ⇒ 没有可签的对象；没号就先落 `verifications/pending/<正文sha>.jsonl`，不是拒签 |
+#: | `ledger_not_verification` | 台账不是 V 自己那本 | 必须 `verifications/<号>.jsonl#v-…`（有号）或 `verifications/pending/<正文sha>.jsonl#u-…`（没号）；稿头自述（`reports/<稿>#V签`）不是证据 |
 #: | `passes_incomplete` | 三转里有一转没有读数 | 每一转都要 `verification_id` / `at` / `proof_sha256`；三格全空的占位不算「成立」 |
 STATEMENT_ID_MISSING = "statement_id_missing"
 LEDGER_NOT_VERIFICATION = "ledger_not_verification"
 PASSES_INCOMPLETE = "passes_incomplete"
+
+#: 认签时「这一签没有独立台账背书」的那几个码（业主 2026-11-05 晚：真假只看背书）。
+#:
+#: 现场（真机 `projects/R-mk-infinite-90/reports`）：
+#: `b-proof-000016.md` 的块写 `台账=reports/b-proof-000016.md#V签`、
+#: `f-proof-plan-000011.md` 的块写 `台账=reports/f-proof-plan-000011.md#V签` ——
+#: 两个都指向稿自己，盘上没有任何一份 V 的台账行记过那一签。改前它们照样被
+#: `bits_after_sign` 认下来（探针实测 `applied=True`、`bits.reviewed=True`），
+#: 于是「稿头自己写已签 3/3」在 B 这一侧也能换到第 3 位。
+#:
+#: 三档分开（三态纪律：没查成 / 查过了没有 / 有但签不住不许折平）：
+#: - `sign_without_ledger`：`ledger` 不是两种台账锚点之一（含稿头自述、空串）；
+#: - `ledger_row_missing`：锚点形状对，但那一份台账里没有那一个 `verification_id`；
+#: - `ledger_sha_mismatch`：行在，但它的 `proof_sha256` 不是这一份正文的 sha；
+#: - `ledger_not_signable`：行在、sha 也对，但那一行自己签不住（结论不是成立 / 有未解决 error）。
+SIGN_WITHOUT_LEDGER = "sign_without_ledger"
+LEDGER_ROW_MISSING = "ledger_row_missing"
+LEDGER_SHA_MISMATCH = "ledger_sha_mismatch"
+LEDGER_NOT_SIGNABLE = "ledger_not_signable"
 
 #: 命题号的形态（与 `schema.is_valid_id` 同一套：当前六位、旧四位读侧兼容）。
 #: 这里不 import `schema`：`vsigns` 是产物层，判据只认"号是不是号"这一件事。
 _STATEMENT_ID_RE = re.compile(r"^\d{4,6}$")
 
 #: V 台账的锚点形状：`verifications/<命题号>.jsonl#v-<号>`。
-#: 只有这一种形状的 `ledger` 算证据 —— 稿头自述（`reports/… #V签`）、pending 台账
-#: （`verifications/pending/<sha>.jsonl`）都不在这条射程内。
+#: 这是「有号」那一档的背书 —— 稿头自述（`reports/… #V签`）不在这条射程内。
+#: 「没号」那一档的背书是 :data:`_PENDING_ANCHOR_RE`（两者都算，业主 2026-11-05 晚）。
 _LEDGER_ANCHOR_RE = re.compile(
     r"^verifications/(?P<sid>\d{4,6})\.jsonl#(?P<vid>v-[0-9]+)$")
+
+#: 「没号」那一档的台账锚点：`verifications/pending/<正文 sha>.jsonl#u-<号>`。
+#:
+#: 业主 2026-11-05 晚：「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签」——
+#: 没号的签落 pending 台账（D-34 的落点），锚点里的 sha 就是被签的那一份正文的 sha
+#: （文件名按正文 sha 分文件的同一把尺，见 `verifications.pending_ledger_path`）。
+#: `vid` 的 `u-` 前缀是 `verifications.PENDING_PREFIX`（u = 未登记）；读取侧一并接受
+#: 历史 `v-` 写法（同一份台账两种前缀都出现过，行号才是真身）。
+_PENDING_ANCHOR_RE = re.compile(
+    r"^verifications/pending/(?P<sha>[0-9a-f]{64})\.jsonl#(?P<vid>(?:[a-z]+-)?\d+)$")
 
 #: 颁发时写给收方秘书的那个信封的 `kind`（它是签文件里的一格，不是另一份文件）。
 #:
@@ -567,6 +603,12 @@ _MANUSCRIPT_NAME_RE = re.compile(
 
 #: 「签的载体」这一族的名字（2026-11-05）：只认 `reports/(f|b|e)-proof-<数字>[-p<N>].md`。
 #: 计划稿（`f-proof-plan-<数字>`）不在这里 —— 它是合法的落稿名，但不是签的载体。
+#:
+#: 目录那一格与 `depsection.MANUSCRIPT_DIR` 同值（`"reports"`）。这里不 import 它：
+#: 本模块的判据只认"名字长什么样"，而 `vsigns` 是产物层（`depsection` 反过来会 import
+#: 本模块的读口）；两处一旦分家，`test_noai_gate` 那条符号存在性判据也看不出来 ——
+#: 所以用一个具名常量，回落的那一条由下面 `sign_carrier_reading` 的 docstring 钉住。
+SIGN_CARRIER_DIR = "reports"
 _SIGN_CARRIER_RE = re.compile(
     r"^(?P<prefix>f|b|e)-proof-(?P<id>\d{4,6})(?:-p(?P<no>[1-9]\d*))?$")
 
@@ -1490,56 +1532,114 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
 # ---------------------------------------------------------------- 颁发（V 的动作）
 
 def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
-                     passes: Any, need: Any) -> dict[str, Any]:
+                     passes: Any, need: Any, artifact_path: Any = "") -> dict[str, Any]:
     """「这一份签有没有对象、有没有证据」的三道必填闸（纯读；一个字节都不写）。
 
-    业主 2026-11-05 的裁定落在三件事上（现场见模块常量那一段）：
+    业主 2026-11-05 晚的裁定落在三件事上（现场见模块常量那一段）：
 
-    1. 没有命题号就没有可签的对象：签的对象是 `statements` 里的那一条命题，
-       `statement_id` 是空串（或不是编号形态）⇒ 受控拒绝 :data:`STATEMENT_ID_MISSING`；
-    2. 台账只能是 V 自己那本：`ledger` 必须形如
-       `verifications/<命题号>.jsonl#v-<号>`，且号就是这一条命题 —— 稿头自己写的
-       「已签 3/3」（`reports/<稿>#V签`）不是证据，受控拒绝 :data:`LEDGER_NOT_VERIFICATION`；
+    1. 没有命题号不是拒签理由：`命题号=未在册` 是合法形态（真机
+       `f-proof-000019.md` 就是）。`statement_id` 空 ⇒ 签照样颁发，背书落
+       `verifications/pending/<正文sha>.jsonl#u-<号>`；只有「号也没有、台账也没有」
+       才受控拒绝 :data:`STATEMENT_ID_MISSING`（那一档没有可签的对象）；
+    2. 台账只能是 V 自己那本：有号 ⇒ `verifications/<号>.jsonl#v-<号>`；没号 ⇒
+       `verifications/pending/<正文sha>.jsonl#u-<号>`，且锚点里的 sha 就是这一份正文。
+       稿头自己写的「已签 3/3」（`reports/<稿>#V签`）不是证据 ⇒
+       :data:`LEDGER_NOT_VERIFICATION`；
     3. 三转都要有读数：`passes` 至少 `need` 条，每条都要带
        `verification_id` / `at` / `proof_sha256`，且 sha 就是被签的正文 sha；末尾那一转
        必须正是 `ledger` 指的那一签 —— 三格全空的占位不许被数成「连续 3/3」，
-       受控拒绝 :data:`PASSES_INCOMPLETE`。
+       受控拒绝 :data:`PASSES_INCOMPLETE`；
+    4. 载体：给了 `artifact_path` 就必须是「签的载体」（计划稿不是，见
+       :func:`sign_carrier_reading`）；没号那一档还要求它是
+       `reports/(f|b|e)-proof-<数字>[-pN].md` —— 没号先签的签只能落在正式手稿上。
 
-    三态：返回 `{ok, code, reason}`。`ok=False` 的每一档都是"这一签不成立"，
+    三态：返回 `{ok, code, reason, ledger_kind}`。`ok=False` 的每一档都是"这一签不成立"，
     调用方按 `code` 分句；这里不抛异常（拒绝是读数，不是故障）。
 
     为什么闸放在 :func:`issue` 里：它是写签的唯一入口（模块 docstring 那一句
     「本函数是写签的唯一入口」）。放在调用点各判一次，等于给第二条写入口留缝。
     """
-    out: dict[str, Any] = {"ok": False, "code": "", "reason": ""}
+    out: dict[str, Any] = {"ok": False, "code": "", "reason": "", "ledger_kind": ""}
     sid = str(statement_id or "").strip()
-    if not sid:
-        out.update(code=STATEMENT_ID_MISSING, reason=(
-            "没有命题号就没有可签的对象：`statement_id` 是空的 ⇒ 这一签不颁发"
-            "（一个字节都不写）。签的对象是 `statements` 里的那一条命题 —— 先让 B "
-            "登记这一条拿到号，再带 `statement_id=<号>` + `proof_manuscript` 送审；"
-            "只给手稿、不给号的「未在册」那一档不再产签，它的读数只到「看过、没签」。"))
-        return out
-    if not _STATEMENT_ID_RE.match(sid):
+    text = str(ledger or "").strip()
+    if sid and not _STATEMENT_ID_RE.match(sid):
         out.update(code=STATEMENT_ID_MISSING, reason=(
             f"`statement_id={sid!r}` 不是命题号形态（4–6 位十进制，与 "
             "`statements.stmt_id` 同一套）⇒ 这一签不颁发（一个字节都不写）："
-            "没有可指认的对象，签就没有落点"))
+            "没有可指认的对象，签就没有落点（没号那一档 `statement_id` 留空、走 pending 台账）"))
         return out
-    anchor = _LEDGER_ANCHOR_RE.match(str(ledger or "").strip())
-    if anchor is None:
+    if not text:
+        if not sid:
+            out.update(code=STATEMENT_ID_MISSING, reason=(
+                "没有可签的对象：既没有命题号、也没有台账落点 ⇒ 这一签不颁发"
+                "（一个字节都不写）。没有号不是拒签理由：没号就先让 V 把这一签落进 "
+                "`verifications/pending/<正文sha>.jsonl`（三转各一行），签块照旧盖在 "
+                "`reports/(f|b|e)-proof-<数字>.md` 上，B 收录时按正文 sha 从稿上拿签。"
+                "这里拒的是「连 pending 台账都没有」——那一签没有任何背书。"))
+            return out
         out.update(code=LEDGER_NOT_VERIFICATION, reason=(
-            f"`ledger={str(ledger or '')!r}` 不是 V 自己那本台账"
-            "（要 `verifications/<命题号>.jsonl#v-<号>`）⇒ 这一签不颁发"
+            f"命题 {sid} 的这一签没有台账落点（`ledger` 是空的）⇒ 不颁发："
+            "签必须有独立台账背书 —— 有号走 `verifications/<号>.jsonl#v-<号>`，"
+            "没号走 `verifications/pending/<正文sha>.jsonl#u-<号>`"))
+        return out
+    pend = _PENDING_ANCHOR_RE.match(text)
+    anchor = _LEDGER_ANCHOR_RE.match(text)
+    if pend is None and anchor is None:
+        out.update(code=LEDGER_NOT_VERIFICATION, reason=(
+            f"`ledger={text!r}` 不是 V 自己那本台账（要 "
+            "`verifications/<命题号>.jsonl#v-<号>` 或 "
+            "`verifications/pending/<正文sha>.jsonl#u-<号>`）⇒ 这一签不颁发"
             "（一个字节都不写）。稿头上自己写的「已签 3/3」（`reports/<稿>#V签`）"
-            "不是证据：它只是这份稿的一句话，拿它当台账等于自己给自己作证；"
-            "`verifications/pending/` 那一档也不在射程内（命题还没在册，没有可签的对象）"))
+            "不是证据：它只是这份稿的一句话，拿它当台账等于自己给自己作证 —— "
+            "真机 `b-proof-000016` / `f-proof-plan-000011` 上的那两块就是这种假签。"))
         return out
-    if str(anchor.group("sid")) != sid:
-        out.update(code=LEDGER_NOT_VERIFICATION, reason=(
-            f"台账 `{str(ledger or '')}` 是命题 {anchor.group('sid')} 的，而这一签要签 "
-            f"stmt:{sid} ⇒ 不颁发（同一份正文被别的命题复用不算签过）"))
-        return out
+    sha = str(artifact_sha or "").strip().lower()
+    if pend is not None:
+        out["ledger_kind"] = "pending"
+        if sid:
+            out.update(code=LEDGER_NOT_VERIFICATION, reason=(
+                f"台账 `{text}` 是「没号」那一档的落点，而这一签要签 stmt:{sid} ⇒ "
+                "不颁发：已经有号的命题要把签落进 `verifications/<号>.jsonl#v-<号>`"
+                "（同一份签不许两处记）"))
+            return out
+        # 锚点里的那个 sha 是这一份 pending 台账的键：散文那一档是正文 sha（`object_path`
+        # 为空 ⇒ `record_pending_sign` 按正文 sha 分文件），E 的穷举那一档是那份报告的字节
+        # sha（B 的第三方签字闸按它认签）。所以这里不比文件名与正文 sha —— 真判据是
+        # 「那一行自己记的 `proof_sha256` 就是这一份正文」，由 :func:`sign_ledger_backing`
+        # （有 root、读得到行）判，`issue` 在写签文件之前会调它。
+        carrier = sign_carrier_reading(artifact_path) if str(artifact_path or "").strip() else {
+            "ok": False, "code": MANUSCRIPT_NAME_BAD,
+            "reason": "没号那一档的签必须落在正式手稿上（`reports/(f|b|e)-proof-<数字>.md`），"
+                      "这一签没有给载体"}
+        _name = str(artifact_path or "").strip().replace("\\", "/")
+        _bare = _name.rsplit("/", 1)[-1]
+        if _bare.lower().endswith(".md"):
+            _bare = _bare[:-3]
+        if not str(_name).startswith(f"{SIGN_CARRIER_DIR}/") \
+                or _SIGN_CARRIER_RE.match(_bare) is None:
+            out.update(code=str(carrier.get("code") or MANUSCRIPT_NAME_BAD), reason=(
+                f"没号那一档的载体必须是 `reports/(f|b|e)-proof-<数字>.md`，收到 "
+                f"{str(artifact_path or '')!r} ⇒ 这一签不颁发（一个字节都不写）："
+                f"{carrier.get('reason') or '计划稿 / 别的文件都不是签的载体'}"))
+            return out
+    else:
+        out["ledger_kind"] = "registered"
+        if sid and str(anchor.group("sid")) != sid:
+            out.update(code=LEDGER_NOT_VERIFICATION, reason=(
+                f"台账 `{text}` 是命题 {anchor.group('sid')} 的，而这一签要签 "
+                f"stmt:{sid} ⇒ 不颁发（同一份正文被别的命题复用不算签过）"))
+            return out
+        if str(artifact_path or "").strip():
+            # 有号那一档只挡计划稿（乙③）：别的名字问题（`f-proof-abc` 那种认不出号）
+            # 归 `land` 那一步判 —— 「颁发看内容、落签看稿名」这两步的分工是 2026-11-02
+            # 定的（`test_issue_and_land_are_two_steps` 的 k 档钉着它）。计划稿不同：
+            # 它是"看起来完全合法、签上去永远认不了"的那一档，必须挡在颁发之前。
+            carrier = sign_carrier_reading(artifact_path)
+            if str(carrier.get("code") or "") == MANUSCRIPT_NAME_PLAN:
+                out.update(code=MANUSCRIPT_NAME_PLAN, reason=(
+                    f"这一签的载体 {str(artifact_path)!r} 是计划稿 ⇒ 不颁发"
+                    f"（一个字节都不写）：{carrier.get('reason') or ''}"))
+                return out
     entries = [dict(p) for p in (passes or ()) if isinstance(p, Mapping)]
     want = max(1, int(need or 1))
     if len(entries) < want:
@@ -1548,8 +1648,6 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             f"{want}/{want}（一个字节都不写）：每一转都要有自己的读数，"
             "没有读数的「成立」不是票"))
         return out
-    #: 被签正文的 sha（调用方已经过 `_sha_key`；这里再取一次，闸自己判）。
-    sha = str(artifact_sha or "").strip().lower()
     for i, one in enumerate(entries, 1):
         missing = [k for k in ("verification_id", "at", "proof_sha256")
                    if not str(one.get(k) or "").strip()]
@@ -1564,13 +1662,112 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
                 f"第 {i} 转的 `proof_sha256` 不是被签正文的 sha（{sha[:12]}…）⇒ "
                 "这三转不是同一份正文的票，不算连续「成立」（这一签不颁发）"))
             return out
-    if str(entries[-1].get("verification_id") or "").strip() != str(anchor.group("vid")):
+    vid = str(entries[-1].get("verification_id") or "").strip()
+    if vid != str((pend or anchor).group("vid")):
         out.update(code=PASSES_INCOMPLETE, reason=(
-            f"`ledger` 指向 `{anchor.group('vid')}`，而 `passes` 最后一转是 "
-            f"`{entries[-1].get('verification_id')}` ⇒ 台账与票不是同一次送审，"
-            "这一签不颁发（一签只认同一趟的那几转）"))
+            f"`ledger` 指向 `{(pend or anchor).group('vid')}`，而 `passes` 最后一转是 "
+            f"`{vid}` ⇒ 台账与票不是同一次送审，这一签不颁发（一签只认同一趟的那几转）"))
         return out
     out.update(ok=True)
+    return out
+
+
+def sign_ledger_backing(root: Any, ledger: Any, *, proof_sha256: Any) -> dict[str, Any]:
+    """这一签的 `台账` 那一格有没有独立台账背书（纯读；业主 2026-11-05 晚）。
+
+    ## 为什么必须有这一格（真机两种假签）
+
+    `projects/R-mk-infinite-90/reports` 上两块「已签 3/3」的 `台账` 都指向稿自己：
+
+    ```text
+    b-proof-000016.md    台账=reports/b-proof-000016.md#V签       ← 假签
+    f-proof-plan-000011.md 台账=reports/f-proof-plan-000011.md#V签  ← 假签
+    ```
+
+    改前 `bits_after_sign` 只核「稿名 → 号」与「正文 sha」，不核「台账那一行在不在」——
+    于是这两块照样换到第 3 位（探针实测 `applied=True`）。业主的口径是：真假的判据
+    不在"有没有号"，而在「有没有一份独立的 V 台账记过这一签」，两种都算：
+
+    - 有号：`verifications/<命题号>.jsonl#v-<号>`；
+    - 没号：`verifications/pending/<键>.jsonl#u-<号>`（D-34 的落点；`<键>` 是这份
+      pending 台账的键 —— 散文那一档是正文 sha，E 的穷举那一档是那份报告的字节 sha，
+      由 `verifications.record_pending_sign` 的 `object_sha256 or proof_sha256` 定）。
+      所以这里不比锚点里的 sha 与正文 sha：行上的 `proof_sha256` 才是"签的是哪一份正文"。
+
+    ## 四档（三态不许折平）
+
+    | 结局 | `code` |
+    |---|---|
+    | 那一格压根不是台账锚点（稿头自述 / 空串 / 别的路径） | :data:`SIGN_WITHOUT_LEDGER` |
+    | 锚点形状对，但那一份台账 / 那一行不在盘上 | :data:`LEDGER_ROW_MISSING` |
+    | 行在，但它的 `proof_sha256` 不是这一份正文的 sha | :data:`LEDGER_SHA_MISMATCH` |
+    | 行在、sha 也对，但那一行自己签不住（不是「成立」/ 有未解决 error / 引用挡） | :data:`LEDGER_NOT_SIGNABLE` |
+
+    `checked=False` 只在"台账读不出来"（读盘抛错）时给：那是"没查成"，不是"没有背书"。
+    返回 `{checked, ok, code, row, path, verification_id, why}`。
+    """
+    from . import verifications as _VR   # 惰性：`row_signable` 的口径只有一处
+
+    out: dict[str, Any] = {"checked": False, "ok": False, "code": "", "row": {},
+                           "path": "", "verification_id": "", "why": ""}
+    text = str(ledger or "").strip().replace("\\", "/")
+    sha = str(proof_sha256 or "").strip().lower()
+    pend = _PENDING_ANCHOR_RE.match(text)
+    reg = _LEDGER_ANCHOR_RE.match(text)
+    if pend is None and reg is None:
+        out.update(checked=True, code=SIGN_WITHOUT_LEDGER, why=(
+            f"`台账={text!r}` 不是 V 自己那本台账（要 "
+            "`verifications/<命题号>.jsonl#v-<号>` 或 "
+            "`verifications/pending/<正文sha>.jsonl#u-<号>`）⇒ 这一签没有独立台账背书："
+            "台账指向稿自己（`reports/… #V签`）时，那一行只是这份稿自己的一句话"))
+        return out
+    vid = str((pend or reg).group("vid"))
+    out["verification_id"] = vid
+    if pend is not None:
+        out["path"] = f"verifications/pending/{pend.group('sha')}.jsonl"
+    else:
+        out["path"] = f"verifications/{reg.group('sid')}.jsonl"
+    path = Path(str(root or "")) / out["path"]
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        out.update(checked=True, code=LEDGER_ROW_MISSING, why=(
+            f"`{out['path']}` 不在盘上 ⇒ 这一签没有台账背书（锚点指着 `{vid}`，"
+            "但那一份台账一次审校都没落过）"))
+        return out
+    row: dict[str, Any] | None = None
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            one = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(one, dict) and str(one.get("verification_id") or "") == vid:
+            row = dict(one)
+            break
+    if row is None:
+        out.update(checked=True, code=LEDGER_ROW_MISSING, why=(
+            f"`{out['path']}` 里没有 `{vid}` 那一行 ⇒ 这一签没有台账背书"
+            "（锚点写着它，那一行却不存在）"))
+        return out
+    out["row"] = row
+    out["checked"] = True
+    if str(row.get("proof_sha256") or "").strip().lower() != sha:
+        out.update(code=LEDGER_SHA_MISMATCH, why=(
+            f"`{out['path']}#{vid}` 的 `proof_sha256` 不是这一份正文的 sha"
+            f"（行上是 `{str(row.get('proof_sha256') or '')[:12]}…`，"
+            f"这一份是 `{sha[:12]}…`）⇒ 签的不是这一版正文"))
+        return out
+    if not _VR.row_signable(row):
+        out.update(code=LEDGER_NOT_SIGNABLE, why=(
+            f"`{out['path']}#{vid}` 那一行自己签不住（结论 "
+            f"{str(row.get('verdict') or '')!r}、未解决 error "
+            f"{int(row.get('unresolved_errors') or 0)} 条）⇒ 有台账也不构成签"))
+        return out
+    out.update(ok=True, why=(f"`{out['path']}#{vid}` 是 V 的台账行"
+                             f"（结论 {str(row.get('verdict') or '')!r}，"
+                             f"正文 sha 相符）⇒ 这一签有独立背书"))
     return out
 
 
@@ -1638,10 +1835,23 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     # 位置在"门槛"之后、"建目录/写文件"之前：拒绝要发生在任何一个字节落盘之前
     # （与上面 `by` 与 sha 两道前置判据同一条纪律）。三档各自有码，调用方按码分句。
     gate = sign_object_gate(artifact_sha=key, statement_id=statement_id,
-                            ledger=ledger, passes=passes, need=need)
+                            ledger=ledger, passes=passes, need=need,
+                            artifact_path=artifact_path)
     if not gate.get("ok"):
         out.update(code=str(gate.get("code") or ""),
                    reason=str(gate.get("reason") or ""))
+        return out
+    # ---- 2026-11-05 晚（业主）：签必须有独立台账背书，而且那一行要真是这一份正文 ----
+    #
+    # 闸在 `sign_object_gate` 只判"台账的形状对不对"（它没有 root，读不了行）。
+    # 背书这一半在 `sign_ledger_backing` 一处（签块 / 签文件 / 颁发三个入口共用）：
+    # 行要在盘上、`proof_sha256` 要是这一份正文、那一行自己签得住。位置同样在写签
+    # 之前 —— 拒绝零字节。
+    backing = sign_ledger_backing(root, ledger, proof_sha256=key)
+    if not backing.get("ok"):
+        out.update(code=str(backing.get("code") or ""),
+                   reason=(str(backing.get("why") or "") + " ⇒ 这一签不颁发"
+                           "（一个字节都不写）：签没有独立台账背书，就只是一句话"))
         return out
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
                 "issued_by": "V"}
@@ -2541,10 +2751,15 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
                                "现算并写上第 9 格 `手稿号`（裸稿号），再收录。"))
         return out
     if ident == "unmatched" and out["manuscript_key"]:
+        # 理由按 `manuscript_sign_reading` 那一条现成的 `identity_why` 说（2026-11-05 晚）：
+        # 计划稿那一档是"号对得上、但它不是签的载体"，改前这里一律印成"手稿号对不上"——
+        # 拒是拒了，拒信却在说另一件事（真机 `f-proof-plan-000011` 的读者会去查号，
+        # 而号根本没错）。
         out.update(code="manuscript_id_unresolved",
-                   reason=(f"第 9 格写的手稿号 {mid!r} 与它所在那份稿的裸稿号 "
-                           f"{out['manuscript_key'] or '（认不出）'!r} 对不上 ⇒ 这一块要么被搬过、"
-                           "要么是照别人的稿抄的"),
+                   reason=(str(reading.get("identity_why") or "").strip() or (
+                       f"第 9 格写的手稿号 {mid!r} 与它所在那份稿的裸稿号 "
+                       f"{out['manuscript_key'] or '（认不出）'!r} 对不上 ⇒ 这一块要么被搬过、"
+                       "要么是照别人的稿抄的")),
                    suggestion=("先确认稿与号是同一份（稿名 `reports/f-proof-<裸稿号>.md`），"
                                "再用 `vsigns.land(by=\"secretary:F\")` 落块；号与稿不一致时"
                                "不许拿 `bits_after_sign` 认签。"))
@@ -2675,14 +2890,31 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                             f"（{gate.get('code')}）；建议：{gate.get('suggestion')}"))
             return dict(bits), out
         if str(block.get("state") or "") == "signed":
+            # ---- 2026-11-05 晚（业主）：真假只看「有没有独立台账背书」 --------------
+            #
+            # 判据在 `sign_ledger_backing` 一处（签块与签文件两条来源共用）：块的
+            # `台账` 那一格必须是 V 的台账锚点，且那一行在盘上、正文 sha 相符、那一行
+            # 自己签得住。真机 `b-proof-000016` / `f-proof-plan-000011` 的块写的是
+            # `reports/… #V签`（指向稿自己）⇒ 改前照样被认下来，现在拒。
+            backing = sign_ledger_backing(root, block.get("ledger"), proof_sha256=sha)
+            out["backing"] = dict(backing)
+            if not backing.get("ok"):
+                out.update(applied=False, code=str(backing.get("code") or ""),
+                           reason=str(backing.get("why") or ""),
+                           why=(f"{backing.get('why')} ⇒ 不认这一块"
+                                f"（{backing.get('code')}）：稿上的「已签 3/3」只是一句话，"
+                                "要有 V 的台账行记过它才算签"))
+                return dict(bits), out
             new = _apply_review_to_bits(
-                bits, verification_id="", evidence=str(block.get("ledger") or ""),
+                bits,
+                verification_id=str(backing.get("verification_id") or ""),
+                evidence=str(block.get("ledger") or ""),
                 findings=[], verdict="成立", proof_no=no, sha=sha,
                 kind=str(kind or ""))
             out["applied"] = True
             out["why"] = (f"手稿里的签块：连续 {block.get('streak')}/{block.get('need')}"
-                          f" 成立且正文 sha 相符（签于 {block.get('at') or '（没有时间）'}）"
-                          " ⇒ 第 3 位按手稿里的签写")
+                          f" 成立且正文 sha 相符（签于 {block.get('at') or '（没有时间）'}），"
+                          f"台账 `{block.get('ledger')}` 一行对得上 ⇒ 第 3 位按手稿里的签写")
             return new, out
         if str(block.get("state") or "") in ("rejected", "stale"):
             return dict(bits), out
@@ -2709,6 +2941,16 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
         return dict(bits), out
     passes = [dict(p) for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
     last = passes[-1] if passes else {}
+    # 签文件这一条来源同样要核背书（业主 2026-11-05 晚）：手写一份 `out/vsigns/<sha>.json`
+    # 把 `台账` 写成稿自己，改前也能换到第 3 位。
+    backing = sign_ledger_backing(root, sign.get("ledger"), proof_sha256=sha)
+    out["backing"] = dict(backing)
+    if not backing.get("ok"):
+        out.update(applied=False, code=str(backing.get("code") or ""),
+                   reason=str(backing.get("why") or ""),
+                   why=(f"{backing.get('why')} ⇒ 不认这份签文件"
+                        f"（{backing.get('code')}）"))
+        return dict(bits), out
     new = _apply_review_to_bits(
         bits, verification_id=str(last.get("verification_id") or ""),
         evidence=str(sign.get("ledger") or ""), findings=[],
@@ -2785,35 +3027,42 @@ def _apply_review_to_bits(bits: Mapping[str, Any], *, verification_id: str,
                                 kind=str(kind or ""))
 
 
-#: pending 台账行允许的载体（2026-11-04 业主裁定 · 乙-14）。
+#: pending 台账行允许的载体（业主 2026-11-04 裁定 · 乙-14；2026-11-05 晚收紧）。
 #:
 #: 为什么要有这一格：pending 台账是"命题还没在册时 V 审过"的落点，`bits_after_sign`
 #: 在新建命题那一档按正文 sha 认领它、直接写 `bits.reviewed=True` —— 这一笔没有签文件、
 #: 也没有手稿签块。改前只要 pending 里有这一份正文就能认领，于是纯内联旧行
 #: （`object_path=""`）也能把第 3 位翻上去。业主要的口径：只认 pending 行的
-#: `object_path` 是一份手稿（`reports/{f,e,b}-proof-*.md`）或 E 的穷举读数报告
+#: `object_path` 是一份手稿（`reports/(f|b|e)-proof-<数字>.md`）或 E 的穷举读数报告
 #: （`out/experiments/<实验号>/exhaustion.md`）的认领；纯内联旧行不认。
-PENDING_CARRIER_PREFIXES: tuple[str, ...] = (
-    "reports/f-proof-", "reports/e-proof-", "reports/b-proof-")
+#:
+#: 2026-11-05 晚：判据搬进 :func:`_pending_carrier_path` 的唯一实现（它要同时拒计划稿、
+#: 要认 `-pN` 多证明名），这里只留一句话的读数面 —— 两个字面量各写一遍就会分家。
+PENDING_CARRIER_RULE = (
+    "pending 行可被认领的载体只有 `reports/(f|b|e)-proof-<数字>[-pN].md` "
+    "与 `out/experiments/<实验号>/exhaustion.md`（计划稿与纯内联旧行都不算）")
 
 
 def _pending_carrier_path(row: Mapping[str, Any]) -> str:
     """pending 行的载体路径（空串 = 这一行没有载体，不许认领）。
 
     三态（判不了就不认）：
-    - 手稿：`reports/{f,e,b}-proof-<号>.md`，且 `manuscript_id_of` 认得出裸稿号
-      （"按号命名"是硬条件 —— 认不出号的块 B 自己也不认，见 `manuscript_sign_gate`
-      的 `manuscript_id_missing`）；
+    - 手稿：`reports/(f|b|e)-proof-<数字>[-pN].md`（2026-11-05 晚业主：只有这三种
+      前缀 + 数字号的正式手稿是签的载体；`f-proof-plan-<数字>` 是合法落稿名，不是载体，
+      真机 `f-proof-plan-000011` 上那块 3/3 就是假签）；
     - E 的穷举读数报告：`out/experiments/<实验号>/exhaustion.md`（E 的 pending 行
       按对象 sha 落的就是这一份报告，B 的第三方签字闸读它）；
-    - 其余（含空串 / 纯内联旧行 / 任意别的路径）⇒ 空串，不认。
+    - 其余（含空串 / 纯内联旧行 / `notes/…` / 任意别的路径）⇒ 空串，不认。
     """
     path = str((row or {}).get("object_path") or "").strip().replace("\\", "/")
     if not path:
         return ""
-    if path.startswith(PENDING_CARRIER_PREFIXES) and path.endswith(".md") \
-            and manuscript_id_of(path):
-        return path
+    parts = path.split("/")
+    if (len(parts) == 2 and parts[0] == SIGN_CARRIER_DIR
+            and path.endswith(".md")):
+        carrier = sign_carrier_reading(path)
+        if carrier.get("ok") and _SIGN_CARRIER_RE.match(parts[1][:-3]):
+            return path
     parts = path.split("/")
     if (len(parts) == 4 and parts[0] == "out" and parts[1] == "experiments"
             and parts[2] and parts[3] == "exhaustion.md"):
@@ -2856,26 +3105,44 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
     ledger = str(got.get("ledger") or "")
     claim = {"ledger": ledger,
              "verification_id": str(ledger).split("#")[-1],
-             "proof_sha256": str(got.get("proof_sha256") or sha or ""),
+             "proof_sha256": str(got.get("proof_sha256") or ""),
              "object_sha256": str(got.get("object_sha256") or ""),
              "bound_id": "", "bound": False}
+    # ---- 2026-11-05 晚（业主）：sha 必须逐字相同 --------------------------------
+    #
+    # `pending_sign` 按 `proof_shas` 匹配，但认领这一步还要自己再看一眼：返回行上的
+    # `proof_sha256` 必须就是这一份正文的 sha（"改一个字就不算同一份"）。不相等 ⇒
+    # 受控拒绝（三态：这不是"没有签"，是"有签但不是这一版"）。
+    if str(row.get("proof_sha256") or "").strip().lower() != str(sha or "").strip().lower():
+        out.update(applied=False, code=LEDGER_SHA_MISMATCH,
+                   why=(f"{ledger} 那一行的 `proof_sha256` 不是这一份正文的 sha"
+                        f"（行上是 `{str(row.get('proof_sha256') or '')[:12]}…`，"
+                        f"这一份是 `{str(sha or '')[:12]}…`）⇒ 不认领："
+                        "改一个字就不算同一份，签不能挪到这一版上来"))
+        return dict(bits), out
     bound = str(row.get("stmt_id") or row.get("statement_id") or "")
     if bound:
         claim.update(bound_id=bound, bound=True)
         out["claim"] = claim
+        out.update(applied=False, code="already_claimed")
         out["why"] = (f"{ledger} 这一签已经认给 stmt:{bound} ⇒ 不再认领"
                       "（同一份正文只认领一次；改稿请重签，登记不产生第二份签）")
         return dict(bits), out
     carrier = _pending_carrier_path(row)
     out["carrier"] = carrier
     if not carrier:
+        out.update(applied=False, code=MANUSCRIPT_NAME_PLAN
+                   if sign_carrier_reading(str(row.get("object_path") or "")).get("code")
+                   == MANUSCRIPT_NAME_PLAN else "carrier_missing")
         out["why"] = (
-            f"{ledger} 这一行没有载体（`object_path` 不是 `reports/{{f,e,b}}-proof-*.md`，"
-            "也不是 `out/experiments/<实验号>/exhaustion.md`）⇒ 不认领："
-            "纯内联正文的 pending 行不给第 3 位。处置：让 V 带 `proof_manuscript` 重审"
-            "（签块落回那一份稿），或让 E 交 `reports/e-proof-<实验号>.md`。")
+            f"{ledger} 这一行没有载体（`object_path` 不是 "
+            "`reports/(f|b|e)-proof-<数字>.md`，也不是 "
+            "`out/experiments/<实验号>/exhaustion.md`）⇒ 不认领："
+            "计划稿 / 纯内联正文的 pending 行不给第 3 位。处置：让 V 带 `proof_manuscript` "
+            "重审（签块落回那一份正式稿），或让 E 交 `reports/e-proof-<实验号>.md`。")
         return dict(bits), out
     if not _VR.row_signable(row):
+        out.update(applied=False, code=LEDGER_NOT_SIGNABLE)
         out["why"] = ("命题还没在册时 V 审过这一份，但那一签签不住"
                       f"（结论 {_VR.read_verdict(row)!r}、未解决 error "
                       f"{int(row.get('unresolved_errors') or 0)} 条、引用核实那一格见台账）"

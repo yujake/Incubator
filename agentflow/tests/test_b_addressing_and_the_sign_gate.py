@@ -67,9 +67,13 @@ def _manuscript(*, manuscript_id: str = SID, sign: bool = True,
                 block_sha: str = "") -> str:
     if not sign:
         return RAW
+    # 2026-11-05 晚（业主）：签块必须有独立台账背书 —— 稿头自述（`reports/… #V签`）
+    # 是假签。这块签盖的是在册命题 SID 的那一份正文，所以背书是
+    # `verifications/000009.jsonl#v-000003`；`_ws` 里落那三行（真台账）。
     return VS.stamp_manuscript_sign(
         RAW, proof_sha=block_sha or _body_sha(), streak=3, need=3, verdict="成立",
-        signer="V", at="2026-11-02T16:43:01+08:00", ledger=f"{REL}#V签",
+        signer="V", at="2026-11-02T16:43:01+08:00",
+        ledger=f"verifications/{SID}.jsonl#v-000003",
         statement_id=SID, manuscript_id=manuscript_id)
 
 
@@ -78,6 +82,11 @@ def _ws(tmp_path: pathlib.Path, *, manuscript: str, carried_path: str | None = N
     st = Store(tmp_path / "ws")
     st.init()
     root = pathlib.Path(st.root)
+    # 签的背书：三行真台账（`flip=False`：这一组量的是寻址与签闸，不是第 3 位）。
+    for _ in range(int(VR.SIGN_STREAK_NEED)):
+        VR.record_verification(str(root), statement_id=SID, proof_text=PROOF,
+                               verdict={"verdict": "成立", "findings": []},
+                               verifier="agent-V", flip=False)
     (root / "reports").mkdir(parents=True, exist_ok=True)
     if manuscript:
         (root / REL).write_text(manuscript, encoding="utf-8")
