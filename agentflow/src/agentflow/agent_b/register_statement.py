@@ -2734,9 +2734,13 @@ class _RegisterStatement:
         pre_write: dict = {}
         if (redelivery is not None and _stronger
                 and str(attach_canonical or "").strip()):
-            # 这一笔的升档凭据在不在（纯读，判据只有一处：与秘书 `_upgrade_evidence_kind`
-            # 读的是同一个 `_manuscript_upgrade_basis`）。不在 ⇒ 不预写正文：那一笔本来
-            # 就升不动（重复读数），正文仍走下面 duplicate 那一支的老路。
+            # 这一笔的升档凭据在不在（纯读）。判据与秘书 `_upgrade_evidence_kind` 同口径：
+            # 三路任一路命中即可 ——
+            #   ① 在册台账 / `verifications/pending/` 那一签（`proof_review_gap`）；
+            #   ②③ 手稿签块 / `bits.reviewed`（`_manuscript_upgrade_basis` 收拢）。
+            # 改前这里只算了 ②③ ⇒ ① 有签的现场（F 的三票台账、E 的待认领一签）被读成
+            # 「这一笔没有凭据」：正文与档位两笔都不请求，盘上停在 `cross_check` ——
+            # D-34 ③⑤、F 的复用升档、以及"签完之后同一份内容再交一次"全撞这一格。
             # 判据刻意不看成"盘上那一行现在有没有正文"—— 那正是 D2 要修的顺序。
             from ..secretary import _manuscript_upgrade_basis as _upgrade_basis
             _basis = _upgrade_basis(
@@ -2744,31 +2748,35 @@ class _RegisterStatement:
                 manuscript_text=str(manuscript_text or ""),
                 manuscript_path=str(manuscript_path or ""),
                 proof_text=str(proof_text or ""), bits=bits)
+            _probe_row = dict(redelivery or {})
+            _probe_row["proof_text"] = str(attach_canonical or "")
+            _probe_row["evidence_kind"] = str(evidence_kind or "")
+            try:
+                _upgrade_gap = dict(_VR.proof_review_gap(
+                    getattr(self.store, "root", ""), _probe_row))
+            except Exception:  # noqa: BLE001 —— 读不出来就当"这一路没有凭据"（保守）
+                _upgrade_gap = {}
+            #: 三路任一路命中：升档这一笔有凭据可交（秘书那一侧才可能升得动）。
+            _signed = bool(_basis.get("signed")) or bool(_upgrade_gap.get("ok"))
             # 还要过写入期闸那一关（它核的是"这一行将要是"什么）：升档能不能落，
             # 取决于闸认不认这一份正文的签。闸不认（例如签只在 `out/vsigns/` 的签文件里、
             # 没有台账/待认领那一行）⇒ 预写正文也没有意义 —— 那一笔本来就只能落重复读数。
             _gate_ready = False
-            if _basis.get("signed"):
+            if _signed:
                 if str(evidence_kind or "") == _VR.PROOF_KIND:
                     _gate_ready = True
                 else:
-                    _probe_row = dict(redelivery or {})
-                    _probe_row["proof_text"] = str(attach_canonical or "")
-                    _probe_row["evidence_kind"] = str(evidence_kind or "")
-                    try:
-                        _gate_ready = bool(_VR.proof_review_gap(
-                            getattr(self.store, "root", ""), _probe_row).get("ok"))
-                    except Exception:  # noqa: BLE001 —— 读不出来就当"闸不认"（保守）
-                        _gate_ready = False
+                    _gate_ready = bool(_upgrade_gap.get("ok"))
         else:
             _basis = {}
+            _signed = False
         #: 这一笔请求的档位落不了（闸不会认这一份正文的签）⇒ 只登记正文，不请求升档。
         #: 读数 `upgrade_refused` 把"请求了什么 / 拒码 / 为什么"一起交出去 —— 于是
         #: `ok=true` 只代表"正文登记了"，绝不被读成"档位也升了"（D2 的"两件事不许糊成
         #: 一个 true"）。升档请求本身不发给秘书，是因为那一笔注定整笔被写入期闸拒；
         #: 把它发出去再把拒收折成 ok 就是改前那个谎。
         upgrade_skipped: dict = {}
-        if (_stronger and not (_basis.get("signed") and _gate_ready)
+        if (_stronger and not (_signed and _gate_ready)
                 and str(attach_canonical or "").strip()):
             upgrade_skipped = {
                 "requested_evidence_kind": str(evidence_kind or ""),
@@ -2779,7 +2787,7 @@ class _RegisterStatement:
                         "或如实按弱档读"),
             }
             payload["evidence_kind"] = _have_ek
-        if _basis.get("signed") and _gate_ready:
+        if _signed and _gate_ready:
             pre_write = self._attach_proofs(stmt_id_now, attach_entries,
                                             canonical=attach_canonical,
                                             bits=bits)
@@ -2801,11 +2809,19 @@ class _RegisterStatement:
         # （`canonical_written`）—— "正文进去了"与"档位升上去了"是两件事，不许糊成
         # 一个 true。
         if not written.get("checked") and str(written.get("refused") or ""):
+            # 秘书交出来的状态读数要原样带回去（D-34 ⑤）：`unknown_lit_id` 的
+            # 「表现在几行 / 现有哪些号」就在 `written` 里，改前这一格只回拒码与档位
+            # 两格 ⇒ 模型拿到 `kind=unknown_lit_id` 却分不清「表是空的」与「号写错了」，
+            # 于是换着号继续猜（真机 T1 第 8 趟：同一条拒了 20 次）。与下面
+            # `not created` 那一支的 `extra` 同一个白名单，一处口径。
+            refused_extra = {k: v for k, v in written.items()
+                             if k in ("literature_rows", "available_lit_ids", "unresolved")}
             return _refuse(str(written.get("refused") or "write_failed"),
                            str(written.get("reason") or "秘书没写这一笔"),
                            stmt_id=stmt_id_now, upgraded=False,
                            requested_evidence_kind=str(evidence_kind or ""),
                            canonical_written=bool(pre_write.get("canonical_written")),
+                           **refused_extra,
                            **({"canonical_history": list(pre_write.get("canonical_history") or [])}
                               if pre_write.get("canonical_written") else {}))
         if written.get("merged") and not written.get("created"):
