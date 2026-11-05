@@ -301,7 +301,7 @@ theorem           = V 签 ∧ 机器可核（Lean 形式化 或 穷举证书，�
 |---|---|---|
 | `depsection.CITATION_MIN_LEVEL` | `"proof_review"`（读 `evidence_kind`） | `"pre_theorem"`（读现算等级） |
 | `depsection.citation_levels()` | 从 `EVIDENCE_KINDS`/`_EVIDENCE_ORDER` 切档位 | 从 `EB.GRADES` 切等级；只核对 `LEGACY_KINDS` 与 `EVIDENCE_KINDS` 互逆 |
-| `depsection.gate_rows` / `_wash_dependency_rows` | 读 `anchor["evidence_kind"]` | 读 `statement_grade(anchor)`（`bits_from_row` 现算） |
+| `depsection.gate_rows` / `wash_dependency_section` | 读 `anchor["evidence_kind"]` | 读 `statement_grade(anchor)`（`bits_from_row` 现算） |
 | `agent_f/manuscript.citable_statements` | 列 `evidence_kind >= proof_review` | 列现算等级 `>= pre_theorem`，提示词行写 `grade=` |
 | `verifications._grade_recomputed_from_signature` | 按通道给目标档、写 `evidence_kind` | 只算等级、不写档位（读数带 `to`/`to_kind`/`basis`） |
 | `verifications.weaker_than_evidence_gaps` | 读档位在 `(heuristic, cross_check)` | 读现算等级在 `(conjecture, strong_conjecture)` |
