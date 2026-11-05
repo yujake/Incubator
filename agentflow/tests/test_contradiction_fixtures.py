@@ -20,19 +20,36 @@ from __future__ import annotations
 import pytest
 
 from agentflow import closing as CL
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from conftest import TS, sync_counters
 from agentflow.store import Store
 
 
-def _stmt(store: Store, sid: str, **kw) -> dict:
-    """一条命题（默认 active + external_lit + 逐字已核）。"""
+def _stmt(store: Store, sid: str, *, level: str = "", **kw) -> dict:
+    """一条命题（默认 active + external_lit + 逐字已核）。
+
+    等级是唯一的轴（2026-11-05）：档位由五元位现算，不再由调用方声明。
+    `level="theorem"` 预置「证明 + 机器可核（第 4 位某个证明号 verified）」那两格；
+    别的档位只预置第 2 位（有证明）。
+    """
     base = dict(stmt_id=sid, origin="external_lit", kind="theorem", label=f"Theorem {sid}",
                 statement_text="命题短版", statement_full="若假设 A 成立，则结论 B 成立",
                 proof_text="Proof. 逐字摘录……", source_lit_id="0000",
-                quote_verified=True, quote_reason="逐字比对通过", evidence_kind="cross_check",
+                quote_verified=True, quote_reason="逐字比对通过",
                 status="active", created_at=TS)
     base.update(kw)
+    body = str(base.get("proof_text") or "")
+    bits = EB.bits_of(
+        origin=str(base.get("origin") or "own_result"),
+        source_lit_id=str(base.get("source_lit_id") or ""),
+        quote_verified=base.get("quote_verified"),
+        proof=bool(body.strip()), proof_process=body,
+        formal=("verified" if level == "theorem" else None),
+        formal_evidence=({"checker": "lean4"} if level == "theorem" else None),
+        kind=str(base.get("kind") or ""))
+    base["bits"] = bits
+    base["evidence_kind"] = EB.kind_from_bits(bits, kind=str(base.get("kind") or ""))
     row = S.Statement(**base)
     row.validate()
     with store.tx("statements", actor="test") as tx:
@@ -111,7 +128,7 @@ def test_our_own_hole_has_its_own_code(tmp_path):
     """
     st = _store(tmp_path)
     _stmt(st, "0001", status="disputed", quote_reason="我们这一版的证明缺一步")
-    _stmt(st, "0002", evidence_kind="proof", derived_from=["0001"])
+    _stmt(st, "0002", level="theorem", derived_from=["0001"])
     rep = _run(st)
     assert "contradiction_own_hole" in _codes(rep), _codes(rep)
     assert "可挽救性评估" in " ".join(f.detail for f in rep.findings), [f.detail for f in rep.findings]
@@ -148,7 +165,7 @@ def test_the_three_causes_do_not_collapse_into_one_code(tmp_path):
     with st.tx("dependencies", actor="test") as tx:
         tx.upsert("dependencies", dep.to_dict())
     _stmt(st, "0001", status="disputed", quote_reason="缺一步")
-    _stmt(st, "0002", evidence_kind="proof", derived_from=["0001"])
+    _stmt(st, "0002", level="theorem", derived_from=["0001"])
     rep = _run(st)
     assert _codes(rep) == ["contradiction_disputed_source", "contradiction_own_hole",
                            "contradiction_wrong_paper"], _codes(rep)

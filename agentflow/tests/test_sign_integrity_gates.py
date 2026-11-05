@@ -53,10 +53,14 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _seed(st: Store, *, proof_text: str = PROOF) -> str:
+    # 等级是唯一的轴：给这一行预置五元位（正文非空 ⇒ 第 2 位为真），
+    # V 的三次「成立」翻第 3 位之后等级现算 `pre_theorem`；历史列照等级反算。
+    bits = EB.bits_of(origin="own_result", proof=bool(str(proof_text or "").strip()),
+                      proof_process=str(proof_text or ""), kind="conjecture")
     seeded = seed_statement_row(
         st, proof_text=proof_text, statement_full=FULL, statement_text="K4 的刻画",
         kind="conjecture", label="k4-characterisation", origin="own_result",
-        evidence_kind="heuristic", bits={})
+        evidence_kind=EB.kind_from_bits(bits, kind="conjecture"), bits=bits)
     return str(seeded["stmt_id"])
 
 
@@ -175,14 +179,14 @@ def test_d_a_plan_manuscript_is_not_a_sign_carrier(tmp_path: pathlib.Path) -> No
 # ====================================================================== e 签成即升档
 
 def test_e_signing_then_registering_the_body_upgrades_the_grade(tmp_path: pathlib.Path) -> None:
-    """e：两阶段现场（先发签、后回填正文）⇒ 正文落进那一行时同一笔升到 `proof_review`。"""
+    """e：两阶段现场（先发签、后回填正文）⇒ 正文落进那一行时同一笔升到 `pre_theorem`。"""
     st = _ws(tmp_path)
     sid = _seed(st, proof_text="")
     rel = _manuscript(st, sid)
     third = _sign_three(st, sid, rel)
     wb = dict(third.get("statement_writeback") or {})
     assert wb.get("written") is False, wb   # 正文还没进那一行 ⇒ 第 3 位不翻
-    assert _row(st, sid)["evidence_kind"] == "heuristic", _row(st, sid)
+    assert EB.bits_from_row(_row(st, sid))["grade"] == "conjecture", _row(st, sid)
     sha = VR.proof_sha(PROOF)
     assert VS.sign_path(st.root, sha).is_file(), "三转成立却没有签文件"
 
@@ -192,24 +196,29 @@ def test_e_signing_then_registering_the_body_upgrades_the_grade(tmp_path: pathli
                       kind="conjecture")
     wrote = b._attach_proofs(sid, [], canonical=PROOF, bits=bits)
     assert wrote.get("written") is True, wrote
-    assert (wrote.get("grade_recomputed") or {}).get("to") == "proof_review", wrote
+    # 等级是唯一的轴：同一笔把等级算到 `pre_theorem`（历史档位反算是 `proof_review`）。
+    assert (wrote.get("grade_recomputed") or {}).get("to") == "pre_theorem", wrote
     row = _row(st, sid)
-    assert row["evidence_kind"] == "proof_review", row
+    assert EB.bits_from_row(row)["grade"] == "pre_theorem", row.get("bits")
+    assert EB.kind_from_bits(row.get("bits") or {},
+                             kind=row.get("kind") or "") == "proof_review", row
     assert row["proof_text"] == PROOF, row
 
 
 # ====================================================================== g 正控
 
 def test_g_the_registered_path_still_upgrades_like_the_good_现场(tmp_path: pathlib.Path) -> None:
-    """g：000013/000017 那种"两步都跑"的正控仍在 —— 签一到，`proof_review` 就到位。"""
+    """g：000013/000017 那种"两步都跑"的正控仍在 —— 签一到，`pre_theorem` 就到位。"""
     st = _ws(tmp_path)
     sid = _seed(st, proof_text=PROOF)
     rel = _manuscript(st, sid)
     third = _sign_three(st, sid, rel)
     assert (third.get("statement_writeback") or {}).get("written") is True, third
     row = _row(st, sid)
-    assert row["evidence_kind"] == "proof_review", row
-    assert (row.get(VR.GRADE_RECOMPUTED_KEY) or {}).get("to") == "proof_review", row
+    assert EB.bits_from_row(row)["grade"] == "pre_theorem", row.get("bits")
+    assert EB.kind_from_bits(row.get("bits") or {},
+                             kind=row.get("kind") or "") == "proof_review", row
+    assert (row.get(VR.GRADE_RECOMPUTED_KEY) or {}).get("to") == "pre_theorem", row
 
 
 # ====================================================================== 丙 义务项

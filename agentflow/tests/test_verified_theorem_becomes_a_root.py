@@ -30,7 +30,6 @@ import pytest
 
 from _proof_manuscript_fixture import write_proof_manuscript
 
-from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -54,8 +53,9 @@ MANUSCRIPT = ("# F 的证明手稿：n^2+n 是偶数\n\n"
               "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
               "|---|---|---|---|\n"
               "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
-#: 未在册时没有号，按计划号命名（`depsection.manuscript_relpath` 是唯一命名口径）。
-REL = DS.manuscript_relpath(plan_id="0000")
+#: 未在册时没有号，但签的载体必须是 `reports/f-proof-<数字>.md`（2026-11-05 晚：
+#: 计划稿 `f-proof-plan-*` 是合法落稿名、不是签的载体 ⇒ 这一份夹具用按号名）。
+REL = "reports/f-proof-000000.md"
 
 
 class _FixedSeam:

@@ -206,6 +206,9 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     out = _agent(st).register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
+        # 2026-11-05：要写正文的这一笔必须带 `proof_manuscript`（正文必须由一份稿承载）。
+        # 盘上那一份是别条命题的稿 —— 正文照写、它的依赖面一条不落（b3 量这一半）。
+        proof_manuscript=FOREIGN_MANUSCRIPT,
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
         evidence_kind="heuristic", quote_verified=None,

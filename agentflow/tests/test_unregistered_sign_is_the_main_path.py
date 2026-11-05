@@ -255,7 +255,7 @@ def test_c3_a_plan_manuscript_carries_no_sign(tmp_path):
 
 # ============================================================ d 认领 ⇒ proof_review
 def test_d_the_claim_reaches_proof_review(tmp_path):
-    """d：登记出号后按正文 sha 认领成功，`evidence_kind` 的凭据面到 `proof_review`。
+    """d：登记出号后按正文 sha 认领成功，等级到 `pre_theorem`（历史列反算 `proof_review`）。
 
     判据本体只有一处：`verifications.proof_review_gap`（写入期闸 / 审计 / 收工门同源）。
     它认 pending 那一行 —— 所以"先签后登记"与"先登记后签"是同一件事。
@@ -271,19 +271,24 @@ def test_d_the_claim_reaches_proof_review(tmp_path):
     assert dict(reading["claim"]).get("ledger") == _pending_ref(row), reading["claim"]
     assert dict(new).get("reviewed") is True, new
 
-    # 登记拿到号之后：那一行的凭据面（`evidence_kind=proof_review` 的写入口）。
+    # 登记拿到号之后：那一行的凭据面（`pre_theorem` 的写入口）。
     gap = VR.proof_review_gap(st.root, {"stmt_id": SID, "kind": "conjecture",
                                         "proof_text": PROOF,
                                         "evidence_kind": VR.PROOF_REVIEW_KIND})
     assert gap.get("ok") is True, gap
     assert gap.get("state") == "signed", gap
     assert gap.get("ledger") == _pending_ref(row), gap
-    # 按通道重算到 proof_review（同一份实现：签发 / 收录两边共用）。
+    # 按通道重算到 `pre_theorem`（同一份实现：签发 / 收录两边共用）。
+    # 等级的现算入参是五元位：认领回来的 `new` 就是这一行的第 3 位。
     recomputed = VR._grade_recomputed_from_signature(
         {"stmt_id": SID, "kind": "conjecture", "proof_text": PROOF,
-         "evidence_kind": "heuristic"}, root=str(st.root))
-    assert (recomputed.get("reading") or {}).get("to") == VR.PROOF_REVIEW_KIND, recomputed
-    assert (recomputed.get("row") or {}).get("evidence_kind") == VR.PROOF_REVIEW_KIND
+         "evidence_kind": "heuristic", "bits": dict(new)},
+        root=str(st.root))
+    reading_now = recomputed.get("reading") or {}
+    assert reading_now.get("to") == "pre_theorem", recomputed
+    # 历史列只是反算读数（不再由这一格写盘）：`pre_theorem` ⇔ `proof_review`。
+    assert reading_now.get("to_kind") == VR.PROOF_REVIEW_KIND, recomputed
+    assert EB.kind_from_grade(reading_now.get("to")) == VR.PROOF_REVIEW_KIND, recomputed
 
 
 # ============================================================ d2 sha 不一致

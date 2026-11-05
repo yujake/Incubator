@@ -43,6 +43,7 @@ if str(_SRC) not in sys.path:
 from conftest import sign_before_registration
 
 from agentflow import depsection as DS
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
@@ -73,13 +74,21 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
     `SIGN_STREAK_NEED` 次「成立」"（第 1、2 次只落台账、不翻位），所以夹具连签 ——
     闸的判据一个字都没放宽，只是夹具按新规矩凑够次数。
     """
+    body = f"命题 {stmt_id} 的证明正文（判据夹具）。"
+    # 等级是唯一的轴：档位由五元位现算。第 2 位先落真（正文就是这一份），
+    # 由 V 的三次「成立」翻第 3 位 ⇒ `pre_theorem`；`level="cross_check"` 那一档
+    # 不签，现算就是 `conjecture`（低于可引门槛，正是 c 要打回的那一档）。
+    bits = EB.bits_of(origin="own_result", proof=True, proof_process=body,
+                      kind="theorem")
     row = S.Statement(
         stmt_id=stmt_id, origin="own_result", kind="theorem",
         label=label or f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",
-        proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
-        evidence_kind="heuristic", status="active", quote_verified=None,
+        proof_text=body,
+        bits=bits,
+        evidence_kind=EB.kind_from_bits(bits, kind="theorem"),
+        status="active", quote_verified=None,
         quote_reason="判据夹具：自产命题", created_at=S.now_iso(), created_by="agent-B")
     row.validate()
     with store.tx("statements", actor="test") as tx:
@@ -89,7 +98,7 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
         for i in range(1, need + 1):
             signed = VR.record_verification(
                 store.root, statement_id=stmt_id,
-                proof_text=f"命题 {stmt_id} 的证明正文（判据夹具）。",
+                proof_text=body,
                 verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
                 store=store, proof_no=1)
             assert signed.get("checked") is True, signed
@@ -99,7 +108,13 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
                 f"连续 {need} 次才发签，第 1..{need - 1} 次只落台账", signed)
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
-    got["evidence_kind"] = level
+    # 历史列照等级反算（判定面只读五元位现算的等级）。
+    got["evidence_kind"] = EB.kind_from_bits(got["bits"],
+                                             kind=got.get("kind") or "")
+    if level == "proof_review":
+        assert got["evidence_kind"] == "proof_review", got["evidence_kind"]
+    else:
+        assert EB.derive_grade(got["bits"], kind=got.get("kind") or "") == "conjecture", got
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", got)
     return got
@@ -296,9 +311,11 @@ def test_a_missing_id_is_sent_back_with_actionable_findings(
 
 def test_a_below_proof_review_source_is_caught_here_not_at_b(
         tmp_path: pathlib.Path) -> None:
-    """b 的第三档：引用写在册但档位不够 `proof_review` ⇒ 在秘书这一步就打回。
+    """b 的第三档：引用写在册但等级不够 `pre_theorem` ⇒ 在秘书这一步就打回。
 
     改前红：这一档只有 B 的入库闸会拒 —— 而那时 F 已经把"提交给 V 的那一份"交出去了。
+    口径（2026-11-05）：档位只是历史列，门槛量的是现算等级；这一条在册命题有证明、
+    没有 V 签 ⇒ 现算 `conjecture`（正是低于 `CITATION_MIN_LEVEL` 的那一档）。
     """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, level="cross_check")
@@ -307,7 +324,7 @@ def test_a_below_proof_review_source_is_caught_here_not_at_b(
     got = _secretary(store).wash_dependency_face(raw)
     assert got["deps_refused"] == DS.WASH_REFUSED_ROW, got
     f = got["deps_refused_findings"][0]
-    assert "cross_check" in f["got"], f
+    assert f["got"] == f"stmt:{THEOREM_A}（conjecture）", f
     assert DS.CITATION_MIN_LEVEL in f["expected"], f
     assert "V" in f["how_to_fix"], f
 
