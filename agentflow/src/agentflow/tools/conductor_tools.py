@@ -1028,10 +1028,11 @@ def conductor_state(_conductor, ) -> ToolResult:
     side_effect="read",
     roles=("M",),
     # 2026-10-15 补齐：这把工具体返回的是那个角色的整份 brief（六个字段），
-    # 而声明里只列了 `{role, actions, tools, summonable}` ⇒ 模型看不到
-    # `duty` / `boundary` / `policy` / `stance` / `signature_error` / `deliverable` ——
-    # 而这件的用途「恰恰是」"让一个角色读到另一个角色的口径"。
-    # `returns` 会拼进 function-calling 的 `description`（模型看得到）。
+    # 而声明里只列了 `{role, actions, tools, summonable}` ⇒ 声明契约与实跑分家
+    # （`duty` / `boundary` / `policy` / `stance` / `signature_error` / `deliverable`
+    # 六格没进键集合）。`returns` 只是台账/冻结快照的声明契约（`tools/base.py:674-679`
+    # 写明 ToolFace 的 description 不带 returns）—— 模型面看不到它，补齐它是为了让
+    # 契约与实跑对上，不是为了让模型多看一眼。
     # 「2026-10-16（业主口径）」：这里「不再返回 `actions` / `tools`」。
     # 原话逐字：「M 只是个派活的……「不指定能力」。M 能看到的只是各角色描述，
     # 「看不到具体的工具箱与动作」，但可在角色描述中暗示它各角色能干什么。」
@@ -3191,8 +3192,9 @@ def conductor_watch(_conductor: Any, store: Any, *, task_id: str = "",
     roles=("M",),
     # 这里只声明顶层键（逐跳那几格写在上面的摘要里）：本仓的声明判据把 `returns=`
     # 里出现的每个引号键都算成"声明的键"，而探针落在受控拒绝那一支时 `hops` 是空
-    # 数组 ⇒ 逐跳键观察不到（那会让 `declared ⊆ actual` 假红）。逐跳的形状仍然对
-    # 模型可见：`tools/base.py` 把摘要与 returns 一起拼进 description。
+    # 数组 ⇒ 逐跳键观察不到（那会让 `declared ⊆ actual` 假红）。逐跳的形状写在
+    # 上面的摘要里（模型面只渲染 summary；`returns` 不进 description —— 见
+    # `tools/base.py:674-679`），所以这里只声明顶层键。
     returns=("{'checked','ok','status','to','chain','chain_text','names','roles','to_role',"
              "'delivered_to','hops','item_id','relay_id','refused','error','skipped',"
              "'text','note'}"),
