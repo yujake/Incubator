@@ -6783,7 +6783,8 @@ class Secretary:
             return out
 
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
-                         force_new: bool = False) -> dict[str, Any]:
+                         force_new: bool = False,
+                         candidate_id: str = "") -> dict[str, Any]:
         """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
 
         业主逐字见 :meth:`wash_statement`。B 自己一次写工具都不调：这里是一笔事务（`statements` +
@@ -6822,6 +6823,12 @@ class Secretary:
         `000000` / `000001` 逐字都是它）：命中 `LABEL_WORKING_NAME_RULES` 就洗掉，洗成
         什么由 `wash_working_name` 的三级兜底决定（剩下一截 / 正文里的第一句 / 待命名），
         读数在 `label_washed` 里逐条给「原标签 → 洗过的名字 + 触发了哪一类」。
+        ## `candidate_id`：把稿名 / 稿头的号当候选号（D2 口径①，2026-11-05）
+        B 在"新建"这一档把稿名 / 稿头算出来的号当候选交进来：**可用就用它发号**
+        （并 `raise_counter_to` 把计数器抬到它之后，下一笔不会又撞）；**已被占 ⇒ 受控
+        拒绝 `stmt_id_taken`，不另发一个号**（改前是静默另发 ⇒ 稿 000001、命题 000000，
+        第 5 步 `manuscript_owner_mismatch`、扫盘 `b-register@000001@…` 的义务永远关不上）。
+        不给 ⇒ 与改前逐字一致（按计数器发）。
         ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）：派活洗不动可以原样发出去，让下游闸门去拒
         （`refused` 行本身就是证据）；写入这条路上没有下游闸门：`Statement.validate` 只查形状，而"键名是别名"这种错会让内容静默落成空字段。
         写是不可逆的，所以这里选"不写"（与 `draft/90` §1.2 对"硬拒"的取舍同一条理由：拒绝是受控的，静默写坏不是）。
@@ -6955,7 +6962,8 @@ class Secretary:
         try:
             return self._record_statement_tx(body, full=full, kind=kind,
                                              force_new=bool(force_new), out=out,
-                                             adjudication=adjudication)
+                                             adjudication=adjudication,
+                                             candidate_id=str(candidate_id or ""))
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             # ---- 写入期闸的拒收要留住它自己的码（2026-11-05 走查 D2）------------
             #
@@ -7602,7 +7610,8 @@ class Secretary:
 
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any],
-                             adjudication: Mapping[str, Any] | None = None
+                             adjudication: Mapping[str, Any] | None = None,
+                             candidate_id: str = ""
                              ) -> dict[str, Any]:
         """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。
 
@@ -7749,7 +7758,42 @@ class Secretary:
             # 过渡期的号空间只有一个权威（老表还在时是 `concept`，迁移之后是 `stmt`）
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else stmt_kind)
-            stmt_id = tx.alloc_id(stmt_kind)
+            # ---- D2（2026-11-05 走查）：稿名 / 稿头的号当候选号，**不另发一个** -------
+            #
+            # 现场（`temp/e2e-sign-20261105-b` 主链）：稿名 / 稿头是 000001，而计数器从 0
+            # 起 ⇒ 登记拿到 000000。第 4 步靠"新命题还没有号"使 owner 判据短路才过；
+            # 第 5 步同一条命令就撞 `manuscript_owner_mismatch`；收工扫盘按**稿名**开
+            # `b-register@000001@…` 的义务永远收不了口（`reconcile_registrations` left=1）。
+            #
+            # 口径①（业主 2026-11-05 选定）：候选号可用 ⇒ 就用它（并把计数器抬到它之后，
+            # 下一笔不会又撞）；已被占 ⇒ 受控拒绝 `stmt_id_taken`，绝不静默另发一个 ——
+            # 错位是静默的，没有任何事后读数会报它（`verify_all` 0 error 就是那次真空的绿）。
+            candidate = str(candidate_id or "").strip()
+            if candidate:
+                if not S.is_valid_id(candidate):
+                    out.update(checked=False, created=False, refused="bad_candidate_id",
+                               reason=(f"候选号 {candidate!r} 不是命题号形态"
+                                       f"（{S.ID_DIGITS} 位十进制；旧四位仍可读）⇒ "
+                                       "整笔不写。稿名 / 稿头要给号就给对形态"))
+                    return out
+                occupied = tx.find("statements", stmt_id=candidate)
+                if occupied is not None:
+                    out.update(checked=False, created=False, refused="stmt_id_taken",
+                               stmt_id=candidate,
+                               reason=(f"稿名 / 稿头要的号 {candidate} 已被在册命题占用"
+                                       f"（{str((occupied or {}).get('label') or '')[:60]!r}，"
+                                       f"正文 {str((occupied or {}).get('statement_full') or '')[:80]!r}）"
+                                       "⇒ 整笔不写，也不另发一个号：另发会让稿头号与登记号错位，"
+                                       "而那个错位是静默的（扫盘义务、第 5 步的 owner 判据都会"
+                                       "按错位后的号读）。处置：让作者把稿改成要登记的那个号，"
+                                       "或确认这条命题确实已在册（用返回里那个 stmt_id）。"))
+                    return out
+                stmt_id = candidate
+                tx.raise_counter_to(stmt_kind, candidate)
+                out["stmt_id_candidate"] = candidate
+                out["stmt_id_candidate_source"] = "candidate"
+            else:
+                stmt_id = tx.alloc_id(stmt_kind)
             # ---- 内部工作名不许当定理名（D1；真机 mp3-r2 的 000000 / 000001）---------
             # 那两行的 label 逐字都是「F 攻坚 000000 子目标 S2」：派活台账里的工作名进了
             # 定理名，于是同一条定理的两份证明在台账上看起来是两条不同的定理。判据与词表
@@ -11669,7 +11713,8 @@ def for_role(role: str, *, root: str | Path, **kw: Any) -> Secretary:
 
 
 def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
-                       sid: str | None = None) -> tuple[Any, str]:
+                       sid: str | None = None, store: Any = None,
+                       meter: Any = None) -> tuple[Any, str]:
     """秘书判断面那一条缝：`(缝 或 None, 读数)` —— 拿不到时读数就说清为什么。
 
     ## 为什么需要这一处（真机 sylow5 的读数，2026-10-26）
@@ -11701,6 +11746,23 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
     为什么不用 `LlmSeam.for_role`：秘书的判断是"判断类"调用，共用一把 key 才能
     单独限额、单独看账（`by_role="secretary:<本体角色>"`），见
     :meth:`LlmSeam.for_secretary` 的 docstring。
+
+    ## 账（2026-11-05，缺陷 3：这条缝没接电表）
+
+    改前这一处造缝只传了 `owner_role/session_root/sid`，**没传 `meter=`** —— 而
+    `LlmSeam.for_secretary` 的 `**kw` 本来就支持它。后果是每条秘书判定都在
+    `llmseam._charge_ledger` 的第一道闸上落 `{"charged": False, "reason": "no_meter"}`：
+    现场 `temp/_five_verify_20261105/ws02/sessions/20261105.jsonl` 里 3 条 `llm_call`、
+    `$0.002101`，而 `usage_ledger` 是 **0 行** —— 这笔钱在 `reconcile_usage` 里既不是
+    已归口、也不是 `unattributed`，是**没有下落**。
+
+    所以这里按"有账本就必须接上"取值：`meter` 显式给了就用；没给而有 `store` ⇒
+    现造 `TokenMeter(store)`；两样都没有（单测里的裸缝 / 没有工作区可落账）⇒
+    `meter=None` 且读数照旧 —— 那一档的 `no_meter` 是"没有账本可写"，不是漏接线。
+    接上之后每一笔都进账：在召唤上下文里 ⇒ 记到那次召唤的 `task_id` 上（并由
+    `TokenMeter._sync_task_usage` 回写 `tasks.usd`）；不在任何召唤里 ⇒ `task_id=None`
+    且 `note` 写明 `unattributed`，由 `reconcile_usage` 单列一栏点名 ——
+    三态纪律：**发了请求的钱只有"已归口"与"点名说清为什么归不了"两种，没有第三种**。
     """
     if seam is not None:
         return seam, "body（调用方给的缝）"
@@ -11708,9 +11770,19 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
         from .llmseam import LlmSeam
     except Exception as exc:  # noqa: BLE001 —— 拿不到缝的工厂 ⇒ 读数写清，不猜
         return None, f"none（拿不到 llmseam：{type(exc).__name__}: {exc}）"
+    # 账本接不接得上与缝要不要造是两件事：接不上不许把判断面关掉（fail-open），
+    # 但要把"这一次的 no_meter 是账本没接上"写进读数。
+    meter_problem = ""
+    if meter is None and store is not None:
+        try:
+            from . import tokenmeter as _TM
+            meter = _TM.TokenMeter(store)
+        except Exception as exc:  # noqa: BLE001
+            meter_problem = (f"meter 没接上（{type(exc).__name__}: {exc}）"
+                             "⇒ 本条缝的调用会落 no_meter")
     try:
         got = LlmSeam.for_secretary(owner_role=str(role), session_root=Path(str(root)),
-                                    sid=sid)
+                                    sid=sid, meter=meter)
     except Exception as exc:  # noqa: BLE001 —— 造缝失败是"没接线"，不是"没有结论"
         return None, f"none（造缝失败：{type(exc).__name__}: {exc}）"
     if got is None:
@@ -11718,6 +11790,8 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
     if not getattr(got, "wired", False):
         return None, ("none（秘书那一档没有配模型 key ⇒ for_secretary 造出来的是空缝；"
                       "这里不把空缝装上去：空缝会把『从来没有判断面』写成『试过了、没成』）")
+    if meter_problem:
+        return got, f"secretary（LlmSeam.for_secretary；{meter_problem}）"
     return got, "secretary（LlmSeam.for_secretary）"
 
 
@@ -11744,7 +11818,8 @@ def for_role_wired(role: str, *, root: str | Path, seam: Any = None,
     没有缝时它连着为什么 —— `judge()` 的 `checked=False` 那一格会把这句话一并带出来，
     于是"判不了"在返回值与台账上都能见到原因，而不是静默退回机械判据。
     """
-    seam_now, source = seam_for_secretary(str(role), root=root, seam=seam, sid=sid)
+    seam_now, source = seam_for_secretary(str(role), root=root, seam=seam, sid=sid,
+                                          store=store)
     sec = Secretary(str(role), root=Path(str(root)), store=store, registry=registry,
                     seam=seam_now, sid=sid, enable_model=bool(enable_model), **kw)
     try:

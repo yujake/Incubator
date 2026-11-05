@@ -2858,7 +2858,31 @@ class _RegisterStatement:
                                requested_evidence_kind=str(evidence_kind or ""),
                                canonical_written=False,
                                **trunc_reading)
-        written = sec.record_statement(payload, role="B")
+        # ---- D2（2026-11-05 走查）：新建档把稿名 / 稿头的号当候选号 ------------------
+        #
+        # 现象：B 按计数器发号、不认稿名/稿头的号 ⇒ 稿 000001、命题 000000 错位；
+        # 第 4 步靠"新命题 stmt_id_now=''"使 owner 判据短路才过；第 5 步同一条命令被
+        # `manuscript_owner_mismatch` 拒；收工扫盘按稿名开 `b-register@000001@…` 的义务
+        # 永远关不上（`reconcile_registrations` left=1，而 `verify_all` 0 error —— 真空的绿）。
+        #
+        # 口径①（业主 2026-11-05 选定）：稿名优先（扫盘按稿名算号，读侧必须与它同键），
+        # 稿名认不出再退到稿头那一行；只在这一笔**确实要新建**时当候选（在册那一档的号
+        # 由在册行给，候选号不许改变它）。候选号被占 ⇒ 秘书受控拒绝 `stmt_id_taken`，
+        # 不另发号（发号那一步在 `Secretary.record_statement` / `_record_statement_tx`）。
+        candidate_stmt_id = ""
+        candidate_source = ""
+        if (not stmt_id_now and not manuscript_foreign
+                and str(manuscript_text or "").strip()):
+            from agentflow import vsigns as _VS_CAND
+
+            _from_path = _VS_CAND.manuscript_id_of(str(manuscript_path or ""))
+            _from_head = _DS.manuscript_statement_id(str(manuscript_text))
+            if _from_path and S.is_valid_id(_from_path):
+                candidate_stmt_id, candidate_source = str(_from_path), "manuscript_name"
+            elif _from_head and S.is_valid_id(_from_head):
+                candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
+        written = sec.record_statement(payload, role="B",
+                                       candidate_id=candidate_stmt_id)
         # ---- D2②：拒绝要看，不许把它读成成功 ------------------------------------
         #
         # 改前 `if written.get("upgraded") and not written.get("created")` 不看
@@ -2874,10 +2898,13 @@ class _RegisterStatement:
             # 于是换着号继续猜（真机 T1 第 8 趟：同一条拒了 20 次）。与下面
             # `not created` 那一支的 `extra` 同一个白名单，一处口径。
             refused_extra = {k: v for k, v in written.items()
-                             if k in ("literature_rows", "available_lit_ids", "unresolved")}
+                             if k in ("literature_rows", "available_lit_ids", "unresolved",
+                                      "stmt_id_candidate")}
             return _refuse(str(written.get("refused") or "write_failed"),
                            str(written.get("reason") or "秘书没写这一笔"),
-                           stmt_id=stmt_id_now, upgraded=False,
+                           # D2：候选号被占（`stmt_id_taken`）时，拒信要点名是哪个号被占。
+                           stmt_id=str(written.get("stmt_id") or stmt_id_now or ""),
+                           upgraded=False,
                            requested_evidence_kind=str(evidence_kind or ""),
                            canonical_written=bool(pre_write.get("canonical_written")),
                            **refused_extra,
@@ -3333,6 +3360,10 @@ class _RegisterStatement:
         deps_reading_now = _deps_reading(written)
         deps_line = str(deps_reading_now.get("deps_receipt") or "")
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
+                #: D2：这一笔的号是从稿名 / 稿头当候选来的（有才带这一格；见下候选号那一段）。
+                **({"stmt_id_candidate": candidate_stmt_id,
+                    "stmt_id_candidate_source": candidate_source}
+                   if candidate_stmt_id else {}),
                 **optimized_reading,
                 #: 2026-11-04：这一笔有没有把稿转成按号命名的正式稿（有才带这一格）。
                 **({"promoted_manuscript": dict(promotion)} if promotion else {}),
