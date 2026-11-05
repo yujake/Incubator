@@ -4772,12 +4772,18 @@ class AgentLoop:
         # 它只进"每步这一条 user 消息"，不碰 system prompt —— 后者要逐字节稳定
         # （`_system_at_step` 守着前缀缓存），而这一句每拍都可能变。
         ask = self._purpose_ask_note()
+        # 「未尽研究」那段读数先落一个局部名，不在 f-string 里直接调：Python 3.11 的
+        # `tokenize` 不把 f-string 表达式展开成 `NAME` 记号，于是"真符号计数"
+        # （`test_r5_orchestration_cost` 的引用判据）只数得到 `_research_block` 的
+        # 定义那一处、数不到这次调用 ⇒ 一个活着的符号会被读成悬空引用。先调用、
+        # 再插值：行为逐字不变（同一个方法、同一个时点、同一段文本）。
+        research_block = self._research_block()
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
                 f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
                 f"{ask}"
-                f"{self._research_block()}"
+                f"{research_block}"
                 f"{face_note}"
                 f"{JSON_TAIL}")
 
