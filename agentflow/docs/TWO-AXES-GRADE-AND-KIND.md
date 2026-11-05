@@ -221,22 +221,29 @@ theorem           = V 签 ∧ 机器可核（Lean 形式化 或 穷举证书，�
 | 合计 | 1 | 0 | 1 | 0 | 0 | 2 |
 <!-- TWO-AXES:TABLE3F:END -->
 
-### 5.3 怎么读这两张表（存量 362 条非概念行 / 168 条不一致）
+### 5.3 怎么读这两张表（存量 362 条非概念行 / 169 条不一致）
 
-- 非概念行 362 条；历史档位与"按五元位现算的等级反算名"对不上 **168 条**
-  （只读盘点见 `temp/grade_audit.py`）。分布：
-  `cross_check→heuristic` 106、`cross_check→proof_review` 30、`heuristic→proof_review` 23、
-  `proof_review→heuristic` 7、`proof→heuristic` 1、`proof→proof_review` 1。
-  业主 2026-11-05 当晚的基线是 **169 条**（105 / 31 / 25 / 6 / 1 / 1）——差 1 条，
-  因为两次读数之间盘上工作区被重跑过（77 工作区 / 362 非概念行逐字相同）。
-- **重刷会让 106 条降档**：那 106 条历史写着 `cross_check`（自报"有数值交叉验证"），
-  而五元位里没有任何证据（`numeric` 不是 `verified`），现算等级只是 `conjecture`
-  ⇒ 反算名 `heuristic`。这是**纠虚报**，不是把真结果降级：原来的 `cross_check` 是
-  写入方声明的，不是证据给的。另有 7 条 `proof_review→heuristic`、1 条 `proof→heuristic`、
-  1 条 `proof→proof_review` 同一性质（合计 115 条降档）。
-- 反方向 54 条是"等级比历史档位更强"（`cross_check→proof_review` 30、
-  `heuristic→proof_review` 23、`proof→proof_review` 1）：这些行的五元位有
-  `proof ∧ reviewed`，历史列只是没跟上 —— 重刷会把它们抬到 `pre_theorem`。
+- 非概念行 362 条；历史档位与"按五元位现算的等级反算名"对不上，有两种读数
+  （只读盘点见 `temp/grade_audit.py`，它同时打印两种）：
+  - **存量口径**（第 2 位按 `proof_text` 非空读、不做读侧降档）：**169 条** =
+    `cross_check→heuristic` 106、`cross_check→proof_review` 30、
+    `heuristic→proof_review` 25、`proof_review→heuristic` 6、
+    `proof→heuristic` 1、`proof→proof_review` 1。业主 2026-11-05 当晚的基线也是
+    **169 条**（105 / 31 / 25 / 6 / 1 / 1）——只有 `cross_check` 那一行的 `reviewed`
+    位在两次读数之间变过（77 工作区 / 362 非概念行逐字相同，是盘上数据漂移，不是口径漂移）。
+  - **严格口径**（`bits_from_row`：占位签 / 过期签 / 过期形式化一律压下来）：**168 条** =
+    `cross_check→heuristic` 132、`heuristic→proof_review` 23、`proof_review→heuristic` 7、
+    `cross_check→proof_review` 4、`proof→heuristic` 1、`proof→proof_review` 1。
+- **重刷会让 106 条降档**（存量口径）：这 106 条历史写着 `cross_check`（自报"有数值
+  交叉验证"），而五元位里没有任何证据（`numeric` 不是 `verified`），现算等级只是
+  `conjecture` ⇒ 反算名 `heuristic`。这是纠虚报，不是把真结果降级：原来的
+  `cross_check` 是写入方声明的，不是证据给的。同一性质还有 `proof_review→heuristic` 6 条、
+  `proof→heuristic` 1 条、`proof→proof_review` 1 条（合计 114 条降档；业主基线 105 那条
+  `cross_check` 的差 1 同上）。严格口径下这一格是 132 + 7 + 1 + 1 = 141 条。
+- 反方向 55 条是"等级比历史档位更强"（`cross_check→proof_review` 30、
+  `heuristic→proof_review` 25、`proof→proof_review` 1）：这些行的五元位有
+  `proof ∧ reviewed`，历史列只是没跟上 —— 重刷会把它们抬到 `pre_theorem`
+  （严格口径下升档 27 条：23 + 4）。
 - 表里 `strong_conjecture` / `theorem` 两列全 0，因为现场没有任何一行的第 1 位是
   `verified`、也没有任何一行的第 4 位是 `verified`（Lean 侧全关；`formal` 这一格在
   3,627 行里只出现过 `pending` 与 `null`，二维的 `{证明号: 状态}` 一次都没落过盘）。
