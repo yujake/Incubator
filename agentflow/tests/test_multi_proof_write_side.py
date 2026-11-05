@@ -214,7 +214,12 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     # 2026-11-05：`_grade_recomputed` 的 `from` / `to` 是等级，历史档位由
     # `from_kind` / `to_kind` 反算给出；`evidence_kind` 只是历史列，登记期不再回填
     # （判定面读 `derive_grade`）。
-    allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY}
+    # 2026-11-06（真机 R-mk-infinite-92）：收录回执两格（`proof_no` / `proof_sha256`）
+    # 只在"正文补进在册那一行、补翻第 2 位"的那一笔落（`_attach_proofs` 的
+    # `proof_collected`）。这一条走的是正文覆盖 / 新建那一支，行上不该多出这两格 ——
+    # 下面逐行断言"没有"。它们不是 `schema.Statement` 的字段（改磁盘格式契约要人审），
+    # 所以从"只差内部留痕"的集合里排除。
+    allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256"}
     assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
     for row, store in ((row_old, st_old), (row_new, st_new)):
@@ -227,6 +232,10 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
         assert trace.get("to_kind") == VR.PROOF_REVIEW_KIND, trace
         assert trace.get("from") and trace.get("from") != trace.get("to"), trace
         assert trace.get("proof_no") == 1, trace
+        # 收录回执（`proof_no` / `proof_sha256`）只在"把正文补进在册那一行、补翻第 2 位"
+        # 的那一笔出现（`_attach_proofs` 的 `proof_collected`）；这一条走的是正文覆盖 /
+        # 新建那一支，行上不该多出这两格 —— 那里的正文与第 2 位本来就是同一笔来的。
+        assert "proof_no" not in row and "proof_sha256" not in row, sorted(row)
         last = _ledger(store)[-1]
         assert trace.get("basis") == (
             f"verifications/{S.format_id(0)}.jsonl#{last['verification_id']}"), trace

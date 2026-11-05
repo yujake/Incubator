@@ -5461,6 +5461,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # not_recorded）；缺格是 `not_recorded`，不是 `false`。页面那一列叫「优化」。
       ("optimized_paths", "OptimizedPath[]"),
       ("grade", "string"), ("grade_label", "string"),
+      # 2026-11-06（真机 R-mk-infinite-92）：收录回执两格 —— 这一行现在这一份证明是
+      # 哪一号、正文指纹是什么。它由"把正文补进在册那一行、补翻第 2 位"的那一笔
+      # （`agent_b.register_statement._attach_proofs` 的 `proof_collected`）按盘上的
+      # 正文现算落盘；不是 `schema.Statement` 的字段，也没有每一行都会有的承诺
+      # （老行 / 新建行都没有）⇒ 声明成可选（`?`）—— C 条"可选的没出现不算漂移"那一档。
+      ("proof_no?", "number"), ("proof_sha256?", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
       ("by_role", "string"), ("by_role_source", "string"),

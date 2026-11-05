@@ -581,6 +581,55 @@ REVIEWED_BY_PROOF_KEY = "reviewed_by_proof"
 REVIEWED_SHA_BY_PROOF_KEY = "reviewed_sha_by_proof"
 
 
+def bits_after_proof_recorded(bits: Mapping[str, Any] | None, *,
+                              delivered: Mapping[str, Any] | None = None,
+                              proof_process: str = "",
+                              kind: str = "") -> dict[str, Any]:
+    """收录一份正文之后的那一份五元位：第 2 位翻真 + 第 3 位带这一笔认到的签。
+
+    ## 为什么这一格必须存在（真机 `R-mk-infinite-92` 的 `statements:000000`）
+
+    现场那一行：`proof_text` 1325 字已在行上、V 的签块在稿上（连续 3/3 成立）、
+    台账也在，而行上仍是 `bits.proof=False` / `grade=conjecture` /
+    `reviewed_by_proof` 为空 —— 因为"收录"那一条路（秘书判同一条 ⇒ 并进在册那一行，
+    `Secretary._merge_into_proposition`）只写了 `proof_text`，把这一笔交来的 `bits`
+    整份丢掉了；而能翻位的只有 V 落签那一笔（`verifications._reviewed_statement_row`，
+    它只动第 3 位）。于是"正文在行上"与"这一行有证明"分家，等级永远派生不出定理。
+
+    ## 判据只有两条，别的都不在这里写
+
+    1. 这一行现在有正文 ⇒ 第 2 位为真（`proof_text` / `proofs` 是正本，位是读数）；
+    2. 这一笔按正文 sha 认到的签（`delivered` = `vsigns.bits_after_sign` 的产物）
+       ⇒ 第 3 位那几张表（逐份表 / sha 表 / `reviewed_by` / `reviewed_source`）
+       整格带过来 —— 认不到就保留旧的（旧签作为历史仍在，读侧按 sha 判 stale）。
+
+    等级不在这里自报：整份走 :func:`normalize_raw`（⇒ :func:`derive_grade` 现算），
+    与 `bits_of` / 读侧的 `bits_from_row` 是同一个函数算出来的。所以穷举 / 形式化那一档
+    不会被压回 `pre_theorem` —— 第 1/4 位已经在盘上的话，`derive_grade` 照样给 `theorem`。
+    """
+    raw = dict(bits or {})
+    fresh = dict(delivered or {})
+    ev = dict(raw.get("evidence") or {})
+    fresh_ev = dict(fresh.get("evidence") or {})
+    # 第 3 位：这一笔认到的签（逐份表 + 那一签盖住的 sha + 凭据）跟着正文一起落。
+    for key in (REVIEWED_BY_PROOF_KEY, REVIEWED_SHA_BY_PROOF_KEY,
+                "reviewed_by", "reviewed_source"):
+        if key in fresh_ev:
+            ev[key] = fresh_ev[key]
+    if bool(fresh.get("reviewed")):
+        raw["reviewed"] = True
+    # 第 2 位：这一行现在有正文 —— 这就是"翻第 2 位"那一步（唯一一处）。
+    raw["proof"] = True
+    body = str(proof_process or "")
+    if body.strip():
+        # 凭据要说得出"证明过程是什么"：`bit_problems` 对"proof=true 而没有正文"报缺陷。
+        ev["proof_process"] = body
+        ev["proof_source"] = str(ev.get("proof_source") or "own")
+    raw["evidence"] = ev
+    return normalize_raw(raw, origin=str(raw.get("origin") or "own_result"),
+                         voided_by=dict(raw.get("voided_by") or {}), kind=kind)
+
+
 def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
     """按证明看第 3 位：`{证明号: 有没有签}`（写侧签下的那张表）。
 

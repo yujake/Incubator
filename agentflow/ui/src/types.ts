@@ -603,6 +603,8 @@ export interface StatementRow {
   optimized_paths: OptimizedPath[];
   grade: string;
   grade_label: string;
+  proof_no?: number;
+  proof_sha256?: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;

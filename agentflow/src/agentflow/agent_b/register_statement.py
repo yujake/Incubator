@@ -855,7 +855,8 @@ class _RegisterStatement:
         return bits, None
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
-                       canonical: str = "", bits: Mapping | None = None) -> dict:
+                       canonical: str = "", bits: Mapping | None = None,
+                       proof_no: Any = 1) -> dict:
         """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
@@ -891,6 +892,18 @@ class _RegisterStatement:
         ② 换正文这一笔不许把 `reviewed_by_proof` / `reviewed_sha_by_proof` 清掉：
         `_bits_after_canonical_write` 把这一笔按现行正文认到的签（`fresh` 里那几格）
         带过来，没认到的保留旧的（读侧按 sha 判 stale）—— 两边都不是"清空即通过"。
+
+        ## 收录那一笔：第 2 位跟着正文一起翻（2026-11-06，真机 R-mk-infinite-92）
+        板上 `b-register@<号>@<被签正文 sha>` 收口走的是秘书的"并进在册命题"支
+        （`Secretary._merge_into_proposition`）：它只写 `proof_text`（canonical 从空
+        补上 / 第 N 份证明进清单），不写 `bits`。改前这一格只在 `canonical_changed`
+        时才合并位 ⇒ 收录完那一行是 `proof=false`，而 V 那一签只翻第 3 位 ⇒
+        `reviewed=true ∧ proof=false ∧ grade=conjecture` 的自相矛盾（等级永远到不了
+        `pre_theorem`）。现在那一支也调本函数（`register_statement` 的 `merged` 支），
+        本格在"行上已有正文而第 2 位还没翻"时用
+        `evidencebits.bits_after_proof_recorded` 把第 2 位翻真、把这一笔认到的第 3 位
+        带过，并同一笔写顶层收录回执（`proof_no` / `proof_sha256`）—— 等级仍由
+        `_grade_recomputed_from_signature` 现算（穷举通道照旧到 `theorem`）。
         """
         out: dict = {"written": False, "attached": [], "already": [],
                      "refused": "", "reason": "", "canonical_differs": False,
@@ -907,7 +920,19 @@ class _RegisterStatement:
                      #: 重算上去的读数（键存在 = 这一笔真升了；`{}` = 没动）。
                      #: 判据只有一处（`verifications._grade_recomputed_from_signature`，
                      #: 与签发那一笔共用），这一格只负责把它接在"正文落进那一行之后"。
-                     "grade_recomputed": {}}
+                     "grade_recomputed": {},
+                     #: 这一笔把第 2 位（有证明）翻上去没有：收录那一条路（秘书判同一条
+                     #: ⇒ 并进在册那行）只写正文、不写 `bits`，这一格就是"补翻第 2 位"
+                     #: 那一笔的读数（判据见 `evidencebits.bits_after_proof_recorded`）。
+                     "proof_collected": False,
+                     #: 这一笔把第 2 位补翻时合并出来的那整份位落盘了没有（第 3 位那几张
+                     #: 表也跟着来）；"翻了"与"合并了"分开报：反真空把翻位那一步摘掉时，
+                     #: 合并出来的那份位仍要落盘 —— 那才是现场的 `reviewed=true ∧
+                     #: proof=false` 形状（判据 `test_b_register_collects_the_proof_bit` 的 b）。
+                     "bits_synced": False,
+                     #: 顶层收录回执：`{proof_no, proof_sha256}`（这一行现在这一份证明是
+                     #: 哪一号、正文指纹是什么）。只在真写进去时出现。
+                     "proof_receipt": {}}
         want = str(canonical or "").strip()
         #: 这一笔交来的东西（证明清单 `entries` / canonical 正文 `want`）两样都没有。
         #:
@@ -1196,6 +1221,46 @@ class _RegisterStatement:
                             "at": S.now_iso(),
                         }
                         out["kind_upgraded"] = dict(row["_kind_upgrade"])
+            # ---- 收录：正文已在行上 ⇒ 第 2 位与"收录回执"同一笔落下 ---------------
+            #
+            # 现场（`projects/R-mk-infinite-92` 的 `statements:000000`，2026-11-06）：
+            # 板上 `b-register@000000@58cf…` 收口那一笔走的是秘书的"并进在册命题"支
+            # （`Secretary._merge_into_proposition`：canonical 从空补上），它只写
+            # `proof_text`；而改前这一格只在 `canonical_changed` 时才合并 `bits`
+            # ⇒ 收录完这一行仍是 `proof=false` / `grade=conjecture`。V 那一签后来只能
+            # 翻第 3 位（`_reviewed_statement_row`），于是盘上出现
+            # `reviewed=true ∧ proof=false ∧ proof_text 非空` 的自相矛盾。
+            #
+            # 判据：这一行现在有正文（正本）⇒ 第 2 位为真（读数），第 3 位那几张表按
+            # 这一笔认到的签带上；实现只有一处（`evidencebits.bits_after_proof_recorded`
+            # ⇒ `normalize_raw` / `derive_grade`），这里不另算一份。
+            # 顶层 `proof_no` / `proof_sha256` 是收录回执（这一行现在这一份证明是哪一号、
+            # 正文指纹是什么），与第 2 位同一笔写、同一次读的正文现算 —— 不是第二份真值。
+            _no_receipt = 1
+            try:
+                _no_receipt = int(_VR.as_proof_no(proof_no) or 0) or 1
+            except (TypeError, ValueError):
+                _no_receipt = 1
+            _body_now = str(_VR.proof_text_of(row, _no_receipt) or "")
+            if bits is not None and _body_now.strip() and not bool(
+                    dict(row.get("bits") or {}).get("proof")):
+                _collected = _EB.bits_after_proof_recorded(
+                    row.get("bits"), delivered=bits, proof_process=_body_now,
+                    kind=str(row.get("kind") or ""))
+                if _collected and _collected != dict(row.get("bits") or {}):
+                    row["bits"] = _collected
+                    out["bits_synced"] = True
+                # 回执只在第 2 位真的翻上去了时写（"翻第 2 位"与"写回执"是同一件事的
+                # 两半：位没翻而先写"收录了第几份"就是在替一个没发生的事实留念）。
+                if bool(_collected.get("proof")):
+                    out["proof_collected"] = True
+                    # 收录回执：这一行现在这一份证明是哪一号、正文指纹是什么。指纹由
+                    # 刚写进这一行的那一份现算（不是抄调用方交来的 sha）。
+                    _want_sha = _VR.proof_sha(_body_now)
+                    row["proof_no"] = int(_no_receipt)
+                    row["proof_sha256"] = _want_sha
+                    out["proof_receipt"] = {"proof_no": int(_no_receipt),
+                                            "proof_sha256": _want_sha}
             # ---- 2026-11-05（业主）：签成之后就升档，不再等第二条命令 --------------
             #
             # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §二.3 / A-1）：
@@ -1213,7 +1278,7 @@ class _RegisterStatement:
             # 已经是 proof / proof_review ⇒ 不动（幂等，不写第二个时间戳）；
             # 读不出来 ⇒ 不动且 `reading.checked=False`（"没查成"不是"不够格"）。
             _recomputed = _VR._grade_recomputed_from_signature(
-                row, root=getattr(store, "root", ""), proof_no=1)
+                row, root=getattr(store, "root", ""), proof_no=_no_receipt)
             if _recomputed.get("reading"):
                 row = dict(_recomputed.get("row") or row)
                 # 读数必须落盘，不只是"算过"：这一格与 `sign_statement` 那一笔
@@ -1226,7 +1291,8 @@ class _RegisterStatement:
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
             if (not out["attached"] and not canonical_changed and not out["formal_synced"]
-                    and not out["grade_recomputed"]):
+                    and not out["grade_recomputed"] and not out["proof_collected"]
+                    and not out["bits_synced"]):
                 return out
             if out["attached"]:
                 row[_VR.PROOFS_KEY] = listed
@@ -3020,6 +3086,38 @@ class _RegisterStatement:
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
             #: 这一笔交上来的正文超了上限这件事，与"有没有新建行"无关。
             out.update(trunc_reading)
+            # ---- 收录签的那条路也走"写全"的那一支（真机 R-mk-infinite-92 的 000000）--
+            #
+            # 这一支（`written["merged"]`）是"命题先在册、正文后到"的收录路：板上
+            # `b-register@<号>@<被签正文 sha>` 收口就走它。秘书那一笔只把正文写进在册行
+            # （`Secretary._merge_into_proposition`），它不写 `bits`；改前到这里就 return，
+            # 于是"正文在行上、V 的签在台账里"而 `bits.proof=false` —— 等级永远派生不出
+            # 定理（现场那一行的 `reviewed=true ∧ proof=false ∧ grade=conjecture`）。
+            #
+            # 现在与"新建 / 升档"那两支共用 `_attach_proofs`：按盘上那一行的正文补翻第 2 位、
+            # 带过这一笔认到的第 3 位、写顶层收录回执，并按现行签重算等级
+            # （`_grade_recomputed`）。合并稿那一档（`merge=True`，正文换成了还没签的那一份）
+            # 不在此列：那一笔要 V 重签，位不许替它说"签过"。
+            if proof_no >= 1 and not written.get("merged_same_kind"):
+                collect = self._attach_proofs(
+                    stmt_now, [], canonical="", bits=bits, proof_no=int(proof_no))
+                if collect.get("refused"):
+                    out["bits_not_written"] = {
+                        "refused": str(collect.get("refused") or ""),
+                        "reason": str(collect.get("reason") or "")}
+                if collect.get("written") or collect.get("proof_receipt"):
+                    out["row"] = next(
+                        (dict(r) for r in self.store.rows("statements")
+                         if str(r.get("stmt_id") or "") == stmt_now),
+                        out.get("row") or {})
+                if collect.get("grade_recomputed"):
+                    out["grade_recomputed"] = dict(collect.get("grade_recomputed") or {})
+                if collect.get("proof_collected"):
+                    out["proof_collected"] = True
+                if collect.get("proof_receipt"):
+                    receipt = dict(collect.get("proof_receipt") or {})
+                    out["proof_receipt"] = receipt
+                    out["proof_sha256"] = str(receipt.get("proof_sha256") or "")
             if proof_no >= 1:
                 out["proofs"] = [{"proof_no": proof_no}]
             if written.get("merged_same_kind"):
