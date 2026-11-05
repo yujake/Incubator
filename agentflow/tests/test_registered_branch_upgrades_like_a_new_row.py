@@ -18,7 +18,7 @@
 | # | 判据 | 改前为什么红 |
 |---|---|---|
 | e | 在册命题 + 带 V 签的手稿交付 ⇒ `kind` / `evidence_kind` 与"新建同一份"逐字相同（都是 `theorem` / `proof`） | 在册那一支只读签名台账 ⇒ `conjecture` / `cross_check` |
-| f | 反真空：把"读手稿签块 + `bits.reviewed`"那一支摘掉 ⇒ e 必须回落到 `cross_check` / `conjecture` | 没有那一支可打桩（`AttributeError`）⇒ 先红 |
+| f | 反真空：把升档的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 / pending）⇒ e 必须回落到 `cross_check` / `conjecture` | 没有那一支可打桩（`AttributeError`）⇒ 先红 |
 | g | negative：手稿没签 ⇒ 两边都不升档（不许因为"命中在册"就升） | 绿（负控）：这一条守的是新支不许把"有稿"读成"签过" |
 
 ## 口径
@@ -32,7 +32,9 @@
    `bits.evidence.reviewed_by_proof[证明号]`）。
 
 2 与 3 同源（B 的 `bits.reviewed` 正是从手稿签块认出来的），所以它们由同一个
-读数函数 `_manuscript_upgrade_basis` 给出 —— 反真空打桩的就是它。
+读数函数 `_manuscript_upgrade_basis` 给出。反真空打桩的是这三路全部：B 的预写那一格
+与秘书同口径（任一路命中即可升档），只摘 2/3 时 1 照样能把档位顶上去（判据
+`test_f_...` 的打桩点因此跟着判据走，断言的强度不变）。
 
 全部用例在 `tmp_path` 里自建工作区；V 的穷举会审是机械七项 ⇒ 零模型调用。
 """
@@ -49,6 +51,7 @@ if str(SRC) not in sys.path:
 
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
+from agentflow import verifications as VR  # noqa: E402
 
 from test_e_gets_its_v_sign_like_f import (  # noqa: E402
     FULL, _column, _env, _manuscript, _register, _submitted_by_e,
@@ -111,14 +114,29 @@ def test_e_the_registered_branch_upgrades_to_the_new_row_result(
 
 
 # ============================================================ f 反真空
+def _no_gap(*_a, **_kw) -> dict:
+    """`verifications.proof_review_gap` 的"没有凭据"读数（台账 / pending 那一支不存在）。"""
+    return {"ok": False, "checked": True, "why": "打桩：台账 / pending 那一支不存在",
+            "state": "unsigned", "verification_id": "", "ledger": "",
+            "sha_matches": None, "proof_no": None, "rows": 0,
+            "problems": [], "checklist": []}
+
+
 def test_f_stubbing_the_manuscript_evidence_falls_back_to_conjecture(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """f：把"读手稿签块 + `bits.reviewed`"那一支摘掉 ⇒ e 回落到猜想 / cross_check。"""
+    """f：把升档的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 /
+    pending）⇒ e 回落到猜想 / cross_check。
+
+    2026-11-05 补：B 的预写那一格改成与秘书同口径（三路任一路命中）之后，只摘手稿
+    那一支不再足以让 e 回落 —— 这份交付的 pending 台账里也有一签。反真空的打桩点
+    跟着判据走：两路全摘；断言与 e 同一组，一个字没放宽。
+    """
     def _absent(**kw):
         return {"checked": True, "signed": False, "basis": "",
                 "why": "打桩：这一支不存在", "manuscript": {}}
 
     monkeypatch.setattr(SEC, "_manuscript_upgrade_basis", _absent)
+    monkeypatch.setattr(VR, "proof_review_gap", _no_gap)
 
     # 在册那一支：签过的稿也升不上去（回落）
     env = _env(tmp_path / "registered")

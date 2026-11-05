@@ -16,7 +16,7 @@
 | D1 c | 依赖边只来自稿里 `## 依赖` 表（`quote` 是表里那行原话、`label` 是"手稿依赖段…"） | 改前按 `derived_from` 扫描落边，表里那行的 `quote` 不在边上 |
 | D2 a | 在册命题 + 有稿有签 ⇒ 一次 `register_statement` 后 `ek=proof_review`、`bits.reviewed=true`、`ok=true` | 升档先算档后写正文 ⇒ 写入期闸整笔拒（`proof_review_without_evidence`） |
 | D2 b | 打桩让升档被拒 ⇒ `ok=false` + 拒码，且 `canonical_written` 说清正文写没写（正文写了、档位没升，分开报） | 改前不看 `checked/refused`，继续写正文并回 `ok=true/upgraded=true` |
-| D2 c | 反真空：把 `_manuscript_upgrade_basis` 打桩成"没签" ⇒ a 回落到 `cross_check` | 没有那一支时"有稿"会被读成"签过" |
+| D2 c | 反真空：把升档的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 / pending）⇒ a 回落到 `cross_check` | 没有这一支时"有稿"会被读成"签过" |
 | D3 a | 同一条边（同 used_by + 来源号 + path_group）经两路描述 ⇒ 只 1 行 | `_dep_step_key` 把 `kind` / `label` 算进身份 ⇒ 2 行 |
 | D3 b | 两条不同的边（来源号不同）⇒ 仍 2 行（不许过度合并） | 同上 |
 | D3 c | 反真空：把 `kind` / `label` 塞回身份键 ⇒ a 变红 | 没有可打桩点 |
@@ -275,13 +275,38 @@ def test_d2_b_a_refused_upgrade_says_so_and_says_whether_the_body_was_written(
         "拒的是升档，不是正文：正文这一格要说得出它写没写")
 
 
-def test_d2_c_reverse_vacuum_without_the_manuscript_evidence_stays_weak(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D2 c：把"读手稿签块 + bits.reviewed"那一支摘掉 ⇒ a 回落到 cross_check。"""
+def _no_upgrade_basis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """把升档的三路凭据全打桩成"没签"（B 与秘书读的是同一组，任一路命中即升档）。
+
+    为什么不能只摘手稿那一支：这一份夹具的台账里也有三次「成立」（`_sign_three`）
+    ⇒ 只要 B 与秘书按三路判据读，台账那一支照样能把档位顶上去，而 `D2 c` 要量的
+    是"没有凭据就不许升"。两处一起摘，判据才量得到"升档真的靠凭据"。
+    """
     monkeypatch.setattr(SEC, "_manuscript_upgrade_basis",
                         lambda **kw: {"checked": True, "signed": False,
-                                      "basis": "", "why": "打桩：这一支不存在",
+                                      "basis": "", "why": "打桩：手稿那一支不存在",
                                       "manuscript": {}})
+    monkeypatch.setattr(VR, "proof_review_gap", _no_gap)
+
+
+def _no_gap(*_a, **_kw) -> dict:
+    """`verifications.proof_review_gap` 的"没有凭据"读数（台账 / pending 那一支不存在）。"""
+    return {"ok": False, "checked": True, "why": "打桩：台账 / pending 那一支不存在",
+            "state": "unsigned", "verification_id": "", "ledger": "",
+            "sha_matches": None, "proof_no": None, "rows": 0,
+            "problems": [], "checklist": []}
+
+
+def test_d2_c_reverse_vacuum_without_the_manuscript_evidence_stays_weak(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D2 c：把升档的凭据全摘掉（手稿签块 / `bits.reviewed` ＋ 台账 / pending）
+    ⇒ a 回落到 cross_check。
+
+    2026-11-05 补：B 的预写那一格改成与秘书同口径（三路任一路命中）之后，只摘手稿
+    那一支不再足以让 a 回落 —— 这份夹具的台账本来就有三次「成立」。所以反真空的
+    打桩点跟着判据走：两路全摘。断言与 `D2 a` 同一组，一个字没放宽。
+    """
+    _no_upgrade_basis(monkeypatch)
     st, sid, body, text = _signed_registered_case(tmp_path)
     got = _agent(st).register_statement(
         **_own(FULL_B, proof_text=body, proof_manuscript=text,
