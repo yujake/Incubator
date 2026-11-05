@@ -45,6 +45,7 @@ import pytest
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
+from agentflow.store import Store, StoreError
 
 from test_v_reviews_three_times_before_signing import (
     PROOF, REL, SID, _axis, _ReviewSeam, _Seam, _put, _secretary, _ws)
@@ -68,11 +69,37 @@ CONDEMNED_BY_V = json.dumps(
      "why": "第 2 步把未证的 (O1) 当作依据，该步不成立。",
      "findings": [{"detail": "第 2 步以未证的 (O1) 为依据", "kind": "引用未证命题",
                    "level": "error", "step": 2}]}, ensure_ascii=False)
-#: 结论「成立」、但有未解决的 error ⇒ 这一行自己签不住（gate 的正身）。
+#: 结论「成立」、但 V 自己标了一条 `level=error` 的 finding。
+#:
+#: 2026-11-06（业主「判词由 V 定，findings 只是备注」+ `verifications.load_bearing_reading`）
+#: 之后，承重档只认两处读数：`defect_step` 非空 / findings 里有 `level=error`。于是这一形状
+#: 先被 fault 支接走（`fault_by_load_bearing_finding`），不再能造出 `terminal="gate"`。
+#: gate 的正身因此换成"依赖台账读不到"（`deps_unreadable`）：结论成立、`unresolved_errors=0`，
+#: 挡签的是 `citation_gate.problem` ⇒ `row_signable` 为假 ⇒ 这一签自己签不住。
 CLEAN_WITH_ERROR = json.dumps(
     {"verdict": "成立", "why": "没找到缺陷；但引述的那一步记着一条未解决的 error。",
      "findings": [{"detail": "第 2 步的引述与原文不一致", "kind": "引述",
                    "level": "error", "step": 2}]}, ensure_ascii=False)
+
+
+def deps_unreadable() -> "mock._patch":
+    """把 `dependencies` 台账读成"读不到"（`terminal="gate"` 的活证）。
+
+    `gate` 的语义是"结论成立、但这一签自己签不住"。2026-11-06 之后 `row_signable` 的
+    两条路各归各档：`unresolved_errors` 那一形状已被 fault 支接走（见上），剩下的
+    就是"引用核实没查成"——`verifications.citation_gate` 的 `problem` 非空。
+
+    打桩打在读口上（`Store.rows`），不走 `verify_proof` 内部的旁路：这样量到的仍是
+    真实那条链（`_citation_material` → `citation_gate` → 台账行 → `row_signable`）。
+    """
+    real = Store.rows
+
+    def _rows(self, table):
+        if str(table) == "dependencies":
+            raise StoreError("夹具：依赖台账读不到（gate 的正身）")
+        return real(self, table)
+
+    return mock.patch.object(Store, "rows", _rows)
 WASHED = {"text": "第 2 步的记号没有定义：请补上记号说明之后再送 V 重签。", "step": 2,
           "findings": [{"quote": "第 2 步的记号没有定义", "why": "记号没定义就没法核这一步"}]}
 
@@ -143,10 +170,18 @@ def outcomes(tmp_path_factory) -> dict[str, dict]:
         "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
         "wash_v_reply": [WASHED]})
 
-    # 4) 成立但签不住（有未解决的 error；秘书这一转不发签）
-    out["gate"] = _run(base / "s4", replies=[CLEAN_WITH_ERROR], answers={
+    # 4) 成立但签不住（依赖台账读不到 ⇒ `citation_gate.problem` 挡住这一签）
+    out["gate"] = _run(base / "s4", replies=[CLEAN], answers={
         "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
-        "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]})
+        "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]},
+        patch=deps_unreadable())
+
+    # 4b) 结论成立 + 一条 `level=error` 的 finding：2026-11-06 起是 fault（承重档），
+    #     不是 gate —— 钉住"gate 不许抢承重档"这件事（改前它正是 gate 的夹具形状）。
+    out["fault_by_load_bearing_finding"] = _run(
+        base / "s4b", replies=[CLEAN_WITH_ERROR], answers={
+            "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+            "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]})
 
     # 5) 秘书这一问没查成
     out["unjudged"] = _run(base / "s5", replies=[CLEAN], answers={
@@ -186,13 +221,14 @@ def outcomes(tmp_path_factory) -> dict[str, dict]:
 # ============================================================ s1：四个结局各拿自己的 terminal
 
 def test_s1_the_four_outcomes_each_get_their_own_terminal(outcomes):
-    """四个结局各出现一次、各拿自己的 terminal。
+    """四个结局各出现一次、各拿自己的 terminal（另加 2026-11-06 的承重档一条）。
 
     不适用那一档单独判（它没有 `review_passes`，见 s1b）：给它编一个 terminal 就是把
     "这一趟没审"写成"审出了某个结局"。
     """
     want = {"signed": "signed",
             "fault_by_secretary": "fault",
+            "fault_by_load_bearing_finding": "fault",
             "fault_by_v": "verdict",
             "gate": "gate"}
     got = {name: outcomes[name]["terminal"] for name in want}
@@ -214,7 +250,8 @@ def test_s1b_not_applicable_has_no_terminal_at_all(outcomes):
 
 def test_s2_a_condemned_row_is_never_labelled_gate(outcomes):
     """判「有毛病」的行，terminal 绝不在 gate 族；反过来 gate 只许出现在"成立"的行上。"""
-    for name in ("fault_by_secretary", "fault_by_v"):
+    for name in ("fault_by_secretary", "fault_by_v",
+                 "fault_by_load_bearing_finding"):
         o = outcomes[name]
         assert _condemned(o["row"]), f"{name} 的夹具不是一条有毛病行：{o['row']}"
         term = str(o["terminal"])
@@ -227,6 +264,12 @@ def test_s2_a_condemned_row_is_never_labelled_gate(outcomes):
             assert VR.read_verdict(o["row"]) == "成立", (
                 f"{name}：terminal='gate' 蕴含这一行的结论是「成立」，"
                 f"实得 {o['row'].get('verdict')!r}")
+            # 签不住必须有名字：gate 只吃"成立、但这一行自己签不住"的行，而"为什么
+            # 签不住"不许只在读数里空着（2026-11-06 之后这一档的来源是
+            # `citation_gate.problem`，不是一条 unresolved error）。
+            assert VR.signing_gate_problem(o["row"]), (
+                f"{name}：terminal='gate' 但台账行没有任何挡签理由"
+                f"（citation_gate.problem 为空）：{o['row'].get('citation_gate')!r}")
 
 
 # ============================================================ s3：反真空（词表 / 活证 / 分支序）
