@@ -2345,7 +2345,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   - 段摘要那一侧只有 F 那一格换值（46bd35c5… → 91335ce5…），另十格逐字未动。
 #:     为什么不是十一格：② 的两笔都不进提示词正文 —— `proof_manuscript` 是可选的参数，
 #:     提示词那一行只印必填参数（`test_every_declared_action_is_listed_with_its_required_params`）；
-#:     `verify.verify_proof.returns` 只拼进 function-calling 的 description，不进任何角色的段。
+#:     `verify.verify_proof.returns` 只进声明快照（不进 function-calling 的
+#:     description，见 `tools/base.py:674-679`），不进任何角色的段。
 #:     所以这一版的段级变化面 = F 那一格，而声明级变化面 = 两份 golden。
 #:   - 抬版本仍然必要：段变了（F）而版本不动，`test_the_prompt_version_moves_with_the_sections`
 #:     会以"这一次改动在审计里查不到版本"报红；两份 golden 里的提示词那一格带着版本行，
@@ -2396,8 +2397,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      才进提示词）：`summary` 从「三态：可销 ⇒ state=retired；不可销（还在飞 / 名下还有
 #:      未消的板项 / …）」改成带「待机」那一档，并写明 `refusal_code` 走
 #:      `Conductor.retire_state_of` 的三态读数。它进的是 M 那一格的 `tools_lines` 行，
-#:      所以 M 那一格额外换一次。`returns=` 不进任何角色的段（它只拼进 function-calling 的
-#:      description，见 `tools/base.py:721` 那一处），它动的是 `tests/golden/
+#:      所以 M 那一格额外换一次。`returns=` 不进任何角色的段（它只进声明快照 ——
+#:      `tools/base.py:674-679` 写明 description 不带 returns），它动的是 `tests/golden/
 #:      tool_surface_snapshot.json` 的 `declarations` 那一格。
 #: 读数（现算，`temp/recompute_prompt_digests.py` 与 `temp/golden_diff_p205.py`）：
 #:   - 段摘要那一侧十一格全换（① 改的是每一格都渲染的 `tools_lines` 行；② 再换 M 那一格）。
@@ -2790,8 +2791,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ② 机器侧的落点：`providers.mark_topic_selfcheck`（broad 逐条标 related/off_topic/unknown，
 #:    只标不删）＋ `search.literature` 的 `candidates[].topic_selfcheck`
 #:    （声明在 `returns=` 里，`contract_amendments` 记了一笔）。
-#:    这两处不改提示词文本本身（`returns=` 会进 function-calling 的 description，
-#:    但那是工具面，属 `tools_lines` 之外的派生态；A 那一格本来就因为 policy 变了）。
+#:    这两处不改提示词文本本身（`returns=` 只进声明快照，不进 function-calling 的
+#:    description，见 `tools/base.py:674-679`；A 那一格本来就因为 policy 变了）。
 #: ③ 连带：十一格表（A 一格）+ `_FROZEN_PROMPT_VERSION` + `_VOLATILE_FACT_SETS` 追加一格。
 #: ④ `tests/fixtures/prompt_cache_warm.json` 本次重落了（业主给了 `--cap-usd 0.1` 的两条命令）。
 #:
@@ -2992,7 +2993,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    「F 自己派 V 审这一份手稿」；`F.step` 只回读签（`v_sign` 四档）。
 #:
 #: 变化格 = F 一格（`agent_skills` 正文只落盘、索引行未动；工具层 `returns` 只进
-#: function-calling 的 description，不进任何角色的段）。
+#: 声明快照，不进 function-calling 的 description，也不进任何角色的段）。
 #: 逐格旧值 → 新值（p232 → p233，现算，不是手抄；脚本 `temp/_p233_recompute.py`）：
 #:   F 00b76d27→61be3f62；其余十格（A/B/C/D/E/G/H/L/M/V）逐字同值。
 #: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p233）；
@@ -3051,7 +3052,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    与第 4 位（17e731e8）。另有共用段 `PAPER_PACK` 的 blocker 两类读法（5b258d55，
 #:    只进 G / H / M）。
 #: ⑥ 工具说明面：`doc_tools` / `review_tools` / `verify_tools` / `attack_tools` 的
-#:    summary / returns（进 `tools_lines` 或 function-calling description）。
+#:    summary 进 `tools_lines`；同批的 `returns` 只进声明快照（不进 tools_lines /
+#:    function-calling description，见 `tools/base.py:674-679`）。
 #:
 #: 变化格 = 十一格全换（逐格现算，不是手抄；脚本 `temp/_p235_recompute.py`）。
 #: 逐格旧值 → 新值（p234 → p235）：
@@ -3073,8 +3075,9 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    「必须留空」—— 填了就是无依据的声称（没有通道就没有凭据，`doc.write_mapping`
 #:    受控拒绝）；`doc.write_mapping` 的 `lean_state` 不再把「关档 / 有产物」当凭据格判据。
 #: ② `specs/h.py` 与 `agent_skills._h_skills()`：H 的逐行核对应同步这条口径。
-#: ③ 工具说明面：`doc.write_mapping` 的 summary 与 rows 四格 description（params / returns）
-#:    同步（进 G 的 `tools_lines`，也进 function-calling 的 description）。
+#: ③ 工具说明面：`doc.write_mapping` 的 summary 进 G 的 `tools_lines`，rows 四格
+#:    description 同步；同批的 `returns=` 只进声明快照（不进 function-calling 的
+#:    description，见 `tools/base.py:674-679`）。
 #:
 #: 变化格 = ['G', 'H']（其余九格 A/B/C/D/E/F/L/M/V 逐字同值）。
 #: 逐格旧值 → 新值（p235 → p236；Lean 开档口径，与 `conftest.py` 同一条）：
@@ -3189,7 +3192,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ③ V 那一格这次没有换值（p239 的 `4daa02d9` 仍成立）：`6efb3079` 给
 #:    `verify.verify_proof` 的 `returns` 补了「`verdict` 是两态之一：`成立` / `有毛病`」，
 #:    summary 一个字符未动（仍 104）。但 `tools_lines` 只渲染「名字 + 摘要 + 必填参数 +
-#:    副作用」，`returns` 只拼进 function-calling 的 description ⇒ 不进任何角色的段。
+#:    副作用」，`returns` 只进声明快照（不进 function-calling 的 description，见
+#:    `tools/base.py:674-679`）⇒ 不进任何角色的段。
 #:    （p239 那一笔的提交信息预期「V 的提示词摘要会 stale」，实测为准：不进段。）
 #:    这一笔在模型可见面上的落点是工具面 —— 见 `tool_surface_snapshot.json` 的
 #:    `declarations."verify.verify_proof".returns` 与 `cli."--role V"` 两格。
