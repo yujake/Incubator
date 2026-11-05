@@ -291,6 +291,13 @@ def _formal_check_formal(_store, _root, **kw: Any) -> Any:  # pragma: no cover -
     },
     side_effect="write_local",
     roles=_ROLES_L,
+    # D17（2026-11-05）：`RECORD_REASONS`（`agent_l/_support.py`）的八个拒信码是
+    # `reason` 的取值，不是 `returns` 里的新键；受控拒绝那一支仍只报
+    # `refused` / `refusal_reason` 两格（`refusal_reason` 恒为 `invalid_params`，
+    # 细一档留在 `reason` 里）。`returns` 只列键集合的契约，不手抄取值表 ——
+    # 取值表的真身只在 `RECORD_REASONS` 一处。而且 `returns` 不进模型面
+    # （`tools/base.py:674-679` 逐字写着 ToolFace 的 description 不带 returns），
+    # 枚举它不会让模型多知道一个字，却会动冻结快照，所以保持现状。
     returns=(
         "{'recorded','experiment_id','statement_id','method','claim','claim_key','status',"
         "'verified','checker','output_sha256','code_hash','path','evidence_kind','result',"
@@ -324,7 +331,7 @@ def _replace_handler(fn: Any, handler: Any) -> Any:
 
 def register(registry: ToolRegistry, *, store: Any = None, root: Any = None,
              **_: Any) -> int:
-    """把 L 的两件工具装进注册表；返回装进去的件数。
+    """把 L 的三件工具装进注册表；返回装进去的件数。
 
     `store` 为 None 时照样注册（调用时给 `not_wired`，FC-08）：
     "没接线"与"没写、没查"是两件事，不许折叠。返回值用于
