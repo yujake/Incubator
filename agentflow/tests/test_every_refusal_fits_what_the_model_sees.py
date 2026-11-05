@@ -88,7 +88,7 @@ def _seat(i: int, state: str) -> dict[str, Any]:
 def _cases() -> list[tuple[str, Callable[[], Any]]]:
     """每一条闸门一个用例：覆盖 `check` / `check_action` 的每个 `Refusal(...)` 点。"""
     shallow = P.Policy(max_direct_children=3)
-    deep = P.Policy()                      # 缺省档：链上 5 个代理 / 直接子上限 25
+    deep = P.Policy()                      # 缺省档：链上 7 个代理 / 直接子上限 25
     many = tuple(_seat(i, "flying") for i in range(100))
     all_silent = tuple(_seat(i, "silent") for i in range(100))
     return [

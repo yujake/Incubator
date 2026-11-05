@@ -313,6 +313,9 @@ def test_the_parent_limits_are_computed_from_the_policy():
     Z就不能再派子代理」⇒ `max_chain_depth` 回到"链上 5 个代理"（台账口径 4 跳；
     更名与两种数法见 `policy.Policy` 的注释与 `policy.max_agents_on_chain`）；
     本判据不看那个数字（它要求数字一律现算），所以这一格改回来不影响它。
+    2026-11-05 再补：业主把这一格抬到 6（逐字「将深度锁调到6，不然 M->D->F->A->B->V
+    是做不到的」）⇒ 链上 7 个代理、台账 6 跳。判据仍然不看那个数字（渲染里一律现算），
+    所以这一条不随它动 —— 动了反而说明有人又把缺省值写死回渲染里。
     """
     from agentflow import policy as POL
 

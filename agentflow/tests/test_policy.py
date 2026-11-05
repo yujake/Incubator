@@ -626,25 +626,28 @@ def test_depth_boundary_is_allowed():
     assert P.check(P.Policy(max_chain_depth=3), _d(depth=3)) is None
 
 
-def test_the_default_chain_depth_is_four_hops_which_is_five_agents():
-    """默认链长：台账 4 跳 = 链上 5 个代理（业主 2026-10-24 原话，逐字）。
+def test_the_default_chain_depth_is_six_hops_which_is_seven_agents():
+    """默认链长：台账 6 跳 = 链上 7 个代理（业主 2026-11-05 裁定，逐字）。
 
-    业主 2026-10-24：「扇出12的意思是能一个父能有几个子，深度5的意思是假如
-    M-W-X-Y-Z，Z就不能再派子代理。」他数的是链上的代理个数（Z 是第 5 个），
-    而台账 `Task.depth` 数的是跳数（主控不落行，它的直接子 = 1）
-    ⇒ 要让"第 5 个代理能干活、它再派就被拒"，这一格的值就是 4 跳。
+    业主 2026-11-05：「将深度锁调到6，不然 M->D->F->A->B->V 是做不到的
+    （F派A补文献，A派B录入，B派V拿V签）」。他数的仍是链上的代理个数
+    （2026-10-24 定的数法：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」），
+    只是这一次数到 7；台账 `Task.depth` 数的是跳数（主控不落行，它的直接子 = 1）
+    ⇒ 要让"第 7 个代理能干活、它再派就被拒"，这一格的值就是 6 跳。
 
     沿革：3 → 5（所有者 2026-10-08）→ 2026-10-15 曾按 C5 抬到 12（那条理由没有
-    业主对"深度"这一轴的裁定背书）→ 2026-10-24 按上引原话改回"链上 5 个代理"。
+    业主对"深度"这一轴的裁定背书，还把"扇出 12"与"深度 12"混成了一件事）→
+    2026-10-24 改回"链上 5 个代理"（台账 4）→ 2026-11-05 抬到"链上 7 个代理"（台账 6）。
+    扇出那一族（25 / 主控 100）、并发、总量、墙钟一个数没动。
 
-    两件事：①默认值就是 4（且 `max_agents_on_chain() + 0` 换算后 == 5）；
-    ②边界精确 —— 台账跳数 4 放行、跳数 5 拒。
+    两件事：①默认值就是 6（且 `max_agents_on_chain()` 换算后 == 7）；
+    ②边界精确 —— 台账跳数 6 放行、跳数 7 拒（换算关系只写在 `max_agents_on_chain`）。
     """
     p = P.Policy()
-    assert p.max_chain_depth == 4, p.to_dict()
-    assert P.max_agents_on_chain(p) == 5, "台账 4 跳必须对上链上 5 个代理（差一只有一处换算）"
-    assert P.check(p, _d(depth=4)) is None, "第 5 个代理（台账跳数 4）必须放行"
-    r = P.check(p, _d(depth=5))
+    assert p.max_chain_depth == 6, p.to_dict()
+    assert P.max_agents_on_chain(p) == 7, "台账 6 跳必须对上链上 7 个代理（差一只有一处换算）"
+    assert P.check(p, _d(depth=6)) is None, "第 7 个代理（台账跳数 6）必须放行"
+    r = P.check(p, _d(depth=7))
     assert r is not None and r.reason == "depth_exceeded", r
 
 

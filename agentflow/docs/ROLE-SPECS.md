@@ -1955,8 +1955,8 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 | 键 | 默认 | 维度 | 缺了会怎样（`policy.Policy` 逐字） |
 |---|---:|---|---|
-| `max_chain_depth` | **4**（台账跳数 = 链上 **5** 个代理） | 委派链长（业主数法：M 是第 1 个、Z 是第 5 个；台账数法：`Task.depth` 是跳数，主控的直接子 = 1） | "链可以**无限深**（每次只派生 1 个，但派生 10000 层）"。业主 2026-10-24 原话：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」—— 结构闸门，不是成本闸门；两种数法差一，换算只在 `policy.max_agents_on_chain` |
-| `max_direct_children` | **25** | 一个父**此刻在飞**的**直接子**数（只数直接子，不管隔着几层的子） | "每一层都能**无限宽**（委派链 5 层，每层 9999 个直接子）"。业主 2026-10-24：「12是只管直接子，不管隔着几层的子」 |
+| `max_chain_depth` | **6**（台账跳数 = 链上 **7** 个代理） | 委派链长（业主数法：M 是第 1 个、第 7 个是能干活的最末一个；台账数法：`Task.depth` 是跳数，主控的直接子 = 1。等式：`max_chain_depth = N` ⇒ 台账 depth 1..N 放行、depth N+1 拒） | "链可以**无限深**（每次只派生 1 个，但派生 10000 层）"。数法仍是业主 2026-10-24 原话「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」；**值**由业主 2026-11-05 抬到 6：「将深度锁调到6，不然 M->D->F->A->B->V 是做不到的（F派A补文献，A派B录入，B派V拿V签）」⇒ 那条 6 代理链（台账 depth 1..5）放行。结构闸门，不是成本闸门；两种数法差一，换算只在 `policy.max_agents_on_chain` |
+| `max_direct_children` | **25** | 一个父**此刻在飞**的**直接子**数（只数直接子，不管隔着几层的子） | "每一层都能**无限宽**（委派链 7 层，每层 9999 个直接子）"。业主 2026-10-24：「12是只管直接子，不管隔着几层的子」 |
 | `max_concurrency` | **16** | 瞬时并发 | "扇出可以**无限持续**：每秒 4 个，跑一天" |
 | `max_tasks_per_run` | **5000** | 生命周期总量 | "**瞬时**把并发打爆：总量对了，但 200 个任务同时开跑" |
 | `wall_clock_sec` | **14400** | 墙钟（FC-20） | `None` = 不限 |
@@ -1971,7 +1971,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 | 用尽 | 行为 |
 |---|---|
-| `max_chain_depth` | 新召唤 `refused/depth_exceeded`（到第 5 个代理之后派活；台账 4 跳，结构闸门不是成本闸门） |
+| `max_chain_depth` | 新召唤 `refused/depth_exceeded`（到第 7 个代理之后派活；台账 6 跳，结构闸门不是成本闸门） |
 | `max_direct_children` | 新召唤 `refused/fanout_exceeded`（上限按发起方角色取：默认档 = `max_direct_children`（25），主控 `M` 一档 = 100（`DIRECT_CHILDREN_LIMIT_BY_ROLE`）；读的是**此刻在飞**的**直接子**数 —— 只数直接子，不管隔着几层的子；直接子返回即腾出名额） |
 | `max_concurrency` | 新召唤 `refused/concurrency_exceeded` |
 | `max_tasks_per_run` | 新召唤 `refused/...`（`total = _started_total + _cancelled_total`） |

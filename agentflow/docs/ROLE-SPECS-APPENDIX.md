@@ -373,7 +373,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | `unknown_action` | 该角色没有这个动作 / 父任务不存在 |
 | `invalid_params` | **参数 schema 校验失败**（R-46 之后这一档单独成码，不再折进 `unknown_action`） |
 | `forbidden_edge` | 策略不允许这条边（如 `C → B`）；或目标是 `NON_SUMMONABLE` |
-| `depth_exceeded` | `depth > max_chain_depth`（链长；台账 4 跳 = 链上 5 个代理，第 5 个不能再派，业主 2026-10-24） |
+| `depth_exceeded` | `depth > max_chain_depth`（链长；台账 6 跳 = 链上 7 个代理，第 7 个不能再派；业主 2026-11-05 裁定「将深度锁调到6」，数法仍是 2026-10-24 那条） |
 | `fanout_exceeded` | 该任务**此刻在飞** `max_direct_children` 个直接子（只数直接子，不管隔着几层的子），且**等过之后仍然满**（口径 = 单时刻：直接子一返回就腾出名额；触顶时 `Conductor` 先等 `fanout_wait_sec`（默认 900s，所有者 2026-10-08：「只可等待子智能体返回结果」）；上限按发起方角色取，见 `policy.direct_children_limit_for`；主控那一档 = 100） |
 | `concurrency_exceeded` | `running >= max_concurrency` |
 | `budget_exceeded` | token / 花销预算耗尽 |

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""触深的拒信要指向上行：到了第 5 个代理就不再自己派，把这件事交给父代理去协调。
+"""触深的拒信要指向上行：到了第 7 个代理就不再自己派，把这件事交给父代理去协调。
 
 ## 业主原话（唯一权威，逐字）
 
@@ -8,13 +8,18 @@
   不要自己再派」
 ```
 
+（原话里的"5"是当时的深度值；2026-11-05 业主把这一格抬到 6（「将深度锁调到6，不然
+M->D->F->A->B->V 是做不到的」）⇒ 这一份的读数跟着抬到"第 7 个代理 / 台账 depth 6"，
+报文里的数字一律现算（`max_agents_on_chain` / `policy.max_chain_depth`），
+句子不变、位置不变。见 `tests/test_depth_lock_is_six_and_fanout_is_not_depth.py`。）
+
 ## 这一份钉住的五件事
 
 | 判据 | 守的是 | 改前红在哪 |
 |---|---|---|
 | a) `test_a_the_refusal_names_the_depth_the_escalation_and_the_ban` | 触深拒信四样齐全：深度现算（测试档 `max_chain_depth=2` ⇒ 报文里只许出现 2 / 3 / 4，一个 5 都不许有）、点名"上报父代理去协调"、`conductor.escalate` 与三个真实形参名、明确禁令"不要再自己派"；四样还必须落在循环真的交给模型的那 400 字里 | 改前的报文只有一句"换个做法（自己收口或交给同级伙伴），不要再往深里派"：一个字的 `escalate` 都没有，而"交给同级伙伴"是同一层再派一次 —— 还是同一句"不"，等于没指路 |
-| b) `test_b_escalating_from_the_fifth_layer_lands_in_the_parent_and_spawns_nothing` | 端到端：第 5 层派子被拒 ⇒ 用 `conductor.escalate` 把事交给父 ⇒ 父名下多一条能读到的留言、它自己没有多出子任务、这一趟以 `stop_reason=escalated` 收工 | 机制本来通（`tests/test_escalate_goes_up_and_stops.py` 已钉住父子通道），缺的是"拒信点名它"。所以这一条改前也绿 —— 它的职责是证明 a 指的那条路真走得通，否则 a 只是一句空话 |
-| c) `test_c_the_fourth_layer_still_dispatches_the_fifth` | 正控：第 4 个代理派第 5 个照常成功（闸不能提前一格）；第 5 个再派才拒 | 改前绿（闸的位置本来就对）—— 它守的是"改这几句话时不许把闸挪动" |
+| b) `test_b_escalating_from_the_fifth_layer_lands_in_the_parent_and_spawns_nothing` | 端到端：第 7 层（台账 depth 6）派子被拒 ⇒ 用 `conductor.escalate` 把事交给父 ⇒ 父名下多一条能读到的留言、它自己没有多出子任务、这一趟以 `stop_reason=escalated` 收工 | 机制本来通（`tests/test_escalate_goes_up_and_stops.py` 已钉住父子通道），缺的是"拒信点名它"。所以这一条改前也绿 —— 它的职责是证明 a 指的那条路真走得通，否则 a 只是一句空话 |
+| c) `test_c_the_fourth_layer_still_dispatches_the_fifth` | 正控：第 6 个代理派第 7 个照常成功（闸不能提前一格）；第 7 个再派才拒 | 改前绿（闸的位置本来就对）—— 它守的是"改这几句话时不许把闸挪动" |
 | d) `test_d_the_depth_refusal_and_the_fanout_refusal_are_one_shape` | 形状一致：两种触顶的拒信都带"现算的读数 + 点名工具与真实形参名（形参名逐个过工具的声明）+ 前提 + 同一条收尾纪律" | 改前的触深拒信四样里只有"结构闸门"一句，`conductor.escalate` 与前提一字没有 ⇒ 与扇出那条（同一批的 `tests/test_retiring_a_silent_child_frees_a_fanout_seat.py` a 条）不是一个形状 |
 | e) `test_e_stubbing_the_old_wording_turns_a_red` | 反真空：把"加这几句"打桩成旧文案 ⇒ a 必红（且红在缺哪几句上） | 不适用（它守的是 a 不是真空的那一条） |
 
@@ -101,6 +106,13 @@ class FakeE:
         return {"outcome": "ok", "detail": f"夹具：E.evidence_for({claim_key})"}
 
 
+class FakeH:
+    """H 的替身：`list_findings` 的必填形参是空集（第 8 个代理就是要被深度拒的那一件）。"""
+
+    def list_findings(self, **kw: Any) -> dict[str, Any]:
+        return {"outcome": "ok", "detail": "夹具：H 列了 findings"}
+
+
 class _Gateway:
     """照剧本回答的替身模型（与 `test_escalate_goes_up_and_stops` 同一个形状）。"""
 
@@ -122,9 +134,10 @@ class _Gateway:
 def _workspace(tmp_path: pathlib.Path) -> dict[str, Any]:
     """造一条 `M → A → B → D` 的链（四个代理），返回各层的台账号。
 
-    第 5 个代理（F）由调用方自己派：c) 要证明它派得出去，b) 要站在它那一层说话。
-    默认策略（`max_chain_depth=4`）下：A 的 depth=1、B=2、D=3、F=4 ⇒ F 就是业主
-    数法里的"第 5 个代理"，它再派（depth=5）才触顶。
+    之后往上加的三层由调用方自己派（`_fifth` / `_sixth` / `_seventh`）：
+    c) 要证明它们派得出去，b) 要站在最上面那一层说话。
+    默认策略（`max_chain_depth=6`）下：A 的 depth=1、B=2、D=3，再加
+    F=4（第 5 个）、A=5（第 6 个）、B=6（第 7 个）—— 第 7 个再派（depth=7）才触顶。
     """
     root = tmp_path / "ws"
     store = Store(root)
@@ -135,7 +148,7 @@ def _workspace(tmp_path: pathlib.Path) -> dict[str, Any]:
                         max_tasks_per_run=500, wall_clock_sec=600),
         registry={"A": ("object", FakeA()), "B": ("object", FakeB()),
                   "D": ("object", FakeD()), "F": ("object", FakeF()),
-                  "E": ("object", FakeE())},
+                  "E": ("object", FakeE()), "H": ("object", FakeH())},
         # 这一份判的是拒信与上行，不是"触顶只可等待"。
         fanout_wait_sec=0.0,
     )
@@ -155,7 +168,7 @@ def _workspace(tmp_path: pathlib.Path) -> dict[str, Any]:
 
 
 def _fifth(env: dict[str, Any], *, key: str = "q8-f") -> str:
-    """把第 5 个代理（F）派出来，返回它的台账号（正控 c 与 b 都走这一格）。"""
+    """把第 5 个代理（F，depth 4）派出来，返回它的台账号（整条链的中转）。"""
     got = env["cond"].summon("F", "status", {"plan_id": "p-1"}, by="D",
                              parent_task_id=env["rows"]["D"], input_key=key)
     assert got.outcome == "ok", f"第 4 个代理派第 5 个竟然失败：{got.outcome}/{got.refusal_reason}"
@@ -164,10 +177,34 @@ def _fifth(env: dict[str, Any], *, key: str = "q8-f") -> str:
     return str(got.task_id)
 
 
-def _over_the_depth(env: dict[str, Any], *, key: str = "q8-e") -> Any:
-    """第 5 个代理（F）再派一件给 E ⇒ 深度拒（`depth_exceeded`）。"""
-    return env["cond"].summon("E", "evidence_for", {"claim_key": "k-1"}, by="F",
-                              parent_task_id=env["rows"]["F"], input_key=key)
+def _sixth(env: dict[str, Any], *, key: str = "q8-a5") -> str:
+    """第 6 个代理（A，depth 5）：`F → A` 是允许的边。"""
+    got = env["cond"].summon("A", "run_once", {}, by="F",
+                             parent_task_id=env["rows"]["F"], input_key=key)
+    assert got.outcome == "ok", f"第 5 个代理派第 6 个竟然失败：{got.outcome}/{got.refusal_reason}"
+    assert got.depth == 5, got.depth
+    env["rows"]["A6"] = str(got.task_id)
+    return str(got.task_id)
+
+
+def _seventh(env: dict[str, Any], *, key: str = "q8-b7") -> str:
+    """第 7 个代理（B，depth 6 = 上限那一格）：`A → B` 是允许的边。"""
+    got = env["cond"].summon("B", "run_once", {}, by="A",
+                             parent_task_id=env["rows"]["A6"], input_key=key)
+    assert got.outcome == "ok", f"第 6 个代理派第 7 个竟然失败：{got.outcome}/{got.refusal_reason}"
+    assert got.depth == 6, got.depth
+    env["rows"]["B7"] = str(got.task_id)
+    return str(got.task_id)
+
+
+def _over_the_depth(env: dict[str, Any], *, key: str = "q8-h") -> Any:
+    """第 7 个代理（B，depth 6）再派一件给 H ⇒ 深度拒（`depth_exceeded`）。
+
+    选 `B → H`：两边都是非审稿人（`reviewer_roles` 只免 V），所以这一跳量的
+    纯粹是深度这一根轴 —— 不会先撞边闸，也不会被"审稿人不占链"那条豁免放走。
+    """
+    return env["cond"].summon("H", "list_findings", {}, by="B",
+                              parent_task_id=env["rows"]["B7"], input_key=key)
 
 
 def _children_of(env: dict[str, Any], task_id: str) -> list[dict[str, Any]]:
@@ -246,84 +283,90 @@ def test_a_the_refusal_names_the_depth_the_escalation_and_the_ban() -> None:
     problems = _a_problems(detail, hops=2, agents=3, forbidden=("5",))
     assert not problems, "；".join(problems) + f"\n拒信原文：{detail}"
 
-    # ---- 默认档（业主数法：第 5 个代理 / 台账 4 跳）
+    # ---- 默认档（业主数法：第 7 个代理 / 台账 6 跳）
     deep = P.Policy()
-    detail0 = _depth_detail(deep, depth=5)
-    problems0 = _a_problems(detail0, hops=4, agents=5)
+    detail0 = _depth_detail(deep, depth=7)
+    problems0 = _a_problems(detail0, hops=6, agents=7)
     assert not problems0, "；".join(problems0) + f"\n拒信原文：{detail0}"
 
     # ---- 四样必须在模型真能看到的那一段里（循环给的是 `_clip(res.detail, 400)`）
     seen = AL._clip(detail0, 400)
-    for want in (f"max_chain_depth=4", "上报父代理去协调", TOOL, "不要再自己派"):
+    for want in ("max_chain_depth=6", "上报父代理去协调", TOOL, "不要再自己派"):
         assert want in seen, (f"模型看到的那 400 字里没有 {want!r}（报文 {len(detail0)} 字，"
                               f"超出 400 的部分模型读不到）")
 
 
 # ====================================================================== b) 端到端
-def test_b_escalating_from_the_fifth_layer_lands_in_the_parent_and_spawns_nothing(
+def test_b_escalating_from_the_seventh_layer_lands_in_the_parent_and_spawns_nothing(
         tmp_path: pathlib.Path) -> None:
-    """b) 第 5 层：派子被拒 ⇒ `escalate` 交给父 ⇒ 父的收件箱多一条、自己没有多出子任务。
+    """b) 第 7 层（台账 depth 6）：派子被拒 ⇒ `escalate` 交给父 ⇒ 父的收件箱多一条、
+    自己没有多出子任务。
 
     这一趟走的是真的循环（拒信 → 模型读到 → 调 `conductor.escalate`），
     所以同时钉住"收工"那一半：`stop_reason=escalated`（不是靠重试把步数烧完）。
     """
     env = _workspace(tmp_path)
-    fifth = _fifth(env)
+    _fifth(env)
+    _sixth(env)
+    seventh = _seventh(env)
     root, cond = env["root"], env["cond"]
+    parent_id = str(env["rows"]["A6"])
 
     # ---- 它先自己派了一次（被深度拒），台账里只多一行 refused，没有子代理
     refused = _over_the_depth(env)
     assert refused.outcome == "refused" and refused.refusal_reason == "depth_exceeded", refused
-    assert _in_flight_children_of(env, fifth) == [], "被拒的召唤不许留下在飞的子代理"
+    assert _in_flight_children_of(env, seventh) == [], "被拒的召唤不许留下在飞的子代理"
 
     # ---- 这一趟循环：第 1 步派子（被拒）→ 第 2 步按拒信指的路上报
-    gateway = _Gateway([_summon_reply("E", "取证据"),
-                        _escalate_reply("我把这件取证据的活交给你：第 5 层派不出去了")])
-    seam = LlmSeam(role="F", session_root=root, gateway=gateway, price=(0.0, 0.0), sid=SID)
-    loop = AgentLoop(role="F", session_root=root,
+    gateway = _Gateway([_summon_reply("H", "列 findings"),
+                        _escalate_reply("我把这件列 findings 的活交给你：第 7 层派不出去了")])
+    seam = LlmSeam(role="B", session_root=root, gateway=gateway, price=(0.0, 0.0), sid=SID)
+    loop = AgentLoop(role="B", session_root=root,
                      registry=build_registry(store=env["store"], conductor=cond).registry,
                      seam=seam, conductor=cond, store=env["store"], sid=SID,
                      auto_secretary=False)
-    run = loop.run("把这件取证据的活派出去（第 5 层）", summoned_by="D", my_task_id=fifth,
-                   parent_task_id=str(env["rows"]["D"]), depth=4)
+    run = loop.run("把这件列 findings 的活派出去（第 7 层）", summoned_by="A",
+                   my_task_id=seventh, parent_task_id=parent_id, depth=6)
 
     # ① 它自己按既有语义收工（不是空转、不是靠 max_steps）
     assert run.stop_reason == "escalated", (run.stop_reason, run.final)
 
-    # ② 父（D）名下多一条能读到的留言，载荷是这条上行
-    got = _inbox_escalations(root, "D")
+    # ② 父（第 6 个代理 A）名下多一条能读到的留言，载荷是这条上行
+    got = _inbox_escalations(root, "A")
     assert len(got) == 1, [m.get("subject") for m in got]
     up = got[0]
     assert up.get("escalation", {}).get("kind") == "reroute", up.get("escalation")
-    assert str(up.get("escalation", {}).get("need") or "").startswith("我把这件取证据"), up
-    assert str(up.get("escalation", {}).get("to_task_id") or "") == str(env["rows"]["D"]), up
+    assert str(up.get("escalation", {}).get("need") or "").startswith("我把这件列 findings"), up
+    assert str(up.get("escalation", {}).get("to_task_id") or "") == parent_id, up
 
     # ③ 它自己没有多出子任务：名下只有"被拒"的台账行，在飞的一个都没有、成功的一个都没有
-    kids = _children_of(env, fifth)
+    kids = _children_of(env, seventh)
     assert kids, "被深度拒掉的那次召唤该在台账里留一行（拒绝也可审计）"
     assert {str(k.get("refusal_reason") or "") for k in kids} == {"depth_exceeded"}, kids
-    assert _in_flight_children_of(env, fifth) == []
+    assert _in_flight_children_of(env, seventh) == []
     assert [k for k in kids if str(k.get("outcome") or "") == "ok"] == []
 
 
 # ====================================================================== c) 正控
-def test_c_the_fourth_layer_still_dispatches_the_fifth(tmp_path: pathlib.Path) -> None:
-    """c) 正控：第 4 个代理（D）派第 5 个（F）照常成功；F 再派才拒。
+def test_c_the_sixth_layer_still_dispatches_the_seventh(tmp_path: pathlib.Path) -> None:
+    """c) 正控：第 6 个代理（A）派第 7 个（B）照常成功；第 7 个再派才拒。
 
-    "闸提前一格"是这类改动最容易犯的错：把 `>` 写成 `>=`，第 5 个代理就派不出来
-    （而业主的数法是"第 5 个能干活、它再派才不行"）。
+    "闸提前一格"是这类改动最容易犯的错：把 `>` 写成 `>=`，第 7 个代理就派不出来
+    （而业主的数法是"第 7 个能干活、它再派才不行"）。
     """
     env = _workspace(tmp_path)
-    fifth = _fifth(env)
-    assert _children_of(env, fifth) == [], "F 刚被派出来，名下不该有子代理"
-    # F（第 5 个代理，台账 depth=4）派 E（depth=5）⇒ 拒
+    _fifth(env)
+    _sixth(env)
+    seventh = _seventh(env)
+    assert _children_of(env, seventh) == [], "第 7 个代理刚被派出来，名下不该有子代理"
+    # 第 7 个（台账 depth=6）派 H（depth=7）⇒ 拒
     over = _over_the_depth(env)
     assert over.outcome == "refused" and over.refusal_reason == "depth_exceeded", over
-    # 反真空：同一条边、少一层就放行（D 派 E 是 depth=4，正好在边界上）
-    edge = env["cond"].summon("E", "evidence_for", {"claim_key": "k-2"}, by="D",
-                              parent_task_id=env["rows"]["D"], input_key="q8-edge")
-    assert edge.outcome == "ok", f"depth=4 是边界内的那一格，不许拒：{edge.refusal_reason}"
-    assert edge.depth == 4, edge.depth
+    # 反真空：同一条边、少一层就放行（第 6 个代理 A 派第 7 个 B 是 depth=6，正好在边界上）
+    edge = env["cond"].summon("B", "run_once", {}, by="A",
+                              parent_task_id=env["rows"]["A6"], input_key="q8-edge")
+    assert edge.outcome == "ok", f"depth=6 是边界内的那一格，不许拒：{edge.refusal_reason}"
+    assert edge.depth == 6, edge.depth
 
 
 # ====================================================================== d) 形状一致
@@ -357,7 +400,7 @@ def test_d_the_depth_refusal_and_the_fanout_refusal_are_one_shape() -> None:
     这一条是"别各写一套"的机器形态：它从两份报文里抽出工具名与形参名，
     逐个过工具的真身声明（`params.properties`），而不是看两句汉字像不像。
     """
-    depth_detail = _depth_detail(P.Policy(), depth=5)
+    depth_detail = _depth_detail(P.Policy(), depth=7)
     fanout = P.check(P.Policy(max_direct_children=3),
                      P.Decision(frm="D", to="A", action="run_once", direct_children=3))
     assert fanout is not None and fanout.reason == "fanout_exceeded", fanout

@@ -149,7 +149,7 @@ res = conductor.summon(
 ```python
 @dataclass(frozen=True)
 class Policy:
-    max_chain_depth: int = 4          # 链长：台账 4 跳 = 链上 5 个代理（业主 2026-10-24 裁定）
+    max_chain_depth: int = 6          # 链长：台账 6 跳 = 链上 7 个代理（业主 2026-11-05 裁定）
     max_direct_children: int = 25     # 一个父能同时挂几个直接子（只数直接子，业主 2026-10-24）
     max_concurrency: int = 4           # 全局同时运行的任务数
     max_tasks_per_run: int = 200       # 一次 run 的召唤总数（生命周期总量）
@@ -202,10 +202,13 @@ H → G            # 审校发现问题 → 请 G 修订（H 不改稿）
 ### 3.2 循环与活锁
 
 - **链长**：`depth > max_chain_depth` ⇒ `refused/depth_exceeded`。两种数法差一，
-  两处都写清：业主数**链上的代理个数**（M W X Y Z ⇒ 5 个，第 5 个不能再派，业主 2026-10-24
-  原话：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」）；台账 `Task.depth` 数**跳数**
-  （主控不落行，它的直接子 = 1）⇒ `max_chain_depth = 4` 跳 = 链上 5 个代理，
-  换算只在 `policy.max_agents_on_chain`。这是结构闸门，不是成本闸门。
+  两处都写清：业主数**链上的代理个数**（M W X Y Z … ⇒ 7 个，第 7 个不能再派；数法仍是
+  业主 2026-10-24 原话：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」）；台账
+  `Task.depth` 数**跳数**（主控不落行，它的直接子 = 1）⇒ `max_chain_depth = 6` 跳
+  = 链上 7 个代理，换算只在 `policy.max_agents_on_chain`。**值**在 2026-11-05 被业主
+  抬到 6（逐字：「将深度锁调到6，不然 M->D->F->A->B->V 是做不到的（F派A补文献，
+  A派B录入，B派V拿V签）」）⇒ 他点名的那条 `M→D→F→A→B→V`（6 个代理 / 台账 depth 1..5）
+  从此放行。这是结构闸门，不是成本闸门。
 - **扇出**：一个任务名下的直接子达 `max_direct_children` 个（口径 = 单时刻在飞：被闸门拒掉、
   根本没跑的尝试照旧落台账但不占名额 —— 否则父任务触顶后就再也派不出活，且每次尝试再占一格＝自我毒化）
   ⇒ `refused/fanout_exceeded`。只数直接子，不管隔着几层的子（业主 2026-10-24：
