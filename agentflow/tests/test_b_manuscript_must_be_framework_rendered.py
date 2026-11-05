@@ -28,11 +28,10 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from conftest import sign_before_registration
-
 from agentflow import depsection as DS
 from agentflow import schema as S
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
@@ -93,38 +92,80 @@ def _add_statement(store: Store, stmt_id: str) -> dict:
 
 
 #: 一份"手写"的稿：有 `## 依赖` 四列表、但没有 `- 依赖面洗稿：` 那一行。
-_HANDWRITTEN = (
-    "# 证明手稿（手写）\n"
-    "\n"
-    f"- 命题号：stmt:{THEOREM_A}\n"
-    "\n"
-    + DS.SECTION_PROOF + "\n"
-    "\n"
-    f"1. 由在册定理直接得到第一步（依据：stmt:{THEOREM_A}）。\n"
-    "2. 由第 1 步得结论。\n"
-    "\n"
-    + DS.SECTION_HEADING + "\n"
-    "\n"
-    "| 引用 | 命题号 | 用在哪一步 | 路径号 |\n"
-    "|---|---|---|---|\n"
-    f"| 由在册定理 | stmt:{THEOREM_A} | 第 1 步 | 1 |\n"
-)
+#: 这一笔要写进台账的那一份正文（稿里的 `## 证明` 与它逐字相同 ⇒ 签块盖住两处）。
+OWN_PROOF = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
+
+
+#: 稿头声明的是本行自己的号（D1 严格版：兜底读盘只认自己的按号稿）。
+def _handwritten(sid: str) -> str:
+    return (
+        "# 证明手稿（手写）\n"
+        "\n"
+        f"- 命题号：stmt:{sid}\n"
+        "\n"
+        + DS.SECTION_PROOF + "\n"
+        "\n"
+        + OWN_PROOF + "\n"
+        "\n"
+        + DS.SECTION_HEADING + "\n"
+        "\n"
+        "| 引用 | 命题号 | 用在哪一步 | 路径号 |\n"
+        "|---|---|---|---|\n"
+        f"| 由在册定理 | stmt:{THEOREM_A} | 第 1 步 | 1 |\n"
+    )
+
+
+#: 这一条要被登记的新命题（先落成猜想拿号，再交它的按号稿）。
+TARGET_FULL = "引理：由在册定理推出结论（B 读稿的判据夹具）。"
+TARGET_TEXT = "由在册定理推出结论"
+
+
+def _agent(store: Store) -> AgentB:
+    return AgentB(store, extractor=None, extract_text=None, config={})
+
+
+def _seed_target(store: Store) -> str:
+    """先把这一条落成"没有正文"的猜想行（拿到号）—— 稿要按这一条的号命名。
+
+    2026-11-05 业主裁定（D1 严格版）：兜底读盘只认"本行自己的稿"。这几条判据量的是
+    洗稿闸，不是寻址；所以先把本行的号拿到，再把它自己的 `reports/f-proof-<本行号>.md`
+    放上盘 —— 于是命中的是"自己的按号稿"，（洗稿闸照旧是这一条判据要量的那一道）。
+    """
+    got = _agent(store).register_statement(
+        statement_full=TARGET_FULL, statement_text=TARGET_TEXT,
+        proof_text="", origin="own_result", kind="conjecture",
+        quote_reason="我方自产命题（判据夹具）", doc_id=THEOREM_A)
+    assert got.get("ok") is True, got
+    return str(got["stmt_id"])
 
 
 def _register(store: Store):
-    b = AgentB(store, extractor=None, extract_text=None, config={})
+    b = _agent(store)
     proof = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
-    # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
-    # 命题还没在册 ⇒ 先落 pending 那一签，登记时按正文 sha 认领。
-    sign_before_registration(store.root, proof_text=proof)
     return b.register_statement(
-        statement_full="引理：由在册定理推出结论（B 读稿的判据夹具）。",
-        statement_text="由在册定理推出结论",
+        statement_full=TARGET_FULL,
+        statement_text=TARGET_TEXT,
         proof_text=proof,
         derived_from=[THEOREM_A], origin="own_result", kind="conjecture",
         quote_reason="我方自产命题（判据夹具）", doc_id=THEOREM_A,
         # 手稿走"盘上那一份"这条路（与真机兜底读盘同一个入口）
         proof_manuscript="")
+
+
+def _stamp_own_manuscript(store: Store, *, sid: str, rel: str) -> None:
+    """这一条已经在册 ⇒ 签要落在它自己的那份稿上（签块盖住正文 sha）。
+
+    2026-11-05（D1 严格版）之后，稿是本行自己的按号稿；已有号的那一档认签走
+    "手稿签块"（`bits_after_sign` 的第 1 来源），不再是"未在册先落 pending"那一档。
+    """
+    proof = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
+    path = pathlib.Path(store.root) / rel
+    text = path.read_text(encoding="utf-8")
+    path.write_text(VS.stamp_manuscript_sign(
+        text, proof_sha=VR.proof_sha(proof), streak=VR.SIGN_STREAK_NEED,
+        need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
+        ledger=f"verifications/{sid}.jsonl#v-000003",
+        statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
 
 
 def test_a_handwritten_manuscript_is_refused_by_name(tmp_path: pathlib.Path) -> None:
@@ -135,9 +176,10 @@ def test_a_handwritten_manuscript_is_refused_by_name(tmp_path: pathlib.Path) -> 
     """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A)
-    rel = DS.manuscript_relpath(statement_id=THEOREM_A)
+    sid = _seed_target(store)
+    rel = DS.manuscript_relpath(statement_id=sid)
     (pathlib.Path(store.root) / rel).parent.mkdir(parents=True, exist_ok=True)
-    (pathlib.Path(store.root) / rel).write_text(_HANDWRITTEN, encoding="utf-8")
+    (pathlib.Path(store.root) / rel).write_text(_handwritten(sid), encoding="utf-8")
 
     got = _register(store)
     assert got.get("ok") is False, got
@@ -154,16 +196,26 @@ def test_the_framework_rendered_one_is_accepted(tmp_path: pathlib.Path) -> None:
     """b 判据（正控）：盖了 `- 依赖面洗稿：` 那一行 ⇒ 照收，依赖边真落。"""
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A)
-    rel = DS.manuscript_relpath(statement_id=THEOREM_A)
-    washed = DS.mark_washed(_HANDWRITTEN, actor="secretary-F", filled="")
+    sid = _seed_target(store)
+    rel = DS.manuscript_relpath(statement_id=sid)
+    washed = DS.mark_washed(_handwritten(sid), actor="secretary-F", filled="")
     (pathlib.Path(store.root) / rel).parent.mkdir(parents=True, exist_ok=True)
     (pathlib.Path(store.root) / rel).write_text(washed, encoding="utf-8")
+    _stamp_own_manuscript(store, sid=sid, rel=rel)
 
     got = _register(store)
     assert got.get("ok") is True, got
     assert got.get("manuscript_source") == DS.SOURCE_DISK, got
     assert got.get("manuscript_washed") is True, got
-    assert int(got.get("deps_written") or 0) >= 1, got
+    # 依赖边真落（这一笔是"在册 + 补正文"那一支 ⇒ 边在 `manuscript_deps` 里；
+    # 老写法（新建那一支）读的是 `deps_written`。两处都认，判的是"边上有没有"）。
+    deps = [dict(r) for r in store.rows("dependencies")
+            if str(r.get("used_by")) == f"stmt:{sid}"]
+    assert len(deps) >= 1, (got, deps)
+    written = got.get("deps_written")
+    if written is None:
+        written = (got.get("manuscript_deps") or {}).get("deps_written")
+    assert int(written or 0) >= 1, got
 
 
 def test_stubbing_the_wash_mark_reading_out_turns_b_red(
@@ -176,10 +228,12 @@ def test_stubbing_the_wash_mark_reading_out_turns_b_red(
                         lambda text: {"washed": False, "actor": "", "filled": "", "mark": ""})
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A)
-    rel = DS.manuscript_relpath(statement_id=THEOREM_A)
-    washed = DS.mark_washed(_HANDWRITTEN, actor="secretary-F", filled="")
+    sid = _seed_target(store)
+    rel = DS.manuscript_relpath(statement_id=sid)
+    washed = DS.mark_washed(_handwritten(sid), actor="secretary-F", filled="")
     (pathlib.Path(store.root) / rel).parent.mkdir(parents=True, exist_ok=True)
     (pathlib.Path(store.root) / rel).write_text(washed, encoding="utf-8")
+    _stamp_own_manuscript(store, sid=sid, rel=rel)
 
     got = _register(store)
     assert got.get("ok") is False and got.get("kind") == KIND, (

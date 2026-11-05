@@ -721,11 +721,17 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     判据只有三句：
     - 按证明正文认出来的（`matched_by == proof_body`）⇒ 是：那一份的 `## 证明`
       与这一笔交的正文逐行相同，不存在"借别人的正文"；
-    - 稿头声明了号（`- 命题号：stmt:<号>`）⇒ 号必须等于本行在册号；本行还没在册 ⇒
-      不是自己的（被引命题的号不是"本行"的）—— 改前 `stmt:000001` 就是这样把
+    - 本行还没在册（没有号）⇒ 不是：没有"本行"可比对，就不许拿任何号去猜
+      （被引命题的号不是"本行"的）—— 改前 `stmt:000001` 就是这样把
       `stmt:000000` 的稿连正文带签一起读走的；
-    - 稿头一个号都没声明（历史形态 / F 渲染前那一版）⇒ 本行还没在册时按既有语义
-      （盘上那份稿就是这一笔的）放行；本行在册时只认按本行命名的那个文件。
+    - 本行在册 ⇒ 稿自己的号（稿头 `- 命题号：stmt:<号>`，没有再按号的文件名）
+      必须等于本行号。稿头声明了别人号、或文件名是别人号，都不是自己的稿。
+
+    ## 2026-11-05 业主裁定：D1 取严格版
+
+    依赖面也是"这一份证明"的事实：被引命题稿里那张 `## 依赖` 表写的是它引了谁；
+    把它按到新命题头上，台账里就会出现一条"我引了 X"而作者从未这么写的边。
+    所以借正文、借签、借依赖面都不行；旧口径"历史形态的稿按既有语义放行"作废。
 
     这一格就是 D1 反真空的打桩点：把它打成恒真 ⇒ `stmt:000001` 又会把
     `stmt:000000` 的稿读成自己的（判据 a 立刻红）。
@@ -735,12 +741,12 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     if str(matched_by or "") == _DS.MATCH_BY_PROOF_BODY:
         return True
     own = str(stmt_id_now or "").strip()
-    declared = _DS.manuscript_statement_id(str(manuscript_text or ""))
-    if str(declared or "").strip():
-        return bool(own) and str(declared).strip() == own
     if not own:
-        return True
-    return str(_VS.manuscript_id_of(str(manuscript_path or "")) or "").strip() == own
+        return False
+    declared = _DS.manuscript_statement_id(str(manuscript_text or ""))
+    named = str(declared or "").strip() or str(
+        _VS.manuscript_id_of(str(manuscript_path or "")) or "").strip()
+    return bool(named) and named == own
 
 
 def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any) -> bool:
@@ -1806,16 +1812,14 @@ class _RegisterStatement:
                 # 改前缺这一道：`stmt:000001` 按 `derived_from=["000000"]` 读到了
                 # `reports/f-proof-000000.md`（号不是本行），把 P0 的正文与签当成了自己的。
                 #
-                # 边界（老调用不许瘫）：这一笔自己带了正文时，命中的那份稿只被用来读
-                # 它 `## 依赖` 面（历史调用 / 直调的既有语义），正文与签一律不取
-                # （`proof_text` 已由调用方给出；下面的取正文那一段另有 `_manuscript_is_own`）。
-                # 这一笔没有正文时，号不是本行的稿连读都不读 —— 那一档唯一的用途就是
-                # "借别人的正文"，正是 D1 要堵的。
+                # 2026-11-05 业主裁定（D1 严格版）：依赖面也是"这一份证明"的事实 ——
+                # 被引命题稿里那张 `## 依赖` 表写的是它引了谁，按到新命题头上就是一条
+                # 作者从未写过的边。所以"这一笔自己带了正文"也不再放行读别人的依赖面：
+                # 号不是本行的稿，一律不读（正文 / 签 / 依赖面三样都不借）。
                 _hit_ok = _manuscript_usable(manuscript_probe,
                                              stmt_id_now=stmt_id_now)
-                _deps_only_read = (not _hit_ok and bool(str(proof_text or "").strip()))
                 if (str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK
-                        and not _hit_ok and not _deps_only_read):
+                        and not _hit_ok):
                     manuscript_probe = dict(
                         manuscript_probe, source=_DS.SOURCE_NONE, text="", path="",
                         why=("按名字命中的那一份稿不是这一条命题的（号不是本行）⇒ 不用它："

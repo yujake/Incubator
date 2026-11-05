@@ -54,6 +54,8 @@ if str(_SRC) not in sys.path:
 from agentflow import depsection as DS
 from agentflow import schema as S
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
+import agentflow.agent_b.register_statement as RS
 from agentflow.agent_b import AgentB
 from agentflow.agent_d import AgentD
 from agentflow.agent_f import AgentF
@@ -505,20 +507,59 @@ def test_d_does_not_carry_a_statements_it_has_no_manuscript_for(
 
 # ------------------------------------------------------------------ b 兜底读盘
 
-def test_an_empty_parameter_reads_the_manuscript_from_disk(
+def test_an_empty_parameter_does_not_borrow_a_cited_manuscripts_dependency_face(
         tmp_path: pathlib.Path) -> None:
-    """b D 没带、盘上有稿 ⇒ 兜底读盘生效、依赖落成、来源读 `disk`（老调用不瘫）。
+    """b（2026-11-05 业主裁定：D1 严格版）盘上只有被引命题名的稿 ⇒ 整笔拒，不许借依赖面。
 
-    改前红：兜底读盘这一支一行都没有（0 行）⇒ `dependencies` 一行不落、返回里也没有
-    `manuscript_source` 这一格。
+    ## 旧逐字（改前，已作废）
 
-    2026-11-04（业主裁定 甲）：正文要有一份手稿签才准写进台账 ⇒ 先按同一份正文落一份
-    pending 签（按正文 sha 认领）。签名载体不是按号命名的那一份，所以兜底读盘读到的
-    仍然是下面这份 `reports/f-proof-<被引命题号>.md`（`manuscript_source=disk`）。
+    同一现场（没有 D 报告、盘上 `reports/f-proof-<被引命题号>.md`、正文引了它）⇒
+    `ok=true`、`manuscript_source=disk`、`dependencies` 落 1 行
+    （`source_stmt_id=<被引号>`）、`deps_missing.state=present`。
+
+    ## 为什么旧期望不对（这是收紧，不是放宽）
+
+    那张 `## 依赖` 表写的是被引命题引了谁；把它按到新命题头上，台账里就会出现
+    一条"我引了 X"而作者从未这么写的边。旧期望建立在"只读依赖面无害"这个前提上，
+    而该前提不成立 —— 所以同一现场现在整笔受控拒绝。
+
+    ## 新逐字
+
+    `ok=false`、`kind=dependency_section_missing`（正文有在册引用而没有这一条自己的稿）、
+    `manuscript_source=none`、`dependencies` 0 行、`statements` 零写入。
     """
     store = _ws(tmp_path)
     _library(store)
     # 没有 D 报告（历史调用 / 直调那一档），盘上那一份稿按"被引命题的号"命名。
+    target = pathlib.Path(store.root) / MANUSCRIPT_DIR / f"f-proof-{THEOREM_A}.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_MANUSCRIPT_FOR_A, encoding="utf-8")
+    body = f"1. 由定理甲直接得到结论（见 stmt:{THEOREM_A}）。"
+    sign_before_registration(store.root, proof_text=body)
+    before = [dict(r) for r in store.rows("statements")]
+
+    got = _register(store, statement_full="定理：由定理甲推出目标结论。",
+                    proof_text=body,
+                    derived_from=[THEOREM_A])
+    assert got.get("ok") is False, got
+    assert got.get("kind") == DS.REFUSED_SECTION_MISSING, got
+    assert str(got.get("manuscript_source") or "") == SRC_NONE, got
+    assert _deps(store) == [], _deps(store)
+    assert [dict(r) for r in store.rows("statements")] == before, (
+        "被拒的那一笔写了 statements（应当零写入）")
+
+
+def test_the_ownership_check_is_what_makes_it_refuse(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """b 的反真空：把"必须是自己的稿"那一步摘掉 ⇒ 上一条判据立刻变红。
+
+    打桩 `_manuscript_is_own` 恒真之后，同一现场回到旧形态：读 `reports/f-proof-<被引号>.md`、
+    `manuscript_source=disk`、`dependencies` 落 1 行。于是"整笔拒 + 零写入"不再成立 ——
+    这正是要证明"新判据的绿来自那一道所有权判据"，不是来自夹具太松。
+    """
+    monkeypatch.setattr(RS, "_manuscript_is_own", lambda **kw: True)
+    store = _ws(tmp_path)
+    _library(store)
     target = pathlib.Path(store.root) / MANUSCRIPT_DIR / f"f-proof-{THEOREM_A}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_MANUSCRIPT_FOR_A, encoding="utf-8")
@@ -529,19 +570,55 @@ def test_an_empty_parameter_reads_the_manuscript_from_disk(
                     proof_text=body,
                     derived_from=[THEOREM_A])
     assert got.get("ok") is True, got
+    assert str(got.get("manuscript_source") or "") == SRC_DISK, got
+    assert {str(r.get("source_stmt_id")) for r in _deps(store)} == {THEOREM_A}, _deps(store)
+
+
+def test_a_rows_own_numbered_manuscript_is_read_for_its_dependency_face(
+        tmp_path: pathlib.Path) -> None:
+    """b 的正控（D1 严格版）：调用方自带正文 + 自己的按号稿 ⇒ 依赖面照读。
+
+    这一条守的是"收紧之后正常的路一条都没断"：
+    - 稿是 `reports/f-proof-<本行号>.md`（稿头声明 `stmt:<本行号>`）；
+    - `manuscript_source=disk`、`dependencies` 1 行（来源 = 稿里 `## 依赖` 表点名的那条）；
+    - 正文是调用方自己交的、签是这一份稿上的签（`bits.reviewed=true`）。
+    """
+    store = _ws(tmp_path)
+    _library(store)
+    full = "定理：由定理甲推出目标结论（自己的按号稿）。"
+    first = _register(store, statement_full=full, proof_text="")
+    assert first.get("ok") is True, first
+    sid = str(first["stmt_id"])
+
+    body = f"1. 由定理甲直接得到结论（见 stmt:{THEOREM_A}）。"
+    rel = f"{MANUSCRIPT_DIR}/f-proof-{sid}.md"
+    text = (
+        f"# F 的证明手稿：自己的按号稿\n\n- 命题号：stmt:{sid}\n\n"
+        "## 命题\n\n" + full + "\n\n## 证明\n\n" + body + "\n\n"
+        + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A))
+    text = DS.mark_washed(text, actor="secretary-F")
+    text = VS.stamp_manuscript_sign(
+        text, proof_sha=VR.proof_sha(body), streak=VR.SIGN_STREAK_NEED,
+        need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
+        ledger=f"verifications/{sid}.jsonl#v-000003",
+        statement_id=sid, manuscript_id=VS.manuscript_id_of(rel))
+    path = pathlib.Path(store.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+    got = _register(store, statement_full=full, proof_text=body)
+    assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_DISK, got
     rows = _deps(store)
     assert len(rows) == 1, rows
-    row = rows[0]
-    assert row["source_stmt_id"] == THEOREM_A, row
-    assert row["used_by"] == f"stmt:{got['stmt_id']}", row
-    assert int(row["path_group"]) == 1, row
+    assert rows[0]["source_stmt_id"] == THEOREM_A, rows
+    assert rows[0]["used_by"] == f"stmt:{sid}", rows
     reading = got.get("deps_missing") or {}
     assert reading.get("state") == "present", reading
-    assert reading.get("manuscript_source") == SRC_DISK, reading
-    probe = reading.get("manuscript_probe") or {}
-    assert str(probe.get("path")) == f"{MANUSCRIPT_DIR}/f-proof-{THEOREM_A}.md", probe
-    assert probe.get("tried"), probe
+    assert str((reading.get("manuscript_probe") or {}).get("path")) == rel, reading
+    row = next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == sid)
+    assert str(row.get("proof_text") or "") == body, row.get("proof_text")
+    assert (row.get("bits") or {}).get("reviewed") is True, row.get("bits")
 
 
 def test_the_two_agreed_names_are_both_recognised(tmp_path: pathlib.Path) -> None:
@@ -933,14 +1010,24 @@ def test_stubbing_the_disk_fallback_out_turns_b_red(tmp_path: pathlib.Path,
 
 def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
                                                      monkeypatch) -> None:
-    """d-3 反真空：把"读 D 的携带单"打桩成永远读不到 ⇒ a 必红（改走 disk 兜底）。
+    """d-3 反真空：把"读 D 的携带单"打桩成永远读不到 ⇒ a 必红。
 
-    这一条与 d-2 合起来才说明主路与兜底是两条真的分开的路：打掉主路，来源读数
-    必须变成 `disk`（而不是仍然自称 `carried_by_D`）。
+    ## 旧逐字（改前，已作废）
 
-    2026-11-04（业主裁定 甲）：这一笔要写的正文要先有一份手稿签 ⇒ 在 D 的报告之后
-    落一份 pending 签（按正文 sha 认领）。签名载体不按号命名，兜底读盘读到的仍是
-    F 那一轮落下的 `reports/f-proof-<F 的命题号>.md`（`manuscript_source=disk`）。
+    打掉携带单之后，兜底读盘读到 F 那一轮落下的
+    `reports/f-proof-<F 的命题号>.md`，`manuscript_source=disk`、`dependencies` 落
+    `THEOREM_A` 那一条。
+
+    ## 为什么旧期望不对（2026-11-05 业主裁定：D1 严格版）
+
+    那一份稿的号是 F 的命题号（不是这一条新命题的），它 `## 依赖` 表写的是 F 引了谁；
+    落到新命题头上就是一条作者从未写过的边。旧期望把"打掉主路 ⇒ 退到兜底"当成必须，
+    但兜底只能读本行自己的稿；本行还没在册（没有号）时没有"自己的稿"可读。
+
+    ## 新逐字
+
+    同一现场 ⇒ `ok=false`、`kind=dependency_section_missing`、`manuscript_source=none`、
+    `_carried_holds(...) is False`、`dependencies` 0 行。
     """
     store = _ws(tmp_path)
     _library(store)
@@ -956,9 +1043,11 @@ def test_stubbing_the_carried_reader_out_turns_a_red(tmp_path: pathlib.Path,
     got = _register(store, statement_full="定理：携带单被打桩（判据夹具）。",
                     proof_text=body,
                     derived_from=[str(out["statement_id"])])
-    assert str(got.get("manuscript_source")) == SRC_DISK, got
+    assert str(got.get("manuscript_source")) == SRC_NONE, got
+    assert got.get("ok") is False, got
+    assert got.get("kind") == DS.REFUSED_SECTION_MISSING, got
     assert _carried_holds(got, store, cited=THEOREM_A) is False, got
-    assert {str(r.get("source_stmt_id")) for r in _deps(store)} == {THEOREM_A}, _deps(store)
+    assert _deps(store) == [], _deps(store)
 
 
 # ------------------------------------------------------------------ f 内容寻址兜底（2026-11-04）
