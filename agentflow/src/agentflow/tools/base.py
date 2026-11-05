@@ -129,15 +129,18 @@ class ParamError(ToolError):
 
 #: 已登记的只读角色例外：角色 -> （（工具名, 理由）, …）。
 #: ## 为什么需要这张表（`P-14` 的另一半）
-#: `ToolRegistry.for_role` 把只读角色（`C` / `H`）的工具面剥成 0 个写工具，而 `H` 有一个设计允许的落库
-#: 代理：它必须能改 `review_findings` 与 `documents.status`（`capabilities.READ_ONLY_WRITE_EXCEPTIONS` 已
-#: 登记表级例外），那个代理走单独的注册表（`AgentH.writers`），里面的工具在 `build_registry` 的注册表里
-#: 根本不存在（`review_tools.register` 默认 `include_writers=False`）。调用期强制一旦生效，"工具面"与
-#: "可调用面"就必须分开命名，否则 `for_role("H")` 不许多出 `review.review_document` 与"H 的落库代理必须
-#: 仍能调它"会互相打架。所以第二个集合只允许由这张显式登记表产生 —— 没有第二条产生路径。
+#: `ToolRegistry.for_role` 把只读角色（`C` / `H` / `V`）的工具面剥掉一切写工具，而设计允许每个只读角色
+#: 有一处**自己的**写入面：H 的落库代理（`review_findings` + `documents.status`）、C 的产出登记通道
+#: （`analysis_reports`），以及 V 自己维护的凭据台账（`verifications/<号>.jsonl`）与它颁的签。
+#: 这些都不走"往 `roles` 里塞只读角色"那条路（那条路会被 `_role_surface` 剥掉，且留痕点名声明错误）：
+#: 它们只由本表逐条产生，于是"为什么这个只读角色能调这个写工具"永远是**一处、逐条、带理由**的登记。
+#: 调用期强制一旦生效，"工具面"与"可调用面"就必须分开命名，否则 `for_role("H")` 不许多出
+#: `review.review_document` 与"H 的落库代理必须仍能调它"会互相打架。所以第二个集合只允许由这张显式
+#: 登记表产生 —— 没有第二条产生路径。
 #: ## 单一来源（`G-45` 那一类缺陷）
 #: `agent_h._H_WRITABLE_TOOLS` 曾是同一件事的第二份名字，现在从本表派生（改这里就是改那里）；每条理由必须
-#: 逐字说清"为什么这个只读角色能调这个写工具"，写不出理由就该改代码而不是加例外。`R4-2`：`role_filter_notes`
+#: 逐字说清"为什么这个只读角色能调这个写工具，它写的是自己的什么"，写不出理由就该改代码而不是加例外。
+#: `R4-2`：`role_filter_notes`
 #: 的条目有「两个来源」（重算 / 装配期），重算来源的带一个标记前缀，重算时只清带标记的 —— 不另开一个字典，
 #: 因为消费方（`scripts/release_check.py` 的 fail 说明、`docs/ROLE-SPECS.md`）读的是「一个列表」，拆开会漏读。
 _SURFACE_NOTE_TAG = "［工具面重算］"
@@ -189,6 +192,30 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
             "报告文件里 ⇒ `review_findings` 里永远只有机器算得出的那几类。"
             "本工具只写 review_findings（不去改 documents.status、不碰知识表）："
             "「补一条发现」与「改一格状态」是两件事",
+        ),
+    ),
+    # V（2026-11-05：把 `verify.verify_proof` 的 `side_effect` 从 `read` 改真成 `write_local` 之后
+    # 补的登记）。为什么只读角色 V 需要一件写工具：它的产物**只能经它自己那张台账落盘** ——
+    # `verifications/<命题号>.jsonl`（追加式，`verifications.record_verification`）、未在册档的签
+    # 信封 `out/vsigns/<正文 sha>.json`（`vsigns.issue`），以及由收方秘书按台账把签块盖回送审的那份
+    # 手稿（`vsigns.land`；V 这边没有直接写稿的口）。没有这一件，V 的判定就无处可落 ——
+    # 而"审了没处记"与"没审"在读数上分不开。
+    # 边界（这句是这一条例外的全部内容）：**V 只写自己维护的那张表与自己的凭据产物，不改别人的东西**。
+    # 它不写任何数据表的正文或结论（`WRITE_SETS["V"]` 仍是空集）；命题行上五元位第 3 位那一格由
+    # V 的秘书经 `verifications.sign_statement` 在同一趟里翻（那是秘书的写，不在本工具的表写集里，
+    # `TOOL_WRITE_SETS["verify.verify_proof"] == frozenset()` 记的就是这个事实）；它不改别人的稿
+    # （`fs.write` / `fs.edit` 不在 V 的工具面上），也不写 `experiments`。
+    # 判据：`tests/test_v_writes_only_its_own_ledger.py`（正控真跑一次落台账；负控 C/H 与"改别人的表"
+    # 仍受控拒绝；反真空摘掉这一条 ⇒ 工具从 V 面上消失）。
+    "V": (
+        (
+            "verify.verify_proof",
+            "V 写的是**它自己维护的那张表**（verifications/<命题号>.jsonl）与**它颁的签**"
+            "（out/vsigns/<正文 sha>.json、收方秘书按台账落回送审手稿的签块）——"
+            "判定必须有落点，否则「审了没处记」与「没审」在读数上分不开。"
+            "它不改别人的东西：不写 statements / experiments 的正文与结论、"
+            "不改别人的稿（命题行上第 3 位那一格由 V 的秘书按台账翻，不在这件工具的表写集里）。"
+            "`for_role('V')` 仍把其余一切写工具剥掉；这一件是 V 面上唯一的例外",
         ),
     ),
 }
@@ -1117,8 +1144,9 @@ class ToolRegistry:
             )
         if allowed_by_exception:
             notes.setdefault(role, []).append(
-                f"按业主裁定「方案 1」放行了 {len(allowed_by_exception)} 个**该角色自己的落库代理**："
-                f"{sorted(allowed_by_exception)}（写面钉死在 READONLY_CALL_EXCEPTIONS[{role!r}] 里）"
+                f"按业主裁定「方案 1」放行了 {len(allowed_by_exception)} 个**该角色自己的写入面**"
+                f"（落库代理 / 自有凭据产物）：{sorted(allowed_by_exception)}"
+                f"（写面钉死在 READONLY_CALL_EXCEPTIONS[{role!r}] 里）"
             )
         if allowed_by_universal:
             notes.setdefault(role, []).append(

@@ -2017,12 +2017,16 @@ CONDUCTOR_WRITE_SET: frozenset[str] = frozenset({"tasks"})
 
 #: 只读角色的写集例外（必须显式登记，不许靠"看代码猜"）。
 #:
-#: `tools.READ_ONLY_ROLES` 说的是"它们的工具面里不许出现写工具"。
-#: 能力表的写集说的是"它们的 Python 实现可能 `store.tx()` 哪些表"。
+#: `tools.READ_ONLY_ROLES` 说的是"它们的工具面里不许出现**别人的**写工具"。
+#: 能力表的写集说的是"它们的 Python 实现可能 `store.tx()` 哪几张表"。
 #: 两者不是同一件事：一个只读角色的实现当然可以写自己的产出登记行。
 #: 显式登记例外的价值在于：新增一个只读角色、或给已有只读角色加一个写入面时，
 #: 若它的写集非空而这里没登记，:func:`assert_capabilities` 会当场抛，
 #: 逼人写下理由。
+#: 注意"写表"与"写工作区文件"是两根轴：V 自己维护的 `verifications/<号>.jsonl`
+#: 是**工作区文件**（不在 `schema.TABLES` 里），所以它的 `WRITE_SETS` 仍是空集，
+#: 但它在**工具级**仍是一条已登记的例外（`READONLY_CALL_EXCEPTIONS["V"]`）——
+#: 本表继续登记它、值取空集，只为满足 [5c] 的"两张表键集必须相同"这条判据。
 #:
 #: 这张表不是"删掉那条断言"的替代品：断言仍然在（"只读角色的写集
 #: 必须只含已登记的受控例外"）。删掉它，这些例外就再也不会被复核 ——
@@ -2042,6 +2046,19 @@ READ_ONLY_WRITE_EXCEPTIONS: dict[str, frozenset[str]] = {
     # 而它的落点只有这两个 —— 于是"发现问题"与"改稿内容"在结构上仍然分得开：
     # H 能改的只有状态与自己的发现，改不了任何一句断言。
     "H": frozenset({"review_findings", "documents"}),
+    # V（2026-11-05）：**空集不是"没有写入面"，而是"没有数据表写入面"**。
+    # V 的写入面是工作区文件：它自己维护的 `verifications/<命题号>.jsonl` 台账、
+    # 未在册档的签信封 `out/vsigns/<正文 sha>.json`，以及收方秘书落回送审手稿的签块。
+    # 三者都不在 `schema.TABLES` 里 ⇒ 本表（问的是"可能 `store.tx()` 哪几张表"）只能是空集。
+    # 这一条之所以要显式登记，是因为工具级例外表（`tools/base.py::READONLY_CALL_EXCEPTIONS`）
+    # 里有 `"V"`：`[5c]` 要求两张表的键集相同，于是它必须在场；
+    # 而它的值必须是空集 —— 把 `statements` 填进来就等于对外宣称 V 能改命题行，
+    # 那是**放宽**权限面，不是把声明说真。
+    # 命题行上五元位第 3 位那一格确实会在同一趟里被翻：那是 V 的秘书经
+    # `verifications.sign_statement` 写的（`store.tx("statements", actor="verifier-…")`），
+    # 属于秘书的写，不是 V 这件工具的直接表写集（`TOOL_WRITE_SETS` 的 AST 扫描也只看
+    # `tools/verify_tools.py` 的同文件调用链，那里一次 `store.tx` 都没有）。
+    "V": frozenset(),
 }
 
 #: 逐工具写集：只读例外里每个工具会写哪几张表（`roles-2` 判据 ② / ③ 的输入）。
@@ -2065,6 +2082,15 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
     "review.report": frozenset(),
     #   ↑ `review_tools.review_report`：只写一个 markdown 报告文件（`draft/17` §8.4），
     #     它对 `review_findings` 只读（`store.rows(...)`），`store.tx` 一次都没出现
+    "verify.verify_proof": frozenset(),
+    #   ↑ `verify_tools._verify_verify_proof`（2026-11-05，V 的台账例外）：**空集是据实读数**，
+    #     不是"没查成"。它把判定交给 `AgentV.verify_proof`：台账那一行由
+    #     `verifications.record_verification` 追加进**工作区文件** `verifications/<号>.jsonl`，
+    #     工具层这一段没有一次 `store.tx`（同文件顶层调用链里也没有）⇒ 它一张数据表都不写。
+    #     命题行上第 3 位那一格由 V 的秘书经 `verifications.sign_statement` 翻（跨模块，
+    #     不在本表的扫描面里，也不算"V 的这件工具写表"）；手稿签块由收方秘书落。
+    #     所以这里既不能填 `statements`（那会把"秘书翻自己那一格"记成"V 能改命题行"，
+    #     是放宽权限面），也不需要 `_NO_WRITE_SET_SOURCE`（扫描器算得出来，正是空集）。
     "review.record_finding": frozenset({"review_findings"}),
     #   ↑ `review_tools.record_finding`（业主 2026-10-18）：H 自己读出来的发现在这里落库。
     #     只写 `review_findings`（`tx.upsert("review_findings", …)`），不碰

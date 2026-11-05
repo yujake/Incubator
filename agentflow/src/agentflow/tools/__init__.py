@@ -99,14 +99,20 @@ from .. import leanscope as _LEANSCOPE  # noqa: E402
 #: `leanscope.is_hidden` 的角色直接返回空面（工具面与可调用面都是空）。
 TOOL_ROLES: tuple[str, ...] = tuple(ROLES) + (CONDUCTOR_ROLE,)
 
-#: 只读角色：它们的工具面里不允许出现任何写工具，无论 `ToolSpec.roles` 怎么声明。
-#: - C（只读图分析）：一旦 C 能写，它就成了"绕过 B 引文回验"的写入路径，而 B 的引文逐字回验是全系统唯一
-#:   能自动发现幻觉引文的地方。
+#: 只读角色：它们的工具面里不允许出现**别人的**写工具，无论 `ToolSpec.roles` 怎么声明。
+#: "只读"约束的是**能不能改别人的东西**（别人的表 / 别人的稿），不是"有没有 `write_local` 声明"：
+#: 只读角色可以写**它自己维护的那张表 / 它自己的凭据产物**，而且这条写面只由
+#: `base.READONLY_CALL_EXCEPTIONS` 逐条登记产生（没有第二条产生路径）。
+#: - C（只读图分析）：一旦 C 能写知识表，它就成了"绕过 B 引文回验"的写入路径，而 B 的引文逐字回验是全系统
+#:   唯一能自动发现幻觉引文的地方。它的自有产出是 `analysis_reports` 的登记行。
 #: - H（审校）：若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上
-#:   无法区分。
+#:   无法区分。它的自有产出是 `review_findings` 与 `documents.status`。
 #: 实现不在这个常量本身，而在 `ToolRegistry.for_role`（结构性过滤）—— 常量只是这条约束的单一来源（FC-03）。
-#: V（验证者）同理但落点不同：它不写任何「表」（`capabilities.WRITE_SETS["V"]` 是空集），唯一的产物是
-#: `verifications/<命题号>.jsonl`；只靠"约定只读"的话 `for_role("V")` 会照旧把写工具发给它。
+#: V（验证者）：它写**自己维护的一张表** —— `verifications/<命题号>.jsonl`（凭据台账；是工作区文件，
+#: 不是 `schema.TABLES` 里那 17 张表）与它颁的签（`out/vsigns/<正文 sha>.json`、收方秘书落回送审手稿的
+#: 签块），所以 `verify.verify_proof` 据实声明 `write_local`；V 拿得到它走的是
+#: `READONLY_CALL_EXCEPTIONS["V"]` 那条逐条例外。`capabilities.WRITE_SETS["V"]` 仍是空集：那根轴问的是
+#: "写哪几张**数据表**"，而 V 一张都不写。它不改别人的东西（`fs.write` / `table.*` 写工具一件都拿不到）。
 READ_ONLY_ROLES = ("C", "H", "V")
 
 #: 有写副作用的等级 —— 第一根轴词表里"写"的那一半（另一半是下面的 `_NON_WRITE_EFFECTS`）。单列一份是为了
