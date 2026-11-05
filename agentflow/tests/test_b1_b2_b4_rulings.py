@@ -102,12 +102,17 @@ def _ok(out) -> dict:
     return got
 
 
-def _with_manuscript(store: Store, payload: dict, *, statement_id: str = "000000") -> dict:
+def _with_manuscript(store: Store, payload: dict, *, statement_id: str) -> dict:
     """给 B 的这一笔补上正文载体（2026-11-04 甲：要写正文就必须带稿）。
 
     稿是 `reports/f-proof-<号>.md`，三节齐、`## 证明` 与这一笔送审的正文逐字一致。
     这些用例量的是 B-2 / B-4 那两道闸，不是"缺稿该不该拒" —— 补稿只是补前提，
     断言一个字不动。
+
+    `statement_id` 必填（2026-11-05 D2 口径①之后）：稿名 / 稿头的号就是这一笔的
+    候选号，所以它必须是"这一笔将要登记的那个号"。同一个号分给两条不同命题的稿，
+    会撞在已登记那一行上并被判成真冲突（`stmt_id_taken`）—— 那是正确的拒绝，
+    不是这些用例要量的东西。
     """
     out = dict(payload)
     text = str(out.get("proof_text") or "")
@@ -170,7 +175,7 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     多跑两趟（`test_b_register_all_missing_hint.py` 的同一个口径）。
     """
     got = _ok(_b(store).register_statement(
-        **_with_manuscript(store, _own(kind="lemma"))))
+        **_with_manuscript(store, _own(kind="lemma"), statement_id="000000")))
     assert got.get("ok") is False, got
     assert got.get("kind") == "must_start_as_conjecture", got
     err = str(got.get("error") or "")
@@ -182,7 +187,7 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
     sign_before_registration(store.root, proof_text=_own()["proof_text"])
     good = _ok(_b(store).register_statement(
-        **_with_manuscript(store, _own(kind="conjecture"))))
+        **_with_manuscript(store, _own(kind="conjecture"), statement_id="000000")))
     assert good.get("ok") is True, good
     rows = store.rows("statements")
     assert len(rows) == 1 and str(rows[0].get("kind")) == "conjecture", rows
@@ -232,7 +237,8 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
         # `conftest.sign_before_registration`）。
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
         out = _ok(_b(store).register_statement(
-            **_with_manuscript(store, _own(kind="  conjecture  "))))
+            **_with_manuscript(store, _own(kind="  conjecture  "),
+                               statement_id="000000")))
     finally:
         monkeypatch.setattr(holder, "_self_authored_gate", real)
 
@@ -241,8 +247,9 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
     assert store.rows("statements")[0]["kind"] == "conjecture", store.rows("statements")[0]
 
     # 拒收路径上标的也是同一个值（不是原始入参那个带空白的串）。
+    # 这是另一条命题（也是另一份稿）：稿号用 000001，别覆盖上面那一行已登记的稿。
     bad = _ok(_b(store).register_statement(**_with_manuscript(store, _own(
-        kind="  lemma  ", statement_full="另一条探针命题。"))))
+        kind="  lemma  ", statement_full="另一条探针命题。"), statement_id="000001")))
     assert bad.get("kind") == "must_start_as_conjecture", bad
     assert bad.get("statement_kind") == "lemma", bad
 
@@ -303,7 +310,7 @@ def _no_source(**kw) -> dict:
 def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     """④ B-4：说「无来源可核」而不给手稿位置 ⇒ 拒；给了 ⇒ 通过且理由里带那个位置。"""
     bad = _ok(_b(store).register_statement(
-        **_with_manuscript(store, _no_source())))
+        **_with_manuscript(store, _no_source(), statement_id="000000")))
     assert bad.get("ok") is False, bad
     assert bad.get("kind") == "no_source_without_backing", bad
     err = str(bad.get("error") or "")
@@ -312,22 +319,29 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
 
     sign_before_registration(store.root, proof_text=_own()["proof_text"])
     good = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
-        quote_reason=f"no_source：原文不在盘上，凭据是我方手稿 {BACKING}"))))
+        quote_reason=f"no_source：原文不在盘上，凭据是我方手稿 {BACKING}"),
+        statement_id="000000")))
     assert good.get("ok") is True, good
     row = store.rows("statements")[0]
     assert BACKING in str(row.get("quote_reason") or ""), row.get("quote_reason")
 
     # 另外两种写法（裁定给的例子）同样算"指到了哪一处"。
-    for reason in ("no_source：见 out/paper/main.tex§3",
-                   "no_source：见 stmt:000007"):
+    # 每笔探针是一条不同的命题 ⇒ 各自的稿要有各自的号（号 == 它将要登记的号）。
+    # 这几笔共用 000000 会撞在 good 那一行上，被判成真冲突（`stmt_id_taken`）：
+    # 那条拒绝是对的（口径①），但它不是 B-4 要量的东西。
+    for i, reason in enumerate(("no_source：见 out/paper/main.tex§3",
+                                "no_source：见 stmt:000007"), start=1):
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
-        got = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
-            statement_full=f"探针命题：{reason}", quote_reason=reason))))
+        got = _ok(_b(store).register_statement(**_with_manuscript(
+            store, _no_source(statement_full=f"探针命题：{reason}", quote_reason=reason),
+            statement_id=f"{i:06d}")))
         assert got.get("ok") is True, (reason, got)
 
     # 只写文件名不算"哪一处"（读的人仍然要在整篇里找）。
+    # 它在编号之前就被 B-4 拒，但稿仍会写盘：给个自己的号，别覆盖 000000 那一行的稿。
     loose = _ok(_b(store).register_statement(**_with_manuscript(store, _no_source(
-        statement_full="探针命题：只写文件名", quote_reason="no_source：见 out/paper/main.tex"))))
+        statement_full="探针命题：只写文件名", quote_reason="no_source：见 out/paper/main.tex"),
+        statement_id="000003")))
     assert loose.get("ok") is False and loose.get("kind") == "no_source_without_backing", loose
 
 
