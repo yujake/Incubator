@@ -763,7 +763,8 @@ def _verify_code_hash(_hash_of, path):
     # 「2026-10-15 补齐」（`draft/124` §17，「本文件是 FC-27 禁改区 [prover-bridge]」，
     # 按业主"先改后签"口径登记，待 2 名人审）：`looked_in` 是"我「去哪几处找过」"、
     # `sources` 是逐处结果 —— 它们承载三态（没找到 / 没查）里"查过哪几处"那一半，
-    # 而 `returns` 会拼进 function-calling 的 `description`（模型看得到）。
+    # 而 `returns` 只是台账/冻结快照的声明契约（`tools/base.py:674-679`：`ToolFace`
+    # 的 description 不带 returns，模型面看不到它），不拼进任何模型可见文本。
     returns="{'checked','available','available_names','reason','probe_errors','looked_in','sources','lean_enabled','lean_enabled_source','can_do_formal','note'}",
     tags=("experiment", "formal"),
 )
@@ -888,8 +889,9 @@ def _verify_detect_verifier():
     # 穷举那一档多落一份被签的证明手稿 `reports/e-proof-<实验号>.md`，返回值多四格 ——
     # `proof_manuscript`（送审时点名的那一格）/ `manuscript_sha256` /
     # `manuscript_proof_sha256` / `manuscript_problems`。只加不减：它们是"把稿交给 V"
-    # 的入口，而工具声明的 `returns` 会拼进 function-calling 的 description（模型看得到）；
-    # 不在声明里 = "跑出来了、模型不知道它在"。
+    # 的入口；工具声明的 `returns` 是台账/冻结快照的契约（`tools/base.py:674-679`
+    # 写明 description 不带 returns），漏了实现真给的键，声明与实跑就分家
+    # （`test_no_tool_returns_a_top_level_key_it_does_not_declare` 会红）。
     # 键清单从实现的真返回读出（`tests/test_tools_returns_declaration.py` 的探针那条路）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
@@ -1096,8 +1098,8 @@ _ROLES_V = ("V",)
             # verdict ∈ consistent / weaker / stronger / unrelated / inadmissible / unknown），
             # `citation_gate` 是签字前置读数的五格（`ok` / `blocking` / `weaker` / `problem` / `why`）。
             # 声明必须跟上（判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`：
-            # `returns` 会拼进 function-calling 的 description ⇒ 模型看得到，声明里没有的
-            # 字段它就不知道存在 —— 那会把"引用核实"这一档在模型那一侧折回看不见）。
+            # `returns` 是台账/冻结快照的声明契约，模型面看不到它（`tools/base.py:674-679`
+            # 写明 description 不带 returns），漏了实跑多出来的键，契约与实现就分家）。
             "'citations','citation_checks','citation_gate',"
             # 2026-10-27：写回那一格（台账行上的 `statement_writeback`：写没写成 / 为什么 /
             # 撤回没有）。三条返回路径都有它（没写回可报时是空对象），所以声明里必须有。
