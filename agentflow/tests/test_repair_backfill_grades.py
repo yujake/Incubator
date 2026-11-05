@@ -64,7 +64,7 @@ def _row_with(sid: str, evidence_kind: str, *, reviewed: bool,
     return _row(sid, evidence_kind=evidence_kind) | {"bits": bits}
 
 
-def _write_row(store: Store, row: dict) -> dict:
+def _put_row(store: Store, row: dict) -> dict:
     # 带 `bits` 的行要过 `bits_shape_problems`：等级缓存与现算必须一致。
     row = dict(row)
     row["bits"] = dict(row["bits"])
@@ -124,7 +124,7 @@ def test_a_dry_run_sees_the_mismatch_and_writes_nothing(
         tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
     """a：五元位已到 `pre_theorem`、历史列还写 `heuristic` ⇒ "会动"；盘上零变化。"""
     st = _ws(tmp_path)
-    _write_row(st, _row_with(SID, "heuristic", reviewed=True))
+    _put_row(st, _row_with(SID, "heuristic", reviewed=True))
     before = _snapshot(st.root)
 
     out = VR.recompute_grades(st.root, st)
@@ -150,11 +150,11 @@ def test_a_dry_run_sees_the_mismatch_and_writes_nothing(
 def test_b_apply_reverses_the_kind_from_the_grade(tmp_path: pathlib.Path) -> None:
     """b：`--apply` ⇒ 历史列被反算成 `proof_review`、痕里的 `to` 是等级 `pre_theorem`。"""
     st = _ws(tmp_path)
-    _write_row(st, _row_with(SID, "heuristic", reviewed=True))
+    _put_row(st, _row_with(SID, "heuristic", reviewed=True))
     _with_ledger_sign(st, SID)                 # 写 `proof_review` 的闸要一条真签
     _force_kind(st, SID, "heuristic")          # 存量形态：签过、历史列还停在 heuristic
     other = _row_with("000001", "heuristic", reviewed=False)     # 一致行
-    _write_row(st, other)
+    _put_row(st, other)
     before_other = _disk_row(st, "000001")
 
     out = VR.recompute_grades(st.root, st, apply=True)
@@ -176,7 +176,7 @@ def test_b_apply_reverses_the_kind_from_the_grade(tmp_path: pathlib.Path) -> Non
 def test_c_second_apply_changes_no_byte(tmp_path: pathlib.Path) -> None:
     """c：第二次 `--apply` ⇒ 全部"已经一致"、`statements.json` 逐字节不变。"""
     st = _ws(tmp_path)
-    _write_row(st, _row_with(SID, "heuristic", reviewed=True))
+    _put_row(st, _row_with(SID, "heuristic", reviewed=True))
     _with_ledger_sign(st, SID)
     _force_kind(st, SID, "heuristic")
     first = VR.recompute_grades(st.root, st, apply=True)
@@ -203,7 +203,7 @@ def test_d_a_self_reported_proof_is_downgraded_to_its_real_grade(tmp_path: pathl
     自报档位不再换来引用学分，重刷把它降到等级允许的那一档。
     """
     st = _ws(tmp_path)
-    _write_row(st, _row_with(SID, "proof", reviewed=False))
+    _put_row(st, _row_with(SID, "proof", reviewed=False))
 
     out = VR.recompute_grades(st.root, st)
     will = _only(out, "will_upgrade")
