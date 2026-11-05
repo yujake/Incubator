@@ -418,10 +418,12 @@ class _RunExperiment:
             #     就这样各多了一份（行上 `bytes=0`），而它们本来就不打算当证明。
             # 报告 dict 仍按同一形状给出（空 path / 0 字节 / 空 problems）：读数面的键集
             # 不因这一档而变，下游读 `report_path` 的地方不必各记一个条件。
-            if _NP.wants_numeric_proof(method=method,
-                                       observations=derived.get("observations"),
-                                       certificate=certificate, search_bound=bound_arg,
-                                       evidence_kind=derived.get("evidence_kind")):
+            _wants_proof = _NP.wants_numeric_proof(
+                method=method, observations=derived.get("observations"),
+                certificate=certificate, search_bound=bound_arg,
+                evidence_kind=derived.get("evidence_kind"))
+            _blocks: dict[str, Any] = {}
+            if _wants_proof:
                 _blocks = _ER.blocks_from(observations=derived.get("observations"),
                                           certificate=certificate, search_bound=bound_arg)
                 report = _ER.land_report(
@@ -438,28 +440,6 @@ class _RunExperiment:
                                  + "；".join(str(p) for p in report.get("problems") or [])
                                  + " ⇒ 这一条不许标 proof（最多是「有数值实验支持」）")
                 derived["observations"][_ER.REPORT_KEY] = report
-                # ---- [5a2] E 的证明手稿（2026-11-03 业主：E 拿 V 签的流程与 F 一样） ----
-                #
-                # ②③ 的读数（上一格）回答的是「这份穷举证据可不可核」；「手稿」回答的是
-                # "V 的签盖在哪一份正文上"。F 那一侧这两件事是同一份文件
-                # （`reports/f-proof-*.md` 的 `## 证明`），E 这一侧改前只有前者 ⇒
-                # V 的未在册入口读不进去、收方秘书也没有地方落签块，E 的"签"只能靠
-                # `e_signature` 自报（那是 E 自己写的 `signed_by="V"`）。
-                # 现在同一趟实验把 `reports/e-proof-<实验号>.md` 也落下来：
-                # 与 F 同目录、同三节、同一把 sha 尺（`## 证明` 的正文 = 证明栏三段）。
-                manuscript = _ER.land_manuscript(
-                    self.workspace_root, experiment_id=eid, claim=claim,
-                    claim_key=claim_key,
-                    script_path=_relpath(path, self.workspace_root), script_sha256=chash,
-                    design=_blocks["design"], enumeration=_blocks["enumeration"],
-                    search_space=_blocks["search_space"],
-                    result=derived.get("result"),
-                    evidence_kind=derived.get("evidence_kind"))
-                if manuscript.get("problems"):
-                    notes.append("[manuscript] E 的证明手稿没有落成："
-                                 + "；".join(str(p) for p in manuscript.get("problems") or [])
-                                 + " ⇒ 这一条拿不到手稿签块（V 的签没有落点）")
-                derived["observations"][_ER.MANUSCRIPT_KEY] = manuscript
             else:
                 # 一般数值实验：不写报告，也不在 `observations` 里留一格空的落盘事实
                 # （留了会被读侧当成"落过盘但没成"，那是另一种欠账）。
@@ -522,6 +502,46 @@ class _RunExperiment:
                 search_bound=bound_arg,
                 created_by=self.actor,
             )
+            # ---- [5a3] E 的证明手稿（2026-11-03 业主：E 拿 V 签的流程与 F 一样） ----
+            #
+            # ②③ 的读数（上面 [5a]）回答的是「这份穷举证据可不可核」；「手稿」回答的是
+            # "V 的签盖在哪一份正文上"。F 那一侧这两件事是同一份文件
+            # （`reports/f-proof-*.md` 的 `## 证明`），E 这一侧改前只有前者 ⇒
+            # V 的未在册入口读不进去、收方秘书也没有地方落签块，E 的"签"只能靠
+            # `e_signature` 自报（那是 E 自己写的 `signed_by="V"`）。
+            # 同一趟实验落一份 `reports/e-proof-<实验号>.md`：
+            # 与 F 同目录、同三节、同一把 sha 尺（`## 证明` 的正文 = 证明栏三段）。
+            #
+            # 为什么落在 `row` 之后（2026-11-05 走查 D5）：稿头那一行
+            # `- 结论：…（等级 X）` 必须与台账这一行的 `evidence_kind` 同源，而那一格是
+            # `_support.build_experiment` 里 `numericproof.sign_experiment` 现算的
+            # （可能把 `cross_check` 升成 `proof`，也可能因落盘读数不齐降档）——
+            # 它要等 `row` 建好才存在。改前这里传的是 `derived["evidence_kind"]`
+            # （升档之前的自评）⇒ 同一份 e-proof 稿抬头写 `cross_check`、
+            # `experiments` 那一行却是 `proof`（走查报告
+            # `temp/walk-e2e-20261105/REPORT.md` §四 D5）。
+            # 现在直接传 `row.evidence_kind`：两处只有一个来源（那一行），不在这里再算
+            # 一遍 —— 再算一遍就是第二个来源，正是这一条要消掉的东西。
+            if _wants_proof:
+                manuscript = _ER.land_manuscript(
+                    self.workspace_root, experiment_id=eid, claim=claim,
+                    claim_key=claim_key,
+                    script_path=_relpath(path, self.workspace_root), script_sha256=chash,
+                    design=_blocks["design"], enumeration=_blocks["enumeration"],
+                    search_space=_blocks["search_space"],
+                    result=derived.get("result"),
+                    evidence_kind=row.evidence_kind)
+                if manuscript.get("problems"):
+                    _manuscript_note = (
+                        "[manuscript] E 的证明手稿没有落成："
+                        + "；".join(str(p) for p in manuscript.get("problems") or [])
+                        + " ⇒ 这一条拿不到手稿签块（V 的签没有落点）")
+                    # 这一行已经建好（`row.notes` 由 `build_experiment` 拼定）⇒ 失败读数
+                    # 补在它上面：只留在局部 `notes` 里等于台账上看不到"稿没落成"。
+                    row.notes = (str(row.notes or "") + "\n" + _manuscript_note).strip()
+                # 手稿事实补进这一行的 `observations`：`build_experiment` 那一刻它还不存在
+                # （手稿现在才落），而 B / V 读的正是这一格（`proof_manuscript`）。
+                row.observations[_ER.MANUSCRIPT_KEY] = manuscript
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
 
         # 签名那一格（`observations.e_signature`）：谁签、谁写 ②③ —— 读侧不自己去翻台账。
