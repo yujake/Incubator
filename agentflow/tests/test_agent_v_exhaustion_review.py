@@ -297,15 +297,18 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
     assert sorted(C.ALLOWED_EDGES["B"]) == ["C", "D", "H", "L", "V"]
     assert sorted(C.ALLOWED_EDGES["C"]) == []
     assert sorted(C.ALLOWED_EDGES["D"]) == ["A", "B", "C", "E", "F"]
-    assert sorted(C.ALLOWED_EDGES["F"]) == ["A", "B", "C", "D", "E", "V"]
+    # 2026-11-05（业主裁定「让 F 作为 D 的严格下级，取消出边 F→D」）：F 那一行少 `D`。
+    assert sorted(C.ALLOWED_EDGES["F"]) == ["A", "B", "C", "E", "V"]
     assert sorted(C.ALLOWED_EDGES["G"]) == ["A", "D", "E", "F"]
     assert sorted(C.ALLOWED_EDGES["H"]) == ["A", "E", "G"]
-    assert sorted(C.ALLOWED_EDGES["V"]) == ["F"]
+    # 2026-11-05（业主裁定「V 不应该有出边」）：V 不再能唤起任何人（入边见下一行）。
+    assert sorted(C.ALLOWED_EDGES["V"]) == []
     assert sorted(C.ALLOWED_EDGES["L"]) == ["C"]
     assert sorted(C.ALLOWED_EDGES["M"]) == ["A", "B", "C", "D", "E", "G", "H"]
     inbound_v = sorted(role for role, tos in C.ALLOWED_EDGES.items() if "V" in tos)
     assert inbound_v == ["B", "E", "F"], inbound_v
-    assert sum(len(tos) for tos in C.ALLOWED_EDGES.values()) == 36
+    # 边总数：36 → 34（恰好 −F→D、−V→F 两条）。
+    assert sum(len(tos) for tos in C.ALLOWED_EDGES.values()) == 34
 
     # ---- 动态那一半：真起一个主控，E 派 V 会审穷举证据，并且拿得到判决
     from agentflow.host import wired_conductor

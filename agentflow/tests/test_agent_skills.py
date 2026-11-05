@@ -220,11 +220,12 @@ def test_the_body_scan_does_not_fire_on_actions_paths_or_filenames(monkeypatch):
     于是没人再看它。工具名的形状是"全小写组名.名"，动作是"大写角色.动作"、
     路径与文件名带斜杠或以 `.json`/`.tex` 结尾 —— 三者机器分得开。
 
-    这里举的动作取 `F.step`（V 的出边就是 F）：动作那一格也有判据
-    （存在 + 够得到），所以"举一个不报的例子"必须同时是一个够得到的动作，
-    否则这一条会与那一条判据互相打架。"""
+    这里举的动作取 `V.read_proof`（V 自己的动作）：2026-11-05 业主裁定
+    「V 不应该有出边」之后 V 够不到任何别人的动作，所以"举一个不报的例子"
+    只能是它自己的 —— 动作那一格也有判据（存在 + 够得到），否则这一条会与
+    那一条判据互相打架。"""
     good = AS.Skill(slug="正文里的非工具点号", title="x", summary="一句话", when="任何时候",
-                    body=("派 `F.step` 推进，读 `data/statements.json`、"
+                    body=("调 `V.read_proof` 读回那一签，读 `data/statements.json`、"
                           "`out/paper/main.tex` 与 `fs.read`。"),
                     tools=("fs.read",))
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (good,))
@@ -248,8 +249,9 @@ def test_the_negative_control_catches_an_unreachable_action_only_in_the_body(mon
     """反负控之十：正文里的动作真实存在、但这个角色够不到 ⇒ 红。
 
     这一条挡的是"把别人的活写进我的操作手册"的正文版：
-    V 的出边只有 F，正文里写"你自己去调 `A.run_once`"就是一句做不到的指令 ——
-    而动作是真动作，所以只查存在性的判据会放过它。"""
+    V 没有出边（2026-11-05 业主裁定「V 不应该有出边」），正文里写"你自己去调
+    `A.run_once`"就是一句做不到的指令 —— 而动作是真动作，所以只查存在性的判据
+    会放过它。"""
     bad = AS.Skill(slug="正文越权动作", title="x", summary="一句话", when="任何时候",
                    body="第 1 步：调 `A.run_once` 自己去检索一遍。")
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))

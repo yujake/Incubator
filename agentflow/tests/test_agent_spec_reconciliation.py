@@ -91,7 +91,10 @@ def test_the_registry_is_not_vacuous() -> None:
     # 这一格是读数不是规格：改边表时必须同时看它（否则"少了一条边"在这里恒绿）。
     # 2026-10-23 晚（业主逐字：「E 写的报告要能落下来，且 V 也要会审这种东西，加 E 派 V
     # 的边」）⇒ 35 → 36，恰好一条：`E → V`（E 跑出穷举证据之后直接派 V 会审）。
-    assert sum(len(v) for v in reg.edges().values()) == 36, (
+    # 2026-11-05 业主两条裁定（逐字）：「我们最好不要出现双向边，所以让 F 作为 D 的严格下级，
+    # 取消出边 F→D」＋「V 不应该有出边」⇒ 36 → 34，恰好两条：`F→D` 与 `V→F`
+    # （两对的另一向 `D→F` / `F→V` 都保留；V 的入边 F / E / B 一条没少）。
+    assert sum(len(v) for v in reg.edges().values()) == 34, (
         "边总数：2026-10-10 裁定第 4 条去掉 M→B / M→F / M→V 三条（32 → 29）；"
         "2026-10-13 业主裁定「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」（29 → 30）；"
         "2026-10-13 业主裁定「补 M 到 B」（30 → 31）；"
@@ -102,6 +105,7 @@ def test_the_registry_is_not_vacuous() -> None:
         "V 的两个入口仍在：F 自产证明时签、B 入库文献侧内容时签）；"
         "2026-10-22 晚业主裁定「L 的协作面」（32 → 35 = +B→L、+B→D、+L→C）；"
         "2026-10-23 晚业主裁定「加 E 派 V 的边」（35 → 36 = +E→V）；"
+        "2026-11-05 业主裁定「取消出边 F→D」「V 不应该有出边」（36 → 34 = −F→D、−V→F）；"
         "文档那一份在 docs/ROLE-SPECS.md §0.5（那一段的数字需要人跟着重算）"
     )
     for role in reg.roles():
@@ -164,6 +168,35 @@ def test_the_reconciliation_catches_a_drifted_spec() -> None:
         one.add(spec)
     with pytest.raises(KeyError):
         one.get("Z")
+
+
+def test_f_does_not_summon_d_and_v_summons_nobody(monkeypatch: pytest.MonkeyPatch) -> None:
+    """业主 2026-11-05 的两条边裁定：取消 `F→D`、清空 V 的出边。
+
+    正控同时读声明层（`specs/f.py` / `specs/v.py` 的 `edges`）与派生层
+    （`capabilities.ALLOWED_EDGES`），再读一遍 V 的入边（F / E / B 一条都不能少）：
+    "我不去读它"与"它真的不在权限面上"必须分得开。
+    反真空把边加回能力面（monkeypatch，不改盘），让既有的 `_mismatches()` 当场报红 ——
+    这就是"把 D / F 加回 capabilities ⇒ 判据红"的机器形态。
+    """
+    reg = builtin_registry()
+    # ① 取消 F→D：声明层与派生层都不含 D
+    assert "D" not in reg.get("F").edges, reg.get("F").edges
+    assert "D" not in C.ALLOWED_EDGES["F"], sorted(C.ALLOWED_EDGES["F"])
+    # ② V 没有出边：声明层与派生层都是空的
+    assert tuple(reg.get("V").edges) == (), reg.get("V").edges
+    assert C.ALLOWED_EDGES["V"] == frozenset(), sorted(C.ALLOWED_EDGES["V"])
+    # ③ 入边不受影响：V 仍能被 F / E / B 唤起
+    inbound_v = {role for role, tos in C.ALLOWED_EDGES.items() if "V" in tos}
+    assert inbound_v == {"B", "E", "F"}, inbound_v
+
+    # 反真空 ①：把 D 加回 F 的能力面 ⇒ 同一把尺子必须报红
+    monkeypatch.setitem(C.ALLOWED_EDGES, "F", C.ALLOWED_EDGES["F"] | {"D"})
+    assert _mismatches(reg.get("F")), "把 D 加回 ALLOWED_EDGES['F']，_mismatches 没抓住"
+    monkeypatch.undo()
+    # 反真空 ②：把 F 加回 V 的能力面 ⇒ 同样报红
+    monkeypatch.setitem(C.ALLOWED_EDGES, "V", frozenset({"F"}))
+    assert _mismatches(reg.get("V")), "把 F 加回 ALLOWED_EDGES['V']，_mismatches 没抓住"
 
 
 # ---------------------------------------------------------------- `specs/` 与 FC-27 清单

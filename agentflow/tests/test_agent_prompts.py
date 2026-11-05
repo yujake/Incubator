@@ -287,9 +287,10 @@ def test_the_parent_limits_block_goes_to_whoever_can_summon(registry: ToolRegist
         if can:
             holders.append(role)
     # 2026-10-22：L 接上协作面（有出边）之后它也会读派活上限那一段 ⇒ 名单里多一个 L。
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "L", "M"], (
+    # 2026-11-05（业主裁定「V 不应该有出边」）：V 也成了发不出 `summon` 的那一档 ⇒ 少一个 V。
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "L", "M"], (
         f"能派活（出边非空）的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
-        "不是判据坏了，是能力表变了（唯一发不出 `summon` 的实测是 C）")
+        "不是判据坏了，是能力表变了（发不出 `summon` 的实测是 C 与 V）")
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这张表按原句恢复（又少了 `"C"`）。
 
 
@@ -676,7 +677,8 @@ def test_the_three_kinds_of_reference_are_told_apart(registry: ToolRegistry):
         holders.append(role)
         for want in ("台账号", "名册名", "实例标签", "对账", "绝对编码"):
             assert want in text, f"{role} 的指称判据里缺 {want!r}"
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "L", "M"], holders
+    # 2026-11-05（业主裁定「V 不应该有出边」）：V 不再派得出活 ⇒ 名单里没有 V。
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "L", "M"], holders
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这张表按原句恢复（与上一条同口径）。
 
 

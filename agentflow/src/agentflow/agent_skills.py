@@ -1475,7 +1475,9 @@ def _v_skills() -> tuple[Skill, ...]:
             title="复核一份证明：两态结论 + 指到那一步",
             summary="成立（没找到缺陷）/ 有毛病（指到那一步）；退回必须说清哪一步、缺什么依据",
             when="F / E / B 把写成的证明或穷举证据交来复核时（每次都是冷启动：只看对象本身）",
-            actions=("V.verify_proof", "F.step"),
+            # 2026-11-05（业主裁定「V 不应该有出边」）：V 不再够得到 `F.step` —— 这一格
+            # 只声明 V 自己的动作（退回是回执里的步号，不是一次唤起）。
+            actions=("V.verify_proof",),
             tools=("fs.read", "table.get"),
             body="""# 复核一份证明
 
@@ -1534,7 +1536,8 @@ def _v_skills() -> tuple[Skill, ...]:
             title="假设轴：结论用的条件，原文真的给了吗",
             summary="逐条核「这一步凭什么成立」：条件、量词、退化情形三样",
             when="复核一条「看起来很强」的结论，或原文的假设写得含糊时",
-            actions=("V.verify_proof", "F.status"),
+            # 2026-11-05（业主裁定「V 不应该有出边」）：同上，V 够不到 `F.status`。
+            actions=("V.verify_proof",),
             tools=("fs.read",),
             body="""# 假设轴
 

@@ -168,14 +168,16 @@ def test_allowed_edges_match_design_table():
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     # 2026-10-23 晚（业主裁定逐字：「E 写的报告要能落下来，且 V 也要会审这种东西，
     # 加 E 派 V 的边」）：E 跑出穷举证据之后要能直接派 V 会审 —— 在那之前两人之间
-    # 隔着 M 转一手，而"谁该看什么"就多一处猜测。这条边是单向的（E→V）：V 自己的
-    # 出边（只有 F）一个字未动，其它角色到 V 的边也没有动（那一份在
-    # `test_agent_v_exhaustion_review.py` 里逐条钉着）。
+    # 隔着 M 转一手，而"谁该看什么"就多一处猜测。这条边是单向的（E→V）：其它角色到
+    # V 的边也没有动（那一份在 `test_agent_v_exhaustion_review.py` 里逐条钉着）。
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D", "V"})
-    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})
+    # 2026-11-05（业主裁定逐字：「我们最好不要出现双向边，所以让 F 作为 D 的严格下级，
+    # 取消出边 F→D」）：F 的出边少一格 `D`；`D → F` 保留。
+    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "E", "V"})
     assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
-    # `V`（验证者）只与 F 交互：出边只有 F（用户 2026-10-05 第七轮裁定）。
-    assert C.ALLOWED_EDGES["V"] == frozenset({"F"})
+    # `V`（验证者）没有出边（2026-11-05 业主裁定「V 不应该有出边」）：它不再能
+    # 唤起任何人，但入边 F / E / B 一条未动（退回是回执里的步号，不是一次唤起）。
+    assert C.ALLOWED_EDGES["V"] == frozenset()
     # 主控的出边（业主 2026-10-10 第 146 轮第 4 条裁定：「不许直接控制 B、F、V，
     # 只可间接由父代理转达」；2026-10-13「补 M 到 B」加回 B；2026-10-18「给 M 开 V
     # 出边」加回 V；2026-10-20 业主裁定重新撤掉 V：「派 V 只有 F（自产证明）与

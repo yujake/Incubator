@@ -362,7 +362,11 @@ SPEC = AgentSpec(
     },
     read_only=True,
     summonable=True,
-    edges=('F',),
+    # 2026-11-05（业主裁定逐字：「V 不应该有出边」）：V 不再能唤起任何人 —— 这里清空。
+    # 入边不动（F / E / B 三条仍能唤起 V）；退回/通信也不受影响：在回执里点名第几步，
+    # 由发件人（F / E / B）自己按那一条改。判据：
+    # `tests/test_agent_spec_reconciliation.py`（两层读数一致 + 反真空）。
+    edges=(),
     write_set=frozenset(),
     class_path='agentflow.agent_v:AgentV',
     actions=ACTIONS,
