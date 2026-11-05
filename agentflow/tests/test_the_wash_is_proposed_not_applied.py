@@ -20,10 +20,12 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import pathlib
 from typing import Any, Mapping
 
+from agentflow import clock as CLK
 from agentflow.agent_loop import LlmBackend, run_role
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
@@ -122,6 +124,48 @@ def _proposal_id_in(root: pathlib.Path) -> str:
     return ""
 
 
+@contextlib.contextmanager
+def _ticking_clock():
+    """这一趟里"等计时器"不再真等：假时钟按请求的秒数拨表。
+
+    为什么需要（2026-11-06 查明的根因）：接受/拒绝那一支派活之后，`agent_loop`
+    会挂着等子代理的计时器。阻塞式 `Conductor.summon`
+    （= `summon_run(summon_begin(...))`）不走 `SummonHandle.settle`，所以
+    `summon_begin` 的 [5c] 起的那条 `wait_for=task:<子>` 计时器没有 `submit`
+    事件可消账；它要到下一次对账（`clock.RECONCILE_EVERY_SEC = 30.0`）才被
+    目标判据收口 ⇒ 每一条"接受/拒绝"用例真睡约 30 秒（实测
+    `test_accepting_the_proposal_dispatches_the_washed_payload` 31.68s，
+    `-p trace_wait_plugin` 的读数：0.5+1+2+4+5+3+5+5+3.88 = 31.8s 的
+    `kind=park` 等待）。
+
+    判据要的是"洗格式的两段式"，不是"真的等 30 秒"。装上假时钟后
+    `clock.await_io` 把请求的秒数拨过去，时钟自己的到点/对账照常跑
+    （`FakeClock.advance` 会调 `fire_due`）—— 控制流一条都没跳过，只是不再
+    真等。判据体与断言一个字不动。
+    """
+    prev_wait = CLK.await_io
+    prev_clock = CLK.current()
+    reading = prev_clock.read()
+    CLK.reset()
+    fake = CLK.use(CLK.FakeClock(wall=reading.wall,
+                                 monotonic=float(reading.monotonic or 0.0)))
+
+    def await_on_the_fake_clock(seconds: float, purpose: str, **kw: Any):
+        # 先把时间拨到"这一片睡完"，时钟的到点/对账才会照常发生；再走既有
+        # `await_io` 记账（显式给 `sleep=lambda: None`：即便时钟被谁换回真的，
+        # 这条替身缝也绝不真睡）。
+        fake.advance(float(seconds))
+        return prev_wait(seconds, purpose, sleep=lambda _s: None, **kw)
+
+    CLK.await_io = await_on_the_fake_clock
+    try:
+        yield fake
+    finally:
+        CLK.await_io = prev_wait
+        CLK.use(prev_clock)
+        CLK.reset_books()
+
+
 def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, Any] | None = None,
          secretary: Any = None, shape: str = "summon",
          children: tuple[str, ...] = ("B",),
@@ -194,10 +238,14 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
 
     cond.summon = spy          # type: ignore[method-assign]
     cond.summon_begin = begin_spy  # type: ignore[method-assign]
-    run = run_role("M", "派一环", store=st, registry=built.registry, conductor=cond,
-                   seam=LlmSeam(role="M", session_root=root, gateway=gates["M"],
-                                price=(0.0, 0.0), sid=SID),
-                   workspace_root=str(root), sid=SID, from_env=False, secretary=secretary)
+    # 挂机等子代理的那一段不真等（见 `_ticking_clock` 的 docstring）：派活/洗格式
+    # 的控制流照常跑，只有"这一片睡多久"由假时钟拨过去。
+    with _ticking_clock():
+        run = run_role("M", "派一环", store=st, registry=built.registry, conductor=cond,
+                       seam=LlmSeam(role="M", session_root=root, gateway=gates["M"],
+                                    price=(0.0, 0.0), sid=SID),
+                       workspace_root=str(root), sid=SID, from_env=False,
+                       secretary=secretary)
     return {"run": run, "store": st, "root": root,
             "steps": [s.result for s in run.steps if s.shape == shape],
             "seen": seen, "secretary": secretary, "shape": shape}
