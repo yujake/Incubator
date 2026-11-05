@@ -3888,6 +3888,18 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     verdict_word = str(got.get("verdict") or "")
     out["ledger"] = str(got.get("ledger") or "")
     out["verification_id"] = str(out["ledger"]).split("#")[-1]
+    #: 这一签挂的是第几条证明（多证明模型，业主 2026-10-22）：pending 行自己记着号
+    #: （`record_pending_sign` 写 `proof_no`），与台账那一支取 `chosen_no` 同一个口径
+    #: （见 `proof_review_gap` 末尾 `chosen_no` 那一行）。
+    #:
+    #: 改前这一格没有任何一支写：`proof_review_gap` 走 pending 支时返回的 `proof_no`
+    #: 恒是初始值 `None`。为什么这不是"少一格装饰"：`_grade_recomputed_from_signature`
+    #: 把 gap 的这一格原样抄进 `_grade_recomputed.proof_no`（那条读数的形状写死在它的
+    #: docstring 里，含 `proof_no`），而 `register_statement` 自 2026-11-05 起在"正文落行
+    #: 之后、tx.upsert 之前"就调回填 —— 那一笔的签通常还只在 pending 台账里 ⇒ 行上的
+    #: `_grade_recomputed.proof_no` 写成 `None`，读的人只能按 canonical 猜，正是
+    #: `_read_proof_no` 的 docstring 点名的"读数里看不出号给错了"。
+    out["proof_no"] = proof_no_of(row)
     out["verdict"] = verdict_word
     out["rows"] = 1
     out["sha_matches"] = True
