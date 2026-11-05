@@ -1373,6 +1373,73 @@ def _is_proposition_kind(kind: Any) -> bool:
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
 
 
+#: `statements.bits` 一栏必须齐的 10 个键（写侧的唯一清单）。
+#:
+#: 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` ② / A-3）：
+#: `data/events.jsonl:3671`（20:54:32，`record_statement` sid=000019）写进去的
+#: `bits` 是 `{}` —— 同一路径写其余 20 行都是这 10 键齐的 dict。于是 `statements`
+#: 里 000019 的 `bits` 是空的（档位、等级全读不出来）。
+#:
+#: 根因不在 `bits` 的校验器（`schema.Statement.validate` 已经调
+#: `evidencebits.bits_shape_problems`），而在「空表被当成没有形状问题」：
+#: `bits_shape_problems({})` 返回 `[]` ⇒ 一条 `bits` 整块没填的行照样过闸。
+#: 而 `_statement_from` 里那一格写的是 `dict(body.get("bits") or {})` —— 调用方
+#: 没交 `bits` 时落盘的就是空表。B 那次走的是 `table.create`（`row` 里没有 `bits`），
+#: 被路由到秘书的正路，于是"路由对了、内容少了一格"。
+#:
+#: 这张清单与 `evidencebits.bits_of` / `normalize_raw` 的产出逐键相同（那两份是
+#: 构造器）；这里只在写侧回答"齐了没有"。
+STATEMENT_BITS_KEYS: tuple[str, ...] = (
+    "numeric", "proof", "reviewed", "formal", "audited",
+    "origin", "evidence", "voided_by", "grade", "audited_badge",
+)
+
+
+def _complete_statement_bits(body: Mapping[str, Any], *, kind: str, origin: str,
+                             ) -> dict[str, Any]:
+    """把这一笔交上来的 `bits` 补成完整的 10 键（缺哪一格补哪一格）。
+
+    ## 三条口径（「拒或补全」里的"补全"那一半）
+
+    1. 调用方交了 `bits` ⇒ 按 `evidencebits.normalize_raw` 归一遍（四态/布尔归一、
+       等级现算）。归一只补不删：`evidence` / `voided_by` 两个口袋原样保留。
+    2. 没交（或交的是空表）⇒ 从这一行自己的字段现算
+       （`evidencebits.bits_of`）：`origin` / `source_lit_id` / `quote_verified`
+       决定第 2、3 位的引用那一档，`proof_text` 非空即第 2 位为真。
+       这一档就是 000019 那一行本来该走的：它是 `own_result`、`proof_text` 为空、
+       `quote_verified=None` ⇒ 第 2/3 位为假、等级现算成 `conjecture`，而不是"全空"。
+    3. 补完还缺键或有 `None` ⇒ 抛 `ValueError`（「拒」那一半）。`record_statement`
+       把它翻成受控拒绝 `write_failed` + 原话，一行都不落。
+       `None` 也算缺：`grade=None` 与"没有 grade"在读侧长得一样，而它俩都让
+       "档位、等级读不出来"这件事重新成立。
+    """
+    from . import evidencebits as EB   # 惰性：位的唯一实现
+
+    raw = dict(body.get("bits") or {})
+    want_origin = str(origin or body.get("origin") or "own_result")
+    if raw:
+        bits = EB.normalize_raw(raw, origin=want_origin, kind=kind,
+                                voided_by=dict(raw.get("voided_by") or {}))
+    else:
+        proof_text = str(body.get("proof_text") or "")
+        bits = EB.bits_of(
+            origin=want_origin,
+            source_lit_id=str(body.get("source_lit_id") or ""),
+            quote_verified=body.get("quote_verified"),
+            proof=bool(proof_text.strip()),
+            proof_process=proof_text,
+            kind=kind,
+        )
+    missing = [k for k in STATEMENT_BITS_KEYS if k not in bits or bits.get(k) is None]
+    if missing:
+        raise ValueError(
+            "statements.bits 必须 10 键齐、且没有一格是 None；这一笔缺 "
+            f"{missing}（整表只有 {sorted(bits)}）⇒ 整笔不写：落一条空 bits 的行，"
+            "档位与等级就再也读不出来（现场 000019）")
+    return bits
+
+
+
 #: 证明正文进台账的唯一收口闸（2026-11-04，业主裁定：正文必须由手稿承载）。
 #:
 #: 规则：`proof_text` 与在册那一份不同（或这一行还不存在）⇒ 必须有一份盖住这一份正文、
@@ -7699,6 +7766,22 @@ class Secretary:
                 out["label_washed"] = dict(working, stmt_id=stmt_id)
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
+            # ---- 2026-11-05（缺陷乙的第二道闸）：10 键齐、没有 None ---------------
+            #
+            # `_statement_from` 已经用 `_complete_statement_bits` 把 `bits` 补全了
+            # （"补全"那一半）；这一格是"拒"那一半：将来有人绕过补全、或者补全本身
+            # 被改坏，落盘的就不再是空表，而是「整笔不写」—— 一条 `bits` 空的行
+            # 比一条写坏的 evidence_kind 更坏：它让档位与等级同时变成"读不出来"，
+            # 而 `bits_shape_problems({})` 返回的是 `[]`（空表 = 没有形状问题）。
+            _bits_now = dict(getattr(row, "bits", None) or {})
+            _bits_missing = [k for k in STATEMENT_BITS_KEYS
+                             if k not in _bits_now or _bits_now[k] is None]
+            if _bits_missing:
+                raise ValueError(
+                    "statements.bits 必须 10 键齐、且没有一格是 None；这一笔缺 "
+                    f"{_bits_missing}（整表只有 {sorted(_bits_now)}）⇒ 整笔不写："
+                    "落一条空 bits 的行，档位与等级就再也读不出来（现场 000019，"
+                    "`data/events.jsonl:3671`）")
             if (row.origin == "own_result" and not str(body.get("quote_reason") or "").strip()
                     and body.get("quote_verified") is not True):
                 # 读数：`quote_reason` 是秘书补的（B 只交两样，见 `_statement_from`）——
@@ -8851,7 +8934,15 @@ class Secretary:
             # 的声明是 `str`）。判据抓不到它（`to_dict` 照抄、`verify` 不查那一格），
             # 但下游按"行范围"读它的人会拿到一个字典。
             doc_id=_s("doc_id") or None, line_range=_lines("line_range"),
-            bits=dict(body.get("bits") or {}), created_at=S.now_iso(),
+            # ---- 2026-11-05（缺陷乙）：`bits` 必须 10 键齐、没有 None -------------
+            #
+            # 改前这一格是 `dict(body.get("bits") or {})`：调用方没交 `bits` 时落盘的
+            # 就是 `{}`，而 `bits_shape_problems({})` 返回 `[]`（空表被当成"没有形状
+            # 问题"）⇒ 一条整块没填 `bits` 的行照样过闸。现场就是 `000019`
+            # （`events.jsonl:3671`，20:54:32，B 走 `table.create` 被路由到正路）。
+            # 现在"缺就现算、算不齐就拒"，判据见 `_complete_statement_bits`。
+            bits=_complete_statement_bits(body, kind=kind, origin=origin),
+            created_at=S.now_iso(),
             created_by=f"secretary-{self.role}")
 
     # ------------------------------------------------------------ 面适配（S1g-2）
