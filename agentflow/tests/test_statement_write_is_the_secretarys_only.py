@@ -416,7 +416,10 @@ def test_negative_control_without_the_secretarys_write_the_positive_reading_goes
     st, cond, reg, backend = _world(tmp_path)
     calls: list[str] = []
 
-    def _no_write(self, payload, *, role="B", force_new=False):
+    # 2026-11-05（D2）：`record_statement` 多了 `candidate_id`（稿名/稿头号当候选号）。
+    # 替身必须与真签名同形，否则调用在绑定实参时就 TypeError、`calls` 一条都进不来 ——
+    # 那时这一条负控量的不是"秘书没写"，而是"替身签名过期"。
+    def _no_write(self, payload, *, role="B", force_new=False, candidate_id=""):
         calls.append(str(payload.get("statement_full") or ""))
         return {"checked": False, "created": False, "duplicate": False, "upgraded": False,
                 "stmt_id": "", "deps_written": 0, "path_groups": 0, "tables": [],
