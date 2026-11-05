@@ -360,6 +360,15 @@ class _Manuscript:
                 section=section)
             return out
         rows = section.get("rows") or []
+        # 2026-11-05（缺陷甲）：表在、但 0 行数据而正文点了在册号 ⇒ 预览就必须说"会退"。
+        # 改前预览与 B 的登记入口都只看 `present`，于是"交出去会不会被退"这一格会亮 ok。
+        _code, _why = _DS.dependency_consistency_problem(text)
+        if _code:
+            out.update(refused=str(_code), reason=str(_why))
+            out["deps_missing"] = _DS.deps_missing_reading(
+                proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
+                section=section)
+            return out
         try:
             stmt_rows = [dict(r) for r in self.store.rows("statements")]
         except Exception as exc:  # noqa: BLE001 - 读不到就不许说"够格"

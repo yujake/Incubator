@@ -300,7 +300,10 @@ def dependency_section_problem(text: Any) -> tuple[str, str]:
     """`## 依赖` 那一节读不读得回：`(受控码, 人话)`；空串 = 可以。
 
     与收方（B）读稿时同一条判据：段读不懂 ⇒ `dependency_section_unreadable`；
-    段缺了而证明正文里有 `stmt:` 引用 ⇒ `dependency_section_missing`（同一句模板）。
+    段缺了而证明正文里有 `stmt:` 引用 ⇒ `dependency_section_missing`（同一句模板）；
+    段在、表 0 行、而正文点了在册号 ⇒ `deps_table_disagrees_with_proof`（表与正文
+    对不上，整份退回并点名第几步 —— 判据本体在
+    `depsection.dependency_consistency_problem`，两处共用同一份）；
     段缺了而正文一条引用都没有 ⇒ 合法（自足的证明）。
     """
     raw = str(text or "")
@@ -308,7 +311,9 @@ def dependency_section_problem(text: Any) -> tuple[str, str]:
     if section.get("refused"):
         return str(section.get("refused")), str(section.get("reason") or "")
     if section.get("present"):
-        return "", ""
+        # 2026-11-05（缺陷甲）：那一节在、但表 0 行，而正文点了在册命题 ⇒ 表与正文对不上。
+        # 改前这一档直接放行（`present` 就算合格），于是"正文引了、表里没写"整份静默通过。
+        return _DS.dependency_consistency_problem(raw)
     refs = _DS.stmt_refs(_DS.proof_body(raw))
     if refs:
         return DEPENDENCY_SECTION_MISSING, detail(

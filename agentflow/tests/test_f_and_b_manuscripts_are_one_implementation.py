@@ -289,12 +289,22 @@ def test_c_the_sign_block_moves_for_both_families(tmp_path: pathlib.Path) -> Non
     old_title = ("# B 的证明手稿：旧标题\n\n"
                  f"- 命题号：stmt:{SID}\n- 证明号：1\n\n"
                  "## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + PROOF_TEXT
-                 + "\n\n## 依赖\n\n" + EMPTY_DEP_TABLE)
+                 # 2026-11-05：这里原来用空表，而 PROOF_TEXT 的正文点了 `stmt:{DEP}`
+                 # —— 那正是缺陷甲的形态（正文引了、表里没写）。现在它会被
+                 # `deps_table_disagrees_with_proof` 整份退回（判据见
+                 # tests/test_deps_table_and_proof_must_agree.py）。这一条量的是
+                 # "改标题时签块怎么搬"，与依赖面无关 ⇒ 用与正文一致的 DEP_TABLE，
+                 # 断言一个字没动。
+                 + "\n\n## 依赖\n\n" + DEP_TABLE)
     _write(st3, target3, old_title)
     old_sha = _sign(st3, target3)
     bout3 = BM.land_rewrite(
         st3.root, statement_id=SID, statement_full=PROPOSITION,
-        proof_text=PROOF_TEXT, label="新标题", proof_no=1)
+        proof_text=PROOF_TEXT, label="新标题", proof_no=1,
+        # 2026-11-05：改写稿的依赖段由来源稿现渲染（`_dependency_rows(source)`）。
+        # 不给来源稿而正文又点了 `stmt:` ⇒ 依赖表只能是 0 行，那正是缺陷甲的形态，
+        # 现在会被整份退回。这一条量的是"改标题时签块怎么搬"⇒ 把已签的旧稿当来源交。
+        source_manuscript=old_title)
     assert bout3.get("ok") is True, bout3
     assert bout3.get("signed") is True, bout3
     final3 = _read(st3, target3)

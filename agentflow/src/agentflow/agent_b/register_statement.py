@@ -875,7 +875,12 @@ class _RegisterStatement:
                      #: 第 4 位这一笔同步过没有（见 `_bits_with_formal`）：它与
                      #: "写了什么"分开报，因为"没验过"与"验过没变化"都是 `False`，
                      #: 而两者该给调用方的话不同（前者不用再登记一次）。
-                     "formal_synced": False, "formal_paths": {}}
+                     "formal_synced": False, "formal_paths": {},
+                     #: 2026-11-05（业主）：签成之后在同一笔里按现行签把 `evidence_kind`
+                     #: 重算上去的读数（键存在 = 这一笔真升了；`{}` = 没动）。
+                     #: 判据只有一处（`verifications._grade_recomputed_from_signature`，
+                     #: 与签发那一笔共用），这一格只负责把它接在"正文落进那一行之后"。
+                     "grade_recomputed": {}}
         want = str(canonical or "").strip()
         #: 这一笔交来的东西（证明清单 `entries` / canonical 正文 `want`）两样都没有。
         #:
@@ -1164,9 +1169,31 @@ class _RegisterStatement:
                             "at": S.now_iso(),
                         }
                         out["kind_upgraded"] = dict(row["_kind_upgrade"])
+            # ---- 2026-11-05（业主）：签成之后就升档，不再等第二条命令 --------------
+            #
+            # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §二.3 / A-1）：
+            # 000014 / 000016 的 `register_statement:proofs` 把正文与 bits 写进来了，而
+            # `evidence_kind` 停在 `heuristic` —— 升档要靠秘书 `record_statement:upgrade`
+            # 再跑一次，而那一条没人跑（000015 / 000018 / 000019 连正文都没回填）。
+            #
+            # 位置：正文（canonical 覆盖 / 新挂的 #pN）已经写进 `row`、bits 也已经认过签
+            # 之后，`tx.upsert` 之前。判据只有一处：`verifications.proof_review_gap`
+            # （写入期闸 / 审计 / 收工门读的同一处），本格只调
+            # `_grade_recomputed_from_signature` 那一个实现 —— 与签发那一笔共用，
+            # 于是"签成之后就升档"在两条路上是同一件事，不会长出第二套口径。
+            #
+            # 三态（由那个函数保证）：没签 / 签的是旧版 ⇒ 不动（"没凭据"不是"不准升"）；
+            # 已经是 proof / proof_review ⇒ 不动（幂等，不写第二个时间戳）；
+            # 读不出来 ⇒ 不动且 `reading.checked=False`（"没查成"不是"不够格"）。
+            _recomputed = _VR._grade_recomputed_from_signature(
+                row, root=getattr(store, "root", ""), proof_no=1)
+            if _recomputed.get("reading"):
+                row = dict(_recomputed.get("row") or row)
+                out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
-            if not out["attached"] and not canonical_changed and not out["formal_synced"]:
+            if (not out["attached"] and not canonical_changed and not out["formal_synced"]
+                    and not out["grade_recomputed"]):
                 return out
             if out["attached"]:
                 row[_VR.PROOFS_KEY] = listed
@@ -1996,7 +2023,18 @@ class _RegisterStatement:
                     "这份手稿不是框架渲染的（缺洗稿元信息），请让 F 用 proof 动作重写",
                     manuscript_source=manuscript_source,
                     manuscript_path=wash_rel,
-                    missing_mark=_DS.WASH_MARK.rstrip())
+                    missing_mark=_DS.WASH_MARK.rstrip(),
+                    # 2026-11-05（缺陷乙）：报文必须点名可执行的下一步。
+                    # 改前那句话点的是 `proof` 动作，而 F 的动作表里没有它
+                    # （`specs/f.py`：create_plan / step / status / list_plans）——
+                    # 拿到拒信的调用方只能原地重交同一份稿，于是空转到
+                    # `attack-000016`（15 轮）。下一步的形状与理由见
+                    # `depsection.NOT_WASHED_NEXT_STEP`。
+                    next_step=_DS.NOT_WASHED_NEXT_STEP,
+                    next_action={"tool": "framework_summon", "role": "F",
+                                 "action": "step",
+                                 "params": {"plan_id": "<这一轮的计划号>"}},
+                )
         #: 别条命题的稿（`manuscript_foreign`）在这里被整份跳过：不解析依赖段、不核档位、
         #: 不落边 —— 它的"依赖面"是别人的，落过来就是把别人的依据记到这条命题头上。
         #: 跳过之后也不进下面那条"交不出手稿"的拒绝：那一档拒的是"这一笔没有任何稿"，
@@ -2022,6 +2060,17 @@ class _RegisterStatement:
                     refs_in_proof=list(manuscript_refs),
                     manuscript_source=manuscript_source)
             if manuscript.get("present"):
+                # 2026-11-05（缺陷甲）：表在、但 0 行数据，而正文点了在册号 ⇒ 表与正文
+                # 对不上。改前这一笔照收（`present` 就算合格），依赖边 0 行而读数正常 ——
+                # "正文里引了、表里没写"整份静默通过。判据本体只有一处
+                # （`depsection.dependency_consistency_problem`），与 F 落稿前那道同源。
+                _code, _why = _DS.dependency_consistency_problem(manuscript_text)
+                if _code:
+                    return _refuse(
+                        str(_code), str(_why),
+                        refs_in_proof=list(manuscript_refs),
+                        manuscript_source=manuscript_source,
+                        manuscript_path=manuscript_path)
                 try:
                     stmt_rows = [dict(r) for r in self.store.rows("statements")]
                 except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行

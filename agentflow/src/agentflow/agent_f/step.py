@@ -410,6 +410,11 @@ class _Step:
                 dict(x) for x in (deploy["deps_refused_findings"] or [])]
         if deploy.get("deps_refused"):
             history_row["deps_refused"] = str(deploy["deps_refused"])
+        # 2026-11-05（缺陷乙）：受控拒绝的机器读数进 history —— `kind` / `streak` /
+        # `next_step` 三格。为什么必须落盘：下一轮（与 `attack.status` 的 `history_tail`）
+        # 靠它判断"这是不是同一种形状的第 N 次"，否则重试永远是静默的。
+        if deploy.get("refusal"):
+            history_row["refusal"] = dict(deploy["refusal"])
         if deploy.get("deps_washing"):
             history_row["deps_washing"] = [dict(x) for x in (deploy["deps_washing"] or [])]
         history.append(history_row)

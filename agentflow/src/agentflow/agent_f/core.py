@@ -65,6 +65,58 @@ def _clip(text: str, limit: int) -> str:
     return s[: limit - 1] + f"…（已截断，原长 {len(s)} 字）"
 
 
+# ---------------------------------------------------------------- 拒绝报文的"下一步"
+#
+# 2026-11-05 现场（`projects/R-mk-infinite-90` 的 plan 000013..000016，逐字见
+# `data/attack_plans.json` 的 history）：B 的 `manuscript_not_washed` 只说
+# 「请让 F 用 proof 动作重写」—— 而 F 的动作表里没有 `proof`（`specs/f.py` 只有
+# `create_plan` / `step` / `status` / `list_plans`；`proof` 只是 `step` 的一种产物）。
+# 拿到那句话的人没有任何可执行的动作，于是同一种形状一轮一轮重交。
+# 这一节把那句话换成"点名动作 + 参数形状"，并把同形重试数出来（落进 history，
+# `attack.status` 的 `history_tail` 上看得见）。
+
+def not_washed_next_step(plan_id: Any = "") -> str:
+    """缺洗稿元信息时唯一能收口的下一步（点名动作与参数形状）。
+
+    `plan_id` 给了就填进形状里（F 这一层知道这一轮的计划号；B 那一层不知道，
+    所以 `depsection.NOT_WASHED_NEXT_STEP` 留的是占位符）。
+    """
+    from .. import depsection as _DS
+
+    pid = str(plan_id or "").strip()
+    if not pid:
+        return _DS.NOT_WASHED_NEXT_STEP
+    return _DS.NOT_WASHED_NEXT_STEP.replace("<这一轮的计划号>", pid)
+
+
+def proof_refusal_streak(plans: Any, *, problem_key: Any, kind: Any) -> int:
+    """同一个 `problem_key` 下、同一种 `kind` 的同形拒绝已经发生过几次。
+
+    数的是每一份计划的 `history[*].refusal.kind`（每轮一条，随计划落盘、在
+    `attack.status` 的 `history_tail` 里可见）。为什么按 `problem_key` 跨计划数：
+    真机里 D 每重试一次就新立一份计划（`000013` → `000016`），只数"当前这一份计划"
+    永远数到 1，而空转恰恰发生在计划之间。
+    """
+    want_key = str(problem_key or "")
+    want_kind = str(kind or "")
+    if not want_key or not want_kind:
+        return 0
+    total = 0
+    for row in plans or ():
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("problem_key") or "") != want_key:
+            continue
+        for item in (row.get("history") or ()):
+            if not isinstance(item, Mapping):
+                continue
+            got = item.get("refusal")
+            if isinstance(got, Mapping) and str(got.get("kind") or "") == want_kind:
+                total += 1
+    return total
+
+
+
 # ---------------------------------------------------------------- 形式化那一档的落点
 #
 # 这一节的三个名字是同一件事的三块：判定（`_is_formal_subgoal`）、落点读数
@@ -2216,6 +2268,10 @@ class _Core:
         received: dict[str, Any] = {}
         #: 秘书洗稿那一遍的读数（只有 `proof` 那一支有内容；打回那一档提前 return）。
         wash: dict[str, Any] = {}
+        #: 这一轮被受控拒绝时的机器读数（`kind` / `streak` / `next_step`）——
+        #: 它会随 history 落盘（`agent_f/step.py`），在 `attack.status` 的 `history_tail`
+        #: 上看得见（2026-11-05：不许无声重试）。
+        refusal: dict[str, Any] = {}
         if kind == "reduction":
             existing = list(plan.get("subgoals") or [])
             taken: list[str] = []
@@ -2351,6 +2407,46 @@ class _Core:
             else:
                 outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
                 evidence = []
+                # ---- 2026-11-05（缺陷乙）：拒绝必须给出可执行的下一步，并把同形重试数出来
+                #
+                # 改前这一支只有上面那半句：D 收到的下一步是"派 V 审这一份"（见下面的
+                # v_sign），而这一份连号都没有 —— 送审也签不下来；拒信本身点的是
+                # 「F 用 proof 动作重写」，可 F 没有 `proof` 这个动作。于是它只能原地
+                # 重交同一形状（真机：`000013`→`000016`，15 轮）。
+                _refused_kind = str(outlet.get("refused_kind") or "")
+                from .. import depsection as _DS_REFUSAL
+
+                if _refused_kind == _DS_REFUSAL.REFUSED_NOT_WASHED:
+                    _prior = 0
+                    try:
+                        _prior = proof_refusal_streak(
+                            self.store.rows("attack_plans"),
+                            problem_key=plan.get("problem_key"),
+                            kind=_refused_kind)
+                    except Exception:  # noqa: BLE001 - 读不到就只数这一轮（不猜）
+                        _prior = 0
+                    refusal = {
+                        "kind": _refused_kind,
+                        "streak": int(_prior) + 1,
+                        "next_step": not_washed_next_step(plan.get("plan_id")),
+                        "manuscript_path": str(manuscript.get("path") or ""),
+                        "manuscript_source": str(manuscript.get("source") or ""),
+                    }
+                    outlet_note += "。" + str(refusal["next_step"])
+                    outlet_note += f"；同形拒绝第 {refusal['streak']} 次（同一个 problem_key 下累计）"
+                    if int(refusal["streak"]) >= 2:
+                        outlet_note += (
+                            " —— 这一形态已被证明走不出去：别再重交同一份稿或同一条路径，"
+                            "按上面那条动作换一条递送路径")
+                    if wash.get("washed"):
+                        # F 这一侧说"洗过了"，而 B 说"缺元信息" —— 两边对同一份字节给出
+                        # 相反的读数。这不由调用方原地重试能解决，必须当缺陷上报。
+                        outlet_note += (
+                            "；⚠️ 读数打架：F 这一侧 `manuscript_washed=true`"
+                            f"（执行者={wash.get('actor') or '（空）'}），而 B 那一侧说缺"
+                            f" `{_DS_REFUSAL.WASH_MARK.rstrip()}` 那一行（路径 "
+                            f"{refusal['manuscript_path'] or '（空）'}）⇒ 把这一条当缺陷上报，"
+                            "不要原地重试")
             # ---- 改名只看号（业主 2026-11-04）：「登记成功（拿到命题号）就改名，签另算」
             #
             # 位置在"登记那一笔"之外、判据只有 `statement_id` 非空：这样 B 的证明正文
@@ -2534,6 +2630,10 @@ class _Core:
             "delivery_state": str((v_sign.get("reading") or {}).get("state") or ""),
             "delivery_label": str((v_sign.get("reading") or {}).get("label") or ""),
             "report_path": str(written["path"]),
+            # 2026-11-05（缺陷乙）：被受控拒绝时的那几格（空 dict = 这一轮没被拒）。
+            # `next_step` 是可粘贴的下一步（点名动作与参数形状），`streak` 是
+            # 同一个 `problem_key` 下同形拒绝的累计次数 —— 两者都会随 history 落盘。
+            "refusal": dict(refusal),
             # P4-7：这一轮派出去的活由谁接 —— 父目标因此不再"每轮都压住子目标"
             # （`attack_tools.pick_next_subgoal` 按它排次序，见那里的 docstring）。
             "waiting_on": [str(g["sid"]) for g in new_goals],

@@ -145,6 +145,30 @@ REFUSED_LEVEL_TOO_LOW = "citation_below_proof_review"
 #: 兜底审计（2026-10-27）：盘上那份 `reports/f-proof-*.md` 缺洗稿元信息 ⇒
 #: 它不是框架渲染的产物（手写 / 换名绕过），整笔拒绝，请 F 用 `proof` 动作重写。
 REFUSED_NOT_WASHED = "manuscript_not_washed"
+#: 依赖段与证明正文对不上（2026-11-05）：`## 依赖` 那张表在、但 0 行数据，而证明正文
+#: 点了在册命题的号 ⇒ 整份退回。改前这一形态两处都放行：`validate_manuscript` 只看
+#: "那一节在不在"，B 的登记入口也只看 `present`；`deps_missing_reading` 虽然把它读成
+#: "说不一致"，但那条读数不拦人（它此前只有 `why` 一句话）。
+REFUSED_TABLE_DISAGREES = "deps_table_disagrees_with_proof"
+
+#: `manuscript_not_washed` 的下一步（2026-11-05 现场裁定）。
+#:
+#: 为什么必须逐字写进报文：改前那句"请让 F 用 proof 动作重写"点的是一个不存在的
+#: 动作 —— F 的动作表里只有 `create_plan` / `step` / `status` / `list_plans`
+#: （`specs/f.py`），`proof` 只是 `step` 的一种产物。拿到那句话的调用方（D 或 F 自己）
+#: 没有任何可执行的动作，于是 `projects/R-mk-infinite-90` 里同形状重交到 `attack-000016`
+#:（15 轮）仍走不出去。
+#:
+#: 为什么"重交同一条路径"永远不行：洗稿元信息那一行只有 F 的秘书在一轮 proof 里盖得上
+#: （`agent_f.core._wash_manuscript` → `depsection.mark_washed`）。把同一份手写稿的路径
+#: 再交给 B，那一行没有谁补 —— 这不缺"再试一次"，缺的是换一条递送路径。
+NOT_WASHED_NEXT_STEP = (
+    "下一步（逐字）：只能让 F 用 `step` 动作重交这一轮 —— "
+    '`framework_summon(role="F", action="step", params={"plan_id": "<这一轮的计划号>"})`；'
+    "F 的那一轮会渲染手稿并由秘书盖 `- 依赖面洗稿：` 那一行，然后必须把正文递进来"
+    "（`proof_manuscript=<正文>`）。不要只给路径：只给路径时那一行没有谁补，"
+    "重交同一条路径还是这一拒。"
+)
 
 
 def is_framework_manuscript(rel: Any) -> bool:
@@ -424,7 +448,50 @@ def stmt_refs(text: str) -> list[str]:
     return out
 
 
-# ------------------------------------------------------------------ 手稿的约定路径与兜底读盘
+def dependency_consistency_problem(text: str) -> tuple[str, str]:
+    """`## 依赖` 那张表与证明正文说的是不是同一件事：`(受控码, 人话)`；空串 = 一致。
+
+    三态（不折平）：
+
+    - 那一节缺了 / 读不懂：不是本函数的事（调用方那两支已各有受控码），返回空串；
+    - 那一节在、表 0 行、正文点了 N 条 `stmt:` ⇒ 对不上（``REFUSED_TABLE_DISAGREES``），
+      `why` 逐条点名"哪个号在第几步"；
+    - 那一节在、表 0 行、正文一条都没点 ⇒ 自足（放行）。
+
+    为什么这一道必须是门而不是读数（2026-11-05 现场）：`deps_missing_reading` 早就把
+    这一形态读成"说不一致"，但读数不拦人 —— `manuscriptform.validate_manuscript` 与
+    B 的登记入口都只看"那一节在不在"。正文里的「（依据：stmt:…）」是散文，
+    框架不把它读回成引用（引用只有一个来源：每一步的 `cites`，见
+    `attackround._clean_step`）⇒ 两处一旦分家，没有任何一跳会自己发现。
+    """
+    raw = str(text or "")
+    section = parse_dependency_section(raw)
+    if not section.get("present") or section.get("refused"):
+        return "", ""
+    if section.get("rows"):
+        return "", ""
+    refs = stmt_refs(proof_body(raw))
+    if not refs:
+        return "", ""
+    #: 每个号出现在第几步（步号取 `## 证明` 里行首的 `N.`，与 F 的渲染器同形）。
+    stepped: dict[str, list[int]] = {}
+    for no, step in sorted(proof_steps(raw).items()):
+        for cite in step.get("cites") or []:
+            stepped.setdefault(str(cite), []).append(int(no))
+    shown: list[str] = []
+    for ref in refs:
+        nos = stepped.get(str(ref)) or []
+        where = ("第 " + "、".join(str(n) for n in nos) + " 步") if nos else "（未标步号的行）"
+        shown.append(f"stmt:{ref} 在{where}")
+    why = (
+        "`## 依赖` 那张表 0 行，而证明正文点了 "
+        f"{len(refs)} 条在册命题（{'；'.join(shown)}）⇒ 表与正文对不上，整份退回。"
+        "正文里写「（依据：stmt:…）」不等于登记了依赖：框架只读每一步的 `cites`，"
+        "不把正文里的号读回成引用。处置：把这些号写进那几步的 `cites`（框架按它渲染"
+        "`## 依赖`），或者把表里那几行补齐 —— 两处必须说的是同一件事。"
+    )
+    return REFUSED_TABLE_DISAGREES, why
+
 
 #: 兜底读盘这一格为什么要存在（真机读数，写在这里而不是写在调用方）：
 #:

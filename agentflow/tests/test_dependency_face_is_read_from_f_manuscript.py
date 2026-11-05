@@ -382,6 +382,11 @@ def test_stub_the_missing_section_detection_and_the_refusal_turns_red(
     """f-c 反真空：把"缺段检测"打桩成恒 present ⇒ c 的拒收必红（照常入库）。
 
     打桩点就是那一条判据读的东西：`parse_dependency_section` 的 `present`。
+
+    2026-11-05：打桩出来的那一节必须是读得回、且与正文一致的一节（表里有一行
+    `stmt:{THEOREM_A}`）。改前这里给的是"present 但 0 行"，而那个形态如今会被
+    缺陷甲那道一致性判据整份退回（`deps_table_disagrees_with_proof`）—— 于是这条
+    反真空量到的就不再是"缺段检测"这一条了。断言（`ok is True`）一个字没动。
     """
     _library(store)
     manuscript = f"## 证明\n\n1. 由 stmt:{THEOREM_A} 直接得到结论。\n"
@@ -389,7 +394,10 @@ def test_stub_the_missing_section_detection_and_the_refusal_turns_red(
 
     monkeypatch.setattr(DS, "parse_dependency_section",
                         lambda text: {"checked": True, "present": True, "heading_line": 1,
-                                      "rows": [], "problems": [], "refused": "", "reason": ""})
+                                      "rows": [{"line": 5, "quote": "由定理甲",
+                                                "stmt_id": THEOREM_A, "step": "第 1 步",
+                                                "path_group": 1}],
+                                      "problems": [], "refused": "", "reason": ""})
     got = _register(store, manuscript, proof_text="1. 由定义直接得到。\n")
     assert got.get("ok") is True, got        # ← c 的"整笔拒绝"在这里是红的
 
