@@ -224,11 +224,17 @@ CITATION_LEVELS: frozenset[str] = citation_levels()
 
 
 def statement_grade(row: Mapping[str, Any]) -> str:
-    """一条 `statements` 行的等级（可引门槛与洗稿判据的唯一读数）。
+    """一条 `statements` 行的等级 —— 唯一实现在这里（另一处是转发）。
 
     唯一入口是 `evidencebits.bits_from_row`（它内部现算 `derive_grade`，并做占位签 /
     旧稿 / 形式化过期那三档读侧降档）。空行 / 读不出来 ⇒ 空串（"判不了"），
     调用方必须 fail-closed —— 空串不是"最弱的猜想"。
+
+    为什么落在这里：本模块是"可引门槛"的唯一定义点（`CITATION_MIN_LEVEL` /
+    `citation_level_allowed`），而 `verifications` 已经依赖本模块（`import depsection`）。
+    `verifications.statement_grade(root, row)` 只是同名的转发（`R003` 收掉两份实现的
+    那一笔）：判据只有这一份，`root` 那一格在两处都必须给，但等级不从台账现读 ——
+    它由 `bits` 现算（台账签只写第 3 位）。
     """
     try:
         return str(EB.bits_from_row(dict(row or {})).get("grade") or "")

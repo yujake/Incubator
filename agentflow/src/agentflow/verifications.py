@@ -3840,14 +3840,20 @@ def _highest_grade(grades: Sequence[str]) -> str:
 
 
 def statement_grade(root: str | Path, row: Mapping[str, Any]) -> str:
-    """这条命题的定理档（多证明模型里"在 in-sync 的证明里取最高"的唯一落点）。
+    """一条命题的等级 —— 转发（唯一实现在 `depsection.statement_grade`）。
 
-    实现就是 :func:`statement_review_reading` 的 `grade`：`proof` 位是行级共用的，
-    `reviewed` 取"至少一条证明 signed"（等价于"在 in-sync 的证明里取最高"：一条 in-sync
-    都没有 ⇒ `conjecture`）。判据本体仍是 `evidencebits.derive_grade`，这里只喂给它
-    汇总后的第 3 位。
+    这一格原先自带一份实现（`statement_review_reading(root, row)["grade"]`：逐条证明
+    现读台账、在 in-sync 的证明里取最高），与 `depsection.statement_grade`（`bits` 现算）
+    是两个落点 —— `R003` 报的正是"同一判据两份实现"。2026-11-05 收成一处：等级由
+    `evidencebits.derive_grade` 从五元位现算（`depsection` 那一份），这里只转发。
+
+    `root` 保留在签名里只为老调用方（`test_multi_proof_end_to_end` 等）不必改；
+    等级不从台账现读 —— 台账的签只写第 3 位（`bits.reviewed`），读侧按同一条
+    `bits_from_row` 现算。逐条证明各自的读数仍归
+    :func:`statement_review_reading`（那是另一个函数、回答另一个问题：每条证明自己
+    到什么档），不要从这一格取。
     """
-    return str(statement_review_reading(root, row).get("grade") or "")
+    return _DS.statement_grade(row)
 
 
 def banned_markers_in(proof_text: str) -> list[str]:
