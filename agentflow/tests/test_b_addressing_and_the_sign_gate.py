@@ -250,7 +250,7 @@ def test_e1_a_legacy_block_is_manuscript_id_missing() -> None:
 def test_e2_an_unknown_id_is_manuscript_id_unresolved_for_a_registered_statement() -> None:
     """e2 第 9 格的号不在册 ⇒ 在册命题那一档 `manuscript_id_unresolved`；建议点名 `register_statement`。
 
-    2026-11-05（D1，阻断级）：**新建命题**（`statement_id=""`）那一档不再判"号必须在册"
+    2026-11-05（D1，阻断级）：「新建命题」（`statement_id=""`）那一档不再判"号必须在册"
     —— 号是登记之后才可能有的。同一个块在那一档放行（判据改由正文 sha +
     `sign_ledger_backing` 的独立台账背书继续判），读数留 `new_statement_number_unregistered`。
     """

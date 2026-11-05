@@ -2719,7 +2719,7 @@ def _mark_pending_candidate(out: dict[str, Any], *, statement_id: Any,
     """`manuscript_id_unresolved` 遇到"正在新建命题"时留一格"可以继续按正文 sha 认领"。
 
     2026-11-05（D1）：空号（`statement_id=""`）这一档的 `manuscript_id_unresolved`
-    不是硬拒 —— 号还没发，签块与在册册子的关系是**登记之后**才可能为真的事；这一签
+    不是硬拒 —— 号还没发，签块与在册册子的关系是「登记之后」才可能为真的事；这一签
     仍然可能由 `verifications/pending/<正文 sha>.jsonl` 那一行独立背书。所以判据只留
     读数（`pending_candidate=True` + 一句为什么），由 :func:`bits_after_sign` 继续走
     :func:`_claim_pending_sign`（按正文 sha，号无关）。
@@ -2789,7 +2789,7 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
                                "不许拿 `bits_after_sign` 认签。"))
         # ---- 2026-11-05（D1 的第二半）：签块与稿号对不上时不直接 return ----------
         #
-        # 这一档的签块**不能**给这份稿作证（块被搬过 / 号写错了），但它盖的那一份正文
+        # 这一档的签块「不能」给这份稿作证（块被搬过 / 号写错了），但它盖的那一份正文
         # 仍可能由 `verifications/pending/<正文 sha>.jsonl` 独立背书（V 在命题还没在册
         # 时审的就是这一份正文）⇒ 空号这一档继续落到 pending 认领，由那一行自己判
         # "签的是不是这一版"。计划稿（`identity_why` 说它不是签的载体）不在此列：
@@ -2816,15 +2816,15 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
             return out
         # ---- 2026-11-05（D1，阻断级）：正在新建的命题不判"号必须在册" ------------
         #
-        # `statement_id=""` 是「这一笔还没登记、号还没发」那一档：号在不在册是**登记
-        # 之后**才可能为真的事。改前这条判据对空号也生效，于是判据量的不是"号对不对"，
+        # `statement_id=""` 是「这一笔还没登记、号还没发」那一档：号在不在册是「登记
+        # 之后」才可能为真的事。改前这条判据对空号也生效，于是判据量的不是"号对不对"，
         # 而是"册子里有没有别人"：空册（`ids` 为空）短路通过，非空册一律拒
         # （`manuscript_id_unresolved`）⇒ 真实工作区里"先签后登记"的正统路整条不通。
         # 所以这里只留读数，不进 `code`：签块照旧走下面那两道（正文 sha 相符 +
         # `sign_ledger_backing` 的独立台账背书）—— 空册与非空册同一把尺，与册子里
         # 有没有别人无关。已登记命题（非空号）那一支仍是硬拒，一个字都不改。
         #
-        # 这一档**不设** `pending_candidate`：门既然放行了，就该用签块自己那条路
+        # 这一档「不设」 `pending_candidate`：门既然放行了，就该用签块自己那条路
         # （它会把 `backing` 带出来）；`pending_candidate` 只留给"门确实判
         # `manuscript_id_unresolved`、而这一笔还没号"的那一档（见
         # `_mark_pending_candidate`：签块与稿号对不上时，仍可按正文 sha 去 pending 认）。
@@ -2867,7 +2867,7 @@ def _registered_ids(store: Any) -> tuple[str, ...]:
 
 def _pending_claim_from_backing(*, backing: Mapping[str, Any], ledger: Any,
                                 sha: str) -> dict[str, Any] | None:
-    """签块那条路认到的是 **pending** 台账行时，产出与 `_claim_pending_sign` 同形的 claim。
+    """签块那条路认到的是 `pending` 台账行时，产出与 `_claim_pending_sign` 同形的 claim。
 
     D3（2026-11-05）：签块与"按正文 sha 的 pending 认领"认的是同一份证据（同一行 V 的
     台账），回写（`bind_pending_claim`）就必须两条路都交得出来 —— 否则"同一份正文只
@@ -2931,7 +2931,7 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     `{ledger, verification_id, proof_sha256, object_sha256, bound_id, bound}`：
     `bound_id` 非空 = 这一签早被别的命题认过（`bound=True`，这一笔不认；`code`
     给 `already_claimed`）；空 = 这一笔刚认下、等登记回写。
-    2026-11-05（D3）：签块这一支认到 **pending** 背书时也交同一形状的 `claim`
+    2026-11-05（D3）：签块这一支认到 `pending` 背书时也交同一形状的 `claim`
     （改前只有 `_claim_pending_sign` 交，签块那条路 return 时不带 —— 于是
     `register_statement` 的 `bind_pending_claim` 那一笔从来没跑过，"同一份正文只认领
     一次"的锁不落）。有号台账（`verifications/<号>.jsonl`）那一档不产生 `claim`：
@@ -3013,7 +3013,7 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                 return dict(bits), out
             # ---- 2026-11-05（D3，证据级）：签块这条认领路也要交 claim --------------
             #
-            # 改前这一支认到 pending 背书之后**不带 `claim`** 就 return：`register_statement`
+            # 改前这一支认到 pending 背书之后「不带 `claim`」就 return：`register_statement`
             # 只在 `v_sign.claim` 存在时调 `bind_pending_claim`（那里的注释写着同一句
             # 纪律），于是 pending 行的 `statement_id` 一直是空的 —— "同一份正文只认领
             # 一次"那把锁从来没落上。第二笔（同一正文 sha、另一条命题、另一份没有签块的稿）
@@ -3304,7 +3304,7 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
     （`#p2` 不许借 `#p1` 的光，反方向同理）。
 
     ## 写什么
-    这一份 pending 台账里的**每一行**（一行是一转）：`statement_id` / `stmt_id` 两键
+    这一份 pending 台账里的每一行（一行是一转）：`statement_id` / `stmt_id` 两键
     同值（与 `record_verification` 同一个双写口径），另加 `claimed_at`（什么时候认的）。
     为什么不是只改锚点那一行：pending 台账按对象内容分文件（`<sha>.jsonl`），里面的行
     是同一份签的几转 —— 只绑最后一转，"这一份正文被谁认领了"在读侧就取决于"从哪一行

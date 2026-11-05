@@ -2866,7 +2866,7 @@ class _RegisterStatement:
         # 永远关不上（`reconcile_registrations` left=1，而 `verify_all` 0 error —— 真空的绿）。
         #
         # 口径①（业主 2026-11-05 选定）：稿名优先（扫盘按稿名算号，读侧必须与它同键），
-        # 稿名认不出再退到稿头那一行；只在这一笔**确实要新建**时当候选（在册那一档的号
+        # 稿名认不出再退到稿头那一行；只在这一笔「确实要新建」时当候选（在册那一档的号
         # 由在册行给，候选号不许改变它）。候选号被占 ⇒ 秘书受控拒绝 `stmt_id_taken`，
         # 不另发号（发号那一步在 `Secretary.record_statement` / `_record_statement_tx`）。
         candidate_stmt_id = ""
