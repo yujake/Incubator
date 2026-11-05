@@ -1902,6 +1902,42 @@ def credential_fields(channel: Any) -> tuple[str, ...]:
     return LEAN_ROW_FIELDS
 
 
+def _empty_channel_problems(row: Row) -> list[dict[str, Any]]:
+    """没有证明通道那一行的凭据格读数（`_lean_problems` 的第 5 / 6 条）。
+
+    "没有通道"= 证明栏里既没有程序也没有 Lean 源码、台账里也没有 E 签的穷举。此时
+    这一行的凭据格必须两格都空：填了 `lean_file` / `lean_target` 是无依据的声称，
+    填了 `numeric_evidence` / `exhaustion_note` 是自称有数值证据而没有数值证明通道
+    （2026-11-04 缝隙二；`mapping_reading` 与收工门读数都读这一条）。
+
+    从 `_lean_problems` 拆出来只为让那个函数回到 200 行以下（2026-11-05：缺陷 1
+    那一支加进来之后 189 → 215）。判据一个字没改，拆的只是落点。
+    """
+    problems: list[dict[str, Any]] = []
+    claimed = [name for name in (NT.EVIDENCE_FIELD, NT.NOTE_FIELD)
+               if str(getattr(row, name, "") or "").strip()]
+    if claimed:
+        problems.append(_problem(
+            NT.NUMERIC_EVIDENCE_MISSING,
+            f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）填了 {claimed}，"
+            "而这一行没有数值证明通道（证明栏里既没有程序也没有 Lean 源码、台账里"
+            "也没有 E 签的穷举）⇒ 这一行自称有数值证据，但没有数值证明通道 —— 两边"
+            "不一致：要么把证明栏第 ① 段写成那份程序并让 E 签下穷举，要么把这两格清空",
+            label=row.label, where=MAPPING_JSON_NAME))
+    filled = [name for name in LEAN_ROW_FIELDS
+              if str(getattr(row, name, "") or "").strip()]
+    if filled:
+        problems.append(_problem(
+            "mapping_lean_file_missing",
+            f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的凭据格填了 "
+            f"{filled}，而这一行没有证明通道（证明栏里既没有程序也没有 Lean 源码）"
+            "⇒ 凭据格不许填，填了就是无依据的声称 —— 类别与通道不一致："
+            f"`lean_file` 是「{CREDENTIAL_CELL_NAME}」那一格，它说的是「这条命题"
+            "百分百为真」；没有通道就没有凭据，两格都必须留空",
+            label=row.label, where=MAPPING_JSON_NAME))
+    return problems
+
+
 def _lean_problems(rows: Sequence[Row], package_root: Path,
                    project_root: Path | None = None,
                    ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
@@ -1963,28 +1999,8 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
         program_credential = bool(program_path) and row.kind not in STATEMENT_ENV_KINDS
         values = {"lean_file": lean_file, "lean_target": lean_target}
         if not channel and not reading["program"]:
-            # 空通道：证明栏里既没有程序也没有 Lean 源码、台账里也没有 E 签的穷举。
-            # 这一行的凭据格必须两格都空（第 5 条）；填了就是无依据的声称。
-            claimed = [name for name in (NT.EVIDENCE_FIELD, NT.NOTE_FIELD)
-                       if str(getattr(row, name, "") or "").strip()]
-            if claimed:
-                problems.append(_problem(
-                    NT.NUMERIC_EVIDENCE_MISSING,
-                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）填了 {claimed}，"
-                    "而这一行没有数值证明通道（证明栏里既没有程序也没有 Lean 源码、台账里"
-                    "也没有 E 签的穷举）⇒ 这一行自称有数值证据，但没有数值证明通道 —— 两边"
-                    "不一致：要么把证明栏第 ① 段写成那份程序并让 E 签下穷举，要么把这两格清空",
-                    label=row.label, where=MAPPING_JSON_NAME))
-            filled = [name for name in LEAN_ROW_FIELDS if values[name]]
-            if filled:
-                problems.append(_problem(
-                    "mapping_lean_file_missing",
-                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的凭据格填了 "
-                    f"{filled}，而这一行没有证明通道（证明栏里既没有程序也没有 Lean 源码）"
-                    "⇒ 凭据格不许填，填了就是无依据的声称 —— 类别与通道不一致："
-                    f"`lean_file` 是「{CREDENTIAL_CELL_NAME}」那一格，它说的是「这条命题"
-                    "百分百为真」；没有通道就没有凭据，两格都必须留空",
-                    label=row.label, where=MAPPING_JSON_NAME))
+            # 空通道：凭据格必须两格都空（第 5 条）；填了就是无依据的声称。
+            problems.extend(_empty_channel_problems(row))
             continue
         # 数值通道那两格里只有一格（程序地址）：程序没有 Lean 声明名那一半。
         # 这份清单只有一处（`credential_fields`）：`doc.mapping_cells` 读的是同一个函数。
