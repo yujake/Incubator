@@ -3231,7 +3231,40 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 三份冻结物按现值重冻（agent 面十一格 prompt 因版本行、D 的正文另算；tool 面与
 #: `tool_declaration_baseline.json` 本笔无工具面改动 ⇒ 预期不动，实测为准）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H`；花费见提交信息）。
-PROMPT_VERSION = "p241"
+#: `p242`（2026-11-05 今晚最后一次冻结：p241 之后那一批模型可见改动一次对齐）：
+#: 变化格 = 十一格全变（A/B/C/D/E/F/G/H/L/M/V）。五个来源，逐条能对上游：
+#: ① `conductor.post_task`（Universal 工具）的 summary 补一句「要让别人办一件事，有出边就走
+#:    派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方
+#:    的结论」（88a203c7）—— `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
+#: ② `conductor.escalate` 的 `side_effect` 从 `read` 改真成 `write_local`（8aa92286，业主裁定
+#:    「乙」：它往父的收件箱与会话事件流追加事件）⇒ tools_lines 那一行换值（十一格），
+#:    且「手 / 眼睛」两行的件数跟着变（它从可读面挪进可改面）；
+#: ③ 压缩批（510280a3，2026-11-05，业主裁定「比例要 ≤74.9%」）：`fs.write` / `fs.edit` /
+#:    `search.download` / `verify.run_experiment` 四条的 summary 换文案 —— D 的正文口径句
+#:    138→103、fs.edit 不再逐字复制它、两句细则逐字挪进 params description（p239 手法）；
+#: ④ `table.list` 的 `fields` 与 `table.search` 的 `select`（068cc9d9，字段投影）：两个可选
+#:    参数进 tools_lines 的「可选 ?…」那一段；
+#: ⑤ 角色自己的段：C 的「唤起伙伴」骨架换成「这一档你用不到」、手段行改成「回执（结论 /
+#:    指到第几步）」（88a203c7）；D 的入边表去掉 F（50c4a1d2 取消 F→D）；F 的「交给 E 或 D
+#:    去验」改成「交给 E 去验（要 D 统筹就用 `conductor.escalate` —— 你没有到 D 的出边）」、
+#:    放弃那条改由 B 办、并补「引的号必须在册」「依赖面是写证明前的动作」「可引池空就直接派 A」
+#:    三句（50c4a1d2 / 08b7d2c3 / 05067047 / b26cd7e4）；V 的出边清空（50c4a1d2）＋
+#:    `verify.verify_proof` 的 `side_effect` read→write_local（911b9e1f）＋只读边界那一族
+#:    （db83d025 / 100a9074 / 327b617f）把 V 的官能段与工具清单整体改写。
+#: 逐格旧值 → 新值（p241 → p242；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   A 4cb3a8cc→042615b3 / B 4341b37e→82bb7841 / C 81d3f27a→be898577 /
+#:   D 3ed71c7a→21724439 / E b286172d→dde7c0ab / F df5f7909→4692fecc /
+#:   G 5275d24f→fac7c4e0 / H 5673c870→c6851bcc / L 0c32f9cd→2baa84d8 /
+#:   M 8e23eb4d→b287bcdf / V 4daa02d9→f59ca74c。
+#: 十一格是 `temp/_p242_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p242）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 三份冻结物按现值重冻（agent 面十一格 prompt 含版本行；tool 面 12 件工具的声明变；
+#: `tool_declaration_baseline.json` 已随压缩批记过账，本次不再动）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
+#: `--probe-no-tools V`；花费见提交信息）。
+PROMPT_VERSION = "p242"
 
 
 

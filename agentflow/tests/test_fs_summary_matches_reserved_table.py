@@ -138,7 +138,7 @@ def summary_problems(name: str, summary: str,
 
 
 def rule_source_problems(write_summary: str, edit_summary: str, rule: str) -> list[str]:
-    """口径句的**单源**判据：`fs.write` 逐字读它，`fs.edit` 只许指到它。
+    """口径句的单源判据：`fs.write` 逐字读它，`fs.edit` 只许指到它。
 
     为什么不再要求两条 summary 都逐字复制（2026-11-05 改，改的不是宽度而是口径）：
     同一句话在同一个角色面上印两遍不是"更清楚"，只是把 summary 预算吃掉 ——
@@ -148,7 +148,7 @@ def rule_source_problems(write_summary: str, edit_summary: str, rule: str) -> li
 
     两条都判（缺一红），且两条各有反真空：
       a `rule` 逐字出现在 `fs.write` 的 summary 里；
-      b `fs.edit` 的 summary 用「同 / 见 / 按 fs.write」这种**可判定**的说法指到它。
+      b `fs.edit` 的 summary 用「同 / 见 / 按 fs.write」这种可判定的说法指到它。
     """
     problems: list[str] = []
     if rule not in str(write_summary or ""):

@@ -1537,13 +1537,29 @@ def test_a_changed_edge_follows_into_the_prompt(registry: ToolRegistry, monkeypa
 
 
 def test_prompts_are_anti_vacuous(registry: ToolRegistry):
-    """提示词必须长到不像占位符，且四种循环形状、三态词表、逐字引文契约都在里面。
+    """提示词必须长到不像占位符，且循环形状、三态词表、逐字引文契约都在里面。
+
     若这条破了：一份被截断或退回模板的提示词照样"非空"，
-    而模型从未被告知循环协议、三态纪律与引文契约 —— 它会输出散文，或者把被拒折成没问题。"""
+    而模型从未被告知循环协议、三态纪律与引文契约 —— 它会输出散文，或者把被拒折成没问题。
+
+    2026-11-05 改期望（p242）：`"summon"` 那一形只在有出边的角色上存在 —— 50c4a1d2
+    把 V 的出边清空、C 本来就没有协作边，两份提示词于是改成「这一档你用不到 —— 你没有任何
+    协作边」。旧期望要求十一格都有 `"summon"`，那会把一个用不上的形状硬塞回没有出边的
+    角色（模型读到的是一份它做不到的教法）。这里改成从 `ALLOWED_EDGES` 现算：有出边的角色
+    必须有那一形，没有出边的必须有那句「用不到」的残桩 —— 两个方向都判，不是删检查。"""
+    from agentflow import capabilities as C
+
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         assert len(text) > 800, f"{role} 的提示词只有 {len(text)} 字符"
-        for shape in ('"tool"', '"summon"', '"message"', '"final"'):
+        shapes = ['"tool"', '"message"', '"final"']
+        if C.ALLOWED_EDGES.get(role):
+            shapes.append('"summon"')
+        else:
+            assert "你没有任何协作边" in text, (
+                f"{role} 没有出边（`ALLOWED_EDGES` 为空），提示词里却没有「你没有任何协作边」"
+                f"这一句残桩 —— 模型要么读不到派活那一形、要么被教了一件它做不到的事")
+        for shape in shapes:
             assert shape in text, f"{role} 的提示词里没有循环形状 {shape}"
         assert any(code in text for code in J.JUDGE_PROBLEMS), f"{role} 的提示词里没有三态词表"
         assert "引文一律逐字" in text, f"{role} 的提示词里没有逐字引文契约"
@@ -2272,7 +2288,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p241"
+_FROZEN_PROMPT_VERSION = "p242"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2499,17 +2515,17 @@ _FROZEN_PROMPT_VERSION = "p241"
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "4cb3a8cc77d429d8787b5fda15b6b9599d8aa85d1d36a01532fcd311213db40c",
-    "B": "4341b37e10a3bb5b0cd1af73f336553d6ab86fcead0308009929726b1f424d4a",
-    "C": "81d3f27a9213d2b146c1541953dcfe61a9954041a539457205d5aa11fa029915",
-    "D": "3ed71c7aff99a3ecbd3cb097f36d7ee46051144924e831bc0a35761446f69a49",
-    "E": "b286172d6f1d0b253e8817c7459481eadd78110eba64d9f6beb15e8b64661a4d",
-    "F": "df5f79095ade6a9872b3d912dbd7ac9c0a1e8799a3a7e1a581d36faffea4680f",
-    "G": "5275d24fa308e0f67003576c84968151ef8f10a36deec8b8d079c51c7dc40cb0",
-    "H": "5673c8706b501211e7ecba996e676cb688edf064cfc1fa75face0d5a691657f4",
-    "L": "0c32f9cd738e6b1f0c0065b488a20b34c77434a56b2180d7339d22e5ecd17828",
-    "M": "8e23eb4d2681ba26adb0a31560a0db656d98e0de9f3663e17aaeb65e027e3539",
-    "V": "4daa02d928a34c4c6acd28ee10aad6f6defaa74813ca842fdd286949a046e681",
+    "A": "042615b3ab4a8a2301f423a89744e67406e6933c51e1cd9ae73700a3c040e62d",
+    "B": "82bb7841a12105d741aa4c4052c7e4f2208ea26ed7ce477de7f68b413841e0d9",
+    "C": "be89857768eea02b5e5a7a9057ef5ca7548644448e452f8fc1f1f86fc60f509f",
+    "D": "21724439535a7d0c4881be23a330e2ec1a5b681bc4437e53625e53be5cb764dc",
+    "E": "dde7c0abe2120a850ef483098192ff69496c718c8839b8da79271fe5ab47d543",
+    "F": "4692fecc93a658ca8ac5f396b7fbb4371283a4b1ba66924eafcd1564445159bd",
+    "G": "fac7c4e03b4fd428915394b8710fee2bf874c929e50302dce605d747a2d10779",
+    "H": "c6851bccff04f34b33748ac7da43c1c39c44c69ee3064b68258e0d21d9d90c6f",
+    "L": "2baa84d85d69122965121a3d5989802d2dc6d1d887d2fcfa38a1f71497deb204",
+    "M": "b287bcdf151e279c067f4d8fd55b7ad4c5051f5a9801b611bfd406b09ae55373",
+    "V": "f59ca74c75a2eb850faa5f8d0b5acc4dd2cc03e1f5cac5e391012368ecd5756c",
 }
 
 

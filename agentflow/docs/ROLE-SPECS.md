@@ -57,7 +57,7 @@ python -c "import tempfile,pathlib;from agentflow.store import Store;from agentf
 > 逐条登记了这四个**该角色自己的落库代理**（`review.review_document` / `review.verify_fixes` /
 > `review.report` / `review.record_finding`；写面钉死在 `review_findings` / `documents.status`）。
 >
-> ⚠️ **只读角色那另外 9 件写工具是"通用能力"，也不是泄漏**（业主 2026-10-26：「通用能力根本不该出现
+> ⚠️ **只读角色那另外 10 件写工具是"通用能力"，也不是泄漏**（业主 2026-10-26：「通用能力根本不该出现
 > 谁能用这个说法」）：`clock.timer_start` / `clock.timer_cancel` / `clock.alarm_start` /
 > `clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `clock.wait_any` /
 > `conductor.ack` / `conductor.post_task` 都在 `tools/__init__.py` 的 `UNIVERSAL_TOOLS` 里，
@@ -474,7 +474,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 94 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 `new_content` 才许入库 | `read` | 否 | A | **title**；doi | `{title,doi,checked,duplicate,overlap_score,overlap_kind,overlap_with,requires_new_content,reason}`；失败 `ok=False` + `kind` + `checked=False`（**重叠没查**，不是「没有重叠」） | `tests/test_search_tools_stage_admit.py` | 同上；三态口径与 `search.dedup_check` 逐字一致（`checked` 是"查没查"，不是"重不重"） |
 | 95 | `lit.admit` | 正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；超限**整笔拒绝**。**不清空列表**（清空属于 `lit.admit_all`） | `write_local` | **是** | A | slots, items；request_id, batch, new_content, overlap_ok | `{ok,kind,whole_call_refused,reason,request_id,batch,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；"整笔拒绝"与"逐条拒收"是两个读数（`whole_call_refused` vs `refused[]`） |
 | 96 | `lit.admit_all` | **一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 `literature`（≤10 条），然后结算清空本委托的列表（全终态、不物理删），并写委托报告 `reports/lit-<request_id>.md`（**已入库 + 未入库含受控理由，两块都要有**） | `write_local` | **是** | A | request_id, new_content | `{ok,kind,whole_call_refused,reason,request_id,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；这是 `specs/a.py` 的 `boundary` 那条 97 字口径（"一次检索至多入库10篇 … 筛完一键迁移并清空列表；报告写清已入库与未入库"）的机器落点 |
-| 97 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 `stop_reason=escalated` 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）；收件人 = 运行期解析出的**召唤者**，**不要求**在 `edges` 里登记；顶层（没有召唤者）受控拒绝 `not_caller`，一行都不写 | `read` | 否 | A B C D E F G H L M V | **need**,**kind**；evidence | `{to,to_task_id,need,kind,evidence,msg_id,state,note}`；受控拒绝：`ok=False` + `kind`（`not_caller` / …） | `tests/test_escalate_goes_up_and_stops.py` | 2026-10-20 新增（业主裁定「子代理卡住要能往上抛」）：它的 `roles` 是**十一个角色全体**（Lean 关着时那 11 个里没有 `L`） ⇒ 它同时进了 §0.2 那张"共有工具"表；`side_effect=read` 是刻意的（它只写一条给**父代理**的消息，不写任何表）；`external=none`（不进网络） |
+| 97 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 `stop_reason=escalated` 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）；收件人 = 运行期解析出的**召唤者**，**不要求**在 `edges` 里登记；顶层（没有召唤者）受控拒绝 `not_caller`，一行都不写 | `write_local` | 否 | A B C D E F G H L M V | **need**,**kind**；evidence | `{to,to_task_id,need,kind,evidence,msg_id,state,note}`；受控拒绝：`ok=False` + `kind`（`not_caller` / …） | `tests/test_escalate_goes_up_and_stops.py` | 2026-10-20 新增（业主裁定「子代理卡住要能往上抛」）：它的 `roles` 是**十一个角色全体**（Lean 关着时那 11 个里没有 `L`） ⇒ 它同时进了 §0.2 那张"共有工具"表；`side_effect=write_local`（2026-11-05 业主裁定「乙」：它往**父代理的收件箱**与会话事件流追加 `agent_message` / `agent_escalation` 两条事件 —— 通信事件也是工作区写，`tools/base.py::EFFECT` 的两根轴是「数据表 / 工作区」，所以「不写任何表」推不出「只读」）；`external=none`（不进网络） |
 | 98 | `doc.write_mapping` | 写论文对应表三份（`out/paper/MAPPING.json` + `MAPPING.md` + `mapping-appendix.tex`，并把 `\input` 一行放进正文）：三份全由 `papermapping.write_package` 从同一批行渲染，**不许手抄**；行读不懂时一行都不写（半张表比没有表更坏），写完立刻按读侧判据 `mapping_reading` 现读一遍 | `write_local` | **是** | G | **project**,**rows** | `{project,json,md,appendix,rows,state,md_state,appendix_state,problems,reason}`；`state` ∈ `pass` / `fail` / `unknown`；失败 kind ∈ `mapping_unresolvable` / `mapping_empty` / `mapping_not_clean` / `io_error` / `bad_project` | `tests/test_the_three_half_breaks_are_fixed.py` | 2026-10-22 新增（业主逐字「G加动作」）：`papermapping.write_package` 此前在 `src/` 下零调用方 ⇒ 手抄的 md 与附录必然与渲染器逐字对不上（`md_drifted`）；`external=none`（不起子进程）；只写论文包、不入库 |
 | 128 | `doc.mapping_cells` | 取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）：G 不必再从台账里翻"这一行该填什么"，先调它，拿不到的格才按通道手填 | `read` | 否 | G | **project**；statement_id, claim_key, proof_no | `{ok,cells,sources,problems,channel,checked}`；`cells` 的键 = `file` / `lean_file` / `lean_target` / `numeric_evidence` / `exhaustion_note` / 索引四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`（只给拿得到的格；空串 = 通道为空、这一格不适用）；`sources[格]` 指回「哪张表哪一行哪一格」或「现算」；`problems` = `[{'cell','why'}]`（`cell='*'` 是整表/整行那一档）；`channel` ∈ numeric / formal / ''；`checked=False` = 没查成；失败 kind ∈ `mapping_cells_incomplete`（逐格读数仍在 `cells` / `problems` 里）/ `bad_project` | `tests/test_doc_mapping_cells_tool.py` | 2026-11-04 新增（业主逐字「如果数据位置都知道，要给 G 开发辅助工具直接拿到」）：判据一条都不在工具里 —— 通道与"该填哪几格"调 `numericproof.proof_channel` / `formal_slot`，逐格问题转发 `papermapping._lean_problems` / `numerictheorem.evidence_index_problems`；只读（`data/` 下零写调用、不写对应表、不起子进程）；`evidence_sha256` 与 `v_signature.sha256` 一律现算，不抄表里旧值 |
 | 99 | `formal.formalize` | 把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / `exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数 | `write_local` | **是** | **L** | **claim**,**source**；declaration_name, statement_id, proof_no, path_source, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path','path','sha256','bytes','declaration_name','written','proof_no','proof_sha256','path_id','path_source','statement_id','statement_source','coverage','faithfulness','steps_path','refused','checker_status','checker_reason','b_library','report'}`；失败（未接线）：`ok=False` + `kind(not_wired)` | `tests/test_l_every_tool_and_action.py` | 2026-10-22 新增（业主施工单「照 E 的 Lean 面复制出 L」）：本件与 `formal.check_formal` / `formal.record` 三件只挂给 L（`formal_tools._ROLES_L == ("L",)`）；`external=exec`（真起检查器子进程）⇒ 审批是；`coverage` 的 `steps_total`/`steps_mapped`/`unmapped`/`sorry_lines` 是"忠实复述"的机器读数，漏一步或有 sorry ⇒ 结论只能是 `unknown` |
@@ -512,7 +512,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 - `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；通用能力另走一档（`UNIVERSAL_TOOLS` 里那批写工具，十一个角色全体都有，见 §0.2 下面第二条注记）。
 - handler 形态：逐个数（partial / lambda / 具名闭包 / 共几件）见附录 §R0.1 那一句 —— 那里现算，本节不抄。要点不变：`lambda` 那几个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
 - 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools` 少"需要 store 才能注册"的那一族；**本文一律用 B 口径**（两个口径的数见 §R0 标题与附录 §R0.1）。
-- **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。此外 V 还拿到 `trace.children`、9 件 `clock.*` 与 `conductor.ack`（后 11 件是通用能力，见 §0.2）。三档相加就是 V 的全部工具面（逐件与总数见附录 §V.4，那里现算）。
+- **V 的 12 件公共只读**（`fs.*` 4 + `table.*` 5 + `manuscripts.*` 2 + `program.list` 1）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。此外 V 还拿到 `trace.children`、9 件 `clock.*`、`conductor.ack`、`conductor.escalate` 与 `conductor.post_task`（后 13 件是通用能力，其中 `conductor.escalate` 2026-11-05 起是 `write_local`，见 §0.2；旧句把它算进"公共只读"是错的）。三档相加（3 + 12 + 13 = 28）就是 V 的全部工具面（逐件与总数见附录 §V.4，那里现算）。
 
 复跑：`python -m agentflow.cli tools`（条数 + 两根轴）与 `python tools/verify_role_specs.py`（逐角色对账）。
 
@@ -1552,7 +1552,7 @@ C 的产出有两类，状态语义完全不同。
 | **写、改证明的任何一句** | V 是判定者："你是判定者，你的产出只有一个两态结论与逐条 findings"（`specs/v.py` 的 `local_notes['敢创新']` 逐字）；能改稿的人不能同时是判它过没过的人 | **F** |
 | 判"这条命题值不值得做、下一步往哪儿走" | 那是**方向判断**，不是证明判断；V 的官能表里 `敢创新` 是 `denied` | **D** |
 | 稿件级正式审查（体例 / 引用是否得当 / 依赖闭合） | 那是**五元位第 5 位**，owner 是 H；V 只看证明本身 | **H** |
-| 写任何一张**数据表**（改别人的东西） | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 把 `fs.*` / `table.*` 一类写工具剥掉。面上的 10 件 `write_local` 全是自己侧或簿记：9 件通用能力（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）+ `verify.verify_proof`（V 自己维护的凭据台账与签，逐条登记在 `READONLY_CALL_EXCEPTIONS["V"]`） | **B / D / E / G**（各自的写面） |
+| 写任何一张**数据表**（改别人的东西） | `capabilities.WRITE_SETS["V"] == frozenset()`；`for_role("V")` 把 `fs.*` / `table.*` 一类写工具剥掉。面上的 11 件 `write_local` 全是自己侧或簿记：10 件通用能力（7 件 `clock.*` + `conductor.ack` / `conductor.escalate` / `conductor.post_task`）+ `verify.verify_proof`（V 自己维护的凭据台账与签，逐条登记在 `READONLY_CALL_EXCEPTIONS["V"]`） | **B / D / E / G**（各自的写面） |
 | 自己补证据、自己提新方向 | 引用到"不干净的命题"时，缺陷**沿依赖边上溯**并如实报出 —— 修是 F/D 的事 | **F**（改证明）/ **D**（改方向） |
 | 拿"看不出来"冒充"审过了" | 它不是两态之外的第三个结论：判不出来 = 没找到缺陷 ⇒ 按「成立」收；缺材料那一档是**没查成**（不落行、如实报），两件事不许折平 | —（结构性禁止） |
 | 靠"再问 F 一句"补齐判断所需的信息 | 那会把冷启动绕过去；判不出来就是没找到缺陷 ⇒ 按「成立」收（没有第三个词可以拿来当退路） | — |
@@ -1599,7 +1599,7 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.8 不变式
 
-- **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：别人的数据表一张都不写；自己侧的产物是 `verifications/<号>.jsonl` 与签的侧文件（工作区文件）。工具面共 10 件 `write_local`：9 件通用簿记（7 件 `clock.*` + `conductor.ack` / `conductor.post_task`）+ `verify.verify_proof`（自己的凭据台账与签，`READONLY_CALL_EXCEPTIONS["V"]` 逐条例外）。
+- **V 对其它智能体的产出只读；自己侧的产物可写**（业主 2026-11-01 的定义）：别人的数据表一张都不写；自己侧的产物是 `verifications/<号>.jsonl` 与签的侧文件（工作区文件）。工具面共 11 件 `write_local`：10 件通用簿记（7 件 `clock.*` + `conductor.ack` / `conductor.escalate` / `conductor.post_task`）+ `verify.verify_proof`（自己的凭据台账与签，`READONLY_CALL_EXCEPTIONS["V"]` 逐条例外）。
 - **输出不合法绝不落台账行**。
 - **台账只追加、编号由脚本发**。
 - **第 3 位只在 `成立` 且无未解决 error 时被签**。
@@ -1711,7 +1711,7 @@ C 的产出有两类，状态语义完全不同。
 
 > ⚠️ **写集与工具面是两根轴，不许互相冒充**：`write_set == {"experiments"}` 是**并发判据**的输入，
 > 也是"L 不碰 `statements`"的声明；`for_role` 的结构性拦截**只针对只读角色**（C / H / V），
-> 所以 L 真的拿得到写工具：`fs.*` 4 + `table.*` 3 + `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task` + `formal.*` 2，另加通用能力的 `clock.*` 与 `conductor.ack`（逐件见附录 §L.4，那里现算）。
+> 所以 L 真的拿得到写工具：`fs.*` 4 + `table.*` 3 + `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task` + `formal.*` 2，另加通用能力的 `clock.*`、`conductor.ack` 与 `conductor.escalate`（逐件见附录 §L.4，那里现算）。
 > "L 只写 `experiments`"这件事由**动作面**（`record` 是它唯一的落表动作）+ 写集声明承担，
 > **不由工具层承担** —— E 今天就是同一个口径，把它写成"L 拿不到写工具"是一句假话。
 

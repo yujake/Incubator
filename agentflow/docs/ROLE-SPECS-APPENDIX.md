@@ -103,8 +103,8 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 |---|---|---|---|
 | 工具总数 | 55 | **124**（`python -m agentflow.cli tools`；Lean 关着时 121） | ⚠️ |
 | 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A54 B39 C36 D59 E40 F52 G55 H46 V28 L39 M42`（同一命令读"各角色工具数"那一行） | ⚠️ |
-| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 60 / write_local 59 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 59 / write_local 57 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
-| 需审批 | 17 / 55 | **63 / 124** | ⚠️ |
+| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 59 / write_local 60 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 58 / write_local 58 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
+| 需审批 | 17 / 55 | **64 / 124** | ⚠️ |
 | 只读角色泄漏 | 0 | **33 件**：`H` 13 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 9 件通用能力：`clock.*` 的七件写工具 + `conductor.ack` + `conductor.post_task`）+ `C` 10 件（`analysis.register_report` 一件落库代理 + 同样那 9 件通用能力）+ `V` 10 件（`verify.verify_proof` 一件自己的凭据写入面 + 那 9 件通用能力） | ⚠️ |
 | 零测试工具 | 7 个（`table.list` `table.count` `table.schema` `table.search` `fs.list` `search.register` `search.download`） | 用"工具名字符串是否出现在 `tests/`"口径，**本次未复算** | ⚠️ |
 | `INVENTORY` 未覆盖的 schema 对象 | 无 `Task`/`UsageEntry`/`EvalResult` | **有**（`schema.EvalResult`） | ❌ **INVENTORY 落后** |
@@ -122,9 +122,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **54** |
-| `side_effect` | `read 24 / write_local 30 / none 0` |
+| `side_effect` | `read 23 / write_local 31 / none 0` |
 | `external` | `none 49 / egress 5`（`search.download` / `search.literature` / `search.providers` / `search.retry_pending` / `search.walk_citations`） |
-| 需审批 | **33** |
+| 需审批 | **34** |
 
 **逐件清单（按模块，共 54）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `lit.*` 7（`admit` `admit_all` `overlap_check` `stage_add` `stage_list` `stage_reject` `stage_withdraw`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `search.*` 10 · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `text.*` 1（`extract`） · `trace.*` 1（`children`）。
 
@@ -143,9 +143,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **39** |
-| `side_effect` | `read 17 / write_local 22 / none 0` |
+| `side_effect` | `read 16 / write_local 23 / none 0` |
 | `external` | `none 38 / egress 1`（`ocr.run`） |
-| 需审批 | **22** |
+| 需审批 | **23** |
 
 **逐件清单（按模块，共 39）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `ocr.*` 3（`backends` `detect_text_layer` `run`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
 
@@ -164,9 +164,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **36** |
-| `side_effect` | `read 26 / write_local 10 / none 0` |
+| `side_effect` | `read 25 / write_local 11 / none 0` |
 | `external` | `none 36` |
-| 需审批 | **10** |
+| 需审批 | **11** |
 
 **逐件清单（按模块，共 36）**：`analysis.*` 1（`register_report`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
 
@@ -187,9 +187,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **59** |
-| `side_effect` | `read 30 / write_local 24 / none 5` |
+| `side_effect` | `read 29 / write_local 25 / none 5` |
 | `external` | `none 59` |
-| 需审批 | **24** |
+| 需审批 | **25** |
 
 **逐件清单（按模块，共 59）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `conjecture.*` 1（`register_conjecture`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `graph.*` 4（`build` `neighbors` `relations_between` `stats`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 5（`chain` `children` `concept` `literature` `relation`）。
 
@@ -208,9 +208,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **40** |
-| `side_effect` | `read 19 / write_local 21 / none 0` |
+| `side_effect` | `read 18 / write_local 22 / none 0` |
 | `external` | `none 39 / exec 1`（`verify.run_experiment`） |
-| 需审批 | **21** |
+| 需审批 | **22** |
 
 **逐件清单（按模块，共 40）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `evidence_for` `list_experiments` `run_experiment`）。
 
@@ -229,9 +229,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **52** |
-| `side_effect` | `read 24 / write_local 23 / none 5` |
+| `side_effect` | `read 23 / write_local 24 / none 5` |
 | `external` | `none 51 / exec 1`（`verify.run_experiment`） |
-| 需审批 | **23** |
+| 需审批 | **24** |
 
 **逐件清单（按模块，共 52）**：`attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
 
@@ -250,9 +250,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **55** |
-| `side_effect` | `read 25 / write_local 25 / none 5` |
+| `side_effect` | `read 24 / write_local 26 / none 5` |
 | `external` | `none 53 / exec 2`（`doc.paper_compile` / `verify.run_experiment`） |
-| 需审批 | **25** |
+| 需审批 | **26** |
 
 **逐件清单（按模块，共 55）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `doc.*` 8（`build_document` `compose_claim` `list_documents` `mapping_cells` `paper_compile` `register_dependency` `scan_claim` `write_mapping`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `review.*` 2（`list_findings` `scan_document`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`） · `verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）。
 
@@ -271,9 +271,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **46** |
-| `side_effect` | `read 28 / write_local 13 / none 5` |
+| `side_effect` | `read 27 / write_local 14 / none 5` |
 | `external` | `none 46` |
-| 需审批 | **13** |
+| 需审批 | **14** |
 
 **逐件清单（按模块，共 46）**：`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`） · `clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `doc.*` 3（`compose_claim` `list_documents` `scan_claim`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `review.*` 8（`list_findings` `record_finding` `report` `review_document` `scan` `scan_document` `scan_text_integrity` `verify_fixes`） · `search.*` 2（`local` `shelf`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 4（`code_hash` `detect_verifier` `evidence_for` `list_experiments`）。
 
@@ -292,9 +292,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **28** |
-| `side_effect` | `read 18 / write_local 10 / none 0` |
+| `side_effect` | `read 17 / write_local 11 / none 0` |
 | `external` | `none 28` |
-| 需审批 | **10** |
+| 需审批 | **11** |
 
 **逐件清单（按模块，共 28）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 3（`ack` `escalate` `post_task`） · `fs.*` 4（`list` `read` `search` `stat`） · `manuscripts.*` 2（`list` `read`） · `program.*` 1（`list`） · `table.*` 5（`count` `get` `list` `schema` `search`） · `trace.*` 1（`children`） · `verify.*` 3（`list_verifications` `read_proof` `verify_proof`）。
 
@@ -313,9 +313,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **39** |
-| `side_effect` | `read 17 / write_local 22 / none 0` |
+| `side_effect` | `read 16 / write_local 23 / none 0` |
 | `external` | `none 36 / exec 3`（`formal.check_formal` / `formal.formalize` / `formal.record`） |
-| 需审批 | **23** |
+| 需审批 | **24** |
 
 **逐件清单（按模块，共 39）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 6（`ack` `broadcast` `escalate` `post_task` `retire_child` `void_items`） · `formal.*` 3（`check_formal` `formalize` `record`） · `fs.*` 8（`delete` `edit` `list` `move` `read` `search` `stat` `write`） · `manuscripts.*` 2（`list` `read`） · `program.*` 2（`list` `stop`） · `table.*` 8（`count` `create` `delete` `get` `list` `schema` `search` `update`） · `trace.*` 1（`children`）。
 
@@ -332,9 +332,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **42** |
-| `side_effect` | `read 19 / write_local 23 / none 0` |
+| `side_effect` | `read 18 / write_local 24 / none 0` |
 | `external` | `none 42` |
-| 需审批 | **23** |
+| 需审批 | **24** |
 
 **逐件清单（按模块，共 42）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 25 · `fs.*` 6（`edit` `list` `read` `search` `stat` `write`） · `program.*` 2（`list` `stop`）。
 
@@ -1138,7 +1138,7 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 
 | # | 命令 | 当次实测输出（摘要） | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：124（已装模块 18…）`；`各角色工具数：{'A': 54, 'B': 39, 'C': 36, 'D': 59, 'E': 40, 'F': 52, 'G': 55, 'H': 46, 'V': 28, 'L': 39, 'M': 42}`；`只读角色写工具泄漏：{'C': ['analysis.register_report', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task'], 'H': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes'], 'V': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.post_task', 'verify.verify_proof']}（!! 有泄漏）`（现读于 2026-10-26；Lean 关着时是 `工具总数：121`） | 0 |
+| 1 | `python -m agentflow.cli tools` | `工具总数：124（已装模块 18…）`；`各角色工具数：{'A': 54, 'B': 39, 'C': 36, 'D': 59, 'E': 40, 'F': 52, 'G': 55, 'H': 46, 'V': 28, 'L': 39, 'M': 42}`；`只读角色写工具泄漏：{'C': ['analysis.register_report', 'clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.escalate', 'conductor.post_task'], 'H': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.escalate', 'conductor.post_task', 'review.record_finding', 'review.report', 'review.review_document', 'review.verify_fixes'], 'V': ['clock.alarm_start', 'clock.periodic_start', 'clock.periodic_stop', 'clock.timer_cancel', 'clock.timer_purpose', 'clock.timer_start', 'clock.wait_any', 'conductor.ack', 'conductor.escalate', 'conductor.post_task', 'verify.verify_proof']}（!! 有泄漏）`（现读于 2026-10-26；Lean 关着时是 `工具总数：121`） | 0 |
 | 2 | `python -m agentflow.cli tools --role E` | 正常输出 E 的工具清单（**不再是 `invalid choice`**） | 0 |
 | 3 | `python -m pytest --collect-only -q` | `5433/5461 tests collected (28 deselected) in 8.28s` | 0 |
 | 4 | `python -m agentflow.agent_a` | `[agent_a 自检] 24/24 项通过` | 0 |
