@@ -156,6 +156,23 @@ NO_THIRD_STATES = (
 #: （`parse_verdict` 与 `schema.ReviewFinding` 判的是同一件事，两处各写一份字面量
 #: 就会在加一档时一处认、一处拒）。
 FINDING_LEVELS: tuple[str, ...] = S.FINDING_LEVELS
+
+#: findings 的级别里，哪一档是「备注」、哪一档是「承重」（业主 2026-11-06 的裁定：
+#: 「判词由 V 定，findings 只是备注」；真机 `projects/R-mk-infinite-92` 的 v-000003）。
+#:
+#: 两个集合都只从受控词表 `FINDING_LEVELS` 里取，不新造字符串：
+#:
+#: - `info` = 备注档。框架自己就用它写"不等于错，只是读的人要知道它没有被用满"
+#:   （:func:`apply_citation_gate` 的 `citation_weaker`）；真机 v-000003 那条
+#:   「第2步末句…此句不承重」也是这一档。这一档的条目不能作为推翻「成立」的依据。
+#: - `error` = 承重档。只有它进 `unresolved_errors`（`parse_verdict` / `apply_citation_gate`），
+#:   只有它让 :func:`row_signable` 为假 —— 词表里"找到了缺陷"的那一档。
+#: - `warning` 两档都不是，本笔刻意不动它：`ROLE-SPECS` §V.7 只说「成立可以带
+#:   info/warning」，没给它"备注"的定性；把它也机械放行会与「先夸后刺」那一族验收
+#:   正面冲突（`tests/test_v_opinion_chain_reaches_f.py` 的 e1）。它仍交秘书的语义判定。
+NOTE_FINDING_LEVELS: frozenset[str] = frozenset(("info",))
+LOAD_BEARING_FINDING_LEVELS: frozenset[str] = frozenset(("error",))
+
 #: 硬禁令的清单（I10 的最小形态）：命中这些短语的步骤必须被指出来。
 #: 用户 2026-10-05 口径："F 禁止写'易证/显然/trivial/clearly/it is easy to see'"。
 HARD_BAN_MARKERS: tuple[str, ...] = (
@@ -1936,6 +1953,87 @@ def row_signable(row: Mapping[str, Any]) -> bool:
     if signing_gate_problem(row):
         return False
     return not citation_blocks(row)
+
+
+def load_bearing_reading(*, verdict: Any, defect_step: Any = None,
+                         findings: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+    """这一行 V 自己给出的「承重缺陷」读数（秘书判定的机械那一半；纯函数）。
+
+    ## 判据（业主 2026-11-06：判词由 V 定，findings 只是备注）
+    只认两处受控读数，两个集合都取自 `FINDING_LEVELS`（不新造字符串）：
+
+    - `defect_step` 非空 ⇒ V 自己指到了那一步（`有毛病` 的必填项，见 `parse_verdict`）；
+    - findings 里有 `level in LOAD_BEARING_FINDING_LEVELS`（`error`）⇒ V 自己标了承重档。
+
+    只有 `info`（`NOTE_FINDING_LEVELS`）的条目不算：V 判「成立」、`defect_step` 为空、
+    findings 全是备注 ⇒ `only_notes=True` ⇒ `clean_note=True`。这一档秘书不许推翻 ——
+    改前真机 `projects/R-mk-infinite-92` 的 v-000003 正是这么被误判成 fault 的：
+    一行 `verdict=成立`、`defect_step=null`、`unresolved_errors=0`，findings 只有一条
+    `level=info`（「此句不承重」），却因为"存在一条 finding"被判成"不能算完全没毛病"。
+
+    ## 为什么 `warning` 不进任何一个集合
+    受控词表只给了 `info/warning/error` 三格，而文档（`ROLE-SPECS` §V.7）只说「成立可以带
+    info/warning」——它没给 `warning` "备注"的定性，也没给它"承重"的定性。本笔只把
+    `info` 定成备注档（框架自己就用它写"不等于错，只是读的人要知道"，见
+    :func:`apply_citation_gate` 的 `citation_weaker`）；`warning` 留在语义判定那一侧。
+    把它也机械放行会与「先夸后刺」那一族验收正面冲突
+    （`tests/test_v_opinion_chain_reaches_f.py` 的 e1）。
+
+    ## 返回
+    读数字典：`levels`（逐条级别，原样）/ `error_findings` /
+    `note_findings` / `unclassified_levels`（`warning` 与词表外的写法）/ `has_defect_step` /
+    `load_bearing` / `only_notes` / `clean_note` / `decided`（这一格能不能机械定下来）/
+    `reason`（给拒信/台账那一行用的那一句，写清"哪一档算承重"）。
+    """
+    step = defect_step
+    levels: list[str] = []
+    errors: list[dict[str, Any]] = []
+    notes: list[dict[str, Any]] = []
+    unclassified: list[str] = []
+    for item in (findings or ()):
+        if not isinstance(item, Mapping):
+            unclassified.append("<not-an-object>")
+            continue
+        one = dict(item)
+        level = str(one.get("level") or "").strip()
+        levels.append(level)
+        if level in LOAD_BEARING_FINDING_LEVELS:
+            errors.append(one)
+        elif level in NOTE_FINDING_LEVELS:
+            notes.append(one)
+        else:
+            unclassified.append(level)
+    has_step = step is not None and str(step).strip() != ""
+    load_bearing = bool(has_step or errors)
+    only_notes = bool(levels) and not errors and not unclassified
+    clean_note = bool(only_notes and not has_step
+                      and str(verdict or "").strip() == "成立")
+    decided = bool(load_bearing or clean_note)
+    parts: list[str] = []
+    if has_step:
+        parts.append(f"V 自己给了 defect_step={step}（指到了那一步）")
+    if errors:
+        parts.append(f"findings 里有 {len(errors)} 条 level=error（承重档）")
+    if clean_note:
+        parts.append(
+            f"verdict='成立'、defect_step 为空、findings 里 {len(notes)} 条全是 info（备注档）"
+            " ⇒ 不构成承重缺陷：不推翻 V 的「成立」（不判 fault、不清零连续次数）；"
+            "备注原文留在台账那一行的 findings 里（承重档只有 error / defect_step）")
+    if not decided:
+        why = "、".join(unclassified) or "没有 findings"
+        parts.append(f"findings 的级别不在本判据能定性的两档里（{why}）⇒ 交语义判定")
+    return {
+        "levels": levels,
+        "error_findings": errors,
+        "note_findings": notes,
+        "unclassified_levels": unclassified,
+        "has_defect_step": has_step,
+        "load_bearing": load_bearing,
+        "only_notes": only_notes,
+        "clean_note": clean_note,
+        "decided": decided,
+        "reason": "；".join(parts),
+    }
 
 
 def secretary_axis(row: Mapping[str, Any]) -> str:
