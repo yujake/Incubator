@@ -1232,6 +1232,21 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 不改引用处文本（改了就丢掉"改前叫什么"）。
     "_rel_is_inside",              # 已删的路径守卫（旧 `agent_f/manuscript.py`）：2026-11-04 的基线注释在讲"那一批把两个路径守卫写进同一个模块"，910b3031 之后只剩 `manuscriptform._norm_rel`
     "_retitle_applied",            # 已删的改名读数（旧 `agent_f/manuscript.py`）：2026-11-04 的审计记录在讲"今天新加的那个读数只处理调用方手里这一份"，910b3031 之后由 `commit_manuscript` 的 `retitled` 格承担
+    # —— 2026-11-05（全量红 · D-COLLAB 审计报告那一族）：七条新登记，逐类写在下面 ——
+    # 前六条出自 `docs/D-COLLAB-AND-MANUSCRIPT-UNIFICATION-2026-11-05.md`（2026-11-05 的
+    # 审计记录）：§4.7 讲"哪些名字被删/搬走"、§5 ③ 讲"temp 副本目录名"。历史叙述与被删的
+    # 名字按本表纪律登记，不改报告文本（改了就丢掉"改前叫什么"）；后四个是 temp 副本的
+    # 目录名（不是符号，也不在交付树的符号面里），登记是为了让"读者按图索骥"成立。
+    "_carry_sign_block",           # 已删的零调用转发（`_Manuscript` 里；f7fc5b21 删掉、docstring 改指真身）—— D-COLLAB §4.7 第 4 行在讲"删了什么、为什么删"，留痕按纪律必须点名被删的东西
+    "_reserved_artifact",          # 已删的布尔壳（f7e22261 删；唯一调用点是 `_reserved_artifact_rule`）—— D-COLLAB §4.7 第 1 行与 §5 ② 的"真死"判据都点名它
+    "_idx",                        # temp 副本目录名（`D:\Incubator\temp\_idx`；不是标识符）—— D-COLLAB §5 ③ 列 p241 期间 temp/ 下的历史副本目录，讲"扫描面里不能有历史副本"
+    "_p238_repo",                  # 同类：temp 副本目录名（§5 ③ 同一句）
+    "_redcheck_20261102",          # 同类：temp 副本目录名（§5 ③ 同一句）
+    "_idx_p241_snapshot",          # 同类：`_idx` 重名时改存的副本目录名（§5 ③ 同一句）
+    # 第七条是活符号，只是"真符号只数到 1 次"：`agent_loop.py` 的 `_clip_board_detail`
+    # 有一处 `def`，两处调用都写在 f-string 里（Python 3.11 的 `tokenize` 把整个 f-string
+    # 当 STRING，不产 NAME 记号）⇒ 计数 1。名字是真的、读的人找得到，登记而不改注释。
+    "_clip_board_detail",          # 存活函数（`agent_loop.py` 定义处一次；两处调用在 f-string 内，符号面数不到）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
