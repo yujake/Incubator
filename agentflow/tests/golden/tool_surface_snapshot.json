@@ -5081,7 +5081,7 @@
     ],
     "type": "object"
    },
-   "returns": "data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}",
+   "returns": "data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 `literature.path`（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}",
    "roles": [
     "A",
     "B",
@@ -5476,7 +5476,7 @@
     ],
     "type": "object"
    },
-   "returns": "data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。",
+   "returns": "data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔被排序去重过的集合字段与被剥掉多余 `library/` 前缀的 `literature.path`（空列表 = 一个字节都没动）。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。",
    "roles": [
     "A",
     "B",
@@ -6030,7 +6030,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）",
+   "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_id_missing / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）",
    "roles": [
     "V"
    ],

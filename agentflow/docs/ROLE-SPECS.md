@@ -459,7 +459,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 76 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
 | 77 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
 | 78 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable,duty,boundary,policy,signature_error,deliverable,stance}` | `tests/test_conductor_tools.py` | 无 |
-| 79 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
+| 79 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`；缺省 `None` = 不设限）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
 | 80 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 论文那一格（回执里的 `tex_sha256` 与盘上那份 `main.tex` 的摘要对得上；没有 `main.tex` ⇒ 不适用，回执读不到 ⇒ 没查成）/ 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 | 81 | `text.extract` | **A 负责把一篇 PDF 转成纯文字稿入库**（业主口径）：读 PDF 自带的文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**原 PDF 原样保留**；写盘前核质量（NUL/替换字符/控制字符占比超标 ⇒ kind=garbled_text，**不写盘**）；纯文本文件直通入库（幂等） | `write_local` | **是** | A | lit_id 或 path | out_dir, pages, max_pages |
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps,note}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
@@ -1958,13 +1958,14 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 |---|---:|---|---|
 | `max_chain_depth` | **6**（台账跳数 = 链上 **7** 个代理） | 委派链长（业主数法：M 是第 1 个、第 7 个是能干活的最末一个；台账数法：`Task.depth` 是跳数，主控的直接子 = 1。等式：`max_chain_depth = N` ⇒ 台账 depth 1..N 放行、depth N+1 拒） | "链可以**无限深**（每次只派生 1 个，但派生 10000 层）"。数法仍是业主 2026-10-24 原话「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」；**值**由业主 2026-11-05 抬到 6：「将深度锁调到6，不然 M->D->F->A->B->V 是做不到的（F派A补文献，A派B录入，B派V拿V签）」⇒ 那条 6 代理链（台账 depth 1..5）放行。结构闸门，不是成本闸门；两种数法差一，换算只在 `policy.max_agents_on_chain` |
 | `max_direct_children` | **25** | 一个父**此刻在飞**的**直接子**数（只数直接子，不管隔着几层的子） | "每一层都能**无限宽**（委派链 7 层，每层 9999 个直接子）"。业主 2026-10-24：「12是只管直接子，不管隔着几层的子」 |
-| `max_concurrency` | **16** | 瞬时并发 | "扇出可以**无限持续**：每秒 4 个，跑一天" |
+| `max_concurrency` | **不设限**（`None`；业主 2026-11-05 裁定「丙：全局不设限」） | 瞬时并发 | "扇出可以**无限持续**：每秒 4 个，跑一天"（显式给正整数时这一档仍然判） |
 | `max_tasks_per_run` | **5000** | 生命周期总量 | "**瞬时**把并发打爆：总量对了，但 200 个任务同时开跑" |
 | `wall_clock_sec` | **14400** | 墙钟（FC-20） | `None` = 不限 |
 | ~~`token_budget`~~ | **该字段已不存在** | token（FC-19） | `Policy` 的 dataclass 只有上面五个 + `usd_budget`（复跑：`python -c "import dataclasses;from agentflow.policy import Policy;print([f.name for f in dataclasses.fields(Policy)])"`） |
 | `usd_budget` | `None` | 花销 | `None` = 不限 |
 
-**四类上限必须同时存在**（FC-18）：`Policy.validate()` 要求四个都是正数
+**其余三道上限必须同时存在**（FC-18）：`Policy.validate()` 要求深度 / 扇出 / 总量 / 墙钟都是正数
+（`max_concurrency` 自 2026-11-05 起允许 `None` = 不设限，它不是"缺一类"）
 （`policy.assert_policy_complete`），且 `run_plan` 启动时调 `assert_policy_complete(policy)`
 （`conductor.Conductor.run_plan`；`policy.assert_policy_complete`）—— **缺任一类即 fail-closed**。
 
@@ -1974,7 +1975,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 |---|---|
 | `max_chain_depth` | 新召唤 `refused/depth_exceeded`（到第 7 个代理之后派活；台账 6 跳，结构闸门不是成本闸门） |
 | `max_direct_children` | 新召唤 `refused/fanout_exceeded`（上限按发起方角色取：默认档 = `max_direct_children`（25），主控 `M` 一档 = 100（`DIRECT_CHILDREN_LIMIT_BY_ROLE`）；读的是**此刻在飞**的**直接子**数 —— 只数直接子，不管隔着几层的子；直接子返回即腾出名额） |
-| `max_concurrency` | 新召唤 `refused/concurrency_exceeded` |
+| `max_concurrency`（**仅显式设正整数时**；缺省 `None` = 不设限 ⇒ 这一行不发生） | 新召唤 `refused/concurrency_exceeded` |
 | `max_tasks_per_run` | 新召唤 `refused/...`（`total = _started_total + _cancelled_total`） |
 | `wall_clock_sec` | 新召唤 `refused/deadline_exceeded`，**并 `_signal_stop("deadline", …)` 协作式取消在跑的** |
 | `usd_budget`（`token_budget` 这一轴已于 2026-10-15 撤掉：**只判钱**） | `refused/budget_exceeded` |

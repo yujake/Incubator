@@ -375,7 +375,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | `forbidden_edge` | 策略不允许这条边（如 `C → B`）；或目标是 `NON_SUMMONABLE` |
 | `depth_exceeded` | `depth > max_chain_depth`（链长；台账 6 跳 = 链上 7 个代理，第 7 个不能再派；业主 2026-11-05 裁定「将深度锁调到6」，数法仍是 2026-10-24 那条） |
 | `fanout_exceeded` | 该任务**此刻在飞** `max_direct_children` 个直接子（只数直接子，不管隔着几层的子），且**等过之后仍然满**（口径 = 单时刻：直接子一返回就腾出名额；触顶时 `Conductor` 先等 `fanout_wait_sec`（默认 900s，所有者 2026-10-08：「只可等待子智能体返回结果」）；上限按发起方角色取，见 `policy.direct_children_limit_for`；主控那一档 = 100） |
-| `concurrency_exceeded` | `running >= max_concurrency` |
+| `concurrency_exceeded` | `max_concurrency` **显式设正整数时** `running >= max_concurrency`（缺省 `None` = 不设限 —— 业主 2026-11-05 裁定「丙：全局不设限」⇒ 这一档不发生；显式设数时仍受控拒，该码仍是活值：`REFUSAL_REASONS` 保留它，历史台账里也有） |
 | `budget_exceeded` | token / 花销预算耗尽 |
 | `deadline_exceeded` | 墙钟到点（**并同时协作式取消在跑的**） |
 | `cycle_detected` | `(role, action, input_key)` 已在祖先链上 |
@@ -400,7 +400,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 #### M.4.3 并发判据：写集相交 ⇒ 串行（**同一角色的不同实例除外**）
 
 - `policy.waves_of(calls, limit=…)`（`policy.waves_of`）：同一波内**写集互不相交**；
-  `limit` 是单波容量（= `max_concurrency`），**"波内并发数 ≤ max_concurrency"由划分保证，
+  `limit` 是单波容量（缺省 `None` = 不分波上限；显式设数时 = `max_concurrency`），**"波内并发数 ≤ limit"由划分保证，
   不需要信号量兜底**。
 - **实例轴（2026-09-30 加）**：`scheduler.TaskCall` 现在带一个 `instance` 标签。
   **同一角色、两边都显式给了不同标签** ⇒ 不算冲突，可以同波并发
@@ -979,7 +979,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 | I-2 | 终态不可改写 | 对已结束任务再调 `finish` ⇒ **零变更** | `conductor.Conductor.finish`（重读磁盘 + 什么都不做） | **已落地** |
 | I-3 | 深度单调不减 | 子 `depth` ≡ 父 `depth + 1` | `conductor.depth` + `verify.task_depth_discontinuous` | **已落地**（双道） |
 | I-4 | 拒绝必须带受控理由 | `outcome="refused"` ⇒ `refusal_reason ∈ REFUSAL_REASONS` | `schema.refusal_reason` + `Conductor.verify_tasks` | **已落地** |
-| I-5 | 并发度不超上限 | 峰值同时 `running` ≤ `max_concurrency` | `policy.check` + `Conductor.peak_running`（`stats()` 暴露） | **已落地**（`peak_running` 是**可打印的事实**） |
+| I-5 | 并发度不超上限 | **显式设数时**峰值同时 `running` ≤ `max_concurrency`（缺省 `None` = 不设限 ⇒ 这一条不适用，业主 2026-11-05 裁定「丙：全局不设限」） | `policy.check` + `Conductor.peak_running`（`stats()` 暴露） | **已落地**（`peak_running` 是**可打印的事实**） |
 | I-6 | 写集相交不并发 | 任一波浪内不存在两个任务写集相交 | `policy.waves_of` + `scheduler` | **已落地** |
 | I-7 | 预算耗尽后不再新开任务 | ⇒ `refused/budget_exceeded` | `policy.check` | **已落地** |
 | I-8 | 取消是协作式且不自动重试 | 取消后不产生新任务；被取消任务 `outcome="cancelled"` | `conductor.outcome` + `dispose` | **已落地** |

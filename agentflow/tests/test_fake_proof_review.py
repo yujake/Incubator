@@ -447,7 +447,7 @@ def test_fs_outlet_does_not_promote_without_a_signature(ws: Store):
     """反真空（⑨）：没有那一签时 F 不许升档 —— 走同一条路要落回 `heuristic`。
 
         这条与上一条成对：没有它，"升档"可能被写成"每次都写 proof_review"，
-        而那正是这道闸要堵的虚报。签的是**另一版**证明（不是行上那一份）："有签"
+        而那正是这道闸要堵的虚报。签的是另一版证明（不是行上那一份）："有签"
         与"这次交的这一份有签"在这里被分开量。
     """
     from agentflow.agent_f import AgentF
@@ -458,7 +458,7 @@ def test_fs_outlet_does_not_promote_without_a_signature(ws: Store):
     assert first["ok"] and first["reused"], first
     assert first["promoted"] is False, first
     assert first["evidence_kind"] == "heuristic", first
-    _sign(ws, stmt_id, proof_text="这是**另一版**证明（不是被审的那一份）")
+    _sign(ws, stmt_id, proof_text="这是另一版证明（不是被审的那一份）")
     second = f._proof_outlet(product, sg, plan=plan)
     assert second["ok"] and second["reused"] and second["promoted"] is False, second
     assert second["evidence_kind"] == "heuristic", second
