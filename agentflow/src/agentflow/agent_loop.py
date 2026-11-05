@@ -206,7 +206,7 @@ def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
 #: 板项正文（`tasks.detail`）的上限 —— 写入侧与渲染侧共用这一个数，不许两处各拍一个。
 #:
 #: 关系一句话（交接口径）：写入侧定"存多少"，渲染侧定"念多少"，念的那个不许小于存的。
-#: 两条都在这个常量上收口：`vreceipts._register_body` 按它截（存多少），
+#: 两条都在这个常量上收口：`vreceipts._register_body` / `_resubmit_body` 按它截（存多少），
 #: `_clip_board_detail` 也按它截（念多少）；两处调同一个数，就不存在"写者认为完整、
 #: 读者却被再切一刀"的缝（改前正是这样：写者 400、读者 300）。
 #:

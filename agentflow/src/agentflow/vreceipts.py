@@ -252,7 +252,13 @@ def resubmit_cleared(*, root: str | Path, label: str, proof_sha: str) -> dict[st
 
 
 def _resubmit_body(*, label: str, detail: Mapping[str, Any], at: str) -> tuple[str, str]:
-    """重送项的一句话摘要 + 正文（≤400 字：`set_item_detail` 是给人读的那一格）。"""
+    """重送项的一句话摘要 + 正文（上限 = `agent_loop.BOARD_DETAIL_CHARS`，480 字）。
+
+    与 `_register_body` 同一个上限：这两条义务的正文都带"两条出路"，写者与渲染层
+    各拍一个数就是 ② 被切的那条缝（全文 306 字，480 之下一个字都不切）。
+    """
+    from .agent_loop import BOARD_DETAIL_CHARS
+
     step = (f"第 {detail.get('defect_step')} 步" if detail.get("defect_step")
             else "步号没读到")
     sha = str(detail.get("proof_sha256") or "")
@@ -268,7 +274,7 @@ def _resubmit_body(*, label: str, detail: Mapping[str, Any], at: str) -> tuple[s
         "② 确实做不下去就明确放弃原命题（B 侧：`table.update` 该命题 "
         "`status=abandoned` + 放弃标记，理由与时间缺一不可）——放弃时这一项同时作废。"
     )
-    return summary, body[:400]
+    return summary, body[:int(BOARD_DETAIL_CHARS)]
 
 
 def ensure_resubmit(*, store: Any, root: str | Path, label: str,
