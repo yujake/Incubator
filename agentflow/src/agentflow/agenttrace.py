@@ -8,9 +8,10 @@
 
 ## 三件事的落点（本模块只做读，不注册工具、不写盘）
 
-1. 一层：`children_with_facts(...)` 给"我直接下级"的行为读数。非 M 角色的深度由
-   `clamp_depth` 钉成 1（就算调用方传了 depth=3 也只给一层），并在返回值里带
-   `deeper` 那一格，逐字写清"更深要看请向 M 请求"。
+1. 一层：`children_with_facts(...)` 给"我直接下级"的行为读数。能看几层的主体是
+   调用方（`caller_role`，不是被看的那一行）：非 M 角色的深度由 `clamp_depth`
+   钉成 1（就算调用方传了 depth=3 也只给一层），并在返回值里带 `deeper` 那一格，
+   逐字写清"更深要看请向 M 请求"。
 2. 全树：`watch_rows(...)` 沿 `parent_task_id` 向下走，给 M 想追几层追几层。
    它与 `Conductor.tree` 的父子谓词逐条一致（只数实例行 `kind == ""`，板项行
    `parent_task_id` 的口径是"收件人"，不是父代理）。测试会断言两份读数同集。
@@ -78,13 +79,41 @@ def _task_id_of(row: Mapping[str, Any]) -> str:
     return str(row.get("task_id") or "")
 
 
+def _caller_role_of(caller_role: str | None) -> str:
+    """这一趟能看几层的主体：调用方角色（空串 = 没挂点 ⇒ 按非 M 处理）。
+
+    直调/脚本场景没有显式传 `caller_role` 时读同一个 ContextVar
+    （`conductor.current_caller_role()`）；仍然为空就 fail-closed 成非 M，绝不
+    回落到被看那一行的 role —— 那正是"传一行 M 的 task_id 就拿到 5 层"的绕过口。
+    """
+    if caller_role is not None:
+        return str(caller_role)
+    from .conductor import current_caller_role
+
+    return str(current_caller_role() or "")
+
+
+def _depth_subject(caller_role: str | None, _task_row: Mapping[str, Any]) -> str:
+    """限深的主体：调用方的角色。
+
+    `_task_row` 在正常路径上一个字都不读：被看的那一行是谁，与"我能看几层"无关。
+    这个参数只为反真空判据存在 —— 把本函数打桩成 `lambda _c, row: _role_of(row)`
+    就退回旧主体（"非 M 调用方看 M 的行只拿 1 层"当场变红）。
+    """
+    return _caller_role_of(caller_role)
+
+
 def clamp_depth(role: str, depth: Any = None) -> int:
     """这一趟实际能看到几层。
 
-    非 M 角色一律 `DESCEND_LIMIT_FOR_NON_M`；M 按调用方给的层数，不给（None）
-    表示"不限"（`subtree_rows` 用一个大数接住）。为什么把 M 的"不限"集中在这里：
-    业主的要求是"M能想追几层追几层"，而"几层"不写死，等于把上界交给台账的
-    实际深度（不额外造一个会过期的数字）。
+    `role` 是调用方的角色，不是被看的那一行的角色：`children_with_facts` 把
+    调用方身份（`trace_tools` 读 `conductor.current_caller_role()`）传进来。
+    非 M 调用方一律 `DESCEND_LIMIT_FOR_NON_M`（1 层）；M 调用方按它给的层数。
+
+    M 传 `None` 与传 `1` 同义（都是 1 层）：`trace.children` 的缺省口径就是
+    "直接下级"，M 要看全树用 `conductor.watch` —— 它走
+    `subtree_rows(depth=None)`，那里才是"不额外截断"。把"全树"塞进本函数的
+    缺省，会让同一个工具在 M 手里悄悄变成另一棵树。
 
     为什么单独成一个函数（而不是在工具里写 `min(depth, 1)`）：反真空判据
     `test_05_disabling_the_clamp_makes_the_one_layer_rule_fail` 把本函数打桩成
@@ -518,12 +547,19 @@ def children_with_facts(
     *,
     depth: Any = None,
     window: int = DEFAULT_WINDOW,
+    caller_role: str | None = None,
 ) -> dict[str, Any]:
-    """`trace.children` 的读侧：我的直接下级（非 M 角色永远只有一层）。"""
+    """`trace.children` 的读侧：我的直接下级（非 M 调用方永远只有一层）。
+
+    能看几层的主体是调用方：`caller_role`（工具层传
+    `conductor.current_caller_role()`），不是 `task_row` 的 role。直调/脚本
+    没有传身份时读同一个 ContextVar；仍然为空就按非 M 处理（fail-closed），
+    绝不回落到被看那一行的 role。
+    """
     rows = store.rows("tasks") if store is not None else []
     me = _task_id_of(task_row)
     role = _role_of(task_row)
-    granted = clamp_depth(role, depth)
+    granted = clamp_depth(_depth_subject(caller_role, task_row), depth)
     records, session_reading = _session_records(root)
     try:
         handoffs = MAN.rows(root)

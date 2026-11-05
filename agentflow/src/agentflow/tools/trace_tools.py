@@ -554,7 +554,9 @@ def trace_children(store, root, *, task_id: str = "", depth: int = 1,
     身份从调用上下文读（`AgentLoop._do_tool` 用 `calling_as` 挂上），与
     `conductor.broadcast` 同一处挂点：工具的形状里没有"我是谁"这一格。
     非 M 角色只许看自己的下级 —— 传别人的台账号会被受控拒绝，否则"一层"这条
-    约束只要换一个 task_id 就绕过去了。
+    约束只要换一个 task_id 就绕过去了。能看几层的主体是调用方：`role` 来自
+    `COND.current_caller_role()`（与 `mine` 分开读），并原样交给
+    `children_with_facts` —— 脚本里就算传了 M 的 task_id，没有 M 的身份也只拿一层。
     """
     from .. import agenttrace as AT
     from .. import conductor as COND
@@ -588,7 +590,8 @@ def trace_children(store, root, *, task_id: str = "", depth: int = 1,
                 "`conductor.escalate(need=\"深看请求：…\", kind=\"other\")`",
                 kind="not_mine", checked=True, task_id=mine)
     data = AT.children_with_facts(store, root or getattr(store, "root", None) or ".",
-                                  me_row, depth=depth, window=window)
+                                  me_row, depth=depth, window=window,
+                                  caller_role=role)
     if not data.get("children"):
         data["note"] = ("台账里我名下没有直接下级（这是查过了、确实没有；"
                         "不是'没读成'）")
