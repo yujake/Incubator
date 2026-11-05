@@ -1059,9 +1059,17 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
         raise
 
 
+#: `fs.write` / `fs.edit` 的 summary 是 `RESERVED_ARTIFACT_TABLE` 的模型可见那一半：
+#: 表说"哪些形状对哪些角色拒"，这两句把它翻成人话给读工具面的人听。
+#: 两处口径必须一致（D8，2026-11-05 走查）：改前这两句说 `RESEARCH.md` 对 D 拒写，而表里
+#: D 那一行已按 2026-11-04 的裁定删掉（D 的研究手稿是既有交付物）⇒ 工具面在教错 ——
+#: 模型会因此不敢写自己的研究手稿。判据同时读这两句与那张表：
+#: `temp/walk-fix-20261105/probe_d8.py`（表里没有 D 的 `RESEARCH` 行 ⇒ 这两句必须说 D 可写；
+#: 表里 F/D/M 的证明稿形状 ⇒ 这两句必须说拒；`out/proofs/` 与 `RESEARCH.md` 里自写
+#: `## 证明` 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。reports/ 下框架产物（`f-proof-*` / `RESEARCH.md` / `*-research.md`）对 F / D / M 拒写（reserved_framework_artifact），改走各自的渲染动作。",
+    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`，但自写 `## 证明`（含 `out/proofs/*.md`）照拒 —— 要落稿就派 F。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1159,7 +1167,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换一段文本（old_string → new_string）：默认要求唯一匹配，可选要求 sha256 与读到的那一版一致。reports/ 下框架产物同 fs.write（对 F / D / M 拒写，reserved_framework_artifact），改走各自的渲染动作。",
+    "定点替换一段文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；保留面与拒写口径同 fs.write（D 可写 `RESEARCH.md`，自写 `## 证明` 才拒）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
