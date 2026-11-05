@@ -298,8 +298,11 @@ SPEC = AgentSpec(
             "满足 / 复核-两态并指到那一步），按需读。",
             # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
             # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
-            # `conductor.escalate` 都在本角色的工具面上（两件都声明只读，不会被只读角色的
-            # 结构性过滤剥掉）。判据：tests/test_every_role_knows_it_can_watch_its_children.py。
+            # `conductor.escalate` 都在本角色的工具面上（`trace.children` 是 read；
+            # `conductor.escalate` 据实是 write_local —— 业主 2026-11-05 裁定「乙」，
+            # 它往会话事件流追加 agent_message + agent_escalation。它不会被只读角色的
+            # 结构性过滤剥掉，靠的是 `tools.UNIVERSAL_TOOLS`：通用能力不按副作用等级剥离）。
+            # 判据：tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
             "逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"

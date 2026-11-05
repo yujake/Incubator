@@ -353,7 +353,8 @@ def role_write_tools(registry, role: str) -> set[str]:
 
 
 def universal_write_tools(registry) -> set[str]:
-    """树上登记在案、且据实会写东西的通用能力（今天八件：clock 七件加 `conductor.ack`）。"""
+    """树上登记在案、且据实会写东西的通用能力（今天十件：clock 七件 + `ack` / `post_task` /
+    `escalate`）。"""
     names = set(registry.names())
     return {n for n in UNIVERSAL_TOOLS
             if n in names and registry.get(n).side_effect in SIDE_EFFECTS_WRITE}

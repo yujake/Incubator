@@ -1603,14 +1603,18 @@ _ESCALATE_READING_KEYS: tuple[str, ...] = ("addressing", "roster_unavailable")
                       "description": "哪些台账 id 需要它（`lit:` / `stmt:` / `exp:` 等，可空）"},
      },
      "required": ["need", "kind"], "additionalProperties": False},
-    side_effect="read",
+    side_effect="write_local",
     # 所有角色 + 主控（业主 2026-10-19：亲子天然双向，上行不是权限面的一条边）。
-    # 只读角色（C/H/V）「也」要拿到它 —— 这一点由 `side_effect="read"` 保证：
-    # `write_local` 会在 `for_role` 里被结构性剥掉。为什么"声明 read"是如实的而不是取巧：
-    # 它不写任何数据表、也不改工作区里任何产物，只把一条「通信记录」追加进会话
-    # （与 `message` / `note` / `ask_user` 三个循环形态同一个平面 —— 那三个 C/H/V 本来就有）。
-    # 同一口径的既有先例：`verify.verify_proof` 也写 `verifications/<命题号>.jsonl`
-    # 却声明 `read`，理由逐字是"V 不写表"。
+    # 副作用据实是「写」（业主 2026-11-05 裁定「乙」）：`Conductor.escalate` 往会话事件流
+    # 追加一条 `agent_message`（进父的收件箱）与一条 `agent_escalation`（「这一趟为什么停在
+    # 这里」的可审计留痕）—— 那是「工作区写」（`tools/base.py::EFFECT` 的两根轴是
+    # 「数据表 / 工作区」）。声明 `read` 会把「写不写数据表」与「写不写工作区」折成同一件事，
+    # 而它真的往盘上追加了事件行。
+    # 只读角色（C/H/V）照样拿得到它 —— 靠的不是这条声明，而是可达性那一根轴：
+    # 它登记在 `tools.UNIVERSAL_TOOLS` 里，`_role_surface` 对通用能力不按副作用等级剥离
+    # （既有先例 `clock.timer_start` 一直是 `write_local`，C/H/V 照样拿得到）；
+    # 它也不进 `READONLY_CALL_EXCEPTIONS` —— 那张表回答的是「谁能用」，通用能力不是例外。
+    # 它一张数据表都不写 ⇒ `UNIVERSAL_TOOLS` 的登记写集仍是空集。
     roles=tuple(S.ROLES) + (S.CONDUCTOR_ROLE,),
     returns=("{'checked','ok','state','to','to_task_id','need','kind','evidence',"
              "'msg_id','reason','error','note'}"),

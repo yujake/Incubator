@@ -413,7 +413,10 @@ UNIVERSAL_TOOLS: dict[str, UniversalTool] = {
         frozenset(),
     ),
     "conductor.escalate": UniversalTool(
-        "上行通道：孩子把需求写进召唤者的收件箱（一条 `agent_message` 事件，不写任何表）。"
+        "上行通道：孩子把需求写进召唤者的收件箱（一条 `agent_message` 事件）并落一条 "
+        "`agent_escalation` 留痕 —— 两者都是**工作区写**（会话事件流），所以它的 "
+        "`side_effect` 据实是 `write_local`（业主 2026-11-05 裁定「乙」）。它一张数据表都不写，"
+        "所以可达性仍归这里：通用能力不按副作用等级剥离，只读角色照样拿得到。"
         "业主 2026-10-19 裁定「父子天然双向」，含只读角色",
         frozenset(),
     ),

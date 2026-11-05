@@ -76,8 +76,14 @@ V_DECLARED_TOOLS: frozenset[str] = frozenset({
     "verify.read_proof",
 })
 
-#: V 工具面上「登记在案的通用写工具」（9 件）。它们是通用能力，不是 V 的私有写入面；
+#: V 工具面上「登记在案的通用写工具」（10 件）。它们是通用能力，不是 V 的私有写入面；
 #: 这一行是人写下来的读数，不由实现反推（多一件/少一件都要人看过）。
+#:
+#: 2026-11-05（业主裁定「乙」，`conductor.escalate` 的 `side_effect` 从 `read` 改真成
+#: `write_local`）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation`
+#: ⇒ 通信事件也是工作区写。它进这张表是因为「读数」变了，不是权限变了：它本来就在 V 的
+#: 面上（`UNIVERSAL_TOOLS` 不按副作用等级剥离），只是此前被谎报成 `read` 才没被数进来。
+#: 下面的 ④ 仍然是"恰好等于"而不是"包含"：多一件、少一件都红，强度一点没降。
 V_UNIVERSAL_WRITE_TOOLS: frozenset[str] = frozenset({
     "clock.timer_start",
     "clock.alarm_start",
@@ -87,6 +93,7 @@ V_UNIVERSAL_WRITE_TOOLS: frozenset[str] = frozenset({
     "clock.timer_cancel",
     "clock.wait_any",
     "conductor.ack",
+    "conductor.escalate",
     "conductor.post_task",
 })
 

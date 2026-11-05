@@ -198,8 +198,11 @@ SPEC = AgentSpec(
             "按对应表逐行核：读 `out/paper/MAPPING.json`，逐行核 label/env_no 与正文对得上、`ledger_id` 与 `proof_no` 能在台账里解析、`file` 与它该有的落点一致、正文附录与 json 渲染逐字一致。**`file` 有两种落点，都对，不许只按一种去拦**：理论定理那一行写论文包内的相对路径（相对的是 `out/paper/`，不是仓库根）；数值实验定理那一行写程序相对**仓库根**的路径（`code/r34_check.py` 这一形态，**不在包里是正常的** —— 按「必须在包里」去拦，会把每一条合规的数值定理都误判成错）。同一行还要认两格（它们同样不是包内文件）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`，仓库相对路径）。**凭据格 `lean_file` 也按这条命题的证明通道核**：numeric 通道 ⇒ 必须就是证明栏第 ① 段那份 `.py` 程序（相对仓库根），`lean_target` 留空（填了就算拿 Lean 声明名给数值程序背书）；formal 通道 ⇒ `.lean` 与 `lean_target` 两格都要有，`lean_target` 要真出现在那份源码里；通道为空 ⇒ 两格必须为空（不适用，不是「没填」）；填了任一格就是无依据的声称（没有通道就没有凭据，判据会拒），空通道时 numeric_evidence / exhaustion_note 也不许填（那是自称有数值证据、却没有数值证明通道）。数值实验定理那一行还要**索引四格**：`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`（B 顺它取正文；逐格核它指得到盘上那份对象、两个 sha 与那一签对得上）。这一档是客观问题（可拦）：`mapping_*` / `md_*`；逻辑颠倒、缺铺垫、术语未定义、承诺未回应、交叉引用错仍是主观档：点名到句、不拦门。",
             # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
             # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
-            # `conductor.escalate` 都在本角色的工具面上（两件都声明只读，不会被只读角色的
-            # 结构性过滤剥掉）。判据：tests/test_every_role_knows_it_can_watch_its_children.py。
+            # `conductor.escalate` 都在本角色的工具面上（`trace.children` 是 read；
+            # `conductor.escalate` 据实是 write_local —— 业主 2026-11-05 裁定「乙」，
+            # 它往会话事件流追加 agent_message + agent_escalation。它不会被只读角色的
+            # 结构性过滤剥掉，靠的是 `tools.UNIVERSAL_TOOLS`：通用能力不按副作用等级剥离）。
+            # 判据：tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
             "逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
