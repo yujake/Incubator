@@ -212,19 +212,35 @@ def test_e_a_delivery_for_a_registered_statement_lands_on_that_row(
     row = got[0]
     bits = dict(row.get("bits") or {})
     assert bits.get("reviewed") is True, bits
-    assert bits.get("grade") == "pre_theorem", bits
+    # 2026-11-05（业主裁定「穷举证书相当于 lean 形式化」）：`derive_grade` 的定理条件放宽成
+    # `proof ∧ (formal=verified ∨ numeric=verified)`。这一笔的证明栏就是 E 的穷举三段式、
+    # 台账里那一签盖住的就是现行这一版 ⇒ 第 1 位由 `_grade_recomputed_from_signature`
+    # 的 `exhaustion` 通道落成 `verified`（见上面的 `bits["numeric"]`）⇒ 等级是 `theorem`。
+    # 同一形态的兄弟判据：`test_b_register_collects_the_proof_bit.py` 的
+    # `test_d_an_exhaustive_proof_collected_later_is_still_a_theorem`（同批改口径）。
+    assert bits.get("numeric") == "verified", bits
+    assert bits.get("grade") == "theorem", bits
     assert str(row.get("proof_text") or "").startswith("程序："), row.get("proof_text")
 
 
 # ============================================================ f 反真空：归属判断
 def test_f_removing_the_ownership_judgement_registers_a_second_row(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """f：把"同一份 statement_full ⇒ 在册那一行"这一格摘掉 ⇒ 必有一边错（注册重复）。
+    """f：把三层归属判断全摘掉 ⇒ 必有一边错（注册重复）。
 
-    归属判断的本体是 B 的秘书那一格（`Secretary.record_statement` 按规范化正文查重，
-    `secretary.py` 里 `T.normalize` 那一步）。这里把 `textutil.normalize` 打桩成
-    "每次都给一个新值" ⇒ 查重恒不命中 ⇒ 同一份交付落成第二行。b/e 的绿因此不是
-    来自"恰好只有一条"，而是来自那一格真的在判。
+    归属判断有三层，任何一层单独在就足以让这一笔"落回在册那一行"：
+
+    1. 规范化正文相等（`Secretary.record_statement` 的 `T.normalize` 那一步）；
+    2. 同一命题的确定性键 / 词面相似度（`propositionkey.same_proposition`）；
+    3. 稿名里的号当候选号（`agent_b.register_statement` 的 D2 那一格，
+       `vsigns.manuscript_id_of`，2026-11-05 起）：E 这份稿叫
+       `reports/e-proof-000000.md` ⇒ 候选号 000000，被在册那一行占着 ⇒ 受控拒收
+       `stmt_id_taken`（不另发号）。只摘 ①② 时这一层会接住，于是"没有多出一行"
+       变成一条假读数（它不再说明 ①② 在判）。
+
+    所以这里三层一起摘：稿名认不出号 ⇒ 候选号为空 ⇒ 退回按计数器发号，而查重恒不
+    命中 ⇒ 同一份交付落成第二行。b/e 的绿因此不是来自"恰好只有一条"，而是来自这些
+    归属判断真的在判（`after == before + 1` 是它们的反真空读数）。
     """
     from agentflow import propositionkey as PK
     from agentflow import textutil as T
@@ -251,17 +267,21 @@ def test_f_removing_the_ownership_judgement_registers_a_second_row(
     assert first.get("ok") is True, first
     before = len(list(env["store"].rows("statements")))
 
-    # 两层归属判断一起摘掉：① 规范化正文相等（`T.normalize`）；
-    # ② 同一命题的确定性键 / 词面相似度（`propositionkey.same_proposition`）。
+    # 三层归属判断一起摘掉：① 规范化正文相等（`T.normalize`）；
+    # ② 同一命题的确定性键 / 词面相似度（`propositionkey.same_proposition`）；
+    # ③ 稿名候选号（`vsigns.manuscript_id_of`，D2 2026-11-05）：不摘它，
+    #    这一笔会被 `stmt_id_taken` 接住（稿名 e-proof-000000.md 指着一个被占的号），
+    #    "没有多出一行"就量不到 ①② 在不在判。
     monkeypatch.setattr(T, "normalize", _unique)
     monkeypatch.setattr(PK, "same_proposition", _never_same)
+    monkeypatch.setattr(VS, "manuscript_id_of", lambda _path: "")
     rows, _note = AgentD(env["store"])._carried_manuscripts()
     _write_note(env, rows)
     _file(env)
     after = len(list(env["store"].rows("statements")))
     assert after == before + 1, (
-        f"摘掉两层归属判断之后应当多出一行（before={before}, after={after}）—— "
-        "没有多出来，说明 e 的「不新增」不是那两层判出来的")
+        f"摘掉三层归属判断之后应当多出一行（before={before}, after={after}）—— "
+        "没有多出来，说明 e 的「不新增」不是这三层判出来的")
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
