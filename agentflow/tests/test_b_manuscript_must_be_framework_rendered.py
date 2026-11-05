@@ -29,6 +29,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import depsection as DS
+from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
@@ -47,7 +48,14 @@ def _ws(path: pathlib.Path) -> Store:
 
 
 def _add_statement(store: Store, stmt_id: str) -> dict:
-    """写一条在册命题（`proof_review` 档：不升档的话 B 会因为档位不够而拒，那是另一条闸）。
+    """写一条在册命题（等级到 `pre_theorem`：不升档的话 B 会因为档位不够而拒，那是另一条闸）。
+
+    ## 为什么是五元位、不是 `evidence_kind`（2026-11-05 口径：等级是唯一的轴）
+    可引门槛读的是 `depsection.statement_grade`（由 `evidencebits.derive_grade` 从五元位
+    现算），`evidence_kind` 只是历史列。改前这一笔只把 `evidence_kind` 改成 `proof_review`
+    而 `bits` 留空 ⇒ 现算等级仍是 `conjecture`，引用门如实拒它（那正是旧断言钉旧词表的
+    地方）。所以第 2 位（`proof`）要随这一行的正文一起落；第 3 位由下面三次「成立」签
+    写回翻真 —— 两件合起来才是 `pre_theorem`。
 
     ## 为什么要签 3 次（业主 2026-10-29 定稿的口径）
     V 的签不再"一次成立就签"：同一份证明、同一版正文（同 `proof_sha256`）要连续 3 次
@@ -65,6 +73,8 @@ def _add_statement(store: Store, stmt_id: str) -> dict:
         proof_text=proof,
         evidence_kind="heuristic", status="active", quote_verified=None,
         quote_reason="判据夹具：自产命题，没有外部引文要比对",
+        bits=EB.bits_of(origin="own_result", proof=True, proof_process=proof,
+                        kind="theorem"),
         created_at=S.now_iso(), created_by="agent-B")
     row.validate()
     with store.tx("statements", actor="test") as tx:
@@ -85,7 +95,8 @@ def _add_statement(store: Store, stmt_id: str) -> dict:
     assert dict(signed.get("statement_writeback") or {}).get("written") is True, signed
     got = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
-    got["evidence_kind"] = "proof_review"
+    # 档位只由等级反算（历史列）：`proof ∧ reviewed` ⇒ `pre_theorem` ⇒ `proof_review`。
+    got["evidence_kind"] = EB.kind_from_bits(got.get("bits") or {}, kind="theorem")
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", got)
     return got

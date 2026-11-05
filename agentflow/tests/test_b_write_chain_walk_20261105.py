@@ -14,9 +14,9 @@
 | D1 a- | 反真空：把 `_manuscript_is_own` 打成恒真 ⇒ a 变红（正文与签都被借来） | 没有这一支时打桩点不存在 |
 | D1 b | A 的稿不许被当 B 的稿读：`manuscript_source=none`、`addressing.hit=false` | 同上（`source=disk`、`address=reports/f-proof-A.md`） |
 | D1 c | 依赖边只来自稿里 `## 依赖` 表（`quote` 是表里那行原话、`label` 是"手稿依赖段…"） | 改前按 `derived_from` 扫描落边，表里那行的 `quote` 不在边上 |
-| D2 a | 在册命题 + 有稿有签 ⇒ 一次 `register_statement` 后 `ek=proof_review`、`bits.reviewed=true`、`ok=true` | 升档先算档后写正文 ⇒ 写入期闸整笔拒（`proof_review_without_evidence`） |
-| D2 b | 打桩让升档被拒 ⇒ `ok=false` + 拒码，且 `canonical_written` 说清正文写没写（正文写了、档位没升，分开报） | 改前不看 `checked/refused`，继续写正文并回 `ok=true/upgraded=true` |
-| D2 c | 反真空：把升档的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 / pending）⇒ a 回落到 `cross_check` | 没有这一支时"有稿"会被读成"签过" |
+| D2 a | 在册命题 + 有稿有签 ⇒ 一次 `register_statement` 后等级 `pre_theorem`、`bits.proof/reviewed=true`、`ok=true` | 升档先算档后写正文 ⇒ 写入期闸整笔拒（`proof_review_without_evidence`） |
+| D2 b | 打桩让升档被拒 ⇒ `ok=false` + 拒码，且 `canonical_written` 说清正文写没写（正文写了、升档那一笔没写成，分开报；等级由五元位现算） | 改前不看 `checked/refused`，继续写正文并回 `ok=true/upgraded=true` |
+| D2 c | 反真空：把升档判据的三路凭据全打桩成"没签"（手稿签块 / `bits.reviewed` ＋ 台账 / pending）⇒ 升档那一笔不请求（`upgrade_refused` 点名 `CODE_WRITE`）；等级仍由五元位现算，不受这条 lane 的桩影响 | 没有这一支时"有稿"会被读成"签过" |
 | D3 a | 同一条边（同 used_by + 来源号 + path_group）经两路描述 ⇒ 只 1 行 | `_dep_step_key` 把 `kind` / `label` 算进身份 ⇒ 2 行 |
 | D3 b | 两条不同的边（来源号不同）⇒ 仍 2 行（不许过度合并） | 同上 |
 | D3 c | 反真空：把 `kind` / `label` 塞回身份键 ⇒ a 变红 | 没有可打桩点 |
@@ -42,6 +42,7 @@ if str(_SRC) not in sys.path:
 import agentflow.agent_b.register_statement as RS  # noqa: E402
 import agentflow.secretary as SEC  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
+from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow import vsigns as VS  # noqa: E402
@@ -131,19 +132,30 @@ def _register_conjecture(st: Store, full: str) -> str:
 
 
 def _promote_to_proof_review(st: Store, sid: str, body: str) -> str:
-    """把一条在册命题抬到 proof_review（先落签、再改档；只给夹具用）。"""
+    """把一条在册命题抬到 `pre_theorem`（先落签、再改档；只给夹具用）。
+
+    2026-11-05 口径：等级是唯一的轴 —— 可引资格由 `evidencebits.derive_grade` 从五元位
+    现算，`evidence_kind` 只是历史列。所以这一格除了写 `proof_text`，还要把第 2 位
+    （`proof`）落成真：只改 `evidence_kind` 的旧写法在新口径下等级仍是 `conjecture`
+    （第 3 位由 `_sign_three` 的台账写回翻真），引用门会如实拒它。
+    """
     rel = f"reports/f-proof-{sid}.md"
     text = _manuscript(sid=sid, proposition=_row(st, sid)["statement_full"],
                        body=body, deps=EMPTY_TABLE)
     row = _row(st, sid)
     row["proof_text"] = body
+    row["bits"] = EB.bits_of(origin=str(row.get("origin") or "own_result"),
+                             proof=True, proof_process=body,
+                             kind=str(row.get("kind") or ""))
     with st.tx("statements", actor="test", note="fixture:seed-body") as tx:
         tx.upsert("statements", row)
     _sign_three(st, sid=sid, text=text, rel=rel, body=body)
     row = _row(st, sid)
-    row["evidence_kind"] = "proof_review"
+    # 档位只由等级反算（`kind_from_bits`）：`proof ∧ reviewed` ⇒ `pre_theorem`，
+    # 反算名是 `proof_review`。历史列与现算等级逐字对应，不是另写一份真值。
+    row["evidence_kind"] = EB.kind_from_bits(row["bits"], kind=str(row.get("kind") or ""))
     row["kind"] = "theorem"
-    with st.tx("statements", actor="test", note="fixture:seed-ek") as tx:
+    with st.tx("statements", actor="test", note="fixture:seed-grade") as tx:
         tx.upsert("statements", row)
     return rel
 
@@ -221,7 +233,12 @@ def _signed_registered_case(tmp_path: pathlib.Path,
     """在册一条猜想 + 盘上一份带签的稿 + 台账三次「成立」（D2 的现场）。"""
     st = _ws(tmp_path, name)
     sid = _register_conjecture(st, FULL_B)
-    body = BODY_B.format(a="000000")  # 正文引用的是探针里不存在的号也没关系（只判档）
+    # 正文不点 `stmt:` 号：这一份夹具只判 D2 的「正文先写、档位后升」，不判依赖面。
+    # 改前写 `BODY_B.format(a="000000")`（= 本行自己的号）：它在册之后，正文点号而
+    # `## 依赖` 表 0 行会被另一道真闸（`depsection.dependency_consistency_problem`，
+    # 2026-11-05 33e25783 落的那一道）整笔拒成 `deps_table_disagrees_with_proof`，
+    # 量不到 D2。依赖面那几条判据在 D1 c / D6 里各自有正控与反真空。
+    body = "1. 由定义直接得到 2+2=4。\n2. 因此 2+2=4。"
     text = _manuscript(sid=sid, proposition=FULL_B, body=body, deps=EMPTY_TABLE)
     rel = f"reports/f-proof-{sid}.md"
     _sign_three(st, sid=sid, text=text, rel=rel, body=body)
@@ -229,7 +246,12 @@ def _signed_registered_case(tmp_path: pathlib.Path,
 
 
 def test_d2_a_one_call_writes_the_body_then_upgrades(tmp_path: pathlib.Path) -> None:
-    """D2 a：一次调用后正文进去、档位升到 proof_review、reviewed 翻真、ok=true。"""
+    """D2 a：一次调用后正文进去、等级到 `pre_theorem`、reviewed 翻真、ok=true。
+
+    2026-11-05 口径（等级是唯一的轴）：旧断言看的是历史列 `evidence_kind=="proof_review"`；
+    判定面现在读 `depsection.statement_grade`，所以这一格钉等级（`pre_theorem`）。
+    第 2 位（`proof`）与第 3 位（`reviewed`）仍逐格钉住 —— 它们是等级的承重凭据。
+    """
     st, sid, body, text = _signed_registered_case(tmp_path)
     got = _agent(st).register_statement(
         **_own(FULL_B, proof_text=body, proof_manuscript=text,
@@ -238,7 +260,8 @@ def test_d2_a_one_call_writes_the_body_then_upgrades(tmp_path: pathlib.Path) -> 
     assert got.get("upgraded") is True, got
     assert got.get("canonical_written") is True, got
     row = _row(st, sid)
-    assert row.get("evidence_kind") == "proof_review", row
+    assert DS.statement_grade(row) == "pre_theorem", row
+    assert (row.get("bits") or {}).get("proof") is True, row.get("bits")
     assert (row.get("bits") or {}).get("reviewed") is True, row.get("bits")
     assert str(row.get("proof_text") or "") == body, row
 
@@ -267,10 +290,15 @@ def test_d2_b_a_refused_upgrade_says_so_and_says_whether_the_body_was_written(
     assert got.get("ok") is False, got
     assert got.get("kind") == VR.CODE_WRITE, got
     assert got.get("upgraded") is not True, got
-    # "正文是否写入"必须说清：这一笔正文写了（canonical_written=true），档位没升。
+    # "正文是否写入"必须说清：这一笔正文写了（canonical_written=true），升档那一笔被拒。
     assert got.get("canonical_written") is True, got
     row = _row(st, sid)
-    assert row.get("evidence_kind") == "cross_check", row
+    # 等级不是"档位那一笔"写出来的：它由五元位现算（正文与签已经在预写那一笔落进这一行），
+    # 所以升档事务被拒之后行上的等级仍是 pre_theorem。旧断言钉的是历史列（cross_check），
+    # 那只是"升档那一笔没写成"的读数；判定面读的是这里这一格。
+    assert DS.statement_grade(row) == "pre_theorem", row
+    assert (row.get("bits") or {}).get("proof") is True, row.get("bits")
+    assert (row.get("bits") or {}).get("reviewed") is True, row.get("bits")
     assert str(row.get("proof_text") or "") == body, (
         "拒的是升档，不是正文：正文这一格要说得出它写没写")
 
@@ -299,12 +327,19 @@ def _no_gap(*_a, **_kw) -> dict:
 
 def test_d2_c_reverse_vacuum_without_the_manuscript_evidence_stays_weak(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D2 c：把升档的凭据全摘掉（手稿签块 / `bits.reviewed` ＋ 台账 / pending）
-    ⇒ a 回落到 cross_check。
+    """D2 c：把升档判据的三路凭据全打桩成"没签" ⇒ 升档那一笔不请求、`upgrade_refused`
+    如实说；而等级由五元位现算，不受这条 lane 的桩影响（这一行仍有 proof ＋ reviewed）。
+
+    ## 旧名里的 "stays weak" 现在指历史档位列，不指等级（2026-11-05 口径）
+    改前这条判据钉 `row.evidence_kind == "cross_check"` —— 那次"没升"只是历史列没动。
+    等级成为唯一的轴之后，同一行的等级读的是 `bits`：这份夹具的手稿签块与台账三次
+    「成立」都是真凭据，`_attach_proofs` 认签之后 `reviewed` 翻真 ⇒ 现算等级
+    `pre_theorem`。所以断言改成等级，并把"升档这一笔被拒"钉在它自己的读数上
+    （`upgraded` / `upgrade_refused`）—— 两件事不许再糊成一个词。
 
     2026-11-05 补：B 的预写那一格改成与秘书同口径（三路任一路命中）之后，只摘手稿
-    那一支不再足以让 a 回落 —— 这份夹具的台账本来就有三次「成立」。所以反真空的
-    打桩点跟着判据走：两路全摘。断言与 `D2 a` 同一组，一个字没放宽。
+    那一支不再足以让历史列回落 —— 这份夹具的台账本来就有三次「成立」。所以反真空的
+    打桩点跟着判据走：两路全摘。
     """
     _no_upgrade_basis(monkeypatch)
     st, sid, body, text = _signed_registered_case(tmp_path)
@@ -313,8 +348,10 @@ def test_d2_c_reverse_vacuum_without_the_manuscript_evidence_stays_weak(
               evidence_kind="proof_review", kind="conjecture"))
     assert got.get("ok") is True, got
     assert got.get("upgraded") is not True, got
+    assert got.get("canonical_written") is True, got
     row = _row(st, sid)
-    assert row.get("evidence_kind") == "cross_check", row
+    assert DS.statement_grade(row) == "pre_theorem", row
+    assert (row.get("bits") or {}).get("reviewed") is True, row.get("bits")
     assert (got.get("upgrade_refused") or {}).get("refused") == VR.CODE_WRITE, got
 
 
