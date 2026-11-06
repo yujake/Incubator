@@ -408,10 +408,10 @@ def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
 
 
 def test_two_different_bodies_faulted_open_two_items_keyed_by_sha(tmp_path):
-    """④ 两次打回、两份**不同正文** ⇒ 各开一条（键 `v-resubmit@<命题>@<sha>` 里含 sha）。
+    """④ 两次打回、两份不同正文 ⇒ 各开一条（键 `v-resubmit@<命题>@<sha>` 里含 sha）。
 
     2026-11-06 裁定 3（打回即站住）之后，「同一份正文被打回两次」在入口上已不可能 ——
-    同一 sha 的第二趟会被短接。所以这一条改成量**键的语义**：正文变了就是另一条义务。
+    同一 sha 的第二趟会被短接。所以这一条改成量键的语义：正文变了就是另一条义务。
     """
     st = _ws(tmp_path)
     conductor_for(st)
