@@ -54,11 +54,13 @@ CORE = ROOT / "src" / "agentflow" / "agent_v" / "core.py"
 
 #: 终态词表（`core.py` 里 `stopped` 的枚举）。p247 删掉了 `verdict` 那一档：V 的判词只是
 #: 陈述，不能再拿它当一条打回；打回只有秘书判 fault 这一条路。
-TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "fault", "unjudged"})
+#: 2026-11-06（业主裁定 3）：这一格改叫 `rejected` —— 同一种结局（打回）在未在册两支里
+#: 本来就叫 `rejected`，在在册这一支叫 `fault`，读的人要按分支猜名字；现在三支同一个词。
+TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "rejected", "unjudged"})
 
 CLEAN = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
                     "findings": []}, ensure_ascii=False)
-#: 秘书判 fault，V 自己的结论词仍写「成立」（这一档今天走 terminal="fault"）。
+#: 秘书判 fault，V 自己的结论词仍写「成立」（这一档今天走 terminal="rejected"）。
 REVIEWED_FAULT = json.dumps({"verdict": "成立", "why": "整体能走通；只是第 2 步的记号没有定义。",
                              "findings": []}, ensure_ascii=False)
 #: V 自己判「有毛病」（81 那 8 行的形状）。秘书这一转判 clean ⇒ 终局只由 V 的结论决定。
@@ -191,7 +193,7 @@ def test_s1_the_four_outcomes_each_get_their_own_terminal(outcomes):
     "这一趟没审"写成"审出了某个结局"。
     """
     want = {"signed": "signed",
-            "fault_by_secretary": "fault",
+            "fault_by_secretary": "rejected",
             # p247：V 写「有毛病」不再自己构成打回；轴是 clean，签不住由机械闸接住。
             "fault_by_v": "gate",
             "gate": "gate"}
@@ -349,6 +351,6 @@ def test_s4_the_reason_and_the_pass_do_not_contradict_each_other(outcomes):
             f"{name}：这一行判的是有毛病，文本里却说「这不是有毛病」：\n{blob}")
     # 反向：秘书判 fault 时，发签理由必须点名有毛病（不许对读者沉默）。
     o = outcomes["fault_by_secretary"]
-    assert o["terminal"] == "fault", o["passes"]
+    assert o["terminal"] == "rejected", o["passes"]
     reason = str((o["got"].get("sign_issuance") or {}).get("reason") or "")
     assert "有毛病" in reason, reason

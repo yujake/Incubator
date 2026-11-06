@@ -143,7 +143,7 @@ def test_h_the_axis_comes_from_the_secretary_not_from_the_two_letters(tmp_path):
     assert (clean["got"].get("sign_issuance") or {}).get("issue") is True, clean["got"]
     assert VR.secretary_axis(clean["row"]) == "clean", clean["row"]
 
-    assert _passes(fault["got"]) == [("fault", 0, "fault")], _passes(fault["got"])
+    assert _passes(fault["got"]) == [("fault", 0, "rejected")], _passes(fault["got"])
     assert (fault["got"].get("sign_issuance") or {}).get("issue") is False, fault["got"]
     assert VR.secretary_axis(fault["row"]) == "fault", fault["row"]
 
@@ -221,7 +221,7 @@ def test_j_a_secretary_fault_fills_the_step_when_v_omits_it(tmp_path):
     assert judge.get("defect_step") == 3, judge
     assert "第 3 步" in str(judge.get("defect_step_basis") or ""), judge
     assert got.get("defect_step") == 3, got
-    assert _passes(got) == [("fault", 0, "fault")], _passes(got)
+    assert _passes(got) == [("fault", 0, "rejected")], _passes(got)
     rows = [dict(r) for r in VR.list_verifications(root, statement_id=SID, limit=None)[0]]
     assert rows and rows[-1]["defect_step"] == 3, rows[-1]
     assert rows[-1]["verdict"] == "有毛病", rows[-1]
@@ -237,7 +237,7 @@ def test_k_restoring_a_literal_fast_path_breaks_h(tmp_path, monkeypatch):
     读数必须从 fault 变成 clean（否则 h 什么也没守住）。
     """
     honest = _run(tmp_path / "honest", _AxisSecretary("fault"))
-    assert _passes(honest["got"]) == [("fault", 0, "fault")], _passes(honest["got"])
+    assert _passes(honest["got"]) == [("fault", 0, "rejected")], _passes(honest["got"])
 
     def _literal_axis(self, reply, verdict, no, *, statement_id=""):
         said = str(verdict.get("verdict") or "")

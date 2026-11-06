@@ -363,6 +363,28 @@ def merge_dependency_audit(verdict: Mapping[str, Any],
     return out
 
 
+def _rejection_stands(standing: Mapping[str, Any]) -> bool:
+    """这一份正文的台账读数是不是「已经被打回、还没改过字」（业主裁定 3 的准确含义）。
+
+    业主逐字：「一次判有毛病时应该立即打回，不再起转，等下一次提交时重新从 0 转计数」。
+    于是「打回」对同一份正文是终局：在 F 把正文改掉（sha 变了）之前，重送同一份
+    不构成一次新的送审 —— 否则就是"再掷一次骰子"，而 `R-mk-infinite-94` 的 000034 正是
+    这么签上的（v2 判 fault ⇒ 同一份正文重开一趟，v3–v5 三转 clean ⇒ 签块写 连续=3/3）。
+
+    两档都算打回，与 F 侧 `agent_f.vsign.delivery_reading` 同一个谓词（不许两处各判一套）：
+
+    - `rejected`：最近一签的秘书轴是 fault（含"那一趟属于打回之后又起转、已作废"那一档）；
+    - `holding` + `secretary_fault`：V 的判词写「成立」、秘书读出了缺陷（老行的形态）。
+
+    其余（`unsigned` / `stale` / `holding` / `signed` / `unreadable`）都不算打回：
+    `signed` 另有 `already_signed` 那条短接先走，`unreadable` 是"没查成"。
+    """
+    state = str(standing.get("state") or "")
+    if state == "rejected":
+        return True
+    return state == "holding" and bool(standing.get("secretary_fault"))
+
+
 def _read_only_facts(store: Any, statement_id: str) -> str:
     """只读读数（命题现状 + 文献/实验条数）—— I12 里"只读查询面"那一半。
 
@@ -1308,6 +1330,68 @@ class AgentV:
                            "—— 不再重复审，不落新台账行、不问模型")
                 return out
 
+        # ---- 2026-11-06（业主裁定 3 的准确含义）：打回站住 —— 同一份正文不再起转 ------
+        #
+        # 业主逐字：「一次判有毛病时应该立即打回，不再起转，等下一次提交时重新从 0 转计数」。
+        # 上一格管"已经签过的"，这一格管对称的那一档：这一份正文已经被打回过。
+        #
+        # 真机现场（`projects/R-mk-infinite-94` 的 000034，只读取证）：v1 clean、v2 判
+        # fault（打回），同一份正文（同一个 sha）在 4 分钟后又送了一趟，v3–v5 三转 clean，
+        # 第 5 转签上、签块写「连续=3/3」。按业主口径这个形状本来就不该出现：打回之后
+        # 又起转的那一趟不是"另一次送审的三转"，而是把同一次打回当成"次数没到"重掷。
+        #
+        # 所以这里与 `already_signed` 同形：不问模型、不落台账行、不签发，把"打回站住"
+        # 作为这一趟的结论报回去（`checked=True`：查过了，结论是这一份仍是打回状态）。
+        # 下一次真正的提交是 F 改稿之后（正文 sha 变了）—— 那一趟从 0 起数，三转
+        # clean 照旧发签（`agent_v.core` 的连判循环一个字都不用改）。
+        #
+        # 幂等与范围：判据只读台账（`review_standing` 只看这一份正文的覆盖集），
+        # 命题不在册 / 台账没有这一份 ⇒ `unsigned`，这一格不触发；`unreadable`（台账读
+        # 不出来）也不触发（那是"没查成"，不许折成"打回"）。
+        standing = VR.review_standing(self.workspace_root, statement_id=sid,
+                                      proof_text=text, proof_no=no)
+        if _rejection_stands(standing):
+            _obj_id = str(standing.get("verification_id") or "")
+            _obj_ref = (f"{standing.get('ledger') or VR.VERIFICATIONS_DIR}#{_obj_id}"
+                        if _obj_id else str(standing.get("ledger") or ""))
+            _judge = {
+                "checked": True, "axis": "fault", "decision": "",
+                "reason": str(standing.get("why") or ""),
+                "basis": [f"台账读数：{_obj_ref or '（没有定位）'}"],
+                #: 这一格不是秘书这一次判的，是台账上那一次打回的读数（读侧口径）。
+                "source": "ledger:rejected",
+            }
+            out.update({
+                "checked": True,
+                "kind": "",
+                "signed_bit3": False,
+                "verdict": str(standing.get("verdict") or ""),
+                "proof_sha256": str(standing.get("sha") or VR.proof_sha(text)),
+                "proof_no": no,
+                "proof_chars": len(text),
+                # 这一趟零转：一条模型调用都没花、一行台账都没落。
+                "review_passes": [],
+                "secretary_judge": _judge,
+                "sign_issuance": self._terminal_issuance(
+                    sid, no, text=text, row={}, judgment=_judge, verdict={}),
+                "ledger": _obj_ref,
+                "reason": f"{_obj_ref or '台账'}：打回站住（同一份正文不重复判）",
+                "detail": (
+                    "这一份正文已经被打回过 ⇒ 这一趟不问模型、不落台账行、不签发。"
+                    "业主 2026-11-06（裁定 3）逐字：「一次判有毛病时应该立即打回，不再起转，"
+                    "等下一次提交时重新从 0 转计数」—— 打回之后又起转的那一趟不是"
+                    "「另一次送审攒够三转」，所以同一份正文（同一个 sha）重送不会把"
+                    "连续次数续上、也不会被当成新的三转。"
+                    f"台账读数：{str(standing.get('why') or '（没有理由）')}。"
+                    "处置：按 findings / 洗过的转达改稿；改过字（正文 sha 变了）之后重送，"
+                    "那一趟从 0 起数，三转 clean 才发签。"
+                    "这一条不是「没查成」，也不是「又签住了」：它是打回。" ),
+            })
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 这一份正文已经被"
+                       f"打回过（{_obj_ref or '台账里那一行'}）—— 不重复判、不落新行、"
+                       "不问模型；改过字之后重送")
+            return out
+
         # ---- 引用核实的材料（业主 2026-10-26：V 要核 F 的引用，而 F 的引用不是逐字引文）----
         #
         # 这一份材料 = 这条命题第 `no` 份证明登记的依赖行（`used_by` / `path_group` /
@@ -1352,17 +1436,28 @@ class AgentV:
         dependency_audit = self._dependency_audit(manuscript_raw)
         passes: list[dict[str, Any]] = []
         last: dict[str, Any] = {}
-        #: 终局是哪一种："" = 循环跑完还没命中终局（= 内部不一致）/ signed / fault /
-        #: verdict（V 自己的结论不是成立）/ gate（结论成立、但这一行自己签不住：
-        #: 引用核实挡签或还有未解决的 error）/ unjudged（秘书这一问没查成）/
-        #: ledger（台账那一行没落地）。
+        #: 终局是哪一种："" = 循环跑完还没命中终局（= 内部不一致）/ signed / rejected /
+        #: gate（结论成立、但这一行自己签不住：引用核实挡签或还有未解决的 error）/
+        #: unjudged（秘书这一问没查成）/ ledger（台账那一行没落地）。
         #:
-        #: 判的次序（2026-11-01 修，`draft/165` 取证 D）：结局（fault / verdict）→
+        #: `rejected` 是"打回"那一个终局（2026-11-06 业主裁定 3）：秘书判 fault ⇒
+        #: 这一转就是终局、立刻打回，不再起转。改前这个值叫 `fault`——同一种结局在
+        #: 未在册两支里叫 `rejected`，在在册这一支叫 `fault`，读的人要按分支猜名字；
+        #: 现在三支同一个词（`_review_unregistered_prose` / `_review_exhaustion_rounds`）。
+        #:
+        #: 判的次序（2026-11-01 修，`draft/165` 取证 D）：结局（rejected）→
         #: 签不签得动（gate）→ 签上了没有（signed）→ 没查成（unjudged）；台账那一档最先判。
-        #: 别把 gate 移回 verdict 之前：`row_signable` 蕴含"结论成立"，移回去就会再把
+        #: 别把 gate 移回结局之前：`row_signable` 蕴含"结论成立"，移回去就会再把
         #: "有毛病"吞成"成立但签不住"（`tests/test_v_terminal_says_what_happened.py` 的 s3c 钉着）。
         stopped = ""
         stop_why = ""
+        #: 这一趟送审内的连续 clean 次数（2026-11-06 业主裁定 3 的准确含义：真计数）。
+        #:
+        #: 它不是轮号：只有"这一转的秘书轴是 clean 且这一行自己签得住"才 +1，任何别的
+        #: 一转一律归零。改前这里是 `pass_no if axis == "clean" else 0`（= 拿轮号当连续数）
+        #: —— 那个形状只在"fault 必然 break"的巧合下才是对的；一旦哪一转没断，
+        #: 它会把"清零之后的第 3 轮"直接读成 3/3（正是业主否掉的"清零后接着攒"）。
+        streak = 0
         for pass_no in range(1, need + 1):
             once = self._review_pass(sid=sid, text=text, no=no, prompt=prompt,
                                      citations=citations,
@@ -1390,19 +1485,19 @@ class AgentV:
                 out["review_passes"] = passes
                 return out
             last = once
-            # 这一转的 streak 是这一趟送审内连到第几轮 clean（2026-11-02 定稿）：
-            # 不是台账尾部跨历史的连续数（那正是"跨两次送审累计"的后门）。
-            # 有毛病 / 结论不是成立 ⇒ 这一趟的连续数归零；秘书没判成那一档由底下
-            # 的 `terminal` 说明，不在这里冒充"0 轮"。
-            in_call_streak = (pass_no if (
-                str(once["judgment"].get("axis") or "") == "clean") else 0)
+            axis = str(once["judgment"].get("axis") or "")
+            # 这一转的 streak 是这一趟送审内连到几转 clean（2026-11-02 定稿 + 2026-11-06
+            # 裁定 3）：真计数 —— 只在"轴是 clean 且这一行自己签得住"时才 +1，
+            # 任何别的转（fault / 没判成 / 引用挡签）一律归零。不是台账尾部跨历史的连续数
+            # （那正是"跨两次送审累计"的后门），也不是轮号（那会把"清零后接着攒"读成够了）。
+            streak = (streak + 1) if (axis == "clean" and VR.row_signable(once["row"])) else 0
             passes.append({
                 "pass": pass_no,
-                "axis": str(once["judgment"].get("axis") or ""),
+                "axis": axis,
                 "decision": str(once["issuance"].get("decision") or ""),
-                "streak": in_call_streak,
+                "streak": streak,
                 "need": int(need),
-                "streak_ok": bool(in_call_streak >= int(need)),
+                "streak_ok": bool(streak >= int(need)),
                 "issue": bool(once["issuance"].get("issue")),
                 "issued": bool(once["issuance"].get("issued")),
                 "verdict": str(once["row"].get("verdict") or ""),
@@ -1422,7 +1517,6 @@ class AgentV:
                 passes[-1]["terminal"] = stopped
                 stop_why = "台账那一行没落地（必须重签）"
                 break
-            axis = str(once["judgment"].get("axis") or "")
             # ---- 先判秘书给的轴，再判"这一签签不签得动"，最后判"签上了没有" ----
             #
             # p247（业主 2026-11-06 第三次收紧）：「V 的判词只是陈述」「每一转的轴
@@ -1430,16 +1524,21 @@ class AgentV:
             # 给出的轴，不看 V 自己写的那两个字」。所以这里删掉了原来的
             # `read_verdict(row) != "成立"` 那一支（它会按 V 的字面直接打回，越过秘书的
             # 语义判定），也删掉了它的 `terminal="verdict"`。现在只有：
-            #   ① 秘书判 fault ⇒ 打回；
+            #   ① 秘书判 fault ⇒ 打回（terminal=rejected）；
             #   ② 轴 clean 但行局部机械闸没过（引用挡签 / 未解决 error）⇒ gate；
             #   ③ 秘书判了签发 ⇒ signed；
             #   ④ 秘书这一问没查成 ⇒ unjudged（不按字面补判）。
             # 三条必须同时成立（`tests/test_v_terminal_says_what_happened.py` 的 s3c 用 AST
-            # 钉住，别只信这段注释）：gate 在 fault 之后、gate 在 signed 之前。
+            # 钉住，别只信这段注释）：gate 在结局之后、gate 在 signed 之前。
+            #
+            # 2026-11-06（业主裁定 3）：「一次判有毛病时应该立即打回，不再起转，等下一次
+            # 提交时重新从 0 转计数」。所以 fault 这一支一判出来就 break —— 这一转就是这次
+            # 送审的最后一转；连续数归零（`streak` 上面已经算了），而同一次送审绝不会
+            # 再起第 4、5 转。下一次送审是一条新的 `review_call`，从 0 起数。
             if axis == "fault":
-                stopped = "fault"
+                stopped = "rejected"
                 passes[-1]["terminal"] = stopped
-                stop_why = "秘书判 fault（有毛病）：这一转就是终局，立刻打回 F"
+                stop_why = "秘书判 fault（有毛病）：这一转就是终局，立刻打回 F（不再起转）"
                 break
             if not bool(once["judgment"].get("checked")):
                 # 秘书这一问没查成（没缝 / 没答上来 / 词表外 / 抛异常）：那不是判定，

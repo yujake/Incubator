@@ -2383,21 +2383,24 @@ def _hold_runs(
     void: list[bool] = []
     sha = ""
     run = 0
-    #: 这一份正文上"打回"已经发生过（带 `review_call` 的那一行判了 fault）。
-    rejected = False
+    #: 这一份证明里被判过打回的那些正文 sha（带 `review_call` 的那一行判了 fault）。
+    #:
+    #: 按 sha 记、不随"换了一份正文"清掉：台账里两份正文的行可以交错出现（改稿 → 回退 →
+    #: 再改稿），而"这一份 sha 打回过"是这份正文的性质，不是相邻两行的性质。
+    #: 改前它是单值、遇到 sha 变化就重置 ⇒ 交错出现时后一次的同 sha 行会漏掉作废。
+    rejected: set[str] = set()
     for row in rows:
         one = str(row.get("proof_sha256") or "")
         if not runs or one != sha:
             run = 0
             sha = one
-            rejected = False       # 换了一份正文（改稿）⇒ 旧的打回不再牵连这一份
         axis = ledger_axis(row)
         call = str(row.get("review_call") or "").strip()
-        is_void = bool(rejected and call)
+        is_void = bool(one and one in rejected and call)
         if axis == "fault":
             run = 0
             if call:
-                rejected = True
+                rejected.add(one)
         elif not axis:
             # 没有轴：老行 / 没判成 / 轴名读不出来。那不是一种判定 ⇒ 既不攒票也不作废。
             pass
@@ -2446,6 +2449,20 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     `#p1` 的三票不许替 `#p2` 数（不许借光）。
     """
     return _hold_runs(rows)[0]
+
+
+def void_after_rejection(rows: Sequence[Mapping[str, Any]]) -> list[bool]:
+    """逐行给出「这一行属于『同一份正文被打回之后又起转』的那一趟」（读侧共用的一把尺）。
+
+    判据只有一处实现（:func:`_hold_runs`），本函数是它对外的那一半：读侧有两处必须
+    同尺 —— 台账的连续计数（:func:`_hold_run_lengths`）与"重送义务清没清"
+    （:func:`vreceipts.resubmit_cleared`）。两处各判一套的后果很具体：作废行一边不算
+    票、一边却还能把"要你重送"的义务清掉 —— 于是一份被打回、没改稿、重掷签上的正文，
+    既不欠票、也不再有人要求它重送（"打回即站住"只站住了一半）。
+
+    调用方负责先把行分组（同一命题 + 同一证明号），与 :func:`_hold_run_lengths` 同一条。
+    """
+    return _hold_runs(rows)[1]
 
 
 def _rows_of_proof(rows: Sequence[Mapping[str, Any]], proof_no: int) -> list[Mapping[str, Any]]:

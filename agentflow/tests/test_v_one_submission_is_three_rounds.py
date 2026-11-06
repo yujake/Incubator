@@ -148,7 +148,7 @@ def test_b_fault_on_round_two_stops_after_two_and_rejects(tmp_path):
     passes = got.get("review_passes") or []
     assert [p["axis"] for p in passes] == ["clean", "fault"], passes
     assert [p["streak"] for p in passes] == [1, 0], passes
-    assert passes[-1]["terminal"] == "fault", passes
+    assert passes[-1]["terminal"] == "rejected", passes
     assert got["signed_bit3"] is False and got["sign_issuance"]["issued"] is False, got
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
     assert len(_rows(st)) == 2, _rows(st)
@@ -180,7 +180,7 @@ def test_c_fault_on_round_one_stops_after_one_and_rejects(tmp_path):
     passes = got.get("review_passes") or []
     assert len(passes) == 1, passes
     assert passes[0]["axis"] == "fault" and passes[0]["streak"] == 0, passes
-    assert passes[0]["terminal"] == "fault", passes
+    assert passes[0]["terminal"] == "rejected", passes
     assert got["signed_bit3"] is False, got
     assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]

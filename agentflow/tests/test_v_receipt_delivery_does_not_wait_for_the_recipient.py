@@ -54,6 +54,9 @@ from agentflow.tools.conductor_tools import conductor_for, reset_cache
 TS = S.now_iso()
 SID = "000019"
 PROOF = "1. 取 G = C_n（n ≥ 3）：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。"
+#: F 改稿之后的那一份正文（2026-11-06 裁定 3：同一份正文被打回后不再起转，
+#: 所以"同一份证明判两次"要用改过字的那一份，第二次才是合法的一次送审）。
+PROOF_B = PROOF + "\n3. 补一条：n ≥ 3 时 C_n 的弦长集合非空。"
 FULL = "设 G 是 3-正则群；则弦长函数不是常值。"
 REPLY_DEFECT = json.dumps({
     "verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据",
@@ -166,6 +169,28 @@ def _verify(st: Store, sid: str, *, v_task: str, parent: str,
         return agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
 
 
+def _seed_fault_row(st: Store, sid: str, *, text: str = "") -> dict:
+    """直接落一行「改前判的那一次打回」（同一份正文的第二条判定）。
+
+    2026-11-06（业主裁定 3）：同一份正文被打回之后重送不再起转，所以"同一份证明
+    判两次、两个 vid"这个现场不能再用两次 `_verify(...)` 造（第二次会被短接成
+    「打回站住」、一行都不落）。这一条量的是"两条 fault 行 ⇒ 两条板项 / 两次补投"，
+    所以第二次改成直接落台账那一行 —— 与本文件
+    `test_closing_carries_the_backfill_reading` 里"模拟改前判的"同一个写法。
+    断言一个字没动。
+    """
+    row = next((dict(r) for r in st.rows("statements")
+                if str(r.get("stmt_id") or "") == str(sid)), {})
+    body = str(text or row.get("proof_text") or PROOF)
+    return VR.record_verification(
+        st.root, statement_id=str(sid), proof_text=body,
+        verdict=json.loads(REPLY_DEFECT),
+        verifier="agent-V", store=st, proof_no=1,
+        secretary_judge={"checked": True, "axis": "fault",
+                         "decision": "有缺陷要指出",
+                         "reason": "夹具：第二条判定的打回"})
+
+
 def _items(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("tasks")
             if str(r.get("input_key") or "").startswith("v-verdict@")]
@@ -238,6 +263,10 @@ def test_same_label_different_vid_are_two_items(tmp_path):
     recipient = _agent_row(st, role="B")
     _put(st, SID)
     _verify(st, SID, v_task="t-v1", parent=recipient)
+    # 第二次是改稿之后的那一份（sha 变了 ⇒ 是一次新的送审；同一份正文重送会被
+    # 「打回站住」短接、一行都不落）。label 仍是 `000019#p1`，只有 vid 不同 —— 这正是
+    # 这一条要量的东西。
+    _put(st, SID, proof=PROOF_B)
     _verify(st, SID, v_task="t-v1", parent=recipient)
     keys = sorted(str(r.get("input_key")) for r in _items(st))
     assert keys == [f"v-verdict@{SID}#p1@v-000001@{recipient}",
@@ -325,7 +354,7 @@ def test_backfill_uses_every_fault_row_not_only_the_latest_sign(tmp_path):
                started="2026-11-01T00:00:00+08:00", ended="2099-01-01T00:00:00+08:00")
     _put(st, SID)
     _verify(st, SID, v_task="t-v1", parent=recipient)
-    _verify(st, SID, v_task="t-v1", parent=recipient)
+    _seed_fault_row(st, SID)
     # 把甲 开的两项撤掉（模拟"改前判的、当时没人投"）：板项清零，只留台账。
     with st.tx("tasks", actor="test") as tx:
         for r in _items(st):

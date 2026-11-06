@@ -306,7 +306,7 @@ def test_t2_a_fault_on_the_second_pass_stops_and_is_washed_to_f(tmp_path):
     assert sec_seam.asked("wash_v_reply") == 1, sec_seam.seen
     assert rows[-1]["washed_relay"]["text"] == WASHED, rows[-1].get("washed_relay")
     # 这一转就是终局：连判在它这里断掉（不是"再给一次机会"），读数里说得出来。
-    assert passes[-1].get("terminal") == "fault", passes
+    assert passes[-1].get("terminal") == "rejected", passes
     assert "终局" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
     assert "还差" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
 
@@ -455,7 +455,7 @@ def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
     assert [p["axis"] for p in passes] == ["clean", "fault"], passes
     # fault 清零：第 2 转的连续次数是 0（不是 1 —— 那会是"不清零"的旧 unsure 口径）。
     assert [p["streak"] for p in passes] == [1, 0], passes
-    assert passes[-1].get("terminal") == "fault", passes
+    assert passes[-1].get("terminal") == "rejected", passes
     rows = _rows(st)
     assert len(rows) == 2, f"台账应当 2 行，实得 {len(rows)}"
     assert rows[-1]["secretary_judge"]["axis"] == "fault", rows[-1]["secretary_judge"]
