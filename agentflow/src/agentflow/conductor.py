@@ -4669,11 +4669,8 @@ class Conductor:
         "这一条能不能撤"要靠模型自己把 id 搬到 `conductor.void_items` 再被拒一次才知道
         —— 试错是两步，而第一步（搬 id）没有任何读数。现在每一步都直接带出可否与动作。
 
-        判据就是 :meth:`_item_authority`（业主裁定 ① 的唯一判据，这里不另写一份）：
-        三态原样保留 —— `checked=False`（没有台账号 / 台账里没有这一行）与
-        `allowed=False`（查过了、你没权限）都给 `revocable=False`，但 `code` / `why`
-        分得开。已经终态的行、以及 `expects` 为空的行（撤销后的行 / 通知）都不可撤：
-        前者没有对象，后者没有义务可撤。
+        判据就是 :meth:`_item_authority`（业主裁定 ① 的唯一判据，三态见那里）：不可撤
+        的每一档都折算成 `revocable=False`，`code` / `why` 原样带出、分得开。
 
         返回的键集固定（`revoke` 这一格在 board / patrol 的每一项上都长这样）：
         `{"revocable","action","call","mode","code","why"}`。
@@ -4776,11 +4773,8 @@ class Conductor:
         "名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
         连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
 
-        出口是作废，但 2026-10-29 起它不是唯一的门（这条口径在代码里已经落地，见下面
-        那一段"deaf"判定）：静默的收件人现在会被一条消息 / 一次委托 / `wake_blocked`
-        叫醒，所以"它静默 ⇒ 它永远不会再处理这条通知"是旧口径。今天作废的正当性只剩
-        "这个号叫不醒了"（已销号 / 兜底表被永久抑制）—— 叫得醒的静默收件人要先唤醒它，
-        让它自己 ack。作废仍然不是"知道了"、也不是"做完了"，而是"这条不会再被处理"。
+        出口是作废 —— 今天它的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久
+        抑制，2026-10-29 起）。"只是静默"不够，那一档在下面边界 2 逐项判。
 
         `revoke=False` 那一档（旧口径）的三条硬边界（少一条就等于把这条路变成"父代 ack"）：
         1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
@@ -4821,24 +4815,19 @@ class Conductor:
 
         ## 业主 2026-11-06 裁定 ① 的乙件 / 丙件（同一笔撤销要一起做完）
 
-        乙件：撤销成功后自动投一条通知给收件人（`_revocation_notice_row` 是唯一
-        一处，正文逐字见那里）：它是已收口的一行（`done` + `expired`），不是新待办
-        —— 通知若开着，就只能是 `expects="ack"`（收件人欠一个回执，与「不需要 ack」
-        正相反）或新造一档 expects（冻结面不许）。返回的 `notified` 逐条给
+        乙件：撤销成功后自动投一条通知给收件人（`_revocation_notice_row` 是唯一一处，
+        正文与"为什么它必须落成 done + expired"见那里）。返回的 `notified` 逐条给
         `{item_id, notice_id, owner, kind, expects, text}`；通知没开成（写失败）进
-        `notification_problems`，撤销本身不回滚（撤销是那一笔的正文，通知是它的
-        回执；两者分开报，不许把"通知没发出去"折成"没撤"）。
+        `notification_problems`，撤销本身不回滚（撤销是正文，通知是回执，两者分开报）。
 
         通知的读口（2026-11-06 第二笔）：那条通知是 `done` 行，`open_items_of`
         看不见它 ⇒ 光落账不等于"提醒到"。收件人那一侧的读法是
         :meth:`revoked_recent_of`（`agent_loop.mailbox_digest` 每拍投一次），
         它只读本方法写下的 `revoke:expired:` 留痕，不进任何 open 计数。
 
-        丙件：撤销后那一行的 `expects` 清空、原值写进 `expects_was`（`schema.Task`
-        末尾那一格；`validate` 只允许 `done` + `expired` 的行为空）。理由：撤销之后
-        那一行不再欠任何动作，留着 `expects="ack"` 会让每一个读侧看着它像还欠一个
-        ack —— 而 `open_items_of` / `board` / `ack_items` 的读数其实都已经不数它了，
-        "列上还剩一个 ack"与"账上不欠"是两句话，盘上只许留后一句。
+        丙件：撤销后 `expects` 清空、原值写进 `expects_was`（`schema.Task` 末尾那一格；
+        `validate` 只允许 `done` + `expired` 的行为空）。留着 `expects="ack"` 会让读侧
+        看着它像还欠一个 ack，而盘上只许留"账上不欠"这一句。
 
         返回：`{"checked","voided":[id],"refused":[{"id","why"}],"traces":[…],
         "notified":[…],"notification_problems":[…],"reason"}`；
@@ -4893,7 +4882,7 @@ class Conductor:
     def _void_item_gate(self, *, iid: str, row: Mapping[str, Any] | None,
                         rows: Mapping[str, Mapping[str, Any]], by_task_id: str,
                         revoke: bool) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
-        """`void_items` 的逐项前置判据（拆分：判据逐字未动，只搬了位置）。
+        """`void_items` 的逐项前置判据。
 
         返回 `(refusal, cur, authority)`：`refusal` 非 None ⇒ 这一条不改，原样进
         `out["refused"]` 并跳过；否则 `cur` 是改前的状态、`authority` 是权限读数
@@ -4981,10 +4970,8 @@ class Conductor:
                          authority: Mapping[str, Any], out: dict[str, Any],
                          by_task_id: str, reason_text: str, at: str,
                          revoke: bool) -> None:
-        """`void_items` 的写盘那一段（拆分：写盘与留痕逐字未动）。
-
-        `out` 就是调用方那一份返回体：`voided` / `traces` / `notified` /
-        `notification_problems` 由这里按原有顺序追加，调用方不再自己拼。
+        """`void_items` 的写盘那一段（`out` 就是调用方的返回体：`voided` / `traces` /
+        `notified` / `notification_problems` 由这里按原有顺序追加）。
         """
         # ---- 写盘：两档共用"直写 + 终态"，留痕各记各的 -------------------
         owner = str(row.get("parent_task_id") or "")
@@ -5709,14 +5696,11 @@ class Conductor:
                           limit: int = REVOKED_RECENT_LIMIT) -> list[dict[str, Any]]:
         """挂在 `task_id` 名下、最近被撤销的那几条（收件人那一侧的读数，2026-11-06）。
 
-        ## 它补的是哪个缺口（上一笔自己报的取舍）
+        ## 它补的是什么（读口，不是第二份账）
 
-        撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办，见
-        :meth:`_revocation_notice_row`），而 `open_items_of` 按设计只数"未消项" ⇒
-        收件人的板面摘要里永远看不到「我名下那条被撤了」。于是"自动通知"实际
-        等于"存了一条没人念的记录"：收件人只能自己去翻台账才发现。这一格就是那句
-        通知的读口：撤销之后，收件人那一侧（`agent_loop.mailbox_digest` 的增量段）
-        能看到最近被撤销的那几条。
+        通知那一行是 `done`（见 :meth:`_revocation_notice_row`），`open_items_of` 看不见
+        它 ⇒ 光落账不等于"提醒到"。本方法只读 `void_items(revoke=True)` 写下的
+        `revoke:expired:` 留痕，由 `agent_loop.mailbox_digest` 的增量段渲染。
 
         ## 它不进任何 open 计数（业主 2026-11-06 的第二笔，硬约束）
 
