@@ -3371,7 +3371,30 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p247"
+#: p247 → p248（2026-11-06 把「轴 / 发签」两句话的未在册例外补齐）：
+#: 变化格 = 只有 V。三笔进模型可见面：
+#:   ② `agent_skills._v_skills()` 的「产出-只产意见-签在秘书」手册正文（轴由秘书语义判定；
+#:      未在册散文支同样如此，穷举支由机械会审给）—— 手册正文不进 system 提示词（索引行
+#:      只印 slug + 一句话 + 何时读它），所以它不换摘要，但它确实是模型读得到的那份文本；
+#:   ④ `verifications.cold_start_prompt` 的发签那一句（在册档秘书判定并落盘 / 未在册档
+#:      V 颁发信封、收方秘书落块）—— 它是 V 的真实入口，不进 system 提示词；
+#:   ⑤ `specs/v.py` 的 policy：轴那一句补「穷举支例外」（`source=exhaustion_report`，
+#:      不经秘书）—— 这是本笔唯一换摘要的一格。
+#: 另两笔是 A 类（不进提示词、不抬版本）：① `docs/ROLE-SPECS.md` 的 V.1 与
+#: ③ `agent_v/core.py` 的模块 docstring。A 类改完的读数是十一格 11/11 SAME、版本仍 p247
+#: （`temp/probe_p248_digests.py`）。
+#: 口径（业主 2026-11-04 乙-5 + 2026-11-06 p247 第三次收紧）：
+#:   - 在册档：发签由 V 的秘书判定并落盘；未在册档：签信封由 V 自己调 `vsigns.issue` 颁发、
+#:     收方秘书只落手稿签块；
+#:   - 轴：在册档与未在册散文支由秘书语义判定；穷举支由机械会审给（`source=exhaustion_report`）。
+#: 十一格是 `temp/_p248_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p248）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p248"
 
 
 

@@ -844,6 +844,11 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p247", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p247（2026-11-06，第三次收紧：V 的判词只是陈述）：业主逐字「① 结论只有两态；② 不做折档：不许按词面把判不了 / 看不出来 / 拿不准 / 我无法判断折成任何一态；③ V 的判词只是陈述，每一转的轴（clean / fault）一律由 V 秘书做语义分析后给出 + 写清依据；streak / 签发只看秘书给出的轴；判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。`parse_verdict` 只做结构解析（不折档、不产轴）；`row_signable` / `_hold_run_lengths` / 签发只看 `secretary_axis`；`agent_v.core` 删掉 `read_verdict != 成立` 的字面快路；秘书题面把「V 的判不了」与「秘书的判不了」分开。变化格 = V 一格（policy 改写；其余十格逐字未动）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p247 → p248（2026-11-06 把「轴 / 发签」两句话的未在册例外补齐）：只改题面 /
+    # 文案与两页文档，一格事实都没挪 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p248", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p248（2026-11-06，把「轴 / 发签」的未在册例外补齐）：口径 = 在册档发签由 V 的秘书判定并落盘；未在册档签信封由 V 颁发、收方秘书只落块；轴在在册档与未在册散文支由秘书语义判定，穷举支由机械会审给（`source=exhaustion_report`，不经秘书）。三笔进模型可见面：`agent_skills` 的 V 手册正文（②）、`verifications.cold_start_prompt` 的发签句（④）、`specs/v.py` 的 policy（⑤，唯一换摘要的一格 —— V 30585→30649 字符，`7fb8adfa…`→`5a071356…`；其余十格逐字未动）。另两笔是 A 类、不进提示词也不抬版本：`docs/ROLE-SPECS.md` V.1 与 `agent_v/core.py` 模块 docstring。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
