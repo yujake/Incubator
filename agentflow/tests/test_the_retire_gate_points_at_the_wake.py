@@ -46,6 +46,15 @@ from agentflow.tools import conductor_tools as CT
 #: 三条描述里必须点到的那件工具（指向唤醒，而不是 ack / 作废）。
 WAKE = "conductor.wake_blocked"
 
+#: 作废那一档的两档口径（业主 2026-11-06 裁定 ①）：每一档是一组必须同时出现的针。
+#: `revoke` 档的正当性是权限（直接父 / 主控 M），`revoke=False` 旧档才是「叫不醒」那道
+#: 证明 —— 两档都在描述里，模型才知道工具面走的是哪一档、旧档凭什么收窄过。
+#: 只收在描述里的字面针（不是从源码里抠的）：模型照做的正是这一份 `summary`。
+ARMS: dict[str, tuple[str, ...]] = {
+    "revoke 档（权限决定）": ("权限", "直接父", "主控 M"),
+    "revoke=False 旧档（叫不醒才轮得到）": ("revoke=False", "叫不醒"),
+}
+
 #: 旧文（每一条都必须已经不在了）。判据自己拿它们做负控，证明检查函数有分辨率。
 OLD_PHRASES: tuple[str, ...] = (
     "先把那些项逐条处置掉再来销",
@@ -82,6 +91,21 @@ def _pointing_problems(summary: str, *, where: str) -> list[str]:
     return problems
 
 
+def _arm_problems(summary: str, *, where: str) -> list[str]:
+    """两档口径各有哪几针不在（空表 = 两档都写清了）。
+
+    分开数两档，是为了让读数能回答"缺的是权限那一档还是叫不醒那一档" —— 只报
+    "缺叫不醒"会把 2026-11-06 那一次口径变更读成一句漏写。
+    """
+    problems: list[str] = []
+    for arm, needles in ARMS.items():
+        missing = [needle for needle in needles if needle not in summary]
+        if missing:
+            problems.append(f"{where} 没说清 `{arm}` 那一档：缺 {missing}"
+                            "（权限与叫不醒是两档，不是同一句话的两种写法）")
+    return problems
+
+
 def test_the_retire_gate_points_at_the_wake_not_at_an_ack() -> None:
     """销号那三道门的措辞：block 档先唤醒，ack 是收件人的动作。"""
     problems: list[str] = []
@@ -93,14 +117,26 @@ def test_the_retire_gate_points_at_the_wake_not_at_an_ack() -> None:
 
 
 def test_the_void_gate_says_only_the_deaf_ones_are_voided() -> None:
-    """作废那一档 2026-10-29 之后收窄成"叫不醒"，措辞不许再写"静默/退役"就够。"""
+    """作废那一档 2026-11-06 起分两档：`revoke` 档由权限定，`revoke=False` 旧档才要"叫不醒"。
+
+    2026-10-29 那一版的口径是「静默不够，叫不醒才轮得到作废」—— 它只对旧档成立。
+    业主 2026-11-06 裁定 ① 之后工具面走的是 `revoke` 档：**收件人的直接父代理、或
+    主控 M** 有权撤，`expects=work` 也收 —— 正当性是**权限**，"叫不醒"不再是必要
+    条件。所以这里把两件独立的事分开钉：
+
+    - block 项的出路仍然是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，
+      不是唤醒）—— 这一句一个字没变，仍是 `_pointing_problems` 那一条；
+    - 描述里**两档都得看得到**：`revoke` 档 = 权限（直接父 / 主控 M），`revoke=False`
+      旧档 = 「收件人叫不醒」那道证明（收窄过的旧口径仍然有效，只是不再是唯一正当性）。
+
+    两向反真空都实测过（删任一段 ⇒ 本用例必红，读数见这一批的提交信息）：
+    删「`revoke` 档由权限决定」那一段 ⇒ `权限` / `直接父` / `主控 M` 三针红；
+    删「`revoke=False` 旧档才要叫不醒」那一段 ⇒ `revoke=False` / `叫不醒` 两针红。
+    """
     problems: list[str] = []
     summary = _summary("conductor.void_items")
     problems += _pointing_problems(summary, where="conductor.void_items 的描述")
-    for needle in ("叫不醒", "静默"):
-        if needle not in summary:
-            problems.append(f"conductor.void_items 的描述里没有说清 {needle!r} 那一档"
-                            "（收窄之后的口径：静默不够，叫不醒才轮得到作废）")
+    problems += _arm_problems(summary, where="conductor.void_items 的描述")
     problems += _source_problems(inspect.getsource(Conductor.void_items),
                                  where="Conductor.void_items 的实现")
     assert problems == [], problems
@@ -137,7 +173,11 @@ def test_the_state_machine_still_has_no_edge_out_of_block() -> None:
 
 
 def test_the_check_functions_can_actually_go_red() -> None:
-    """负控：把旧文喂进去，同一套函数必须报出来（否则它只是在测"文件里没这句话"）。"""
+    """负控：把旧文喂进去，同一套函数必须报出来（否则它只是在测"文件里没这句话"）。
+
+    两档口径各喂一次"只写了一半"的样本：只有权限那一档、只有叫不醒那一档 ——
+    两向都必须报出来，否则 `_arm_problems` 只是在测"这两个词在不在文件里"。
+    """
     problems: list[str] = []
     for old in OLD_PHRASES:
         if not _source_problems(f"前一句。{old}。后一句", where="负控样本"):
@@ -148,4 +188,15 @@ def test_the_check_functions_can_actually_go_red() -> None:
     if _pointing_problems(f"block 那一档先由 {WAKE} 唤醒（翻回 queued）。",
                           where="正控样本"):
         problems.append("新文自己没过检查 —— 检查函数与这次的措辞不一致")
+    # 两档口径：写全两档 ⇒ 过；只写一半（任意一半）⇒ 必须报。
+    both = ("权限：收件人的直接父代理或主控 M 有权撤；"
+            "`revoke=False` 旧档只作废叫不醒者。")
+    if _arm_problems(both, where="正控样本"):
+        problems.append("写全两档的正控样本没过检查 —— 两档的针与这次的措辞不一致")
+    only_authority = "权限：收件人的直接父代理或主控 M 有权撤。"
+    if not _arm_problems(only_authority, where="负控样本"):
+        problems.append("只写权限那一档（没写 revoke=False / 叫不醒）却没被报出来")
+    only_deaf = "`revoke=False` 旧档只作废叫不醒者。"
+    if not _arm_problems(only_deaf, where="负控样本"):
+        problems.append("只写叫不醒那一档（没写权限 / 直接父 / 主控 M）却没被报出来")
     assert problems == [], problems
