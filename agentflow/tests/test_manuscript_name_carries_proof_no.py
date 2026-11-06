@@ -72,7 +72,7 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
     for _ in range(3):
         VR.record_verification(str(root), statement_id="000000", proof_text=body,
                                verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V", flip=False)
+                               verifier="agent-V", flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     issued = VS.issue(root, artifact_sha=VR.proof_sha(body), streak=3, need=3,
                       artifact_path=rel,
                       ledger="verifications/000000.jsonl#v-000003",

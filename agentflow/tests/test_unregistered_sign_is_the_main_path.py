@@ -171,7 +171,7 @@ def test_b_a_registered_statement_still_signs_into_its_own_ledger(tmp_path):
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         VR.record_verification(str(st.root), statement_id=sid, proof_text=PROOF,
                                verdict=dict(OK), verifier="agent-V", store=st,
-                               proof_no=1, manuscript=rel)
+                               proof_no=1, manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert not problems, problems
@@ -272,7 +272,7 @@ def test_d_the_claim_reaches_proof_review(tmp_path):
     _put(st, REL, MANUSCRIPT)
     row = VR.record_pending_sign(st.root, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
-                                 verifier="agent-V", object_path=REL)
+                                 verifier="agent-V", object_path=REL, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     new, reading = _claim(st, statement_id="")     # B 新建那一档：还没有号
     assert reading.get("applied") is True, reading
     assert reading.get("claim"), reading
@@ -306,7 +306,7 @@ def test_d2_a_different_body_sha_cannot_claim(tmp_path):
     _put(st, REL, MANUSCRIPT)
     row = VR.record_pending_sign(st.root, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
-                                 verifier="agent-V", object_path=REL)
+                                 verifier="agent-V", object_path=REL, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     other = PROOF + "改动一个字。"
     _new, reading = _claim(st, proof=other)
     assert reading.get("applied") is False, reading
@@ -339,7 +339,7 @@ def test_e_a_pending_sign_is_claimed_exactly_once(tmp_path):
     _put(st, REL, MANUSCRIPT)
     row = VR.record_pending_sign(st.root, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
-                                 verifier="agent-V", object_path=REL)
+                                 verifier="agent-V", object_path=REL, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     claim = {"ledger": _pending_ref(row), "verification_id": row["verification_id"],
              "proof_sha256": row["proof_sha256"]}
     first = VS.bind_pending_claim(st.root, claim=claim, statement_id=SID)

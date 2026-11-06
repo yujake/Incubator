@@ -112,7 +112,7 @@ def _sign(store: Store, sid: str, text: str, proof_no: int) -> dict:
     for i in range(1, need + 1):
         signed = VR.record_verification(
             store.root, statement_id=sid, proof_text=text, verdict=dict(_OK),
-            verifier="agent-V", store=store, proof_no=proof_no)
+            verifier="agent-V", store=store, proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         wrote = bool((signed.get("statement_writeback") or {}).get("written"))
         assert wrote is (i == need), (
             f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："
@@ -216,6 +216,11 @@ def test_an_unreadable_proof_number_is_not_folded_and_a_missing_one_still_is_p1(
         "proof_sha256": VR.proof_sha(P1), "proof_chars": len(P1),
         "round": 1, "used_faces": [], "submission_id": "",
         "at": "2026-01-01T00:00:00+00:00",
+        # 2026-11-06（裁定 2）：台账那一行的轴只能来自秘书。这一条量的是"证明号的
+        # 读法"，不是"签的门槛" —— 所以给这一行补上秘书那一格（判词是「成立」⇒
+        # clean），别让"没有轴 ⇒ 不计票"这条新规则把它顺带判成未签。
+        "secretary_judge": {"checked": True, "axis": "clean", "decision": "没问题",
+                            "reason": "夹具：秘书判 clean"},
     }
     assert "proof_no" not in old_row, "这一条判的就是「行上没有这一格」"
     need = int(VR.SIGN_STREAK_NEED)

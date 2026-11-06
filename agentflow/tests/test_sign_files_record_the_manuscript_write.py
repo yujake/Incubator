@@ -73,7 +73,7 @@ def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
         _VR.record_verification(
             str(root), statement_id="000000", proof_text=body,
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            proof_no=1, manuscript=MANUSCRIPT)
+            proof_no=1, manuscript=MANUSCRIPT, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     return root
 
 

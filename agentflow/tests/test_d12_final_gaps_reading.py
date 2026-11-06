@@ -91,7 +91,7 @@ def _sign(root: pathlib.Path, stmt_id: str, proof: str) -> dict[str, Any]:
     got: dict[str, Any] = {}
     for wanted in (1, 2, 3):
         got = VR.record_verification(root, statement_id=stmt_id, proof_text=proof,
-                                     verdict=verdict, used_faces=("statements.read",))
+                                     verdict=verdict, used_faces=("statements.read",), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         holds = VR.consecutive_holds(root, stmt_id)
         assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
         if wanted < VR.SIGN_STREAK_NEED:

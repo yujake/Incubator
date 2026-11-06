@@ -66,10 +66,15 @@ def carry_proof_manuscript(root: Any, payload: Mapping[str, Any], *,
     from agentflow import evidencebits as _EB
     from agentflow import verifications as _VR
 
+    # 2026-11-06（业主裁定 2）：这一签要让 B 能认领成"第三方 V 签"（= 登记成立），
+    # 所以它必须带秘书那一格。写口改前是"不给就不写"，而读侧对没有那一格的行按
+    # `verdict` 字面给轴 —— 夹具要的是"秘书判过 clean 的那一签"，这里显式给。
     _VR.record_pending_sign(
         str(root), proof_text=text,
         verdict={"verdict": "成立", "findings": []},
-        object_path=rel)
+        object_path=rel,
+        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                         "reason": "夹具：秘书判 clean"})
     out["proof_manuscript"] = rel
     if not out.get("bits"):
         out["bits"] = _EB.bits_of(

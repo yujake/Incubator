@@ -50,6 +50,24 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
+
+def _judge_for(verdict: dict) -> dict:
+    """夹具：按这一行的判词给秘书的轴（只给两态；「有毛病」⇒ fault）。
+
+    2026-11-06 裁定 2 之后，台账的轴只能来自秘书。夹具写的是"这一行当年怎么判的"，
+    所以轴跟着判词走：成立 ⇒ clean、有毛病 ⇒ fault、其余（看不出来一类）⇒ 空轴。
+    这不是"按字面定轴"—— 这条断言在夹具里，是声明这一段是什么现场，不是判据。
+    """
+    word = str((verdict or {}).get("verdict") or "")
+    if word == "成立":
+        return {"checked": True, "axis": "clean", "decision": "没问题",
+                "reason": "夹具：秘书判 clean"}
+    if word == "有毛病":
+        return {"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                "reason": "夹具：秘书判 fault"}
+    return {"checked": False, "axis": "", "decision": "",
+            "reason": "夹具：判词不是两态，秘书没给轴"}
+
 TS = "2026-10-22T00:00:00+08:00"
 SID = S.format_id(0)
 STATEMENT = "设 G 是 3-正则群；则弦长函数不是常值。"
@@ -138,7 +156,7 @@ def _sign(store: Store, *, text: str = P1,
     return VR.record_verification(
         store.root, statement_id=SID, proof_text=text,
         verdict=dict(verdict or _OK), verifier="agent-V", store=store,
-        proof_no=1, manuscript="reports/f-proof-000000.md")
+        proof_no=1, manuscript="reports/f-proof-000000.md", secretary_judge=_judge_for(dict(verdict or _OK)))
 
 
 def _sign_votes(store: Store, count: int, *, text: str = P1) -> list[dict]:

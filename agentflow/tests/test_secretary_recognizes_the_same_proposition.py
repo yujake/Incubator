@@ -159,7 +159,7 @@ def _sign(st: Store, *, text: str, proof_no: int = 1, stmt_id: str = SID) -> dic
     """V 的一次审校 = 台账一票（业主 2026-10-29：一票不翻位）。"""
     return VR.record_verification(st.root, statement_id=stmt_id, proof_text=text,
                                   verdict=dict(_OK), verifier="agent-V", store=st,
-                                  proof_no=proof_no)
+                                  proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _sign_n(st: Store, *, text: str, proof_no: int = 1, stmt_id: str = SID) -> dict:

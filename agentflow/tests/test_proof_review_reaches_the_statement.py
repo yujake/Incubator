@@ -42,6 +42,24 @@ from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.store import Store
 
+
+def _judge_for(verdict: dict) -> dict:
+    """夹具：按这一行的判词给秘书的轴（只给两态；「有毛病」⇒ fault）。
+
+    2026-11-06 裁定 2 之后，台账的轴只能来自秘书。夹具写的是"这一行当年怎么判的"，
+    所以轴跟着判词走：成立 ⇒ clean、有毛病 ⇒ fault、其余（看不出来一类）⇒ 空轴。
+    这不是"按字面定轴"—— 这条断言在夹具里，是声明这一段是什么现场，不是判据。
+    """
+    word = str((verdict or {}).get("verdict") or "")
+    if word == "成立":
+        return {"checked": True, "axis": "clean", "decision": "没问题",
+                "reason": "夹具：秘书判 clean"}
+    if word == "有毛病":
+        return {"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                "reason": "夹具：秘书判 fault"}
+    return {"checked": False, "axis": "", "decision": "",
+            "reason": "夹具：判词不是两态，秘书没给轴"}
+
 TS = "2026-10-22T00:00:00+08:00"
 SID = S.format_id(1)
 PROOF1 = "1. 由定义直接得到。\n2. 由 1 与假设 n ≥ 3 得结论。"
@@ -124,7 +142,7 @@ def _sign(store: Store, *, text: str = PROOF1, proof_no: int = 1,
     for _i in range(max(1, n)):
         row = VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                      verdict=want, verifier="agent-V",
-                                     store=store, proof_no=proof_no)
+                                     store=store, proof_no=proof_no, secretary_judge=_judge_for(want))
     return row
 
 
@@ -385,6 +403,11 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     old_row = {"verification_id": "v-000001", "statement_id": SID, "verifier": "V",
                "verdict": "成立", "findings": [], "unresolved_errors": 0,
                "proof_sha256": VR.proof_sha(PROOF1), "proof_chars": len(PROOF1),
+               # 2026-11-06（裁定 2）：台账那一行的轴只能来自秘书。这一条量的是
+               # "老行没有 proof_no 也读得出"，不是"没有轴也算一票" —— 所以补上
+               # 秘书那一格（判词「成立」⇒ clean），让"连续 1/3"这条读数仍然成立。
+               "secretary_judge": {"checked": True, "axis": "clean",
+                                   "decision": "没问题", "reason": "夹具：秘书判 clean"},
                "round": 1, "at": TS}
     path.write_text(json.dumps(old_row, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -400,7 +423,7 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     # 补够三次之后同一个口判 ok（否则上面那一条可能只是"这个口永远不放行"）
     for _i in range(VR.SIGN_STREAK_NEED - 1):
         VR.record_verification(st.root, statement_id=SID, proof_text=PROOF1,
-                               verdict=_OK, verifier="agent-V", store=st, proof_no=1)
+                               verdict=_OK, verifier="agent-V", store=st, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert VR.proof_review_gap(st.root, {"stmt_id": SID, "proof_text": PROOF1,
                                          "evidence_kind": "proof_review"})["ok"] is True
     # 没有证明清单 ⇒ 只有 #p1 一条，编号与正文都不变

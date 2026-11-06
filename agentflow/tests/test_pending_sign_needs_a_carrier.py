@@ -48,7 +48,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _pending(st: Store, *, object_path: str = "") -> dict:
     return VR.record_pending_sign(
-        st.root, proof_text=PROOF, verdict=dict(OK), object_path=object_path)
+        st.root, proof_text=PROOF, verdict=dict(OK), object_path=object_path, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _manuscript_text() -> str:

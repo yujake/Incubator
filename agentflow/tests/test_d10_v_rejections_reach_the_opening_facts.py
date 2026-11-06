@@ -87,7 +87,10 @@ def _reject(root: pathlib.Path, stmt_id: str, proof: str) -> dict[str, Any]:
                       "detail": "第 1 步写了「显然（易证）」，而族非空需要构造"}],
     }, ensure_ascii=False))
     return VR.record_verification(root, statement_id=stmt_id, proof_text=proof,
-                                  verdict=verdict, used_faces=("statements.read",))
+                                  verdict=verdict, used_faces=("statements.read",),
+                                  secretary_judge={"checked": True, "axis": "fault",
+                                                   "decision": "有缺陷要指出",
+                                                   "reason": "夹具：这一行判的是「有毛病」"})
 
 
 def _rejected_workspace(tmp_path: pathlib.Path) -> tuple[Store, Any, Any, pathlib.Path]:

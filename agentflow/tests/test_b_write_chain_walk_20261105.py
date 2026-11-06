@@ -121,7 +121,7 @@ def _sign_three(st: Store, *, sid: str, text: str, rel: str, body: str) -> None:
         VR.record_verification(
             st.root, statement_id=sid, proof_text=body,
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=st, proof_no=1, manuscript=rel)
+            store=st, proof_no=1, manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _register_conjecture(st: Store, full: str) -> str:

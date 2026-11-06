@@ -142,7 +142,7 @@ def _audited_statement(st: Store) -> str:
         VR.record_verification(
             st.root, statement_id=sid, proof_text=PROOF,
             verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", store=st)
+            verifier="agent-V", store=st, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     return sid
 
 

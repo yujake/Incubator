@@ -82,7 +82,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         VR.record_verification(str(st.root), statement_id=SID, proof_text=PROOF,
                                verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V", store=st, proof_no=1, flip=False)
+                               verifier="agent-V", store=st, proof_no=1, flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     return st
 
 

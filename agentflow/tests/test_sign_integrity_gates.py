@@ -93,7 +93,7 @@ def _sign_three(st: Store, sid: str, rel: str) -> dict:
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         last = VR.record_verification(
             str(st.root), statement_id=sid, proof_text=PROOF, verdict=dict(OK),
-            verifier="agent-V", store=st, proof_no=1, manuscript=rel)
+            verifier="agent-V", store=st, proof_no=1, manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     return last
 
 

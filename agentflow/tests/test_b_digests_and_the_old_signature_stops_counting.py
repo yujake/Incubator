@@ -102,7 +102,7 @@ def _sign(st: Store, *, proof_text: str) -> dict:
     """V 的签名写入口（`verify.verify_proof` 走的就是它；这里不经模型）。"""
     return VR.record_verification(
         st.root, statement_id=str(_row(st)["stmt_id"]), proof_text=proof_text,
-        verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1)
+        verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _seed_row(st: Store) -> str:

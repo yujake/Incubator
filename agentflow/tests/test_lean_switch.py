@@ -546,7 +546,7 @@ def test_the_closing_cell_says_not_applicable_instead_of_red(
     # 这一格数的是"签住的"那些行 ⇒ 必须签够次数，并先断"1 次不签"（新规矩的正控）。
     for wanted in (1, 2, 3):
         VR.record_verification(ws, statement_id="0000", proof_text="证明：一行",
-                               verdict={"verdict": "成立", "findings": []}, verifier="V")
+                               verdict={"verdict": "成立", "findings": []}, verifier="V", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         holds = VR.consecutive_holds(ws, "0000")
         assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
         if wanted < VR.SIGN_STREAK_NEED:

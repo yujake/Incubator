@@ -83,7 +83,7 @@ def _with_ledger_sign(store: Store, sid: str) -> None:
         VR.record_verification(
             store.root, statement_id=sid, proof_text=_PROOF,
             verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", store=store, proof_no=1)
+            verifier="agent-V", store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _force_kind(store: Store, sid: str, evidence_kind: str) -> None:

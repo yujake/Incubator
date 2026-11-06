@@ -46,6 +46,24 @@ from agentflow.store import Store
 
 from conftest import seed_statement_row
 
+
+def _judge_for(verdict: dict) -> dict:
+    """夹具：按这一行的判词给秘书的轴（只给两态；「有毛病」⇒ fault）。
+
+    2026-11-06 裁定 2 之后，台账的轴只能来自秘书。夹具写的是"这一行当年怎么判的"，
+    所以轴跟着判词走：成立 ⇒ clean、有毛病 ⇒ fault、其余（看不出来一类）⇒ 空轴。
+    这不是"按字面定轴"—— 这条断言在夹具里，是声明这一段是什么现场，不是判据。
+    """
+    word = str((verdict or {}).get("verdict") or "")
+    if word == "成立":
+        return {"checked": True, "axis": "clean", "decision": "没问题",
+                "reason": "夹具：秘书判 clean"}
+    if word == "有毛病":
+        return {"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                "reason": "夹具：秘书判 fault"}
+    return {"checked": False, "axis": "", "decision": "",
+            "reason": "夹具：判词不是两态，秘书没给轴"}
+
 #: 一条「成立」的审校结论（`record_verification` 会把它规范化再落盘）。
 _OK = {"verdict": "成立", "findings": []}
 _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据",
@@ -120,7 +138,7 @@ def _sign(store: Store, stmt_id: str, proof_text: str = _PROOF, verdict: dict | 
                                      proof_text=proof_text, verdict=want,
                                      verifier="agent-V",
                                      store=(store if flip else None),
-                                     proof_no=1)
+                                     proof_no=1, secretary_judge=_judge_for(want))
         # 翻位那一转才是"这一签"（后面再投的几票是复查读数，回填痕不会重写）
         if not flipped and bool((row.get("statement_writeback") or {}).get("written")):
             flipped = row
@@ -319,7 +337,7 @@ def test_the_refusal_message_lists_which_of_the_three_items_is_missing(ws: Store
     assert "✗" in msg and "✓" in msg, msg
     assert "verifications/<命题号>.jsonl" in msg, msg
     assert "disclaimer" in msg, (
-        "拒信要明说「这一档**不**要 disclaimer」——否则读的人会去补一个不在判据里的字段：" + msg)
+        "拒信要明说「这一档不要 disclaimer」——否则读的人会去补一个不在判据里的字段：" + msg)
 
 
 # ------------------------------------------------------------------- ⑦ 作用域

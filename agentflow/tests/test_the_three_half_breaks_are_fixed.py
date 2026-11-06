@@ -124,7 +124,7 @@ def _sign(store: Store, *, text: str, proof_no: int) -> dict:
     """V 的一次审校 = 台账一票（业主 2026-10-29：一票不翻位）。"""
     return VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                   verdict=dict(_OK), verifier="agent-V", store=store,
-                                  proof_no=proof_no)
+                                  proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _sign_n(store: Store, *, text: str, proof_no: int) -> dict:

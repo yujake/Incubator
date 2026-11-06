@@ -84,7 +84,7 @@ def _sign(st: Store, stmt_id: str, text: str) -> None:
     for _ in range(3):
         VR.record_verification(st.root, statement_id=stmt_id, proof_text=text,
                                verdict=dict(_OK), verifier="agent-V", store=st,
-                               proof_no=1)
+                               proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _split_without_proofs(base: pathlib.Path) -> Store:

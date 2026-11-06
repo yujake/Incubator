@@ -78,7 +78,7 @@ def _sign(st: Store, rel: str) -> None:
         row = VR.record_pending_sign(
             st.root, proof_text=body,
             verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", object_path=rel)
+            verifier="agent-V", object_path=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     ledger = (f"verifications/pending/{row['proof_sha256']}.jsonl"
               f"#{row['verification_id']}")
     stamped = VS.stamp_manuscript_sign(

@@ -374,7 +374,7 @@ def test_an_unresolvable_recipient_is_recorded_not_guessed(tmp_path):
     VR.record_verification(st.root, statement_id=SID, proof_text=PROOF,
                            verdict={"verdict": "有毛病", "defect_step": 2,
                                     "findings": []},
-                           verifier="agent-V", store=st, proof_no=1)
+                           verifier="agent-V", store=st, proof_no=1, secretary_judge={"checked": True, "axis": "fault", "decision": "有缺陷要指出", "reason": "夹具：秘书判 fault（这一行判的是「有毛病」）"})
     got = VRC.backfill(store=st, caller="test")
     assert got["opened"] == [], got
     assert got["undelivered"] and "不可判" in got["undelivered"][0], got
@@ -436,7 +436,7 @@ def test_closing_carries_the_backfill_reading(tmp_path, monkeypatch):
     VR.record_verification(st.root, statement_id=S.format_id(2), proof_text=PROOF,
                            verdict={"verdict": "有毛病", "defect_step": 2,
                                     "findings": []},
-                           verifier="agent-V", store=st, proof_no=1)
+                           verifier="agent-V", store=st, proof_no=1, secretary_judge={"checked": True, "axis": "fault", "decision": "有缺陷要指出", "reason": "夹具：秘书判 fault（这一行判的是「有毛病」）"})
 
     monkeypatch.setattr(CL, "closing_session_identity", lambda root, sid: _Ident())
     monkeypatch.setattr(CL, "machine_feeders", lambda store, **kw: {})

@@ -138,7 +138,7 @@ def _sign(store: Store, stmt_id: str) -> dict:
         signed = VR.record_verification(
             store.root, statement_id=stmt_id, proof_text=text,
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
+            store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         holds = VR.consecutive_holds(store.root, stmt_id)
         assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
         writeback = dict(signed.get("statement_writeback") or {})

@@ -86,7 +86,7 @@ def _ws(tmp_path: pathlib.Path, *, manuscript: str, carried_path: str | None = N
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         VR.record_verification(str(root), statement_id=SID, proof_text=PROOF,
                                verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V", flip=False)
+                               verifier="agent-V", flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     (root / "reports").mkdir(parents=True, exist_ok=True)
     if manuscript:
         (root / REL).write_text(manuscript, encoding="utf-8")

@@ -574,7 +574,7 @@ def _stamp(st: Store, rel: str, *, sid: str, body: str) -> None:
         VR.record_verification(
             str(st.root), statement_id=str(sid), proof_text=str(body),
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            proof_no=1, manuscript=str(rel))
+            proof_no=1, manuscript=str(rel), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _real_entries_run(st: Store) -> tuple[str, str, str]:

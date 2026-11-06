@@ -94,7 +94,7 @@ def _sign(store: Store, *, text: str = P1, proof_no: int = 1) -> dict:
     """
     return VR.record_verification(
         store.root, statement_id=S.format_id(0), proof_text=text,
-        verdict=dict(_OK), verifier="agent-V", store=store, proof_no=proof_no)
+        verdict=dict(_OK), verifier="agent-V", store=store, proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _sign_n(store: Store, *, text: str = P1, proof_no: int = 1,
@@ -164,7 +164,7 @@ def _empty_then_sign(st: Store, *, text: str, manuscript: str) -> None:
         VR.record_verification(
             str(st.root), statement_id=str(made["stmt_id"]), proof_text=text,
             verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1,
-            manuscript=manuscript)
+            manuscript=manuscript, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
@@ -181,7 +181,7 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         VR.record_verification(
             str(st_bad.root), statement_id=str(made["stmt_id"]), proof_text=P1,
-            verdict=dict(_OK), verifier="agent-V", store=st_bad, proof_no=1)
+            verdict=dict(_OK), verifier="agent-V", store=st_bad, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     bad = _agent(st_bad).register_statement(**OWN, proof_text=P1)
     assert bad["ok"] is False, bad
     assert bad.get("kind") == "proof_text_needs_a_manuscript_sign", bad

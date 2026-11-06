@@ -80,7 +80,7 @@ def test_e9_a_dirty_proof_is_refused_at_the_step_and_not_signed(tmp_path):
     # 硬禁令的机械那一半：这两处短语确实在这份证明里（判据可离线复算）
     assert set(VR.banned_markers_in(_DIRTY)) >= {"易证", "显然"}, VR.banned_markers_in(_DIRTY)
     row = VR.record_verification(root, statement_id="0007", proof_text=_DIRTY, verdict=verdict,
-                    used_faces=("statements.read",))
+                    used_faces=("statements.read",), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert row["verdict"] == "有毛病" and row["defect_step"] == 1, row
     assert row["unresolved_errors"] == 2, row
     assert VR.signs_bit3(row) is False, row
@@ -129,7 +129,7 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
                     verdict=VR.parse_verdict(json.dumps(
                         {"verdict": "有毛病", "defect_step": 1,
                          "findings": [{"level": "error", "step": 1, "kind": "缝", "detail": "第 1 步"}]},
-                        ensure_ascii=False)))
+                        ensure_ascii=False)), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     unsigned = EB.bits_of(proof=True, proof_process=_DIRTY,
                           **VR.bit3_payload(bad, streak=VR.SIGN_STREAK_NEED))
     assert unsigned["grade"] == "conjecture", unsigned
@@ -149,7 +149,9 @@ def test_the_verdict_is_a_statement_not_a_state(tmp_path):
     root = tmp_path / "ws"
     root.mkdir()
     unclear = VR.record_verification(root, statement_id="0009", proof_text=_DIRTY,
-                        verdict=VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足"}'))
+                        verdict=VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足"}'),
+                        secretary_judge={"checked": False, "axis": "", "decision": "",
+                                         "reason": "夹具：判词不是两态，秘书没给轴"})
     assert unclear["verdict"] == "看不出来", unclear
     assert VR.read_verdict(unclear) == "看不出来", unclear
     assert VR.secretary_axis(unclear) == "", unclear
@@ -170,7 +172,7 @@ def test_a_wrong_field_in_a_handmade_verdict_is_refused_at_write_time(tmp_path):
     root.mkdir()
     with pytest.raises(VR.VerificationError):
         VR.record_verification(root, statement_id="0007", proof_text=_CLEAN,
-                  verdict={"verdict": "成立", "findings": [{"level": "critical", "step": 1}]})
+                  verdict={"verdict": "成立", "findings": [{"level": "critical", "step": 1}]}, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert VR.list_verifications(root, statement_id="0007")[0] == [], "被拒的那次不许留下行"
 
 
@@ -181,7 +183,7 @@ def test_the_ledger_is_append_only_and_ids_are_allocated_by_the_script(tmp_path)
     ok = VR.parse_verdict('{"verdict": "成立", "findings": []}')
     for i in range(3):
         VR.record_verification(root, statement_id="0007", proof_text=_CLEAN + f"\n（第 {i} 次提交）",
-                  verdict=ok, round_no=i + 1)
+                  verdict=ok, round_no=i + 1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     rows, problems = VR.list_verifications(root, statement_id="0007")
     assert not problems, problems
     assert [r["verification_id"] for r in rows] == [f"v-{S.format_id(i)}" for i in (1, 2, 3)], rows

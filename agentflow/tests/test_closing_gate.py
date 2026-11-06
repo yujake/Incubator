@@ -3325,7 +3325,7 @@ def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passe
     stmt = next(r for r in st.rows("statements") if str(r.get("stmt_id")) == "0000")
     VR.record_verification(ws, statement_id="0000",
                            proof_text=str(stmt.get("proof_text") or ""),
-                           verdict={"verdict": "成立"}, verifier="agent-V")
+                           verdict={"verdict": "成立"}, verifier="agent-V", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     _seal(ws, st)
     green = _gate(st, report)
     assert green.status["acceptance"] == "pass", _acc_detail(green)
@@ -3336,7 +3336,7 @@ def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passe
     VR.record_verification(ws, statement_id="0000",
                            proof_text=str(stmt.get("proof_text") or ""),
                            verdict={"verdict": "有毛病", "defect_step": 1,
-                                    "why": "第 1 步没有依据"}, verifier="agent-V")
+                                    "why": "第 1 步没有依据"}, verifier="agent-V", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     _seal(ws, st)
     again = _gate(st, report)
     assert again.status["acceptance"] == "pass", _acc_detail(again)

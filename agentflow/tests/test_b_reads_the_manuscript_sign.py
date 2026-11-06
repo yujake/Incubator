@@ -69,7 +69,7 @@ def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
         verdict=({"verdict": verdict} if verdict == "成立" else {
             "verdict": verdict, "defect_step": 2,
             "quote": "夹具：第 1 步直接取 δ=ε", "why": "夹具：对一般连续函数不成立"}),
-        verifier="agent-V", object_path=REL)
+        verifier="agent-V", object_path=REL, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     ledger = (f"verifications/pending/"
               f"{str(row.get('object_sha256') or row.get('proof_sha256'))}.jsonl"
               f"#{row.get('verification_id')}")

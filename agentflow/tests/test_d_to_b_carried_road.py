@@ -112,7 +112,7 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
                 store.root, statement_id=stmt_id,
                 proof_text=body,
                 verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-                store=store, proof_no=1)
+                store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
             assert signed.get("checked") is True, signed
             written = bool((signed.get("statement_writeback") or {}).get("written"))
             assert written is (i == need), (

@@ -1575,7 +1575,7 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
         if any_cover:
             out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
                        reason=("这一份正文（sha {sha}…）在 V 的台账里有签，但那一签是"
-                               "**内联**审出来的（台账行上没有 `manuscript`）—— 内联签没有"
+                               "内联审出来的（台账行上没有 `manuscript`）—— 内联签没有"
                                "载体，签块 / `## 依赖` / 按号寻址三样都落不了盘。正路：先把"
                                "正文落成一份稿（`reports/f-proof-*.md` / `notes/*.md`）→ "
                                "派 V 用 `verify.verify_proof` 带 `proof_manuscript` 审那一份"
@@ -3641,7 +3641,10 @@ class Secretary:
         if not candidate_axis and str(v.get("axis") or "") in _VR.SECRETARY_JUDGE_AXES:
             candidate_axis = str(v.get("axis") or "")
         if not candidate_axis:
-            #: 老调用点 / 直调夹具：只给了 `verdict`，没有秘书那一格 ⇒ 历史兼容读。
+            #: 老调用点 / 直调夹具：只给了 `verdict`，没有秘书那一格 ⇒ 没有轴。
+            #: 2026-11-06 裁定 2 起 `historical_axis` 一律空轴（它从前按 `verdict` 字面
+            #: 给 clean/fault，那正是"绕过秘书登记成立"的后半截）。这一档因此是
+            #: "判不了"：`candidate_ok` 为假 ⇒ 不签发，不是"没问题"。
             candidate_axis = _VR.historical_axis(v)
         candidate_ok = (candidate_axis == "clean"
                         and int(v.get("unresolved_errors") or 0) == 0)
@@ -6863,7 +6866,7 @@ class Secretary:
                         " ⇒ 整笔不写（不在'改一格'里顺手写坏一行）"))
                     return out
                 extra = {k: v for k, v in merged.items() if k not in canonical}
-                row_out = {**extra, **canonical}
+                row_out = {extra, canonical}
                 tx.upsert("statements", row_out, note="secretary:amend_statement_meta")
                 out.update(checked=True, amended=True, stmt_id=sid,
                            changes=sorted(changed), row=row_out,
@@ -11783,7 +11786,7 @@ def _judge_system(kind: str) -> str:
             "业主定的门槛是「同一份正文连续 3 次都判「成立」」——`streak`（尾部连续 clean 的次数）"
             "必须达到 `need`（门槛），且这几次盖的是同一份正文（那一格读数须为真）。\n"
             "p247：这里的 `candidate_axis` 是上一问（`v_reply_defect`）给出的轴 ——"
-            "它是唯一判据；`candidate_verdict` 只是 V 写下的陈述，**不要**按它的字面改判轴。\n"
+            "它是唯一判据；`candidate_verdict` 只是 V 写下的陈述，不要按它的字面改判轴。\n"
             "- 次数够了、同一份正文、这一签的 `candidate_axis` 是 clean ⇒ 判「签发」；\n"
             "- 次数不够 / 不是同一份正文 / 这一签的 `candidate_axis` 不是 clean ⇒ 判「不签发」，"
             "并在 basis 里点名差在哪一项；\n"

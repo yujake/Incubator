@@ -122,7 +122,7 @@ def _sign_three(st: Store, *, proof_text: str, stmt_id: str, proof_no: int = 1,
         VR.record_verification(
             st.root, statement_id=str(stmt_id), proof_text=str(proof_text),
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=st, proof_no=int(proof_no), manuscript=str(manuscript or ""))
+            store=st, proof_no=int(proof_no), manuscript=str(manuscript or ""), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _relaxed(monkeypatch) -> None:

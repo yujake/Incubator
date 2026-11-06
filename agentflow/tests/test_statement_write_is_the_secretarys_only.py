@@ -172,7 +172,7 @@ def _sign_off(st: Store, stmt_id: str, proof_text: str) -> dict[str, Any]:
         out = VR.record_verification(
             st.root, statement_id=stmt_id, proof_text=proof_text,
             verdict={"verdict": "成立", "why": "逐行走查三步都成立"},
-            manuscript=f"reports/f-proof-{stmt_id}.md", store=st, flip=False)
+            manuscript=f"reports/f-proof-{stmt_id}.md", store=st, flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         holds = VR.consecutive_holds(st.root, stmt_id)
         assert holds["checked"] is True and int(holds["streak"]) == wanted, holds
         if wanted < VR.SIGN_STREAK_NEED:

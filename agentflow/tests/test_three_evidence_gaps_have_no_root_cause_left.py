@@ -156,7 +156,7 @@ def _promote_to_proof_review(store: Store, stmt_id: str, proof_text: str) -> Non
     for i in range(1, need + 1):
         signed = VR.record_verification(
             store.root, statement_id=stmt_id, proof_text=proof_text, verdict=_OK,
-            verifier="agent-V", store=store, proof_no=1)
+            verifier="agent-V", store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         assert signed.get("checked") is True, signed
         wrote = bool((signed.get("statement_writeback") or {}).get("written"))
         assert wrote is (i == need), (
@@ -187,7 +187,7 @@ def _sign(store: Store, *, stmt_id: str, proof_text: str, proof_no: int) -> dict
     for i in range(1, need + 1):
         signed = VR.record_verification(
             store.root, statement_id=str(stmt_id), proof_text=proof_text,
-            verdict=dict(_OK), verifier="agent-V", store=store, proof_no=int(proof_no))
+            verdict=dict(_OK), verifier="agent-V", store=store, proof_no=int(proof_no), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         wrote = bool((signed.get("statement_writeback") or {}).get("written"))
         assert wrote is (i == need), (
             f"第 {i} 次「成立」的翻位读数是 written={wrote!r} —— 2026-10-29 口径："

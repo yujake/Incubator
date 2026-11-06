@@ -139,7 +139,9 @@ def test_the_recorded_author_makes_the_flag_work_end_to_end(store):
         verdict={"verdict": "有毛病", "defect_step": 2,
                  "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
                                "detail": "第 2 步直接用了结论"}]},
-        verifier="agent-V", store=store, proof_no=1)
+        verifier="agent-V", store=store, proof_no=1, secretary_judge={
+            "checked": True, "axis": "fault", "decision": "有缺陷要指出",
+            "reason": "夹具：这一行判的是「有毛病」，秘书的轴跟着是 fault"})
     vid = str(row["verification_id"])
     detail = {
         "stmt_id": sid, "proof_no": 1, "label": f"{sid}#p1", "verdict": "有毛病",

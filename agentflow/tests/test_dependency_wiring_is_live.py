@@ -148,14 +148,14 @@ def _library(store: Store) -> None:
         first = VR.record_verification(
             store.root, statement_id=sid, proof_text=_PROOF_TEXT.format(sid=sid),
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
+            store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         assert dict(first.get("statement_writeback") or {}).get("written") is False, (
             "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", first.get("statement_writeback"))
         for _ in (1, 2):
             signed = VR.record_verification(
                 store.root, statement_id=sid, proof_text=_PROOF_TEXT.format(sid=sid),
                 verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-                store=store, proof_no=1)
+                store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         assert signed.get("checked") is True, signed
         assert dict(signed.get("statement_writeback") or {}).get("written") is True, (
             "连续 3 次成立之后仍然没发签", signed.get("statement_writeback"))
@@ -642,7 +642,7 @@ def test_a_rows_own_numbered_manuscript_is_read_for_its_dependency_face(
         VR.record_verification(
             store.root, statement_id=sid, proof_text=body,
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1, manuscript=rel)
+            store=store, proof_no=1, manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
     got = _register(store, statement_full=full, proof_text=body)
     assert got.get("ok") is True, got

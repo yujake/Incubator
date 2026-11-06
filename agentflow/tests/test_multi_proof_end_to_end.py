@@ -152,7 +152,7 @@ def _sign(store: Store, *, text: str, proof_no: int, stmt_id: str = SID) -> dict
     for i in range(1, need + 1):
         signed = VR.record_verification(store.root, statement_id=stmt_id, proof_text=text,
                                         verdict=dict(_OK), verifier="agent-V", store=store,
-                                        proof_no=proof_no)
+                                        proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
         wrote = bool((signed.get("statement_writeback") or {}).get("written"))
         assert wrote is (i == need), _broken(
             "L2", f"第 {i} 次「成立」的翻位读数是 written={wrote!r}（2026-10-29 口径："

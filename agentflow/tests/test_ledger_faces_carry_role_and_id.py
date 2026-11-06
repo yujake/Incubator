@@ -348,7 +348,7 @@ def test_the_role_falls_back_in_order_and_says_which_field_it_came_from(
              body="夹具正文：这一条交接是判据输入。", task_id="t-000001", sid="s1")
     # 第五档 verifier（走 verifications.record_verification 这一个写入口）
     V.record_verification(root, statement_id="0001", proof_text="夹具证明正文",
-                          verdict={"verdict": "成立"}, verifier="V")
+                          verdict={"verdict": "成立"}, verifier="V", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
     ev = R.evidence_chain(root)
     st = {str(r["stmt_id"]): r for r in ev["statements"]}

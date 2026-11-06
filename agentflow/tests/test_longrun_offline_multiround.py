@@ -189,7 +189,7 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
         VR.record_verification(
             st.root, statement_id=sid, proof_text=PROOF,
             verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", store=st)
+            verifier="agent-V", store=st, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     steps.append("V.verify_proof/B.register_statement")
 
     # ⑦ 链闭合：经审核的自证定理 ⇒ 是根

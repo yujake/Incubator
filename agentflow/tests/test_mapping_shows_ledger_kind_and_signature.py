@@ -441,7 +441,7 @@ def _signed_row(tmp_path: pathlib.Path, **kw) -> tuple[Store, str, dict]:
     sid = str(filed["stmt_id"])
     first = VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
                                    verdict={"verdict": "成立", "findings": []},
-                                   verifier="agent-V", store=store)
+                                   verifier="agent-V", store=store, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert dict(first.get("statement_writeback") or {}).get("written") is False, (
         "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", first.get("statement_writeback"))
     assert [dict(r) for r in store.rows("statements")
@@ -449,10 +449,10 @@ def _signed_row(tmp_path: pathlib.Path, **kw) -> tuple[Store, str, dict]:
         "一票就抬档了（抬档只挂在真签上的那一笔）")
     VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
                            verdict={"verdict": "成立", "findings": []},
-                           verifier="agent-V", store=store)
+                           verifier="agent-V", store=store, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     out = VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
-                                 verifier="agent-V", store=store)
+                                 verifier="agent-V", store=store, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert out.get("checked") is True and out.get("verdict") == "成立", out
     assert dict(out.get("statement_writeback") or {}).get("written") is True, (
         "连续 3 次成立之后仍然没发签", out.get("statement_writeback"))
@@ -483,7 +483,7 @@ def test_e_a_signed_conjecture_becomes_a_theorem_in_the_same_write(
     # 读数：签名入口把"因为哪一签而抬"写在返回里（不是只在盘上悄悄改一格）。
     out = VR.record_verification(store.root, statement_id=sid, proof_text=PROOF,
                                  verdict={"verdict": "成立", "findings": []},
-                                 verifier="agent-V", store=store)
+                                 verifier="agent-V", store=store, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     writeback = dict(out.get("statement_writeback") or {})
     # 连续 3 次成立之后这里已经是第 4 票：它会照常翻位（票数够了），而 kind 已经是
     # theorem ⇒ 起点不再是 conjecture ⇒ 这一笔不重复抬（三态：不适用范围不写）。
@@ -506,7 +506,7 @@ def test_e2_a_rejected_verdict_does_not_lift_anything(tmp_path: pathlib.Path) ->
         verdict={"verdict": "有毛病", "defect_step": 2,
                  "findings": [{"level": "error", "step": 2, "kind": "gap",
                                "detail": "归纳步不成立"}]},
-        verifier="agent-V", store=store)
+        verifier="agent-V", store=store, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     assert out.get("verdict") == "有毛病", out
     row = [dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == sid][0]
     assert row["kind"] == "conjecture", row

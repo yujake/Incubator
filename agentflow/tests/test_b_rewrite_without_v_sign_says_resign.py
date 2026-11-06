@@ -40,6 +40,24 @@ from agentflow.agent_b import AgentB               # noqa: E402
 from agentflow.agent_v import AgentV               # noqa: E402
 from agentflow.store import Store                  # noqa: E402
 
+
+def _judge_for(verdict: dict) -> dict:
+    """夹具：按这一行的判词给秘书的轴（只给两态；「有毛病」⇒ fault）。
+
+    2026-11-06 裁定 2 之后，台账的轴只能来自秘书。夹具写的是"这一行当年怎么判的"，
+    所以轴跟着判词走：成立 ⇒ clean、有毛病 ⇒ fault、其余（看不出来一类）⇒ 空轴。
+    这不是"按字面定轴"—— 这条断言在夹具里，是声明这一段是什么现场，不是判据。
+    """
+    word = str((verdict or {}).get("verdict") or "")
+    if word == "成立":
+        return {"checked": True, "axis": "clean", "decision": "没问题",
+                "reason": "夹具：秘书判 clean"}
+    if word == "有毛病":
+        return {"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                "reason": "夹具：秘书判 fault"}
+    return {"checked": False, "axis": "", "decision": "",
+            "reason": "夹具：判词不是两态，秘书没给轴"}
+
 SID = "000000"
 FULL = "设 G 是 3-正则群；则弦长函数不是常值（重签判据）。"
 TEXT = "弦长函数不是常值（重签判据）"
@@ -103,7 +121,7 @@ def _sign(st: Store, text: str, *, verdict: dict | None = None, times: int = 1) 
     for _ in range(int(times)):
         VR.record_verification(st.root, statement_id=SID, proof_text=text,
                                verdict=dict(verdict or OK), verifier="agent-V",
-                               store=st, proof_no=1)
+                               store=st, proof_no=1, secretary_judge=_judge_for(dict(verdict or OK)))
 
 
 class _Call:
@@ -233,7 +251,7 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
         VR.record_verification(
             st.root, statement_id=SID, proof_text=signed_body,
             verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", store=st)
+            verifier="agent-V", store=st, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     rewrite = _b(st).register_statement(
         **{**OWN, "kind": "conjecture"}, proof_text=signed_body,
         proof_manuscript=man_text)

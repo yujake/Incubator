@@ -66,7 +66,7 @@ def _add_statement(store: Store, stmt_id: str, *, derived_from: list[str] | None
         return VR.record_verification(
             store.root, statement_id=stmt_id, proof_text=str(row.proof_text),
             verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            store=store, proof_no=1)
+            store=store, proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
     one = _sign()
     wb = dict(one.get("statement_writeback") or {})

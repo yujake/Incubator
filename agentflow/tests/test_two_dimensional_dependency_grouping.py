@@ -417,16 +417,16 @@ def _sign_n(st: Store, *, proof_text: str, proof_no: int) -> dict:
     """
     first = VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
                                    verdict={"verdict": "成立", "findings": []},
-                                   verifier="agent-V", store=st, proof_no=proof_no)
+                                   verifier="agent-V", store=st, proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     wb = dict(first.get("statement_writeback") or {})
     assert wb.get("written") is False and int(wb.get("streak") or 0) == 1, (
         "第 1 次「成立」就把第 3 位翻了（连续 3 次才发签）", wb)
     VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
                            verdict={"verdict": "成立", "findings": []},
-                           verifier="agent-V", store=st, proof_no=proof_no)
+                           verifier="agent-V", store=st, proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     last = VR.record_verification(st.root, statement_id=SID, proof_text=proof_text,
                                   verdict={"verdict": "成立", "findings": []},
-                                  verifier="agent-V", store=st, proof_no=proof_no)
+                                  verifier="agent-V", store=st, proof_no=proof_no, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     wb = dict(last.get("statement_writeback") or {})
     assert wb.get("written") is True and int(wb.get("streak") or 0) == 3, (
         "连续 3 次「成立」之后仍然没发签", wb)

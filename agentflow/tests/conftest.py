@@ -1107,8 +1107,15 @@ def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
                sid=sid)
 
     # ---- V 的验证台账（裁定 K2：造一行，含 verdict 与 proof_sha256）
+    #
+    # 2026-11-06（业主裁定 2）：台账行的轴只能由秘书给。写口改前是"不给就不写这一格"，
+    # 而读侧对"没有这一格"的行按 `verdict` 字面给轴 —— 于是三行不经秘书的「成立」就能
+    # 签住第 3 位。夹具要的是"秘书判过 clean 的那一行"，所以这里显式给轴（不是绕过）。
     V.record_verification(root, statement_id="0001", proof_text="夹具样本：证明正文",
-                          verdict={"verdict": "成立"}, verifier="V")
+                          verdict={"verdict": "成立"}, verifier="V",
+                          secretary_judge={"checked": True, "axis": "clean",
+                                           "decision": "没问题",
+                                           "reason": "夹具：秘书判 clean"})
     return root
 
 
