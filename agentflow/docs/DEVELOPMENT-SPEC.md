@@ -1971,3 +1971,249 @@ python -m agentflow.cli tools
 拒绝码表与基线的摩擦保的是"实现没被偷偷改宽"，索引的摩擦保的是"哪份算数"这件事**仍然有一个人负责**。
 这三条摩擦都保留，判据强度才不靠"大家记得同步"这种没有判据的承诺。
 
+---
+
+## [规范] §18 ⭐ 2026-11-06 真机一夜的九条教训（每条都带现场读数）
+
+> **为什么要有这一节**：那一夜（2026-11-05 晚 → 11-06 晨）不是"又修了几个 bug"，而是
+> 九次**同类误判**：把静止读成卡死、用并发数猜卡点、让探针把扫描面撑大、用脚本批量写赦免账、
+> 用计数器顶替判定、用截断 diff 核对提交、把"板干净"当成"研究做完"、把概念面派给写不出概念行的角色、
+> 把"引用了未在册的号"当成合法 dangling。九条都留了盘上读数；本节把它们写成**下一次可以直接照做的动作**。
+>
+> **本节怎么读**：每条四格 —— **结论**（一句命令式）/ **现场读数**（那晚真实读到的数、字段或命令输出）/
+> **以后怎么做**（可执行步骤）/ **判据**（哪条测试把住；没有的写"目前无判据，属于纪律"）。
+> 四格缺一格，这一条就退化成一句口号。
+>
+> **本节所有数字都是当次读数，不是今天的规格**（与 §1.1 同一条理由）：每条都写了出处（文件 / 命令），
+> 复跑后以新读数为准；本节不把这些数抄进任何 `LIVE-READINGS` 块。
+>
+> **本节不新建文件**：它就落在 `docs/DEVELOPMENT-SPEC.md` 里，所以 `docs/INDEX.md` 与
+> `docs/READING-MAP.md` 的索引面一个字不用动；引用的读数都在 `temp/` 与 `projects/` 的当次落盘上。
+
+### [规范] §18.0 索引：九条 → 现场读数 → 判据
+
+| # | 教训 | 现场读数（出处） | 判据 |
+|---|---|---|---|
+| 18.1 | 别把"静止"读成"卡死" | `temp/pytest-all` 四个 chunk log = 0 字节；`temp/_chunk0_stream.log` 停在 68% 半行 | 目前无判据（纪律） |
+| 18.2 | 全量卡死先用逐文件超时诊断 | 959 文件 / 944 过 / 10 独立红 / 2 超时；两个超时文件就是根因 | 工具自身有判据；流程无判据（纪律） |
+| 18.3 | 探针跑完即清，整树副本不留 | 39,852 → 18,662 文件；516.09s → 98.19s | 只有机制守卫；"跑完即清"无判据（纪律） |
+| 18.4 | 赦免类台账不许批量化写入 | 一次 69 条 amendment；最终账本仍 49 条 | `tests/test_tool_descriptions_are_compressed.py` 两条 |
+| 18.5 | 判定不许用计数器顶替角色判断 | 81 的 8/8 `有毛病` 行被标成 `gate`；`97c4f3bc` 裁定「判定重新是问模型 + 按题面语义」 | `tests/test_v_info_finding_is_left_to_the_secretary.py`、`tests/test_v_terminal_says_what_happened.py`、`tests/test_v_verdict_is_two_states.py` |
+| 18.6 | 并行 lane 一个文件一个所有者 | `62787fb3` 混入 `f0090991` 的改动；`49729b99` 带进另一条 lane 的两段 | 目前无判据（纪律） |
+| 18.7 | "挂机"按"研究未尽"算 | tasks=13 / statements=0 / 26 次 `agent_park` / 20 分钟一轮 | `tests/test_m_must_not_park_with_research_unfinished.py`、`tests/test_park_is_a_real_stop.py` |
+| 18.8 | 未尽项的动作要指向真能长出那一行的角色 | 概念行只由 B 经 `Secretary.write_concept_row` 写；C 只产 `AnalysisReport` | `test_branch_a_no_concept_face_dispatches_b` 等 |
+| 18.9 | 引用面：在册 ∧ 等级 ≥ `pre_theorem` | `CITATION_MIN_LEVEL` = `pre_theorem`；V 六项依赖面审计 | `tests/test_the_v_audits_the_dependency_face.py` 等 |
+
+### [规范] §18.1 别把"静止"读成"卡死"：块缓冲的日志不是进度
+
+**结论**：不要用"日志不动"判断"进程不动"；先看 CPU 是否在涨、socket 是否挂着、线程在等什么，再决定杀不杀；跑长任务一律 `python -u`（或 `PYTHONUNBUFFERED=1`）。
+
+**现场读数**（2026-11-06 00:26–07:52）：
+
+- `temp/pytest-all` 下 `20261106-002650` 那一跑：`plan.txt` 逐字写着 `files = 957`、`jobs = 4`，而四个 `chunk-*.log` **全是 0 字节**（时间戳都停在 00:26:50）；同目录只有 `chunk-*.cmd.txt` 与 `plan.txt` 有内容，也**没有** `summary.json`。
+- 同一夜把输出接进文件的那一跑：`temp/_chunk0_stream.log` 最后一个字节停在 `tests/test_release_acceptance_wiring.py::test_the_exit_code_follows_ms_verdict_three_ways`（进度 `[ 68%]`，半行，没有汇总行）；而 `temp/_chunk0_stream.err` 是 **0 字节**。
+- 00:46:37 重新起的那一跑，四个 `chunk-*.log` 有 16–28KB、有汇总行（14 红逐条点名）——同一套命令能把输出写出来；差别只在"stdout 接没接管道 / 文件"与"有没有 `-u`"。
+- 业主当次原话：「日志 0 字节/停在旧位置，而进程还在算。那晚我因此杀掉过两次正在跑的全量。」
+
+**以后怎么做**：
+
+1. 先取三样读数，再决定杀不杀：
+
+   ```powershell
+   # ① CPU 两次采样（间隔 10 秒；第二次明显更高 = 还在算）
+   Get-Process python, python3 -ErrorAction SilentlyContinue |
+       Select-Object Id, CPU, StartTime
+   # ② 有没有活着的连接（挂着的 socket 不会被"日志不动"看见）
+   Get-NetTCPConnection -OwningProcess <pid> -State Established -ErrorAction SilentlyContinue
+   # ③ 线程在等什么（有 py-spy 就用；没有就跳过，不拿猜测补位）
+   py-spy dump --pid <pid>
+   ```
+
+2. 长任务一律不缓冲：
+
+   ```powershell
+   $env:PYTHONUNBUFFERED = "1"
+   python -u -m pytest tests/<one_file>.py -q 2>&1 | Tee-Object -FilePath temp/pytest_<tag>.log
+   ```
+
+3. 只有"CPU 两次采样都不涨 ∧ 没有 Established socket ∧ 线程都在等一个不会来的锁"才判卡死；判之前先把这三样读数写进报告。
+
+**判据**：目前无判据，属于纪律（`tests/test_cli_console_encoding.py` 只管终端编码，不管进程有没有在算）。
+
+### [规范] §18.2 全量卡死要用逐文件超时诊断，不许用并发数猜
+
+**结论**：全量卡死时，先跑 `tools/run_each_test_file.py --timeout 180` 把"哪个文件超时 / 哪个文件独立红"点出来；不要用 `--jobs 4` 的并发数去猜卡点。
+
+**现场读数**（2026-11-06 00:46–07:39）：
+
+- `--jobs 4` 那一跑的 plan 是 `files = 957`；跑完的 `temp/_suite_stream.log` 尾部逐条列出 **14 条红**，但没有一条告诉你"哪一个是卡住全量的那个"。
+- 同一晚的逐文件门（`--timeout 180`）读到 **959 文件 / 944 过 / 10 独立红 / 2 超时**（业主当次记录；`tools/run_each_test_file.py` 的状态词是 `ok` / `fail` / `unknown`，超时落 `unknown`，逐字 `超时（180s）`）。
+- 两个超时文件就是卡死根因，且两条都有盘上原文：
+  - `temp/r5_timeout180.log`：`TIMEOUT after 180.1s (limit 180s)`（对应 `tests/test_r5_orchestration_cost.py`；单跑改前 **516.09s**）；
+  - `temp/wash_negative_realwait.log`：同一行 `TIMEOUT after 180.1s (limit 180s)`（对应 `tests/test_the_wash_is_proposed_not_applied.py`；当时每条"接受/拒绝"用例真睡 **31.68s**）。
+- 两个文件各自修完后：r5 `35 passed in 98.19s`；wash `12 passed in 14.28s`。
+
+**以后怎么做**：
+
+1. 先只要清单、不跑：`python -u tools/run_each_test_file.py --list`。
+2. 再逐文件跑，超时给足：`python -u tools/run_each_test_file.py --timeout 180`（按 §18.1 判活，不许中途 kill）。
+3. 先读 `unknown` 那一档（超时 / 起不了进程），再读 `FAIL`；**不要**先看 `--jobs 4` 的总红数。
+4. 找到超时文件后，单跑它并加 `--durations=10`，把慢的那一条钉到名字；修完再跑一次同一条命令，确认 `unknown` 清零。
+
+**判据**：工具本身有判据（`tests/test_run_each_test_file.py`：`test_one_failing_file_is_named_and_fails_the_gate`、`test_exit_0_with_only_skipped_is_all_skipped_not_ok`、`test_a_whole_file_xfail_file_is_never_read_as_ok`），发布门也有 `per-file` 步；但"全量卡死必须先逐文件诊断"这条**流程**目前无判据，属于纪律。
+
+### [规范] §18.3 探针跑完即清，整树副本不许留在被扫的树里
+
+**结论**：探针跑完即清；整树副本不要留在被扫描的树里（`temp/` 也不行），因为扫描面按文件数付钱。
+
+**现场读数**（2026-11-06 06:44–07:52）：
+
+- 06:44 单跑 `tests/test_r5_orchestration_cost.py`：**516.09s**，`1 failed / 34 passed`；最慢一条 `test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference` **342.48s**（`temp/r5_run1.log` 的 `slowest 20 durations`）。
+- 清掉 `temp/` 下 **11 棵整树副本 + 1 份快照树**之后：扫描面 **39,852 → 18,662 文件**；同一文件 **35 passed in 98.19s**（`temp/_msg_scan_closeout.txt`）。
+- 扫描面里 `.py/.md` 的体量：`tests/test_r5_orchestration_cost.py` 自己的 docstring 记着 **17.5k 个文件（`temp/` 占 16.8k）**，扣掉 `temp/` 之后副本只剩约 **700** 个文件。
+
+**以后怎么做**：
+
+1. 探针一律落 `temp/<label>/`，跑完 `Remove-Item -Recurse -Force`；删之前先 `Resolve-Path` 打印绝对路径，确认它就是那个 label，再动手。
+2. 需要"改前/改后"对照时，只复制**扫描面**（非 `temp/` 的 `.py` / `.md` + `src/agentflow/**` 的包资产），不要 `copytree` 整棵树。
+3. 收工时用一条命令报扫描面大小：`(Get-ChildItem temp -Recurse -File).Count`；这个数突然翻倍，先找副本，再跑判据。
+
+**判据**：`tests/test_r5_orchestration_cost.py::test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference` 的机制守卫只保证"草稿目录里的副本不许改变悬空读数、非草稿目录里的副本必须能改变它"；它**不**保证"副本不拖慢扫描"。所以"跑完即清"目前无判据，属于纪律。
+
+### [规范] §18.4 赦免类台账不许批量化写入
+
+**结论**：`contract_amendments` / 豁免表 / `_REF_KNOWN_MISSING_TEMP` / `_REF_KNOWN_MISSING_TEST_FILES` 这类"赦免"不要批量化写入；只从判据自己打印的「可粘贴账骨架」逐条插，每条单独写理由。
+
+**现场读数**（2026-11-06 01:17–07:52）：
+
+- 01:17 的第一版脚本 `temp/_add_amendments.py`：对 `contract_diff_edits` 的**每一组**都 `amendments.append(...)`，`reason` 只从一张四元表里取，取不到就写「按实现现算追平（2026-11-05 那批改动）」；业主原话：**一次加了 69 条 amendment**，等于把所有契约差异都赦免，当场回滚。
+- 01:18 的第二版 `temp/_add_amendments2.py` 才加上"已有 amendment 覆盖的跳过"；01:19 的 `temp/_add_amendments4.py` 改成只从 `temp/_contract_out.txt` 里判据打印的「可粘贴的账骨架」取 `json` 块（脚本先打印 `骨架条数`），逐条填 `reason`。
+- 最终基线仍是 **49 条** amendment：`temp/_msg_closeout_freeze.txt` 逐字「账本仍 49 条 —— 只重记，不多记」；那 3 条是 `table.create` / `table.update` / `verify.verify_proof` 的 `returns`。
+- 可复跑的反面读数：今天同一表达式 `contract_diff_edits(frozen, current)`（不带 amendments 过滤）读到 **68 组 / 87 条 edit**；把 68 组都写进赦免表，等于把整份差异都判成"合法演进"。
+
+**以后怎么做**：
+
+1. 先跑判据，把它打印的「可粘贴的账骨架」原样存到 `temp/`（`tests/_skeleton.py` 的 `contract_amendments_message` 就是那个渲染器）。
+2. **逐条**插：每条只写它自己那几条 `edits`，`reason` 必须回答"这次演进为什么合法"、`date` 写当天；不许用一个默认串兜底。
+3. 插完重跑判据；再故意多插一条（或把某条 `reason` 清空），确认判据会红——否则这条机制只是橡皮图章。
+
+**判据**：`tests/test_tool_descriptions_are_compressed.py::test_declaration_contracts_are_unchanged`（契约差异必须逐条对上）与 `::test_the_recorded_amendments_are_the_only_thing_they_excuse`（一条 amendment 只赦免它自己那几条 edit、`reason` 不能为空、退回后必须红）；骨架侧 `tests/test_registration_skeletons.py::test_a3_a_contract_change_failure_carries_the_whole_edits_fragment` 与 `::test_d_one_generator_run_changes_not_one_byte_on_disk`。
+
+### [规范] §18.5 判定不许用计数器顶替角色判断
+
+**结论**：判定不要用计数器顶替角色判断；"干净 / 有毛病"由秘书按题面语义判（V 回复里的一条 `info` finding 也可能让它不干净），代码不数 findings 条数；"成立 ⇒ 零 finding"仍然是"干净"那一档的判据，但它是秘书的语义结论，不是 `len(findings)`。
+
+**现场读数**（2026-11-06）：
+
+- 业主当次裁定（`97c4f3bc` 的提交信息逐字）：「这是对的，不是缺陷」—— 秘书用 info 级 finding 推翻「成立」是对的；「判定重新是「问模型 + 按题面语义」；info 级 finding 也确实会让这一转不算干净，但那是秘书判出来的结论，不是代码数 finding 条数数出来的（业主另已否掉「判定机械」）」。
+- 盘上的形态：`src/agentflow/verifications.py::parse_verdict` 要求 `verdict` ∈ {`成立`, `有毛病`}，`有毛病` 必须给 `defect_step`；`Secretary.judge_v_reply` 的材料只有 V 回复正文 + `verdict` / `defect_step`（**没有** `findings` 形参）；`src/agentflow/agent_v/core.py` 的终局分支序是 `verdict` → `fault` → `gate` → `signed` → `unjudged`。
+- 改前实测（`tests/test_v_terminal_says_what_happened.py` 的 docstring 逐字记着）：真机 81 的 **8 行（8/8 `verdict=有毛病`）全部被标成 `terminal="gate"`** —— 读的人把"有毛病"读成"成立但签不住"。
+- `row_signable` 仍用 `unresolved_errors == 0`（只数 `level="error"`）做"这一行签不签得动"的硬闸；那是**签的闸**，不是判定本身。
+- 反真空：`tests/test_v_info_finding_is_left_to_the_secretary.py` 的 a（成立 + 一条 `info` + 秘书答 fault ⇒ streak 0、不签发、秘书真被问一次）/ b（成立 + findings 空 + 秘书答 clean ⇒ 三转 streak 3、可签）。
+
+**以后怎么做**：
+
+1. 判定只走 `Secretary.judge_v_reply`（题面语义）；不写 `len(findings) > 0` 或 `unresolved_errors > 0 ⇒ 有毛病` 这种分支。
+2. `unresolved_errors` 只用于 `row_signable` 的"签不签得动"与理由串；不许把它折成判定。
+3. 新增"干净 / 有毛病"的形状先补 `tests/test_v_info_finding_is_left_to_the_secretary.py` 的 a / b；不许用"数条数"造一条捷径。
+
+**判据**：`tests/test_v_info_finding_is_left_to_the_secretary.py::test_a_an_info_finding_may_still_make_the_turn_not_clean`、`::test_b_zero_findings_lets_the_secretary_call_it_clean`；`tests/test_v_terminal_says_what_happened.py::test_s1_the_four_outcomes_each_get_their_own_terminal`、`::test_s2_a_condemned_row_is_never_labelled_gate`、`::test_s3b_every_terminal_value_has_a_live_witness`、`::test_s3c_the_branch_order_puts_the_outcome_before_the_signability`；`tests/test_v_verdict_is_two_states.py`（两态的唯一读口）。
+
+### [规范] §18.6 并行 lane 一个文件一个所有者；提交前看全文 diff
+
+**结论**：并行 lane 里一个文件同一时刻只设一个所有者；提交前先 `git log --oneline -3`，再看 `git diff --stat -- <path>` 与**全文** diff，不要用 `Select-Object -First N` 截断核对。
+
+**现场读数**（2026-11-05 晚 → 11-06 晨）：
+
+- `62787fb3` 的提交混进了 `f0090991` 的 `LlmSeam.for_secretary(..., meter=...)`：`temp/e2e-sign-20261105-b` 的报告逐字写着「那是在我提交前落进工作区、被我带进本笔；内容正确、归属混了」，同页的教训逐字是「`git diff | Select-Object -First 20` 是假核对；之后一律全文 diff」。
+- `49729b99` 把另一条 lane（批 3 / D-54 ③）未提交的 `closing.py` 两段（`suspected_split_reading` 与它的读数接线）带进了自己的提交；更正说明在 `temp/msg_note_49729b99_attribution.txt`。
+- 同族的纪律条目（`temp/_p242_commit_msg.txt`）：「带 path 会提交工作区整文件、把别人的改动一起带走」。
+
+**以后怎么做**：
+
+1. 动手前先 `git status --porcelain -- <path>`；不是自己的脏文件不碰，先等它的所有者提交完。
+2. 提交前三步，缺一不可：
+
+   ```powershell
+   git log --oneline -3
+   git diff --stat -- <精确路径>
+   git diff -- <精确路径>          # 全文；不接 Select-Object / head / -First N
+   ```
+
+3. 一笔只提交一个精确路径：`git commit -F <消息文件> -- <精确路径>`；不 `reset`、不 `amend`、不 `checkout --`。
+4. 同一个文件确实要两个人先后改：前一个提交完再动；同一文件不许并行。
+
+**判据**：目前无判据，属于纪律（仓库里没有"这次提交只含本 lane 的 hunk"这类机器判据）。
+
+### [规范] §18.7 "挂机"按"研究未尽"算，不按"板子上有没有卡片"算
+
+**结论**："挂机"要按"研究未尽"算，不能按"板子上有没有卡片"算；板干净不等于研究做完。
+
+**现场读数**（`projects/R-mk-infinite-93`，2026-11-06）：
+
+- 台账：`tasks` **13 行**（M 6 / D 4 / E 2 / A 1 / C 0）、`statements` **0 行**、`experiments` **11 行**（其中 7 条有结论：2 `supports` + 5 `refutes`；4 条 `inconclusive`）、`research_questions` **4 条 `open`**、`documents` **0 行**。
+- 时长：`sessions/20261106.jsonl` 首尾 **04:26:20 → 05:57:02**（1 小时 30 分 42 秒；最后一笔子代理 A 起于 04:31:52，到收尾是 1 小时 25 分）；全程 **26 条 `agent_park`**。
+- 三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮实验/穷举"，概念行一行没长（`tests/test_m_must_not_park_with_research_unfinished.py` 的 docstring 逐字记着）；`clock.PATROL_INTERVAL_SEC = 1200.0`（20 分钟一轮）。
+
+**以后怎么做**：
+
+1. 挂机前读 `researchpending.pending_reading(store)`；`pending` 为真就派 `next_action` 指向的角色，不 park。
+2. 只有 `concept_missing` / `candidate_unfiled` / `statements_unsigned` / `signed_unregistered` / `open_questions` / `manuscript_missing` 全空，才允许 park；"没有研究对象"的空工作区也不产生 gap（不许把 M 变成永动机）。
+3. 读数坏掉（`checked=False`）也按"未尽"挡（fail-closed），但连续挡到 `RESEARCH_STALL_LIMIT` 要报受控告警并放开，不许无限空转。
+
+**判据**：`tests/test_m_must_not_park_with_research_unfinished.py::test_branch_a_no_concept_face_dispatches_b`、`::test_branch_b_verified_conclusions_are_propositionalized`、`::test_the_same_reading_only_blocks_for_a_bounded_number_of_beats`、`::test_an_unreadable_reading_is_bounded_too`、`::test_finished_research_still_parks`；`tests/test_park_is_a_real_stop.py::test_a_parked_parent_takes_no_model_calls_and_no_steps`。
+
+### [规范] §18.8 "未尽项"的动作必须指向真能长出那一行的角色
+
+**结论**："未尽项"的下一动作必须指向真能写出那一行的角色；概念行只派 B，不要派 C。
+
+**现场读数**（2026-11-06）：
+
+- `researchpending._GAP_ACTIONS` 的 `concept_missing` 一格 `target` 写死 `"B"`，理由逐字「概念行只由 B 经 `Secretary.write_concept_row` 写，C 只做分析」。
+- `src/agentflow/specs/c.py` 的 C 动作表只有 `hottest` / `paths` / `cold` / `gaps` / `neighbors` / `relations_between`（`side_effect="read"`，产出 `AnalysisReport`）；概念行的唯一写侧是 `conceptrows` → `Secretary.write_concept_row`。
+- 2026-11-06 业主裁定（甲）：概念行那一档的动作主语是 B 而不是 C；真机 93 就是这样空转的 —— 三次轮查只排实验/穷举，concept 行 **0**。
+- 同一份 `researchpending` 的判据：`concept_missing` 与 `candidate_unfiled` 是两条独立分支，各自必须能单独触发（a1 / b1 与 a2 / b2）。
+
+**以后怎么做**：
+
+1. 写任何 `next_action` 前，先在 `specs/<role>.py` 的动作表里找"写那张表"的动作；找不到就换角色，不要写"派 X 梳理/整理"这种散文。
+2. 概念面：派 B；命题面：派 D（D 再派 F）；稿面：派 G（或 D 先出手稿）；文献面：派 A。
+3. 把 `target` 和 `next_action` 一起写进读数；只写动作不写主语，下一个人还会派错。
+
+**判据**：`tests/test_m_must_not_park_with_research_unfinished.py::test_branch_a_no_concept_face_dispatches_b`（断言 `concepts=0` 与 `next_action=concept_missing`，动作对象是 B 不是 C）；`tests/test_a_concept_row_is_registered_by_the_secretary.py::test_stubbing_the_route_back_to_a_direct_write_turns_the_reading_red`（直写概念行会红）。
+
+### [规范] §18.9 引用面：在册 ∧ 等级 ≥ `pre_theorem`；V 第一道、B 第二道
+
+**结论**：F 只可引「在册 ∧ 等级 ≥ `pre_theorem`」的命题；V 是第一道防线（六项依赖面审计），B 的受控拒是第二道兜底；"引用了未在册的号"不是合法 dangling，是这一笔写错了。
+
+**现场读数**（2026-11-06）：
+
+- `src/agentflow/depsection.py::CITATION_MIN_LEVEL = "pre_theorem"`；`citable_pool(statement_rows)` 只把 `status="active"` 且等级在 `CITATION_LEVELS` 里的号放进池子；`uncitable_statement_problem` 对"不在册 / 状态不可用 / 等级算不出 / 等级不够"各给一个受控码（不是一句"不够格"）。
+- `src/agentflow/depsection.py::dependency_review` 六项：① 正文每个号在册；② 每个被引号等级 ≥ `pre_theorem`；③ `## 依赖` 表每行同样满足 ①②；④ 表与正文引用集合一致（两边差集都点名）；⑤ 表里"用在哪一步"与正文那一步的 `cites` 对得上（可核时）；⑥ 引用强度沿用已有那一档。
+- 业主当次逐字：「F 应该无法读到尚未在册的命题，特别地，F 只可引用 proof review（或者说准定理级）及以上等级的命题」；追加「引用未在册命题应该在 V 审阅时就被打回，轮不到 B」。`efc5879b` 把 `53ec0477` 的"落 dangling 后整笔照写"回滚掉，改回受控拒。
+- 反真空读数：`temp/probe_v_audit_20261106.py`（g–k）与 `temp/probe_owner_rule_20261106.py`（a–e）全 PASS；对应判据见下。
+
+**以后怎么做**：
+
+1. 任何"可引"判定只读 `depsection.citable_pool` / `uncitable_statement_problem`，不许另写第二份；F 的提示词清单、B 的登记入口、V 的审计吃同一个池子。
+2. 正文或依赖表点到池外的号 ⇒ **受控拒、整笔不写**，拒信点名那个号与理由（不在册 ⇒「它不在册，F 读不到它」；等级不够 ⇒「等级 X 低于 `pre_theorem`，不可引」）。
+3. V 的六项审计任一不成立 ⇒ `verdict=有毛病` + `defect_step` + findings 点名 ⇒ 不签发；B 的受控拒保留作兜底，不是第一道。
+4. 不许把"引用了未在册的号"记成待接的 dangling 边；那不是边，是这一笔写错了。
+
+**判据**：`tests/test_the_v_audits_the_dependency_face.py::test_g_a_citation_of_an_unregistered_statement_is_a_defect`、`::test_h_a_citation_below_the_floor_is_a_defect`、`::test_i_a_table_row_the_body_never_cites_is_a_defect`、`::test_j_stubbing_the_pool_check_lets_g_and_h_through_red`、`::test_k_a_clean_dependency_face_still_gets_signed`；`tests/test_deps_table_and_proof_must_agree.py::test_e_b_registration_refuses_the_same_mismatch`、`::test_f_the_same_target_below_the_citation_floor_is_refused`；`tests/test_the_secretary_scans_the_proof.py::test_b_refuses_a_proof_that_cites_an_unregistered_statement`。
+
+### [规范] §18.10 收口：这九条里还缺判据的条目
+
+> 这一节本身是"判据缺口清单"，不是"我们已经都做到了"的声明。缺判据的条目按 §17.2 第 1 问处置：
+> 它们目前只能靠**纪律 + 当次读数**，不许在报告里写成"已有判据把住"。
+
+| 条目 | 现状 | 缺的是什么 |
+|---|---|---|
+| §18.1 先判活再杀 | 无判据 | "日志 0 字节时先看 CPU / socket / 线程"是流程，没有测试能证明操作者做了这三步 |
+| §18.2 先逐文件诊断 | 工具自身有判据，流程无判据 | 没有任何东西要求"全量卡死时必须先跑 `--timeout 180`"，也没有东西记录那两个超时文件 |
+| §18.3 跑完即清 | 只有机制守卫 | 机制守卫只保证副本不改写悬空读数，不保证副本不拖慢扫描；扫描耗时没有上限判据 |
+| §18.6 一个文件一个所有者 / 全文 diff | 无判据 | 提交归属没有机器判据；`git diff` 截断与否也没有判据 |
+| §18.4 的"批量化" | 部分有判据 | 两条判据只守"每条 amendment 只赦免自己的 edits、reason 非空"；它们守不住"脚本一次把 68 组全插进去"这个**动作形态** |
+
+§18.5 / §18.7 / §18.8 / §18.9 四条都能指到具体测试文件与函数，见各条的**判据**格；§18.4 是部分有判据（见上表最后一行）。
+
