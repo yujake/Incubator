@@ -6866,7 +6866,7 @@ class Secretary:
                         " ⇒ 整笔不写（不在'改一格'里顺手写坏一行）"))
                     return out
                 extra = {k: v for k, v in merged.items() if k not in canonical}
-                row_out = {extra, canonical}
+                row_out = {**extra, **canonical}
                 tx.upsert("statements", row_out, note="secretary:amend_statement_meta")
                 out.update(checked=True, amended=True, stmt_id=sid,
                            changes=sorted(changed), row=row_out,
