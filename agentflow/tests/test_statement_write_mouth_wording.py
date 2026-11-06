@@ -58,9 +58,12 @@ ABANDON = "会触发作废"
 BODY_ENTRY = "正文仍需走证明入口"
 
 #: 统一后的那整句（五处逐字同义，只有源码里的换行位置不同）。
+#: 2026-11-06 p250a（f507b528）把作废后的板项状态按实现改准：`ITEM_CLOSES` 里没有
+#: `closed`，真读数是 `item_state=done` + `item_close=expired` ⇒ 这一句跟着改成
+#: `done` + `expired`；五处同步（判据的强度不变：仍是「五处逐字同义」）。
 CANONICAL = (
     "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
-    "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
+    "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；"
     "正文仍需走证明入口。"
 )
 
@@ -142,7 +145,7 @@ def test_b_removing_either_sentence_turns_the_check_red() -> None:
 # ============================================================ c 反真空（整句）
 def test_c_rewording_one_site_back_to_the_old_line_turns_it_red() -> None:
     """c：把任一处那整句改回旧口径（三个词一个不少）⇒ 逐字同义这一条必须红。"""
-    tail = "（`v-resubmit`项随之closed/expired）；正文仍需走证明入口。"
+    tail = "（`v-resubmit`项随之`done`+`expired`）；正文仍需走证明入口。"
     rewound_tail = "；作废落在`v-resubmit`项上（closed/expired）；正文仍需走证明入口。"
     for rel, want in SITES:
         squashed = _squash(_read(rel))

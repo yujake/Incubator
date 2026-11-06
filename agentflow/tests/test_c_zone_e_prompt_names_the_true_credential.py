@@ -12,14 +12,17 @@
 | 3 | 「`signed_by=V` 那三格是唯一凭据」 | 真凭据是 V 台账那一行（`verifications/pending/<对象sha>.jsonl` 或 `verifications/<号>.jsonl`）；`observations.e_signature` 只是 E 自己写的结构标记，不算第三方签字（`numericproof.suspect_self_signed` 读的就是它） |
 
 第 3 段还漏了入口那一格：E 送审必须把 `proof_manuscript`（手稿路径）交上去 ——
-`agent_v.core._review_unregistered_prose` 的入口守卫只认它；不带它，`verify_proof`
-只会把判词落进 pending，稿上永远没有签块。
+`agent_v.core._review_unregistered_prose` 的入口守卫只认它。2026-11-06 p250a（f507b528）
+按实现把「不带它会怎样」改准了：穷举这一档不带稿 ⇒ 只给「看过、没签」
+（`numeric_evidence_reviewed_not_signed`），`verifications/pending/` 也不落一行
+（旧写法「不带它只会落 pending、稿上永远没有签块」与 `agent_v/core.py:153-154` 的
+那一组 kind 不符，已退役）。
 
 ## 判据怎么判
 
 只钉 E 的渲染提示词（`agent_prompts.system_prompt("E")`）：
 - 五条新口径必须出现（两态 / 签名者=收方秘书 / 真凭据是 V 台账那一行 /
-  `e_signature` 只是结构标记 / `proof_manuscript` 与「不带它只落 pending」）；
+  `e_signature` 只是结构标记 / `proof_manuscript` 与「不带稿 ⇒ 只给看过、没签」）；
 - 四条旧口径一个字都不许留（`三态结论落` / `签名者是 V` / `signed_by=V` /
   `成立的唯一凭据`）。
 
@@ -51,8 +54,8 @@ NEEDLES: tuple[str, ...] = (
     "observations.e_signature",
     "结构标记",
     "proof_manuscript",
-    "不带它只会落 pending",
-    "稿上永远没有签块",
+    "只给「看过、没签」（`numeric_evidence_reviewed_not_signed`）",
+    "`verifications/pending/` 也不落一行",
 )
 
 #: 旧口径的判别式：改后一个字都不许留（不再是"凭据"的说法）。

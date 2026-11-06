@@ -869,6 +869,22 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "retire_child / wake_blocked 三件，外加 void_items 的 `returns`。另两笔是 A 类、不进提示词也"
              "不抬版本：`verifications.py` 的 SECRETARY_JUDGE_KEY 注释与 `agent_skills.py` 的 M/E/F 手册正文。"
              "facts 键集仍 15 格（键名与条数一格未动）"},
+    # p250 → p251（2026-11-07「修 9 条红」）：只改题面 / 判据文本，一格事实都没挪
+    # ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p251", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p251（2026-11-07 修 9 条红）：p250 之后提示词文本又变了两轮却没抬版本 —— "
+             "① 72dffab1 把共享的 `conductor.void_items` summary 里 `open_items_of` 改成 "
+             "`conductor.board` 四读数（该工具在 A/B/D/E/F/G/L/M 八格面上 ⇒ 这八格已漂）；"
+             "② b7a1c721 改 M 的 policy 同一句。本批在 HEAD 2a609a3b 上把 9 条红修完再一次性抬格："
+             "甲 = 恢复被 d0987609 压缩掉、判据字面钉着的两句（`secretary.py` 的「两个『判不了』别混」"
+             "整段 / `specs/d.py` 的「研究侧由你主导」89 字原条），并把被 b3f0b8fb 顶掉的第一条位置挪回；"
+             "乙 = 三组判据按 f507b528 已改准的现状更新（V 的「按现行签**现算等级**」、E 的"
+             "「不带稿 ⇒ 只给『看过、没签』/pending 不落一行」、作废板项的 `done` + `expired`），"
+             "其中 `done` + `expired` 同步到 b/d/m/agent_skills 五处。"
+             "变化格 = A/B/D/E/F/G/L/M（A/E/F/G/L 的上游是 72dffab1 的共享 summary；"
+             "B 多一处 `done`+`expired`；D 多恢复原条并挪回第一条；M 多 b7a1c721 的读数名）。"
+             "C/H/V 逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

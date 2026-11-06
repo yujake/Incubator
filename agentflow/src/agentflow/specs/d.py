@@ -206,18 +206,20 @@ SPEC = AgentSpec(
             "猜想的九个状态各自必须带什么（schema 的硬条件，缺一样就当场拒收）：`proposed` 要给非空 `testable`（给不出一律落 `needs_evidence`）；`supported_not_proved` 要至少一条 `experiment_ids`；`refuted` 要 `counterexample_experiment_id`；`proved` 要 `proof_experiment_id`；`promoted` 要 `promoted_to`；`known_in_literature` 要 `known_lit_id`；`withdrawn` 要 `withdraw_reason`。",
         ),
         policy=(
-            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
-            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
-            "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
-            "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
-            "不必证明叫不醒（`why` 必填、逐字进留痕）。",
             # 2026-10-20 业主裁定（逐字：「「F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，
             # D 是真正主导研究」……请「加强 D 侧研究的积极性，压低 M 自主操纵研究的积极性」」）
             # ⇒ 头一条就是"你主导研究"：派 C/E/F、让 F 带 V 的签字，都由 D 自己决定。
             # 它「不新增任何边」（D 的出边仍是 A/B/C/E/F，`D→V` 那条已叫停）—— 只是把
             # 已有的授权写成"由你决定、不必等 M 批准"，否则 D 每走一步都要先问主控。
-            "**研究侧由你主导**：派 C / E / F 都由你决定，不必等 M 批准（M 只做统筹与搭桥）—— "
-            "具体怎么派人见下面「F 可能直接派 A」那一条。",
+            # 2026-11-06 p250b 把撤销那条插到了最前，顶掉了"第一条"这个位置 ⇒ 挪回第一条：
+            # 判据 `test_d_owns_the_research_side` 钉的就是"越靠后越会被读成补充说明"。
+            "**研究侧由你主导**：下一步做什么、派 C（要候选路径）、派 E（写脚本/玩具例子）、"
+            "派 F（攻坚）、让 F 带 V 的签字，都由你决定，不必等 M 批准；M 只做统筹与搭桥。",
+            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
+            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
+            "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
+            "不必证明叫不醒（`why` 必填、逐字进留痕）。",
             "**证据够不够由三条可核实判据给**（`assess` / `consider` / `submit_gaps` 走的是同一份 `analyze_gaps`）：① 问题的关键词"
             "在关系与概念里零命中 ⇒ 不足（去要检索）；② 最高度数低于阈值、且一条 `quote_verified=True` 的引文都没有 ⇒ 不足；"
             "③ 存在成对矛盾 ⇒ 不足（走 `adjudicate`：先读原始证明的那一步，再判是结论错、条件被漏还是口径不同）。门槛没到就不下钻，"
@@ -307,7 +309,7 @@ SPEC = AgentSpec(
             "拿到干净的「成立」；② 这条命题确实做不动了 ⇒ **明确放弃**：派 B 用通用表写口把 `status` 改成 `abandoned`，"
             "并同时把 `quote_reason` 写成 `abandoned@<ISO8601>@<理由>`（状态、时间、理由三样缺一不可；只写状态的行仍按未签计）。"
             "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
-            "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；正文仍需走证明入口。"
+            "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。"
             "放弃之后回头看一眼板：确认名下那条 `v-resubmit@` 已 `done`（`item_close` ∈ `acked` / `completed` / "
             "`expired`；还开着就按未消项处理，它会挡销号与收工）。",
             "**「成果概述」是第一节**：证明了哪些命题、证伪了哪些猜想、做了哪些数值实验 / 测过哪些样例、以及过程中总结到的经验。"

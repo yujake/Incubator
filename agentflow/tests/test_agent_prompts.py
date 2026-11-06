@@ -2287,7 +2287,23 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p250"
+# 2026-11-07（p250 → p251，「修 9 条红」）：八格换值 —— A/B/D/E/F/G/L/M。
+# 其中 A/E/F/G/L 的上游不在本批：72dffab1 把共享的 `conductor.void_items` summary 里
+# `open_items_of` 改成「读板用 `conductor.board`：board_open_items / board_open_count /
+# patrol 的 child_open_count / tree().items」四个真读数，而该工具在 A/B/D/E/F/G/L/M
+# 八格面上 ⇒ p250 冻结之后这八格一直漂（文本变了没抬版本）。本批自己动的是 B / D / M：
+# ① 甲：`specs/d.py` 恢复「研究侧由你主导」89 字原条并挪回第一条（b3f0b8fb 把撤销说明
+#    插到最前，顶掉了 2026-10-20 的"第一条"裁定）；`secretary.py` 的「两个『判不了』别混」
+#    整段恢复（它只进秘书的判断面，不进这十一格）；「作废后的板项」在 B/D/M 与两份手册里
+#    统一成 `done` + `expired`。② 乙：V/E/作废口径三组判据按 f507b528 已改准的现状更新
+#    （判据文本不进提示词；同步到五处的那一句进 B/D/M 三格）。③ M 另带 b7a1c721 的读数名
+#    改动。C/H/V 逐字未动。逐格旧值 → 新值：
+#      A 0ae47c4f→e3919091 / B 2e2a0f35→8eb5c3c7 / D 15969bb8→0c08f935 /
+#      E acf48e01→7a6079a2 / F 2b76518f→af0fa9f9 / G 99a3a6ac→c8d898a7 /
+#      L 34b0473c→f1d6fe1d / M 1b6876d9→523229a7（C/H/V 与 p250 同值）。
+# 十一格是 `temp/_p251_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
+# 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+_FROZEN_PROMPT_VERSION = "p251"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2522,16 +2538,16 @@ _FROZEN_PROMPT_VERSION = "p250"
 #: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "0ae47c4f391a1ac7ea20928f431042050b79c23b8f9dbecf9a91a17a3c60812d",
-    "B": "2e2a0f35f1ae484ce1b5966c755fe2040838a2a95fe046eddf56fc0f1b281ffc",
+    "A": "e3919091bf5be2488f48031b9fbefb2c7e4adcee56909874075727bc844e9034",
+    "B": "8eb5c3c716e070a8ea575029bac1afee71e489aabec0ee0c2af9f9880947f998",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "15969bb8312c4819169dbb05c0ef59ef1b5dff7a44d3bb30f7621b2a62faad21",
-    "E": "acf48e01b9ddd1fc0c3374927173c0de662b75680bb464f24e7a91f114646cd4",
-    "F": "2b76518f13a7885b1c91cf9f5dff99b4760d2e7855e5fda72979c01031521476",
-    "G": "99a3a6ac0eace8d8645349702bc872299b00f5484245030f78065bd6bb5f21bd",
+    "D": "0c08f935b945ffa999b362ba5bb164389045e4110e2e5a70e12d4f03db5c98d9",
+    "E": "7a6079a2c24dce973bf8357e8415d8ad579f8c5631941b28773b37855dc86755",
+    "F": "af0fa9f9ed726fca11aedf49242b7fe8b5b624d13ebc90c2dfff8926b02c97c6",
+    "G": "c8d898a7e83987856741aeaf127869e578445a1db8c8b84f05c1ccbb5f0d9509",
     "H": "f1fa916c520bf5357969e7ff20eb32dcca0bb249adb78bd3d50b7a948ea87488",
-    "L": "34b0473c6f57a23fd611c5fdb8b00cd274bd015a7b156a2abb3e88521c6731e9",
-    "M": "1b6876d99b1d87c28ea2a6d4bcd469c0175bd741db62fe7a63901d7e0866dc3c",
+    "L": "f1d6fe1d88ad8aa93f2239b8ac768d7730bd579bb5a704b956353c404543d827",
+    "M": "523229a7473fbb84233e3fb19f33965fe2e6d35e6674c9ed542547040933e654",
     "V": "a3d391fc5a737268fc8d4c36ecd74146f2dc4f9fea4aaf58a677c229446f48bd",
 }
 

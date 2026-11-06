@@ -365,7 +365,7 @@ SPEC = AgentSpec(
             "你要说的是**等级**，别去挑那个历史列的名字。"
             "改命题的正文：把同一份内容**再交一次** `own.register_statement`。"
             "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
-            "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 closed/expired）；"
+            "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；"
             "正文仍需走证明入口。",
             # 2026-10-20 业主裁定（逐字："B 负责定理及证明入库时可让 V 审核签字，这是对文献侧引入的内容
             # 需要看的，因为我们自己经 F 产出的证明天生带 V 签字"）：V 的签字有三个入口（F 产出时签、

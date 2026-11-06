@@ -3420,7 +3420,27 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p250"
+#: p250 → p251（2026-11-07 修 9 条红）：
+#: p250 那一段（f507b528 更正 / b3f0b8fb 补齐 / d0987609 压缩）抬了版本，但之后又有两笔改了
+#: 共享文本却没抬版本：72dffab1 把 `conductor.void_items` 的 summary 里 `open_items_of` 改成
+#: 「读板用 `conductor.board`：board_open_items / board_open_count / patrol 的 child_open_count /
+#: tree().items」（该工具在 A/B/D/E/F/G/L/M 八格面上）与 b7a1c721 的 M policy 读数名。
+#: 本批把 HEAD 2a609a3b 上的 9 条红修完再一次抬格：
+#:   甲（压缩过头，恢复判据字面钉着的原句）：① `secretary._judge_system("v_reply_defect")` 的
+#:      「两个『判不了』别混」整段（d0987609 的 C10 删掉；判据 test_v_axis... 钉两句）；
+#:      ② `specs/d.py` 的「研究侧由你主导」89 字原条（d0987609 的 C8 压成 76 字）—— 并把
+#:      b3f0b8fb 插到最前、顶掉"第一条"的撤销说明挪到它后面。
+#:   乙（判据钉旧口径，按 f507b528 已改准的现状更新判据）：V 的「按现行签现算等级」、
+#:      E 的「不带稿 ⇒ 只给『看过、没签』（numeric_evidence_reviewed_not_signed）/
+#:      `verifications/pending/` 也不落一行」、作废板项的 `done` + `expired`
+#:      （`ITEM_CLOSES` 没有 `closed`；同步到 b/d/m/agent_skills 五处）。
+#: 变化格 = A/B/D/E/F/G/L/M（A/E/F/G/L 的上游是 72dffab1；C/H/V 逐字未动）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p251）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: `tests/golden/agent_surface_snapshot.json` / `tool_surface_snapshot.json` 按现值重冻；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p251"
 
 
 
