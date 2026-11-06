@@ -470,9 +470,17 @@ def _f_case(tmp_path: pathlib.Path, *, sign_sha: str | None = None) -> tuple[Sto
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
     sha = _bytes_sha(pathlib.Path(store.root) / F_PROOF_REL)
+    # 2026-11-06（裁定 2 / 3 之后）：台账行的轴只能由秘书给 —— 没有
+    # `secretary_judge` 这一格的行，`row_signable` 判 False（`ledger_axis` 不再按
+    # `verdict` 的字面回退）。这里手写三票是"控制 verdict 与 sha"的夹具，不是"绕过
+    # 秘书"：给上与真写口（`verifications.record_verification`）同形的判定格，
+    # 三票才仍然是三票。断言一个字没改。
+    judge = {"checked": True, "axis": "clean", "decision": "没问题",
+             "reason": "夹具：秘书读不出缺陷（F 侧那一路要走模型，这里只控 verdict 与 sha）"}
     _ledger(store, sid, [{"verification_id": f"v-{i:06d}", "proof_no": 1,
                           "verdict": "成立", "proof_sha256": _text_sha(F_PROOF),
                           "object_sha256": sha, "object_path": F_PROOF_REL,
+                          "secretary_judge": dict(judge),
                           "at": TS}
                          for i in (1, 2, 3)])
     _index_for_f_proof(store, sha=sha,
