@@ -2939,9 +2939,7 @@ class Task:
     # 这一格；这一格只在 `expects == ""` 时有值（两格同时非空 ⇒ 读的人不知道以哪格为准，
     # 由 `validate` 当场拒）。
     #
-    # 位置在最后一位（不是美观问题）：`to_dict()` 是 `asdict`（键序 = 字段序），而
-    # `_write_new_row` 与 `finish` 都把行补齐到全字段 —— 新键追加在末尾才让 `rebuild()`
-    # 之后 `tasks.json` 逐字节一致（I-9 的那两条判据守这件事）。
+    # 位置在最后一位的理由同 `settled_at_parent_exit`（`rebuild()` 逐字节一致，I-9）。
     #: `expects` 被清空前的那一档（`ITEM_EXPECTS` 之一；空串 = 没有可留的来路）。
     expects_was: str = ""
 
@@ -3068,12 +3066,8 @@ class Task:
         else:
             if self.kind not in ITEM_KINDS:
                 raise ValueError(f"kind 必须是 {ITEM_KINDS} 之一或空串，收到 {self.kind!r}")
-            # 空 `expects` 只开在一处：撤销/作废之后的那一行（`item_state="done"` 且
-            # `item_close="expired"`）。那一档回答的是"这条永远不会再被处理"，
-            # `expects` 在它上面不再承担任何义务；原值留在 `expects_was`（业主
-            # 2026-11-06 的丙件）。其余行（queued / seen / block / done+acked /
-            # done+completed）仍然只许 `ITEM_EXPECTS` 两档 —— 空串不是第三个取值，
-            # 它只是"这一行已经没有任何动作可要"这个形态在过期行上的写法。
+            # 空 `expects` 只开在撤销/作废之后的那一行（`done` + `expired`，见
+            # `expects` / `expects_was` 两格的字段注释）；其余行仍只许 `ITEM_EXPECTS` 两档。
             empty_expects_ok = (self.expects == "" and self.item_state == "done"
                                 and self.item_close == "expired")
             if self.expects not in ITEM_EXPECTS and not empty_expects_ok:
