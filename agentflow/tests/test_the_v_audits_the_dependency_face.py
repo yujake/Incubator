@@ -241,9 +241,13 @@ def test_j_stubbing_the_pool_check_lets_g_and_h_through_red(monkeypatch, tmp_pat
     """j：把 ①/② 的判据打桩成恒真 ⇒ g 与 h 必须回到"放行并签上"。
 
     这证明 g/h 的绿来自那一条判据，而不是"恰好别处也走不通"。
+
+    打桩点跟着判据落点走（2026-11-06）："这个号不可引"那条判据收进
+    `uncitable_statement_finding`（它同时是六格的唯一制造器），
+    `uncitable_statement_problem` 只剩它的两格视图。下面两条断言一个字都没改。
     """
-    monkeypatch.setattr(DS, "uncitable_statement_problem",
-                        lambda sid, rows, **_kw: ("", ""))
+    monkeypatch.setattr(DS, "uncitable_statement_finding",
+                        lambda sid, rows, **_kw: {})
 
     st = _ws(tmp_path / "g")
     body = (f"1. 由 stmt:{UNKNOWN} 直接推出结论。\n2. 于是主命题成立。")

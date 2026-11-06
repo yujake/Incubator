@@ -158,6 +158,54 @@ REFUSED_NOT_WASHED = "manuscript_not_washed"
 #: "那一节在不在"，B 的登记入口也只看 `present`；`deps_missing_reading` 虽然把它读成
 #: "说不一致"，但那条读数不拦人（它此前只有 `why` 一句话）。
 REFUSED_TABLE_DISAGREES = "deps_table_disagrees_with_proof"
+#: 依赖段那一行"用在哪一步"与证明正文那一步的 `cites` 对不上（表述错误里的 b 类）。
+#: 这个名字此前只是两个调用点各写的字面量，2026-11-06 收成一个常量（值一个字不改）。
+REFUSED_STEP_MISMATCH = "dependency_step_mismatch"
+
+#: 引文与被引命题的原文对不上（表述错误里的 a 类：引错内容）。
+#:
+#: 为什么必须有一个专门的码（业主 2026-11-06 的四元组口径）：b / c 两类已经各有
+#: 受控码（:data:`REFUSED_STEP_MISMATCH` / :data:`REFUSED_TABLE_DISAGREES` 覆盖
+#: "步号对不上"与"表与正文的引用集合不一致"），而"表里那一行的引文写的是另一条
+#: 在册命题的原文"此前没有任何码 —— 它长得像 c（表里确实有一行），读的人会照着去改
+#: 错的地方：该改的是号或引文，不是把行删掉。
+#:
+#: 判据面刻意保守（见 :func:`quote_mismatch_finding`）：只有能证明那段引文逐字
+#: 属于另一条在册命题时才报。F 的渲染器把"这一步的原话"写进引文那一格，它本来
+#: 就不等于被引命题的正文 —— 拿"不像"当判据会把每一份正常手稿都判红。
+REFUSED_QUOTE_MISMATCH = "citation_quote_mismatch"
+
+#: 引用面异常的四元组六格（业主 2026-11-06 的机器形态：每格只回答一个问题）。
+#:
+#: | 格 | 回答什么 |
+#: |---|---|
+#: | `stmt_id` | 是哪一条引用（那个号） |
+#: | `where` | 在哪一步 / 依赖表第几行 |
+#: | `kind` | 是哪一类问题（受控码，见 :data:`CITATION_KIND_LABELS`） |
+#: | `expected` | 期望什么 |
+#: | `got` | 实际读到什么 |
+#: | `fix` | 该怎么改（一句话可执行） |
+#:
+#: 缺一格就是读的人要多猜一次：没有号就只能重读整份稿，没有步骤就只能自己找，
+#: 没有期望 / 实得就不知道差在哪，没有 `fix` 就只知道"有问题"而不知道下一步。
+FINDING_CELLS: tuple[str, ...] = ("stmt_id", "where", "kind", "expected", "got", "fix")
+
+#: 受控分类：受控码 → 报文里逐字出现的类别名（一码一名，不许互借）。
+#:
+#: 业主 2026-11-06 逐字："不许把两类混成一句（例如把『不在册』与『等级不到』写成
+#: 同一句『依赖面有问题』）"。所以类别名按码固定，读的人据此知道该去登记、该去签、
+#: 还是该改号；码本身也逐字进报文（机器读它）。
+CITATION_KIND_LABELS: dict[str, str] = {
+    REFUSED_UNKNOWN_SOURCE: "该条不存在（未在册）",
+    REFUSED_SOURCE_STATUS: "该条不可用（状态不是 active）",
+    REFUSED_LEVEL_UNREADABLE: "等级读不出来（判不了）",
+    REFUSED_LEVEL_TOO_LOW: "等级不到可引门槛",
+    REFUSED_TABLE_DISAGREES: "表述错误·表与正文的引用集合不一致",
+    REFUSED_STEP_MISMATCH: "表述错误·步号对不上",
+    REFUSED_QUOTE_MISMATCH: "表述错误·引文与被引命题的原文对不上",
+    REFUSED_SECTION: "依赖段读不懂（格式不对）",
+    REFUSED_SECTION_MISSING: "依赖段缺失（正文引了、手稿里没有这一节）",
+}
 
 #: `manuscript_not_washed` 的下一步（2026-11-05 现场裁定）。
 #:
@@ -277,47 +325,155 @@ def citable_pool(statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     return pool
 
 
-def uncitable_statement_problem(
+def _citation_where(*, step: Any = None, line: int = 0, site: str = "") -> str:
+    """四元组里"哪一步"那一格：步号 / 表行 / 站点，能写几样就写几样。
+
+    为什么要三样一起写：同一个异常可能同时有"表第几行"与"正文第几步"两个坐标
+    （表里那一行说它用在第 2 步），只给一个的话，读的人还得自己把另一个找出来 ——
+    而找错一步就是改错一处。
+    """
+    try:
+        no = int(step) if str(step if step is not None else "").strip() else 0
+    except (TypeError, ValueError):
+        no = 0
+    line_no = int(line or 0)
+    site_text = str(site or "").strip()
+    if line_no and no > 0:
+        return f"依赖段第 {line_no} 行（表里写用在哪一步：第 {no} 步）"
+    if line_no:
+        return f"依赖段第 {line_no} 行"
+    if no > 0 and site_text:
+        return f"{site_text}第 {no} 步"
+    if no > 0:
+        return f"第 {no} 步"
+    return f"{site_text}（未标步号的行）" if site_text else "（未标步号的行）"
+
+
+def finding_sentence(record: Mapping[str, Any]) -> str:
+    """一条引用面异常的人话：号 / 哪一步 / 哪一类 / 怎么改，四件都在同一句里。
+
+    形如：
+
+        `stmt:000008`（在哪一步：证明正文第 2 步）· 类别：等级不到可引门槛
+        （`citation_below_proof_review`）· 期望：… · 实得：… · 怎么改：…
+
+    为什么拼成一句而不是只给 dict：这一句会进拒信、V 的 `finding.detail`、
+    洗稿打回的 `reason` —— 读它的人（提交证明者、D、F 的秘书）手里没有 dict，
+    只有这句话。四个问句的答案缺一个，读的人就要多猜一次。
+    """
+    sid = str(record.get("stmt_id") or "")
+    kind = str(record.get("kind") or "")
+    label = CITATION_KIND_LABELS.get(kind, "引用面异常")
+    head = f"`stmt:{sid}`" if sid else "（这一条没有可认的命题号）"
+    return (
+        f"{head}（在哪一步：{record.get('where')}）· 类别：{label}（`{kind}`）"
+        f" · 期望：{record.get('expected')} · 实得：{record.get('got')}"
+        f" · 怎么改：{record.get('fix')}"
+    )
+
+
+def citation_finding(*, stmt_id: str, where: str, kind: str, expected: str,
+                     got: str, fix: str, step: Any = None) -> dict[str, Any]:
+    """造一条六格齐全的引用面异常（`detail` 是 :func:`finding_sentence` 那句人话）。
+
+    六格就是 :data:`FINDING_CELLS`；`step` 是给调用方排序 / 指 `defect_step` 用的
+    整数步号（没有就 `None`，"没标步号"与"第 0 步"是两件事）。
+    """
+    no = step if isinstance(step, int) else None
+    out: dict[str, Any] = {
+        "stmt_id": str(stmt_id or ""),
+        "where": str(where or "（未标步号的行）"),
+        "kind": str(kind or ""),
+        "expected": str(expected or ""),
+        "got": str(got or ""),
+        "fix": str(fix or ""),
+        "step": no,
+    }
+    out["detail"] = finding_sentence(out)
+    return out
+
+
+def uncitable_statement_finding(
         sid: str, statement_rows: Iterable[Mapping[str, Any]] | None, *,
-        where: str = "") -> tuple[str, str]:
-    """`stmt:<sid>` 为什么不可引：`(受控码, 人话)`；空串对 = 可引（在册 ∧ 等级够）。
+        where: str = "", line: int = 0, step: Any = None) -> dict[str, Any]:
+    """`stmt:<sid>` 为什么不可引 ⇒ 六格；空字典 = 可引（在册 ∧ 等级够）。
 
     三态不折平：不在册 / 状态不可用 / 等级算不出来 / 等级不够，各有各的受控码与
-    人话 —— 把它们折成一句"不够格"，读的人就不知道该去登记、该去签、还是该改号。
+    期望 / 实得 / 怎么改 —— 把它们折成一句"不够格"，读的人就不知道该去登记、
+    该去签、还是该改号（业主 2026-11-06："不许把两类混成一句"）。
 
-    拒信逐字点名那个号与理由（业主 2026-11-06 的两句原话都落在人话里）：
-    不在册 ⇒「它不在册，F 读不到它」；等级不够 ⇒「等级 X 低于 pre_theorem，不可引」。
+    不在册那一档的实得逐字带着「F 读不到它，这不是待接的悬空边」：那是业主那一句
+    「F 应该无法读到尚未在册的命题」的落点，读的人据此知道该改号而不是去补一条边。
 
     `statement_rows=None` = 调用方手里没有台账（只拿得到可引集合）：这一档只报
-    "不在可引池里"，不冒充知道原因。
+    "不在可引池里"，不冒充知道原因（原因四档都要真读台账）。
     """
+    site = str(where or "").strip()
+    where_text = _citation_where(step=step, line=line, site=site or "依赖段")
     if statement_rows is None:
-        return REFUSED_UNKNOWN_SOURCE, (
-            f"{where}点名的 `stmt:{sid}` 不在这一轮的可引池里（在册 ∧ "
-            f"{CITATION_MIN_LEVEL} 级及以上才可引）—— F 读不到它，所以这个号只能是"
-            "这一笔写错了 ⇒ 整笔不写")
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_UNKNOWN_SOURCE,
+            expected=(f"在册且等级 ≥ {CITATION_MIN_LEVEL}（这一层只拿得到可引池，"
+                      "看不到每一条的状态与等级）"),
+            got="不在这一轮的可引池里",
+            fix=("核对号：把这一格换成 `attack.step` 返回值里本轮可引的 id；"
+                 "若它本来就该在册，先让 B 登记、让 V 签，再来引"),
+            step=step)
     index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
     anchor = index.get(str(sid))
     if anchor is None:
-        return REFUSED_UNKNOWN_SOURCE, (
-            f"{where}点名的 `stmt:{sid}` 不在册（台账里现有 {len(index)} 条命题）："
-            "它不在册，F 读不到它 ⇒ 这不是待接的悬空边，而是这一笔写错了，整笔不写")
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_UNKNOWN_SOURCE,
+            expected="在册（只有已收录的命题才可引）",
+            got=(f"不在册（台账里现有 {len(index)} 条命题）—— F 读不到它，"
+                 "这不是待接的悬空边"),
+            fix=("改号：把这一格的 `stmt:" + str(sid) + "` 换成台账里真实的一条在册命题号"
+                 "（`attack.step` 的返回值里有本轮可引的 id 清单）；"
+                 "若这一条本来就该在册，先让 B 登记它、再引"),
+            step=step)
     status = str(anchor.get("status") or "").strip()
     if status != "active":
-        return REFUSED_SOURCE_STATUS, (
-            f"{where}点名的 `stmt:{sid}` 现在不可用（statements.status="
-            f"{status or '（空）'!r}，只有 active 才算已收录）：F 读不到它 ⇒ 整笔不写")
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_SOURCE_STATUS,
+            expected="在册且 status=active（只有 active 才算已收录）",
+            got=f"statements.status={status or '（空）'}",
+            fix=("补登记：让 B 把这条命题重新登记成 active（或换一条已收录的号），"
+                 "再来引"),
+            step=step)
     level = statement_grade(anchor)
     if not level:
-        return REFUSED_LEVEL_UNREADABLE, (
-            f"{where}点名的 `stmt:{sid}` 等级算不出来（五元位读不出 / 现算出空）"
-            " ⇒ 读不到等级就不许放行，整笔不写")
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_UNREADABLE,
+            expected=f"{CITATION_MIN_LEVEL} 级及以上（要有 V 签）",
+            got="等级算不出来（五元位读不出 / 现算出空）",
+            fix=(f"先让它过签：让 V 走查签「成立」（或形式化 / 穷举核过）把它升到 "
+                 f"{CITATION_MIN_LEVEL} 级，再引它"),
+            step=step)
     if not citation_level_allowed(level):
-        return REFUSED_LEVEL_TOO_LOW, (
-            f"{where}点名的 `stmt:{sid}` 等级 `{level}` 低于 {CITATION_MIN_LEVEL}，"
-            f"不可引（引用要求 {CITATION_MIN_LEVEL} 级及以上；F 只可引用准定理级及以上）"
-            "⇒ 整笔不写")
-    return "", ""
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_TOO_LOW,
+            expected=(f"门槛 {CITATION_MIN_LEVEL}（引用要求 {CITATION_MIN_LEVEL} "
+                      "级及以上）"),
+            got=f"等级 {level}",
+            fix=(f"先让它过签：让 V 的逐行走审把它抬到 {CITATION_MIN_LEVEL} 级，"
+                 "再来引它（或换一条已经够格的命题）"),
+            step=step)
+    return {}
+
+
+def uncitable_statement_problem(
+        sid: str, statement_rows: Iterable[Mapping[str, Any]] | None, *,
+        where: str = "", line: int = 0, step: Any = None) -> tuple[str, str]:
+    """`stmt:<sid>` 为什么不可引：`(受控码, 人话)`；空串对 = 可引（在册 ∧ 等级够）。
+
+    这一层只是 :func:`uncitable_statement_finding` 的两格视图（旧调用方读的形态）；
+    判据与六格只有一份实现 —— 两处各写一套才是"另一个人读到的理由不一样"。
+    """
+    got = uncitable_statement_finding(sid, statement_rows, where=where, line=line,
+                                      step=step)
+    if not got:
+        return "", ""
+    return str(got["kind"]), str(got["detail"])
 
 
 def dep_kind_of(statement_kind: str) -> str:
@@ -513,7 +669,9 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
         out["refused"] = REFUSED_SECTION
         first = out["problems"][0]
         out["reason"] = (f"手稿的依赖段读不懂（`{SECTION_HEADING}`，第 {first['line']} 行起）："
-                         + "；".join(f"第 {p['line']} 行——{p['why']}" for p in out["problems"]))
+                         + "；".join(f"第 {p['line']} 行——{p['why']}" for p in out["problems"])
+                         + "。怎么改：" + _section_problem_fix(str(first["why"]))
+                         + "（逐条六格见 `section_problem_findings`）")
     return out
 
 
@@ -535,6 +693,81 @@ def stmt_refs(text: str) -> list[str]:
         if code and S.is_valid_id(code) and code not in out:
             out.append(code)
     return out
+
+
+def _first_step_of(ref: str, steps: Mapping[int, Mapping[str, Any]]) -> int | None:
+    """正文里第一次引 `ref` 的那一步（没有就 `None` —— 不猜步号）。"""
+    nos = [int(no) for no, step in steps.items()
+           if str(ref) in (str(x) for x in (step.get("cites") or []))]
+    return min(nos) if nos else None
+
+
+def _first_number(text: Any) -> int | None:
+    """一段"用在哪一步"的文字里的第一个整数（没有就 `None`，不猜）。
+
+    表里那一格是自由文本（`第 1、3 步` / `1` / `第 2 步`），四元组只需要一个能指路
+    的步号；多个步号时取最小的那个，其余仍留在原文里（读数不丢）。
+    """
+    nos = _step_numbers(text)
+    return nos[0] if nos else None
+
+
+def dependency_consistency_findings(
+        text: str, *, known_ids: Iterable[str] | None = None,
+        statement_rows: Iterable[Mapping[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """`## 依赖` 与证明正文对不上 ⇒ 逐条六格；空列表 = 一致（或这一层不该管）。
+
+    每一条异常单独一条记录（业主 2026-11-06："每一条异常都必须给出四元组"）——
+    把三条引用折成一句"表与正文不一致"，读的人仍然得自己回去数哪几条。
+
+    三态（不折平）：
+
+    - 那一节缺了 / 读不懂：不是本函数的事（调用方那两支已各有受控码），返回空列表；
+    - 正文点了不可引的号（不在册 / 等级不够）：每条一条
+      （``REFUSED_UNKNOWN_SOURCE`` / ``REFUSED_LEVEL_TOO_LOW`` …），带步号；
+    - 那一节在、表 0 行、正文点了 N 条可引命题 ⇒ 每条一条
+      （``REFUSED_TABLE_DISAGREES``），带"在证明正文第 N 步"；
+    - 那一节在、表 0 行、正文一条可引引用都没点 ⇒ 空列表（自足）。
+
+    为什么表里有行就不再往下查：这一层是"落稿 / 收方"的闸，它只回答"这张表是不是
+    漏写成了 0 行"；"表里多一行"与"步号对不上"由 V 的 :func:`dependency_review`
+    逐条核（那里拿得到整份正文与台账，这两档需要它们）。
+    """
+    raw = str(text or "")
+    section = parse_dependency_section(raw)
+    if not section.get("present") or section.get("refused"):
+        return []
+    steps = proof_steps(raw)
+    refs = stmt_refs(proof_body(raw))
+    findings: list[dict[str, Any]] = []
+    known = {str(x) for x in known_ids} if known_ids is not None else None
+    if known is not None:
+        for ref in refs:
+            if str(ref) in known:
+                continue
+            #: 池子与台账由调用方从同一次 `statements` 读里算出来 ⇒ 不在这里另立一条
+            #: "池子少了它"的判据：不可引的原因只有 `uncitable_statement_finding` 一处。
+            got = uncitable_statement_finding(
+                str(ref), statement_rows, where="证明正文",
+                step=_first_step_of(str(ref), steps))
+            if got:
+                findings.append(got)
+        refs = [ref for ref in refs if str(ref) in known]
+    if section.get("rows") or not refs:
+        return findings
+    for ref in refs:
+        no = _first_step_of(str(ref), steps)
+        findings.append(citation_finding(
+            stmt_id=str(ref), where=_citation_where(step=no, site="证明正文"),
+            kind=REFUSED_TABLE_DISAGREES,
+            expected=(f"`{SECTION_HEADING}` 那张表里有一行 `stmt:{ref}`"
+                      "（写明它用在哪一步）"),
+            got="那张表 0 行（正文点了它，表里没有这一行）",
+            fix=("把表里那一行补上（号与用在哪一步都写对），或把这些号写进那几步的 "
+                 "`cites`（框架按它渲染 `## 依赖`）—— 正文里的「（依据：stmt:…）」"
+                 "不等于登记了依赖：框架只读每一步的 `cites`"),
+            step=no))
+    return findings
 
 
 def dependency_consistency_problem(
@@ -575,42 +808,78 @@ def dependency_consistency_problem(
     `attackround._clean_step`）⇒ 两处一旦分家，没有任何一跳会自己发现。
     """
     raw = str(text or "")
-    section = parse_dependency_section(raw)
-    if not section.get("present") or section.get("refused"):
+    got = dependency_consistency_findings(raw, known_ids=known_ids,
+                                          statement_rows=statement_rows)
+    if not got:
         return "", ""
-    refs = stmt_refs(proof_body(raw))
-    if known_ids is not None:
-        known = {str(x) for x in known_ids}
-        for ref in refs:
-            if str(ref) in known:
-                continue
-            #: 池子与台账由调用方从同一次 `statements` 读里算出来 ⇒ 不在这里另立一条
-            #: "池子少了它"的判据：不可引的原因只有 `uncitable_statement_problem` 一处。
-            return uncitable_statement_problem(
-                str(ref), statement_rows, where="证明正文")
-        refs = [ref for ref in refs if str(ref) in known]
-    if section.get("rows"):
-        return "", ""
-    if not refs:
-        return "", ""
-    #: 每个号出现在第几步（步号取 `## 证明` 里行首的 `N.`，与 F 的渲染器同形）。
-    stepped: dict[str, list[int]] = {}
-    for no, step in sorted(proof_steps(raw).items()):
-        for cite in step.get("cites") or []:
-            stepped.setdefault(str(cite), []).append(int(no))
-    shown: list[str] = []
+    return str(got[0]["kind"]), "；".join(str(f["detail"]) for f in got)
+
+
+def _section_problem_fix(why: str) -> str:
+    """按解析器那句话给一句可执行的改法（四元组的第四格）。"""
+    if "没有表格" in why:
+        return "在 `## 依赖` 下面补一张四列表（表头 + 分隔行 + 每行一条依赖）"
+    if "表头缺列" in why or "表头有" in why:
+        return "把表头改成四列（引用 / 命题号 / 用在哪一步 / 路径号），一列都不许少"
+    if "命题号" in why:
+        return ("把那一格写成 `stmt:NNNNNN`（六位十进制号；号要从台账或 `attack.step` "
+                "的清单里取）")
+    if "路径号" in why:
+        return "把路径号写成正整数（第几条证明；1 = 主证明）"
+    if "列" in why:
+        return "把这一行补齐成四列（引用 / 命题号 / 用在哪一步 / 路径号）"
+    return "按上面那句改这一行（四列表，列固定）"
+
+
+def section_problem_findings(text: str,
+                             section: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """依赖段读不懂 ⇒ 逐条六格（表头缺列 / 列数不对 / 号形状 / 路径号）。
+
+    这一档没有"被引的那一条"可指时 `stmt_id` 是空串（表头缺列就是没有号可指），
+    报文里逐字写"这一条没有可认的命题号" —— 三态纪律：不拿一个瞎猜的号填空。
+    行里能扫出 `stmt:<号>` 时照实收进 `stmt_id`，读的人至少知道是哪一行。
+    """
+    import re as _re
+
+    lines = str(text or "").replace("\r\n", "\n").split("\n")
+    out: list[dict[str, Any]] = []
+    for problem in section.get("problems") or []:
+        line = int(problem.get("line") or 0)
+        raw = lines[line - 1] if 0 < line <= len(lines) else ""
+        hit = _re.search(r"stmt:\s*([0-9]+)", raw)
+        sid = hit.group(1) if hit and S.is_valid_id(hit.group(1)) else ""
+        why = str(problem.get("why") or "")
+        out.append(citation_finding(
+            stmt_id=sid, where=_citation_where(line=line, site="依赖段"),
+            kind=REFUSED_SECTION,
+            expected="一张四列表里的一条合法依赖（号形如 `stmt:NNNNNN`）",
+            got=why, fix=_section_problem_fix(why)))
+    return out
+
+
+def missing_section_findings(text: str, refs: Iterable[str], *,
+                             got_extra: str = "") -> list[dict[str, Any]]:
+    """手稿里没有 `## 依赖` 那一节而正文点了号 ⇒ 每条一条六格。
+
+    为什么逐条而不是"正文引用了 N 条"：读的人要照着改，而"哪一条、在哪一步"正是
+    他要找的东西（业主 2026-11-06："每一条异常都必须给出四元组"）。
+    """
+    steps = proof_steps(text)
+    out: list[dict[str, Any]] = []
     for ref in refs:
-        nos = stepped.get(str(ref)) or []
-        where = ("第 " + "、".join(str(n) for n in nos) + " 步") if nos else "（未标步号的行）"
-        shown.append(f"stmt:{ref} 在{where}")
-    why = (
-        "`## 依赖` 那张表 0 行，而证明正文点了 "
-        f"{len(refs)} 条在册命题（{'；'.join(shown)}）⇒ 表与正文对不上，整份退回。"
-        "正文里写「（依据：stmt:…）」不等于登记了依赖：框架只读每一步的 `cites`，"
-        "不把正文里的号读回成引用。处置：把这些号写进那几步的 `cites`（框架按它渲染"
-        "`## 依赖`），或者把表里那几行补齐 —— 两处必须说的是同一件事。"
-    )
-    return REFUSED_TABLE_DISAGREES, why
+        no = _first_step_of(str(ref), steps)
+        out.append(citation_finding(
+            stmt_id=str(ref), where=_citation_where(step=no, site="证明正文"),
+            kind=REFUSED_SECTION_MISSING,
+            expected=(f"手稿里有一节 `{SECTION_HEADING}`，里面一行 `stmt:{ref}`"
+                      "（写明它用在哪一步）"),
+            got=("手稿里没有 `## 依赖` 这一节（正文点了它，表里没有登记）"
+                 + (f"；{got_extra}" if got_extra else "")),
+            fix=("让 F 用 `step` 动作重交这一轮（框架会按每一步的 `cites` 渲染 "
+                 f"`{SECTION_HEADING}`），或在手稿里补那一节（四列表，列固定）"
+                 "—— 补上那一节再交"),
+            step=no))
+    return out
 
 
 #: 兜底读盘这一格为什么要存在（真机读数，写在这里而不是写在调用方）：
@@ -1210,7 +1479,10 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
               statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """逐条核"来源在册 / 可用 / 档位够不够" ⇒ 一份可整笔拒绝的读数。
 
-    返回 `{"checked", "ok", "refused", "reason", "levels": {号: 档}}`。
+    返回 `{"checked", "ok", "refused", "reason", "levels", "finding", "findings"}`。
+    `refused` 是受控码、`reason` 是四元组那句人话（号 + 第几行 / 第几步 + 类别 +
+    期望 / 实得 + 怎么改），`finding` / `findings` 是同一句话的六格形态（业主
+    2026-11-06：每条异常都要给得出"是哪一条、哪一类、差在哪、怎么改"）。
     判据顺序：在册 → 状态可用 → 档位读得到 → 档位够。先报最具体的那一条
     （"这条号不在册"比"档位不够"更能让人立刻改对）。
 
@@ -1224,17 +1496,22 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
     :func:`uncitable_statement_problem` 一处产生，与 F 的可引池同源。
     """
     index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    ledger = list(index.values())
     levels: dict[str, str] = {}
     for row in rows:
         sid = str(row.get("stmt_id") or "")
         if sid in index:
             levels[sid] = statement_grade(index[sid])
-        code, why = uncitable_statement_problem(
-            sid, index.values(), where=f"依赖段第 {row.get('line')} 行")
-        if code:
-            return {"checked": True, "ok": False, "refused": code,
-                    "levels": levels, "reason": why}
-    return {"checked": True, "ok": True, "refused": "", "reason": "", "levels": levels}
+        #: 四元组里的"哪一步"两样都写：表行号（`line`）与表里自己写的步号。
+        got = uncitable_statement_finding(
+            sid, ledger, where="依赖段", line=int(row.get("line") or 0),
+            step=_first_number(row.get("step")))
+        if got:
+            return {"checked": True, "ok": False, "refused": str(got["kind"]),
+                    "levels": levels, "reason": str(got["detail"]),
+                    "finding": got, "findings": [got]}
+    return {"checked": True, "ok": True, "refused": "", "reason": "", "levels": levels,
+            "finding": {}, "findings": []}
 
 
 def deps_groups(rows: Iterable[Mapping[str, Any]],
@@ -1267,6 +1544,82 @@ def deps_groups(rows: Iterable[Mapping[str, Any]],
     return [groups[no] for no in sorted(groups)]
 
 
+#: 引文对比的两个长度门槛（归一之后）：太短的片段（"由定理""见上文"）在几十条命题里
+#: 必然撞上，报出来就是噪音 —— 噪音会把整条告警训练成没人看（DEVELOPMENT-SPEC §8 P15）。
+#: "整段相等"比"是它的一段摘录"更硬，所以门槛更低一点。
+QUOTE_MATCH_MIN_CHARS = 16
+QUOTE_EQUAL_MIN_CHARS = 10
+
+
+def _norm_citation_text(text: Any) -> str:
+    """引文对比用的归一：去空白 / 标点 / markdown 记号，只留字与数字。"""
+    return "".join(ch for ch in str(text or "") if ch.isalnum())
+
+
+def _summary(text: Any, *, limit: int = 48) -> str:
+    """一句话摘要（对比读数用；超过 `limit` 截断并加省略号，不把整段原文抄进拒信）。"""
+    raw = " ".join(str(text or "").split())
+    return raw if len(raw) <= limit else raw[:limit] + "…"
+
+
+def _quote_matches(quote: str, row: Mapping[str, Any], *,
+                   exact_floor: int = QUOTE_EQUAL_MIN_CHARS,
+                   contain_floor: int = QUOTE_MATCH_MIN_CHARS) -> bool:
+    """归一后的引文是不是这一行的原文（整段相等，或一段不短于门槛的原文摘录）。"""
+    for field in ("statement_full", "statement_text"):
+        text = _norm_citation_text(row.get(field))
+        if not text:
+            continue
+        if quote == text and len(quote) >= exact_floor:
+            return True
+        if quote in text and len(quote) >= contain_floor:
+            return True
+    return False
+
+
+def quote_mismatch_finding(row: Mapping[str, Any],
+                           statement_rows: Iterable[Mapping[str, Any]]
+                           ) -> dict[str, Any]:
+    """表里那一行的引文是不是另一条在册命题的原文 ⇒ 一条六格（表述错误 a 类）。
+
+    ## 只有"能证明"才报（这一条决定了它会不会变成噪音）
+    引文那一格在 F 的渲染器里写的是"这一步的原话"，它本来就不等于被引命题的正文
+    （`agent_f/manuscript.py::dependency_rows`）。所以拿"读起来不像"当判据，会把每一份
+    正常手稿都判红。可判的只有一件事：这段引文逐字（归一空白与标点后）等于另一条
+    在册命题的 `statement_full` / `statement_text` —— 那时号和引文至少有一个写错了，
+    而两种情况都有确定的改法（改号 / 改引文）。
+
+    先看被引的那一条：引文对得上它 ⇒ 放行（哪怕它同时也像别人）。
+
+    空字典 = 没发现可判的引错内容（不是"核过了、没问题"的另一种写法：这一档的判据
+    面就是上面那一条，核不到另一条命题的原文时它没有结论可说）。
+    """
+    sid = str(row.get("stmt_id") or "")
+    quote = _norm_citation_text(row.get("quote"))
+    if len(quote) < QUOTE_EQUAL_MIN_CHARS:
+        return {}
+    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    anchor = index.get(sid) or {}
+    if _quote_matches(quote, anchor, exact_floor=0, contain_floor=0):
+        return {}
+    for other_id, other in index.items():
+        if other_id == sid or not _quote_matches(quote, other):
+            continue
+        return citation_finding(
+            stmt_id=sid,
+            where=_citation_where(line=int(row.get("line") or 0),
+                                  step=_first_number(row.get("step"))),
+            kind=REFUSED_QUOTE_MISMATCH,
+            expected=(f"引文对得上 `stmt:{sid}` 的原文（`statement_full`）："
+                      f"{_summary(anchor.get('statement_full'))}"),
+            got=(f"引文「{_summary(row.get('quote'))}」与 `stmt:{other_id}` 的原文逐字相同："
+                 f"{_summary(other.get('statement_full'))}"),
+            fix=(f"改号或改引文：若引的其实是 `stmt:{other_id}`，把这一行的命题号改成它；"
+                 f"若引的是 `stmt:{sid}`，把引用那一格换成它的原文摘要"),
+            step=_first_number(row.get("step")))
+    return {}
+
+
 def dependency_review(text: str,
                       statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """V 审稿时对 `## 依赖` 面的六项逐条核 ⇒ 一份可并入 verdict 的读数。
@@ -1279,21 +1632,30 @@ def dependency_review(text: str,
 
     | # | 项目 | 判据 |
     |---|---|---|
-    | ① | 正文里每个 `stmt:<号>` 都在册 | `uncitable_statement_problem` |
+    | ① | 正文里每个 `stmt:<号>` 都在册 | `uncitable_statement_finding` |
     | ② | 每个被引号等级 ≥ `pre_theorem` | 同上（`conjecture` / `strong_conjecture` 不可引） |
-    | ③ | `## 依赖` 表每一行点名的号同样满足 ① 与 ② | 同上，`where` 写行号 |
+    | ③ | `## 依赖` 表每一行点名的号同样满足 ① 与 ② | 同上，坐标写成"第几行 + 表里写的步号" |
     | ④ | 表与正文的引用集合一致 | 两边的差集逐条点名（正文点了没写行 / 表里多一行） |
     | ⑤ | 表里"用在哪一步"与正文那一步的 `cites` 对得上（可核时） | 步号不在正文 / 那一步没引这个号 |
     | ⑥ | 引用强度（不得把被引命题写强） | 不在这里：已有那一档（`citation_checks` / `citation_gate`） |
+    | ⑦ | 引文与被引命题的原文是不是同一条（表述错误 a 类） | `quote_mismatch_finding`（只在能证明引文属于另一条在册命题时才报） |
 
     ⑤的边界（如实说）：手稿的四列表里没有被引命题的 `proof_no` / 正文 sha 这两格，
     所以"proof_no / sha"那一半没有可核的载体；能核的是"表里说用在第几步"与
     "正文那一步的 `cites`"对不对得上。正文没有编号行（`proof_steps` 为空）时这一项
     不核（"可核时"），不猜。
 
-    返回 `{"checked", "ok", "findings", "defect_step", "why"}`。`findings` 的每一项
-    是 `{"level": "error", "step": 步号, "kind": 受控码, "detail": 人话}` —— 与
-    `verifications.parse_verdict` 的 finding 形状逐格对齐（它要落台账）。
+    ## 返回（每一条都带四元组六格）
+
+    `{"checked", "ok", "findings", "defect_step", "why"}`。`findings` 的每一项是
+    台账那一行的四格 `{"level": "error", "step": 步号, "kind": 受控码, "detail": 人话}`
+    再加上引用面的六格（`:data:`FINDING_CELLS`）：`stmt_id` / `where` / `expected` /
+    `got` / `fix`。六格为什么同时写进 `detail`：台账那一行的 finding 形状由
+    `verifications.parse_verdict` 钉死为四格（另一个落点，本模块不越界），所以
+    人话是那一行里唯一能承载六格的地方；结构化六格供调用方（与判据）直接读。
+
+    `detail` 的每一句都逐字含"那个号 + 在哪一步 + 哪一类 + 期望 / 实得 + 怎么改"
+    （业主 2026-11-06：「反馈给提交证明者的信息需指出具体是哪条」）。
     """
     raw = str(text or "")
     ledger = [dict(r) for r in statement_rows]
@@ -1305,9 +1667,7 @@ def dependency_review(text: str,
     flagged: set[str] = set()
 
     def _step_of(ref: str) -> int | None:
-        nos = [no for no, step in steps.items()
-               if str(ref) in (str(x) for x in (step.get("cites") or []))]
-        return min(nos) if nos else None
+        return _first_step_of(ref, steps)
 
     def _row_step(row: Mapping[str, Any]) -> int | None:
         nos = _step_numbers(row.get("step"))
@@ -1318,19 +1678,31 @@ def dependency_review(text: str,
             return min(nos)
         return _step_of(str(row.get("stmt_id") or ""))
 
-    def _add(step: int | None, kind: str, detail: str) -> None:
-        findings.append({"level": "error", "step": step, "kind": kind,
-                         "detail": detail})
+    def _add(record: Mapping[str, Any]) -> None:
+        """六格记录 + 台账那一行的四格 ⇒ 一条 finding（同一条判据两处落点）。"""
+        step = record.get("step") if isinstance(record.get("step"), int) else None
+        findings.append({
+            "level": "error", "step": step, "kind": str(record.get("kind") or ""),
+            "detail": str(record.get("detail") or ""),
+            # 六格：台账那一行留不住它们（`parse_verdict` 只留四格），但返回读数留住，
+            # 而 `detail` 那句人话把六格的值全写进去了。
+            "stmt_id": str(record.get("stmt_id") or ""),
+            "where": str(record.get("where") or ""),
+            "expected": str(record.get("expected") or ""),
+            "got": str(record.get("got") or ""),
+            "fix": str(record.get("fix") or ""),
+        })
 
     # ①② 正文里的号：在册 ∧ 等级够。
     for ref in body_refs:
-        code, why = uncitable_statement_problem(ref, ledger, where="证明正文")
-        if not code:
+        got = uncitable_statement_finding(ref, ledger, where="证明正文",
+                                          step=_step_of(ref))
+        if not got:
             continue
         flagged.add(ref)
-        _add(_step_of(ref), code, why)
+        _add(got)
 
-    # ③ `## 依赖` 表里的号：同样要在册 ∧ 等级够（同一个判据，`where` 换成行号）。
+    # ③ `## 依赖` 表里的号：同样要在册 ∧ 等级够（同一个判据，坐标换成行号 + 表里写的步号）。
     table_ids: list[str] = []
     for row in rows:
         sid = str(row.get("stmt_id") or "")
@@ -1338,11 +1710,18 @@ def dependency_review(text: str,
             table_ids.append(sid)
         if sid in flagged:
             continue
-        code, why = uncitable_statement_problem(
-            sid, ledger, where=f"依赖段第 {row.get('line')} 行")
-        if code:
+        got = uncitable_statement_finding(
+            sid, ledger, where="依赖段", line=int(row.get("line") or 0),
+            step=_first_number(row.get("step")))
+        if got:
             flagged.add(sid)
-            _add(_row_step(row), code, why)
+            _add(got)
+
+    # ⑦ 表述错误 a 类：表里那一行的引文写的是另一条在册命题的原文。
+    for row in rows:
+        got = quote_mismatch_finding(row, ledger)
+        if got:
+            _add(got)
 
     # ④ 表与正文的引用集合必须一致：两边差集逐条点名（表多一行也是缺陷）。
     body_set = set(body_refs)
@@ -1350,18 +1729,29 @@ def dependency_review(text: str,
     for ref in body_refs:
         if ref in table_set:
             continue
-        _add(_step_of(ref), REFUSED_TABLE_DISAGREES,
-             (f"证明正文点了 `stmt:{ref}`，而手稿的 `{SECTION_HEADING}` 表里没有这一行"
-              " —— 表与正文说的不是同一件事（缺的那一行要补上；正文是 F 的署名作品，"
-              "表按它补齐）"))
+        no = _step_of(ref)
+        _add(citation_finding(
+            stmt_id=ref, where=_citation_where(step=no, site="证明正文"),
+            kind=REFUSED_TABLE_DISAGREES,
+            expected=(f"手稿的 `{SECTION_HEADING}` 表里有一行 `stmt:{ref}`"
+                      "（写明它用在哪一步）"),
+            got="表里没有这一行",
+            fix=("把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，"
+                 "表按它补齐 —— 两处必须说的是同一件事"),
+            step=no))
     for row in rows:
         sid = str(row.get("stmt_id") or "")
         if sid in body_set:
             continue
-        _add(_row_step(row), REFUSED_TABLE_DISAGREES,
-             (f"手稿的 `{SECTION_HEADING}` 表第 {row.get('line')} 行点了 `stmt:{sid}`，"
-              "而证明正文没有点它 —— 表里多出来的一行也是缺陷"
-              "（表与正文必须说的是同一件事）"))
+        no = _row_step(row)
+        _add(citation_finding(
+            stmt_id=sid, where=_citation_where(step=no, line=int(row.get("line") or 0)),
+            kind=REFUSED_TABLE_DISAGREES,
+            expected="证明正文里有一步 cite 它（那一步的 `cites` 里含这个号）",
+            got="证明正文没有点它（0 处引用）",
+            fix=("删掉表里那一行（它多出来了），或把正文那一步的 `cites` 补上它 —— "
+                 "两处必须说的是同一件事"),
+            step=no))
 
     # ⑤ 表里"用在哪一步"与正文那一步的 cites 对得上（正文有编号行时才核）。
     if steps:
@@ -1372,20 +1762,35 @@ def dependency_review(text: str,
                 continue
             absent = [n for n in nos if n not in steps]
             if absent:
-                _add(min(absent), "dependency_step_mismatch",
-                     (f"依赖段第 {row.get('line')} 行说 `stmt:{sid}` 用在第 "
-                      f"{'、'.join(str(n) for n in absent)} 步，而证明正文里没有那一步"
-                      " —— 步号对不上，读的人会照着去改错误的一步"))
+                _add(citation_finding(
+                    stmt_id=sid,
+                    where=_citation_where(line=int(row.get("line") or 0),
+                                          step=min(absent)),
+                    kind=REFUSED_STEP_MISMATCH,
+                    expected=(f"证明正文里有第 {'、'.join(str(n) for n in absent)} 步"
+                              "（表说它用在那一步）"),
+                    got=(f"证明正文只有第 {'、'.join(str(n) for n in sorted(steps))} 步，"
+                         "没有表里写的那一步"),
+                    fix=("把表里'用在哪一步'改成正文里真实的那一步（号不变）；"
+                         "若那一步本来就该在，先把它补进正文再交"),
+                    step=min(absent)))
                 continue
             cited_here: set[str] = set()
             for n in nos:
                 cited_here.update(str(x) for x in (steps[n].get("cites") or []))
             if sid not in cited_here:
                 shown = "、".join(f"stmt:{x}" for x in sorted(cited_here)) or "（没有引用）"
-                _add(min(nos), "dependency_step_mismatch",
-                     (f"依赖段第 {row.get('line')} 行说 `stmt:{sid}` 用在第 "
-                      f"{'、'.join(str(n) for n in nos)} 步，而正文那些步引的是 {shown}"
-                      " —— 表里那一格与正文对不上"))
+                _add(citation_finding(
+                    stmt_id=sid,
+                    where=_citation_where(step=min(nos),
+                                          line=int(row.get("line") or 0)),
+                    kind=REFUSED_STEP_MISMATCH,
+                    expected=(f"第 {'、'.join(str(n) for n in nos)} 步的 `cites` 里含 "
+                              f"`stmt:{sid}`"),
+                    got=f"第 {'、'.join(str(n) for n in nos)} 步引的是 {shown}",
+                    fix=("改表里那一格：写正文真正引它的那一步；若表是对的，就把正文"
+                         "那一步的 `cites` 补上它（正文与表必须说的是同一件事）"),
+                    step=min(nos)))
 
     if not findings:
         return {"checked": True, "ok": True, "findings": [], "defect_step": None,
@@ -1632,11 +2037,27 @@ def wash_dependency_section(text: str, *,
     findings: list[dict[str, Any]] = []
 
     def _finding(*, line: int, quote: str, got: str, expected: str, why: str,
-                 how_to_fix: str) -> dict[str, Any]:
-        """一条"打回"的逐条说明（业主：哪一行 / 写的什么 / 该是什么 / 为什么 / 怎么改）。"""
+                 how_to_fix: str, stmt_id: str = "",
+                 kind: str = WASH_REFUSED_ROW,
+                 step: Any = None) -> dict[str, Any]:
+        """一条"打回"的逐条说明（哪一行 / 写的什么 / 该是什么 / 为什么 / 怎么改）。
+
+        洗稿这一侧原有的六个键（`line` / `quote` / `got` / `expected` / `why` /
+        `how_to_fix`）一个不改 —— 它们是 F 的秘书那一侧既有的读法。这里补上四元组
+        缺的 `stmt_id` 与 `where`、受控码 `kind`、`fix`（与 `how_to_fix` 同值，
+        四元组那一边的名字）与 `detail`（号 + 哪一步 + 哪一类 + 怎么改 的那一句）。
+        """
+        where_text = _citation_where(line=int(line), step=step, site="依赖段")
+        record = citation_finding(
+            stmt_id=stmt_id, where=where_text, kind=kind, expected=expected,
+            got=(got if not quote else f"{got}（表里那一行的引文：{_summary(quote)}）"),
+            fix=how_to_fix, step=step)
         return {"line": int(line), "quote": str(quote or ""), "got": str(got or ""),
                 "expected": str(expected or ""), "why": str(why or ""),
-                "how_to_fix": str(how_to_fix or "")}
+                "how_to_fix": str(how_to_fix or ""),
+                "stmt_id": record["stmt_id"], "where": record["where"],
+                "kind": record["kind"], "fix": record["fix"],
+                "detail": record["detail"]}
 
     # 结构都读不懂、而正文里又没有 `cites` 可以据以重建 ⇒ 打回（不许猜一行出来）。
     # 注意"缺节 + 一条引用都没有"不是这一档：那是自足证明，秘书补一个空节即可。
@@ -1649,15 +2070,18 @@ def wash_dependency_section(text: str, *,
             expected="一张四列的表（引用 / 命题号 / 用在哪一步 / 路径号）",
             why=(reason or f"手稿里没有 `{SECTION_HEADING}` 这一节，而证明正文里也没有可据以重建的 `stmt:` 引用"),
             how_to_fix=(f"在证明手稿里补一节 `{SECTION_HEADING}`（四列表，列固定），"
-                        "或者在证明正文的每一步写明依据（`stmt:NNNNNN`）—— 依赖面由代码按它渲染")))
+                        "或者在证明正文的每一步写明依据（`stmt:NNNNNN`）—— 依赖面由代码按它渲染"),
+            kind=REFUSED_SECTION))
     for row in rows:
         sid = str(row.get("stmt_id") or "")
         line = int(row.get("line") or 0)
         quote = str(row.get("quote") or "")
         anchor = index.get(sid)
+        step_no = _first_number(row.get("step"))
         if anchor is None:
             findings.append(_finding(
-                line=line, quote=quote, got=f"stmt:{sid}",
+                line=line, quote=quote, got=f"stmt:{sid}", stmt_id=sid,
+                kind=REFUSED_UNKNOWN_SOURCE, step=step_no,
                 expected="（无法确定 —— 请自己指认台账里真实的那一条）",
                 why=(f"第 {line} 行点名的 `stmt:{sid}` 不在册"
                      f"（台账里现有 {len(index)} 条命题）"),
@@ -1667,7 +2091,8 @@ def wash_dependency_section(text: str, *,
         level = statement_grade(anchor)
         if not level:
             findings.append(_finding(
-                line=line, quote=quote, got=f"stmt:{sid}（等级算不出来）",
+                line=line, quote=quote, got=f"stmt:{sid}（等级算不出来）", stmt_id=sid,
+                kind=REFUSED_LEVEL_UNREADABLE, step=step_no,
                 expected=f"{CITATION_MIN_LEVEL} 级及以上",
                 why=(f"第 {line} 行点名的 `stmt:{sid}` 等级算不出来"
                      "（五元位读不出 / 现算出空）⇒ 读不到就不许引"),
@@ -1676,7 +2101,8 @@ def wash_dependency_section(text: str, *,
             continue
         if not citation_level_allowed(level):
             findings.append(_finding(
-                line=line, quote=quote, got=f"stmt:{sid}（{level}）",
+                line=line, quote=quote, got=f"stmt:{sid}（{level}）", stmt_id=sid,
+                kind=REFUSED_LEVEL_TOO_LOW, step=step_no,
                 expected=f"{CITATION_MIN_LEVEL} 级及以上",
                 why=(f"第 {line} 行点名的 `stmt:{sid}` 现在是 `{level}`，"
                      f"引用要求 {CITATION_MIN_LEVEL} 级及以上"),
@@ -1705,7 +2131,8 @@ def wash_dependency_section(text: str, *,
             kept.append({**row, "stmt_id": fixable[0], "verified": "washed"})
             continue
         findings.append(_finding(
-            line=line, quote=quote, got=f"stmt:{sid}",
+            line=line, quote=quote, got=f"stmt:{sid}", stmt_id=sid,
+            kind=REFUSED_STEP_MISMATCH, step=step_no,
             expected="（无法唯一确定 —— 请自己指认）",
             why=(f"第 {line} 行写的是 `stmt:{sid}`，而第 {row.get('step')} 的 `cites` 是 "
                  f"{['stmt:' + x for x in cited]} ⇒ 号与正文对不上"),
@@ -1715,7 +2142,8 @@ def wash_dependency_section(text: str, *,
             deps_refused=WASH_REFUSED_ROW,
             deps_refused_findings=findings,
             reason=("依赖面的命题号核实不过（这一份不许提交给 V，退回 F 重写）："
-                    + "；".join(str(f["why"]) for f in findings)),
+                    + "；".join(f"{f['detail']}（为什么：{f['why']}）"
+                                for f in findings)),
             rows=[dict(r) for r in rows])
         return out
     out["rows"] = kept
