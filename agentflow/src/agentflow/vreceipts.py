@@ -230,11 +230,9 @@ def resubmit_cleared(*, root: str | Path, label: str, proof_sha: str) -> dict[st
         return out
     # ---- 2026-11-06（业主裁定 3）：作废行不许清义务 ---------------------------
     #
-    # 现场（`projects/R-mk-infinite-94` 的 000034）：v2 判 fault、同一份正文重开一趟，
-    # v3–v5 三转 clean 签上。那三行按新口径是作废行（同一份正文不重复判）⇒ 它们不是
-    # "打回之后更干净的「成立」"，不许把重送义务清掉。取的尺与连续计数同一处
-    # （`verifications.void_after_rejection` → `_hold_runs`）：两边各判一套，就会
-    # "不算票、却算义务已清"。
+    # 现场见 `verifications._hold_runs` 的 docstring（同一份正文重开一趟 ⇒ 那三行作废）：
+    # 作废行不是"打回之后更干净的「成立」"。尺与连续计数同一处（`void_after_rejection`
+    # → `_hold_runs`）—— 两边各判一套，就会"不算票、却算义务已清"。
     try:
         void = VR.void_after_rejection([dict(r) for r in rows])
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有作废行"
