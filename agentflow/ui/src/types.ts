@@ -705,6 +705,7 @@ export interface VerificationRow {
   by_role_source: string;
   by_task_id: string;
   citation_checks: { stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; in_material: boolean }[];
+  secretary_judge: Record<string, unknown>;
   by_task_id_tri: string;
 }
 

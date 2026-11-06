@@ -5553,6 +5553,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("citation_checks",
        "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; "
        "in_material: boolean }[]"),
+      # 2026-11-06（「打回即站住」落地后）：台账写口现在无条件写这一格
+      # （`verifications.secretary_judge_cell`：给了判定写判定，没给写"未判成"），
+      # 于是夹具/真盘上的新行都读得出它 —— C 条拿行逐键比 ⇒ 这里必须声明，
+      # 否则类型面读不出"这一行的轴是不是秘书给的"（轴是签发唯一来源）。
+      # 形状是那一格的 `axis` / `checked` / `decision` / `reason` 加上调用方带的
+      # `basis` / `source` 等，读侧只搬不解释 ⇒ 声明成开放字典。
+      ("secretary_judge", "Record<string, unknown>"),
       ("by_task_id_tri", "string"))),
     ("ArtifactRow",
      "artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）",
