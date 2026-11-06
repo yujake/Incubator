@@ -57,10 +57,6 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 上那个轴名也不再有兼容读 —— `verifications` 删了
 `SECRETARY_JUDGE_HISTORICAL_AXES` 与 `secretary_axis` 的兼容支，老行上那个值读出来是
 空轴（这一行没有轴），连续计数里没有一条分支认它。
-2026-11-06（真机 `projects/R-mk-infinite-92` 的 v-000003）：上面那句「只挑出一处小记号
-问题也算」只对"没有记录进 findings 的散文"与 `warning` 那一档还成立 —— 判词由 V 定，
-findings 只是备注：`verdict=成立` + `defect_step` 空 + findings 全是 `level=info`（备注档）
-这一形状不再判 fault（判据在 `verifications.load_bearing_reading`，机械判、不问模型）。
 
 "没查成"不是判定（第 3 条）：秘书问不出来 / 模型输出不合法 / 台账写不进去 ⇒ 那是框架
 失败：终止、`checked=False` + 明确 reason，不许当成 fault 打回、也不许说"次数没到"。
@@ -597,14 +593,6 @@ class AgentV:
         `clean` / `fault`。拿不准、只挑出一个小记号问题、只说"我没逐行验证"——都是 fault
         （`secretary.V_REPLY_AXIS` 只有两格：词表外的一律"不采信" ⇒ `checked=False`）。
 
-        2026-11-06（真机 `projects/R-mk-infinite-92` 的 v-000003）：`findings` 的级别要
-        一起递过去 —— 判词由 V 定，findings 只是备注。`defect_step` 非空、或 findings 里
-        有 `level=error`（承重档）才算「有毛病」；`verdict=成立` + `defect_step` 空 +
-        findings 全是 `level=info`（备注档）⇒ 秘书不许推翻（判据在
-        `verifications.load_bearing_reading`，机械判、不再问模型）。改前这一格不递
-        findings，秘书只能看回复正文里"有一条 finding"这件事本身 ⇒ 一条"此句不承重"的
-        info 就能把三连干净成立判成 fault。
-
         没有秘书 / 没判断面 ⇒ `checked=False` + `axis=""`：那是"没查成"，不是一种判定，
         更不是"没问题"（连续计数里既不算票、也不清零）。
         """
@@ -616,7 +604,6 @@ class AgentV:
         return sec.judge_v_reply(reply=str(reply or ""),
                                  verdict=str(verdict.get("verdict") or ""),
                                  defect_step=verdict.get("defect_step"),
-                                 findings=list(verdict.get("findings") or []),
                                  statement_id=str(statement_id or ""),
                                  proof_no=no,
                                  task_id=str(self.cfg.get("task_id") or ""))

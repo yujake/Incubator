@@ -310,13 +310,6 @@ PROOF_ROUTES_KEY = "_proof_routes"
 #: 一起删了，老行上那个值读出来是空轴（"这一行没有轴"）；`_hold_run_lengths` 里专门为它
 #: 写的那条分支也删了（那一支的结果与"轴读不出来"那条通用纪律逐字相同，删掉它等于删掉
 #: "承认那一档存在"的最后一处落点）。
-#:
-#: 2026-11-06（真机 `projects/R-mk-infinite-92` 的 v-000003）：上面那一条「只挑出一处
-#: 小记号问题也算有毛病」被收窄了 —— 判词由 V 定，findings 只是备注：
-#: `verdict=成立` + `defect_step` 空 + findings 全是 `level=info`（备注档）这一形状
-#: 不再判 fault（判据在 `verifications.load_bearing_reading`，机械判、不问模型）。
-#: 承重档只有两处读数：`defect_step` 非空、或 findings 里有 `level=error`。
-#: `warning` 与"没有 findings"仍走题面的语义判定（「我没逐行验证」那一类照旧判 fault）。
 V_REPLY_CLEAN = "没问题"
 V_REPLY_FAULT = "有缺陷要指出"
 
@@ -3415,7 +3408,6 @@ class Secretary:
     # role="V" 恒 False（I12），而"把证明正文当材料递进去"正是绕过那条隔离的暗通道。
 
     def judge_v_reply(self, *, reply: str, verdict: str = "", defect_step: Any = None,
-                      findings: Any = None,
                       statement_id: str = "", proof_no: Any = 1,
                       task_id: str = "", proof_text: str = "",
                       materials: Any = None) -> dict[str, Any]:
@@ -3427,23 +3419,6 @@ class Secretary:
         所以 `proof_text` / `materials` 两个形参是受控拒绝口：调用方若真把它们塞进来，
         本方法拒判（`checked=False` + `refused="proof_text_not_allowed"`），
         而不是"收了但没用"—— 后者会让"秘书看过 F 的证明"这件事在盘上查不出来。
-
-        ## 2026-11-06（真机 `projects/R-mk-infinite-92`）：判词由 V 定，findings 只是备注
-        改前这一问只看回复正文（findings 的 `level` 一个字节都不过去），而题面写着
-        "只挑出一处小记号问题：一律判这一档"。于是只要回复里出现一条 finding —— 哪怕
-        V 自己把它标成 `level=info`、并在 detail 里写着"此句不承重"——模型就把它判成
-        fault，三连干净成立被判成"不能算完全没毛病"（现场 v-000003）。
-
-        现在先按台账那一行的受控读数把能定的定下来
-        （`verifications.load_bearing_reading`）：
-        - `defect_step` 非空 / findings 里有 `error`（承重档）⇒ `fault`；
-        - `verdict=成立` + `defect_step` 空 + findings 全是 `info`（备注档）⇒ `clean`，
-          备注原文留在台账那一行的 findings 里（不洗稿、不只因它清零）；
-        - 其余（没有 findings、或只有 `warning` 这类词表没定性的档）仍问模型 ——
-          那一档没有机械判据，语义判定还在（「我没逐行验证」那一类仍判 fault）。
-
-        机械定下来的那两档不再发模型调用，但仍落一行秘书决定台账（留痕），
-        `reason` 里逐字写清"哪一档算承重"。
 
         ## 返回
         `checked` / `answer`（模型原话那一格；没查成时是 `JUDGE_UNCHECKED`） /
@@ -3493,32 +3468,6 @@ class Secretary:
             "ledger_row": {"verdict": str(verdict or ""), "defect_step": defect_step},
         }
         out["material"] = dict(material)
-        # ---- 2026-11-06：先按台账那一行的受控读数判，能定的不再问模型 ----
-        #
-        # 判据只有两处（`defect_step` 非空 / `level=error` 的 finding），备注档只有
-        # `level=info`；`warning` 与"没有 findings"都留给下面那次模型调用。
-        # 这一支是"判词由 V 定，findings 只是备注"的落点：改前它不存在，
-        # 所以 v-000003 那种形状会被题面判成 fault（真机现场）。
-        reading = _VR.load_bearing_reading(verdict=str(verdict or "").strip(),
-                                           defect_step=defect_step,
-                                           findings=[dict(f) for f in (findings or ())
-                                                     if isinstance(f, Mapping)])
-        if not out["unwired"] and reading["decided"]:
-            answer = V_REPLY_FAULT if reading["load_bearing"] else V_REPLY_CLEAN
-            out.update(checked=True, answer=answer, axis=V_REPLY_AXIS[answer],
-                       reason=str(reading["reason"] or ""),
-                       basis=[f"findings level={lv}" for lv in reading["levels"]][:5])
-            # 留痕：机械判也要有台账行（读侧 `errorstats` 按 `target.judge` 统计它）。
-            self.note_decision(
-                duty=2, kind=KIND_DECISION, decision=answer,
-                reason=out["reason"], basis=list(out["basis"]),
-                target={"judge": "v_reply_defect"},
-                judge={k: out[k] for k in ("checked", "answer", "axis", "unwired",
-                                           "reason", "verdict", "defect_step")},
-                before=(f"verdict={out['verdict']!r}; defect_step={out['defect_step']!r}; "
-                        f"findings_levels={reading['levels']!r}"),
-                after=f"axis={out['axis']}")
-            return out
         got = self.judge("v_reply_defect", material, task_id=task_id)
         out["cost"] = dict(got.get("cost") or {})
         out["reason"] = str(got.get("reason") or "")
