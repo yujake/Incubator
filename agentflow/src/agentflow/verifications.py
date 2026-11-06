@@ -1045,9 +1045,8 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         '"verdict": "consistent|weaker|stronger|unrelated|inadmissible|unknown", '
         '"quote_verbatim": <true 或 false>, "note": "<一句话依据：一致在哪 / 差在哪>"}]}\n'
         "- `defect_step`：有毛病时必须给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
-        "- `成立` 的判据是零 finding：`findings` 必须为空 —— 一条要改的都没有，才写 `成立`。"
-        "只要有一处要改的（哪怕只是措辞建议、`level=info`），就写 `有毛病`、在 `defect_step` "
-        "指到那一步、并把那一条写进 `findings`；不许写成「成立 + 一条 info」。\n"
+        "- `成立` = `findings` 为空（零 finding）；有一条要改的就是 `有毛病`，"
+        "在 `defect_step` 指到那一步、把那一条写进 `findings`。\n"
         "- 没有第三个词：写成「判不了 / 我无法判断」不是一种结论 —— 那是没做完审；"
         "框架不折档（不把它算成成立、也不算成有毛病），由秘书读这段回复后语义判成"
         "clean / fault，并在 `findings`（带步号）与 `defect_step` 里对得上卡在哪一步；"

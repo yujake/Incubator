@@ -253,7 +253,7 @@ SPEC = AgentSpec(
             #   ⇒ 没有任何写入期闸能拿「报了 none」去比「写了候选」（实测：`outcome="no_results"`
             #   而 `result_lit_ids` 非空的 `search_requests` 行照样通过校验）。
             #   缺的字段：`search_requests` / `lit_candidates` 上没有 `located` / `closest_snippets` 这类落点。
-            "确认优先于登记：宁可如实回报 none 并列出最接近的三段，也不要把「看起来相关」写成「找到了」。",
+            "确认优先于登记 —— 见上面 boundary 那条（none 列最接近的三段、不交 B）。",
             # 2026-10-21 复核：判不了（缺 `negative_search` / `counter_verdict` 字段），故保留。
             #   `search_requests` 的 17 个字段里没有任何「反证检索」维度，`SEARCH_OUTCOMES` 里也没有
             #   `unresolved`（实测写入 `outcome="unresolved"` 被 `SearchRequest.validate()` 拒）。

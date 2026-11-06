@@ -1379,12 +1379,9 @@ def _v_skills() -> tuple[Skill, ...]:
 必须指到步号与原句）。『看不出错』就是成立；不存在『看不出来』这一档，也不存在
 『看不出对』这回事。
 
-**判词写死：`成立` = 零 finding。** `成立` 只有在**一条要改的都没有**时才用，`findings`
-必须为空。有任何一条要改的（哪怕只是措辞建议、`level=info`）⇒ 判 `有毛病`，并在
-`defect_step` 指到那一步、在 `findings` 里写下那一条；`有毛病` 必须给 `defect_step`。
-判「成立」不要求你证明它正确，只要求你**一处要改的都没有**：拿不准、说不清，就说明你
-在那一处至少看见了一条要改的 —— 把它写下来判 `有毛病`，别用「大致看过」代替
-「没找到缺陷」。
+**判词写死：`成立` = 零 finding。** `findings` 必须为空；有任何一条要改的（哪怕只是
+措辞建议、`level=info`）⇒ 判 `有毛病`，在 `defect_step` 指到那一步、在 `findings` 里
+写下那一条。拿不准、说不清 = 你在那一处看见了一条要改的，不是「大致看过」。
 
 为什么这么硬：秘书那一侧按「拿不准、说不清、只挑出一处小记号问题 ⇒ 也算有毛病」判；
 你写「成立 + 一条 info」，两边题面就打架，这条链永远签不出来。
@@ -1510,15 +1507,10 @@ def _v_skills() -> tuple[Skill, ...]:
 
 ## 结论是 `verify.verify_proof` 的**产出**，不是你的入参（2026-10-28 真机踩过）
 
-这件工具收 `statement_id` 与 `proof_manuscript`（**在册也给稿**：你读的正文与签块都落在那一份稿上），
-另可选 `proof_no` / `readonly_facts` ——
-**结论由它自己判**（它内部走你的判据缝），返回里就有 `verdict` / `defect_step` /
-`findings` / `unresolved_errors`。把 `verdict` / `findings` / `defect_step` 当参数传进去
-会被参数门拒成 `param_invalid`（真机：`projects/paper-rewrite-78c` 的 V 在 17:42 / 17:43
-连着两次这么写，两次都被同一道门拒）。
-
-要补一句**你自己的**看法：那走 `message`（给派活的人），或者写进退回的那段话里 ——
-不要塞进工具参数：那等于让被审的一方自己报结论。
+这件工具收 `statement_id` / `proof_manuscript`（**在册也给稿**）/ `proof_no` / `readonly_facts`；
+**结论由它自己判**，返回里就有 `verdict` / `defect_step` / `findings` / `unresolved_errors`。
+把 `verdict` / `findings` / `defect_step` 当参数传进去 ⇒ 参数门拒成 `param_invalid`。
+要补一句**你自己的**看法：走 `message`（给派活的人）—— 塞进工具参数等于让被审的一方自己报结论。
 
 ## 结论只有两态（没有第三个）
 
