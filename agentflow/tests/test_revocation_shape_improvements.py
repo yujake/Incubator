@@ -132,20 +132,26 @@ def _a_problems(tmp_path: pathlib.Path) -> list[str]:
     """(甲) 的判据本体：一条项的 revoke 格按看的人给出可否与动作。"""
     problems: list[str] = []
     ws, box, ids = _hierarchy(tmp_path)
+    # 与 F1 那一条完全无关的另一支（M 的另一个直接子）：它既不是父、也不是兄弟，
+    # 更不是 F1 名下的人 —— "无关者"这一例必须真是无关的，不许拿 F1 的子（G1）顶替。
+    unrelated_id = _agent(box, role="D", parent=ids["M"], detail="另一支（无关）")
     item = _item(box, owner=ids["F1"], role="F", expects="work",
                  kind="delegation", summary="一条待撤的活")
 
     m = _board_item(box, item, viewer=ids["M"]).get("revoke") or {}
     parent = _board_item(box, item, viewer=ids["D1"]).get("revoke") or {}
     sibling = _board_item(box, item, viewer=ids["F2"]).get("revoke") or {}
-    unrelated = _board_item(box, item, viewer=ids["G1"]).get("revoke") or {}
+    child = _board_item(box, item, viewer=ids["G1"]).get("revoke") or {}
+    unrelated = _board_item(box, item, viewer=unrelated_id).get("revoke") or {}
 
     if m.get("revocable") is not True or parent.get("revocable") is not True:
         problems.append(f"M / 直接父应当看得到可撤：M={m!r} 父={parent!r}")
     if sibling.get("revocable") is not False:
         problems.append(f"兄弟（F2）不该看得到可撤：{sibling!r}")
+    if child.get("revocable") is not False:
+        problems.append(f"名下的子（G1）不该看得到可撤父母那一层的项：{child!r}")
     if unrelated.get("revocable") is not False:
-        problems.append(f"无关者（G1）不该看得到可撤：{unrelated!r}")
+        problems.append(f"无关者（另一支）不该看得到可撤：{unrelated!r}")
     # "撤它该用哪个动作"：动作名 + 可照抄的 args（不让模型自己搬 id）
     if m.get("action") != "conductor.void_items":
         problems.append(f"可撤那一档没有给出动作名：{m!r}")
@@ -172,7 +178,7 @@ def _a_problems(tmp_path: pathlib.Path) -> list[str]:
 
 def test_a_board_and_patrol_items_carry_the_revocability_reading(
         tmp_path: pathlib.Path) -> None:
-    """甲：board / patrol 的每一项都带 revoke 格；父子看得到、兄弟与无关者看不到。"""
+    """甲：board / patrol 的每一项都带 revoke 格；M / 直接父看得到，兄弟 / 子 / 无关者看不到。"""
     assert _a_problems(tmp_path) == [], _a_problems(tmp_path)
 
 
