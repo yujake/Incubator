@@ -4867,156 +4867,15 @@ class Conductor:
             rows = {str(r.get("task_id")): r for r in tx.rows("tasks")}
             for iid in ids:
                 row = rows.get(iid)
-                if row is None:
-                    out["refused"].append({"id": iid, "why": "没有这一项（不是'已经作废'）"})
+                refusal, cur, authority = self._void_item_gate(
+                    iid=iid, row=row, rows=rows, by_task_id=by_task_id, revoke=revoke)
+                if refusal is not None:
+                    out["refused"].append(refusal)
                     continue
-                if not self._is_board_item(row):
-                    out["refused"].append({"id": iid, "why": "不是板项（kind 为空）⇒ 不归作废管"})
-                    continue
-                cur = str(row.get("item_state") or "queued")
-                if cur == "done":
-                    out["refused"].append({"id": iid, "why": "已经是终态（重复作废不改任何格）"})
-                    continue
-                # ---- 权限（业主 2026-11-06 裁定 ①）：两档都先过这一关 -------------
-                # 顺序刻意的：先判"你是谁、能不能动这一条"，再判"这一条该不该作废"。
-                # 反过来（先判 deaf 再判权限）会让没有权限的人也能把一条项"推进到
-                # 某个分支"，读数上分不清"它没权限"与"它没证明"。
-                authority = self._item_authority(rows, by_task_id=by_task_id, row=row)
-                if not authority.get("checked"):
-                    out["refused"].append({"id": iid,
-                                           "code": str(authority.get("code") or "unknown_actor"),
-                                           "why": str(authority.get("why") or "权限读不成（fail-closed）")})
-                    continue
-                if not authority.get("allowed"):
-                    out["refused"].append({"id": iid, "code": "not_authorized",
-                                           "why": str(authority.get("why") or "没有权限改这一条")})
-                    continue
-                if str(row.get("expects") or "") == "":
-                    # 撤销后的行（`done` + `expired`）已经在上面被终态那一档拦下；走到
-                    # 这里的空 expects 只可能是"通知"那种本来就不要求任何动作的行 ——
-                    # 没有义务可撤，撤了还会再生成一条通知（`REVOKE_NOTICE_PREFIX` 防环）。
-                    out["refused"].append({
-                        "id": iid, "code": "no_obligation",
-                        "why": ("它不要求任何动作（expects 为空）⇒ 没有可撤的义务"
-                                "（撤销不是删行）")})
-                    continue
-                if not revoke:
-                    # 旧口径（作废）：只收 expects=ack 的通知，而且收件人必须叫不醒。
-                    if str(row.get("expects") or "") != "ack":
-                        out["refused"].append({"id": iid,
-                                               "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
-                                                      "（只许作废'知道了就好'的通知）"})
-                        continue
-                    who = str(row.get("role") or "")
-                    try:
-                        gate = self.retire_state_of(str(row.get("parent_task_id") or ""))
-                    except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 不许作废（fail-closed）
-                        gate = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
-                    if not gate.get("checked"):
-                        out["refused"].append({"id": iid, "why": (
-                            f"收件人状态读不成（{gate.get('reason') or '没查成'}）⇒ 不知道它是不是静默，"
-                            "不许作废（fail-closed）")})
-                        continue
-                    if not gate.get("silent"):
-                        out["refused"].append({"id": iid, "why": (
-                            f"{who} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")})
-                        continue
-                    # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
-                    # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
-                    # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
-                    receiver = str(row.get("parent_task_id") or "")
-                    # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
-                    # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
-                    # `lifeline_suppressed` 那一半在工作。
-                    receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
-                    # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
-                    # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
-                    # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
-                    verdict = "unknown"
-                    suppressed = False
-                    try:
-                        verdict = self.retired_verdict(receiver, parent=receiver_parent)
-                        suppressed = bool(CLK.lifeline_suppressed(
-                            str(getattr(self.store, "root", "") or ""), receiver))
-                    except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
-                        verdict = "unknown"
-                        suppressed = False
-                    if not (suppressed or verdict == "retired"):
-                        if verdict == "unknown":
-                            out["refused"].append({"id": iid, "code": "unknown_retired", "why": (
-                                f"{who} 的销号名单读不全（{self._retired_reason()}）⇒ "
-                                "证明不了「它叫不醒」，不代作废（作废不可逆）")})
-                        else:
-                            out["refused"].append({"id": iid, "why": (
-                                f"{who} 只是静默，但一条消息或一次委托就会把它叫醒"
-                                "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
-                                "；作废不可逆，不许拿『它不会再看』当理由")})
-                        continue
-                # ---- 写盘：两档共用"直写 + 终态"，留痕各记各的 -------------------
-                owner = str(row.get("parent_task_id") or "")
-                new = dict(row)
-                new["item_state"] = "done"
-                new["item_close"] = "expired"
-                if revoke:
-                    # 丙件（业主 2026-11-06）：撤销之后这一行不再欠任何动作 ——
-                    # `expects` 清空、原值进 `expects_was`（schema 只允许 done/expired
-                    # 的行为空）。留着 `expects="ack"` 会让读的人看着它像还欠一个 ack，
-                    # 而读侧（open_items_of / board / ack_items）其实都已经不数它了。
-                    new["expects_was"] = str(row.get("expects") or "")
-                    new["expects"] = ""
-                inputs = list(new.get("inputs") or [])
-                if revoke:
-                    # 六格：谁（by）/ 归谁（owner）/ 为什么（reason）/ 原状（from）/
-                    # 新状（to）/ 何时（at）。append-only，事后读行就能复核这一笔。
-                    mark = (f"revoke:expired:by={by_task_id}:owner={owner or '（顶层）'}:"
-                            f"from={cur}:to=done:at={at}:reason={reason_text}")
-                    note = (f"item:expired:revoke:by={by_task_id}:"
-                            f"owner={owner or '（顶层）'}:from={cur}:to=done:at={at}")
-                else:
-                    mark = f"void:expired:{by_task_id}:{reason_text}"
-                    note = "item:expired"
-                inputs.append(mark)
-                new["inputs"] = inputs
-                task = S.Task(**{k: v for k, v in new.items()
-                                 if k in S.Task.__dataclass_fields__})
-                task.validate()
-                tx.upsert("tasks", task.to_dict(), note=note)
-                out["voided"].append(iid)
-                trace = {
-                    "item_id": iid, "by": str(by_task_id), "owner": owner,
-                    "reason": reason_text, "from": cur, "to": "done", "at": at,
-                    "close": "expired", "mode": ("revoke" if revoke else "void"),
-                    "authority": str(authority.get("mode") or ""),
-                    "notice_id": "",
-                }
-                out["traces"].append(trace)
-                if revoke:
-                    # 乙件（业主 2026-11-06）：撤销成功 ⇒ 同一笔事务里给收件人投一条
-                    # 通知。通知是已收口的一行（见 `_revocation_notice_row` 的
-                    # docstring：开着的通知只能是欠 ack 或新造一档 expects，两者都不许）。
-                    # 写失败不回滚撤销（撤销是正文，通知是回执），但必须逐条报出来。
-                    owner_depth = int((rows.get(owner) or {}).get("depth") or 0) + 1
-                    notice = self._revocation_notice_row(
-                        row=row, item_id=iid, owner=owner, by_task_id=str(by_task_id),
-                        reason=reason_text, depth=owner_depth)
-                    if notice is None:
-                        out["notification_problems"].append(
-                            f"{iid}：没有投撤销通知（没有收件人，或它本身是一条撤销通知）")
-                    else:
-                        try:
-                            notice_id = self._row_with_id(tx, notice,
-                                                          note="item:notice:revoked")
-                        except Exception as exc:  # noqa: BLE001 —— 通知没开成要如实报
-                            out["notification_problems"].append(
-                                f"{iid}：撤销通知没开成（{type(exc).__name__}: {exc}）"
-                                "⇒ 撤销照旧（它是正文），但收件人不会收到这条通知")
-                        else:
-                            trace["notice_id"] = notice_id
-                            out["notified"].append({
-                                "item_id": iid, "notice_id": notice_id,
-                                "owner": owner, "kind": "notice", "expects": "",
-                                "text": str(notice.get("detail") or ""),
-                            })
+                self._void_item_apply(
+                    tx=tx, row=row, rows=rows, iid=iid, cur=cur, authority=authority,
+                    out=out, by_task_id=by_task_id, reason_text=reason_text, at=at,
+                    revoke=revoke)
         verb = "撤销" if revoke else "作废"
         if out["refused"] and not out["voided"]:
             out["reason"] = f"一条都没{verb}（拒绝理由见 refused）"
@@ -5030,6 +4889,168 @@ class Conductor:
                 for t in out["traces"][:5])
             out["reason"] = f"撤销 {len(out['voided'])} 条（留痕：{shown}）"
         return out
+
+    def _void_item_gate(self, *, iid: str, row: Mapping[str, Any] | None,
+                        rows: Mapping[str, Mapping[str, Any]], by_task_id: str,
+                        revoke: bool) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
+        """`void_items` 的逐项前置判据（拆分：判据逐字未动，只搬了位置）。
+
+        返回 `(refusal, cur, authority)`：`refusal` 非 None ⇒ 这一条不改，原样进
+        `out["refused"]` 并跳过；否则 `cur` 是改前的状态、`authority` 是权限读数
+        （写盘那一段的留痕要用它）。刻意用元组而不是再定义一种 dict 返回形状：
+        它只在 `void_items` 的一次循环里活着。
+        """
+        if row is None:
+            return {"id": iid, "why": "没有这一项（不是'已经作废'）"}, "", {}
+        if not self._is_board_item(row):
+            return {"id": iid, "why": "不是板项（kind 为空）⇒ 不归作废管"}, "", {}
+        cur = str(row.get("item_state") or "queued")
+        if cur == "done":
+            return {"id": iid, "why": "已经是终态（重复作废不改任何格）"}, cur, {}
+        # ---- 权限（业主 2026-11-06 裁定 ①）：两档都先过这一关 -------------
+        # 顺序刻意的：先判"你是谁、能不能动这一条"，再判"这一条该不该作废"。
+        # 反过来（先判 deaf 再判权限）会让没有权限的人也能把一条项"推进到
+        # 某个分支"，读数上分不清"它没权限"与"它没证明"。
+        authority = self._item_authority(rows, by_task_id=by_task_id, row=row)
+        if not authority.get("checked"):
+            return {"id": iid,
+                    "code": str(authority.get("code") or "unknown_actor"),
+                    "why": str(authority.get("why") or "权限读不成（fail-closed）")}, cur, authority
+        if not authority.get("allowed"):
+            return {"id": iid, "code": "not_authorized",
+                    "why": str(authority.get("why") or "没有权限改这一条")}, cur, authority
+        if str(row.get("expects") or "") == "":
+            # 撤销后的行（`done` + `expired`）已经在上面被终态那一档拦下；走到
+            # 这里的空 expects 只可能是"通知"那种本来就不要求任何动作的行 ——
+            # 没有义务可撤，撤了还会再生成一条通知（`REVOKE_NOTICE_PREFIX` 防环）。
+            return {
+                "id": iid, "code": "no_obligation",
+                "why": ("它不要求任何动作（expects 为空）⇒ 没有可撤的义务"
+                        "（撤销不是删行）")}, cur, authority
+        if not revoke:
+            # 旧口径（作废）：只收 expects=ack 的通知，而且收件人必须叫不醒。
+            if str(row.get("expects") or "") != "ack":
+                return {"id": iid,
+                        "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
+                               "（只许作废'知道了就好'的通知）"}, cur, authority
+            who = str(row.get("role") or "")
+            try:
+                gate = self.retire_state_of(str(row.get("parent_task_id") or ""))
+            except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 不许作废（fail-closed）
+                gate = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+            if not gate.get("checked"):
+                return {"id": iid, "why": (
+                    f"收件人状态读不成（{gate.get('reason') or '没查成'}）⇒ 不知道它是不是静默，"
+                    "不许作废（fail-closed）")}, cur, authority
+            if not gate.get("silent"):
+                return {"id": iid, "why": (
+                    f"{who} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")}, cur, authority
+            # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
+            # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
+            # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
+            receiver = str(row.get("parent_task_id") or "")
+            # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
+            # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
+            # `lifeline_suppressed` 那一半在工作。
+            receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
+            # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
+            # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
+            # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
+            verdict = "unknown"
+            suppressed = False
+            try:
+                verdict = self.retired_verdict(receiver, parent=receiver_parent)
+                suppressed = bool(CLK.lifeline_suppressed(
+                    str(getattr(self.store, "root", "") or ""), receiver))
+            except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
+                verdict = "unknown"
+                suppressed = False
+            if not (suppressed or verdict == "retired"):
+                if verdict == "unknown":
+                    return {"id": iid, "code": "unknown_retired", "why": (
+                        f"{who} 的销号名单读不全（{self._retired_reason()}）⇒ "
+                        "证明不了「它叫不醒」，不代作废（作废不可逆）")}, cur, authority
+                return {"id": iid, "why": (
+                    f"{who} 只是静默，但一条消息或一次委托就会把它叫醒"
+                    "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
+                    "；作废不可逆，不许拿『它不会再看』当理由")}, cur, authority
+        return None, cur, authority
+
+    def _void_item_apply(self, *, tx: Any, row: Mapping[str, Any],
+                         rows: Mapping[str, Mapping[str, Any]], iid: str, cur: str,
+                         authority: Mapping[str, Any], out: dict[str, Any],
+                         by_task_id: str, reason_text: str, at: str,
+                         revoke: bool) -> None:
+        """`void_items` 的写盘那一段（拆分：写盘与留痕逐字未动）。
+
+        `out` 就是调用方那一份返回体：`voided` / `traces` / `notified` /
+        `notification_problems` 由这里按原有顺序追加，调用方不再自己拼。
+        """
+        # ---- 写盘：两档共用"直写 + 终态"，留痕各记各的 -------------------
+        owner = str(row.get("parent_task_id") or "")
+        new = dict(row)
+        new["item_state"] = "done"
+        new["item_close"] = "expired"
+        if revoke:
+            # 丙件（业主 2026-11-06）：撤销之后这一行不再欠任何动作 ——
+            # `expects` 清空、原值进 `expects_was`（schema 只允许 done/expired
+            # 的行为空）。留着 `expects="ack"` 会让读的人看着它像还欠一个 ack，
+            # 而读侧（open_items_of / board / ack_items）其实都已经不数它了。
+            new["expects_was"] = str(row.get("expects") or "")
+            new["expects"] = ""
+        inputs = list(new.get("inputs") or [])
+        if revoke:
+            # 六格：谁（by）/ 归谁（owner）/ 为什么（reason）/ 原状（from）/
+            # 新状（to）/ 何时（at）。append-only，事后读行就能复核这一笔。
+            mark = (f"revoke:expired:by={by_task_id}:owner={owner or '（顶层）'}:"
+                    f"from={cur}:to=done:at={at}:reason={reason_text}")
+            note = (f"item:expired:revoke:by={by_task_id}:"
+                    f"owner={owner or '（顶层）'}:from={cur}:to=done:at={at}")
+        else:
+            mark = f"void:expired:{by_task_id}:{reason_text}"
+            note = "item:expired"
+        inputs.append(mark)
+        new["inputs"] = inputs
+        task = S.Task(**{k: v for k, v in new.items()
+                         if k in S.Task.__dataclass_fields__})
+        task.validate()
+        tx.upsert("tasks", task.to_dict(), note=note)
+        out["voided"].append(iid)
+        trace = {
+            "item_id": iid, "by": str(by_task_id), "owner": owner,
+            "reason": reason_text, "from": cur, "to": "done", "at": at,
+            "close": "expired", "mode": ("revoke" if revoke else "void"),
+            "authority": str(authority.get("mode") or ""),
+            "notice_id": "",
+        }
+        out["traces"].append(trace)
+        if revoke:
+            # 乙件（业主 2026-11-06）：撤销成功 ⇒ 同一笔事务里给收件人投一条
+            # 通知。通知是已收口的一行（见 `_revocation_notice_row` 的
+            # docstring：开着的通知只能是欠 ack 或新造一档 expects，两者都不许）。
+            # 写失败不回滚撤销（撤销是正文，通知是回执），但必须逐条报出来。
+            owner_depth = int((rows.get(owner) or {}).get("depth") or 0) + 1
+            notice = self._revocation_notice_row(
+                row=row, item_id=iid, owner=owner, by_task_id=str(by_task_id),
+                reason=reason_text, depth=owner_depth)
+            if notice is None:
+                out["notification_problems"].append(
+                    f"{iid}：没有投撤销通知（没有收件人，或它本身是一条撤销通知）")
+            else:
+                try:
+                    notice_id = self._row_with_id(tx, notice,
+                                                  note="item:notice:revoked")
+                except Exception as exc:  # noqa: BLE001 —— 通知没开成要如实报
+                    out["notification_problems"].append(
+                        f"{iid}：撤销通知没开成（{type(exc).__name__}: {exc}）"
+                        "⇒ 撤销照旧（它是正文），但收件人不会收到这条通知")
+                else:
+                    trace["notice_id"] = notice_id
+                    out["notified"].append({
+                        "item_id": iid, "notice_id": notice_id,
+                        "owner": owner, "kind": "notice", "expects": "",
+                        "text": str(notice.get("detail") or ""),
+                    })
 
     def open_items_many(self, items: Sequence[Mapping[str, Any]], *,
                         details: Sequence[str] | None = None) -> list[str]:
