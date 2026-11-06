@@ -109,7 +109,10 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
     root.mkdir()
     ok = VR.parse_verdict('{"verdict": "成立", "findings": []}')
     row = VR.record_verification(root, statement_id="0007", proof_text=_CLEAN, verdict=ok,
-                    used_faces=("statements.read", "experiments.read"))
+                    used_faces=("statements.read", "experiments.read"),
+                    #: p247：轴只由秘书给；这一条量的是连续闸，故给 clean。
+                    secretary_judge={"checked": True, "axis": "clean",
+                                     "decision": "没问题", "reason": "夹具：clean"})
     assert VR.signs_bit3(row) is False, "没有连续读数也签了 ⇒ 那道闸没接上"
     assert VR.signs_bit3(row, streak=VR.SIGN_STREAK_NEED) is True, row
     payload = VR.bit3_payload(row, streak=VR.SIGN_STREAK_NEED)
@@ -134,29 +137,31 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
 
 # ============================================================ 两态与"没查成"
 
-def test_two_states_are_not_collapsed(tmp_path):
-    """两态：`看不出来` 这一族折成 `成立`，与"没查成"（输出不合法）不许折平。
+def test_the_verdict_is_a_statement_not_a_state(tmp_path):
+    """p247：`verdict` 只是陈述 —— 原样落行、不折档；没有秘书轴 ⇒ 不签。
 
-    2026-11-01 业主裁定：「不应该有『看不出来』，『看不出来错』就是没毛病，没有
-    『看不出来对』」。所以这里判的是折档的两件事：结论落在 `成立`、原话留在
-    `verdict_raw`（"+ 折档不翻位"）；而真正的"没查成"（不是 JSON / 缺步号 /
-    词表外的写法）仍然抛错、不落行。
+    业主 2026-11-06 第三次收紧逐字：「V 的判词只是陈述」「不做折档」。所以：
+    ① 「看不出来」原样留在台账上（不折成成立、也不折成有毛病）；
+    ② 这一行没有 `secretary_judge` ⇒ 轴为空 ⇒ 不签第 3 位、不投连续票；
+    ③ 真正的"没查成"只剩结构不合法（不是 JSON / 缺 `verdict` 字段）；
+       词表外的写法只是一句陈述，不拒、也不折。
     """
     root = tmp_path / "ws"
     root.mkdir()
     unclear = VR.record_verification(root, statement_id="0009", proof_text=_DIRTY,
                         verdict=VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足"}'))
-    assert unclear["verdict"] == "成立", unclear
-    assert unclear["verdict_raw"] == "看不出来", unclear
-    assert "没有找到缺陷" in unclear["why"], unclear["why"]
+    assert unclear["verdict"] == "看不出来", unclear
+    assert VR.read_verdict(unclear) == "看不出来", unclear
+    assert VR.secretary_axis(unclear) == "", unclear
     assert VR.signs_bit3(unclear) is False, unclear
     assert VR.bit3_payload(unclear) == {}, unclear
     with pytest.raises(VR.VerificationError):
         VR.parse_verdict("我觉得还行")            # 不是 JSON ⇒ 没查成
     with pytest.raises(VR.VerificationError):
-        VR.parse_verdict('{"verdict": "有毛病"}')  # 有毛病却没指到步 ⇒ 没查成
-    with pytest.raises(VR.VerificationError):
-        VR.parse_verdict('{"verdict": "大概成立"}')  # 取值不在词表 ⇒ 没查成
+        VR.parse_verdict('{"findings": []}')      # 缺 verdict 字段 ⇒ 没有陈述可读
+    loose = VR.parse_verdict('{"verdict": "大概成立"}')
+    assert loose["verdict"] == "大概成立", loose
+    assert VR.signs_bit3(loose, streak=VR.SIGN_STREAK_NEED) is False, loose
 
 
 def test_a_wrong_field_in_a_handmade_verdict_is_refused_at_write_time(tmp_path):

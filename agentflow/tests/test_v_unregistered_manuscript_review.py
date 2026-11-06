@@ -90,9 +90,44 @@ def _ws(tmp_path: pathlib.Path, *, text: str = MANUSCRIPT) -> Store:
     return st
 
 
+class _JudgeStub:
+    """V 的秘书替身（p247：轴必须由秘书给；这一支只量未在册那条路）。
+
+    夹具按 V 回复里有没有「有毛病」给出轴 —— 这是替身自己的判定，不是生产代码在按字面
+    定轴；生产代码里 `judge_v_reply` 读的是回复语义。
+    落签那一半委托给一个没有缝的真秘书（`land_unregistered_sign` 的口径只有一处）。
+    """
+
+    def __init__(self, st: Store) -> None:
+        from agentflow import secretary as _SEC
+
+        self._real = _SEC.Secretary("V", root=st.root, store=st, seam=None,
+                                    enable_model=False)
+
+    @property
+    def actor_label(self):
+        return self._real.actor_label
+
+    def land_unregistered_sign(self, envelope):
+        return self._real.land_unregistered_sign(envelope)
+
+    def judge_v_reply(self, *, reply="", verdict="", defect_step=None, **_kw):
+        bad = "有毛病" in str(verdict) or "有毛病" in str(reply)
+        return {"checked": True, "axis": "fault" if bad else "clean",
+                "decision": "有缺陷要指出" if bad else "没问题",
+                "reason": "夹具：秘书语义判定", "basis": ["夹具"],
+                "defect_step": (defect_step if isinstance(defect_step, int) else 2)
+                if bad else None}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": True, "washed": True, "text": "第 2 步需要补依据。",
+                "findings": [], "dropped": [], "refused": ""}
+
+
 def _v(st: Store, replies: list[str]) -> tuple[AgentV, _ReviewSeam]:
     seam = _ReviewSeam(list(replies))
-    return AgentV(st, workspace_root=st.root, llm=seam), seam
+    return AgentV(st, workspace_root=st.root, llm=seam,
+                  secretary=_JudgeStub(st)), seam
 
 
 @contextlib.contextmanager

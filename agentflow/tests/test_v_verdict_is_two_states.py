@@ -5,33 +5,27 @@
 「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」
 ```
 
-## 要落成的口径（业主原话逐条）
+## 要落成的口径（业主 2026-11-01 + 2026-11-06 p247 第三次收紧）
 
 ```text
-A. V 自己的结论只剩两态：成立 / 有毛病。
-   「看不出来」不存在，并且归到成立那一侧 ——
-   「看不出错」= 没找到缺陷 = 没毛病 = 成立；不存在「看不出对」这回事
-   （判"成立"不要求 V 证明正确，只要求它没找到缺陷）。
-   模型若回「看不出来 / 判不了 / 我无法判断」这类 ⇒ 一律按「成立」收，
-   reason 写明"它没有找到缺陷 ⇒ 按没毛病"。
-   与秘书那一条不冲突：秘书判的是回复的措辞，V 这一侧是结论词，只有两态
-   —— 两张词表、两条纪律。
-B. 历史台账行里 verdict="看不出来" 按「成立（没找到缺陷）」读，并且计一票
-   （2026-11-02 追加裁定，业主逐字：「这一档连历史兼容读也不留」）。
-   改前它是"不算票、也不清零"—— 那是一种宽容（老行既不算通过、也不算失败）；
-   现在它算通过。这是放宽方向的改动，来自业主要求「不留该档」，
-   它会让老工作区的连续数变高（本文件 s3：2 → 3）。
+A. V 自己的判词只是陈述：成立 / 有毛病 / 判不了 / 看不出来 都原样落盘。
+   p247 逐字：「不做折档」「不许按词面把判不了 / 看不出来 / 拿不准 / 我无法判断
+   折成任何一态」。轴（clean / fault）由 V 的秘书读回复后语义判定；
+   没有秘书轴的行不签、不算票。
+B. 历史台账行里的 verdict="看不出来" 原样读出（不折档、不算票、不签）——
+   p247 把 2026-11-02 的「按成立读并计票」也取消了（本文件 s3：3 → 2）。
 C. specs/v.py 的 policy 第一段写成两态并逐字写那两句（这一份的 s4 钉渲染面）。
-D. 三转连判机制不变：clean 仍要求 verdict=成立；有毛病仍立刻终止并打回 F。
+D. 三转连判机制不变：秘书判 clean 才继续；判 fault 立刻终止并打回 F；
+   V 的判词本身不再构成一条打回（p247）。
 ```
 
 ## 四条判据（每条都先红后绿）
 
 | # | 它守什么 | 改前为什么红 |
 |---|---|---|
-| s1 | 模型回「看不出来」⇒ 台账那一行 verdict=成立（不是有毛病、也不是第三态），why 写明为什么这么收 | `parse_verdict` 认三态 ⇒ 原样落成 `看不出来` |
-| s2 | 模型回「我无法判断这份证明对不对」⇒ 同样落成成立（同一族措辞、同一处置） | 词表外 ⇒ 抛 `VerificationError`（"没查成"），一行都不落 |
-| s3 | 手写的 `verdict="看不出来"` 历史行：读得出（盘上那四个字不动）、按成立读、投连续成立那一票；`review_standing` 读成 `signed` | 改前它"不算票、也不清零" ⇒ 同一条台账数出 2 而不是 3，且读数停在 `rejected` + 一句"历史行" |
+| s1 | 模型回「看不出来」⇒ 台账那一行原样是 `看不出来`（不折成成立/有毛病）；没有秘书轴 ⇒ 不签 | 改前 `parse_verdict` 把它折成 `成立` |
+| s2 | 模型回「我无法判断这份证明对不对」⇒ 同样原样落行、不折档、不签；结构不合法才是"没查成" | 改前折成成立 / 或把词表外写法当成没查成 |
+| s3 | 手写的 `verdict="看不出来"` 历史行：读得出（盘上那四个字不动）、不折档、不算票、不签 | 改前按成立读并计票（数出 3）；p247 收紧成 2 |
 | s4 | 渲染后的 V 提示词（system + 冷启动，含技能索引摘要）里只剩两态那两句；`看不出来` 只许出现在"不存在……这一档"那句否定式里 | 两处都写着三态 / 让模型"信息不足就写看不出来" |
 | s5 | `verify.verify_proof` 给模型看的那段声明文字（`summary` ＋ `returns`，`returns` 会拼进 function-calling 的 description）里不再出现 `看不出来`；而"`checked=False` ⇒ 没查成、不落台账行"这条约束一字不许丢 | `returns` 里那句「绝不拿「看不出来」冒充「审过了」」指着已经取消的那一档；模型读到的是一档它产不出的结论 |
 
@@ -127,43 +121,39 @@ def _folded(root: pathlib.Path, reply: str) -> dict:
 
 # ------------------------------------------------------------------ s1
 
-def test_s1_a_hedged_verdict_lands_as_holds_not_as_a_third_state(tmp_path):
-    """s1：模型回「看不出来」⇒ 台账 verdict 落成成立，why 写明为什么这么收。
+def test_s1_a_hedged_verdict_lands_as_a_statement_not_a_state(tmp_path):
+    """s1（p247）：模型回「看不出来」⇒ 台账原样留住这句陈述；没有轴 ⇒ 不签。
 
     三件事各断一次（少一条这条判据就只是"它没报错"）：
-    ① 台账那一行的 `verdict` 是 `成立` —— 既不是 `有毛病`，也不是第三态；
-    ② 词表里没有第三态（`verifications.VERDICTS` 只有两格）；
-    ③ `why` 写清"它没有找到缺陷 ⇒ 按没毛病收"，并且把模型原话留在 `verdict_raw` 里
-       （否则"它其实没判"这件事在盘上不可见）。
+    ① 台账那一行的 `verdict` 是 `看不出来` —— 不许折成 `成立` 或 `有毛病`；
+    ② 这一行没有 `secretary_judge` ⇒ `secretary_axis` 是空串（没有轴，不是 clean）；
+    ③ `read_verdict` 原样返回，`row_signable` 为假（轴只能由秘书给）。
     """
     root = tmp_path / "ws"
     root.mkdir()
     got = _folded(root, '{"verdict": "看不出来", "why": "信息不足", "findings": []}')
     row, out = got["row"], got["out"]
 
-    assert out["verdict"] == "成立", out
-    assert row["verdict"] == "成立", "台账那一行不是「成立」⇒ 第三态还在盘上" + str(row)
-    assert row["verdict"] != "有毛病", "把「没找到缺陷」判成了找到缺陷" + str(row)
-    # ② 词表本身只有两态（第三态不是"这一行碰巧没写"）
-    assert VR.VERDICTS == ("有毛病", "成立"), VR.VERDICTS
-    assert "看不出来" not in VR.VERDICTS, VR.VERDICTS
-    assert "看不出来" in VR.LEGACY_VERDICTS, VR.LEGACY_VERDICTS
-    # ③ why 说清这么收的理由，且原话可查
-    why = str(row.get("why") or "")
-    assert "没有找到缺陷" in why and "没毛病" in why, why
-    assert "看不出来" in why, "why 里没有点名模型回的是哪一档 ⇒ 无从复核" + why
-    assert row.get("verdict_raw") == "看不出来", row
-    # 这一签不翻位（没有秘书、也没有连续次数）—— 与"它被判成成立"是两件事
+    assert out["verdict"] == "看不出来", out
+    assert row["verdict"] == "看不出来", "台账那一行被折档了" + str(row)
+    # ② 没有秘书 ⇒ 没有轴（不是 clean）
+    assert VR.secretary_axis(row) == "", row
+    assert VR.secretary_judged(row) is False, row
+    # ③ 只取字段、不产轴
+    assert VR.read_verdict(row) == "看不出来", row
+    assert VR.row_signable(row) is False, "没有秘书轴却签得住 ⇒ 字面又当成了 clean"
+    # 这一签不翻位
     assert out["signed_bit3"] is False, out
 
 
 # ------------------------------------------------------------------ s2
 
-def test_s2_i_cannot_judge_is_folded_into_holds(tmp_path):
-    """s2：模型回「我无法判断这份证明对不对」⇒ 同样落成成立（同一族措辞、同一处置）。
+def test_s2_i_cannot_judge_stays_a_statement_and_is_not_signed(tmp_path):
+    """s2（p247）：模型回「我无法判断这份证明对不对」⇒ 原样落成陈述，不折档、不签。
 
-    反真空：同一套夹具喂一句词表外、也不是这一族的话（"大概成立"）⇒ 不许落行
-    （那是"没查成"）。两条一起才说明"折"的是这一族措辞，不是"什么词都收"。
+    反真空：同一套夹具喂一句结构不合法的话（"大概成立" 不是 JSON）⇒ 不落行
+    （那是"没查成"）；而词表外但结构合法的写法（"大概成立" 包在 JSON 里）只是陈述，
+    也不折档。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -171,20 +161,18 @@ def test_s2_i_cannot_judge_is_folded_into_holds(tmp_path):
         {"verdict": "我无法判断这份证明对不对", "why": "证明里有一个记号没定义"},
         ensure_ascii=False))
     row, out = got["row"], got["out"]
-    assert out["verdict"] == "成立", out
-    assert row["verdict"] == "成立", row
-    why = str(row.get("why") or "")
-    assert "没有找到缺陷" in why and "没毛病" in why, why
-    assert row.get("verdict_raw") == "我无法判断这份证明对不对", row
+    assert out["verdict"] == "我无法判断这份证明对不对", out
+    assert row["verdict"] == "我无法判断这份证明对不对", row
+    assert VR.secretary_axis(row) == "", row
+    assert VR.row_signable(row) is False, row
 
-    # 反真空：不属于这一族的词仍然"没查成"（不落行、不冒充成立）
+    # 反真空：结构不合法仍然"没查成"（不落行）
     other = tmp_path / "ws2"
     other.mkdir()
-    agent, _seam = _agent(other, json.dumps({"verdict": "大概成立", "findings": []},
-                                            ensure_ascii=False))
+    agent, _seam = _agent(other, "大概成立")
     bad = agent.verify_proof(SID, proof_text=PROOF)
     assert bad["checked"] is False and bad["reason"] == "unparsable", bad
-    assert _ledger(other) == [], "词表外的结论竟然落了一行台账"
+    assert _ledger(other) == [], "结构不合法却落了一行台账"
 
 
 # ------------------------------------------------------------------ s3
@@ -212,24 +200,23 @@ def _legacy_row(root: pathlib.Path, *, verdict: str = "看不出来",
     return legacy
 
 
-def test_s3_a_historical_row_reads_as_holds_and_counts_as_a_vote(tmp_path):
-    """s3：历史行（`verdict="看不出来"`）按「成立」读、并且计一票（2026-11-02 追加裁定）。
+def test_s3_a_historical_row_stays_a_statement_and_does_not_count(tmp_path):
+    """s3（p247）：历史行（`verdict="看不出来"`）原样读得出，但不折档、不算票、不签。
 
-    业主本轮逐字：「这一档连历史兼容读也不留」。于是读侧对它只剩一种读法 ——
-    按「成立（没找到缺陷）」读，并且投「连续成立」那一票。三半，缺一半这条判据就是假绿：
+    业主 2026-11-06 第三次收紧：「V 的判词只是陈述」「不做折档」。所以：
     ① 读得出：台账里三行都在，历史行那四个字原样还在盘上（不许被"顺手迁移"改掉）；
-    ② 算票：`成立, 成立, 看不出来` 的连续次数是 3 —— 改前是 2（那一档"不清零、也
-       不计入"）。这是放宽方向的改动（老行从"既不算通过也不算失败"变成"算通过"），
-       来自业主要求「不留该档」；
-    ③ 第 3 位跟着它走：`row_signable` 为真、`bit3_payload(streak=3)` 非空、
-       `review_standing` 读成 `signed`（改前是 `rejected` + 一句"历史行"）。
+    ② 不算票：`成立, 成立, 看不出来` 的连续次数是 2 —— 只有前两行有秘书轴（夹具给的
+       clean）；历史行没有轴 ⇒ 不算票、也不清零；
+    ③ 第 3 位不动：`row_signable(legacy)` 为假、`bit3_payload(legacy, streak=3)` 为空。
     """
     root = tmp_path / "ws"
     root.mkdir()
     for _i in (1, 2):
         VR.record_verification(root, statement_id=SID, proof_text=PROOF,
                                verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V")
+                               verifier="agent-V",
+                               secretary_judge={"checked": True, "axis": "clean",
+                                                "decision": "没问题", "reason": "夹具"})
     holds2 = VR.consecutive_holds(root, SID)
     assert holds2["streak"] == 2, holds2
 
@@ -241,35 +228,28 @@ def test_s3_a_historical_row_reads_as_holds_and_counts_as_a_vote(tmp_path):
     assert [r["verdict"] for r in rows] == ["成立", "成立", "看不出来"], rows
     text = VR.verification_ledger_path(root, SID).read_text(encoding="utf-8")
     assert '"verdict": "看不出来"' in text, "历史行被改写了（台账是追加式的，不许迁移）"
+    assert VR.read_verdict(legacy) == "看不出来", "历史行被折档了"
 
-    # ② 算票：3（改前 2）
+    # ② 不算票：2（历史行没有轴）
     holds = VR.consecutive_holds(root, SID)
     assert holds["checked"] is True, holds
-    assert holds["streak"] == 3, (
-        f"历史行没有计票（{holds['streak']}）：3 = 按成立读并算一票；"
-        "2 = 它还留着改前那条『不算票、也不清零』的宽容读法")
+    assert holds["streak"] == 2, (
+        f"历史行被算成票了（{holds['streak']}）：p247 的轴只由秘书给，"
+        "老行的陈述不产生轴")
     assert holds["rows"] == 3, holds
-    assert holds["streak_ok"] is True, holds
 
-    # ③ 第 3 位：这一行够格签，凭据上写的是读出来的结论（成立）
-    assert VR.row_signable(legacy) is True, "历史行仍被判成不够格签第 3 位"
-    payload = VR.bit3_payload(legacy, streak=3)
-    assert payload.get("reviewed") is True, payload
-    assert payload["reviewed_by"]["verdict"] == "成立", payload
-    assert VR.bit3_payload(legacy) == {}, "不给连续读数时它签得住 ⇒ 连续闸被绕开了"
+    # ③ 第 3 位：这一行不够格签，凭据为空
+    assert VR.row_signable(legacy) is False, "历史行仍被判成够格签第 3 位"
+    assert VR.bit3_payload(legacy) == {}, VR.bit3_payload(legacy)
+    assert VR.bit3_payload(legacy, streak=3) == {}, VR.bit3_payload(legacy, streak=3)
 
-    # 读数：最近那一签就是它 ⇒ signed（不是改前那个 rejected + "历史行"）
-    standing = VR.review_standing(root, statement_id=SID, proof_text=PROOF)
-    assert standing["state"] == "signed", standing
-    assert standing["verdict"] == "成立", standing
-    assert standing["streak"] == 3, standing
-    assert "历史兼容读" not in str(standing.get("why") or ""), standing["why"]
-
-    # 补：它后面再来一票就是第 4 票（改前停在 3）
+    # 补：它后面再来一票（有 clean 轴）就是第 3 票
     VR.record_verification(root, statement_id=SID, proof_text=PROOF,
                            verdict={"verdict": "成立", "findings": []},
-                           verifier="agent-V")
-    assert VR.consecutive_holds(root, SID)["streak"] == 4, VR.consecutive_holds(root, SID)
+                           verifier="agent-V",
+                           secretary_judge={"checked": True, "axis": "clean",
+                                            "decision": "没问题", "reason": "夹具"})
+    assert VR.consecutive_holds(root, SID)["streak"] == 3, VR.consecutive_holds(root, SID)
 
 
 # ------------------------------------------------------------------ s4

@@ -52,10 +52,9 @@ from test_v_reviews_three_times_before_signing import (
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "src" / "agentflow" / "agent_v" / "core.py"
 
-#: 终态词表（`core.py` 里 `stopped` 的枚举）。这一批不新增取值：甲只挪分支，
-#: 让死掉的 `verdict` 复活 —— 所以这份字面量改前改后逐字相同，它守的是"增删取值必须
-#: 同步改判据"，不是"改后要多一个值"。
-TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "verdict", "fault", "unjudged"})
+#: 终态词表（`core.py` 里 `stopped` 的枚举）。p247 删掉了 `verdict` 那一档：V 的判词只是
+#: 陈述，不能再拿它当一条打回；打回只有秘书判 fault 这一条路。
+TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "fault", "unjudged"})
 
 CLEAN = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
                     "findings": []}, ensure_ascii=False)
@@ -76,11 +75,10 @@ CLEAN_WITH_ERROR = json.dumps(
 WASHED = {"text": "第 2 步的记号没有定义：请补上记号说明之后再送 V 重签。", "step": 2,
           "findings": [{"quote": "第 2 步的记号没有定义", "why": "记号没定义就没法核这一步"}]}
 
-#: 判「有毛病」= 台账行的结论读出来不是「成立」，或者秘书的语义轴是 fault。
-#: （两种情况都必须算：V 自己判的、秘书判的。）
+#: 判「有毛病」= 秘书的语义轴是 fault（p247：V 的 `verdict` 只是陈述，不算）。
 
 def _condemned(row: dict) -> bool:
-    return VR.read_verdict(row) != "成立" or VR.secretary_axis(row) == "fault"
+    return VR.secretary_axis(row) == "fault"
 
 
 def _run(tmp: Path, *, replies: list[str], answers: dict, twice: bool = False,
@@ -138,7 +136,8 @@ def outcomes(tmp_path_factory) -> dict[str, dict]:
             "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN), _axis(SEC.V_REPLY_FAULT)],
             "wash_v_reply": [WASHED]})
 
-    # 3) 有毛病（V 自己判；秘书判 clean）—— 81 那 8 行的形状，今天被 gate 抢走
+    # 3) V 自己写「有毛病」、秘书判 clean —— p247：V 的判词只是陈述，轴是 clean；
+    #    这一行因自己的未解决 error 签不住 ⇒ terminal=gate（不是"V 判的打回"）。
     out["fault_by_v"] = _run(base / "s3", replies=[CONDEMNED_BY_V], answers={
         "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
         "wash_v_reply": [WASHED]})
@@ -193,7 +192,8 @@ def test_s1_the_four_outcomes_each_get_their_own_terminal(outcomes):
     """
     want = {"signed": "signed",
             "fault_by_secretary": "fault",
-            "fault_by_v": "verdict",
+            # p247：V 写「有毛病」不再自己构成打回；轴是 clean，签不住由机械闸接住。
+            "fault_by_v": "gate",
             "gate": "gate"}
     got = {name: outcomes[name]["terminal"] for name in want}
     assert got == want, (
@@ -214,7 +214,7 @@ def test_s1b_not_applicable_has_no_terminal_at_all(outcomes):
 
 def test_s2_a_condemned_row_is_never_labelled_gate(outcomes):
     """判「有毛病」的行，terminal 绝不在 gate 族；反过来 gate 只许出现在"成立"的行上。"""
-    for name in ("fault_by_secretary", "fault_by_v"):
+    for name in ("fault_by_secretary",):
         o = outcomes[name]
         assert _condemned(o["row"]), f"{name} 的夹具不是一条有毛病行：{o['row']}"
         term = str(o["terminal"])
@@ -224,9 +224,9 @@ def test_s2_a_condemned_row_is_never_labelled_gate(outcomes):
             "读的人会把「有毛病」读成「成立但签不住」")
     for name, o in outcomes.items():
         if o["terminal"] == "gate":
-            assert VR.read_verdict(o["row"]) == "成立", (
-                f"{name}：terminal='gate' 蕴含这一行的结论是「成立」，"
-                f"实得 {o['row'].get('verdict')!r}")
+            assert VR.secretary_axis(o["row"]) == "clean", (
+                f"{name}：terminal='gate' 蕴含这一行的轴是 clean（签不住的是机械闸），"
+                f"实得 axis={VR.secretary_axis(o['row'])!r}")
 
 
 # ============================================================ s3：反真空（词表 / 活证 / 分支序）
@@ -309,17 +309,16 @@ def test_s3c_the_branch_order_puts_the_outcome_before_the_signability():
     c) gate > fault：gate 只吃"成立但签不住"的行，不许抢在"有毛病"前面。
     """
     idx = _branch_indexes()
-    assert set(idx) == {"ledger", "verdict", "fault", "gate", "signed", "unjudged"}, idx
-    assert idx["verdict"] < idx["fault"], (
-        f"verdict 支({idx['verdict']}) 必须排在 fault 支({idx['fault']}) 之前")
-    assert idx["gate"] > idx["fault"], (
-        f"gate 支({idx['gate']}) 抢在 fault 支({idx['fault']}) 之前 ⇒ "
-        "「有毛病」的行会先被标成「成立但签不住」")
+    assert set(idx) == {"ledger", "fault", "unjudged", "gate", "signed"}, idx
+    assert idx["ledger"] == min(idx.values()), f"台账那一支必须最先判：{idx}"
+    assert idx["fault"] < idx["unjudged"], (
+        f"fault 支({idx['fault']}) 必须排在 unjudged 支({idx['unjudged']}) 之前")
+    assert idx["unjudged"] < idx["gate"], (
+        f"unjudged 支({idx['unjudged']}) 必须排在 gate 支({idx['gate']}) 之前 ⇒ "
+        "没有轴的行走不到 gate（它连\"签不签得动\"都没有判）")
     assert idx["gate"] < idx["signed"], (
         f"gate 支({idx['gate']}) 必须排在 signed 支({idx['signed']}) 之前 ⇒ "
-        "否则（结论成立但签不住）会被报成「签上了」")
-    assert idx["ledger"] == min(idx.values()), f"台账那一支必须最先判：{idx}"
-    assert idx["unjudged"] == max(idx.values()), f"「没查成」必须最后判：{idx}"
+        "否则（轴 clean 但签不住）会被报成「签上了」")
 
 
 # ============================================================ s4：同一返回里的文本不许打架
@@ -348,8 +347,8 @@ def test_s4_the_reason_and_the_pass_do_not_contradict_each_other(outcomes):
             f"{name}：这一行判的是有毛病，文本里却说结论是「成立」：\n{blob}")
         assert "这不是有毛病" not in blob, (
             f"{name}：这一行判的是有毛病，文本里却说「这不是有毛病」：\n{blob}")
-    # 反向：terminal 说 verdict 时，发签理由必须点名有毛病（不许对读者沉默）。
-    o = outcomes["fault_by_v"]
-    assert o["terminal"] == "verdict", o["passes"]
+    # 反向：秘书判 fault 时，发签理由必须点名有毛病（不许对读者沉默）。
+    o = outcomes["fault_by_secretary"]
+    assert o["terminal"] == "fault", o["passes"]
     reason = str((o["got"].get("sign_issuance") or {}).get("reason") or "")
     assert "有毛病" in reason, reason

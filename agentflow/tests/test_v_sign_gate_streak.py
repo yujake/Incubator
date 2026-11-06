@@ -127,7 +127,11 @@ def _sign(store: Store, *, verdict: dict | None = None, text: str = PROOF,
     """
     return VR.record_verification(store.root, statement_id=SID, proof_text=text,
                                   verdict=verdict or _OK, verifier="agent-V",
-                                  store=store, proof_no=1, secretary_judge=judge)
+                                  store=store, proof_no=1,
+                                  #: p247：轴只由秘书给；夹具默认 clean（需要别的轴时显式传）。
+                                  secretary_judge=judge or {"checked": True, "axis": "clean",
+                                                            "decision": "没问题",
+                                                            "reason": "夹具：clean"})
 
 
 def _sign_legacy_unsure(store: Store, *, text: str = PROOF) -> dict:
@@ -382,7 +386,7 @@ def test_a7_no_secretary_means_no_signature_at_all(tmp_path):
     assert VR.consecutive_holds(st.root, SID)["streak"] == 2
     bare = _sec(st, None)          # 装配缺失：没有缝的秘书
     decided = bare.decide_sign_issuance(statement_id=SID, proof_text=PROOF, proof_no=1,
-                                        verdict=_OK)
+                                        verdict={**_OK, "axis": "clean"})
     assert decided["checked"] is False and decided["issue"] is False, decided
     assert decided["issued"] is False, decided
     assert "没查成" in decided["reason"], decided["reason"]

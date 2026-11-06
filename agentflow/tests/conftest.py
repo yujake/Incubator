@@ -366,6 +366,57 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
     return need
 
 
+class CleanVerdictSecretary:
+    """p247 的测试替身：V 的秘书给指定轴（缺省 clean）、三转即签发（不调真模型）。
+
+    为什么放在 conftest：`test_longrun_offline_multiround` / `test_verified_theorem_*`
+    这类端到端夹具只关心"签落没落"，不应该各自再抄一份秘书替身。
+    """
+
+    def __init__(self, axis: str = "clean", store=None) -> None:
+        self.axis = axis
+        self._real = None
+        if store is not None:
+            from agentflow import secretary as SEC
+
+            self._real = SEC.Secretary("V", root=store.root, store=store,
+                                       seam=None, enable_model=False)
+
+    @property
+    def actor_label(self):
+        return self._real.actor_label if self._real is not None else ""
+
+    def land_unregistered_sign(self, envelope):
+        if self._real is None:
+            return {"landed": False, "state": "refused", "code": "no_landing_method",
+                    "reason": "夹具：没有真实秘书", "manuscript_write": {},
+                    "ledger_bit": "not_attempted"}
+        return self._real.land_unregistered_sign(envelope)
+
+    def judge_v_reply(self, *, defect_step=None, **_kw):
+        bad = self.axis == "fault"
+        return {"checked": True, "axis": self.axis,
+                "decision": "有缺陷要指出" if bad else "没问题",
+                "reason": "夹具：秘书判 " + self.axis, "basis": ["夹具"],
+                "defect_step": (defect_step if isinstance(defect_step, int) else 2)
+                if bad else None}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": True, "washed": True, "text": "（夹具：无需洗稿）",
+                "findings": [], "dropped": [], "refused": ""}
+
+    def decide_sign_issuance(self, *, within_call=None, **_kw):
+        from agentflow import verifications as VR
+
+        ok = (self.axis == "clean" and within_call is not None
+              and int(within_call) >= int(VR.SIGN_STREAK_NEED))
+        return {"checked": True, "issue": ok, "issued": False,
+                "decision": "签发" if ok else "不签发",
+                "streak": int(within_call or 0), "projected": int(within_call or 0),
+                "need": int(VR.SIGN_STREAK_NEED), "streak_ok": ok,
+                "reason": "夹具：够就签发", "basis": ["夹具"]}
+
+
 def sign_before_registration(root, *, proof_text: str,
                              times: int | None = None) -> dict:
     """「命题还没在册」时 V 审的那一签：先落 pending 台账，登记时按正文 sha 认领。
@@ -401,7 +452,10 @@ def sign_before_registration(root, *, proof_text: str,
     out = VR.record_pending_sign(
         str(root), proof_text=str(proof_text),
         verdict={"verdict": "成立", "findings": []},
-        object_path=rel)
+        object_path=rel,
+        #: p247：轴只由秘书给；夹具给 clean（不是由 `verdict` 字面推）。
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
     _ = times  # pending 档不数连续次数（那一档结构上没有"同一趟三行"）
     return out
 
@@ -418,7 +472,9 @@ def sign_before_registration_legacy(root, *, proof_text: str,
     out = VR.record_pending_sign(
         str(root), proof_text=str(proof_text),
         verdict={"verdict": "成立", "findings": []},
-        object_path="reports/f-proof-000000.md")
+        object_path="reports/f-proof-000000.md",
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
     _ = times
     return out
 

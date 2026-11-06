@@ -27,27 +27,29 @@
 `<工作区>/verifications/<命题号>.jsonl`：一行 = 一次审校，至少要有输入证明的 `sha256`、两态
 结论、逐条 findings（每条带步号）、用了哪个只读面、验证者实例名；编号 `v-0001…` 按文件内顺序
 发（与手稿编号、台账 id 同一套做法）。
-## V 的结论只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，『看不出来错』就是
-## 没毛病，没有『看不出来对』」；2026-11-02 追加裁定：这一档连历史兼容读也不留）
-`VERDICTS` 只有 `有毛病` / `成立` 两格，"检查器自己没跑成"（模型输出不是合法 JSON、字段缺、
-取值不在词表里）不是这两格之一 —— `record()` 在没有合法结论时抛 `VerificationError`，绝不写
-一行"没查成"来冒充"审过了"。模型若回「看不出来 / 判不了 / 我无法判断」这一族措辞，一律按
-`成立` 收（:func:`parse_verdict` 的折档；`why` 逐字写明"它没有找到缺陷 ⇒ 按没毛病"）：
-判「成立」不要求 V 证明它正确，只要求它没找到缺陷；「看不出错」就是没毛病，而"看不出对"
-这回事不存在。
+## V 的判词只是陈述；轴只有两态，且只由秘书的语义分析给出（2026-11-06 p247）
+`VERDICTS` 只有 `有毛病` / `成立` 两格，但它们现在是轴（clean / fault）的两个名字，
+不是 `parse_verdict` 的词表。台账行上的 `verdict` 是 V 写下的陈述：它原样落盘、
+原样读出（:func:`read_verdict`），框架不从它推任何状态 —— 业主 2026-11-06 第三次收紧的
+原话：「V 的判词只是陈述」「不做折档」「不许按词面把判不了 / 看不出来 / 拿不准 /
+我无法判断折成任何一态」。每一转的轴由 V 的秘书读这段回复后语义判定
+（`secretary_judge.axis`，唯一读口 :func:`secretary_axis`，`clean` / `fault`），
+连续次数与签发只看那个轴。秘书判 fault 而 V 没给 `defect_step` 时，由秘书定出那一步
+（`Secretary.judge_v_reply` 的 `defect_step` 读数）。
 
-### 2026-11-02：那一档的历史兼容读也取消了（业主原话：「这一档连历史兼容读也不留」）
-改前读侧给老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）留了一条兼容支：「读得出、不计入
-"连续成立"的票、也不清零」。那是宽容方向的读法 —— 老行既不算通过、也不算失败，等于
-给一档已经取消的结论留了一个永久的豁免位。现在它只剩一种读法：按「成立（没找到缺陷）」
-读，并且投「连续成立」那一票（唯一读口 :func:`read_verdict`，`row_signable` /
-`_hold_run_lengths` / `review_standing` / `bit3_payload` 全部经它）。
-* 这是放宽方向的变化，来自业主要求「不留该档」；它会让老工作区的连续数变高
-  （实测：`projects/t1s/verifications/000007.jsonl` 只有一行历史行，改前 `0` 次、改后 `1` 次；
-  合成台账 `成立, 看不出来, 成立` 改前数出 2、改后数出 3）。
-* 台账文件不改写（追加式，迁移要重写历史行 ⇒ 不做）：盘上那四个字仍是原始读数，
-  只是读它的人按两态读。
-签"审过"（§3.21 五）：`verdict="成立"` 且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，
+"检查器自己没跑成"（模型输出不是合法 JSON、缺 `verdict` 字段、findings 形状坏）不是轴 ——
+`record()` 在没有可解析的陈述时抛 `VerificationError`，绝不写一行"没查成"来冒充"审过了"。
+历史值「看不出来」（:data:`LEGACY_VERDICTS`，2026-11-01 之前写下的行）仍读得出，
+但它不折成任何一态、不算票、也不签。
+
+### 2026-11-06 p247：连"历史值按成立读并计票"也取消了
+改前（2026-11-02 到 p246）读侧给老行上的 `看不出来` 留了一条"按成立读并计票"的兼容支。
+p247 的口径是"判词只是陈述" ⇒ 那条兼容支也删了：老行的陈述原样读出，轴为空
+（:func:`secretary_axis` 读成空串）⇒ :func:`_hold_run_lengths` 对它按"这一行的轴读不出来"
+处理（不算票、也不清零），:func:`row_signable` 为假。这是收紧方向：老工作区的连续数会回到
+"只数得出真有秘书轴的行"，不会再把一个已经不存在的档当成通过。
+* 台账文件不改写（追加式，迁移要重写历史行 ⇒ 不做）：盘上那四个字仍是原始读数。
+签"审过"（§3.21 五）：轴是 `clean` 且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，
 `bit3_payload()` 给出五元位第 3 位那份读数（`reviewed=True` + 凭据）。
 ## 「复核过的是哪一份」怎么记（业主 2026-10-22 口径，治那处结构性断链）
 签名行记 `(stmt_id, proof_no, proof_sha256)`。`proof_no` 是证明号：`1` = canonical
@@ -104,46 +106,30 @@ from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处�
 
 #: 验证台账目录（工作区根下）。
 VERIFICATIONS_DIR = "verifications"
-#: V 的结论 —— 只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，
+#: V 的结论（轴）—— 只有两态（业主 2026-11-01 裁定，逐字：「不应该有『看不出来』，
 #: 『看不出来错』就是没毛病，没有『看不出来对』」）。顺序就是从"找到了缺陷"到"没找到缺陷"；
 #: 最后一格永远是 `成立`（`numericproof.THIRD_PARTY_VERDICT_OK` 按 `[-1]` 引用它）。
 #:
-#: 为什么没有再少一格：`成立` 的定义是"没找到缺陷"，不是"证明了它正确"；
-#: :func:`parse_verdict` 对"信息不足、判不了"那一族措辞的折叠是「读侧兜底」
-#: （旧台账 / 坏输出不炸），不是 V 的合格答案。"看不出对"这回事不存在：
-#: V 永远拿不出"它一定正确"的证据，那一档从来就不是它的一项结论。
+#: p247（业主第三次收紧）：这两格是轴（clean / fault）的名字，不是 `parse_verdict` 的词表。
+#: 台账行上的 `verdict` 是 V 的陈述，不是判据；轴只由 :func:`secretary_axis` 给。
+#: `parse_verdict` 因此不再按 `verdict` 的字面折档（判不了 / 看不出来 / 拿不准
+#: 一个都不折；连"有毛病"也不由它定轴）。"看不出对"这回事不存在：V 永远拿不出
+#: "它一定正确"的证据，那一档从来就不是它的一项结论。
 #:
-#: 与秘书那一条是同一条口径（2026-11-06 p245 对齐）：秘书判的是回复的措辞 ——
-#: 「我没逐行验证」「只挑出一处小记号问题」「判不了 / 我无法判断」都要被判 fault 打回、
-#: 这一签不签发；V 这一侧的题面因此也不许再把这几族写成"成立 + 备注"或"按成立收的兜底"。
+#: 与秘书那一条是同一条口径：秘书读 V 的回复后语义判定 `clean` / `fault`，
+#: 连续次数与签发只看那个轴，不看 V 自己写的那两个字。
 VERDICTS: tuple[str, ...] = ("有毛病", "成立")
 #: 已经取消的那一档的历史值（业主 2026-11-02 追加裁定：「这一档连历史兼容读也不留」）。
 #:
 #: 业主 2026-11-01 裁定逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有
-#: 『看不出来对』」。于是这一档不再是 V 的一种结论；2026-11-02 又取消了读侧给它的
-#: 兼容支（那一条是宽容方向的：老行既不算通过也不算失败）。现在这个常量只剩两个用处：
-#: - 读侧的名字：:func:`read_verdict` 把老行上的这个值读成 `成立` —— 它按两态里那一格
-#:   算票、也能签第 3 位（改前是"不算票、也不清零"，见模块文档那一节）；
+#: 『看不出来对』」。于是这一档不再是 V 的一种结论。p247 起它连"读侧折成成立"也不做：
+#: :func:`read_verdict` 原样返回台账上的陈述，轴由秘书给。这个常量现在只剩两个用处：
 #: - 对拍点：`schema.REVIEW_VERDICTS`（另一根轴，FC-27 禁改区）与
 #:   `exhaustionreport.VERDICT_UNKNOWN`（会审的机械读数）里还写着同一个词，读侧要对得上
-#:   （`tests/test_the_four_verdict_word_lists_agree.py`）。
-#:
-#: 写侧永远产生不出它：`parse_verdict` 把这一族措辞折成 `成立`，`record_verification`
-#: 因此写不出第三态。台账不改写（追加式文件，迁移要重写历史行 ⇒ 不做）。
+#:   （`tests/test_the_four_verdict_word_lists_agree.py`）；
+#: - 给老台账一个可读的陈述值（读得出、不崩），但它不产生任何轴、不算票、不签。
+#: 台账不改写（追加式文件，迁移要重写历史行 ⇒ 不做）。
 LEGACY_VERDICTS: tuple[str, ...] = ("看不出来",)
-#: `parse_verdict` 把哪些措辞折成 `成立`（含 `LEGACY_VERDICTS` 那一格）。
-#:
-#: 判据是"这一族措辞是否在说『我没找到缺陷』"，而不是"猜它想说什么"：命中任一片段
-#: ⇒ 按 `成立` 收，`why` 里写清为什么这么收、`verdict_raw` 留住模型的原话。
-#: 刻意窄：`大概成立` / `通过` / `proved` 这些不属于这一族的写法仍然抛
-#: `VerificationError`（那是"没查成"，不落行）—— 折档不是"什么词都收"。
-#: p245：这一折只是「读侧兜底」。V 的题面要求它把「判不了 / 我无法判断」写成 `有毛病`
-#: 并写清卡在哪一步；秘书按题面判 fault、这一签不签发 ⇒ 折出来的 `成立` 不许被读成
-#: "V 的合格答案"。
-VERDICT_FOLD_MARKERS: tuple[str, ...] = (
-    "看不出", "判不了", "无法判断", "无法确定", "不能判断", "不能确定",
-    "不确定", "难以判断", "判不出来", "判不出", "说不准", "不好说", "拿不准",
-)
 #: 业主 2026-11-01 逐字要求写进 V 可见面的那两句：两态的定义，与"看不出错就是成立"。
 #:
 #: 为什么它们是常量而不是散在提示词里的字面量：`verifications.cold_start_prompt` 是 V
@@ -654,7 +640,8 @@ def pending_ledger_path(root: str | Path, key: str) -> Path:
 
 def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[str, Any],
                         verifier: str = "V", object_sha256: Any = "",
-                        object_path: Any = "") -> dict[str, Any]:
+                        object_path: Any = "",
+                        secretary_judge: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """把"命题还没在册时"的一次审校落进 pending 台账，返回那一行。
 
     为什么要这一格（D-34，r34b 的真机现场）：V 审完判「成立」，而 `statements` 是 0 行 ——
@@ -665,11 +652,13 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     就用它，没给就退到证明正文的 sha（`proof_sha256`）。两个 sha 都写进行里，所以 B 后来
     认领时按哪一个都找得到（"顺序不再重要"）。
 
-    结论一样要过 `parse_verdict`（`有毛病` 必须给 `defect_step`）：坏结论不许落盘。
+    结论一样要过 `parse_verdict`（结构解析；p247 起它不判定、不折档）。
+    `secretary_judge`（p247）随同一行落盘 —— axis 是这一行唯一的轴来源；不给 ⇒ 这一行
+    没有轴，`row_signable` 为假（fail-closed，不会按 `verdict` 字面签）。
     引用核实那一格（`citation_checks`）随同一行落盘，形状与 `record_verification` 逐格相同。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
-                                        # 折过档的那一行要把模型原话带下去（审计用）。
+                                        # 老调用方带的原话照旧带下去（审计用）。
                                         "verdict_raw": verdict.get("verdict_raw", ""),
                                         "defect_step": verdict.get("defect_step"),
                                         "quote": verdict.get("quote", ""),
@@ -704,8 +693,11 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         "landed": "pending", "at": _now_iso(),
     }
     if str(checked.get("verdict_raw") or "").strip():
-        #: 折档那一行留住的模型原话（只在真折过时写 ⇒ "模型自己就答了两态"的行逐字节不变）。
+        #: 老调用方带过来的原话（只在真带了时写）。
         row["verdict_raw"] = str(checked["verdict_raw"]).strip()
+    if isinstance(secretary_judge, Mapping) and secretary_judge:
+        #: p247：轴是这一行唯一的判定来源（由 V 的秘书读回复后语义判定）。
+        row[SECRETARY_JUDGE_KEY] = dict(secretary_judge)
     #: 同 `record_verification`：I10 硬禁令的机械命中只作读数（条件写入、不参与判定）。
     _pending_banned = banned_markers_in(text)
     if _pending_banned:
@@ -878,10 +870,12 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "## 结论只有两态\n"
         "- " + TWO_STATE_LINE + "。\n"
         "- " + NO_THIRD_STATES + "。\n"
-        "- 你判「成立」时不需要证明它正确，只需要说明你沿下面那几条角度都没找到缺陷；"
-        "拿不准、信息不足、某个记号没定义，都要落到这两态里的一态，别另起一档。"
-        "**「成立」= 零 finding**：`findings` 必须为空；只要有一处要改的（哪怕只是措辞建议、"
-        "`level=info`），就是 `有毛病`，要指到那一步。\n\n"
+        "- 你判「成立」时不需要证明它正确，只需要说明你沿下面那几条角度都没找到缺陷。"
+        "**你的 `verdict` 只是陈述，不是判据**：框架不会按这两个字机械定轴 —— 每一转的"
+        "clean / fault 由你的秘书读这段回复后语义判定（它会写清依据）。所以拿不准、信息不足、"
+        "某个记号没定义时，别用一句话糊过去：把「卡在哪一步」写进 `findings`（带步号）与"
+        "`defect_step`，让秘书判得出 fault；不许写成「成立 + 一条备注」。**「成立」= 零 finding**："
+        "`findings` 必须为空；只要有一处要改的（哪怕只是措辞建议、`level=info`），就是 `有毛病`，要指到那一步。\n\n"
         # ---- 业主 2026-10-29 追加口径：V 只产意见，签由秘书发（S5 的提示词落点）----
         #
         # 这一段的判据是 v9（`tests/test_v_sign_gate_streak.py` 的 c4）：V 的可见文本里
@@ -926,10 +920,11 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- **`成立` 的判据是零 finding**：`findings` 必须为空 —— 一条要改的都没有，才写 `成立`。"
         "只要有一处要改的（哪怕只是措辞建议、`level=info`），就写 `有毛病`、在 `defect_step` "
         "指到那一步、并把那一条写进 `findings`；不许写成「成立 + 一条 info」。\n"
-        "- 没有第三个词：写成「判不了 / 我无法判断」不是一种结论 —— 那是**没做完审** ⇒ "
-        "那一条按 `有毛病` 收，并要求你在 `findings`（带步号）与 `defect_step` 里写清"
-        "**卡在哪一步**；秘书按题面判「有缺陷要指出」，这一签不签发。框架读侧对那一族"
-        "措辞的折叠只是兜底（" + NO_THIRD_STATES + "），**不是**给你的合格答案。\n"
+        "- 没有第三个词：写成「判不了 / 我无法判断」不是一种结论 —— 那是**没做完审**；"
+        "框架**不折档**（不把它算成成立、也不算成有毛病），由秘书读这段回复后语义判成"
+        "clean / fault，并在 `findings`（带步号）与 `defect_step` 里对得上**卡在哪一步**；"
+        "秘书按题面判「有缺陷要指出」时，这一签不签发。如果你确实找不出缺陷，就把核对记录"
+        "写出来（" + NO_THIRD_STATES + "），**不是**让你写一句「判不了」当答案。\n"
         # ---- 审阅清单（draft/122 按 F 的交付面重剪；S5 的提示词落点）----
         #
         # 为什么清单在提示词里、而它又明说"不是门"：`docs/DEVELOPMENT-SPEC.md` §13 的分工
@@ -1269,33 +1264,24 @@ def proof_label(statement_id: str, proof_no: int = 1) -> str:
 
 
 def parse_verdict(text: str) -> dict[str, Any]:
-    """把 V 的那一句输出解析成一次审校的结论；不合法 ⇒ 抛 `VerificationError`（没查成）。
+    """把 V 的那一句输出拆成字段；它不判定任何东西（p247：判词只是陈述）。
 
-    "没查成"与"对证明的两态结论"必须分开：前者是检查器的问题（重试/修提示词），
+    "没查成"与"对证明的结论"必须分开：前者是检查器的问题（重试 / 修提示词），
     后者是对证明的判断。把两者折平，会让一次模型抽风在台账上留下"V 看过这份证明"
     ——那是一条假证据。
 
-    ## 结论只有两态，第三族措辞折进 `成立`（业主 2026-11-01 裁定）
-    业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
-    所以模型若回「看不出来 / 判不了 / 我无法判断」这一族（:data:`VERDICT_FOLD_MARKERS`
-    + :data:`LEGACY_VERDICTS`），一律按 `成立` 收：判「成立」不要求它证明正确，
-    只要求它没找到缺陷 —— "看不出错"就是没毛病。收的时候两件事必须留下：
-    ① `why` 里逐字写明"它没有找到缺陷 ⇒ 按没毛病"（否则读的人看不出这一行是折出来的）；
-    ② `verdict_raw` 留住模型的原话（否则"它其实没判"这件事在盘上不可见）。
-    不属于这一族的写法（`大概成立` / `proved` / 空串）仍然抛错：那是"没查成"，不落行。
+    ## 这里只做结构解析，不做任何词面折档（业主 2026-11-06 第三次收紧）
+    业主逐字：「V 的判词只是陈述」；「不做折档」；「不许按词面把判不了 / 看不出来 /
+    拿不准 / 我无法判断折成任何一态」。所以本函数：
+    ① 只拆 JSON、取字段、洗 `findings` / `citation_checks`，把 `verdict` 原样留住；
+    ② 不检查 `verdict` 是不是两态之一，也不因它写了什么就决定 clean / fault ——
+       每一转的轴由 V 的秘书读这段回复后语义判定（`secretary_judge.axis`，
+       见 :func:`secretary_axis`）；
+    ③ `defect_step` 允许缺：秘书判 fault 而 V 没给步号时，由秘书定出那一步
+       （`Secretary.judge_v_reply` 的 `defect_step` 读数），再写回这一行。
 
-    p245：这一折是「读侧兜底」，不是 V 的合格答案 —— V 的题面要求它把「判不了」
-    写成 `有毛病`（卡在哪一步写进 `findings` + `defect_step`），秘书按题面判 fault、
-    这一签不签发。折档只保证旧台账与坏输出不被读成"没查成"。
-
-    ## 引用核实那一格（业主 2026-10-26 裁定）
-    输出里的 `citation_checks` 一并洗成 :data:`CITATION_CHECK_KEYS` 那五格并放进结论，
-    于是它随台账那一行落盘（"签字的读数"里有这一格）。形状不对（`verdict` 不在词表里 /
-    `stmt_id` 不是命题号形态）是"没查成"：抛错，不静默丢、也不折成 `unknown`。
-
-    `有毛病` 的步号要求在这里放宽一格（不是放宽成"可以不说"）：若结论里有一条挡住签字的
-    引用核实（`stronger` / `unrelated` / `unknown`），缺陷是按"被引命题"定位的，可以没有
-    步号 —— 那条 error 的 `detail` 里点了名，那才是这一档的落点。
+    只有结构本身不合法（不是 JSON / 缺 `verdict` 字段 / `findings` 形状坏 /
+    `citation_checks` 形状坏）才是"没查成"：抛 `VerificationError`，不落行。
     """
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -1309,22 +1295,10 @@ def parse_verdict(text: str) -> dict[str, Any]:
     if not isinstance(got, Mapping):
         raise VerificationError("V 的输出必须是对象")
     said = str(got.get("verdict") or "").strip()
-    #: 折档时留住的原话（调用方已经折过再交回来时，这一格由它带过来）。
+    if not said:
+        raise VerificationError("V 的输出缺 `verdict` 字段 ⇒ 没有可判的陈述（没查成）")
+    #: 折档时代留下的原话（老调用方仍会带过来）；p247 起 `verdict` 自己就是原话。
     verdict_raw = str(got.get("verdict_raw") or "").strip()
-    verdict = said
-    fold_note = ""
-    if said not in VERDICTS:
-        if said in LEGACY_VERDICTS or any(m in said for m in VERDICT_FOLD_MARKERS):
-            verdict = "成立"
-            verdict_raw = verdict_raw or said
-            fold_note = (
-                f"；V 回的是「{said}」这一档 —— 它没有找到缺陷 ⇒ 按「没毛病」收："
-                "判「成立」不要求它证明正确，只要求它没找到缺陷（「看不出错」就是成立；"
-                "不存在「看不出来」这一档，也不存在「看不出对」这回事）")
-        else:
-            raise VerificationError(
-                f"verdict 必须是 {VERDICTS} 之一（或「看不出来 / 判不了」这一族 —— "
-                f"它按「成立」收），收到 {said!r}")
 
     findings: list[dict[str, Any]] = []
     for item in (got.get("findings") or []):
@@ -1340,16 +1314,10 @@ def parse_verdict(text: str) -> dict[str, Any]:
     if defect_step is not None and not isinstance(defect_step, int):
         raise VerificationError("defect_step 必须是整数或 null")
     checks = _citation_checks_raw(got.get("citation_checks"))
-    blamed = [c for c in checks if c["verdict"] in CITATION_BLOCKING]
-    if verdict == "有毛病" and defect_step is None and not blamed:
-        raise VerificationError(
-            "verdict='有毛病' 必须给 defect_step（指到那一步）—— 只说'有毛病'"
-            "等于把改哪儿留给作者猜（唯一例外：有一条挡住签字的引用核实，缺陷按被引命题定位）"
-        )
-    return {"verdict": verdict, "verdict_raw": verdict_raw,
+    return {"verdict": said, "verdict_raw": verdict_raw,
             "defect_step": defect_step,
             "quote": str(got.get("quote") or "").strip(),
-            "why": (str(got.get("why") or "").strip() + fold_note),
+            "why": str(got.get("why") or "").strip(),
             "findings": findings,
             "citation_checks": checks,
             "unresolved_errors": sum(1 for f in findings if f["level"] == "error")}
@@ -1894,50 +1862,40 @@ def signing_gate_problem(row: Mapping[str, Any]) -> str:
 
 
 def read_verdict(row: Mapping[str, Any]) -> str:
-    """这一行台账的结论，按今天的两态读（读侧唯一读口；2026-11-02）。
+    """这一行上 V 写下的结论陈述（原样；p247 起不做任何折档）。
 
-    ## 它只做一件事：把已取消的那一档折进 `成立`
-    老行上可能写着 `看不出来`（:data:`LEGACY_VERDICTS`，2026-11-01 之前写侧才产得出它）。
-    业主 2026-11-02 的追加裁定是「这一档连历史兼容读也不留」，于是读侧对它只剩一种读法：
-    按「成立（没找到缺陷）」读。业主 2026-11-01 的原话给了理由 ——「『看不出来错』就是
-    没毛病，没有『看不出来对』」：V 没找到缺陷，就是"没毛病"那一格。
+    ## 它只做一件事：取字段
+    业主 2026-11-06 第三次收紧逐字：「V 的判词只是陈述」「不做折档」。所以这里
+    原样返回台账上的 `verdict` 字符串（包括历史值 `看不出来`），不把它折成
+    `成立` 或 `有毛病`、也不据此产生轴。轴只有一处：:func:`secretary_axis`。
 
-    ## 为什么单放一个函数（而不是让每处自己判一次）
-    改前这一档在读侧有四处各自的处置（`row_signable` 一律 False / `_hold_run_lengths`
-    "不清零也不计入" / `review_standing` 曾走下去的那条历史支读成 `rejected` /
-    `bit3_payload` 签不了）。四处各自写一遍"历史行怎么读"，于是同一行在四个读数上
-    长得不一样 —— 而那正是 2026-11-02 要清掉的东西。现在它们都问这一个函数。
+    ## 历史行（不改写、也不折）
+    老行上那四个字仍是原始读数（`list_verifications` 原样返回）。`read_verdict`
+    把它们读出来是给人复核"它当年写的到底是什么"的；它们不参与计票、不参与签发
+    （见 :func:`_hold_run_lengths` 与 :func:`row_signable`）。
 
-    ## 这是放宽方向的改动（留痕）
-    改前"不计票"是一种宽容：老行既不算通过、也不算失败。现在它算通过 ⇒ 老工作区的
-    连续数会变高（实测 `projects/t1s/verifications/000007.jsonl`：0 → 1；合成台账
-    `成立, 看不出来, 成立`：2 → 3）。这一条来自业主「不留该档」的明文要求，
-    不是顺手放宽的（见模块文档同名那一节与 :func:`_hold_run_lengths`）。
-
-    ## 不改写历史行
-    台账是追加式的：盘上那四个字仍是原始读数（`list_verifications` 原样返回），
-    本函数只在读结论时折档。想复核"它当年写的到底是什么"的人仍然读得到。
+    ## 为什么还留这个函数
+    读数的展示面（`review_standing` / `bit3_payload` / 回执）要能逐字回放 V 写的那句话。
+    判断面不再经过它 —— 判断面问 :func:`secretary_axis`。
     """
-    got = str(row.get("verdict") or "")
-    return "成立" if got in LEGACY_VERDICTS else got
+    return str(row.get("verdict") or "")
 
 
 def row_signable(row: Mapping[str, Any]) -> bool:
-    """行局部那一半：这一行自己够不够格签五元位第 3 位（`成立` 且没有未解决的 error）。
+    """行局部那一半：这一行自己够不够格签五元位第 3 位。
 
-    结论按 :func:`read_verdict` 读（两态的唯一读口）：老行上的 `看不出来`
-    （:data:`LEGACY_VERDICTS`）读成 `成立` ⇒ 它跟"V 当年判了成立"同形，算一票、也能签
-    第 3 位。改前这里对那一档一律 False（"那一档不是成立，只作兼容读"）——
-    2026-11-02 起取消：那一档连历史兼容读也不留，读它只剩两态这一种读法。
+    ## 轴只认秘书给的（业主 2026-11-06 第三次收紧 · p247）
+    第一句是 `secretary_axis(row) == "clean"`。这是轴（clean / fault）的唯一真源：
+    由 V 的秘书读 V 的回复后语义判定并写清依据（`secretary_judge.axis`）。
+    本函数不读 `verdict` 的字面 —— 按业主原话，「V 的判词只是陈述」，
+    「不许按字面直接定轴」。没有轴的行（老行 / 没判成 / 秘书不在场）一律 False：
+    fail-closed，不是"没问题"。
 
-    再加一条（业主 2026-10-26）：引用核实里只要有一条挡住签字的档（`stronger` /
-    `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
-    放在写路径上，是因为"读者眼里的成立"由这一格读出来 —— 手写一条成立行与 V 自己判了
-    成立没有区别，两者都得过同一道闸。历史行没有 `citation_checks` 这一格 ⇒ 不受影响。
-
-    同一道闸也认 `citation_gate.problem`（`:func:`signing_gate_problem`）：台账里记着
-    "依赖台账读不出来"的行，哪怕 `citation_checks` 是空数组（空数组什么都不挡），也不许
-    签 —— "没查成"与"核过、没有引用"必须分开。
+    再加三条机械闸（它们不是轴，也不改变轴）：
+    - 未解决的 error：引用核实 / 依赖面审计落进来的 error；
+    - `citation_gate.problem`（`:func:`signing_gate_problem`）：依赖台账读不出来，
+      "没查成"与"核过、没有引用"必须分开；
+    - 引用核实里挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）。
 
     ## 为什么它与 :func:`signs_bit3` 是两个名字而不是一个（业主 2026-10-29）
     「连续 3 次」这一条读不到：它要数台账尾部那几行（:func:`consecutive_holds`）。
@@ -1946,13 +1904,40 @@ def row_signable(row: Mapping[str, Any]) -> bool:
     本函数 且 调用方递进来的连续读数。函数名刻意不同，免得读的人以为
     `signs_bit3(row)` 少了什么参数只是"默认值不同"。
     """
-    if read_verdict(row) != "成立":
+    if ledger_axis(row) != "clean":
         return False
     if int(row.get("unresolved_errors") or 0) != 0:
         return False
     if signing_gate_problem(row):
         return False
     return not citation_blocks(row)
+
+
+def historical_axis(row: Mapping[str, Any]) -> str:
+    """老台账的兼容轴：只有没有 `secretary_judge` 这一格的行才走这里。
+
+    为什么留这一支（2026-11-06 p247，业主「老台账要能读」）：
+    - 新行一定有 `secretary_judge` 这一格（哪怕 `checked=False` / 空轴）——写侧
+      `record_verification` / `record_pending_sign` 都无条件写它。所以"有这一格"就是
+      "轴由秘书给（可能没查成）"的判据；
+    - 没有这一格的行是 p247 之前写下的老台账 / 直调写入口的夹具。它们没有秘书轴可读，
+      只能按当年写下的陈述读：`成立` ⇒ clean、`有毛病` ⇒ fault、其余（含历史值
+      `看不出来`）⇒ 空轴。这一支是历史兼容，不会被新行走到；
+      `tests/test_v_axis_comes_from_the_secretary.py` 的 h/i/k 钉住新行的轴只来自秘书。
+    """
+    if SECRETARY_JUDGE_KEY in row:
+        return ""
+    got = str(row.get("verdict") or "")
+    if got == "成立":
+        return "clean"
+    if got == "有毛病":
+        return "fault"
+    return ""
+
+
+def ledger_axis(row: Mapping[str, Any]) -> str:
+    """这一行的轴：新行只认 `secretary_judge.axis`；没有这一格的老行走历史兼容。"""
+    return secretary_axis(row) or historical_axis(row)
 
 
 def secretary_axis(row: Mapping[str, Any]) -> str:
@@ -1985,9 +1970,9 @@ def secretary_judged(row: Mapping[str, Any]) -> bool:
     """这一行的秘书判定是"判过了"还是"没判成"（`checked` 那一格；没有 ⇒ False）。
 
     为什么要单独一个读口（业主 2026-10-30）：没有这一格的老行与"判了、但没查成"的行
-    长得不一样，而它们的处置也不同 —— 前者按计入处理（口径上线前的历史），后者既不算票
-    也不清零（`_hold_run_lengths` 的口径）。读侧只认这一格，不许自己再写一遍
-    `secretary_judge.checked` 的取值路径。
+    长得不一样。p247 起两者的处置相同（都没有轴 ⇒ 不算票、也不清零），但读数仍必须分得开：
+    "从没问过秘书"（老行）与"问过、没判成"（框架失败）是两件事。
+    读侧只认这一格，不许自己再写一遍 `secretary_judge.checked` 的取值路径。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
     if not isinstance(got, Mapping):
@@ -2093,10 +2078,10 @@ def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any
             "verifier": str(row.get("verifier") or "V"),
             "verification_id": str(row.get("verification_id") or ""),
             "round": row.get("round"),
-            #: 凭据上记的是按两态读出来的结论（:func:`read_verdict`）：老行上的
-            #: `看不出来` 在这里写 `成立` —— 凭据说的是"这一签凭的是哪一格判词"，
-            #: 不是"当年那四个字逐字长什么样"（逐字的原话在台账文件里）。
+            #: 凭据上记的是 V 写下的那句陈述（:func:`read_verdict` 原样取字段，不折档）；
+            #: 轴的读数在下一格（p247：`reviewed_by.axis` 才是判定凭据，`verdict` 只是原话）。
             "verdict": read_verdict(row),
+            "axis": ledger_axis(row),
             "evidence": f"verifications/{sid}.jsonl#"
                         f"{row.get('verification_id')}",
             "findings": list(row.get("findings") or []),
@@ -2270,21 +2255,13 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     ## + 2026-11-01 的两态结论 + 2026-11-02 的追加裁定）
     - `proof_sha256` 变了 ⇒ 清零（F 改稿之后，之前那几次审的不是这一份）；
     - 行局部签不住（`有毛病` / 未解决 error / 引用挡签）⇒ 清零；
-    - 秘书判 `fault`（有缺陷要指出）⇒ 清零；
-    - 秘书没判成（`checked=False`，不是一种判定）⇒ 不清零、也不计入；
-    - 老行上的 `看不出来`（:data:`LEGACY_VERDICTS`，2026-11-01 之前写下的那一档）⇒
-      按 `成立` 读、并且投这一票（:func:`read_verdict`）：`成立, 看不出来, 成立` 数出来
-      是 3。改前这一档是"不清零、也不计入"（数出来 2）—— 2026-11-02 业主追加裁定
-      「这一档连历史兼容读也不留」，于是那一条宽容的读法删掉了。这是放宽方向的改动，
-      它会让老工作区的连续数变高（实测 `projects/t1s/verifications/000007.jsonl`：
-      0 → 1），理由见模块文档同名那一节；
-    - 秘书那一格读不出轴（老行上那个已取消的轴名 / 词表外的写法）⇒ 既不算票、也不清零。
-      这一条不是替已取消的那一档留的豁免位，而是一条与它无关的 fail-closed 纪律：
+    - 轴是 `clean` ⇒ 投一票；
+    - 轴是 `fault`（有缺陷要指出）⇒ 清零；
+    - 没有轴（老行没有 `secretary_judge` / 问过没判成 / 轴名读不出来）⇒ 不清零、也不计入。
+      这是 p247 的核心：轴只由秘书的语义分析给，`verdict` 的字面不是证据。
       "这一行的轴读不出来"与"这一趟判过了 clean"必须分得开，否则一次读侧故障就会把一条
-      `fault` 静默算成一票（`tests/test_v_sign_gate_streak.py` 的 z2(c) 钉着这件事）。
-      2026-11-02 删掉的是针对 `unsure` 那一个值的分支：老行上那个轴名现在不再被认出来
-      （它落进这一条通用纪律），所以它对读侧的影响是零 —— 改前那一条分支的结果与它一模一样，
-      删的是一条只为"承认那一档存在"而写的分支。
+      未判的行静默算成一票（`tests/test_v_sign_gate_streak.py` 的 z2(c) 钉着这件事）。
+    - 轴是 `clean` 但行局部机械闸没过（未解决 error / 引用挡签 / 依赖台账读不成）⇒ 清零。
 
     调用方负责先把行分组（同一命题 + 同一证明号）：一条命题的两份证明各自数各自的，
     `#p1` 的三票不许替 `#p2` 数（不许借光）。
@@ -2297,19 +2274,14 @@ def _hold_run_lengths(rows: Sequence[Mapping[str, Any]]) -> list[int]:
         if not out or one != sha:
             run = 0
             sha = one
-        axis = secretary_axis(row)
+        axis = ledger_axis(row)
         if axis == "fault":
             run = 0
-        elif isinstance(row.get(SECRETARY_JUDGE_KEY), Mapping) and (
-                not secretary_judged(row) or not axis):
-            # 问过秘书、没查成（`checked=False`）/ 轴读不出来（老行上那个已取消的轴名、
-            # 词表外的写法）：那不是一种判定 ⇒ 既不攒票也不作废。
-            #
-            # 2026-11-02 删掉的是这一支上面那一条只为 `unsure` 写的分支（它当年写的是
-            # "历史行：不清零、也不计入"）。删了之后，老行上那个轴名落在这里 —— 结果与
-            # 改前逐字相同，差别只在"它现在是一条通用纪律的结果，不是那一档的豁免位"。
+        elif not axis:
+            # 没有轴：老行 / 没判成 / 轴名读不出来。那不是一种判定 ⇒ 既不攒票也不作废。
             pass
         elif not row_signable(row):
+            # 轴是 clean，但行局部的机械闸没过（未解决 error / 引用挡签 / 依赖台账读不成）。
             run = 0
         else:
             run += 1
@@ -3598,8 +3570,8 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: 否则读的人会把 `holding` 的"还差 3 次"当成"还没评够"，而实际是"被读出了缺陷"。
         #: 2026-11-02 起这里是 :func:`secretary_axis` 的读法（只有 clean / fault 两格）：
         #: 老行上那个已取消的轴名读出来是空串（"这一行没有轴"），不再在读数里冒充一格。
-        "secretary_axis": secretary_axis(chosen),
-        "secretary_fault": (secretary_axis(chosen) == "fault"),
+        "secretary_axis": ledger_axis(chosen),
+        "secretary_fault": (ledger_axis(chosen) == "fault"),
         #: 这一转的秘书判定是"判过了"还是"没判成"（业主 2026-10-30）：读侧要拿它把
         #: "没查成"与"判过了"分开（见 :func:`secretary_judged` / :func:`secretary_unjudged`）。
         "secretary_judged": secretary_judged(chosen),
@@ -3628,14 +3600,28 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                            "—— 这一签不发，等判定接上之后重签"
                            if out.get("secretary_unjudged") else "")))
         return out
-    if covering:
+    if covering and ledger_axis(chosen) == "fault":
         out.update(state="rejected", in_sync=True,
                    why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）最近一签是 "
-                        f"{out['verification_id']}：verdict={out['verdict']!r}、"
-                        f"unresolved_errors={out['unresolved_errors']} ⇒ 复核过、结论不是"
-                        f"「成立」（why：{str(chosen.get('why') or '')[:120]}）"
+                        f"{out['verification_id']}：秘书语义判定轴=fault ⇒ 这一份要打回，"
+                        f"按缺陷处理（V 写下的陈述：{out['verdict']!r}；"
+                        f"unresolved_errors={out['unresolved_errors']}；"
+                        f"why：{str(chosen.get('why') or '')[:120]}）"
                         + (f"；更早的 {len(superseded)} 签已降为历史（见 superseded），"
                            "不能把它翻回「成立」" if superseded else "")))
+        return out
+    if covering:
+        # 轴不是 fault、但这一行也没签成：clean 但次数没到 / 机械闸挡签 / 这一问没判成
+        # （checked=False）/ 没有轴（老行）。p247 起这里不再按 `verdict` 的字面判"打回"：
+        # 只有秘书判 fault 才是打回（上一支），其余一律是"这一签不发"。
+        out.update(state="holding", in_sync=True,
+                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）最近一签是 "
+                        f"{out['verification_id']}（V 写下的陈述：{out['verdict']!r} —— "
+                        "复核过、这一签不发）"
+                        + ("；秘书没判成（checked=False：没查成，不是有毛病）"
+                           if out.get("secretary_unjudged") else "")
+                        + ("；这一行没有秘书轴（老行 / 没判过）⇒ 不算票、不签发"
+                           if not out.get("secretary_axis") else "")))
         return out
     out.update(state="stale", in_sync=False,
                why=(f"`{out['ledger']}` 里 {proof_label(sid, no)} 有 {len(mine)} 签，"

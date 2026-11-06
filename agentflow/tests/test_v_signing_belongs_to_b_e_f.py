@@ -371,8 +371,12 @@ def _sign(root, proof_text: str = PROOF_TEXT, *, times: int = SIGN_TIMES) -> lis
     `bits.evidence` 不翻，所以默认攒够 `SIGN_TIMES` 次 —— 而"一签不够"这件事由
     `test_a_signed_statement_is_not_asked_for_another_signature` 用 `times=1` 单独正控。
     """
-    return [record_verification(root, statement_id=SID, proof_text=proof_text,
-                                verdict=parse_verdict('{"verdict": "成立", "findings": []}'))
+    return [record_verification(
+                root, statement_id=SID, proof_text=proof_text,
+                verdict=parse_verdict('{"verdict": "成立", "findings": []}'),
+                #: p247：轴只由秘书给；夹具给 clean（不是由 verdict 字面推）。
+                secretary_judge={"checked": True, "axis": "clean",
+                                 "decision": "没问题", "reason": "夹具：clean"})
             for _ in range(int(times))]
 
 

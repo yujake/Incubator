@@ -191,6 +191,22 @@ def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
 
 # ============================================================ ① 撤回
 
+#: p247：轴只由秘书给。这些夹具量的是写入口 / 盘点，不是秘书，故给 clean。
+_CLEAN_JUDGE = {"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具"}
+_vr_record = VR.record_verification
+_vr_pending = VR.record_pending_sign
+
+
+def _record(*args, **kwargs):
+    kwargs.setdefault("secretary_judge", _CLEAN_JUDGE)
+    return _vr_record(*args, **kwargs)
+
+
+def _pending(*args, **kwargs):
+    kwargs.setdefault("secretary_judge", _CLEAN_JUDGE)
+    return _vr_pending(*args, **kwargs)
+
+
 def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.Path) -> None:
     """① 存量 `proof_review` 行 + V 签 `#p2` ⇒ 真签住，或 `checked=False` 并说明。
 
@@ -260,7 +276,7 @@ def test_the_write_gate_lets_through_a_row_where_any_proof_is_signed(
 
     # 连续 3 次「成立」才签住（业主 2026-10-29）：一次就放行等于没有这道门槛。
     for _i in range(VR.SIGN_STREAK_NEED):
-        VR.record_verification(st.root, statement_id=SID, proof_text=P2, verdict=dict(_OK),
+        _record(st.root, statement_id=SID, proof_text=P2, verdict=dict(_OK),
                                verifier="agent-V", store=st, proof_no=2)
     signed = dict(_get(st), evidence_kind="proof_review")
     assert VR.proof_review_gap(st.root, signed)["ok"] is True, VR.proof_review_gap(st.root, signed)
@@ -290,13 +306,13 @@ def test_the_rolled_back_row_itself_reports_not_landed(tmp_path: pathlib.Path) -
     # 先攒够两票（连续闸要求第 3 次才翻位）⇒ 第 3 次才会走到事务提交那一步，
     # 撤回那一支才被真的撞上。改前只需一次（一次成立就翻位）。
     for _i in range(VR.SIGN_STREAK_NEED - 1):
-        VR.record_verification(st.root, statement_id=SID, proof_text=P2,
+        _record(st.root, statement_id=SID, proof_text=P2,
                                verdict=dict(_OK), verifier="agent-V", flip=False,
                                proof_no=2)
     original = ST._refuse_fake_proof_review
     ST._refuse_fake_proof_review = _refuse
     try:
-        row = VR.record_verification(st.root, statement_id=SID, proof_text=P2,
+        row = _record(st.root, statement_id=SID, proof_text=P2,
                                      verdict=dict(_OK), verifier="agent-V",
                                      store=st, proof_no=2)
     finally:
@@ -412,7 +428,7 @@ def test_a_bad_proof_number_is_refused_not_folded_to_p1(tmp_path: pathlib.Path) 
     _put(st)
     for bad in (0, "abc", 2.0):
         try:
-            VR.record_verification(st.root, statement_id=SID, proof_text=P1,
+            _record(st.root, statement_id=SID, proof_text=P1,
                                    verdict=dict(_OK), verifier="agent-V",
                                    store=st, proof_no=bad)
         except VR.VerificationError as exc:
@@ -421,7 +437,7 @@ def test_a_bad_proof_number_is_refused_not_folded_to_p1(tmp_path: pathlib.Path) 
             raise AssertionError(f"坏证明号 {bad!r} 被接受了（折成了 #p1）")
     assert _ledger_bytes(st) == 0, "坏号被拒之后台账里仍有行"
     # 正控（防真空）：合法号照旧写得进去。
-    VR.record_verification(st.root, statement_id=SID, proof_text=P1,
+    _record(st.root, statement_id=SID, proof_text=P1,
                            verdict=dict(_OK), verifier="agent-V", store=st, proof_no=1)
     assert len(_ledger_rows(st)) == 1, _ledger_rows(st)
 
@@ -438,7 +454,7 @@ def test_unsigned_is_a_checked_conclusion_not_an_unchecked_ledger(
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
     # 让台账存在、读得出、但 canonical 一次都没签：只在 #p2 上落一签"有毛病"。
-    VR.record_verification(st.root, statement_id=SID, proof_text=P2, verdict=dict(_BAD),
+    _record(st.root, statement_id=SID, proof_text=P2, verdict=dict(_BAD),
                            verifier="agent-V", store=st, proof_no=2)
     assert VR.verification_ledger_path(st.root, SID).is_file()
 
@@ -487,7 +503,7 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
     _put(st)
     path = _make_readonly(st)
     try:
-        row = VR.record_verification(st.root, statement_id=SID, proof_text=P1,
+        row = _record(st.root, statement_id=SID, proof_text=P1,
                                      verdict=dict(_OK), verifier="agent-V",
                                      store=st, proof_no=1)
         wb = row["statement_writeback"]
@@ -514,7 +530,7 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
     # 连续闸要求三次，所以这里跑三次、看最后一次：`written=True`（位翻了）。
     ok_row: dict = {}
     for _i in range(VR.SIGN_STREAK_NEED):
-        ok_row = VR.record_verification(st.root, statement_id=SID, proof_text=P1,
+        ok_row = _record(st.root, statement_id=SID, proof_text=P1,
                                         verdict=dict(_OK), verifier="agent-V",
                                         store=st, proof_no=1)
         assert ok_row["statement_writeback"]["append_state"] == "appended", ok_row
@@ -551,7 +567,7 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
     | 成立 + `citation_gate.problem` | signed | rejected，点名"引用核实没查成" |
     """
     root = tmp_path
-    clean = VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    clean = _pending(root, proof_text=P1, verdict=dict(_OK))
     # 改前断言 → 改后断言（为什么）：`signs_bit3(那一行) is True` →
     # `row_signable(那一行) is True` 且 `signs_bit3(那一行) is False`。
     # pending 那一签按对象 sha 认领，它审的时候命题还没登记 ⇒ 没有命题台账可数
@@ -567,7 +583,7 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
     errs = {"verdict": "成立",
             "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
                           "detail": "第 2 步直接用了结论"}]}
-    VR.record_pending_sign(root, proof_text=P1, verdict=errs)
+    _pending(root, proof_text=P1, verdict=errs)
     gap = _gap_for(root)
     assert gap["ok"] is False and gap["state"] == "rejected", gap
     assert "未解决的 error 1 条" in gap["why"], gap["why"]
@@ -578,13 +594,13 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
     cite = {"verdict": "成立", "findings": [],
             "citation_checks": [{"stmt_id": S.format_id(1), "verdict": "unknown",
                                  "quote_verbatim": False, "note": "判不了"}]}
-    VR.record_pending_sign(root, proof_text=P1, verdict=cite)
+    _pending(root, proof_text=P1, verdict=cite)
     gap = _gap_for(root)
     assert gap["ok"] is False and gap["state"] == "rejected", gap
     assert "引用核实挡住" in gap["why"], gap["why"]
 
     # 引用核实没查成（依赖台账读不出来）：改前这一格也读成签住了。
-    gate_problem = VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    gate_problem = _pending(root, proof_text=P1, verdict=dict(_OK))
     assert gate_problem.get("verdict") == "成立"
     path = VR.pending_ledger_path(root, VR.proof_sha(P1))
     rows, problems = VR.JF.read_jsonl(path)
@@ -608,10 +624,10 @@ def test_the_third_party_gate_reads_the_pending_route_with_the_same_bar(
     from agentflow import numericproof as NP
 
     root = tmp_path
-    VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    _pending(root, proof_text=P1, verdict=dict(_OK))
     assert NP.third_party_problems(P1, root=root) == []
 
-    VR.record_pending_sign(root, proof_text=P1, verdict={
+    _pending(root, proof_text=P1, verdict={
         "verdict": "成立",
         "findings": [{"level": "error", "step": 1, "kind": "缝", "detail": "这一步没有依据"}]})
     problems = NP.third_party_problems(P1, root=root)

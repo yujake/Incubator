@@ -31,6 +31,8 @@ from agentflow.agent_h import AgentH
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+from conftest import CleanVerdictSecretary
+
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
 BUDGET = {"max_rounds": 3, "max_parallel_subgoals": 2,
           "max_persist_attempts": 2, "max_depth": 2}
@@ -162,7 +164,8 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
 
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
                         parent_role="F"):
-        reviewed = _as_dict(AgentV(st, llm=_FixedSeam("成立")).verify_proof(
+        reviewed = _as_dict(AgentV(st, llm=_FixedSeam("成立"),
+                                   secretary=CleanVerdictSecretary("clean", st)).verify_proof(
             proof_manuscript=man_rel))
     assert reviewed.get("checked") is True, reviewed
     assert reviewed.get("kind") == "proof_unregistered_signed", reviewed

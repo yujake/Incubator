@@ -2736,7 +2736,7 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
         for e in maybe_fault:
             vid = str(e.get("verification_id") or "")
             sign = signed.get(vid) or {}
-            if VR.secretary_axis(sign) != "fault":
+            if VR.ledger_axis(sign) != "fault":
                 # 只有 fault 那一档才是"有毛病，要交回 F 改"。"没判成"（checked=False）是
                 # 框架面的事；老行上那个已取消的轴名（2026-11-02）读出来是空轴 —— 两者都
                 # 不是 V 的判决，都不许冒充成一次打回。
@@ -2751,26 +2751,30 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             faulted.append(e)
         if not rejected and not faulted:
             continue
-        for e, via in ([(x, "verdict") for x in rejected]
-                       + [(x, "secretary_fault") for x in faulted]):
-            details.append(_v_rejection_detail(
-                sid, e, signed.get(str(e.get("verification_id") or "")) or {}, via))
+        #: p247：进明细的唯一理由 = 秘书判 fault（axis 只由秘书给）。`via` 只决定措辞：
+        #: V 自己写的就是「有毛病」⇒ 用旧措辞；否则说明是秘书从「成立」里读出来的。
+        for e in rejected + faulted:
+            sign = signed.get(str(e.get("verification_id") or "")) or {}
+            via = ("verdict" if VR.read_verdict(sign) == "有毛病"
+                   else "secretary_fault")
+            if via == "secretary_fault" and not _washed_text(sign):
+                #: C 段纪律：秘书判 fault、但没洗出可转达的文本 ⇒ 这一条不进明细
+                #: （不输出 V 的原文），并留一句读数（"没送到"不许静默）。
+                problems.append(
+                    f"{e.get('label') or sid}：秘书判定这一回复指出了缺陷，但没洗出可转达的"
+                    "文本 ⇒ 这一条不转达（洗不出来不输出 V 的原文）")
+                continue
+            details.append(_v_rejection_detail(sid, e, sign, via))
     details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
     if not details and not problems:
         return ("（名下没有被 V 判「有毛病」的证明：要么每条都签过成立，"
                 "要么一次都还没送 V）"), [], []
     lines: list[str] = []
     if details:
-        n_fault = sum(1 for d in details if d.get("via") == "secretary_fault")
-        if n_fault:
-            # 这一档的措辞不许与"V 判有毛病"混同：V 自己的结论词可能写的是「成立」。
-            lines.append(
-                f"V 的意见要交回 F 的证明共 {len(details)} 条（其中 {n_fault} 条 V 自己的结论"
-                f"写的是「成立」、而秘书判定它的回复指出了缺陷；数据源 "
-                f"`verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
-        else:
-            lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
-                         f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
+        #: p247：进明细的唯一理由 = 秘书判 fault。V 的 `verdict` 只是陈述，所以这里
+        #: 不再按"V 自己写的结论"分两种抬头 —— 逐行用 `via` 说明它是秘书判出来的。
+        lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
+                     f"（数据源 `verifications/*.jsonl` 逐条读；步号就是秘书判定指出的那一步）：")
         for d in details[:max(1, int(limit))]:
             step = ("第 %s 步" % d["defect_step"]) if d.get("defect_step") else "步号没读到"
             # 渲染集合 = 投递集合：洗过的那一份也必须在这里出现（否则"板上是洗过的、

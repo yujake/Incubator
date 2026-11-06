@@ -1363,7 +1363,7 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
             continue
         if str(one.get("proof_sha256") or "").strip().lower() != sha:
             continue
-        if clean_only and (verdict_axis(one) or _VR.read_verdict(one) != "成立"):
+        if clean_only and _VR.ledger_axis(one) != "clean":
             continue
         picked = one
     if picked is None:
@@ -1374,7 +1374,7 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
     vid = str(picked.get("verification_id") or "")
     out.update(found=True, verification_id=vid, at=str(picked.get("at") or ""),
                verdict=_VR.read_verdict(picked),
-               clean=(not verdict_axis(picked)) and _VR.read_verdict(picked) == "成立",
+               clean=(_VR.ledger_axis(picked) == "clean"),
                defect_steps=defect_steps(picked))
     out["ledger"] = f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#{vid}"
     if out["clean"]:
@@ -2322,10 +2322,8 @@ def verdict_axis(row: Mapping[str, Any]) -> str:
     """
     from . import verifications as _VR
 
-    if _VR.read_verdict(row) == "有毛病":
-        return "verdict"
-    if _VR.secretary_axis(row) == "fault":
-        return "secretary_fault"
+    if _VR.ledger_axis(row) == "fault":
+        return ("verdict" if _VR.read_verdict(row) == "有毛病" else "secretary_fault")
     return ""
 
 

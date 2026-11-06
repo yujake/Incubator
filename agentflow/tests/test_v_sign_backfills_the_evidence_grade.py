@@ -86,7 +86,10 @@ def _sign(store: Store, sid: str, *, verdict: dict | None = None,
           text: str = PROOF) -> dict:
     return VR.record_verification(
         str(store.root), statement_id=sid, proof_text=text,
-        verdict=dict(verdict or _OK), verifier="agent-V", store=store, proof_no=1)
+        verdict=dict(verdict or _OK), verifier="agent-V", store=store, proof_no=1,
+        #: p247：轴只由秘书给；这些夹具量的是回填，故给 clean。
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
 
 
 def _sign_three(store: Store, sid: str, *, verdict: dict | None = None) -> dict:

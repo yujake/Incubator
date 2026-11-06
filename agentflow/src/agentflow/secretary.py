@@ -3114,6 +3114,18 @@ class Secretary:
             # 正是这么来的。
             out["nontriviality"] = level
             out["nontriviality_basis"] = str(data.get("nontriviality_basis") or "")[:500]
+        if kind == "v_reply_defect":
+            # ---- p247：判 fault 而 V 没给步号时，由秘书定出那一步 ----------------
+            #
+            # 业主 2026-11-06 第三次收紧：「判 fault 而 V 没给 defect_step ⇒ 秘书定出
+            # 那一步」。所以这一问要多要一格；取值只有两种：正整数（指到 V 回复里
+            # 说的那一步）或 null（这一档不是按步号定位的）。坏值一律 null —— 不猜。
+            raw_step = data.get("defect_step")
+            step: int | None = None
+            if isinstance(raw_step, int) and not isinstance(raw_step, bool) and raw_step >= 1:
+                step = raw_step
+            out["defect_step"] = step
+            out["defect_step_basis"] = str(data.get("defect_step_basis") or "")[:500]
         if kind == "proposition_identity":
             # ---- 2026-10-24：同一趟判断的第二组输出（业主：让秘书洗定理名，让秘书判）。
             #
@@ -3432,6 +3444,14 @@ class Secretary:
         那一格（`判不了`）或任何词表外的写法 ⇒ `checked=False` + `axis=""`：
         那是"没查成"（框架失败），不是一种结论，更不是"没问题"（连续计数里既不算票、
         也不清零；上层见 `agent_v.core` 的 `secretary_unjudged` 那一支）。
+
+        ## p247：轴是唯一的判定来源；判 fault 时由本方法定出那一步
+        业主 2026-11-06 第三次收紧逐字：「V 的判词只是陈述」「每一转的轴（clean / fault）
+        一律由 V 秘书做语义分析后给出」「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
+        所以：① `verdict` 只作为材料里的原话递给模型，本方法不按它的字面定轴；
+        ② 模型判「有缺陷要指出」时还要给出 `defect_step`（题面要求），本方法把它带回去；
+        ③ V 给了步号就以 V 的为准？不 —— 轴与步号都是秘书这一问的产物：V 的 `defect_step`
+        只是材料，返回值里的 `defect_step` 是秘书定下的那一步（V 给同一值时二者相同）。
         """
         from . import verifications as _VR   # 惰性：此处只借它的轴词表与 `row_signable`
 
@@ -3488,6 +3508,12 @@ class Secretary:
             out["reason"] = f"结论 {answer!r} 不在 {list(V_REPLY_VERDICTS)} 里 ⇒ 不采信"
             return out
         out.update(checked=True, answer=answer, axis=V_REPLY_AXIS[answer])
+        #: p247：判 fault 时那一步由秘书这一问定（V 没给就以秘书给的为准；V 给了同一步
+        #: 时二者相同）。判 clean ⇒ null（没有要改的那一步）。
+        out["defect_step"] = (got.get("defect_step")
+                              if V_REPLY_AXIS[answer] == "fault" else None)
+        out["defect_step_basis"] = (str(got.get("defect_step_basis") or "")
+                                    if V_REPLY_AXIS[answer] == "fault" else "")
         return out
 
     def decide_sign_issuance(self, *, statement_id: str, proof_text: str = "",
@@ -3600,7 +3626,24 @@ class Secretary:
                   and str(row.get("verification_id") or "")
                   == str(reading.get("verification_id") or ""))
         out["landed"] = bool(landed)
-        candidate_ok = (str(v.get("verdict") or "") == "成立"
+        # ---- p247：候选这一签的资格只看秘书给的轴，不看 V 的 verdict 字面 ----
+        #
+        # 业主 2026-11-06 第三次收紧：「streak / 签发只看秘书给出的轴，不看 V 自己写的
+        # 那两个字」。所以这里读 `secretary_axis`（row 已经有这一格；直调路径可以从
+        # `verdict` 的 `secretary_judge` / `axis` 带进来），不再用 `verdict == "成立"`。
+        candidate_axis = ""
+        if isinstance(row, Mapping):
+            candidate_axis = _VR.ledger_axis(row)
+        if not candidate_axis:
+            got_judge = v.get(_VR.SECRETARY_JUDGE_KEY)
+            if isinstance(got_judge, Mapping):
+                candidate_axis = _VR.secretary_axis({_VR.SECRETARY_JUDGE_KEY: got_judge})
+        if not candidate_axis and str(v.get("axis") or "") in _VR.SECRETARY_JUDGE_AXES:
+            candidate_axis = str(v.get("axis") or "")
+        if not candidate_axis:
+            #: 老调用点 / 直调夹具：只给了 `verdict`，没有秘书那一格 ⇒ 历史兼容读。
+            candidate_axis = _VR.historical_axis(v)
+        candidate_ok = (candidate_axis == "clean"
                         and int(v.get("unresolved_errors") or 0) == 0)
         if within is not None:
             # ---- 2026-11-02 定稿：地板只看这一趟送审内部的轮数。
@@ -3639,6 +3682,7 @@ class Secretary:
                 "projected": out["projected"], "streak_ok": out["streak_ok"],
                 "same_sha": True,
                 "candidate_verdict": str(v.get("verdict") or ""),
+                "candidate_axis": candidate_axis,
                 "candidate_defect_step": v.get("defect_step"),
                 "reading_why": ("这一签的轮数由 V 的连判循环给出（同一趟送审内第几轮）；"
                                 "台账历史行不参与这一趟的发签判定"),
@@ -3651,6 +3695,7 @@ class Secretary:
                 "need": out["need"],
                 "projected": out["projected"], "streak_ok": out["streak_ok"],
                 "same_sha": same_sha, "candidate_verdict": str(v.get("verdict") or ""),
+                "candidate_axis": candidate_axis,
                 "candidate_defect_step": v.get("defect_step"),
                 "reading_why": str(reading.get("why") or reading_problem)[:400],
             }
@@ -3670,7 +3715,7 @@ class Secretary:
             # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。这一句只是"这一转还
             # 不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给（签 / 打回）。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
-                       reason=(f"连续「成立」{out['projected']}/{out['need']} 次"
+                       reason=(f"连续 clean（秘书轴）{out['projected']}/{out['need']} 次"
                                f"（{'这一趟送审内' if within is not None else '台账历史读数'}"
                                f"）⇒ 这一签不发；门槛是 {int(out['need'])} 次连续的「没问题」"
                                + ("；台账历史行不参与这一趟的判定"
@@ -11696,9 +11741,10 @@ def _judge_system(kind: str) -> str:
         # 业主 2026-10-29（V 签门槛的 B 段）第一版是三档；2026-10-30 第三次裁定收成两档：
         # 「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
         # 于是题面只给两档，并逐字写清"拿不准就按有缺陷处理"——没有中间档可退。
-        # 为什么必须逐字写"先夸后刺"这几种形态：`verifications.parse_verdict` 只能挡住
-        # "有毛病但没给 defect_step"，它挡不住"整体很好，只是有一个缺陷需要指出"——
-        # 那种回复在词表上读成「成立」，而它明明指出了一个缺陷。
+        # why：`verifications.parse_verdict` 只能挡住结构不合格，它挡不住"整体很好，只是有
+        # 一个缺陷需要指出"——那种回复曾经在词表上被读成「成立」，而它明明指出了一个缺陷。
+        # p247（业主第三次收紧）：轴只由这一问给；V 的 verdict 只是陈述，不得按字面定轴；
+        # 判 fault 还要给出 defect_step（V 没给时由这一问定出那一步）。
         ask = (
             "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底有没有指出缺陷？"
             "只有两档，没有中间档：\n"
@@ -11713,9 +11759,16 @@ def _judge_system(kind: str) -> str:
             "它的依据落在不归 F 的那几样上（文献真伪/页码核对、实验数值复现、稿件排版"
             "与术语统一）也不是没问题 —— 那说明它没审证明本身，按有缺陷处理。\n"
             "「判不了」不是一种结论：判不出来就说明它没有证明「没问题」，按有缺陷处理。"
-            "只判这段回复说了什么：不要替它补它没说过的检查，也不要因为语气自信就判没问题。"
+            "只判这段回复说了什么：不要替它补它没说过的检查，也不要因为语气自信就判没问题。\n"
+            "两个「判不了」别混：① 被审的 V 回复里写「判不了」—— 那是它的陈述，按上面"
+            "这一条判「有缺陷要指出」；② 你自己（秘书）不能拿「判不了」当结论 —— 你只从"
+            "「没问题」/「有缺陷要指出」两档里选一档，选不出来时按「有缺陷要指出」收。\n"
             "decision 取「没问题」/「有缺陷要指出」之一；reason 一句话；"
-            "basis 里引回复原文的片段（逐字，不要改写）。"
+            "basis 里引回复原文的片段（逐字，不要改写）。\n"
+            "另加一格 defect_step（只在 decision=「有缺陷要指出」时要，整数或 null）："
+            "这段回复指到的是证明里的第几步；回复里点了步号就用它，没点就按它描述的缺陷"
+            "落在哪一步给出最早的那一步；实在定位不到才给 null，并在 defect_step_basis 里"
+            "写清为什么。decision=「没问题」⇒ defect_step=null。"
         )
     elif kind == "sign_issuance":
         # 业主 2026-10-29（V 签门槛的 A 段）：发不发签由 V 的秘书说了算。
@@ -11727,10 +11780,12 @@ def _judge_system(kind: str) -> str:
             "问题：验证者（V）刚对一个命题的某一份证明给出了结论，现在要决定"
             "这一签发不发（发签 = 把命题行的第 3 位翻成「审过」）。"
             "材料是台账现算的读数，不是证明正文。判据只有一条："
-            "业主定的门槛是「同一份正文连续 3 次都判「成立」」——`streak`（尾部连续「成立」的次数）"
+            "业主定的门槛是「同一份正文连续 3 次都判「成立」」——`streak`（尾部连续 clean 的次数）"
             "必须达到 `need`（门槛），且这几次盖的是同一份正文（那一格读数须为真）。\n"
-            "- 次数够了、同一份正文、这一签的结论是「成立」⇒ 判「签发」；\n"
-            "- 次数不够 / 不是同一份正文 / 这一签的结论不是「成立」⇒ 判「不签发」，"
+            "p247：这里的 `candidate_axis` 是上一问（`v_reply_defect`）给出的轴 ——"
+            "它是唯一判据；`candidate_verdict` 只是 V 写下的陈述，**不要**按它的字面改判轴。\n"
+            "- 次数够了、同一份正文、这一签的 `candidate_axis` 是 clean ⇒ 判「签发」；\n"
+            "- 次数不够 / 不是同一份正文 / 这一签的 `candidate_axis` 不是 clean ⇒ 判「不签发」，"
             "并在 basis 里点名差在哪一项；\n"
             "某一格读数读不出来时不要拿一个结论去凑：那是「没查成」，框架按 checked=False 记。\n"
             "decision 取「签发」/「不签发」之一；reason 一句话；"

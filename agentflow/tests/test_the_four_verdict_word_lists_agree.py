@@ -67,11 +67,13 @@ def test_the_authority_is_the_two_verdict_words_in_order() -> None:
     assert VR.VERDICTS[-1] == "成立", "最后一档是'签住了'那一档，numericproof 按 -1 引用它"
     assert VR.VERDICTS[0] == "有毛病"
     assert len(VR.VERDICTS) == 2
-    # 那一档已经取消：它只剩"历史值"这一个身份（读得出、按成立读并计票、写不出）
+    # 历史值只剩"可读的陈述"这一个身份（p247：不折档、不算票、不签）
     assert "看不出来" not in VR.VERDICTS, VR.VERDICTS
     assert VR.LEGACY_VERDICTS == ("看不出来",), VR.LEGACY_VERDICTS
-    assert VR.read_verdict({"verdict": VR.LEGACY_VERDICTS[0]}) == VR.VERDICTS[-1], (
-        "历史值没有被读成真身的最后一格（成立）⇒ 那一档还在读侧冒充一格")
+    assert VR.read_verdict({"verdict": VR.LEGACY_VERDICTS[0]}) == VR.LEGACY_VERDICTS[0], (
+        "历史值被折成了某一态 ⇒ 判词又变成判据了（p247 要求原样读出）")
+    assert VR.signs_bit3({"verdict": VR.LEGACY_VERDICTS[0]}, streak=3) is False, (
+        "历史值没有秘书轴却签住了 ⇒ 字面又当成了 clean")
 
 
 def test_the_same_axis_copies_are_word_for_word_identical() -> None:
@@ -108,23 +110,24 @@ def test_schema_review_verdicts_is_another_axis_without_a_third_state() -> None:
 
 
 def test_parse_verdict_accepts_exactly_the_authority() -> None:
-    """行为面：两态逐字认；历史那一格与"判不了"那一族折成 `成立`；其余一个都不认。"""
+    """行为面（p247）：两态逐字认；历史值与「判不了」那一族原样认作陈述；不折档。"""
+    import json as _json
+
     for word in VR.VERDICTS:
-        # `有毛病` 必须指到那一步（`parse_verdict` 的另一条纪律），另一档不需要。
-        payload = {"verdict": word,
-                   "defect_step": 1 if word == "有毛病" else None, "findings": []}
-        got = VR.parse_verdict(__import__("json").dumps(payload, ensure_ascii=False))
+        payload = {"verdict": word, "defect_step": 1 if word == "有毛病" else None,
+                   "findings": []}
+        got = VR.parse_verdict(_json.dumps(payload, ensure_ascii=False))
         assert got["verdict"] == word
-    # 历史那一格（2026-11-01 之前写下的）：折成 `成立`，原话进 `verdict_raw`
-    folded = VR.parse_verdict('{"verdict": "看不出来", "why": "信息不足", "findings": []}')
-    assert folded["verdict"] == "成立", folded
-    assert folded["verdict_raw"] == "看不出来", folded
-    assert "没有找到缺陷" in folded["why"], folded["why"]
-    # 词表之外的词一个都不许认（首尾空白是 `parse_verdict` 刻意容忍的，不算"之外的词"）。
-    for bad in ("proved", "已完成", "", "成立。", "大概成立"):
+    # 历史值（2026-11-01 之前写下的）与「判不了」那一族：原样是陈述，不折成任何一态
+    for word in ("看不出来", "判不了", "我无法判断", "拿不准", "大概成立"):
+        got = VR.parse_verdict(_json.dumps({"verdict": word, "findings": []},
+                                           ensure_ascii=False))
+        assert got["verdict"] == word, got
+        assert VR.secretary_axis(got) == "", "parse_verdict 自己产出了轴 ⇒ 字面又成判据了"
+    # 结构不合法才是"没查成"（不是 JSON / 缺 verdict 字段）
+    for bad in ("proved", "", "成立。"):
         with pytest.raises(VR.VerificationError):
-            VR.parse_verdict('{"verdict": %s, "findings": []}'
-                             % __import__("json").dumps(bad, ensure_ascii=False))
+            VR.parse_verdict("not-json-" + bad)
 
 
 def test_no_fifth_module_defines_the_word_as_its_own_literal() -> None:

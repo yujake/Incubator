@@ -130,6 +130,23 @@ def _conductor(st: Store):
     return conductor_for(st)
 
 
+class _FaultSecretary:
+    """V 的秘书替身（p247：轴与洗稿都由秘书给；这一支量的是投递）。
+
+    夹具固定判 fault 并给一份可转达的洗稿 —— 这一条链要量的是"投递"，不是语义判定。
+    """
+
+    def judge_v_reply(self, *, defect_step=None, **_kw):
+        return {"checked": True, "axis": "fault", "decision": "有缺陷要指出",
+                "reason": "夹具：fault", "basis": ["夹具"],
+                "defect_step": defect_step if isinstance(defect_step, int) else 2}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": True, "washed": True,
+                "text": "第 2 步的引理用错了：补上依据之后重新送 V 重签。",
+                "findings": [], "dropped": [], "refused": ""}
+
+
 def _verify(st: Store, sid: str, *, v_task: str, parent: str,
             role: str = "B", reply: str = REPLY_DEFECT) -> dict:
     """走 V 的真入口：`AgentV.verify_proof`（投递钩子在它里面）。
@@ -143,7 +160,8 @@ def _verify(st: Store, sid: str, *, v_task: str, parent: str,
     text = str(row.get("proof_text") or PROOF)
     rel = write_proof_manuscript(st.root, str(sid), text,
                                  statement_full=str(row.get("statement_full") or ""))
-    agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply))
+    agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply),
+                   secretary=_FaultSecretary())
     with CND.calling_as(v_task, "V", parent_task_id=parent, parent_role=role):
         return agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
 

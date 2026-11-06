@@ -265,6 +265,25 @@ DUTIES: dict[str, dict[str, object]] = {
                "按题面判 clean / fault；fault ⇒ 这一转不算干净、这一签不签发 —— V 必须知道"
                "这件事有接住方，否则它会把「我写了成立」读成「秘书会照单发签」",
     },
+    # 2026-11-06（p247：第三次收紧「V 的判词只是陈述」）：`specs/v.py` / `cold_start_prompt` /
+    # `agent_skills` 三处新增「每一转的轴（clean / fault）由你的秘书读这段回复后语义判定」
+    # 与「秘书会按这段回复的语义定出那一步」。这是另一条对秘书的承诺（轴从哪来、步号由谁定），
+    # 与上一条（fault ⇒ 不签发）不是同一件事 ⇒ 逐条新登记，不并进旧探针。
+    # 真身：`verifications.secretary_axis` / `ledger_axis`（轴）＋ `Secretary.judge_v_reply`
+    # 的 `defect_step` 读数；生产调用点 `agent_v/core.py` 的 `AgentV._judge_v_reply`。
+    "v_axis_from_the_secretary": {
+        "code": "secretary_axis",
+        "where": "verifications.py",
+        "call": ("secretary.py 的 Secretary.judge_v_reply",
+                 "agent_v/core.py 的 AgentV._judge_v_reply"),
+        "visibility": "conditional",
+        "roles": ("V",),
+        "probe": ("每一转的轴（clean / fault）由你的秘书",
+                  "秘书会按这段回复的语义定出那一步"),
+        "why": "轴（clean / fault）只由 V 的秘书读回复后语义判定，V 的 verdict 只是陈述；"
+               "判 fault 而 V 没给 defect_step 时由秘书定出那一步 —— V 必须知道"
+               "「我写哪两个字」不决定轴，否则它会把判词当成判据",
+    },
     # 2026-11-04（业主裁定 A 甲）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
     # 这条走法在 B 的 policy 里是一句完整承诺（交正文 → 框架落稿 → 派 V → 签到位 → 再入库），
     # 而它有两个真身、各管一半，所以拆成两条登记（探针也各认那一半）：

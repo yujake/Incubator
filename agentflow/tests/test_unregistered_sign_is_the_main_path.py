@@ -41,13 +41,14 @@ from agentflow import conductor as CND
 from agentflow import depsection as _DS
 from agentflow import evidencebits as EB
 from agentflow import schema as S
+from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
 from conftest import seed_statement_row
-from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam
+from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam, _Seam, _axis
 
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
@@ -72,6 +73,13 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
     return st
+
+
+def _clean_secretary(st: Store):
+    """V 的秘书（p247：轴由秘书给；这一支量的是未在册签的落地）。"""
+    seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                  "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
+    return SEC.Secretary("V", root=st.root, store=st, seam=seam, enable_model=True)
 
 
 def _put(st: Store, rel: str, text: str) -> pathlib.Path:
@@ -118,7 +126,7 @@ def test_a_unregistered_manuscript_lands_a_pending_ledger_with_three_tickets(tmp
     st = _ws(tmp_path)
     _put(st, REL, MANUSCRIPT)
     seam = _ReviewSeam([CLEAN_REPLY])
-    v = AgentV(st, workspace_root=st.root, llm=seam)
+    v = AgentV(st, workspace_root=st.root, llm=seam, secretary=_clean_secretary(st))
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001", parent_role="F"):
         got = v.verify_proof(proof_manuscript=REL)
 
@@ -373,7 +381,7 @@ def test_f_closing_the_pending_write_port_turns_a_red(tmp_path, monkeypatch):
 
     monkeypatch.setattr(VR, "record_pending_sign", _closed)
     seam = _ReviewSeam([CLEAN_REPLY])
-    v = AgentV(st, workspace_root=st.root, llm=seam)
+    v = AgentV(st, workspace_root=st.root, llm=seam, secretary=_clean_secretary(st))
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001", parent_role="F"):
         got = v.verify_proof(proof_manuscript=REL)
 
@@ -384,3 +392,4 @@ def test_f_closing_the_pending_write_port_turns_a_red(tmp_path, monkeypatch):
     block = VS.manuscript_sign_reading(
         (pathlib.Path(st.root) / REL).read_text(encoding="utf-8"), manuscript_path=REL)
     assert block["found"] is False, block
+

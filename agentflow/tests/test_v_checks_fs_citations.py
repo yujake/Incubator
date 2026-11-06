@@ -184,7 +184,10 @@ def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
             signed = VR.record_verification(
                 store.root, statement_id=sid, proof_text=LEMMA_PROOF,
                 verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-                store=store, proof_no=1)
+                store=store, proof_no=1,
+                #: p247：轴只由秘书给；夹具给 clean（不是由 `verdict` 字面推）。
+                secretary_judge={"checked": True, "axis": "clean",
+                                 "decision": "没问题", "reason": "夹具：clean"})
         assert signed.get("checked") is True, signed
         assert signed["statement_writeback"]["written"] is True, signed["statement_writeback"]
     _set_evidence_kind(store, sid, evidence_kind)
@@ -515,11 +518,10 @@ def test_an_unknown_citation_lands_as_undetermined_and_does_not_sign(
     见 `docs/DEVELOPMENT-SPEC.md` §16.7 对这条判据的登记。改的是判据本体，靶子没变：
     "判不了的那一条不许换成一签"。）
 
-    业主 2026-11-01 把 V 的结论收成两态，所以这一档的落法改了（判据跟着改，不是放宽）：
-    结论仍是 `成立`（V 没有找到缺陷 —— 判不了不是找到缺陷），而"这一签不许落地"由
-    引用闸挡住：那一条 `unknown` 同时是一条 error（`unresolved_errors > 0`）并进
-    `citation_blocks` ⇒ `row_signable` 为假。不存在第三个结论词（改前它落成
-    `看不出来`），而"判不了也要落台账"这件事一个字没动。
+    p247：`verdict` 只是 V 写下的陈述（这一条里写的是 `成立`），引用闸不改写它；但这一档
+    是「没查成」，不是「没问题」：那一条 `unknown` 同时是一条 error
+    （`unresolved_errors > 0`）并进 `citation_blocks` ⇒ `row_signable` 为假（轴再 clean
+    也签不住）⇒ 这一签不签发。不存在第三个结论词；「判不了也要落台账」这件事一个字没动。
     """
     store = _ws(tmp_path)
     lemma = _lemma(store)
@@ -654,7 +656,8 @@ def test_signs_bit3_refuses_a_row_whose_citation_check_blocks() -> None:
     `verdict=成立` 与 V 自己判了成立，在读者眼里没有区别 ⇒ 读侧必须有同一道闸。
     这不是第二份判据：它读的就是 `citation_checks` 那一格、词表就是 `CITATION_BLOCKING`。
     """
-    base = {"statement_id": "000001", "verdict": "成立", "unresolved_errors": 0}
+    base = {"statement_id": "000001", "verdict": "成立", "unresolved_errors": 0,
+            "secretary_judge": {"checked": True, "axis": "clean"}}
     for verdict in sorted(VR.CITATION_BLOCKING):
         row = dict(base, citation_checks=[{"stmt_id": "000002", "verdict": verdict,
                                            "quote_verbatim": False, "note": "x"}])
@@ -711,7 +714,9 @@ def test_the_citation_gate_and_signs_bit3_reach_the_same_verdict_after_disk(
     # 三次「成立」才签住（业主 2026-10-29）；第 1、2 次只落台账 ⇒ 读侧读到 holding。
     for _i in range(VR.SIGN_STREAK_NEED):
         VR.record_verification(tmp_path, statement_id="000009", proof_text=text,
-                               verdict=merged, citation_gate=gate)
+                               verdict=merged, citation_gate=gate,
+                               secretary_judge={"checked": True, "axis": "clean",
+                                                "decision": "没问题", "reason": "夹具"})
     rows, problems = VR.list_verifications(tmp_path, statement_id="000009", limit=None)
     assert problems == [], problems
     disk = dict(rows[-1])
@@ -742,6 +747,7 @@ def test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red() -> 
     assert gate["ok"] is True, gate
 
     row = {"stmt_id": "000009", "verdict": "成立", "unresolved_errors": 0,
+           "secretary_judge": {"checked": True, "axis": "clean"},
            "citation_checks": [dict(c) for c in checks]}
     assert VR.signs_bit3(row, streak=VR.SIGN_STREAK_NEED) is True
 
@@ -754,6 +760,7 @@ def test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red() -> 
     assert VR.citation_gate(stripped["citation_checks"])["ok"] is False
     # 老行缺键按"材料内"读 ⇒ 阻挡条目照旧挡签。
     old = {"stmt_id": "000009", "verdict": "成立", "unresolved_errors": 0,
+           "secretary_judge": {"checked": True, "axis": "clean"},
            "citation_checks": [{"stmt_id": "000002", "verdict": "stronger",
                                 "quote_verbatim": False, "note": "x"}]}
     assert VR.citation_blocks(old) != []

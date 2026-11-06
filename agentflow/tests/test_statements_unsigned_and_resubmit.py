@@ -32,6 +32,7 @@ import pathlib
 import pytest
 from agentflow import closing as CL
 from agentflow import conductor as CND
+from agentflow import secretary as SEC
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
 from agentflow import vreceipts as VRC
@@ -340,6 +341,33 @@ def _manuscript(st: Store, sid: str, proof: str) -> str:
     return rel
 
 
+class _JudgeStub:
+    """V 的秘书替身（p247：轴与洗稿都由秘书给；这一支量的是「待重送」板项）。
+
+    夹具按 V 的判词给轴（有毛病 ⇒ fault）—— 这是替身自己的判定，不是生产代码按字面定轴。
+    """
+
+    def judge_v_reply(self, *, reply="", verdict="", defect_step=None, **_kw):
+        bad = "有毛病" in str(verdict) or "有毛病" in str(reply)
+        return {"checked": True, "axis": "fault" if bad else "clean",
+                "decision": "有缺陷要指出" if bad else "没问题",
+                "reason": "夹具：秘书语义判定", "basis": ["夹具"],
+                "defect_step": (defect_step if isinstance(defect_step, int) else 5)
+                if bad else None}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": True, "washed": True, "text": "第 5 步没有依据：补齐后重送 V。",
+                "findings": [], "dropped": [], "refused": ""}
+
+    def decide_sign_issuance(self, *, within_call=None, **_kw):
+        ok = within_call is not None and int(within_call) >= int(VR.SIGN_STREAK_NEED)
+        return {"checked": True, "issue": ok, "issued": False,
+                "decision": SEC.SIGN_ISSUE if ok else SEC.SIGN_WITHHOLD,
+                "streak": int(within_call or 0), "projected": int(within_call or 0),
+                "need": int(VR.SIGN_STREAK_NEED), "streak_ok": ok,
+                "reason": "夹具：够就签发", "basis": ["夹具"]}
+
+
 def _verify_v(st: Store, sid: str, *, parent: str, proof: str = PROOF,
               reply: str = REPLY_DEFECT) -> dict:
     """走 V 的真入口（投递钩子在它里面）。
@@ -347,7 +375,8 @@ def _verify_v(st: Store, sid: str, *, parent: str, proof: str = PROOF,
     2026-11-04（甲）：在册命题的 V 审也要手稿 —— 夹具把这一份证明栏写成一份
     `reports/f-proof-<号>.md` 的「## 证明」，V 从稿里取正文、签块也落回稿。
     """
-    agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply))
+    agent = AgentV(st, workspace_root=st.root, llm=_Seam(reply),
+                   secretary=_JudgeStub())
     rel = _manuscript(st, sid, proof)
     with CND.calling_as("t-v1", "V", parent_task_id=parent, parent_role="F"):
         return agent.verify_proof(sid, proof_text=proof, proof_manuscript=rel)
@@ -424,7 +453,8 @@ def test_an_unowned_fault_opens_nothing_and_reads_as_owner_unknown(tmp_path):
     conductor_for(st)
     _put(st)
     # 不在任何召唤里 ⇒ current_parent 为空 ⇒ undelivered
-    agent = AgentV(st, workspace_root=st.root, llm=_Seam(REPLY_DEFECT))
+    agent = AgentV(st, workspace_root=st.root, llm=_Seam(REPLY_DEFECT),
+                   secretary=_JudgeStub())
     got = agent.verify_proof(SID, proof_text=PROOF,
                              proof_manuscript=_manuscript(st, SID, PROOF))
     assert got.get("checked") is True, got

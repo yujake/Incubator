@@ -38,7 +38,7 @@ from agentflow.agent_c import AgentC
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
-from conftest import seed_statement_row
+from conftest import CleanVerdictSecretary, seed_statement_row
 
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
 FULL = "若 n≥3 则 n^2+n 是偶数（自证）。"
@@ -106,7 +106,7 @@ def _seed_statement(st: Store) -> str:
 def _audited_statement(st: Store) -> str:
     """正控的现场：V 先审手稿（3 转成立 ⇒ 签块落稿）→ B 再收录。"""
     path = _write_manuscript(st)
-    v = AgentV(st, llm=_FixedSeam("成立"))
+    v = AgentV(st, llm=_FixedSeam("成立"), secretary=CleanVerdictSecretary("clean", st))
     # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份。
     from agentflow import conductor as CND
 
@@ -179,7 +179,7 @@ def test_a_flawed_verdict_does_not_make_it_a_root(tmp_path: pathlib.Path) -> Non
     # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿（按号命名的那一份）。
     # 这一条判的是"有毛病 ⇒ 不作根"，判据一个字没改；补的只是签的载体。
     rel = write_proof_manuscript(st.root, sid, PROOF, statement_full=FULL)
-    v = AgentV(st, llm=_FixedSeam("有毛病"))
+    v = AgentV(st, llm=_FixedSeam("有毛病"), secretary=CleanVerdictSecretary("fault", st))
     got = v.verify_proof(sid, PROOF, proof_manuscript=rel)
     got = got if isinstance(got, dict) else got.to_dict()
     assert got.get("verdict") == "有毛病", got

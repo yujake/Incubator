@@ -81,7 +81,15 @@ def _reject(root: pathlib.Path, sid: str, *, step: int) -> str:
         verdict={"verdict": "有毛病", "defect_step": step,
                  "findings": [{"level": "error", "step": step, "kind": "无依据的步骤",
                                "detail": f"第 {step} 步直接用了结论"}]},
-        verifier="agent-V")
+        verifier="agent-V",
+        #: p247：打回只看秘书轴；夹具给 fault（不是由 V 的 verdict 字面推）。
+        secretary_judge={"checked": True, "axis": "fault",
+                         "decision": "有缺陷要指出", "reason": "夹具：fault",
+                         "defect_step": step},
+        #: fault 那一档的转达必须带洗过的文本（C 段）；否则交付侧拒绝投递。
+        washed_relay={"washed": True,
+                      "text": f"第 {step} 步直接用了结论：补齐之后重新送 V 重签。",
+                      "findings": [{"quote": "第 2 步", "why": "没有依据"}]})
     return str(row["verification_id"])
 
 
@@ -260,17 +268,23 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     # 再把次数凑够 —— `signs_bit3` 只认"够次数"的那一签，所以连续读数要一起递进去。
     sign = VR.record_verification(
         st.root, statement_id=sid, proof_text=PROOF,
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
+        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
     holds1 = VR.consecutive_holds(st.root, sid)
     assert holds1["checked"] is True and int(holds1["streak"]) == 1, holds1
     assert VR.signs_bit3(sign, streak=holds1) is False, (
         "签 1 次就签住了第 3 位 ⇒ 2026-10-29 的连续 3 次口径没生效", holds1)
     sign = VR.record_verification(
         st.root, statement_id=sid, proof_text=PROOF,
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
+        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
     sign = VR.record_verification(
         st.root, statement_id=sid, proof_text=PROOF,
-        verdict={"verdict": "成立", "findings": []}, verifier="agent-V")
+        verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：clean"})
     holds3 = VR.consecutive_holds(st.root, sid)
     assert int(holds3["streak"]) == VR.SIGN_STREAK_NEED and holds3["streak_ok"] is True, holds3
     assert sign["verdict"] == "成立" and VR.signs_bit3(sign, streak=holds3), sign

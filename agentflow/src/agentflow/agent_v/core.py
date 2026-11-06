@@ -67,18 +67,21 @@ V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知�
 或秘书在次数够的那一转既不签也不判出问题 ⇒ 返回值报内部不一致（`checked=False` + 明确
 `reason`），绝不写成"次数没到"。逐次读数在返回值的 `review_passes` 里（每项带
 `terminal`：这一转是不是终局、是哪一种终局）。
-## V 的结论只有两态（业主 2026-11-01 裁定）
-业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
-`成立` / `有毛病` 是对证明的两态结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON /
-字段缺 / 取值不在词表里）不是这两态之一。模型若回「看不出来 / 判不了 / 我无法判断」
-这一族措辞，`verifications.parse_verdict` 一律折成 `成立`（它没有找到缺陷 ⇒ 按没毛病收），
-`why` 里写明这么收的理由、`verdict_raw` 留住原话。
+## V 的判词只是陈述；轴只有两态，且只由秘书的语义分析给出（2026-11-06 p247）
+业主 2026-11-01 逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
+2026-11-06 第三次收紧又逐字定死：「V 的判词只是陈述」「不做折档」「不许按词面把判不了 /
+看不出来 / 拿不准 / 我无法判断折成任何一态」；「每一转的轴（clean / fault）一律由 V 秘书
+做语义分析后给出」；「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
+于是：`verdict` / `findings` / `defect_step` 只由 `parse_verdict` 做结构解析；
+`成立` / `有毛病` 是轴的名字（`secretary_judge.axis`），连续次数与签发只看那个轴。
+"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 缺 `verdict` 字段）不是轴 —— 那种情况下
+`checked=False` 且台账里不留行（绝不写一行"没查成"来冒充"审过了"）。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
-- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；-
-`checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
-两者都不落台账（`verifications.record_verification` 在没有合法结论时抛`VerificationError`，
-绝不写一行"没查成"来冒充"审过了"）。穷举型证据缺材料同理：
-`checked=False, reason="missing_material"`（缺哪一块进 `detail`），台账里也不留行。
+- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；
+- `checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
+穷举型证据缺材料同理：`checked=False, reason="missing_material"`（缺哪一块进 `detail`），
+台账里也不留行。秘书这一问没查成是另一档：台账照落（`secretary_judge.checked=False`），
+只是那一转不算 clean、也不按 V 的判词补判。
 """
 
 from __future__ import annotations
@@ -601,12 +604,17 @@ class AgentV:
             return {"checked": False, "axis": "", "unwired": True, "decision": "",
                     "reason": (self.secretary_problem
                                or "这一趟没有 V 的秘书 ⇒ 语义判定没查成（不是「没问题」）")}
-        return sec.judge_v_reply(reply=str(reply or ""),
-                                 verdict=str(verdict.get("verdict") or ""),
-                                 defect_step=verdict.get("defect_step"),
-                                 statement_id=str(statement_id or ""),
-                                 proof_no=no,
-                                 task_id=str(self.cfg.get("task_id") or ""))
+        try:
+            return sec.judge_v_reply(reply=str(reply or ""),
+                                     verdict=str(verdict.get("verdict") or ""),
+                                     defect_step=verdict.get("defect_step"),
+                                     statement_id=str(statement_id or ""),
+                                     proof_no=no,
+                                     task_id=str(self.cfg.get("task_id") or ""))
+        except Exception as exc:  # noqa: BLE001 —— p247：秘书抛异常不许回退成字面判
+            return {"checked": False, "axis": "", "unwired": False, "decision": "",
+                    "reason": (f"秘书这一问抛异常（{type(exc).__name__}: {exc}）⇒ "
+                               "这一转的轴没查成（checked=False，不按 V 的判词字面补判）")}
 
     def _wash_v_reply(self, reply: str, verdict: Mapping[str, Any], no: int, *,
                       statement_id: str = "") -> dict[str, Any]:
@@ -1075,7 +1083,20 @@ class AgentV:
                 _n_reply = (f"穷举型证据会审：结论 {_n_verdict.get('verdict')!r}"
                             f"（{len(_reviewed.get('checks') or [])} 项检查，"
                             f"缺材料 {_missing}）")
-                _n_judge = self._judge_v_reply(_n_reply, _n_verdict, no, statement_id=sid)
+                #: p247：穷举这一档没有模型原文（会审是机械的七项核对）—— 轴由机械会审
+                #: 自己的两态读数给（`VERDICT_OK` ⇒ clean / `VERDICT_BAD` ⇒ fault），
+                #: 写成与秘书判定同形的 `secretary_judge`（`source=exhaustion_report`）。
+                #: 这不是按 V 的判词字面定轴：这一格的 `verdict` 就是会审的机械结论本身。
+                _n_word = str(_n_verdict.get("verdict") or "")
+                _n_axis = ("clean" if _n_word == str(_ER.VERDICT_OK)
+                           else ("fault" if _n_word == str(_ER.VERDICT_BAD) else ""))
+                _n_judge = {
+                    "checked": bool(_n_axis), "axis": _n_axis, "decision": _n_word,
+                    "reason": str(_reviewed.get("why") or _reviewed.get("reason") or ""),
+                    "basis": [f"exhaustion_report={_n_word}"],
+                    "source": "exhaustion_report",
+                    "defect_step": _n_verdict.get("defect_step"),
+                }
                 out["secretary_judge"] = dict(_n_judge)
                 try:
                     _row = VR.record_verification(
@@ -1337,8 +1358,7 @@ class AgentV:
             # 有毛病 / 结论不是成立 ⇒ 这一趟的连续数归零；秘书没判成那一档由底下
             # 的 `terminal` 说明，不在这里冒充"0 轮"。
             in_call_streak = (pass_no if (
-                str(once["judgment"].get("axis") or "") == "clean"
-                and VR.read_verdict(once["row"]) == "成立") else 0)
+                str(once["judgment"].get("axis") or "") == "clean") else 0)
             passes.append({
                 "pass": pass_no,
                 "axis": str(once["judgment"].get("axis") or ""),
@@ -1366,38 +1386,33 @@ class AgentV:
                 stop_why = "台账那一行没落地（必须重签）"
                 break
             axis = str(once["judgment"].get("axis") or "")
-            # ---- 先判结局（有毛病），再判"这一签签不签得动"，最后判"签上了没有" ----
+            # ---- 先判秘书给的轴，再判"这一签签不签得动"，最后判"签上了没有" ----
             #
-            # 这个次序是 2026-11-01 修的（`draft/165` 取证 D 的那个谎）：这一段原本把
-            # `if not VR.row_signable(...)` 排在 verdict 支之前，而 `row_signable` 的第一句
-            # 就是 `read_verdict(row) != "成立" ⇒ False` —— 于是"V 自己判了有毛病"的行必然
-            # 先在 gate 断掉，于是 `terminal="verdict"` 从 `d839936b`（2026-10-30）起再也走
-            # 不到（死档），81 的 8 行（8/8 有毛病）全被标成"成立但签不住"。
-            #
+            # p247（业主 2026-11-06 第三次收紧）：「V 的判词只是陈述」「每一转的轴
+            # （clean / fault）一律由 V 秘书做语义分析后给出」「streak / 签发只看秘书
+            # 给出的轴，不看 V 自己写的那两个字」。所以这里删掉了原来的
+            # `read_verdict(row) != "成立"` 那一支（它会按 V 的字面直接打回，越过秘书的
+            # 语义判定），也删掉了它的 `terminal="verdict"`。现在只有：
+            #   ① 秘书判 fault ⇒ 打回；
+            #   ② 轴 clean 但行局部机械闸没过（引用挡签 / 未解决 error）⇒ gate；
+            #   ③ 秘书判了签发 ⇒ signed；
+            #   ④ 秘书这一问没查成 ⇒ unjudged（不按字面补判）。
             # 三条必须同时成立（`tests/test_v_terminal_says_what_happened.py` 的 s3c 用 AST
-            # 钉住，别只信这段注释）：
-            #   ① verdict 在 fault 之前：V 自己判过的缺陷不许被秘书那一档改写；
-            #   ② gate 在 fault 之后：gate 只吃"结论成立、但这一行自己签不住"的行；
-            #   ③ gate 在 signed 之前：否则（结论成立、引用挡签、而秘书已经判了签发）会被
-            #      报成"签上了" —— 位根本没翻，那是新的谎。
-            #
-            # 重排不改变任何签发判定：签发在 `_review_pass` 里已经做完（落台账、问秘书、
-            # 翻位都在那儿），这一段只写三个局部量然后 break；六个条件都是同一转的内生量、
-            # 彼此无副作用 ⇒ 停在第几转、问了模型几次、每一转的 issuance 逐字不变。
-            if VR.read_verdict(once["row"]) != "成立":
-                # V 自己的结论不是「成立」⇒ 本身就是一条打回，不依赖秘书那一问。
-                # 它排在"秘书没查成"之前：V 已经判过的缺陷不许被改记成"没查成"。
-                # 结论按 `VR.read_verdict` 读（两态的唯一读口）：老行上那个已取消的档
-                # （2026-11-02：连历史兼容读也不留）读成 `成立`，不会在这里冒充打回。
-                stopped = "verdict"
-                passes[-1]["terminal"] = stopped
-                stop_why = (f"这一签的结论是 {VR.read_verdict(once['row'])!r}"
-                            "（本身就是打回，立刻停）")
-                break
+            # 钉住，别只信这段注释）：gate 在 fault 之后、gate 在 signed 之前。
             if axis == "fault":
                 stopped = "fault"
                 passes[-1]["terminal"] = stopped
                 stop_why = "秘书判 fault（有毛病）：这一转就是终局，立刻打回 F"
+                break
+            if not bool(once["judgment"].get("checked")):
+                # 秘书这一问没查成（没缝 / 没答上来 / 词表外 / 抛异常）：那不是判定，
+                # 更不是"有毛病"。p247：这一支排在 gate 之前 —— 没有轴就没有"签不签得动"
+                # 可判（`row_signable` 也返回假），必须如实报 unjudged，不许把它读成
+                # "结论成立但签不住"。立刻停，读数由收尾那一支分两档给。
+                stopped = "unjudged"
+                passes[-1]["terminal"] = stopped
+                stop_why = ("秘书这一转没判成（checked=False）：没查成，不是有毛病，"
+                            "也不是没问题")
                 break
             if not VR.row_signable(once["row"]):
                 # ---- 结论写「成立」，但这一行自己签不住（引用核实挡签 / 未解决的 error）----
@@ -1424,14 +1439,6 @@ class AgentV:
                 passes[-1]["terminal"] = stopped
                 stop_why = ("签上了" if once["issuance"].get("issued")
                             else "秘书判了签发，但翻位没落成（落地是秘书的事）")
-                break
-            if not bool(once["judgment"].get("checked")):
-                # 秘书这一问没查成（没缝 / 没答上来 / 词表外）：那不是判定，更不是"有毛病"。
-                # 立刻停，读数由收尾那一支分两档给（装配缺口 / 这一问失败）。
-                stopped = "unjudged"
-                passes[-1]["terminal"] = stopped
-                stop_why = ("秘书这一转没判成（checked=False）：没查成，不是有毛病，"
-                            "也不是没问题")
                 break
         # 循环之后：这一趟的读数一律取"最后那一转"（前面的每一转都在 `review_passes` 里）。
         row = dict(last.get("row") or {})
@@ -1566,8 +1573,9 @@ class AgentV:
 
         一转做五件事，一件都不许省：
         ① 真的问一次模型（第 2 转起在提问的末尾追加"第几次"，稳定前缀一个字不动）；
-        ② 把回复解析成两态结论（不合法 ⇒ 这一格"没查成"，不落台账行；「看不出来」那一族
-         措辞由 `verifications.parse_verdict` 折成「成立」）；
+        ② 把回复解析成两态结论（不合法 ⇒ 这一格"没查成"，不落台账行；历史值「看不出来」
+         按「成立」收，而「判不了 / 我无法判断」这一族按「有毛病」收 —— 见
+         `verifications.parse_verdict`）；
         ③ 引用核实的定稿与签字前置（与改前同一套判据，唯一实现在 `verifications`）；
         ④ 秘书的语义两档判定（B 段）＋ 判了 fault 时那一次洗稿（C 段）；
         ⑤ `record_verification(flip=False)` 落一行台账；clean 且结论是「成立」才问秘书
@@ -1636,6 +1644,15 @@ class AgentV:
         # ③ 秘书读连续次数 + 判"发不发"，判发就由它自己调 `sign_statement` 翻位。
         # 秘书不在场 / 没缝 / 没判成 ⇒ ②照落、③不翻 ⇒ 第 3 位保持空（fail-closed）。
         judgment = self._judge_v_reply(reply, verdict, no, statement_id=sid)
+        # ---- p247：判 fault 而 V 没给步号 ⇒ 用秘书定出的那一步 ------------------
+        #
+        # 业主 2026-11-06 第三次收紧：「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
+        # 机械解析仍然只负责取字段（V 给了就原样用）；秘书那一问给出步号时，这一行按它写。
+        if (str(judgment.get("axis") or "") == "fault"
+                and verdict.get("defect_step") is None):
+            _sec_step = judgment.get("defect_step")
+            if isinstance(_sec_step, int) and not isinstance(_sec_step, bool):
+                verdict = dict(verdict, defect_step=_sec_step)
         # C 段：秘书判"有缺陷要指出"⇒ 立刻洗一遍，把洗过的文本随台账那一行落盘。
         # 为什么在落台账之前洗：台账是追加式文件，行写下去就不能改；洗过的转达文本
         # 必须与那一签一起落（`v_rejections_digest` 从那一格读给 F）。
@@ -1694,10 +1711,10 @@ class AgentV:
         if receipt.get("state"):
             self._emit(f"verify_proof({sid})：回执 {receipt.get('state')}"
                        f"（{receipt.get('reason') or '没有读数'}）")
-        if (bool(judgment.get("checked")) and axis == "clean"
-                and str(verdict.get("verdict") or "") == "成立"):
-            # 只有"判过了、没问题、结论成立"这一档才问"这一签发不发"
+        if bool(judgment.get("checked")) and axis == "clean":
+            # 只有"判过了、轴是 clean"这一档才问"这一签发不发"
             # （其余几档都是终局或没查成，见 `_terminal_issuance`）。
+            # p247：这里不再看 `verdict == "成立"` —— 轴只由秘书给，V 的判词只是陈述。
             # 2026-11-02 定稿：把"这一趟的第几轮"作为地板递给秘书 —— 前两轮必不签，
             # 第三轮 clean 才签；台账历史行不参与（跨送审绝不累计）。
             issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row,
@@ -1766,13 +1783,9 @@ class AgentV:
         from .. import secretary as _SEC
 
         axis = str(judgment.get("axis") or "")
-        # 这一转凭什么不发签：verdict（结论不是成立）/ fault（有毛病）/ unjudged（没查成）。
-        # 次序与 `verify_proof` 循环里那三个分支逐字同一套（一处改两处漂是不允许的）：
-        # 「V 自己的结论不是成立」本身就是一条打回，不依赖秘书那一问 —— 不许因为秘书
-        # 没查成，把一条 V 自己判过的缺陷改记成"没查成"。
-        if str(verdict.get("verdict") or "") != "成立":
-            kind = "verdict"
-        elif axis == "fault":
+        # 这一转凭什么不发签：fault（秘书判有毛病）/ unjudged（秘书这一问没查成）。
+        # p247：不再有 `verdict` 那一档 —— V 的判词只是陈述，不发签的轴由秘书给。
+        if axis == "fault":
             kind = "fault"
         else:
             kind = "unjudged"
@@ -1799,17 +1812,15 @@ class AgentV:
                          verdict: Mapping[str, Any]) -> str:
         """不发签那一转的 `sign_issuance.reason`：说清"为什么不签"，不说"次数没到"。
 
-        三档分开写（`verdict` / `fault` / `unjudged` —— 读的人据此知道下一步该干什么）：fault = 有毛病（按缺陷改）、
-        verdict = V 自己的结论不是成立（本身就是打回）、unjudged = 这一问没查成
-        （框架失败：不是判定，也不许当成"有毛病"打回）。
-        `kind` 由调用方按与循环同一套判据算好（`fault` / `verdict` / `unjudged`）。
+        两档分开写（`fault` / `unjudged` —— 读的人据此知道下一步该干什么）：fault = 有毛病
+        （按缺陷改）、unjudged = 这一问没查成（框架失败：不是判定，也不许当成"有毛病"打回）。
+        p247：`verdict` 那一档删了 —— V 的判词只是陈述，不能拿它当"打回"的证据；
+        打回只有秘书判 fault 这一条路。
+        `kind` 由调用方按与循环同一套判据算好（`fault` / `unjudged`）。
         """
         if kind == "fault":
             return ("这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局："
                     "已按 fault 打回 F（错在第几步见洗过的转达与 findings）")
-        if kind == "verdict":
-            return (f"这一签的结论是 {str(verdict.get('verdict') or '（不是成立）')!r} ⇒ "
-                    "不发签；这一转就是终局：这一份要打回 F 改正之后再送 V 重审")
         return ("这一转秘书没判成（checked=False）⇒ 不发签；这是框架失败（没查成），"
                 "既不是「有毛病」，也不是「没问题」："
                 f"{str(judgment.get('reason') or '没有给理由')[:200]}")
@@ -2155,15 +2166,29 @@ class AgentV:
                         "passes": passes, "manuscript": rel}
             #: 依赖面六项审计（业主 2026-11-06）：机械缺陷并进这一转的结论。
             verdict = merge_dependency_audit(verdict, dependency_audit)
+            #: p247：轴由 V 的秘书语义判定（V 的判词只是陈述）。
+            judgment = self._judge_v_reply(reply, verdict, no)
+            if (str(judgment.get("axis") or "") == "fault"
+                    and verdict.get("defect_step") is None):
+                _sec_step = judgment.get("defect_step")
+                if isinstance(_sec_step, int) and not isinstance(_sec_step, bool):
+                    verdict = dict(verdict, defect_step=_sec_step)
+            axis = str(judgment.get("axis") or "")
             word = VR.read_verdict(verdict)
             unresolved = int(verdict.get("unresolved_errors") or 0)
-            judged.append({"pass": n, "verdict": verdict})
-            passes.append({"pass": n, "verdict": word, "unresolved_errors": unresolved,
+            judged.append({"pass": n, "verdict": verdict, "judgment": judgment})
+            passes.append({"pass": n, "axis": axis, "verdict": word,
+                           "unresolved_errors": unresolved,
                            "defect_step": verdict.get("defect_step"),
                            "terminal": ""})
             self._emit(f"verify_proof(未在册)：第 {n} 转 {word}"
-                       f"（未解决 error {unresolved} 条）")
-            if word != "成立" or unresolved != 0:
+                       f"（秘书轴={axis or '没查成'}，未解决 error {unresolved} 条）")
+            if not judgment.get("checked"):
+                # 秘书这一问没查成 ⇒ 这一份不签（不是 fault，也不是 clean）。
+                stopped = "unjudged"
+                passes[-1]["terminal"] = stopped
+                break
+            if axis == "fault" or unresolved != 0:
                 stopped = "rejected"
                 passes[-1]["terminal"] = stopped
                 break
@@ -2184,7 +2209,8 @@ class AgentV:
                 passes[-1]["terminal"] = stopped
         at = _now_iso()
         last = judged[-1]["verdict"] if judged else {}
-        verdict_word = "成立" if stopped == "signed" else VR.read_verdict(last)
+        #: p247：V 的判词只是陈述 —— 签没签不代表它写成「成立」；原样回放。
+        verdict_word = str(last.get("verdict") or "")
         streak = len(judged) if stopped == "signed" else 0
         # ---- 甲（2026-11-03）：负判不是签，不写手稿块 ----------------------------
         #
@@ -2243,7 +2269,8 @@ class AgentV:
             try:
                 pending_rows = [VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
-                    verifier=self.actor, object_path=rel)
+                    verifier=self.actor, object_path=rel,
+                    secretary_judge=judged[i].get("judgment"))
                     for i in range(len(judged))]
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
                 # 2026-11-05（D4）：改前只收 `VerificationError` / `OSError`，写口抛别的
@@ -2271,7 +2298,8 @@ class AgentV:
             try:
                 pending = VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=last,
-                    verifier=self.actor, object_path=rel)
+                    verifier=self.actor, object_path=rel,
+                    secretary_judge=(judged[-1].get("judgment") if judged else None))
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
                 # 同上一支：判词没有落点也是「这一份没查成」，不许把异常抛给调用方。
                 return {"failed": True, "checked": False, "reason": "ledger_unwritable",
@@ -2443,7 +2471,8 @@ class AgentV:
                     self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
                     verifier=self.actor,
                     object_sha256=str(reviewed.get("report_sha256") or ""),
-                    object_path=(str(reviewed.get("report_path") or "") or rel))
+                    object_path=(str(reviewed.get("report_path") or "") or rel),
+                    secretary_judge=judged[i].get("judgment"))
                     for i in range(len(judged))]
                 pending = pending_rows[-1] if pending_rows else {}
                 passes = _passes_with_tickets(passes, pending_rows)
@@ -2452,7 +2481,8 @@ class AgentV:
                     self.workspace_root, proof_text=body, verdict=last,
                     verifier=self.actor,
                     object_sha256=str(reviewed.get("report_sha256") or ""),
-                    object_path=(str(reviewed.get("report_path") or "") or rel))
+                    object_path=(str(reviewed.get("report_path") or "") or rel),
+                    secretary_judge=(judged[-1].get("judgment") if judged else None))
         except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
             # 穷举那一支的 pending 写口同理：改前只收 VerificationError / OSError。
             return {"failed": True, "checked": False, "reason": "ledger_unwritable",
@@ -2519,14 +2549,27 @@ class AgentV:
                 return ({"failed": True, "reason": MISSING_MATERIAL_REASON,
                          "detail": missing_detail, "passes": passes, "manuscript": rel},
                         judged, passes, stopped, reviewed)
-            judged.append({"pass": n, "verdict": verdict})
-            passes.append({"pass": n, "verdict": word,
+            #: p247：穷举这一档没有 V 的散文回复 —— 轴由机械会审自己的两态读数给
+            #: （`_ER.VERDICT_OK` ⇒ clean / `_ER.VERDICT_BAD` ⇒ fault），并写成与
+            #: 秘书判定同形的 `secretary_judge`（`source=exhaustion_report`）。这不是
+            #: 按 V 的 `verdict` 字面定轴：这一格的 `verdict` 就是会审的机械结论本身。
+            _axis = ("clean" if word == str(_ER.VERDICT_OK)
+                     else ("fault" if word == str(_ER.VERDICT_BAD) else ""))
+            judgment = {
+                "checked": bool(_axis), "axis": _axis, "decision": word,
+                "reason": str(reviewed.get("why") or reviewed.get("reason") or ""),
+                "basis": [f"exhaustion_report={word}"],
+                "source": "exhaustion_report",
+                "defect_step": verdict.get("defect_step"),
+            }
+            judged.append({"pass": n, "verdict": verdict, "judgment": judgment})
+            passes.append({"pass": n, "axis": _axis, "verdict": word,
                            "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
                            "defect_step": verdict.get("defect_step"),
                            "terminal": ""})
             self._emit(f"verify_proof(未在册·穷举)：第 {n} 转 {word}"
                        f"（{len(reviewed.get('checks') or [])} 项检查）")
-            if word != "成立":
+            if _axis != "clean":
                 stopped = "rejected"
                 passes[-1]["terminal"] = stopped
                 break
@@ -3113,15 +3156,14 @@ def selftest() -> int:
     sent = seam.prompts[0] if seam.prompts else ""
     checks.append(("提示词里带证明全文与硬禁令", "1. 显然成立。" in sent and "易证" in sent))
     checks.append(("提示词里带只读读数", "只读读数：0 行" in sent))
-    # 业主 2026-11-01：回「看不出来」这一族 ⇒ 折成 `成立` 落行（它不是"没查成"），
-    # 而"折出来的成立"照样不签第 3 位（没有秘书、也没有连续次数）。
+    # p247：历史值「看不出来」原样落成陈述（不折档），没有秘书轴 ⇒ 不签第 3 位。
     _probe_rows = probe.list_verifications("0008")["items"]
-    checks.append(("回「看不出来」⇒ 折成成立并落行（why 说清为什么这么收）",
+    checks.append(("回「看不出来」⇒ 原样落行（不折档）",
                    probe.list_verifications("0008")["total"] == 1
-                   and bool(_probe_rows) and _probe_rows[0]["verdict"] == "成立"
-                   and "没有找到缺陷" in str(_probe_rows[0].get("why") or "")
-                   and _probe_rows[0].get("verdict_raw") == "看不出来"))
-    checks.append(("折出来的成立同样不签第 3 位",
+                   and bool(_probe_rows) and _probe_rows[0]["verdict"] == "看不出来"
+                   and VR.read_verdict(_probe_rows[0]) == "看不出来"
+                   and VR.secretary_axis(_probe_rows[0]) == ""))
+    checks.append(("没有秘书轴的陈述同样不签第 3 位",
                    bool(_probe_rows) and VR.bit3_payload(_probe_rows[0]) == {}))
 
     noproof = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([]))
