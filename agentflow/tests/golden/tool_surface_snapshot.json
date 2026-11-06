@@ -1681,7 +1681,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（`open_items_of` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到。",
+   "summary": "把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。",
    "tags": []
   },
   "conductor.wake_blocked": {
