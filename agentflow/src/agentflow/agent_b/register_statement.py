@@ -2145,18 +2145,24 @@ class _RegisterStatement:
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
             manuscript_refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
             if manuscript.get("refused"):
+                # 逐条四元组（哪一行 / 想写什么 / 该是什么 / 怎么改）：读的人要照着改，
+                # 而解析器那句话说的是"这一行为什么读不懂"，不是"该改成什么"。
                 return _refuse(
                     str(_DS.REFUSED_SECTION), str(manuscript.get("reason") or ""),
                     problems=list(manuscript.get("problems") or []),
+                    findings=_DS.section_problem_findings(manuscript_text, manuscript),
                     heading_line=int(manuscript.get("heading_line") or 0))
             if not manuscript.get("present") and manuscript_refs:
                 shown = "、".join(f"stmt:{x}" for x in manuscript_refs[:3])
                 more = f" 等 {len(manuscript_refs)} 条" if len(manuscript_refs) > 3 else ""
+                findings = _DS.missing_section_findings(manuscript_text, manuscript_refs)
                 return _refuse(
                     str(_DS.REFUSED_SECTION_MISSING),
-                    f"这份证明手稿里没有 `## 依赖` 那一节，而正文引用了 {shown}{more} —— "
-                    "依赖面必须写进手稿（四列表，列固定），B 按它入库；补上那一节再交",
+                    "这份证明手稿里没有 `## 依赖` 那一节，而正文引用了 "
+                    f"{len(manuscript_refs)} 条（{shown}{more}）⇒ "
+                    + "；".join(str(f["detail"]) for f in findings),
                     refs_in_proof=list(manuscript_refs),
+                    findings=findings,
                     manuscript_source=manuscript_source)
             if manuscript.get("present"):
                 # 2026-11-05（缺陷甲）：表在、但 0 行数据，而正文点了在册号 ⇒ 表与正文
@@ -2177,14 +2183,17 @@ class _RegisterStatement:
                         f"手稿的依赖段要核每条来源的档位、并判正文的引用在不在可引池里，"
                         f"而 `statements` 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 整笔不写：读不到档位就不许放行")
+                pool = _DS.citable_pool(stmt_rows)
                 _code, _why = _DS.dependency_consistency_problem(
-                    manuscript_text,
-                    known_ids=_DS.citable_pool(stmt_rows),
-                    statement_rows=stmt_rows)
+                    manuscript_text, known_ids=pool, statement_rows=stmt_rows)
                 if _code:
                     return _refuse(
                         str(_code), str(_why),
                         refs_in_proof=list(manuscript_refs),
+                        # 每一条异常各自一条六格（号 / 哪一行哪一步 / 类别 / 期望 / 实得 / 怎么改）；
+                        # `error` 那句已经是同几条的人话，这里给机器读的形态。
+                        findings=_DS.dependency_consistency_findings(
+                            manuscript_text, known_ids=pool, statement_rows=stmt_rows),
                         manuscript_source=manuscript_source,
                         manuscript_path=manuscript_path)
                 gate = _DS.gate_rows(manuscript.get("rows") or (), stmt_rows)
@@ -2192,6 +2201,7 @@ class _RegisterStatement:
                     return _refuse(
                         str(gate.get("refused") or _DS.REFUSED_LEVEL_TOO_LOW),
                         str(gate.get("reason") or ""),
+                        findings=list(gate.get("findings") or []),
                         source_levels=dict(gate.get("levels") or {}),
                         required=sorted(_DS.CITATION_LEVELS))
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
@@ -2221,19 +2231,25 @@ class _RegisterStatement:
                 if on_ledger:
                     shown = "、".join(f"stmt:{x}" for x in on_ledger[:3])
                     more = f" 等 {len(on_ledger)} 条" if len(on_ledger) > 3 else ""
+                    #: 每一条引用各自一条六格（号 / 在哪一步 / 类别 / 期望 / 实得 / 怎么改）。
+                    findings = _DS.missing_section_findings(
+                        proof_text, on_ledger,
+                        got_extra="这一笔没有交出手稿（`proof_manuscript` 是空的）")
                     return _refuse(
                         str(_DS.REFUSED_SECTION_MISSING),
-                        (f"这一笔的证明正文引用了可引命题 {shown}{more}，而它没有交出手稿"
-                         "（`proof_manuscript` 是空的）。三处都找过了："
-                         "① 参数里没有；"
-                         "② D 的研究报告里没有携带它（" + str(manuscript_carried.get("why")
-                                                              or "（D 的报告里没有那一节）")
-                         + "）；"
+                        (f"这一笔的证明正文引用了 {len(on_ledger)} 条在册命题"
+                         f"（{shown}{more}），而它没有交出手稿 ⇒ "
+                         + "；".join(str(f["detail"]) for f in findings)
+                         + "。三处都找过了：① 参数里没有；"
+                         "② D 的研究报告里没有携带它（"
+                         + str(manuscript_carried.get("why")
+                               or "（D 的报告里没有那一节）") + "）；"
                          "③ 按约定路径去盘上找也没有（"
                          + str(manuscript_probe.get("why") or "（没有可定位的命题号）")
                          + "）—— 依赖面必须写进 F 的证明手稿（四列表，列固定），B 读稿登记；"
                          "让 D 把 F 那份稿一并带过来（或把正文传进 `proof_manuscript`）再交"),
                         refs_in_proof=list(on_ledger),
+                        findings=findings,
                         manuscript_source=_DS.SOURCE_NONE,
                         manuscript_probe=dict(manuscript_probe),
                         manuscript_carried=dict(manuscript_carried))
