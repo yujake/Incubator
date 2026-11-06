@@ -46,8 +46,8 @@ V 只被这三方唤起：F 交证明、E 交穷举证据、B 交文献侧引入
 - V 的审查材料里必须同时有 F 对每条被引命题的说法（`dependencies` 那一行）
   与被引命题的正文摘要 —— 只给编号，V 核不出"F 是不是这么用的"；
 - 逐条一档结论 `consistent` / `weaker` / `stronger` / `unrelated` / `inadmissible` /
-  `unknown`，读数是台账里的 `citation_checks`（`{stmt_id, verdict, quote_verbatim, note}`，
-  `quote_verbatim` 只作信息、不参与判定）；
+  `unknown`，读数是台账里的 `citation_checks`（`{stmt_id, verdict, quote_verbatim, note,
+  in_material}`：`quote_verbatim` 只作信息、不参与判定，`in_material` 说这一条引用在不在材料内）；
 - `stronger` / `unrelated` / `inadmissible` 三档 ⇒ 这一份改判 `有毛病`、不签发；
   `unknown` 是「没查成」⇒ 同样不签发（两者理由不同，都点名哪一条、差在哪）；
   `weaker` 可以签，但读数里点名"只用到了弱形式"；
@@ -210,7 +210,7 @@ def _build(d: BuilderDeps) -> Any:
 SPEC = AgentSpec(
     role='V',
     brief=    AgentBrief(
-        duty="证明级验证：把 F 交回来的证明按写成后的样子整体重读，逐条查硬禁令与同段依据，给两态结论；**发签的判定与写盘是两件事**：在册档发不发由你的秘书判、签的侧文件由框架侧落盘；未在册档签只由你**颁发**（写 `out/vsigns/<被审正文的 sha>.json`，把信封交给收方秘书）；手稿签块与五元位第 3 位由收方秘书落（送审的是 F / E / B，就由哪一方的秘书落），不在你手上",
+        duty="证明级验证：把 F 交回来的证明按写成后的样子整体重读，逐条查硬禁令与同段依据，给两态结论；**发签的判定与写盘是两件事**：在册档发不发由 V 的秘书判、签的侧文件由框架侧落盘；未在册档签只由你（V 这一侧）**颁发**（写 `out/vsigns/<被审正文的 sha>.json`，把信封交给收方秘书）；手稿签块与五元位第 3 位由收方秘书落（送审的是 F / E / B，就由哪一方的秘书落），不在 V 手上",
         boundary=(
             "你由 F / E / B 唤起：F 把写成的证明交给你复核；E 把穷举证据（程序 + ②③ 报告）交给你会审；B 在把一条自产结果登记成 proof 之前要你这一签。你不写、不改证明（那是 F 的活）：你只读它、只说它站不站得住，退回时必须说明情况并指到那一步（F 按你给的那一条补步骤，而不是重写整篇）。",
             "你不判“这条命题值不值得做、下一步往哪儿走”（那是 D 的活）：那是方向判断，不是证明判断。",
@@ -219,7 +219,8 @@ SPEC = AgentSpec(
             # conductor.ack/post_task），按「工具面全量只读」说就不成立。业主逐字：
             # 「只读的意思是对其它智能体的产出只读」—— 别人的台账一张都不写，自己侧的产物照写。
             "你**对其它智能体的产出只读**：别人的命题 / 文献 / 实验 / 五元位台账，你一张表都不写、一个字节都不改。"
-            "**你自己侧的产物**是：`verifications/<命题号>.jsonl` 那一行（一行一次审校；三条动作为此也声明成只读）"
+            "**你自己侧的产物**是：`verifications/<命题号>.jsonl` 那一行（一行一次审校；三件动作里 "
+            "`verify_proof` 声明 `write_local`，`list_verifications` / `read_proof` 声明 `read`）"
             "与签的侧文件 `out/vsigns/<被审正文的 sha>.json`（在册档由框架侧的签发判定落盘；未在册档由你颁发，把信封交给收方秘书）；另外 `conductor.ack` / "
             "`conductor.post_task`（你自己的板项）与 `clock.*`（你自己的计时器）也是你这一侧的簿记。",
             "每次审校都是冷启动：你拿到的是证明全文与只读读数，没有 F 的解释、没有 store 句柄；要判断“他为什么这么写”就去看证明本身，不要去猜作者的意图。",
@@ -259,7 +260,9 @@ SPEC = AgentSpec(
             # 一条命题有多份证明时，"我签的是哪一份"就是这一格凭据的全部内容。
             "**你签的是「第几条证明」**：`verify_proof` 收 `proof_no`（1 = canonical / 缺省值，"
             "2 起是该行 `proofs` 清单里的那一份）—— 逐份独立，别把 `#p1` 的那一签借给 `#p2`："
-            "读数里第 3 位与第 4 位都按 `proof_no` 分开记（`bits.evidence.reviewed_by_proof[证明号]`）。",
+            "读数里第 3 位与第 4 位都按 `proof_no` 分开记"
+            "（第 3 位 `bits.evidence.reviewed_by_proof[证明号]`、第 4 位 "
+            "`bits.evidence.formal_by_proof[证明号]`）。",
             # 2026-11-04（业主裁定 甲）：V 的可见面必须说清"什么情况下能签、什么情况下
             # 只能给看过但没签"。判据：`temp/probe_manuscript_gate.py` 的 a / c 与
             # `tests/test_v_unregistered_manuscript_review.py`（手稿那一支）。

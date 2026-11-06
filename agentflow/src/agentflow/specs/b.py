@@ -294,7 +294,7 @@ PROOF_CHANNEL_NO_LEAN = (
     "**形式化那一档本会话产不出来（系统做不了）**：证明的判读走逐行审阅 —— 证明过程逐字进 "
     "`statements` 的 `proof_text`（含假设、每一步的依据、你接不上的那一步），再请 V 用 "
     "`verify.verify_proof` 逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）"
-    "（签发新的那一档要 V 的「成立」）。"
+    "（签发看的是这一签的秘书轴：`secretary_judge.axis=clean` 且 `checked=true`；V 写「成立」只是陈述）。"
     "用户指定「这一条需要形式化验证」时，如实回「本会话形式化已关闭」这一读数，"
     "并把这条要求连同缺的那几样记进交付。"
 )
@@ -334,8 +334,8 @@ SPEC = AgentSpec(
             "**V 签过一份稿之后，板上会多一条 `b-register@<命题号>@<被签正文的 sha>` 的「必须收录」义务项**"
             "（`expects=work`，不是回执）：收口只有一条 —— 那个号在 `statements` 里出现正文且 `reviewed=true`"
             "（逐份口径，`#p2` 不借 `#p1` 的光）；`ack` 不会让它消失。明确不收录就按放弃那条办"
-            "（`status=abandoned` ＋ 可解析的 `quote_reason`），它会作废。这条项挂在 B 名下、会挡销号与收工，"
-            "别让它一直开着。",
+            "（`status=abandoned` ＋ 可解析的 `quote_reason`），它会作废。这条项挂在 B 名下、会挡销号与收工；"
+            "**但被派你的那一方撤销之后就不再挡**（`item_close=expired`、`expects` 已清空），别让它一直开着。",
             "把命题交给 D 之前先自己定位页与逐字摘录：你摘的那一段就是「原文长什么样」的唯一可比对文本 —— D 的初步审阅与 H 的采信"
             "都靠它。",
             "**你是审校这条链的第一环**：你写下的逐字 `quote` / `quote_verified` / `proof_text` 是下游唯一能「拿原文比一比」的东西 "
@@ -354,7 +354,8 @@ SPEC = AgentSpec(
             "**只有真没有那一签时**才退到 `conjecture` / `strong_conjecture` —— 退档不是错，但它是安全方向的偷懒：一条够格的强结果"
             "写成弱等级，论文的强度声明会长期虚低，而 `verify` 会报 `weaker_than_evidence`（warning）把它点出来。两条出口写清："
             "① 请 V 走查（`V.verify_proof`，产物就是 `verifications/<命题号>.jsonl` 那一行）签完再报 `pre_theorem`"
-            "（签还没到位就再走查 —— 单次「成立」不算 `signed`）；"
+            "（签还没到位就再看 `review_standing`：`holding` 可以再走查；`rejected` 要**先改稿**、"
+            "正文 sha 变了再送 —— 同一份正文重送会原样返回「打回站住」）；"
             "② 如实降到弱等级，并在 `quote_reason` 里写「还没有 V 的签名」—— 别把'拿不准'写成默认值。"
             "**`evidence_kind` 只是历史列**：它由等级反算（`evidencebits` 的 `kind_from_grade`）落盘，判定面不读它；"
             "你要说的是**等级**，别去挑那个历史列的名字。"

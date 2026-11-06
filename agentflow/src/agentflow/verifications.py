@@ -930,11 +930,12 @@ def _cold_start_proof_strength(*, lean_on: bool) -> str:
         # （`_grade_recomputed_from_signature`）正是由这一签触发的：在册那一行在签落位那一刻
         # 按现行签把 `evidence_kind` 重算一遍，目标档按通道给。V 不知道这件事，就会把
         # "穷举那一篇"读成"我审过了、所以是 proof_review"（那是错的终态，`draft/178`）。
-        "- 档位（`evidence_kind`）按通道给：你这一签落地之后，在册那一行的档位按现行签"
-        "重算（只升不降，`_grade_recomputed_from_signature`）—— 通道是穷举程序"
-        "（三段式证明栏 + 实验台账里那条由你签下的穷举证明）⇒ `proof`；通道是文字证明 ⇒ "
-        "`proof_review`。判据只有一处（`numericproof.find_signed_exhaustion_for_column`）："
-        "穷举那一篇停在 `proof_review` 是错的终态，因为 V 不能逐行走查一份程序。\n"
+        "- 等级按通道给：你这一签落地之后，在册那一行按现行签**现算等级**"
+        "（只升不降，`_grade_recomputed_from_signature`）—— 通道是穷举程序"
+        "（三段式证明栏 + 实验台账里那条由你签下的穷举证明）⇒ `theorem`；通道是文字证明 ⇒ "
+        "`pre_theorem`。`evidence_kind`（`proof` / `proof_review`）只是由等级反算的历史列名。"
+        "判据只有一处（`numericproof.find_signed_exhaustion_for_column`）："
+        "穷举那一篇停在 `pre_theorem` 是错的终态，因为 V 不能逐行走查一份程序。\n"
         "- 所以别在理由里写「已形式化验证」（那是第 ① 类的说法）；穷举那一类你要写的是"
         "「穷尽性与会审七项已核」。\n"
         "\n## 穷举型证据会审（证明栏第 ① 段是程序、且不是 `.lean` 时走这一档）\n"
@@ -1009,9 +1010,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "## 你产出什么、不由你决定什么\n"
         "- 你只产出一份审稿意见（下面那个 JSON）：它进 `verifications/<命题号>.jsonl` 那一行。\n"
         "- 在册档发不发签由你的秘书判定并落盘；未在册档由你颁发签信封、由收方秘书落块。"
-        "你写「成立」不等于签上了；第 1、2 次「成立」也不会签 —— 连续三次「成立」（同一份正文）"
-        "之后才轮得到发签：在册档是秘书判、它判了才发；未在册档由你在第三转 clean 之后颁发。"
-        "所以别在回复里写「我已经签过了」「这一条签住了」。\n"
+        "你写「成立」不等于签上了：签到位没有，看签文件 `out/vsigns/<被审正文的 sha>.json` 与"
+        "五元位第 3 位 —— 「到位」是那两个读数，不是你的判词；轮数与门槛由框架按这一趟送审自己数，"
+        "你不需要推断它。所以别在回复里写「我已经签过了」「这一条签住了」。\n"
         # ---- 2026-11-01（P0-2）：签落在哪必须由 V 自己的可见面说清 ----
         #
         # 改前这一份提示词对「签落在哪」一个字都没说（审计 R37 的欠教），而它说得出
@@ -1060,8 +1061,8 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "但 note 要写清只用到哪一部分；\n"
         "- `stronger`：F 用到的结论比命题本身更强（把结论说强了、或悄悄去掉了它要的假设）；\n"
         "- `unrelated`：这条命题与这一步无关（引错了）；\n"
-        f"- `inadmissible`：被引命题的档位低于 `{CITATION_EVIDENCE_FLOOR}`（"
-        "`cross_check` / `heuristic` / 空）⇒ 不够格被当作依据引，不管用法一致不一致；\n"
+        f"- `inadmissible`：被引命题的**等级**低于 `{CITATION_EVIDENCE_FLOOR}`（"
+        "`conjecture` / `strong_conjecture` / 空）⇒ 不够格被当作依据引，不管用法一致不一致；\n"
         "- `unknown`：材料不足判不了（不在册 / 正文读不到）—— 它不是 `consistent`。\n"
         "- `quote_verbatim` 只当信息记（F 那句话是不是逐字抄的），它不影响结论、也不影响签字。\n"
         "- 有一条 `stronger` / `unrelated` / `inadmissible` / `unknown` ⇒ 这一份不许判 `成立`"
@@ -1114,7 +1115,8 @@ SIGN_STREAK_NEED: int = 3
 #:
 #: 它是行上的一格而不是 statements 的新列：连续计数从台账派生（`draft/125` §二 A），
 #: 于是 `schema.py` / `store.py` 这两个 FC-27 一个字节都不用动。历史行没有这一格
-#: ⇒ 读侧按"没判过"处理（也就是"计入连续"）——那是这条口径上线之前的行为，逐字不变。
+#: ⇒ 读侧按「没判过」处理（空轴既不攒票也不清零；2026-11-02 起 `historical_axis` 恒空）；
+#: 「计入连续」是这条口径上线之前的行为，已经不是今天的读法。
 SECRETARY_JUDGE_KEY = "secretary_judge"
 
 #: 台账行上「秘书语义判定」那一格的写侧轴（业主 2026-10-29 的 B 段；

@@ -121,7 +121,8 @@ SPEC = AgentSpec(
             "（`t-NNNNNN->t-NNNNNN->t-NNNNNN`）、名册名混写（`M->D1->F2->V1`）、只写链尾（`D1` 或 `t-NNNNNN`，"
             "由秘书按台账现算从你到它的那一条链）；每一跳都校验（不是上一跳的直接下级 ⇒ `broken_chain`，"
             "销号 ⇒ `retired_target`，拒信逐跳点名缺什么）。**只有链尾那一跳**才开一条 `notice` / `ack` 板项"
-            "（用 `conductor.board` 读得到，`open_count` 里就挂着它）；中间那几跳只留一行转发台账，"
+            "（用 `conductor.board` 读得到，`board_open_items` 里就挂着它、`board_open_count` 数它）；"
+            "中间那几跳只留一行转发台账，"
             "不开板项、不拿正文。回执里带 `chain_text`（这条链的写法）与 "
             "`delivered_to`（**列表**，只有一个元素 = 链尾那一个的绝对编号 —— 不是标量；读它先取 `[0]`）"
             "—— **巡视回来那一轮要发消息时把它抄进消息里**：链是"
@@ -337,8 +338,8 @@ SPEC = AgentSpec(
             "写成 `abandoned@<ISO8601>@<理由>`（状态、时间、理由三样缺一不可；只写状态的行仍按未签计，读数是 "
             "`abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项：通用写口可改 "
             "`statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时"
-            "**会触发作废**（`v-resubmit` 项随之 closed/expired）；正文仍需走证明入口。所以走 ② 之后要回头看板："
-            "确认那条重送项已 closed/expired（还开着就按未消项处理，它会挡销号与收工）。",
+            "**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。所以走 ② 之后要回头看板："
+            "确认那条重送项已 `done`（还开着就按未消项处理，它会挡销号与收工）。",
             "**「攻」里出现 `statement_id` 就当场交给 D 去核签**：你派 `F.status` 拿回来的 `attack.status` 里，`history_tail` "
             "每一轮可能带 `statement_id`（F 那一轮把论证落成了 `statements` 的一行）—— 看到它就在**同一轮**里派 `D` 去办："
             "D 会核那一条带没带 V 的签字，缺签由 D 让 F 补签（那一签由 F 去办），**不要等收工再想起**来；F 产出时已经签过的"

@@ -31,7 +31,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "A", "run_once",
         "领取一条待办检索请求并跑完（搜索 + 登记文献 + 下载）",
         _obj({}),
-        "ARunResult（含 claimed / outstanding / registered ）",
+        "ARunResult（`to_dict()` 的键：processed / registered / duplicated / downloaded / "
+        "outcome / request_id / queue_pending / report_path …；`claimed` 只是属性、不在 "
+        "`to_dict()` 里）",
         side_effect="write_local", handler_name="run_once",
         external="egress",
     ),

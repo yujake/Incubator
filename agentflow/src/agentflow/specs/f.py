@@ -145,6 +145,8 @@ SPEC = AgentSpec(
             "（命题现状 / 台账条数）。**V 只会退回两种结论：成立（没找到缺陷）/ 有毛病"
             "（找到缺陷，指到步号与原句）** —— 读到 `有毛病` 就按那条缺陷"
             "改稿/补步骤，读到 `成立` 就是这一格被审过、不再重交；证明要被 V 签过 `成立`，五元位第 3 位才算数。"
+            "**例外：判词是「成立」而交付读数仍是「未通过」**（`secretary_fault`）——"
+            "按缺陷改稿再送，别把这一条当成已经结束。"
             "**你这一趟交没交差，按条看 `F.step` 返回的 `delivery` 那一格**（也进 `history`）："
             "`signed_count` / `pending_count` / `unsigned_count` / `total` 逐条数，`coverage_reading` 是"
             "「已签/总数」；`delivered` **只在「有成果、且每一条成果都已签」时为真** —— 不是「有一条签了」，"
@@ -257,7 +259,8 @@ SPEC = AgentSpec(
             "**不许把\"我还没查\"写成\"这份证明自足\"**。",
             "**V 签过之后这一行的等级就该是 `pre_theorem`，不许一直停在 `conjecture`**（2026-10-19 晚，按 `projects/mp2` 的 "
             "`stmt:000003` 修）：交 B 登记 `statements` 那一行时，等级由 `verifications/<命题号>.jsonl` 里的签名**现算**"
-            "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 最近一签「成立」且 `proof_sha256` 与现行正文相符 ⇒ "
+            "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 那一签**签得住**（`signs_bit3`："
+            "同一趟送审里连续 3 转 clean、这一转的轴是 `clean`）且 `proof_sha256` 与现行正文相符 ⇒ "
             "`pre_theorem`（穷举证书或 Lean 核查也到位 ⇒ `theorem`，两者同级）；"
             "**只有真没有那一签时才停在 `conjecture`**（有普通数值实验支撑则是 `strong_conjecture`）。"
             "这是定义（`evidencebits` 的 `derive_grade` 现算，`evidence_kind` 只是由等级反算的历史列），不是自报：那一签只有 "

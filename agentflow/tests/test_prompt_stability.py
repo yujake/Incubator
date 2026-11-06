@@ -854,6 +854,21 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p249", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p249（2026-11-06，「签 / 秘书」这一类口径的最后一次收拾）：口径 = 在册档的发签由 V 的秘书判（`decide_sign_issuance`）、写盘由框架侧（`sign_statement` → `_vsigns_write_after_flip` → `vsigns.issue`）；未在册档不经秘书判、由 V 颁发签信封（`vsigns.issue`），收方秘书只落手稿签块（`vsigns.land`）——「判定」与「写盘」在任何一句话里都分开说。五笔进模型可见面：`verifications.cold_start_prompt` 的两类 proof ②条与会审末句、`specs/v.py` 的 `boundary` / `duty` / policy 那一句、`agent_skills` 的 V 技能索引（slug 更名 `…-签分两档` + title + summary）与手册正文第二节。变化格 = V + B/E/F/M（后四格只差伙伴表里 V 的 `duty` 那一行；V 30649→30755 字符，`5a071356…`→`c4a83154…`）。另两笔是 A 类、不进提示词也不抬版本：`verifications.py` 的 S5 注释与 `agent_v/core.py` 模块 docstring（11/11 SAME）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p249 → p250（2026-11-06「过时更正 / 缺补齐 / 压缩」三段）：只改题面 / 文案与两页文档，
+    # 一格事实都没挪 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p250", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p250（2026-11-06，六份只读审计报告逐条落地的三段）：① 过时更正（撤销口径 5 处；"
+             "`open_count` / `retire_integrity.open_items` / `review_standing` 三个格名；B 的签发轴与打回短接；"
+             "F 的 `signs_bit3` 与 `secretary_fault`；cold_start 的等级口径与可观察说法；V 的 duty 人称与 "
+             "`write_local` 声明；E 的无稿那一档；A 的 `returns`；SECRETARY_JUDGE_KEY 注释）；"
+             "② 缺补齐（a/b/d/e/f/g 六份父 spec 各一句撤销说明、M 的 `revoke` 格与四个 open 读数、"
+             "`revoked_recent`、E 手册的 exhaustion 轴来源、F 的 `review_standing=rejected`、"
+             "M 的 `fault_unrepaired` / `by_class`）；③ 压缩（10 处：甲 2 / 乙 8，逐条标「谁接住」）。"
+             "变化格 = A/B/D/E/F/G/H/L/M/V（C 一字未动）；工具 summary 改动 = conductor.void_items / "
+             "retire_child / wake_blocked 三件，外加 void_items 的 `returns`。另两笔是 A 类、不进提示词也"
+             "不抬版本：`verifications.py` 的 SECRETARY_JUDGE_KEY 注释与 `agent_skills.py` 的 M/E/F 手册正文。"
+             "facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 

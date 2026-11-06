@@ -1776,8 +1776,8 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
     "（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 "
     "`conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能"
     "代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，"
-    "那条项要等收件人自己 `conductor.ack` 才不算未消（唤醒不清板项，销号闸照旧挡）；叫不醒的 "
-    "ack-only 通知才轮得到 `conductor.void_items`。"
+    "那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，"
+    "销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。"
     "第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序"
     "（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / "
     "已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；"
@@ -2197,8 +2197,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                      "task_board 没清，不许直接销号。逐条按它的 item_state 走：block 那一档先由"
                      "主控 `conductor.wake_blocked` 唤醒（翻回 queued —— ack 对 block 行必被"
                      "状态机拒，父也不能代收件人 ack）；queued / seen 那一档等收件人自己 "
-                     "`conductor.ack`，唤醒不会替它清板项；叫不醒的 ack-only 通知才轮到 "
-                     "`conductor.void_items`。等它名下一条未消的项都不剩再来销 —— 否则不许销号"
+                     "`conductor.ack`，唤醒不会替它清板项；不再需要做的项由你或 M 撤销"
+                     "（`conductor.void_items`）。等它名下一条未消的项都不剩再来销 —— 否则不许销号"
                      "（没读的东西不许跟着名字一起销掉）"),
                     missing=[f"{r['task_id']}（{r['kind']}/{r['item_state']}）" for r in listed],
                     open_items=listed)
@@ -2612,17 +2612,7 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
 
 @tool(
     "conductor.void_items",
-    "把**永远不会再被收件人处理**的板项作废（item_close=expired）。"
-    "它只对一种情形成立、也只允许一种写法：收件人（子代理）叫不醒了（已销号，或兜底表被"
-    "永久抑制），而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，"
-    "父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，"
-    "那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。"
-    "这一档在 2026-10-29 之后收窄了：只是静默还不够 —— 一条消息、一次委托，或主控 "
-    "`conductor.wake_blocked` 一下，就会把它叫起来，那时它自己能 ack；叫得醒的一律拒。"
-    "三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须叫不醒"
-    "（静默但叫得醒 ⇒ 先把唤醒那一步走完，作废不是唤醒的替代品）；"
-    "作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，"
-    "所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。",
+    "把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（`open_items_of` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到。",
     {"type": "object",
      "properties": {
          "item_ids": {"type": "array",
@@ -2636,7 +2626,7 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
      "additionalProperties": False},
     side_effect="write_local",
     roles=_PARENT_ROLES,
-    returns=("{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一"),
+    returns=("{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why} 或 {id, code, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一"),
 )
 def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResult:
     """作废"永远不会再被收件人处理"的板项（`item_close="expired"`）。
@@ -2832,9 +2822,9 @@ def conductor_ack(_conductor: Any, item_ids: list, note: str = "",
     "逐条给 `refusal_code`）。真写时两根轴一起翻（status→running、item_state→queued）并在 "
     "`inputs` 追一条 `wake:<谁>@<iso>|<为什么>`，然后只经 `wake_on_lifeline` 叫醒 owner（那条路"
     "带「已销号 / 在飞」双闸）。两条后果写在明面上：① 唤醒清不掉板项本身 —— 它只是回到 queued，"
-    "收口仍要收件人自己 `conductor.ack`（`expects=work`）或 `conductor.void_items`（只收 "
-    "`expects=ack` 且收件人叫不醒的那种）；② block 板项会一直挡收工（`retire_integrity.open_items` "
-    "⇒ `dirty` ⇒ `complete=false`），唤醒解除的是「叫不醒」，不是「挡住销号」。",
+    "收口仍要收件人自己 `conductor.ack`（`expects=work`）或撤掉不再需要做的项"
+    "（`conductor.void_items`，`expects=work` 也收）；② block 板项会一直挡收工（`retire_integrity` "
+    "的 `dirty` 非空 ⇒ `complete=false`），唤醒解除的是「叫不醒」，不是「挡住销号」。",
     {"type": "object",
      "properties": {
          "ids": {"type": "array",

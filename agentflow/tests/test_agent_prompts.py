@@ -788,12 +788,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     # 而那一句写的是模块文件（`proofauthors.py`）。它不是工具，也不该被读成工具名 ——
     # 判据 `tests/test_b_param_face_explains_proof_authors_and_kind.py` 逐字要求带 `.py`。
     "proofauthors.py": "文件名（模块文件），不是工具 —— B 的说明面用它指认推断那一格的是哪个模块",
-    # 2026-10-29（block 表 × 逐条审批唤醒）：`conductor.wake_blocked` 的描述里点了这一格，
-    # 因为"唤醒不清板项、block 项还会永久挡收工"这件事必须说清到具体读数格 ——
-    # 它是 `Conductor.retire_integrity` 返回的 `open_items`，读它的是收工门，不是工具
-    # （与上面 `stats.closure_reminders` 同形：读数字段路径）。
-    "retire_integrity.open_items": "读数字段路径（`Conductor.retire_integrity` 返回的 "
-                                   "open_items 那一格），不是工具",
+    # 2026-11-06（p250，审计 2 的 1b 条）退役：这条登记的是 `retire_integrity.open_items`，
+    # 而顶层根本没有这一格（根自己那一格叫 `root_open_items`，逐节点那一格才叫 `open_items`）。
+    # 提示词已经改成「`retire_integrity` 的 `dirty` 非空 ⇒ `complete=false`」，那句话不再点
+    # 任何「不是工具」的点号路径 ⇒ 本条登记随旧口径一起退役（本判据自己有反真空断言：
+    # 登记表里每一条都必须仍在某一份提示词里 ⇒ 退役就是删掉，不是留着不报）。
     # 2026-11-01（审计 174 §1.3 的修法）：`autonomy.run_autonomous` / `policy.check` /
     # `policy.waves_of` / `quoteverify.check_quote` / `userio.ask_user` 五条已从提示词里删掉
     # （它们是模块函数，不是工具；照字面调只会拿 `unknown_tool`）⇒ 这五条登记也一起摘掉。
@@ -2288,7 +2287,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p249"
+_FROZEN_PROMPT_VERSION = "p250"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2523,17 +2522,17 @@ _FROZEN_PROMPT_VERSION = "p249"
 #: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "b6fefb150896bd8c3fa77b4fa0407bf5d0def18e75e4ab143411037b0462a900",
-    "B": "754e663c53d6937dd492608bd68f8a29a3e0fbd3d79d3f8614028621fce0bc2e",
+    "A": "aac23d2b8a56e1a75576d25f5f65494705337e87bd313429cbd7ed813013168d",
+    "B": "f496fc8660617ba6453a3bf58f2681d0f98b52e58cabb6a6f90dae16b5b4452d",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "1040f2aa3a5ed429749b0d6d5277bf79079ad53708daa30199f6abd29eed99e7",
-    "E": "514ddf63d17600696b25445126c90e6e33c3185122e9d3c234975628307a7239",
-    "F": "660af579439f510ee64780d382c50a1550a8368eda961db1b5ec83182839c0f6",
-    "G": "a3d910f6b46583af72694798d5164ebeb674914919c9ce12b8d88e92f8b0d793",
-    "H": "1e4c2b9de0485d4c866373d42aae6f31b144b8b9fef9b650c4fb756620697911",
-    "L": "98d5d49ee7a3717d2a3bb652a9a9b76bde919c278b2199b2fc108501cb41a620",
-    "M": "080c336bdb2971e807cc49dbb98f5b5d3ff59d6d08020c8a2d07a14aa55c63be",
-    "V": "c4a8315417ae7ba9b0e63e36024cc9088112f59d70efbf0d19a8c832a4e7a402",
+    "D": "334f0219ea8726f5c20d55cd214bab4d4286e64c0d8582bd9ee3ed2d3cb6d053",
+    "E": "12eecc1dcac5ea23ad94803a52be7bc345f07e0449914f7803f2ae7e03d1eb07",
+    "F": "e99f0e3142e5f6f9e89363511bcf85e1f648a839767ed46cd29c5731d84ed59c",
+    "G": "54cee69224a21a2b34be489beb0162ebf9fe62eae153d42a86b09f7eed78d227",
+    "H": "f1fa916c520bf5357969e7ff20eb32dcca0bb249adb78bd3d50b7a948ea87488",
+    "L": "34b0473c6f57a23fd611c5fdb8b00cd274bd015a7b156a2abb3e88521c6731e9",
+    "M": "f8f8918a0e7e3d9f5203d2aaeac1375466c5e54219a066c9e1810361fefcdb4f",
+    "V": "1e154d01f88e7eb4a9806a5b1c41cdaeb74df8580aa64c44c7ff81d8eccbd329",
 }
 
 

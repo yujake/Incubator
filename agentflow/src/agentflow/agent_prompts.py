@@ -3420,7 +3420,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p249"
+PROMPT_VERSION = "p250"
 
 
 
@@ -5756,7 +5756,7 @@ PAPER_PACK = """\
 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
 同样以它的当次读数为准。
 **blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` ——
-既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是重送 V 拿到干净的「成立」，或明确放弃
+既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是**改稿之后**重送 V 拿到干净的「成立」，或明确放弃
 （`status=abandoned` + `quote_reason=abandoned@<ISO8601>@<理由>`）；`mapping_not_written` —— 有命题、已成稿而论文包里
 没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
 `acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 落在 `paper` 那一格（改完正文没重编）。
