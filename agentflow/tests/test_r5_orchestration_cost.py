@@ -1317,6 +1317,8 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
      "已删的非平凡性机械判档判据：`src/agentflow/secretary.py` 的 `proof_effort_readings` 在讲"
      "「这个读数被打了桩之后哪几条判据会跟着红」时逐字点名它的 (f) 当实例；它随机械判档整族"
      "被删（档位只剩秘书一个来源），名字得留着，否则那个实例无出处"),
+    ("agentflow/tests/test_v_info_note_does_not_overturn_a_hold.py",
+     "改前名字：`9c5df7fc` 那份判据（后来被裁定为错、已删）；`temp/REPORT-v-info-note-20261106.md` 刻意保留原名作为史实，不指向任何现存文件"),
 )
 
 
