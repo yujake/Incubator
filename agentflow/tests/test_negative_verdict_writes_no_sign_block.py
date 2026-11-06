@@ -89,9 +89,30 @@ def _manuscript_file(st: Store, rel: str = REL, text: str = MANUSCRIPT) -> pathl
     return path
 
 
+class _JudgeStub:
+    """p247 的秘书替身：轴由秘书给，不再由 V 的判词字面推。
+
+    替身自己的判据是"V 的回复里写没写有毛病" —— 这是替身的语义判定，不是生产代码
+    在按字面折档（生产里 `Secretary.judge_v_reply` 读的是模型对回复的语义分析）。
+    """
+
+    def judge_v_reply(self, *, reply="", verdict="", defect_step=None, **_kw):
+        bad = "有毛病" in str(verdict) or "有毛病" in str(reply)
+        return {"checked": True, "axis": "fault" if bad else "clean",
+                "decision": "有缺陷要指出" if bad else "没问题",
+                "reason": "夹具：秘书语义判定", "basis": ["夹具"],
+                "defect_step": (defect_step if isinstance(defect_step, int) else 2)
+                if bad else None}
+
+    def wash_v_reply(self, **_kw):
+        return {"checked": True, "washed": True, "text": "（夹具：无需洗稿）",
+                "findings": [], "dropped": [], "refused": ""}
+
+
 def _v(st: Store, replies: list[str]) -> tuple[AgentV, _ReviewSeam]:
     seam = _ReviewSeam(list(replies))
-    return AgentV(st, workspace_root=st.root, llm=seam), seam
+    #: p247：每一转的轴由秘书给；不装这一名，第一转就落 `unjudged`（不是负判）。
+    return AgentV(st, workspace_root=st.root, llm=seam, secretary=_JudgeStub()), seam
 
 
 @contextlib.contextmanager

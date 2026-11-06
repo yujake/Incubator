@@ -337,17 +337,23 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
         "工具路径上没有 V 的秘书，却把第 3 位翻了 ⇒ 发签逃过了秘书那一关：" + str(payload))
     issuance = dict(payload.get("sign_issuance") or {})
     assert issuance.get("issue") is False and issuance.get("issued") is False, issuance
-    # 这一趟挡在两道闸上：① 台账那一签的语义判定没有轴（没有秘书 ⇒ 没人判 ——
-    # 2026-10-30 第三次裁定之后"判不了"不再是一种结论，所以这里既不是 clean、也不是
-    # fault、更不是旧那一格 unsure）⇒ 它既不计数也不清零 ⇒ 连续次数 0；
-    # ② 连续次数不够 / 没人发签 ⇒ 不发签。装配缺口那一档不算框架失败：V 的会审确实做完了
-    # （`checked` 仍为真、`verdict` 与台账都在），缺的只是"谁能发这一签"。
-    assert issuance.get("projected") == 0, issuance
+    # 这一趟挡在两道闸上：
+    # ① p247（2026-11-06）把穷举这一档的轴改由机械会审自己给
+    #    （`source=exhaustion_report`：七项全过 ⇒ clean），所以台账那一行算一票 ——
+    #    改前这一格问的是"没有秘书 ⇒ 没人判 ⇒ 没轴 ⇒ 0 票"，那是旧口径。现在
+    #    `projected=1` / `streak=1`（need=3，仍不够），不算签；
+    # ② 发签仍要秘书：工具路径（`tools/verify_tools.py:_agent_v`）造不出 V 的秘书，
+    #    这一名自动装配的秘书没有判断面 ⇒ `checked=False`，第 3 位不翻。
+    # 装配缺口那一档不算框架失败：V 的会审确实做完了（`checked` 仍为真、`verdict`
+    # 与台账都在），缺的只是"谁能发这一签"。
+    assert issuance.get("projected") == 1, issuance
+    assert issuance.get("streak") == 1, issuance
     assert issuance.get("streak_ok") is False, issuance
     assert issuance.get("need") == VR.SIGN_STREAK_NEED, issuance
     judge = dict(payload.get("secretary_judge") or {})
-    assert judge.get("axis") == "", judge
-    assert judge.get("checked") is False, judge
+    assert judge.get("axis") == "clean", judge
+    assert judge.get("checked") is True, judge
+    assert judge.get("source") == "exhaustion_report", judge
     # 负控：没这条边的角色派 V 仍然被拒（否则上面那条"受理"只是空转）
     bad = cond.summon("V", "list_verifications", {}, by="G")
     assert str(bad.outcome) == "refused", bad

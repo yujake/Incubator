@@ -403,7 +403,11 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     man_path.parent.mkdir(parents=True, exist_ok=True)
     man_path.write_text(man_text, encoding="utf-8")
 
-    v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")] * 3))
+    #: p247（2026-11-06）：轴只由秘书给 —— 这一趟的三转 clean 必须由秘书那一问判出，
+    #: 不再是 V 的 `verdict` 字面。夹具因此显式装一名带判断面的秘书（不是放宽判据：
+    #: 它正是生产里 `AgentV._secretary` 惰性装配的那一格，只是测试不给真模型）。
+    v2 = AgentV(st, workspace_root=ws, llm=_Seam([_verdict_json("成立")] * 3),
+                secretary=_v_secretary(st))
     # 2026-11-03 件一：未在册正判的块由收方秘书落 —— 先挂上"V 由 F 派出来"的身份。
     from agentflow import conductor as CND
 

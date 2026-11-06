@@ -100,9 +100,12 @@ class _Seam:
         return dict(doc), _Call()
 
 
-def _axis(answer: str) -> dict:
-    return {"checked": True, "decision": answer, "reason": "夹具：照规则判",
-            "basis": ["夹具"]}
+def _axis(answer: str, *, defect_step: int | None = None) -> dict:
+    out = {"checked": True, "decision": answer, "reason": "夹具：照规则判",
+           "basis": ["夹具"]}
+    if defect_step is not None:
+        out["defect_step"] = int(defect_step)
+    return out
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -159,10 +162,18 @@ def _agent_row(st: Store, *, role: str, status: str = "running",
 
 
 def _verify_v(st: Store, sid: str, *, proof: str = PROOF, reply: str = CLEAN_REPLY,
-              parent: str = "t-f1") -> dict:
-    """走 V 的真入口：三转 clean（或一转打回）⇒ 秘书发签 / 落块 / 开义务。"""
+              parent: str = "t-f1", axis: str = SEC.V_REPLY_CLEAN) -> dict:
+    """走 V 的真入口：三转 clean（或一转打回）⇒ 秘书发签 / 落块 / 开义务。
+
+    p247（2026-11-06）：轴只由秘书给 —— 要造"打回"，必须让秘书判
+    `V_REPLY_FAULT`；只把 V 的回复写成「有毛病」而秘书判 clean 的那一拍，
+    按新语义是签发（V 的判词只是陈述），不再是一条打回。
+    """
     sec = SEC.Secretary("V", root=st.root, store=st,
-                        seam=_Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
+                        seam=_Seam({"v_reply_defect": [
+                                       _axis(axis,
+                                             defect_step=(2 if axis == SEC.V_REPLY_FAULT
+                                                          else None))],
                                     "sign_issuance": [_axis(SEC.SIGN_ISSUE)]}),
                         enable_model=True)
     agent = AgentV(st, workspace_root=st.root, llm=_ReviewSeam(reply), secretary=sec)
@@ -299,7 +310,9 @@ def test_d_the_resubmit_duty_is_untouched(tmp_path):
     # 送审者必须真的在 `tasks` 里：回执与「必须重送」义务的负责人都是它那一个台账号。
     submitter = _agent_row(st, role="F", status="done", parent="t-root")
     _verify_v(st, SID, parent=submitter)                     # 签了、没入库 ⇒ 收录义务
-    _verify_v(st, SID2, reply=FAULT_REPLY, parent=submitter)  # 打回 ⇒ 重送义务
+    # p247：打回只能由秘书判 fault 造出来；V 写「有毛病」只是陈述。
+    _verify_v(st, SID2, reply=FAULT_REPLY, parent=submitter,
+              axis=SEC.V_REPLY_FAULT)                        # 打回 ⇒ 重送义务
     regs = _register_items(st)
     subs = _resubmit_items(st)
     assert len(regs) == 1, [r.get("input_key") for r in regs]

@@ -15,7 +15,7 @@
 |---|---|---|
 | a | `specs/v.py` 的明文 | 读得到「只约束在册档」「落块仍由收方秘书做」两句 |
 | b | `_review_pass`（在册档） | 调 `decide_sign_issuance`（正控：检测器不是瞎的） |
-| c | `_review_unregistered_prose` / `_review_unregistered_exhaustion` | 不调 `decide_sign_issuance` / `judge_v_reply`（例外是真的） |
+| c | `_review_unregistered_prose` / `_review_unregistered_exhaustion` | 不调 `decide_sign_issuance`（例外是真的）；散文那一支调 `judge_v_reply` 取轴（p247），穷举那一支两支都不调（轴由机械会审给） |
 | d | 反真空（源码） | 往未在册函数里插一句 `self._decide_sign_issuance(...)` ⇒ 检测器报违规 |
 | e | 反真空（明文） | 把 `specs/v.py` 那两句删掉 ⇒ 明文判据报缺 |
 
@@ -37,7 +37,24 @@ EXCEPTION_LINES: tuple[str, ...] = (
 )
 
 #: 秘书「发不发」判定的调用名（未在册档里出现就是口径变了）。
-DECISION_CALLS: frozenset[str] = frozenset({"decide_sign_issuance", "_decide_sign_issuance", "judge_v_reply", "_judge_v_reply"})
+#:
+#: p247（2026-11-06）把两件事分开了：发不发签仍不由未在册档问秘书（业主 2026-11-04
+#: 的明文例外）；而每一转的轴（clean / fault）一律由秘书语义判定给出 —— 散文那一支
+#: 因此多了一次 `_judge_v_reply`，这不是"发签判定"，不推翻上面那条例外。
+ISSUANCE_CALLS: frozenset[str] = frozenset({
+    "decide_sign_issuance", "_decide_sign_issuance"})
+AXIS_CALLS: frozenset[str] = frozenset({"judge_v_reply", "_judge_v_reply"})
+
+#: 未在册两支各自该调哪一格（p247 之后的口径，逐函数点名）：
+#:
+#: - 散文那一支：轴要问秘书（`_judge_v_reply`），但发不发签不问（`_decide_sign_issuance`
+#:   仍不出现）；
+#: - 穷举那一支：没有 V 的散文回复，轴由机械会审自己的两态读数给（`source=
+#:   exhaustion_report`），同样不问发签。
+UNREGISTERED_AXIS_CALLS: dict[str, frozenset[str]] = {
+    "_review_unregistered_prose": frozenset({"_judge_v_reply"}),
+    "_review_unregistered_exhaustion": frozenset(),
+}
 
 #: 在册档那一支（正控：它必须调得到判定）。
 IN_REGISTER_FUNC = "_review_pass"
@@ -59,8 +76,8 @@ def _func_node(source: str, name: str) -> ast.FunctionDef | None:
     return None
 
 
-def _decision_calls(node: ast.AST) -> set[str]:
-    """这一棵函数子树里对秘书判定入口的调用名（按属性末段认，别名也认不到就算了）。"""
+def _decision_calls(node: ast.AST, names: frozenset[str] = ISSUANCE_CALLS) -> set[str]:
+    """这一棵函数子树里对 `names` 那些调用名的调用（按属性末段认，别名也认不到就算了）。"""
     found: set[str] = set()
     for sub in ast.walk(node):
         if not isinstance(sub, ast.Call):
@@ -68,7 +85,7 @@ def _decision_calls(node: ast.AST) -> set[str]:
         func = sub.func
         name = (func.attr if isinstance(func, ast.Attribute)
                 else func.id if isinstance(func, ast.Name) else "")
-        if name in DECISION_CALLS:
+        if name in names:
             found.add(name)
     return found
 
@@ -93,15 +110,31 @@ def test_b_the_in_register_branch_really_asks_the_secretary() -> None:
 
 # ====================================================================== c 例外是真的
 def test_c_the_unregistered_branches_do_not_ask_the_secretary() -> None:
-    """未在册两支不调秘书判定：三转 clean 即颁发（落块仍由收方秘书做）。"""
+    """未在册两支不调发签判定；散文那一支的轴仍必须问秘书（p247）。
+
+    函数名保留判据 id（历史上它禁的是"任何秘书判定"）；p247（2026-11-06 第三次收紧）
+    之后禁的只剩"发签判定"，散文那一支的轴必须问秘书 —— 这一条同时钉住两件事，
+    而不是把旧断言删掉。
+
+    p247（2026-11-06 第三次收紧）只改了"轴从哪来"：散文那一支每转要问一次
+    `_judge_v_reply`（V 的判词只是陈述），但"发不发签"仍不归未在册档
+    （业主 2026-11-04 的明文例外：三转 clean 即颁发，落块仍由收方秘书做）。
+    穷举那一支没有散文回复，轴由机械会审给（`source=exhaustion_report`），连轴都不问。
+    """
     source = CORE.read_text(encoding="utf-8")
     for name in UNREGISTERED_FUNCS:
         node = _func_node(source, name)
         assert node is not None, f"没找到函数 {name} ⇒ 这一格没查成"
-        calls = _decision_calls(node)
-        assert not calls, (
-            f"{name} 里插进了秘书判定 {sorted(calls)} ⇒ 未在册档的明文例外被改了；"
+        issuance = _decision_calls(node, ISSUANCE_CALLS)
+        assert not issuance, (
+            f"{name} 里插进了发签判定 {sorted(issuance)} ⇒ 未在册档的明文例外被改了；"
             "要么把它撤掉，要么改业主裁定并同时改 specs/v.py")
+        # 正控（不是"什么都没调"）：散文那一支必须问轴，穷举那一支必须不问轴。
+        axis = _decision_calls(node, AXIS_CALLS)
+        assert axis == set(UNREGISTERED_AXIS_CALLS[name]), (
+            f"{name} 的轴调用 {sorted(axis)} 与 p247 的口径不一致（期望 "
+            f"{sorted(UNREGISTERED_AXIS_CALLS[name])}）：散文那一支的轴由秘书给，"
+            "穷举那一支由机械会审给")
 
 
 # ====================================================================== d 反真空（源码）
