@@ -1120,6 +1120,11 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     "temp/golden_diff_p203.py",
     "temp/golden_diff_p205.py",
     "temp/_recompute",
+    # 2026-11-06（今晚清整树副本 + 探针跑完即清）：新增两条。
+    #   · `temp/161_replica_81`：161 那一批反真空用的整树副本，与另外 9 棵整树副本一起删掉（扫描面从 39,852 文件降到 20,588）；
+    #   · `temp/grade_audit.py`：等级只读审计探针，读数已写进 `docs/TWO-AXES-GRADE-AND-KIND.md` §5.3，按"跑完即清"删掉本体。
+    "temp/161_replica_81",
+    "temp/grade_audit.py",
 )
 
 

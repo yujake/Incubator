@@ -462,7 +462,7 @@ tests/test_dependency_strictness.py
 tests/test_dependency_wiring_is_live.py
 tests/test_deprecated_forms_are_gone.py
 tests/test_depth_exceeded_says_escalate_to_parent.py
-tests/test_depth_lock_is_five_and_fanout_is_not_depth.py
+tests/test_depth_lock_is_six_and_fanout_is_not_depth.py
 tests/test_direct_write_is_routed_to_the_secretary.py
 tests/test_dispatch_owes_one_return_beat.py
 tests/test_dispatch_without_action.py
@@ -631,7 +631,7 @@ tests/test_noai_gate_record_audit_cli.py
 tests/test_noai_gate_timestamp_order.py
 tests/test_noai_gate_umbrella_prefix.py
 tests/test_nontriviality_is_joined_by_stmt_id.py
-tests/test_nontriviality_is_judged_by_effort.py
+tests/test_secretary_rates_nontriviality.py
 tests/test_nontriviality_ledger_is_read_once.py
 tests/test_nontriviality_reading_is_read_only.py
 tests/test_numeric_theorem_writing_spec.py
