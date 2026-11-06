@@ -3342,7 +3342,36 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 三份冻结物按现值重冻（agent 面：V 的 prompt 与 B/E/F/M 的伙伴表行；tool 面按判据对拍）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
 #: `--probe-no-tools V`；花费见提交信息）。
-PROMPT_VERSION = "p244"
+#: `p245`（2026-11-06 把 V 那一侧题面的四处口径对齐到秘书那一侧）：
+#: 变化格 = V 一格（其余十格逐字未动 —— 本笔没有动任何伙伴表行的上游：
+#: V 的 `deliverable` 一个字没改）。四处都是同一个病：V 那侧说"成立"，秘书那侧判"有毛病"：
+#: ① 「我没逐行验证」：`verifications.cold_start_prompt` 与 `agent_skills` 的
+#:    「复核-两态并指到那一步」手册原来写"只写『整体框架没问题 / 思路上没问题』
+#:    而不带核对记录 ⇒ 仍按成立收" ⇒ 改成"那就是没逐行验证 ⇒ 判有毛病，
+#:    把『核到哪一步、从哪一步起没核』写进 findings（带步号）+ defect_step"。
+#: ② 依据落在不归 F 的那几样（文献真伪/页码/实验数值复现/排版术语）：原来写
+#:    "它们不是缺陷、这一签按成立收、理由面错位写进 why" ⇒ 改成"也不是成立：判有毛病，
+#:    把『理由面错位』写进 findings/defect_step（秘书只看这两样，写 why 不算数）"。
+#: ③ 「判不了 / 我无法判断」：`specs/v.py` 的 policy 与 `verifications.cold_start_prompt`
+#:    原来写"框架仍按成立收（兜底）" ⇒ 改成"那是没做完审 ⇒ 那一条按有毛病收，
+#:    必须写清卡在哪一步"；框架读侧的折档保留，但注释与题面都改准成"读侧兜底，
+#:    不是 V 的合格答案"（`verifications.py` 的模块注释、VERDICT_FOLD_MARKERS、
+#:    parse_verdict 三处一并改准）。
+#: ④ 引用核实 `unknown`：`verifications.apply_citation_gate` 的注释原来写
+#:    "只有 unknown ⇒ 结论不动，仍是成立" ⇒ 改成"这一档是没查成（不是没问题）：
+#:    保持不签发，理由写『引用核不了』"（`findings` 的 detail 同口径改字）。
+#: 机制不动：`parse_verdict` / `apply_citation_gate` / `signs_bit3` / 秘书那条
+#: "问模型"的路一个字没动 —— 只改题面、文案与那几处注释口径。
+#: 判据：`tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`；
+#: 现场读数 `temp/probe_p245_consistency.py`；反真空 `temp/probe_p245_antivacuum.py`。
+#: 逐格旧值 → 新值（p244 → p245；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   V 见 `_FROZEN_PROMPT_DIGESTS`（其余十格与 p244 同值）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p245）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p245"
 
 
 

@@ -248,6 +248,23 @@ DUTIES: dict[str, dict[str, object]] = {
                "（`vsigns.land`）—— V 必须知道签字不归它落，否则它会把「我写了成立」"
                "读成「已经签上了」，而第 3 位其实一次都没翻",
     },
+    # 2026-11-06（p245：V 题面四处口径对齐秘书）：`specs/v.py` 的 policy 新增一句
+    # 「秘书按题面判「有缺陷要指出」，这一签不签发」—— 它承诺"V 的回复会被秘书按题面
+    # 语义判一遍，判成 fault 就不发签"。真身是 `Secretary.judge_v_reply`（生产调用点
+    # `agent_v/core.py` 的 `AgentV._judge_v_reply`），与 `decide_sign_issuance`（上面那条）
+    # 是两件事：那一条判"发不发"，这一条判"这段回复算不算有缺陷"。
+    # 可见性 `conditional ("V",)`：这句话只出现在 V 那一格（别的角色的秘书不判 V 的回复）。
+    "v_reply_judge": {
+        "code": "judge_v_reply",
+        "where": "secretary.py",
+        "call": ("agent_v/core.py 的 AgentV._judge_v_reply",),
+        "visibility": "conditional",
+        "roles": ("V",),
+        "probe": ("秘书按题面判",),
+        "why": "审阅回复的语义判定：V 的回复（「我没逐行验证」「判不了」等）由它自己的秘书"
+               "按题面判 clean / fault；fault ⇒ 这一转不算干净、这一签不签发 —— V 必须知道"
+               "这件事有接住方，否则它会把「我写了成立」读成「秘书会照单发签」",
+    },
     # 2026-11-04（业主裁定 A 甲）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
     # 这条走法在 B 的 policy 里是一句完整承诺（交正文 → 框架落稿 → 派 V → 签到位 → 再入库），
     # 而它有两个真身、各管一半，所以拆成两条登记（探针也各认那一半）：
