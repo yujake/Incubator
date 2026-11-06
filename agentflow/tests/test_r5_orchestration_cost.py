@@ -1045,6 +1045,10 @@ _STALE_REFS = (
 # 换面后"只有文本提及"的那些逐条登记进 `_REF_KNOWN_MENTION_TOKENS`，与仓里读数逐条等额（多一个、少一个都红）——登记是一条会被 review 的 diff，不是放宽口径。
 # 记号豁免：与引用同一行写逐字三个汉字 `非指代` 才跳过，且该文件必须落在 `_REF_EXEMPTED_EXPECTED_FILES`（豁免是暗门，放行要留可见登记）；死活由 `test_the_reference_exemption_marker_is_alive` 独立判（全仓零豁免 ⇒ 报"机制死了"）。
 # 范围按第 8 轮那台宽扫（`temp/REAUDIT8-R5.json` / `temp/reaudit8-R5-p8.py`）扩到整棵树：报出的范围必须与扫过的范围同宽（`F9`）。
+# 2026-11-06 收窄扫描面：从"整棵树"改成"被 git 跟踪的文件"（`git ls-files`，见 `_git_tracked_paths`）——
+# 未跟踪的 `temp/` scratch 不是仓内内容：往那里写笔记不该能让判据红，也不该能让判据绿。
+# 这一条治的正是"改写未跟踪的审计报告来掩红"那个形态（红被掩住、不是被修掉）；
+# `temp/…` 路径的存在性检查不随扫描面收窄（引用了 temp 路径就必须真存在，那是另一件事）。
 # 本判据只判"树里有没有这个标识符"，不判"这个名字绑定了什么"：它管的是设计时那一类（只有注释在说它）。
 _REF_SCAN_SUFFIXES = (".py", ".md")
 #: 不参与体检的目录：`__pycache__` / `.pytest_cache` / `.git` / `.mypy_cache` / `projects` / `out` / `node_modules`。
@@ -1055,6 +1059,9 @@ _REF_SCAN_SUFFIXES = (".py", ".md")
 #: 1.2 万个文件、`.gitignore` §4b 明确排除（入库的是 `ui/pnpm-lock.yaml`）；不排除要白读这些文件，
 #: 而且第三方 README 里下划线开头的 token 写成反引号形态就会被当成"我们引用的私有符号"（假报警）。
 #: 排除的是"安装结果"，不是"我们写的前端源码"：`ui/src/**`、`ui/*.json`、`ui/*.ts` 照旧全扫。
+#: 2026-11-06 之后这一档只对"回退路径"（非 git 的夹具树）与"清单里混进来的同名目录"起作用：
+#: 真仓的扫描面由 `git ls-files` 给（见 `_git_tracked_paths`），`projects/` / `out/` / `node_modules/`
+#: 本来就不在跟踪清单里。
 _REF_SCAN_SKIP_DIRS = ("__pycache__", ".pytest_cache", ".git", ".mypy_cache",
                        "projects", "out", "node_modules")
 #: 只对"真符号出现次数"那一维（口径第 2 条）排除的目录（`R7-⑮` 的窄修）。
@@ -1070,6 +1077,11 @@ _REF_SCAN_SKIP_DIRS = ("__pycache__", ".pytest_cache", ".git", ".mypy_cache",
 #: 用绝对路径判会把整个副本排除掉，副本读数与真树当场不同，
 #: 那条负控（"副本读数必须与真树逐字相同"）就会失效。
 #: 负控 = `test_a_scratch_copy_cannot_cure_a_dangling_reference`。
+#:
+#: 2026-11-06：扫描面收窄到"被跟踪文件"之后，真仓的 `temp/` 已经不在扫描面里
+#: （`git ls-files` 不列它），这一档在真仓上成了第二道保险；它仍然必须留着 ——
+#: 非 git 的夹具树走回退路径（整树遍历），那条负控正是在那种树上证明
+#: "scratch 里的副本抬不动计数"。不留它，回退路径就会重新长出 `R0-C2` 那个形态。
 _REF_SYMBOL_COUNT_SKIP_DIRS = ("temp",)
 
 
@@ -1113,13 +1125,15 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     #     `161_scan_variants.py`；
     #   · _probe_160_ws81（整树副本，落点不带扩展名） / `_recompute_160.py`；
     #   · `probe_159_sibling_race_fixture.py` / `ws158_copy` / `ws158_roster` / `ws159_81`。
-    # 剩下这 3 条是两棵树里真的都没有的：
-    #   · 前两条：`agent_prompts.py` 注释里点名的两份 golden diff 探针（当时的读数出处）；
-    #   · 第三条：未跟踪报告 `temp/h_scan_unify_report.md` 里点名的目录形态 scratch 落点
-    #     （本轮两棵树重算后才第一次进表 —— 原语义照旧，缺了就要登记）。
+    # 剩下这 2 条是两棵树里真的都没有的：
+    #   · 两条：`agent_prompts.py` 注释里点名的两份 golden diff 探针（当时的读数出处）。
+    # 2026-11-06（扫描面收窄到被跟踪文件）：temp/_recompute 这条按等额纪律删掉（这里刻意
+    # 不写反引号：那会让删除说明自己又变成一条新的 ticked 引用）。
+    # 它原来的唯一出处是未跟踪的报告 `temp/h_scan_unify_report.md` —— 那份报告从今天起
+    # 不在扫描面里，这条引用也就不再被判据看见。这不是"文件又回来了"，是登记过期：
+    # 表里留着它反而会被反向等额判成不符（同 `X-91.5-3` 那次"能解析的引用不许占位"）。
     "temp/golden_diff_p203.py",
     "temp/golden_diff_p205.py",
-    "temp/_recompute",
     # 2026-11-06（今晚清整树副本 + 探针跑完即清）：新增两条。
     #   · `temp/161_replica_81`：161 那一批反真空用的整树副本，与另外 9 棵整树副本一起删掉（扫描面从 39,852 文件降到 20,588）；
     #   · `temp/grade_audit.py`：等级只读审计探针，读数已写进 `docs/TWO-AXES-GRADE-AND-KIND.md` §5.3，按"跑完即清"删掉本体。
@@ -1317,8 +1331,10 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
      "已删的非平凡性机械判档判据：`src/agentflow/secretary.py` 的 `proof_effort_readings` 在讲"
      "「这个读数被打了桩之后哪几条判据会跟着红」时逐字点名它的 (f) 当实例；它随机械判档整族"
      "被删（档位只剩秘书一个来源），名字得留着，否则那个实例无出处"),
-    ("agentflow/tests/test_v_info_note_does_not_overturn_a_hold.py",
-     "改前名字：`9c5df7fc` 那份判据（后来被裁定为错、已删）；`temp/REPORT-v-info-note-20261106.md` 刻意保留原名作为史实，不指向任何现存文件"),
+    # 2026-11-06（扫描面收窄到被跟踪文件）：原最后一条 `agentflow/tests/test_v_info_note_
+    # does_not_overturn_a_hold.py` 按等额纪律删掉。它的唯一出处是未跟踪的报告
+    # `temp/REPORT-v-info-note-20261106.md`（那份报告刻意保留原名当史实）；那份报告从今天起
+    # 不在扫描面里 ⇒ 这条提及不再被判据看见，登记过期。表里留着它会被反向等额判成不符。
 )
 
 
@@ -1425,15 +1441,55 @@ def _reference_scan_roots() -> tuple[pathlib.Path, pathlib.Path] | None:
     return None
 
 
-def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
-    """整棵树里参与体检的文件（`.py` + `.md`），排除缓存、版本控制目录与运行产物。
+def _git_tracked_paths(tree: pathlib.Path) -> list[str] | None:
+    """`tree` 下被 git 跟踪的文件（相对 `tree` 的正斜杠路径，按 git 的输出序）。
 
-    运行产物（`projects/`、`out/`）为什么不扫：见 `_REF_SCAN_SKIP_DIRS` 上的那段
-    （2026-10-05 真机：模型在自己的报告里引了两个它没写的脚本 ⇒ 判据被一次运行点红）。
+    ## 为什么扫描面是"被跟踪"而不是"整棵树"（2026-11-06）
+    改前扫整棵树，`.gitignore` 掉的 `temp/` 也在里面：往 `temp/` 写一份审计报告、
+    报告里引用一个"真符号、但唯一调用写在 f-string 里"的私有名，判据就把这份
+    未跟踪的 scratch 报成仓里的悬空引用。上一轮的"修法"是改写那份
+    未跟踪的 .md —— 红被掩住，不是被修掉：任何人再往 temp 写笔记都会再红，而改写
+    审计产物等于篡改证据。正确的口径是：scratch 不是仓内内容，它不该有资格让
+    判据红或绿；仓的扫描面 = git 跟踪的文件。
+
+    这不是放宽 `temp/…` 路径那一族：引用了 temp 路径就必须真存在，那条检查照旧
+    （见 `_temp_reference_exists`）—— 扫描面管的是"哪里的字算引用"，不是"引用要不要真"。
+
+    ## 两种失败分得开
+    返回 `None` 只用于"这里根本不是 git 仓"（夹具/探针自己造的临时树）：调用方回退到
+    整树遍历，那些树没有"未跟踪 scratch"这回事。在一个确实是 git 仓的树上取不到清单
+    （git 起不来、权限、可疑所有权）⇒ 抛错：那是"没查成"，绝不是"一条引用都没有"。
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(["git", "-C", str(tree), "ls-files", "-z", "--", "."],
+                              capture_output=True)
+    except OSError as exc:  # git 不在 PATH 上
+        raise RuntimeError(
+            f"`git` 起不来，判据取不到被跟踪清单（不是 clean）：{exc}") from exc
+    if proc.returncode != 0:
+        stderr = (proc.stderr or b"").decode("utf-8", errors="replace")
+        if "not a git repository" in stderr:
+            return None
+        raise RuntimeError(
+            f"`git ls-files` 在 {tree} 上以 {proc.returncode} 失败 ⇒ 判据取不到"
+            f"被跟踪清单（不是 clean）：{stderr[-400:]}")
+    return [p for p in proc.stdout.decode("utf-8", errors="replace").split("\0") if p]
+
+
+def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
+    """参与体检的文件：被 git 跟踪的 `.py` + `.md`（口径见 `_git_tracked_paths`）。
+
+    不是 git 仓时（夹具/探针造的临时树）回退到整树遍历：那些树没有"未跟踪 scratch"
+    这回事，整树就是它的全部内容；回退路径的读数由本文件里那几条夹具用例钉着。
+
+    运行产物（`projects/`、`out/`、`node_modules/`）与缓存目录两档都不扫：跟踪清单里
+    本来就没有它们（回退路径上则靠 `_REF_SCAN_SKIP_DIRS` 剪枝）。
 
     排序只是为了让读数是确定的 —— 同一棵树两次跑给出同一份清单。
 
-    ## 为什么用 `os.walk` 剪枝而不是先 `rglob` 再过滤
+    ## 为什么用 `os.walk` 剪枝而不是先 `rglob` 再过滤（回退路径）
     改前是 `tree.rglob("*")` 把 64k 个文件全造出来、再用 `p.parts` 过滤 ——
     `projects/`（16k 文件）、`out/`、`node_modules/` 这些判据本来就看不见的目录
     每个文件都白 stat 一遍。本机实测（2026-11-06，共享工作区）这一步 31.1s，
@@ -1445,7 +1501,22 @@ def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
     """
     if any(part in _REF_SCAN_SKIP_DIRS for part in tree.parts):
         return []
-    out: list[pathlib.Path] = []
+    tracked = _git_tracked_paths(tree)
+    if tracked is not None:
+        out: list[pathlib.Path] = []
+        for rel in tracked:
+            if pathlib.Path(rel).suffix not in _REF_SCAN_SUFFIXES:
+                continue
+            # 清单里若混进跳过目录（历史遗留 / 子模块），与回退路径同口径地剪掉。
+            if any(part in _REF_SCAN_SKIP_DIRS for part in pathlib.Path(rel).parts[:-1]):
+                continue
+            p = tree / rel
+            # 已从工作树删掉但索引里还记着的文件：老口径（遍历工作树）看不见它，
+            # 这里也照老口径不把它算进扫描面（读不到 ≠ 没引用）。
+            if p.is_file():
+                out.append(p)
+        return sorted(out)
+    out = []
     for dirpath, dirnames, filenames in os.walk(tree):
         dirnames[:] = [d for d in dirnames if d not in _REF_SCAN_SKIP_DIRS]
         base = pathlib.Path(dirpath)
@@ -1478,6 +1549,50 @@ def test_the_ref_scan_skips_run_artifacts_but_not_the_repo(tmp_path: pathlib.Pat
     assert "REPORT.md" not in missing, f"运行产物不该被扫：{got['missing']}"
 
 
+def test_the_scratch_is_out_of_the_scan_surface_until_it_is_tracked(
+        tmp_path: pathlib.Path) -> None:
+    """负控（2026-11-06 的扫描面）：未跟踪的 `temp/` 里一条假引用不算数，`git add` 之后必须算。
+
+    这是真缺陷的机械版：现场是 `temp/_audit_*.md` 引了一个"真符号、唯一调用在 f-string 里"
+    的私有名 ⇒ 判据红；上一轮的"修法"是改写那份未跟踪的报告 —— 红被掩住、不是被修掉。
+    三档缺一档这条负控就退化成恒真：
+      ① 夹具先证明 `git` 在这棵树上真的接上了（`_git_tracked_paths` 给清单，不是 `None`）：
+         `None` 会让扫描面回退到整树遍历，那时的"绿"是回退路径给的、不是新口径给的；
+      ② 同一份假引用写在未跟踪的 `temp/` 下 ⇒ 不报（scratch 不是仓内内容）；
+      ③ 把它搬进被跟踪的位置（`git add docs/R.md`）⇒ 必须报（口径没有把仓内引用一起放掉）。
+    """
+    import subprocess
+
+    tok = "_scratch_surface_probe_zzz"
+    body = "见 `" + tok + "`。\n"
+    (tmp_path / "src").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "temp").mkdir()
+    (tmp_path / "src" / "defs.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "temp" / "note.md").write_text(body, encoding="utf-8")
+
+    init = subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], capture_output=True)
+    assert init.returncode == 0, f"夹具建不起 git 仓：{init.stderr!r}"
+    assert _git_tracked_paths(tmp_path) == [], (
+        "新仓里不该有被跟踪文件 —— 清单不是空的就说明夹具的树不是它以为的那棵")
+
+    scratch_only = _scan_ticked_references(tmp_path, tmp_path)
+    assert not [x for x in scratch_only["dangling"] if tok in x], (
+        "未跟踪的 `temp/` 里那条假引用被当成仓内引用报了 ⇒ 扫描面还是整棵树："
+        f"{scratch_only['dangling']}")
+
+    (tmp_path / "docs" / "R.md").write_text(body, encoding="utf-8")
+    add = subprocess.run(["git", "-C", str(tmp_path), "add", "docs/R.md"],
+                         capture_output=True)
+    assert add.returncode == 0, f"`git add` 失败：{add.stderr!r}"
+    assert "docs/R.md" in _git_tracked_paths(tmp_path), "`git add` 之后清单里没有它"
+
+    tracked_scan = _scan_ticked_references(tmp_path, tmp_path)
+    assert [x for x in tracked_scan["dangling"] if tok in x], (
+        "搬进被跟踪的 `docs/` 之后那条假引用还是没被报 ⇒ 新口径把仓内引用一起放掉了："
+        f"{tracked_scan['dangling']}")
+
+
 def _temp_reference_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Path) -> bool:
     """反引号里的 `temp/…` 引用存在吗 —— 两棵树、顺序写死；两处都缺才算缺（`X-91.5-3` 收紧）。
 
@@ -1507,9 +1622,10 @@ def _temp_reference_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Pat
 
 def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path,
                             *, ref_tree: pathlib.Path | None = None) -> dict:
-    """扫整棵树里反引号包着的引用 ⇒ 读数（键：`files` / `tokens` / `paths` /
-    `dangling` / `missing` / `exempted` / `dangling_tokens` / `symbol_counts` /
-    `symbol_count_files` / `symbol_count_skipped`）。
+    """扫被 git 跟踪的文件（`_iter_ref_scan_files`）里反引号包着的引用 ⇒ 读数
+    （键：`files` / `tokens` / `paths` / `dangling` / `missing` / `exempted` /
+    `dangling_tokens` / `symbol_counts` / `symbol_count_files` /
+    `symbol_count_skipped`）。
 
     口径见上面那一段注释块；豁免只看同一行里的 `_REF_EXEMPT_MARK`。
     每个文件只读一遍：份数按命令当次读（别抄定值，`F9` 写下的 214 已经过期；
@@ -1536,7 +1652,7 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path,
                                                       errors="replace")))
         except OSError:  # 读不到就当它不在体检范围里：既不报，也不假装干净
             continue
-    #: 口径第 2 条用的计数面：整棵树里每个名字作为真符号出现几次
+    #: 口径第 2 条用的计数面：被跟踪文件里每个名字作为真符号出现几次
     #: （见 `_python_identifiers_in_text`）。它不含注释/docstring、不含字符串字面量、
     #: 不含 `.md` 正文 —— 所以"在判据文件里随手写下一个 token"抬不动它
     #: （`R5-AN-10-1` 的假绿就是靠抬"文本面"实现的）。
@@ -1789,11 +1905,15 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
     第 7 轮三条 finding 的机械判据：`R7-R5-1`（引了一个全仓不存在的私有函数名 —— 那正是本判据会把"示例"也判红的原因，所以本 docstring 里所有引号包着的私有名都必须是真符号）、`R7-R5-2`（引的 temp 路径名字写错、真名是下划线）、`R7-R5-3`（列着四份不存在的 zone-backup 文件）。
     三态纪律（`R8-R5-1`）：根定不下来时先分清两件事 —— 在仓里却认不出仓 ⇒ FAILED（判据坏了）；只有真的在仓外（连 checkout 结构都没有）才 skip。根锚本身是随仓走的两条（`_ROOT_MARKERS`，`X-91.5-3`），不是 `temp/` 下那份未跟踪的审计产物；反真空判据是 `test_the_reference_scan_root_anchor_is_not_a_temp_artifact`。
 
+    ## 扫描面 = 被 git 跟踪的文件（2026-11-06）
+    扫描面是 `git ls-files` 给出的文件（`_git_tracked_paths`），不是整棵树：未跟踪的 `temp/` scratch 不是仓内内容，往那里写笔记不该能让这条判据红或绿（改前会红，而上一轮的"修法"是改写那份未跟踪的审计报告 —— 红被掩住、不是被修掉）。`temp/…` 路径的存在性检查照旧（`_temp_reference_exists`）：扫描面管的是"哪里的字算引用"，不是"引用要不要真"。
+    负控 = `test_the_scratch_is_out_of_the_scan_surface_until_it_is_tracked`（同一份假引用：未跟踪 ⇒ 绿；`git add` 成被跟踪之后 ⇒ 红），正控是本文件里其它夹具树（非 git ⇒ 回退整树遍历，悬空照旧报）。`F9` 的整树宽扫口径到此为止，它的历史读数仍留在下面两条里。
+
     ## 记号豁免（逐字三个汉字：`非指代`）
-    扫描范围是整棵树（`F9` 按第 8 轮宽扫的口径扩宽）。历史叙述（讲的是修之前的旧装配点）与示意性引用（演示证据路径词法归一的等价写法）不指向任何东西，却不该被改 —— 改成正名或删掉都是篡改史实/示例。这类引用由显式记号放行：在与该引用同一行里写下记号 `非指代`（逐字这三个汉字，写在行内任何位置都算），扫描器跳过它，并把跳过次数报出来；带记号的引用还必须落在 `_REF_EXEMPTED_EXPECTED_FILES` 登记过的文件里 —— 多一条、少一条、或换一个文件都算不符。记号是活的还是死的，由 `test_the_reference_exemption_marker_is_alive` 独立判（全仓一条豁免都没有时它报"机制死了"）。
+    扫描范围是被跟踪的文件（`F9` 的整树口径在 2026-11-06 收窄，见上一节）。历史叙述（讲的是修之前的旧装配点）与示意性引用（演示证据路径词法归一的等价写法）不指向任何东西，却不该被改 —— 改成正名或删掉都是篡改史实/示例。这类引用由显式记号放行：在与该引用同一行里写下记号 `非指代`（逐字这三个汉字，写在行内任何位置都算），扫描器跳过它，并把跳过次数报出来；带记号的引用还必须落在 `_REF_EXEMPTED_EXPECTED_FILES` 登记过的文件里 —— 多一条、少一条、或换一个文件都算不符。记号是活的还是死的，由 `test_the_reference_exemption_marker_is_alive` 独立判（全仓一条豁免都没有时它报"机制死了"）。
     负控 = 把任一引用改成不存在的名字/路径 ⇒ 本用例必红，两条方向都实测过（读数 `temp/fix6_f5-neg-V9-r7-dangling-refs.txt`：符号那一路 FAILED，路径那一路由同一份读数里 `MISSING` 的条数给出）；根解析的布局矩阵读数在 `temp/fix6_f5-neg-R8-layouts.txt`。
     ## 悬空口径（`R5-AN-10-1` 之后按符号数，不按文本数）
-    该 token 在整棵树里作为真符号（`.py` 的 Python 标识符，不含注释/docstring/字符串/`.md`）出现 ≤ 1 次 ⇒ 悬空。这是 `FIX11` 的 `C2` 换掉的口径：改之前数的是"全树文本出现次数"，于是"在本文件里随手写下一个被引用的 token"（哪怕只写在注释里）就能把计数从 1 抬到 2，别处的悬空引用被"治好"、判据安静变绿（第 10 轮实测 `symbCrit` / `symbBoth` 两档都是 `passed`）。
+    该 token 在被跟踪文件里作为真符号（`.py` 的 Python 标识符，不含注释/docstring/字符串/`.md`）出现 ≤ 1 次 ⇒ 悬空。这是 `FIX11` 的 `C2` 换掉的口径：改之前数的是"全树文本出现次数"，于是"在本文件里随手写下一个被引用的 token"（哪怕只写在注释里）就能把计数从 1 抬到 2，别处的悬空引用被"治好"、判据安静变绿（第 10 轮实测 `symbCrit` / `symbBoth` 两档都是 `passed`）。
     第二条断言是逐条登记表 `_REF_KNOWN_MENTION_TOKENS`（这条口径的豁免面）：仓里"只有文本提及、没有真符号"的 token 必须与它逐条相等 —— 多一个（新写的、没有解释的提及）红，少一个（登记过期）也红。记号豁免表 `_REF_EXEMPTED_EXPECTED_FILES` 单独判（上面的断言），两者不通用。
 
     这条判据的机制守卫是独立的用例 `test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference`（它自己造一份"只在判据文件里提及"的注入，断言那条引用仍然报红）。
@@ -1811,7 +1931,7 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
     assert res["paths"] > 0, "路径扫描一个都没接上（扫描器坏了？）"
     assert res["dangling"] == [], (
         "注释/docstring 里引用了全仓不存在的私有符号名 —— 读的人按图索骥会找不到东西。"
-        "判据按符号面数：该 token 在整棵树里作为 `.py` 的 Python 标识符"
+        "判据按符号面数：该 token 在被跟踪文件里作为 `.py` 的 Python 标识符"
         "（不含注释/docstring/字符串/`.md` 的提及）出现 ≤ 1 次就算悬空。"
         "那条引用是正当的（字符串键、历史名字、约定片段）就逐条登记进 "
         "`_REF_KNOWN_MENTION_TOKENS`，别把它写没："
