@@ -2648,6 +2648,18 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     两条都在那一处判，工具层不另立一份口径 —— 注意"叫不醒"比"静默"严：静默但一条
     消息就能叫醒的那一档会被拒，那是 2026-10-29 唤醒落地之后收窄的口径）。
 
+    ## 2026-11-06 业主裁定 ①：工具这一路走的是 `revoke=True`
+
+    裁定原文逐字：「给父代理可以更改子代理板项状态的能力，可将不再需要做的任务标为
+    撤销，特别地 M 可通过审计工具更改任意代理的板项状态。」所以工具层显式传
+    `revoke=True`：有权限的改的人（收件人的直接父代理 / M）可以撤"不再需要做"的项，
+    不再要求证明收件人叫不醒；没有权限的人仍受控拒绝（`not_authorized`）。
+    留痕六格（`by` / `owner` / `reason` / `from` / `to` / `at`）由 `Conductor.void_items`
+    写进行 `inputs` 与事件 note，并在 `reason` 里原样回一段读数 —— 不许默默改。
+
+    旧口径（deaf 才许作废）仍在 `Conductor.void_items(revoke=False)` 那一档，
+    但工具面不再调它：agent 能触及的那一路只有"有权限的撤销"。
+
     三态：`checked=False` 表示没查成（没有台账号 / 读数不是对象 / 调用抛了），
     不许读成"没有要作废的"。
     """
@@ -2678,7 +2690,8 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
         # `AttributeError: 'function' object has no attribute 'void_items'`。
         # 后果不是"这件工具不好用"：它是唯一设计来解「销号闸 ↔ 收工闸」互锁的出口，
         # 它一炸，那一趟只能以 `final_refused` 收尾（真机 2026-10-28 实测）。
-        got = _conductor().void_items(ids, by_task_id=mine, why=str(why))
+        got = _conductor().void_items(ids, by_task_id=mine, why=str(why),
+                                      revoke=True)
     except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写，只能如实说不知道
         data["reason"] = f"作废时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道"
         return ok(data, **data)
@@ -2687,11 +2700,16 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
         return ok(data, **data)
     voided = [str(x) for x in (got.get("voided") or ())]
     refused = [dict(r) for r in (got.get("refused") or ()) if isinstance(r, Mapping)]
+    traces = [dict(t) for t in (got.get("traces") or ()) if isinstance(t, Mapping)]
     data.update(checked=bool(got.get("checked")), voided=voided, refused=refused,
                 count=len(voided),
                 state=("voided" if voided else ("refused" if refused else "nothing")),
                 ok=bool(voided), reason=str(got.get("reason") or ""))
-    return ok(data, **data)
+    # 六格留痕（by / owner / reason / from / to / at）放 `meta` 而不进 `data`：
+    # `returns=` 声明的是 data 的键集，而工具面是冻结快照（`tests/golden/`，FC-27）；
+    # 在没得到人重冻之前，多一个 data 键会让 `test_no_tool_returns_a_top_level_key_it_does_not_declare`
+    # 当场红。`meta` 整格都渲染进模型看到的那条结果 ⇒ 读数一个字都不少。
+    return ok(data, **data, traces=traces)
 
 
 @tool(

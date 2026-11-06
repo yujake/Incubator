@@ -4519,8 +4519,83 @@ class Conductor:
             "seen_by": "", "seen_step": None, "keep_alive": bool(keep_alive),
         }
 
+    #: 改板项状态的两个有权限档（`_item_authority` 的读数，业主 2026-11-06 裁定 ①）。
+    #:
+    #: 为什么只有两档：裁定原文只有两句话 ——「父代理可以更改子代理板项状态」与
+    #: 「M 可通过审计工具更改任意代理的板项状态」。除此之外「没有人」有权改别人的板项
+    #: （收件人自己走 `ack_items`，那条路一个字都没放宽）。
+    ITEM_AUTHORITY_PARENT = "parent"
+    ITEM_AUTHORITY_CONDUCTOR = "conductor"
+
+    def _item_authority(self, rows: Mapping[str, Mapping[str, Any]], *,
+                        by_task_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
+        """谁有权改「这一条板项」的状态（业主 2026-11-06 裁定 ① 的唯一判据）。
+
+        判据只有两句话，落在这一处、不再在工具层抄第二份：
+
+        1. 父：`row["parent_task_id"]`（收件人）那一行的 `parent_task_id` 是
+           `by_task_id` ⇒ 改的人是收件人的「直接父代理」，可以改它名下的板项。
+           只认直接父：祖父 / 兄弟 / 更远的层都不行（裁定写的是「子代理板项」，
+           不是「子树里任何一项」）—— 越权一档由 `not_authorized` 逐条拒。
+        2. M（主控）：`by_task_id` 那一行的 `role == "M"` ⇒ 可改「任意代理」的板项，
+           不限直接子（这就是「特别地」那半句）。一格刻意的收窄：如果那条项归属的
+           收件人自己也是 `role=M` 的顶趟行，M 也不改它 —— 裁定说的是「任意代理」，
+           顶趟与顶趟之间不是父子/代理关系；那两条 M 行谁也不知道"别人"是谁
+           （`test_an_item_that_belongs_to_someone_else_is_refused` 正是这一档）。
+
+        三态：`checked=False` 是"判不了"（没有台账号 / 台账里没有这一行 / 那一行
+        自己是板项），不许折成"没权限"；`allowed=False` 且 `checked=True` 才是"查过了、
+        你没有权限"。拒信带机器码（`no_actor` / `unknown_actor` / `not_authorized`）。
+
+        返回 `{"checked","allowed","kind","by","owner","code","why"}`；`owner` 是板项
+        的收件人（`row["parent_task_id"]`）—— 留痕里的 `owner` 就是这一格。
+        """
+        by = str(by_task_id or "")
+        owner = str(row.get("parent_task_id") or "")
+        out: dict[str, Any] = {"checked": True, "allowed": False, "kind": "",
+                               "by": by, "owner": owner, "code": "", "why": ""}
+        if not by:
+            out.update(checked=False, code="no_actor",
+                       why=("没有台账号 ⇒ 判不了谁在改（不猜一个改的人；"
+                            "留痕里的 by 必须是台账上真有的那一行）"))
+            return out
+        actor = rows.get(by)
+        if actor is None:
+            out.update(checked=False, code="unknown_actor",
+                       why=(f"台账里没有 {by} 这一行 ⇒ 不知道你是谁，不许改别人的板项"
+                            "（fail-closed：查不到≠有权限）"))
+            return out
+        if str(actor.get("kind") or ""):
+            out.update(code="not_authorized",
+                       why=(f"{by} 自己是一条板项（kind={actor.get('kind')}），不是代理"
+                            " ⇒ 板项不能改别人的板项"))
+            return out
+        role = str(actor.get("role") or "")
+        owner_row = rows.get(owner) if owner else None
+        owner_role = str((owner_row or {}).get("role") or "")
+        if role == S.CONDUCTOR_ROLE and owner_role != S.CONDUCTOR_ROLE:
+            out.update(allowed=True, kind=self.ITEM_AUTHORITY_CONDUCTOR,
+                       why=f"{by} 是主控 M：可改任意代理的板项（业主 2026-11-06 裁定 ①）")
+            return out
+        if (owner_row is not None and not str(owner_row.get("kind") or "")
+                and str(owner_row.get("parent_task_id") or "") == by):
+            out.update(allowed=True, kind=self.ITEM_AUTHORITY_PARENT,
+                       why=(f"{by} 是 {owner} 的直接父代理：可改它名下的板项"
+                            "（业主 2026-11-06 裁定 ①）"))
+            return out
+        if role == S.CONDUCTOR_ROLE and owner_role == S.CONDUCTOR_ROLE:
+            out.update(code="not_authorized",
+                       why=(f"{by} 是主控 M，但 {owner} 也是顶趟行（role=M）⇒ "
+                            "裁定说的是「任意代理」，两个顶趟之间不是这项的父子关系；"
+                            "这一条不许改（要改由人处置）"))
+            return out
+        out.update(code="not_authorized",
+                   why=(f"{by} 不是 {owner or '（顶层）'} 的直接父代理、也不是主控 M ⇒ "
+                        "只有它的直接父代理或 M 能改别人的板项（兄弟 / 祖父 / 更远的层都不行）"))
+        return out
+
     def void_items(self, item_ids: Sequence[str], *, by_task_id: str, why: str,
-                   ) -> dict[str, Any]:
+                   revoke: bool = False) -> dict[str, Any]:
         """把"永远不会再被收件人处理"的板项作废（`item_close="expired"`）。
 
         为什么必须有这一条（真机 `projects/paper-rewrite-78` 2026-10-28 02:48 实测）：
@@ -4535,7 +4610,7 @@ class Conductor:
         "这个号叫不醒了"（已销号 / 兜底表被永久抑制）—— 叫得醒的静默收件人要先唤醒它，
         让它自己 ack。作废仍然不是"知道了"、也不是"做完了"，而是"这条不会再被处理"。
 
-        三条硬边界（少一条就等于把这条路变成"父代 ack"）：
+        `revoke=False` 那一档（旧口径）的三条硬边界（少一条就等于把这条路变成"父代 ack"）：
         1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
         2. 调用方必须已经证明收件人叫不醒（已销号，或兜底表被永久抑制）：只是静默
            不够 —— 一条消息或一次委托就会把它叫起来，那时它自己能 ack（本方法逐项核
@@ -4547,18 +4622,51 @@ class Conductor:
            "不会有人读"），但一律过 `schema.Task.validate`；来路写进 `inputs`
            （`void:expired:<父台账号>:<理由>`），于是事后能回答"谁作废的、为什么"。
 
-        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"reason"}`；拒信只有
-        `unknown_retired` 那一档多一个 `code` 格（`{"id","code","why"}` —— 理由码是
-        机器读的那一格，改前那一句"它只是静默"是没有根据的结论、也没有理由码）。
-        三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
+        ## 业主 2026-11-06 裁定 ①：按权限撤销（`revoke=True`）
+
+        上面那三条是"作废"（`revoke=False`，缺省）的口径，2026-11-06 之后它不再是
+        唯一的改法。裁定原文（逐字）：
+
+            1.给父代理可以更改子代理板项状态的能力，可将不再需要做的任务标为撤销，
+              特别地 M 可通过审计工具更改任意代理的板项状态。
+
+        于是 `revoke=True` 这一档：改的人是「直接父代理」或「M」（`_item_authority`
+        判，判据只有那一处）⇒ 可以撤"不再需要做"的板项，不再要求证明"收件人叫不醒"
+        —— 权限替代了那道证明。但「必须留痕」，而且留痕是六格：
+
+        - `by`（谁改的，台账号）/ `owner`（这条项原来归谁）/ `reason`（为什么，理由串）
+        - `from`（原状态）/ `to="done"`（新状态）/ `at`（时刻）
+
+        六格同时落两处：行的 `inputs` 追加一条
+        `revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`（append-only，
+        事后读行就能复核），事件 note 记 `item:expired:revoke:…`（事件流带 ts）；
+        写入口的返回里另有 `traces`（逐条同一套六格）。「不许默默改」：`refused`
+        逐条说为什么没改，`voided` 只列真写成了的编号。
+
+        权限是这一档的全部正当性：兄弟 / 祖父 / 任何非直接父、非 M 的人改别人的项
+        ⇒ 受控拒绝 `not_authorized`，一个格都不动。收件人自己那条路不受影响 ——
+        他仍是 `ack_items`（`conductor.ack`），不是这里。
+
+        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"traces":[…],"reason"}`；
+        拒信只有 `unknown_retired` 那一档多一个 `code` 格（`{"id","code","why"}` ——
+        理由码是机器读的那一格，改前那一句"它只是静默"是没有根据的结论、也没有
+        理由码）；权限拒绝那一档也带 `code`（`no_actor` / `unknown_actor` /
+        `not_authorized`）。三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
         """
         self._refuse_write_in_snapshot("作废板项（void_items）")
         ids = [str(x) for x in item_ids if str(x).strip()]
         if not ids:
-            return {"checked": True, "voided": [], "refused": [], "reason": "没有给要作废的项"}
-        # 边界 2：收件人必须静默/已退役。按父（我自己）判一次，逐项再核收件人。
-        out: dict[str, Any] = {"checked": True, "voided": [], "refused": [], "reason": ""}
-        with self.store.tx("tasks", actor="conductor", note="item:expired") as tx:
+            return {"checked": True, "voided": [], "refused": [], "traces": [],
+                    "reason": "没有给要作废的项"}
+        reason_text = " ".join(str(why).split())[:120]
+        at = S.now_iso()
+        # 边界 2：收件人必须静默/已退役（只对 `revoke=False` 那一档成立）。
+        # `revoke=True` 那一档的正当性是权限，不是"它叫不醒" —— 见 docstring。
+        out: dict[str, Any] = {"checked": True, "voided": [], "refused": [],
+                               "traces": [], "reason": ""}
+        with self.store.tx("tasks", actor="conductor",
+                           note=("item:expired" if not revoke
+                                 else "item:expired:revoke")) as tx:
             rows = {str(r.get("task_id")): r for r in tx.rows("tasks")}
             for iid in ids:
                 row = rows.get(iid)
@@ -4568,74 +4676,117 @@ class Conductor:
                 if not self._is_board_item(row):
                     out["refused"].append({"id": iid, "why": "不是板项（kind 为空）⇒ 不归作废管"})
                     continue
-                if str(row.get("item_state") or "") == "done":
+                cur = str(row.get("item_state") or "queued")
+                if cur == "done":
                     out["refused"].append({"id": iid, "why": "已经是终态（重复作废不改任何格）"})
                     continue
-                if str(row.get("expects") or "") != "ack":
+                # ---- 权限（业主 2026-11-06 裁定 ①）：两档都先过这一关 -------------
+                # 顺序刻意的：先判"你是谁、能不能动这一条"，再判"这一条该不该作废"。
+                # 反过来（先判 deaf 再判权限）会让没有权限的人也能把一条项"推进到
+                # 某个分支"，读数上分不清"它没权限"与"它没证明"。
+                authority = self._item_authority(rows, by_task_id=by_task_id, row=row)
+                if not authority.get("checked"):
                     out["refused"].append({"id": iid,
-                                           "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
-                                                  "（只许作废'知道了就好'的通知）"})
+                                           "code": str(authority.get("code") or "unknown_actor"),
+                                           "why": str(authority.get("why") or "权限读不成（fail-closed）")})
                     continue
-                owner = str(row.get("role") or "")
-                try:
-                    gate = self.retire_state_of(str(row.get("parent_task_id") or ""))
-                except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 不许作废（fail-closed）
-                    gate = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
-                if not gate.get("checked"):
-                    out["refused"].append({"id": iid, "why": (
-                        f"收件人状态读不成（{gate.get('reason') or '没查成'}）⇒ 不知道它是不是静默，"
-                        "不许作废（fail-closed）")})
+                if not authority.get("allowed"):
+                    out["refused"].append({"id": iid, "code": "not_authorized",
+                                           "why": str(authority.get("why") or "没有权限改这一条")})
                     continue
-                if not gate.get("silent"):
-                    out["refused"].append({"id": iid, "why": (
-                        f"{owner} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")})
-                    continue
-                # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
-                # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
-                # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
-                receiver = str(row.get("parent_task_id") or "")
-                # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
-                # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
-                # `lifeline_suppressed` 那一半在工作。
-                receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
-                # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
-                # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
-                # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
-                verdict = "unknown"
-                suppressed = False
-                try:
-                    verdict = self.retired_verdict(receiver, parent=receiver_parent)
-                    suppressed = bool(CLK.lifeline_suppressed(
-                        str(getattr(self.store, "root", "") or ""), receiver))
-                except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
+                if not revoke:
+                    # 旧口径（作废）：只收 expects=ack 的通知，而且收件人必须叫不醒。
+                    if str(row.get("expects") or "") != "ack":
+                        out["refused"].append({"id": iid,
+                                               "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
+                                                      "（只许作废'知道了就好'的通知）"})
+                        continue
+                    who = str(row.get("role") or "")
+                    try:
+                        gate = self.retire_state_of(str(row.get("parent_task_id") or ""))
+                    except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 不许作废（fail-closed）
+                        gate = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+                    if not gate.get("checked"):
+                        out["refused"].append({"id": iid, "why": (
+                            f"收件人状态读不成（{gate.get('reason') or '没查成'}）⇒ 不知道它是不是静默，"
+                            "不许作废（fail-closed）")})
+                        continue
+                    if not gate.get("silent"):
+                        out["refused"].append({"id": iid, "why": (
+                            f"{who} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")})
+                        continue
+                    # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
+                    # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
+                    # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
+                    receiver = str(row.get("parent_task_id") or "")
+                    # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
+                    # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
+                    # `lifeline_suppressed` 那一半在工作。
+                    receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
+                    # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
+                    # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
+                    # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
                     verdict = "unknown"
                     suppressed = False
-                if not (suppressed or verdict == "retired"):
-                    if verdict == "unknown":
-                        out["refused"].append({"id": iid, "code": "unknown_retired", "why": (
-                            f"{owner} 的销号名单读不全（{self._retired_reason()}）⇒ "
-                            "证明不了「它叫不醒」，不代作废（作废不可逆）")})
-                    else:
-                        out["refused"].append({"id": iid, "why": (
-                            f"{owner} 只是静默，但一条消息或一次委托就会把它叫醒"
-                            "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
-                            "；作废不可逆，不许拿『它不会再看』当理由")})
-                    continue
+                    try:
+                        verdict = self.retired_verdict(receiver, parent=receiver_parent)
+                        suppressed = bool(CLK.lifeline_suppressed(
+                            str(getattr(self.store, "root", "") or ""), receiver))
+                    except Exception:  # noqa: BLE001 —— 判不了就当它还会醒（不可逆动作取保守侧）
+                        verdict = "unknown"
+                        suppressed = False
+                    if not (suppressed or verdict == "retired"):
+                        if verdict == "unknown":
+                            out["refused"].append({"id": iid, "code": "unknown_retired", "why": (
+                                f"{who} 的销号名单读不全（{self._retired_reason()}）⇒ "
+                                "证明不了「它叫不醒」，不代作废（作废不可逆）")})
+                        else:
+                            out["refused"].append({"id": iid, "why": (
+                                f"{who} 只是静默，但一条消息或一次委托就会把它叫醒"
+                                "（它叫不醒才轮得到代作废）⇒ 先销号，或让它自己 ack"
+                                "；作废不可逆，不许拿『它不会再看』当理由")})
+                        continue
+                # ---- 写盘：两档共用"直写 + 终态"，留痕各记各的 -------------------
+                owner = str(row.get("parent_task_id") or "")
                 new = dict(row)
                 new["item_state"] = "done"
                 new["item_close"] = "expired"
                 inputs = list(new.get("inputs") or [])
-                inputs.append(f"void:expired:{by_task_id}:{' '.join(str(why).split())[:120]}")
+                if revoke:
+                    # 六格：谁（by）/ 归谁（owner）/ 为什么（reason）/ 原状（from）/
+                    # 新状（to）/ 何时（at）。append-only，事后读行就能复核这一笔。
+                    mark = (f"revoke:expired:by={by_task_id}:owner={owner or '（顶层）'}:"
+                            f"from={cur}:to=done:at={at}:reason={reason_text}")
+                    note = (f"item:expired:revoke:by={by_task_id}:"
+                            f"owner={owner or '（顶层）'}:from={cur}:to=done:at={at}")
+                else:
+                    mark = f"void:expired:{by_task_id}:{reason_text}"
+                    note = "item:expired"
+                inputs.append(mark)
                 new["inputs"] = inputs
                 task = S.Task(**{k: v for k, v in new.items()
                                  if k in S.Task.__dataclass_fields__})
                 task.validate()
-                tx.upsert("tasks", task.to_dict(), note="item:expired")
+                tx.upsert("tasks", task.to_dict(), note=note)
                 out["voided"].append(iid)
+                out["traces"].append({
+                    "item_id": iid, "by": str(by_task_id), "owner": owner,
+                    "reason": reason_text, "from": cur, "to": "done", "at": at,
+                    "close": "expired", "mode": ("revoke" if revoke else "void"),
+                    "authority": str(authority.get("kind") or ""),
+                })
+        verb = "撤销" if revoke else "作废"
         if out["refused"] and not out["voided"]:
-            out["reason"] = "一条都没作废（拒绝理由见 refused）"
+            out["reason"] = f"一条都没{verb}（拒绝理由见 refused）"
         elif out["refused"]:
-            out["reason"] = f"作废 {len(out['voided'])} 条、拒 {len(out['refused'])} 条"
+            out["reason"] = f"{verb} {len(out['voided'])} 条、拒 {len(out['refused'])} 条"
+        elif revoke and out["traces"]:
+            # 撤销那一档的读数里要能直接查到这一笔（六格）—— 不要求读的人再去翻行。
+            shown = "；".join(
+                f"{t['item_id']} by={t['by']} owner={t['owner'] or '（顶层）'} "
+                f"from={t['from']} to={t['to']} at={t['at']} reason={t['reason']}"
+                for t in out["traces"][:5])
+            out["reason"] = f"撤销 {len(out['voided'])} 条（留痕：{shown}）"
         return out
 
     def open_items_many(self, items: Sequence[Mapping[str, Any]], *,
