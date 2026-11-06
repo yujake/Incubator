@@ -57,11 +57,11 @@ FACTS: dict[str, str] = {
     "③ 收工门的结论格": "`complete=False`",
 }
 
-#: ③ 的「挡收工的判据格」：顶层与逐节点是**两个不同的真名** —— `retire_integrity`
+#: ③ 的「挡收工的判据格」：顶层与逐节点是两个不同的真名 —— `retire_integrity`
 #: 的顶层那一格叫 `root_open_items`（`conductor.py::retire_integrity` 返回 dict 的键），
 #: 逐节点那一格才叫 `open_items`（`nodes[]` 每项里的键）。
 #:
-#: 判据**同时接受两种读法**：手册点名哪一个都算说清。但它必须挂在 `retire_integrity`
+#: 判据同时接受两种读法：手册点名哪一个都算说清。但它必须挂在 `retire_integrity`
 #: 上 —— 以及旧形状里那个编出来的格名 `retire_integrity.open_items` 不算说清：
 #: 那个名字顶层不存在（顶层叫 `root_open_items`），逐节点也不叫这个全名。
 GATE_ANCHOR = "`retire_integrity`"
