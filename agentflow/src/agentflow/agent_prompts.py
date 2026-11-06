@@ -3305,7 +3305,44 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: CLI 行；`tool_declaration_baseline.json` 若有工具声明改动，按判据的可粘贴账骨架逐条记）；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
 #: `--probe-no-tools V`；花费见提交信息）。
-PROMPT_VERSION = "p243"
+#: `p244`（2026-11-06 把 V 的判词语义写死：「成立」= 零 finding · 一次性重冻）：
+#: 变化格 = B / E / F / M / V 五格。V 那一格是本笔的主体；另外四格不是各自动了正文，
+#: 而是 V 的 `deliverable` 进了「伙伴表」那一行（`partners_lines` 的 `；它交付：{deliverable}`，
+#: 见 `agent_prompts.py` 里 `extra = f"；它交付：{brief.deliverable}"`）—— 有出边指向 V 的
+#: B / E / F 与 M 的名册表各印一次，所以它们跟着换；其余六格（A / C / D / G / H / L）逐字未动。
+#: 口径（业主 2026-11-06 两条，逐字）：
+#:   ① 「成立」= 零 finding：V 判「成立」时 `findings` 必须为空；
+#:   ② 只要有一处要改的（含 `level=info` 的措辞建议）⇒ 判「有毛病」，并给 `defect_step`
+#:      指到那一步。
+#:   why：秘书那一侧（`9c5df7fc` 已回滚到原状）取的是「拿不准、说不清、只挑出一处小记号
+#:   问题 ⇒ 也算有毛病」；若 V 继续「成立 + 一条 info」，两边题面打架 ⇒ 这条链永远签不出来
+#:   （真机 92 前三次成立就是这样不签的）。
+#: 逐条（只动模型可见文本，不动判定代码 —— 回滚后的实现是对的：秘书问模型按题面语义判）：
+#: ① `specs/v.py` 的 policy：新增「判「成立」的唯一判据是零 finding」一段（`findings`
+#:    必须为空；有任何一条含 `level=info` ⇒ `有毛病` + `defect_step`），并把「拿不准 / 说不清」
+#:    从「落到两态之一」改成「那就是一条要改的 ⇒ 有毛病」；六条审查角度那一格补「任意一条上
+#:    看见要改的 ⇒ 有毛病；六条都没有 ⇒ 成立」；签发那一条补「`成立`（它的定义就是 findings
+#:    为空）」；`deliverable` 与 `local_notes['脑子']` 同口径补齐（后者与
+#:    `agent_prompts.FACULTY_LOCAL[("V","脑子")]` 逐字同步，判据 `test_agent_spec_reconciliation`）。
+#: ② `agent_skills._v_skills()`：那份「产出-只产意见」手册新增「判词写死：成立 = 零 finding」
+#:    一段（含 why）与「结论语法」两条的同口径；「复核-两态并指到那一步」的成立/有毛病两条
+#:    与「拿不准」那一条同口径；「自足-核的是那一行字面」的三轴结论同口径。
+#: ③ `verifications.cold_start_prompt`（V 的真实入口，不是 system prompt）：结论两态那一节补
+#:    「成立 = 零 finding」，输出 JSON 那一段把改前的「空 findings 或只有 info/warning」改成
+#:    「成立必须 `findings` 为空；有 info 也判有毛病」—— V 自己就不再产出「成立 + 一条 info」。
+#: ④ 检查 F / E 的送审说明：两处都只写「V 只会退回两种结论」与「读到有毛病就按缺陷改稿」，
+#:    没有暗示「可以成立但留备注」的句子 ⇒ 本笔不改（列在报告的 ⑥ 里）。
+#: 逐格旧值 → 新值（p243 → p244；Lean 开档口径，与 `conftest.py` 同一条）：
+#:   B 2555d58b→见 `_FROZEN_PROMPT_DIGESTS`（V 的 deliverable 进伙伴表）；其余四格同理，
+#:   十一格现值一律以 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 的现算值为准。
+#: 十一格是 `temp/_p244_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实，口径只有一处），不是手抄。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p244）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 三份冻结物按现值重冻（agent 面：V 的 prompt 与 B/E/F/M 的伙伴表行；tool 面按判据对拍）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（含 `--probe-cross-run H,M` 与
+#: `--probe-no-tools V`；花费见提交信息）。
+PROMPT_VERSION = "p244"
 
 
 
@@ -5356,7 +5393,11 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-                   '补上之后能不能过；推不到（没找到缺陷）就写"成立"并说清沿哪几关试过。',
+                   '补上之后能不能过；一处要改的都没有（findings 为空）才写"成立"，点得出任何一处'
+
+
+
+                   '（含措辞建议）就判"有毛病"并指到那一步。',
 
 
 

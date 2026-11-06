@@ -2288,7 +2288,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p243"
+_FROZEN_PROMPT_VERSION = "p244"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2516,16 +2516,16 @@ _FROZEN_PROMPT_VERSION = "p243"
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "b6fefb150896bd8c3fa77b4fa0407bf5d0def18e75e4ab143411037b0462a900",
-    "B": "2555d58bcf2165f16ec10b46b9b7d9beda09f0534b5e2898c4caf00cb30efc54",
+    "B": "b1cbc93f2e05038a6ecd9abcaa84e58d7f0b495f7b3c04f1694457736d1e670c",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
     "D": "1040f2aa3a5ed429749b0d6d5277bf79079ad53708daa30199f6abd29eed99e7",
-    "E": "d5472af2e4bb7a41fb4de9ff919e28a70f973ac46c501e3a1140fcc6c198318f",
-    "F": "092feb370f732989b4a010d506871ad6d356a75e398c18ee6b9b5e0d1af9885b",
+    "E": "bdd995ca1925bb05eb5507b50c71443be8c89bfb8ab887f9b0ce3f609c084b4a",
+    "F": "af7ec19acfb5b96319db7626f1b27cca77f355cd9566377821bd7c899217bfbb",
     "G": "a3d910f6b46583af72694798d5164ebeb674914919c9ce12b8d88e92f8b0d793",
     "H": "1e4c2b9de0485d4c866373d42aae6f31b144b8b9fef9b650c4fb756620697911",
     "L": "98d5d49ee7a3717d2a3bb652a9a9b76bde919c278b2199b2fc108501cb41a620",
-    "M": "946f49f275beda58d06a0ea44a6f331716c80418cdf82e3a4f6aa8e6525580a4",
-    "V": "d22929bcc4764cedace99dac986c08c121380e6d80aa215353cd3b421d513cf8",
+    "M": "283c0ca9980d2edbda98725d17744c8337f528df3bc9d38623294fb7acddfb68",
+    "V": "98040f16e1c6412a7c236882c8df92382ae571640a63cc0c9284cc39e6649654",
 }
 
 

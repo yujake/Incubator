@@ -875,7 +875,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- " + TWO_STATE_LINE + "。\n"
         "- " + NO_THIRD_STATES + "。\n"
         "- 你判「成立」时不需要证明它正确，只需要说明你沿下面那几条角度都没找到缺陷；"
-        "拿不准、信息不足、某个记号没定义，都要落到这两态里的一态，别另起一档。\n\n"
+        "拿不准、信息不足、某个记号没定义，都要落到这两态里的一态，别另起一档。"
+        "**「成立」= 零 finding**：`findings` 必须为空；只要有一处要改的（哪怕只是措辞建议、"
+        "`level=info`），就是 `有毛病`，要指到那一步。\n\n"
         # ---- 业主 2026-10-29 追加口径：V 只产意见，签由秘书发（S5 的提示词落点）----
         #
         # 这一段的判据是 v9（`tests/test_v_sign_gate_streak.py` 的 c4）：V 的可见文本里
@@ -917,9 +919,11 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         '"verdict": "consistent|weaker|stronger|unrelated|inadmissible|unknown", '
         '"quote_verbatim": <true 或 false>, "note": "<一句话依据：一致在哪 / 差在哪>"}]}\n'
         "- `defect_step`：有毛病时必须给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
-        "- 没有找到缺陷就写 `成立`（空 findings 或只有 info/warning）；找到了缺陷就写 `有毛病`"
-        "并指到步号。没有第三个词：写成「看不出来 / 判不了」会被按 `成立` 收"
-        "（" + NO_THIRD_STATES + "）。\n"
+        "- **`成立` 的判据是零 finding**：`findings` 必须为空 —— 一条要改的都没有，才写 `成立`。"
+        "只要有一处要改的（哪怕只是措辞建议、`level=info`），就写 `有毛病`、在 `defect_step` "
+        "指到那一步、并把那一条写进 `findings`；不许写成「成立 + 一条 info」。\n"
+        "- 没有第三个词：写成「看不出来 / 判不了」会被按 `成立` 收"
+        "（" + NO_THIRD_STATES + "）；但那是兜底，不是你该写的答案。\n"
         # ---- 审阅清单（draft/122 按 F 的交付面重剪；S5 的提示词落点）----
         #
         # 为什么清单在提示词里、而它又明说"不是门"：`docs/DEVELOPMENT-SPEC.md` §13 的分工

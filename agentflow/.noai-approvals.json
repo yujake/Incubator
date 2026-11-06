@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-06T02:32:46+08:00",
+  "generated_at": "2026-11-06T09:21:12+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -400,10 +400,10 @@
       "path": "src/agentflow/specs/v.py",
       "glob": "src/agentflow/specs/v.py",
       "category": "auth-audit",
-      "sha256": "94d7a11879df508219a243d60108cfbdd2a31f82e4146234911737b5da112ba0",
+      "sha256": "f688cd6d0d14ca300261ca8cb61cbc126a35243218653e68411a2500df99afa5",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-06 p243 等级是唯一的轴：只改 specs/*.py 的 policy/参数说明文本与 agent 面冻结快照（业主已开放冻结面修改权限；判定逻辑不动，语义上游 e0b49d89/e8ca6ccc）",
+      "change_note": "p244：V 的判词写死（成立=零 finding）+ 十一格重冻",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "8220fdcfd1bfc98ac3ac06c13b47a1dc5c70399314bd237786579192da09f3de",
+      "sha256": "d6f887bd020a0dab49099e5a75cdcf63ed055adf253195d9d1123e903f34c863",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-06 p243 等级是唯一的轴：只改 specs/*.py 的 policy/参数说明文本与 agent 面冻结快照（业主已开放冻结面修改权限；判定逻辑不动，语义上游 e0b49d89/e8ca6ccc）",
+      "change_note": "p244：V 的判词写死（成立=零 finding）+ 十一格重冻",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

@@ -822,6 +822,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p243", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p243（2026-11-06，等级是唯一的轴）：变化格 = 全部十一格（共用段 `STRUCTURE_NOT_PROMPT` 与各角色自己的 policy / 动作说明都改了）。口径：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；可引门槛 = `pre_theorem`；穷举与 Lean 同级都到 `theorem`；`evidence_kind` 只是历史列（由等级反算，判定面不读）；V 不假定有号（没号先落 `verifications/pending/<正文 sha>.jsonl`，B 登记后按正文 sha 认领，三票齐）。判据：`tests/test_agent_prompts.py` 的十一格 + `test_the_prompt_version_moves_with_the_sections`。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p243 → p244（2026-11-06 把 V 的判词语义写死：「成立」= 零 finding）：只改模型可见文本
+    # （`specs/v.py` 的 policy / deliverable / local_notes、`agent_skills._v_skills()`、
+    # `verifications.cold_start_prompt`、`agent_prompts.FACULTY_LOCAL`），一格事实都没挪
+    # ⇒ count / keys_sha256 与上一格同值。变化格 B / E / F / M / V（后四者是 V 的 deliverable
+    # 进伙伴表那一行，不是它们自己的正文动了）。
+    {"version": "p244", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p244（2026-11-06，V 的判词写死）：「成立」= 零 finding —— `findings` 必须为空；只要有一处要改的（含 `level=info` 的措辞建议）⇒ `有毛病` + `defect_step`；`有毛病` 必须给 `defect_step`。why：秘书那一侧按「拿不准、说不清、只挑出一处小记号问题 ⇒ 也算有毛病」判，若 V 继续「成立 + 一条 info」两边题面打架、这条链永远签不出来。变化格 = B / E / F / M / V（V 是自己那一格；B/E/F/M 是 V 的 deliverable 进伙伴表「它交付：」那一行）。facts 键集仍 15 格（键名与条数一格未动）"},
 
 )
 
