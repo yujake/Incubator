@@ -438,7 +438,7 @@ def _m_skills() -> tuple[Skill, ...]:
    写成 `abandoned@<ISO8601>@<理由>`。状态、时间、理由三样缺一不可 —— 只写状态的行仍按
    未签计（读数是 `abandoned_without_reason`）。
 
-- 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。
+- 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit@` 项随之 `done` + `expired`）；正文仍需走证明入口。
 所以走第 2 条之后回头看一眼板：名下那条重送项应当已经 `done` + `expired`（还开着就按未消项
 处理，它会挡销号与收工）。
 
@@ -2959,7 +2959,7 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
    只写状态的行仍按未签计（`abandoned_without_reason`）。
 
 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改
-`status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。
+`status=abandoned` 时**会触发作废**（`v-resubmit@` 项随之 `done` + `expired`）；正文仍需走证明入口。
 所以放弃之后回头看一眼板：名下那条 `v-resubmit@` 应当已经 `done` + `expired`（还开着就按未消项
 处理，它会挡销号与收工）。
 
