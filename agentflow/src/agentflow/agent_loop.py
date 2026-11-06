@@ -4364,6 +4364,15 @@ class AgentLoop:
     registry: Any
     seam: LlmSeam
     conductor: Any = None
+    #: 最近一拍的「研究未尽」与「整棵树有没有人在干活」读数（`_park_gate` 写、提示词那段读）。
+    #:
+    #: 类级默认 `None`：`_park_gate` 之外的路径（直接拼提示词的夹具、或第一拍之前的读）拿到的
+    #: 就是"这一拍还没读到"，不必再写 `getattr(self, ..., None)` —— 那会把名字写成字符串，
+    #: 而 `test_r5_orchestration_cost` 的引用判据按真符号（`.py` 的 NAME 记号）计数：
+    #: 只在赋值处出现一次的私有名会被读成悬空引用。默认值放在类体里，这两个名字各有两处
+    #: 真记号（赋值 + 类级声明），读法也只有属性访问一种。
+    _research_cache: dict[str, Any] | None = None
+    _tree_cache: dict[str, Any] | None = None
     #: 单次循环最多几步。默认 30（`draft/37` §1.2 的第一条读数）：定 6 的时候，
     #: 一个被驱动的动作连"读完一段正文"都不够 —— 真机实测（2026-10-01）G 的 151 步里
     #: 89 次在读、53 次在写自己的笔记，最后还是没能落盘一处改动；而框架给它的默认是 6。
@@ -6093,9 +6102,146 @@ class AgentLoop:
                     "counts": {}, "fingerprint": "",
                     "reason": f"研究未尽读数没查成（{type(exc).__name__}: {exc}）"}
 
+    @staticmethod
+    def _agents_working(by_task: Mapping[str, Any], *, me: str) -> list[str]:
+        """「除我以外谁在飞」—— 这条判据的唯一实现（`_tree_busy_reading` 读它）。
+
+        业主 2026-11-06 逐字：「查在飞时肯定要除掉自己，不然就是看见自己在干活就
+        允许给自己挂机」。所以 `me` 那一行最先被摘掉：M 在读这一拍时自己的台账行
+        就是 `running`（`agent_state` 第 ⑥ 步在没有钟压着时正是把它读成"在飞"），
+        不摘它，`busy` 在这类拍上恒真、判据形同废纸。
+
+        输入是 `Conductor.activity_snapshot()` 的 `by_task`（三态唯一实现的输出），
+        这里只做"挑出 flying 且不是我"这一件事，不另判一遍三态。
+        """
+        mine = str(me or "")
+        return sorted(str(tid) for tid, cell in by_task.items()
+                      if str(tid) != mine
+                      and str((cell or {}).get("state") or "") == "flying")
+
+    def _tree_busy_reading(self) -> dict[str, Any]:
+        """整棵树「有没有（除我以外的）人在干活」的读数（`_research_guard` 的第二个输入）。
+
+        ## 为什么要有这一格（业主 2026-11-06 口径逐字）
+
+            「只要整个树有人干活，且 M 自己暂无可直接做完的板项，它就能挂机」
+
+        改前 `_pending_work` 的三条判据（新投递 / 未消项 / 刚落定的子）只问「M 自己
+        名下」；"别人正在跑"这件事在挂机判据里根本没有读进来。于是只要研究未尽
+        （`researchpending.pending_reading` 非空），B 正在登记概念也照挡 —— 那是业主
+        不允许的过度催促。真机 R-mk-infinite-93 那一趟是"整棵树都闲着"，所以那次
+        拦得对；读数必须能分开「有人干活」与「全部 idle」这两档。
+
+        ## 读数来源（只读既有读数，不新造状态）
+
+        本体是 `Conductor.activity_snapshot()` —— 它是 `conductor.agent_state` 三态
+        （在飞 / 待机 / 静默 / 未读到）唯一实现的调用点，`conductor.patrol` 与
+        `conductor.state` 读的也是同一份台账快照。`state == "flying"` 就是"它自己在跑"。
+
+        ## 除掉 M 自己（业主 2026-11-06）
+
+            「查在飞时肯定要除掉自己，不然就是看见自己在干活就允许给自己挂机」
+
+        三样都不进这里，它们各有各的读者：
+        - 自己那一行（`_agents_working` 的 `me` 那一刀）：M 此刻正在读这一拍，
+          自己的台账行永远是 `running`，不除掉它这条判据恒真；
+        - 自己名下的板项：那是 `_pending_work` 的第 2 条（该 M 自己做，不是"别人在干活"）；
+        - 自己挂的计时器 / 自己的 mail：那是 `_park_reading` 与 `_pending_work` 的第 1 条。
+        被排除掉的那一条原样带回 `excluded`（task_id / role / state），给读数复核用。
+
+        ## 口径
+
+        `busy = working or unfinished`：
+        - `working`：除 M 以外、三态为"在飞"的那些台账号（业主"任一子代理在飞"）；
+        - `unfinished`：除 M 以外、名下还有未消板项的那些父号（业主"有未结项"，
+          与 `Conductor.open_items_by_parent` 同一份读数）。
+
+        ## 三态
+
+        - 没有主控句柄 / 没有台账号（分不出哪一行是自己）/ 台账与时钟读不成 ⇒ `checked=False`；
+        - 已经看见有人在飞 ⇒ 结论成立，`checked=True`（其余行读不成不影响"有人在干活"）；
+        - 没人在飞、却有代理行三态读不成、或未结项读不成 ⇒ `checked=False`：
+          "全部 idle" 这个结论不成立 —— 不许把"没查成"折成"没人"（fail-closed）。
+        调用方（`_research_guard`）在 `checked=False` 时归到固定键、照样挡，仍受
+        `RESEARCH_STALL_LIMIT` 的上限 —— 既不静默放行，也不无限催。
+        """
+        empty: dict[str, Any] = {
+            "checked": True, "busy": False, "working": [], "unfinished": [],
+            "unfinished_count": 0, "unknown": [],
+            "excluded": {"task_id": "", "role": "", "state": ""},
+            "why_text": "", "reason": ""}
+        me = str(self.my_task_id or "")
+        if self.conductor is None:
+            return {**empty, "checked": False,
+                    "reason": "没有主控句柄 ⇒ 整棵树里有谁在干活读不到（不是「没人」）"}
+        if not me:
+            return {**empty, "checked": False,
+                    "reason": ("没有台账号 ⇒ 分不出台账里哪一行是它自己"
+                               "（「除掉自己」这一步做不了，这条判据就会恒真）⇒ 这一格读不成")}
+        try:
+            snap = dict(self.conductor.activity_snapshot())
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {**empty, "checked": False,
+                    "reason": f"整棵树的活动读数没查成（{type(exc).__name__}: {exc}）"}
+        if not snap.get("checked"):
+            return {**empty, "checked": False,
+                    "reason": ("整棵树的活动读数没查成（"
+                               + str(snap.get("reason") or "没查成")
+                               + "）⇒ 谁在飞判不了（不是「没人」）")}
+        by_task = {str(k): dict(v) for k, v in (snap.get("by_task") or {}).items()}
+        cell = by_task.get(me) or {}
+        excluded = {"task_id": me, "role": str(cell.get("role") or ""),
+                    "state": str(cell.get("state") or "")}
+        working = self._agents_working(by_task, me=me)
+        unknown = sorted(tid for tid, c in by_task.items()
+                         if str(tid) != me and str(c.get("state") or "") == "unknown")
+        open_problem = ""
+        unfinished: list[str] = []
+        unfinished_count = 0
+        try:
+            groups = self.conductor.open_items_by_parent()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            groups = None
+            open_problem = f"未结项读数没查成（{type(exc).__name__}: {exc}）"
+        if groups is not None:
+            for pid, rows in groups.items():
+                if str(pid) == me or not rows:
+                    continue
+                unfinished.append(str(pid))
+                unfinished_count += len(rows)
+        unfinished.sort()
+        why: list[str] = []
+        if working:
+            why.append("除 M 以外在飞：" + "、".join(working[:6]))
+        if unfinished:
+            why.append(f"除 M 以外还有 {unfinished_count} 条未结项"
+                       f"（{'、'.join(unfinished[:6])}）")
+        if not working and not unfinished:
+            why.append("除 M 以外没有人在飞、也没有未结项")
+        out: dict[str, Any] = {**empty, "working": working, "unfinished": unfinished,
+                               "unfinished_count": unfinished_count, "unknown": unknown,
+                               "excluded": excluded, "busy": bool(working or unfinished),
+                               "why_text": "；".join(why)}
+        if out["busy"]:
+            # 已经看见有人在干活 ⇒ 这个结论不受别行读不成影响（它们只会更保守）。
+            return out
+        if unknown or open_problem:
+            out["checked"] = False
+            out["reason"] = (open_problem
+                             or (f"有 {len(unknown)} 个代理的三态读不成（"
+                                 + "、".join(unknown[:6])
+                                 + "）⇒ 整棵树闲不闲判不了（不是「都没人」）"))
+            return out
+        return out
+
     def _research_guard(self, *, step: int, run: "AgentLoop.LoopRun",
-                        reading: Mapping[str, Any]) -> dict[str, Any]:
+                        reading: Mapping[str, Any],
+                        tree: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """这一拍要不要因为「研究未尽」而不许挂机（以及连续挡了几次）。
+
+        `tree` 是 `_tree_busy_reading` 的读数：整棵树有人干活 ⇒ 这一档优先放过
+        （业主 2026-11-06：「只要整个树有人干活，且 M 自己暂无可直接做完的板项，
+        它就能挂机」）。只有"整棵树都闲着"时，研究未尽才拦它、让它派一个人。
 
         返回 `{pending, checked, blocked, stalled, streak, fingerprint, reason}`：
         `blocked=True` ⇒ 调用方把这一拍落成 `decision="run"`（问模型，`next_action`
@@ -6105,19 +6251,50 @@ class AgentLoop:
 
         记账只在本方法：`run.park["research_fp"]` / `["research_streak"]` /
         `["research_warned"]`。读数一变（`fingerprint` 换了）就重新从 1 数起。
+
+        三档的次序（业主 2026-11-06）：
+        ```
+        ① 整棵树有人干活（`tree.busy`）              ⇒ 不拦（照常 park；优先于研究未尽）
+        ② 整棵树闲着（或读不成）且 gaps 非空          ⇒ 拦（decision="run" + next_action）
+        ③ 整棵树闲着且 gaps 空                       ⇒ 不拦（`pending=False` 那一支）
+        ```
+        `tree.checked=False` 归到固定键（`…|tree-unreadable`）并照旧挡：
+        不许静默放行，也不许无限催 —— 同一固定键连续挡到 `RESEARCH_STALL_LIMIT`
+        同样报受控告警并放开。
         """
+        tree = dict(tree or {})
         out: dict[str, Any] = {"pending": bool(reading.get("pending")),
                                "checked": bool(reading.get("checked")),
                                "blocked": False, "stalled": False, "streak": 0,
                                "fingerprint": str(reading.get("fingerprint") or ""),
+                               "tree_checked": bool(tree.get("checked")),
+                               "tree_busy": bool(tree.get("busy")),
+                               "tree_reason": str(tree.get("reason") or tree.get("why_text") or ""),
                                "reason": ""}
         if str(self.role) != S.CONDUCTOR_ROLE or not out["pending"]:
             run.park["research_fp"] = ""
             run.park["research_streak"] = 0
             return out
+        # ---- ① 整棵树有人干活 ⇒ 这一档优先放过（业主 2026-11-06 逐字口径）。
+        #
+        # 这一拍不是"无事可做"：别人正在跑，M 睡下去会被人叫醒；此时为"研究未尽"
+        # 把它叫起来排动作，就是过度催促。所以：不挡、不记账（连续挡的计数从头数），
+        # 照常走 park —— 研究未尽这一段仍会进提示词（`_research_block` 念的是同一份
+        # 读数），于是模型看得见"为什么这一拍可以睡"。
+        if out["tree_busy"]:
+            run.park["research_fp"] = ""
+            run.park["research_streak"] = 0
+            out["reason"] = ("整棵树有人正在干活（"
+                             + str(tree.get("why_text") or "除 M 以外有代理在飞")
+                             + "）⇒ 研究未尽这一档这一拍不拦，照常挂机等它")
+            return out
         # 读不成的那一档没有 gap、也就没有 fingerprint：给它一个固定键，否则
         # `fp` 恒空 ⇒ streak 永远从 1 数起 ⇒ 永远挡下去（那正是"无限空转"）。
+        # 整棵树闲不闲读不成时同样归到固定键：这一档的挡与"读不成"这件事绑定，
+        # 读数一变就重新数，但不会因为每拍都读不成而永远挡下去。
         fp = out["fingerprint"] or "unreadable"
+        if not out["tree_checked"]:
+            fp = f"{fp}|tree-unreadable"
         out["fingerprint"] = fp
         previous = str(run.park.get("research_fp") or "")
         streak = int(run.park.get("research_streak") or 0) + 1 if (fp == previous) else 1
@@ -6133,7 +6310,11 @@ class AgentLoop:
             f"研究未尽（{gap_text}；读数 "
             + "，".join(f"{k}={v}" for k, v in counts.items())
             + f"）⇒ 这一拍不许挂机干等，必须当场排一个动作："
-            + str(action.get("summary") or "先查 `conductor.state` 的 research 读数"))
+            + str(action.get("summary") or "先查 `conductor.state` 的 research 读数")
+            + ("；整棵树都闲着（" + str(tree.get("why_text") or "除 M 以外没有人在飞")
+               + "）" if out["tree_checked"]
+               else "；整棵树闲不闲读不成（" + (out["tree_reason"] or "没查成")
+               + f"）⇒ 按固定键挡，最多挡 {RESEARCH_STALL_LIMIT} 拍"))
         if streak < RESEARCH_STALL_LIMIT:
             out["blocked"] = True
             return out
@@ -6152,6 +6333,10 @@ class AgentLoop:
                     "counts": counts, "gaps": [dict(g) for g in (reading.get("gaps") or ())
                                                if isinstance(g, Mapping)],
                     "next_action": action, "reason": out["reason"],
+                    # 整棵树那一格的读数（这一档最后是被谁放开的：树闲 / 树读不成）。
+                    "tree_checked": out["tree_checked"],
+                    "tree_busy": out["tree_busy"],
+                    "tree_reason": out["tree_reason"],
                 }, sid=self.sid)
             except Exception as exc:  # noqa: BLE001 —— 落不成告警不许拦住这一拍
                 run.notes.append(f"研究未尽告警没落成（{type(exc).__name__}: {exc}）")
@@ -6164,6 +6349,8 @@ class AgentLoop:
         out["research_blocked"] = bool(guard.get("blocked"))
         out["research_stalled"] = bool(guard.get("stalled"))
         out["research_streak"] = int(guard.get("streak") or 0)
+        out["tree_checked"] = bool(guard.get("tree_checked"))
+        out["tree_busy"] = bool(guard.get("tree_busy"))
 
     def _research_block(self) -> str:
         """提示词里那段「未尽研究」读数（M 专用；没有未尽项 ⇒ 空串）。
@@ -6171,23 +6358,48 @@ class AgentLoop:
         为什么提示词里要有这一段：只把挂机挡住、不把"为什么被挡住、下一步该排什么"
         念给模型，它下一拍看到的还是一份没有新事实的上下文 —— 那只是把 20 分钟一次的
         空转换成 0.5 秒一次的空转。所以判据值 + `next_action` 必须进它读到的那段话。
+
+        2026-11-06 起这段还要念「整棵树有没有人在干活」（`_tree_cache`，与
+        `_research_guard` 同一份读数）：判据从"研究未尽就拦"改成"整棵树闲着才拦"，
+        模型必须看得见这个新事实 —— 否则它读到的仍是"不许挂机"，而框架却可能已经
+        让它睡了（或者反过来让它排动作时它不知道为什么）。读数的三种形态分开念：
+        有人干活 / 都闲着 / 读不成，绝不把"没查成"折成"没人"。
         """
         if str(self.role) != S.CONDUCTOR_ROLE:
             return ""
-        reading = getattr(self, "_research_cache", None)
+        reading = self._research_cache
         if not isinstance(reading, Mapping) or not reading.get("pending"):
             return ""
         counts = dict(reading.get("counts") or {})
         gaps = [g for g in (reading.get("gaps") or ()) if isinstance(g, Mapping)]
         action = dict(reading.get("next_action") or {})
+        tree = self._tree_cache
         lines = ["【未尽研究（机制读数，不是建议）】",
                  "- 判据：" + ("，".join(f"{k}={v}" for k, v in counts.items()) or "读数没查成"),
                  "- 未尽项：" + ("；".join(
                      f"{g.get('code')}×{g.get('count')}（"
                      + "、".join(str(x) for x in (g.get("ids") or ())[:6]) + "）"
-                     for g in gaps) or "没查成"),
-                 "- 这一拍不许挂机干等；必须当场排一个动作："
-                 + str(action.get("summary") or "先查 `conductor.state` 的 research 读数")]
+                     for g in gaps) or "没查成")]
+        tree_busy = False
+        if not isinstance(tree, Mapping):
+            lines.append("- 整棵树：这一拍没读到活动读数 ⇒ 不拿「没读到」当「没人干活」")
+        elif not tree.get("checked"):
+            lines.append("- 整棵树：闲不闲读不成（" + str(tree.get("reason") or "没查成")
+                         + "）⇒ 这一档按「判不了」处理：仍挡挂机，"
+                         f"且最多挡 {RESEARCH_STALL_LIMIT} 拍（不静默放行）")
+        elif tree.get("busy"):
+            tree_busy = True
+            lines.append("- 整棵树：有人正在干活（"
+                         + str(tree.get("why_text") or "除 M 以外有代理在飞")
+                         + "）⇒ 研究未尽这一档这一拍不拦：可以挂机等它回来")
+        else:
+            lines.append("- 整棵树：都闲着（"
+                         + str(tree.get("why_text") or "除 M 以外没有人在飞")
+                         + "）")
+        if not tree_busy:
+            lines.append("- 这一拍不许挂机干等；必须当场排一个动作："
+                         + str(action.get("summary")
+                               or "先查 `conductor.state` 的 research 读数"))
         return "\n".join(lines) + "\n"
 
     def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
@@ -6443,6 +6655,16 @@ class AgentLoop:
         # 判据本体在 `researchpending.pending_reading`（纯读、可复核）；这里只消费它的结论。
         research = self._research_reading()
         self._research_cache = research
+        # ---- 「整棵树有没有人在干活」（业主 2026-11-06）：研究未尽这一档的第二个输入。
+        # 只读既有读数（`_tree_busy_reading` → `Conductor.activity_snapshot`），
+        # 只对 M 读（这一档只挡 M；非 M 的挂机口径一个字不动）。
+        tree: dict[str, Any] = (
+            self._tree_busy_reading() if str(self.role) == S.CONDUCTOR_ROLE
+            else {"checked": True, "busy": False, "working": [], "unfinished": [],
+                  "unfinished_count": 0, "unknown": [],
+                  "excluded": {"task_id": "", "role": "", "state": ""},
+                  "why_text": "非 M：这一档不读", "reason": ""})
+        self._tree_cache = tree
         pending_timers = list(want.get("pending") or ())
         out: dict[str, Any] = {"skip_model": False, "decision": "run", "woke_reason": "",
                                "waited_sec": 0.0, "reason": "",
@@ -6459,6 +6681,9 @@ class AgentLoop:
                                                             or None),
                                             "gaps": [dict(g) for g in (research.get("gaps") or ())
                                                      if isinstance(g, Mapping)]},
+                               "tree": dict(tree),
+                               "tree_busy": bool(tree.get("busy")),
+                               "tree_checked": bool(tree.get("checked")),
                                "research_blocked": False,
                                "research_stalled": False,
                                "research_streak": 0,
@@ -6495,7 +6720,8 @@ class AgentLoop:
             else:
                 # ---- 「研究未尽」先问一次（真机 R-mk-infinite-93）：显式要求等也不许把
                 # 这一拍睡过去。判据与告警的记账只在 `_research_guard` 一处。
-                guard = self._research_guard(step=step, run=run, reading=research)
+                guard = self._research_guard(step=step, run=run, reading=research,
+                                             tree=tree)
                 self._note_research_gate(out, guard)
                 if guard.get("blocked"):
                     out.update(skip_model=False, decision="run",
@@ -6511,12 +6737,17 @@ class AgentLoop:
                     if patrol.get("mounted"):
                         run.notes.append(f"轮查：{patrol.get('reason')}")
                     slept = self._park_sleep_once(run=run, parked=parked)
+                    # 允许 park 的那一档要贴出"为什么可以睡"的读数（业主 2026-11-06）：
+                    # 这一档能走到这里，要么研究已收工，要么整棵树有人正在干活。
+                    gate_note = (str(guard.get("reason") or "")
+                                 if guard.get("tree_busy") else "")
                     out.update(skip_model=True, decision="park",
                                waited_sec=float(slept.get("waited_sec") or 0.0),
                                patrol=patrol,
-                               reason=(str(slept.get("reason") or "") or
-                                       f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
-                                       "（这一拍不调模型）"))
+                               reason=((str(slept.get("reason") or "") or
+                                        f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
+                                        "（这一拍不调模型）")
+                                       + (f"；{gate_note}" if gate_note else "")))
                     run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
                     run.park["wait_any"] = True
         elif want.get("requested") and not pending_timers:
@@ -6527,7 +6758,8 @@ class AgentLoop:
             # 「研究未尽」先挡：研究没做完时，"无事可做 ⇒ 交差"会把整盘活静默地放掉
             # （真机 R-mk-infinite-93 的同族形态）。这一档只把交差换成"排动作"，
             # 不新造任何终止态。
-            guard = self._research_guard(step=step, run=run, reading=research)
+            guard = self._research_guard(step=step, run=run, reading=research,
+                                         tree=tree)
             self._note_research_gate(out, guard)
             if guard.get("blocked"):
                 out.update(skip_model=False, decision="run",
@@ -6562,7 +6794,8 @@ class AgentLoop:
             # ---- 但"无事可做"还要过「研究未尽」这一关（真机 R-mk-infinite-93）：
             # 板上未结项 0 ≠ 研究做完了；`researchpending.pending_reading` 非空 ⇒ 这一拍
             # 不许 park，必须把 next_action 排给模型（提示词那一段由 `_research_block` 拼）。
-            guard = self._research_guard(step=step, run=run, reading=research)
+            guard = self._research_guard(step=step, run=run, reading=research,
+                                         tree=tree)
             self._note_research_gate(out, guard)
             if guard.get("blocked"):
                 out.update(skip_model=False, decision="run",
@@ -6584,8 +6817,10 @@ class AgentLoop:
                 out.update(skip_model=True, decision="park",
                            waited_sec=float(slept.get("waited_sec") or 0.0),
                            patrol=patrol,
-                           reason=(str(slept.get("reason") or "") or
-                                   "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note))
+                           reason=((str(slept.get("reason") or "") or
+                                    "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看" + note)
+                                   + ((f"；{guard.get('reason')}")
+                                      if guard.get("tree_busy") else "")))
                 run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
         elif parked["count"]:
             # ⑤ 有计时器在等，但手上有活 ⇒ 照常调模型（"计时器不阻塞动作"）
@@ -6644,6 +6879,11 @@ class AgentLoop:
         run.park["research_blocked"] = bool(out["research_blocked"])
         run.park["research_stalled"] = bool(out["research_stalled"])
         run.park["research_streak"] = int(out["research_streak"])
+        # ---- 「整棵树有人干活」那一格的收口读数（与 `agent_park` 事件同源）：
+        # 除 M 以外谁在飞（`working`）、谁被排除（`excluded`）、除 M 以外还有几条未结项。
+        run.park["tree"] = dict(out["tree"])
+        run.park["tree_busy"] = bool(out["tree_busy"])
+        run.park["tree_checked"] = bool(out["tree_checked"])
         run.park["waiters"] = [
             {"timer_id": str(w.get("timer_id") or ""), "wait_for": str(w.get("wait_for") or ""),
              "purpose": str(w.get("purpose") or ""), "parked_sec": w.get("parked_sec"),
@@ -6661,6 +6901,9 @@ class AgentLoop:
                 "wait_any": bool(out["wait_any"]), "timers": list(pending_timers),
                 "pending_work": bool(out["pending_work"]),
                 "research": dict(out["research"]),
+                "tree": dict(out["tree"]),
+                "tree_busy": bool(out["tree_busy"]),
+                "tree_checked": bool(out["tree_checked"]),
                 "checked": bool(out["checked"]), "reason": str(out["reason"]),
             }, sid=self.sid)
         return out

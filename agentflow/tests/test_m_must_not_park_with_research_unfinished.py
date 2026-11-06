@@ -32,6 +32,16 @@ e. 读数坏掉（`checked=False` / fingerprint 为空）也走同一条上限�
 f. 只挡 M：同一个现场换成 D 那一趟 ⇒ 照旧 park（`_pending_work` 三条口径一个字没改）。
 
 边界：全部 tmp 工作区、假时钟、替身模型（`_Gate` 照剧本回答），零真实模型调用。
+
+## 2026-11-06 的口径变化（这一份改了夹具，没放宽断言）
+
+业主逐字：「只要整个树有人干活，且 M 自己暂无可直接做完的板项，它就能挂机」
+⇒「研究未尽」只在「整棵树都闲着」时才拦。这一份此前用一行永远 `running` 的子做
+"挂机等待的对象" —— 那在今天的读数里是"除 M 以外有人正在飞"，会先把挂机放开，
+a/b/d/e 就不是在测研究未尽了。所以 a1/a2/b1/b2/c/d/e 改用 `_idle_child`
+（子已收工、计时器照旧挂着 ⇒ 第 ④ 支可达、而整棵树闲着）—— 断言一条没动，
+被测的那条判据仍是"研究未尽 + 树闲 ⇒ 不许 park"。反过来"树里有人干活 ⇒ 允许 park"
+那一档（含"排除 M 自己"）由 `tests/test_park_gate_whole_tree_busy.py` 单独钉。
 """
 from __future__ import annotations
 
@@ -128,6 +138,27 @@ def _child(cond: Conductor, parent: str, role: str = "D") -> str:
         "error": None, "started_at": "2026-11-06T04:48:00+08:00", "ended_at": None,
         "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
     }, note="start:D.run_once")
+
+
+def _idle_child(cond: Conductor, parent: str, role: str = "D") -> str:
+    """造一行「已交差」的子代理（"整棵树闲着"的夹具；计时器由调用方照旧挂上）。
+
+    为什么 2026-11-06 起这些判据要用它：挂机判据多了一格「整棵树有没有人在干活」
+    （业主逐字：「只要整个树有人干活，且 M 自己暂无可直接做完的板项，它就能挂机」），
+    而"研究未尽 ⇒ 不许 park"只在「整棵树都闲着」时才成立。此前这里造的是一行
+    永远 `running` 的子 —— 那在今天的读数里是"有人正在飞"，会先把挂机放开，
+    于是这些判据就不是在测"研究未尽"了。
+
+    造法是"交差"而不是"落终态"（`cond.finish`）：`agent_state` 的第 ⑦' 步把
+    "交差账上有它那一行"判成静默（业主 2026-10-27 第四条：「父代理把它记为静默
+    子代理」），而台账那一行仍是 `running` ⇒ 挂着等它的计时器不会当场点掉
+    （落终态会让 `< 计时器 >` 以 `triggered_by=target_closed` 立刻到点，第 ④ 支
+    就不可达了）。这正是真机上"父已经把它记为静默、台账行还没落终态"的那个形状。
+    """
+    child = _child(cond, parent, role)
+    CLK.record_handoff(str(cond.store.root), task_id=child, parent_task_id=parent,
+                       role=role, reason="研究侧子代理已交回（夹具：记为静默）")
+    return child
 
 
 def _experiment(store: Store, eid: str, result: str) -> None:
@@ -257,7 +288,7 @@ def test_branch_a_no_concept_face_dispatches_b(
     """a1：concept=0 的研究型现场 ⇒ M 不许 park，必须排"派 B 登记概念行"。"""
     st, cond, ws = _ws(tmp_path, "branch-a")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_branch_a_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
@@ -315,7 +346,7 @@ def test_branch_b_verified_conclusions_are_propositionalized(
     """a2：concept 面在、7 条有结论的实验、非概念命题 0 ⇒ 必须排"立命题并派 F"。"""
     st, cond, ws = _ws(tmp_path, "branch-b")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
@@ -354,7 +385,7 @@ def test_branch_a_criterion_is_load_bearing(
     """b1：把 concept 面那一条打桩成空 ⇒ 同一现场又允许 park，且 a1 的断言变红。"""
     st, cond, ws = _ws(tmp_path, "vacuum-a")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_concept_only_gap(st)
     CLK.start_timer(ws, reason="等 D", wait_for=f"task:{child}", task_id=me, role="M")
     assert [g["code"] for g in RP.pending_reading(st)["gaps"]] == ["concept_missing"]
@@ -378,7 +409,7 @@ def test_branch_b_criterion_is_load_bearing(
     """b2：把"有结论未命题化"那一条打桩成空 ⇒ 同一现场又允许 park，a2 变红。"""
     st, cond, ws = _ws(tmp_path, "vacuum-b")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
@@ -405,7 +436,7 @@ def test_finished_research_still_parks(
     """c：有 concept、有命题、有签、有收录、有稿 ⇒ 允许 park（不变成永动机）。"""
     st, cond, ws = _ws(tmp_path, "done")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_finished_research(st, ws)
     CLK.start_timer(ws, reason="等 D 收尾", wait_for=f"task:{child}",
                     task_id=me, role="M")
@@ -434,7 +465,7 @@ def test_the_same_reading_only_blocks_for_a_bounded_number_of_beats(
     """d：同一读数连续挡到 `RESEARCH_STALL_LIMIT` ⇒ 报一次受控告警并放开挂机。"""
     st, cond, ws = _ws(tmp_path, "stall")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
@@ -469,7 +500,7 @@ def test_an_unreadable_reading_is_bounded_too(
     """e：fail-closed 挡，但连续挡到上限同样放开并告警（读坏不是无限挡）。"""
     st, cond, ws = _ws(tmp_path, "unreadable")
     me = cond.open_top_level_run("M", TASK)
-    child = _child(cond, me)
+    child = _idle_child(cond, me)
     _seed_branch_b_shape(st)
     CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{child}",
                     task_id=me, role="M")
