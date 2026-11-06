@@ -237,7 +237,7 @@ def test_the_authority_check_is_the_load_bearing_gate(
 
     def _deny(self: Conductor, rows: Mapping[str, Mapping[str, Any]], *,
               by_task_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
-        return {"checked": True, "allowed": False, "kind": "denied",
+        return {"checked": True, "allowed": False, "mode": "denied",
                 "by": str(by_task_id), "owner": str(row.get("parent_task_id") or ""),
                 "code": "not_authorized", "why": "打桩：恒无权限"}
 
@@ -253,7 +253,7 @@ def test_the_authority_check_is_the_load_bearing_gate(
 
     def _allow(self: Conductor, rows: Mapping[str, Mapping[str, Any]], *,
                by_task_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
-        return {"checked": True, "allowed": True, "kind": "stub",
+        return {"checked": True, "allowed": True, "mode": "stub",
                 "by": str(by_task_id), "owner": str(row.get("parent_task_id") or ""),
                 "code": "", "why": "打桩：恒有权限"}
 
