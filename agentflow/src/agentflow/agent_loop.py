@@ -2493,19 +2493,9 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                                   + "\n".join(_board_item_line(r) for r in pick))
                 if got["backlog"]:
                     blocks.append(f"- （还有 {got['backlog']} 项没渲染 —— 下一次投递继续）")
-        # ---- ①b 「最近被撤销的项」（业主 2026-11-06 的第二笔：通知必须"真能提醒到"）
-        #
-        # 为什么必须在这里、而不是 `board_digest` / `board_view` / patrol 的 `_board_cell`：
-        # 撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办），而
-        # `open_items_of` 按定义只数未消项 ⇒ 板面摘要里永远看不见「我名下那条被撤了」。
-        # 而 `conductor.board` / `conductor.patrol` 是 M 才拿得到的工具（`roles=("M",)`）——
-        # 收件人（子代理）根本调不到它们，把这一格放过去等于"父亲看得见、本人看不见"，
-        # 正是这一笔要补的缺口。收件人那一侧唯一真能读到的地方是这里：每一拍
-        # `ask_step` 之前投进去的增量（D-52 的唯一投递点）。
-        #
-        # 它不进任何 open 计数（`open_items_of` / `board_open_count` /
-        # `child_open_count` / `board_digest` 一个字都不动）：另起一格、另起一段。
-        # 空的时候连标题都不出现 —— 没有撤项的人不该读到一段废话。
+        # ---- ①b 「最近被撤销的项」（业主 2026-11-06 的第二笔）----
+        # 为什么落在这一层、为什么不进 open 计数，见本函数 docstring 同名那一节；
+        # 这里只有一件事：读口是 `revoked_recent_of`，渲染键是 `REVOKED_RECENT_KEY_PREFIX`。
         look_revoked = getattr(conductor, "revoked_recent_of", None)
         if not callable(look_revoked):
             got["checked"] = False
@@ -6264,11 +6254,8 @@ class AgentLoop:
 
             「只要整个树有人干活，且 M 自己暂无可直接做完的板项，它就能挂机」
 
-        改前 `_pending_work` 的三条判据（新投递 / 未消项 / 刚落定的子）只问「M 自己
-        名下」；"别人正在跑"这件事在挂机判据里根本没有读进来。于是只要研究未尽
-        （`researchpending.pending_reading` 非空），B 正在登记概念也照挡 —— 那是业主
-        不允许的过度催促。真机 R-mk-infinite-93 那一趟是"整棵树都闲着"，所以那次
-        拦得对；读数必须能分开「有人干活」与「全部 idle」这两档。
+        改前只有 M 自己名下的三条判据（新投递 / 未消项 / 刚落定的子），"别人正在跑"没进
+        读数 ⇒ 研究未尽时连 B 正在登记概念都照挡（业主不许可的过度催促）。
 
         ## 读数来源（只读既有读数，不新造状态）
 
@@ -6300,15 +6287,10 @@ class AgentLoop:
 
         ## 为什么 `unfinished` 要问收件人还在不在（真机 R-mk-infinite-94）
 
-        改前 `unfinished` 数的是"哪个号名下还有 `item_state != done` 的板项"，不看那个号
-        还在不在。那一趟 6 个号的 10 条通知全部挂在『已收工』的收件人名下（`status=done`，
-        `outcome` 是 ok / cancelled；`seen_by` 是收件人自己）⇒ 没有人会再 ack、也没有人
-        会再办事，可读数每拍都报"还有 10 条未结项" ⇒ `_research_guard` 第 ① 档
-        （整棵树有人干活 ⇒ 不拦）永远成立 ⇒ 它每 7 分钟 park 一次，研究不尽那一档
-        一次都没落地。判据：`tests/test_park_gate_whole_tree_busy.py` 的 a3 / b2 / d2。
-
-        注意这一刀『不是』改成"树忙恒 False"：`working` 一个都没动，真有人在飞照旧
-        `busy=True`；只有"已收工的号名下那条死项"不再冒充"有人在干活"。
+        改前 `unfinished` 不看收件人还在不在：R-mk-infinite-94 那一趟 6 个号的 10 条通知
+        全挂在已收工的收件人名下 ⇒ 读数每拍报"还有 10 条未结项" ⇒ `_research_guard` 第 ①
+        档恒真、研究不尽那一档一次都没落地。判据：`test_park_gate_whole_tree_busy.py`
+        的 a2 / b / d / e（这一刀不是"树忙恒 False"：`working` 一个字没动）。
 
         ## 三态
 
