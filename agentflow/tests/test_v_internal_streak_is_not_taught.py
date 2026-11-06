@@ -21,7 +21,7 @@ V 内部一次 `verify_proof` 会自己连判 `SIGN_STREAK_NEED` 轮 —— 那�
 
 | 面 | 怎么取的 | 模型在哪看到它 |
 |---|---|---|
-| V 手册「产出-只产意见-签在秘书」 | `agent_skills.skills_for("V")` 的 `title` + `summary` + `body` | 索引行进提示词、正文落 `skills/V/…md` 由它 `fs.read` |
+| V 手册「产出-只产意见-签分两档」 | `agent_skills.skills_for("V")` 的 `title` + `summary` + `body` | 索引行进提示词、正文落 `skills/V/…md` 由它 `fs.read` |
 | E 手册「穷举证明-拿签与上报收养」 | `agent_skills.skills_for("E")` 同上 | 同上（`skills/E/…md`） |
 | `_needs_v_reason` 的四种结局 | 现调 `register_statement._needs_v_reason(state=…)` | 拒信里的「建议：…」那一句 |
 | 三道闸的拒信建议 | 源码里的那三句（`三转成立后签落回稿` / `三转成立后由收方秘书` / `连续 N 次「成立」`） | 同上 |
@@ -51,7 +51,7 @@ PROJECT = pathlib.Path(__file__).resolve().parents[1]
 #: V 内部连判的教程式说法（模型拿不到这些，也不该被要求推断）。
 FORBIDDEN: tuple[str, ...] = ("三转", "连判", "连续三次", "连续 3 次", "连续3次", "第 1、2 次")
 
-V_SLUG = "产出-只产意见-签在秘书"
+V_SLUG = "产出-只产意见-签分两档"
 E_SLUG = "穷举证明-拿签与上报收养"
 
 #: 每一面必须保住的那句判断（判据 c；删掉 ⇒ d 红）。

@@ -935,7 +935,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         # —— 提示词管"想让它这么做"，判据管"不许它不这么做"。下面每一条都是"怎么读"的
         # 方法（判不了），所以只能是嘱托；而"V 是不是逐行验证过"本来也不可机器判
         # （draft/126 §三 的同一句）。完整版在 V 的技能手册里
-        # （`skills/V/产出-只产意见-签在秘书.md`），这里给压缩版 —— 它每次审阅都要带，
+        # （`skills/V/产出-只产意见-签分两档.md`），这里给压缩版 —— 它每次审阅都要带，
         # 而手册是按需读的。
         "\n## 审阅清单（这是嘱托，不是门）\n"
         "`docs/DEVELOPMENT-SPEC.md` §13：提示词管「想让它这么做」，判据管「不许它不这么做」。"
@@ -1005,8 +1005,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         f"- 本会话 Lean 形式化：{'已开启' if _lean_on else '已关闭'}；\n"
         "- `proof` 级证据有两类，并列、不分高低：\n"
         "  ① Lean 形式化 —— 凭据是 `formal.check_formal` 的检查器原话；\n"
-        "  ② 穷举 —— 凭据是 E 写的那份程序 + ②③；这一签由你的秘书发"
-        "（你只给结论，见下面那一档）；\n"
+        "  ② 穷举 —— 凭据是 E 写的那份程序 + ②③；发签分两档：在册档由你的秘书判定并落盘，"
+        "未在册档不问秘书（机械会审全过即由你颁发签信封、收方秘书落块）；你只给结论，"
+        "见下面那一档；\n"
         # 2026-10-24：判据 long 期望这一句「不构成 `proof`」—— 它的意思是"
         # 你这一次逐行走查的「成立」本身不是 proof 级凭据：proof 档要那两类里的某一份"
         # （检查器原话 / 穷举那份程序），你这一签是给它们背书的，不是替代它们。
@@ -1034,7 +1035,8 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格没查成：点名缺哪一块，"
         "既不判 `成立`、也不判 `有毛病`，台账里也不留那一行（留一行会把「没查成」"
         "冒充成「审过了」）；材料补齐之后重新送审。\n"
-        "- 七项全过才判 `成立`；会不会发签由你的秘书按连续次数判 —— 这一签是「对数值证据的背书」，"
+        "- 七项全过才判 `成立`；会不会发签分两档：在册档由你的秘书按连续次数判，未在册档按机械"
+        "会审的连续次数判（`source=exhaustion_report`，不经秘书）—— 这一签是「对数值证据的背书」，"
         "不是「你逐行读过一份自然语言证明」。\n"
     )
 
@@ -1572,8 +1574,8 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
             "grade_recomputed": {},
             "streak": 0, "need": SIGN_STREAK_NEED, "streak_ok": False,
             "deferred_to": "secretary",
-            "reason": (f"签字权在 V 的秘书手上（业主 2026-10-29）：台账那一行已落"
-                       f"（{vid}），第 3 位等秘书判"
+            "reason": (f"发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），"
+                       f"未在册档由 V 自己颁发签信封。台账那一行已落（{vid}）"
                        + (f"；但签名那一行没写成（{append_problem}）" if append_problem else "")),
         }
         row["statement_writeback"] = writeback

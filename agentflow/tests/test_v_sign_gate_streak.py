@@ -834,7 +834,7 @@ def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_
       ② 你看不到审阅之外（洗稿那件事对它是不可见面）；
       ③ 审阅清单接进来了：H-1…H-5 / T-1…T-8 / N-1…N-4 / C-1…C-4 与"不归 F"都点名；
       ④ 清单被注明"这是嘱托，不是门"，并指向 `docs/DEVELOPMENT-SPEC.md` §13；
-      ⑤ V 的提示词索引里点得到那份手册（`skills/V/产出-只产意见-签在秘书.md`）。
+      ⑤ V 的提示词索引里点得到那份手册（`skills/V/产出-只产意见-签分两档.md`）。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -861,10 +861,10 @@ def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_
     assert "秘书判定并落盘" in _missing(stripped)
     # ⑤ 索引里点得到那份手册（正文按需读，索引是唯一入口）
     system = AP.system_prompt("V", registry=build_registry().registry)
-    idx = SK.skill_path("V", "产出-只产意见-签在秘书")
+    idx = SK.skill_path("V", "产出-只产意见-签分两档")
     assert idx in system, idx
     # 反真空：这一份手册真的在 V 的手册清单里（不是只在别处写过一句话）
-    assert any(s.slug == "产出-只产意见-签在秘书" for s in SK.skills_for("V"))
+    assert any(s.slug == "产出-只产意见-签分两档" for s in SK.skills_for("V"))
 
 
 def test_c5_vs_thinking_default_is_high(tmp_path):

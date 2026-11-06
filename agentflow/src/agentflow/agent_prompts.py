@@ -3394,7 +3394,33 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p248"
+#: p248 → p249（2026-11-06 最后一次收拾「签 / 秘书」这一类口径）：
+#: 变化格 = V + B / E / F / M（后四格只差伙伴表里那一行 V 的 `duty`：它随「职责表」渲染进
+#: 能派 V 的那几个角色的提示词）。进模型可见面的五笔：
+#:   ① `verifications.cold_start_prompt` 的「两类 proof 并列」②条（穷举那一签的发签分两档：
+#:      在册档秘书判、框架侧落盘；未在册档不问秘书，机械会审全过即由 V 颁发信封）；
+#:   ② 同文穷举会审末句（「会不会发签」同样分两档，`source=exhaustion_report` 不经秘书）；
+#:   ③ `specs/v.py` 的 `boundary`（签的侧文件在册档由框架侧落盘、未在册档由 V 颁发）；
+#:   ④ `specs/v.py` 的 `duty`（把「发签的判定」与「写盘」拆成两件事说）；
+#:   ⑤ `agent_skills._v_skills()` 的索引那三行（slug 更名 `…-签分两档` + title + summary）
+#:      与那份手册正文的第二节（判定 / 写盘分两档；顺手删掉「三转干净」那句教程式说法，
+#:      判据 `test_v_internal_streak_is_not_taught` 在 p248 那一笔之后一直是红的）。
+#: 另有一笔同族、不在七处清单里：`specs/v.py` 的 policy 有一句「才轮到你颁发这一签
+#: （写 out/vsigns/…）」—— 在册档那也是框架侧写的，本笔把它拆成两档（B 类，随同一次抬版）。
+#: A 类（不进提示词、不抬版本，已单独提交 8c2ff492）：⑦ `verifications.py` 的 S5 注释与
+#: ⑥ `agent_v/core.py` 的模块 docstring。
+#: 判据：`tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`；
+#: 逐格读数 `temp/_p249_digest_table.txt`；反真空 `temp/probe_p249_antivacuum.py`；
+#: 口径扫描 `temp/scan_sign_secretary.py`（同一行同时出现「签」与「秘书」的全部行，待改 = 0）。
+#: 口径：在册档发签由 V 的秘书判、框架侧落盘（`decide_sign_issuance` → `sign_statement` →
+#: `_vsigns_write_after_flip` → `vsigns.issue`）；未在册档不经秘书判、由 V 颁发
+#: （`vsigns.issue`），收方秘书只落手稿签块（`vsigns.land`）。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p249）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: `tests/golden/agent_surface_snapshot.json` 按现值重冻（tool 面 / baseline 对拍不变）；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p249"
 
 
 

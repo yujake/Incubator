@@ -2288,7 +2288,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 工具说明面同步（进 G 的 `tools_lines`）。其余九格逐字同值。逐格旧值 → 新值：
 #   G 2aca56d9→fc79c5df / H 4715fc66→ba7efe69。
 # 十一格是 `temp/_p235_recompute.py` 的现算值（Lean 开档，与 conftest 同一条），不是手抄。
-_FROZEN_PROMPT_VERSION = "p248"
+_FROZEN_PROMPT_VERSION = "p249"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2514,18 +2514,26 @@ _FROZEN_PROMPT_VERSION = "p248"
 #: 为什么块 3 不继续叫 p228：p228 已经落进 `tests/fixtures/prompt_cache_warm.json`
 #: （那份读数记录的是"p228 的提示词"）⇒ 复用同一个版本号会让读数声称一份它没量过的
 #: 提示词。抬 p229 并重跑一轮 warm（花费见提交信息）。
+#: p248 → p249（2026-11-06，「签 / 秘书」这一类口径的最后一次收拾）：五个格换值 ——
+#: V（`duty` / `boundary` / policy 里「才轮得到发签这一步」那一句 + 技能索引那一行）与
+#: B / E / F / M（它们的伙伴表里印着 V 的 `duty`，同一处上游）。其余六格逐字未动
+#: （只差版本行 p248→p249）。逐格旧值 → 新值：
+#:   B b1cbc93f→754e663c / E bdd995ca→514ddf63 / F af7ec19a→660af579 /
+#:   M 283c0ca9→080c336b / V 5a071356→c4a83154。
+#: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "b6fefb150896bd8c3fa77b4fa0407bf5d0def18e75e4ab143411037b0462a900",
-    "B": "b1cbc93f2e05038a6ecd9abcaa84e58d7f0b495f7b3c04f1694457736d1e670c",
+    "B": "754e663c53d6937dd492608bd68f8a29a3e0fbd3d79d3f8614028621fce0bc2e",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
     "D": "1040f2aa3a5ed429749b0d6d5277bf79079ad53708daa30199f6abd29eed99e7",
-    "E": "bdd995ca1925bb05eb5507b50c71443be8c89bfb8ab887f9b0ce3f609c084b4a",
-    "F": "af7ec19acfb5b96319db7626f1b27cca77f355cd9566377821bd7c899217bfbb",
+    "E": "514ddf63d17600696b25445126c90e6e33c3185122e9d3c234975628307a7239",
+    "F": "660af579439f510ee64780d382c50a1550a8368eda961db1b5ec83182839c0f6",
     "G": "a3d910f6b46583af72694798d5164ebeb674914919c9ce12b8d88e92f8b0d793",
     "H": "1e4c2b9de0485d4c866373d42aae6f31b144b8b9fef9b650c4fb756620697911",
     "L": "98d5d49ee7a3717d2a3bb652a9a9b76bde919c278b2199b2fc108501cb41a620",
-    "M": "283c0ca9980d2edbda98725d17744c8337f528df3bc9d38623294fb7acddfb68",
-    "V": "5a071356ccc4d0d576ef7851d213dd5fae86ac93a28df73fe4b826fa391e87c0",
+    "M": "080c336bdb2971e807cc49dbb98f5b5d3ff59d6d08020c8a2d07a14aa55c63be",
+    "V": "c4a8315417ae7ba9b0e63e36024cc9088112f59d70efbf0d19a8c832a4e7a402",
 }
 
 
