@@ -407,17 +407,22 @@ def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
     assert "重送" in str(one.get("detail") or ""), one.get("detail")
 
 
-def test_the_same_sha_faulted_twice_still_opens_only_one_item(tmp_path):
-    """④ 同一份证明打回两次（两签、同一 sha）⇒ 板项只 1 条；补投再跑一遍也不增。"""
+def test_two_different_bodies_faulted_open_two_items_keyed_by_sha(tmp_path):
+    """④ 两次打回、两份**不同正文** ⇒ 各开一条（键 `v-resubmit@<命题>@<sha>` 里含 sha）。
+
+    2026-11-06 裁定 3（打回即站住）之后，「同一份正文被打回两次」在入口上已不可能 ——
+    同一 sha 的第二趟会被短接。所以这一条改成量**键的语义**：正文变了就是另一条义务。
+    """
     st = _ws(tmp_path)
     conductor_for(st)
     parent = _agent_row(st)
     _put(st)
     _verify_v(st, SID, parent=parent)
-    _verify_v(st, SID, parent=parent)
-    assert len(_resubmit_items(st)) == 1, [r.get("input_key") for r in _resubmit_items(st)]
+    _reproof(st)   # 打回站住之后要再判必须改稿（同 sha 重掷不再重判）
+    _verify_v(st, SID, parent=parent, proof=PROOF2)
+    assert len(_resubmit_items(st)) == 2, [r.get("input_key") for r in _resubmit_items(st)]
     VRC.backfill(store=st)
-    assert len(_resubmit_items(st)) == 1, [r.get("input_key") for r in _resubmit_items(st)]
+    assert len(_resubmit_items(st)) == 2, [r.get("input_key") for r in _resubmit_items(st)]
     # 而回执那一侧是两条（两签两个 vid）—— 义务与回执不是同一条
     receipts = [r for r in st.rows("tasks")
                 if str(r.get("input_key") or "").startswith("v-verdict@")]
