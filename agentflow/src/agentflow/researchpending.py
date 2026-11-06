@@ -322,6 +322,6 @@ def pending_reading(store: Any) -> dict[str, Any]:
         if action:
             out["next_action"] = {"code": str(first["code"]), **action}
     key = json.dumps([[g["code"], g["count"], g["ids"]] for g in gaps],
-                     ensure_ascii=False, sort_keys=True)
+                     ensure_ascii=False, sort_keys=True, default=str)
     out["fingerprint"] = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] if gaps else ""
     return out

@@ -329,8 +329,12 @@ def test_b4_no_source_must_point_at_our_own_manuscript(store: Store) -> None:
     # 每笔探针是一条不同的命题 ⇒ 各自的稿要有各自的号（号 == 它将要登记的号）。
     # 这几笔共用 000000 会撞在 good 那一行上，被判成真冲突（`stmt_id_taken`）：
     # 那条拒绝是对的（口径①），但它不是 B-4 要量的东西。
+    # 第二笔原先写 `no_source：见 stmt:000007` —— 000007 从来不在册，而 2026-11-06 的裁定
+    # 是「F 只可引用在册 ∧ 等级 ≥ pre_theorem 的命题」⇒ 那种正文现在会被受控拒
+    # （`dependency_source_not_registered`），而 B-4 要量的只是"理由里指到了哪一处"。
+    # 所以这里换成**本条自己在册的号**（000001），它由上面那笔登记造出来。
     for i, reason in enumerate(("no_source：见 out/paper/main.tex§3",
-                                "no_source：见 stmt:000007"), start=1):
+                                "no_source：见 stmt:000001"), start=1):
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
         got = _ok(_b(store).register_statement(**_with_manuscript(
             store, _no_source(statement_full=f"探针命题：{reason}", quote_reason=reason),
