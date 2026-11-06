@@ -937,3 +937,69 @@ EXIT=0
 |---|---|---|---|
 | （待签） | | | |
 | （待签） | | | |
+
+---
+
+## 12. 2026-11-06 批 p250b（`a0640c43..2a0f658c`）—— 命中 3 条，**批准栏待 2 名 reviewer 人工签**
+
+**这一批的性质**：p250 登记之后的一小批收口（8 个提交，`a0fc75e3..2a0f658c`），
+改动 9 个文件，其中 3 个落在 FC-27 清单里：`src/agentflow/specs/m.py`（`auth-audit`）与
+两份冻结快照（`eval-criteria`）。其余 6 个（`docs/READING-MAP.md` / `docs/ROLE-GUIDE.md` /
+`src/agentflow/tools/conductor_tools.py` / `tests/fixtures/tool_declaration_baseline.json` /
+两个判据文件）不在清单里，`--paths` 对它们报未命中（读数见下）。
+
+改动性质：**只碰文字**。`m.py` 只改了 policy 里那一句「撤销让板面四个 open 读数各少一」的
+**读数名**（`open_items_of` → 读板用 `conductor.board` 的 `board_open_items`），动作表
+（`ACTIONS`）、边、写集一个字未动；两份快照是这句话的下游（八个角色的 prompt 都嵌着同一段
+工作板说明）与工具声明（`conductor.void_items` 的 `summary`）的重冻。
+
+| # | 路径 | 类别 | 这一批改了什么（走查要点） |
+|---:|---|---|---|
+| 1 | `src/agentflow/specs/m.py` | `auth-audit` | policy 那一句的四个 open 读数改成今天的名字：`open_items_of`（已删 / 不在工具面）→ 读板用 `conductor.board`，逐格是 `board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`。**动作表 / 边 / 写集零改动** |
+| 2 | `tests/golden/agent_surface_snapshot.json` | `eval-criteria` | 重冻：A/B/D/E/F/G/L/M 八格 `prompt` 换值（每个 prompt 的共板段里同一句撤销说明跟着换；M 那一格因它自己的 policy 同段出现两次而多换一处）；`tools` / `write_set` / `edges` / `role_registry` 逐格未动 |
+| 3 | `tests/golden/tool_surface_snapshot.json` | `eval-criteria` | 重冻：`conductor.void_items` 的 `summary` 换值（revoke 档口径：权限替代「叫不醒」的证明、`expects=work` 也收）；其余 121 件的声明逐字段未动 |
+
+**当次读数（复跑命令与原文；改动集 = `git diff --name-only a0640c43..2a0f658c`）**：
+
+```text
+$ python -B scripts/noai_gate.py --paths docs/READING-MAP.md docs/ROLE-GUIDE.md \
+      src/agentflow/specs/m.py src/agentflow/tools/conductor_tools.py \
+      tests/fixtures/tool_declaration_baseline.json \
+      tests/golden/agent_surface_snapshot.json tests/golden/tool_surface_snapshot.json \
+      tests/test_the_m_manual_says_how_to_wake_block_items.py tests/test_the_retire_gate_points_at_the_wake.py
+[requires_human] required_approvals=2
+requires_human：3 条改动落在 **FC-27 禁 AI 区**（类别：auth-audit、eval-criteria）⇒ 必须由人编写或人逐行走查，并需要 2 名 reviewer 批准。命中：src/agentflow/specs/m.py, tests/golden/agent_surface_snapshot.json, tests/golden/tool_surface_snapshot.json
+⚠️ 台账 **stale** 3 条（被批准的那一版与盘上不是同一版 ⇒ 旧批准不许沿用；`--check-approvals` 会给出逐条结论）：src/agentflow/specs/m.py（台账 dffdfcaae511 ≠ 盘上 4572470957a6）；tests/golden/agent_surface_snapshot.json（台账 d691e142305c ≠ 盘上 b95d2719d56b）；tests/golden/tool_surface_snapshot.json（台账 23e452b00877 ≠ 盘上 473c88b3f93a）
+EXIT=1
+```
+
+**基线登记（登记 ≠ 批准）**：
+
+```text
+$ python -B scripts/noai_gate.py --baseline \
+      --paths src/agentflow/specs/m.py tests/golden/agent_surface_snapshot.json tests/golden/tool_surface_snapshot.json \
+      --note "…" --authored ai-agent --authored-basis attested --this-session changed
+[baseline] 登记 3 条 / 未登记 0 条；台账：D:\Incubator\agentflow\.noai-approvals.json
+  · src/agentflow/specs/m.py  refreshed  sha256 4572470957a6  [auth-audit]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · tests/golden/agent_surface_snapshot.json  refreshed  sha256 b95d2719d56b  [eval-criteria]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · tests/golden/tool_surface_snapshot.json  refreshed  sha256 473c88b3f93a  [eval-criteria]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+EXIT=0
+```
+
+**台账只读对账**：
+
+```text
+$ python -B scripts/noai_gate.py --check-ledger
+[clean] check-ledger
+clean：清单 44 条唯一路径全部在台账里有条目（台账 43 条）；其中 1 条是刻意预登记（盘上还没有这个文件）：src/agentflow/release_check.py。台账另有 0 条清单外的历史条目 —— 本命令不要求对称（台账是只增的历史记录，清单是今天的保护范围）。
+EXIT=0
+```
+
+**reviewers = 0（登记 ≠ 批准）**：三条的 `reviewers` 与 `audits` 都是空数组；批准只能由人 `--approve` 追加。
+
+**批准栏（由人签，AI 不许填）**：
+
+| reviewer | 日期 | 走查范围（逐行读过哪些） | 结论 |
+|---|---|---|---|
+| （待签） | | | |
+| （待签） | | | |
