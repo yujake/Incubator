@@ -6623,6 +6623,22 @@
           "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed / statement_missing（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / no_such_proof / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_id_missing / statement_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
         }
       ]
+    },
+    {
+      "tools": [
+        "conductor.void_items"
+      ],
+      "key": "returns",
+      "reason": "2026-11-06 撤销口径（甲）：`refused[]` 每一项新增受控拒信码 `code`（`{id, code, why}`），`returns` 那句逐字声明了元素键；顶层键集合、其余各档与 `state` 的四档取值一个字未动。",
+      "date": "2026-11-06",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一",
+          "to": "{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why} 或 {id, code, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一"
+        }
+      ]
     }
   ],
   "summary_lens_before": {
