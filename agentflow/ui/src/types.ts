@@ -842,6 +842,7 @@ export interface TaskRow {
   seen_step: number | null;
   keep_alive: boolean;
   settled_at_parent_exit: boolean;
+  expects_was: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;

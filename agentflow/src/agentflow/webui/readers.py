@@ -5660,6 +5660,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 声明 —— 否则契约 C 会报"后端有而 types.ts 没有"，而那一格正是剪断与交付
       # 分不开的地方（跨 lane 的连带，由 Q2 这一批顺手补上）。
       ("settled_at_parent_exit", "boolean"),
+      # 2026-11-06（裁定 ① 的丙件）：撤销之后 `expects` 被清空，原值落在这一格。
+      # 同上一条：它是 `Task` 的列，盘上有它就得在 types.ts 里声明。
+      ("expects_was", "string"),
       # 任务行的编号就是它自己的 `task_id`（按它反查，命中的是这一趟自己的收尾事件）。
       # 角色这一格照业主的口径只认 `created_by`（Task 没有那一栏）⇒ 空串。
       ("by_role", "string"), ("by_role_source", "string"),

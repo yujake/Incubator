@@ -2901,6 +2901,10 @@ class Task:
     #: 板上的 kind（`ITEM_KINDS`）。空串 = 老行 / 纯实例行（不进板）。
     kind: str = ""
     #: 什么算做完（`ITEM_EXPECTS`）；`kind` 非空时必填。
+    #:
+    #: 唯一允许为空的行是撤销/作废之后的那一行（`item_state="done"` 且
+    #: `item_close="expired"`）：它不再欠任何动作，原值记在 `expects_was`
+    #: （业主 2026-11-06 裁定 ① 的丙件；判据 `tests/test_revocation_shape_improvements.py`）。
     expects: str = ""
     #: 工作项轴（`ITEM_STATES`）。
     item_state: str = ""
@@ -2925,6 +2929,21 @@ class Task:
     # 之后 `tasks.json` 逐字节一致（I-9 的那两条判据守这件事）。
     #: `True` = 这一行的终态是父代理退场时结算的（子当时还在跑，结果未知）。
     settled_at_parent_exit: bool = False
+
+    # ---- 撤销（业主 2026-11-06 裁定 ① 的丙件）：`expects` 被清空之后，原值留在哪
+    #
+    # 为什么必须有这一格（一个数一个名，撤销不是删除）：撤销之后那一行不再欠任何动作，
+    # 于是 `expects`（"什么算做完"的唯一一格）被清空 —— 可它原来要的是 `ack` 还是
+    # `work`，读的人仍然要能回答（"这一条本来只要一个回执，还是一件要交付的活"）。
+    # 把它抹掉就是把撤销这件事塌成"本来就没有"。所以清空 `expects` 时必须把原值留在
+    # 这一格；这一格只在 `expects == ""` 时有值（两格同时非空 ⇒ 读的人不知道以哪格为准，
+    # 由 `validate` 当场拒）。
+    #
+    # 位置在最后一位（不是美观问题）：`to_dict()` 是 `asdict`（键序 = 字段序），而
+    # `_write_new_row` 与 `finish` 都把行补齐到全字段 —— 新键追加在末尾才让 `rebuild()`
+    # 之后 `tasks.json` 逐字节一致（I-9 的那两条判据守这件事）。
+    #: `expects` 被清空前的那一档（`ITEM_EXPECTS` 之一；空串 = 没有可留的来路）。
+    expects_was: str = ""
 
     def validate(self) -> None:
         if not str(self.task_id or "").strip():
@@ -3040,19 +3059,40 @@ class Task:
         # ⇒ 加列对 59 个真机工作区的 2276 行老行零影响（实测 `draft/89` §1.2）。
         if not self.kind:
             if (self.expects or self.item_state or self.item_close or self.seen_by
-                    or self.seen_step is not None or self.keep_alive):
+                    or self.seen_step is not None or self.keep_alive
+                    or self.expects_was):
                 raise ValueError(
-                    "kind 为空（老行/纯实例行）时，工作项那六格与 keep_alive 必须全空 —— "
+                    "kind 为空（老行/纯实例行）时，工作项那几格与 keep_alive 必须全空 —— "
                     "否则这一行既算老行又带板状态，读它的人分不清以哪一格为准"
                 )
         else:
             if self.kind not in ITEM_KINDS:
                 raise ValueError(f"kind 必须是 {ITEM_KINDS} 之一或空串，收到 {self.kind!r}")
-            if self.expects not in ITEM_EXPECTS:
+            # 空 `expects` 只开在一处：撤销/作废之后的那一行（`item_state="done"` 且
+            # `item_close="expired"`）。那一档回答的是"这条永远不会再被处理"，
+            # `expects` 在它上面不再承担任何义务；原值留在 `expects_was`（业主
+            # 2026-11-06 的丙件）。其余行（queued / seen / block / done+acked /
+            # done+completed）仍然只许 `ITEM_EXPECTS` 两档 —— 空串不是第三个取值，
+            # 它只是"这一行已经没有任何动作可要"这个形态在过期行上的写法。
+            empty_expects_ok = (self.expects == "" and self.item_state == "done"
+                                and self.item_close == "expired")
+            if self.expects not in ITEM_EXPECTS and not empty_expects_ok:
                 raise ValueError(
-                    f"kind 非空时 expects 必须是 {ITEM_EXPECTS} 之一，收到 {self.expects!r}"
+                    f"kind 非空时 expects 必须是 {ITEM_EXPECTS} 之一"
+                    f"（或撤销后 done/expired 行上的空串），收到 {self.expects!r}"
                     "（少了它就没有'什么算做完'的口径）"
                 )
+            if self.expects_was:
+                if self.expects:
+                    raise ValueError(
+                        "expects_was 只在 expects 被清空时有意义 —— 两格同时非空，"
+                        "读的人不知道哪一格才是现在的口径"
+                    )
+                if self.expects_was not in ITEM_EXPECTS:
+                    raise ValueError(
+                        f"expects_was 必须是 {ITEM_EXPECTS} 之一，收到 {self.expects_was!r}"
+                        "（它是清空前的那一档，不许自由文本）"
+                    )
             if self.item_state not in ITEM_STATES:
                 raise ValueError(
                     f"kind 非空时 item_state 必须是 {ITEM_STATES} 之一，收到 {self.item_state!r}"
