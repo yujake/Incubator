@@ -17,7 +17,9 @@
 
 1. 它是逐条审批唤醒，不是一键全醒；
 2. 默认 `dry_run=True` 只看不写、`approve="yes"` 才动；
-3. block 板项也会永久挡收工（`retire_integrity.open_items` ⇒ `dirty` ⇒ `complete=False`）。
+3. block 板项也会永久挡收工：它让 `retire_integrity` 的 `dirty` 非空 ⇒ `complete=False`。
+   那几格读数的真名有两处（`retire_integrity` 的顶层叫 `root_open_items`，逐节点才叫
+   `open_items`）—— 手册点名哪一个都算说清，见 `GATE_ANCHOR` / `GATE_CELLS`。
 
 ## 反真空（每条断言都自带方向）
 
@@ -51,10 +53,19 @@ FACTS: dict[str, str] = {
     "② 默认只看不写": "默认 `dry_run=True` 只看不写",
     "② 批准才动": '`approve="yes"` 才动',
     "③ block 板项挡收工": "block 板项也会永久挡收工",
-    "③ 挡收工的判据格": "`retire_integrity.open_items`",
     "③ 脏节点那一档": "`dirty`",
     "③ 收工门的结论格": "`complete=False`",
 }
+
+#: ③ 的「挡收工的判据格」：顶层与逐节点是**两个不同的真名** —— `retire_integrity`
+#: 的顶层那一格叫 `root_open_items`（`conductor.py::retire_integrity` 返回 dict 的键），
+#: 逐节点那一格才叫 `open_items`（`nodes[]` 每项里的键）。
+#:
+#: 判据**同时接受两种读法**：手册点名哪一个都算说清。但它必须挂在 `retire_integrity`
+#: 上 —— 以及旧形状里那个编出来的格名 `retire_integrity.open_items` 不算说清：
+#: 那个名字顶层不存在（顶层叫 `root_open_items`），逐节点也不叫这个全名。
+GATE_ANCHOR = "`retire_integrity`"
+GATE_CELLS: tuple[str, ...] = ("`root_open_items`", "`open_items`")
 
 
 def _bodies(role: str) -> str:
@@ -77,11 +88,29 @@ def _m_surface(tmp_path: pathlib.Path) -> Any:
     return build_registry(store=st, conductor=cond).registry, cond
 
 
+def _gate_problems(body: str) -> list[str]:
+    """③ 的判据格说清了吗（空表 = 说清了）：挂在 `retire_integrity` 上、用了两个真名之一。
+
+    两向都要报：只写了工具名没写格名 ⇒ 报；格名用了编出来的形状 ⇒ 也报。
+    """
+    problems: list[str] = []
+    if GATE_ANCHOR not in body:
+        problems.append(f"M 的可见手册里没有点到 {GATE_ANCHOR} —— "
+                        "挡收工的是它返回的那几格读数")
+    if not any(cell in body for cell in GATE_CELLS):
+        problems.append(
+            "M 的可见手册里没有用真格名（顶层 / 逐节点任一个都行：" + " / ".join(GATE_CELLS)
+            + "）—— `retire_integrity.open_items` 那个形状顶层不存在："
+            "顶层叫 `root_open_items`，逐节点那一格才叫 `open_items`")
+    return problems
+
+
 def test_the_three_facts_are_in_the_visible_m_manual() -> None:
     """三条事实必须逐字出现在 M 的可见手册里（缺一条就是一句没写下来的口径）。"""
     body = _bodies("M")
     missing = [f"{name}（{needle}）" for name, needle in FACTS.items()
                if needle not in body]
+    missing += _gate_problems(body)
     assert missing == [], f"M 的可见手册里缺这几条：{missing}"
 
 
@@ -115,7 +144,8 @@ def test_the_three_facts_do_not_leak_into_another_roles_manual() -> None:
 
     D 的手册与 M 的手册是从同一份 `agent_skills.py` 印出来的：若判据实际上只读了整个
     文件（或读错了角色），这一条会立刻红 —— 它证明上一条断言读的真是 M 的面子。
+    判据格那两个真名也一并算进负控：D 的手册里一个都不该有。
     """
     other = _bodies("D")
-    leaked = [needle for needle in FACTS.values() if needle in other]
+    leaked = [needle for needle in (*FACTS.values(), *GATE_CELLS) if needle in other]
     assert leaked == [], f"这些字句不该出现在 D 的可见手册里：{leaked}"
