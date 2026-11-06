@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-05，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **271 个 `.py`、254,968 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,595 行** —— 批 R40 把它补进了 §3 的表；
+> **271 个 `.py`、254,819 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，13,595 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -375,7 +375,7 @@
 | 文件 | 是什么 |
 |---|---|
 | `evidence.py` | 证据层：先检索、再逐字回验 —— 每条结论都落在某段真实原文上 |
-| `researchpending.py` | 327 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签 / 已签未收录 / 开着的题 / 无稿 —— 六档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题。这张清单是那一步的判据来源 |
+| `researchpending.py` | 340 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签 / 已签未收录 / 开着的题 / 无稿 —— 六档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题。这张清单是那一步的判据来源 |
 | `artifacts.py` | 产物登记：谁在哪个路径产出了什么 |
 | `depsection.py` | **F 手稿依赖段的唯一解析点 + 引用档位的唯一判据**（业主 2026-10-24：「作者只写内容，登记由收方读稿产生」）：`SECTION_HEADING` 那一节按四列表格读成 `dependencies`（`used_by="stmt:<命题号>#pN"` + `path_group` + `source_stmt_id`），`citation_levels` / `citation_level_allowed` 是引用档位本身，`read_manuscript` 按命题号找 F 的手稿。F 自己不写依赖台账、也没有写台账的工具；`secretary`、B 的入库、D 的汇报、F 的手稿四处都读这一份（与 V 读 F 的手稿再签字同构） |
 | `papercompile.py` | 把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`，并写框架自己的编译回执：判"这份 PDF 是不是盘上这份 tex 编的"（`receipt_matches_tex`） |

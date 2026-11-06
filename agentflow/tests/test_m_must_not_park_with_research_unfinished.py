@@ -7,8 +7,8 @@
     （其中 supports/refutes 是有结论的）· research_questions 有开着的
     板上未结项 0
     三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮实验/穷举"，
-    C 一次都没派过 ⇒ 没有 concept ⇒ F 的可引池是空的 ⇒ 没有命题可立 ⇒
-    没有稿可签 ⇒ 等级永远上不去。
+    概念行一行都没长出来（而概念行只由 B 经 `Secretary.write_concept_row` 写，
+    C 的动作面只产 `AnalysisReport`）⇒ 这条"未尽"永远消不掉。
 
 ## 这一份钉的九件事
 
@@ -17,7 +17,8 @@
 
 a1. 分支甲（无概念面）：研究型项目里 concept 行 = 0（现场有实验/问题）
     ⇒ M 这一拍 `decision="run"`（不 park），提示词逐字带 `concepts=0` 与
-    `next_action=concept_missing`（"派 C 梳理概念"）。
+    `next_action=concept_missing`（"派 B 登记概念行"，动作对象是 B 不是 C ——
+    概念行只由 B 经 `Secretary.write_concept_row` 写，C 只做分析）。
 a2. 分支乙（有核验结论未命题化）：已有 concept，`experiments` 里有 7 条有结论的、
     而非概念 `statements` = 0 ⇒ `next_action=candidate_unfiled`
     （"立命题并派 F 落稿"）。
@@ -251,9 +252,9 @@ def _assert_branch_holds(run: Any, gate: _Gate, *, action: str,
 
 # ------------------------------------------------------------------ a1 分支甲
 
-def test_branch_a_no_concept_face_dispatches_c(
+def test_branch_a_no_concept_face_dispatches_b(
         tmp_path: pathlib.Path, bench) -> None:
-    """a1：concept=0 的研究型现场 ⇒ M 不许 park，必须排"派 C 梳理概念"。"""
+    """a1：concept=0 的研究型现场 ⇒ M 不许 park，必须排"派 B 登记概念行"。"""
     st, cond, ws = _ws(tmp_path, "branch-a")
     me = cond.open_top_level_run("M", TASK)
     child = _child(cond, me)
@@ -271,17 +272,22 @@ def test_branch_a_no_concept_face_dispatches_c(
 
     assert run.stop_reason == "stop_file", run.to_dict()
     _assert_branch_holds(run, gate, action="concept_missing",
-                         needles=("concepts=0", "派 C", "梳理概念"))
+                         needles=("concepts=0", "派 B", "登记概念行",
+                                  "write_concept_row"))
     reading = RP.pending_reading(st)
     assert reading["checked"] is True, reading
     assert reading["pending"] is True, reading
     assert reading["counts"]["concepts"] == 0, reading
     assert reading["counts"]["research_shaped"] is True, reading
     assert reading["gaps"][0]["code"] == "concept_missing", reading
+    why = str(reading["gaps"][0]["why"])
+    assert "write_concept_row" in why and "B 登记" in why, why
+    assert "派 C" not in str(reading["next_action"]["summary"]), reading["next_action"]
+    assert "梳理概念" not in str(reading["next_action"]["summary"]), reading["next_action"]
     assert reading["next_action"] == {
-        "code": "concept_missing", "target": "C",
-        "summary": ("派 C 梳理概念：从已有文献/实验里抽出概念与关系（concept 行是 F 的"
-                    "可引池；没有它，命题立不出来、稿也没得签）")}, reading
+        "code": "concept_missing", "target": "B",
+        "summary": ("派 B 从已读文献/文档里登记概念行（概念行只由 B 经 "
+                    "`Secretary.write_concept_row` 写，C 只做分析）")}, reading
     # 同一份底座能从 M 的两处看盘面读到：state 给逐表读数，patrol 异常清单给这一句。
     reg = build_registry(store=st, conductor=cond, workspace_root=ws).registry
     state = reg.call("conductor.state", role="M")
@@ -290,6 +296,10 @@ def test_branch_a_no_concept_face_dispatches_c(
     patrol = reg.call("conductor.patrol", role="M")
     assert patrol.ok, patrol.error
     assert any("concept_missing" in str(x) for x in (patrol.data.get("anomalies") or ())), \
+        patrol.data.get("anomalies")
+    # 巡查那一句与挂机那一段共用同一份 `next_action`：口径换了，这里也必须是"派 B"。
+    assert any("派 B" in str(x) and "write_concept_row" in str(x)
+               for x in (patrol.data.get("anomalies") or ())), \
         patrol.data.get("anomalies")
     events, problems = SS.read_session(ws, sid=SID)
     assert not problems, problems
@@ -358,7 +368,7 @@ def test_branch_a_criterion_is_load_bearing(
     assert gate.prompts == [], ("concept 面板打桩成空之后仍然问了模型", gate.prompts)
     assert str(run.park.get("decision") or "") == "park", run.park
     with pytest.raises(AssertionError):
-        _assert_branch_holds(run, gate, action="concept_missing", needles=("派 C",))
+        _assert_branch_holds(run, gate, action="concept_missing", needles=("派 B",))
 
 
 # ------------------------------------------------------------------ b2 反真空（乙）

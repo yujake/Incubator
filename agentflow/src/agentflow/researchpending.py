@@ -18,7 +18,7 @@
 
 | 档 | 判据（可读） | 下一动作（按 `specs/m.py` 的边表） |
 |---|---|---|
-| `concept_missing` | 研究型项目（有实验/开着的问题/文献/稿子）里，`statements` 的 concept 行 = 0 | 派 C 梳理概念（概念面是 F 的可引池：没有它，命题立不出来、稿没得签） |
+| `concept_missing` | 研究型项目（有实验/开着的问题/文献/稿子）里，`statements` 的 concept 行 = 0 | 派 B 从已读文献/文档里登记概念行（概念行只由 B 经 `Secretary.write_concept_row` 写；C 的动作面只产 `AnalysisReport`，写不出概念行） |
 | `candidate_unfiled` | 有结论的 `experiments`（`result ∈ supports/refutes` 且 `evidence_kind ∈ proof/cross_check`）> 0，而非概念 `statements` = 0 | 立命题并派 F 落稿：派 D 立项，由 D 派 F 写命题与证明（M 不直连 F） |
 | `statements_unsigned` | `closing.statements_unsigned_reading` 的 `count` > 0（既没有 V 签、也没有被明确放弃的命题） | 派 D 让 F 补签（谁产出谁送 V）；命题已在册的缺签由 B 处置；拿不到签就明确放弃 |
 | `signed_unregistered` | 板上开着的 `b-register@` 义务 > 0（稿上已有成立的 V 签、`statements` 里还没入库） | 派 B 收录 |
@@ -27,10 +27,19 @@
 
 `concept_missing` 与 `candidate_unfiled` 是两条独立的分支，缺一不可：
 真机 R-mk-infinite-93 的三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮
-实验/穷举"，C 一次都没派过 —— 没有 concept ⇒ F 的可引池是空的 ⇒ 没有命题可立 ⇒
-没有稿可签 ⇒ 等级永远上不去。所以概念面先于命题面（上表就是这么排的），而两条
-各自的判据都必须能单独触发（判据见 `tests/test_m_must_not_park_with_research_unfinished.py`
-的 a1/a2 与 b1/b2）。
+实验/穷举"，概念行一行都没长出来 —— 概念面空着，说明文献整理这一环（B 的交付面）
+还没做完，这就是"研究未尽"里最先可读的那一格。
+
+这一档的动作主语是 B 而不是 C（2026-11-06 业主裁定，甲）：概念行的唯一写侧在
+B 那一侧（`conceptrows` → `Secretary.write_concept_row`，契约第 4 条逐字"写经秘书"：
+五元位 / 洗名 / 概念同一性同一份实现）；C 的动作面全是分析（`hottest` / `paths` /
+`cold` / `gaps` / `neighbors` / `relations_between` 产 `AnalysisReport`），一行概念
+都写不出来 ⇒ 派 C 是死路：派出去也长不出概念行，这条"未尽项"永远消不掉（真机 93
+就是这样空转的）。理由也不是"概念面是 F 的可引池"：可引池 = 在册 ∧ 等级 ≥
+`pre_theorem` 的命题（`depsection.citable_pool`），与 concept 行无关。
+
+概念面那一档排在命题面之前（上表就是这么排的），两条各自的判据都必须能单独触发
+（判据见 `tests/test_m_must_not_park_with_research_unfinished.py` 的 a1/a2 与 b1/b2）。
 
 `pending = bool(gaps)`：任何一条非空都算"研究未尽"。"一件事都没开始"不算：
 一个从来没有任何实验/命题/问题/文献/稿子的空工作区不产生 gap —— 它是"没有研究
@@ -81,9 +90,9 @@ def _verified_kinds() -> tuple[str, ...]:
 #: 为什么把"派谁"写在这里：M 的边表不许在这里重写一遍，但动作要能落到一个具体角色才叫"排出动作"；`target` 只是那句话的主语，不是权限面。
 _GAP_ACTIONS: dict[str, dict[str, str]] = {
     "concept_missing": {
-        "target": "C",
-        "summary": ("派 C 梳理概念：从已有文献/实验里抽出概念与关系（concept 行是 F 的"
-                    "可引池；没有它，命题立不出来、稿也没得签）"),
+        "target": "B",
+        "summary": ("派 B 从已读文献/文档里登记概念行（概念行只由 B 经 "
+                    "`Secretary.write_concept_row` 写，C 只做分析）"),
     },
     "candidate_unfiled": {
         "target": "D",
@@ -134,14 +143,17 @@ def _ids(rows: list[Mapping[str, Any]], field: str, limit: int = 12) -> list[str
 def _gap_concept_missing(counts: Mapping[str, Any]) -> dict[str, Any] | None:
     """分支甲：概念面是不是空的（研究型项目里 concept 行 = 0）。
 
-    为什么要先于"候选族"那一条：真机 R-mk-infinite-93 的三次轮查每次都只排
-    "再做一轮实验/穷举"，C 零次 —— 没有 concept ⇒ F 的可引池空 ⇒ 没有命题可立。
-    没有这一条，"有结论的实验"那条会一直排在 C 前面，而它是立不出来的。
+    为什么这一条排在"候选族"前面：真机 R-mk-infinite-93 的三次轮查每次都只排
+    "再做一轮实验/穷举"，概念行一行都没长出来 —— 概念面是这一档最先可读的缺口。
+
+    为什么动作对象是 B 而不是 C（业主 2026-11-06 裁定，甲）：概念行只由 B 经
+    `Secretary.write_concept_row` 写，C 的动作面全是分析（产 `AnalysisReport`）——
+    派 C 也长不出概念行，那条"未尽项"永远消不掉（真机 93 就是这样空转的）。
 
     作用域：只对"研究型项目"触发（`research_shaped=True`）。一个空工作区
     （没有实验 / 问题 / 文献 / 稿子）不产生这一条 —— 它是"没有研究对象"，
     不是"概念面缺席"，否则 M 在任何空工作区里都挂不了机（连"打个招呼"的任务
-    也会被派去梳理概念）。
+    也会被派去登记概念）。
     """
     if int(counts.get("concepts") or 0) > 0:
         return None
@@ -153,7 +165,8 @@ def _gap_concept_missing(counts: Mapping[str, Any]) -> dict[str, Any] | None:
         "observed": 0,
         "ids": [],
         "why": ("研究型项目里 statements 的 concept 行是 0 —— 概念面还没建："
-                "F 的可引池是空的，命题立不出来、稿也没得签"),
+                "概念行只由 B 经 `Secretary.write_concept_row` 写（C 只做分析），"
+                "所以要派 B 登记概念行"),
     }
 
 
@@ -266,7 +279,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
         return out
 
     gaps: list[dict[str, Any]] = []
-    # 分支甲先于分支乙：没有概念面时，"立命题"立不出来（F 的可引池是空的）。
+    # 分支甲先于分支乙：概念面是这一档最先可读的缺口；两条各自独立、都能单独触发。
     concept_gap = _gap_concept_missing(counts)
     if concept_gap is not None:
         gaps.append(concept_gap)
