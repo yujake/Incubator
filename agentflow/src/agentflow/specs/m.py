@@ -143,8 +143,9 @@ SPEC = AgentSpec(
             "**`conductor.board` / `conductor.patrol` 的每一项都带 `revoke` 格**（`revocable` / "
             "`action` / `call` / `mode` / `code` / `why`）：`revocable=true` 就照 `call` 抄参数"
             "（`item_ids` 填这一条的编号、`why` 填一句为什么撤），别自己搬 id 再被拒一次。",
-            "**撤销让板面四个 open 读数各少一**（`open_items_of` / `board_open_count` / patrol 的 "
-            "`child_open_count` / `tree().items`）—— 销号闸与收工闸同时松一格。",
+            "**撤销让板面四个 open 读数各少一**（读板用 `conductor.board`：`board_open_items` / "
+            "`board_open_count` / patrol 的 `child_open_count` / `tree().items`）"
+            "—— 销号闸与收工闸同时松一格。",
             "**收件人那一侧会收到【最近被撤销的项】**（`revoked_recent`：谁撤的、理由、时间）："
             "那一条不欠 ack，别当成还没通知到。",
             "**子代理交完差、你不再需要它之后，主动销号**（销号走 `conductor.retire_child(child_name=…, reason=…)`，"
