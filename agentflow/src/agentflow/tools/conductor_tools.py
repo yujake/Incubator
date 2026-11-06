@@ -1575,7 +1575,8 @@ def conductor_board(_conductor, limit: int = 20) -> ToolResult:
     而"板上没事"是 `checked=True` 且 `board_open_count==0`（只数真板项；合成项另有
     `pending_*_count`）—— 这两件事折平就是本仓最忌的形态。
     """
-    view = _conductor().board_view(limit=int(limit))
+    view = _conductor().board_view(limit=int(limit),
+                                   by_task_id=str(current_task_id() or ""))
     if not view.get("checked", False):
         raise ToolError(f"板读不成：{view.get('reason') or '未知原因'} ⇒ 这是『没查成』，"
                         "不是『板上没事』")
@@ -2701,6 +2702,8 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     voided = [str(x) for x in (got.get("voided") or ())]
     refused = [dict(r) for r in (got.get("refused") or ()) if isinstance(r, Mapping)]
     traces = [dict(t) for t in (got.get("traces") or ()) if isinstance(t, Mapping)]
+    notified = [dict(t) for t in (got.get("notified") or ()) if isinstance(t, Mapping)]
+    notification_problems = [str(x) for x in (got.get("notification_problems") or ())]
     data.update(checked=bool(got.get("checked")), voided=voided, refused=refused,
                 count=len(voided),
                 state=("voided" if voided else ("refused" if refused else "nothing")),
@@ -2709,7 +2712,10 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     # `returns=` 声明的是 data 的键集，而工具面是冻结快照（`tests/golden/`，FC-27）；
     # 在没得到人重冻之前，多一个 data 键会让 `test_no_tool_returns_a_top_level_key_it_does_not_declare`
     # 当场红。`meta` 整格都渲染进模型看到的那条结果 ⇒ 读数一个字都不少。
-    return ok(data, **data, traces=traces)
+    # 乙件的 `notified`（撤销通知逐条：item_id / notice_id / owner / kind / expects / text）
+    # 与 `notification_problems` 同一条理由走 `meta`。
+    return ok(data, **data, traces=traces, notified=notified,
+              notification_problems=notification_problems)
 
 
 @tool(
@@ -3538,19 +3544,26 @@ def _in_progress_of(rows: Any) -> tuple[str, str]:
                 "⇒ 分不出『现在在做』的是哪一条")
 
 
-def _board_cell(cond: Any, code: str) -> dict[str, Any]:
+def _board_cell(cond: Any, code: str, *, by_task_id: str = "") -> dict[str, Any]:
     """未做完的板项逐条 + 现在在做哪一项（`open_items_of` 是未消项的唯一读数）。
 
     `child_open_count` 这个名字量的是什么（153-U-05）：这一个子代理名下、未完成的
     真板项件数（`open_items_of(code)` 的条数）。它不含合成项、也不是全工作区 —— 与
     `conductor.board` 的 `board_open_count`（全工作区真板项）是两个分母，故两个名。
+
+    `by_task_id`（甲件，业主 2026-11-06）：每一项的 `revoke` 格按看的人算（判据
+    只有 `Conductor.revocation_cell`）。不给 ⇒ "不知道你是谁"，每一项都是不可撤 +
+    那一句理由（不是"你没有权限"）。整张 `tasks` 快照只读一次：`open_items_of` 与
+    权限判据读的是同一份，两个读数不会互相漂。
     """
     try:
-        rows = [dict(r) for r in cond.open_items_of(code)]
+        snapshot = [dict(r) for r in cond._tasks()]
+        rows = [dict(r) for r in cond.open_items_by_parent(snapshot).get(code, ())]
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
         return {"checked": False, "in_progress_id": "", "in_progress_reason": "",
                 "child_open_count": 0, "items": [],
                 "reason": f"板读不成（{type(exc).__name__}: {exc}）⇒ 它名下还有几条项判不了"}
+    by_id = {str(r.get("task_id") or ""): r for r in snapshot}
     in_progress, why = _in_progress_of(rows)
     items: list[dict[str, Any]] = []
     for row in sorted(rows, key=lambda r: str(r.get("task_id") or "")):
@@ -3565,6 +3578,8 @@ def _board_cell(cond: Any, code: str) -> dict[str, Any]:
             "item_close": str(row.get("item_close") or ""),
             "seen_step": row.get("seen_step"),
             "called_by": str(row.get("called_by") or ""),
+            # 甲件：能不能撤 + 撤它该用哪个动作（与 `conductor.board` 同一格、同一判据）
+            "revoke": cond.revocation_cell(row, by_task_id=by_task_id, rows=by_id),
             # 板项行没有"创建时刻"这一列（`open_item` 写的 `started_at` 是空串）：能算就算，
             # 算不了就 null 加一句为什么 —— 不编一个 0（0 会被读成"刚开的"）。
             "age_sec": age,
@@ -3812,7 +3827,7 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
         row = by_code.get(code) or {}
         cell = states.get(code) or {}
         state = str(cell.get("state") or AGENT_STATE_UNKNOWN)
-        board = _board_cell(cond, code)
+        board = _board_cell(cond, code, by_task_id=str(here or ""))
         timers = _timers_cell(clock, code, timer_index, reading, timer_problem)
         guidance = _last_guidance(relay_rows, code)
         if relay_problem:

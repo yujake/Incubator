@@ -115,6 +115,15 @@ INFORMATIONAL_ITEM_KINDS: tuple[str, ...] = ("notice", "message")
 #:   指导有时就是要办的事，所以今天不动它的旧行为（仍要 ack）。裁定之后只改这一格。
 ACK_REQUIRED_ITEM_PREFIXES: tuple[str, ...] = ("v-verdict@", "stop-notice@", "relay@")
 
+#: 撤销通知的 `input_key` 前缀（业主 2026-11-06 裁定 ① 的乙件）。
+#:
+#: 为什么要一个前缀而不是"每撤一次随便写一条"：
+#: 1. 幂等 —— 同一条项只该有一份撤销通知（撤销本身也只能落一次）；
+#: 2. 防环 —— 通知自己也是一条 `tasks` 行；没有这个前缀，撤一条通知会再生成一条
+#:    通知，撤通知的通知又会生成一条……`.void_items` 用它认出"这一条是通知，不再
+#:    替它发通知"。
+REVOKE_NOTICE_PREFIX: str = "revoke-notice@"
+
 # ---------------------------------------------------------------- 三态（在飞 / 待机 / 静默）
 #
 # 业主逐字（2026-10-26 同一批裁定的第二句，`tests/test_three_states_flying_standby_silent.py`
@@ -4598,6 +4607,116 @@ class Conductor:
                         "只有它的直接父代理或 M 能改别人的板项（兄弟 / 祖父 / 更远的层都不行）"))
         return out
 
+    #: 撤销该用的动作（`revocation_cell` 的 `action` 格）。与工具面同名，不另造一个名字：
+    #: 模型看到的就是注册表里能调的那一件（`conductor.void_items`，它在工具层固定带
+    #: `revoke=True`）。
+    REVOKE_ACTION = "conductor.void_items"
+
+    def revocation_cell(self, row: Mapping[str, Any], *, by_task_id: str = "",
+                        rows: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
+        """「这一条能不能被你撤、撤它该用哪个动作」—— 甲件（业主 2026-11-06）。
+
+        为什么要有这一格：改前 `conductor.board` / `conductor.patrol` 只给 `items[].id`，
+        "这一条能不能撤"要靠模型自己把 id 搬到 `conductor.void_items` 再被拒一次才知道
+        —— 试错是两步，而第一步（搬 id）没有任何读数。现在每一步都直接带出可否与动作。
+
+        判据就是 :meth:`_item_authority`（业主裁定 ① 的唯一判据，这里不另写一份）：
+        三态原样保留 —— `checked=False`（没有台账号 / 台账里没有这一行）与
+        `allowed=False`（查过了、你没权限）都给 `revocable=False`，但 `code` / `why`
+        分得开。已经终态的行、以及 `expects` 为空的行（撤销后的行 / 通知）都不可撤：
+        前者没有对象，后者没有义务可撤。
+
+        返回的键集固定（`revoke` 这一格在 board / patrol 的每一项上都长这样）：
+        `{"revocable","action","call","mode","code","why"}`。
+
+        - `revocable=True` ⇒ `action="conductor.void_items"`，`call` 是照抄就能用的
+          参数骨架 `{"item_ids": [这一条的编号], "why": "<一句话为什么撤>"}`（`why`
+          必填，进留痕；模型只需要补那一句）；
+        - `revocable=False` ⇒ `action` / `call` 是空表/空串，`why` 说清凭什么不可撤
+          （权限拒信原样带出，或"已经终态" / "它不要求任何动作"）。
+        """
+        out: dict[str, Any] = {"revocable": False, "action": "", "call": {},
+                               "mode": "", "code": "", "why": ""}
+        iid = str(row.get("task_id") or "")
+        if not self._is_board_item(row):
+            out.update(code="not_board_item",
+                       why="它不是板项（kind 为空）⇒ 不归撤销管")
+            return out
+        if str(row.get("item_state") or "") == "done":
+            out.update(code="already_done",
+                       why="它已经是终态（item_state=done）⇒ 没有可撤的东西")
+            return out
+        if str(row.get("expects") or "") == "":
+            out.update(code="no_obligation",
+                       why="它不要求任何动作（expects 为空）⇒ 没有可撤的义务")
+            return out
+        if rows is None:
+            try:
+                rows = self._tasks_by_id()
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                out.update(code="unknown_actor",
+                           why=f"台账读不成（{type(exc).__name__}: {exc}）⇒ 判不了谁有权撤")
+                return out
+        authority = self._item_authority(rows, by_task_id=by_task_id, row=row)
+        if not authority.get("checked"):
+            out.update(code=str(authority.get("code") or "unknown_actor"),
+                       why=str(authority.get("why") or "权限读不成（fail-closed）"))
+            return out
+        if not authority.get("allowed"):
+            out.update(code="not_authorized",
+                       why=str(authority.get("why") or "没有权限撤这一条"))
+            return out
+        out.update(revocable=True, action=self.REVOKE_ACTION,
+                   call={"item_ids": [iid],
+                         "why": "<一句话为什么撤：必填，逐字进那一行的 inputs>"},
+                   mode=str(authority.get("mode") or ""),
+                   why=str(authority.get("why") or ""))
+        return out
+
+    def _revocation_notice_row(self, *, row: Mapping[str, Any], item_id: str,
+                               owner: str, by_task_id: str, reason: str,
+                               depth: int) -> dict | None:
+        """撤销通知那一条行的形状（乙件；唯一一处，判据可整格替换它做反真空）。
+
+        业主逐字（2026-11-06）：
+
+            撤销时自动投一条通知给收件人（系统发出、不要 ack）：
+            「你名下 t-xxxxx（<summary>）已被 <by> 撤销（理由：…），你不需要再处理它」
+
+        ## 为什么它是已收口的一行（`done` + `expired`），而不是一条开着的新待办
+
+        `ITEM_EXPECTS` 只有 `ack` / `work` 两档（冻结面）。一条开着的通知只能是
+        `expects="ack"`（收件人欠一个回执 —— 与「不需要 ack」正相反，而且它会在销号闸
+        里冒充"名下还有未消的板项"）或新造一档 expects（不许）。所以通知以已收口的一行
+        落账：它是一份记录，不是待办 —— `open_items_of` 看不见它、`ack_items` 收不到
+        它，板的两个计数一个都不动（既有判据
+        `test_the_board_readings_drop_the_revoked_item_at_once` 要求撤销后计数恰好少 1，
+        它同时守着"通知不许冒充待办"）。
+
+        `called_by="system"`：这一条不是撤销的人（`by_task_id`）以自己名义投的，是框架替
+        这次撤销发的；`by` 出现在正文里，读的人不用猜。`expects` 为空（那一行不欠任何
+        动作）—— `schema.Task.validate` 的空 `expects` 窄门正好开在 done/expired 上。
+
+        返回 `None` = 这一条不该投（没有收件人，或它自己就是一条撤销通知 ⇒ 防环）。
+        """
+        if not owner:
+            return None
+        if str(row.get("input_key") or "").startswith(REVOKE_NOTICE_PREFIX):
+            # 通知自己也是 tasks 行：撤它会再生成一条通知，撤通知的通知再生成一条……
+            return None
+        summary = " ".join(str(row.get("detail") or "").split())[:200] or "（没有摘要）"
+        text = (f"你名下 {item_id}（{summary}）已被 {by_task_id} 撤销"
+                f"（理由：{reason}），你不需要再处理它")
+        notice = self._item_row(kind="notice", role=str(row.get("role") or ""),
+                                expects="", action="notice", summary=text,
+                                called_by="system", parent_task_id=owner,
+                                depth=max(1, int(depth)),
+                                input_key=f"{REVOKE_NOTICE_PREFIX}{item_id}")
+        notice["item_state"] = "done"
+        notice["item_close"] = "expired"
+        notice["inputs"] = [f"notice:revoked:{item_id}:by={by_task_id}"]
+        return notice
+
     def void_items(self, item_ids: Sequence[str], *, by_task_id: str, why: str,
                    revoke: bool = False) -> dict[str, Any]:
         """把"永远不会再被收件人处理"的板项作废（`item_close="expired"`）。
@@ -4651,23 +4770,43 @@ class Conductor:
         ⇒ 受控拒绝 `not_authorized`，一个格都不动。收件人自己那条路不受影响 ——
         他仍是 `ack_items`（`conductor.ack`），不是这里。
 
-        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"traces":[…],"reason"}`；
+        ## 业主 2026-11-06 裁定 ① 的乙件 / 丙件（同一笔撤销要一起做完）
+
+        乙件：撤销成功后自动投一条通知给收件人（`_revocation_notice_row` 是唯一
+        一处，正文逐字见那里）：它是已收口的一行（`done` + `expired`），不是新待办
+        —— 通知若开着，就只能是 `expects="ack"`（收件人欠一个回执，与「不需要 ack」
+        正相反）或新造一档 expects（冻结面不许）。返回的 `notified` 逐条给
+        `{item_id, notice_id, owner, kind, expects, text}`；通知没开成（写失败）进
+        `notification_problems`，撤销本身不回滚（撤销是那一笔的正文，通知是它的
+        回执；两者分开报，不许把"通知没发出去"折成"没撤"）。
+
+        丙件：撤销后那一行的 `expects` 清空、原值写进 `expects_was`（`schema.Task`
+        末尾那一格；`validate` 只允许 `done` + `expired` 的行为空）。理由：撤销之后
+        那一行不再欠任何动作，留着 `expects="ack"` 会让每一个读侧看着它像还欠一个
+        ack —— 而 `open_items_of` / `board` / `ack_items` 的读数其实都已经不数它了，
+        "列上还剩一个 ack"与"账上不欠"是两句话，盘上只许留后一句。
+
+        返回：`{"checked","voided":[id],"refused":[{"id","why"}],"traces":[…],
+        "notified":[…],"notification_problems":[…],"reason"}`；
         拒信只有 `unknown_retired` 那一档多一个 `code` 格（`{"id","code","why"}` ——
         理由码是机器读的那一格，改前那一句"它只是静默"是没有根据的结论、也没有
         理由码）；权限拒绝那一档也带 `code`（`no_actor` / `unknown_actor` /
-        `not_authorized`）。三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
+        `not_authorized`）；`expects` 为空的行带 `no_obligation`（它没有可撤的义务）。
+        三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
         """
         self._refuse_write_in_snapshot("作废板项（void_items）")
         ids = [str(x) for x in item_ids if str(x).strip()]
         if not ids:
             return {"checked": True, "voided": [], "refused": [], "traces": [],
+                    "notified": [], "notification_problems": [],
                     "reason": "没有给要作废的项"}
         reason_text = " ".join(str(why).split())[:120]
         at = S.now_iso()
         # 边界 2：收件人必须静默/已退役（只对 `revoke=False` 那一档成立）。
         # `revoke=True` 那一档的正当性是权限，不是"它叫不醒" —— 见 docstring。
         out: dict[str, Any] = {"checked": True, "voided": [], "refused": [],
-                               "traces": [], "reason": ""}
+                               "traces": [], "notified": [],
+                               "notification_problems": [], "reason": ""}
         with self.store.tx("tasks", actor="conductor",
                            note=("item:expired" if not revoke
                                  else "item:expired:revoke")) as tx:
@@ -4697,6 +4836,15 @@ class Conductor:
                 if not authority.get("allowed"):
                     out["refused"].append({"id": iid, "code": "not_authorized",
                                            "why": str(authority.get("why") or "没有权限改这一条")})
+                    continue
+                if str(row.get("expects") or "") == "":
+                    # 撤销后的行（`done` + `expired`）已经在上面被终态那一档拦下；走到
+                    # 这里的空 expects 只可能是"通知"那种本来就不要求任何动作的行 ——
+                    # 没有义务可撤，撤了还会再生成一条通知（`REVOKE_NOTICE_PREFIX` 防环）。
+                    out["refused"].append({
+                        "id": iid, "code": "no_obligation",
+                        "why": ("它不要求任何动作（expects 为空）⇒ 没有可撤的义务"
+                                "（撤销不是删行）")})
                     continue
                 if not revoke:
                     # 旧口径（作废）：只收 expects=ack 的通知，而且收件人必须叫不醒。
@@ -4755,6 +4903,13 @@ class Conductor:
                 new = dict(row)
                 new["item_state"] = "done"
                 new["item_close"] = "expired"
+                if revoke:
+                    # 丙件（业主 2026-11-06）：撤销之后这一行不再欠任何动作 ——
+                    # `expects` 清空、原值进 `expects_was`（schema 只允许 done/expired
+                    # 的行为空）。留着 `expects="ack"` 会让读的人看着它像还欠一个 ack，
+                    # 而读侧（open_items_of / board / ack_items）其实都已经不数它了。
+                    new["expects_was"] = str(row.get("expects") or "")
+                    new["expects"] = ""
                 inputs = list(new.get("inputs") or [])
                 if revoke:
                     # 六格：谁（by）/ 归谁（owner）/ 为什么（reason）/ 原状（from）/
@@ -4773,12 +4928,41 @@ class Conductor:
                 task.validate()
                 tx.upsert("tasks", task.to_dict(), note=note)
                 out["voided"].append(iid)
-                out["traces"].append({
+                trace = {
                     "item_id": iid, "by": str(by_task_id), "owner": owner,
                     "reason": reason_text, "from": cur, "to": "done", "at": at,
                     "close": "expired", "mode": ("revoke" if revoke else "void"),
                     "authority": str(authority.get("mode") or ""),
-                })
+                    "notice_id": "",
+                }
+                out["traces"].append(trace)
+                if revoke:
+                    # 乙件（业主 2026-11-06）：撤销成功 ⇒ 同一笔事务里给收件人投一条
+                    # 通知。通知是已收口的一行（见 `_revocation_notice_row` 的
+                    # docstring：开着的通知只能是欠 ack 或新造一档 expects，两者都不许）。
+                    # 写失败不回滚撤销（撤销是正文，通知是回执），但必须逐条报出来。
+                    owner_depth = int((rows.get(owner) or {}).get("depth") or 0) + 1
+                    notice = self._revocation_notice_row(
+                        row=row, item_id=iid, owner=owner, by_task_id=str(by_task_id),
+                        reason=reason_text, depth=owner_depth)
+                    if notice is None:
+                        out["notification_problems"].append(
+                            f"{iid}：没有投撤销通知（没有收件人，或它本身是一条撤销通知）")
+                    else:
+                        try:
+                            notice_id = self._row_with_id(tx, notice,
+                                                          note="item:notice:revoked")
+                        except Exception as exc:  # noqa: BLE001 —— 通知没开成要如实报
+                            out["notification_problems"].append(
+                                f"{iid}：撤销通知没开成（{type(exc).__name__}: {exc}）"
+                                "⇒ 撤销照旧（它是正文），但收件人不会收到这条通知")
+                        else:
+                            trace["notice_id"] = notice_id
+                            out["notified"].append({
+                                "item_id": iid, "notice_id": notice_id,
+                                "owner": owner, "kind": "notice", "expects": "",
+                                "text": str(notice.get("detail") or ""),
+                            })
         verb = "撤销" if revoke else "作废"
         if out["refused"] and not out["voided"]:
             out["reason"] = f"一条都没{verb}（拒绝理由见 refused）"
@@ -6980,7 +7164,7 @@ class Conductor:
                 "by_close": by_close,
                 "old_instance_rows": len(self._tasks()) - len(rows)}
 
-    def board_view(self, *, limit: int = 20) -> dict[str, Any]:
+    def board_view(self, *, limit: int = 20, by_task_id: str = "") -> dict[str, Any]:
         """给主控/父级看的"还挂着什么"（只读，不含建议）。
 
         口径（甲形态的一条硬约束）：`tasks` 现在有两类行 —— 板项（`kind` 非空）与老实例行
@@ -6991,13 +7175,25 @@ class Conductor:
           `kind` 非空且 `item_state != done`）的件数与明细，落台账、可复算；
         - `pending_attack_count` / `pending_search_count`（+ 对应的 `*_items`）：量的是合成项
           —— 由猜想与文献现状每拍现造、不落台账 ⇒ 并进上面那个数就再也说不清"板上还剩几件活"。
+
+        ## `by_task_id`：每一项的 `revoke` 格按看的人算（甲件，业主 2026-11-06）
+
+        改前每一项只有 `task_id`：模型得把 id 搬到 `conductor.void_items`、被拒一次，
+        才知道"这一条我撤不撤得动"。现在每一项带一格 `revoke`（形状与判据见
+        :meth:`revocation_cell`）：能不能撤、该用哪个动作、参数骨架是什么。
+        `by_task_id` 不给 ⇒ 读调用上下文（`calling_as` 挂的台账号）；两处都没有 ⇒
+        每一项的 `revoke` 都是 `checked=False` 那一档（"不知道你是谁"，不是"你没有权限"）。
         """
+        viewer = str(by_task_id or "") or current_task_id()
         try:
-            rows = self._board_rows()
+            all_rows = [dict(r) for r in self._tasks()]
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "reason": f"{type(exc).__name__}: {exc}",
                     "board_open_items": [], "board_open_count": 0}
-        board_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
+        by_id = {str(r.get("task_id") or ""): r for r in all_rows}
+        board_items = [r for r in all_rows
+                       if self._is_board_item(r)
+                       and str(r.get("item_state") or "") != "done"]
         # 2026-10-17（T5 第 2 趟真机读数驱动）：把"登记了但没人立项"的猜想
         # 变成板上的待办。为什么放在这里：D 的手册已经逐字写了"登记完猜想请接着把
         # 这一腿开出去"（且自己记着"第 10 趟 T5 这一环整环为 0"），可第 2 趟 T5 又是 0
@@ -7011,7 +7207,13 @@ class Conductor:
         gaps = self._pending_search_items()
         board_items.sort(key=lambda r: (str(r.get("started_at") or ""),
                                         str(r.get("task_id") or "")))
-        out = {"checked": True, "board_open_items": board_items[:max(1, int(limit))],
+        shown: list[dict[str, Any]] = []
+        for r in board_items[:max(1, int(limit))]:
+            row = dict(r)
+            # 甲件：每一项直接带出"这一条能不能被你撤、撤它该用哪个动作"。
+            row["revoke"] = self.revocation_cell(row, by_task_id=viewer, rows=by_id)
+            shown.append(row)
+        out = {"checked": True, "board_open_items": shown,
                "board_open_count": len(board_items), "readings": self.board_readings()}
         if pending:
             out["pending_attack_count"] = len(pending)
