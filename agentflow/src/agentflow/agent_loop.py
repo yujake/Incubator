@@ -6123,6 +6123,56 @@ class AgentLoop:
                       if str(tid) != mine
                       and str((cell or {}).get("state") or "") == "flying")
 
+    @staticmethod
+    def _item_owner_can_still_act(row: Mapping[str, Any]) -> bool:
+        """这条未消板项的『收件人』还"在不在"—— 决定它算不算"有人在干活"。
+
+        ## 为什么要有这一针（真机 R-mk-infinite-94，2026-11-06 16:35 起每 7 分钟一 park）
+
+        那一趟的 `why_text` 逐字是：
+
+            「除 M 以外在飞：t-000142；除 M 以外还有 10 条未结项
+              （t-000002、t-000008、t-000012、t-000020、t-000058、t-000079）」
+
+        而台账里那 10 条全是 `kind=notice` / `expects=ack` 的板项（`item_state` 是
+        `queued` 或 `seen`），它们的收件人那一行『全部已收工』：
+
+            t-000002 role=A status=done outcome=ok        ended_at 14:18:12
+            t-000008 role=E status=done outcome=ok        ended_at 15:46:54
+            t-000012 role=D status=done outcome=ok        ended_at 16:26:03
+            t-000020 role=F status=done outcome=cancelled ended_at 16:25:41
+            t-000058 role=B status=done outcome=ok        ended_at 15:37:56
+            t-000079 role=G status=done outcome=ok        ended_at 15:35:16
+
+        它们读到过这些通知（`seen_by` 就是收件人自己、`seen_step` 是它当时的步号：49 / 30 /
+        33 / 81 / 18 / 30），但在收工之前没有 ack，而收工之后没有人会再替它们 ack
+        （父不许代 ack —— 业主 2026-10-08；`void_items` 也只许作废"叫不醒"的收件人的项）。
+        于是"10 条未结项"是『死的』：再挂八小时也还是 10 条，"树忙"因此虚高且恒真，
+        `_research_guard` 的第 ① 档永远优先 ⇒ 研究未尽那一档一次都没拦过
+        （open_questions ×3 一直没处理，$7.23 之后停摆）。
+
+        ## 判据只有一处
+
+        委托 `secretary.is_live_agent`（"这一行还算不算在跑"的唯一判据：轴是 agent，即
+        `kind` 为空、不是顶趟行、`status` 在活档 `LIVE_TASK_STATUSES`）。这里『不』自己
+        读 `kind` / `status` —— 那正是 Q18/Q27 收掉的第二份判据
+        （判据：`tests/test_the_axis_is_asked_in_one_place.py` 与
+        `tests/test_the_axis_and_liveness_are_asked_separately.py`）。
+
+        ## 三档
+
+        - 收件人还在（活档 `pending` / `running`）⇒ True：它名下没结的项就是"它手上还有活"；
+        - 收件人已不在活档（`done` / `cancelled` / `failed`，以及停住的 `block`）⇒ False：
+          它此刻不在跑，那些项也就没有人正在处理（`block` 那一档要等 `wake_blocked`
+          把它唤回活档，才重新算"它手上有活"—— 唤醒是另一次写，不由这一格代劳）；
+        - 台账里没有收件人那一行 ⇒ False：`is_live_agent({})` 走 `row_axis` 的
+          "其余"档，与"已收工"同档 —— "台账里没有这一行"本身就是查得到的结论，
+          不是"没查成"（"没查成"由调用方的 `open_problem` 那一支说）。
+        """
+        from .secretary import is_live_agent      # 惰性：与本模块其余几处引用秘书同姿态
+
+        return bool(is_live_agent(dict(row or {})))
+
     def _tree_busy_reading(self) -> dict[str, Any]:
         """整棵树「有没有（除我以外的）人在干活」的读数（`_research_guard` 的第二个输入）。
 
@@ -6157,8 +6207,24 @@ class AgentLoop:
 
         `busy = working or unfinished`：
         - `working`：除 M 以外、三态为"在飞"的那些台账号（业主"任一子代理在飞"）；
-        - `unfinished`：除 M 以外、名下还有未消板项的那些父号（业主"有未结项"，
-          与 `Conductor.open_items_by_parent` 同一份读数）。
+        - `unfinished`：除 M 以外、名下还有未消板项『且收件人还活着』的那些父号（业主
+          "有未结项"，与 `Conductor.open_items_by_parent` 同一份读数，收件人那一刀由
+          :meth:`_item_owner_can_still_act` 判）；
+        - `stale_items`（『不』进 `busy`）：名下还有未消板项、但收件人已经收工的那些父号
+          —— 那些项永远不会再被处理（真机 R-mk-infinite-94 的 10 条 / 6 个号），
+          算进 `busy` 就是让这条判据恒真。它们不静默消失：照旧进读数与 `why_text`。
+
+        ## 为什么 `unfinished` 要问收件人还在不在（真机 R-mk-infinite-94）
+
+        改前 `unfinished` 数的是"哪个号名下还有 `item_state != done` 的板项"，不看那个号
+        还在不在。那一趟 6 个号的 10 条通知全部挂在『已收工』的收件人名下（`status=done`，
+        `outcome` 是 ok / cancelled；`seen_by` 是收件人自己）⇒ 没有人会再 ack、也没有人
+        会再办事，可读数每拍都报"还有 10 条未结项" ⇒ `_research_guard` 第 ① 档
+        （整棵树有人干活 ⇒ 不拦）永远成立 ⇒ 它每 7 分钟 park 一次，研究不尽那一档
+        一次都没落地。判据：`tests/test_park_gate_whole_tree_busy.py` 的 a3 / b2 / d2。
+
+        注意这一刀『不是』改成"树忙恒 False"：`working` 一个都没动，真有人在飞照旧
+        `busy=True`；只有"已收工的号名下那条死项"不再冒充"有人在干活"。
 
         ## 三态
 
@@ -6171,7 +6237,7 @@ class AgentLoop:
         """
         empty: dict[str, Any] = {
             "checked": True, "busy": False, "working": [], "unfinished": [],
-            "unfinished_count": 0, "unknown": [],
+            "unfinished_count": 0, "stale_items": [], "stale_count": 0, "unknown": [],
             "excluded": {"task_id": "", "role": "", "state": ""},
             "why_text": "", "reason": ""}
         me = str(self.my_task_id or "")
@@ -6202,28 +6268,51 @@ class AgentLoop:
         open_problem = ""
         unfinished: list[str] = []
         unfinished_count = 0
+        # 收件人已经收工的那些未消项（`{owner, role, status, count}`）：不算"有人干活"，
+        # 但也不许静默消失 —— 它们照旧进读数与 `why_text`（真机 R-mk-infinite-94）。
+        stale_owners: list[dict[str, Any]] = []
+        stale_count = 0
+        rows: list[dict[str, Any]] = []
         try:
-            groups = self.conductor.open_items_by_parent()
+            # 台账只读一次：收件人那一行与未消项都要它（`_tasks()` 是一次整表反序列化）。
+            rows = list(self.conductor._tasks())
+            groups = self.conductor.open_items_by_parent(rows)
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             groups = None
             open_problem = f"未结项读数没查成（{type(exc).__name__}: {exc}）"
         if groups is not None:
-            for pid, rows in groups.items():
-                if str(pid) == me or not rows:
+            owner_row = {str(r.get("task_id") or ""): r for r in rows}
+            for pid, open_rows in groups.items():
+                if str(pid) == me or not open_rows:
+                    continue
+                owner = owner_row.get(str(pid)) or {}
+                if not self._item_owner_can_still_act(owner):
+                    stale_owners.append({"owner": str(pid),
+                                         "role": str(owner.get("role") or ""),
+                                         "status": str(owner.get("status") or ""),
+                                         "count": len(open_rows)})
+                    stale_count += len(open_rows)
                     continue
                 unfinished.append(str(pid))
-                unfinished_count += len(rows)
+                unfinished_count += len(open_rows)
         unfinished.sort()
+        stale_owners.sort(key=lambda x: str(x.get("owner") or ""))
         why: list[str] = []
         if working:
             why.append("除 M 以外在飞：" + "、".join(working[:6]))
         if unfinished:
             why.append(f"除 M 以外还有 {unfinished_count} 条未结项"
                        f"（{'、'.join(unfinished[:6])}）")
+        if stale_owners:
+            why.append(f"另有 {stale_count} 条未结项挂在已收工的号下"
+                       f"（{'、'.join(str(x.get('owner') or '') for x in stale_owners[:6])}）"
+                       "—— 收件人不会再处理，不算有人在干活")
         if not working and not unfinished:
             why.append("除 M 以外没有人在飞、也没有未结项")
         out: dict[str, Any] = {**empty, "working": working, "unfinished": unfinished,
-                               "unfinished_count": unfinished_count, "unknown": unknown,
+                               "unfinished_count": unfinished_count,
+                               "stale_items": stale_owners, "stale_count": stale_count,
+                               "unknown": unknown,
                                "excluded": excluded, "busy": bool(working or unfinished),
                                "why_text": "；".join(why)}
         if out["busy"]:
@@ -6665,7 +6754,7 @@ class AgentLoop:
         tree: dict[str, Any] = (
             self._tree_busy_reading() if str(self.role) == S.CONDUCTOR_ROLE
             else {"checked": True, "busy": False, "working": [], "unfinished": [],
-                  "unfinished_count": 0, "unknown": [],
+                  "unfinished_count": 0, "stale_items": [], "stale_count": 0, "unknown": [],
                   "excluded": {"task_id": "", "role": "", "state": ""},
                   "why_text": "非 M：这一档不读", "reason": ""})
         self._tree_cache = tree

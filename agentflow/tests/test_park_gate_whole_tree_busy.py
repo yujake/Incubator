@@ -29,6 +29,17 @@ i. 只有 M 自己在跑 + gaps 空 ⇒ 允许 park（正常收工；排除自�
 j. 反真空（h）：把"除掉 M 自己"那一步摘掉 ⇒ 同一现场读成"有人干活" ⇒ 允许 park（h 红）。
 k. 两格读数有类级默认 `None`（R5 引用判据按真符号计数）：第一拍之前读它们返回空串、不抛。
 
+## 真机 R-mk-infinite-94 那一趟补的三条（2026-11-06，同一个文件里钉）
+
+a3. 现场形状复刻：9 条 `expects=ack` 的通知挂在 3 个『已收工』的号名下
+    （`status=done`、`outcome=ok / cancelled`，`item_state` 是 `queued` / `seen`）
+    + 1 条真在飞 ⇒ 树『忙』（只因为在飞那 1 条），而 `unfinished` 只列『真的没结』的
+    那些（这一现场是空表）、那 9 条落进 `stale_items`（不静默消失）。
+b2. 只有已收工的号名下的板项（全 ok / cancelled）、没有任何在飞 ⇒ 树『不忙』
+    ⇒ research gap 非空时『不许 park』（改前：忙 ⇒ 允许 park ⇒ 这条红）。
+d2. 反真空（b2）：把"收件人还在不在"那一刀打桩成恒 True（= 改前"数所有板项"）
+    ⇒ 同一现场读成"有人干活" ⇒ 又允许 park（b2 红）。
+
 边界：全部 tmp 工作区、假时钟、替身模型（`_Gate` 照剧本回答），零真实模型调用。
 """
 from __future__ import annotations
@@ -140,6 +151,45 @@ def _idle_agent(cond: Conductor, parent: str, role: str = "D",
     CLK.record_handoff(str(cond.store.root), task_id=tid, parent_task_id=parent,
                        role=role, reason="研究侧子代理已交回（夹具：记为静默）")
     return tid
+
+
+def _closed_agent(cond: Conductor, parent: str, role: str = "A",
+                  key: str = "tree@closed", outcome: str = "ok") -> str:
+    """造一行『已收工』的子代理（真机 R-mk-infinite-94 的收件人形状）。
+
+    真机台账里那 6 个号的逐字读数是 `status=done` + `outcome ∈ {ok, cancelled}` +
+    `ended_at` 非空。为什么用 `_write_new_row` 而不是 `finish`：这里要的正是"行已经
+    落终态、但它名下还挂着没 ack 的通知"这个形状，而 `finish` 会顺手去收板项。
+    """
+    return cond._write_new_row({
+        "task_id": "", "role": role, "action": "run_once", "called_by": "M",
+        "parent_task_id": parent, "depth": 2, "input_key": key,
+        "status": "done", "outcome": outcome, "refusal_reason": None,
+        "instance": "", "detail": f"一个已收工的研究侧子代理（outcome={outcome}）",
+        "error": None, "started_at": "2026-11-06T04:10:00+08:00",
+        "ended_at": "2026-11-06T04:20:00+08:00",
+        "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+    }, note=f"end:{role}.{outcome}")
+
+
+def _notice_to(cond: Conductor, owner: str, *, step: int = 0) -> str:
+    """在 `owner` 名下开一条 `expects=ack` 的通知（真机那 10 条的形状）。
+
+    `step > 0` 时把它标成"收件人读到过"（`item_state=seen` + `seen_by` + `seen_step`）
+    —— 真机那 10 条里有 6 条正是 `seen`（收件人读到过、但收工之前没 ack）。
+
+    为什么直接造行而不用 `conductor.mark_item_seen`：那一手会把信息型板项当场收口
+    （`_settle_if_informational` 的"seen 即 ack"，真机读数 t-000116 那一批不是这么
+    收的 —— 它们停在 `seen` + `item_close=""`）。这里要的是『停在 seen 的未消项』。
+    """
+    row = Conductor._item_row(kind="notice", role="A", expects="ack", action="notice",
+                              summary="通知：这条通知没有人会再 ack 了",
+                              parent_task_id=owner)
+    if step > 0:
+        row["item_state"] = "seen"
+        row["seen_by"] = owner
+        row["seen_step"] = step
+    return cond._write_new_row(row, note="item:notice")
 
 
 def _experiment(store: Store, eid: str, result: str) -> None:
@@ -581,3 +631,140 @@ def test_j_without_excluding_m_itself_the_tree_looks_busy_and_m_sleeps(
     assert gate.prompts == [], gate.prompts
     with pytest.raises(AssertionError):
         _assert_blocked_from_park(run, gate, ws)
+
+
+# ================================================================ 真机 R-mk-infinite-94 现场
+#
+# 台账逐字（projects/R-mk-infinite-94/data/tasks.json，只读取证）：
+#   why_text: 「除 M 以外在飞：t-000142；除 M 以外还有 10 条未结项
+#              （t-000002、t-000008、t-000012、t-000020、t-000058、t-000079）」
+#   那 10 条：kind=notice / expects=ack / item_state ∈ {queued, seen}，收件人是上面这 6 个号；
+#   这 6 个号自己：status=done + outcome ∈ {ok, cancelled} + ended_at 非空。
+# ⇒ "树忙"是那 10 条『死的』未结项撑起来的，而它们永远不会再被处理。
+
+#: 复刻真机那 10 条未结项的分布（owner 角色, outcome, 几条）；9 条复刻，形状逐字
+#: （真机 6 条 seen / 4 条 queued；这里每个号 2 条 seen + 1 条 queued）。
+_REAL_FIELD_ITEMS: tuple[tuple[str, str, int], ...] = (
+    ("A", "ok", 3),
+    ("D", "ok", 3),
+    ("F", "cancelled", 3),
+)
+
+
+def _real_field_owners(cond: Conductor, me: str) -> list[str]:
+    """复刻真机那 3 个"已收工、名下还挂着没 ack 的通知"的号，返回它们的 task_id。"""
+    owners: list[str] = []
+    step = 30
+    for role, outcome, count in _REAL_FIELD_ITEMS:
+        owner = _closed_agent(cond, me, role=role, key=f"relay@{role}",
+                              outcome=outcome)
+        owners.append(owner)
+        for i in range(count):
+            # 前半 seen（收件人读到过、没来得及 ack）、后半 queued（连读都没读到）
+            _notice_to(cond, owner, step=(step if i % 2 == 0 else 0))
+            step += 3
+    return owners
+
+
+def test_a3_the_real_field_shape_is_busy_only_because_one_is_flying(
+        tmp_path: pathlib.Path, bench) -> None:
+    """a3：9 条已收工号名下的通知 + 1 条真在飞 ⇒ 树忙（因为在飞那 1 条）。
+
+    读数要能分开两件事：谁『真的』在干活（`working`），以及哪些未结项是『死的』
+    （`stale_items`）。改前这两件事折在 `unfinished` 一格上 ⇒ `busy` 恒真。
+    """
+    st, cond, ws = _ws(tmp_path, "real-field-94")
+    me = cond.open_top_level_run("M", TASK)
+    flying = _agent_row(cond, me, role="E", key="relay@R-000142")
+    owners = _real_field_owners(cond, me)
+    loop = _loop(st, cond, ws, _Gate([_tool("clock.now")]), me)
+    loop.my_task_id = me
+
+    tree = loop._tree_busy_reading()
+    print("a3 读数：working =", tree["working"], "| unfinished =", tree["unfinished"],
+          "| stale =", tree["stale_items"], "| why =", tree["why_text"])
+    assert tree["checked"] is True, tree
+    assert tree["working"] == [flying], tree
+    assert tree["busy"] is True, tree
+    # 真的没结的：这一现场一条都没有 —— 9 条全挂在已收工的号下
+    assert tree["unfinished"] == [], tree
+    assert int(tree["unfinished_count"]) == 0, tree
+    # 但那 9 条不许静默消失：逐号列出条数、角色、以及"收件人已收工"这个事实
+    assert [x["owner"] for x in tree["stale_items"]] == sorted(owners), tree
+    assert [int(x["count"]) for x in tree["stale_items"]] == [3, 3, 3], tree
+    assert int(tree["stale_count"]) == 9, tree
+    assert {str(x["status"]) for x in tree["stale_items"]} == {"done"}, tree
+    assert {str(x["role"]) for x in tree["stale_items"]} == {"A", "D", "F"}, tree
+    # 读数那一句必须同时说清"谁在飞"与"那 9 条为什么不算"
+    assert flying in str(tree["why_text"]), tree["why_text"]
+    assert "已收工" in str(tree["why_text"]), tree["why_text"]
+    assert "不算有人在干活" in str(tree["why_text"]), tree["why_text"]
+
+
+def test_b2_only_closed_owners_items_do_not_count_as_someone_working(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    """b2：只有已收工号名下的板项、没有任何在飞 ⇒ 树闲着 ⇒ 研究未尽必须拦（不许 park）。
+
+    改前的形态（本条就是它的回归）：那 9 条把 `busy` 撑成 True ⇒ 第 ① 档永远优先
+    ⇒ 每一拍都 park，研究不尽一次都没落地 —— 真机就是那样每 7 分钟 park 一次。
+    """
+    st, cond, ws = _ws(tmp_path, "real-field-94-idle")
+    me = cond.open_top_level_run("M", TASK)
+    _real_field_owners(cond, me)
+    # 一条"挂着等"的钟：等的是那个已交差、还没落终态的子（第 ④ 支的入口）。
+    # 为什么不等那 6 个已收工的号：等一条已经收工的钟会当场以 `closed` 唤醒 M
+    # （第 ③ 支），那一拍根本走不到挂机判据 —— 现场也就不是"闲着却没人拦"了。
+    waited = _idle_agent(cond, me)
+    _seed_gap(st)
+    CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{waited}",
+                    task_id=me, role="M")
+    gate = _Gate([_tool("clock.now")], on_call=_stop_on_first_call(ws))
+    monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
+    run = _loop(st, cond, ws, gate, me).run(
+        TASK, summoned_by="user", my_task_id=me, depth=1)
+
+    assert run.stop_reason == "stop_file", run.to_dict()
+    tree = dict(run.park.get("tree") or {})
+    print("b2 读数：working =", tree.get("working"), "| unfinished =",
+          tree.get("unfinished"), "| stale_count =", tree.get("stale_count"),
+          "| decision =", run.park.get("decision"))
+    assert tree.get("busy") is False, tree
+    assert tree.get("working") == [], tree
+    assert tree.get("unfinished") == [], tree
+    assert int(tree.get("stale_count") or 0) == 9, tree
+    _assert_blocked_from_park(run, gate, ws)
+    assert (run.park.get("research", {}).get("next_action") or {}).get("target") == "B", \
+        run.park
+
+
+def test_d2_counting_every_board_item_again_makes_b2_red(
+        tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    """d2：反真空（b2）。把"收件人还在不在"那一刀摘掉（= 改前"数所有板项"）⇒ b2 红。
+
+    打桩的位置必须是那条判据本身（`_item_owner_can_still_act`）：把 `busy` 直接拨成
+    True 只证明了布尔值被读，证明不了"这一刀承重"。
+    """
+    st, cond, ws = _ws(tmp_path, "real-field-94-revert")
+    me = cond.open_top_level_run("M", TASK)
+    _real_field_owners(cond, me)
+    waited = _idle_agent(cond, me)
+    _seed_gap(st)
+    CLK.start_timer(ws, reason="等 D 交回候选族", wait_for=f"task:{waited}",
+                    task_id=me, role="M")
+    monkeypatch.setattr(AgentLoop, "_item_owner_can_still_act",
+                        staticmethod(lambda row: True))          # = 改前：数所有板项
+    gate = _Gate([_tool("clock.now")], on_call=_stop_on_first_call(ws))
+    monkeypatch.setattr(AgentLoop, "_park_slice", _park_once_then_stop(bench, ws))
+    run = _loop(st, cond, ws, gate, me).run(
+        TASK, summoned_by="user", my_task_id=me, depth=1)
+
+    assert run.stop_reason == "stop_file", run.to_dict()
+    tree = dict(run.park.get("tree") or {})
+    print("d2 读数（摘掉那一刀之后）：unfinished =", tree.get("unfinished"),
+          "| busy =", tree.get("busy"), "| decision =", run.park.get("decision"))
+    assert tree.get("busy") is True, tree
+    assert str(run.park.get("decision") or "") == "park", run.park
+    assert gate.prompts == [], gate.prompts
+    with pytest.raises(AssertionError):
+        _assert_blocked_from_park(run, gate, ws)
+
