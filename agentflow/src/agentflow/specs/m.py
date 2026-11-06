@@ -140,6 +140,13 @@ SPEC = AgentSpec(
             "分钟轮查计时器。",
             "要盯某一个子代理时用 `conductor.review_child`：给它绝对编码，返回它那一项的全部"
             "读数与整棵名册树（从树上挑合法的号）。",
+            "**`conductor.board` / `conductor.patrol` 的每一项都带 `revoke` 格**（`revocable` / "
+            "`action` / `call` / `mode` / `code` / `why`）：`revocable=true` 就照 `call` 抄参数"
+            "（`item_ids` 填这一条的编号、`why` 填一句为什么撤），别自己搬 id 再被拒一次。",
+            "**撤销让板面四个 open 读数各少一**（`open_items_of` / `board_open_count` / patrol 的 "
+            "`child_open_count` / `tree().items`）—— 销号闸与收工闸同时松一格。",
+            "**收件人那一侧会收到【最近被撤销的项】**（`revoked_recent`：谁撤的、理由、时间）："
+            "那一条不欠 ack，别当成还没通知到。",
             "**子代理交完差、你不再需要它之后，主动销号**（销号走 `conductor.retire_child(child_name=…, reason=…)`，"
             "`child_name` 给它**名册名**（如 `D1`），`reason` 写一句为什么销它；绝对编号 `task_id` 只是旧的兼容写法，"
             "销号按名册名指称）：判定与落盘都在秘书那一侧，你只负责发起 —— "
@@ -340,6 +347,9 @@ SPEC = AgentSpec(
             "`statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时"
             "**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。所以走 ② 之后要回头看板："
             "确认那条重送项已 `done`（还开着就按未消项处理，它会挡销号与收工）。",
+            "**看到「成立」不等于签住了**：收工读数 `statements_unsigned` 的 `by_class` 里 "
+            "`fault_unrepaired` 排第一档 —— 打回之后没有更新的干净「成立」（含「V 写成立、轴却是 "
+            "fault」那一档）也算未签，出路仍是改稿后重送或明确放弃。",
             "**「攻」里出现 `statement_id` 就当场交给 D 去核签**：你派 `F.status` 拿回来的 `attack.status` 里，`history_tail` "
             "每一轮可能带 `statement_id`（F 那一轮把论证落成了 `statements` 的一行）—— 看到它就在**同一轮**里派 `D` 去办："
             "D 会核那一条带没带 V 的签字，缺签由 D 让 F 补签（那一签由 F 去办），**不要等收工再想起**来；F 产出时已经签过的"

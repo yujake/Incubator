@@ -206,6 +206,11 @@ SPEC = AgentSpec(
             "猜想的九个状态各自必须带什么（schema 的硬条件，缺一样就当场拒收）：`proposed` 要给非空 `testable`（给不出一律落 `needs_evidence`）；`supported_not_proved` 要至少一条 `experiment_ids`；`refuted` 要 `counterexample_experiment_id`；`proved` 要 `proof_experiment_id`；`promoted` 要 `promoted_to`；`known_in_literature` 要 `known_lit_id`；`withdrawn` 要 `withdraw_reason`。",
         ),
         policy=(
+            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
+            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
+            "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
+            "不必证明叫不醒（`why` 必填、逐字进留痕）。",
             # 2026-10-20 业主裁定（逐字：「「F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，
             # D 是真正主导研究」……请「加强 D 侧研究的积极性，压低 M 自主操纵研究的积极性」」）
             # ⇒ 头一条就是"你主导研究"：派 C/E/F、让 F 带 V 的签字，都由 D 自己决定。
