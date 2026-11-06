@@ -2204,6 +2204,13 @@ def board_digest(conductor: Any, *, my_task_id: str,
 #: 一条不丢，且"还有 N 条没投"写在增量段末尾（否则"读不完"与"没新东西"同形）。
 MAILBOX_LIMIT: int = 8
 
+#: 「最近被撤销的项」那一格在渲染集（`AgentLoop._mailbox_rendered`）里的键前缀。
+#:
+#: 为什么键不是被撤项的 task_id：那一行此前作为"未消项"可能已经被渲染过了（它
+#: 正是「我读过的、然后被撤了」这种最常见的情形）⇒ 用 task_id 当键会把最该提醒的
+#: 那一条永久滤掉。这里用"被撤项的编号"另起一个键空间，与任何 task_id 都不会撞。
+REVOKED_RECENT_KEY_PREFIX: str = "revoked-recent@"
+
 #: 信箱投递事件的 `kind`（append-only 的审计面）。
 #:
 #: 为什么不复用 `agent_inbox`：那一条的键是 `delivered`（留言的 msg_id），投递登记的
@@ -2377,13 +2384,42 @@ def _board_item_line(row: Mapping[str, Any]) -> str:
             f" 来自 {row.get('called_by')}：{_clip_board_detail(row.get('detail'))}")
 
 
+def _revoked_recent_key(entry: Mapping[str, Any]) -> str:
+    """「最近被撤销」一条在渲染集里的键（见 `REVOKED_RECENT_KEY_PREFIX` 的说明）。"""
+    return REVOKED_RECENT_KEY_PREFIX + str(entry.get("item_id") or "")
+
+
+def _revoked_recent_line(entry: Mapping[str, Any]) -> str:
+    """一条「最近被撤销」在提示词里的那一行（收件人读得懂的句子，不是台账原文）。
+
+    念全四格：被撤的编号 / 谁撤的 / 理由 / 何时；`summary` 是那一行原来的摘要
+    （与撤销通知正文里的 `<summary>` 同一个读口，见 `conductor._board_item_summary`）。
+    """
+    at = str(entry.get("at") or "")
+    when = f"，{at}" if at else ""
+    return (f"- [{entry.get('item_id')}] 已被 {entry.get('by')} 撤销"
+            f"（理由：{entry.get('reason') or '（没写）'}{when}）："
+            f"{_clip_board_detail(entry.get('summary'))} —— 你不需要再处理它")
+
+
 def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                    my_task_id: str, sid: str | None = None,
                    parent_task_id: str = "", parent_role: str = "",
                    limit: int = MAILBOX_LIMIT,
                    rendered: Sequence[str] = ()) -> dict[str, Any]:
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
-    backlog, reason}`。
+    backlog, reason, items, revoked_recent, revoked_ids}`。
+
+    ## 「最近被撤销的项」为什么在这里（业主 2026-11-06 的第二笔）
+
+    撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办），`open_items_of`
+    按定义看不见它 ⇒ 收件人的板面摘要里永远没有「我名下那条被撤了」。而
+    `conductor.board` / `conductor.patrol` 都是 M 才拿得到的工具（收件人调不到），
+    所以这一格只能挂在收件人那一侧的投递点上：这就是本函数。
+    它另起一段、另开一格 `revoked_recent`（`{item_id, by, reason, at, summary}`，
+    判据在 `conductor.revoked_recent_of`），不进任何 open 计数。没有撤项时
+    那一段连标题都不出现（`revoked_recent` 是空表），逐字见判据 c。它只念最近
+    N 条（`conductor.REVOKED_RECENT_LIMIT`，缺省 5）；更早的去台账看。
 
     ## 只认 `item_state == "queued"`
 
@@ -2414,7 +2450,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     """
     got: dict[str, Any] = {"checked": True, "text": "", "item_ids": [], "msg_ids": [],
                            "problems": [], "backlog": 0, "reason": "",
-                           "items": []}
+                           "items": [], "revoked_recent": [], "revoked_ids": []}
     n = max(1, int(limit))
     already = {str(x) for x in (rendered or ())}
     blocks: list[str] = []
@@ -2457,6 +2493,46 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                                   + "\n".join(_board_item_line(r) for r in pick))
                 if got["backlog"]:
                     blocks.append(f"- （还有 {got['backlog']} 项没渲染 —— 下一次投递继续）")
+        # ---- ①b 「最近被撤销的项」（业主 2026-11-06 的第二笔：通知必须"真能提醒到"）
+        #
+        # 为什么必须在这里、而不是 `board_digest` / `board_view` / patrol 的 `_board_cell`：
+        # 撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办），而
+        # `open_items_of` 按定义只数未消项 ⇒ 板面摘要里永远看不见「我名下那条被撤了」。
+        # 而 `conductor.board` / `conductor.patrol` 是 M 才拿得到的工具（`roles=("M",)`）——
+        # 收件人（子代理）根本调不到它们，把这一格放过去等于"父亲看得见、本人看不见"，
+        # 正是这一笔要补的缺口。收件人那一侧唯一真能读到的地方是这里：每一拍
+        # `ask_step` 之前投进去的增量（D-52 的唯一投递点）。
+        #
+        # 它不进任何 open 计数（`open_items_of` / `board_open_count` /
+        # `child_open_count` / `board_digest` 一个字都不动）：另起一格、另起一段。
+        # 空的时候连标题都不出现 —— 没有撤项的人不该读到一段废话。
+        look_revoked = getattr(conductor, "revoked_recent_of", None)
+        if not callable(look_revoked):
+            got["checked"] = False
+            got["problems"].append(
+                "信箱读不到「最近被撤销的项」：这个 conductor 没有 `revoked_recent_of`")
+        else:
+            try:
+                recent = [dict(r) for r in look_revoked(my_task_id)]
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                got["checked"] = False
+                got["problems"].append(
+                    f"信箱读不到「最近被撤销的项」：{type(exc).__name__}: {exc}")
+            else:
+                # 渲染集合 = 投递集合：这一格没有状态机（被撤的行已经是 done），
+                # 去重只有渲染集这一层，键用 `REVOKED_RECENT_KEY_PREFIX` + 板项编号
+                # （不与任何 task_id 撞名）。`revoked_recent_of` 只回最近 N 条
+                # （`conductor.REVOKED_RECENT_LIMIT`）—— 更早的是台账里的历史，不再念。
+                fresh_revoked = [r for r in recent
+                                 if _revoked_recent_key(r) not in already]
+                pick_revoked = fresh_revoked[:n]
+                got["revoked_recent"] = pick_revoked
+                got["revoked_ids"] = [_revoked_recent_key(r) for r in pick_revoked]
+                if pick_revoked:
+                    blocks.append(
+                        "【最近被撤销的项】（这些项不欠你任何动作 —— 不需要再处理；"
+                        "只是告诉你它们已不在你名下）\n"
+                        + "\n".join(_revoked_recent_line(r) for r in pick_revoked))
 
     # ---- ② 留言（`agent_inbox` 那条通道的未投递项）
     try:
@@ -2484,6 +2560,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
 def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
                             shape: str, text: str, item_ids: Sequence[str] = (),
                             msg_ids: Sequence[str] = (), wake_ids: Sequence[str] = (),
+                            revoked_ids: Sequence[str] = (),
                             task_id: str = "", sid: str | None = None) -> str:
     """落一条 append-only 的投递事件；返回问题串（空 = 落成了）。
 
@@ -2494,8 +2571,10 @@ def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
     - `"step_tail"`：投递落在某一步执行之后（`Agent.p._hear` 那条耳朵）⇒ 那段文字
       在这条步的 tool 结果里，续跑不再另加消息（另加会让重建的那一段多一条）。
 
-    `item_ids` / `msg_ids` / `wake_ids` 是这一条事件的键：`agent_mailbox` 事件因此
-    可以按 item_id 复算"这一项投过没有"，而不用相信任何内存状态。
+    `item_ids` / `msg_ids` / `wake_ids` / `revoked_ids` 是这一条事件的键：
+    `agent_mailbox` 事件因此可以按编号复算"这一条投过没有"，而不用相信任何内存状态。
+    `revoked_ids` 是「最近被撤销的项」那一格的键（形如 `revoked-recent@t-000123`）：
+    那一格没有状态机可推进（被撤的行已经是 done），投递记录是它跨趟可复算的唯一落点。
     """
     return SS.append(Path(session_root), {
         "kind": MAILBOX_EVENT, "role": str(role), "task_id": str(task_id or ""),
@@ -2503,6 +2582,7 @@ def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
         "item_ids": [str(x) for x in (item_ids or ())],
         "msg_ids": [str(x) for x in (msg_ids or ())],
         "wake_ids": [str(x) for x in (wake_ids or ())],
+        "revoked_ids": [str(x) for x in (revoked_ids or ())],
         "at": S.now_iso(),
     }, sid=sid)[1]
 
@@ -5648,10 +5728,12 @@ class AgentLoop:
             run.notes.append(str(p))
         item_ids = [x for x in got.get("item_ids") or () if x]
         msg_ids = [x for x in got.get("msg_ids") or () if x]
+        # 「最近被撤销」的键只进渲染集（这一格没有状态机可推进：被撤的行已经是 done）。
+        revoked_ids = [x for x in got.get("revoked_ids") or () if x]
         parts = [x for x in (monitor, patrol_block, str(children.get("text") or ""),
                              str(got.get("text") or "")) if x]
         if not parts:
-            return {"text": "", "item_ids": [], "msg_ids": [],
+            return {"text": "", "item_ids": [], "msg_ids": [], "revoked_ids": [],
                     "wake_ids": [str(e.get("wake_id") or "") for e in wakes.get("consumed") or ()],
                     "monitor": bool(monitor), "checked": bool(got.get("checked")),
                     "children": children,
@@ -5662,17 +5744,19 @@ class AgentLoop:
         problem = record_mailbox_delivery(
             self.session_root, self.role, step=step, shape="turn", text=text,
             item_ids=item_ids, msg_ids=msg_ids, wake_ids=wake_ids,
+            revoked_ids=revoked_ids,
             task_id=str(self.my_task_id or ""), sid=self.sid)
         if problem:
             run.notes.append(f"信箱投递事件没落成：{problem}")
         # 渲染集：这一趟已经把它念进过提示词了（与"承认送达"分开的一层，见字段说明）。
         self._mailbox_rendered.update(item_ids)
         self._mailbox_rendered.update(msg_ids)
+        self._mailbox_rendered.update(revoked_ids)
         if monitor:
             self._monitor_turn_step = int(step)
             run.monitor_turns += 1
         return {"text": text, "item_ids": item_ids, "msg_ids": msg_ids,
-                "wake_ids": wake_ids, "monitor": bool(monitor),
+                "revoked_ids": revoked_ids, "wake_ids": wake_ids, "monitor": bool(monitor),
                 "checked": bool(got.get("checked")), "children": children,
                 "problems": list(got.get("problems") or ())}
 
@@ -6501,8 +6585,8 @@ class AgentLoop:
         口径（业主 2026-10-27：「计时器不阻塞智能体动作，智能体可在多计时器同时存在时
         继续手上工作」）—— 有活 = 下列任一条为真：
 
-        1. 这一拍有新投递（板项 / 留言 / 唤醒被消费）：那几段话就在这一步的上下文里，
-           模型得读它；
+        1. 这一拍有新投递（板项 / 留言 / 唤醒被消费 / 「最近被撤销的项」）：那几段话
+           就在这一步的上下文里，模型得读它；
         2. 我名下有未消的板项（`conductor.open_items_of`）：那是等着我处置的事；
         3. 有子代理刚刚落定、它的产出一句都没被消费（`mailbox["children"]["settled"]`）。
 
@@ -6514,6 +6598,10 @@ class AgentLoop:
                                "items": [], "delivered": 0}
         delivered = len(mailbox.get("item_ids") or ()) + len(mailbox.get("msg_ids") or ())
         delivered += len(mailbox.get("wake_ids") or ())
+        # 「最近被撤销」也是这一拍的新投递：那一段话已经在上下文里，模型得读它。
+        # 不算进它会把"名下那条被撤了"压到下一次唤醒之后才被看到 —— 而这一格的
+        # 全部意义就是"撤销之后真能提醒到"（业主 2026-11-06）。
+        delivered += len(mailbox.get("revoked_ids") or ())
         out["delivered"] = delivered
         if delivered:
             out["busy"] = True

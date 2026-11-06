@@ -124,6 +124,55 @@ ACK_REQUIRED_ITEM_PREFIXES: tuple[str, ...] = ("v-verdict@", "stop-notice@", "re
 #:    替它发通知"。
 REVOKE_NOTICE_PREFIX: str = "revoke-notice@"
 
+#: 撤销留痕在那一行 `inputs` 里的机器前缀（与 :meth:`Conductor.void_items` 写的那一条同源）。
+#:
+#: 为什么读侧也要一个前缀：撤销与旧口径的"作废"（`void:expired:…`）都收口成
+#: `done` + `expired`，光看状态分不开"这条是被撤了"与"这条是被作废了"。业主
+#: 2026-11-06 那一笔裁定的正文只认 `revoke`，所以「最近被撤销」这一格只认这一条前缀。
+REVOKE_MARK_PREFIX: str = "revoke:expired:"
+
+#: 「最近被撤销」这一格一次回几条（收件人那一侧的读数与提示词共用这一个数）。
+#:
+#: 为什么有上界：撤销是流水，无限回会把提示词的一格撑成整本台账；N 之内足够回答
+#: 「我名下最近哪几条被撤了」，更早的去台账里看（每一行 `inputs` 都留着六格）。
+#: 业主的原话是「自动提醒，且要真能提醒到」——「最近 N 条」是提醒，不是全量同步。
+REVOKED_RECENT_LIMIT: int = 5
+
+def _revoke_mark_of(row: Mapping[str, Any]) -> str:
+    """这一行 `inputs` 里那条撤销留痕（没有 ⇒ 空串）。"""
+    for text in row.get("inputs") or ():
+        line = str(text)
+        if line.startswith(REVOKE_MARK_PREFIX):
+            return line
+    return ""
+
+def _parse_revoke_mark(mark: str) -> dict[str, str]:
+    """把一条 `revoke:expired:…` 留痕拆回六格；拆不出的格给空串（不猜）。
+
+    形状是固定的（写侧只有 :meth:`Conductor.void_items` 一处）：
+    `revoke:expired:by=…:owner=…:from=…:to=done:at=<ISO>:reason=…`。
+    `at` 是 ISO 时刻、本身带冒号，所以不能按冒号一律切：先定位 `:at=` 与
+    `:reason=` 两个分隔点，再拆前面那四格。`reason` 是最后一格，其余冒号都归它。
+    """
+    rest = str(mark)[len(REVOKE_MARK_PREFIX):]
+    at_at = rest.find(":at=")
+    at_reason = rest.find(":reason=", at_at if at_at >= 0 else 0)
+    out: dict[str, str] = {}
+    for part in (rest[:at_at] if at_at >= 0 else rest).split(":"):
+        key, sep, value = part.partition("=")
+        if sep:
+            out[key] = value
+    if at_at >= 0:
+        out["at"] = rest[at_at + len(":at="):at_reason if at_reason >= 0 else len(rest)]
+    if at_reason >= 0:
+        out["reason"] = rest[at_reason + len(":reason="):]
+    return out
+
+def _board_item_summary(row: Mapping[str, Any], *, cap: int = 200) -> str:
+    """一条板项的一句话摘要（`detail` 归一化 + 截断）—— 通知正文与「最近被撤销」共用。"""
+    text = " ".join(str(row.get("detail") or "").split())[:cap]
+    return text or "（没有摘要）"
+
 # ---------------------------------------------------------------- 三态（在飞 / 待机 / 静默）
 #
 # 业主逐字（2026-10-26 同一批裁定的第二句，`tests/test_three_states_flying_standby_silent.py`
@@ -4704,7 +4753,7 @@ class Conductor:
         if str(row.get("input_key") or "").startswith(REVOKE_NOTICE_PREFIX):
             # 通知自己也是 tasks 行：撤它会再生成一条通知，撤通知的通知再生成一条……
             return None
-        summary = " ".join(str(row.get("detail") or "").split())[:200] or "（没有摘要）"
+        summary = _board_item_summary(row)
         text = (f"你名下 {item_id}（{summary}）已被 {by_task_id} 撤销"
                 f"（理由：{reason}），你不需要再处理它")
         notice = self._item_row(kind="notice", role=str(row.get("role") or ""),
@@ -4779,6 +4828,11 @@ class Conductor:
         `{item_id, notice_id, owner, kind, expects, text}`；通知没开成（写失败）进
         `notification_problems`，撤销本身不回滚（撤销是那一笔的正文，通知是它的
         回执；两者分开报，不许把"通知没发出去"折成"没撤"）。
+
+        通知的读口（2026-11-06 第二笔）：那条通知是 `done` 行，`open_items_of`
+        看不见它 ⇒ 光落账不等于"提醒到"。收件人那一侧的读法是
+        :meth:`revoked_recent_of`（`agent_loop.mailbox_digest` 每拍投一次），
+        它只读本方法写下的 `revoke:expired:` 留痕，不进任何 open 计数。
 
         丙件：撤销后那一行的 `expects` 清空、原值写进 `expects_was`（`schema.Task`
         末尾那一格；`validate` 只允许 `done` + `expired` 的行为空）。理由：撤销之后
@@ -5629,6 +5683,64 @@ class Conductor:
                 continue
             out.setdefault(str(row.get("parent_task_id") or ""), []).append(row)
         return out
+
+    def revoked_recent_of(self, task_id: str, *,
+                          limit: int = REVOKED_RECENT_LIMIT) -> list[dict[str, Any]]:
+        """挂在 `task_id` 名下、最近被撤销的那几条（收件人那一侧的读数，2026-11-06）。
+
+        ## 它补的是哪个缺口（上一笔自己报的取舍）
+
+        撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办，见
+        :meth:`_revocation_notice_row`），而 `open_items_of` 按设计只数"未消项" ⇒
+        收件人的板面摘要里永远看不到「我名下那条被撤了」。于是"自动通知"实际
+        等于"存了一条没人念的记录"：收件人只能自己去翻台账才发现。这一格就是那句
+        通知的读口：撤销之后，收件人那一侧（`agent_loop.mailbox_digest` 的增量段）
+        能看到最近被撤销的那几条。
+
+        ## 它不进任何 open 计数（业主 2026-11-06 的第二笔，硬约束）
+
+        `open_items_of` / `board_view` 的 `board_open_count` / patrol 的
+        `child_open_count` / `board_digest` 的读数一个都不动：这一格是另开的，
+        只由本方法与调用它的那一处渲染。判据：`tests/test_revoked_items_reach_the_recipient.py`
+        的 b 条把四个读数在"有 / 没有这一格"两种情况下逐字比。
+
+        ## 判据只有一处
+
+        `item_state="done"`、`item_close="expired"`，且那一行 `inputs` 里有一条
+        `revoke:expired:` 留痕（`void_items(revoke=True)` 写的）。旧口径的
+        `void:expired:` 不算撤销（那是"作废"，业主这一笔裁定的正文只认 revoke）。
+
+        返回（按 `at` 从新到旧，最多 `limit` 条，形状固定）
+        `{"item_id","by","reason","at","summary"}`；读不成 ⇒ 抛（调用方按三态处理：
+        "没读成"不是"我名下没有被撤项"）。
+        """
+        want = str(task_id or "")
+        if not want:
+            return []
+        cap = max(1, int(limit))
+        found: list[dict[str, Any]] = []
+        for row in self._tasks():
+            if not self._is_board_item(row):
+                continue
+            if str(row.get("parent_task_id") or "") != want:
+                continue
+            if str(row.get("item_state") or "") != "done":
+                continue
+            if str(row.get("item_close") or "") != "expired":
+                continue
+            mark = _revoke_mark_of(row)
+            if not mark:
+                continue
+            parsed = _parse_revoke_mark(mark)
+            found.append({
+                "item_id": str(row.get("task_id") or ""),
+                "by": str(parsed.get("by") or ""),
+                "reason": str(parsed.get("reason") or ""),
+                "at": str(parsed.get("at") or ""),
+                "summary": _board_item_summary(row),
+            })
+        found.sort(key=lambda r: (r["at"], r["item_id"]), reverse=True)
+        return found[:cap]
 
     # ---------------------------------------------------------------- 三态与幂等（S1h）
     def active_children(self, task_id: str) -> dict[str, Any]:
