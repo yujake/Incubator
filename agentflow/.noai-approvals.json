@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-06T11:11:17+08:00",
+  "generated_at": "2026-11-06T12:03:37+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -400,11 +400,11 @@
       "path": "src/agentflow/specs/v.py",
       "glob": "src/agentflow/specs/v.py",
       "category": "auth-audit",
-      "sha256": "e32fd24b31acd320c5711c55cb8a816e6d6a850c382c5b28ed6c2a839370b2c8",
+      "sha256": "c32e33f9ecd32bd669fd54753249601141b0efedcb4c5d31020f5604ff42b836",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-06 p247 第三次收紧：V 的判词只是陈述、轴只由秘书给（specs/v.py 的 policy 文案 + agent 面快照重冻；判定机制不动，语义上游 f0dead89 口径）",
-      "changed_this_session": null,
+      "change_note": "p247 文案改准：例外约束的是发签判定（issue），轴该谁给——散文支由 V 秘书语义判定（secretary:v_reply_defect）、穷举支由机械会审（exhaustion_report）；同笔把未在册收尾的轴读数带到返回值顶层（core.py）。只改文案与读数，不改判据强度。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

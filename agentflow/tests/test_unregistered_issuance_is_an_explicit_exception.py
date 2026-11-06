@@ -58,7 +58,7 @@ UNREGISTERED_AXIS_CALLS: dict[str, frozenset[str]] = {
 
 #: 在册档那一支（正控：它必须调得到判定）。
 IN_REGISTER_FUNC = "_review_pass"
-#: 未在册的两支（例外：不许插秘书判定）。
+#: 未在册的两支（例外：不许插发签判定；散文支的轴仍由秘书给，穷举支由机械会审给）。
 UNREGISTERED_FUNCS: tuple[str, ...] = (
     "_review_unregistered_prose", "_review_unregistered_exhaustion")
 

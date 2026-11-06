@@ -467,6 +467,38 @@ def _passes_with_tickets(passes: list[dict[str, Any]],
     return out
 
 
+def _unregistered_secretary_judge(got: Mapping[str, Any]) -> dict[str, Any]:
+    """未在册那一支的轴读数：原样带到返回值顶层（与在册支同形）。
+
+    为什么要有这一格（2026-11-06）：这一支的 `checked` / `axis` / `source` /
+    `defect_step` / `reason` 此前只躺在 `review_passes` 与 pending 台账行上，调用方
+    从返回值顶层拿不到"轴是什么、谁判的" —— 业主的规矩是「读数不许丢」。在册那一支
+    的顶层早就有 `secretary_judge`（`verify_proof` 的初值里也有，键无条件存在）；
+    这一格让两支同形，而不是让未在册那支的读者自己去翻明细。
+
+    源只有一处：`_review_unregistered_prose` / `_review_unregistered_exhaustion`
+    返回的 `secretary_judge`（它们与写进 pending 台账行的是同一份判定）。
+    `passes` 那一支只是兜底：某条"没查成"的早退路径没有 judgment 时，至少把最后一转
+    的轴与步号读出来；两者都没有 ⇒ 空字典（"这一趟没有轴可报"，不是 clean）。
+    """
+    judge = dict(got.get("secretary_judge") or {})
+    if judge:
+        return judge
+    passes = [p for p in (got.get("passes") or []) if isinstance(p, Mapping)]
+    last = dict(passes[-1]) if passes else {}
+    if not last:
+        return {}
+    axis = str(last.get("axis") or "")
+    return {
+        "checked": bool(axis),
+        "axis": axis,
+        "decision": str(last.get("verdict") or ""),
+        "reason": str(last.get("reason") or ""),
+        "source": str(last.get("source") or ""),
+        "defect_step": last.get("defect_step"),
+    }
+
+
 class AgentV:
     """验证者。三个 handler 与 `specs/v.py` 的 `handler_name` 逐字同名。
 
@@ -2167,7 +2199,10 @@ class AgentV:
             #: 依赖面六项审计（业主 2026-11-06）：机械缺陷并进这一转的结论。
             verdict = merge_dependency_audit(verdict, dependency_audit)
             #: p247：轴由 V 的秘书语义判定（V 的判词只是陈述）。
-            judgment = self._judge_v_reply(reply, verdict, no)
+            #: `source` 随这一份判定一起落账（pending 行与返回值顶层读的是同一格）：
+            #: 散文支的轴来路就是这一问，不从别处推断。
+            judgment = dict(self._judge_v_reply(reply, verdict, no))
+            judgment.setdefault("source", "secretary:v_reply_defect")
             if (str(judgment.get("axis") or "") == "fault"
                     and verdict.get("defect_step") is None):
                 _sec_step = judgment.get("defect_step")
@@ -2278,7 +2313,9 @@ class AgentV:
                 return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                         "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                    "这一份没查成（签没有落点，必须重审）"),
-                        "passes": passes, "manuscript": rel}
+                        "passes": passes, "manuscript": rel,
+                        "secretary_judge": (dict(judged[-1].get("judgment") or {})
+                                            if judged else {})}
             pending = pending_rows[-1] if pending_rows else {}
             passes = _passes_with_tickets(passes, pending_rows)
             block_write, issued, landed = self._issue_and_land_unregistered(
@@ -2305,12 +2342,17 @@ class AgentV:
                 return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                         "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                    "这一份没查成（判词没有落点，必须重审）"),
-                        "passes": passes, "manuscript": rel}
+                        "passes": passes, "manuscript": rel,
+                        "secretary_judge": (dict(judged[-1].get("judgment") or {})
+                                            if judged else {})}
         reading = dict(block_write.get("reading") or {})
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
                 "issued": issued, "landed": landed,
                 "pending": pending,
+                #: 2026-11-06：轴那一格带到顶层（`_finish_unregistered` 原样搬到返回值）。
+                "secretary_judge": (dict(judged[-1].get("judgment") or {})
+                                    if judged else {}),
                 "verdict": verdict_word, "findings": list(last.get("findings") or []),
                 "defect_step": last.get("defect_step"),
                 "unresolved_errors": int(last.get("unresolved_errors") or 0),
@@ -2443,7 +2485,11 @@ class AgentV:
         failure, judged, passes, stopped, reviewed = self._review_exhaustion_rounds(
             body=body, exp_rows=exp_rows, row=row, rel=rel, need=need)
         if failure is not None:
-            # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）
+            # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）；
+            # 已判过的几转照旧带出去（轴读数不许丢），空表 = 一转都没判到。
+            failure = dict(failure)
+            failure["secretary_judge"] = (dict(judged[-1].get("judgment") or {})
+                                          if judged else {})
             return failure
         at = _now_iso()
         last = judged[-1]["verdict"] if judged else {}
@@ -2488,7 +2534,9 @@ class AgentV:
             return {"failed": True, "checked": False, "reason": "ledger_unwritable",
                     "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
                                "这一份没查成（判词没有落点，必须重审）"),
-                    "passes": passes, "manuscript": rel}
+                    "passes": passes, "manuscript": rel,
+                    "secretary_judge": (dict(judged[-1].get("judgment") or {})
+                                        if judged else {})}
         if stopped == "signed":
             block_write, issued, landed = self._issue_and_land_unregistered(
                 rel=rel, sha=sha, streak=streak, need=need, no=no,
@@ -2498,6 +2546,10 @@ class AgentV:
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
                 "issued": issued, "landed": landed, "pending": pending,
+                #: 2026-11-06：轴那一格带到顶层（与散文那一支同形；穷举支的 source
+                #: 是 `exhaustion_report`，不是秘书）。
+                "secretary_judge": (dict(judged[-1].get("judgment") or {})
+                                    if judged else {}),
                 "verdict": verdict_word, "findings": list(last.get("findings") or []),
                 "defect_step": last.get("defect_step"),
                 "unresolved_errors": int(last.get("unresolved_errors") or 0),
@@ -2682,11 +2734,18 @@ class AgentV:
 
     def _finish_unregistered(self, out: dict[str, Any], *, no: int,
                              got: Mapping[str, Any]) -> dict[str, Any]:
-        """未在册手稿那一支的收尾（键集与另几条返回路径相同）。"""
+        """未在册手稿那一支的收尾（键集与另几条返回路径相同）。
+
+        2026-11-06：轴那一格（`checked` / `axis` / `source` / `defect_step` / `reason`）
+        由 :func:`_unregistered_secretary_judge` 带到返回值顶层 —— 与在册那一支的
+        `secretary_judge` 同形。改前它只躺在 `review_passes` 与 pending 台账行上，
+        调用方读返回值拿不到"轴是什么、谁判的"。
+        """
         if bool(got.get("failed")):
             out.update(checked=False, reason=str(got.get("reason") or ""),
                        detail=str(got.get("detail") or ""),
-                       review_passes=list(got.get("passes") or []))
+                       review_passes=list(got.get("passes") or []),
+                       secretary_judge=_unregistered_secretary_judge(got))
             self._emit(f"verify_proof(未在册)：没查成（{got.get('reason')}）")
             return out
         stopped = str(got.get("stopped") or "")
@@ -2708,6 +2767,7 @@ class AgentV:
                 "proof_no": no,
                 "signed_bit3": False,
                 "review_passes": [],
+                "secretary_judge": _unregistered_secretary_judge(got),
                 "ledger": str(got.get("manuscript") or "") or str(block.get("ledger") or ""),
                 "reason": str(got.get("reason") or ""),
                 "detail": (f"`{got.get('manuscript') or '（这一份稿）'}` 里已经有盖住同一份"
@@ -2784,6 +2844,7 @@ class AgentV:
             "proof_chars": 0,
             "signed_bit3": False,
             "review_passes": list(got.get("passes") or []),
+            "secretary_judge": _unregistered_secretary_judge(got),
             "ledger": pending_ledger or str(got.get("manuscript") or ""),
             "reason": str(got.get("reason") or ""),
             "detail": record,

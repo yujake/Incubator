@@ -29,6 +29,7 @@
 | ⑥ | 第 2 转判「有毛病」 | 只问 2 次就停；不写块；判词落 pending 一行；F 读数「未通过」 |
 | ⑦ | 入口守卫 | 只收 F / E / B 那一份手稿的命名 |
 | ⑧ | 计划稿 + 三转干净（真机 `f-proof-plan-000011` 的形状） | 看过、没签：不写块、不落 pending、不颁发 |
+| ⑨ | 未在册三转 clean | 返回值顶层 `secretary_judge` 读得到 `axis=clean` / `source=secretary:v_reply_defect`，与 pending 行是同一份判定 |
 
 零模型调用：V 的审阅缝交出预置回复并计数（与三连判判据共用同一套替身）。
 """
@@ -45,12 +46,14 @@ from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_f import vsign as FVS
 from agentflow.agent_v import AgentV
+from agentflow.agent_v import core as V_CORE
 from agentflow.store import Store
 
 from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam
 
-#: 未在册那一支的判定面是 V 自己的两态结论（没有秘书那一层：pending / 手稿这条血脉
-#: 一直只认 `row_signable`，见 `agent_v/core.py::_review_unregistered_prose` 的说明）。
+#: 未在册那一支的轴也由秘书语义判定给（p247：散文支每一转问一次 `_judge_v_reply`，
+#: 穷举支由机械会审给）；V 的两态结论只是陈述。下面的 `_JudgeStub` 是替身自己在给轴，
+#: 不是生产代码在按 `verdict` 字面定轴。
 #: 所以这一组用"结论就是有毛病"的回复，而不是"判词写成立、秘书读出缺陷"那一招。
 REJECT_REPLY = json.dumps({"verdict": "有毛病", "defect_step": 2,
                            "quote": "第 1 步直接取 δ=ε",
@@ -412,3 +415,54 @@ def test_g_a_plan_manuscript_is_reviewed_but_never_signed(tmp_path):
     # 落稿名这一半照旧（F 的「先落计划名、拿到号再改名」工作流没被动）。
     assert VS.parse_manuscript_name(plan_rel)["manuscript_id"] == "plan-0000"
     assert VS.is_sign_carrier(plan_rel) is False
+
+
+# ============================================================ ⑨ 顶层轴读数
+def test_h_the_axis_reading_reaches_the_return_top_level(tmp_path):
+    """⑨ 未在册三转 clean ⇒ 返回值顶层直接读得到轴，且与 pending 行是同一份判定。
+
+    业主的规矩：读数不许丢。改前顶层 `secretary_judge` 是 `{}`，轴只躺在
+    `review_passes[*].axis` 与 pending 台账行上 —— 调用方读返回值拿不到"轴是什么、
+    谁判的"，只能去翻明细。这一条钉两处读数（返回值顶层 / pending 最后一行）逐字相等。
+    """
+    st = _ws(tmp_path)
+    v, seam = _v(st, [CLEAN_REPLY])
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert seam.asked() == 3, seam.asked()
+    judge = dict(got.get("secretary_judge") or {})
+    assert judge.get("checked") is True, judge
+    assert judge.get("axis") == "clean", judge
+    assert judge.get("source") == "secretary:v_reply_defect", judge
+    assert judge.get("defect_step") is None, judge
+
+    # ---- 两处读数：返回值顶层 == pending 台账最后一行那一格 ----
+    rows = _pending_rows(st)
+    assert rows, "三转 clean 却没有 pending 行 ⇒ 这一格没查成"
+    assert dict(rows[-1].get("secretary_judge") or {}) == judge, (
+        f"返回值顶层的轴与 pending 行不是同一份判定：{judge!r} != "
+        f"{rows[-1].get('secretary_judge')!r}")
+
+    # ---- 第三处读数：逐转的轴也全是 clean（顶层不是另造的一格）----
+    assert [str(p.get("axis") or "") for p in got.get("review_passes") or []] == [
+        "clean"] * int(VR.SIGN_STREAK_NEED), got.get("review_passes")
+
+
+def test_h2_dropping_the_projection_loses_the_top_level_axis(tmp_path, monkeypatch):
+    """⑨ 的反真空：把投影函数换成恒空表 ⇒ 顶层读不到轴（h 的断言会红）。
+
+    这不是"再断言一遍"：它真的把把轴搬到顶层的那一处摘掉，再看读数是不是变空 ——
+    若摘掉之后 h 仍然读得到 clean，那 h 就是假绿（它量的不是那个投影）。
+    """
+    monkeypatch.setattr(V_CORE, "_unregistered_secretary_judge", lambda got: {})
+    st = _ws(tmp_path)
+    v, seam = _v(st, [CLEAN_REPLY])
+    with _submitted_by_f():
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert seam.asked() == 3, seam.asked()
+    assert got.get("secretary_judge") == {}, got.get("secretary_judge")
+    # 逐转读数照旧：变空的只有顶层那一格（不是轴本身没了）。
+    assert [str(p.get("axis") or "") for p in got.get("review_passes") or []] == [
+        "clean"] * int(VR.SIGN_STREAK_NEED), got.get("review_passes")

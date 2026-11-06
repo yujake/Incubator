@@ -62,20 +62,27 @@ V 只被这三方唤起：F 交证明、E 交穷举证据、B 交文献侧引入
 
 ## 发签权的边界（业主 2026-11-04 裁定 · 乙-5，这是明文例外）
 
-2026-10-29 的「V 只产审稿意见；发不发签由 V 的秘书决定」只约束在册档。
+2026-10-29 的「V 只产审稿意见；发不发签由 V 的秘书决定」只约束在册档；这条例外约束的
+是**发签判定**（`decide_sign_issuance` 的 `issue` 那一路），**不是「要不要轴」**。
 
 未在册档（`reports/f-proof-*.md` / `reports/e-proof-*.md` / `reports/b-proof-*.md`
 那一支，`agent_v/core.py::_review_unregistered_prose` 与
 `_review_unregistered_exhaustion`）常常没有「收方秘书在场」这个前提：F / E 的稿在被
-收方接手之前就要签，强行要求秘书判定会把这一档变成死路。所以：
+收方接手之前就要签，强行要求秘书判「发不发」会把这一档变成死路。所以：
 
-- 未在册三转 clean（穷举档是三轮机械会审 clean）即由 V 颁发 —— `vsigns.issue` 写
-  `out/vsigns/<正文 sha>.json`、把信封交给收方；
+- **发签**：未在册三转 clean（穷举档是三轮机械会审 clean）即由 V 颁发 —— `vsigns.issue`
+  写 `out/vsigns/<正文 sha>.json`、把信封交给收方；两支都不许有 `issue` 那一路
+  （都不调 `decide_sign_issuance`，这才是业主 2026-11-04 那条例外约束的东西）；
+- **轴（clean / fault）该谁给**（p247，2026-11-06）：散文支每一转由 V 的秘书做语义判定
+  （`_judge_v_reply` → `Secretary.judge_v_reply`，`source=secretary:v_reply_defect`）；
+  穷举支没有 V 的散文回复，轴由机械会审自己的两态读数给（`exhaustionreport.review`，
+  `source=exhaustion_report`），不问秘书。V 的判词只是陈述，轴不看它的字面；
 - 手稿签块仍只由收方秘书落（`Secretary.land_unregistered_sign`），V 在这个档里
   一处签写口都没有 —— 一句话：未在册档「V 颁发、落块仍由收方秘书做」；
 - 这是明文例外，不是暗中放宽：判据
   `tests/test_unregistered_issuance_is_an_explicit_exception.py` 同时钉住
-  「这一段在」与「未在册两支没有插入秘书判定」；谁把秘书判定插进未在册档，
+  「这一段在」与「未在册两支不调发签判定」，并用正控钉住「散文支必须问秘书要轴、
+  穷举支必须不问」（p247）。谁把发签判定插进未在册档，或把散文支的轴改回 V 自己给，
   那一条判据会红。
 """
 
