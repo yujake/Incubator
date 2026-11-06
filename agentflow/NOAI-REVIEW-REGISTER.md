@@ -883,4 +883,57 @@ EXIT=1
 | （待签） | | | |
 | （待签） | | | |
 
+---
 
+## 11. 2026-11-06 批 p250（六份审计报告的「过时 / 缺 / 冗长」）—— 命中 10 条，**批准栏待 2 名 reviewer 人工签**
+
+**这一批的性质**：业主 2026-11-06 的施工单把六份只读审计报告（`temp/_audit_1_v_face.md` /
+`_audit_2_m_face.md` / `_audit_3_adbgh_face.md` / `_audit_4_cefl_face.md` /
+`_audit_5_tool_surface.md` / `_audit_prompt_tool_consistency.md`）逐条落成三段文案改动。
+改动**只碰字符串 / 文案 / docstring**：动作表（`ACTIONS`）、边（`edges`）、写集（`write_set`）
+一个字未动 —— 机器读数：`temp/_probe_code_tokens.py` 的「非字符串 token 差异」= 10，
+全部是新增 policy 元素之间的 `,`（六份 spec 各一个、`specs/m.py` 四个），
+没有任何语句 / 表达式被改。`capabilities.py` 四张表因此不变。
+
+`PROMPT_VERSION` p249 → p250（只抬一次），十一格摘要逐格重算 ⇒ 两份冻结快照重冻。
+
+| # | 路径 | 类别 | 这一批改了什么（走查要点） |
+|---:|---|---|---|
+| 1 | `src/agentflow/specs/a.py` | `auth-audit` | `run_once` 的 `returns` 删掉 `outstanding`（全仓无实现）、`claimed` 标明只是 property；policy 新增「你能撤子代理的板项」（`conductor.void_items(item_ids, why)`）；压缩 1 处（`policy` 那句与 `boundary` 同句 → 指回 boundary）。**动作表零改动** |
+| 2 | `src/agentflow/specs/b.py` | `auth-audit` | 关 Lean 那一档的签发条件从「V 的『成立』」→ 秘书轴（`secretary_judge.axis=clean` 且 `checked=true`）；`b-register` 义务项补「撤销之后不再挡」；「签还没到位就再走查」→ `review_standing` 分档（`rejected` 先改稿）；`pre_theorem` 的真判据 → `signs_bit3` + 轴 clean；policy 新增撤销说明；压缩 1 处（`holding` 那半句与上面三条同句）。**动作表零改动** |
+| 3 | `src/agentflow/specs/d.py` | `auth-audit` | `closed/expired` → `done` + `item_close` 三值；初步审阅三态 → 两态 +「没查成」；policy 新增撤销说明；压缩 1 处（「研究侧由你主导」与下面那条同句）。**动作表零改动** |
+| 4 | `src/agentflow/specs/e.py` | `auth-audit` | 无稿那一档改成「只给看过、没签」（`numeric_evidence_reviewed_not_signed`，pending 也不落一行）；policy 新增撤销说明。**动作表零改动** |
+| 5 | `src/agentflow/specs/f.py` | `auth-audit` | 「成立 ⇒ 被审过」补 `secretary_fault` 档与 `review_standing=rejected`；`pre_theorem` 的真判据 → `signs_bit3` + 轴 clean；policy 新增撤销说明。**动作表零改动** |
+| 6 | `src/agentflow/specs/g.py` | `auth-audit` | policy 新增撤销说明（一句）。**动作表零改动** |
+| 7 | `src/agentflow/specs/m.py` | `auth-audit` | `open_count` → `board_open_items` / `board_open_count`；`retire_integrity.open_items` 那条链的读法（`dirty` 非空）；新增 `revoke` 格 / 四个 open 读数 / `revoked_recent` / `fault_unrepaired`·`by_class` 四句；`closed/expired` → `done`；压缩 1 处（销号≠停止，判据接住的是 `target_not_silent`）。**动作表零改动** |
+| 8 | `src/agentflow/specs/v.py` | `auth-audit` | `duty` 的第二人称 → 角色名（这段经 `partners_lines` 原样贴进 B/E/F/M 的伙伴表；判据探针要求「签只由你」这个子串仍在 ⇒ 那一处写作「你（V 这一侧）」）；boundary 的「三条动作为此也声明成只读」→ 真声明（`verify_proof` 是 `write_local`，另两件 `read`）；第 4 位补 `formal_by_proof`、`citation_checks` 补 `in_material`；压缩 1 处（`findings` 为空那句的推论）。**动作表零改动** |
+| 9 | `tests/golden/agent_surface_snapshot.json` | `eval-criteria` | 重冻：十一格 `roles.*.prompt` 换值（C 一格逐字未动；`roles.*.tools` / `write_set` / `edges` 逐格未动）。逐格字符数见提交 `d0987609` 的说明 |
+| 10 | `tests/golden/tool_surface_snapshot.json` | `eval-criteria` | 重冻：`conductor.void_items` 的 `summary`（502 → 520 字）与 `returns` 换值；`retire_child` / `wake_blocked` 的 summary 也换了；其余 121 件的声明逐字段未动 |
+
+**当次读数（复跑命令与原文，`--since` 取本批之前的 `cb37de71`）**：
+
+```text
+$ python -B scripts/noai_gate.py --git --since cb37de71
+[requires_human] required_approvals=2
+requires_human：10 条改动落在 **FC-27 禁 AI 区**（类别：auth-audit、eval-criteria）
+命中：agentflow/src/agentflow/specs/{a,b,d,e,f,g,m,v}.py,
+      agentflow/tests/golden/{agent_surface_snapshot,tool_surface_snapshot}.json
+EXIT=1
+```
+
+**基线登记（登记 ≠ 批准）**：
+
+```text
+$ python -B scripts/noai_gate.py --baseline --paths src/agentflow/specs/{a,b,d,e,f,g,m,v}.py \
+      tests/golden/{agent_surface_snapshot,tool_surface_snapshot}.json --note "…"
+[baseline] 登记 10 条 / 未登记 0 条；台账：D:\Incubator\agentflow\.noai-approvals.json
+  · 每一条都是 reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+EXIT=0
+```
+
+**批准栏（由人签，AI 不许填）**：
+
+| reviewer | 日期 | 走查范围（逐行读过哪些） | 结论 |
+|---|---|---|---|
+| （待签） | | | |
+| （待签） | | | |
