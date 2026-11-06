@@ -4547,12 +4547,14 @@ class Conductor:
         自己是板项），不许折成"没权限"；`allowed=False` 且 `checked=True` 才是"查过了、
         你没有权限"。拒信带机器码（`no_actor` / `unknown_actor` / `not_authorized`）。
 
-        返回 `{"checked","allowed","kind","by","owner","code","why"}`；`owner` 是板项
-        的收件人（`row["parent_task_id"]`）—— 留痕里的 `owner` 就是这一格。
+        返回 `{"checked","allowed","mode","by","owner","code","why"}`；`mode` 是
+        允许的那一档（`parent` / `conductor`，见上面两个常量）—— 刻意不叫 `kind`：
+        这一格回答的是"凭什么允许"，不是"这一行是哪根轴"，免得把两件事读混。
+        `owner` 是板项的收件人（`row["parent_task_id"]`）—— 留痕里的 `owner` 就是这一格。
         """
         by = str(by_task_id or "")
         owner = str(row.get("parent_task_id") or "")
-        out: dict[str, Any] = {"checked": True, "allowed": False, "kind": "",
+        out: dict[str, Any] = {"checked": True, "allowed": False, "mode": "",
                                "by": by, "owner": owner, "code": "", "why": ""}
         if not by:
             out.update(checked=False, code="no_actor",
@@ -4565,21 +4567,23 @@ class Conductor:
                        why=(f"台账里没有 {by} 这一行 ⇒ 不知道你是谁，不许改别人的板项"
                             "（fail-closed：查不到≠有权限）"))
             return out
-        if str(actor.get("kind") or ""):
+        if self._is_board_item(actor):
+            # 消息里回显 kind 只是为了让人读得懂这条拒信（`actor["kind"]` 原样打出，
+            # 不做判据 —— 判据是上面那一行 `_is_board_item`）。
             out.update(code="not_authorized",
-                       why=(f"{by} 自己是一条板项（kind={actor.get('kind')}），不是代理"
+                       why=(f"{by} 自己是一条板项（kind={actor['kind']}），不是代理"
                             " ⇒ 板项不能改别人的板项"))
             return out
         role = str(actor.get("role") or "")
         owner_row = rows.get(owner) if owner else None
         owner_role = str((owner_row or {}).get("role") or "")
         if role == S.CONDUCTOR_ROLE and owner_role != S.CONDUCTOR_ROLE:
-            out.update(allowed=True, kind=self.ITEM_AUTHORITY_CONDUCTOR,
+            out.update(allowed=True, mode=self.ITEM_AUTHORITY_CONDUCTOR,
                        why=f"{by} 是主控 M：可改任意代理的板项（业主 2026-11-06 裁定 ①）")
             return out
-        if (owner_row is not None and not str(owner_row.get("kind") or "")
+        if (owner_row is not None and self._is_instance_row(owner_row)
                 and str(owner_row.get("parent_task_id") or "") == by):
-            out.update(allowed=True, kind=self.ITEM_AUTHORITY_PARENT,
+            out.update(allowed=True, mode=self.ITEM_AUTHORITY_PARENT,
                        why=(f"{by} 是 {owner} 的直接父代理：可改它名下的板项"
                             "（业主 2026-11-06 裁定 ①）"))
             return out
@@ -4773,7 +4777,7 @@ class Conductor:
                     "item_id": iid, "by": str(by_task_id), "owner": owner,
                     "reason": reason_text, "from": cur, "to": "done", "at": at,
                     "close": "expired", "mode": ("revoke" if revoke else "void"),
-                    "authority": str(authority.get("kind") or ""),
+                    "authority": str(authority.get("mode") or ""),
                 })
         verb = "撤销" if revoke else "作废"
         if out["refused"] and not out["voided"]:
