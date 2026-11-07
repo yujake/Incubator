@@ -301,8 +301,23 @@ def test_f_stubbing_the_forwarding_param_makes_a_and_e_red(tmp_path: pathlib.Pat
         return real(self, **kw)
 
     monkeypatch.setattr(SEC.Secretary, "handoff_add", _dropped)
-    # a) 具体收件人这一档
-    assert _hand_off(env, {"to": "F"}).get("ok") is True
+    # a) 具体收件人这一档。
+    #
+    # 2026-11-07（C 类：先判"实现对还是判据对"，结论是**判据过时**，不是实现回归）：
+    # 这一组夹具里有两个同角色实例（判据 e 要的），而 `to="F"` 是**角色名** ——
+    # `roster_addresses` 的契约是"角色代号、而该角色在册多个 ⇒ `ambiguous_in_roster`"
+    # （`agent_loop.py:3893`，改前实测就红在这一格：`refused=not_an_edge`，不是转发形参
+    # 的事），落到 `_handoff_address` 的角色那一支又要有协作边
+    # （`agent_loop.py:11862-11873`），而 B 的边里没有 F
+    # （`src/agentflow/specs/b.py:602`：`edges=('C','D','H','L','V')`）⇒ 受控拒。
+    # "点名那一个实例"在这套口径里就是写名册名 —— 与判据 e 同一个写法（判据没放宽：
+    # 仍要求 `ok=True`、行里不许有 `to_task_id`、读侧写「旧账无号」）。
+    assert _hand_off(env, {"to": "F",
+                           "roster_addressing": {"written": "F1", "name": "F1",
+                                                 "task_id": env["f1"], "role": "F",
+                                                 "how": "child",
+                                                 "addressed_by": "roster_name"}}
+                     ).get("ok") is True
     first = _last_row(env["ws"])
     assert first["to"] == "F" and "to_task_id" not in first, first
     assert _label(env["ws"])["to_label"] == "F（旧账无号）", _label(env["ws"])["to_label"]
