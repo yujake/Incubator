@@ -548,13 +548,20 @@ def test_apply_abandonment_writes_status_and_marker(tmp_path):
     _verify(st)
     assert _unsigned(st)["count"] == 1
     got = SA.apply_abandonment(st, statement_id=SID, reason="第 5 步补不出来",
-                               at="2026-11-01T21:10:00+08:00")
+                               at="2026-11-01T21:10:00+08:00",
+                               abandon_kind="math_error",
+                               abandon_basis="第 5 步直接用了结论：那一步没有依据",
+                               defect_ref=f"verifications/{SID}.jsonl#v-000001")
     assert got["checked"] is True and got["abandoned"] is True, got
     row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
     assert row["status"] == "abandoned", row
     parsed = SA.parse_abandon(row["quote_reason"])
     assert parsed["checked"] and parsed["at"] == "2026-11-01T21:10:00+08:00", parsed
-    assert "补不出来" in parsed["reason"], parsed
+    # 2026-11-07：`@` 之后是结构化理由（两档形状），理由正文在 `abandon_basis` 里
+    assert "补不出来" in parsed["reason"] or "第 5 步直接用了结论" in parsed["reason"], parsed
+    structured = SA.parse_abandon_reason(row["quote_reason"])
+    assert structured["complete"] is True and structured["abandon_kind"] == "math_error", \
+        structured
     assert _unsigned(st)["count"] == 0, _unsigned(st)
     abandoned = _abandoned(st)
     assert abandoned["count"] == 1 and abandoned["rows"][0]["stmt_id"] == SID, abandoned
@@ -566,18 +573,32 @@ def test_apply_abandonment_is_idempotent(tmp_path):
     """③ 同一份放弃重放 ⇒ 幂等（不改任何格、不报错）。"""
     st = _ws(tmp_path)
     _put(st)
-    first = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS)
-    second = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS)
+    _verify(st)
+    args = dict(abandon_kind="math_error",
+                abandon_basis="第 5 步直接用了结论",
+                defect_ref=f"verifications/{SID}.jsonl#v-000001")
+    first = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS, **args)
+    second = SA.apply_abandonment(st, statement_id=SID, reason="改不动", at=TS, **args)
     assert first["checked"] and second["checked"], (first, second)
     assert second["already"] is True and second["changes"] == [], second
 
 
 def test_apply_abandonment_refuses_without_a_reason_or_an_id(tmp_path):
-    """③ 没有理由 / 没有命题号 / 不在册 ⇒ 受控拒绝，盘上一个字节都不改。"""
+    """③ 没有理由 / 没有命题号 / 不在册 ⇒ 受控拒绝，盘上一个字节都不改。
+
+    2026-11-07 改：命题行"只给一段散文"这一档现在受控拒在**换号理由**那一关
+    （`abandon_reason_missing`，业主裁定要 `abandon_kind` + `abandon_basis`）；
+    `abandon_marker_invalid` 这一档仍然对**不是命题**的行（概念行不过那道闸）生效。
+    """
     st = _ws(tmp_path)
     _put(st)
+    _verify(st)
     blank = SA.apply_abandonment(st, statement_id=SID, reason="   ")
-    assert blank["checked"] is False and blank["refused"] == "abandon_marker_invalid", blank
+    assert blank["checked"] is False and blank["refused"] == "abandon_reason_missing", blank
+    _put(st, "000002", kind="concept")
+    concept_blank = SA.apply_abandonment(st, statement_id="000002", reason="   ")
+    assert concept_blank["checked"] is False, concept_blank
+    assert concept_blank["refused"] == "abandon_marker_invalid", concept_blank
     no_id = SA.apply_abandonment(st, statement_id="", reason="有理由")
     assert no_id["checked"] is False and no_id["refused"] == "abandon_missing_id", no_id
     unknown = SA.apply_abandonment(st, statement_id="999999", reason="有理由")
@@ -594,7 +615,10 @@ def test_apply_abandonment_expires_the_open_resubmit_item(tmp_path):
     _put(st)
     _verify_v(st, SID, parent=parent)
     item = _resubmit_items(st)[0]
-    got = SA.apply_abandonment(st, statement_id=SID, reason="改不动了", at=TS)
+    got = SA.apply_abandonment(st, statement_id=SID, reason="改不动了", at=TS,
+                               abandon_kind="math_error",
+                               abandon_basis="第 5 步直接用了结论：那一步没有依据",
+                               defect_ref=f"verifications/{SID}.jsonl#v-000001")
     assert got["checked"] is True, got
     assert got["resubmits"]["checked"] is True and got["resubmits"]["closed"], got["resubmits"]
     closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
@@ -654,15 +678,16 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
     reg = _table_registry(st)
     with CND.calling_as("t-b1", "B"):
         res = reg.call("table.update", table="statements", id=SID,
-                       patch={"status": "abandoned",
-                              "quote_reason": SA.abandon_marker(
-                                  at="2026-11-01T21:10:00+08:00",
-                                  reason="第 5 步补不出来，改不动了")})
+                       patch={"status": "abandoned"},
+                       abandon_kind="math_error",
+                       abandon_basis="第 5 步直接用了结论：那一步没有依据",
+                       defect_ref=f"verifications/{SID}.jsonl#v-000001")
     assert res.ok, (res.error, getattr(res, "data", None) or getattr(res, "meta", None))
     row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
     assert row["status"] == "abandoned", row
     parsed = SA.parse_abandon(row["quote_reason"])
-    assert parsed["checked"] and parsed["at"] == "2026-11-01T21:10:00+08:00", parsed
+    assert parsed["checked"], parsed
+    assert SA.parse_abandon_reason(row["quote_reason"])["abandon_kind"] == "math_error", row
     assert _unsigned(st)["count"] == 0, _unsigned(st)
     assert _abandoned(st)["count"] == 1, _abandoned(st)
 
@@ -710,10 +735,10 @@ def test_table_update_closes_the_open_resubmit_item_and_leaves_no_open_work(tmp_
     reg = _table_registry(st)
     with CND.calling_as("t-b1", "B"):
         res = reg.call("table.update", table="statements", id=SID,
-                       patch={"status": "abandoned",
-                              "quote_reason": SA.abandon_marker(
-                                  at="2026-11-01T21:10:00+08:00",
-                                  reason="第 5 步补不出来，改不动了")})
+                       patch={"status": "abandoned"},
+                       abandon_kind="math_error",
+                       abandon_basis="第 5 步直接用了结论：那一步没有依据",
+                       defect_ref=f"verifications/{SID}.jsonl#v-000001")
     assert res.ok, (res.error, getattr(res, "data", None) or getattr(res, "meta", None))
 
     closed = next(dict(r) for r in st.rows("tasks")

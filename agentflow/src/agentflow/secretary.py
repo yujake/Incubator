@@ -1816,6 +1816,18 @@ def normalize_same_as(value: Any) -> tuple[str, int]:
 #: 「谁能改 statements 的哪一格」是 FC-27 的权限面（`tools/table_tools.py` 也是禁改区）。
 STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
 
+#: 放弃/换号时随 `status="abandoned"` 一起交上来的那几格（业主 2026-11-07 裁定）。
+#:
+#: 它们**不是**就地改的字段（一个字节都不会落进 row 的顶层键）：它们是"理由"的
+#: 结构化形状，由 `statementabandon.check_abandon_reason` 判过之后拼进
+#: `quote_reason` 那一条标记里（`abandoned@<ISO8601>@<JSON>`）。所以它们在白名单里
+#: （放行到这一层）却不在 `STATEMENT_META_PATCH_KEYS` 里（不被当作可写列）。
+#:
+#: 为什么必须在这一层就拒：`table.update` 是业主验收的通用写口，模型真会用它；
+#: 而"受控拒"要求**一个字节都不写** ⇒ 校验必须赶在 `tx.upsert` 之前。
+STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
+    "abandon_kind", "abandon_basis", "defect_ref", "difficulty", "salvaged")
+
 #: 就地改 `kind` 时认的英文词表（命题性的那几档 + 概念/定义两档）。
 #:
 #: 中文 kind（`定理` / `引理`）不在里面：真机 82 的 A-1 就是它进不了命题性词表、
@@ -6740,6 +6752,68 @@ class Secretary:
                        reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
         return out
 
+    def _abandon_reason_gate(self, row: Mapping[str, Any], wanted: Mapping[str, Any],
+                             given: Mapping[str, Any]) -> dict[str, Any]:
+        """放弃命题那一步的换号理由闸（业主 2026-11-07；判据本体在 `statementabandon`）。
+
+        返回 `{"refused","reason","form","quote_reason"}`：
+        - 不归这道闸管（目标状态不是 abandoned / kind 不是命题 / 幂等重放且没交新理由）
+          ⇒ 空字典（一个字节都不干预）；
+        - 受控拒 ⇒ `refused` + `reason`（**调用方必须整笔不写**）；
+        - 过关 ⇒ `quote_reason` 是要落盘的那一条标记（`abandoned@<ISO>@<JSON>`），
+          `form` 是判据的逐格读数。
+
+        ## 三档（业主原话划的两档 + 不受管的那一档）
+        1. `kind ∈ secretary.PROPOSITION_KINDS`（theorem / lemma / proposition /
+           corollary / conjecture）⇒ 必须给 `abandon_kind` + `abandon_basis`，
+           判据 `statementabandon.check_abandon_reason`（math_error 要 `defect_ref`
+           且那一行真的判「有毛病」、理由要点名 `defect_step`；difficulty 要
+           `difficulty` + 非空的 `salvaged`，每条在册 / active / 引理类）；
+        2. `concept` / `definition` / 认不出的 kind ⇒ 不受这道闸管（概念不是命题，
+           谈不上"命题本身有数学错误"或"证明遇到的困难"）；
+        3. 这一行**早就是** `abandoned` 而这一次没交新理由 ⇒ 幂等重放，不拦
+           （历史行必须还能被重放；要补理由就带上那几格重交一次，本闸会承认它）。
+
+        ## 为什么落盘的是 JSON 而不是自由文本
+        读侧要按 `abandon_kind` 分组、要判"是否带证据"（`closing` 的换号读数），
+        自由文本做不到。人类可读的那一段是 `abandon_basis` 本身，它没有被压缩。
+        """
+        from . import statementabandon as _SA
+
+        target = str(wanted.get("status", row.get("status")) or "")
+        if target != "abandoned":
+            return {}
+        kind_now = str(wanted.get("kind", row.get("kind")) or "").strip().lower()
+        if kind_now not in PROPOSITION_KINDS:
+            return {}
+        already = str(row.get("status") or "") == "abandoned"
+        if already and not given:
+            # 幂等重放：历史行（只有自由文本理由的那种）必须还能走这一格，
+            # 否则"先补板项、后补理由"这条路会被闸反锁死。
+            return {}
+        form = _SA.check_abandon_reason(
+            self.store,
+            kind=given.get("abandon_kind"), basis=given.get("abandon_basis"),
+            defect_ref=given.get("defect_ref", ""), difficulty=given.get("difficulty", ""),
+            salvaged=given.get("salvaged") or ())
+        if not form.get("checked"):
+            return {"refused": str(form.get("refused") or "abandon_reason_missing"),
+                    "reason": str(form.get("why") or "换号理由不齐 ⇒ 整笔不写"),
+                    "form": form}
+        at = S.now_iso()
+        if already:
+            was = _SA.parse_abandon(row.get("quote_reason"))
+            if was.get("checked") and str(was.get("at") or ""):
+                at = str(was.get("at"))     # 补理由不改"几时放下的"那一刻
+        marker = _SA.abandon_marker(
+            at=at,
+            reason=_SA.structured_reason(
+                kind=str(form["abandon_kind"]), basis=str(form["abandon_basis"]),
+                defect_ref=str(form.get("defect_ref") or ""),
+                difficulty=str(form.get("difficulty") or ""),
+                salvaged=form.get("salvaged") or ()))
+        return {"quote_reason": marker, "form": form}
+
     def amend_statement_meta(self, stmt_id: str, patch: Mapping[str, Any], *,
                              role: str = "B", task_id: str = "") -> dict[str, Any]:
         """就地改一条在册命题的非正文格（`status` / `kind` / `quote_reason`）。
@@ -6776,7 +6850,9 @@ class Secretary:
         out: dict[str, Any] = {"checked": False, "amended": False,
                                "stmt_id": str(stmt_id or ""), "changes": [],
                                "before": {}, "row": {}, "tables": [],
-                               "refused": "", "reason": ""}
+                               "refused": "", "reason": "",
+                               #: 换号理由那几格的判据读数（只有放弃命题那一笔才非空）。
+                               "form": {}}
         if self.store is None:
             out.update(refused="secretary_unavailable",
                        reason="这一名秘书没有 store ⇒ 改不了（命题的写侧归秘书）")
@@ -6794,14 +6870,20 @@ class Secretary:
                        reason=("patch 是空的 ⇒ 没有要改的格。这一条只改 "
                                f"{list(STATEMENT_META_PATCH_KEYS)} 之一或多个"))
             return out
-        extra_keys = sorted(k for k in wanted if k not in STATEMENT_META_PATCH_KEYS)
+        extra_keys = sorted(k for k in wanted if k not in STATEMENT_META_PATCH_KEYS
+                            and k not in STATEMENT_ABANDON_PATCH_KEYS)
         if extra_keys:
             out.update(refused="statement_patch_key_not_allowed", reason=(
-                f"这一条只允许就地改 {list(STATEMENT_META_PATCH_KEYS)}，收到 {extra_keys}。"
+                f"这一条只允许就地改 {list(STATEMENT_META_PATCH_KEYS)}"
+                f"（放弃命题时另带 {list(STATEMENT_ABANDON_PATCH_KEYS)}），收到 {extra_keys}。"
                 "改正文请把新正文写进 `statement_full` / `proof_text` 再交一次 "
                 "`own.register_statement`（同一条命题会就地覆盖，旧正文进 `proof_history`）；"
                 "其余格没有就地写口 —— 整笔不写，盘上一个字节都没变。"))
             return out
+        #: 换号理由那几格先摘出来：它们不是可写的列（见 `STATEMENT_ABANDON_PATCH_KEYS`），
+        #: 只用来拼 `quote_reason` 那一条标记。
+        abandon_given = {k: wanted.pop(k) for k in list(wanted)
+                         if k in STATEMENT_ABANDON_PATCH_KEYS}
         if "status" in wanted:
             status = str(wanted["status"] or "").strip()
             if status not in S.STATEMENT_STATUSES:
@@ -6838,6 +6920,19 @@ class Secretary:
                     out.update(refused="not_found",
                                reason=f"statements 里没有主键 {sid} ⇒ 没有可改的行")
                     return out
+                # ---- 2026-11-07（业主裁定）：放弃/换号必须给清结构化理由 ----------
+                #
+                # 位置在"算 changed 之前、`tx.upsert` 之前"：受控拒要求一个字节都不写，
+                # 而这一格一旦被判拒，`wanted` 里的 `status` 也不许落盘。
+                gate = self._abandon_reason_gate(row, wanted, abandon_given)
+                if gate.get("refused"):
+                    out.update(refused=str(gate["refused"]),
+                               reason=str(gate.get("reason") or ""),
+                               form=dict(gate.get("form") or {}))
+                    return out
+                if gate.get("quote_reason"):
+                    wanted["quote_reason"] = str(gate["quote_reason"])
+                    out["form"] = dict(gate.get("form") or {})
                 before = {k: row.get(k) for k in wanted}
                 changed = {k: v for k, v in wanted.items() if row.get(k) != v}
                 out["before"] = before
@@ -6879,6 +6974,63 @@ class Secretary:
                        reason=(f"改非正文格没成（{type(exc).__name__}: {exc}）"
                                " ⇒ 这一笔按'没写成'读"))
             return out
+
+    def _with_relabel_reading(self, landed: Mapping[str, Any] | None,
+                              *, kind: str = "") -> dict[str, Any]:
+        """登记成功之后，把"这一笔是不是换号（同一 label 再登记）"的读数带上。
+
+        业主 2026-11-07 的裁决只拦**放弃**那一侧（`Statement` 的
+        `status=abandoned` 写口），登记这一侧**不拦**：历史工作区里已经有一批没有
+        结构化理由的 `abandoned` 行，拦它们只会把 B 卡死。所以这一格只做两件事：
+
+        - 原件理由齐 ⇒ 返回读数 `supersedes`（原 `stmt_id` + `abandon_kind` +
+          `abandon_basis` 摘要 + 证据是否在）；
+        - 原件理由不齐（历史行）⇒ 返回 `superseded_without_reason`（原 `stmt_id` 列表），
+          **不拒** —— 让审计一眼看到"这一条换号是在没有给出理由的情况下发生的"。
+
+        判据本体是 `statementabandon.relabel_events`（`closing` 的换号读数读同一份）。
+        """
+        out = dict(landed or {})
+        if not out.get("created") or not str(out.get("stmt_id") or ""):
+            return out            # 不是新建（已在册 / 升档 / 合并）⇒ 没有"换号"这回事
+        from . import statementabandon as _SA
+
+        sid = str(out.get("stmt_id") or "")
+        label = str((out.get("row") or {}).get("label") or "").strip()
+        if not label:
+            return out
+        try:
+            events = _SA.relabel_events(self.store.rows("statements"))
+        except Exception as exc:  # noqa: BLE001 —— 读数读不出来不许带走已经落盘的登记
+            out["relabel"] = {"checked": False,
+                              "reason": f"{type(exc).__name__}: {exc}"}
+            return out
+        priors = [one for one in events.get(label, []) if one.get("stmt_id") != sid]
+        out["relabel"] = {"checked": True, "label": label,
+                          "priors": len(priors),
+                          "supersedes": [], "superseded_without_reason": []}
+        if not priors:
+            return out
+        for one in priors:
+            if one.get("complete"):
+                out["relabel"]["supersedes"].append({
+                    "stmt_id": one["stmt_id"], "at": one.get("at", ""),
+                    "abandon_kind": one.get("abandon_kind", ""),
+                    "basis": one.get("basis", ""),
+                    "has_evidence": bool(one.get("has_evidence")),
+                })
+            else:
+                out["relabel"]["superseded_without_reason"].append({
+                    "stmt_id": one["stmt_id"], "at": one.get("at", ""),
+                    "why": "原件没有结构化的换号理由（历史行）⇒ 只报不拦",
+                })
+        # 顶层也放一份：模型读的是返回值，`relabel` 里那一层太深时它会漏看。
+        if out["relabel"]["supersedes"]:
+            out["supersedes"] = list(out["relabel"]["supersedes"])
+        if out["relabel"]["superseded_without_reason"]:
+            out["superseded_without_reason"] = list(
+                out["relabel"]["superseded_without_reason"])
+        return out
 
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
                          force_new: bool = False,
@@ -7058,10 +7210,11 @@ class Secretary:
             adjudication.get("proposition_adjudication") or {})
         out["canonical_name"] = str(adjudication.get("canonical_name") or "")
         try:
-            return self._record_statement_tx(body, full=full, kind=kind,
-                                             force_new=bool(force_new), out=out,
-                                             adjudication=adjudication,
-                                             candidate_id=str(candidate_id or ""))
+            landed = self._record_statement_tx(body, full=full, kind=kind,
+                                               force_new=bool(force_new), out=out,
+                                               adjudication=adjudication,
+                                               candidate_id=str(candidate_id or ""))
+            return self._with_relabel_reading(landed, kind=kind)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             # ---- 写入期闸的拒收要留住它自己的码（2026-11-05 走查 D2）------------
             #

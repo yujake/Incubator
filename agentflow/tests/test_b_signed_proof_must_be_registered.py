@@ -336,8 +336,22 @@ def test_e_an_explicit_abandonment_expires_the_duty(tmp_path):
     _put(st)
     _verify_v(st, SID)
     one = _register_items(st)[0]
+    # 2026-11-07（业主裁定）：放弃一条命题必须给结构化换号理由。
+    # 这一档用 `difficulty`：把旧稿里可取之处拆成一条在册引理（`salvaged` 非空）。
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", {
+            "stmt_id": "000009", "origin": "own_result", "kind": "lemma",
+            "label": "引理：旧稿里可取的那一步", "statement_full": FULL,
+            "statement_text": FULL, "proof_text": "", "evidence_kind": "heuristic",
+            "status": "active", "quote_verified": None, "quote_reason": "夹具：自产命题",
+            "created_at": TS, "created_by": "test", "bits": {}})
     got = SA.apply_abandonment(st, statement_id=SID, reason="这一份稿不进册：重新做",
-                               at="2026-11-05T03:00:00+08:00")
+                               at="2026-11-05T03:00:00+08:00",
+                               abandon_kind="difficulty",
+                               abandon_basis="这一份稿不进册：依赖面补齐不了，重新做",
+                               difficulty="V 要求的那条依赖拿不到；三条路都试过",
+                               salvaged=[{"label": "引理：旧稿里可取的那一步",
+                                          "stmt_id": "000009"}])
     assert got["checked"] is True and got["abandoned"] is True, got
     rec = VRC.reconcile_registrations(store=st, root=st.root)
     assert rec["checked"] is True, rec

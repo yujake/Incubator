@@ -27,6 +27,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .. import dedup as _dedup
 from .. import schema as S
+from .. import statementabandon as _SA
 from .. import store as _store_mod
 from .. import textutil as _text
 from ..interactions import IdSpaceExhausted, next_prefixed_id
@@ -1434,12 +1435,18 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
 
 
 def _secretary_keys() -> frozenset[str]:
-    """秘书那条路认得的载荷键（正名 ∪ 别名）；读不到 ⇒ 空集（那一格就不报 dropped）。"""
+    """秘书那条路认得的载荷键（正名 ∪ 别名 ∪ 换号理由那五格）；读不到 ⇒ 空集。
+
+    换号理由那五格（`statementabandon.ABANDON_PARAM_KEYS`）也算"认得"：它们不是可写的
+    列，而是 `Secretary.amend_statement_meta` 在写之前要判的那几格 —— 不列在这里，
+    它们会出现在 `dropped_keys` 读数里被当成"白给了"。
+    """
     try:
         from ..secretary import STATEMENT_KEY_ALIASES, STATEMENT_PARAM_KEYS
     except Exception:  # noqa: BLE001
         return frozenset()
     out = set(STATEMENT_PARAM_KEYS)
+    out.update(_SA.ABANDON_PARAM_KEYS)
     for alts in STATEMENT_KEY_ALIASES.values():
         out.update(alts)
     return frozenset(out)
@@ -1867,12 +1874,46 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     "table.update",
     "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。"
     "`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改"
-    "（整行校验 + 事务）；带正文仍走登记路；其余格拒。",
+    "（整行校验 + 事务）；带正文仍走登记路；其余格拒。"
+    "**放弃命题（`patch.status=\"abandoned\"`）另要两格换号理由**：`abandon_kind`"
+    "（只许 `math_error` / `difficulty`）与 `abandon_basis`（理由正文）；"
+    "`math_error` 再给 `defect_ref`（`verifications/<号>.jsonl#v-00000N`，那一行必须真的"
+    "判「有毛病」且理由点名 `defect_step` 那一步）；`difficulty` 再给 `difficulty`"
+    "（难在哪）与 `salvaged`（把旧证明可取之处拆成的引理：每条形如 "
+    "`{\"label\": …, \"stmt_id\": …}`，那条引理必须在册、active、kind=lemma）。"
+    "理由不齐 ⇒ 受控拒绝（`abandon_reason_missing` 一类码），一个字节都不写。",
     _obj(
         {
             "table": _TABLE_PROP,
             "id": {"type": "string", "description": "要改的行主键"},
             "patch": {"type": "object", "description": "只写要改的字段"},
+            "abandon_kind": {
+                "type": "string", "enum": list(_SA.ABANDON_KINDS),
+                "description": "换号理由的档：math_error（命题有实质数学错误）/ "
+                               "difficulty（证明遇到难以逾越的困难）。只在 "
+                               "patch.status=abandoned 时用，且那时必填。"},
+            "abandon_basis": {
+                "type": "string",
+                "description": "换号理由正文：math_error 要点名错在第几步、错是什么；"
+                               "difficulty 要说清难在哪。只在 patch.status=abandoned 时用，"
+                               "且那时必填。"},
+            "defect_ref": {
+                "type": "string",
+                "description": "math_error 档必填：`verifications/<6 位命题号>.jsonl#"
+                               "v-<6 位验证号>`，指向那一行判「有毛病」的判词。"},
+            "difficulty": {
+                "type": "string",
+                "description": "difficulty 档必填：说清难在哪（缺哪条引理 / 哪一步的界对不上"
+                               " / 哪条假设用不上）。"},
+            "salvaged": {
+                "type": "array",
+                "description": "difficulty 档必填且非空：把旧证明里可取之处拆成的引理。"
+                               "每条给 label 与 stmt_id（那条引理必须在册、status=active、"
+                               "kind=lemma）。空数组 ⇒ 受控拒绝。",
+                "items": {"type": "object",
+                          "properties": {"label": {"type": "string"},
+                                         "stmt_id": {"type": "string"}},
+                          "required": ["stmt_id"]}},
         },
         required=("table", "id", "patch"),
     ),
@@ -1886,7 +1927,10 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
              "refused_by_backstop …）。"),
     tags=("table", "crud", "write"),
 )
-def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, Any]) -> ToolResult:
+def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, Any],
+                 abandon_kind: str = "", abandon_basis: str = "",
+                 defect_ref: str = "", difficulty: str = "",
+                 salvaged: Sequence[Mapping[str, Any]] | None = None) -> ToolResult:
     """部分更新。
 
     实现上是"读整行 → 覆盖 patch → 整行校验 → 整行写回"，而不是"只写 patch 的字段"：
@@ -1897,7 +1941,35 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
 
     `literature.path` 的两格（M4，2026-11-05）见 `table.create` 的同名一段：归一化只在
     这一笔真的写了 path 时做（patch 里没有 path ⇒ 存量原样保留，不替业主改盘）。
+
+    ## 换号理由那五格（业主 2026-11-07 裁定）
+    `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` 不是
+    可写的列：它们是"放弃命题"这件事的理由形状。`statements` 那一笔在下发路由之前把
+    它们并进载荷，于是 `Secretary.amend_statement_meta` 能在**写之前**判它们
+    （受控拒 = 一个字节都不写）。判据本体只有一份（`statementabandon.check_abandon_reason`）。
     """
+    try:
+        idf = _spec_of(table)["id_field"]
+    except ToolError as e:
+        return fail(str(e), table=table, kind="unknown_table")
+    # ---- 直写兜底：同 `table.create`（见 `_direct_write_disposal`）。
+    # 这一格也是"V 签完之后把档位写强"那条路被接管的地方：同一份内容再交一次，
+    # 秘书会按 `verifications` 里那一签决定升不升档（升档就地改那一行、不新建）。
+    if not patch:
+        return fail("patch 不能为空（空 patch 只会更新 updated_at，通常是调用方写错了）", table=table, id=id, kind="param_error")
+    # ---- 换号理由五格：只在写 `statements` 时并进载荷（别的表没有这一档）---------
+    extra_abandon = {k: v for k, v in (
+        ("abandon_kind", abandon_kind), ("abandon_basis", abandon_basis),
+        ("defect_ref", defect_ref), ("difficulty", difficulty),
+        ("salvaged", salvaged)) if v not in (None, "", (), [], {})}
+    payload = dict(patch or {})
+    if extra_abandon:
+        if str(table or "") != "statements":
+            return fail(
+                f"换号理由（{sorted(extra_abandon)}）只对 table='statements' 有意义 —— "
+                f"这一笔改的是 {table!r}，那几格没有落点。整笔不写。",
+                table=table, id=id, kind="param_error")
+        payload.update(extra_abandon)
     try:
         idf = _spec_of(table)["id_field"]
     except ToolError as e:
@@ -1914,7 +1986,7 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     if tasks_refused is not None:
         return tasks_refused
     refused = _direct_write_disposal(ctx, table=table, op="update",
-                                     payload=dict(patch or {}), id=id, idf=idf)
+                                     payload=payload, id=id, idf=idf)
     if refused is not None:
         return refused
 

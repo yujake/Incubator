@@ -5518,11 +5518,21 @@ def suspected_split_reading(store: Any) -> dict[str, Any]:
 
 
 def statements_abandoned_reading(store: Any) -> dict[str, Any]:
-    """I3 的另一格读数：明确放弃的命题（带理由与时间）。
+    """I3 的另一格读数：明确放弃的命题（带理由与时间）+ 换号读数（`relabeled`）。
 
     判据只有一条：`status == "abandoned"` 且 `quote_reason` 是一条可解析的放弃标记
     （`statementabandon.parse_abandon`，写侧 `schema.Statement.validate` 逐条核）。
     "明确"这个词的机器含义就在这里：理由与时间都读得出来。
+
+    ## `relabeled`：同一个 label 被换了多少次号（业主 2026-11-07 裁定）
+    业主原话：「换号需给清理由……」。这一格**不拦门**（阈值拦截是业主明说不要的），
+    它只让"同一 label 反复换号"在收工输出上显形 —— 98 的真机形态正是它：`lem:cancel`
+    下 000049 与 000050 各有一次放弃，两次的理由一条结构化的都没有。
+
+    逐 label 给 `{label, relabels, events[{stmt_id, at, abandon_kind, has_evidence}],
+    repeated}`：`relabels` = 这个 label 下"被放弃"的次数（每一次放弃就是一次换号），
+    `repeated` = `relabels >= 2`（≥2 次要能一眼看到）。判据本体是
+    `statementabandon.relabel_events`（登记那一侧 `supersedes` 读数读的是同一份）。
 
     三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（没查成，不是"没有放弃"）。
     自称放弃而标记读不出来的行不计入这一格（它们进 `statements_unsigned` 的
@@ -5532,10 +5542,13 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     from . import statementabandon as _SA
 
     out: dict[str, Any] = {"checked": False, "count": 0, "checked_from": "statements",
-                           "rows": [], "problems": [], "reason": ""}
+                           "rows": [], "problems": [], "reason": "",
+                           "relabeled": {"checked": False, "labels": [], "repeated": 0,
+                                         "reason": ""}}
     rows, why = _statement_rows(store)
     if rows is None:
         out["reason"] = why
+        out["relabeled"]["reason"] = why
         return out
     for sid, row in sorted(rows.items()):
         if str(row.get("status") or "") != "abandoned":
@@ -5544,12 +5557,39 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
         if not got.get("checked"):
             out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
             continue
+        parsed = _SA.parse_abandon_reason(row.get("quote_reason"))
         out["rows"].append({"stmt_id": sid, "kind": str(row.get("kind") or ""),
                             "at": str(got.get("at") or ""),
                             "reason": str(got.get("reason") or ""),
-                            "label": str(row.get("label") or "")})
+                            "label": str(row.get("label") or ""),
+                            # 2026-11-07：换号理由的两档读数（历史行三格全空）
+                            "abandon_kind": str(parsed.get("abandon_kind") or ""),
+                            "abandon_basis": str(parsed.get("abandon_basis") or ""),
+                            "defect_ref": str(parsed.get("defect_ref") or ""),
+                            "salvaged": [dict(x) for x in (parsed.get("salvaged") or [])],
+                            "structured": bool(parsed.get("structured")),
+                            "complete": bool(parsed.get("complete"))})
     out["checked"] = True
     out["count"] = len(out["rows"])
+    events = _SA.relabel_events(list(rows.values()))
+    labels: list[dict[str, Any]] = []
+    for label, ones in events.items():
+        labels.append({"label": label, "relabels": len(ones),
+                       "repeated": len(ones) >= 2,
+                       "events": [{"stmt_id": one["stmt_id"], "at": one.get("at", ""),
+                                   "abandon_kind": one.get("abandon_kind", ""),
+                                   "has_evidence": bool(one.get("has_evidence"))}
+                                  for one in ones]})
+    labels.sort(key=lambda one: (-int(one["relabels"]), str(one["label"])))
+    repeated = [one for one in labels if one["repeated"]]
+    out["relabeled"] = {
+        "checked": True, "labels": labels, "repeated": len(repeated),
+        "reason": ("查过了：没有同一个 label 被换号两次以上的行"
+                   if not repeated else
+                   "查过了：" + "、".join(f"{one['label']}（{one['relabels']} 次）"
+                                         for one in repeated)
+                   + " 这几条同一 label 换号 ≥2 次（读数，不拦门）"),
+    }
     out["reason"] = ("查过了：没有明确放弃的命题" if not out["rows"] else
                      f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）")
     return out
