@@ -291,6 +291,28 @@ ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
 
+#: 六类环境在正文里**印出来的抬头**（环境识别面的唯一一张表）。
+#:
+#: 业主 2026-11-07（`_canon_F_manuscript_protocol.md` 第六节，逐字）：
+#: 「登记里 `kind=example` 的行（玩具例子）：正文用 `Example` 环境，不用 Lemma/Theorem；
+#: 其余按既有映射。example 只是给人看的标签，处理与普通命题一致。」
+#:
+#: 为什么单列一张表：对应表的 `kind` 是**机器面**（`\begin{example}` 的环境名），读者
+#: 看到的是**抬头**（"Example 1.2"）。两者可以不一致 —— `\newtheorem{example}{Lemma}`
+#: 会让一条 `kind=example` 的行在 PDF 上印成 Lemma，而扫描器只认环境名、看不出这件事
+#: （`_printed_env_title` 只对上 theorem / lemma / proposition / corollary 那一组）。
+#: 这一张表把"这一类 kind 该印什么"写成数据，`environment_titles()` 逐行对照导言区
+#: 真有的 `\newtheorem` 声明 —— 于是"kind=example 的行真的进了 Example 环境"是一格
+#: 可读的读数，而不是一句人话。
+ENV_TITLES: dict[str, str] = {
+    "theorem": "Theorem",
+    "lemma": "Lemma",
+    "proposition": "Proposition",
+    "corollary": "Corollary",
+    "example": "Example",
+    "experiment": "Experiment",
+}
+
 #: 数值实验定理那一支管哪几类环境（正文"一条命题一个环境"用；`is_numeric_row` 不按它判）。
 #:
 #: 为什么不是全部六类：例子与实验不是"被证明的命题"，它们没有证明栏可指。
@@ -994,6 +1016,77 @@ def statement_envs_of_text(tex: str) -> list[BodyEnv]:
     """
     clean = strip_tex_comments(str(tex or ""))
     return _scan_envs(clean, {}, kinds=statement_env_names(clean))
+
+
+def env_title_of(kind: Any) -> str:
+    """某一类映射行在正文里该印哪个抬头（`ENV_TITLES` 的唯一读口；认不出 ⇒ 空串）。
+
+    空串是"认不出这一档"，**不是**"哪一档都行"：调用方（`environment_titles`）把它
+    读成"这一行没有可对照的抬头"，于是"摘掉 example 那一格"会当场变成一格红读数。
+    """
+    return ENV_TITLES.get(str(kind or "").strip().lower(), "")
+
+
+def _newtheorem_titles(tex: str) -> dict[str, str]:
+    """导言区 `\\newtheorem{名字}{标题}` ⇒ `{名字: 标题第一个词（小写）}`。
+
+    只读**印出来的第一个词**（与 `statement_env_names` 同一把尺）：`{Example}` 与
+    `{Example (toy)}` 都读成 `example`。读不到的（没有声明、或标题是纯命令）不进表。
+    """
+    out: dict[str, str] = {}
+    for m in _NEWTHEOREM_RE.finditer(strip_tex_comments(str(tex or ""))):
+        name = m.group("name").strip()
+        title = _printed_env_title(m.group("title"))
+        if name and title:
+            out[name] = title
+    return out
+
+
+def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
+    """对应表逐行「该用哪个环境抬头」的读数，以及正文导言区实际印的是什么。
+
+    业主 2026-11-07（protocol 第六节）：「`kind=example` 的行（玩具例子）：正文用
+    `Example` 环境，不用 Lemma/Theorem；其余按既有映射。」这一格就是那句话的机器读数。
+
+    逐行给：
+
+    | 键 | 意思 |
+    |---|---|
+    | `kind` / `label` | 这一行说的是哪一类环境的哪一个（对应表原样） |
+    | `env_title` | 这一行**该**印的抬头（`ENV_TITLES`；认不出 ⇒ 空串） |
+    | `declared` | 导言区 `\\newtheorem{<kind>}{…}` 实际印出来的抬头；读不到 ⇒ 空串 |
+    | `ok` | `env_title` 非空，且（没有声明 或 声明与它同名，不分大小写） |
+
+    `declared` 为空是"没查成"（没有 `\\newtheorem` 可对 —— 夹具与大部分真机稿的
+    环境由文档类直接给），不是"印错了"：三态纪律在这里就是"读不到 ⇒ 不据此判红"。
+
+    返回 `{"checked": True, "titles": {kind: title}, "rows": [...], "unknown": [...],
+    "mismatched": [...]}`。它是**读数**（与 `kind_gap` / `theorem_unsigned` 同族），
+    不进 `problems`、不改 `state`；判它红不红是调用方的事（判据见
+    `tests/test_example_is_a_normal_proposition.py` 的 d/e）。
+
+    为什么按 `row.kind` 找 `declared`：对应表与正文的对齐口径是"环境名 = kind"
+    （`_orphan_problems` 按 `(kind, label)` 配），所以 `kind=example` 那一行对的就是
+    `\\begin{example}` 与 `\\newtheorem{example}{…}`。
+    """
+    declared_titles = _newtheorem_titles(tex)
+    items: list[dict[str, Any]] = []
+    unknown: list[str] = []
+    mismatched: list[dict[str, str]] = []
+    for row in rows:
+        kind = str(row.kind or "").strip().lower()
+        title = env_title_of(kind)
+        declared = str(declared_titles.get(kind) or "")
+        ok = bool(title) and (not declared or declared == title.lower())
+        items.append({"kind": kind, "label": str(row.label or ""),
+                      "env_title": title, "declared": declared, "ok": ok})
+        if not title:
+            unknown.append(kind)
+        elif not ok:
+            mismatched.append({"kind": kind, "label": str(row.label or ""),
+                               "env_title": title, "declared": declared})
+    return {"checked": True, "titles": {k: v for k, v in ENV_TITLES.items()},
+            "rows": items, "unknown": unknown, "mismatched": mismatched}
 
 
 def _env_where(env: BodyEnv) -> str:
@@ -4108,6 +4201,10 @@ def mapping_reading(project_root: str | Path, *,
         "envs": len(envs),
         "statement_envs": len(statement_envs),
         "statement_surplus": [],
+        # 六类环境"该印什么抬头"的读数（业主 2026-11-07：example 用 Example 环境）。
+        # 与 `kind_gap` / `theorem_unsigned` 同族：纯读、不拦门；判它红不红是调用方的事。
+        "environments": {"checked": False, "titles": {}, "rows": [],
+                         "unknown": [], "mismatched": []},
         "tex_files": list(tex_files),
         "md_state": "",
         "appendix_state": "",
@@ -4171,6 +4268,9 @@ def mapping_reading(project_root: str | Path, *,
     rows, problems = parse_rows(payload)
     reading["rows"] = len(rows)
     reading["checked"] = True
+    # 六类环境"该印什么抬头"的读数（纯读，不进 problems）：`kind=example` 的行要在
+    # 正文里印成 Example —— 这一格把"该印什么"与"导言区真声明成什么"逐行摆在一起。
+    reading["environments"] = environment_titles(rows, tex=tex_text)
     # 正文读不完（成环 / 超深 / \\input 指的文件读不到）与表无关，但它决定了
     # "正文里有没有这个环境"这一格能不能信 —— 所以它与表的问题一起进 problems。
     problems += body_problems

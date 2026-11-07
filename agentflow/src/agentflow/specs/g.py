@@ -286,6 +286,9 @@ WRITING_SCOPE = (
     "「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— `\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成 "
     "Lemma、被当成正文里的另一个定理（真机实测：1 个 theorem 环境 + 5 个印成 Lemma 的 claim，而台账只有 1 条命题 ⇒ "
     "对应表只能 1 行，环境与行对不上），**禁写**；对应表按环境逐行核，印成 Lemma 的自定义宏同样算一个定理类环境。"
+    "**玩具例子（台账 `kind=example`）用 `Example` 环境**（业主 2026-11-07）：`\\newtheorem{example}{Example}` + "
+    "`\\begin{example}`，对应表那一行 `kind` 写 `example` —— **不许把它排成 Lemma / Theorem 混进定理链**；它是给人看的"
+    "标签，落稿 / V 审 / 等级与普通命题一致，所以证明照那一行的 `proof_text` 排、不许因为「只是例子」省掉。"
 )
 
 #: 关掉 Lean 时上面那一段的替身：同一条口径，一个字都不提 L / Lean（那一档没有这一岗）。
@@ -298,6 +301,9 @@ WRITING_SCOPE_NO_LEAN = (
     "凭据的落点只有两处：`out/paper/MAPPING.json` 那一行与 `experiments` 台账那一行（路径与 sha 都在那里）。"
     "**`claim` 宏不得用来伪装定理类环境**：它是给「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— "
     "`\\newtheorem{claim}[theorem]{Lemma}` 这种定义禁写；对应表按环境逐行核，印成 Lemma 的自定义宏同样算一个定理类环境。"
+    "**玩具例子（台账 `kind=example`）用 `Example` 环境**（业主 2026-11-07）：`\\newtheorem{example}{Example}` + "
+    "`\\begin{example}`，对应表那一行 `kind` 写 `example` —— **不许把它排成 Lemma / Theorem 混进定理链**；它是给人看的"
+    "标签，落稿 / V 审 / 等级与普通命题一致，所以证明照那一行的 `proof_text` 排、不许因为「只是例子」省掉。"
 )
 
 #: 关掉 Lean 时，上面那一段整段换成另一份（这一档做不出形式化）。

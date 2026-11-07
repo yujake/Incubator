@@ -3404,6 +3404,15 @@ def _g_skills() -> tuple[Skill, ...]:
   Lemma、被当成正文里另一个定理，**禁写**。对应表按环境逐行核，印成 Lemma 的
   自定义宏同样算一个定理类环境（`doc.write_mapping` 会点名"正文多出 N 个定理类环境，
   台账里没有对应命题"）。
+- **玩具例子（台账 `kind=example`）收进正文时用 `Example` 环境，不用 Lemma / Theorem**
+  （业主 2026-11-07，`_canon_F_manuscript_protocol.md` 第六节逐字）：
+  `\\newtheorem{example}{Example}` + `\\begin{example}\\label{...} … \\end{example}`，
+  对应表那一行的 `kind` 写 `example`、证明照那一行的 `proof_text` 排。它是**给人看的
+  标签**：落稿 / V 审 / 等级与普通命题一致（文字论证到 `pre_theorem`、穷举到 `theorem`），
+  所以不要因为它"只是例子"就省掉证明，也不要把一条例子改写成 Lemma 混进定理链。
+  另五类照既有映射（theorem→Theorem / lemma→Lemma / proposition→Proposition /
+  corollary→Corollary / experiment→Experiment）；`papermapping.environment_titles`
+  会把"该印什么"与导言区真声明成什么逐行对出来。
 
 ## 长路径 / 长哈希：正文里必须可断行（业主 2026-10-24，D-47）
 
