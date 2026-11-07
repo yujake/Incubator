@@ -434,16 +434,22 @@ def _m_skills() -> tuple[Skill, ...]:
 两条出路，没有第三条：
 
 1. **重送**：补齐之后由 D 让 F 把那一份手稿重新送 V 审（`proof_manuscript`，在册也给；**D 没有到 V 的边**，别派 D 去送审），拿到干净的「成立」；
-2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，并把理由说成两档之一：
+2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，并把理由说成四档之一：
    - `abandon_kind="math_error"`：`abandon_basis` 里写清**错在第几步、错的是什么**，再给一个
      `defect_ref` 指到这条命题自己的「有毛病」判词（`verifications/<该命题号>.jsonl#v-00000N`）；
    - `abandon_kind="difficulty"`：`difficulty` 里写清**难在哪**（缺哪条引理 / 哪一步的界对不上），
      并把旧证明里可取之处拆成引理写进 `salvaged`（每条 `{label, stmt_id}`；引理要已在册、
-     `status=active`、`kind="lemma"`）。
-   这两档都先由秘书判：理由空着、`salvaged` 空着、或 `difficulty` 不是真困难，都会在写盘前
-   被受控拒（码见 `statementabandon` 的 `ABANDON_*`），盘上一个字节不改。只写状态的行仍按
-   未签计（读数 `abandoned_without_reason`）。落盘那一段的形状是
-   `quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统按你给的那两档拼）。
+     `status=active`、`kind="lemma"`）；
+   - `abandon_kind="counterexample"`：给 `experiment_id` —— 那条真跑过、真的反驳了这条命题的
+     反例实验（`experiments` 里 `result=refutes` 且带非空反例的那一行），`abandon_basis` 里
+     写清**哪一个参数组让它假**；
+   - `abandon_kind="space_too_large"`：给 `space` —— 枚举参数与规模（各维区间 / 枚举例数），
+     `abandon_basis` 里写清**为什么在合理成本内做不到**。
+   这四档都先由秘书判：理由空着、`salvaged` 空着、`difficulty` 不是真困难、`experiment_id`
+   指不到一条真的反例实验、`space` 读不出规模，都会在写盘前被受控拒（码见 `statementabandon`
+   的 `ABANDON_*`），盘上一个字节不改。只写状态的行仍按未签计（读数
+   `abandoned_without_reason`）。落盘那一段的形状是
+   `quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统按你给的这四档拼）。
 
 - 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。
   所以走第 2 条之后回头看一眼板：名下那条重送项应当已经 `done` + `expired`（还开着就按未消项
@@ -968,24 +974,31 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 引文语义那一档（业主 2026-10-14 口径）必须留证据：来源里那一段逐字正文 +
 那一次判定的调用记录 —— 说不出对着哪一段、哪一次判的，就不算通过。
 
-## 放弃一条命题：五格如实带上，判的是你的秘书
+## 放弃一条命题：七格如实带上，判的是你的秘书
 
 被派去「把某条命题标成放弃」时，你是**执行者**：把派你的人给的理由**原样**带进 `table.update`，
 判它齐不齐的是**你的秘书**（写盘前判，受控拒 = 一个字节都不写），不是你替它圆场、也不是你
 自己改口径凑过去。
 
-五格都在 `table.update` 的参数面上（只在 `patch.status="abandoned"` 时用）：
+七格都在 `table.update` 的参数面上（只在 `patch.status="abandoned"` 时用）：
 
-- `abandon_kind`：只两档 —— `math_error`（命题本身有实质数学错误）/ `difficulty`（证明遇到难以逾越的困难）；
+- `abandon_kind`：四档 —— `math_error`（命题本身有实质数学错误）/ `difficulty`（证明遇到难以逾越的困难）/
+  `counterexample`（发现反例）/ `space_too_large`（枚举空间过于宏大）；
 - `abandon_basis`：理由正文。`math_error` 要点名**错在第几步、错的是什么**；`difficulty` 要说清**难在哪**；
+  `counterexample` 要说清**哪一个参数组让它假**；`space_too_large` 要说清**为什么在合理成本内做不到**；
 - `defect_ref`：`math_error` 那一档用，形状 `verifications/<6 位命题号>.jsonl#v-<6 位验证号>`，
   命题号必须是**这一条**（指向别的命题、或指向一条对旧正文的判词都会被拒）；
 - `difficulty`：`difficulty` 那一档用，说清难在哪（缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）；
 - `salvaged`：`difficulty` 那一档用，旧证明里可取之处拆出的引理，每条 `{"label": …, "stmt_id": …}`
-  —— 那几条要**先在册**（`status="active"`、`kind="lemma"`、不是这条自己、且在这笔放弃之前就登记了）。
+  —— 那几条要**先在册**（`status="active"`、`kind="lemma"`、不是这条自己、且在这笔放弃之前就登记了）；
+- `experiment_id`：`counterexample` 那一档用，`experiments` 里那条真反例实验的号（那一行要
+  `result="refutes"`、带非空反例，且检验的是**这一条**——引另一条命题的反例会被拒）；
+- `space`：`space_too_large` 那一档用，枚举参数与规模的读数（各维区间 / 枚举例数，取
+  `numericproof._space_reading` 认的字段；填一段散文不算读数）。
 
 交接时**缺哪格就回去问派你的人要哪格**，别自己编一个号、也别把一段散文硬塞进 `abandon_basis` 了事：
-理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 秘书会受控拒
+理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 / `experiment_id` 指不到真反例 /
+`space` 读不出规模 ⇒ 秘书会受控拒
 （`abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine` …），
 盘上一个字节不改。`quote_reason` 里那条标记与时间戳由系统按你给的这几格拼，不用你手写。
 
@@ -1713,6 +1726,10 @@ def _e_skills() -> tuple[Skill, ...]:
 第三格是 2026-11-03 才有的：没有它，你手里只有"读数"，没有"被签的那份稿"——
 而 V 的签块只能落在一份手稿里。**把 `proof_manuscript` 记下来**，下一步要用它。
 
+**写盘之前先过形态闸**：想升格成 `proof` 的那一档在落实验行、②③ 报告与稿之前，会过**同一个**
+形态闸 —— 你的秘书会看它是否写清了「从什么条件导出什么结论」；判不过或没判成 ⇒ 受控拒
+`proposition_form_refused`，一个字节都不写（一般数值实验不过这道闸）。
+
 ### 稿头那一行 `- 证明号：` 由框架写，不归你填
 
 `reports/e-proof-<实验号>.md` 的稿头是框架渲染的（`exhaustionreport.compose_manuscript`）：
@@ -2080,14 +2097,16 @@ def _f_skills() -> tuple[Skill, ...]:
 把选择与理由写进 `self_assessment.next_move` / `why` —— 读数里的 `trail` 就是这一格的
 留痕。系统**不替你选、不催办、不自动放弃**，也不替你决定重送几次。
 
-「明确放弃」的落法是台账那一行 `status=abandoned`，理由按下面两档写（`quote_reason` 里
+「明确放弃」的落法是台账那一行 `status=abandoned`，理由按下面四档写（`quote_reason` 里
 那条标记由系统按你给的理由拼，不用你手写时间戳）；放弃之后那一条**不再算未签**，
 但它也**不计入产出的证明数**。
 
-### 换号时把理由给清：两档（业主 2026-11-07）
+### 换号时把理由给清：四档（业主 2026-11-07）
 
 业主原话：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
 对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
+同一句话同步到 E 侧的数值证明路线时，又点名了两个理由：「1.发现反例；2.枚举空间过于宏大
+以致难以在合理成本内实现」。
 
 - **命题本身有实质数学错误** ⇒ `abandon_kind="math_error"` + `abandon_basis`（**错在第几步、
   错的是什么**）+ `defect_ref`（`verifications/<命题号>.jsonl#v-000001`，指到 V 判「有毛病」
@@ -2096,6 +2115,12 @@ def _f_skills() -> tuple[Skill, ...]:
   （把旧证明里可取的部分**拆成引理**：每条 `{label, stmt_id}`，那几条要在册、active、
   `kind="lemma"`）。攻不动的那条可以放下，但已经证出来的几步值得留下来 —— 拆成引理，
   下一趟的人能直接引；
+- **发现反例** ⇒ `abandon_kind="counterexample"` + `experiment_id`（`experiments` 里那条真跑过、
+  `result="refutes"` 且带非空反例、检验的是**这一条**的那一行）+ `abandon_basis` 写清
+  **哪一个参数组让它假**。反例的证据是那一次实验，不是一句「我找到了反例」；
+- **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"` + `space`（枚举参数与规模：各维区间
+  `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段）+ `abandon_basis` 写清
+  **为什么在合理成本内做不到**。「宏大」落在读数上，不是一句形容词；
 - 两格空着（只给一段散文理由）⇒ 受控拒 `abandon_reason_missing`；`salvaged` 空着 ⇒
   `abandon_salvaged_missing`。受控拒时盘上一个字节都不改。
 
@@ -2153,16 +2178,18 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 放弃原命题」。既没有 V 签、也没有被明确放弃的命题会让收工门的 `statements_unsigned` 大于 0 ——
 那是 **blocker**（`machine_pass` 假、退出码 1，而且它**不落在八格里任何一格上**，八格全绿也
 照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 B 把它
-**明确放弃**（B 走 `table.update`：`status=abandoned`，理由按下面两档给；
+**明确放弃**（B 走 `table.update`：`status=abandoned`，理由按下面四档给；
 状态、时间、理由缺一不可，只写状态的行仍按未签计）。**别让一条证明长期悬着** —— 悬着不会自己消失，
 它只会在收工时变成一格红。
 
-### 换号（放弃原命题、另立一条）时把理由给清：两档
+### 换号（放弃原命题、另立一条）时把理由给清：四档
 
 业主 2026-11-07：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
 对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
+同一句话同步到 E 侧的数值证明路线时，又点名了两个理由：「1.发现反例；2.枚举空间过于宏大
+以致难以在合理成本内实现」。
 
-请 B 放弃、而你要给的理由正文，按这两档之一写（`table.update` 的 `abandon_kind` 与
+请 B 放弃、而你要给的理由正文，按这四档之一写（`table.update` 的 `abandon_kind` 与
 `abandon_basis`）：
 
 - **这一条命题本身有实质数学错误** ⇒ `abandon_kind="math_error"`，`abandon_basis` 写清
@@ -2174,13 +2201,19 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
   写进 `salvaged`（每条 `{label, stmt_id}`；那几条要在册、`status=active`、`kind="lemma"`）。
   这正是一个好习惯：攻不动的那条命题可以放下，但已经证出来的那几步不该跟着埋掉 ——
   拆成引理登记下来，下一趟的人能直接引它；
+- **发现反例** ⇒ `abandon_kind="counterexample"`：给 `experiment_id` —— `experiments` 里那条
+  真跑过、`result="refutes"`、带非空反例、且检验的是**这一条**的实验，`abandon_basis` 里
+  写清**哪一个参数组让它假**（反例的证据是那一次实验，不是一句「我找到了反例」）；
+- **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"`：给 `space` —— 枚举参数与规模
+  （各维区间 `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段），
+  `abandon_basis` 里写清**为什么在合理成本内做不到**（「宏大」落在读数上，不是一句形容词）；
 - 两格空着换号（只写一段 `quote_reason` 散文）会被受控拒 `abandon_reason_missing`；
   `difficulty` 而 `salvaged` 空着 ⇒ `abandon_salvaged_missing`。受控拒时盘上一个字节都不改。
 
 同一 label 再登记一条时，登记回执里会带 `supersedes`（原件理由的摘要：`stmt_id` +
 `abandon_kind` + 理由摘要）或 `superseded_without_reason`（原件是历史行、没有结构化理由）——
 那是**读数**，不拦你。理由最后落在 `quote_reason` 那一条标记里
-（`abandoned@<ISO8601>@<结构化理由>`），标记与时间戳都由系统按你给的那两格拼。
+（`abandoned@<ISO8601>@<结构化理由>`），标记与时间戳都由系统按你给的那几格拼。
 
 ## 形式化那一档（不是你的活，也不要主动去要）
 
@@ -3064,12 +3097,14 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
 
 1. **重送**：派 F 把那一条补齐之后重新送 V 审，拿到干净的「成立」；
 2. **明确放弃**：这条确实做不动了 ⇒ 派 B 用通用表写口把 `status` 改成 `abandoned`，
-   同时把理由按下面两档给清（只写一段散文理由的行会被受控拒 `abandon_reason_missing`）。
+   同时把理由按下面四档给清（只写一段散文理由的行会被受控拒 `abandon_reason_missing`）。
 
-### 换号时把理由给清：两档（业主 2026-11-07）
+### 换号时把理由给清：四档（业主 2026-11-07）
 
 业主原话：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
 对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
+同一句话同步到 E 侧的数值证明路线时，又点名了两个理由：「1.发现反例；2.枚举空间过于宏大
+以致难以在合理成本内实现」。
 
 你是研究侧的主导，"这条不做了、换一条"这个决定多半由你下 —— 下的时候顺手把理由给清，
 别让下一趟的人只看到"这条被放下了"：
@@ -3082,6 +3117,12 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
   （缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上），并把旧证明里**可取的部分拆成引理**
   写进 `salvaged`（每条 `{label, stmt_id}`；那几条要在册、`status=active`、`kind="lemma"`）。
   这是划算的：这条猜想放下了，但已经证出来的几步变成下一趟能直接引的引理；
+- **发现反例** ⇒ `abandon_kind="counterexample"`：给 `experiment_id` —— `experiments` 里那条
+  真跑过、`result="refutes"`、带非空反例、且检验的是**这一条**的实验，`abandon_basis` 里
+  写清**哪一个参数组让它假**；反例的证据是那一次实验，不是一句「我找到了反例」；
+- **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"`：给 `space` —— 枚举参数与规模
+  （各维区间 `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段），
+  `abandon_basis` 里写清**为什么在合理成本内做不到**（「宏大」落在读数上，不是形容词）；
 - `difficulty` 而 `salvaged` 空着 ⇒ `abandon_salvaged_missing`；两格空着 ⇒
   `abandon_reason_missing`。受控拒时盘上一个字节都不改。
 
@@ -3089,7 +3130,7 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
 `superseded_without_reason`（原件是历史行、没有结构化理由）—— 那是读数，不拦。
 
 理由最后落在 `quote_reason` 那一条标记里：`abandoned@<ISO8601>@<结构化理由>`——
-标记与时间戳都由系统按你给的那两格拼，你不用手写。
+标记与时间戳都由系统按你给的那几格拼，你不用手写。
 
 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改
 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。

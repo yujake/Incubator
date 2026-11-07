@@ -5864,7 +5864,8 @@ PAPER_PACK = """\
 同样以它的当次读数为准。
 **blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` ——
 既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是**改稿之后**重送 V 拿到干净的「成立」，或明确放弃
-（`status=abandoned` + `abandon_kind` + `abandon_basis`，再按档给 `defect_ref` 或 `difficulty` + `salvaged`；理由不齐 ⇒
+（`status=abandoned` + `abandon_kind` + `abandon_basis`，再按四档给 `defect_ref` / `difficulty` + `salvaged` /
+`experiment_id` / `space`；理由不齐 ⇒
 写盘前受控拒，见 D / F 的政策与两份手册）；`mapping_not_written` —— 有命题、已成稿而论文包里
 没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
 `acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 落在 `paper` 那一格（改完正文没重编）。
