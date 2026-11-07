@@ -364,11 +364,22 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 2026-11-07（解耦落地 / A3）：`reports/f-proof-*` 这一类落点**只有框架能写**。
     # 改前保留表只登记了 F / D / M，于是 A 与 B 用 `fs.write("reports/f-proof-000001.md")`
     # 实测两条都 `ok=True` —— 一份"看起来是 F 登记条目"的稿可以由别的角色手写进盘，
-    # 而 B 的收录按 sha 认领会把它当成真稿。收窄口径：F 的稿是框架按登记条目渲染的，
-    # 谁的手写口都不许落（F/D/M 的既有口径不变，这里补 A / B 两行；`b-proof-*` /
-    # `e-proof-*` 是同一类框架产物，一并收进来）。
-    *[("A", rule) for rule in ("prefix:f-proof-", "prefix:b-proof-", "prefix:e-proof-")],
-    *[("B", rule) for rule in ("prefix:f-proof-", "prefix:b-proof-", "prefix:e-proof-")],
+    # 而 B 的收录按 sha 认领会把它当成真稿。
+    #
+    # 2026-11-07（B 类收口：A3 收过头了）：A / B 那几行从"文件名形态、全树拦"收回
+    # **规范落点**（`reports/` 这一族，规则里带 `/` ⇒ 按整条相对路径判，见
+    # `_artifact_rule_matches`）。为什么收回：`notes/` 是 A/B 的正常产出面 —— 按名字
+    # 全树拦会把 `notes/f-proof-x.md` 这样一份普通笔记判成框架产物（判据
+    # `test_c_legit_landing_spots_are_untouched` 的两向读数）。而"像 F 登记条目"的风险
+    # 只在 B 的寻址面：`depsection` 只按 `reports/` 找稿，`notes/` 下同名的那份到不了
+    # 认领那一步。F / D / M 的既有口径**一个字节没动**（D6：作者/收方那一侧换个目录
+    # 仍是同一个框架产物；那一档的真机现场是 F 把稿写进了 `notes/`）。
+    ("A", f"prefix:{_RESERVED_DIR}/f-proof-"),
+    ("A", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("A", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    ("B", f"prefix:{_RESERVED_DIR}/f-proof-"),
+    ("B", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
     # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——
@@ -539,6 +550,27 @@ def _reserved_ledger(rel: str) -> bool:
                for who, rule in RESERVED_ARTIFACT_TABLE)
 
 
+def _artifact_rule_matches(rule: str, rel: str) -> bool:
+    """手稿那一半的一条规则是否命中 `rel`（工作区相对路径，`/` 分隔）。
+
+    两档，只看规则串里有没有 `/`：
+
+    - **带 `/`**：按整条相对路径判（`_path_rule_matches`）—— 这一档是"规范落点"
+      （2026-11-07：A / B 的手稿写权限只收在 `reports/` 这一族上；`notes/` 是它们的
+      正常产出面，不该按文件名全树拦）；
+    - **不带 `/`**：按文件名判（`_rule_matches`）—— 2026-10-27 D6 的既有口径：
+      作者/收方那一侧换个目录仍是同一个框架产物（真机 `notes/f-proof-…` 就是这么进盘的）。
+
+    两档共用同一张表：表里写的是哪种规则，这里就按哪种判，不另写第二份判断。
+    """
+    text = str(rule or "")
+    _kind, _sep, needle = text.partition(":")
+    if "/" in needle:
+        return _path_rule_matches(text, rel)
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    return bool(parts) and _rule_matches(text, parts[-1])
+
+
 def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     """`rel` 命中的那条手稿规则（没命中 ⇒ None）；判据只读 :data:`RESERVED_ARTIFACT_TABLE`。
 
@@ -547,6 +579,9 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     一处 —— 这里不另写判断，只把命中的字符串带出来。本函数就是手稿那一半的唯一实现：
     2026-11-05 之前它外面还有一层只返回 bool 的旧壳，那个壳的调用点为 0
     （真机唯一调用点是 `_reserved_refusal` 里这一句），已删；别再长出第二个名字。
+
+    命中的判法见 :func:`_artifact_rule_matches`：规则里带 `/` 的按整条路径判
+    （规范落点），不带的按文件名判（D6）。
     """
     owner = str(role or "")
     rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
@@ -559,7 +594,7 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     if not name.casefold().endswith(".md"):
         return None
     for rule in rules:
-        if _rule_matches(rule, name):
+        if _artifact_rule_matches(rule, str(rel or "")):
             return rule
     return None
 
@@ -1129,7 +1164,9 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 #: 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
+    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写"
+    "（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），"
+    "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
