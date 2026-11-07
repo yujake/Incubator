@@ -90,6 +90,12 @@ _G_VERBATIM_OWNER_LINE: str = (
     '`\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成 Lemma、被当成正文里的另一个定理（真机实测：1 个 theorem 环境 + '
     '5 个印成 Lemma 的 claim，而台账只有 1 条命题 ⇒ 对应表只能 1 行，环境与行对不上），**禁写**；对应表按环境逐行核，印成 Lemma '
     '的自定义宏同样算一个定理类环境。'
+    # 2026-11-07（玩具例子 p257）：`specs/g.py` 的 `WRITING_SCOPE` 尾巴上追加了下面这一句（`kind=example`
+    # ⇒ `Example` 环境）。豁免是整行相等，所以那一句也必须逐字落在这里 —— 只同步"业主原话那半句"不算：
+    # 整行对不上，这条豁免就从此永不生效（① 红、② 也会报"允许清单过期"）。
+    '**玩具例子（台账 `kind=example`）用 `Example` 环境**（业主 2026-11-07）：`\\newtheorem{example}{Example}` + '
+    '`\\begin{example}`，对应表那一行 `kind` 写 `example` —— **不许把它排成 Lemma / Theorem 混进定理链**；它是给人看的'
+    '标签，落稿 / V 审 / 等级与普通命题一致，所以证明照那一行的 `proof_text` 排、不许因为「只是例子」省掉。'
 )
 #: 允许清单按角色挂（`{角色: (逐字行, ...)}`）：只有这里点名的那一行、只在那个角色身上放行。
 _VERBATIM_OWNER_LINES: dict[str, tuple[str, ...]] = {"G": (_G_VERBATIM_OWNER_LINE,)}
