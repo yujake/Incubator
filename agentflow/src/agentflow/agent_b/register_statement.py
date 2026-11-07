@@ -3797,12 +3797,17 @@ class _RegisterStatement:
     def _apply_declared_manuscript_kind(self, got: dict, *, statement_full: str,
                                         origin: str, kind: str,
                                         proof_manuscript: str) -> dict:
-        """已登记命题：手稿头声明了 `lemma` 而 V 的签已把等级抬到 `pre_theorem` 以上
-        ⇒ 按那一档把 kind 升上去（只写 `kind` 这一格，走秘书的 meta patch）。
+        """已登记命题：手稿头声明了 `lemma` / `example` 而 V 的签已把等级抬到
+        `pre_theorem` 以上 ⇒ 按那一档把 kind 升上去（只写 `kind` 这一格，走秘书的
+        meta patch）。
 
         为什么必须等 V 的签：B-2 的纪律是"自产、无出处、无签 ⇒ 从猜想注册"，
         升成 lemma 是签之后的那一步；没有签就改 kind 等于自报（那正是 B-2 堵的）。
         这里只在 `derive_grade(bits)` 已经到 `pre_theorem` / `theorem` 时才落。
+
+        `example`（业主 2026-11-07，protocol 第六节）走的是**同一条升档路**：它是
+        给人看的标签，落稿 / 收 V 签 / 按五元位算等级与 lemma 一字不差；差别只在
+        G 收进正文时用 `Example` 环境（`papermapping.ENV_TITLES`）。B 这一侧不另开分支。
         """
         out = dict(got) if isinstance(got, dict) else got
         if not isinstance(out, dict) or not out.get("ok"):
@@ -3812,7 +3817,7 @@ class _RegisterStatement:
             return out
         declared = _declared_manuscript_kind(
             text=str(proof_manuscript or ""), root=str(self.store.root))
-        if declared not in ("lemma", "theorem"):
+        if declared not in ("lemma", "theorem", "example"):
             return out
         sid = str(out.get("stmt_id") or "")
         if not sid:
