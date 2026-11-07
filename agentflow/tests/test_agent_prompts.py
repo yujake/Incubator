@@ -2303,7 +2303,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #      L 34b0473c→f1d6fe1d / M 1b6876d9→523229a7（C/H/V 与 p250 同值）。
 # 十一格是 `temp/_p251_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 # 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
-_FROZEN_PROMPT_VERSION = "p251"
+_FROZEN_PROMPT_VERSION = "p252"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2538,15 +2538,15 @@ _FROZEN_PROMPT_VERSION = "p251"
 #: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "e3919091bf5be2488f48031b9fbefb2c7e4adcee56909874075727bc844e9034",
-    "B": "8eb5c3c716e070a8ea575029bac1afee71e489aabec0ee0c2af9f9880947f998",
+    "A": "6d0b66f1507ecef8e57aa9260122fc42a4b0de475c587800b5338665782bb183",
+    "B": "86c2b72863db8a7187d27824a608db0c4eb81f0ca6087819a287ae6707171c5a",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "0c08f935b945ffa999b362ba5bb164389045e4110e2e5a70e12d4f03db5c98d9",
-    "E": "7a6079a2c24dce973bf8357e8415d8ad579f8c5631941b28773b37855dc86755",
-    "F": "af0fa9f9ed726fca11aedf49242b7fe8b5b624d13ebc90c2dfff8926b02c97c6",
-    "G": "c8d898a7e83987856741aeaf127869e578445a1db8c8b84f05c1ccbb5f0d9509",
+    "D": "ec440bd499a7cfb5a9bbac39a605f392b04593bcae5d52eebf8f4c25e24ab6c1",
+    "E": "66cf60d07a92d60483caf77aa78f21ae77b1f75429eda328ce419c4ce6ea4fbd",
+    "F": "0be857dbd53e187871fb68592e609a9f8d60aa266758cf357141d0ce261d574b",
+    "G": "8d38e0fe5f61665998af48debfaefe4ef3a74f67803c61f5ee5afe3dd3e528dc",
     "H": "f1fa916c520bf5357969e7ff20eb32dcca0bb249adb78bd3d50b7a948ea87488",
-    "L": "f1d6fe1d88ad8aa93f2239b8ac768d7730bd579bb5a704b956353c404543d827",
+    "L": "1d86d5e635f312f0e3b138d76e3e39e3348f1b8168d3ac01e55d4c92cc5dcf85",
     "M": "523229a7473fbb84233e3fb19f33965fe2e6d35e6674c9ed542547040933e654",
     "V": "a3d391fc5a737268fc8d4c36ecd74146f2dc4f9fea4aaf58a677c229446f48bd",
 }

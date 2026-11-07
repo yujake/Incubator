@@ -758,7 +758,7 @@ STATEMENTS_BY_B_REFUSAL = (
 def _statements_are_registered_by_b(role: str) -> bool:
     """这一次写 `statements` 的是不是 B 的登记那一笔（反真空的判据只有这一处）。
 
-    空串 = 没有角色挂点（脚本 / 单测 / 直接调 handler），**不是"非 B"**。这一档刻意
+    空串 = 没有角色挂点（脚本 / 单测 / 直接调 handler），不是"非 B"。这一档刻意
     fail-open，理由三段：
 
     1. 三态纪律：`conductor.current_caller_role()` 的空串是"没有挂点 / 没查"，不是
@@ -1875,13 +1875,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。"
     "`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改"
     "（整行校验 + 事务）；带正文仍走登记路；其余格拒。"
-    "**放弃命题（`patch.status=\"abandoned\"`）另要两格换号理由**：`abandon_kind`"
-    "（只许 `math_error` / `difficulty`）与 `abandon_basis`（理由正文）；"
-    "`math_error` 再给 `defect_ref`（`verifications/<号>.jsonl#v-00000N`，那一行必须真的"
-    "判「有毛病」且理由点名 `defect_step` 那一步）；`difficulty` 再给 `difficulty`"
-    "（难在哪）与 `salvaged`（把旧证明可取之处拆成的引理：每条形如 "
-    "`{\"label\": …, \"stmt_id\": …}`，那条引理必须在册、active、kind=lemma）。"
-    "理由不齐 ⇒ 受控拒绝（`abandon_reason_missing` 一类码），一个字节都不写。",
+    "放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / "
+    "`difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；"
+    "理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1945,7 +1941,7 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     ## 换号理由那五格（业主 2026-11-07 裁定）
     `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` 不是
     可写的列：它们是"放弃命题"这件事的理由形状。`statements` 那一笔在下发路由之前把
-    它们并进载荷，于是 `Secretary.amend_statement_meta` 能在**写之前**判它们
+    它们并进载荷，于是 `Secretary.amend_statement_meta` 能在写之前判它们
     （受控拒 = 一个字节都不写）。判据本体只有一份（`statementabandon.check_abandon_reason`）。
     """
     try:

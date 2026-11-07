@@ -885,6 +885,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "变化格 = A/B/D/E/F/G/L/M（A/E/F/G/L 的上游是 72dffab1 的共享 summary；"
              "B 多一处 `done`+`expired`；D 多恢复原条并挪回第一条；M 多 b7a1c721 的读数名）。"
              "C/H/V 逐字未动。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p251 → p252（2026-11-07，业主两笔裁定同批）：facts 键集一格没动（还是 15 格），
+    # 两笔都只改段文本 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p252", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p252（2026-11-07，业主两笔裁定同批）：甲「换号需给清理由」两档写进 "
+             "`agent_skills` 的 D / F 两本手册（math_error 要指出错在第几步 + `defect_ref`；"
+             "difficulty 要说清难在哪 + 把可取之处拆成引理 `salvaged`；理由不齐"
+             "受控拒 `abandon_reason_missing`）；乙「命题登记时需过 F 秘书闸」写进 F 交付那一本"
+             "（交稿前由 F 自己的秘书按「条件 → 结论」判一次形状，判不过或没判成 ⇒"
+             " `proposition_form_refused`，不交给登记）。变化格 = A/B/D/E/F/G/L："
+             "D/F 是自己的手册变了，A/B/E/G/L 是 `table.update` 那一行 summary（工具声明，"
+             "新增 `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged`"
+             " 五格）印在这五个角色的工具面上。C/H/M/V 逐字未动。"},
 
 )
 

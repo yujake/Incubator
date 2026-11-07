@@ -120,7 +120,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
@@ -246,7 +246,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -502,7 +502,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。 | `read` | `concept_id` |
@@ -614,7 +614,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
@@ -753,7 +753,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
@@ -889,7 +889,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
@@ -1216,7 +1216,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | 部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table="statements"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。

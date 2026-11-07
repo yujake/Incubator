@@ -5437,6 +5437,26 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "abandon_basis": {
+      "description": "换号理由正文：math_error 要点名错在第几步、错是什么；difficulty 要说清难在哪。只在 patch.status=abandoned 时用，且那时必填。",
+      "type": "string"
+     },
+     "abandon_kind": {
+      "description": "换号理由的档：math_error（命题有实质数学错误）/ difficulty（证明遇到难以逾越的困难）。只在 patch.status=abandoned 时用，且那时必填。",
+      "enum": [
+       "math_error",
+       "difficulty"
+      ],
+      "type": "string"
+     },
+     "defect_ref": {
+      "description": "math_error 档必填：`verifications/<6 位命题号>.jsonl#v-<6 位验证号>`，指向那一行判「有毛病」的判词。",
+      "type": "string"
+     },
+     "difficulty": {
+      "description": "difficulty 档必填：说清难在哪（缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）。",
+      "type": "string"
+     },
      "id": {
       "description": "要改的行主键",
       "type": "string"
@@ -5444,6 +5464,24 @@
      "patch": {
       "description": "只写要改的字段",
       "type": "object"
+     },
+     "salvaged": {
+      "description": "difficulty 档必填且非空：把旧证明里可取之处拆成的引理。每条给 label 与 stmt_id（那条引理必须在册、status=active、kind=lemma）。空数组 ⇒ 受控拒绝。",
+      "items": {
+       "properties": {
+        "label": {
+         "type": "string"
+        },
+        "stmt_id": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "stmt_id"
+       ],
+       "type": "object"
+      },
+      "type": "array"
      },
      "table": {
       "description": "17 张表之一",
@@ -5488,7 +5526,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。",
+   "summary": "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改（整行校验 + 事务）；带正文仍走登记路；其余格拒。放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / `difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。",
    "tags": [
     "table",
     "crud",
@@ -7235,7 +7273,7 @@
   "table.list": "(*, table: 'str', limit: 'int' = 50, offset: 'int' = 0, filter: 'Mapping[str, Any] | None' = None, fields: 'Sequence[str] | None' = None) -> 'ToolResult'",
   "table.schema": "(table: 'str | None' = None) -> 'ToolResult'",
   "table.search": "(*, table: 'str', query: 'str', fields: 'Sequence[str] | None' = None, select: 'Sequence[str] | None' = None, limit: 'int' = 50) -> 'ToolResult'",
-  "table.update": "(*, table: 'str', id: 'str', patch: 'Mapping[str, Any]') -> 'ToolResult'",
+  "table.update": "(*, table: 'str', id: 'str', patch: 'Mapping[str, Any]', abandon_kind: 'str' = '', abandon_basis: 'str' = '', defect_ref: 'str' = '', difficulty: 'str' = '', salvaged: 'Sequence[Mapping[str, Any]] | None' = None) -> 'ToolResult'",
   "text.extract": "(path='', lit_id='', out_dir='', pages=None, max_pages=200)",
   "trace.chain": "(relation_ids: 'list[str]') -> 'ToolResult'",
   "trace.children": "(*, task_id: 'str' = '', depth: 'int' = 1, window: 'int' = 5) -> 'ToolResult'",

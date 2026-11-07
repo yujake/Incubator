@@ -1878,23 +1878,23 @@ class _Core:
 
     def _proposition_form_gate(self, *, full: str, kind: str, body: str,
                                label: str, task_id: str = "") -> dict[str, Any]:
-        """交稿之前过一道**命题形态闸**（业主 2026-11-07 裁定；一处实现，F 侧唯一调用点）。
+        """交稿之前过一道命题形态闸（业主 2026-11-07 裁定；一处实现，F 侧唯一调用点）。
 
         业主原话（逐字）：
 
         > 「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
 
         ## 为什么装在 F 这一侧、装在登记之前
-        命题描述是 **F 这一轮写出来的**（`product` 里的命题文本 + 它自己那份证明正文），
+        命题描述是 F 这一轮写出来的（`product` 里的命题文本 + 它自己那份证明正文），
         而 F 自己不写 `statements`（它把内容交给 B 的登记正路）。所以闸必须在"交出去之前"
-        判：判不过就**不交给登记**，盘上那一张表一行都不多。D 的猜想只是参考、B 的收录
+        判：判不过就不交给登记，盘上那一张表一行都不多。D 的猜想只是参考、B 的收录
         也承载文献侧定理（那条路不能一刀切）—— 两处都不装。
 
         ## 三态（fail-closed）
         - `submittable=True`：判定做了、`well_formed=True` ⇒ 照原样交给登记正路；
         - `submittable=False` + `checked=True, well_formed=False`：判过了、不合格 ⇒ 受控拒，
           `problems` 逐条点名缺什么；
-        - `submittable=False` + `checked=False`：**没判成**（没有秘书 / 没有缝 / 超时 /
+        - `submittable=False` + `checked=False`：没判成（没有秘书 / 没有缝 / 超时 /
           坏 JSON / 词表外）⇒ 同样受控拒 —— "没判成"绝不许折成"没毛病"。
 
         `kind` 落在 `concept`/`definition` 那一档时不受这道闸管（概念不是命题）。
@@ -1965,7 +1965,7 @@ class _Core:
         plan_id = str(plan.get("plan_id") or "")
         # ---- 2026-11-07（业主裁定）：交稿之前先过命题形态闸 ----------------------
         #
-        # 位置是结构性的：在 `_register`（B 的登记正路）之前 ⇒ 判不过就**一行都不多**
+        # 位置是结构性的：在 `_register`（B 的登记正路）之前 ⇒ 判不过就一行都不多
         # （`statements` 表上不会出现那条"作业规格"式的猜想）。判据本体只有一份：
         # `Secretary.judge_proposition_form`（模型判定，一次调用），这里只做接线。
         form = self._proposition_form_gate(

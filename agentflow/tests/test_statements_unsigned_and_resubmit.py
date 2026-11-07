@@ -586,9 +586,9 @@ def test_apply_abandonment_is_idempotent(tmp_path):
 def test_apply_abandonment_refuses_without_a_reason_or_an_id(tmp_path):
     """③ 没有理由 / 没有命题号 / 不在册 ⇒ 受控拒绝，盘上一个字节都不改。
 
-    2026-11-07 改：命题行"只给一段散文"这一档现在受控拒在**换号理由**那一关
+    2026-11-07 改：命题行"只给一段散文"这一档现在受控拒在换号理由那一关
     （`abandon_reason_missing`，业主裁定要 `abandon_kind` + `abandon_basis`）；
-    `abandon_marker_invalid` 这一档仍然对**不是命题**的行（概念行不过那道闸）生效。
+    `abandon_marker_invalid` 这一档仍然对不是命题的行（概念行不过那道闸）生效。
     """
     st = _ws(tmp_path)
     _put(st)

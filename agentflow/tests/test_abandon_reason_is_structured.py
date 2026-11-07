@@ -8,7 +8,7 @@
 
 ## 改前 / 改后的真实形态（98 的读数）
 
-`projects/paper-rewrite-98/data/statements.json` 里 15 条 `kind=conjecture` 的命题**全部**
+`projects/paper-rewrite-98/data/statements.json` 里 15 条 `kind=conjecture` 的命题全部
 `status=abandoned`，而 `quote_reason` 都是自由文本：
 
 | 号 | 理由（改前的原文，节选） |
@@ -18,7 +18,7 @@
 | 000050 | 「000050 是 000049 同一缺陷件的重登记：label 同为 lem:cancel…」 |
 | 000036 / 000037 / 000039 | 「本行不是数学命题，而是 F 一方的作业/验收规格」 |
 
-⇒ 改前：这些行**都写进去了**（`status=abandoned` + 一段散文），而"同一 label 再登记"
+⇒ 改前：这些行都写进去了（`status=abandoned` + 一段散文），而"同一 label 再登记"
 （000049 → 000050）在盘上没有任何结构化读写得出"前一件的理由齐不齐"。
 
 ## 本文件守的六件事
@@ -469,7 +469,7 @@ def test_f_a_concept_is_not_a_proposition_so_it_is_not_gated(tmp_path):
 def test_supersedes_is_reported_but_never_blocks(tmp_path):
     """②：同 label 换号 ⇒ 原件理由齐时带 `supersedes`；不齐时只标 `superseded_without_reason`。
 
-    业主 2026-11-07 的口径：**不拦**（历史工作区里已有一批没有结构化理由的行，
+    业主 2026-11-07 的口径：不拦（历史工作区里已有一批没有结构化理由的行，
     拦它们只会把 B 卡死）。
     """
     st = _ws(tmp_path)
@@ -496,7 +496,7 @@ def test_supersedes_is_reported_but_never_blocks(tmp_path):
 
 
 def test_a_legacy_prior_is_reported_as_superseded_without_reason_and_not_blocked(tmp_path):
-    """②的负控：原件没有结构化理由（历史行）⇒ 只标一格，**不拒**。"""
+    """②的负控：原件没有结构化理由（历史行）⇒ 只标一格，不拒。"""
     st = _ws(tmp_path)
     _put(st, SID, kind="conjecture", label="lem:cancel")
     with st.tx("statements", actor="test") as tx:

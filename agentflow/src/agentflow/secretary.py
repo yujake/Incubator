@@ -1818,13 +1818,13 @@ STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
 
 #: 放弃/换号时随 `status="abandoned"` 一起交上来的那几格（业主 2026-11-07 裁定）。
 #:
-#: 它们**不是**就地改的字段（一个字节都不会落进 row 的顶层键）：它们是"理由"的
+#: 它们不是就地改的字段（一个字节都不会落进 row 的顶层键）：它们是"理由"的
 #: 结构化形状，由 `statementabandon.check_abandon_reason` 判过之后拼进
 #: `quote_reason` 那一条标记里（`abandoned@<ISO8601>@<JSON>`）。所以它们在白名单里
 #: （放行到这一层）却不在 `STATEMENT_META_PATCH_KEYS` 里（不被当作可写列）。
 #:
 #: 为什么必须在这一层就拒：`table.update` 是业主验收的通用写口，模型真会用它；
-#: 而"受控拒"要求**一个字节都不写** ⇒ 校验必须赶在 `tx.upsert` 之前。
+#: 而"受控拒"要求一个字节都不写 ⇒ 校验必须赶在 `tx.upsert` 之前。
 STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
     "abandon_kind", "abandon_basis", "defect_ref", "difficulty", "salvaged")
 
@@ -3193,21 +3193,21 @@ class Secretary:
         > 「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
 
         ## 它判什么、不判什么（两根轴必须分开）
-        - **判**：这段描述的形状 —— 前提写得出来吗？结论是一个可判真假的断言吗？
-          二者由"若…则…/设…则…"一类结构连起来了吗？有没有把**作业/验收规格**
+        - 判：这段描述的形状 —— 前提写得出来吗？结论是一个可判真假的断言吗？
+          二者由"若…则…/设…则…"一类结构连起来了吗？有没有把作业/验收规格
           （"本轮产物必须是 proof"、"判据是 `manuscript_published=true`"、
           "原样提交 `reports/xxx.md`"）写成一条命题？
-        - **不判**：它对不对（那是 V 的轴，`verify.verify_proof`）、它是否平凡/是否已知
+        - 不判：它对不对（那是 V 的轴，`verify.verify_proof`）、它是否平凡/是否已知
           （那是 `judge_statement` 的非平凡性轴）。两根轴混进同一格就是本仓反复踩过的
           "同一件事两个名字"。
-        - **不用词面阈值代替判断**（业主明确不要机械判据）：这里一次模型调用，没有
+        - 不用词面阈值代替判断（业主明确不要机械判据）：这里一次模型调用，没有
           关键词表、没有字数阈值。
 
         ## 返回（键集合固定）
 
         | 键 | 意思 |
         |---|---|
-        | `checked` | 这一问有没有真的判成（**没缝 / 关着 / 超时 / 坏 JSON / 词表外 ⇒ False**） |
+        | `checked` | 这一问有没有真的判成（没缝 / 关着 / 超时 / 坏 JSON / 词表外 ⇒ False） |
         | `well_formed` | 两态，没有第三档：`True` 形状合规 / `False` 不合规（只在 `checked=True` 时有意义） |
         | `conditions` | 它读出来的前提（字符串；合格时不许为空） |
         | `conclusion` | 它读出来的结论（字符串；合格时不许为空） |
@@ -3216,7 +3216,7 @@ class Secretary:
         | `refused` | 受控码（`checked=False` 或 `well_formed=False` 时非空） |
 
         ## 三态（本仓最贵的那条纪律）
-        `checked=False` **不是**"没毛病"：调用方（F 的交稿那一步）必须 fail-closed
+        `checked=False` 不是"没毛病"：调用方（F 的交稿那一步）必须 fail-closed
         当受控拒处理 —— 否则"今天没判成"会被读成"今天放行了"。
 
         ## 缓存
@@ -6915,7 +6915,7 @@ class Secretary:
         返回 `{"refused","reason","form","quote_reason"}`：
         - 不归这道闸管（目标状态不是 abandoned / kind 不是命题 / 幂等重放且没交新理由）
           ⇒ 空字典（一个字节都不干预）；
-        - 受控拒 ⇒ `refused` + `reason`（**调用方必须整笔不写**）；
+        - 受控拒 ⇒ `refused` + `reason`（调用方必须整笔不写）；
         - 过关 ⇒ `quote_reason` 是要落盘的那一条标记（`abandoned@<ISO>@<JSON>`），
           `form` 是判据的逐格读数。
 
@@ -6927,7 +6927,7 @@ class Secretary:
            `difficulty` + 非空的 `salvaged`，每条在册 / active / 引理类）；
         2. `concept` / `definition` / 认不出的 kind ⇒ 不受这道闸管（概念不是命题，
            谈不上"命题本身有数学错误"或"证明遇到的困难"）；
-        3. 这一行**早就是** `abandoned` 而这一次没交新理由 ⇒ 幂等重放，不拦
+        3. 这一行早就是 `abandoned` 而这一次没交新理由 ⇒ 幂等重放，不拦
            （历史行必须还能被重放；要补理由就带上那几格重交一次，本闸会承认它）。
 
         ## 为什么落盘的是 JSON 而不是自由文本
@@ -7135,14 +7135,14 @@ class Secretary:
                               *, kind: str = "") -> dict[str, Any]:
         """登记成功之后，把"这一笔是不是换号（同一 label 再登记）"的读数带上。
 
-        业主 2026-11-07 的裁决只拦**放弃**那一侧（`Statement` 的
-        `status=abandoned` 写口），登记这一侧**不拦**：历史工作区里已经有一批没有
+        业主 2026-11-07 的裁决只拦放弃那一侧（`Statement` 的
+        `status=abandoned` 写口），登记这一侧不拦：历史工作区里已经有一批没有
         结构化理由的 `abandoned` 行，拦它们只会把 B 卡死。所以这一格只做两件事：
 
         - 原件理由齐 ⇒ 返回读数 `supersedes`（原 `stmt_id` + `abandon_kind` +
           `abandon_basis` 摘要 + 证据是否在）；
         - 原件理由不齐（历史行）⇒ 返回 `superseded_without_reason`（原 `stmt_id` 列表），
-          **不拒** —— 让审计一眼看到"这一条换号是在没有给出理由的情况下发生的"。
+          不拒 —— 让审计一眼看到"这一条换号是在没有给出理由的情况下发生的"。
 
         判据本体是 `statementabandon.relabel_events`（`closing` 的换号读数读同一份）。
         """
@@ -11930,7 +11930,7 @@ def proposition_form_of(root: str | Path, *, statement_full: str = "",
                         stmt_id: str = "") -> dict[str, Any]:
     """这条命题的形态判定（读侧唯一口）。
 
-    三态：空字典 = **没有判定过**（不是"判过、合格"）；非空 = 有判定行，`well_formed`
+    三态：空字典 = 没有判定过（不是"判过、合格"）；非空 = 有判定行，`well_formed`
     与 `checked` 两格说清结论。能不能缓存由调用方按 `checked` 决定 —— "没查成"的行
     不许挡住下一次调用（缝是可能好起来的，与 `proposition_verdict_of` 同一条纪律）。
     """

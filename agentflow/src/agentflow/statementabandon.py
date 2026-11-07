@@ -57,12 +57,12 @@ ABANDON_SEP = "@"
 # > 「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
 # >   对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
 #
-# 改前 `quote_reason` 里那段理由是**自由文本**：写一句"无干净依据"就能过
+# 改前 `quote_reason` 里那段理由是自由文本：写一句"无干净依据"就能过
 # （98 的真机读数：000040–000048 九条同一秒批量放弃，理由逐字都是同一句
 # "verifications/ 下不存在 0000NN.jsonl"），而"同一 label 再登记一条"这件事
 # 在盘上没有任何结构化读数（000049 → 000050：label 同为 `lem:cancel`、
 # `line_range` 同为那份稿、"区别只是一处措辞"）。所以这一节把"理由"从一段散文
-# 变成**两档受控形状**：每一档都要求指出业主原话里点名的那样东西。
+# 变成两档受控形状：每一档都要求指出业主原话里点名的那样东西。
 #
 # ## 为什么形状住在 `quote_reason` 里（与上面那段同一个理由）
 #
@@ -73,7 +73,7 @@ ABANDON_SEP = "@"
 # `parse_abandon_reason()["structured"]` 为假 —— 于是"这一行的换号理由齐不齐"
 # 在盘上是一个可读的读数，而不是靠人去猜那段散文是什么意思。
 
-#: 换号理由的**两档**（业主原话里的 1 与 2）。只许这两个值：
+#: 换号理由的两档（业主原话里的 1 与 2）。只许这两个值：
 #: 多一个"其它"就等于给自由文本留了后门（"作业规格不是命题"那一类暂无这一档，
 #: 见 `docs/ROLE-GUIDE.md` 同批报告里的待裁项）。
 ABANDON_KIND_MATH_ERROR = "math_error"
@@ -84,12 +84,12 @@ ABANDON_KINDS: tuple[str, ...] = (ABANDON_KIND_MATH_ERROR, ABANDON_KIND_DIFFICUL
 ABANDON_PARAM_KEYS: tuple[str, ...] = ("abandon_kind", "abandon_basis", "defect_ref",
                                        "difficulty", "salvaged")
 
-#: `salvaged` 里每一条引理的 `kind` 取值 —— 业主原话是"拆出落成**引理**"。
+#: `salvaged` 里每一条引理的 `kind` 取值 —— 业主原话是"拆出落成引理"。
 #:
 #: `schema` 里没有 statements.kind 的词表（`schema.Statement.kind: str = "theorem"`，
 #: 见 `schema.py:2363` —— 它是个自由字符串，schema 不校验取值）；可判真假的断言类
 #: 那几档的真身在 `secretary.PROPOSITION_KINDS`（`secretary.py:1367`：
-#: theorem / lemma / proposition / corollary / conjecture）。其中 `lemma` **就是**
+#: theorem / lemma / proposition / corollary / conjecture）。其中 `lemma` 就是
 #: 业主说的"引理"，所以这里直接用它、不需要退到"最接近的一档"。
 SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
 
@@ -110,8 +110,8 @@ def abandon_proposition_kinds() -> tuple[str, ...]:
 
     `concept` / `definition` 不在其中（`secretary.NOT_APPLICABLE_KINDS`，
     `secretary.py:235`）：概念行没有"条件 ⇒ 结论"，也就谈不上"命题本身有数学错误"
-    或"证明遇到的困难" ⇒ **放弃 concept 不该被这道闸拦**（业主 2026-11-07 的边界）。
-    认不出的 kind 一律**不拦**：闸只对"确定是命题"的那几档生效，免得把将来的新
+    或"证明遇到的困难" ⇒ 放弃 concept 不该被这道闸拦（业主 2026-11-07 的边界）。
+    认不出的 kind 一律不拦：闸只对"确定是命题"的那几档生效，免得把将来的新
     kind 一刀切挡死（那是"装错位置"的同一种病）。
     """
     from . import secretary as _SEC
@@ -213,7 +213,7 @@ def _defect_refusal(store: Any, root: str, ref: str,
 def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any = "",
                          difficulty: Any = "", salvaged: Any = (),
                          root: str = "") -> dict[str, Any]:
-    """换号理由的**唯一判据**（两档）：返回 `{checked, refused, why, problems, …}`。
+    """换号理由的唯一判据（两档）：返回 `{checked, refused, why, problems, …}`。
 
     这是业主 2026-11-07 那句裁定的机器落点。两个写口（`apply_abandonment` 与
     `Secretary.amend_statement_meta`）都只调它，不各写一份校验 —— 两处各写一份，
@@ -222,7 +222,7 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     ## 两档各自要求什么
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
-    | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 那一行必须**真的存在**、其判词是「有毛病」或轴为 `fault`；`abandon_basis` 必须点名那一行的 `defect_step`（"错在第几步"） |
+    | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 那一行必须真的存在、其判词是「有毛病」或轴为 `fault`；`abandon_basis` 必须点名那一行的 `defect_step`（"错在第几步"） |
     | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条 `stmt_id` 必须真的在册、`status=active`、`kind` 属于引理类（:data:`SALVAGED_KINDS`） |
 
     ## 三态
@@ -353,13 +353,13 @@ def structured_reason(*, kind: str, basis: str, defect_ref: str = "",
 
 
 def parse_abandon_reason(text: Any) -> dict[str, Any]:
-    """读一条放弃标记里的**结构化理由**（读侧唯一实现）。
+    """读一条放弃标记里的结构化理由（读侧唯一实现）。
 
     返回 `{"checked", "structured", "abandon_kind", "abandon_basis", "defect_ref",
     "difficulty", "salvaged", "complete", "why"}`。三态与原模块同一条纪律：
 
     - `structured=False` ⇒ 这是历史行（`@` 之后是一段自由文本）：结构化的那几格
-      一个都读不出来，`why` 说明"换号理由不齐" —— 它**不是**"没有理由"；
+      一个都读不出来，`why` 说明"换号理由不齐" —— 它不是"没有理由"；
     - `structured=True` 而 `complete=False` ⇒ 形状能读、但那一档要求的格子缺了
       （例如 math_error 没有 `defect_ref`）⇒ `why` 点名缺哪一格；
     - `complete=True` ⇒ 那一档该有的都在。
@@ -412,7 +412,7 @@ def relabel_events(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[dict[str
 
     一次 `abandoned` 就是一次"这一条被放下了"；同一个 label 下出现 N 次，就是这条
     定理名换号 N 次（98 的 `lem:cancel`：000049 与 000050 各一次 ⇒ 2 次）。
-    **不做阈值拦截**（业主只要它显形）：这里只给读数，判不判门由调用方决定。
+    不做阈值拦截（业主只要它显形）：这里只给读数，判不判门由调用方决定。
 
     返回 `{label: [{"stmt_id","at","kind","abandon_kind","has_evidence","structured",
     "complete","basis"}]}`。空 label 的行不进（没有定理名就没有"换号"这件事）。
@@ -533,14 +533,14 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     - `kind ∈ secretary.PROPOSITION_KINDS`（theorem / lemma / proposition / corollary /
       conjecture）⇒ 必须给 `abandon_kind` + `abandon_basis`（math_error 再要
       `defect_ref`，difficulty 再要 `difficulty` + `salvaged`），判据是
-      :func:`check_abandon_reason`；**不齐 ⇒ 受控拒绝，一个字节都不写**。
-    - `concept` / `definition` / 认不出的 kind ⇒ **不受这道闸管**（概念不是命题，
+      :func:`check_abandon_reason`；不齐 ⇒ 受控拒绝，一个字节都不写。
+    - `concept` / `definition` / 认不出的 kind ⇒ 不受这道闸管（概念不是命题，
       谈不上"命题有数学错误"或"证明遇到困难"）：理由仍必须是可解析的放弃标记
       （`schema.Statement.validate` 那条老闸照旧）。
 
     ## 已经把这一条标成 `abandoned` 的行（幂等重放）不走新闸
     重放不是一次新的换号：历史行（98 里那批只有自由文本的行）必须还能被幂等重放，
-    否则"先补理由、再关板项"这条路会被闸反锁死。要**补**理由，走
+    否则"先补理由、再关板项"这条路会被闸反锁死。要补理由，走
     `Secretary.amend_statement_meta`（它会把新理由写进 `quote_reason`）。
 
     返回 `{"checked","abandoned","already","stmt_id","at","reason","marker",

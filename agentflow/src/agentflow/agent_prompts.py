@@ -3440,7 +3440,29 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` / `tool_surface_snapshot.json` 按现值重冻；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p251"
+#: p251 → p252（2026-11-07，业主两笔裁定同批）：
+#: 甲「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。对于1，需在
+#:   换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
+#:   ⇒ `agent_skills._d_skills()`（手稿那一本的「签收或放弃」节）与
+#:   `agent_skills._f_skills()`（交付那一本的「签收或放弃」节）各写清两档：
+#:   `abandon_kind=math_error` 要「错在第几步、错是什么」+ `defect_ref`；
+#:   `abandon_kind=difficulty` 要「难在哪」+ 把可取之处拆成引理（`salvaged`）；
+#:   两格空着换号 ⇒ 受控拒 `abandon_reason_missing`（`salvaged` 空 ⇒
+#:   `abandon_salvaged_missing`）；同 label 再登记的 `supersedes` /
+#:   `superseded_without_reason` 是读数、不拦。
+#: 乙「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
+#:   ⇒ `agent_skills._f_skills()` 的交付那一本新增一节：交稿前 F 自己的秘书按
+#:   「条件 → 结论」判一次形状（只判形状，不判对不对、不判是否平凡），判不过或没判成
+#:   ⇒ 这一轮受控拒 `proposition_form_refused`、不交给登记。
+#: 变化格 = A/B/D/E/F/G/L：D/F 是自己的手册变了；A/B/E/G/L 变的是 `table.update` 那一行
+#: summary（工具声明，印在每一个有这件工具的角色面上：新增 `abandon_kind` / `abandon_basis`
+#: / `defect_ref` / `difficulty` / `salvaged` 五格）。C/H/M/V 四格逐字未动。
+#: 连带：`tests/test_agent_prompts.py` 的十一格表 + `_FROZEN_PROMPT_VERSION`（p252）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: `tests/golden/agent_surface_snapshot.json` / `tool_surface_snapshot.json` 按现值重冻；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p252"
 
 
 

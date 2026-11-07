@@ -52,8 +52,8 @@ from agentflow.store import Store
 #
 # 2026-11-07（业主裁定）：F 交稿之前多了一道"命题形态闸"
 # （`agent_f/core.py::_proposition_form_gate` → `Secretary.judge_proposition_form`）。
-# 它是一次**模型调用**，而这一份夹具里没有模型 ⇒ 判据会 fail-closed 拒收（那是对的行为）。
-# 下面这个 autouse 夹具只替代**那一次调用**（给一个"形态合规"的答案），不摘闸：
+# 它是一次模型调用，而这一份夹具里没有模型 ⇒ 判据会 fail-closed 拒收（那是对的行为）。
+# 下面这个 autouse 夹具只替代那一次调用（给一个"形态合规"的答案），不摘闸：
 # 闸照跑、判据仍是那一处实现；写成补丁而不是"让闸放行"，是为了让"夹具里没有模型"
 # 这件事只在这一个地方被交代一次。
 @pytest.fixture(autouse=True)
