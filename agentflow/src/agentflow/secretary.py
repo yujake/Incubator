@@ -3339,6 +3339,120 @@ class Secretary:
         except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
             out["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
+    def judge_abandon_difficulty(self, *, statement: Mapping[str, Any],
+                                 difficulty: Any, basis: Any, salvaged: Any = (),
+                                 task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
+        """放弃闸的 difficulty 档：一次秘书语义判定（业主 2026-11-07 审计 B1/第 10 条）。
+
+        业主逐字：「对于2，需指出困难，并将原先证明中可取之处拆出落成引理」。
+        改前 `difficulty` 只要非空就过（"做不动了"也算指出困难），`salvaged` 只核
+        "在册 / active / kind=lemma"（可以是任意一条无关旧引理）。这一问同时判两件事，
+        一次调用：
+
+        1. `difficulty` 是不是在说真实的数学困难、难在哪（卡在哪条引理 / 哪一步 /
+           哪条假设），而不是"做不动了"这类没有内容的话；
+        2. `salvaged` 里那几条引理是不是从这条命题的原证明里拆出来的可取之处，
+           而不是随便一条在册引理（或这条命题自己）。
+
+        ## 为什么是模型判定而不是字数/关键词阈值
+        「真困难」与「从旧稿拆出」都是语义判断：任何字数下限都会被一段套话满足，
+        任何关键词表都会把"缺一条 K 的速降假设"判成没有关键词。业主明确不要机械判据。
+
+        ## 三态（本仓最贵的那条纪律）
+        没缝 / 关着 / 超时 / 坏 JSON / 非布尔 / 说合格却读不出"难在哪" ⇒ `checked=False`
+        + `refused`（调用方按受控拒处理）。不许把"这一次没判成"折成"有理由"。
+
+        ## 返回（键集合固定）
+        `checked` / `genuine` / `where` / `salvaged_from_proof` / `problems` /
+        `decision` / `refused` / `reason`。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "genuine": False, "where": "", "salvaged_from_proof": False,
+            "problems": [], "decision": "", "refused": "", "reason": "",
+            "cost": {}, "statement_sha256": "",
+        }
+        body = str((statement or {}).get("statement_full") or "")
+        proof = str((statement or {}).get("proof_text") or "")
+        out["statement_sha256"] = hashlib.sha256(body.encode("utf-8")).hexdigest() if body else ""
+        if not str(difficulty or "").strip():
+            out.update(refused="abandon_difficulty_required",
+                       reason="这一档没有 `difficulty` ⇒ 没有可判的「难在哪」（不发调用）")
+            return out
+        if self.seam is None or not self.enable_model:
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 难度没判成；"
+                               "按受控拒处理 ——「没判成」不许折成「有理由」"
+                               + (f"（装配读数：{self.model_source}）"
+                                  if str(self.model_source or "") else "")))
+            return out
+        rows = []
+        for one in (salvaged or ()):
+            if not isinstance(one, Mapping):
+                continue
+            rows.append({"stmt_id": str(one.get("stmt_id") or ""),
+                         "kind": str(one.get("kind") or ""),
+                         "created_at": str(one.get("created_at") or ""),
+                         "label": str(one.get("label") or ""),
+                         "statement_full": str(one.get("statement_full") or "")[:JUDGE_MATERIAL_CAP]})
+        material = {
+            "statement_full": body[:JUDGE_MATERIAL_CAP],
+            "proof_text": proof[:JUDGE_MATERIAL_CAP],
+            "difficulty": str(difficulty or ""),
+            "abandon_basis": str(basis or ""),
+            "salvaged": rows,
+        }
+        try:
+            data, call = self.seam.ask_json(_judge_material(material),
+                                            system=_abandon_difficulty_system(),
+                                            task_id=task_id,
+                                            note="secretary:abandon_difficulty")
+        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 没判成（fail-closed）
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=f"难度判定调用失败（{type(exc).__name__}: {exc}）⇒ 没判成")
+            return out
+        out["cost"] = dict(getattr(call, "cost", {}) or {})
+        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=(f"难度判定没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
+                               f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 没判成"))
+            return out
+        genuine = data.get("genuine")
+        from_proof = data.get("salvaged_from_proof")
+        if not isinstance(genuine, bool):
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=(f"模型给的 genuine 不是布尔（收到 {genuine!r}）⇒ 不采信："
+                               "这一问只有两态，第三档会让「没判成」冒充「有理由」"))
+            return out
+        if not isinstance(from_proof, bool):
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=(f"模型给的 salvaged_from_proof 不是布尔（收到 {from_proof!r}）"
+                               "⇒ 不采信（同一档只有两态）"))
+            return out
+        where = str(data.get("where") or "").strip()
+        problems = [str(x).strip() for x in (data.get("problems") or []) if str(x).strip()]
+        decision = str(data.get("decision") or "").strip()
+        if genuine and not where:
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=("模型判「这是真困难」，却读不出难在哪（where 是空的）⇒ "
+                               "这一格没判成：合格必须能复述「难在哪」"))
+            return out
+        if (not genuine or not from_proof) and not problems:
+            out.update(refused="abandon_difficulty_not_judged",
+                       reason=("模型判不合格，却一条 problems 都没点名 ⇒ 这一格没判成："
+                               "拒收必须逐条说缺什么"))
+            return out
+        refused = ""
+        if not genuine:
+            refused = "abandon_difficulty_not_genuine"
+        elif not from_proof:
+            refused = "abandon_salvaged_not_from_proof"
+        out.update(checked=True, genuine=genuine, where=where,
+                   salvaged_from_proof=from_proof, problems=problems,
+                   decision=decision, refused=refused,
+                   reason=(f"难度判定：{'是真困难，难在 ' + where if genuine else '不是真困难'}"
+                           f"；salvaged {'取自原证明' if from_proof else '不是从原证明拆出来的'}"))
+        return out
+
     def judge_statement(self, *, statement_full: str, statement: str = "",
                         source: str = "", basis_hint: str = "",
                         proof_text: str = "", proofs: list | None = None,
@@ -6913,22 +7027,35 @@ class Secretary:
         """放弃命题那一步的换号理由闸（业主 2026-11-07；判据本体在 `statementabandon`）。
 
         返回 `{"refused","reason","form","quote_reason"}`：
-        - 不归这道闸管（目标状态不是 abandoned / kind 不是命题 / 幂等重放且没交新理由）
-          ⇒ 空字典（一个字节都不干预）；
+        - 不归这道闸管（目标状态不是 abandoned / 明确非命题的 kind / 幂等重放且没交
+          新理由）⇒ 空字典（一个字节都不干预）；
         - 受控拒 ⇒ `refused` + `reason`（调用方必须整笔不写）；
         - 过关 ⇒ `quote_reason` 是要落盘的那一条标记（`abandoned@<ISO>@<JSON>`），
           `form` 是判据的逐格读数。
 
-        ## 三档（业主原话划的两档 + 不受管的那一档）
-        1. `kind ∈ secretary.PROPOSITION_KINDS`（theorem / lemma / proposition /
-           corollary / conjecture）⇒ 必须给 `abandon_kind` + `abandon_basis`，
-           判据 `statementabandon.check_abandon_reason`（math_error 要 `defect_ref`
-           且那一行真的判「有毛病」、理由要点名 `defect_step`；difficulty 要
-           `difficulty` + 非空的 `salvaged`，每条在册 / active / 引理类）；
-        2. `concept` / `definition` / 认不出的 kind ⇒ 不受这道闸管（概念不是命题，
-           谈不上"命题本身有数学错误"或"证明遇到的困难"）；
-        3. 这一行早就是 `abandoned` 而这一次没交新理由 ⇒ 幂等重放，不拦
-           （历史行必须还能被重放；要补理由就带上那几格重交一次，本闸会承认它）。
+        ## 判档读的是盘上原 kind（2026-11-07 审计 A1/A2）
+        改前读的是 `wanted.get("kind", row.get("kind"))` —— 同一笔 patch 里把
+        `kind` 改成 `concept` 再写 `status=abandoned`，闸就按"想要的 kind"跳过。
+        现在：
+        1. 同一笔里改 `kind` + 把 `status` 改成 `abandoned` ⇒ 受控拒
+           `abandon_kind_change_in_same_patch`（改类与放弃是两件事，拆开交）；
+        2. 判档一律读盘上那一行；若盘上现在是 `concept` / `definition` 而
+           `_statement_amend_history` 记着它曾经是命题（先改 kind、再放弃的
+           两步走），仍按命题处理 —— 否则一行改成 concept 再一行放弃就绕过去了。
+
+        ## 三档
+        1. 明确非命题的两档（`concept` / `definition`）⇒ 不受这道闸管（概念没有
+           "条件 ⇒ 结论"，谈不上"命题本身有数学错误"或"证明遇到的困难"）；
+           其余一切 kind（含词表外的 `example` / `remark` / 空串）一律按命题处理
+           （审计 A3：改前"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
+        2. 命题 ⇒ 必须给 `abandon_kind` + `abandon_basis`，判据
+           `statementabandon.check_abandon_reason`（math_error 要 `defect_ref`
+           指向这一条且审的是现行正文、理由要点名 `defect_step`；difficulty 要
+           `difficulty` + 非空的 `salvaged`，每条在册 / active / 引理类 / 不许自指 /
+           须在这笔放弃之前就在册，最后过 `judge_abandon_difficulty` 的语义判定）。
+        3. 这一行早就是 `abandoned` 而这一次没交新理由、也没改 `quote_reason`
+           ⇒ 幂等重放，不拦（历史行必须还能被重放）；理由要变 ⇒ 与第一次同一道闸
+           （审计 A4：已 abandoned 不是免检通行证）。
 
         ## 为什么落盘的是 JSON 而不是自由文本
         读侧要按 `abandon_kind` 分组、要判"是否带证据"（`closing` 的换号读数），
@@ -6939,28 +7066,70 @@ class Secretary:
         target = str(wanted.get("status", row.get("status")) or "")
         if target != "abandoned":
             return {}
-        kind_now = str(wanted.get("kind", row.get("kind")) or "").strip().lower()
-        if kind_now not in PROPOSITION_KINDS:
+        # ---- 1) 放弃的同一笔里改 kind ⇒ 受控拒
+        if "kind" in wanted and str(wanted.get("kind") or "") != str(row.get("kind") or ""):
+            return {
+                "refused": "abandon_kind_change_in_same_patch",
+                "reason": ("放弃命题的那一笔不许同时改 kind（收到 "
+                           f"{row.get('kind')!r} → {wanted.get('kind')!r}）：判档读的是"
+                           "盘上原 kind，换个 kind 就换一把尺。要改类请单独交一笔，"
+                           "再按新的 kind 走放弃"),
+                "form": {}}
+
+        def _kind_on_disk(current: Mapping[str, Any]) -> str:
+            """盘上原 kind；当前是 concept/definition 而历史说它曾是命题 ⇒ 取那次原值。"""
+            kind = str(current.get("kind") or "").strip().lower()
+            if not _SA.is_abandon_exempt(kind):
+                return kind
+            for entry in (current.get("_statement_amend_history") or []):
+                if not isinstance(entry, Mapping):
+                    continue
+                changes = entry.get("changes")
+                cell = changes.get("kind") if isinstance(changes, Mapping) else None
+                if not isinstance(cell, Mapping):
+                    continue
+                old = str(cell.get("from") or "").strip().lower()
+                new = str(cell.get("to") or "").strip().lower()
+                if _SA.is_abandon_exempt(new) and old and not _SA.is_abandon_exempt(old):
+                    return old
+            return kind
+
+        kind_now = _kind_on_disk(row)
+        if _SA.is_abandon_exempt(kind_now):
             return {}
         already = str(row.get("status") or "") == "abandoned"
-        if already and not given:
-            # 幂等重放：历史行（只有自由文本理由的那种）必须还能走这一格，
-            # 否则"先补板项、后补理由"这条路会被闸反锁死。
-            return {}
-        form = _SA.check_abandon_reason(
-            self.store,
-            kind=given.get("abandon_kind"), basis=given.get("abandon_basis"),
-            defect_ref=given.get("defect_ref", ""), difficulty=given.get("difficulty", ""),
-            salvaged=given.get("salvaged") or ())
-        if not form.get("checked"):
-            return {"refused": str(form.get("refused") or "abandon_reason_missing"),
-                    "reason": str(form.get("why") or "换号理由不齐 ⇒ 整笔不写"),
-                    "form": form}
+        if not given:
+            # 幂等重放：同一个标记原样重交 ⇒ 一个字节都不干预；
+            # 要换一段理由（不管是自由文本还是完整结构化标记）⇒ 往下走闸。
+            if already and "quote_reason" not in wanted:
+                return {}
+            if already and str(wanted.get("quote_reason") or "") == str(row.get("quote_reason") or ""):
+                return {}
+            parsed = (_SA.parse_abandon_reason(wanted.get("quote_reason"))
+                      if "quote_reason" in wanted else {})
+            if parsed.get("structured") and parsed.get("complete"):
+                given = {"abandon_kind": parsed.get("abandon_kind"),
+                         "abandon_basis": parsed.get("abandon_basis"),
+                         "defect_ref": parsed.get("defect_ref") or "",
+                         "difficulty": parsed.get("difficulty") or "",
+                         "salvaged": parsed.get("salvaged") or ()}
         at = S.now_iso()
         if already:
             was = _SA.parse_abandon(row.get("quote_reason"))
             if was.get("checked") and str(was.get("at") or ""):
                 at = str(was.get("at"))     # 补理由不改"几时放下的"那一刻
+        form = _SA.check_abandon_reason(
+            self.store,
+            kind=given.get("abandon_kind"), basis=given.get("abandon_basis"),
+            defect_ref=given.get("defect_ref", ""), difficulty=given.get("difficulty", ""),
+            salvaged=given.get("salvaged") or (), statement_id=str(row.get("stmt_id") or ""),
+            at=at, statement=row,
+            difficulty_judge=self.judge_abandon_difficulty,
+            judgment_required=True)
+        if not form.get("checked"):
+            return {"refused": str(form.get("refused") or "abandon_reason_missing"),
+                    "reason": str(form.get("why") or "换号理由不齐 ⇒ 整笔不写"),
+                    "form": form}
         marker = _SA.abandon_marker(
             at=at,
             reason=_SA.structured_reason(
@@ -12239,6 +12408,29 @@ def _proposition_form_system() -> str:
         "conclusion（你读出的结论，字符串）、problems（字符串数组：不合格时逐条说缺什么，"
         "例如「没有写清前提」「结论不是可判真假的断言」「这是流程要求，不是命题」，"
         "合格时给空数组）、decision（一句话判词）。\n\n"
+    )
+
+
+def _abandon_difficulty_system() -> str:
+    """放弃闸 difficulty 档的稳定头（进 `system` 位）：只问两件事 + 输出形状。
+
+    业主 2026-11-07 逐字：「对于2，需指出困难，并将原先证明中可取之处拆出落成引理」。
+
+    与 `_proposition_form_system` 同一条缓存纪律：只取决于"这是难度判定"，
+    逐字节稳定；材料（命题 / 旧证明 / difficulty / salvaged 各行）留在 user 位。
+    """
+    return (
+        "你是「放弃命题的难度判定」：只回答两件事 —— "
+        "① `difficulty` 这一段是不是在说**真实的数学困难**、难在哪（卡在哪条引理 / 哪一步 / "
+        "哪条假设），而不是「做不动了」「太难了」「时间不够」这类没有内容的话；"
+        "② `salvaged` 里那几条引理是不是**从这条命题的原证明里拆出来的可取之处**，"
+        "而不是随便一条在册引理、更不是这条命题自己。"
+        "**不判**这条命题对不对、也**不判**该不该放弃。"
+        "只回一个 JSON 对象，字段：genuine（**布尔**，只有两态：这一段是不是真困难）、"
+        "where（你读出的难在哪；genuine=true 时不许为空）、"
+        "salvaged_from_proof（**布尔**：那几条引理是不是从原证明里拆出来的）、"
+        "problems（字符串数组：genuine=false 或 salvaged_from_proof=false 时逐条说为什么，"
+        "两样都为真时给空数组）、decision（一句话判词）。\n\n"
     )
 
 

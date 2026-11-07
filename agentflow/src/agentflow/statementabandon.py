@@ -97,22 +97,47 @@ SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
 #: `verifications/<号>.jsonl#v-00000N`）。号必须是 6 位（本仓的 id 宽度）。
 DEFECT_REF_RE = re.compile(r"^verifications/(\d{6})\.jsonl#(v-\d{6})$")
 
+#: 语义判定那一问的受控码（`abandon_difficulty_not_genuine` 是业主 2026-11-07 点名的）。
+ABANDON_DIFFICULTY_NOT_JUDGED = "abandon_difficulty_not_judged"
+ABANDON_DIFFICULTY_NOT_GENUINE = "abandon_difficulty_not_genuine"
+ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
+
+
+def abandon_exempt_kinds() -> tuple[str, ...]:
+    """哪些 `kind` 明确不是命题、不归放弃闸管（真身 `secretary.NOT_APPLICABLE_KINDS`）。
+
+    ## 为什么闸要改成 fail-closed（2026-11-07 审计 A3）
+    改前判据是"`kind in PROPOSITION_KINDS` 才拦"：于是登记口收下的 `example` /
+    `remark` / 空 kind（`record_statement` 对 kind 不设词表）一路放行 —— 只要把
+    kind 写成一个词表外的值，自由文本放弃就绕过了整道闸。现在只放行明确非命题
+    的那两档（`concept` / `definition`，业主 2026-11-07 的边界），其余一律当命题处理。
+
+    独立成一个函数（而不是在各处写 `not in`）：放行面是一份可以单独打桩的判据，
+    反真空用例要能把它改宽再看见负控变绿。
+    """
+    from . import secretary as _SEC
+
+    return tuple(str(k) for k in _SEC.NOT_APPLICABLE_KINDS)
+
+
+def is_abandon_exempt(kind: Any) -> bool:
+    """这个 `kind` 是不是"明确非命题"（`concept` / `definition`）⇒ 不归放弃闸管。"""
+    return str(kind or "").strip().lower() in abandon_exempt_kinds()
+
 
 def abandon_proposition_kinds() -> tuple[str, ...]:
-    """哪些 `kind` 算"命题"（这道闸只管它们）。真身是 `secretary.PROPOSITION_KINDS`。
+    """哪些 `kind` 算"命题"（读侧/报错文案用的正向词表）。
 
-    ## 为什么是它、不是 `schema` 里另立一张表
-    `schema` 对 `statements.kind` 没有词表（`Statement.kind` 是自由字符串，见
-    `schema.py:2363` 一带），所以"可判真假的断言类"这件事只在一处被定义过：
-    `secretary.PROPOSITION_KINDS`（`secretary.py:1367`）= theorem / lemma /
-    proposition / corollary / conjecture。它同时也是"参不参与同一命题判定"的判据
-    （`_is_proposition_kind`）—— 同一个概念两处各写一张表就会漂。
+    真身是 `secretary.PROPOSITION_KINDS`（theorem / lemma / proposition /
+    corollary / conjecture）：`schema` 对 `statements.kind` 没有词表
+    （`Statement.kind` 是自由字符串，见 `schema.py:2363` 一带），"可判真假的断言类"
+    只在这一处被定义过。
 
-    `concept` / `definition` 不在其中（`secretary.NOT_APPLICABLE_KINDS`，
-    `secretary.py:235`）：概念行没有"条件 ⇒ 结论"，也就谈不上"命题本身有数学错误"
-    或"证明遇到的困难" ⇒ 放弃 concept 不该被这道闸拦（业主 2026-11-07 的边界）。
-    认不出的 kind 一律不拦：闸只对"确定是命题"的那几档生效，免得把将来的新
-    kind 一刀切挡死（那是"装错位置"的同一种病）。
+    ## 它与放行面的关系（2026-11-07 改）
+    改前放弃闸用的是"`kind in abandon_proposition_kinds()` 才拦"，于是词表外的
+    kind（`example` / `remark` / 空串）直接不拦。现在放行面才是判据：
+    :func:`is_abandon_exempt` 只认 `concept` / `definition` 两档，其余（含认不出的）
+    全按命题处理。这个函数因此只用于读数与措辞，不再被当作"要不要拦"的分界线。
     """
     from . import secretary as _SEC
 
@@ -174,11 +199,23 @@ def _defect_row(store: Any, root: str, sid: str, vid: str) -> tuple[dict[str, An
                   "引用了一行不存在的判词")
 
 
-def _defect_refusal(store: Any, root: str, ref: str,
-                    basis: str) -> tuple[dict[str, Any], str, str]:
-    """核一条 `defect_ref`：必须真的存在、且判词是「有毛病」或轴为 `fault`。
+def _defect_refusal(store: Any, root: str, ref: str, basis: str, *,
+                    statement_id: str = "",
+                    statement: Mapping[str, Any] | None = None,
+                    ) -> tuple[dict[str, Any], str, str]:
+    """核一条 `defect_ref`：必须真的存在、判词是「有毛病」/轴为 `fault`、
+    指向被放弃的这一条、且审的是它现在这一份正文。
 
     返回 `(detail, refused_code, why)`：成功时 `refused_code` 是空串。
+
+    ## 2026-11-07 审计 C1 之后补的两条（业主「需在换号理由中指出错误」）
+    改前只核「那一行存在并且判有毛病」：放弃 000001 时可以引用 000002 的判词
+    （跨命题），也可以引用一条对旧正文的判词（改稿后它已经 stale）。两条都不是
+    「指出这条命题的错误」。现在：
+    - ref 里的命题号必须等于 `statement_id`（`abandon_defect_ref_other_statement`）；
+    - 那一行的 `proof_sha256` 必须与现行证明正文（按那一行的 `proof_no` 取）
+      的 sha 相同（`abandon_defect_ref_stale`）。没有 sha 的行同样按 stale 拒 ——
+      "确认不了审的是哪一份"不许折成"审的就是这一份"。
     """
     m = DEFECT_REF_RE.match(str(ref or "").strip())
     if not m:
@@ -186,6 +223,14 @@ def _defect_refusal(store: Any, root: str, ref: str,
             f"defect_ref 必须是 `verifications/<6 位命题号>.jsonl#v-<6 位验证号>` "
             f"（收到 {str(ref or '')!r}）")
     sid, vid = m.group(1), m.group(2)
+    target = str(statement_id or "").strip()
+    if not target:
+        return {}, "abandon_target_missing", (
+            "这一笔没给被放弃的命题号 ⇒ 没法把 defect_ref 绑到「这一条」上（不猜）")
+    if sid != target:
+        return {}, "abandon_defect_ref_other_statement", (
+            f"{ref} 指的是命题 {sid} 的判词，而这一笔放弃的是 {target} —— "
+            "「命题有实质数学错误」必须指出**这一条**自己的错误，不能引用另一条命题的")
     row, why = _defect_row(store, root, sid, vid)
     if row is None:
         return {}, "abandon_defect_ref_unreadable", why
@@ -197,10 +242,27 @@ def _defect_refusal(store: Any, root: str, ref: str,
         return {}, "abandon_defect_ref_not_fault", (
             f"{ref} 这一行的判词是 {verdict!r}、轴是 {axis!r} —— 它**不是**「有毛病」"
             "⇒ 不能拿它当「命题有实质数学错误」的依据")
+    # ---- 陈旧判词（审计 C1）：审的是旧正文 ⇒ 不能拿来放弃现正文
+    no = _VR.proof_no_of(row)
+    current_text = _VR.proof_text_of(statement or {}, no)
+    current_sha = _VR.proof_sha(current_text)
+    row_sha = str(row.get("proof_sha256") or "").strip().lower()
     step = row.get("defect_step")
     detail: dict[str, Any] = {"defect_step": step if isinstance(step, int) else None,
                               "verdict": verdict, "axis": axis,
-                              "verification": str(row.get("verification_id") or "")}
+                              "verification": str(row.get("verification_id") or ""),
+                              "proof_no": no,
+                              "defect_proof_sha256": row_sha,
+                              "current_proof_sha256": current_sha}
+    if not row_sha:
+        return detail, "abandon_defect_ref_stale", (
+            f"{ref} 这一行没有 `proof_sha256` ⇒ 说不出它审的是哪一份正文（没查成不许"
+            "折成「审的就是现在这一份」）")
+    if row_sha != current_sha:
+        return detail, "abandon_defect_ref_stale", (
+            f"{ref} 审的是 sha256={row_sha[:12]}… 那一份，而命题 {target} 现行 "
+            f"proof #{no} 的 sha256={current_sha[:12]}… ⇒ 这一行「有毛病」是对旧稿的，"
+            "改稿之后它已经陈旧，不能拿来当「这一份证明有数学错误」的依据")
     if isinstance(step, int) and step >= 1:
         if not _step_pattern(step).search(str(basis or "")):
             return detail, "abandon_defect_step_mismatch", (
@@ -210,20 +272,72 @@ def _defect_refusal(store: Any, root: str, ref: str,
     return detail, "", ""
 
 
+def _parse_stamp(value: Any) -> datetime | None:
+    """ISO8601 时间戳（读不出来 ⇒ `None`，不猜）。"""
+    try:
+        return datetime.fromisoformat(str(value or "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
+    """`created_at` 是否不晚于 `at`（README 口径：按 created_at 判，给读数不靠猜）。
+
+    返回 `(ok, why)`。两个时间戳都读不出来、或一个带时区一个不带而补不齐 ⇒ 不成立
+    （"确认不了它是不是这一次放弃之前就有的"不许折成"是"）。
+    """
+    made, ref = _parse_stamp(created_at), _parse_stamp(at)
+    if made is None:
+        return False, f"created_at 读不出来（{created_at!r}）"
+    if ref is None:
+        return False, f"放弃时间读不出来（{at!r}）"
+    if (made.tzinfo is None) != (ref.tzinfo is None):
+        tz = ref.tzinfo or made.tzinfo
+        if made.tzinfo is None:
+            made = made.replace(tzinfo=tz)
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=tz)
+    try:
+        if made <= ref:
+            return True, ""
+        return False, f"created_at={str(created_at)!r} 晚于放弃时刻 {str(at)!r}"
+    except TypeError as exc:  # noqa: BLE001 —— 两个时间戳不可比 ⇒ 没查成
+        return False, f"两个时间戳不可比（{type(exc).__name__}: {exc}）"
+
+
 def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any = "",
                          difficulty: Any = "", salvaged: Any = (),
-                         root: str = "") -> dict[str, Any]:
+                         root: str = "", statement_id: Any = "",
+                         at: Any = "", statement: Mapping[str, Any] | None = None,
+                         difficulty_judge: Any = None,
+                         judgment_required: bool = False) -> dict[str, Any]:
     """换号理由的唯一判据（两档）：返回 `{checked, refused, why, problems, …}`。
 
     这是业主 2026-11-07 那句裁定的机器落点。两个写口（`apply_abandonment` 与
     `Secretary.amend_statement_meta`）都只调它，不各写一份校验 —— 两处各写一份，
     "什么算给清了理由"就会在两个出口长出两种答案。
 
-    ## 两档各自要求什么
+    ## 两档各自要求什么（2026-11-07 审计之后的完整版）
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
-    | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 那一行必须真的存在、其判词是「有毛病」或轴为 `fault`；`abandon_basis` 必须点名那一行的 `defect_step`（"错在第几步"） |
-    | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条 `stmt_id` 必须真的在册、`status=active`、`kind` 属于引理类（:data:`SALVAGED_KINDS`） |
+    | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
+    | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类；不许指被放弃的这条自己；必须在这笔放弃之前就在册（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的） |
+
+    ## `statement_id` / `at` 为什么是必填的
+    审计 C1：改前的 `defect_ref` 没有 target，可以引用另一条命题的「有毛病」行，
+    也可以引用一条对旧正文的判词。两件事都要"被放弃的那一条"才判得了，所以
+    target 与放弃时刻都进判据。`statement` 给了就直接用它（写口手里有盘上那一行），
+    不给就按 `statement_id` 从 `statements` 读。
+
+    ## 语义判定（2026-11-07 审计 B1）
+    `difficulty="做不动了"` 能过，是因为改前只查非空。现在 `difficulty_judge` 是一次
+    秘书语义判定（`Secretary.judge_abandon_difficulty`，两态 fail-closed，不用字数/
+    关键词阈值）；它同时判「那几条 salvaged 是不是从这条命题的旧证明里拆出来的」。
+    - `judgment_required=True` 而没给判定面 ⇒ `abandon_difficulty_not_judged`（fail-closed）；
+    - 判了但 `genuine=False` ⇒ `abandon_difficulty_not_genuine`；
+    - 判了但 `salvaged_from_proof=False` ⇒ `abandon_salvaged_not_from_proof`。
+    低层直调（`apply_abandonment` 没有秘书面）不传 `judgment_required`，结构判据照旧 ——
+    生产的新放弃只经 `Secretary.amend_statement_meta` 那一口，那里一定传。
 
     ## 三态
     `checked=True` = 理由齐；`checked=False` + `refused` = 受控拒绝（一个字节都不写）。
@@ -259,6 +373,27 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
         return out
     out.update(abandon_kind=got_kind, abandon_basis=got_basis)
     root_now = str(root or getattr(store, "root", "") or "")
+    # ---- 目标命题（2026-11-07 审计 C1 / C10：判据要有"被放弃的那一条"）
+    target_id = str(statement_id or "").strip()
+    rows, read_why = _statement_rows(store)
+    if rows is None:
+        out.update(refused="abandon_statements_unreadable",
+                   why=(f"`statements` 读不出来（{read_why}）⇒ 没法核被放弃的那一条"
+                        "（没查成，不是通过）"))
+        return out
+    target = dict(statement) if isinstance(statement, Mapping) else rows.get(target_id)
+    if target is None:
+        if not target_id:
+            out.update(refused="abandon_target_missing",
+                       why=("这一笔没给被放弃的命题号 ⇒ defect_ref / salvaged 都没法绑到"
+                            "「这一条」上（不猜）"))
+        else:
+            out.update(refused="abandon_unknown_statement",
+                       why=f"命题 {target_id} 不在册 ⇒ 放弃一条不存在的命题（不新建行）")
+        return out
+    if not target_id:
+        target_id = str(target.get("stmt_id") or "").strip()
+    out["detail"]["statement_id"] = target_id
     if got_kind == ABANDON_KIND_MATH_ERROR:
         ref = str(defect_ref or "").strip()
         if not ref:
@@ -267,11 +402,12 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
                              "`verifications/<号>.jsonl#v-00000N`）—— 业主原话："
                              "「需在换号理由中指出错误」，而指出错误要有可核的那一行"))
             return out
-        detail, code, why = _defect_refusal(store, root_now, ref, got_basis)
+        detail, code, why = _defect_refusal(store, root_now, ref, got_basis,
+                                            statement_id=target_id, statement=target)
         if code:
-            out.update(refused=code, why=why, defect_ref=ref, detail=detail)
+            out.update(refused=code, why=why, defect_ref=ref, detail={**out["detail"], **detail})
             return out
-        out.update(defect_ref=ref, detail=detail)
+        out.update(defect_ref=ref, detail={**out["detail"], **detail})
         out.update(checked=True, why=f"math_error：理由引到 {ref}（判词「有毛病」）")
         return out
     # ---- difficulty 档
@@ -286,13 +422,9 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     if why:
         out.update(refused="abandon_salvaged_missing", why=why)
         return out
-    rows, read_why = _statement_rows(store)
-    if rows is None:
-        out.update(refused="abandon_salvaged_not_registered",
-                   why=f"`statements` 读不出来（{read_why}）⇒ 没法核 salvaged 里那几条在不在册")
-        return out
     problems: list[str] = []
     kept: list[dict[str, str]] = []
+    readings: list[dict[str, Any]] = []
     for one in items:
         sid = one["stmt_id"]
         row = rows.get(sid)
@@ -301,6 +433,12 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
             out.update(refused="abandon_salvaged_not_registered",
                        why=(f"salvaged 里的 {sid} 不在 statements 里 ⇒ 引理必须是真的"
                             "登记过的那一条（受控拒绝，一个字节都不写）"))
+            return out
+        if sid == target_id:
+            out.setdefault("problems", []).append(f"{sid}：指向被放弃的这条自己")
+            out.update(refused="abandon_salvaged_self_reference",
+                       why=(f"salvaged 里出现了被放弃的这条自己（{sid}）—— 一条正在被放弃的"
+                            "命题不能同时充当「旧证明里拆出来的引理」"))
             return out
         status = str(row.get("status") or "")
         if status != "active":
@@ -314,7 +452,54 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
                        why=(f"salvaged 里的 {sid} 的 kind 是 {kind_now!r}，而这一档只认引理类 "
                             f"{list(SALVAGED_KINDS)}（业主原话：拆出落成引理）"))
             return out
+        before, age_why = _registered_before(row.get("created_at"), at)
+        if not before:
+            out.update(refused="abandon_salvaged_after_the_abandonment",
+                       why=(f"salvaged 里的 {sid} 不是在这笔放弃之前就在册的引理（{age_why}）"
+                            " ⇒ 「原先证明中可取之处」必须是旧稿时期的东西，不许现造"))
+            return out
         kept.append({"label": one["label"] or str(row.get("label") or ""), "stmt_id": sid})
+        readings.append({"stmt_id": sid, "kind": kind_now,
+                         "created_at": str(row.get("created_at") or ""),
+                         "label": str(row.get("label") or ""),
+                         "statement_full": str(row.get("statement_full") or "")})
+    out["detail"]["salvaged_readings"] = readings
+    # ---- 秘书语义判定（同一个调用同时判「真困难」与「从旧稿拆出」）
+    if difficulty_judge is None:
+        if judgment_required:
+            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
+                       why=("difficulty 这一档要一次秘书语义判定（这是不是真困难、难在哪，"
+                            "以及 salvaged 是不是从旧证明里拆出来的），而这一笔没有判定面 ⇒ "
+                            "没判成按受控拒处理（不许折成「有理由」）"))
+            return out
+    else:
+        verdict: dict[str, Any]
+        try:
+            got = difficulty_judge(statement=target, difficulty=diff,
+                                   basis=got_basis, salvaged=list(readings))
+            verdict = dict(got) if isinstance(got, Mapping) else {}
+        except Exception as exc:  # noqa: BLE001 —— 判定炸了 = 没判成（fail-closed）
+            verdict = {"checked": False,
+                       "reason": f"难度判定调用失败（{type(exc).__name__}: {exc}）"}
+        out["detail"]["difficulty_judgment"] = verdict
+        if not verdict.get("checked"):
+            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
+                       why=("难度语义判定没判成"
+                            f"（{verdict.get('reason') or verdict.get('refused') or '没有判定面'}）"
+                            " ⇒ 受控拒（「没判成」不许折成「有理由」）"))
+            return out
+        if not verdict.get("genuine"):
+            out.update(refused=ABANDON_DIFFICULTY_NOT_GENUINE,
+                       why=("秘书判定：这不是「难以逾越的困难」/没指出难在哪"
+                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
+                            " ⇒ 受控拒"))
+            return out
+        if not verdict.get("salvaged_from_proof"):
+            out.update(refused=ABANDON_SALVAGED_NOT_FROM_PROOF,
+                       why=("秘书判定：salvaged 里那几条不是从这条命题的原证明里拆出来的"
+                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
+                            " ⇒ 受控拒"))
+            return out
     out.update(salvaged=kept, checked=True,
                why=(f"difficulty：指出困难 + 把旧证明可取之处拆成 {len(kept)} 条引理"
                     f"（{'、'.join(one['stmt_id'] for one in kept)}）"))
@@ -515,10 +700,55 @@ def _statement_of(row: Mapping[str, Any]) -> Any:
                            if k in _S.Statement.__dataclass_fields__})
 
 
+def _replayed_marker(current: Mapping[str, Any], was: Mapping[str, Any], *,
+                     reason: Any, abandon_kind: Any, abandon_basis: Any,
+                     defect_ref: Any, difficulty: Any, salvaged: Any) -> str:
+    """这一笔若按"同一个标记原样重放"来读，会拼出哪一条标记（读不出来 ⇒ 空串）。
+
+    幂等重放的口径必须逐字节比标记，而不是比调用方传了什么：`_abandon_reading`
+    重放的是"标记里那段理由原文"（没有结构化那五格），而第一次写的是结构化 JSON ——
+    两条路拼出来的必须是同一个字符串，否则"重放"会被误读成"改理由"。
+    """
+    try:
+        at = str(was.get("at") or "")
+        structured = any(str(x or "").strip() for x in
+                         (abandon_kind, abandon_basis, defect_ref, difficulty))
+        if salvaged not in (None, "", (), [], {}):
+            structured = True
+        if not structured:
+            return abandon_marker(at=at, reason=str(reason or ""))
+        if isinstance(salvaged, (str, bytes)) or not isinstance(salvaged, Iterable):
+            if salvaged not in (None, "", (), [], {}):
+                return ""      # 形状认不出 ⇒ 不认作幂等（交给闸去拒/去认）
+            items: list[dict[str, str]] = []
+        else:
+            items = []
+            for one in salvaged:
+                if isinstance(one, str):
+                    label, _, sid = one.partition(":")
+                    if not sid:
+                        return ""
+                    items.append({"label": label.strip(), "stmt_id": sid.strip()})
+                elif isinstance(one, Mapping):
+                    sid = str(one.get("stmt_id") or one.get("stmt") or "").strip()
+                    if not sid:
+                        return ""
+                    items.append({"label": str(one.get("label") or ""), "stmt_id": sid})
+                else:
+                    return ""
+        return abandon_marker(at=at, reason=structured_reason(
+            kind=str(abandon_kind or ""), basis=str(abandon_basis or ""),
+            defect_ref=str(defect_ref or ""), difficulty=str(difficulty or ""),
+            salvaged=items))
+    except Exception:  # noqa: BLE001 —— 拼不出来就不认幂等，交给后面的闸
+        return ""
+
+
 def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "",
                       actor: str = "secretary-B", abandon_kind: Any = "",
                       abandon_basis: Any = "", defect_ref: Any = "",
-                      difficulty: Any = "", salvaged: Any = ()) -> dict[str, Any]:
+                      difficulty: Any = "", salvaged: Any = (),
+                      difficulty_judge: Any = None) -> dict[str, Any]:
     """把一条已登记命题标成 `abandoned`（写侧唯一实现：理由与时间一起落盘）。
 
     这是业主 2026-11-01 那句「拿不到V签就得一直改，或者放弃原命题」里
@@ -530,18 +760,19 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     业主逐字：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
     对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
 
-    - `kind ∈ secretary.PROPOSITION_KINDS`（theorem / lemma / proposition / corollary /
-      conjecture）⇒ 必须给 `abandon_kind` + `abandon_basis`（math_error 再要
-      `defect_ref`，difficulty 再要 `difficulty` + `salvaged`），判据是
-      :func:`check_abandon_reason`；不齐 ⇒ 受控拒绝，一个字节都不写。
-    - `concept` / `definition` / 认不出的 kind ⇒ 不受这道闸管（概念不是命题，
+    - 明确非命题的两档（`concept` / `definition`，真身
+      `secretary.NOT_APPLICABLE_KINDS`）⇒ 不受这道闸管（概念没有"条件 ⇒ 结论"，
       谈不上"命题有数学错误"或"证明遇到困难"）：理由仍必须是可解析的放弃标记
       （`schema.Statement.validate` 那条老闸照旧）。
+    - 其余一切 kind（含词表外的 `example` / `remark` / 空串）一律按命题处理
+      （2026-11-07 审计 A3：改前"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
 
-    ## 已经把这一条标成 `abandoned` 的行（幂等重放）不走新闸
-    重放不是一次新的换号：历史行（98 里那批只有自由文本的行）必须还能被幂等重放，
-    否则"先补理由、再关板项"这条路会被闸反锁死。要补理由，走
-    `Secretary.amend_statement_meta`（它会把新理由写进 `quote_reason`）。
+    ## 已经把这一条标成 `abandoned` 的行：幂等重放放行，理由变了必须过闸
+    历史行（98 里那批只有自由文本的行）必须还能被幂等重放（同一个标记原样重交 ⇒
+    `already=True`，不写任何格），否则"先补理由、再关板项"这条路会被闸反锁死。
+    但"已 abandoned"不是一张跳过判据的通行证（2026-11-07 审计 A4）：这一笔要把
+    `quote_reason` 改成另一段文字 ⇒ 走与第一次放弃同一道闸；自由文本改写照旧
+    `abandon_reason_missing`。要补理由，给全那五格（或一份完整的结构化标记）。
 
     返回 `{"checked","abandoned","already","stmt_id","at","reason","marker",
     "changes","refused","why","resubmits","row","form"}`。三态：
@@ -582,22 +813,30 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
         out.update(refused="abandon_unknown_statement",
                    why=f"命题 {sid} 不在册 ⇒ 放弃一条不存在的命题（不新建行）")
         return out
-    if str(current.get("status") or "") == "abandoned":
-        was = parse_abandon(current.get("quote_reason"))
-        if was.get("checked"):
+    already = str(current.get("status") or "") == "abandoned"
+    existing_marker = str(current.get("quote_reason") or "")
+    was = parse_abandon(existing_marker)
+    if already and was.get("checked"):
+        candidate = _replayed_marker(current, was, reason=reason,
+                                     abandon_kind=abandon_kind, abandon_basis=abandon_basis,
+                                     defect_ref=defect_ref, difficulty=difficulty,
+                                     salvaged=salvaged)
+        if candidate and candidate == existing_marker:
             out.update(checked=True, abandoned=True, already=True,
                        at=str(was.get("at") or ""), reason=str(was.get("reason") or ""),
-                       marker=str(current.get("quote_reason") or ""),
+                       marker=existing_marker,
                        row=current, why="这一条早就是 abandoned（幂等：不改任何格）")
             out["resubmits"] = close_resubmits(store, statement_id=sid,
                                                why="命题被明确放弃（幂等重放）")
             return out
-    # ---- 新的一次放弃：命题类必须过结构化理由那一关（业主 2026-11-07）----
+    # ---- 新的一次放弃 / 改写理由：命题类必须过结构化理由那一关（业主 2026-11-07）----
     kind_now = str(current.get("kind") or "").strip().lower()
-    if kind_now in abandon_proposition_kinds():
+    if not is_abandon_exempt(kind_now):
         form = check_abandon_reason(store, kind=abandon_kind, basis=abandon_basis,
                                     defect_ref=defect_ref, difficulty=difficulty,
-                                    salvaged=salvaged)
+                                    salvaged=salvaged, statement_id=sid, at=stamp,
+                                    statement=current, difficulty_judge=difficulty_judge,
+                                    judgment_required=bool(difficulty_judge))
         out["form"] = dict(form)
         if not form.get("checked"):
             out.update(refused=str(form.get("refused") or "abandon_reason_missing"),
@@ -608,8 +847,11 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
                                    defect_ref=str(form.get("defect_ref") or ""),
                                    difficulty=str(form.get("difficulty") or ""),
                                    salvaged=form.get("salvaged") or ())
+    rewrite_at = stamp
+    if already and was.get("checked") and str(was.get("at") or ""):
+        rewrite_at = str(was.get("at"))       # 补理由不改"几时放下的"那一刻
     try:
-        marker = abandon_marker(at=stamp, reason=str(reason or ""))
+        marker = abandon_marker(at=rewrite_at, reason=str(reason or ""))
     except ValueError as exc:
         out.update(refused="abandon_marker_invalid", why=str(exc))
         return out
@@ -628,10 +870,12 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     from . import schema as _S
 
     data = stmt.to_dict()
-    if str(current.get("status") or "") != "abandoned":
+    if not already:
         out["changes"] = [f"status: {current.get('status')} → abandoned",
-                          f"quote_reason: {str(current.get('quote_reason') or '')[:40]!r} "
+                          f"quote_reason: {existing_marker[:40]!r} "
                           f"→ {marker[:60]!r}"]
+    elif existing_marker != marker:
+        out["changes"] = [f"quote_reason: {existing_marker[:40]!r} → {marker[:60]!r}"]
     try:
         with store.tx("statements", actor=str(actor or "secretary-B"),
                       note=f"statement:abandoned:{got.get('at')}") as tx:

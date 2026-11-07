@@ -6639,6 +6639,74 @@
           "to": "{'checked','ok','state','voided','refused','count','requested','by_task_id','why','reason'}; refused[] 每项是 {id, why} 或 {id, code, why}（元素键不计入顶层）; state 取 voided/refused/nothing/unknown 之一"
         }
       ]
+    },
+    {
+      "tools": [
+        "table.update"
+      ],
+      "key": "params",
+      "reason": "2026-11-07（放弃命题闸收口，业主裁定）：`table.update` 新增放弃理由五格 `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged`（只在 `table='statements'` 且 `patch.status=abandoned` 时有意义）；同一批把 `defect_ref` 绑到被放弃的命题号与现行证明的 `proof_sha256`、`difficulty` 加一次秘书语义判定、`salvaged` 加自指 / 时序 / 拆出关系的判据。五键逐项登记；其余 123 件工具的契约一个字未动；`summary` 只在压缩批次内继续压缩（本件 313→158 字符）。",
+      "date": "2026-11-07",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/abandon_basis",
+          "value": {
+            "type": "string",
+            "description": "换号理由正文：math_error 要点名错在第几步、错是什么；difficulty 要说清难在哪。只在 patch.status=abandoned 时用，且那时必填。"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/abandon_kind",
+          "value": {
+            "type": "string",
+            "enum": [
+              "math_error",
+              "difficulty"
+            ],
+            "description": "换号理由的档：math_error（命题有实质数学错误）/ difficulty（证明遇到难以逾越的困难）。只在 patch.status=abandoned 时用，且那时必填。"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/defect_ref",
+          "value": {
+            "type": "string",
+            "description": "math_error 档必填：`verifications/<6 位命题号>.jsonl#v-<6 位验证号>`，命题号必须是**被放弃的这条**；那一行要判「有毛病」且 proof_sha256 与现行证明一致（跨命题 / 陈旧 ⇒ 拒）。"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/difficulty",
+          "value": {
+            "type": "string",
+            "description": "difficulty 档必填：说清难在哪（缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）；秘书会判它是不是真困难、难在哪（没判成或判不是 ⇒ 拒）。"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/salvaged",
+          "value": {
+            "type": "array",
+            "description": "difficulty 档必填且非空：从旧证明里拆出的引理。每条给 label 与 stmt_id（须在册、status=active、kind=lemma、不是这条自己、且在这笔放弃之前就在册；秘书同一问判它是不是从原证明拆出来的）。空数组 ⇒ 受控拒绝。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "stmt_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "stmt_id"
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "summary_lens_before": {

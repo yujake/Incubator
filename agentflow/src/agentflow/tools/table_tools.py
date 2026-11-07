@@ -1872,12 +1872,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
 @tool(
     "table.update",
-    "部分更新一行：只覆盖 patch 里的字段，其余原样保留；不允许改主键。"
-    "`table=\"statements\"` 只放 `status` / `kind` / `quote_reason` 三格就地改"
-    "（整行校验 + 事务）；带正文仍走登记路；其余格拒。"
-    "放弃命题（`status=abandoned`）另要换号理由两格：`abandon_kind`（`math_error` / "
-    "`difficulty`）与 `abandon_basis`，按档再给 `defect_ref` 或 `difficulty`+`salvaged`；"
-    "理由不齐 ⇒ 受控拒（`abandon_reason_missing` 一类码），一个字节都不写。",
+    "部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/"
+    "quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + "
+    "abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1896,16 +1893,19 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
             "defect_ref": {
                 "type": "string",
                 "description": "math_error 档必填：`verifications/<6 位命题号>.jsonl#"
-                               "v-<6 位验证号>`，指向那一行判「有毛病」的判词。"},
+                               "v-<6 位验证号>`，命题号必须是**被放弃的这条**；那一行要判"
+                               "「有毛病」且 proof_sha256 与现行证明一致（跨命题 / 陈旧 ⇒ 拒）。"},
             "difficulty": {
                 "type": "string",
                 "description": "difficulty 档必填：说清难在哪（缺哪条引理 / 哪一步的界对不上"
-                               " / 哪条假设用不上）。"},
+                               " / 哪条假设用不上）；秘书会判它是不是真困难、难在哪"
+                               "（没判成或判不是 ⇒ 拒）。"},
             "salvaged": {
                 "type": "array",
-                "description": "difficulty 档必填且非空：把旧证明里可取之处拆成的引理。"
-                               "每条给 label 与 stmt_id（那条引理必须在册、status=active、"
-                               "kind=lemma）。空数组 ⇒ 受控拒绝。",
+                "description": "difficulty 档必填且非空：从旧证明里拆出的引理。"
+                               "每条给 label 与 stmt_id（须在册、status=active、kind=lemma、"
+                               "不是这条自己、且在这笔放弃之前就在册；秘书同一问判它是不是"
+                               "从原证明拆出来的）。空数组 ⇒ 受控拒绝。",
                 "items": {"type": "object",
                           "properties": {"label": {"type": "string"},
                                          "stmt_id": {"type": "string"}},

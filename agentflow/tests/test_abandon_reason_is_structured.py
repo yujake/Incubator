@@ -96,11 +96,44 @@ def _registry(st: Store):
     return reg
 
 
-def _abandon(st: Store, sid: str = SID, **kw):
-    """走生产的通用写口（`table.update`）放弃一条命题。"""
-    reg = _registry(st)
-    with CND.calling_as("t-b1", "B"):
-        return reg.call("table.update", table="statements", id=sid, **kw)
+def _genuine_verdict(*, genuine: bool = True, from_proof: bool = True,
+                     checked: bool = True, reason: str = "夹具：难度语义判定") -> dict:
+    """difficulty 档的秘书语义判定替身（一次调用；不碰真模型）。
+
+    2026-11-07 审计 B1 之后，难度档多了一问 `Secretary.judge_abandon_difficulty`。
+    本文件的用例只关心"闸用不用这一问、用它的哪个字段"，所以钉一个两态的替身：
+    `genuine`（是不是真困难）与 `salvaged_from_proof`（是不是从原证明拆出来的）。
+    """
+    return {"checked": bool(checked), "genuine": bool(genuine),
+            "where": "缺一条 K 的速降假设" if genuine else "",
+            "salvaged_from_proof": bool(from_proof),
+            "problems": [] if (genuine and from_proof) else ["夹具：这一档不合格"],
+            "decision": "夹具：难度判定", "refused": "",
+            "reason": reason}
+
+
+def _abandon(st: Store, sid: str = SID, *, judge: object = None, **kw):
+    """走生产的通用写口（`table.update`）放弃一条命题。
+
+    `judge` 是这一刀的难度语义判定替身（dict 或 callable）；不给就给"真困难 +
+    从原证明拆出"那一档。真的 `for_role_wired` 走真秘书，这里只替换那一问 ——
+    `amend_statement_meta` / 结构化理由 / 事务都还是生产实现。
+    """
+    real = SEC.Secretary.judge_abandon_difficulty
+    verdict = _genuine_verdict() if judge is None else judge
+
+    def _judge(self, **_kw):
+        if callable(verdict):
+            return dict(verdict(**_kw))
+        return dict(verdict)
+
+    SEC.Secretary.judge_abandon_difficulty = _judge
+    try:
+        reg = _registry(st)
+        with CND.calling_as("t-b1", "B"):
+            return reg.call("table.update", table="statements", id=sid, **kw)
+    finally:
+        SEC.Secretary.judge_abandon_difficulty = real
 
 
 def _row(st: Store, sid: str = SID) -> dict:
@@ -398,9 +431,13 @@ def test_e_removing_the_salvaged_check_makes_c_red(tmp_path, monkeypatch):
     def lenient(store, **kw):
         got = real(store, **kw)
         if got.get("refused", "").startswith("abandon_salvaged"):
+            # 摘掉的是"salvaged 校验"，不是"结构化理由"：形状仍按调用方给的那一份
+            # （否则写出来的标记与重放时拼的那一条逐字节不同，幂等那一档会被读成"改理由"）
             return {"checked": True, "refused": "", "why": "（探针：摘掉校验）",
-                    "abandon_kind": "difficulty", "abandon_basis": "x",
-                    "defect_ref": "", "difficulty": "d", "salvaged": [], "detail": {}}
+                    "abandon_kind": str(kw.get("kind") or "difficulty"),
+                    "abandon_basis": str(kw.get("basis") or "x"),
+                    "defect_ref": "", "difficulty": str(kw.get("difficulty") or "d"),
+                    "salvaged": [], "detail": {}}
         return got
 
     monkeypatch.setattr(SA, "check_abandon_reason", lenient)
@@ -411,7 +448,8 @@ def test_e_removing_the_salvaged_check_makes_c_red(tmp_path, monkeypatch):
     monkeypatch.undo()
     again = SA.apply_abandonment(st, statement_id=SID, reason="理由", at=TS,
                                  salvaged=[], **DIFF)
-    assert again["checked"] is True, "这一行已经被上面那一笔标成 abandoned（幂等）"
+    assert again["checked"] is True and again["already"] is True, (
+        "同一份标记原样重放 ⇒ 幂等（不是「改理由」）")
     _put(st, "000004", label="再来一条")
     fresh = SA.apply_abandonment(st, statement_id="000004", reason="理由", at=TS,
                                  salvaged=[], **DIFF)
@@ -425,8 +463,8 @@ def test_e_removing_the_defect_ref_check_makes_b_red(tmp_path, monkeypatch):
     _verify(st, verdict="成立", fault=False, step=None)
     real = SA._defect_refusal
 
-    def lenient(store, root, ref, basis):
-        detail, code, _why = real(store, root, ref, basis)
+    def lenient(store, root, ref, basis, **_kw):
+        detail, code, _why = real(store, root, ref, basis, **_kw)
         return detail, "", ""
 
     monkeypatch.setattr(SA, "_defect_refusal", lenient)
