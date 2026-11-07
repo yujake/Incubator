@@ -7,14 +7,14 @@
 
 F 侧那半是「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出
 什么结论」。同步到 E 侧之后，判的对象与判据一字不改 —— 仍然是
-:meth:`secretary.Secretary.judge_proposition_form` 那一次判定（本模块**不写第二份**
+:meth:`secretary.Secretary.judge_proposition_form` 那一次判定（本模块不写第二份
 形态判据），只是调用方从 F 的手稿登记换成了 E 的数值证明路线。
 
 ## 闸装在哪（E 侧的「登记/收录之前」）
 
 E 把一条 conjecture 收成 `evidence_kind="proof"` 的凭据，落点是
 `experiments` 那一行（`numericproof.sign_experiment` 现算档位）。所以闸必须在
-**那一行写盘之前**：`AgentE.run_experiment` 在算完 `wants_numeric_proof`、还没开
+那一行写盘之前：`AgentE.run_experiment` 在算完 `wants_numeric_proof`、还没开
 `store.tx` 的时候问一次；不过 ⇒ 受控拒，一个字节都不写（实验行、原始输出、
 ②③ 报告、e-proof 手稿都不落）。
 
@@ -23,7 +23,7 @@ E 把一条 conjecture 收成 `evidence_kind="proof"` 的凭据，落点是
 - `submittable=True`：判定做了、`well_formed=True` ⇒ 放行；
 - `submittable=False` + `checked=True, well_formed=False`：判过了、不合格 ⇒ 受控拒；
 - `submittable=False` + `checked=False`：没判成（没有秘书 / 没缝 / 超时 / 坏 JSON /
-  词表外 / 判定那一问自己抛了）⇒ 同样受控拒（**没判成不许折成没毛病**）。
+  词表外 / 判定那一问自己抛了）⇒ 同样受控拒（没判成不许折成没毛病）。
 
 三档都要落进 `out/secretary/proposition_form.jsonl`（`role="E"`）——
 否则"这一趟没跑过闸"与"跑过了、都合格"在收工读数上不可分。
@@ -47,7 +47,7 @@ class _NumericProofFormGate:
         """E 自己的秘书；拿不到就 `None`（调用方必须 fail-closed）。
 
         与 F 的 `_secretary` 同一条取舍：派生失败不抛（那是环境问题），但"没有秘书"
-        会让这一问**没判成**并如实写进形态台账 —— "没判成"绝不许写成"判过了"。
+        会让这一问没判成并如实写进形态台账 —— "没判成"绝不许写成"判过了"。
         """
         got = getattr(self, "e_secretary", _UNSET)
         if got is not _UNSET:

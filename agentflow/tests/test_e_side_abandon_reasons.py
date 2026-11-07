@@ -8,7 +8,7 @@
 
 ## 这一档与 F 侧那两档的关系
 
-判定口**只有一处**：`statementabandon.check_abandon_reason`（F 侧的 `math_error` /
+判定口只有一处：`statementabandon.check_abandon_reason`（F 侧的 `math_error` /
 `difficulty` 与 E 侧的 `counterexample` / `space_too_large` 都从它出结论）。
 本文件不另写一份"像不像反例 / 空间大不大"的判据 —— 每一格都打桩数过调用次数
 （`test_d_*`）：两个写口（`apply_abandonment` / `Secretary.amend_statement_meta`）
@@ -154,7 +154,7 @@ def test_a_an_experiment_that_did_not_refute_it_is_refused(tmp_path):
 
 
 def test_a_an_experiment_about_another_statement_is_refused(tmp_path):
-    """a 负控 3：那一行确实证否了**另一条**断言 ⇒ 不是这条命题的反例。"""
+    """a 负控 3：那一行确实证否了另一条断言 ⇒ 不是这条命题的反例。"""
     st = _ws(tmp_path)
     _put_statement(st)
     _put_experiment(st, "000003", claim="另一条完全无关的断言", claim_key="other")

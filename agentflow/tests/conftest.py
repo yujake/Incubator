@@ -421,11 +421,11 @@ class FormOkSecretary:
     """`AgentE` 形态闸的测试替身：判"合格"，其余一概不碰（业主 2026-11-07 第二刀）。
 
     为什么要有它：E 的数值证明路线在落库之前过一道形态闸（判据本体是
-    `Secretary.judge_proposition_form`）。本仓大量用例测的是**数值证明链路本身**
+    `Secretary.judge_proposition_form`）。本仓大量用例测的是数值证明链路本身
     （②③ 落盘 / V 的签 / 入库闸 / 收工读数），而那些用例的工作区里没有配模型 key ——
     真秘书派生出来没有判断面，闸会 fail-closed 把整条链路拒掉。那些用例钉这个替身，
     表示"形态这一关已经过了"；闸本身（含没判成 / 判不过 / 反真空）由
-    `tests/test_e_side_proposition_form_gate.py` 用**真的** `Secretary` + 假模型缝覆盖。
+    `tests/test_e_side_proposition_form_gate.py` 用真的 `Secretary` + 假模型缝覆盖。
 
     用法：`e = e_form_gate_ok(AgentE(store, ...))`，或构造之后
     `e.e_secretary = FormOkSecretary()`（`AgentE.e_secretary` 是注入点）。

@@ -74,7 +74,7 @@ ABANDON_SEP = "@"
 # 在盘上是一个可读的读数，而不是靠人去猜那段散文是什么意思。
 
 #: 换号理由的四档。前两档是业主 2026-11-07 原话里的 1 与 2（F 侧注册/放弃闸的
-#: `math_error` / `difficulty`）；后两档是同一句裁定同步到 **E 侧数值证明路线**
+#: `math_error` / `difficulty`）；后两档是同一句裁定同步到 E 侧数值证明路线
 #: 时业主点名的两个理由（2026-11-07 第二刀，逐字）：
 #:
 #: > 「F侧的注册+放弃闸需同步到E侧的数值证明路线，只不过E侧放弃的理由为：
@@ -308,7 +308,7 @@ def _experiment_rows(store: Any) -> tuple[dict[str, dict[str, Any]] | None, str]
 def _counterexample_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     """一行实验上的反例读数（`counterexample` 那一格，原样；没有就空）。"""
     raw = row.get("counterexample")
-    if isinstance(raw, bool) or raw is None:
+    if isinstance(raw, bool) or not raw:
         return {}
     if isinstance(raw, Mapping):
         return dict(raw)
@@ -321,7 +321,7 @@ def _counterexample_reading(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _experiment_claims(row: Mapping[str, Any], target: Mapping[str, Any]) -> bool:
-    """这一行实验检验的是不是**被放弃的这一条**命题（不猜：认不出 ⇒ 不认作这一条）。
+    """这一行实验检验的是不是被放弃的这一条命题（不猜：认不出 ⇒ 不认作这一条）。
 
     两条认法，任一成立就算（与 B 收 E 的证据时"按正文 / 按 claim_key 认"同一族的宽松度）：
     1. `claim_key` 等于这条命题的 `label` 或 `stmt_id`（写侧自己绑的那一格）；
@@ -353,10 +353,10 @@ def _counterexample_refusal(store: Any, eid: str,
     三条同时成立才算"可核的反例"（缺一条都拒，且逐条说清缺哪一条）：
 
     1. `experiment_id` 在 `experiments` 里真的有一行（读不出来 = 没查成，也拒）；
-    2. 那一行**反驳了**这条命题：`result="refutes"`（schema 硬约束：它必须带非空
+    2. 那一行反驳了这条命题：`result="refutes"`（schema 硬约束：它必须带非空
        `counterexample` 且 `negation_kind="disproved"`），或它带着非空 `counterexample`
        读数（历史行 / 别的写法）。只有 `supports` 一类 ⇒ 这不是反例；
-    3. 那一行检验的是**被放弃的这一条**（`claim_key` / `claim` 认，见
+    3. 那一行检验的是被放弃的这一条（`claim_key` / `claim` 认，见
        :func:`_experiment_claims`）—— "引用另一条命题的反例"不是这条命题有反例。
 
     返回 `(detail, refused_code, why)`。
@@ -402,7 +402,7 @@ def _counterexample_refusal(store: Any, eid: str,
 def _has_enumeration_scale(mapping: Mapping[str, Any]) -> bool:
     """这一份空间读数里有没有"规模"（区间 / 枚举量）—— 没有就只是一段文字。
 
-    "枚举空间过于宏大"必须是一个**可核的数字**（多少维、各维多大、一共多少例），
+    "枚举空间过于宏大"必须是一个可核的数字（多少维、各维多大、一共多少例），
     否则"太大了"这种自由文本也能当理由。判据本体全部复用 `numericproof` 的既有读口：
     `_bound_dimensions`（`[lo, hi]` 形态的整数区间）与 `_case_count_of`（枚举例数）。
     """
@@ -425,7 +425,7 @@ def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     """把放弃理由里的 `space` 读成一份可核读数（E 侧放弃理由 2「枚举空间过于宏大」）。
 
     业主 2026-11-07（逐字）：「枚举空间过于宏大以致难以在合理成本内实现」。
-    "宏大"必须是一个**读数**，不是一句形容词 —— 所以这一格只认结构化的空间数据，
+    "宏大"必须是一个读数，不是一句形容词 —— 所以这一格只认结构化的空间数据，
     读口走 `numericproof._space_reading` 的既有字段（`search_bound` / `SPACE_KEYS`），
     这里不新造字段名、不另写一份读法。
 
@@ -433,11 +433,11 @@ def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     - 直接给搜索空间对象（区间 `[lo, hi]` / `n_cases` 一类计数 / `SPACE_KEYS` 里的键）；
     - 给实验行那三格 `{"observations": …, "certificate": …, "search_bound": …}`。
 
-    三态（业主：**读数读不到 ⇒ 受控拒，fail-closed**）：
+    三态（业主：读数读不到 ⇒ 受控拒，fail-closed）：
     - `abandon_space_required`：这一格是空的；
     - `abandon_space_unreadable`：给的不是对象 / 对象里读不出任何空间读数；
     - `abandon_space_not_a_reading`：读出来的是一段文字（或没有任何规模数字）——
-      "太大了"这种词面**不能**代替读数。
+      "太大了"这种词面不能代替读数。
 
     返回 `(detail, refused_code, why)`；成功时 code 为空。
     """
@@ -536,10 +536,10 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     |---|---|---|
     | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
     | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类；不许指被放弃的这条自己；必须在这笔放弃之前就在册（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的） |
-    | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是**这一条**命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
+    | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是这一条命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
     | `space_too_large` | `space` + `abandon_basis` | `space` 必须是结构化读数（走 `numericproof._space_reading` 的既有字段），且读得出规模（`[lo, hi]` 区间或枚举例数）；读不到 / 只有文字 ⇒ 受控拒（fail-closed） |
 
-    后两档是 **E 侧数值证明路线**的两条放弃理由（业主 2026-11-07 第二刀），判定口与
+    后两档是 E 侧数值证明路线的两条放弃理由（业主 2026-11-07 第二刀），判定口与
     前两档是同一个函数：这里不写第二份"像不像反例 / 空间大不大"的判据。
 
     ## `statement_id` / `at` 为什么是必填的

@@ -6,10 +6,10 @@
 > 「F侧的注册+放弃闸需同步到E侧的数值证明路线」
 
 F 侧那一半是「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件
-导出什么结论」。同步到 E 侧之后：**判据本体不变**，仍是
+导出什么结论」。同步到 E 侧之后：判据本体不变，仍是
 `Secretary.judge_proposition_form` 那一次判定（`test_d_*` 打桩数调用点，证明两处用的是
 同一份实现），只是调用方换成 E 的数值证明路线 —— 在 `experiments` 那一行（以及它
-带出的 ②③ 报告 / e-proof 手稿）**写盘之前**判一次。
+带出的 ②③ 报告 / e-proof 手稿）写盘之前判一次。
 
 ## 判据
 
@@ -109,7 +109,7 @@ def _write(store: Store, rel: str = SCRIPT_REL, body: str = EXHAUSTIVE_PROBE) ->
 
 
 def _e(store: Store, seam: _Seam | None = None) -> AgentE:
-    """E 的秘书用**真的** `Secretary`（`judge_proposition_form` 本体），只换模型缝。"""
+    """E 的秘书用真的 `Secretary`（`judge_proposition_form` 本体），只换模型缝。"""
     sec = SEC.Secretary("E", root=store.root, store=store, seam=seam,
                         enable_model=True)
     return AgentE(store, config={}, workspace_root=store.root, secretary=sec)

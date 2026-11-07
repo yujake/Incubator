@@ -376,16 +376,16 @@ class _RunExperiment:
         # ---- [4e] E 侧形态闸（业主 2026-11-07 第二刀：「F侧的注册+放弃闸需同步到
         # E 侧的数值证明路线」）
         #
-        # 判什么：这条**描述**有没有写清「从什么条件导出什么结论」。判据本体只有一处
+        # 判什么：这条描述有没有写清「从什么条件导出什么结论」。判据本体只有一处
         # （`Secretary.judge_proposition_form`，与 F 的手稿登记闸同一个判定口），本文件
         # 只负责"在什么时候问"与"不过怎么办"。
         #
-        # 什么时候问：这一条实验**要走数值证明路线**的时候 —— 判据仍是
+        # 什么时候问：这一条实验要走数值证明路线的时候 —— 判据仍是
         # `numericproof.wants_numeric_proof`（method=exhaustive_search / 布尔 true 的
         # exhaustive / 调用方声称 proof，三者任一）。一般数值实验（numeric / cross_check）
         # 不产出 proof 级凭据、不落 statements 的 proof 行 ⇒ 不过这道闸。
         #
-        # 位置：`store.tx` **之前**（[5] 才开事务、才写实验行 / 原始输出 / ②③ 报告 /
+        # 位置：`store.tx` 之前（[5] 才开事务、才写实验行 / 原始输出 / ②③ 报告 /
         # e-proof 手稿）⇒ 判不过时一个字节都不写。没判成（没有秘书 / 没缝 / 超时 /
         # 坏 JSON）同样是受控拒，且形态台账会留一行 `role="E"` 的"没判成"读数。
         _wants_proof = _NP.wants_numeric_proof(
