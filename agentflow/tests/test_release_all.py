@@ -1829,7 +1829,7 @@ def doc_test_reference_problems(docs: dict[str, str]) -> list[str]:
     缺陷形态（`R7-R6-4` 实测）：`DEVELOPMENT.md` 的 `LIVE-READINGS` 导语点名`test_documented_live_readings_match_the_repo`，
     而全仓没有这个名字 ——判据其实在（真名见那一行），只是文档指不到 ⇒ 照着核对的人会得出相反的结论。这与 `R6-AN-3`（文档指一个不存在的工具名）同族，所以处置也一样：让文档的每个指路都被一条判据核过。
 
-    口径：`tests/xxx.py::test_yyy` 要求文件与函数都在；裸 `test_xxx` 要求它至少能解析成 `tests/test_xxx.py` 文件、或某个测试文件里的 `def test_xxx(`；
+    口径：`tests/xxx.py::test_yyy` 要求文件与函数都在；裸 `test_xxx` 要求它至少能解析成 `tests/test_xxx.py` 文件、或某个测试文件里的 `def test_xxx(`（形态示例，非指代）；
     裸名字若出现在路径形态里（`tests/test_xxx.py`，形态示例，非指代）而文件不在盘上，报的就是"点名的文件不存在" ——读者照它去跑命令，跑不到是最直接的那一种坏。一段文字里一个测试对象都没点名 ⇒
     报"失去对象"（空输入不许读成通过）。
 
