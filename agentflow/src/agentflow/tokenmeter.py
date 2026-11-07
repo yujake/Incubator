@@ -120,77 +120,14 @@ def _settled_mark() -> str:
 def reconcile_usage(store: Any) -> dict:
     """`Σ tasks.usd` 与 `Σ usage_ledger.usd` 的对账读数（只读；差值逐笔点名）。
 
-    ## 它回答什么（判据 a 的机器读数）
-
-    两处各记一笔账（`usage_ledger` 是权威账、`tasks.tokens/usd` 是回写读数）时，
-    "相差多少"不是结论 —— 必须能说出"差在谁的头上、为什么"。所以这里给三栏：
-
-    | 栏 | 内容 |
-    |---|---|
-    | `ledger_usd` / `tasks_usd` / `diff_usd` | 两个总额与它们的差（微美元整数相等才算 `equal`） |
-    | `unattributed` | `task_id` 为 `None` 的账（逐笔 `usage_id` 点名）：这些钱不属于任何一行 `tasks` |
-    | `named_residual` | 逐行点名的差额：`task_id`、`status`、`tasks.usd`、账本在该号上的汇总 |
-
-    ## 为什么只有"未结算 / 没有台账号"才允许差
-
-    仍在跑的那一行还没有终态，所以它的 `tasks.usd` 可能落后于账本（本次修复之后
-    每次记账都会回写，这种落后只剩"记账与回写之间的那一瞬"）；`task_id=None` 的账
-    没有可回写的行。两种都必须逐笔点名，不许折成一句"总体对得上"——
-    `usage_task_total_mismatch`（`verify.py`）判的是逐行相等，这里补的是"总额差在哪"。
-
-    第三个允许出现的名字是 `dangling`：账本挂着一个 `tasks` 里不存在的号。那是
-    写入侧的缺陷（`verify.dangling_usage_task` 会报 error），这里只如实点名。
+    实现在 `modelcost.reconcile_usage`：对账是"花销口径"那一侧的事（它读的是
+    `usage_ledger` 与 `tasks` 两本账的逐笔差额），而 `modelcost` 本来就只向下
+    依赖本模块 ⇒ 搬过去不会成环。这里留一个同名转发，调用方（`TM.reconcile_usage`）
+    的 import 面一个字都没变。
     """
-    ledger = [dict(r) for r in store.rows("usage_ledger")]
-    tasks = [dict(r) for r in store.rows("tasks")]
-    task_rows = {str(r.get("task_id") or ""): r for r in tasks}
-    per_task: dict[str, int] = {}
-    unattributed_micro = 0
-    unattributed_ids: list[str] = []
-    ledger_micro = 0
-    for row in ledger:
-        amount = _micro(row.get("usd"))
-        ledger_micro += amount
-        tid = str(row.get("task_id") or "")
-        if not tid:
-            unattributed_micro += amount
-            unattributed_ids.append(str(row.get("usage_id") or ""))
-            continue
-        per_task[tid] = per_task.get(tid, 0) + amount
-    unattributed = {"count": len(unattributed_ids),
-                    "usd": round(unattributed_micro / 1_000_000, 6),
-                    "usage_ids": unattributed_ids}
-    tasks_micro = sum(_micro(r.get("usd")) for r in tasks)
-    named: list[dict] = []
-    dangling: list[dict] = []
-    for tid, amount in sorted(per_task.items()):
-        row = task_rows.get(tid)
-        if row is None:
-            dangling.append({"task_id": tid, "ledger_usd": round(amount / 1_000_000, 6)})
-            continue
-        declared = _micro(row.get("usd"))
-        if declared == amount:
-            continue
-        named.append({
-            "task_id": tid,
-            "role": str(row.get("role") or ""),
-            "status": str(row.get("status") or ""),
-            "tasks_usd": round(declared / 1_000_000, 6),
-            "ledger_usd": round(amount / 1_000_000, 6),
-            "diff_usd": round((amount - declared) / 1_000_000, 6),
-            "settled": _settled_mark() in [str(x) for x in (row.get("inputs") or [])],
-        })
-    return {
-        "ledger_rows": len(ledger),
-        "task_rows": len(tasks),
-        "ledger_usd": round(ledger_micro / 1_000_000, 6),
-        "tasks_usd": round(tasks_micro / 1_000_000, 6),
-        "diff_usd": round((ledger_micro - tasks_micro) / 1_000_000, 6),
-        "equal": ledger_micro == tasks_micro,
-        "unattributed": unattributed,
-        "named_residual": named,
-        "dangling": dangling,
-    }
+    from .modelcost import reconcile_usage as _impl
+
+    return _impl(store)
 
 
 def row_with_idem_key(rows: Any, idem_key: str) -> dict | None:

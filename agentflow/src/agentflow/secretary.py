@@ -1630,6 +1630,32 @@ def _bits_bear_evidence(bits: Any) -> bool:
     return False
 
 
+def _semantic_quote_evidence_refusal(body: Mapping[str, Any]) -> dict[str, str]:
+    """`quote_mode="semantic"` 但缺证据 ⇒ `{refused, reason}`；不适用/证据齐 ⇒ `{}`。
+
+    语义那一档必须留证据：`quote_span`（来源那一段逐字正文）与
+    `quote_call_sha256`（那次语义判定的调用记录）缺一不可 —— 说不出对着哪一段、
+    哪一次判的，就不算通过（三态纪律：没查不许折成查过了没问题）。
+
+    为什么单列成函数：它此前内联在 `Secretary.record_statement` 里，而那方法在
+    2026-11-07 的体量读数里刚好越过 200 行基线；判据（`_normalize_quote_mode`）
+    与拒码都没变，只是把这一格搬到"写库前可读拒绝"自己的函数里。
+    """
+    if str(body.get("quote_mode") or "") != "semantic":
+        return {}
+    span = str(body.get("quote_span") or "").strip()
+    call = str(body.get("quote_call_sha256") or "").strip()
+    if span and call:
+        return {}
+    miss = "quote_span（来源那一段逐字正文）" if not span else \
+        "quote_call_sha256（那次语义判定的调用记录）"
+    return {"refused": "quote_evidence_missing",
+            "reason": (f"标了 quote_mode='semantic' 但缺 {miss} —— 语义那一档"
+                       "必须留证据：说不出对着哪一段、哪一次判的，就不算通过。"
+                       "补上这两栏，或把 quote_verified 改成 None/False 并写明"
+                       "为什么（三态纪律：没查不许折成查过了没问题）")}
+
+
 def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
                               manuscript_path: Any = "", proof_text: Any = "",
                               bits: Mapping[str, Any] | None = None
@@ -7469,23 +7495,12 @@ class Secretary:
             return out
         # ---- D1（2026-10-22）：语义那一档的证据缺了就不写，并给具名理由。
         #
-        # 这一格此前落到 `Statement.validate()` 里抛 `ValueError`（"标了 semantic 而缺
-        # span/call"），而它抛在事务内 ⇒ 调用方拿到的是 `write_failed` 这个通用码，
-        # 分不清"参数没给齐"与"盘坏了"。判据仍是同一处（`_normalize_quote_mode`），
-        # 这里只是把它提前成一条写库前的可读拒绝。
-        _mode = str(body.get("quote_mode") or "")
-        if _mode == "semantic":
-            _span = str(body.get("quote_span") or "").strip()
-            _call = str(body.get("quote_call_sha256") or "").strip()
-            if not _span or not _call:
-                _miss = "quote_span（来源那一段逐字正文）" if not _span else \
-                    "quote_call_sha256（那次语义判定的调用记录）"
-                out.update(refused="quote_evidence_missing",
-                           reason=(f"标了 quote_mode='semantic' 但缺 {_miss} —— 语义那一档"
-                                   "必须留证据：说不出对着哪一段、哪一次判的，就不算通过。"
-                                   "补上这两栏，或把 quote_verified 改成 None/False 并写明"
-                                   "为什么（三态纪律：没查不许折成查过了没问题）"))
-                return out
+        # 判据本体在 `_semantic_quote_evidence_refusal`（拆出来只为让本方法留在
+        # "一屏半"之内；2026-11-07 体量基线回到 95）。
+        _semantic_refusal = _semantic_quote_evidence_refusal(body)
+        if _semantic_refusal:
+            out.update(**_semantic_refusal)
+            return out
         # ---- 出处档的词表：与 B 的 `bad_origin` 同一个码（路由过来的非法载荷也要
         # 在"正文闸"之前被按这一格拒：否则拒信会说"缺手稿签"，而真正错的是 origin）。
         _origin_now = str(body.get("origin") or "")

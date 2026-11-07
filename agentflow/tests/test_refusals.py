@@ -75,24 +75,11 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "攻坚台账 `reports/attack-<plan_id>.md` 写盘失败（`_report_append`）："
         "执行了、没写成 ⇒ 执行失败；而且它**不许**让整轮崩掉，返回值只说"
         "「这一行没落盘」，由调用方在 `detail` 里如实写出来",
-    # 注（2026-10-26，H3）：这里原本还有一条 `statement_write_failed`。`R2b-⑬`
-    # 把 `_proof_outlet` 那两个手写分支并成了一条（写盘失败与"假 proof_review 拒收"
-    # 现在都走 `statement_handoff_failed` / `statement_handoff_refused` 那两档），
-    # 盘上再也扫不到这个名字 ⇒ 按本文件"登记过期就删"的规矩退役这条登记。
-    # 这不是放宽：告警方向没变 —— 今天若有谁再手写一个 `ok=False` 而没登记，
-    # 它照样落进 `missing`。
-    ("agent_f/core.py", "statement_handoff_failed"):
-        "论证落 `statements` 失败（`_proof_outlet` 的事务里抛了，含 store 写入期那道"
-        "「假 proof_review 拒收」）：这是「写不进表」，不是「这次调用不成立」——"
-        "同一条纪律：F 的论证没有出口要如实说，而不是把参数问题推给调用方",
-    # 2026-11-04：上面那个键在盘上出现两处（同一 `(模块, kind)` 只能写一条理由 ⇒
-    # 处数记进 `_REPEAT_COUNTS`）。这一处是把证明交给 B 的登记那一笔时抛了
-    # （`_hand_proof_to_b` 里 `B.register_statement` 的异常，含 B 的秘书不可达）：这是
-    # 「这一跳没做成」，不是「F 的参数不对」⇒ 执行失败，不许冒充一次拒绝。
-    ("agent_f/core.py", "statement_handoff_refused"):
-        "B 的登记按它自己的判据拒了这一笔（`must_start_as_conjecture` / "
-        "`dependency_section_*` 等）：拒绝是兜底方给的，不是 F 的调用不成立 ⇒ "
-        "原样带回它的理由，不折成 F 的 `refused`",
+    # 注（2026-11-07，解耦落地后的第二次退役）：`statement_handoff_failed` /
+    # `statement_handoff_refused` 这两条登记也退役了 —— 那两个手写 `{"ok": False}`
+    # 分支现在走 `refusals.refuse`（`_hand_proof` 的受控拒），盘上再也扫不到这两个
+    # 名字。按本文件"登记过期就删"的规矩退役；告警方向没变：再手写一个没登记的
+    # `ok=False` 照样落进 `missing`。
     # `agent_c/path_shape.py` 的 `_no_spine()`（2026-10-22 登记）：它是子结果，
     # 不是动作的终态 payload —— `{"ok": False, "nodes": [], "edges": [], "length": 0}`
     # 在那一支里的意思逐字是"这条候选路径没算出一条承重脊"（没走到根 / 成环 / 超深度 /
@@ -173,13 +160,12 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 与 `manuscript`（`reports/e-proof-<号>.md` 没落，2026-11-03 E 的手稿读数落地时
     # 成为第二处）。两处 kind 都是空串，所以靠这张表记处数。
     ("agent_e/run_experiment.py", ""): 2,
-    # 2026-11-04（件 A 那一批补登）：同一 `(模块, kind)` 在盘上是两处 ——
-    # `_proof_outlet` 落 `statements` 失败、`_hand_proof_to_b` 把证明交给 B 时抛。
-    # 登记表只能给这个键写一条理由（两处同属「这一跳没做成」），处数记在这里。
-    ("agent_f/core.py", "statement_handoff_failed"): 2,
     # 2026-11-04（同上）：`agent_d/write_report.py` 的 `rec` 是逐行记录的读数格，
     # 盘上有两处 —— `statement` 那一张与 `experiment` 那一张；两处 kind 都是空串。
-    ("agent_d/write_report.py", ""): 2,
+    # 2026-11-07（解耦落地）：第三处 —— F 的登记条目（`mss:` 行）也是同形的读数格
+    # （`_deliver_f_manuscript_row` 的 `rec`：还没递出去时 `ok=False`，它不是动作返回、
+    # 不进台账）。计数 2 → 3，理由与该表里那两处逐字相同。
+    ("agent_d/write_report.py", ""): 3,
 }
 
 
@@ -327,3 +313,5 @@ def test_the_three_refusing_actions_really_return_a_controlled_refusal(tmp_path)
 
     assert st.rows("literature") == [] and st.rows("search_requests") == [], (
         "被拒的调用不许留下半行")
+
+

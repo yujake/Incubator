@@ -534,7 +534,8 @@ def structured_reason(*, kind: str, basis: str, defect_ref: str = "",
              for one in (salvaged or ())]
     if items:
         payload["salvaged"] = items
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                      default=str)
 
 
 def parse_abandon_reason(text: Any) -> dict[str, Any]:
@@ -910,4 +911,5 @@ def close_resubmits(store: Any, *, statement_id: str, why: str) -> dict[str, Any
     except Exception as exc:  # noqa: BLE001 —— 作废失败不许带走"放弃"这件事本身
         return {"checked": False, "closed": [], "problems": [f"{type(exc).__name__}: {exc}"],
                 "reason": "重送项作废没跑成（放弃这一笔已经落盘）"}
+
 

@@ -171,7 +171,7 @@ def _run_f_proof(store: Store, *, cite: str = f"stmt:{THEOREM_A}") -> dict:
     """F 真走一轮 proof：写稿 → 秘书洗 → 落手稿登记条目（命题号还没发）。
 
     2026-11-07（解耦 + 裁边）：F 不再直接登记 statements（`F→B` 那条边已被裁去），
-    所以这一轮拿到的是一份**手稿登记条目**；命题号由 B 在 V 签之后按 sha 认领时才发。
+    所以这一轮拿到的是一份手稿登记条目；命题号由 B 在 V 签之后按 sha 认领时才发。
     """
     f = AgentF(store, config={"workspace_root": store.root},
                llm=FakeSeam(_proof_payload(cite)))
@@ -260,7 +260,7 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
     _add_statement(store, THEOREM_A, label="定理甲")
     proof = _run_f_proof(store)
     # 2026-11-07（解耦 + 裁边）：F 那一侧只落手稿登记条目（不写 statements / dependencies）
-    # ⇒ 这一笔 D 携带是**唯一**可能把这条命题带进台账的动作（不是"边早就在"的真空绿）。
+    # ⇒ 这一笔 D 携带是唯一可能把这条命题带进台账的动作（不是"边早就在"的真空绿）。
     d = _d_with_b(store)
     d.write_report()
     delivery = d.last_delivery
@@ -504,7 +504,7 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)
     assert problems == [] and ledger, (problems, ledger)
-    # 2026-11-07（唯一交稿链）：B 的第一笔登记是这条命题的**首次**登记，放行它的那一签
+    # 2026-11-07（唯一交稿链）：B 的第一笔登记是这条命题的首次登记，放行它的那一签
     # 是 pending 台账里的「先签后登记」（按正文 sha 认领，不在 `verifications/<号>.jsonl`
     # 里另起一行）⇒ 这一趟 V 只落 3 行（逐转一行；前两转只落台账、第三转发签）。
     # 旧链那 `+1` 是"命题已在册、夹具补一签"那一档，本链不再发生 —— 这里不许写成 4 行。

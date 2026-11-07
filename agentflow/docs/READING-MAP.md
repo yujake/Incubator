@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-06，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-07，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **271 个 `.py`、256,927 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,001 行** —— 批 R40 把它补进了 §3 的表；
+> **272 个 `.py`、260,017 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,001 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -255,6 +255,7 @@
 | `manuscripts.py` | **交接手稿**的唯一实现（`draft/37` §134 用户口径 + `draft/39` §C1 存储改追加式）：账本 `handoffs.jsonl`（在 `manuscripts/` 下）**一行一份交接**（`to`/`summary`/`body` 必填），编号从 `0000` 起**由脚本在锁内分配**（扫"账本行 + 旧 `.md` 文件"的并集），并发写不撞号不覆盖；旧格式 `<编号>-<谁>to<谁>.md`（给所有人写 `toALL`）仍然读得回来但不算账本行。为什么要它：交接的"派活依据"与"溯源"此前只活在对话里 —— 写了手稿之后每一跳都能被第三方从盘上复核。写走循环形状 `handoff`（要知道"我是谁"，而工具层拿不到 per-call 身份），收工时的强制 `notify` 表也走它；读/列走 `tools/manuscript_tools.py`（A–H 八面，M 用 `fs.*` 白名单读同一批文件），按编号/收发/时间/引用检索走 `scripts/manuscripts_query.py`（顺手打被引用命题的五元位快照） |
 | `bmanuscript.py` | **B 的改写手稿：可签的载体**（业主 2026-11-04 裁定 A 甲「B 的改写要有可签的载体」）：B 改写在册证明时，正文与在册那一版不同 ⇒ 旧签读成 stale、台账行也盖不住新正文；`AgentB.register_statement` 把 B 交上来的正文渲染成 `reports/b-proof-<命题号>.md`（与 F / E 同形：`## 命题` / `## 证明` / `## 依赖` 三节），V 读这一份、三转成立后由收方秘书（`secretary:B`）把签块落回稿里，B 再带这份稿入库 ⇒ `vsigns.manuscript_sign_standing` 读到「签到位」。写侧读数三档：`written` / `preserved+signed`（目标稿已是同一份正文的已签版，一个字节都不动）/ `problem`（目标稿已签而这一笔是另一份正文 ⇒ 不覆盖、把冲突留在读数里）。B 没有文件写口，稿由框架在登记入口落盘。判据 `tests/test_b_rewrite_manuscript_gets_signed.py` |
 | `manuscriptform.py` | **证明手稿的唯一实现（F 的 `reports/f-proof-<号>.md` 与 B 的 `reports/b-proof-<号>.md` 共用）**（业主 2026-11-04「两族在形式上必须完全统一」）：命名（`<prefix>-proof-<号>[-p<N>].md`，解析只走 `vsigns.parse_manuscript_name`）、渲染（`## 命题` / `## 证明` / `## 依赖` 三节同一段代码，前缀与角色名只是参数）、搬签块（`carry_sign_block` 按 sha 相符才搬、第 9 格手稿号按新名重算）、落盘事务（写稿 + `## 依赖` 段 + `dependencies` 边同成功同失败，落边失败把刚写的稿回滚）、拒信码（`multiple_propositions` / `not_washed` / `bad_manuscript_name` / `no_proof_section` / `dependency_section_missing`）全部只在这里定义一次。两个转发壳：`agent_f/manuscript.py`（F 侧）与 `bmanuscript.py`（B 侧）不另写一份。判据 `tests/test_f_and_b_manuscripts_are_one_implementation.py` |
+| `proofregistry.py` | **手稿登记与重写的唯一入口**（业主 2026-11-07：「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」）：`register_or_rewrite` 决定"新命题登记一次 / 同一条命题只换 `## 证明`"（新命题过 F 秘书形态闸、`proof_no` 递增、正文 sha 重算、版本 append-only）；`parse_entry` 读稿头登记元信息（命题号 / 正文 sha / 命题指纹 / 证据种类 / 登记时间 / `- 版本：`）；`same_slot_reading` 是"这一笔是不是同一条命题的槽"的判据（命题号 → 计划+子目标 → 标签，且必须有登记元信息 —— 手写带 `- 标签：` 的头不算）；`entries_on_disk` / `proof_revisions` 是收工读数。路径由 `manuscriptform.name_reading` 定，身份由本模块定，合起来是「一份命题只住一份稿」的全部实现。判据 `tests/test_proof_registration_is_decoupled.py` |
 
 ### 第 3 层 · 工具面（角色手上的"手与眼"）
 
@@ -443,7 +444,7 @@
 | `agent_loop.py` | 14001 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_tier`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1087 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3369 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
-| `agent_skills.py` | 4224 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
+| `agent_skills.py` | 4358 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
 | `providers.py` | 3366 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2940 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
 | `schema.py` | 4056 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |

@@ -2895,6 +2895,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                     "抖动 + `connected` 归零 + `settle`/`_fire` 累计 `waited_total` 与总等待"
                     "上限）；唯一调用方是 `agent_loop.AgentLoop._ask_step_with_reconnect`，"
                     "等待走 `clock.await_io`（真耗墙钟、进主时钟的账）",
+    # 2026-11-07（解耦落地）：手稿登记（"登记一次、证明改 N 次"的唯一写入口）。
+    # 为什么必须是顶层模块：它同时被 F（写手稿）、B（改写 b-稿）、D（按登记条目携带）、
+    # closing（收工读数 `proof_revisions`）四处读/写，任何一处各写一份"这份稿是不是在册"
+    # 的判据，都会让"同一命题被登记两次"与"重写被读成新登记"这两个形态各有一个答案；
+    # 而它不碰 store、不发模型调用（纯文件 + 头部元信息），单独成模块才能被
+    # `tests/test_proof_registration_is_decoupled.py` 直接当函数核。
+    "proofregistry.py": "手稿登记与重写的唯一入口：register_or_rewrite（新命题过闸一次；"
+                        "同槽位后续只换 `## 证明`）/ parse_entry（稿头元信息）/ "
+                        "same_slot_reading（槽位识别：命题号 → 计划+子目标 → 标签，且必须有"
+                        "登记元信息）/ entries_on_disk / proof_revisions（收工读数）—— "
+                        "`manuscriptform.name_reading` 定路径、本模块定身份，两处合起来是"
+                        "「一份命题只住一份稿」的全部实现",
 }
 
 

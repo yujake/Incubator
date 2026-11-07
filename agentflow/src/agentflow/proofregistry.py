@@ -292,7 +292,7 @@ def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
 
 def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_id: Any = "",
               sid: Any = "", label: Any = "") -> bool:
-    """盘上这一条登记条目与这一笔要写的是不是**同一条命题的槽**。
+    """盘上这一条登记条目与这一笔要写的是不是「同一条命题的槽」。
 
     三种身份键，按优先级取第一个两边都有的：
 
@@ -302,7 +302,7 @@ def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_
        的不同子目标读成同一槽；
     3. `- 标签：`：只有前两样都缺时才用（旧稿 / 手写稿的兜底）。
 
-    **调用方必须先确认 `entry["checked"]`**（有正文 sha / 命题指纹 / 版本记录）：
+    调用方必须先确认 `entry["checked"]`（有正文 sha / 命题指纹 / 版本记录）：
     手写稿可以给自己写一行 `- 标签：`，但它没有登记元信息，不是登记条目
     （A3 的判据 `test_a_handwritten_labelled_head_is_not_an_entry`）。
 
@@ -310,7 +310,7 @@ def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_
     （`agent_f/core.py::_apply_round` → `proof_manuscript` 先写一份计划稿）那一份
     稿头没有 `- 标签：`（渲染时 `label=""`）⇒ 每一轮都读成"新命题" ⇒ 每轮重新登记
     （实测 3 轮 `modes=[registered×3]`、闸 3 次、`proof_no=[1,1,1]`）。
-    槽位从**稿头元信息**取，于是"传不传 `manuscript_text`"不再决定解耦成不成立。
+    槽位从稿头元信息取，于是"传不传 `manuscript_text`"不再决定解耦成不成立。
     """
     want_sid = str(statement_id or "").strip()
     have_sid = str(entry.get("statement_id") or "").strip()
@@ -330,11 +330,11 @@ def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_
 def _find_registered_text(root: Any, *, family: Any, statement_id: Any = "",
                           plan_id: Any = "", sid: Any = "", label: Any = "",
                           exclude: Any = "") -> dict[str, Any]:
-    """在 `reports/` 下按槽位找一份已在册的条目（拿号前后是**同一份稿**，不换槽）。
+    """在 `reports/` 下按槽位找一份已在册的条目：拿号前后是同一份稿，不换槽。
 
     返回 `{"path", "text", "entry"}`；找不到 ⇒ `{}`。只在规范路径上没有条目时用：
     命题在 V 签之后被 B 收录、拿到命题号，落点从 `f-proof-plan-<计划>.md` 变成
-    `f-proof-<号>.md` —— 这一条不认旧路径，就会在拿号之后**重新登记一次**
+    `f-proof-<号>.md` —— 这一条不认旧路径，就会在拿号之后重新登记一次
     （版本历史从 1 重来、形态闸再跑一次），而"一份命题只住一份稿"就断了。
     """
     prefix = _MF.PREFIX.get(str(family or ""), "")
@@ -693,4 +693,6 @@ def registration_note() -> str:
     """提示词里那一句（业主 2026-11-07 逐字口径的正面表述）。"""
     return ("你登记一条**新命题**时，你的秘书会先看它是否写清了「从什么条件导出什么结论」；"
             "已经在登记里的命题**重写证明**时不再过这一步 —— 改证明不需要重新登记。")
+
+
 

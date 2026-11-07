@@ -239,7 +239,7 @@ def test_the_retry_budget_is_read_from_the_plan_not_hardcoded(store: Store):
 # ============================================================ P3-6：proof 的出口
 #
 # 2026-11-07（解耦 + 裁边）：F 的 proof 档不再直接把命题交给 B 登记（`F→B` 那条边已
-# 被裁去）。出口现在是**手稿登记条目**：F 落 `reports/f-proof-plan-<计划号>.md`，
+# 被裁去）。出口现在是手稿登记条目：F 落 `reports/f-proof-plan-<计划号>.md`，
 # 命题号由 B 在 V 签之后按正文 sha 认领时才发。下面两条按新链路钉同等强度：
 # 生成的是"一条命题、一行台账"，只是那一行由 B 在认领时写。
 

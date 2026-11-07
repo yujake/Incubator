@@ -1198,7 +1198,6 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
     "_notify_gate",               # 2026-10-07 改名成 `notify_reading`（旧名在说谎：它不打回）：`agent_loop.py` 里那段改名留痕必须点名旧名 —— 留痕按纪律必须点名被删/被改的东西
     "_BASE_",                     # 别名前缀（不是完整标识符）
-    "_impl",                      # 被转发的名字（`lint_rules.py` 的解释）
     "_private",                   # 判据片段（不是标识符）
     "_accepts_",                  # 测试名约定片段（不是标识符）
     "_rejects_",                  # 同上
@@ -2303,3 +2302,4 @@ def test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference() ->
         "本文件里那处裸提及把别处的悬空引用『治好』了 ⇒ 这盏灯又变成了假绿。"
         f"（期望多出恰好一条含 `{_PROBE_TOKEN}` 的 dangling，实得：{new_items}）"
     )
+

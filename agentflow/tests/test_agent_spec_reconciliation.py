@@ -208,7 +208,7 @@ def test_f_dispatching_b_is_structurally_refused_before_b_sees_it() -> None:
     """业主 2026-11-07 裁边的行为面：F 派 B ⇒ 策略层 `forbidden_edge`（B 根本收不到）。
 
     为什么这条判据必须落在 `policy.check` 而不是 B 的入口：B 的
-    `f_proposition_must_be_a_manuscript` 是**第二道防线**；裁边之后，F 的召唤在
+    `f_proposition_must_be_a_manuscript` 是「第二道防线」；裁边之后，F 的召唤在
     "边不存在"这一层就该被挡住（一道结构性拒信，而不是"进了 B 的门再被拒"）。
     反真空：把 `F→B` 加回能力面 ⇒ 同一笔召唤不再被 `forbidden_edge` 拒（这条红）。
     """

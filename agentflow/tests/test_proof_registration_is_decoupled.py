@@ -410,7 +410,7 @@ def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
 # ================================================================ A1 / A2 / A3
 #
 # 2026-11-07 业主审计（a02d4682）：上面 a/d 那两条走的是 `_hand_proof(manuscript_text="")`，
-# 而**生产路径**是 `_apply_round` → `proof_manuscript` 先写一份计划稿 → 洗稿写回盘
+# 而生产路径是 `_apply_round` → `proof_manuscript` 先写一份计划稿 → 洗稿写回盘
 # → 才登记。那两笔写盘都把登记条目的头部（`- 标签：` / 正文 sha / 版本）覆盖成普通稿，
 # 于是每一轮都读成"新命题"：实测 3 轮 `modes=[registered×3]`、形态闸 3 次、
 # `proof_no=[1,1,1]`、版本历史只有 1 条 —— 解耦在默认路径上没有生效。
@@ -521,7 +521,7 @@ def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
 def test_a3_a_handwritten_labelled_head_is_not_a_registration_entry(tmp_path):
     """A3：手写一份带 `- 标签：` 的头，不许被认成登记条目。
 
-    判据：`- 标签：` 只是作者给的一个粗键；"是不是登记条目"看的是**登记元信息**
+    判据：`- 标签：` 只是作者给的一个粗键；"是不是登记条目"看的是登记元信息
     （正文 sha / 命题指纹 / 版本记录）。改前 `same_slot` 只比 label ⇒ 手写稿被当成
     已登记，于是 `mode=rewritten`、形态闸一次都不跑 —— 一份手写稿就能冒充登记条目。
     """

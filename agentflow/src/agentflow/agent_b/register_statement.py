@@ -3842,34 +3842,6 @@ class _RegisterStatement:
             out["row"] = dict(amended["row"])
         return out
 
-    def _proof_rewrite_target(self, *, full: str, proof_text: str,
-                              proof_manuscript: str) -> dict:
-        """这一笔是不是"已登记命题的证明重写"？（是 ⇒ 返回在册那一行，否则空表）
-
-        判据三条（同时成立才算重写）：
-        1. 命题按 `statement_full` 的规范化值真的在册（`_existing_statement_for`）；
-        2. 交来的证明正文非空，且与在册那一份不同（逐字相同的那一档是幂等重交，
-           不是重写 —— 它照旧走原来的登记，不动手稿版本）；
-        3. 这一行已经有证明正文（`proof_text` 或 `proofs` 清单的最后一份）——
-           没有正文的行是"待补证明"，那一笔是第一次挂证明，不算重写。
-        """
-        row = self._existing_statement_for(str(full or "").strip())
-        if not row:
-            return {}
-        want = str(proof_text or "").strip()
-        if not want:
-            return {}
-        have = str(row.get("proof_text") or "").strip()
-        if not have:
-            listed = row.get("proofs") or []
-            if listed:
-                have = str((dict(listed[-1]) or {}).get("text") or "").strip()
-        if not have:
-            return {}
-        if _VR.proof_sha(have) == _VR.proof_sha(want):
-            return {}
-        return dict(row)
-
     def _land_rewrite_manuscript(self, row: Mapping, *, proof_text: str,
                                  proof_manuscript: str) -> dict:
         """把这一版 B 的证明落进 `reports/b-proof-<命题号>.md`（就地重写那一节）。"""
@@ -4378,11 +4350,11 @@ class _RegisterStatement:
                                             "signed", "text", "why")})
         out["problem"] = dict(got.get("problem") or {})
         out["ok"] = bool(got.get("ok"))
-        # ---- 2026-11-07（A1）：第一份 b-稿也要成为**登记条目** ---------------------
+        # ---- 2026-11-07（A1）：第一份 b-稿也要成为「登记条目」 ---------------------
         #
         # `ack`：`bmanuscript.land_rewrite` 只落骨架（三节 + `- 证明号：`），没有
         # `- 正文sha：` / `- 命题指纹：` / `- 版本：`。于是下一轮再改写时，
-        # `proofregistry` 读到的不是登记条目，会把同一命题**重新登记**一次
+        # `proofregistry` 读到的不是登记条目，会把同一命题重新登记一次
         # （`proof_no` 回到 1、版本历史从 1 重来）—— 这正是 A1 那条真缺陷在 B 侧的同一形态。
         # 骨架落成之后立刻过一遍登记入口（正文逐字不变，只补头部登记元信息），
         # 于是"同一份命题的后续每一版证明"都落成 `mode=rewritten`。

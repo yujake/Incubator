@@ -81,7 +81,7 @@ LIVE-READINGS:BEGIN
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 85 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 86 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 47   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 44   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
@@ -2216,4 +2216,5 @@ python -m agentflow.cli tools
 | §18.4 的"批量化" | 部分有判据 | 两条判据只守"每条 amendment 只赦免自己的 edits、reason 非空"；它们守不住"脚本一次把 68 组全插进去"这个**动作形态** |
 
 §18.5 / §18.7 / §18.8 / §18.9 四条都能指到具体测试文件与函数，见各条的**判据**格；§18.4 是部分有判据（见上表最后一行）。
+
 
