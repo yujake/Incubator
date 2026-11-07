@@ -30,18 +30,22 @@
 """
 from __future__ import annotations
 
+import pathlib
+import re
+
 import pytest
+
+from agentflow import conductor as CND
 
 from agentflow import statementabandon as SA
 from agentflow.agent_prompts import system_prompt
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
 
-#: 提示词里教「放弃理由该写什么」的那几个角色：D 是研究侧主导、F 是被打回后可能
-#: 放弃的那一侧、M 决定「这条不做了」。B 是执行口 —— 它的那一份教法来自
-#: `table.update` 的 summary（工具面），由工具声明那一侧的判据钉着
-#: （`tests/test_tool_surface_snapshot.py` 与 `test_tool_descriptions_are_compressed`）。
-TEACHING_ROLES: tuple[str, ...] = ("D", "F", "M")
+#: 提示词里教「放弃理由该写什么」的那几个角色：B 是执行口（它的那一份教法来自
+#: `table.update` 的 summary）、D 是研究侧主导、F 是被打回后可能放弃的那一侧、
+#: M 决定「这条不做了」。其余角色的提示词不教这一节。
+TEACHING_ROLES: tuple[str, ...] = ("B", "D", "F", "M")
 
 #: E 侧那两档各自多要的那一格。名字取自 `ABANDON_PARAM_KEYS` 的真身，不另写一份。
 E_SIDE_CELLS: tuple[str, ...] = ("experiment_id", "space")
@@ -115,3 +119,109 @@ def _the_numeric_proof_handbook(bodies: dict[str, str]) -> tuple[str, str]:
         if "穷举证明" in slug:
             return body, slug
     raise AssertionError(f"E 的手册里没有「穷举证明」那一本：{sorted(bodies)}")
+
+
+# ---------------------------------------------------------------- d/e 工具面：两格不是装饰
+
+#: 提示词里以 `abandon_` 开头的标识符（参数名 / 拒因码）。
+_ABANDON_TOKEN = re.compile(r"abandon_[a-z_]+")
+
+
+def _known_abandon_tokens() -> set[str]:
+    """`statementabandon` 里真有的那批 `abandon_*` 名字（参数名 ∪ 源码里的字面量）。"""
+    src = pathlib.Path(SA.__file__).read_text(encoding="utf-8")
+    return set(_ABANDON_TOKEN.findall(src)) | set(SA.ABANDON_PARAM_KEYS)
+
+
+def test_d_the_seven_cells_are_declared_and_the_signature_matches(registry) -> None:
+    """d：`table.update` 的声明与实现是同一套参数（两个方向都判）。"""
+    import inspect
+
+    spec = registry.get("table.update")
+    props = spec.params.get("properties") or {}
+    declared = set(props)
+    implemented = set(inspect.signature(spec.handler).parameters)
+    assert set(SA.ABANDON_PARAM_KEYS) <= declared, (
+        f"声明里缺放弃理由的那几格：{sorted(set(SA.ABANDON_PARAM_KEYS) - declared)}")
+    assert declared == implemented, (
+        "声明 → 实现 / 实现 → 声明 有差集："
+        f"只说没做 {sorted(declared - implemented)}，只做没说 {sorted(implemented - declared)}")
+    assert set(props["abandon_kind"]["enum"]) == set(SA.ABANDON_KINDS), (
+        "声明里的 enum 与 `ABANDON_KINDS` 不是同一批："
+        f"{sorted(props['abandon_kind']['enum'])} vs {sorted(SA.ABANDON_KINDS)}")
+    assert missing_teachings(spec.summary) == [], (
+        "工具说明（模型唯一会读到的教法）没把四档与两格写进去：" + spec.summary)
+
+
+def test_e_the_two_new_cells_reach_the_backstop_through_the_parameters(tmp_path) -> None:
+    """e：`experiment_id` / `space` 走参数面（不是塞进 `patch`）也落进结构化理由。"""
+    store = Store(tmp_path / "ws")
+    store.init()
+    _seed_statement(store)
+    _seed_experiment(store, "000001")
+    reg = build_registry(store=store, workspace_root=store.root, roles=tuple(ROLES),
+                         strict=True).registry
+    reg.bound_role = "B"
+
+    with CND.calling_as("t-p256", "B"):
+        got = reg.call("table.update", table="statements", id="000001",
+                       patch={"status": "abandoned"},
+                       abandon_kind="counterexample",
+                       abandon_basis="n=9 那一格让它为假",
+                       experiment_id="000001")
+    assert got.ok is True, got.error
+    parsed = SA.parse_abandon_reason(_statement_row(store)["quote_reason"])
+    assert parsed["complete"] is True and parsed["experiment_id"] == "000001", parsed
+
+    _seed_statement(store, sid="000002", label="other")
+    with CND.calling_as("t-p256", "B"):
+        got2 = reg.call("table.update", table="statements", id="000002",
+                        patch={"status": "abandoned"},
+                        abandon_kind="space_too_large",
+                        abandon_basis="10^12 个对象，合理成本内做不到",
+                        space={"N_range": [2, 14], "cells": 10 ** 12})
+    assert got2.ok is True, got2.error
+    parsed2 = SA.parse_abandon_reason(_statement_row(store, "000002")["quote_reason"])
+    assert parsed2["complete"] is True, parsed2
+    assert parsed2["space"]["N_range"] == [2, 14], parsed2
+
+
+def test_f_no_prompt_names_an_abandon_identifier_that_does_not_exist(registry) -> None:
+    """f：提示词里出现的每个 `abandon_*` 名字，都必须在 `statementabandon` 里真的存在。"""
+    known = _known_abandon_tokens()
+    mentioned: set[str] = set()
+    for role in TEACHING_ROLES:
+        mentioned.update(_ABANDON_TOKEN.findall(system_prompt(role, registry=registry)))
+    assert mentioned, "提示词里一个 `abandon_*` 名字都没抽到 ⇒ 这条判据没有对象"
+    assert mentioned <= known, (
+        f"提示词提到但实现里不存在的名字：{sorted(mentioned - known)}"
+        "（提示词教了一个框架不认的标识符）")
+
+
+def _seed_statement(store: Store, *, sid: str = "000001", label: str = "four-tiers") -> dict:
+    row = {"stmt_id": sid, "origin": "own_result", "kind": "conjecture", "label": label,
+           "statement_full": "对任意正整数 n，R(3,4)=9。", "statement_text": "对任意正整数 n，R(3,4)=9。",
+           "proof_text": "数值算过一遍。", "evidence_kind": "heuristic", "status": "active",
+           "quote_verified": None, "quote_reason": "夹具：自产命题",
+           "created_at": "2026-11-07T12:00:00+08:00", "created_by": "test", "bits": {}}
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+    return row
+
+
+def _seed_experiment(store: Store, eid: str) -> dict:
+    row = {"experiment_id": eid, "claim": "对任意正整数 n，R(3,4)=9。", "claim_key": "four-tiers",
+           "method": "numeric", "evidence_kind": "cross_check", "result": "refutes",
+           "negation_kind": "disproved",
+           "counterexample": {"kind": "counterexample", "n": 9},
+           "code_path": "code/probe.py", "code_hash": "0" * 16,
+           "observations": {}, "certificate": None, "search_bound": {},
+           "exit_code": 0, "runtime_sec": 0.1,
+           "created_at": "2026-11-07T12:00:00+08:00", "created_by": "test"}
+    with store.tx("experiments", actor="test") as tx:
+        tx.upsert("experiments", row)
+    return row
+
+
+def _statement_row(store: Store, sid: str = "000001") -> dict:
+    return next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == sid)

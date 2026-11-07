@@ -6645,7 +6645,7 @@
         "table.update"
       ],
       "key": "params",
-      "reason": "2026-11-07（放弃命题闸收口，业主裁定）：`table.update` 新增放弃理由五格 `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged`（只在 `table='statements'` 且 `patch.status=abandoned` 时有意义）；同一批把 `defect_ref` 绑到被放弃的命题号与现行证明的 `proof_sha256`、`difficulty` 加一次秘书语义判定、`salvaged` 加自指 / 时序 / 拆出关系的判据。五键逐项登记；其余 123 件工具的契约一个字未动；`summary` 只在压缩批次内继续压缩（本件 313→158 字符）。",
+      "reason": "2026-11-07 p256（放弃理由四档）：`table.update` 的 `params` 从「五格」补到七格 —— 新增 `experiment_id`（counterexample 档：`experiments` 里那条真跑过、`result=refutes`、带非空反例、且检验的是被放弃这一条的反例实验）与 `space`（space_too_large 档：枚举参数与规模，取 `numericproof._space_reading` 的既有字段），并把 `abandon_kind` 的 enum / description 与 `abandon_basis` 的 description 从两档写成四档。七键逐项登记；其余 123 件工具的契约一个字未动；`summary` 在压缩批次内等量压缩（本件 123 → 177 字符，批次总量 6470/8631 = 74.9623%，≤75%）。",
       "date": "2026-11-07",
       "edits": [
         {
@@ -6653,7 +6653,7 @@
           "path": "params/properties/abandon_basis",
           "value": {
             "type": "string",
-            "description": "换号理由正文：math_error 要点名错在第几步、错是什么；difficulty 要说清难在哪。只在 patch.status=abandoned 时用，且那时必填。"
+            "description": "换号理由正文：math_error 点名错在第几步、错是什么；difficulty 说清难在哪；counterexample 写清哪一个参数组让它假；space_too_large 写清为什么在合理成本内做不到。只在 patch.status=abandoned 时用，且那时必填。"
           }
         },
         {
@@ -6663,9 +6663,11 @@
             "type": "string",
             "enum": [
               "math_error",
-              "difficulty"
+              "difficulty",
+              "counterexample",
+              "space_too_large"
             ],
-            "description": "换号理由的档：math_error（命题有实质数学错误）/ difficulty（证明遇到难以逾越的困难）。只在 patch.status=abandoned 时用，且那时必填。"
+            "description": "换号理由的档（四档）：math_error（命题有实质数学错误）/ difficulty（证明遇到难以逾越的困难）/ counterexample（发现反例）/ space_too_large（枚举空间过于宏大）。只在 patch.status=abandoned 时用，且那时必填。"
           }
         },
         {
@@ -6682,6 +6684,14 @@
           "value": {
             "type": "string",
             "description": "difficulty 档必填：说清难在哪（缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）；秘书会判它是不是真困难、难在哪（没判成或判不是 ⇒ 拒）。"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/experiment_id",
+          "value": {
+            "type": "string",
+            "description": "counterexample 档必填：`experiments` 里那条反例实验的号 —— 那一行要 `result=refutes`、带非空反例、且检验的是被放弃的这一条（引一条不存在的实验 / 没反驳它的实验 / 另一条命题的反例 ⇒ 拒）。"
           }
         },
         {
@@ -6704,6 +6714,14 @@
                 "stmt_id"
               ]
             }
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/space",
+          "value": {
+            "type": "object",
+            "description": "space_too_large 档必填：枚举参数与规模。可直接给各维区间（`[lo, hi]`）/ 枚举例数，也可给实验行那三格（`observations` / `certificate` / `search_bound`）—— 取 `numericproof._space_reading` 的既有字段；自由文本或读不出规模 ⇒ 拒。"
           }
         }
       ]

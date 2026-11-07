@@ -795,7 +795,7 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
 
 @tool(
     "graph.neighbors",
-    "返回某概念的邻居概念代号（升序）及其连接的度数信息。"
+    "返回某概念的邻居概念代号（升序）与度数信息。"
     f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超过上限时 "
     "truncated=True 并说明只给了前几个 —— 绝不静默截断。",
     {

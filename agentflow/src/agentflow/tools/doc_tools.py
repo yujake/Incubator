@@ -2356,8 +2356,8 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
 @tool(
     "doc.register_dependency",
     (
-            "登记外部依赖（FC-23）：`closed` 前用真实数据核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`"
-            "/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的是我们自己的一条命题；`"
+            "登记外部依赖（FC-23）：`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`"
+            "/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的我方命题；`"
             "path_group` = 第几条证明路径（组内都要、组间任一）。"
             ),
     {

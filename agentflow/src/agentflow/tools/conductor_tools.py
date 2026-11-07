@@ -358,7 +358,7 @@ def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活：按写集分波（波次由写集现算）线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
+    "一次派**一批**活：按写集分波、线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
     {
         "type": "object",
         "properties": {
@@ -476,7 +476,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
 @tool(
     "conductor.ledger",
-    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。不含建议。",
+    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（请代唤申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。",
     {
         "type": "object",
         "properties": {
@@ -963,7 +963,7 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
 
 @tool(
     "conductor.state",
-    "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 已注册未消化的篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上的程序进程读数，巡查按它点异常清单。",
+    "只读状态视图：各表计数 + 猜想按状态 + 台账规模。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 未消化篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上程序进程读数，巡查按它点异常。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
@@ -1282,7 +1282,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance`（内容级验收五条 + 辅助读数）与 `cap_usd`（成本上限）。",
+    "只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance`（内容级验收五条 + 辅助读数）与 `cap_usd`。",
     {
         "type": "object",
         "properties": {

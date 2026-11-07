@@ -1435,9 +1435,9 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
 
 
 def _secretary_keys() -> frozenset[str]:
-    """秘书那条路认得的载荷键（正名 ∪ 别名 ∪ 换号理由那五格）；读不到 ⇒ 空集。
+    """秘书那条路认得的载荷键（正名 ∪ 别名 ∪ 换号理由那七格）；读不到 ⇒ 空集。
 
-    换号理由那五格（`statementabandon.ABANDON_PARAM_KEYS`）也算"认得"：它们不是可写的
+    换号理由那七格（`statementabandon.ABANDON_PARAM_KEYS`）也算"认得"：它们不是可写的
     列，而是 `Secretary.amend_statement_meta` 在写之前要判的那几格 —— 不列在这里，
     它们会出现在 `dropped_keys` 读数里被当成"白给了"。
     """
@@ -1872,8 +1872,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
 @tool(
     "table.update",
-    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 "
-    "abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。",
+    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + "
+    "defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + "
+    "space；都另给 abandon_basis，缺即拒。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1881,14 +1882,16 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
             "patch": {"type": "object", "description": "只写要改的字段"},
             "abandon_kind": {
                 "type": "string", "enum": list(_SA.ABANDON_KINDS),
-                "description": "换号理由的档：math_error（命题有实质数学错误）/ "
-                               "difficulty（证明遇到难以逾越的困难）。只在 "
+                "description": "换号理由的档（四档）：math_error（命题有实质数学错误）/ "
+                               "difficulty（证明遇到难以逾越的困难）/ counterexample"
+                               "（发现反例）/ space_too_large（枚举空间过于宏大）。只在 "
                                "patch.status=abandoned 时用，且那时必填。"},
             "abandon_basis": {
                 "type": "string",
-                "description": "换号理由正文：math_error 要点名错在第几步、错是什么；"
-                               "difficulty 要说清难在哪。只在 patch.status=abandoned 时用，"
-                               "且那时必填。"},
+                "description": "换号理由正文：math_error 点名错在第几步、错是什么；difficulty "
+                               "说清难在哪；counterexample 写清哪一个参数组让它假；"
+                               "space_too_large 写清为什么在合理成本内做不到。只在 "
+                               "patch.status=abandoned 时用，且那时必填。"},
             "defect_ref": {
                 "type": "string",
                 "description": "math_error 档必填：`verifications/<6 位命题号>.jsonl#"
@@ -1909,6 +1912,19 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
                           "properties": {"label": {"type": "string"},
                                          "stmt_id": {"type": "string"}},
                           "required": ["stmt_id"]}},
+            "experiment_id": {
+                "type": "string",
+                "description": "counterexample 档必填：`experiments` 里那条反例实验的号 —— "
+                               "那一行要 `result=refutes`、带非空反例、且检验的是被放弃的"
+                               "这一条（引一条不存在的实验 / 没反驳它的实验 / 另一条命题的"
+                               "反例 ⇒ 拒）。"},
+            "space": {
+                "type": "object",
+                "description": "space_too_large 档必填：枚举参数与规模。可直接给各维区间"
+                               "（`[lo, hi]`）/ 枚举例数，也可给实验行那三格"
+                               "（`observations` / `certificate` / `search_bound`）—— 取 "
+                               "`numericproof._space_reading` 的既有字段；自由文本或读不出"
+                               "规模 ⇒ 拒。"},
         },
         required=("table", "id", "patch"),
     ),
@@ -1925,7 +1941,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, Any],
                  abandon_kind: str = "", abandon_basis: str = "",
                  defect_ref: str = "", difficulty: str = "",
-                 salvaged: Sequence[Mapping[str, Any]] | None = None) -> ToolResult:
+                 salvaged: Sequence[Mapping[str, Any]] | None = None,
+                 experiment_id: str = "",
+                 space: Mapping[str, Any] | None = None) -> ToolResult:
     """部分更新。
 
     实现上是"读整行 → 覆盖 patch → 整行校验 → 整行写回"，而不是"只写 patch 的字段"：
@@ -1937,11 +1955,13 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     `literature.path` 的两格（M4，2026-11-05）见 `table.create` 的同名一段：归一化只在
     这一笔真的写了 path 时做（patch 里没有 path ⇒ 存量原样保留，不替业主改盘）。
 
-    ## 换号理由那五格（业主 2026-11-07 裁定）
-    `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` 不是
-    可写的列：它们是"放弃命题"这件事的理由形状。`statements` 那一笔在下发路由之前把
-    它们并进载荷，于是 `Secretary.amend_statement_meta` 能在写之前判它们
-    （受控拒 = 一个字节都不写）。判据本体只有一份（`statementabandon.check_abandon_reason`）。
+    ## 换号理由那七格（业主 2026-11-07 裁定）
+    `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` /
+    `experiment_id` / `space` 不是可写的列：它们是"放弃命题"这件事的理由形状。`statements`
+    那一笔在下发路由之前把它们并进载荷，于是 `Secretary.amend_statement_meta` 能在写之前判它们
+    （受控拒 = 一个字节都不写）。判据本体只有一份（`statementabandon.check_abandon_reason`），
+    四档各有各的证据：math_error 要 `defect_ref`、difficulty 要 `difficulty` + `salvaged`、
+    counterexample 要 `experiment_id`、space_too_large 要 `space`。
     """
     try:
         idf = _spec_of(table)["id_field"]
@@ -1952,11 +1972,12 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     # 秘书会按 `verifications` 里那一签决定升不升档（升档就地改那一行、不新建）。
     if not patch:
         return fail("patch 不能为空（空 patch 只会更新 updated_at，通常是调用方写错了）", table=table, id=id, kind="param_error")
-    # ---- 换号理由五格：只在写 `statements` 时并进载荷（别的表没有这一档）---------
+    # ---- 换号理由七格：只在写 `statements` 时并进载荷（别的表没有这一档）---------
     extra_abandon = {k: v for k, v in (
         ("abandon_kind", abandon_kind), ("abandon_basis", abandon_basis),
         ("defect_ref", defect_ref), ("difficulty", difficulty),
-        ("salvaged", salvaged)) if v not in (None, "", (), [], {})}
+        ("salvaged", salvaged), ("experiment_id", experiment_id),
+        ("space", space)) if v not in (None, "", (), [], {})}
     payload = dict(patch or {})
     if extra_abandon:
         if str(table or "") != "statements":
