@@ -676,6 +676,12 @@ def proof_revisions(store: Any) -> dict[str, Any]:
         from . import secretary as _SEC
 
         for one in _SEC.proposition_form_rows(root):
+            # 这本台账 2026-11-07 起是 F 与 E 共用的（同一道形态闸同步到了 E 的数值
+            # 证明路线）。这一格数的是"F 的手稿登记被拒了几次" ⇒ 只认 F 自己的行
+            # （历史上 role 缺省为空的那几条也归 F）；E 的拒收进
+            # `closing.proposition_form_reading` 的 `by_role["E"]`，不在这里冒充 F。
+            if str(one.get("role") or "") not in ("", "F"):
+                continue
             if one.get("checked") and not one.get("well_formed"):
                 key = str(one.get("label") or "")
                 refused_by_label[key] = refused_by_label.get(key, 0) + 1
