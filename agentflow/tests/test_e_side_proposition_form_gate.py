@@ -252,6 +252,30 @@ def test_d_f_and_e_gates_call_the_one_judge(tmp_path, monkeypatch):
     assert calls == ["E", "F"], calls
 
 
+# ---------------------------------------------------------------- f 读数分角色
+
+def test_f_the_reading_splits_the_two_callers_by_role(tmp_path):
+    """f：`closing.proposition_form_reading` 按角色分（F / E 各一份同四档读数）。"""
+    from agentflow import closing as CL
+
+    st = _store(tmp_path)
+    _write(st)
+    _run(_e(st, _well_formed_seam()), WELL_FORMED)
+    f = AgentF(st, config={"workspace_root": str(st.root), "plan_id": "0001"})
+    f.f_secretary = SEC.Secretary("F", root=st.root, store=st,
+                                  seam=_ill_formed_seam(), enable_model=True)
+    got = f._proposition_form_gate(full=SPEC_036, kind="conjecture", body="", label="x")
+    assert got["submittable"] is False, got
+    read = CL.proposition_form_reading(st)
+    assert read["checked"] is True and read["judged"] == 2, read
+    assert read["by_role"]["E"]["judged"] == 1, read["by_role"]
+    assert read["by_role"]["E"]["well_formed"] == 1, read["by_role"]
+    assert read["by_role"]["F"]["judged"] == 1, read["by_role"]
+    assert read["by_role"]["F"]["refused"] == 1, read["by_role"]
+    assert read["by_role"]["F"]["codes"] == [{"code": "proposition_form_refused",
+                                              "count": 1}], read["by_role"]
+
+
 # ---------------------------------------------------------------- e 反真空
 
 def test_e_removing_the_e_gate_makes_b_red(tmp_path, monkeypatch):

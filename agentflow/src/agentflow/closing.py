@@ -5527,6 +5527,12 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
     判据本体是 `secretary.proposition_form_rows`（那本 append-only 台账），这里只做
     三件本层的事：数三档（合格 / 不合格 / 没判成）、按码分组、取一条合法样本。
 
+    ## 分角色（2026-11-07 第二刀：同一道闸同步到了 E 的数值证明路线）
+    这台闸今天有两个调用方：F 的手稿登记、E 的数值证明路线。两者问的是同一个
+    `Secretary.judge_proposition_form`，但读的人要知道"哪一侧问的"——
+    所以 `by_role` 给逐角色的同四档读数（`F` / `E` 两个键恒在，其余角色出现才加），
+    顶层那四档仍是合计（老读数一个字不改）。
+
     三态：`out/secretary/proposition_form.jsonl` 读不出来 / 没有工作区根 ⇒
     `checked=False` + `reason`（没查成，不是"一条都没被拒"）。
     没有这本台账（一闸都没跑过）⇒ `checked=True` 且 `judged=0`，`reason` 说清
@@ -5534,6 +5540,7 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
     """
     out: dict[str, Any] = {"checked": False, "judged": 0, "well_formed": 0,
                            "refused": 0, "unchecked": 0, "codes": [], "sample": {},
+                           "by_role": {},
                            "checked_from": "out/secretary/proposition_form.jsonl",
                            "reason": ""}
     root = str(getattr(store, "root", "") or "")
@@ -5549,6 +5556,11 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
         return out
     out["checked"] = True
     codes: dict[str, int] = {}
+    #: 逐角色四档（`F` / `E` 两个键恒在：零条也要读得出"这一侧一次都没跑过"）。
+    roles: dict[str, dict[str, Any]] = {
+        "F": {"judged": 0, "well_formed": 0, "refused": 0, "unchecked": 0},
+        "E": {"judged": 0, "well_formed": 0, "refused": 0, "unchecked": 0},
+    }
     for one in rows:
         out["judged"] += 1
         if not one.get("checked"):
@@ -5568,7 +5580,26 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
                              "conditions": str(one.get("conditions") or "")[:200],
                              "conclusion": str(one.get("conclusion") or "")[:200],
                              "decision": str(one.get("decision") or "")[:200]}
+        role = str(one.get("role") or "").strip()
+        bucket = roles.setdefault(
+            role, {"judged": 0, "well_formed": 0, "refused": 0, "unchecked": 0})
+        bucket["judged"] += 1
+        if not one.get("checked"):
+            bucket["unchecked"] += 1
+        elif one.get("well_formed"):
+            bucket["well_formed"] += 1
+        else:
+            bucket["refused"] += 1
+        if code:
+            bucket_codes = bucket.setdefault("codes", {})
+            bucket_codes[code] = int(bucket_codes.get(code, 0)) + 1
     out["codes"] = [{"code": code, "count": n} for code, n in sorted(codes.items())]
+    out["by_role"] = {
+        role: {**bucket,
+               "codes": [{"code": code, "count": n}
+                         for code, n in sorted((bucket.get("codes") or {}).items())]}
+        for role, bucket in roles.items()
+    }
     if not out["judged"]:
         out["reason"] = ("查过了：这一趟形态闸一次都没跑过（台账里 0 行）⇒ 这个读数不是"
                          "「都合格」")
@@ -5614,6 +5645,13 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     `repeated` = `relabels >= 2`（≥2 次要能一眼看到）。判据本体是
     `statementabandon.relabel_events`（登记那一侧 `supersedes` 读数读的是同一份）。
 
+    ## 按档统计（2026-11-07 第二刀）
+    放弃理由现在有四档（F 侧 `math_error` / `difficulty`，E 侧 `counterexample` /
+    `space_too_large`）。读数要能分别数清每一档：顶层 `abandon_kinds` 是这四条被放弃
+    命题的逐档计数（四个键恒在，零条也读得出来），`relabeled["kinds"]` 是"换号事件"
+    的逐档计数（同一个 label 下的事件按档分开数），`unstructured` 是历史自由文本行的
+    条数（读不出档，不是"没有理由"）。
+
     三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（没查成，不是"没有放弃"）。
     自称放弃而标记读不出来的行不计入这一格（它们进 `statements_unsigned` 的
     `abandoned_without_reason`），同时进 `problems` —— 两个读数对同一行给出相反的
@@ -5623,7 +5661,12 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
 
     out: dict[str, Any] = {"checked": False, "count": 0, "checked_from": "statements",
                            "rows": [], "problems": [], "reason": "",
+                           #: 逐档计数（四个键恒在：零条也要读得出"这一档没有"）。
+                           "abandon_kinds": {kind: 0 for kind in _SA.ABANDON_KINDS},
+                           #: 历史行（`quote_reason` 是自由文本 / 读不出档）的条数。
+                           "unstructured": 0,
                            "relabeled": {"checked": False, "labels": [], "repeated": 0,
+                                         "kinds": {kind: 0 for kind in _SA.ABANDON_KINDS},
                                          "reason": ""}}
     rows, why = _statement_rows(store)
     if rows is None:
@@ -5642,17 +5685,25 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                             "at": str(got.get("at") or ""),
                             "reason": str(got.get("reason") or ""),
                             "label": str(row.get("label") or ""),
-                            # 2026-11-07：换号理由的两档读数（历史行三格全空）
+                            # 2026-11-07：换号理由的四档读数（历史行三格全空）
                             "abandon_kind": str(parsed.get("abandon_kind") or ""),
                             "abandon_basis": str(parsed.get("abandon_basis") or ""),
                             "defect_ref": str(parsed.get("defect_ref") or ""),
+                            "experiment_id": str(parsed.get("experiment_id") or ""),
+                            "space": dict(parsed.get("space") or {}),
                             "salvaged": [dict(x) for x in (parsed.get("salvaged") or [])],
                             "structured": bool(parsed.get("structured")),
                             "complete": bool(parsed.get("complete"))})
+        kind_now = str(parsed.get("abandon_kind") or "")
+        if kind_now in out["abandon_kinds"]:
+            out["abandon_kinds"][kind_now] += 1
+        else:
+            out["unstructured"] += 1
     out["checked"] = True
     out["count"] = len(out["rows"])
     events = _SA.relabel_events(list(rows.values()))
     labels: list[dict[str, Any]] = []
+    event_kinds: dict[str, int] = {kind: 0 for kind in _SA.ABANDON_KINDS}
     for label, ones in events.items():
         labels.append({"label": label, "relabels": len(ones),
                        "repeated": len(ones) >= 2,
@@ -5660,10 +5711,15 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                                    "abandon_kind": one.get("abandon_kind", ""),
                                    "has_evidence": bool(one.get("has_evidence"))}
                                   for one in ones]})
+        for one in ones:
+            kind_now = str(one.get("abandon_kind") or "")
+            if kind_now in event_kinds:
+                event_kinds[kind_now] += 1
     labels.sort(key=lambda one: (-int(one["relabels"]), str(one["label"])))
     repeated = [one for one in labels if one["repeated"]]
     out["relabeled"] = {
         "checked": True, "labels": labels, "repeated": len(repeated),
+        "kinds": event_kinds,
         "reason": ("查过了：没有同一个 label 被换号两次以上的行"
                    if not repeated else
                    "查过了：" + "、".join(f"{one['label']}（{one['relabels']} 次）"
@@ -5671,7 +5727,11 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                    + " 这几条同一 label 换号 ≥2 次（读数，不拦门）"),
     }
     out["reason"] = ("查过了：没有明确放弃的命题" if not out["rows"] else
-                     f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）")
+                     f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）"
+                     "；按档 " + "/".join(f"{kind}={n}"
+                                         for kind, n in out["abandon_kinds"].items())
+                     + (f"；另有 {out['unstructured']} 条历史自由文本行"
+                        if out["unstructured"] else ""))
     return out
 
 

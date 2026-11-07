@@ -301,6 +301,52 @@ def test_d_both_write_ports_go_through_the_one_check(monkeypatch):
     assert calls == ["counterexample", "space_too_large"], calls
 
 
+# ---------------------------------------------------------------- f 读数按档
+
+def _seed_abandoned(st: Store, sid: str, label: str, kind: str, **parts) -> None:
+    """直接落一条 abandoned 行（读侧用例：不走写口，只造读数）。"""
+    marker = SA.abandon_marker(at=TS, reason=SA.structured_reason(
+        kind=kind, basis="夹具：理由是结构化 JSON", **parts))
+    row = {"stmt_id": sid, "origin": "own_result", "kind": "conjecture", "label": label,
+           "statement_full": f"夹具命题 {sid}。", "statement_text": f"夹具命题 {sid}。",
+           "proof_text": "", "evidence_kind": "heuristic", "status": "abandoned",
+           "quote_verified": None, "quote_reason": marker, "created_at": TS,
+           "created_by": "test", "bits": {}}
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+
+
+def test_f_the_reading_counts_every_kind_and_the_relabeled_events(tmp_path):
+    """f：`statements_abandoned_reading` 能按四档分别统计（含 `relabeled.kinds`）。"""
+    st = _ws(tmp_path)
+    _seed_abandoned(st, "000001", "same", "math_error", defect_ref="verifications/000001.jsonl#v-000001")
+    _seed_abandoned(st, "000002", "same", "counterexample", experiment_id="000001")
+    _seed_abandoned(st, "000003", "diff", "space_too_large",
+                    space={"N_range": [2, 14]})
+    # 历史自由文本行：读不出档，但不许被折成"没有理由"
+    row = {"stmt_id": "000004", "origin": "own_result", "kind": "conjecture",
+           "label": "legacy", "statement_full": "夹具", "statement_text": "夹具",
+           "proof_text": "", "evidence_kind": "heuristic", "status": "abandoned",
+           "quote_verified": None,
+           "quote_reason": "abandoned@2026-11-01T00:00:00+08:00@那时候的一句散文",
+           "created_at": TS, "created_by": "test", "bits": {}}
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+    read = _abandoned(st)
+    assert read["checked"] is True and read["count"] == 4, read
+    assert read["abandon_kinds"] == {"math_error": 1, "difficulty": 0,
+                                     "counterexample": 1, "space_too_large": 1}, read
+    assert read["unstructured"] == 1, read
+    assert read["relabeled"]["repeated"] == 1, read["relabeled"]
+    assert read["relabeled"]["kinds"]["math_error"] == 1, read["relabeled"]
+    assert read["relabeled"]["kinds"]["counterexample"] == 1, read["relabeled"]
+    assert read["relabeled"]["kinds"]["space_too_large"] == 1, read["relabeled"]
+    by_id = {row["stmt_id"]: row for row in read["rows"]}
+    assert by_id["000002"]["experiment_id"] == "000001", by_id["000002"]
+    assert by_id["000003"]["space"]["N_range"] == [2, 14], by_id["000003"]
+    assert "按档" in read["reason"], read["reason"]
+
+
 # ---------------------------------------------------------------- e 反真空
 
 def test_e_removing_the_counterexample_check_makes_a_red(tmp_path, monkeypatch):
