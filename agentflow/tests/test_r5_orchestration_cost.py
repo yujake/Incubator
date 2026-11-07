@@ -1143,7 +1143,7 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
 
 
 _REF_EXEMPT_MARK = "非指代"
-#: 允许带记号跳过的引用落在哪些文件里（`F9` 实测的两处，逐条登记）。
+#: 允许带记号跳过的引用落在哪些文件里（`F9` 实测两处；2026-11-07 收口时新增第三处，逐条登记）。
 #:
 #: 为什么用一张显式的表而不是"带记号就放行"：后者是一条可以随时增宽的暗门 ——
 #: 下一个人只要在悬空引用后面补三个字就能让它变绿。有了这张表，新豁免必须改这个
@@ -1151,6 +1151,13 @@ _REF_EXEMPT_MARK = "非指代"
 _REF_EXEMPTED_EXPECTED_FILES = (
     "tests/test_core_audit_efgh.py",   # 历史叙述：修之前的旧装配点名
     "scripts/noai_gate.py",            # 示意性引用：路径词法归一的举例
+    # 2026-11-07（收口最后 5 条红 · ⑤）：`tests/test_release_all.py` 的常量注释用那个
+    # "形态示例"文件名（tests/test_xxx.py，这里刻意不写反引号：那会让本说明自己又变成
+    # 一条新的 ticked 引用）示范"路径形态怎么解析"（`_DOC_TEST_PATH_RE` 那一族）——
+    # 那是形态示例，不指向任何一份真测试。按记号通道处理（同行写 `非指代`），
+    # 而不是把它塞进 `_REF_KNOWN_MISSING_TEST_FILES`：后者等于承认一条错引用，
+    # 而这里要表达的是"这个文件名不指代任何东西"（示意 ≠ 缺失）。
+    "tests/test_release_all.py",       # 示意性引用：`R7-R6-4` 判据的路径形态举例
 )
 #: 判据（引用读数）已知的"非符号提及"：这些反引号私有 token 在整棵树里
 #: 没有（或只有一个）真符号出现点，但那处引用是正当的 —— 它说的是
@@ -1303,9 +1310,17 @@ _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
 #: 再登记 57 条，只会把登记表烂成噪音；而真事故的形态是"点名一份测试文件"。
 _TICKED_TEST_FILE = re.compile(r"`([A-Za-z0-9_./\-]*test_[A-Za-z0-9_]*\.py)`")
 #: 本族已知的"不存在的 test_*.py 提及"（逐条登记并写类别；多一条、少一条都红）。
+#:
+#: 与另外两族同一条记号通道：同一行写了 `非指代` 的示意性写法（docstring 举例）不进本表，
+#: 由 `_REF_EXEMPTED_EXPECTED_FILES` 那条等额断言单独管（落点文件必须登记、条数必须相等）。
+#: 本表收的是"真的这一点指不到了"：历史真值、负控夹具的假名字、已删判据的出处。
 _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
-    ("tests/test_xxx.py",
-     "形态示例：`test_release_all.py` 在讲「裸名字怎么解析成 tests/<name>.py」这条规则本身"),
+    # 2026-11-07（收口最后 5 条红 · ⑤）：原来第一条（"形态示例"那一条，名字见
+    # `tests/test_release_all.py` 的三处示范；这里刻意不写反引号，否则本说明自己
+    # 就成了新的 ticked 引用）按等额纪律从本表删除 —— 它已经不是"被点名而不存在"：
+    # 那三处示范用例都带上了记号 `非指代`（并登记进 `_REF_EXEMPTED_EXPECTED_FILES`），
+    # 于是它落在记号豁免通道里、不再进 `missing_test_named`。本表留着它会被反向等额
+    # 判成"登记过期"；而"塞回本表"本身也是错的（那是把一条示意写成"已知缺失"）。
     ("tests/test_extract.py",
      "历史真值：那一行逐字写着它已不存在（讲那份清单原来对这类引用完全没牙）"),
     ("tests/test_does_not_exist_zzz.py",
@@ -1731,9 +1746,21 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path,
                                      known_names=known_names,
                                      rel_suffixes=rel_suffixes):
                     continue
+                if marked:
+                    # 2026-11-07（收口最后 5 条红 · ⑤）：记号豁免对这一族同样是"跳过"
+                    # （与上面符号 / `temp/` 两族同一条通道 —— 判据 docstring 的
+                    # 「记号豁免」一节写的是"扫描器跳过它"，不是只管前两族）。
+                    # 缺口在哪：`tests/test_release_all.py` 的三处注释拿
+                    # tests/test_xxx.py 这个"形态示例"名示范"路径形态怎么解析"，
+                    # 它不指代任何一份真测试 ⇒ 带 `非指代` 记号是它该走的通道，
+                    # 而不是把它塞进 `_REF_KNOWN_MISSING_TEST_FILES`（那等于承认一条错引用）。
+                    # 豁免不是白给的：落点文件必须登记在 `_REF_EXEMPTED_EXPECTED_FILES`，
+                    # 且调用方按 `len(exempted) == len(表)` 逐条等额判 —— 多一条、少一条、
+                    # 换一个文件都红（同一张表的第三族读数因此也进了那条断言）。
+                    exempted.append((rel, lineno, f"`{ref}`"))
+                    continue
                 missing_test_named.add(ref)
-                if not marked:
-                    missing_test_files.append(f"{rel}:{lineno}: `{ref}`")
+                missing_test_files.append(f"{rel}:{lineno}: `{ref}`")
     return {
         "files": len(pairs),
         "tokens": len(tokens),
@@ -1953,7 +1980,8 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
     ), (
         "点名的 `test_*.py` 里「不存在」的那些与登记表 `_REF_KNOWN_MISSING_TEST_FILES` 不符 —— "
         "新出现的（有人把文件名写错、或引了一份不存在的测试）要逐条登记并写清类别，"
-        "登记过期的要删掉（多一条、少一条都算不符）："
+        "登记过期的要删掉（多一条、少一条都算不符）；带记号 `非指代` 的示意性写法不进这一族"
+        "（它走 `_REF_EXEMPTED_EXPECTED_FILES` 那条等额断言）："
         f"{sorted(res['missing_test_named'])} vs "
         f"{sorted(ref for ref, _ in _REF_KNOWN_MISSING_TEST_FILES)}；"
         f"逐处读数：{res['missing_test_files']}"

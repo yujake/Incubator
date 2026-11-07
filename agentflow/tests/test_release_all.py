@@ -1791,9 +1791,9 @@ def test_the_historical_marker_leak_criterion_is_not_vacuous():
 
 #: 带 `::` 的引用形态：文件 + 函数都要能核。
 _DOC_TEST_REF_RE = re.compile(r"([\w./-]*tests?/[\w./-]+\.py)::(test_[A-Za-z0-9_]+)")
-#: 裸名字形态（`test_xxx`）：解析成 `tests/test_xxx.py` 文件或某个文件里的 `def test_xxx(`。
+#: 裸名字形态（`test_xxx`）：解析成 `tests/test_xxx.py` 文件或某个文件里的 `def test_xxx(`（形态示例，非指代）。
 _DOC_BARE_TEST_RE = re.compile(r"\btest_[A-Za-z0-9_]*[A-Za-z0-9]\b")
-#: 路径形态（`tests/test_xxx.py`，可带前缀目录）：让报错能逐字说出"点名的文件不存在"，
+#: 路径形态（`tests/test_xxx.py`，可带前缀目录）：让报错能逐字说出"点名的文件不存在"（同上，形态示例，非指代），
 #: 而不是把一处死路径降级成一处"测试对象找不到"（两者对读者的指向不同）。
 _DOC_TEST_PATH_RE = re.compile(r"[\w./-]*tests?/[\w./-]*\.py")
 
@@ -1830,7 +1830,7 @@ def doc_test_reference_problems(docs: dict[str, str]) -> list[str]:
     而全仓没有这个名字 ——判据其实在（真名见那一行），只是文档指不到 ⇒ 照着核对的人会得出相反的结论。这与 `R6-AN-3`（文档指一个不存在的工具名）同族，所以处置也一样：让文档的每个指路都被一条判据核过。
 
     口径：`tests/xxx.py::test_yyy` 要求文件与函数都在；裸 `test_xxx` 要求它至少能解析成 `tests/test_xxx.py` 文件、或某个测试文件里的 `def test_xxx(`；
-    裸名字若出现在路径形态里（`tests/test_xxx.py`）而文件不在盘上，报的就是"点名的文件不存在" ——读者照它去跑命令，跑不到是最直接的那一种坏。一段文字里一个测试对象都没点名 ⇒
+    裸名字若出现在路径形态里（`tests/test_xxx.py`，形态示例，非指代）而文件不在盘上，报的就是"点名的文件不存在" ——读者照它去跑命令，跑不到是最直接的那一种坏。一段文字里一个测试对象都没点名 ⇒
     报"失去对象"（空输入不许读成通过）。
 
     `R6-AN-2` 的配套把 `NOAI-REVIEW-REGISTER.md` 加进了调用面的文档集合：它是一份历史档案（见 `_DOC_TEST_REF_DOCS`），但那不表示它点名的命令可以指到不存在的东西。
