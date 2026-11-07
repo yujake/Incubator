@@ -1852,7 +1852,10 @@ STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
 #: 为什么必须在这一层就拒：`table.update` 是业主验收的通用写口，模型真会用它；
 #: 而"受控拒"要求一个字节都不写 ⇒ 校验必须赶在 `tx.upsert` 之前。
 STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
-    "abandon_kind", "abandon_basis", "defect_ref", "difficulty", "salvaged")
+    "abandon_kind", "abandon_basis", "defect_ref", "difficulty", "salvaged",
+    # E 侧那两档的按档证据（业主 2026-11-07 第二刀：反例 / 枚举空间过于宏大）：
+    # `experiment_id` 指一条真的证否实验；`space` 是一份结构化的枚举参数与规模读数。
+    "experiment_id", "space")
 
 #: 就地改 `kind` 时认的英文词表（命题性的那几档 + 概念/定义两档）。
 #:
@@ -7083,6 +7086,12 @@ class Secretary:
            ⇒ 幂等重放，不拦（历史行必须还能被重放）；理由要变 ⇒ 与第一次同一道闸
            （审计 A4：已 abandoned 不是免检通行证）。
 
+        ## E 侧那两档（业主 2026-11-07 第二刀）
+        `counterexample`（发现反例）/ `space_too_large`（枚举空间过于宏大）由同一道闸判：
+        前者要 `experiment_id` 指一条真的证否实验、后者要一份结构化的 `space` 读数。
+        这两格由调用方随 `status=abandoned` 一起交（走 `patch` 或完整的结构化
+        `quote_reason` 标记），本函数只把它们原样递给判据 —— 不在这里写第二套判据。
+
         ## 为什么落盘的是 JSON 而不是自由文本
         读侧要按 `abandon_kind` 分组、要判"是否带证据"（`closing` 的换号读数），
         自由文本做不到。人类可读的那一段是 `abandon_basis` 本身，它没有被压缩。
@@ -7138,7 +7147,9 @@ class Secretary:
                          "abandon_basis": parsed.get("abandon_basis"),
                          "defect_ref": parsed.get("defect_ref") or "",
                          "difficulty": parsed.get("difficulty") or "",
-                         "salvaged": parsed.get("salvaged") or ()}
+                         "salvaged": parsed.get("salvaged") or (),
+                         "experiment_id": parsed.get("experiment_id") or "",
+                         "space": parsed.get("space") or {}}
         at = S.now_iso()
         if already:
             was = _SA.parse_abandon(row.get("quote_reason"))
@@ -7148,7 +7159,10 @@ class Secretary:
             self.store,
             kind=given.get("abandon_kind"), basis=given.get("abandon_basis"),
             defect_ref=given.get("defect_ref", ""), difficulty=given.get("difficulty", ""),
-            salvaged=given.get("salvaged") or (), statement_id=str(row.get("stmt_id") or ""),
+            salvaged=given.get("salvaged") or (),
+            experiment_id=given.get("experiment_id", ""),
+            space=given.get("space") or None,
+            statement_id=str(row.get("stmt_id") or ""),
             at=at, statement=row,
             difficulty_judge=self.judge_abandon_difficulty,
             judgment_required=True)
@@ -7162,7 +7176,9 @@ class Secretary:
                 kind=str(form["abandon_kind"]), basis=str(form["abandon_basis"]),
                 defect_ref=str(form.get("defect_ref") or ""),
                 difficulty=str(form.get("difficulty") or ""),
-                salvaged=form.get("salvaged") or ()))
+                salvaged=form.get("salvaged") or (),
+                experiment_id=str(form.get("experiment_id") or ""),
+                space=form.get("space") or None))
         return {"quote_reason": marker, "form": form}
 
     def amend_statement_meta(self, stmt_id: str, patch: Mapping[str, Any], *,

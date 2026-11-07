@@ -73,16 +73,38 @@ ABANDON_SEP = "@"
 # `parse_abandon_reason()["structured"]` 为假 —— 于是"这一行的换号理由齐不齐"
 # 在盘上是一个可读的读数，而不是靠人去猜那段散文是什么意思。
 
-#: 换号理由的两档（业主原话里的 1 与 2）。只许这两个值：
+#: 换号理由的四档。前两档是业主 2026-11-07 原话里的 1 与 2（F 侧注册/放弃闸的
+#: `math_error` / `difficulty`）；后两档是同一句裁定同步到 **E 侧数值证明路线**
+#: 时业主点名的两个理由（2026-11-07 第二刀，逐字）：
+#:
+#: > 「F侧的注册+放弃闸需同步到E侧的数值证明路线，只不过E侧放弃的理由为：
+#: >   1.发现反例；2.枚举空间过于宏大以致难以在合理成本内实现。」
+#:
 #: 多一个"其它"就等于给自由文本留了后门（"作业规格不是命题"那一类暂无这一档，
 #: 见 `docs/ROLE-GUIDE.md` 同批报告里的待裁项）。
 ABANDON_KIND_MATH_ERROR = "math_error"
 ABANDON_KIND_DIFFICULTY = "difficulty"
-ABANDON_KINDS: tuple[str, ...] = (ABANDON_KIND_MATH_ERROR, ABANDON_KIND_DIFFICULTY)
+#: E 侧第一档：发现反例（必须给可核的 `experiment_id`，理由正文说清哪个参数组让它假）。
+ABANDON_KIND_COUNTEREXAMPLE = "counterexample"
+#: E 侧第二档：枚举空间过于宏大（必须给可核的 `space` 读数，理由正文说清为什么在合理
+#: 成本内做不到）。
+ABANDON_KIND_SPACE_TOO_LARGE = "space_too_large"
+ABANDON_KINDS: tuple[str, ...] = (ABANDON_KIND_MATH_ERROR, ABANDON_KIND_DIFFICULTY,
+                                  ABANDON_KIND_COUNTEREXAMPLE,
+                                  ABANDON_KIND_SPACE_TOO_LARGE)
 
-#: 写口要认的那五个键（两个必填 + 三个按档必填）。工具声明与白名单都从这里取。
+#: E 侧那两档（"数值证明路线"的两条放弃理由）。判定口与 F 那两档共用同一个
+#: :func:`check_abandon_reason` —— 这里只给读数与措辞一个可引用的名字，不是第二份判定。
+ABANDON_E_SIDE_KINDS: tuple[str, ...] = (ABANDON_KIND_COUNTEREXAMPLE,
+                                         ABANDON_KIND_SPACE_TOO_LARGE)
+
+#: 写口要认的那几个键（两个必填 + 各档按需）。工具声明与白名单都从这里取。
+#:
+#: `experiment_id` 是 counterexample 档的可核证据；`space` 是 space_too_large 档的
+#: 可核读数（后者的字段名走 `numericproof._space_reading` 的既有那一套，不新造）。
 ABANDON_PARAM_KEYS: tuple[str, ...] = ("abandon_kind", "abandon_basis", "defect_ref",
-                                       "difficulty", "salvaged")
+                                       "difficulty", "salvaged", "experiment_id",
+                                       "space")
 
 #: `salvaged` 里每一条引理的 `kind` 取值 —— 业主原话是"拆出落成引理"。
 #:
@@ -272,6 +294,197 @@ def _defect_refusal(store: Any, root: str, ref: str, basis: str, *,
     return detail, "", ""
 
 
+def _experiment_rows(store: Any) -> tuple[dict[str, dict[str, Any]] | None, str]:
+    """`experiments` 的全部行（按实验号索引）；读不出来 ⇒ `(None, why)`（三态）。"""
+    if store is None:
+        return None, "没有 store"
+    try:
+        return {str(r.get("experiment_id") or ""): dict(r)
+                for r in store.rows("experiments")}, ""
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _counterexample_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+    """一行实验上的反例读数（`counterexample` 那一格，原样；没有就空）。"""
+    raw = row.get("counterexample")
+    if isinstance(raw, bool) or raw is None:
+        return {}
+    if isinstance(raw, Mapping):
+        return dict(raw)
+    if isinstance(raw, str):
+        text = raw.strip()
+        return {"text": text} if text else {}
+    if isinstance(raw, (list, tuple)):
+        return {"items": list(raw)} if raw else {}
+    return {"value": raw}
+
+
+def _experiment_claims(row: Mapping[str, Any], target: Mapping[str, Any]) -> bool:
+    """这一行实验检验的是不是**被放弃的这一条**命题（不猜：认不出 ⇒ 不认作这一条）。
+
+    两条认法，任一成立就算（与 B 收 E 的证据时"按正文 / 按 claim_key 认"同一族的宽松度）：
+    1. `claim_key` 等于这条命题的 `label` 或 `stmt_id`（写侧自己绑的那一格）；
+    2. 归一化之后 `claim` 与这条命题的正文互相包含（一长一短时两个方向都认）。
+    """
+    key = str(row.get("claim_key") or "").strip()
+    label = str(target.get("label") or "").strip()
+    sid = str(target.get("stmt_id") or "").strip()
+    if key and key in (label, sid):
+        return True
+    claim = str(row.get("claim") or "").strip()
+    body = str(target.get("statement_full") or target.get("statement_text") or "").strip()
+    if not claim or not body:
+        return False
+    try:
+        from . import textutil as _T
+
+        claim, body = _T.normalize(claim), _T.normalize(body)
+    except Exception:  # noqa: BLE001 —— 归一不了就逐字比（不猜更多）
+        pass
+    return bool(claim and body) and (claim in body or body in claim)
+
+
+def _counterexample_refusal(store: Any, eid: str,
+                            target: Mapping[str, Any],
+                            ) -> tuple[dict[str, Any], str, str]:
+    """核一条 counterexample 档的证据（业主 2026-11-07：E 侧放弃理由 1「发现反例」）。
+
+    三条同时成立才算"可核的反例"（缺一条都拒，且逐条说清缺哪一条）：
+
+    1. `experiment_id` 在 `experiments` 里真的有一行（读不出来 = 没查成，也拒）；
+    2. 那一行**反驳了**这条命题：`result="refutes"`（schema 硬约束：它必须带非空
+       `counterexample` 且 `negation_kind="disproved"`），或它带着非空 `counterexample`
+       读数（历史行 / 别的写法）。只有 `supports` 一类 ⇒ 这不是反例；
+    3. 那一行检验的是**被放弃的这一条**（`claim_key` / `claim` 认，见
+       :func:`_experiment_claims`）—— "引用另一条命题的反例"不是这条命题有反例。
+
+    返回 `(detail, refused_code, why)`。
+    """
+    rows, why = _experiment_rows(store)
+    if rows is None:
+        return {}, "abandon_experiments_unreadable", (
+            f"`experiments` 读不出来（{why}）⇒ 反例那一格没查成（没查成不是通过）")
+    row = rows.get(eid)
+    if row is None:
+        return {}, "abandon_counterexample_experiment_missing", (
+            f"`experiments` 里没有 {eid} 这一行 ⇒ 引用了一行不存在的实验，"
+            "拿不出「哪一个参数组让它假」的可核证据")
+    reading = _counterexample_reading(row)
+    result = str(row.get("result") or "")
+    detail: dict[str, Any] = {
+        "experiment_id": eid,
+        "result": result,
+        "negation_kind": str(row.get("negation_kind") or ""),
+        "claim": str(row.get("claim") or "")[:400],
+        "claim_key": str(row.get("claim_key") or ""),
+        "counterexample": reading,
+        "refutes": bool(result == "refutes" or reading),
+        "claims_this_statement": bool(_experiment_claims(row, target)),
+    }
+    if result != "refutes" and not reading:
+        return detail, "abandon_counterexample_not_refuting", (
+            f"实验 {eid} 的 result={result!r}、也没有非空 counterexample 读数 ⇒ "
+            "它没有反驳任何命题；「发现反例」这一档要的是一条**证否**的实验")
+    if not detail["claims_this_statement"]:
+        return detail, "abandon_counterexample_other_statement", (
+            f"实验 {eid} 检验的是另一条断言（claim={str(row.get('claim') or '')[:80]!r}、"
+            f"claim_key={str(row.get('claim_key') or '')!r}），不是被放弃的这一条 ⇒ "
+            "「这条命题有反例」必须指到检验**这一条**的那次实验")
+    return detail, "", ""
+
+
+#: `space` 读数里认作"规模"的键（与 `numericproof` 的既有读口同源，不新造一套）。
+#: 区间形态走 `numericproof._bound_dimensions`；枚举例数走 `numericproof._case_count_of`
+#: （后者认的键就是 `numericproof.CASE_COUNT_KEYS`）。
+
+
+def _has_enumeration_scale(mapping: Mapping[str, Any]) -> bool:
+    """这一份空间读数里有没有"规模"（区间 / 枚举量）—— 没有就只是一段文字。
+
+    "枚举空间过于宏大"必须是一个**可核的数字**（多少维、各维多大、一共多少例），
+    否则"太大了"这种自由文本也能当理由。判据本体全部复用 `numericproof` 的既有读口：
+    `_bound_dimensions`（`[lo, hi]` 形态的整数区间）与 `_case_count_of`（枚举例数）。
+    """
+    from . import numericproof as _NP
+
+    try:
+        bound_cases, _dims = _NP._bound_dimensions(dict(mapping))
+    except Exception:  # noqa: BLE001 —— 读不出来就是"没有规模"
+        bound_cases = None
+    cases = _NP._case_count_of(dict(mapping))
+    if bound_cases is not None or cases:
+        return True
+    for value in mapping.values():
+        if isinstance(value, Mapping) and _has_enumeration_scale(value):
+            return True
+    return False
+
+
+def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
+    """把放弃理由里的 `space` 读成一份可核读数（E 侧放弃理由 2「枚举空间过于宏大」）。
+
+    业主 2026-11-07（逐字）：「枚举空间过于宏大以致难以在合理成本内实现」。
+    "宏大"必须是一个**读数**，不是一句形容词 —— 所以这一格只认结构化的空间数据，
+    读口走 `numericproof._space_reading` 的既有字段（`search_bound` / `SPACE_KEYS`），
+    这里不新造字段名、不另写一份读法。
+
+    认两种形态（都来自盘上既有行）：
+    - 直接给搜索空间对象（区间 `[lo, hi]` / `n_cases` 一类计数 / `SPACE_KEYS` 里的键）；
+    - 给实验行那三格 `{"observations": …, "certificate": …, "search_bound": …}`。
+
+    三态（业主：**读数读不到 ⇒ 受控拒，fail-closed**）：
+    - `abandon_space_required`：这一格是空的；
+    - `abandon_space_unreadable`：给的不是对象 / 对象里读不出任何空间读数；
+    - `abandon_space_not_a_reading`：读出来的是一段文字（或没有任何规模数字）——
+      "太大了"这种词面**不能**代替读数。
+
+    返回 `(detail, refused_code, why)`；成功时 code 为空。
+    """
+    from . import numericproof as _NP
+
+    if raw is None or raw == "" or raw == {} or raw == ():
+        return {}, "abandon_space_required", (
+            "space_too_large 这一档必须给 `space`（枚举参数与规模，取 "
+            "`numericproof._space_reading` 的既有字段）—— 业主原话："
+            "「枚举空间过于宏大以致难以在合理成本内实现」；「宏大」必须有读数")
+    if isinstance(raw, (str, bytes)):
+        return {}, "abandon_space_unreadable", (
+            f"space 收到的是自由文本 {str(raw)[:60]!r} ⇒ 这不是读数："
+            "「太大了」这类词面不能代替枚举参数与规模（要给对象：各维区间 / 枚举例数）")
+    if not isinstance(raw, Mapping) or not raw:
+        return {}, "abandon_space_unreadable", (
+            f"space 必须是对象（收到 {type(raw).__name__}）—— 它是枚举参数与规模，"
+            "不是一段散文")
+    obs = raw.get("observations") if isinstance(raw.get("observations"), Mapping) else {}
+    cert = raw.get("certificate") if isinstance(raw.get("certificate"), Mapping) else {}
+    bound = raw.get("search_bound") if isinstance(raw.get("search_bound"), Mapping) else {}
+    if obs or cert or bound:
+        value, where = _NP._space_reading(dict(obs), dict(cert), dict(bound))
+    else:
+        # 直接给搜索空间对象：先按 observations 那一格读（`SPACE_KEYS` 的既有读口），
+        # 读不到再把整份当 `search_bound` 读（同一份读口对非空 search_bound 原样返回）——
+        # 两种形态都是 `numericproof._space_reading` 认的，不新造字段。
+        value, where = _NP._space_reading(dict(raw), {}, {})
+        if value is None:
+            value, where = _NP._space_reading({}, {}, dict(raw))
+    if value is None or value == "" or value == {} or value == []:
+        return {}, "abandon_space_unreadable", (
+            "space 里读不到搜索空间（`numericproof._space_reading` 的 "
+            f"`search_bound` / {list(_NP.SPACE_KEYS)} 都没有可用值）⇒ 没查成不许折成"
+            "「空间很大」")
+    if isinstance(value, str):
+        return {}, "abandon_space_not_a_reading", (
+            f"space 读到的是一段文字（{value[:60]!r}）⇒ 它没有枚举参数、也没有规模；"
+            "「枚举空间过于宏大」要的是可核的区间 / 枚举例数，不是一句形容词")
+    if not isinstance(value, Mapping) or not _has_enumeration_scale(value):
+        return {}, "abandon_space_not_a_reading", (
+            "space 里没有任何规模读数（各维 `[lo, hi]` 区间或 "
+            f"`{list(_NP.CASE_COUNT_KEYS)}` 一类的枚举例数）⇒ 读不出「多宏大」，"
+            "不能拿词面代替读数")
+    return {"space": dict(value), "space_where": where}, "", ""
+
+
 def _parse_stamp(value: Any) -> datetime | None:
     """ISO8601 时间戳（读不出来 ⇒ `None`，不猜）。"""
     try:
@@ -307,21 +520,27 @@ def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
 
 def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any = "",
                          difficulty: Any = "", salvaged: Any = (),
+                         experiment_id: Any = "", space: Any = None,
                          root: str = "", statement_id: Any = "",
                          at: Any = "", statement: Mapping[str, Any] | None = None,
                          difficulty_judge: Any = None,
                          judgment_required: bool = False) -> dict[str, Any]:
-    """换号理由的唯一判据（两档）：返回 `{checked, refused, why, problems, …}`。
+    """换号理由的唯一判据（四档）：返回 `{checked, refused, why, problems, …}`。
 
     这是业主 2026-11-07 那句裁定的机器落点。两个写口（`apply_abandonment` 与
     `Secretary.amend_statement_meta`）都只调它，不各写一份校验 —— 两处各写一份，
     "什么算给清了理由"就会在两个出口长出两种答案。
 
-    ## 两档各自要求什么（2026-11-07 审计之后的完整版）
+    ## 四档各自要求什么（2026-11-07 审计之后 + E 侧同步的完整版）
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
     | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
     | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类；不许指被放弃的这条自己；必须在这笔放弃之前就在册（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的） |
+    | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是**这一条**命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
+    | `space_too_large` | `space` + `abandon_basis` | `space` 必须是结构化读数（走 `numericproof._space_reading` 的既有字段），且读得出规模（`[lo, hi]` 区间或枚举例数）；读不到 / 只有文字 ⇒ 受控拒（fail-closed） |
+
+    后两档是 **E 侧数值证明路线**的两条放弃理由（业主 2026-11-07 第二刀），判定口与
+    前两档是同一个函数：这里不写第二份"像不像反例 / 空间大不大"的判据。
 
     ## `statement_id` / `at` 为什么是必填的
     审计 C1：改前的 `defect_ref` 没有 target，可以引用另一条命题的「有毛病」行，
@@ -338,6 +557,8 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     - 判了但 `salvaged_from_proof=False` ⇒ `abandon_salvaged_not_from_proof`。
     低层直调（`apply_abandonment` 没有秘书面）不传 `judgment_required`，结构判据照旧 ——
     生产的新放弃只经 `Secretary.amend_statement_meta` 那一口，那里一定传。
+    E 侧那两档不看 `difficulty_judge`：它们的证据是"盘上那一行实验 / 那一份空间读数"，
+    由本函数的确定性判据核，不另发一次语义判定。
 
     ## 三态
     `checked=True` = 理由齐；`checked=False` + `refused` = 受控拒绝（一个字节都不写）。
@@ -346,25 +567,25 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     out: dict[str, Any] = {
         "checked": False, "refused": "", "why": "", "problems": [],
         "abandon_kind": "", "abandon_basis": "", "defect_ref": "", "difficulty": "",
-        "salvaged": [], "detail": {},
+        "experiment_id": "", "space": {}, "salvaged": [], "detail": {},
     }
     got_kind = str(kind or "").strip()
     got_basis = str(basis or "").strip()
     if not got_kind and not got_basis:
         out.update(refused="abandon_reason_missing",
-                   why=("放弃/换号必须给 `abandon_kind`（math_error 或 difficulty）与 "
-                        "`abandon_basis`（理由正文）两格 —— 只写 status='abandoned' 的"
+                   why=("放弃/换号必须给 `abandon_kind`（" + "/".join(ABANDON_KINDS) +
+                        "）与 `abandon_basis`（理由正文）两格 —— 只写 status='abandoned' 的"
                         "自由文本理由不算给清了理由（业主 2026-11-07）"))
         return out
     if not got_kind:
         out.update(refused="abandon_reason_missing",
-                   why=(f"`abandon_basis` 有了，而 `abandon_kind` 是空的 —— 它只许两个值 "
+                   why=(f"`abandon_basis` 有了，而 `abandon_kind` 是空的 —— 它只许 "
                         f"{list(ABANDON_KINDS)}：不接受「是哪一档我自己看着办」"))
         return out
     if got_kind not in ABANDON_KINDS:
         out.update(refused="abandon_kind_not_allowed",
                    why=(f"abandon_kind 只许 {list(ABANDON_KINDS)} 之一（收到 {got_kind!r}）—— "
-                        "第三档不接受：业主只裁了两档，多一档就是给自由文本留后门"))
+                        "词表外的档不接受：多一档就是给自由文本留后门"))
         return out
     if not got_basis:
         out.update(refused="abandon_reason_missing",
@@ -409,6 +630,38 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
             return out
         out.update(defect_ref=ref, detail={**out["detail"], **detail})
         out.update(checked=True, why=f"math_error：理由引到 {ref}（判词「有毛病」）")
+        return out
+    # ---- counterexample 档（E 侧理由 1：发现反例）
+    if got_kind == ABANDON_KIND_COUNTEREXAMPLE:
+        eid = str(experiment_id or "").strip()
+        if not eid:
+            out.update(refused="abandon_counterexample_required",
+                       why=("counterexample 这一档必须给 `experiment_id`（认一条**真的**实验行）"
+                            "—— 业主原话：「发现反例」；反例的证据是那一次实验，"
+                            "不是一句「我找到了反例」。空值不猜实验"))
+            return out
+        detail, code, why = _counterexample_refusal(store, eid, target)
+        if code:
+            out.update(refused=code, why=why, experiment_id=eid,
+                       detail={**out["detail"], **detail})
+            return out
+        out.update(experiment_id=eid, detail={**out["detail"], **detail})
+        out.update(checked=True,
+                   why=(f"counterexample：理由引到实验 {eid}"
+                        f"（result={detail.get('result')!r}，反例读数"
+                        f"{'有' if detail.get('counterexample') else '在 result 上'}）"))
+        return out
+    # ---- space_too_large 档（E 侧理由 2：枚举空间过于宏大）
+    if got_kind == ABANDON_KIND_SPACE_TOO_LARGE:
+        got_space, code, why = _space_reading_of(space)
+        if code:
+            out.update(refused=code, why=why)
+            return out
+        out.update(space=dict(got_space.get("space") or {}),
+                   detail={**out["detail"], **got_space})
+        out.update(checked=True,
+                   why=("space_too_large：理由带一份可核的空间读数（出处 "
+                        f"{got_space.get('space_where') or '（未知）'}）"))
         return out
     # ---- difficulty 档
     diff = str(difficulty or "").strip()
@@ -517,12 +770,17 @@ def _statement_rows(store: Any) -> tuple[dict[str, dict[str, Any]] | None, str]:
 
 
 def structured_reason(*, kind: str, basis: str, defect_ref: str = "",
-                      difficulty: str = "", salvaged: Sequence[Mapping[str, str]] = ()) -> str:
-    """把两档理由拼成落盘那一段（`quote_reason` 里 `@` 之后的正文）。
+                      difficulty: str = "", salvaged: Sequence[Mapping[str, str]] = (),
+                      experiment_id: str = "", space: Mapping[str, Any] | None = None) -> str:
+    """把各档理由拼成落盘那一段（`quote_reason` 里 `@` 之后的正文）。
 
     形状是 JSON（`ensure_ascii=False`、键排序）：它必须能被机器逐格读回
     （读数要按 `abandon_kind` 分组、要判"是否带证据"），而自由文本做不到这件事。
     人类可读的那一段是 `abandon_basis` 这一格本身 —— 它没有被压缩成标签。
+
+    E 侧那两档各多一格可核证据：`experiment_id`（counterexample）与 `space`
+    （space_too_large）。它们与 `defect_ref` 同一条纪律 —— 只有给了值才落键，
+    历史行逐字不变。
     """
     payload: dict[str, Any] = {"abandon_kind": str(kind or ""),
                                "abandon_basis": str(basis or "").strip()}
@@ -530,6 +788,10 @@ def structured_reason(*, kind: str, basis: str, defect_ref: str = "",
         payload["defect_ref"] = str(defect_ref).strip()
     if str(difficulty or "").strip():
         payload["difficulty"] = str(difficulty).strip()
+    if str(experiment_id or "").strip():
+        payload["experiment_id"] = str(experiment_id).strip()
+    if isinstance(space, Mapping) and space:
+        payload["space"] = dict(space)
     items = [{"label": str(one.get("label") or ""), "stmt_id": str(one.get("stmt_id") or "")}
              for one in (salvaged or ())]
     if items:
@@ -542,7 +804,8 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
     """读一条放弃标记里的结构化理由（读侧唯一实现）。
 
     返回 `{"checked", "structured", "abandon_kind", "abandon_basis", "defect_ref",
-    "difficulty", "salvaged", "complete", "why"}`。三态与原模块同一条纪律：
+    "difficulty", "salvaged", "experiment_id", "space", "complete", "why"}`。
+    三态与原模块同一条纪律：
 
     - `structured=False` ⇒ 这是历史行（`@` 之后是一段自由文本）：结构化的那几格
       一个都读不出来，`why` 说明"换号理由不齐" —— 它不是"没有理由"；
@@ -552,8 +815,8 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
     """
     out: dict[str, Any] = {
         "checked": False, "structured": False, "abandon_kind": "", "abandon_basis": "",
-        "defect_ref": "", "difficulty": "", "salvaged": [], "complete": False, "why": "",
-        "at": "",
+        "defect_ref": "", "difficulty": "", "salvaged": [], "experiment_id": "",
+        "space": {}, "complete": False, "why": "", "at": "",
     }
     got = parse_abandon(text)
     if not got.get("checked"):
@@ -578,6 +841,8 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
                abandon_basis=str(data.get("abandon_basis") or "").strip(),
                defect_ref=str(data.get("defect_ref") or "").strip(),
                difficulty=str(data.get("difficulty") or "").strip(),
+               experiment_id=str(data.get("experiment_id") or "").strip(),
+               space=(dict(data.get("space")) if isinstance(data.get("space"), Mapping) else {}),
                salvaged=[dict(x) for x in (data.get("salvaged") or []) if isinstance(x, Mapping)])
     out["at"] = str(got.get("at") or "")
     if not out["abandon_basis"]:
@@ -588,6 +853,12 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
         return out
     if kind == ABANDON_KIND_DIFFICULTY and not (out["difficulty"] and out["salvaged"]):
         out["why"] = "difficulty 这一档缺 difficulty 或 salvaged ⇒ 换号理由不齐"
+        return out
+    if kind == ABANDON_KIND_COUNTEREXAMPLE and not out["experiment_id"]:
+        out["why"] = "counterexample 这一档缺 experiment_id ⇒ 换号理由不齐"
+        return out
+    if kind == ABANDON_KIND_SPACE_TOO_LARGE and not out["space"]:
+        out["why"] = "space_too_large 这一档缺 space（枚举参数与规模）⇒ 换号理由不齐"
         return out
     out.update(complete=True)
     return out
@@ -619,6 +890,8 @@ def relabel_events(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[dict[str
             "structured": bool(parsed.get("structured")),
             "complete": bool(parsed.get("complete")),
             "has_evidence": bool(parsed.get("defect_ref")
+                                 or parsed.get("experiment_id")
+                                 or parsed.get("space")
                                  or (parsed.get("difficulty") and parsed.get("salvaged"))),
             "basis": _basis_digest(parsed),
         })
@@ -703,17 +976,21 @@ def _statement_of(row: Mapping[str, Any]) -> Any:
 
 def _replayed_marker(current: Mapping[str, Any], was: Mapping[str, Any], *,
                      reason: Any, abandon_kind: Any, abandon_basis: Any,
-                     defect_ref: Any, difficulty: Any, salvaged: Any) -> str:
+                     defect_ref: Any, difficulty: Any, salvaged: Any,
+                     experiment_id: Any = "", space: Any = None) -> str:
     """这一笔若按"同一个标记原样重放"来读，会拼出哪一条标记（读不出来 ⇒ 空串）。
 
     幂等重放的口径必须逐字节比标记，而不是比调用方传了什么：`_abandon_reading`
-    重放的是"标记里那段理由原文"（没有结构化那五格），而第一次写的是结构化 JSON ——
+    重放的是"标记里那段理由原文"（没有结构化那几格），而第一次写的是结构化 JSON ——
     两条路拼出来的必须是同一个字符串，否则"重放"会被误读成"改理由"。
     """
     try:
         at = str(was.get("at") or "")
         structured = any(str(x or "").strip() for x in
-                         (abandon_kind, abandon_basis, defect_ref, difficulty))
+                         (abandon_kind, abandon_basis, defect_ref, difficulty,
+                          experiment_id))
+        if isinstance(space, Mapping) and space:
+            structured = True
         if salvaged not in (None, "", (), [], {}):
             structured = True
         if not structured:
@@ -740,7 +1017,8 @@ def _replayed_marker(current: Mapping[str, Any], was: Mapping[str, Any], *,
         return abandon_marker(at=at, reason=structured_reason(
             kind=str(abandon_kind or ""), basis=str(abandon_basis or ""),
             defect_ref=str(defect_ref or ""), difficulty=str(difficulty or ""),
-            salvaged=items))
+            salvaged=items, experiment_id=str(experiment_id or ""),
+            space=(dict(space) if isinstance(space, Mapping) else None)))
     except Exception:  # noqa: BLE001 —— 拼不出来就不认幂等，交给后面的闸
         return ""
 
@@ -749,6 +1027,7 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
                       actor: str = "secretary-B", abandon_kind: Any = "",
                       abandon_basis: Any = "", defect_ref: Any = "",
                       difficulty: Any = "", salvaged: Any = (),
+                      experiment_id: Any = "", space: Any = None,
                       difficulty_judge: Any = None) -> dict[str, Any]:
     """把一条已登记命题标成 `abandoned`（写侧唯一实现：理由与时间一起落盘）。
 
@@ -760,6 +1039,9 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     ## 2026-11-07（业主裁定）：放弃"可判真假的断言类"命题时必须给结构化理由
     业主逐字：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
     对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
+    同日第二刀（E 侧数值证明路线）：「只不过E侧放弃的理由为：1.发现反例；
+    2.枚举空间过于宏大以致难以在合理成本内实现」⇒ 同一道闸多两档（`counterexample` /
+    `space_too_large`，判据仍是 :func:`check_abandon_reason` 一处）。
 
     - 明确非命题的两档（`concept` / `definition`，真身
       `secretary.NOT_APPLICABLE_KINDS`）⇒ 不受这道闸管（概念没有"条件 ⇒ 结论"，
@@ -821,7 +1103,8 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
         candidate = _replayed_marker(current, was, reason=reason,
                                      abandon_kind=abandon_kind, abandon_basis=abandon_basis,
                                      defect_ref=defect_ref, difficulty=difficulty,
-                                     salvaged=salvaged)
+                                     salvaged=salvaged, experiment_id=experiment_id,
+                                     space=space)
         if candidate and candidate == existing_marker:
             out.update(checked=True, abandoned=True, already=True,
                        at=str(was.get("at") or ""), reason=str(was.get("reason") or ""),
@@ -835,7 +1118,8 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     if not is_abandon_exempt(kind_now):
         form = check_abandon_reason(store, kind=abandon_kind, basis=abandon_basis,
                                     defect_ref=defect_ref, difficulty=difficulty,
-                                    salvaged=salvaged, statement_id=sid, at=stamp,
+                                    salvaged=salvaged, experiment_id=experiment_id,
+                                    space=space, statement_id=sid, at=stamp,
                                     statement=current, difficulty_judge=difficulty_judge,
                                     judgment_required=bool(difficulty_judge))
         out["form"] = dict(form)
@@ -847,7 +1131,9 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
                                    basis=str(form["abandon_basis"]),
                                    defect_ref=str(form.get("defect_ref") or ""),
                                    difficulty=str(form.get("difficulty") or ""),
-                                   salvaged=form.get("salvaged") or ())
+                                   salvaged=form.get("salvaged") or (),
+                                   experiment_id=str(form.get("experiment_id") or ""),
+                                   space=form.get("space") or None)
     rewrite_at = stamp
     if already and was.get("checked") and str(was.get("at") or ""):
         rewrite_at = str(was.get("at"))       # 补理由不改"几时放下的"那一刻
