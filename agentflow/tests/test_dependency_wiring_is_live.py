@@ -1017,7 +1017,12 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
 
     打桩两处（合起来就是改前那一套时序）：① `proof_manuscript` 第一次调用不落盘
     （登记那一刻盘上没有稿）；② `publish_manuscript` 不改名（登记之后也不按命号落）。
-    于是 D 的携带单是空的、B 兜底也找不到稿 ⇒ 依赖面建不起来（在映射的判据下必红）。
+    于是"登记那一刻稿已在盘上"这条判据（`_a0_holds`）必红。
+
+    2026-11-07（解耦落地）之后，退回这个时序**不再**让携带单空掉：登记条目本身
+    就是那份手稿（框架写），所以 D 带的是一行"还没拿到命题号"的条目（`mss:<稿号>`，
+    地址 + 正文 sha 都在）。反真空的强度改由两处守住：a0 仍然红（时序真的退了），
+    而这一行必须真的可被认领（V 签之后 B 按正文 sha 认领它、落到一个真命题号上）。
     """
     _library(store)
     real_write = AgentF.proof_manuscript
@@ -1055,13 +1060,41 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     assert spy.calls[0]["files"] == [], spy.calls[0]["files"]
     assert _a0_holds(store, out, spy) is False, (
         "写稿时机退回登记之后，a0 的判据竟然还是绿的 ⇒ 它测的不是时序")
-    # 于是 D 手上没有稿可带（携带单空），B 也就落不了依赖
-    assert DS.carried_manuscripts(_d_report(store))["rows"] == [], "携带单本该是空的"
+    # ---- 2026-11-07 新契约：D 手上有一份"登记条目"可带，而它还没拿到命题号 --------
+    #
+    # 解耦之后"手稿文件就是登记条目"（`proofregistry` 的模块说明第 1 条）：登记这一笔
+    # 由框架把稿写到规范路径上，所以即便 F 自己那一笔写稿被退回登记之后，盘上仍有一份
+    # 带登记元信息的稿。携带单因此**不是空的** —— 它是新契约里那一行"未落号"的条目。
+    # 强度：这一行必须带地址 + 正文 sha（B 认领靠的就是它），且同一份稿只许上一行
+    # （`stmt:` 与 `mss:` 两行指着同一个路径 + 同一个 sha ⇒ 那是重列，不是携带）。
+    carried = DS.carried_manuscripts(_d_report(store))
+    rows = carried["rows"]
+    assert len(rows) == 1, rows
+    term = rows[0]
+    assert term["statement_id"] == "", term
+    assert term["manuscript_id"] == "plan-000000", term
+    assert term["path"] == f"{MANUSCRIPT_DIR}/f-proof-plan-000000.md", term
+    assert len(str(term["sha256"])) == 64, term
+    # 反真空的下半段照旧成立：这一条**新**命题自己没有稿 ⇒ B 整笔拒，
+    # 不借那一份别人的正文 / 依赖面（D1 严格版的既有判据，不放宽）。
     got = _register(store, statement_full="定理：写稿时机退回登记之后（反真空）。",
                     proof_text=f"1. 由定理甲直接得到（见 stmt:{THEOREM_A}）。",
                     derived_from=[THEOREM_A])
     assert _carried_holds(got, store, cited=THEOREM_A) is False, got
     assert got.get("ok") is False and got.get("kind") == DS.REFUSED_SECTION_MISSING, got
+    # 强度不降：那一行不是"挂在那里好看"的 —— V 签之后 B **按正文 sha 认领它**，
+    # 落到一个真命题号上（`manuscript_source=carried_by_D`、依赖面落成）。
+    # 没有这一格，"未落号的条目"只是清单上的一行字；有了它，`mss:plan-*` 这一档
+    # 就是可核的：签的是这一份正文、认领的也是这一份正文。
+    body = DS.proof_body(
+        (pathlib.Path(store.root) / term["path"]).read_text(encoding="utf-8")).strip("\n")
+    sign_before_registration(store.root, proof_text=body)
+    claim = _register(store, statement_full="定理：未落号的登记条目在 V 签之后被认领。",
+                      proof_text=body, derived_from=[THEOREM_A])
+    assert claim.get("ok") is True, claim
+    assert str(claim.get("stmt_id") or ""), claim
+    assert str(claim.get("manuscript_source")) == SRC_CARRIED, claim
+    assert _carried_holds(claim, store, cited=THEOREM_A), claim
 
 
 def test_stubbing_the_disk_fallback_out_turns_b_red(tmp_path: pathlib.Path,
