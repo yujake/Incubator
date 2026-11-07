@@ -518,6 +518,117 @@ def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
         return False, f"两个时间戳不可比（{type(exc).__name__}: {exc}）"
 
 
+def _difficulty_refusal(out: dict[str, Any], *,
+                        rows: Mapping[str, dict[str, Any]],
+                        target: Mapping[str, Any], target_id: str, basis: str,
+                        difficulty: Any, salvaged: Any, at: Any,
+                        difficulty_judge: Any, judgment_required: bool,
+                        ) -> dict[str, Any]:
+    """difficulty 档的判据（2026-11-07 从 :func:`check_abandon_reason` 原样搬出）。
+
+    搬出来只为让主函数回到 200 行以内（`tests/test_repo_survey_does_not_get_worse.py`
+    的 `src_functions_gt200_lines` 那一格）：判定逻辑、拒绝码、判定顺序、字段名一个字
+    都没改 —— 逐行搬移，`out` 是主函数传进来的同一个 dict，`detail` / `problems`
+    也是同一个引用，所以返回值与搬之前逐字节相同。
+
+    `(out_patch, done)` 的等价形状在这里是"就地改传进来的 `out` 并返回它"：这一档的
+    每条路径都收场（原实现里每条路径也都是 `return out`），所以不需要再往主函数回。
+    """
+    diff = str(difficulty or "").strip()
+    if not diff:
+        out.update(refused="abandon_difficulty_required",
+                   why=("difficulty 这一档必须给 `difficulty`（说清难在哪）—— 业主原话："
+                        "「需指出困难」；只写一句「做不动了」不是指出困难"))
+        return out
+    out.update(difficulty=diff)
+    items, why = _salvaged_items(salvaged)
+    if why:
+        out.update(refused="abandon_salvaged_missing", why=why)
+        return out
+    problems: list[str] = []
+    kept: list[dict[str, str]] = []
+    readings: list[dict[str, Any]] = []
+    for one in items:
+        sid = one["stmt_id"]
+        row = rows.get(sid)
+        if row is None:
+            out.setdefault("problems", []).append(f"{sid}：不在册")
+            out.update(refused="abandon_salvaged_not_registered",
+                       why=(f"salvaged 里的 {sid} 不在 statements 里 ⇒ 引理必须是真的"
+                            "登记过的那一条（受控拒绝，一个字节都不写）"))
+            return out
+        if sid == target_id:
+            out.setdefault("problems", []).append(f"{sid}：指向被放弃的这条自己")
+            out.update(refused="abandon_salvaged_self_reference",
+                       why=(f"salvaged 里出现了被放弃的这条自己（{sid}）—— 一条正在被放弃的"
+                            "命题不能同时充当「旧证明里拆出来的引理」"))
+            return out
+        status = str(row.get("status") or "")
+        if status != "active":
+            out.update(refused="abandon_salvaged_not_active",
+                       why=(f"salvaged 里的 {sid} 状态是 {status!r}，不是 active ⇒ "
+                            "拿一条已作废/已放弃的行当「可取之处」不是把旧证明拆成引理"))
+            return out
+        kind_now = str(row.get("kind") or "").strip().lower()
+        if kind_now not in SALVAGED_KINDS:
+            out.update(refused="abandon_salvaged_kind_not_lemma",
+                       why=(f"salvaged 里的 {sid} 的 kind 是 {kind_now!r}，而这一档只认引理类 "
+                            f"{list(SALVAGED_KINDS)}（业主原话：拆出落成引理）"))
+            return out
+        before, age_why = _registered_before(row.get("created_at"), at)
+        if not before:
+            out.update(refused="abandon_salvaged_after_the_abandonment",
+                       why=(f"salvaged 里的 {sid} 不是在这笔放弃之前就在册的引理（{age_why}）"
+                            " ⇒ 「原先证明中可取之处」必须是旧稿时期的东西，不许现造"))
+            return out
+        kept.append({"label": one["label"] or str(row.get("label") or ""), "stmt_id": sid})
+        readings.append({"stmt_id": sid, "kind": kind_now,
+                         "created_at": str(row.get("created_at") or ""),
+                         "label": str(row.get("label") or ""),
+                         "statement_full": str(row.get("statement_full") or "")})
+    out["detail"]["salvaged_readings"] = readings
+    # ---- 秘书语义判定（同一个调用同时判「真困难」与「从旧稿拆出」）
+    if difficulty_judge is None:
+        if judgment_required:
+            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
+                       why=("difficulty 这一档要一次秘书语义判定（这是不是真困难、难在哪，"
+                            "以及 salvaged 是不是从旧证明里拆出来的），而这一笔没有判定面 ⇒ "
+                            "没判成按受控拒处理（不许折成「有理由」）"))
+            return out
+    else:
+        verdict: dict[str, Any]
+        try:
+            got = difficulty_judge(statement=target, difficulty=diff,
+                                   basis=basis, salvaged=list(readings))
+            verdict = dict(got) if isinstance(got, Mapping) else {}
+        except Exception as exc:  # noqa: BLE001 —— 判定炸了 = 没判成（fail-closed）
+            verdict = {"checked": False,
+                       "reason": f"难度判定调用失败（{type(exc).__name__}: {exc}）"}
+        out["detail"]["difficulty_judgment"] = verdict
+        if not verdict.get("checked"):
+            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
+                       why=("难度语义判定没判成"
+                            f"（{verdict.get('reason') or verdict.get('refused') or '没有判定面'}）"
+                            " ⇒ 受控拒（「没判成」不许折成「有理由」）"))
+            return out
+        if not verdict.get("genuine"):
+            out.update(refused=ABANDON_DIFFICULTY_NOT_GENUINE,
+                       why=("秘书判定：这不是「难以逾越的困难」/没指出难在哪"
+                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
+                            " ⇒ 受控拒"))
+            return out
+        if not verdict.get("salvaged_from_proof"):
+            out.update(refused=ABANDON_SALVAGED_NOT_FROM_PROOF,
+                       why=("秘书判定：salvaged 里那几条不是从这条命题的原证明里拆出来的"
+                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
+                            " ⇒ 受控拒"))
+            return out
+    out.update(salvaged=kept, checked=True,
+               why=(f"difficulty：指出困难 + 把旧证明可取之处拆成 {len(kept)} 条引理"
+                    f"（{'、'.join(one['stmt_id'] for one in kept)}）"))
+    return out
+
+
 def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any = "",
                          difficulty: Any = "", salvaged: Any = (),
                          experiment_id: Any = "", space: Any = None,
@@ -663,100 +774,12 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
                    why=("space_too_large：理由带一份可核的空间读数（出处 "
                         f"{got_space.get('space_where') or '（未知）'}）"))
         return out
-    # ---- difficulty 档
-    diff = str(difficulty or "").strip()
-    if not diff:
-        out.update(refused="abandon_difficulty_required",
-                   why=("difficulty 这一档必须给 `difficulty`（说清难在哪）—— 业主原话："
-                        "「需指出困难」；只写一句「做不动了」不是指出困难"))
-        return out
-    out.update(difficulty=diff)
-    items, why = _salvaged_items(salvaged)
-    if why:
-        out.update(refused="abandon_salvaged_missing", why=why)
-        return out
-    problems: list[str] = []
-    kept: list[dict[str, str]] = []
-    readings: list[dict[str, Any]] = []
-    for one in items:
-        sid = one["stmt_id"]
-        row = rows.get(sid)
-        if row is None:
-            out.setdefault("problems", []).append(f"{sid}：不在册")
-            out.update(refused="abandon_salvaged_not_registered",
-                       why=(f"salvaged 里的 {sid} 不在 statements 里 ⇒ 引理必须是真的"
-                            "登记过的那一条（受控拒绝，一个字节都不写）"))
-            return out
-        if sid == target_id:
-            out.setdefault("problems", []).append(f"{sid}：指向被放弃的这条自己")
-            out.update(refused="abandon_salvaged_self_reference",
-                       why=(f"salvaged 里出现了被放弃的这条自己（{sid}）—— 一条正在被放弃的"
-                            "命题不能同时充当「旧证明里拆出来的引理」"))
-            return out
-        status = str(row.get("status") or "")
-        if status != "active":
-            out.update(refused="abandon_salvaged_not_active",
-                       why=(f"salvaged 里的 {sid} 状态是 {status!r}，不是 active ⇒ "
-                            "拿一条已作废/已放弃的行当「可取之处」不是把旧证明拆成引理"))
-            return out
-        kind_now = str(row.get("kind") or "").strip().lower()
-        if kind_now not in SALVAGED_KINDS:
-            out.update(refused="abandon_salvaged_kind_not_lemma",
-                       why=(f"salvaged 里的 {sid} 的 kind 是 {kind_now!r}，而这一档只认引理类 "
-                            f"{list(SALVAGED_KINDS)}（业主原话：拆出落成引理）"))
-            return out
-        before, age_why = _registered_before(row.get("created_at"), at)
-        if not before:
-            out.update(refused="abandon_salvaged_after_the_abandonment",
-                       why=(f"salvaged 里的 {sid} 不是在这笔放弃之前就在册的引理（{age_why}）"
-                            " ⇒ 「原先证明中可取之处」必须是旧稿时期的东西，不许现造"))
-            return out
-        kept.append({"label": one["label"] or str(row.get("label") or ""), "stmt_id": sid})
-        readings.append({"stmt_id": sid, "kind": kind_now,
-                         "created_at": str(row.get("created_at") or ""),
-                         "label": str(row.get("label") or ""),
-                         "statement_full": str(row.get("statement_full") or "")})
-    out["detail"]["salvaged_readings"] = readings
-    # ---- 秘书语义判定（同一个调用同时判「真困难」与「从旧稿拆出」）
-    if difficulty_judge is None:
-        if judgment_required:
-            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
-                       why=("difficulty 这一档要一次秘书语义判定（这是不是真困难、难在哪，"
-                            "以及 salvaged 是不是从旧证明里拆出来的），而这一笔没有判定面 ⇒ "
-                            "没判成按受控拒处理（不许折成「有理由」）"))
-            return out
-    else:
-        verdict: dict[str, Any]
-        try:
-            got = difficulty_judge(statement=target, difficulty=diff,
-                                   basis=got_basis, salvaged=list(readings))
-            verdict = dict(got) if isinstance(got, Mapping) else {}
-        except Exception as exc:  # noqa: BLE001 —— 判定炸了 = 没判成（fail-closed）
-            verdict = {"checked": False,
-                       "reason": f"难度判定调用失败（{type(exc).__name__}: {exc}）"}
-        out["detail"]["difficulty_judgment"] = verdict
-        if not verdict.get("checked"):
-            out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
-                       why=("难度语义判定没判成"
-                            f"（{verdict.get('reason') or verdict.get('refused') or '没有判定面'}）"
-                            " ⇒ 受控拒（「没判成」不许折成「有理由」）"))
-            return out
-        if not verdict.get("genuine"):
-            out.update(refused=ABANDON_DIFFICULTY_NOT_GENUINE,
-                       why=("秘书判定：这不是「难以逾越的困难」/没指出难在哪"
-                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
-                            " ⇒ 受控拒"))
-            return out
-        if not verdict.get("salvaged_from_proof"):
-            out.update(refused=ABANDON_SALVAGED_NOT_FROM_PROOF,
-                       why=("秘书判定：salvaged 里那几条不是从这条命题的原证明里拆出来的"
-                            f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
-                            " ⇒ 受控拒"))
-            return out
-    out.update(salvaged=kept, checked=True,
-               why=(f"difficulty：指出困难 + 把旧证明可取之处拆成 {len(kept)} 条引理"
-                    f"（{'、'.join(one['stmt_id'] for one in kept)}）"))
-    return out
+    # ---- difficulty 档（整段搬进 `_difficulty_refusal`：判据、拒绝码、判定顺序、
+    # 字段名一个字都没改；搬出来只为让本函数回到 200 行以内，见那个函数的 docstring）
+    return _difficulty_refusal(
+        out, rows=rows, target=target, target_id=target_id, basis=got_basis,
+        difficulty=difficulty, salvaged=salvaged, at=at,
+        difficulty_judge=difficulty_judge, judgment_required=judgment_required)
 
 
 def _statement_rows(store: Any) -> tuple[dict[str, dict[str, Any]] | None, str]:
