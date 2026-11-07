@@ -1872,9 +1872,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
 @tool(
     "table.update",
-    "部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/"
-    "quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + "
-    "abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。",
+    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 "
+    "abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。",
     _obj(
         {
             "table": _TABLE_PROP,

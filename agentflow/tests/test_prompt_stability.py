@@ -920,6 +920,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "携带单」与「来自 A 的收录请求照常办」）与本批 B 类的 `fs.write` summary（A/B 写 `reports/` 下"
              "三族证明了也拒、`notes/` 下不算框架产物）。变化格 = B/D/F/M（十一格摘要）；A/E/G/L 只动面快照里"
              "那一行 summary、不进摘要；C/H/V 逐字未动。facts 键集仍 15 格。"},
+    # p254 → p255（2026-11-07，A 类压缩收口）：facts 键集一格没动（还是 15 格），
+    # 只改工具说明文本 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p255", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p255（2026-11-07，A 类压缩收口）：上游是本批把压缩批次压回预算的那两句工具说明"
+             "（`table.update` 的 summary 去掉与 `params` 重复的「只覆盖 patch，不改主键」，"
+             "`fs.write` 的 summary 去掉重复的动词与名词）。变化格 = A/B/D/E/F/G/L（`table.update` 的"
+             " `roles` 恰是这七格）；`fs.write` 那一行不进摘要（多出的 M 那格 SAME）⇒ 只动面快照；"
+             "C/H/M/V 逐字未动。facts 键集仍 15 格。"},
 
 )
 

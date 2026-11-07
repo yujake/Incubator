@@ -2324,7 +2324,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   B 08cdc16d→30720620 / D 48fb9628→2b0e40ab / F 46140ef9→390ca21e / M b43664a8→0449b009。
 # C/H/V 与 A/E/G/L 逐字未动。十一格是 `temp/_p254_freeze_digests.py` 的现算值（口径同上），
 # 不是手抄。
-_FROZEN_PROMPT_VERSION = "p254"
+_FROZEN_PROMPT_VERSION = "p255"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2559,15 +2559,15 @@ _FROZEN_PROMPT_VERSION = "p254"
 #: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "aa1ca53c1e71d5246d47c6323f6ecf3eb3feda4b31b6aaede10f480e22545805",
-    "B": "307206208d92cc4a990a4541130adeeabdfdb35186ebc82897f3b46a64c7ddfd",
+    "A": "7eb935b4a03b2d4b3a55467b141ccce0384527204a2ed964b941e1812467f13a",
+    "B": "f6f8b0454f46690552c576b99b1b7dedba46c9d0a729fdf2c0d075aa36ad1607",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "2b0e40ab8067f03e4d830399aac9d01cb32cc7fc121765276af81f4527a9b407",
-    "E": "bfea0b3153c8d601bf01392a6e8cf43b718bb597efdd01c74bc67bf790a555cc",
-    "F": "390ca21e2e1ab7b448a25a4908b10c32eff2ae087032eb65068dfb7d163ef26e",
-    "G": "142885bcd819507785b3f45ccabe1cba5f552b569afa347e82b6815fc80a363f",
+    "D": "23d34e946b0e7f779f1b5b85ba59fc3cc1eaee72f578c5e14c5638dda09f17ed",
+    "E": "2cc19316ac7edeadeaecd1bf413d87a3ca5d28487d1c403bfda0e0f1b9c84b2d",
+    "F": "81416473aa2bd905f9309d4e384b47449359af702e6bb8455937f99eff42cbf5",
+    "G": "3999a4e30bc34e39fbd7253f784c82df6f8ffd48b8519725187fc7893286bf09",
     "H": "82aded018b331b95d28f931c1ad60c0999894ad08716db3ca9a0f897770377f6",
-    "L": "1ecacc15bf05f097285c4e43661bfba623449c65f6c6e165ef1436f7ea069f8c",
+    "L": "c610ce90ff554e5c030487b9929dfc7ada35f41891bc775d4850b519871ab76f",
     "M": "0449b0096409a7878e2a987067cb933de1bdfb5ff7f347cce654f37c75e8fc60",
     "V": "a3d391fc5a737268fc8d4c36ecd74146f2dc4f9fea4aaf58a677c229446f48bd",
 }

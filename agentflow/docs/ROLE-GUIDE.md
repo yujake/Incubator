@@ -91,7 +91,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `lit.admit` | 正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。 | `write_local` | （无） |
 | `lit.admit_all` | 提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。 | `write_local` | （无） |
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
@@ -120,7 +120,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
@@ -231,7 +231,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。 | `write_local` | （无） |
@@ -246,7 +246,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -479,7 +479,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `graph.build` | 从 store 三张表构建概念图索引，返回图规模与完整性体检读数。 | `read` | （无） |
 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超过上限时 truncated=True 并说明只给了前几个 —— 绝不静默截断。 | `read` | `concept_id` |
 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
@@ -502,7 +502,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。 | `read` | `concept_id` |
@@ -602,7 +602,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -614,7 +614,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
@@ -740,7 +740,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -754,7 +754,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
@@ -876,7 +876,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -890,7 +890,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
@@ -1205,7 +1205,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -1217,7 +1217,7 @@
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
-| `table.update` | 部分更新一行：只覆盖 patch，不改主键。`statements` 只就地改 status/kind/quote_reason（整行校验）；带正文走登记。放弃命题另要 abandon_kind + abandon_basis，按档给 defect_ref 或 difficulty+salvaged；不齐 ⇒ 拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题要五格 abandon_kind/abandon_basis + 按档 defect_ref 或 difficulty+salvaged，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -1366,7 +1366,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 

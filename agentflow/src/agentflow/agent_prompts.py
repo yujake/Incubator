@@ -3505,7 +3505,29 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
 #: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p254"
+#: p254 → p255（2026-11-07，A 类压缩收口：只动工具说明，不动任何一段提示词正文）：
+#: 上游 = 本批 A 类（`src/agentflow/tools/fs_tools.py` 与 `src/agentflow/tools/table_tools.py`）：
+#:   ① `fs.write` 的 summary：上一批（B 类 dcab4a44）新加的那一句从
+#:      「A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物」压成
+#:      「A/B 在 `reports/` 下这三族也拒；`notes/` 不算」—— 事实一字不少，只删重复的动词与名词；
+#:   ② `table.update` 的 summary：同一批（10d1f398）新写的两句压掉与 `params` 重复的部分
+#:      （「只覆盖 patch，不改主键」已被 `patch` / `id` 两格的 description 写死），
+#:      五格（`abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged`）
+#:      与「按档给」的两档口径原样保留；压缩批次总量 6516 → 6473 字符（74.9971%，≤75%）。
+#: 变化格（十一格摘要）= A / B / D / E / F / G / L —— 上游只有一条：
+#: `table.update` 的 summary（它的 `roles` 恰好就是这七格；判据
+#: `tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections` 的渲染口径
+#: 会把这七格的工具面渲进提示词）。`fs.write` 的那一句不进十一格：`fs.write` 的 `roles`
+#: 比上面那七格多一个 M，而 M 的摘要 SAME ⇒ 它只动面快照，不动摘要（与 p254 那次同形）。
+#: C / H / M / V 四格逐字未动。逐格旧值 → 新值：
+#:   A aa1ca53c→7eb935b4 / B 30720620→f6f8b045 / D 2b0e40ab→23d34e94 / E bfea0b31→2cc19316 /
+#:   F 390ca21e→81416473 / G 142885bc→3999a4e3 / L 1ecacc15→c610ce90。
+#: 十一格是 `temp/_p255_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：`_FROZEN_PROMPT_VERSION`（p255）+ `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，
+#: count / keys_sha256 与 p254 同值）；两份 golden 按现值重冻；`docs/ROLE-GUIDE.md` 重生成
+#: （`SYSTEM-COMPONENTS.md` 不动）；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p255"
 
 
 
