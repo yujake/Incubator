@@ -1063,7 +1063,7 @@ def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
     返回 `{"checked": True, "titles": {kind: title}, "rows": [...], "unknown": [...],
     "mismatched": [...]}`。它是**读数**（与 `kind_gap` / `theorem_unsigned` 同族），
     不进 `problems`、不改 `state`；判它红不红是调用方的事（判据见
-    `tests/test_example_is_a_normal_proposition.py` 的 d/e）。
+    `tests/test_example_g_mapping_is_the_example_environment.py` 的 d/e）。
 
     为什么按 `row.kind` 找 `declared`：对应表与正文的对齐口径是"环境名 = kind"
     （`_orphan_problems` 按 `(kind, label)` 配），所以 `kind=example` 那一行对的就是
