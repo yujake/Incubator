@@ -2915,7 +2915,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    summary 与冷启动口径统一成两态（签落 `out/vsigns/<sha>.json`，由秘书发）。
 #: ③ 本轮的提示词口径收口（`draft/171`/`172`/`174` 的施工）：
 #:    · 未签闭环教进 M/D/F：`statements_unsigned` 是 blocker（不落在八格里任何一格上）、
-#:      两条出路（重送 V 拿干净「成立」/ `status=abandoned` + `quote_reason=abandoned@<ISO>@<理由>`）、
+#:      两条出路（重送 V 拿干净「成立」/ `status=abandoned` + 两档理由：`math_error` 给 `defect_ref`、
+#:      `difficulty` 给 `difficulty` + `salvaged`；p253 起旧写法 `quote_reason=abandoned@<ISO>@<理由>` 不再教）、
 #:      放弃作废 `v-resubmit@` 那一半；M 那句已作废的「0 不是失败，静默的 0 才是」删掉；
 #:    · F 补 `v-resubmit@<命题号>@<proof_sha256>`（expects=work，ack 关不掉）、
 #:      `verify_proof` 的必填 `statement_id` / `proof_no` / `readonly_facts`、
@@ -3462,7 +3463,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/golden/agent_surface_snapshot.json` / `tool_surface_snapshot.json` 按现值重冻；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p252"
+#: p252 → p253（2026-11-07，让提示词与工具面第二次对齐 + 版本冻结）：
+#: 背景：p252 那一笔（4e5e85ae）把 `table.update` 的 summary 改成两档放弃口径（新增 `abandon_kind` /
+#: `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` 五格），但只改了工具声明与 D/F 的手册：
+#: 十一格里 A/B/D/E/F/G/L 的摘要从那一刻起就与冻结表对不上（判据一直是红的），而 D/F/M 的 policy
+#: 与 M 的正文仍在教旧写法 `quote_reason=abandoned@<ISO8601>@<理由>`（「三样缺一不可」）。
+#: 本笔逐处改成两档，并把版本推到 p253。进段的有四笔：
+#:   ① `specs/d.py` 的 policy（放弃那一条改成 `math_error` / `difficulty` 两档，点名三个受控码）；
+#:   ② `specs/f.py` 的 policy（同上两档）＋ 新增一条「交 B 登记前先过命题形态闸」
+#:      （`proposition_form_refused` —— p252 只写进 F 的手册，而手册正文不进提示词 ⇒ 模型看不到）；
+#:   ③ `specs/m.py` 的 policy（同上两档）；
+#:   ④ `agent_prompts.py` 的 M「五、完成定义」里那句 blocker 出路（同上两档）。
+#: 另有三笔不进段（正文只落盘 / 注释）：`agent_skills` 的 M 手册那一节（顺手把被前一笔插坏的
+#: 段落理顺）、`agent_skills` 的 B 手册新增「五格如实带上，判的是你的秘书」、
+#: `agent_prompts.py` 里 p252 那一格历史注释里的旧写法。
+#: 变化格 = D / F / M（本笔）＋ A/B/E/G/L（上游 4e5e85ae 那一笔的 `table.update` summary；
+#: 它们从 p252 起就漂着，本批只负责把冻结表跟上，不重复改它们）；C/H/V 三格逐字未动。
+#: 判据：`tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p253）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；`tests/golden/agent_surface_snapshot.json` /
+#: `tool_surface_snapshot.json` 按现值重冻；`docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p253"
 
 
 
@@ -5799,7 +5821,8 @@ PAPER_PACK = """\
 同样以它的当次读数为准。
 **blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` ——
 既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是**改稿之后**重送 V 拿到干净的「成立」，或明确放弃
-（`status=abandoned` + `quote_reason=abandoned@<ISO8601>@<理由>`）；`mapping_not_written` —— 有命题、已成稿而论文包里
+（`status=abandoned` + `abandon_kind` + `abandon_basis`，再按档给 `defect_ref` 或 `difficulty` + `salvaged`；理由不齐 ⇒
+写盘前受控拒，见 D / F 的政策与两份手册）；`mapping_not_written` —— 有命题、已成稿而论文包里
 没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
 `acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 落在 `paper` 那一格（改完正文没重编）。
 只要 `closing` 的读数里 `blockers` 非空，就不算交付。

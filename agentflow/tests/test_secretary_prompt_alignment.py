@@ -337,6 +337,26 @@ DUTIES: dict[str, dict[str, object]] = {
                "秘书整份退回（`dependency_source_not_registered`，逐行点名哪一行、哪个号），"
                "这一份不交给 V；F 必须知道有这一遍，否则它会把「交上去了」读成「已经在审了」",
     },
+    # 2026-11-07（p253：F 的 policy 正文补命题形态闸 —— p252 只把这道闸写进 F 的手册，
+    # 而手册正文不进 system 提示词（索引行只印 slug + 一句话）⇒ 模型那一侧看不到它）。
+    # F 的 policy 现在逐字写着「你的秘书先按「条件 → 结论」判一次形状」：那是一句对角色的
+    # 承诺（秘书会判、判不过 / 没判成 ⇒ 这一轮受控拒 `proposition_form_refused`）⇒ 按本文件
+    # 纪律必须有一条职责认领它，否则方向二红（承诺了一个没人接住的接住方）。
+    # 真身 `Secretary.judge_proposition_form`（secretary.py；判据只有一处）；
+    # 生产调用点 `agent_f/core.py` 的 `sec.judge_proposition_form(`（登记一条新命题那一笔）。
+    # 可见性 `conditional ("F",)`：这道闸只在 F 交一条新命题时发生，别的角色不经过它。
+    "f_proposition_form": {
+        "code": "judge_proposition_form",
+        "where": "secretary.py",
+        "call": ("agent_f/core.py 的 `sec.judge_proposition_form(`（登记新命题那一笔）",),
+        "visibility": "conditional",
+        "roles": ("F",),
+        "probe": ("你的秘书先按「条件 → 结论」判一次形状",),
+        "why": "命题形态闸：F 交一条新命题时，它自己的秘书先问「这段描述有没有明确"
+               "从什么条件导出什么结论」（只判形状，不判对不对、不判是否平凡）；判不过或"
+               "没判成 ⇒ 这一轮受控拒 `proposition_form_refused`、不落成手稿登记条目 —— "
+               "F 必须知道这一步有接住方，否则它会把「我交了」读成「已经登记了」",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，
@@ -402,6 +422,15 @@ NO_CALL_POINT_TODAY = {
                               "`getattr(sec, 'land_unregistered_sign')` 反射调用"
                               "（V 侧不得直接 import 写口，`agent_v/**` 0 处签写口）—— "
                               "判据的行级扫描认不出反射形态，故登记在此",
+    # 2026-11-07（p253）：与上面两条同一类 —— 它是作为值递进去的，不是被调用的。
+    # 调用点：`secretary.py::amend_statement_meta` 里 `difficulty_judge=self.judge_abandon_difficulty`
+    # 绑进 `statementabandon.check_abandon_reason`（判据里没有 `symbol(` 那种形态，行级扫描认不出
+    # 「方法被当参数传」这一档）。豁免里点名的那一问（这是不是真困难 / salvaged 是不是从原证明拆的）。
+    "judge_abandon_difficulty": "difficulty 档放弃命题的秘书语义判定；调用点："
+                                "`secretary.py::amend_statement_meta` 以 "
+                                "`difficulty_judge=self.judge_abandon_difficulty` 绑进 "
+                                "`statementabandon.check_abandon_reason` —— 判据的行级扫描只认 "
+                                "`symbol(` / `.symbol(` 两种调用形态，认不出「方法被当参数传」，故登记在此",
 }
 
 

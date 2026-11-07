@@ -434,14 +434,20 @@ def _m_skills() -> tuple[Skill, ...]:
 两条出路，没有第三条：
 
 1. **重送**：补齐之后由 D 让 F 把那一份手稿重新送 V 审（`proof_manuscript`，在册也给；**D 没有到 V 的边**，别派 D 去送审），拿到干净的「成立」；
-2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，**同时**把 `quote_reason`
-   写成 `abandoned@<ISO8601>@<理由>`。状态、时间、理由三样缺一不可 —— 只写状态的行仍按
-   未签计（读数是 `abandoned_without_reason`）。
+2. **明确放弃**：派 B 用通用表写口把该命题标成 `status=abandoned`，并把理由说成两档之一：
+   - `abandon_kind="math_error"`：`abandon_basis` 里写清**错在第几步、错的是什么**，再给一个
+     `defect_ref` 指到这条命题自己的「有毛病」判词（`verifications/<该命题号>.jsonl#v-00000N`）；
+   - `abandon_kind="difficulty"`：`difficulty` 里写清**难在哪**（缺哪条引理 / 哪一步的界对不上），
+     并把旧证明里可取之处拆成引理写进 `salvaged`（每条 `{label, stmt_id}`；引理要已在册、
+     `status=active`、`kind="lemma"`）。
+   这两档都先由秘书判：理由空着、`salvaged` 空着、或 `difficulty` 不是真困难，都会在写盘前
+   被受控拒（码见 `statementabandon` 的 `ABANDON_*`），盘上一个字节不改。只写状态的行仍按
+   未签计（读数 `abandoned_without_reason`）。
 
 - 通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。
-所以走第 2 条之后回头看一眼板：名下那条重送项应当已经 `done` + `expired`（还开着就按未消项
-那条重送义务的幂等键是 `v-resubmit@<命题号>@<proof_sha256>`（键里带被审正文的 sha）—— 它不欠你动作；收口只有两条路：更干净的「成立」落下来，或它的父代理/M 显式撤销。
-处理，它会挡销号与收工）。
+  所以走第 2 条之后回头看一眼板：名下那条重送项应当已经 `done` + `expired`（还开着就按未消项
+  处理，它会挡销号与收工）。
+- 那条重送义务的幂等键是 `v-resubmit@<命题号>@<proof_sha256>`（键里带被审正文的 sha）—— 它不欠你动作；收口只有两条路：更干净的「成立」落下来，或它的父代理/M 显式撤销。
 
 ## 还有一格读数：哪些证明还没洗过（`statements_unoptimized`）
 
@@ -953,6 +959,27 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 引文语义那一档（业主 2026-10-14 口径）必须留证据：来源里那一段逐字正文 +
 那一次判定的调用记录 —— 说不出对着哪一段、哪一次判的，就不算通过。
+
+## 放弃一条命题：五格如实带上，判的是你的秘书
+
+被派去「把某条命题标成放弃」时，你是**执行者**：把派你的人给的理由**原样**带进 `table.update`，
+判它齐不齐的是**你的秘书**（写盘前判，受控拒 = 一个字节都不写），不是你替它圆场、也不是你
+自己改口径凑过去。
+
+五格都在 `table.update` 的参数面上（只在 `patch.status="abandoned"` 时用）：
+
+- `abandon_kind`：只两档 —— `math_error`（命题本身有实质数学错误）/ `difficulty`（证明遇到难以逾越的困难）；
+- `abandon_basis`：理由正文。`math_error` 要点名**错在第几步、错的是什么**；`difficulty` 要说清**难在哪**；
+- `defect_ref`：`math_error` 那一档用，形状 `verifications/<6 位命题号>.jsonl#v-<6 位验证号>`，
+  命题号必须是**这一条**（指向别的命题、或指向一条对旧正文的判词都会被拒）；
+- `difficulty`：`difficulty` 那一档用，说清难在哪（缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）；
+- `salvaged`：`difficulty` 那一档用，旧证明里可取之处拆出的引理，每条 `{"label": …, "stmt_id": …}`
+  —— 那几条要**先在册**（`status="active"`、`kind="lemma"`、不是这条自己、且在这笔放弃之前就登记了）。
+
+交接时**缺哪格就回去问派你的人要哪格**，别自己编一个号、也别把一段散文硬塞进 `abandon_basis` 了事：
+理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 秘书会受控拒
+（`abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine` …），
+盘上一个字节不改。`quote_reason` 里那条标记与时间戳由系统按你给的这几格拼，不用你手写。
 
 ## 等级不许自报
 

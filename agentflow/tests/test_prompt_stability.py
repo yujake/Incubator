@@ -898,6 +898,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "D/F 是自己的手册变了，A/B/E/G/L 是 `table.update` 那一行 summary（工具声明，"
              "新增 `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged`"
              " 五格）印在这五个角色的工具面上。C/H/M/V 逐字未动。"},
+    # p252 → p253（2026-11-07，让提示词与工具面第二次对齐）：facts 键集一格没动（还是 15 格），
+    # 只改段文本 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p253", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p253（2026-11-07，提示词与工具面第二次对齐 + 版本冻结）：p252 把 `table.update` 的"
+             " summary 改成两档放弃口径，但只改了工具声明与 D/F 的手册 —— 十一格里 A/B/D/E/F/G/L"
+             " 从那一刻起就与冻结表对不上，而 D/F/M 的 policy 与 M 正文仍在教旧写法"
+             "「`quote_reason=abandoned@<ISO8601>@<理由>`，三样缺一不可」。本笔把四处旧格式逐处改成"
+             "两档（`math_error`：错在第几步 + `defect_ref`；`difficulty`：难在哪 + `salvaged` 引理），"
+             "B 手册补上五格与「判的是你的秘书」，F 的 policy 正文补上命题形态闸"
+             "（`proposition_form_refused`）。变化格 = D/F/M（本笔）＋ A/B/E/G/L（上游 4e5e85ae 的"
+             " `table.update` summary，从 p252 起就漂着）；C/H/V 逐字未动。facts 键集仍 15 格。"},
 
 )
 
