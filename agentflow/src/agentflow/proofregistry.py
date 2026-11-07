@@ -393,6 +393,41 @@ def read_entry(root: Any, *, family: Any, statement_id: Any = "",
 
 # ---------------------------------------------------------------- 登记 / 重写（唯一写入口）
 
+def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str,
+                          label: Any, kind: Any, mode: str, entry: Mapping[str, Any],
+                          at_text: str, versions_line: str,
+                          statement_id: Any) -> str:
+    """把稿头元信息改成本笔这一版（`## 证明` 之后一个字节不动），并补上命题号那一行。
+
+    稿头那一行必须写上这一笔的命题号（2026-11-07：解耦之后的漏格）。解耦之后登记条的
+    底稿常常是 `proof_manuscript` 先写的那份计划稿，而它渲染时还没有命题号
+    （`manuscriptform.render_proof_manuscript` 写的是 `- 命题号：stmt:（还没落号）`）。
+    `_rewrite_head` 只管元信息那几行、不碰这一行，于是登记落在
+    `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"—— 双读数。后果是可直接读到的：
+    `entries_on_disk` 把这一条读成"未落号的登记条目"，D 的携带单于是把同一份稿再列一遍
+    （`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），而按号核对携带单的那一侧找不到
+    它。号已经拿到 ⇒ 这一行必须写它。
+
+    这一段是纯搬移：`register_or_rewrite` 原来内联在这里的几行原样搬进来，
+    入参与返回值都是原来的那几格（拆分只为了把 210 行压回 200 行以内）。
+    """
+    head_now = split_sections(text)[0]
+    head_new = _rewrite_head(head_now, {
+        _MF.PROOF_NO_MARK: str(proof_no),
+        SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
+        _MF.LABEL_MARK: str(label or ""),
+        KIND_MARK: (str(kind or "") if mode == MODE_REGISTERED
+                    else str(kind or entry.get("kind") or "")),
+        REGISTERED_AT_MARK: (at_text if mode == MODE_REGISTERED
+                             else str(entry.get("registered_at") or at_text)),
+        VERSION_MARK: versions_line,
+    })
+    text = head_new + text[len(head_now):]
+    if str(statement_id or "").strip():
+        text, _applied = _MF.ensure_statement_line(text, str(statement_id))
+    return text
+
+
 def register_or_rewrite(
     root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
     dependency_rows: Sequence[Mapping[str, Any]] = (),
@@ -555,30 +590,12 @@ def register_or_rewrite(
         deps_body = (deps_section[len(_DS.SECTION_HEADING):]
                      if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
         text, _ok_deps = _replace_section(text, "依赖", deps_body)
-    # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"）。
-    head_now = split_sections(text)[0]
-    head_new = _rewrite_head(head_now, {
-        _MF.PROOF_NO_MARK: str(proof_no),
-        SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
-        _MF.LABEL_MARK: str(label or ""),
-        KIND_MARK: (str(kind or "") if mode == MODE_REGISTERED
-                    else str(kind or entry.get("kind") or "")),
-        REGISTERED_AT_MARK: (at_text if mode == MODE_REGISTERED
-                             else str(entry.get("registered_at") or at_text)),
-        VERSION_MARK: versions_line,
-    })
-    text = head_new + text[len(head_now):]
-    # ---- 稿头那一行必须写上这一笔的命题号（2026-11-07：解耦之后的漏格） ------------
-    #
-    # 解耦之后登记条的底稿常常是 `proof_manuscript` 先写的那份计划稿，而它渲染时
-    # 还没有命题号（`manuscriptform.render_proof_manuscript` 写的是
-    # `- 命题号：stmt:（还没落号）`）。`_rewrite_head` 只管元信息那几行、不碰这一行，
-    # 于是登记落在 `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"—— 双读数。
-    # 后果是可直接读到的：`entries_on_disk` 把这一条读成"未落号的登记条目"，D 的携带单
-    # 于是把同一份稿再列一遍（`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），
-    # 而按号核对携带单的那一侧找不到它。号已经拿到 ⇒ 这一行必须写它。
-    if str(statement_id or "").strip():
-        text, _applied = _MF.ensure_statement_line(text, str(statement_id))
+    # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"），并补上命题号那一行。
+    # 那一段（含"为什么必须写命题号"的现场）搬进 `_head_for_new_version`：纯搬移。
+    text = _head_for_new_version(
+        text, proof_no=proof_no, new_sha=new_sha, new_fp=new_fp, label=label,
+        kind=kind, mode=mode, entry=entry, at_text=at_text,
+        versions_line=versions_line, statement_id=statement_id)
     # ---- 落盘（框架写；原子替换） ------------------------------------------------
     target = Path(str(root or "")) / rel
     try:
