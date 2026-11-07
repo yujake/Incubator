@@ -52,6 +52,8 @@ from __future__ import annotations
 
 from ._support import Any, Mapping, S, Sequence, _short
 
+from pathlib import Path
+
 from .. import depsection as _DS
 from .. import manuscriptform as _MF
 from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里，本模块只转发
@@ -240,11 +242,26 @@ class _Manuscript:
         rel = self.manuscript_path(statement_id, sid, plan_id=plan_id)
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
         preview = self.preview_dependencies(text)
-        got = _MF.commit_manuscript(
-            root, family=_MF.FAMILY_F, text=text, statement_id=statement_id,
-            plan_id=plan_id, retitle="none", dependency_rows=rows)
+        # ---- A1：这一份"预写"不许擦掉已经登记的那一条 ------------------------------
+        #
+        # 生产路径的次序是"先写稿、后登记"（死结 1 的修法），而登记条目就住在同一个
+        # 规范路径上（没有命题号时是 `reports/f-proof-plan-<计划号>.md`）⇒ 每一轮
+        # `commit_manuscript` 都会把上一轮写进去的登记元信息（`- 正文sha：` / 命题指纹 /
+        # `- 版本：`）连同 `- 标签：` 一起覆盖掉，于是 `register_or_rewrite` 每轮都读成
+        # "新命题"（实测 3 轮 `modes=[registered×3]`、形态闸 3 次、`proof_no=[1,1,1]`）。
+        # 解耦要成立，这一笔就不能动登记条目：稿在手上（`text` 照给），盘上那一份留给
+        # `register_or_rewrite` 去就地重写 `## 证明`。
+        kept = self._registered_entry_text(root, rel)
+        if kept is not None:
+            got = {"ok": True, "checked": True, "path": rel, "written": False,
+                   "preserved": True, "text": kept, "why": ""}
+        else:
+            got = _MF.commit_manuscript(
+                root, family=_MF.FAMILY_F, text=text, statement_id=statement_id,
+                plan_id=plan_id, retitle="none", dependency_rows=rows)
         out = {"ok": bool(got.get("ok")), "path": rel, "text": text, "rows": rows,
                "preview": preview, "named_by": "stmt" if statement_id else "plan",
+               "preserved": bool(got.get("preserved")),
                "why": str(got.get("why") or "")}
         if not got.get("ok"):
             # 写盘那一格失败时保留 F 原来那句"依赖面这一趟只能靠 B 读正文"的读数。
@@ -323,6 +340,32 @@ class _Manuscript:
         out["published"] = True
         out["why"] = ""
         return out
+
+    # -------------------------------------------------------------- 登记条目保护（A1）
+
+    @staticmethod
+    def _registered_entry_text(root: Any, rel: str) -> str | None:
+        """`rel` 上是不是已经有一条登记条目（是 ⇒ 它的正文；不是 ⇒ None）。
+
+        判据只用一处：`proofregistry.parse_entry(...)["checked"]`（有正文 sha /
+        命题指纹 / 版本记录）。手写稿写一行 `- 标签：` 不算（A3 的同一条判据）——
+        所以这里不会"因为盘上有个同名文件"就不写稿，只保护真的登记条目。
+        """
+        if not rel:
+            return None
+        path = Path(str(root or "")) / rel
+        if not path.is_file():
+            return None
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return None
+        try:
+            from .. import proofregistry as _PR
+
+            return text if _PR.parse_entry(text).get("checked") else None
+        except Exception:  # noqa: BLE001 —— 读不出来就按"不是在册"处理（不猜）
+            return None
 
     # -------------------------------------------------------------- 只读预览
 

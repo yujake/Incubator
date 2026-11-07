@@ -25,6 +25,7 @@
 """
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
@@ -404,3 +405,153 @@ def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
     assert one["registrations"] == 1 and one["proof_count"] == 4, one
     assert [v["proof_no"] for v in one["versions"]] == [1, 2, 3, 4], one
     assert "登记 1 次" in read["reason"] and "4 版" in read["reason"], read["reason"]
+
+
+# ================================================================ A1 / A2 / A3
+#
+# 2026-11-07 业主审计（a02d4682）：上面 a/d 那两条走的是 `_hand_proof(manuscript_text="")`，
+# 而**生产路径**是 `_apply_round` → `proof_manuscript` 先写一份计划稿 → 洗稿写回盘
+# → 才登记。那两笔写盘都把登记条目的头部（`- 标签：` / 正文 sha / 版本）覆盖成普通稿，
+# 于是每一轮都读成"新命题"：实测 3 轮 `modes=[registered×3]`、形态闸 3 次、
+# `proof_no=[1,1,1]`、版本历史只有 1 条 —— 解耦在默认路径上没有生效。
+#
+# 下面三条钉的就是"生产路径"本身（不带 `manuscript_text=""` 这种夹具形状）。
+
+class _ProofSeam:
+    """一次性推理缝：每轮回一份 proof 产物（`complete(prompt) -> str`）。"""
+
+    def __init__(self, body: str) -> None:
+        self.body = str(body)
+
+    def complete(self, prompt: str) -> str:
+        return json.dumps({"product": "proof", "strategy": "套用已知定理",
+                           "why_strategy": "夹具：由在册定理逐条读出",
+                           "steps": [{"n": 1, "text": self.body,
+                                      "cites": [], "assumption": True}]},
+                          ensure_ascii=False)
+
+
+def _production_rounds(st: Store, bodies, monkeypatch=None):
+    """生产路径跑 N 轮 F 的 proof 档（`AgentF.step`，与真机同一入口）。
+
+    返回 `(plan_id, rounds, stub)`；`rounds` 是每一轮 `step` 的返回值。
+    """
+    stub = _FormStub()
+    f = AgentF(st, config={"workspace_root": str(st.root)},
+               llm=_ProofSeam(bodies[0] if bodies else ""))
+    f.f_secretary = stub
+    plan = f.create_plan("引理：由定义推出目标结论", "PK-A1-PRODUCTION", subgoals=[
+        {"sid": "s1", "text": "由定义推出目标结论", "owner": "F",
+         "testable": "同一命题的证明每轮重写"}])
+    pid = str(plan["plan_id"])
+    rounds = []
+    for body in bodies:
+        f.llm = _ProofSeam(body)
+        rounds.append(dict(f.step(pid)))
+    return pid, rounds, stub
+
+
+def test_a1_the_production_path_registers_once_and_rewrites_after(tmp_path):
+    """A1：生产路径 3 轮 ⇒ `[registered, rewritten, rewritten]`、闸 1 次、版本 3 条。
+
+    改前（a02d4682）读数：`[registered, registered, registered]`、闸 3 次、
+    `proof_no=[1,1,1]`、版本历史 `[1]` —— 因为 `proof_manuscript` 与洗稿写回盘
+    都把登记条目头部的元信息覆盖掉了。
+    """
+    st = _ws(tmp_path)
+    pid, rounds, stub = _production_rounds(st, PROOFS[:3])
+
+    assert [r.get("proof_mode") for r in rounds] == [
+        "registered", "rewritten", "rewritten"], rounds
+    assert [r.get("proof_no") for r in rounds] == [1, 2, 3], rounds
+    # 形态闸只在"登记新命题"那一次跑（改前是 3 次）
+    assert len(stub.calls) == 1, stub.calls
+    entries = R.entries_on_disk(st.root)
+    assert len(entries) == 1, entries
+    assert [v["proof_no"] for v in entries[0]["versions"]] == [1, 2, 3], entries[0]["versions"]
+    assert len({v["sha256"] for v in entries[0]["versions"]}) == 3, entries[0]["versions"]
+    # 一份命题只住一份稿（计划名那一份；还没有命题号）
+    files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("f-proof*.md"))
+    assert files == ["f-proof-plan-000000.md"], files
+    # F 不再直写 statements（解耦之后那一行由 B 在 V 签之后认领）
+    assert len(list(st.rows("statements"))) == 0
+
+
+def test_a1_negative_control_old_slot_recognition_makes_it_red(tmp_path, monkeypatch):
+    """A1 反真空：把"槽位识别"打桩回旧行为（只认 label、不认稿头槽位）⇒ 上面那条红。
+
+    旧行为 = `same_slot_reading` 恒 False（改前的实现在生产路径上就等价于此：
+    稿头的 `- 标签：` 被洗稿写回盘盖掉了，label 比对永远不成立）。
+    """
+    monkeypatch.setattr(R, "same_slot_reading", lambda *a, **kw: False)
+    st = _ws(tmp_path)
+    _pid, rounds, stub = _production_rounds(st, PROOFS[:3])
+    assert len(stub.calls) == 3, (
+        "打桩回旧行为之后闸仍然只跑一次 ⇒ A1 那条判据证明不了槽位识别在承重", stub.calls)
+    assert [r.get("proof_mode") for r in rounds] == ["registered"] * 3, rounds
+
+
+def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
+    """A2：同一槽位（计划 + 子目标）改命题正文 ⇒ 受控拒 `proposition_text_changed`。
+
+    改前：`proposition_text_changed` 只在 `same_slot` 生效，而生产路径上 `same_slot`
+    永远是 False ⇒ 改命题正文被当成"新命题"静默登记（盘上 `## 命题` 被换掉）。
+    现在：槽位从稿头元信息认出来，改命题正文走受控拒，盘上一个字节都不动。
+    """
+    st = _ws(tmp_path)
+    pid, rounds, stub = _production_rounds(st, PROOFS[:1])
+    assert rounds[0].get("proof_mode") == "registered", rounds
+    sheet = pathlib.Path(st.root) / "reports/f-proof-plan-000000.md"
+    before = R.section_hashes(sheet.read_text(encoding="utf-8"))
+    # 同一个子目标换命题正文（同窗口）：只改 plan 台账上的 subgoal.text
+    row = dict(st.rows("attack_plans")[0])
+    subs = [dict(s) for s in (row.get("subgoals") or [])]
+    subs[0]["text"] = OTHER
+    row["subgoals"] = subs
+    with st.tx("attack_plans", actor="test", note="fixture:a2") as tx:
+        tx.upsert("attack_plans", row)
+    _pid, second, _stub = _production_rounds(st, [PROOFS[1]])
+    out = second[0]
+    assert "命题正文与登记条目里那一条不一致" in str(out.get("reason") or ""), out
+    after = R.section_hashes(sheet.read_text(encoding="utf-8"))
+    assert after == before, "受控拒却动了盘上的稿（命题 / 证明 / 依赖任何一节都不许变）"
+    assert len(stub.calls) == 1, "改命题正文不该再跑一次形态闸（它不是重写）"
+
+
+def test_a3_a_handwritten_labelled_head_is_not_a_registration_entry(tmp_path):
+    """A3：手写一份带 `- 标签：` 的头，不许被认成登记条目。
+
+    判据：`- 标签：` 只是作者给的一个粗键；"是不是登记条目"看的是**登记元信息**
+    （正文 sha / 命题指纹 / 版本记录）。改前 `same_slot` 只比 label ⇒ 手写稿被当成
+    已登记，于是 `mode=rewritten`、形态闸一次都不跑 —— 一份手写稿就能冒充登记条目。
+    """
+    st = _ws(tmp_path)
+    rel = "reports/f-proof-plan-0000.md"
+    path = pathlib.Path(st.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# F 的证明手稿：手写的\n\n"
+        "- 命题号：stmt:（还没落号）\n"
+        "- 计划：0000 · 子目标：s1\n"
+        "- 标签：F 攻坚 0000 子目标 s1\n\n"
+        "## 命题\n\n" + TEXT + "\n\n"
+        "## 证明\n\n手写的证明正文。\n\n"
+        "## 依赖\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        encoding="utf-8")
+    assert R.parse_entry(path.read_text(encoding="utf-8"))["checked"] is False
+    gates: list[str] = []
+
+    def _gate(**kw):
+        gates.append("called")
+        return {"checked": True, "well_formed": True, "submittable": True,
+                "problems": [], "refused": "", "reason": "夹具：形态合规"}
+
+    got = R.register_or_rewrite(
+        st.root, family="F", label="F 攻坚 0000 子目标 s1", proposition=TEXT,
+        proof_text=PROOFS[0], plan_id="0000", sid="s1", gate=_gate)
+    assert got.get("mode") == "registered", got
+    assert len(gates) == 1, "手写稿被当成登记条目 ⇒ 形态闸一次都没跑"
+    entry = R.parse_entry(path.read_text(encoding="utf-8"))
+    assert entry["checked"] is True, entry
+    assert [v["proof_no"] for v in entry["versions"]] == [1], entry
+

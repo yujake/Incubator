@@ -361,6 +361,14 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 产物换个名字就绕过去了。`suffix:-proof.md` 把"证明稿"这个形状收进来：F / M 的
     # 框架证明稿不许手写（`reports/` 只是推荐落点，名字才是判据）。
     ("F", "suffix:-proof.md"),
+    # 2026-11-07（解耦落地 / A3）：`reports/f-proof-*` 这一类落点**只有框架能写**。
+    # 改前保留表只登记了 F / D / M，于是 A 与 B 用 `fs.write("reports/f-proof-000001.md")`
+    # 实测两条都 `ok=True` —— 一份"看起来是 F 登记条目"的稿可以由别的角色手写进盘，
+    # 而 B 的收录按 sha 认领会把它当成真稿。收窄口径：F 的稿是框架按登记条目渲染的，
+    # 谁的手写口都不许落（F/D/M 的既有口径不变，这里补 A / B 两行；`b-proof-*` /
+    # `e-proof-*` 是同一类框架产物，一并收进来）。
+    *[("A", rule) for rule in ("prefix:f-proof-", "prefix:b-proof-", "prefix:e-proof-")],
+    *[("B", rule) for rule in ("prefix:f-proof-", "prefix:b-proof-", "prefix:e-proof-")],
     # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——

@@ -1740,8 +1740,20 @@ class _Core:
             return out
         try:
             path = Path(root) / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(new_text, encoding="utf-8")
+            # ---- A1：洗过的那一份写回盘时，也不许擦掉已登记的那一条 ---------------
+            #
+            # `rel` 就是手稿登记的规范路径（还没有命题号时是计划名那一份）⇒ 直接
+            # `write_text` 会把上一轮写进去的登记元信息（正文 sha / 命题指纹 / 版本）
+            # 连同 `- 标签：` 一起盖掉，于是下一笔 `register_or_rewrite` 又读成"新命题"
+            # —— 解耦在默认路径上失效的第二个现场（第一个在 `proof_manuscript`）。
+            # 已经有一条登记条目时：洗过的正文留在 `out["text"]` 里交给登记那一笔
+            # （`template`），盘上那一份留给 `register_or_rewrite` 就地重写 `## 证明`。
+            kept = self._registered_entry_text(root, rel)
+            if kept is None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(new_text, encoding="utf-8")
+            else:
+                out["entry_preserved"] = True
         except OSError as exc:
             out["reason"] = (f"洗过的那一份没写回盘（{type(exc).__name__}: {exc}）⇒ "
                              "不许提交给 V（盘上那一份不是洗过的版本）")

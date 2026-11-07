@@ -153,8 +153,19 @@ def _f_text(st: Store) -> str:
 
 
 def _role_normalized(text: str) -> str:
-    """把标题里的角色名抹成同一个：判据只允许角色名不同。"""
-    return (str(text).replace("# F 的证明手稿：", "# R 的证明手稿：")
+    """把标题里的角色名抹成同一个，并去掉**登记条目**那几行：判据只允许角色名不同。
+
+    2026-11-07（解耦落地）：一份稿现在是"手稿 + 登记元信息"两段。登记元信息
+    （`- 正文sha：` / `- 命题指纹：` / `- 登记时间：` / `- 版本：` / `- 证据种类：`）
+    由 `proofregistry` 按登记那一刻补，**F 与 B 两族走同一段代码**；旧入口
+    （`publish_manuscript` / `bmanuscript.land_rewrite`）只落骨架、不补这几行。
+    这一条判的要证明的是"两族落的是同一份骨架" ⇒ 比的是骨架；登记元信息有它自己的
+    判据（`tests/test_proof_registration_is_decoupled.py` 的 a / i），不在这里重复比。
+    """
+    marks = ("- 正文sha：", "- 命题指纹：", "- 登记时间：", "- 版本：", "- 证据种类：")
+    body = "\n".join(line for line in str(text).replace("\r\n", "\n").split("\n")
+                     if not line.strip().startswith(marks))
+    return (body.replace("# F 的证明手稿：", "# R 的证明手稿：")
             .replace("# B 的证明手稿：", "# R 的证明手稿："))
 
 

@@ -3878,7 +3878,8 @@ class _RegisterStatement:
 
         sid = str(row.get("stmt_id") or "")
         proposition = str(row.get("statement_full") or "")
-        label = str(row.get("label") or f"B 优化 stmt:{sid}") or f"B 优化 stmt:{sid}"
+        # 标签只在真有的时候写：`- 标签：` 是登记元信息，不是骨架行（缺就不写）
+        label = str(row.get("label") or "")
         rows: list[dict] = []
         template = str(proof_manuscript or "")
         if _is_manuscript_rel(template):
@@ -4377,6 +4378,39 @@ class _RegisterStatement:
                                             "signed", "text", "why")})
         out["problem"] = dict(got.get("problem") or {})
         out["ok"] = bool(got.get("ok"))
+        # ---- 2026-11-07（A1）：第一份 b-稿也要成为**登记条目** ---------------------
+        #
+        # `ack`：`bmanuscript.land_rewrite` 只落骨架（三节 + `- 证明号：`），没有
+        # `- 正文sha：` / `- 命题指纹：` / `- 版本：`。于是下一轮再改写时，
+        # `proofregistry` 读到的不是登记条目，会把同一命题**重新登记**一次
+        # （`proof_no` 回到 1、版本历史从 1 重来）—— 这正是 A1 那条真缺陷在 B 侧的同一形态。
+        # 骨架落成之后立刻过一遍登记入口（正文逐字不变，只补头部登记元信息），
+        # 于是"同一份命题的后续每一版证明"都落成 `mode=rewritten`。
+        if out.get("ok") and str(out.get("path") or ""):
+            stamped = self._land_rewrite_manuscript(
+                {"stmt_id": statement_id, "statement_full": statement_full,
+                 "label": (str(head.get("label") or "") if from_source
+                           else str(label or "")), "kind": ""},
+                proof_text=proof_text, proof_manuscript=str(out.get("path") or ""))
+            if stamped.get("ok"):
+                _rel = str(stamped.get("manuscript_path") or out.get("path") or "")
+                try:
+                    _text = (Path(str(root)) / _rel).read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    _text = str(out.get("text") or "")
+                from .. import vsigns as _VS_STAMP
+
+                _block = _VS_STAMP.manuscript_sign_reading(_text, manuscript_path=_rel)
+                out.update(path=_rel, text=_text,
+                           preserved=bool(stamped.get("preserved")),
+                           signed=bool(_block.get("found") and _block.get("signed")),
+                           proof_no=int(stamped.get("proof_no") or 0),
+                           sha256=str(stamped.get("sha256") or ""))
+            else:
+                out.update(ok=False,
+                           why=("b-稿骨架写成了，而登记元信息没补上（"
+                                + str(stamped.get("why") or "未知原因")
+                                + "）⇒ 下一轮会把同一命题重新登记一次"))
         return out
 
     def _v_signature_for(self, *, statement_full: str, proof_text: str,
@@ -4684,3 +4718,5 @@ class _RegisterStatement:
                 "checked": bool((got.get("reading") or {}).get("checked")),
                 "verification_id": str((got.get("reading") or {}).get("verification_id") or ""),
                 "why": str((got.get("reading") or {}).get("why") or "")}
+
+

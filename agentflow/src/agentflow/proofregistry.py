@@ -288,6 +288,79 @@ def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
                             for v in versions), versions
 
 
+# ---------------------------------------------------------------- 槽位识别（A1/A2）
+
+def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_id: Any = "",
+              sid: Any = "", label: Any = "") -> bool:
+    """盘上这一条登记条目与这一笔要写的是不是**同一条命题的槽**。
+
+    三种身份键，按优先级取第一个两边都有的：
+
+    1. 命题号（`- 命题号：stmt:<号>`）：拿到号之后，号就是身份；
+    2. `（计划号，子目标）`（`- 计划：<plan> · 子目标：<sid>`）：F 还没有号时，
+       这是唯一稳定的槽位键 —— 计划稿的路径里没有子目标，光看路径会把同一计划下
+       的不同子目标读成同一槽；
+    3. `- 标签：`：只有前两样都缺时才用（旧稿 / 手写稿的兜底）。
+
+    **调用方必须先确认 `entry["checked"]`**（有正文 sha / 命题指纹 / 版本记录）：
+    手写稿可以给自己写一行 `- 标签：`，但它没有登记元信息，不是登记条目
+    （A3 的判据 `test_a_handwritten_labelled_head_is_not_an_entry`）。
+
+    为什么要有这一格：改前 `register_or_rewrite` 只比 label，而生产路径
+    （`agent_f/core.py::_apply_round` → `proof_manuscript` 先写一份计划稿）那一份
+    稿头没有 `- 标签：`（渲染时 `label=""`）⇒ 每一轮都读成"新命题" ⇒ 每轮重新登记
+    （实测 3 轮 `modes=[registered×3]`、闸 3 次、`proof_no=[1,1,1]`）。
+    槽位从**稿头元信息**取，于是"传不传 `manuscript_text`"不再决定解耦成不成立。
+    """
+    want_sid = str(statement_id or "").strip()
+    have_sid = str(entry.get("statement_id") or "").strip()
+    if want_sid and have_sid:
+        return want_sid == have_sid
+    want_plan = str(plan_id or "").strip()
+    have_plan = str(entry.get("plan_id") or "").strip()
+    if want_plan and have_plan and want_plan == have_plan:
+        want_sg = str(sid or "").strip()
+        have_sg = str(entry.get("sid") or "").strip()
+        return not want_sg or not have_sg or want_sg == have_sg
+    want_label = str(label or "").strip()
+    have_label = str(entry.get("label") or "").strip()
+    return bool(want_label) and want_label == have_label
+
+
+def _find_registered_text(root: Any, *, family: Any, statement_id: Any = "",
+                          plan_id: Any = "", sid: Any = "", label: Any = "",
+                          exclude: Any = "") -> dict[str, Any]:
+    """在 `reports/` 下按槽位找一份已在册的条目（拿号前后是**同一份稿**，不换槽）。
+
+    返回 `{"path", "text", "entry"}`；找不到 ⇒ `{}`。只在规范路径上没有条目时用：
+    命题在 V 签之后被 B 收录、拿到命题号，落点从 `f-proof-plan-<计划>.md` 变成
+    `f-proof-<号>.md` —— 这一条不认旧路径，就会在拿号之后**重新登记一次**
+    （版本历史从 1 重来、形态闸再跑一次），而"一份命题只住一份稿"就断了。
+    """
+    prefix = _MF.PREFIX.get(str(family or ""), "")
+    if not prefix:
+        return {}
+    base = Path(str(root or "")) / _MF.MANUSCRIPT_DIR
+    if not base.is_dir():
+        return {}
+    want_rel = str(exclude or "").strip()
+    for path in sorted(base.glob(f"{prefix}*.md")):
+        rel = f"{_MF.MANUSCRIPT_DIR}/{path.name}"
+        if rel == want_rel:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        got = parse_entry(text)
+        if not got.get("checked"):
+            continue
+        if same_slot_reading(got, statement_id=statement_id, plan_id=plan_id,
+                     sid=sid, label=label):
+            return {"path": rel, "text": text, "entry": got}
+    return {}
+
+
 # ---------------------------------------------------------------- 路径（唯一来源：manuscriptform）
 
 def entry_relpath(*, family: Any, statement_id: Any = "", plan_id: Any = "") -> str:
@@ -348,6 +421,7 @@ def register_or_rewrite(
         "proof_no": 0, "manuscript_path": rel, "sha256": "", "deps_rows": [],
         "problems": [], "refused": "", "why": "", "entry": {}, "gate": {},
         "written": False, "section_hashes": {}, "migrated": False, "preserved": False,
+        "relocated_from": "",
     }
     if not rel:
         out.update(refused=REFUSED_PATH,
@@ -362,7 +436,24 @@ def register_or_rewrite(
     old_text = str(before.get("text") or "")
     entry = dict(before.get("entry") or {})
     new_fp = proposition_fingerprint(proposition)
-    same_slot = bool(before.get("exists") and str(entry.get("label") or "").strip() == str(label or "").strip())
+    # ---- 槽位识别（A1）：先看规范路径；不在册/路径换了再看同一槽的旧落点 -----------
+    #
+    # `checked` 是"这是不是一条登记条目"的判据（A3）：手写稿可以自己写一行
+    # `- 标签：`，但它没有正文 sha / 命题指纹 / 版本记录 ⇒ 不是在册条目。
+    same_slot = bool(before.get("exists") and entry.get("checked")
+                     and same_slot_reading(entry, statement_id=statement_id,
+                                           plan_id=plan_id, sid=sid, label=label))
+    relocated_from = ""
+    if not same_slot:
+        found = _find_registered_text(root, family=family, statement_id=statement_id,
+                                      plan_id=plan_id, sid=sid, label=label,
+                                      exclude=rel)
+        if found:
+            relocated_from = str(found.get("path") or "")
+            old_text = str(found.get("text") or "")
+            entry = dict(found.get("entry") or {})
+            same_slot = True
+    out["relocated_from"] = relocated_from
     old_fp = str(entry.get("fingerprint") or "")
     migrated = False
     if same_slot and not old_fp:
@@ -431,6 +522,17 @@ def register_or_rewrite(
         if str(template or "").strip():
             # 调用方刚渲染并洗过的那一份：拿它当基稿（洗稿行 / 依赖段原样保留）。
             text = str(template).replace("\r\n", "\n")
+            # `## 证明` 的内容以参数为准：template 也可能是一份"骨架"（B 的改写拿
+            # F 的稿当底稿时就是这样，正文必须换成 B 交来的那一份）。
+            if str(proof_text or "").strip() and not proof_sha(proof_text) == proof_sha(
+                    _DS.proof_body(text)):
+                text, _ok_proof = _replace_section(text, "证明", str(proof_text))
+                if not _ok_proof:
+                    text = _MF.render_proof_manuscript(
+                        family, title=title, statement_id=statement_id,
+                        proposition=proposition, proof_text=proof_text,
+                        dependency_section=deps_section, plan_id=plan_id, sid=sid,
+                        label=label, proof_no=proof_no)
             if rows and not _DS.parse_dependency_section(text).get("present"):
                 deps_body = (deps_section[len(_DS.SECTION_HEADING):]
                              if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
@@ -475,6 +577,12 @@ def register_or_rewrite(
         out.update(checked=True, refused=REFUSED_WRITE,
                    why=f"手稿没写成（{type(exc).__name__}: {exc}）⇒ 登记条目没有落盘")
         return out
+    # ---- 换槽迁移：拿到命题号之后落点换了名，旧名那一份要收掉（一份命题只住一份稿）--
+    if relocated_from and relocated_from != rel:
+        try:
+            (Path(str(root or "")) / relocated_from).unlink(missing_ok=True)
+        except OSError:  # noqa: BLE001 —— 旧名删不掉只多一份稿，不改这一笔的结论
+            out["relocated_kept"] = relocated_from
     out.update(ok=True, checked=True, mode=mode, proof_no=proof_no, sha256=new_sha,
                deps_rows=rows, written=True, migrated=migrated,
                entry={**entry, "label": str(label or ""), "statement_id": str(statement_id or ""),
@@ -585,3 +693,4 @@ def registration_note() -> str:
     """提示词里那一句（业主 2026-11-07 逐字口径的正面表述）。"""
     return ("你登记一条**新命题**时，你的秘书会先看它是否写清了「从什么条件导出什么结论」；"
             "已经在登记里的命题**重写证明**时不再过这一步 —— 改证明不需要重新登记。")
+

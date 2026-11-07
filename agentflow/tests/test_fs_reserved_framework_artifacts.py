@@ -243,6 +243,58 @@ def test_e_fs_edit_is_the_same_gate(tmp_path: pathlib.Path) -> None:
         "被拒了却改了盘上那一份")
 
 
+# ============================================================ A/B：手稿写权限收窄（2026-11-07）
+
+
+#: A3 那一组路径：F/B/E 三族的框架证明稿（A 与 B 都不许手写）。
+OTHER_ROLE_PROOF_PATHS = (
+    "reports/f-proof-000001.md",
+    "reports/f-proof-plan-000000.md",
+    "reports/b-proof-000001.md",
+    "reports/e-proof-000001.md",
+)
+
+
+def test_a3_a_and_b_cannot_hand_write_a_proof_manuscript(tmp_path: pathlib.Path) -> None:
+    """A3 判据：A / B 写 `reports/f-proof-*`（及同族的 b/e-稿）⇒ 受控拒、零写入。
+
+    改前实测（a02d4682）：保留表只登记了 F / D / M，于是
+    `fs.write("reports/f-proof-000001.md")` 以 A、B 身份调用都是 `ok=True`
+    —— 一份"看起来是 F 登记条目"的稿可以由别的角色手写进盘，而 B 的收录按 sha
+    认领时会把它当成真稿。收窄之后：这一类落点只有框架（登记条目渲染）能写；
+    F / D / M 的既有口径一个字没改（a / b / m-a / n-a 照旧）。
+    """
+    root, reg = _ws(tmp_path)
+    for role in ("A", "B"):
+        for rel in OTHER_ROLE_PROOF_PATHS:
+            res = _call(reg, role, "fs.write", path=rel, content="别的角色手写的证明稿")
+            assert res.ok is False, (role, rel, res)
+            assert res.meta.get("kind") == KIND, (role, rel, res.meta)
+            assert MESSAGE in str(res.error or ""), (role, rel, res.error)
+            assert not (root / rel).exists(), f"{role} 写 {rel} 被拒了却仍落盘"
+    # 正控：同一批角色写普通笔记仍然放行（"收窄手稿"不等于"封掉 A/B 的写口"）
+    res = _call(reg, "B", "fs.write", path="notes/b-notes.md", content="B 的笔记")
+    assert res.ok is True, ("B 的正常笔记被误伤了", res)
+
+
+def test_a3_dropping_the_a_b_rows_turns_the_criterion_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """A3 反真空：把表里 A / B 那几行摘掉 ⇒ 上一条必红。
+
+    打桩点就是那张表（只留 F / D / M = 改前状态）⇒ 同一批路径必须写得进去，
+    于是"A/B 被拒"这件事的来源是表上新增的那几行，而不是别处顺手写的判断。
+    """
+    before = tuple(row for row in FT.RESERVED_ARTIFACT_TABLE if row[0] in ("F", "D", "M"))
+    assert before, "表里连 F/D/M 都没有 ⇒ 这条反真空打桩点在核一个空表"
+    monkeypatch.setattr(FT, "RESERVED_ARTIFACT_TABLE", before)
+    root, reg = _ws(tmp_path)
+    for role, rel in (("A", "reports/f-proof-000001.md"),
+                      ("B", "reports/f-proof-000002.md")):
+        res = _call(reg, role, "fs.write", path=rel, content="改前状态：写得进去")
+        assert res.ok is True, (
+            f"A/B 那几行被摘掉了却还是拒绝（{role}/{rel}）⇒ A3 的绿不来自它们", res)
+
+
 def test_the_table_names_match_the_one_definition(tmp_path: pathlib.Path) -> None:
     """漂移判据：保留表里的名字必须与 `depsection` 那套约定同源（不是两份字面量）。
 
@@ -350,3 +402,4 @@ def test_n_d_stubbing_the_filename_rule_out_turns_a_and_b_red(
         assert res.ok is True, (
             f"文件名规则被打桩成空了却还是拒绝（{role} / {rel}）⇒ n-a/n-b 的绿不来自它", res)
         assert (root / rel).is_file(), (role, rel)
+
