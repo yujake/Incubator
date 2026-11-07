@@ -171,9 +171,10 @@ def test_allowed_edges_match_design_table():
     # 隔着 M 转一手，而"谁该看什么"就多一处猜测。这条边是单向的（E→V）：其它角色到
     # V 的边也没有动（那一份在 `test_agent_v_exhaustion_review.py` 里逐条钉着）。
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D", "V"})
-    # 2026-11-05（业主裁定逐字：「我们最好不要出现双向边，所以让 F 作为 D 的严格下级，
-    # 取消出边 F→D」）：F 的出边少一格 `D`；`D → F` 保留。
-    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "E", "V"})
+    # 2026-11-07（业主最终裁定逐字：「裁去F到B的直接出边，防止向下交稿，F只能向上通过D向B
+    # 交稿」＋「向上的意思是F向父代理D交稿」）：F 的出边少 `B`、多 `D`（一减一加）。
+    # 交稿链路 = F 落手稿 → 派 D 携带 → D 派 B 收录（V 签之后按 sha 认领）。
+    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "C", "D", "E", "V"})
     assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
     # `V`（验证者）没有出边（2026-11-05 业主裁定「V 不应该有出边」）：它不再能
     # 唤起任何人，但入边 F / E / B 一条未动（退回是回执里的步号，不是一次唤起）。

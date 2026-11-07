@@ -168,7 +168,11 @@ def _proof_payload(cite: str) -> dict:
 
 
 def _run_f_proof(store: Store, *, cite: str = f"stmt:{THEOREM_A}") -> dict:
-    """F 真走一轮 proof：写稿 → 秘书洗 → 登记（拿到命题号与盘上的稿）。"""
+    """F 真走一轮 proof：写稿 → 秘书洗 → 落手稿登记条目（命题号还没发）。
+
+    2026-11-07（解耦 + 裁边）：F 不再直接登记 statements（`F→B` 那条边已被裁去），
+    所以这一轮拿到的是一份**手稿登记条目**；命题号由 B 在 V 签之后按 sha 认领时才发。
+    """
     f = AgentF(store, config={"workspace_root": store.root},
                llm=FakeSeam(_proof_payload(cite)))
     plan = f.create_plan("引理：由在册定理推出结论", "PK-D-TO-B", subgoals=[
@@ -176,7 +180,13 @@ def _run_f_proof(store: Store, *, cite: str = f"stmt:{THEOREM_A}") -> dict:
          "testable": "手稿的依赖段每条引用一行"}])
     out = f.step(str(plan["plan_id"]))
     assert out.get("action") == "proof", out
-    assert str(out.get("statement_id") or ""), out
+    assert out.get("proof_mode") == "registered", out
+    assert pathlib.Path(store.root, str(out["manuscript_path"])).is_file(), out
+    assert out.get("manuscript_washed") is True, out
+    # 交稿只走手稿：F 这一侧不写 statements、也不写 dependencies
+    # （盘上那一行是夹具预置的在册定理 `THEOREM_A`，不是 F 这一轮登记的）
+    assert [str(r.get("stmt_id")) for r in store.rows("statements")] == [THEOREM_A]
+    assert list(store.rows("dependencies")) == [], store.rows("dependencies")
     return out
 
 
@@ -249,18 +259,8 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
     proof = _run_f_proof(store)
-    f_stmt = str(proof["statement_id"])
-    assert pathlib.Path(store.root, str(proof["manuscript_path"])).is_file(), proof
-    assert proof.get("manuscript_washed") is True, proof
-    # F 那一侧不写依赖台账（作者只写内容）：盘上这一行是 B 在 F 递交时读稿落的
-    # （`used_by` 正是 F 那条命号、`label` 指着手稿依赖段的第几行）。
-    author_side = [dict(r) for r in store.rows("dependencies")]
-    assert {str(r.get("used_by")) for r in author_side} == {f"stmt:{f_stmt}"}, author_side
-    assert all("手稿依赖段" in str(r.get("label") or "") for r in author_side), author_side
-    with store.tx("dependencies", actor="test") as tx:
-        for row in author_side:
-            tx.delete("dependencies", row["dep_id"], note="判据夹具：清掉 F 那一轮落的边")
-
+    # 2026-11-07（解耦 + 裁边）：F 那一侧只落手稿登记条目（不写 statements / dependencies）
+    # ⇒ 这一笔 D 携带是**唯一**可能把这条命题带进台账的动作（不是"边早就在"的真空绿）。
     d = _d_with_b(store)
     d.write_report()
     delivery = d.last_delivery
@@ -269,7 +269,9 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
     assert _a_holds(store, delivery), delivery
     rec = delivery["results"][0]
     assert rec["ok"] is True, rec
-    assert rec["stmt_id"] == f_stmt, rec
+    f_stmt = str(rec["stmt_id"])
+    assert f_stmt, rec
+    assert rec["manuscript_source"] == SRC_CARRIED, rec
     assert rec["manuscript_washed"] is True, (
         "B 读到的不是秘书洗过的那一版（读数里没有 manuscript_washed）", rec)
     assert int(rec["deps_written"]) >= 1, rec
@@ -277,8 +279,8 @@ def test_d_hands_the_manuscript_to_b_and_b_lands_the_edges(
     rows = [dict(r) for r in store.rows("dependencies")]
     assert {str(r.get("used_by")) for r in rows} == {f"stmt:{f_stmt}"}, rows
     assert {int(r.get("path_group")) for r in rows} == {1}, rows
-    # 命题行一个字没多：D 递交的是在册那一行（B 不新建、也不重判档位）
-    assert [str(r.get("stmt_id")) for r in store.rows("statements")].count(f_stmt) == 1
+    # 新命题只落一行（B 发号一次；F 那一侧没有预登记）；盘上另一行是夹具预置的定理甲
+    assert [str(r.get("stmt_id")) for r in store.rows("statements")] == [THEOREM_A, f_stmt]
     # 幂等：同一趟再交一次不重复落边（D 每轮都会携带一遍）
     again = _d_with_b(store)
     again.write_report()
@@ -339,7 +341,8 @@ def test_the_delivery_is_in_d_code_not_in_model_args(tmp_path: pathlib.Path,
     d = _d_with_b(store)
     d.write_report()
     assert len(calls) == 1, calls
-    assert [r["statement_id"] for r in calls[0]], calls[0]
+    # 携带单上这一条还没有命题号 ⇒ 行键是稿号（`mss:<稿号>`），不是命题号
+    assert [r["manuscript_id"] for r in calls[0]], calls[0]
 
 
 # ------------------------------------------------------------------ c 反真空
@@ -461,19 +464,20 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
     proof = _run_f_proof(store)
-    f_stmt = str(proof["statement_id"])
 
+    # 唯一交稿链（2026-11-07）：F 落手稿 → D 携带 → B 按 sha 认领（发号 + 落依赖边）。
+    d = _d_with_b(store)
+    d.write_report()
+    assert _a_holds(store, d.last_delivery), d.last_delivery
+    f_stmt = str(d.last_delivery["results"][0]["stmt_id"])
+    assert f_stmt, d.last_delivery
+    rows = [dict(r) for r in store.rows("dependencies")]
+    assert rows, "依赖面一条都没有落"
     # 准入闸（2026-11-02 默认 strict）之后，F 这一笔登记是先有签才写得进去的
     # （`signed_v_handoffs` 用一份真签放行）；而这一条要跑的是"B 登记之后 V 现场连判
     # 3 转发签"。把读侧那格缓存退回假，V 才会真的连判（真台账、真秘书判定）——
     # 那一份签仍在 pending 台账里，闸在 B 那一步已经用过它。
     reset_bit3_cache(store, f_stmt)
-
-    d = _d_with_b(store)
-    d.write_report()
-    assert _a_holds(store, d.last_delivery), d.last_delivery
-    rows = [dict(r) for r in store.rows("dependencies")]
-    assert rows, "依赖面一条都没有落"
 
     reply = json.dumps({
         "verdict": "成立", "defect_step": None, "why": "", "findings": [],
@@ -484,18 +488,27 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     v = _v_with_secretary(store, v_llm)
     row = next(dict(r) for r in store.rows("statements")
                if str(r.get("stmt_id")) == f_stmt)
+    # 拿到号之后 B 把 F 的计划名那份稿转正成按号命名的正式稿（同一份稿，不第二份）
+    formal_rel = f"reports/f-proof-{f_stmt}.md"
+    assert pathlib.Path(store.root, formal_rel).is_file(), (
+        "B 发号之后 F 的稿没有转正成 `reports/f-proof-<号>.md`",
+        sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
+    assert not pathlib.Path(store.root, str(proof.get("manuscript_path") or "")).exists(), (
+        "转正之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
     # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签
     reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""),
-                                      str(proof.get("manuscript_path") or ""))
+                                      formal_rel)
     signed = reviewed[-1]
     assert signed.get("signed_bit3") is True, signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {THEOREM_A}, signed
     assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)
     assert problems == [] and ledger, (problems, ledger)
-    # V 现场这一趟落了 3 行（前两转只落台账、第三转发签）；另外 1 行是夹具
-    # "先签后登记"放行 B 那一笔的那一票（`signed_v_handoffs`）—— 两件事分开数。
-    assert len(ledger) == int(VR.SIGN_STREAK_NEED) + 1, (
+    # 2026-11-07（唯一交稿链）：B 的第一笔登记是这条命题的**首次**登记，放行它的那一签
+    # 是 pending 台账里的「先签后登记」（按正文 sha 认领，不在 `verifications/<号>.jsonl`
+    # 里另起一行）⇒ 这一趟 V 只落 3 行（逐转一行；前两转只落台账、第三转发签）。
+    # 旧链那 `+1` 是"命题已在册、夹具补一签"那一档，本链不再发生 —— 这里不许写成 4 行。
+    assert len(ledger) == int(VR.SIGN_STREAK_NEED), (
         "前两次「成立」也必须落在台账里（只落台账、不翻位），"
         f"读到 {len(ledger)} 行：{[r.get('verification_id') for r in ledger]}")
     assert [r.get("verdict") for r in ledger[-int(VR.SIGN_STREAK_NEED):]] == ["成立"] * int(
@@ -517,3 +530,7 @@ def test_the_washed_flag_travels_with_the_file(tmp_path: pathlib.Path) -> None:
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
 pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+
+
+
+

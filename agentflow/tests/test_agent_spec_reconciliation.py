@@ -94,6 +94,9 @@ def test_the_registry_is_not_vacuous() -> None:
     # 2026-11-05 业主两条裁定（逐字）：「我们最好不要出现双向边，所以让 F 作为 D 的严格下级，
     # 取消出边 F→D」＋「V 不应该有出边」⇒ 36 → 34，恰好两条：`F→D` 与 `V→F`
     # （两对的另一向 `D→F` / `F→V` 都保留；V 的入边 F / E / B 一条没少）。
+    # 2026-11-07 业主最终裁定（逐字）：「为了落实口径，裁去F到B的直接出边，防止向下交稿，
+    # F只能向上通过D向B交稿」＋「向上的意思是F向父代理D交稿」⇒ −F→B、+F→D（一减一加，
+    # 总数仍是 34）：交稿链路 = F 落手稿 → 派 D 携带 → D 派 B 收录。
     assert sum(len(v) for v in reg.edges().values()) == 34, (
         "边总数：2026-10-10 裁定第 4 条去掉 M→B / M→F / M→V 三条（32 → 29）；"
         "2026-10-13 业主裁定「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」（29 → 30）；"
@@ -170,19 +173,21 @@ def test_the_reconciliation_catches_a_drifted_spec() -> None:
         one.get("Z")
 
 
-def test_f_does_not_summon_d_and_v_summons_nobody(monkeypatch: pytest.MonkeyPatch) -> None:
-    """业主 2026-11-05 的两条边裁定：取消 `F→D`、清空 V 的出边。
+def test_f_does_not_summon_b_and_summons_its_parent_d(monkeypatch: pytest.MonkeyPatch) -> None:
+    """业主 2026-11-07 的边裁定：裁去 `F→B`、加回 `F→D`；V 仍然没有出边。
 
     正控同时读声明层（`specs/f.py` / `specs/v.py` 的 `edges`）与派生层
     （`capabilities.ALLOWED_EDGES`），再读一遍 V 的入边（F / E / B 一条都不能少）：
     "我不去读它"与"它真的不在权限面上"必须分得开。
     反真空把边加回能力面（monkeypatch，不改盘），让既有的 `_mismatches()` 当场报红 ——
-    这就是"把 D / F 加回 capabilities ⇒ 判据红"的机器形态。
+    这就是"把 B 加回 capabilities ⇒ 判据红"的机器形态。
     """
     reg = builtin_registry()
-    # ① 取消 F→D：声明层与派生层都不含 D
-    assert "D" not in reg.get("F").edges, reg.get("F").edges
-    assert "D" not in C.ALLOWED_EDGES["F"], sorted(C.ALLOWED_EDGES["F"])
+    # ① 裁去 F→B、加 F→D：声明层与派生层一致
+    assert "D" in reg.get("F").edges, reg.get("F").edges
+    assert "B" not in reg.get("F").edges, reg.get("F").edges
+    assert "D" in C.ALLOWED_EDGES["F"], sorted(C.ALLOWED_EDGES["F"])
+    assert "B" not in C.ALLOWED_EDGES["F"], sorted(C.ALLOWED_EDGES["F"])
     # ② V 没有出边：声明层与派生层都是空的
     assert tuple(reg.get("V").edges) == (), reg.get("V").edges
     assert C.ALLOWED_EDGES["V"] == frozenset(), sorted(C.ALLOWED_EDGES["V"])
@@ -190,13 +195,45 @@ def test_f_does_not_summon_d_and_v_summons_nobody(monkeypatch: pytest.MonkeyPatc
     inbound_v = {role for role, tos in C.ALLOWED_EDGES.items() if "V" in tos}
     assert inbound_v == {"B", "E", "F"}, inbound_v
 
-    # 反真空 ①：把 D 加回 F 的能力面 ⇒ 同一把尺子必须报红
-    monkeypatch.setitem(C.ALLOWED_EDGES, "F", C.ALLOWED_EDGES["F"] | {"D"})
-    assert _mismatches(reg.get("F")), "把 D 加回 ALLOWED_EDGES['F']，_mismatches 没抓住"
+    # 反真空 ①：把 B 加回 F 的能力面 ⇒ 同一把尺子必须报红
+    monkeypatch.setitem(C.ALLOWED_EDGES, "F", C.ALLOWED_EDGES["F"] | {"B"})
+    assert _mismatches(reg.get("F")), "把 B 加回 ALLOWED_EDGES['F']，_mismatches 没抓住"
     monkeypatch.undo()
     # 反真空 ②：把 F 加回 V 的能力面 ⇒ 同样报红
     monkeypatch.setitem(C.ALLOWED_EDGES, "V", frozenset({"F"}))
     assert _mismatches(reg.get("V")), "把 F 加回 ALLOWED_EDGES['V']，_mismatches 没抓住"
+
+
+def test_f_dispatching_b_is_structurally_refused_before_b_sees_it() -> None:
+    """业主 2026-11-07 裁边的行为面：F 派 B ⇒ 策略层 `forbidden_edge`（B 根本收不到）。
+
+    为什么这条判据必须落在 `policy.check` 而不是 B 的入口：B 的
+    `f_proposition_must_be_a_manuscript` 是**第二道防线**；裁边之后，F 的召唤在
+    "边不存在"这一层就该被挡住（一道结构性拒信，而不是"进了 B 的门再被拒"）。
+    反真空：把 `F→B` 加回能力面 ⇒ 同一笔召唤不再被 `forbidden_edge` 拒（这条红）。
+    """
+    from agentflow import policy as P
+
+    decision = P.Decision(frm="F", to="B", action="register_statement")
+    got = P.check(P.Policy(), decision)
+    assert got is not None, "F 派 B 没有被策略层拒 ⇒ 裁边没生效（B 会收到这一笔）"
+    assert got.reason == "forbidden_edge", (
+        "F 派 B 的拒绝理由不是 `forbidden_edge`（收到 "
+        f"{got.reason!r}）⇒ 这不是「边不存在」那一档", got.detail)
+
+    # 反真空：把边加回去 ⇒ 同一笔不再被 forbidden_edge 拒（于是上面的绿来自边表）
+    from agentflow import capabilities as _C
+
+    saved = _C.ALLOWED_EDGES["F"]
+    _C.ALLOWED_EDGES["F"] = frozenset(set(saved) | {"B"})
+    try:
+        again = P.check(P.Policy(), P.Decision(frm="F", to="B",
+                                               action="register_statement"))
+        assert again is None or again.reason != "forbidden_edge", (
+            "把 F→B 加回能力面之后仍然判 forbidden_edge ⇒ 上面那条绿不是边表给的",
+            again)
+    finally:
+        _C.ALLOWED_EDGES["F"] = saved
 
 
 # ---------------------------------------------------------------- `specs/` 与 FC-27 清单
@@ -251,3 +288,4 @@ def test_the_manifest_coverage_judge_catches_a_missing_row() -> None:
                         if not ln.startswith("src/agentflow/specs/d.py"))
     assert dropped != manifest
     assert _unregistered_specs(dropped, specs_dir) == ["src/agentflow/specs/d.py"]
+

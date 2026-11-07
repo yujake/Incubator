@@ -197,22 +197,62 @@ def test_a_a_registered_number_renames_the_manuscript_without_any_sign(store: St
     assert f"- 命题号：stmt:{SID}" in final
 
 
-def test_a2_f_registration_gets_a_number_and_publishes_without_a_sign(store: Store) -> None:
-    """a2：F 的 proof 档在没有签时也拿得到号，拿到号就按号命名。
+def test_a2_f_registration_lands_a_manuscript_entry_and_the_number_comes_from_b(
+        store: Store) -> None:
+    """a2：F 的 proof 档先落手稿登记条目；命题号由 B 在 V 签之后认领时才发。
 
-    改前红（真机 87 的形态）：`B.register_statement` 的 `proof_without_v_sign` 整笔拒
-    ⇒ `out["statement_id"]` 不存在 ⇒ `publish_manuscript` 一次都没被调用。
+    2026-11-07（解耦 + 裁边）口径：`F→B` 那条边被裁去 ⇒ F 不再"登记拿到号"，
+    它落的是 `reports/f-proof-plan-<计划号>.md` 这一条手稿登记条目；V 在命题还没在册时
+    先签（pending），B 按正文 sha 认领 → 发号 → 把同一份稿转正成
+    `reports/f-proof-<号>.md`。改前那两条（"没有签也拿得到号" / "拿到号就改名"）
+    要防的事一样没少：没编号之前不凭空造号、编号之后盘上只有一份稿。
     """
     out = _run_proof_round(store)
     assert out.get("action") == "proof", out
 
-    sid = _number_of(out)
-    assert sid, f"没有签时 F 连命题号都没拿到：{out.get('reason') or out}"
-    assert out.get("manuscript_path") == f"{MANUSCRIPT_DIR}/f-proof-{sid}.md", out
-    assert not (pathlib.Path(store.root) / PLAN_REL).exists(), (
-        "按号命名之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
+    # ① F 这一侧：登记条目按计划名落，没有号（不凭空造号）
+    assert out.get("proof_mode") == "registered", out
+    assert out.get("manuscript_path") == PLAN_REL, out
+    assert (pathlib.Path(store.root) / PLAN_REL).is_file(), out
+    numbered = sorted(p.name for p in (pathlib.Path(store.root) / MANUSCRIPT_DIR).glob(
+        "f-proof-*.md") if not p.name.startswith("f-proof-plan-"))
+    assert numbered == [], numbered
+    # 没有号 ⇒ 这一份还没签，交不了差
     assert out.get("delivery_state") == "waiting", out
     assert out.get("delivered") is False, out
+
+    # ② 交稿链路：V 先签（pending）→ B 按 sha 认领 → 发号 + 转正
+    sid, rel = _claim_number(store)
+    assert sid, (sid, rel)
+    assert rel == f"{MANUSCRIPT_DIR}/f-proof-{sid}.md", rel
+    assert (pathlib.Path(store.root) / rel).is_file(), rel
+    assert not (pathlib.Path(store.root) / PLAN_REL).exists(), (
+        "按号命名之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
+
+
+def _claim_number(store: Store) -> tuple[str, str]:
+    """把 F 那一轮的手稿走完交稿链路：V 先签（pending）→ B 按 sha 认领。
+
+    返回 `(命题号, 转正后的手稿路径)`；号由 B 在认领那一刻发（F 侧不造号）。
+    """
+    from agentflow.agent_b import AgentB
+    from conftest import sign_before_registration
+
+    text = _read(store, PLAN_REL)
+    body = VS.manuscript_proof_body(text).strip("\n")
+    sign_before_registration(store.root, proof_text=body)
+    b = AgentB(store, extractor=None, extract_text=None)
+    got = b.register_statement(
+        statement_full="由定理甲推出目标结论。",
+        statement_text="由定理甲推出目标结论。",
+        origin="own_result", kind="conjecture",
+        label="F 攻坚 000000 子目标 s1", proof_text=body,
+        proof_manuscript=PLAN_REL, evidence_kind="heuristic",
+        line_range={"label": PLAN_REL},
+        quote_reason="夹具：F 的手稿登记条目在 V 签之后由 B 认领")
+    assert got.get("ok") is True, got
+    sid = str(got.get("stmt_id") or "")
+    return sid, f"{MANUSCRIPT_DIR}/f-proof-{sid}.md" if sid else ""
 
 
 # ------------------------------------------------------------------ b 搬签
@@ -289,27 +329,38 @@ def test_c_without_a_number_the_manuscript_keeps_its_plan_name(store: Store) -> 
 def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
     """d：名字叫 `f-proof-<号>.md` 不等于已签；删掉签块必须回落到「待签」。
 
-    改前红：第一步就红 —— 没有签时 F 拿不到号，盘上根本没有按号命名的稿。
+    2026-11-07（解耦 + 裁边）：改成"登记条目先落计划名、B 认领时才按号命名"之后，
+    这条判据的另一半（F 没有签时拿不到号）已由 `a2` 覆盖；这里只钉读侧那一条不变式：
+    读侧认的是签块 / 台账，不是文件名。夹具直接在册一行命题 + 落一份按号命名、
+    但没有签的稿（`publish_manuscript` 的既有入口），读数必须是「待签」。
     """
-    out = _run_proof_round(store)
-    sid = _number_of(out)
-    assert sid, out
-    rel = str(out.get("manuscript_path") or "")
-    assert rel == f"{MANUSCRIPT_DIR}/f-proof-{sid}.md", out
+    from conftest import seed_statement_row
+
+    seed_statement_row(store, statement_full="由定理甲推出目标结论。",
+                       statement_text="由定理甲推出目标结论。",
+                       kind="conjecture", stmt_id=SID, proof_text=BODY)
+    text = _plan_text()
+    _write(store, PLAN_REL, text)
+    pub = _f(store).publish_manuscript(
+        {"ok": True, "path": PLAN_REL, "text": text, "rows": [], "named_by": "plan"},
+        statement_id=SID)
+    assert pub.get("published") is True, pub
+    rel = str(pub["path"])
+    assert rel == f"{MANUSCRIPT_DIR}/f-proof-{SID}.md", rel
 
     final = _read(store, rel)
     body = VS.manuscript_proof_body(final)
     sha = VR.proof_sha(body)
     f = _f(store)
 
-    waiting = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    waiting = f._read_sign(statement_id=SID, proof_text=body)["reading"]
     assert waiting.get("state") == "waiting", waiting
     assert waiting.get("delivered") is False, waiting
 
     # 盖一块真的签（sha 相符）⇒ 已签。这一步证明读侧认的是块，不是名字。
-    _write(store, rel, _sign(final, proof_sha=sha, manuscript_id=sid,
-                             statement_id=sid))
-    signed = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    _write(store, rel, _sign(final, proof_sha=sha, manuscript_id=SID,
+                             statement_id=SID))
+    signed = f._read_sign(statement_id=SID, proof_text=body)["reading"]
     assert signed.get("state") == "signed", signed
 
     # 把签块删掉：名字仍然是 `f-proof-<号>.md`，读数必须回到「待签」。
@@ -317,7 +368,7 @@ def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
         line for line in _read(store, rel).replace("\r\n", "\n").split("\n")
         if not line.strip().startswith(VS.SIGN_MARK))
     _write(store, rel, stripped)
-    back = f._read_sign(statement_id=sid, proof_text=body)["reading"]
+    back = f._read_sign(statement_id=SID, proof_text=body)["reading"]
     assert back.get("state") == "waiting", back
     assert back.get("delivered") is False, back
 

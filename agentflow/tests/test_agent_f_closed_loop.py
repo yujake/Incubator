@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import attackround as AR
+from agentflow import depsection as DS
 from agentflow import llmseam
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
@@ -236,46 +237,74 @@ def test_the_retry_budget_is_read_from_the_plan_not_hardcoded(store: Store):
 
 
 # ============================================================ P3-6：proof 的出口
+#
+# 2026-11-07（解耦 + 裁边）：F 的 proof 档不再直接把命题交给 B 登记（`F→B` 那条边已
+# 被裁去）。出口现在是**手稿登记条目**：F 落 `reports/f-proof-plan-<计划号>.md`，
+# 命题号由 B 在 V 签之后按正文 sha 认领时才发。下面两条按新链路钉同等强度：
+# 生成的是"一条命题、一行台账"，只是那一行由 B 在认领时写。
 
-def test_a_proof_round_hands_the_statement_to_b(store: Store, signed_v_handoffs):
-    """判据：`proof` 之后，`statements` 那一行是 B 的登记落下来的，不是 F 直写的。
+def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
+    """判据：`proof` 之后 F 落的是手稿登记条目；B 在 V 签之后按 sha 认领才有一行。
 
-    改前红：改前 `_proof_outlet` 在 F 进程里自己 upsert，落下来的行
-    `created_by=agent-F`、`kind=lemma`、`bits={}`、label 还是「F 攻坚 …」。
-    现在同一笔走 B 的 `register_statement`：五元位算出来了、定理名被洗过、
-    首次登记按 B-2 从猜想起步。
+    改前（旧链）：F 的出口直接调 `B.register_statement` 当场落 statements 一行。
+    改后（业主 2026-11-07）：「F只能向上通过D向B交稿」⇒ F 这一侧只有手稿；
+    这一条把整条链走完（手稿 → pending 签 → B 认领），并逐条保留旧判据要防的东西：
+    那一行不是 F 直写的（`created_by=secretary-B`）、五元位由 B 算出来、
+    首次登记按 B-2 从猜想起步、label 不再是 F 的派活工作名。
     """
+    from agentflow.agent_b import AgentB
+    from conftest import sign_before_registration
+
     llm = FakeLLM(_proof_round("这是第一步"))
     f = _f(store, llm=llm)
     pid = _new_plan(f)
     out = f.step(pid)
 
+    # ① F 这一侧：只有手稿登记条目（没有 statements 行）
+    assert store.rows("statements") == [], store.rows("statements")
+    assert out.get("proof_mode") == "registered", out
+    rel = str(out.get("manuscript_path") or "")
+    assert rel == f"reports/f-proof-plan-{pid}.md", out
+    manuscript = (Path(store.root) / rel).read_text(encoding="utf-8")
+    assert "这是第一步" in manuscript
+    assert "- 证明号：1" in manuscript and "- 正文sha：" in manuscript, manuscript[:600]
+
+    # ② V 在命题还没在册时先签（pending 台账），B 按正文 sha 认领 → statements 一行
+    body = DS.proof_body(manuscript).strip("\n")
+    sign_before_registration(store.root, proof_text=body)
+    b = AgentB(store, extractor=None, extract_text=None)
+    got = b.register_statement(
+        statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
+        origin="own_result", kind="conjecture",
+        label=str(out.get("proof_label") or ""), proof_text=body,
+        # 给路径（而不是正文）：B 据此知道这份稿落在哪，拿到号之后才能把它转正。
+        proof_manuscript=rel, evidence_kind="heuristic",
+        line_range={"label": rel},
+        quote_reason="夹具：F 的手稿登记条目在 V 签之后由 B 认领")
+    assert got.get("ok") is True, got
     stmts = store.rows("statements")
     assert len(stmts) == 1, stmts
-    row = stmts[0]
+    row = dict(stmts[0])
     assert row["origin"] == "own_result", row
     assert row["created_by"] == "secretary-B", row["created_by"]
     assert row["kind"] == "conjecture", row          # B-2：没有 V 签先按猜想登记
     assert "这是第一步" in row["proof_text"], row
-    # 等级不许自报更高：V 没签过 ⇒ 只能 heuristic；五元位由 B 那一笔算出来（不是空对象）
     assert row["evidence_kind"] == "heuristic", row
     assert dict(row.get("bits") or {}), row
     assert "F 攻坚" not in str(row.get("label") or ""), row["label"]
     assert row["quote_reason"], row
 
-    report = Path(store.root) / "reports" / f"attack-{pid}.md"
-    assert report.is_file(), f"盘上没有 {report}"
-    text = report.read_text(encoding="utf-8")
-    assert "第 1 轮" in text and "`proof`" in text and "依据" in text and "下一步" in text, text
-    assert str(row["stmt_id"]) in text, text
+    # ③ 拿到号之后那份计划名的手稿转正成按号命名的正式稿（同一份，不第二份）
+    formal = f"reports/f-proof-{row['stmt_id']}.md"
+    assert (Path(store.root) / formal).is_file(), (
+        formal, sorted(p.name for p in (Path(store.root) / "reports").glob("f-proof*.md")))
 
-    # 产物落点进 `detail`（M 读 `attack.status` 就看得见）与返回值
+    # ④ 这一轮的读数面：F 的 history 记的是手稿登记条目（命题号由 B 认领那一笔发出）
     rec = store.rows("attack_plans")[0]["history"][-1]
-    assert rec["statement_id"] == row["stmt_id"] and rec["report_path"] == f"reports/attack-{pid}.md", rec
-    assert out["statement_id"] == row["stmt_id"] and out["report_path"] in out["reason"], out
-    # F 仍拿得到号：这一轮的 evidence 就是 B 的登记发出来的那个 `stmt:<号>`
-    # （D8 的"同步往返一次再拿号"，不是"不拿号"）。
-    assert rec.get("evidence") == [f"stmt:{row['stmt_id']}"], rec
+    assert rec.get("proof_mode") == "registered", rec
+    assert rec.get("manuscript_path") == rel, rec
+    assert "statement_id" not in rec, rec
+    assert str(got.get("stmt_id")) == str(row["stmt_id"]), got
 
 
 def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeypatch):
@@ -295,17 +324,55 @@ def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeyp
     f = _f(store, llm=llm)
     f.step(_new_plan(f))
     assert store.rows("statements") == [], "出口摘掉之后仍然写进了 statements ⇒ 这条负控是空转"
+    assert store.rows("dependencies") == [], "出口摘掉之后仍然写进了 dependencies"
     rec = store.rows("attack_plans")[0]["history"][-1]
-    assert "没能**落进 statements" in rec["detail"] or "没能" in rec["detail"], rec["detail"]
+    assert "没能" in rec["detail"], rec["detail"]
 
 
-def test_the_same_proof_twice_is_not_registered_twice(store: Store, signed_v_handoffs):
-    """反真空（幂等）：逐字相同的论证不许登记第二行（否则 `statement_rows` 虚高）。"""
+def test_the_same_proof_twice_does_not_grow_the_manuscript_or_the_rows(store: Store,
+                                                                       signed_v_handoffs):
+    """反真空（幂等）：逐字相同的论证再挂一次 ⇒ 手稿版本不涨、statements 行数不变。
+
+    改前这一条钉的是"同一份证明不会登记两次"；新链路下"登记"发生在 B 认领那一笔，
+    而同一份手稿被挂第二次时 `proofregistry` 的幂等那一档必须让 `proof_no` 原地不动
+    （否则版本历史会被无意义的重复递交顶高），statements 也不许多出行。
+    """
+    from agentflow.agent_b import AgentB
+    from agentflow import proofregistry as R
+    from conftest import sign_before_registration
+
     llm = FakeLLM(_proof_round("同一步"), _proof_round("同一步"))
     f = _f(store, llm=llm)
     pid = _new_plan(f)
-    f.step(pid)
-    f.step(pid)
+    first = f.step(pid)
+    second = f.step(pid)
+    assert [first.get("proof_mode"), second.get("proof_mode")] == [
+        "registered", "rewritten"], (first, second)
+    assert [first.get("proof_no"), second.get("proof_no")] == [1, 1], (first, second)
+    entries = R.entries_on_disk(store.root)
+    assert len(entries) == 1, entries
+    assert [v["proof_no"] for v in entries[0]["versions"]] == [1], entries[0]["versions"]
+    # 同一份正文认领两次 ⇒ statements 仍然只有一行
+    rel = str(second.get("manuscript_path") or "")
+    manuscript = (Path(store.root) / rel).read_text(encoding="utf-8")
+    body = DS.proof_body(manuscript).strip("\n")
+    sign_before_registration(store.root, proof_text=body)
+    b = AgentB(store, extractor=None, extract_text=None)
+    got = b.register_statement(
+        statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
+        origin="own_result", kind="conjecture", label="同一条命题",
+        proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
+        line_range={"label": rel}, quote_reason="夹具：同一份证明认领两次")
+    assert got.get("ok") is True, got
+    # 第一次认领之后那份稿已经转正成按号命名的正式稿（同一份稿换了名字）
+    rel = f"reports/f-proof-{got['stmt_id']}.md"
+    assert (Path(store.root) / rel).is_file(), rel
+    got = b.register_statement(
+        statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
+        origin="own_result", kind="conjecture", label="同一条命题",
+        proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
+        line_range={"label": rel}, quote_reason="夹具：同一份证明认领两次")
+    assert got.get("ok") is True, got
     assert len(store.rows("statements")) == 1, store.rows("statements")
 
 
@@ -413,3 +480,6 @@ def test_without_a_seam_a_testable_only_subgoal_still_says_what_is_missing(store
     sg = store.rows("attack_plans")[0]["subgoals"][0]
     assert not sg.get("script_spec"), sg
     assert store.rows("experiments") == [] and list((Path(store.root) / "code").glob("*.py")) == []
+
+
+

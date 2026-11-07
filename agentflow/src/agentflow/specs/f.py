@@ -187,7 +187,9 @@ SPEC = AgentSpec(
             "八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**"
             "（B 走 `table.update`：`status=abandoned`，理由按两档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ "
             "`defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理"
-            "（`salvaged` 每条给 `label` 与 `stmt_id`）。理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒"
+            "（`salvaged` 每条给 `label` 与 `stmt_id`）。那一段理由的落盘形状是 "
+            "`quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统拼，你只给两档理由那几格）。"
+            "理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒"
             "（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`），一个字节不改）。"
             "**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。",
             # 2026-10-24 业主裁定（D-54，逐字要点）：「Sylow 第一定理，会有几种证明语言，会有不同的
@@ -366,13 +368,14 @@ SPEC = AgentSpec(
     summonable=True,
     edges=(
         'A',
-        'B',
+        # 2026-11-07（业主最终裁定，逐字：「为了落实口径，裁去F到B的直接出边，防止向下
+        # 交稿，F只能向上通过D向B交稿。」＋「向上的意思是F向父代理D交稿」）：
+        #   · 删 `F→B`：交稿不许向下派 B（B 的 `register_statement` 里
+        #     `f_proposition_must_be_a_manuscript` 保留作第二道防线，不再是主机制）；
+        #   · 加 `F→D`：这是"向上交给父代理"的那条边（撤销 2026-11-05「取消出边 F→D」）。
+        # 交稿链路 = F 落手稿 → 派 D 携带 → D 派 B 收录（V 签之后按 sha 认领）。
         'C',
-        # 2026-11-05（业主裁定逐字：「我们最好不要出现双向边，所以让 F 作为 D 的严格下级，
-        # 取消出边 F→D」；他并澄清「边」指"谁能唤起谁"，不是通信方向）：这里没有 `D`
-        # —— F 不能再唤起 D（`D → F` 保留，回执/通信不受影响）。向上汇报仍走
-        # `conductor.escalate`（收件人 = 召唤者 D），要人干活就派仍在边上的 A / B / E。
-        # 判据：`tests/test_agent_spec_reconciliation.py`（两层读数一致 + 反真空）。
+        'D',
         'E',
         # `F → V`（用户 2026-10-05 第七轮裁定）：F 提交证明、V 退回并指到要补的步骤。
         # 2026-11-05（业主裁定「V 不应该有出边」）：`specs/v.py` 的 `edges` 已清空，

@@ -535,6 +535,52 @@ class _WriteReport:
             if no >= 1:
                 one["proof_no"] = int(no)
             rows.append(one)
+        # ---- 2026-11-07（解耦落地）：F 的**登记条目**（还没拿到命题号的那一份） -----
+        #
+        # 上面那一圈按 `statements` 行找稿；而解耦之后 F 先落手稿登记条目、命题号由 B
+        # 在 V 签之后才发 ⇒ 第一轮那一份稿在 `statements` 里还没有行。改前 D 只按命题行
+        # 找稿，于是"F 落稿 → D 携带 → B 按 sha 认领"这条唯一交稿链在**第一次**就断在
+        # D 这一侧（携带单 0 行），而那个形态与"这一条证明确实自足"长得一样。
+        # 现在：登记条目里 `family=F`、命题号还空（或那一行不在 statements 里）的稿
+        # 也上携带单，键用稿号（`mss:<稿号>`，`depsection.CARRIED_KEYS` 的第三档）。
+        # 只带 `checked` 的登记条目（`proofregistry.parse_entry`）—— 手写稿没有登记
+        # 元信息，不是"等 B 收录的那一份"。
+        note_prefix = ""
+        from .. import vsigns as _VS
+        try:
+            from .. import proofregistry as _PR
+
+            _entries = _PR.entries_on_disk(self.store.root)
+        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
+            _entries = []
+            note_prefix = (f"（手稿登记条目这一趟读不出来：{type(exc).__name__}: {exc} ⇒ "
+                           "这张携带单可能少列了还没拿到命题号的那几份。）")
+        _known_stmt_ids = {str(r.get("stmt_id") or "") for r in statements}
+        for one in _entries:
+            if str(one.get("family") or "") != "F":
+                continue
+            sid = str(one.get("statement_id") or "")
+            if sid and sid in _known_stmt_ids:
+                continue
+            rel = str(one.get("path") or "")
+            msid = str(_VS.manuscript_id_of(rel) or "")
+            if not rel or not msid:
+                continue
+            key = _carried_key("mss", msid)
+            if key in seen:
+                continue
+            try:
+                blob = (Path(self.store.root) / rel).read_bytes()
+                text = blob.decode("utf-8", errors="replace")
+            except (OSError, UnicodeDecodeError):
+                continue
+            seen.add(key)
+            row = {"statement_id": "", "manuscript_id": msid, "path": rel,
+                   "sha256": hashlib.sha256(blob).hexdigest()}
+            no = _DS.manuscript_proof_no(text)
+            if no >= 1:
+                row["proof_no"] = int(no)
+            rows.append(row)
         # ---- E 的穷举证明手稿（2026-11-04：同一张单，键是 exp:<实验号>） -------------
         #
         # 判据全在盘上：台账里有一行 `evidence_kind="proof"` 的实验、它落了
@@ -671,6 +717,19 @@ class _WriteReport:
         for row in rows:
             sid = str(row.get("statement_id") or "")
             eid = str(row.get("experiment_id") or "")
+            msid = str(row.get("manuscript_id") or "")
+            if not sid and not eid and msid:
+                # ---- 2026-11-07（解耦落地）：F 的登记条目（还没有命题号） ------------
+                #
+                # 唯一交稿链的第一环：F 落手稿登记条目（命题号还没发）→ D 携带 →
+                # B 按正文 sha 认领、发号、落 statements 一行。这一支与 E 的 `exp:` 行
+                # 同形：参数从"稿 + 稿头元信息"拼，命题号不需要先有。
+                rec = self._deliver_f_manuscript_row(row)
+                if rec is not None:
+                    out["results"].append(rec)
+                    if rec.get("ok"):
+                        out["delivered"] = int(out["delivered"]) + 1
+                continue
             if not sid and eid:
                 # ---- 2026-11-04（业主裁定 B）：E 的 `exp:` 行也由 D 代递 ------------
                 #
@@ -736,6 +795,85 @@ class _WriteReport:
         if not rows:
             out["why"] = "携带单是空的（盘上没有任何一条按命号命名的 F 证明手稿）"
         return out
+
+    def _deliver_f_manuscript_row(self, row: Mapping[str, Any]) -> dict[str, Any] | None:
+        """把携带单上一条"F 的登记条目（命题号还没发）"递给 B（2026-11-07 解耦）。
+
+        ## 为什么这一支必须存在（唯一交稿链的第一环）
+
+        业主 2026-11-07 最终裁定：「为了落实口径，裁去F到B的直接出边……F只能向上通过D
+        向B交稿」＋「向上的意思是F向父代理D交稿」。于是交稿链路只有一条：
+        **F 落手稿 → 派 D 携带 → D 派 B 收录（V 签之后按 sha 认领）**。
+        F 的第一轮证明是一份登记条目、命题号还没发（号由 B 在 V 签之后发），
+        而改前 D 只按 `statements` 行找稿 ⇒ 这一条链在第一次就断了。
+
+        ## 参数从稿头元信息 + 稿拼（与 E 的 `exp:` 行同形）
+
+        - `statement_full` / `statement_text`：手稿 `## 命题` 那一节（F 登记的命题正文）；
+        - `proof_text`：手稿 `## 证明` 那一节（V 的签盖的就是它）；
+        - `kind`：稿头 `- 证据种类：`（读不出 / 词表外 ⇒ `conjecture`，不许自报更高）；
+        - `label`：稿头 `- 标签：`；
+        - `proof_manuscript`：整份稿（B 按携带单核 sha、从稿里读签块与依赖段）。
+
+        三态：没有 B ⇒ 一条 `checked` 之外的原因；稿读不到 / 没有 `## 命题` 或
+        `## 证明` ⇒ 不递并点名；B 拒收 ⇒ `ok=False` + 拒信原文。
+        """
+        from .. import depsection as _DS
+        from .. import proofregistry as _PR
+
+        rel = str(row.get("path") or "")
+        rec: dict[str, Any] = {
+            "statement_id": "", "manuscript_id": str(row.get("manuscript_id") or ""),
+            "ok": False, "stmt_id": "", "deps_written": 0, "manuscript_source": "",
+            "manuscript_washed": False, "kind": "", "error": ""}
+        if self.b is None:
+            rec["error"] = ("这一趟手上没有 B 的入口（直调 `AgentD(store)` 时没有 `b=`）"
+                            " ⇒ 这一份 F 的登记条目没有递出去")
+            return rec
+        try:
+            text = (Path(self.store.root) / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            rec["error"] = (f"读不到手稿 {rel}（{type(exc).__name__}: {exc}）"
+                            " ⇒ 这一份 F 的登记条目递不出去")
+            return rec
+        entry = _PR.parse_entry(text)
+        _head, sections = _PR.split_sections(text)
+        proposition = next((body.strip() for name, body in sections if name == "命题"), "")
+        proof_text = _DS.proof_body(text).strip("\n")
+        if not proposition:
+            rec["error"] = f"{rel} 里没有 `## 命题` 那一节 ⇒ 不知道要给 B 登记哪一条命题"
+            return rec
+        if not proof_text.strip():
+            rec["error"] = f"{rel} 里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
+            return rec
+        try:
+            got = dict(self.b.register_statement(
+                statement_full=proposition,
+                statement_text=proposition,
+                label=str(entry.get("label") or ""),
+                proof_text=proof_text,
+                proof_manuscript=text,
+                origin="own_result",
+                kind=str(entry.get("kind") or "conjecture") or "conjecture",
+                evidence_kind="heuristic",
+                quote_verified=None,
+                quote_reason=("F 的手稿登记条目（自产命题）：引文面不适用 —— V 的签在"
+                              "手稿块上；命题正文与证明正文都逐字来自 `" + rel + "`"),
+                # 自有结果的出处就是那份稿本身（不是文献第几页）：B 的出处闸要这一格。
+                line_range={"label": rel},
+                derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or [])],
+            ) or {})
+        except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
+            rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"
+            return rec
+        rec.update(ok=bool(got.get("ok")),
+                   stmt_id=str(got.get("stmt_id") or ""),
+                   deps_written=int(got.get("deps_written") or 0),
+                   manuscript_source=str(got.get("manuscript_source") or ""),
+                   manuscript_washed=bool(got.get("manuscript_washed")),
+                   kind=str(got.get("kind") or ""),
+                   error=str(got.get("error") or ""))
+        return rec
 
     def _deliver_exp_row(self, row: Mapping[str, Any]) -> dict[str, Any] | None:
         """把携带单上一条 E 的 `exp:` 稿递给 B（与 F 行同形；业主 2026-11-04 裁定 B）。
@@ -948,3 +1086,5 @@ class _WriteReport:
                 f"- `exp:{one.get('experiment_id')}` 的稿 `{one.get('path')}` 这一趟没有代 B 登记："
                 f"{one.get('why') or '按携带单寻址'}")
         return lines
+
+

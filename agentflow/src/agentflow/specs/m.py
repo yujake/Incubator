@@ -348,7 +348,7 @@ SPEC = AgentSpec(
             "**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理（`salvaged` 每条给 `label` 与 `stmt_id`）。"
             "理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒（如 `abandon_reason_missing` / "
             "`abandon_salvaged_missing` / `abandon_difficulty_not_genuine`）；标记与时间戳由系统按这几格拼进 "
-            "`quote_reason`，不用 B 手写。只写状态的行仍按未签计，读数是 `abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项：通用写口可改 "
+            "`quote_reason=abandoned@<ISO8601>@<结构化理由>`，不用 B 手写。只写状态的行仍按未签计，读数是 `abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项：通用写口可改 "
             "`statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时"
             "**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。所以走 ② 之后要回头看板："
             "确认那条重送项已 `done`（还开着就按未消项处理，它会挡销号与收工）。",
