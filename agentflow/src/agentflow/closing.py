@@ -5517,6 +5517,71 @@ def suspected_split_reading(store: Any) -> dict[str, Any]:
     return out
 
 
+def proposition_form_reading(store: Any) -> dict[str, Any]:
+    """I4 的另一格读数：命题形态闸（业主 2026-11-07 裁定）的逐条读数。
+
+    业主逐字：「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件
+    导出什么结论」。这一格**不拦门**（只让它在收工输出上显形）：被拒的条数、逐条码、
+    以及一条合法样本（"条件 → 结论"长什么样）。
+
+    判据本体是 `secretary.proposition_form_rows`（那本 append-only 台账），这里只做
+    三件本层的事：数三档（合格 / 不合格 / 没判成）、按码分组、取一条合法样本。
+
+    三态：`out/secretary/proposition_form.jsonl` 读不出来 / 没有工作区根 ⇒
+    `checked=False` + `reason`（没查成，不是"一条都没被拒"）。
+    没有这本台账（一闸都没跑过）⇒ `checked=True` 且 `judged=0`，`reason` 说清
+    "这一趟没跑过闸"（它同样不是"都合格"）。
+    """
+    out: dict[str, Any] = {"checked": False, "judged": 0, "well_formed": 0,
+                           "refused": 0, "unchecked": 0, "codes": [], "sample": {},
+                           "checked_from": "out/secretary/proposition_form.jsonl",
+                           "reason": ""}
+    root = str(getattr(store, "root", "") or "")
+    if not root:
+        out["reason"] = "这一层没有工作区根 ⇒ 形态闸那本台账读不到（没查成）"
+        return out
+    try:
+        from . import secretary as _SEC
+
+        rows = _SEC.proposition_form_rows(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+        out["reason"] = f"形态闸台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    out["checked"] = True
+    codes: dict[str, int] = {}
+    for one in rows:
+        out["judged"] += 1
+        if not one.get("checked"):
+            out["unchecked"] += 1
+        elif one.get("well_formed"):
+            out["well_formed"] += 1
+        else:
+            out["refused"] += 1
+        code = str(one.get("refused") or "")
+        if code:
+            codes[code] = codes.get(code, 0) + 1
+        if (not out["sample"] and one.get("checked") and one.get("well_formed")
+                and str(one.get("conditions") or "") and str(one.get("conclusion") or "")):
+            out["sample"] = {"at": str(one.get("at") or ""),
+                             "label": str(one.get("label") or ""),
+                             "kind": str(one.get("kind") or ""),
+                             "conditions": str(one.get("conditions") or "")[:200],
+                             "conclusion": str(one.get("conclusion") or "")[:200],
+                             "decision": str(one.get("decision") or "")[:200]}
+    out["codes"] = [{"code": code, "count": n} for code, n in sorted(codes.items())]
+    if not out["judged"]:
+        out["reason"] = ("查过了：这一趟形态闸一次都没跑过（台账里 0 行）⇒ 这个读数不是"
+                         "「都合格」")
+    else:
+        out["reason"] = (f"查过了：判了 {out['judged']} 条 —— 合格 {out['well_formed']}、"
+                         f"受控拒 {out['refused']}、没判成 {out['unchecked']}"
+                         + ("（码：" + "、".join(f"{c['code']}×{c['count']}"
+                                                for c in out["codes"]) + "）"
+                            if out["codes"] else "（没有拒收码）")
+                         + "（读数，不拦门）")
+    return out
+
+
 def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     """I3 的另一格读数：明确放弃的命题（带理由与时间）+ 换号读数（`relabeled`）。
 
@@ -7154,6 +7219,13 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         rep, "statements_unsigned", statements_unsigned_reading, store)
     rep.readings["statements_abandoned"] = _run_reading(
         rep, "statements_abandoned", statements_abandoned_reading, store)
+    # ---- 命题形态闸那一格（业主 2026-11-07 裁定；只说，不拦）--------------------
+    #
+    # 「命题登记时需过 F 秘书闸」：这一格让"被拒了几条、每条是什么码、合法样本长什么样"
+    # 在收工输出上显形。与上面那几格同一套纪律：只落 `readings`、不产生 `Finding`、
+    # 不动 `status` 与退出码 ⇒ 门的强度一格没改。
+    rep.readings["proposition_form"] = _run_reading(
+        rep, "proposition_form", proposition_form_reading, store)
     # ---- 第二阶段那一格（业主 2026-11-02 两阶段录入）：哪些证明还没洗过 --------
     #
     # 本笔只落读数（readings.statements_unoptimized，没查成时一条 warning）：

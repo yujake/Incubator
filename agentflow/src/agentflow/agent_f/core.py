@@ -1876,6 +1876,69 @@ class _Core:
             manuscript_text=manuscript_text, manuscript_received=manuscript_received,
             cites=cites, tier=tier, existing_row=existing_row)
 
+    def _proposition_form_gate(self, *, full: str, kind: str, body: str,
+                               label: str, task_id: str = "") -> dict[str, Any]:
+        """交稿之前过一道**命题形态闸**（业主 2026-11-07 裁定；一处实现，F 侧唯一调用点）。
+
+        业主原话（逐字）：
+
+        > 「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
+
+        ## 为什么装在 F 这一侧、装在登记之前
+        命题描述是 **F 这一轮写出来的**（`product` 里的命题文本 + 它自己那份证明正文），
+        而 F 自己不写 `statements`（它把内容交给 B 的登记正路）。所以闸必须在"交出去之前"
+        判：判不过就**不交给登记**，盘上那一张表一行都不多。D 的猜想只是参考、B 的收录
+        也承载文献侧定理（那条路不能一刀切）—— 两处都不装。
+
+        ## 三态（fail-closed）
+        - `submittable=True`：判定做了、`well_formed=True` ⇒ 照原样交给登记正路；
+        - `submittable=False` + `checked=True, well_formed=False`：判过了、不合格 ⇒ 受控拒，
+          `problems` 逐条点名缺什么；
+        - `submittable=False` + `checked=False`：**没判成**（没有秘书 / 没有缝 / 超时 /
+          坏 JSON / 词表外）⇒ 同样受控拒 —— "没判成"绝不许折成"没毛病"。
+
+        `kind` 落在 `concept`/`definition` 那一档时不受这道闸管（概念不是命题）。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "well_formed": False, "submittable": False,
+            "conditions": "", "conclusion": "", "problems": [], "decision": "",
+            "refused": "", "reason": "", "actor": "",
+        }
+        try:
+            from ..secretary import NOT_APPLICABLE_KINDS, PROPOSITION_FORM_REFUSED
+        except Exception as exc:  # noqa: BLE001 —— 模块拿不到就是"没判成"（fail-closed）
+            out.update(refused="proposition_form_unavailable",
+                       reason=f"形态闸那一格没接上（{type(exc).__name__}: {exc}）⇒ 没判成")
+            return out
+        if str(kind or "").strip().lower() in NOT_APPLICABLE_KINDS:
+            out.update(checked=True, well_formed=True, submittable=True,
+                       reason=(f"kind={kind!r} 落在 concept/definition 那一档：它不是命题"
+                               "（没有「条件 → 结论」）⇒ 不受这道闸管"))
+            return out
+        sec = self._secretary()
+        if sec is None:
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=("F 的秘书派生不出来"
+                               f"（{getattr(self, 'f_secretary_problem', '未知原因')}）⇒ "
+                               "这一问没判成：受控拒（没判成不等于没毛病）"))
+            return out
+        got = dict(sec.judge_proposition_form(
+            statement_full=str(full or ""), label=str(label or ""), kind=str(kind or ""),
+            proof_text=str(body or ""), task_id=task_id) or {})
+        out.update(
+            checked=bool(got.get("checked")), well_formed=bool(got.get("well_formed")),
+            conditions=str(got.get("conditions") or ""),
+            conclusion=str(got.get("conclusion") or ""),
+            problems=[str(x) for x in (got.get("problems") or [])],
+            decision=str(got.get("decision") or ""),
+            actor=f"secretary-{getattr(sec, 'role', 'F')}",
+            refused=str(got.get("refused") or ""),
+            reason=str(got.get("reason") or ""))
+        out["submittable"] = bool(out["checked"] and out["well_formed"])
+        if not out["checked"]:
+            out["refused"] = out["refused"] or PROPOSITION_FORM_REFUSED
+        return out
+
     def _hand_proof_to_b(self, *, full: str, text: str, body: str, sid: str,
                          plan: Mapping[str, Any], manuscript_text: str,
                          manuscript_received: dict[str, Any], cites: list[str],
@@ -1900,6 +1963,30 @@ class _Core:
         """
         row_now = dict(existing_row or {})
         plan_id = str(plan.get("plan_id") or "")
+        # ---- 2026-11-07（业主裁定）：交稿之前先过命题形态闸 ----------------------
+        #
+        # 位置是结构性的：在 `_register`（B 的登记正路）之前 ⇒ 判不过就**一行都不多**
+        # （`statements` 表上不会出现那条"作业规格"式的猜想）。判据本体只有一份：
+        # `Secretary.judge_proposition_form`（模型判定，一次调用），这里只做接线。
+        form = self._proposition_form_gate(
+            full=full, kind=str(row_now.get("kind") or "conjecture") or "conjecture",
+            body=body, label=f"F 攻坚 {plan_id} 子目标 {sid}")
+        if not form.get("submittable"):
+            # 拒绝的形状走 `refusals.refuse`（不是手搓 `ok=False`）：这两件事在台账里
+            # 必须分得开 —— "这次调用本身不成立"（前置条件不满足）与"执行了、没成功"。
+            # 判不过形态闸是前者（那段描述不是一条命题）。
+            from .. import refusals as _R
+
+            why = (str(form.get("reason") or "命题形态闸没放行")
+                   + ("；逐条缺什么：" + "；".join(form["problems"][:4])
+                      if form.get("problems") else ""))
+            return _R.refuse(
+                "proposition_form_refused", why,
+                refused_kind="proposition_form_refused",
+                statement_id="", reused=bool(row_now), promoted=False,
+                manuscript_received=manuscript_received, proof_text=body,
+                proof_attached=False, proposition_form=form,
+                why=why, cites=cites)
         try:
             known = {str(r.get("stmt_id") or "") for r in self.store.rows("statements")}
         except Exception:  # noqa: BLE001 - 读不到就当"没有在册 id"，只影响 derived_from
@@ -2025,7 +2112,10 @@ class _Core:
                 "proof_text": body, "proof_attached": proof_attached,
                 "proof_refusal": proof_refusal,
                 "proof_gate": dict((proof_refusal or {}).get("proof_gate") or {}),
-                "proof_gate_why": str((proof_refusal or {}).get("reason") or "")}
+                "proof_gate_why": str((proof_refusal or {}).get("reason") or ""),
+                #: 2026-11-07（业主裁定）：交稿之前那道命题形态闸的逐格读数
+                #: （条件 / 结论 / 判词 —— 模型与审计都看得到"这一条为什么过"）。
+                "proposition_form": dict(form)}
 
     # ------------------------------------------------------ 送审与「V 签」读数
     #

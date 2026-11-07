@@ -42,6 +42,13 @@ class _FSecretary:
                 "deps_section_filled": "", "deps_washing": [],
                 "reason": "夹具：依赖面本来就合规"}
 
+    def judge_proposition_form(self, **_kw) -> dict:
+        """2026-11-07（业主裁定）：交稿之前那道命题形态闸。夹具的命题是规范的。"""
+        return {"checked": True, "well_formed": True,
+                "conditions": "夹具：前提", "conclusion": "夹具：结论",
+                "problems": [], "decision": "夹具：形态合规",
+                "refused": "", "reason": "夹具：形态合规"}
+
 
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")

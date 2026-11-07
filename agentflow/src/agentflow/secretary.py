@@ -3183,6 +3183,162 @@ class Secretary:
         )
         return result
 
+    def judge_proposition_form(self, *, statement_full: str, label: str = "",
+                               kind: str = "", proof_text: str = "",
+                               task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
+        """F 的秘书专属：这条命题描述有没有明确「从什么条件导出什么结论」。
+
+        业主 2026-11-07 逐字：
+
+        > 「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
+
+        ## 它判什么、不判什么（两根轴必须分开）
+        - **判**：这段描述的形状 —— 前提写得出来吗？结论是一个可判真假的断言吗？
+          二者由"若…则…/设…则…"一类结构连起来了吗？有没有把**作业/验收规格**
+          （"本轮产物必须是 proof"、"判据是 `manuscript_published=true`"、
+          "原样提交 `reports/xxx.md`"）写成一条命题？
+        - **不判**：它对不对（那是 V 的轴，`verify.verify_proof`）、它是否平凡/是否已知
+          （那是 `judge_statement` 的非平凡性轴）。两根轴混进同一格就是本仓反复踩过的
+          "同一件事两个名字"。
+        - **不用词面阈值代替判断**（业主明确不要机械判据）：这里一次模型调用，没有
+          关键词表、没有字数阈值。
+
+        ## 返回（键集合固定）
+
+        | 键 | 意思 |
+        |---|---|
+        | `checked` | 这一问有没有真的判成（**没缝 / 关着 / 超时 / 坏 JSON / 词表外 ⇒ False**） |
+        | `well_formed` | 两态，没有第三档：`True` 形状合规 / `False` 不合规（只在 `checked=True` 时有意义） |
+        | `conditions` | 它读出来的前提（字符串；合格时不许为空） |
+        | `conclusion` | 它读出来的结论（字符串；合格时不许为空） |
+        | `problems` | 逐条说缺什么（合格时为空；不合格时必须非空） |
+        | `decision` | 一句话判词 |
+        | `refused` | 受控码（`checked=False` 或 `well_formed=False` 时非空） |
+
+        ## 三态（本仓最贵的那条纪律）
+        `checked=False` **不是**"没毛病"：调用方（F 的交稿那一步）必须 fail-closed
+        当受控拒处理 —— 否则"今天没判成"会被读成"今天放行了"。
+
+        ## 缓存
+        按命题正文的 sha256 命中本台账（`out/secretary/proposition_form.jsonl`）：
+        同一条正文重交一次不重复花钱，命中的结论原样带回（`cached=True`）。
+        "没查成"的行不缓存（缝可能好起来，与 `proposition_verdict_of` 同一条纪律）。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "well_formed": False, "conditions": "", "conclusion": "",
+            "problems": [], "decision": "", "refused": "", "reason": "", "cached": False,
+            "cost": {}, "material": {}, "statement_sha256": "", "role": str(self.role),
+        }
+        body = str(statement_full or "")
+        if not body.strip():
+            out.update(refused=EMPTY_STATEMENT_TEXT,
+                       reason=("这一条没有命题正文（0 字）⇒ 没有可判的对象："
+                               "不进形态判定，不发调用"))
+            return out
+        root = str(getattr(self.store, "root", "") or self.root or "")
+        key = _proposition_verdict_key(body)
+        out["statement_sha256"] = key
+        if root:
+            cached = proposition_form_of(root, statement_full=body)
+            if cached and cached.get("checked"):
+                out.update(checked=bool(cached.get("checked")),
+                           well_formed=bool(cached.get("well_formed")),
+                           conditions=str(cached.get("conditions") or ""),
+                           conclusion=str(cached.get("conclusion") or ""),
+                           problems=[str(x) for x in (cached.get("problems") or [])],
+                           decision=str(cached.get("decision") or ""),
+                           cached=True,
+                           reason=f"命中台账里那一次判定（{cached.get('at') or ''}）")
+                if not out["well_formed"]:
+                    out["refused"] = PROPOSITION_FORM_REFUSED
+                return out
+        if self.seam is None or not self.enable_model:
+            # fail-closed：没有判断面 ⇒ 这一格没查成（不是"没毛病"）。
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 形态没判成。"
+                               "登记这一步按受控拒处理 —— 「没判成」不许折成「没毛病」"
+                               + (f"（装配读数：{self.model_source}）"
+                                  if str(self.model_source or "") else "")))
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        material = {"label": str(label or ""), "kind": str(kind or ""),
+                    "statement_full": body[:JUDGE_MATERIAL_CAP],
+                    "proof_chars": len(str(proof_text or ""))}
+        out["material"] = dict(material)
+        try:
+            data, call = self.seam.ask_json(_judge_material(material),
+                                            system=_proposition_form_system(),
+                                            task_id=task_id,
+                                            note="secretary:proposition_form")
+        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 没判成（fail-closed）
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=f"形态判定调用失败（{type(exc).__name__}: {exc}）⇒ 没判成")
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=(f"形态判定没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
+                               f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 没判成"))
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        raw = data.get("well_formed")
+        if not isinstance(raw, bool):
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=(f"模型给的 well_formed 不是布尔（收到 {raw!r}）⇒ 不采信："
+                               "这一问只有两态，第三档会让「没判成」冒充「没毛病」"))
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        conditions = str(data.get("conditions") or "").strip()
+        conclusion = str(data.get("conclusion") or "").strip()
+        problems = [str(x).strip() for x in (data.get("problems") or []) if str(x).strip()]
+        decision = str(data.get("decision") or "").strip()
+        if raw and not (conditions and conclusion):
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=("模型判合格，却读不出前提或结论（conditions/conclusion 有空格）⇒ "
+                               "这一格没判成：合格的那一档必须能复述「条件 → 结论」"))
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        if not raw and not problems:
+            out.update(refused=PROPOSITION_FORM_REFUSED,
+                       reason=("模型判不合格，却一条 problems 都没点名 ⇒ 这一格没判成："
+                               "拒收必须逐条说缺什么，否则调用方不知道该改哪里"))
+            self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                            task_id=task_id, root=root)
+            return out
+        out.update(checked=True, well_formed=bool(raw), conditions=conditions,
+                   conclusion=conclusion, problems=problems, decision=decision,
+                   refused="" if raw else PROPOSITION_FORM_REFUSED,
+                   reason=("形态合规：前提与结论都读得出来" if raw else
+                           f"形态不合规：{len(problems)} 条 —— " + "；".join(problems[:4])))
+        self._note_form(out, body=body, label=label, kind=kind, stmt_id=stmt_id,
+                        task_id=task_id, root=root)
+        return out
+
+    def _note_form(self, out: Mapping[str, Any], *, body: str, label: str = "",
+                   kind: str = "", stmt_id: str = "", task_id: str = "",
+                   root: str = "") -> None:
+        """把这一次形态判定落进台账（写不进去不许带走这一次判定的结论）。"""
+        if not root:
+            return
+        try:
+            out["ledger"] = append_proposition_form(
+                root, statement_full=body, checked=bool(out.get("checked")),
+                well_formed=bool(out.get("well_formed")),
+                conditions=str(out.get("conditions") or ""),
+                conclusion=str(out.get("conclusion") or ""),
+                problems=list(out.get("problems") or ()),
+                decision=str(out.get("decision") or ""),
+                refused=str(out.get("refused") or ""),
+                reason=str(out.get("reason") or ""), label=label, kind=kind,
+                stmt_id=stmt_id, role=str(self.role), task_id=task_id)
+        except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
+            out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+
     def judge_statement(self, *, statement_full: str, statement: str = "",
                         source: str = "", basis_hint: str = "",
                         proof_text: str = "", proofs: list | None = None,
@@ -11703,6 +11859,92 @@ def proposition_verdicts_path(root: str | Path) -> Path:
     return Path(root).joinpath(*SECRETARY_DIR, PROPOSITION_VERDICT_LEDGER)
 
 
+# ---------------------------------------------------------------- 命题形态判定台账（2026-11-07）
+
+#: 命题形态判定（"这条描述有没有明确「从什么条件导出什么结论」"）的旁支台账。
+#:
+#: 为什么要有这一本账：这一问的结论必须能被收工读数数出来（业主 2026-11-07：
+#: 「命题登记时需过 F 秘书闸」+ 读数要显形"被拒的条数 + 逐条码"）。而它不落
+#: `statements` 行 —— F 自己不写 `statements`（登记是 B 的活），所以判定结果落在
+#: 秘书自己的台账上，读侧一个口：:func:`proposition_form_of`。
+PROPOSITION_FORM_LEDGER = "proposition_form.jsonl"
+
+#: 这一闸的受控码（模型读得到的那一个）。
+PROPOSITION_FORM_REFUSED = "proposition_form_refused"
+
+
+def proposition_form_path(root: str | Path) -> Path:
+    """命题形态判定台账的路径：`out/secretary/proposition_form.jsonl`。"""
+    return Path(root).joinpath(*SECRETARY_DIR, PROPOSITION_FORM_LEDGER)
+
+
+def append_proposition_form(root: str | Path, *, statement_full: str, checked: bool,
+                            well_formed: bool, conditions: str = "", conclusion: str = "",
+                            problems: Sequence[str] = (), decision: str = "",
+                            refused: str = "", reason: str = "", label: str = "",
+                            kind: str = "", stmt_id: str = "", role: str = "",
+                            task_id: str = "") -> dict[str, Any]:
+    """追加一行形态判定读数（append-only；显式 LF，与 `append_proposition_verdict` 同一口径）。
+
+    每一次判定都记（含"没查成"那一档）：读数要把"被拒了几条 / 每条是什么码"数得出来，
+    而只记放行的那几条会让拒收在盘上消失 —— 那正是这道闸要防的"静默放行"。
+    """
+    path = proposition_form_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"at": _now_iso(),
+           "statement_sha256": _proposition_verdict_key(statement_full),
+           "statement_chars": len(str(statement_full or "")),
+           "checked": bool(checked), "well_formed": bool(well_formed),
+           "conditions": str(conditions or ""), "conclusion": str(conclusion or ""),
+           "problems": [str(x) for x in (problems or ())],
+           "decision": str(decision or ""), "refused": str(refused or ""),
+           "reason": str(reason or ""), "label": str(label or ""),
+           "kind": str(kind or ""), "stmt_id": str(stmt_id or ""),
+           "role": str(role or ""), "task_id": str(task_id or "")}
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）。
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    return row
+
+
+def proposition_form_rows(root: str | Path) -> list[dict[str, Any]]:
+    """这本台账的全部行（读不出来 ⇒ 空列表，并把原因留给调用方那条三态读数去报）。"""
+    path = proposition_form_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, Mapping):
+            out.append(dict(row))
+    return out
+
+
+def proposition_form_of(root: str | Path, *, statement_full: str = "",
+                        stmt_id: str = "") -> dict[str, Any]:
+    """这条命题的形态判定（读侧唯一口）。
+
+    三态：空字典 = **没有判定过**（不是"判过、合格"）；非空 = 有判定行，`well_formed`
+    与 `checked` 两格说清结论。能不能缓存由调用方按 `checked` 决定 —— "没查成"的行
+    不许挡住下一次调用（缝是可能好起来的，与 `proposition_verdict_of` 同一条纪律）。
+    """
+    key = _proposition_verdict_key(statement_full) if statement_full else ""
+    last: dict[str, Any] = {}
+    for row in proposition_form_rows(root):
+        if stmt_id and str(row.get("stmt_id") or "") == str(stmt_id):
+            last = row
+            continue
+        if key and str(row.get("statement_sha256") or "") == key:
+            last = row
+    return last
+
+
 def _proposition_verdict_key(statement_full: str) -> str:
     """缓存键：命题正文的 sha256（去首尾空白之后）。
 
@@ -11969,6 +12211,34 @@ def _wash_v_system() -> str:
         "「这篇论文有没有价值」这类价值判断（那不是 V 的判据面）。"
         "只回一个 JSON 对象，字段：text（改写后的正文）、findings（对象数组：quote + why）、"
         "step（整数或 null）。\n\n"
+    )
+
+
+def _proposition_form_system() -> str:
+    """命题形态闸的稳定头（进 `system` 位）：只问一件事 + 输出形状。
+
+    业主 2026-11-07 逐字：「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了
+    从什么条件导出什么结论」。
+
+    与 :func:`_judge_system` / :func:`_wash_v_system` 同一条缓存纪律：这一段只取决于
+    "这是命题形态闸"，逐字节稳定（材料留在 user 位）。为什么把"不判什么"也写进
+    稳定头：本仓反复踩过"两根轴混进同一格"（非平凡性 vs 正确性），把边界写在
+    提示词里比写在注释里更能拦住下一次改动。
+    """
+    return (
+        "你是「命题形态闸」：只回答一件事 —— 这段描述有没有明确「从什么条件导出什么结论」。"
+        "**不判它对不对**（那是验证者的轴），**不判它是否平凡/是否已知**（那是另一根轴），"
+        "也不评价它的价值。"
+        "判据四条：① 前提（条件 / 假设 / 量词范围）在描述里写得出来；"
+        "② 结论是一个**可判真假的断言**；"
+        "③ 二者由「若…则…」「设…则…」一类结构连起来，而不是一段流程要求；"
+        "④ 描述里没有混进作业/验收规格（「本轮产物必须是 proof」「判据是 "
+        "manuscript_published=true」「原样提交 reports/xxx.md」这类不是数学断言）。"
+        "只回一个 JSON 对象，字段：well_formed（**布尔**，只有两态，不许给 "
+        "true/false 以外的值）、conditions（你读出的前提，字符串）、"
+        "conclusion（你读出的结论，字符串）、problems（字符串数组：不合格时逐条说缺什么，"
+        "例如「没有写清前提」「结论不是可判真假的断言」「这是流程要求，不是命题」，"
+        "合格时给空数组）、decision（一句话判词）。\n\n"
     )
 
 

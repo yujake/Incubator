@@ -34,6 +34,24 @@ from agentflow.agent_f import AgentF
 from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import table_tools as TT
+# ---------------------------------------------------------------- 命题形态闸的夹具答案
+#
+# 2026-11-07（业主裁定）：F 交稿之前多了一道"命题形态闸"
+# （`agent_f/core.py::_proposition_form_gate` → `Secretary.judge_proposition_form`）。
+# 它是一次**模型调用**，而这一份夹具里没有模型 ⇒ 判据会 fail-closed 拒收（那是对的行为）。
+# 下面这个 autouse 夹具只替代**那一次调用**（给一个"形态合规"的答案），不摘闸：
+# 闸照跑、判据仍是那一处实现；写成补丁而不是"让闸放行"，是为了让"夹具里没有模型"
+# 这件事只在这一个地方被交代一次。
+@pytest.fixture(autouse=True)
+def _proposition_form_answers_ok(monkeypatch):
+    from agentflow import secretary as _SEC
+
+    monkeypatch.setattr(
+        _SEC.Secretary, "judge_proposition_form",
+        lambda self, **_kw: {"checked": True, "well_formed": True,
+                             "conditions": "夹具：前提", "conclusion": "夹具：结论",
+                             "problems": [], "decision": "夹具：形态合规",
+                             "refused": "", "reason": "夹具：形态合规"})
 
 #: 一次 F 会交上来的命题（`own_result` 的出处用 `line_range` 的 label，不编页码）。
 ROW: dict[str, Any] = {
