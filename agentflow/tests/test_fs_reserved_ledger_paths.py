@@ -202,7 +202,7 @@ def test_c_legit_landing_spots_are_untouched(tmp_path: pathlib.Path) -> None:
     # ---- 2026-11-07（B 类收口）：同一个文件名，两向读数必须分开 -------------------
     #
     # 保留表的 A3 收窄曾经按"文件名形态"全树拦：`notes/f-proof-x.md` 也被判成框架产物，
-    # 而 `notes/` 是 A 的正常产出面。收口之后规则按**规范落点**判（`reports/` 这一族），
+    # 而 `notes/` 是 A 的正常产出面。收口之后规则按规范落点判（`reports/` 这一族），
     # 于是这两条读数必须同时成立 —— 只贴一头的话，"收窄"与"全树拦"在判据上没区别。
     notes_doc = _call(reg, "A", "fs.write", path="notes/f-proof-y.md",
                       content="A 的普通笔记：文件名像手稿，落点不是规范落点")

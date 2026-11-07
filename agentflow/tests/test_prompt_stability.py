@@ -910,6 +910,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "B 手册补上五格与「判的是你的秘书」，F 的 policy 正文补上命题形态闸"
              "（`proposition_form_refused`）。变化格 = D/F/M（本笔）＋ A/B/E/G/L（上游 4e5e85ae 的"
              " `table.update` summary，从 p252 起就漂着）；C/H/V 逐字未动。facts 键集仍 15 格。"},
+    # p253 → p254（2026-11-07，A4 裁边 + 解耦落地的连带重冻）：facts 键集一格没动（还是 15 格），
+    # 只改段文本 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p254", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p254（2026-11-07，A4 裁边 + 解耦落地的连带重冻）：上游是 74e243df「删 F→B、加 F→D」"
+             "（`specs/f.py` 的 edges 换一格、F/D/M 的放弃理由落盘形状改成"
+             " `quote_reason=abandoned@<ISO8601>@<结构化理由>`、B 手册补「F 不会直接派你；交稿来自 D 的"
+             "携带单」与「来自 A 的收录请求照常办」）与本批 B 类的 `fs.write` summary（A/B 写 `reports/` 下"
+             "三族证明了也拒、`notes/` 下不算框架产物）。变化格 = B/D/F/M（十一格摘要）；A/E/G/L 只动面快照里"
+             "那一行 summary、不进摘要；C/H/V 逐字未动。facts 键集仍 15 格。"},
 
 )
 

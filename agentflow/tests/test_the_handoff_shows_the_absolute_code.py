@@ -303,8 +303,8 @@ def test_f_stubbing_the_forwarding_param_makes_a_and_e_red(tmp_path: pathlib.Pat
     monkeypatch.setattr(SEC.Secretary, "handoff_add", _dropped)
     # a) 具体收件人这一档。
     #
-    # 2026-11-07（C 类：先判"实现对还是判据对"，结论是**判据过时**，不是实现回归）：
-    # 这一组夹具里有两个同角色实例（判据 e 要的），而 `to="F"` 是**角色名** ——
+    # 2026-11-07（C 类：先判"实现对还是判据对"，结论是判据过时，不是实现回归）：
+    # 这一组夹具里有两个同角色实例（判据 e 要的），而 `to="F"` 是角色代号 ——
     # `roster_addresses` 的契约是"角色代号、而该角色在册多个 ⇒ `ambiguous_in_roster`"
     # （`agent_loop.py:3893`，改前实测就红在这一格：`refused=not_an_edge`，不是转发形参
     # 的事），落到 `_handoff_address` 的角色那一支又要有协作边

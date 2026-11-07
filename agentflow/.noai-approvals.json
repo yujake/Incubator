@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-07T14:24:47+08:00",
+  "generated_at": "2026-11-07T17:08:07+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -465,11 +465,11 @@
       "path": "src/agentflow/tools/fs_tools.py",
       "glob": "src/agentflow/tools/fs_tools.py",
       "category": "auth-audit",
-      "sha256": "a6f962ff9a730a76af9849f21044296e998b74172209dadc4d2760304358e103",
+      "sha256": "d895ba3a8212bddf0daa3644ef3035f0f63a1091514f76d012359867062f37ee",
       "authored": "ai-agent",
-      "authored_basis": "inferred",
-      "change_note": "2026-11-07 解耦落地（A1-A4）：fs 保留表收窄 A/B 写证明稿；F 边 F→B 删、F→D 加；F/D/M 提示词补 abandoned@ 标记；reviewers=0（登记 ≠ 批准）",
-      "changed_this_session": true,
+      "authored_basis": "attested",
+      "change_note": "2026-11-07 收口（A–D）：B 类把 A/B 的手稿保留行收回 reports/ 规范落点（_artifact_rule_matches 加路径档）+ fs.write summary 同步；D 类按 p254 重冻 agent/tool 两份 golden。reviewers=0（登记≠批准，需人逐行走查）",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -517,11 +517,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "a13adf665a92a6ce9eabe432130264864c64b269a8695042a9a833baeb8f7320",
+      "sha256": "27a0b86618892b8b94c8d4617cd41b91dfacbb744bb3779925eb73d0433af8da",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p253 让提示词与工具面第二次对齐：specs/d,f,m 的 policy 把旧放弃格式（quote_reason=abandoned@<ISO>@<理由>，三样缺一不可）改成 math_error/difficulty 两档（defect_ref / salvaged），F 的 policy 正文补命题形态闸 proposition_form_refused；两份 golden 按现值重冻（tool: table.update 的 summary+params；agent: 11 份 prompt 的版本行 + 9 格文本）",
-      "changed_this_session": true,
+      "change_note": "2026-11-07 收口（A–D）：B 类把 A/B 的手稿保留行收回 reports/ 规范落点（_artifact_rule_matches 加路径档）+ fs.write summary 同步；D 类按 p254 重冻 agent/tool 两份 golden。reviewers=0（登记≠批准，需人逐行走查）",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -543,11 +543,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "51699365a9d0108efa919c3204f16df8766203d9752cd130ef911f3d16db7311",
+      "sha256": "9999e72d06779240942c6ceb44fa9d88b16ba9cdbe4b15d7627eb972139541f2",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p253 让提示词与工具面第二次对齐：specs/d,f,m 的 policy 把旧放弃格式（quote_reason=abandoned@<ISO>@<理由>，三样缺一不可）改成 math_error/difficulty 两档（defect_ref / salvaged），F 的 policy 正文补命题形态闸 proposition_form_refused；两份 golden 按现值重冻（tool: table.update 的 summary+params；agent: 11 份 prompt 的版本行 + 9 格文本）",
-      "changed_this_session": true,
+      "change_note": "2026-11-07 收口（A–D）：B 类把 A/B 的手稿保留行收回 reports/ 规范落点（_artifact_rule_matches 加路径档）+ fs.write summary 同步；D 类按 p254 重冻 agent/tool 两份 golden。reviewers=0（登记≠批准，需人逐行走查）",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []

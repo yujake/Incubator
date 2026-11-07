@@ -3484,7 +3484,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；`tests/golden/agent_surface_snapshot.json` /
 #: `tool_surface_snapshot.json` 按现值重冻；`docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p253"
+#: p253 → p254（2026-11-07，A4 裁边 + 解耦落地的连带重冻）：
+#: 上游两笔（都不在本笔改段，本笔只把版本与冻结表跟上）：
+#:   ① 74e243df「A4 裁边：删 F→B、加 F→D」（业主逐字：「裁去F到B的直接出边……F只能向上通过D
+#:      向B交稿」）：`specs/f.py` 的 edges 换一格（伙伴表里 B 换成 D）；`specs/f.py` /
+#:      `specs/d.py` / `specs/m.py` 的放弃理由落盘形状改成
+#:      `quote_reason=abandoned@<ISO8601>@<结构化理由>`；`agent_skills._b_skills()` 新增
+#:      「F 不会直接派你；交稿来自 D 的携带单」与「来自 A 的收录请求照常办」两句。
+#:   ② 本批 B 类收口（`src/agentflow/tools/fs_tools.py`）：`fs.write` 的 summary 补一句
+#:      「A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物」—— 保留表 A/B 那六行
+#:      从"文件名形态、全树拦"收回规范落点之后的教法（判据
+#:      `tests/test_fs_reserved_ledger_paths.py::test_c_legit_landing_spots_are_untouched`）。
+#: 变化格（十一格摘要）= B / D / F / M；A / E / G / L 的面快照也动（fs.write 那一行 summary），
+#: 但那一行不进 `_surface_digest` 的渲染（摘要口径只覆盖提示词正文）⇒ 它们十一格逐字未动。
+#: C / H / V 三格逐字未动。逐格旧值 → 新值：
+#:   B 08cdc16d→30720620 / D 48fb9628→2b0e40ab / F 46140ef9→390ca21e / M b43664a8→0449b009。
+#: 十一格是 `temp/_p254_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p254）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
+#: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p254"
 
 
 

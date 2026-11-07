@@ -2312,7 +2312,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   E 66cf60d0→bfea0b31 / F 0be857db→46140ef9 / G 8d38e0fe→142885bc /
 #   H f1fa916c→82aded01 / L 1d86d5e6→1ecacc15 / M 523229a7→b43664a8。
 # 十一格是 `temp/_p253_freeze_digests.py` 的现算值（口径同上），不是手抄。
-_FROZEN_PROMPT_VERSION = "p253"
+# 2026-11-07（p253 → p254，A4 裁边 + 解耦落地的连带重冻）：四格换值 ——
+# B/D/F/M；上游两笔都不在本笔改段（本笔只把版本与冻结表跟上）：
+#   ① 74e243df「A4 裁边：删 F→B、加 F→D」：`specs/f.py` 的 edges 换一格（伙伴表里 B 换成 D）、
+#      `specs/f.py` / `specs/d.py` / `specs/m.py` 的放弃理由落盘形状改成
+#      `quote_reason=abandoned@<ISO8601>@<结构化理由>`、`agent_skills._b_skills()` 新增
+#      「F 不会直接派你；交稿来自 D 的携带单」与「来自 A 的收录请求照常办」两句；
+#   ② 本批 B 类收口（`tools/fs_tools.py`）：`fs.write` 的 summary 补一句「A/B 写 `reports/`
+#      下这三族证明了也拒；`notes/` 下不算框架产物」—— 那一行进面快照、不进十一格摘要。
+# 逐格旧值 → 新值：
+#   B 08cdc16d→30720620 / D 48fb9628→2b0e40ab / F 46140ef9→390ca21e / M b43664a8→0449b009。
+# C/H/V 与 A/E/G/L 逐字未动。十一格是 `temp/_p254_freeze_digests.py` 的现算值（口径同上），
+# 不是手抄。
+_FROZEN_PROMPT_VERSION = "p254"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2548,15 +2560,15 @@ _FROZEN_PROMPT_VERSION = "p253"
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "aa1ca53c1e71d5246d47c6323f6ecf3eb3feda4b31b6aaede10f480e22545805",
-    "B": "08cdc16d696063d10bace6e410a1ce160e477ae498b69d8724782939909497e7",
+    "B": "307206208d92cc4a990a4541130adeeabdfdb35186ebc82897f3b46a64c7ddfd",
     "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "48fb9628c7bcf0e468ef1df61c91878d6b5b4836d85997d38c6ae3a24c0696f2",
+    "D": "2b0e40ab8067f03e4d830399aac9d01cb32cc7fc121765276af81f4527a9b407",
     "E": "bfea0b3153c8d601bf01392a6e8cf43b718bb597efdd01c74bc67bf790a555cc",
-    "F": "46140ef9d2202c4511a77ce160de5c06385c3d6ee9fe8af642a8bd7ccca16078",
+    "F": "390ca21e2e1ab7b448a25a4908b10c32eff2ae087032eb65068dfb7d163ef26e",
     "G": "142885bcd819507785b3f45ccabe1cba5f552b569afa347e82b6815fc80a363f",
     "H": "82aded018b331b95d28f931c1ad60c0999894ad08716db3ca9a0f897770377f6",
     "L": "1ecacc15bf05f097285c4e43661bfba623449c65f6c6e165ef1436f7ea069f8c",
-    "M": "b43664a8ce43ea3536514de4b2969ca787a05d6702754e21375b7dd1815c57b5",
+    "M": "0449b0096409a7878e2a987067cb933de1bdfb5ff7f347cce654f37c75e8fc60",
     "V": "a3d391fc5a737268fc8d4c36ecd74146f2dc4f9fea4aaf58a677c229446f48bd",
 }
 

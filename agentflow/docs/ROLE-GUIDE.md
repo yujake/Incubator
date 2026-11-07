@@ -91,7 +91,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `lit.admit` | 正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。 | `write_local` | （无） |
 | `lit.admit_all` | 提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。 | `write_local` | （无） |
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
@@ -199,7 +199,7 @@
 ### 协作面
 
 - 能召唤：C、D、H、L、V
-- 谁能召唤它：A、D、E、F、M
+- 谁能召唤它：A、D、E、M
 - 可被召唤：是
 - 写集（能改哪些表）：literature、relations、reprocess_requests、statements
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
@@ -231,7 +231,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。 | `write_local` | （无） |
@@ -392,7 +392,7 @@
   - **你可以给「证明思路」与「依赖面参考」，但证明的落稿与拿签不属于你**（业主 2026-11-04 逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，然后再提出新的想法」）：① **想法由你给**：哪些引理要引、按什么顺序、用哪条已证命题（`stmt:` 号）—— 写在这趟给你的活的说明里，或写进 `F.create_plan` 的 `problem` / `subgoals`（每个子目标写成可判定的 `{sid, text, owner}`）这一类参数里；② **证明的落稿与拿签不属于你**：`reports/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；你**不许**自己在 `out/proofs/`、`notes/`、`reports/` 里写出一份「可提交的证明稿」（带 `## 证明` 那一节，或名字就是 F 的证明稿）—— `fs.write` / `fs.edit` 对它们受控拒绝（`reserved_framework_artifact`），撞上去只是白跑一趟；③ **你的产物是**：想法（猜想 / 思路 / 依赖面参考）+ 收获（数值实验结果、理论攻坚的成果）+ 下一个想法 —— 即「读回 F 的结果 → 立新猜想 → 再派 F」这个循环；`out/proofs/` 是攻坚过程记录（可写 `## 思路` / `## 依赖面参考`，不能带 `## 证明` 节）。
   - **登记猜想之前先判重**：不给 `conjecture_id` 时框架按规范化后的 `statement` 查重 —— 命中就**更新既有那一行**并回 `duplicate=true`（不是新建）；要另起一条就把差异写进正文重新交（正文按规范化比不同才会落新的一行）。所以改写一条猜想之前先想清楚：这是「同一条改个说法」还是「另一条」—— 前者会更新原行（历史留在同一行上），后者才是新行。
   - **你的研究手稿是这一趟之后唯一还在的记忆**：**七节，按这个次序** —— **成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步**。它落在三处你真能写的地方：① 项目级 `reports/RESEARCH.md`（**七节、先读后改**：先 `fs.read` 看现在这一版，再用 `fs.edit` 定点改或 `fs.write(overwrite=true)` 整份更新；**它是收录者/引用者** —— 把 F 的证明手稿（`reports/f-proof-<号>.md`）、E 的实验成果收进来并带上引用，证明正文本身不在这里写）；② `research.write_note`（按研究问题**追加**一条笔记 —— 追加而非覆盖，七节里的内容逐条写进去）；③ `D.write_report` 渲染的 `reports/<qid>-research.md`（一份问题一份的工作稿，**携带单由它生成** —— 交 B 时 F 的证明稿随这张单一起走；手写 `*-research.md` 会被`reserved_framework_artifact` 拒，改走 `write_report`）。**`reports/RESEARCH.md` 里不许出现你自己新写的 `## 证明` 节**：那一节只许是引用/转载 F 的稿（点名盘上的 `reports/f-proof-<号>.md` 或带它的 sha256），否则 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）。
-  - **命题不能悬着：每条登记的命题最终要么有 V 签、要么被明确放弃**。收工门的读数 `statements_unsigned` 数的是「既没有 V 签、也没有被明确放弃」的非概念命题，它大于 0 就是 **blocker**（`machine_pass` 假、退出码 1，**不落在八格里任何一格上**）。所以看到被 V 打回的证明，两条路选一条：① 派 F 把那一条补齐之后**重新送 V 审**，拿到干净的「成立」；② 这条命题确实做不动了 ⇒ **明确放弃**：派 B 走 `table.update` 把 `status` 改成 `abandoned`，并把理由按两档之一说清（`abandon_kind` ＋ `abandon_basis`）—— **`math_error`**：指出错在第几步、错的是什么，并给 `defect_ref`（形如 `verifications/<号>.jsonl#v-00000N`，指着这条命题自己那一行判词「有毛病」）；**`difficulty`**：说清难在哪，再把旧证明里可取之处拆成引理交出去（`salvaged` 每条给 `label` 与 `stmt_id`，引理先在册、`status=active`、`kind=lemma`）。理由空着、`salvaged` 空着、或 `difficulty` 不是真困难，都会在写盘前被受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`）；标记与时间戳由系统按这几格拼进 `quote_reason`，不用你手写。通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。放弃之后回头看一眼板：确认名下那条 `v-resubmit@` 已 `done`（`item_close` ∈ `acked` / `completed` / `expired`；还开着就按未消项处理，它会挡销号与收工）。
+  - **命题不能悬着：每条登记的命题最终要么有 V 签、要么被明确放弃**。收工门的读数 `statements_unsigned` 数的是「既没有 V 签、也没有被明确放弃」的非概念命题，它大于 0 就是 **blocker**（`machine_pass` 假、退出码 1，**不落在八格里任何一格上**）。所以看到被 V 打回的证明，两条路选一条：① 派 F 把那一条补齐之后**重新送 V 审**，拿到干净的「成立」；② 这条命题确实做不动了 ⇒ **明确放弃**：派 B 走 `table.update` 把 `status` 改成 `abandoned`，并把理由按两档之一说清（`abandon_kind` ＋ `abandon_basis`）—— **`math_error`**：指出错在第几步、错的是什么，并给 `defect_ref`（形如 `verifications/<号>.jsonl#v-00000N`，指着这条命题自己那一行判词「有毛病」）；**`difficulty`**：说清难在哪，再把旧证明里可取之处拆成引理交出去（`salvaged` 每条给 `label` 与 `stmt_id`，引理先在册、`status=active`、`kind=lemma`）。理由空着、`salvaged` 空着、或 `difficulty` 不是真困难，都会在写盘前被受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`）；标记与时间戳由系统按这几格拼进 `quote_reason=abandoned@<ISO8601>@<结构化理由>`，不用你手写。通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。放弃之后回头看一眼板：确认名下那条 `v-resubmit@` 已 `done`（`item_close` ∈ `acked` / `completed` / `expired`；还开着就按未消项处理，它会挡销号与收工）。
   - **「成果概述」是第一节**：证明了哪些命题、证伪了哪些猜想、做了哪些数值实验 / 测过哪些样例、以及过程中总结到的经验。**这一节里的每一句声称都必须引到别人落的那份文件上**，不许只凭你手上的读数转述：
   - **证明 / 证伪**的声称 ⇒ 引 **F** 落的那一份（`statements` 里的 `proof_text` 与 `reports/attack-<plan_id>.md`；证伪则引那条带 `counterexample` 的 `experiments` 行）；
   - **数值实验 / 例子 / 反例**的声称 ⇒ 引 **E** 的代码文件（实验行里的 `code_path`）或**描述那个例子的文件**；
@@ -440,7 +440,7 @@
 ### 协作面
 
 - 能召唤：A、B、C、E、F
-- 谁能召唤它：B、E、G、M
+- 谁能召唤它：B、E、F、G、M
 - 可被召唤：是
 - 写集（能改哪些表）：research_questions、search_requests
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
@@ -479,7 +479,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `graph.build` | 从 store 三张表构建概念图索引，返回图规模与完整性体检读数。 | `read` | （无） |
 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息。邻居列表**有界**（默认 max_neighbors=200）：超过上限时 truncated=True 并说明只给了前几个 —— 绝不静默截断。 | `read` | `concept_id` |
 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
@@ -602,7 +602,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -655,7 +655,7 @@
   - **证明写完之后由你派 V 审这一份证明稿（proof manuscript）**（`framework_summon` 形状：`role="V"`，`task` 写清要审**哪一份** —— 点手稿路径 `reports/f-proof-*.md`，**在册了也点同一份稿**）。V 的 `verify_proof` 参数按工具面给全：`statement_id`（在册后给这条命题的号；还没在册就不给，空号 = 还没在册 —— **没号也能签**：V 先把那一签落进 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领）；`proof_no` 是第几条证明（缺省 1）；`proof_manuscript` **一律给**（在册与否都给：那是 V 读的正文，也是签块要盖回的那一份稿）—— 只给命题号、不给稿，签就没有落在任何一份正文上，B 收录时从稿上读不到那一签；`readonly_facts` 是你附的只读读数（命题现状 / 台账条数）。**V 只会退回两种结论：成立（没找到缺陷）/ 有毛病（找到缺陷，指到步号与原句）** —— 读到 `有毛病` 就按那条缺陷改稿/补步骤，读到 `成立` 就是这一格被审过、不再重交；证明要被 V 签过 `成立`，五元位第 3 位才算数。**例外：判词是「成立」而交付读数仍是「未通过」**（`secretary_fault`）——按缺陷改稿再送，别把这一条当成已经结束（`review_standing=rejected` 那一档 —— 同一份正文被打回之后又起转的那一趟 —— 同样按「未通过」读）。**你这一趟交没交差，按条看 `F.step` 返回的 `delivery` 那一格**（也进 `history`）：`signed_count` / `pending_count` / `unsigned_count` / `total` 逐条数，`coverage_reading` 是「已签/总数」；`delivered` **只在「有成果、且每一条成果都已签」时为真** —— 不是「有一条签了」，也不是「这一轮这一份签了」。`delivery_state` / `delivery_label` 仍是这一轮这一份的四档（**已签 / 待签 / 未通过 / 没查成**），但**一条签到手不等于交差**。没签的逐条列在 `unfinished`：待签 ⇒ 这一步真的去派 V；未通过 ⇒ 按缺陷改稿再派；没查成 ⇒ 查为什么（签块 / 台账读不出来），别把它读成「没毛病」。**没成果也是合法的收工理由**（研究了、尽力了、0 条成果 ⇒ `legal_stop=true`、`is_failure=false`），但它不是交差完成（`delivered` 为假）。
   - **你名下被 V 判「有毛病」的证明会在开场事实里逐条列出来（「我名下被 V 判『有毛病』的证明」那一栏，含命题号 / 最近一签的编号 / 错在第几步 / 那一签盖的是不是现在这一份），同一条判决还会作为一项落在你的工作项板上**（`called_by=V`）：读到就**按它给的步号补那一步**，补完再跑一次 `F.step` 并**派 V 重审这一份手稿**（带 `proof_manuscript`，在册也给）（`framework_summon`；同一份正文 V 不会重复判，改过字才重判）重签 —— **不许绕开 V** 直接把它当定理用，也不许改命题去迁就那一签；步号没读到时**请 V 用 `read_proof` 读回那一签再问你**。
   - **板上还会有一条 `v-resubmit@<命题号>@<proof_sha256>`：那是「重送义务」，`expects=work`，**不是回执**（业主 2026-11-01 的裁定：「知道了」与「改完了」是两件事）。它的幂等键里带的是**被审正文的 sha**，所以换一份正文就是另一条义务。**ack 不动它**：`work` 项只能以 `completed` / `expired` 收口，而关它的唯一方式是让同一条命题出现**更新的干净「成立」行**（`settle_resubmitted`）—— 也就是说你得真交一份改好的证明、让 V 重审并判成立。**不去收口它，它会一直挂在板上、挡销号与收工**（销号闸把「名下还有未消的板项」算成不干净）。放弃原命题时这一条由放弃那一步作废（`close_resubmits_for`，`close=expired`）。
-  - **你的证明最终必须有 V 签，或者那条命题被明确放弃**：既没有签、也没有被放弃的命题会让收工门的 `statements_unsigned` 大于 0 —— 那是 **blocker**（`machine_pass` 假、退出码 1，而且它不落在八格里任何一格上，八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**（B 走 `table.update`：`status=abandoned`，理由按两档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ `defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理（`salvaged` 每条给 `label` 与 `stmt_id`）。理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`），一个字节不改）。**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。
+  - **你的证明最终必须有 V 签，或者那条命题被明确放弃**：既没有签、也没有被放弃的命题会让收工门的 `statements_unsigned` 大于 0 —— 那是 **blocker**（`machine_pass` 假、退出码 1，而且它不落在八格里任何一格上，八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**（B 走 `table.update`：`status=abandoned`，理由按两档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ `defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理（`salvaged` 每条给 `label` 与 `stmt_id`）。那一段理由的落盘形状是 `quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统拼，你只给两档理由那几格）。理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`），一个字节不改）。**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。
   - **一条定理要几种证明，就是一条命题的 `proof_no` 1..N，不是几条命题**：D 或用户要「几种证明语言 / 几条独立路径」时，你把 N 份都写出来、**每份各自落成一份手稿**（`reports/f-proof-<命题号>.md`，稿头的 `- 证明号：<N>` 说这一份是第几条），一次落成**一条 stmt** —— `statements` 那一行交给 **B 登记**（你把命题正文与 N 份手稿一并交过去，由它读稿落那一行；你不写那张表）。不要用内联的 `proofs=[...]` 交正文，也不要为每条路线各立一条命题。每条证明各自送 V 签（`verify_proof` 带 `proof_no=N`，V 的签按份落在 `bits.evidence.reviewed_by_proof` 里），不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by="stmt:<命题号>#pN"` ＋ `path_group` 标明它属于第几条，于是 C 能从每个依赖面各追出一条完整证明链。论文对应表里同一条命题占多行、每行各带 `proof_no`。**反向判据：不要把同一条定理拆成多条命题**（表述不同不等于不同命题）；拆开后 `proof_no` 恒为 1、`path_group` 只剩一组，多证明机制一次都不会被触发。
   - **依赖面不用你手写那一节 —— 你只交 `cites`**：你每一份证明的正文由 `F.step` 落成手稿（`reports/f-proof-<命题号>.md`；返回里给 `manuscript_path` 与 `deps_preview`，全文不进返回值），手稿里那一节标题逐字为 `## 依赖` 的四列表**由框架按你的 `cites` 渲染**（引用取那一步的原话 / 命题号 / 用在哪一步 / 路径号）。渲染出来长这样（**给你读的**，不用你写）：
 ```
@@ -699,7 +699,7 @@
 
 ### 协作面
 
-- 能召唤：A、B、C、E、V
+- 能召唤：A、C、D、E、V
 - 谁能召唤它：D、G
 - 可被召唤：是
 - 写集（能改哪些表）：attack_plans、reprocess_requests、search_requests
@@ -740,7 +740,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -876,7 +876,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -1205,7 +1205,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
@@ -1281,7 +1281,7 @@
   - **验收表里必须有一行「论文对应表」**（D-38，2026-10-24）：论文包里有 `out/paper/MAPPING.json` 且那一行三格齐（`file` ＋ 数值实验定理的 `numeric_evidence` / `exhaustion_note`，或有 Lean 产出时的 `lean_file` / `lean_target`）⇒ 记「成立」；论文已经成稿而论文包里没有 `MAPPING.json` ⇒ 那一行记「**未完成**」（不是 `na`、也不许把这一行省掉）。缺对应表 ⇒ 论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环没有落点），而这一项此前只数两份 ACCEPTANCE，所以两趟真机都没把它当成交付的一部分。
   - **G8（可复跑门）由你代跑、H 只判回执**：H 是只读角色、拿不到执行工具，「本轮实跑过」只能由你把它变成一份回执。做法：派 E 用 `verify.run_experiment(script_path=…)` 把正文里点名的数值脚本重跑一遍（它返回 `exit_code` 与 stdout），把这四个键凑成 `run_evidence` 交给 H：`{'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}`。H 只判「回执合不合格」：缺 `exit_code` 就分不出绿与红（⇒ G8 记 `unknown`），`exit_code != 0` ⇒ G8 记 `fail`；**没跑就写 `{checked: false, reason: '…为什么没跑…'}`，理由必填**（不写理由等于把「权限不允许」和「忘了跑」混成一件事）。
   - **要有人走查就派 D 去办**（D 会通过 F 让 V 签）：正文或 `statements` 里存在**证明级断言**（等级 `pre_theorem` / `theorem`）而 `reviewed_proof_rows` 记 0 时，不许当成「这一档天然为 0」—— 要么派 `D` 去核签（缺签的由 D 让 F 补签，产物落 `verifications`），要么在验收表那一行写清为什么没有任何一签。
-  - **每一条命题都必须以 V 签收尾，否则收工门不放行**（业主 2026-11-01 逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」）：`conductor.closing` 的读数 `statements_unsigned` 数的是「既没有 V 签、也没有被明确放弃」的非概念命题；它大于 0 就是 **blocker**，`machine_pass` 会假、退出码 1 —— 而且**它不落在八格里的任何一格上**（八格全绿也照样拦）。出路只有两条：① **重送**：派 D 让 F 把这一份补齐之后重新送 V 审，拿到干净的「成立」；② **明确放弃原命题**：派 B 走通用表写口把该命题 `status` 标成 `abandoned`，并把理由按两档之一说清（`abandon_kind` ＋ `abandon_basis`）—— **`math_error`**：指出错在第几步、错的是什么 ＋ `defect_ref`（`verifications/<号>.jsonl#v-00000N`，指着这条命题自己那一行判词「有毛病」）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理（`salvaged` 每条给 `label` 与 `stmt_id`）。理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`）；标记与时间戳由系统按这几格拼进 `quote_reason`，不用 B 手写。只写状态的行仍按未签计，读数是 `abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项：通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。所以走 ② 之后要回头看板：确认那条重送项已 `done`（还开着就按未消项处理，它会挡销号与收工）。
+  - **每一条命题都必须以 V 签收尾，否则收工门不放行**（业主 2026-11-01 逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」）：`conductor.closing` 的读数 `statements_unsigned` 数的是「既没有 V 签、也没有被明确放弃」的非概念命题；它大于 0 就是 **blocker**，`machine_pass` 会假、退出码 1 —— 而且**它不落在八格里的任何一格上**（八格全绿也照样拦）。出路只有两条：① **重送**：派 D 让 F 把这一份补齐之后重新送 V 审，拿到干净的「成立」；② **明确放弃原命题**：派 B 走通用表写口把该命题 `status` 标成 `abandoned`，并把理由按两档之一说清（`abandon_kind` ＋ `abandon_basis`）—— **`math_error`**：指出错在第几步、错的是什么 ＋ `defect_ref`（`verifications/<号>.jsonl#v-00000N`，指着这条命题自己那一行判词「有毛病」）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理（`salvaged` 每条给 `label` 与 `stmt_id`）。理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`）；标记与时间戳由系统按这几格拼进 `quote_reason=abandoned@<ISO8601>@<结构化理由>`，不用 B 手写。只写状态的行仍按未签计，读数是 `abandoned_without_reason`）。放弃会作废该命题名字下的 `v-resubmit@` 板项：通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；正文仍需走证明入口。所以走 ② 之后要回头看板：确认那条重送项已 `done`（还开着就按未消项处理，它会挡销号与收工）。
   - **看到「成立」不等于签住了**：收工读数 `statements_unsigned` 的 `by_class` 里 `fault_unrepaired` 排第一档 —— 打回之后没有更新的干净「成立」（含「V 写成立、轴却是 fault」那一档）也算未签，出路仍是改稿后重送或明确放弃。
   - **「攻」里出现 `statement_id` 就当场交给 D 去核签**：你派 `F.status` 拿回来的 `attack.status` 里，`history_tail` 每一轮可能带 `statement_id`（F 那一轮把论证落成了 `statements` 的一行）—— 看到它就在**同一轮**里派 `D` 去办：D 会核那一条带没带 V 的签字，缺签由 D 让 F 补签（那一签由 F 去办），**不要等收工再想起**来；F 产出时已经签过的（`verifications` 最近一签「成立」且 `proof_sha256` 与现行正文相符）**不许要求再签**。①**落点必须是 `verifications`**：产物就是 `verifications/<命题号>.jsonl` 的那一行（`成立` 且无未解决 error 才签得住），**不收口头结论**；②**不许**让 F 或 B 直接把等级写成 `pre_theorem`：那一级的定义是「V 的 `verifications` 里那一条签『成立』」，写入期**当场拒收**查不到签的 `pre_theorem`（错误码 `proof_review_without_evidence`，历史名；闸读的是凭据不是那一格历史值，整笔事务一行都不写）；**反过来也一样**：那一签已经在盘上（`proof_text` 非空＋最近一签「成立」＋`proof_sha256` 与现行正文相符）而这一行还停在 `conjecture` / `strong_conjecture` ⇒ 那是把强结果登记成弱等级，`verify` 会报 `weaker_than_evidence`（warning）—— 该升就升（判据够格的写入不会被拒）；③计划 `history` 里有 `statement_id` 而 `verifications` 里没有对应的行 ⇒ 「攻」那一格记 `unknown`（**不是 `pass`**）。
   - **交付物按任务那句话说**：说「研究…交付研究手稿」⇒ `documents` + `out/review/REPORT.md` 就够；说「整理成论文 / 交付论文 / 稿件」⇒ 让 G **自己写正文**（`fs.write` 到 `out/paper/main.tex`）再调 `doc.paper_compile` 编出 `out/paper/main.pdf`（收工门看的就是回执里的 `tex_sha256`：这份 PDF 是不是盘上这份正文编的）。**正文只有一个来源：G 自己写** —— 不要派渲染/核锚，也不要指望脚本替你写正文。常见交付形式的构成（判决在 `draft/83` §5.2）：①**论文** = `out/paper/main.tex`（**主件，G 自己一段段写**）+ `main.pdf` + 两份验收表（`ACCEPTANCE-CHECKS.json` / `ACCEPTANCE.md`）+ `COMPILE-RECEIPT.json`（编译回执）+ **论文对应表 `out/paper/MAPPING.json`**（G 调 `doc.write_mapping` 一次落三份：json / md / 正文附录）；**没有渲染锚这回事了** —— 旧的「论文包」（`RENDER-ANCHOR.json` + 项目自带的 `code/make_paper.py` / `code/compile_paper.py`）**不是本系统的部件**，不要派这类活；②**研究手稿** = 一行 `documents`（`kind="note"` 或 `"survey"`）+ markdown + `out/review/REPORT.md`；③**清单型交付** = 一行 `documents`（`kind="survey"`，条目写进 `sections`）+ 说明报告；④**说明报告** = `out/review/REPORT.md`（每趟都要交）。**交付物本身要有一档读数**（D59）—— 任务说「交付进展手稿 / 清单 / 综述」时，验收表第⑦环那一行写 `document_rows`，或在稿件里才成立的那几档之一。**不许用 F 的计划推进（`plan_progress_rows`）顶掉它**：F 的推进是「攻」，不是「交」。A 派了 B 的话，D 只读 B 整理过的概念与关系；A 没派就说明为什么不需要。
@@ -1366,7 +1366,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 写 `reports/` 下这三族证明了也拒；`notes/` 下不算框架产物），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 

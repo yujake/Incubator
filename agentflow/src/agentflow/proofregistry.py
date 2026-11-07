@@ -571,11 +571,11 @@ def register_or_rewrite(
     # ---- 稿头那一行必须写上这一笔的命题号（2026-11-07：解耦之后的漏格） ------------
     #
     # 解耦之后登记条的底稿常常是 `proof_manuscript` 先写的那份计划稿，而它渲染时
-    # **还没有命题号**（`manuscriptform.render_proof_manuscript` 写的是
+    # 还没有命题号（`manuscriptform.render_proof_manuscript` 写的是
     # `- 命题号：stmt:（还没落号）`）。`_rewrite_head` 只管元信息那几行、不碰这一行，
     # 于是登记落在 `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"—— 双读数。
     # 后果是可直接读到的：`entries_on_disk` 把这一条读成"未落号的登记条目"，D 的携带单
-    # 于是把**同一份稿**再列一遍（`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），
+    # 于是把同一份稿再列一遍（`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），
     # 而按号核对携带单的那一侧找不到它。号已经拿到 ⇒ 这一行必须写它。
     if str(statement_id or "").strip():
         text, _applied = _MF.ensure_statement_line(text, str(statement_id))

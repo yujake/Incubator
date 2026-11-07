@@ -1019,7 +1019,7 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     （登记那一刻盘上没有稿）；② `publish_manuscript` 不改名（登记之后也不按命号落）。
     于是"登记那一刻稿已在盘上"这条判据（`_a0_holds`）必红。
 
-    2026-11-07（解耦落地）之后，退回这个时序**不再**让携带单空掉：登记条目本身
+    2026-11-07（解耦落地）之后，退回这个时序不再让携带单空掉：登记条目本身
     就是那份手稿（框架写），所以 D 带的是一行"还没拿到命题号"的条目（`mss:<稿号>`，
     地址 + 正文 sha 都在）。反真空的强度改由两处守住：a0 仍然红（时序真的退了），
     而这一行必须真的可被认领（V 签之后 B 按正文 sha 认领它、落到一个真命题号上）。
@@ -1064,7 +1064,7 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     #
     # 解耦之后"手稿文件就是登记条目"（`proofregistry` 的模块说明第 1 条）：登记这一笔
     # 由框架把稿写到规范路径上，所以即便 F 自己那一笔写稿被退回登记之后，盘上仍有一份
-    # 带登记元信息的稿。携带单因此**不是空的** —— 它是新契约里那一行"未落号"的条目。
+    # 带登记元信息的稿。携带单因此不是空的 —— 它是新契约里那一行"未落号"的条目。
     # 强度：这一行必须带地址 + 正文 sha（B 认领靠的就是它），且同一份稿只许上一行
     # （`stmt:` 与 `mss:` 两行指着同一个路径 + 同一个 sha ⇒ 那是重列，不是携带）。
     carried = DS.carried_manuscripts(_d_report(store))
@@ -1075,14 +1075,14 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     assert term["manuscript_id"] == "plan-000000", term
     assert term["path"] == f"{MANUSCRIPT_DIR}/f-proof-plan-000000.md", term
     assert len(str(term["sha256"])) == 64, term
-    # 反真空的下半段照旧成立：这一条**新**命题自己没有稿 ⇒ B 整笔拒，
+    # 反真空的下半段照旧成立：这一条新命题自己没有稿 ⇒ B 整笔拒，
     # 不借那一份别人的正文 / 依赖面（D1 严格版的既有判据，不放宽）。
     got = _register(store, statement_full="定理：写稿时机退回登记之后（反真空）。",
                     proof_text=f"1. 由定理甲直接得到（见 stmt:{THEOREM_A}）。",
                     derived_from=[THEOREM_A])
     assert _carried_holds(got, store, cited=THEOREM_A) is False, got
     assert got.get("ok") is False and got.get("kind") == DS.REFUSED_SECTION_MISSING, got
-    # 强度不降：那一行不是"挂在那里好看"的 —— V 签之后 B **按正文 sha 认领它**，
+    # 强度不降：那一行不是"挂在那里好看"的 —— V 签之后 B 按正文 sha 认领它，
     # 落到一个真命题号上（`manuscript_source=carried_by_D`、依赖面落成）。
     # 没有这一格，"未落号的条目"只是清单上的一行字；有了它，`mss:plan-*` 这一档
     # 就是可核的：签的是这一份正文、认领的也是这一份正文。
