@@ -6025,8 +6025,8 @@
         "verify.run_experiment"
       ],
       "key": "params",
-      "reason": "整格按现值重记（2026-11-05，p242 压缩）：本格四次演进合成一条 —— ① 2026-10-26 Lean 侧清场（形式化那一路归 L）：删 `imports` / `run_name` 两格，`script_path` 的说明去掉「formal 时必须是 .lean」；② 同一轮加穷举证明四格 `design` / `enumeration` / `exhaustive` / `search_space`；③ 2696cb93（D15，2026-11-05）把 `method.enum` 里 E 收不下的 `formal` 去掉，只广告三种计算法；④ 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：`method` 多一格 `description`，把「`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）」逐字从 summary 挪到参数面（p239 的同一手法：细则进参数 description，模型仍看得见）。enum 一变旧账就与现值不再逐项全等 ⇒ 整格按现值重记一条，`edits` 覆盖以上全部九项；这不是新改动，是重记必须连带覆盖的历史键与压缩挪位。",
-      "date": "2026-11-05",
+      "reason": "整格按现值重记（2026-11-05，p242 压缩）：本格四次演进合成一条 —— ① 2026-10-26 Lean 侧清场（形式化那一路归 L）：删 `imports` / `run_name` 两格，`script_path` 的说明去掉「formal 时必须是 .lean」；② 同一轮加穷举证明四格 `design` / `enumeration` / `exhaustive` / `search_space`；③ 2696cb93（D15，2026-11-05）把 `method.enum` 里 E 收不下的 `formal` 去掉，只广告三种计算法；④ 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：`method` 多一格 `description`，把「`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）」逐字从 summary 挪到参数面（p239 的同一手法：细则进参数 description，模型仍看得见）。enum 一变旧账就与现值不再逐项全等 ⇒ 整格按现值重记一条，`edits` 覆盖以上全部九项；这不是新改动，是重记必须连带覆盖的历史键与压缩挪位。 ｜ 2026-11-07 p257（玩具例子 `kind=example` 只是标签，处理与普通命题一致）：`verify.run_experiment` 的 `params` 从「十二格」补到十三格 —— 新增 `kind`（这一条命题的种类标签：theorem / lemma / proposition / corollary / conjecture / example，可选）。它只做三件事：① 数值证明路线写盘之前过同一道形态闸时把标签原样递过去；② 写进 `reports/e-proof-<实验号>.md` 的 `- 证据种类：` 那一行（B 收录时按它落 `statements.kind`，与 F 的手稿同一个头标记）；③ 记进 `observations.statement_kind`。等级仍由 `evidencebits.derive_grade` 按五元位现算，与标签无关；词表外的值在跑脚本之前受控拒。四处（工具 schema / 本文件 / `AgentE.run_experiment` / `specs/e.py` 的动作表）同名同类型。其余 123 件工具的契约一个字未动；`declarations` / `n_tools` / 分母 / 名单 / `MAX_RATIO` 一格未动。",
+      "date": "2026-11-07",
       "edits": [
         {
           "op": "add_key",
@@ -6093,6 +6093,14 @@
           "value": {
             "type": "string",
             "description": "搜索空间的文字描述（可选）：多大、这个数是怎么算出来的。判定读的是 search_bound（穷举那一档给了证书就必须给）；这一格进 observations.search_space，与脚本自报的同名键不一致时以调用方为准、并在 notes 里留一句。三种都没有 ⇒ 缺搜索空间，落 cross_check"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/kind",
+          "value": {
+            "type": "string",
+            "description": "这一条命题的种类标签（可选；只给人看，不决定证据档位）：theorem / lemma / proposition / corollary / conjecture / example。玩具例子写 `example` —— 它照样落稿、照样过形态闸、照样送 V 签，等级按凭据算（文字论证 ⇒ pre_theorem；穷举 ⇒ theorem）；标了 example 之后 G 收进正文时会用 Example 环境。词表外的值在跑脚本之前受控拒"
           }
         }
       ]

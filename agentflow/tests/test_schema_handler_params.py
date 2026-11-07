@@ -187,7 +187,7 @@ def test_criterion_negative_control_fake_property_must_be_reported(store: Store)
         "另一件 handler 不收 **kwargs 的工具上（否则注入恒不报、负控变成假绿）")
     assert _declared_properties(original) == {
         "certificate", "claim", "claim_key", "design", "enumeration", "exhaustive",
-        "for_question_id", "method", "params", "script_path", "search_bound",
+        "for_question_id", "kind", "method", "params", "script_path", "search_bound",
         "search_space", "timeout",
     }, "这条负控按 verify.run_experiment 当前的 property 集合写的，集合变了要同步改"
 

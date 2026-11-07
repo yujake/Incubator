@@ -446,7 +446,8 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
                        script_path: Any, script_sha256: Any = "",
                        design: Any, enumeration: Any,
                        search_space: Any = None, result: Any = "",
-                       evidence_kind: Any = "", proof_no: Any = None) -> str:
+                       evidence_kind: Any = "", proof_no: Any = None,
+                       kind: Any = "") -> str:
     """把 E 的穷举证明拼成一份与 F 同形的证明手稿（纯函数，逐字节可复现）。
 
     形态（段序固定、标题逐字；V 只读 `## 证明` 那一节，B 登记时也读同一节）::
@@ -480,6 +481,13 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     "不知道"等于第 1 份（读侧按 `#p1` 处理），不许猜成别的号。
     为什么不给个默认 1 写死：写死会让"E 知道这是第 3 份"与"E 不知道"在稿上一个样，
     而前者正是 B 收录时要用的那一格（`depsection.manuscript_proof_no` 读它）。
+
+    ## `kind`（2026-11-07，玩具例子）
+    这一条命题的种类标签（`theorem` / `lemma` / `proposition` / `corollary` /
+    `conjecture` / `example`）。给了就写一行 `- 证据种类：<kind>` —— 与 F 的手稿
+    **同一个头标记**（`proofregistry.KIND_MARK`），B 收录时按它落 `statements.kind`
+    （`_declared_manuscript_kind`）。不给就省略（旧稿逐字节不变）：那是"没声明"，
+    不是"猜一个"。E 这一侧不为 example 单开分支：它与 lemma 走同一条升档路。
     """
     from . import numericproof as _NP
 
@@ -507,6 +515,8 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         f"- 程序：{str(script_path or '').strip()}"
         + (f"（sha256 {str(script_sha256).strip()}）" if str(script_sha256 or "").strip() else ""),
     ])
+    if str(kind or "").strip():
+        head.append(f"- 证据种类：{str(kind).strip().lower()}")
     if search_space is not None:
         head.append(f"- 搜索空间：{_json_text(search_space)}")
     head.append(f"- 结论：{str(result or '').strip() or '（未记）'}"
@@ -558,7 +568,8 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     out["path"] = rel
     text = compose_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
-        "design", "enumeration", "search_space", "result", "evidence_kind", "proof_no")})
+        "design", "enumeration", "search_space", "result", "evidence_kind", "proof_no",
+        "kind")})
     target, why = _resolve(root, rel)
     if target is None:
         problems.append(f"手稿落点解析不了：{why}")

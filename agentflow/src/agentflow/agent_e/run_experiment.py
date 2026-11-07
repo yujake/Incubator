@@ -172,6 +172,7 @@ class _RunExperiment:
         enumeration: str | None = None,
         exhaustive: bool | None = None,
         search_space: str | None = None,
+        kind: str = "",
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
         推导规则见模块 docstring（唯一权威表述）：计算类方法的推导在 :func:`_derive`。
@@ -201,6 +202,16 @@ class _RunExperiment:
         两条不许做的改动：① 把 `sleep` 从能力表里删掉 —— 那会让替身无法按 schema 传参，被测的就不再是那条真实链路；② 在这里补一个具名的 `sleep`，或让它收`inspect.Parameter.VAR_KEYWORD`
         —— 前者是没人读的假承诺，后者把"我传了但它没看"变成静默成功，而 `conductor.LocalBackend.call` 的 docstring 逐字拒绝的正是这个形态。参数门的口径（声明 ∩ 实现签名）见
         `capabilities.gate_params` / `capabilities.check_params`。
+
+        `kind`（2026-11-07，玩具例子）是这一条命题的**种类标签**（`theorem` / `lemma` /
+        `proposition` / `corollary` / `conjecture` / `example`），缺省空串 = 不声明。
+        它只做三件事：① 数值证明路线写盘之前过同一道形态闸时，把标签原样递过去
+        （`_proposition_form_gate(kind=…)`；闸不按标签分叉）；② 写进 e-proof 手稿的
+        `- 证据种类：` 那一行（B 收录时按它落 `statements.kind`，与 F 的手稿同一个头标记）；
+        ③ 记进 `observations["statement_kind"]`。**等级仍由 `derive_grade` 按五元位现算**，
+        与标签无关 —— `example` 只是给人看的标签，处理与普通命题一致。
+        词表外的取值在跑脚本之前受控拒（`ExperimentError`）：手稿头是作者写的字节，
+        不能让它随手发明一个 kind。
         """
         if not str(claim).strip():
             raise ExperimentError("claim 不能为空（没有命题就没有实验）")
@@ -250,6 +261,27 @@ class _RunExperiment:
                 "证据档位由 `_derive` 推导。静默忽略会让调用方以为自己指定了检查条件"
                 "（说明了 imports，实际什么也没发生）"
             )
+
+        # ---- `kind` 是命题标签（空串 = 不声明）。词表是 `secretary.PROPOSITION_KINDS`
+        # 那一处（theorem / lemma / proposition / corollary / conjecture / example）——
+        # 本文件不另抄一份：抄一份就会在两个地方漂。词表外的值在跑脚本之前拒：
+        # 手稿头是作者写的字节，B 收录时只认那张表（`_declared_manuscript_kind`），
+        # 这里放一个拼错的词过去 = 稿头写着一个永远不会被读到的标签。
+        kind_now = str(kind or "").strip().lower()
+        if kind_now:
+            try:
+                from ..secretary import PROPOSITION_KINDS
+            except Exception as exc:  # noqa: BLE001 —— 拿不到词表 = 没法核（fail-closed）
+                raise ExperimentError(
+                    "kind 的受控词表读不到（`secretary.PROPOSITION_KINDS`："
+                    f"{type(exc).__name__}: {exc}）⇒ 这一趟不落库"
+                ) from exc
+            if kind_now not in PROPOSITION_KINDS:
+                raise ExperimentError(
+                    f"kind 必须是 {list(PROPOSITION_KINDS)} 之一（或空串 = 不声明），"
+                    f"收到 {kind!r} —— 它是这一条命题的种类标签，B 收录时按手稿头那一行落 "
+                    "`statements.kind`；词表外的值不会有人读"
+                )
 
         # ---- R-01（`draft/44`）：这四条不用跑脚本就能判 ⇒ 在起子进程之前判掉。
         #
@@ -393,8 +425,13 @@ class _RunExperiment:
             certificate=certificate, search_bound=bound_arg,
             evidence_kind=derived.get("evidence_kind"))
         if _wants_proof:
+            # 标签原样递给同一道形态闸（闸按正文判，不按 kind 分叉）；没声明时沿用
+            # 历史上的那一档 `conjecture`。`example` 在这一格里**不特殊**。
+            if kind_now:
+                derived["observations"]["statement_kind"] = kind_now
             _form = self._proposition_form_gate(
-                full=str(claim or ""), kind="conjecture", label=str(claim_key or ""))
+                full=str(claim or ""), kind=kind_now or "conjecture",
+                label=str(claim_key or ""))
             if not _form.get("submittable"):
                 _why = str(_form.get("reason") or "").strip()
                 _problems = [str(x) for x in (_form.get("problems") or []) if str(x).strip()]
@@ -563,7 +600,8 @@ class _RunExperiment:
                     design=_blocks["design"], enumeration=_blocks["enumeration"],
                     search_space=_blocks["search_space"],
                     result=derived.get("result"),
-                    evidence_kind=row.evidence_kind)
+                    evidence_kind=row.evidence_kind,
+                    kind=kind_now)
                 if manuscript.get("problems"):
                     _manuscript_note = (
                         "[manuscript] E 的证明手稿没有落成："

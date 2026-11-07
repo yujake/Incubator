@@ -67,7 +67,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "design": _S,
               "enumeration": _S,
               "exhaustive": _B,
-              "search_space": _S},
+              "search_space": _S,
+              # 2026-11-07（玩具例子）：这一条命题的种类标签（theorem / lemma /
+              # proposition / corollary / conjecture / example），可选。它只进形态闸的
+              # `kind` 与 e-proof 手稿的 `- 证据种类：` 那一行（B 收录时按它落
+              # `statements.kind`），不参与等级判定 —— `example` 与 `lemma` 走同一条
+              # 升档路，为它单开一档就是给一个标签加特殊分支。工具 schema 与
+              # `AgentE.run_experiment` 同轮加同名同类型的一格（两层对账会强制一致）。
+              "kind": _S},
              ("claim", "claim_key", "script_path")),
         "dict（experiment_id / result / evidence_kind / …）",
         side_effect="write_local", handler_name="run_experiment",

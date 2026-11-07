@@ -861,6 +861,20 @@ def _verify_detect_verifier():
                                 "以调用方为准、并在 notes 里留一句。三种都没有 ⇒ 缺搜索空间，"
                                 "落 cross_check"),
             },
+            # 2026-11-07（业主：玩具例子 `kind=example` 只是标签，处理与普通命题一致）：
+            # 这一格是**这一条命题的种类标签**，不是证据档位。它只决定两件事：写进
+            # `reports/e-proof-<实验号>.md` 的 `- 证据种类：` 那一行（B 收录时按它落
+            # `statements.kind`，与 F 的手稿同一个头标记）与形态闸拿到的 `kind`；
+            # 等级仍由 `derive_grade` 按五元位现算（`example` 与 `lemma` 走同一条升档路）。
+            "kind": {
+                "type": "string",
+                "description": ("这一条命题的种类标签（可选；只给人看，不决定证据档位）："
+                                "theorem / lemma / proposition / corollary / conjecture / example。"
+                                "玩具例子写 `example` —— 它照样落稿、照样过形态闸、照样送 V 签，"
+                                "等级按凭据算（文字论证 ⇒ pre_theorem；穷举 ⇒ theorem）；"
+                                "标了 example 之后 G 收进正文时会用 Example 环境。"
+                                "词表外的值在跑脚本之前受控拒"),
+            },
            },
            "required": ["claim", "claim_key", "script_path"],
            "additionalProperties": False,
@@ -908,7 +922,7 @@ def _verify_detect_verifier():
     tags=("experiment", "evidence"),
     external="exec",
 )
-def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None):
+def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None, kind=None):
     """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（_need_store, _run_experiment_tool）由装配期用 `partial` 绑定，
@@ -922,6 +936,10 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
     四格同一批加进来，四处（工具 schema / 本函数 / `AgentE.run_experiment` /
     `specs/e.py` 的动作表）同名同类型 —— 它们是穷举证明的凭据，缺一格那条证据就落
     `cross_check`。四格都可选：不是穷举的实验不该被逼着填。
+
+    `kind`（2026-11-07，玩具例子）：这一条命题的种类标签，四处同名同类型（同上），
+    缺省 `None` ⇒ 不声明；它只进形态闸的 `kind` 与 e-proof 手稿的 `- 证据种类：`
+    那一行，不参与任何等级判定。
     """
     return (
     _need_store("verify.run_experiment")
@@ -939,6 +957,7 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
                    enumeration=enumeration,
                    exhaustive=exhaustive,
                    search_space=search_space,
+                   kind=kind,
                )
     )
 
@@ -1363,6 +1382,9 @@ def register(
                     enumeration=kw.get("enumeration"),
                     exhaustive=kw.get("exhaustive"),
                     search_space=kw.get("search_space"),
+                    # 2026-11-07：命题的种类标签（玩具例子写 example）。它只进形态闸与
+                    # e-proof 手稿的 `- 证据种类：` 那一行；等级仍由五元位现算。
+                    kind=kw.get("kind"),
                 )
             )
         except ToolError:
