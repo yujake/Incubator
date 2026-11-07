@@ -364,3 +364,18 @@ def test_e_removing_the_counterexample_check_makes_a_red(tmp_path, monkeypatch):
     assert got.get("checked") is True, (
         "反真空失效：摘掉证据校验之后仍然被拒 ⇒ 这条用例证明不了那道校验在起作用")
     monkeypatch.setattr(SA, "_counterexample_refusal", real)
+
+
+def test_e_removing_the_space_reading_check_makes_b_green(tmp_path, monkeypatch):
+    """e：把 space 读数的校验摘掉 ⇒ `space="太大了"` 这种自由文本也会"过"。"""
+    monkeypatch.setattr(
+        SA, "_space_reading_of",
+        lambda raw: ({"space": dict(raw) if isinstance(raw, dict) else {}}, "", ""))
+    st = _ws(tmp_path)
+    _put_statement(st)
+    got = _abandon(st, SID, abandon_kind="space_too_large",
+                   abandon_basis="太大了", space="太大了")
+    assert got.get("checked") is True, (
+        "反真空失效：摘掉读数校验之后仍然被拒 ⇒ 这条用例证明不了那道校验在起作用"
+        f"｜读数：{got}")
+
