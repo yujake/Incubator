@@ -1,0 +1,587 @@
+# -*- coding: utf-8 -*-
+"""手稿登记（把「登记命题」与「写/改证明」解耦；业主 2026-11-07 裁定）。
+
+## 业主要的两件事（逐字）
+
+> 「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」
+> 「F侧反复修改一个命题的证明时要直接动那个命题所指手稿的 proof 板块」
+> 「就是F侧登记新命题F秘书闸拦的那块」
+
+⇒ 一次登记（过 F 秘书的形态闸）之后，反复改证明不再登记：只改同一份手稿的
+`## 证明` 那一节（顺手按 cites 重渲 `## 依赖`），把 `proof_no` 递增、`正文 sha256` 重算。
+不新落第二个文件（不出现 `f-proof-000041-v2.md` 这类名字），也不新落 statements 行。
+
+## 登记条目住在哪（没有新表、没有新列）
+
+业主 2026-11-07（逐字）：「手稿文件本身（规范路径 + 文件头元信息：命题文本 / 证明号 /
+正文 sha256 / cites）」「`attack_plans.history` 的既有格（`manuscript_path` 等）里带上
+这份稿的身份」「不要开新表」。所以：
+
+1. 手稿文件就是登记条目（唯一落点，`manuscriptform.name_reading` 定的规范路径）：
+   `reports/f-proof-<命题号>.md`（B 侧 `reports/b-proof-<命题号>.md`；还没有命题号时
+   按计划名 `reports/f-proof-plan-<计划号>.md`，与既有两段命名一致）。文件头多了四行
+   元信息（都只在给了值时才写，旧稿逐字节不变）：
+
+   ```
+   - 证明号：<N>            （既有那一行，`manuscriptform.PROOF_NO_MARK`）
+   - 正文sha：<sha256>      （`## 证明` 那一节的 sha256 —— 与 V 签盖的是同一把尺）
+   - 命题指纹：<sha256>     （`## 命题` 那一节规范化后的 sha256，判"还是不是同一条命题"）
+   - 证据种类：<kind>       （`lemma` / `theorem` / `conjecture` …，B 收录时按它落 kind）
+   - 登记时间：<ISO8601>    （这一条第一次落成手稿的时刻；重写不改它）
+   - 版本：p<N>@<ISO8601>@<sha256>；p<N-1>@…   （append-only，每次重写追加一格）
+   ```
+
+2. `attack_plans.history` 的既有格（F 侧）：每轮那一行照旧落 `manuscript_path` /
+   `manuscript_proof_no` / `manuscript_sha256` / `manuscript_registered` / `manuscript_label`
+   —— 于是"这一轮是登记还是重写"在计划台账上读得出来。B 侧没有 attack_plans，身份就在
+   手稿头的 `- 版本：` 那一行里（同一份文件，不是第二张账）。
+
+3. 没有新表、没有新列：`schema.py` 零改动（判据 `tests/test_proof_registration_is_decoupled.py`
+   的 f 那一格）。
+
+## 什么算「新命题」（这是"过不过闸"的唯一判据）
+
+- 手稿登记里没有同 label 的条目 ⇒ 新命题 ⇒ 过 F 秘书形态闸（`gate` 回调，一次）；
+- 有同 label 的条目、且 `## 命题` 的规范化指纹相同 ⇒ 重写证明 ⇒ 不过闸、不登记；
+- 有同 label 的条目、而命题指纹不同 ⇒ 受控拒 `proposition_text_changed`
+  （"这是新命题／或走放弃+换号，不要用挂证明改命题正文"）。
+
+为什么"同 label + 命题指纹"两条都看：label 是作者给的粗键（同一子目标的第 N 轮），
+指纹是内容键。只看 label 会把"同一个子目标换了命题"读成重写（静默改命题，正是这次要
+消灭的形态）；只看指纹则同一命题的标点级改写会变成"新命题"（多登记一次）。
+所以：label 定"这是不是同一个登记槽"，指纹定"这个槽里是不是同一条命题"。
+
+## 手稿由框架写
+
+`reserved_framework_artifact` 的既有口径不变：`fs.write` / `fs.edit` 仍写不了
+`f-proof-*` / `b-proof-*`。本模块是框架侧的落稿入口（作者的正文由调用方传进来）。
+
+## 分节哈希（判据 i 的机器证据）
+
+`section_hashes(text)` 按 `## ` 切节、逐节 sha256；重写那一笔只换 `## 证明`（与它后面
+的 `## 依赖`），所以「其余小节的分节哈希逐次相同、`## 证明` 的逐次不同」是可直接读的。
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterable, Mapping, Sequence
+
+from . import depsection as _DS
+from . import manuscriptform as _MF
+from . import verifications as _VR
+from . import vsigns as _VS
+
+#: 手稿头里的元信息标记（与 `manuscriptform` 的既有标记同一个风格；只增不改）。
+SHA_MARK = "- 正文sha："
+FINGERPRINT_MARK = "- 命题指纹："
+KIND_MARK = "- 证据种类："
+REGISTERED_AT_MARK = "- 登记时间："
+VERSION_MARK = "- 版本："
+
+#: 受控码（写读两侧共用，不另起第二套词）。
+REFUSED_TEXT_CHANGED = "proposition_text_changed"
+REFUSED_GATE = "proposition_form_refused"
+REFUSED_PATH = "manuscript_path_unavailable"
+REFUSED_READ = "manuscript_unreadable"
+REFUSED_WRITE = "manuscript_write_failed"
+REFUSED_SHAPE = "manuscript_shape_refused"
+
+#: 「新命题 / 重写」两档（读数用；不参与任何判据分支的第三档）。
+MODE_REGISTERED = "registered"
+MODE_REWRITTEN = "rewritten"
+
+#: `- 版本：` 那一格的条目分隔符。
+_VERSION_SEP = "；"
+
+_SECTION_RE = re.compile(r"^##\s+(?P<name>.+?)\s*$")
+
+
+def _now() -> str:
+    """这一笔的时间戳（唯一实现在 `schema.now_iso`；这里只转发，不写第二份）。"""
+    from .schema import now_iso
+
+    return str(now_iso())
+
+
+def _norm(text: Any) -> str:
+    """规范化（判"还是不是同一条命题"用的那把尺；只归一空白与全半角空格）。"""
+    return " ".join(str(text or "").replace("\u3000", " ").split())
+
+
+def proposition_fingerprint(proposition: Any) -> str:
+    """命题指纹：规范化之后 sha256（与 `## 命题` 那一节的字节无关）。"""
+    return hashlib.sha256(_norm(proposition).encode("utf-8")).hexdigest()
+
+
+def proof_sha(proof_text: Any) -> str:
+    """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺）。"""
+    return _VR.proof_sha(_VS.manuscript_proof_body(str(proof_text or "")))
+
+
+# ---------------------------------------------------------------- 分节（切 / 换 / 哈希）
+
+def split_sections(text: Any) -> tuple[str, list[tuple[str, str]]]:
+    """把手稿切成 `(头部, [(节名, 节内容), …])`；内容不含节标题那一行。"""
+    lines = str(text or "").replace("\r\n", "\n").split("\n")
+    starts = [i for i, line in enumerate(lines) if line.startswith("## ")]
+    if not starts:
+        return "\n".join(lines), []
+    head = "\n".join(lines[: starts[0]])
+    out: list[tuple[str, str]] = []
+    for k, i in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(lines)
+        name = lines[i][3:].strip()
+        out.append((name, "\n".join(lines[i + 1: end])))
+    return head, out
+
+
+def section_hashes(text: Any) -> dict[str, str]:
+    """按 `## ` 切节算 sha256：`{"## 命题": …, "## 证明": …, "## 依赖": …}`。
+
+    节名保留 `## ` 前缀（读的人不必猜是哪个键）；同一节重复出现时按出现次序加 `#2`。
+    """
+    _head, sections = split_sections(text)
+    out: dict[str, str] = {}
+    seen: dict[str, int] = {}
+    for name, body in sections:
+        key = f"## {name}"
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] > 1:
+            key = f"{key}#{seen[key]}"
+        out[key] = hashlib.sha256(body.strip("\n").encode("utf-8")).hexdigest()
+    return out
+
+
+def _replace_section(text: str, name: str, body: str) -> tuple[str, bool]:
+    """只换 `## <name>` 那一节的内容，其余字节原样（判据 i 的"只动那一块"）。"""
+    lines = str(text or "").replace("\r\n", "\n").split("\n")
+    starts = [i for i, line in enumerate(lines) if _SECTION_RE.match(line)]
+    for k, i in enumerate(starts):
+        if _SECTION_RE.match(lines[i]).group("name").strip() != name:
+            continue
+        end = starts[k + 1] if k + 1 < len(starts) else len(lines)
+        mid = [""] + str(body).strip("\n").split("\n")
+        if end < len(lines) or (lines and lines[-1] == ""):
+            mid.append("")
+        lines[i: end] = [lines[i]] + mid
+        return "\n".join(lines), True
+    return text, False
+
+
+# ---------------------------------------------------------------- 头部元信息（解析 / 改写）
+
+def parse_entry(text: Any) -> dict[str, Any]:
+    """读手稿头的登记元信息（纯读；读不出来给空串，不猜）。"""
+    head, _sections = split_sections(text)
+    out: dict[str, Any] = {
+        "statement_id": "", "plan_id": "", "sid": "", "label": "", "proof_no": 0,
+        "sha256": "", "fingerprint": "", "kind": "", "registered_at": "",
+        "versions": [], "checked": False, "problems": [],
+    }
+    for line in head.split("\n"):
+        raw = line.strip()
+        if raw.startswith(_MF.STATEMENT_MARK):
+            got = raw[len(_MF.STATEMENT_MARK):].strip()
+            if got.startswith("stmt:"):
+                got = got[5:].strip()
+            out["statement_id"] = "" if got.startswith("（") else got
+        elif raw.startswith(_MF.PLAN_MARK):
+            got = raw[len(_MF.PLAN_MARK):].strip()
+            plan, _, rest = got.partition("·")
+            out["plan_id"] = plan.strip()
+            if "子目标：" in rest:
+                out["sid"] = rest.split("子目标：", 1)[1].strip()
+        elif raw.startswith(_MF.LABEL_MARK):
+            out["label"] = raw[len(_MF.LABEL_MARK):].strip()
+        elif raw.startswith(_MF.PROOF_NO_MARK):
+            got = raw[len(_MF.PROOF_NO_MARK):].strip()
+            try:
+                out["proof_no"] = int(got or 0)
+            except ValueError:
+                out["problems"].append(f"证明号读不出整数：{got!r}")
+        elif raw.startswith(SHA_MARK):
+            out["sha256"] = raw[len(SHA_MARK):].strip().lower()
+        elif raw.startswith(FINGERPRINT_MARK):
+            out["fingerprint"] = raw[len(FINGERPRINT_MARK):].strip().lower()
+        elif raw.startswith(KIND_MARK):
+            out["kind"] = raw[len(KIND_MARK):].strip()
+        elif raw.startswith(REGISTERED_AT_MARK):
+            out["registered_at"] = raw[len(REGISTERED_AT_MARK):].strip()
+        elif raw.startswith(VERSION_MARK):
+            payload = raw[len(VERSION_MARK):].strip()
+            for item in payload.split(_VERSION_SEP):
+                item = item.strip()
+                if not item:
+                    continue
+                parts = item.split("@", 2)
+                got = {"raw": item, "proof_no": 0, "at": "", "sha256": ""}
+                if len(parts) == 3:
+                    try:
+                        got["proof_no"] = int(parts[0].lstrip("pP") or 0)
+                    except ValueError:
+                        got["proof_no"] = 0
+                    got["at"] = parts[1].strip()
+                    got["sha256"] = parts[2].strip().lower()
+                out["versions"].append(got)
+    out["checked"] = bool(out["versions"] or out["sha256"] or out["fingerprint"])
+    return out
+
+
+def render_version(proof_no: Any, at: Any, sha: Any) -> str:
+    return f"p{int(proof_no or 0)}@{str(at or '')}@{str(sha or '')}"
+
+
+def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
+    """就地改写头部的那几行（缺的按固定次序插在 `- 证明号：` 之后）。
+
+    `- 版本：` 是 append-only 的一整行（一次重写 append 一格），所以它与其他标记同样
+    替换：`values[VERSION_MARK]` 已经是"旧版本 + 这一版"的完整清单。
+    """
+    lines = head.split("\n")
+    order = [SHA_MARK, FINGERPRINT_MARK, KIND_MARK, REGISTERED_AT_MARK, _MF.LABEL_MARK]
+    touched: set[str] = set()
+    out: list[str] = []
+    for line in lines:
+        raw = line.strip()
+        hit = next((mark for mark in [_MF.PROOF_NO_MARK, *order, VERSION_MARK]
+                    if raw.startswith(mark)), "")
+        if hit and hit in values and str(values[hit]) != "":
+            if hit in touched:   # 同一格出现第二次（手写稿／旧格式）⇒ 只留一份
+                continue
+            touched.add(hit)
+            out.append(f"{hit}{values[hit]}")
+            if hit == _MF.PROOF_NO_MARK:
+                for mark in order:
+                    if mark in values and str(values[mark]) != "" and mark not in touched:
+                        out.append(f"{mark}{values[mark]}")
+                        touched.add(mark)
+            continue
+        out.append(line)
+    missing = [mark for mark in [*order, VERSION_MARK]
+               if mark in values and str(values[mark]) != "" and mark not in touched]
+    if missing:
+        # `- 证明号：` 那一行都没有的旧稿：插在头部最后一行之前（贴近稿头，不污染分节）。
+        at = len(out)
+        while at > 0 and not out[at - 1].strip():
+            at -= 1
+        for mark in reversed(missing):
+            out.insert(at, f"{mark}{values[mark]}")
+    return "\n".join(out)
+
+
+def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
+                    sha: str) -> tuple[str, list[dict[str, Any]]]:
+    """把这一版追进 `- 版本：` 那一行（一次重写只加一格；同一版重复写 ⇒ 幂等）。"""
+    versions = [dict(v) for v in (entry.get("versions") or [])]
+    if not versions and int(entry.get("proof_no") or 0) >= 1 and entry.get("sha256"):
+        versions.append({"proof_no": int(entry["proof_no"]),
+                         "at": str(entry.get("registered_at") or ""),
+                         "sha256": str(entry.get("sha256") or "")})
+    if versions and int(versions[-1].get("proof_no") or 0) == int(proof_no) \
+            and str(versions[-1].get("sha256") or "") == str(sha):
+        return "", versions
+    versions.append({"proof_no": int(proof_no), "at": str(at), "sha256": str(sha)})
+    return _VERSION_SEP.join(render_version(v.get("proof_no"), v.get("at"), v.get("sha256"))
+                            for v in versions), versions
+
+
+# ---------------------------------------------------------------- 路径（唯一来源：manuscriptform）
+
+def entry_relpath(*, family: Any, statement_id: Any = "", plan_id: Any = "") -> str:
+    """这一条命题的手稿落点（`manuscriptform.name_reading`；认不出 ⇒ 空串，不猜）。"""
+    got = _MF.name_reading(family, statement_id=statement_id, plan_id=plan_id)
+    return str(got.get("path") or "") if got.get("ok") else ""
+
+
+def read_entry(root: Any, *, family: Any, statement_id: Any = "",
+               plan_id: Any = "") -> dict[str, Any]:
+    """读这一条命题的登记条目（手稿 + 头部元信息）；稿不在 ⇒ `exists=False`。"""
+    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id)
+    out: dict[str, Any] = {"checked": True, "exists": False, "path": rel, "text": "",
+                           "entry": parse_entry(""), "why": ""}
+    if not rel:
+        out.update(checked=False, why=f"手稿落点认不出（family={family!r}，"
+                                      f"statement_id={statement_id!r}，plan_id={plan_id!r}）")
+        return out
+    path = Path(str(root or "")) / rel
+    if not path.is_file():
+        return out
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        out.update(checked=False, why=f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）")
+        return out
+    out.update(exists=True, text=text, entry=parse_entry(text))
+    return out
+
+
+# ---------------------------------------------------------------- 登记 / 重写（唯一写入口）
+
+def register_or_rewrite(
+    root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
+    dependency_rows: Sequence[Mapping[str, Any]] = (),
+    statement_id: Any = "", plan_id: Any = "", sid: Any = "", title: Any = "",
+    kind: Any = "", author: Any = "", at: Any = "", template: str = "",
+    gate: Callable[..., Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """登记一条新命题（过闸一次）／重写一条已登记命题的证明（不过闸、不登记）。
+
+    `template` 是新命题那一档的底稿（调用方刚渲染并洗过的那一份手稿正文）：
+    给了就用它当基稿（只补头部的登记元信息），于是洗稿元信息、依赖段一个字节都不丢；
+    不给就按 `proposition` / `proof_text` / `dependency_rows` 现渲染。
+
+    返回（键固定）：
+    `{checked, ok, mode, statement_id, proof_no, manuscript_path, sha256, deps_rows,
+      problems, refused, why, entry, section_hashes, gate, written, migrated}`。
+
+    - `mode="registered"`：这一条第一次落成手稿（过闸；`gate` 读数的原文在 `gate`）；
+    - `mode="rewritten"`：同一条命题的下一版证明（`## 证明` 就地换、`proof_no` 递增）；
+    - `ok=False` 时 `refused` 是受控码，盘上一个字节都不动（`written=False`）。
+    """
+    at_text = str(at or "") or _now()
+    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id)
+    out: dict[str, Any] = {
+        "checked": True, "ok": False, "mode": "", "statement_id": str(statement_id or ""),
+        "proof_no": 0, "manuscript_path": rel, "sha256": "", "deps_rows": [],
+        "problems": [], "refused": "", "why": "", "entry": {}, "gate": {},
+        "written": False, "section_hashes": {}, "migrated": False, "preserved": False,
+    }
+    if not rel:
+        out.update(refused=REFUSED_PATH,
+                   why=(f"手稿落点认不出（family={family!r}、statement_id={statement_id!r}、"
+                        f"plan_id={plan_id!r}）⇒ 不登记、不写盘"))
+        return out
+    before = read_entry(root, family=family, statement_id=statement_id, plan_id=plan_id)
+    if not before.get("checked"):
+        out.update(checked=False, refused=REFUSED_READ,
+                   why=f"登记条目读不出来 ⇒ 没查成（不是「新命题」）：{before.get('why')}")
+        return out
+    old_text = str(before.get("text") or "")
+    entry = dict(before.get("entry") or {})
+    new_fp = proposition_fingerprint(proposition)
+    same_slot = bool(before.get("exists") and str(entry.get("label") or "").strip() == str(label or "").strip())
+    old_fp = str(entry.get("fingerprint") or "")
+    migrated = False
+    if same_slot and not old_fp:
+        # 旧稿（解耦之前落的那一批）没有指纹行：这一笔是"给旧稿补上登记元信息"，
+        # 不是"改命题"。补的时候不拿旧稿的 `## 命题` 去拒新正文 —— 权威判定在调用方
+        # （F 已经按 statements 那一行核过命题正文），这里只如实标 `migrated=True`。
+        _head, sections = split_sections(old_text)
+        old_prop = next((body for name, body in sections if name == "命题"), "")
+        entry["fingerprint"] = proposition_fingerprint(old_prop) if old_prop.strip() else ""
+        migrated = True
+    if same_slot and old_fp and old_fp != new_fp:
+        out.update(refused=REFUSED_TEXT_CHANGED,
+                   why=("命题正文与登记条目里那一条不一致（指纹 "
+                        f"{old_fp[:12]}… → {new_fp[:12]}…）⇒ 受控拒。"
+                        "这是**另一条新命题**（走登记），或者要走「放弃 + 换号」；"
+                        "**不要用挂证明改命题正文** —— 重写只能改 `## 证明` 那一节"),
+                   entry=entry, problems=["proposition_text_changed"])
+        return out
+    mode = MODE_REWRITTEN if same_slot else MODE_REGISTERED
+    # ---- 幂等：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也不涨） ------------------
+    #
+    # 真机上 D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
+    # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被无意义的重复递交顶高，
+    # V 台账也会被同一 sha 灌满。
+    if (mode == MODE_REWRITTEN and str(entry.get("fingerprint") or "") == new_fp
+            and proof_sha(proof_text) == str(entry.get("sha256") or "")):
+        out.update(ok=True, checked=True, mode=mode,
+                   proof_no=int(entry.get("proof_no") or 1),
+                   sha256=str(entry.get("sha256") or ""),
+                   deps_rows=[dict(r) for r in (dependency_rows or [])],
+                   written=False, preserved=True, entry=dict(entry),
+                   section_hashes=section_hashes(old_text), why="")
+        return out
+    # ---- 新命题：登记这一刻过 F 秘书的形态闸（只在这里跑；重写永不再跑） ----------
+    gate_reading: dict[str, Any] = {}
+    if mode == MODE_REGISTERED and gate is not None:
+        try:
+            gate_reading = dict(gate(statement_full=str(proposition or ""),
+                                     kind=str(kind or ""), body=str(proof_text or ""),
+                                     label=str(label or "")) or {})
+        except Exception as exc:  # noqa: BLE001 —— 闸自己炸了 = 没判成（fail-closed）
+            gate_reading = {"checked": False, "well_formed": False, "submittable": False,
+                            "refused": REFUSED_GATE,
+                            "reason": f"形态闸抛了（{type(exc).__name__}: {exc}）⇒ 没判成",
+                            "problems": []}
+        out["gate"] = gate_reading
+        if not gate_reading.get("submittable"):
+            problems = [str(x) for x in (gate_reading.get("problems") or [])]
+            out.update(checked=bool(gate_reading.get("checked", False)),
+                       refused=REFUSED_GATE,
+                       problems=problems,
+                       why=("命题形态闸没放行 ⇒ 这一条不登记、不落盘（手稿一个字节都没写）："
+                            + str(gate_reading.get("reason") or "形态不合规")
+                            + ("；逐条缺什么：" + "；".join(problems[:4])
+                               if problems else "")),
+                       entry=entry)
+            return out
+    # ---- 渲染：新命题整份渲染；重写只换 `## 证明` 与它后面的 `## 依赖` -------------
+    rows = [dict(r) for r in (dependency_rows or [])]
+    deps_section = _DS.render_dependency_section(rows)
+    new_sha = proof_sha(proof_text)
+    proof_no = int(entry.get("proof_no") or 0) + 1 if mode == MODE_REWRITTEN else 1
+    if mode == MODE_REGISTERED:
+        versions_line = render_version(1, at_text, new_sha)
+        versions = [{"proof_no": 1, "at": at_text, "sha256": new_sha}]
+        if str(template or "").strip():
+            # 调用方刚渲染并洗过的那一份：拿它当基稿（洗稿行 / 依赖段原样保留）。
+            text = str(template).replace("\r\n", "\n")
+            if rows and not _DS.parse_dependency_section(text).get("present"):
+                deps_body = (deps_section[len(_DS.SECTION_HEADING):]
+                             if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
+                text, _added = _replace_section(text, "依赖", deps_body)
+        else:
+            text = _MF.render_proof_manuscript(
+                family, title=title, statement_id=statement_id,
+                proposition=proposition, proof_text=proof_text,
+                dependency_section=deps_section, plan_id=plan_id, sid=sid,
+                label=label, proof_no=proof_no)
+    else:
+        versions_line, versions = _versions_block(
+            entry, proof_no=proof_no, at=at_text, sha=new_sha)
+        text = old_text
+        text, ok_proof = _replace_section(text, "证明", proof_text)
+        if not ok_proof:
+            out.update(refused=REFUSED_SHAPE,
+                       why="手稿里没有 `## 证明` 那一节 ⇒ 没有可替换的板块（不整份重写）")
+            return out
+        deps_body = (deps_section[len(_DS.SECTION_HEADING):]
+                     if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
+        text, _ok_deps = _replace_section(text, "依赖", deps_body)
+    # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"）。
+    head_now = split_sections(text)[0]
+    head_new = _rewrite_head(head_now, {
+        _MF.PROOF_NO_MARK: str(proof_no),
+        SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
+        _MF.LABEL_MARK: str(label or ""),
+        KIND_MARK: (str(kind or "") if mode == MODE_REGISTERED
+                    else str(kind or entry.get("kind") or "")),
+        REGISTERED_AT_MARK: (at_text if mode == MODE_REGISTERED
+                             else str(entry.get("registered_at") or at_text)),
+        VERSION_MARK: versions_line,
+    })
+    text = head_new + text[len(head_now):]
+    # ---- 落盘（框架写；原子替换） ------------------------------------------------
+    target = Path(str(root or "")) / rel
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _MF._atomic_write(target, text)
+    except OSError as exc:
+        out.update(checked=True, refused=REFUSED_WRITE,
+                   why=f"手稿没写成（{type(exc).__name__}: {exc}）⇒ 登记条目没有落盘")
+        return out
+    out.update(ok=True, checked=True, mode=mode, proof_no=proof_no, sha256=new_sha,
+               deps_rows=rows, written=True, migrated=migrated,
+               entry={**entry, "label": str(label or ""), "statement_id": str(statement_id or ""),
+                      "proof_no": proof_no, "sha256": new_sha, "fingerprint": new_fp,
+                      "kind": str(kind or entry.get("kind") or ""),
+                      "registered_at": str(entry.get("registered_at") or at_text),
+                      "versions": versions},
+               section_hashes=section_hashes(text), why="")
+    return out
+
+
+# ---------------------------------------------------------------- 读数（proof_revisions）
+
+def entries_on_disk(root: Any) -> list[dict[str, Any]]:
+    """扫 `reports/` 下的证明手稿，返回逐份的登记条目（纯读）。"""
+    base = Path(str(root or "")) / _MF.MANUSCRIPT_DIR
+    out: list[dict[str, Any]] = []
+    if not base.is_dir():
+        return out
+    for family, prefix in ((_MF.FAMILY_F, _MF.PREFIX[_MF.FAMILY_F]),
+                           (_MF.FAMILY_B, _MF.PREFIX[_MF.FAMILY_B])):
+        for path in sorted(base.glob(f"{prefix}*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            got = parse_entry(text)
+            rel = f"{_MF.MANUSCRIPT_DIR}/{path.name}"
+            if not got.get("checked"):
+                continue
+            out.append({"family": family, "path": rel, "label": str(got.get("label") or ""),
+                        "statement_id": str(got.get("statement_id") or ""),
+                        "proof_no": int(got.get("proof_no") or 0),
+                        "sha256": str(got.get("sha256") or ""),
+                        "versions": [dict(v) for v in (got.get("versions") or [])],
+                        "kind": str(got.get("kind") or "")})
+    return out
+
+
+def proof_revisions(store: Any) -> dict[str, Any]:
+    """逐命题读「登记了几次 / 挂过几次证明 / 每次的 sha 与 proof_no / 有几次被判有毛病」。
+
+    "登记了几次"按条目算（一条在册命题的手稿条目 = 一次登记；同一个 label 的手稿只有
+    一份是这次解耦的直接形态）；"被判有毛病"读两处：形态闸台账（`proposition_form`）
+    与计划历史里那些 `proposition_form_refused` / `proposition_text_changed` 的拒收行。
+    """
+    out: dict[str, Any] = {"checked": False, "propositions": [], "problems": [],
+                           "registrations": 0, "proof_versions": 0,
+                           "checked_from": f"{_MF.MANUSCRIPT_DIR}/*proof-*.md",
+                           "reason": ""}
+    root = str(getattr(store, "root", "") or "")
+    if not root:
+        out["reason"] = "这一层没有工作区根 ⇒ 手稿登记读不到（没查成）"
+        return out
+    try:
+        on_disk = entries_on_disk(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+        out["reason"] = f"手稿目录读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    out["checked"] = True
+    refused_by_label: dict[str, int] = {}
+    try:
+        from . import secretary as _SEC
+
+        for one in _SEC.proposition_form_rows(root):
+            if one.get("checked") and not one.get("well_formed"):
+                key = str(one.get("label") or "")
+                refused_by_label[key] = refused_by_label.get(key, 0) + 1
+    except Exception as exc:  # noqa: BLE001 —— 台账读不到只少一格，不改"查过了"的那一半
+        out["problems"].append(f"形态闸台账读不出来：{type(exc).__name__}: {exc}")
+    for one in on_disk:
+        versions = [dict(v) for v in (one.get("versions") or [])]
+        if not versions:
+            versions = [{"proof_no": int(one.get("proof_no") or 0),
+                         "at": "", "sha256": str(one.get("sha256") or "")}]
+        label = str(one.get("label") or "")
+        out["propositions"].append({
+            "family": str(one.get("family") or ""),
+            "label": label,
+            "statement_id": str(one.get("statement_id") or ""),
+            "manuscript_path": str(one.get("path") or ""),
+            "registrations": 1,
+            "proof_count": len(versions),
+            "versions": [{"proof_no": int(v.get("proof_no") or 0),
+                          "sha256": str(v.get("sha256") or ""),
+                          "at": str(v.get("at") or "")} for v in versions],
+            "problems": int(refused_by_label.get(label, 0)),
+        })
+    out["registrations"] = sum(int(p["registrations"]) for p in out["propositions"])
+    out["proof_versions"] = sum(int(p["proof_count"]) for p in out["propositions"])
+    if not out["propositions"]:
+        out["reason"] = ("查过了：`reports/` 下没有一份带登记条目的证明手稿 ⇒ "
+                         "这个读数不是「命题登记一次、证明改 N 次」的那种形态")
+    else:
+        out["reason"] = (f"查过了：{len(out['propositions'])} 条手稿登记、"
+                         f"{out['proof_versions']} 个证明版本 —— "
+                         + "；".join(f"{p['label'] or p['manuscript_path']}：登记 "
+                                    f"{p['registrations']} 次 / 证明 {p['proof_count']} 版 / "
+                                    f"有毛病 {p['problems']} 次"
+                                    for p in out["propositions"][:6])
+                         + "（读数，不拦门）")
+    return out
+
+
+# ---------------------------------------------------------------- 手稿头的那句话（给提示词用）
+
+def registration_note() -> str:
+    """提示词里那一句（业主 2026-11-07 逐字口径的正面表述）。"""
+    return ("你登记一条**新命题**时，你的秘书会先看它是否写清了「从什么条件导出什么结论」；"
+            "已经在登记里的命题**重写证明**时不再过这一步 —— 改证明不需要重新登记。")

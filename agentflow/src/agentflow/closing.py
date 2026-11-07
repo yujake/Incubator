@@ -5582,6 +5582,21 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
     return out
 
 
+def proof_revisions_reading(store: Any) -> dict[str, Any]:
+    """手稿登记 / 证明重写的逐命题读数（业主 2026-11-07 裁定：登记与写证明解耦）。
+
+    读的是 `reports/*proof-*.md` 头部的登记元信息（`proofregistry.proof_revisions`）。
+    逐命题给「登记了几次 / 挂过几次证明 / 每次的 sha 与 proof_no / 有几次被判有毛病」：
+    让"命题登记一次、证明改了 N 次"在收工输出上一眼可见。
+
+    三态：没有工作区根 / 目录读不出来 ⇒ `checked=False` + `reason`（没查成）；
+    一条手稿都没有 ⇒ `checked=True` 且 `registrations=0`，`reason` 说清"不是那种形态"。
+    """
+    from . import proofregistry as _PR
+
+    return _PR.proof_revisions(store)
+
+
 def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     """I3 的另一格读数：明确放弃的命题（带理由与时间）+ 换号读数（`relabeled`）。
 
@@ -7226,6 +7241,14 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # 不动 `status` 与退出码 ⇒ 门的强度一格没改。
     rep.readings["proposition_form"] = _run_reading(
         rep, "proposition_form", proposition_form_reading, store)
+    # ---- 手稿登记 / 证明重写那一格（业主 2026-11-07 裁定：登记与写证明解耦）--------
+    #
+    # 读的是 `reports/*proof-*.md` 头部的登记元信息（`proofregistry.proof_revisions`）：
+    # 逐命题给「登记了几次 / 挂过几次证明 / 每次的 sha 与 proof_no / 有几次被判有毛病」。
+    # 让"命题登记一次、证明改了 N 次"这件事在收工输出上一眼可见。与上面那几格同一套
+    # 纪律：只落 `readings`、不产生 `Finding`、不动 `status` 与退出码。
+    rep.readings["proof_revisions"] = _run_reading(
+        rep, "proof_revisions", proof_revisions_reading, store)
     # ---- 第二阶段那一格（业主 2026-11-02 两阶段录入）：哪些证明还没洗过 --------
     #
     # 本笔只落读数（readings.statements_unoptimized，没查成时一条 warning）：

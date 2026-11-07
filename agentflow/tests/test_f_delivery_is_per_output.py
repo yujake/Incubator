@@ -304,7 +304,16 @@ def test_f_a_signed_output_does_not_end_the_plan(tmp_path):
     """
     st = _ws(tmp_path)
     f = _f(st)
-    f.llm = _FakeLLM(_proof_reply())
+    # 2026-11-07（业主裁定：登记与写证明解耦）：`step` 再跑一轮会重写 s1 的手稿，
+    # 而重写会换掉正文 sha ⇒ 盖在旧正文上的那一签按设计作废（V 台账按新 sha 另落一行）。
+    # 所以这一条要验的"签到手不等于交差"必须让这一轮的正文与已签的那一份逐字相同
+    # （同一份正文 ⇒ 同一个 sha ⇒ 签仍然成立），其余读数一个字不改。
+    f.llm = _FakeLLM(json.dumps({
+        "product": "proof", "strategy": "套用已知定理", "why_strategy": "直接按定义",
+        "steps": [{"n": 1, "text": "引理 A：取 ε>0，按定义逐点验证。", "cites": [],
+                   "assumption": False},
+                  {"n": 2, "text": "ε 任意 ⇒ 结论成立。", "cites": []}]},
+        ensure_ascii=False))
     pid = f.create_plan("难题：判定这个族", "PK-179-NOSTOP", subgoals=[
         {"sid": "s1", "text": "证明引理 A", "owner": "F", "testable": "存在反例或有限界"},
         {"sid": "s2", "text": "证明引理 B", "owner": "F", "testable": "存在反例或有限界"},

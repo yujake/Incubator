@@ -312,12 +312,14 @@ def test_f_manuscript_section_is_read_by_b_and_lands_a_dependency(store: Store) 
     # —— 这条判据钉的是"这一笔（`stmt:<新命号>`）读出的那两行"，多出来的那两行点名，不静默略过。
     rows = [r for r in _deps(store) if str(r.get("used_by")) == f"stmt:{stmt_id}"]
     assert len(rows) == 2, _deps(store)
+    # 2026-11-07（业主裁定：登记与写证明解耦）：F 的命题在 B 收录之前没有 statements
+    # 行，于是 F 这一侧不写依赖表（作者只写内容，登记由收方读稿产生）。盘上应当
+    # 只有 B 这一笔读稿落的两行 —— 把"作者侧也有两行"从判据里去掉，不是放宽：
+    # 多出来的任何一行都要被点名，而不是被当成"作者侧的镜像"放过。
     author_side = [r for r in _deps(store) if str(r.get("used_by")) != f"stmt:{stmt_id}"]
-    assert {str(r.get("used_by")) for r in author_side} == {f"stmt:{out['statement_id']}"}, \
-        author_side
-    assert len(author_side) == 2, author_side
-    assert {str(r.get("source_stmt_id")) for r in author_side} == {THEOREM_A, THEOREM_B}, \
-        author_side
+    assert author_side == [], (
+        "F 这一侧不许写 dependencies（它没有 statements 行，登记由 B 读稿产生）："
+        f"{author_side}")
     by_source = {r["source_stmt_id"]: r for r in rows}
     assert sorted(by_source) == sorted([THEOREM_A, THEOREM_B]), by_source
     for source, row in by_source.items():

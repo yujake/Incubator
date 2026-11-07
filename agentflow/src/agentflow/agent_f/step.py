@@ -417,6 +417,15 @@ class _Step:
             history_row["refusal"] = dict(deploy["refusal"])
         if deploy.get("deps_washing"):
             history_row["deps_washing"] = [dict(x) for x in (deploy["deps_washing"] or [])]
+        # ---- 2026-11-07（业主裁定）：手稿登记条目的身份进 history --------------------
+        #
+        # "登记一次、证明改 N 次"这件事必须在计划台账上读得出来（`proof_revisions`
+        # 读数与下一轮提示词的 history 摘要都读它），否则只能靠数盘上有几份稿。
+        for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
+                     "proof_sha256", "proof_label", "proof_section_hashes",
+                     "manuscript_migrated", "manuscript_path"):
+            if deploy.get(_key) not in (None, "", {}, []):
+                history_row[_key] = deploy[_key]
         history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
@@ -472,6 +481,12 @@ class _Step:
         # 里塞一整篇手稿不划算，而 D/B 需要时按路径读。
         if deploy.get("manuscript_path"):
             out["manuscript_path"] = str(deploy["manuscript_path"])
+        # ---- 2026-11-07（业主裁定）：手稿登记条目的身份也进返回值 ----------
+        for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
+                     "proof_sha256", "proof_label", "proof_section_hashes",
+                     "manuscript_migrated"):
+            if deploy.get(_key) not in (None, "", {}, []):
+                out[_key] = deploy[_key]
         # 2026-11-04（改名与签拆开）：改名到哪一步、签块搬没搬，必须进返回值。
         # 只给 `manuscript_path` 的话，"改名了但标题没重写"与"完整改名"在调用方
         # 眼里长得一样（两者都是按号的名字）。

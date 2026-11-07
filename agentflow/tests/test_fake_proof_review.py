@@ -512,10 +512,33 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     signed = _sign(ws, stmt_id, proof_text=str(row["proof_text"]), flip=True)
     assert signed.get("verification_id"), signed
 
-    second = f._proof_outlet(product, sg, plan=plan)     # 同样的论证再交一遍
-    assert second["ok"] and second["reused"], second
-    assert second["promoted"] is True, second
-    assert second["evidence_kind"] == "proof_review", second
+    # 2026-11-07（业主裁定：登记与写证明解耦）：F 不再登记；"V 签之后按 sha 认领并升档"
+    # 发生在 B 的收录那一笔（同一份稿、同一行、不新登记）。
+    import pathlib
+
+    from agentflow import depsection as DS
+    from agentflow.agent_b import AgentB
+
+    rel = str(first.get("manuscript_path") or "")
+    mtext = pathlib.Path(ws.root, rel).read_text(encoding="utf-8")
+    # 稿头那个号是"这一行已经在册"的号：交给 B 时去掉，免得被当成"新登记的候选号"
+    # （D2 的 `stmt_id_taken` 判据管的是新建那一档；这里要的是同一行升档）。
+    mtext = "\n".join(line for line in mtext.splitlines()
+                      if not line.lstrip().startswith("- 命题号"))
+    body = DS.proof_body(mtext).strip("\n")
+    second = AgentB(ws, extractor=None, extract_text=None).register_statement(
+        statement_full=str(row["statement_full"]),
+        statement_text=str(row.get("statement_text") or ""),
+        origin="own_result", kind="conjecture",
+        # 档位按 V 的账本现算（`_proof_tier` → `proof_review`）：B 收到这个档之后
+        # 仍会按盘上那一签复核，不是自报。
+        evidence_kind="proof_review",
+        label=f"F 攻坚 {plan.get('plan_id')} 子目标 {sg.get('sid')}",
+        proof_text=body, proof_manuscript=mtext, line_range={"label": rel},
+        quote_reason="F 交来的论证（V 已签，B 按 sha 认领）")
+    assert second.get("ok") is True, second
+    assert second.get("upgraded") is True, second
+    assert second.get("evidence_kind") == "proof_review", second
     after = [r for r in ws.rows("statements") if str(r.get("stmt_id")) == stmt_id]
     assert len(after) == 1, after                          # 升档不是登记第二行
     assert after[0]["evidence_kind"] == "proof_review", after[0]

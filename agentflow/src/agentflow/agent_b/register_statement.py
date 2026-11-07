@@ -784,6 +784,59 @@ def _manuscript_belongs_to_a_cited_statement(*, declared_id: Any = "",
     return declared in cited
 
 
+#: 这一笔的调用方角色（`conductor.current_parent()` 的父角色；没挂点 ⇒ 空串）。
+#:
+#: 为什么读父角色而不是 `current_caller_role()`：那一个是"我是谁"（B 自己），
+#: 而这里要判的是"谁派我来的" —— F 的命题必须先落手稿。
+def _caller_role() -> str:
+    try:
+        from ..conductor import current_parent
+
+        _pid, role = current_parent()
+        return str(role or "")
+    except Exception:  # noqa: BLE001 —— 读不到就当作"没有挂点"（不是"父是 F"）
+        return ""
+
+
+def _declared_manuscript_kind(*, text: str = "", root: str = "") -> str:
+    """手稿头 `- 证据种类：<kind>` 读出来的那一档（认不出 / 词表外 ⇒ 空串，不猜）。
+
+    只认 `secretary.PROPOSITION_KINDS` 里的取值：手稿头是作者写的字节，不能让它
+    随手发明一个新 kind 落进 `statements`（那等于绕开 kind 的语义）。
+    """
+    raw = str(text or "")
+    rel = _norm_manuscript_rel(raw)
+    if rel and _is_manuscript_rel(rel) and root:
+        try:
+            raw = (Path(str(root)) / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return ""
+    if not raw.strip():
+        return ""
+    try:
+        from .. import proofregistry as _PR
+        from ..secretary import PROPOSITION_KINDS
+
+        kind = str(_PR.parse_entry(raw).get("kind") or "").strip().lower()
+    except Exception:  # noqa: BLE001 —— 读不到就是没有声明（不猜）
+        return ""
+    return kind if kind in PROPOSITION_KINDS else ""
+
+
+#: 这一笔的调用方角色（`conductor.current_parent()` 的父角色；没挂点 ⇒ 空串）。
+#:
+#: 为什么读父角色而不是 `current_caller_role()`：那一个是"我是谁"（B 自己），
+#: 而这里要判的是"谁派我来的" —— F 的命题必须先落手稿。
+def _caller_role() -> str:
+    try:
+        from ..conductor import current_parent
+
+        _pid, role = current_parent()
+        return str(role or "")
+    except Exception:  # noqa: BLE001 —— 读不到就当作"没有挂点"（不是"父是 F"）
+        return ""
+
+
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
@@ -1660,7 +1713,7 @@ class _RegisterStatement:
         kind = str((row or {}).get("evidence_kind") or "").strip()
         return kind or "unknown"
 
-    def register_statement(
+    def _register_statement_impl(
         self,
         *,
         statement_full: str,
@@ -1731,6 +1784,20 @@ class _RegisterStatement:
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
                            f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
+        # ---- 2026-11-07（业主裁定 ②：lemma 那条死锁）：F 的手稿登记按内容落了
+        # `- 证据种类：lemma` ⇒ B 收录已登记的同一条命题时照它落 kind。
+        #
+        # 为什么只在"已在册"那一档生效：首次登记受 B-2 管（自产、无出处、无签 ⇒
+        # 必须从「猜想」注册，`_must_start_as_conjecture_refusal` 不许放宽）。升成
+        # lemma 的那一步正是业主点名的"从猜想升成引理"：先立猜想、V 签之后按手稿头
+        # 的声明升档。手稿头是 F 能表达"这是一条引理"的唯一既有落点（不新增参数面、
+        # 不改动作声明）。
+        if (origin == "own_result" and str(kind or "").strip() in ("", "theorem", "conjecture")
+                and self._existing_statement_for(str(statement_full or "").strip()) is not None):
+            declared = _declared_manuscript_kind(
+                text=str(proof_manuscript or ""), root=str(self.store.root))
+            if declared:
+                kind_now = declared
         # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
         #
         # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、「1142 条带
@@ -3666,6 +3733,184 @@ class _RegisterStatement:
     # 这一支是那条路在 B 侧的落点：D 的代码直接调 `B.register_statement(...)`，
     # 命题已经在册（F 落的行）⇒ 不新建、不重判档位，只把这一份手稿的依赖段落成边。
 
+    # ---------------------------------------------------------------- 解耦壳（2026-11-07）
+    #
+    # 业主原话（逐字）：
+    #   「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」
+    #   「B的重写一样（只是B不用再注册命题，命题拿已经登记的待优化的）」
+    #
+    # 这一层只做两件事，原来的登记实现一个字都没动（`_register_statement_impl`）：
+    #
+    # 1. 调用方是 F ⇒ 受控拒 `f_proposition_must_be_a_manuscript`：F 的命题必须先
+    #    落成手稿登记条目（`reports/f-proof-*.md`，过 F 秘书的形态闸），B 在 V 签之后
+    #    按 sha 收录。F 直接用 `framework_summon` 派 B 登记这条路不再绕开那道闸。
+    # 2. 已登记命题的新证明（命题正文逐字相同、而证明正文不同）⇒ 先把
+    #    `reports/b-proof-<号>.md` 就地重写一版（`proofregistry`，`proof_no` 递增、
+    #    正文 sha 重算、只换 `## 证明` 那一节），再交给原实现去挂那一份证明。
+    #    ⇒ 「登记」只发生一次；之后每一版证明只换手稿，不新登记、不新增 statements 行。
+    F_CALLER_REFUSED = "f_proposition_must_be_a_manuscript"
+
+    def register_statement(self, *, statement_full: str,
+                           source_lit_id: str = "",
+                           proof_text: str = "",
+                           proofs: list | None = None,
+                           proof_manuscript: str = "",
+                           kind: str = "theorem",
+                           label: str = "",
+                           statement_text: str = "",
+                           origin: str = "external_lit",
+                           page_range: dict | None = None,
+                           evidence_kind: str = "cross_check",
+                           quote_verified: bool | None = None,
+                           quote_reason: str = "",
+                           quote_mode: str = "",
+                           quote_span: str = "",
+                           quote_call_sha256: str = "",
+                           derived_from: list | None = None,
+                           doc_id: str = "",
+                           line_range: dict | None = None) -> dict:
+        """B 的动作入口：F 的命题必须走手稿登记；已登记命题的证明重写只重写手稿。
+
+        判据与读数见本类顶上那一段注释。参数面与 `_register_statement_impl` 逐字相同
+        （动作声明面读的是这个方法）。
+        """
+        caller = _caller_role()
+        if caller == "F":
+            return _refuse(
+                self.F_CALLER_REFUSED,
+                ("F 交来的命题不能直接走 `B.register_statement`：请把它登记成手稿条目"
+                 "（`reports/f-proof-<命题号>.md`，新命题会过 F 秘书的形态闸），"
+                 "B 在 V 签之后按正文 sha 收录。这条派活路径不再绕开手稿登记"))
+        got = self._register_statement_impl(
+            statement_full=statement_full, source_lit_id=source_lit_id,
+            proof_text=proof_text, proofs=proofs, proof_manuscript=proof_manuscript,
+            kind=kind, label=label, statement_text=statement_text, origin=origin,
+            page_range=page_range, evidence_kind=evidence_kind,
+            quote_verified=quote_verified, quote_reason=quote_reason,
+            quote_mode=quote_mode, quote_span=quote_span,
+            quote_call_sha256=quote_call_sha256, derived_from=derived_from,
+            doc_id=doc_id, line_range=line_range)
+        return self._apply_declared_manuscript_kind(
+            got, statement_full=statement_full, origin=origin, kind=kind,
+            proof_manuscript=proof_manuscript)
+
+    def _apply_declared_manuscript_kind(self, got: dict, *, statement_full: str,
+                                        origin: str, kind: str,
+                                        proof_manuscript: str) -> dict:
+        """已登记命题：手稿头声明了 `lemma` 而 V 的签已把等级抬到 `pre_theorem` 以上
+        ⇒ 按那一档把 kind 升上去（只写 `kind` 这一格，走秘书的 meta patch）。
+
+        为什么必须等 V 的签：B-2 的纪律是"自产、无出处、无签 ⇒ 从猜想注册"，
+        升成 lemma 是签之后的那一步；没有签就改 kind 等于自报（那正是 B-2 堵的）。
+        这里只在 `derive_grade(bits)` 已经到 `pre_theorem` / `theorem` 时才落。
+        """
+        out = dict(got) if isinstance(got, dict) else got
+        if not isinstance(out, dict) or not out.get("ok"):
+            return out
+        if str(origin or "") != "own_result" or str(kind or "").strip() not in (
+                "", "theorem", "conjecture"):
+            return out
+        declared = _declared_manuscript_kind(
+            text=str(proof_manuscript or ""), root=str(self.store.root))
+        if declared not in ("lemma", "theorem"):
+            return out
+        sid = str(out.get("stmt_id") or "")
+        if not sid:
+            return out
+        row = next((dict(r) for r in self.store.rows("statements")
+                    if str(r.get("stmt_id") or "") == sid), {})
+        if not row or str(row.get("kind") or "") == declared:
+            return out
+        try:
+            grade = _EB.derive_grade(dict(row.get("bits") or {}),
+                                     kind=str(row.get("kind") or ""))
+        except Exception:  # noqa: BLE001 - 算不出来 ⇒ 不升（没判成不是"够格"）
+            return out
+        if grade not in ("pre_theorem", "theorem"):
+            return out
+        sec = self._statement_secretary()
+        if sec is None:
+            return out
+        amended = dict(sec.amend_statement_meta(
+            sid, {"kind": declared}, role="B") or {})
+        out["kind_upgraded_from_manuscript"] = {
+            "from": str(row.get("kind") or ""), "to": declared,
+            "grade": grade, "basis": str(amended.get("reason") or ""),
+            "amended": bool(amended.get("amended")),
+        }
+        if amended.get("amended") and amended.get("row"):
+            out["row"] = dict(amended["row"])
+        return out
+
+    def _proof_rewrite_target(self, *, full: str, proof_text: str,
+                              proof_manuscript: str) -> dict:
+        """这一笔是不是"已登记命题的证明重写"？（是 ⇒ 返回在册那一行，否则空表）
+
+        判据三条（同时成立才算重写）：
+        1. 命题按 `statement_full` 的规范化值真的在册（`_existing_statement_for`）；
+        2. 交来的证明正文非空，且与在册那一份不同（逐字相同的那一档是幂等重交，
+           不是重写 —— 它照旧走原来的登记，不动手稿版本）；
+        3. 这一行已经有证明正文（`proof_text` 或 `proofs` 清单的最后一份）——
+           没有正文的行是"待补证明"，那一笔是第一次挂证明，不算重写。
+        """
+        row = self._existing_statement_for(str(full or "").strip())
+        if not row:
+            return {}
+        want = str(proof_text or "").strip()
+        if not want:
+            return {}
+        have = str(row.get("proof_text") or "").strip()
+        if not have:
+            listed = row.get("proofs") or []
+            if listed:
+                have = str((dict(listed[-1]) or {}).get("text") or "").strip()
+        if not have:
+            return {}
+        if _VR.proof_sha(have) == _VR.proof_sha(want):
+            return {}
+        return dict(row)
+
+    def _land_rewrite_manuscript(self, row: Mapping, *, proof_text: str,
+                                 proof_manuscript: str) -> dict:
+        """把这一版 B 的证明落进 `reports/b-proof-<命题号>.md`（就地重写那一节）。"""
+        from .. import manuscriptform as _MF
+        from .. import proofregistry as _PR
+
+        sid = str(row.get("stmt_id") or "")
+        proposition = str(row.get("statement_full") or "")
+        label = str(row.get("label") or f"B 优化 stmt:{sid}") or f"B 优化 stmt:{sid}"
+        rows: list[dict] = []
+        template = str(proof_manuscript or "")
+        if _is_manuscript_rel(template):
+            rel = _norm_manuscript_rel(template)
+            try:
+                template = (Path(str(self.store.root)) / rel).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                template = ""
+        if template:
+            section = _DS.parse_dependency_section(template)
+            if section.get("present") and not section.get("refused"):
+                rows = [dict(x) for x in (section.get("rows") or [])]
+        got = _PR.register_or_rewrite(
+            self.store.root, family=_MF.FAMILY_B, label=label,
+            proposition=proposition, proof_text=str(proof_text or ""),
+            dependency_rows=rows, statement_id=sid, kind=str(row.get("kind") or ""),
+            template=template, gate=self._declared_kind_gate())
+        out = dict(got)
+        out["text"] = ""
+        target = str(got.get("manuscript_path") or "")
+        if got.get("ok") and target:
+            try:
+                out["text"] = (Path(str(self.store.root)) / target).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                out.update(ok=False, refused="manuscript_unreadable",
+                           why=f"重写稿读不回来（{type(exc).__name__}: {exc}）")
+        return out
+
+    def _declared_kind_gate(self):
+        """B 的重写没有形态闸（业主：「B侧收录不拦」）；登记那一刻不判形态。"""
+        return None
+
     def _manuscript_deps_after_write(self, sec: Any, stmt_id: str,
                                      deps_groups: list[list[dict]]) -> dict:
         """正文写进在册那一行之后，把这份稿的依赖面也落下去（D7 的 A 那一半）。
@@ -4067,6 +4312,48 @@ class _RegisterStatement:
             return out
         head = _BM.header_reading(source_manuscript)
         from_source = bool(head.get("checked"))
+        # ---- 2026-11-07（业主裁定 ③）：已登记命题的证明重写就地动那一块 ---------
+        #
+        # 业主原话（逐字）：「B的重写一样（只是B不用再注册命题，命题拿已经登记的待优化的）」
+        # 「F侧反复修改一个命题的证明时要直接动那个命题所指手稿的 proof 板块」。
+        # 目标稿已经存在 ⇒ 这一笔是同一命题的下一版证明：只换 `## 证明`（按 cites
+        # 重渲 `## 依赖`），`proof_no` 递增、正文 sha256 重算，不新落第二个文件
+        # （不出现 `b-proof-000041-v2.md` 这类新名）。
+        from .. import proofregistry as _PR
+
+        _target = _PR.entry_relpath(family="B", statement_id=statement_id)
+        if _target and (Path(str(root)) / _target).is_file():
+            landed = self._land_rewrite_manuscript(
+                {"stmt_id": statement_id, "statement_full": statement_full,
+                 "label": label, "kind": ""},
+                proof_text=proof_text, proof_manuscript=source_manuscript)
+            if landed.get("ok"):
+                from .. import vsigns as _VS_READ
+
+                _rel = str(landed.get("manuscript_path") or _target)
+                _text = str(landed.get("text") or "")
+                if not _text:
+                    try:
+                        _text = (Path(str(root)) / _rel).read_text(encoding="utf-8")
+                    except (OSError, UnicodeDecodeError):
+                        _text = ""
+                _block = _VS_READ.manuscript_sign_reading(_text, manuscript_path=_rel)
+                out.update(path=_rel,
+                           written=bool(landed.get("written")),
+                           preserved=bool(landed.get("preserved")
+                                          or not bool(landed.get("written"))),
+                           signed=bool(_block.get("found") and _block.get("signed")),
+                           text=_text, why="", problem={},
+                           proof_no=int(landed.get("proof_no") or 0),
+                           sha256=str(landed.get("sha256") or ""))
+                return out
+            out.update(checked=bool(landed.get("checked", True)), written=False,
+                       preserved=False, signed=False,
+                       path=str(landed.get("manuscript_path") or _target),
+                       why=str(landed.get("why") or ""),
+                       problem={"kind": str(landed.get("refused") or ""),
+                                "why": str(landed.get("why") or "")})
+            return out
         try:
             got = _BM.land_rewrite(
                 root, statement_id=statement_id,

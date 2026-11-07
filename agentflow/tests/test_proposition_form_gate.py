@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""命题形态闸（业主 2026-11-07 裁定）：F 交稿之前，命题描述必须明确「条件 → 结论」。
+"""命题形态闸（业主 2026-11-07 裁定）：F 登记新命题时，命题描述必须明确「条件 → 结论」。
 
 业主原话（逐字，这就是本文件的验收标准）：
 
 > 「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出什么结论」
+> 「就是F侧登记新命题F秘书闸拦的那块」
 
 ## 现场（98 的三条反例，逐字，见 `projects/paper-rewrite-98/data/statements.json`）
 
@@ -14,13 +15,14 @@
 | 000039 | 同 000037 + 「…并逐字给出 fs.stat 的 size 与 sha256」 | 验收读数清单 |
 
 这三条被登记成 `kind=conjecture`，然后以「本行不是数学命题，而是 F 一方的作业/验收规格」
-为由放弃 —— 那是事后才发现的。这一闸把它挪到登记之前。
+为由放弃 —— 那是事后才发现的。这一闸把它挪到手稿登记之前。
 
-## 闸装在哪（三处候选，只有一处是对的）
+## 闸装在哪（2026-11-07 业主第二次裁定把它挪到了手稿登记那一步）
 
-| 位置 | 装不装 | 理由（业主 2026-11-07 逐字纠正） |
+| 位置 | 装不装 | 理由（业主逐字） |
 |---|---|---|
-| F 交稿那一步（`agent_f/core.py::_hand_proof_to_b`） | 装 | 「F自己产出命题和证明」；命题描述就是 F 这一轮写出来的 |
+| F 登记新命题（手稿登记：`proofregistry.register_or_rewrite` 的 `registered` 那一档） | 装 | 「就是F侧登记新命题F秘书闸拦的那块」 |
+| 已有命题的证明重写 | 不装 | 「已经在登记里的命题重写证明时不再过这一步 —— 改证明不需要重新登记」 |
 | `D.register_conjecture` | 不装 | 「D侧给的猜想只是参考」 |
 | `B.register_statement` | 不装 | 「B侧收录不拦」（那条路还承载文献侧定理的收录） |
 
@@ -34,15 +36,14 @@
 
 | 编号 | 判据 | 用例 |
 |---|---|---|
-| a | 98 那三条文本 ⇒ 受控拒，`statements` 一行都不多 | `test_a_*` |
-| b | 一条规范的「设…则…」⇒ 交给登记路、正常入册，且判定结果读得回来 | `test_b_*` |
+| a | 98 那三条文本 ⇒ 受控拒，手稿不落盘、`statements` 一行都不多 | `test_a_*` |
+| b | 一条规范的「设…则…」⇒ 过闸、落成手稿登记条目，且判定结果读得回来 | `test_b_*` |
 | c | B 自己收录文献侧定理（不经 F）⇒ 不受影响 | `test_c_*` |
 | d | `D.register_conjecture` ⇒ 不受影响 | `test_d_*` |
-| e | 判定没查成（打桩抛）⇒ 受控拒 + `checked=False`（fail-closed） | `test_e_*` |
+| e | 判定没查成（打桩抛 / 没有秘书）⇒ 受控拒 + `checked=False`（fail-closed） | `test_e_*` |
 | f | 反真空：摘掉这道闸 ⇒ a 红 | `test_f_*` |
 | g | 收工读数 `proposition_form`：被拒条数 + 逐条码 + 一条合法样本 | `test_g_*` |
 """
-
 from __future__ import annotations
 
 import pathlib
@@ -145,24 +146,32 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _agent(st: Store, secretary: object | None) -> AgentF:
-    agent = AgentF(st)
+    agent = AgentF(st, config={"workspace_root": str(st.root), "plan_id": "0001"})
     if secretary is not None:
         agent.f_secretary = secretary
     return agent
 
 
-def _hand(agent: AgentF, full: str, *, kind: str = "conjecture", sid: str = "S1"):
-    return agent._hand_proof_to_b(
-        full=full, text=full, body=PROOF, sid=sid,
-        plan={"plan_id": "p1", "problem_key": "k1"},
-        manuscript_text="", manuscript_received={"source": "param", "chars": 0,
-                                                 "section_rows": 0, "refs_in_proof": 0},
+def _hand(agent: AgentF, full: str, *, kind: str = "conjecture", sid: str = "S1",
+          body: str = PROOF):
+    return agent._hand_proof(
+        full=full, text=full, body=body, sid=sid,
+        plan={"plan_id": "0001", "problem_key": "k1"},
+        sg={"sid": sid, "text": full, "kind": kind},
+        manuscript_text="",
+        manuscript_received={"source": "param", "chars": 0,
+                             "section_rows": 0, "refs_in_proof": 0},
         cites=[], tier={"kind": "heuristic", "why": "夹具"},
-        existing_row={"kind": kind})
+        dependency_rows=[], existing_row={"kind": kind})
 
 
 def _count(st: Store) -> int:
     return len(list(st.rows("statements")))
+
+
+def _manuscripts(st: Store) -> list[str]:
+    base = pathlib.Path(st.root) / "reports"
+    return sorted(p.name for p in base.glob("*.md")) if base.is_dir() else []
 
 
 # ---------------------------------------------------------------- a 98 的三条 ⇒ 受控拒
@@ -170,7 +179,7 @@ def _count(st: Store) -> int:
 @pytest.mark.parametrize("text", [SPEC_036, SPEC_037, SPEC_039],
                          ids=["000036", "000037", "000039"])
 def test_a_a_spec_registered_as_a_conjecture_is_refused(tmp_path, text):
-    """a：98 那种「作业/验收规格」当猜想交 ⇒ 受控拒，`statements` 一行都不多。"""
+    """a：98 那种「作业/验收规格」当新命题登记 ⇒ 受控拒，手稿不落盘、行数不变。"""
     st = _ws(tmp_path)
     before = _count(st)
     stub = _FormStub(
@@ -185,51 +194,37 @@ def test_a_a_spec_registered_as_a_conjecture_is_refused(tmp_path, text):
     assert got["refused_kind"] == "proposition_form_refused", got
     assert got["statement_id"] == "", got
     assert _count(st) == before, "闸判不过时 statements 不许出现新行"
+    assert _manuscripts(st) == [], "闸判不过时手稿不许落盘"
     form = dict(got.get("proposition_form") or {})
     assert form.get("checked") is True and form.get("well_formed") is False, form
     assert len(form.get("problems") or []) == 3, form
-    assert "流程要求" in got["why"], got["why"]
+    assert "流程要求" in got["error"], got["error"]
     # 闸真的看到了那段正文（不是拿空串判的）
     assert stub.calls and stub.calls[0]["statement_full"] == text, stub.calls
 
 
-# ---------------------------------------------------------------- b 合格 ⇒ 交给登记
+# ---------------------------------------------------------------- b 合格 ⇒ 落手稿登记
 
-def test_b_a_well_formed_proposition_is_handed_to_registration(tmp_path):
-    """b：规范的「设…若…则…」⇒ 过闸、交给 B 的登记正路（B 侧读数照旧）。
-
-    这里把 B 的登记动作换成一个记录用的替身：量的是"过闸之后真的往下走了"，
-    而 B 自己的登记行为由 `test_c_*` 与既有的 register 那一批守。
-    """
+def test_b_a_well_formed_proposition_is_registered_as_a_manuscript(tmp_path):
+    """b：规范的「设…若…则…」⇒ 过闸、落成手稿登记条目（登记一次）。"""
     st = _ws(tmp_path)
     stub = _FormStub(well_formed=True, conditions="设 K=Q(√−3)，O_K 为其整数环",
                      conclusion="∑_{N𝔭≤X} log N𝔭 = X + O(√X)")
     agent = _agent(st, stub)
-    seen: dict = {}
-
-    class _Reviewer:
-        def __init__(self, store, **_kw):
-            self.store = store
-
-        def register_statement(self, **kw):
-            seen.update(kw)
-            return {"ok": True, "stmt_id": "000001", "reused": False, "promoted": False,
-                    "evidence_kind": "heuristic"}
-
-    import agentflow.agent_b as _AB
-
-    real = _AB.AgentB
-    _AB.AgentB = _Reviewer
-    try:
-        got = _hand(agent, WELL_FORMED)
-    finally:
-        _AB.AgentB = real
+    got = _hand(agent, WELL_FORMED)
     assert got["ok"] is True, got
-    assert got["statement_id"] == "000001", got
-    assert seen.get("statement_full") == WELL_FORMED, seen
+    assert got["proof_mode"] == "registered", got
+    assert got["proof_no"] == 1, got
+    assert len(stub.calls) == 1, stub.calls
     form = dict(got.get("proposition_form") or {})
     assert form.get("submittable") is True, form
     assert stub.calls[0]["label"], "闸要拿到这一条的 label 才能判"
+    # 登记条目真的落盘了（规范路径 + 头部元信息）
+    path = pathlib.Path(st.root) / str(got["manuscript_path"])
+    assert path.is_file(), got["manuscript_path"]
+    text = path.read_text(encoding="utf-8")
+    assert "## 命题" in text and "## 证明" in text and "## 依赖" in text, text
+    assert "- 命题指纹：" in text and "- 正文sha：" in text, text
 
 
 def test_b_the_verdict_lands_in_the_ledger_and_is_readable(tmp_path):
@@ -257,13 +252,16 @@ def test_b_the_verdict_lands_in_the_ledger_and_is_readable(tmp_path):
 # ---------------------------------------------------------------- e 没判成 ⇒ fail-closed
 
 def test_e_a_failed_judgement_refuses_and_says_not_checked(tmp_path):
-    """e：模型那一侧炸了 ⇒ F 受控拒 + `checked=False`（不许静默放行）。"""
+    """e：模型那一侧炸了 ⇒ F 受控拒 + `checked=False`（不许静默放行，也不许穿透）。"""
     st = _ws(tmp_path)
     before = _count(st)
     agent = _agent(st, _FormStub(raises=TimeoutError("模型超时")))
-    with pytest.raises(TimeoutError):
-        _hand(agent, WELL_FORMED)
+    got = _hand(agent, WELL_FORMED)
+    assert got["ok"] is False and got["kind"] == "proposition_form_refused", got
     assert _count(st) == before
+    assert _manuscripts(st) == [], "没判成时手稿不许落盘"
+    rows = SEC.proposition_form_rows(st.root)
+    assert len(rows) == 1 and rows[0]["checked"] is False, rows
 
     # 秘书那一层自己把异常折成"没判成"（fail-closed 的那一半）
     sec = SEC.Secretary("F", root=st.root, store=st, seam=_RaisingSeam(),
@@ -289,6 +287,10 @@ def test_e_no_secretary_means_refused(tmp_path):
     form = dict(got.get("proposition_form") or {})
     assert form.get("checked") is False, form
     assert _count(st) == before
+    assert _manuscripts(st) == []
+    # "没有秘书"也进形态台账（否则 judged=0 与"没跑过闸"不可分）
+    rows = SEC.proposition_form_rows(st.root)
+    assert len(rows) == 1 and rows[0]["checked"] is False, rows
 
 
 class _RaisingSeam:
@@ -306,7 +308,7 @@ class _RaisingSeam:
 # ---------------------------------------------------------------- f 反真空
 
 def test_f_removing_the_gate_makes_a_red(tmp_path, monkeypatch):
-    """f：把这道闸摘掉 ⇒ a 立刻变红（同一个替身、同一段正文，只是不再判形态）。"""
+    """f：把这道闸摘掉 ⇒ a 立刻变红（同一段作业规格、只是不再判形态）。"""
     st = _ws(tmp_path)
     before = _count(st)
     agent = _agent(st, _FormStub(
@@ -318,25 +320,12 @@ def test_f_removing_the_gate_makes_a_red(tmp_path, monkeypatch):
                             "decision": "（探针：摘掉闸）", "refused": "", "reason": "",
                             "actor": ""})
 
-    class _Reviewer:
-        def __init__(self, store, **_kw):
-            pass
-
-        def register_statement(self, **_kw):
-            return {"ok": True, "stmt_id": "000002", "reused": False, "promoted": False}
-
-    import agentflow.agent_b as _AB
-
-    real = _AB.AgentB
-    _AB.AgentB = _Reviewer
-    try:
-        got = _hand(agent, SPEC_036)
-    finally:
-        _AB.AgentB = real
+    got = _hand(agent, SPEC_036)
     assert got["ok"] is True, (
         "反真空失效：摘掉形态闸之后仍然被拒 ⇒ 这条用例证明不了闸在起作用")
-    assert _count(st) == before
-    monkeypatch.undo()
+    assert _manuscripts(st) == ["f-proof-plan-0001.md"], (
+        "摘掉闸之后那段作业规格会被登记成手稿 —— 这正是 a 要拦住的那件事")
+    assert _count(st) == before, "F 仍然不写 statements（登记那一步不在这一侧）"
 
 
 # ---------------------------------------------------------------- c/d 两处不受影响

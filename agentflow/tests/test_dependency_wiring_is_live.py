@@ -64,7 +64,7 @@ from agentflow.agent_f import AgentF
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
-from conftest import sign_before_registration
+from conftest import seed_statement_row, sign_before_registration
 
 
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
@@ -230,10 +230,30 @@ def _new_plan(f: AgentF) -> str:
 
 
 def _run_proof_round(store: Store, cites: list[str]) -> dict:
+    """跑一轮 F 的 proof 档，返回这一轮的读数（手稿登记条目 + 在册命题号）。
+
+    2026-11-07（业主裁定：登记与写证明解耦）：F 不再自己把新命题写进 `statements`；
+    命题由 B 在 V 签之后收录。这一组判据量的是"B 读 F 的手稿落依赖"那条链，所以夹具
+    把这一条命题先铺成已经在册（B 先收录过的那一版），于是 F 这一轮走的是
+    "已登记 ⇒ 只挂证明"那条路：手稿仍按命题号命名（`reports/f-proof-<号>.md`），
+    D 才携带得走。这与真机顺序一致（B 收录在前、F 之后反复改证明）。
+    """
     f, _seam = _f_with_seam(store, _proof_product(cites=cites))
-    out = f.step(_new_plan(f))
+    plan_id = _new_plan(f)
+    text = "由在册定理推出目标引理"
+    seeded = seed_statement_row(
+        store, statement_full=text, statement_text=text, kind="conjecture",
+        label=f"F 攻坚 {plan_id} 子目标 s1",
+        # 出处那一栏：B 收录 F 的手稿时写的就是"这份稿在哪"（不是页码）。
+        # 没有它，D 之后代递这一行会被 `missing_own_source` 拒（那是既有判据，不放宽）。
+        line_range={"label": f"reports/f-proof-plan-{plan_id}.md"},
+        # 证据档：B 收录时按 V 的账本写这一格；D 之后代递时读的也是它
+        # （两边不一致会被判成"这一笔要更强证据"，从而绕开"只读稿登记依赖"那条早退支路）。
+        evidence_kind="heuristic",
+        proof_text="（B 在 V 签之后收录的那一版证明：这一轮会被 F 的新证明重写）")
+    out = f.step(plan_id)
     assert out.get("action") == "proof", out
-    assert str(out.get("statement_id") or ""), out
+    assert str(out.get("statement_id") or "") == str(seeded["stmt_id"]), out
     return out
 
 
@@ -323,12 +343,14 @@ def _without_proposition_line(text: str) -> str:
 def _a0_holds(store: Store, out: dict, spy: _RegistrationSpy) -> bool:
     """判据 a0（判据本体，正控与反真空共用同一个谓词）。
 
-    三件事同时成立才算绿：
+    2026-11-07（解耦）之后的三件事（同时成立才算绿）：
     1. 登记那一笔真的收到了一份非空的手稿正文，且它里面有 `## 依赖` 那一节；
-    2. 登记那一刻盘上已经有一份 `f-proof-*.md`，内容与收到的那份逐字相同；
-    3. 那一轮结束时手稿在按命题号的名字下，正文与收到的那份相同（只有开头
-       "命题号"那一行换成了真号 —— 见 `_without_proposition_line`）。
+    2. 登记那一刻盘上已经有这份正文（计划名那一份底稿）；
+    3. 登记条目落在 `out["manuscript_path"]`，它的三节分节哈希与收到的那份逐字相同
+       （登记只补了头部元信息，没改正文）。
     """
+    from agentflow import proofregistry as _PR
+
     if len(spy.calls) != 1:
         return False
     call = spy.calls[0]
@@ -337,17 +359,14 @@ def _a0_holds(store: Store, out: dict, spy: _RegistrationSpy) -> bool:
         return False
     if not any(text == received for text in call["texts"].values()):
         return False
-    sid = str(out.get("statement_id") or "")
     rel = str(out.get("manuscript_path") or "")
-    if not sid or rel != f"{MANUSCRIPT_DIR}/f-proof-{sid}.md":
+    if not rel or str(out.get("proof_mode") or "") != "registered":
         return False
     path = pathlib.Path(store.root) / rel
     if not path.is_file():
         return False
     final = path.read_text(encoding="utf-8")
-    if _without_proposition_line(final) != _without_proposition_line(received):
-        return False
-    return f"- 命题号：stmt:{sid}" in final
+    return _PR.section_hashes(final) == _PR.section_hashes(received)
 
 
 def _carried_holds(got: dict, store: Store, *, cited: str) -> bool:
@@ -408,13 +427,16 @@ def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeyp
         "登记收到的正文与盘上那一份不同 ⇒ 登记那一刻手上的稿不在盘上",
         call["files"])
     assert _a0_holds(store, out, spy), out
-    # 登记那一刻的稿是按计划号命名的（此刻还没有命题号），登记之后改成按命号的名字
-    assert call["files"] == [f"f-proof-plan-{out['plan_id']}.md"], call["files"]
+    # 2026-11-07（业主裁定：登记与写证明解耦）：这一轮就是一次手稿登记（新命题）——
+    # 底稿是按计划号写的那份（此刻还没有命题号），登记条目落在同一个规范路径上；
+    # F 不再写 statements，所以这一格没有命题号（B 在 V 签之后收录）。
+    assert out.get("proof_mode") == "registered", out
+    assert str(out.get("statement_id") or "") == "", out
     assert str(out.get("manuscript_path")) == (
-        f"{MANUSCRIPT_DIR}/f-proof-{out['statement_id']}.md"), out
+        f"{MANUSCRIPT_DIR}/f-proof-plan-{out['plan_id']}.md"), out
     assert str(out.get("manuscript_source")) == SRC_PARAM, out
-    # 登记之后那个按计划号的名字不再留在盘上（改名，不是复制一份）。
-    assert _reports(store) == [f"f-proof-{out['statement_id']}.md"], _reports(store)
+    # 同一条命题只留一份稿（底稿与登记条目是同一份文件，不是复制两份）。
+    assert _reports(store) == [f"f-proof-plan-{out['plan_id']}.md"], _reports(store)
 
 
 # ------------------------------------------------------------------ a D 携带

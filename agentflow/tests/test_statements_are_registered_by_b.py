@@ -144,9 +144,17 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
 
     改前红：F 直写那两行 `bits={}`、账本文件根本不存在。
 
+    2026-11-07（业主裁定：登记与写证明解耦）之后，F 的出口只落手稿登记条目
+    （`reports/f-proof-plan-<计划>.md`），`statements` 那一行由 B 在 V 签之后收录。
+    所以这一条先让 F 落稿，再让 B 按那份稿收录 —— 走的仍是 B 的登记正路，
+    `bits` / 非平凡度这两格一个字没改。
+
     非平凡度这一步在 B 的循环里是 `AgentLoop._statement_filing_tier` 调
     `Secretary.judge_statement`；这里把 `judge` 打成"判过"（零模型），让同一段落账代码跑起来。
     """
+    from agentflow import depsection as DS
+    from conftest import sign_before_registration
+
     st = _world(tmp_path)
 
     def _judge(self, kind, context, task_id=""):
@@ -159,12 +167,35 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
     sg = {"sid": "s1", "text": "判定这条", "testable": "存在反例或有限界"}
     product = {"product": "proof", "strategy": "反证",
                "steps": [{"n": 1, "text": "反设存在反例，取最小者", "assumption": True}]}
-    out = f._proof_outlet(product, sg, plan={"plan_id": "000000"})
-    assert out["ok"] is True, out
+    outlet = f._proof_outlet(product, sg, plan={"plan_id": "000000"})
+    assert outlet["ok"] is True, outlet
+    assert outlet["proof_mode"] == "registered", outlet
+    # F 这一侧没有 statements 行（登记是 B 的活）
+    assert list(st.rows("statements")) == [], list(st.rows("statements"))
+    rel = str(outlet.get("manuscript_path") or "")
+    text = pathlib.Path(st.root, rel).read_text(encoding="utf-8")
+    body = DS.proof_body(text).strip("\n")
+    sign_before_registration(st.root, proof_text=body)
+    got = AgentB(st, extractor=None, extract_text=None).register_statement(
+        statement_full=str(sg["text"]), statement_text=str(sg["text"]),
+        origin="own_result", kind="conjecture",
+        label=f"F 攻坚 000000 子目标 s1",
+        proof_text=body, proof_manuscript=text,
+        line_range={"label": rel},
+        quote_reason="夹具：自产命题，V 已签（先签后登记）")
+    assert got.get("ok") is True, got
     row = next(r for r in st.rows("statements")
-               if str(r.get("stmt_id") or "") == str(out["statement_id"]))
+               if str(r.get("stmt_id") or "") == str(got["stmt_id"]))
     assert dict(row.get("bits") or {}), row
     assert row["created_by"] == "secretary-B", row["created_by"]
+    # 非平凡度落账：生产路径在 B 的循环里（`AgentLoop._statement_filing_tier` →
+    # `Secretary.judge_statement`）。这里直接调同一件生产方法（零模型：`judge` 已打桩），
+    # 判据仍是"台账里有一行、读侧用同一份正文找得回来"。
+    SEC.Secretary("B", root=st.root, store=st).judge_statement(
+        statement_full=str(row["statement_full"]),
+        statement=str(row.get("statement_text") or ""),
+        proof_text=str(row.get("proof_text") or ""),
+        kind=str(row.get("kind") or ""), stmt_id=str(row["stmt_id"]))
     path = pathlib.Path(st.root) / "out" / "secretary" / "nontriviality.jsonl"
     assert path.is_file(), f"盘上没有 {path}"
     lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
