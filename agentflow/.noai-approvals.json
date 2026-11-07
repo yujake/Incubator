@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-07T19:46:54+08:00",
+  "generated_at": "2026-11-07T19:51:15+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "cdea889615b0f5c3af4e31f0eede86d07d9acc91d0953e16c7ea48bd115d2b83",
+      "sha256": "e7678aac8280704f3d9551403d6c0230d98cef7a46cf9cdde02eb40b3f618901",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p255 A 类压缩收口：fs.write / table.update 的 summary 压回预算（只删重复，事实未减）+ 两份 golden 按现值重冻。登记 != 批准，reviewers=0。",
+      "change_note": "2026-11-07 p256：放弃理由四档的连带重冻。agent 面 12 处叶子 = 11 个角色的 prompt（版本行 + D/F/M 的 policy + B 的 table.update 说明 + 只读面那三件说明的等量压缩）+ E 的 init_signature（上游 3f5c30c6 给 AgentE.__init__ 加了 secretary，那是上一笔的面漂移）；tool 面 23 处 = 8 件 summary（table.update 四档 + 七件等量压缩）+ table.update 的 params（新增 experiment_id / space、enum 四值、两条 description）+ signatures/table.update + 9 条 --role CLI。登记 = 基线，reviewers 仍为空（登记 ≠ 批准）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -543,10 +543,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "56c1ac965eacfc120f766063e1eee66fa7ac9cbd57543172f57af6ab6226d575",
+      "sha256": "2436ffad978c62b1d9ab23b19c6981f405b82a994baf96cc86e938df807b97ea",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p255 A 类压缩收口：fs.write / table.update 的 summary 压回预算（只删重复，事实未减）+ 两份 golden 按现值重冻。登记 != 批准，reviewers=0。",
+      "change_note": "2026-11-07 p256：放弃理由四档的连带重冻。agent 面 12 处叶子 = 11 个角色的 prompt（版本行 + D/F/M 的 policy + B 的 table.update 说明 + 只读面那三件说明的等量压缩）+ E 的 init_signature（上游 3f5c30c6 给 AgentE.__init__ 加了 secretary，那是上一笔的面漂移）；tool 面 23 处 = 8 件 summary（table.update 四档 + 七件等量压缩）+ table.update 的 params（新增 experiment_id / space、enum 四值、两条 description）+ signatures/table.update + 9 条 --role CLI。登记 = 基线，reviewers 仍为空（登记 ≠ 批准）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

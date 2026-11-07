@@ -3527,7 +3527,38 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 连带：`_FROZEN_PROMPT_VERSION`（p255）+ `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，
 #: count / keys_sha256 与 p254 同值）；两份 golden 按现值重冻；`docs/ROLE-GUIDE.md` 重生成
 #: （`SYSTEM-COMPONENTS.md` 不动）；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p255"
+#: p255 → p256（2026-11-07，放弃理由四档：提示词与工具面一起跟上）：
+#: 上游两笔（上一批的 8774bb67 / 79698677；本笔只负责把版本与冻结表跟上）：
+#:   ① 8774bb67：五本手册 + M 的正文 + 三条 policy 从「按两档之一」改成四档
+#:      —— `agent_skills._m_skills()`（收工那一格）/ `_b_skills()` / `_f_skills()` /
+#:      `_d_skills()` / `_m_skills()`（换号那一节）、`agent_prompts` 的 M「五、完成定义」
+#:      blocker 出路、`specs/d.py` / `specs/f.py` / `specs/m.py`。四档各有各的证据：
+#:      math_error + defect_ref / difficulty + salvaged / counterexample + experiment_id /
+#:      space_too_large + space。`agent_skills._e_skills()` 的「穷举证明」那一本补了
+#:      「写盘之前先过形态闸」（`proposition_form_refused`）—— 手册正文不进 system prompt，
+#:      它本身不改任何一格摘要。
+#:   ② 79698677：`table.update` 的 summary 改四档 + `params` 补 `experiment_id` / `space`
+#:      两格（summary 与参数提示都进 `tools_lines`，所以它 `roles` 里那七格换值）；
+#:      同一批在压缩批次内等量压掉冗余（`conductor.state` / `conductor.ledger` /
+#:      `conductor.closing` / `doc.register_dependency` / `conductor.summon_many` /
+#:      `attack.create_plan` / `graph.neighbors`，只删重复的说法，事实一条没少）。
+#: 变化格（十一格摘要）= A / B / C / D / E / F / G / H / L / M：
+#:   A/B/D/E/F/G/L 的上游是 `table.update` 那一行；C/H 没有 `table.update`，它们换值是因为
+#:   同一批在只读工具面上压掉了等量冗余（`conductor.state` / `conductor.ledger` /
+#:   `conductor.closing` 都在它们的面上）；M 两处都动（policy + table.update 在它的面上）。
+#:   V 逐字未动：它既没有 `table.update`，那三件只读工具也不在它的面上 ⇒ 只差版本行。
+#: 逐格旧值 → 新值：
+#:   A 7eb935b4→7dfe78d3 / B f6f8b045→667bf57a / C 232128db→922a4275 /
+#:   D 23d34e94→527711b8 / E 2cc19316→c5cefdfc / F 81416473→f6f65ec0 /
+#:   G 3999a4e3→55d1a1c1 / H 82aded01→b2eda81b / L c610ce90→9461d747 /
+#:   M 0449b009→63abea4f；V a3d391fc→a3d391fc（SAME）。
+#: 十一格是 `temp/_p256_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p256）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
+#: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p256"
 
 
 

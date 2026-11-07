@@ -2324,7 +2324,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   B 08cdc16d→30720620 / D 48fb9628→2b0e40ab / F 46140ef9→390ca21e / M b43664a8→0449b009。
 # C/H/V 与 A/E/G/L 逐字未动。十一格是 `temp/_p254_freeze_digests.py` 的现算值（口径同上），
 # 不是手抄。
-_FROZEN_PROMPT_VERSION = "p255"
+_FROZEN_PROMPT_VERSION = "p256"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2559,16 +2559,16 @@ _FROZEN_PROMPT_VERSION = "p255"
 #: 十一格是 `temp/_p249_freeze_digests.py` 的现算值（导入本文件的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "7eb935b4a03b2d4b3a55467b141ccce0384527204a2ed964b941e1812467f13a",
-    "B": "f6f8b0454f46690552c576b99b1b7dedba46c9d0a729fdf2c0d075aa36ad1607",
-    "C": "232128db6ea7fe4f56283370498db324d457228e6f5470583944d92637f192e6",
-    "D": "23d34e946b0e7f779f1b5b85ba59fc3cc1eaee72f578c5e14c5638dda09f17ed",
-    "E": "2cc19316ac7edeadeaecd1bf413d87a3ca5d28487d1c403bfda0e0f1b9c84b2d",
-    "F": "81416473aa2bd905f9309d4e384b47449359af702e6bb8455937f99eff42cbf5",
-    "G": "3999a4e30bc34e39fbd7253f784c82df6f8ffd48b8519725187fc7893286bf09",
-    "H": "82aded018b331b95d28f931c1ad60c0999894ad08716db3ca9a0f897770377f6",
-    "L": "c610ce90ff554e5c030487b9929dfc7ada35f41891bc775d4850b519871ab76f",
-    "M": "0449b0096409a7878e2a987067cb933de1bdfb5ff7f347cce654f37c75e8fc60",
+    "A": "7dfe78d302ccf4d6d713aa7b7206e59bf7c4a543fe7f13435ce445176ef6949e",
+    "B": "667bf57a92aa51e59eb19a8f939663887e043fc0662883150ee3cd8dd08cb075",
+    "C": "922a427550f75ffea7282c0176ef6b2f516fb0b407b2a73d9ba97b27c556fcf0",
+    "D": "527711b8a1a97cf4587d5c6f481e1673582a7d7db599a538fb4b26e5b8fad0d4",
+    "E": "c5cefdfc3eefffd3f7a44a754e05bac99612dafbddbf76b1ddba63c9c5cbd374",
+    "F": "f6f65ec08c9f1f6f16cea43dfa9aa4e0e7adf5bb86ef629f3d428b4b2aecb705",
+    "G": "55d1a1c1b46d655c91ada94103f17452fe3c288c6b5d76cba58461f9d73f90f3",
+    "H": "b2eda81b2b9de1c4fe8f9f5fc4c0b3a43f97f60c558aaecb746bda405cb3978b",
+    "L": "9461d7475a6113632e8bc939968ffdf7beed986c45fee19ab9e0ccfa6a533a24",
+    "M": "63abea4f5c95ad5bf4f9258c164130a8966f4a62d2163c028ed4e01b2a2e5ce5",
     "V": "a3d391fc5a737268fc8d4c36ecd74146f2dc4f9fea4aaf58a677c229446f48bd",
 }
 
