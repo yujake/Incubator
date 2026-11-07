@@ -249,6 +249,30 @@ def _formal_dispatch_facts() -> dict[str, Any]:
     }
 
 
+def product_kind(product: Mapping[str, Any]) -> str:
+    """这一轮 `proof` 产物自己声明的命题种类标签（可选 `kind`；认不出 ⇒ 空串，不猜）。
+
+    业主 2026-11-07（`_canon_F_manuscript_protocol.md` 第六节）：「example 只是给人看的
+    标签，处理与普通命题一致」。F 是作者，能表达「这一条是玩具例子」的唯一既有落点是
+    这一轮产物里的一个可选字段 —— 不新增动作参数、不改 `attack_plans` 的行形状：
+    读到了就交给手稿登记（`- 证据种类：` 那一行，B 收录时按它落 `statements.kind`），
+    没读到就照旧由 `sg` / 在册那一行决定。
+
+    只认 `secretary.PROPOSITION_KINDS`（theorem / lemma / proposition / corollary /
+    conjecture / example）：词表外的值一律读成"没声明"，不拿作者写错的字节去落 kind。
+    """
+    if not isinstance(product, Mapping):
+        return ""
+    raw = str(product.get("kind") or "").strip().lower()
+    if not raw:
+        return ""
+    try:
+        from ..secretary import PROPOSITION_KINDS
+    except Exception:  # noqa: BLE001 —— 词表读不到 ⇒ 不据此落 kind（不猜）
+        return ""
+    return raw if raw in PROPOSITION_KINDS else ""
+
+
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
                    tried: Sequence[str], evidence: Sequence[str] = (),
                    history: Sequence[str] = (), retry_note: str = "",
@@ -1216,6 +1240,14 @@ class _Core:
                 # 写成受控档位之外的词时那一格读成 `unreadable`（逐条列出哪一格错）。
                 if isinstance(data, Mapping) and data.get("self_assessment") is not None:
                     product["self_assessment"] = data.get("self_assessment")
+                # 命题种类标签（可选；业主 2026-11-07：玩具例子 `kind=example` 只是
+                # 给人看的标签）。与自评同一手法：`parse_round` 只认受控四档、会把它
+                # 丢掉 ⇒ 在这里从模型原样交回的 JSON 里取出；`product_kind` 负责只认
+                # `PROPOSITION_KINDS`，认不出就当没声明（不猜）。它只在 `proof` 那一支
+                # 有落点（`_proof_outlet` 写进手稿头的 `- 证据种类：`）。
+                _declared_kind = product_kind(data)
+                if _declared_kind:
+                    product["kind"] = _declared_kind
                 break
             except AR.RoundError as exc:
                 # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 把它的原话
@@ -1802,6 +1834,12 @@ class _Core:
 
         steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
         sid = str(sg.get("sid") or "")
+        # ---- 这一轮产物自己声明的命题种类标签（可选 `kind`；业主 2026-11-07）----
+        # 只在给了的时候盖过 `sg` 里的那一格：它随后进 `_hand_proof` 的登记条目
+        # （手稿头 `- 证据种类：`）与形态闸的 `kind`；没给就照旧由 `sg` / 在册那一行定。
+        _declared_kind = product_kind(product)
+        if _declared_kind:
+            sg = {**dict(sg), "kind": _declared_kind}
         # ---- 登记那一刻手上的稿（三态：参数给了 / 参数空）—— 只读，不写盘、不写台账
         manuscript_text = str(proof_manuscript or "")
         manuscript_received: dict[str, Any] = {

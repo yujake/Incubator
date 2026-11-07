@@ -97,7 +97,10 @@ PRODUCT_SPECS: dict[str, str] = {
         "`text` 是这一步说了什么，`cites` 是它引到的**在册 id**（只许引这一轮列出的那些），"
         "**前提步**才可以声明成前提（`assumption: true`）；**推导步声明成前提 = 这一步没做**"
         "（V 会按这个读）："
-        "**缝是正确的事实变成错误证明的地方**，不许用措辞跳过去。"),
+        "**缝是正确的事实变成错误证明的地方**，不许用措辞跳过去。"
+        "可选 `kind`：这一条命题的种类标签（theorem / lemma / proposition / corollary / "
+        "conjecture / example）—— 玩具例子写 `example`（业主 2026-11-07：它只是给人看的标签，"
+        "处理与普通命题一致）。给了就落进手稿头的 `- 证据种类：`、等级仍按凭据算；不给就照旧。"),
     "dead_end": (
         "这一轮走不下去。要给受控 `reason`（" + "、".join(DEAD_END_REASONS) + " 之一）、"
         "`evidence`（哪一步不行）、`best_partial`（已证的引理／缩小的范围／排除的法，"
