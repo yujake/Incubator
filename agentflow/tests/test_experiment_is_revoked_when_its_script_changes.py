@@ -36,6 +36,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from conftest import e_form_gate_ok  # noqa: E402
 from agentflow import closing as CL  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
@@ -92,7 +93,8 @@ def _sha(text: str) -> str:
 
 
 def _e(store: Store) -> AgentE:
-    return AgentE(store, config={}, workspace_root=store.root)
+    # 本文件测的是"改脚本 ⇒ 撤销老登记"这条链路：形态闸那一关钉成"合格"。
+    return e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root))
 
 
 def _run(store: Store, *, rel: str = SCRIPT_REL) -> dict:

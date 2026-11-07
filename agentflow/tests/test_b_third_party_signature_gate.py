@@ -40,7 +40,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature, seed_statement_row, sync_counters  # noqa: E402
+from conftest import add_literature, e_form_gate_ok, seed_statement_row, sync_counters  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
@@ -106,7 +106,7 @@ def _ledger(store: Store, sid: str, rows: list[dict[str, Any]]) -> pathlib.Path:
 def _run_exhaustive(store: Store) -> dict:
     """E 真跑一次穷举实验，并把 ②③ 落到盘上（这一步之后那条实验才是 proof）。"""
     _write(store, SCRIPT_REL, EXHAUSTIVE_PROBE)
-    out = AgentE(store, config={}, workspace_root=store.root).run_experiment(
+    out = e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root)).run_experiment(
         "R(3,4)=9（K_9 的二染色穷举）", "ramsey34=9", SCRIPT_REL, method="numeric")
     row = [r for r in store.rows("experiments") if r["experiment_id"] == out["experiment_id"]][0]
     sig = NP.signature_of(row)

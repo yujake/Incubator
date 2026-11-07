@@ -37,6 +37,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from agentflow import capabilities as CAP  # noqa: E402
+from conftest import seed_proposition_form_ok  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
@@ -94,6 +95,10 @@ def _wired(tmp: pathlib.Path, body: str = _EXHAUSTIVE_SCRIPT):
     target = ws / _SCRIPT_REL
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body, encoding="utf-8")
+    # 这条工具路径自己造 `AgentE`（注入不进秘书），而 E 的数值证明路线在落库前过一道
+    # 形态闸：预置一条"这条命题此前判过、合格"的读数（闸本身由
+    # `test_e_side_proposition_form_gate.py` 用真秘书 + 假缝覆盖）。
+    seed_proposition_form_ok(ws, _BASE["claim"], label=_BASE["claim_key"])
     return st, reg, ws
 
 

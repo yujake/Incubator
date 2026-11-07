@@ -27,7 +27,7 @@ import sys
 
 import pytest
 
-from conftest import sign_before_registration
+from conftest import seed_proposition_form_ok, sign_before_registration
 from _proof_manuscript_fixture import write_proof_manuscript
 
 from agentflow import capabilities as CAP
@@ -57,6 +57,9 @@ def _wired(tmp_path: pathlib.Path):
     cond = Conductor(st, backend=LocalBackend({}))
     reg = build_registry(store=st, conductor=cond, workspace_root=str(ws)).registry
     (ws / "search.py").write_text(_SEARCH_SCRIPT, encoding="utf-8")
+    # 这条工具路径自己造 `AgentE`（注入不进秘书）：预置一条"这条命题此前判过、合格"
+    # 的形态读数，让"广告面 = 接受面"这条判据测的是参数面而不是秘书缝的有无。
+    seed_proposition_form_ok(ws, "在 n<=12 内没有反例", label="bound12")
     return st, reg, ws
 
 

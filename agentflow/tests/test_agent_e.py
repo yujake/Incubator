@@ -85,7 +85,11 @@ def write_script(store: Store, rel: str, body: str) -> str:
 
 
 def make_e(store: Store, **cfg) -> AgentE:
-    return AgentE(store, config=dict(cfg), workspace_root=store.root)
+    # 本文件测的是 E 的推导 / 证据面（证明链路之外）：形态闸那一关钉成"合格"；
+    # 闸本身由 `test_e_side_proposition_form_gate.py` 用真秘书 + 假缝覆盖。
+    from conftest import e_form_gate_ok
+
+    return e_form_gate_ok(AgentE(store, config=dict(cfg), workspace_root=store.root))
 
 
 def add_experiment(store: Store, **kw) -> dict:

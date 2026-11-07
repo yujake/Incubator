@@ -41,7 +41,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature, sync_counters  # noqa: E402
+from conftest import add_literature, e_form_gate_ok, sync_counters  # noqa: E402
 from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from agentflow import closing  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
@@ -113,7 +113,9 @@ def _write(store: Store, rel: str, body: str) -> str:
 
 
 def _e(store: Store) -> AgentE:
-    return AgentE(store, config={}, workspace_root=store.root)
+    # 本文件测的是 T0 档位与穷举证明的判定链：形态闸那一关钉成"合格"
+    # （闸本身由 `test_e_side_proposition_form_gate.py` 覆盖）。
+    return e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root))
 
 
 def _b(store: Store) -> AgentB:

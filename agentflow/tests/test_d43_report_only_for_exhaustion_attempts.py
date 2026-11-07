@@ -47,6 +47,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from conftest import e_form_gate_ok  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
@@ -136,7 +137,7 @@ def _run_plain_numeric(tmp_path: pathlib.Path) -> tuple[Store, dict]:
     """跑一条普通数值实验（numeric / cross_check，无意升格成证明）。"""
     store = _store(tmp_path)
     _write(store, "code/scan_points.py", NUMERIC_PROBE)
-    out = AgentE(store, config={}, workspace_root=store.root).run_experiment(
+    out = e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root)).run_experiment(
         "扫描了十万个点", "scan=100000", "code/scan_points.py", method="numeric")
     return store, out
 
@@ -145,7 +146,7 @@ def _run_heuristic(tmp_path: pathlib.Path) -> tuple[Store, dict]:
     """跑一条 heuristic 档的实验（脚本没打结论行）。"""
     store = _store(tmp_path)
     _write(store, "code/no_conclusion.py", HEURISTIC_PROBE)
-    out = AgentE(store, config={}, workspace_root=store.root).run_experiment(
+    out = e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root)).run_experiment(
         "没有结论的一趟", "no_conclusion=1", "code/no_conclusion.py", method="numeric")
     return store, out
 
@@ -166,7 +167,7 @@ def _run_exhaustive_attempt(tmp_path: pathlib.Path,
         kwargs["enumeration"] = (
             "枚举 K_9 全部 2^36 个二染色；按顶点置换取 canonical form 去掉对称性重数，"
             "再按 3-子集/4-子集的对称性剪枝；每个染色都落在枚举里，无一遗漏；边界 n=9")
-    out = AgentE(store, config={}, workspace_root=store.root).run_experiment(
+    out = e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root)).run_experiment(
         "R(3,4)=9（K_9 的二染色穷举）", "ramsey34=9", "code/enum_k9.py", **kwargs)
     return store, out
 
@@ -237,7 +238,7 @@ def test_2b_the_intent_is_wider_than_the_method_alone(tmp_path: pathlib.Path) ->
     """② 的第二半：`method=numeric` 但 `exhaustive=true` 也算"想升格" ⇒ 同样要求三件套。"""
     store = _store(tmp_path)
     _write(store, "code/enum_numeric.py", NUMERIC_PROBE)
-    out = AgentE(store, config={}, workspace_root=store.root).run_experiment(
+    out = e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root)).run_experiment(
         "numeric 但报了 exhaustive=true", "ramsey34=9", "code/enum_numeric.py",
         method="numeric", exhaustive=True, design=DESIGN)
     report_rel = ER.report_relpath(out["experiment_id"])

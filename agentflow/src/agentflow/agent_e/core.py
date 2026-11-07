@@ -12,6 +12,7 @@ from .author_script import _AuthorScript
 from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
+from .proposition_form import _NumericProofFormGate
 
 
 def _note_process_wait(elapsed_sec: float, site: str) -> None:
@@ -43,6 +44,7 @@ class _Core:
         llm: Any | None = None,
         tools: ToolRegistry | None = None,
         actor: str = "agent-E",
+        secretary: Any | None = None,
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
@@ -85,6 +87,12 @@ class _Core:
         self.last_run: dict[str, Any] = {}
         #: 工具调用失败记录（与 agent_d 的 `last_tool_errors` 同名同义）。
         self.last_tool_errors: list[dict] = []
+        # ---- 形态闸（业主 2026-11-07 第二刀）：显式给了秘书就钉死（测试/装配可注入）；
+        # 不给则第一次用到时由 `proposition_form._e_secretary` 惰性派生 `secretary:E`。
+        # 注意"给 None"在构造参数上等于"没给"—— 要表达"这一位没有判断面"，
+        # 构造之后把 `agent.e_secretary = None` 钉上实例属性（派生只认类级哨兵）。
+        if secretary is not None:
+            self.e_secretary = secretary
         self.tools = tools if tools is not None else install_e_tools(self.store, workspace_root=self.workspace_root)
         # ---- 绑定角色（`P-14`）：注入的注册表同样要绑（`AgentD` 那条注释同族）。
         if self.tools.bound_role is None:
@@ -287,7 +295,7 @@ class _Core:
                 "program_timer": prog.reading(),
             }
 
-class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
+class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _NumericProofFormGate, _Core):
     """数值实验与反例智能体。
 
     每个方法都可以被独立调用与单测：

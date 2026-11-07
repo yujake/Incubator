@@ -373,6 +373,40 @@ class _RunExperiment:
                      else (dict((derived.get("observations") or {}).get("bound") or {})
                            or None))
 
+        # ---- [4e] E 侧形态闸（业主 2026-11-07 第二刀：「F侧的注册+放弃闸需同步到
+        # E 侧的数值证明路线」）
+        #
+        # 判什么：这条**描述**有没有写清「从什么条件导出什么结论」。判据本体只有一处
+        # （`Secretary.judge_proposition_form`，与 F 的手稿登记闸同一个判定口），本文件
+        # 只负责"在什么时候问"与"不过怎么办"。
+        #
+        # 什么时候问：这一条实验**要走数值证明路线**的时候 —— 判据仍是
+        # `numericproof.wants_numeric_proof`（method=exhaustive_search / 布尔 true 的
+        # exhaustive / 调用方声称 proof，三者任一）。一般数值实验（numeric / cross_check）
+        # 不产出 proof 级凭据、不落 statements 的 proof 行 ⇒ 不过这道闸。
+        #
+        # 位置：`store.tx` **之前**（[5] 才开事务、才写实验行 / 原始输出 / ②③ 报告 /
+        # e-proof 手稿）⇒ 判不过时一个字节都不写。没判成（没有秘书 / 没缝 / 超时 /
+        # 坏 JSON）同样是受控拒，且形态台账会留一行 `role="E"` 的"没判成"读数。
+        _wants_proof = _NP.wants_numeric_proof(
+            method=method, observations=derived.get("observations"),
+            certificate=certificate, search_bound=bound_arg,
+            evidence_kind=derived.get("evidence_kind"))
+        if _wants_proof:
+            _form = self._proposition_form_gate(
+                full=str(claim or ""), kind="conjecture", label=str(claim_key or ""))
+            if not _form.get("submittable"):
+                _why = str(_form.get("reason") or "").strip()
+                _problems = [str(x) for x in (_form.get("problems") or []) if str(x).strip()]
+                raise ExperimentError(
+                    "这条实验要走数值证明路线（它会产出一条 proof 级凭据，之后由 B 收进 "
+                    "statements），而命题形态闸没过 ⇒ 受控拒，一个字节都没写："
+                    f"{_form.get('refused') or 'proposition_form_refused'}"
+                    + (f"；{_why}" if _why else "")
+                    + ("；逐条：" + "；".join(_problems) if _problems else "")
+                    + "。把命题描述改成「设…则…」那样写清条件与结论再重交；"
+                    "形态判定读数已落 out/secretary/proposition_form.jsonl（role=E）")
+
         # ---- [5] 一个事务：alloc_id + 写 experiments
         #
         # `alloc_id` 必须在持锁事务内进行，否则两个 E 实例会拿到同一个
@@ -418,10 +452,9 @@ class _RunExperiment:
             #     就这样各多了一份（行上 `bytes=0`），而它们本来就不打算当证明。
             # 报告 dict 仍按同一形状给出（空 path / 0 字节 / 空 problems）：读数面的键集
             # 不因这一档而变，下游读 `report_path` 的地方不必各记一个条件。
-            _wants_proof = _NP.wants_numeric_proof(
-                method=method, observations=derived.get("observations"),
-                certificate=certificate, search_bound=bound_arg,
-                evidence_kind=derived.get("evidence_kind"))
+            #
+            # `_wants_proof` 已在 [4e]（形态闸那一段）按同一批事实算过一次：两处要问的
+            # 是同一个问题，所以这里复用那一格，不重新算第二遍。
             _blocks: dict[str, Any] = {}
             if _wants_proof:
                 _blocks = _ER.blocks_from(observations=derived.get("observations"),

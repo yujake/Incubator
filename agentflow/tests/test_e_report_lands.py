@@ -32,7 +32,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature  # noqa: E402
+from conftest import add_literature, e_form_gate_ok  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -92,7 +92,9 @@ def _write(store: Store, rel: str, body: str) -> str:
 
 
 def _e(store: Store) -> AgentE:
-    return AgentE(store, config={}, workspace_root=store.root)
+    # 本文件测的是 ②③ 落盘 / e-proof 手稿 / 签与入库链路：形态闸那一关钉成"合格"
+    # （闸本身由 `test_e_side_proposition_form_gate.py` 用真秘书 + 假缝覆盖）。
+    return e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root))
 
 
 def _sha(text: str) -> str:

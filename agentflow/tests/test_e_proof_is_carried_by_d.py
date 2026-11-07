@@ -38,7 +38,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import add_literature  # noqa: E402
+from conftest import add_literature, e_form_gate_ok  # noqa: E402
 from agentflow import conductor as CND  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
@@ -65,7 +65,7 @@ def _env(tmp_path: pathlib.Path, *, sign: bool = True) -> dict:
     script = pathlib.Path(st.root) / SCRIPT_REL
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(EXHAUSTIVE_PROBE, encoding="utf-8")
-    e = AgentE(st, config={}, workspace_root=st.root)
+    e = e_form_gate_ok(AgentE(st, config={}, workspace_root=st.root))
     out = e.run_experiment(CLAIM, CLAIM_KEY, SCRIPT_REL, method="numeric")
     env = {"store": st, "out": out,
            "column": NP.proof_column(dict(st.rows("experiments")[-1])),
