@@ -1003,3 +1003,80 @@ EXIT=0
 |---|---|---|---|
 | （待签） | | | |
 | （待签） | | | |
+
+---
+
+## 13. 2026-11-07 批 p253（提示词与工具面第二次对齐 + 版本冻结）—— 命中 5 条，**批准栏待 2 名 reviewer 人工签**
+
+这一批改 13 个文件，其中 **5 条**落在 FC-27 清单里（`auth-audit` ×3 + `eval-criteria` ×2）。
+其余 8 个（`agent_prompts.py` / `agent_skills.py` / `docs/ROLE-GUIDE.md` /
+`tests/fixtures/prompt_cache_warm.json` / 三个判据文件 / 台账自身）不在清单的 glob 上，
+`--paths` 对它们报未命中。
+
+改动性质：**只碰文字与冻结物**。`specs/{d,f,m}.py` 只改 policy 里的那一条（放弃命题处，
+外加 F 新增的一条形态闸说明）；动作表（`ACTIONS`）、边、写集一个字未动。两份快照是这些
+文字的**下游**：`tool_surface_snapshot.json` 的 `table.update` 一行（`summary` / `params`，
+上游 `4e5e85ae` 的 p252 工具声明，本批只把 golden 跟上）与 `agent_surface_snapshot.json`
+的 11 份 prompt（版本行 p252→p253 + 9 格文本）。
+
+| # | 路径 | 类别 | 这一批改了什么（走查要点） |
+|---:|---|---|---|
+| 1 | `src/agentflow/specs/d.py` | `auth-audit` | policy「命题不能悬着」那一条的放弃段：旧写法 `quote_reason=abandoned@<ISO8601>@<理由>`（三样缺一不可）→ `abandon_kind` + `abandon_basis` 两档（`math_error` 给 `defect_ref` / `difficulty` 给 `difficulty` + `salvaged`），点名三个受控码。**动作表 / 边 / 写集零改动** |
+| 2 | `src/agentflow/specs/f.py` | `auth-audit` | 同上那条（F 侧）＋ 新增一条「交 B 登记一条新命题之前，你的秘书先按「条件 → 结论」判一次形状」（`proposition_form_refused`）：p252 只把这道闸写进 F 的手册，而手册正文不进 system 提示词 ⇒ 模型那一侧 0 命中，本笔补进 policy 正文。**动作表 / 边 / 写集零改动** |
+| 3 | `src/agentflow/specs/m.py` | `auth-audit` | policy「每一条命题都必须以 V 签收尾」那一条的放弃段：同上改成两档（不点名 `table.update` —— M 的工具面上没有它，点名会撞 `agent_skills.validate()` 的工具面判据）。**动作表 / 边 / 写集零改动** |
+| 4 | `tests/golden/agent_surface_snapshot.json` | `eval-criteria` | 重冻：11 份 prompt 的版本行（p252→p253）＋ 9 格正文（A/B/D/E/F/G/H/L/M）；`actions` / `handler_signatures` / `tools` / `write_set` / `edges` / `wiring_status` / `role_registry` 逐格未动（`test_agent_surface_snapshot` 的 3 条全绿即证） |
+| 5 | `tests/golden/tool_surface_snapshot.json` | `eval-criteria` | 重冻：只有 `table.update` 一件的 `summary` + `params` 换值（上游 p252 的五格参数与压缩后的 summary）＋ 7 条 `--role` CLI 输出（summary 印在那里）；其余 123 件逐字段未动 |
+
+**当次读数（复跑命令与原文）**：
+
+```text
+$ python -B scripts/noai_gate.py --paths src/agentflow/specs/d.py src/agentflow/specs/f.py \
+      src/agentflow/specs/m.py tests/golden/agent_surface_snapshot.json \
+      tests/golden/tool_surface_snapshot.json
+[requires_human] required_approvals=2
+requires_human：5 条改动落在 **FC-27 禁 AI 区**（类别：auth-audit、eval-criteria）⇒ 必须由人编写或人逐行走查，并需要 2 名 reviewer 批准。命中：src/agentflow/specs/d.py, src/agentflow/specs/f.py, src/agentflow/specs/m.py, tests/golden/agent_surface_snapshot.json, tests/golden/tool_surface_snapshot.json
+⚠️ 台账 **stale** 5 条（被批准的那一版与盘上不是同一版 ⇒ 旧批准不许沿用）：
+  src/agentflow/specs/d.py（台账 272c8019b788 ≠ 盘上 b048896d7f15）；
+  src/agentflow/specs/f.py（台账 a52f73e12261 ≠ 盘上 a3dc2f2184bc）；
+  src/agentflow/specs/m.py（台账 4572470957a6 ≠ 盘上 ac8fbb5ad9ba）；
+  tests/golden/agent_surface_snapshot.json（台账 f6a3806c8013 ≠ 盘上 a13adf665a92）；
+  tests/golden/tool_surface_snapshot.json（台账 473c88b3f93a ≠ 盘上 51699365a9d0）
+EXIT=1
+```
+
+**基线登记（登记 ≠ 批准）**：
+
+```text
+$ python -B scripts/noai_gate.py --baseline \
+      --paths src/agentflow/specs/d.py src/agentflow/specs/f.py src/agentflow/specs/m.py \
+              tests/golden/agent_surface_snapshot.json tests/golden/tool_surface_snapshot.json \
+      --note "p253 让提示词与工具面第二次对齐：specs/d,f,m 的 policy 把旧放弃格式（quote_reason=abandoned@<ISO>@<理由>，三样缺一不可）改成 math_error/difficulty 两档（defect_ref / salvaged），F 的 policy 正文补命题形态闸 proposition_form_refused；两份 golden 按现值重冻" \
+      --authored ai-agent --authored-basis attested --this-session changed
+[baseline] 登记 5 条 / 未登记 0 条；台账：D:\Incubator\agentflow\.noai-approvals.json
+  · src/agentflow/specs/d.py  refreshed  sha256 b048896d7f15  [auth-audit]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · src/agentflow/specs/f.py  refreshed  sha256 a3dc2f2184bc  [auth-audit]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · src/agentflow/specs/m.py  refreshed  sha256 ac8fbb5ad9ba  [auth-audit]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · tests/golden/agent_surface_snapshot.json  refreshed  sha256 a13adf665a92  [eval-criteria]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+  · tests/golden/tool_surface_snapshot.json  refreshed  sha256 51699365a9d0  [eval-criteria]  authored=ai-agent/attested  reviewers=0（**登记 ≠ 批准**，reviewers 只能由人 `--approve` 追加）
+EXIT=0
+```
+
+**台账只读对账**：
+
+```text
+$ python -B scripts/noai_gate.py --check-ledger
+[clean] check-ledger
+clean：清单 44 条唯一路径全部在台账里有条目（台账 43 条）；其中 1 条是刻意预登记（盘上还没有这个文件）：src/agentflow/release_check.py。台账另有 0 条清单外的历史条目 —— 本命令不要求对称（台账是只增的历史记录，清单是今天的保护范围）。
+EXIT=0
+```
+
+**reviewers = 0（登记 ≠ 批准）**：五条的 `reviewers` 与 `audits` 都是空数组；
+批准只能由人 `--approve` 追加。**本批没有取代任何旧批准**（它们此前已 stale，
+本笔按规则由 `--baseline` 刷新并把旧签名清空）。
+
+**批准栏（由人签，AI 不许填）**：
+
+| reviewer | 日期 | 走查范围（逐行读过哪些） | 结论 |
+|---|---|---|---|
+| （待签） | | | |
+| （待签） | | | |
