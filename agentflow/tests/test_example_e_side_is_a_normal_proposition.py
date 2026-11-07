@@ -18,7 +18,7 @@
 
 同一份 example 用普通命题的判据链能过：落稿（`proofregistry` 条目 / e-proof 文件）、
 审（形态闸台账 + `verifications` 三行）、等级（`derive_grade`；同一份 bits 换成
-`kind=theorem` 得**同一个**等级）、收工读数（`closing.proposition_form_reading` /
+`kind=theorem` 得同一个等级）、收工读数（`closing.proposition_form_reading` /
 `type_ahead_of_grade_rows`）四处各一条读数。
 """
 from __future__ import annotations
@@ -79,7 +79,7 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
 def test_c_the_same_example_passes_the_identical_chain(tmp_path):
     """c：同一份 example 用普通命题的判据链能过 —— 落稿 / 审 / 等级 / 收工四处读数。
 
-    四处都**不读 kind 做分支**：落稿读 `proofregistry` 条目、审读两张台账
+    四处都不读 kind 做分支：落稿读 `proofregistry` 条目、审读两张台账
     （形态闸 + V 的 verifications）、等级读 `derive_grade`（同一份 bits 换 kind 得同值）、
     收工读数读 `closing.proposition_form_reading` 与 `type_ahead_of_grade_rows`。
     """
@@ -106,7 +106,7 @@ def test_c_the_same_example_passes_the_identical_chain(tmp_path):
     assert len(verification_rows(st, e_env["sid"])) == VR.SIGN_STREAK_NEED
     assert len(pending_rows(st)) >= 1
 
-    # ③ 等级：现算，且**换掉标签不改等级**（example 与 theorem 对同一份 bits 同值）
+    # ③ 等级：现算，且换掉标签不改等级（example 与 theorem 对同一份 bits 同值）
     f_bits, e_bits = dict(f_row["bits"]), dict(e_row["bits"])
     assert EB.derive_grade(f_bits, kind="example") == EB.derive_grade(f_bits, kind="theorem")
     assert EB.derive_grade(e_bits, kind="example") == EB.derive_grade(e_bits, kind="theorem")

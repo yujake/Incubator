@@ -291,14 +291,14 @@ ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
 
-#: 六类环境在正文里**印出来的抬头**（环境识别面的唯一一张表）。
+#: 六类环境在正文里"印出来的抬头"（环境识别面的唯一一张表）。
 #:
 #: 业主 2026-11-07（`_canon_F_manuscript_protocol.md` 第六节，逐字）：
 #: 「登记里 `kind=example` 的行（玩具例子）：正文用 `Example` 环境，不用 Lemma/Theorem；
 #: 其余按既有映射。example 只是给人看的标签，处理与普通命题一致。」
 #:
-#: 为什么单列一张表：对应表的 `kind` 是**机器面**（`\begin{example}` 的环境名），读者
-#: 看到的是**抬头**（"Example 1.2"）。两者可以不一致 —— `\newtheorem{example}{Lemma}`
+#: 为什么单列一张表：对应表的 `kind` 是机器面（`\begin{example}` 的环境名），读者
+#: 看到的是抬头（"Example 1.2"）。两者可以不一致 —— `\newtheorem{example}{Lemma}`
 #: 会让一条 `kind=example` 的行在 PDF 上印成 Lemma，而扫描器只认环境名、看不出这件事
 #: （`_printed_env_title` 只对上 theorem / lemma / proposition / corollary 那一组）。
 #: 这一张表把"这一类 kind 该印什么"写成数据，`environment_titles()` 逐行对照导言区
@@ -1021,7 +1021,7 @@ def statement_envs_of_text(tex: str) -> list[BodyEnv]:
 def env_title_of(kind: Any) -> str:
     """某一类映射行在正文里该印哪个抬头（`ENV_TITLES` 的唯一读口；认不出 ⇒ 空串）。
 
-    空串是"认不出这一档"，**不是**"哪一档都行"：调用方（`environment_titles`）把它
+    空串是"认不出这一档"，不是"哪一档都行"：调用方（`environment_titles`）把它
     读成"这一行没有可对照的抬头"，于是"摘掉 example 那一格"会当场变成一格红读数。
     """
     return ENV_TITLES.get(str(kind or "").strip().lower(), "")
@@ -1030,7 +1030,7 @@ def env_title_of(kind: Any) -> str:
 def _newtheorem_titles(tex: str) -> dict[str, str]:
     """导言区 `\\newtheorem{名字}{标题}` ⇒ `{名字: 标题第一个词（小写）}`。
 
-    只读**印出来的第一个词**（与 `statement_env_names` 同一把尺）：`{Example}` 与
+    只读印出来的第一个词（与 `statement_env_names` 同一把尺）：`{Example}` 与
     `{Example (toy)}` 都读成 `example`。读不到的（没有声明、或标题是纯命令）不进表。
     """
     out: dict[str, str] = {}
@@ -1053,7 +1053,7 @@ def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
     | 键 | 意思 |
     |---|---|
     | `kind` / `label` | 这一行说的是哪一类环境的哪一个（对应表原样） |
-    | `env_title` | 这一行**该**印的抬头（`ENV_TITLES`；认不出 ⇒ 空串） |
+    | `env_title` | 这一行该印的抬头（`ENV_TITLES`；认不出 ⇒ 空串） |
     | `declared` | 导言区 `\\newtheorem{<kind>}{…}` 实际印出来的抬头；读不到 ⇒ 空串 |
     | `ok` | `env_title` 非空，且（没有声明 或 声明与它同名，不分大小写） |
 

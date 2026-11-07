@@ -6,7 +6,7 @@
     「登记里 `kind=example` 的行（玩具例子）：正文用 `Example` 环境，不用 Lemma/Theorem；
       其余按既有映射。example 只是给人看的标签，处理与普通命题一致。」
 
-这一条量的是**普通命题那一条链一个字节都没分叉**：落稿仍走
+这一条量的是普通命题那一条链一个字节都没分叉：落稿仍走
 `proofregistry.register_or_rewrite`、形态闸仍是 `Secretary.judge_proposition_form`
 （跑一次、只在新命题那一档跑）、送审仍是 V 的 `verify_proof`（按正文 sha，一份一签）、
 等级仍是 `evidencebits.derive_grade` 按五元位现算（有证明 + V 签 ⇒ `pre_theorem`）。

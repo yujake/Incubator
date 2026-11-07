@@ -1366,10 +1366,10 @@ PROOF_SAME_KIND = "proof_same_kind"
 #: 认不出的 kind 一律不并（保守：并错一条的代价比漏并大）。
 #:
 #: `example`（玩具例子，业主 2026-11-07，`_canon_F_manuscript_protocol.md` 第六节）也在这
-#: 一张表里：它**只是给人看的标签**，处理与普通命题一致 —— 落稿 / 过形态闸 / 送 V /
+#: 一张表里：它只是给人看的标签，处理与普通命题一致 —— 落稿 / 过形态闸 / 送 V /
 #: 按五元位算等级，一条都不特殊。它进来是为了让"命题性的那几档"与"正文里能收进
 #: `Example` 环境的那一档"是同一份名单：手稿头写 `- 证据种类：example`、B 收录时按它
-#: 落 kind（`_declared_manuscript_kind` 只认这张表）。**不是**为 example 单开一个分支：
+#: 落 kind（`_declared_manuscript_kind` 只认这张表）。不是为 example 单开一个分支：
 #: 这里加一个取值，`derive_grade` / `judge_proposition_form` / `verify_proof` 一个字不动。
 PROPOSITION_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary",
                                       "conjecture", "example")

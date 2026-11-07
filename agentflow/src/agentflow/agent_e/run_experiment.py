@@ -203,12 +203,12 @@ class _RunExperiment:
         —— 前者是没人读的假承诺，后者把"我传了但它没看"变成静默成功，而 `conductor.LocalBackend.call` 的 docstring 逐字拒绝的正是这个形态。参数门的口径（声明 ∩ 实现签名）见
         `capabilities.gate_params` / `capabilities.check_params`。
 
-        `kind`（2026-11-07，玩具例子）是这一条命题的**种类标签**（`theorem` / `lemma` /
+        `kind`（2026-11-07，玩具例子）是这一条命题的种类标签（`theorem` / `lemma` /
         `proposition` / `corollary` / `conjecture` / `example`），缺省空串 = 不声明。
         它只做三件事：① 数值证明路线写盘之前过同一道形态闸时，把标签原样递过去
         （`_proposition_form_gate(kind=…)`；闸不按标签分叉）；② 写进 e-proof 手稿的
         `- 证据种类：` 那一行（B 收录时按它落 `statements.kind`，与 F 的手稿同一个头标记）；
-        ③ 记进 `observations["statement_kind"]`。**等级仍由 `derive_grade` 按五元位现算**，
+        ③ 记进 `observations["statement_kind"]`。等级仍由 `derive_grade` 按五元位现算，
         与标签无关 —— `example` 只是给人看的标签，处理与普通命题一致。
         词表外的取值在跑脚本之前受控拒（`ExperimentError`）：手稿头是作者写的字节，
         不能让它随手发明一个 kind。
@@ -426,7 +426,7 @@ class _RunExperiment:
             evidence_kind=derived.get("evidence_kind"))
         if _wants_proof:
             # 标签原样递给同一道形态闸（闸按正文判，不按 kind 分叉）；没声明时沿用
-            # 历史上的那一档 `conjecture`。`example` 在这一格里**不特殊**。
+            # 历史上的那一档 `conjecture`。`example` 在这一格里不特殊。
             if kind_now:
                 derived["observations"]["statement_kind"] = kind_now
             _form = self._proposition_form_gate(

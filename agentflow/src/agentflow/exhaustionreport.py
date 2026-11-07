@@ -485,7 +485,7 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     ## `kind`（2026-11-07，玩具例子）
     这一条命题的种类标签（`theorem` / `lemma` / `proposition` / `corollary` /
     `conjecture` / `example`）。给了就写一行 `- 证据种类：<kind>` —— 与 F 的手稿
-    **同一个头标记**（`proofregistry.KIND_MARK`），B 收录时按它落 `statements.kind`
+    同一个头标记（`proofregistry.KIND_MARK`），B 收录时按它落 `statements.kind`
     （`_declared_manuscript_kind`）。不给就省略（旧稿逐字节不变）：那是"没声明"，
     不是"猜一个"。E 这一侧不为 example 单开分支：它与 lemma 走同一条升档路。
     """

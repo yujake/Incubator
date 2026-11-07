@@ -3805,7 +3805,7 @@ class _RegisterStatement:
         升成 lemma 是签之后的那一步；没有签就改 kind 等于自报（那正是 B-2 堵的）。
         这里只在 `derive_grade(bits)` 已经到 `pre_theorem` / `theorem` 时才落。
 
-        `example`（业主 2026-11-07，protocol 第六节）走的是**同一条升档路**：它是
+        `example`（业主 2026-11-07，protocol 第六节）走的是同一条升档路：它是
         给人看的标签，落稿 / 收 V 签 / 按五元位算等级与 lemma 一字不差；差别只在
         G 收进正文时用 `Example` 环境（`papermapping.ENV_TITLES`）。B 这一侧不另开分支。
         """

@@ -941,6 +941,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "6470/8631 = 74.9623%）。变化格 = A/B/C/D/E/F/G/H/L/M（A/B/D/E/F/G/L 的上游是 "
              "`table.update` 那一行；C/H 没有它，换值来自只读面上那三件说明的等量压缩；M 两处都动）；"
              "V 逐字未动。facts 键集仍 15 格。"},
+    # p256 → p257（2026-11-07，玩具例子 `kind=example`）：facts 键集一格没动（还是 15 格），
+    # 只改工具说明与 G 的一段 policy ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p257", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p257（2026-11-07，玩具例子 `kind=example` 只是标签）：上游三笔 = "
+             "8d56c055（`secretary.PROPOSITION_KINDS` 收下 example、B 与 lemma 走同一条签后升档路 —— "
+             "不进提示词）、c86e7a2a（`verify.run_experiment` 的工具面多一格 `kind`，它的 roles 是 "
+             "E / F / G ⇒ 只这三格的 tools_lines 换值）、adf3402c（`specs/g.py` 的 WRITING_SCOPE 与 "
+             "WRITING_SCOPE_NO_LEAN 补「玩具例子用 Example 环境」⇒ G 再换一次）。变化格 = E/F/G；"
+             "A/B/C/D/H/L/M/V 逐字未动。facts 键集仍 15 格。"},
 
 )
 

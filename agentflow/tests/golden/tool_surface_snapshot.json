@@ -5993,6 +5993,10 @@
      "for_question_id": {
       "type": "string"
      },
+     "kind": {
+      "description": "这一条命题的种类标签（可选；只给人看，不决定证据档位）：theorem / lemma / proposition / corollary / conjecture / example。玩具例子写 `example` —— 它照样落稿、照样过形态闸、照样送 V 签，等级按凭据算（文字论证 ⇒ pre_theorem；穷举 ⇒ theorem）；标了 example 之后 G 收进正文时会用 Example 环境。词表外的值在跑脚本之前受控拒",
+      "type": "string"
+     },
      "method": {
       "description": "三种计算法之一（E 收得下的就这三种）；`method='formal'` 不是 E 的活（当场拒 `formal_not_in_e`）",
       "enum": [
@@ -7296,7 +7300,7 @@
   "verify.list_experiments": "(claim_key=None, limit=None)",
   "verify.list_verifications": "(statement_id=None, limit=None)",
   "verify.read_proof": "(statement_id)",
-  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None)",
+  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None, kind=None)",
   "verify.verify_proof": "(statement_id='', proof_text=None, readonly_facts=None, proof_no=None, proof_manuscript=None)"
  },
  "summary": {

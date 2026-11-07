@@ -3558,7 +3558,33 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
 #: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p256"
+#: p256 → p257（2026-11-07，玩具例子 `kind=example` 只是标签：提示词与工具面跟上）：
+#: 上游三笔（8d56c055 / c86e7a2a / adf3402c；本笔只负责把版本与冻结表跟上）：
+#:   ① 8d56c055：`secretary.PROPOSITION_KINDS` 收下 `example`，B 的
+#:      `_apply_declared_manuscript_kind` 与 lemma 走同一条签后升档路（无 example 专用分支）；
+#:      那一笔不进提示词（`PROPOSITION_KINDS` 不渲染进任何一格）⇒ 十一格零变化。
+#:   ② c86e7a2a：`verify.run_experiment` 的工具面多一格 `kind`（四处同名同类型：工具 schema /
+#:      本文件 `_verify_run_experiment` / `AgentE.run_experiment` / `specs/e.py` 的动作表）。
+#:      这一格进 `tools_lines`（每个角色都渲染本角色的工具面）—— 但只有 E / F / G 三格的
+#:      面上有 `verify.run_experiment`（`roles=_ROLES_WRITE`）⇒ 只这三格换值；
+#:      A/B/C/D/H/L/M/V 的面上没有它，逐字未动。
+#:   ③ adf3402c：`specs/g.py` 的 `WRITING_SCOPE` / `WRITING_SCOPE_NO_LEAN` 各补一句
+#:      「玩具例子（台账 `kind=example`）用 `Example` 环境」⇒ G 那一格再换一次。
+#:      `agent_skills._g_skills()` 的手册正文不进 system prompt ⇒ 不改任何一格摘要。
+#: 变化格（十一格摘要）= E / F / G；A / B / C / D / H / L / M / V 逐字未动（只差版本行）。
+#: 逐格旧值 → 新值：
+#:   E c5cefdfc→e60b9c92 / F f6f65ec0→3029f47a / G 55d1a1c1→e94de814；
+#:   A 7dfe78d3 / B 667bf57a / C 922a4275 / D 527711b8 / H b2eda81b / L 9461d747 /
+#:   M 63abea4f / V a3d391fc（八格 SAME）。
+#: 十一格是 `temp/_p257_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p257）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p256 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 因 `verify.run_experiment.params`
+#: 多 `kind` 一格、`agent_surface_snapshot.json` 因十一格提示词的版本行与 E/F/G 三格正文变）；
+#: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p257"
 
 
 
