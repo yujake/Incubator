@@ -458,7 +458,8 @@ def test_d4_dropping_the_program_credential_branch_reopens_a3(
     assert before["state"] == "pass", _details(before)
     assert gate_before["complete"] == 1 and gate_before["incomplete"] == [], gate_before
 
-    monkeypatch.setattr(PM, "_proof_column_program", lambda statement: "")
+    monkeypatch.setattr(PM, "_proof_column_program",
+                        lambda statement, **kwargs: "")
     after, gate = _reading(root)
     kinds = _kinds(after)
     assert after["state"] == "fail", _details(after)

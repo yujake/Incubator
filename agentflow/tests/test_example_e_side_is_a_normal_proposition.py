@@ -69,8 +69,11 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     bits = dict(row.get("bits") or {})
     assert bits.get("numeric") == "verified", bits
     assert EB.derive_grade(bits, kind=row["kind"]) == "theorem", bits
-    # 证明栏就是 E 的那三段（既有 `numericproof.compose_proof_column`，不是新写的）
-    assert NP.parse_proof_column(str(row.get("proof_text") or ""))["problems"] == [], (
+    # 证明栏就是 E 的那一段穷举论证（既有 `numericproof.compose_proof_column`，不是新写的）；
+    # 程序路径在实验行的 `code_path`（2026-11-08）
+    exp = [dict(r) for r in st.rows("experiments")][0]
+    assert NP.parse_proof_column(str(row.get("proof_text") or ""),
+                                 code_path=exp["code_path"])["problems"] == [], (
         row.get("proof_text"))
 
 

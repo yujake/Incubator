@@ -279,11 +279,13 @@ def test_6_the_r34b_shape_reads_back_as_proof(tmp_path: pathlib.Path) -> None:
     assert ER.disk_problems(ws, row) == [], ER.disk_problems(ws, row)
     for key in ("design", "enumeration", "environment"):
         assert int((facts["blocks"] or {}).get(key) or 0) > 0, (key, facts["blocks"])
-    # 证明栏三段与报告同一份（B 登记、G 引用认的是它）
-    column = NP.parse_proof_column(NP.proof_column(row))
+    # 证明栏只剩 ③（2026-11-08），② 在 observations、① 在 code_path：三处与报告同一份
+    column = NP.parse_proof_column(NP.proof_column(row), code_path=row["code_path"])
     assert column["problems"] == [], column
-    assert column["script"] == _SCRIPT_REL
-    assert column["design"] == _DESIGN and column["enumeration"] == _ENUM
+    assert column["script"] == _SCRIPT_REL == row["code_path"]
+    assert column["design"] == "", column
+    assert column["enumeration"] == _ENUM
+    assert str((row.get("observations") or {}).get("design") or "") == _DESIGN, row
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口

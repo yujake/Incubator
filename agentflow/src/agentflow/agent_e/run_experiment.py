@@ -613,6 +613,32 @@ class _RunExperiment:
                 # 手稿事实补进这一行的 `observations`：`build_experiment` 那一刻它还不存在
                 # （手稿现在才落），而 B / V 读的正是这一格（`proof_manuscript`）。
                 row.observations[_ER.MANUSCRIPT_KEY] = manuscript
+            elif str(claim or "").strip():
+                # ---- 普通数值实验也落手稿（2026-11-08 业主裁定） -------------------
+                #
+                # 业主逐字：「E侧普通数值实验也需写报告，即命题+数值实验结果，和F侧命题+
+                # 证明一致，E侧普通数值实验不用过V」。改前只有 `_wants_proof` 那一条落稿
+                # （`reports/e-proof-*`），普通数值实验一条手稿都没有 —— 于是 D 想提交
+                # 「有数值实验支持的强猜想」时，B 手上没有任何 E 侧手稿可读。
+                #
+                # 两族不重叠：`_wants_proof` 为真 ⇒ 只落 `e-proof-*`（这一支不会走）；
+                # 其余"有命题的实验" ⇒ 落 `e-num-*`（命题 + 数值结果；程序只引用
+                # `experiments.code_path` 那一格）。落不成如实记 note，不抛异常
+                # （实验真的跑过了 —— 稿没落成是"这一条没有可引用的手稿"，不是"实验不算"）。
+                numeric_manuscript = _ER.land_numeric_manuscript(
+                    self.workspace_root, experiment_id=eid, claim=claim,
+                    claim_key=claim_key, method=method, params=params,
+                    observations=derived.get("observations"),
+                    search_bound=bound_arg, result=derived.get("result"),
+                    exit_code=run["exit_code"], runtime_sec=run["runtime_sec"],
+                    evidence_kind=row.evidence_kind)
+                if numeric_manuscript.get("problems"):
+                    _num_note = (
+                        "[manuscript] E 的数值实验手稿没有落成："
+                        + "；".join(str(p) for p in numeric_manuscript.get("problems") or [])
+                        + " ⇒ 这一条没有可引用的手稿（D 侧提交强猜想时会缺这一份）")
+                    row.notes = (str(row.notes or "") + "\n" + _num_note).strip()
+                row.observations[_ER.NUMERIC_MANUSCRIPT_KEY] = numeric_manuscript
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
 
         # 签名那一格（`observations.e_signature`）：谁签、谁写 ②③ —— 读侧不自己去翻台账。
@@ -621,6 +647,8 @@ class _RunExperiment:
         _obs = row.observations if isinstance(row.observations, Mapping) else {}
         _sig = _obs.get("e_signature")
         _sig = dict(_sig) if isinstance(_sig, Mapping) else {}
+        _num_ms = _obs.get(_ER.NUMERIC_MANUSCRIPT_KEY)
+        _num_ms = dict(_num_ms) if isinstance(_num_ms, Mapping) else {}
         out = {
             "experiment_id": eid,
             "recorded": True,
@@ -645,6 +673,11 @@ class _RunExperiment:
             "manuscript_sha256": str(manuscript.get("sha256") or ""),
             "manuscript_proof_sha256": str(manuscript.get("proof_sha256") or ""),
             "manuscript_problems": [str(p) for p in manuscript.get("problems") or []],
+            # 普通数值手稿（2026-11-08 新族 `reports/e-num-<实验号>.md`）：
+            # D → B 提交「有数值实验支持的强猜想」时指的就是这一份（不过 V）。
+            "numeric_manuscript": str(_num_ms.get("path") or ""),
+            "numeric_manuscript_sha256": str(_num_ms.get("sha256") or ""),
+            "numeric_manuscript_problems": [str(p) for p in _num_ms.get("problems") or []],
             "signed_by": str(_sig.get("signed_by") or ""),
             "proof_authors": [str(a) for a in (_sig.get("proof_authors") or [])],
             "notes": row.notes,

@@ -66,7 +66,11 @@ BLOCK_DESIGN = ER.BLOCK_DESIGN
 BLOCK_EXHAUSTION = ER.BLOCK_EXHAUSTION
 
 #: ① 那一块的标题（程序相对地址）。
-BLOCK_PROGRAM = NP.PART_NAMES["script"]
+#:
+#: 2026-11-08 起程序路径住在 `experiments.code_path`，证明栏里没有这一段了 ——
+#: `numericproof.PART_NAMES` 也不再含 `script`。这里仍留一个只用于读数展示的
+#: 字面量（`exhaustionreport` 的报告那一块叫「运行环境」+ 程序地址，判据不读它）。
+BLOCK_PROGRAM = "程序"
 
 #: 第三件：运行环境（版本、随机种子若有）。它与程序地址合成业主口径里的第三块。
 BLOCK_ENVIRONMENT = ER.BLOCK_ENVIRONMENT
@@ -114,21 +118,24 @@ _EVIDENCE_ID_RE = re.compile(r"exp:[0-9]+")
 
 
 def is_program_proof(proof_text: Any) -> bool:
-    """这一格是不是"证明栏写的是程序"（数值实验定理的判据入口）。
+    """这一格是不是"数值证据的证明栏"（数值实验定理的判据入口）。
 
-    口径只有一份：`numericproof.proof_column_script` —— 它同时认三段式证明栏
-    （`程序：… / 程序设计：… / 穷举论证：…`）与"只写了一行程序路径"的历史形态。
-    不在这里重写一遍，否则"什么样的写法算程序"会长出第二个答案。
+    口径只有一份：`numericproof.parse_proof_column(...)["numeric"]` —— 2026-11-08 之后
+    证明栏里只有 ③ 穷举论证，程序路径住在 `experiments.code_path`；旧三段式（还带着
+    `程序：` / `程序设计：`）也算这一档 —— 读侧要认得出它归数值那一支（然后由
+    `proof_column_problems` 点名"旧形态"）。
+    不在这里重写一遍，否则"什么样的写法算数值证据"会长出第二个答案。
     """
-    return bool(NP.proof_column_script(proof_text))
+    return bool(NP.parse_proof_column(proof_text).get("numeric"))
 
 
-def proof_column_problems(proof_text: Any) -> list[str]:
-    """这条定理落库时那份证明栏缺哪一段（空清单 = ① ② ③ 三段齐）。
+def proof_column_problems(proof_text: Any, *, code_path: Any = "") -> list[str]:
+    """这条定理落库时那份证明栏缺哪一段（空清单 = ③ 齐、`code_path` 有）。
 
-    转给 `numericproof.parse_proof_column`：三段标签的解析与判据只有那一处。
+    转给 `numericproof.parse_proof_column`：单段标签的解析与判据只有那一处
+    （程序路径不在证明栏里，按 `experiments.code_path` 传进来核）。
     """
-    return list(NP.parse_proof_column(proof_text).get("problems") or [])
+    return list(NP.parse_proof_column(proof_text, code_path=code_path).get("problems") or [])
 
 
 def evidence_id_of(experiment: Mapping[str, Any] | None) -> str:

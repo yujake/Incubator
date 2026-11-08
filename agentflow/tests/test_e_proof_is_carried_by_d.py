@@ -213,14 +213,17 @@ def test_e_a_delivery_for_a_registered_statement_lands_on_that_row(
     bits = dict(row.get("bits") or {})
     assert bits.get("reviewed") is True, bits
     # 2026-11-05（业主裁定「穷举证书相当于 lean 形式化」）：`derive_grade` 的定理条件放宽成
-    # `proof ∧ (formal=verified ∨ numeric=verified)`。这一笔的证明栏就是 E 的穷举三段式、
+    # `proof ∧ (formal=verified ∨ numeric=verified)`。这一笔的证明栏就是 E 的那份穷举论证、
     # 台账里那一签盖住的就是现行这一版 ⇒ 第 1 位由 `_grade_recomputed_from_signature`
     # 的 `exhaustion` 通道落成 `verified`（见上面的 `bits["numeric"]`）⇒ 等级是 `theorem`。
     # 同一形态的兄弟判据：`test_b_register_collects_the_proof_bit.py` 的
     # `test_d_an_exhaustive_proof_collected_later_is_still_a_theorem`（同批改口径）。
     assert bits.get("numeric") == "verified", bits
     assert bits.get("grade") == "theorem", bits
-    assert str(row.get("proof_text") or "").startswith("程序："), row.get("proof_text")
+    # 2026-11-08：证明栏只剩 ③（穷举论证）；程序在实验行的 `code_path`
+    assert str(row.get("proof_text") or "").startswith("穷举论证："), row.get("proof_text")
+    exp = [dict(r) for r in env["store"].rows("experiments")][0]
+    assert NP.norm_rel(exp["code_path"]) == NP.norm_rel(SCRIPT_REL), exp.get("code_path")
 
 
 # ============================================================ f 反真空：归属判断

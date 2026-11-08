@@ -377,9 +377,14 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("A", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("A", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("A", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    # 2026-11-08（业主三条裁定）：E 的普通数值手稿 `reports/e-num-<实验号>.md` 是**新族**、
+    # 同样是框架渲染的 —— 与 e-proof 一样，A / B 不许手写（否则"B 的绿色通道按族名认稿"
+    # 这条判据会被一份手写稿喂假内容）。
+    ("A", f"prefix:{_RESERVED_DIR}/e-num-"),
     ("B", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    ("B", f"prefix:{_RESERVED_DIR}/e-num-"),
     # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——

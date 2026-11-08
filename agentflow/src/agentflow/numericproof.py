@@ -20,12 +20,18 @@
    写进 `proof_authors`（②③ 的原作者）。V 的逐行走查仍不覆盖数值证据 ——
    "签字"与"逐行审阅"是两件事（见 :func:`verifier_covers` / :func:`verifier_problems`）。
    B 不许给自己产出的命题自签 proof。
-3. 证明栏（业主 2026-10-23 晚的硬口径）：必须由三部分组成 ——
-   ① 程序相对地址（相对仓库）、② 程序设计（要解决什么、按什么结构搜、为什么覆盖全域）、
-   ③ 穷举论证（搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理）。
-   ②③ 都由 E 写，B 只负责原样登记（不许自己编、也不许把 E 的读数改写成自己的话）。
-   落点是 `statements.proof_text` 一份文本、三段标签固定（:func:`compose_proof_column`）：
+3. 证明栏（业主 2026-11-08 的口径；改前是"三段式"，见下）：只写 ③ 穷举论证 ——
+   搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理。
+   ① 程序相对地址住在 `experiments.code_path`（配 `code_hash`）、② 程序设计住在
+   `experiments.observations["design"]`；两格都不许再抄进 `statements.proof_text`。
+   业主逐字：「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」＋「乙」（=
+   ② 程序设计挪进 `observations["design"]`，`proof_text` 只剩 ③）。
+   ③ 由 E 写，B 只负责原样登记（不许自己编、也不许把 E 的读数改写成自己的话）。
+   落点是 `statements.proof_text` 一份文本、单段标签固定（:func:`compose_proof_column`）：
    这样 `schema.Statement` 不用加字段，而"B 改了一个字"可以由逐段比对抓出来。
+   三档仍然分得开：穷举（命题 + 程序 + 穷举论证 + V 签 ⇒ `theorem`）· 普通数值
+   （命题 + 数值结果 + 程序，无 V ⇒ `strong_conjecture`）· F 文字证明（+ V ⇒
+   `pre_theorem`）。
 4. "形式化"那一格（业主 2026-10-23 晚）：数值实验定理填数值实验程序（相对仓库路径），
    普通理论定理填 Lean 程序（`.lean` 路径）—— 两者同一格、填的东西不同，
    不许互相冒充。判据见 :func:`formal_slot`（判据 ⑧）。
@@ -129,17 +135,28 @@ SIGNATURE_KEY = "e_signature"
 #: 签名里"这两块是谁写的"那一格（业主 2026-10-23 晚：②③ 的作者必须是 E）。
 PROOF_AUTHORS_KEY = "proof_authors"
 
-#: 证明栏的三段（业主 2026-10-23 晚的硬口径：证明栏必须由三部分组成）。
+#: 证明栏的那一段（业主 2026-11-08：「穷举式的 proof_test 应该是填穷举论证，
+#: 实验栏填相对路径」⇒ 证明栏只剩 ③）。
 #:
-#: 每一段写成 `标签：正文` 的单行（正文可以续行，解析时归到上一段）。
-#: 顺序就是业主给的那个顺序：① 程序相对地址、② 程序设计、③ 穷举论证。
+#: 写成 `标签：正文`（正文可以续行，解析时归到这一段）。
 PROOF_PARTS: tuple[tuple[str, str], ...] = (
-    ("程序", "script"),
-    ("程序设计", "design"),
     ("穷举论证", "enumeration"),
 )
 #: 段名 → 标签（同一份表派生，不写第二份）。
 PART_NAMES: dict[str, str] = {name: label for label, name in PROOF_PARTS}
+
+#: 改前那两段（2026-11-08 之前的三段式证明栏）。它们不再住证明栏：
+#: ① 程序 → `experiments.code_path`、② 程序设计 → `experiments.observations["design"]`。
+#: 解析器见到这两个标签就算一条 `problems`（"证明栏里还带着旧三段"），于是
+#: B 的入库闸不会再把一份旧形态的证明栏当合格的穷举证明 ——— 而不是静默地把它读成
+#: ③ 的一部分。
+MISPLACED_PROOF_PARTS: tuple[tuple[str, str], ...] = (
+    ("程序", "script"),
+    ("程序设计", "design"),
+)
+#: 旧两段的段名（`problems` 与读数按它点名）。
+MISPLACED_PART_NAMES: dict[str, str] = {
+    name: label for label, name in MISPLACED_PROOF_PARTS}
 
 #: 程序脚本的常见后缀（证明栏写的是脚本时用它判"这是不是一段代码而不是一段散文"）。
 SCRIPT_SUFFIXES: tuple[str, ...] = (
@@ -320,7 +337,8 @@ def exhaustion_problems(*, method: Any,
                         evidence_kind: Any = "") -> list[str]:
     """穷尽判定：空清单 = 整个论域被穷尽验证过（够 proof）；非空 = 缺什么，逐条写清。
 
-    要的东西就是业主 2026-10-23 晚点名的三块（证明栏的三段，作者都是 E）：
+    要的东西就是业主 2026-10-23 晚点名的三块（2026-11-08 的居所：① 在
+    `experiments.code_path`、② 在 `observations["design"]`、③ 在证明栏）：
     ① 程序相对地址（`code_path`）、② 程序设计（`design`）、③ 穷举论证（`enumeration`），
     外加"可核"这件事本身：布尔 true 的 `exhaustive` 与一个说得出范围的搜索空间。
 
@@ -390,34 +408,48 @@ def exhaustion_problems(*, method: Any,
     return problems
 
 
-def compose_proof_column(*, script_path: Any, design: Any, enumeration: Any) -> str:
-    """把证明栏那三段拼成一份可解析的文本（E 写，B 原样登记）。
+def compose_proof_column(*, enumeration: Any) -> str:
+    """把证明栏那一整段拼成一份可解析的文本（E 写，B 原样登记）。
 
-    形态（段序固定，标签逐字）::
+    形态（标签逐字）::
 
-        程序：code/enum.py
-        程序设计：要解决什么、按什么结构搜、为什么覆盖全域
         穷举论证：搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理
 
-    为什么是这一种而不是三个字段：`statements` 的"证明"栏只有 `proof_text` 一栏，
-    加字段要走人裁（schema 是禁改区）。三段合一、标签固定 ⇒ 既不加字段，又能被
-    :func:`parse_proof_column` 逐段核（B 改一个字就对不上 E 的签名）。
+    ## 为什么只剩一段（业主 2026-11-08，唯一权威）
+
+    「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」；② 程序设计按「乙」挪进
+    `experiments.observations["design"]`。所以：① 程序路径住 `experiments.code_path`、
+    ② 程序设计住 `observations["design"]`，两者都不许再抄进证明栏 —— 证明栏只有 ③。
+
+    为什么仍是"一段文本"而不是加字段：`statements` 的"证明"栏只有 `proof_text` 一栏，
+    加字段要走人裁（schema 是禁改区）。单段 + 标签固定 ⇒ 既不加字段，又能被
+    :func:`parse_proof_column` 逐字核（B 改一个字就对不上 E 的签名）。
     """
     return "\n".join(
         f"{label}：{str(value or '').strip()}"
-        for label, value in (("程序", script_path), ("程序设计", design), ("穷举论证", enumeration)))
+        for label, value in (("穷举论证", enumeration),))
 
 
-def parse_proof_column(text: Any) -> dict[str, Any]:
-    """把证明栏拆成三段：`{"script","design","enumeration","problems","raw"}`。
+def parse_proof_column(text: Any, *, code_path: Any = "") -> dict[str, Any]:
+    """把证明栏拆开：`{"script","design","enumeration","problems","raw","numeric"}`。
 
-    解析规则只有一条：以三段标签（`程序：` / `程序设计：` / `穷举论证：`）开头的行换段，
-    其余行接在当前段后面（E 可以把一段写成好几行）。认不出的段一律 `""` ——
-    宁可判"缺这一段"，也不许把一句散文读成程序地址。
+    ## 新口径（2026-11-08）：单段（穷举论证）+ 实验行的 `code_path` 非空
+
+    判据（业主那两句裁定）：
+    - 证明栏里必须有 ③「穷举论证」那一段；
+    - 程序路径不在证明栏里，在 `experiments.code_path` 那一格 —— 调用方把那一格的值
+      当 `code_path` 传进来，本函数用 `is_script_path` 核它；
+    - 证明栏里若还带着旧两段（`程序：` / `程序设计：`）⇒ 记一条 `problems`：那是改前
+      形态，程序该在 `code_path`、设计该在 `observations["design"]`，不许拿它冒充新形态。
+
+    `script` / `design` 两格仍返回，但只从参数 / 旧标签读：新文本下 `design` 恒为空，
+    `script` 恒等于传入的 `code_path`（合法时）。认不出的段一律 `""` —— 宁可判"缺这一段"，
+    也不许把一句散文读成程序地址。
     """
     raw = str(text or "")
     parts: dict[str, str] = {name: "" for _label, name in PROOF_PARTS}
     current = ""
+    misplaced: list[str] = []
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -430,33 +462,67 @@ def parse_proof_column(text: Any) -> dict[str, Any]:
                 break
         if hit:
             current = hit
-        elif current:
+            continue
+        stray = ""
+        for label, name in MISPLACED_PROOF_PARTS:
+            if stripped.startswith(f"{label}：") or stripped.startswith(f"{label}:"):
+                stray = name
+                break
+        if stray:
+            # 旧两段不再属于证明栏：整行丢掉、记一条问题（不许把它续进 ③ 的正文里）。
+            if stray not in misplaced:
+                misplaced.append(stray)
+            current = ""
+            continue
+        if current:
             parts[current] = (parts[current] + "\n" + stripped).strip()
+    script = str(code_path or "").strip().replace("\\", "/")
     problems: list[str] = []
-    if not is_script_path(parts["script"]):
+    if misplaced:
+        shown = "、".join(f"「{MISPLACED_PART_NAMES[name]}」" for name in misplaced)
         problems.append(
-            f"缺第 ① 段「程序」的相对路径（读到 {parts['script']!r}）："
-            "穷举证明的签名就是那份程序")
-    if not parts["design"]:
-        problems.append("缺第 ② 段「程序设计」（要解决什么、按什么结构搜、为什么覆盖全域）")
+            f"证明栏里还带着旧形态的 {shown} 段：按 2026-11-08 的口径，证明栏只写"
+            "「穷举论证」，程序路径在 experiments.code_path、程序设计在 "
+            "observations['design'] —— 把这两段从证明栏里删掉，别拿旧形态冒充新形态")
     if not parts["enumeration"]:
         problems.append(
-            "缺第 ③ 段「穷举论证」（搜索空间多大、怎么算出、对称性/剪枝、"
+            "缺穷举论证（③：搜索空间多大、怎么算出、对称性/剪枝、"
             "为什么不漏、边界怎么处理）")
-    return {**parts, "problems": problems, "raw": raw}
+    if not is_script_path(script):
+        problems.append(
+            f"缺程序路径（code_path）：读到 {code_path!r} —— 穷举证明的签名就是那份程序，"
+            "它住在 experiments.code_path（含后缀，不含盘符与 `..`），不在证明栏里")
+    return {**parts, "script": script if is_script_path(script) else "",
+            #: ② 程序设计不在证明栏里（住 `observations["design"]`）：这一格恒空，
+            #: 保留它只为读侧形状不变（旧调用方读 `parsed["design"]` 不会 KeyError）。
+            "design": "",
+            "problems": problems, "raw": raw,
+            #: 这一份文本是不是"数值证据的证明栏"（单段标签在；旧三段也算，读侧要认得出
+            #: 它归数值那一档，见 `verifier_problems`）。散文证明 ⇒ False。
+            "numeric": bool(parts["enumeration"] or misplaced)}
 
 
 def proof_column_script(text: Any) -> str:
-    """从证明栏里取出第 ① 段的程序路径（认不出 ⇒ 空串）。
+    """从旧形态的证明栏里取出程序路径（认不出 ⇒ 空串）。
 
-    两形态都认：三段式证明栏，以及"只写了一行程序路径"的历史形态（那一种拿不到
-    proof，但读侧要认得出它是"数值证据"——V 用它判"这条不归我审"）。
+    只用于读历史数据（改前 `程序：` 那一段，或整份就是一行程序路径）：2026-11-08 之后
+    程序路径住在 `experiments.code_path`，新证明栏里没有它。读侧判"这条命题是不是数值
+    证据"应看 :func:`parse_proof_column` 的 `numeric` 那格，而不是本函数。
     """
     parsed = parse_proof_column(text)
     if parsed["script"] and is_script_path(parsed["script"]):
         return str(parsed["script"]).strip().replace("\\", "/")
     raw = str(text or "").strip().replace("\\", "/")
-    return raw if is_script_path(raw) else ""
+    if is_script_path(raw):
+        return raw
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        for label, _name in MISPLACED_PROOF_PARTS:
+            if stripped.startswith(f"{label}：") or stripped.startswith(f"{label}:"):
+                value = stripped[len(label) + 1:].strip().replace("\\", "/")
+                if is_script_path(value):
+                    return value
+    return ""
 
 
 # ---------------------------------------------------------------- 穷举上界 vs 枚举量（只报不判）
@@ -598,12 +664,11 @@ def exhaustion_verdict(*, method: Any,
         "signed_by": signer_of(method),
         # ②③ 的作者：业主 2026-10-23 晚的点名 —— 这两块都由 E 写。
         "proof_authors": [author_of(method)],
-        # 证明栏：三段齐全才给；不够时留空（不许拿它冒充证据）。
+        # 证明栏：穷举论证那一段（2026-11-08）；不够时留空（不许拿它冒充证据）。
         "script_path": script if enough else "",
         "design": design,
         "enumeration": enumeration,
-        "proof_text": (compose_proof_column(script_path=script, design=design,
-                                           enumeration=enumeration) if enough else ""),
+        "proof_text": (compose_proof_column(enumeration=enumeration) if enough else ""),
         "coverage_where": enum_where,
         "design_where": design_where,
         "search_space": space,
@@ -634,8 +699,9 @@ def sign_experiment(*, method: Any,
       proof（只能『有数值实验支持』）」—— 所以落盘核查这一关在签名这一刻就问，
       不留到 B 那一侧才发现。
     - `observations`：在既有读数之上加一格 :data:`SIGNATURE_KEY` —— 签名主体、
-      ②③ 的作者、证明理由、三段式证明栏原文、脚本哈希、以及"缺什么"。
-      签名落在这里而不是新加一列：`observations` 是"这一次到底算了什么"的机器可读格。
+      穷举论证的作者、证明理由、证明栏原文（2026-11-08 起只有 ③）、脚本哈希、
+      以及"缺什么"。签名落在这里而不是新加一列：`observations` 是"这一次到底算了什么"
+      的机器可读格。
     """
     if not is_calculation(method):
         return {}
@@ -715,17 +781,18 @@ def is_signed_exhaustion(experiment: Mapping[str, Any] | None) -> bool:
 
 
 def proof_column(experiment: Mapping[str, Any]) -> str:
-    """这一行实验进"定理证明库"时，证明栏该写什么：E 写的那份三段式证明栏。
+    """这一行实验进"定理证明库"时，证明栏该写什么：E 写的那份「穷举论证」。
 
-    老行（签名里没有 `proof_text`）退回第 ① 段（程序路径）—— 那一档在业主 2026-10-23
-    晚的口径下不够 proof，读侧据此判"缺 ②③"。
+    老行（签名里没有 `proof_text`，或签名里还是改前的三段式）原样交回 —— 读侧
+    （`parse_proof_column`）会把旧两段记成问题，于是它拿不到 proof 的复核；
+    程序路径一律去 `experiments.code_path` 读（`proof_column_script` 只认旧形态）。
     """
     row = _as_mapping(experiment)
     sig = signature_of(row)
     composed = str(sig.get("proof_text") or "").strip()
     if composed:
         return composed
-    return str(sig.get("script_path") or row.get("code_path") or "").strip().replace("\\", "/")
+    return str(sig.get("enumeration") or "").strip()
 
 
 def signed_exhaustion_experiments(experiments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -861,27 +928,82 @@ def norm_rel(path: Any) -> str:
 
 def find_signed_exhaustion(experiments: Sequence[Mapping[str, Any]],
                            script_path: Any) -> dict[str, Any] | None:
-    """按程序路径找那一条 E 签的穷举证明（找不到 ⇒ `None`，不是"随便找一条"）。"""
+    """按程序路径找那一条 E 签的穷举证明（找不到 ⇒ `None`，不是"随便找一条"）。
+
+    认法两条（2026-11-08 之后 `code_path` 是程序路径的唯一居所，旧行才看证明栏）：
+    ① `experiments.code_path` 与它相同；② 旧形态的证明栏里 `程序：` 那一段与它相同。
+    """
     want = norm_rel(script_path)
     if not want:
         return None
     for row in signed_exhaustion_experiments(experiments):
-        if norm_rel(proof_column_script(proof_column(row))) == want \
-                or norm_rel(row.get("code_path")) == want:
+        if norm_rel(row.get("code_path")) == want:
+            return row
+        if norm_rel(proof_column_script(proof_column(row))) == want:
             return row
     return None
 
 
 def find_signed_exhaustion_for_column(experiments: Sequence[Mapping[str, Any]],
-                                      proof_text: Any) -> dict[str, Any] | None:
-    """按"B 交来的那份证明栏"找 E 的签名：先认第 ① 段的程序路径，再认整份逐字相同。"""
+                                      proof_text: Any, *,
+                                      code_path: Any = "",
+                                      experiment_id: Any = "") -> dict[str, Any] | None:
+    """按"B 交来的那份证明栏"找 E 的签名：按实验号 / `code_path` 认，不再只按文本。
+
+    2026-11-08（业主：「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」）：
+    证明栏里只剩 ③，程序路径搬去了 `experiments.code_path`。于是"这份证明栏对应哪条
+    实验"的认法按优先级是：
+
+    ① `experiment_id`（调用方从 `reports/e-proof-<实验号>.md` 那个名字读出来的号）——
+       唯一不会歧义的一格；
+    ② ③ 那一段的正文与实验行 `observations.enumeration` 逐字相同（"这份证明栏就是
+       这一条写的"）；
+    ③ `code_path`（调用方从实验行读到的程序路径）—— 最后才用它：两条实验可以共用
+       同一份程序（"同一脚本、换枚举策略"是常态），只按它认会挑到第一条；
+    ④ 旧形态：整份证明栏与旧三段式逐字相同（只读历史数据）。
+
+    认不出 ⇒ `None`（不许"随便找一条"）。
+    """
     raw = str(proof_text or "").strip()
-    if not raw:
+    want_text = norm_text(raw)
+    want_script = norm_rel(code_path)
+    want_id = str(experiment_id or "").strip()
+    if not (want_text or want_script or want_id):
         return None
-    for row in signed_exhaustion_experiments(experiments):
-        if norm_rel(norm_text(proof_column(row))) == norm_rel(norm_text(raw)):
-            return row
-    return find_signed_exhaustion(experiments, proof_column_script(raw))
+    rows = signed_exhaustion_experiments(experiments)
+    # 逐优先级扫整张表（不是逐行比全部条件）：两条实验共用同一份程序时，
+    # "先撞到哪条"不能决定答案 —— 先按实验号 / 正文认，最后才退到 code_path。
+    if want_id:
+        for row in rows:
+            if str(row.get("experiment_id") or row.get("id") or "") == want_id:
+                return row
+    if want_text:
+        for row in rows:
+            if norm_text(enumeration_of(row)) == want_text:
+                return row
+        for row in rows:
+            if norm_text(proof_column(row)) == want_text:
+                return row
+    if want_script:
+        for row in rows:
+            if norm_rel(row.get("code_path")) == want_script:
+                return row
+        return find_signed_exhaustion(experiments, want_script)
+    return None
+
+
+def enumeration_of(experiment: Mapping[str, Any] | None) -> str:
+    """这一行实验的 ③ 穷举论证原文（`observations` > `certificate.detail` > `search_bound`）。
+
+    读口与 :func:`exhaustion_problems` 同一份（`_enumeration_reading`）：证明栏现在只剩
+    这一段，所以"这份证明栏是不是这一条实验的"按它认（:func:`find_signed_exhaustion_for_column`）。
+    """
+    row = _as_mapping(experiment)
+    value, _where = _enumeration_reading(
+        _as_mapping(row.get("observations")),
+        _as_mapping(row.get("certificate")),
+        _as_mapping(row.get("search_bound")))
+    return str(value or "").strip()
 
 
 def norm_text(text: Any) -> str:
@@ -933,28 +1055,41 @@ def report_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
 
 
 def find_exhaustion_record(experiments: Sequence[Mapping[str, Any]],
-                           proof_text: Any) -> dict[str, Any] | None:
+                           proof_text: Any, *, code_path: Any = "",
+                           experiment_id: Any = "") -> dict[str, Any] | None:
     """按证明栏找那条"穷举 proof"记录 —— 不管它签名对不对（为了给出准确的拒信）。
 
     与 :func:`find_signed_exhaustion_for_column` 的分工：那个只回"签名合格的"，
     这个回"是这一条，但签名可能不合格" —— 两者都只在它们的射程里回答，
     拒信因此能说清是"没有这条记录"还是"有记录但签名不对"（两种欠账的处置不同）。
+
+    认法与 `find_signed_exhaustion_for_column` 同一份（实验号 → code_path → ③ 正文 →
+    旧形态整份），差别只在不筛签名。
     """
     raw = str(proof_text or "").strip()
-    if not raw:
-        return None
     want_text = norm_text(raw)
-    want_script = norm_rel(proof_column_script(raw))
-    for row in (experiments or ()):
-        if not isinstance(row, Mapping) or not is_calculation(row.get("method")):
-            continue
-        if str(row.get("evidence_kind") or "") != "proof":
-            continue
-        column = proof_column(row)
-        if norm_text(column) == want_text:
-            return dict(row)
-        if want_script and norm_rel(proof_column_script(column)) == want_script:
-            return dict(row)
+    want_script = norm_rel(code_path)
+    want_id = str(experiment_id or "").strip()
+    if not (want_text or want_script or want_id):
+        return None
+    rows = [dict(r) for r in (experiments or ())
+            if isinstance(r, Mapping) and is_calculation(r.get("method"))
+            and str(r.get("evidence_kind") or "") == "proof"]
+    if want_id:
+        for row in rows:
+            if str(row.get("experiment_id") or row.get("id") or "") == want_id:
+                return row
+    if want_text:
+        for row in rows:
+            if norm_text(enumeration_of(row)) == want_text:
+                return row
+        for row in rows:
+            if norm_text(proof_column(row)) == want_text:
+                return row
+    if want_script:
+        for row in rows:
+            if norm_rel(row.get("code_path")) == want_script:
+                return row
     return None
 
 
@@ -1753,17 +1888,19 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                     experiments: Sequence[Mapping[str, Any]] = (),
                     root: Any = None, statements: Sequence[Mapping[str, Any]] = (),
                     statement_full: Any = "",
-                    index_rows: Sequence[Mapping[str, Any]] = ()) -> list[str]:
-    """B 的入库闸：`proof` 这一档不许 B 自签，也不许 B 替 E 写 ②③。
+                    index_rows: Sequence[Mapping[str, Any]] = (),
+                    manuscript: Any = "") -> list[str]:
+    """B 的入库闸：`proof` 这一档不许 B 自签，也不许 B 替 E 写穷举论证。
 
     只拦一种情形：`origin="own_result"` 且 `evidence_kind="proof"` ——
-    那是我方结果自称"已证明"，它必须要么指到一条 V 签、E 写 ②③ 的穷举证明
-    （且证明栏就是 E 写的那三段、逐字相同），要么指到一条 `method="formal"` +
+    那是我方结果自称"已证明"，它必须要么指到一条 V 签、E 写穷举论证的穷举证明
+    （且证明栏就是 E 写的那一段、逐字相同），要么指到一条 `method="formal"` +
     `evidence_kind="proof"` 的形式化实验（那是"自证定理经核验后进库"的既有正路）。
 
-    判据（业主 2026-10-23 晚的硬口径）：
-    - ⑥ 只有程序路径、没有 ②③ ⇒ 不许 proof（拒信点名缺"程序设计"/"穷举论证"）；
-    - ⑦ 签名主体必须是 V、②③ 的作者必须是 E（`proof_authors` 含 E）；
+    判据（业主 2026-11-08 的口径，替代改前的三段式口径）：
+    - ⑥ 缺穷举论证、或 `experiments.code_path` 为空、或证明栏还是旧三段式
+      ⇒ 不许 proof（拒信逐字点名"缺穷举论证"/"缺程序路径（code_path）"）；
+    - ⑦ 签名主体必须是 V、穷举论证的作者必须是 E（`proof_authors` 含 E）；
       B 自称作者 / 改写 E 的读数 / 签名写成 `signed_by="E"` ⇒ 受控拒绝；
     - ②③ 的落盘核查交给 `exhaustionreport`（那一侧在时；不在时如实记"没查成"）；
     - 第三方签字（`root` / `statements` / `statement_full` 给了才查得了）：E 侧那一路
@@ -1776,18 +1913,23 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
       没查成不许折成通过）；
     - 都没有 ⇒ 最多到 :data:`SUPPORTED_ONLY_KIND`。
 
+    `manuscript`（2026-11-08）：B 这一笔递进来的那份手稿的路径。`reports/e-proof-<号>.md`
+    那个名字是"这份证明栏钉到哪条实验"的唯一无歧义键（两条实验可以共用同一份程序），
+    所以程序路径从那条实验行的 `code_path` 读、而不是从证明栏文本里猜。
+
     ## D-34：多一路"顺索引取对象"（`index_rows` 是 D 报告里的目录行）
 
     业主 2026-10-23 夜的模型：D 的报告＝目录（新成果＋索引），F 的证明 / E 的报告＝正文，
     V 的签＝盖章，B＝读者。于是 B 的入库有两条正路，走哪一条由证明栏的形状定：
 
-    - 证明栏是程序（E 侧的数值证据）：先过原来那几档（三段式、E 的 ②③、落盘核查），
-      再过第三方签字；`index_rows` 给得出这一条的索引行时，那一行也是要核的对象
-      （:func:`resolve_index` 取到对象、四格与两份 sha 都对得上）—— 索引指不到对象 ⇒ 拒；
-    - 证明栏不是程序（F 侧的自然语言证明）：以前在 ⑥ 那一档被一律拒（"证明栏不够格拿
+    - 证明栏是数值证据（有「穷举论证」那一段；2026-11-08 起程序路径在实验行的
+      `code_path`）：先过原来那几档（③、落盘核查），再过第三方签字；`index_rows` 给得出
+      这一条的索引行时，那一行也是要核的对象（:func:`resolve_index` 取到对象、四格与
+      两份 sha 都对得上）—— 索引指不到对象 ⇒ 拒；
+    - 证明栏不是数值证据（F 侧的自然语言证明）：以前在 ⑥ 那一档被一律拒（"证明栏不够格拿
       proof"）。现在它由索引进来：目录里那一行说这是 F 的证明（`evidence_kind="proof"`）、
       对象在盘上、sha 与 V 的签相符 ⇒ 允许登记成 proof。没有索引行 ⇒ 仍是 ⑥ 的那条拒信
-      （只是补一句"要么给三段式程序证明栏，要么让 D 的报告索引指到这份证明"）。
+      （只是补一句"要么给数值证据的证明栏，要么让 D 的报告索引指到这份证明"）。
 
     索引这一路是可打桩的（判据 ⑥ 的反真空）：`resolve_index` 恒成功 ⇒ 上面那两条负控
     （对象 sha 不符 / 索引指不到对象）必须当场放行。
@@ -1799,8 +1941,38 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
     if kind != "proof" or str(origin or "") != "own_result":
         return []
     text = str(proof_text or "").strip()
-    parsed = parse_proof_column(text)
-    program = proof_column_script(text)
+    # ---- 程序路径现在住在 `experiments.code_path`（2026-11-08） --------------------
+    #
+    # B 手上没有"那一条实验"时，从 E 的证明手稿名字读实验号（`reports/e-proof-<号>.md`
+    # 是唯一不会歧义的键：两条实验可以共用同一份程序）。读到了就顺那条实验行取
+    # `code_path`；读不到（F 侧 / 旧数据）再退回证明栏里旧 `程序：` 那一段。
+    eid = ""
+    resolved_code_path = ""
+    exp_rows = [dict(r) for r in (experiments or ()) if isinstance(r, Mapping)]
+    _ms = str(manuscript or "").strip().replace("\\", "/")
+    if _ms:
+        try:
+            from . import exhaustionreport as _ER
+            if _ER.is_manuscript_relpath(_ms):
+                eid = _ER.experiment_id_of(_ms)
+        except Exception:  # noqa: BLE001 —— 读不出实验号 = 这一格没接上（不猜）
+            eid = ""
+    if eid:
+        _row = next((r for r in exp_rows
+                     if str(r.get("experiment_id") or r.get("id") or "") == eid), None)
+        if _row is not None:
+            resolved_code_path = str(_row.get("code_path") or "")
+    legacy_program = proof_column_script(text)
+    if not resolved_code_path:
+        # 钉不到实验行时，先按 ③ 的正文认出那一条（旧数据 / 调用方把稿当正文递进来），
+        # 认到了就把它的 `code_path` 当程序路径 —— 次序仍是 实验号 > code_path > ③ 正文。
+        _found = find_signed_exhaustion_for_column(
+            experiments, text, code_path=legacy_program, experiment_id=eid)
+        if _found is not None:
+            resolved_code_path = str(_found.get("code_path") or "")
+    parsed = parse_proof_column(text, code_path=resolved_code_path or legacy_program)
+    program = parsed["script"]
+    numeric_column = bool(parsed.get("numeric"))
     # ---- 顺索引取对象（D 报告那一行）：E 侧与 F 侧共用这一份判据与这一条取法。
     entry = find_index_entry(index_rows, program=program, proof_text=text) if index_rows else None
     indexed = resolve_index(root, entry) if entry is not None else None
@@ -1812,12 +1984,13 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
             "evidence_sha256 / v_signature）必须指得到盘上那一份、且 V 签的就是它"
         ]
     want_object = str(indexed["sha256"]) if indexed is not None else ""
-    if not program:
-        # F 侧：正文不是三段式程序 ⇒ 索引是它进 proof 的唯一正路（判据 ③）。
+    if not numeric_column:
+        # F 侧：正文不是数值证据的证明栏（没有「穷举论证」那一段）⇒ 索引是它进
+        # proof 的唯一正路（判据 ③）。
         if indexed is None:
             return [
-                "这一条的证明栏不够格拿 proof（它不是数值证据的三段式，"
-                "而 D 的报告里也没有指向它那份证明的索引行）" +
+                "这一条的证明栏不够格拿 proof（它不是数值证据的证明栏 —— 没有"
+                "「穷举论证」那一段，而 D 的报告里也没有指向它那份证明的索引行）" +
                 ("；" + "；".join(parsed["problems"]) if parsed["problems"] else "") +
                 "。F 侧的证明要 proof：让 D 的报告（论文对应表）为它写一行索引 —— "
                 "evidence_kind=\"proof\"、evidence_path（那份证明在仓库里的相对路径）、"
@@ -1829,18 +2002,20 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
         return third_party_problems(text, root=root, statement_id=sid,
                                     object_sha256=want_object)
     if parsed["problems"]:
-        # ⑥：只有程序路径（或只有其中一段）⇒ 不许 proof，且点名缺哪一块。
+        # ⑥：缺 ③ / 缺程序路径 / 还是旧三段式 ⇒ 不许 proof，且逐字点名缺哪一块。
         return [
             "这一条的证明栏不够格拿 proof：" + "；".join(parsed["problems"]) +
-            "。业主 2026-10-23 晚的硬口径：数值实验定理的证明栏必须由三部分组成 ——"
-            "① 程序相对地址（相对仓库）、② 程序设计（要解决什么、按什么结构搜、"
-            "为什么覆盖全域）、③ 穷举论证（搜索空间多大、怎么算出、对称性/剪枝、"
-            "为什么不漏、边界怎么处理），而且 ②③ 由 E 写、B 只原样登记。"
+            "。业主 2026-11-08 的口径：穷举证明的证明栏只写 ③ 穷举论证；"
+            "① 程序路径在 `experiments.code_path`（含后缀、相对仓库根）、"
+            "② 程序设计在 `experiments.observations[\"design\"]` —— 两者都不许再抄进"
+            "证明栏。③ 由 E 写、B 只原样登记。"
             f"补齐之前这一条最多是 {SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"
         ]
-    found = find_signed_exhaustion_for_column(experiments, text)
+    found = find_signed_exhaustion_for_column(experiments, text,
+                                              code_path=program, experiment_id=eid)
     if found is None:
-        near = find_exhaustion_record(experiments, text)
+        near = find_exhaustion_record(experiments, text, code_path=program,
+                                      experiment_id=eid)
         if near is not None:
             sig = signature_of(near)
             authors = [str(a) for a in (sig.get(PROOF_AUTHORS_KEY) or [])]
@@ -1848,34 +2023,39 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                 # ⑦：签字由 V（业主 2026-10-23 晚的更正）—— 写 signed_by="E" 的那一版不算数。
                 return [
                     "这条实验的签名主体写的是 E（signed_by='E'）⇒ 那一版口径已经作废："
-                    "签字由 V，E 只是 ②③ 的作者。把签名改成 signed_by='V'、"
+                    "签字由 V，E 只是 ③ 与程序设计的作者。把签名改成 signed_by='V'、"
                     "proof_authors 含 'E' 之后再来登记"
                 ]
             return [
                 f"这条实验的签名不齐：signed_by={sig.get('signed_by')!r}、"
                 f"{PROOF_AUTHORS_KEY}={authors!r} ⇒ 签名主体应是 {PROOF_SIGNER!r}、"
-                f"②③ 的作者应含 {NUMERIC_AUTHOR!r}。业主 2026-10-23 晚：程序设计"
-                "与穷举论证都由 E 写，签字由 V，B 只原样登记 —— B 自称作者（或替 E 写）"
+                f"③ 的作者应含 {NUMERIC_AUTHOR!r}。业主 2026-11-08：穷举论证由 E 写、"
+                "程序在 code_path，签字由 V，B 只原样登记 —— B 自称作者（或替 E 写）"
                 "这一条拿不到 proof"
             ]
         return [
-            "证明栏是三段式的，但台账里没有与它对应的穷举证明"
-            "（experiments 里要有 code_path 指向第 ① 段那份程序、evidence_kind='proof'、"
+            "证明栏是穷举论证，但台账里没有与它对应的穷举证明"
+            "（experiments 里要有 code_path 指向那份程序、evidence_kind='proof'、"
             "observations.e_signature 里 signed_by='V'、proof_authors 含 'E'、"
-            "proof_reason='exhaustion'）⇒ B 不许自签，也不许替 E 把 ②③ 写出来："
-            "这条先把实验跑成 proof（E 的 run_experiment，E 给出 ②③），再来原样登记"
+            "proof_reason='exhaustion'）⇒ B 不许自签，也不许替 E 把穷举论证写出来："
+            "这条先把实验跑成 proof（E 的 run_experiment），再来原样登记"
         ]
     sig = signature_of(found)
     authors = [str(a) for a in (sig.get(PROOF_AUTHORS_KEY) or [])]
-    want_design = str(sig.get("design") or "").strip()
     want_enum = str(sig.get("enumeration") or "").strip()
-    if (norm_text(parsed["design"]) != norm_text(want_design)
-            or norm_text(parsed["enumeration"]) != norm_text(want_enum)):
+    if norm_text(parsed["enumeration"]) != norm_text(want_enum):
         # ⑦ 的另一半：改写成自己的话也算"替 E 写"。
         return [
-            "证明栏的 ②③ 与 E 签名里的原文不一致 ⇒ B 不许把 E 的读数改写成自己的话"
-            "（业主 2026-10-23 晚：B 只负责原样登记）。"
-            "把 E 给的那两段逐字贴回来，或让 E 重出一份"
+            "证明栏的穷举论证与 E 签名里的原文不一致 ⇒ B 不许把 E 的读数改写成自己的话"
+            "（业主 2026-11-08：B 只负责原样登记）。"
+            "把 E 给的那一段逐字贴回来，或让 E 重出一份"
+        ]
+    if norm_rel(parsed["script"]) != norm_rel(found.get("code_path")):
+        return [
+            f"证明栏对应的程序 {parsed['script']!r} 与实验行 exp:"
+            f"{str(found.get('experiment_id') or found.get('id') or '')} 的 "
+            f"`code_path` {str(found.get('code_path') or '')!r} 不是同一份 ⇒ "
+            "同一条定理的「实验栏」只能指一份程序（业主 2026-11-08）"
         ]
     # ②③ 的落盘核查（`exhaustionreport` 那一侧；不在时这一格是"没查成"，不是"通过了"）。
     _report = report_problems(found)
@@ -1906,16 +2086,17 @@ def verifier_problems(statement: Mapping[str, Any],
                       experiments: Sequence[Mapping[str, Any]] = ()) -> list[str]:
     """V 的逐行走查（`verify.verify_proof`）不覆盖这一条命题的理由（空清单 = 它照旧管）。
 
-    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是程序
-    （证明栏里第 ① 段是脚本路径，或整份就是一行程序路径）⇒ V 没有跑过那份程序，
-    所以逐行走查不覆盖它 —— 那一签要说清是"对数值证据的背书"，
+    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是数值证据
+    （证明栏里有「穷举论证」那一段，程序在 `experiments.code_path`）⇒ V 没有跑过那份
+    程序，所以逐行走查不覆盖它 —— 那一签要说清是"对数值证据的背书"，
     而不能被下游读成"V 逐行审过这份证明了"。
     """
     row = _as_mapping(statement)
     text = str(row.get("proof_text") or "").strip()
-    script = proof_column_script(text)
-    if not script:
+    parsed = parse_proof_column(text)
+    if not parsed.get("numeric"):
         return []
+    script = proof_column_script(text) or "（见 experiments.code_path）"
     found = find_signed_exhaustion_for_column(experiments, text)
     detail = ("台账里有它对应的穷举证明（V 签、②③ 由 E 写）" if found is not None
               else "台账里还没有与它对应的穷举证明（那说明它连 proof 都还不够）")
@@ -1992,8 +2173,9 @@ def proof_channel(statement: Mapping[str, Any],
     """这条命题的证明走的是哪一条通道：`"numeric"` / `"formal"` / `""`（没有通道）。
 
     判据（顺序即口径）：
-    1. 证明栏能用 `proof_column_script` 取出程序，且台账里有一条与之对应的穷举证明
-       ⇒ `numeric`（数值实验定理）；
+    1. 证明栏里有「穷举论证」那一段（`parse_proof_column(...)["numeric"]`）、且台账里有
+       一条与之对应的穷举证明 ⇒ `numeric`（数值实验定理）；程序路径在那条实验行的
+       `code_path` 上；
     2. 否则证明栏是程序（.lean）且台账里有一条 `method="formal"` + `evidence_kind="proof"`
        的行、且那一行绑到这条命题上 ⇒ `formal`（理论定理的 Lean 程序）；
     3. 都不是 ⇒ 空串（没有这一类证明栏，这一格对它不适用）。
@@ -2003,9 +2185,10 @@ def proof_channel(statement: Mapping[str, Any],
     """
     row = _as_mapping(statement)
     text = str(row.get("proof_text") or "").strip()
-    script = proof_column_script(text)
-    if script and find_signed_exhaustion_for_column(experiments, text) is not None:
+    parsed = parse_proof_column(text)
+    if parsed.get("numeric") and find_signed_exhaustion_for_column(experiments, text) is not None:
         return PROOF_CHANNEL_NUMERIC
+    script = parsed["script"] or proof_column_script(text)
     if script and is_lean_path(script):
         return PROOF_CHANNEL_FORMAL
     lean_rows = _bound_formal_rows(row, experiments)
@@ -2029,7 +2212,8 @@ def formal_slot(statement: Mapping[str, Any],
 
     - `channel`：`"numeric"` / `"formal"` / `""`（这一格对它不适用）；
     - `kind`：这一格应当填哪一类（`FORMAL_SLOT_KINDS` 之一；通道为空时也空）；
-    - `path`：这一格应当填的那份程序（通道为空时为空）；formal 通道取的那一行必须
+    - `path`：这一格应当填的那份程序（通道为空时为空）；数值通道那份是实验行的
+      `code_path`（2026-11-08：程序不再住在证明栏里）；formal 通道取的那一行必须
       绑到这条命题（`evidencebits.formal_row_bound_to` 的四处绑定点）—— 台账里别的命题
       的 formal 行不是这一条的凭据；
     - `problems`：空清单 = 填对了（或"没填"——三态：没填不是填错）。
@@ -2043,7 +2227,8 @@ def formal_slot(statement: Mapping[str, Any],
         return {"channel": "", "kind": "", "path": "", "problems": [],
                 "why": "这条命题没有数值/形式化证明通道 ⇒ 形式化那一格对它不适用"}
     if channel == PROOF_CHANNEL_NUMERIC:
-        path = proof_column_script(text)
+        found = find_signed_exhaustion_for_column(experiments, text)
+        path = norm_rel((found or {}).get("code_path"))
         kind = FORMAL_SLOT_NUMERIC
         if given and is_lean_path(given):
             problems.append(

@@ -260,13 +260,14 @@ def _proof_column_of(store: Store) -> str:
 
 def _file_via_b(store: Store, *, proof_text: str, kind: str = "theorem",
                 evidence_kind: str = "proof", statement_full: str = "对任意正整数 n，R(3,4)=9。",
-                label: str = "R(3,4)=9") -> dict:
+                label: str = "R(3,4)=9", proof_manuscript: str = "") -> dict:
     """B 的入库正路（`own.register_statement` 的真身）：自产结果 + 证明栏 + 出处两件式。"""
     return _b(store).register_statement(
         origin="own_result", kind=kind, label=label,
         statement_full=statement_full, statement_text=statement_full[:40],
         proof_text=proof_text, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1},
+        proof_manuscript=proof_manuscript,
         quote_verified=False, quote_reason="own_result：我方推导，没有第二份文本可比对")
 
 
@@ -368,12 +369,16 @@ def test_calculation_methods_cover_schema() -> None:
 
 # ------------------------------------------------------------------ ① 穷举 ⇒ proof
 
-def test_criterion1_an_exhaustive_run_is_proof_signed_by_v_with_a_three_part_column(
+def test_criterion1_an_exhaustive_run_is_proof_signed_by_v_with_an_exhaustion_column(
         tmp_path: pathlib.Path) -> None:
-    """① 穷举实验 ⇒ 命题可标 proof、`signed_by=V`（②③ 的作者是 E）、证明栏是"程序 + ②③"三段式。
+    """① 穷举实验 ⇒ 命题可标 proof、`signed_by=V`（③ 的作者是 E）、证明栏只有穷举论证。
 
     整条链真跑一次：E 起子进程跑枚举脚本 → E 按穷尽证据签 proof →
     B 把 E 的证明栏原样登记 → 命题行进定理证明库（`proof` ⇒ 可以当根）。
+
+    2026-11-08 口径（业主：「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」）：
+    证明栏只剩 ③；① 程序在 `experiments.code_path`、② 程序设计在
+    `observations["design"]` —— 两段都不许再出现在证明栏里。
     """
     store = _store(tmp_path)
     out = _run_exhaustive(store)
@@ -382,18 +387,22 @@ def test_criterion1_an_exhaustive_run_is_proof_signed_by_v_with_a_three_part_col
     assert len(rows) == 1
     row = rows[0]
     sig = NP.signature_of(row)
-    # ⑦ 的读数形状（业主 2026-10-23 晚）：签字由 V，②③ 的作者是 E，不许 signed_by=E
+    # ⑦ 的读数形状（业主 2026-10-23 晚）：签字由 V，③ 的作者是 E，不许 signed_by=E
     assert sig["signed_by"] == NP.PROOF_SIGNER == "V", sig
     assert sig[NP.PROOF_AUTHORS_KEY] == ["E"], sig
     assert np_author_not_signer(sig), sig
     assert sig["proof_reason"] == NP.PROOF_REASON_EXHAUSTION, sig
     assert NP.is_signed_exhaustion(row), row
-    # 证明栏：三段齐全，第 ① 段是脚本的相对路径
+    # 证明栏：只有 ③；程序路径在实验行、程序设计在 observations 里
     column = NP.proof_column(row)
-    parts = NP.parse_proof_column(column)
+    parts = NP.parse_proof_column(column, code_path=row["code_path"])
     assert parts["problems"] == [], parts
     assert parts["script"] == "code/enum_ramsey34.py", parts
-    assert parts["design"].strip() and parts["enumeration"].strip(), parts
+    assert parts["script"] == row["code_path"], parts
+    assert parts["design"] == "", "② 程序设计不许再出现在证明栏里（它住 observations）"
+    assert parts["enumeration"].strip(), parts
+    assert "程序设计：" not in column and "程序：" not in column, column
+    assert str((row.get("observations") or {}).get("design") or "").strip(), row
 
     # V 的会审签名必须先落在盘上（第三方签字闸：E 自己盖的章不算）
     add_literature(store, S.format_id(0))
@@ -471,7 +480,9 @@ def test_criterion1b_the_verdict_helper_names_the_signature_parts() -> None:
     v = NP.exhaustion_verdict(method="numeric", observations=obs, code_path="code/enum.py")
     assert v["evidence_kind"] == "proof" and v["proof_reason"] == NP.PROOF_REASON_EXHAUSTION
     assert v["signed_by"] == "V" and v["proof_authors"] == ["E"]
-    assert NP.parse_proof_column(v["proof_text"])["script"] == "code/enum.py"
+    assert NP.parse_proof_column(v["proof_text"],
+                                 code_path="code/enum.py")["script"] == "code/enum.py"
+    assert "程序设计：" not in v["proof_text"], "② 程序设计不许再抄进证明栏"
 
 
 # ------------------------------------------------------------------ ② 不完全 ⇒ 不构成证明
@@ -522,8 +533,7 @@ def _assert_partial_cannot_be_proof(tmp_path: pathlib.Path) -> None:
 
     # 负控 D：B 拿一条 cross_check 的实验去标 proof ⇒ 受控拒绝（B 不许自签）
     add_literature(store, S.format_id(0))
-    fabricated = NP.compose_proof_column(script_path="code/scan.py", design="我猜的搜法",
-                                        enumeration="应该不漏吧")
+    fabricated = NP.compose_proof_column(enumeration="应该不漏吧")
     refused = _file_via_b(store, proof_text=fabricated)
     assert refused.get("ok") is False, refused
     assert refused.get("kind") == "proof_needs_third_party_signature", refused
@@ -634,18 +644,31 @@ def test_legacy_ledger_zero_is_unjudged_not_t0(tmp_path: pathlib.Path) -> None:
 
 # ------------------------------------------------------------------ ⑥ 缺 ②③ 不许 proof
 
-def test_criterion6_only_a_script_path_is_not_enough_for_proof(tmp_path: pathlib.Path) -> None:
-    """⑥ 只有程序路径、没有 ②③ ⇒ 不许 proof，读数点名缺"程序设计"/"穷举论证"。"""
+def test_criterion6_only_an_exhaustion_argument_without_a_code_path_is_not_enough(
+        tmp_path: pathlib.Path) -> None:
+    """⑥ 缺穷举论证 / 缺程序路径（code_path）⇒ 不许 proof，拒信逐字点名缺哪一块。
+
+    2026-11-08 的两条口径（业主：「穷举式的 proof_test 应该是填穷举论证，实验栏填相对
+    路径」）：证明栏只有 ③，程序路径在 `experiments.code_path`；两样缺任何一样都拿不到
+    proof，拒信必须逐字写「缺穷举论证」/「缺程序路径（code_path）」。
+    """
     store = _store(tmp_path)
     _run_exhaustive(store)
     add_literature(store, S.format_id(0))
-    refused = _file_via_b(store, proof_text="code/enum_ramsey34.py")
+    # a：只有 ③、没有程序路径（那条实验的 code_path 不是这一份文本的签名）
+    refused = _file_via_b(store, proof_text="穷举论证：全部 2^36 个染色，按同构剪枝")
     assert refused.get("ok") is False, refused
     assert refused.get("kind") == "proof_needs_third_party_signature", refused
     error = str(refused.get("error") or "")
-    assert "程序设计" in error and "穷举论证" in error, error
+    assert "缺程序路径（code_path）" in error, error
 
-    # 判定函数这一侧：E 那边缺 ② 或缺 ③ ⇒ 一样拿不到 proof
+    # b：只写了一行程序路径（旧形态）⇒ 证明栏里没有 ③，拒信点名缺穷举论证
+    refused2 = _file_via_b(store, proof_text="code/enum_ramsey34.py")
+    assert refused2.get("ok") is False, refused2
+    error2 = str(refused2.get("error") or "")
+    assert "缺穷举论证" in error2, error2
+
+    # 判定函数这一侧：E 那边缺 ②（design）或缺 ③（enumeration）⇒ 一样拿不到 proof
     base = {"exhaustive": True, "enumeration": "全部 2^36 个染色，按同构剪枝",
             "search_space": {"graph": "K_9"}, "exhaustion_report": _report_facts()}
     no_design = NP.exhaustion_verdict(method="numeric", observations=dict(base),
@@ -676,18 +699,18 @@ def test_criterion7_the_signature_is_v_and_the_authors_are_e(tmp_path: pathlib.P
     _run_exhaustive(store)
     add_literature(store, S.format_id(0))
     column = _proof_column_of(store)
-    parts = NP.parse_proof_column(column)
-    assert parts["problems"] == []
     row = NP.signed_exhaustion_experiments(_rows(store, "experiments"))[0]
+    parts = NP.parse_proof_column(column, code_path=row.get("code_path"))
+    assert parts["problems"] == []
     sig = NP.signature_of(row)
     # ⑦-c 读数形状（业主点名的两个字段）
     assert sig["signed_by"] == "V" and sig[NP.PROOF_AUTHORS_KEY] == ["E"], sig
 
-    # ⑦-a：B 把 ②③ 改写成自己的话（程序路径不变）⇒ 拒
-    rewritten = NP.compose_proof_column(script_path=parts["script"],
-                                       design="我自己想的搜法（E 那份我没看）",
-                                       enumeration=parts["enumeration"])
-    refused = _file_via_b(store, proof_text=rewritten)
+    # ⑦-a：B 把 ③ 改写成自己的话 ⇒ 拒（认法是实验号 / code_path，不是文本）
+    rewritten = NP.compose_proof_column(enumeration="我自己想的搜法（E 那份我没看）")
+    manuscript_rel = f"reports/e-proof-{row['experiment_id']}.md"
+    refused = _file_via_b(store, proof_text=rewritten,
+                          proof_manuscript=manuscript_rel)
     assert refused.get("ok") is False, refused
     assert "改写" in str(refused.get("error") or ""), refused.get("error")
 
@@ -704,8 +727,11 @@ def test_criterion7_the_signature_is_v_and_the_authors_are_e(tmp_path: pathlib.P
     stale_sig = {**sig, "signed_by": "E"}
     stale = dict(row)
     stale["observations"] = {**row["observations"], NP.SIGNATURE_KEY: stale_sig}
-    probs = NP.filing_problems(origin="own_result", evidence_kind="proof",
-                               proof_text=column, experiments=[stale])
+    probs = NP.filing_problems(
+        origin="own_result", evidence_kind="proof",
+        proof_text=column, experiments=[stale],
+        # 程序路径住在实验行：按稿名钉到那一条（2026-11-08）
+        manuscript=f"reports/e-proof-{row['experiment_id']}.md")
     assert probs and "作废" in probs[0], probs
     with pytest.raises(ValueError):
         S.Experiment(**{k: v for k, v in stale.items()
@@ -728,7 +754,8 @@ def test_criterion8_the_formal_slot_is_filled_by_the_right_kind(tmp_path: pathli
     _sign_with_v(store, column)
     assert _file_via_b(store, proof_text=column).get("ok") is True
     numeric_stmt = _rows(store, "statements")[0]
-    script = NP.parse_proof_column(column)["script"]
+    exp_row = _rows(store, "experiments")[0]
+    script = exp_row["code_path"]
 
     # 数值实验定理：这一格该填数值程序
     slot = NP.formal_slot(numeric_stmt, _rows(store, "experiments"))
@@ -804,8 +831,7 @@ def test_criterion5a_stubbing_the_exhaustion_judgement_makes_criterion2_red(
         "proof_reason": NP.PROOF_REASON_EXHAUSTION, "signed_by": "E",
         "proof_authors": ["E"], "script_path": str(kw.get("code_path") or ""),
         "design": "d", "enumeration": "e",
-        "proof_text": NP.compose_proof_column(script_path=kw.get("code_path") or "",
-                                              design="d", enumeration="e"),
+        "proof_text": NP.compose_proof_column(enumeration="e"),
         "search_space": {}, "problems": [],
     })
     with pytest.raises(AssertionError):

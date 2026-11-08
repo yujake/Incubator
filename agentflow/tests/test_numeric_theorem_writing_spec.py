@@ -71,11 +71,9 @@ NOTE_TEXT = ER.compose_report(
     environment="python 3.12.4，无随机种子（确定性 DFS），运行时 0.125 s",
     result="supports", evidence_kind="proof")
 
-#: E 写的那条命题的三段式证明栏（① 程序、② 程序设计、③ 穷举论证）。
+#: E 写的那条命题的证明栏（2026-11-08 起只有 ③ 穷举论证；① 程序在实验行的
+#: `code_path`、② 程序设计在 `observations["design"]`）。
 PROOF_COLUMN = (
-    f"程序：{PROGRAM}\n"
-    "程序设计：要解决 R(3,4) 的上界；按字典序逐边回溯、红/蓝两支；"
-    "根对称性把红邻域折成前缀，覆盖全域。\n"
     "穷举论证：搜索空间 2^36 = 68719476736；只按确定矛盾剪枝所以不漏；n=9 时叶子 0 个。"
 )
 

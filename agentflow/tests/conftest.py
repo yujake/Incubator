@@ -447,13 +447,15 @@ def e_form_gate_ok(agent):
 
 
 def seed_proposition_form_ok(root, statement_full, *, kind: str = "conjecture",
-                             label: str = ""):
+                             label: str = "", role: str = "E"):
     """在工作区里预置一条"形态判定合格"的读数（给只能经工具面构造 E 的用例）。
 
     为什么要这一手：`verify.run_experiment` 那条工具路径自己造 `AgentE`，测试注入不进
     秘书；而 `Secretary.judge_proposition_form` 先读
     `out/secretary/proposition_form.jsonl` 的缓存（`checked=True` 的行命中即不再问模型、
     也不需要缝）⇒ 预置一条"判过、合格"的行，等价于"这条命题此前已经过闸"。
+
+    `role` 只影响台账那一行的"谁判的"（2026-11-08：B 的普通数值通道也读同一份缓存）。
     """
     from agentflow import secretary as SEC
 
@@ -461,7 +463,7 @@ def seed_proposition_form_ok(root, statement_full, *, kind: str = "conjecture",
         root, statement_full=str(statement_full), checked=True, well_formed=True,
         conditions="夹具：设…", conclusion="夹具：则…", problems=[],
         decision="夹具：形态合规", refused="", reason="夹具：形态合规（预置）",
-        label=str(label), kind=str(kind), stmt_id="", role="E", task_id="")
+        label=str(label), kind=str(kind), stmt_id="", role=str(role), task_id="")
 
 
 def sign_before_registration(root, *, proof_text: str,

@@ -1018,7 +1018,8 @@ class AgentV:
                 _exp_rows = list(self.store.rows("experiments"))
             except (StoreError, AttributeError, TypeError):
                 _exp_rows = []
-            _numeric = _ER.is_exhaustion_column(hit, _exp_rows)
+            _numeric = _ER.is_exhaustion_column(hit, _exp_rows,
+                                                manuscript=manuscript_rel)
             if manuscript_rel:
                 # 载体在手：正文以稿为准（穷举那一支的稿里 `## 证明` 就是证明栏）。
                 _ms = self._registered_manuscript_body(
@@ -1097,7 +1098,10 @@ class AgentV:
                 # 的七项读数去给新版签字。
                 _reviewed = _ER.review(workspace_root=self.workspace_root,
                                        statement={"proof_text": text},
-                                       experiments=_exp_rows)
+                                       experiments=_exp_rows,
+                                       # 2026-11-08：程序路径不在证明栏里了，会审要钉到
+                                       # 这份稿自己那条实验（稿名里那个实验号）。
+                                       experiment_id=_ER.experiment_id_of(manuscript_rel))
                 out["kind"] = "numeric_evidence"
                 out["exhaustion_review"] = dict(_reviewed)
                 out["signer"] = str(_reviewed.get("signed_by") or "")

@@ -233,19 +233,43 @@ NOT_WASHED_NEXT_STEP = (
 )
 
 
+#: 框架渲染的手稿族（2026-11-08 起四族都算"框架产物"）：F 的证明稿 / B 的改写稿 /
+#: E 的穷举证明稿 / E 的普通数值手稿。族名是"谁写的、要不要 V 签"在路径上的唯一区分。
+MANUSCRIPT_FAMILY_PREFIXES: tuple[str, ...] = (
+    "f-proof-", "b-proof-", "e-proof-", "e-num-")
+
+
 def is_framework_manuscript(rel: Any) -> bool:
-    """`rel` 是不是 `depsection` 这套约定下的 F 证明手稿路径（`reports/f-proof-*.md`）。
+    """`rel` 是不是框架渲染的手稿（四族：`reports/{f,b}-proof-*` / `e-proof-*` / `e-num-*`）。
 
     判据只用一处定义（前缀与目录名都从本模块的常量读）：调用方拿它区分
-    "这是我约定的那份稿"与"别的文件" —— 兜底审计只在它是的那一档上生效。
-    空串 / 非 `.md` / 不在 `reports/` 下 / 名字不带前缀 ⇒ False（宁可不动手）。
+    "这是框架约定的那份稿"与"别的文件" —— 兜底审计只在它是的那一档上生效。
+    空串 / 非 `.md` / 不在 `reports/` 下 / 名字不带任何一族前缀 ⇒ False（宁可不动手）。
+
+    2026-11-08（业主裁定）：E 的普通数值手稿 `reports/e-num-<实验号>.md` 也是框架渲染的
+    —— 它必须与 `e-proof-*` 一样挡住手写（A/B 换个名字绕过那条口子）。要不要洗稿
+    是另一件事（只有 F 的稿走 `- 依赖面洗稿：` 那一行，见 :func:`needs_wash`）。
     """
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
     if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
         return False
-    name = parts[-1]
-    return (name.casefold().endswith(".md")
-            and name.casefold().startswith(MANUSCRIPT_STMT_PREFIX.casefold()))
+    name = parts[-1].casefold()
+    if not name.endswith(".md"):
+        return False
+    return any(name.startswith(prefix) for prefix in MANUSCRIPT_FAMILY_PREFIXES)
+
+
+def needs_wash(rel: Any) -> bool:
+    """这份稿要不要 F 的秘书盖洗稿元信息（只有 F 的 `reports/f-proof-*` 要）。
+
+    为什么 B / E 的稿不要：那一行元信息只有 F 的那一轮 proof 盖得上；拿同一道审计去拦
+    E 的稿会把"框架渲染过的 e-proof / e-num"判成"手写稿"而整笔拒掉 ——
+    而 E 那两族的作者与洗稿义务在 E 的写侧（`exhaustionreport`）。
+    """
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
+        return False
+    return parts[-1].casefold().startswith("f-proof-")
 
 
 def citation_levels() -> frozenset[str]:

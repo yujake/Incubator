@@ -841,7 +841,9 @@ class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
                         other_proofs: list[str] | None = None,
-                        kind: str = "") -> tuple[dict, dict | None]:
+                        kind: str = "",
+                        numeric_evidence: Mapping[str, Any] | None = None
+                        ) -> tuple[dict, dict | None]:
         """按 `evidencebits` 现算五元位，返回 `(bits, 拒绝)`；拒绝非空 ⇒ 整笔不写。
 
         三态见模块 docstring 的"第八件"。这里只做两件事：「算」（`bits_of`）与
@@ -888,9 +890,15 @@ class _RegisterStatement:
                 quote_verified=quote_verified,
                 proof=bool(texts) and own,
                 proof_process=(texts[0] if own and texts else ""),
+                # 2026-11-08（普通数值绿色通道）：第 1 位由 E 那条实验的读数撑起来 ——
+                # 凭据是实验号 + 程序路径（`bit_problems` 要求 `verified` 必须能指到
+                # 哪条实验/哪个脚本）。它只把等级抬到 `strong_conjecture`（第 2 位仍空）。
                 # 必须与 `schema.Statement.validate` 用的是同一个值：概念行的等级
                 # （`not_applicable`）只有带上 kind 才算得出来，见上面那段说明。
                 kind=kind,
+                # 普通数值绿色通道：`numeric="verified"` 的凭据（实验号 + 程序路径）。
+                numeric="verified" if numeric_evidence else None,
+                numeric_evidence=numeric_evidence,
             )
             problems = list(_EB.bits_shape_problems(bits, kind=kind))
         except Exception as exc:  # noqa: BLE001 - 算不出来要如实记，不许折成空 bits
@@ -906,6 +914,158 @@ class _RegisterStatement:
                 + "；".join(problems),
                 problems=problems)
         return bits, None
+
+    # ---- 普通数值手稿的绿色通道（2026-11-08 业主三条裁定） ------------------------
+    #
+    # 业主逐字：「D侧普通数值实验也需写报告……D侧呈递时一样引用E侧手稿提交强猜想
+    # （即有数值实验支持的猜想），B侧做好适配（应该在手稿里找命题和数值实验程序，
+    # 不录入其它内容）」＋「专门给普通数值实验开绿色通道就行」＋「乙」（② 程序设计
+    # 挪进 experiments.observations["design"]，证明栏只剩 ③）。
+    #
+    # 这条通道只认 E 的 `reports/e-num-<实验号>.md`（穷举档 `e-proof-*` 走原来那条
+    # 第三方签字闸，不在这一条上）：
+    #   · 命题：手稿 `## 命题` 那一节（不录 `## 数值结果` / 任何别的内容）；
+    #   · 程序：`experiments.code_path` 那一格（手稿里只写"见实验行"，不抄一遍）；
+    #   · `proof_text` 空着（业主明令）；
+    #   · `evidence_kind` = `cross_check`（"有数值实验支持，不构成证明"；业主说的
+    #     「普通数值档值」，受控词表里本来就有这一档）；
+    #   · 等级由五元位现算：`numeric=verified`（凭据指到那条实验）⇒ `strong_conjecture`；
+    #   · 不过 V（V 台账 0 行也能收）—— 这不是绕过闸，而是业主给这一档定的口径：
+    #     它的承重证据是机器可核的实验行 + 程序路径 + 数值结果，不是一签。
+
+    def _numeric_manuscript_channel(self, *, proof_manuscript: Any) -> dict[str, Any]:
+        """这一笔递进来的是不是 E 的普通数值手稿；是 ⇒ 把该取的两样取出来。
+
+        只认路径（`reports/e-num-<号>.md`）；认不出/读不到/实验行对不上 ⇒ `ok=False`
+        并把原因逐条写进 `problems`（调用方据此走普通登记路，不把"没认出"当"不是"）。
+        """
+        from .. import exhaustionreport as _ER
+        from .. import numericproof as _NP
+
+        out: dict[str, Any] = {
+            "checked": False, "ok": False, "path": "", "experiment_id": "",
+            "code_path": "", "method": "", "statement": "", "result_text": "",
+            "manuscript": {}, "problems": [],
+        }
+        rel = str(proof_manuscript or "").strip().replace("\\", "/")
+        if not rel or not _ER.is_numeric_manuscript_relpath(rel):
+            return out
+        out["checked"] = True
+        out["path"] = rel
+        root = getattr(self.store, "root", "")
+        read = _ER.read_numeric_manuscript(root, rel)
+        out["manuscript"] = read
+        if not read.get("ok"):
+            out["problems"] = [f"E 的普通数值手稿读不成：{p}"
+                               for p in (read.get("problems") or [])] or [
+                "E 的普通数值手稿读不成（没有理由）"]
+            return out
+        eid = _ER.experiment_id_of(rel)
+        out["experiment_id"] = eid
+        try:
+            rows = [dict(r) for r in self.store.rows("experiments")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到实验台账 ⇒ 这一格没查成
+            out["problems"] = [f"实验台账读不出来（{type(exc).__name__}: {exc}）⇒ "
+                               "没查成（不是「没有那条实验」）"]
+            return out
+        row = next((r for r in rows
+                    if str(r.get("experiment_id") or r.get("id") or "") == eid), None)
+        if row is None:
+            out["problems"] = [f"手稿点名的实验行 exp:{eid} 不在 experiments 台账里 ⇒ "
+                               "这一份没有可核的数值结果（不许把它当手稿收）"]
+            return out
+        out["method"] = str(row.get("method") or "")
+        if out["method"] == _NP.FORMAL_METHOD:
+            out["problems"] = ["这一行是形式化实验（method=formal）⇒ 不归普通数值通道"
+                               "（它的凭据是检查器输出，不是数值结果）"]
+            return out
+        code_path = str(row.get("code_path") or "").strip().replace("\\", "/")
+        if not _NP.is_script_path(code_path):
+            out["problems"] = [f"实验行 exp:{eid} 的 code_path 读不到程序路径"
+                               f"（读到 {code_path!r}）⇒ 这一份没有可复跑的程序"]
+            return out
+        out["code_path"] = code_path
+        parts = _ER.numeric_sections_of(read.get("text") or "")
+        out["statement"] = str(parts.get("statement") or "").strip()
+        out["result_text"] = str(parts.get("result") or "").strip()
+        if not out["statement"]:
+            out["problems"] = [f"手稿 `{_ER.NUMERIC_STATEMENT_HEADING}` 那一节是空的 ⇒ "
+                               "这一份没有可登记的命题"]
+            return out
+        out["ok"] = True
+        return out
+
+    def _numeric_form_gate(self, *, full: str, kind: str = "conjecture",
+                           label: str = "", task_id: str = "") -> dict[str, Any]:
+        """普通数值通道收录那一刻的形态闸（一次调用，不是每条实验判一次）。
+
+        判据本体只有一处：:meth:`secretary.Secretary.judge_proposition_form`（与 F / E
+        同一道判定口）；本方法只做三件本层的事：① 把这条命题递过去；② 把"没判成"也写进
+        形态台账（`role="B"`）；③ 折成 `submittable`（两态）。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "well_formed": False, "submittable": False,
+            "conditions": "", "conclusion": "", "problems": [], "decision": "",
+            "refused": "", "reason": "", "actor": "", "cached": False,
+        }
+        from ..secretary import (NOT_APPLICABLE_KINDS, PROPOSITION_FORM_REFUSED,
+                                 append_proposition_form)
+
+        root = str(getattr(self.store, "root", "") or "")
+
+        def _note(reason: str) -> None:
+            if not root:
+                return
+            try:
+                append_proposition_form(
+                    root, statement_full=str(full or ""), checked=False,
+                    well_formed=False, conditions="", conclusion="",
+                    problems=[str(reason)[:200]], decision="没判成",
+                    refused=PROPOSITION_FORM_REFUSED, reason=str(reason),
+                    label=str(label or ""), kind=str(kind or ""), stmt_id="",
+                    role="B", task_id=task_id)
+            except Exception as exc:  # noqa: BLE001 - 台账写不进去不改判定
+                out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+
+        if str(kind or "").strip().lower() in NOT_APPLICABLE_KINDS:
+            out.update(checked=True, well_formed=True, submittable=True,
+                       reason=(f"kind={kind!r} 落在 concept/definition 那一档：它不是命题"))
+            return out
+        sec = self._statement_secretary()
+        if sec is None:
+            why = ("B 的秘书派生不出来"
+                   f"（{getattr(self, 'secretary_problem', '未知原因')}）⇒ "
+                   "这一问没判成：受控拒（没判成不等于没毛病）")
+            out.update(refused=PROPOSITION_FORM_REFUSED, reason=why)
+            _note(why)
+            return out
+        try:
+            got = dict(sec.judge_proposition_form(
+                statement_full=str(full or ""), label=str(label or ""),
+                kind=str(kind or ""), proof_text="", task_id=task_id) or {})
+        except Exception as exc:  # noqa: BLE001 —— 判定那一问炸了 = 没判成（受控拒）
+            why = (f"形态判定调用失败（{type(exc).__name__}: {exc}）⇒ "
+                   "没判成：受控拒（没判成不等于没毛病）")
+            out.update(refused=PROPOSITION_FORM_REFUSED, reason=why,
+                       problems=[str(exc)[:200]])
+            _note(why)
+            return out
+        out.update(
+            checked=bool(got.get("checked")), well_formed=bool(got.get("well_formed")),
+            conditions=str(got.get("conditions") or ""),
+            conclusion=str(got.get("conclusion") or ""),
+            problems=[str(x) for x in (got.get("problems") or [])],
+            decision=str(got.get("decision") or ""),
+            actor=f"secretary-{getattr(sec, 'role', 'B')}",
+            refused=str(got.get("refused") or ""),
+            reason=str(got.get("reason") or ""),
+            cached=bool(got.get("cached")))
+        out["submittable"] = bool(out["checked"] and out["well_formed"])
+        if not out["checked"]:
+            out["refused"] = out["refused"] or PROPOSITION_FORM_REFUSED
+            if not got.get("ledger"):
+                _note(str(out.get("reason") or "没判成"))
+        return out
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
                        canonical: str = "", bits: Mapping | None = None,
@@ -1755,6 +1915,26 @@ class _RegisterStatement:
     ) -> dict:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
+        # ---- 2026-11-08（业主三条裁定）：普通数值手稿的绿色通道 ----------------
+        #
+        # 只认 E 的 `reports/e-num-<实验号>.md`（其余路径 / 正文一律走原路）。认出来了：
+        # 命题取手稿 `## 命题`（覆盖调用方传的 statement_full —— 业主：「在手稿里找命题」），
+        # 证明正文空着（业主明令），档位固定成"有数值实验支持"。
+        # 认出来但读不成 / 实验行对不上 ⇒ 受控拒（fail-closed，不退回"当成正文"）。
+        _green = self._numeric_manuscript_channel(proof_manuscript=proof_manuscript)
+        if _green.get("checked") and not _green.get("ok"):
+            return _refuse(
+                "numeric_manuscript_refused",
+                "这一笔递的是 E 的普通数值手稿（`reports/e-num-<实验号>.md`），而它读不成："
+                + "；".join(str(p) for p in (_green.get("problems") or []))
+                + "。整笔不写：普通数值通道只从「手稿里的命题 + 实验行的 code_path」取内容，"
+                "取不到就不许拿别的东西顶替",
+                problems=list(_green.get("problems") or []),
+                numeric_channel={"path": _green.get("path") or ""})
+        if _green.get("ok"):
+            _green_statement = str(_green.get("statement") or "").strip()
+            if _green_statement:
+                full = _green_statement
         #: 这一笔的 `kind` 只在这里派生一次（B-2 的判据与落库用的必须是同一个值）。
         #:
         #: 为什么强调"只一处"：改前这个缺省值在动作里出现过两遍 —— 概念行那一支写
@@ -1784,6 +1964,13 @@ class _RegisterStatement:
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
                            f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
+        if _green.get("ok") and origin != "own_result":
+            return _refuse(
+                "numeric_channel_needs_own_result",
+                f"E 的普通数值手稿只能按 `origin=\"own_result\"` 登记（收到 {origin!r}）："
+                "那一份是 E 自己跑出来的实验结果，不是文献里摘的 —— 按 external_lit 登记"
+                "会把逐字引文那几道闸（page_range / quote_verified）套到一份数值读数上",
+                numeric_channel={"path": _green.get("path") or ""})
         # ---- 2026-11-07（业主裁定 ②：lemma 那条死锁）：F 的手稿登记按内容落了
         # `- 证据种类：lemma` ⇒ B 收录已登记的同一条命题时照它落 kind。
         #
@@ -1798,6 +1985,13 @@ class _RegisterStatement:
                 text=str(proof_manuscript or ""), root=str(self.store.root))
             if declared:
                 kind_now = declared
+        if _green.get("ok") and kind_now not in CONJECTURE_START_KINDS:
+            # 普通数值手稿的承重证据只到「有数值实验支持」那一档：`kind` 是声明，
+            # 声明成定理级会被 B-2 那道闸整笔拒（"自产且无出处 ⇒ 从猜想注册"）。
+            # 这一档不换一条名目绕闸：如实压回 `conjecture`，并把调用方原来写的
+            # 那一档留在读数里（`kind_downgraded`）—— 等级由五元位现算，不由声明。
+            _green["kind_downgraded"] = kind_now
+            kind_now = "conjecture"
         # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
         #
         # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、「1142 条带
@@ -1831,6 +2025,19 @@ class _RegisterStatement:
                 proofs_dropped = [dict(p) if isinstance(p, Mapping) else p
                                   for p in (proofs or [])]
                 proofs = None
+        # 普通数值通道：`proof_text` 空着（业主明令），别的正文一律不录。
+        # 调用方若还塞了 `proof_text` / `proofs`，丢掉但留痕（`dropped_content`）——
+        # 静默丢掉会让"他以为交了什么"与"台账里有什么"分家。
+        if _green.get("ok"):
+            _dropped = []
+            if str(proof_text or "").strip():
+                _dropped.append("proof_text")
+            if proofs:
+                _dropped.append("proofs")
+            if _dropped:
+                _green["dropped_content"] = _dropped
+            proof_text = ""
+            proofs = None
         # 第九件（多证明）：清单先整份核完，再把 #p1 的正文接进 `proof_text`。
         # 位置在这里而不是更靠后：`needs_proof` / 第 2 位 / 秘书载荷都读 `proof_text`，
         # 三处必须是同一份正文（"#p1 在清单里"与"#p1 在 proof_text 里"不许有两种读数）。
@@ -2095,7 +2302,10 @@ class _RegisterStatement:
                               stmt_id_now=stmt_id_now,
                               matched_by=manuscript_probe.get("matched_by")))
         if (not proof_text_source and manuscript_text.strip()
-                and not manuscript_foreign and _body_owner_ok):
+                and not manuscript_foreign and _body_owner_ok
+                # 普通数值手稿没有 `## 证明` 那一节（`proof_body` 会退回整份全文）——
+                # 这一档的正文按业主口径空着，不许把「数值结果」当证明正文收进来。
+                and not _green.get("ok")):
             from_manuscript = str(_DS.proof_body(manuscript_text) or "").strip()
             if from_manuscript:
                 proof_text = from_manuscript
@@ -2183,7 +2393,7 @@ class _RegisterStatement:
                 wash_rel = str(manuscript_probe.get("path") or "")
             else:
                 wash_rel = ""
-            if _DS.is_framework_manuscript(wash_rel):
+            if _DS.needs_wash(wash_rel):
                 return _refuse(
                     str(_DS.REFUSED_NOT_WASHED),
                     "这份手稿不是框架渲染的（缺洗稿元信息），请让 F 用 proof 动作重写",
@@ -2210,7 +2420,10 @@ class _RegisterStatement:
         if manuscript_text.strip() and not manuscript_foreign:
             manuscript = _DS.parse_dependency_section(manuscript_text)
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
-            manuscript_refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
+            # 普通数值手稿没有 `## 证明` 节：整份稿里的别的内容（审查意见 / 后续计划）
+            # 一律不参与这一笔（业主：不录入其它内容）。
+            manuscript_refs = ([] if _green.get("ok")
+                               else _DS.stmt_refs(_DS.proof_body(manuscript_text)))
             if manuscript.get("refused"):
                 # 逐条四元组（哪一行 / 想写什么 / 该是什么 / 怎么改）：读的人要照着改，
                 # 而解析器那句话说的是"这一行为什么读不懂"，不是"该改成什么"。
@@ -2434,7 +2647,10 @@ class _RegisterStatement:
         _wants_stronger_evidence = (
             str(evidence_kind or "") != str((redelivery or {}).get("evidence_kind") or ""))
         if (manuscript_text.strip() and not manuscript_foreign and not carries_write
-                and not _wants_stronger_evidence):
+                and not _wants_stronger_evidence
+                # 普通数值通道要写的是五元位第 1 位（numeric=verified）+ 档位，
+                # 这一支"命题行不动"的早退接不住它 ⇒ 交给下面的正常登记路。
+                and not _green.get("ok")):
             if redelivery is not None:
                 received = self._receive_carried_manuscript(
                     redelivery, deps_groups=deps_groups, manuscript=manuscript,
@@ -2470,6 +2686,11 @@ class _RegisterStatement:
             return _refuse("bad_evidence_kind",
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
                            "（它是证据强度，不是来源；来源走 source_lit_id）")
+        if _green.get("ok"):
+            # 2026-11-08（业主：「专门给普通数值实验开绿色通道」）：这一档的档位由手稿族
+            # 决定，不由调用方声明 —— 普通数值实验 = "有数值实验支持，不构成证明"。
+            # 受控词表里本来就有这一档（`cross_check` 的定义逐字是这句），不新造值。
+            evidence_kind = _NP.SUPPORTED_ONLY_KIND
         # ---- 2026-10-23（业主裁定「都由 E 来签」→ 晚间更正「签字仍然由 V 签」）：B 不许自签 proof
         #
         # `proof` 这一档从这一天起有两个入口：形式化（检查器/L 那一支）与穷举
@@ -2501,7 +2722,11 @@ class _RegisterStatement:
                                              # D-34：D 报告的目录行（论文对应表）。
                                              # 读不到 ⇒ 空清单 ⇒ 索引那一路取不到对象，
                                              # 闸按"目录里没有这一条"拒（不是放行）。
-                                             index_rows=self._report_index_rows())
+                                             index_rows=self._report_index_rows(),
+                                             # 2026-11-08：程序路径不住证明栏了，闸要按
+                                             # `reports/e-proof-<号>.md` 那个名字钉到实验行
+                                             # 才能读到 `code_path`。
+                                             manuscript=manuscript_path)
         # ---- 2026-11-04（业主裁定 ⑥-1-b）：要写正文/依赖面的这一笔必须带稿 ----------
         #
         # 裁定：「闸要求本笔必须带 `proof_manuscript`，不靠台账签行反查」。
@@ -2580,7 +2805,9 @@ class _RegisterStatement:
         #: `external_lit` 那一支不会走到 `own_result` 那一支里 —— 第一版把赋值写在
         #: 分支里，于是所有 `external_lit` 登记都在返回值那一行 `NameError`
         #: （`tasks` 落 `failed`）。判据：`tests/test_intake_actions.py` 的四跳链。
-        needs_proof = (str(origin) == "own_result" and not str(proof_text or "").strip())
+        needs_proof = (str(origin) == "own_result" and not str(proof_text or "").strip()
+                       # 普通数值通道有 E 的实验行撑着：它不欠一份证明正文（业主 2026-11-08）。
+                       and not _green.get("ok"))
         if str(origin) == "external_lit":
             page = dict(page_norm)
             if not (page.get("start") or str(page.get("label") or "").strip()):
@@ -2592,8 +2819,13 @@ class _RegisterStatement:
                                "审稿判据会判这一行缺出处页码" + _all_missing)
         elif str(origin) == "own_result":
             line = dict(line_norm)
-            if not (str(doc_id or "").strip()
-                    or line.get("start") or str(line.get("label") or "").strip()):
+            if _green.get("ok"):
+                # 普通数值通道的出处是那条实验行（`exp:<号>`），不是 doc_id / line_range：
+                # 业主的模型里 D 交的是"E 的实验成果"，没有我方稿件可指 —— 这一格按
+                # `origin_basis` 记成实验行，不拿一条编出来的页码顶替。
+                pass
+            elif not (str(doc_id or "").strip()
+                      or line.get("start") or str(line.get("label") or "").strip()):
                 return _refuse("missing_own_source",
                                "origin='own_result' 时必须给我们自己的出处："
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
@@ -2802,6 +3034,30 @@ class _RegisterStatement:
             return _must_start_as_conjecture_refusal(kind_now=kind_now,
                                                      origin=str(origin))
 
+        # ---- 2026-11-08：普通数值通道的形态闸（收录那一刻判一次） --------------
+        #
+        # 业主：「B侧做好适配（应该在手稿里找命题和数值实验程序，不录入其它内容）」。
+        # 手稿里取的"命题"有没有写清「从什么条件导出什么结论」，由 B 的秘书判一次 ——
+        # 与 F / E 同一道判定口（`Secretary.judge_proposition_form`），不是每条实验判一次。
+        # 判不过 / 没判成 ⇒ 受控拒，一个 statements 行都不落。
+        if _green.get("ok"):
+            _form = self._numeric_form_gate(full=full, kind=kind_now, label=label)
+            _green["proposition_form"] = dict(_form)
+            if not _form.get("submittable"):
+                _why = str(_form.get("reason") or "").strip()
+                _problems = [str(x) for x in (_form.get("problems") or []) if str(x).strip()]
+                return _refuse(
+                    "proposition_form_refused",
+                    ("这条普通数值手稿里的命题形态闸没过 ⇒ 受控拒，不落 statements 行："
+                     f"{_form.get('refused') or 'proposition_form_refused'}")
+                    + (f"；{_why}" if _why else "")
+                    + ("；逐条：" + "；".join(_problems) if _problems else "")
+                    + "。把命题改成「设…则…」那样写清条件与结论，让 E 重落一份手稿再交；"
+                    "形态判定读数已落 out/secretary/proposition_form.jsonl（role=B）",
+                    problems=_problems,
+                    numeric_channel={"path": _green.get("path") or "",
+                                     "proposition_form": dict(_form)})
+
         # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
         # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
         bits, bits_bad = self._statement_bits(
@@ -2810,7 +3066,15 @@ class _RegisterStatement:
             other_proofs=[str(e.get("text") or "") for e in proofs_listed],
             # 透传的是上面唯一一处派生出来的 `kind_now`（不是再算一次）：
             # 位里的等级、校验端的等级、落库那一行的 kind 必须是同一个字符串。
-            kind=kind_now)
+            kind=kind_now,
+            # 普通数值通道：第 1 位的凭据 = 实验号 + 程序路径（足 `bit_problems` 的
+            # "verified 必须能指到哪条实验/哪个脚本"）。
+            numeric_evidence=({"experiment_id": _green.get("experiment_id") or "",
+                               "script": _green.get("code_path") or "",
+                               "manuscript": _green.get("path") or "",
+                               "manuscript_sha256": str(
+                                   (_green.get("manuscript") or {}).get("sha256") or "")}
+                              if _green.get("ok") else None))
         if bits_bad is not None:
             return bits_bad
         # ---- 机械录入的默认态：这一笔交来的每一份证明都标 `optimized=false`（业主 2026-11-02）
@@ -3626,6 +3890,21 @@ class _RegisterStatement:
                 #: 静默把一句"通过了"改成 unknown 与静默放过它同样是坏。
                 "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
+                #: 2026-11-08：普通数值通道的读数（只在真走了那条通道时出现）。
+                #: 三样都在里面：手稿路径 / 实验号 / 程序路径 / 档位压回的那一格，
+                #: 以及形态闸的判定 —— "为什么这一条没要 V 签"读的就是它。
+                **({"numeric_channel": {
+                    "path": str(_green.get("path") or ""),
+                    "experiment_id": str(_green.get("experiment_id") or ""),
+                    "code_path": str(_green.get("code_path") or ""),
+                    "evidence_kind": evidence_kind,
+                    "proof_text": "(空着：普通数值档，业主明令)",
+                    "kind_downgraded": str(_green.get("kind_downgraded") or ""),
+                    "dropped_content": list(_green.get("dropped_content") or []),
+                    "proposition_form": dict(_green.get("proposition_form") or {}),
+                    "manuscript_sha256": str(
+                        (_green.get("manuscript") or {}).get("sha256") or ""),
+                }} if _green.get("ok") else {}),
                 #: 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，让秘书
                 #: 判」）：三态 + 判词 + 洗过的定理名 + "原标签 → 定理名" + 标签里被洗掉的
                 #: 那条路线（它落在第 1 份证明上，没有丢）。判 different / unknown 时

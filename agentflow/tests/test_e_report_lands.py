@@ -167,18 +167,24 @@ def test_1_the_two_blocks_really_land_on_disk_with_a_stable_relative_path(
 
 
 def test_1b_the_column_and_the_report_say_the_same_two_blocks(tmp_path: pathlib.Path) -> None:
-    """① 的第二半：证明栏里的 ②③ 与盘上那份读数逐字一致（两处不一致 = 两个人写的话）。"""
+    """① 的第二半：证明栏的 ③ 与盘上那份读数逐字一致，② 与程序各自有唯一居所。
+
+    2026-11-08：证明栏只剩 ③（穷举论证）；② 程序设计在 `observations["design"]`、
+    ① 程序在 `code_path` —— 两处都必须与报告里那两块读数是同一句话。
+    """
     store = _store(tmp_path)
     out = _run(store)
     row = [r for r in store.rows("experiments") if r["experiment_id"] == out["experiment_id"]][0]
     column = NP.proof_column(row)
-    parts = NP.parse_proof_column(column)
+    parts = NP.parse_proof_column(column, code_path=row["code_path"])
     assert parts["problems"] == [], parts
     report = ER.read_report(store.root, out["report_path"])
     assert report["ok"] is True, report
-    assert parts["design"] in report["text"], "证明栏里的程序设计在报告里读不到"
+    assert "程序设计：" not in column, "② 程序设计不许再出现在证明栏里"
+    design = str((row.get("observations") or {}).get("design") or "")
+    assert design.strip() and design in report["text"], "observations 里的程序设计在报告里读不到"
     assert parts["enumeration"] in report["text"], "证明栏里的穷举论证在报告里读不到"
-    assert parts["script"] == SCRIPT_REL
+    assert parts["script"] == SCRIPT_REL == row["code_path"]
 
 
 # ------------------------------------------------------------------ ② 负控：报告缺 ⇒ 不 proof

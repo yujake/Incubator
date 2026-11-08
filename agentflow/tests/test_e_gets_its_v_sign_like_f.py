@@ -126,10 +126,11 @@ def test_a_e_writes_a_proof_manuscript_in_the_f_shape(tmp_path):
     assert VS.manuscript_proof_body(text) == column
     assert read["proof_body"] == column
     assert read["proof_sha256"] == VR.proof_sha(column) == env["out"]["manuscript_proof_sha256"]
-    # 正文就是穷举那三段（B 登记时 `filing_problems` 认的正是这三段）
-    parsed = NP.parse_proof_column(column)
+    # 正文就是穷举论证那一段（B 登记时 `filing_problems` 认的正是它；② 与程序各有居所）
+    parsed = NP.parse_proof_column(column, code_path=SCRIPT_REL)
     assert parsed["problems"] == [], parsed
     assert parsed["script"] == SCRIPT_REL, parsed
+    assert parsed["design"] == "" and "程序设计：" not in column, parsed
     # 与 F 同形的那三节都在
     for heading in (ER.MANUSCRIPT_STATEMENT_HEADING, ER.MANUSCRIPT_PROOF_HEADING,
                     ER.MANUSCRIPT_DEPENDENCY_HEADING):

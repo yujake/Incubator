@@ -266,7 +266,8 @@ def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Pa
 
 
 def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.Path) -> None:
-    """③-5 只有一份"写着程序的证明栏"、台账里没有对应的实验 ⇒ `看不出来`（缺 ②③）。"""
+    """③-5 只有一份证明栏（③ 在、程序路径钉不到实验）、台账里没有对应的实验
+    ⇒ `看不出来`（缺 ②③ 与程序）。"""
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     _write(store, SCRIPT_REL, EXHAUSTIVE_PROBE)
@@ -274,7 +275,6 @@ def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.P
         "stmt_id": S.format_id(0), "claim_key": "ramsey34=9",
         "statement_full": "对任意正整数 n，R(3,4)=9。",
         "proof_text": NP.compose_proof_column(
-            script_path=SCRIPT_REL, design="把上界归约成二染色穷举",
             enumeration="枚举全部 2^36 个染色，无一遗漏"),
     }
     reviewed = ER.review(workspace_root=store.root, statement=statement, experiments=[])

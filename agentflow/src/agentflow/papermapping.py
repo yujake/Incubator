@@ -1915,16 +1915,35 @@ def _credential_statement(row: Row,
     return {**dict(target), "proof_text": V.proof_text_of(target, row.proof_no)}
 
 
-def _proof_column_program(statement: Mapping[str, Any] | None) -> str:
-    """证明栏第 ① 段那份程序的相对路径（读不到 ⇒ 空串）。
+def _proof_column_program(statement: Mapping[str, Any] | None, *,
+                          experiments: Sequence[Mapping[str, Any]] = (),
+                          evidence: Any = "", file: Any = "") -> str:
+    """证明栏那份程序的相对路径（读不到 ⇒ 空串）。
 
-    2026-11-05 缺陷 1：例子 / 实验的「数值凭据通道」按证明栏判 —— 第 ① 段是程序，
-    这一行就填那份 `.py`。本函数只取那一格的地址，不另判通道（通道仍只问
-    `numericproof.proof_channel`）。
+    2026-11-08 起程序路径住在 `experiments.code_path`（证明栏只剩 ③），所以认法：
+    ① 先按这一行的 `numeric_evidence`（`exp:NNNNNN`）钉到那条实验、读它的 `code_path`；
+    ② 读不到才退回旧形态的证明栏文本（历史数据里 `程序：` 那一段）；
+    ③ 再退到对应表那一行的 `file`（它本来就是"证明栏"那一格；例子 / 实验的数值凭据
+       正是填在这里）。
+    通道判据仍只问 `numericproof.proof_channel`，本函数不另判通道。
     """
     if not isinstance(statement, Mapping):
         return ""
-    return NP.norm_rel(NP.proof_column_script(statement.get("proof_text")))
+    legacy = NP.norm_rel(NP.proof_column_script(statement.get("proof_text")))
+    if legacy:
+        return legacy
+    eid = str(evidence or "").strip().split(":")[-1]
+    if eid:
+        for row in (experiments or ()):
+            if not isinstance(row, Mapping):
+                continue
+            if str(row.get("experiment_id") or row.get("id") or "") != eid:
+                continue
+            got = NP.norm_rel(row.get("code_path"))
+            if got:
+                return got
+    fallback = NP.norm_rel(file)
+    return fallback if NP.is_script_path(fallback) else ""
 
 
 def _credential_slot(row: Row,
@@ -2088,7 +2107,10 @@ def _lean_problems(rows: Sequence[Row], package_root: Path,
         # 凭据格填它就齐 —— 不因 kind 不是命题类环境而挡（2026-11-05 缺陷 1）。
         program_path = ""
         if reading["program"] and not channel:
-            program_path = _proof_column_program(_credential_statement(row, ledger))
+            program_path = _proof_column_program(
+                _credential_statement(row, ledger), experiments=experiments,
+                evidence=str(getattr(row, NT.EVIDENCE_FIELD, "") or ""),
+                file=str(row.file or ""))
         program_credential = bool(program_path) and row.kind not in STATEMENT_ENV_KINDS
         values = {"lean_file": lean_file, "lean_target": lean_target}
         if not channel and not reading["program"]:
@@ -3497,26 +3519,30 @@ def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
             f"{'；'.join(reasons) if reasons else '签名或证明理由不齐'}"
             f" ⇒ 这一条只能记成「{NT.SUPPORTED_ONLY_WORD}」，不许写成定理 / 已证明")
         return out
-    script = NP.proof_column_script(NP.proof_column(found))
+    # 程序路径住在实验行的 `code_path`（2026-11-08：证明栏只剩 ③ 穷举论证）。
+    script = NP.norm_rel(found.get("code_path"))
     if NP.norm_rel(script) != NP.norm_rel(row.file):
         add(NT.NUMERIC_EVIDENCE_MISSING,
             f"表里 label={label!r} 的 `{NT.EVIDENCE_FIELD}` = {want} 那一段的程序是 "
-            f"{script!r}，而证明栏写的是 {row.file!r} —— 同一条定理的证明栏只能指一份程序")
+            f"{script!r}（`exp:{NT.evidence_id_of(found)}` 的 `code_path`），而证明栏写的是 "
+            f"{row.file!r} —— 同一条定理的证明栏只能指一份程序")
         return out
 
-    # 落库那一份证明栏（`statements.proof_text`）就是这条定理的证明栏：三段（① 程序、
-    # ② 程序设计、③ 穷举论证）缺任何一段，它都还不算证明 —— 只能记成"有数值实验支持"。
+    # 落库那一份证明栏（`statements.proof_text`）就是这条定理的证明栏：它必须与 E 的
+    # ③ 逐字相同（缺了 / 改写了 ⇒ 它还不算证明 —— 只能记成"有数值实验支持"）。
     if isinstance(ledger_row, Mapping):
-        column_problems = NT.proof_column_problems(ledger_row.get("proof_text"))
+        column_problems = NT.proof_column_problems(
+            ledger_row.get("proof_text"), code_path=found.get("code_path"))
         for detail in column_problems:
             add(NT.EXHAUSTION_NOTE_MISSING,
                 f"表里 label={label!r} 落库那份证明栏（`{row.ledger_id}`）{detail}"
-                f" —— 三段齐了才叫证明栏；缺的那一段由 E 写，G 原样引用")
-        registered = NP.proof_column_script(ledger_row.get("proof_text"))
-        if registered and NP.norm_rel(registered) != NP.norm_rel(row.file):
-            add(NT.PROOF_PROGRAM_MISSING,
-                f"表里 label={label!r} 的证明栏写的是 {row.file!r}，而落库那份证明栏第 ① 段"
-                f"写的是 {registered!r} —— 同一条定理的证明栏只能指一份程序")
+                f" —— ③ 齐、程序在 `code_path`，才叫证明栏；③ 由 E 写，G 原样引用")
+        registered = NP.norm_text(ledger_row.get("proof_text"))
+        if registered and registered != NP.norm_text(NP.proof_column(found)):
+            add(NT.EXHAUSTION_NOTE_MISSING,
+                f"表里 label={label!r} 落库那份证明栏与 E 的 ③ 不是同一份"
+                f"（`{row.ledger_id}` 与 `exp:{NT.evidence_id_of(found)}` 的签名）——"
+                "B 只负责原样登记 E 的读数，改写成自己的话就不算同一份")
 
     # ②③ 两块读数 + 署名 + 读数编号：E 写的那一份落点必须读得到、且三块齐。
     expected = NT.note_relpath(found)
@@ -3774,7 +3800,10 @@ def mapping_cells(project_root: str | Path, *,
     theorem_numeric = is_numeric_theorem_row(row, ledger, experiments)
     # 证明栏第 ① 段是程序、E 还没签成穷举时，那份 `.py` 就是例子 / 实验的数值凭据
     # （2026-11-05 缺陷 1：凭据格按通道判，`kind` 只决定要不要那几格附加义务）。
-    program_path = "" if channel else _proof_column_program(statement)
+    program_path = "" if channel else _proof_column_program(
+        statement, experiments=experiments,
+        evidence=str(getattr(row, NT.EVIDENCE_FIELD, "") or ""),
+        file=str(row.file or ""))
     program_credential = bool(program_path) and row.kind not in STATEMENT_ENV_KINDS
     cells: dict[str, Any] = {}
     sources: dict[str, str] = {}
@@ -3792,21 +3821,19 @@ def mapping_cells(project_root: str | Path, *,
         exp_row = (NP.find_signed_exhaustion_for_column(experiments,
                                                         statement.get("proof_text"))
                    or NP.find_signed_exhaustion(experiments, slot.get("path") or row.file))
-        script = (NP.norm_rel(NP.proof_column_script(NP.proof_column(exp_row)))
-                  if exp_row is not None else "")
+        script = NP.norm_rel((exp_row or {}).get("code_path"))
         if not script:
             script = NP.norm_rel(slot.get("path") or "") or program_path
         if script:
-            src = (f"experiments#{NT.evidence_id_of(exp_row) or '?'} 的证明栏第 ① 段"
-                   "（`numericproof.proof_column`）"
+            src = (f"experiments#{NT.evidence_id_of(exp_row) or '?'} 的 `code_path`"
+                   "（2026-11-08：程序路径住实验行，不在证明栏里）"
                    if exp_row is not None else
-                   f"statements#stmt:{sid}#p{want_no} 的 proof_text 第 ① 段"
+                   f"statements#stmt:{sid}#p{want_no} 的 proof_text（旧形态 `程序：` 段）"
                    "（`numericproof.proof_column_script`）")
             put("file", script, f"{src} —— 数值实验定理这一行的 `file` 是**仓库根相对**的那份程序")
         else:
             miss("file", "这一行按 `papermapping.is_numeric_row` 是数值凭据那一档，"
-                         "而证明栏第 ① 段"
-                         "读不出那份程序的路径（`numericproof.proof_column_script` 返回空）"
+                         "而那条实验的 `code_path` 与证明栏的旧 `程序：` 段都读不出程序路径"
                          " ⇒ 这一格拿不到")
     else:
         env, why = _body_env_for_label(project, row.label)
