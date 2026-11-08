@@ -5086,6 +5086,40 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
             "signed_pending_filing": 3, "judgment_missing": 4, "unreadable": 5,
             "never_submitted": 6}
     pending_rows: list[dict[str, Any]] = []
+    _unsigned_rows_reading(rows, out=out, root=root, now_dt=now_dt, box=box,
+                           rank=rank, pending_rows=pending_rows)
+    for one in list(out["rows"]) + pending_rows:
+        key = str(one["class"])
+        out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
+    out["pending_filing"] = pending_rows
+    out["pending_filing_count"] = len(pending_rows)
+    out["checked"] = True
+    out["count"] = len(out["rows"])
+    out["reason"] = ("查过了：没有「既无 V 签也未放弃」的命题"
+                     if not out["rows"] else
+                     f"查过了：{out['count']} 条命题既无 V 签也未明确放弃"
+                     f"（扫了 {out['scanned']} 条非概念命题）")
+    if pending_rows:
+        out["reason"] += (f"；另有 {len(pending_rows)} 条是「稿上已签、册里还没收录」"
+                          "（不欠签，等 B 收录）")
+    return out
+
+
+def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
+                           root: str, now_dt: str, box: Mapping[Any, Any],
+                           rank: Mapping[str, int],
+                           pending_rows: list[dict[str, Any]]) -> None:
+    """逐条判「既无 V 签也未放弃」（`statements_unsigned_reading` 的内层，只搬移）。
+
+    2026-11-08 从 `statements_unsigned_reading` 拆出：那 110 行循环是同一件事（逐条读
+    证明清单 / 台账 / 稿上的签，判它属于哪一档），拆出来之后外层回到 100 行上下 ——
+    体量基线是读数，不许为了它抬（业主口径：拆函数，不抬基线）。读数经 `out` 与
+    `pending_rows` 带出，不开新返回值。
+    """
+    from . import statementabandon as _SA
+    from . import verifications as _VR
+    from . import vsigns as _VSP
+
     for sid, row in sorted(rows.items()):
         kind = str(row.get("kind") or "")
         if kind == "concept":
@@ -5197,22 +5231,6 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
             "hung_seconds": hung, "hung": _human_span(hung),
             "owner": owner, "owner_known": bool(owner),
             "proofs": proofs, "why": str(worst.get("why") or "")[:400]})
-    for one in list(out["rows"]) + pending_rows:
-        key = str(one["class"])
-        out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
-    out["pending_filing"] = pending_rows
-    out["pending_filing_count"] = len(pending_rows)
-    out["checked"] = True
-    out["count"] = len(out["rows"])
-    out["reason"] = ("查过了：没有「既无 V 签也未放弃」的命题"
-                     if not out["rows"] else
-                     f"查过了：{out['count']} 条命题既无 V 签也未明确放弃"
-                     f"（扫了 {out['scanned']} 条非概念命题）")
-    if pending_rows:
-        out["reason"] += (f"；另有 {len(pending_rows)} 条是「稿上已签、册里还没收录」"
-                          "（不欠签，等 B 收录）")
-    return out
-
 
 def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     """第二阶段那一格读数：按 optimized 加来源分三档（业主 2026-11-02 两阶段录入）。

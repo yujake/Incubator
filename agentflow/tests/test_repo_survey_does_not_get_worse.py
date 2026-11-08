@@ -96,17 +96,13 @@ BASELINE: dict[str, int] = {
     # `_norm_rel` / `_rel_is_inside` 两个路径守卫）。是「既有单职责模块被写胖过线」，
     # 不是新落的模块 —— 但那一批的载体读写本来就只有这一处，拆开会让"哪一份稿在盘上、
     # 叫什么名"有两个实现。判据语义一个字没动：抬完仍然只许降、不许再涨。
-    # 2026-11-08 再抬 75 → 76。净额 +1，能逐条点名（按文件比对基线提交 047100d5 与
-    # HEAD：两条新过线、一条掉回线下）：
-    #   · `src/agentflow/statementabandon.py` 1224 行 —— 新落的单职责模块（放弃命题的
-    #     四档理由 + defect_ref / salvaged 的判据与读数），不是既有文件被写胖；
-    #   · `src/agentflow/propositionkey.py` 823 行 —— 原 791 行，2026-11-08 两轴收口
-    #     （`_statement_same_system` 删除、`same_concept` / `proposition_key` 的读数与
-    #     候选口径并进来）把这条确定性键的判据推到过线，是「既有模块被写胖过线」；
-    #   · 掉回线下的一条：`src/agentflow/agent_f/manuscript.py`（890 → 800 以下），
-    #     2026-11-07 手稿产出收口之后它的入口搬走了一部分。
-    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_files_gt800_lines": 76,
+    # 2026-11-08（不抬基线，改拆）：这一批确实把 `propositionkey.py` 推过 800（791 →
+    # 823，概念定义项那一块），但业主口径是「不许抬基线」⇒ 处置是把它拆回 800 以下：
+    # 「概念的定义项」那三样（`CONCEPT_GENERIC_TERMS` / 两个抽取正则 / `defined_term`）
+    # 搬到 `conceptrows.py`（概念行的唯一读写口），`propositionkey` 只回引两个 public
+    # 名字。搬完 823 → 786 行，这一格仍是 75。同一笔里函数那一格也是拆（95 不动）——
+    # 逐条见下面那一格上方的点名。判据语义一个字没动：只许降、不许再涨。
+    "src_files_gt800_lines": 75,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -187,23 +183,21 @@ BASELINE: dict[str, int] = {
     #     `land_unregistered_sign`），并分辨 `reviews_unsigned` / 负判落 pending /
     #     路径不合约定三类终局。它是「新落的长函数」，不是把既有函数写胖。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    # 2026-11-08 再抬 95 → 99。净额 +4，逐条点名（按 (文件, 函数名) 比对基线提交
-    # 047100d5 与 HEAD：五条新过线、一条掉回线下）：
-    #   · `src/agentflow/agent_b/register_statement.py::_register_statement_impl` 2243 行
-    #     与掉回线下的 `register_statement`（1502 行 → 200 行以下）是同一笔拆分：
-    #     入口收成薄适配（参数面 + 早退那几档），主体搬进 `_register_statement_impl`，
-    #     这一对净额 0；
-    #   · `src/agentflow/agent_b/register_statement.py::_transition` 296 行 —— 新落：
-    #     收录路径的"这一笔走哪一条"（在册 / 未在册 / 携带 / 概念行）的分派与读数；
-    #   · `src/agentflow/closing.py::statements_unsigned_reading` 213 行 —— 新落：
-    #     收工门那条"有登记动作、判定台账 0 行"的读数口（2026-11-08 块①）；
-    #   · `src/agentflow/secretary.py::adjudicate_proposition` 284 行 —— 由两处判定收成
-    #     一处实现之后，挑词 / 检索 / 一次判定的三段都落在这一个函数里；
-    #   · `src/agentflow/secretary.py::record_statement` 201 行 —— 同一批把同一性闸
-    #     （`_resolve_same_statement` 的两档结论 + fail-closed）并进这条写入正路。
-    # 前一条是"既有函数被拆开"，后四条都是"这一批的新能力落在既有文件里"。
-    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 99,
+    # 2026-11-08（不抬基线，改拆）：这一批把五条函数推过 200 行（其中
+    # `_register_statement_impl` 与掉回线下的 `register_statement` 是同一笔拆分的两半，
+    # 净额 0）。业主口径「不许抬基线，拆函数」⇒ 处置是把越过线的那四条各拆一块出来：
+    #   · `agent_b/register_statement.py::_attach_proofs._transition` 296 → 159 —— 把
+    #     「换正文」那一段（核签 / 换 / 认优化标记 / 判旧签不算数）搬成
+    #     `_RegisterStatement._apply_canonical_proof`；
+    #   · `closing.py::statements_unsigned_reading` 213 → 103 —— 把逐条判档那个循环搬成
+    #     模块级 `_unsigned_rows_reading`；
+    #   · `secretary.py::adjudicate_proposition` 284 → 198 —— 把 `out` 初值与「取候选」
+    #     两块搬成 `_identity_out` / `_identity_candidates`；
+    #   · `secretary.py::record_statement` 201 → 180 —— 把「交给事务写口 / 写不成怎么读」
+    #     那一段搬成 `_land_or_refuse`。
+    # 四块都是整段搬移（缩进不变、块内逐字相同），返回值 sha256 前后相同（12 组，见
+    # `temp/_equiv_probe.py`）。拆完这一格仍是 95。判据语义一个字没动：只许降、不许再涨。
+    "src_functions_gt200_lines": 95,
     "dup_docstring_segments": 5,
 }
 
@@ -234,11 +228,12 @@ BASELINE: dict[str, int] = {
 #: 2026-11-04 载体迁移再抬两格：文件 74 → 75（`agent_f/manuscript.py` 620 → 890）与
 #: 函数 94 → 95（`agent_v/core.py::_review_unregistered_prose` 0 → 224），来源逐条见
 #: `BASELINE` 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
-#: 2026-11-08 再抬两格：文件 75 → 76（净 +1：`statementabandon.py` 1224 新过线、
-#: `propositionkey.py` 823 被写胖，`agent_f/manuscript.py` 掉回线下）与函数 95 → 99
-#: （净 +4：五条新过线、`register_statement` 拆分后掉回线下），来源逐条见 `BASELINE`
-#: 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
-BASELINE_OBSERVED = "2026-11-08"
+#: 2026-11-08：这一批没有抬基线（业主口径：拆函数 / 拆模块，不抬基线）。文件那一格
+#: 仍是 75（`propositionkey.py` 823 → 786：概念定义项那一块搬进 `conceptrows.py`），
+#: 函数那一格仍是 95（四条越过 200 的函数各拆一块出来，见 `BASELINE` 里那一格上方的
+#: 逐条点名）。`BASELINE_OBSERVED` 因此仍是 2026-11-04 —— 这两个数是那一天的读数，
+#: 今天再量还是它。
+BASELINE_OBSERVED = "2026-11-04"
 
 
 def _load_survey():

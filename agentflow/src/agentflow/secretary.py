@@ -7059,38 +7059,7 @@ class Secretary:
         full = str(stmt_like.get("statement_full") or "")
         label = str(stmt_like.get("label") or "")
         kind = str(stmt_like.get("kind") or "theorem")
-        out: dict[str, Any] = {
-            #: 判词只有两档（`PROPOSITION_VERDICTS`）；空串 = 这一趟没判成（没有判词）。
-            "checked": False, "verdict": "", "canonical_name": "",
-            "same_as": "", "route": "", "condition": "", "conclusion": "",
-            "basis": "", "reason": "", "label": label, "kind": kind,
-            "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
-            "reused": False, "cached": False, "statement_sha256": "",
-            #: 检索读数（2026-11-08 主动查询）：关键词 / 命中几条 / 实际交给模型看的是
-            #: 哪几条（带每条命中的词）/ 判定那一趟发没发 / 一句话为什么。
-            "keywords": [], "hits_total": 0, "hits_named": [], "judged": False,
-            "why": "",
-            #: 这一条判定用的是哪一条缝（`Secretary.model_source` 的三档读数：
-            #: `body（…）` / `secretary（…）` / `none（…）`）。空串 = 这一名秘书是裸造的
-            #: （`Secretary(...)` 没传 `seam=`），那一档就是"没有判断面"。
-            #:
-            #: 为什么把它放进返回值（2026-10-26 真机 sylow5）：`judge()` 那句"没有装配
-            #: 模型缝"只在 `Secretary.judge` 的局部返回值里，调用方（B 的工具返回、直写
-            #: 路由的 detail）看不到"缝为什么没有" —— 而 sylow5 的根因恰恰是装配处漏了
-            #: 一根线，不是判据坏了。缝的来源与"判了没有"必须同时在读数上。
-            "seam_source": str(self.model_source or ""),
-            #: 这一格到底有没有"试过"：有缝且开关开着才是试过。
-            #:
-            #: 它与 `checked` 是两根轴：`attempted=False` 是"这一名秘书根本没有判同一性
-            #: 这一路"（没缝），`attempted=True` + `checked=False` 是"试了、没判成"
-            #: （超时 / 坏 JSON / same 点不出号 / 词表外结论）。「上层 fail-closed 的判据是
-            #: 这两根轴的交集」：试过而没判成 ⇒ 不新建、不合并、受控拒（见
-            #: `_merge_into_proposition`）。没有判断面的秘书走 2026-11-04 的确定性兜底
-            #: （只认确定性键相同），盘上要不要留痕也由这一格决定 —— 没有缝的秘书写出来的
-            #: 行必须与改前逐字节相同（否则"这一段正文之前长什么样"被一个从来没发生过的
-            #: 判定改写了）。
-            "attempted": bool(self.seam is not None and self.enable_model),
-        }
+        out: dict[str, Any] = self._identity_out(label=label, kind=kind)
         if not _is_proposition_kind(kind):
             out["reason"] = (f"kind={kind!r} 不在命题性的那几档 {list(PROPOSITION_KINDS)} 里 "
                              "⇒ 不是命题，不参与同一性判定（也不洗它的名字）")
@@ -7153,74 +7122,12 @@ class Secretary:
         # 没有候选（台账 0 条 / 关键词 0 命中）时「仍然发判定那一趟」：洗定理名
         # （`canonical_name` / `route`）与判定是同一趟的输出，跳过它就会让"第一条命题
         # 的 label 原样落盘"—— 那正是洗名要治的形态。这一档只省掉挑词那一问。
-        if candidates is not None:
-            supplied = [dict(c) for c in candidates
-                        if isinstance(c, Mapping) and str(c.get("stmt_id") or "").strip()]
-            for item in supplied:
-                item.setdefault("hit_words", [])
-                item.setdefault("proof_nos", [])
-                item["statement_full"] = str(item.get("statement_full") or "")[
-                    :PROPOSITION_VERDICT_TEXT_CHARS]
-            out.update(
-                keywords=[], hits_total=len(supplied),
-                hits_named=[{"stmt_id": str(h.get("stmt_id") or ""),
-                             "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                            for h in supplied[:PROPOSITION_VERDICT_CANDIDATES]],
-                candidates=list(supplied),
-                why=("调用方给了候选表 ⇒ 这一趟不再自己检索" if supplied
-                     else "调用方给的候选表为空 ⇒ 没有可比的条目（查过 0 条）"))
-            if not supplied:
-                # 兼容档：调用方已经查过一圈且明确给了空表 ⇒ 不再花一次调用（旧入口的语义）。
-                out.update(checked=True, verdict=_PK.STATE_DIFFERENT, judged=False,
-                           reason="查过：调用方给的候选表为空（0 条）⇒ 没有同一条",
-                           basis="查过：没有可比的候选 ⇒ 不同")
-                self._remember_proposition_verdict(out, full=full, label=label,
-                                                   task_id=task_id)
-                return self._with_adjudication_visibility(out)
-        else:
-            pool_rows, pool_problem = self._searchable_statement_rows(rows)
-            if pool_problem:
-                out.update(checked=False, verdict="", reason=pool_problem,
-                           why=pool_problem)
-                return self._with_adjudication_visibility(out)
-            if not pool_rows:
-                out["why"] = ("台账里没有可检索的 active 命题（读过了，0 条）"
-                              "⇒ 没有候选，判定直接判 different")
-            else:
-                kw = self.pick_statement_keywords(statement_full=full, label=label,
-                                                  kind=kind, task_id=task_id)
-                out["keywords"] = [str(x) for x in (kw.get("keywords") or ())]
-                out["keyword_checked"] = bool(kw.get("checked"))
-                out["why"] = str(kw.get("why") or "")
-                if not kw.get("checked"):
-                    out.update(
-                        checked=False, verdict="",
-                        reason=("关键词没提取成 ⇒ 这一问没判成（不新建、不合并、受控拒）："
-                                + str(kw.get("why") or "（没有给原因）")))
-                    return self._with_adjudication_visibility(out)
-                search = self._statements_matching_keywords(out["keywords"],
-                                                            rows=pool_rows)
-                hits = list(search.get("hits") or [])
-                out["hits_total"] = len(hits)
-                out["hits_named"] = [
-                    {"stmt_id": str(h.get("stmt_id") or ""),
-                     "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                    for h in hits[:PROPOSITION_VERDICT_CANDIDATES]]
-                out["candidates"] = hits
-                if not hits:
-                    out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在命题台账里"
-                                  "命中 0 条 ⇒ 没有候选")
-        context = {
-            # 这一条给三倍于候选的篇幅：它是要被判的那一条，缺了一半就没法判。
-            "statement_full": full[: PROPOSITION_VERDICT_TEXT_CHARS * 3],
-            "label": label,
-            "kind": kind,
-            "candidates": self._candidate_reading(out["candidates"]),
-            "how_to_judge": ("只比条件与结论；条件强弱不同 ⇒ different；"
-                             "条件只是记号/等价改写 ⇒ same；"
-                             "候选表为空 ⇒ different（没有可并的对象）；"
-                             "读不清就不给判词（不许猜，也不许给第三档）"),
-        }
+        if self._identity_candidates(out, candidates=candidates, rows=rows,
+                                     full=full, label=label, kind=kind,
+                                     task_id=task_id):
+            return self._with_adjudication_visibility(out)
+        context = self._identity_context(
+            full=full, label=label, kind=kind, candidates=out["candidates"])
         got = self.judge("proposition_identity", context, task_id=task_id, note=note)
         out["judged"] = True
         out["cost"] = dict(got.get("cost") or {})
@@ -7286,6 +7193,133 @@ class Secretary:
             self._remember_proposition_verdict(out, full=full, label=label,
                                                task_id=task_id)
         return self._with_adjudication_visibility(out)
+
+    def _identity_context(self, *, full: str, label: str, kind: str,
+                          candidates: list[dict[str, Any]]) -> dict[str, Any]:
+        """判定那一趟的材料（只搬移：字面量逐字相同）。
+
+        2026-11-08 从 `adjudicate_proposition` 拆出（体量基线是读数，不许为了它抬）。
+        """
+        return {
+        # 这一条给三倍于候选的篇幅：它是要被判的那一条，缺了一半就没法判。
+        "statement_full": full[: PROPOSITION_VERDICT_TEXT_CHARS * 3],
+        "label": label,
+        "kind": kind,
+        "candidates": self._candidate_reading(candidates),
+        "how_to_judge": ("只比条件与结论；条件强弱不同 ⇒ different；"
+                         "条件只是记号/等价改写 ⇒ same；"
+                         "候选表为空 ⇒ different（没有可并的对象）；"
+                         "读不清就不给判词（不许猜，也不许给第三档）"),
+    }
+
+    def _identity_out(self, *, label: str, kind: str) -> dict[str, Any]:
+        """这一趟的初值读数（键无条件存在：没判成由 `checked` 说，不靠少给键）。
+
+        2026-11-08 从 `adjudicate_proposition` 拆出（只搬移，字面量逐字相同）：那一格 30 余行，
+        拆出来之后 `adjudicate_proposition` 回到 200 行以内 —— 体量基线是读数，不许为了它抬。
+        """
+        out: dict[str, Any] = {
+            #: 判词只有两档（`PROPOSITION_VERDICTS`）；空串 = 这一趟没判成（没有判词）。
+            "checked": False, "verdict": "", "canonical_name": "",
+            "same_as": "", "route": "", "condition": "", "conclusion": "",
+            "basis": "", "reason": "", "label": label, "kind": kind,
+            "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
+            "reused": False, "cached": False, "statement_sha256": "",
+            #: 检索读数（2026-11-08 主动查询）：关键词 / 命中几条 / 实际交给模型看的是
+            #: 哪几条（带每条命中的词）/ 判定那一趟发没发 / 一句话为什么。
+            "keywords": [], "hits_total": 0, "hits_named": [], "judged": False,
+            "why": "",
+            #: 这一条判定用的是哪一条缝（`Secretary.model_source` 的三档读数：
+            #: `body（…）` / `secretary（…）` / `none（…）`）。空串 = 这一名秘书是裸造的
+            #: （`Secretary(...)` 没传 `seam=`），那一档就是"没有判断面"。
+            #:
+            #: 为什么把它放进返回值（2026-10-26 真机 sylow5）：`judge()` 那句"没有装配
+            #: 模型缝"只在 `Secretary.judge` 的局部返回值里，调用方（B 的工具返回、直写
+            #: 路由的 detail）看不到"缝为什么没有" —— 而 sylow5 的根因恰恰是装配处漏了
+            #: 一根线，不是判据坏了。缝的来源与"判了没有"必须同时在读数上。
+            "seam_source": str(self.model_source or ""),
+            #: 这一格到底有没有"试过"：有缝且开关开着才是试过。
+            #:
+            #: 它与 `checked` 是两根轴：`attempted=False` 是"这一名秘书根本没有判同一性
+            #: 这一路"（没缝），`attempted=True` + `checked=False` 是"试了、没判成"
+            #: （超时 / 坏 JSON / same 点不出号 / 词表外结论）。「上层 fail-closed 的判据是
+            #: 这两根轴的交集」：试过而没判成 ⇒ 不新建、不合并、受控拒（见
+            #: `_merge_into_proposition`）。没有判断面的秘书走 2026-11-04 的确定性兜底
+            #: （只认确定性键相同），盘上要不要留痕也由这一格决定 —— 没有缝的秘书写出来的
+            #: 行必须与改前逐字节相同（否则"这一段正文之前长什么样"被一个从来没发生过的
+            #: 判定改写了）。
+            "attempted": bool(self.seam is not None and self.enable_model),
+        }
+        return out
+
+    def _identity_candidates(self, out: dict[str, Any], *,
+                             candidates: Sequence[Mapping[str, Any]] | None,
+                             rows: Iterable[Mapping[str, Any]] | None,
+                             full: str, label: str, kind: str, task_id: str) -> bool:
+        """取这一趟的候选表；返回 True = 这一趟到此为止（调用方直接回读数）。
+
+        2026-11-08 从 `adjudicate_proposition` 拆出（只搬移，块内逐字相同）：「调用方给了候选」
+        与「秘书自己挑词检索」是同一格的两条来路，合起来 50 余行；拆开之后 `adjudicate_proposition`
+        回到 200 行以内 —— 体量基线是读数，不许为了它抬（业主口径：拆函数，不抬基线）。
+        """
+        if candidates is not None:
+            supplied = [dict(c) for c in candidates
+                        if isinstance(c, Mapping) and str(c.get("stmt_id") or "").strip()]
+            for item in supplied:
+                item.setdefault("hit_words", [])
+                item.setdefault("proof_nos", [])
+                item["statement_full"] = str(item.get("statement_full") or "")[
+                    :PROPOSITION_VERDICT_TEXT_CHARS]
+            out.update(
+                keywords=[], hits_total=len(supplied),
+                hits_named=[{"stmt_id": str(h.get("stmt_id") or ""),
+                             "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
+                            for h in supplied[:PROPOSITION_VERDICT_CANDIDATES]],
+                candidates=list(supplied),
+                why=("调用方给了候选表 ⇒ 这一趟不再自己检索" if supplied
+                     else "调用方给的候选表为空 ⇒ 没有可比的条目（查过 0 条）"))
+            if not supplied:
+                # 兼容档：调用方已经查过一圈且明确给了空表 ⇒ 不再花一次调用（旧入口的语义）。
+                out.update(checked=True, verdict=_PK.STATE_DIFFERENT, judged=False,
+                           reason="查过：调用方给的候选表为空（0 条）⇒ 没有同一条",
+                           basis="查过：没有可比的候选 ⇒ 不同")
+                self._remember_proposition_verdict(out, full=full, label=label,
+                                                   task_id=task_id)
+                return True
+        else:
+            pool_rows, pool_problem = self._searchable_statement_rows(rows)
+            if pool_problem:
+                out.update(checked=False, verdict="", reason=pool_problem,
+                           why=pool_problem)
+                return True
+            if not pool_rows:
+                out["why"] = ("台账里没有可检索的 active 命题（读过了，0 条）"
+                              "⇒ 没有候选，判定直接判 different")
+            else:
+                kw = self.pick_statement_keywords(statement_full=full, label=label,
+                                                  kind=kind, task_id=task_id)
+                out["keywords"] = [str(x) for x in (kw.get("keywords") or ())]
+                out["keyword_checked"] = bool(kw.get("checked"))
+                out["why"] = str(kw.get("why") or "")
+                if not kw.get("checked"):
+                    out.update(
+                        checked=False, verdict="",
+                        reason=("关键词没提取成 ⇒ 这一问没判成（不新建、不合并、受控拒）："
+                                + str(kw.get("why") or "（没有给原因）")))
+                    return True
+                search = self._statements_matching_keywords(out["keywords"],
+                                                            rows=pool_rows)
+                hits = list(search.get("hits") or [])
+                out["hits_total"] = len(hits)
+                out["hits_named"] = [
+                    {"stmt_id": str(h.get("stmt_id") or ""),
+                     "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
+                    for h in hits[:PROPOSITION_VERDICT_CANDIDATES]]
+                out["candidates"] = hits
+                if not hits:
+                    out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在命题台账里"
+                                  "命中 0 条 ⇒ 没有候选")
+        return False
 
     def _remember_proposition_verdict(self, out: dict[str, Any], *, full: str,
                                       label: str = "", task_id: str = "") -> None:
@@ -8153,11 +8187,27 @@ class Secretary:
         out["proposition_adjudication"] = dict(
             adjudication.get("proposition_adjudication") or {})
         out["canonical_name"] = str(adjudication.get("canonical_name") or "")
+        return self._land_or_refuse(body, full=full, kind=kind,
+                                    force_new=bool(force_new), out=out,
+                                    adjudication=adjudication,
+                                    candidate_id=str(candidate_id or ""))
+
+
+    def _land_or_refuse(self, body: Mapping[str, Any], *, full: str, kind: str,
+                        force_new: bool, out: dict[str, Any],
+                        adjudication: Mapping[str, Any],
+                        candidate_id: str) -> dict[str, Any]:
+        """把这一笔交给事务写口；写不成按三态回一条读数（不抛、不半笔）。
+
+        2026-11-08 从 `record_statement` 拆出（只搬移，块内逐字相同）：「交给事务写口」
+        与「写不成怎么读」是同一件事的两半，合起来 20 余行；拆开之后 `record_statement`
+        回到 200 行以内 —— 体量基线是读数，不许为了它抬（业主口径：拆函数，不抬基线）。
+        """
         try:
             landed = self._record_statement_tx(body, full=full, kind=kind,
                                                force_new=bool(force_new), out=out,
                                                adjudication=adjudication,
-                                               candidate_id=str(candidate_id or ""))
+                                               candidate_id=candidate_id)
             return self._with_relabel_reading(landed, kind=kind)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             # ---- 写入期闸的拒收要留住它自己的码（2026-11-05 走查 D2）------------

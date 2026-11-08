@@ -41,6 +41,7 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
@@ -63,6 +64,46 @@ LEGACY_TABLE = "concepts"
 #: `own_result` —— 于是"文献里来的术语"在报告里被读成"我们自己的结果"。
 #: 根因在 `concept_statement` 把 `origin="own_result"` 写死（本批缺陷一）。
 CONCEPT_ORIGINS: tuple[str, ...] = ("external_lit", "own_result")
+
+#: 不算定义项的通用词（规范化之后逐字比）。
+#:
+#: 为什么要有这一格：概念行的标签在真机里有一大片只写着"概念"/"定义"（名字在正文里），
+#: 拿它当键会把所有这些没命名的行并成一条 —— 那是比"重复登记"更坏的一种错
+#: （一条真概念在台账上消失，而盘上看起来完全合法）。
+CONCEPT_GENERIC_TERMS: tuple[str, ...] = (
+    "概念", "定义", "命题", "定理", "引理", "推论", "猜想", "注", "例", "反例",
+    "concept", "definition", "proposition", "theorem", "lemma", "remark", "example",
+)
+
+#: 从 `statement_full` 里抽"被定义的那个术语"只认开头这两种显式形态。
+#:
+#: 为什么只认开头、只认这两种：`概念（X）` / `定义（X）` 是登记时写定义句的固定形态
+#: （真机 mp3-r2 的六条概念行逐条都是），而"正文里某个括号里的东西"不是一个可复算的
+#: 定义项 —— 猜它会把两条不相关的定义并成一条。
+_DEFINED_TERM_HEAD = re.compile(
+    r"^[\s#>*_\-|]*"
+    r"(?:概念|定义|definition|concept)"
+    r"\s*[（(]\s*([^（()）\n]{1,80}?)\s*[）)]",
+    re.IGNORECASE)
+_DEFINED_TERM_HEAD2 = re.compile(
+    r"^[\s#>*_\-|]*(?:概念|定义)\s*[:：]\s*([^：:，,。；;\n]{1,60})")
+
+
+def defined_term(statement_full: str) -> str:
+    """从一条定义的正文里抽"被定义的那个术语"；抽不出 ⇒ 空串（不猜）。
+
+    只认开头：「概念（X）」「定义（X）」「概念：X」「定义：X」（英文 Definition (X) 同）。
+    返回的是原样的一截术语，规范化交给 :func:`concept_keys`（比键的时候才规范化，
+    读数里留原文，读的人能核对抽错没抽错）。
+    """
+    text = str(statement_full or "")
+    if not text.strip():
+        return ""
+    for pattern in (_DEFINED_TERM_HEAD, _DEFINED_TERM_HEAD2):
+        found = pattern.match(text)
+        if found:
+            return str(found.group(1) or "").strip()
+    return ""
 
 #: 一轮之内新建概念的上限（业主 2026-10-21：「概念应按轮限量，一轮几十条以内」）。
 #:
