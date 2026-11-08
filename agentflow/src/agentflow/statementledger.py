@@ -44,11 +44,11 @@
 
 ## 与工具层 `table.search` 的关系（2026-11-09 起：statements 上同一把尺）
 
-通用表工具（`tools/table_tools.py` 的 `table.get` / `table.search`）对**别的表**仍是列文本：
+通用表工具（`tools/table_tools.py` 的 `table.get` / `table.search`）对别的表仍是列文本：
 `casefold` 子串、对该表全部标量字符串字段。本模块是命题语义面的查：只比 `label` /
 `statement_full`，用 `textutil.normalize`（与判重、查重同一把尺）。
 
-**在 `statements` 表上，两边从 2026-11-09 起是一把尺**：`table.search` 的 statements 分支
+在 `statements` 表上，两边从 2026-11-09 起是一把尺：`table.search` 的 statements 分支
 不再用 `casefold`，而是调同一份判据（`textutil.normalized_keywords` /
 `textutil.matched_keywords`），搜索面也收敛到 `label` / `statement_full`；点名别的列
 （`proof_text` / `status` / `stmt_id` …）会受控拒绝，不静默忽略。
@@ -57,7 +57,7 @@
 差异清单与"哪些差异是有意为之、不统一"见 `temp/_design_two_rulers.md`。
 
 `table_tools.py` 在 `.noai-paths` 的 FC-27 禁改区（`auth-audit` 类）：这次改动是按
-`scripts/noai_gate.py --baseline` 登记的，**登记 ≠ 批准**，仍需 2 名 reviewer 逐行走查。
+`scripts/noai_gate.py --baseline` 登记的，登记 ≠ 批准，仍需 2 名 reviewer 逐行走查。
 
 ## 池（查哪一批）归调用方，不归本模块
 
