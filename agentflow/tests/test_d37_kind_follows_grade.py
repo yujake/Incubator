@@ -58,13 +58,13 @@ V 的签（第 3 位）与形式化通过（第 4 位）是两条并列的独立
 
 ## 2026-11-08（缺陷③）：这一组的写侧负控为什么不再钉 `ok=false`
 
-`c94a8e8f` 把「收录回执」从"第 2 位这次翻真"那一支里解耦出来：**只要这一行真有一份
-正文**，`_attach_proofs` 就把这一笔落点的号与现算 sha 写到 `statements` 顶层
-（`proof_no` / `proof_sha256`），并且**它进写盘判据**（`out["proof_receipt"]` 非空 ⇒
+`c94a8e8f` 把「收录回执」从"第 2 位这次翻真"那一支里解耦出来：只要这一行真有一份
+正文，`_attach_proofs` 就把这一笔落点的号与现算 sha 写到 `statements` 顶层
+（`proof_no` / `proof_sha256`），并且它进写盘判据（`out["proof_receipt"]` 非空 ⇒
 事务提交）。于是"同一条命题已在册、而这一行的回执还没写过"的那一笔不再整笔拒
 `duplicate_statement`：它真写了一格 ⇒ `ok=true` + `new_row=false`。
 
-这一组的四条负控要量的**不是**"这一笔写没写东西"，而是"这一笔有没有把 `kind` 抬上去
+这一组的四条负控要量的不是"这一笔写没写东西"，而是"这一笔有没有把 `kind` 抬上去
 （以及盘上的升档留痕有没有再动一次）"。所以判据钉在后者：`new_row=false`、
 `upgraded=false` + 拒码逐字、盘上 `kind` / `_kind_upgrade` / `_grade_recomputed` 逐字不变。
 拿 `ok` 当代理比这弱两层：拒收可能发生在写了一半之后，而"写了新行"也可能报 `ok=false`。
