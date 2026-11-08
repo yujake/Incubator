@@ -2346,8 +2346,8 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 路径收录」；D 的 policy 三处（只递指针 / 只给研究方向不点 conjecture_id / 命题台账由 B 写、
 # D 只读）。A / C / E / F / G / H / L / M / V 逐字未动（只差版本行）。
 # 逐格旧值 → 新值：B 465a645b→4441ddd1 / D da51f676→4d840d5b。
-# 十一格是 `temp/_p259_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
-# 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+# 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+# （先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实）现算。
 _FROZEN_PROMPT_VERSION = "p259"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段

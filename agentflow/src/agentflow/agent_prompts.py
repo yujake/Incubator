@@ -3615,8 +3615,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:          与写集三张表 / 报告落点是文件。
 #: 变化格（十一格摘要）= B / D；A / C / E / F / G / H / L / M / V 逐字未动（只差版本行）。
 #: 逐格旧值 → 新值：B 465a645b→4441ddd1 / D da51f676→4d840d5b。
-#: 十一格是 `temp/_p259_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
-#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+#: （先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实）现算。
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p259）；`tests/test_prompt_stability.py` 的
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p258 同值）；
 #: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字不变 —— 本批没有改任何工具声明；
