@@ -3452,14 +3452,14 @@ class Secretary:
 
     # ------------------------------------------------ 同一命题检索（2026-11-08）
     #
-    # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「应该没有same和different读数，
-    # 只有秘书查了一圈没查到一样的就注册新的，查到就更新那条命题的状态」。
+    # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「语义判定……应该是主动查询」。
     #
-    # 两步都是秘书的判定（各一次模型调用），代码只做检索与落盘：
-    #   ① pick_statement_keywords：从待收命题里挑数学内容的关键词；
-    #   ② judge_statement_same：拿检索出来的那几条问"是不是同一条"。
-    # 两问的产物都不是"same/different"这种结论词：found 非空 = 查到了那一条；
-    # 空 = 查了一圈没查到。于是调用方只有一条分支，不必再解释第二种说法。
+    # 两问，都在这一处收口：
+    #   ① pick_statement_keywords：从待收命题里挑数学内容的关键词（检索的输入）；
+    #   ② `adjudicate_proposition`：代码按关键词检索，再把命中候选交给判定那一趟。
+    # 判定只有一处实现（`adjudicate_proposition`；两档 same / different）。
+    # `judge_statement_same` 只是历史入口的薄适配（把调用方已检索好的候选递进去），
+    # 它不再有自己的题面与自己的判据。
 
     def pick_statement_keywords(self, *, statement_full: str, label: str = "",
                                 kind: str = "", task_id: str = "") -> dict[str, Any]:
@@ -3467,7 +3467,7 @@ class Secretary:
 
         业主 2026-11-08 逐字：「B秘书要学会在命题台账里按关键词搜索」。
         这一问只回答"拿哪几个词去台账里捞"，不回答"捞到的是不是同一条"（那是
-        :meth:`judge_statement_same` 那一问）。两问分开的理由：关键词是检索的输入，
+        :meth:`adjudicate_proposition` 那一趟）。两问分开的理由：关键词是检索的输入，
         判同一是检索结果的处置；混成一问会让"检索没捞到"与"判定说不是"在读数上同形。
 
         ## 返回
@@ -3552,118 +3552,50 @@ class Secretary:
                              candidates: Sequence[Mapping[str, Any]],
                              label: str = "", kind: str = "",
                              task_id: str = "") -> dict[str, Any]:
-        """这一条待收命题是不是候选表里的某一条（一次模型调用；产物只有 found 与 why）。
+        """历史入口（薄适配）：把"调用方已检索好的候选"递给唯一那一处判定。
 
-        业主 2026-11-08 逐字：「应该没有same和different读数，只有秘书查了一圈没查到
-        一样的就注册新的，查到就更新那条命题的状态」。所以返回里没有 relation /
-        same_meaning / different 这些词：found 非空就是查到了那一条（号），空就是
-        查了一圈没查到。调用方只有一条分支（found 非空 ⇒ 更新那一行；空 ⇒ 注册新的）。
+        ## 2026-11-08：它不再是第二份判定
 
-        逐字命中免模型：候选里有一条的正文与待收命题在 `textutil.normalize` 下全等
-        ⇒ 直接 found，一次调用都不发（"逐字相同"是确定性事实，不需要问模型）。
+        在此之前这一问是「另一套」判据：自己的题面（`_statement_same_system`）、自己
+        读 `found`、自己的成员校验 —— 与 `adjudicate_proposition` 那套（条件 ⇒ 结论 /
+        两档）给出两个答案。业主 2026-11-08 问的「语义判定」只能有一处实现，所以现在
+        判定本体只在 :meth:`adjudicate_proposition`（挑词 → 检索 → 一次模型判定），
+        这里只做形状翻译：
 
-        ## 返回
-        | 键 | 意思 |
-        |---|---|
-        | checked | 这一问有没有真的判成（没缝 / 超时 / 坏 JSON / 指了候选外的号 ⇒ False） |
-        | found | 查到的那一条 stmt_id；空串 = 查了一圈没查到 |
-        | why | 一句话：凭哪几个关键词、哪一处断言认定是同一条（没查到则写不同在哪） |
+        - 调用方给了候选 ⇒ 那一处跳过挑词，直接判（`candidates=`，兼容既有写法）；
+        - 两档结论翻成 `found`：查到的那一条的号 / 空串（调用方只有一条分支：
+          found 非空 ⇒ 更新那一行；空 ⇒ 注册新的）；
+        - 不写 `proposition_verdicts` 缓存（`use_cache=False`）：这一档的候选是逐页
+          给的，按正文 sha 缓存会把"这一页没查到"沿用到下一页。
 
-        ## 判定说明（写进 system，不是代码阈值）
-        条件与结论一致才是同一条：同义改写、把条件写得更清楚 / 更完整（等价）⇒ 同一条；
-        条件被强化或弱化（「对所有 n」vs「对 n≤10」）、结论被改、换了一个断言 ⇒ 不是同一条。
+        下一笔 agent_b 改调 `adjudicate_proposition(..., candidates=…)` 之后，这一个
+        入口可以删掉（调用点：`agent_b/register_statement.py` 的同一命题检索那一支）。
         """
-        out: dict[str, Any] = {"checked": False, "found": "", "why": "",
-                               "ledger": {}, "role": str(self.role)}
-        body = str(statement_full or "")
-        pool = [dict(c) for c in (candidates or ())
-                if isinstance(c, Mapping) and str(c.get("stmt_id") or "").strip()]
-        ids = [str(c.get("stmt_id") or "") for c in pool]
-        if not body.strip():
-            out["why"] = ("命题正文是 0 字 ⇒ 没有可判的对象（没调模型）："
-                          "空正文与「没有可比的断言」是同一件事")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind, task_id=task_id)
-            return out
-        if not pool:
-            out.update(checked=True, found="",
-                       why="候选表为空 ⇒ 没有可比的条目（查过，0 条）")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind, task_id=task_id)
-            return out
-        from . import textutil as T   # 惰性：逐字命中与检索同用这一处归一化
-        key = T.normalize(body)
-        exact = next((c for c in pool
-                      if T.normalize(str(c.get("statement_full") or "")) == key), None)
-        if exact is not None:
-            out.update(checked=True, found=str(exact.get("stmt_id") or ""),
-                       why="候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；没调模型")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        if self.seam is None or not self.enable_model:
-            out["why"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 判定没成。"
-                          "调用方必须 fail-closed：不新注册"
-                          + (f"（装配读数：{self.model_source}）"
-                             if str(self.model_source or "") else ""))
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        material = {
-            "label": str(label or ""), "kind": str(kind or ""),
-            "statement_full": body[:JUDGE_MATERIAL_CAP],
-            "candidates": [{"stmt_id": str(c.get("stmt_id") or ""),
-                            "label": str(c.get("label") or ""),
-                            "statement_full": str(c.get("statement_full") or "")[
-                                :PROPOSITION_VERDICT_TEXT_CHARS]}
-                           for c in pool],
+        got = self.adjudicate_proposition(
+            {"statement_full": statement_full, "label": label,
+             "kind": kind or "theorem"},
+            candidates=[dict(c) for c in (candidates or ()) if isinstance(c, Mapping)],
+            note="secretary:statement_same", use_cache=False, task_id=task_id)
+        found = (str(got.get("same_as") or "")
+                 if str(got.get("verdict") or "") == _PK.STATE_SAME else "")
+        out: dict[str, Any] = {
+            "checked": bool(got.get("checked")),
+            "found": found,
+            "why": str(got.get("reason") or got.get("why") or ""),
+            "verdict": str(got.get("verdict") or ""),
+            "same_as": str(got.get("same_as") or ""),
+            "basis": str(got.get("basis") or ""),
+            "keywords": [str(x) for x in (got.get("keywords") or ())],
+            "hits_total": int(got.get("hits_total") or 0),
+            "hits_named": list(got.get("hits_named") or ()),
+            "judged": bool(got.get("judged")),
+            "ledger": {}, "role": str(self.role),
         }
-        try:
-            data, call = self.seam.ask_json(
-                _judge_material(material), system=_statement_same_system(),
-                task_id=task_id, note="secretary:statement_same")
-        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 没判成（fail-closed）
-            out["why"] = f"同一命题判定调用失败（{type(exc).__name__}: {exc}）⇒ 没判成"
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
-            out["why"] = (f"同一命题判定没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
-                          f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 没判成")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        found, how_many = normalize_same_as(data.get("found"))
-        why = str(data.get("why") or "").strip()
-        if not why:
-            out["why"] = "模型没写 why ⇒ 不采信：读的人要能看出它凭哪一处断言认定是同一条"
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        if how_many > 1:
-            out["why"] = (f"模型一次点了 {how_many} 个号（收到 {data.get('found')!r}）⇒ 不采信："
-                          "查到哪一条是它的判断，框架替它挑一个等于替它表态；"
-                          f"候选 {ids}")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        if found and found not in ids:
-            out["why"] = (f"模型点名的 {found!r} 不在本次候选里（候选 {ids}）⇒ 不采信："
-                          "一个指不出候选号的命中等于替它编一条依据")
-            self._note_statement_same(stage="judge", out=out, body=body,
-                                      label=label, kind=kind,
-                                      candidates=ids, task_id=task_id)
-            return out
-        out.update(checked=True, found=found, why=why)
-        self._note_statement_same(stage="judge", out=out, body=body,
-                                  label=label, kind=kind,
-                                  candidates=ids, task_id=task_id)
+        ids = [str(c.get("stmt_id") or "") for c in (candidates or ())
+               if isinstance(c, Mapping)]
+        self._note_statement_same(stage="judge", out=out, body=str(statement_full or ""),
+                                  label=label, kind=kind, candidates=ids,
+                                  task_id=task_id)
         return out
 
     def _note_statement_same(self, *, stage: str, out: dict[str, Any],
@@ -7144,7 +7076,10 @@ class Secretary:
             return self._with_adjudication_visibility(out)
         key = _proposition_verdict_key(full)
         out["statement_sha256"] = key
-        cached = self._proposition_verdicts.get(key) or proposition_verdict_of(self.root, full)
+        # `use_cache=False` 是历史入口（`judge_statement_same`）那一档：它的候选是逐页
+        # 给的，按正文 sha 缓存会把"这一页没查到"沿用到下一页。
+        cached = ((self._proposition_verdicts.get(key)
+                   or proposition_verdict_of(self.root, full)) if use_cache else {})
         cached_verdict = str((cached or {}).get("verdict") or "")
         cached_same_as, _cached_n = normalize_same_as((cached or {}).get("same_as"))
         # 只认判成了的两档：判 same 的还必须点得出号（否则那一行也不是一次判定）。
@@ -7323,7 +7258,9 @@ class Secretary:
                 return self._with_adjudication_visibility(out)
         if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
             return self._with_adjudication_visibility(out)
-        self._remember_proposition_verdict(out, full=full, label=label, task_id=task_id)
+        if use_cache:
+            self._remember_proposition_verdict(out, full=full, label=label,
+                                               task_id=task_id)
         return self._with_adjudication_visibility(out)
 
     def _remember_proposition_verdict(self, out: dict[str, Any], *, full: str,
@@ -13201,31 +13138,6 @@ def _statement_keywords_system() -> str:
         "词数由你自己定（以能把同义的那条捞出来为度）。"
         "只回一个 JSON 对象，字段：keywords（字符串数组）、"
         "why（一句话：这几个词为什么能把同义的那条捞出来）。\n\n"
-    )
-
-
-def _statement_same_system() -> str:
-    """同一命题判定的稳定头（进 `system` 位）：判定说明 + 输出形状。
-
-    业主 2026-11-08 逐字：「应该没有same和different读数，只有秘书查了一圈没查到
-    一样的就注册新的，查到就更新那条命题的状态」。所以题面只要一个 `found`：
-    查到就给候选的号，没查到就给空串 —— 没有第三种结论词可填。
-
-    与 :func:`_proposition_form_system` 同一条缓存纪律：这一段只取决于"这是同一命题
-    判定"，逐字节稳定；待收命题与候选表留在 user 位。
-    """
-    return (
-        "你是「命题同一性判定」：下面这条待收命题与候选表里的每一条，是不是同一个命题。"
-        "准绳：条件与结论一致才是同一条（什么条件推出什么结论）。"
-        "算同一条：同一个断言换了写法；把条件写得更清楚 / 更完整，但与原条件等价；"
-        "换变量名、换记号、把「有限群」写成「阶有限的群」这一类等价改写。"
-        "不算同一条：条件被强化或弱化（例如「对所有 n」与「对 n≤10」是两条，"
-        "即使主题相同）；结论被改；换了一个断言。"
-        "只比条件与结论：定理叫什么名字、证明走哪条路线、表述风格，都不参与判定。"
-        "查到了就在 found 里给那一条的 stmt_id（只给一个号）；"
-        "查不到就给空串 —— 没有别的结论词可填。"
-        "只回一个 JSON 对象，字段：found（候选的 stmt_id 或空串）、"
-        "why（一句话：凭哪几个关键词、哪一处断言认定是同一条；查不到则写不同在哪）。\n\n"
     )
 
 

@@ -102,7 +102,13 @@ class Seam:
         if str(note).endswith("statement_same"):
             if self.judge_bad:
                 return None, self._Call()
-            return ({"found": self.found, "why": "条件与结论同一"}, self._Call())
+            # 2026-11-08：判定与 `adjudicate_proposition` 收成同一处，题面要的是
+            # decision / same_as（两档），不再是旧的 found。
+            return ({"decision": "same" if self.found else "different",
+                     "same_as": self.found, "canonical_name": "",
+                     "condition": "夹具：条件同一", "conclusion": "夹具：结论同一",
+                     "basis": ["条件：一致", "结论：一致"],
+                     "reason": "条件与结论同一"}, self._Call())
         if str(note).endswith("proposition_identity"):
             return ({"decision": "different", "same_as": "", "canonical_name": "",
                      "condition": "", "conclusion": "", "basis": [], "reason": "不同"},

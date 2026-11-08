@@ -181,7 +181,11 @@ class SameSearchSeam:
             return ({"keywords": ["在册定理"], "why": "夹具：用命题里的数学词去捞"},
                     self._Call())
         if str(note).endswith("statement_same"):
-            return ({"found": "", "why": "夹具：条件不同的两条"}, self._Call())
+            # 2026-11-08：判定与 `adjudicate_proposition` 收成同一处，题面要的是
+            # decision / same_as（两档），不再是旧的 found。
+            return ({"decision": "different", "same_as": "", "canonical_name": "",
+                     "condition": "", "conclusion": "", "basis": [],
+                     "reason": "夹具：条件不同的两条"}, self._Call())
         return ({}, self._Call())
 
 
