@@ -101,6 +101,13 @@ from ..refusals import refuse as _refuse
 #: 静默放行 —— 白名单不会。
 CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
 
+#: 一次递给秘书看的候选条数。
+#:
+#: 这是工程上限，不是判定阈值：关键词检索可能一次捞回很多行，而一次模型调用放不下
+#: 整张台账。检索结果按"命中了几个关键词"降序排，分批问，问到命中或批次用完为止。
+#: 词面相似度不参与取舍（业主明令：不许用词面阈值代替判断）。
+STATEMENT_SAME_CANDIDATE_PAGE = 20
+
 
 #: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
 #: 同一个口径：`notes/` 是草稿本、`reports/` 是正式落点）。别的根一律当"正文"处理，
@@ -882,6 +889,12 @@ def _caller_role() -> str:
         return ""
 
 
+def _same_search_reading(same: Mapping | None) -> dict:
+    """同一命题检索的公开读数（去掉内部行缓存 `_row`，其余原样带走）。"""
+    return {str(k): v for k, v in dict(same or {}).items()
+            if not str(k).startswith("_")}
+
+
 def _declared_manuscript_kind(*, text: str = "", root: str = "") -> str:
     """手稿头 `- 证据种类：<kind>` 读出来的那一档（认不出 / 词表外 ⇒ 空串，不猜）。
 
@@ -1030,6 +1043,10 @@ class _RegisterStatement:
             "checked": False, "ok": False, "path": "", "experiment_id": "",
             "code_path": "", "method": "", "statement": "", "result_text": "",
             "manuscript": {}, "problems": [],
+            # 数值证据四元组的机器侧原料（2026-11-08：一个命题可以有多份实验）：
+            # 只从实验行原样取，不在这里判它们够不够（那是 `bit_problems` 的事）。
+            "observations": {}, "params": {}, "result": "", "counterexample": None,
+            "experiment_row": {},
         }
         rel = str(proof_manuscript or "").strip().replace("\\", "/")
         if not rel or not _ER.is_numeric_manuscript_relpath(rel):
@@ -1059,6 +1076,11 @@ class _RegisterStatement:
                                "这一份没有可核的数值结果（不许把它当手稿收）"]
             return out
         out["method"] = str(row.get("method") or "")
+        out["observations"] = dict(row.get("observations") or {})
+        out["params"] = dict(row.get("params") or {})
+        out["result"] = str(row.get("result") or "")
+        out["counterexample"] = row.get("counterexample")
+        out["experiment_row"] = dict(row)
         if out["method"] == _NP.FORMAL_METHOD:
             out["problems"] = ["这一行是形式化实验（method=formal）⇒ 不归普通数值通道"
                                "（它的凭据是检查器输出，不是数值结果）"]
@@ -1149,6 +1171,505 @@ class _RegisterStatement:
             out["refused"] = out["refused"] or PROPOSITION_FORM_REFUSED
             if not got.get("ledger"):
                 _note(str(out.get("reason") or "没判成"))
+        return out
+
+    # ---- 同一命题检索与证据位更新（2026-11-08 业主口径） ---------------------------
+    #
+    # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「只有秘书查了一圈没查到一样的
+    # 就注册新的，查到就更新那条命题的状态」。
+    #
+    # 这一块只做三件事：
+    #   ① 请秘书挑关键词（`pick_statement_keywords`，一次模型调用）；
+    #   ② 按关键词在 statements 里检索（确定性；命中规则只有"包含"，词面相似度不参与）；
+    #   ③ 请秘书判"这一条是不是检索出来的某一条"（`judge_statement_same`，一次模型调用）。
+    # 检索面只有 active 的命题类行（概念 / 定义不是命题）；候选为空 ⇒ 不调判定、直接新登记。
+
+    def _numeric_same_candidates(self, *, keywords: Sequence[str]) -> dict:
+        """按关键词检索在册命题（只查，不判）。
+
+        命中规则（业主 2026-11-08 的口径）：`label` 或 `statement_full` 里包含该关键词；
+        大小写 / 全半角按 `textutil.normalize` 的既有口径归一。多关键词任一命中即进候选，
+        并把命中的词记下来（读数用）。排序按命中词数降序（只是展示顺序，不是判定）。
+
+        返回三态：`ok=False` = 台账读不出来（没查成，调用方 fail-closed）；
+        `ok=True` + `hits=[]` = 查过了、0 条。
+        """
+        from .. import textutil as T
+        from ..secretary import _is_proposition_kind
+
+        out: dict = {"checked": False, "hits": [], "reason": "", "checked_rows": 0}
+        try:
+            rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是"没有"）
+            out["reason"] = (f"statements 台账读不出来（{type(exc).__name__}: {exc}）"
+                             "⇒ 没查成（不是「没有候选」）")
+            return out
+        wanted = [(str(word), T.normalize(str(word))) for word in (keywords or ())]
+        wanted = [(raw, norm) for raw, norm in wanted if norm]
+        hits: list[dict] = []
+        for row in rows:
+            sid = str(row.get("stmt_id") or "")
+            if not sid:
+                continue
+            if not _is_proposition_kind(row.get("kind")):
+                continue
+            if str(row.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
+                continue
+            if not str(row.get("statement_full") or "").strip():
+                continue
+            label_n = T.normalize(str(row.get("label") or ""))
+            full_n = T.normalize(str(row.get("statement_full") or ""))
+            hit_words = [raw for raw, norm in wanted
+                         if norm in label_n or norm in full_n]
+            if not hit_words:
+                continue
+            hits.append({"stmt_id": sid, "label": str(row.get("label") or ""),
+                         "statement_full": str(row.get("statement_full") or ""),
+                         "kind": str(row.get("kind") or ""),
+                         "hit_words": hit_words, "row": row})
+        hits.sort(key=lambda item: (-len(item["hit_words"]), item["stmt_id"]))
+        out.update(checked=True, hits=hits, checked_rows=len(rows))
+        return out
+
+    def _resolve_same_statement(self, *, full: str, label: str = "",
+                                kind: str = "conjecture",
+                                task_id: str = "") -> dict:
+        """这一条待收命题是不是在册的某一条（查到就更新 / 追加那一行，不新注册）。
+
+        这是"是不是同一条命题"的唯一入口：普通数值收录、证明收录（多证明路径）、
+        D 的指针收录都走它 —— 不许每处各写一份判据（那会长出三种答案）。
+
+        返回的读数就是"它确实搜过"的凭据：
+        `keywords` / `keyword_checked` / `hits_total` / `hits_named` / `found` / `why` /
+        `judged`（真调过判定没有）/ `model_calls`（发了几个模型调用）。
+
+        三态（业主 2026-11-08）：
+        | 结局 | 返回 |
+        |---|---|
+        | 查到某一条 | `checked=True` + `found=<stmt_id>` + `_row`（那一行原文） |
+        | 查过、没查到 | `checked=True` + `found=""` + `why`（关键词命中 0 条 / 逐批判过都不同） |
+        | 没查成 | `checked=False` + `refused=same_statement_unjudged` + `why`（整笔不写） |
+
+        "逐字相同"是确定性事实：候选里有一条规范化后全等 ⇒ 直接 found，不调模型
+        （判据 c：模型调用 0 次）。
+        """
+        from ..secretary import append_statement_same
+
+        out: dict = {
+            "checked": False, "keyword_checked": False,
+            "keywords": [], "hits_total": 0, "hits_named": [],
+            "found": "", "why": "", "judged": False,
+            "model_calls": 0, "problems": [], "refused": "",
+            "_row": {},
+        }
+        sec = self._statement_secretary()
+        root = str(getattr(self.store, "root", "") or "")
+
+        # 先看台账里有没有可检索的命题：一条都没有 ⇒ 不花模型调用（"查过、0 条"）。
+        from ..secretary import _is_proposition_kind
+        try:
+            all_rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001
+            out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
+                       why=f"statements 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成")
+            out["problems"] = [out["why"]]
+            return out
+        eligible = [r for r in all_rows
+                    if str(r.get("stmt_id") or "").strip()
+                    and _is_proposition_kind(r.get("kind"))
+                    and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES
+                    and str(r.get("statement_full") or "").strip()]
+        if not eligible:
+            out.update(checked=True, keyword_checked=True, hits_total=0,
+                       why=("查过：命题台账里没有可检索的 active 命题（候选 0 条）"
+                            "⇒ 注册新的"))
+            if root:
+                try:
+                    out["retrieval_ledger"] = append_statement_same(
+                        root, stage="retrieval", statement_full=str(full or ""),
+                        checked=True, keywords=[], hits_total=0,
+                        why=str(out["why"]), label=label, kind=kind,
+                        role="B", task_id=task_id)
+                except Exception as exc:  # noqa: BLE001
+                    out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+            return out
+
+        # 逐字相同：确定性事实，免模型（也不要秘书 —— 这一档不依赖判断面）。
+        from .. import textutil as T
+        key = T.normalize(str(full or ""))
+        exact = next((r for r in eligible
+                      if T.normalize(str(r.get("statement_full") or "")) == key), None)
+        if exact is not None:
+            sid = str(exact.get("stmt_id") or "")
+            out.update(checked=True, keyword_checked=True, hits_total=1, judged=False,
+                       hits_named=[{"stmt_id": sid, "hit_words": ["逐字相同"]}],
+                       found=sid,
+                       why=("候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；"
+                            "没调模型"))
+            out["_row"] = dict(exact)
+            if root:
+                try:
+                    out["judge_ledger"] = append_statement_same(
+                        root, stage="judge", statement_full=str(full or ""),
+                        checked=True, candidates=[sid], found=sid,
+                        why=str(out["why"]), label=label, kind=kind,
+                        role="B", task_id=task_id)
+                except Exception as exc:  # noqa: BLE001
+                    out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+            return out
+        if sec is None:
+            out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
+                       why="这一趟没有秘书 ⇒ 有候选而没查成（不新注册）"
+                       + (f"；{self.secretary_problem}" if getattr(self, "secretary_problem", "") else ""))
+            out["problems"] = [out["why"]]
+            return out
+
+        # 第一步：请秘书挑关键词。
+        got = sec.pick_statement_keywords(statement_full=str(full or ""),
+                                          label=label, kind=kind, task_id=task_id)
+        out["model_calls"] += 1
+        out["keyword_checked"] = bool(got.get("checked"))
+        out["keywords"] = [str(x) for x in (got.get("keywords") or [])]
+        if not out["keyword_checked"]:
+            out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
+                       why=str(got.get("why") or "关键词没提取成"))
+            out["problems"] = [out["why"]]
+            return out
+
+        # 第二步：按关键词检索（只查，不判）。
+        found_hits = self._numeric_same_candidates(keywords=out["keywords"])
+        if not found_hits.get("checked"):
+            out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
+                       why=str(found_hits.get("reason") or "检索没查成"))
+            out["problems"] = [out["why"]]
+            if root:
+                try:
+                    append_statement_same(
+                        root, stage="retrieval", statement_full=str(full or ""),
+                        checked=False, keywords=out["keywords"], hits_total=0,
+                        why=str(out["why"]), label=label, kind=kind,
+                        role="B", task_id=task_id)
+                except Exception as exc:  # noqa: BLE001
+                    out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+            return out
+        hits = list(found_hits.get("hits") or [])
+        out["hits_total"] = len(hits)
+        out["hits_named"] = [{"stmt_id": str(h.get("stmt_id") or ""),
+                              "hit_words": list(h.get("hit_words") or [])}
+                             for h in hits[:5]]
+        if root:
+            try:
+                out["retrieval_ledger"] = append_statement_same(
+                    root, stage="retrieval", statement_full=str(full or ""),
+                    checked=True, keywords=out["keywords"], hits_total=len(hits),
+                    candidates=[str(h.get("stmt_id") or "") for h in hits],
+                    why=str(out["why"] or ""), label=label, kind=kind,
+                    role="B", task_id=task_id)
+            except Exception as exc:  # noqa: BLE001
+                out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+        if not hits:
+            out.update(checked=True, found="",
+                       why=("查过：关键词在命题台账里命中 0 条 ⇒ 注册新的"
+                            f"（关键词：{'、'.join(out['keywords'])}）"))
+            return out
+
+        # 第三步：分类问秘书"是不是其中某一条"（分批只是工程上限）。
+        for start in range(0, len(hits), STATEMENT_SAME_CANDIDATE_PAGE):
+            page = hits[start:start + STATEMENT_SAME_CANDIDATE_PAGE]
+            out["judged"] = True
+            got = sec.judge_statement_same(statement_full=str(full or ""),
+                                           candidates=[h["row"] for h in page],
+                                           label=label, kind=kind, task_id=task_id)
+            out["model_calls"] += 1
+            if not got.get("checked"):
+                out.update(refused=_R.SAME_STATEMENT_UNJUDGED, found="", _row={},
+                           why=str(got.get("why") or "同一命题判定没成"))
+                out["problems"] = [out["why"]]
+                return out
+            sid = str(got.get("found") or "")
+            if sid:
+                row = next((dict(h["row"]) for h in page
+                            if str(h.get("stmt_id") or "") == sid), None)
+                out.update(checked=True, found=sid,
+                           why=str(got.get("why") or ""), _row=dict(row or {}))
+                return out
+        out.update(checked=True, found="",
+                   why=("查过：逐批问过秘书，检索出来的 "
+                        f"{len(hits)} 条都不是同一条 ⇒ 注册新的"))
+        return out
+
+    @staticmethod
+    def _same_statement_adjudication(same: Mapping) -> dict:
+        """把"查一圈"的结果折成秘书同一性命中判定的形状（交给 `record_statement`）。
+
+        为什么要有这一格：既有写入链在 `_merge_into_proposition` 里认 `adjudication`
+        点名的 `same_as`。语义 found 命中之后要走的正是那条既有分支（多证明追加、
+        签按 sha 认、等级现算都在里面），所以这里只把 found / 空折成它认的字段，
+        不再发第二次模型调用（不许两处各判一次）。
+        """
+        from .. import propositionkey as _PK
+
+        found = str(same.get("found") or "")
+        why = str(same.get("why") or "")
+        return {
+            "checked": True,
+            "verdict": _PK.STATE_SAME if found else _PK.STATE_DIFFERENT,
+            "same_as": found, "canonical_name": "", "route": "",
+            "condition": "", "conclusion": "", "basis": why, "reason": why,
+            "candidates": [],
+            "cost": {"ledger": "",
+                     "reason": "没发调用（沿用同一命题检索那一趟的结论）"},
+            "reused": False, "cached": False, "statement_sha256": "",
+            "seam_source": "agent_b.register_statement:same_statement",
+            "attempted": True,
+            "proposition_adjudication": {
+                "checked": True, "attempted": True, "reason": why,
+                "seam_source": "agent_b.register_statement:same_statement"},
+        }
+
+    @staticmethod
+    def _numeric_four_tuple(green: Mapping) -> dict:
+        """这一份实验的数值证据四元组（`schema.NUMERIC_EVIDENCE_KEYS`，键名固定）。
+
+        只从实验行原样取：`script` = code_path；`range` = observations / params 里的
+        range（没有就写 observations.grid 这一格）；`n_cases` 用
+        `numericproof.CASE_COUNT_KEYS` 那几种写法（没有就写 observations.points）；
+        `n_counterexamples` 优先取机器自报的条数，没有就按有没有 counterexample 记 0/1。
+        不写序号 / 时间 / 第几份 —— 四元组本身就是内容寻址的键。
+        """
+        obs = dict(green.get("observations") or {})
+        params = dict(green.get("params") or {})
+        cases = _NP._case_count_of(obs, params)
+        if cases is None:
+            points = obs.get("points")
+            cases = points if isinstance(points, int) and not isinstance(points, bool) else None
+        ce = obs.get("n_counterexamples")
+        if not isinstance(ce, int) or isinstance(ce, bool):
+            ce = 1 if green.get("counterexample") else 0
+        range_text = str(obs.get("range") or params.get("range")
+                         or obs.get("grid") or "").strip()
+        return {"script": str(green.get("code_path") or ""),
+                "range": range_text,
+                "n_cases": int(cases or 0),
+                "n_counterexamples": int(ce)}
+
+    def _numeric_entry(self, green: Mapping) -> dict:
+        """流水里的一条数值证据：四元组 + 外侧的程序指纹与出处（不塞第五个键）。"""
+        entry = dict(self._numeric_four_tuple(green))
+        row = dict(green.get("experiment_row") or {})
+        entry["code_hash"] = str(row.get("code_hash") or "")
+        eid = str(green.get("experiment_id") or "")
+        entry["exp"] = f"exp:{eid}" if eid else ""
+        return entry
+
+    @staticmethod
+    def _same_numeric_program(left: Mapping, right: Mapping) -> bool:
+        """两条数值证据是不是同一个数值程序（业主 2026-11-08 的唯一判据）。
+
+        判据 = 脚本相对路径 + 它的 `code_hash`，两者都相同才算同一个程序。
+        不用 `experiment_id`（那是"哪一次运行"），不用四元组内容（那是读数）。
+        """
+        return (str(left.get("script") or "") == str(right.get("script") or "")
+                and str(left.get("code_hash") or "")
+                == str(right.get("code_hash") or ""))
+
+    def _merge_numeric_evidence(self, old: Mapping | None, green: Mapping) -> dict:
+        """把这一份数值证据追加进流水（单位 = 一个数值程序，不是一次调用）。
+
+        业主 2026-11-08：「数值实验录入就是一个纯追加的过程」＋「只判是不是一个
+        数值程序」＋「如果同一个程序被重复提交，用后一次的替换前一次的」⇒
+        同一个程序（脚本相对路径 + `code_hash` 都相同）再递一次，就地替换那条已有
+        条目（读数换成后一次的，条数不变，旧读数不保留）；不是同一个程序就追加一条
+        （哪怕四元组数值恰好相同）。不用 `experiment_id`、不用四元组内容做身份。
+
+        一份数值证据 = `schema.NUMERIC_EVIDENCE_KEYS` 那四个键（键名固定，§8.3
+        契约）；程序指纹与出处放在条目外侧（`code_hash` / `exp:<号>`），不往四元组
+        里塞第五个键。已有条目一个字都不改；不排序；份数不影响等级（五元位现算）。
+        指针格（`experiment_id` / `experiments` / `script`）保留，供
+        `bit_evidence_gaps` 核"表里查得到"。
+        """
+        old_map = dict(old or {})
+        entries: list[dict] = []
+        for item in (old_map.get("entries") or []):
+            if isinstance(item, Mapping):
+                entry_old = {k: item.get(k) for k in S.NUMERIC_EVIDENCE_KEYS}
+                entry_old["code_hash"] = str(item.get("code_hash") or "")
+                entry_old["exp"] = str(item.get("exp") or item.get("experiment") or "")
+                entries.append(entry_old)
+        if not entries:
+            # 旧行（单份、没有 entries）折成流水里的第一条：只取它真有的那几格。
+            legacy = {k: old_map.get(k) for k in S.NUMERIC_EVIDENCE_KEYS
+                      if old_map.get(k) not in (None, "")}
+            if legacy:
+                legacy["code_hash"] = str(old_map.get("code_hash") or "")
+                eid_old = str(old_map.get("experiment_id") or "")
+                legacy["exp"] = f"exp:{eid_old}" if eid_old else ""
+                entries.append(legacy)
+        eid = str(green.get("experiment_id") or "")
+        entry = self._numeric_entry(green)
+        # 同一个程序再次提交 ⇒ 就地替换那一条（读数换成后一次的，条数不变）；
+        # 不是同一个程序 ⇒ 追加一条。业主 2026-11-08：「用后一次的替换前一次的」。
+        matched = next((index for index, item in enumerate(entries)
+                        if self._same_numeric_program(item, entry)), None)
+        if matched is not None:
+            entries[matched] = entry
+        else:
+            entries.append(entry)
+        exp_ids = [str(x) for x in (old_map.get("experiments") or []) if str(x).strip()]
+        if eid and eid not in exp_ids:
+            exp_ids.append(eid)
+        if not exp_ids and old_map.get("experiment_id"):
+            exp_ids = [str(old_map.get("experiment_id") or "")]
+        merged = dict(old_map)
+        merged["entries"] = entries
+        merged["experiments"] = exp_ids
+        if eid:
+            merged["experiment_id"] = eid
+        merged["script"] = entry["script"] or str(old_map.get("script") or "")
+        merged["code_hash"] = str(entry.get("code_hash") or "")
+        merged["manuscript"] = str(green.get("path") or old_map.get("manuscript") or "")
+        merged["manuscript_sha256"] = str(
+            (green.get("manuscript") or {}).get("sha256")
+            or old_map.get("manuscript_sha256") or "")
+        #: 这一位能不能当"机器可核的证书"用（穷举 + V 签）—— 普通数值实验只抬到
+        #: `strong_conjecture`，不许因为它和一份 V 签证明并在一行就把等级读成定理。
+        #: 集合里只要有一份是签下的穷举，整位仍按证书读（业主：取已有证据里最高那档）。
+        merged["certificate"] = bool(old_map.get("certificate")) or bool(
+            _NP.is_signed_exhaustion(green.get("experiment_row") or {}))
+        return merged
+
+    def _numeric_evidence_payload(self, green: Mapping) -> dict:
+        """新登记那一笔的数值证据（集合里先放一份四元组 + 指针）。"""
+        return self._merge_numeric_evidence({}, green)
+
+    def _update_numeric_evidence(self, *, row: Mapping, green: Mapping,
+                                 same: Mapping) -> dict:
+        """更新在册那一行的数值证据位（不新注册、不覆盖在册正文与既有 V 签 / formal 位）。
+
+        业主 2026-11-08：「查到就更新那条命题的状态」。更新的只有第 1 位与它的凭据：
+        `bits.numeric = verified`，凭据指到这一份手稿 + 这条实验；等级按五元位现算
+        （第 2 位仍空 ⇒ strong_conjecture；已有证明 / V 签 / formal 位则保持更高的那一档）。
+        在册正文一个字都不改：措辞差异只进读数（`proposition_matches_manuscript`）。
+        """
+        sid = str(row.get("stmt_id") or "")
+        root = str(getattr(self.store, "root", "") or "")
+        path = str(green.get("path") or "")
+        before_bits = dict(row.get("bits") or {})
+        before_numeric = dict((before_bits.get("evidence") or {}).get("numeric") or {})
+        before_list = [x for x in (before_numeric.get("entries") or [])
+                       if isinstance(x, Mapping)]
+        before_entries = len(before_list)
+        new_entry = self._numeric_entry(green)
+        same_program = any(self._same_numeric_program(x, new_entry)
+                           for x in before_list)
+        evidence = self._merge_numeric_evidence(before_numeric, green)
+        out: dict = {
+            "ok": True, "stmt_id": sid, "new_row": False,
+            "found": sid, "why": str(same.get("why") or ""),
+            "searched": {k: same.get(k) for k in
+                         ("keywords", "keyword_checked", "hits_total",
+                          "hits_named", "judged", "model_calls")},
+            "proposition_matches_manuscript": False,
+            "numeric_channel": {
+                "path": path,
+                "experiment_id": str(green.get("experiment_id") or ""),
+                "code_path": str(green.get("code_path") or ""),
+                "evidence_kind": "cross_check",
+                "proof_text": "(空着：普通数值档，业主明令)",
+                "manuscript_sha256": evidence["manuscript_sha256"],
+            },
+        }
+        kind_now = str(row.get("kind") or "")
+        grade_before = _EB.derive_grade(before_bits, kind=kind_now)
+        bits = dict(before_bits)
+        bits["numeric"] = "verified"
+        ev = dict(bits.get("evidence") or {})
+        ev["numeric"] = dict(evidence)
+        bits["evidence"] = ev
+        grade = _EB.derive_grade(bits, kind=kind_now)
+        bits["grade"] = grade
+        bits["audited_badge"] = bool(bits.get("audited")) and grade not in (
+            "conjecture", _EB.GRADE_NOT_APPLICABLE)
+        problems = list(_EB.bits_shape_problems(bits, kind=kind_now))
+        if problems:
+            return _refuse("bad_bits",
+                           "在册那一行的五位与新证据合起来不合规 ⇒ 整笔不写："
+                           + "；".join(problems), problems=problems)
+        store = getattr(self, "store", None)
+        if store is None:
+            return _refuse("secretary_unavailable",
+                           "这一趟没有 store ⇒ 证据位写不进去（不许退回 B 自己写）")
+        try:
+            with store.tx("statements", actor=str(getattr(self, "actor", "agent-B")
+                                                  or "agent-B"),
+                          note=f"agent_b.register_statement:numeric_evidence:{sid}") as tx:
+                got = tx.find("statements", stmt_id=sid)
+                if got is None:
+                    return _refuse("same_statement_missing",
+                                   f"要更新的 stmt:{sid} 不在 statements 里 ⇒ 整笔不写"
+                                   "（查到的那一行在写盘前消失了：不是静默新注册的理由）")
+                current = dict(got)
+                merged = dict(current.get("bits") or {})
+                merged["numeric"] = "verified"
+                merged_ev = dict(merged.get("evidence") or {})
+                merged_ev["numeric"] = self._merge_numeric_evidence(
+                    dict(merged_ev.get("numeric") or {}), green)
+                merged["evidence"] = merged_ev
+                merged_grade = _EB.derive_grade(merged, kind=str(current.get("kind") or ""))
+                merged["grade"] = merged_grade
+                merged["audited_badge"] = bool(merged.get("audited")) and merged_grade not in (
+                    "conjecture", _EB.GRADE_NOT_APPLICABLE)
+                merged_problems = list(_EB.bits_shape_problems(
+                    merged, kind=str(current.get("kind") or "")))
+                if merged_problems:
+                    return _refuse("bad_bits",
+                                   "写盘前按现行行重算的五位不合规 ⇒ 整笔不写："
+                                   + "；".join(merged_problems),
+                                   problems=merged_problems)
+                current["bits"] = merged
+                tx.upsert("statements", current,
+                          note=f"agent_b.register_statement:numeric_evidence:{sid}")
+        except Exception as exc:  # noqa: BLE001 —— 写盘失败 = 没写成（不是写成了一半）
+            return _refuse("numeric_evidence_write_failed",
+                           f"证据位写盘失败（{type(exc).__name__}: {exc}）⇒ 整笔不写",
+                           stmt_id=sid)
+        latest = next((dict(r) for r in self.store.rows("statements")
+                       if str(r.get("stmt_id") or "") == sid), {})
+        from .. import textutil as T
+        same_text = bool(latest) and (
+            T.normalize(str(latest.get("statement_full") or ""))
+            == T.normalize(str(row.get("statement_full") or "")))
+        out.update(
+            row=latest,
+            proposition_matches_manuscript=same_text,
+            updated_statement={
+                "stmt_id": sid, "written": True,
+                "numeric": "verified", "grade": str(
+                    _EB.bits_from_row(latest).get("grade") or grade),
+                "grade_before": grade_before,
+                "evidence": dict(evidence),
+                "entries": [dict(x) for x in (evidence.get("entries") or [])],
+                "entry_keys": list(S.NUMERIC_EVIDENCE_KEYS),
+                "program": {"script": str(new_entry.get("script") or ""),
+                            "code_hash": str(new_entry.get("code_hash") or "")},
+                "same_program": bool(same_program),
+                "replaced": bool(same_program),
+                "appended": int(not same_program),
+                "entries_before": before_entries,
+                "entries_after": len(evidence.get("entries") or []),
+                "entries_total": len(evidence.get("entries") or []),
+                "experiments": list(evidence.get("experiments") or []),
+                "manuscript": path,
+                "experiment_id": str(green.get("experiment_id") or ""),
+                "proposition_matches_manuscript": same_text,
+            },
+            note=("这一条与在册 stmt:" + sid + " 被秘书认定为同一条 ⇒ 不新注册；"
+                  "只更新那一行的数值证据位（numeric=verified，凭据 "
+                  f"{evidence['experiment_id']} / {evidence['script']}）；"
+                  "在册正文一个字都没改"
+                  + ("。" if same_text else
+                     "（新交的措辞与在册正文不同，差异只在读数里，不覆盖在册正文）。")),
+        )
         return out
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
@@ -2069,12 +2590,12 @@ class _RegisterStatement:
                 text=str(proof_manuscript or ""), root=str(self.store.root))
             if declared:
                 kind_now = declared
-        if _green.get("ok") and kind_now not in CONJECTURE_START_KINDS:
-            # 普通数值手稿的承重证据只到「有数值实验支持」那一档：`kind` 是声明，
-            # 声明成定理级会被 B-2 那道闸整笔拒（"自产且无出处 ⇒ 从猜想注册"）。
-            # 这一档不换一条名目绕闸：如实压回 `conjecture`，并把调用方原来写的
-            # 那一档留在读数里（`kind_downgraded`）—— 等级由五元位现算，不由声明。
-            _green["kind_downgraded"] = kind_now
+        if _green.get("ok"):
+            # 2026-11-08（业主改口径）：「普通数值实验不写 kind，一律写 conjecture」。
+            # 所以这一档不看调用方声明了什么、也不拒收它：kind 直接落 conjecture。
+            # 不留「你原来声明的是 theorem」这类读数 —— 那种读数会让声明继续在盘外
+            # 活着，而台账上那一行永远只有 conjecture。等级由五元位现算
+            # （numeric=verified ⇒ strong_conjecture）。
             kind_now = "conjecture"
         # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
         #
@@ -2207,6 +2728,38 @@ class _RegisterStatement:
         #: 唯一的号就是这个 —— 不把它喂进候选，携带单里的那一行永远对不上号
         #: （`read_carried_manuscript` 只剩"按正文 sha 撞"那一条路，而正文恰好也还没写）。
         redelivery = self._existing_statement_for(full)
+        # ---- 2026-11-08（业主）：收录时按语义查一圈"是不是在册的同一条" -------------
+        #
+        # 判据只有一处（`_resolve_same_statement`：秘书挑关键词 -> 台账检索 -> 秘书认定），
+        # 三处共用：普通数值收录 / 证明收录（多证明路径）/ D 的指针收录。
+        # 逐字相同那一档由它直接给 found（免模型）；措辞不同的同一条由秘书在检索出来的
+        # 候选里认。查到 ⇒ `redelivery` 就是那一行，下游走既有"在册"分支（`proofs`
+        # 追加、proof_no 递增、签按 sha 认、等级现算都沿用既有实现）；没查到 ⇒ 新登记。
+        # 有候选而没查成 ⇒ 受控拒（fail-closed，不新注册）。
+        _same_search: dict = {}
+        _same_adjudication: dict | None = None
+        _same_applies = False
+        if redelivery is None and not _green.get("ok") and param_manuscript_path:
+            from ..secretary import _is_proposition_kind as _is_prop_kind
+            _same_applies = bool(_is_prop_kind(kind_now))
+        if _same_applies:
+            _same_search = self._resolve_same_statement(
+                full=full, label=label, kind=kind_now)
+            if _same_search.get("refused"):
+                return _refuse(
+                    _R.SAME_STATEMENT_UNJUDGED,
+                    "这一条要查「是不是在册的同一条命题」，而这一问没查成 => "
+                    "受控拒、不新注册（没查成不等于「不是同一条」）："
+                    + str(_same_search.get("why") or "")
+                    + "。改法：确认秘书这一趟有判断面（模型缝 / 开关开着），"
+                    "并确认 statements 台账读得出来",
+                    same_statement=_same_search_reading(_same_search),
+                    manuscript_source=_DS.SOURCE_NONE,
+                    manuscript_path=param_manuscript_path)
+            _found_row = dict(_same_search.get("_row") or {})
+            if str(_same_search.get("found") or "") and _found_row:
+                redelivery = _found_row
+            _same_adjudication = self._same_statement_adjudication(_same_search)
         stmt_id_now = str((redelivery or {}).get("stmt_id") or "")
         # ---- D1（2026-11-05）：命中之后要问"这份稿是不是本行的" ---------------------
         #
@@ -3141,6 +3694,37 @@ class _RegisterStatement:
                     problems=_problems,
                     numeric_channel={"path": _green.get("path") or "",
                                      "proposition_form": dict(_form)})
+            # ---- 2026-11-08（业主）：普通数值收录先查一圈"是不是在册的同一条" ------
+            #
+            # 查到 ⇒ 更新那一行的数值证据位（不新注册，块丙）；没查到 ⇒ 照常登记新的。
+            # 有候选而没查成 ⇒ 受控拒（fail-closed：没查成不等于「不是同一条」）。
+            _same_search = self._resolve_same_statement(
+                full=full, label=label, kind=kind_now)
+            _green["same_statement"] = _same_search_reading(_same_search)
+            if _same_search.get("refused"):
+                return _refuse(
+                    _R.SAME_STATEMENT_UNJUDGED,
+                    "这条普通数值命题要查「是不是在册的同一条」，而这一问没查成 => "
+                    "受控拒、不新注册（没查成不等于「不是同一条」）："
+                    + str(_same_search.get("why") or "")
+                    + "。改法：确认秘书这一趟有判断面（模型缝 / 开关开着），"
+                    "并确认 statements 台账读得出来",
+                    same_statement=_same_search_reading(_same_search),
+                    problems=list(_same_search.get("problems") or []),
+                    numeric_channel={"path": _green.get("path") or "",
+                                     "same_statement": _same_search_reading(_same_search)})
+            if str(_same_search.get("found") or ""):
+                _row_found = dict(_same_search.get("_row") or {})
+                if not _row_found:
+                    return _refuse(
+                        "same_statement_missing",
+                        "秘书查到了在册的那一条，而它的行读不回来 ⇒ 整笔不写"
+                        "（不许退化成新注册）",
+                        same_statement=_same_search_reading(_same_search),
+                        numeric_channel={"path": _green.get("path") or ""})
+                return self._update_numeric_evidence(
+                    row=_row_found, green=_green, same=_same_search)
+            _same_adjudication = self._same_statement_adjudication(_same_search)
 
         # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
         # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
@@ -3152,12 +3736,9 @@ class _RegisterStatement:
             # 位里的等级、校验端的等级、落库那一行的 kind 必须是同一个字符串。
             kind=kind_now,
             # 普通数值通道：第 1 位的凭据 = 实验号 + 程序路径（足 `bit_problems` 的
-            # "verified 必须能指到哪条实验/哪个脚本"）。
-            numeric_evidence=({"experiment_id": _green.get("experiment_id") or "",
-                               "script": _green.get("code_path") or "",
-                               "manuscript": _green.get("path") or "",
-                               "manuscript_sha256": str(
-                                   (_green.get("manuscript") or {}).get("sha256") or "")}
+            # "verified 必须能指到哪条实验/哪个脚本"），外加一份四元组的集合
+            # （`entries`：一个命题可以有多份数值实验，内容寻址去重、不记次序）。
+            numeric_evidence=(self._numeric_evidence_payload(_green)
                               if _green.get("ok") else None))
         if bits_bad is not None:
             return bits_bad
@@ -3442,7 +4023,8 @@ class _RegisterStatement:
                 elif _from_head and S.is_valid_id(_from_head):
                     candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
         written = sec.record_statement(payload, role="B",
-                                       candidate_id=candidate_stmt_id)
+                                       candidate_id=candidate_stmt_id,
+                                       adjudication=_same_adjudication)
         # ---- D2②：拒绝要看，不许把它读成成功 ------------------------------------
         #
         # 改前 `if written.get("upgraded") and not written.get("created")` 不看
@@ -3497,6 +4079,12 @@ class _RegisterStatement:
                    "evidence_kind": self._evidence_kind_on_disk(stmt_now),
                    "requested_evidence_kind": evidence_kind,
                    "matched_by": str(written.get("matched_by") or ""),
+                   #: 2026-11-08（业主）：语义查一圈的读数（查到的那一条走的是既有
+                   #: "在册"分支 —— proofs 追加 / proof_no 递增 / 签按 sha 认都在里面）。
+                   **({"searched": _same_search_reading(_same_search),
+                       "found": str(_same_search.get("found") or ""),
+                       "why": str(_same_search.get("why") or "")}
+                      if _same_search else {}),
                    "similarity": float(written.get("similarity") or 0.0),
                    "proof_no": proof_no,
                    #: 这一次的号是哪来的（`crafted` / `carried` / `fallback`）——
@@ -3975,20 +4563,26 @@ class _RegisterStatement:
                 "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
                 #: 2026-11-08：普通数值通道的读数（只在真走了那条通道时出现）。
-                #: 三样都在里面：手稿路径 / 实验号 / 程序路径 / 档位压回的那一格，
-                #: 以及形态闸的判定 —— "为什么这一条没要 V 签"读的就是它。
+                #: 手稿路径 / 实验号 / 程序路径 / 形态闸的判定 ——
+                #: "为什么这一条没要 V 签"读的就是它。
                 **({"numeric_channel": {
                     "path": str(_green.get("path") or ""),
                     "experiment_id": str(_green.get("experiment_id") or ""),
                     "code_path": str(_green.get("code_path") or ""),
                     "evidence_kind": evidence_kind,
                     "proof_text": "(空着：普通数值档，业主明令)",
-                    "kind_downgraded": str(_green.get("kind_downgraded") or ""),
                     "dropped_content": list(_green.get("dropped_content") or []),
                     "proposition_form": dict(_green.get("proposition_form") or {}),
                     "manuscript_sha256": str(
                         (_green.get("manuscript") or {}).get("sha256") or ""),
                 }} if _green.get("ok") else {}),
+                #: 2026-11-08（业主）：同一命题检索的读数（查到 / 没查到、关键词、命中）。
+                #: 只有真查过一圈时才有这几格（老返回形状逐字不变）。
+                **({"searched": _same_search_reading(_same_search),
+                    "found": str(_same_search.get("found") or ""),
+                    "why": str(_same_search.get("why") or ""),
+                    "same_statement": _same_search_reading(_same_search)}
+                   if _same_search else {}),
                 #: 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，让秘书
                 #: 判」）：三态 + 判词 + 洗过的定理名 + "原标签 → 定理名" + 标签里被洗掉的
                 #: 那条路线（它落在第 1 份证明上，没有丢）。判 different / unknown 时

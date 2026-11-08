@@ -32,7 +32,8 @@ from typing import Any
 
 from . import schema as S
 
-__all__ = ["PRECONDITION_REASON", "EMPTY_STATEMENT_TEXT", "EMPTY_PROOF_TEXT", "refuse"]
+__all__ = ["PRECONDITION_REASON", "EMPTY_STATEMENT_TEXT", "EMPTY_PROOF_TEXT",
+           "SAME_STATEMENT_UNJUDGED", "refuse"]
 
 #: 前置条件不满足时用的那一档受控理由。集中在这里，是为了让"动作拒绝"这件事
 #: 只有一个落点：散在各文件里的字面量一旦漂移，`Task.validate` 会在写库那一刻抛，
@@ -59,6 +60,13 @@ assert PRECONDITION_REASON in S.REFUSAL_REASONS, (
 #: （F-05 的待办那一档），拦掉它等于把那条路堵死。
 EMPTY_STATEMENT_TEXT = "empty_statement_text"
 EMPTY_PROOF_TEXT = "empty_proof_text"
+
+#: 「这一条是不是在册的某一条命题」这一问没查成的受控码。
+#:
+#: 三态纪律：台账里有候选、而关键词没提取成或判定没成（没缝 / 超时 / 坏 JSON）⇒
+#: 整笔不写。把"没查成"折成"查过了、不是同一条"会让同一条命题被登记成第二行，
+#: 而盘上不会有任何一格说那一笔其实没查过。
+SAME_STATEMENT_UNJUDGED = "same_statement_unjudged"
 
 
 def refuse(kind: str, error: str, **extra: Any) -> dict:

@@ -75,7 +75,7 @@ from typing import Any, Iterable, Mapping
 
 #: 引文"通过"的两档（`schema.QUOTE_MODES` 的唯一来源就是它，这里只转发一次引用）。
 from . import quoteevidence as _QE
-from .schema import QUOTE_MODES
+from .schema import NUMERIC_EVIDENCE_KEYS, QUOTE_MODES
 
 #: 引文状态的第五档（D1，2026-10-22 第二版）：说"通过"，而盘上拿不出可复核的区间。
 #:
@@ -1149,6 +1149,22 @@ def bits_shape_problems(raw: Mapping[str, Any] | None, *,
     return problems
 
 
+def _numeric_is_certificate(bits: Mapping[str, Any]) -> bool:
+    """第 1 位是不是"机器可核的证书"（穷举 + V 签），而不是普通数值抽样。
+
+    业主 2026-11-08：一个命题可以追加多份数值实验；普通数值实验只抬到
+    `strong_conjecture`，不许因为同一行还有一份 V 签证明就把等级读成定理。
+    判据落在 `bits.evidence.numeric.certificate`（由写侧按
+    `numericproof.is_signed_exhaustion` 填）。旧行没有这一格 ⇒ 保持既有读法
+    （当年第 1 位只有穷举证书一个来源，缺这一格等于它是那条路）。
+    """
+    ev = dict(bits.get("evidence") or {})
+    num = ev.get("numeric")
+    if isinstance(num, Mapping) and "certificate" in num:
+        return bool(num.get("certificate"))
+    return True
+
+
 def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     """五元位 ⇒ 等级（唯一的等级来源；任何角色自报的等级都不认）。
 
@@ -1183,7 +1199,7 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     # 函数级只回答"这条命题到不到定理"，不回答"是哪一条路径撑起来的"。
     formal = _bit_state(bits, FORMAL_BIT) == "verified"
     numeric = _bit_state(bits, "numeric") == "verified"
-    if has_proof and (formal or numeric):
+    if has_proof and (formal or (numeric and _numeric_is_certificate(bits))):
         return "theorem"
     if has_proof and reviewed:
         return "pre_theorem"
@@ -1448,6 +1464,33 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
                         or num.get("script") or num.get("scripts")):
             problems.append("numeric=verified 必须写明是哪条实验/哪个脚本测的"
                             "（experiments / experiment_id / script）—— 没有指针的凭据复跑不了")
+        # 2026-11-08（业主）：一个命题可以有多份数值实验；一份证据就是
+        # `schema.NUMERIC_EVIDENCE_KEYS` 那四格组成的一个四元组，集合放在
+        # `entries` 里。键名是固定契约：多一格 / 少一格都不可判定（缺一项就无法
+        # 把"零反例"与"没查"分开）。旧行没有 `entries` ⇒ 这一条不判（向后兼容）。
+        entries = num.get("entries")
+        if entries is not None:
+            allowed = set(NUMERIC_EVIDENCE_KEYS)
+            if not isinstance(entries, (list, tuple)) or not entries:
+                problems.append(
+                    "numeric evidence 的 entries 必须是非空数组"
+                    f"（一份数值证据 = {list(NUMERIC_EVIDENCE_KEYS)} 的一个四元组）")
+            else:
+                provenance = {"code_hash", "exp", "experiment_id", "experiment"}
+                for index, item in enumerate(entries, 1):
+                    if not isinstance(item, Mapping):
+                        problems.append(
+                            f"numeric evidence 的第 {index} 项不是对象"
+                            f"（读到 {type(item).__name__}）")
+                        continue
+                    missing = sorted(allowed - set(item))
+                    extra = sorted(set(item) - allowed - provenance)
+                    if missing or extra:
+                        problems.append(
+                            f"numeric evidence 的第 {index} 项缺 {missing} / 多 {extra}，"
+                            f"而一份数值证据必须是 {list(NUMERIC_EVIDENCE_KEYS)} 四格"
+                            "（键名固定；'是哪个实验'这层身份放在条目外侧的 "
+                            "experiment_id / experiment 两格，不往四元组里塞第五个键）")
     if _bit_state(bits, FORMAL_BIT) == "verified":
         # 逐条读：一条路径说 verified，就要有它自己那一格凭据（不许拿别条路径的顶）。
         # 单格形态（老行）读成 `{1: …}`（见 `formal_evidence_by_proof`），所以老行的

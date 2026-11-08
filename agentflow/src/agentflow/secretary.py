@@ -3375,6 +3375,242 @@ class Secretary:
         except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
             out["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
+    # ------------------------------------------------ 同一命题检索（2026-11-08）
+    #
+    # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「应该没有same和different读数，
+    # 只有秘书查了一圈没查到一样的就注册新的，查到就更新那条命题的状态」。
+    #
+    # 两步都是秘书的判定（各一次模型调用），代码只做检索与落盘：
+    #   ① pick_statement_keywords：从待收命题里挑数学内容的关键词；
+    #   ② judge_statement_same：拿检索出来的那几条问"是不是同一条"。
+    # 两问的产物都不是"same/different"这种结论词：found 非空 = 查到了那一条；
+    # 空 = 查了一圈没查到。于是调用方只有一条分支，不必再解释第二种说法。
+
+    def pick_statement_keywords(self, *, statement_full: str, label: str = "",
+                                kind: str = "", task_id: str = "") -> dict[str, Any]:
+        """给一条待收命题挑检索关键词（一次模型调用；产物只有 keywords 与 why）。
+
+        业主 2026-11-08 逐字：「B秘书要学会在命题台账里按关键词搜索」。
+        这一问只回答"拿哪几个词去台账里捞"，不回答"捞到的是不是同一条"（那是
+        :meth:`judge_statement_same` 那一问）。两问分开的理由：关键词是检索的输入，
+        判同一是检索结果的处置；混成一问会让"检索没捞到"与"判定说不是"在读数上同形。
+
+        ## 返回
+        | 键 | 意思 |
+        |---|---|
+        | checked | 这一问有没有真的判成（没缝 / 关着 / 超时 / 坏 JSON / 空词表 ⇒ False） |
+        | keywords | 模型给出的关键词（原样，按出现顺序去重；词数由它自己定） |
+        | why | 一句话：这几个词为什么能把同义的那条捞出来 |
+
+        代码里没有"最多 N 个词"的上限：词数是判定的一部分（业主明确不许机械上限）。
+        检索面多大由调用方按工程上限分批，不由这一问替它裁。
+        """
+        out: dict[str, Any] = {"checked": False, "keywords": [], "why": "",
+                               "ledger": {}, "role": str(self.role)}
+        body = str(statement_full or "")
+        if not body.strip():
+            out["why"] = ("命题正文是 0 字 ⇒ 没有可检索的内容（没调模型）："
+                          "空正文不是「材料不足」，它没有关键词可挑")
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        if self.seam is None or not self.enable_model:
+            out["why"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 关键词没提取成。"
+                          "调用方必须 fail-closed：不新注册"
+                          + (f"（装配读数：{self.model_source}）"
+                             if str(self.model_source or "") else ""))
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        material = {"label": str(label or ""), "kind": str(kind or ""),
+                    "statement_full": body[:JUDGE_MATERIAL_CAP]}
+        try:
+            data, call = self.seam.ask_json(
+                _judge_material(material), system=_statement_keywords_system(),
+                task_id=task_id, note="secretary:statement_keywords")
+        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 没提取成（fail-closed）
+            out["why"] = f"关键词提取调用失败（{type(exc).__name__}: {exc}）⇒ 没提取成"
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
+            out["why"] = (f"关键词提取没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
+                          f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 没提取成")
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        raw = data.get("keywords")
+        if not isinstance(raw, (list, tuple)):
+            out["why"] = (f"模型给的 keywords 不是数组（收到 {raw!r}）⇒ 不采信："
+                          "这一问的产物是一张词表，不是一句话")
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        from . import textutil as T   # 惰性：只借既有归一化口径做去重
+        words: list[str] = []
+        seen: set[str] = set()
+        for item in raw:
+            word = str(item or "").strip()
+            key = T.normalize(word)
+            if not word or not key or key in seen:
+                continue
+            seen.add(key)
+            words.append(word)
+        why = str(data.get("why") or "").strip()
+        if not words:
+            out["why"] = "模型给的关键词表是空的 ⇒ 没提取成（空词表捞不到任何一条）"
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        if not why:
+            out["why"] = ("模型给了关键词却没写 why ⇒ 不采信：读的人要能看出"
+                          "这几个词凭什么能把同义的那条捞出来")
+            self._note_statement_same(stage="keywords", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        out.update(checked=True, keywords=words, why=why)
+        self._note_statement_same(stage="keywords", out=out, body=body,
+                                  label=label, kind=kind, task_id=task_id)
+        return out
+
+    def judge_statement_same(self, *, statement_full: str,
+                             candidates: Sequence[Mapping[str, Any]],
+                             label: str = "", kind: str = "",
+                             task_id: str = "") -> dict[str, Any]:
+        """这一条待收命题是不是候选表里的某一条（一次模型调用；产物只有 found 与 why）。
+
+        业主 2026-11-08 逐字：「应该没有same和different读数，只有秘书查了一圈没查到
+        一样的就注册新的，查到就更新那条命题的状态」。所以返回里没有 relation /
+        same_meaning / different 这些词：found 非空就是查到了那一条（号），空就是
+        查了一圈没查到。调用方只有一条分支（found 非空 ⇒ 更新那一行；空 ⇒ 注册新的）。
+
+        逐字命中免模型：候选里有一条的正文与待收命题在 `textutil.normalize` 下全等
+        ⇒ 直接 found，一次调用都不发（"逐字相同"是确定性事实，不需要问模型）。
+
+        ## 返回
+        | 键 | 意思 |
+        |---|---|
+        | checked | 这一问有没有真的判成（没缝 / 超时 / 坏 JSON / 指了候选外的号 ⇒ False） |
+        | found | 查到的那一条 stmt_id；空串 = 查了一圈没查到 |
+        | why | 一句话：凭哪几个关键词、哪一处断言认定是同一条（没查到则写不同在哪） |
+
+        ## 判定说明（写进 system，不是代码阈值）
+        条件与结论一致才是同一条：同义改写、把条件写得更清楚 / 更完整（等价）⇒ 同一条；
+        条件被强化或弱化（「对所有 n」vs「对 n≤10」）、结论被改、换了一个断言 ⇒ 不是同一条。
+        """
+        out: dict[str, Any] = {"checked": False, "found": "", "why": "",
+                               "ledger": {}, "role": str(self.role)}
+        body = str(statement_full or "")
+        pool = [dict(c) for c in (candidates or ())
+                if isinstance(c, Mapping) and str(c.get("stmt_id") or "").strip()]
+        ids = [str(c.get("stmt_id") or "") for c in pool]
+        if not body.strip():
+            out["why"] = ("命题正文是 0 字 ⇒ 没有可判的对象（没调模型）："
+                          "空正文与「没有可比的断言」是同一件事")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        if not pool:
+            out.update(checked=True, found="",
+                       why="候选表为空 ⇒ 没有可比的条目（查过，0 条）")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind, task_id=task_id)
+            return out
+        from . import textutil as T   # 惰性：逐字命中与检索同用这一处归一化
+        key = T.normalize(body)
+        exact = next((c for c in pool
+                      if T.normalize(str(c.get("statement_full") or "")) == key), None)
+        if exact is not None:
+            out.update(checked=True, found=str(exact.get("stmt_id") or ""),
+                       why="候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；没调模型")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        if self.seam is None or not self.enable_model:
+            out["why"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 判定没成。"
+                          "调用方必须 fail-closed：不新注册"
+                          + (f"（装配读数：{self.model_source}）"
+                             if str(self.model_source or "") else ""))
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        material = {
+            "label": str(label or ""), "kind": str(kind or ""),
+            "statement_full": body[:JUDGE_MATERIAL_CAP],
+            "candidates": [{"stmt_id": str(c.get("stmt_id") or ""),
+                            "label": str(c.get("label") or ""),
+                            "statement_full": str(c.get("statement_full") or "")[
+                                :PROPOSITION_VERDICT_TEXT_CHARS]}
+                           for c in pool],
+        }
+        try:
+            data, call = self.seam.ask_json(
+                _judge_material(material), system=_statement_same_system(),
+                task_id=task_id, note="secretary:statement_same")
+        except Exception as exc:  # noqa: BLE001 —— 调用失败 = 没判成（fail-closed）
+            out["why"] = f"同一命题判定调用失败（{type(exc).__name__}: {exc}）⇒ 没判成"
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        if not getattr(call, "ok", False) or not isinstance(data, Mapping):
+            out["why"] = (f"同一命题判定没拿到可用的 JSON（{getattr(call, 'problem', '') or 'no_reply'}:"
+                          f"{str(getattr(call, 'detail', '') or '')[:160]}）⇒ 没判成")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        found, how_many = normalize_same_as(data.get("found"))
+        why = str(data.get("why") or "").strip()
+        if not why:
+            out["why"] = "模型没写 why ⇒ 不采信：读的人要能看出它凭哪一处断言认定是同一条"
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        if how_many > 1:
+            out["why"] = (f"模型一次点了 {how_many} 个号（收到 {data.get('found')!r}）⇒ 不采信："
+                          "查到哪一条是它的判断，框架替它挑一个等于替它表态；"
+                          f"候选 {ids}")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        if found and found not in ids:
+            out["why"] = (f"模型点名的 {found!r} 不在本次候选里（候选 {ids}）⇒ 不采信："
+                          "一个指不出候选号的命中等于替它编一条依据")
+            self._note_statement_same(stage="judge", out=out, body=body,
+                                      label=label, kind=kind,
+                                      candidates=ids, task_id=task_id)
+            return out
+        out.update(checked=True, found=found, why=why)
+        self._note_statement_same(stage="judge", out=out, body=body,
+                                  label=label, kind=kind,
+                                  candidates=ids, task_id=task_id)
+        return out
+
+    def _note_statement_same(self, *, stage: str, out: dict[str, Any],
+                             body: str = "", label: str = "", kind: str = "",
+                             keywords: Sequence[str] = (), hits_total: int = 0,
+                             candidates: Sequence[str] = (),
+                             task_id: str = "") -> None:
+        """把这一问落进台账（写不进去不许带走结论；与 `_note_form` 同一条纪律）。"""
+        root = str(getattr(self.store, "root", "") or self.root or "")
+        if not root:
+            return
+        try:
+            out["ledger"] = append_statement_same(
+                root, stage=stage, statement_full=body,
+                checked=bool(out.get("checked")),
+                keywords=list(keywords or ()), hits_total=int(hits_total or 0),
+                candidates=list(candidates or ()),
+                found=str(out.get("found") or ""), why=str(out.get("why") or ""),
+                label=label, kind=kind, role=str(self.role), task_id=task_id)
+        except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
+            out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+
     def judge_abandon_difficulty(self, *, statement: Mapping[str, Any],
                                  difficulty: Any, basis: Any, salvaged: Any = (),
                                  task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
@@ -7408,7 +7644,9 @@ class Secretary:
 
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
                          force_new: bool = False,
-                         candidate_id: str = "") -> dict[str, Any]:
+                         candidate_id: str = "",
+                         adjudication: Mapping[str, Any] | None = None
+                         ) -> dict[str, Any]:
         """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
 
         业主逐字见 :meth:`wash_statement`。B 自己一次写工具都不调：这里是一笔事务（`statements` +
@@ -7561,8 +7799,17 @@ class Secretary:
         # 把它放进 `store.tx` 就是拿网络等待去占着写锁，而锁里不该有网络等待。
         # 读候选用的是 `self.store.rows`（只读），事务里那一份快照由 `_record_statement_tx`
         # 自己再用 `tx.rows` 核（合并前它必须确认那一条还在、还可并）。
-        adjudication = self.adjudicate_proposition(
-            {"statement_full": full, "label": str(body.get("label") or ""), "kind": kind})
+        if adjudication is None:
+            adjudication = self.adjudicate_proposition(
+                {"statement_full": full, "label": str(body.get("label") or ""),
+                 "kind": kind})
+        else:
+            # 2026-11-08（业主）：调用方已经把"是不是在册的同一条"查过一圈
+            # （`register_statement._resolve_same_statement`：关键词检索 + 秘书认定）。
+            # 这里沿用那一趟的结论，不再发第二次模型调用 —— 同一件事两个判据会给出
+            # 两个答案，而"两处各判一次"正是这条链要收掉的形态。
+            adjudication = dict(adjudication)
+            out["adjudication_source"] = "register_statement:same_statement"
         out["adjudication"] = self._adjudication_reading(adjudication)
         #: 判不了必须可见（2026-10-26）：`adjudication` 是那一趟的逐字读数，而这一格是
         #: "判了没有"的一句话（`checked` / `attempted` / `reason` / `seam_source`）。
@@ -8235,6 +8482,7 @@ class Secretary:
         """
         from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
         from . import textutil as T       # 惰性：查重键的唯一实现
+        from . import verifications as VR  # 惰性：新建那一支的 #pN 落点要它的 PROOFS_KEY
 
         adj = dict(adjudication or {})
         # ---- 洗定理名（业主 2026-10-24）：「Sylow 三定理（路线一：…）」⇒「Sylow 三定理」。
@@ -12076,6 +12324,14 @@ def proposition_verdicts_path(root: str | Path) -> Path:
 #: 秘书自己的台账上，读侧一个口：:func:`proposition_form_of`。
 PROPOSITION_FORM_LEDGER = "proposition_form.jsonl"
 
+#: 同一命题检索的旁支台账（挑词 / 判定 / 检索各一行）。
+#:
+#: 为什么要有这一本账：业主 2026-11-08 的验收口径是"B 秘书查过一圈没有"必须可审计
+#: （关键词、命中数、查到哪一条、为什么没查成）。这些读数不落 `statements` 行
+#: （那一行只记证据位），所以落在秘书自己的台账上，读侧一个口：
+#: :func:`statement_same_rows`。
+STATEMENT_SAME_LEDGER = "statement_same.jsonl"
+
 #: 这一闸的受控码（模型读得到的那一个）。
 PROPOSITION_FORM_REFUSED = "proposition_form_refused"
 
@@ -12150,6 +12406,61 @@ def proposition_form_of(root: str | Path, *, statement_full: str = "",
         if key and str(row.get("statement_sha256") or "") == key:
             last = row
     return last
+
+
+# ---------------------------------------------------------------- 同一命题检索台账（2026-11-08）
+
+
+def statement_same_path(root: str | Path) -> Path:
+    """同一命题检索台账的路径：`out/secretary/statement_same.jsonl`。"""
+    return Path(root).joinpath(*SECRETARY_DIR, STATEMENT_SAME_LEDGER)
+
+
+def append_statement_same(root: str | Path, *, stage: str, statement_full: str,
+                          checked: bool, keywords: Sequence[str] = (),
+                          hits_total: int = 0, candidates: Sequence[str] = (),
+                          found: str = "", why: str = "", label: str = "",
+                          kind: str = "", role: str = "",
+                          task_id: str = "") -> dict[str, Any]:
+    """追加一行检索 / 判定读数（append-only；显式 LF，与形态台账同一口径）。
+
+    每一次都记（含"没查成"那一档）：把"没查成"也留在盘上，读的人才分得清
+    "查过、没查到"与"根本没查"。只记查到的那几笔会让 fail-closed 在盘上消失。
+    """
+    path = statement_same_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"at": _now_iso(), "stage": str(stage or ""),
+           "statement_sha256": _proposition_verdict_key(statement_full),
+           "statement_chars": len(str(statement_full or "")),
+           "checked": bool(checked),
+           "keywords": [str(x) for x in (keywords or ())],
+           "hits_total": int(hits_total or 0),
+           "candidates": [str(x) for x in (candidates or ())][:50],
+           "found": str(found or ""), "why": str(why or ""),
+           "label": str(label or ""), "kind": str(kind or ""),
+           "role": str(role or ""), "task_id": str(task_id or "")}
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    return row
+
+
+def statement_same_rows(root: str | Path) -> list[dict[str, Any]]:
+    """这本台账的全部行（读不出来 ⇒ 空列表，与形态台账同一条读法）。"""
+    path = statement_same_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, Mapping):
+            out.append(dict(row))
+    return out
 
 
 def _proposition_verdict_key(statement_full: str) -> str:
@@ -12446,6 +12757,54 @@ def _proposition_form_system() -> str:
         "conclusion（你读出的结论，字符串）、problems（字符串数组：不合格时逐条说缺什么，"
         "例如「没有写清前提」「结论不是可判真假的断言」「这是流程要求，不是命题」，"
         "合格时给空数组）、decision（一句话判词）。\n\n"
+    )
+
+
+def _statement_keywords_system() -> str:
+    """命题台账检索的挑词稳定头（进 `system` 位）。
+
+    业主 2026-11-08 逐字：「B秘书要学会在命题台账里按关键词搜索」。
+    与 :func:`_proposition_form_system` 同一条缓存纪律：这一段只取决于"这是挑检索词"，
+    逐字节稳定；待收命题留在 user 位。
+
+    为什么不设词数上限：词数是判定的一部分 —— 挑几个、挑哪些，由模型按"能不能把
+    同义的那条捞出来"自己定。代码里写"最多 N 个"会把一个判定问题降成机械配额。
+    """
+    return (
+        "你是「命题台账检索」：给一条待收命题挑能在台账里捞到同义命题的关键词。"
+        "只挑数学内容：对象（群、图、矩阵、函数…）、结构（有限、交换、连通…）、"
+        "关键量（阶、秩、维数、误差…）、结论形态（同构、收敛、成立、整除…）。"
+        "不要挑「设」「则」「若」「对所有」这类虚词，也不要挑标点。"
+        "同义的那条可能换了写法：条件写得更全或更简、结论同一 —— 请挑两边都会出现的"
+        "数学词，别挑只在这一条里出现的措辞。"
+        "词数由你自己定（以能把同义的那条捞出来为度）。"
+        "只回一个 JSON 对象，字段：keywords（字符串数组）、"
+        "why（一句话：这几个词为什么能把同义的那条捞出来）。\n\n"
+    )
+
+
+def _statement_same_system() -> str:
+    """同一命题判定的稳定头（进 `system` 位）：判定说明 + 输出形状。
+
+    业主 2026-11-08 逐字：「应该没有same和different读数，只有秘书查了一圈没查到
+    一样的就注册新的，查到就更新那条命题的状态」。所以题面只要一个 `found`：
+    查到就给候选的号，没查到就给空串 —— 没有第三种结论词可填。
+
+    与 :func:`_proposition_form_system` 同一条缓存纪律：这一段只取决于"这是同一命题
+    判定"，逐字节稳定；待收命题与候选表留在 user 位。
+    """
+    return (
+        "你是「命题同一性判定」：下面这条待收命题与候选表里的每一条，是不是同一个命题。"
+        "准绳：条件与结论一致才是同一条（什么条件推出什么结论）。"
+        "算同一条：同一个断言换了写法；把条件写得更清楚 / 更完整，但与原条件等价；"
+        "换变量名、换记号、把「有限群」写成「阶有限的群」这一类等价改写。"
+        "不算同一条：条件被强化或弱化（例如「对所有 n」与「对 n≤10」是两条，"
+        "即使主题相同）；结论被改；换了一个断言。"
+        "只比条件与结论：定理叫什么名字、证明走哪条路线、表述风格，都不参与判定。"
+        "查到了就在 found 里给那一条的 stmt_id（只给一个号）；"
+        "查不到就给空串 —— 没有别的结论词可填。"
+        "只回一个 JSON 对象，字段：found（候选的 stmt_id 或空串）、"
+        "why（一句话：凭哪几个关键词、哪一处断言认定是同一条；查不到则写不同在哪）。\n\n"
     )
 
 
