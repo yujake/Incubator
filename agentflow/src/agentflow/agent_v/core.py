@@ -2369,7 +2369,7 @@ class AgentV:
                 + "：你只按下面这份证明正文本身重读；审过之后签会落回这一份手稿"
                   "（`reports/b-proof-<命题号>.md` 里的签块），B 带这份稿入库时读到它。")
         else:
-            _facts = ("这一条命题还没在册（`statements` 里没有它，正文读不到）："
+            _facts = ("这一条命题还没给命题号（V 只读手稿，不查台账；命题正文读不到）："
                       "你只按下面这份证明正文本身重读；签会落进这一份手稿，"
                       "等 B 收录这条命题时随稿读到。")
         prompt = VR.cold_start_prompt(
@@ -3166,7 +3166,8 @@ class AgentV:
             "reason": ("看过、没签：命题还没在册，而这一趟只给了内联证明栏、"
                        "没给 `proof_manuscript` ⇒ 没有可落签的载体；"
                        "机械会审的七项读数照给，但一个签字节都没落"),
-            "detail": (f"命题 {statement_id or '（还没落号）'} 不在 statements 里："
+            "detail": (f"命题 {statement_id or '（还没落号）'} 这一趟没有可签的载体"
+                       "（V 只读手稿，不查 statements）："
                        "穷举型证据的会审跑完了（七项读数在 `exhaustion_review` / "
                        "`checks` / `missing` 里），判定只作读数、不构成签，"
                        "也不落任何 pending 台账行。要签就让 E 带 "
