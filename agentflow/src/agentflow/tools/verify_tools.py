@@ -779,12 +779,15 @@ def _verify_detect_verifier():
 @tool(
     "verify.run_experiment",
     (
-            "跑工作区内脚本并登记一条 Experiment 行。自报 `evidence_kind='proof'` 降级为 `cross_check`；崩溃记 `inconclusive`。"
+            "登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），"
+            "普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。"
             ),
     {
            "type": "object",
            "properties": {
-            "claim": {"type": "string"},
+            "claim": {"type": "string", "description":
+                      "这一条声称什么（命题正文）。自报 `evidence_kind='proof'` 会被降级为 "
+                      "`cross_check`；脚本崩溃记 `inconclusive`。"},
             "claim_key": {"type": "string"},
             "script_path": {"type": "string", "description": "工作区内的相对路径"},
             "params": {"type": "object"},
@@ -1084,7 +1087,8 @@ _ROLES_V = ("V",)
     # 只读读数由调用方现取现传（`verifications.cold_start_prompt` 只收字符串）：
     # 这是 I12 冷启动在接口上的那一半 —— 传字符串而不是传 store，
     # "它能碰什么"就被固定在签名里，而不是靠一句"它会守规矩"。
-            "readonly_facts": {"type": "string", "description": "只读读数（命题现状 / 台账条数）"},
+            "readonly_facts": {"type": "string", "description":
+                               "只读读数（手稿事实：命题正文 / 证明 / 依赖 / 签块）"},
             # 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
             # 收录时读到」）：未在册那一条入口 —— 传 F 那一份证明手稿的工作区相对路径
             # （`reports/f-proof-*.md`），V 读稿审、三转干净就把签块盖回那一份手稿
