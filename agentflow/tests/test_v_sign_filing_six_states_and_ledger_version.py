@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""判据②：两格四态实为**六档**，且「册里没有证明行」与「册里是旧版」必须分开。
+"""判据②：两格四态实为六档，且「册里没有证明行」与「册里是旧版」必须分开。
 
 ## 改前的两处错（2026-11-08，业主让核的 file:line）
 
 - `vsigns.py` 的状态表写着六档，但实现里 `matched_no == 0` 一律归
-  `signed_stale_in_ledger` ⇒ **真实新命题**（B 收录前，`statements` 行上
+  `signed_stale_in_ledger` ⇒ 真实新命题（B 收录前，`statements` 行上
   `proof_text=""`）永远读不到 `signed_pending_filing`（它被误报成"册里是旧版"）；
-- stale 档只说"册里没有盖住这一份正文的证明行"，**不给出册里现行是哪一版** ——
+- stale 档只说"册里没有盖住这一份正文的证明行"，不给出册里现行是哪一版 ——
   读的人分不清"旧到哪一版"。
 
 ## 这一份钉的六档 + 两条反真空
@@ -22,7 +22,7 @@
 | `unreadable` | 没给 store（这一格没查成） | `unreadable`，`filed=None` |
 
 反真空 ①：新命题那一档若退回"`matched_no==0` ⇒ stale"，`pending` 那两条立刻红。
-反真空 ②：册里现行那一版必须真是**最新带正文**的那一份（多份证明那一格）。
+反真空 ②：册里现行那一版必须真是最新带正文的那一份（多份证明那一格）。
 
 零模型调用、全部 tmp 工作区、不读写 `projects/`。
 """
@@ -181,7 +181,7 @@ def test_7_unreadable_without_store(tmp_path: pathlib.Path) -> None:
 def test_8_anti_vacuum_new_proposition_must_not_be_stale(tmp_path: pathlib.Path) -> None:
     """反真空 ①：把「`matched_no==0` ⇒ stale」改回去，这一条立刻红。
 
-    同一份签、只改册里有没有**带正文的证明行**：没有 ⇒ pending；有旧版 ⇒ stale。
+    同一份签、只改册里有没有带正文的证明行：没有 ⇒ pending；有旧版 ⇒ stale。
     两个读数必须不同 —— 这就是"分开两档"的判据本身。
     """
     st = _ws(tmp_path)
@@ -189,7 +189,7 @@ def test_8_anti_vacuum_new_proposition_must_not_be_stale(tmp_path: pathlib.Path)
     text = _signed_text(_manuscript(st))
     no_rows = _read(st, text)
     assert no_rows["state"] == "signed_pending_filing", no_rows
-    # 同一份稿/签，给册里补一条**旧版**正文 ⇒ 立刻落到 stale（证明分档真的在看册）。
+    # 同一份稿/签，给册里补一条旧版正文 ⇒ 立刻落到 stale（证明分档真的在看册）。
     st2 = _ws(tmp_path / "old-version")
     _row(st2, proof=PROOF + "\n3. 更旧的一版。", reviewed=True)
     stale = _read(st2, text)

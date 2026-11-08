@@ -58,7 +58,7 @@ SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_us
 #: （形状表与登记表等额：新增一个形状不登记就红）。
 SECRETARY_OUTBOUND_SHAPES: tuple[str, ...] = ("summon", "summon_many", "handoff", "message")
 
-#: `own.<动作>` 的**受控拒绝**要原样带回模型的读数键（2026-11-08，业主"读数说谎"那一批）。
+#: `own.<动作>` 的受控拒绝要原样带回模型的读数键（2026-11-08，业主"读数说谎"那一批）。
 #:
 #: 改前只有 `problems` / `missing` / `stmt_id` 那一小撮：动作自己的受控拒（`_refuse` 的
 #: 形态）里那些"为什么没判成"的读数全丢 —— `same_statement`（同一命题检索：关键词 /
@@ -9092,7 +9092,7 @@ class AgentLoop:
                 else:
                     # ---- 派活文本判据（业主 2026-11-08）：D 不能命令 E/F 把它的猜想做出来 ----
                     #
-                    # `dispatchpolicy.dispatch_text_problems` 改前**零调用点**（只有直调测试
+                    # `dispatchpolicy.dispatch_text_problems` 改前零调用点（只有直调测试
                     # 在用它），于是 `specs/d.py` / `agent_skills.py` 里那句"机器可核"在
                     # 运行期没有任何约束。这里把它接到派活那一刻：命中 ⇒ 这一步受控拒、
                     # 拒信逐条点名是哪条 `conjecture_id`；只写研究方向 ⇒ 不拦。
@@ -11489,7 +11489,7 @@ class AgentLoop:
         业主 2026-11-08 逐字：「那条猜想只是参考意见，D 不能直接把自己的猜想登记到命题
         台账，也不能命令 E 或 F 必须把它做出来，这只是研究方向参考」。判据本体在
         `dispatchpolicy.dispatch_text_problems`（只读盘：`conjectures` 台账 + 派活文本），
-        改前它**零调用点** —— `specs/d.py` 与 `agent_skills.py` 里"机器可核"那句在运行期
+        改前它零调用点 —— `specs/d.py` 与 `agent_skills.py` 里"机器可核"那句在运行期
         没有任何约束。这里把它接到 D 的 `summon` / `summon_many`：命中 ⇒ `run()` 那一支
         受控拒并逐条点名；只写研究方向（不点号）⇒ 不拦。
 
@@ -11500,7 +11500,7 @@ class AgentLoop:
         （fail-open 放行：阻塞一条委托比放行更贵，但读数必须看得见）；跑成了 ⇒
         `checked=True`，`violations` 空就是"没有点名"。
 
-        用 `events=` 把这一条载荷直接递给判据（不走会话回读）：派活**还没落盘**，
+        用 `events=` 把这一条载荷直接递给判据（不走会话回读）：派活还没落盘，
         此刻能审的只有手上这一份；同一条判据也仍可离线扫全量会话（收工侧）。
         """
         if shape not in ("summon", "summon_many"):

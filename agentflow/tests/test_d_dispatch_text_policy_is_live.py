@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""判据④：`dispatchpolicy.dispatch_text_problems` 要在**派活那一刻**管用。
+"""判据④：`dispatchpolicy.dispatch_text_problems` 要在派活那一刻管用。
 
 ## 真机背景（业主 2026-11-08 裁定，逐字）
 
@@ -7,7 +7,7 @@
 >   必须把它做出来，这只是研究方向参考」
 
 `specs/d.py:272` 与 `agent_skills.py:2951,2980` 都写着"机器可核"，判据本体
-`dispatchpolicy.dispatch_text_problems` 也确实写好了 —— 但改前它**零调用点**（只有直调
+`dispatchpolicy.dispatch_text_problems` 也确实写好了 —— 但改前它零调用点（只有直调
 测试在用它）⇒ 这条裁定在运行期没有任何约束。
 
 ## 这一份钉的三条

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""判据⑤：`verify_proof` 早退时 `sign_issuance` 必须是**完整**的 fail-closed 键。
+"""判据⑤：`verify_proof` 早退时 `sign_issuance` 必须是完整的 fail-closed 键。
 
 ## 崩点（2026-11-08）
 
@@ -8,7 +8,7 @@
 按 `sign_issuance["checked"]` 读的调用方当场 `KeyError`（V 自检就是这么读的：
 `clean["sign_issuance"]["checked"]`）。
 
-修法只在**初值**（`agent_v/core.py` 的 `fail_closed_sign_issuance`），不改声明那句话。
+修法只在初值（`agent_v/core.py` 的 `fail_closed_sign_issuance`），不改声明那句话。
 
 ## 这一份钉的三条
 

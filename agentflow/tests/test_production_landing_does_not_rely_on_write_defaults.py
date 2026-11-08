@@ -14,16 +14,16 @@ V 已改成"只颁签 + 只落块"（`land_sign_without_ledger` / `record_verifi
 
 ## 这一份的结论（审计口径，逐条可核）
 
-- **生产路径全部显式关掉**（本文件逐条 AST 核对）：`AgentV` 的两处
+- 生产路径全部显式关掉（本文件逐条 AST 核对）：`AgentV` 的两处
   `record_verification` 都带 `flip=False`；`verifications.py` 的两处 `vsigns.land` 都带
   `ledger_bit=False`（且 `store=None`）；`land_sign_without_ledger` 的
   `_registration_after_vsign` 带 `skip_gap=True`；
-- **默认值保留**（不改成 False）：它们只服务历史直调 / 夹具（`conftest.sign_for_the_gate`
+- 默认值保留（不改成 False）：它们只服务历史直调 / 夹具（`conftest.sign_for_the_gate`
   用 `record_verification(store=…, 不传 flip)` 一次签住第 3 位；
   `test_issue_and_land_are_two_steps` 走 `land(store=…, 不传 ledger_bit)` 测"落台账位"
   那条正路）。改成 False 会把这两条既有正路关掉 —— 按业主口径"说明并保留"。
 
-所以判据不是"默认值改成 False"，而是"**没有任何生产调用点靠默认值写**"：上面三格由
+所以判据不是"默认值改成 False"，而是"没有任何生产调用点靠默认值写"：上面三格由
 AST 逐条核对；默认值本身由签名断言钉住（改它必须同时改这一份与报告）。
 """
 from __future__ import annotations

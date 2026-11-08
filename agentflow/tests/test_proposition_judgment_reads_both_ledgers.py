@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""判据①（2026-11-08 业主 sylow5 的误报）：判定"发生过"必须**两本账合读**。
+"""判据①（2026-11-08 业主 sylow5 的误报）：判定"发生过"必须两本账合读。
 
 ## 误报现场（改前）
 
 B 主路走 `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适配：候选逐页给，
-按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它**只写** `statement_same.jsonl`，
-**不写** `proposition_verdicts.jsonl`。而 `closing.proposition_judgment_reading` 改前只数
+按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它只写 `statement_same.jsonl`，
+不写 `proposition_verdicts.jsonl`。而 `closing.proposition_judgment_reading` 改前只数
 后者 ⇒ 探针实测 `verdict_rows=0, registration_actions=1, judged_zero=true`，而
 `seam_sources` 两条都说明判过 —— 收工读数在说谎。
 
@@ -16,7 +16,7 @@ B 主路走 `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适�
 | a | 只有 `statement_same`（stage=judge）那一本有行 ⇒ `judged_zero=False`、不报 warning |
 | b | 两本账各自的读数都在（`judged_by_ledger` 逐本 + `judged_rows` 合计） |
 | c | 反真空（只读一本 ⇒ 复现误报）：`verdict_rows==0 且 registration_actions>=1` 这个旧判据式仍成立，而 `judged_zero` 必须 False —— 证明绿是"合读"带来的 |
-| d | 反真空之二：`statement_same` 里的 `keywords` / `retrieval` 行**不算**判过（否则"没判成的尝试"会被数成"判过了"） |
+| d | 反真空之二：`statement_same` 里的 `keywords` / `retrieval` 行不算判过（否则"没判成的尝试"会被数成"判过了"） |
 
 零网络、全部 tmp 工作区、不读写 `projects/`。
 """
@@ -54,9 +54,9 @@ def _session_step(root: pathlib.Path) -> None:
 
 
 def _judge_only(tmp_path: pathlib.Path) -> Store:
-    """造出误报现场：**直接写盘**出 `statement_same.jsonl` 的一行（stage=judge）。
+    """造出误报现场：直接写盘出 `statement_same.jsonl` 的一行（stage=judge）。
 
-    为什么不调 `secretary.judge_statement_same`：那只是 B 主路当前**碰巧**走的那个
+    为什么不调 `secretary.judge_statement_same`：那只是 B 主路当前碰巧走的那个
     入口（另一条 lane 计划删它）。读数判据只认盘上的行形状，夹具也必须只依赖行形状
     —— 否则入口一换名，这条判据就替它陪葬。行形状与 `_note_statement_same` 写出来的
     逐字同形：`stage="judge"` + `checked=True` + `seam_source` 非空。

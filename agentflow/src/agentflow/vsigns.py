@@ -1066,13 +1066,13 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
       且第 3 位为真（`evidencebits.reviewed_by_proof` 的逐份表优先，回退 `reviewed`）。
       `status=abandoned` + 可解析放弃标记 ⇒ `filed=False, abandoned=True`（明确不收录）。
 
-    ## `state`（受控词表 —— 两格四态其实是**六档**，2026-11-08 收口）
+    ## `state`（受控词表 —— 两格四态其实是六档，2026-11-08 收口）
 
     | 值 | 判据 |
     |---|---|
     | `filed` | 稿上已签（或已签过）且册里这一份正文 + 第 3 位都对上 |
-    | `signed_pending_filing` | 稿上已签、册里**没有任何证明行**（新命题收录前 `proof_text=""`），或册里有盖住这一份正文的行但第 3 位没翻 ⇒ 等 B 收录 |
-    | `signed_stale_in_ledger` | 稿上已签，而册里**有证明行、但没有一条盖住这一份正文**（册里是旧版）⇒ 签还在，等 B 收录新版；`statement.current_proof_no` / `current_proof_sha256` 给出册里**现行**那一版 |
+    | `signed_pending_filing` | 稿上已签、册里没有任何证明行（新命题收录前 `proof_text=""`），或册里有盖住这一份正文的行但第 3 位没翻 ⇒ 等 B 收录 |
+    | `signed_stale_in_ledger` | 稿上已签，而册里有证明行、但没有一条盖住这一份正文（册里是旧版）⇒ 签还在，等 B 收录新版；`statement.current_proof_no` / `current_proof_sha256` 给出册里现行那一版 |
     | `unsigned` | 稿上没签、册里也没有 → 真的没有签 |
     | `abandoned` | 明确放弃（义务作废，不是"收录了"） |
     | `unreadable` | 稿或册读不成 / 没给 store（这一格没查成，不折成"没签"） |
@@ -1080,7 +1080,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     `signed_pending_filing` 与 `signed_stale_in_ledger` 必须分开：改前把
     `matched_no == 0` 一律归 `stale`（"册里没有任何证明行"与"册里是旧版"折成一档）⇒
     真实新命题（B 收录前，行上 `proof_text=""`）永远读不到 `signed_pending_filing`。
-    现在按**册里有没有带正文的证明行**分，stale 档另给册里现行那一版的号与 sha。
+    现在按册里有没有带正文的证明行分，stale 档另给册里现行那一版的号与 sha。
 
     三态纪律：`filed` 为 `None` = 没查成（不是"没收录"）；此时 `state` 落 `unreadable`。
     """
@@ -1162,7 +1162,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
         if _VR.proof_sha(one) == signed_now:
             matched_no, matched_text = int(no), str(one)
             break
-    # 册里**现行**那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
+    # 册里现行那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
     # "册里是旧版"与"册里没有任何证明行"是两个问题，读数要能分开。
     with_text = [(int(no), str(text)) for no, text in proofs if str(text or "").strip()]
     current_no, current_text = with_text[-1] if with_text else (0, "")
@@ -1188,7 +1188,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
         #
         # 改前 `matched_no == 0` 一律归 `signed_stale_in_ledger` —— 于是"新命题、B 收录前
         # 行上 `proof_text=""`"那一档永远读不到 `signed_pending_filing`（真实新命题也被
-        # 报成 stale）。判据只看**册里的证明行有没有正文**：
+        # 报成 stale）。判据只看册里的证明行有没有正文：
         if not matched_no and not with_text:
             out["state"] = "signed_pending_filing"
             out["why"] = (f"稿上已签（{body[:12]}…），而册里没有任何证明行"

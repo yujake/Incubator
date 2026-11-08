@@ -5713,13 +5713,13 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
 
     1. `verdict_rows`：`out/secretary/proposition_verdicts.jsonl` 的行数（判定判成了
        才会落这一本账，读侧唯一口 `secretary.proposition_verdict_rows`）；
-       注意这本账**只记「判完并且要缓存」的那一趟**：B 主路走
+       注意这本账只记「判完并且要缓存」的那一趟：B 主路走
        `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适配：候选逐页给、
-       按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它**不写这本账**，只写
+       按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它不写这本账，只写
        `statement_same.jsonl`。只数这一本就会把"判过了一场"读成"一次都没判"
        （2026-11-08 业主 sylow5 的误报：`verdict_rows=0` 而 seam 两条都说明判过）；
     2. `statement_same_judged`：`out/secretary/statement_same.jsonl` 里 `stage="judge"`
-       且 `checked=True` 的行数（**第二本账**；`statement_same_rows` 是该账全部行，
+       且 `checked=True` 的行数（第二本账；`statement_same_rows` 是该账全部行，
        含 `keywords` / `retrieval` 那些"还没判"的尝试 —— 混进来会把"没判成"数成"判过"）。
        `judged_by_ledger` 逐本给行数，`judged_rows` 是两本账合读的总数；
     3. `registration_actions`：有登记动作的次数。会话优先（`sessions/<sid>.jsonl` 里

@@ -645,7 +645,7 @@ def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
     写着这一格的键无条件存在。按 `sign_issuance["checked"]` 读的调用方（V 自检就是
     这么读的：`clean["sign_issuance"]["checked"]`）当场 `KeyError`。
 
-    修法只给**初值**一套完整的 fail-closed 键，不改声明那句话：键集合取两处实现的
+    修法只给初值一套完整的 fail-closed 键，不改声明那句话：键集合取两处实现的
     并集（`Secretary.decide_sign_issuance` 的初值 + `_terminal_issuance` 的返回），
     值全是"没走到签发"：`checked=False` / `issue=False` / `issued=False`，`reason`
     说清这是早退，不是"不签发"那一档。
@@ -1029,7 +1029,7 @@ class AgentV:
             # 业主 2026-10-29 的两格：秘书语义判定（B 段，两档）与发签决定（A 段）。
             # 键无条件存在（"没判成"由 `checked=False` 说，不靠少给键来表达）。
             "secretary_judge": {},
-            #: 2026-11-08：初值是一套**完整的 fail-closed 键**，不是 `{}` —— 早退路径
+            #: 2026-11-08：初值是一套完整的 fail-closed 键，不是 `{}` —— 早退路径
             #: 直接 `return out`，空字典会让按 `sign_issuance["checked"]` 读的调用方
             #: 当场 KeyError（V 自检就是这么读的）。键集见 :func:`fail_closed_sign_issuance`。
             "sign_issuance": fail_closed_sign_issuance(
