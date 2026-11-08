@@ -32,6 +32,7 @@ from . import interactions as IX
 from . import litread as LR
 from . import schema as S
 from . import signatures as SIG
+from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import textutil as T
 # 假 `proof_review` 那一格（2026-10-19）：判据本体在 `verifications`（写入期闸、
 # 收工门、审计期三处读同一处口径 —— 这里不抄第二份"什么叫一签"）。
@@ -2074,7 +2075,8 @@ def verify_all(
     _check_6(rep, dependencies, documents, exp_by_id, experiments)
     # `E1/R-03`（方案 A）：`stmt:` 与其余几档同权 ⇒ 这里也要把命题表交给第 7 段，
     # 否则 `elif kind == "stmt"` 那条分支拿到的是未定义的名字（导入期不会红、运行期才炸）。
-    stmt_by_id = {str(r.get("stmt_id")): r for r in store.rows("statements")}
+    # 索引的构造只有一处（查口 `index_by_id`）。
+    stmt_by_id = SL.index_by_id(store.rows("statements"))
     rejected_by_id = _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations,
                               stmt_by_id)
     _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store)

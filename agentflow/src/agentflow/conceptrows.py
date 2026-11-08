@@ -688,8 +688,10 @@ def mirror_gaps(store: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"checked": False, "statements_only": [], "legacy_only": [],
                            "merged": [], "transition_over": False, "reason": ""}
     try:
-        stmt_ids = {str(r.get("stmt_id") or "") for r in store.rows("statements")
-                    if str(r.get("kind") or "") == "concept"}
+        # 索引的构造只有一处（查口 `index_by_id`）；"只要概念行"是本层自己的过滤
+        # （概念行池与命题池不是同一件事，别把它塞进查口）。
+        stmt_ids = {sid for sid, row in SL.index_by_id(store.rows("statements")).items()
+                    if str(row.get("kind") or "") == "concept"}
     except Exception as exc:  # noqa: BLE001 —— 读不成要如实报
         out["reason"] = f"statements 读不成（{type(exc).__name__}: {exc}）"
         return out

@@ -785,11 +785,15 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
 
 
 def _statement_rows(store: Any) -> tuple[dict[str, dict[str, Any]] | None, str]:
-    """`statements` 的全部行（按号索引）；读不出来 ⇒ `(None, why)`（三态）。"""
+    """`statements` 的全部行（按号索引）；读不出来 ⇒ `(None, why)`（三态）。
+
+    索引的构造只有一处（`statementledger.index_by_id`）：别处再写一遍
+    `{号: 行}` 推导式，就是"同一件事两处实现"。
+    """
     if store is None:
         return None, "没有 store"
     try:
-        return {str(r.get("stmt_id") or ""): dict(r) for r in store.rows("statements")}, ""
+        return SL.index_by_id(store.rows("statements")), ""
     except Exception as exc:  # noqa: BLE001
         return None, f"{type(exc).__name__}: {exc}"
 

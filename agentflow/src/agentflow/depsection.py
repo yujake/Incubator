@@ -45,6 +45,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import evidencebits as EB
 from . import schema as S
+from . import statementledger as SL   # 命题台账的查口（全表→索引的唯一实现）
 
 
 #: 依赖段的段标题（固定，逐字）。
@@ -452,7 +453,7 @@ def uncitable_statement_finding(
             fix=("核对号：把这一格换成 `attack.step` 返回值里本轮可引的 id；"
                  "若它本来就该在册，先让 B 登记、让 V 签，再来引"),
             step=step)
-    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    index = SL.index_by_id(statement_rows)
     anchor = index.get(str(sid))
     if anchor is None:
         return citation_finding(
@@ -1563,7 +1564,7 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
     照旧 `REFUSED_LEVEL_TOO_LOW`（`pre_theorem` 以下不可引）。两档都由
     :func:`uncitable_statement_problem` 一处产生，与 F 的可引池同源。
     """
-    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    index = SL.index_by_id(statement_rows)
     ledger = list(index.values())
     levels: dict[str, str] = {}
     for row in rows:
@@ -1666,7 +1667,7 @@ def quote_mismatch_finding(row: Mapping[str, Any],
     quote = _norm_citation_text(row.get("quote"))
     if len(quote) < QUOTE_EQUAL_MIN_CHARS:
         return {}
-    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    index = SL.index_by_id(statement_rows)
     anchor = index.get(sid) or {}
     if _quote_matches(quote, anchor, exact_floor=0, contain_floor=0):
         return {}
@@ -2150,7 +2151,7 @@ def wash_dependency_section(text: str, *,
     reason, section, rows, columns_ok}`：`text` 是洗过的那一份（退回时是原文）。
     """
     raw = str(text or "")
-    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    index = SL.index_by_id(statement_rows)
     section = parse_dependency_section(raw)
     out: dict[str, Any] = {
         "checked": True, "washed": False, "text": raw,

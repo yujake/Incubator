@@ -35,6 +35,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import schema as S
+from . import statementledger as SL   # 命题台账的查口（全表→索引的唯一实现）
 from . import textutil as T
 
 #: 论文里出现这些前缀就算"引了别的稿子"（两阶段引用口径：论文不许引稿子）。
@@ -154,7 +155,7 @@ def check_paper_ledger(paper: Mapping[str, Any], moved: Sequence[Mapping[str, An
     out: dict[str, Any] = {"checked": False, "problems": [], "reason": "",
                            "counts": {"moved": 0, "mapped": 0, "citations": 0}}
     try:
-        by_id = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+        by_id = SL.index_by_id(statement_rows)
         deps = [dict(d) for d in dep_rows]
         cites = _citations_of(paper)
         moved_list = [dict(m) for m in moved]

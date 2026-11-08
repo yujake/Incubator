@@ -34,6 +34,7 @@ from typing import Any, Iterable, Mapping, NamedTuple, Sequence
 from . import papercompile as PC
 from . import schema as S
 from . import statementbody as _SB   # D2：命题正文的唯一读口（真身 statement_full）
+from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import textutil as T
 from . import userio as U
 # 引文回验的四态读数（B-4）：`no_source_backed` / `no_source_unbacked` /
@@ -4646,7 +4647,8 @@ def _statement_rows(store: Any) -> tuple[dict[str, Any] | None, str]:
     if store is None:
         return None, "没有 store ⇒ 没查成（不是「没有下游」，也不是「没有问题」）"
     try:
-        return {str(s.get("stmt_id")): s for s in store.rows("statements")}, ""
+        # 索引的构造只有一处（查口 `index_by_id`）；这里只管三态。
+        return SL.index_by_id(store.rows("statements")), ""
     except Exception as exc:  # noqa: BLE001
         return None, f"`statements` 读不到（{type(exc).__name__}）⇒ 没查成"
 

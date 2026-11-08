@@ -3039,8 +3039,8 @@ def _registered_ids(store: Any) -> tuple[str, ...]:
     if store is None:
         return ()
     try:
-        return tuple(str(r.get("stmt_id") or "") for r in store.rows("statements")
-                     if str(r.get("stmt_id") or ""))
+        # 索引的构造只有一处（查口 `index_by_id`）；号元组的顺序仍是台账物理顺序。
+        return tuple(SL.index_by_id(store.rows("statements")))
     except Exception:  # noqa: BLE001 —— 读不到册不是"没有命题"：这一格留空，判据退到"没有册"
         return ()
 

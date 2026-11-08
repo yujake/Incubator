@@ -1645,8 +1645,8 @@ def reconcile_resubmits(*, store: Any, root: str | Path) -> dict[str, Any]:
         out["reason"] = f"板项读不出来（{type(exc).__name__}: {exc}）"
         return out
     try:
-        statements = {str(r.get("stmt_id") or ""): dict(r)
-                      for r in store.rows("statements")}
+        # 索引的构造只有一处（查口 `index_by_id`）；这里只管三态。
+        statements = SL.index_by_id(store.rows("statements"))
     except Exception as exc:  # noqa: BLE001
         out["reason"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
         return out

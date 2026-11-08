@@ -4817,8 +4817,10 @@ def _apply_grade_backfill(root: Path, store: Any,
     try:
         from .store import Store as _Store   # 惰性：只为一个"全新的读"开一个新句柄
 
-        disk_rows = {str(r.get("stmt_id") or r.get("statement_id") or ""): dict(r)
-                     for r in _Store(root).rows("statements")}
+        # 索引的构造只有一处（查口 `index_by_id`）。改前这里还认 `statement_id`
+        # 这个历史别名：`statements` 的主键只有 `stmt_id`（schema 里没有那一列，
+        # `row_from_dict` 也会丢掉未知键）⇒ 那一档是死别名，按主键口径统一。
+        disk_rows = SL.index_by_id(_Store(root).rows("statements"))
     except Exception as exc:  # noqa: BLE001 —— 读不回来就逐条记"没查成"
         for entry, _target in attempted:
             out["unmoved"].append({

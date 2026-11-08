@@ -3310,8 +3310,8 @@ class _RegisterStatement:
                     #: 这一格问的是"正文引了在册命题没有"（用于判"这一笔该不该带稿"），
                     #: 不是可引池：「在册但等级不够」由稿那一侧 / 秘书那一侧的受控拒点名，
                     #: 不在这里折成"缺稿"（缺的确实不是稿）。
-                    known_ids = {str(r.get("stmt_id") or "")
-                                 for r in self.store.rows("statements")}
+                    #: 索引的构造只有一处（查口 `index_by_id`）。
+                    known_ids = set(SL.index_by_id(self.store.rows("statements")))
                 except Exception:  # noqa: BLE001 - 读不到就只按形状判，理由里写清
                     known_ids = set(probe_refs)
                 on_ledger = [rid for rid in probe_refs if rid in known_ids]
@@ -5581,7 +5581,8 @@ class _RegisterStatement:
                         "statements ⇒ 判不了上下文定理有没有重锚或声明（不许当成通过）")
         try:
             deps = [dict(r) for r in store.rows("dependencies")]
-            known = {str(r.get("stmt_id") or "") for r in store.rows("statements")}
+            # 索引的构造只有一处（查口 `index_by_id`）；这里只要号集合。
+            known = set(SL.index_by_id(store.rows("statements")))
         except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
             return [], (f"没查成：dependencies / statements 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 拒绝落库。三态纪律：'读不到'"

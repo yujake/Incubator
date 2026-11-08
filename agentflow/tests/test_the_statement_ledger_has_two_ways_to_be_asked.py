@@ -391,5 +391,58 @@ def test_j_every_by_id_site_goes_through_the_box() -> None:
     assert defs == ["statementledger.py"], f"按号查的实现不止一处：{defs}"
 
 
+# ===================================================== k 收口登记表（S2：全表→索引）
+#: 改前各自写 `{号: 行}` 推导式（或号集合 / 号元组）的那些函数。现在它们必须调
+#: `statementledger.index_by_id` —— 恢复成自己建索引 ⇒ 这一条当场红。
+MIGRATED_INDEX: tuple[tuple[str, str], ...] = (
+    ("agentflow/statementabandon.py", "_statement_rows"),
+    ("agentflow/closing.py", "_statement_rows"),
+    ("agentflow/verify.py", "verify_all"),
+    ("agentflow/verifications.py", "_apply_grade_backfill"),
+    ("agentflow/vreceipts.py", "reconcile_resubmits"),
+    ("agentflow/agent_b/register_statement.py", "_register_statement_impl"),
+    ("agentflow/agent_b/register_statement.py", "_context_theorem_gaps"),
+    ("agentflow/vsigns.py", "_registered_ids"),
+    ("agentflow/conceptrows.py", "mirror_gaps"),
+    # 这四处拿到的是一批已经读出来的 statements 行（不自己读表），索引的构造同样是
+    # 同一件事 —— 改前各写一遍 `{号: 行}`（`paperledger` 与 `_DepGraph` 连 keys 都一样）。
+    ("agentflow/depsection.py", "uncitable_statement_finding"),
+    ("agentflow/depsection.py", "gate_rows"),
+    ("agentflow/depsection.py", "quote_mismatch_finding"),
+    ("agentflow/depsection.py", "wash_dependency_section"),
+    ("agentflow/paperledger.py", "check_paper_ledger"),
+    ("agentflow/agent_c/proof_chain.py", "__init__"),
+)
+
+
+def _index_comprehension(fn: ast.AST) -> bool:
+    """函数体里还有没有 `{str(r.get("stmt_id") …): …}` / `{… for r in …}` 那种手写索引。"""
+    for node in ast.walk(fn):
+        if isinstance(node, ast.DictComp):
+            if "stmt_id" in ast.unparse(node.key):
+                return True
+        if isinstance(node, (ast.SetComp, ast.GeneratorExp)):
+            text = ast.unparse(node).replace('"', "").replace("'", "")
+            if "stmt_id" in text and "index_by_id" not in text:
+                return True
+    return False
+
+
+def test_k_every_index_site_goes_through_the_box() -> None:
+    """k：S2 的 9 个调用点都问查口；谁恢复自己建索引，这一条当场红。"""
+    assert len(MIGRATED_INDEX) >= 8, "登记表被悄悄缩短了"
+    for rel, name in MIGRATED_INDEX:
+        fn = _function_node(rel, name)
+        assert _calls_attr(fn, "index_by_id"), (
+            f"{rel}::{name} 没有走 `statementledger.index_by_id` —— 全表→索引又长出了第二处")
+    # 反真空：检测器认得出改前那种写法。
+    sample = ast.parse('def f(rows):\n'
+                       '    return {str(r.get("stmt_id") or ""): dict(r) for r in rows}\n')
+    assert _index_comprehension(sample.body[0]), "反真空：检测器认不出改前那种写法"
+    defs = [path.name for path in (SRC / "agentflow").rglob("*.py")
+            if "def index_by_id(" in path.read_text(encoding="utf-8")]
+    assert defs == ["statementledger.py"], f"全表→索引的实现不止一处：{defs}"
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

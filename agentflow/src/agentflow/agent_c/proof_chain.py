@@ -44,6 +44,8 @@ from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
 # 依赖的 `used_by` 尾巴（`#pN`）只有一个解析点（`proofloc`）：两份解析意味着
 # "台账上是第 2 条证明、读出来是第 1 条"这种错没有任何东西会报（业主 2026-10-22）。
 from .. import proofloc as _PL  # noqa: E402
+# 命题台账的查口：全表→索引只留一处实现（`statementledger.index_by_id`）。
+from .. import statementledger as SL  # noqa: E402
 # 历史概念行上那个哨兵（唯一出处是 `migrate_concepts.PRIMITIVE_PROOF`）。
 # 读侧仍认它（不动历史）：迁移折出来的老概念、以及 2026-10-21 之前写进来的那些行，
 # `proof_text` 就是这一个值。而「写入侧」已经不再写它
@@ -375,7 +377,7 @@ class _DepGraph:
 
     def __init__(self, *, stmts, deps, exps, lits, root: Any = None) -> None:
         self.root = root
-        self.stmts = {str(r.get("stmt_id") or ""): dict(r) for r in stmts}
+        self.stmts = SL.index_by_id(stmts)
         self.exps = {str(r.get("exp_id") or ""): dict(r) for r in exps}
         self.lits = {str(r.get("lit_id") or ""): dict(r) for r in lits}
         #: 边索引：使用点 → 证明号 → `path_group` → 边。两层键都是这台机器的口径：
