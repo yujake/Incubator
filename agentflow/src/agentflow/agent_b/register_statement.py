@@ -4319,8 +4319,12 @@ class _RegisterStatement:
                         "reason": str(collect.get("reason") or "")}
                 if collect.get("written") or collect.get("proof_receipt"):
                     _row_got = SL.by_id(self.store, stmt_id=stmt_now)
-                    out["row"] = ((_row_got["row"] if _row_got["found"] else {})
-                                  or out.get("row") or {})
+                    if not _row_got["checked"]:
+                        _err = _row_got.get("error") or {}
+                        raise RuntimeError(
+                            f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                            f"{_err.get('message') or _row_got.get('reason') or '?'}）")
+                    out["row"] = (_row_got["row"] or out.get("row") or {})
                 if collect.get("grade_recomputed"):
                     out["grade_recomputed"] = dict(collect.get("grade_recomputed") or {})
                 if collect.get("proof_collected"):
