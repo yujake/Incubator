@@ -149,6 +149,9 @@ def test_d_concept_identity_unjudged_refuses_a_second_row(tmp_path: pathlib.Path
     assert refused.get("created") is False, refused
     assert refused.get("proposition_state") == "", refused
     assert "没判成" in str(refused.get("reason") or ""), refused
+    # 拒信必须给出改法（主笔 2026-11-08）：否则就是把人堵死，不是拦错。
+    assert "改法" in str(refused.get("reason") or ""), refused
+    assert "定义项" in str(refused.get("reason") or ""), refused
     assert len(_rows(st)) == 1, [r.get("label") for r in _rows(st)]
 
 

@@ -732,8 +732,10 @@ def same_concept(a_label: str, a_full: str = "", b_label: str = "",
     missing = [name for name, side in (("这一条", left), ("在册那一条", right))
                if not (side["label"] or side["term"])]
     out["reason"] = (f"判不了 = 没判成：{'、'.join(missing)}抽不出定义项（标签是空的，正文也"
-                     "不是一句「概念（X）」/「定义（X）」形态）⇒ 调用方受控拒"
-                     "（判不了不等于不同）")
+                     "不是一句「概念（X）」/「定义（X）」形态）⇒ 调用方受控拒、不新建第二行"
+                     "（判不了不等于不同）。改法：把定义项写出来 —— 标签写具体术语，或正文"
+                     "写成「概念（X）」/「定义（X）」；若它确实与在册某一条不同，写出不同的"
+                     "定义项，判据会判 different 并照常新建")
     return out
 
 

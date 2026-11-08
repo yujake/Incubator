@@ -301,6 +301,9 @@ def test_unjudged_concepts_are_refused_when_a_comparable_row_exists(
     assert second.get("created") is False, second
     assert second.get("proposition_state") == "", second
     assert "没判成" in str(second.get("reason") or ""), second
+    # 拒信要给改法（主笔 2026-11-08）：写定义项，或写明它与在册哪一条不同。
+    assert "改法" in str(second.get("reason") or ""), second
+    assert "定义项" in str(second.get("reason") or ""), second
     assert len(_rows(st)) == 1, [r.get("label") for r in _rows(st)]
 
 
