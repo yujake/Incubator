@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""② 裸构造点判据：**能登记 / 改台账的路径上，秘书必须带缝**。
+"""② 裸构造点判据：能登记 / 改台账的路径上，秘书必须带缝。
 
 ## 这一条钉的是什么
 
@@ -7,19 +7,19 @@
 那一道闸把每一次判定折成"没有判断面"，于是同一条定理被登记 2–3 次，而
 `out/secretary/proposition_verdicts.jsonl` 一次都没被建出来（`secretary.seam_for_secretary`
 的 docstring 逐字记着那五个构造点）。单测当时全绿 —— 因为每一处判据都自己塞了一条假缝。
-断的不是判据，是**装配线**；所以这里按源码扫装配点。
+断的不是判据，是"装配线"；所以这里按源码扫装配点。
 
 ## 判据（三层，缺一层都不成立）
 
-1. **登记路径上的裸构造一律红**：模块里只要能调到
+1. 登记路径上的裸构造一律红：模块里只要能调到
    `record_statement` / `land_statement` / `amend_statement_meta` 这三件里的任何一件
    （`REGISTRATION_METHODS`），它里面就不许出现"没带缝"的 `Secretary(...)` /
    `for_role(...)`（`for_role` 不传 `seam=` 时与裸构造同义）。
-2. **其余裸构造逐个登记理由**：`_EXEMPT` 是"确实不需要缝"的白名单（只取 `child_counts`
+2. 其余裸构造逐个登记理由：`_EXEMPT` 是"确实不需要缝"的白名单（只取 `child_counts`
    的 `statusreport.py` / `webui/readers.py`、工厂函数本体、模块自检探针、只读
-   `surface_of` 的那一处、只转发交接的 `_peer_secretary`）。白名单与实际**逐条对表**
+   `surface_of` 的那一处、只转发交接的 `_peer_secretary`）。白名单与实际"逐条对表"
    （多一条、少一条都红）—— 一张永不生效的豁免表会腐烂成"看起来还在挡着什么"。
-3. **反真空**：把 `agent_b/core.py::_Core._statement_secretary` 的 `for_role_wired(...)`
+3. 反真空：把 `agent_b/core.py::_Core._statement_secretary` 的 `for_role_wired(...)`
    换成裸 `Secretary(...)`，本判据必须红（见 `test_anti_vacuum_...`）；同时正面钉住
    "它今天是带缝的"—— 否则"没有违规"可能只是"什么都没扫到"。
 
@@ -63,7 +63,7 @@ class Site:
         return (self.module, self.qualname)
 
 
-#: 白名单：**逐条**登记"确实不需要缝"的裸构造点，每一条都写清凭什么。
+#: 白名单：逐条登记"确实不需要缝"的裸构造点，每一条都写清凭什么。
 #: 键 = `(模块相对路径, 构造点所在函数/方法的 qualname)`；`selftest` 里有两个构造点，
 #: 共用一个键（同一个理由）。
 _EXEMPT: dict[tuple[str, str], str] = {
