@@ -96,7 +96,17 @@ BASELINE: dict[str, int] = {
     # `_norm_rel` / `_rel_is_inside` 两个路径守卫）。是「既有单职责模块被写胖过线」，
     # 不是新落的模块 —— 但那一批的载体读写本来就只有这一处，拆开会让"哪一份稿在盘上、
     # 叫什么名"有两个实现。判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_files_gt800_lines": 75,
+    # 2026-11-08 再抬 75 → 76。净额 +1，能逐条点名（按文件比对基线提交 047100d5 与
+    # HEAD：两条新过线、一条掉回线下）：
+    #   · `src/agentflow/statementabandon.py` 1224 行 —— 新落的单职责模块（放弃命题的
+    #     四档理由 + defect_ref / salvaged 的判据与读数），不是既有文件被写胖；
+    #   · `src/agentflow/propositionkey.py` 823 行 —— 原 791 行，2026-11-08 两轴收口
+    #     （`_statement_same_system` 删除、`same_concept` / `proposition_key` 的读数与
+    #     候选口径并进来）把这条确定性键的判据推到过线，是「既有模块被写胖过线」；
+    #   · 掉回线下的一条：`src/agentflow/agent_f/manuscript.py`（890 → 800 以下），
+    #     2026-11-07 手稿产出收口之后它的入口搬走了一部分。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_files_gt800_lines": 76,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -177,7 +187,23 @@ BASELINE: dict[str, int] = {
     #     `land_unregistered_sign`），并分辨 `reviews_unsigned` / 负判落 pending /
     #     路径不合约定三类终局。它是「新落的长函数」，不是把既有函数写胖。
     # 判据语义一个字没动：抬完仍然只许降、不许再涨。
-    "src_functions_gt200_lines": 95,
+    # 2026-11-08 再抬 95 → 99。净额 +4，逐条点名（按 (文件, 函数名) 比对基线提交
+    # 047100d5 与 HEAD：五条新过线、一条掉回线下）：
+    #   · `src/agentflow/agent_b/register_statement.py::_register_statement_impl` 2243 行
+    #     与掉回线下的 `register_statement`（1502 行 → 200 行以下）是同一笔拆分：
+    #     入口收成薄适配（参数面 + 早退那几档），主体搬进 `_register_statement_impl`，
+    #     这一对净额 0；
+    #   · `src/agentflow/agent_b/register_statement.py::_transition` 296 行 —— 新落：
+    #     收录路径的"这一笔走哪一条"（在册 / 未在册 / 携带 / 概念行）的分派与读数；
+    #   · `src/agentflow/closing.py::statements_unsigned_reading` 213 行 —— 新落：
+    #     收工门那条"有登记动作、判定台账 0 行"的读数口（2026-11-08 块①）；
+    #   · `src/agentflow/secretary.py::adjudicate_proposition` 284 行 —— 由两处判定收成
+    #     一处实现之后，挑词 / 检索 / 一次判定的三段都落在这一个函数里；
+    #   · `src/agentflow/secretary.py::record_statement` 201 行 —— 同一批把同一性闸
+    #     （`_resolve_same_statement` 的两档结论 + fail-closed）并进这条写入正路。
+    # 前一条是"既有函数被拆开"，后四条都是"这一批的新能力落在既有文件里"。
+    # 判据语义一个字没动：抬完仍然只许降、不许再涨。
+    "src_functions_gt200_lines": 99,
     "dup_docstring_segments": 5,
 }
 
@@ -208,7 +234,11 @@ BASELINE: dict[str, int] = {
 #: 2026-11-04 载体迁移再抬两格：文件 74 → 75（`agent_f/manuscript.py` 620 → 890）与
 #: 函数 94 → 95（`agent_v/core.py::_review_unregistered_prose` 0 → 224），来源逐条见
 #: `BASELINE` 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
-BASELINE_OBSERVED = "2026-11-04"
+#: 2026-11-08 再抬两格：文件 75 → 76（净 +1：`statementabandon.py` 1224 新过线、
+#: `propositionkey.py` 823 被写胖，`agent_f/manuscript.py` 掉回线下）与函数 95 → 99
+#: （净 +4：五条新过线、`register_statement` 拆分后掉回线下），来源逐条见 `BASELINE`
+#: 里那两格上方的点名；判据语义仍未变（只许降、不许再涨）。
+BASELINE_OBSERVED = "2026-11-08"
 
 
 def _load_survey():

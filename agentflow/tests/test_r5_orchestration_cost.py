@@ -1294,6 +1294,12 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 有一处 `def`，两处调用都写在 f-string 里（Python 3.11 的 `tokenize` 把整个 f-string
     # 当 STRING，不产 NAME 记号）⇒ 计数 1。名字是真的、读的人找得到，登记而不改注释。
     "_clip_board_detail",          # 存活函数（`agent_loop.py` 定义处一次；两处调用在 f-string 内，符号面数不到）
+    # —— 2026-11-08（V 只对手稿 / 两轴收口那一批）：三个已改名或已删的名字，四处引用都是
+    # 「改前是什么形态」的史实叙述，不是"照着找能得到东西"的指针 —— 按本表纪律逐条登记，
+    # 不把它们写没（写没等于把"这一批删掉了什么"也从注释里删掉）——
+    "_proposition_adjudication",   # 命题行上的判词字符串键（`statements` 行里那一格；符号面 0 次，引用处讲的是这一格从哪来）
+    "_statement_same_system",      # 已删：`judge_statement_same` 当年自己那一份题面（2026-11-08 收成一处判定后删掉）
+    "_read_only_facts",            # 旧名：V 提示词里那一段只读读数，现名 `agent_v.core._manuscript_facts`（改从手稿事实取）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

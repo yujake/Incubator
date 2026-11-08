@@ -279,7 +279,7 @@ PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
 #: 一次判定最多把几条命中候选交给秘书看：4 条。
 #:
-#: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_search_statements_by_keywords`）；
+#: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_statements_matching_keywords`）；
 #: 命中多于这个数时只把前 4 条交给模型，`hits_total` 与 `hits_named` 两个读数把
 #: "命中了几条 / 实际给它看了哪几条"分开写清。
 #: 为什么不给更多：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名。

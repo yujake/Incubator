@@ -77,7 +77,7 @@ reviewed_sha_by_proof`（`{"1": "<sha256>", "2": ""}`，见 `evidencebits.REVIEW
 F 在 `dependencies` 上登记"这一份证明用到哪条在册命题"（`used_by` / `path_group` /
 `source_stmt_id` / 那一行的人话）。那是自然语言描述（"由引理 2"、"由 Sylow I 可知"），
 不是逐字引文 ⇒ 只把编号交给 V 没有用，V 必须看到两样东西：F 是怎么说的、被引命题真正
-说的是什么（:func:`citation_material` 把两边一起取出来，正文摘要一起进提示词）。
+说的是什么（`agent_v.core._citation_material` 把两边一起取出来，正文摘要一起进提示词）。
 V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / `stronger` /
 `unrelated` / `inadmissible` / `unknown`），读数是 `citation_checks` 那五格
 （:data:`CITATION_CHECK_KEYS`；第 5 格 `in_material` 说明这一条是不是这一份证明登记的引用），
@@ -190,9 +190,6 @@ CITATION_CHECK_KEYS: tuple[str, ...] = (
     "stmt_id", "verdict", "quote_verbatim", "note", "in_material")
 #: 进 V 的审查材料的"被引命题正文摘要"长度上界（正文本身留在 `citations` 的全文格里）。
 CITATION_DIGEST_CHARS = 600
-#: 依赖行上"F 为什么这么引"那句话的候选键（按优先级取第一个非空；`note` 是正名，
-#: 老写法把话写在 `label` / `quote` / `status_reason` 里，所以那几个也认）。
-DEP_NOTE_KEYS: tuple[str, ...] = ("note", "label", "quote", "status_reason")
 
 #: 被引命题的等级下限 —— 直接引用 `depsection.CITATION_MIN_LEVEL`（唯一门槛定义）。
 #:
@@ -230,114 +227,6 @@ def evidence_kind_admissible(kind: Any) -> bool:
     """
     grade = EB.KIND_TO_GRADE.get(str(kind or "").strip(), "")
     return citation_grade_admissible(grade)
-
-
-def dep_note(row: Mapping[str, Any]) -> tuple[str, str]:
-    """依赖行上 F 写的那句话，返回 `(文本, 它出自哪个键)`（都空 ⇒ `("", "")`）。
-
-    为什么认几个键而不是一个：`dependencies` 行的正名里没有 `note`（`schema.Dependency`
-    是禁改区），F 侧的说明可能落在 `label`（人话标签）、`quote`（引文原话）或
-    `status_reason`（为什么是那个状态）里。三处都读、并把出处键一起交出去，
-    读的人才知道那句话是"标签"还是"引文原话"；只读一个键会让另一种写法静默丢掉。
-    """
-    for key in DEP_NOTE_KEYS:
-        text = str(row.get(key) or "").strip()
-        if text:
-            return text, key
-    return "", ""
-
-
-def _digest(text: str, limit: int = CITATION_DIGEST_CHARS) -> str:
-    """正文摘要（进提示词的那一份）：超长时截断并留一句"以下截断"。"""
-    body = str(text or "").strip()
-    if len(body) <= limit:
-        return body
-    return body[:limit].rstrip() + f"……（以下截断，全文共 {len(body)} 字）"
-
-
-def citation_material(*, statement_id: str, proof_no: Any = None,
-                      deps: Iterable[Mapping[str, Any]] = (),
-                      statements: Iterable[Mapping[str, Any]] = ()) -> list[dict[str, Any]]:
-    """V 的引用核实材料：这条命题第 `proof_no` 份证明登记的依赖行 + 每条被引命题的正文。
-
-    一条被引命题（`source_stmt_id`）一项，同一命题在不同 `path_group` 下登记两次也合成
-    一项（组号逐条列在 `path_groups` 里）：V 要对"这条被引命题"给一次结论，不是对
-    "这一次引用"给一次。
-
-    返回项（键集合固定，读的人不必猜）：
-    `stmt_id`（被引命题号）/ `paths`（每个 `path_group` 一条，含 `dep_id` / `used_by` /
-    `path_group` / `note` / `note_source` / `status` / `label` / `quote`）/
-    `path_groups` / `dep_ids` / `statement_full`（被引命题正文，不在册 ⇒ 空串）/
-    `statement_digest`（进提示词的摘要）/ `statement_missing` / `statement_label` /
-    `evidence_kind`（被引命题现在的档位；不在册 ⇒ 空串）/ `admissible`（这一档够不够格
-    被引，业主口径「proof_review级及以上才可引用」；判据 :func:`evidence_kind_admissible`）。
-
-    三态：`statement_missing=True` 说的是"册子里没有这条命题"，不是"它没有正文" ——
-    两者在读数上必须分得开（前者只判得了 `unknown`）。
-
-    只收 `used_by` 指向本条命题、且证明号等于 `proof_no` 的依赖行：`#p2` 的依赖不进
-    `#p1` 的审查材料（借光/串份是这一格要防的事）；`used_by` 的尾巴读不懂（`#pabc` 之类）
-    也不静默折成 canonical，直接不算这一份的依赖（原串仍留在依赖台账里，由 C 那条链点名）。
-    """
-    from . import proofloc as _PL   # 依赖尾巴的唯一解析点
-
-    sid = str(statement_id or "").strip()
-    want = _read_proof_no(proof_no) or DEFAULT_PROOF_NO
-    bodies = {str(r.get("stmt_id") or ""): r for r in statements}
-    grouped: dict[str, dict[str, Any]] = {}
-    for row in deps:
-        head, no, problem = _PL.parse_used_by_checked(str(row.get("used_by") or ""))
-        if problem:
-            continue
-        if str(head).strip() not in (f"stmt:{sid}", sid):
-            continue
-        if no != want:
-            continue
-        cited = str(row.get("source_stmt_id") or "").strip()
-        if not cited:
-            continue
-        note, note_source = dep_note(row)
-        item = grouped.setdefault(cited, {
-            "stmt_id": cited, "paths": [], "path_groups": [], "dep_ids": [],
-            "statement_full": "", "statement_digest": "", "statement_missing": False,
-            "statement_label": "", "evidence_kind": "", "admissible": False,
-        })
-        group = int(row.get("path_group") or 1)
-        item["paths"].append({
-            "dep_id": str(row.get("dep_id") or ""),
-            "used_by": str(row.get("used_by") or ""),
-            "path_group": group,
-            "note": note, "note_source": note_source,
-            "status": str(row.get("status") or ""),
-            "label": str(row.get("label") or ""),
-            "quote": str(row.get("quote") or ""),
-        })
-        if group not in item["path_groups"]:
-            item["path_groups"].append(group)
-        if str(row.get("dep_id") or ""):
-            item["dep_ids"].append(str(row.get("dep_id") or ""))
-    out = list(grouped.values())
-    for item in out:
-        hit = bodies.get(item["stmt_id"])
-        body = _SB.body_of(hit) if hit is not None else ""
-        item["statement_full"] = body
-        item["statement_digest"] = _digest(body) if hit is not None else ""
-        item["statement_missing"] = hit is None
-        item["statement_label"] = str((hit or {}).get("label") or "")
-        # 2026-11-05：可引门槛读等级（同一行、同一个 `derive_grade`，与 B 的门同源）。
-        # 历史 `evidence_kind` 只留着给提示词显示；判定不看它。
-        try:
-            item["grade"] = EB.derive_grade(
-                EB.bits_from_row(dict(hit or {})), kind=str((hit or {}).get("kind") or ""))
-        except Exception:  # noqa: BLE001 —— 算不出来 ⇒ 空串（不够格，可见的失败）
-            item["grade"] = ""
-        item["evidence_kind"] = str((hit or {}).get("evidence_kind") or "")
-        # 档位判据的缺省答案在这里算一次（`agent_v` 会用自己的缝再盖一次：
-        # 那是可打桩的那一格，判据 b 的反真空就打在它上面）。
-        item["admissible"] = citation_grade_admissible(item["grade"])
-        item["path_groups"] = sorted(item["path_groups"])
-    out.sort(key=lambda it: (it["stmt_id"], it["path_groups"]))
-    return out
 
 
 def _citation_checks_raw(raw: Any) -> list[dict[str, Any]]:
@@ -430,7 +319,7 @@ def reconcile_citation_checks(checks: Sequence[Mapping[str, Any]],
         if admitted is None:
             # 兼容旧材料的形状：没有 `grade` 那一格时，先把历史档位反算成等级
             # （`evidence_kind_admissible` 只做这一步换算，门槛仍是同一个）。新材料
-            # （`citation_material`）一定带 `grade`，走的是上面那条正路。
+            # （`agent_v.core._citation_material` 的返回）一定带 `grade`，走的是上面那条正路。
             admitted = (citation_grade_admissible(grade) if "grade" in item
                         else evidence_kind_admissible(item.get("evidence_kind")))
         if not bool(item.get("statement_missing")) and not admitted:
@@ -969,7 +858,7 @@ def cold_start_prompt(statement_full: str, proof_text: str,
     从只读查询面取好传进来）—— 传字符串而不是传 store，是为了让"它能碰什么"在接口上
     就固定下来。
 
-    `citations` 是引用核实的材料（`citation_material` 的返回）：F 对每条被引命题的说法
+    `citations` 是引用核实的材料（`agent_v.core._citation_material` 的返回）：F 对每条被引命题的说法
     与被引命题的正文摘要一起进来。它仍然只是一串字符串（没有 store 句柄），
     但它是 F 的叙述 —— 所以接口上多这一格是刻意的：V 要核 F 的引用，就必须看到 F 的
     说法，这是 `draft/39` 里"不给作者叙述"那条纪律的一处有边界的例外（只给被引命题的

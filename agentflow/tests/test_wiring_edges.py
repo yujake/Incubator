@@ -535,7 +535,11 @@ WIRED: dict[str, str] = {
     "read_manuscript": "_RegisterStatement.register_statement 的兜底读盘",
     "record_manuscript_dependency_face": "_RegisterStatement._receive_carried_manuscript",
     # 9 V 引用核实
-    "citation_material": "agent_v.core._citation_material",
+    # 2026-11-08（V 只对手稿）：材料来源从 `verifications.citation_material`（读
+    # `dependencies` + `statements`）换成 `agent_v.core._citation_material`（读手稿的
+    # `## 依赖` 与被引命题自己的手稿）。旧那一份再没有调用点，已删 —— 台账改指真身：
+    # 两个调用点都在 `AgentV.verify_proof`（短接回放那一段与连判循环前的取材料）。
+    "_citation_material": "AgentV.verify_proof（短接回放 + 连判前取材料，两处）",
     "reconcile_citation_checks": "AgentV._citation_checks",
     "apply_citation_gate": "AgentV.verify_proof",
     "signs_bit3": "verifications.record_verification 等七处",

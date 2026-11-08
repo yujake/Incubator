@@ -548,25 +548,6 @@ def _manuscript_facts(rel: str, raw: str, deps: Mapping[str, Any],
     return "\n".join(lines)
 
 
-def _signed_ledger_row(root: Any, statement_id: str, proof_no: int) -> dict[str, Any]:
-    """这一份证明签住的那一行台账（读不到 / 没有 ⇒ 空 dict；只作读数回放用）。
-
-    为什么要有它：已经签过的命题再被送来时，`verify_proof` 短接、不落新行，而那一签的
-    逐条引用结论 / findings 只存在于"签住的那一行"上 —— 不回放，调用方拿到的手里会比
-    真身更空（"核过、有一条 weaker"与"没有引用"在读数上长得一样）。
-    判据本体仍是 `verifications.signed_rows`（"这一批里哪几行签住了"的唯一实现），
-    这里只做"按证明号取最后那一行"。
-    """
-    try:
-        rows, _bad = VR.list_verifications(root, statement_id=statement_id, limit=None)
-    except (OSError, VR.VerificationError):
-        # 台账读不出来 ⇒ 回放不了（不是"没有引用"）。调用方在 `detail` 里照实说。
-        return {}
-    one = [r for r in rows if VR.proof_no_of(r) == int(proof_no)]
-    signed = VR.signed_rows(one)
-    return dict(signed[-1]) if signed else {}
-
-
 def _ledger_row_for_sha(root: Any, statement_id: str, sha: str) -> dict[str, Any]:
     """V 自己台账里盖住这一份正文 sha 的最近一行（读不到 / 没有 ⇒ 空 dict）。
 
