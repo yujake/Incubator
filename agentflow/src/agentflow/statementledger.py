@@ -42,16 +42,22 @@
 用静态 AST 检查钉住这一点（不是靠运行时打桩），另外各有一条「把这一条口径降级
 ⇒ 依赖它的判据红」的反真空。
 
-## 与工具层 `table.search` 的关系（两件事，别混）
+## 与工具层 `table.search` 的关系（2026-11-09 起：statements 上同一把尺）
 
-通用表工具（`tools/table_tools.py` 的 `table.get` / `table.search`）搜的是列文本：
-`casefold` 子串、对表里全部标量字符串字段（`statements` 实测 18 个，连 `status`、
-`stmt_id` 都在扫描面里）。本模块是命题语义面的查：只比 `label` / `statement_full`，
-用 `textutil.normalize`（与判重、查重同一把尺）。两者不是同一件事，也不许互相顶替：
-同一个关键词在两处会给出不同命中。工具层那两条不在本模块的迁移范围（`table_tools.py`
-在 `.noai-paths` 的 FC-27 禁改区，`auth-audit` 类，要 2 名 reviewer）；
-将来若拿到 FC-27 批准，`table.search` 在 `table="statements"` 上应委托 `by_keywords`
-—— 那是待办，不是已做（见 `temp/_todo_b_box_step4.md`）。
+通用表工具（`tools/table_tools.py` 的 `table.get` / `table.search`）对**别的表**仍是列文本：
+`casefold` 子串、对该表全部标量字符串字段。本模块是命题语义面的查：只比 `label` /
+`statement_full`，用 `textutil.normalize`（与判重、查重同一把尺）。
+
+**在 `statements` 表上，两边从 2026-11-09 起是一把尺**：`table.search` 的 statements 分支
+不再用 `casefold`，而是调同一份判据（`textutil.normalized_keywords` /
+`textutil.matched_keywords`），搜索面也收敛到 `label` / `statement_full`；点名别的列
+（`proof_text` / `status` / `stmt_id` …）会受控拒绝，不静默忽略。
+所以「同一个查询在两处给出不同命中」这个形态在命题台账上已被消掉（判据：
+`tests/test_the_two_rulers_agree_on_the_ledger.py`，反真空是把那一路换回 `casefold` ⇒ 红）。
+差异清单与"哪些差异是有意为之、不统一"见 `temp/_design_two_rulers.md`。
+
+`table_tools.py` 在 `.noai-paths` 的 FC-27 禁改区（`auth-audit` 类）：这次改动是按
+`scripts/noai_gate.py --baseline` 登记的，**登记 ≠ 批准**，仍需 2 名 reviewer 逐行走查。
 
 ## 池（查哪一批）归调用方，不归本模块
 
@@ -242,9 +248,7 @@ def by_keywords(source: Any = None, *,
         "source": _source_label(source, rows), "matched_by": MATCHED_BY_KEYWORDS,
         "why": "", "reason": "", "error": {},
     }
-    raw_words = [keywords] if isinstance(keywords, str) else list(keywords or ())
-    wanted = [(str(raw), T.normalize(str(raw))) for raw in raw_words]
-    wanted = [(raw, norm) for raw, norm in wanted if norm]
+    wanted = T.normalized_keywords(keywords)
     out["keywords"] = [raw for raw, _norm in wanted]
     if not wanted:
         why = ("没给可用的关键词（一个都没有，或归一化后全是空）⇒ 按关键字查这一问"
@@ -267,9 +271,8 @@ def by_keywords(source: Any = None, *,
         sid = str(row.get("stmt_id") or "")
         if not sid:
             continue
-        label_n = T.normalize(str(row.get("label") or ""))
-        full_n = T.normalize(str(row.get("statement_full") or ""))
-        hit_words = [raw for raw, norm in wanted if norm in label_n or norm in full_n]
+        hit_words = T.matched_keywords(
+            [str(row.get("label") or ""), str(row.get("statement_full") or "")], wanted)
         if not hit_words:
             continue
         full = str(row.get("statement_full") or "")

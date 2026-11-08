@@ -78,6 +78,48 @@ def is_cjk(text: str) -> bool:
     return bool(_CJK_RE.search(text or ""))
 
 
+# ---------------------------------------------------------------- 关键词命中（唯一判据）
+#
+# 这一段是"怎么算包含"的**唯一实现**：命题台账查口（`statementledger.by_keywords`）与
+# 通用表工具（`tools/table_tools.table_search` 在 `statements` 表上）都调它。
+#
+# 为什么必须只有一处（2026-11-09「两把尺」）：两处各写一份时，同一个查询会给出两个结论
+# —— 工具层用 `casefold` 裸子串，查口用 `normalize`（全半角 / 大小写 / 标点 / 空白都折叠）。
+# 实测：`noether，环` 在查口命中 `Noether 环`、在工具层 0 命中；全角 `Ｐ 阶元` 同样分家。
+# 两边各自都自洽 ⇒ 没有任何判据会报错，只有人对着读数才看得出来。
+# 设计取舍（差异清单、为什么不去改 `by_keywords` 的字段面）见 `temp/_design_two_rulers.md`。
+
+
+def normalized_keywords(keywords: str | Iterable[Any]) -> list[tuple[str, str]]:
+    """关键词 → `[(原样, 归一后)]`；归一后为空的词丢掉。
+
+    三态：空词**不是**"空命中"——它连一问都构成不了（`by_keywords` 据此给
+    `checked=False`）。丢在这里而不是让调用方各判一次：那正是两份实现开始分家的地方。
+    """
+    raw_words = [keywords] if isinstance(keywords, str) else list(keywords or ())
+    out: list[tuple[str, str]] = []
+    for raw in raw_words:
+        text = str(raw)
+        norm = normalize(text)
+        if norm:
+            out.append((text, norm))
+    return out
+
+
+def matched_keywords(texts: Iterable[str | None],
+                     wanted: Iterable[tuple[str, str]]) -> list[str]:
+    """在多段文本里找命中的关键词，按给定次序返回**原样**的词。
+
+    - 判据只有一句：`normalize(文本)` 里包含 `归一后的关键词`（子串）。全半角 / 大小写 /
+      标点 / 空白都由 `normalize` 折叠，所以"同一个词的不同写法"是同一个词；
+    - 多段文本任一命中即算命中（`label` 与 `statement_full` 就是两段）；
+    - `texts` 只收 `str | None`：非字符串由调用方先决定怎么处理（工具层跳过、查口 `str()`），
+      本函数不替它猜一个字面量出来。
+    """
+    hay = [normalize(text) for text in texts]
+    return [raw for raw, norm in wanted if any(norm in chunk for chunk in hay)]
+
+
 # ---------------------------------------------------------------- 分词与相似度
 
 
