@@ -733,7 +733,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 | **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | `conjectures` 一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
-| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`） | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`）；**普通数值那一档例外**：`reports/e-num-*`（`## 命题` + `## 数值结果`）**不过 V**，`proof_text` 留空、等级最多 `strong_conjecture` | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；普通数值 ⇒ `strong_conjecture`；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进（`e-num` 那一档为空）、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
 
 ### B 的正文与签从哪来（F 与 E 同一套）
 
@@ -916,6 +916,23 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
   `manuscript_not_washed`。退回 D、由 D 让 F 重写那一份手稿，不要自己补元信息、
   也不要自己补一节 `## 依赖` 冒充 F 写的；
 - 拒收理由**原话**带回去（哪一条、差在哪、查过哪三处），不要硬降档、不要重发同一笔。
+
+## E 的手稿分两族：`e-proof-*`（穷举）与 `e-num-*`（普通数值）
+
+业主 2026-11-08 的三条裁定：E 的普通数值实验也写手稿，B 按族名分两路读。
+
+| 族 | 内容契约 | 你登记时取什么 | 档位 / 签 |
+|---|---|---|---|
+| `reports/e-proof-<实验号>.md` | `## 命题` / `## 证明` / `## 依赖` | `proof_text` = `## 证明` 那一节的穷举论证（逐字）；程序地址去实验行的 `code_path` 读 | 穷举 + V 签 ⇒ `theorem`；**没有 V 签照旧整笔拒** |
+| `reports/e-num-<实验号>.md` | `## 命题` / `## 数值结果` | 只从 `## 命题` 取命题；程序地址去实验行的 `code_path` 读；**`## 数值结果` 与别的节一个字都不录** | `proof_text` 留空、`evidence_kind=cross_check`、等级 `strong_conjecture`；**不过 V**（绿色通道） |
+
+绿色通道的边界（别把它读成"以后都不用签"）：
+
+- 只认 E 的 `e-num-*`，别的手稿（F / B / e-proof）走原路；
+- 这一档**不收** `doc_id` / `line_range`（出处就是那条实验行），`kind` 写 `conjecture`；
+- 收录那一刻仍过**一次**命题形态闸（秘书判「条件 → 结论」）；判不过 ⇒ `proposition_form_refused`；
+- 手稿里的 `## 命题` 才是命题正文：调用方另传的 `statement_full` 会被它覆盖，别把
+  "审查意见 / 后续计划" 之类的东西当命题交上去。
 
 ## 消化：正文写成自然语言，不是照抄（不设机械闸）
 
@@ -1791,11 +1808,24 @@ D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evi
 
 **你既不要写对应表，也不要自己去找 B 的 `register_statement`。**
 
+## 4b. 普通数值实验也落一份手稿（`reports/e-num-<实验号>.md`）
+
+业主 2026-11-08：「E侧普通数值实验也需写报告，即命题+数值实验结果」「E侧普通数值实验不用过V」。
+所以每一次**有命题**的实验跑完，`E.run_experiment` 都会落一份 `reports/e-num-<实验号>.md`：
+
+- `## 命题`：被检验的那条命题（条件 → 结论）；
+- `## 数值结果`：算了什么、在什么范围、结果；
+- 程序只写「见实验行 `exp:<号>` 的 `code_path`」，**不把路径抄进正文**（改脚本时不会两处漂）。
+
+这一族的签是**不需要**的（不过 V）：它是给 D 提交「有数值实验支持的强猜想」时引用的 ——
+D 把这份稿的路径交给 B，B 从 `## 命题` 取命题、从实验行取程序，`proof_text` 空着、
+等级 `strong_conjecture`。穷举那一档仍落 `e-proof-*` 并照上面 1–4 步拿 V 的签。
+
 ## 5. 两档分野：跑的是哪一档，决定它到哪一级
 
 | 你跑的是 | 落什么 | 派不派 V | 拿不拿签 | 等级（唯一的轴） |
 |---|---|---|---|---|
-| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 | **不派 V** | **不拿签** | 最多 `strong_conjecture`（有普通数值实验支撑）；脚本自报的 `proof` 一律按凭据降级（历史列 `evidence_kind` 最多 `cross_check`） |
+| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 + `reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`） | **不派 V** | **不拿签** | 最多 `strong_conjecture`（有普通数值实验支撑）；脚本自报的 `proof` 一律按凭据降级（历史列 `evidence_kind` 最多 `cross_check`） |
 | **穷举证明**（三件套齐 + ②③ 落盘 + 手稿） | 实验行 + 报告 + 手稿 | 派 | 拿（收方秘书落块） | 等级按通道给：穷举证书 + V 签 ⇒ **`theorem`** —— 与 Lean **同级**（历史列 `evidence_kind=proof`）；**不是** `pre_theorem`（文字证明那一档才停在 `pre_theorem`，它的历史列名是 `proof_review`） |
 
 两档**不许写成同一级**：
@@ -2958,6 +2988,20 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 - **若这件事报到你这里、或 B 把入库结果回给你，你要把它落实**：派 A 查文献（用循环的 `summon` 形状）、
   让 B 入库（`summon` 派 B 的登记），并把新入库的号点名回告 F —— **不要只说「我知道了」**，也不要把这件事推回 M。
 - **查不到或不够格要如实回告**（低于 `proof_review` 的入了库也引不了）：说清缺哪一格，别让 F 等一个不会来的更新。
+
+## 提交「有数值实验支持的强猜想」：引用 E 的 `e-num-*`（2026-11-08 业主裁定）
+
+你对 `statements` 只有只读权限 —— 要把一条强猜想交给 B 登记时，走的不是你自己写那一行：
+
+1. 先让 E 跑一次普通数值实验（`E.run_experiment`）⇒ 它会落一份
+   `reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`）；
+   **E 不需要 V 的签**（业主：「E侧普通数值实验不用过V」）；
+2. 把**那份稿的路径**交给 B（`summon` 派 B 的 `register_statement`，`proof_manuscript` 给这个
+   路径、`kind=conjecture`）；B 从 `## 命题` 取命题、从实验行取程序，`proof_text` 空着、
+   等级 `strong_conjecture`（`evidence_kind` 历史列 `cross_check`）；
+3. 这样你交出去的每一条强猜想都有 E 侧的读数背书；**穷举**那一档仍走
+   `reports/e-proof-<实验号>.md`（它要 V 签）、F 的文字证明走 F 的手稿 —— 三档的载体不同，
+   别把"没有 V 签"当成"不能交"。
 
 ## 有界与归因
 
