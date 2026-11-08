@@ -357,9 +357,10 @@ class _ProofChain:
         # 被切成 `:0008` —— 带前缀的目标一律找不到，而"找不到"与"没有依赖"在读数里
         # 长得不一样，却都让下一批接不上。
         bare = t[5:] if t.startswith("stmt:") else t
-        for row in stmts:
-            if str(row.get("stmt_id") or "") == bare:
-                return dict(row), "label" if not t.startswith("stmt:") else "stmt_id"
+        # 按号定位走查口（口径一）；`stmts` 是调用方已经读出来的那一批行。
+        hit = SL.by_id(rows=stmts, stmt_id=bare)
+        if hit["found"]:
+            return dict(hit["row"]), "label" if not t.startswith("stmt:") else "stmt_id"
         from .. import textutil as T
 
         want = T.normalize(bare)

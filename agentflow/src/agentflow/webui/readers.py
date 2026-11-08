@@ -79,6 +79,7 @@ from typing import Any, Mapping, Sequence
 
 from .. import manuscripts as _MS
 from .. import sessions as SS
+from .. import statementledger as SL   # 命题台账的查口（全表→索引，只读、零模型）
 from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
                          agent_states, clock_waiters, most_active_state, state_counts)
 from ..jsonlfile import read_jsonl_state
@@ -1914,8 +1915,8 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     out["relations"] = _quote_state_rows(out.get("relations") or [])
     out["experiments"] = _experiment_code_consistency(root_p,
                                                       out.get("experiments") or [])
-    by_sid = {str(r.get("stmt_id") or ""): r for r in out["statements"]
-              if isinstance(r, Mapping)}
+    # 索引的构造只有一处（查口 `index_by_id`）：非 Mapping / 没号的行由它跳过。
+    by_sid = SL.index_by_id(out["statements"])
     out["verifications"] = _verification_consistency(out.get("verifications") or [],
                                                      by_sid)
     if problems:

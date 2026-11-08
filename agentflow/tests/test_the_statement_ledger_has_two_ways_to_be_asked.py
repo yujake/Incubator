@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import pathlib
 import sys
 
@@ -331,10 +332,18 @@ MIGRATED_BY_ID: tuple[tuple[str, str], ...] = (
     ("agentflow/agent_d/write_report.py", "_deliver_carried_to_b"),
     ("agentflow/agent_l/formalize.py", "_pick_statement"),
     ("agentflow/agent_l/record.py", "_statement_row"),
+    # 2026-11-09 补收（业主裁「两处残余都收」）：拿已读出来的行再手写一遍按号找的那两处。
+    ("agentflow/agent_c/proof_chain.py", "_resolve_target"),
+    ("agentflow/tools/doc_tools.py", "register_dependency"),
 )
 
 
 def _module_tree(rel: str) -> ast.Module:
+    return _parse_cached(rel)
+
+
+@functools.lru_cache(maxsize=None)
+def _parse_cached(rel: str) -> ast.Module:
     return ast.parse((SRC / rel).read_text(encoding="utf-8"))
 
 
@@ -351,27 +360,41 @@ def _calls_attr(fn: ast.AST, attr: str) -> bool:
 
 
 def _hand_rolled_id_lookup(fn: ast.AST) -> bool:
-    """函数体里还有没有「`next((r for r in rows if r.get("stmt_id") == sid), …)`」那种手写。"""
+    """函数体里还有没有「按号取一行」的手写（`next(...)` 与 `for row in rows: if …` 两种形态）。"""
     for node in ast.walk(fn):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == "next" and node.args):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "next" and node.args
+                and isinstance(node.args[0], ast.GeneratorExp)):
+            for inner in ast.walk(node.args[0]):
+                if (isinstance(inner, ast.Compare)
+                        and any(isinstance(op, ast.Eq) for op in inner.ops)
+                        and "stmt_id" in ast.unparse(inner)):
+                    return True
             continue
-        gen = node.args[0]
-        if not isinstance(gen, ast.GeneratorExp):
-            continue
-        for inner in ast.walk(gen):
-            if (isinstance(inner, ast.Compare)
-                    and any(isinstance(op, ast.Eq) for op in inner.ops)
-                    and "stmt_id" in ast.unparse(inner)):
-                return True
+        if isinstance(node, ast.For):
+            # 只认"在台账/快照那批行里找"的循环：`for row in rows` / `for row in stmts` /
+            # `for r in store.rows("statements")`。对判定返回的候选表按号挑一条不算
+            # （那不是台账读点）。
+            iter_text = ast.unparse(node.iter)
+            if not any(k in iter_text for k in ("rows", "stmts", "statements", "ledger")):
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.If):
+                    continue
+                if not any("stmt_id" in ast.unparse(x) for x in ast.walk(inner)):
+                    continue
+                if any(isinstance(x, ast.Compare) and any(isinstance(op, ast.Eq)
+                                                         for op in x.ops)
+                       for x in ast.walk(inner)):
+                    return True
     return False
 
 
 def test_j_every_by_id_site_goes_through_the_box() -> None:
-    """j：S1 的 26 个调用点都问查口；谁恢复自己扫全表，这一条当场红。
+    """j：S1 的 28 个调用点都问查口；谁恢复自己扫全表，这一条当场红。
 
     这一条是「同一件事只留一处实现」的机器读数：登记表里每个函数都必须出现
-    `statementledger.by_id(...)` 的调用，且不许再出现手写的按号 `next(...)`。
+    `statementledger.by_id(...)` 的调用，且不许再出现手写的按号 `next(...)` / `for` 循环。
     """
     assert len(MIGRATED_BY_ID) >= 20, "登记表被悄悄缩短了（收口点少了 = 判据面变小）"
     for rel, name in MIGRATED_BY_ID:
@@ -379,12 +402,18 @@ def test_j_every_by_id_site_goes_through_the_box() -> None:
         assert _calls_attr(fn, "by_id"), (
             f"{rel}::{name} 没有走 `statementledger.by_id` —— 按号查的实现又长出了第二处")
         assert not _hand_rolled_id_lookup(fn), (
-            f"{rel}::{name} 里还有手写的按号 `next(...)` —— 自己扫全表又回来了")
-    # 反真空：检测器自己要认得出改前那种写法（否则上面的"没有"是空的）。
-    sample = ast.parse(
-        'def f(rows, sid):\n'
-        '    return next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)\n')
-    assert _hand_rolled_id_lookup(sample.body[0]), "反真空：检测器认不出改前那种写法"
+            f"{rel}::{name} 里还有手写的按号查找 —— 自己扫全表又回来了")
+    # 反真空：检测器自己要认得出改前那两种写法（否则上面的"没有"是空的）。
+    for src in (
+            'def f(rows, sid):\n'
+            '    return next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)\n',
+            'def f(rows, sid):\n'
+            '    for row in rows:\n'
+            '        if str(row.get("stmt_id") or "") == sid:\n'
+            '            return row\n'
+            '    return None\n'):
+        assert _hand_rolled_id_lookup(ast.parse(src).body[0]), (
+            f"反真空：检测器认不出改前那种写法\n{src}")
     # 唯一实现：`by_id` 只定义在查口一处。
     defs = [path.name for path in (SRC / "agentflow").rglob("*.py")
             if "def by_id(" in path.read_text(encoding="utf-8")]
@@ -412,6 +441,14 @@ MIGRATED_INDEX: tuple[tuple[str, str], ...] = (
     ("agentflow/depsection.py", "wash_dependency_section"),
     ("agentflow/paperledger.py", "check_paper_ledger"),
     ("agentflow/agent_c/proof_chain.py", "__init__"),
+    # 2026-11-09 补收（业主裁「形状相同的 4 处都收」）：号集合 / 成员判定的构造。
+    # `agent_f/manuscript.py:117` 不在内 —— 它的 `pool` 是 `depsection.citable_pool(rows)`
+    # 的返回值（`{号: 等级}`，唯一实现），那一行只是成员判定；折进 `index_by_id` 会把
+    # 「可引池」与「全表索引」折平。
+    ("agentflow/webui/readers.py", "evidence_chain"),
+    ("agentflow/paperledger.py", "assign_paper_numbers"),
+    ("agentflow/agent_d/write_report.py", "_carried_manuscripts"),
+    ("agentflow/agent_d/write_report.py", "_carried_missing_reading"),
 )
 
 

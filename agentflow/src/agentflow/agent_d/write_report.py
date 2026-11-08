@@ -556,7 +556,8 @@ class _WriteReport:
             _entries = []
             note_prefix = (f"（手稿登记条目这一趟读不出来：{type(exc).__name__}: {exc} ⇒ "
                            "这张携带单可能少列了还没拿到命题号的那几份。）")
-        _known_stmt_ids = {str(r.get("stmt_id") or "") for r in statements}
+        # 号集合的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
+        _known_stmt_ids = set(SL.index_by_id(statements))
         for one in _entries:
             if str(one.get("family") or "") != "F":
                 continue
@@ -657,7 +658,8 @@ class _WriteReport:
             return {"carried_missing": False, "checked": False, "statement_ids": [],
                     "reason": (f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ "
                                "这一趟判不出携带单缺不缺（那是「读不到」，不是「不缺」）")}
-        on_ledger = {str(r.get("stmt_id") or "") for r in statements if str(r.get("stmt_id") or "")}
+        # 号集合的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
+        on_ledger = set(SL.index_by_id(statements))
         refs: list[str] = []
         for row in statements:
             sid = str(row.get("stmt_id") or "")

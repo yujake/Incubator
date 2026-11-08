@@ -34,6 +34,7 @@ from .. import papercompile as PC
 from .. import papermapping as PM
 from .. import proofloc as _PL
 from .. import schema as S
+from .. import statementledger as SL   # 命题台账的查口（按号 / 全表→索引，只读、零模型）
 from .. import textutil as T
 from .. import verifications as VR
 from ..store import StoreError
@@ -2003,8 +2004,8 @@ def register_dependency(
                     "'核过了'，也不是'库里没有这一条'—— 先用 `agentflow verify` 定位"
                     "（必要时 `agentflow rebuild` 重建），再登记这条边"
                 ) from None
-            anchor = next((r for r in stmt_rows
-                           if str(r.get("stmt_id")) == source_stmt_id), None)
+            # 按号定位走查口（口径一）；`stmt_rows` 是事务里刚读出来的那一批行。
+            anchor = SL.by_id(rows=stmt_rows, stmt_id=source_stmt_id)["row"] or None
             if anchor is None:
                 raise ValueError(
                     f"source_stmt_id={source_stmt_id!r} 不存在：statements 表里没有这一行"

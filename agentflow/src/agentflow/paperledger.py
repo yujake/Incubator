@@ -55,7 +55,8 @@ def assign_paper_numbers(statement_rows: Iterable[Mapping[str, Any]], *,
 
     `section` 传空 ⇒ 只用序号（`"5"`）。给的 `start` 是这一节里第一个号。
     """
-    ids = sorted({str(r.get("stmt_id") or "") for r in statement_rows if str(r.get("stmt_id") or "")})
+    # 索引的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
+    ids = sorted(SL.index_by_id(statement_rows))
     out: dict[str, str] = {}
     for i, sid in enumerate(ids, start=int(start)):
         out[sid] = f"{section}.{i}" if str(section).strip() else str(i)
