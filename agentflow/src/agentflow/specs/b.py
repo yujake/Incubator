@@ -153,7 +153,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
                            "来源。**它决定还要给哪些字段**（写库前逐条硬校验）："
                            "external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；"
                            "own_result（我们自己的）⇒ 必须给 doc_id 或 line_range 之一，"
-                           "**并且**交一份证明手稿（`proof_manuscript`；在册命题也给稿）"},
+                           "**并且**交一份证明手稿（`proof_manuscript`；在册命题也给稿）；"
+                           "交的是 E 的普通数值手稿（`reports/e-num-<实验号>.md`）时例外："
+                           "出处就是那条实验行，不用 doc_id / line_range，把那份稿交给 `proof_manuscript` 即可"},
                 "page_range": {**_OBJ, "description":
                                "origin='external_lit' 必需：出处页码（start，或 label —— "
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
@@ -490,6 +492,15 @@ SPEC = AgentSpec(
             "**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / "
             "归纳版）不等于不同命题；拆开之后 `proof_no` 恒为 1、`path_group` 只剩一组，"
             "多证明机制一次都不会被触发。判重先问「这是不是同一条」，再问「这是它的第几份证明」。",
+            # 2026-11-08（业主三条裁定）：E 的手稿分两族，B 读法不同。
+            "**E 的手稿分两族，读法不同**（业主 2026-11-08）：`reports/e-proof-<实验号>.md` 是穷举档 —— "
+            "`proof_text` 只原样收 `## 证明` 那一节的穷举论证（程序地址住实验行的 `code_path`、程序设计住 "
+            "`observations[\"design\"]`，都不许再塞进 `proof_text`），没有 V 签照旧受控拒 "
+            "（`proof_needs_third_party_signature`）。`reports/e-num-<实验号>.md` 是普通数值档"
+            "（`## 命题` + `## 数值结果`）—— 只从 `## 命题` 取命题、程序取 实验行的 `code_path`，"
+            "`proof_text` 留空、`evidence_kind` 落 `cross_check`（等级 `strong_conjecture`），**不过 V**；"
+            "`## 数值结果` 与别的节一个字都不录。这一档不收 `doc_id` / `line_range`（出处就是那条实验行），"
+            "`kind` 写 `conjecture`；D 提交「有数值实验支持的强猜想」走的就是它。",
             "**这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、不给 `documents` 另开一类；A 交来的文献由你把定理与"
             "证明收进 `statements`（`proof_text` + 逐字出处），**收录比转述强**：综述里的一句话查不到行，收录表里每一行都能。",
             # 2026-10-22 业主裁定 B-1（逐字：「若出现被指认无可信度的文献，或待审核的文献，

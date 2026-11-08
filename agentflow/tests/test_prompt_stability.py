@@ -951,6 +951,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "E / F / G ⇒ 只这三格的 tools_lines 换值）、adf3402c（`specs/g.py` 的 WRITING_SCOPE 与 "
              "WRITING_SCOPE_NO_LEAN 补「玩具例子用 Example 环境」⇒ G 再换一次）。变化格 = E/F/G；"
              "A/B/C/D/H/L/M/V 逐字未动。facts 键集仍 15 格。"},
+    # p257 → p258（2026-11-08，业主三条裁定：E 普通数值手稿 + B 绿色通道 + 穷举档证明栏）：
+    # facts 键集一格没动（还是 15 格），只改四份 spec 的段文本 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p258", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p258（2026-11-08，业主三条裁定）：上游四份 spec 的 policy / 动作面描述 = "
+             "`specs/e.py`（穷举那一条的 ② 改成「证明栏只写 ③ 穷举论证；程序住 code_path、"
+             "设计住 observations」＋新增 ⑤ 普通数值手稿 `e-num-*`）、`specs/b.py`（「两族手稿"
+             "读法不同」policy ＋ `origin` 描述补绿色通道的出路）、`specs/d.py`（提交强猜想引用 "
+             "`e-num-*`，statements 只读）、`specs/g.py`（落库证明栏只有 ③）。变化格 = B/D/E/G；"
+             "A/C/F/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
 
 )
 

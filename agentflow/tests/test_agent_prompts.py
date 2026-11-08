@@ -2332,7 +2332,16 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   E c5cefdfc→e60b9c92 / F f6f65ec0→3029f47a / G 55d1a1c1→e94de814。
 # 十一格是 `temp/_p257_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
 # 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
-_FROZEN_PROMPT_VERSION = "p257"
+# 2026-11-08（p257 → p258，业主三条裁定：E 普通数值手稿 + B 绿色通道 + 穷举档证明栏）：
+# 四格换值 —— B / D / E / G；上游是本笔改的四份 spec（E 的穷举 ② 改写 + ⑤ 新增、
+# B 的「两族手稿」policy 与 `origin` 描述、D 的「提交强猜想引用 e-num」、G 的
+# WRITING_SCOPE 落库口径）。A / C / F / H / L / M / V 逐字未动（只差版本行）。
+# 逐格旧值 → 新值：
+#   B 667bf57a→465a645b / D 527711b8→da51f676 / E e60b9c92→dd9d4185 /
+#   G e94de814→27d436f7。
+# 十一格是 `temp/_p258_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+# 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+_FROZEN_PROMPT_VERSION = "p258"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2568,12 +2577,12 @@ _FROZEN_PROMPT_VERSION = "p257"
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "7dfe78d302ccf4d6d713aa7b7206e59bf7c4a543fe7f13435ce445176ef6949e",
-    "B": "667bf57a92aa51e59eb19a8f939663887e043fc0662883150ee3cd8dd08cb075",
+    "B": "465a645b82eea398069bd029f595de6aa7f573c5c76fc3552327d9b3b39d1d63",
     "C": "922a427550f75ffea7282c0176ef6b2f516fb0b407b2a73d9ba97b27c556fcf0",
-    "D": "527711b8a1a97cf4587d5c6f481e1673582a7d7db599a538fb4b26e5b8fad0d4",
-    "E": "e60b9c92726085be27636d09e7c159dcd4d3d33490a24c42f49206a19afa1f50",
+    "D": "da51f676945caab454bd72e3cf15664c2c6e6aaf4d81c9e544a5179a4c69d5f7",
+    "E": "dd9d4185e0db9a17ad1eed816b568c18a5612c8c83276d7c5a835dc721d288da",
     "F": "3029f47ad672549ec3da56ee1753b002cabbf1391d112936fe6dfe6d9e275446",
-    "G": "e94de81490b0692013b4ecceabe3c0740140ebf2ee3791cf5df12d8ca6603d24",
+    "G": "27d436f790a1f9b2056db0171b117fa59e5a1e5ff9e8ca290f8ba1a03fedae9e",
     "H": "b2eda81b2b9de1c4fe8f9f5fc4c0b3a43f97f60c558aaecb746bda405cb3978b",
     "L": "9461d7475a6113632e8bc939968ffdf7beed986c45fee19ab9e0ccfa6a533a24",
     "M": "63abea4f5c95ad5bf4f9258c164130a8966f4a62d2163c028ed4e01b2a2e5ce5",

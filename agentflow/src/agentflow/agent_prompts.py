@@ -3584,7 +3584,25 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 多 `kind` 一格、`agent_surface_snapshot.json` 因十一格提示词的版本行与 E/F/G 三格正文变）；
 #: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p257"
+#: p257 → p258（2026-11-08，业主三条裁定：E 普通数值手稿 + B 绿色通道 + 穷举档证明栏）：
+#: 四格换值 —— B / D / E / G（提示词正文动了；其余七格只差版本行）。
+#:   ① `specs/e.py` 的 policy：穷举那一条的 ② 改成「证明栏只写 ③ 穷举论证；程序地址住
+#:      实验行 `code_path`、程序设计住 `observations["design"]`」，并新增 ⑤「普通数值实验
+#:      也落 `reports/e-num-<实验号>.md`（命题 + 数值结果；不过 V）」。
+#:   ② `specs/b.py`：policy 新增「E 的手稿分两族，读法不同」（e-proof 收 ③ + V 签；
+#:      e-num 只取命题 + code_path、proof_text 空、cross_check / strong_conjecture、不过 V），
+#:      动作面 `origin` 的描述补「普通数值手稿这一档不收 doc_id / line_range」。
+#:   ③ `specs/d.py`：policy 新增「提交强猜想时引用 E 的 `e-num-*` 手稿」（statements 只读）。
+#:   ④ `specs/g.py` 的 `WRITING_SCOPE` / `WRITING_SCOPE_NO_LEAN`：正文的 proof 环境仍写全
+#:      三块给人读，但落进 `statements.proof_text` 的只有 ③（程序在 `code_path`、设计在
+#:      `observations`）——「三块合起来就是证明栏」那句留着（它说的是论文正文那一节）。
+#: 变化格（十一格摘要）= B / D / E / G；A / C / F / H / L / M / V 逐字未动（只差版本行）。
+#: 逐格旧值 → 新值：
+#:   B 667bf57a→465a645b / D 527711b8→da51f676 / E e60b9c92→dd9d4185 /
+#:   G e94de814→27d436f7。
+#: 十一格是 `temp/_p258_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+PROMPT_VERSION = "p258"
 
 
 

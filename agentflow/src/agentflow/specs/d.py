@@ -234,6 +234,12 @@ SPEC = AgentSpec(
             "然后写成 `conjectures` 的一行 —— `statement` 一句话说清，`testable` 给出**怎么判它有假**（参数、界、判据），"
             "`negation_statement` 写它的否定。**没有猜想就只有一堆读数**。猜想登记之后用实验去支持或反驳它（`experiment_ids` / "
             "`counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。"
+            # 2026-11-08（业主三条裁定）：D 对 statements 只读；提交强猜想时引用 E 的手稿。
+            "**提交强猜想时引用 E 的普通数值手稿**（业主 2026-11-08）：你对 `statements` 只有只读权限 —— "
+            "要把一条「有数值实验支持的猜想」交给 B 登记时，交的是那条 E 的 `reports/e-num-<实验号>.md`"
+            "（`proof_manuscript` 给这个路径）+ `kind=conjecture`；B 从那份稿的 `## 命题` 取命题、从实验行取程序，"
+            "`proof_text` 空着、等级 `strong_conjecture`、不过 V。穷举证据仍走 `reports/e-proof-<实验号>.md`"
+            "（它要 V 签，按原路走）；F 的文字证明走 F 的手稿。这样你的每一件提交物都有 E 或 F 侧的背书。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
             # 2026-10-21 减负：原来这是「两条」（"猜想写出来交给 F"＋"立了猜想必须派 F"），
