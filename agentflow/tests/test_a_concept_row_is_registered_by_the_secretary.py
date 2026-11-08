@@ -154,7 +154,9 @@ def test_the_write_asks_the_concept_identity_criterion(store: Store,
         CR.write_concept(tx, stmt_id="0000", label="有限维李代数",
                          definition=LEGACY["definition"], out=readings)
     first_identity = dict(readings.get("concept_identity") or {})
-    assert first_identity.get("state") in (PK.STATE_DIFFERENT, PK.STATE_UNKNOWN), first_identity
+    # 在册 0 条概念行 ⇒ "没有同一个概念"判得出来（different），不是"判不了"。
+    assert first_identity.get("checked") is True, first_identity
+    assert first_identity.get("state") == PK.STATE_DIFFERENT, first_identity
 
     seen: list[tuple[str, str]] = []
     real = PK.same_concept

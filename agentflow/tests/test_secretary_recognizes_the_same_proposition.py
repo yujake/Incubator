@@ -575,7 +575,7 @@ def test_reverting_one_judge_turns_its_criterion_red(
     monkeypatch.setattr(
         PK, "same_kind_proof",
         lambda a, b, threshold=PK.PROOF_SAME_JACCARD: {
-            "state": PK.STATE_DIFFERENT, "basis": "", "similarity": 0.0,
+            "checked": True, "state": PK.STATE_DIFFERENT, "basis": "", "similarity": 0.0,
             "threshold": float(threshold), "what": "证明",
             "reason": "打桩：永远不同（改前的行为）"},
         raising=True)
@@ -587,10 +587,12 @@ def test_reverting_one_judge_turns_its_criterion_red(
 # ============================================================ ⑥ 三态：判不了不并
 
 def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) -> None:
-    """⑥ 文本过短 / 纯符号 ⇒ `unknown` 且不并（不猜）。
+    """⑥ 判不了：命题轴仍是 unknown（兜底口径），同种证明轴是"没判成"（两档之外）。
 
-    三态纪律：`unknown` 既不是 `same` 也不是 `different`。两档判不了的 `reason` 不同
-    （太短 / 全是符号）：处置不同 —— 前者可以补上下文，后者要补文字。
+    2026-11-08 业主「没有判不了」只收了 `same_concept` / `same_kind_proof` 两轴；
+    命题轴的确定性兜底仍是三态（`statementfission` 与 `_same_proposition_candidate`
+    读的就是它）。同种证明轴判不了 ⇒ `checked=False` + `state=""`，调用方受控拒
+    （见 `tests/test_unjudged_axes_are_fail_closed.py`）。
     """
     for left, right in (("x = 1", "y = 1"), ("显然。", "由定义。"),
                         ("≤ ≥ ≠", "≠ ∤ ∝"), ("∀x∈G", "∀y∈H")):
@@ -600,7 +602,8 @@ def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) 
         assert got["reason"], (left, right, got)
     assert "全是符号" in PK.same_proposition("≤ ≥ ≠", "≠ ∤ ∝")["reason"]
     assert "太短" in PK.same_proposition("x = 1", "y = 1")["reason"]
-    assert PK.same_kind_proof("显然。", "由定义。")["state"] == PK.STATE_UNKNOWN
+    unjudged_proof = PK.same_kind_proof("显然。", "由定义。")
+    assert unjudged_proof["checked"] is False and unjudged_proof["state"] == "", unjudged_proof
 
     # 登记路径：两条都判不了的短命题各落各的行（不许因为"判不了"就把它们并成一条）。
     st = _ws(tmp_path)

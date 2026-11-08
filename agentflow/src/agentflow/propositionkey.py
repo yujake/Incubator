@@ -38,7 +38,7 @@
 | 问题 | 判据 | 命中之后 |
 |---|---|---|
 | 这两条命题是不是同一条 | 秘书挑词 → 关键词检索 → 一次判定（`secretary.adjudicate_proposition`） | 不新建命题行，落成那条命题的第 N 份证明 |
-| 同一命题下这两份证明是不是同一种证法 | `same_kind_proof` | 不新增证明号，受控拒绝 `proof_same_kind`（或 `merge=true` 合成一份并重拿 V 签） |
+| 同一命题下这两份证明是不是同一种证法 | `same_kind_proof` | 不新增证明号，受控拒绝 `proof_same_kind`（或 `merge=true` 合成一份并重拿 V 签）；判不了 ⇒ 受控拒 `proof_kind_unjudged` |
 
 ## 命题键（`proposition_key`）
 
@@ -65,12 +65,20 @@
 （`数` 在 `函数` 里已经出现过），而它们是两种写法 —— 二元组保留这一层区分，同时仍然
 是排序无关的集合。
 
-## 三态（`judgeable`）
+## 判不了 = 没判成（`judgeable`）
 
-`proposition_key` 对"判不了"的文本返回空串，`same_proposition` / `same_kind_proof`
-返回 `state="unknown"`。判不了的两档是：文本太短（内容单元 < `MIN_CONTENT_UNITS`）、
-或者全是符号没有可比的文字。unknown 不是 different：调用方据此走"不并"，
-也不许把它记成"判过了、不同"。理由必须留在 `reason` 里（哪一档、读数是多少）。
+`proposition_key` 与 `prose_similarity` 对"判不了"的文本返回空串 / 0.0。两轴对它的表达
+在 2026-11-08 之后分成两种（业主逐字：「没有判不了」）：
+
+- `same_proposition`（命题轴的确定性兜底）：仍返回 `state="unknown"` —— 它不归模型判，
+  调用方（`statementfission` 的形态读数与 `_same_proposition_candidate` 的兜底）读的是
+  这个三态里的"判不了"；那是命题轴的历史口径，本模块不改。
+- `same_kind_proof` / `same_concept`：判不了 = 没判成（`checked=False`、`state=""`），
+  不返回第三种结论。调用方据此 fail-closed（受控拒：不新增证明号 / 不新建概念行）；
+  不许把它折成 `different`。
+
+判不了的两档是：文本太短（内容单元 < `MIN_CONTENT_UNITS`）、或者全是符号没有可比的文字。
+理由必须留在 `reason` 里（哪一档、读数是多少），读数在 `judgeable["a"]` / `["b"]`。
 
 ## 相似度（兜底的那一档）
 
@@ -96,9 +104,10 @@
 | 定义项（标签） | 两侧的标签规范化后相同 | `concept_label` |
 | 定义项（正文里的术语） | 正文开头「概念（X）」/「定义（X）」抽出的 X 相同 | `concept_defined_term` |
 
-三态照旧：两侧至少有一侧抽得出定义项、而两侧不相等 ⇒ `different`；两侧都抽不出
-（空标签、正文不是一句定义）⇒ `unknown`。`unknown` 不许折成 `different`：折平会让
-"没人判过"变成"判过了、不同"，于是同一个概念还是会被登记两行。
+两档（2026-11-08 起）：两侧至少有一侧抽得出定义项、而两侧不相等 ⇒ `different`；定义项相同
+⇒ `same`。两侧都抽不出（空标签、正文不是一句定义）⇒ 判不了 = 没判成
+（`checked=False`、`state=""`）：调用方受控拒、不新建第二行。`checked=False` 不许折成
+`different`（"判不了当不同"会让同一个概念还是被登记两行），也不许折成 `same`。
 
 抽出来的定义项先去标点与空白再比：`有限维 Lie 代数` 与 `有限维Lie代数` 是同一个键，
 `finite-dimensional Lie algebra` 与 `finite dimensional lie algebra` 也是。通用的那几个
@@ -113,9 +122,10 @@
 
 ## 判据
 
-`tests/test_secretary_recognizes_the_same_proposition.py` 钉的是命题那一份的六条行为
-（键命中 / 相似度兜底 / 三态 / 同种证明 / 以及"把判据打桩之后调用方必须变红"的反真空）；
-概念那一份（`same_concept`）钉在 `tests/test_one_concept_is_one_row.py`。
+`tests/test_secretary_recognizes_the_same_proposition.py` 钉的是命题那一份的行为（键命中 /
+相似度兜底 / 命题轴三态 / 同种证明 / 以及"把判据打桩之后调用方必须变红"的反真空）；
+概念那一份（`same_concept`）钉在 `tests/test_one_concept_is_one_row.py`；两轴的"判不了 =
+没判成 + 调用方受控拒"钉在 `tests/test_unjudged_axes_are_fail_closed.py`。
 """
 from __future__ import annotations
 
@@ -499,24 +509,33 @@ def prose_similarity(a: str, b: str) -> float:
 
 
 def _judge(a: str, b: str, *, threshold: float, basis: str,
-           what: str) -> dict[str, Any]:
-    """两段文本的同一性判定（三态 + 依据 + 读数），命题与证明共用这一处。
+           what: str, unknown_is_unjudged: bool = False) -> dict[str, Any]:
+    """两段文本的同一性判定（依据 + 读数 + `checked`），命题与证明共用这一处。
 
     `what` 只用于文案（"命题"/"证明"），不参与判据 —— 两轴的算法刻意是同一套，
     不同的只有阈值与命中之后的处置（处置在调用方，不在这里）。
+
+    `unknown_is_unjudged`：判不了时怎么表达。`False`（命题轴）照旧 `state="unknown"`；
+    `True`（证明轴，2026-11-08 起）`checked=False` + `state=""` —— "判不了"不是第三种
+    结论，是"没判成"。
     """
     left_probe, right_probe = judgeable(a), judgeable(b)
     out: dict[str, Any] = {
-        "state": STATE_UNKNOWN, "basis": "", "similarity": 0.0,
+        "checked": False, "state": STATE_UNKNOWN, "basis": "", "similarity": 0.0,
         "key_a": "", "key_b": "", "detail": {}, "reason": "",
         "threshold": float(threshold), "what": what,
     }
     if not left_probe["ok"] or not right_probe["ok"]:
         missing = [probe["reason"] for probe in (left_probe, right_probe) if not probe["ok"]]
-        out["reason"] = (f"判不了：{'；'.join(missing)} ⇒ 不并、也不记成不同（三态纪律）")
+        if unknown_is_unjudged:
+            out.update(state="", reason=(f"判不了 = 没判成：{'；'.join(missing)}"
+                                         " ⇒ 调用方受控拒（判不了不等于不同）"))
+        else:
+            out["reason"] = (f"判不了：{'；'.join(missing)} ⇒ 不并、也不记成不同（三态纪律）")
         out["judgeable"] = {"a": left_probe, "b": right_probe}
         return out
     out["judgeable"] = {"a": left_probe, "b": right_probe}
+    out["checked"] = True
     if basis == BASIS_KEY:
         key_a, key_b = proposition_key(a), proposition_key(b)
         out["key_a"], out["key_b"] = key_a, key_b
@@ -551,9 +570,11 @@ def same_proposition(a: str, b: str, *,
     """两条命题表述是不是同一条（三态：same / different / unknown）。
 
     先比键，键不同再比词面相似度。返回值（调用方与拒信都读这一份，不各算一遍）：
-    `state` / `basis` / `similarity` / `key_a` / `key_b` / `detail` / `reason` /
-    `threshold` / `judgeable`。
+    `checked` / `state` / `basis` / `similarity` / `key_a` / `key_b` / `detail` /
+    `reason` / `threshold` / `judgeable`。
     `basis` 只有 `proposition_key`、`prose_similarity` 两档；`unknown` 时为空串。
+    命题轴的"判不了"仍是第三态 `state="unknown"`（`checked=False`）：这一轴是确定性兜底，
+    不在 2026-11-08 "收两档"的范围内（理由见模块 docstring）。
     """
     return _judge(a, b, threshold=threshold, basis=BASIS_KEY, what="命题")
 
@@ -572,13 +593,16 @@ def proof_similarity(a: str, b: str) -> float:
 
 def same_kind_proof(a: str, b: str, *,
                     threshold: float = PROOF_SAME_JACCARD) -> dict[str, Any]:
-    """两份证明是不是同一种证法（三态，返回值形状与 `same_proposition` 相同）。
+    """两份证明是不是同一种证法（两档：same / different；判不了 = 没判成）。
 
-    为什么"同种"不是"不同"的两档而必须三态：证明太短（"显然。"/"由定义直接得到。"）
-    时，两份短证明的词面相似度天然很高，判成"同种"会让真实的另一种证法被拒；
-    判成"不同"又会让同一种证法被并列记录。两种都不对，所以是 unknown。
+    2026-11-08 业主：「没有判不了」⇒ 这一轴与命题同一性同一条纪律：判不了不是第三种
+    结论，是 `checked=False`（`state=""`）；调用方据此 fail-closed（不新增证明号，
+    受控拒 `proof_kind_unjudged`）。为什么不能折成 `different`：证明太短（"显然。" /
+    "由定义直接得到。"）时两份短证明的词面相似度天然很高，折成 different 就是"判不了
+    当不同" —— 同一种证法会被并列记录，正是这一轴要防的形态。
     """
-    return _judge(a, b, threshold=threshold, basis=BASIS_PROOF_SIMILARITY, what="证明")
+    return _judge(a, b, threshold=threshold, basis=BASIS_PROOF_SIMILARITY, what="证明",
+                  unknown_is_unjudged=True)
 
 
 # ------------------------------------------------------------------ 概念同一性
@@ -667,50 +691,55 @@ def concept_keys(label: str, statement_full: str = "") -> dict[str, str]:
 
 def same_concept(a_label: str, a_full: str = "", b_label: str = "",
                  b_full: str = "") -> dict[str, Any]:
-    """同一概念的两条行是不是同一个概念（定义项相同；三态，确定性，零模型调用）。
+    """同一概念的两条行是不是同一个概念（定义项相同；两档，确定性，零模型调用）。
 
     返回值（调用方与读数都读这一份）：
-    `state` / `basis` / `key_a` / `key_b` / `label_key_a` / `label_key_b` /
+    `checked` / `state` / `basis` / `key_a` / `key_b` / `label_key_a` / `label_key_b` /
     `term_key_a` / `term_key_b` / `reason`。
     判据顺序固定：标签相同优先（它就是"定义项"的规范落点），其次正文里的术语。
     标签不同而术语相同 ⇒ 仍判 `same`（真机 mp3-r2 的两行标签相同，但"标签改过一次、
     正文里的术语还是那个"的形态同样不该新建第二行）。
+
+    两档（2026-11-08 起）：判得出 ⇒ `checked=True` + `state="same"/"different"`；
+    两侧都抽不出定义项 ⇒ `checked=False` + `state=""`（没判成，调用方受控拒
+    `concept_identity_unjudged`）。第三态 `unknown` 不再从这里出去。
     """
     left = concept_keys(a_label, a_full)
     right = concept_keys(b_label, b_full)
     out: dict[str, Any] = {
-        "state": STATE_UNKNOWN, "basis": "", "key_a": "", "key_b": "",
+        "checked": False, "state": "", "basis": "", "key_a": "", "key_b": "",
         "label_key_a": left["label"], "label_key_b": right["label"],
         "term_key_a": left["term"], "term_key_b": right["term"],
         "reason": "",
     }
     if left["label"] and left["label"] == right["label"]:
-        out.update(state=STATE_SAME, basis=BASIS_CONCEPT_LABEL,
+        out.update(checked=True, state=STATE_SAME, basis=BASIS_CONCEPT_LABEL,
                    key_a=left["label"], key_b=right["label"],
                    reason=(f"定义项（标签）规范化后相同：{left['label']!r}"
                            " ⇒ 同一个概念，不许新建第二行"))
         return out
     if left["term"] and left["term"] == right["term"]:
-        out.update(state=STATE_SAME, basis=BASIS_CONCEPT_TERM,
+        out.update(checked=True, state=STATE_SAME, basis=BASIS_CONCEPT_TERM,
                    key_a=left["term"], key_b=right["term"],
                    reason=(f"正文里被定义的术语相同：{left['term']!r}"
                            "（标签不同，但定义项是同一个）⇒ 同一个概念，不许新建第二行"))
         return out
     if (left["label"] or left["term"]) and (right["label"] or right["term"]):
-        out.update(state=STATE_DIFFERENT,
+        out.update(checked=True, state=STATE_DIFFERENT,
                    reason=(f"定义项不同（这一条 {left['label'] or left['term']!r} / "
                            f"在册那一条 {right['label'] or right['term']!r}）⇒ 两条概念"))
         return out
     missing = [name for name, side in (("这一条", left), ("在册那一条", right))
                if not (side["label"] or side["term"])]
-    out["reason"] = (f"判不了：{'、'.join(missing)}抽不出定义项（标签是空的，正文也不是"
-                     "一句「概念（X）」/「定义（X）」形态）⇒ 不并、也不记成不同（三态纪律）")
+    out["reason"] = (f"判不了 = 没判成：{'、'.join(missing)}抽不出定义项（标签是空的，正文也"
+                     "不是一句「概念（X）」/「定义（X）」形态）⇒ 调用方受控拒"
+                     "（判不了不等于不同）")
     return out
 
 
 def concept_similarity(a_label: str, a_full: str = "", b_label: str = "",
                        b_full: str = "") -> float:
-    """概念这一档的读数：判成同一个概念是 1.0，其余（different / unknown）是 0.0。
+    """概念这一档的读数：判成同一个概念是 1.0，其余（different / 没判成）是 0.0。
 
     只给"排个序、读个数"用，不参与判据 —— 判据只有 `same_concept` 一处，这里是它的
     读数投影（两处各算一遍判据是同一件事两个实现的老毛病）。
@@ -720,7 +749,7 @@ def concept_similarity(a_label: str, a_full: str = "", b_label: str = "",
 
 
 def selftest() -> int:
-    """自检：六条判据的最小形态（不读盘、不写盘）。返回 0 = 全过。"""
+    """自检：各条判据的最小形态（不读盘、不写盘）。返回 0 = 全过。"""
     a = "设 G 是 3-正则群；则弦长函数不是常值。"
     b = "假设 G 为 3-正则群，于是弦长函数不是常值。"
     c = "设 H 是有限群；则 H 的阶有限。"
@@ -737,15 +766,21 @@ def selftest() -> int:
                                    "概念（有限维 Lie 代数）：设 K 为域。")
     two_concepts = same_concept("有限维李代数", "概念（有限维李代数）：dim < ∞。",
                                 "幂零李代数", "概念（幂零李代数）：降中心列终止。")
+    tiny_proof = same_kind_proof("x = 1", "y = 1")
+    tiny_concept = same_concept("", "不是一句定义", "", "也不是一句定义")
     checks = [
         (proposition_key(a) == proposition_key(b), "同一命题的两种写法键相同", proposition_key(a)),
         (same["state"] == STATE_SAME, "同一命题判成 same", same),
         (cross["state"] == STATE_DIFFERENT, "无关命题判成 different", cross),
         (proof_same["state"] == STATE_SAME, "同种证明判成 same", proof_same),
         (proof_cross["state"] == STATE_DIFFERENT, "不同证明判成 different", proof_cross),
-        (tiny["state"] == STATE_UNKNOWN, "太短的文本判成 unknown", tiny),
+        (tiny["state"] == STATE_UNKNOWN, "命题轴太短的文本仍是 unknown（兜底口径）", tiny),
+        (tiny_proof["checked"] is False and tiny_proof["state"] == "",
+         "同种证明轴判不了 ⇒ checked=False / state=''", tiny_proof),
         (same_concept_hit["state"] == STATE_SAME, "同一概念判成 same", same_concept_hit),
         (two_concepts["state"] == STATE_DIFFERENT, "两个概念判成 different", two_concepts),
+        (tiny_concept["checked"] is False and tiny_concept["state"] == "",
+         "概念轴判不了 ⇒ checked=False / state=''", tiny_concept),
     ]
     bad = [(ok, why, got) for ok, why, got in checks if not ok]
     for ok, why, got in bad:

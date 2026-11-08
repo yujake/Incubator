@@ -1359,6 +1359,19 @@ MERGED_BY_SIMILARITY = _PK.BASIS_SIMILARITY
 MERGED_BY_ADJUDICATION = "secretary_adjudication"
 #: 同种证明的拒收码（写侧与拒信共用这一个字面量）。
 PROOF_SAME_KIND = "proof_same_kind"
+#: 同种证明这一问"没判成"的受控码（2026-11-08，业主「没有判不了」）。
+#:
+#: 为什么必须与 `PROOF_SAME_KIND` 分开：那一档是现象结论（"判过了、同种"），这一档
+#: 没有结论（证明太短 / 纯符号 ⇒ `same_kind_proof` 回 `checked=False`）。折平会把
+#: "没判成"读成"判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）——
+#: 前者是同一种证法被并列记录，后者是一份真的另一种证法被拒，两种都错。
+PROOF_KIND_UNJUDGED = "proof_kind_unjudged"
+#: 概念同一性"没判成"的受控码（2026-11-08，同上）。
+#:
+#: 概念这一档是确定性判据（`same_concept`，零模型调用），但"两侧都抽不出定义项"仍是
+#: 判不了：折成 different 就会照旧新建第二行（同一个概念两行，正是这一档要治的形态），
+#: 所以调用方受控拒，不是"照常新建"。
+CONCEPT_IDENTITY_UNJUDGED = "concept_identity_unjudged"
 #: 参与"同一命题"判定的 kind（命题性的那几档）。
 #:
 #: 为什么需要这一格：`Statement.kind` 刻意是自由文本（`schema.Statement` 的类 docstring
@@ -8611,6 +8624,7 @@ class Secretary:
         hit = dict(identity.get("hit") or {})
         if out is not None:
             out["concept_identity"] = {
+                "checked": bool(identity.get("checked")),
                 "state": str(identity.get("state") or ""),
                 "basis": str(identity.get("basis") or ""),
                 "same_as": str(hit.get("stmt_id") or ""),
@@ -9541,26 +9555,36 @@ class Secretary:
                 f"{threshold:.2f}，但词面相似度不参与判定、不决定并"
                 "（词面重合不等于条件与结论一致）；确定性键不同 ⇒ 两条")
 
-    def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> list[dict[str, Any]]:
+    def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> dict[str, Any]:
         """这条命题在册的证明里，与新交来的这一份同种的那些（相似度降序）。
 
-        判据只有一处（`propositionkey.same_kind_proof`）。`unknown`（太短/纯符号）
-        不算命中：那是"判不了"，把它读成"同种"会让一份真的另一种短证明被拒。
+        判据只有一处（`propositionkey.same_kind_proof`）。返回
+        `{"hits": [...], "unjudged": [{"proof_no", "reason"}]}`：
+
+        - `hits`：判成了 `same` 的那些（`proof_no` / `similarity` / `detail` / `reason`）；
+        - `unjudged`：判不了的那几份（证明太短 / 纯符号 ⇒ `checked=False`）。它们不再
+          静默跳过：调用方据此 fail-closed（整笔受控拒、不新增证明号）。改前把它们
+          当成"不是同种"继续走 ⇒ "判不了当不同"，那正是同一种证法被并列记录的来路。
         """
         from . import verifications as VR   # 惰性：证明清单的唯一读口径
 
         hits: list[dict[str, Any]] = []
+        unjudged: list[dict[str, Any]] = []
         if not str(proof or "").strip():
-            return hits
+            return {"hits": hits, "unjudged": unjudged}
         for no, text in VR.proof_list(row):
             got = _PK.same_kind_proof(proof, text, threshold=self.proof_same_jaccard)
+            if not got.get("checked"):
+                unjudged.append({"proof_no": int(no),
+                                 "reason": str(got.get("reason") or "")})
+                continue
             if str(got.get("state") or "") != _PK.STATE_SAME:
                 continue
             hits.append({"proof_no": int(no), "similarity": float(got.get("similarity") or 0.0),
                          "detail": dict(got.get("detail") or {}),
                          "reason": str(got.get("reason") or "")})
         hits.sort(key=lambda h: (-h["similarity"], int(h["proof_no"])))
-        return hits
+        return {"hits": hits, "unjudged": unjudged}
 
     def _same_concept_candidate(self, tx: Any, *, label: str,
                                 full: str, exclude_id: str = "") -> dict[str, Any]:
@@ -9576,13 +9600,15 @@ class Secretary:
         - 跳过 `exclude_id` 那一行（改一条既有的概念行时，它自己一定会命中自己 ——
           那一格问的是"另有一行是不是同一个概念"，把自己算进命中会把每次同步都读成
           发现了一条重复）；
-        - 两侧都抽不出定义项的跳过（`unknown` 不是命中，也不是"不同"）；
+        - 两侧都抽不出定义项的记成"没判成"（`checked=False`）：那不是命中，也不是"不同"，
+          调用方据此受控拒（`concept_identity_unjudged`）；
         - 多条命中时取"标签那一档优先、同档取号最小"（确定性：同一次登记不能因为行的
           物理顺序不同而并进不同的一条）。
 
-        返回 `{"hit": <命中|None>, "state", "basis", "reason", "candidates"}`：
-        `hit` 是 `{"stmt_id", "row", "verdict"}`；没命中时 `state` 是 `different`
-        或 `unknown`（两者的处置相同 —— 照旧新建 —— 但读数必须分得开）。
+        返回 `{"hit": <命中|None>, "checked", "state", "basis", "reason", "candidates"}`：
+        `hit` 是 `{"stmt_id", "row", "verdict"}`。没命中时两档分得开：
+        `checked=True + state="different"`（判过了、不同 ⇒ 照旧新建）与
+        `checked=False + state=""`（没判成 ⇒ 调用方受控拒，不许照旧新建）。
         """
         hits: list[dict[str, Any]] = []
         saw_different = False
@@ -9613,22 +9639,29 @@ class Secretary:
                                      == _PK.BASIS_CONCEPT_LABEL else 1,
                                      str(h["stmt_id"])))
             top = hits[0]
-            return {"hit": top, "state": _PK.STATE_SAME,
+            return {"hit": top, "checked": True, "state": _PK.STATE_SAME,
                     "basis": str(top["verdict"].get("basis") or ""),
                     "reason": str(top["verdict"].get("reason") or ""),
                     "candidates": [str(h["stmt_id"]) for h in hits]}
         if saw_different:
-            return {"hit": None, "state": _PK.STATE_DIFFERENT, "basis": "",
+            return {"hit": None, "checked": True, "state": _PK.STATE_DIFFERENT, "basis": "",
                     "reason": ("在册的概念行里定义项都不一样 ⇒ 这是另一个概念，应当各建一行"
                                "（判据是定义项相同，不是词面相似）"),
                     "candidates": []}
-        keep = ("；在册那几条抽不出定义项：" + "、".join(f"stmt:{sid}" for sid in unknown_why[:4])
-                if unknown_why else "")
-        return {"hit": None, "state": _PK.STATE_UNKNOWN, "basis": "",
-                "reason": ("判不了：这一条抽不出定义项（标签是空的，正文也不是一句"
-                           "「概念（X）」/「定义（X）」形态）⇒ 不并、也不记成不同"
-                           "（照旧新建；这一档不发模型调用 —— 概念没有"
-                           "「条件 ⇒ 结论」，判词表里没有它那一格）" + keep),
+        if unknown_why:
+            keep = "；在册那几条抽不出定义项：" + "、".join(f"stmt:{sid}" for sid in unknown_why[:4])
+            return {"hit": None, "checked": False, "state": "", "basis": "",
+                    "reason": ("判不了 = 没判成：这一条或它在册的那几条抽不出定义项（标签是"
+                               "空的，正文也不是一句「概念（X）」/「定义（X）」形态）⇒ 调用方"
+                               "受控拒、不新建第二行（判不了不等于不同；这一档不发模型调用 ——"
+                               "概念没有「条件 ⇒ 结论」，判词表里没有它那一格）" + keep),
+                    "candidates": []}
+        # 在册没有可比的概念行（0 条，或全被状态 / 排除项 / 空正文跳过）⇒ "没有同一个概念"
+        # 是判得出来的：这是第一个概念，没有合并对象。不把它记成"判不了"——否则第一条
+        # 概念永远登记不进来（fail-closed 会把整条路关死）。
+        return {"hit": None, "checked": True, "state": _PK.STATE_DIFFERENT, "basis": "",
+                "reason": ("在册没有可比的概念行（0 条 / 全被跳过）⇒ 这是第一个概念，"
+                           "没有同一个概念可与它合并"),
                 "candidates": []}
 
     def _merge_into_concept(self, tx: Any, *, body: Mapping[str, Any], full: str,
@@ -9645,17 +9678,26 @@ class Secretary:
         判据是 `propositionkey.same_concept`（纯函数、零调用）：定义项相同 ⇒ 同一个概念。
         命中 ⇒ 不新建行，返回既有 `stmt_id`，读数里 `duplicate=True` +
         `matched_by="concept_label"/"concept_defined_term"`，并把依据那句原话写进
-        `reason`（升档 / 补别名留给那一行，不在这一笔里静默改它的内容）。没命中 ⇒
-        `None`（调用方照常新建），读数说清是"判过了、不同"还是"判不了"。
+        `reason`（升档 / 补别名留给那一行，不在这一笔里静默改它的内容）。判过了、不同 ⇒
+        `None`（调用方照常新建）；判不了 ⇒ 受控拒（`concept_identity_unjudged`）、整笔不写
+        —— "判不了当不同"正是同一个概念落成两行的来路。
 
         ## 为什么这一档不发模型调用
         `adjudicate_proposition` 的判词表是"条件 ⇒ 结论"（`_judge_system` 的
         `proposition_identity` 那一格），概念没有这一组；把它交给模型既判不出什么，
         又会给真机上千条概念行各买一次调用（mp3 一个工作区就 1143 条）。确定性判得出的
-        事不交给模型 —— 判不出的那一档如实报 `unknown` 并照旧新建。
+        事不交给模型 —— 判不出的那一档受控拒（`concept_identity_unjudged`），
+        不折成"不同"去新建第二行。
         """
         got = self._same_concept_candidate(tx, label=str(body.get("label") or ""), full=full)
-        out["proposition_state"] = str(got.get("state") or _PK.STATE_UNKNOWN)
+        if not got.get("checked"):
+            why = str(got.get("reason") or "")
+            out.update(checked=False, created=False,
+                       refused=CONCEPT_IDENTITY_UNJUDGED,
+                       proposition_state="", proposition_reason=why,
+                       reason=(why + " ⇒ 整笔不写（不新建、不合并）"))
+            return out
+        out["proposition_state"] = str(got.get("state") or "")
         out["proposition_reason"] = str(got.get("reason") or "")
         hit = got.get("hit")
         if not hit:
@@ -9688,6 +9730,8 @@ class Secretary:
         | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
         | 同一个概念（概念行） | `checked=True` + `created=False` + `duplicate=True` + `stmt_id=<既有>` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
         | 判不了（试过而没判成） | `checked=False` + `refused="same_statement_unjudged"` + `adjudication.fail_closed` + 一句原因（不新建、不合并） |
+        | 同种证明这一问没判成 | `checked=False` + `refused="proof_kind_unjudged"` + 点名哪几份判不了（不新增证明号） |
+        | 概念同一性没判成 | `checked=False` + `refused="concept_identity_unjudged"` + 一句原因（不新建第二行） |
         | 没命中 | `None`（调用方照常新建；这一支一个字节都不写） |
 
         概念行那一档（D2）走 :meth:`_merge_into_concept`：它没有"条件 ⇒ 结论"，判据是
@@ -9806,7 +9850,8 @@ class Secretary:
         out["proposition_reason"] = str(verdict.get("reason") or "")
         basis = str(verdict.get("basis") or "")
         similarity = float(verdict.get("similarity") or 0.0)
-        kind_hits = self._same_kind_hits(row, proof)
+        kind_got = self._same_kind_hits(row, proof)
+        kind_hits, unjudged_proofs = kind_got["hits"], kind_got["unjudged"]
         merge = body.get("merge") is True
         existing = VR.proof_list(row)
         # ---- 同一份正文再交一次：不新增证明号，也不算「同种证明」（2026-11-02） ------
@@ -9836,6 +9881,22 @@ class Secretary:
                                "（那一份已在册）；要换这一份的正文就把新正文交上来"
                                "（proof_text 或 proofs 里那一号），旧正文会进 proof_history，"
                                "并请 V 对新正文重签（resign_required）"))
+            return out
+        # ---- 同种证明这一问没判成：不许折成"不同"照旧新增证明号（2026-11-08）------
+        #
+        # 位置：在"逐字同一份"那一档之后（那是确定性事实、不需要判定），merge 之前
+        # （合并要落到具体哪一份，判不了就不许猜）。判不了不等于不同 —— 折成不同就会
+        # 新增证明号，同一种证法被并列记录，正是这一轴要防的形态。
+        if unjudged_proofs:
+            names = "、".join(f"#{int(h['proof_no'])}" for h in unjudged_proofs)
+            out.update(checked=False, created=False, duplicate=False, merged=False,
+                       refused=PROOF_KIND_UNJUDGED, stmt_id=sid, merged_into=sid,
+                       matched_by=basis, similarity=similarity, same_kind=[],
+                       unjudged_proofs=list(unjudged_proofs),
+                       reason=(f"这一份证明与 stmt:{sid} 的 {names} 判不了是不是同种"
+                               "（判不了 ≠ 不同）⇒ 不新增证明号：判不了就当不同，同一种"
+                               "证法会被并列记录。把证明正文写清楚（太短 / 纯符号是判不了"
+                               "的两档）再交"))
             return out
         # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
         #

@@ -171,11 +171,16 @@ def test_b_two_different_concepts_still_get_their_own_rows(tmp_path: pathlib.Pat
     assert a.get("created") is True and b.get("created") is True, (a, b)
     assert str(a.get("stmt_id")) != str(b.get("stmt_id")), (a, b)
     assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
-    # 通用词那一档：两条都只写"概念" ⇒ 不是同一个概念（定义项抽不出来就不许猜）。
+    # 通用词那一档：两条都只写"概念" ⇒ 定义项抽不出来 ⇒ 判不了 = 没判成 ⇒ 受控拒
+    # （2026-11-08 起：判不了不许当"不同"照旧新建；更不许被并进 a / b 那两行）。
     c = _concept(sec, "概念", "第一条：设 X 是一个集合。")
     d = _concept(sec, "概念", "第二条：设 Y 是一个拓扑空间。")
-    assert c.get("created") is True and d.get("created") is True, (c, d)
-    assert len(_rows(st)) == 4, [r.get("label") for r in _rows(st)]
+    assert c.get("checked") is False, c
+    assert c.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, c
+    assert d.get("checked") is False, d
+    assert d.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, d
+    assert c.get("created") is False and d.get("created") is False, (c, d)
+    assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
     assert PK.concept_keys("概念", "") == {"label": "", "term": ""}
 
 
@@ -213,7 +218,8 @@ def test_c_stubbing_the_criterion_to_different_turns_a_red(tmp_path: pathlib.Pat
     是"定义项相同"这条判据给的，而不是别的什么顺手拦住了第二笔。
     """
     def _always_different(*a, **k):
-        return {"state": PK.STATE_DIFFERENT, "basis": "", "key_a": "", "key_b": "",
+        return {"checked": True, "state": PK.STATE_DIFFERENT, "basis": "",
+                "key_a": "", "key_b": "",
                 "label_key_a": "", "label_key_b": "", "term_key_a": "", "term_key_b": "",
                 "reason": "打桩：恒判 different"}
 
@@ -252,15 +258,21 @@ def test_before_this_feature_exists_the_concept_lands_twice(tmp_path: pathlib.Pa
 # ============================================================ 直接判据（纯函数）
 
 
-def test_the_pure_criterion_is_three_state(tmp_path: pathlib.Path) -> None:
-    """判据本身的三态：same / different / unknown 各一条（unknown 不许折成 different）。"""
+def test_the_pure_criterion_is_two_state_with_unjudged(tmp_path: pathlib.Path) -> None:
+    """判据本身：same / different 两档 + "判不了 = 没判成"（不许折成 different）。
+
+    2026-11-08 业主：「没有判不了」⇒ 这一轴不再回第三种结论；判不了是
+    `checked=False` + `state=""`，调用方据此受控拒（见
+    `test_unjudged_concepts_are_refused_when_a_comparable_row_exists`）。
+    """
     same = PK.same_concept(REAL_LABEL, REAL_DEF_1, REAL_LABEL, REAL_DEF_2)
-    assert same["state"] == PK.STATE_SAME and same["basis"] == PK.BASIS_CONCEPT_LABEL, same
+    assert same["checked"] is True and same["state"] == PK.STATE_SAME, same
+    assert same["basis"] == PK.BASIS_CONCEPT_LABEL, same
     diff = PK.same_concept(REAL_LABEL, REAL_DEF_1, OTHER_LABEL, OTHER_DEF)
-    assert diff["state"] == PK.STATE_DIFFERENT, diff
-    unknown = PK.same_concept("", "", "", "")
-    assert unknown["state"] == PK.STATE_UNKNOWN, unknown
-    assert "判不了" in str(unknown.get("reason") or ""), unknown
+    assert diff["checked"] is True and diff["state"] == PK.STATE_DIFFERENT, diff
+    unjudged = PK.same_concept("", "", "", "")
+    assert unjudged["checked"] is False and unjudged["state"] == "", unjudged
+    assert "没判成" in str(unjudged.get("reason") or ""), unjudged
     # 规范化那一层：标点 / 空白 / 连字符的两种排版是同一个定义项。
     assert PK.concept_keys("finite-dimensional Lie algebra", "")["label"] == (
         PK.concept_keys("Finite Dimensional Lie-Algebra", "")["label"])
@@ -268,14 +280,38 @@ def test_the_pure_criterion_is_three_state(tmp_path: pathlib.Path) -> None:
         PK.concept_keys("有限维Lie代数", "")["label"])
 
 
-def test_unknown_concepts_are_registered_but_leave_a_reading(tmp_path: pathlib.Path) -> None:
-    """判不了的那一档：照旧新建（不并），但读数必须说清"判不了"而不是"判过了、不同"。"""
+def test_unjudged_concepts_are_refused_when_a_comparable_row_exists(
+        tmp_path: pathlib.Path) -> None:
+    """判不了 = 没判成：在册有一条"同样抽不出定义项"的概念行 ⇒ 受控拒（不新建）。
+
+    为什么"判不了"只在有可比行时成立：在册 0 条概念行时，"没有同一个概念"是判得出来的
+    （第一条概念必须登记得进来），那一档记 different 照旧新建。折成 different 的那种
+    反真空写法会让第二条概念照旧落盘 —— 同一个概念两行，正是这一档要治的形态。
+    """
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
-    # 两条都只有一句很短的正文、标签是空的：定义项抽不出来 ⇒ unknown。
-    first = sec.record_statement({"statement_full": "设 X 是一个集合。", "label": "",
-                                  "kind": "concept", "origin": "own_result",
-                                  "self_authored": True, "doc_id": S.format_id(0)}, role="B")
+    payload = {"statement_full": "设 X 是一个集合。", "label": "",
+               "kind": "concept", "origin": "own_result", "self_authored": True,
+               "doc_id": S.format_id(0)}
+    first = sec.record_statement(payload, role="B", force_new=True)
     assert first.get("created") is True, first
-    assert first.get("proposition_state") == PK.STATE_UNKNOWN, first
-    assert "判不了" in str(first.get("proposition_reason") or ""), first
+    second = sec.record_statement(dict(payload, statement_full="设 Y 是一个集合。"), role="B")
+    assert second.get("checked") is False, second
+    assert second.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, second
+    assert second.get("created") is False, second
+    assert second.get("proposition_state") == "", second
+    assert "没判成" in str(second.get("reason") or ""), second
+    assert len(_rows(st)) == 1, [r.get("label") for r in _rows(st)]
+
+
+def test_the_first_concept_is_registered_when_the_table_is_empty(
+        tmp_path: pathlib.Path) -> None:
+    """在册 0 条概念行 ⇒ "没有同一个概念"判得出来（different、照旧新建）。
+
+    fail-closed 的反面：把"没有可比行"也记成没判成，第一条概念就永远登记不进来。
+    """
+    st = _ws(tmp_path)
+    sec = Secretary("B", root=st.root, store=st)
+    got = _concept(sec, REAL_LABEL, REAL_DEF_1)
+    assert got.get("created") is True, got
+    assert got.get("proposition_state") == PK.STATE_DIFFERENT, got
