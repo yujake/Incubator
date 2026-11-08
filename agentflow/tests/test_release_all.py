@@ -2460,6 +2460,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "judgeable（够不够格当一条命题）/ proposition_key（规范键）/ "
                          "prose_similarity（两段正文的相似度读数）；终判在 "
                          "secretary.Secretary.adjudicate_proposition（三态，按正文 sha256 缓存）",
+    # 2026-11-09（业主第三件：「查必须明确有两种口径」，随后「把查搬到各角色」）：
+    # 命题台账的**查**那一族。为什么必须是顶层：它是唯一一处「怎么在 statements 里找行」
+    # 的实现（按编号 / 按内容关键字两条口径互不调用），**不能**住在秘书里 —— 第 4 步要把
+    # 它搬到 C/D/F/G/V/L 与 B 自己，而那些角色没有秘书实例；也不能住进某个角色包
+    # （那会让别的角色 import 一个角色）。它只读、零模型、不开事务，所以谁都能直接 import。
+    "statementledger.py": "命题台账的查口（两种口径，各自独立、各自带读数）：`by_id`（按编号，"
+                          "主键逐字相等、不过滤 status/kind、0 命中是确定性事实）/ "
+                          "`by_keywords`（按内容关键字，label/statement_full 经 "
+                          "`textutil.normalize` 包含、多词任一命中，0 命中不等于不在册）；"
+                          "底座 `rows_of`（store/tx/rows 同一取数口）/ `pool`（可检索池唯一实现）/ "
+                          "`index_by_id`（全表→索引唯一实现）/ `duplicate_hits`（正文规范化全等，"
+                          "写路径查重判据）。判定不在这里：`secretary.Secretary.judge`",
     # F 手稿依赖段的唯一解析点：作者只写内容、登记由收方（B）读稿产生
     # （与 V 读 F 的手稿再签字同构）⇒ 解析若有两份，"台账上是第 2 条、
     # 读出来是第 1 条"这类错没有任何东西会报。

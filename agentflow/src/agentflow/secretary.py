@@ -42,6 +42,7 @@ from . import propositionkey as _PK
 from . import refusals as R
 from . import schema as S
 from . import statementbody as _SB
+from . import statementledger as SL
 
 #: 台账落点：`<工作区>/out/secretary/<role>.jsonl`（追加式、脚本发号，`draft/53` §11.2）。
 SECRETARY_DIR = ("out", "secretary")
@@ -279,7 +280,8 @@ PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
 #: 一次判定一页给几条候选（分页的页大小，不是截断）。
 #:
-#: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_statements_matching_keywords`）；
+#: 候选是秘书自己按关键词在台账里检索出来的命中项（查口的 `by_keywords`，
+#: 唯一实现在 `statementledger`）；
 #: 命中多于这个数时按页依次交给模型，问到命中或页尽为止（2026-11-08 缺陷 ②：
 #: 改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成"这批都不是"）。
 #: `pages_total` / `pages_judged` / `page_exhausted` / `candidates_total` 四个读数
@@ -6859,87 +6861,14 @@ class Secretary:
 
     # ------------------------------------------------------------ 命题同一性（模型判）
 
-    def _searchable_statement_rows(self, rows: Iterable[Mapping[str, Any]] | None = None
-                                   ) -> tuple[list[dict[str, Any]], str]:
-        """可检索的命题池（active / 命题性 / 有号有正文）与"读不出来"的理由。
-
-        过滤三条与 `_same_proposition_candidate` 逐字同源（它守的是同一件事，只是那一格
-        在"没有模型"时兜底）：只留命题性的 kind（概念/定义不是命题）、跳过
-        `schema.STATEMENT_UNUSABLE_STATUSES` 的行（被否证/被取代的行不能当并入口）、
-        跳过没号或正文空的行。
-
-        三态：`(池, "")` = 读成了（池可能是空表：那是"查过、0 条可检索"）；
-        `([], 理由)` = 读不成（调用方 fail-closed，不许折成"没有同一条"）。
-
-        `rows` 给了就用调用方递进来的那一批：它在这里的身份是「检索的池」，不是候选 ——
-        候选仍由关键词决定（业主 2026-11-08：「语义判定……应该是主动查询」）。
-        """
-        pool = rows
-        if pool is None:
-            store = getattr(self, "store", None)
-            if store is None:
-                return [], ("这一名秘书没有 store ⇒ 命题台账读不出来（不是「没有同一条」）"
-                            " ⇒ 这一问没判成")
-            try:
-                pool = [dict(r) for r in store.rows("statements")]
-            except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是"没有"）
-                self._log(f"命题台账读不出来：{type(exc).__name__}: {exc}")
-                return [], (f"statements 台账读不出来（{type(exc).__name__}: {exc}）"
-                            " ⇒ 这一问没判成（不是「没有同一条」）")
-        keep: list[dict[str, Any]] = []
-        for r in pool:
-            if not isinstance(r, Mapping):
-                continue
-            if not str(r.get("stmt_id") or "").strip():
-                continue
-            if not _is_proposition_kind(r.get("kind")):
-                continue
-            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
-                continue
-            if not str(r.get("statement_full") or "").strip():
-                continue
-            keep.append(dict(r))
-        return keep, ""
-
-    def _statements_matching_keywords(self, keywords: Sequence[str], *,
-                                      rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-        """按关键词在命题池里检索候选（确定性；只取候选，不判）。
-
-        ## 命中规则（业主 2026-11-08 的口径）
-        `label` 或 `statement_full` 里「包含」该关键词；大小写 / 全半角 / 标点按
-        `textutil.normalize` 的既有口径归一。多关键词任一命中即进候选，并记下命中的词
-        （读数）。排序按命中词数降序、同分按号升序 —— 这只是展示顺序，「不参与判定」；
-        词面相似度也不进这一格（业主：「检索只是取候选，不参与判定」）。
-
-        返回 `{"checked": True, "hits": [...], "checked_rows": n, "reason": ""}`；
-        每项带 `stmt_id` / `label` / `statement_full`（截到判定篇幅）/ `kind` /
-        `hit_words` / `proof_nos`，以及 `row`（整行，调用方并表时要用）。
-        """
-        from . import textutil as T          # 惰性：归一化口径的唯一实现
-        from . import verifications as VR    # 惰性：证明清单的唯一读口径
-
-        wanted = [(str(raw), T.normalize(str(raw))) for raw in (keywords or ())]
-        wanted = [(raw, norm) for raw, norm in wanted if norm]
-        hits: list[dict[str, Any]] = []
-        for row in rows:
-            sid = str(row.get("stmt_id") or "")
-            if not sid:
-                continue
-            label_n = T.normalize(str(row.get("label") or ""))
-            full_n = T.normalize(str(row.get("statement_full") or ""))
-            hit_words = [raw for raw, norm in wanted
-                         if norm in label_n or norm in full_n]
-            if not hit_words:
-                continue
-            hits.append({"stmt_id": sid, "label": str(row.get("label") or ""),
-                         "kind": str(row.get("kind") or ""),
-                         "statement_full": str(row.get("statement_full") or "")[
-                             :PROPOSITION_VERDICT_TEXT_CHARS],
-                         "hit_words": hit_words,
-                         "proof_nos": [int(no) for no, _t in VR.proof_list(dict(row))],
-                         "row": dict(row)})
-        hits.sort(key=lambda item: (-len(item["hit_words"]), item["stmt_id"]))
-        return {"checked": True, "hits": hits, "checked_rows": len(rows), "reason": ""}
+    # ------------------------------------------------------------ 命题同一性（模型判）
+    #
+    # 检索（口径二）与可检索池都不在本文件：它们是命题台账的「查」那一族，唯一实现住在
+    # `statementledger`（`by_keywords` / `pool`）。2026-11-09 之前这里是
+    # `_searchable_statement_rows` + `_statements_matching_keywords` 两个私有方法，
+    # 而全仓另外还有 3 处逐字同源的池过滤与 1 处第二把尺的关键词检索（工具层 `table.search`）。
+    # 收口之后本文件只负责「挑词 → 问查口 → 逐页判」，三件事各归各的一处。
+    # 判据：`tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`。
 
     @staticmethod
     def _candidate_reading(hits: Sequence[Mapping[str, Any]],
@@ -7329,7 +7258,9 @@ class Secretary:
                                                    task_id=task_id)
                 return True
         else:
-            pool_rows, pool_problem = self._searchable_statement_rows(rows)
+            # 检索的两件事各归一处：池过滤（`pool`）与关键词匹配（`by_keywords`）都在
+            # `statementledger`；本层只负责「挑词 → 问查口」，不重写任何过滤。
+            pool_rows, pool_problem = self._ledger_pool(rows)
             if pool_problem:
                 out.update(checked=False, verdict="", reason=pool_problem,
                            why=pool_problem)
@@ -7349,8 +7280,14 @@ class Secretary:
                         reason=("关键词没提取成 ⇒ 这一问没判成（不新建、不合并、受控拒）："
                                 + str(kw.get("why") or "（没有给原因）")))
                     return True
-                search = self._statements_matching_keywords(out["keywords"],
-                                                            rows=pool_rows)
+                search = SL.by_keywords(rows=pool_rows, keywords=out["keywords"],
+                                        text_chars=PROPOSITION_VERDICT_TEXT_CHARS)
+                if not search.get("checked"):
+                    out.update(checked=False, verdict="",
+                               reason=str(search.get("reason")
+                                          or "检索没查成 ⇒ 这一问没判成"),
+                               why=str(search.get("why") or ""))
+                    return True
                 hits = list(search.get("hits") or [])
                 out["hits_total"] = len(hits)
                 # 读了哪几条 = 全部命中（分页之后每页都会看到；不再是"前 4 条"）。
@@ -7361,9 +7298,22 @@ class Secretary:
                 out["candidates_total"] = len(hits)
                 out["candidates"] = hits
                 if not hits:
-                    out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在命题台账里"
-                                  "命中 0 条 ⇒ 没有候选")
+                    out["why"] = str(search.get("why") or "")
         return False
+
+    def _ledger_pool(self, rows: Iterable[Mapping[str, Any]] | None = None
+                     ) -> tuple[list[dict[str, Any]], str]:
+        """本层要的那一批：可检索 / 可并的 active 命题（口径由 `statementledger.pool` 定）。
+
+        2026-11-09 之前这里叫 `_searchable_statement_rows`，过滤三条与
+        `_same_proposition_candidate` 逐字同源；现在两者都问 `statementledger.pool`。
+        「这一层要哪一批」是语义决定（命题池），所以池的 kind 名单仍由这里给 ——
+        名单的唯一来源是 `PROPOSITION_KINDS`，箱子里不复制它。
+        """
+        got, problem = SL.rows_of(self.store, rows=rows)
+        if problem:
+            return [], problem
+        return SL.pool(got or (), kinds=PROPOSITION_KINDS), ""
 
     def _remember_proposition_verdict(self, out: dict[str, Any], *, full: str,
                                       label: str = "", task_id: str = "") -> None:
@@ -9665,21 +9615,15 @@ class Secretary:
           当依据用，"并进一条已经被取代的命题"等于把新证明挂在一条废行上）；
         - 多条命中时取相似度最高的、同分取号最小的（确定性：同一次登记不能因为
           行的物理顺序不同而并进不同的一条）。
+        「哪一批」这一问不在这里：池过滤是 `statementledger.pool`（唯一实现，与
+        `_ledger_pool` 同一处口径）。
         """
         if not _is_proposition_kind(kind):
             return None
         candidates: list[dict[str, Any]] = []
-        for r in tx.rows("statements"):
+        for r in SL.pool(tx.rows("statements"), kinds=PROPOSITION_KINDS):
             sid = str(r.get("stmt_id") or "")
-            if not sid:
-                continue
-            if not _is_proposition_kind(r.get("kind")):
-                continue
-            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
-                continue
             other = str(r.get("statement_full") or "")
-            if not other.strip():
-                continue
             verdict = _PK.same_proposition(full, other,
                                            threshold=self.same_proposition_jaccard)
             if str(verdict.get("state") or "") != _PK.STATE_SAME:
@@ -9729,15 +9673,21 @@ class Secretary:
             target_id = str(adj.get("same_as") or "")
             # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是判定那一刻的候选，
             # 到了事务里它可能已经被否证/被取代/改成非命题 kind —— 那时不许把新证明挂上去。
-            hit = next(({"row": dict(r), "stmt_id": str(r.get("stmt_id") or ""),
-                         "verdict": {"state": _PK.STATE_SAME,
-                                     "basis": MERGED_BY_ADJUDICATION,
-                                     "similarity": 0.0,
-                                     "reason": str(adj.get("basis") or "")}}
-                        for r in tx.rows("statements")
-                        if str(r.get("stmt_id") or "") == target_id
-                        and _is_proposition_kind(r.get("kind"))
-                        and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES), None)
+            # 定位走查口那唯一一处（`statementledger.by_id`）；「可不可并」是本层自己的
+            # 判据（它读 kind 与 status 两格），两件事不混在一个函数里。
+            # 这里传 `rows=`（事务快照）而不是 `tx`：锁内读失败必须照旧抛出、整笔不写，
+            # 不许被查口折成「没查到这一条」。
+            found = SL.by_id(rows=tx.rows("statements"), stmt_id=target_id)
+            row = dict(found.get("row") or {})
+            hit = ({"row": row, "stmt_id": str(row.get("stmt_id") or ""),
+                    "verdict": {"state": _PK.STATE_SAME,
+                                "basis": MERGED_BY_ADJUDICATION,
+                                "similarity": 0.0,
+                                "reason": str(adj.get("basis") or "")}}
+                   if (found.get("found")
+                       and _is_proposition_kind(row.get("kind"))
+                       and str(row.get("status") or "")
+                       not in S.STATEMENT_UNUSABLE_STATUSES) else None)
             if hit is None:
                 # 判了 same、点名的号却读不到/不可并 ⇒ 这一笔判不成：不并，也不新建
                 # （`_merge_into_proposition` 按受控拒处置）。
@@ -9790,15 +9740,9 @@ class Secretary:
         if not _is_proposition_kind(kind):
             return head + f"kind={kind!r} 不是命题性的那几档，本来就不并"
         best: tuple[float, str] | None = None
-        for r in tx.rows("statements"):
+        for r in SL.pool(tx.rows("statements"), kinds=PROPOSITION_KINDS):
             sid = str(r.get("stmt_id") or "")
             other = str(r.get("statement_full") or "")
-            if not sid or not other.strip():
-                continue
-            if not _is_proposition_kind(r.get("kind")):
-                continue
-            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
-                continue
             got = _PK.same_proposition(full, other, threshold=self.same_proposition_jaccard)
             score = float(got.get("similarity") or 0.0)
             if best is None or score > best[0]:

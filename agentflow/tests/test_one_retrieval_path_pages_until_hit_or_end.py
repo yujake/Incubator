@@ -75,18 +75,27 @@ def _judge_pages(monkeypatch, *, same_when=None):
 
 # ===================================================== a 检索只有一处
 def test_a_the_retrieval_has_exactly_one_implementation() -> None:
-    """a：`_statements_matching_keywords` 只定义/调用在 `secretary.py` 一处。"""
+    """a：关键词检索只定义在 `statementledger.py` 一处、只被 `secretary.py` 调一处。
+
+    2026-11-09（业主第三件「查必须明确有两种口径」）：这一格的落点跟着实现搬了 ——
+    原先是 `Secretary._statements_matching_keywords`（秘书的私有方法），现在是
+    `statementledger.by_keywords`（命题台账查口的口径二）。**判据强度不变**：
+    仍然是「定义 1 处 + 调用 1 处」，只是定义搬到了能被各角色共用的那一层。
+    为什么必须搬：私有方法谁都调不到，第 4 步「把查搬到各角色」就无从下手。
+    """
     defs: list[str] = []
     calls: list[str] = []
     for path in SRC_DIR.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if "def _statements_matching_keywords(" in text:
+        if "def by_keywords(" in text:
             defs.append(path.name)
-        calls.extend([path.name] * text.count("_statements_matching_keywords("))
-    assert defs == ["secretary.py"], f"检索实现不止一处：{defs}"
-    # 定义行本身算一次；调用点必须只有一处（`_identity_candidates` 里那一次）。
-    assert calls.count("secretary.py") == 2, (
-        f"`_statements_matching_keywords` 的落点清单不是「定义 1 + 调用 1」：{calls}")
+        calls.extend([path.name] * text.count("by_keywords("))
+    assert defs == ["statementledger.py"], f"检索实现不止一处：{defs}"
+    # 定义行本身算一次 ⇒ 查口内部不许再有调用；调用点必须只有 `_identity_candidates` 那一处。
+    assert calls.count("statementledger.py") == 1, (
+        f"查口内部又长出了第二条检索路：{calls}")
+    assert calls.count("secretary.py") == 1, (
+        f"`by_keywords` 的调用点清单不是「只有 `_identity_candidates` 一处」：{calls}")
     b_src = (SRC_DIR / "agent_b" / "register_statement.py").read_text(encoding="utf-8")
     tree = ast.parse(b_src)
     funcs = {node.name for node in ast.walk(tree)
