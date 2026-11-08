@@ -86,6 +86,7 @@ from .. import evidencebits as _EB
 from .. import numericproof as _NP
 from .. import quoteevidence as QE
 from .. import refusals as _R
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR
 from ..refusals import refuse as _refuse
 
@@ -1379,8 +1380,8 @@ class _RegisterStatement:
                     row = dict(cand.get("row") or {})
                     break
             if not row:
-                row = next((dict(r) for r in all_rows
-                            if str(r.get("stmt_id") or "") == out["found"]), {})
+                # 按号定位走查口（口径一）；`all_rows` 是这一层刚读的那一份快照。
+                row = SL.by_id(rows=all_rows, stmt_id=out["found"])["row"]
             out["_row"] = row
             if not row:
                 out.update(checked=False, refused=_R.SAME_STATEMENT_UNJUDGED,
@@ -1737,8 +1738,9 @@ class _RegisterStatement:
             # 这一笔没有要写的（收口前那一支是 `same_statement_missing` / `bad_bits`，
             # 它们自带 `ok=false` 的拒信体）⇒ 原样回它，不许补一个"写成了"。
             return out
-        latest = next((dict(r) for r in self.store.rows("statements")
-                       if str(r.get("stmt_id") or "") == sid), {})
+        # 按号定位走查口（口径一）。这里传 `rows=` 而不是让查口自己读：这一格是"写成了
+        # 之后的回读"，锁内 / 读侧失败都该照旧抛出（不是一个三态读数）。
+        latest = SL.by_id(rows=self.store.rows("statements"), stmt_id=sid)["row"]
         from .. import textutil as T
         same_text = bool(latest) and (
             T.normalize(str(latest.get("statement_full") or ""))
@@ -2638,11 +2640,11 @@ class _RegisterStatement:
         sid = str(stmt_id or "")
         if not sid:
             return "unknown"
-        try:
-            rows = list(self.store.rows("statements"))
-        except Exception:  # noqa: BLE001 —— 读不到台账不是"盘上就是这个值"（折成请求值就是撒谎）
+        # 按号定位走查口（口径一）；读不到台账不是"盘上就是这个值"（折成请求值就是撒谎）。
+        got = SL.by_id(self.store, stmt_id=sid)
+        if not got["checked"]:
             return "unknown"
-        row = next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)
+        row = got["row"] if got["found"] else None
         kind = str((row or {}).get("evidence_kind") or "").strip()
         return kind or "unknown"
 
@@ -4313,10 +4315,9 @@ class _RegisterStatement:
                         "refused": str(collect.get("refused") or ""),
                         "reason": str(collect.get("reason") or "")}
                 if collect.get("written") or collect.get("proof_receipt"):
-                    out["row"] = next(
-                        (dict(r) for r in self.store.rows("statements")
-                         if str(r.get("stmt_id") or "") == stmt_now),
-                        out.get("row") or {})
+                    out["row"] = (SL.by_id(rows=self.store.rows("statements"),
+                                           stmt_id=stmt_now)["row"]
+                                  or out.get("row") or {})
                 if collect.get("grade_recomputed"):
                     out["grade_recomputed"] = dict(collect.get("grade_recomputed") or {})
                 if collect.get("proof_collected"):
@@ -4403,8 +4404,8 @@ class _RegisterStatement:
                     proof_no=int(proof_no_placement))
                 if _collected.get("row"):
                     written = {**dict(written), "row": dict(_collected.get("row") or {})}
-            _landed_row = (next((dict(r) for r in self.store.rows("statements")
-                                 if str(r.get("stmt_id") or "") == stmt_now), {})
+            _landed_row = (SL.by_id(rows=self.store.rows("statements"),
+                                    stmt_id=stmt_now)["row"]
                            if attach.get("written")
                            else dict(written.get("row") or {}))
             _landed_has_proof = _row_has_proof(_landed_row)
@@ -4518,8 +4519,8 @@ class _RegisterStatement:
                                                       canonical=attach_canonical,
                                                       bits=bits,
                                                       proof_no=int(proof_no_placement))
-            _dup_row = (next((dict(r) for r in self.store.rows("statements")
-                              if str(r.get("stmt_id") or "") == stmt_dup), {})
+            _dup_row = (SL.by_id(rows=self.store.rows("statements"),
+                                 stmt_id=stmt_dup)["row"]
                         if attach.get("written")
                         else dict(written.get("row") or {}))
             _dup_has_proof = _row_has_proof(_dup_row)
@@ -4704,8 +4705,8 @@ class _RegisterStatement:
                             + " ⇒ 第 2 份及以后的证明没有写进库（不是写了一半，是那几条没写）"),
                            stmt_id=stmt_id)
         if attach.get("written"):
-            data = next((dict(r) for r in self.store.rows("statements")
-                         if str(r.get("stmt_id") or "") == stmt_id), data)
+            data = (SL.by_id(rows=self.store.rows("statements"),
+                             stmt_id=stmt_id)["row"] or data)
         # ---- 2026-11-02（②）：「先有签、后登记」认到的那一签，拿到号之后回写台账行。
         #
         # 为什么落在这里：`vsigns.bits_after_sign` 在"新建"这一档只能按正文 sha 认签
@@ -5115,14 +5116,16 @@ class _RegisterStatement:
             head_sid = prov_label.split(":", 1)[-1].strip()
         row_now: dict | None = None
         if head_sid:
-            try:
-                row_now = next((dict(r) for r in self.store.rows("statements")
-                                if str(r.get("stmt_id") or "") == head_sid), None)
-            except Exception as exc:  # noqa: BLE001 —— 读不到台账 ⇒ 这一格没查成
+            # 按号定位走查口（口径一）；读不到台账 ⇒ 这一格没查成（不是不在册）。
+            got = SL.by_id(self.store, stmt_id=head_sid)
+            if not got["checked"]:
+                err = got.get("error") or {}
                 return _refuse(
                     "pointer_ledger_unreadable",
                     f"按手稿路径收录：稿头点名了在册命题 stmt:{head_sid}，而 `statements` "
-                    f"台账读不出来（{type(exc).__name__}: {exc}）⇒ 整笔不写（读不到 ≠ 不在册）"), "", ""
+                    f"台账读不出来（{err.get('type', '?')}: {err.get('message', '?')}）"
+                    "⇒ 整笔不写（读不到 ≠ 不在册）", "", "")
+            row_now = got["row"] if got["found"] else None
             if row_now is None:
                 return _refuse(
                     "pointer_statement_missing",
@@ -5215,8 +5218,7 @@ class _RegisterStatement:
         sid = str(out.get("stmt_id") or "")
         if not sid:
             return out
-        row = next((dict(r) for r in self.store.rows("statements")
-                    if str(r.get("stmt_id") or "") == sid), {})
+        row = SL.by_id(rows=self.store.rows("statements"), stmt_id=sid)["row"]
         if not row or str(row.get("kind") or "") == declared:
             return out
         try:

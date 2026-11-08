@@ -97,6 +97,7 @@ from ..agent_e._support import (
     build_experiment,
 )
 from .. import statementbody as SB
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR   # 正文 sha 与证明清单的口径各只有一处
 from ._support import (
     RECORD_REASONS,
@@ -423,21 +424,22 @@ class _Record:
     def _statement_row(self, sid: str) -> tuple[Mapping[str, Any] | None, str]:
         """按号取一条 `statements` 行：`(行, 没有时的人话)`。
 
-        为什么用"读一次全表再线性找"：`Store.rows` 是既有的唯一读法，
-        这里不新造一个按主键查的入口（多一个读法就多一处能漂的口径）。
+        2026-11-09：按号定位改走查口（`statementledger.by_id`，口径一）。改前这里
+        手写「读一次全表再线性找」，并在注释里写明理由是「不新造一个按主键查的入口
+        （多一个读法就多一处能漂的口径）」—— 那条理由现在由查口兑现：按主键查的实现
+        只有一处，各角色（含 L）都问它，不再各写一份。
         """
         if not sid:
             return None, "没给 statement_id ⇒ 登记不了（这一行必须绑定到台账里的一条命题）"
-        try:
-            rows = self.store.rows("statements")
-        except Exception as exc:  # noqa: BLE001
-            return None, (f"读不了 statements（{type(exc).__name__}: {exc}）"
-                          "⇒ 没查成，不是『没有这条命题』")
-        for row in rows:
-            if str(row.get("stmt_id") or "") == sid:
-                return row, ""
-        return None, (f"台账里没有编号为 {sid!r} 的命题 ⇒ 不登记"
-                      "（机器核验台账里的 formal 行必须绑定到一条已经登记过的命题）")
+        found = SL.by_id(self.store, stmt_id=sid)
+        if not found["checked"]:
+            err = found.get("error") or {}
+            return None, (f"读不了 statements（{err.get('type', '?')}: "
+                          f"{err.get('message', '?')}）⇒ 没查成，不是『没有这条命题』")
+        if not found["found"]:
+            return None, (f"台账里没有编号为 {sid!r} 的命题 ⇒ 不登记"
+                          "（机器核验台账里的 formal 行必须绑定到一条已经登记过的命题）")
+        return found["row"], ""
 
     def _record_refuse(self, reason: str, detail: str, **fields: Any) -> dict:
         """受控拒绝（固定键集合 + `recorded=False` + `refused=True` + 一行原因）。

@@ -143,6 +143,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from .. import statementbody as _SB
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR   # 证明号 / 证明清单 / 正文 sha 的口径各只有一处
 from ..agent_e._support import ExperimentError
 from ..canonical import json_default
@@ -533,8 +534,8 @@ class _Formalize:
                            " 钉不住被形式化的是哪一条：这次什么都不写、也不查"),
             }
         if sid:
-            hit = next((row for row in rows
-                        if _normalize_statement_id(row.get("stmt_id")) == sid), None)
+            # 按号定位走查口（口径一）；`sid` 已在上面归一化（去空白 / 去 `stmt:` 前缀）。
+            hit = SL.by_id(rows=rows, stmt_id=sid)["row"] or None
             if hit is None:
                 return {
                     "ok": False, "statement_id": sid,

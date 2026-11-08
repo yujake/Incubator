@@ -1571,7 +1571,8 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
                            "判不了这一份正文有没有手稿签（没查成不是通过）"))
         return out
     if sid:
-        row = next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)
+        # 按号定位走查口（口径一）；`rows` 是这一层刚读的那一份快照。
+        row = SL.by_id(rows=rows, stmt_id=sid)["row"] or None
     elif str(statement_full or "").strip():
         key = _T.normalize(str(statement_full or ""))
         row = next((r for r in rows
@@ -7310,7 +7311,7 @@ class Secretary:
         「这一层要哪一批」是语义决定（命题池），所以池的 kind 名单仍由这里给 ——
         名单的唯一来源是 `PROPOSITION_KINDS`，箱子里不复制它。
         """
-        got, problem = SL.rows_of(self.store, rows=rows)
+        got, problem, _error = SL.rows_of(self.store, rows=rows)
         if problem:
             return [], problem
         return SL.pool(got or (), kinds=PROPOSITION_KINDS), ""
@@ -7527,7 +7528,8 @@ class Secretary:
             with self.store.tx("statements", "dependencies",
                                actor=f"secretary-{self.role}",
                                note=note or "record_manuscript_dependency_face") as tx:
-                if tx.find("statements", stmt_id=sid) is None:
+                # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+                if not SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["found"]:
                     out.update(refused="statement_missing",
                                reason=(f"台账里没有 stmt:{sid} ⇒ 依赖面挂不到任何一行"
                                        "（收方读稿登记的是在册命题的依赖面）"))
@@ -7803,8 +7805,9 @@ class Secretary:
         try:
             with self.store.tx("statements", actor=f"secretary-{self.role}",
                                note="secretary:amend_statement_meta") as tx:
-                row = next((dict(r) for r in tx.rows("statements")
-                            if str(r.get("stmt_id") or "") == sid), None)
+                # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+                by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+                row = by_id["row"] if by_id["found"] else None
                 if row is None:
                     out.update(refused="not_found",
                                reason=f"statements 里没有主键 {sid} ⇒ 没有可改的行")
@@ -7920,7 +7923,9 @@ class Secretary:
         sid = str(stmt_id or "").strip()
         with self.store.tx("statements", actor=f"secretary-{self.role}",
                            note=note or f"secretary:land_statement:{op}") as tx:
-            found = tx.find("statements", stmt_id=sid)
+            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            found = (by_id["row"] if by_id["found"] else None)
             got = dict(transition(dict(found) if found is not None else None) or {})
             out["result"] = dict(got.get("result") or {})
             if got.get("refused"):
@@ -9148,8 +9153,8 @@ class Secretary:
                                        f"（{S.ID_DIGITS} 位十进制；旧四位仍可读）⇒ "
                                        "整笔不写。稿名 / 稿头要给号就给对形态"))
                     return out
-                occupied = tx.find("statements", stmt_id=candidate)
-                if occupied is not None:
+                occupied = SL.by_id(rows=tx.rows("statements"), stmt_id=candidate)["row"]
+                if occupied:
                     out.update(checked=False, created=False, refused="stmt_id_taken",
                                stmt_id=candidate,
                                reason=(f"稿名 / 稿头要的号 {candidate} 已被在册命题占用"
@@ -9575,7 +9580,8 @@ class Secretary:
         try:
             with self.store.tx(*STATEMENT_WRITE_TABLES, actor=f"secretary-{self.role}",
                                note="record_proof_deps") as tx:
-                if tx.find("statements", stmt_id=out["stmt_id"]) is None:
+                if not SL.by_id(rows=tx.rows("statements"),
+                                stmt_id=out["stmt_id"])["found"]:
                     out.update(refused="unknown_statement",
                                reason=(f"`statements` 里没有 {out['stmt_id']} ⇒ 这几份证明的"
                                        "依赖没有落点（清单挂不上时也没有行可挂）"))

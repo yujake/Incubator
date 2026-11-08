@@ -101,6 +101,7 @@ from . import evidencebits as EB  # 等级的唯一派生口（`derive_grade` / 
 from . import jsonlfile as JF
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
 from . import statementbody as _SB  # 命题正文的唯一读口（被引命题的正文从这里取）
+from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import textutil as T  # 引用解析的唯一实现（`citation_ref_parts`，`P-5`）
 from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处（`proofloc`）
 
@@ -3365,7 +3366,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     try:
         with store.tx("statements", actor=f"verifier-{row.get('verifier') or 'V'}",
                       note=f"verify.sign:{sid}#p{no}") as tx:
-            found = tx.find("statements", stmt_id=sid)
+            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            found = by_id["row"] if by_id["found"] else None
             if not append_ledger:
                 # 台账那一行是调用方先落的（V 的秘书那条路）：这里一个字都不追加。
                 append_state = "appended_by_caller"
@@ -4758,9 +4761,10 @@ def _apply_grade_backfill(root: Path, store: Any,
         try:
             with store.tx("statements", actor="repair",
                           note=f"repair.backfill_grades:{sid}") as tx:
-                current = next(
-                    (r for r in tx.rows("statements")
-                     if str(r.get("stmt_id") or r.get("statement_id") or "") == sid), None)
+                # 按号定位走查口（口径一）。改前这里还认 `statement_id` 这个历史别名：
+                # `statements` 的主键只有 `stmt_id`（`schema` 里没有那一列，`row_from_dict`
+                # 也会丢掉未知键）⇒ 那一档是死别名，收口时按主键口径统一。
+                current = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["row"] or None
                 if current is None:
                     out["unmoved"].append({
                         "statement_id": sid,

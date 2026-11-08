@@ -6,10 +6,10 @@
 | # | 判据 | 改前为什么没有 |
 |---|---|---|
 | a | 口径一（按编号）：只给编号就能查，读数里看得见 `mode` / `found` / `hits_total` / `scanned` / `why` | 改前没有公共入口：按号找行散在 31 处，各写各的默认值 |
-| b | 口径二（按内容关键字）：只给关键词就能查，读数里看得见 `hits_total` / 每条 `hit_words` / `scanned` / `why` | 改前只有一处**私有**方法（`Secretary._statements_matching_keywords`），任何角色都调不到 |
-| c | 两条口径**互不调用**：静态 AST 证明（`by_id` 的函数体里没有 `by_keywords`，反之亦然），外加运行时一条打桩另一条照绿 | 改前不存在"两条口径"，只有一条检索 |
+| b | 口径二（按内容关键字）：只给关键词就能查，读数里看得见 `hits_total` / 每条 `hit_words` / `scanned` / `why` | 改前只有一处私有方法（`Secretary._statements_matching_keywords`），任何角色都调不到 |
+| c | 两条口径互不调用：静态 AST 证明（`by_id` 的函数体里没有 `by_keywords`，反之亦然），外加运行时一条打桩另一条照绿 | 改前不存在"两条口径"，只有一条检索 |
 | d | 三态不折平：台账读不到 ⇒ `checked=False` 且 `found=None`；查过没有 ⇒ `checked=True` + `found=False` / `hits_total=0` | 改前各读点把「读不到」折成 `{}` / `None` / `[]`，与「没有」同形 |
-| e | 口径一**不过滤**：`abandoned` 行、概念行按号都查得到（编号是主键事实，不是"active 的那一行"） | 改前有的读点顺手过滤状态，有的不过滤 |
+| e | 口径一不过滤：`abandoned` 行、概念行按号都查得到（编号是主键事实，不是"active 的那一行"） | 改前有的读点顺手过滤状态，有的不过滤 |
 | f | 口径二用的是 `textutil.normalize` 那把尺（全半角 / 大小写 / 标点），不是 `casefold` 子串 —— 搜「Ｇ」能命中「G」 | 工具层 `table.search` 是 `casefold` 子串，全角字母搜不到 |
 | g | 反真空（口径二被降级）：把 `by_keywords` 换成「永远 0 命中」⇒ 判同一性那一趟再也认不出在册的同一条（红） | — |
 | h | 反真空（口径一被降级）：把 `by_id` 换成「永远没查到」⇒ 判了 same 之后并表那一笔 fail-closed（红） | — |
@@ -257,7 +257,7 @@ def test_h_degrading_the_id_mode_breaks_the_merge(tmp_path: pathlib.Path,
                                                   monkeypatch) -> None:
     """h：把口径一降级成「永远没查到」⇒ 判了 same 之后并表那一笔 fail-closed。
 
-    「判了 same ⇒ 并进点名的那一条」这一支第一件事就是**按号把那一行读回来**
+    「判了 same ⇒ 并进点名的那一条」这一支第一件事就是按号把那一行读回来
     （`Secretary._proposition_owner`）。口径一被降级成永远查不到，它必须 fail-closed
     （读数 `adjudication.fail_closed=True`、不并、也不新建），而不是照旧并进去。
     """
@@ -297,6 +297,98 @@ def test_i_the_box_is_read_only_and_model_free() -> None:
                if isinstance(node, ast.ImportFrom) and node.module}
     assert all(not str(m).endswith("secretary") for m in imports), (
         f"查口不许 import 秘书（那是第 4 步搬不动的根因）：{imports}")
+
+
+# ===================================================== j 收口登记表（S1：按编号）
+#: 改前各自手写「读一遍全表，再 `next(...)` 按号找」的那些函数。现在它们必须调
+#: `statementledger.by_id`（口径一）—— 恢复成自己扫全表 ⇒ 这一条当场红。
+MIGRATED_BY_ID: tuple[tuple[str, str], ...] = (
+    ("agentflow/secretary.py", "record_manuscript_dependency_face"),
+    ("agentflow/secretary.py", "amend_statement_meta"),
+    ("agentflow/secretary.py", "land_statement"),
+    ("agentflow/secretary.py", "_record_statement_tx"),
+    ("agentflow/secretary.py", "record_proof_deps"),
+    ("agentflow/secretary.py", "_proposition_owner"),
+    ("agentflow/secretary.py", "proof_text_manuscript_sign_gate"),
+    ("agentflow/agent_b/register_statement.py", "_update_numeric_evidence"),
+    ("agentflow/agent_b/register_statement.py", "_evidence_kind_on_disk"),
+    ("agentflow/agent_b/register_statement.py", "_register_statement_impl"),
+    ("agentflow/agent_b/register_statement.py", "_register_pointer_manuscript"),
+    ("agentflow/agent_b/register_statement.py", "_apply_declared_manuscript_kind"),
+    ("agentflow/agent_b/register_statement.py", "_resolve_same_statement"),
+    ("agentflow/vsigns.py", "sign_filing_reading"),
+    ("agentflow/vsigns.py", "_land_ledger_bit"),
+    ("agentflow/vreceipts.py", "registration_gap"),
+    ("agentflow/vreceipts.py", "_author_of"),
+    ("agentflow/vreceipts.py", "_detail_from_ledger"),
+    ("agentflow/verifications.py", "sign_statement"),
+    ("agentflow/verifications.py", "_apply_grade_backfill"),
+    ("agentflow/statementabandon.py", "apply_abandonment"),
+    ("agentflow/conceptrows.py", "sync_from_legacy"),
+    ("agentflow/agent_f/core.py", "_proof_tier"),
+    ("agentflow/agent_f/core.py", "_hand_proof"),
+    ("agentflow/agent_f/core.py", "_statement_row"),
+    ("agentflow/agent_d/write_report.py", "_deliver_carried_to_b"),
+    ("agentflow/agent_l/formalize.py", "_pick_statement"),
+    ("agentflow/agent_l/record.py", "_statement_row"),
+)
+
+
+def _module_tree(rel: str) -> ast.Module:
+    return ast.parse((SRC / rel).read_text(encoding="utf-8"))
+
+
+def _function_node(rel: str, name: str) -> ast.AST:
+    for node in ast.walk(_module_tree(rel)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    raise AssertionError(f"{rel} 里没有函数 {name}（登记表失去对象 = 没查成，不是通过）")
+
+
+def _calls_attr(fn: ast.AST, attr: str) -> bool:
+    return any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+               and node.func.attr == attr for node in ast.walk(fn))
+
+
+def _hand_rolled_id_lookup(fn: ast.AST) -> bool:
+    """函数体里还有没有「`next((r for r in rows if r.get("stmt_id") == sid), …)`」那种手写。"""
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "next" and node.args):
+            continue
+        gen = node.args[0]
+        if not isinstance(gen, ast.GeneratorExp):
+            continue
+        for inner in ast.walk(gen):
+            if (isinstance(inner, ast.Compare)
+                    and any(isinstance(op, ast.Eq) for op in inner.ops)
+                    and "stmt_id" in ast.unparse(inner)):
+                return True
+    return False
+
+
+def test_j_every_by_id_site_goes_through_the_box() -> None:
+    """j：S1 的 26 个调用点都问查口；谁恢复自己扫全表，这一条当场红。
+
+    这一条是「同一件事只留一处实现」的机器读数：登记表里每个函数都必须出现
+    `statementledger.by_id(...)` 的调用，且不许再出现手写的按号 `next(...)`。
+    """
+    assert len(MIGRATED_BY_ID) >= 20, "登记表被悄悄缩短了（收口点少了 = 判据面变小）"
+    for rel, name in MIGRATED_BY_ID:
+        fn = _function_node(rel, name)
+        assert _calls_attr(fn, "by_id"), (
+            f"{rel}::{name} 没有走 `statementledger.by_id` —— 按号查的实现又长出了第二处")
+        assert not _hand_rolled_id_lookup(fn), (
+            f"{rel}::{name} 里还有手写的按号 `next(...)` —— 自己扫全表又回来了")
+    # 反真空：检测器自己要认得出改前那种写法（否则上面的"没有"是空的）。
+    sample = ast.parse(
+        'def f(rows, sid):\n'
+        '    return next((r for r in rows if str(r.get("stmt_id") or "") == sid), None)\n')
+    assert _hand_rolled_id_lookup(sample.body[0]), "反真空：检测器认不出改前那种写法"
+    # 唯一实现：`by_id` 只定义在查口一处。
+    defs = [path.name for path in (SRC / "agentflow").rglob("*.py")
+            if "def by_id(" in path.read_text(encoding="utf-8")]
+    assert defs == ["statementledger.py"], f"按号查的实现不止一处：{defs}"
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用

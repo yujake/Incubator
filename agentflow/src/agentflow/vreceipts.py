@@ -78,6 +78,7 @@ from typing import Any, Iterator, Mapping, Sequence
 from filelock import FileLock, Timeout
 
 from . import schema as _S
+from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 
 #: 落点目录（`out/` 下，与 `out/vsigns/` 平级）：这是"回执投递"的账，不是签的账。
 OUTBOX_DIR = "vreceipts"
@@ -671,12 +672,14 @@ def registration_gap(*, store: Any, label: str, proof_sha: str = "",
     if not sid:
         out["reason"] = "这一条没有命题号 ⇒ 判不了要查哪一行（不猜）"
         return out
-    try:
-        row = next((dict(r) for r in store.rows("statements")
-                    if str(r.get("stmt_id") or "") == sid), None)
-    except Exception as exc:  # noqa: BLE001
-        out["reason"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+    # 按号定位走查口（口径一）：读不到 ≠ 没收录（三态在这一层才分得开）。
+    by_id = SL.by_id(store, stmt_id=sid)
+    if not by_id["checked"]:
+        err = by_id.get("error") or {}
+        out["reason"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
+                         f"{err.get('message', '?')}）⇒ 这一格没查成")
         return out
+    row = by_id["row"] if by_id["found"] else None
     out["checked"] = True
     if row is None:
         out.update(gap=True,
@@ -1379,12 +1382,14 @@ def _author_of(store: Any, label: str) -> dict[str, Any]:
     if store is None or not sid:
         out["reason"] = "没有 store / 没有命题号 ⇒ 作者读不到"
         return out
-    try:
-        row = next((dict(r) for r in store.rows("statements")
-                    if str(r.get("stmt_id") or "") == sid), {})
-    except Exception as exc:  # noqa: BLE001
-        out["reason"] = f"statements 读不出来（{type(exc).__name__}: {exc}）"
+    # 按号定位走查口（口径一）；`row={}` 与改前同一个默认值（falsy ⇒ 「不在册」那一支）。
+    by_id = SL.by_id(store, stmt_id=sid)
+    if not by_id["checked"]:
+        err = by_id.get("error") or {}
+        out["reason"] = (f"statements 读不出来（{err.get('type', '?')}: "
+                         f"{err.get('message', '?')}）")
         return out
+    row = by_id["row"]
     if not row:
         out["reason"] = f"命题 {sid} 不在册 ⇒ 作者读不到"
         return out
@@ -1714,8 +1719,10 @@ def _detail_from_ledger(store: Any, root: str, label: str,
     # `in_sync`：这一签盖的正文与命题现文是不是同一份（与读侧同一口径：
     # `statement_review_reading` 的 proofs[*].in_sync）。
     try:
-        stmt = next((dict(r) for r in store.rows("statements")
-                     if str(r.get("stmt_id") or "") == sid), {})
+        # 按号定位走查口（口径一）；读不到与不在册在这条读数上同形（都是 `in_sync=False`），
+        # 因为这一格只是回执明细里的一句话，不是「六档」的判据。
+        by_id = SL.by_id(store, stmt_id=sid)
+        stmt = by_id["row"] if by_id["found"] else {}
         reading = VR.statement_review_reading(root, stmt) if stmt else {}
         entry = next((e for e in (reading.get("proofs") or [])
                       if str(e.get("verification_id") or "") == verification_id), {})

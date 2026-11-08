@@ -94,6 +94,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+
 #: 签与归档的落点（工作区相对）。与 `out/experiments`、`out/review` 同一条约定：
 #: 产物住 `out/`，表住 `data/`。
 SIGNS_DIR = "out/vsigns"
@@ -1123,12 +1125,15 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
         out["why"] = ("这一份没有命题号 ⇒ 查不到册里哪一行（不猜）；"
                       f"稿上已签={out['manuscript_signed']}")
         return out
-    try:
-        row = next((dict(r) for r in store.rows("statements")
-                    if str(r.get("stmt_id") or "") == sid), None)
-    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没收录"
-        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 两格没查成"
+    # 按号定位走查口那唯一一处（`statementledger.by_id`，口径一）：
+    # 读不成 ⇒ `checked=False`（不是「没收录」），按号没这一行 ⇒ `found=False`。
+    found = SL.by_id(store, stmt_id=sid)
+    if not found["checked"]:
+        err = found.get("error") or {}
+        out["why"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
+                      f"{err.get('message', '?')}）⇒ 两格没查成")
         return out
+    row = found["row"] if found["found"] else None
     out["checked"] = True
     # 册那格的键集合不随分支变（三态纪律）：下面每个 return 之前只覆盖有读数的那几格。
     stmt: dict[str, Any] = {
@@ -2353,7 +2358,9 @@ def _land_ledger_bit(store: Any, *, statement_id: str, proof_no: Any, sha: str,
     try:
         with store.tx("statements", actor=f"verifier-{by}",
                       note=f"vsign.land:{sid}#p{no}") as tx:
-            row = tx.find("statements", stmt_id=sid)
+            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            row = by_id["row"] if by_id["found"] else None
             if row is None:
                 out.update(state="no_statement",
                            why=f"`statements` 里没有命题 {sid} ⇒ 没有可翻的位")

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .create_plan import _CreatePlan
 from .manuscript import _Manuscript
 from .step import _Step
@@ -1660,13 +1661,15 @@ class _Core:
         # （新行那一支：`_proof_outlet` 在事务里刚取的号，盘上确实还没有），
         # 但读失败要说出来 —— 静默退回"只看 canonical"正是这一条缺陷本身。
         note = ""
-        try:
-            stored = next((r for r in self.store.rows("statements")
-                           if str(r.get("stmt_id") or "") == probe["stmt_id"]), None)
-        except Exception as exc:  # noqa: BLE001 - 读不到整行不该让这一步崩掉，但必须如实说
+        # 按号定位走查口（口径一）；读不到整行不让这一步崩掉，但必须如实说。
+        by_id = SL.by_id(self.store, stmt_id=probe["stmt_id"])
+        if not by_id["checked"]:
             stored = None
-            note = (f"；`statements` 读不到整行（{type(exc).__name__}: {exc}）⇒ "
-                    "按探针行判（只看 canonical 那一份）")
+            err = by_id.get("error") or {}
+            note = (f"；`statements` 读不到整行（{err.get('type', '?')}: "
+                    f"{err.get('message', '?')}）⇒ 按探针行判（只看 canonical 那一份）")
+        else:
+            stored = by_id["row"] if by_id["found"] else None
         if isinstance(stored, Mapping):
             probe = dict(stored)
             probe["stmt_id"] = str(stmt_id or "")
@@ -2138,10 +2141,11 @@ class _Core:
         mode = str(got.get("mode") or "")
         landed: dict[str, Any] = dict(row_now)
         if stmt_id:
-            try:
-                landed = next((dict(r) for r in self.store.rows("statements")
-                               if str(r.get("stmt_id") or "") == stmt_id), landed)
-            except Exception:  # noqa: BLE001 - 读不到就用传进来那一份
+            # 按号定位走查口（口径一）；读不到就用传进来那一份（`row_now`）。
+            by_id = SL.by_id(self.store, stmt_id=stmt_id)
+            if by_id["checked"] and by_id["found"]:
+                landed = dict(by_id["row"])
+            else:
                 landed = dict(row_now)
         judge_note = ""
         if stmt_id and not reused:
@@ -2233,12 +2237,14 @@ class _Core:
         sid = str(statement_id or "").strip()
         if not sid:
             return {}
-        try:
-            return next((dict(r) for r in self.store.rows("statements")
-                         if str(r.get("stmt_id") or "") == sid), {})
-        except Exception as exc:  # noqa: BLE001 - 读不到就如实说，不据此判"没签"
-            self._log(f"statements 读不到（找 stmt:{sid}）：{type(exc).__name__}: {exc}")
+        # 按号定位走查口（口径一）；读不到就如实说，不据此判"没签"。
+        by_id = SL.by_id(self.store, stmt_id=sid)
+        if not by_id["checked"]:
+            err = by_id.get("error") or {}
+            self._log(f"statements 读不到（找 stmt:{sid}）："
+                      f"{err.get('type', '?')}: {err.get('message', '?')}")
             return {}
+        return by_id["row"] if by_id["found"] else {}
 
     def _output_body(self, statement_id: str, plan_id: str = "") -> dict:
         """这一条成果的「现行正文」（签盖的就是它）与手稿落点。

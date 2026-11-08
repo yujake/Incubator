@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
 from . import schema as S
+from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import textutil as T
 from .migrate_concepts import PENDING_SEARCH, fold_concepts
 
@@ -862,7 +863,9 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
     aliases = [str(a) for a in (legacy_row.get("aliases") or []) if str(a).strip()]
     source_lit = str(legacy_row.get("definition_source_lit_id") or "")
     secretary = _concept_secretary(tx)
-    existing = tx.find("statements", stmt_id=cid)
+    # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+    by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=cid)
+    existing = by_id["row"] if by_id["found"] else None
     if existing is None:
         # 老表的墓碑在新标准里也要立起来（第一次同步就碰到一条已经被合并的老行是常事：
         # 迁移历史数据时全是这种）⇒ 先算出那两格，再交给秘书那一笔写。

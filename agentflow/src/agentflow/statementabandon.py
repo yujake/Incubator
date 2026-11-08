@@ -43,6 +43,8 @@ import re
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+
 #: 标记前缀。它与 `schema.STATEMENT_STATUSES` 里的 `abandoned` 同源命名：
 #: 状态那一格说"这一行放弃了"，这一格说"为什么、什么时候"。
 ABANDON_MARKER = "abandoned@"
@@ -1108,13 +1110,15 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
         from . import schema as _S
 
         stamp = _S.now_iso()
-    try:
-        current = next((dict(r) for r in store.rows("statements")
-                        if str(r.get("stmt_id") or "") == sid), None)
-    except Exception as exc:  # noqa: BLE001
+    # 按号定位走查口（口径一）：读不到 ⇒ 受控拒（不是「这一条不在册」）。
+    by_id = SL.by_id(store, stmt_id=sid)
+    if not by_id["checked"]:
+        err = by_id.get("error") or {}
         out.update(refused="statements_unreadable",
-                   why=f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 没查成")
+                   why=(f"`statements` 读不出来（{err.get('type', '?')}: "
+                        f"{err.get('message', '?')}）⇒ 没查成"))
         return out
+    current = by_id["row"] if by_id["found"] else None
     if current is None:
         out.update(refused="abandon_unknown_statement",
                    why=f"命题 {sid} 不在册 ⇒ 放弃一条不存在的命题（不新建行）")
@@ -1189,9 +1193,9 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     try:
         with store.tx("statements", actor=str(actor or "secretary-B"),
                       note=f"statement:abandoned:{got.get('at')}") as tx:
-            live = next((r for r in tx.rows("statements")
-                         if str(r.get("stmt_id") or "") == sid), None)
-            if live is None:
+            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
+            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            if not by_id["found"]:
                 out.update(refused="abandon_unknown_statement",
                            why=f"命题 {sid} 在写事务里不见了 ⇒ 整笔不写")
                 return out

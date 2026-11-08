@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import Any, CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _conf_label, _digest, json
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 
 
 def _carried_key(kind: str, ident: Any) -> str:
@@ -749,11 +750,14 @@ class _WriteReport:
                                    "deps_written": 0, "manuscript_source": "",
                                    "manuscript_washed": False, "kind": "", "error": ""}
             stmt_row = None
-            try:
-                stmt_row = next((dict(r) for r in self.store.rows("statements")
-                                 if str(r.get("stmt_id") or "") == sid), None)
-            except Exception as exc:  # noqa: BLE001 —— 读不到要说出来
-                rec["error"] = f"读不到 statements：{type(exc).__name__}: {exc}"
+            # 按号定位走查口（口径一）；读不到要说出来（不是「这一条不在册」）。
+            by_id = SL.by_id(self.store, stmt_id=sid)
+            if not by_id["checked"]:
+                err = by_id.get("error") or {}
+                rec["error"] = (f"读不到 statements：{err.get('type', '?')}: "
+                                f"{err.get('message', '?')}")
+            else:
+                stmt_row = by_id["row"] if by_id["found"] else None
             text = ""
             try:
                 text = (Path(self.store.root) / str(row.get("path") or "")).read_text(

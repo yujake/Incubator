@@ -79,7 +79,7 @@ def test_a_the_retrieval_has_exactly_one_implementation() -> None:
 
     2026-11-09（业主第三件「查必须明确有两种口径」）：这一格的落点跟着实现搬了 ——
     原先是 `Secretary._statements_matching_keywords`（秘书的私有方法），现在是
-    `statementledger.by_keywords`（命题台账查口的口径二）。**判据强度不变**：
+    `statementledger.by_keywords`（命题台账查口的口径二）。判据强度不变：
     仍然是「定义 1 处 + 调用 1 处」，只是定义搬到了能被各角色共用的那一层。
     为什么必须搬：私有方法谁都调不到，第 4 步「把查搬到各角色」就无从下手。
     """
