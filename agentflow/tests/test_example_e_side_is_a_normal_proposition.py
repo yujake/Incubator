@@ -32,6 +32,7 @@ from agentflow import numericproof as NP
 from agentflow import proofregistry as PR
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 
 from _example_chain import (
     pending_rows, row_of, run_e_example, run_f_example, verification_rows, ws,
@@ -62,7 +63,20 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     assert len(ledger) == VR.SIGN_STREAK_NEED, ledger
     assert all(str(r.get("proof_sha256") or "") == VR.proof_sha(env["column"])
                for r in ledger), ledger
-    assert env["passes"][-1].get("signed_bit3") is True, env["passes"][-1]
+    # 2026-11-08（业主：「V 现在只对手稿负责」）：V 不再翻命题行的第 3 位
+    # （`signed_bit3` 恒 False），签落在这一份 e-proof 稿上。原来那一句断的是
+    # "签真的发生了"；新契约下同一件事由两处读数回答，而且更硬：
+    # ① 收方秘书把九格块落回稿了没有（`review_write.manuscript_signed`）；
+    # ② 稿上那一块自己读出来是不是 signed（`vsigns.manuscript_sign_reading`，
+    #    连 `streak` / `need` 一起对上门槛）。只把 `signed_bit3` 改成 False 是没断言的，
+    # 所以这两处缺一不可。
+    last = env["passes"][-1]
+    assert last.get("signed_bit3") is False, last
+    assert dict(last.get("review_write") or {}).get("manuscript_signed") is True, last
+    block = VS.manuscript_sign_reading(env["signed_text"], manuscript_path=env["rel"])
+    assert block.get("signed") is True, block
+    assert (block.get("streak"), block.get("need")) == (VR.SIGN_STREAK_NEED,
+                                                        VR.SIGN_STREAK_NEED), block
     # 等级：按穷举算（numeric verified + proof ⇒ theorem）
     row = row_of(st, env["sid"])
     assert row["kind"] == "example", row

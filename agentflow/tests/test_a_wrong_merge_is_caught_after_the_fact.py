@@ -255,6 +255,12 @@ class _FakeSeam:
 
     它只按定理名判：两个同名标签 ⇒ same 并点名第一个候选；不同名 ⇒ different。
     真实判据在提示词里（条件 ⇒ 结论一致），这里只替"模型说了什么"那一个返回值。
+
+    2026-11-08：判定改成"秘书主动查询（挑词 → 代码检索 → 一次判定）"之后，这一问有两次
+    模型调用，替身也得答两次 —— 挑词那一问（`secretary:statement_keywords`）给的词就是
+    这条待判正文的定理名（`_clean_name(label)`）；检索面、命中计数与两档形状仍走
+    `Secretary.adjudicate_proposition` 那一处实现。不答它会让整条链 fail-closed
+    （"关键词没提取成 ⇒ 这一问没判成"），于是本文件量不到"错并 / 正常合并"这件事。
     """
 
     class _Call:
@@ -266,8 +272,15 @@ class _FakeSeam:
         self.calls: list[str] = []
 
     def ask_json(self, prompt, **kw):
-        self.calls.append(str(kw.get("note") or ""))
-        return self._reply(_material(prompt)), self._Call()
+        note = str(kw.get("note") or "")
+        self.calls.append(note)
+        data = _material(prompt)
+        if note.endswith("statement_keywords"):
+            name = _clean_name(str(data.get("label") or ""))
+            return ({"keywords": [name] if name else [],
+                     "why": ("打桩：拿定理名去台账里捞同一条"
+                             if name else "打桩：这条没有定理名可捞")}, self._Call())
+        return self._reply(data), self._Call()
 
     def _reply(self, data: dict) -> dict:
         name = _clean_name(str(data.get("label") or ""))

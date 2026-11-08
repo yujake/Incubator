@@ -3374,6 +3374,31 @@ def selftest() -> int:
 
     checks: list[tuple[str, bool]] = []
     root = Path(tempfile.mkdtemp(prefix="agent_v_selftest_"))
+
+    def _manuscript(stmt_id: str, proof: str) -> str:
+        """落一份按号命名的稿，返回工作区相对路径（自检的送审载体）。
+
+        2026-11-08 业主口径「V 只对手稿负责，不该看台账了」：签块 / `## 依赖` /
+        按号寻址三样只在文件上，内联正文（`proof_text`）单独送审会被
+        `proof_manuscript_required` 受控拒 —— 自检也必须走同一条正路，否则它量的
+        是一条真机上不存在（也不许存在）的入口。三节 `## 命题` / `## 证明` /
+        `## 依赖` 齐全；依赖段空表本身就是"这一份没有引用任何在册命题"的声明。
+        """
+        rel = f"reports/f-proof-{stmt_id}.md"
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# F 的证明手稿（自检）\n\n"
+            f"- 命题号：stmt:{stmt_id}\n\n"
+            "## 命题\n\n（自检：这一份审的只是证明正文）\n\n"
+            f"## 证明\n\n{proof}\n\n"
+            "## 依赖\n\n"
+            "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+            "|---|---|---|---|\n\n"
+            "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+            encoding="utf-8")
+        return rel
+
     agent = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([
         '{"verdict": "成立", "findings": []}',
         '{"verdict": "有毛病", "defect_step": 2, "findings": '
@@ -3382,7 +3407,8 @@ def selftest() -> int:
     ]))
     checks.append(("构造成功", agent.actor == DEFAULT_VERIFIER))
 
-    clean = agent.verify_proof("0007", proof_text="1. 由定义直接得到。")
+    clean = agent.verify_proof(
+        "0007", proof_manuscript=_manuscript("0007", "1. 由定义直接得到。"))
     checks.append(("干净证明签成立", clean["checked"] and clean["verdict"] == "成立"))
     # 编号宽度「不许写死」：2026-10-14 业主裁定「所有四位编号改成六位」
     # （`schema.ID_DIGITS = 6`），发号点是 `verifications.next_verification_id`
@@ -3408,12 +3434,14 @@ def selftest() -> int:
                    _EB.BIT_OWNERS.get("reviewed") == "V"
                    and clean["reviewed_by"] == {}))
 
-    bad = agent.verify_proof("0007", proof_text="1. 由定义直接得到。2. 易证。")
+    bad = agent.verify_proof(
+        "0007", proof_manuscript=_manuscript("0007", "1. 由定义直接得到。2. 易证。"))
     checks.append(("有毛病指到那一步", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
     checks.append(("有毛病不签第 3 位", bad["signed_bit3"] is False
                    and bad["bits"].get("reviewed") is False))
 
-    unparsable = agent.verify_proof("0007", proof_text="1. 随便写。")
+    unparsable = agent.verify_proof(
+        "0007", proof_manuscript=_manuscript("0007", "1. 随便写。"))
     checks.append(("没查成不落行", unparsable["checked"] is False
                    and unparsable["reason"] == "unparsable"))
 
@@ -3431,7 +3459,8 @@ def selftest() -> int:
     # 正控：提示词里真的有对象与硬禁令（否则上面那条"没有句柄"只是空集通过）。
     seam = _ScriptedSeam(['{"verdict": "看不出来", "findings": []}'])
     probe = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=seam)
-    probe.verify_proof("0008", proof_text="1. 显然成立。", readonly_facts="- 只读读数：0 行")
+    probe.verify_proof("0008", proof_manuscript=_manuscript("0008", "1. 显然成立。"),
+                       readonly_facts="- 只读读数：0 行")
     sent = seam.prompts[0] if seam.prompts else ""
     checks.append(("提示词里带证明全文与硬禁令", "1. 显然成立。" in sent and "易证" in sent))
     checks.append(("提示词里带只读读数", "只读读数：0 行" in sent))
@@ -3445,10 +3474,15 @@ def selftest() -> int:
     checks.append(("没有秘书轴的陈述同样不签第 3 位",
                    bool(_probe_rows) and VR.bit3_payload(_probe_rows[0]) == {}))
 
-    noproof = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([]))
+    noproof_seam = _ScriptedSeam([])
+    noproof = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=noproof_seam)
     got = noproof.verify_proof("0007", proof_text="")
+    # 2026-11-08 业主口径「V 只对手稿负责」之后，"没有可签的载体"挡在更前面那一格，
+    # 拒信码从 `no_proof_text` 变成 `proof_text_needs_a_manuscript`。这条判据量的那件事
+    # 一个字没变：没有载体就不问模型（`not noproof_seam.prompts`）、不落台账行。
     checks.append(("没有证明全文就不问模型", got["checked"] is False
-                   and got["reason"] == "no_proof_text"))
+                   and got["reason"] == "proof_text_needs_a_manuscript"
+                   and not noproof_seam.prompts))
     bad_id = noproof.verify_proof("7", proof_text="x")
     # 标签写错过一次（"命题号必须 4 位"而 `schema.ID_DIGITS == 6`）：标签也是判据的
     # 一部分 —— 读者照着它去改数据，会得到"越改越不对"。所以除了 `reason` 码，
@@ -3458,10 +3492,11 @@ def selftest() -> int:
                    and f"{S.ID_DIGITS} 位" in bad_id["detail"]
                    and "4 位号仍可读" in bad_id["detail"]))
     # 反真空：上面那条只证明"坏号被拒"。若发号/收号两侧一起把六位号也拒了，
-    # 它照样绿 ⇒ 这里正控地把一个「六位」命题号喂进去，必须被当成合法号。
+    # 它照样绿 ⇒ 这里正控地把一个「六位」命题号喂进去，必须被当成合法号：
+    # 过了号闸才会走到载体闸，于是"拒信码是载体闸那个"就是"号被接受了"的读数。
     six_ok = noproof.verify_proof(S.format_id(7), proof_text="")
     checks.append((f"六位命题号被接受（{S.format_id(7)}；写侧的新形态）",
-                   six_ok["reason"] == "no_proof_text"))
+                   six_ok["reason"] == "proof_text_needs_a_manuscript"))
 
     for name, good in checks:
         print(f"  [{'PASS' if good else 'FAIL'}] {name}")

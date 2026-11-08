@@ -246,8 +246,15 @@ def test_a_concept_declaring_own_result_without_self_authored_is_refused(store, 
     assert declared.get("created") is True, declared
 
     # 反真空：把这条判据打桩成恒放行 ⇒ 缺声明的那一笔也必须能落盘。
+    #
+    # 2026-11-08：这一笔必须换一个定义项（`label`）。概念同一性闸（`concept_identity_gate`，
+    # 发号之前判）对同一个 `label` 规范化后相同就判"同一个概念，不许新建第二行"
+    # （`matched_by=concept_label`）—— 那是另一个判据，不是本条要量的 origin 判据。
+    # 沿用 `label="环"` 会让这一笔先被概念闸并掉（`duplicate=True`），于是
+    # "恒放行 ⇒ 必须落盘"这句话量不到 `concept_origin_problem`。断言一个字没动。
     monkeypatch.setattr(CR, "concept_origin_problem", lambda **kwargs: "")
-    forced = sec.record_statement({**base, "statement_full": "环的陈述（反真空）"}, role="B")
+    forced = sec.record_statement({**base, "label": "域",
+                                   "statement_full": "域的陈述（反真空）"}, role="B")
     assert forced.get("created") is True, forced
 
 

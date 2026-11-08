@@ -40,11 +40,13 @@ import pytest
 
 from conftest import sign_before_registration
 from _proof_manuscript_fixture import write_proof_manuscript
+from _same_statement_stub import SameStatementStub
 
 from agentflow import agent_prompts as AP
 from agentflow import closing
 from agentflow import quoteevidence as QE
 from agentflow.agent_b import AgentB
+from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
 
@@ -59,7 +61,17 @@ TS = "2026-10-22T00:00:00+08:00"
 
 
 def _b(st: Store) -> AgentB:
-    return AgentB(st, extractor=None, extract_text=None, config={})
+    """按真机装配的形状造 B（2026-11-08 起：B 手里必须有判断面）。
+
+    收录正路在 B-2 / B-4 之前先问一次"是不是在册的同一条"（`_resolve_same_statement`）。
+    没接秘书时那一问 fail-closed，会把本文件那两条判据（kind 只派生一次 / no_source
+    要指到我方手稿）顶掉。所以这里按生产同形接一名秘书 —— 缝是离线替身，只答
+    "挑词 + 判 different"，检索面与两档形状仍走那一处实现（见
+    `_same_statement_stub` 的模块 docstring）。断言一个字没动。
+    """
+    return AgentB(st, extractor=None, extract_text=None, config={},
+                  secretary=Secretary("B", root=st.root, store=st,
+                                      seam=SameStatementStub(), enable_model=True))
 
 
 def _prompt(role: str) -> str:

@@ -50,10 +50,12 @@ if str(_SRC) not in sys.path:
 from conftest import reset_bit3_cache
 
 from agentflow import capabilities as CAP
+from agentflow import conductor as CND
 from agentflow import depsection as DS
 from agentflow import host
 from agentflow import schema as S
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_d import AgentD
 from agentflow.agent_f import AgentF
@@ -144,6 +146,56 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "",
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", got)
     return got
+
+
+def _cited_manuscript_with_a_real_sign(store: Store, stmt_id: str, *, label: str = "") -> str:
+    """给一条在册命题落一份带真签的手稿（`reports/f-proof-<号>.md`），返回相对路径。
+
+    ## 为什么这一格必须补（2026-11-08 业主：「V 现在只对手稿负责」）
+
+    可引资格不再读 `statements.bits` 的等级，改读被引命题那一份手稿上有没有 V 签
+    （`agent_v.core._cited_manuscripts`：`reports/f-proof-<号>.md` 先、`b-proof-<号>.md`
+    后；读不到 ⇒ `manuscript_missing=True` + `admissible=False`，机械改判 `inadmissible`
+    挡住这一签）。所以"在册命题"这一侧的前提是：它的证明有一份稿，稿上有真签。
+
+    改前红：夹具只往 `statements` 里塞一行（+ 三次 `record_verification` 翻位），
+    盘上没有那份稿 ⇒ `_cited_manuscripts` 判 `found=False` ⇒ 引用闸挡签 ⇒
+    `verify_proof` 连判第一转就 `terminal=gate`，端到端那条链量不到"三转发签"。
+
+    签是真的：先是 `record_pending_sign` 落一行 pending 台账（未在册/未登记形态那一档，
+    与 `conftest.sign_before_registration` 同一口径），再把那一行的锚点写进签块 ——
+    `manuscript_sign_standing` 会去台账里核这一签的背书，块本身不自己作证。
+    正文 sha 与被签的那一份逐字相符（`write_manuscript_sign` 写盘前核过）。
+    """
+    body = f"命题 {stmt_id} 的证明正文（判据夹具）。"
+    full = f"命题 {stmt_id} 的完整正文（含假设）。"
+    rel = f"reports/f-proof-{stmt_id}.md"
+    text = ("# F 的证明手稿（判据夹具：被引命题）\n\n"
+            f"- 命题号：stmt:{stmt_id}\n"
+            "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
+            f"## 命题\n\n{full}\n\n"
+            f"## 证明\n\n{body}\n\n"
+            + DS.render_dependency_section([]))
+    path = pathlib.Path(store.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    on_disk = DS.proof_body(text).strip("\n")
+    assert on_disk == body, (on_disk, body)
+    row = VR.record_pending_sign(
+        store.root, proof_text=on_disk, verdict={"verdict": "成立", "findings": []},
+        verifier="agent-V", object_path=rel,
+        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                         "reason": "夹具：clean"})
+    key = str(row.get("object_sha256") or row.get("proof_sha256") or "")
+    anchor = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl"
+              f"#{row.get('verification_id')}")
+    wrote = VS.write_manuscript_sign(
+        store.root, rel, proof_sha=VR.proof_sha(on_disk),
+        streak=int(VR.SIGN_STREAK_NEED), need=int(VR.SIGN_STREAK_NEED),
+        verdict="成立", signer="V", at=S.now_iso(), ledger=anchor,
+        statement_id=str(stmt_id), signed=True)
+    assert wrote.get("state") == "written", (label, wrote)
+    return rel
 
 
 class FakeSeam:
@@ -490,8 +542,24 @@ def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
     assert [p.get("issued") for p in passes] == [False] * (need - 1) + [True], (
         f"逐转的发签读数是 {[p.get('issued') for p in passes]} —— 2026-10-29 口径："
         f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（前几转只落台账）")
-    assert got.get("signed_bit3") is True, (
-        f"最后一转应当签上第 3 位；发签决定读数：{got.get('sign_issuance')}", got)
+    # 2026-11-08（业主：「V 现在只对手稿负责」）：V 不再翻命题行的第 3 位
+    # （`signed_bit3` 恒 False，命题位等 B 收录时按正文 sha 认领），签只落手稿。
+    # 原句断的是"签真的发生了"；新契约下同一件事改由两处更硬的读数回答：
+    # ① 收方秘书把九格块落回稿了没有（`review_write.manuscript_signed`）；
+    # ② 稿上那一块自己读出来是不是 signed（连 streak / need 一起对上门槛）。
+    # 只把 True 改成 False 是没断言的，所以这两处缺一不可。
+    assert got.get("signed_bit3") is False, (
+        f"V 不再翻命题位（业主 2026-11-08）；发签决定读数：{got.get('sign_issuance')}", got)
+    assert dict(got.get("review_write") or {}).get("manuscript_signed") is True, (
+        f"第三转应当把签落回手稿；写回读数：{got.get('review_write')}", got)
+    block = VS.manuscript_sign_standing(
+        pathlib.Path(agent.workspace_root, manuscript).read_text(encoding="utf-8"),
+        proof_sha=VR.proof_sha(DS.proof_body(
+            pathlib.Path(agent.workspace_root, manuscript).read_text(encoding="utf-8")
+        ).strip("\n")),
+        manuscript_path=manuscript)
+    assert block.get("state") == "signed", block
+    assert (block.get("streak"), block.get("need")) == (need, need), block
     return [got]
 
 
@@ -519,6 +587,13 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
     # 那一份签仍在 pending 台账里，闸在 B 那一步已经用过它。
     reset_bit3_cache(store, f_stmt)
 
+    # 2026-11-08（业主：「V 现在只对手稿负责」）：可引资格读"被引命题那一份手稿上有
+    # 没有 V 签"，不再读 statements.bits 的等级 ⇒ 夹具必须给被引的那一条落一份带真签的稿。
+    # 这是补前提（真机上每条在册命题的证明都住在一份稿里），不是放宽引用闸。
+    # 位置放在 D 携带之后：D 的携带单会扫 `reports/*.md`，提前落这份稿会让它多交一件
+    # （那是夹具时序，不是这条判据要量的事）。
+    _cited_manuscript_with_a_real_sign(store, THEOREM_A, label="定理甲")
+
     reply = json.dumps({
         "verdict": "成立", "defect_step": None, "why": "", "findings": [],
         "citation_checks": [{"stmt_id": THEOREM_A, "verdict": "consistent",
@@ -535,11 +610,20 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
         sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
     assert not pathlib.Path(store.root, str(proof.get("manuscript_path") or "")).exists(), (
         "转正之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
-    # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签
-    reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""),
-                                      formal_rel)
+    # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签。
+    # 2026-11-08（V 只对手稿）：签块由收方秘书落回稿（`vsigns.land` 只认
+    # `secretary:F/B/E`，`by` 从召唤上下文里的 `parent_role` 取）。真机上 V 总是被
+    # 某一方派出来的，所以这一趟必须在同一个召唤上下文里跑 —— 夹具此前没给，
+    # 于是落地那一步如实报 `not_a_secretary`（拒落，一个字节都不写）。
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""),
+                                          formal_rel)
     signed = reviewed[-1]
-    assert signed.get("signed_bit3") is True, signed
+    # 签落在稿上（`_v_reviews_until_signed` 已核过 manuscript_signed 与稿上的签块）；
+    # 命题位仍由 B 收录时按正文 sha 认领（V 不写 statements）⇒ 这里断言的是"签发生在这份稿上"。
+    assert dict(signed.get("review_write") or {}).get("manuscript_signed") is True, signed
+    assert signed.get("signed_bit3") is False, signed
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {THEOREM_A}, signed
     assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)

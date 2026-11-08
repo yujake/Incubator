@@ -29,6 +29,7 @@ import pytest
 
 from conftest import seed_proposition_form_ok, sign_before_registration
 from _proof_manuscript_fixture import write_proof_manuscript
+from _same_statement_stub import wire_for_secretary
 
 from agentflow import capabilities as CAP
 from agentflow import schema as S
@@ -205,7 +206,7 @@ def test_the_conditional_ladder_of_register_statement_is_advertised():
 
 
 def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
-        tmp_path: pathlib.Path):
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     """正控 + 逐级负控：齐了才落行；缺出处/引用理由/ID 形态任何一级都不落行。
 
     ## 第 ① 级（缺 `proof_text`）为什么是"落行 + 挂待办"而不是"拒收"
@@ -215,6 +216,11 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     这条改判不许蔓延 —— `external_lit` 缺 `source_lit_id` 仍然必须拒。
 
     负控逐级来，是因为模型在 T1 里正是一级一级撞上去的：每个负控都对应它当时得到的那一种拒绝。"""
+    # 2026-11-08：收录正路先问一次"台账里有没有同一条"（`_resolve_same_statement`），
+    # 那一问要秘书。真机里 `host.build_role_registry` 装配的 B 手里有判断面；夹具里
+    # 没有模型 ⇒ 按同一处装配路径接一条只答"挑词 + 判 different"的离线替身，
+    # 否则那条 fail-closed 会顶在本用例要量的四级拒收前面（断言一个字没动）。
+    wire_for_secretary(monkeypatch)
     st, b = _b_instance(tmp_path)
 
     # 正控：四级都齐 ⇒ 落一行
