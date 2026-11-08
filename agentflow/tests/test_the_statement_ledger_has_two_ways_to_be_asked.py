@@ -571,5 +571,48 @@ def test_m_pool_and_keywords_have_one_implementation_each() -> None:
     assert old == [], f"改前那个私有检索方法又回来了：{old}"
 
 
+# ===================================================== n 角色侧：不许自己扫全表（第 4 步）
+#: 业主 2026-11-09 第 4 步：把查按角色接到查口上。每搬一个角色，这一族就多一行；
+#: 搬完之后这些文件里不许再有 `.rows("statements")` 的调用点 —— 取数走查口的
+#: `rows_of`，取行走 `by_id` / `by_keywords` / `index_by_id` / `pool`。
+#: 这一条钉的是「角色侧不再自己扫全表」，不是「角色会查」（后者由
+#: `tests/test_each_role_queries_the_statement_ledger.py` 的行为与反真空钉）。
+ROLE_FILES_WITHOUT_DIRECT_READ: tuple[str, ...] = (
+    "agentflow/agent_c/proof_chain.py",
+)
+
+
+def _direct_statement_row_reads(rel: str) -> list[int]:
+    """该文件里 `.rows("statements")` 的调用点行号（AST；docstring 里的字不算）。"""
+    tree = _parse_cached(rel)
+    out: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "rows"):
+            continue
+        if (len(node.args) == 1 and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value == "statements"):
+            out.append(node.lineno)
+    return sorted(out)
+
+
+def test_n_role_files_do_not_scan_the_statements_table_themselves() -> None:
+    """n：搬过的角色文件里不许再有直接读 statements 的调用点。"""
+    assert len(ROLE_FILES_WITHOUT_DIRECT_READ) >= 1, "登记表被悄悄清空了"
+    for rel in ROLE_FILES_WITHOUT_DIRECT_READ:
+        got = _direct_statement_row_reads(rel)
+        assert not got, (
+            f"{rel} 又自己扫全表了（`rows(\"statements\")` 在行 {got}）—— "
+            "取数走查口 `statementledger.rows_of`，取行走 `by_id` / `by_keywords`")
+    # 反真空：检测器认得出改前那种写法。
+    sample = ast.parse('def f(store):\n'
+                       '    return [dict(r) for r in store.rows("statements")]\n')
+    calls = [n for n in ast.walk(sample) if isinstance(n, ast.Call)]
+    assert any(isinstance(n.func, ast.Attribute) and n.func.attr == "rows"
+               for n in calls), "反真空：检测器认不出 `.rows` 调用"
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

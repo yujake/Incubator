@@ -167,8 +167,21 @@ class _ProofChain:
         max_depth = max(1, int(max_depth))
         k = max(1, int(k))
         warnings: list[str] = []
+        # `statements` 的取数口只有一处（查口 `rows_of`）：C 不再自己 `store.rows`。
+        # 三态由它给（读不到 ≠ 0 行），这里只把「读不到」翻成本角色原有的那句受控读数。
+        stmts, problem, error = SL.rows_of(self.store)
+        if problem:
+            return self._report(
+                "proof_chain", str(target), {"max_depth": max_depth, "k": k},
+                summary=(f"依赖图读不成（{problem}）⇒ 这一趟没查成"
+                         "（不是『这条成果没有依赖』）"),
+                payload={"checked": False, "target": str(target), "groups": [],
+                         "best_group": None, "groups_total": 0,
+                         **_shape_keys(False, (), "依赖图没读成 ⇒ 形状没算成"
+                                                    "（不是『没有候选路径』）")},
+                ok_=False, error=f"{error.get('type') or 'Unreadable'}: "
+                                 f"{error.get('message') or problem}")
         try:
-            stmts = [dict(r) for r in self.store.rows("statements")]
             deps = [dict(r) for r in self.store.rows("dependencies")]
             exps = [dict(r) for r in self.store.rows("experiments")]
             lits = [dict(r) for r in self.store.rows("literature")]
