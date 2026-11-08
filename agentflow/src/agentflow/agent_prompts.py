@@ -3623,7 +3623,20 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_surface_snapshot.json` 因十一格提示词的版本行与 B / D 两格正文变）；
 #: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p259"
+#: p259 → p260（2026-11-08，业主：收录按语义查一圈 + 普通数值一律 conjecture +
+#: 数值证据流水）：一格换值 —— B（其余十格只差版本行）。
+#:   `specs/b.py` 的 policy 新增「收录先查『是不是在册的同一条』」：普通数值手稿在台账上
+#:   永远是 conjecture（调用方给的 kind 不参与）；秘书挑数学关键词检索后认定，查到就不新
+#:   注册（数值手稿更新数值证据流水 / 证明手稿按既有多证明分支追加 proof_no）。
+#: 变化格 = B；A / C / D / E / F / G / H / L / M / V 逐字未动（只差版本行）。
+#: 逐格旧值 → 新值：B 4441ddd1→af7b11fd。
+#: 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+#: （先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实）现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p260）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
+#: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p260"
 
 
 

@@ -2348,7 +2348,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 逐格旧值 → 新值：B 465a645b→4441ddd1 / D da51f676→4d840d5b。
 # 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
 # （先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实）现算。
-_FROZEN_PROMPT_VERSION = "p259"
+# 2026-11-08（p259 → p260，业主：收录按语义查一圈 + 普通数值一律 conjecture +
+# 数值证据流水）：一格换值 —— B。上游是 `specs/b.py` 的 policy 新增
+# 「收录先查『是不是在册的同一条』」（普通数值手稿永远是 conjecture；秘书按关键词检索后
+# 认定，查到就不新注册：数值手稿更新数值证据流水 / 证明手稿按既有多证明分支追加）。
+# A / C / D / E / F / G / H / L / M / V 逐字未动（只差版本行）。
+# 逐格旧值 → 新值：B 4441ddd1→af7b11fd。
+# 十一格是 `temp/_p258_freeze_digests.py` 的现算值（口径同上），不是手抄。
+_FROZEN_PROMPT_VERSION = "p260"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2584,7 +2591,7 @@ _FROZEN_PROMPT_VERSION = "p259"
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "7dfe78d302ccf4d6d713aa7b7206e59bf7c4a543fe7f13435ce445176ef6949e",
-    "B": "4441ddd195b1ec6a5e1a58f64fd54138cbcf255a8992a39de19c6b47e3e0e1f2",
+    "B": "af7b11fd2c3b5c93f6740726cd23db1480c20c40653bdf1d876a514f8df741fa",
     "C": "922a427550f75ffea7282c0176ef6b2f516fb0b407b2a73d9ba97b27c556fcf0",
     "D": "4d840d5b74c79234b8bbe0d7f3bc9badc62a1f6ca893187a486aa8f2481e7429",
     "E": "dd9d4185e0db9a17ad1eed816b568c18a5612c8c83276d7c5a835dc721d288da",

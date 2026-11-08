@@ -972,6 +972,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "收录；D 传正文受控拒」）、`specs/d.py`（policy 三处：向 B 登记只递指针 / 立了猜想"
              "之后把研究方向交给 F 而不点名 conjecture_id / 命题台账由 B 写、D 只读，写集三张表）。"
              "变化格 = B/D；A/C/E/F/G/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
+    # p259 → p260（2026-11-08，业主：收录按语义查一圈 + 普通数值一律 conjecture +
+    # 数值证据流水）：facts 键集一格没动（还是 15 格），只改 `specs/b.py` 的 policy 段文本
+    # ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p260", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p260（2026-11-08，业主：收录按语义查一圈 + 普通数值一律 conjecture + "
+             "数值证据流水）：上游一份 spec = `specs/b.py` 的 policy 新增「收录先查『是不是在册的"
+             "同一条』」（普通数值手稿永远是 conjecture；秘书按关键词检索后认定，查到就不新注册："
+             "数值手稿更新数值证据流水 / 证明手稿按既有多证明分支追加 proof_no）。"
+             "变化格 = B；A/C/D/E/F/G/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
 
 )
 

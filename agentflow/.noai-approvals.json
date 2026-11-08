@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T14:45:19+08:00",
+  "generated_at": "2026-11-08T17:33:55+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "b4ac271802faf103cd192089eefb751921f789802b867ae653e9081e1c727493",
+      "sha256": "2f8afc0006e39392b29e7ba205810f6606bbfee5882bbf171b63b25a14df5bb4",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p259 收口复核：三处 FC-27 登记与盘上现值对齐（specs/b.py、specs/d.py 的 sha 未变；golden 已随 p259 重冻）。登记 ≠ 批准（reviewers=0）。",
+      "change_note": "2026-11-08 p260（业主：收录按语义查一圈 + 普通数值一律 conjecture + 数值证据流水）：specs/b.py 的 policy 新增「收录先查是不是在册的同一条」；golden 随 p260 十一格重冻（只 B 一格正文与版本行变）。登记 != 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "7a082029e7731d5d62030696f08eb32ad7687c5aad7e588428a582f88cdfb60c",
+      "sha256": "77a25a3850c0db85601c5b8fd0a89d6b08ba29c2bf5052c08cc25d73d3e00b95",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p259 收口复核：三处 FC-27 登记与盘上现值对齐（specs/b.py、specs/d.py 的 sha 未变；golden 已随 p259 重冻）。登记 ≠ 批准（reviewers=0）。",
+      "change_note": "2026-11-08 p260（业主：收录按语义查一圈 + 普通数值一律 conjecture + 数值证据流水）：specs/b.py 的 policy 新增「收录先查是不是在册的同一条」；golden 随 p260 十一格重冻（只 B 一格正文与版本行变）。登记 != 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
