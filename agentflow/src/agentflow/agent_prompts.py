@@ -3636,7 +3636,20 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
 #: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p260"
+#: p260 → p261（2026-11-08，缺陷①：只递指针在工具层通过；本体四条缺陷的判据）：
+#: 零格换值 —— 十一格逐字未动（只差版本行）。
+#:   上游 `specs/b.py` 只动了 `register_statement.statement_full` 的 `minLength: 1`
+#:   （去掉，让"只给 proof_manuscript"的指针形态过参数门）与这一格的 description；
+#:   动作 summary / policy / 工具面（`own.*` 不在 registry 快照里）都未变，而
+#:   `_surface_digest` 不含参数 description ⇒ 十一格 SAME。
+#: 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+#: （先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实）现算。
+#: 连带：十一格表（digest map 逐字不变）+ `_FROZEN_PROMPT_VERSION`（p261）；
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；
+#: 两份 golden 按现值重冻（版本行变）；`docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md`
+#: 由 `python -B tools/write_system_docs.py` 重生成；`tests/fixtures/prompt_cache_warm.json`
+#: 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p261"
 
 
 

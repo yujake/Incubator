@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T22:36:35+08:00",
+  "generated_at": "2026-11-08T23:09:52+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "77a25a3850c0db85601c5b8fd0a89d6b08ba29c2bf5052c08cc25d73d3e00b95",
+      "sha256": "7d896d00123da5e8b78c52e33e3cdf04d88fe258d422d074b93bc0d7d7d44429",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p260（业主：收录按语义查一圈 + 普通数值一律 conjecture + 数值证据流水）：specs/b.py 的 policy 新增「收录先查是不是在册的同一条」；golden 随 p260 十一格重冻（只 B 一格正文与版本行变）。登记 != 批准（reviewers=0）。",
+      "change_note": "2026-11-08 p261（缺陷①：只递指针在工具层通过）：PROMPT_VERSION 行与 B 一格提示词摘要随版本重冻；specs/b.py 只动 statement_full 参数格（digest 不含参数 description）。登记≠批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

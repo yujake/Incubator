@@ -982,6 +982,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "同一条』」（普通数值手稿永远是 conjecture；秘书按关键词检索后认定，查到就不新注册："
              "数值手稿更新数值证据流水 / 证明手稿按既有多证明分支追加 proof_no）。"
              "变化格 = B；A/C/D/E/F/G/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
+    # p260 → p261（2026-11-08，缺陷①「只递指针」在工具层通过）：只改 `specs/b.py` 的
+    # `statement_full` 参数格（去 `minLength` + description），`_surface_digest` 不含参数
+    # description ⇒ 十一格 SAME；facts 键集一格没动（还是 15 格）。
+    {"version": "p261", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p261（2026-11-08，缺陷①）：上游 `specs/b.py` 只去掉 "
+             "`register_statement.statement_full` 的 `minLength: 1` 并改那一格的 description"
+             "（让只给 `proof_manuscript` 的指针形态过参数门；空正文不能登记仍由动作层 "
+             "`empty_statement_text` 拒）。`_surface_digest` 不含参数 description ⇒ 十一格 "
+             "SAME（只差版本行）。facts 键集仍 15 格。"},
 
 )
 

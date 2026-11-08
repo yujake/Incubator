@@ -2355,7 +2355,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # A / C / D / E / F / G / H / L / M / V 逐字未动（只差版本行）。
 # 逐格旧值 → 新值：B 4441ddd1→af7b11fd。
 # 十一格是 `temp/_p258_freeze_digests.py` 的现算值（口径同上），不是手抄。
-_FROZEN_PROMPT_VERSION = "p260"
+# 2026-11-08（p260 → p261，缺陷①）：零格换值 —— 十一格逐字未动（只差版本行）。
+# 上游 `specs/b.py` 只去掉 `register_statement.statement_full` 的 `minLength: 1`
+# 并改了那一格的 description；`_surface_digest` 不含参数 description，动作 summary /
+# policy / 工具面都未变 ⇒ 十一格 SAME。
+_FROZEN_PROMPT_VERSION = "p261"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
