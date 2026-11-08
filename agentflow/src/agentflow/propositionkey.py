@@ -685,18 +685,19 @@ def defined_term(statement_full: str) -> str:
 def _concept_key_text(text: str) -> str:
     """一段术语 → 可比的定义项键（空串 = 这一侧抽不出可比的东西）。
 
-    两道门槛都是刻意的：通用词（`CONCEPT_GENERIC_TERMS`）不算定义项；规范化之后不足
-    两个字符的也不算。一个字符的名字（`环` / `群`）太弱 —— 它能与同一个字在别的语境里
-    撞上，而并错的代价是一条真概念在台账上消失（与 `SAME_PROPOSITION_JACCARD` 那条
-    "宁可漏并"同一个取舍）。这一档的读数落 `unknown`（不并、照旧新建），不是 `different`。
+    门槛只剩一道：通用词（`CONCEPT_GENERIC_TERMS`）不算定义项。
+
+    2026-11-08（主笔裁定：不许按长度预判死）：删掉"规范化之后不足两个字符的不算"。
+    单字概念名（`群` / `环` / `谱`）是数学文献里最正常不过的东西；按字数把它判成
+    "抽不出定义项"会让 fail-closed 把整个概念表堵死（只要有这么一行在册，之后每一条
+    新概念都判不了）。通用词那条保留：拿"概念"当键会把所有没命名的概念并成一条，
+    那比漏并更坏。
     """
     raw = str(text or "").strip()
     if not raw:
         return ""
     canonical = _canonical(raw, strip_glue=False)
     key = _CONCEPT_KEY_DROP.sub("", canonical)
-    if len(key) < 2:
-        return ""
     if key in CONCEPT_GENERIC_TERMS:
         return ""
     return key

@@ -869,6 +869,12 @@ def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
     老表已退役（`legacy_present` 报 `present=False`）时只写新标准 —— 那一支不是
     "降级"，而是迁移之后的正态；但老文件还在盘上（`stale_file`）时必须在返回值里
     读得到（它装着没搬完的数据）。
+
+    ## 2026-11-08：先判同一性、再发号（D2 后门）
+    这一支以前是"先 `alloc_id` 再写"，于是概念同一性判不了时无路可退（拒了留
+    `id_gap`、放过就是后门）。现在 `secretary.concept_identity_gate(tx)` 在发号之前
+    判：没判成 ⇒ `checked=False` + 一句原因、一个号都不发；判成 same ⇒ 调用方
+    按 D2 并进在册那一行（`stmt_id` 传进来时沿用它的号，不另发）。
     """
     name = str(label or "").strip()
     if not name:
@@ -881,6 +887,11 @@ def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
     tables = ["statements"] + ([LEGACY_TABLE] if legacy.get("present") else [])
     try:
         with store.tx(*tables, actor=actor, note="concept_upsert") as tx:
+            from . import secretary as _SEC   # 惰性：与 `_concept_secretary` 同一条理由
+            gate = _SEC.concept_identity_gate(tx, label=name, full=definition)
+            if not gate.get("checked"):
+                return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
+                        "reason": str(gate.get("reason") or "")}
             sid = str(stmt_id or "").strip() or tx.alloc_id(S.TABLES["statements"]["id_kind"])
             write_concept(tx, stmt_id=sid, label=name, definition=definition, aliases=aliases,
                           source_lit_id=source_lit_id, proof_text=proof_text, doc_id=doc_id,

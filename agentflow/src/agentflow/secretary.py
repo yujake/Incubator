@@ -13448,6 +13448,41 @@ def for_role_wired(role: str, *, root: str | Path, seam: Any = None,
     return sec
 
 
+def concept_identity_gate(tx: Any, *, label: str, full: str = "",
+                          exclude_id: str = "") -> dict[str, Any]:
+    """写一条新概念行之前先过这一闸（在发号之前调）：不写盘，只回判词。
+
+    ## 为什么需要这一处（2026-11-08，D2 的后门）
+    `Secretary.write_concept_row` 会算概念同一性，但它的调用方（`conceptrows.upsert` /
+    `agent_b/run_once.resolve_concept`）在调用它之前就已经把号发出去了；于是"判不了
+    就拒"落在那一层只会留下 `id_gap`（分配了 ID 但未建成行），而"放过"又等于概念轴
+    有个后门。正确形状是"先判后分号"，而判据本体只该有一处 —— 这一格就是给调用方在
+    `tx.alloc_id(...)` 之前调的那个口。
+
+    ## 返回
+    `{"checked", "state", "basis", "reason", "candidates"}`，与
+    `Secretary._same_concept_candidate` 同源（唯一的 `same_concept` 调用点）：
+
+    - `checked=True` + `state="same"`：在册已有同一个概念（`candidates` 点名）——
+      调用方按 D2 并进那一行，不新建；
+    - `checked=True` + `state="different"`：判过了、不同（含"在册 0 条可比行"）⇒
+      照常发号新建；
+    - `checked=False`：没判成 ⇒ 调用方受控拒（`concept_identity_unjudged`），
+      一个号都不发。
+
+    概念这一档是确定性判据、零模型调用，所以现造一名无缝秘书是对的（缝与本判据无关）。
+    """
+    store = getattr(tx, "_store", None)
+    root = str(getattr(store, "root", "") or "")
+    sec = Secretary("B", root=Path(root) if root else Path("."), store=store,
+                    seam=None, enable_model=False)
+    got = sec._same_concept_candidate(tx, label=str(label or ""),
+                                      full=str(full or ""),
+                                      exclude_id=str(exclude_id or ""))
+    return {key: got.get(key) for key in
+            ("checked", "state", "basis", "reason", "candidates")}
+
+
 def _now_iso() -> str:
     return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
 

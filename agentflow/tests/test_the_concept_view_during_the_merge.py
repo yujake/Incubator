@@ -245,7 +245,7 @@ def test_a_leftover_file_is_named_and_not_merged(store):
     视图读数里的 `reason`），而"不许合"这一条同样要判：把残留行折进视图会让
     "还有一份没搬"读成"已经搬完了"。
     """
-    out = CR.upsert(store, label="谱", definition="矩阵的谱")
+    out = CR.upsert(store, label="谱集合", definition="矩阵的谱")
     _stale_concepts_file(store, cid="0007", name="还没搬完的老概念")
 
     state = CR.legacy_present(store)

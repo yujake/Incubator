@@ -291,6 +291,22 @@ class _RunOnce:
                     return ""
                 # 概念号与命题号是同一个号空间（业主 D2「同表同分配器不可能撞号」）
                 # ⇒ 这里从 `stmt` 发号；落刀之后 `concept` 这一档连计数器都没有了。
+                #
+                # 2026-11-08（D2 后门）：先判同一性、再发号。`conceptrows.upsert`
+                # 那条老路的判词在发号之后，判不了只能放过（后门）或留 `id_gap`；
+                # 这里在 `alloc_id` 之前过同一个闸（唯一判据 `same_concept`），
+                # 没判成 ⇒ 这一条概念受控拒、不占号（关系那一段据此跳过它）。
+                from ..secretary import concept_identity_gate as _concept_gate
+                _gate = _concept_gate(tx, label=name, full=definition)
+                if not _gate.get("checked"):
+                    res.concepts_refused += 1
+                    res.details.append({
+                        "lit_id": lit_id, "stage": "concept_identity",
+                        "refused": str(name),
+                        "refused_code": "concept_identity_unjudged",
+                        "why": str(_gate.get("reason") or ""),
+                    })
+                    return ""
                 cid = tx.alloc_id("stmt")
                 row = S.Concept(
                     concept_id=cid,
