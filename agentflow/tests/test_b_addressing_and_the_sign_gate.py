@@ -125,6 +125,13 @@ class _CountingSeam:
             prompt_version = "t"
             prompt_sha256 = "0" * 64
 
+        if str(note).endswith("proposition_identity"):
+            # 2026-11-08：判定只有两档；这一条夹具测的是寻址（不该有候选），
+            # 所以给一个合法的 different（旧夹具给的是「签发」—— 那是词表外的结论，
+            # 现在按"没判成"受控拒，会把这一条判据挡在寻址之前）。
+            return ({"decision": "different", "same_as": "", "canonical_name": "",
+                     "route": "", "condition": "", "conclusion": "",
+                     "reason": "夹具：没有候选 ⇒ 不同", "basis": []}, _Call())
         return {"decision": "签发", "reason": "夹具", "basis": ["夹具"]}, _Call()
 
 

@@ -105,6 +105,11 @@ class _IdentitySeam:
         from test_b_signed_proof_must_be_registered import _Call
 
         self.calls.append(str(note or ""))
+        if str(note or "").endswith("statement_keywords"):
+            # 2026-11-08（主动查询）：秘书先挑词、再检索；这几个词命中在册那一行
+            # （它的 label / 正文里都有「一致连续」）。
+            return ({"keywords": ["一致连续"],
+                     "why": "打桩：这个数学词能把在册那一条捞出来"}, _Call())
         if not str(note or "").endswith("proposition_identity"):
             return {}, _Call()
         text = str(prompt or "")
