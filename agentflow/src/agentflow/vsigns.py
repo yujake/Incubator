@@ -1066,16 +1066,21 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
       且第 3 位为真（`evidencebits.reviewed_by_proof` 的逐份表优先，回退 `reviewed`）。
       `status=abandoned` + 可解析放弃标记 ⇒ `filed=False, abandoned=True`（明确不收录）。
 
-    ## `state`（受控词表）
+    ## `state`（受控词表 —— 两格四态其实是**六档**，2026-11-08 收口）
 
     | 值 | 判据 |
     |---|---|
     | `filed` | 稿上已签（或已签过）且册里这一份正文 + 第 3 位都对上 |
-    | `signed_pending_filing` | 稿上已签、册里还没有这一份（新中间态） |
-    | `signed_stale_in_ledger` | 稿上签了新版，而册里那一份正文是旧版（签还在，等 B 收录新版） |
+    | `signed_pending_filing` | 稿上已签、册里**没有任何证明行**（新命题收录前 `proof_text=""`），或册里有盖住这一份正文的行但第 3 位没翻 ⇒ 等 B 收录 |
+    | `signed_stale_in_ledger` | 稿上已签，而册里**有证明行、但没有一条盖住这一份正文**（册里是旧版）⇒ 签还在，等 B 收录新版；`statement.current_proof_no` / `current_proof_sha256` 给出册里**现行**那一版 |
     | `unsigned` | 稿上没签、册里也没有 → 真的没有签 |
     | `abandoned` | 明确放弃（义务作废，不是"收录了"） |
     | `unreadable` | 稿或册读不成 / 没给 store（这一格没查成，不折成"没签"） |
+
+    `signed_pending_filing` 与 `signed_stale_in_ledger` 必须分开：改前把
+    `matched_no == 0` 一律归 `stale`（"册里没有任何证明行"与"册里是旧版"折成一档）⇒
+    真实新命题（B 收录前，行上 `proof_text=""`）永远读不到 `signed_pending_filing`。
+    现在按**册里有没有带正文的证明行**分，stale 档另给册里现行那一版的号与 sha。
 
     三态纪律：`filed` 为 `None` = 没查成（不是"没收录"）；此时 `state` 落 `unreadable`。
     """
@@ -1128,7 +1133,8 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     stmt: dict[str, Any] = {"found": row is not None, "stmt_id": sid}
     out["statement"] = stmt
     if row is None:
-        stmt.update(reviewed=False, proof_no=0, grade="", proof_sha256="", status="")
+        stmt.update(reviewed=False, proof_no=0, grade="", proof_sha256="", status="",
+                    proof_rows=0, current_proof_no=0, current_proof_sha256="")
         out["filed"] = False
         out["state"] = ("signed_pending_filing" if out["manuscript_signed"]
                         else "unsigned")
@@ -1151,30 +1157,54 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     signed_now = body
     matched_no = 0
     matched_text = ""
-    for no, one in _VR.proof_list(row):
+    proofs = _VR.proof_list(row)
+    for no, one in proofs:
         if _VR.proof_sha(one) == signed_now:
             matched_no, matched_text = int(no), str(one)
             break
+    # 册里**现行**那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
+    # "册里是旧版"与"册里没有任何证明行"是两个问题，读数要能分开。
+    with_text = [(int(no), str(text)) for no, text in proofs if str(text or "").strip()]
+    current_no, current_text = with_text[-1] if with_text else (0, "")
     per = dict(_EB.reviewed_by_proof(row) or {})
     reviewed = bool(per.get(matched_no, per.get(str(matched_no), False))) if matched_no else False
     stmt.update(proof_no=matched_no,
                 proof_sha256=(_VR.proof_sha(matched_text) if matched_text else ""),
                 reviewed=reviewed,
-                grade=str((_EB.bits_from_row(row) or {}).get("grade") or ""))
+                grade=str((_EB.bits_from_row(row) or {}).get("grade") or ""),
+                #: 册里带正文的证明行数 / 现行那一版的号与正文 sha（2026-11-08 六档收口）：
+                #: `signed_stale_in_ledger` 与 `signed_pending_filing` 的分别就落在这几格上
+                #: （`proof_text=""` 的那条 #p1 不是一份证明 —— 它是"还没收录"）。
+                proof_rows=len(with_text),
+                current_proof_no=current_no,
+                current_proof_sha256=(_VR.proof_sha(current_text) if current_text else ""))
     out["filed"] = bool(matched_no and reviewed)
     if out["filed"]:
         out["state"] = "filed"
         out["why"] = (f"{sid}#p{matched_no} 已入台账：正文 sha 与签块相符、第 3 位为真")
         return out
     if out["manuscript_signed"]:
-        out["state"] = ("signed_stale_in_ledger" if not matched_no
-                        else "signed_pending_filing")
-        out["why"] = (
-            (f"稿上已签（{body[:12]}…），而册里没有盖住这一份正文的证明行 ⇒ "
-             "等 B 收录；这不是「签丢了」")
-            if not matched_no else
-            (f"稿上已签（{body[:12]}…），册里那一份的行还在、第 3 位没翻 ⇒ "
-             "等 B 收录；这不是「签丢了」"))
+        # ---- 六档里的两档：册里「没有证明行」与册里「是旧版」必须分开（2026-11-08）----
+        #
+        # 改前 `matched_no == 0` 一律归 `signed_stale_in_ledger` —— 于是"新命题、B 收录前
+        # 行上 `proof_text=""`"那一档永远读不到 `signed_pending_filing`（真实新命题也被
+        # 报成 stale）。判据只看**册里的证明行有没有正文**：
+        if not matched_no and not with_text:
+            out["state"] = "signed_pending_filing"
+            out["why"] = (f"稿上已签（{body[:12]}…），而册里没有任何证明行"
+                          "（`proof_text` 为空）⇒ 等 B 收录；这不是「签丢了」")
+        elif not matched_no:
+            _cur_sha = str(stmt.get("current_proof_sha256") or "")
+            out["state"] = "signed_stale_in_ledger"
+            out["why"] = (
+                f"稿上已签（{body[:12]}…），而册里 {len(with_text)} 条证明行没有一条盖住"
+                f"这一份正文 —— 册里现行是 #p{current_no}"
+                f"（正文 sha {_cur_sha[:12]}…）⇒ 签还在，等 B 收录新版；"
+                "这不是「签丢了」")
+        else:
+            out["state"] = "signed_pending_filing"
+            out["why"] = (f"稿上已签（{body[:12]}…），册里 #p{matched_no} 那一份的行在、"
+                          "第 3 位没翻 ⇒ 等 B 收录；这不是「签丢了」")
         return out
     out["state"] = "unsigned"
     out["why"] = (f"{sid} 稿上没签、册里这一份也没有第 3 位 "
