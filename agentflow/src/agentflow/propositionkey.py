@@ -9,8 +9,8 @@
 所以"这两条是不是同一个定理"的终判不在本模块：它在
 `secretary.Secretary.adjudicate_proposition`（一次模型调用，只回 same / different 两档；
 判不了 = 没判成 `checked=False`，按正文 sha256 缓存判成了的那两档）。候选也不再由本模块
-粗筛：**秘书自己挑数学关键词 → 代码按关键词在 `statements` 里检索（`label` /
-`statement_full` 归一后包含该词）→ 只把命中的那几条交给一次判定**
+粗筛：秘书自己挑数学关键词 → 代码按关键词在 `statements` 里检索（`label` /
+`statement_full` 归一后包含该词）→ 只把命中的那几条交给一次判定
 （`Secretary.pick_statement_keywords` / `_statements_matching_keywords`）。本模块在那一层
 的上游只做三件事：
 
