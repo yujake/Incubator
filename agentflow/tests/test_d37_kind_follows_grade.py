@@ -56,6 +56,19 @@ V 的签（第 3 位）与形式化通过（第 4 位）是两条并列的独立
   降成 `lemma` 会造出第二个等级口径（同一个 `bits` 两处读出两个档）。V 的签不是"能不能
   叫定理"的必要条件，它是第 3 位那条独立凭据；一条 Lean 真编译过的证明已经是定理。
 
+## 2026-11-08（缺陷③）：这一组的写侧负控为什么不再钉 `ok=false`
+
+`c94a8e8f` 把「收录回执」从"第 2 位这次翻真"那一支里解耦出来：**只要这一行真有一份
+正文**，`_attach_proofs` 就把这一笔落点的号与现算 sha 写到 `statements` 顶层
+（`proof_no` / `proof_sha256`），并且**它进写盘判据**（`out["proof_receipt"]` 非空 ⇒
+事务提交）。于是"同一条命题已在册、而这一行的回执还没写过"的那一笔不再整笔拒
+`duplicate_statement`：它真写了一格 ⇒ `ok=true` + `new_row=false`。
+
+这一组的四条负控要量的**不是**"这一笔写没写东西"，而是"这一笔有没有把 `kind` 抬上去
+（以及盘上的升档留痕有没有再动一次）"。所以判据钉在后者：`new_row=false`、
+`upgraded=false` + 拒码逐字、盘上 `kind` / `_kind_upgrade` / `_grade_recomputed` 逐字不变。
+拿 `ok` 当代理比这弱两层：拒收可能发生在写了一半之后，而"写了新行"也可能报 `ok=false`。
+
 ## 真机工作区不许碰
 
 本文件只碰 `tmp_path` 下的临时工作区。cube 那条老行按新口径读到什么是只读探针的
@@ -259,13 +272,21 @@ def test_criterion1_a_conjecture_without_a_signature_stays_a_conjecture(
 
     # 写侧负控：同一份内容再交一次、自称 proof_review（而台账里一次都没签）
     # ⇒ 一行都不许升，kind 仍是猜想，而且读数里留着"V 那一签还差"的原话。
+    #
+    # 2026-11-08（缺陷③，`c94a8e8f`）之后这一笔不再整笔拒收：这一行的收录回执
+    # （`proof_no` / `proof_sha256`）此前没写过，而回执是"只要这一行真有正文就写"
+    # 的那一格，它进了写盘判据 ⇒ `ok=true` 只代表"回执真写了一格"（`new_row=false`，
+    # 没有新行、没有升档）。判据因此钉在"升没升"上，不再拿 `ok` 当代理
+    # （理由逐字见模块 docstring 那一节）。
     again = _resubmit(store, evidence_kind="proof_review")
-    assert again.get("ok") is False, again
-    assert str(again.get("kind") or "") == "duplicate_statement", again
-    # 拒信那一格叫 `error`（`refusals.refuse` 的形状）：秘书留下的"还差 V 那一签"
-    # 必须转到这里来，不许折成一句"重复登记"。
-    assert "V" in str(again.get("error") or ""), (
-        "秘书/ B 的读数里没有说清'还差 V 那一签'：" + str(again.get("error")))
+    assert again.get("new_row") is False, again
+    # 升档没发生：请求的那一档被写入期闸按"没有能签住这份正文的台账"挡下（拒码逐字）。
+    assert again.get("upgraded") is False, again
+    assert str((again.get("upgrade_refused") or {}).get("refused") or "") == \
+        "proof_review_without_evidence", again
+    # 回执里"还差什么"的原话仍在：秘书留下的"还差 V 那一签"不许折成一句"重复登记"。
+    assert "V 的一签" in str(again.get("note") or ""), (
+        "秘书/ B 的读数里没有说清'还差 V 那一签'：" + str(again.get("note")))
     assert _row(store, sid)["kind"] == "conjecture", _row(store, sid)
 
 
@@ -313,18 +334,18 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     read = EB.kind_following_grade(before, root=store.root)
     assert read["state"] == "not_applicable" and read["kind"] == "theorem", read
 
-    # 同一份内容再交一次：名字已经到位 ⇒ 秘书查重后没有新东西可写。
+    # 同一份内容再交一次：名字已经到位 ⇒ 没有新行、也没有第二次升档。
     # 2026-11-05 起不再借这一笔"补档位"：等级是五元位现算的，历史列与判定无关。
+    # 2026-11-08（缺陷③）之后这一笔会写收录回执（回执不在盘上时它就是一次真写）
+    # ⇒ 判据钉"盘上那几格有没有动"，不钉 `ok`：升档留痕逐字相比（含 `at` / `basis`）。
     again = _resubmit(store)
-    assert again.get("ok") is False, again
-    assert str(again.get("kind") or "") == "duplicate_statement", again
+    assert again.get("new_row") is False, again
     assert str(again.get("stmt_id") or sid) == sid, again
     row = _row(store, sid)
     assert row["kind"] == "theorem", row
     assert row["evidence_kind"] == "cross_check", row
     trace = dict(row.get("_kind_upgrade") or {})
-    assert trace.get("from") == "conjecture" and trace.get("to") == "theorem", trace
-    assert sign_row in str(trace.get("basis") or ""), (sign_row, trace)
+    assert trace == trace0, (trace, trace0)
     # 幂等：回执只发生过一次（时间戳与依据一起没变），不是"每写一次重算一遍"。
     assert dict(row.get("_grade_recomputed") or {}) == recomputed, row
 
@@ -376,10 +397,12 @@ def test_criterion3b_a_failed_formal_does_not_lift_the_kind(store: Store) -> Non
     _formal_ledger_row(store, sid=sid, verified=False)
 
     synced = _resubmit(store)
-    # 第 4 位没有变化 ⇒ 这一笔什么都不写，落到"重复登记"那一档（不是"升了"）。
-    assert synced.get("ok") is False and str(synced.get("kind") or "") == \
-        "duplicate_statement", synced
+    # 第 4 位没有变化 ⇒ 这一笔不升档（回执那一格会写 —— 见模块 docstring：那不是"升了"）。
+    assert synced.get("new_row") is False, synced
+    assert synced.get("upgraded") is not True, synced
+    assert "kind_upgrade" not in synced, synced
     row = _row(store, sid)
+    assert not row.get("_kind_upgrade"), row
     assert str((row.get("bits") or {}).get("grade") or "") != "theorem", row
     assert str(row.get("kind") or "") == "conjecture", row
     read = EB.kind_following_grade(row, root=store.root)
@@ -407,6 +430,8 @@ def test_criterion4_deleting_the_signature_returns_it_to_conjecture(store: Store
     assert ledger.is_file() and ledger.read_text(encoding="utf-8").strip(), ledger
     named = _row(store, sid)
     assert named["kind"] == "theorem", named
+    trace_named = dict(named.get("_kind_upgrade") or {})
+    assert trace_named.get("to") == "theorem", trace_named
 
     # 删掉那一签（只删台账那一行；`bits.reviewed` 不动 —— 它就是"位说签过"的现场）。
     ledger.write_text("", encoding="utf-8")
@@ -424,9 +449,16 @@ def test_criterion4_deleting_the_signature_returns_it_to_conjecture(store: Store
     assert "V" in str(read["shortfall"]), read
 
     again = _resubmit(store, evidence_kind="proof_review")
-    assert again.get("ok") is False, again
-    # 名字不撤销（没有降档路径），但也不许再往上走一步：那一格逐字没变。
-    assert _row(store, sid)["kind"] == "theorem", _row(store, sid)
+    # 升档请求被写入期闸挡下（台账里已经没有那一签）：拒码逐字（回执那一格照写，
+    # 见模块 docstring —— 那是"这一笔真写了一格"，不是"升了"）。
+    assert str((again.get("upgrade_refused") or {}).get("refused") or "") == \
+        "proof_review_without_evidence", again
+    assert again.get("upgraded") is False, again
+    # 名字不撤销（没有降档路径），但也不许再往上走一步：升档留痕逐字没变（含 at）。
+    after = _row(store, sid)
+    assert after["kind"] == "theorem", after
+    assert dict(after.get("_kind_upgrade") or {}) == trace_named, (
+        after.get("_kind_upgrade"), trace_named)
 
 
 # ------------------------------------------------------------------ ⑤ 历史不追溯
