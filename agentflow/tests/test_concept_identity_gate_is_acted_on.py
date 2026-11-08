@@ -566,3 +566,86 @@ def test_c4_run_once_still_creates_a_different_concept(tmp_path: pathlib.Path) -
     assert len(rows) == 1, rows
     assert _counter(st) == 1, _counter(st)
     assert _identity_details(out) == [], _identity_details(out)
+
+
+# ============================================================ 入口 5：命题载荷里的概念清单
+# （`Secretary._record_statement_tx` 的 `concepts=` 那一支：B 交一条命题时顺带交概念草稿。
+#   它不在题面点名的四个入口里，但它同样在写之前发号 —— write_concept_row 收紧之后不先
+#   过闸就会"发了号不建行"（id_gap），所以这一处也必须先判后分号。）
+
+
+def _theorem_with_concepts(concepts: list[dict]) -> dict:
+    from agentflow import schema as S
+
+    return {"statement_full": "定理：对任意群 G，命题 ph 成立。",
+            "statement_text": "命题 ph 成立", "origin": "own_result",
+            "kind": "theorem", "doc_id": S.format_id(0),
+            "quote_reason": "我方自产命题，没有外部引文要比对",
+            "concepts": list(concepts)}
+
+
+def _own_concept(name: str, definition: str) -> dict:
+    return {"name": name, "definition": definition, "origin": "own_result",
+            "self_authored": True}
+
+
+def _stmts(st: Store) -> list[dict]:
+    return [dict(r) for r in st.rows("statements")]
+
+
+def test_a5_concepts_in_a_statement_payload_are_merged_without_a_burned_id(
+        tmp_path: pathlib.Path) -> None:
+    """a（入口 5）：命题载荷里的同义概念 ⇒ 并入、不落第二行、不发号。
+
+    改前（write_concept_row 收紧之后）红：`tx.alloc_id(concept_kind)` 先发号，
+    再进 write_concept_row 才发现是 same ⇒ 行没建、号已经发出去了（counters 多 1）。
+    """
+    st = _ws(tmp_path)
+    first = CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
+    sid = str(first.get("stmt_id") or "")
+    got = _secretary(st).record_statement(
+        _theorem_with_concepts([_own_concept(ALT_LABEL, REAL_DEF_2)]), role="B")
+    assert got.get("checked") is True and got.get("created") is True, got
+    assert len(_concept_rows(st)) == 1, [r.get("label") for r in _concept_rows(st)]
+    assert [r.get("stmt_id") for r in _stmts(st)] == ["000000", "000001"], _stmts(st)
+    assert _counter(st) == 2, _counter(st)
+    actions = list(got.get("concepts_identity") or [])
+    assert actions and actions[0].get("concept_action") == "merged", actions
+    assert str(actions[0].get("same_as") or "") == sid, actions
+    for key in ("checked", "state", "same_as", "reason"):
+        assert key in actions[0], actions[0]
+
+
+def test_b5_unjudged_concept_in_a_statement_payload_is_refused_without_a_burned_id(
+        tmp_path: pathlib.Path) -> None:
+    """b（入口 5）：判不了 ⇒ 那一条概念受控拒、0 新行、counters 不动（不烧号）。"""
+    st = _ws(tmp_path)
+    CR.upsert(st, label="群", definition="概念（群）：带运算的集合。")
+    got = _secretary(st).record_statement(
+        _theorem_with_concepts([_own_concept(UNJUDGEABLE_LABEL,
+                                             "设 Y 是一个拓扑空间。")]), role="B")
+    assert got.get("checked") is True and got.get("created") is True, got  # 命题照落
+    assert len(_concept_rows(st)) == 1, [r.get("label") for r in _concept_rows(st)]
+    assert [r.get("stmt_id") for r in _stmts(st)] == ["000000", "000001"], _stmts(st)
+    assert _counter(st) == 2, _counter(st)
+    refused = list(got.get("concepts_refused") or [])
+    assert refused and refused[0].get("name") == UNJUDGEABLE_LABEL, refused
+    assert refused[0].get("concept_action") == "refused", refused
+    assert refused[0].get("checked") is False and refused[0].get("state") == "", refused
+    assert str(refused[0].get("reason") or ""), refused
+
+
+def test_c5_a_different_concept_in_a_statement_payload_is_created(
+        tmp_path: pathlib.Path) -> None:
+    """c（正控，入口 5）：真不同 ⇒ 照常发号建那一行。"""
+    st = _ws(tmp_path)
+    got = _secretary(st).record_statement(
+        _theorem_with_concepts([_own_concept(REAL_LABEL, REAL_DEF_1)]), role="B")
+    assert got.get("checked") is True and got.get("created") is True, got
+    rows = _concept_rows(st)
+    assert len(rows) == 1 and rows[0].get("stmt_id") == "000001", rows
+    assert _counter(st) == 2, _counter(st)
+    actions = list(got.get("concepts_identity") or [])
+    assert actions and actions[0].get("concept_action") == "created", actions
+    for key in ("checked", "state", "same_as", "reason"):
+        assert key in actions[0], actions[0]

@@ -9310,6 +9310,7 @@ class Secretary:
             quota = CR.ConceptQuota()
             dropped_proof: list[str] = []
             refused_concepts: list[dict] = []
+            identity_actions: list[dict] = []
             for c in concepts:
                 name = str(c.get("name") or "")
                 if str(c.get("proof_text") or "").strip():
@@ -9325,10 +9326,32 @@ class Secretary:
                                    or (resolved_origin == "own_result"
                                        and not str(origin or "").strip())))
                 if problem:
-                    refused_concepts.append({"name": name, "why": problem})
+                    refused_concepts.append({"name": name, "why": problem,
+                                             "concept_action": "refused"})
+                    continue
+                # ---- 同一性闸（发号之前）：`write_concept_row` 收紧之后，先发号再判
+                # same / 判不了都会留下"号已发、行没建"的空洞（`verify` 的 `id_gap`）。
+                # 处置口径与四个入口同一处（`concept_identity_action` 唯一折算点）。
+                gate = concept_identity_gate(
+                    tx, label=name, full=str(c.get("definition") or ""))
+                act = concept_identity_action(gate)
+                if act["concept_action"] == "refused":
+                    refused_concepts.append({
+                        "name": name, "why": str(act.get("reason") or ""),
+                        "concept_action": "refused", "checked": False, "state": "",
+                        "same_as": "", "reason": str(act.get("reason") or "")})
+                    continue
+                if act["concept_action"] == "merged":
+                    identity_actions.append({
+                        "name": name, "concept_action": "merged",
+                        "same_as": str(act.get("same_as") or ""), "checked": True,
+                        "state": "same",
+                        "candidates": [str(x) for x in (act.get("candidates") or [])],
+                        "reason": str(act.get("reason") or "")})
                     continue
                 if not quota.admit(name):
-                    refused_concepts.append({"name": name, "why": quota.reading()["why"]})
+                    refused_concepts.append({"name": name, "why": quota.reading()["why"],
+                                             "concept_action": "refused"})
                     continue
                 # 与上面同一口径：老表还在的时候号空间的权威是 `concept`（两张表要同号，
                 # 而各自发号会让两边的号不连续 —— `verify` 的 `id_gap` 会报出来）
@@ -9346,12 +9369,19 @@ class Secretary:
                                    or (resolved_origin == "own_result"
                                        and not str(origin or "").strip())),
                     mirror=bool(legacy.get("present")))
+                identity_actions.append({
+                    "name": name, "concept_action": "created",
+                    "concept_id": cid, "same_as": "", "checked": True,
+                    "state": str(act.get("state") or "different"), "candidates": [],
+                    "reason": str(act.get("reason") or "")})
                 if str(crow_data.get("status") or "") == "pending_definition":
                     pending_concepts += 1
             if dropped_proof:
                 out["concept_proof_text_dropped"] = dropped_proof[:20]
             if refused_concepts:
                 out["concepts_refused"] = refused_concepts[:20]
+            if identity_actions:
+                out["concepts_identity"] = identity_actions[:20]
             out["concept_quota"] = quota.reading()
             dep_count = self._write_dep_steps(tx, steps, stmt_id=stmt_id, body=body)
             written.append("dependencies")
