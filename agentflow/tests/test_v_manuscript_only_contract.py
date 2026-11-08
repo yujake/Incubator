@@ -89,6 +89,10 @@ def test_prompt_and_read_proof_take_the_manuscript_not_the_ledger(
     assert full in prompt, "提示词里的命题正文不是手稿的 `## 命题`"
     assert "台账里的命题正文" not in prompt, "提示词里混进了 statements.statement_full"
     assert "手稿里的新证明" in prompt, "提示词里的证明不是手稿的 `## 证明`"
+    # 读 1：提示词里的"只读读数"只剩手稿事实 —— 台账的 kind/status/evidence_kind
+    # 一格都不许出现（改前 `_read_only_facts` 会把它们印进来）。
+    assert "kind=" not in prompt and "evidence_kind=" not in prompt, prompt
+    assert "手稿：" in prompt and "签块：" in prompt, prompt
 
     got = v.read_proof("000000")
     assert got["source"] == "manuscript", got
@@ -218,3 +222,84 @@ def test_citation_material_comes_from_the_manuscripts(tmp_path: pathlib.Path) ->
     assert "999999" not in json.dumps(got.get("citations"), ensure_ascii=False)
     assert got["citations"][0]["admissible"] is True, got["citations"][0]
     assert got["citations"][0]["manuscript"] == lemma_rel, got["citations"][0]
+
+
+def test_dependency_audit_admits_by_manuscript_sign_not_by_statements_bits(
+        tmp_path: pathlib.Path) -> None:
+    """读 3：依赖面审计的可引资格读被引命题的手稿签块，不读 statements 的等级位。
+
+    三档一条链（改前 V 读 statements.bits ⇒ 第一档会放行；改后必须按稿判）：
+    a. 册里那一条 write_verified=True（旧口径够格），而盘上没有它的手稿 ⇒ 有毛病；
+    b. 手稿在、但没有 V 签 ⇒ 仍然有毛病（等级不到门）；
+    c. 手稿上盖了签 ⇒ 放行（过依赖面这一关）。
+    """
+    from agentflow import conductor as CND
+
+    main = "000000"
+    lemma = "000002"
+    body = f"1. 由 stmt:{lemma} 得结论（依据：stmt:{lemma}）。"
+
+    def _scene(tag: str) -> tuple[Store, str, dict]:
+        st = _ws(tmp_path / tag)
+        _put(st, proof_text=body, statement_full="主命题（依赖面夹具）。")
+        rel = "reports/f-proof-000000.md"
+        path = pathlib.Path(st.root) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"# 证明手稿\n\n- 命题号：stmt:{main}\n\n## 命题\n\n主命题（依赖面夹具）。\n\n"
+            f"## 证明\n\n{body}\n\n"
+            + DS.render_dependency_section([
+                {"quote": "由引理得结论", "stmt_id": lemma, "step": "第 1 步",
+                 "path_group": 1}]),
+            encoding="utf-8")
+        seed_statement_row(
+            st, proof_text="1. 引理的证明。", statement_full="引理正文。",
+            statement_text="引理正文。", kind="theorem", label="引理",
+            origin="own_result", evidence_kind="proof",
+            bits=EB.bits_of(proof=True, proof_process="1. 引理的证明。",
+                            reviewed=True,
+                            reviewed_by={"verification_id": "v-000001"},
+                            kind="theorem"),
+            stmt_id=lemma)
+        v = AgentV(st, workspace_root=st.root, llm=_Seam())
+        with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                            parent_role="F"):
+            return st, rel, v.verify_proof(main, proof_manuscript=rel)
+
+    # a：册里够格、盘上没有手稿 ⇒ 有毛病（挡签的点名里写"盘上没有…手稿"）。
+    _st, _rel, got_a = _scene("no-manuscript")
+    assert got_a.get("verdict") == "有毛病", got_a
+    assert any((lemma in str(f.get("detail") or "") and "盘上没有" in str(f.get("detail") or ""))
+               for f in (got_a.get("findings") or [])), got_a.get("findings")
+
+    # b：手稿在、没有签 ⇒ 仍然有毛病（不是"在册就够格"）。
+    st, rel, _ = _scene("unsigned")
+    lemma_rel = "reports/f-proof-000002.md"
+    (pathlib.Path(st.root) / lemma_rel).write_text(
+        "# 引理手稿\n\n- 命题号：stmt:000002\n\n## 命题\n\n引理正文。\n\n"
+        "## 证明\n\n1. 引理的证明。\n\n" + DS.render_dependency_section([]),
+        encoding="utf-8")
+    v = AgentV(st, workspace_root=st.root, llm=_Seam())
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got_b = v.verify_proof("000000", proof_manuscript=rel)
+    assert got_b.get("verdict") == "有毛病", got_b
+    assert any((lemma in str(f.get("detail") or "") and "V 签" in str(f.get("detail") or ""))
+               for f in (got_b.get("findings") or [])), got_b.get("findings")
+
+    # c：手稿上盖了签 ⇒ 依赖面这一关放行（至少不再出现那条 error）。
+    raw = (pathlib.Path(st.root) / lemma_rel).read_text(encoding="utf-8")
+    (pathlib.Path(st.root) / lemma_rel).write_text(
+        VS.stamp_manuscript_sign(
+            raw, proof_sha=VR.proof_sha("1. 引理的证明。"), streak=3, need=3,
+            verdict="成立", signer="secretary:F", at="2026-11-08T00:00:00+08:00",
+            ledger="verifications/000002.jsonl#v-000001",
+            statement_id=lemma, manuscript_id=lemma),
+        encoding="utf-8")
+    v2 = AgentV(st, workspace_root=st.root, llm=_Seam())
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got_c = v2.verify_proof("000000", proof_manuscript=rel)
+    assert not [f for f in (got_c.get("findings") or [])
+                if str(f.get("stmt_id") or "") == lemma], got_c.get("findings")
+    assert got_c.get("verdict") == "成立", got_c
