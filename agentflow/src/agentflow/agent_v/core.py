@@ -1018,8 +1018,12 @@ class AgentV:
                 _exp_rows = list(self.store.rows("experiments"))
             except (StoreError, AttributeError, TypeError):
                 _exp_rows = []
-            _numeric = _ER.is_exhaustion_column(hit, _exp_rows,
-                                                manuscript=manuscript_rel)
+            # 2026-11-08（业主：V 不许拿数值证据代替自己的判定）：这一格只认「证明栏」
+            # （`statements.proof_text` 里有没有 ③「穷举论证」），不认手稿名 ——
+            # `reports/e-proof-*.md` 只说明这份稿是 E 的那一族，不说明这一条命题的证明栏
+            # 已经是数值证据。在册行还是"猜想、证明栏空着"时，V 要做的是按写成后的样子
+            # 逐行走查（要自己的判定缝），不是把这份稿交给机械七项会审。
+            _numeric = _ER.is_exhaustion_column(hit, _exp_rows)
             if manuscript_rel:
                 # 载体在手：正文以稿为准（穷举那一支的稿里 `## 证明` 就是证明栏）。
                 _ms = self._registered_manuscript_body(

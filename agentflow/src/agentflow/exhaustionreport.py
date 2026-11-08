@@ -1298,23 +1298,24 @@ def _finding(level: str, check: str, detail: str, step: int) -> dict[str, Any]:
 
 
 def is_exhaustion_column(statement: Mapping[str, Any],
-                         experiments: Sequence[Mapping[str, Any]] = (),
-                         *, manuscript: Any = "") -> bool:
+                         experiments: Sequence[Mapping[str, Any]] = ()) -> bool:
     """这条命题的证明栏是不是"穷举型证据"（2026-11-08：证明栏里有 ③ 穷举论证那段）。
 
     为什么不要求"台账里已经有一条 E 签的穷举证明"：那正是本判据要判的东西 ——
     报告没落地时台账里根本没有那条签名，而 V 仍然必须去看、并且报「看不出来（缺材料）」。
     程序路径不在证明栏里了（住 `experiments.code_path`），所以这里不再按"第 ① 段是
     `.lean`"排除形式化：F 的散文证明没有「穷举论证」那一段，`parse_proof_column` 的
-    `numeric` 就是 False。`manuscript` 给的是 `reports/e-proof-<号>.md` 时也算这一档
-    （V 走的是穷举会审那条路）。
+    `numeric` 就是 False。
+
+    只看「证明栏」（`statement["proof_text"]`），不看手稿名（2026-11-08 业主：「V 不许拿
+    数值证据代替自己的判定」）：`reports/e-proof-*.md` 只说明这份稿是 E 那一族，不说明
+    这条命题的证明栏已经是数值证据；在册行还空着证明栏时，V 要做的是逐行走查。这条判据
+    只决定"该不该走逐行走查"，不决定"V 签成立"（后者由判定缝与签发门判）。
     """
     from . import numericproof as NP
 
     text = str(_as_mapping(statement).get("proof_text") or "").strip()
-    if NP.parse_proof_column(text).get("numeric"):
-        return True
-    return bool(str(manuscript or "").strip()) and is_manuscript_relpath(manuscript)
+    return bool(NP.parse_proof_column(text).get("numeric"))
 
 
 def verdict_of(reviewed: Mapping[str, Any] | None) -> dict[str, Any]:
