@@ -311,5 +311,147 @@ def test_b_a_degraded_keyword_mode_no_longer_finds_the_registered_one(
     assert bad["found"] == "", bad
 
 
+# ===================================================== ⑤ D：已知成果（内容关键字）
+def _known_results_mask(rows) -> list[dict]:
+    """D 的「已知成果」视图：`origin=own_result` ∧ `status=active`（掩码由调用方给）。"""
+    return [r for r in rows
+            if str(r.get("origin") or "") == "own_result"
+            and str(r.get("status") or "") == "active"]
+
+
+def test_d_finds_known_results_by_content_keywords_on_its_own_mask(
+        tmp_path: pathlib.Path) -> None:
+    """只给内容词 ⇒ 在 D 的已知成果视图里取到那一条；视图外的行不进来。"""
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。",
+                       kind="theorem", origin="own_result")
+    seed_statement_row(st, stmt_id="0002", label="P 阶元（外来）",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。（摘自文献）",
+                       kind="theorem", origin="external_lit", source_lit_id="0001")
+    from agentflow.agent_d import AgentD
+
+    assert AgentD(st) is not None
+    rows, problem, _error = SL.rows_of(st)
+    assert problem == "", problem
+    assert len(rows) == 2, rows
+    mask = _known_results_mask(rows)
+    got = SL.by_keywords(rows=mask, keywords=["p 阶元"])
+    assert got["checked"] is True, got
+    assert [h["stmt_id"] for h in got["hits"]] == ["0001"], got
+
+
+def test_d_an_unreadable_ledger_is_not_a_missing_carried_sheet(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：取数口降级 ⇒ 携带单缺口读数「没查成」，不是「不缺」。"""
+    from agentflow.agent_d import AgentD
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。",
+                       kind="theorem", origin="own_result")
+    monkeypatch.setattr(SL, "rows_of", _unreadable_rows_of)
+    got = AgentD(st)._carried_missing_reading([])
+    assert got["checked"] is False, got
+    assert "读不出来" in got["reason"], got
+
+
+def test_d_a_degraded_keyword_mode_loses_the_known_result(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径二降级 ⇒ 已知成果视图里再也取不到那一条（0 命中）。"""
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。",
+                       kind="theorem", origin="own_result")
+    rows = st.rows("statements")
+    mask = _known_results_mask(rows)
+    assert SL.by_keywords(rows=mask, keywords=["p 阶元"])["hits_total"] == 1
+    monkeypatch.setattr(SL, "by_keywords", _degraded_keywords)
+    assert SL.by_keywords(rows=mask, keywords=["p 阶元"])["hits_total"] == 0
+
+
+# ===================================================== ⑤ F：按编号 + 掩码
+def _high_bits():
+    from agentflow import evidencebits as EB
+
+    return EB.bits_of(origin="own_result", proof=True, proof_process="夹具：一份证明",
+                      reviewed=True, reviewed_by={"by": "agent-V"}, kind="theorem")
+
+
+def test_f_reads_the_statement_by_number_alone(tmp_path: pathlib.Path) -> None:
+    """只给编号 ⇒ 取到台账那一行（读不到不据此判「没签」）。"""
+    from agentflow.agent_f import AgentF
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    assert AgentF(st)._statement_row("0001")["label"] == "A⇒B"
+
+
+def test_f_a_degraded_id_mode_returns_no_row(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径一降级 ⇒ 按号取不到那一行（空表，不是「没有这条」）。"""
+    from agentflow.agent_f import AgentF
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    monkeypatch.setattr(SL, "by_id", _degraded_id)
+    assert AgentF(st)._statement_row("0001") == {}
+
+
+def test_f_the_citable_mask_is_the_callers_and_blocks_the_below_grade(
+        tmp_path: pathlib.Path) -> None:
+    """F 的掩码读数：够等级的列进可引清单，不够的那条拿不到（掩码由 F 给，不是查口的阈值）。
+
+    `by_keywords` 里没有任何等级阈值：同一个关键字在「全表」上命中两条，
+    在 F 交给它的掩码上只剩够格的那一条。
+    """
+    from agentflow import depsection as _DS
+    from agentflow.agent_f import AgentF
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。",
+                       kind="theorem", evidence_kind="heuristic",
+                       proof_text="Proof. 一步。", bits=_high_bits())
+    seed_statement_row(st, stmt_id="0002", label="P 阶元（猜想）",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元？",
+                       kind="conjecture")
+    f = AgentF(st)
+    lines, ids, note = f.citable_statements()
+    assert ids == ["stmt:0001"], (lines, ids, note)
+    assert "1 条的等级低于" in note, note
+    rows, problem = f.statement_rows()
+    assert problem == "" and len(rows) == 2, (rows, problem)
+    mask = [r for r in rows
+            if str(r.get("stmt_id") or "") in _DS.citable_pool(rows)]
+    got = SL.by_keywords(rows=mask, keywords=["p 阶元"])
+    assert [h["stmt_id"] for h in got["hits"]] == ["0001"], got
+    # 同一个词在全表上两条都命中 ⇒ 「拿不到」是掩码挡的，不是词没命中。
+    all_hits = SL.by_keywords(rows=rows, keywords=["p 阶元"])
+    assert {h["stmt_id"] for h in all_hits["hits"]} == {"0001", "0002"}, all_hits
+    below = SL.by_keywords(rows=mask, keywords=["猜想"])
+    assert below["hits_total"] == 0, below
+
+
+def test_f_an_unreadable_ledger_is_not_no_citable_statements(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：取数口降级 ⇒ 可引清单读成「读不到」，不是「一条可引的都没有」。"""
+    from agentflow.agent_f import AgentF
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群，则 G 有 p 阶元。",
+                       kind="theorem", evidence_kind="heuristic",
+                       proof_text="Proof. 一步。", bits=_high_bits())
+    monkeypatch.setattr(SL, "rows_of", _unreadable_rows_of)
+    lines, ids, note = AgentF(st).citable_statements()
+    assert lines == [] and ids == [], (lines, ids)
+    assert "读不出来" in note, note
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

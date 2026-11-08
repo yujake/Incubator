@@ -1876,11 +1876,12 @@ class _Core:
         text = str(sg.get("text") or "").strip()
         full = (text + (f"；这一条的可检验形式：{sg.get('testable')}" if sg.get("testable") else "")
                 + ("；显式声明的前提：" + "／".join(assumptions) if assumptions else ""))
-        try:
-            existing = list(self.store.rows("statements"))
-        except Exception as exc:  # noqa: BLE001 - 读不到就当"没有可复用的"，但要说出来
+        # 取数走查口的唯一取数口；读不到就当"没有可复用的"，但要说出来（不当成 0 行）。
+        existing, problem, error = SL.rows_of(self.store)
+        if problem:
             existing = []
-            self._log(f"statements 读不到：{type(exc).__name__}: {exc}")
+            self._log(f"statements 读不到：{error.get('type') or '?'}: "
+                      f"{error.get('message') or problem}")
         existing_row: dict[str, Any] = {}
         exact_match = False
         #: 只在"同一条命题"这一层命中、但证明正文与盘上那一行不同（或那一行还没有正文）。

@@ -56,6 +56,7 @@ from pathlib import Path
 
 from .. import depsection as _DS
 from .. import manuscriptform as _MF
+from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里，本模块只转发
     carry_sign_block,
     ensure_statement_line,
@@ -82,10 +83,12 @@ class _Manuscript:
 
         绝不用 `[]` 冒充"台账里一条命题都没有" —— 那是两件事。
         """
-        try:
-            return [dict(r) for r in self.store.rows("statements")], ""
-        except Exception as exc:  # noqa: BLE001 - 读不到要如实说，不许折成空表
-            return [], f"{type(exc).__name__}: {exc}"
+        # 取数走查口的唯一取数口（三态：读不到 ≠ 台账里一条命题都没有）。
+        rows, problem, error = SL.rows_of(self.store)
+        if problem:
+            return [], (f"{error.get('type') or '?'}: "
+                        f"{error.get('message') or problem}")
+        return rows, ""
 
     def citable_statements(self) -> tuple[list[str], list[str], str]:
         """B 已收录、这一轮写证明时可读可引的命题 ⇒ `(提示词行, 可引 id, 说明)`。
@@ -414,13 +417,13 @@ class _Manuscript:
         # ≥ pre_theorem）；不在册 / 等级不够的号 ⇒ 这一笔写错了（F 读不到它），
         # 预览就报受控拒，拒信点名那个号。可引池只有一处定义（`citable_pool`），
         # 与提示词那份清单、B 的登记入口、V 的依赖面审计同源。
-        try:
-            stmt_rows = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 - 读不到就不许说"够格"
+        stmt_rows, problem, error = SL.rows_of(self.store)
+        if problem:
             out.update(refused=str(_DS.REFUSED_LEVEL_UNREADABLE),
                        reason=(f"预览要核每条来源的档位、并判正文的引用在不在可引池里，"
                                f"而 `statements` 读不出来"
-                               f"（{type(exc).__name__}: {exc}）⇒ 这次预览没查成"))
+                               f"（{error.get('type') or '?'}: "
+                               f"{error.get('message') or problem}）⇒ 这次预览没查成"))
             return out
         _code, _why = _DS.dependency_consistency_problem(
             text, known_ids=_DS.citable_pool(stmt_rows), statement_rows=stmt_rows)

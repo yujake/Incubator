@@ -502,10 +502,10 @@ class _WriteReport:
 
         from .. import depsection as _DS
 
-        try:
-            statements = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
-            return [], (f"（`statements` 这一趟读不出来：{type(exc).__name__}: {exc} ⇒ 这张携带单"
+        statements, problem, error = SL.rows_of(self.store)
+        if problem:
+            return [], (f"（`statements` 这一趟读不出来：{error.get('type') or '?'}: "
+                        f"{error.get('message') or problem} ⇒ 这张携带单"
                         "没有生成：那是「读不到」，不是「没有可携带的稿」。B 读它之前先让 D 重跑"
                         "一次 `write_report`。）")
         rows: list[dict] = []
@@ -652,11 +652,11 @@ class _WriteReport:
                     "reason": f"携带单上有 {len(rows)} 条（这一趟不缺）"}
         from .. import depsection as _DS
 
-        try:
-            statements = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有依赖"
+        statements, problem, error = SL.rows_of(self.store)
+        if problem:
             return {"carried_missing": False, "checked": False, "statement_ids": [],
-                    "reason": (f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                    "reason": (f"`statements` 读不出来（{error.get('type') or '?'}: "
+                               f"{error.get('message') or problem}）⇒ "
                                "这一趟判不出携带单缺不缺（那是「读不到」，不是「不缺」）")}
         # 号集合的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
         on_ledger = set(SL.index_by_id(statements))
