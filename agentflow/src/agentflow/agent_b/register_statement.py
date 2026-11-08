@@ -1599,40 +1599,62 @@ class _RegisterStatement:
         if store is None:
             return _refuse("secretary_unavailable",
                            "这一趟没有 store ⇒ 证据位写不进去（不许退回 B 自己写）")
+        # ---- 2026-11-08（业主：「B 实际只有台账的只读权限，B 的任何所谓写台账的路实际上
+        # 都由 B 的秘书洗过」）：这一笔不再由 B 开事务 —— 行变换交给秘书的
+        # `land_statement`（它开事务、读现行行、判"改了哪几格"、写盘）。
+        # `_transition` 拿到的 `found` 是事务内读的那一行：读—判—写仍在同一把锁里，
+        # 与收口前逐字同序（收口前那一段 `tx.find` / 重算五位 / `tx.upsert` 原样搬进闭包）。
+        sec = self._statement_secretary()
+        if sec is None:
+            return _refuse("secretary_unavailable",
+                           "这一趟没有秘书 ⇒ 证据位写不进去（不许退回 B 自己写）"
+                           + (f"；{self.secretary_problem}" if self.secretary_problem else ""))
+
+        def _transition(found: Any) -> dict:
+            if found is None:
+                return {"write": False,
+                        "result": _refuse("same_statement_missing",
+                                          f"要更新的 stmt:{sid} 不在 statements 里 ⇒ 整笔不写"
+                                          "（查到的那一行在写盘前消失了：不是静默新注册的理由）")}
+            current = dict(found)
+            merged = dict(current.get("bits") or {})
+            merged["numeric"] = "verified"
+            merged_ev = dict(merged.get("evidence") or {})
+            merged_ev["numeric"] = self._merge_numeric_evidence(
+                dict(merged_ev.get("numeric") or {}), green)
+            merged["evidence"] = merged_ev
+            merged_grade = _EB.derive_grade(merged, kind=str(current.get("kind") or ""))
+            merged["grade"] = merged_grade
+            merged["audited_badge"] = bool(merged.get("audited")) and merged_grade not in (
+                "conjecture", _EB.GRADE_NOT_APPLICABLE)
+            merged_problems = list(_EB.bits_shape_problems(
+                merged, kind=str(current.get("kind") or "")))
+            if merged_problems:
+                return {"write": False,
+                        "result": _refuse("bad_bits",
+                                          "写盘前按现行行重算的五位不合规 ⇒ 整笔不写："
+                                          + "；".join(merged_problems),
+                                          problems=merged_problems)}
+            current["bits"] = merged
+            return {"write": True, "row": current, "result": out}
+
         try:
-            with store.tx("statements", actor=str(getattr(self, "actor", "agent-B")
-                                                  or "agent-B"),
-                          note=f"agent_b.register_statement:numeric_evidence:{sid}") as tx:
-                got = tx.find("statements", stmt_id=sid)
-                if got is None:
-                    return _refuse("same_statement_missing",
-                                   f"要更新的 stmt:{sid} 不在 statements 里 ⇒ 整笔不写"
-                                   "（查到的那一行在写盘前消失了：不是静默新注册的理由）")
-                current = dict(got)
-                merged = dict(current.get("bits") or {})
-                merged["numeric"] = "verified"
-                merged_ev = dict(merged.get("evidence") or {})
-                merged_ev["numeric"] = self._merge_numeric_evidence(
-                    dict(merged_ev.get("numeric") or {}), green)
-                merged["evidence"] = merged_ev
-                merged_grade = _EB.derive_grade(merged, kind=str(current.get("kind") or ""))
-                merged["grade"] = merged_grade
-                merged["audited_badge"] = bool(merged.get("audited")) and merged_grade not in (
-                    "conjecture", _EB.GRADE_NOT_APPLICABLE)
-                merged_problems = list(_EB.bits_shape_problems(
-                    merged, kind=str(current.get("kind") or "")))
-                if merged_problems:
-                    return _refuse("bad_bits",
-                                   "写盘前按现行行重算的五位不合规 ⇒ 整笔不写："
-                                   + "；".join(merged_problems),
-                                   problems=merged_problems)
-                current["bits"] = merged
-                tx.upsert("statements", current,
-                          note=f"agent_b.register_statement:numeric_evidence:{sid}")
+            landed = sec.land_statement(
+                sid, _transition, op="numeric_evidence",
+                note=f"agent_b.register_statement:numeric_evidence:{sid}")
         except Exception as exc:  # noqa: BLE001 —— 写盘失败 = 没写成（不是写成了一半）
             return _refuse("numeric_evidence_write_failed",
                            f"证据位写盘失败（{type(exc).__name__}: {exc}）⇒ 整笔不写",
                            stmt_id=sid)
+        if not landed.get("checked"):
+            # 秘书那一层拒了（改的格越界 / 行不在 / 没有秘书）：它的拒码原样往上回。
+            return _refuse(str(landed.get("refused") or "numeric_evidence_write_failed"),
+                           str(landed.get("reason") or "秘书没写这一笔"), stmt_id=sid)
+        out = dict(landed.get("result") or out)
+        if not landed.get("written"):
+            # 这一笔没有要写的（收口前那一支是 `same_statement_missing` / `bad_bits`，
+            # 它们自带 `ok=false` 的拒信体）⇒ 原样回它，不许补一个"写成了"。
+            return out
         latest = next((dict(r) for r in self.store.rows("statements")
                        if str(r.get("stmt_id") or "") == sid), {})
         from .. import textutil as T
@@ -1825,19 +1847,30 @@ class _RegisterStatement:
         #: 第 4 位的台账（L 的 `record` 落的那张表）。在事务外先读好：它只被
         #: `_bits_with_formal` 用来算"这一位现在是什么"，不参与这一笔的内容判据。
         experiments = [dict(r) for r in store.rows("experiments")]
-        with store.tx("statements", actor=str(getattr(self, "actor", "agent-B") or "agent-B"),
-                      note=f"agent_b.register_statement:proofs:{stmt_id}") as tx:
-            found = tx.find("statements", stmt_id=stmt_id)
-            if found is None:
+        # ---- 2026-11-08（业主：「B 实际只有台账的只读权限，B 的任何所谓写台账的路实际上
+        # 都由 B 的秘书洗过」）：这一笔不再由 B 开事务 —— 行变换交给秘书的
+        # `land_statement`（它开事务、读现行行、判"改了哪几格"、写盘）。
+        # `_transition` 拿到的 `found_row` 是事务内读的那一行：下面的"读—判—写"仍在
+        # 同一把锁里，与收口前逐字同序（原先 `with store.tx` 里那一段原样搬进闭包）。
+        sec = self._statement_secretary()
+        if sec is None:
+            out["reason"] = ("这一趟没有秘书 ⇒ 证明清单 / 正文写不进去（写入侧是 B 的活，"
+                             "落盘归秘书：`Secretary.land_statement`；不许退回 B 自己写）"
+                             + (f"；{self.secretary_problem}" if self.secretary_problem else ""))
+            out["canonical_pending"] = bool(want)
+            return out
+
+        def _transition(found_row: Any) -> dict:
+            if found_row is None:
                 if nothing_to_attach:
                     # 这一笔本来就不带东西（只为第 4 位同步而来），行不在就没什么可同步：
                     # 不编一句"清单无处可挂"（那会把"没东西可挂"说成"挂失败了"）。
-                    return out
+                    return {"write": False, "result": out}
                 out["reason"] = (f"`statements` 里没有 {stmt_id} ⇒ 证明清单无处可挂"
                                  "（行没落成，清单也就没有落点）")
                 out["canonical_pending"] = bool(want)
-                return out
-            row = dict(found)
+                return {"write": False, "result": out}
+            row = dict(found_row)
             have_raw = str(row.get("proof_text") or "")
             have_canon = have_raw.strip()
             # 逐字比，不按去空白比：只改了首尾空白的稿也是一次改稿，静默不写会让
@@ -1943,7 +1976,7 @@ class _RegisterStatement:
                         "② 确实只是改稿、不是优化替换 ⇒ 仍要一份覆盖新正文的签"
                         "（改稿要重签是既有口径）。盘上正文一个字都没动"
                         "（`proof_text` 仍是旧那一份，`proof_history` 也没有多一条）。")
-                    return out
+                    return {"write": False, "result": out}
                 if have_canon:
                     # 旧正文先留痕，再换：顺序反了就会出现"新正文已落、旧正文已经丢了"
                     # 的窗口（事务失败时内存里那一份改动的可见性没法靠调用方保证）。
@@ -1997,7 +2030,7 @@ class _RegisterStatement:
                         "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
                         "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
                         "一并处置")
-                    return out
+                    return {"write": False, "result": out}
                 listed.append({"proof_no": no, "text": text,
                                "created_at": str(entry.get("created_at") or S.now_iso())})
                 out["attached"].append(no)
@@ -2111,13 +2144,22 @@ class _RegisterStatement:
             if (not out["attached"] and not canonical_changed and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
                     and not out["bits_synced"]):
-                return out
+                return {"write": False, "result": out}
             if out["attached"]:
                 row[_VR.PROOFS_KEY] = listed
-            tx.upsert("statements", row,
-                      note=f"agent_b.register_statement:proofs:{stmt_id}")
-            out["written"] = True
             out["canonical_written"] = bool(canonical_changed)
+            return {"write": True, "row": row, "result": out}
+
+        landed = sec.land_statement(
+            stmt_id, _transition, op="attach_proofs",
+            note=f"agent_b.register_statement:proofs:{stmt_id}")
+        if not landed.get("checked"):
+            # 秘书那一层拒了这一笔（行不在 / 改的格越界）：如实回拒，不许当写过了。
+            out["refused"] = str(landed.get("refused") or "statement_land_refused")
+            out["reason"] = str(landed.get("reason") or "")
+            return out
+        if landed.get("written"):
+            out["written"] = True
         return out
 
     @staticmethod

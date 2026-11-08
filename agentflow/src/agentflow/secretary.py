@@ -1870,6 +1870,41 @@ STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
 #: 也不在猜想白名单，而拒因说的是另一件事（去要 V 签）。这一格把"不是取值"说清。
 STATEMENT_META_KINDS: tuple[str, ...] = PROPOSITION_KINDS + NOT_APPLICABLE_KINDS
 
+#: 经 :meth:`Secretary.land_statement` 落盘的两类操作各自允许改哪几格（权限面，写死在这一层）。
+#:
+#: 为什么需要这一格（业主 2026-11-08，逐字：「我应该定过B实际只有台账的只读权限，B的任何
+#: 所谓写台账的路实际上都由B秘书洗过」）：B 的写侧还有两支自己开 `store.tx("statements")`
+#: 落行（追加证明 / 更新数值证据位），秘书那一层一个字都没过目。收口之后 B 只交"这一笔要
+#: 改成什么"，开事务、读现行行、判"改了哪几格"、写盘四件事都在秘书这一层；这张表是第三件
+#: 的判据：
+#:
+#: - `attach_proofs`：B 追加证明（`#p2` 及以后进 `proofs`）、换 canonical 正文（`proof_text`
+#:   ＋旧正文进 `proof_history`）、按签/形式化同步五元位与等级、按证据升 `kind`、写收录回执；
+#: - `numeric_evidence`：只动五元位（第 1 位 `numeric` ＋ 它的凭据流水 ＋ `grade`）。
+#:
+#: 不在表里的格一律改不动（`statement_patch_key_not_allowed`，一个字节都不写）：正文的真身
+#: `statement_full`、出处面（`source_lit_id` / `page_range` / `doc_id` / `line_range`）、
+#: 创建留痕（`stmt_id` / `created_at` / `created_by`）都在"改不动"那一侧。
+#:
+#: `proofs` / `_grade_recomputed` 这两格是 `verifications` 的键（`PROOFS_KEY` /
+#: `GRADE_RECOMPUTED_KEY`），`_kind_upgrade` 与 `verifications._kind_upgrade_from_signature`
+#: 写的是同一格；三处逐字同一套由 `tests/test_b_never_writes_statements_directly.py` 钉着
+#: （本文件不在 import 期读 `verifications` —— 它会反过来读本文件）。
+STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
+    "attach_proofs": (
+        "proof_text",           # #p1 的正文（canonical）
+        "proof_history",        # 被换掉的旧正文
+        "proofs",               # #p2 及以后的清单（`verifications.PROOFS_KEY`）
+        "bits",                 # 五元位（含认签表 / 优化态 / 形式化 / `grade`）
+        "kind",                 # 按证据升档（`evidencebits.kind_following_grade`）
+        "_kind_upgrade",        # 升档留痕
+        "proof_no",             # 收录回执（这一行现在是第几份证明）
+        "proof_sha256",         # 收录回执（这一份正文的指纹）
+        "_grade_recomputed",    # 按签重算等级的读数（`verifications.GRADE_RECOMPUTED_KEY`）
+    ),
+    "numeric_evidence": ("bits",),
+}
+
 #: 同一性按"定义项相同"判的那几档 kind（概念行没有条件 → 结论，命题那一套判据对它失效）。
 #:
 #: 为什么只有 `concept` 一档、不顺手带上 `definition`：这一档的判据是"标签（或正文里
@@ -7583,6 +7618,102 @@ class Secretary:
             out.update(checked=False, refused="write_failed",
                        reason=(f"改非正文格没成（{type(exc).__name__}: {exc}）"
                                " ⇒ 这一笔按'没写成'读"))
+            return out
+
+    def land_statement(self, stmt_id: str, transition: Any, *, op: str,
+                       note: str = "", role: str = "B") -> dict[str, Any]:
+        """在秘书的事务里落一次 `statements`：调用方只给"行变换"，写盘与"改了哪几格"的判据在这里。
+
+        ## 为什么需要这一条（业主 2026-11-08，逐字）
+        「我应该定过B实际只有台账的只读权限，B的任何所谓写台账的路实际上都由B秘书洗过」
+        ⇒ B 本体对 `statements` 只读：它的两支写侧（`_attach_proofs` / `_update_numeric_evidence`）
+        此前自己开 `store.tx("statements")` 落行，秘书那一层一个字都没过目。收口之后
+        B 只说"这一笔要改成什么"，四件事归这一层：开事务、读现行行、判"改了哪几格"、写盘。
+
+        ## 参数
+        - `transition(row_or_None) -> {"write": bool, "row": {...}, "result": <调用方读数>}`：
+          调用方用它拿到的事务内那一行算"这一笔要改成什么"（返回 `write=False` ⇒
+          一个字都不写；返回 `refused` + `reason` 也等价于不写）。传进来的 `row` 是
+          `tx.find` 读的，所以"读—判—写"仍在同一把锁里、与收口前逐字同序。
+        - `op`：`STATEMENT_LAND_OPS` 的键 —— 决定这一笔允许改哪几格。
+
+        ## 洗的是什么（不是空转的漏斗）
+        落盘前逐条核：`stmt_id` 那一行在不在、`transition` 要写的行是不是把允许之外的格
+        改了（越界 ⇒ `statement_patch_key_not_allowed`，一个字节都不写）。正文真身、出处面、
+        创建留痕都不在任何 `op` 的白名单里 ⇒ 这一条路改不动它们。
+
+        ## 三态（不折平）
+        | 结局 | 返回 |
+        |---|---|
+        | 写成了 | `checked=True` + `written=True` + `row` + `changed` + `result` |
+        | 调用方判定这一笔无内容 / 它自己拒了 | `checked=True` + `written=False` + `result` |
+        | 秘书这一层拒（越界 / 行不在 / 没有 store / 不是 B 的活） | `checked=False` + `refused` + `reason` |
+
+        ## 异常不吞
+        事务里的异常照旧往上抛：两个调用方各有自己的异常处置（`_update_numeric_evidence`
+        折 `numeric_evidence_write_failed`；`_attach_proofs` 一直是往上抛）。在这里吞掉会把
+        它们的拒码换成一个泛码 —— 那是把"哪一步没写成"抹平。
+        """
+        out: dict[str, Any] = {"checked": False, "written": False,
+                               "stmt_id": str(stmt_id or ""), "op": str(op or ""),
+                               "refused": "", "reason": "", "changed": [],
+                               "row": {}, "result": {}, "tables": []}
+        if self.store is None:
+            out.update(refused="secretary_unavailable",
+                       reason="这一名秘书没有 store ⇒ 命题行写不了（写入侧归秘书）")
+            return out
+        if str(role) not in STATEMENT_WRITER_ROLES:
+            out.update(refused="not_statement_writer",
+                       reason=(f"命题的写入侧是 B 的活（收到 role={role!r}）—— "
+                               f"只有 {STATEMENT_WRITER_ROLES} 能经这一格落命题行"))
+            return out
+        allowed = STATEMENT_LAND_OPS.get(str(op or ""))
+        if allowed is None:
+            out.update(refused="unknown_statement_land_op",
+                       reason=(f"`op={op!r}` 不在 {sorted(STATEMENT_LAND_OPS)} 里 ⇒ "
+                               "不知道这一笔允许改哪几格，整笔不写"))
+            return out
+        sid = str(stmt_id or "").strip()
+        with self.store.tx("statements", actor=f"secretary-{self.role}",
+                           note=note or f"secretary:land_statement:{op}") as tx:
+            found = tx.find("statements", stmt_id=sid)
+            got = dict(transition(dict(found) if found is not None else None) or {})
+            out["result"] = dict(got.get("result") or {})
+            if got.get("refused"):
+                out.update(checked=False, written=False,
+                           refused=str(got.get("refused") or "statement_land_refused"),
+                           reason=str(got.get("reason") or ""))
+                return out
+            if not got.get("write"):
+                out.update(checked=True, written=False,
+                           reason="这一笔没有要写的内容（调用方判定）⇒ 一个字节都没写")
+                return out
+            if found is None:
+                out.update(checked=False, refused="statement_missing",
+                           reason=(f"`statements` 里没有 {sid} ⇒ 这一笔没有落点"
+                                   "（行没落成，改也无处可改）：一个字节都没写"))
+                return out
+            base = dict(found)
+            row = dict(got.get("row") or {})
+            changed = sorted(k for k in (set(base) | set(row))
+                             if base.get(k) != row.get(k))
+            bad = [k for k in changed if k not in allowed]
+            if bad:
+                out.update(checked=False, refused="statement_patch_key_not_allowed",
+                           reason=(f"`{op}` 这一笔只许改 {list(allowed)}，而它改了 {bad} ⇒ "
+                                   "整笔不写（正文真身 / 出处面 / 创建留痕都不在任何一条"
+                                   "落盘白名单里）"))
+                return out
+            if not changed:
+                out.update(checked=True, written=False,
+                           reason=("这一笔要写的就是盘上这些值 ⇒ 一个字节都没写"
+                                   "（幂等：不是失败，也不是写成了）"))
+                return out
+            tx.upsert("statements", row,
+                      note=note or f"secretary:land_statement:{op}")
+            out.update(checked=True, written=True, found=True, row=dict(row),
+                       changed=changed, tables=["statements"],
+                       reason=("落了 " + "、".join(changed) + f"（`{op}`；由秘书写盘）"))
             return out
 
     def _with_relabel_reading(self, landed: Mapping[str, Any] | None,
