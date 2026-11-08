@@ -5683,6 +5683,135 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
     return out
 
 
+#: 登记动作在会话步里的工具名（三种写法都认：B 的正名与两个历史别名）。
+_REGISTER_ACTION_NAMES: tuple[str, ...] = (
+    "own.register_statement", "B.register_statement", "register_statement")
+
+
+def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]:
+    """① 「这一趟里命题同一性判定到底发生过几次」（业主 2026-11-08，sylow5 的根因）。
+
+    三个数一起读，缺一个就读不出"整条链是死的"：
+
+    1. `verdict_rows`：`out/secretary/proposition_verdicts.jsonl` 的行数（判定判成了
+       才会落这一本账，读侧唯一口 `secretary.proposition_verdict_rows`）；
+    2. `registration_actions`：有登记动作的次数。会话优先（`sessions/<sid>.jsonl` 里
+       `kind="agent_step"` 且工具名是 `register_statement` 的三条写法之一，含被拒的尝试）；
+       会话里一次都没有 ⇒ 退到工作区事件台账（`events.jsonl` 的 `note` 以
+       `record_statement` 开头）。读数里 `registration_scope` 写明是哪一档 ——
+       "这一趟"与"整个工作区"不许折成同一个数；
+    3. `seam_sources`：这一条判定用的哪条缝的分布（`statement_same.jsonl` 与 statements
+       行的 `_proposition_adjudication` 两处合读）。`seam_none` 单列 —— `none（…）` 就是
+       "装配处没接上"，不是"判过了"。
+
+    判定：`judged_zero = 有登记动作 ∧ 判定台账 0 行`；`seam_none > 0` 也算命中。
+    两者都由 `check_closing` 转成一条 warning（不是 blocker）：同类"接线 / 可见性"
+    读数（`statements_unoptimized` / `suspected_splits` / `proposition_form`）都是
+    readings + warning；而且裸秘书工作区（既有的那批判据）不该因为"没缝"就收不了工 ——
+    那是改门强度，不是加读数。三态：没有工作区根 / 台账读不出来 ⇒ `checked=False` +
+    `reason`（没查成不是"0 次判定"）。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "root_ok": False,
+        "verdict_path": "", "verdict_rows": 0,
+        "registration_actions": 0, "registration_scope": "unknown",
+        "registration_actions_session": 0, "registration_actions_workspace": 0,
+        "seam_sources": [], "seam_none": 0, "unjudged_attempts": 0,
+        "seam_scope": "workspace（statement_same.jsonl + statements 行；不按趟过滤）",
+        "judged_zero": False, "problems": [], "reason": "",
+    }
+    root = str(getattr(store, "root", "") or "")
+    if not root:
+        out["reason"] = "这一层没有工作区根 ⇒ 判定台账读不到（没查成）"
+        return out
+    from . import secretary as _SEC
+
+    try:
+        verdict_rows = _SEC.proposition_verdict_rows(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+        out["reason"] = f"命题判定台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    out["root_ok"] = True
+    out["checked"] = True
+    out["verdict_path"] = str(_SEC.proposition_verdicts_path(root))
+    out["verdict_rows"] = len(verdict_rows)
+
+    # ---- 登记动作：会话优先，退事件台账 ---------------------------------------
+    from . import sessions as SS
+
+    session_actions = 0
+    session_problems: list[str] = []
+    try:
+        events, session_problems = SS.read_session(root, sid=sid or None)
+        for one in events:
+            if str(one.get("kind") or "") != "agent_step":
+                continue
+            name = str((one.get("payload") or {}).get("name") or "")
+            if name in _REGISTER_ACTION_NAMES:
+                session_actions += 1
+    except Exception as exc:  # noqa: BLE001 —— 会话读不出来 ⇒ 退工作区，且留读数
+        session_problems = [f"会话读不出来（{type(exc).__name__}: {exc}）"]
+    workspace_actions = 0
+    try:
+        for one in store.read_events():
+            if str(one.get("note") or "").startswith("record_statement"):
+                workspace_actions += 1
+    except Exception as exc:  # noqa: BLE001
+        out["problems"].append(f"事件台账读不出来（{type(exc).__name__}: {exc}）")
+    out["registration_actions_session"] = session_actions
+    out["registration_actions_workspace"] = workspace_actions
+    if session_actions:
+        out["registration_actions"] = session_actions
+        out["registration_scope"] = "session"
+    elif workspace_actions:
+        out["registration_actions"] = workspace_actions
+        out["registration_scope"] = "workspace"
+    else:
+        out["registration_actions"] = 0
+        out["registration_scope"] = "session" if not session_problems else "unknown"
+    if session_problems:
+        out["problems"].extend(str(x) for x in session_problems[:3])
+
+    # ---- seam_source 分布：两本台账合读 --------------------------------------
+    counts: dict[str, int] = {}
+    unjudged = 0
+    try:
+        for one in _SEC.statement_same_rows(root):
+            source = str(one.get("seam_source") or "")
+            counts[source] = counts.get(source, 0) + 1
+            if not one.get("checked"):
+                unjudged += 1
+    except Exception as exc:  # noqa: BLE001
+        out["problems"].append(f"同一命题检索台账读不出来（{type(exc).__name__}: {exc}）")
+    try:
+        for one in store.rows("statements"):
+            adj = one.get("_proposition_adjudication")
+            if not isinstance(adj, Mapping):
+                continue
+            source = str(adj.get("seam_source") or "")
+            counts[source] = counts.get(source, 0) + 1
+            if not adj.get("checked"):
+                unjudged += 1
+    except Exception as exc:  # noqa: BLE001
+        out["problems"].append(f"statements 行读不出来（{type(exc).__name__}: {exc}）")
+    out["seam_sources"] = [
+        {"source": source or "（空：旧行没有这一格 / 裸造秘书没有 model_source）",
+         "count": count}
+        for source, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    out["seam_none"] = sum(count for source, count in counts.items()
+                           if source.startswith("none"))
+    out["unjudged_attempts"] = unjudged
+    out["judged_zero"] = (out["registration_actions"] >= 1 and out["verdict_rows"] == 0)
+    out["reason"] = (
+        f"查过了：登记动作 {out['registration_actions']} 次（{out['registration_scope']}）、"
+        f"判定台账 {out['verdict_rows']} 行、seam 读数 "
+        + ("、".join(f"{x['source']}×{x['count']}" for x in out["seam_sources"])
+           or "0 条")
+        + ("｜没判成的读数 " + str(out["unjudged_attempts"]) + " 条"
+           if out["unjudged_attempts"] else ""))
+    return out
+
+
 def proof_revisions_reading(store: Any) -> dict[str, Any]:
     """手稿登记 / 证明重写的逐命题读数（业主 2026-11-07 裁定：登记与写证明解耦）。
 
@@ -7371,6 +7500,37 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # 不动 `status` 与退出码 ⇒ 门的强度一格没改。
     rep.readings["proposition_form"] = _run_reading(
         rep, "proposition_form", proposition_form_reading, store)
+    # ---- ①「判定从未发生」那一格（业主 2026-11-08；warning，只说、仍不拦）-------
+    #
+    # 业主 2026-11-08 的现场：真机 sylow5 同一条定理被登记 2–3 次，而
+    # `out/secretary/proposition_verdicts.jsonl` 一次都没建出来 —— 判定整条链是死的，
+    # 会话里没有任何一格说"这一条判定根本没发生"。这一格把三个数摆在一起报：
+    # 判定台账行数 / 有登记动作的次数 / seam_source 分布（口径见
+    # `proposition_judgment_reading`）。
+    #
+    # 分级：warning（不是 blocker）。理由与同类格一致（`statements_unoptimized` /
+    # `suspected_splits` / `proposition_form` 都是 readings + warning）：blocker 留给
+    # "说了通过而证据不成立"；而且裸秘书工作区（既有的那批判据）不该因为"没缝"就收不了工
+    # —— 那是改门强度，不是加读数。要抬成 blocker 只改 level 一处，读数不动。
+    rep.readings["proposition_judgment"] = _run_reading(
+        rep, "proposition_judgment", proposition_judgment_reading, store, sid=sid or "")
+    _pj = rep.readings["proposition_judgment"]
+    if _pj.get("checked") and (_pj.get("judged_zero")
+                               or int(_pj.get("seam_none") or 0) > 0):
+        _why: list[str] = []
+        if _pj.get("judged_zero"):
+            _why.append(f"登记动作 {_pj.get('registration_actions')} 次"
+                        f"（{_pj.get('registration_scope')}）而判定台账 0 行")
+        if int(_pj.get("seam_none") or 0) > 0:
+            _why.append(f"seam_source=none 的读数 {_pj.get('seam_none')} 条")
+        rep.findings.append(Finding(
+            "proposition_judgment", "proposition_judgment_never_ran", "warning",
+            "命题同一性判定这一趟没有真正发生：" + "；".join(_why) + "。"
+            "真机 sylow5 的形态就是同一条定理被登记 2–3 次，而 "
+            "`out/secretary/proposition_verdicts.jsonl` 一次都没建出来 —— "
+            "去查秘书那一档的模型 key / 装配（`secretary.for_role_wired`），"
+            "以及 `out/secretary/statement_same.jsonl` 里的 seam_source。"
+            "这一格不拦门（接线 / 可见性读数是 warning）"))
     # ---- 手稿登记 / 证明重写那一格（业主 2026-11-07 裁定：登记与写证明解耦）--------
     #
     # 读的是 `reports/*proof-*.md` 头部的登记元信息（`proofregistry.proof_revisions`）：

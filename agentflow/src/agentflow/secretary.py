@@ -3495,6 +3495,7 @@ class Secretary:
         检索面多大由调用方按工程上限分批，不由这一问替它裁。
         """
         out: dict[str, Any] = {"checked": False, "keywords": [], "why": "",
+                               "seam_source": str(self.model_source or ""),
                                "ledger": {}, "role": str(self.role)}
         body = str(statement_full or "")
         if not body.strip():
@@ -3603,6 +3604,7 @@ class Secretary:
             "hits_total": int(got.get("hits_total") or 0),
             "hits_named": list(got.get("hits_named") or ()),
             "judged": bool(got.get("judged")),
+            "seam_source": str(got.get("seam_source") or ""),
             "ledger": {}, "role": str(self.role),
         }
         ids = [str(c.get("stmt_id") or "") for c in (candidates or ())
@@ -3628,7 +3630,9 @@ class Secretary:
                 keywords=list(keywords or ()), hits_total=int(hits_total or 0),
                 candidates=list(candidates or ()),
                 found=str(out.get("found") or ""), why=str(out.get("why") or ""),
-                label=label, kind=kind, role=str(self.role), task_id=task_id)
+                label=label, kind=kind,
+                seam_source=str(out.get("seam_source") or ""),
+                role=str(self.role), task_id=task_id)
         except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
             out["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -7305,6 +7309,7 @@ class Secretary:
                 hits_total=int(out.get("hits_total") or 0),
                 hits_named=list(out.get("hits_named") or ()),
                 judged=bool(out.get("judged")), why=str(out.get("why") or ""),
+                seam_source=str(out.get("seam_source") or ""),
                 role=str(self.role or ""), task_id=str(task_id or self.task_id or ""))
             self._proposition_verdicts[_proposition_verdict_key(full)] = dict(row)
             out["cached"] = True
@@ -7389,6 +7394,11 @@ class Secretary:
                 "basis": str(adj.get("basis") or ""),
                 "reason": str(adj.get("reason") or ""),
                 "reused": bool(adj.get("reused")),
+                # 这一条判定用的是哪条缝（2026-11-08，①）：`body（…）` / `secretary（…）` /
+                # `none（…）` / 空串（裸造）。收工读数按它数 `seam_source` 分布 ——
+                # "整条判定链是死的"（sylow5）必须在盘上读得出来，不能只在返回值里。
+                "seam_source": str(adj.get("seam_source") or ""),
+                "seam_attempted": bool(adj.get("attempted")),
                 "at": S.now_iso(),
             }
         return out
@@ -9566,7 +9576,7 @@ class Secretary:
         - `unjudged`：判定面没给出可用结论的那几份（`checked=False`）。它们不再
           静默跳过：调用方据此 fail-closed（整笔受控拒、不新增证明号）。改前把它们
           当成"不是同种"继续走 ⇒ "判不了当不同"，那正是同一种证法被并列记录的来路。
-          **空槽不算"判不了"**：`proof_list` 会把"canonical 那一格还没有正文"读成
+          空槽不算"判不了"：`proof_list` 会把"canonical 那一格还没有正文"读成
           一条空证明（`(1, "")`），那不是一份可比的证明，跳过它 —— 否则每一笔
           "在册行还没有证明、这一笔来补第一份"都会被受控拒（真机 R-mk-infinite-92
           的 5 条红就是它们）。
@@ -12842,7 +12852,7 @@ def append_statement_same(root: str | Path, *, stage: str, statement_full: str,
                           checked: bool, keywords: Sequence[str] = (),
                           hits_total: int = 0, candidates: Sequence[str] = (),
                           found: str = "", why: str = "", label: str = "",
-                          kind: str = "", role: str = "",
+                          kind: str = "", seam_source: str = "", role: str = "",
                           task_id: str = "") -> dict[str, Any]:
     """追加一行检索 / 判定读数（append-only；显式 LF，与形态台账同一口径）。
 
@@ -12859,6 +12869,7 @@ def append_statement_same(root: str | Path, *, stage: str, statement_full: str,
            "hits_total": int(hits_total or 0),
            "candidates": [str(x) for x in (candidates or ())][:50],
            "found": str(found or ""), "why": str(why or ""),
+           "seam_source": str(seam_source or ""),
            "label": str(label or ""), "kind": str(kind or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -12905,6 +12916,7 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
                                keywords: Sequence[str] = (), hits_total: int = 0,
                                hits_named: Sequence[Mapping[str, Any]] = (),
                                judged: bool = False, why: str = "",
+                               seam_source: str = "",
                                role: str = "", task_id: str = "") -> dict[str, Any]:
     """追加一行判定读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
@@ -12935,6 +12947,7 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
            "hits_named": [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
                           for x in (hits_named or ())],
            "judged": bool(judged), "why": str(why or ""),
+           "seam_source": str(seam_source or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）。
@@ -12967,6 +12980,31 @@ def proposition_verdict_of(root: str | Path, statement_full: str) -> dict[str, A
         if str(row.get("statement_sha256") or "") == key and str(row.get("verdict") or ""):
             last = dict(row)
     return last
+
+
+def proposition_verdict_rows(root: str | Path) -> list[dict[str, Any]]:
+    """命题同一性判定台账的全部行（读侧唯一口；没有文件 ⇒ 空列表）。
+
+    为什么要有这一格（2026-11-08，①）：收工读数要数"这一趟判定到底发生过几次"，
+    而"判定台账有几行"是唯一可靠的落盘读数。读法与 `proposition_form_rows` /
+    `statement_same_rows` 逐字同形：空行跳过、坏 JSON 跳过（读不出来由调用方的三态
+    读数报"没查成"，不许折成"0 次判定"）。
+    """
+    path = proposition_verdicts_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, Mapping):
+            out.append(dict(row))
+    return out
 
 
 # ---------------------------------------------------------------- 证明的路子说明
