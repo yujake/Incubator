@@ -909,12 +909,19 @@ def _verify_detect_verifier():
     # 写明 description 不带 returns），漏了实现真给的键，声明与实跑就分家
     # （`test_no_tool_returns_a_top_level_key_it_does_not_declare` 会红）。
     # 键清单从实现的真返回读出（`tests/test_tools_returns_declaration.py` 的探针那条路）。
+    # 2026-11-08（业主裁定「E 侧普通数值实验也需写报告」）：普通数值实验（非穷举）
+    # 也落一份 `reports/e-num-<实验号>.md`（命题 + 数值结果，不过 V），返回值再多三格 ——
+    # `numeric_manuscript`（D 提交「有数值实验支持的强猜想」时指的那一格，与
+    # `proof_manuscript` 不重名、不混用）/ `numeric_manuscript_sha256` /
+    # `numeric_manuscript_problems`。同样只加不减：没有这一段实验时三格是空串 / 空表，
+    # 键本身恒在；漏声明比少返回更危险（模型读 `returns` 认识不到这两份稿的区别）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
             "'code_hash','runtime_sec','notes',"
             "'signed_by','proof_authors','report_path','report_sha256','report_bytes',"
             "'report_blocks','report_problems',"
-            "'proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems'}"
+            "'proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems',"
+            "'numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
