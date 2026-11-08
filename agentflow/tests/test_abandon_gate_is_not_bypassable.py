@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import pathlib
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 
 import pytest
 from conftest import seed_statement_row, sign_before_registration
@@ -86,6 +87,18 @@ def _put(st: Store, sid: str = SID, *, kind: str = "theorem", label: str = "",
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
     return row
+
+
+def _just_after(stamp: str) -> str:
+    """比 `stamp` 晚一分钟的时刻（夹具时钟：放弃发生在引理真在册之后）。
+
+    `salvaged` 的判据是「这条引理在这笔放弃之前就在册」（按 `created_at` 判，
+    见 `statementabandon._registered_before`）。e 这一条里的引理是由「真登记路」
+    写进来的 ⇒ 它的 `created_at` 是墙钟。放弃时刻若写死成一个绝对日期，过了那一天，
+    一条真在册的引理就会被读成"现造"（`abandon_salvaged_after_the_abandonment`）——
+    所以这一格必须相对这一行算，不许写死。
+    """
+    return (datetime.fromisoformat(str(stamp)) + timedelta(minutes=1)).isoformat()
 
 
 def _verify(st: Store, sid: str = SID, *, verdict: str = "有毛病",
@@ -547,9 +560,12 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
     assert lemma["kind"] in SEC.PROPOSITION_KINDS, lemma
     # 正控：把它当 `salvaged`，放弃另一条命题 ⇒ 过闸（改前这里会 `abandon_salvaged_kind_not_lemma`）
     _put(st, "000099", kind="conjecture", label="要放弃的命题")
+    # 放弃时刻 = 这条引理真在册之后（相对它自己的 `created_at` 算；写死绝对日期会
+    # 在第二天把"刚登记的引理"读成"现造"）：
+    at = _just_after(str(lemma["created_at"]))
     with _judge_as(GENUINE):
         result = SA.apply_abandonment(
-            st, statement_id="000099", reason="理由", at=LATE,
+            st, statement_id="000099", reason="理由", at=at,
             abandon_basis=DIFF["abandon_basis"], difficulty=DIFF["difficulty"],
             abandon_kind="difficulty",
             salvaged=[{"label": lemma["label"], "stmt_id": lemma_id}],
