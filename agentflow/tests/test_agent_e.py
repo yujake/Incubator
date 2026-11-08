@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -213,10 +214,28 @@ def test_run_experiment_records_row_with_hash_and_exit_code(store):
     # 框架还多写两格 —— `e_signature`（签名与"够不够 proof"的判定）与
     # `exhaustion_report`（②③ 那份读数落没落盘的事实），与 `conclusion_source`
     # 同一性质：框架自己的读数，不是脚本自报的。所以它们也排除在"逐字不动"之外。
+    #
+    # 2026-11-08（业主裁定：E 的普通数值实验也落 `reports/e-num-<实验号>.md` 手稿）：
+    # 框架再写一格 `numeric_manuscript` —— 落盘事实（path / bytes / sha256 / ok /
+    # problems / experiment_id / at）。它同样不是脚本自报的读数，但不是"可以不看"的
+    # 那一类：D 提交「有数值实验支持的强猜想」时指的就是这一份。所以这里把它逐格钉住
+    # （改前只比脚本那两格 —— 框架多写一格，那个比较式看不见）。
     _framework_keys = {"conclusion_source", "e_signature", "exhaustion_report"}
-    assert {k: v for k, v in row["observations"].items() if k not in _framework_keys} == {
-        "grid": 64, "max_err": 1e-9}
-    assert row["observations"]["conclusion_source"] == "line", row["observations"]
+    _script_keys = {"grid", "max_err", "numeric_manuscript"}
+    obs = row["observations"]
+    assert set(obs) <= _framework_keys | _script_keys, obs
+    script = {k: v for k, v in obs.items() if k not in _framework_keys}
+    assert set(script) == _script_keys, obs
+    # 脚本自报的两格逐字不动（与改前同一个比较式，一个字节都没放宽）：
+    assert {k: script[k] for k in ("grid", "max_err")} == {"grid": 64, "max_err": 1e-9}
+    # 这一格必须真的在，且指的就是这一条实验的稿（落点按实验号定，判不了就红）：
+    num = script["numeric_manuscript"]
+    assert num["path"] == f"reports/e-num-{out['experiment_id']}.md", num
+    assert re.fullmatch(r"[0-9a-f]{64}", str(num["sha256"] or "")), num
+    assert num["ok"] is True and num["problems"] == [], num
+    assert num["sha256"] == hashlib.sha256(
+        (Path(store.root) / num["path"]).read_bytes()).hexdigest(), num
+    assert obs["conclusion_source"] == "line", obs
     # 签名这一格必须真的在（它决定"这条证据能不能叫 proof"）；非穷举的那一趟只能是
     # "有数值实验支持"，且签名里逐条写着缺什么。
     sig = row["observations"]["e_signature"]
