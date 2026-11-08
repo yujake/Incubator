@@ -4,7 +4,7 @@
 ## 审计探针 C（改前红）
 
 `agent_b/register_statement.py` 自建关键词检索（`_numeric_same_candidates`）并按 20 条
-分批；而判定那一侧 `_candidate_reading` **只把前 4 条交给模型**。探针 C 传 20 条
+分批；而判定那一侧 `_candidate_reading` 只把前 4 条交给模型。探针 C 传 20 条
 候选，模型只看到 4 条；第 5–20 条永不入眼却被记成"这批都不是"（模型点了第 20 条
 也会被接受 —— 它根本没看过那条的正文）。
 
@@ -163,7 +163,7 @@ def test_d_truncating_to_the_first_page_hides_the_twentieth(
 # ===================================================== e 反真空：B 不自建检索
 def test_e_b_hands_the_whole_trip_to_the_secretary(
         tmp_path: pathlib.Path, monkeypatch) -> None:
-    """e：B 的 `_resolve_same_statement` 调 `adjudicate_proposition` 且**不带候选表**。
+    """e：B 的 `_resolve_same_statement` 调 `adjudicate_proposition` 且不带候选表。
 
     若把 B 的自建检索恢复，它一定会先把候选检索好、再用 `candidates=` 递过去 ——
     这一条断言就是那个形态的负控。

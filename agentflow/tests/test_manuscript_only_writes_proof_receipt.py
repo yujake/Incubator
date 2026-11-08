@@ -5,7 +5,7 @@
 ## 走查读数（改前红）
 
 - 只给 `proof_manuscript`、`proof_text` 入参为空时：正文由 B 从稿里读，落进了
-  `statements.proof_text`，而顶层 `proof_no` / `proof_sha256` **一个字节都没写**
+  `statements.proof_text`，而顶层 `proof_no` / `proof_sha256` 一个字节都没写
   （盘上 null）；返回值与 `_grade_recomputed` 却说"第 1 份证明"。
 - `e-num` 通道：返回 `proof_no=1`，而这一行 `bits.proof=false`、`proof_text=""`
   ⇒ 没有证明却读出"第 1 份证明"。
@@ -145,7 +145,7 @@ def test_d_without_the_receipt_write_the_pointer_row_has_no_proof_number(
     """d：把回执那一笔摘掉 ⇒ a 的盘上两格又变空（a/b 的绿依赖它）。
 
     打桩点取"写盘前那一格"（`Secretary.land_statement`）：它把 `transition` 交来的
-    行原样写盘。这里把 `proof_no` / `proof_sha256` 从**要写的那一行**里拿掉 ——
+    行原样写盘。这里把 `proof_no` / `proof_sha256` 从要写的那一行里拿掉 ——
     正是改前"顶层不写"的形态；若 a/b 仍然绿，说明那两格不是这一笔写的。
     """
     import agentflow.secretary as SEC

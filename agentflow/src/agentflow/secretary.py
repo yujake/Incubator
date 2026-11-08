@@ -277,10 +277,10 @@ PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different")
 #: "同一条定理交了三遍"，没有这一层就是三笔钱买同一句话。
 PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
-#: 一次判定一页给几条候选（**分页的页大小，不是截断**）。
+#: 一次判定一页给几条候选（分页的页大小，不是截断）。
 #:
 #: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_statements_matching_keywords`）；
-#: 命中多于这个数时按页依次交给模型，**问到命中或页尽为止**（2026-11-08 缺陷 ②：
+#: 命中多于这个数时按页依次交给模型，问到命中或页尽为止（2026-11-08 缺陷 ②：
 #: 改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成"这批都不是"）。
 #: `pages_total` / `pages_judged` / `page_exhausted` / `candidates_total` 四个读数
 #: 把"看了几页 / 几个候选 / 是不是页尽"与判词一起摆出来。
@@ -7000,7 +7000,7 @@ class Secretary:
                            ) -> list[dict[str, Any]]:
         """一页命中候选 ⇒ 判定的上下文那一份（只留判定要看的格）。
 
-        2026-11-08（缺陷 ②）：这一格只是**一页**的成形器（页大小
+        2026-11-08（缺陷 ②）：这一格只是一页的成形器（页大小
         `PROPOSITION_VERDICT_CANDIDATES`）；分页在 `_identity_pages`，问到命中或页尽，
         不再把整批截到前 4 条。
         """
@@ -7037,10 +7037,10 @@ class Secretary:
         ## 检索读数（"它确实查过"必须看得见；2026-11-08）
         `keywords` / `hits_total`（命中几条）/ `hits_named`（这一趟交给模型看的全部候选，
         带每条命中的词）/ `judged`（判定那一趟发没发）/ `same_as` / `why`。
-        **分页读数（缺陷 ②）**：`candidates_total`（候选总数）/ `pages_total`（要问几页）/
+        分页读数（缺陷 ②）：`candidates_total`（候选总数）/ `pages_total`（要问几页）/
         `pages_judged`（真问了几页）/ `candidates_seen`（已经入眼几条）/
         `page_exhausted`（问完了还没命中）。候选按 `PROPOSITION_VERDICT_CANDIDATES`
-        分页，**问到命中或页尽**；改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成
+        分页，问到命中或页尽；改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成
         "这批都不是"。
         台账里 0 条可检索命题、或关键词 0 命中 ⇒ `checked=True` + `verdict="different"`
         （查过、没有同一条；0 命中仍发判定那一趟洗定理名，读数里 `candidates_total=0`、
@@ -7146,6 +7146,29 @@ class Secretary:
                                      full=full, label=label, kind=kind,
                                      task_id=task_id):
             return self._with_adjudication_visibility(out)
+        if self._judge_identity_pages(out, full=full, label=label, kind=kind,
+                                      note=note, task_id=task_id):
+            return self._with_adjudication_visibility(out)
+        if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
+            return self._with_adjudication_visibility(out)
+        if use_cache:
+            self._remember_proposition_verdict(out, full=full, label=label,
+                                               task_id=task_id)
+        return self._with_adjudication_visibility(out)
+
+    def _judge_identity_pages(self, out: dict[str, Any], *, full: str,
+                              label: str, kind: str, note: str,
+                              task_id: str) -> bool:
+        """按页判同一性（问到命中或页尽）；返回 True = 调用方应直接回读数。
+
+        2026-11-08 缺陷 ② 的实现从 `adjudicate_proposition` 拆出（只搬移）：分页、
+        命中收口、成员校验三段合起来 90 余行；拆出来之后那一格回到 200 行以内 ——
+        体量基线是读数，不许为了它抬（业主口径：拆函数，不抬基线）。
+
+        三件事与改前逐字同序：① 每页发一次判定（`judge`）；② 判 same 就在那一页
+        校验 `same_as` 是页内候选号（指不出号 ⇒ 没判成）；③ 判 different 继续下一页，
+        页尽时 `page_exhausted=True`。
+        """
         candidates_page = list(out["candidates"])
         pages = self._identity_pages(candidates_page)
         # ---- 检索读数（2026-11-08 缺陷 ②）：候选总数 / 页数 / 实际问了几页 / 是否页尽 ----
@@ -7179,7 +7202,7 @@ class Secretary:
             if not got.get("checked"):
                 out["checked"] = False
                 out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
-                return self._with_adjudication_visibility(out)
+                return True
             verdict = str(got.get("decision") or "")
             if verdict not in PROPOSITION_VERDICTS:
                 # `judge()` 已经按词表挡了一层；这里再挡一层是防"别的类别借这一格"：
@@ -7187,7 +7210,7 @@ class Secretary:
                 out.update(checked=False, verdict="",
                            reason=(f"模型给的结论 {verdict!r} 不在两档 "
                                    f"{list(PROPOSITION_VERDICTS)} 里 ⇒ 不采信：这一格没判成"))
-                return self._with_adjudication_visibility(out)
+                return True
             # 洗定理名与判同一趟（每一页的判词都带 `canonical_name` / `route`）：
             # 取"判成的那一页"—— 判 same 就在那一页收口，判 different 一直问到页尽。
             out["canonical_name"] = str(got.get("canonical_name") or "").strip()
@@ -7225,24 +7248,19 @@ class Secretary:
                                f"替它编一条依据（候选 {ids or '空'}）")
                     out.update(checked=False, verdict="", same_as="", reason=why,
                                basis="；".join(parts + [why]))
-                    return self._with_adjudication_visibility(out)
+                    return True
                 if normalized not in ids:
                     why = (f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
                            f" 不是候选表里的号（候选 {ids or '空'}）⇒ 没判成：凭一个指不出来的"
                            "号合并，等于替它编一条依据")
                     out.update(checked=False, verdict="", same_as="", reason=why,
                                basis="；".join(parts + [why]))
-                    return self._with_adjudication_visibility(out)
+                    return True
                 break
             # different：还有下一页就接着问；页尽就由下面那一格收口。
         out["page_exhausted"] = bool(out["verdict"] == _PK.STATE_DIFFERENT
                                      and out["pages_judged"] >= out["pages_total"])
-        if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
-            return self._with_adjudication_visibility(out)
-        if use_cache:
-            self._remember_proposition_verdict(out, full=full, label=label,
-                                               task_id=task_id)
-        return self._with_adjudication_visibility(out)
+        return False
 
     def _identity_context(self, *, full: str, label: str, kind: str,
                           candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -7312,7 +7330,7 @@ class Secretary:
     def _identity_pages(candidates: Sequence[Mapping[str, Any]],
                         page_size: int = PROPOSITION_VERDICT_CANDIDATES
                         ) -> list[list[dict[str, Any]]]:
-        """候选表 ⇒ 判定分页（**问到命中或页尽**；不是截断到第一页）。
+        """候选表 ⇒ 判定分页（问到命中或页尽；不是截断到第一页）。
 
         2026-11-08 缺陷 ②：改前 `_candidate_reading` 把命中截到前 4 条，第 5–N 条
         永不入眼却记成"这批都不是"。这一格是那条纪律的唯一实现：候选按页切开，

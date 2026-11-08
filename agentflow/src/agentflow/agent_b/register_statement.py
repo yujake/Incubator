@@ -908,7 +908,7 @@ def _caller_role() -> str:
 
 
 def _row_has_proof(row: Mapping | None) -> bool:
-    """这一行到底有没有一份**有正文**的证明（canonical 或 #pN 任一）。
+    """这一行到底有没有一份有正文的证明（canonical 或 #pN 任一）。
 
     为什么不能 `bool(proof_list(row))`：`proof_list` 对 canonical 空的行也可能给出
     一条 `(1, "")`（结构上有那一格、正文是空的）。e-num 普通数值档正是这个形态 ——
@@ -1215,7 +1215,7 @@ class _RegisterStatement:
     #
     # 检索只有一处实现：`Secretary.adjudicate_proposition`（秘书挑词 → 代码检索 → 判定）。
     # B 这一层不再自建关键词检索、也不再自己分批 —— 改前 `_numeric_same_candidates` 是
-    # 第二条检索路，而判定那一侧只把前 4 条交给模型 ⇒ 第 5–20 条**永不入眼**却记成
+    # 第二条检索路，而判定那一侧只把前 4 条交给模型 ⇒ 第 5–20 条永不入眼却记成
     # "这批都不是"。现在 B 只做两件事：
     #   ① 逐字相同这一档（确定性事实，免模型）在这里直接给 found；
     #   ② 其余一律交给秘书那一条路：它自己挑词、自己检索、按页问到命中或页尽，并把
@@ -1231,7 +1231,7 @@ class _RegisterStatement:
         ## 为什么 B 不再自己检索（2026-11-08 缺陷 ②）
         改前这一格自己按关键词扫 `statements`（`_numeric_same_candidates`）、再按 20 条
         分批把候选递给判定那一趟；而判定那一趟只把前 4 条交给模型 ⇒ 第 5–20 条
-        **永不入眼**却被记成"这批都不是"。业主的口径是「检索只是取候选，不参与判定」
+        永不入眼却被记成"这批都不是"。业主的口径是「检索只是取候选，不参与判定」
         ＋「只留一条检索路」：检索与判定同住 `Secretary.adjudicate_proposition`，它自己
         分页（页大小 = 一次能给几条的工程上限），问到命中或页尽为止。
 
@@ -1310,35 +1310,9 @@ class _RegisterStatement:
         exact = next((r for r in eligible
                       if T.normalize(str(r.get("statement_full") or "")) == key), None)
         if key and exact is not None:
-            sid = str(exact.get("stmt_id") or "")
-            out.update(checked=True, keyword_checked=True, hits_total=1, judged=False,
-                       hits_named=[{"stmt_id": sid, "hit_words": ["逐字相同"]}],
-                       candidates_total=1, pages_total=0, pages_judged=0,
-                       page_exhausted=True, found=sid,
-                       why=("候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；"
-                            "没调模型"))
-            out["_row"] = dict(exact)
-            out["adjudication"] = {
-                "checked": True, "attempted": False, "verdict": _PK.STATE_SAME,
-                "same_as": sid, "canonical_name": "", "route": "",
-                "basis": "规范化后逐字相同（确定性事实）",
-                "reason": str(out["why"]), "reused": False, "cached": False,
-                "statement_sha256": "", "seam_source": "",
-                "keywords": [], "hits_total": 1,
-                "hits_named": list(out["hits_named"]), "judged": False,
-                "candidates_total": 1, "pages_total": 0,
-                "pages_judged": 0, "page_exhausted": True,
-            }
-            if root:
-                try:
-                    out["judge_ledger"] = append_statement_same(
-                        root, stage="judge", statement_full=str(full or ""),
-                        checked=True, candidates=[sid], found=sid,
-                        why=str(out["why"]), label=label, kind=kind,
-                        role="B", task_id=task_id)
-                except Exception as exc:  # noqa: BLE001
-                    out["ledger_error"] = f"{type(exc).__name__}: {exc}"
-            return out
+            return self._same_statement_exact(
+                exact=exact, full=full, label=label, kind=kind,
+                task_id=task_id, root=root)
         sec = self._statement_secretary()
         if sec is None:
             out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
@@ -1423,6 +1397,53 @@ class _RegisterStatement:
                                 for h in out["hits_named"]],
                     found=out["found"], why=str(out["why"]), label=label,
                     kind=kind, role="B", task_id=task_id)
+            except Exception as exc:  # noqa: BLE001
+                out["ledger_error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    @staticmethod
+    def _same_statement_exact(*, exact: Mapping, full: str, label: str,
+                              kind: str, task_id: str, root: str) -> dict:
+        """逐字相同那一档：规范化后全等 ⇒ 直接 found，不调模型。
+
+        这不是第二条检索路：它不生成候选，只回答"同一段正文是不是已经在册"
+        （判据 c：模型调用 0 次）。2026-11-08 从 `_resolve_same_statement` 拆出
+        （只搬移）：那一格合起来 200 行出头 —— 体量基线是读数，不许为了它抬。
+        """
+        from .. import propositionkey as _PK
+        from ..secretary import append_statement_same
+
+        out: dict = {
+            "checked": True, "keyword_checked": True, "hits_total": 1, "judged": False,
+            "keywords": [], "hits_named": [], "found": "", "why": "",
+            "model_calls": 0, "problems": [], "refused": "",
+            "candidates_total": 1, "pages_total": 0, "pages_judged": 0,
+            "page_exhausted": True, "adjudication": {}, "_row": {},
+        }
+        sid = str(exact.get("stmt_id") or "")
+        out.update(
+            hits_named=[{"stmt_id": sid, "hit_words": ["逐字相同"]}], found=sid,
+            why=("候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；"
+                 "没调模型"))
+        out["_row"] = dict(exact)
+        out["adjudication"] = {
+            "checked": True, "attempted": False, "verdict": _PK.STATE_SAME,
+            "same_as": sid, "canonical_name": "", "route": "",
+            "basis": "规范化后逐字相同（确定性事实）",
+            "reason": str(out["why"]), "reused": False, "cached": False,
+            "statement_sha256": "", "seam_source": "",
+            "keywords": [], "hits_total": 1,
+            "hits_named": list(out["hits_named"]), "judged": False,
+            "candidates_total": 1, "pages_total": 0,
+            "pages_judged": 0, "page_exhausted": True,
+        }
+        if root:
+            try:
+                out["judge_ledger"] = append_statement_same(
+                    root, stage="judge", statement_full=str(full or ""),
+                    checked=True, candidates=[sid], found=sid,
+                    why=str(out["why"]), label=label, kind=kind,
+                    role="B", task_id=task_id)
             except Exception as exc:  # noqa: BLE001
                 out["ledger_error"] = f"{type(exc).__name__}: {exc}"
         return out
@@ -2049,11 +2070,11 @@ class _RegisterStatement:
                     out["proof_collected"] = True
             # ---- 收录回执（2026-11-08 缺陷 ③）：与"第 2 位这次翻没翻"解耦 -----------
             #
-            # 改前回执写在第 2 位翻真那一支里 ⇒ 一条**新建**的"命题 + 证明"
+            # 改前回执写在第 2 位翻真那一支里 ⇒ 一条新建的"命题 + 证明"
             # （`bits.proof` 一开始就为真、`_needs_proof` 为假）永远拿不到回执：
             # 返回值说第 1 份，而 `statements` 顶层的 `proof_no` / `proof_sha256`
             # 一个字节都没写（盘上读 null）。现在只要这一行真有一份正文，就把它的号
-            # 与**现算**的 sha 写到顶层；号只从这一笔的落点 `proof_no` 读，不猜。
+            # 与现算的 sha 写到顶层；号只从这一笔的落点 `proof_no` 读，不猜。
             # e-num 那一档 `_body_present` 为假 ⇒ 顶层不写 —— 没有证明就不许读出
             # "第 1 份证明"。
             if _body_present:
