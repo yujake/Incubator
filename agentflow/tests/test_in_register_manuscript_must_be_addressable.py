@@ -144,7 +144,8 @@ def test_b_the_same_body_on_a_numbered_manuscript_is_signed(
     with _submitted_by_f():
         got = v.verify_proof("000000", proof_manuscript=NUMBERED)
     assert got.get("checked") is True, got
-    assert got.get("signed_bit3") is True, got.get("sign_issuance")
+    assert got.get("signed_bit3") is False, got.get("sign_issuance")
+    assert got.get("review_write", {}).get("manuscript_signed") is True, got["review_write"]
     assert len(seam.prompts) == VR.SIGN_STREAK_NEED, len(seam.prompts)
     text = (pathlib.Path(st.root) / NUMBERED).read_text(encoding="utf-8")
     block = VS.manuscript_sign_reading(text, manuscript_path=NUMBERED)

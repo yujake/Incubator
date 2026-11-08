@@ -1051,9 +1051,9 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
 def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
                         proof_text: Any = "", statement_id: Any = "",
                         store: Any = None) -> dict[str, Any]:
-    """两格读数：**稿上已签** / **已入台账**（2026-11-08，业主「V 只对手稿负责」）。
+    """两格读数：稿上已签 / 已入台账（2026-11-08，业主「V 只对手稿负责」）。
 
-    为什么必须有这两格：V 不再写 `statements` 之后，会出现一个**新的中间态** ——
+    为什么必须有这两格：V 不再写 `statements` 之后，会出现一个新的中间态 ——
     「V 签了、签块与侧文件都在，而 B 还没收录」。若不把它读出来，读侧会把
     `statements.bits.reviewed=false` 当成"没签过"（看起来像签丢了）。
     两格分开判，第三格 `state` 把中间态命名出来。
@@ -1062,7 +1062,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
 
     - `manuscript_signed`：:func:`manuscript_sign_standing`（签块存在、`已签=true`、
       `连续>=need`、`正文sha` 与 `## 证明` 相符、第 9 格稿号与稿路径对得上）。
-    - `filed`：`statements` 里那一条命题的**这一份证明**的正文 sha 等于稿上被签的 sha，
+    - `filed`：`statements` 里那一条命题的这一份证明的正文 sha 等于稿上被签的 sha，
       且第 3 位为真（`evidencebits.reviewed_by_proof` 的逐份表优先，回退 `reviewed`）。
       `status=abandoned` + 可解析放弃标记 ⇒ `filed=False, abandoned=True`（明确不收录）。
 
@@ -1071,7 +1071,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     | 值 | 判据 |
     |---|---|
     | `filed` | 稿上已签（或已签过）且册里这一份正文 + 第 3 位都对上 |
-    | `signed_pending_filing` | 稿上已签、册里还没有这一份（**新中间态**） |
+    | `signed_pending_filing` | 稿上已签、册里还没有这一份（新中间态） |
     | `signed_stale_in_ledger` | 稿上签了新版，而册里那一份正文是旧版（签还在，等 B 收录新版） |
     | `unsigned` | 稿上没签、册里也没有 → 真的没有签 |
     | `abandoned` | 明确放弃（义务作废，不是"收录了"） |

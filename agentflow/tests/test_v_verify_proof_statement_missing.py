@@ -1,22 +1,26 @@
 # -*- coding: utf-8 -*-
-"""V 的 `verify_proof`：命题不在册时不许给 verdict（业主 2026-10-17 授权动禁改区后补）。
+"""V 的 `verify_proof`：载体是手稿，不是"命题在不在册"（2026-11-08 新契约）。
 
-## 现场（亲测抓到的缺口）
+## 旧契约与被替换的那一条
 
-```verify_proof("999999", "Proof. 一步。")     ← 命题 999999 不在册⇒ checked=True, verdict='有毛病', defect_step=1  ＋ 落了 verifications/999999.jsonl ```
+改前这一组钉的是「命题不在册 ⇒ `checked=False` + `kind='statement_missing'`」。那是
+「V 读 `statements` 才知道审谁」时代的判据。业主 2026-11-08 的口径是：
 
-它对证明文本的判定自洽（空步骤推不出命题），但"这个命题在不在册"没有任何一处说过⇒ 调用方读到的意思是"命题与证明都审过了"。这正是本仓最在意的那一类："没查成"被盖在 `checked=True` 底下。
+    「V现在只对手稿负责，不该看台账了」
 
-## 补法（按本模块既有纪律：`checked=False` ⇒ 不落台账行）
+⇒ V 不再知道、也不该声称"这条命题在不在册"。它要知道的是"有没有一份可审的手稿"：
+- 没有稿（只给内联正文 / 什么都没给）⇒ 受控拒 `proof_kind=proof_manuscript_required`，
+  没审、不落台账行；
+- 有稿 ⇒ 照常审（命题有没有被 B 收录是另一件事，由 B 收录时按正文 sha 认领）。
 
-命题不在册 ⇒ `checked=False` ＋ `kind='statement_missing'` ＋ 逐字说明"这是没审"，不落台账行（留一行会把"没查成"冒充成"审过了"）。
+## 这一组钉三件事
 
-这一组钉三件事：
-1. 命题不在册 ⇒ `checked is False`、`kind='statement_missing'`、没有 verdict、台账文件不存在；
-2. 负控：命题在册 ＋ 空证明 ⇒ 仍是 `checked=True` ＋ verdict（别把正常路径弄坏）；
-3. 命题在册时台账照写（留痕）。
+1. `999999` + 只给内联正文 ⇒ `checked=False`、`kind='proof_manuscript_required'`、
+   没有 verdict、台账文件不存在（这是"没查成"，不是"审过了"）；
+2. 负控：`999999`（不在册）+ 一份按号手稿 ⇒ 不走"不在册"那条路，而是进正常审校
+   （裸装配下如实回 `judge_not_wired`）—— V 不再因为"没登记"拒审一份稿；
+3. 在册命题 + 按号手稿 ⇒ 同样进正常审校（两条路径在"有没有稿"这一格上一致）。
 """
-
 from __future__ import annotations
 
 import pathlib
@@ -59,36 +63,53 @@ def _ledger_files(store: Store) -> list[str]:
     return sorted(p.name for p in d.glob("*")) if d.is_dir() else []
 
 
-def test_a_missing_statement_is_not_verified(tmp_path: pathlib.Path) -> None:
-    """正控：命题不在册 ⇒ 没审、无 verdict、台账不留行。"""
+def test_without_a_manuscript_there_is_no_review_even_for_an_unknown_id(
+        tmp_path: pathlib.Path) -> None:
+    """载体闸：`999999` + 只给内联正文 ⇒ 没审、无 verdict、台账不留行。
+
+    它不是"这条命题不在册"，而是"这一趟没有可审 / 可签的载体"。
+    """
     store = _ws(tmp_path)
     v = AgentV(store)
     out = v.verify_proof("999999", "Proof. 一步。")
     got = out if isinstance(out, dict) else out.to_dict()
     assert got.get("checked") is False, got
-    assert got.get("kind") == "statement_missing", got
+    assert got.get("kind") == "proof_manuscript_required", got
     assert not str(got.get("verdict") or "").strip(), f"不该给 verdict：{got}"
     assert _ledger_files(store) == [], "没审却落了台账行"
 
 
-def test_an_existing_statement_takes_the_normal_review_path(tmp_path: pathlib.Path) -> None:
-    """负控：命题在册 ⇒ 不走 `statement_missing`，而是进正常审校路径。
+def test_an_unregistered_manuscript_is_reviewed_like_any_other(
+        tmp_path: pathlib.Path) -> None:
+    """负控：`999999` 不在册，但给了一份按号手稿 ⇒ 正常审校路径，不是"不在册"。
 
-    裸装配（没接判定模型）下正常路径会如实回 `judge_not_wired`（"没判成"）⇒
-    这一条要钉的是两条路径分得开：在册命题不许被报成 `statement_missing`。
+    V 不再读册 ⇒ "没登记"不是拒信。裸装配（没有判定模型）下如实回 `judge_not_wired`
+    —— 那是"没判成"，不是"不在册"，也不是"审过了"。
     """
+    store = _ws(tmp_path)
+    v = AgentV(store)
+    rel = write_proof_manuscript(store.root, "999999", "Proof. 一步。",
+                                 statement_full="探针命题（不在册）")
+    out = v.verify_proof("999999", "Proof. 一步。", proof_manuscript=rel)
+    got = out if isinstance(out, dict) else out.to_dict()
+    assert got.get("kind") != "statement_missing", f"不在册又成了一封拒信：{got}"
+    assert str(got.get("reason") or "") != "statement_missing", got
+    assert got.get("reason") == "judge_not_wired", got
+    assert got.get("checked") is False, got
+    assert _ledger_files(store) == [], "没判成却落了台账行"
+
+
+def test_a_registered_statement_takes_the_same_review_path(tmp_path: pathlib.Path) -> None:
+    """在册 + 手稿 ⇒ 与上面那条同一条审校路径（"在不在册"不再分叉）。"""
     store = _ws(tmp_path)
     sid = _register_a_statement(store)
     assert sid, "没种出命题"
     v = AgentV(store)
-    # 2026-11-04（甲）：在册命题要带按号手稿；这一条量的是"在册 ⇒ 走正常审校路径"。
     rel = write_proof_manuscript(store.root, sid, "Proof. 一步。",
                                  statement_full="探针命题：若 n≥3 则无解（V 判据用）")
     out = v.verify_proof(sid, "Proof. 一步。", proof_manuscript=rel)
     got = out if isinstance(out, dict) else out.to_dict()
     assert got.get("kind") != "statement_missing", f"在册命题被误报成不在册：{got}"
-    assert str(got.get("reason") or "") != "statement_missing", got
-    # 裸装配下正常路径的读数（不接模型 ⇒ 如实说没判成，且不落台账行）
     assert got.get("reason") == "judge_not_wired", got
     assert got.get("checked") is False, got
     assert _ledger_files(store) == [], "没判成却落了台账行"

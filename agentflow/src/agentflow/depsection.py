@@ -1712,7 +1712,7 @@ def manuscript_uncitable_finding(
         where: str = "", line: int = 0, step: Any = None) -> dict[str, Any]:
     """`stmt:<sid>` 在"V 只读手稿"这一口径下为什么不可引 ⇒ 六格；空字典 = 可引。
 
-    可引判据与册子那一版**同一条政策**（`CITATION_MIN_LEVEL = "pre_theorem"`），
+    可引判据与册子那一版同一条政策（`CITATION_MIN_LEVEL = "pre_theorem"`），
     但证据来源换成手稿：被引命题必须有一份盘上的手稿（`reports/f-proof-<号>.md` 或
     `reports/b-proof-<号>.md`），而且那份稿的现在这一份正文上盖着一份 V 签
     （`vsigns.manuscript_sign_standing` 的 `signed`）。

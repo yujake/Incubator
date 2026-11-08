@@ -81,7 +81,11 @@ def test_1_missing_material_lands_no_pending_row_and_says_so(tmp_path: pathlib.P
     before = _pending_files(store)
     assert before == [], f"夹具前提：pending 台账一开始是空的（实际 {before}）"
 
-    got = AgentV(store, workspace_root=store.root).verify_proof(SID, proof_text=env["column"])
+    # 2026-11-08：V 只对手稿负责 ⇒ "未在册"由空命题号选支（不是"册里查不到"）。
+    # 载体同样是 E 的按号手稿（`reports/e-proof-<实验号>.md`）；报告被删掉 ⇒ 缺材料。
+    got = AgentV(store, workspace_root=store.root).verify_proof(
+        "", proof_text=env["column"],
+        proof_manuscript=ER.proof_manuscript_relpath(env["experiment_id"]))
 
     # ① pending 台账不新增行（这一条判据的原文）
     after = _pending_files(store)
@@ -126,7 +130,7 @@ def test_2_complete_material_is_reviewed_and_signed_without_a_statement_id(
     assert _pending_files(store) == []
 
     got = AgentV(store, workspace_root=store.root).verify_proof(
-        SID, proof_text=env["column"],
+        "", proof_text=env["column"],
         # 2026-11-04（业主裁定 甲）：E 的穷举证据要签，载体是 `reports/e-proof-<实验号>.md`
         # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。
         proof_manuscript=ER.proof_manuscript_relpath(env["experiment_id"]))

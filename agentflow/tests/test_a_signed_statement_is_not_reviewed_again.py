@@ -66,35 +66,43 @@ def _signed_agent(st):
 def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
     """签完之后的同一趟调用必须短接：不落新行、不问模型、不问秘书、读数说得出来。
 
-    夹具走真路：一次 `verify_proof` 自己连判三转 clean ⇒ 秘书发签 ⇒ 命题行第 3 位翻真
-    （这正是真机 v6–v8 那三行的来路）。之后的调用必须一眼停下 —— 改前它又连判三转
+    夹具走真路：一次 `verify_proof` 自己连判三转 clean ⇒ 秘书发签 ⇒ 签落在稿上
+    （侧文件 + 九格块）。之后的调用必须一眼停下 —— 改前它又连判三转
     （真机 v9–v12 就是这么来的，其中 v10 还被判成 fault，读侧把它当"要打回"）。
+
+    2026-11-08（V 只对手稿负责）：短接的判据从"命题行第 3 位"换成"稿上签块盖住这一份
+    正文"；命题行一个字节都不动（那是 B 收录时的活）。
     """
     st = T3._ws(tmp_path)
     T3._put(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
-    assert first["signed_bit3"] is True, first["sign_issuance"]
-    assert T3._stmt_row(st)["bits"]["reviewed"] is True, T3._stmt_row(st)["bits"]
+    with T3._as_submitter():
+        first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert first["signed_bit3"] is False, first["sign_issuance"]
+    assert first["review_write"].get("manuscript_signed") is True, first["review_write"]
+    assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
     signed_rows = T3._rows(st)
     assert len(signed_rows) == VR.SIGN_STREAK_NEED, signed_rows
     # 只量"签完之后"那几趟：把这一趟的调用读数清掉。
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    with T3._as_submitter():
+        again = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
     assert again["checked"] is True, again
-    assert again["signed_bit3"] is True, again
+    assert again["signed_bit3"] is False, again
+    assert again["review_write"].get("manuscript_signed") is True, again["review_write"]
     assert again["review_passes"] == [], (
         f"签过的命题又被连判了 {len(again['review_passes'])} 转：{again['review_passes']}")
     assert again["reason"] == "already_signed", again["reason"]
     assert again["proof_no"] == 1, again
     assert again["proof_sha256"] == VR.proof_sha(T3.PROOF), again
-    assert again["bits"]["reviewed"] is True, again["bits"]
+    assert again["bits"].get("reviewed") is not True, again["bits"]
 
     # 不给正文那一趟（读盘上那一份）也必须同样短接：M 派 V 时常走这一支。
-    without_text = agent.verify_proof(T3.SID, proof_manuscript=T3.REL)
+    with T3._as_submitter():
+        without_text = agent.verify_proof(T3.SID, proof_manuscript=T3.REL)
     assert without_text["checked"] is True, without_text
     assert without_text["review_passes"] == [], without_text["review_passes"]
     assert without_text["reason"] == "already_signed", without_text["reason"]
@@ -113,30 +121,35 @@ def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
     assert details == [], f"签过的命题仍然读出了要打回 F 的明细：{details}"
 
 
-# ============================================================ r2：负控（量的就是那个位）
+# ============================================================ r2：负控（量的就是稿上那一格）
 
-def test_r2_clearing_the_bit_lets_the_same_call_review_again(tmp_path):
-    """把 `bits.reviewed` 清成假 ⇒ 同一个调用照常审、照常落行（r1 量的就是那个位）。
+def test_r2_the_short_circuit_reads_the_manuscript_sign_not_the_statement_bit(tmp_path):
+    """负控：清掉命题位不重开审（签在稿上）；改掉稿的正文才会重开审。
 
-    负控的靶子是"恒短接"：若短接条件写成"这条命题有台账行就停"（或干脆恒停），
-    这一条会红 —— 位清掉了却仍然一行不落、一次不问。
+    2026-11-08 之后短接的判据是稿上签块盖住这一份正文，不是 `statements.bits`。
+    所以这一条从两头量：
+    - 把命题行的第 3 位清成假 ⇒ 同一份稿仍然短接（说明短接没在读命题行）；
+    - 把稿的 `## 证明` 改一个字（sha 变了）⇒ 照常审、照常落行、签落在新稿上。
+    靶子仍是"恒短接"：若短接写成"这条命题有台账行就停"（或干脆恒停），第二半会红。
     """
     st = T3._ws(tmp_path)
     T3._put(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
-    assert first["signed_bit3"] is True, first["sign_issuance"]
+    with T3._as_submitter():
+        first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert first["review_write"].get("manuscript_signed") is True, first["review_write"]
     rows_before = len(T3._rows(st))
     assert rows_before == VR.SIGN_STREAK_NEED, T3._rows(st)
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    # 直接把 statements 那一行的第 3 位清成假（走真事务；不改台账 —— 负控要量的就是这一位）。
-    # 等级按五元位现算（`normalize_raw`）：盘上的 `grade` 只是缓存，清位之后必须跟着现算值，
-    # 否则写入期闸会以"自报等级与现算不符"拒收 —— 那是另一条判据，不是这条负控要量的东西。
+    # 清命题行的第 3 位（走真事务）—— 稿上的签还在，短接必须照旧。
     cleared = copy.deepcopy(T3._stmt_row(st))
     cleared["bits"]["reviewed"] = False
+    ev = dict(cleared["bits"].get("evidence") or {})
+    ev.pop("reviewed_by_proof", None)
+    cleared["bits"]["evidence"] = ev
     cleared["bits"] = EB.normalize_raw(cleared["bits"],
                                        origin=str(cleared.get("origin") or "own_result"),
                                        kind=str(cleared.get("kind") or ""))
@@ -144,39 +157,49 @@ def test_r2_clearing_the_bit_lets_the_same_call_review_again(tmp_path):
         tx.upsert("statements", cleared)
     assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
 
-    again = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    with T3._as_submitter():
+        still = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert still["reason"] == "already_signed", (
+        "命题位清成假之后同一份稿却重开了审 ⇒ 短接读的不是稿上的签")
+    assert review.asked() == 0, review.asked()
 
+    # 第二半：改稿（正文 sha 变了）⇒ 必须重新审、重新落行、签落在新稿上。
+    changed = T3.PROOF + "\n3. 补上边界情形。"
+    T3._put(st, proof_text=changed)
+    with T3._as_submitter():
+        again = agent.verify_proof(T3.SID, proof_text=changed, proof_manuscript=T3.REL)
     passes = again["review_passes"] or []
     assert again["reason"] != "already_signed", (
-        "第 3 位已经是假，这一趟却仍然短接 ⇒ 短接量的不是那个位")
-    assert review.asked() >= 1, "位清成假之后一次模型都没问 ⇒ 这一条命题再也审不了了"
+        "正文 sha 已经变了，这一趟却仍然短接 ⇒ 短接没有看稿上那份签的 sha")
+    assert review.asked() >= 1, "改稿之后一次模型都没问 ⇒ 这一份再也审不了了"
     assert review.asked() == len(passes), (review.asked(), passes)
     assert len(T3._rows(st)) == rows_before + len(passes), (
-        f"位清成假之后审了 {len(passes)} 转，台账却从 {rows_before} 变成"
+        f"改稿之后审了 {len(passes)} 转，台账却从 {rows_before} 变成"
         f" {len(T3._rows(st))} 行")
     assert again["checked"] is True, again
-    # 这一趟审完又签上了（台账里前三次 clean 的票还在）⇒ 位回到真。
-    assert T3._stmt_row(st)["bits"]["reviewed"] is True, T3._stmt_row(st)["bits"]
+    assert again["review_write"].get("manuscript_signed") is True, again["review_write"]
+    assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
 
 
 # ============================================================ r3：历史行为不变
 def test_r3_an_unsigned_statement_still_reviews_three_times(tmp_path):
-    """未签的命题照旧一次判满三转（3 行、3 次模型调用、发签）—— 短接不许做宽。"""
+    """未签的命题照旧一次判满三转（3 行、3 次模型调用、签落在稿上）—— 短接不许做宽。"""
     st = T3._ws(tmp_path)
     T3._put(st)
     assert T3._stmt_row(st)["bits"]["reviewed"] is False, "夹具前提：这一行一次都没签过"
     agent, review, sec_seam = _signed_agent(st)
 
-    got = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    with T3._as_submitter():
+        got = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
 
     assert review.asked() == VR.SIGN_STREAK_NEED, (
         f"未签的命题只问了 {review.asked()} 次模型 ⇒ 短接做宽了（历史行为变了）")
     assert len(got["review_passes"] or []) == VR.SIGN_STREAK_NEED, got["review_passes"]
     assert len(T3._rows(st)) == VR.SIGN_STREAK_NEED, f"台账应当 3 行，实得 {len(T3._rows(st))}"
     assert got["reason"] != "already_signed", got["reason"]
-    assert got["signed_bit3"] is True, got["sign_issuance"]
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     assert (got["review_passes"] or [])[-1]["terminal"] == "signed", got["review_passes"]
-    assert T3._stmt_row(st)["bits"]["reviewed"] is True, T3._stmt_row(st)["bits"]
+    assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
 
 
 # ============================================================ r4：另一份证明不许借光
@@ -202,25 +225,27 @@ def _put_two_proofs(st):
 
 
 def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
-    """`#p1` 签过之后，`#p2` 不许短接（逐条表里 `#p2` 还是假）。
+    """`#p1` 签过之后，`#p2` 不许短接（short-circuit 读的是这份稿自己的签）。
 
-    这一条量的是"短接做宽"的第二种形态：按命题级汇总位（`bits.reviewed` 是
-    "任一份成立即为真"）短接，会替 `#p2` 借 `#p1` 的光 —— 一份一次都没审过的证明
-    被读成"已经签过"，那是比原缺陷更坏的一种假话（`evidencebits.reviewed_by_proof`
-    存在的理由就是这一条）。
+    这一条量的是"短接做宽"的第二种形态：按命题级汇总位（或按命题号找一份签）短接，
+    会替 `#p2` 借 `#p1` 的光 —— 一份一次都没审过的证明被读成"已经签过"。
+    2026-11-08 之后判据是这一份手稿上的签块盖住这一份正文：`#p2` 的稿上没有块 ⇒
+    照常审；两份都签上之后才短接。
     """
     st = T3._ws(tmp_path)
     proof_2 = _put_two_proofs(st)
     agent, review, sec_seam = _signed_agent(st)
 
-    first = agent.verify_proof(T3.SID, proof_no=1, proof_manuscript=T3.REL)
-    assert first["signed_bit3"] is True, first["sign_issuance"]
-    assert EB.reviewed_by_proof(T3._stmt_row(st)) == {1: True, 2: False}, (
-        EB.reviewed_by_proof(T3._stmt_row(st)))
+    with T3._as_submitter():
+        first = agent.verify_proof(T3.SID, proof_no=1, proof_manuscript=T3.REL)
+    assert first["review_write"].get("manuscript_signed") is True, first["review_write"]
+    assert T3._stmt_row(st)["bits"]["reviewed"] is False, T3._stmt_row(st)["bits"]
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    second = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=f"reports/f-proof-{T3.SID}-p2.md")
+    rel2 = f"reports/f-proof-{T3.SID}-p2.md"
+    with T3._as_submitter():
+        second = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=rel2)
 
     assert second["reason"] != "already_signed", (
         "#p2 一次都没审过，这一趟却短接了 ⇒ 短接读的是命题级汇总位（借了 #p1 的光）")
@@ -229,15 +254,14 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
     assert len(second["review_passes"] or []) == VR.SIGN_STREAK_NEED, second["review_passes"]
     assert second["proof_no"] == 2, second
     assert second["proof_sha256"] == VR.proof_sha(proof_2), second
-    assert second["signed_bit3"] is True, second["sign_issuance"]
-    assert EB.reviewed_by_proof(T3._stmt_row(st)) == {1: True, 2: True}, (
-        EB.reviewed_by_proof(T3._stmt_row(st)))
-    rows = T3._rows(st)
-    assert len(rows) == 2 * VR.SIGN_STREAK_NEED, f"台账应当 6 行，实得 {len(rows)}"
+    assert second["review_write"].get("manuscript_signed") is True, second["review_write"]
+    assert len(T3._rows(st)) == 2 * VR.SIGN_STREAK_NEED, (
+        f"台账应当 6 行，实得 {len(T3._rows(st))}")
 
     # 两份都签了之后，再问 #p2 才该短接。
     review.prompts.clear()
-    third = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=f"reports/f-proof-{T3.SID}-p2.md")
+    with T3._as_submitter():
+        third = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=rel2)
     assert third["reason"] == "already_signed", third["reason"]
     assert third["review_passes"] == [], third["review_passes"]
     assert review.asked() == 0, review.asked()

@@ -4414,48 +4414,54 @@ class Secretary:
 
     def _land_sign_issuance(self, out: dict[str, Any], *, proof_text: str,
                             proof_no: Any, row: Mapping[str, Any] | None) -> None:
-        """把"签发"这个决定落成一次 `sign_statement`（翻位的唯一写口）。
+        """把"签发"这个决定落成一份签（2026-11-08 起：不碰 `statements`）。
 
-        三态：签颁发了（`issued=True`）/ 没有可写的行（没有 store 或没有那一行的 row）/
-        写了但没成（`sign_statement` 自己报的理由）。三种都不改变 `issue` 这一个决定
-        —— 决定是决定，落地是落地（`draft/125` 三态纪律：决定与它的产物分开报）。
+        三态：签颁发了（`issued=True`）/ 没有可落的那一行（没有 store 或没有 row）/
+        颁发了但块没落（`vsign` / `manuscript_write` 自己报的理由）。三种都不改变
+        `issue` 这一个决定 —— 决定是决定，落地是落地（`draft/125` 三态纪律）。
 
-        2026-11-03 件二：`issued` 回答的是"签有没有颁发"，不是"命题位有没有翻"。
-        两阶段录入里 V 先签、B 后写正文 ⇒ 签文件已落而位不翻；位与理由分开报
-        （`writeback.written` 是位，`writeback.body_gate` 说为什么没翻）。
+        为什么不再调 `verifications.sign_statement`：那条会在
+        `store.tx("statements")` 里翻第 3 位、抬 `kind`、现算 `grade`。业主 2026-11-08
+        的口径是「V 现在只对手稿负责，不该看台账了」「第几份证明、什么等级都是 B 秘书
+        录入时关心且需负责的」⇒ V 的签只落在稿上（侧文件 + 九格块），命题行由 B 收录时
+        按正文 sha 认领。`sign_statement` 保留给历史直调 / 夹具（`flip=True` 那条兼容门）。
         """
         from . import verifications as _VR
 
         if self.store is None:
             out["reason"] = (f"{out.get('reason') or ''}；但这一名秘书没有 store "
-                             "⇒ 决定是「签发」，而翻位那一步落不了（换装配："
+                             "⇒ 决定是「签发」，而落签那一步落不了（换装配："
                              "`for_role_wired(..., store=<本工作区的 store>)`）")
             return
         if not isinstance(row, Mapping) or not str(row.get("verification_id") or ""):
-            out["reason"] = (f"{out.get('reason') or ''}；但没有可翻的那一行"
+            out["reason"] = (f"{out.get('reason') or ''}；但没有可落的那一行"
                              "（`record_verification` 的返回行没递进来）⇒ 只落了决定")
             return
         try:
-            writeback = _VR.sign_statement(self.store, row=dict(row),
-                                           proof_text=proof_text, proof_no=proof_no,
-                                           append_ledger=False, sign_issuance=dict(out),
-                                           by=self.sign_recipient())
-        except Exception as exc:  # noqa: BLE001 —— 翻位失败要如实报（台账那一行已在盘上）
-            out["writeback"] = {"written": False,
-                                "reason": f"翻位没成（{type(exc).__name__}: {exc}）"}
-            out["reason"] = (f"{out.get('reason') or ''}；翻位没成"
-                             f"（{type(exc).__name__}: {exc}）⇒ 位没翻，台账那一行留着")
+            writeback = _VR.land_sign_without_ledger(
+                self.store, row=dict(row),
+                within_call=out.get("within_call"),
+                need=out.get("need"), review_call=str(out.get("review_call") or ""),
+                by=self.sign_recipient(),
+                manuscript=str(row.get("manuscript") or ""))
+        except Exception as exc:  # noqa: BLE001 —— 落签失败要如实报（台账那一行已在盘上）
+            out["writeback"] = {"written": False, "sign_issued": False,
+                                "reason": f"落签没成（{type(exc).__name__}: {exc}）"}
+            out["reason"] = (f"{out.get('reason') or ''}；落签没成"
+                             f"（{type(exc).__name__}: {exc}）⇒ 签没落，台账那一行留着")
             return
         out["writeback"] = dict(writeback)
-        vsign = dict(writeback.get("vsign") or {})
-        out["issued"] = bool(writeback.get("written")
-                              or vsign.get("written") or vsign.get("idempotent"))
+        out["manuscript_write"] = dict(writeback.get("manuscript_write") or {})
+        out["issued"] = bool(writeback.get("sign_issued"))
         if not out["issued"]:
-            out["reason"] = (f"{out.get('reason') or ''}；但翻位没落成："
+            out["reason"] = (f"{out.get('reason') or ''}；但落签没落成："
                              f"{str(writeback.get('reason') or '没有理由')}")
-        elif not writeback.get("written"):
-            out["reason"] = (f"{out.get('reason') or ''}；签已颁发，但命题位没翻"
+        elif not out["manuscript_write"].get("written"):
+            out["reason"] = (f"{out.get('reason') or ''}；签已颁发，但手稿块没落"
                              f"（{str(writeback.get('reason') or '没有理由')}）")
+        else:
+            out["reason"] = (f"{out.get('reason') or ''}；签已颁发并由收方秘书落回手稿"
+                             "（命题行由 B 收录时按正文 sha 认领）")
 
     def _note_sign_issuance(self, out: Mapping[str, Any], *, task_id: str = "") -> None:
         """把"发不发签"这一行落进决定台账（`before` = 台账读数，`after` = 决定）。

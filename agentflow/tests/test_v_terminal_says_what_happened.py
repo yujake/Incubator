@@ -42,6 +42,7 @@ from unittest import mock
 
 import pytest
 
+from agentflow import conductor as CND
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow.agent_v import AgentV
@@ -97,7 +98,10 @@ def _run(tmp: Path, *, replies: list[str], answers: dict, twice: bool = False,
         # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿。`_put` 已经把被审的那一份
         # 正文落成 `reports/f-proof-<号>.md`（`## 证明` 逐字一致、`## 依赖` 空表），
         # 这里带路径送审 —— 终态判据读的仍是同一趟连判，一个字没改。
-        return agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+        # 2026-11-08：签只落在稿上；落块要收方秘书，所以造真实送审的挂点（parent=F）。
+        with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                            parent_role="F"):
+            return agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
 
     if patch is None:
         got = _once()

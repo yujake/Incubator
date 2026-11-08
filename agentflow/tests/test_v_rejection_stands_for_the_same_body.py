@@ -60,6 +60,7 @@ from agentflow import vreceipts as VRC
 from agentflow.agent_v import AgentV, core as AV_CORE
 
 from _proof_manuscript_fixture import write_proof_manuscript
+import test_v_reviews_three_times_before_signing as T3
 from test_v_reviews_three_times_before_signing import (
     CLEAN_REPLY,
     FAULT_REPLY,
@@ -183,7 +184,8 @@ def test_b_the_next_submission_counts_from_zero_after_the_revision(tmp_path):
 
     review.replies = [CLEAN_REPLY] * 3
     agent2, review2 = _agent(st, [CLEAN_REPLY] * 3, [SEC.V_REPLY_CLEAN] * 3)
-    got = agent2.verify_proof(SID, proof_text=proof_b, proof_manuscript=REL)
+    with T3._as_submitter():
+        got = agent2.verify_proof(SID, proof_text=proof_b, proof_manuscript=REL)
     assert review2.asked() == 3, (
         f"改稿之后问了 {review2.asked()} 次（应当是三转 clean ⇒ 3 次）")
     assert review.asked() == 2, review.asked()
@@ -193,8 +195,9 @@ def test_b_the_next_submission_counts_from_zero_after_the_revision(tmp_path):
     assert passes[-1]["terminal"] == "signed", passes
     assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
     assert got["sign_issuance"]["streak"] == 3, got["sign_issuance"]
-    assert got["signed_bit3"] is True, got
-    assert _stmt_row(st)["bits"]["reviewed"] is True, _stmt_row(st)["bits"]
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    assert got["signed_bit3"] is False, got
+    assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
 
 
 # ============================================================ c：三转 clean 照旧发签
@@ -204,12 +207,15 @@ def test_c_three_clean_rounds_in_one_submission_still_sign(tmp_path):
     st = _ws(tmp_path)
     _put(st)
     agent, review = _agent(st, [CLEAN_REPLY], [SEC.V_REPLY_CLEAN])
-    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with T3._as_submitter():
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review.asked() == 3, review.asked()
     passes = got.get("review_passes") or []
     assert [p["streak"] for p in passes] == [1, 2, 3], passes
     assert passes[-1]["terminal"] == "signed", passes
-    assert got["signed_bit3"] is True and got["sign_issuance"]["issued"] is True, got
+    assert got["signed_bit3"] is False, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
     assert len(_rows(st)) == 3, _rows(st)
 
 
@@ -226,19 +232,23 @@ def test_d_removing_the_rejection_stop_brings_the_field_shape_back(tmp_path, mon
     agent, review = _agent(st, [CLEAN_REPLY, FAULT_REPLY, CLEAN_REPLY, CLEAN_REPLY, CLEAN_REPLY],
                            [SEC.V_REPLY_CLEAN, SEC.V_REPLY_FAULT, SEC.V_REPLY_CLEAN,
                             SEC.V_REPLY_CLEAN, SEC.V_REPLY_CLEAN])
-    first = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with T3._as_submitter():
+        first = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review.asked() == 2, review.asked()
-    second = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
-    # 摘掉那一格 ⇒ 同一份正文又起了一趟：一共问 5 次、而且秘书那一侧真的签了（= 现场）。
+    with T3._as_submitter():
+        second = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    # 摘掉那一格 ⇒ 同一份正文又起了一趟：一共问 5 次、而且签真的落在这份稿上（= 现场）。
     assert review.asked() == 5, f"摘掉那一格之后只问了 {review.asked()} 次（不是现场形状）"
     assert len(second.get("review_passes") or []) == 3, second.get("review_passes")
     assert [p["streak"] for p in second["review_passes"]] == [1, 2, 3], second["review_passes"]
     assert second["sign_issuance"]["issued"] is True, second["sign_issuance"]
-    assert _stmt_row(st)["bits"]["reviewed"] is True, _stmt_row(st)["bits"]
-    # 读侧那一半仍在：这一趟的签落在一份"已经被打回过"的正文上 ⇒ 台账读数不认它
-    # （`signed_bit3` 因此仍是 False）。两道闸各自独立：摘掉其中一道，另一道还在。
+    assert second["review_write"].get("manuscript_signed") is True, second["review_write"]
+    # 两件独立的事实：稿上签了（上面那格），而 V 的台账仍把这一份正文读成「打回站住」
+    # （`signed_bit3` 因此仍是 False —— V 不翻命题位，这一步归 B 收录）。
     assert second["signed_bit3"] is False, second
     assert first["signed_bit3"] is False, first
+    assert VR.review_standing(st.root, statement_id=SID, proof_text=PROOF,
+                              proof_no=1)["state"] == "rejected"
 
 
 def test_d2_the_fault_branch_breaks_and_the_streak_is_a_real_counter():

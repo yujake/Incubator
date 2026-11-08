@@ -32,6 +32,7 @@ if str(SRC) not in sys.path:
 
 from conftest import add_literature, e_form_gate_ok, sign_before_registration  # noqa: E402
 from agentflow import capabilities as C  # noqa: E402
+from agentflow import conductor as CND  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -173,10 +174,15 @@ def _v_secretary(store: Store):
 
 
 def _three(agent: AgentV, sid: str, column: str, *, manuscript: str = "") -> dict:
-    """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值（第 3 次才翻位）。"""
+    """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值（第 3 次才落签块）。
+
+    2026-11-08：签只落在稿上，落块要收方秘书 ⇒ 造真实送审的挂点（parent=E）。
+    """
     got: dict = {}
-    for _i in range(VR.SIGN_STREAK_NEED):
-        got = agent.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
+                        parent_role="E"):
+        for _i in range(VR.SIGN_STREAK_NEED):
+            got = agent.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     return got
 
 
@@ -195,7 +201,8 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
     assert got["checked"] is True, got
     assert got["kind"] == "numeric_evidence", got
     assert got["verdict"] == ER.VERDICT_OK, (got["verdict"], got.get("findings"))
-    assert got["signed_bit3"] is True, got
+    assert got["signed_bit3"] is False, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     checks = {str(c["name"]): c["ok"] for c in got["checks"]}
     for name in (ER.CHECK_PROGRAM, ER.CHECK_REPORT, ER.CHECK_SPACE, ER.CHECK_SYMMETRY,
                  ER.CHECK_BOUNDARY, ER.CHECK_EXHAUSTIVE, ER.CHECK_SLOT):

@@ -3154,6 +3154,8 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
     from . import vsigns as _VS
 
     root = getattr(store, "root", "")
+    if isinstance(store, (str, Path)):
+        root = str(store)
     need = int(holds.get("need") or SIGN_STREAK_NEED)
     # ---- 收方秘书是谁：调用方给了就用；没给就按这一趟的父角色现读（权威来源）----
     #
@@ -3215,6 +3217,97 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
     if out["payload_problem"]:
         out["reason"] = (f"{out['reason']}；组签内容时有一格没读成"
                          f"（{out['payload_problem']}）")
+    return out
+
+
+def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
+                             within_call: int | None = None,
+                             need: Any = None, review_call: str = "",
+                             by: str = "", manuscript: str = "") -> dict[str, Any]:
+    """颁签 + 落块，不碰 `statements`（2026-11-08，业主「V 只对手稿负责」）。
+
+    这是 V 的在册送审在"三转 clean + 秘书判发"之后的落地那一步：
+    - 写签的侧文件（`out/vsigns/<正文 sha>.json`，`vsigns.issue`）；
+    - 让收方秘书把 `- V 签：` 九格块落回手稿（`vsigns.land`，`ledger_bit=False`）；
+    - 给 B 开一条「必须收录」义务（`_registration_after_vsign`，签块落成才开）。
+
+    不开 `store.tx("statements")`：不翻第 3 位、不写 `kind` / `grade` /
+    `reviewed_by_proof`。那些是 B 收录时的活（业主：「第几份证明、什么等级都是 B 秘书
+    录入时关心且需负责的」）。于是 `writeback["written"]` 恒为 False —— 它回答的是
+    "命题位有没有被这一趟翻"，答案是没有；签有没有落地由 `sign_issued` /
+    `manuscript_write` 两格回答（三态不许折平）。
+
+    返回键：`written`（恒 False，命题位）/ `deferred_to="filing:B"` /
+    `sign_issued` / `vsign` / `land` / `manuscript_write` / `registration` / `reason`。
+    `written=False` 与 `sign_issued=False` 同时出现才是"这一签没落地"。
+    """
+    out: dict[str, Any] = {
+        "written": False, "rolled_back": False, "deferred_to": "filing:B",
+        "sign_issued": False, "append_state": "appended_by_caller",
+        "vsign": {}, "land": {}, "manuscript_write": {}, "registration": {},
+        "statement_id": str(row.get("stmt_id") or row.get("statement_id") or ""),
+        "proof_no": 0, "proof_sha256": str(row.get("proof_sha256") or ""),
+        "grade": "", "kind_upgrade": {}, "upgrade_note": "",
+        "grade_recomputed": {}, "streak": 0, "need": int(SIGN_STREAK_NEED),
+        "streak_ok": False, "reason": "",
+    }
+    row = dict(row or {})
+    sid = str(out["statement_id"])
+    if not sid:
+        out["reason"] = ("没有命题号 ⇒ 这一签没有可写的台账锚点（不是「签上了」）")
+        return out
+    if not row_signable(row):
+        out["reason"] = ("这一签签不住（verdict 不是「成立」，或有未解决的 error）"
+                         "⇒ 不颁发、不落块")
+        return out
+    root = getattr(store, "root", "")
+    if isinstance(store, (str, Path)):
+        root = str(store)
+    try:
+        no = proof_no_of(row)
+    except VerificationError:
+        no = DEFAULT_PROOF_NO
+    out["proof_no"] = int(no)
+    n = int(need or SIGN_STREAK_NEED)
+    if within_call is not None:
+        holds: dict[str, Any] = {
+            "checked": True, "streak": max(0, int(within_call)), "need": n,
+            "streak_ok": bool(int(within_call) >= n),
+            "sha": str(row.get("proof_sha256") or ""),
+            "review_call": str(review_call or row.get("review_call") or ""),
+            "legacy_rows": 0,
+        }
+    else:
+        holds = consecutive_holds(root, sid, proof_no=no)
+    out["streak"] = int(holds.get("streak") or 0)
+    out["need"] = int(holds.get("need") or n)
+    out["streak_ok"] = bool(holds.get("streak_ok"))
+    try:
+        ledger = verification_ledger_path(root, sid)
+    except VerificationError as exc:
+        out["reason"] = f"{exc}；这一签没有可写的台账锚点"
+        return out
+    vsign = _vsigns_write_after_flip(
+        root, row=row, ledger=ledger, statement_id=sid, proof_no=int(no),
+        sha=str(row.get("proof_sha256") or ""), holds=holds,
+        append_ledger=False, by=str(by or ""),
+        manuscript=str(manuscript or row.get("manuscript") or ""))
+    out["vsign"] = dict(vsign)
+    out["sign_issued"] = bool(vsign.get("written") or vsign.get("idempotent"))
+    out["manuscript_write"] = dict(vsign.get("manuscript_write") or {})
+    out["land"] = dict(vsign.get("land") or {})
+    if out["sign_issued"] and out["manuscript_write"].get("written"):
+        out["reason"] = ("签已颁发并落回手稿；命题行的第 3 位与等级由 B 收录时"
+                         "按正文 sha 认领/现算（V 不写 statements）")
+    elif out["sign_issued"]:
+        out["reason"] = (f"签已颁发（`{vsign.get('path') or '签文件'}`），但块没落："
+                         f"{str(out['land'].get('reason') or vsign.get('reason') or '没有理由')}")
+    else:
+        out["reason"] = (f"颁发没成（`{vsign.get('path') or '签文件'}`）："
+                         f"{str(vsign.get('reason') or '没有理由')}")
+    out["registration"] = _registration_after_vsign(
+        store=store, root=root, vsign=dict(vsign), statement_id=sid,
+        proof_no=int(no), sha=str(row.get("proof_sha256") or ""))
     return out
 
 

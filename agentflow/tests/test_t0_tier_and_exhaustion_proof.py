@@ -44,6 +44,7 @@ if str(SRC) not in sys.path:
 from conftest import add_literature, e_form_gate_ok, sync_counters  # noqa: E402
 from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from agentflow import closing  # noqa: E402
+from agentflow import conductor as CND  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
@@ -234,20 +235,27 @@ def _sign_with_v(store: Store, column: str,
     filed = _file_as_conjecture(store, proof_text=column, statement_full=statement_full)
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
+    before = dict(_rows(store, "statements")[0])
     # 2026-11-04（业主裁定 甲）：在册命题的 V 审也必须带手稿 —— 签块 / `## 依赖` /
     # 按号寻址三样只在文件上。夹具把这一份证明栏落成 `reports/f-proof-<号>.md`
     # （`## 证明` 与证明栏逐字一致，`## 依赖` 空表），送审时带同一个路径。
     # 判据一个字没改：连续 3 次「成立」才翻第 3 位这条口径原样在下面判。
     manuscript = _e_manuscript(store, sid, column, statement_full=statement_full)
     v = AgentV(store, workspace_root=store.root, secretary=_secretary_v(store))
-    first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
-    assert first.get("checked") is True and first.get("verdict") == "成立", first
-    assert first.get("signed_bit3") is False, (
-        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
-    v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
-    got = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
+                        parent_role="E"):
+        first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+        assert first.get("checked") is True and first.get("verdict") == "成立", first
+        assert first.get("signed_bit3") is False, (
+            "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
+        v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+        got = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert got.get("checked") is True and got.get("verdict") == "成立", got
-    assert got.get("signed_bit3") is True, got
+    assert got.get("signed_bit3") is False, got
+    assert got.get("review_write", {}).get("manuscript_signed") is True, got["review_write"]
+    #: 这一趟前后命题行的逐字对照（V 不写 statements 的直接读数）。
+    got["_statement_before"] = before
+    got["_statement_after"] = dict(_rows(store, "statements")[0])
     return got
 
 
@@ -441,22 +449,15 @@ def test_criterion1c_the_third_clean_sign_backfills_proof_not_proof_review(
     _run_exhaustive(store)
     add_literature(store, S.format_id(0))
     column = _proof_column_of(store)
-    _sign_with_v(store, column)
+    got = _sign_with_v(store, column)
+    signed_before = dict(got.get("_statement_before") or {})
 
+    # 2026-11-08（V 只对手稿负责）：V 这一趟只把签落在稿上；命题行的等级 / kind /
+    # 第 3 位都是 B 收录时的活。所以"V 落签那一刻"这一行必须逐字不动。
     signed = _rows(store, "statements")[0]
-    assert EB.bits_from_row(signed)["grade"] == "theorem", signed
-    assert signed["kind"] == "theorem", signed
-    bits = dict(signed.get("bits") or {})
-    assert bits.get("proof") is True and bits.get("reviewed") is True, bits
-    assert bits.get("numeric") == "verified", bits
-    trace = dict(signed.get(VR.GRADE_RECOMPUTED_KEY) or {})
-    assert trace.get("to") == "theorem", trace
-    assert trace.get("to_kind") == "proof", trace
-    assert trace.get("from") == "strong_conjecture", trace
-    assert trace.get("channel") == "exhaustion", trace
-    assert int(trace.get("proof_no") or 0) == 1, trace
+    assert signed == signed_before, "V 的签写进了 statements（新契约下这是 B 收录的活）"
 
-    filed = _file_via_b(store, proof_text=column)
+    filed = _file_via_b(store, proof_text=column, evidence_kind="proof")
     assert filed.get("ok") is True, filed
     # B 这一笔是"同一条已在册、证据档到位"：不新建行，历史列按现算等级反算成 proof。
     assert filed.get("new_row") is False, filed
@@ -465,6 +466,10 @@ def test_criterion1c_the_third_clean_sign_backfills_proof_not_proof_review(
     assert final["kind"] == "theorem", final
     assert final["evidence_kind"] == "proof", final
     assert EB.bits_from_row(final)["grade"] == "theorem", final
+    trace = dict(final.get(VR.GRADE_RECOMPUTED_KEY) or {})
+    assert trace.get("to") == "theorem", trace
+    assert trace.get("to_kind") == "proof", trace
+    assert int(trace.get("proof_no") or 0) == 1, trace
 
 
 def np_author_not_signer(sig: dict) -> bool:

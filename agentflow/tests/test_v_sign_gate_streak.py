@@ -66,6 +66,7 @@ import pytest
 from agentflow import agent_loop as AL
 from agentflow import agent_prompts as AP
 from agentflow import agent_skills as SK
+from agentflow import conductor as CND
 from agentflow import evidencebits as EB
 from agentflow import modelgw as G
 from agentflow import secretary as SEC
@@ -352,7 +353,9 @@ def test_a6_the_secretary_performs_the_flip(tmp_path):
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     sec = _sec(st, seam)
     agent = _agent(st, sec)
-    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["checked"] is True, got
     passes = got.get("review_passes") or []
     assert [p["streak"] for p in passes] == [1, 2, 3], passes
@@ -360,8 +363,10 @@ def test_a6_the_secretary_performs_the_flip(tmp_path):
     assert [p["issued"] for p in passes] == [False, False, True], passes
     assert got["sign_issuance"]["issue"] is True, got["sign_issuance"]
     assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
-    assert got["signed_bit3"] is True and got["bits"]["reviewed"] is True, got["bits"]
-    assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
+    # 2026-11-08：签落在稿上（侧文件 + 九格块），命题行的第 3 位归 B 收录时认领。
+    assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    assert _row(st)["bits"]["reviewed"] is False, _row(st)["bits"]
     rows, _bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
     assert len(rows) == 3, f"三转应当落三行台账（前两转只落台账），实得 {len(rows)}"
     # 发签决定落进了秘书那本账（不是只留在返回值里）
@@ -415,64 +420,79 @@ def test_a7_no_secretary_means_no_signature_at_all(tmp_path):
 # ============================================================ a8–a10 / v8 与 v7
 
 def _spy_signing(monkeypatch):
-    """给两个写口各包一层：记下 `sign_statement` 的调用者函数名与每次落台账的 `flip`。
+    """给三个写口各包一层：记下发签写口的调用者与落台账的 `flip`。
+
+    2026-11-08 之后 V 的发签落地产是 `verifications.land_sign_without_ledger`
+    （只颁签 + 只落块，不碰 statements）；`sign_statement`（会写 statements）必须
+    一次都不被 V 这一路调到。`flip` 仍然是"落台账那一步有没有顺手翻位"的读数。
 
     为什么量"调用者函数名"而不是"源码里有没有那个字符串"：本仓反复踩过"判据读源码文本"
-    的坑（`test_model_calls_are_deterministic` 那条就是）。运行时栈是行为，不是措辞：
-    谁真的调了签，就一定在名单里。
+    的坑。运行时栈是行为，不是措辞：谁真的调了签，就一定在名单里。
     """
-    callers: list[str] = []
+    signer_callers: list[str] = []
+    statement_write_callers: list[str] = []
     flips: list[object] = []
+    real_land = VR.land_sign_without_ledger
     real_sign = VR.sign_statement
     real_record = VR.record_verification
 
+    def _land(store, **kw):
+        signer_callers.append(str(sys._getframe(1).f_code.co_name))
+        return real_land(store, **kw)
+
     def _sign(store, **kw):
-        callers.append(str(sys._getframe(1).f_code.co_name))
+        statement_write_callers.append(str(sys._getframe(1).f_code.co_name))
         return real_sign(store, **kw)
 
     def _record(root, **kw):
         flips.append(kw.get("flip", True))
         return real_record(root, **kw)
 
+    monkeypatch.setattr(VR, "land_sign_without_ledger", _land)
     monkeypatch.setattr(VR, "sign_statement", _sign)
     monkeypatch.setattr(VR, "record_verification", _record)
-    return callers, flips
+    return signer_callers, statement_write_callers, flips
 
 
 def test_a8_only_the_secretary_calls_the_signing_writer(tmp_path, monkeypatch):
-    """v8：V 的代码路径里没有自己签的调用；`sign_statement` 只能由秘书调。
+    """v8：V 的代码路径里没有自己签的调用；发签落地只由秘书那一步调。
 
     两条腿缺一条就只是"读起来像"：
-    ① 运行时调用栈：这一趟发签里，调用者必须是 `_land_sign_issuance`（秘书落地那一步）；
-       `verify_proof` / `_finish_numeric` / `record_verification` 一次都不许出现；
-    ② 落台账那一步：V 这一路每一次 `record_verification` 都必须 `flip=False`
-       （V 只落台账，翻位不是它的事）。
+    ① 运行时调用栈：这一趟发签里，`land_sign_without_ledger` 的调用者必须是
+       `_land_sign_issuance`（秘书落地那一步）；`verify_proof` / `_finish_numeric` /
+       `record_verification` 一次都不许出现；
+    ② `sign_statement`（会写 statements 的那条历史写口）在 V 这一路 0 次调用；
+    ③ 落台账那一步：V 这一路每一次 `record_verification` 都必须 `flip=False`，
+       且命题行的第 3 位一个字节都没动。
 
-    2026-10-30 起"三次审阅"发生在一次调用里的三转（业主口径），所以这里从"调三次
-    `verify_proof`"改成"调一次、三转"：落台账的次数仍是 3（三转各一行），发签仍是 1 次。
-
-    反真空：这一趟必须真的发生过发签（`callers` 非空），否则"没有自己签"只是没签。
+    反真空：这一趟必须真的发生过发签（`signer_callers` 非空），否则"没有自己签"只是没签。
     """
     st = _ws(tmp_path)
     _put(st)
     seam = _Seam({"sign_issuance": [_axis(SEC.SIGN_ISSUE)],
                   "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]})
     agent = _agent(st, _sec(st, seam))
-    callers, flips = _spy_signing(monkeypatch)
-    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    signer_callers, statement_write_callers, flips = _spy_signing(monkeypatch)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert got["checked"] is True, got
     assert len(got.get("review_passes") or []) == 3, got.get("review_passes")
-    assert got["signed_bit3"] is True, (got["signed_bit3"], got["sign_issuance"])
-    assert callers, "三转 clean 里一次发签都没有发生 ⇒ 这一条没测到'签'（判据真空）"
-    assert set(callers) == {"_land_sign_issuance"}, (
-        f"`sign_statement` 被这些调用者调过：{sorted(set(callers))} ⇒ "
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    assert signer_callers, "三转 clean 里一次发签都没有发生 ⇒ 这一条没测到'签'（判据真空）"
+    assert set(signer_callers) == {"_land_sign_issuance"}, (
+        f"`land_sign_without_ledger` 被这些调用者调过：{sorted(set(signer_callers))} ⇒ "
         "发签没有唯一落在秘书那一侧（V 或别的路径还在自己签）")
-    assert "verify_proof" not in callers and "_finish_numeric" not in callers, callers
+    assert "verify_proof" not in signer_callers and "_finish_numeric" not in signer_callers, (
+        signer_callers)
+    assert statement_write_callers == [], (
+        f"V 这一路调了 `sign_statement`（它会开 statements 事务）："
+        f"{sorted(set(statement_write_callers))} ⇒ 「V 只对手稿负责」没落地")
     assert flips and all(f is False for f in flips), (
         f"V 这一路有 `record_verification` 没带 flip=False：{flips} ⇒ "
         "V 把「落台账」与「翻位」合成了一步")
     assert len(flips) == 3, f"三转应当各落一行台账，实得 {len(flips)} 次：{flips}"
-    assert _row(st)["bits"]["reviewed"] is True, _row(st)["bits"]
+    assert _row(st)["bits"]["reviewed"] is False, _row(st)["bits"]
 
 
 class _LazyButApproving:

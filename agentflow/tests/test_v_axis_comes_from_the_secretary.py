@@ -105,12 +105,26 @@ class _AxisSecretary:
 
 
 def _run(tmp_path: pathlib.Path, secretary) -> dict:
-    """跑一趟 `verify_proof`（storeless 路径：只落台账、不发真签）。"""
+    """跑一趟 `verify_proof`（storeless 路径：只落台账、不发真签）。
+
+    2026-11-08：在册命题必须有一份手稿（V 只对手稿负责）—— 这里补一份按号命名的稿，
+    正文与 `proof_text` 逐字一致；storeless 那一路不写 statements，读数与改前同一套。
+    """
+    from agentflow import depsection as _DS
+
     root = tmp_path / "ws"
     root.mkdir(parents=True, exist_ok=True)
+    rel = f"reports/f-proof-{SID}.md"
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
+        + _DS.render_dependency_section([]),
+        encoding="utf-8")
     agent = AgentV(None, workspace_root=root, llm=_ReviewSeam(REPLY_HOLDS),
                    secretary=secretary)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
     rows, bad = VR.list_verifications(root, statement_id=SID, limit=None)
     assert not bad, bad
     return {"got": got, "row": (dict(rows[-1]) if rows else {}),
@@ -213,8 +227,18 @@ def test_j_a_secretary_fault_fills_the_step_when_v_omits_it(tmp_path):
                         "findings": [{"level": "error", "step": 4, "kind": "无依据",
                                       "detail": "第 4 步没有依据"}]},
                        ensure_ascii=False)
+    from agentflow import depsection as _DS
+
+    rel = f"reports/f-proof-{SID}.md"
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
+        + _DS.render_dependency_section([]),
+        encoding="utf-8")
     agent = AgentV(None, workspace_root=root, llm=_ReviewSeam(reply), secretary=sec)
-    got = agent.verify_proof(SID, proof_text=PROOF)
+    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
 
     judge = dict(got.get("secretary_judge") or {})
     assert judge.get("checked") is True and judge.get("axis") == "fault", judge

@@ -157,14 +157,39 @@ def test_f_verify_proof_re_reviews_a_bare_bit(tmp_path: pathlib.Path) -> None:
 
 
 # ====================================================================== g 反真空（集成）
-def test_g_with_the_locator_gate_stubbed_the_same_call_short_circuits(
+def test_g_the_short_circuit_comes_from_the_manuscript_sign(
         tmp_path: pathlib.Path, monkeypatch) -> None:
-    """反真空（集成）：打桩 locator ⇒ 同一调用短接（already_signed、零模型调用）。"""
-    monkeypatch.setattr(VR, "_already_signed_locator", lambda *_a, **_kw: "stub")
+    """反真空（集成）：短接的判据是稿上签块盖住这一份正文（2026-11-08）。
+
+    2026-11-08 之前这一条打桩的是 `bit3_already_signed` 的 locator；V 只对手稿负责
+    之后，短接改读 `vsigns.manuscript_sign_standing` —— 所以这里真的盖一块签，看
+    同一调用是否零模型短接；再把稿的正文改一个字（sha 变了），看它是否重开审。
+    """
+    from agentflow import vsigns as VS
+
     st = _ws(tmp_path)
     _put(st, reviewed_by={"round": 1})
+    rel = _write_ms(st)
+    raw = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
+    stamped = VS.stamp_manuscript_sign(
+        raw, proof_sha=VR.proof_sha(PROOF), streak=VR.SIGN_STREAK_NEED,
+        need=VR.SIGN_STREAK_NEED, verdict="成立", signer="secretary:F",
+        at="2026-11-08T00:00:00+08:00",
+        ledger="verifications/000000.jsonl#v-000001",
+        statement_id="000000", manuscript_id="000000")
+    (pathlib.Path(st.root) / rel).write_text(stamped, encoding="utf-8")
+
     v, seam = _agent(st)
-    got = v.verify_proof("000000", proof_manuscript=_write_ms(st))
+    got = v.verify_proof("000000", proof_manuscript=rel)
     assert got.get("reason") == "already_signed", got
     assert got.get("review_passes") == [], got
     assert len(seam.prompts) == 0, f"短接那一趟还问了 {len(seam.prompts)} 次模型"
+
+    # 反真空：改一个字（正文 sha 变了）⇒ 签块不再盖住这一份 ⇒ 必须重开审。
+    changed = stamped.replace(PROOF, PROOF + "\n3. 补上边界情形。")
+    assert changed != stamped
+    (pathlib.Path(st.root) / rel).write_text(changed, encoding="utf-8")
+    v2, seam2 = _agent(st)
+    again = v2.verify_proof("000000", proof_manuscript=rel)
+    assert again.get("reason") != "already_signed", again
+    assert len(seam2.prompts) >= 1, "改稿之后一次模型都没问 ⇒ 短接做宽了"

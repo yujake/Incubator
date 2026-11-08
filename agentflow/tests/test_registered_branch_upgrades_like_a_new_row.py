@@ -117,7 +117,14 @@ def test_e_the_registered_branch_does_not_sign_without_a_review_seam(
     """
     env = _env(tmp_path / "registered")
     sid = _register_conjecture(env)
-    rel, _before = _manuscript(env)
+    # 2026-11-08（V 只对手稿负责）：穷举判据改成"看稿里 `## 证明` 的写法"，不再看册里的
+    # 证明栏。这一条要量的是"散文在册支没有模型缝 ⇒ 没查成"，所以给它一份散文稿；
+    # 穷举稿在无模型缝下是机械可审的（`test_agent_v_exhaustion_review` 正向钉着）。
+    from _proof_manuscript_fixture import write_proof_manuscript
+
+    rel = write_proof_manuscript(
+        env["store"].root, sid,
+        "1. 由定义直接得到。\n2. 于是结论成立。", statement_full=FULL)
     with _submitted_by_e():
         got = env["v"].verify_proof(sid, proof_manuscript=rel)
 

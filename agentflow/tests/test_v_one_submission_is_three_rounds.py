@@ -37,6 +37,7 @@ import pytest
 from agentflow import agent_loop as AL
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
+from agentflow import conductor as CND
 from agentflow import vsigns as VS
 from agentflow.agent_v import AgentV
 
@@ -72,6 +73,13 @@ def _agent(st, review, sec_seam):
                   secretary=_secretary(st, sec_seam))
 
 
+def _submit():
+    """真实送审的挂点（V 的 parent = F）：签块只能由收方秘书落（2026-11-08 之后的签
+    只落在稿上，没有挂点时只能颁发签文件、不能落块）。"""
+    return CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                          parent_role="F")
+
+
 def _sign_doc(st) -> dict:
     path = VS.sign_path(st.root, VR.proof_sha(PROOF))
     assert path.is_file(), f"没有落签：{path}"
@@ -99,7 +107,9 @@ def test_a_one_call_asks_three_rounds_and_signs(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        got = _agent(st, review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 3, f"一次送审只问了 {review.asked()} 次 ⇒ 不是连判三轮"
     passes = got.get("review_passes") or []
@@ -109,7 +119,8 @@ def test_a_one_call_asks_three_rounds_and_signs(tmp_path):
     assert [p["issue"] for p in passes] == [False, False, True], passes
     assert passes[-1]["terminal"] == "signed", passes
 
-    assert got["signed_bit3"] is True, got
+    assert got["signed_bit3"] is False, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     assert got["sign_issuance"]["streak"] == 3, got["sign_issuance"]
     assert got["sign_issuance"]["need"] == 3, got["sign_issuance"]
 
@@ -141,7 +152,9 @@ def test_b_fault_on_round_two_stops_after_two_and_rejects(tmp_path):
                                         "findings": [{"quote": "第 2 步的记号没有定义",
                                                       "why": "记号没有定义就没法核这一步"}]}],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        got = _agent(st, review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 2, (
         f"第 2 轮已经判 fault，却又问了 {review.asked()} 次 ⇒ 「立刻停」没做到")
@@ -173,7 +186,9 @@ def test_c_fault_on_round_one_stops_after_one_and_rejects(tmp_path):
                                         "findings": [{"quote": "第 2 步的记号没有定义",
                                                       "why": "记号没有定义就没法核这一步"}]}],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        got = _agent(st, review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 1, (
         f"第 1 轮已经判 fault，却又问了 {review.asked()} 次 ⇒ 不是「立刻停」")
@@ -218,7 +233,9 @@ def test_d_two_legacy_clean_rounds_cannot_add_up_to_this_submission(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        got = _agent(st, review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
 
     assert review.asked() == 3, (
         f"旧台账 2 行 clean + 本次第 1 轮 clean 就出签 ⇒ 跨送审累计（只问了 "
@@ -229,7 +246,8 @@ def test_d_two_legacy_clean_rounds_cannot_add_up_to_this_submission(tmp_path):
     assert [p["issue"] for p in passes] == [False, False, True], passes
     assert passes[-1]["terminal"] == "signed", passes
     assert got["sign_issuance"]["streak"] == 3, got["sign_issuance"]
-    assert got["signed_bit3"] is True, got
+    assert got["signed_bit3"] is False, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
 
     rows = _rows(st)
     assert len(rows) == 5, rows
@@ -276,7 +294,9 @@ def test_d2_a_second_submission_does_not_inherit_the_first_calls_two_rounds(tmp_
     first_review = _BrokenAfterOne([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    _agent(st, first_review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        _agent(st, first_review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
     assert first_review.asked() == 2, "夹具前提：第一趟第二轮失败（第一轮 clean 已落一行）"
     rows = _rows(st)
     assert len(rows) == 1 and str(rows[0].get("review_call") or ""), rows
@@ -285,12 +305,15 @@ def test_d2_a_second_submission_does_not_inherit_the_first_calls_two_rounds(tmp_
 
     # 第二趟：三轮 clean。改前第 2 轮就会凑到 3（1+2），只问 2 次；改后问满 3。
     second_review = _ReviewSeam([CLEAN_REPLY])
-    got = _agent(st, second_review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _submit():
+        got = _agent(st, second_review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
     assert second_review.asked() == 3, (
         f"第二趟送审只问了 {second_review.asked()} 次就签 ⇒ 把第一趟的 1 轮 clean "
         "累计进来了（跨送审累计）")
     assert [p["streak"] for p in got["review_passes"]] == [1, 2, 3], got["review_passes"]
-    assert got["signed_bit3"] is True, got
+    assert got["signed_bit3"] is False, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     new_rows = [r for r in _rows(st) if str(r.get("review_call") or "")]
     assert len(new_rows) == 4, _rows(st)
     calls = {str(r.get("review_call") or "") for r in new_rows}
@@ -312,8 +335,10 @@ def test_e_the_sign_file_is_not_a_vacuous_pass(tmp_path):
     review = _ReviewSeam([CLEAN_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
                       "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    got = _agent(st, review, sec_seam).verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
-    assert got["signed_bit3"] is True, got
+    with _submit():
+        got = _agent(st, review, sec_seam).verify_proof(
+            SID, proof_text=PROOF, proof_manuscript=REL)
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
 
     doc = _sign_doc(st)
     passes = doc["passes"]

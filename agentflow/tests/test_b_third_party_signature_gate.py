@@ -41,6 +41,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from conftest import add_literature, e_form_gate_ok, seed_statement_row, sync_counters  # noqa: E402
+from agentflow import conductor as CND  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
 from agentflow import numericproof as NP  # noqa: E402
@@ -198,14 +199,21 @@ def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
         "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
         encoding="utf-8")
     for i in range(1, int(VR.SIGN_STREAK_NEED) + 1):
-        got = agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
+        with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
+                            parent_role="E"):
+            got = agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
         outs.append(got)
         assert got.get("checked") is True, got
         assert got.get("verdict") == "成立", got
-        assert got.get("signed_bit3") is (i == int(VR.SIGN_STREAK_NEED)), (
-            f"第 {i} 次会审的 signed_bit3={got.get('signed_bit3')!r} —— 门槛是连续 "
-            f"{int(VR.SIGN_STREAK_NEED)} 次「成立」且秘书判定通过（第 1、2 次只落台账），"
-            f"读到的发签决定：{got.get('sign_issuance')}", got)
+        # 2026-11-08：签只落在稿上（第 1、2 次尚未落块；第 3 次落块），
+        # 命题行的第 3 位归 B 收录时认领 —— `signed_bit3` 恒 False。
+        assert got.get("signed_bit3") is False, (
+            f"第 {i} 次落签后 signed_bit3={got.get('signed_bit3')!r} ⇒ "
+            "V 又在写 statements 了", got)
+        assert bool(dict(got.get("review_write") or {}).get("manuscript_signed")) is (
+            i == int(VR.SIGN_STREAK_NEED)), (
+            f"第 {i} 次落块读数不对：{got.get('review_write')}；"
+            f"读到的发签决定：{got.get('sign_issuance')}")
     return outs
 
 
@@ -395,7 +403,10 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
     reviewed = _review_until_signed(_v(store), sid, column)
     signed = reviewed[-1]
     assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
-    assert signed.get("signed_bit3") is True, signed
+    # 2026-11-08：V 的签落在稿上；命题位由 B 收录时认领。
+    assert signed.get("signed_bit3") is False, signed
+    assert signed.get("review_write", {}).get("manuscript_signed") is True, (
+        signed["review_write"])
     ledger = pathlib.Path(store.root) / VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
     assert ledger.is_file()
     # 前三签都留在台账里（第 1、2 次只落台账，不许因为"没发签"就不落行）

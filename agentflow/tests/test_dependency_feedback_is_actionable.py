@@ -151,8 +151,10 @@ def test_a_v_finding_survives_into_the_ledger_row_and_the_return(
     finding = next(f for f in got["findings"]
                    if f"stmt:{GONE}" in str(f.get("detail") or ""))
     _text_cells(str(finding.get("detail") or ""), GONE, kind=str(finding["kind"]))
-    assert "不在册" in finding["detail"], finding
-    assert finding["kind"] == DS.REFUSED_UNKNOWN_SOURCE, finding
+    # 2026-11-08：V 不读册 ⇒ 它不能声称"不在册"，能说的是"盘上没有这一条命题的手稿"。
+    assert "盘上没有" in finding["detail"], finding
+    assert "手稿" in finding["detail"], finding
+    assert finding["kind"] == DS.REFUSED_LEVEL_UNREADABLE, finding
 
 
 def test_a_b_refusal_letter_names_the_missing_statement(tmp_path: pathlib.Path) -> None:

@@ -346,14 +346,20 @@ def _verify_three(store: Store, sid: str, column: str,
                         seam=_VSecretarySeam(), enable_model=True)
     v = AgentV(store, workspace_root=store.root, secretary=sec)
     manuscript = ER.proof_manuscript_relpath(exp_id) if str(exp_id or "").strip() else ""
-    first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
-    assert first.get("checked") is True, first
-    assert first.get("signed_bit3") is False, (
-        "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
-    v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
-    third = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+    from agentflow import conductor as CND
+
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
+                        parent_role="E"):
+        first = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+        assert first.get("checked") is True, first
+        assert first.get("signed_bit3") is False, (
+            "第 1 次「成立」就签上了第 3 位（连续 3 次才发签）", first)
+        v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
+        third = v.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
     assert third.get("checked") is True and third.get("verdict") == "成立", third
-    assert third.get("signed_bit3") is True, third
+    assert third.get("signed_bit3") is False, third
+    assert third.get("review_write", {}).get("manuscript_signed") is True, (
+        third["review_write"])
     assert dict(third.get("sign_issuance") or {}).get("issued") is True, third
     return first, third
 
@@ -564,8 +570,9 @@ def test_5_a_sign_made_before_registration_is_not_lost(tmp_path: pathlib.Path) -
     assert list(store.rows("statements")) == []
 
     man_rel = ER.proof_manuscript_relpath(env["experiment_id"])
+    # 2026-11-08：未在册由空命题号选支（不是"册里查不到"）；载体仍是 E 的按号稿。
     signed = AgentV(store, workspace_root=store.root).verify_proof(
-        S.format_id(0), proof_text=env["column"], proof_manuscript=man_rel)
+        "", proof_text=env["column"], proof_manuscript=man_rel)
     assert signed.get("checked") is True, signed
     # 改前（只给内联正文）：`numeric_evidence_unregistered`。甲之后走按号稿那一支：
     # `proof_unregistered_signed`（签要落在稿上，那一支才有落点）。

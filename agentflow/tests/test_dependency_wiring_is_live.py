@@ -965,21 +965,44 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
         f"## 证明\n\n{PROOF_BODY}\n\n"
         + DS.render_dependency_section(_dep_rows),
         encoding="utf-8")
+    # 2026-11-08（V 只对手稿负责）：可引资格从被引命题自己的手稿签块读 ——
+    # 整条链里这两条定理也要各有一份按号手稿与一块 3/3 的签（与真机 F 的稿同形）。
+    from _proof_manuscript_fixture import write_proof_manuscript
+    from agentflow import vsigns as _VS
+
+    for _sid in (THEOREM_A, THEOREM_B):
+        _body = _PROOF_TEXT.format(sid=_sid)
+        _rel = write_proof_manuscript(
+            store.root, _sid, _body,
+            statement_full=f"命题 {_sid} 的完整正文（含假设）。")
+        _raw = (pathlib.Path(store.root) / _rel).read_text(encoding="utf-8")
+        _stamped = _VS.stamp_manuscript_sign(
+            _raw, proof_sha=VR.proof_sha(_body), streak=3, need=3, verdict="成立",
+            signer="secretary:F", at=S.now_iso(),
+            ledger=f"verifications/{_sid}.jsonl#v-000001",
+            statement_id=_sid, manuscript_id=_sid)
+        (pathlib.Path(store.root) / _rel).write_text(_stamped, encoding="utf-8")
     # 业主 2026-10-29：第 1、2 次「成立」只落台账、不翻位 ⇒ 正控要断"前几转不签"；
     # 2026-10-30 起那几次落在同一次调用的多转里（V 判没问题后连续再判，不是 F 三交）
     # ⇒ 逐转读数从 `review_passes` 读，"连续之后才签"这条口径本身没变。
-    signed = v.verify_proof(b_stmt, proof_text=PROOF_BODY, proof_manuscript=b_man_rel)
+    from agentflow import conductor as _CND
+
+    with _CND.calling_as("t-v-000001", "V", parent_task_id="t-b-000001",
+                         parent_role="F"):
+        signed = v.verify_proof(b_stmt, proof_text=PROOF_BODY,
+                                proof_manuscript=b_man_rel)
     assert signed.get("checked") is True, signed
     v_passes = signed.get("review_passes") or []
     assert len(v_passes) == int(VR.SIGN_STREAK_NEED), v_passes
     assert [p.get("issued") for p in v_passes] == [False] * (len(v_passes) - 1) + [True], (
         "逐转的发签读数不是「前几转只落台账、最后一转才签」："
         f"{[p.get('issued') for p in v_passes]}", signed)
-    # 2026-11-03 件二：命题行里还没有这一份正文（`proof_text=""`，下面第 ③ 步才写）
-    # ⇒ 第 3 位不翻；签文件照旧颁发，B 写正文时按 sha 认领。
+    # 2026-11-08：V 的签落在稿上（侧文件 + 九格块）；命题行的第 3 位归 B 收录时认领，
+    # 所以 `signed_bit3` 恒 False、`writeback.written` 也恒 False（没有命题位可翻）。
     assert signed.get("signed_bit3") is False, signed
-    assert (dict((signed.get("sign_issuance") or {}).get("writeback") or {})
-            .get("body_gate")) == "missing_body", signed
+    assert signed.get("review_write", {}).get("manuscript_signed") is True, (
+        signed["review_write"])
+    assert signed.get("review_write", {}).get("written") is False, signed["review_write"]
     assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {
         THEOREM_A, THEOREM_B}, signed.get("citation_checks")
     assert v_llm.prompts, "V 没有被问过"

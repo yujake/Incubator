@@ -110,9 +110,22 @@ def _ledger(root: pathlib.Path, sid: str = SID) -> list[dict]:
 
 
 def _folded(root: pathlib.Path, reply: str) -> dict:
-    """跑一趟真审阅，返回（唯一的）那一行台账 + 返回值。"""
+    """跑一趟真审阅，返回（唯一的）那一行台账 + 返回值。
+
+    2026-11-08：在册命题必须有一份手稿（V 只对手稿负责）；storeless 这一路仍只落台账。
+    """
+    from agentflow import depsection as _DS
+
+    rel = f"reports/f-proof-{SID}.md"
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
+        + _DS.render_dependency_section([]),
+        encoding="utf-8")
     agent, _seam = _agent(root, reply)
-    out = agent.verify_proof(SID, proof_text=PROOF)
+    out = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
     assert out["checked"] is True, out
     rows = _ledger(root)
     assert len(rows) == 1, rows
@@ -169,8 +182,18 @@ def test_s2_i_cannot_judge_stays_a_statement_and_is_not_signed(tmp_path):
     # 反真空：结构不合法仍然"没查成"（不落行）
     other = tmp_path / "ws2"
     other.mkdir()
+    from agentflow import depsection as _DS2
+
+    rel2 = f"reports/f-proof-{SID}.md"
+    path2 = other / rel2
+    path2.parent.mkdir(parents=True, exist_ok=True)
+    path2.write_text(
+        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
+        + _DS2.render_dependency_section([]),
+        encoding="utf-8")
     agent, _seam = _agent(other, "大概成立")
-    bad = agent.verify_proof(SID, proof_text=PROOF)
+    bad = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel2)
     assert bad["checked"] is False and bad["reason"] == "unparsable", bad
     assert _ledger(other) == [], "结构不合法却落了一行台账"
 

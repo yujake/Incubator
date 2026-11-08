@@ -60,10 +60,13 @@ import pytest
 
 from _proof_manuscript_fixture import write_proof_manuscript
 
+from agentflow import conductor as _CND
+from agentflow import depsection as _DS
 from agentflow import evidencebits as _EB
 from agentflow import proofloc as PL
 from agentflow import schema as S
 from agentflow import verifications as VR
+from agentflow import vsigns as _VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
@@ -160,6 +163,9 @@ def _cite(store: Store, *, citing: str, cited: str, note: str = F_NOTE,
 
     F 那句话写在 `label` 上（`schema.Dependency` 的正名之一）：它是自然语言描述，
     不是逐字引文 —— 这正是本件要核的东西。
+
+    2026-11-08：V 只读手稿，所以依赖还要写进被审的那份手稿的 `## 依赖` 表；
+    台账那一行照旧写（B 收录时仍读它），但 V 这一侧不再读它。
     """
     row = S.Dependency(
         dep_id=dep_id, used_by=PL.used_by_of(f"stmt:{citing}", proof_no),
@@ -169,6 +175,13 @@ def _cite(store: Store, *, citing: str, cited: str, note: str = F_NOTE,
     ).to_dict()
     with store.tx("dependencies", actor="test", note="fixture:dependency") as tx:
         tx.upsert("dependencies", row, note="fixture:dependency")
+    _PENDING_CITES.setdefault(str(store.root), []).append({
+        "_proof_no": int(proof_no), "quote": note, "stmt_id": cited,
+        "step": 1, "path_group": int(path_group)})
+
+
+#: 每张手稿（按证明号）要带进 `## 依赖` 的那些行（`_cite` 登记、`_three` 消费）。
+_PENDING_CITES: dict[str, list[dict]] = {}
 
 
 def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
@@ -176,6 +189,10 @@ def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
 
     2026-10-29 之后"签住"要连续 `SIGN_STREAK_NEED` 次「成立」（第 1、2 次只落台账、
     不翻位）：这一条引理要够 `proof_review` 级被引，所以这里签够次数（改前只签一次）。
+
+    2026-11-08（V 只对手稿负责）：可引资格从引理自己的手稿签块读 —— 所以够格那
+    一档还要把一份按号命名的稿落在盘上、并在稿上盖一块 3/3 的 V 签；不够格那一档
+    留一份没有签的稿（读得到正文、读不到签）。
     """
     sid = _register(store, full=LEMMA_FULL, proof=LEMMA_PROOF)
     if evidence_kind == "proof_review":
@@ -191,6 +208,16 @@ def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
         assert signed.get("checked") is True, signed
         assert signed["statement_writeback"]["written"] is True, signed["statement_writeback"]
     _set_evidence_kind(store, sid, evidence_kind)
+    rel = write_proof_manuscript(store.root, sid, LEMMA_PROOF,
+                                 statement_full=LEMMA_FULL)
+    if evidence_kind == "proof_review":
+        raw = (pathlib.Path(store.root) / rel).read_text(encoding="utf-8")
+        stamped = _VS.stamp_manuscript_sign(
+            raw, proof_sha=VR.proof_sha(LEMMA_PROOF), streak=3, need=3,
+            verdict="成立", signer="secretary:F", at=S.now_iso(),
+            ledger=f"verifications/{sid}.jsonl#v-000001",
+            statement_id=sid, manuscript_id=sid)
+        (pathlib.Path(store.root) / rel).write_text(stamped, encoding="utf-8")
     return sid
 
 
@@ -230,20 +257,42 @@ def _v_secretary(store: Store):
 def _three(agent: AgentV, main: str, **kw: Any) -> dict:
     """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值。
 
-    为什么不是一次：业主 2026-10-29「V 签门槛 = 连续 3 次没问题」—— 第 1、2 次只落台账、
-    不翻位。这一份判据量的是"签住之后引用核实读得对不对"，所以夹具要把那一签真的签住。
-
     2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 ⇒ 这一格给被审的那一份正文落
-    一份按号命名的稿（`## 证明` 与 `proof_text` 逐字一致，`## 依赖` 空表），再带
-    `proof_manuscript` 送审。判据一个字没改：签要落在稿上，引用核实读的仍是同一份正文。
+    一份按号命名的稿（`## 证明` 与 `proof_text` 逐字一致），再带 `proof_manuscript`
+    送审。判据一个字没改：签要落在稿上。
+
+    2026-11-08（V 只对手稿负责）：依赖面也从稿的 `## 依赖` 读 —— `_cite` 登记的那些行
+    按证明号铺进这份稿；再挂一个真实送审的 parent（落块只能由收方秘书做）。
     """
     text = str(kw.get("proof_text") or "")
+    no = int(kw.get("proof_no") or 1)
     if text.strip():
+        cites = [row for row in _PENDING_CITES.get(str(agent.workspace_root), [])
+                 if int(row.get("_proof_no") or 1) == no]
+        if cites:
+            # F 的框架手稿里，依赖表并不是"另一份清单"：正文那一步也带着 `stmt:` 引用。
+            # 夹具的证明是一段散文，这里按同一形状把引用补进第一个编号步 —— 于是
+            # 依赖面六项里 ④⑤（表与正文一致 / 步号）读的是同一件事，判据量的仍是
+            # 引用核实（语义），不是"夹具没写 cites"。
+            import re as _re
+
+            refs = "、".join(f"stmt:{row['stmt_id']}" for row in cites)
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
+                if _re.match(r"^\d+\s*[.、)]\s*", line.strip()):
+                    lines[i] = line.rstrip() + f"（依据：{refs}）"
+                    break
+            text = "\n".join(lines)
+        kw["proof_text"] = text
         kw["proof_manuscript"] = write_proof_manuscript(
-            agent.workspace_root, main, text, proof_no=int(kw.get("proof_no") or 1))
+            agent.workspace_root, main, text, proof_no=no,
+            statement_full=str(kw.pop("statement_full", "") or MAIN_FULL),
+            deps_rows=cites)
     out: dict = {}
-    for _i in range(VR.SIGN_STREAK_NEED):
-        out = agent.verify_proof(main, **kw)
+    with _CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                         parent_role="F"):
+        for _i in range(VR.SIGN_STREAK_NEED):
+            out = agent.verify_proof(main, **kw)
     return out
 
 
@@ -271,8 +320,14 @@ def _blocked_by(out: dict, verdict: str) -> bool:
 
 
 def _signed(out: dict) -> bool:
-    """正控那条判据成立吗：结论成立、签住第 3 位、台账里也读得到同一档。"""
-    return (str(out.get("verdict") or "") == "成立" and out.get("signed_bit3") is True
+    """正控那条判据成立吗：结论成立、签落在稿上、台账里也读得到同一档。
+
+    2026-11-08 之后"签住"的落点是稿上的九格块（`review_write.manuscript_signed`）；
+    命题行的第 3 位归 B 收录时认领（`signed_bit3` 恒 False）。
+    """
+    return (str(out.get("verdict") or "") == "成立"
+            and bool(dict(out.get("review_write") or {}).get("manuscript_signed"))
+            and out.get("signed_bit3") is False
             and out.get("checked") is True)
 
 
@@ -432,12 +487,12 @@ def test_a_cross_check_citation_is_inadmissible_and_cannot_sign(tmp_path: pathli
         _check(lemma, "consistent", note="用法与原文一致（模型原话）")]))
 
     out = _three(agent, main, proof_text=MAIN_PROOF)
-    assert out["citations"][0]["evidence_kind"] == "cross_check", out["citations"]
-    assert out["citations"][0]["grade"] == "conjecture", out["citations"]
+    # 2026-11-08：可引资格从"被引命题自己的手稿上有没有 V 签"读。这一档的稿没有签
+    # ⇒ 等级读不出来（空）、不够格；模型说"一致"也照样被改判 inadmissible。
+    assert out["citations"][0]["manuscript_missing"] is False, out["citations"]
+    assert out["citations"][0]["grade"] == "", out["citations"]
     assert out["citations"][0]["admissible"] is False
     assert _blocked_by(out, "inadmissible"), out
-    assert "conjecture" in out["citation_checks"][0]["note"], (
-        "挡签的点名要写清它现在的**等级**（判定面读等级）", out["citation_checks"])
     assert "pre_theorem" in out["citation_checks"][0]["note"], out["citation_checks"]
     assert "不够格" in seam.prompts[0], "提示词里要教这条档位口径（否则模型无从判）"
     disk = _ledger_row(store, main)
@@ -560,11 +615,15 @@ def test_a_citation_to_a_missing_proposition_cannot_be_called_consistent(
         _check("999999", "consistent", note="模型说一致（它也没见过这条命题）")]))
 
     out = _three(agent, main, proof_text=MAIN_PROOF)
-    assert out["citations"][0]["statement_missing"] is True, out["citations"]
-    assert out["citation_checks"][0]["verdict"] == "unknown", out["citation_checks"]
-    assert "不在册" in out["citation_checks"][0]["note"]
+    # 2026-11-08：V 只读手稿 ⇒ 读不到"这一条有没有在册"，能说的是"盘上没有它的稿"。
+    # 这一档照样挡住：`manuscript_missing` 是读数，改判 inadmissible 是判据。
+    assert out["citations"][0]["manuscript_missing"] is True, out["citations"]
+    assert out["citations"][0]["statement_missing"] is False, (
+        "V 不读册，却声称'不在册' ⇒ 读了一句它没查过的话")
+    assert out["citation_checks"][0]["verdict"] == "inadmissible", out["citation_checks"]
+    assert "不够格" in out["citation_checks"][0]["note"]
     assert out["signed_bit3"] is False, out
-    assert "只能判 unknown" in seam.prompts[0]
+    assert "判 inadmissible" in seam.prompts[0]
 
 
 # ============================================================ 护栏：缺一条按 unknown
@@ -607,12 +666,14 @@ def test_dependencies_of_another_proof_do_not_enter_this_proofs_material(
     agent, _seam = _v(store, _reply(checks=[]))
     out1 = _three(agent, main, proof_text=MAIN_PROOF, proof_no=1)
     assert out1["citations"] == [], "把 #p2 的依赖塞进了 #p1 的材料（串份）"
-    assert out1["signed_bit3"] is True, out1
+    assert out1["signed_bit3"] is False, out1
+    assert out1["review_write"].get("manuscript_signed") is True, out1["review_write"]
 
     agent2, seam2 = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
     out2 = _three(agent2, main, proof_text=MAIN_PROOF_2, proof_no=2)
     assert [c["stmt_id"] for c in out2["citations"]] == [lemma], out2["citations"]
-    assert out2["proof_no"] == 2 and out2["signed_bit3"] is True, out2
+    assert out2["proof_no"] == 2 and out2["signed_bit3"] is False, out2
+    assert out2["review_write"].get("manuscript_signed") is True, out2["review_write"]
     assert LEMMA_FULL in seam2.prompts[0]
 
 

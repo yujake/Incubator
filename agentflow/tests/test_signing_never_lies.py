@@ -37,6 +37,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import closing as CL
+from agentflow import conductor as CND
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
@@ -181,11 +182,13 @@ def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
     # 2026-11-04（甲）：在册送审必须带按号手稿；p2 走 `f-proof-<号>-p2.md`。
     rel = write_proof_manuscript(store.root, SID, body, statement_full=FULL, proof_no=no)
     out: dict = {}
-    for _i in range(max(1, int(times))):
-        kw = {"proof_no": proof_no, "proof_manuscript": rel}
-        if proof_text:
-            kw["proof_text"] = proof_text
-        out = agent.verify_proof(SID, **kw)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        for _i in range(max(1, int(times))):
+            kw = {"proof_no": proof_no, "proof_manuscript": rel}
+            if proof_text:
+                kw["proof_text"] = proof_text
+            out = agent.verify_proof(SID, **kw)
     return out
 
 
@@ -237,22 +240,20 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
         "返回说签住了第 3 位，而台账是 0 字节：" + json.dumps(out, ensure_ascii=False))
     assert out["proof_sha256"] == VR.proof_sha(P2), out
 
-    if out["checked"] and out["signed_bit3"]:
-        # 正控那一半：真的签住了 —— 台账有行、位翻了、R10 数得到。
-        rows = _ledger_rows(st)
-        assert len(rows) == VR.SIGN_STREAK_NEED and rows[-1]["proof_no"] == 2, rows
-        assert rows[-1]["proof_sha256"] == VR.proof_sha(P2), rows[-1]
-        assert _per_proof(st) == {1: False, 2: True}, _per_proof(st)
-        n, detail = _r10(st)
-        assert n == 1 and detail["review_states"]["signed"] == 1, detail
-        assert detail["counted"][0]["proof_no"] == 2, detail
-        assert out["review_write"]["written"] is True, out["review_write"]
-        assert out["sign_issuance"]["issued"] is True, out["sign_issuance"]
-        return
-    # 另一条合法出口：拒了就如实说，且盘上同样没有这一签。
-    assert out["checked"] is False and out["reason"], out
-    assert "reviewed" in out["detail"] or "没" in out["detail"], out["detail"]
-    assert _per_proof(st) == {1: False, 2: False}, _per_proof(st)
+    # 2026-11-08（V 只对手稿负责）：V 不再翻命题位，所以"签住了"这件事只由稿上那一格
+    # 回答；返回值绝不许把 `signed_bit3` 说成真，也绝不许把 statements 写一个字。
+    assert out["checked"] is True, out
+    rows = _ledger_rows(st)
+    assert len(rows) == VR.SIGN_STREAK_NEED and rows[-1]["proof_no"] == 2, rows
+    assert rows[-1]["proof_sha256"] == VR.proof_sha(P2), rows[-1]
+    assert out["signed_bit3"] is False, out
+    assert out["review_write"].get("manuscript_signed") is True, out["review_write"]
+    assert out["review_write"].get("written") is False, out["review_write"]
+    assert out["sign_issuance"]["issued"] is True, out["sign_issuance"]
+    # statements 一个字节都没动：逐份位是空的（不是 {1: False, 2: True}）。
+    assert _per_proof(st) == {}, _per_proof(st)
+    assert _get(st)["bits"]["reviewed"] is False, _get(st)["bits"]
+    assert size > 0, "三转的台账一行都没落"
 
 
 def test_the_write_gate_lets_through_a_row_where_any_proof_is_signed(
@@ -342,11 +343,12 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
     seam = _Seam()
-    # 三次（连续 3 次「成立」才翻位、且翻位由 V 的秘书做 —— 2026-10-29）
     agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_v_secretary(st))
     rel2 = write_proof_manuscript(st.root, SID, P2, statement_full=FULL, proof_no=2)
-    for _i in range(VR.SIGN_STREAK_NEED):
-        out = agent.verify_proof(SID, proof_no=2, proof_manuscript=rel2)
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        for _i in range(VR.SIGN_STREAK_NEED):
+            out = agent.verify_proof(SID, proof_no=2, proof_manuscript=rel2)
 
     assert seam.prompts, "没有问过模型 ⇒ 这条判据没有对象"
     assert seam.prompts[0], seam.prompts
@@ -357,23 +359,49 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     assert out["proof_sha256"] == VR.proof_sha(P2), (
         f"sha 不是 #p2 那一份的（{out['proof_sha256'][:12]}… vs {VR.proof_sha(P2)[:12]}…）")
     assert _ledger_rows(st)[0]["proof_sha256"] == VR.proof_sha(P2), _ledger_rows(st)[0]
-    # #p1 没有被牵连：它自己那一格仍是未签，签的凭据在 #p2 上。
-    assert _per_proof(st) == {1: False, 2: True}, _per_proof(st)
-    reading = VR.statement_review_reading(st.root, _get(st))
-    assert reading["proofs"][0]["state"] == "unsigned", reading["proofs"][0]
-    assert reading["proofs"][1]["state"] == "signed", reading["proofs"][1]
+    # 2026-11-08：载体是稿，"号与正文绑定"由稿本身保证：签只落在交给 V 的那一份稿上，
+    # statements 一个字节不动（`#p1` 不会被牵连，也不会被借用）。
+    assert out["signed_bit3"] is False, out
+    assert out["review_write"].get("manuscript_signed") is True, out["review_write"]
+    assert _per_proof(st) == {}, _per_proof(st)
+    from agentflow import depsection as _DS
+    from agentflow import vsigns as _VS
+
+    _p2_text = (pathlib.Path(st.root) / rel2).read_text(encoding="utf-8")
+    _p2_sign = _VS.manuscript_sign_standing(
+        _p2_text, proof_sha=VR.proof_sha(_DS.proof_body(_p2_text)),
+        manuscript_path=rel2)
+    assert _p2_sign["found"] is True and _p2_sign["signed"] is True, _p2_sign
+    assert _p2_sign["proof_sha256"] == VR.proof_sha(P2), _p2_sign
 
 
-def test_a_missing_proof_number_is_refused_instead_of_borrowing_another(
-        tmp_path: pathlib.Path) -> None:
-    """② 的反面：`proof_no` 指向一份不存在的证明 ⇒ `no_such_proof`，一行都不落。"""
+def test_a_proof_number_alone_cannot_carry_a_sign(tmp_path: pathlib.Path) -> None:
+    """② 的反面（2026-11-08 新契约）：号不是载体，稿才是。
+
+    - 只给 `proof_no=3`、不给稿 ⇒ 受控拒（`proof_text_needs_a_manuscript`），一行都不落；
+    - 给了一份稿（正文是 P2）、号写 3 ⇒ V 审 / 签的是这份稿的正文（提示词里是 P2），
+      台账回执里的号只是送审方给的标签；分配归 B 收录（`_proof_no_from_delivery`）。
+    """
     st = _ws(tmp_path)
     _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
     seam = _Seam()
     out = _v(st, seam).verify_proof(SID, proof_no=3)
-    assert out["checked"] is False and out["reason"] == "no_such_proof", out
-    assert seam.prompts == [], "没有那一份证明却问了模型（拿别的正文顶替）"
+    assert out["checked"] is False and out["reason"] == "proof_text_needs_a_manuscript", out
+    assert seam.prompts == [], "没有稿却问了模型（号不能顶替正文）"
     assert _ledger_bytes(st) == 0, "没审却落了台账行"
+
+    rel = write_proof_manuscript(st.root, SID, P2, statement_full=FULL, proof_no=2)
+    agent = AgentV(st, workspace_root=st.root, llm=seam,
+                   secretary=_v_secretary(st))
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                        parent_role="F"):
+        got = agent.verify_proof(SID, proof_no=3, proof_manuscript=rel)
+    assert got["checked"] is True, got
+    assert got["proof_sha256"] == VR.proof_sha(P2), got
+    assert seam.prompts and P2_MARK in seam.prompts[-1], (
+        "给了稿却按号去取别的正文 ⇒ 「只对手稿负责」没落地")
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    assert _per_proof(st) == {}, _per_proof(st)
 
 
 # ============================================================ ③ 正文与号错配

@@ -37,10 +37,12 @@ import json
 import pathlib
 
 from _proof_manuscript_fixture import write_proof_manuscript
+from agentflow import conductor as CND
 from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
@@ -57,6 +59,15 @@ HEAD = ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一�
 #: 一次 clean 的审阅回复：模型说成立（缺陷由 V 的机械审计找，不靠模型）。
 CLEAN_REPLY = json.dumps({"verdict": "成立", "why": "重读一遍，未发现问题。",
                           "findings": []}, ensure_ascii=False)
+
+
+def _clean_with_check(sid: str) -> str:
+    """clean + 对 `sid` 给出 `consistent`（依赖面干净那一档：引用核实也要有结论）。"""
+    return json.dumps({
+        "verdict": "成立", "why": "重读一遍，未发现问题。", "findings": [],
+        "citation_checks": [{"stmt_id": sid, "verdict": "consistent",
+                             "quote_verbatim": False, "note": "夹具：用法一致"}],
+    }, ensure_ascii=False)
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -92,6 +103,31 @@ def _manuscript(store: Store, *, body: str, rows: list[dict]) -> str:
     """写这一条命题的按号手稿，返回工作区相对路径。"""
     return write_proof_manuscript(store.root, SID, body, statement_full=FULL,
                                   deps_rows=rows)
+
+
+def _lemma_manuscript(store: Store, *, full: str = LEMMA_FULL,
+                      signed: bool = True) -> str:
+    """被引命题自己的手稿（2026-11-08：可引资格从这一份稿上的 V 签读）。
+
+    `signed=True` ⇒ 盖一块 3/3 的签（够格）；`False` ⇒ 只有正文、没有签（不够格）。
+    不再靠 `statements.bits.reviewed` —— V 不读册。
+    """
+    rel = write_proof_manuscript(store.root, LEMMA, "1. 引理正文（夹具）。",
+                                 statement_full=full)
+    if signed:
+        raw = (pathlib.Path(store.root) / rel).read_text(encoding="utf-8")
+        stamped = VS.stamp_manuscript_sign(
+            raw, proof_sha=VR.proof_sha("1. 引理正文（夹具）。"), streak=3, need=3,
+            verdict="成立", signer="secretary:F", at=TS,
+            ledger=f"verifications/{LEMMA}.jsonl#v-000001",
+            statement_id=LEMMA, manuscript_id=LEMMA)
+        (pathlib.Path(store.root) / rel).write_text(stamped, encoding="utf-8")
+    return rel
+
+
+def _submit():
+    return CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
+                          parent_role="F")
 
 
 def _row(sid: str, quote: str, step: str = "第 1 步") -> dict:
@@ -190,8 +226,8 @@ def test_g_a_citation_of_an_unregistered_statement_is_a_defect(tmp_path):
     got = agent.verify_proof(SID, proof_text=body, proof_manuscript=rel)
 
     _expect_fault(got, UNKNOWN)
-    assert "不在册" in _details(got), got
-    assert "F 读不到它" in _details(got), got
+    assert "盘上没有" in _details(got), got
+    assert "手稿" in _details(got), got
     # 判据是"这一签没落地"：台账那一行在（它是打回的凭据），但没有签块。
     rows, bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
     assert not bad, bad
@@ -206,6 +242,7 @@ def test_h_a_citation_below_the_floor_is_a_defect(tmp_path):
     _put(st, SID, full=FULL, bits=_bits(), label="主命题", proof_text=body)
     lemma = _put(st, LEMMA, full=LEMMA_FULL, bits=_bits(reviewed=False), label="猜想引理")
     assert DS.statement_grade(lemma) == "conjecture", lemma
+    _lemma_manuscript(st, signed=False)   # 稿在、没有 V 签 ⇒ 低于门槛
     rel = _manuscript(st, body=body, rows=[_row(LEMMA, "上下文引理")])
     agent, _review = _agent(st)
 
@@ -213,7 +250,7 @@ def test_h_a_citation_below_the_floor_is_a_defect(tmp_path):
 
     _expect_fault(got, LEMMA)
     detail = _details(got)
-    assert "等级" in detail and "conjecture" in detail, got
+    assert "V 签" in detail, got
     assert DS.CITATION_MIN_LEVEL in detail, got
     assert got.get("signed_bit3") is False, got
 
@@ -226,6 +263,7 @@ def test_i_a_table_row_the_body_never_cites_is_a_defect(tmp_path):
     _put(st, SID, full=FULL, bits=_bits(), label="主命题", proof_text=body)
     lemma = _put(st, LEMMA, full=LEMMA_FULL, bits=_bits(reviewed=True), label="上下文引理")
     assert DS.statement_grade(lemma) == "pre_theorem", lemma
+    _lemma_manuscript(st, signed=True)
     rel = _manuscript(st, body=body, rows=[_row(LEMMA, "表里多出来的那一行")])
     agent, _review = _agent(st)
 
@@ -238,34 +276,40 @@ def test_i_a_table_row_the_body_never_cites_is_a_defect(tmp_path):
 
 # ============================================================ j 反真空
 def test_j_stubbing_the_pool_check_lets_g_and_h_through_red(monkeypatch, tmp_path):
-    """j：把 ①/② 的判据打桩成恒真 ⇒ g 与 h 必须回到"放行并签上"。
+    """j：把可引资格判据打桩成恒真 ⇒ g 与 h 必须回到"放行并签上"。
 
     这证明 g/h 的绿来自那一条判据，而不是"恰好别处也走不通"。
 
-    打桩点跟着判据落点走（2026-11-06）："这个号不可引"那条判据收进
-    `uncitable_statement_finding`（它同时是六格的唯一制造器），
-    `uncitable_statement_problem` 只剩它的两格视图。下面两条断言一个字都没改。
+    2026-11-08：可引资格的判据落点从册子换成手稿，唯一制造器是
+    `depsection.manuscript_uncitable_finding`（六格）。把它打桩成恒 `{}` ⇒
+    两个"不可引"的现场都必须放行。
     """
-    monkeypatch.setattr(DS, "uncitable_statement_finding",
-                        lambda sid, rows, **_kw: {})
+    monkeypatch.setattr(DS, "manuscript_uncitable_finding",
+                        lambda sid, cited, **_kw: {})
+    # 可引资格还有第二道：引用闸（`_citation_admissibility` 同一格）。审计松开之后，
+    # 这一道也要松开 —— 否则"打桩恒真"只松开了半条链，判据量到的不是同一个东西。
+    monkeypatch.setattr(AgentV, "_citation_admissibility", lambda self, grade: True)
 
     st = _ws(tmp_path / "g")
     body = (f"1. 由 stmt:{UNKNOWN} 直接推出结论。\n2. 于是主命题成立。")
     _put(st, SID, full=FULL, bits=_bits(), label="主命题", proof_text=body)
     rel = _manuscript(st, body=body, rows=[_row(UNKNOWN, "某条不存在的引理")])
-    agent, _review = _agent(st)
-    got = agent.verify_proof(SID, proof_text=body, proof_manuscript=rel)
-    assert got.get("signed_bit3") is True, (
+    agent, _review = _agent(st, [_clean_with_check(UNKNOWN)])
+    with _submit():
+        got = agent.verify_proof(SID, proof_text=body, proof_manuscript=rel)
+    assert got.get("review_write", {}).get("manuscript_signed") is True, (
         f"打桩成恒真之后 g 仍然被拒 ⇒ g 的绿不是 ① 给的：{got}")
 
     st2 = _ws(tmp_path / "h")
     body2 = (f"1. 由 stmt:{LEMMA} 的结论直接推出。\n2. 于是主命题成立。")
     _put(st2, SID, full=FULL, bits=_bits(), label="主命题", proof_text=body2)
     _put(st2, LEMMA, full=LEMMA_FULL, bits=_bits(reviewed=False), label="猜想引理")
+    _lemma_manuscript(st2, signed=False)
     rel2 = _manuscript(st2, body=body2, rows=[_row(LEMMA, "上下文引理")])
-    agent2, _review2 = _agent(st2)
-    got2 = agent2.verify_proof(SID, proof_text=body2, proof_manuscript=rel2)
-    assert got2.get("signed_bit3") is True, (
+    agent2, _review2 = _agent(st2, [_clean_with_check(LEMMA)])
+    with _submit():
+        got2 = agent2.verify_proof(SID, proof_text=body2, proof_manuscript=rel2)
+    assert got2.get("review_write", {}).get("manuscript_signed") is True, (
         f"打桩成恒真之后 h 仍然被拒 ⇒ h 的绿不是 ② 给的：{got2}")
 
 
@@ -278,13 +322,16 @@ def test_k_a_clean_dependency_face_still_gets_signed(tmp_path):
     lemma = _put(st, LEMMA, full=LEMMA_FULL, bits=_bits(reviewed=True), label="上下文引理")
     assert DS.statement_grade(lemma) == "pre_theorem", lemma
     assert LEMMA in DS.citable_pool([lemma]), DS.citable_pool([lemma])
+    _lemma_manuscript(st, signed=True)
     rel = _manuscript(st, body=body, rows=[_row(LEMMA, "上下文引理")])
-    agent, review = _agent(st)
+    agent, review = _agent(st, [_clean_with_check(LEMMA)])
 
-    got = agent.verify_proof(SID, proof_text=body, proof_manuscript=rel)
+    with _submit():
+        got = agent.verify_proof(SID, proof_text=body, proof_manuscript=rel)
 
     assert got.get("checked") is True, got
     assert got.get("verdict") == "成立", got
-    assert got.get("signed_bit3") is True, got
+    assert got.get("signed_bit3") is False, got
+    assert got.get("review_write", {}).get("manuscript_signed") is True, got["review_write"]
     assert _problems(got) == [], got.get("findings")
     assert review.asked() == 3, review.asked()

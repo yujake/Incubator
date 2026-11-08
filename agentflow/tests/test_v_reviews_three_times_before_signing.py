@@ -63,9 +63,11 @@ import json
 import pathlib
 
 from agentflow import agent_loop as AL
+from agentflow import conductor as CND
 from agentflow import evidencebits as EB
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
@@ -96,20 +98,23 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _put(store: Store) -> dict:
-    """落一条在册命题（走真事务；夹具只造这一行）。"""
+def _put(store: Store, *, proof_text: str = PROOF) -> dict:
+    """落一条在册命题（走真事务；夹具只造这一行）。
+
+    `proof_text` 可换（改稿那一档要用另一份正文：sha 变了签才该作废）。
+    """
     row = {
         "stmt_id": SID, "origin": "own_result", "kind": "theorem",
         "label": "弦长函数非常值", "statement_full": FULL,
-        "statement_text": "弦长函数不是常值", "proof_text": PROOF,
+        "statement_text": "弦长函数不是常值", "proof_text": proof_text,
         "evidence_kind": "heuristic", "status": "active",
         "quote_verified": None, "quote_reason": "自产命题，没有外部引文要比对",
         "created_at": TS, "created_by": "test",
-        "bits": EB.bits_of(proof=True, proof_process=PROOF, kind="theorem"),
+        "bits": EB.bits_of(proof=True, proof_process=proof_text, kind="theorem"),
     }
     with store.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
-    write_proof_manuscript(store.root, SID, PROOF, statement_full=FULL)
+    write_proof_manuscript(store.root, SID, proof_text, statement_full=FULL)
     return row
 
 
@@ -209,6 +214,17 @@ def _rows(st: Store) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _as_submitter():
+    """一次真实送审的挂点：V 的 parent = F（收方秘书 = `secretary:F`）。
+
+    2026-11-08 起签只落在稿上，而落块只能由收方秘书做（`vsigns.land` 的 `by` 只认
+    `secretary:F|B`）。直调 V 不挂 parent 时 `by=""` ⇒ 能颁发签文件、不能落块 ——
+    那是既有语义，不是失败。要量"稿上已签"的判据必须造出真实送审的挂点。
+    """
+    return CND.calling_as("t-v-000001", "V",
+                          parent_task_id="t-f-000001", parent_role="F")
+
+
 # ============================================================ t1：一次调用判三次
 
 def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
@@ -226,9 +242,8 @@ def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
 
-    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
-
-    # 这一次调用真的自己问了三次模型（不是 F 又提交了三次）。
+    with _as_submitter():
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review.asked() == 3, (
         f"一次 `verify_proof` 只问了 {review.asked()} 次模型 ⇒ "
         "「连续 3 次」还是靠 F 反复提交")
@@ -251,10 +266,18 @@ def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
     assert {VR.proof_no_of(r) for r in rows} == {1}, rows
     assert len({r["verification_id"] for r in rows}) == 3, rows
 
-    assert got["signed_bit3"] is True, got["sign_issuance"]
-    assert got["bits"]["reviewed"] is True, got["bits"]
+    # 2026-11-08：签落在稿上（侧文件 + 九格块），命题行的第 3 位归 B 收录时认领。
+    # 三转 clean ⇒ 秘书判发 ⇒ 签真的落地（issuance.issued + 稿上签块），
+    # 而 statements 一个字节都不动（这是新契约的另一半）。
+    assert got["signed_bit3"] is False, got["sign_issuance"]
+    assert got["bits"].get("reviewed") is not True, got["bits"]
     assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
-    assert _stmt_row(st)["bits"]["reviewed"] is True, _stmt_row(st)["bits"]
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
+    _block = VS.manuscript_sign_standing(
+        (pathlib.Path(st.root) / REL).read_text(encoding="utf-8"),
+        proof_sha=VR.proof_sha(PROOF), manuscript_path=REL)
+    assert _block["state"] == "signed", _block
+    assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
 
     # clean 那一档一条都不许递到 F：读侧明细为空，投递那一步一个板项都不开。
     text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
@@ -350,13 +373,15 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     agent = AgentV(st, workspace_root=st.root, llm=review,
                    secretary=_secretary(st, sec_seam))
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 1)
-    got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _as_submitter():
+        got = agent.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     assert review.asked() == 1, (
         f"门槛 1 时问了 {review.asked()} 次模型 ⇒ 停的条件没跟着门槛走")
     assert len(got.get("review_passes") or []) == 1, got.get("review_passes")
     assert len(_rows(st)) == 1, _rows(st)
     assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
-    assert got["signed_bit3"] is True, got["bits"]
+    assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
+    assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     # (b) 门槛 5：上界跟着门槛走 ⇒ 判满 5 次、第 5 次签上（不是判到 3 就停）。
     st2 = _ws(tmp_path / "b")
     _put(st2)
@@ -366,7 +391,8 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     agent2 = AgentV(st2, workspace_root=st2.root, llm=review2,
                     secretary=_secretary(st2, sec_seam2))
     monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 5)
-    got2 = agent2.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
+    with _as_submitter():
+        got2 = agent2.verify_proof(SID, proof_text=PROOF, proof_manuscript=REL)
     passes = got2.get("review_passes") or []
     assert len(passes) == 5, f"门槛 5 时判了 {len(passes)} 次 ⇒ 上界没有等于门槛"
     assert review2.asked() == 5, (review2.asked(), passes)
@@ -375,8 +401,9 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     assert len(_rows(st2)) == 5, f"台账应当 5 行（每一转各一行），实得 {len(_rows(st2))}"
     assert got2["sign_issuance"]["streak_ok"] is True, got2["sign_issuance"]
     assert got2["sign_issuance"]["issued"] is True, got2["sign_issuance"]
-    assert got2["signed_bit3"] is True and got2["bits"]["reviewed"] is True, got2
-    assert _stmt_row(st2)["bits"]["reviewed"] is True, _stmt_row(st2)["bits"]
+    assert got2["signed_bit3"] is False and got2["bits"].get("reviewed") is not True, got2
+    assert got2["review_write"].get("manuscript_signed") is True, got2["review_write"]
+    assert _stmt_row(st2)["bits"]["reviewed"] is False, _stmt_row(st2)["bits"]
     # 终局是"签上"，不是"次数没到"：两格读数都这么说。
     assert passes[-1].get("terminal") == "signed", passes
     assert "还差" not in got2["sign_issuance"]["reason"], got2["sign_issuance"]
@@ -398,7 +425,7 @@ def test_t3_the_pass_bound_is_the_threshold_itself(tmp_path, monkeypatch):
     assert got3["checked"] is False, got3
     assert str(got3["reason"]).startswith("internal_inconsistency"), got3["reason"]
     assert "还差" not in str(got3["reason"]), got3["reason"]
-    assert got3["signed_bit3"] is False and got3["bits"] == {}, got3
+    assert got3["signed_bit3"] is False and got3["bits"].get("reviewed") is not True, got3
     assert _stmt_row(st3)["bits"]["reviewed"] is False, _stmt_row(st3)["bits"]
 
 
@@ -543,7 +570,7 @@ def test_t5_a_secretary_that_cannot_answer_is_not_a_verdict(tmp_path):
     assert "timeout" in str(got["detail"]), got["detail"]
     assert got["secretary_judge"]["checked"] is False, got["secretary_judge"]
     assert got["sign_issuance"]["checked"] is False, got["sign_issuance"]
-    assert got["signed_bit3"] is False and got["bits"] == {}, got
+    assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
     # 不打回：读侧一条明细都没有，板上一个项都不开（没查成不是"有毛病"）。
     text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
