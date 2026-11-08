@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T13:00:15+08:00",
+  "generated_at": "2026-11-08T13:25:40+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "b80b8e1b95943dac43d903ca25e8834c25e6b4c3035a49752d3156fc1ca0b9b9",
+      "sha256": "b4ac271802faf103cd192089eefb751921f789802b867ae653e9081e1c727493",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p258 业主三条裁定（第 2 笔：提示词与冻结）：specs/e.py（穷举 ② 改写 + 普通数值手稿 e-num 那条）、specs/b.py（两族手稿读法 + origin 描述）、specs/d.py（提交强猜想引用 e-num）、specs/g.py（落库证明栏只有 ③）、tools/fs_tools.py（保留表加 reports/e-num- 两行）、两份 golden（agent 面随 p258 重冻；tool 面逐字未变）。登记 = 基线，reviewers 仍为空（登记 != 批准）。",
+      "change_note": "2026-11-08 块甲（D 只递指针）：specs/b.py 的 register_statement 放开 statement_full 必填并广告「按手稿路径收录」；specs/d.py 的 policy 新增「向 B 登记只递指针」。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -309,10 +309,10 @@
       "path": "src/agentflow/specs/d.py",
       "glob": "src/agentflow/specs/d.py",
       "category": "auth-audit",
-      "sha256": "e91c5c90356a1f27efabef5f4872abe337cb5c73a5955313edc955a49e4d0786",
+      "sha256": "7e59d379412e4b3deade2edb87fdc8f0482b768cfb3e1a31bf092e220e89c233",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p258 业主三条裁定（第 2 笔：提示词与冻结）：specs/e.py（穷举 ② 改写 + 普通数值手稿 e-num 那条）、specs/b.py（两族手稿读法 + origin 描述）、specs/d.py（提交强猜想引用 e-num）、specs/g.py（落库证明栏只有 ③）、tools/fs_tools.py（保留表加 reports/e-num- 两行）、两份 golden（agent 面随 p258 重冻；tool 面逐字未变）。登记 = 基线，reviewers 仍为空（登记 != 批准）。",
+      "change_note": "2026-11-08 块甲（D 只递指针）：specs/b.py 的 register_statement 放开 statement_full 必填并广告「按手稿路径收录」；specs/d.py 的 policy 新增「向 B 登记只递指针」。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

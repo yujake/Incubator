@@ -150,6 +150,90 @@ def _should_promote_to_formal(rel: str) -> bool:
     return text.startswith("notes/")
 
 
+#: D 交稿只许递指针（业主 2026-11-08 逐字）：
+#:
+#: > 「D对命题台账只有只读权限，D向B提交要登记的命题时都是有证明或数值实验的
+#: >   （即E和F的成果）…B侧做好适配（应该在手稿里找命题和数值实验程序，不录入其它内容）」
+#:
+#: 所以 D 这一侧只给三样**指针**：手稿工作区相对路径（`proof_manuscript`）、
+#: 命题号 / 实验号、出处（`exp:<号>`）。命题正文、证明正文、`kind`、`evidence_kind`
+#: 一律由 B 从那份稿里读（`_register_pointer_manuscript`）—— D 把它们抄进参数
+#: 就是"把手稿内容转手一遍"，而转手的那一份没有任何东西保证它与稿逐字相同。
+#:
+#: 这一档的受控码。为什么它必须是一个**可读的码**而不是一句散文：调用方（D 的模型）
+#: 要据此改参数，而 `ok=False` 会被终态映射记成 `refused / invalid_params`（`refusals.refuse`）。
+D_POINTER_ONLY_REFUSAL = "d_gives_manuscript_pointers_only"
+
+#: D 传了任何一个就算"递的是正文"的参数（名，人话名）—— 桩点就是这张表。
+#:
+#: 为什么按"非空"判、不按"传没传"判：`register_statement` 的形参有默认值
+#: （`kind=""` / `origin=""` / `evidence_kind=""` …），Python 分不出"显式传了空串"
+#: 与"没传"；而"传了空串"与"没传"在语义上是同一件事（都没有内容）。这条闸要拦的是
+#: **有内容**的那一份，所以判非空就够了，且不会把"显式给空"误判成违规。
+_POINTER_ONLY_BODY_FIELDS: tuple[tuple[str, str], ...] = (
+    ("statement_full", "命题正文"),
+    ("statement_text", "命题短版"),
+    ("proof_text", "证明正文"),
+    ("proofs", "证明清单"),
+    ("kind", "kind"),
+    ("evidence_kind", "evidence_kind"),
+    ("origin", "origin"),
+    ("quote_reason", "引文理由"),
+    ("label", "标签"),
+    ("derived_from", "承重链"),
+    ("doc_id", "doc_id"),
+    ("source_lit_id", "来源文献"),
+    ("page_range", "页码"),
+    ("quote_verified", "引文回验"),
+    ("quote_mode", "回验方式"),
+    ("quote_span", "引文片段"),
+    ("quote_call_sha256", "语义判定指纹"),
+)
+
+
+def _pointer_body_present(name: str, value: Any) -> bool:
+    """这一格 D 有没有给出"正文类"的内容（见 `_POINTER_ONLY_BODY_FIELDS`）。"""
+    if name in ("proofs", "derived_from"):
+        return bool(list(value or ()))
+    if name == "page_range":
+        return bool(dict(value or {}))
+    if name == "quote_verified":
+        return value is not None
+    return bool(str(value or "").strip())
+
+
+def _caller_is_d() -> bool:
+    """这一笔的发起方是不是 D（B 的直调上下文里 `current_caller_role()`；被 D 召唤时是父角色）。
+
+    两个都要读：D 的代码（`write_report`）直接调 B 的方法时，挂点是"我是 D"；
+    而 D 用 `summon` 派 B 时，B 自己的任务上下文里 `_caller_role()` 才是 D。
+    """
+    roles: set[str] = set()
+    try:
+        from ..conductor import current_caller_role
+
+        roles.add(str(current_caller_role() or ""))
+    except Exception:  # noqa: BLE001 —— 读不到挂点 = 没有挂点（不是"D 在调"）
+        pass
+    roles.add(str(_caller_role() or ""))
+    return "D" in roles
+
+
+def _pointer_manuscript_rel(value: Any) -> str:
+    """`proof_manuscript` 是"手稿相对路径"时返回归一后的路径，否则空串。"""
+    rel = _norm_manuscript_rel(value)
+    return rel if _is_manuscript_rel(rel) else ""
+
+
+def _head_value(text: Any, mark: str) -> str:
+    """手稿稿头 `- <标记>：<值>` 那一行的值（没有 / 空 ⇒ 空串，不猜）。"""
+    for line in str(text or "").splitlines():
+        raw = line.strip()
+        if raw.startswith(mark):
+            return raw[len(mark):].strip()
+    return ""
+
+
 def _same_manuscript_text(left: Any, right: Any) -> bool:
     """两份手稿正文是不是同一版（只把换行归一，别的一字不改）。
 
@@ -4029,17 +4113,17 @@ class _RegisterStatement:
     #    ⇒ 「登记」只发生一次；之后每一版证明只换手稿，不新登记、不新增 statements 行。
     F_CALLER_REFUSED = "f_proposition_must_be_a_manuscript"
 
-    def register_statement(self, *, statement_full: str,
+    def register_statement(self, *, statement_full: str = "",
                            source_lit_id: str = "",
                            proof_text: str = "",
                            proofs: list | None = None,
                            proof_manuscript: str = "",
-                           kind: str = "theorem",
+                           kind: str = "",
                            label: str = "",
                            statement_text: str = "",
-                           origin: str = "external_lit",
+                           origin: str = "",
                            page_range: dict | None = None,
-                           evidence_kind: str = "cross_check",
+                           evidence_kind: str = "",
                            quote_verified: bool | None = None,
                            quote_reason: str = "",
                            quote_mode: str = "",
@@ -4052,6 +4136,19 @@ class _RegisterStatement:
 
         判据与读数见本类顶上那一段注释。参数面与 `_register_statement_impl` 逐字相同
         （动作声明面读的是这个方法）。
+
+        ## 两种形态（2026-11-08）
+
+        - **按手稿路径收录**（D 那一侧只走这一种）：`statement_full` 空 + `proof_manuscript`
+          是一份工作区相对路径 ⇒ 命题正文 / 证明正文 / `kind` / `evidence_kind` / 出处
+          全部由 B 从那份稿里读（`_register_pointer_manuscript`）。调用方只递指针：
+          稿路径 + 命题号/实验号 + 出处（`line_range={"label": "exp:<号>"}`）。
+        - **正文登记**（文献侧 / B 自己改写 / 历史调用）：沿用改前逐字一致的参数面。
+
+        为什么 D 传正文就受控拒（业主 2026-11-08「D对命题台账只有只读权限」）：
+        D 把稿里的内容抄进参数，等于让"登记的那一份"与"稿里的那一份"分成两个来源，
+        而没有任何东西保证它们逐字相同；这一笔的承重证据是 E/F 的成果，那就只能由
+        收方从成果里读。拒信逐字点名「只递指针」，并说清改法。
         """
         caller = _caller_role()
         if caller == "F":
@@ -4060,18 +4157,202 @@ class _RegisterStatement:
                 ("F 交来的命题不能直接走 `B.register_statement`：请把它登记成手稿条目"
                  "（`reports/f-proof-<命题号>.md`，新命题会过 F 秘书的形态闸），"
                  "B 在 V 签之后按正文 sha 收录。这条派活路径不再绕开手稿登记"))
+        rel = _pointer_manuscript_rel(proof_manuscript)
+        if _caller_is_d():
+            # 注意：`locals()` 必须在函数作用域里取（推导式有自己的作用域，
+            # 在推导式里取到的是 `name` / `label` 那两个循环变量本身）。
+            _args = dict(locals())
+            carried = [label for name, label in _POINTER_ONLY_BODY_FIELDS
+                       if _pointer_body_present(name, _args.get(name))]
+            if carried:
+                return _refuse(
+                    D_POINTER_ONLY_REFUSAL,
+                    ("D 交稿**只递指针**（业主 2026-11-08：D 对命题台账只有只读权限，"
+                     "向 B 提交的每一条都要有 E / F 的成果背书）：这一笔还带着 "
+                     + "、".join(carried)
+                     + " —— 那些内容一律由 **B 从手稿里读**，D 不许另传（抄一遍就等于"
+                     "给「登记的那一份」换了个来源）。改法：只给 `proof_manuscript=<手稿"
+                     "工作区相对路径>`，再给命题号 / 实验号与出处（`exp:<号>`）；"
+                     "命题正文、证明正文、kind、evidence_kind 与引文理由都由 B 从那份稿里读"))
+            if not rel:
+                return _refuse(
+                    D_POINTER_ONLY_REFUSAL,
+                    ("D 交稿**只递指针**：这一笔没有给手稿路径（`proof_manuscript` 读到 "
+                     f"{str(proof_manuscript or '')[:60]!r}）⇒ 整笔不写。改法：只递指针 —— "
+                     "`proof_manuscript` 给那份稿的工作区相对路径"
+                     "（`reports/e-proof-<实验号>.md` / `reports/e-num-<实验号>.md` / "
+                     "`reports/f-proof-*.md`），再给命题号 / 实验号与出处；"
+                     "命题正文、证明正文、kind、evidence_kind 都由 B 从那份稿里读"))
+        if rel and not str(statement_full or "").strip():
+            got, pointer_origin, pointer_kind = self._register_pointer_manuscript(
+                rel, provenance=line_range)
+            return self._apply_declared_manuscript_kind(
+                got, statement_full="", origin=pointer_origin, kind=pointer_kind,
+                proof_manuscript=rel)
         got = self._register_statement_impl(
             statement_full=statement_full, source_lit_id=source_lit_id,
             proof_text=proof_text, proofs=proofs, proof_manuscript=proof_manuscript,
-            kind=kind, label=label, statement_text=statement_text, origin=origin,
-            page_range=page_range, evidence_kind=evidence_kind,
+            kind=str(kind or "theorem"), label=label, statement_text=statement_text,
+            origin=str(origin or "external_lit"),
+            page_range=page_range, evidence_kind=str(evidence_kind or "cross_check"),
             quote_verified=quote_verified, quote_reason=quote_reason,
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range)
         return self._apply_declared_manuscript_kind(
-            got, statement_full=statement_full, origin=origin, kind=kind,
-            proof_manuscript=proof_manuscript)
+            got, statement_full=statement_full, origin=str(origin or "external_lit"),
+            kind=str(kind or "theorem"), proof_manuscript=proof_manuscript)
+
+    def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None
+                                     ) -> tuple[dict, str, str]:
+        """按手稿路径收录：把该登记的那几样**全部从稿里读**出来（D 只递了指针）。
+
+        业主 2026-11-08 逐字：「D对命题台账只有只读权限，D向B提交要登记的命题时
+        都是有证明或数值实验的（即E和F的成果）…B侧做好适配（应该在手稿里找命题和
+        数值实验程序，不录入其它内容）」。
+
+        ## 读什么、从哪读（三族手稿各一条，判据只有这一处）
+
+        | 这一格 | 从稿的哪儿读 |
+        |---|---|
+        | 命题正文 | `## 命题` 那一节（三族同形；E 的 `e-num-*` 也是它） |
+        | 证明正文 | `## 证明` 那一节（`e-num-*` 没有这一节：普通数值档 `proof_text` 留空） |
+        | `kind` | 稿头 `- 证据种类：<kind>`（认不出 / 词表外 ⇒ 按族取缺省：`e-proof` ⇒ theorem、其余 ⇒ conjecture） |
+        | `evidence_kind` | 按族定：`e-proof` ⇒ `proof`（穷举证明，要 V 签）、`e-num` ⇒ `cross_check`（有数值实验支持）、F 的文字证明 ⇒ `heuristic` |
+        | 出处 `line_range` | `e-*` ⇒ `exp:<实验号>`（稿头 / 路径名 / 调用方给的出处，三者同一处）；F ⇒ 稿的路径本身 |
+        | 承重链 `derived_from` | 证明正文里的 `stmt:` 引用（与 `depsection.stmt_refs` 同一口径） |
+        | `label` | F 的稿头 `- 标签：`；E 的取命题首行前 80 字 |
+
+        返回 `(B 的登记结果, origin, kind)`；受控拒时 origin / kind 是空串。
+        """
+        from .. import depsection as _DS
+        from .. import exhaustionreport as _ER
+        from .. import proofregistry as _PR
+
+        root = Path(str(getattr(self.store, "root", "") or "."))
+        try:
+            text = (root / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            return _refuse(
+                "manuscript_unreadable",
+                f"按手稿路径收录：读不到 `{rel}`（{type(exc).__name__}: {exc}）⇒ 整笔不写"
+                "（读不到的稿不能当成没有；也不能退回让调用方贴正文）"), "", ""
+        _head, sections = _PR.split_sections(text)
+        statement = next((str(body).strip() for name, body in sections if name == "命题"), "")
+        if not statement:
+            return _refuse(
+                "pointer_manuscript_missing_statement",
+                f"按手稿路径收录：`{rel}` 里没有 `## 命题` 那一节 ⇒ 不知道要给 B 登记哪一条"
+                "命题。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段"), "", ""
+        numeric = _ER.is_numeric_manuscript_relpath(rel)
+        proof_text = "" if numeric else _DS.proof_body(text).strip("\n")
+        if not numeric and not proof_text.strip():
+            return _refuse(
+                "pointer_manuscript_missing_proof",
+                f"按手稿路径收录：`{rel}` 里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文。"
+                "这一格**由 B 从稿里读**，不许调用方在参数里另贴一段"), "", ""
+        base = rel.rsplit("/", 1)[-1]
+        if numeric:
+            family, default_kind, evidence_kind = "e-num", "conjecture", "cross_check"
+        elif rel.startswith(f"{_ER.MANUSCRIPT_DIR}/{_ER.MANUSCRIPT_PREFIX}"):
+            family, default_kind, evidence_kind = "e-proof", "theorem", "proof"
+        elif base.startswith((_DS.MANUSCRIPT_STMT_PREFIX, _DS.MANUSCRIPT_PLAN_PREFIX)) \
+                or rel.startswith("notes/"):
+            family, default_kind, evidence_kind = "f-proof", "conjecture", "heuristic"
+        else:
+            return _refuse(
+                "pointer_manuscript_unrecognized",
+                f"按手稿路径收录：认不出 `{rel}` 是哪一族手稿（E 的 `reports/e-proof-*` / "
+                "`reports/e-num-*`，F 的 `reports/f-proof-*` / `notes/*.md`）⇒ 整笔不写。"
+                "这一格不猜：认不出族的稿没有「该从哪一节读什么」的契约"), "", ""
+        declared = _declared_manuscript_kind(text=text)
+        prov_label = ""
+        if isinstance(provenance, Mapping):
+            prov_label = str(provenance.get("label") or "").strip()
+        # ---- 这一份稿点名的是"哪一条命题"（B 自己从稿里读，不由调用方另传） --------
+        #
+        # 已在册的命题：稿头 `- 命题号：stmt:<号>`（F 的登记条目 / 按号命名的稿）或
+        # 调用方给的出处标签 `stmt:<号>`。命中在册那一行 ⇒ 命题正文、短版与 label 取
+        # **在册那一行**（B 自己的台账）：这一笔是"给一条在册命题挂上这份证明"，
+        # 不是"重新登记它的命题"—— 拿稿里那段去重会让同一命题因措辞漂移落成第二行。
+        # 读数 `pointer.proposition_source` 说清正文取的是哪一处，`proposition_matches_manuscript`
+        # 记稿里那一段与在册正文字面是否一致（不一致是读数，不是静默改写）。
+        head_sid = str(_DS.manuscript_statement_id(text) or "").strip()
+        if not head_sid and prov_label.startswith("stmt:"):
+            head_sid = prov_label.split(":", 1)[-1].strip()
+        row_now: dict | None = None
+        if head_sid:
+            try:
+                row_now = next((dict(r) for r in self.store.rows("statements")
+                                if str(r.get("stmt_id") or "") == head_sid), None)
+            except Exception as exc:  # noqa: BLE001 —— 读不到台账 ⇒ 这一格没查成
+                return _refuse(
+                    "pointer_ledger_unreadable",
+                    f"按手稿路径收录：稿头点名了在册命题 stmt:{head_sid}，而 `statements` "
+                    f"台账读不出来（{type(exc).__name__}: {exc}）⇒ 整笔不写（读不到 ≠ 不在册）"), "", ""
+            if row_now is None:
+                return _refuse(
+                    "pointer_statement_missing",
+                    f"按手稿路径收录：稿 `{rel}` 点名了 stmt:{head_sid}，而它在 `statements` "
+                    "台账里找不到 ⇒ 整笔不写（B 不替它另发一个号：那会让稿头号与登记号错位）"), "", ""
+        kind = declared or (str(row_now.get("kind") or "").strip() if row_now else "") \
+            or default_kind
+        if row_now is not None:
+            proposition = str(row_now.get("statement_full") or statement)
+            statement_text = str(row_now.get("statement_text") or "")
+            label = str(row_now.get("label") or "")
+            evidence_kind = str(row_now.get("evidence_kind") or evidence_kind)
+            origin_now = str(row_now.get("origin") or "own_result")
+            # 出处沿用这一行自己的（它是 B 上一笔登记时写的，不是这一笔的输入）。
+            line_range = dict(row_now.get("line_range") or {}) or {"label": rel}
+            doc_id = str(row_now.get("doc_id") or "")
+        else:
+            proposition = statement
+            eid = str(_ER.experiment_id_of(rel) or "").strip()
+            head_eid = _head_value(text, "- 实验号：")
+            if not eid and head_eid:
+                eid = head_eid.split(":", 1)[-1].strip()
+            if family in ("e-num", "e-proof"):
+                label = (prov_label if prov_label.startswith(_ER.EVIDENCE_PREFIX)
+                         else f"{_ER.EVIDENCE_PREFIX}{eid}" if eid else "")
+                line_range = {"label": label or rel}
+                doc_id = ""
+            else:
+                line_range = {"label": rel}
+                doc_id = ""
+            statement_text = _head_value(text, "- 命题键：")
+            label = ((str(_PR.parse_entry(text).get("label") or "").strip()
+                      if family == "f-proof" else "")
+                     or " ".join(proposition.split())[:80])
+            origin_now = "own_result"
+        quote_reason = (
+            f"手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `{rel}` —— "
+            "引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；"
+            "V 的签（若有）在手稿块上"
+            if not numeric else
+            f"手稿收录（D 只递指针）：普通数值手稿 `{rel}` —— 命题逐字取自 `## 命题`，"
+            "证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 "
+            "`code_path`，引文面不适用")
+        got = self._register_statement_impl(
+            statement_full=proposition, statement_text=statement_text,
+            proof_text=proof_text, proofs=None, proof_manuscript=rel,
+            kind=kind, label=label, origin=origin_now,
+            evidence_kind=evidence_kind, quote_verified=None,
+            quote_reason=quote_reason,
+            derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
+            doc_id=doc_id, line_range=line_range)
+        if isinstance(got, dict):
+            got["pointer"] = {
+                "path": rel,
+                "statement_id": head_sid,
+                "proposition_source": ("ledger" if row_now is not None else "manuscript"),
+                "proposition_matches_manuscript": bool(
+                    not row_now
+                    or _same_manuscript_text(
+                        str(row_now.get("statement_full") or ""), statement)),
+                "d_gave_only_pointers": True,
+            }
+        return got, origin_now, kind
 
     def _apply_declared_manuscript_kind(self, got: dict, *, statement_full: str,
                                         origin: str, kind: str,

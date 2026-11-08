@@ -762,22 +762,19 @@ class _WriteReport:
                 rec["error"] = (f"读不到手稿 {row.get('path')}（{type(exc).__name__}: {exc}）"
                                 " ⇒ 这一条递不出去")
             if stmt_row is not None and text.strip() and not rec["error"]:
-                proofs = [{"proof_no": int(e.get("proof_no") or 0),
-                           "text": str(e.get("text") or "")}
-                          for e in (stmt_row.get("proofs") or []) if isinstance(e, Mapping)]
+                # ---- 2026-11-08（业主三条裁定）：D 只递指针 -------------------------
+                #
+                # 改前这一笔把 `statement_full` / `statement_text` / `proof_text` /
+                # `proofs` / `kind` / `evidence_kind` / `quote_reason` 从在册那一行抄进
+                # 参数 —— 那是"把手稿内容转手一遍"：登记的那一份与稿里的那一份成了两个
+                # 来源，没有任何东西保证它们逐字相同。现在只给三样指针：稿的工作区
+                # 相对路径、命题号（这里就是 `row` 那一条在册行）、出处（稿本身）。
+                # 命题正文 / 证明正文 / kind / evidence_kind 由 B 从稿里读
+                # （`AgentB._register_pointer_manuscript`）；D 再传正文会被 B 受控拒。
                 try:
                     got = dict(self.b.register_statement(
-                        statement_full=str(stmt_row.get("statement_full") or ""),
-                        statement_text=str(stmt_row.get("statement_text") or ""),
-                        proof_text=str(stmt_row.get("proof_text") or ""),
-                        proofs=proofs or None,
-                        derived_from=[str(x) for x in (stmt_row.get("derived_from") or [])],
-                        origin=str(stmt_row.get("origin") or "own_result"),
-                        kind=str(stmt_row.get("kind") or "lemma"),
-                        evidence_kind=str(stmt_row.get("evidence_kind") or "heuristic"),
-                        quote_reason=str(stmt_row.get("quote_reason") or ""),
-                        # 手稿正文随这一笔递过去（B 会按携带单核 `carried_by_D`）。
-                        proof_manuscript=text,
+                        proof_manuscript=str(row.get("path") or ""),
+                        line_range={"label": f"stmt:{sid}"},
                     ) or {})
                 except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
                     rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"
@@ -807,13 +804,15 @@ class _WriteReport:
         F 的第一轮证明是一份登记条目、命题号还没发（号由 B 在 V 签之后发），
         而改前 D 只按 `statements` 行找稿 ⇒ 这一条链在第一次就断了。
 
-        ## 参数从稿头元信息 + 稿拼（与 E 的 `exp:` 行同形）
+        ## 递过去只有指针（2026-11-08 业主裁定：D 对命题台账只读）
 
-        - `statement_full` / `statement_text`：手稿 `## 命题` 那一节（F 登记的命题正文）；
-        - `proof_text`：手稿 `## 证明` 那一节（V 的签盖的就是它）；
-        - `kind`：稿头 `- 证据种类：`（读不出 / 词表外 ⇒ `conjecture`，不许自报更高）；
-        - `label`：稿头 `- 标签：`；
-        - `proof_manuscript`：整份稿（B 按携带单核 sha、从稿里读签块与依赖段）。
+        - `proof_manuscript`：稿的工作区相对路径（唯一的内容入口）；
+        - 命题号 / 实验号与出处：F 的稿按路径本身点名；E 的 `exp:` 行另给
+          `line_range={"label": "exp:<实验号>"}`。
+
+        命题正文、证明正文、`kind`、`evidence_kind` 一律由 B 从稿里读
+        （`B._register_pointer_manuscript`）；D 传正文会被 B 受控拒。下面这两段预读
+        只为把"稿缺 `## 命题` / `## 证明`"在 D 这一侧就如实记成 `error`。
 
         三态：没有 B ⇒ 一条 `checked` 之外的原因；稿读不到 / 没有 `## 命题` 或
         `## 证明` ⇒ 不递并点名；B 拒收 ⇒ `ok=False` + 拒信原文。
@@ -836,7 +835,6 @@ class _WriteReport:
             rec["error"] = (f"读不到手稿 {rel}（{type(exc).__name__}: {exc}）"
                             " ⇒ 这一份 F 的登记条目递不出去")
             return rec
-        entry = _PR.parse_entry(text)
         _head, sections = _PR.split_sections(text)
         proposition = next((body.strip() for name, body in sections if name == "命题"), "")
         proof_text = _DS.proof_body(text).strip("\n")
@@ -847,21 +845,16 @@ class _WriteReport:
             rec["error"] = f"{rel} 里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
             return rec
         try:
+            # ---- 2026-11-08（业主三条裁定）：D 只递指针 -------------------------
+            #
+            # 改前这一笔把 `## 命题` / `## 证明` / 稿头 `- 证据种类` 抄进
+            # `statement_full` / `proof_text` / `kind` —— 那是"把手稿内容转手一遍"。
+            # 现在只给指针：稿的工作区相对路径；命题正文、证明正文、kind、
+            # evidence_kind 全部由 B 从稿里读（`B._register_pointer_manuscript`）。
+            # 上面那两段预读保留，只为把"稿缺 `## 命题` / `## 证明`"在 D 这一侧就
+            # 如实记成 `error`（那是"这一条递不出去"的读数，不是登记参数）。
             got = dict(self.b.register_statement(
-                statement_full=proposition,
-                statement_text=proposition,
-                label=str(entry.get("label") or ""),
-                proof_text=proof_text,
-                proof_manuscript=text,
-                origin="own_result",
-                kind=str(entry.get("kind") or "conjecture") or "conjecture",
-                evidence_kind="heuristic",
-                quote_verified=None,
-                quote_reason=("F 的手稿登记条目（自产命题）：引文面不适用 —— V 的签在"
-                              "手稿块上；命题正文与证明正文都逐字来自 `" + rel + "`"),
-                # 自有结果的出处就是那份稿本身（不是文献第几页）：B 的出处闸要这一格。
-                line_range={"label": rel},
-                derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or [])],
+                proof_manuscript=rel,
             ) or {})
         except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
             rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"
@@ -882,14 +875,15 @@ class _WriteReport:
 
         > 「E 的 exp: 行也由 D 代递（与 F 行同形）」
 
-        ## 参数从哪来（experiment 行 + 稿）
+        ## 递过去只有指针（2026-11-08）
 
-        - `statement_full`：experiment 行的 `claim`（E 写在台账里的被检验命题）；
-        - 证明栏 `proof_text`：稿里 `## 证明` 那一节（`exhaustionreport.proof_body_of`）——
-          与 `numericproof.compose_proof_column` 逐字同源，B 的第三方签字闸按它的 sha 认签；
-        - `doc_id` / `line_range`：E 的出处不是文献页，`line_range.label` 指回那条
-          experiment 行（`exp:<实验号>`），`doc_id` 留空 —— 编一个不存在的 doc 号比留空更坏；
-        - `proof_manuscript`：整份稿（B 从稿里读签块与依赖段）。
+        - `proof_manuscript`：稿的工作区相对路径（唯一的内容入口）；
+        - `line_range.label`：出处 `exp:<实验号>` —— 指回 experiment 行，`doc_id` 不填
+          （编一个不存在的 doc 号比留空更坏）。
+
+        命题正文、证明正文、`kind`、`evidence_kind` 一律由 B 从稿里读。D 传正文会被
+        B 受控拒。下面那两段预读只为把"稿缺 `## 证明` / 没有签"在 D 这一侧就记成
+        `error`（那是"这一条递不出去"的读数，不是登记参数）。
 
         ## 三态（不折平）
 
@@ -901,7 +895,6 @@ class _WriteReport:
         返回一条 result（键与 F 行同形，另带 `experiment_id`）；`None` = 这一行不该由本方法
         处理（反真空打桩点就落在这里：摘掉它 ⇒ B 侧收不到、`statements` 里没有那一行）。
         """
-        from .. import depsection as _DS
         from .. import exhaustionreport as _ER
         from .. import vsigns as _VS
 
@@ -948,25 +941,16 @@ class _WriteReport:
         if not proof_text.strip():
             rec["error"] = f"exp:{eid} 的稿里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
             return rec
-        claim = str(exp_row.get("claim") or "").strip()
         try:
+            # ---- 2026-11-08（业主三条裁定）：D 只递指针 -------------------------
+            #
+            # 改前这一笔把 experiment 行的 `claim` / `claim_key` 与稿里 `## 证明`
+            # 抄进 `statement_full` / `statement_text` / `proof_text`。现在只给指针：
+            # 稿的工作区相对路径 + 出处（`exp:<实验号>`）；命题正文、证明正文、
+            # kind、evidence_kind 由 B 从稿里读。
             got = dict(self.b.register_statement(
-                statement_full=claim,
-                statement_text=str(exp_row.get("claim_key") or "").strip(),
-                label=" ".join(claim.split())[:80],
-                proof_text=proof_text,
-                proof_manuscript=text,
-                origin="own_result",
-                kind="theorem",
-                evidence_kind=str(exp_row.get("evidence_kind") or "proof"),
-                # E 的出处是那条实验行（不是文献页）：编一个 doc 号比留空更坏。
-                doc_id="",
+                proof_manuscript=rel,
                 line_range={"label": f"exp:{eid}"},
-                quote_verified=None,
-                quote_reason=(f"E 的穷举证明（exp:{eid}）：引文面不适用 —— 数值证据由"
-                              "程序与穷举论证签，V 的签在手稿块上"),
-                # 依赖面由 B 读稿里的 `## 依赖` 那一节（与 F 行同一条路）。
-                derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or [])],
             ) or {})
         except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
             rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"

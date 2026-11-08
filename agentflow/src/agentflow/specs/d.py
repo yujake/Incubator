@@ -240,6 +240,13 @@ SPEC = AgentSpec(
             "（`proof_manuscript` 给这个路径）+ `kind=conjecture`；B 从那份稿的 `## 命题` 取命题、从实验行取程序，"
             "`proof_text` 空着、等级 `strong_conjecture`、不过 V。穷举证据仍走 `reports/e-proof-<实验号>.md`"
             "（它要 V 签，按原路走）；F 的文字证明走 F 的手稿。这样你的每一件提交物都有 E 或 F 侧的背书。"
+            # 2026-11-08（业主三条裁定之一）：D 交稿只递指针，正文由 B 从手稿里读。
+            "**向 B 登记只递指针**（业主 2026-11-08）：`B.register_statement` 那一笔你只给三样 —— "
+            "手稿的工作区相对路径（`proof_manuscript`）、命题号 / 实验号、出处（`exp:<实验号>`）；"
+            "命题正文、证明正文、kind、evidence_kind 一律由 B 从那份稿里读。**你不要把稿里的"
+            "内容抄进参数**（传了 `statement_full` / `proof_text` / `kind` / `evidence_kind` 会被"
+            "受控拒 `d_gives_manuscript_pointers_only`，拒信会点名「只递指针」）—— 抄一遍就等于"
+            "给「登记的那一份」换了来源，而没有任何东西保证它与稿逐字相同。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
             # 2026-10-21 减负：原来这是「两条」（"猜想写出来交给 F"＋"立了猜想必须派 F"），

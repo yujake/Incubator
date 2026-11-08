@@ -643,7 +643,32 @@ def signed_v_handoffs(monkeypatch):
     real = AgentB.register_statement
 
     def signed(self, **kw):
-        text = str(kw.get("proof_text") or "")
+        # ---- 2026-11-08（D 只递指针）：指针形态的签名前提 ----------------
+        #
+        # D 现在只给 `proof_manuscript=<手稿相对路径>`：`statement_full` / `proof_text`
+        # 不再随参数来（那是"把手稿内容抄进参数"）。夹具要签的仍然是**这一份正文**，
+        # 所以按 B 同一处切法从稿里读出来（`## 命题` / `## 证明`）—— 只用于本夹具，
+        # 不回写 `kw`：回写会把这一笔变成"正文登记"，指针形态就测不到了。
+        _pointer_stmt = ""
+        _pointer_text = ""
+        _pointer_sid = ""
+        _rel = str(kw.get("proof_manuscript") or "").strip().replace("\\", "/")
+        if (not str(kw.get("statement_full") or "").strip() and _rel
+                and "/" in _rel and _rel.endswith(".md")):
+            from agentflow import depsection as _DS
+            from agentflow import proofregistry as _PR
+
+            try:
+                _ms = (Path(str(self.store.root)) / _rel).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                _ms = ""
+            if _ms:
+                _head, _secs = _PR.split_sections(_ms)
+                _pointer_stmt = next(
+                    (str(_b).strip() for _n, _b in _secs if _n == "命题"), "")
+                _pointer_text = _DS.proof_body(_ms).strip("\n")
+                _pointer_sid = str(_DS.manuscript_statement_id(_ms) or "").strip()
+        text = str(kw.get("proof_text") or "") or _pointer_text
         if not text.strip():
             for _item in list(kw.get("proofs") or []):
                 _one = dict(_item) if hasattr(_item, "items") else {}
@@ -655,8 +680,17 @@ def signed_v_handoffs(monkeypatch):
                     text = str(_one.get("text") or "")
                     if text:
                         break
-        row = self._existing_statement_for(str(kw.get("statement_full") or "")) or {}
+        row = self._existing_statement_for(
+            str(kw.get("statement_full") or "") or _pointer_stmt) or {}
         sid = str(row.get("stmt_id") or "")
+        if not sid:
+            # 指针形态：稿头 `- 命题号：stmt:<号>` 或调用方给的 `stmt:<号>` 出处
+            # （与 B 的 `_register_pointer_manuscript` 同一处判据）就是这一笔的目标行。
+            _label = str((kw.get("line_range") or {}).get("label") or "")
+            if _label.startswith("stmt:"):
+                _pointer_sid = _pointer_sid or _label.split(":", 1)[-1].strip()
+            if _pointer_sid:
+                sid = str(_pointer_sid)
         # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
         # 夹具替它造一份三节稿（正文就是这一笔要写的那一份；依赖面空表）。
         #
@@ -716,11 +750,21 @@ def signed_v_handoffs(monkeypatch):
 
         if text.strip() and not covered(text, 1):
             if sid:
-                # 已在册：一票「成立」就够准入闸（`_signature_covers` 把 `holding`
-                # 且秘书判 clean 算作"有签"），而不翻第 3 位 —— 用例原本"这一行还没签"
-                # 的读数因此不被夹具顺手改掉。
-                sign_for_the_gate(self.store.root, statement_id=sid, proof_text=text,
-                                  times=1)
+                # ---- 2026-11-08（D 只递指针）：这一笔要换掉 canonical 正文 -------------
+                #
+                # 指针形态下 D 交来的是**稿里那一份证明**（不是把在册那一行原样再交一遍）。
+                # 在册那一行的 `proof_text` 与它不同 ⇒ B 会走「换 canonical 正文」那条路，
+                # 而那条路要求这一份新正文真的签过（`optimized` 的两格
+                # `reviewed_by_proof` / `reviewed_sha_by_proof` 要落）—— 一票 `holding`
+                # 不够。所以这一档按发签门槛签满，并把 `store` / `manuscript` 传进去
+                # （与"换正文"的真实前提同一个形状）；非指针形态一个字不变。
+                _replace_canonical = bool(_rel) and str(
+                    row.get("proof_text") or "") != str(text)
+                sign_for_the_gate(
+                    self.store.root, statement_id=sid, proof_text=text,
+                    manuscript=_rel or "",
+                    **({"times": None, "store": self.store}
+                       if _replace_canonical else {"times": 1}))
             else:
                 _pending_sign(text)
         for item in list(kw.get("proofs") or []):
@@ -780,7 +824,7 @@ def signed_v_handoffs(monkeypatch):
                 "kind": str(kw.get("kind") or "conjecture"),
                 "label": str(kw.get("label") or ""),
                 "statement_text": str(kw.get("statement_text") or ""),
-                "statement_full": str(kw.get("statement_full") or ""),
+                "statement_full": str(kw.get("statement_full") or "") or _pointer_stmt,
                 "proof_text": "", "status": "active",
                 "created_at": _S.now_iso(), "created_by": "secretary-B",
                 "quote_verified": kw.get("quote_verified"),

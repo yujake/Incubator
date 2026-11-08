@@ -216,6 +216,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                      "（自产命题在册与否都交它）：F/E 的稿，"
                                      "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
                                      "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
+                                     # 2026-11-08（业主三条裁定）：D 只递指针。
+                                     "给的是**工作区相对路径**（`reports/…` / `notes/…`）"
+                                     "而 `statement_full` 留空时，这一笔按「手稿路径收录」："
+                                     "命题取 `## 命题`、证明取 `## 证明`、`kind` 取稿头"
+                                     "`- 证据种类：`、`evidence_kind` 按族定（e-proof ⇒ proof、"
+                                     "e-num ⇒ cross_check、F ⇒ heuristic）—— 调用方不许另传"
+                                     "正文（D 传正文会被受控拒 `d_gives_manuscript_pointers_only`）。"
                                      "F 的证明手稿正文：里面那一节 `## 依赖` 由 B 读出来落依赖边。"
                                      "四列表，列固定："
                                      "`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
@@ -235,7 +242,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "origin='own_result' 时与 doc_id **二者必居其一**："
                                "start 或 label 至少一个"},
             },
-            required=("statement_full",),
+            required=(),
         ),
         "dict（stmt_id / source_lit_id / quote_verified / origin / evidence_kind / row）",
         side_effect="write_local", handler_name="register_statement",
