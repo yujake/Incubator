@@ -5713,16 +5713,25 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
 
     1. `verdict_rows`：`out/secretary/proposition_verdicts.jsonl` 的行数（判定判成了
        才会落这一本账，读侧唯一口 `secretary.proposition_verdict_rows`）；
-    2. `registration_actions`：有登记动作的次数。会话优先（`sessions/<sid>.jsonl` 里
+       注意这本账**只记「判完并且要缓存」的那一趟**：B 主路走
+       `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适配：候选逐页给、
+       按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它**不写这本账**，只写
+       `statement_same.jsonl`。只数这一本就会把"判过了一场"读成"一次都没判"
+       （2026-11-08 业主 sylow5 的误报：`verdict_rows=0` 而 seam 两条都说明判过）；
+    2. `statement_same_judged`：`out/secretary/statement_same.jsonl` 里 `stage="judge"`
+       且 `checked=True` 的行数（**第二本账**；`statement_same_rows` 是该账全部行，
+       含 `keywords` / `retrieval` 那些"还没判"的尝试 —— 混进来会把"没判成"数成"判过"）。
+       `judged_by_ledger` 逐本给行数，`judged_rows` 是两本账合读的总数；
+    3. `registration_actions`：有登记动作的次数。会话优先（`sessions/<sid>.jsonl` 里
        `kind="agent_step"` 且工具名是 `register_statement` 的三条写法之一，含被拒的尝试）；
        会话里一次都没有 ⇒ 退到工作区事件台账（`events.jsonl` 的 `note` 以
        `record_statement` 开头）。读数里 `registration_scope` 写明是哪一档 ——
        "这一趟"与"整个工作区"不许折成同一个数；
-    3. `seam_sources`：这一条判定用的哪条缝的分布（`statement_same.jsonl` 与 statements
-       行的 `_proposition_adjudication` 两处合读）。`seam_none` 单列 —— `none（…）` 就是
-       "装配处没接上"，不是"判过了"。
+    4. `seam_sources`：这一条判定用的哪条缝的分布（`statement_same.jsonl` 与 statements
+       行的 `_proposition_adjudication` 两处合读；每条给出 `by_ledger` 分开数）。
+       `seam_none` 单列 —— `none（…）` 就是"装配处没接上"，不是"判过了"。
 
-    判定：`judged_zero = 有登记动作 ∧ 判定台账 0 行`；`seam_none > 0` 也算命中。
+    判定：`judged_zero = 有登记动作 ∧ 两本账合读的判定行 0`；`seam_none > 0` 也算命中。
     两者都由 `check_closing` 转成一条 warning（不是 blocker）：同类"接线 / 可见性"
     读数（`statements_unoptimized` / `suspected_splits` / `proposition_form`）都是
     readings + warning；而且裸秘书工作区（既有的那批判据）不该因为"没缝"就收不了工 ——
@@ -5732,6 +5741,10 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
     out: dict[str, Any] = {
         "checked": False, "root_ok": False,
         "verdict_path": "", "verdict_rows": 0,
+        "statement_same_path": "", "statement_same_rows": 0,
+        "statement_same_judged": 0,
+        "judged_rows": 0,
+        "judged_by_ledger": {"proposition_verdicts": 0, "statement_same": 0},
         "registration_actions": 0, "registration_scope": "unknown",
         "registration_actions_session": 0, "registration_actions_workspace": 0,
         "seam_sources": [], "seam_none": 0, "unjudged_attempts": 0,
@@ -5753,6 +5766,12 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
     out["checked"] = True
     out["verdict_path"] = str(_SEC.proposition_verdicts_path(root))
     out["verdict_rows"] = len(verdict_rows)
+    out["statement_same_path"] = str(_SEC.statement_same_path(root))
+    try:
+        statement_same_rows = list(_SEC.statement_same_rows(root))
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"的那半本
+        statement_same_rows = []
+        out["problems"].append(f"同一命题检索台账读不出来（{type(exc).__name__}: {exc}）")
 
     # ---- 登记动作：会话优先，退事件台账 ---------------------------------------
     from . import sessions as SS
@@ -5791,38 +5810,57 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
         out["problems"].extend(str(x) for x in session_problems[:3])
 
     # ---- seam_source 分布：两本台账合读 --------------------------------------
-    counts: dict[str, int] = {}
+    counts: dict[str, dict[str, int]] = {}
     unjudged = 0
-    try:
-        for one in _SEC.statement_same_rows(root):
-            source = str(one.get("seam_source") or "")
-            counts[source] = counts.get(source, 0) + 1
-            if not one.get("checked"):
-                unjudged += 1
-    except Exception as exc:  # noqa: BLE001
-        out["problems"].append(f"同一命题检索台账读不出来（{type(exc).__name__}: {exc}）")
+
+    def _count_seam(one: Mapping[str, Any], ledger: str) -> None:
+        nonlocal unjudged
+        source = str(one.get("seam_source") or "")
+        bucket = counts.setdefault(
+            source, {"total": 0, "statement_same": 0, "statements": 0})
+        bucket["total"] += 1
+        bucket[ledger] = int(bucket.get(ledger, 0)) + 1
+        if not one.get("checked"):
+            unjudged += 1
+
+    for one in statement_same_rows:
+        _count_seam(one, "statement_same")
     try:
         for one in store.rows("statements"):
             adj = one.get("_proposition_adjudication")
-            if not isinstance(adj, Mapping):
-                continue
-            source = str(adj.get("seam_source") or "")
-            counts[source] = counts.get(source, 0) + 1
-            if not adj.get("checked"):
-                unjudged += 1
+            if isinstance(adj, Mapping):
+                _count_seam(adj, "statements")
     except Exception as exc:  # noqa: BLE001
         out["problems"].append(f"statements 行读不出来（{type(exc).__name__}: {exc}）")
     out["seam_sources"] = [
         {"source": source or "（空：旧行没有这一格 / 裸造秘书没有 model_source）",
-         "count": count}
-        for source, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
-    out["seam_none"] = sum(count for source, count in counts.items()
+         "count": bucket["total"],
+         "by_ledger": {"statement_same": bucket["statement_same"],
+                       "statements": bucket["statements"]}}
+        for source, bucket in sorted(counts.items(),
+                                     key=lambda kv: (-kv[1]["total"], kv[0]))]
+    out["seam_none"] = sum(bucket["total"] for source, bucket in counts.items()
                            if source.startswith("none"))
     out["unjudged_attempts"] = unjudged
-    out["judged_zero"] = (out["registration_actions"] >= 1 and out["verdict_rows"] == 0)
+    # ---- 判定"发生过"：两本账合读（2026-11-08 业主 sylow5 的误报根因）----------
+    #
+    # 第一本（`proposition_verdicts`）只收"判完要缓存"的那一趟；B 主路那一档
+    # （`judge_statement_same(use_cache=False)`）只写第二本（`statement_same`）。
+    # 两本各数各的、合计才是"判定发生过几次"：只看一本 ⇒ 另一条正路被判成"死链"。
+    statement_same_judged = sum(
+        1 for one in statement_same_rows
+        if str(one.get("stage") or "") == "judge" and bool(one.get("checked")))
+    out["statement_same_rows"] = len(statement_same_rows)
+    out["statement_same_judged"] = statement_same_judged
+    out["judged_by_ledger"] = {"proposition_verdicts": int(out["verdict_rows"]),
+                               "statement_same": statement_same_judged}
+    out["judged_rows"] = sum(int(v) for v in out["judged_by_ledger"].values())
+    out["judged_zero"] = (out["registration_actions"] >= 1 and out["judged_rows"] == 0)
     out["reason"] = (
-        f"查过了：登记动作 {out['registration_actions']} 次（{out['registration_scope']}）、"
-        f"判定台账 {out['verdict_rows']} 行、seam 读数 "
+        f"查过了：登记动作 {out['registration_actions']} 次（{out['registration_scope']}）；"
+        f"判定两本账合读 —— proposition_verdicts {out['verdict_rows']} 行 + "
+        f"statement_same {statement_same_judged} 次判过"
+        f"（该台账共 {len(statement_same_rows)} 行，含没判成的尝试）；seam 读数 "
         + ("、".join(f"{x['source']}×{x['count']}" for x in out["seam_sources"])
            or "0 条")
         + ("｜没判成的读数 " + str(out["unjudged_attempts"]) + " 条"
@@ -7537,8 +7575,12 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
                                or int(_pj.get("seam_none") or 0) > 0):
         _why: list[str] = []
         if _pj.get("judged_zero"):
+            _led = dict(_pj.get("judged_by_ledger") or {})
             _why.append(f"登记动作 {_pj.get('registration_actions')} 次"
-                        f"（{_pj.get('registration_scope')}）而判定台账 0 行")
+                        f"（{_pj.get('registration_scope')}）而判定台账 0 行"
+                        f"（两本账合读：proposition_verdicts "
+                        f"{int(_led.get('proposition_verdicts') or 0)} + statement_same "
+                        f"{int(_led.get('statement_same') or 0)}）")
         if int(_pj.get("seam_none") or 0) > 0:
             _why.append(f"seam_source=none 的读数 {_pj.get('seam_none')} 条")
         rep.findings.append(Finding(
