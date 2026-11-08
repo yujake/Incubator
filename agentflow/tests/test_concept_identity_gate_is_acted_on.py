@@ -278,3 +278,182 @@ def test_d2_only_the_transition_sync_path_may_switch_the_judgment_off() -> None:
                             and kw.value.value is True):
                         hits.append((path.name, fn.name))
     assert sorted(hits) == [("conceptrows.py", "sync_from_legacy")], hits
+
+
+# ============================================================ 入口 3：_record_pending_concept
+
+
+def _pending(sec: SEC.Secretary, label: str, **kw) -> dict:
+    """交一条"定义还没抽到"的概念（D12 甲：走 `_record_pending_concept`）。"""
+    payload = {"label": label, "statement_full": "", "kind": "concept",
+               "origin": "own_result", "self_authored": True}
+    payload.update(kw)
+    return sec.record_statement(payload, role="B")
+
+
+def test_a3_pending_concept_merges_into_the_registered_one(
+        tmp_path: pathlib.Path) -> None:
+    """a（入口 3）：待补概念与在册那条同名 ⇒ 并入，不落第二行、不发号。
+
+    改前红：`_record_pending_concept` 只按 `T.normalize(标签)` 查重，判词完全不看闸
+    ⇒ 标签只差一个空格（`有限维 Lie 代数` / `有限维Lie代数`）时查重漏掉、第二行照落。
+    """
+    st = _ws(tmp_path)
+    first = CR.upsert(st, label="有限维 Lie 代数",
+                      definition="概念（有限维 Lie 代数）：dim_K g < ∞。")
+    sid = str(first.get("stmt_id") or "")
+    before_rows, before_count = len(_rows(st)), _counter(st)
+    gotten = _pending(_secretary(st), "有限维Lie代数")
+    assert gotten.get("created") is False and gotten.get("duplicate") is True, gotten
+    assert str(gotten.get("stmt_id") or "") == sid, gotten
+    assert gotten.get("concept_action") == "merged", gotten
+    _reading(gotten.get("concept_identity") or {}, action="merged", same_as=sid)
+    assert len(_rows(st)) == before_rows == 1, [r.get("label") for r in _rows(st)]
+    assert _counter(st) == before_count == 1, (_counter(st), before_count)
+    # 并入不把在册那一行打回 pending（定义还在）
+    assert str(_rows(st)[0].get("status") or "") == "active", _rows(st)[0]
+
+
+def test_a3b_two_pending_twins_do_not_make_two_rows(tmp_path: pathlib.Path) -> None:
+    """a（入口 3，待补对特补）：两条待补概念只差一个空格 ⇒ 仍只有一行、一个号。
+
+    这一档闸看不到对手：`_same_concept_candidate` 跳过不可作依据的状态（`pending_definition`
+    在列）⇒ 它只会说"在册没有可比行"。所以这一入口按同一把定义项键（`concept_keys` 的
+    标签那一半）把待补行也看一遍 —— 判据还是 `propositionkey` 那一处，不另写一份。
+    """
+    st = _ws(tmp_path)
+    sec = _secretary(st)
+    first = _pending(sec, "有限维 Lie 代数")
+    assert first.get("created") is True, first
+    assert first.get("concept_action") == "created", first
+    assert str(_rows(st)[0].get("status") or "") == "pending_definition", _rows(st)[0]
+    before = _counter(st)
+    second = _pending(sec, "有限维Lie代数")
+    assert second.get("created") is False and second.get("duplicate") is True, second
+    assert str(second.get("stmt_id") or "") == str(first.get("stmt_id")), (first, second)
+    assert second.get("concept_action") == "merged", second
+    _reading(second.get("concept_identity") or {}, action="merged",
+             same_as=str(first.get("stmt_id") or ""))
+    assert len(_rows(st)) == 1, [r.get("label") for r in _rows(st)]
+    assert _counter(st) == before, (_counter(st), before)
+
+
+def test_a3c_exact_same_label_pending_is_reported_as_merged(
+        tmp_path: pathlib.Path) -> None:
+    """a（入口 3，既有查重那一半）：标签逐字相同 ⇒ 不新建，且读数要能看出是"并入"。"""
+    st = _ws(tmp_path)
+    sec = _secretary(st)
+    first = _pending(sec, "新概念")
+    second = _pending(sec, "新概念")
+    assert second.get("created") is False and second.get("duplicate") is True, second
+    assert str(second.get("stmt_id") or "") == str(first.get("stmt_id")), (first, second)
+    assert second.get("concept_action") == "merged", second
+    _reading(second.get("concept_identity") or {}, action="merged",
+             same_as=str(first.get("stmt_id") or ""))
+    assert len(_rows(st)) == 1
+    assert _counter(st) == 1
+
+
+def test_a3d_unjudged_pending_concept_still_lands_and_says_why(
+        tmp_path: pathlib.Path) -> None:
+    """D12 甲（入口 3）：定义还没抽到 ⇒ 判不了也照落，但前提必须写在读数里。
+
+    这一格钉的是题面 ② 的口径：D12 甲 豁免的是"定义还没抽到"，不是"同一个概念可以
+    落两行"。判得 `same` 时上面 a3 已经证明它仍会并入；判不了时照落成
+    `pending_definition`，读数里 `checked=False` + `d12_pending=True` + 原因（闸为什么
+    判不了），所以它不是一条静默的漏口。
+    """
+    st = _ws(tmp_path)
+    # 在册一条抽不出定义项的 active 概念（标签是通用词、正文不是「概念（X）」形态）
+    active = CR.upsert(st, label=UNJUDGEABLE_LABEL, definition="设 X 是一个集合。")
+    assert active.get("concept_action") == "created", active
+    before = _counter(st)
+    gotten = _pending(_secretary(st), "生僻概念 Y")
+    assert gotten.get("created") is True, gotten
+    assert gotten.get("concept_action") == "created", gotten
+    identity = dict(gotten.get("concept_identity") or {})
+    assert identity.get("checked") is False and identity.get("state") == "", identity
+    assert str(identity.get("same_as") or "") == "", identity
+    assert str(identity.get("reason") or ""), identity
+    assert gotten.get("d12_pending") is True, gotten
+    assert "D12" in str(gotten.get("reason") or ""), gotten
+    rows = _rows(st)
+    assert len(rows) == 2, [r.get("label") for r in rows]
+    assert _counter(st) == before + 1, (_counter(st), before)
+
+
+def test_c3_different_pending_concepts_each_get_a_row(tmp_path: pathlib.Path) -> None:
+    """c（正控，入口 3）：两个真不同的待补概念 ⇒ 各自一行（不是一律并）。"""
+    st = _ws(tmp_path)
+    sec = _secretary(st)
+    a = _pending(sec, "有限维李代数")
+    b = _pending(sec, "幂零李代数")
+    assert a.get("created") is True and b.get("created") is True, (a, b)
+    assert a.get("concept_action") == "created" and b.get("concept_action") == "created", (a, b)
+    assert str(a.get("stmt_id")) != str(b.get("stmt_id")), (a, b)
+    assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
+
+
+# ============================================================ 拒信里的改法（两轴）
+#
+# 业主 2026-11-08：拒信只教做得到的事。p262 已把这两轴教进 B 的题面；真正的拒信渲染
+# 还在 `secretary.py` 那两处 —— 判不了时各补一句改法（正面表述）。下面两条打桩给一个
+# "只说了判不了、没给改法"的判词 ⇒ 绿只能由渲染那一句给（把那一句摘掉，这一条当场红）。
+
+_PROOF_FULL = "设 G 是 3-正则群；则弦长函数不是常值。"
+_PROOF_FULL_KEY = "假设 G 为 3-正则群，于是弦长函数不是常值。"
+_PROOF_A = ("证明：把弦长函数记为 f，设 G 是 3-正则群。由定义直接计算每个顶点的邻域大小，"
+            "弦长只依赖邻域结构，故 f 在正则性下取常值，与假设矛盾。")
+_PROOF_B = ("证明：对顶点数作强归纳。取一条最长路径，用 3-正则性把端点邻域配对，"
+            "再以诱导子图归结到更小的图，最终得到弦长随基图变化的递推，导出非常值。")
+
+
+def _own(full: str) -> dict:
+    from agentflow import schema as S
+
+    return {"statement_full": full, "statement_text": full[:24],
+            "origin": "own_result", "kind": "conjecture",
+            "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
+
+
+def test_the_concept_refusal_teaches_what_to_write_next(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """概念同一性判不了 ⇒ 拒信里要能读到"把定义项写出来"这一条改法。"""
+    monkeypatch.setattr(
+        SEC.Secretary, "_same_concept_candidate",
+        lambda self, tx, **kw: {"hit": None, "checked": False, "state": "", "basis": "",
+                                "reason": "打桩：判不了", "candidates": []},
+        raising=True)
+    st = _ws(tmp_path)
+    got = _secretary(st).record_statement(
+        {"statement_full": "设 X 是一个集合；则 X 是空的当且仅当它没有元素。",
+         "label": "空集", "kind": "concept", "origin": "own_result",
+         "self_authored": True}, role="B")
+    assert got.get("checked") is False, got
+    assert got.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, got
+    text = str(got.get("reason") or "")
+    assert "改法" in text and "定义项" in text, text
+    assert len(_rows(st)) == 0, _rows(st)
+
+
+def test_the_proof_kind_refusal_teaches_what_to_do_next(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+        signed_v_handoffs) -> None:  # noqa: ANN001 —— conftest 的 V 签前提夹具
+    """同种证明判不了 ⇒ 拒信里要能读到"换一条真正不同的证法再交"这一条改法。"""
+    from agentflow import propositionkey as PK
+    from agentflow.agent_b import AgentB
+
+    monkeypatch.setattr(
+        PK, "same_kind_proof",
+        lambda *a, **k: {"checked": False, "state": "", "basis": "", "similarity": 0.0,
+                         "reason": "打桩：判定面没给出可用结论"},
+        raising=True)
+    st = _ws(tmp_path)
+    b = AgentB(st, extractor=None, extract_text=None, config={})
+    first = b.register_statement(**_own(_PROOF_FULL), proof_text=_PROOF_A)
+    assert first.get("ok") is True, first
+    refused = b.register_statement(**_own(_PROOF_FULL_KEY), proof_text=_PROOF_B)
+    assert refused.get("ok") is False, refused
+    assert refused.get("kind") == SEC.PROOF_KIND_UNJUDGED, refused
+    text = str(refused.get("error") or "")
+    assert "改法" in text and "证法" in text, text

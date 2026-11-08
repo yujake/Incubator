@@ -8569,29 +8569,84 @@ class Secretary:
         与 `_record_statement_tx` 分开的理由：那一条路要求 `statement_full` 非空
         （命题没有"内容待补"这一档），而概念有 —— 混在一处会把"命题缺假设"
         与"概念缺定义"折成同一件事（前者该拒，后者该落）。
-        查重按概念标签的规范化值（同名的概念不重复建行；改名由人/秘书那一层决定）。
+
+        ## 同一性判词在这里也要处置（2026-11-08）
+        `concept_identity_gate` 在发号之前判，`concept_identity_action` 折成三档：
+
+        - 判得 `same` ⇒ 并入那一条（不新建、不发号），读数 `concept_action="merged"`；
+        - 判不了 ⇒ 这是 `D12` 甲 豁免的那一档（它豁免的正是"定义还没抽到"）：照落成
+          `pending_definition`，但读数必须写明 `checked=False` / `d12_pending=True` 与原因
+          —— 待补不是依据，也不是"可以落两行"；
+        - `different` ⇒ 照常发号新建。
+
+        `D12` 甲的边界写在这里：它豁免的是"定义还没抽到"这件事，不豁免"判得 same"。
+        两条待补概念只差一个空格时闸看不到对手（`_same_concept_candidate` 跳过
+        `pending_definition`），所以这一入口按同一把定义项键（`propositionkey.concept_keys`
+        的标签那一半）把待补行也看一遍 —— 判据仍是那一处，不另写一份。
+
+        拒绝（空标签 / 出处分档）都发生在 `alloc_id` 之前 ⇒ counters 不动、不留 `id_gap`。
         """
         from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
         from . import textutil as T       # 惰性：查重键的唯一实现
 
         name = str(body.get("label") or "")
         if not name.strip():
-            out.update(refused="empty_statement",
+            out.update(refused="empty_statement", concept_action="refused",
+                       concept_identity={"checked": False, "state": "", "basis": "",
+                                         "same_as": "", "candidates": [],
+                                         "reason": "一条概念至少要有 label（名字）"},
                        reason="一条概念至少要有 label（名字）—— 没有名字的行谁也认不出它")
             return out
         legacy = CR.legacy_present(self.store)
         tables = list(STATEMENT_WRITE_TABLES) + ([CR.LEGACY_TABLE] if legacy.get("present") else [])
         with self.store.tx(*tables, actor=f"secretary-{self.role}",
                            note="record_statement:concept_pending") as tx:
+            gate = concept_identity_gate(tx, label=name)
+            act = concept_identity_action(gate)
+            # 查重：先按规范化标签（既有口径，通用词也认），再按同一把定义项键把待补行
+            # 也看一遍（闸跳过它们 —— 见 docstring 的 D12 甲 边界）。
             key = T.normalize(name)
             dup = next((r for r in tx.rows("statements")
                         if str(r.get("kind") or "") == "concept"
                         and T.normalize(str(r.get("label") or "")) == key), None)
+            if dup is None:
+                label_key = _PK.concept_keys(name, "")["label"]
+                if label_key:
+                    dup = next((r for r in tx.rows("statements")
+                                if str(r.get("kind") or "") == "concept"
+                                and _PK.concept_keys(str(r.get("label") or ""),
+                                                     str(r.get("statement_full") or "")
+                                                     )["label"] == label_key), None)
             if dup is not None:
-                out.update(checked=True, created=False, duplicate=True,
-                           stmt_id=str(dup.get("stmt_id") or ""),
-                           reason=("同一个概念标签已在册 ⇒ 不新建行（秘书查重；"
-                                   "定义到了去改那一行，而不是再起一条）"))
+                merged_id = str(dup.get("stmt_id") or "")
+                if str(act.get("concept_action") or "") == "merged":
+                    reading = dict(act)
+                else:
+                    reading = {"checked": True, "state": "same",
+                               "basis": _PK.BASIS_CONCEPT_LABEL,
+                               "same_as": merged_id, "candidates": [merged_id],
+                               "reason": ("待补行不是同一性闸的合并落点（`pending_definition` "
+                                          "不在可比行里）⇒ 这一入口按同一把定义项键补看一次："
+                                          "标签规范化后相同（同一个概念）")}
+                reading["concept_action"] = "merged"
+                out.update(checked=True, created=False, duplicate=True, stmt_id=merged_id,
+                           same_as=merged_id, concept_action="merged",
+                           concept_identity=reading,
+                           reason=(f"同一个概念已在册（stmt:{merged_id}）⇒ 并入那一行："
+                                   "不新建第二行、不发号（判据："
+                                   f"{str(reading.get('reason') or '').strip()}）"))
+                return out
+            # `origin` 按来源分档（本批缺陷一的第二处）：交来的概念有出处 ⇒ external_lit；
+            # 没有出处 ⇒ 我们自己定义的新概念（own_result，推断，不要求调用方另声明）。
+            # 这一判放在发号之前：拒的时候 counters 不动、不留 `id_gap`。
+            src_lit = str(body.get("source_lit_id") or "")
+            concept_origin = CR.resolve_concept_origin(source_lit_id=src_lit)
+            problem = CR.concept_origin_problem(origin=concept_origin,
+                                                source_lit_id=src_lit,
+                                                self_authored=(concept_origin == "own_result"))
+            if problem:
+                out.update(checked=False, created=False, refused="concept_origin_refused",
+                           concept_action="refused", reason=problem)
                 return out
             # 过渡期的号空间只有一个权威：老表还在的时候就是 `concept`（B 的 pipeline
             # 从那儿发号），迁移之后才是 `stmt` —— 两边各发各的会让同一张表出现
@@ -8599,16 +8654,6 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else S.TABLES["statements"]["id_kind"])
             cid = tx.alloc_id(concept_kind)
-            # `origin` 按来源分档（本批缺陷一的第二处）：交来的概念有出处 ⇒ external_lit；
-            # 没有出处 ⇒ 我们自己定义的新概念（own_result，推断，不要求调用方另声明）。
-            src_lit = str(body.get("source_lit_id") or "")
-            concept_origin = CR.resolve_concept_origin(source_lit_id=src_lit)
-            problem = CR.concept_origin_problem(origin=concept_origin,
-                                                source_lit_id=src_lit,
-                                                self_authored=(concept_origin == "own_result"))
-            if problem:
-                out.update(refused="concept_origin_refused", reason=problem)
-                return out
             # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
             data = self.write_concept_row(tx, stmt_id=cid, label=name, definition="",
                                           aliases=body.get("aliases") or [],
@@ -8617,12 +8662,17 @@ class Secretary:
                                           origin=concept_origin,
                                           self_authored=(concept_origin == "own_result"),
                                           mirror=bool(legacy.get("present")), out=out)
+        d12 = bool(out.get("d12_pending"))
         out.update(checked=True, created=True, stmt_id=cid, row=data,
                    tables=tables, mirrored=bool(legacy.get("present")), pending_concepts=1,
+                   concept_action="created",
                    nontriviality_not_applicable=True,
                    reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据；"
                            "概念行不带 `proof_text`（概念不参与等级链，"
-                           "要补的是定义，不是证明）"))
+                           "要补的是定义，不是证明）"
+                           + ("；同一性闸判不了（D12 甲 豁免的正是'定义还没抽到'这个前提）"
+                              "⇒ 照落，但这一档不是'同一个概念可以落两行'"
+                              if d12 else "")))
         return out
 
     def _concept_bits(self, *, origin: str, source_lit_id: str = "") -> dict[str, Any]:
@@ -8802,7 +8852,10 @@ class Secretary:
                 return {"concept_action": "refused", "checked": False, "state": "",
                         "same_as": "", "candidates": list(act.get("candidates") or []),
                         "refused": CONCEPT_IDENTITY_UNJUDGED, "concept_identity": dict(act),
-                        "reason": (why + " ⇒ 这一笔不写（不新建、不合并）")}
+                        "reason": (why + " ⇒ 这一笔不写（不新建、不合并）。"
+                                   "改法：把定义项写出来 —— 标签写成具体术语，或正文写成"
+                                   "「概念（X）」/「定义（X）」；若它确实与在册某一条不同，"
+                                   "把那个不同的定义项写出来再交")}
             if act["concept_action"] == "merged":
                 target = str(act.get("same_as") or "")
                 why = (f"同一个概念已在册（stmt:{target}；依据："
@@ -9872,7 +9925,10 @@ class Secretary:
             out.update(checked=False, created=False,
                        refused=CONCEPT_IDENTITY_UNJUDGED,
                        proposition_state="", proposition_reason=why,
-                       reason=(why + " ⇒ 整笔不写（不新建、不合并）"))
+                       reason=(why + " ⇒ 整笔不写（不新建、不合并）。"
+                               "改法：把定义项写出来 —— 标签写成具体术语，或正文写成"
+                               "「概念（X）」/「定义（X）」；若它确实与在册某一条不同，"
+                               "把那个不同的定义项写出来再交"))
             return out
         out["proposition_state"] = str(got.get("state") or "")
         out["proposition_reason"] = str(got.get("reason") or "")
@@ -10074,7 +10130,8 @@ class Secretary:
                                "（没判成 ≠ 不同）⇒ 不新增证明号：折成不同，同一种证法会"
                                "被并列记录。短证明不按字数预判死（会照常判）；这一档只在"
                                "判定面没给出可用结论时出现（今天 = 没有可比的文本；判定面"
-                               "若换成模型，则是超时 / 坏 JSON / 没给可用答案）"))
+                               "若换成模型，则是超时 / 坏 JSON / 没给可用答案）。"
+                               "改法：换一条真正不同的证法再交，或本次不再提交"))
             return out
         # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
         #
