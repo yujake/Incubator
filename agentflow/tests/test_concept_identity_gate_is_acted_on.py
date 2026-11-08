@@ -649,3 +649,40 @@ def test_c5_a_different_concept_in_a_statement_payload_is_created(
     assert actions and actions[0].get("concept_action") == "created", actions
     for key in ("checked", "state", "same_as", "reason"):
         assert key in actions[0], actions[0]
+
+
+# ============================================================ e：反真空
+#
+# 把"判词 ⇒ 处置"这一层摘掉（唯一折算点打桩成恒 created = 改前的形态：闸判它的，
+# 各入口照旧新建），两个入口的同义判据必须当场红 —— 证明 a1 / a4 的绿是"按闸的结论
+# 处置"给的，而不是别的什么顺手拦住了第二笔。
+
+
+def test_e_removing_the_disposition_turns_the_synonym_checks_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """e（反真空）：折算点恒 created ⇒ 入口 1 / 入口 4 都落第二行（= 改前形态）。"""
+    def _always_created(gate):
+        got = dict(gate or {})
+        return {"concept_action": "created", "checked": True,
+                "state": str(got.get("state") or "different"),
+                "basis": str(got.get("basis") or ""), "same_as": "",
+                "candidates": [str(x) for x in (got.get("candidates") or [])],
+                "reason": str(got.get("reason") or "")}
+
+    monkeypatch.setattr(SEC, "concept_identity_action", _always_created)
+
+    # ---- 入口 1：`CR.upsert`（a1 的场景）
+    st = _ws(tmp_path)
+    CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
+    second = CR.upsert(st, label=ALT_LABEL, definition=REAL_DEF_2)
+    assert second.get("concept_action") == "created", second
+    assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
+    assert _counter(st) == 2, _counter(st)
+
+    # ---- 入口 4：`run_once.resolve_concept`（a4 的场景）
+    st2 = _ws(tmp_path / "run_once")
+    CR.upsert(st2, label=REAL_LABEL, definition=REAL_DEF_1)
+    _one_paper(st2)
+    out = _agent_b(st2, [{"name": ALT_LABEL, "definition": REAL_DEF_2}]).run_once().to_dict()
+    assert int(out.get("concepts_created") or 0) == 1, out
+    assert len(_concept_rows(st2)) == 2, [r.get("label") for r in _concept_rows(st2)]
