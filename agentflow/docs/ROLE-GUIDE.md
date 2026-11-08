@@ -174,6 +174,10 @@
   - **同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立路径」时，目标是同一条命题的 `proof_no` 1..N，不是 N 条独立命题。登记时**逐份交稿**：每份证明各自有一份手稿（稿头的 `- 证明号：<N>` 说它属于第几条），你按稿登记成 `#p1` / `#p2`…（`#p1` 落行上的 `proof_text`，`#p2` 起落同一行的 `proofs` 清单）；**不要用内联的 `proofs=[{proof_no: 1..N, text: …}]` 交正文**（那条路没有稿、依赖面恒 0、签也没有落点）。**每条证明各自要 V 的签**：`bits.evidence.reviewed_by_proof` 按 `proof_no` 逐份记（`{"1": true, "2": false}`），一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by="stmt:<命题号>#pN"` ＋ `path_group` 标明它属于第几条证明（`deps` 两维：外层 = 可选路径、内层 = 一条路径上的步骤），C 才能按不同的依赖面追出不同的证明路径。论文对应表里同一条命题占多行、每行各带 `proof_no`。**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / 归纳版）不等于不同命题；拆开之后 `proof_no` 恒为 1、`path_group` 只剩一组，多证明机制一次都不会被触发。判重先问「这是不是同一条」，再问「这是它的第几份证明」。
   - **E 的手稿分两族，读法不同**（业主 2026-11-08）：`reports/e-proof-<实验号>.md` 是穷举档 —— `proof_text` 只原样收 `## 证明` 那一节的穷举论证（程序地址住实验行的 `code_path`、程序设计住 `observations["design"]`，都不许再塞进 `proof_text`），没有 V 签照旧受控拒 （`proof_needs_third_party_signature`）。`reports/e-num-<实验号>.md` 是普通数值档（`## 命题` + `## 数值结果`）—— 只从 `## 命题` 取命题、程序取 实验行的 `code_path`，`proof_text` 留空、`evidence_kind` 落 `cross_check`（等级 `strong_conjecture`），**不过 V**；`## 数值结果` 与别的节一个字都不录。这一档不收 `doc_id` / `line_range`（出处就是那条实验行），`kind` 写 `conjecture`；D 提交「有数值实验支持的强猜想」走的就是它。
   - **收录先查「是不是在册的同一条」**（业主 2026-11-08）：普通数值手稿在台账上永远是 `conjecture`（调用方给的 kind 不参与，等级由五元位现算）；收录前秘书会挑数学关键词在 `statements` 里检索、再认定是不是同一条 —— 查到就不新注册：普通数值手稿把那一行的数值证据流水更新（一个程序一条；同一程序再交用后一次替换，换参数也算同一程序），证明手稿把这一份作为该命题的另一条证明路径追加（`proof_no` 递增、每份签按 sha 各认各的）。
+  - **D 只递手稿路径时，命题从 `## 命题` 读、证明从 `## 证明` 读**（业主 2026-11-08「只递指针」）：`statement_full` 留空即可 —— 命题取稿的 `## 命题`，证明取稿的 `## 证明`，依赖面取稿的 `## 依赖`；不要求 D 另传正文，也不把正文抄进参数（D 传正文会被受控拒 `d_gives_manuscript_pointers_only`）。
+  - **签的两格读数（稿上已签 / 已入台账）与六档各有名字**（业主 2026-11-08「V 只对手稿负责」）：稿上已签看稿里的 `- V 签：` 签块（`已签` / `连续` / `正文sha`），已入台账看 `statements` 里这一份正文的 sha 与第 3 位。`signed_pending_filing` = 稿上已签、册里还没有证明行（或第 3 位没翻）⇒ 你收录时认领它；`signed_stale_in_ledger` = 稿上已签、册里是旧版 ⇒ 正文 sha 变了，按新版收录并让那一版重新拿签（这不是「签丢了」）；其余四档 `filed` / `unsigned` / `abandoned` / `unreadable` 分别说「两格都对上」/「都没签」/「明确放弃」/「没查成」。
+  - **概念同一性 / 同种证明这两根轴判不了 ⇒ 受控拒，不是新建**：秘书判不出「这是不是在册的同一条概念」⇒ `concept_identity_unjudged`；判不出「这是不是同一种证法」⇒ `proof_kind_unjudged`。改法：把能区分的材料补齐再交一次 —— 概念写清定义项（标签写具体术语，或正文写成「概念（X）」/「定义（X）」），证明写清路线与依赖面；不要换一个名字绕过去。
+  - **短证明照样判，不按字数预判死**：两句话的证明也能判出两种证法（「取 δ=ε 逐点验证」≠「用有限覆盖」）；只有「没有可比的文本」（空串）才算判不了。别因为正文短就自己先判成「不同」或「同种」—— 那是折平，不是判定。
   - **这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、不给 `documents` 另开一类；A 交来的文献由你把定理与证明收进 `statements`（`proof_text` + 逐字出处），**收录比转述强**：综述里的一句话查不到行，收录表里每一行都能。
   - 被指认无可信度、或还在待审核的文献：不可当引文入库，只可当研究参考 —— 不拿它的原话当 `quote` / `quote_reason` 的凭据，也不凭它登记关系行；它只能落在「研究参考 / 待核」那一栏，要引用就先换一篇可核的来源。
   - **你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。
@@ -622,7 +626,7 @@
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
-| `verify.run_experiment` | 跑工作区内脚本并登记一条 Experiment 行。自报 `evidence_kind='proof'` 降级为 `cross_check`；崩溃记 `inconclusive`。 | `write_local` | `claim`、`claim_key`、`script_path` |
+| `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
 共 **40** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
@@ -763,7 +767,7 @@
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
-| `verify.run_experiment` | 跑工作区内脚本并登记一条 Experiment 行。自报 `evidence_kind='proof'` 降级为 `cross_check`；崩溃记 `inconclusive`。 | `write_local` | `claim`、`claim_key`、`script_path` |
+| `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
 共 **52** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
@@ -899,7 +903,7 @@
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
 | `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
-| `verify.run_experiment` | 跑工作区内脚本并登记一条 Experiment 行。自报 `evidence_kind='proof'` 降级为 `cross_check`；崩溃记 `inconclusive`。 | `write_local` | `claim`、`claim_key`、`script_path` |
+| `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
 共 **55** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 

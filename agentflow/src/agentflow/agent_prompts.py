@@ -3649,7 +3649,30 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 两份 golden 按现值重冻（版本行变）；`docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md`
 #: 由 `python -B tools/write_system_docs.py` 重生成；`tests/fixtures/prompt_cache_warm.json`
 #: 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p261"
+#: p261 → p262（2026-11-08，提示词-工具面一致性审计 ①–⑦ 的题面补齐）：
+#: 四格换值 —— B / E / F / G。上游两笔：
+#:   ① `specs/b.py` 的 policy 新增四条（D 只递指针时从 `## 命题` / `## 证明` 读；签的两格读数
+#:      （稿上已签 / 已入台账）与六档；概念同一性 / 同种证明判不了 ⇒ 受控拒并给改法；
+#:      短证明照样判、不按字数预判死）⇒ 只 B 那一格换值；
+#:   ② `tools/verify_tools.py` 的 `verify.run_experiment` summary 换成两类 E 手稿
+#:      （`reports/e-proof-<实验号>.md` 穷举要 V 签 / `reports/e-num-<实验号>.md` 普通数值
+#:      不需 V 签）⇒ 它的 roles 是 E / F / G，`tools_lines` 那一行只渲染本角色工具面
+#:      ⇒ E / F / G 三格换值（同一笔把「自报 proof 降 cross_check / 崩溃记 inconclusive」
+#:      挪进 `claim` 的 description，模型仍看得见）。
+#: 另两笔不进十一格：`verifications.cold_start_prompt`（V 的真实入口，不进 system prompt；
+#: 只审手稿 / 签落在稿上 / 两格读数与六档）与 `verify.verify_proof.readonly_facts` 的说明
+#: （`_surface_digest` 不含参数 description）⇒ V 那一格逐字同 p261。
+#: 逐格旧值 → 新值（p261 → p262）：
+#:   B af7b11fd→a424c53f / E dd9d4185→4c7ab9c9 / F 3029f47a→fa1e8c8c /
+#:   G 27d436f7→1994799a；A / C / D / H / L / M / V 逐字未动（只差版本行）。
+#: 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+#: （`temp/_p258_freeze_digests.py` 导入它并先 `import conftest` 钉住环境）现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p262）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p261 同值）；
+#: 两份 golden 按现值重冻（B 提示词与两个工具声明格变）；`docs/ROLE-GUIDE.md` /
+#: `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p262"
 
 
 

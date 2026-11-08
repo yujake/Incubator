@@ -2359,7 +2359,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 上游 `specs/b.py` 只去掉 `register_statement.statement_full` 的 `minLength: 1`
 # 并改了那一格的 description；`_surface_digest` 不含参数 description，动作 summary /
 # policy / 工具面都未变 ⇒ 十一格 SAME。
-_FROZEN_PROMPT_VERSION = "p261"
+# 2026-11-08（p261 → p262，提示词-工具面一致性审计 ①–⑦ 的题面补齐）：四格换值。
+# 上游两笔：① `specs/b.py` 的 policy 新增四条（从手稿读命题 / 两格读数与六档 /
+# 判不了受控拒与改法 / 短证明照样判）；② `verify.run_experiment` 的 summary 换成两类
+# E 手稿（e-proof 穷举要 V 签 / e-num 普通数值不需 V 签）—— 它的 roles 是 E/F/G，
+# `tools_lines` 只渲染本角色工具面 ⇒ 这三格换值。`verifications.cold_start_prompt`
+# （V 的真实入口）与 `verify.verify_proof.readonly_facts` 的说明都不进 system prompt
+# ⇒ V 那一格逐字同 p261。A / C / D / H / L / M / V 逐字未动（只差版本行）。
+# 逐格旧值 → 新值：
+#   B af7b11fd→a424c53f / E dd9d4185→4c7ab9c9 / F 3029f47a→fa1e8c8c /
+#   G 27d436f7→1994799a。
+# 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
+# （`temp/_p258_freeze_digests.py` 导入它并先 `import conftest` 钉住环境）现算。
+_FROZEN_PROMPT_VERSION = "p262"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2595,12 +2607,12 @@ _FROZEN_PROMPT_VERSION = "p261"
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "7dfe78d302ccf4d6d713aa7b7206e59bf7c4a543fe7f13435ce445176ef6949e",
-    "B": "af7b11fd2c3b5c93f6740726cd23db1480c20c40653bdf1d876a514f8df741fa",
+    "B": "a424c53fdb025845b2fd3146cbd20f51952e87b9444f7eedade54679d085a590",
     "C": "922a427550f75ffea7282c0176ef6b2f516fb0b407b2a73d9ba97b27c556fcf0",
     "D": "4d840d5b74c79234b8bbe0d7f3bc9badc62a1f6ca893187a486aa8f2481e7429",
-    "E": "dd9d4185e0db9a17ad1eed816b568c18a5612c8c83276d7c5a835dc721d288da",
-    "F": "3029f47ad672549ec3da56ee1753b002cabbf1391d112936fe6dfe6d9e275446",
-    "G": "27d436f790a1f9b2056db0171b117fa59e5a1e5ff9e8ca290f8ba1a03fedae9e",
+    "E": "4c7ab9c93ea23074d9ea26d5d5209427470d99d3c2dc9aa50154c273ab8d8a45",
+    "F": "fa1e8c8cfdb22b76743b13c288e5eb5a5ec802534c9c714c7bfe0bc1ca0d6295",
+    "G": "1994799a9279759a98ca78f16824acf571bfbee1264f0d4db8d400c4d11e7c97",
     "H": "b2eda81b2b9de1c4fe8f9f5fc4c0b3a43f97f60c558aaecb746bda405cb3978b",
     "L": "9461d7475a6113632e8bc939968ffdf7beed986c45fee19ab9e0ccfa6a533a24",
     "M": "63abea4f5c95ad5bf4f9258c164130a8966f4a62d2163c028ed4e01b2a2e5ce5",

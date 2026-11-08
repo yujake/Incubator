@@ -992,6 +992,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "（让只给 `proof_manuscript` 的指针形态过参数门；空正文不能登记仍由动作层 "
              "`empty_statement_text` 拒）。`_surface_digest` 不含参数 description ⇒ 十一格 "
              "SAME（只差版本行）。facts 键集仍 15 格。"},
+    # p261 → p262（2026-11-08，提示词-工具面一致性审计 ①–⑦）：facts 键集一格没动
+    # （还是 15 格），只改 `specs/b.py` 的 policy 段文本与 `verify.run_experiment` 的 summary
+    # ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p262", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p262（2026-11-08，提示词-工具面一致性审计 ①–⑦）：上游两笔 —— "
+             "`specs/b.py` 的 policy 新增四条（D 只递指针时命题从 `## 命题` 读、证明从 "
+             "`## 证明` 读；签的两格读数与六档；概念同一性 / 同种证明判不了 ⇒ 受控拒并给改法；"
+             "短证明照样判、不按字数预判死）；`tools/verify_tools.py` 的 `verify.run_experiment` "
+             "summary 换成两类 E 手稿（e-proof 穷举要 V 签 / e-num 普通数值不需 V 签），它的 "
+             "roles 是 E/F/G ⇒ 这三格的 tools_lines 也跟着换。变化格 = B/E/F/G；"
+             "A/C/D/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
 
 )
 
