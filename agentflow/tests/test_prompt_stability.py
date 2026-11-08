@@ -1004,6 +1004,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "summary 换成两类 E 手稿（e-proof 穷举要 V 签 / e-num 普通数值不需 V 签），它的 "
              "roles 是 E/F/G ⇒ 这三格的 tools_lines 也跟着换。变化格 = B/E/F/G；"
              "A/C/D/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
+    # p262 → p263（2026-11-09，两把尺统一后的声明面收口）：facts 键集一格没动
+    # （还是 15 格），只改 `tools/table_tools.py` 里 `table.search` 的 summary 与两条 params
+    # description ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p263", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p263（2026-11-09，两把尺统一后的声明面收口）：上游一笔 —— "
+             "`table.search` 的 summary 从「默认全部标量字符串字段」改成真口径"
+             "（statements 走内容面 label/statement_full，其余表走全部标量字符串字段），"
+             "params 的 query / fields description 同步改（后者不进 _surface_digest）。"
+             "这件工具的 roles 是 A–H + V + L ⇒ 那十格的 tools_lines 换值，M 逐字未动。"
+             "facts 键集仍 15 格。"},
 
 )
 

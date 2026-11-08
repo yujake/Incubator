@@ -3672,7 +3672,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 两份 golden 按现值重冻（B 提示词与两个工具声明格变）；`docs/ROLE-GUIDE.md` /
 #: `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p262"
+#: p262 → p263（2026-11-09，「两把尺」统一后的声明面收口）：
+#: 十格换值 —— A / B / C / D / E / F / G / H / V / L。上游一笔：
+#:   `tools/table_tools.py` 的 `table.search` summary 改成真口径（statements 走内容面
+#:   `label` / `statement_full`，其余表走全部标量字符串字段；旧文案写"默认全部标量字符串字段"
+#:   —— 而 statements 上早已只搜两列，属于"声明与实现相反"）。`table.search` 的 roles 是
+#:   A–H + V + L ⇒ `tools_lines` 对这几格各渲染一行 ⇒ 十格换值；M 的面里没有这件工具
+#:   ⇒ 逐字未动（只差版本行）。
+#: 不进摘要的连带：`query` / `fields` 的 params description 按同一口径重写
+#:   （`_surface_digest` 不含参数 description）；契约基线补一条 `contract_amendments`
+#:   （`params` 两处 description）；两份 golden 按现值重冻（工具声明格 + 版本行）。
+#: 十一格不是手抄：`temp/_recompute_digests.py` 导入判据自己的 `_surface_digest` 现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p263）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p262 同值）；
+#: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p263"
 
 
 

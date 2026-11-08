@@ -4,13 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-09，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **275 个 `.py`、266,460 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,101 行** —— 批 R40 把它补进了 §3 的表；
+> **275 个 `.py`、266,484 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,101 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
-> 2026-11-09 再改一次：266,332 → **266,460**（两把尺统一：`textutil.py` 抽出唯一的关键词
-> 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它，净 +128 行；文件数 275 与
-> `>800 行` 的 75 都不变，`agent_loop.py` 行数也不变）。
+> 2026-11-09 再改一次：266,332 → **266,484**（两把尺统一：`textutil.py` 抽出唯一的关键词
+> 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它（+128）；同日的声明面收口
+> （`table.search` 的 summary 与 `query` / `fields` 说明改真口径、`PROMPT_VERSION` 抬到 p263）
+> 再 +24 行；文件数 275 与 `>800 行` 的 75 都不变，`agent_loop.py` 行数也不变）。
 > 新人打开任何一个文件都是一本小册子，
 > 于是"从哪读起"本身成了一道门槛 —— 这份图就是为了把这道门槛拆掉。
 > （本行原先写"188 个 `.py`、98,217 行、37 个文件超过 800 行"（观测 2026-10-06），
@@ -309,7 +310,7 @@
 > `python -m agentflow.agent_a` 的自检入口在同目录的 `agent_a/__main__.py`。
 | `agents` 的公共零件：`claimanatomy.py` | 断言解剖学 —— `documents.claims` 每个元素的唯一判据来源 |
 | `claims.py` | 原子断言拆分（把一段答复切成可逐条回验的断言） |
-| `statementledger.py` | **命题台账的查口**（只读、零模型、不写盘、不开事务）：两种口径分开 —— `by_id`（按编号：主键逐字相等、不过滤 status/kind；0 命中 = 确定性事实）与 `by_keywords`（按内容：`label`/`statement_full` 经 `textutil.normalize` 后包含任一关键词；0 命中 ≠ 不在册）；底座 `rows_of`/`pool`/`index_by_id`/`duplicate_hits` 各一份，池与常量由调用方传（命题池与概念行池过滤条件不同，不焊死在查里）。2026-11-09 把全仓 62 处"自己扫全表拿一行/建索引"收成这 5 个入口（判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`）；同日晚第 4 步把 C/L/V 的三个库模块/B/D/F 的台账读点也接到这组入口（角色侧 `rows("statements")` 27 → 0，判据 `tests/test_each_role_queries_the_statement_ledger.py` 的「只给一种输入 + 反真空」）；`table.get`/`table.search` 是通用列文本搜（casefold、18 字段），与这里**不是同一件事** |
+| `statementledger.py` | **命题台账的查口**（只读、零模型、不写盘、不开事务）：两种口径分开 —— `by_id`（按编号：主键逐字相等、不过滤 status/kind；0 命中 = 确定性事实）与 `by_keywords`（按内容：`label`/`statement_full` 经 `textutil.normalize` 后包含任一关键词；0 命中 ≠ 不在册）；底座 `rows_of`/`pool`/`index_by_id`/`duplicate_hits` 各一份，池与常量由调用方传（命题池与概念行池过滤条件不同，不焊死在查里）。2026-11-09 把全仓 62 处"自己扫全表拿一行/建索引"收成这 5 个入口（判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`）；同日晚第 4 步把 C/L/V 的三个库模块/B/D/F 的台账读点也接到这组入口（角色侧 `rows("statements")` 27 → 0，判据 `tests/test_each_role_queries_the_statement_ledger.py` 的「只给一种输入 + 反真空」）；`table.get` 仍是通用按号取行；`table.search` 在 `statements` 上已与这里**同一把尺**（2026-11-09 起：只搜 `label` / `statement_full`，判据是同一份 `textutil.matched_keywords`），其它表仍是通用列文本搜（`casefold`、全部标量字符串字段）—— 判据 `tests/test_the_two_rulers_agree_on_the_ledger.py` |
 | `propositionkey.py` | **命题同一性与同种证明的判据**（纯函数、确定性、零模型调用；2026-10-24 业主改口径：「不用机械判据，让秘书洗定理名，让秘书判」+ 准绳「定理描述一致（什么条件推出什么结论），就是一个定理」）：本模块只在终判的上游做两件事 —— `judgeable`（够不够格当一条命题）与 `proposition_key` / `prose_similarity`（同一性的候选读数）；终判在 `secretary.Secretary.adjudicate_proposition`（一次模型调用，二档 same / different，判不了 = 没判成，按正文 sha256 缓存） |
 | `jobobject.py` | 进程树治理（`draft/39` §3.21 五 I13，D03 的根因修法）：Windows **作业对象**（`KILL_ON_JOB_CLOSE`）—— `create_job`/`assign`/`assign_tree`（根 + 现有后代；作业归属**不向前追溯**）/ `grace_then_kill`（先宽限再 `TerminateJobObject`）/ `reap`/`close`；后代枚举走 Toolhelp 快照。`stopctl` 的强制停止优先走它（`via="job"`），`taskkill` 只作退路 |
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |

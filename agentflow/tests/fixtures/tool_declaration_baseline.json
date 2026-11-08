@@ -6744,6 +6744,40 @@
           }
         }
       ]
+    },
+    {
+      "tools": [
+        "table.search"
+      ],
+      "key": "params",
+      "reason": "2026-11-09 两把尺统一后的声明面收口：`table.search` 的 `query` / `fields` 两条 description 改成真口径 —— statements 表按命题语义面匹配（`label` / `statement_full` 经 `textutil.normalize` 归一后包含），`fields` 省略时 statements = 这两列、其它表 = 全部标量字符串字段；点名内容面之外的字段与归一后为空的查询都是受控拒绝。旧文案说「省略=全部标量字符串字段」，在 statements 上已与实现相反。本条的编辑清单里还带着 2026-11-05 那条 `select` add_key（内容逐字相同、两条 amendment 各自成立）：判据按「整份差异逐项对上」匹配，所以整份记在这里。结构 / 枚举 / required / 默认值一字未动，其余 123 件工具的契约一个字未动。",
+      "date": "2026-11-09",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "params/properties/fields/description",
+          "from": "限定字段；省略=全部标量字符串字段",
+          "to": "限定扫描字段；省略时：statements 表 = label / statement_full（与命题查口同一把尺），其它表 = 全部标量字符串字段。statements 上点名这两列之外的字段 ⇒ 受控拒绝（要按其它字段找请用 table.list 的 filter 或 table.get）"
+        },
+        {
+          "op": "set_scalar",
+          "path": "params/properties/query/description",
+          "from": "要查找的子串（不做正则解释）",
+          "to": "要查找的子串（不做正则解释）。statements 表按内容面匹配：label / statement_full 经 textutil.normalize 归一后包含（全半角 / 大小写 / 标点 / 空白不敏感）；归一后为空 ⇒ 受控拒绝"
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/select",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "字段投影（与 table.list 的 `fields` 是同一件事）：只回这几个键；省略=整行。注意它不参与搜索：搜哪些字段仍由 `fields` 决定"
+          }
+        }
+      ]
     }
   ],
   "summary_lens_before": {

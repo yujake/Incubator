@@ -119,7 +119,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
@@ -251,7 +251,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
@@ -352,7 +352,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。 | `read` | `concept_id` |
@@ -508,7 +508,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
@@ -620,7 +620,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
@@ -760,7 +760,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
@@ -896,7 +896,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
@@ -1015,7 +1015,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
@@ -1117,7 +1117,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.list_verifications` | 列验证台账（只读，可按命题过滤）。 | `read` | （无） |
 | `verify.read_proof` | 按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。 | `read` | `statement_id` |
@@ -1223,7 +1223,7 @@
 | `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
 | `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 

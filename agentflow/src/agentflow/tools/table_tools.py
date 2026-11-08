@@ -2283,21 +2283,30 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
     return ok({"tables": tables, "vocabularies": vocabs}, table_count=len(tables), vocabulary_count=len(vocabs))
 
 
-# ⚠️ 这里的 summary / 参数说明是模型面契约，且被冻结在
-# `tests/golden/tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json`
-# 里（两份都属 FC-27 `eval-criteria`："重冻必须由人逐格看过"）。2026-11-09 的统一让
-# `statements` 的默认搜索面变成 `label` / `statement_full`（见 `STATEMENT_SEARCH_FIELDS`），
-# 而 summary 仍写着"默认全部标量字符串字段"——这是有意留下的文字债：改它要重冻上面
-# 两份快照，那是 2 名 reviewer 的人工动作，本次不碰。读的人以 `STATEMENT_SEARCH_FIELDS`
-# 与 `table_search` 的 docstring 为准（差异清单见 `temp/_design_two_rulers.md` §6）。
+# 这里的 summary / 参数说明是模型面契约，且被冻结在
+# `tests/golden/tool_surface_snapshot.json`、`tests/golden/agent_surface_snapshot.json`
+# 与 `tests/fixtures/tool_declaration_baseline.json` 里（前两份属 FC-27 `eval-criteria`：
+# 重冻必须由人逐格看过）。2026-11-09 的"两把尺"统一让 `statements` 的默认搜索面变成
+# `label` / `statement_full`（见 `STATEMENT_SEARCH_FIELDS`），因此 summary 与
+# `query` / `fields` 的说明**按真口径写明**（不再写"默认全部标量字符串字段"）：
+# 声明面与实现必须逐句对得上，否则模型会照着一句假的默认面去用工具。
+# 重冻与版本：三份冻结面已按各自做法重冻（快照用 `--write`、契约基线补
+# `contract_amendments`），并抬了 `PROMPT_VERSION`（summary 进 `tools_lines`）。
 @tool(
     "table.search",
-    "在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。",
+    "子串匹配；statements 按内容面，其余按标量字符串字段。",
     _obj(
         {
             "table": _TABLE_PROP,
-            "query": {"type": "string", "minLength": 1, "description": "要查找的子串（不做正则解释）"},
-            "fields": {"type": "array", "items": {"type": "string"}, "description": "限定字段；省略=全部标量字符串字段"},
+            "query": {"type": "string", "minLength": 1,
+                      "description": "要查找的子串（不做正则解释）。statements 表按内容面匹配："
+                                     "label / statement_full 经 textutil.normalize 归一后包含"
+                                     "（全半角 / 大小写 / 标点 / 空白不敏感）；归一后为空 ⇒ 受控拒绝"},
+            "fields": {"type": "array", "items": {"type": "string"},
+                       "description": "限定扫描字段；省略时：statements 表 = label / statement_full"
+                                      "（与命题查口同一把尺），其它表 = 全部标量字符串字段。"
+                                      "statements 上点名这两列之外的字段 ⇒ 受控拒绝"
+                                      "（要按其它字段找请用 table.list 的 filter 或 table.get）"},
             "select": _SELECT_PROP,
             "limit": {
                 "type": "integer",
