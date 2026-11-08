@@ -128,6 +128,9 @@ CARRIED_KEYS: tuple[str, ...] = ("stmt:", "exp:", "mss:")
 #: 元信息（"命题号：stmt:000002"）不是引用，把它数进来会让读数虚高）。
 SECTION_PROOF = "## 证明"
 
+#: 命题正文那一节的段标题（2026-11-08：V 只读手稿之后，命题正文从这一节来）。
+SECTION_STATEMENT = "## 命题"
+
 #: 表格的四列：`(字段名, 认得出的关键词, 人读的列名)`。
 #:
 #: 识别按关键词（表头写"命题号（stmt:NNNNNN）"也认），但四列缺一不可、顺序不限 ——
@@ -570,6 +573,20 @@ def section_lines(text: str, heading: str = SECTION_HEADING) -> tuple[list[tuple
             break
         body.append((i, line))
     return body, start
+
+
+def statement_body(text: str) -> str:
+    """手稿里「命题」那一节的正文（没有这一节 ⇒ 空串）。
+
+    2026-11-08（业主：「V 现在只对手稿负责，不该看台账了」）：V 的命题正文只从这一节读，
+    不再从 `statements.statement_full` 读。空串是"这份稿没有命题页"这一事实的诚实读数，
+    调用方必须自己判它（`agent_v` 会用占位句进提示词，不拿空串冒充一条命题）。
+
+    归一与 :func:`proof_body` 同一套：只去掉首尾空行，段内的换行与缩进逐字保留 ——
+    命题正文是 F 的署名内容，读侧不做任何再排版。
+    """
+    body, _start = section_lines(text, SECTION_STATEMENT)
+    return "\n".join(raw for _ln, raw in body).strip("\n").strip()
 
 
 def proof_body(text: str) -> str:
@@ -1671,8 +1688,72 @@ def quote_mismatch_finding(row: Mapping[str, Any],
     return {}
 
 
+def manuscript_citation_resolver(
+        cited: Mapping[str, Mapping[str, Any]]):
+    """V 只读手稿时的可引资格解析器（供 :func:`dependency_review` 的 `admissibility=`）。
+
+    `cited` 的形如 `{stmt_id: {found, manuscript, statement_full, signed, why, tried}}`
+    （`agent_v.core._cited_manuscripts` 的产物）。返回一个
+    `(sid, *, where, line, step) -> 六格 finding 或 {}` 的闭包。
+
+    为什么用一个解析器而不是再写一份 `dependency_review`：④⑤⑦ 三项（表与正文一致 /
+    步号 / 引文归属）与"册子"那一版逐字相同，只有 ①②③ 的"可引资格"来源不同 ——
+    抄第二份判据必然漂，而漂的那一处正好会是"V 放行了一条其实不可引的引用"。
+    """
+    def _resolve(sid: str, *, where: str = "", line: int = 0,
+                 step: Any = None) -> dict[str, Any]:
+        return manuscript_uncitable_finding(str(sid), cited, where=where,
+                                            line=line, step=step)
+    return _resolve
+
+
+def manuscript_uncitable_finding(
+        sid: str, cited: Mapping[str, Mapping[str, Any]], *,
+        where: str = "", line: int = 0, step: Any = None) -> dict[str, Any]:
+    """`stmt:<sid>` 在"V 只读手稿"这一口径下为什么不可引 ⇒ 六格；空字典 = 可引。
+
+    可引判据与册子那一版**同一条政策**（`CITATION_MIN_LEVEL = "pre_theorem"`），
+    但证据来源换成手稿：被引命题必须有一份盘上的手稿（`reports/f-proof-<号>.md` 或
+    `reports/b-proof-<号>.md`），而且那份稿的现在这一份正文上盖着一份 V 签
+    （`vsigns.manuscript_sign_standing` 的 `signed`）。
+
+    两档受控码刻意复用既有码，不新造：
+    - 手稿不在 / 读不成 ⇒ `REFUSED_LEVEL_UNREADABLE`（"等级读不出来（判不了）"）——
+      读不到正文与签，就判不了它够不够格；
+    - 手稿在、没有盖住现行正文的签 ⇒ `REFUSED_LEVEL_TOO_LOW`（"等级不到可引门槛"）。
+    两档的期望 / 实得 / 怎么改都按"稿"写，不冒充"不在册"（V 读不到册，说"不在册"
+    就是编一句它没查过的话）。
+    """
+    site = str(where or "").strip()
+    where_text = _citation_where(step=step, line=line, site=site or "依赖段")
+    item = dict(cited.get(str(sid)) or {})
+    if not item.get("found"):
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_UNREADABLE,
+            expected=(f"盘上有一份这一条命题的手稿（`reports/f-proof-<号>.md`；"
+                      f"V 只读手稿：正文与签都在稿上）"),
+            got=(f"盘上没有这一条命题的手稿（找过：{item.get('tried') or '（没记）'}）"
+                 "⇒ 读不到它的正文，也读不到它的签"),
+            fix=("先把这一条命题的证明落成一份手稿（`reports/f-proof-<号>.md`，"
+                 "`## 命题` / `## 证明` / `## 依赖` 三节），再引它；"
+                 "V 不从台账读正文"),
+            step=step)
+    if not item.get("signed"):
+        return citation_finding(
+            stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_TOO_LOW,
+            expected=(f"`{item.get('manuscript')}` 的现在这一份正文上有一份 V 签"
+                      f"（等级 ≥ {CITATION_MIN_LEVEL}）"),
+            got=(f"`{item.get('manuscript')}` 上没有盖住正文 sha 的 V 签"
+                 f"（{item.get('why') or '未签'}）"),
+            fix=("先让 V 把这一条命题的证明审成「成立」、签落在稿上"
+                 f"（到 {CITATION_MIN_LEVEL} 级），再来引它"),
+            step=step)
+    return {}
+
+
 def dependency_review(text: str,
-                      statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+                      statement_rows: Iterable[Mapping[str, Any]],
+                      *, admissibility: Any = None) -> dict[str, Any]:
     """V 审稿时对 `## 依赖` 面的六项逐条核 ⇒ 一份可并入 verdict 的读数。
 
     业主 2026-11-06 逐字：「引用未在册命题应该在 V 审阅时就被打回，轮不到 B」。
@@ -1690,6 +1771,10 @@ def dependency_review(text: str,
     | ⑤ | 表里"用在哪一步"与正文那一步的 `cites` 对得上（可核时） | 步号不在正文 / 那一步没引这个号 |
     | ⑥ | 引用强度（不得把被引命题写强） | 不在这里：已有那一档（`citation_checks` / `citation_gate`） |
     | ⑦ | 引文与被引命题的原文是不是同一条（表述错误 a 类） | `quote_mismatch_finding`（只在能证明引文属于另一条在册命题时才报） |
+
+    ①②③ 的「可引资格」来源可由 `admissibility=` 换（2026-11-08：V 只读手稿那一档传
+    :func:`manuscript_citation_resolver`，判据变成"被引命题的手稿在盘上、且盖着 V 签"）；
+    缺省仍是册子那一版（`:func:`uncitable_statement_finding`），B / 旧调用方逐字不变。
 
     ⑤的边界（如实说）：手稿的四列表里没有被引命题的 `proof_no` / 正文 sha 这两格，
     所以"proof_no / sha"那一半没有可核的载体；能核的是"表里说用在第几步"与
@@ -1744,10 +1829,18 @@ def dependency_review(text: str,
             "fix": str(record.get("fix") or ""),
         })
 
+    def _admissible(ref: str, *, where: str, step: Any = None,
+                    line: int = 0) -> dict[str, Any]:
+        """①②③ 的可引资格：调用方给了 `admissibility` 就用它（V 只读手稿那一档），
+        否则仍走册子那一版。判据本体只有一处，两种来源在这一格分叉、四个判据共用。"""
+        if admissibility is not None:
+            return dict(admissibility(str(ref), where=where, step=step, line=line) or {})
+        return uncitable_statement_finding(ref, ledger, where=where, step=step,
+                                           line=line)
+
     # ①② 正文里的号：在册 ∧ 等级够。
     for ref in body_refs:
-        got = uncitable_statement_finding(ref, ledger, where="证明正文",
-                                          step=_step_of(ref))
+        got = _admissible(ref, where="证明正文", step=_step_of(ref))
         if not got:
             continue
         flagged.add(ref)
@@ -1761,8 +1854,8 @@ def dependency_review(text: str,
             table_ids.append(sid)
         if sid in flagged:
             continue
-        got = uncitable_statement_finding(
-            sid, ledger, where="依赖段", line=int(row.get("line") or 0),
+        got = _admissible(
+            sid, where="依赖段", line=int(row.get("line") or 0),
             step=_first_number(row.get("step")))
         if got:
             flagged.add(sid)

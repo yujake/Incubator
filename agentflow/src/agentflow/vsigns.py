@@ -1048,6 +1048,140 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     return out
 
 
+def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
+                        proof_text: Any = "", statement_id: Any = "",
+                        store: Any = None) -> dict[str, Any]:
+    """两格读数：**稿上已签** / **已入台账**（2026-11-08，业主「V 只对手稿负责」）。
+
+    为什么必须有这两格：V 不再写 `statements` 之后，会出现一个**新的中间态** ——
+    「V 签了、签块与侧文件都在，而 B 还没收录」。若不把它读出来，读侧会把
+    `statements.bits.reviewed=false` 当成"没签过"（看起来像签丢了）。
+    两格分开判，第三格 `state` 把中间态命名出来。
+
+    ## 判据（两个都借既有唯一实现，不写第二份）
+
+    - `manuscript_signed`：:func:`manuscript_sign_standing`（签块存在、`已签=true`、
+      `连续>=need`、`正文sha` 与 `## 证明` 相符、第 9 格稿号与稿路径对得上）。
+    - `filed`：`statements` 里那一条命题的**这一份证明**的正文 sha 等于稿上被签的 sha，
+      且第 3 位为真（`evidencebits.reviewed_by_proof` 的逐份表优先，回退 `reviewed`）。
+      `status=abandoned` + 可解析放弃标记 ⇒ `filed=False, abandoned=True`（明确不收录）。
+
+    ## `state`（受控词表）
+
+    | 值 | 判据 |
+    |---|---|
+    | `filed` | 稿上已签（或已签过）且册里这一份正文 + 第 3 位都对上 |
+    | `signed_pending_filing` | 稿上已签、册里还没有这一份（**新中间态**） |
+    | `signed_stale_in_ledger` | 稿上签了新版，而册里那一份正文是旧版（签还在，等 B 收录新版） |
+    | `unsigned` | 稿上没签、册里也没有 → 真的没有签 |
+    | `abandoned` | 明确放弃（义务作废，不是"收录了"） |
+    | `unreadable` | 稿或册读不成 / 没给 store（这一格没查成，不折成"没签"） |
+
+    三态纪律：`filed` 为 `None` = 没查成（不是"没收录"）；此时 `state` 落 `unreadable`。
+    """
+    from pathlib import Path
+
+    from . import evidencebits as _EB
+    from . import verifications as _VR
+
+    out: dict[str, Any] = {
+        "checked": False, "manuscript_signed": False, "filed": None,
+        "state": "unreadable", "abandoned": False,
+        "manuscript": {}, "statement": {}, "why": "",
+    }
+    rel = str(manuscript_path or "").strip().replace("\\", "/")
+    text = str(proof_text or "")
+    if not text and rel:
+        try:
+            text = (Path(str(root or "")) / rel).read_text(encoding="utf-8")
+        except OSError as exc:
+            out["why"] = f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ 两格都没查成"
+            return out
+    if not str(text).strip():
+        out["why"] = ("这一份没有手稿正文（`manuscript_path` 指的那份稿读不到 / 没给）"
+                      "⇒ 稿上已签这一格没查成")
+        return out
+    body = _VR.proof_sha(manuscript_proof_body(text))
+    block = manuscript_sign_standing(text, proof_sha=body, manuscript_path=rel)
+    out["manuscript"] = dict(block)
+    if not bool(block.get("checked")):
+        out["why"] = (f"签块读不成形（{block.get('why') or '没有读数'}）⇒ "
+                      "稿上已签这一格没查成")
+        return out
+    out["manuscript_signed"] = str(block.get("state") or "") == "signed"
+    if store is None:
+        out["why"] = ("没有 store ⇒ 已入台账这一格没查成（不是「还没收录」）；"
+                      f"稿上已签={out['manuscript_signed']}")
+        return out
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out["why"] = ("这一份没有命题号 ⇒ 查不到册里哪一行（不猜）；"
+                      f"稿上已签={out['manuscript_signed']}")
+        return out
+    try:
+        row = next((dict(r) for r in store.rows("statements")
+                    if str(r.get("stmt_id") or "") == sid), None)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没收录"
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 两格没查成"
+        return out
+    out["checked"] = True
+    stmt: dict[str, Any] = {"found": row is not None, "stmt_id": sid}
+    out["statement"] = stmt
+    if row is None:
+        stmt.update(reviewed=False, proof_no=0, grade="", proof_sha256="", status="")
+        out["filed"] = False
+        out["state"] = ("signed_pending_filing" if out["manuscript_signed"]
+                        else "unsigned")
+        out["why"] = (f"`statements` 里没有命题 {sid} 那一行 ⇒ 这一份签还没有被收录"
+                      if out["manuscript_signed"]
+                      else f"`statements` 里没有命题 {sid}，稿上也没有签")
+        return out
+    from . import statementabandon as _SA
+
+    status = str(row.get("status") or "")
+    stmt["status"] = status
+    if status == "abandoned":
+        parsed = _SA.parse_abandon(row.get("quote_reason"))
+        if parsed.get("checked"):
+            out.update(filed=False, abandoned=True, state="abandoned")
+            out["why"] = (f"命题 {sid} 已被明确放弃（{parsed.get('at')}："
+                          f"{parsed.get('reason')}）⇒ 明确不收录，义务作废")
+            return out
+    # 册里这一条命题的每一份证明：按正文 sha 找"这一签盖的那一份"。
+    signed_now = body
+    matched_no = 0
+    matched_text = ""
+    for no, one in _VR.proof_list(row):
+        if _VR.proof_sha(one) == signed_now:
+            matched_no, matched_text = int(no), str(one)
+            break
+    per = dict(_EB.reviewed_by_proof(row) or {})
+    reviewed = bool(per.get(matched_no, per.get(str(matched_no), False))) if matched_no else False
+    stmt.update(proof_no=matched_no,
+                proof_sha256=(_VR.proof_sha(matched_text) if matched_text else ""),
+                reviewed=reviewed,
+                grade=str((_EB.bits_from_row(row) or {}).get("grade") or ""))
+    out["filed"] = bool(matched_no and reviewed)
+    if out["filed"]:
+        out["state"] = "filed"
+        out["why"] = (f"{sid}#p{matched_no} 已入台账：正文 sha 与签块相符、第 3 位为真")
+        return out
+    if out["manuscript_signed"]:
+        out["state"] = ("signed_stale_in_ledger" if not matched_no
+                        else "signed_pending_filing")
+        out["why"] = (
+            (f"稿上已签（{body[:12]}…），而册里没有盖住这一份正文的证明行 ⇒ "
+             "等 B 收录；这不是「签丢了」")
+            if not matched_no else
+            (f"稿上已签（{body[:12]}…），册里那一份的行还在、第 3 位没翻 ⇒ "
+             "等 B 收录；这不是「签丢了」"))
+        return out
+    out["state"] = "unsigned"
+    out["why"] = (f"{sid} 稿上没签、册里这一份也没有第 3 位 "
+                  f"（签块：{block.get('state') or 'unsigned'}）")
+    return out
+
+
 def manuscript_body_matches(text: str, *, artifact_sha: Any) -> dict[str, Any]:
     """这一份稿的「## 证明」正文 == 被签的那一份吗（纯读；业主 2026-11-02）。
 
