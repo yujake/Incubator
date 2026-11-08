@@ -20,6 +20,7 @@
 | d | 普通数值交 kind=theorem ⇒ 落盘 kind=conjecture，无拒收、无 downgrade 读数 | 改前静默压回并记 `kind_downgraded` |
 | e | 关键词没提取成 / 判定没成 ⇒ 不新注册、受控拒、台账一行 | 改前没有这一问，照样新注册 |
 | f | 候选 0 条 ⇒ 新登记，读数写明"查过、0 条" | 改前没有这一格读数 |
+| g | 反真空：退回逐字全等 ⇒ a 新注册两行；把"没判成"折成"没查到" ⇒ e 新注册一行 | 判据自身要能红 |
 | j | 关键词共享但措辞不同 ⇒ `found` 命中（贴 keywords / hits_named） | 改前没有关键词检索 |
 | k | 反真空：摘掉关键词检索 ⇒ j 变红（新注册两行） | 判据自身要能红 |
 | p | 同一命题用两个不同程序各跑一次 ⇒ 两条（script 不同）、等级不变 | 改前只存单份 |
@@ -626,6 +627,50 @@ def test_n_a_plain_numeric_experiment_does_not_raise_a_pre_theorem(tmp_path):
     updated = dict(got.get("updated_statement") or {})
     assert updated.get("grade_before") == "pre_theorem", updated
     assert updated.get("grade") == "pre_theorem", updated
+
+
+def test_g_a_if_semantic_were_removed_a_would_register_two_rows(tmp_path, monkeypatch):
+    """g 的第一半：反真空 —— 退回"逐字全等"⇒ a 的同义改写变成新注册两行。"""
+    def _exact_only(self, *, full, label="", kind="conjecture", task_id=""):
+        row = self._existing_statement_for(full)
+        return {"checked": True, "found": str((row or {}).get("stmt_id") or ""),
+                "why": "夹具：只认逐字全等", "keywords": [], "keyword_checked": True,
+                "hits_total": 0, "hits_named": [], "judged": False,
+                "model_calls": 0, "problems": [], "refused": "",
+                "_row": dict(row or {})}
+
+    monkeypatch.setattr(AgentB, "_resolve_same_statement", _exact_only)
+    store = _store(tmp_path)
+    _first_numeric(store)
+    second = _numeric(store, PARAPHRASE, "k2", "code/scan2.py",
+                      {"range": "n<=10", "points": 10})
+    seed_proposition_form_ok(store.root, PARAPHRASE, kind="conjecture", role="B")
+    got = _register(store, Seam(found=""), second["numeric_manuscript"])
+    assert got.get("ok") is True, got
+    assert got.get("found") == "", got
+    assert len(_rows(store)) == 2, (
+        "反真空失效：退回逐字全等之后 a 仍然只落一行 ⇒ 语义查一圈不是承重的",
+        _rows(store))
+
+
+def test_g_e_if_unjudged_were_treated_as_not_found_e_would_register(tmp_path, monkeypatch):
+    """g 的第二半：反真空 —— 把"没判成"折成"没查到" ⇒ e 会新注册一行。"""
+    monkeypatch.setattr(
+        SEC.Secretary, "judge_statement_same",
+        lambda self, **kw: {"checked": True, "found": "",
+                            "why": "夹具：把没判成当成没查到"})
+    store = _store(tmp_path)
+    _first_numeric(store)
+    second = _numeric(store, PARAPHRASE, "k2", "code/scan2.py",
+                      {"range": "n<=10", "points": 10})
+    seed_proposition_form_ok(store.root, PARAPHRASE, kind="conjecture", role="B")
+    got = _register(store, Seam(keywords=["P(n)"], judge_bad=True),
+                    second["numeric_manuscript"])
+    assert got.get("ok") is True, got
+    assert got.get("found") == "", got
+    assert len(_rows(store)) == 2, (
+        "反真空失效：把没判成折成没查到之后 e 仍然没有新注册 ⇒ "
+        "fail-closed 不是承重的", _rows(store))
 
 
 def test_o_without_semantic_found_l_would_register_a_second_proposition(tmp_path, monkeypatch):
