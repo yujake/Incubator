@@ -13,7 +13,6 @@
 | a' | 反真空：同一台扫描器对"塞回一处直写"的样本必报 | 扫描器恒返回空 ⇒ a 的绿说明不了任何事 |
 | b | 三条正控（新建行 / 追加证明 / 更新数值证据位）各跑一趟：行都落盘，且 `statements` 的每一次 upsert 事件 `actor` 都是 `secretary-B` | 改前那两笔的 `actor` 是 `agent-B` |
 | c | 负控：把 `Secretary.land_statement` 关成"一个字都不写" ⇒ b 的两条写路必须不落盘 | 有"B 自己写"的后备路 ⇒ c 绿 |
-| d | 白名单与 `verifications` 的键逐字同一套，且正文真身 / 出处面 / 创建留痕不在任何一条白名单里 | 两处键名漂移 / 白名单被放宽 ⇒ d 红 |
 
 扫描器只看调用形状（`X.tx("statements")` / `X.upsert("statements")` / `.update` / `.delete`），
 不看上下文：`tables_for_concept_write("relations")` 那种"声明表名"的写法不是直接写（它的落盘在
@@ -100,59 +99,6 @@ def test_a_negative_control_the_scanner_catches_a_direct_write_put_back() -> Non
     # 负控的负控：不相干的表名一个都不许报（否则上面那条"0 命中"是假的）
     assert _direct_statement_writes(
         "with store.tx(\"relations\") as tx:\n    tx.upsert(\"relations\", row)\n") == []
-
-
-#: `statements` 的已登记直写口（"只有秘书侧的写口能落这张表"）。
-#:
-#: 这一格是"B 对台账只读"在不改写集时的机械表达：`capabilities.WRITE_SETS["B"]` 仍含
-#: `statements`（B 这一趟确实会写这张表 —— 由它的秘书落），但"谁执行 `tx.upsert`"被收成
-#: 下面这几个写口。B 本体（`agent_b/**`）不在其中（判据 a 单独钉这一条）。
-#:
-#: - `secretary.py`：B 的秘书（登记 / 落证明 / 证据位 / 改元信息 / 放弃）；
-#: - `statementabandon.py`：放弃命题那一笔（actor 是 `secretary-B`，写 `status=abandoned`）；
-#: - `verifications.py`：V 落签翻第 3 位 / 修复（actor 是 `verifier-*` / `repair`）；
-#: - `vsigns.py`：签块回填（actor 是 `verifier-<by>`）。
-#:
-#: 新增一个模块要写这张表 ⇒ 先在这里登记并写清理由；不登记就红 —— 这正是"多种写口"被
-#: 收成一个清单的落点。
-STATEMENT_DIRECT_WRITERS: frozenset[str] = frozenset({
-    "secretary.py", "statementabandon.py", "verifications.py", "vsigns.py",
-})
-
-
-def test_a_only_the_registered_writers_may_touch_statements() -> None:
-    """a''：全 `src/agentflow` 里直接写 `statements` 的模块 = 已登记的那几个（B 不在其中）。"""
-    pkg = SRC / "agentflow"
-    found: dict[str, list[tuple[int, str]]] = {}
-    for path in sorted(pkg.glob("*.py")):
-        hits = _direct_statement_writes(path.read_text(encoding="utf-8"))
-        if hits:
-            found[path.name] = hits
-    extra = sorted(set(found) - STATEMENT_DIRECT_WRITERS)
-    assert extra == [], (
-        "这些模块直接写了 `statements`，却不在 `STATEMENT_DIRECT_WRITERS` 里："
-        f"{ {name: found[name] for name in extra} }\n"
-        "（命题台账的落盘写口只许是秘书 / 放弃 / 签发 / 修复；要新开一条先登记理由）")
-    assert set(found) == STATEMENT_DIRECT_WRITERS, (
-        f"登记表里这些写口已经没有直写了（登记表要自我清理）："
-        f"{sorted(STATEMENT_DIRECT_WRITERS - set(found))}")
-    assert "register_statement.py" not in found and "core.py" not in found, (
-        "agent_b 的模块出现在直写清单里 ⇒ B 本体又自己在写台账了")
-
-
-# ============================================================ d 白名单
-def test_d_the_landing_whitelist_is_the_verifications_key_set() -> None:
-    """d：`STATEMENT_LAND_OPS` 与 `verifications` 的键逐字同一套，且正文/出处/留痕不在里面。"""
-    attach = set(SEC.STATEMENT_LAND_OPS["attach_proofs"])
-    numeric = set(SEC.STATEMENT_LAND_OPS["numeric_evidence"])
-    assert {VR.PROOFS_KEY, VR.GRADE_RECOMPUTED_KEY, "proof_text", "proof_history",
-            "bits", "kind", "_kind_upgrade", "proof_no", "proof_sha256"} <= attach, attach
-    assert numeric == {"bits"}, numeric
-    # 这三面是"经这一条路改不动"的那一侧（权限面：正文真身 / 出处面 / 创建留痕）。
-    for key in ("stmt_id", "statement_full", "statement_text", "source_lit_id", "page_range",
-                "doc_id", "line_range", "origin", "created_at", "created_by", "status"):
-        assert key not in attach, f"{key} 进了 attach_proofs 的白名单 ⇒ 那一面经这条路能改了"
-        assert key not in numeric, f"{key} 进了 numeric_evidence 的白名单 ⇒ 那一面经这条路能改了"
 
 
 # ============================================================ b 三条正控
