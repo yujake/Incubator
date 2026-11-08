@@ -40,21 +40,6 @@ CANDIDATES = [{"stmt_id": "000000", "label": "在册的那一条",
                "statement_full": "设 H 是另一个群；则 H 的阶是偶数。"}]
 
 
-class _Seam:
-    """一条"判了、判的是不同"的假模型缝（零网络：`ask_json` 立刻回合法 JSON）。"""
-
-    class _Call:
-        ok = True
-        problem = ""
-        detail = ""
-
-    def ask_json(self, prompt, **kw):
-        return ({"decision": "different", "canonical_name": "", "same_as": "",
-                 "route": "", "condition": "", "conclusion": "",
-                 "basis": ["夹具：判 different"], "reason": "夹具：判 different"},
-                self._Call())
-
-
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
@@ -69,12 +54,21 @@ def _session_step(root: pathlib.Path) -> None:
 
 
 def _judge_only(tmp_path: pathlib.Path) -> Store:
-    """造出误报现场：只走 `judge_statement_same`（只写 statement_same 那一本）。"""
+    """造出误报现场：**直接写盘**出 `statement_same.jsonl` 的一行（stage=judge）。
+
+    为什么不调 `secretary.judge_statement_same`：那只是 B 主路当前**碰巧**走的那个
+    入口（另一条 lane 计划删它）。读数判据只认盘上的行形状，夹具也必须只依赖行形状
+    —— 否则入口一换名，这条判据就替它陪葬。行形状与 `_note_statement_same` 写出来的
+    逐字同形：`stage="judge"` + `checked=True` + `seam_source` 非空。
+    """
     st = _ws(tmp_path)
-    sec = SEC.for_role_wired("B", root=st.root, store=st, seam=_Seam())
-    got = sec.judge_statement_same(statement_full=FULL, candidates=CANDIDATES,
-                                   label="夹具", kind="theorem")
-    assert got.get("checked") is True, got
+    SEC.append_statement_same(
+        st.root, stage="judge", statement_full=FULL, checked=True,
+        keywords=["有限群", "阶"], hits_total=1,
+        candidates=[str(c.get("stmt_id") or "") for c in CANDIDATES],
+        found="", why="夹具：判过、判的是不同",
+        label="夹具", kind="theorem",
+        seam_source="body（夹具：判过，这趟只落第二本账）", role="B")
     _session_step(st.root)
     return st
 
