@@ -318,9 +318,17 @@ def test_5_forcing_the_signature_lookup_open_makes_criterion_3_red(
     """判据 5（反真空）：把"要不要 V 签"的判定 monkeypatch 成恒通过 ⇒ 判据 3 必红。
 
     "要不要 V 签的判定"的唯一实现是 `_v_signature_for`（它读 V 的台账）。把它换成一个
-    恒回"签过了"的替身之后，判据 3 的那一笔（没有签）就会落库 —— 于是判据 3 的
-    "拒 self_authored_needs_v" 必红。这条反真空证明判据 3 读的是那一份判定，不是
+    恒回"签过了"的替身之后，判据 3 的那一笔（没有签）就会落到更后面那一档 —— 于是判据 3
+    的"拒 self_authored_needs_v"必红。这条反真空证明判据 3 读的是那一份判定，不是
     "反正拒了"。
+
+    2026-11-08（缺陷③，`c94a8e8f`）之后"更后面那一档"的形状变了：收录回执
+    （`proof_no` / `proof_sha256`）是"只要这一行真有正文就写"的一格，它进了写盘判据
+    ⇒ 这一笔 `ok=true` + `new_row=false`，不再落到 `duplicate_statement` 那一档。
+    真正挡住升档的是**写入期闸读到的那一份盘上台账**（放开的只是一份判定，不是那一行）：
+    盘上 `kind` 停在 `conjecture`、没有 `_kind_upgrade`，回执自己写着"还差 V 的一签"。
+    所以判据钉这三格，不钉那个拒码 —— 拒码只证明"有人拒了"，这三格证明
+    "拒了之后那一行仍然不是定理"。
     """
     st = _ws(tmp_path)
     b = _b(st)
@@ -356,6 +364,14 @@ def test_5_forcing_the_signature_lookup_open_makes_criterion_3_red(
     assert forced.get("kind") != "self_authored_needs_v", (
         "'要不要 V 签'的判定已经换成恒通过，这一笔却仍然报 self_authored_needs_v ⇒ "
         "判据 3 的牙不在那一份判定上（它可能是被别的东西顺手拦下的）：" + str(forced))
-    assert str(forced.get("kind") or "") in ("duplicate_statement",
-                                            "must_start_as_conjecture"), (
-        "闸放开之后这一笔既没有落库、也没有落到更后面那一级 ⇒ 这个反真空没打中：" + str(forced))
+    # 闸放开之后这一笔**落成什么**（见 docstring 末段）：没有新建行，盘上名字没升，
+    # 回执逐字说还差什么 —— 挡它的是写入期闸读到的那一份盘上台账。
+    assert forced.get("new_row") is False, (
+        "闸放开之后这一笔既没有落成「在册那一档」、也没有给出读数 ⇒ 这个反真空没打中："
+        + str(forced))
+    landed = next((dict(r) for r in st.rows("statements")
+                   if str(r.get("stmt_id") or "") == str(first.get("stmt_id"))), {})
+    assert str(landed.get("kind") or "") == "conjecture", (
+        "闸放开之后盘上的名字跟着升成定理了 ⇒ 判据 3 的牙不在那一份判定上：" + str(landed))
+    assert not landed.get("_kind_upgrade"), landed
+    assert "V 的一签" in str(forced.get("note") or ""), forced
