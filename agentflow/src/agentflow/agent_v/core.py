@@ -633,6 +633,41 @@ def _unregistered_secretary_judge(got: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
+                              reason: str = "") -> dict[str, Any]:
+    """`verify_proof` 初值里 `sign_issuance` 那一格的 fail-closed 形状（键无条件存在）。
+
+    ## 为什么要有它（2026-11-08，业主让核的那条）
+
+    改前初值是 `{}`：`verify_proof` 的每一条早退路径（`bad_statement_id` /
+    `bad_proof_no` / 手稿闸 / 未在册那几条闸…）都直接 `return out`，于是返回值里
+    `sign_issuance` 是空字典 —— 而工具声明（`tools/verify_tools.py` 的 `returns=`）
+    写着这一格的键无条件存在。按 `sign_issuance["checked"]` 读的调用方（V 自检就是
+    这么读的：`clean["sign_issuance"]["checked"]`）当场 `KeyError`。
+
+    修法只给**初值**一套完整的 fail-closed 键，不改声明那句话：键集合取两处实现的
+    并集（`Secretary.decide_sign_issuance` 的初值 + `_terminal_issuance` 的返回），
+    值全是"没走到签发"：`checked=False` / `issue=False` / `issued=False`，`reason`
+    说清这是早退，不是"不签发"那一档。
+
+    三态纪律：`checked=False` 不是"可以签"，也不是"判过、不签发" —— 它是"这一趟
+    没走到签发那一步"。任何一条真路径仍会整格覆盖它（`out["sign_issuance"] = ...`），
+    所以这里只影响早退。
+    """
+    return {
+        "checked": False, "issue": False, "issued": False, "landed": False,
+        "decision": "",
+        "writeback": {}, "streak": 0, "need": int(VR.SIGN_STREAK_NEED),
+        "streak_ok": False, "projected": 0, "same_sha": False, "state": "",
+        "reason": (str(reason or "")
+                   or "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` "
+                      "不是「可以签」，也不是「不签发」这一档"),
+        "within_call": None, "review_call": "", "ledger_streak": 0,
+        "basis": [], "reading": {}, "cost": {}, "material": {},
+        "statement_id": str(statement_id or ""), "proof_no": int(proof_no or 0),
+    }
+
+
 class AgentV:
     """验证者。三个 handler 与 `specs/v.py` 的 `handler_name` 逐字同名。
 
@@ -994,7 +1029,11 @@ class AgentV:
             # 业主 2026-10-29 的两格：秘书语义判定（B 段，两档）与发签决定（A 段）。
             # 键无条件存在（"没判成"由 `checked=False` 说，不靠少给键来表达）。
             "secretary_judge": {},
-            "sign_issuance": {},
+            #: 2026-11-08：初值是一套**完整的 fail-closed 键**，不是 `{}` —— 早退路径
+            #: 直接 `return out`，空字典会让按 `sign_issuance["checked"]` 读的调用方
+            #: 当场 KeyError（V 自检就是这么读的）。键集见 :func:`fail_closed_sign_issuance`。
+            "sign_issuance": fail_closed_sign_issuance(
+                statement_id=str(statement_id or "").strip()),
             # 业主 2026-10-30：这一趟自己连判了几次、每一转的判定档与连续次数。
             # 同理无条件存在（一次都没判成时是空数组 —— "没判过"与"判了 0 转"不靠少给键分）。
             "review_passes": [],
@@ -1029,6 +1068,10 @@ class AgentV:
             self._emit(f"verify_proof({sid})：{exc} —— 没查，不落台账行")
             return out
         out["proof_no"] = no
+        # `sign_issuance` 的初值在号判完之后补上这两格：早退路径（手稿闸 / 未在册那几条）
+        # 交回的 fail-closed 读数也要带对号与命题号，而不是空/0。
+        out["sign_issuance"]["statement_id"] = sid
+        out["sign_issuance"]["proof_no"] = int(no)
         text = str(proof_text or "")
         #: 这一趟签的载体（工作区相对路径；空串 = 没有手稿）。在册那一支由参数给、
         #: 随台账行交给 `sign_statement`（签块落回同一份稿）；未在册那两支各自处理。
