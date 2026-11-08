@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-07，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-08，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **273 个 `.py`、261,077 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,001 行** —— 批 R40 把它补进了 §3 的表；
+> **274 个 `.py`、262,723 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,001 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -392,6 +392,7 @@
 | `textutil.py` | 文本规范化、相似度、slug、页码解析 |
 | `errorstats.py` | **按角色 × 类目的「错误动作计数」**（业主口径逐字在模块 docstring：统计"被各种判据拦下或被秘书拦下"的行为，按角色细分多类）：只读事件流与会话记录，一份都不写（不建表、不改行、不追加事件、不落报告）；`ERROR_CATEGORIES` / `CODE_TABLE`（码→类目→`file:line` 出处）/ `primary_code`（一条记录只算一次的主码规则）/ `error_action_stats`（三态 `checked` + `state` + `reason`）/ `render_text` / `stats_json`。人看 `agentflow stats errors`，程序看 `as_dict()` |
 | `readouts.py` | **四个只读读数的统一外层**（`draft/145`，业主 2026-10-24 的 B/F 两格）：`errors_readout` / `flow_readout` / `cost_readout` / `gates_readout` 共用同一个外层五键（`checked` / `state` / `reason` / `data` / `problems`）—— 同一份口径同时供 CLI 与网页读，"没读到"不折成 0。判据 `tests/test_readouts_are_the_single_shape.py` |
+| `dispatchpolicy.py` | **D 派活文本的机械判据**（块乙，业主 2026-11-08 逐字：「那条猜想只是参考意见，D不能直接把自己的猜想登记到命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」）：`d_dispatch_records` 从 `sessions/*.jsonl` 的 `agent_step` 事件里取 D 真的交给 E/F 的那一段（`role="D"`、`shape="summon"` 的 `payload`，三态 `checked`）；`dispatch_text_problems` 判两半 —— ① 派活文本里出现 D 自己登记的某条 `conjecture_id`（`conj:NNNNNN` 或裸 6 位，且那个号真在 `conjectures` 台账里）⇒ `violations` 逐条点名 sid / index / 猜想号；② 归属到某段派活文本的 `attack_plans`（`problem` 是那段文本的子串，或 `problem_key` 就是它给的值）同样点名；认不出归属的计划记 `self_authored_plans`、不算违规（F 自己想证不算 D 的命令）。只写研究方向（不提号）⇒ 绿；会话记录读不出来 ⇒ `checked=False`（没查成 ≠ 没有违规）。纯函数、不注册工具、零模型调用、不写盘；判据 `tests/test_d_gives_a_direction_not_a_conjecture_order.py` |
 | `statementfission.py` | **形态读数：一条定理有没有被拆成多条独立命题**（D-54，只报不拦；业主 2026-10-24 在 `projects/sylow3` 看到同一条 Sylow 定理被登记成三条、第 2 份证明一份没用）：`suspected_splits` 用并查集把"表述不同、其实是同一条"的候选并起来，`describe` / `summary` 出人读读数；判重仍归 `secretary` 的 `_same_proposition_candidate`，本模块只出读数、不改台账 |
 
 **仓库根还有四处不属于 `src/`，但改代码时会碰到**：
@@ -444,7 +445,7 @@
 | `agent_loop.py` | 14001 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_tier`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1087 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3369 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
-| `agent_skills.py` | 4408 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
+| `agent_skills.py` | 4462 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
 | `providers.py` | 3366 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2940 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
 | `schema.py` | 4056 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
