@@ -9090,7 +9090,40 @@ class AgentLoop:
                             f"监控回合出口限定已连拒 {self._monitor_refusals} 次 ⇒ "
                             "从下一步起放开（许可的名单写在提示词里；放开这件事必须留痕）")
                 else:
-                    result = self._execute(shape, payload)
+                    # ---- 派活文本判据（业主 2026-11-08）：D 不能命令 E/F 把它的猜想做出来 ----
+                    #
+                    # `dispatchpolicy.dispatch_text_problems` 改前**零调用点**（只有直调测试
+                    # 在用它），于是 `specs/d.py` / `agent_skills.py` 里那句"机器可核"在
+                    # 运行期没有任何约束。这里把它接到派活那一刻：命中 ⇒ 这一步受控拒、
+                    # 拒信逐条点名是哪条 `conjecture_id`；只写研究方向 ⇒ 不拦。
+                    # 分级理由：这是"这一条派活的内容违反一条明文裁定"，改写文本就能过，
+                    # 不是"角色/边不存在"那种结构性拒绝 ⇒ `invalid_params`（受控词表里
+                    # "这次调用本身不成立"那一档），并给出改法。
+                    dispatch_policy = self._dispatch_policy_reading(shape, payload)
+                    _policy_hits = [dict(v) for v in (dispatch_policy.get("violations") or [])]
+                    if _policy_hits:
+                        _ids = sorted({str(v.get("conjecture_id") or "")
+                                       for v in _policy_hits if v.get("conjecture_id")})
+                        _detail = (
+                            "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 "
+                            + "、".join(_ids or ["（号读不出来）"])
+                            + "。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F "
+                            "必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），"
+                            "不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。")
+                        result = {"ok": False, "outcome": "refused",
+                                  "refused": "dispatch_names_a_conjecture_id",
+                                  "refusal_reason": "invalid_params",
+                                  "error": _detail, "detail": _detail,
+                                  "executed": False,
+                                  "violations": _policy_hits,
+                                  "dispatch_policy": dispatch_policy}
+                        run.notes.append(
+                            "派活文本点名了自己登记的猜想号（" + "、".join(_ids) + "）⇒ 受控拒")
+                    else:
+                        result = self._execute(shape, payload)
+                        if dispatch_policy:
+                            # 没命中也要留读数：`checked=False` 是"判据没跑成"，不是"绿"。
+                            result = {**result, "dispatch_policy": dispatch_policy}
                     # 2026-10-26（G1）：`program.stop` / `program.list` 那一族的读数进 run.notes。
                     # 为什么在这里：工具层没有"写 run.notes"的通道（run 只活在循环这一层），
                     # 而"我杀了 N 个自己的程序"必须让人在跑完之后看得到 —— 它是一条会改变机器状态的读数。
@@ -11446,6 +11479,55 @@ class AgentLoop:
             return "", f"名册登记没跑成：{type(exc).__name__}: {exc}"
         problem = str(reg.get("problem") or "")
         return ("" if problem else str(reg.get("name") or "")), problem
+
+    def _dispatch_policy_reading(self, shape: str, payload: Mapping[str, Any]
+                                 ) -> dict[str, Any]:
+        """D 的派活文本点了它自己登记的 `conjecture_id` 没有（运行期唯一闸）。
+
+        ## 为什么接在"派活那一刻"
+
+        业主 2026-11-08 逐字：「那条猜想只是参考意见，D 不能直接把自己的猜想登记到命题
+        台账，也不能命令 E 或 F 必须把它做出来，这只是研究方向参考」。判据本体在
+        `dispatchpolicy.dispatch_text_problems`（只读盘：`conjectures` 台账 + 派活文本），
+        改前它**零调用点** —— `specs/d.py` 与 `agent_skills.py` 里"机器可核"那句在运行期
+        没有任何约束。这里把它接到 D 的 `summon` / `summon_many`：命中 ⇒ `run()` 那一支
+        受控拒并逐条点名；只写研究方向（不点号）⇒ 不拦。
+
+        ## 三态
+
+        不是 D 的派活 / 没有 store ⇒ `{}`（这条判据不适用，不是"绿"）；
+        判据读不成（`conjectures` 读不出来等）⇒ 原样带 `checked=False` + `reason`
+        （fail-open 放行：阻塞一条委托比放行更贵，但读数必须看得见）；跑成了 ⇒
+        `checked=True`，`violations` 空就是"没有点名"。
+
+        用 `events=` 把这一条载荷直接递给判据（不走会话回读）：派活**还没落盘**，
+        此刻能审的只有手上这一份；同一条判据也仍可离线扫全量会话（收工侧）。
+        """
+        if shape not in ("summon", "summon_many"):
+            return {}
+        if str(getattr(self, "role", "") or "") != "D":
+            return {}
+        root = str(getattr(getattr(self, "store", None), "root", "") or "")
+        if not root:
+            return {}
+        if shape == "summon":
+            items: list[dict[str, Any]] = [dict(payload)]
+        else:
+            items = [dict(x) for x in (payload.get("targets") or [])
+                     if isinstance(x, Mapping)]
+        if not items:
+            return {}
+        events = [{"kind": "agent_step", "role": "D", "shape": "summon",
+                   "sid": str(getattr(self, "sid", "") or ""), "index": idx,
+                   "payload": item} for idx, item in enumerate(items)]
+        try:
+            from . import dispatchpolicy as _DP
+
+            return dict(_DP.dispatch_text_problems(root, events=events))
+        except Exception as exc:  # noqa: BLE001 —— 判据坏了不许带走这一趟（留读数）
+            return {"checked": False, "violations": [], "dispatches": 0,
+                    "reason": (f"派活文本判据没跑成（{type(exc).__name__}: {exc}）"
+                               "⇒ 这一格没查成（不是「没有违规」）")}
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
