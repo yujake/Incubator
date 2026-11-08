@@ -436,6 +436,14 @@ def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
     """
     from agentflow import agent_f as AF
 
+    # 前提显式化（2026-11-09，业主裁定 ③）：这一条判据①判的是"没登记缝 ⇒
+    # `dead_end(缺工具)`"，所以进门先把 F 的默认缝显式钉成 None。
+    # 这不是为了让判据变绿：真有一处没登记的缝，钉掉之后判据照样按原样红；
+    # 它是为了让这条判据的前提不再依赖"上一条判据 / 模块夹具有没有留下缝"这个环境事实
+    # （那道兜底在 `tests/conftest.py` 的 `_ROLE_REGISTRY_BASELINE`，但它不该是
+    # "这条判据的前提取值"的唯一来源 —— 前提应当由判据自己声明）。
+    AF.set_default_llm(None)
+
     llm = FakeLLM(_round(product="reduction", reason="拆成两条更小的判定",
                          new_subgoals=[{"goal": "判定 n<=12 的小情形",
                                         "testable": "枚举 n<=12 全部候选"}]))

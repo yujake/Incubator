@@ -1227,22 +1227,35 @@ def _reset_provider_cooldowns():
     _P.clear_provider_cooldowns()
 
 
-def _role_seam_state() -> dict:
-    """读一遍「逐角色默认模型缝」表（快照/还原的唯一清单：只有这一处知道要存什么）。"""
+def _role_registry_state() -> dict:
+    """读一遍「逐角色」的两张进程级注册表（快照/还原的唯一清单：只有这一处知道要存什么）。
+
+    两张表都在 `llmseam` 里、都是进程级 dict：
+    - `_ROLE_SEAMS`：逐角色默认模型缝（`attack_tools._agent_for` → `agent_f.default_llm()`）；
+    - `_ROLE_CONFIGS`：逐 `(角色, 工作区根)` 的装配期配置（`attack_tools._agent_for` →
+      `role_config("F", root)`；`test_agent_f_inference` 的 J-07 判据直接登记它）。
+
+    为什么两张表共用一份清单（2026-11-09，业主裁定）：它们是同一类东西 —— 进程级、
+    按角色索引、由装配期写入。只还原其中一张，另一张就是同一类"污染变基线"隐患的
+    下一个落点；`_ROLE_CONFIGS` 现在没有生产写入点，不代表以后不会有（没有还原面时，
+    那种缺陷要等到某条判据串跑变红才暴露，而失败信息指不到起点）。
+    """
     from agentflow import llmseam as _LS
 
-    return dict(_LS._ROLE_SEAMS)
+    return {"seams": dict(_LS._ROLE_SEAMS), "configs": dict(_LS._ROLE_CONFIGS)}
 
 
-def _apply_role_seam_state(saved: dict) -> None:
-    """把缝表装回给定的那一份（原地清空再填，保持同一个 dict 对象）。"""
+def _apply_role_registry_state(saved: dict) -> None:
+    """把两张表装回给定的那一份（原地清空再填，保持同一个 dict 对象）。"""
     from agentflow import llmseam as _LS
 
     _LS._ROLE_SEAMS.clear()
-    _LS._ROLE_SEAMS.update(saved)
+    _LS._ROLE_SEAMS.update(saved["seams"])
+    _LS._ROLE_CONFIGS.clear()
+    _LS._ROLE_CONFIGS.update(saved["configs"])
 
 
-#: 逐角色默认缝的会话基线：拍摄时点 = 本文件导入期（不是每条判据 setup 时，理由见下）。
+#: 两张逐角色进程级注册表的会话基线：拍摄时点 = 本文件导入期（不是每条判据 setup 时，理由见下）。
 #:
 #: ## 为什么"进来时拍一张"不够（2026-11-09 的顺序敏感缺陷，最小复现见下）
 #:
@@ -1268,18 +1281,27 @@ def _apply_role_seam_state(saved: dict) -> None:
 #:    setup 之前"，只在收尾还原挡不住它（这一条就是本缺陷的另一条污染路径）；
 #: 3. 收尾照旧装回基线（判据自己在用例里登记/撤销缝的自由一字不减）。
 #:
+#: ## 分工（业主 2026-11-09 裁定）：模块级夹具可以装配，脏东西由基线兜住
+#:
+#: 模块级夹具里做装配（跑进程内 `run-agent`、`wired_llm_conductor` 一类）是允许的形态，
+#: 本仓还有其它用处，不禁；但装配留下的一切进程级状态由这里的基线兜住。反过来说：
+#: 新开一张进程级表（按角色 / 按根登记的注册表）就要同时进这份基线 —— 只还原一张，
+#: 等于给同一类缺陷留了下一个落点，而那种缺陷的失败信息指不到起点
+#: （`_ROLE_CONFIGS` 就是这么并进来的：它是第二张表，不是第二个问题）。
+#:
 #: 判据见 `tests/test_the_role_seam_baseline_is_captured_before_the_imports.py`。
-_ROLE_SEAMS_BASELINE: dict = {}
+_ROLE_REGISTRY_BASELINE: dict = {}
 
 #: 导入期就拍（理由见上）：晚于此处就会拍到某个测试模块在导入期/模块夹具里的装配副作用。
-_ROLE_SEAMS_BASELINE.update(_role_seam_state())
+_ROLE_REGISTRY_BASELINE.update(_role_registry_state())
 
 
 @pytest.fixture(autouse=True)
 def _restore_role_seams():
-    """每条判据前后都把「逐角色默认模型缝」装回会话基线（进程级状态的副作用隔离）。
+    """每条判据前后都把「逐角色」两张进程级注册表装回会话基线（副作用隔离）。
 
-    与上面那条同一个理由，只是另一张进程级的表：`llmseam._ROLE_SEAMS` 是
+    与上面那条同一个理由，只是另一类进程级的表（自 2026-11-09 起是两张：
+    `llmseam._ROLE_SEAMS` 与 `llmseam._ROLE_CONFIGS`）。`_ROLE_SEAMS` 是
     F / V 在工具层那条路上取缝的唯一来源（`attack_tools._agent_for` →
     `agent_f.default_llm()`）。有两条判据会把它设成真的缝（`test_host_wiring`
     的「F 无条件装配缝」、`test_f_reasoning_is_its_working_mode` 同族）——
@@ -1299,24 +1321,26 @@ def _restore_role_seams():
 
     改前 `saved = dict(_LS._ROLE_SEAMS)` 拍在 setup 里，只能挡住"同一条判据里"的写入；
     挡不住模块级夹具（它比任何函数级夹具都先装配，拍的时候污染已经在表里了）。
-    最小复现与现场读数写在 `_ROLE_SEAMS_BASELINE` 上方那段。现在 setup 与收尾都装回
+    最小复现与现场读数写在 `_ROLE_REGISTRY_BASELINE` 上方那段。现在 setup 与收尾都装回
     导入期基线：模块级夹具的副作用在进入判据之前就被抹掉，而判据自己在用例里登记缝
-    （包括负控登记 `None`）仍然只在"这一条判据之内"有效。
+    （包括负控登记 `None`）仍然只在"这一条判据之内"有效。两张表一起装回：
+    `_ROLE_CONFIGS` 是同一类注册表（理由与分工见基线那段）。
     """
-    _apply_role_seam_state(_ROLE_SEAMS_BASELINE)
+    _apply_role_registry_state(_ROLE_REGISTRY_BASELINE)
     yield
-    _apply_role_seam_state(_ROLE_SEAMS_BASELINE)
+    _apply_role_registry_state(_ROLE_REGISTRY_BASELINE)
 
 
 @pytest.fixture
-def role_seam_baseline() -> dict:
-    """会话基线的一份只读副本（给「基线必须干净」那条判据用）。
+def role_registry_baseline() -> dict:
+    """两张注册表会话基线的一份只读副本（给「基线必须干净」那条判据用）。
 
-    只读：这里是浅拷贝，改它不会改到夹具还原用的那一份。
-    为什么要有这个出口：`_ROLE_SEAMS_BASELINE` 是模块私有名，判据不该直接摸它；
+    只读：内外两层都拷贝，改它不会改到夹具还原用的那一份。
+    为什么要有这个出口：`_ROLE_REGISTRY_BASELINE` 是模块私有名，判据不该直接摸它；
     而"基线里有没有别的测试模块的导入期/模块夹具副作用"这件事，只有判据读得出来。
     """
-    return dict(_ROLE_SEAMS_BASELINE)
+    return {"seams": dict(_ROLE_REGISTRY_BASELINE["seams"]),
+            "configs": dict(_ROLE_REGISTRY_BASELINE["configs"])}
 
 
 #: 四条写路径上全部进程级可变状态的会话基线。清单只有一处，读/写共用
