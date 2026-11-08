@@ -583,6 +583,7 @@ ROLE_FILES_WITHOUT_DIRECT_READ: tuple[str, ...] = (
     "agentflow/verifications.py",
     "agentflow/vsigns.py",
     "agentflow/vreceipts.py",
+    "agentflow/agent_b/register_statement.py",
 )
 
 

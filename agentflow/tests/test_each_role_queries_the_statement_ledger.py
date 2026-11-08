@@ -220,5 +220,96 @@ def test_v_an_unreadable_ledger_is_not_an_empty_register(
     assert VS._registered_ids(st) == (), "取数口降级了，在册号读数却还读得到"
 
 
+# ===================================================== ④ B：编号 + 关键字（收录之前）
+def test_b_reads_the_disk_row_by_number_alone(tmp_path: pathlib.Path) -> None:
+    """只给编号 ⇒ 回读到盘上那一格的 `evidence_kind`（不拿请求值顶）。"""
+    from agentflow.agent_b import AgentB
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", evidence_kind="proof", proof_text="Proof. 一步。")
+    b = AgentB(st, extractor=None, extract_text=None, config={})
+    assert b._evidence_kind_on_disk("0001") == "proof"
+
+
+def test_b_a_degraded_id_mode_reads_unknown_instead_of_the_value(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径一降级 ⇒ 回读那一格掉成 `unknown`（不是「盘上就是这个值」）。"""
+    from agentflow.agent_b import AgentB
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", evidence_kind="proof", proof_text="Proof. 一步。")
+    b = AgentB(st, extractor=None, extract_text=None, config={})
+    monkeypatch.setattr(SL, "by_id", _degraded_id)
+    assert b._evidence_kind_on_disk("0001") == "unknown"
+
+
+def _judge_same(*, same_as: str):
+    def _fake(self, kind, context, *, task_id="", note=""):
+        ids = [str(c.get("stmt_id") or "") for c in (context.get("candidates") or [])]
+        hit = same_as if same_as in ids else ""
+        return {"checked": True, "decision": "same" if hit else "different",
+                "same_as": hit, "canonical_name": "P 阶元", "route": "",
+                "condition": "", "conclusion": "", "basis": ["夹具"],
+                "reason": "夹具", "cost": {}, "elapsed_sec": 0.0}
+    return _fake
+
+
+def test_b_finds_the_registered_one_by_keywords_before_taking_it_in(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """只给内容（不给编号）⇒ 收录之前先按关键词问出在册的那一条。
+
+    B 自己不检索：挑词与判定是秘书那一层，检索只经查口口径二（`by_keywords`）。
+    """
+    from agentflow import secretary as SEC
+    from agentflow.agent_b import AgentB
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群且 |G| = p^a·m，则 G 有 p 阶元。",
+                       kind="theorem")
+    sec = SEC.Secretary("B", root=st.root, store=st)
+    monkeypatch.setattr(SEC.Secretary, "pick_statement_keywords",
+                        lambda self, **kw: {"checked": True, "keywords": ["p 阶元"],
+                                            "why": "夹具"})
+    monkeypatch.setattr(SEC.Secretary, "judge", _judge_same(same_as="0001"))
+    b = AgentB(st, extractor=None, extract_text=None, config={})
+    monkeypatch.setattr(type(b), "_statement_secretary", lambda self: sec)
+    got = b._resolve_same_statement(full="设 G 是有限群，那么 G 里有 p 阶元。",
+                                    label="P 阶元", kind="theorem")
+    assert got["checked"] is True, got
+    assert got["found"] == "0001", got
+
+
+def test_b_a_degraded_keyword_mode_no_longer_finds_the_registered_one(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径二降级 ⇒ 同一问再认不出在册那一条（`found` 掉成空）。"""
+    from agentflow import secretary as SEC
+    from agentflow.agent_b import AgentB
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="P 阶元",
+                       statement_full="设 G 是有限群且 |G| = p^a·m，则 G 有 p 阶元。",
+                       kind="theorem")
+    sec = SEC.Secretary("B", root=st.root, store=st)
+    monkeypatch.setattr(SEC.Secretary, "pick_statement_keywords",
+                        lambda self, **kw: {"checked": True, "keywords": ["p 阶元"],
+                                            "why": "夹具"})
+    monkeypatch.setattr(SEC.Secretary, "judge", _judge_same(same_as="0001"))
+    b = AgentB(st, extractor=None, extract_text=None, config={})
+    monkeypatch.setattr(type(b), "_statement_secretary", lambda self: sec)
+    # 换一句不同的转述：避开判定缓存，确保这一问真的走到检索。
+    first = b._resolve_same_statement(full="设 G 是有限群，那么 G 里有 p 阶元。",
+                                      label="P 阶元", kind="theorem")
+    assert first["found"] == "0001", first
+    monkeypatch.setattr(SL, "by_keywords", _degraded_keywords)
+    bad = b._resolve_same_statement(full="有限群 G 一定含一个 p 阶元。",
+                                    label="P 阶元", kind="theorem")
+    assert bad["found"] == "", bad
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

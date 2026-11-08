@@ -1266,11 +1266,11 @@ class _RegisterStatement:
             "_row": {},
         }
         root = str(getattr(self.store, "root", "") or "")
-        try:
-            all_rows = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001
+        all_rows, problem, error = SL.rows_of(self.store)
+        if problem:
             out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
-                       why=f"statements 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成")
+                       why=(f"statements 台账读不出来（{error.get('type') or '?'}: "
+                            f"{error.get('message') or problem}）⇒ 没查成"))
             out["problems"] = [out["why"]]
             return out
         # 可检索 / 可并池只有一处实现（查口 `pool`）；kind 名单仍取自秘书那一份
@@ -1734,9 +1734,14 @@ class _RegisterStatement:
             # 这一笔没有要写的（收口前那一支是 `same_statement_missing` / `bad_bits`，
             # 它们自带 `ok=false` 的拒信体）⇒ 原样回它，不许补一个"写成了"。
             return out
-        # 按号定位走查口（口径一）。这里传 `rows=` 而不是让查口自己读：这一格是"写成了
-        # 之后的回读"，锁内 / 读侧失败都该照旧抛出（不是一个三态读数）。
-        latest = SL.by_id(rows=self.store.rows("statements"), stmt_id=sid)["row"]
+        # 按号定位走查口（口径一）。这一格是"写成了之后的回读"，锁内 / 读侧失败都该
+        # 照旧抛出（不是一个三态读数）：查口把异常收成 checked=False，这里翻回一次抛出。
+        latest_got = SL.by_id(self.store, stmt_id=sid)
+        if not latest_got["checked"]:
+            _err = latest_got.get("error") or {}
+            raise RuntimeError(f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                               f"{_err.get('message') or latest_got.get('reason') or '?'}）")
+        latest = latest_got["row"]
         from .. import textutil as T
         same_text = bool(latest) and (
             T.normalize(str(latest.get("statement_full") or ""))
@@ -3258,14 +3263,14 @@ class _RegisterStatement:
                 # 等级不够的号不是"待接的悬空边"，而是这一笔写错了（F 读不到它，不可能
                 # 在引用它）⇒ 受控拒，拒信点名那个号。"在册"要真读台账，所以读
                 # `statements` 提到这一判据之前；读不到 ⇒ 不许猜，整笔不写。
-                try:
-                    stmt_rows = [dict(r) for r in self.store.rows("statements")]
-                except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
+                stmt_rows, problem, error = SL.rows_of(self.store)
+                if problem:
                     return _refuse(
                         str(_DS.REFUSED_LEVEL_UNREADABLE),
                         f"手稿的依赖段要核每条来源的档位、并判正文的引用在不在可引池里，"
                         f"而 `statements` 读不出来"
-                        f"（{type(exc).__name__}: {exc}）⇒ 整笔不写：读不到档位就不许放行")
+                        f"（{error.get('type') or '?'}: "
+                        f"{error.get('message') or problem}）⇒ 整笔不写：读不到档位就不许放行")
                 pool = _DS.citable_pool(stmt_rows)
                 _code, _why = _DS.dependency_consistency_problem(
                     manuscript_text, known_ids=pool, statement_rows=stmt_rows)
@@ -3306,8 +3311,11 @@ class _RegisterStatement:
                     #: 这一格问的是"正文引了在册命题没有"（用于判"这一笔该不该带稿"），
                     #: 不是可引池：「在册但等级不够」由稿那一侧 / 秘书那一侧的受控拒点名，
                     #: 不在这里折成"缺稿"（缺的确实不是稿）。
-                    #: 索引的构造只有一处（查口 `index_by_id`）。
-                    known_ids = set(SL.index_by_id(self.store.rows("statements")))
+                    #: 索引的构造只有一处（查口 `index_by_id`）；取数走唯一取数口。
+                    #: 读不到时与改前同一档：按「正文里点到的号都算在册」走（理由另写）。
+                    ids_rows, ids_problem, _ids_error = SL.rows_of(self.store)
+                    known_ids = (set(probe_refs) if ids_problem
+                                 else set(SL.index_by_id(ids_rows)))
                 except Exception:  # noqa: BLE001 - 读不到就只按形状判，理由里写清
                     known_ids = set(probe_refs)
                 on_ledger = [rid for rid in probe_refs if rid in known_ids]
@@ -3508,10 +3516,9 @@ class _RegisterStatement:
             # 读不到实验台账时不能放行（那会把"查不了"折成"查过了没问题"）：
             # 交给 `filing_problems` 的空清单分支 ⇒ 拒，理由里会写"台账里没有对应实验"。
             exp_rows = []
-        stmt_rows = []
-        try:
-            stmt_rows = list(self.store.rows("statements"))
-        except Exception:  # noqa: BLE001 —— 同上：读不到命题台账 ⇒ 那一格"没查成"⇒ 拒
+        # 取数走查口的唯一取数口；读不到命题台账 ⇒ 那一格"没查成" ⇒ 拒（照旧：空清单）。
+        stmt_rows, stmt_problem, _stmt_error = SL.rows_of(self.store)
+        if stmt_problem:
             stmt_rows = []
         _sign_problems = _NP.filing_problems(origin=origin, evidence_kind=evidence_kind,
                                              proof_text=proof_text, experiments=exp_rows,
@@ -4311,8 +4318,8 @@ class _RegisterStatement:
                         "refused": str(collect.get("refused") or ""),
                         "reason": str(collect.get("reason") or "")}
                 if collect.get("written") or collect.get("proof_receipt"):
-                    out["row"] = (SL.by_id(rows=self.store.rows("statements"),
-                                           stmt_id=stmt_now)["row"]
+                    _row_got = SL.by_id(self.store, stmt_id=stmt_now)
+                    out["row"] = ((_row_got["row"] if _row_got["found"] else {})
                                   or out.get("row") or {})
                 if collect.get("grade_recomputed"):
                     out["grade_recomputed"] = dict(collect.get("grade_recomputed") or {})
@@ -4400,10 +4407,16 @@ class _RegisterStatement:
                     proof_no=int(proof_no_placement))
                 if _collected.get("row"):
                     written = {**dict(written), "row": dict(_collected.get("row") or {})}
-            _landed_row = (SL.by_id(rows=self.store.rows("statements"),
-                                    stmt_id=stmt_now)["row"]
-                           if attach.get("written")
-                           else dict(written.get("row") or {}))
+            if attach.get("written"):
+                _landed_got = SL.by_id(self.store, stmt_id=stmt_now)
+                if not _landed_got["checked"]:
+                    _err = _landed_got.get("error") or {}
+                    raise RuntimeError(
+                        f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                        f"{_err.get('message') or _landed_got.get('reason') or '?'}）")
+                _landed_row = _landed_got["row"] or {}
+            else:
+                _landed_row = dict(written.get("row") or {})
             _landed_has_proof = _row_has_proof(_landed_row)
             out = {"ok": True, "stmt_id": stmt_now,
                    #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
@@ -4515,10 +4528,16 @@ class _RegisterStatement:
                                                       canonical=attach_canonical,
                                                       bits=bits,
                                                       proof_no=int(proof_no_placement))
-            _dup_row = (SL.by_id(rows=self.store.rows("statements"),
-                                 stmt_id=stmt_dup)["row"]
-                        if attach.get("written")
-                        else dict(written.get("row") or {}))
+            if attach.get("written"):
+                _dup_got = SL.by_id(self.store, stmt_id=stmt_dup)
+                if not _dup_got["checked"]:
+                    _err = _dup_got.get("error") or {}
+                    raise RuntimeError(
+                        f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                        f"{_err.get('message') or _dup_got.get('reason') or '?'}）")
+                _dup_row = _dup_got["row"] or {}
+            else:
+                _dup_row = dict(written.get("row") or {})
             _dup_has_proof = _row_has_proof(_dup_row)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
@@ -4701,8 +4720,12 @@ class _RegisterStatement:
                             + " ⇒ 第 2 份及以后的证明没有写进库（不是写了一半，是那几条没写）"),
                            stmt_id=stmt_id)
         if attach.get("written"):
-            data = (SL.by_id(rows=self.store.rows("statements"),
-                             stmt_id=stmt_id)["row"] or data)
+            _data_got = SL.by_id(self.store, stmt_id=stmt_id)
+            if not _data_got["checked"]:
+                _err = _data_got.get("error") or {}
+                raise RuntimeError(f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                                   f"{_err.get('message') or _data_got.get('reason') or '?'}）")
+            data = _data_got["row"] or data
         # ---- 2026-11-02（②）：「先有签、后登记」认到的那一签，拿到号之后回写台账行。
         #
         # 为什么落在这里：`vsigns.bits_after_sign` 在"新建"这一档只能按正文 sha 认签
@@ -5214,7 +5237,12 @@ class _RegisterStatement:
         sid = str(out.get("stmt_id") or "")
         if not sid:
             return out
-        row = SL.by_id(rows=self.store.rows("statements"), stmt_id=sid)["row"]
+        _decl_got = SL.by_id(self.store, stmt_id=sid)
+        if not _decl_got["checked"]:
+            _err = _decl_got.get("error") or {}
+            raise RuntimeError(f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                               f"{_err.get('message') or _decl_got.get('reason') or '?'}）")
+        row = _decl_got["row"] or {}
         if not row or str(row.get("kind") or "") == declared:
             return out
         try:
@@ -5361,9 +5389,9 @@ class _RegisterStatement:
 
         if not T.normalize(str(full or "")):
             return None
-        try:
-            rows = self.store.rows("statements")
-        except Exception:  # noqa: BLE001 —— 读不到 ⇒ 走正常那一支（不猜它在册）
+        # 取数走查口的唯一取数口；读不到 ⇒ 走正常那一支（不猜它在册）。
+        rows, problem, _error = SL.rows_of(self.store)
+        if problem:
             return None
         hits = SL.duplicate_hits(rows, text=full)["hits"]
         return hits[0] if hits else None
@@ -5575,7 +5603,12 @@ class _RegisterStatement:
         try:
             deps = [dict(r) for r in store.rows("dependencies")]
             # 索引的构造只有一处（查口 `index_by_id`）；这里只要号集合。
-            known = set(SL.index_by_id(store.rows("statements")))
+            # 取数走唯一取数口（三态：读不成不是空表）。
+            stmt_rows, problem, error = SL.rows_of(store)
+            if problem:
+                raise RuntimeError(f"{error.get('type') or '?'}: "
+                                   f"{error.get('message') or problem}")
+            known = set(SL.index_by_id(stmt_rows))
         except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
             return [], (f"没查成：dependencies / statements 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 拒绝落库。三态纪律：'读不到'"
@@ -5828,10 +5861,11 @@ class _RegisterStatement:
             return out
         root = getattr(store, "root", None)
         key = _T.normalize(statement_full)
-        try:
-            rows = [dict(r) for r in store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
-            out["why"] = (f"没查成：statements 读不出来（{type(exc).__name__}: {exc}）"
+        # 取数走查口的唯一取数口；读不到要如实说，不许当成通过。
+        rows, problem, error = SL.rows_of(store)
+        if problem:
+            out["why"] = (f"没查成：statements 读不出来（{error.get('type') or '?'}: "
+                          f"{error.get('message') or problem}）"
                           "⇒ 判不了这一条有没有 V 的签")
             return out
         sha = VR.proof_sha(want)
