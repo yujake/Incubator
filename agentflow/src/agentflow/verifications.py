@@ -2995,6 +2995,10 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     `skip_gap=True`（2026-11-08，V 的签后义务）：不读 `statements` 去判断"是不是已经收录了"。
     义务的存在与它是否已满足是两件事 —— V 只对手稿负责，签落成后就无条件开义务；
     "满足了没有"由 B 收录时消账、收工时 `sweep_registrations` 按盘上事实收口。
+
+    默认 `False` 只服务历史直调（`sign_statement` 末尾那一支：兼容门，仍按 `statements`
+    判"已收录"）；生产签后义务在 `land_sign_without_ledger` 里显式传 `skip_gap=True`。
+    判据 `test_production_landing_does_not_rely_on_write_defaults` 逐条核这一格。
     """
     from . import vreceipts as _VRC
 

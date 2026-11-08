@@ -2171,6 +2171,15 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
     `code` / `by` / `artifact_sha` / `manuscript_id` / `body_mismatch` /
     `manuscript_write` / `ledger_bit` / `ledger_why` / `sign_recorded` / `anchor` /
     `anchor_source` / `reason`。
+
+    ## `ledger_bit=True` 的默认值只服务历史直调 / 夹具（2026-11-08 审计）
+
+    生产两处落签（V 侧的 `verifications._vsigns_write_after_flip` 与收方秘书的
+    `Secretary.land_unregistered_sign`）都显式传 `store=None` + `ledger_bit=False`：
+    位由外层事务落，这里再落一次就是同一格两个写者（还会重入同一把表锁）。
+    默认值保留是因为直调判据（`test_issue_and_land_are_two_steps`）要测"落台账位"
+    那条正路 —— 改成 False 会把那条路关掉。判据
+    `test_production_landing_does_not_rely_on_write_defaults` 逐条核生产调用点。
     """
     out: dict[str, Any] = {
         "checked": False, "landed": False, "state": "refused", "code": "",
