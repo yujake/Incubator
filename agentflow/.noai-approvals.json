@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T23:30:53+08:00",
+  "generated_at": "2026-11-09T07:34:30+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -478,10 +478,10 @@
       "path": "src/agentflow/tools/table_tools.py",
       "glob": "src/agentflow/tools/table_tools.py",
       "category": "auth-audit",
-      "sha256": "eb6c4b4bdcf7ef1e680c07e802abc0244bf6f7f686d0e47667e0a156d9074737",
+      "sha256": "ca979e05f9359c6de4da80d94761df6e98d261c1b9cf94a7c0f3879d8f9d8bfc",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-07 p256：\table.update 的 summary 与 params 从「五格 / 两档」改成「七格 / 四档」—— 新增 experiment_id（counterexample）与 space（space_too_large）两格；同一批在压缩批次内等量裁剪（批次总量 6470/8631 = 74.9623%，≤75%）。改的是工具声明面，不动 handler 的行为判据（判据本体在 statementabandon.check_abandon_reason）。登记 = 基线，reviewers 仍为空（登记 ≠ 批准）。",
+      "change_note": "2026-11-09 两把尺统一（statements 分支）：table_search 在 table=statements 上改用命题查口同一判据（textutil.normalized_keywords / matched_keywords，normalize 后包含），默认搜索面收敛到 label / statement_full；点名内容面之外字段、归一后为空的查询均受控拒绝；其它表的通用搜索逐字不变。新增 STATEMENT_SEARCH_FIELDS / _statement_matched_fields。登记 = 写这一版 sha256，reviewers 仍为空（登记 != 批准）；这条仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

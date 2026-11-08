@@ -558,6 +558,41 @@ def _scalar_str_fields(table: str) -> list[str]:
     return [f.name for f in _fields_of(table) if not _is_array_type(hints.get(f.name)) and _mentions_str(hints.get(f.name))]
 
 
+#: `statements` 的搜索面：与命题台账查口（`statementledger.by_keywords`）同一把尺。
+#
+# 2026-11-09「两把尺」：`table.search` 原先对全部标量字符串字段（`statements` 实测 18 个）
+# 做 `casefold` 裸子串，而查口只比这两列、用 `textutil.normalize`（全半角 / 大小写 / 标点 /
+# 空白都折叠）。同一份台账、同一个查询，模型与秘书会得到不同结论，而两边各自都自洽 ——
+# 实测：`noether，环` 在查口命中 `Noether 环`、在工具层 0 命中；全角 `Ｐ 阶元` 同样分家。
+# 现在两边调同一份判据（`textutil.normalized_keywords` / `matched_keywords`）：
+# 默认搜索面 = 这两列；`fields=` 点名别的列 ⇒ 受控拒绝（不静默忽略，否则
+# "我搜了 proof_text 却 0 条"会被读成"台账里没有"）。其它表的通用搜索一个字节都不动
+# （它们没有"命题语义面"这回事；`normalize` 还会吃掉 `literature.path` 里的 `/` 与 `.`）。
+# 设计取舍见 `temp/_design_two_rulers.md`；判据见
+# `tests/test_the_two_rulers_agree_on_the_ledger.py`。
+STATEMENT_SEARCH_FIELDS: tuple[str, str] = ("label", "statement_full")
+
+
+def _statement_matched_fields(row: Mapping[str, Any], names: Sequence[str],
+                              wanted: Iterable[tuple[str, str]]) -> list[str]:
+    """`statements` 行命中了哪几个字段（与命题查口同一把尺）。
+
+    单独成函数有两个理由：
+    1. 工具侧只需要"哪些字段命中"（进 `meta.matched_fields`），判据本体在
+       `textutil.matched_keywords` —— 这里不再抄一遍"包含"；
+    2. 它是反真空的替换点：`tests/test_the_two_rulers_agree_on_the_ledger.py`
+       把这个函数换回统一前的 `casefold` 子串实现，断言同一个查询在两处给出不同
+       hit 集 —— 证明"一致性判据"不是恒真的。
+    """
+    found: list[str] = []
+    for name in names:
+        val = row.get(name)
+        # 非字符串不猜成一个字面量：工具层对非 str 的字段一律当"这一段没有文本"。
+        if _text.matched_keywords([val if isinstance(val, str) else ""], wanted):
+            found.append(name)
+    return found
+
+
 def _vocabularies() -> dict[str, list[str]]:
     """反射出 `schema` 模块里的全部受控词表。
 
@@ -2248,6 +2283,13 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
     return ok({"tables": tables, "vocabularies": vocabs}, table_count=len(tables), vocabulary_count=len(vocabs))
 
 
+# ⚠️ 这里的 summary / 参数说明是模型面契约，且被冻结在
+# `tests/golden/tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json`
+# 里（两份都属 FC-27 `eval-criteria`："重冻必须由人逐格看过"）。2026-11-09 的统一让
+# `statements` 的默认搜索面变成 `label` / `statement_full`（见 `STATEMENT_SEARCH_FIELDS`），
+# 而 summary 仍写着"默认全部标量字符串字段"——这是有意留下的文字债：改它要重冻上面
+# 两份快照，那是 2 名 reviewer 的人工动作，本次不碰。读的人以 `STATEMENT_SEARCH_FIELDS`
+# 与 `table_search` 的 docstring 为准（差异清单见 `temp/_design_two_rulers.md` §6）。
 @tool(
     "table.search",
     "在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配。",
@@ -2290,6 +2332,18 @@ def table_search(
     大小写不敏感用 `casefold()` 而不是 `lower()` —— 后者对某些语言（如德语 ß）会漏匹配，
     而"大小写不敏感"的承诺必须是字面成立的。
 
+    ## `statements` 上走的是命题查口那把尺（2026-11-09「两把尺」）
+
+    通用表（`literature` / `relations` / …）仍是上面那句：`casefold` 裸子串、默认扫全部
+    标量字符串字段。命题台账例外：搜索面是 `label` / `statement_full`，判据是
+    `textutil.normalize` 后包含（全半角 / 大小写 / 标点 / 空白都折叠），与
+    `statementledger.by_keywords` 是同一份实现（`textutil.matched_keywords`）⇒
+    同一个查询在两处给出同一批行。三条边界（都是受控拒绝，不静默忽略）：
+    - `fields=` 点名内容面之外的列（`proof_text` / `status` / `stmt_id` …）⇒ `param_error`，
+      并指路 `table.list` 的 `filter`（等值）与 `table.get`（按号）；
+    - `query` 归一化后为空（纯标点 / 纯空白）⇒ `param_error`（"这一问不成立"，不是 0 命中）；
+    - 没有 `stmt_id` 的行不返回（台账行没有号就没有身份，与查口同一口径）。
+
     `fields` 与 `select` 是两件事，别混：前者说"搜哪些字段"，后者说"回哪几个键"。
     合并成一个名字会让"只想看 id 与名字"的调用方被迫改搜索范围。
     """
@@ -2299,28 +2353,57 @@ def table_search(
         return fail(str(e), table=table, kind="unknown_table")
 
     known = _field_names(table)
-    scanned = list(fields) if fields else _scalar_str_fields(table)
+    if table == "statements":
+        scanned = list(fields) if fields else list(STATEMENT_SEARCH_FIELDS)
+    else:
+        scanned = list(fields) if fields else _scalar_str_fields(table)
     bad = sorted({f for f in scanned if f not in known})
     if bad:
         return fail(f"{table} 没有字段 {bad}；可用字段：{sorted(known)}", table=table, kind="param_error")
     if not scanned:
         return fail(f"{table} 没有可用于子串搜索的标量字符串字段；请用 fields 显式指定", table=table, kind="param_error")
+    statement_surface = table == "statements"
+    if statement_surface:
+        off = sorted(set(scanned) - set(STATEMENT_SEARCH_FIELDS))
+        if off:
+            return fail(
+                f"`statements` 的搜索面是命题台账的内容面 {list(STATEMENT_SEARCH_FIELDS)}"
+                "（与命题查口同一把尺：`textutil.normalize` 后包含）；"
+                f"{off} 不在这一面里。要按其它字段找，请用 `table.list` 的 `filter`（等值）"
+                "或 `table.get`（按号）—— 这里不静默忽略：否则「我搜了那一列却 0 条」"
+                "会被读成「台账里没有」。",
+                table=table, kind="param_error", fields=off)
     problem = _projection_problem(table, select, derived=False)
     if problem:
         return fail(problem, table=table, kind="param_error")
 
-    needle = query.casefold()
+    if statement_surface:
+        wanted = _text.normalized_keywords([query])
+        if not wanted:
+            return fail(
+                f"查询 {query!r} 归一化后没有可比的词（纯标点 / 纯空白）⇒ 这一问不成立"
+                "（不是「0 命中」）；请给一个有内容的词。",
+                table=table, kind="param_error")
+        needle = ""
+    else:
+        wanted = []
+        needle = query.casefold()
     hits: list[dict] = []
     matched: dict[str, list[str]] = {}
     for row in _rows(ctx, table):
-        found_in: list[str] = []
-        for name in scanned:
-            val = row.get(name)
-            if isinstance(val, str):
-                if needle in val.casefold():
+        if statement_surface:
+            if not str(row.get("stmt_id") or ""):
+                continue  # 台账行没有号就没有身份（与查口同一口径）
+            found_in = _statement_matched_fields(row, scanned, wanted)
+        else:
+            found_in = []
+            for name in scanned:
+                val = row.get(name)
+                if isinstance(val, str):
+                    if needle in val.casefold():
+                        found_in.append(name)
+                elif isinstance(val, (list, tuple)) and any(isinstance(x, str) and needle in x.casefold() for x in val):
                     found_in.append(name)
-            elif isinstance(val, (list, tuple)) and any(isinstance(x, str) and needle in x.casefold() for x in val):
-                found_in.append(name)
         if found_in:
             hits.append(dict(row))
             rid = str(row.get(_spec_of(table)["id_field"]))
