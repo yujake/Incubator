@@ -10,7 +10,7 @@
 
 | # | 判据 | 改前为什么红 |
 |---|---|---|
-| a1 | D 在 `calling_as(role="D")` 下只给 `proof_manuscript=<路径>` ⇒ B 收下；落盘那一行的 `statement_full` / `proof_text` 与手稿 `## 命题` / `## 证明` **逐字相同**，且只落一行 | 改前 D 把正文抄进参数；没有"按手稿路径收录"这条形态（`statement_full` 是必填，B 不会自己从稿里读） |
+| a1 | D 在 `calling_as(role="D")` 下只给 `proof_manuscript=<路径>` ⇒ B 收下；落盘那一行的 `statement_full` / `proof_text` 与手稿 `## 命题` / `## 证明` 逐字相同，且只落一行 | 改前 D 把正文抄进参数；没有"按手稿路径收录"这条形态（`statement_full` 是必填，B 不会自己从稿里读） |
 | a2 | 同一形态下 D 再传 `statement_full` / `proof_text` / `kind` / `evidence_kind` ⇒ 受控拒 `d_gives_manuscript_pointers_only`，拒信逐字点名「只递指针」，且 `statements` 一行都不落 | 改前 D 就是这样交的，B 照收 |
 | a3 | 反真空：把「调用方是 D」那一格摘掉 ⇒ a2 的同一笔被照收（证明 a2 的红真的来自那道闸，不是"恰好参数不对"） | 没有那道闸 |
 

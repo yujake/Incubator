@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""块丙：D 的写集按**实际写过的表**列全（业主 2026-11-08）。
+"""块丙：D 的写集按实际写过的表列全（业主 2026-11-08）。
 
 业主原话（逐字）：
 
@@ -10,9 +10,9 @@
 
 | # | 判据 |
 |---|---|
-| a | 跑一趟 D 的三个写动作（`propose_question` / `submit_gaps` / `register_conjecture`），拿 `events.jsonl` 里 `(op="upsert"/"delete", table)` 现算"真的写过的表"，与 `WRITE_SETS["D"]` **逐表相等** |
+| a | 跑一趟 D 的三个写动作（`propose_question` / `submit_gaps` / `register_conjecture`），拿 `events.jsonl` 里 `(op="upsert"/"delete", table)` 现算"真的写过的表"，与 `WRITE_SETS["D"]` 逐表相等 |
 | b | policy 里逐字有「命题台账由 B 写、D 只读」 |
-| c | `statements` / `dependencies` **不在** D 的写集里（哪怕这一趟经由 B 写了 statements —— 那是 B 写的，不是 D） |
+| c | `statements` / `dependencies` 不在 D 的写集里（哪怕这一趟经由 B 写了 statements —— 那是 B 写的，不是 D） |
 | d | 报告落点是文件：`write_report` 之后 `analysis_reports` 一行都不多（它是 C 的表） |
 
 反真空读数在 a 的内部：`actual` 是从事件流现算的，不是照抄声明；少一张表（例如把
@@ -90,7 +90,7 @@ def test_b_the_policy_says_the_ledger_is_written_by_b_and_read_only_for_d() -> N
 
 # ============================================================ c statements 不在写集
 def test_c_statements_and_dependencies_are_not_in_d_write_set() -> None:
-    """c：D 对命题台账 / 依赖面**只读** —— 写集里不许有那两张表。"""
+    """c：D 对命题台账 / 依赖面只读 —— 写集里不许有那两张表。"""
     ws = {str(t) for t in (CAP.WRITE_SETS.get("D") or ())}
     for table in ("statements", "dependencies"):
         assert table not in ws, (table, sorted(ws))

@@ -155,12 +155,12 @@ def _should_promote_to_formal(rel: str) -> bool:
 #: > 「D对命题台账只有只读权限，D向B提交要登记的命题时都是有证明或数值实验的
 #: >   （即E和F的成果）…B侧做好适配（应该在手稿里找命题和数值实验程序，不录入其它内容）」
 #:
-#: 所以 D 这一侧只给三样**指针**：手稿工作区相对路径（`proof_manuscript`）、
+#: 所以 D 这一侧只给三样指针：手稿工作区相对路径（`proof_manuscript`）、
 #: 命题号 / 实验号、出处（`exp:<号>`）。命题正文、证明正文、`kind`、`evidence_kind`
 #: 一律由 B 从那份稿里读（`_register_pointer_manuscript`）—— D 把它们抄进参数
 #: 就是"把手稿内容转手一遍"，而转手的那一份没有任何东西保证它与稿逐字相同。
 #:
-#: 这一档的受控码。为什么它必须是一个**可读的码**而不是一句散文：调用方（D 的模型）
+#: 这一档的受控码。为什么它必须是一个可读的码而不是一句散文：调用方（D 的模型）
 #: 要据此改参数，而 `ok=False` 会被终态映射记成 `refused / invalid_params`（`refusals.refuse`）。
 D_POINTER_ONLY_REFUSAL = "d_gives_manuscript_pointers_only"
 
@@ -169,7 +169,7 @@ D_POINTER_ONLY_REFUSAL = "d_gives_manuscript_pointers_only"
 #: 为什么按"非空"判、不按"传没传"判：`register_statement` 的形参有默认值
 #: （`kind=""` / `origin=""` / `evidence_kind=""` …），Python 分不出"显式传了空串"
 #: 与"没传"；而"传了空串"与"没传"在语义上是同一件事（都没有内容）。这条闸要拦的是
-#: **有内容**的那一份，所以判非空就够了，且不会把"显式给空"误判成违规。
+#: 有内容的那一份，所以判非空就够了，且不会把"显式给空"误判成违规。
 _POINTER_ONLY_BODY_FIELDS: tuple[tuple[str, str], ...] = (
     ("statement_full", "命题正文"),
     ("statement_text", "命题短版"),
@@ -4139,11 +4139,11 @@ class _RegisterStatement:
 
         ## 两种形态（2026-11-08）
 
-        - **按手稿路径收录**（D 那一侧只走这一种）：`statement_full` 空 + `proof_manuscript`
+        - 按手稿路径收录（D 那一侧只走这一种）：`statement_full` 空 + `proof_manuscript`
           是一份工作区相对路径 ⇒ 命题正文 / 证明正文 / `kind` / `evidence_kind` / 出处
           全部由 B 从那份稿里读（`_register_pointer_manuscript`）。调用方只递指针：
           稿路径 + 命题号/实验号 + 出处（`line_range={"label": "exp:<号>"}`）。
-        - **正文登记**（文献侧 / B 自己改写 / 历史调用）：沿用改前逐字一致的参数面。
+        - 正文登记（文献侧 / B 自己改写 / 历史调用）：沿用改前逐字一致的参数面。
 
         为什么 D 传正文就受控拒（业主 2026-11-08「D对命题台账只有只读权限」）：
         D 把稿里的内容抄进参数，等于让"登记的那一份"与"稿里的那一份"分成两个来源，
@@ -4205,7 +4205,7 @@ class _RegisterStatement:
 
     def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None
                                      ) -> tuple[dict, str, str]:
-        """按手稿路径收录：把该登记的那几样**全部从稿里读**出来（D 只递了指针）。
+        """按手稿路径收录：把该登记的那几样全部从稿里读出来（D 只递了指针）。
 
         业主 2026-11-08 逐字：「D对命题台账只有只读权限，D向B提交要登记的命题时
         都是有证明或数值实验的（即E和F的成果）…B侧做好适配（应该在手稿里找命题和
@@ -4273,7 +4273,7 @@ class _RegisterStatement:
         #
         # 已在册的命题：稿头 `- 命题号：stmt:<号>`（F 的登记条目 / 按号命名的稿）或
         # 调用方给的出处标签 `stmt:<号>`。命中在册那一行 ⇒ 命题正文、短版与 label 取
-        # **在册那一行**（B 自己的台账）：这一笔是"给一条在册命题挂上这份证明"，
+        # 在册那一行（B 自己的台账）：这一笔是"给一条在册命题挂上这份证明"，
         # 不是"重新登记它的命题"—— 拿稿里那段去重会让同一命题因措辞漂移落成第二行。
         # 读数 `pointer.proposition_source` 说清正文取的是哪一处，`proposition_matches_manuscript`
         # 记稿里那一段与在册正文字面是否一致（不一致是读数，不是静默改写）。

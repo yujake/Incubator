@@ -961,6 +961,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "读法不同」policy ＋ `origin` 描述补绿色通道的出路）、`specs/d.py`（提交强猜想引用 "
              "`e-num-*`，statements 只读）、`specs/g.py`（落库证明栏只有 ③）。变化格 = B/D/E/G；"
              "A/C/F/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
+    # p258 → p259（2026-11-08，业主三条裁定 · 第 4 笔：D 只递指针 / D 只给研究方向 / 写集对齐 /
+    # 穷举标签收紧）：facts 键集一格没动（还是 15 格），只改两份 spec 的段文本 ⇒ count /
+    # keys_sha256 与上一格同值。
+    {"version": "p259", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p259（2026-11-08，业主三条裁定 · 第 4 笔）：上游两份 spec = "
+             "`specs/b.py`（`register_statement.required` 从 (statement_full,) 放开成 ()，"
+             "`proof_manuscript` 描述广告「给工作区相对路径 + statement_full 留空 ⇒ 按手稿路径"
+             "收录；D 传正文受控拒」）、`specs/d.py`（policy 三处：向 B 登记只递指针 / 立了猜想"
+             "之后把研究方向交给 F 而不点名 conjecture_id / 命题台账由 B 写、D 只读，写集三张表）。"
+             "变化格 = B/D；A/C/E/F/G/H/L/M/V 逐字未动（只差版本行）。facts 键集仍 15 格。"},
 
 )
 

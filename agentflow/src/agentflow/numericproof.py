@@ -2089,21 +2089,21 @@ _EXPERIMENT_TOKEN_RE = re.compile(r"exp\s*[:：]\s*(\d+)")
 
 def _experiment_pins(statement: Mapping[str, Any], experiments: Sequence[Mapping[str, Any]]
                      ) -> list[dict[str, Any]]:
-    """这一条命题能钉到哪几条 **E 的穷举实验行**（凭据：实验号 或 `code_path`）。
+    """这一条命题能钉到哪几条 E 的穷举实验行（凭据：实验号 或 `code_path`）。
 
     ## 为什么必须有这一格（业主 2026-11-08 的读侧收紧）
 
     改前 `verifier_problems` 把"证明栏里有「穷举论证：」这个标签"直接当成数值证据
-    （`parse_proof_column(...)["numeric"]` 恒真）。于是一段**散文证明**只要整段以这个
+    （`parse_proof_column(...)["numeric"]` 恒真）。于是一段散文证明只要整段以这个
     标签开头，就会被读成"V 的逐行走查不适用" —— 而它其实是一段普通证明，逐行走查
     不但适用、还是唯一的复核方式。
 
     收紧后的判据是"标签 + 能钉到一条 E 的穷举实验行"：
-    - **实验号**：`line_range.label`（B 从手稿里读出来写的那一格，形如 `exp:000000`）
+    - 实验号：`line_range.label`（B 从手稿里读出来写的那一格，形如 `exp:000000`）
       或证明正文里的 `exp:000000`；
-    - **`code_path`**：证明正文里出现那条实验行的程序相对路径（归一化后逐字）。
+    - `code_path`：证明正文里出现那条实验行的程序相对路径（归一化后逐字）。
 
-    钉不到 ⇒ 这条命题按**普通证明**处理（`verifier_problems` 返回空清单，V 的逐行走查
+    钉不到 ⇒ 这条命题按普通证明处理（`verifier_problems` 返回空清单，V 的逐行走查
     照常适用）。实验行本身要求：计算类方法（不是 `method="formal"`）、
     `evidence_kind="proof"` —— 那是"E 的穷举证明"这一档的形状。
     """
@@ -2135,7 +2135,7 @@ def _experiment_pins(statement: Mapping[str, Any], experiments: Sequence[Mapping
             hits.append({"experiment": dict(experiment), "how": "code_path",
                          "experiment_id": eid})
             continue
-        # 第三条凭据（2026-11-08）：③ 那一段与实验行里那一份**逐字相同** ——
+        # 第三条凭据（2026-11-08）：③ 那一段与实验行里那一份逐字相同 ——
         # 「这份证明栏就是这一条写的」。它比"恰好同前缀"强得多：只贴标签的散文
         # 不会与任何一条实验的穷举论证逐字相同。
         if want_text and (
@@ -2150,8 +2150,8 @@ def verifier_problems(statement: Mapping[str, Any],
                       experiments: Sequence[Mapping[str, Any]] = ()) -> list[str]:
     """V 的逐行走查（`verify.verify_proof`）不覆盖这一条命题的理由（空清单 = 它照旧管）。
 
-    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是**数值证据**
-    （证明栏里有「穷举论证」那一段、**而且能钉到一条 E 的穷举实验行**：实验号或
+    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是数值证据
+    （证明栏里有「穷举论证」那一段、而且能钉到一条 E 的穷举实验行：实验号或
     `code_path`）⇒ V 没有跑过那份程序，所以逐行走查不覆盖它 —— 那一签要说清是"对数值
     证据的背书"，而不能被下游读成"V 逐行审过这份证明了"。
 
@@ -2160,7 +2160,7 @@ def verifier_problems(statement: Mapping[str, Any],
     改前只看标签（`parse_proof_column(...)["numeric"]`）：F 的散文证明若整段以
     「穷举论证：」开头，会被误判成数值证据，于是 V 的逐行走查被这一格挡掉。
     现在判据是 `_experiment_pins`（实验号 / `code_path` 两样凭据）；钉不到 ⇒ 返回空清单
-    （按普通证明处理，逐行走查照常适用）。**只贴标签不再算数值证据。**
+    （按普通证明处理，逐行走查照常适用）。只贴标签不再算数值证据。
     """
     row = _as_mapping(statement)
     text = str(row.get("proof_text") or "").strip()

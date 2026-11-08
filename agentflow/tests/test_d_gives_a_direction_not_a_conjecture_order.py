@@ -8,16 +8,16 @@
 
 ## 判据（机械可核，不是词表判断）
 
-- **红**：从 **D 的派活记录**（`sessions/*.jsonl` 的 `agent_step`：`role="D"`、
+- 红：从 D 的派活记录（`sessions/*.jsonl` 的 `agent_step`：`role="D"`、
   `shape="summon"` 的 `payload`）里取文本，出现 D 自己登记的 `conjecture_id`
   （`conj:NNNNNN` 或裸 6 位号，且那个号在 `conjectures` 台账里）⇒ `violations` 非空，
   逐条点名「哪一次派活 / 哪条计划、点了哪条猜想」；
-- **绿**：D 只写研究方向（不提号）⇒ `violations` 空；
-- **反真空**：把号匹配那一格摘掉（`token_match` 恒返回 `[]`）⇒ 红的那条必须变绿。
+- 绿：D 只写研究方向（不提号）⇒ `violations` 空；
+- 反真空：把号匹配那一格摘掉（`token_match` 恒返回 `[]`）⇒ 红的那条必须变绿。
 
 `attack_plans` 只在"它的 `problem` 文本能在某一段 D 派活文本里找到"（或 `problem_key`
 就是那段派活 `params` 里的值）时才算"这句派活落成的计划"—— F 自主写的计划（问题文本没有
-出现在任何 D 派活里）记进 `self_authored_plans`，**不算违规**：那是 F 自己的选择。
+出现在任何 D 派活里）记进 `self_authored_plans`，不算违规：那是 F 自己的选择。
 
 本文件同时钉住题面：`specs/d.py` 的 policy 与 `agent_skills._d_skills()` 不再教 D 拿
 `conjecture_id` 当 `problem_key`，并写明猜想只是参考意见。

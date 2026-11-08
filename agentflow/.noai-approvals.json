@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T13:30:01+08:00",
+  "generated_at": "2026-11-08T13:49:15+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -286,7 +286,7 @@
       "sha256": "b4ac271802faf103cd192089eefb751921f789802b867ae653e9081e1c727493",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 块甲（D 只递指针）：specs/b.py 的 register_statement 放开 statement_full 必填并广告「按手稿路径收录」；specs/d.py 的 policy 新增「向 B 登记只递指针」。登记 ≠ 批准（reviewers=0）。",
+      "change_note": "2026-11-08 p259 收口复核：三处 FC-27 登记与盘上现值对齐（specs/b.py、specs/d.py 的 sha 未变；golden 已随 p259 重冻）。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -312,7 +312,7 @@
       "sha256": "b185439fc4a5bbc3da4ee08a19801d9006f95a9501fed772e77a2b43e1148f46",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 块丙（写集声明对齐）：specs/d.py 的 write_set 从 {research_questions, search_requests} 补成实际写过的三张表（conjectures / research_questions / search_requests），并在 policy 写明「命题台账由 B 写、D 只读」与「报告落点是文件不是表」。FC-27 auth-audit，登记 ≠ 批准（reviewers=0）。",
+      "change_note": "2026-11-08 p259 收口复核：三处 FC-27 登记与盘上现值对齐（specs/b.py、specs/d.py 的 sha 未变；golden 已随 p259 重冻）。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "4c91e2ce447cb739dd57873ddd4e43c1b23b9decaa95ad9d74675d013001915d",
+      "sha256": "7a082029e7731d5d62030696f08eb32ad7687c5aad7e588428a582f88cdfb60c",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p258 业主三条裁定（第 2 笔：提示词与冻结）：specs/e.py（穷举 ② 改写 + 普通数值手稿 e-num 那条）、specs/b.py（两族手稿读法 + origin 描述）、specs/d.py（提交强猜想引用 e-num）、specs/g.py（落库证明栏只有 ③）、tools/fs_tools.py（保留表加 reports/e-num- 两行）、两份 golden（agent 面随 p258 重冻；tool 面逐字未变）。登记 = 基线，reviewers 仍为空（登记 != 批准）。",
+      "change_note": "2026-11-08 p259 收口复核：三处 FC-27 登记与盘上现值对齐（specs/b.py、specs/d.py 的 sha 未变；golden 已随 p259 重冻）。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

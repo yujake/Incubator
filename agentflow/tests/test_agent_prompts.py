@@ -2341,7 +2341,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   G e94de814→27d436f7。
 # 十一格是 `temp/_p258_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
 # 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
-_FROZEN_PROMPT_VERSION = "p258"
+# 2026-11-08（p258 → p259，业主三条裁定 · 第 4 笔）：两格换值 —— B / D。上游是本批改的
+# 两份 spec：B 的 `register_statement.required` 放开 + `proof_manuscript` 描述广告「按手稿
+# 路径收录」；D 的 policy 三处（只递指针 / 只给研究方向不点 conjecture_id / 命题台账由 B 写、
+# D 只读）。A / C / E / F / G / H / L / M / V 逐字未动（只差版本行）。
+# 逐格旧值 → 新值：B 465a645b→4441ddd1 / D da51f676→4d840d5b。
+# 十一格是 `temp/_p259_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+# 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+_FROZEN_PROMPT_VERSION = "p259"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2577,9 +2584,9 @@ _FROZEN_PROMPT_VERSION = "p258"
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "7dfe78d302ccf4d6d713aa7b7206e59bf7c4a543fe7f13435ce445176ef6949e",
-    "B": "465a645b82eea398069bd029f595de6aa7f573c5c76fc3552327d9b3b39d1d63",
+    "B": "4441ddd195b1ec6a5e1a58f64fd54138cbcf255a8992a39de19c6b47e3e0e1f2",
     "C": "922a427550f75ffea7282c0176ef6b2f516fb0b407b2a73d9ba97b27c556fcf0",
-    "D": "da51f676945caab454bd72e3cf15664c2c6e6aaf4d81c9e544a5179a4c69d5f7",
+    "D": "4d840d5b74c79234b8bbe0d7f3bc9badc62a1f6ca893187a486aa8f2481e7429",
     "E": "dd9d4185e0db9a17ad1eed816b568c18a5612c8c83276d7c5a835dc721d288da",
     "F": "3029f47ad672549ec3da56ee1753b002cabbf1391d112936fe6dfe6d9e275446",
     "G": "27d436f790a1f9b2056db0171b117fa59e5a1e5ff9e8ca290f8ba1a03fedae9e",

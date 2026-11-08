@@ -3602,7 +3602,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   G e94de814→27d436f7。
 #: 十一格是 `temp/_p258_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
 #: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
-PROMPT_VERSION = "p258"
+#: p258 → p259（2026-11-08，业主三条裁定 · 第 4 笔：D 只递指针 / D 只给研究方向 / 写集对齐 /
+#: 穷举标签收紧）：两格换值 —— B / D（其余九格只差版本行）。
+#:   ① `specs/b.py`：`register_statement` 的 `required` 从 `("statement_full",)` 放开成 `()`
+#:      （指针形态不必先编一段正文；空正文的正文登记路仍由 impl 的 `empty_statement_text` 拒），
+#:      且 `proof_manuscript` 的描述广告「给的是工作区相对路径而 `statement_full` 留空 ⇒ 按
+#:      手稿路径收录：命题 / 证明 / kind / evidence_kind 由 B 从稿里读；D 传正文会被受控拒」。
+#:   ② `specs/d.py`：policy 三处 —— (a)「向 B 登记只递指针」；
+#:      (b)「立了猜想之后把研究方向交给 F」取代「problem_key 就用猜想的 conjecture_id」，
+#:          并写明猜想只是参考意见、不点名任何 `conjecture_id`（判据
+#:          `agentflow.dispatchpolicy.dispatch_text_problems`）；(c)「命题台账由 B 写、D 只读」
+#:          与写集三张表 / 报告落点是文件。
+#: 变化格（十一格摘要）= B / D；A / C / E / F / G / H / L / M / V 逐字未动（只差版本行）。
+#: 逐格旧值 → 新值：B 465a645b→4441ddd1 / D da51f676→4d840d5b。
+#: 十一格是 `temp/_p259_freeze_digests.py` 的现算值（导入判据文件自己的 `_surface_digest`，
+#: 先 `import conftest` 钉住 Lean 开档 / 设置文件 / 机器事实），不是手抄。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p259）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p258 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字不变 —— 本批没有改任何工具声明；
+#: `agent_surface_snapshot.json` 因十一格提示词的版本行与 B / D 两格正文变）；
+#: `docs/ROLE-GUIDE.md` / `docs/SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p259"
 
 
 
