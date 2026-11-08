@@ -3366,8 +3366,14 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     try:
         with store.tx("statements", actor=f"verifier-{row.get('verifier') or 'V'}",
                       note=f"verify.sign:{sid}#p{no}") as tx:
-            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
-            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            # 按号定位走查口（口径一）；快照传 `tx`（同一个 `rows(table)` 协议）。
+            # 锁内读失败仍照旧抛出（查口把异常收成 checked=False → 这里翻回一次抛出，
+            # 否则「读不到」会被下面读成「没有这一行」）。
+            by_id = SL.by_id(tx, stmt_id=sid)
+            if not by_id["checked"]:
+                err = by_id.get("error") or {}
+                raise RuntimeError(f"`statements` 读不出来（{err.get('type') or '?'}: "
+                                   f"{err.get('message') or by_id.get('reason') or '?'}）")
             found = by_id["row"] if by_id["found"] else None
             if not append_ledger:
                 # 台账那一行是调用方先落的（V 的秘书那条路）：这里一个字都不追加。
@@ -4672,10 +4678,10 @@ def recompute_grades(root: str | Path, store: Any, *, apply: bool = False) -> di
         out["why"] = (f"`{root_p / 'data' / str(S.TABLES['statements']['file'])}` 不在盘上"
                       " ⇒ 这不像一个工作区（四栏都没查成）")
         return out
-    try:
-        rows = [dict(r) for r in store.rows("statements")]
-    except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许假装"0 行"
-        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 四栏都没查成"
+    rows, problem, error = SL.rows_of(store)
+    if problem:
+        out["why"] = (f"`statements` 读不出来（{error.get('type') or '?'}: "
+                      f"{error.get('message') or problem}）⇒ 四栏都没查成")
         return out
     out["checked"] = True
     out["rows"] = len(rows)
@@ -4764,7 +4770,13 @@ def _apply_grade_backfill(root: Path, store: Any,
                 # 按号定位走查口（口径一）。改前这里还认 `statement_id` 这个历史别名：
                 # `statements` 的主键只有 `stmt_id`（`schema` 里没有那一列，`row_from_dict`
                 # 也会丢掉未知键）⇒ 那一档是死别名，收口时按主键口径统一。
-                current = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["row"] or None
+                current_got = SL.by_id(tx, stmt_id=sid)
+                if not current_got["checked"]:
+                    err = current_got.get("error") or {}
+                    raise RuntimeError(
+                        f"`statements` 读不出来（{err.get('type') or '?'}: "
+                        f"{err.get('message') or current_got.get('reason') or '?'}）")
+                current = current_got["row"] or None
                 if current is None:
                     out["unmoved"].append({
                         "statement_id": sid,
@@ -4817,18 +4829,25 @@ def _apply_grade_backfill(root: Path, store: Any,
     try:
         from .store import Store as _Store   # 惰性：只为一个"全新的读"开一个新句柄
 
-        # 索引的构造只有一处（查口 `index_by_id`）。改前这里还认 `statement_id`
-        # 这个历史别名：`statements` 的主键只有 `stmt_id`（schema 里没有那一列，
-        # `row_from_dict` 也会丢掉未知键）⇒ 那一档是死别名，按主键口径统一。
-        disk_rows = SL.index_by_id(_Store(root).rows("statements"))
+        # 取数走查口的唯一取数口（三态：读不成不是 0 行）。
+        disk_got, disk_problem, disk_error = SL.rows_of(_Store(root))
     except Exception as exc:  # noqa: BLE001 —— 读不回来就逐条记"没查成"
+        disk_got, disk_problem = None, f"{type(exc).__name__}: {exc}"
+        disk_error = {"type": type(exc).__name__, "message": str(exc)}
+    if disk_problem:
         for entry, _target in attempted:
             out["unmoved"].append({
                 "statement_id": str(entry.get("statement_id") or ""),
-                "why": (f"写完之后再读盘失败（{type(exc).__name__}: {exc}）"
+                "why": ("写完之后再读盘失败（"
+                        f"{disk_error.get('type') or '?'}: "
+                        f"{disk_error.get('message') or disk_problem}）"
                         "⇒ 这一条是「没查成」，不是「没动」"),
             })
         return
+    # 索引的构造只有一处（查口 `index_by_id`）。改前这里还认 `statement_id`
+    # 这个历史别名：`statements` 的主键只有 `stmt_id`（schema 里没有那一列，
+    # `row_from_dict` 也会丢掉未知键）⇒ 那一档是死别名，按主键口径统一。
+    disk_rows = SL.index_by_id(disk_got)
     for entry, target in attempted:
         sid = str(entry.get("statement_id") or "")
         disk = disk_rows.get(sid) or {}

@@ -174,5 +174,51 @@ def test_l_a_degraded_rows_of_is_unreadable_not_absent(
     assert "读不出来" in got["detail"], got
 
 
+# ===================================================== ③ V：三个库模块（按编号 / 索引）
+def test_v_registration_gap_takes_the_statement_by_number_alone(
+        tmp_path: pathlib.Path) -> None:
+    """只给编号（`label="0001"`）⇒ 取到那一行并如实报「还没入库」。"""
+    from agentflow import vreceipts as VRE
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    got = VRE.registration_gap(store=st, label="0001")
+    assert got["checked"] is True, got
+    assert got["statement_id"] == "0001", got
+    assert got["body"] is True, got          # 正文取到了那一行
+    assert got["gap"] is True, got           # 还没 reviewed（不是「已收录」）
+
+
+def test_v_a_degraded_id_mode_cannot_see_the_row(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径一降级 ⇒ 按号读不到那一行的正文（`body` 从 True 掉成 False）。"""
+    from agentflow import vreceipts as VRE
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    monkeypatch.setattr(SL, "by_id", _degraded_id)
+    got = VRE.registration_gap(store=st, label="0001")
+    assert got["body"] is False, got
+    assert got["gap"] is True, got
+
+
+def test_v_an_unreadable_ledger_is_not_an_empty_register(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：取数口降级 ⇒ 在册号读数「没查成」，不是「没有册」（空元组）。"""
+    from agentflow import vsigns as VS
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    assert VS._registered_ids(st) == ("0001",), "前提变了：在册号读数不走了"
+    monkeypatch.setattr(SL, "rows_of", _unreadable_rows_of)
+    assert VS._registered_ids(st) == (), "取数口降级了，在册号读数却还读得到"
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

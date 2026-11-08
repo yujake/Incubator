@@ -1644,12 +1644,13 @@ def reconcile_resubmits(*, store: Any, root: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         out["reason"] = f"板项读不出来（{type(exc).__name__}: {exc}）"
         return out
-    try:
-        # 索引的构造只有一处（查口 `index_by_id`）；这里只管三态。
-        statements = SL.index_by_id(store.rows("statements"))
-    except Exception as exc:  # noqa: BLE001
-        out["reason"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
+    # 取数走查口的唯一取数口（三态：读不成不是 0 行）；索引的构造只有一处。
+    stmt_rows, problem, error = SL.rows_of(store)
+    if problem:
+        out["reason"] = (f"`statements` 读不出来（{error.get('type') or '?'}: "
+                         f"{error.get('message') or problem}）")
         return out
+    statements = SL.index_by_id(stmt_rows)
     out["checked"] = True
     for row in board:
         key = str(row.get("input_key") or "")

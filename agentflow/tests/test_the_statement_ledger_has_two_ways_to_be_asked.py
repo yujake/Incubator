@@ -580,6 +580,9 @@ def test_m_pool_and_keywords_have_one_implementation_each() -> None:
 ROLE_FILES_WITHOUT_DIRECT_READ: tuple[str, ...] = (
     "agentflow/agent_c/proof_chain.py",
     "agentflow/agent_l/formalize.py",
+    "agentflow/verifications.py",
+    "agentflow/vsigns.py",
+    "agentflow/vreceipts.py",
 )
 
 

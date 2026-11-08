@@ -2358,8 +2358,14 @@ def _land_ledger_bit(store: Any, *, statement_id: str, proof_no: Any, sha: str,
     try:
         with store.tx("statements", actor=f"verifier-{by}",
                       note=f"vsign.land:{sid}#p{no}") as tx:
-            # 按号定位走查口（口径一）；事务快照传 `rows=`，锁内读失败仍照旧抛出。
-            by_id = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)
+            # 按号定位走查口（口径一）；快照传 `tx`。锁内读失败仍照旧落 `failed`
+            # （查口把异常收成 checked=False → 这里翻回一次抛出，否则「读不到」会被
+            # 下面读成「没有这一行」的 `no_statement`）。
+            by_id = SL.by_id(tx, stmt_id=sid)
+            if not by_id["checked"]:
+                err = by_id.get("error") or {}
+                raise RuntimeError(f"`statements` 读不出来（{err.get('type') or '?'}: "
+                                   f"{err.get('message') or by_id.get('reason') or '?'}）")
             row = by_id["row"] if by_id["found"] else None
             if row is None:
                 out.update(state="no_statement",
@@ -3038,11 +3044,12 @@ def _registered_ids(store: Any) -> tuple[str, ...]:
     """在册命题号（只读；没有 store / 读不出来 ⇒ 空元组，判据按"没有册"那一档走）。"""
     if store is None:
         return ()
-    try:
-        # 索引的构造只有一处（查口 `index_by_id`）；号元组的顺序仍是台账物理顺序。
-        return tuple(SL.index_by_id(store.rows("statements")))
-    except Exception:  # noqa: BLE001 —— 读不到册不是"没有命题"：这一格留空，判据退到"没有册"
+    # 取数走查口的唯一取数口；读不到册不是"没有命题"：这一格留空，判据退到"没有册"。
+    rows, problem, _error = SL.rows_of(store)
+    if problem:
         return ()
+    # 索引的构造只有一处（查口 `index_by_id`）；号元组的顺序仍是台账物理顺序。
+    return tuple(SL.index_by_id(rows))
 
 
 def _pending_claim_from_backing(*, backing: Mapping[str, Any], ledger: Any,
