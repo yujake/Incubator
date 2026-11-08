@@ -407,7 +407,20 @@ def test_two_nearly_identical_proofs_are_refused_as_the_same_kind(
     assert near.get("kind") == "proof_same_kind", near
     assert "#1" in near.get("error", ""), near.get("error")
     assert "同种" in near.get("error", ""), near.get("error")
-    assert "merge=true" in near.get("error", ""), "拒信没给出合并那一条正路"
+    # 2026-11-08（缺陷④①）：拒信只许教 `own.register_statement` 真能做到的改法。
+    # 改前它教"给 merge=true、proof_no=N"，而参数面（`specs/b.py`）与动作签名里
+    # 都没有这两个键 ⇒ 模型照做只会撞 `invalid_params`。现在：
+    #   · 拒信点名一条真能做到的（换一条真正不同的证法），并说清"这一份不再提交"；
+    #   · 拒信里出现的键与参数面一一对得上（merge / proof_no 都不在参数里）。
+    from agentflow.specs import b as SPEC_B
+
+    params = next(a.params for a in SPEC_B.ACTIONS
+                  if a.action == "register_statement")["properties"]
+    error = str(near.get("error") or "")
+    assert "换一条真正不同的证法" in error, error
+    assert "merge" not in params and "proof_no" not in params, sorted(params)
+    assert "merge=" not in error and "proof_no=" not in error, (
+        "拒信又教了一个参数面上不存在的键", error)
 
     rows = _rows(st)
     assert len(rows) == 1, f"被拒之后在册 {len(rows)} 条命题"
