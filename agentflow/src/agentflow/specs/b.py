@@ -110,7 +110,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "受控拒绝（派生列的去路见 `tools/base.py` 的参数门提示）",
         _obj(
             {
-                "statement_full": {**_S, "minLength": 1},
+                # 2026-11-08（缺陷 ①）：去掉 `minLength: 1`。这一格不再是"必填非空"：
+                # 只给 `proof_manuscript`（工作区相对路径）时，命题由 B 从手稿
+                # `## 命题` 读（`_register_pointer_manuscript`），参数里编一段正文
+                # 反而是转手；而"空正文不能登记"那条判据一个字没松 —— 它住在动作里
+                # （`empty_statement_text`，两者都不给时受控拒并零写入）。
+                # 工具层此前用 `minLength` 把合法的指针形态挡在参数门 ⇒ 改前红。
+                "statement_full": {**_S, "description":
+                                   "含完整假设的命题正文。**只给 `proof_manuscript` 时"
+                                   "这一格可以不传**（命题从手稿 `## 命题` 取）；"
+                                   "正文与手稿都不给 ⇒ 动作层受控拒 `empty_statement_text`"
+                                   "（空正文不能登记，这条没有放宽）"},
                 # `draft/37` §87：这几格的条件性必需此前完全没被广告，而实现在写库前逐条硬校验
                 # —— T1 第 2 趟实测：`origin='own_result'` 先撞 `doc_id`/`line_range`（8 次），
                 # 改对之后再撞 `proof_text`（6 次），14 次召唤全废、`statements` 始终 0 行。

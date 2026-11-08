@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T21:55:34+08:00",
+  "generated_at": "2026-11-08T22:36:35+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "2f8afc0006e39392b29e7ba205810f6606bbfee5882bbf171b63b25a14df5bb4",
+      "sha256": "a53d112bf71377a7c06f8970f332e327e0e530e645ab12254c8656463dbbbdab",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p260（业主：收录按语义查一圈 + 普通数值一律 conjecture + 数值证据流水）：specs/b.py 的 policy 新增「收录先查是不是在册的同一条」；golden 随 p260 十一格重冻（只 B 一格正文与版本行变）。登记 != 批准（reviewers=0）。",
+      "change_note": "2026-11-08 缺陷①：register_statement 的 statement_full 去掉 minLength:1，只给 proof_manuscript 的指针形态才能在工具层通过；空正文不能登记仍由动作层的 empty_statement_text 拒（判据 tests/test_pointer_only_passes_the_tool_gate.py）。登记≠批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
