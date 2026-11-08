@@ -38,6 +38,10 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 #: 判据是双向的：新出现一条没登记的就红（新写的动作漏用了 `refuse`），
 #: 登记表里有一条扫不到的也红（豁免腐烂成"看起来还在挡着什么"）。
 _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
+    ("agent_b/register_statement.py", ""):
+        "`_numeric_manuscript_channel` 的「这一笔不是 E 的普通数值手稿 / 读不成」那格读数："
+        "它是内部判读的三态返回值（调用方据此继续走普通登记路），不是一次受控拒；"
+        "真受控拒由收录口按 `refusals.refuse` 报（`numeric_manuscript_refused` 一类）",
     ("agent_d/poll.py", ""):
         "工具 `research.poll_waiting` 自己失败了（不是参数不对、也不是前置条件不满足）"
         "⇒ 这是「执行了、没成功」，该落 `failed`，不该冒充 `refused`",
