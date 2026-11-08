@@ -524,29 +524,38 @@ class _Formalize:
         这条闸的全部结论都必须是"拒绝"或"某一行"，没有第三种。
         """
         sid = _normalize_statement_id(statement_id)
-        try:
-            rows = [dict(row) for row in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 - 读不出来是 unknown 的一档，不是"没有"
-            return {
-                "ok": False,
-                "reason": "statement_ledger_unreadable",
-                "detail": (f"`statements` 表读不出来（{type(exc).__name__}: {exc}）⇒"
-                           " 钉不住被形式化的是哪一条：这次什么都不写、也不查"),
-            }
         if sid:
-            # 按号定位走查口（口径一）；`sid` 已在上面归一化（去空白 / 去 `stmt:` 前缀）。
-            hit = SL.by_id(rows=rows, stmt_id=sid)["row"] or None
+            # 按号定位只走查口（口径一）：只给编号那一档不需要先读整表 ——
+            # 「读出链 / 读出待形式化的那一条」由查口回答，本角色不再自己扫全表。
+            found = SL.by_id(self.store, stmt_id=sid)
+            if not found["checked"]:
+                err = found.get("error") or {}
+                return {
+                    "ok": False,
+                    "reason": "statement_ledger_unreadable",
+                    "detail": (f"`statements` 表读不出来（{err.get('type') or '?'}: "
+                               f"{err.get('message') or found.get('reason') or '?'}）⇒"
+                               " 钉不住被形式化的是哪一条：这次什么都不写、也不查"),
+                }
+            hit = found["row"] or None
             if hit is None:
                 return {
                     "ok": False, "statement_id": sid,
                     "reason": "statement_not_found",
                     "detail": (f"`statements` 里没有 {sid} ⇒ 要形式化的那一行不存在"
-                               f"（盘上登记了 {len(rows)} 行）。先请 B 登记，再来形式化"),
+                               f"（盘上登记了 {found['scanned']} 行）。先请 B 登记，再来形式化"),
                 }
             return _checked_row(hit, sid=sid, source="explicit", claim=claim,
                                 proof_no=proof_no)
-
-        # ---- 没给编号：只认一种可证明的来源 —— claim 与某一行的正文逐字相同且唯一
+        # 没给编号：才需要整批行（`claim` 与某一行正文逐字比）。取数走查口的唯一取数口。
+        rows, problem, _error = SL.rows_of(self.store)
+        if problem:
+            return {
+                "ok": False,
+                "reason": "statement_ledger_unreadable",
+                "detail": (f"`statements` 表读不出来（{problem}）⇒"
+                           " 钉不住被形式化的是哪一条：这次什么都不写、也不查"),
+            }
         want = _flat(claim)
         hits = [row for row in rows if _flat(_SB.body_of(row)) == want and want]
         if len(hits) == 1:

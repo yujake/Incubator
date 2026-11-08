@@ -126,5 +126,53 @@ def test_c_a_degraded_rows_of_is_not_an_empty_graph(
     assert "读不成" in rep.summary, rep.summary
 
 
+# ===================================================== ② L：按编号
+def test_l_picks_the_statement_to_formalize_by_number_alone(
+        tmp_path: pathlib.Path) -> None:
+    """只给编号（`stmt:0001`）⇒ 取到那一条；claim 只是同一句的复核，不当检索用。"""
+    from agentflow.agent_l import AgentL
+
+    st = _store(tmp_path)
+    body = "若 A 成立，则 B 成立。"
+    seed_statement_row(st, stmt_id="0001", label="A⇒B", statement_full=body,
+                       kind="theorem", proof_text="Proof. 一步。")
+    got = AgentL(st)._pick_statement(claim=body, statement_id="stmt:0001")
+    assert got["ok"] is True, got
+    assert got["statement_id"] == "0001", got
+    assert got["source"] == "explicit", got
+    assert got["label"] == "A⇒B" and got["body"] == body, got
+
+
+def test_l_a_degraded_id_mode_refuses_the_statement_by_name(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：口径一降级 ⇒ 只给编号那一档受控拒（`statement_not_found`）。"""
+    from agentflow.agent_l import AgentL
+
+    st = _store(tmp_path)
+    body = "若 A 成立，则 B 成立。"
+    seed_statement_row(st, stmt_id="0001", label="A⇒B", statement_full=body,
+                       kind="theorem", proof_text="Proof. 一步。")
+    monkeypatch.setattr(SL, "by_id", _degraded_id)
+    got = AgentL(st)._pick_statement(claim=body, statement_id="0001")
+    assert got["ok"] is False, got
+    assert got["reason"] == "statement_not_found", got
+
+
+def test_l_a_degraded_rows_of_is_unreadable_not_absent(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：取数口降级 ⇒ 不给编号那一档读成「读不出来」，不是「没有这一条」。"""
+    from agentflow.agent_l import AgentL
+
+    st = _store(tmp_path)
+    seed_statement_row(st, stmt_id="0001", label="A⇒B",
+                       statement_full="若 A 成立，则 B 成立。",
+                       kind="theorem", proof_text="Proof. 一步。")
+    monkeypatch.setattr(SL, "rows_of", _unreadable_rows_of)
+    got = AgentL(st)._pick_statement(claim="随便一句转述", statement_id="")
+    assert got["ok"] is False, got
+    assert got["reason"] == "statement_ledger_unreadable", got
+    assert "读不出来" in got["detail"], got
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

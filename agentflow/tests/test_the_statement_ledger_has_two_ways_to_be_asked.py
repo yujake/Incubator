@@ -579,6 +579,7 @@ def test_m_pool_and_keywords_have_one_implementation_each() -> None:
 #: `tests/test_each_role_queries_the_statement_ledger.py` 的行为与反真空钉）。
 ROLE_FILES_WITHOUT_DIRECT_READ: tuple[str, ...] = (
     "agentflow/agent_c/proof_chain.py",
+    "agentflow/agent_l/formalize.py",
 )
 
 
