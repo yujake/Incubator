@@ -1130,11 +1130,13 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
         out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 两格没查成"
         return out
     out["checked"] = True
-    stmt: dict[str, Any] = {"found": row is not None, "stmt_id": sid}
+    # 册那格的键集合不随分支变（三态纪律）：下面每个 return 之前只覆盖有读数的那几格。
+    stmt: dict[str, Any] = {
+        "found": row is not None, "stmt_id": sid, "reviewed": False, "proof_no": 0,
+        "grade": "", "proof_sha256": "", "status": "", "proof_rows": 0,
+        "current_proof_no": 0, "current_proof_sha256": ""}
     out["statement"] = stmt
     if row is None:
-        stmt.update(reviewed=False, proof_no=0, grade="", proof_sha256="", status="",
-                    proof_rows=0, current_proof_no=0, current_proof_sha256="")
         out["filed"] = False
         out["state"] = ("signed_pending_filing" if out["manuscript_signed"]
                         else "unsigned")
