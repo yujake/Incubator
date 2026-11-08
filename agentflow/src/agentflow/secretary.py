@@ -13664,6 +13664,52 @@ def concept_identity_gate(tx: Any, *, label: str, full: str = "",
             ("checked", "state", "basis", "reason", "candidates")}
 
 
+#: 概念同一性闸的三种处置（`concept_identity_action` 的唯一取值表）。
+CONCEPT_IDENTITY_ACTIONS: tuple[str, ...] = ("created", "merged", "refused")
+
+
+def concept_identity_action(gate: Mapping[str, Any]) -> dict[str, Any]:
+    """把同一性闸的判词折成唯一一档处置（四个写入口共用，2026-11-08）。
+
+    ## 为什么要有这一格（改前四个入口各判各的、也各不处置）
+    `concept_identity_gate` 只回判词（`checked` / `state` / `candidates` / `reason`），
+    而"判成 same 该并入哪一行、判不了该不该拒"四个入口各写各的：`conceptrows.upsert`
+    只读 `checked`、`_record_pending_concept` 完全不判、`run_once.resolve_concept` 只按
+    名字找 —— 于是闸判出来的 `same` 在四个落点都被丢掉（真机 mp3-r2 的 000003 / 000004）。
+    把"判词 ⇒ 处置"收成这一处，四个入口只读它的 `concept_action`。
+
+    ## 三档（题面 2026-11-08 逐字）
+    | 闸的判词 | `concept_action` | 处置 |
+    |---|---|---|
+    | `checked=False`（判不了） | `refused` | 受控拒、不发号（counters 不动） |
+    | `checked=True` + `state="same"` + 有候选 | `merged` | 并入 `same_as` 那一条，不新建行、不发号 |
+    | 其余（`different` / 候选 0 条） | `created` | 照常新建 |
+
+    `state="same"` 却没有候选（判词不自洽）按 `created` 走：没有可并入的对象时
+    新建是唯一可执行的处置 —— 但这一档不静默，`reason` 原样带出去。
+
+    返回的字典同时是那四个入口的读数：`checked` / `state` / `basis` / `same_as` /
+    `candidates` / `reason` 六格齐全（并入与新建读同一份，不另写一份读数）。
+    """
+    got = dict(gate or {})
+    checked = bool(got.get("checked"))
+    state = str(got.get("state") or "")
+    candidates = [str(x) for x in (got.get("candidates") or []) if str(x)]
+    basis = str(got.get("basis") or "")
+    reason = str(got.get("reason") or "")
+    if not checked:
+        return {"concept_action": "refused", "checked": False, "state": "",
+                "basis": basis, "same_as": "", "candidates": candidates,
+                "reason": reason}
+    if state == _PK.STATE_SAME and candidates:
+        return {"concept_action": "merged", "checked": True, "state": state,
+                "basis": basis, "same_as": candidates[0],
+                "candidates": candidates, "reason": reason}
+    return {"concept_action": "created", "checked": True,
+            "state": state or _PK.STATE_DIFFERENT, "basis": basis, "same_as": "",
+            "candidates": candidates, "reason": reason}
+
+
 def _now_iso() -> str:
     return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
 

@@ -914,31 +914,53 @@ def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
     ## 2026-11-08：先判同一性、再发号（D2 后门）
     这一支以前是"先 `alloc_id` 再写"，于是概念同一性判不了时无路可退（拒了留
     `id_gap`、放过就是后门）。现在 `secretary.concept_identity_gate(tx)` 在发号之前
-    判：没判成 ⇒ `checked=False` + 一句原因、一个号都不发；判成 same ⇒ 调用方
-    按 D2 并进在册那一行（`stmt_id` 传进来时沿用它的号，不另发）。
+    判，处置由 `secretary.concept_identity_action` 统一折算（唯一折算点）：
+
+    - `refused`（判不了）⇒ `checked=False`、一个号都不发（counters 不动）；
+    - `merged`（判成 same 且有候选）⇒ 并入 `same_as` 那一行：不新建行、不发号，
+      返回里的 `stmt_id` 就是并入对象；
+    - `created`（different / 候选 0 条）⇒ 照常发号新建。
+
+    三档都带 `concept_action` 与 `concept_identity`（`checked` / `state` / `same_as` /
+    `candidates` / `reason`）—— 读的人不必再从秘书台账里猜"这一笔是并了还是建了"。
+    `stmt_id` 传进来时按 `exclude_id` 处理：那是改一条既有行，不是拿它当合并对象。
     """
     name = str(label or "").strip()
     if not name:
         return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
+                "concept_action": "refused", "concept_identity": {},
                 "reason": "一条概念至少要有 label（名字）—— 没有名字的行谁也认不出它"}
     legacy = legacy_present(store)
     if not legacy.get("checked"):
         return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
+                "concept_action": "refused", "concept_identity": {},
                 "reason": f"老表在不在判不了 ⇒ 这一笔不写（{legacy.get('reason')}）"}
     tables = ["statements"] + ([LEGACY_TABLE] if legacy.get("present") else [])
     try:
         with store.tx(*tables, actor=actor, note="concept_upsert") as tx:
             from . import secretary as _SEC   # 惰性：与 `_concept_secretary` 同一条理由
-            gate = _SEC.concept_identity_gate(tx, label=name, full=definition)
-            if not gate.get("checked"):
+            gate = _SEC.concept_identity_gate(tx, label=name, full=definition,
+                                              exclude_id=str(stmt_id or "").strip())
+            act = _SEC.concept_identity_action(gate)
+            if act["concept_action"] == "refused":
                 return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
-                        "reason": str(gate.get("reason") or "")}
+                        "concept_action": "refused", "concept_identity": act,
+                        "reason": str(act.get("reason") or "")}
+            if act["concept_action"] == "merged":
+                merged_id = str(act.get("same_as") or "")
+                return {"checked": True, "stmt_id": merged_id, "mirrored": False,
+                        "tables": [], "concept_action": "merged", "concept_identity": act,
+                        "reason": (f"同一个概念已在册（stmt:{merged_id}）⇒ 并入那一行："
+                                   "不新建第二行、不发号（判据："
+                                   f"{str(act.get('reason') or '').strip()}）")}
             sid = str(stmt_id or "").strip() or tx.alloc_id(S.TABLES["statements"]["id_kind"])
             write_concept(tx, stmt_id=sid, label=name, definition=definition, aliases=aliases,
                           source_lit_id=source_lit_id, proof_text=proof_text, doc_id=doc_id,
                           actor=actor, mirror=bool(legacy.get("present")))
     except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
         return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
+                "concept_action": "refused", "concept_identity": {},
                 "reason": f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读"}
     return {"checked": True, "stmt_id": sid, "mirrored": bool(legacy.get("present")),
-            "tables": tables, "reason": str(legacy.get("reason") or "")}
+            "tables": tables, "concept_action": "created", "concept_identity": act,
+            "reason": str(legacy.get("reason") or "")}
