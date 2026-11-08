@@ -277,12 +277,14 @@ PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different")
 #: "同一条定理交了三遍"，没有这一层就是三笔钱买同一句话。
 PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
-#: 一次判定最多把几条命中候选交给秘书看：4 条。
+#: 一次判定一页给几条候选（**分页的页大小，不是截断**）。
 #:
 #: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_statements_matching_keywords`）；
-#: 命中多于这个数时只把前 4 条交给模型，`hits_total` 与 `hits_named` 两个读数把
-#: "命中了几条 / 实际给它看了哪几条"分开写清。
-#: 为什么不给更多：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名。
+#: 命中多于这个数时按页依次交给模型，**问到命中或页尽为止**（2026-11-08 缺陷 ②：
+#: 改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成"这批都不是"）。
+#: `pages_total` / `pages_judged` / `page_exhausted` / `candidates_total` 四个读数
+#: 把"看了几页 / 几个候选 / 是不是页尽"与判词一起摆出来。
+#: 为什么一页是 4：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名；
 #: 候选越多，每条能分到的字数越少 —— 而对"条件与结论是否一致"这件事，半条命题没有用。
 PROPOSITION_VERDICT_CANDIDATES = 4
 
@@ -3580,11 +3582,12 @@ class Secretary:
         - 调用方给了候选 ⇒ 那一处跳过挑词，直接判（`candidates=`，兼容既有写法）；
         - 两档结论翻成 `found`：查到的那一条的号 / 空串（调用方只有一条分支：
           found 非空 ⇒ 更新那一行；空 ⇒ 注册新的）；
-        - 不写 `proposition_verdicts` 缓存（`use_cache=False`）：这一档的候选是逐页
-          给的，按正文 sha 缓存会把"这一页没查到"沿用到下一页。
+        - 不写 `proposition_verdicts` 缓存（`use_cache=False`）：候选是这一趟手里
+          的（调用方给的），按正文 sha 缓存会把"这一趟没查到"沿用到下一趟。
 
-        下一笔 agent_b 改调 `adjudicate_proposition(..., candidates=…)` 之后，这一个
-        入口可以删掉（调用点：`agent_b/register_statement.py` 的同一命题检索那一支）。
+        2026-11-08（缺陷 ②）之后 B 的主路不再经过这里：B 直接调
+        `adjudicate_proposition(...)`（不带 `candidates=`），检索与分页都归秘书。
+        这个入口保留为兼容壳（`closing` 等读侧仍引用它），删除留给下一笔。
         """
         got = self.adjudicate_proposition(
             {"statement_full": statement_full, "label": label,
@@ -6995,7 +6998,12 @@ class Secretary:
     def _candidate_reading(hits: Sequence[Mapping[str, Any]],
                            limit: int = PROPOSITION_VERDICT_CANDIDATES
                            ) -> list[dict[str, Any]]:
-        """命中候选 ⇒ 判定的上下文那一份（截断 + 只留判定要看的格）。"""
+        """一页命中候选 ⇒ 判定的上下文那一份（只留判定要看的格）。
+
+        2026-11-08（缺陷 ②）：这一格只是**一页**的成形器（页大小
+        `PROPOSITION_VERDICT_CANDIDATES`）；分页在 `_identity_pages`，问到命中或页尽，
+        不再把整批截到前 4 条。
+        """
         return [{"stmt_id": str(h.get("stmt_id") or ""),
                  "label": str(h.get("label") or ""),
                  "proof_nos": list(h.get("proof_nos") or []),
@@ -7027,10 +7035,16 @@ class Secretary:
            判 same 时点名并进哪一条（`same_as`）。
 
         ## 检索读数（"它确实查过"必须看得见；2026-11-08）
-        `keywords` / `hits_total`（命中几条）/ `hits_named`（实际交给模型看的是哪几条，
+        `keywords` / `hits_total`（命中几条）/ `hits_named`（这一趟交给模型看的全部候选，
         带每条命中的词）/ `judged`（判定那一趟发没发）/ `same_as` / `why`。
+        **分页读数（缺陷 ②）**：`candidates_total`（候选总数）/ `pages_total`（要问几页）/
+        `pages_judged`（真问了几页）/ `candidates_seen`（已经入眼几条）/
+        `page_exhausted`（问完了还没命中）。候选按 `PROPOSITION_VERDICT_CANDIDATES`
+        分页，**问到命中或页尽**；改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成
+        "这批都不是"。
         台账里 0 条可检索命题、或关键词 0 命中 ⇒ `checked=True` + `verdict="different"`
-        （查过、没有同一条）；关键词没提取成 / 台账读不成 ⇒ `checked=False`（没判成，
+        （查过、没有同一条；0 命中仍发判定那一趟洗定理名，读数里 `candidates_total=0`、
+        `page_exhausted=True`）；关键词没提取成 / 台账读不成 ⇒ `checked=False`（没判成，
         上层 fail-closed；这一档不许退回"拿全表或相似度候选去猜"）。
 
         ## 两档与依据（返回）
@@ -7105,6 +7119,12 @@ class Secretary:
                             for x in (cached.get("hits_named") or ())],
                 judged=bool(cached.get("judged")),
                 why=str(cached.get("why") or ""),
+                keyword_checked=bool(cached.get("keyword_checked")),
+                candidates_total=int(cached.get("candidates_total") or 0),
+                pages_total=int(cached.get("pages_total") or 0),
+                pages_judged=int(cached.get("pages_judged") or 0),
+                candidates_seen=int(cached.get("candidates_seen") or 0),
+                page_exhausted=bool(cached.get("page_exhausted")),
                 candidates=[])
             return self._with_adjudication_visibility(out)
         if cached:
@@ -7126,67 +7146,97 @@ class Secretary:
                                      full=full, label=label, kind=kind,
                                      task_id=task_id):
             return self._with_adjudication_visibility(out)
-        context = self._identity_context(
-            full=full, label=label, kind=kind, candidates=out["candidates"])
-        got = self.judge("proposition_identity", context, task_id=task_id, note=note)
-        out["judged"] = True
-        out["cost"] = dict(got.get("cost") or {})
-        out["judged_elapsed_sec"] = got.get("elapsed_sec")
-        if not got.get("checked"):
-            out["checked"] = False
-            out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
-            return self._with_adjudication_visibility(out)
-        verdict = str(got.get("decision") or "")
-        if verdict not in PROPOSITION_VERDICTS:
-            # `judge()` 已经按词表挡了一层；这里再挡一层是防"别的类别借这一格"：
-            # 词表外的结论不是一种判定 ⇒ 没判成（不新建、不合并）。
-            out.update(checked=False, verdict="",
-                       reason=(f"模型给的结论 {verdict!r} 不在两档 "
-                               f"{list(PROPOSITION_VERDICTS)} 里 ⇒ 不采信：这一格没判成"))
-            return self._with_adjudication_visibility(out)
-        out["checked"] = True
-        out["verdict"] = verdict
-        out["canonical_name"] = str(got.get("canonical_name") or "").strip()
-        out["same_as"] = str(got.get("same_as") or "").strip()
-        out["route"] = str(got.get("route") or "").strip()
-        out["condition"] = str(got.get("condition") or "").strip()
-        out["conclusion"] = str(got.get("conclusion") or "").strip()
-        out["reason"] = str(got.get("reason") or "")
-        parts = [str(x).strip() for x in (got.get("basis") or []) if str(x).strip()]
-        out["basis"] = "；".join(parts + ([out["reason"]] if out["reason"] else []))
-        if out["verdict"] == _PK.STATE_SAME:
-            ids = [str(c["stmt_id"]) for c in out["candidates"]]
-            # ---- 先归一化外壳，再判成员（真机 82，2026-11-01）
-            #
-            # 现场：模型判 same 时把号写成 `"['000003']"`（52 处 / 16 个会话行），
-            # 而下面这条成员判据逐字比 ⇒ 判了 same 也不并、照旧落新行
-            # （重复对 000001/000004、000003/000005 就是这么来的）。
-            # 纪律不改：归一化后仍指不出候选号 ⇒ 没判成（2026-11-08 起不再降成
-            # 第三种结论）："凭一个指不出来的号合并，等于替它编一条依据"这句话仍然成立；
-            # 多元素列表也不猜，只说清"你给了 N 个号"。
-            raw_same_as = str(out["same_as"] or "")
-            normalized, how_many = normalize_same_as(raw_same_as)
-            out["same_as"] = normalized
-            if not normalized:
-                if how_many > 1:
-                    why = (f"模型判 same，但 same_as 给了 {how_many} 个号"
-                           f"（收到 {raw_same_as!r}）⇒ 不猜：并进哪一条是它的判断，"
-                           f"框架替它挑一个等于替它表态；要并请只点一个号"
-                           f"（候选 {ids or '空'}）")
-                else:
-                    why = (f"模型判 same，但 same_as 没给出可用的号"
-                           f"（收到 {raw_same_as!r}）⇒ 没判成：指不出候选号的合并等于"
-                           f"替它编一条依据（候选 {ids or '空'}）")
-                out.update(checked=False, verdict="", same_as="", reason=why,
-                           basis="；".join(parts + [why]))
+        candidates_page = list(out["candidates"])
+        pages = self._identity_pages(candidates_page)
+        # ---- 检索读数（2026-11-08 缺陷 ②）：候选总数 / 页数 / 实际问了几页 / 是否页尽 ----
+        #
+        # 改前这里只把前 4 条交给模型（`_candidate_reading` 截断），而 `hits_total`
+        # 照旧报全量 ⇒ "第 5–20 条永不入眼"与"20 条都看过"在读数上同形。现在按
+        # `PROPOSITION_VERDICT_CANDIDATES` 分页，问到命中或页尽为止，并把三件事写进
+        # 读数：`pages_total` / `pages_judged` / `page_exhausted`（外加
+        # `candidates_total` / `candidates_seen`）。
+        out["candidates_total"] = len(candidates_page)
+        out["pages_total"] = len(pages)
+        out["pages_judged"] = 0
+        out["candidates_seen"] = 0
+        out["page_exhausted"] = False
+        out["judged"] = False
+        seen: list[str] = []
+        parts: list[str] = []
+        page_ids: list[str] = []
+        for index, page in enumerate(pages, 1):
+            context = self._identity_context(
+                full=full, label=label, kind=kind, candidates=page)
+            got = self.judge("proposition_identity", context, task_id=task_id,
+                             note=note)
+            out["judged"] = True
+            out["pages_judged"] = index
+            page_ids = [str(c.get("stmt_id") or "") for c in page]
+            seen.extend(page_ids)
+            out["candidates_seen"] = len(seen)
+            out["cost"] = dict(got.get("cost") or out.get("cost") or {})
+            out["judged_elapsed_sec"] = got.get("elapsed_sec")
+            if not got.get("checked"):
+                out["checked"] = False
+                out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
                 return self._with_adjudication_visibility(out)
-            if normalized not in ids:
-                why = (f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
-                       f" 不是候选表里的号（候选 {ids or '空'}）⇒ 没判成：凭一个指不出来的"
-                       "号合并，等于替它编一条依据")
-                out.update(checked=False, verdict="", same_as="", reason=why,
-                           basis="；".join(parts + [why]))
+            verdict = str(got.get("decision") or "")
+            if verdict not in PROPOSITION_VERDICTS:
+                # `judge()` 已经按词表挡了一层；这里再挡一层是防"别的类别借这一格"：
+                # 词表外的结论不是一种判定 ⇒ 没判成（不新建、不合并）。
+                out.update(checked=False, verdict="",
+                           reason=(f"模型给的结论 {verdict!r} 不在两档 "
+                                   f"{list(PROPOSITION_VERDICTS)} 里 ⇒ 不采信：这一格没判成"))
                 return self._with_adjudication_visibility(out)
+            # 洗定理名与判同一趟（每一页的判词都带 `canonical_name` / `route`）：
+            # 取"判成的那一页"—— 判 same 就在那一页收口，判 different 一直问到页尽。
+            out["canonical_name"] = str(got.get("canonical_name") or "").strip()
+            out["route"] = str(got.get("route") or "").strip()
+            out["condition"] = str(got.get("condition") or "").strip()
+            out["conclusion"] = str(got.get("conclusion") or "").strip()
+            out["reason"] = str(got.get("reason") or "")
+            parts = [str(x).strip() for x in (got.get("basis") or []) if str(x).strip()]
+            out["basis"] = "；".join(parts + ([out["reason"]] if out["reason"] else []))
+            out["checked"] = True
+            out["verdict"] = verdict
+            out["same_as"] = str(got.get("same_as") or "").strip()
+            if verdict == _PK.STATE_SAME:
+                ids = page_ids
+                # ---- 先归一化外壳，再判成员（真机 82，2026-11-01）
+                #
+                # 现场：模型判 same 时把号写成 `"['000003']"`（52 处 / 16 个会话行），
+                # 而下面这条成员判据逐字比 ⇒ 判了 same 也不并、照旧落新行
+                # （重复对 000001/000004、000003/000005 就是这么来的）。
+                # 纪律不改：归一化后仍指不出候选号 ⇒ 没判成（2026-11-08 起不再降成
+                # 第三种结论）："凭一个指不出来的号合并，等于替它编一条依据"这句话仍然成立；
+                # 多元素列表也不猜，只说清"你给了 N 个号"。
+                raw_same_as = str(out["same_as"] or "")
+                normalized, how_many = normalize_same_as(raw_same_as)
+                out["same_as"] = normalized
+                if not normalized:
+                    if how_many > 1:
+                        why = (f"模型判 same，但 same_as 给了 {how_many} 个号"
+                               f"（收到 {raw_same_as!r}）⇒ 不猜：并进哪一条是它的判断，"
+                               f"框架替它挑一个等于替它表态；要并请只点一个号"
+                               f"（候选 {ids or '空'}）")
+                    else:
+                        why = (f"模型判 same，但 same_as 没给出可用的号"
+                               f"（收到 {raw_same_as!r}）⇒ 没判成：指不出候选号的合并等于"
+                               f"替它编一条依据（候选 {ids or '空'}）")
+                    out.update(checked=False, verdict="", same_as="", reason=why,
+                               basis="；".join(parts + [why]))
+                    return self._with_adjudication_visibility(out)
+                if normalized not in ids:
+                    why = (f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
+                           f" 不是候选表里的号（候选 {ids or '空'}）⇒ 没判成：凭一个指不出来的"
+                           "号合并，等于替它编一条依据")
+                    out.update(checked=False, verdict="", same_as="", reason=why,
+                               basis="；".join(parts + [why]))
+                    return self._with_adjudication_visibility(out)
+                break
+            # different：还有下一页就接着问；页尽就由下面那一格收口。
+        out["page_exhausted"] = bool(out["verdict"] == _PK.STATE_DIFFERENT
+                                     and out["pages_judged"] >= out["pages_total"])
         if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
             return self._with_adjudication_visibility(out)
         if use_cache:
@@ -7229,6 +7279,12 @@ class Secretary:
             #: 哪几条（带每条命中的词）/ 判定那一趟发没发 / 一句话为什么。
             "keywords": [], "hits_total": 0, "hits_named": [], "judged": False,
             "why": "",
+            #: 分页读数（2026-11-08 缺陷 ②）：候选总数 / 总页数 / 真问了几页 /
+            #: 已经看过几个候选 / 是否页尽。"只看了 4 条就说都不是"与"20 条都看过"
+            #: 必须在这一组数上分得开。
+            "keyword_checked": False, "candidates_total": 0,
+            "pages_total": 0, "pages_judged": 0, "candidates_seen": 0,
+            "page_exhausted": False,
             #: 这一条判定用的是哪一条缝（`Secretary.model_source` 的三档读数：
             #: `body（…）` / `secretary（…）` / `none（…）`）。空串 = 这一名秘书是裸造的
             #: （`Secretary(...)` 没传 `seam=`），那一档就是"没有判断面"。
@@ -7252,6 +7308,23 @@ class Secretary:
         }
         return out
 
+    @staticmethod
+    def _identity_pages(candidates: Sequence[Mapping[str, Any]],
+                        page_size: int = PROPOSITION_VERDICT_CANDIDATES
+                        ) -> list[list[dict[str, Any]]]:
+        """候选表 ⇒ 判定分页（**问到命中或页尽**；不是截断到第一页）。
+
+        2026-11-08 缺陷 ②：改前 `_candidate_reading` 把命中截到前 4 条，第 5–N 条
+        永不入眼却记成"这批都不是"。这一格是那条纪律的唯一实现：候选按页切开，
+        调用方逐页问；空候选也要给一页（洗定理名与判定是同一趟的输出）。
+
+        独立成函数是为了留一个可打桩的判据点：反真空把这里换成"只给第一页"，
+        `tests/test_one_retrieval_path_pages_until_hit_or_end.py` 必须当场红。
+        """
+        size = max(1, int(page_size))
+        items = [dict(c) for c in (candidates or ()) if isinstance(c, Mapping)]
+        return ([items[i:i + size] for i in range(0, len(items), size)] or [[]])
+
     def _identity_candidates(self, out: dict[str, Any], *,
                              candidates: Sequence[Mapping[str, Any]] | None,
                              rows: Iterable[Mapping[str, Any]] | None,
@@ -7272,15 +7345,19 @@ class Secretary:
                     :PROPOSITION_VERDICT_TEXT_CHARS]
             out.update(
                 keywords=[], hits_total=len(supplied),
+                # 读了哪几条 = 全部（分页之后每页都会看到；这里不再截到一页）。
                 hits_named=[{"stmt_id": str(h.get("stmt_id") or ""),
                              "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                            for h in supplied[:PROPOSITION_VERDICT_CANDIDATES]],
+                            for h in supplied],
                 candidates=list(supplied),
+                candidates_total=len(supplied),
                 why=("调用方给了候选表 ⇒ 这一趟不再自己检索" if supplied
                      else "调用方给的候选表为空 ⇒ 没有可比的条目（查过 0 条）"))
             if not supplied:
                 # 兼容档：调用方已经查过一圈且明确给了空表 ⇒ 不再花一次调用（旧入口的语义）。
                 out.update(checked=True, verdict=_PK.STATE_DIFFERENT, judged=False,
+                           pages_total=0, pages_judged=0, candidates_seen=0,
+                           page_exhausted=True,
                            reason="查过：调用方给的候选表为空（0 条）⇒ 没有同一条",
                            basis="查过：没有可比的候选 ⇒ 不同")
                 self._remember_proposition_verdict(out, full=full, label=label,
@@ -7311,10 +7388,12 @@ class Secretary:
                                                             rows=pool_rows)
                 hits = list(search.get("hits") or [])
                 out["hits_total"] = len(hits)
+                # 读了哪几条 = 全部命中（分页之后每页都会看到；不再是"前 4 条"）。
                 out["hits_named"] = [
                     {"stmt_id": str(h.get("stmt_id") or ""),
                      "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                    for h in hits[:PROPOSITION_VERDICT_CANDIDATES]]
+                    for h in hits]
+                out["candidates_total"] = len(hits)
                 out["candidates"] = hits
                 if not hits:
                     out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在命题台账里"
@@ -7343,6 +7422,12 @@ class Secretary:
                 hits_total=int(out.get("hits_total") or 0),
                 hits_named=list(out.get("hits_named") or ()),
                 judged=bool(out.get("judged")), why=str(out.get("why") or ""),
+                keyword_checked=bool(out.get("keyword_checked")),
+                candidates_total=int(out.get("candidates_total") or 0),
+                pages_total=int(out.get("pages_total") or 0),
+                pages_judged=int(out.get("pages_judged") or 0),
+                candidates_seen=int(out.get("candidates_seen") or 0),
+                page_exhausted=bool(out.get("page_exhausted")),
                 seam_source=str(out.get("seam_source") or ""),
                 role=str(self.role or ""), task_id=str(task_id or self.task_id or ""))
             self._proposition_verdicts[_proposition_verdict_key(full)] = dict(row)
@@ -7396,6 +7481,13 @@ class Secretary:
             "judged": bool(out.get("judged")),
             "same_as": str(out.get("same_as") or ""),
             "why": str(out.get("why") or ""),
+            #: 分页读数（2026-11-08 缺陷 ②）：看了几页 / 几个候选 / 是否页尽。
+            "keyword_checked": bool(out.get("keyword_checked")),
+            "candidates_total": int(out.get("candidates_total") or 0),
+            "pages_total": int(out.get("pages_total") or 0),
+            "pages_judged": int(out.get("pages_judged") or 0),
+            "candidates_seen": int(out.get("candidates_seen") or 0),
+            "page_exhausted": bool(out.get("page_exhausted")),
         }
         return out
 
@@ -8254,7 +8346,9 @@ class Secretary:
             #: "没判成"的原因不能只活在秘书的台账里：调用方（B 的工具返回、直写路由的
             #: detail）拿到的就是这一份读数。
             "seam_source": str(got.get("seam_source") or ""),
-            "candidates": [str(c.get("stmt_id") or "") for c in (got.get("candidates") or [])],
+            "candidates": [(str(c.get("stmt_id") or "") if isinstance(c, Mapping)
+                            else str(c))
+                           for c in (got.get("candidates") or [])],
             #: 检索读数（"它确实自己查过"必须看得见，2026-11-08）：
             #: 关键词 / 命中几条 / 实际交给模型看的是哪几条 / 判定那一趟发没发。
             "keywords": [str(x) for x in (got.get("keywords") or ())],
@@ -8264,6 +8358,13 @@ class Secretary:
             "judged": bool(got.get("judged")),
             "why": str(got.get("why") or ""),
             "cost": dict(got.get("cost") or {}),
+            #: 分页读数（2026-11-08 缺陷 ②）：看了几页 / 几个候选 / 是否页尽。
+            "keyword_checked": bool(got.get("keyword_checked")),
+            "candidates_total": int(got.get("candidates_total") or 0),
+            "pages_total": int(got.get("pages_total") or 0),
+            "pages_judged": int(got.get("pages_judged") or 0),
+            "candidates_seen": int(got.get("candidates_seen") or 0),
+            "page_exhausted": bool(got.get("page_exhausted")),
         }
 
     def _upgrade_evidence_kind(self, existing: Mapping[str, Any],
@@ -12966,6 +13067,10 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
                                keywords: Sequence[str] = (), hits_total: int = 0,
                                hits_named: Sequence[Mapping[str, Any]] = (),
                                judged: bool = False, why: str = "",
+                               keyword_checked: bool = False,
+                               candidates_total: int = 0, pages_total: int = 0,
+                               pages_judged: int = 0, candidates_seen: int = 0,
+                               page_exhausted: bool = False,
                                seam_source: str = "",
                                role: str = "", task_id: str = "") -> dict[str, Any]:
     """追加一行判定读数（append-only；显式 LF，Windows 上不留 CRLF）。
@@ -12997,6 +13102,13 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
            "hits_named": [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
                           for x in (hits_named or ())],
            "judged": bool(judged), "why": str(why or ""),
+           #: 分页读数（2026-11-08 缺陷 ②）：看了几页 / 几个候选 / 是否页尽。
+           "keyword_checked": bool(keyword_checked),
+           "candidates_total": int(candidates_total or 0),
+           "pages_total": int(pages_total or 0),
+           "pages_judged": int(pages_judged or 0),
+           "candidates_seen": int(candidates_seen or 0),
+           "page_exhausted": bool(page_exhausted),
            "seam_source": str(seam_source or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:

@@ -101,12 +101,9 @@ from ..refusals import refuse as _refuse
 #: 静默放行 —— 白名单不会。
 CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
 
-#: 一次递给秘书看的候选条数。
-#:
-#: 这是工程上限，不是判定阈值：关键词检索可能一次捞回很多行，而一次模型调用放不下
-#: 整张台账。检索结果按"命中了几个关键词"降序排，分批问，问到命中或批次用完为止。
-#: 词面相似度不参与取舍（业主明令：不许用词面阈值代替判断）。
-STATEMENT_SAME_CANDIDATE_PAGE = 20
+#: 「一次能给几条候选」的工程上限住在秘书那一侧（`secretary.PROPOSITION_VERDICT_CANDIDATES`）：
+#: B 不再自建检索、也不再自己分批（2026-11-08 缺陷 ②：检索路只留秘书那一条）。
+#: 这里一个字都不留 —— 留一个"B 的分批大小"等于把第二条检索路的骨架留在原处。
 
 
 #: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
@@ -911,9 +908,13 @@ def _caller_role() -> str:
 
 
 def _same_search_reading(same: Mapping | None) -> dict:
-    """同一命题检索的公开读数（去掉内部行缓存 `_row`，其余原样带走）。"""
+    """同一命题检索的公开读数（去掉内部行缓存 `_row` 与整份判定内部表，其余原样带走）。
+
+    `adjudication` 那一格里有候选的整行（`row`），它只给 `record_statement` 用；
+    公开读数要的是判词 / 页数 / 候选数 / 关键词，不要把整行再抄一遍。
+    """
     return {str(k): v for k, v in dict(same or {}).items()
-            if not str(k).startswith("_")}
+            if not str(k).startswith("_") and str(k) != "adjudication"}
 
 
 def _declared_manuscript_kind(*, text: str = "", root: str = "") -> str:
@@ -1194,100 +1195,63 @@ class _RegisterStatement:
                 _note(str(out.get("reason") or "没判成"))
         return out
 
-    # ---- 同一命题检索与证据位更新（2026-11-08 业主口径） ---------------------------
+    # ---- 同一命题检索：只留秘书那一条路（2026-11-08 缺陷 ②） -----------------------
     #
     # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「只有秘书查了一圈没查到一样的
     # 就注册新的，查到就更新那条命题的状态」。
     #
-    # 这一块只做三件事：
-    #   ① 请秘书挑关键词（`pick_statement_keywords`，一次模型调用）；
-    #   ② 按关键词在 statements 里检索（确定性；命中规则只有"包含"，词面相似度不参与）；
-    #   ③ 请秘书判"这一条是不是检索出来的某一条"（`judge_statement_same`，一次模型调用）。
-    # 检索面只有 active 的命题类行（概念 / 定义不是命题）；候选为空 ⇒ 不调判定、直接新登记。
-
-    def _numeric_same_candidates(self, *, keywords: Sequence[str]) -> dict:
-        """按关键词检索在册命题（只查，不判）。
-
-        命中规则（业主 2026-11-08 的口径）：`label` 或 `statement_full` 里包含该关键词；
-        大小写 / 全半角按 `textutil.normalize` 的既有口径归一。多关键词任一命中即进候选，
-        并把命中的词记下来（读数用）。排序按命中词数降序（只是展示顺序，不是判定）。
-
-        返回三态：`ok=False` = 台账读不出来（没查成，调用方 fail-closed）；
-        `ok=True` + `hits=[]` = 查过了、0 条。
-        """
-        from .. import textutil as T
-        from ..secretary import _is_proposition_kind
-
-        out: dict = {"checked": False, "hits": [], "reason": "", "checked_rows": 0}
-        try:
-            rows = [dict(r) for r in self.store.rows("statements")]
-        except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是"没有"）
-            out["reason"] = (f"statements 台账读不出来（{type(exc).__name__}: {exc}）"
-                             "⇒ 没查成（不是「没有候选」）")
-            return out
-        wanted = [(str(word), T.normalize(str(word))) for word in (keywords or ())]
-        wanted = [(raw, norm) for raw, norm in wanted if norm]
-        hits: list[dict] = []
-        for row in rows:
-            sid = str(row.get("stmt_id") or "")
-            if not sid:
-                continue
-            if not _is_proposition_kind(row.get("kind")):
-                continue
-            if str(row.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
-                continue
-            if not str(row.get("statement_full") or "").strip():
-                continue
-            label_n = T.normalize(str(row.get("label") or ""))
-            full_n = T.normalize(str(row.get("statement_full") or ""))
-            hit_words = [raw for raw, norm in wanted
-                         if norm in label_n or norm in full_n]
-            if not hit_words:
-                continue
-            hits.append({"stmt_id": sid, "label": str(row.get("label") or ""),
-                         "statement_full": str(row.get("statement_full") or ""),
-                         "kind": str(row.get("kind") or ""),
-                         "hit_words": hit_words, "row": row})
-        hits.sort(key=lambda item: (-len(item["hit_words"]), item["stmt_id"]))
-        out.update(checked=True, hits=hits, checked_rows=len(rows))
-        return out
+    # 检索只有一处实现：`Secretary.adjudicate_proposition`（秘书挑词 → 代码检索 → 判定）。
+    # B 这一层不再自建关键词检索、也不再自己分批 —— 改前 `_numeric_same_candidates` 是
+    # 第二条检索路，而判定那一侧只把前 4 条交给模型 ⇒ 第 5–20 条**永不入眼**却记成
+    # "这批都不是"。现在 B 只做两件事：
+    #   ① 逐字相同这一档（确定性事实，免模型）在这里直接给 found；
+    #   ② 其余一律交给秘书那一条路：它自己挑词、自己检索、按页问到命中或页尽，并把
+    #      页数 / 候选数 / 是否页尽写进读数（`pages_total` / `pages_judged` /
+    #      `candidates_total` / `page_exhausted`）。
+    # 三处共用：普通数值收录 / 证明收录（多证明路径）/ D 的指针收录。
 
     def _resolve_same_statement(self, *, full: str, label: str = "",
                                 kind: str = "conjecture",
                                 task_id: str = "") -> dict:
-        """这一条待收命题是不是在册的某一条（查到就更新 / 追加那一行，不新注册）。
+        """这一条待收命题是不是在册的某一条（检索与判定都归秘书那一处）。
 
-        这是"是不是同一条命题"的唯一入口：普通数值收录、证明收录（多证明路径）、
-        D 的指针收录都走它 —— 不许每处各写一份判据（那会长出三种答案）。
+        ## 为什么 B 不再自己检索（2026-11-08 缺陷 ②）
+        改前这一格自己按关键词扫 `statements`（`_numeric_same_candidates`）、再按 20 条
+        分批把候选递给判定那一趟；而判定那一趟只把前 4 条交给模型 ⇒ 第 5–20 条
+        **永不入眼**却被记成"这批都不是"。业主的口径是「检索只是取候选，不参与判定」
+        ＋「只留一条检索路」：检索与判定同住 `Secretary.adjudicate_proposition`，它自己
+        分页（页大小 = 一次能给几条的工程上限），问到命中或页尽为止。
 
-        返回的读数就是"它确实搜过"的凭据：
-        `keywords` / `keyword_checked` / `hits_total` / `hits_named` / `found` / `why` /
-        `judged`（真调过判定没有）/ `model_calls`（发了几个模型调用）。
+        ## 读数的承重项
+        `pages_total` / `pages_judged` / `candidates_total` / `page_exhausted`：
+        "看了几页 / 几个候选 / 是不是页尽"必须与判词一起看得见 —— 只写 `hits_total`
+        时，"只看了 4 条就说都不是"与"20 条都看过"在读数上同形。
 
-        三态（业主 2026-11-08）：
+        ## 逐字相同那一档（确定性事实，免模型）
+        规范化后全等 ⇒ 直接 found，不调模型（判据 c：模型调用 0 次）。这不是第二条
+        检索路：它不生成候选，只回答"同一段正文是不是已经在册"。
+
+        ## 三态（业主 2026-11-08）
         | 结局 | 返回 |
         |---|---|
         | 查到某一条 | `checked=True` + `found=<stmt_id>` + `_row`（那一行原文） |
-        | 查过、没查到 | `checked=True` + `found=""` + `why`（关键词命中 0 条 / 逐批判过都不同） |
+        | 查过、没查到 | `checked=True` + `found=""` + `why`（候选 0 条 / 逐页判过都不同） |
         | 没查成 | `checked=False` + `refused=same_statement_unjudged` + `why`（整笔不写） |
-
-        "逐字相同"是确定性事实：候选里有一条规范化后全等 ⇒ 直接 found，不调模型
-        （判据 c：模型调用 0 次）。
         """
-        from ..secretary import append_statement_same
+        from .. import propositionkey as _PK
+        from .. import textutil as T
+        from ..secretary import append_statement_same, _is_proposition_kind
 
         out: dict = {
             "checked": False, "keyword_checked": False,
             "keywords": [], "hits_total": 0, "hits_named": [],
             "found": "", "why": "", "judged": False,
             "model_calls": 0, "problems": [], "refused": "",
+            "candidates_total": 0, "pages_total": 0, "pages_judged": 0,
+            "page_exhausted": False, "adjudication": {},
             "_row": {},
         }
-        sec = self._statement_secretary()
         root = str(getattr(self.store, "root", "") or "")
-
-        # 先看台账里有没有可检索的命题：一条都没有 ⇒ 不花模型调用（"查过、0 条"）。
-        from ..secretary import _is_proposition_kind
         try:
             all_rows = [dict(r) for r in self.store.rows("statements")]
         except Exception as exc:  # noqa: BLE001
@@ -1300,10 +1264,24 @@ class _RegisterStatement:
                     and _is_proposition_kind(r.get("kind"))
                     and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES
                     and str(r.get("statement_full") or "").strip()]
+        # 台账里一条可检索的命题都没有 ⇒ "查过、0 条"（不花模型调用、也不要求判断面）。
         if not eligible:
             out.update(checked=True, keyword_checked=True, hits_total=0,
+                       candidates_total=0, pages_total=0, pages_judged=0,
+                       page_exhausted=True,
                        why=("查过：命题台账里没有可检索的 active 命题（候选 0 条）"
                             "⇒ 注册新的"))
+            out["adjudication"] = {
+                "checked": True, "attempted": False,
+                "verdict": _PK.STATE_DIFFERENT, "same_as": "",
+                "canonical_name": "", "route": "",
+                "basis": "查过：没有可比的候选 ⇒ 不同",
+                "reason": str(out["why"]), "reused": False, "cached": False,
+                "statement_sha256": "", "seam_source": "",
+                "keywords": [], "hits_total": 0, "hits_named": [],
+                "judged": False, "candidates_total": 0, "pages_total": 0,
+                "pages_judged": 0, "page_exhausted": True,
+            }
             if root:
                 try:
                     out["retrieval_ledger"] = append_statement_same(
@@ -1314,20 +1292,30 @@ class _RegisterStatement:
                 except Exception as exc:  # noqa: BLE001
                     out["ledger_error"] = f"{type(exc).__name__}: {exc}"
             return out
-
-        # 逐字相同：确定性事实，免模型（也不要秘书 —— 这一档不依赖判断面）。
-        from .. import textutil as T
+        # 逐字相同：确定性事实，免模型。
         key = T.normalize(str(full or ""))
         exact = next((r for r in eligible
                       if T.normalize(str(r.get("statement_full") or "")) == key), None)
-        if exact is not None:
+        if key and exact is not None:
             sid = str(exact.get("stmt_id") or "")
             out.update(checked=True, keyword_checked=True, hits_total=1, judged=False,
                        hits_named=[{"stmt_id": sid, "hit_words": ["逐字相同"]}],
-                       found=sid,
+                       candidates_total=1, pages_total=0, pages_judged=0,
+                       page_exhausted=True, found=sid,
                        why=("候选的正文与待收命题逐字相同（规范化后全等）⇒ 同一条；"
                             "没调模型"))
             out["_row"] = dict(exact)
+            out["adjudication"] = {
+                "checked": True, "attempted": False, "verdict": _PK.STATE_SAME,
+                "same_as": sid, "canonical_name": "", "route": "",
+                "basis": "规范化后逐字相同（确定性事实）",
+                "reason": str(out["why"]), "reused": False, "cached": False,
+                "statement_sha256": "", "seam_source": "",
+                "keywords": [], "hits_total": 1,
+                "hits_named": list(out["hits_named"]), "judged": False,
+                "candidates_total": 1, "pages_total": 0,
+                "pages_judged": 0, "page_exhausted": True,
+            }
             if root:
                 try:
                     out["judge_ledger"] = append_statement_same(
@@ -1338,114 +1326,153 @@ class _RegisterStatement:
                 except Exception as exc:  # noqa: BLE001
                     out["ledger_error"] = f"{type(exc).__name__}: {exc}"
             return out
+        sec = self._statement_secretary()
         if sec is None:
             out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
-                       why="这一趟没有秘书 ⇒ 有候选而没查成（不新注册）"
-                       + (f"；{self.secretary_problem}" if getattr(self, "secretary_problem", "") else ""))
+                       why=("这一趟没有秘书 ⇒ 同一命题检索 / 判定没查成（不新注册）"
+                            + (f"；{self.secretary_problem}"
+                               if getattr(self, "secretary_problem", "") else "")))
             out["problems"] = [out["why"]]
             return out
-
-        # 第一步：请秘书挑关键词。
-        got = sec.pick_statement_keywords(statement_full=str(full or ""),
-                                          label=label, kind=kind, task_id=task_id)
-        out["model_calls"] += 1
-        out["keyword_checked"] = bool(got.get("checked"))
-        out["keywords"] = [str(x) for x in (got.get("keywords") or [])]
-        if not out["keyword_checked"]:
+        try:
+            got = dict(sec.adjudicate_proposition(
+                {"statement_full": str(full or ""), "label": label,
+                 "kind": kind or "theorem"},
+                note="secretary:statement_same", task_id=task_id) or {})
+        except Exception as exc:  # noqa: BLE001 —— 判定这一问炸了 = 没判成
             out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
-                       why=str(got.get("why") or "关键词没提取成"))
+                       why=(f"同一命题检索 / 判定调用失败（{type(exc).__name__}: "
+                            f"{exc}）⇒ 没查成"))
             out["problems"] = [out["why"]]
             return out
-
-        # 第二步：按关键词检索（只查，不判）。
-        found_hits = self._numeric_same_candidates(keywords=out["keywords"])
-        if not found_hits.get("checked"):
-            out.update(refused=_R.SAME_STATEMENT_UNJUDGED,
-                       why=str(found_hits.get("reason") or "检索没查成"))
-            out["problems"] = [out["why"]]
+        out["adjudication"] = got
+        out["checked"] = bool(got.get("checked"))
+        out["keyword_checked"] = bool(got.get("keyword_checked",
+                                               got.get("keywords")))
+        out["keywords"] = [str(x) for x in (got.get("keywords") or ())]
+        out["hits_total"] = int(got.get("hits_total") or 0)
+        out["hits_named"] = [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
+                             for x in (got.get("hits_named") or ())]
+        out["judged"] = bool(got.get("judged"))
+        out["candidates_total"] = int(got.get("candidates_total") or 0)
+        out["pages_total"] = int(got.get("pages_total") or 0)
+        out["pages_judged"] = int(got.get("pages_judged") or 0)
+        out["page_exhausted"] = bool(got.get("page_exhausted"))
+        out["why"] = str(got.get("reason") or got.get("why") or "")
+        if bool(got.get("reused")):
+            out["model_calls"] = 0
+        else:
+            out["model_calls"] = ((1 if out["keyword_checked"] else 0)
+                                  + out["pages_judged"])
+        if not out["checked"]:
+            out.update(refused=_R.SAME_STATEMENT_UNJUDGED, found="", _row={})
+            out["problems"] = [out["why"] or "同一命题判定没成"]
+            # 判没成也要在盘上留一行（旧读数逐字不变）：`judge` 那一趟没给结论时
+            # `checked=False`，读的人才分得清"查过、不是同一条"与"根本没判成"。
             if root:
                 try:
-                    append_statement_same(
-                        root, stage="retrieval", statement_full=str(full or ""),
-                        checked=False, keywords=out["keywords"], hits_total=0,
-                        why=str(out["why"]), label=label, kind=kind,
-                        role="B", task_id=task_id)
+                    out["judge_ledger"] = append_statement_same(
+                        root, stage="judge", statement_full=str(full or ""),
+                        checked=False, keywords=out["keywords"],
+                        hits_total=out["hits_total"],
+                        candidates=[str(h.get("stmt_id") or "")
+                                    for h in out["hits_named"]],
+                        found="", why=str(out["why"] or ""), label=label,
+                        kind=kind, role="B", task_id=task_id)
                 except Exception as exc:  # noqa: BLE001
                     out["ledger_error"] = f"{type(exc).__name__}: {exc}"
             return out
-        hits = list(found_hits.get("hits") or [])
-        out["hits_total"] = len(hits)
-        out["hits_named"] = [{"stmt_id": str(h.get("stmt_id") or ""),
-                              "hit_words": list(h.get("hit_words") or [])}
-                             for h in hits[:5]]
+        if str(got.get("verdict") or "") == _PK.STATE_SAME:
+            out["found"] = str(got.get("same_as") or "")
+        if out["found"]:
+            row: dict = {}
+            for cand in (got.get("candidates") or ()):
+                if (isinstance(cand, Mapping)
+                        and str(cand.get("stmt_id") or "") == out["found"]):
+                    row = dict(cand.get("row") or {})
+                    break
+            if not row:
+                row = next((dict(r) for r in all_rows
+                            if str(r.get("stmt_id") or "") == out["found"]), {})
+            out["_row"] = row
+            if not row:
+                out.update(checked=False, refused=_R.SAME_STATEMENT_UNJUDGED,
+                           found="", problems=["秘书判了同一条，而它的行读不回来"])
+                out["why"] = "秘书判了同一条，而它在 statements 里的行读不回来 ⇒ 没查成"
+                return out
         if root:
             try:
-                out["retrieval_ledger"] = append_statement_same(
-                    root, stage="retrieval", statement_full=str(full or ""),
-                    checked=True, keywords=out["keywords"], hits_total=len(hits),
-                    candidates=[str(h.get("stmt_id") or "") for h in hits],
-                    why=str(out["why"] or ""), label=label, kind=kind,
-                    role="B", task_id=task_id)
+                out["judge_ledger"] = append_statement_same(
+                    root, stage="judge", statement_full=str(full or ""),
+                    checked=True, keywords=out["keywords"],
+                    hits_total=out["hits_total"],
+                    candidates=[str(h.get("stmt_id") or "")
+                                for h in out["hits_named"]],
+                    found=out["found"], why=str(out["why"]), label=label,
+                    kind=kind, role="B", task_id=task_id)
             except Exception as exc:  # noqa: BLE001
                 out["ledger_error"] = f"{type(exc).__name__}: {exc}"
-        if not hits:
-            out.update(checked=True, found="",
-                       why=("查过：关键词在命题台账里命中 0 条 ⇒ 注册新的"
-                            f"（关键词：{'、'.join(out['keywords'])}）"))
-            return out
-
-        # 第三步：分类问秘书"是不是其中某一条"（分批只是工程上限）。
-        for start in range(0, len(hits), STATEMENT_SAME_CANDIDATE_PAGE):
-            page = hits[start:start + STATEMENT_SAME_CANDIDATE_PAGE]
-            out["judged"] = True
-            got = sec.judge_statement_same(statement_full=str(full or ""),
-                                           candidates=[h["row"] for h in page],
-                                           label=label, kind=kind, task_id=task_id)
-            out["model_calls"] += 1
-            if not got.get("checked"):
-                out.update(refused=_R.SAME_STATEMENT_UNJUDGED, found="", _row={},
-                           why=str(got.get("why") or "同一命题判定没成"))
-                out["problems"] = [out["why"]]
-                return out
-            sid = str(got.get("found") or "")
-            if sid:
-                row = next((dict(h["row"]) for h in page
-                            if str(h.get("stmt_id") or "") == sid), None)
-                out.update(checked=True, found=sid,
-                           why=str(got.get("why") or ""), _row=dict(row or {}))
-                return out
-        out.update(checked=True, found="",
-                   why=("查过：逐批问过秘书，检索出来的 "
-                        f"{len(hits)} 条都不是同一条 ⇒ 注册新的"))
         return out
 
     @staticmethod
     def _same_statement_adjudication(same: Mapping) -> dict:
         """把"查一圈"的结果折成秘书同一性命中判定的形状（交给 `record_statement`）。
 
-        为什么要有这一格：既有写入链在 `_merge_into_proposition` 里认 `adjudication`
-        点名的 `same_as`。语义 found 命中之后要走的正是那条既有分支（多证明追加、
-        签按 sha 认、等级现算都在里面），所以这里只把 found / 空折成它认的字段，
-        不再发第二次模型调用（不许两处各判一次）。
+        ## 为什么不再自己拼一份判词（2026-11-08 缺陷 ②/④）
+        改前这里把 `canonical_name` / `route` 写死成空串，于是
+        `Secretary._record_statement_tx` 的洗名条件（`adj.checked ∧
+        adj.canonical_name`）永假 ⇒ 脏标签原样落盘（审计探针 D）。现在检索与判定
+        都归秘书那一处（`_resolve_same_statement` 调的是
+        `Secretary.adjudicate_proposition`），它那一趟的 `canonical_name` /
+        `route` 就是洗名的依据 —— 这里只把 `same_as` 折成既有写入链认的字段，
+        其余原样带过去（同一个判据只有一个答案，不重新拼一份）。
         """
         from .. import propositionkey as _PK
 
+        adj = dict(same.get("adjudication") or {})
         found = str(same.get("found") or "")
-        why = str(same.get("why") or "")
+        why = str(same.get("why") or adj.get("reason") or "")
+        verdict = str(adj.get("verdict") or "")
+        if verdict not in (_PK.STATE_SAME, _PK.STATE_DIFFERENT):
+            verdict = _PK.STATE_SAME if found else _PK.STATE_DIFFERENT
+        seam = str(adj.get("seam_source")
+                   or "agent_b.register_statement:same_statement")
+        visibility = dict(adj.get("proposition_adjudication") or {})
+        if not visibility:
+            visibility = {"checked": bool(adj.get("checked")),
+                          "attempted": bool(adj.get("attempted", True)),
+                          "reason": why, "seam_source": seam}
         return {
-            "checked": True,
-            "verdict": _PK.STATE_SAME if found else _PK.STATE_DIFFERENT,
-            "same_as": found, "canonical_name": "", "route": "",
-            "condition": "", "conclusion": "", "basis": why, "reason": why,
-            "candidates": [],
-            "cost": {"ledger": "",
-                     "reason": "没发调用（沿用同一命题检索那一趟的结论）"},
-            "reused": False, "cached": False, "statement_sha256": "",
-            "seam_source": "agent_b.register_statement:same_statement",
-            "attempted": True,
-            "proposition_adjudication": {
-                "checked": True, "attempted": True, "reason": why,
-                "seam_source": "agent_b.register_statement:same_statement"},
+            "checked": bool(adj.get("checked", True)),
+            "verdict": verdict,
+            "same_as": found,
+            # 洗名与"这是哪一条"是同一趟判定的两个产物：照原样带过去。
+            "canonical_name": str(adj.get("canonical_name") or ""),
+            "route": str(adj.get("route") or ""),
+            "condition": str(adj.get("condition") or ""),
+            "conclusion": str(adj.get("conclusion") or ""),
+            "basis": str(adj.get("basis") or why), "reason": why,
+            "candidates": [{"stmt_id": str(c.get("stmt_id") or "")}
+                           for c in (adj.get("candidates") or ())
+                           if isinstance(c, Mapping)],
+            "cost": dict(adj.get("cost")
+                         or {"ledger": "",
+                             "reason": "没发调用（沿用同一命题检索那一趟的结论）"}),
+            "reused": bool(adj.get("reused")), "cached": bool(adj.get("cached")),
+            "statement_sha256": str(adj.get("statement_sha256") or ""),
+            "seam_source": seam,
+            "attempted": bool(adj.get("attempted", True)),
+            "keywords": [str(x) for x in (adj.get("keywords") or ())],
+            "hits_total": int(adj.get("hits_total") or 0),
+            "hits_named": [dict(x) if isinstance(x, Mapping)
+                           else {"stmt_id": str(x)}
+                           for x in (adj.get("hits_named") or ())],
+            "judged": bool(adj.get("judged")),
+            "candidates_total": int(adj.get("candidates_total") or 0),
+            "pages_total": int(adj.get("pages_total") or 0),
+            "pages_judged": int(adj.get("pages_judged") or 0),
+            "page_exhausted": bool(adj.get("page_exhausted")),
+            "proposition_adjudication": visibility,
         }
 
     @staticmethod

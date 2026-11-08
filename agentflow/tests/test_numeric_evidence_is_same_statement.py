@@ -311,7 +311,12 @@ def test_e2_a_failed_keyword_extraction_also_refuses(tmp_path):
 
 # ================================================================== f 候选 0 条
 def test_f_no_keyword_hit_registers_with_a_zero_hit_reading(tmp_path):
-    """f：候选 0 条 ⇒ 新登记，读数写明"查过、0 条"。"""
+    """f：候选 0 条 ⇒ 新登记，读数写明"查过、0 条"。
+
+    2026-11-08（缺陷 ②）：检索与判定只有秘书那一条路。0 命中时仍发判定那一趟
+    （洗定理名与判定是同一趟的输出）⇒ `judged=True`，而"0 候选"由
+    `hits_total=0` / `candidates_total=0` / `page_exhausted=True` 读出来。
+    """
     store = _store(tmp_path)
     seed_statement_row(store, statement_full="设 m 是正整数；则 Q(m) 对 m=1..3 成立。",
                        kind="conjecture", label="Q(m) 的界")
@@ -324,7 +329,8 @@ def test_f_no_keyword_hit_registers_with_a_zero_hit_reading(tmp_path):
     searched = dict(got.get("searched") or {})
     assert searched.get("checked") is True, searched
     assert searched.get("hits_total") == 0, searched
-    assert searched.get("judged") is False, searched
+    assert searched.get("candidates_total") == 0, searched
+    assert searched.get("page_exhausted") is True, searched
     assert len(_rows(store)) == 2, _rows(store)
 
 
@@ -357,22 +363,32 @@ def test_j_keyword_search_lands_a_differently_worded_proposition(tmp_path):
 
 
 def test_k_without_keyword_retrieval_j_would_register_a_second_row(tmp_path, monkeypatch):
-    """k：反真空 —— 摘掉关键词检索 ⇒ j 变成新注册两行（红）。"""
+    """k：反真空 —— 摘掉秘书侧的关键词检索 ⇒ j 变成新注册两行（红）。
+
+    2026-11-08（缺陷 ②）：检索路只留秘书那一条（`adjudicate_proposition`），B 不再
+    自建检索。所以反真空打在这一处：把秘书那一趟的检索结论换成"0 候选、不同"，
+    B 就没有第二条路可走 ⇒ j 会新注册两行。
+    """
+    def _no_retrieval(self, stmt_like, **kw):
+        return {"checked": True, "attempted": True, "verdict": "different",
+                "same_as": "", "candidates": [], "keywords": [], "hits_total": 0,
+                "hits_named": [], "judged": False, "pages_total": 1,
+                "pages_judged": 0, "candidates_total": 0, "page_exhausted": True,
+                "reason": "夹具：摘掉秘书侧检索", "basis": "",
+                "seam_source": "fixture", "cost": {}, "reused": False}
+
+    monkeypatch.setattr(SEC.Secretary, "adjudicate_proposition", _no_retrieval)
     store = _store(tmp_path)
     sid = _seed_paraphrase(store)
     out = _numeric(store, CLAIM, "k1", "code/scan.py",
                    {"range": "n<=10", "points": 10})
     seed_proposition_form_ok(store.root, CLAIM, kind="conjecture", role="B")
-    monkeypatch.setattr(
-        AgentB, "_numeric_same_candidates",
-        lambda self, **kw: {"checked": True, "hits": [], "reason": "",
-                            "checked_rows": 1})
     got = _register(store, Seam(keywords=["P(n)", "n<=10"], found=sid),
                     out["numeric_manuscript"])
     assert got.get("ok") is True, got
     assert got.get("found") == "", got
     assert len(_rows(store)) == 2, (
-        "反真空失效：摘掉关键词检索之后 j 仍然只落一行 ⇒ 检索这一步不是承重的", _rows(store))
+        "反真空失效：摘掉秘书侧检索之后 j 仍然只落一行 ⇒ 检索这一步不是承重的", _rows(store))
 
 
 # ================================================================== p / q / r 纯追加
@@ -660,11 +676,20 @@ def test_g_a_if_semantic_were_removed_a_would_register_two_rows(tmp_path, monkey
 
 
 def test_g_e_if_unjudged_were_treated_as_not_found_e_would_register(tmp_path, monkeypatch):
-    """g 的第二半：反真空 —— 把"没判成"折成"没查到" ⇒ e 会新注册一行。"""
-    monkeypatch.setattr(
-        SEC.Secretary, "judge_statement_same",
-        lambda self, **kw: {"checked": True, "found": "",
-                            "why": "夹具：把没判成当成没查到"})
+    """g 的第二半：反真空 —— 把"没判成"折成"没查到" ⇒ e 会新注册一行。
+
+    2026-11-08（缺陷 ②）：判定入口只剩 `adjudicate_proposition`（B 不再有自己的
+    分批判定）。所以反真空打在它上面：把"没判成"换成 checked=True + different。
+    """
+    def _fold(self, stmt_like, **kw):
+        return {"checked": True, "attempted": True, "verdict": "different",
+                "same_as": "", "candidates": [], "keywords": [], "hits_total": 0,
+                "hits_named": [], "judged": False, "pages_total": 1,
+                "pages_judged": 0, "candidates_total": 0, "page_exhausted": True,
+                "reason": "夹具：把没判成当成没查到", "basis": "",
+                "seam_source": "fixture", "cost": {}, "reused": False}
+
+    monkeypatch.setattr(SEC.Secretary, "adjudicate_proposition", _fold)
     store = _store(tmp_path)
     _first_numeric(store)
     second = _numeric(store, PARAPHRASE, "k2", "code/scan2.py",
