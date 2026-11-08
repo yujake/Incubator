@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-08T13:25:40+08:00",
+  "generated_at": "2026-11-08T13:28:36+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -309,10 +309,10 @@
       "path": "src/agentflow/specs/d.py",
       "glob": "src/agentflow/specs/d.py",
       "category": "auth-audit",
-      "sha256": "7e59d379412e4b3deade2edb87fdc8f0482b768cfb3e1a31bf092e220e89c233",
+      "sha256": "c10f9ddca0291fb95eef0754b3c473ca59a183554fdb320a1162cbfd7a5afe70",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 块甲（D 只递指针）：specs/b.py 的 register_statement 放开 statement_full 必填并广告「按手稿路径收录」；specs/d.py 的 policy 新增「向 B 登记只递指针」。登记 ≠ 批准（reviewers=0）。",
+      "change_note": "2026-11-08 块乙（D 只给研究方向）：specs/d.py 的 policy 把「派 F 去证这条猜想 / problem_key=conjecture_id」改成「交研究方向、不点名 conjecture_id；猜想只是参考意见、E/F 可不证」，并点名机械判据 agentflow.dispatchpolicy.dispatch_text_problems。登记 ≠ 批准（reviewers=0）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
