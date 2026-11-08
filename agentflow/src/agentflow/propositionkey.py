@@ -79,11 +79,11 @@
 
 两轴"没判成"的口径（2026-11-08 主笔裁定：不按字数预判死）：
 
-- `same_kind_proof`：**不再看 `MIN_CONTENT_UNITS`** —— 短证明照样判（"取 δ=ε 逐点验证"
-  与"用有限覆盖"是两种证法，判得出）。只剩一种没判成：**没有可比的文本**（空串）。
+- `same_kind_proof`：不再看 `MIN_CONTENT_UNITS` —— 短证明照样判（"取 δ=ε 逐点验证"
+  与"用有限覆盖"是两种证法，判得出）。只剩一种没判成：没有可比的文本（空串）。
   理由留在 `reason` 里。
-- `same_concept`：**从来不用** `MIN_CONTENT_UNITS`（它没有"文本长度"这一轴）；"没判成"
-  是**两侧都抽不出定义项**（标签是空的、正文也不是「概念（X）」/「定义（X）」形态）。
+- `same_concept`：从来不用 `MIN_CONTENT_UNITS`（它没有"文本长度"这一轴）；"没判成"
+  是两侧都抽不出定义项（标签是空的、正文也不是「概念（X）」/「定义（X）」形态）。
 
 `MIN_CONTENT_UNITS` 今天只剩一处用处：命题轴的确定性兜底（`judgeable`，被
 `proposition_key` / `same_proposition` / `prose_similarity` 调用）。`x = 1` 与 `y = 1`
@@ -161,12 +161,12 @@ PROOF_SAME_JACCARD = 0.80
 
 #: 命题轴"判不了"的下限：内容单元（拉丁词元 + 中文字）少于这个数 ⇒ `unknown`。
 #:
-#: 用途（2026-11-08 起只剩这一处）：**命题轴的确定性兜底** —— `judgeable` 被
+#: 用途（2026-11-08 起只剩这一处）：命题轴的确定性兜底 —— `judgeable` 被
 #: `proposition_key` / `same_proposition` / `prose_similarity` 调用。`x = 1` 与 `y = 1`
 #: 的词面相似度是 2/3，光看相似度会把两条不同断言判成"高度重合"；太短的命题没有足够
 #: 信息支撑任何结论，所以那一档仍走"判不了"（`unknown`），不是"不同"。
 #:
-#: **同种证明 / 概念同一性两轴不再用它**（2026-11-08 主笔裁定：短证明照样判，见
+#: 同种证明 / 概念同一性两轴不再用它（2026-11-08 主笔裁定：短证明照样判，见
 #: `_judge` 的 docstring）。概念轴从来没用过它。
 MIN_CONTENT_UNITS = 4
 
@@ -535,8 +535,8 @@ def _judge(a: str, b: str, *, threshold: float, basis: str,
 
     ## 2026-11-08（主笔裁定）：两轴不按"内容单元 < `MIN_CONTENT_UNITS`"预判死
     短证明照样判："取 δ=ε 逐点验证"与"用有限覆盖"是两种证法，词面相似度判得出来。
-    长度阈值只留给**命题轴的确定性兜底**（`same_proposition` / `proposition_key` /
-    `prose_similarity`）。证明轴只剩一种"没判成"：**没有可比的文本**（空串）——
+    长度阈值只留给命题轴的确定性兜底（`same_proposition` / `proposition_key` /
+    `prose_similarity`）。证明轴只剩一种"没判成"：没有可比的文本（空串）——
     那是没东西可判，不是字数不够。
     """
     left_probe, right_probe = judgeable(a), judgeable(b)
@@ -621,7 +621,7 @@ def same_kind_proof(a: str, b: str, *,
 
     ## 2026-11-08（主笔裁定）：不按字数预判死
     短证明照样判：词面相似度判得出"取 δ=ε 逐点验证" ≠ "用有限覆盖"。所以这一轴
-    **不看 `MIN_CONTENT_UNITS`**；`checked=False` 只剩"没有可比的文本"（空串）——
+    不看 `MIN_CONTENT_UNITS`；`checked=False` 只剩"没有可比的文本"（空串）——
     那是没东西可判，不是字数不够。两种折平都不许：折成 different 会让同一种证法被
     并列记录；折成 same 会让一份真的另一种证法被拒。
     """
