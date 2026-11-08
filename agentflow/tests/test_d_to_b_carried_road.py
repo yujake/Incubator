@@ -158,6 +158,33 @@ class FakeSeam:
         return json.dumps(self.payload, ensure_ascii=False)
 
 
+class SameSearchSeam:
+    """B 的同一命题检索的离线替身（2026-11-08：收录要先查一圈"是不是同一条"）。
+
+    这一份夹具里没有模型；判据照跑，只替代那两次调用：挑检索词与"没查到同一条"。
+    给的是"查过了、没有同一条"，不是"免查" —— 检索面与 fail-closed 仍由
+    `register_statement._resolve_same_statement` 一处实现。
+    """
+
+    class _Call:
+        ok = True
+        problem = ""
+        detail = ""
+        text = ""
+        model = "fake"
+        prompt_version = "t"
+        prompt_sha256 = "0" * 64
+
+    def ask_json(self, prompt, *, system: str = "", task_id: str = "",
+                 note: str = ""):
+        if str(note).endswith("statement_keywords"):
+            return ({"keywords": ["在册定理"], "why": "夹具：用命题里的数学词去捞"},
+                    self._Call())
+        if str(note).endswith("statement_same"):
+            return ({"found": "", "why": "夹具：条件不同的两条"}, self._Call())
+        return ({}, self._Call())
+
+
 def _proof_payload(cite: str) -> dict:
     return {"product": "proof", "strategy": "套用已知定理",
             "why_strategy": "由在册定理直接推出结论",
@@ -191,8 +218,17 @@ def _run_f_proof(store: Store, *, cite: str = f"stmt:{THEOREM_A}") -> dict:
 
 
 def _d_with_b(store: Store) -> AgentD:
-    """按真机装配的形状造 D：构造期拿到同一个 B 实例（`specs/d.py` 的 `peers["B"]`）。"""
-    b = AgentB(store, extractor=None, extract_text=None, config={})
+    """按真机装配的形状造 D：构造期拿到同一个 B 实例（`specs/d.py` 的 `peers["B"]`）。
+
+    2026-11-08：B 收录时先查一圈"是不是在册的同一条"（关键词 -> 台账检索 -> 秘书认定）。
+    这一份夹具没有模型 ⇒ 给 B 一个"挑得出词、查到过、不是同一条"的离线替身，
+    让判据照跑而不是把闸摘掉。
+    """
+    from agentflow import secretary as _SEC
+
+    b = AgentB(store, extractor=None, extract_text=None, config={},
+               secretary=_SEC.Secretary("B", root=store.root, store=store,
+                                        seam=SameSearchSeam(), enable_model=True))
     return AgentD(store, config={"workspace_root": store.root}, b=b)
 
 
