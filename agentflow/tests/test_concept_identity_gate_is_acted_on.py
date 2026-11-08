@@ -457,3 +457,112 @@ def test_the_proof_kind_refusal_teaches_what_to_do_next(
     assert refused.get("kind") == SEC.PROOF_KIND_UNJUDGED, refused
     text = str(refused.get("error") or "")
     assert "改法" in text and "证法" in text, text
+
+
+# ============================================================ 入口 4：agent_b.run_once.resolve_concept
+
+_QUOTE = "An abelian group is a group in which the commutative law holds."
+
+
+class _StubExtractor:
+    """确定性抽取器替身：交回预设的概念草稿（不调模型、不读 PDF）。"""
+
+    def __init__(self, concepts=()):
+        self._concepts = list(concepts)
+        self.calls = 0
+
+    def extract(self, doc, lit_id, meta):
+        self.calls += 1
+        return list(self._concepts), []
+
+
+def _one_paper(st: Store, lit_id: str = "0000") -> None:
+    from conftest import add_literature, write_library_file
+
+    write_library_file(st, f"{lit_id}/a.txt", _QUOTE)
+    add_literature(st, lit_id, title="A", path=f"{lit_id}/a.txt")
+
+
+def _agent_b(st: Store, concepts) -> object:
+    from agentflow.agent_b import AgentB
+    from agentflow.extract import extract_text
+    from agentflow.llm import ConceptDraft
+
+    drafts = [ConceptDraft(name=c["name"], definition=c["definition"], aliases=[],
+                           source_lit_id="0000") for c in concepts]
+    return AgentB(st, extractor=_StubExtractor(drafts), extract_text=extract_text,
+                  config={"lease_seconds": 900, "max_attempts": 3})
+
+
+def _concept_rows(st: Store) -> list[dict]:
+    return [dict(r) for r in st.rows("statements") if str(r.get("kind") or "") == "concept"]
+
+
+def _identity_details(res: dict) -> list[dict]:
+    return [d for d in (res.get("details") or []) if d.get("stage") == "concept_identity"]
+
+
+def test_a4_run_once_merges_a_synonym_without_a_second_row(
+        tmp_path: pathlib.Path) -> None:
+    """a（入口 4）：B 消化文献时遇到同义概念 ⇒ 并入、不落第二行、不发号。
+
+    改前红：`resolve_concept` 只按名字 `find_concept`，闸判出的 `same` 被忽略 ⇒
+    另发一个号、落第二行（真机 mp3-r2 的形态）。
+    """
+    st = _ws(tmp_path)
+    first = CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
+    sid = str(first.get("stmt_id") or "")
+    _one_paper(st)
+    before_rows, before_count = len(_concept_rows(st)), _counter(st)
+    res = _agent_b(st, [{"name": ALT_LABEL, "definition": REAL_DEF_2}]).run_once()
+    out = res.to_dict()
+    assert int(out.get("concepts_created") or 0) == 0, out
+    assert int(out.get("concepts_reused") or 0) == 1, out
+    assert len(_concept_rows(st)) == before_rows == 1, [
+        r.get("label") for r in _concept_rows(st)]
+    assert _counter(st) == before_count == 1, (_counter(st), before_count)
+    details = _identity_details(out)
+    assert details, out.get("details")
+    merged = [d for d in details if d.get("concept_action") == "merged"]
+    assert merged and str(merged[0].get("same_as") or "") == sid, details
+    for key in ("checked", "state", "same_as", "reason"):
+        assert key in merged[0], merged[0]
+    assert merged[0].get("checked") is True and merged[0].get("state") == "same", merged[0]
+
+
+def test_b4_run_once_refuses_unjudged_without_a_row_or_an_id(
+        tmp_path: pathlib.Path) -> None:
+    """b（入口 4）：判不了 ⇒ 受控拒、0 新行、counters 不动（不占号）。"""
+    st = _ws(tmp_path)
+    CR.upsert(st, label="群", definition="概念（群）：带运算的集合。")
+    _one_paper(st)
+    before_rows, before_count = len(_concept_rows(st)), _counter(st)
+    res = _agent_b(st, [{"name": UNJUDGEABLE_LABEL,
+                         "definition": "设 Y 是一个拓扑空间。"}]).run_once()
+    out = res.to_dict()
+    assert int(out.get("concepts_created") or 0) == 0, out
+    assert int(out.get("concepts_refused") or 0) == 1, out
+    assert len(_concept_rows(st)) == before_rows == 1, _concept_rows(st)
+    assert _counter(st) == before_count, (_counter(st), before_count)
+    details = _identity_details(out)
+    assert details and details[0].get("refused_code") == SEC.CONCEPT_IDENTITY_UNJUDGED, details
+    assert details[0].get("checked") is False and details[0].get("state") == "", details
+    assert str(details[0].get("reason") or ""), details
+    assert str(details[0].get("same_as") or "") == "", details
+
+
+def test_c4_run_once_still_creates_a_different_concept(tmp_path: pathlib.Path) -> None:
+    """c（正控，入口 4）：真不同 / 在册 0 条 ⇒ 照常发号建行（不是一律拒、一律并）。
+
+    新建那一档不另落 `concept_identity` 读数（`details` 截前 20 条，一条概念一条会把
+    配额拒绝那几条挤掉）：它的处置由 `concepts_created` 与盘上那一行读。
+    """
+    st = _ws(tmp_path)
+    _one_paper(st)
+    res = _agent_b(st, [{"name": REAL_LABEL, "definition": REAL_DEF_1}]).run_once()
+    out = res.to_dict()
+    assert int(out.get("concepts_created") or 0) == 1, out
+    rows = _concept_rows(st)
+    assert len(rows) == 1, rows
+    assert _counter(st) == 1, _counter(st)
+    assert _identity_details(out) == [], _identity_details(out)

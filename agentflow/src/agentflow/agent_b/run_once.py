@@ -261,22 +261,70 @@ class _RunOnce:
             relation_rows = tx.rows("relations")
             touched: set[str] = set()
 
+            def _merge_aliases(existing: dict, name: str,
+                               aliases: Iterable[str] | None) -> None:
+                # 合并别名（需求未要求，但别名不合并会导致后续同义名重复建概念）
+                merged = S.sorted_unique(list(existing.get("aliases") or [])
+                                          + [name] + list(aliases or []))
+                merged = [a for a in merged
+                          if T.normalize(a) != (existing.get("normalized_name") or "")]
+                if merged == (existing.get("aliases") or []):
+                    return
+                existing["aliases"] = merged
+                existing["updated_at"] = S.now_iso()
+                # 一处调用同时办两件事：老表还在时先写老表那一份，再同步新标准
+                # （同一个号）；老表已退役 ⇒ 只写新标准。见 conceptrows。
+                _CR.upsert_legacy_shaped(tx, existing, actor=self.actor,
+                                         note="alias_merge")
+
+            def _refuse_concept(name: str, why: str) -> str:
+                res.concepts_refused += 1
+                res.details.append({
+                    "lit_id": lit_id, "stage": "concept_identity",
+                    "refused": str(name),
+                    "refused_code": "concept_identity_unjudged",
+                    "concept_action": "refused", "checked": False, "state": "",
+                    "same_as": "", "candidates": [], "why": why, "reason": why,
+                })
+                return ""
+
             def resolve_concept(name: str, definition: str = "", aliases: Iterable[str] | None = None) -> str:
                 nonlocal concept_rows
                 existing = D.find_concept(concept_rows, name, list(aliases or []))
                 if existing is not None:
-                    # 合并别名（需求未要求，但别名不合并会导致后续同义名重复建概念）
-                    merged = S.sorted_unique(list(existing.get("aliases") or []) + [name] + list(aliases or []))
-                    merged = [a for a in merged if T.normalize(a) != (existing.get("normalized_name") or "")]
-                    if merged != (existing.get("aliases") or []):
-                        existing["aliases"] = merged
-                        existing["updated_at"] = S.now_iso()
-                        # 一处调用同时办两件事：老表还在时先写老表那一份，再同步新标准
-                        # （同一个号）；老表已退役 ⇒ 只写新标准。见 conceptrows。
-                        _CR.upsert_legacy_shaped(tx, existing, actor=self.actor,
-                                                 note="alias_merge")
+                    _merge_aliases(existing, name, aliases)
                     res.concepts_reused += 1
                     return existing["concept_id"]
+                # 2026-11-08（D2 后门）：先判同一性、再发号。`conceptrows.upsert`
+                # 那条老路的判词在发号之后，判不了只能放过（后门）或留 `id_gap`；
+                # 这里在 `alloc_id` 之前过同一个闸（唯一判据 `same_concept`），
+                # 处置按 `concept_identity_action` 统一折算（唯一折算点）：
+                # same ⇒ 并入新标准那一条（不新建、不发号）；判不了 ⇒ 受控拒；其余照建。
+                from ..secretary import concept_identity_action as _concept_action
+                from ..secretary import concept_identity_gate as _concept_gate
+                _gate = _concept_gate(tx, label=name, full=definition)
+                _act = _concept_action(_gate)
+                if _act["concept_action"] == "refused":
+                    return _refuse_concept(name, str(_act.get("reason") or ""))
+                if _act["concept_action"] == "merged":
+                    same_as = str(_act.get("same_as") or "")
+                    target = next((r for r in concept_rows
+                                   if str(r.get("concept_id") or "") == same_as), None)
+                    if target is None:
+                        # 判 same 却指不到一条可并的行 ⇒ 不拿"读不到"冒充"不是同一条"。
+                        return _refuse_concept(
+                            name, ("闸判 same 却指不到一条可并的在册概念行（stmt:"
+                                   f"{same_as} 在事务快照里读不到）⇒ 受控拒：不新建、不合并"))
+                    _merge_aliases(target, name, aliases)
+                    res.concepts_reused += 1
+                    res.details.append({
+                        "lit_id": lit_id, "stage": "concept_identity",
+                        "concept_action": "merged", "merged": str(name),
+                        "same_as": same_as, "checked": True, "state": "same",
+                        "candidates": [str(x) for x in (_act.get("candidates") or [])],
+                        "reason": str(_act.get("reason") or ""),
+                    })
+                    return same_as
                 # ---- 概念配额（2026-10-21，本批缺陷一第三处）：超上限「受控拒绝」，
                 # 不静默丢。拒绝时返回空串，调用方（关系那一段）据此跳过这一条关系，
                 # 并把"因为配额被推迟"写进 details —— 于是"这一轮写了多少、还差多少"
@@ -291,22 +339,6 @@ class _RunOnce:
                     return ""
                 # 概念号与命题号是同一个号空间（业主 D2「同表同分配器不可能撞号」）
                 # ⇒ 这里从 `stmt` 发号；落刀之后 `concept` 这一档连计数器都没有了。
-                #
-                # 2026-11-08（D2 后门）：先判同一性、再发号。`conceptrows.upsert`
-                # 那条老路的判词在发号之后，判不了只能放过（后门）或留 `id_gap`；
-                # 这里在 `alloc_id` 之前过同一个闸（唯一判据 `same_concept`），
-                # 没判成 ⇒ 这一条概念受控拒、不占号（关系那一段据此跳过它）。
-                from ..secretary import concept_identity_gate as _concept_gate
-                _gate = _concept_gate(tx, label=name, full=definition)
-                if not _gate.get("checked"):
-                    res.concepts_refused += 1
-                    res.details.append({
-                        "lit_id": lit_id, "stage": "concept_identity",
-                        "refused": str(name),
-                        "refused_code": "concept_identity_unjudged",
-                        "why": str(_gate.get("reason") or ""),
-                    })
-                    return ""
                 cid = tx.alloc_id("stmt")
                 row = S.Concept(
                     concept_id=cid,
@@ -331,6 +363,10 @@ class _RunOnce:
                 # 却因为写死 `own_result` 被读成"我们自己的结果"（本批缺陷一第二处）。
                 _CR.upsert_legacy_shaped(tx, d, actor=self.actor, note="created")
                 res.concepts_created += 1
+                # 新建那一档不再另落一条 `concept_identity` 读数：`details` 是有限读数面
+                # （`to_dict` 截前 20 条），一条概念一条 identity 行会把配额拒绝那几条
+                # 挤出去（"静默丢"的形态）。新建是默认处置，`concepts_created` 已经数得清；
+                # 需要读 `checked/state/same_as/reason` 的两档是 merged / refused（下面各一条）。
                 return cid
 
             # 1) 显式概念草稿先建（它们带定义，是概念的权威来源）
