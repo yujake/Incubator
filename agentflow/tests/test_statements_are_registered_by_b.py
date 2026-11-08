@@ -157,7 +157,9 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
 
     st = _world(tmp_path)
 
-    def _judge(self, kind, context, task_id=""):
+    # 2026-11-08：`judge` 多了一个 `note=` 读数目（同一类判定有两问时要分得开）；
+    # 替身必须与真签名同形，否则绑定实参就 TypeError、判词一条都进不来。
+    def _judge(self, kind, context, task_id="", note=""):
         return {"checked": True, "decision": "合格", "nontriviality": 2,
                 "nontriviality_basis": "夹具判词", "reason": "夹具判词",
                 "cost": {"ledger": "", "reason": "夹具"}}

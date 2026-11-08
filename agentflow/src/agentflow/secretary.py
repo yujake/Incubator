@@ -3123,8 +3123,12 @@ class Secretary:
     #: 两处各写一份的话，"加了一类判断却忘了给它词表"会静默落进 `DECISIONS` 的校验里。
     JUDGE_KINDS = tuple(JUDGE_VERDICTS)
 
-    def judge(self, kind: str, context: Mapping[str, Any], *, task_id: str = "") -> dict[str, Any]:
+    def judge(self, kind: str, context: Mapping[str, Any], *, task_id: str = "",
+              note: str = "") -> dict[str, Any]:
         """判断类：用本智能体自己的缝做一次模型调用，把结论落台账。
+
+        `note` 是这一次调用的读数目（缺省 `secretary:<kind>`）：同一类判定有两问
+        （挑词 / 认定）时，读数要分得开哪一问花的那一笔钱。判据本身仍按 `kind`。
 
         判断类别（`draft/53` §10 的三条"改判给秘书"，加业主 2026-10-14 裁决第 12 条前半）：`duplicate_retry`
         （同 key 的既有终态行算重复还是正当重试）、`tool_name`（错名映到哪一个候选，或一个都不映）、
@@ -3178,7 +3182,8 @@ class Secretary:
             # 十个角色的循环那条路（`agent_loop`）用的就是同一个参数。
             data, call = self.seam.ask_json(_judge_material(context),
                                             system=_judge_system(kind),
-                                            task_id=task_id, note=f"secretary:{kind}")
+                                            task_id=task_id,
+                                            note=note or f"secretary:{kind}")
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错 ⇒ 没查成 + 留痕
             return self._record_judge(kind, context, {
                 "checked": False, "reason": f"调用失败：{type(exc).__name__}: {exc}",
@@ -6948,31 +6953,37 @@ class Secretary:
 
     # ------------------------------------------------------------ 命题同一性（模型判）
 
-    def _proposition_candidates(self, full: str, *,
-                                rows: Iterable[Mapping[str, Any]] | None = None
-                                ) -> list[dict[str, Any]]:
-        """粗筛交给秘书看的候选（命题性的、可用的、有号有正文的那几行）。
+    def _searchable_statement_rows(self, rows: Iterable[Mapping[str, Any]] | None = None
+                                   ) -> tuple[list[dict[str, Any]], str]:
+        """可检索的命题池（active / 命题性 / 有号有正文）与"读不出来"的理由。
 
-        过滤的三条与 `_same_proposition_candidate` 逐字同源（它守的是同一件事，只是那一格
-        在"没有模型"时兜底）：只留命题性的 kind（`PROPOSITION_KINDS`：概念/定义不是命题）、
-        跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 的行（被否证/被取代的行不能当并入口）、
-        跳过没号或正文空的行。排序与截断交给 `propositionkey.candidates_for`（唯一一处）。
+        过滤三条与 `_same_proposition_candidate` 逐字同源（它守的是同一件事，只是那一格
+        在"没有模型"时兜底）：只留命题性的 kind（概念/定义不是命题）、跳过
+        `schema.STATEMENT_UNUSABLE_STATUSES` 的行（被否证/被取代的行不能当并入口）、
+        跳过没号或正文空的行。
+
+        三态：`(池, "")` = 读成了（池可能是空表：那是"查过、0 条可检索"）；
+        `([], 理由)` = 读不成（调用方 fail-closed，不许折成"没有同一条"）。
+
+        `rows` 给了就用调用方递进来的那一批：它在这里的身份是「检索的池」，不是候选 ——
+        候选仍由关键词决定（业主 2026-11-08：「语义判定……应该是主动查询」）。
         """
         pool = rows
         if pool is None:
-            # 没把候选递进来 ⇒ 这一步只能现读台账；它不是"读了没有"，
-            # 真读坏的那一档走下面 `except`（并留 `_log` 一行）。
             store = getattr(self, "store", None)
             if store is None:
-                # 连 store 都没有 ⇒ 候选真的不存在（调用方据 basis 说清这一格，三态）。
-                return []
+                return [], ("这一名秘书没有 store ⇒ 命题台账读不出来（不是「没有同一条」）"
+                            " ⇒ 这一问没判成")
             try:
-                pool = store.rows("statements")
-            except Exception as exc:  # noqa: BLE001 —— 读不到就没有候选（调用方据 basis 说清）
-                self._log(f"命题候选读不出来：{type(exc).__name__}: {exc}")
-                return []
+                pool = [dict(r) for r in store.rows("statements")]
+            except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是"没有"）
+                self._log(f"命题台账读不出来：{type(exc).__name__}: {exc}")
+                return [], (f"statements 台账读不出来（{type(exc).__name__}: {exc}）"
+                            " ⇒ 这一问没判成（不是「没有同一条」）")
         keep: list[dict[str, Any]] = []
         for r in pool:
+            if not isinstance(r, Mapping):
+                continue
             if not str(r.get("stmt_id") or "").strip():
                 continue
             if not _is_proposition_kind(r.get("kind")):
@@ -6982,33 +6993,89 @@ class Secretary:
             if not str(r.get("statement_full") or "").strip():
                 continue
             keep.append(dict(r))
-        # 候选里也带上"这条已有几份证明"：秘书凭它一眼看出"这是同一个定理的第几种证法"。
-        from . import verifications as VR   # 惰性：证明清单的唯一读口径
+        return keep, ""
 
-        picks = _PK.candidates_for(full, keep, limit=PROPOSITION_VERDICT_CANDIDATES)
-        by_id = {str(r.get("stmt_id") or ""): r for r in keep}
-        for pick in picks:
-            row = by_id.get(str(pick.get("stmt_id") or ""), {})
-            pick["proof_nos"] = [int(no) for no, _t in VR.proof_list(row)] if row else []
-            pick["statement_full"] = str(pick.get("statement_full") or "")[
-                :PROPOSITION_VERDICT_TEXT_CHARS]
-        return picks
+    def _statements_matching_keywords(self, keywords: Sequence[str], *,
+                                      rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        """按关键词在命题池里检索候选（确定性；只取候选，不判）。
+
+        ## 命中规则（业主 2026-11-08 的口径）
+        `label` 或 `statement_full` 里「包含」该关键词；大小写 / 全半角 / 标点按
+        `textutil.normalize` 的既有口径归一。多关键词任一命中即进候选，并记下命中的词
+        （读数）。排序按命中词数降序、同分按号升序 —— 这只是展示顺序，「不参与判定」；
+        词面相似度也不进这一格（业主：「检索只是取候选，不参与判定」）。
+
+        返回 `{"checked": True, "hits": [...], "checked_rows": n, "reason": ""}`；
+        每项带 `stmt_id` / `label` / `statement_full`（截到判定篇幅）/ `kind` /
+        `hit_words` / `proof_nos`，以及 `row`（整行，调用方并表时要用）。
+        """
+        from . import textutil as T          # 惰性：归一化口径的唯一实现
+        from . import verifications as VR    # 惰性：证明清单的唯一读口径
+
+        wanted = [(str(raw), T.normalize(str(raw))) for raw in (keywords or ())]
+        wanted = [(raw, norm) for raw, norm in wanted if norm]
+        hits: list[dict[str, Any]] = []
+        for row in rows:
+            sid = str(row.get("stmt_id") or "")
+            if not sid:
+                continue
+            label_n = T.normalize(str(row.get("label") or ""))
+            full_n = T.normalize(str(row.get("statement_full") or ""))
+            hit_words = [raw for raw, norm in wanted
+                         if norm in label_n or norm in full_n]
+            if not hit_words:
+                continue
+            hits.append({"stmt_id": sid, "label": str(row.get("label") or ""),
+                         "kind": str(row.get("kind") or ""),
+                         "statement_full": str(row.get("statement_full") or "")[
+                             :PROPOSITION_VERDICT_TEXT_CHARS],
+                         "hit_words": hit_words,
+                         "proof_nos": [int(no) for no, _t in VR.proof_list(dict(row))],
+                         "row": dict(row)})
+        hits.sort(key=lambda item: (-len(item["hit_words"]), item["stmt_id"]))
+        return {"checked": True, "hits": hits, "checked_rows": len(rows), "reason": ""}
+
+    @staticmethod
+    def _candidate_reading(hits: Sequence[Mapping[str, Any]],
+                           limit: int = PROPOSITION_VERDICT_CANDIDATES
+                           ) -> list[dict[str, Any]]:
+        """命中候选 ⇒ 判定的上下文那一份（截断 + 只留判定要看的格）。"""
+        return [{"stmt_id": str(h.get("stmt_id") or ""),
+                 "label": str(h.get("label") or ""),
+                 "proof_nos": list(h.get("proof_nos") or []),
+                 "statement_full": str(h.get("statement_full") or "")}
+                for h in list(hits)[: max(0, int(limit))]]
 
     def adjudicate_proposition(self, stmt_like: Mapping[str, Any] | str, *,
                                rows: Iterable[Mapping[str, Any]] | None = None,
+                               candidates: Sequence[Mapping[str, Any]] | None = None,
+                               note: str = "secretary:proposition_identity",
+                               use_cache: bool = True,
                                task_id: str = "") -> dict[str, Any]:
-        """这一条与在册的哪一条是同一个定理（一次模型调用，两档，按正文 sha256 缓存）。
+        """这一条与在册的哪一条是同一个定理（秘书主动查询 + 一次模型判定，两档，按正文 sha256 缓存）。
 
         业主 2026-10-24 的两句（唯一权威）：「不用机械判据，让秘书洗定理名，让秘书判」；
         「定理描述一致（什么条件推出什么结论），就是一个定理」；2026-11-08 又裁定：
         这一问不许有第三种结论 —— 读不清就是没判成，不是一种判词。
 
-        所以这一格做两件事，一次调用做完：
+        所以这一格做三件事、两次模型调用（挑词 + 判定；判定那一趟同时洗名）：
+        ⓪ 「秘书自己出查询」：`pick_statement_keywords` 挑数学关键词（一次调用），
+           代码按关键词在 `statements` 里检索 active 命题（`label` / `statement_full`
+           包含该词，归一按 `textutil`）—— 检索只取候选，「不把全表交给模型过一遍」；
+           调用方已经检索好候选（`candidates=`）时跳过这一问（兼容既有写法），
+           但走的是同一处判定；
         ① 洗定理名：`Sylow 三定理（路线一：类方程/强归纳 + 共轭作用，自证草稿，待 V 审签）`
            ⇒ `canonical_name = "Sylow 三定理"`，被洗掉的"路线一：…"进 `route`
            （它不丢：落进证明那一层，见 :func:`proof_route_of`）；
         ② 判是不是同一个命题：读条件与结论，只给 same / different，
            判 same 时点名并进哪一条（`same_as`）。
+
+        ## 检索读数（"它确实查过"必须看得见；2026-11-08）
+        `keywords` / `hits_total`（命中几条）/ `hits_named`（实际交给模型看的是哪几条，
+        带每条命中的词）/ `judged`（判定那一趟发没发）/ `same_as` / `why`。
+        台账里 0 条可检索命题、或关键词 0 命中 ⇒ `checked=True` + `verdict="different"`
+        （查过、没有同一条）；关键词没提取成 / 台账读不成 ⇒ `checked=False`（没判成，
+        上层 fail-closed；这一档不许退回"拿全表或相似度候选去猜"）。
 
         ## 两档与依据（返回）
         | 结局 | 返回 |
@@ -7026,8 +7093,9 @@ class Secretary:
         ## 为什么按正文 sha256 缓存（`out/secretary/proposition_verdicts.jsonl`）
         判定的对象是那段正文；同一条正文换个标签、重试、换个人再交一次，结论不会有别的
         答案，而每一次都要真发一次调用。真机 sylow4 的形态正好是"同一条定理交了三遍"——
-        没有这一层就是三笔钱买同一句话。只缓存判过的（`checked=True`）：没查成不许缓存，
-        那会把"这一次没查成"变成"以后都别查了"。
+        没有这一层就是三笔钱买同一句话。只缓存判成了的两档（`checked=True`）：没判成不许
+        缓存，那会把"这一次没判成"变成"以后都别查了"。缓存行也带检索读数，于是"沿用
+        那一次判定"时同样读得出它当年查过什么。
         `reused=True` + `cost.reason="没发调用（沿用缓存）"` 是"这一趟没花钱"的唯一读数。
         """
         if isinstance(stmt_like, str):
@@ -7042,6 +7110,10 @@ class Secretary:
             "basis": "", "reason": "", "label": label, "kind": kind,
             "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
             "reused": False, "cached": False, "statement_sha256": "",
+            #: 检索读数（2026-11-08 主动查询）：关键词 / 命中几条 / 实际交给模型看的是
+            #: 哪几条（带每条命中的词）/ 判定那一趟发没发 / 一句话为什么。
+            "keywords": [], "hits_total": 0, "hits_named": [], "judged": False,
+            "why": "",
             #: 这一条判定用的是哪一条缝（`Secretary.model_source` 的三档读数：
             #: `body（…）` / `secretary（…）` / `none（…）`）。空串 = 这一名秘书是裸造的
             #: （`Secretary(...)` 没传 `seam=`），那一档就是"没有判断面"。
@@ -7097,29 +7169,101 @@ class Secretary:
                 cached_at=str(cached.get("at") or ""),
                 cached_label=str(cached.get("label") or ""),
                 cost={"ledger": "", "reason": "没发调用（沿用缓存：同一段正文判过一遍）"},
-                # 候选表照旧摆出来：读的人要能核对"沿用这一次判定的那批候选还在不在"。
-                candidates=self._proposition_candidates(full, rows=rows))
+                # 检索读数照旧摆出来（缓存行里存着那一次查过什么）；候选表不重算 ——
+                # 重算要再花一次挑词调用，而这一次的处置不取决于候选还在不在。
+                keywords=[str(x) for x in (cached.get("keywords") or ())],
+                hits_total=int(cached.get("hits_total") or 0),
+                hits_named=[dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
+                            for x in (cached.get("hits_named") or ())],
+                judged=bool(cached.get("judged")),
+                why=str(cached.get("why") or ""),
+                candidates=[])
             return self._with_adjudication_visibility(out)
         if cached:
             out["cache_ignored"] = (
                 f"台账里那一行判词 {cached_verdict!r} 不是两档里的一次判定"
                 "（历史行：旧的第三种结论词，或判 same 却没点名候选号）⇒ 不当缓存用，"
                 "这一趟重新判")
-        candidates = self._proposition_candidates(full, rows=rows)
-        out["candidates"] = candidates
+        # ---- 取候选：默认路径 = 秘书自己查（业主 2026-11-08：「应该是主动查询」）------
+        #
+        # 两档来源，处置不同：
+        # - `candidates=` 给了：调用方已经检索好（兼容既有写法），这一趟不自己查；
+        # - 没给：秘书自己挑关键词、自己在台账里检索。关键词那一问没成 ⇒ 没判成
+        #   （fail-closed），「不许」退回"拿全表/相似度候选去猜"。
+        #
+        # 没有候选（台账 0 条 / 关键词 0 命中）时「仍然发判定那一趟」：洗定理名
+        # （`canonical_name` / `route`）与判定是同一趟的输出，跳过它就会让"第一条命题
+        # 的 label 原样落盘"—— 那正是洗名要治的形态。这一档只省掉挑词那一问。
+        if candidates is not None:
+            supplied = [dict(c) for c in candidates
+                        if isinstance(c, Mapping) and str(c.get("stmt_id") or "").strip()]
+            for item in supplied:
+                item.setdefault("hit_words", [])
+                item.setdefault("proof_nos", [])
+                item["statement_full"] = str(item.get("statement_full") or "")[
+                    :PROPOSITION_VERDICT_TEXT_CHARS]
+            out.update(
+                keywords=[], hits_total=len(supplied),
+                hits_named=[{"stmt_id": str(h.get("stmt_id") or ""),
+                             "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
+                            for h in supplied[:PROPOSITION_VERDICT_CANDIDATES]],
+                candidates=list(supplied),
+                why=("调用方给了候选表 ⇒ 这一趟不再自己检索" if supplied
+                     else "调用方给的候选表为空 ⇒ 没有可比的条目（查过 0 条）"))
+            if not supplied:
+                # 兼容档：调用方已经查过一圈且明确给了空表 ⇒ 不再花一次调用（旧入口的语义）。
+                out.update(checked=True, verdict=_PK.STATE_DIFFERENT, judged=False,
+                           reason="查过：调用方给的候选表为空（0 条）⇒ 没有同一条",
+                           basis="查过：没有可比的候选 ⇒ 不同")
+                self._remember_proposition_verdict(out, full=full, label=label,
+                                                   task_id=task_id)
+                return self._with_adjudication_visibility(out)
+        else:
+            pool_rows, pool_problem = self._searchable_statement_rows(rows)
+            if pool_problem:
+                out.update(checked=False, verdict="", reason=pool_problem,
+                           why=pool_problem)
+                return self._with_adjudication_visibility(out)
+            if not pool_rows:
+                out["why"] = ("台账里没有可检索的 active 命题（读过了，0 条）"
+                              "⇒ 没有候选，判定直接判 different")
+            else:
+                kw = self.pick_statement_keywords(statement_full=full, label=label,
+                                                  kind=kind, task_id=task_id)
+                out["keywords"] = [str(x) for x in (kw.get("keywords") or ())]
+                out["keyword_checked"] = bool(kw.get("checked"))
+                out["why"] = str(kw.get("why") or "")
+                if not kw.get("checked"):
+                    out.update(
+                        checked=False, verdict="",
+                        reason=("关键词没提取成 ⇒ 这一问没判成（不新建、不合并、受控拒）："
+                                + str(kw.get("why") or "（没有给原因）")))
+                    return self._with_adjudication_visibility(out)
+                search = self._statements_matching_keywords(out["keywords"],
+                                                            rows=pool_rows)
+                hits = list(search.get("hits") or [])
+                out["hits_total"] = len(hits)
+                out["hits_named"] = [
+                    {"stmt_id": str(h.get("stmt_id") or ""),
+                     "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
+                    for h in hits[:PROPOSITION_VERDICT_CANDIDATES]]
+                out["candidates"] = hits
+                if not hits:
+                    out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在命题台账里"
+                                  "命中 0 条 ⇒ 没有候选")
         context = {
             # 这一条给三倍于候选的篇幅：它是要被判的那一条，缺了一半就没法判。
             "statement_full": full[: PROPOSITION_VERDICT_TEXT_CHARS * 3],
             "label": label,
             "kind": kind,
-            "candidates": [{"stmt_id": c["stmt_id"], "label": c["label"],
-                            "proof_nos": c.get("proof_nos") or [],
-                            "statement_full": c["statement_full"]} for c in candidates],
+            "candidates": self._candidate_reading(out["candidates"]),
             "how_to_judge": ("只比条件与结论；条件强弱不同 ⇒ different；"
                              "条件只是记号/等价改写 ⇒ same；"
+                             "候选表为空 ⇒ different（没有可并的对象）；"
                              "读不清就不给判词（不许猜，也不许给第三档）"),
         }
-        got = self.judge("proposition_identity", context, task_id=task_id)
+        got = self.judge("proposition_identity", context, task_id=task_id, note=note)
+        out["judged"] = True
         out["cost"] = dict(got.get("cost") or {})
         out["judged_elapsed_sec"] = got.get("elapsed_sec")
         if not got.get("checked"):
@@ -7145,7 +7289,7 @@ class Secretary:
         parts = [str(x).strip() for x in (got.get("basis") or []) if str(x).strip()]
         out["basis"] = "；".join(parts + ([out["reason"]] if out["reason"] else []))
         if out["verdict"] == _PK.STATE_SAME:
-            ids = [str(c["stmt_id"]) for c in candidates]
+            ids = [str(c["stmt_id"]) for c in out["candidates"]]
             # ---- 先归一化外壳，再判成员（真机 82，2026-11-01）
             #
             # 现场：模型判 same 时把号写成 `"['000003']"`（52 处 / 16 个会话行），
@@ -7179,14 +7323,33 @@ class Secretary:
                 return self._with_adjudication_visibility(out)
         if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
             return self._with_adjudication_visibility(out)
+        self._remember_proposition_verdict(out, full=full, label=label, task_id=task_id)
+        return self._with_adjudication_visibility(out)
+
+    def _remember_proposition_verdict(self, out: dict[str, Any], *, full: str,
+                                      label: str = "", task_id: str = "") -> None:
+        """把判成了的这一条落进缓存（写不成只留读数，不改这一趟的结论）。
+
+        只该在 `out["checked"]` 为真时调用：没判成的不许缓存 —— 那会把"这一次没判成"
+        变成"以后都别查了"，而缝是可能好起来的（与 `_statement_verdicts` 同一条纪律）。
+        """
+        if not out.get("checked"):
+            return
         try:
             row = append_proposition_verdict(
-                self.root, statement_full=full, verdict=out["verdict"],
-                canonical_name=out["canonical_name"], same_as=out["same_as"],
-                route=out["route"], label=label, condition=out["condition"],
-                conclusion=out["conclusion"], basis=out["basis"],
+                self.root, statement_full=full, verdict=str(out.get("verdict") or ""),
+                canonical_name=str(out.get("canonical_name") or ""),
+                same_as=str(out.get("same_as") or ""),
+                route=str(out.get("route") or ""), label=label,
+                condition=str(out.get("condition") or ""),
+                conclusion=str(out.get("conclusion") or ""),
+                basis=str(out.get("basis") or ""),
+                keywords=[str(x) for x in (out.get("keywords") or ())],
+                hits_total=int(out.get("hits_total") or 0),
+                hits_named=list(out.get("hits_named") or ()),
+                judged=bool(out.get("judged")), why=str(out.get("why") or ""),
                 role=str(self.role or ""), task_id=str(task_id or self.task_id or ""))
-            self._proposition_verdicts[key] = dict(row)
+            self._proposition_verdicts[_proposition_verdict_key(full)] = dict(row)
             out["cached"] = True
             out["cached_at"] = str(row.get("at") or "")
         except OSError as exc:
@@ -7194,7 +7357,6 @@ class Secretary:
             # 写不成意味着下一趟还要再花一次钱。
             out["cache_problem"] = f"{type(exc).__name__}: {exc}"
             self._log(f"命题判定台账没写成：{out['cache_problem']}")
-        return self._with_adjudication_visibility(out)
 
     @staticmethod
     def _with_adjudication_visibility(adj: Mapping[str, Any]) -> dict[str, Any]:
@@ -12725,14 +12887,19 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
                                same_as: str = "", route: str = "",
                                label: str = "", condition: str = "",
                                conclusion: str = "", basis: str = "",
+                               keywords: Sequence[str] = (), hits_total: int = 0,
+                               hits_named: Sequence[Mapping[str, Any]] = (),
+                               judged: bool = False, why: str = "",
                                role: str = "", task_id: str = "") -> dict[str, Any]:
     """追加一行判定读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
     只记判成了的两档结论（same / different）：没判成（没缝 / 开关关着 / 超时 / 坏 JSON /
-    词表外结论 / same 点不出号）不许缓存 —— 那会把"这一次没判成"变成"以后都别查了"，
-    而缝是可能好起来的（与 `_statement_verdicts` 同一条纪律）。
+    词表外结论 / same 点不出号 / 关键词没提取成）不许缓存 —— 那会把"这一次没判成"变成
+    "以后都别查了"，而缝是可能好起来的（与 `_statement_verdicts` 同一条纪律）。
 
     每行带 `statement_sha256`：读侧按它折叠出"这条正文最后一次判定是什么"，不必去猜行序。
+    检索读数（`keywords` / `hits_total` / `hits_named` / `judged` / `why`）也落这一行：
+    "沿用那一次判定"时，读的人同样看得到它当年查过什么（业主 2026-11-08：主动查询）。
     返回写下去的那一行（调用方拿它进返回值，不另拼一份）。
     """
     path = proposition_verdicts_path(root)
@@ -12748,6 +12915,11 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
            "condition": str(condition or ""),
            "conclusion": str(conclusion or ""),
            "basis": str(basis or ""),
+           "keywords": [str(x) for x in (keywords or ())],
+           "hits_total": int(hits_total or 0),
+           "hits_named": [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
+                          for x in (hits_named or ())],
+           "judged": bool(judged), "why": str(why or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）。
@@ -13169,7 +13341,7 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
     ## 账（2026-11-05，缺陷 3：这条缝没接电表）
 
     改前这一处造缝只传了 `owner_role/session_root/sid`，没传 `meter=` —— 而
-    `LlmSeam.for_secretary` 的 `**kw` 本来就支持它。后果是每条秘书判定都在
+    `LlmSeam.for_secretary` 的 `kw` 本来就支持它。后果是每条秘书判定都在
     `llmseam._charge_ledger` 的第一道闸上落 `{"charged": False, "reason": "no_meter"}`：
     现场 `temp/_five_verify_20261105/ws02/sessions/20261105.jsonl` 里 3 条 `llm_call`、
     `$0.002101`，而 `usage_ledger` 是 0 行 —— 这笔钱在 `reconcile_usage` 里既不是

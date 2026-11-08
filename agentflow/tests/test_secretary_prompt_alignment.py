@@ -357,6 +357,27 @@ DUTIES: dict[str, dict[str, object]] = {
                "没判成 ⇒ 这一轮受控拒 `proposition_form_refused`、不落成手稿登记条目 —— "
                "F 必须知道这一步有接住方，否则它会把「我交了」读成「已经登记了」",
     },
+    # p260/p261（2026-11-08，业主：「语义判定……应该是主动查询」）：B 的 policy 那一句
+    # 「收录先查『是不是在册的同一条』」是一句对角色的承诺（秘书会先查一圈；查到就更新
+    # 那一条、没查到才新注册）⇒ 按本文件纪律必须有一条职责认领它，否则方向二红。
+    # 真身 `Secretary.adjudicate_proposition`（秘书主动查询 + 两档判定；判定只有一处实现）；
+    # 生产调用点：`secretary.record_statement`（B 交内容那一笔）与
+    # `agent_b/register_statement._resolve_same_statement`（收录前那一圈）。
+    # 可见性 `conditional ("B",)`：这一圈只发生在 B 收录时，别的角色不经过它。
+    "same_statement_search": {
+        "code": "adjudicate_proposition",
+        "where": "secretary.py",
+        "call": ("secretary.py::record_statement",
+                 "agent_b/register_statement.py 的 `_resolve_same_statement`"),
+        "visibility": "conditional",
+        "roles": ("B",),
+        "probe": ("收录先查", "是不是在册的同一条"),
+        "why": "收录前查一圈「是不是在册的同一条」：秘书自己挑数学关键词、按关键词在"
+               "命题台账里检索，再把命中候选交给判定（只有两档 same / different；判不了 ⇒ "
+               "没判成 ⇒ 受控拒、不新建不合并）。查到就不新注册（证明手稿追加 proof_no、"
+               "数值手稿更新数值证据流水）。B 必须知道这一步有接住方，否则它会把"
+               "「我交了」读成「这是一条新命题」",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，

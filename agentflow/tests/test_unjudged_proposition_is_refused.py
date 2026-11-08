@@ -68,6 +68,12 @@ class _Seam:
 
     def ask_json(self, prompt, *, system: str = "", task_id: str = "", note: str = ""):
         self.calls.append(str(note))
+        if str(note).endswith("statement_keywords"):
+            # 台账里铺着那条 Sylow 命题：这几个词把它捞出来（这一份测的不是检索）。
+            if self.timeout:
+                return None, _Call(False, "judge_timeout", "打桩：这一趟没查成")
+            return ({"keywords": ["Sylow", "p-子群"],
+                     "why": "打桩：这两个数学词能把同义的那条捞出来"}, _Call())
         if self.timeout:
             return None, _Call(False, "judge_timeout", "打桩：这一趟没查成")
         data = {

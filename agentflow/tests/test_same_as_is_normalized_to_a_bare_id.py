@@ -56,8 +56,14 @@ class _Seam:
         self.calls: list[str] = []
 
     def ask_json(self, prompt, **kw):
-        self.calls.append(str(kw.get("note") or ""))
-        reply = self.replies.pop(0) if self.replies else {"decision": "unknown"}
+        note = str(kw.get("note") or "")
+        self.calls.append(note)
+        if note.endswith("statement_keywords"):
+            # 在册那条是弦长命题：这几个词把它捞出来（这一份测的是 same_as 归一化）。
+            return ({"keywords": ["弦长", "3-正则"],
+                     "why": "打桩：这两个数学词能把同义的那条捞出来"},
+                    type("C", (), {"ok": True, "problem": "", "detail": ""})())
+        reply = self.replies.pop(0) if self.replies else {"decision": ""}
         data = {"decision": str(reply.get("decision") or "unknown"),
                 "same_as": str(reply.get("same_as") or ""),
                 "canonical_name": str(reply.get("canonical_name") or "弦长非常值"),

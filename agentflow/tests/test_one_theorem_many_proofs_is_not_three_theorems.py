@@ -203,7 +203,13 @@ class _FakeSeam:
         self.calls: list[str] = []
 
     def ask_json(self, prompt, **kw):
-        self.calls.append(str(kw.get("note") or ""))
+        note = str(kw.get("note") or "")
+        self.calls.append(note)
+        if note.endswith("statement_keywords"):
+            # 秘书主动查询的第一步（2026-11-08）：打桩给出这一批夹具共享的数学词。
+            # 它们同时命中 Sylow 那几条、弦长那一对与中心引理（宁可多捞，判定按名判）。
+            return ({"keywords": ["Sylow", "p-子群", "弦长", "正则"],
+                     "why": "打桩：这几个数学词能把同义的那条捞出来"}, self._Call())
         if self.mode == "off":
             return None, self._Call(False, "judge_timeout", "打桩：这一趟没查成")
         return self._reply(_material(prompt)), self._Call()
@@ -395,8 +401,12 @@ def test_b_three_routes_become_one_statement_with_three_proofs(
         assert got.get("matched_by") == SEC.MERGED_BY_ADJUDICATION, got
         assert got.get("stmt_id") == SID, got
         assert "并入已有命题" in str(got.get("note") or ""), got.get("note")
-    # 三次判定三次调用（三条正文各不相同 ⇒ 缓存不该命中）；每一次都留了凭据。
-    assert len(seam.calls) == 3, seam.calls
+    # 三次判定三次调用（三条正文各不相同 ⇒ 缓存不该命中）；第一次台账是空的，所以
+    # 只有后两次多一次"挑词"（主动查询，2026-11-08：先挑词、再检索、再判定）。
+    judge_calls = [c for c in seam.calls if c.endswith("proposition_identity")]
+    keyword_calls = [c for c in seam.calls if c.endswith("statement_keywords")]
+    assert len(judge_calls) == 3, seam.calls
+    assert len(keyword_calls) == 2, seam.calls
     rows = _rows(st)
     assert len(rows) == 1, f"同一条定理的三种路线落成了 {len(rows)} 条命题行"
     row = rows[0]
