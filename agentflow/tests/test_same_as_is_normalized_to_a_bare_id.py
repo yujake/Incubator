@@ -15,8 +15,8 @@
 |---|---|---|
 | a | 裸号 / 列表串 / 带空白三种写法都归成裸号，verdict 保持 same | 改前 `"['000000']"` 与 `" 000000 "` 都不等于候选号 ⇒ unknown |
 | b | 同一命题的两种写法各交一次：第二次并进既有行、不新建 | 改前第一次判 different（打桩）、第二次判 same 但号被外壳挡住 ⇒ 落第二行 |
-| c | 多元素列表不猜：verdict unknown，reason 说"给了 2 个号" | 改前 reason 只说"不是候选表里的号"，数不出模型给了几个 |
-| d | 不存在的号仍 unknown（不放宽"指不出来就不并"这条纪律） | 改前与 c 同一条文案，分不出"号不存在"与"号没归一化" |
+| c | 多元素列表不猜：没判成（`checked=False`、判词空），reason 说"给了 2 个号" | 改前 reason 只说"不是候选表里的号"，数不出模型给了几个；且把它折成一种结论 |
+| d | 不存在的号仍没判成（不放宽"指不出来就不并"这条纪律） | 改前与 c 同一条文案，分不出"号不存在"与"号没归一化" |
 
 边界：全部 tmp 工作区、零真实模型调用（判词由打桩的缝给）；不读写 `projects/`。
 """
@@ -178,14 +178,15 @@ def test_the_second_submission_merges_instead_of_creating_a_row(tmp_path):
 
 
 def test_a_multi_element_list_is_not_guessed_and_says_how_many(tmp_path):
-    """c：`"['000000', '000001']"` ⇒ unknown，reason 点名"给了 2 个号"。
+    """c：`"['000000', '000001']"` ⇒ 没判成（`checked=False`），reason 点名"给了 2 个号"。
 
-    改前红：同一句"不是候选表里的号" —— 读的人看不出模型给了几个号，
-    也无从判断"这个坏值是模型写坏了还是框架读坏了"。
+    2026-11-08（业主：「没有判不了」）：这一档以前降成第三种结论再照旧落一行；
+    现在它是「没判成」：判词为空、不并、也不新建（上层受控拒）。
     """
     st, row = _first_row(tmp_path)
     got = _adjudicate(st, "['%s', '000001']" % row["stmt_id"])
-    assert got["verdict"] == "unknown", got
+    assert got["checked"] is False, got
+    assert got["verdict"] == "", got
     assert got["same_as"] == "", got
     assert "2 个号" in str(got.get("reason") or ""), got
 
@@ -194,13 +195,14 @@ def test_a_multi_element_list_is_not_guessed_and_says_how_many(tmp_path):
 
 
 def test_an_id_outside_the_candidates_stays_unknown(tmp_path):
-    """d：归一化后仍不在候选集 ⇒ unknown（纪律不改：指不出来就不并）。
+    """d：归一化后仍不在候选集 ⇒ 没判成（纪律不改：指不出来就不并、也不新建）。
 
-    改前红：同上一条的同一句文案；这一条钉的是"归一化不许变成放宽"。
+    这一条钉的是"归一化不许变成放宽"：外壳剥掉之后号还得真的在候选里，
+    否则这一趟就没有判词（不是"判过了、不同"）。
     """
     st, _row = _first_row(tmp_path)
     got = _adjudicate(st, "['000999']")
-    assert got["checked"] is True, got
-    assert got["verdict"] == "unknown", got
-    assert got["same_as"] == "000999", got
+    assert got["checked"] is False, got
+    assert got["verdict"] == "", got
+    assert got["same_as"] == "", got
     assert "不是候选表里的号" in str(got.get("reason") or ""), got

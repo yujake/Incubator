@@ -214,15 +214,24 @@ class _FakeSeam:
         name = _clean_name(label)
         route = _route(label)
         if self.mode in ("same", "different", "unknown"):
-            # 反真空的三根桩：恒判同一个 / 恒判不同 / 恒判不了。
-            word = self.mode
-            same_as = str(candidates[0]["stmt_id"]) if candidates else ""
-            return {"decision": word, "same_as": same_as if word == "same" else "",
+            # 反真空的三根桩：恒判同一个 / 恒判不同 / 恒给词表外的结论。
+            # `same` 只有在有候选时才点得出号：没有候选就给"不同" —— 判 same 却点不出号
+            # 在 2026-11-08 之后是「没判成」（不是一种判词），那会把这一根桩变成"整笔
+            # 受控拒"，反真空就演示不了"错并"这个后果了。
+            if self.mode == "same" and candidates:
+                word = "same"
+                same_as = str(candidates[0]["stmt_id"])
+            elif self.mode == "same":
+                word, same_as = "different", ""
+            else:
+                word, same_as = self.mode, ""
+            return {"decision": word, "same_as": same_as,
                     "canonical_name": name, "route": route,
                     "condition": "打桩：条件未读", "conclusion": "打桩：结论未读",
                     "reason": f"打桩：恒判 {word}", "basis": [f"打桩：{word}"]}
         if not name:
-            return {"decision": "unknown", "canonical_name": "", "route": route,
+            # 标签里读不出定理名 ⇒ 这一趟给不出判词（词表外，框架按没判成处理）。
+            return {"decision": "", "canonical_name": "", "route": route,
                     "reason": "标签里读不出定理名", "basis": ["条件：标签为空"]}
         hit = next((c for c in candidates
                     if _name_key(str(c.get("label") or "")) == _name_key(name)), None)
@@ -441,35 +450,35 @@ def test_b3_one_payload_with_three_proofs_still_lands_path_groups_one_two_three(
         f"stmt:{SID}", f"stmt:{SID}#p2", f"stmt:{SID}#p3"], deps
 
 
-# ============================================================ c) unknown ⇒ 不并、留 basis
+# ============================================================ c) 判不了 ⇒ 不并、也不新建
 
-def test_c_unknown_never_merges_and_leaves_its_basis(tmp_path: pathlib.Path) -> None:
-    """c：判不了 ⇒ 不并（负控：判不了不许猜），而且凭据留在盘上。
+def test_c_a_third_word_is_unjudged_and_writes_nothing(tmp_path: pathlib.Path) -> None:
+    """c：模型给词表外的结论 ⇒ 没判成 ⇒ 受控拒、盘上一行都不落。
 
     这一对写法（`FULL_A` / `FULL_A_KEY`）的 `proposition_key` 相同 —— 机械判据会并。
-    所以"不并"这句话在这里是有对象的：秘书判 unknown 必须压过机械判据。
+    2026-11-08（业主：「没有判不了」）之后，这一档既不是"并"也不是"不并后新建"：
+    它是「没判成」，整笔受控拒（`same_statement_unjudged`），一行都不写。
+
+    改前红：那一档在词表里（`checked=True`）⇒ 第一次照旧新建、第二次不并再新建 ⇒ 两行。
     """
     st = _ws(tmp_path)
     seam = _FakeSeam(mode="unknown")
     b = _agent(st, seam)
+    # 先直接问一次秘书那一格：读数必须说清"试过、没判成、没有判词"。
+    direct = Secretary("B", root=st.root, store=st, seam=seam, enable_model=True)
+    probe = direct.record_statement(_own(FULL_A, "弦长引理"), role="B")
+    assert probe.get("refused") == "same_statement_unjudged", probe
+    pgrid = dict(probe.get("proposition_adjudication") or {})
+    assert pgrid.get("checked") is False and pgrid.get("attempted") is True, pgrid
+    assert pgrid.get("verdict") == "", pgrid
     first = _register(b, FULL_A, "弦长引理", PROOF_A)
     second = _register(b, FULL_A_KEY, "弦长引理", PROOF_D)
-    assert first.get("ok") is True, first
-    assert second.get("ok") is True, second
     assert PK.proposition_key(FULL_A) == PK.proposition_key(FULL_A_KEY), (
         "夹具前提：这一对在机械判据下是同一个键（否则 c 不 sharp）")
-    rows = _rows(st)
-    assert len(rows) == 2, f"判不了却被并进了 {2 - len(rows)} 条（应 2 条独立命题）"
-    assert second.get("merged") is not True, second
-    assert int(second.get("proof_no") or 1) == 1, second
-    adj = dict(second.get("adjudication") or {})
-    assert adj.get("checked") is True, "判不了是'查过了'，不是'没查成'（三态不许折平）"
-    assert adj.get("verdict") == "unknown", adj
-    assert str(adj.get("basis") or "").strip(), "判不了也必须留一句凭据"
-    trace = dict(rows[1].get("_proposition_adjudication") or {})
-    assert trace.get("verdict") == "unknown" and str(trace.get("basis") or ""), trace
-    assert _proof_nos(rows[0]) == [1] and _proof_nos(rows[1]) == [1], (
-        [_proof_nos(r) for r in rows])
+    for got in (first, second):
+        assert got.get("ok") is False, got
+        assert got.get("kind") == "same_statement_unjudged", got
+    assert len(_rows(st)) == 0, f"没判成却落了 {len(_rows(st))} 行（应一行都不落）"
 
 
 # ============================================================ d) 缓存：一条正文只判一次
@@ -563,35 +572,47 @@ def test_before_this_feature_exists_the_three_rows_come_back(
         "改前的形态应当是 label 里带着路线")
 
 
-# ============================================================ 护栏②：没查成退回机械判据
+# ============================================================ 护栏②：没判成不许悄悄换判据写盘
 
-def test_a_missing_model_falls_back_to_the_old_judge_and_still_writes(
+def test_a_missing_model_is_refused_instead_of_falling_back(
         tmp_path: pathlib.Path) -> None:
-    """护栏②：缝没查成（超时）⇒ 退回既有机械判据，写入路不瘫。
+    """护栏②：缝没查成（超时）⇒ 受控拒、一行都不落（不再退回机械判据）。
 
-    这一条守的是"新判据不是单点故障"：模型没接上时，两条表述几乎相同的命题仍然并成
-    一条 + 第 2 份证明（老口径），而返回值把这一档如实标成"没查成"（`checked=False`），
-    不许冒充"判过了、不同"。
+    2026-11-08 业主：「没有判不了」⇒ 判不了就是没判成 ⇒ 不新建、不合并、受控拒。
+    这一条守的是"模型没接上时也不许悄悄换一套判据去写盘"：改前这一档退回
+    `_same_proposition_candidate`（键 + 词面相似度），把两条表述几乎相同的命题并成
+    一条 + 第 2 份证明 —— 而"并"与"新建"都不是那一趟该做的决定。
+
+    同一条护栏的另一半（完全没有判断面时沿用 2026-11-04 的确定性兜底）也钉在这里：
+    `attempted=False` 与 `attempted=True` + `checked=False` 是两件事，不许折成一档。
     """
     st = _ws(tmp_path)
     seam = _FakeSeam(mode="off")
     b = _agent(st, seam)
+    # 直接问一次秘书那一格：读数必须说清"试过、没判成"。
+    direct = Secretary("B", root=st.root, store=st, seam=seam, enable_model=True)
+    probe = direct.record_statement(_own(FULL_A, "弦长引理"), role="B")
+    assert probe.get("refused") == "same_statement_unjudged", probe
+    pgrid = dict(probe.get("proposition_adjudication") or {})
+    assert pgrid.get("checked") is False, "没判成不许标成判过了"
+    assert pgrid.get("attempted") is True, pgrid
+    assert str(pgrid.get("reason") or ""), pgrid
     first = _register(b, FULL_A, "弦长引理", PROOF_A)
     second = _register(b, FULL_A_KEY, "弦长引理", PROOF_D)
-    assert first.get("ok") is True, first
-    assert second.get("ok") is True, second
-    assert second.get("merged") is True and int(second.get("proof_no") or 0) == 2, second
-    assert second.get("matched_by") == PK.BASIS_KEY, second
-    adj = dict(second.get("adjudication") or {})
-    assert adj.get("checked") is False, "没查成不许标成判过了"
-    assert str(adj.get("reason") or ""), adj
-    assert len(_rows(st)) == 1, _rows(st)
-    # 没有缝（默认的 Secretary）也是同一档：不写坏、不冒充。
+    for got in (first, second):
+        assert got.get("ok") is False, got
+        assert got.get("kind") == "same_statement_unjudged", got
+    assert len(_rows(st)) == 0, _rows(st)
+
+    # 另一半：完全没有判断面（裸装的秘书，`attempted=False`）⇒ 2026-11-04 的确定性兜底
+    # 仍然有效：键相同的等价改写照并、键不同的照常新建。两条的条件不同，处置也不同。
     sec = Secretary("B", root=st.root, store=st)
+    assert sec.seam is None
     got = sec.record_statement(_own("设 H 是交换群；则 H 的每个子群都正规。", "交换群引理"),
                                role="B")
     assert got.get("checked") is True and got.get("created") is True, got
-    assert dict(got.get("adjudication") or {}).get("checked") is False, got.get("adjudication")
+    grid = dict(got.get("adjudication") or {})
+    assert grid.get("checked") is False and grid.get("attempted") is False, grid
 
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份

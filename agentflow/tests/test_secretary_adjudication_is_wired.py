@@ -186,8 +186,9 @@ def test_without_a_seam_the_unjudged_grid_is_visible(tmp_path):
     assert "没有装配模型缝" in grid["reason"], grid
     # 裸造的秘书没有"缝从哪来"的读数（空串 = 这一名秘书是裸造的）
     assert grid["seam_source"] == "", grid
-    # 判不了不等于没返回值：判定本身仍然走完（三态 + 候选表），只是没查成。
-    assert got["checked"] is False and got["verdict"] == "unknown", got
+    # 没判成不等于没返回值：判定本身仍然走完（候选表 + 原因），只是没有判词。
+    # 2026-11-08 起判词只有两档，"没判成"的读数是 `verdict=""`（不再有第三种结论）。
+    assert got["checked"] is False and got["verdict"] == "", got
 
 
 def test_record_statement_also_surfaces_the_unjudged_grid(tmp_path):

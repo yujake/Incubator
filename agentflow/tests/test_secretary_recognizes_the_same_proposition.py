@@ -623,8 +623,11 @@ def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) 
     got = sec.record_statement({**_own("显然。"), "proof_text": "显然。", "bits": bits},
                                role="B")
     assert got.get("checked") is True and got.get("created") is True, got
-    assert got.get("proposition_state") == PK.STATE_UNKNOWN, got.get("proposition_state")
+    # 2026-11-08 起判词只有两档：这一笔没有判断面（`attempted=False`），所以
+    # `proposition_state` 是空串（没有判词），而"为什么判不了"照旧留在 reason 里。
+    assert got.get("proposition_state") == "", got.get("proposition_state")
     assert "判不了" in got.get("proposition_reason", ""), got.get("proposition_reason")
+    assert dict(got.get("adjudication") or {}).get("attempted") is False, got.get("adjudication")
     assert got.get("merged") is False, got
 
 

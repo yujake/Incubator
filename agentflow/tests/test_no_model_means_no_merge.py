@@ -143,15 +143,19 @@ def test_a_two_condition_strengths_stay_two_rows_without_the_model(
     # 变体留痕不许写：没有并进来，就没有"另一种写法"这回事。
     assert not list(rows[1].get("_proposition_matches") or []), rows[1].get("_proposition_matches")
 
-    # 读数：为什么没并（三态不许折平 —— 这是"没查成"，不是"查过了、不同"）。
-    assert second.get("proposition_state") == PK.STATE_UNKNOWN, second.get("proposition_state")
+    # 读数：为什么没并（不许折平 —— 这是"没有判断面"，不是"查过了、不同"）：
+    # 2026-11-08 起判词只有两档，"没判成"的读数是 `verdict=""` + `checked=False`，
+    # 不再有第三种结论词（`proposition_state` 的初值因此是空串）。
+    assert second.get("proposition_state") == "", second.get("proposition_state")
     adj = dict(second.get("adjudication") or {})
     assert adj.get("checked") is False, adj
+    assert adj.get("attempted") is False, adj
     assert adj.get("fail_closed") is True, adj
     why = str(adj.get("why_not_merged") or "")
     assert "不并" in why and "相似度" in why, why
     assert "0.8889" in why, f"读数要点名那一对的实际相似度（读的人才核得动）：{why!r}"
-    assert "没查成" in str(second.get("proposition_reason") or ""), second.get("proposition_reason")
+    assert "没有判断面" in str(second.get("proposition_reason") or ""), (
+        second.get("proposition_reason"))
 
 
 # ============================================================ b) 模型判 same ⇒ 仍能并

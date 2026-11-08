@@ -258,14 +258,17 @@ def _is_trivial_verdict(decision: Any) -> bool:
     """
     return _nontriviality_level(decision) == 0
 
-#: 「这一条与在册的哪一条是同一条命题」的结论词表（业主 2026-10-24 的准绳）。
+#: 「这一条与在册的哪一条是同一条命题」的结论词表（业主 2026-10-24 的准绳；2026-11-08 收成两档）。
 #:
-#: 业主逐字：「定理描述一致（什么条件推出什么结论），就是一个定理」。所以这一问只有三个
-#: 结论：同一组条件推出同一组结论（same）/ 不是（different）/ 条件或结论有一侧写不清、
-#: 判不了（unknown）。三态不是"两态 + 一个兜底"：unknown 的处置是"不并、留凭据"，它与
-#: different（"判过了，确实不是"）在台账上必须分得开 —— 折平就会把"没人判过"读成"判过
-#: 了、不同"，于是同一条定理又被拆成两条。
-PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different", "unknown")
+#: 业主逐字：「定理描述一致（什么条件推出什么结论），就是一个定理」；2026-11-08 又裁定：
+#: 这一问不许有第三种结论 —— 读不清就是没判成，不是一种判词。
+#:
+#: 所以这一问只有两个结论：同一组条件推出同一组结论（same）/ 不是（different）。
+#: 「没有第三种结论词」：读不清（缺条件 / 结论写不清 / same 点不出候选号 / 词表外结论 /
+#: 超时 / 坏 JSON / 没缝）不是一种判定，而是「没判成」 —— `checked=False`，上层按 fail-closed
+#: 处置（不新建、不合并、受控拒）。"没判成"与"判过了、不同"必须在盘上分得开：
+#: 前者是 `checked=False`，后者是 `checked=True` + `verdict="different"`。
+PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different")
 
 #: 命题同一性判定的旁支台账（append-only）：一行一次判定，键是命题正文的 sha256。
 #:
@@ -274,8 +277,11 @@ PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different", "unknown")
 #: "同一条定理交了三遍"，没有这一层就是三笔钱买同一句话。
 PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
-#: 交给秘书的候选上限（"按主题粗筛一小批"）：4 条。
+#: 一次判定最多把几条命中候选交给秘书看：4 条。
 #:
+#: 候选是秘书自己按关键词在台账里检索出来的命中项（见 `_search_statements_by_keywords`）；
+#: 命中多于这个数时只把前 4 条交给模型，`hits_total` 与 `hits_named` 两个读数把
+#: "命中了几条 / 实际给它看了哪几条"分开写清。
 #: 为什么不给更多：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名。
 #: 候选越多，每条能分到的字数越少 —— 而对"条件与结论是否一致"这件事，半条命题没有用。
 PROPOSITION_VERDICT_CANDIDATES = 4
@@ -1378,6 +1384,35 @@ PROPOSITION_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "coroll
 def _is_proposition_kind(kind: Any) -> bool:
     """这个 kind 算不算"命题性的"（决定它参不参与同一命题判定）。"""
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
+
+
+def _proposition_judgment_missing(kind: Any, adj: Mapping[str, Any]) -> str:
+    """这一次同一性判定能不能支撑"新建 / 合并"（返回非空 = 不能，值是为什么）。
+
+    ## 判据（业主 2026-11-08：「没有判不了」）
+    三条，顺序固定：
+    1. 不是命题性的 kind ⇒ 不适用（返回空串：概念那一档走 `same_concept`，不走这一问）；
+    2. 试过而没判成（`attempted=True` + `checked=False`：超时 / 坏 JSON / 词表外结论 /
+       same 点不出号 / 没有检索面）⇒ 受控拒：不新建、不合并。"没判成"不等于"不是同一条"，
+       拿它当 different 去新建一行，就是"既在账上又不在账上"的那种重复；
+    3. 判成了、但判词不在两档里 ⇒ 同上（防御：`judge()` 已经挡了一层）。
+
+    `attempted=False`（没缝 / 开关关着）并不在这里拒：那一档是"这一名秘书根本没有
+    判同一性这一路"，沿用 2026-11-04 的确定性兜底（只认确定性键相同）—— 把"没有判断面"
+    与"判定失败"折成同一档，会让裸装的测试工作区一笔都写不进去，而归因还指不到缝上。
+    """
+    if not _is_proposition_kind(kind):
+        return ""
+    if not adj.get("checked"):
+        if not adj.get("attempted"):
+            return ""
+        return ("这一条要查「是不是在册的同一条命题」，而这一问没判成 ⇒ 受控拒："
+                "不新建、不合并（没判成不等于「不是同一条」）："
+                + (str(adj.get("reason") or "") or "（没有给原因）"))
+    if str(adj.get("verdict") or "") not in PROPOSITION_VERDICTS:
+        return (f"这一次判定的判词 {str(adj.get('verdict') or '')!r} 不在两档 "
+                f"{list(PROPOSITION_VERDICTS)} 里 ⇒ 受控拒：不新建、不合并")
+    return ""
 
 
 #: `statements.bits` 一栏必须齐的 10 个键（写侧的唯一清单）。
@@ -6962,30 +6997,31 @@ class Secretary:
     def adjudicate_proposition(self, stmt_like: Mapping[str, Any] | str, *,
                                rows: Iterable[Mapping[str, Any]] | None = None,
                                task_id: str = "") -> dict[str, Any]:
-        """这一条与在册的哪一条是同一个定理（一次模型调用，三态，按正文 sha256 缓存）。
+        """这一条与在册的哪一条是同一个定理（一次模型调用，两档，按正文 sha256 缓存）。
 
         业主 2026-10-24 的两句（唯一权威）：「不用机械判据，让秘书洗定理名，让秘书判」；
-        「定理描述一致（什么条件推出什么结论），就是一个定理」。
+        「定理描述一致（什么条件推出什么结论），就是一个定理」；2026-11-08 又裁定：
+        这一问不许有第三种结论 —— 读不清就是没判成，不是一种判词。
 
         所以这一格做两件事，一次调用做完：
         ① 洗定理名：`Sylow 三定理（路线一：类方程/强归纳 + 共轭作用，自证草稿，待 V 审签）`
            ⇒ `canonical_name = "Sylow 三定理"`，被洗掉的"路线一：…"进 `route`
            （它不丢：落进证明那一层，见 :func:`proof_route_of`）；
-        ② 判是不是同一个命题：读条件与结论，给 same / different / unknown，
+        ② 判是不是同一个命题：读条件与结论，只给 same / different，
            判 same 时点名并进哪一条（`same_as`）。
 
-        ## 三态与依据（返回）
+        ## 两档与依据（返回）
         | 结局 | 返回 |
         |---|---|
         | 判同一 | `checked=True` + `verdict="same"` + `same_as=<stmt_id>` + `canonical_name` |
         | 判不同 | `checked=True` + `verdict="different"`（不并，新建） |
-        | 判不了 | `checked=True` + `verdict="unknown"`（不并，留 `basis`） |
-        | 没查成 | `checked=False` + `reason`（没缝 / 开关关着 / 超时 / 坏 JSON / 词表外结论） |
+        | 没判成 | `checked=False` + `verdict=""` + `reason`（没缝 / 开关关着 / 超时 / 坏 JSON / 词表外结论 / same 点不出号） |
 
-        `basis` 是那一趟的判词（条件一句 + 结论一句 + 一句理由），三态都要有：
-        "判不了"也必须留下"缺的是条件还是结论"，否则下一次还是判不了。
-        `same` 而 `same_as` 指不出一个候选号 ⇒ 当场降成 `unknown`：凭一个指不出来的号
-        合并，等于替它编一条依据（与"模型给的结论不在词表里就不采信"同一条纪律）。
+        没有第三种结论词。`basis` 是那一趟的判词（条件一句 + 结论一句 + 一句理由）；
+        `same` 而 `same_as` 指不出一个候选号 ⇒ 没判成（`checked=False`，不并也不新建）：
+        凭一个指不出来的号合并，等于替它编一条依据（与"模型给的结论不在词表里就不采信"
+        同一条纪律）。这一档以前会降成第三种结论再照旧新建一行 —— 那正是"既在账上又不在
+        账上"的形态，2026-11-08 起不许再出现。
 
         ## 为什么按正文 sha256 缓存（`out/secretary/proposition_verdicts.jsonl`）
         判定的对象是那段正文；同一条正文换个标签、重试、换个人再交一次，结论不会有别的
@@ -7000,7 +7036,8 @@ class Secretary:
         label = str(stmt_like.get("label") or "")
         kind = str(stmt_like.get("kind") or "theorem")
         out: dict[str, Any] = {
-            "checked": False, "verdict": _PK.STATE_UNKNOWN, "canonical_name": "",
+            #: 判词只有两档（`PROPOSITION_VERDICTS`）；空串 = 这一趟没判成（没有判词）。
+            "checked": False, "verdict": "", "canonical_name": "",
             "same_as": "", "route": "", "condition": "", "conclusion": "",
             "basis": "", "reason": "", "label": label, "kind": kind,
             "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
@@ -7016,11 +7053,14 @@ class Secretary:
             "seam_source": str(self.model_source or ""),
             #: 这一格到底有没有"试过"：有缝且开关开着才是试过。
             #:
-            #: 它与 `checked` 是两根轴（三态之外再分一层）：`attempted=False` 是"这一名
-            #: 秘书根本没有判同一性这一路"（没缝），`attempted=True` + `checked=False` 是
-            #: "试了、没查成"（超时 / 坏 JSON）。盘上要不要留痕由它决定 —— 没有缝的秘书
-            #: 写出来的行必须与改前逐字节相同（否则"这一段正文之前长什么样"被一个从来
-            #: 没发生过的判定改写了）。
+            #: 它与 `checked` 是两根轴：`attempted=False` 是"这一名秘书根本没有判同一性
+            #: 这一路"（没缝），`attempted=True` + `checked=False` 是"试了、没判成"
+            #: （超时 / 坏 JSON / same 点不出号 / 词表外结论）。「上层 fail-closed 的判据是
+            #: 这两根轴的交集」：试过而没判成 ⇒ 不新建、不合并、受控拒（见
+            #: `_merge_into_proposition`）。没有判断面的秘书走 2026-11-04 的确定性兜底
+            #: （只认确定性键相同），盘上要不要留痕也由这一格决定 —— 没有缝的秘书写出来的
+            #: 行必须与改前逐字节相同（否则"这一段正文之前长什么样"被一个从来没发生过的
+            #: 判定改写了）。
             "attempted": bool(self.seam is not None and self.enable_model),
         }
         if not _is_proposition_kind(kind):
@@ -7033,15 +7073,20 @@ class Secretary:
         key = _proposition_verdict_key(full)
         out["statement_sha256"] = key
         cached = self._proposition_verdicts.get(key) or proposition_verdict_of(self.root, full)
-        if cached:
+        cached_verdict = str((cached or {}).get("verdict") or "")
+        cached_same_as, _cached_n = normalize_same_as((cached or {}).get("same_as"))
+        # 只认判成了的两档：判 same 的还必须点得出号（否则那一行也不是一次判定）。
+        # 历史行（2026-11-08 之前）里可能有旧的第三种结论词 —— 它不许当缓存用：
+        # 那会把"那一次没判成"沿用到今天，而这一趟本来可以重新判（判据 c）。
+        if (cached and cached_verdict in PROPOSITION_VERDICTS
+                and (cached_verdict != _PK.STATE_SAME or bool(cached_same_as))):
             # 缓存里的坏值也要按同一把尺归一化：本趟 `proposition_verdicts.jsonl` 的
             # 第 6-9 行就是 `"['000001']"` 这一族，而同一段正文重交时读的正是它
             # （"判过一次就复用"这条纪律会让坏值一直活着）。只归一化外形，
             # 不重判 verdict —— 判词是那一趟的读数，改它等于替那一趟翻案。
-            cached_same_as, _n = normalize_same_as(cached.get("same_as"))
             out.update(
                 checked=True,
-                verdict=str(cached.get("verdict") or _PK.STATE_UNKNOWN),
+                verdict=cached_verdict,
                 canonical_name=str(cached.get("canonical_name") or ""),
                 same_as=cached_same_as,
                 route=str(cached.get("route") or ""),
@@ -7055,6 +7100,11 @@ class Secretary:
                 # 候选表照旧摆出来：读的人要能核对"沿用这一次判定的那批候选还在不在"。
                 candidates=self._proposition_candidates(full, rows=rows))
             return self._with_adjudication_visibility(out)
+        if cached:
+            out["cache_ignored"] = (
+                f"台账里那一行判词 {cached_verdict!r} 不是两档里的一次判定"
+                "（历史行：旧的第三种结论词，或判 same 却没点名候选号）⇒ 不当缓存用，"
+                "这一趟重新判")
         candidates = self._proposition_candidates(full, rows=rows)
         out["candidates"] = candidates
         context = {
@@ -7066,7 +7116,8 @@ class Secretary:
                             "proof_nos": c.get("proof_nos") or [],
                             "statement_full": c["statement_full"]} for c in candidates],
             "how_to_judge": ("只比条件与结论；条件强弱不同 ⇒ different；"
-                             "条件只是记号/等价改写 ⇒ same；写不清 ⇒ unknown"),
+                             "条件只是记号/等价改写 ⇒ same；"
+                             "读不清就不给判词（不许猜，也不许给第三档）"),
         }
         got = self.judge("proposition_identity", context, task_id=task_id)
         out["cost"] = dict(got.get("cost") or {})
@@ -7075,8 +7126,16 @@ class Secretary:
             out["checked"] = False
             out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
             return self._with_adjudication_visibility(out)
+        verdict = str(got.get("decision") or "")
+        if verdict not in PROPOSITION_VERDICTS:
+            # `judge()` 已经按词表挡了一层；这里再挡一层是防"别的类别借这一格"：
+            # 词表外的结论不是一种判定 ⇒ 没判成（不新建、不合并）。
+            out.update(checked=False, verdict="",
+                       reason=(f"模型给的结论 {verdict!r} 不在两档 "
+                               f"{list(PROPOSITION_VERDICTS)} 里 ⇒ 不采信：这一格没判成"))
+            return self._with_adjudication_visibility(out)
         out["checked"] = True
-        out["verdict"] = str(got.get("decision") or _PK.STATE_UNKNOWN)
+        out["verdict"] = verdict
         out["canonical_name"] = str(got.get("canonical_name") or "").strip()
         out["same_as"] = str(got.get("same_as") or "").strip()
         out["route"] = str(got.get("route") or "").strip()
@@ -7092,30 +7151,34 @@ class Secretary:
             # 现场：模型判 same 时把号写成 `"['000003']"`（52 处 / 16 个会话行），
             # 而下面这条成员判据逐字比 ⇒ 判了 same 也不并、照旧落新行
             # （重复对 000001/000004、000003/000005 就是这么来的）。
-            # 纪律不改：归一化后仍指不出候选号 ⇒ 不并（"凭一个指不出来的号合并，
-            # 等于替它编一条依据"这句话仍然成立）；多元素列表也不猜，只说清"你给了 N 个号"。
+            # 纪律不改：归一化后仍指不出候选号 ⇒ 没判成（2026-11-08 起不再降成
+            # 第三种结论）："凭一个指不出来的号合并，等于替它编一条依据"这句话仍然成立；
+            # 多元素列表也不猜，只说清"你给了 N 个号"。
             raw_same_as = str(out["same_as"] or "")
             normalized, how_many = normalize_same_as(raw_same_as)
             out["same_as"] = normalized
             if not normalized:
-                out["verdict"] = _PK.STATE_UNKNOWN
                 if how_many > 1:
-                    out["reason"] = (
-                        f"模型判 same，但 same_as 给了 {how_many} 个号（收到 {raw_same_as!r}）"
-                        f" ⇒ 不猜：并进哪一条是它的判断，框架替它挑一个等于替它表态；"
-                        f"要并请只点一个号（候选 {ids or '空'}）")
+                    why = (f"模型判 same，但 same_as 给了 {how_many} 个号"
+                           f"（收到 {raw_same_as!r}）⇒ 不猜：并进哪一条是它的判断，"
+                           f"框架替它挑一个等于替它表态；要并请只点一个号"
+                           f"（候选 {ids or '空'}）")
                 else:
-                    out["reason"] = (
-                        f"模型判 same，但 same_as 没给出可用的号（收到 {raw_same_as!r}）"
-                        f" ⇒ 不并：指不出候选号的合并等于替它编一条依据（候选 {ids or '空'}）")
-                out["basis"] = "；".join(parts + [out["reason"]])
-            elif normalized not in ids:
-                out["verdict"] = _PK.STATE_UNKNOWN
-                out["reason"] = (
-                    f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
-                    f" 不是候选表里的号"
-                    f"（候选 {ids or '空'}）⇒ 不并：凭一个指不出来的号合并，等于替它编一条依据")
-                out["basis"] = "；".join(parts + [out["reason"]])
+                    why = (f"模型判 same，但 same_as 没给出可用的号"
+                           f"（收到 {raw_same_as!r}）⇒ 没判成：指不出候选号的合并等于"
+                           f"替它编一条依据（候选 {ids or '空'}）")
+                out.update(checked=False, verdict="", same_as="", reason=why,
+                           basis="；".join(parts + [why]))
+                return self._with_adjudication_visibility(out)
+            if normalized not in ids:
+                why = (f"模型判 same，但 same_as={normalized!r}（原文 {raw_same_as!r}）"
+                       f" 不是候选表里的号（候选 {ids or '空'}）⇒ 没判成：凭一个指不出来的"
+                       "号合并，等于替它编一条依据")
+                out.update(checked=False, verdict="", same_as="", reason=why,
+                           basis="；".join(parts + [why]))
+                return self._with_adjudication_visibility(out)
+        if not out["checked"]:     # 防御：只有判成了的两档才许进缓存
+            return self._with_adjudication_visibility(out)
         try:
             row = append_proposition_verdict(
                 self.root, statement_full=full, verdict=out["verdict"],
@@ -7141,7 +7204,7 @@ class Secretary:
 
         改前这一格只活在 `checked` / `reason` 两个平铺的键里，而它们旁边紧挨着
         `verdict` / `canonical_name` / `basis` 那一组判词 —— 读的人（尤其是模型，
-        它只看工具返回的那一份 JSON）很容易把它们读成"判过了，结论是 unknown"。
+        它只看工具返回的那一份 JSON）很容易把它们读成"判过了，结论是某一档"。
         真机 sylow5 的后果就是：`out/secretary/proposition_verdicts.jsonl` 一次都没
         建出来，而会话里没有任何一格说"这一条判定根本没发生"。
 
@@ -7149,6 +7212,10 @@ class Secretary:
         - `checked`：判成了没有（`False` 不是说"不同"，是"没判"）；
         - `attempted`：有没有真的去判（没缝 ⇒ `False`，试了没成 ⇒ `True`）；
         - `seam_source`：这一条判定用的哪条缝（`none（…）` 就是没接线）。
+
+        检索读数（`keywords` / `hits_total` / `hits_named` / `judged`）也在这一格里：
+        "它确实自己查过一圈"必须与"判了没有"同时看得见（2026-11-08 业主：
+        「语义判定当前实现是秘书主动查询还是必须全过一遍？应该是主动查询」）。
 
         ## 为什么挂在这里而不是每个 `return` 自己写
 
@@ -7160,10 +7227,17 @@ class Secretary:
         out["proposition_adjudication"] = {
             "checked": bool(out.get("checked")),
             "attempted": bool(out.get("attempted")),
-            "verdict": str(out.get("verdict") or _PK.STATE_UNKNOWN),
+            "verdict": str(out.get("verdict") or ""),
             "reason": str(out.get("reason") or ""),
             "seam_source": str(out.get("seam_source") or ""),
             "reused": bool(out.get("reused")),
+            "keywords": [str(x) for x in (out.get("keywords") or ())],
+            "hits_total": int(out.get("hits_total") or 0),
+            "hits_named": [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
+                           for x in (out.get("hits_named") or ())],
+            "judged": bool(out.get("judged")),
+            "same_as": str(out.get("same_as") or ""),
+            "why": str(out.get("why") or ""),
         }
         return out
 
@@ -7176,8 +7250,8 @@ class Secretary:
         - `PROOF_ROUTES_KEY` 那一格 = {证明号: 一句话}：这条路线的说明。业主 2026-10-24：
           「路线写在证明这一层」—— 它从此不住在 label 里，也不再丢（洗名不是丢信息）。
         - `_proposition_adjudication = {verdict, basis, ...}`：这一条是凭哪一次判定落成
-          现在这样的。判 different / unknown 的也要落：只落 same 的记录，读的人就分不出
-          "判过了、不同"与"没人判过"（三态纪律在盘上也要分得开）。
+          现在这样的。判 different 的也要落：只落 same 的记录，读的人就分不出
+          "判过了、不同"与"没人判过"（没判成是 `checked=False`，与"判过了"必须分得开）。
         这两个键都不在 `schema.Statement` 里 —— store 落的是 JSON 行，`row_from_dict` 只取
         它认识的键（与命题并表痕迹 / `proof_history` 同一做法），所以不必动 schema。
         """
@@ -7942,10 +8016,10 @@ class Secretary:
             adjudication = dict(adjudication)
             out["adjudication_source"] = "register_statement:same_statement"
         out["adjudication"] = self._adjudication_reading(adjudication)
-        #: 判不了必须可见（2026-10-26）：`adjudication` 是那一趟的逐字读数，而这一格是
+        #: 没判成必须可见（2026-10-26）：`adjudication` 是那一趟的逐字读数，而这一格是
         #: "判了没有"的一句话（`checked` / `attempted` / `reason` / `seam_source`）。
         #: 为什么要两格：前者挨着 `verdict` / `basis` 那一组判词，读的人（模型只看工具
-        #: 返回的那份 JSON）容易把它读成"判过了、结论 unknown"；这一格单独命名，于是
+        #: 返回的那份 JSON）容易把它读成"判过了、结论是某一档"；这一格单独命名，于是
         #: "这一条判定根本没发生"在返回值里不可能被漏看。
         out["proposition_adjudication"] = dict(
             adjudication.get("proposition_adjudication") or {})
@@ -7979,15 +8053,15 @@ class Secretary:
     def _adjudication_reading(adj: Mapping[str, Any]) -> dict[str, Any]:
         """命题同一性判定的读数（进返回值与台账；不把内部候选表整份甩出去）。
 
-        三态在这一格里必须一眼能分辨：`checked=False` 是"没查成"（没缝 / 超时），
-        `verdict="unknown"` 是"查过了、判不了"。折平这两个会让"没人判过"看起来像
-        "判过了、确实不同"。
+        两档在这一格里必须一眼能分辨：`checked=False` 是"没判成"（没缝 / 超时 / 坏 JSON /
+        same 点不出号 / 词表外结论），`checked=True` + `verdict="different"` 是"查过了、
+        确实不是"。折平这两个会让"没人判过"看起来像"判过了、确实不同"。
         """
         got = dict(adj or {})
         return {
             "checked": bool(got.get("checked")),
             "attempted": bool(got.get("attempted")),
-            "verdict": str(got.get("verdict") or _PK.STATE_UNKNOWN),
+            "verdict": str(got.get("verdict") or ""),
             "canonical_name": str(got.get("canonical_name") or ""),
             "same_as": str(got.get("same_as") or ""),
             "route": str(got.get("route") or ""),
@@ -7998,10 +8072,18 @@ class Secretary:
             "reused": bool(got.get("reused")),
             "cached": bool(got.get("cached")),
             #: 这一条判定用哪条缝（三档见 `seam_for_secretary`）。没有缝时它连着为什么 ——
-            #: "判不了"的原因不能只活在秘书的台账里：调用方（B 的工具返回、直写路由的
+            #: "没判成"的原因不能只活在秘书的台账里：调用方（B 的工具返回、直写路由的
             #: detail）拿到的就是这一份读数。
             "seam_source": str(got.get("seam_source") or ""),
             "candidates": [str(c.get("stmt_id") or "") for c in (got.get("candidates") or [])],
+            #: 检索读数（"它确实自己查过"必须看得见，2026-11-08）：
+            #: 关键词 / 命中几条 / 实际交给模型看的是哪几条 / 判定那一趟发没发。
+            "keywords": [str(x) for x in (got.get("keywords") or ())],
+            "hits_total": int(got.get("hits_total") or 0),
+            "hits_named": [dict(x) if isinstance(x, Mapping) else {"stmt_id": str(x)}
+                           for x in (got.get("hits_named") or ())],
+            "judged": bool(got.get("judged")),
+            "why": str(got.get("why") or ""),
             "cost": dict(got.get("cost") or {}),
         }
 
@@ -9247,28 +9329,28 @@ class Secretary:
         | 档 | 谁说了算 | 命中 |
         |---|---|---|
         | `adjudication.checked`（秘书判成了） | 它：`same` + 点名的 `same_as` 且那一行还在/还可并 | 那一条 |
-        | 没查成（没缝 / 超时 / 坏 JSON / 正文截断） | fail-closed：只认「确定性键相同」这一档等价改写；词面相似度只排序、不决定并 | 键相同那一条 |
+        | 没有判断面（没缝 / 开关关着） | 2026-11-04 的确定性兜底：只认「确定性键相同」这一档等价改写；词面相似度不决定并 | 键相同那一条 |
 
-        三态读数全在这一处写（`adjudication` / `proposition_state` / `proposition_reason`）：
-        判 different / unknown 与"没查成"都不许折成"并"，也不许折成"查过了、不同"。
+        "试过而没判成"（`attempted=True` + `checked=False`）与"判了 same 却指不到一条
+        在册行"都不进这张表：它们由 `_merge_into_proposition` 按受控拒处置（2026-11-08
+        业主：「没有判不了」⇒ 判不了就是没判成，不许拿它去新建一行）。
+
+        读数全在这一处写（`adjudication` / `proposition_state` / `proposition_reason`）：
+        判 different 与"没判成"都不许折成"并"，也不许把"没判成"折成"判过了、不同"。
         「这一笔带不带证明正文」不参与这个判断（2026-11-04：没有正文的重复登记也要
         判归属）—— 它只决定命中之后落成"第 N 份证明"还是"一次重复读数"。
         """
         if adj.get("checked"):
-            verdict_word = str(adj.get("verdict") or _PK.STATE_UNKNOWN)
+            verdict_word = str(adj.get("verdict") or "")
             out["adjudication"] = self._adjudication_reading(adj)
             out["proposition_reason"] = (str(adj.get("basis") or "")
                                          or str(adj.get("reason") or ""))
             if verdict_word != _PK.STATE_SAME:
-                out["proposition_state"] = (verdict_word if verdict_word in
-                                            (_PK.STATE_DIFFERENT, _PK.STATE_UNKNOWN)
-                                            else _PK.STATE_UNKNOWN)
-                # 判 different / unknown ⇒ 不并，这一支一个字节都不写（调用方照常新建）。
-                # `unknown` 尤其不许拿相似度去猜：那是把"没人判过"冒充"判过了、不同"的
-                # 同一类错，只是方向相反。
+                out["proposition_state"] = _PK.STATE_DIFFERENT
+                # 判 different ⇒ 不并，这一支一个字节都不写（调用方照常新建）。
                 return None
             target_id = str(adj.get("same_as") or "")
-            # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是登记那一刻的候选，
+            # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是判定那一刻的候选，
             # 到了事务里它可能已经被否证/被取代/改成非命题 kind —— 那时不许把新证明挂上去。
             hit = next(({"row": dict(r), "stmt_id": str(r.get("stmt_id") or ""),
                          "verdict": {"state": _PK.STATE_SAME,
@@ -9280,13 +9362,17 @@ class Secretary:
                         and _is_proposition_kind(r.get("kind"))
                         and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES), None)
             if hit is None:
-                out["proposition_state"] = _PK.STATE_UNKNOWN
+                # 判了 same、点名的号却读不到/不可并 ⇒ 这一笔判不成：不并，也不新建
+                # （`_merge_into_proposition` 按受控拒处置）。
+                out["proposition_state"] = ""
                 out["proposition_reason"] = (
                     f"秘书判 same 并点名 stmt:{target_id or '（空）'}，而事务快照里读不到那一条"
-                    "（或它的状态已不可并）⇒ 不并、照常新建（不在一条读不到的行上写证明）")
+                    "（或它的状态已不可并）⇒ 受控拒：不在一条读不到的行上写证明，"
+                    "也不另建一行")
+                out["adjudication"]["fail_closed"] = True
                 return None
             return hit
-        # ---- 没查成：fail-closed（业主 2026-11-04 裁定）
+        # ---- 没有判断面：确定性兜底（业主 2026-11-04 裁定）
         #
         # 改前这一支退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"两档，
         # 于是「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」（键不同、
@@ -9297,15 +9383,15 @@ class Secretary:
         # - 确定性键相同 ⇒ 仍并：那是"条件与结论的等价改写 + 分句顺序 / 记号排版"
         #   （业主的判准里「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、可复算，
         #   不是阈值判据；
-        # - 词面相似度一个字节都不决定并：它只给候选表排序（`_proposition_candidates`
-        #   与 `_fail_closed_reason` 的读数）。
-        # 没并的那一档必须留下读数（`adjudication.checked=False` + `fail_closed` +
-        # `why_not_merged`）：三态纪律 —— "没查成"不许折成"查过了、不同"。
+        # - 词面相似度一个字节都不决定并：它只在读数里报"离阈值有多远"
+        #   （`_fail_closed_reason`）。
+        # 这一档必须留下读数（`adjudication.checked=False` + `fail_closed` +
+        # `why_not_merged`）：「没有判断面」不许折成"查过了、不同"。
         out["adjudication"] = self._adjudication_reading(adj)
         hit = self._same_proposition_candidate(tx, full, kind=kind, key_only=True)
         if hit is None:
             why = self._fail_closed_reason(tx, full, kind=kind)
-            out["proposition_state"] = _PK.STATE_UNKNOWN
+            out["proposition_state"] = ""
             out["proposition_reason"] = why
             out["adjudication"]["fail_closed"] = True
             out["adjudication"]["why_not_merged"] = why
@@ -9317,12 +9403,12 @@ class Secretary:
 
         为什么要有它：fail-closed 之后最常见的追问就是"它明明看起来是同一条，凭什么都
         不并"。答案必须落在返回值里 —— 而且要点名那个相似度读数（读的人才核得动
-        "阈值那一档当年会不会并"），同时说清它现在只是候选表排序用的量。
+        "阈值那一档当年会不会并"），同时说清它现在只是读数、不决定并。
 
         相似度取自 `propositionkey.same_proposition`（判据唯一那一处），不另算一遍：
         同一个对子在两处给出不同的读数，是本仓反复登记过的缺陷形态。
         """
-        head = ("没查成（adjudication.checked=False：没有模型缝 / 超时 / 坏 JSON / 正文截断）"
+        head = ("没有判断面（adjudication.attempted=False：没有模型缝 / 开关关着）"
                 " ⇒ fail-closed 不并：")
         if not _is_proposition_kind(kind):
             return head + f"kind={kind!r} 不是命题性的那几档，本来就不并"
@@ -9347,7 +9433,7 @@ class Secretary:
         score, sid = best
         reach = ("达到阈值" if score >= threshold else "未达阈值")
         return (head + f"在册 stmt:{sid} 与这一条的词面相似度 {score:.4f} {reach} "
-                f"{threshold:.2f}，但词面相似度只用于候选表排序、不决定并"
+                f"{threshold:.2f}，但词面相似度不参与判定、不决定并"
                 "（词面重合不等于条件与结论一致）；确定性键不同 ⇒ 两条")
 
     def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> list[dict[str, Any]]:
@@ -9496,6 +9582,7 @@ class Secretary:
         | 同种证明、且没给 merge | `checked=False` + `refused="proof_same_kind"` + 点名第几份 |
         | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
         | 同一个概念（概念行） | `checked=True` + `created=False` + `duplicate=True` + `stmt_id=<既有>` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
+        | 判不了（试过而没判成） | `checked=False` + `refused="same_statement_unjudged"` + `adjudication.fail_closed` + 一句原因（不新建、不合并） |
         | 没命中 | `None`（调用方照常新建；这一支一个字节都不写） |
 
         概念行那一档（D2）走 :meth:`_merge_into_concept`：它没有"条件 ⇒ 结论"，判据是
@@ -9516,27 +9603,41 @@ class Secretary:
         照旧是"第几条路径"。两条证明的依赖面因此分开，`_DepGraph.groups_of` 读出来
         是 `{1: {…}, 2: {…}}` 两维（既有机制，不在这里重写）。
 
-        ## 谁说了算（2026-10-24 晚，业主改口径）
+        ## 谁说了算（2026-10-24 晚，业主改口径；2026-11-08 收成两档）
         业主逐字：「不用机械判据，让秘书洗定理名，让秘书判」，准绳是「定理描述一致
-        （什么条件推出什么结论），就是一个定理」。所以：
+        （什么条件推出什么结论），就是一个定理」；2026-11-08 又逐字：「没有判不了」。所以：
 
         - `adjudication.checked`（秘书判成了）⇒ 它说了算：`same` ⇒ 并进它点名的
-          `same_as` 那一条；`different` / `unknown` ⇒ 不并（`unknown` 也一律不许拿
-          相似度去猜 —— 判不了就是不并，台账里留 basis 给人看）；
-        - 没查成（没缝 / 开关关着 / 超时 / 坏 JSON / 正文截断）⇒ fail-closed 不并
-          （2026-11-04 业主裁定）：只认"确定性键相同"这一档等价改写，词面相似度一个字节
-          都不决定并（它只给候选表排序）；没并的那一档留 `adjudication.fail_closed` +
-          `why_not_merged` 两个读数 —— 判不了就是不并，相似度不替它表态。
+          `same_as` 那一条（那一条读不到/不可并 ⇒ 受控拒，不新建）；`different` ⇒ 不并，
+          照常新建（这是"查过了、确实不是"）；
+        - 试过而没判成（`attempted=True` + `checked=False`：超时 / 坏 JSON / 词表外结论 /
+          same 点不出号 / 检索面没建成）⇒ 受控拒（`same_statement_unjudged`）：不新建、
+          不合并。"没判成不等于不是同一条"—— 拿它当 different 去新建，就是重复行的来源；
+        - 没有判断面（没缝 / 开关关着）⇒ 2026-11-04 的确定性兜底：只认"确定性键相同"
+          这一档等价改写，词面相似度一个字节都不决定并；没并的那一档留
+          `adjudication.fail_closed` + `why_not_merged` 两个读数。
         """
         from . import verifications as VR   # 惰性：证明清单 / 签名状态的唯一读口径
 
         adj = dict(adjudication or {})
-        # 三态读数（"这一笔被判成什么"）：没有命中时也要能读出判过了、判的是哪一种。
-        # 不许把"判不了"折成"不同"—— 两者的 `reason` 不同，处置也不同。
+        # "这一笔被判成什么"的初值：判成了才有词，没判成是空串（不是某一档结论）。
         probe = _PK.judgeable(full)
-        out["proposition_state"] = (_PK.STATE_UNKNOWN if not probe["ok"]
-                                   else _PK.STATE_DIFFERENT)
-        out["proposition_reason"] = str(probe["reason"] or "没命中在册的同一条命题（键不同、相似度未达阈值）")
+        out["proposition_state"] = "" if not probe["ok"] else _PK.STATE_DIFFERENT
+        out["proposition_reason"] = str(
+            probe["reason"] or "没命中在册的同一条命题（判 different：条件与结论不同）")
+        # ---- 判不了 = 没判成（业主 2026-11-08：「没有判不了」）-----------------------
+        #
+        # 位置在 `force_new` 之前：调用方明确要"另起一条"也不能替一次失败的判定说话 ——
+        # 那一笔的语义仍是"还没查清这是不是同一条"，先查清再谈新建。
+        missing = _proposition_judgment_missing(kind, adj)
+        if missing:
+            reading = self._adjudication_reading(adj)
+            reading["fail_closed"] = True
+            reading["why_not_merged"] = missing
+            out.update(checked=False, refused=R.SAME_STATEMENT_UNJUDGED,
+                       proposition_state="", proposition_reason=missing,
+                       reason=missing, adjudication=reading)
+            return out
         if force_new:
             # 调用方明确要"另起一条" ⇒ 不并（`force_new` 的含义就是不许替它合并）。
             out["proposition_reason"] = "force_new：调用方明确要另起一条，跳过同一性合并"
@@ -9560,6 +9661,19 @@ class Secretary:
         # 直接返回 None，于是同一命题换一种写法、两次都没带证明时会落第二行 —— 而它
         # 并不产生第二份证明，也没有任何读数说"这是同一条"。
         hit = self._proposition_owner(tx, full, kind=kind, adj=adj, out=out)
+        if (hit is None and adj.get("checked")
+                and str(adj.get("verdict") or "") == _PK.STATE_SAME):
+            # 判了 same、点名的号却在事务快照里读不到/不可并 ⇒ 这一笔判不成：
+            # 受控拒（不新建、不合并），不拿"读不到那一条"冒充"不是同一条"。
+            why = str(out.get("proposition_reason") or "") or (
+                "秘书判 same 却指不到一条可并的在册行 ⇒ 受控拒：不新建、不合并")
+            reading = self._adjudication_reading(adj)
+            reading["fail_closed"] = True
+            reading["why_not_merged"] = why
+            out.update(checked=False, refused=R.SAME_STATEMENT_UNJUDGED,
+                       proposition_state="", proposition_reason=why,
+                       reason=why, adjudication=reading)
+            return out
         if not proof.strip():
             if hit is None:
                 out["proposition_reason"] = (
@@ -12614,9 +12728,9 @@ def append_proposition_verdict(root: str | Path, *, statement_full: str,
                                role: str = "", task_id: str = "") -> dict[str, Any]:
     """追加一行判定读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
-    只记判过的结论（same / different / unknown 都算判过了）：没查成（没缝 / 开关关着 /
-    超时 / 坏 JSON）不许缓存 —— 那会把"这一次没查成"变成"以后都别查了"，而缝是可能好起来
-    的（与 `_statement_verdicts` 同一条纪律）。
+    只记判成了的两档结论（same / different）：没判成（没缝 / 开关关着 / 超时 / 坏 JSON /
+    词表外结论 / same 点不出号）不许缓存 —— 那会把"这一次没判成"变成"以后都别查了"，
+    而缝是可能好起来的（与 `_statement_verdicts` 同一条纪律）。
 
     每行带 `statement_sha256`：读侧按它折叠出"这条正文最后一次判定是什么"，不必去猜行序。
     返回写下去的那一行（调用方拿它进返回值，不另拼一份）。
@@ -12762,16 +12876,20 @@ def _judge_system(kind: str) -> str:
     elif kind == "proposition_identity":
         ask = (
             "问题：下面这一条命题（条件 ⇒ 结论）与候选表里的每一条，是不是同一个定理？"
+            "候选表是秘书从命题台账里取出来的那几条 —— 它只决定给你看哪几条，"
+            "判定只看条件与结论。"
             "业主定的准绳逐字是：「定理描述一致（什么条件推出什么结论），就是一个定理」。"
-            "所以判据只有一条 —— 条件组与结论组是否一致。四种情形逐条写清："
-            "① 同一组条件推出同一组结论 ⇒ 判 same，并在 same_as 里给出候选的 stmt_id；"
+            "所以判据只有一条 —— 条件组与结论组是否一致。三种情形逐条写清："
+            "① 同一组条件推出同一组结论 ⇒ 判 same，并在 same_as 里给出候选的 stmt_id"
+            "（只给一个号，且必须是候选表里的号）；"
             "② 条件是包含关系（一条更强 / 一条更弱）⇒ 判 different，basis 里写明"
             "『条件强弱不同』，不许因为『看起来是同一个主题』就判 same；"
             "③ 结论相同、条件只是同一条件的另一种记号或等价改写（换变量名、换记号、"
-            "把『有限群』写成『阶有限的群』这一类）⇒ 仍判 same；"
-            "④ 条件或结论有一侧写不清（缺假设、只给了名字、正文被截断）⇒ 判 unknown，"
-            "并在 basis 里点名缺的是条件还是结论 —— 读不出就如实给 unknown，不许猜；"
-            "候选表为空 ⇒ 判 different（没有可并的对象）。"
+            "把『有限群』写成『阶有限的群』这一类）⇒ 仍判 same。"
+            "判词只有两档：same / different —— 没有第三档，也不许自己造一个像结论的词。"
+            "读不清（缺假设、只给了名字、正文被截断）时不要猜：把 decision 留成空串"
+            "（或写『没判成』），框架把它当「没判成」处理（不新建、不合并、受控拒）；"
+            "那不是你的判词。"
             "不参与判定的东西：定理叫什么名字、证明走哪条路线、证明手法、表述风格 ——"
             "这些都不是『条件 ⇒ 结论』的一部分。"
             "另加四个字段（同一趟判断的输出，不另发调用）："
