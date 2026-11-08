@@ -500,5 +500,39 @@ def test_l_every_exact_text_site_goes_through_the_box() -> None:
     assert defs == ["statementledger.py"], f"正文规范化全等的实现不止一处：{defs}"
 
 
+# ===================================================== m 收口登记表（S3 池 / S4 关键词）
+#: 改前各自内联「active ∧ 命题性 ∧ 有号有正文」那三条过滤的函数；现在必须调 `pool`。
+MIGRATED_POOL: tuple[tuple[str, str], ...] = (
+    ("agentflow/secretary.py", "_ledger_pool"),
+    ("agentflow/secretary.py", "_same_proposition_candidate"),
+    ("agentflow/secretary.py", "_fail_closed_reason"),
+    ("agentflow/agent_b/register_statement.py", "_resolve_same_statement"),
+)
+
+#: 改前保管关键词检索的那个私有方法（已删）：现在只有 `by_keywords` 一处实现，
+#: 唯一调用点是秘书的 `_identity_candidates`（挑词仍在本层、判定仍只经 `judge`）。
+KEYWORD_CALLERS: tuple[tuple[str, str], ...] = (
+    ("agentflow/secretary.py", "_identity_candidates"),
+)
+
+
+def test_m_pool_and_keywords_have_one_implementation_each() -> None:
+    """m：池过滤 4 个调用点、关键词 1 个调用点都问查口；恢复内联 ⇒ 当场红。"""
+    for rel, name in MIGRATED_POOL:
+        assert _calls_attr(_function_node(rel, name), "pool"), (
+            f"{rel}::{name} 没有走 `statementledger.pool` —— 可检索池又长出了第二处")
+    for rel, name in KEYWORD_CALLERS:
+        assert _calls_attr(_function_node(rel, name), "by_keywords"), (
+            f"{rel}::{name} 没有走 `statementledger.by_keywords` —— 检索又长出了第二条路")
+    for entry in ("pool", "by_keywords"):
+        defs = [path.name for path in (SRC / "agentflow").rglob("*.py")
+                if f"def {entry}(" in path.read_text(encoding="utf-8")]
+        assert defs == ["statementledger.py"], f"{entry} 的实现不止一处：{defs}"
+    # 旧私有方法（改前的唯一检索实现）不许复活：定义与调用都不许再有。
+    old = [path.name for path in (SRC / "agentflow").rglob("*.py")
+           if "def _statements_matching_keywords(" in path.read_text(encoding="utf-8")]
+    assert old == [], f"改前那个私有检索方法又回来了：{old}"
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

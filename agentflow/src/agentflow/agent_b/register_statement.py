@@ -1254,7 +1254,7 @@ class _RegisterStatement:
         """
         from .. import propositionkey as _PK
         from .. import textutil as T
-        from ..secretary import append_statement_same, _is_proposition_kind
+        from ..secretary import append_statement_same, PROPOSITION_KINDS
 
         out: dict = {
             "checked": False, "keyword_checked": False,
@@ -1273,11 +1273,9 @@ class _RegisterStatement:
                        why=f"statements 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成")
             out["problems"] = [out["why"]]
             return out
-        eligible = [r for r in all_rows
-                    if str(r.get("stmt_id") or "").strip()
-                    and _is_proposition_kind(r.get("kind"))
-                    and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES
-                    and str(r.get("statement_full") or "").strip()]
+        # 可检索 / 可并池只有一处实现（查口 `pool`）；kind 名单仍取自秘书那一份
+        # `PROPOSITION_KINDS`（箱子里不复制名单）。
+        eligible = SL.pool(all_rows, kinds=PROPOSITION_KINDS)
         # 台账里一条可检索的命题都没有 ⇒ "查过、0 条"（不花模型调用、也不要求判断面）。
         if not eligible:
             out.update(checked=True, keyword_checked=True, hits_total=0,
