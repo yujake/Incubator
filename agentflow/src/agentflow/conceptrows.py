@@ -868,10 +868,14 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
         # 迁移历史数据时全是这种）⇒ 先算出那两格，再交给秘书那一笔写。
         tomb: dict[str, Any] = {}
         _apply_merge_tombstone(tomb, legacy_row)
+        # 过渡同步的契约是"一号一行"：老表那一行按原号镜像到新标准，合并不在这一层做
+        # （老表的合并由 `merged_into` 那一格管）⇒ 它只报同一性、不按判词处置。
+        # 这是全仓唯一允许传 `transition_sync=True` 的调用点（机械判据：
+        # `tests/test_concept_identity_gate_is_acted_on.py::test_d2_...`）。
         return secretary.write_concept_row(
             tx, stmt_id=cid, label=label, definition=definition, aliases=aliases,
             source_lit_id=source_lit, status=str(tomb.get("status") or ""),
-            quote_reason=str(tomb.get("quote_reason") or ""))
+            quote_reason=str(tomb.get("quote_reason") or ""), transition_sync=True)
     # 改既有那一行：只动"从老表推得出来的那几格"，新标准独有的那几格由秘书那一格
     # 原样保留（`existing` 传进去，它只改 label / 正文 / aliases / source_lit）。
     status = ""

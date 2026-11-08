@@ -176,3 +176,105 @@ def test_c1_different_concepts_still_get_their_own_rows(tmp_path: pathlib.Path) 
     assert a.get("concept_action") == "created" and b.get("concept_action") == "created", (a, b)
     assert str(a.get("stmt_id")) != str(b.get("stmt_id")), (a, b)
     assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
+
+
+# ============================================================ 入口 2：Secretary.write_concept_row
+
+
+def _secretary(st: Store) -> SEC.Secretary:
+    return SEC.Secretary("B", root=st.root, store=st)
+
+
+def test_a2_write_concept_row_merges_instead_of_unconditional_upsert(
+        tmp_path: pathlib.Path) -> None:
+    """a（入口 2）：`write_concept_row` 判成 same ⇒ 并入、不落第二行、不发号。
+
+    改前红：判词只进 `out["concept_identity"]`，随后仍无条件 `tx.upsert("statements")`
+    ⇒ 第二行落盘，且 `push_counters("000009")` 把 `stmt` 计数器抬到 10。
+    """
+    st = _ws(tmp_path)
+    first = CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
+    sid = str(first.get("stmt_id") or "")
+    before_rows, before_count = len(_rows(st)), _counter(st)
+    reading: dict = {}
+    sec = _secretary(st)
+    with st.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
+        got = sec.write_concept_row(
+            tx, stmt_id="000009", label=ALT_LABEL, definition=REAL_DEF_2,
+            origin="own_result", self_authored=True, out=reading)
+    assert got.get("concept_action") == "merged", got
+    assert str(got.get("stmt_id") or "") == sid, got
+    _reading(reading.get("concept_identity") or {}, action="merged", same_as=sid)
+    assert reading.get("concept_action") == "merged", reading
+    assert len(_rows(st)) == before_rows == 1, [r.get("label") for r in _rows(st)]
+    assert _counter(st) == before_count == 1, (_counter(st), before_count)
+
+
+def test_b2_write_concept_row_refuses_unjudged_without_a_row_or_a_burned_id(
+        tmp_path: pathlib.Path) -> None:
+    """b（入口 2）：判不了 ⇒ 受控拒、0 新行、counters 不动（不新建、不烧号）。"""
+    st = _ws(tmp_path)
+    first = CR.upsert(st, label="群", definition="概念（群）：带运算的集合。")
+    assert first.get("checked") is True, first
+    before_rows, before_count = len(_rows(st)), _counter(st)
+    reading: dict = {}
+    sec = _secretary(st)
+    with st.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
+        got = sec.write_concept_row(
+            tx, stmt_id="000009", label=UNJUDGEABLE_LABEL,
+            definition="设 Y 是一个拓扑空间。",
+            origin="own_result", self_authored=True, out=reading)
+    assert got.get("concept_action") == "refused", got
+    assert got.get("checked") is False, got
+    assert got.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, got
+    _reading(reading.get("concept_identity") or {}, action="refused")
+    assert len(_rows(st)) == before_rows == 1, _rows(st)
+    assert _counter(st) == before_count, (_counter(st), before_count)
+
+
+def test_c2_write_concept_row_still_creates_a_different_concept(
+        tmp_path: pathlib.Path) -> None:
+    """c（正控，入口 2）：判得了 different ⇒ 照常写那一行（不是一律并、一律拒）。"""
+    st = _ws(tmp_path)
+    CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
+    reading: dict = {}
+    sec = _secretary(st)
+    with st.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
+        got = sec.write_concept_row(
+            tx, stmt_id="000009", label=OTHER_LABEL, definition=OTHER_DEF,
+            origin="own_result", self_authored=True, out=reading)
+    assert str(got.get("stmt_id") or "") == "000009", got
+    assert reading.get("concept_action") == "created", reading
+    assert [r.get("stmt_id") for r in _rows(st)] == ["000000", "000009"], _rows(st)
+    _reading(reading.get("concept_identity") or {}, action="created")
+
+
+def test_d2_only_the_transition_sync_path_may_switch_the_judgment_off() -> None:
+    """d（机械判据）：全仓只有过渡同步那一条入口传 `transition_sync=True`。
+
+    这条不是形式主义：`write_concept_row` 的默认值就是强制处置，而 `transition_sync=True`
+    是唯一的"只报不处置"档。若哪一天别的调用点也传它，概念轴就多出一个后门 ——
+    而盘上看起来一切正常。所以按 AST 逐调用点核：精确等于
+    `[("conceptrows.py", "sync_from_legacy")]`。
+    """
+    import ast
+    import inspect
+
+    default = inspect.signature(SEC.Secretary.write_concept_row).parameters["transition_sync"].default
+    assert default is False, default
+
+    hits: list[tuple[str, str]] = []
+    for path in (REPO / "src").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                for kw in node.keywords:
+                    if (kw.arg == "transition_sync"
+                            and isinstance(kw.value, ast.Constant)
+                            and kw.value.value is True):
+                        hits.append((path.name, fn.name))
+    assert sorted(hits) == [("conceptrows.py", "sync_from_legacy")], hits

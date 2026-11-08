@@ -8712,7 +8712,8 @@ class Secretary:
                           existing: Mapping[str, Any] | None = None,
                           status: str = "", quote_reason: str = "",
                           proof_text: str = "",
-                          out: dict[str, Any] | None = None) -> dict[str, Any]:
+                          out: dict[str, Any] | None = None,
+                          transition_sync: bool = False) -> dict[str, Any]:
         """在已开的事务里写一条概念行：洗名 + 五元位 + 概念同一性都由这一处做（2026-10-26，D14）。
 
         ## 为什么是"秘书的一个专用方法"，而不是调 `record_statement`
@@ -8733,13 +8734,26 @@ class Secretary:
         3. 概念同一性：`_same_concept_candidate`（`propositionkey.same_concept` 的唯一调用点）。
            判词进 `out["concept_identity"]`。
 
-        ## 判到"同一个概念"时为什么不在这里拦下这一笔
-        概念行的号在上游就发出去了（`agent_b.run_once` 从 `concept` 计数器发号、
-        `conceptrows.upsert` 从 `stmt` 计数器发号），这一层只拿得到"已经发出的号"。
-        拦下 = 那个号没有行，`verify` 的 `id_gap` 当场报警（"分配了 ID 但未建成行"），
-        而老表那一份镜像已经写了 ⇒ 新标准与老表分家。所以这一层给的是判词（`duplicate`
-        / `same_as`），处置权留在调用方；"同一个概念不落第二行"的正路是
-        `record_statement` 的 `_merge_into_concept`（它在发号之前判）。
+        ## 判到"同一个概念"时的处置（2026-11-08，D2 的四个入口统一）
+        `concept_identity_action(identity)` 是唯一的折算点，这一层按它的 `concept_action` 走：
+
+        - `merged`（新建 + same + 有候选）⇒ 不写这一行，返回并入读数（`stmt_id` 就是并入
+          对象）。调用方的号必须是在过闸之前没发过的（四个发号入口都先过闸）—— 否则
+          会留 `id_gap`，所以这一档在这里是最后一道网，不是发号点；
+        - `refused`（判不了）⇒ 新建那一支不写、返回受控拒。例外是"定义还没抽到"
+          （`full` 为空，`D12` 甲）：那一档闸只能按标签判，判不了也照落成
+          `pending_definition`，读数里 `d12_pending=True` 写明这个前提（否则定义没抽到的
+          概念永远登记不进来）；判得 `same` 时仍并入（不新建第二行）；
+        - `created`（different / 候选 0 条）⇒ 照常写。
+
+        改一条既有行（`existing` 给了）不新建也不并入：它本身就是那一行，读数只报
+        `checked` / `state` / `same_as` / `reason`（这一档的 `concept_action` 不写 ——
+        没有"新行"可谈）。
+
+        `transition_sync=True` 只给 `conceptrows.sync_from_legacy`（= `upsert_legacy_shaped`
+        的过渡同步路）：过渡同步的契约是一号一行（老表那一行按原号镜像到新标准），
+        合并不在这一层做 —— 老表的合并由 `merged_into` 那一格管。别的调用点传它 ⇒
+        `tests/test_concept_identity_gate_is_acted_on.py` 的机械判据当场红。
 
         ## 既有行为一个字不动
         升档（定义到了 ⇒ `pending_definition` 回 `active`）与合并（老表的墓碑
@@ -8802,6 +8816,12 @@ class Secretary:
         # ---- 概念同一性（唯一判据；改一条既有行时把自己排除在命中之外）
         identity = self._same_concept_candidate(tx, label=name, full=full, exclude_id=sid)
         hit = dict(identity.get("hit") or {})
+        act = concept_identity_action(identity)
+        #: 这一笔的最终处置：D12 甲（定义还没抽到）把 refused 折成"照落"，
+        #: 其余按折算点的三档；改既有行没有"新行"可谈，不写这一格。
+        pending_exempt = (act["concept_action"] == "refused"
+                          and existing is None and not full.strip())
+        final_action = "created" if pending_exempt else act["concept_action"]
         if out is not None:
             out["concept_identity"] = {
                 "checked": bool(identity.get("checked")),
@@ -8811,6 +8831,10 @@ class Secretary:
                 "candidates": [str(x) for x in (identity.get("candidates") or [])],
                 "reason": str(identity.get("reason") or ""),
             }
+            if existing is None:
+                out["concept_identity"]["concept_action"] = final_action
+                out["concept_action"] = final_action
+                out["d12_pending"] = pending_exempt
         elif hit:
             # 判到"同一个概念"而调用方没要读数（`conceptrows` 那三个写口就是这样）⇒
             # 落到秘书自己的台账上：这一笔判过、判的是哪一行必须在盘上留得住，
@@ -8824,6 +8848,23 @@ class Secretary:
                     fail_open=False)
             except Exception as exc:  # noqa: BLE001 —— 留痕失败不带走这一笔写
                 self._log(f"概念同一性留痕没写成：{type(exc).__name__}: {exc}")
+        # ---- 处置（默认强制；只有过渡同步那一条路只报不处置）
+        if not transition_sync and existing is None:
+            if act["concept_action"] == "refused" and not pending_exempt:
+                why = str(identity.get("reason") or "")
+                return {"concept_action": "refused", "checked": False, "state": "",
+                        "same_as": "", "candidates": list(act.get("candidates") or []),
+                        "refused": CONCEPT_IDENTITY_UNJUDGED, "concept_identity": dict(act),
+                        "reason": (why + " ⇒ 这一笔不写（不新建、不合并）")}
+            if act["concept_action"] == "merged":
+                target = str(act.get("same_as") or "")
+                why = (f"同一个概念已在册（stmt:{target}；依据："
+                       f"{self._basis_text(str(act.get('basis') or ''), 0.0)}）⇒ 并入那一行："
+                       "不新建第二行、不发号")
+                return {"stmt_id": target, "concept_action": "merged", "checked": True,
+                        "state": "same", "same_as": target,
+                        "candidates": list(act.get("candidates") or []),
+                        "concept_identity": dict(act), "reason": why}
         obj = S.row_from_dict("statements", data)
         obj.validate()
         data = obj.to_dict()

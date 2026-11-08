@@ -148,6 +148,9 @@ def test_the_write_asks_the_concept_identity_criterion(store: Store,
     打桩的是判据本体（不是另写一份假代码）：它记下被问了几次、问的是哪两个标签 ——
     于是"这一层有没有第二份同一性实现"变成一个可数的读数。
     第一条概念在空表上写（没有对手可问，问零次是对的）；第二条才是"问不问"的判据。
+
+    2026-11-08 起判词要落到处置上：第二条判成 `same` ⇒ 并入 0000，不落第二行
+    （改前这一笔是"判了不拒、仍无条件 upsert"，`rows=2` —— 那就是 D2 的漏口）。
     """
     readings: dict = {}
     with store.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
@@ -174,7 +177,9 @@ def test_the_write_asks_the_concept_identity_criterion(store: Store,
     identity2 = dict(readings2.get("concept_identity") or {})
     assert identity2.get("state") == PK.STATE_SAME, identity2
     assert identity2.get("same_as") == "0000", identity2
-    assert len(_rows(store)) == 2, [r.get("stmt_id") for r in _rows(store)]
+    assert identity2.get("concept_action") == "merged", identity2
+    assert readings2.get("concept_action") == "merged", readings2
+    assert len(_rows(store)) == 1, [r.get("stmt_id") for r in _rows(store)]
 
 
 # ============================================================ b) 既有行为不许退化
@@ -243,7 +248,7 @@ def test_stubbing_the_route_back_to_a_direct_write_turns_the_reading_red(
     def _old_direct_write(self, tx, *, stmt_id, label, definition="", aliases=(),
                           source_lit_id="", doc_id="", origin="", self_authored=False,
                           mirror=False, existing=None, status="", quote_reason="",
-                          proof_text="", out=None):
+                          proof_text="", out=None, transition_sync=False):
         # 改前那一笔逐字：构造 + 直写（没有 bits、没有洗名、没有同一性）
         data = CR.concept_statement(stmt_id=stmt_id, label=label, definition=definition,
                                     aliases=aliases, source_lit_id=source_lit_id,
