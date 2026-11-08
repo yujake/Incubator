@@ -3,9 +3,11 @@
 
 ## 误报现场（改前）
 
-B 主路走 `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适配：候选逐页给，
-按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它只写 `statement_same.jsonl`，
-不写 `proposition_verdicts.jsonl`。而 `closing.proposition_judgment_reading` 改前只数
+B 主路改前走一个 `use_cache=False` 的薄适配（候选逐页给，按正文 sha 缓存会把
+"这一页没查到"沿用到下一页）⇒ 它只写 `statement_same.jsonl`，不写
+`proposition_verdicts.jsonl`。那条适配 2026-11-08 晚已删，但"两本账都要数"这条判据
+不依赖它：任何一个 `use_cache=False` 的调用（候选逐页给）都只写第二本。
+而 `closing.proposition_judgment_reading` 改前只数
 后者 ⇒ 探针实测 `verdict_rows=0, registration_actions=1, judged_zero=true`，而
 `seam_sources` 两条都说明判过 —— 收工读数在说谎。
 
@@ -56,10 +58,10 @@ def _session_step(root: pathlib.Path) -> None:
 def _judge_only(tmp_path: pathlib.Path) -> Store:
     """造出误报现场：直接写盘出 `statement_same.jsonl` 的一行（stage=judge）。
 
-    为什么不调 `secretary.judge_statement_same`：那只是 B 主路当前碰巧走的那个
-    入口（另一条 lane 计划删它）。读数判据只认盘上的行形状，夹具也必须只依赖行形状
-    —— 否则入口一换名，这条判据就替它陪葬。行形状与 `_note_statement_same` 写出来的
-    逐字同形：`stage="judge"` + `checked=True` + `seam_source` 非空。
+    为什么不调一个具体入口：那只是 B 主路当前碰巧走的那条路（入口会换名、也会被删）。
+    读数判据只认盘上的行形状，夹具也必须只依赖行形状 —— 否则入口一换名，这条判据就替它陪葬。
+    行形状与 `_note_statement_same` 写出来的逐字同形：`stage="judge"` + `checked=True`
+    + `seam_source` 非空。
     """
     st = _ws(tmp_path)
     SEC.append_statement_same(

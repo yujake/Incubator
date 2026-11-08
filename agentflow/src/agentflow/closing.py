@@ -5713,10 +5713,9 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
 
     1. `verdict_rows`：`out/secretary/proposition_verdicts.jsonl` 的行数（判定判成了
        才会落这一本账，读侧唯一口 `secretary.proposition_verdict_rows`）；
-       注意这本账只记「判完并且要缓存」的那一趟：B 主路走
-       `judge_statement_same(use_cache=False)`（`secretary.py` 的薄适配：候选逐页给、
-       按正文 sha 缓存会把"这一页没查到"沿用到下一页）⇒ 它不写这本账，只写
-       `statement_same.jsonl`。只数这一本就会把"判过了一场"读成"一次都没判"
+       注意这本账只记「判完并且要缓存」的那一趟：`use_cache=False` 的调用
+       （候选逐页给，按正文 sha 缓存会把"这一页没查到"沿用到下一页）不写这本账，
+       只写 `statement_same.jsonl`。只数这一本就会把"判过了一场"读成"一次都没判"
        （2026-11-08 业主 sylow5 的误报：`verdict_rows=0` 而 seam 两条都说明判过）；
     2. `statement_same_judged`：`out/secretary/statement_same.jsonl` 里 `stage="judge"`
        且 `checked=True` 的行数（第二本账；`statement_same_rows` 是该账全部行，
@@ -5844,8 +5843,8 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
     out["unjudged_attempts"] = unjudged
     # ---- 判定"发生过"：两本账合读（2026-11-08 业主 sylow5 的误报根因）----------
     #
-    # 第一本（`proposition_verdicts`）只收"判完要缓存"的那一趟；B 主路那一档
-    # （`judge_statement_same(use_cache=False)`）只写第二本（`statement_same`）。
+    # 第一本（`proposition_verdicts`）只收"判完要缓存"的那一趟；`use_cache=False`
+    # 那一档（候选逐页给）只写第二本（`statement_same`）。
     # 两本各数各的、合计才是"判定发生过几次"：只看一本 ⇒ 另一条正路被判成"死链"。
     statement_same_judged = sum(
         1 for one in statement_same_rows

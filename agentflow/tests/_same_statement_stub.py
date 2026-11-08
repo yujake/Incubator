@@ -73,8 +73,8 @@ class SameStatementStub:
         if kind.endswith("statement_keywords"):
             return ({"keywords": list(self.keywords),
                      "why": "夹具：用这几个数学词去台账里捞同义的那一条"}, _Call())
-        # 判定那一问有两个入口名：`judge_statement_same` 的 `secretary:statement_same`
-        # 与 `adjudicate_proposition` 直调时的 `secretary:proposition_identity` ——
+        # 判定那一问的 note 有两个：`secretary:statement_same`（主动查询那一趟）
+        # 与 `secretary:proposition_identity`（`adjudicate_proposition` 直调）——
         # 两个入口共用同一处判定（2026-11-08 收口），替身也按同一份判词答。
         if kind.endswith("statement_same") or kind.endswith("proposition_identity"):
             return ({"decision": self.decision, "same_as": self.same_as,

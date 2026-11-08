@@ -3473,9 +3473,8 @@ class Secretary:
     # 两问，都在这一处收口：
     #   ① pick_statement_keywords：从待收命题里挑数学内容的关键词（检索的输入）；
     #   ② `adjudicate_proposition`：代码按关键词检索，再把命中候选交给判定那一趟。
-    # 判定只有一处实现（`adjudicate_proposition`；两档 same / different）。
-    # `judge_statement_same` 只是历史入口的薄适配（把调用方已检索好的候选递进去），
-    # 它不再有自己的题面与自己的判据。
+    # 判定只有一处实现（`adjudicate_proposition`；两档 same / different）：
+    # 每一处调用都走它，不再有第二个入口、也不再有自己的第二份题面。
 
     def pick_statement_keywords(self, *, statement_full: str, label: str = "",
                                 kind: str = "", task_id: str = "") -> dict[str, Any]:
@@ -3563,58 +3562,6 @@ class Secretary:
         out.update(checked=True, keywords=words, why=why)
         self._note_statement_same(stage="keywords", out=out, body=body,
                                   label=label, kind=kind, task_id=task_id)
-        return out
-
-    def judge_statement_same(self, *, statement_full: str,
-                             candidates: Sequence[Mapping[str, Any]],
-                             label: str = "", kind: str = "",
-                             task_id: str = "") -> dict[str, Any]:
-        """历史入口（薄适配）：把"调用方已检索好的候选"递给唯一那一处判定。
-
-        ## 2026-11-08：它不再是第二份判定
-
-        在此之前这一问是「另一套」判据：自己的题面（`_statement_same_system`）、自己
-        读 `found`、自己的成员校验 —— 与 `adjudicate_proposition` 那套（条件 ⇒ 结论 /
-        两档）给出两个答案。业主 2026-11-08 问的「语义判定」只能有一处实现，所以现在
-        判定本体只在 :meth:`adjudicate_proposition`（挑词 → 检索 → 一次模型判定），
-        这里只做形状翻译：
-
-        - 调用方给了候选 ⇒ 那一处跳过挑词，直接判（`candidates=`，兼容既有写法）；
-        - 两档结论翻成 `found`：查到的那一条的号 / 空串（调用方只有一条分支：
-          found 非空 ⇒ 更新那一行；空 ⇒ 注册新的）；
-        - 不写 `proposition_verdicts` 缓存（`use_cache=False`）：候选是这一趟手里
-          的（调用方给的），按正文 sha 缓存会把"这一趟没查到"沿用到下一趟。
-
-        2026-11-08（缺陷 ②）之后 B 的主路不再经过这里：B 直接调
-        `adjudicate_proposition(...)`（不带 `candidates=`），检索与分页都归秘书。
-        这个入口保留为兼容壳（`closing` 等读侧仍引用它），删除留给下一笔。
-        """
-        got = self.adjudicate_proposition(
-            {"statement_full": statement_full, "label": label,
-             "kind": kind or "theorem"},
-            candidates=[dict(c) for c in (candidates or ()) if isinstance(c, Mapping)],
-            note="secretary:statement_same", use_cache=False, task_id=task_id)
-        found = (str(got.get("same_as") or "")
-                 if str(got.get("verdict") or "") == _PK.STATE_SAME else "")
-        out: dict[str, Any] = {
-            "checked": bool(got.get("checked")),
-            "found": found,
-            "why": str(got.get("reason") or got.get("why") or ""),
-            "verdict": str(got.get("verdict") or ""),
-            "same_as": str(got.get("same_as") or ""),
-            "basis": str(got.get("basis") or ""),
-            "keywords": [str(x) for x in (got.get("keywords") or ())],
-            "hits_total": int(got.get("hits_total") or 0),
-            "hits_named": list(got.get("hits_named") or ()),
-            "judged": bool(got.get("judged")),
-            "seam_source": str(got.get("seam_source") or ""),
-            "ledger": {}, "role": str(self.role),
-        }
-        ids = [str(c.get("stmt_id") or "") for c in (candidates or ())
-               if isinstance(c, Mapping)]
-        self._note_statement_same(stage="judge", out=out, body=str(statement_full or ""),
-                                  label=label, kind=kind, candidates=ids,
-                                  task_id=task_id)
         return out
 
     def _note_statement_same(self, *, stage: str, out: dict[str, Any],
@@ -7083,8 +7030,8 @@ class Secretary:
             return self._with_adjudication_visibility(out)
         key = _proposition_verdict_key(full)
         out["statement_sha256"] = key
-        # `use_cache=False` 是历史入口（`judge_statement_same`）那一档：它的候选是逐页
-        # 给的，按正文 sha 缓存会把"这一页没查到"沿用到下一页。
+        # `use_cache=False` 是"候选逐页给"那一档（调用方手里已经有候选）：按正文 sha
+        # 缓存会把"这一页没查到"沿用到下一页。
         cached = ((self._proposition_verdicts.get(key)
                    or proposition_verdict_of(self.root, full)) if use_cache else {})
         cached_verdict = str((cached or {}).get("verdict") or "")

@@ -1298,8 +1298,12 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 「改前是什么形态」的史实叙述，不是"照着找能得到东西"的指针 —— 按本表纪律逐条登记，
     # 不把它们写没（写没等于把"这一批删掉了什么"也从注释里删掉）——
     "_proposition_adjudication",   # 命题行上的判词字符串键（`statements` 行里那一格；符号面 0 次，引用处讲的是这一格从哪来）
-    "_statement_same_system",      # 已删：`judge_statement_same` 当年自己那一份题面（2026-11-08 收成一处判定后删掉）
     "_read_only_facts",            # 旧名：V 提示词里那一段只读读数，现名 `agent_v.core._manuscript_facts`（改从手稿事实取）
+    # —— 2026-11-08 晚（清死代码那一笔发现的红，不是那一笔引入的）：`_numeric_same_candidates`
+    # 是 B 自建关键词检索那条已删的路（3d0cb523 收成一处检索）。四处引用都是「改前是什么
+    # 形态」的史实叙述，不是"照着找能得到东西"的指针 ⇒ 按本表纪律登记，不改引用处文本
+    # （改了就丢掉"改前叫什么"）。
+    "_numeric_same_candidates",    # 已删：B 自建检索那条旧路（`register_statement.py` 的注释与 `test_one_retrieval_path_pages_until_hit_or_end.py` 的反真空断言都点名它）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
