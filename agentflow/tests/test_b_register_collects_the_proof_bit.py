@@ -284,7 +284,11 @@ def test_b_without_the_bit2_step_the_field_shape_comes_back(
     assert bits.get("proof") is False, bits
     assert bits.get("grade") == "conjecture", bits
     assert row.get(VR.GRADE_RECOMPUTED_KEY) is None, row
-    assert row.get("proof_no") is None and row.get("proof_sha256") is None, row
+    # 2026-11-08（缺陷③）：回执与"第 2 位这次翻没翻"解耦 —— 正文在行上，回执照写
+    # （号 / sha 是"这一行现在有哪一份正文"的事实）；承重的是上面 `bits.proof=false`
+    # 那条判据。改前这一行断言的是"回执也没有"，而回执缺席本身并不是第 2 位的读数。
+    assert int(row.get("proof_no") or 0) == 1, row
+    assert str(row.get("proof_sha256") or "") == VR.proof_sha(PROOF), row
 
 
 # ============================================================ c 不许顺手到 theorem

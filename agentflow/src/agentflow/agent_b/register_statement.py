@@ -907,6 +907,19 @@ def _caller_role() -> str:
         return ""
 
 
+def _row_has_proof(row: Mapping | None) -> bool:
+    """这一行到底有没有一份**有正文**的证明（canonical 或 #pN 任一）。
+
+    为什么不能 `bool(proof_list(row))`：`proof_list` 对 canonical 空的行也可能给出
+    一条 `(1, "")`（结构上有那一格、正文是空的）。e-num 普通数值档正是这个形态 ——
+    用"清单非空"判会把"没有证明"读成"第 1 份证明"（缺陷 ③）。判据只认正文非空。
+    """
+    data = dict(row or {})
+    if str(data.get("proof_text") or "").strip():
+        return True
+    return any(str(text or "").strip() for _no, text in _VR.proof_list(data))
+
+
 def _same_search_reading(same: Mapping | None) -> dict:
     """同一命题检索的公开读数（去掉内部行缓存 `_row` 与整份判定内部表，其余原样带走）。
 
@@ -1739,6 +1752,11 @@ class _RegisterStatement:
                   "在册正文一个字都没改"
                   + ("。" if same_text else
                      "（新交的措辞与在册正文不同，差异只在读数里，不覆盖在册正文）。")),
+            # ---- 缺陷 ③②：普通数值档没有"证明"这一档 ------------------------------
+            # e-num 的正文按业主口径留空 ⇒ 顶层不写 `proof_no`（0），并给显式
+            # `has_proof=false`：改前这一档的读数被记成"第 1 份证明"，而
+            # `bits.proof=false`、`proof_text=""` —— 三处互相打架。
+            has_proof=False, proof_no=0, proof_sha256="",
         )
         return out
 
@@ -2009,6 +2027,9 @@ class _RegisterStatement:
             except (TypeError, ValueError):
                 _no_receipt = 1
             _body_now = str(_VR.proof_text_of(row, _no_receipt) or "")
+            #: 这一行现在真有一份正文（canonical 或 #pN）—— 回执、第 2 位、按签重算
+            #: 都只在"有一份正文"时成立。E 的普通数值档（e-num）没有证明正文 ⇒ 恒假。
+            _body_present = bool(_body_now.strip())
             #: 2026-11-08：两种"这一笔要把位带上去"的形态 ——
             #: ① 第 2 位还没翻（收录那一笔）；② 第 2 位已真、而这一笔刚认到第 3 位
             #: （V 签在稿上、B 收录时读到）。改前只认 ① ⇒ 后者永远停在 reviewed=false，
@@ -2016,7 +2037,7 @@ class _RegisterStatement:
             _needs_proof = not bool(dict(row.get("bits") or {}).get("proof"))
             _needs_review = (bool(dict(bits or {}).get("reviewed"))
                              and not bool(dict(row.get("bits") or {}).get("reviewed")))
-            if (bits is not None and _body_now.strip()
+            if (bits is not None and _body_present
                     and (_needs_proof or _needs_review)):
                 _collected = _EB.bits_after_proof_recorded(
                     row.get("bits"), delivered=bits, proof_process=_body_now,
@@ -2024,13 +2045,21 @@ class _RegisterStatement:
                 if _collected and _collected != dict(row.get("bits") or {}):
                     row["bits"] = _collected
                     out["bits_synced"] = True
-                # 回执只在第 2 位真的翻上去了时写（"翻第 2 位"与"写回执"是同一件事的
-                # 两半：位没翻而先写"收录了第几份"就是在替一个没发生的事实留念）。
                 if bool(_collected.get("proof")):
                     out["proof_collected"] = True
-                    # 收录回执：这一行现在这一份证明是哪一号、正文指纹是什么。指纹由
-                    # 刚写进这一行的那一份现算（不是抄调用方交来的 sha）。
-                    _want_sha = _VR.proof_sha(_body_now)
+            # ---- 收录回执（2026-11-08 缺陷 ③）：与"第 2 位这次翻没翻"解耦 -----------
+            #
+            # 改前回执写在第 2 位翻真那一支里 ⇒ 一条**新建**的"命题 + 证明"
+            # （`bits.proof` 一开始就为真、`_needs_proof` 为假）永远拿不到回执：
+            # 返回值说第 1 份，而 `statements` 顶层的 `proof_no` / `proof_sha256`
+            # 一个字节都没写（盘上读 null）。现在只要这一行真有一份正文，就把它的号
+            # 与**现算**的 sha 写到顶层；号只从这一笔的落点 `proof_no` 读，不猜。
+            # e-num 那一档 `_body_present` 为假 ⇒ 顶层不写 —— 没有证明就不许读出
+            # "第 1 份证明"。
+            if _body_present:
+                _want_sha = _VR.proof_sha(_body_now)
+                if (str(row.get("proof_sha256") or "") != _want_sha
+                        or int(row.get("proof_no") or 0) != int(_no_receipt)):
                     row["proof_no"] = int(_no_receipt)
                     row["proof_sha256"] = _want_sha
                     out["proof_receipt"] = {"proof_no": int(_no_receipt),
@@ -2051,8 +2080,10 @@ class _RegisterStatement:
             # 三态（由那个函数保证）：没签 / 签的是旧版 ⇒ 不动（"没凭据"不是"不准升"）；
             # 已经是 proof / proof_review ⇒ 不动（幂等，不写第二个时间戳）；
             # 读不出来 ⇒ 不动且 `reading.checked=False`（"没查成"不是"不够格"）。
-            _recomputed = _VR._grade_recomputed_from_signature(
-                row, root=getattr(store, "root", ""), proof_no=_no_receipt)
+            _recomputed: dict = {}
+            if _body_present:
+                _recomputed = _VR._grade_recomputed_from_signature(
+                    row, root=getattr(store, "root", ""), proof_no=_no_receipt)
             if _recomputed.get("reading"):
                 row = dict(_recomputed.get("row") or row)
                 # 读数必须落盘，不只是"算过"：这一格与 `sign_statement` 那一笔
@@ -2066,7 +2097,7 @@ class _RegisterStatement:
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
             if (not out["attached"] and not canonical_changed and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
-                    and not out["bits_synced"]):
+                    and not out["bits_synced"] and not out["proof_receipt"]):
                 return {"write": False, "result": out}
             if out["attached"]:
                 row[_VR.PROOFS_KEY] = listed
@@ -4091,7 +4122,8 @@ class _RegisterStatement:
         if _signed and _gate_ready:
             pre_write = self._attach_proofs(stmt_id_now, attach_entries,
                                             canonical=attach_canonical,
-                                            bits=bits)
+                                            bits=bits,
+                                            proof_no=int(proof_no_placement))
             # 正文写不进去 ⇒ 升档这一笔也不用问了（闸只会拒）：照实回这一笔的拒码。
             if pre_write.get("refused"):
                 return _refuse(str(pre_write.get("refused") or "proof_text_not_written"),
@@ -4328,7 +4360,8 @@ class _RegisterStatement:
             #: 写者），但那一次写的读数（正文 / 历史 / 认签 / 优化态）要照原样带回。
             attach = pre_write or self._attach_proofs(stmt_now, attach_entries,
                                                       canonical=attach_canonical,
-                                                      bits=bits)
+                                                      bits=bits,
+                                                      proof_no=int(proof_no_placement))
             # ---- 2026-11-08：已在终态档也要把"这一笔认到的签"落到行上 ----------
             #
             # V 只对手稿负责之后，签不再由 V 写 statements；B 的 at_tier 出口（同一条
@@ -4349,6 +4382,11 @@ class _RegisterStatement:
                     proof_no=int(proof_no_placement))
                 if _collected.get("row"):
                     written = {**dict(written), "row": dict(_collected.get("row") or {})}
+            _landed_row = (next((dict(r) for r in self.store.rows("statements")
+                                 if str(r.get("stmt_id") or "") == stmt_now), {})
+                           if attach.get("written")
+                           else dict(written.get("row") or {}))
+            _landed_has_proof = _row_has_proof(_landed_row)
             out = {"ok": True, "stmt_id": stmt_now,
                    #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                 **({"promoted_manuscript": dict(pre_gate_promotion)}
@@ -4370,7 +4408,11 @@ class _RegisterStatement:
                    #: 这一支只改在册那一行，不新建（与 duplicate 那一支同一个读数键：
                    #: 调用方按它判"有没有多一行"，缺了会把"改档"读成"建了新行"）。
                    "new_row": False,
-                   "proof_no": int(proof_no_placement),
+                   "has_proof": _landed_has_proof,
+                   "proof_no": (int(_landed_row.get("proof_no") or 0)
+                                if _landed_has_proof else 0),
+                   "proof_sha256": (str(_landed_row.get("proof_sha256") or "")
+                                    if _landed_has_proof else ""),
                    "proof_no_source": str(proof_no_source),
                    "row": dict(written.get("row") or {}),
                    #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
@@ -4453,7 +4495,13 @@ class _RegisterStatement:
             #: D2① 已经写过正文的那一笔不写第二遍（读数照原样带回，见升档那一支）。
             attach = pre_write or self._attach_proofs(stmt_dup, attach_entries,
                                                       canonical=attach_canonical,
-                                                      bits=bits)
+                                                      bits=bits,
+                                                      proof_no=int(proof_no_placement))
+            _dup_row = (next((dict(r) for r in self.store.rows("statements")
+                              if str(r.get("stmt_id") or "") == stmt_dup), {})
+                        if attach.get("written")
+                        else dict(written.get("row") or {}))
+            _dup_has_proof = _row_has_proof(_dup_row)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
                                stmt_id=stmt_dup,
@@ -4487,7 +4535,11 @@ class _RegisterStatement:
                        "sign_filing": _sign_filing_reading(
                            self.store, manuscript_path=manuscript_path,
                            manuscript_text=manuscript_text, statement_id=stmt_dup),
-                       "proof_no": int(proof_no_placement),
+                       "has_proof": _dup_has_proof,
+                       "proof_no": (int(_dup_row.get("proof_no") or 0)
+                                    if _dup_has_proof else 0),
+                       "proof_sha256": (str(_dup_row.get("proof_sha256") or "")
+                                        if _dup_has_proof else ""),
                        "proof_no_source": str(proof_no_source),
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": _deps_reading(written),
@@ -4615,7 +4667,8 @@ class _RegisterStatement:
         data = dict(written.get("row") or {})
         attach = self._attach_proofs(stmt_id, attach_entries,
                                      canonical=attach_canonical,
-                                     bits=bits)
+                                     bits=bits,
+                                     proof_no=int(proof_no_placement))
         if attach.get("refused"):
             # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
             # 成功返回：盘上那一份 `proof_text` 一个字都没动，读数在 `_optimized_reading`。
@@ -4691,6 +4744,11 @@ class _RegisterStatement:
         sign_filing = _sign_filing_reading(
             self.store, manuscript_path=manuscript_path,
             manuscript_text=manuscript_text, statement_id=stmt_id)
+        # ---- 缺陷 ③：这一行现在到底有没有一份证明（读数与盘上同一个判据） ----------
+        # `has_proof` 是显式读数：e-num 那一档 `proof_text=""`、清单空 ⇒ false，
+        # 顶层不写 `proof_no`（0）；有手稿正文的那一档 ⇒ true，号与 sha 由
+        # `_attach_proofs` 的收录回执写进 statements 顶层。
+        _row_proof_now = _row_has_proof(data)
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 #: D2：这一笔的号是从稿名 / 稿头当候选来的（有才带这一格；见下候选号那一段）。
                 **({"stmt_id_candidate": candidate_stmt_id,
@@ -4776,7 +4834,13 @@ class _RegisterStatement:
                 "proof_vs_source": dict(proof_vs_source),
                 #: 证明号与它的来源（缺口 ①）：`crafted` / `carried` / `fallback` ——
                 #: 回退也要说，否则"读了"与"猜的"在读数上分不开。
-                "proof_no": int(proof_no_placement),
+                #: 缺陷 ③：没有证明的那一档（e-num / 空证明）不写号（0），并把
+                #: `has_proof=false` 显式给出 —— "第 1 份证明"只属于真有一份正文的行。
+                "has_proof": _row_proof_now,
+                "proof_no": (int(data.get("proof_no") or 0)
+                             if _row_proof_now else 0),
+                "proof_sha256": (str(data.get("proof_sha256") or "")
+                                 if _row_proof_now else ""),
                 "proof_no_source": str(proof_no_source),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
