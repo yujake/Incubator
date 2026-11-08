@@ -173,6 +173,8 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     老判据断言"只给 `proof_text` 与 `proofs=[#p1]` 落出同一行"，那是内联老路本身。
     新判据先钉住"内联签不够"（正文要有审的是手稿的签），再在"有手稿签"的前提下
     保留原来那一半：两种 #p1 写法落出的行逐字节相同。
+    2026-11-09（缺陷③）：正文覆盖 / 新建这一支也要写收录回执（`proof_no` /
+    `proof_sha256`），且 sha 必须等于盘上那份正文的真实 sha、号等于该份的号。
     """
     # 负控：签是内联审出来的（台账行没有 `manuscript`）⇒ 整笔拒。
     st_bad = _ws(tmp_path / "inline")
@@ -214,11 +216,11 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     # 2026-11-05：`_grade_recomputed` 的 `from` / `to` 是等级，历史档位由
     # `from_kind` / `to_kind` 反算给出；`evidence_kind` 只是历史列，登记期不再回填
     # （判定面读 `derive_grade`）。
-    # 2026-11-06（真机 R-mk-infinite-92）：收录回执两格（`proof_no` / `proof_sha256`）
-    # 只在"正文补进在册那一行、补翻第 2 位"的那一笔落（`_attach_proofs` 的
-    # `proof_collected`）。这一条走的是正文覆盖 / 新建那一支，行上不该多出这两格 ——
-    # 下面逐行断言"没有"。它们不是 `schema.Statement` 的字段（改磁盘格式契约要人审），
-    # 所以从"只差内部留痕"的集合里排除。
+    # 2026-11-06（真机 R-mk-infinite-92）：收录回执两格（`proof_no` / `proof_sha256`）——
+    # 2026-11-09（缺陷③）起口径是"这一行真有正文的每一支都写"：新建 / 正文覆盖这一支
+    # 也要有（第几份证明由 B 收录时决定；只在一支上写反而让两条等价写法落出不同的行）。
+    # 它们不是 `schema.Statement` 的字段（改磁盘格式契约要人审），`_attach_proofs` 一直
+    # 就以非 schema 键写这两格；这里沿用既有容忍度，所以从"只差内部留痕"的集合里排除。
     allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256"}
     assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
@@ -232,10 +234,15 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
         assert trace.get("to_kind") == VR.PROOF_REVIEW_KIND, trace
         assert trace.get("from") and trace.get("from") != trace.get("to"), trace
         assert trace.get("proof_no") == 1, trace
-        # 收录回执（`proof_no` / `proof_sha256`）只在"把正文补进在册那一行、补翻第 2 位"
-        # 的那一笔出现（`_attach_proofs` 的 `proof_collected`）；这一条走的是正文覆盖 /
-        # 新建那一支，行上不该多出这两格 —— 那里的正文与第 2 位本来就是同一笔来的。
-        assert "proof_no" not in row and "proof_sha256" not in row, sorted(row)
+        # 2026-11-09（缺陷③）：收录回执（`proof_no` / `proof_sha256`）在"这一行真有
+        # 正文"的每一支都写 —— 新建 / 正文覆盖这一支也要有（第几份证明由 B 收录时
+        # 决定）；且 sha 必须是盘上那份正文的真实 sha、号必须等于该份的号，不是自报。
+        # 它们不是 schema 字段（见上）。
+        assert row.get("proof_no") == 1, sorted(row)
+        assert str(row.get("proof_sha256") or "") == VR.proof_sha(P1), (
+            row.get("proof_sha256"), VR.proof_sha(P1))
+        assert str(row.get("proof_sha256") or "") == VR.proof_sha(
+            str(row.get("proof_text") or "")), row
         last = _ledger(store)[-1]
         assert trace.get("basis") == (
             f"verifications/{S.format_id(0)}.jsonl#{last['verification_id']}"), trace
@@ -244,6 +251,47 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
         "有手稿签时，只给 proof_text 与 proofs=[#p1] 必须落出同一行（等价 #p1）")
     assert "proofs" not in out_old and "proofs" not in out_new, (out_old, out_new)
     assert sorted(out_old) == sorted(out_new), (sorted(out_old), sorted(out_new))
+
+
+def test_a2_without_the_receipt_write_the_new_row_has_no_proof_number(
+        tmp_path, monkeypatch):
+    """① 反真空：把"写收录回执"摘掉 ⇒ 新建 / 正文覆盖这一支的行上就没有两格（① 红）。
+
+    打桩点取"写盘前那一格"（`Secretary.land_statement`）：它把 `transition` 交来的行
+    原样写盘。这里把 `proof_no` / `proof_sha256` 从要写的那一行里拿掉 —— 正是缺陷③
+    改前的形态。① 的"盘上两格与真实正文 sha 一致"因此不再成立（红），证明它的绿
+    真的来自 `_attach_proofs` 那一笔写入。
+    """
+    import agentflow.secretary as SEC
+
+    real = SEC.Secretary.land_statement
+
+    def _strip(self, stmt_id, transition, **kwargs):
+        def _inner(row):
+            got = transition(row)
+            if isinstance(got, dict) and isinstance(got.get("row"), dict):
+                stripped = dict(got["row"])
+                stripped.pop("proof_no", None)
+                stripped.pop("proof_sha256", None)
+                got = dict(got)
+                got["row"] = stripped
+            return got
+
+        return real(self, stmt_id, _inner, **kwargs)
+
+    monkeypatch.setattr(SEC.Secretary, "land_statement", _strip)
+    st = _ws(tmp_path)
+    _empty_then_sign(st, text=P1, manuscript="reports/f-proof-000000.md")
+    from agentflow import depsection as DS
+
+    ms = ("# F 的证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n" + STATEMENT
+          + "\n\n## 证明\n\n" + P1 + "\n\n" + DS.render_dependency_section([]))
+    out = _agent(st).register_statement(**OWN, proof_text=P1, proof_manuscript=ms)
+    assert out["ok"] is True, out
+    row = _row(st)
+    assert row["proof_text"] == P1, row
+    assert "proof_no" not in row, sorted(row)
+    assert "proof_sha256" not in row, sorted(row)
 
 
 # ============================================================ ② 多证明写入
