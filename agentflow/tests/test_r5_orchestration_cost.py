@@ -1204,6 +1204,9 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_shell_demo",                # R8-A-1 退场的入口处理函数（2026-10-07 删）：`cli.py` 的留痕注释在讲"这里原有它、为什么摘掉"；留痕按纪律必须点名被删的东西
     "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
     "_notify_gate",               # 2026-10-07 改名成 `notify_reading`（旧名在说谎：它不打回）：`agent_loop.py` 里那段改名留痕必须点名旧名 —— 留痕按纪律必须点名被删/被改的东西
+    "_searchable_statement_rows",  # 2026-11-09 搬进查口后从 `Secretary` 删掉的旧私有方法名（真符号 0 次）：
+                                  # `secretary.py` 与 `statementledger.py` 的搬迁留痕必须点名它，否则读者按图找不到东西
+    "_statements_matching_keywords",  # 同上：旧的关键词检索私有方法，改成查口的 `by_keywords` 后只剩文本提及
     "_BASE_",                     # 别名前缀（不是完整标识符）
     "_private",                   # 判据片段（不是标识符）
     "_accepts_",                  # 测试名约定片段（不是标识符）
