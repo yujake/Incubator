@@ -444,5 +444,61 @@ def test_k_every_index_site_goes_through_the_box() -> None:
     assert defs == ["statementledger.py"], f"全表→索引的实现不止一处：{defs}"
 
 
+# ===================================================== l 收口登记表（S5：正文规范化全等）
+#: 改前各自写 `normalize(statement_full) == key` 的那些函数。现在它们必须调
+#: `statementledger.duplicate_hits` —— 恢复成自己比一遍 ⇒ 这一条当场红。
+#:
+#: 注意：`agent_l/formalize.py` 的 `claim_match` 与 B 的 `_v_signature_for` 不在这张表里
+#: —— 它们比的不是 `textutil.normalize(statement_full)`：前者用 `_flat`
+#: （只压空白，比 normalize 更严），后者用 `statementbody.body_of`（会回退到
+#: `statement_text`）。两条都是另一件事，折进来会悄悄放宽判据。
+MIGRATED_TEXT: tuple[tuple[str, str], ...] = (
+    ("agentflow/agent_b/register_statement.py", "_existing_statement_for"),
+    ("agentflow/agent_b/register_statement.py", "_resolve_same_statement"),
+    ("agentflow/secretary.py", "_record_statement_tx"),
+    ("agentflow/secretary.py", "proof_text_manuscript_sign_gate"),
+)
+
+
+def _hand_rolled_text_lookup(fn: ast.AST) -> bool:
+    """函数体里还有没有 `next((r for r in rows if normalize(r["statement_full"]) == key))`。"""
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "next" and node.args):
+            continue
+        gen = node.args[0]
+        if not isinstance(gen, ast.GeneratorExp):
+            continue
+        for inner in ast.walk(gen):
+            if not (isinstance(inner, ast.Compare)
+                    and any(isinstance(op, ast.Eq) for op in inner.ops)):
+                continue
+            text = ast.unparse(inner)
+            if "normalize" in text and "statement_full" in text:
+                return True
+    return False
+
+
+def test_l_every_exact_text_site_goes_through_the_box() -> None:
+    """l：S5 的 4 个调用点都问查口；谁恢复自己比正文，这一条当场红。"""
+    assert len(MIGRATED_TEXT) >= 4, "登记表被悄悄缩短了"
+    for rel, name in MIGRATED_TEXT:
+        fn = _function_node(rel, name)
+        assert _calls_attr(fn, "duplicate_hits"), (
+            f"{rel}::{name} 没有走 `statementledger.duplicate_hits` —— "
+            "正文规范化全等又长出了第二处")
+        assert not _hand_rolled_text_lookup(fn), (
+            f"{rel}::{name} 里还有手写的正文比对 —— 自己扫全表又回来了")
+    # 反真空：检测器认得出改前那种写法。
+    sample = ast.parse(
+        'def f(rows, key, T):\n'
+        '    return next((r for r in rows\n'
+        '                 if T.normalize(str(r.get("statement_full") or "")) == key), None)\n')
+    assert _hand_rolled_text_lookup(sample.body[0]), "反真空：检测器认不出改前那种写法"
+    defs = [path.name for path in (SRC / "agentflow").rglob("*.py")
+            if "def duplicate_hits(" in path.read_text(encoding="utf-8")]
+    assert defs == ["statementledger.py"], f"正文规范化全等的实现不止一处：{defs}"
+
+
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(__import__("pytest").main([__file__, "-q"]))

@@ -1306,11 +1306,9 @@ class _RegisterStatement:
                 except Exception as exc:  # noqa: BLE001
                     out["ledger_error"] = f"{type(exc).__name__}: {exc}"
             return out
-        # 逐字相同：确定性事实，免模型。
-        key = T.normalize(str(full or ""))
-        exact = next((r for r in eligible
-                      if T.normalize(str(r.get("statement_full") or "")) == key), None)
-        if key and exact is not None:
+        # 逐字相同：确定性事实，免模型。比对口径只有一处（查口 `duplicate_hits`）。
+        exact = (SL.duplicate_hits(eligible, text=full)["hits"] or [None])[0]
+        if T.normalize(str(full or "")) and exact is not None:
             return self._same_statement_exact(
                 exact=exact, full=full, label=label, kind=kind,
                 task_id=task_id, root=root)
@@ -5363,17 +5361,14 @@ class _RegisterStatement:
         """
         from .. import textutil as T
 
-        key = T.normalize(str(full or ""))
-        if not key:
+        if not T.normalize(str(full or "")):
             return None
         try:
-            rows = [dict(r) for r in self.store.rows("statements")]
+            rows = self.store.rows("statements")
         except Exception:  # noqa: BLE001 —— 读不到 ⇒ 走正常那一支（不猜它在册）
             return None
-        for row in rows:
-            if T.normalize(str(row.get("statement_full") or "")) == key:
-                return row
-        return None
+        hits = SL.duplicate_hits(rows, text=full)["hits"]
+        return hits[0] if hits else None
 
     def _promote_formal_manuscript(self, *, stmt_id: str, rel: str, text: str,
                                    source: str = "") -> dict:

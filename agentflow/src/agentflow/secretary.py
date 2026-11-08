@@ -1544,7 +1544,6 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
     proof_no, sha256, covering}`。`covering` 是命中的台账行摘要（`verification_id` /
     `manuscript`），给读的人核对"是哪一份稿上的签"。
     """
-    from . import textutil as _T
     from . import verifications as _VR
 
     out: dict[str, Any] = {"checked": True, "required": False, "ok": True,
@@ -1574,9 +1573,8 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
         # 按号定位走查口（口径一）；`rows` 是这一层刚读的那一份快照。
         row = SL.by_id(rows=rows, stmt_id=sid)["row"] or None
     elif str(statement_full or "").strip():
-        key = _T.normalize(str(statement_full or ""))
-        row = next((r for r in rows
-                    if _T.normalize(str(r.get("statement_full") or "")) == key), None)
+        # 正文规范化全等的比对口径只有一处（查口 `duplicate_hits`）。
+        row = (SL.duplicate_hits(rows, text=statement_full)["hits"] or [None])[0]
     if row is not None:
         out["statement_id"] = str(row.get("stmt_id") or "")
     if row is not None and str(row.get("proof_text") or "").strip() == text:
@@ -9068,9 +9066,10 @@ class Secretary:
                            *([CR.LEGACY_TABLE] if legacy.get("present") else ()),
                            actor=f"secretary-{self.role}",
                            note="record_statement") as tx:
-            key = T.normalize(full)
-            existing = next((r for r in tx.rows("statements")
-                             if T.normalize(str(r.get("statement_full") or "")) == key), None)
+            # 正文规范化全等的比对口径只有一处（查口 `duplicate_hits`）；
+            # 读的是事务快照（`tx.rows`），所以"读—判—写"仍在同一把锁里。
+            existing = (SL.duplicate_hits(tx.rows("statements"), text=full)["hits"]
+                        or [None])[0]
             if existing is not None and not force_new:
                 upgraded = self._upgrade_evidence_kind(existing, body)
                 if upgraded.get("upgraded"):
