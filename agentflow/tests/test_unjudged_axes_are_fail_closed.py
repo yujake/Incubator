@@ -6,17 +6,19 @@
 
 | 条 | 它要证明的事 |
 |---|---|
-| a | 同种证明轴判不了 ⇒ `checked=False` + `state=""`，不再是第三种结论 |
+| a | 短证明不按字数预判死（照样判）；"没有可比的文本"才 `checked=False` / `state=""` |
 | b | 概念同一性轴判不了 ⇒ `checked=False` + `state=""` |
-| c | 调用点：同种证明判不了 ⇒ 整笔受控拒 `proof_kind_unjudged`、不新增证明号 |
+| c | 调用点：判定面没给出可用结论 ⇒ 整笔受控拒 `proof_kind_unjudged`、不新增证明号 |
 | d | 调用点：概念同一性判不了 ⇒ 整笔受控拒 `concept_identity_unjudged`、不新建行 |
-| e | 反真空：谁把"判不了"填成 different（`checked=True`）⇒ a / b 当场红 |
+| e | 反真空：谁把"没判成"填成 different（`checked=True`）⇒ a / b 当场红 |
 | f | 正控：判得了的 same / different 照旧（这两轴不是"一律拒"） |
 
-## 为什么不能"判不了当不同"
+## 为什么不能"没判成当不同"
 
-- 同种证明：证明太短（"显然。" / "由定义。"）时词面相似度天然很高；折成 different
-  就是"新增一个证明号"，同一种证法被并列记录 —— 真机担心的正是这个形态。
+- 同种证明：折成 different 就是"新增一个证明号"，同一种证法被并列记录 —— 真机担心
+  的正是这个形态。**但"短"本身不是没判成**：2026-11-08 主笔裁定删掉"内容单元 <
+  `MIN_CONTENT_UNITS` ⇒ unknown"这条机械预判（短证明也判得出两种证法）；这一档只剩
+  "没有可比的文本"。
 - 概念同一性：两侧都抽不出定义项（标签空、正文不是一句定义）时折成 different，
   同一个概念就照旧落第二行 —— mp3-r2 的 `000003` / `000004` 正是这么来的。
 
@@ -91,14 +93,23 @@ def _proof_nos(row: dict) -> list[int]:
 
 # ============================================================ a / b：纯函数（两轴）
 
-def test_a_unjudgeable_proof_is_not_judged(tmp_path: pathlib.Path) -> None:
-    """a：同种证明轴判不了 ⇒ `checked=False` + `state=""`（不是第三种结论、更不是不同）。"""
+def test_a_short_proofs_are_still_judged(tmp_path: pathlib.Path) -> None:
+    """a：短证明不按字数预判死 —— 照样判；只有"没有可比的文本"才没判成。
+
+    2026-11-08 主笔裁定：删掉"内容单元 < `MIN_CONTENT_UNITS` ⇒ unknown"这条机械预判。
+    "取 δ=ε 逐点验证"与"用有限覆盖"是两种证法，短也判得出；判不了只剩"没东西可判"
+    （空文本）这一档。
+    """
+    short = PK.same_kind_proof("取 δ=ε，逐点验证。", "用有限覆盖。")
+    assert short["checked"] is True, short
+    assert short["state"] == PK.STATE_DIFFERENT, short
     for left, right in (("显然。", "由定义。"), ("x = 1", "y = 1"), ("≤ ≥ ≠", "≠ ∤ ∝")):
         got = PK.same_kind_proof(left, right)
-        assert got["checked"] is False, (left, right, got)
-        assert got["state"] == "", (left, right, got)
-        assert "没判成" in str(got.get("reason") or ""), (left, right, got)
-        assert got["basis"] == "" and got["similarity"] == 0.0, got
+        assert got["checked"] is True, (left, right, got)
+        assert got["state"] in (PK.STATE_SAME, PK.STATE_DIFFERENT), (left, right, got)
+    empty = PK.same_kind_proof("", "由定义。")
+    assert empty["checked"] is False and empty["state"] == "", empty
+    assert "没有可比的文本" in str(empty.get("reason") or ""), empty
 
 
 def test_b_unjudgeable_concept_is_not_judged(tmp_path: pathlib.Path) -> None:
@@ -111,17 +122,24 @@ def test_b_unjudgeable_concept_is_not_judged(tmp_path: pathlib.Path) -> None:
 
 # ============================================================ c / d：调用点 fail-closed
 
-def test_c_same_kind_unjudged_refuses_a_new_proof_number(tmp_path: pathlib.Path) -> None:
-    """c：同种证明判不了 ⇒ 受控拒 `proof_kind_unjudged`、证明号不变。
+def test_c_judge_without_an_answer_refuses_a_new_proof_number(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """c：判定面没给出可用结论 ⇒ 受控拒 `proof_kind_unjudged`、证明号不变。
 
-    先在册一条命题 + 一份长证明；再把同一命题换一种写法交来、证明正文只写"显然。"
-    ⇒ `same_kind_proof("显然。", PROOF_A)` 判不了 ⇒ 整笔不写。
+    短证明现在会照常判（见 a），所以这一档用**打桩的"没答"判定面**来造：契约是
+    "判定面没答 ⇒ 不新增证明号"（未来判定面换成模型时，超时 / 坏 JSON / 没给可用
+    答案都走这一档）。
     """
+    monkeypatch.setattr(
+        PK, "same_kind_proof",
+        lambda *a, **k: {"checked": False, "state": "", "basis": "", "similarity": 0.0,
+                         "reason": "打桩：判定面没给出可用结论"},
+        raising=True)
     st = _ws(tmp_path)
     b = _agent(st)
     first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
     assert first.get("ok") is True, first
-    refused = b.register_statement(**_own(FULL_A_KEY), proof_text=SHORT_PROOF)
+    refused = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_B)
     assert refused.get("ok") is False, refused
     assert refused.get("kind") == SEC.PROOF_KIND_UNJUDGED, refused
     assert "#1" in str(refused.get("error") or ""), refused
@@ -170,7 +188,7 @@ def test_e_folding_unjudged_into_different_turns_the_criterion_red() -> None:
         assert not (folded["checked"] is False and folded["state"] == ""), (
             f"{want}：把判不了折成 different 之后仍然被当成通过 ⇒ 反真空失败")
     # 真实现与这个错误实现逐格相反 —— 于是"改坏了"一定会被 a / b 抓住。
-    real_proof = PK.same_kind_proof(SHORT_PROOF, PROOF_A)
+    real_proof = PK.same_kind_proof("", PROOF_A)
     real_concept = PK.same_concept(BLANK_LABEL, BLANK_DEF, BLANK_LABEL, BLANK_DEF)
     assert real_proof["checked"] is False and real_proof["state"] == "", real_proof
     assert real_concept["checked"] is False and real_concept["state"] == "", real_concept

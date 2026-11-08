@@ -587,12 +587,12 @@ def test_reverting_one_judge_turns_its_criterion_red(
 # ============================================================ ⑥ 三态：判不了不并
 
 def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) -> None:
-    """⑥ 判不了：命题轴仍是 unknown（兜底口径），同种证明轴是"没判成"（两档之外）。
+    """⑥ 判不了：命题轴仍是 unknown（兜底口径）；同种证明轴不按字数预判死。
 
     2026-11-08 业主「没有判不了」只收了 `same_concept` / `same_kind_proof` 两轴；
     命题轴的确定性兜底仍是三态（`statementfission` 与 `_same_proposition_candidate`
-    读的就是它）。同种证明轴判不了 ⇒ `checked=False` + `state=""`，调用方受控拒
-    （见 `tests/test_unjudged_axes_are_fail_closed.py`）。
+    读的就是它）。同种证明轴 2026-11-08 主笔裁定：短证明照样判（"显然。"/"由定义。"
+    也判得出 different），`checked=False` 只剩"没有可比的文本"（空串）。
     """
     for left, right in (("x = 1", "y = 1"), ("显然。", "由定义。"),
                         ("≤ ≥ ≠", "≠ ∤ ∝"), ("∀x∈G", "∀y∈H")):
@@ -602,8 +602,11 @@ def test_unjudgeable_texts_are_unknown_and_never_merged(tmp_path: pathlib.Path) 
         assert got["reason"], (left, right, got)
     assert "全是符号" in PK.same_proposition("≤ ≥ ≠", "≠ ∤ ∝")["reason"]
     assert "太短" in PK.same_proposition("x = 1", "y = 1")["reason"]
-    unjudged_proof = PK.same_kind_proof("显然。", "由定义。")
-    assert unjudged_proof["checked"] is False and unjudged_proof["state"] == "", unjudged_proof
+    short_proof = PK.same_kind_proof("显然。", "由定义。")
+    assert short_proof["checked"] is True, short_proof
+    assert short_proof["state"] == PK.STATE_DIFFERENT, short_proof
+    empty_proof = PK.same_kind_proof("", "由定义。")
+    assert empty_proof["checked"] is False and empty_proof["state"] == "", empty_proof
 
     # 登记路径：两条都判不了的短命题各落各的行（不许因为"判不了"就把它们并成一条）。
     st = _ws(tmp_path)

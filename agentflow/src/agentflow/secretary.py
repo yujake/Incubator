@@ -1362,9 +1362,10 @@ PROOF_SAME_KIND = "proof_same_kind"
 #: 同种证明这一问"没判成"的受控码（2026-11-08，业主「没有判不了」）。
 #:
 #: 为什么必须与 `PROOF_SAME_KIND` 分开：那一档是现象结论（"判过了、同种"），这一档
-#: 没有结论（证明太短 / 纯符号 ⇒ `same_kind_proof` 回 `checked=False`）。折平会把
-#: "没判成"读成"判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）——
-#: 前者是同一种证法被并列记录，后者是一份真的另一种证法被拒，两种都错。
+#: 没有结论（`same_kind_proof` 回 `checked=False`：今天只剩"没有可比的文本"，未来若
+#: 判定面换成模型，则超时 / 坏 JSON / 没给可用答案也落这一档）。折平会把"没判成"读成
+#: "判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）—— 前者是同一种证法
+#: 被并列记录，后者是一份真的另一种证法被拒，两种都错。
 PROOF_KIND_UNJUDGED = "proof_kind_unjudged"
 #: 概念同一性"没判成"的受控码（2026-11-08，同上）。
 #:
@@ -9562,9 +9563,13 @@ class Secretary:
         `{"hits": [...], "unjudged": [{"proof_no", "reason"}]}`：
 
         - `hits`：判成了 `same` 的那些（`proof_no` / `similarity` / `detail` / `reason`）；
-        - `unjudged`：判不了的那几份（证明太短 / 纯符号 ⇒ `checked=False`）。它们不再
+        - `unjudged`：判定面没给出可用结论的那几份（`checked=False`）。它们不再
           静默跳过：调用方据此 fail-closed（整笔受控拒、不新增证明号）。改前把它们
           当成"不是同种"继续走 ⇒ "判不了当不同"，那正是同一种证法被并列记录的来路。
+          **空槽不算"判不了"**：`proof_list` 会把"canonical 那一格还没有正文"读成
+          一条空证明（`(1, "")`），那不是一份可比的证明，跳过它 —— 否则每一笔
+          "在册行还没有证明、这一笔来补第一份"都会被受控拒（真机 R-mk-infinite-92
+          的 5 条红就是它们）。
         """
         from . import verifications as VR   # 惰性：证明清单的唯一读口径
 
@@ -9573,6 +9578,8 @@ class Secretary:
         if not str(proof or "").strip():
             return {"hits": hits, "unjudged": unjudged}
         for no, text in VR.proof_list(row):
+            if not str(text or "").strip():
+                continue      # 空槽不是一份证明，也不是"判不了"
             got = _PK.same_kind_proof(proof, text, threshold=self.proof_same_jaccard)
             if not got.get("checked"):
                 unjudged.append({"proof_no": int(no),
@@ -9896,10 +9903,11 @@ class Secretary:
                        refused=PROOF_KIND_UNJUDGED, stmt_id=sid, merged_into=sid,
                        matched_by=basis, similarity=similarity, same_kind=[],
                        unjudged_proofs=list(unjudged_proofs),
-                       reason=(f"这一份证明与 stmt:{sid} 的 {names} 判不了是不是同种"
-                               "（判不了 ≠ 不同）⇒ 不新增证明号：判不了就当不同，同一种"
-                               "证法会被并列记录。把证明正文写清楚（太短 / 纯符号是判不了"
-                               "的两档）再交"))
+                       reason=(f"这一份证明与 stmt:{sid} 的 {names} 没判成是不是同种"
+                               "（没判成 ≠ 不同）⇒ 不新增证明号：折成不同，同一种证法会"
+                               "被并列记录。短证明不按字数预判死（会照常判）；这一档只在"
+                               "判定面没给出可用结论时出现（今天 = 没有可比的文本；判定面"
+                               "若换成模型，则是超时 / 坏 JSON / 没给可用答案）"))
             return out
         # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
         #

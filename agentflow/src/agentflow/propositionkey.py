@@ -77,8 +77,18 @@
   不返回第三种结论。调用方据此 fail-closed（受控拒：不新增证明号 / 不新建概念行）；
   不许把它折成 `different`。
 
-判不了的两档是：文本太短（内容单元 < `MIN_CONTENT_UNITS`）、或者全是符号没有可比的文字。
-理由必须留在 `reason` 里（哪一档、读数是多少），读数在 `judgeable["a"]` / `["b"]`。
+两轴"没判成"的口径（2026-11-08 主笔裁定：不按字数预判死）：
+
+- `same_kind_proof`：**不再看 `MIN_CONTENT_UNITS`** —— 短证明照样判（"取 δ=ε 逐点验证"
+  与"用有限覆盖"是两种证法，判得出）。只剩一种没判成：**没有可比的文本**（空串）。
+  理由留在 `reason` 里。
+- `same_concept`：**从来不用** `MIN_CONTENT_UNITS`（它没有"文本长度"这一轴）；"没判成"
+  是**两侧都抽不出定义项**（标签是空的、正文也不是「概念（X）」/「定义（X）」形态）。
+
+`MIN_CONTENT_UNITS` 今天只剩一处用处：命题轴的确定性兜底（`judgeable`，被
+`proposition_key` / `same_proposition` / `prose_similarity` 调用）。`x = 1` 与 `y = 1`
+的词面相似度是 2/3，光看相似度会把两条不同断言判成"高度重合"——那一档仍是 `unknown`
+（`statementfission` 的形态读数也依赖它），不在本件收两档的范围内。
 
 ## 相似度（兜底的那一档）
 
@@ -149,11 +159,15 @@ SAME_PROPOSITION_JACCARD = 0.85
 #: 所以这里可以比命题轴更愿意报"同种"。
 PROOF_SAME_JACCARD = 0.80
 
-#: 判不了的下限：内容单元（拉丁词元 + 中文字）少于这个数 ⇒ `unknown`。
+#: 命题轴"判不了"的下限：内容单元（拉丁词元 + 中文字）少于这个数 ⇒ `unknown`。
 #:
-#: 为什么要有它：`x = 1` 与 `y = 1` 的词面相似度是 2/3，光看相似度会把两条不同的
-#: 断言判成"高度重合"。太短的文本没有足够的信息支撑任何结论，所以它必须走
-#: "判不了"这一档，而不是"不同"（"不同"是一个结论，"判不了"不是）。
+#: 用途（2026-11-08 起只剩这一处）：**命题轴的确定性兜底** —— `judgeable` 被
+#: `proposition_key` / `same_proposition` / `prose_similarity` 调用。`x = 1` 与 `y = 1`
+#: 的词面相似度是 2/3，光看相似度会把两条不同断言判成"高度重合"；太短的命题没有足够
+#: 信息支撑任何结论，所以那一档仍走"判不了"（`unknown`），不是"不同"。
+#:
+#: **同种证明 / 概念同一性两轴不再用它**（2026-11-08 主笔裁定：短证明照样判，见
+#: `_judge` 的 docstring）。概念轴从来没用过它。
 MIN_CONTENT_UNITS = 4
 
 #: `same_proposition` / `same_kind_proof` 的三态取值。
@@ -518,6 +532,12 @@ def _judge(a: str, b: str, *, threshold: float, basis: str,
     `unknown_is_unjudged`：判不了时怎么表达。`False`（命题轴）照旧 `state="unknown"`；
     `True`（证明轴，2026-11-08 起）`checked=False` + `state=""` —— "判不了"不是第三种
     结论，是"没判成"。
+
+    ## 2026-11-08（主笔裁定）：两轴不按"内容单元 < `MIN_CONTENT_UNITS`"预判死
+    短证明照样判："取 δ=ε 逐点验证"与"用有限覆盖"是两种证法，词面相似度判得出来。
+    长度阈值只留给**命题轴的确定性兜底**（`same_proposition` / `proposition_key` /
+    `prose_similarity`）。证明轴只剩一种"没判成"：**没有可比的文本**（空串）——
+    那是没东西可判，不是字数不够。
     """
     left_probe, right_probe = judgeable(a), judgeable(b)
     out: dict[str, Any] = {
@@ -525,16 +545,16 @@ def _judge(a: str, b: str, *, threshold: float, basis: str,
         "key_a": "", "key_b": "", "detail": {}, "reason": "",
         "threshold": float(threshold), "what": what,
     }
-    if not left_probe["ok"] or not right_probe["ok"]:
-        missing = [probe["reason"] for probe in (left_probe, right_probe) if not probe["ok"]]
-        if unknown_is_unjudged:
-            out.update(state="", reason=(f"判不了 = 没判成：{'；'.join(missing)}"
-                                         " ⇒ 调用方受控拒（判不了不等于不同）"))
-        else:
-            out["reason"] = (f"判不了：{'；'.join(missing)} ⇒ 不并、也不记成不同（三态纪律）")
-        out["judgeable"] = {"a": left_probe, "b": right_probe}
-        return out
     out["judgeable"] = {"a": left_probe, "b": right_probe}
+    if unknown_is_unjudged:
+        if not str(a or "").strip() or not str(b or "").strip():
+            out.update(state="", reason=("判不了 = 没判成：至少一侧的证明正文是空的"
+                                         "（没有可比的文本，不是字数不够）"))
+            return out
+    elif not left_probe["ok"] or not right_probe["ok"]:
+        missing = [probe["reason"] for probe in (left_probe, right_probe) if not probe["ok"]]
+        out["reason"] = (f"判不了：{'；'.join(missing)} ⇒ 不并、也不记成不同（三态纪律）")
+        return out
     out["checked"] = True
     if basis == BASIS_KEY:
         key_a, key_b = proposition_key(a), proposition_key(b)
@@ -593,13 +613,17 @@ def proof_similarity(a: str, b: str) -> float:
 
 def same_kind_proof(a: str, b: str, *,
                     threshold: float = PROOF_SAME_JACCARD) -> dict[str, Any]:
-    """两份证明是不是同一种证法（两档：same / different；判不了 = 没判成）。
+    """两份证明是不是同一种证法（两档：same / different；没判成 = `checked=False`）。
 
-    2026-11-08 业主：「没有判不了」⇒ 这一轴与命题同一性同一条纪律：判不了不是第三种
-    结论，是 `checked=False`（`state=""`）；调用方据此 fail-closed（不新增证明号，
-    受控拒 `proof_kind_unjudged`）。为什么不能折成 `different`：证明太短（"显然。" /
-    "由定义直接得到。"）时两份短证明的词面相似度天然很高，折成 different 就是"判不了
-    当不同" —— 同一种证法会被并列记录，正是这一轴要防的形态。
+    2026-11-08 业主：「没有判不了」⇒ 判不了不是第三种结论，是 `checked=False`
+    （`state=""`）；调用方据此 fail-closed（不新增证明号，受控拒
+    `proof_kind_unjudged`）。
+
+    ## 2026-11-08（主笔裁定）：不按字数预判死
+    短证明照样判：词面相似度判得出"取 δ=ε 逐点验证" ≠ "用有限覆盖"。所以这一轴
+    **不看 `MIN_CONTENT_UNITS`**；`checked=False` 只剩"没有可比的文本"（空串）——
+    那是没东西可判，不是字数不够。两种折平都不许：折成 different 会让同一种证法被
+    并列记录；折成 same 会让一份真的另一种证法被拒。
     """
     return _judge(a, b, threshold=threshold, basis=BASIS_PROOF_SIMILARITY, what="证明",
                   unknown_is_unjudged=True)
@@ -768,7 +792,8 @@ def selftest() -> int:
                                    "概念（有限维 Lie 代数）：设 K 为域。")
     two_concepts = same_concept("有限维李代数", "概念（有限维李代数）：dim < ∞。",
                                 "幂零李代数", "概念（幂零李代数）：降中心列终止。")
-    tiny_proof = same_kind_proof("x = 1", "y = 1")
+    tiny_proof = same_kind_proof("显然。", "由定义。")
+    empty_proof = same_kind_proof("", "由定义。")
     tiny_concept = same_concept("", "不是一句定义", "", "也不是一句定义")
     checks = [
         (proposition_key(a) == proposition_key(b), "同一命题的两种写法键相同", proposition_key(a)),
@@ -777,8 +802,10 @@ def selftest() -> int:
         (proof_same["state"] == STATE_SAME, "同种证明判成 same", proof_same),
         (proof_cross["state"] == STATE_DIFFERENT, "不同证明判成 different", proof_cross),
         (tiny["state"] == STATE_UNKNOWN, "命题轴太短的文本仍是 unknown（兜底口径）", tiny),
-        (tiny_proof["checked"] is False and tiny_proof["state"] == "",
-         "同种证明轴判不了 ⇒ checked=False / state=''", tiny_proof),
+        (tiny_proof["checked"] is True and tiny_proof["state"] == STATE_DIFFERENT,
+         "短证明照样判（不按字数预判死）", tiny_proof),
+        (empty_proof["checked"] is False and empty_proof["state"] == "",
+         "同种证明轴没有可比的文本 ⇒ checked=False / state=''", empty_proof),
         (same_concept_hit["state"] == STATE_SAME, "同一概念判成 same", same_concept_hit),
         (two_concepts["state"] == STATE_DIFFERENT, "两个概念判成 different", two_concepts),
         (tiny_concept["checked"] is False and tiny_concept["state"] == "",
