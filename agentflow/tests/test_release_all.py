@@ -2907,6 +2907,19 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                         "登记元信息）/ entries_on_disk / proof_revisions（收工读数）—— "
                         "`manuscriptform.name_reading` 定路径、本模块定身份，两处合起来是"
                         "「一份命题只住一份稿」的全部实现",
+    # 2026-11-08（块乙，业主逐字：「那条猜想只是参考意见，D不能直接把自己的猜想登记到
+    # 命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」）：
+    # D 派活文本的机械判据。为什么必须是顶层模块：它读的是 `sessions/*.jsonl` 的
+    # `agent_step` 事件（`role="D"` 的 `summon` 载荷）与 `conjectures` / `attack_plans`
+    # 两张台账，判据要能被测试当纯函数直接喂事件（那个测试文件不走 store、不建会话目录），
+    # 挂进 `agent_d/` 会让判据拖起整个角色包；而它不注册工具、不发模型调用、不写盘。
+    "dispatchpolicy.py": "D 派活文本的机械判据（块乙）：`CONJECTURE_PREFIX_RE` / "
+                         "`conjecture_ids_of` / `d_dispatch_records`（唯一读口：D 的 "
+                         "`summon` 派活记录，三态 `checked`）/ `dispatch_text_problems`"
+                         "（派活文本点名 D 自己登记的猜想号 ⇒ `violations` 逐条点名 sid + "
+                         "index + conjecture_id；只写研究方向 ⇒ 绿；认不出归属的 "
+                         "`attack_plans` 记 `self_authored_plans`、不算违规）—— 纯函数、"
+                         "不注册工具、零模型调用、不写盘",
 }
 
 
