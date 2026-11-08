@@ -8654,14 +8654,17 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else S.TABLES["statements"]["id_kind"])
             cid = tx.alloc_id(concept_kind)
-            # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
+            # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号。
+            # `d12_pending=True` 是这一条 D12 甲 入口的身份（全仓只有这一处传）：
+            # 判不了时照落成 pending_definition，别的普通调用不许走这条豁免。
             data = self.write_concept_row(tx, stmt_id=cid, label=name, definition="",
                                           aliases=body.get("aliases") or [],
                                           source_lit_id=src_lit,
                                           doc_id=str(body.get("doc_id") or ""),
                                           origin=concept_origin,
                                           self_authored=(concept_origin == "own_result"),
-                                          mirror=bool(legacy.get("present")), out=out)
+                                          mirror=bool(legacy.get("present")), out=out,
+                                          d12_pending=True)
         d12 = bool(out.get("d12_pending"))
         out.update(checked=True, created=True, stmt_id=cid, row=data,
                    tables=tables, mirrored=bool(legacy.get("present")), pending_concepts=1,
@@ -8710,7 +8713,8 @@ class Secretary:
                           status: str = "", quote_reason: str = "",
                           proof_text: str = "",
                           out: dict[str, Any] | None = None,
-                          transition_sync: bool = False) -> dict[str, Any]:
+                          transition_sync: bool = False,
+                          d12_pending: bool = False) -> dict[str, Any]:
         """在已开的事务里写一条概念行：洗名 + 五元位 + 概念同一性都由这一处做（2026-10-26，D14）。
 
         ## 为什么是"秘书的一个专用方法"，而不是调 `record_statement`
@@ -8737,10 +8741,11 @@ class Secretary:
         - `merged`（新建 + same + 有候选）⇒ 不写这一行，返回并入读数（`stmt_id` 就是并入
           对象）。调用方的号必须是在过闸之前没发过的（四个发号入口都先过闸）—— 否则
           会留 `id_gap`，所以这一档在这里是最后一道网，不是发号点；
-        - `refused`（判不了）⇒ 新建那一支不写、返回受控拒。例外是"定义还没抽到"
-          （`full` 为空，`D12` 甲）：那一档闸只能按标签判，判不了也照落成
-          `pending_definition`，读数里 `d12_pending=True` 写明这个前提（否则定义没抽到的
-          概念永远登记不进来）；判得 `same` 时仍并入（不新建第二行）；
+        - `refused`（判不了）⇒ 新建那一支不写、返回受控拒，拒信给改法（把定义项写出来）。
+          唯一例外是 `D12` 甲：`_record_pending_concept`（定义还没抽到的概念行的唯一入口）
+          传 `d12_pending=True` 时照落成 `pending_definition`，读数里 `d12_pending=True`
+          写明这个前提。这一档按调用方身份分，不按文本（"没定义"）：否则
+          "同义概念都不写定义项"就能绕过受控拒、落成两行。判得 `same` 时两种来路都并入。
         - `created`（different / 候选 0 条）⇒ 照常写。
 
         改一条既有行（`existing` 给了）不新建也不并入：它本身就是那一行，读数只报
@@ -8749,7 +8754,8 @@ class Secretary:
 
         `transition_sync=True` 只给 `conceptrows.sync_from_legacy`（= `upsert_legacy_shaped`
         的过渡同步路）：过渡同步的契约是一号一行（老表那一行按原号镜像到新标准），
-        合并不在这一层做 —— 老表的合并由 `merged_into` 那一格管。别的调用点传它 ⇒
+        合并不在这一层做 —— 老表的合并由 `merged_into` 那一格管。`d12_pending=True` 只给
+        `_record_pending_concept`（`D12` 甲 的唯一入口）。别的调用点传这两个中的任何一个 ⇒
         `tests/test_concept_identity_gate_is_acted_on.py` 的机械判据当场红。
 
         ## 既有行为一个字不动
@@ -8814,10 +8820,11 @@ class Secretary:
         identity = self._same_concept_candidate(tx, label=name, full=full, exclude_id=sid)
         hit = dict(identity.get("hit") or {})
         act = concept_identity_action(identity)
-        #: 这一笔的最终处置：D12 甲（定义还没抽到）把 refused 折成"照落"，
-        #: 其余按折算点的三档；改既有行没有"新行"可谈，不写这一格。
+        #: 这一笔的最终处置：D12 甲（`_record_pending_concept`，按调用方身份传入
+        #: `d12_pending=True`）把 refused 折成"照落"，其余按折算点的三档；
+        #: 改既有行没有"新行"可谈，不写这一格。
         pending_exempt = (act["concept_action"] == "refused"
-                          and existing is None and not full.strip())
+                          and existing is None and bool(d12_pending))
         final_action = "created" if pending_exempt else act["concept_action"]
         if out is not None:
             out["concept_identity"] = {

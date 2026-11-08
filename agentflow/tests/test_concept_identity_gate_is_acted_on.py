@@ -249,35 +249,111 @@ def test_c2_write_concept_row_still_creates_a_different_concept(
     _reading(reading.get("concept_identity") or {}, action="created")
 
 
-def test_d2_only_the_transition_sync_path_may_switch_the_judgment_off() -> None:
-    """d（机械判据）：全仓只有过渡同步那一条入口传 `transition_sync=True`。
+def test_b2b_write_concept_row_refuses_unjudged_even_without_a_definition(
+        tmp_path: pathlib.Path) -> None:
+    """b（入口 2 收紧）：普通调用（非 D12 路径）判不了 ⇒ 受控拒，不因"没定义"自动照落。
 
-    这条不是形式主义：`write_concept_row` 的默认值就是强制处置，而 `transition_sync=True`
-    是唯一的"只报不处置"档。若哪一天别的调用点也传它，概念轴就多出一个后门 ——
-    而盘上看起来一切正常。所以按 AST 逐调用点核：精确等于
-    `[("conceptrows.py", "sync_from_legacy")]`。
+    改前红：`write_concept_row` 把"没有定义可判"一律当成 D12 甲（照落成 pending）——
+    那条口子让"同名/同义概念都不写定义项"能绕过去、落成两行。改后按调用方身份分：
+    只有 `_record_pending_concept`（D12 甲 的唯一入口）能拿到 `d12_pending=True`，
+    普通调用一律受控拒；拒信里给改法。
+    """
+    st = _ws(tmp_path)
+    active = CR.upsert(st, label=UNJUDGEABLE_LABEL, definition="设 X 是一个集合。")
+    assert active.get("concept_action") == "created", active
+    before_rows, before_count = len(_rows(st)), _counter(st)
+    reading: dict = {}
+    sec = _secretary(st)
+    with st.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
+        got = sec.write_concept_row(
+            tx, stmt_id="000009", label="生僻概念 Y", definition="",
+            origin="own_result", self_authored=True, out=reading)
+    assert got.get("concept_action") == "refused", got
+    assert got.get("checked") is False, got
+    assert got.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, got
+    text = str(got.get("reason") or "")
+    assert "改法" in text and "定义项" in text, text
+    assert len(_rows(st)) == before_rows == 1, _rows(st)
+    assert _counter(st) == before_count == 1, (_counter(st), before_count)
+
+
+def test_b2c_the_d12_entry_still_lands_the_same_unjudged_concept(
+        tmp_path: pathlib.Path) -> None:
+    """b（② 的另一半读数）：同一条"没有定义项"的概念 —— D12 入口照落（pending）。
+
+    与 b2b 是同一条概念的两种来路：普通 `write_concept_row` 拒，D12 甲 的
+    `_record_pending_concept` 照落，且读数写明 `d12_pending=True` 与"判不了"。
+    """
+    st = _ws(tmp_path)
+    CR.upsert(st, label=UNJUDGEABLE_LABEL, definition="设 X 是一个集合。")
+    before_rows, before_count = len(_rows(st)), _counter(st)
+    got = _pending(_secretary(st), "生僻概念 Y")
+    assert got.get("created") is True, got
+    assert got.get("concept_action") == "created", got
+    identity = dict(got.get("concept_identity") or {})
+    assert identity.get("checked") is False and identity.get("state") == "", identity
+    assert got.get("d12_pending") is True, got
+    assert len(_rows(st)) == before_rows + 1, _rows(st)
+    assert _counter(st) == before_count + 1, (_counter(st), before_count)
+
+
+def test_e2_removing_the_ordinary_refusal_brings_the_second_row_back(
+        tmp_path: pathlib.Path) -> None:
+    """e（② 的反真空）：让普通调用走 D12 甲 那条豁免（= 把拒绝摘掉）⇒ 复现两行。
+
+    这一条与 b2b 是同一场景的两面：b2b 证明普通调用会被拒；这一条证明"若不拒、照落成
+    pending"，同一条只有标签没有定义项的概念就会落成第二行、并把号烧到 000009 ——
+    所以 b2b 的绿是"按调用方身份拒"给的，不是"恰好没写进去"。
+    """
+    st = _ws(tmp_path)
+    CR.upsert(st, label=UNJUDGEABLE_LABEL, definition="设 X 是一个集合。")
+    sec = _secretary(st)
+    reading: dict = {}
+    with st.tx(*CR.tables_for_concept_write(), actor="agent-B") as tx:
+        got = sec.write_concept_row(
+            tx, stmt_id="000009", label="生僻概念 Y", definition="",
+            origin="own_result", self_authored=True, d12_pending=True, out=reading)
+    assert reading.get("concept_action") == "created", reading
+    assert str(got.get("stmt_id") or "") == "000009", got
+    assert len(_rows(st)) == 2, [r.get("label") for r in _rows(st)]
+    assert _counter(st) == 10, _counter(st)
+
+
+def test_d2_only_the_two_documented_callers_may_switch_the_judgment_off() -> None:
+    """d（机械判据）：两个"关掉处置"的开关各只有一条登记过的来路。
+
+    - `transition_sync=True`：只给 `conceptrows.sync_from_legacy`（过渡同步一号一行）；
+    - `d12_pending=True`：只给 `secretary._record_pending_concept`（D12 甲 的唯一入口）。
+
+    这条不是形式主义：`write_concept_row` 的默认值就是强制处置，这两个开关是"照落/只报"
+    的两条窄路。若哪一天别的调用点也传它们，概念轴就多出后门 —— 而盘上看起来一切正常。
+    所以按 AST 逐调用点核，并钉住两个默认值都是 False。
     """
     import ast
     import inspect
 
-    default = inspect.signature(SEC.Secretary.write_concept_row).parameters["transition_sync"].default
-    assert default is False, default
-
-    hits: list[tuple[str, str]] = []
-    for path in (REPO / "src").rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for fn in ast.walk(tree):
-            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            for node in ast.walk(fn):
-                if not isinstance(node, ast.Call):
+    def _true_callers(name: str) -> list[tuple[str, str]]:
+        hits: list[tuple[str, str]] = []
+        for path in (REPO / "src").rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for fn in ast.walk(tree):
+                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                for kw in node.keywords:
-                    if (kw.arg == "transition_sync"
-                            and isinstance(kw.value, ast.Constant)
-                            and kw.value.value is True):
-                        hits.append((path.name, fn.name))
-    assert sorted(hits) == [("conceptrows.py", "sync_from_legacy")], hits
+                for node in ast.walk(fn):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    for kw in node.keywords:
+                        if (kw.arg == name and isinstance(kw.value, ast.Constant)
+                                and kw.value.value is True):
+                            hits.append((path.name, fn.name))
+        return sorted(hits)
+
+    signature = inspect.signature(SEC.Secretary.write_concept_row)
+    for name in ("transition_sync", "d12_pending"):
+        assert signature.parameters[name].default is False, name
+
+    assert _true_callers("transition_sync") == [("conceptrows.py", "sync_from_legacy")]
+    assert _true_callers("d12_pending") == [("secretary.py", "_record_pending_concept")]
 
 
 # ============================================================ 入口 3：_record_pending_concept
