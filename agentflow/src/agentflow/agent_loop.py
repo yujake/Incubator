@@ -58,6 +58,25 @@ SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_us
 #: （形状表与登记表等额：新增一个形状不登记就红）。
 SECRETARY_OUTBOUND_SHAPES: tuple[str, ...] = ("summon", "summon_many", "handoff", "message")
 
+#: `own.<动作>` 的**受控拒绝**要原样带回模型的读数键（2026-11-08，业主"读数说谎"那一批）。
+#:
+#: 改前只有 `problems` / `missing` / `stmt_id` 那一小撮：动作自己的受控拒（`_refuse` 的
+#: 形态）里那些"为什么没判成"的读数全丢 —— `same_statement`（同一命题检索：关键词 /
+#: 命中几条 / 实际给模型看了哪几条 / 判了没有 / 发了几个模型调用）、`searched`、`same_as`、
+#: `seam_source` 到了模型眼前一个都不剩，于是它只能猜"我是不是参数写错了"。
+#:
+#: 白名单而不是"全透传"：动作返回值里可能有内部行缓存（`_row`）与大块原文，那些不该
+#: 借受控拒漏给模型。新增读数时在这里登记 —— 这是"模型看得见什么"的唯一落点。
+_OWN_REFUSAL_READING_KEYS: tuple[str, ...] = (
+    # 原有：表/号/依赖面那几个能改参数的读数
+    "problems", "missing", "stmt_id", "available_lit_ids",
+    "literature_rows", "unresolved", "changes", "upgraded",
+    # ③ 判定 / 检索读数（"为什么没判成"必须看得见）
+    "searched", "same_statement", "same_as", "seam_source",
+    "keywords", "keyword_checked", "hits_total", "hits_named",
+    "judged", "model_calls", "proposition_adjudication",
+)
+
 #: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`（`draft/37` §68）。
 #:
 #: 这些键集来自「提示词里那个原生函数面」（`framework_summon(role=…, action=…, params=…)`、
@@ -13166,8 +13185,7 @@ class LlmBackend:
                                       or got.get("detail") or "被拒"),
                         "refusal_reason": str(got.get("refusal_reason") or ""),
                         **{k: v for k, v in got.items()
-                           if k in ("problems", "missing", "stmt_id", "available_lit_ids",
-                                    "literature_rows", "unresolved", "changes", "upgraded")}}
+                           if k in _OWN_REFUSAL_READING_KEYS}}
             return got
 
         return ToolSpec(
