@@ -111,7 +111,10 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "调用方 `formalize` 拿它去拼 `self._refusal(...)` —— 那一条才走 `refusals.refuse`，"
         "受控理由与 `refusal_reason` 都在那一侧。所以这里没有一次独立的拒绝可记。"
         "不走 `refuse` 的理由同 `agent_c/path_shape.py` 那一格：会给一条正常的"
-        "「换一条证明路径」的读数贴上 `refusal_reason=invalid_params`。",
+        "「换一条证明路径」的读数贴上 `refusal_reason=invalid_params`。"
+        "2026-11-09 多出第十二处（同一格）：按号取待形式化那一条改走查口之后，"
+        "`statements` 读不出来时回 `statement_ledger_unreadable` —— 那是「没查成」，"
+        "冒充受控拒会把「读不出来」说成「你说错了」，所以照旧落 `failed`",
     # 2026-11-05（p241 手稿统一之后复核）：这一格只剩 `preview_dependencies()` 的 `out`
     # 那一处；`proof_manuscript()` 的写盘失败已随 910b3031 搬进
     # `manuscriptform.commit_manuscript`（那里返回 `{"ok": False, ...}` 的 `got`，由
@@ -152,8 +155,9 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
 #: ⇒ `stale` 红（豁免腐烂）。
 _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # L 的形式化入口：十一条"这一条候选不成立"的子结果（`_pick_statement` 五条、
-    # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串。
-    ("agent_l/formalize.py", ""): 11,
+    # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串；2026-11-09 多出第十二处
+    # （按号取待形式化改走查口之后，`statements` 读不出来那一档）。
+    ("agent_l/formalize.py", ""): 12,
     # 只剩 `preview_dependencies()` 的读数一条（2026-11-05 复核：`proof_manuscript()` 的
     # 写盘失败已随 910b3031 搬进 `manuscriptform.commit_manuscript`，不再是这里的字面量）。
     ("agent_f/manuscript.py", ""): 1,
