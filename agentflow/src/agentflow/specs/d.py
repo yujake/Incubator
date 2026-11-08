@@ -249,6 +249,15 @@ SPEC = AgentSpec(
             "给「登记的那一份」换了来源，而没有任何东西保证它与稿逐字相同。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
+            # 2026-11-08（块丙）：台账归属与写集（业主裁定「D对命题台账只有只读权限」）。
+            "**命题台账由 B 写、D 只读**（业主 2026-11-08 逐字：D 对命题台账只有只读权限；"
+            "D 向 B 提交要登记的命题时都是有证明或数值实验的，即 E 和 F 的成果）：`statements` "
+            "只能经 B 的收录口写（`B.register_statement`，你只递指针，见上一条）；你**自己的写集**"
+            "只有三张表 —— `conjectures`（`register_conjecture` 落猜想行）、`research_questions`"
+            "（问题行）、`search_requests`（检索请求），与 `WRITE_SETS['D']` 逐表一致。"
+            "**报告落点是文件、不是表**：`reports/RESEARCH.md` 与 `reports/<qid>-research.md` —— "
+            "`write_report` 只写文件、不落任何表（`WRITE_SETS['D']` 里没有 `analysis_reports` "
+            "正是这个事实，读数是 `report_landing_reading`）。",
             # 2026-10-21 减负：原来这是「两条」（"猜想写出来交给 F"＋"立了猜想必须派 F"），
             # 前者的机制细节并进后者、重复的说理删掉；D→F 边通 / summon 形状两件事实保留。
             # 2026-11-08（业主三条裁定之二，逐字）：「那条猜想只是参考意见，D不能直接把
@@ -523,6 +532,22 @@ SPEC = AgentSpec(
         'F',
     ),
     write_set=frozenset((
+                     # 2026-11-08（块丙，业主裁定「D对命题台账只有只读权限」）：写集按**实际
+                     # 写过的表**列全 —— D 的代码真的写这三张：
+                     #   · `conjectures`：`conjecture.register_conjecture` 落猜想行
+                     #     （`agent_d/register_conjecture.py` → `tools/conjecture_tools.py`）；
+                     #   · `research_questions`：`ingest` / `propose_question` / `consider` /
+                     #     `poll` / `adjudicate` / `research` 写问题行；
+                     #   · `search_requests`：`submit_gaps` / `adjudicate` 建检索请求。
+                     # 判据 `tests/test_d_write_set_matches_the_tables_it_writes.py`：跑一趟
+                     # D 的三个写动作，拿 `events.jsonl` 的 `(op, table)` 现算写过的表集合，
+                     # 与这一格逐表相等。
+                     # **`statements` 不在里面**（也不许补）：命题台账由 B 写、D 只读；
+                     # D 交稿只递指针（块甲），B 是唯一写入口。
+                     # D 的**报告落点**是文件而不是表：`reports/RESEARCH.md` 与
+                     # `reports/<qid>-research.md`（`write_report` 只写文件，不落任何表 ——
+                     # `agent_d/_support.report_landing_reading` 是这个事实的读数）。
+                     'conjectures',
                      'research_questions',
                      'search_requests',
                  )),
