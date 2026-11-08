@@ -62,6 +62,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -2082,27 +2083,105 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                                        statement_id=sid)
 
 
+#: 「实验号」在文本里的写法（`exp:000000` / `exp：000000`；只认带前缀的号）。
+_EXPERIMENT_TOKEN_RE = re.compile(r"exp\s*[:：]\s*(\d+)")
+
+
+def _experiment_pins(statement: Mapping[str, Any], experiments: Sequence[Mapping[str, Any]]
+                     ) -> list[dict[str, Any]]:
+    """这一条命题能钉到哪几条 **E 的穷举实验行**（凭据：实验号 或 `code_path`）。
+
+    ## 为什么必须有这一格（业主 2026-11-08 的读侧收紧）
+
+    改前 `verifier_problems` 把"证明栏里有「穷举论证：」这个标签"直接当成数值证据
+    （`parse_proof_column(...)["numeric"]` 恒真）。于是一段**散文证明**只要整段以这个
+    标签开头，就会被读成"V 的逐行走查不适用" —— 而它其实是一段普通证明，逐行走查
+    不但适用、还是唯一的复核方式。
+
+    收紧后的判据是"标签 + 能钉到一条 E 的穷举实验行"：
+    - **实验号**：`line_range.label`（B 从手稿里读出来写的那一格，形如 `exp:000000`）
+      或证明正文里的 `exp:000000`；
+    - **`code_path`**：证明正文里出现那条实验行的程序相对路径（归一化后逐字）。
+
+    钉不到 ⇒ 这条命题按**普通证明**处理（`verifier_problems` 返回空清单，V 的逐行走查
+    照常适用）。实验行本身要求：计算类方法（不是 `method="formal"`）、
+    `evidence_kind="proof"` —— 那是"E 的穷举证明"这一档的形状。
+    """
+    row = _as_mapping(statement)
+    text = str(row.get("proof_text") or "")
+    ids: set[str] = set()
+    label = _as_mapping(row.get("line_range")).get("label")
+    for source in (label, row.get("doc_id"), text):
+        for match in _EXPERIMENT_TOKEN_RE.finditer(str(source or "")):
+            ids.add(str(match.group(1)).lstrip("0") or "0")
+    want_text = norm_text(text)
+    hits: list[dict[str, Any]] = []
+    for experiment in (experiments or ()):
+        if not isinstance(experiment, Mapping):
+            continue
+        if str(experiment.get("method") or "") == FORMAL_METHOD:
+            continue
+        if not is_calculation(experiment.get("method")):
+            continue
+        if str(experiment.get("evidence_kind") or "") != "proof":
+            continue
+        eid = str(experiment.get("experiment_id") or experiment.get("id") or "").strip()
+        if eid and (eid.lstrip("0") or "0") in ids:
+            hits.append({"experiment": dict(experiment), "how": "experiment_id",
+                         "experiment_id": eid})
+            continue
+        code_path = norm_rel(experiment.get("code_path"))
+        if code_path and code_path in want_text:
+            hits.append({"experiment": dict(experiment), "how": "code_path",
+                         "experiment_id": eid})
+            continue
+        # 第三条凭据（2026-11-08）：③ 那一段与实验行里那一份**逐字相同** ——
+        # 「这份证明栏就是这一条写的」。它比"恰好同前缀"强得多：只贴标签的散文
+        # 不会与任何一条实验的穷举论证逐字相同。
+        if want_text and (
+                norm_text(enumeration_of(experiment)) == want_text
+                or norm_text(proof_column(experiment)) == want_text):
+            hits.append({"experiment": dict(experiment), "how": "enumeration",
+                         "experiment_id": eid})
+    return hits
+
+
 def verifier_problems(statement: Mapping[str, Any],
                       experiments: Sequence[Mapping[str, Any]] = ()) -> list[str]:
     """V 的逐行走查（`verify.verify_proof`）不覆盖这一条命题的理由（空清单 = 它照旧管）。
 
-    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是数值证据
-    （证明栏里有「穷举论证」那一段，程序在 `experiments.code_path`）⇒ V 没有跑过那份
-    程序，所以逐行走查不覆盖它 —— 那一签要说清是"对数值证据的背书"，
-    而不能被下游读成"V 逐行审过这份证明了"。
+    签名主体是 V，但"签字"与"逐行走查"是两件事：这条命题的"证明"是**数值证据**
+    （证明栏里有「穷举论证」那一段、**而且能钉到一条 E 的穷举实验行**：实验号或
+    `code_path`）⇒ V 没有跑过那份程序，所以逐行走查不覆盖它 —— 那一签要说清是"对数值
+    证据的背书"，而不能被下游读成"V 逐行审过这份证明了"。
+
+    ## 2026-11-08：标签不够，得钉到实验行（块丁）
+
+    改前只看标签（`parse_proof_column(...)["numeric"]`）：F 的散文证明若整段以
+    「穷举论证：」开头，会被误判成数值证据，于是 V 的逐行走查被这一格挡掉。
+    现在判据是 `_experiment_pins`（实验号 / `code_path` 两样凭据）；钉不到 ⇒ 返回空清单
+    （按普通证明处理，逐行走查照常适用）。**只贴标签不再算数值证据。**
     """
     row = _as_mapping(statement)
     text = str(row.get("proof_text") or "").strip()
     parsed = parse_proof_column(text)
     if not parsed.get("numeric"):
         return []
-    script = proof_column_script(text) or "（见 experiments.code_path）"
+    pins = _experiment_pins(row, experiments)
+    if not pins:
+        # 只贴了标签、钉不到实验行 ⇒ 这是一段普通证明：V 的逐行走查适用（空清单 = 它照旧管）。
+        return []
+    pin = pins[0]
+    script = (proof_column_script(text)
+              or str((pin.get("experiment") or {}).get("code_path") or "")
+              or "（见 experiments.code_path）")
     found = find_signed_exhaustion_for_column(experiments, text)
     detail = ("台账里有它对应的穷举证明（V 签、②③ 由 E 写）" if found is not None
               else "台账里还没有与它对应的穷举证明（那说明它连 proof 都还不够）")
     return [
-        f"这条命题的证明栏是程序 {script!r}（{detail}）⇒ 这是数值证据："
-        "签字由 V（业主 2026-10-23 晚），但那是一签对数值证据的背书，"
+        f"这条命题的证明栏是程序 {script!r}（{detail}；钉到的实验行 "
+        f"exp:{pin.get('experiment_id') or '（无号）'}，凭据 {pin.get('how')}）⇒ "
+        "这是数值证据：签字由 V（业主 2026-10-23 晚），但那是一签对数值证据的背书，"
         "不是 V 的逐行走查 —— V 审的是自然语言证明的每步依据，它没有跑过这份程序，"
         "所以逐行走查这一格对数值证据不适用（也绝不该被读成'V 逐行审过'）"
     ]
