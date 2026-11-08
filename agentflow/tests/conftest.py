@@ -1227,9 +1227,57 @@ def _reset_provider_cooldowns():
     _P.clear_provider_cooldowns()
 
 
+def _role_seam_state() -> dict:
+    """读一遍「逐角色默认模型缝」表（快照/还原的唯一清单：只有这一处知道要存什么）。"""
+    from agentflow import llmseam as _LS
+
+    return dict(_LS._ROLE_SEAMS)
+
+
+def _apply_role_seam_state(saved: dict) -> None:
+    """把缝表装回给定的那一份（原地清空再填，保持同一个 dict 对象）。"""
+    from agentflow import llmseam as _LS
+
+    _LS._ROLE_SEAMS.clear()
+    _LS._ROLE_SEAMS.update(saved)
+
+
+#: 逐角色默认缝的会话基线：拍摄时点 = 本文件导入期（不是每条判据 setup 时，理由见下）。
+#:
+#: ## 为什么"进来时拍一张"不够（2026-11-09 的顺序敏感缺陷，最小复现见下）
+#:
+#: `scope="module"` 的夹具先于任何函数级夹具装配。`tests/test_l_formalizes_what_b_says.py`
+#: 的 `good_run`（`:156`）在夹具体里跑一趟进程内 `run-agent L`，而装配层
+#: `host.wired_llm_conductor` 会无条件 `_AF.set_default_llm(f_llm)`（`host.py:553`）——
+#: 于是改前那版夹具"setup 时拍到的起点"本身就是这个被装配出来的缝，此后每条判据都
+#: 忠实地把它还原回去：污染变成了基线，而且再也没有人负责抹掉。
+#:
+#: 现场读数（最小复现：`tests/test_l_formalizes_what_b_says.py::test_l_exists_as_a_role_and_runs_a_scripted_round`
+#: 在前、`tests/test_agent_f_inference.py::test_the_tool_layer_path_gets_the_registered_seam` 在后）：
+#: 目标判据 setup 时 `_ROLE_SEAMS={'F': LlmSeam@…, 'E': None}`（基线应为 `{}`）。
+#: 那条判据①的前提是"没登记缝 ⇒ `dead_end(缺工具)`"；前提被换掉之后工具路径真的去问
+#: 那个缝（剧本给的是 `{"final": …}`，不是受控四档），`history` 上于是没有 `product` 键
+#: ⇒ `KeyError: 'product'`（`tests/test_agent_f_inference.py:461`）。失败信息完全指不到
+#: "前提被别人的装配改掉了"。
+#:
+#: ## 所以三件事
+#:
+#: 1. 基线在任何测试模块被导入之前拍（与下面的 `_WRITE_PATH_HOOK_BASELINE`、
+#:    `_CLOCK_BASELINE` 同一条纪律：此刻 `sys.modules` 里只有产品代码）；
+#: 2. setup 也装回基线 —— 模块级夹具的副作用发生在"上一条判据收尾之后、这一条判据
+#:    setup 之前"，只在收尾还原挡不住它（这一条就是本缺陷的另一条污染路径）；
+#: 3. 收尾照旧装回基线（判据自己在用例里登记/撤销缝的自由一字不减）。
+#:
+#: 判据见 `tests/test_the_role_seam_baseline_is_captured_before_the_imports.py`。
+_ROLE_SEAMS_BASELINE: dict = {}
+
+#: 导入期就拍（理由见上）：晚于此处就会拍到某个测试模块在导入期/模块夹具里的装配副作用。
+_ROLE_SEAMS_BASELINE.update(_role_seam_state())
+
+
 @pytest.fixture(autouse=True)
 def _restore_role_seams():
-    """每条判据前后都把「逐角色默认模型缝」恢复原样（进程级状态的副作用隔离）。
+    """每条判据前后都把「逐角色默认模型缝」装回会话基线（进程级状态的副作用隔离）。
 
     与上面那条同一个理由，只是另一张进程级的表：`llmseam._ROLE_SEAMS` 是
     F / V 在工具层那条路上取缝的唯一来源（`attack_tools._agent_for` →
@@ -1238,7 +1286,7 @@ def _restore_role_seams():
     那是它们该测的东西；但它们跑完之后那个缝留在表里，而下一条依赖
     "没登记缝 ⇒ `dead_end(缺工具)`"的负控（`test_agent_f_inference` 的
     `test_the_tool_layer_path_gets_the_registered_seam`）就换了前提：
-    实测跑成 `action='proof'`、history 上没有 `product` 键，报 `KeyError: 'product'`
+    实测 history 上没有 `product` 键，报 `KeyError: 'product'`
     —— 失败信息完全指不到"前提被上一条判据改掉了"（2026-10-27 复现：单独跑绿、
     与那两个文件一起跑红）。
 
@@ -1246,13 +1294,29 @@ def _restore_role_seams():
     以后还会有第五、第六条判据去登记缝；在夹具这一层统一还原，才不必每加一条
     判据就记得"我也要收尾"（`test_verify_proof_takes_text_from_the_shelf` 此前
     就是手写 save/restore 的，那是同一个需求的第三份实现）。
-    """
-    from agentflow import llmseam as _LS
 
-    saved = dict(_LS._ROLE_SEAMS)
+    ## 2026-11-09：还原面从"setup 快照"改成"导入期基线"（本缺陷的另一条污染路径）
+
+    改前 `saved = dict(_LS._ROLE_SEAMS)` 拍在 setup 里，只能挡住"同一条判据里"的写入；
+    挡不住模块级夹具（它比任何函数级夹具都先装配，拍的时候污染已经在表里了）。
+    最小复现与现场读数写在 `_ROLE_SEAMS_BASELINE` 上方那段。现在 setup 与收尾都装回
+    导入期基线：模块级夹具的副作用在进入判据之前就被抹掉，而判据自己在用例里登记缝
+    （包括负控登记 `None`）仍然只在"这一条判据之内"有效。
+    """
+    _apply_role_seam_state(_ROLE_SEAMS_BASELINE)
     yield
-    _LS._ROLE_SEAMS.clear()
-    _LS._ROLE_SEAMS.update(saved)
+    _apply_role_seam_state(_ROLE_SEAMS_BASELINE)
+
+
+@pytest.fixture
+def role_seam_baseline() -> dict:
+    """会话基线的一份只读副本（给「基线必须干净」那条判据用）。
+
+    只读：这里是浅拷贝，改它不会改到夹具还原用的那一份。
+    为什么要有这个出口：`_ROLE_SEAMS_BASELINE` 是模块私有名，判据不该直接摸它；
+    而"基线里有没有别的测试模块的导入期/模块夹具副作用"这件事，只有判据读得出来。
+    """
+    return dict(_ROLE_SEAMS_BASELINE)
 
 
 #: 四条写路径上全部进程级可变状态的会话基线。清单只有一处，读/写共用
