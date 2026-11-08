@@ -775,7 +775,7 @@ def _live_role_task(store: Any, role: str) -> dict[str, Any]:
 
 def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: str,
                         manuscript: str = "", owner: str = "", called_by: str = "V",
-                        depth: int = 1, at: str = "") -> dict[str, Any]:
+                        depth: int = 1, at: str = "", skip_gap: bool = False) -> dict[str, Any]:
     """开一条「必须收录」义务项（幂等；已清掉的不开，已收口的收口）。
 
     返回 `{"checked","state","key","item_id","owner","owner_known","reason","problems"}`，
@@ -786,6 +786,10 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     `owner`：给了就用；没给就认那一刻唯一的 B 台账号；一个都认不出 ⇒ `owner=""` 而
     照样开项（`owner_known=False`，由 `registration_digest` 的 `unowned` 数出来，
     `board_view` 把这一条亮给主控去派）。
+
+    `skip_gap=True`（2026-11-08，V 的签后义务）：不读 `statements` 判断"是不是已经收录"。
+    义务的存在与它是否已满足是两件事：V 只对手稿负责 ⇒ 签落成后无条件开；"满足了没有"
+    由 B 收录时消账、收工时 `sweep_registrations` 收口。
     """
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
                            "owner": str(owner or ""), "owner_known": False,
@@ -798,7 +802,15 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
         return out
     key = register_key(label, sha)
     out["key"] = key
-    gap = registration_gap(store=store, label=label, proof_sha=sha, manuscript=manuscript)
+    if skip_gap:
+        # V 只对手稿负责：开义务不看册。三态照旧（`checked=True` + `gap=True`），
+        # 但理由逐字说清"这是一条无条件义务，是否已满足不在这里判"。
+        gap = {"checked": True, "gap": True, "abandoned": False,
+               "reason": ("签后无条件开义务（V 不读 statements）；"
+                          "是否已经收录由 B 收录时消账 / 收工扫盘判")}
+    else:
+        gap = registration_gap(store=store, label=label, proof_sha=sha,
+                               manuscript=manuscript)
     if not gap.get("checked"):
         out.update(state="skipped",
                    reason=(f"{gap.get('reason')}；不拿'读不出来'当'还没收录'去开一条待办"))

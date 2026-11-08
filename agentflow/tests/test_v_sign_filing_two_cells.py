@@ -196,3 +196,36 @@ def test_h_statement_body_comes_from_the_manuscript(tmp_path: pathlib.Path) -> N
     text = _manuscript(st, full="（手稿上的命题）")
     assert DS.statement_body(text) == "（手稿上的命题）", DS.statement_body(text)
     assert DS.statement_body("# 空稿\n\n## 证明\n\n1. 显然。") == "", "没有命题页 ⇒ 空串"
+
+
+def test_i_closing_reports_signed_pending_filing_not_unsigned(
+        tmp_path: pathlib.Path) -> None:
+    """收工读数：稿上已签、册里未收录 ⇒ `signed_pending_filing`，不是欠签。
+
+    先把稿盖成已签（册里没位），`closing.statements_unsigned_reading` 必须把它放进
+    `pending_filing`（`count` 仍 0、不阻塞收工门），而不是 `never_submitted`；
+    没有签的对照组才进 `rows` / `count`。
+    """
+    from agentflow import closing
+
+    st = _ws(tmp_path)
+    _row(st, reviewed=False)
+    _text = _signed_text(_manuscript(st))   # 稿上盖好签
+    (pathlib.Path(st.root) / REL).write_text(_text, encoding="utf-8")
+    got = closing.statements_unsigned_reading(st)
+    assert got["checked"] is True, got
+    assert got["count"] == 0, got["rows"]
+    assert got["pending_filing_count"] == 1, got
+    assert got["by_class"].get("signed_pending_filing") == 1, got["by_class"]
+    one = dict(got["pending_filing"][0])
+    assert one["class"] == "signed_pending_filing", one
+    assert "不是「签丢了」" in one["why"], one["why"]
+    assert "稿上已签" in got["reason"], got["reason"]
+
+    # 对照组：同一份稿没有签 ⇒ 才是"欠签"。
+    st2 = _ws(tmp_path / "no-sign")
+    _row(st2, reviewed=False)
+    _manuscript(st2)
+    got2 = closing.statements_unsigned_reading(st2)
+    assert got2["count"] == 1 and got2["pending_filing_count"] == 0, got2
+    assert got2["rows"][0]["class"] == "never_submitted", got2["rows"][0]

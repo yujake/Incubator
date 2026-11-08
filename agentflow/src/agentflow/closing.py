@@ -4965,6 +4965,40 @@ def _human_span(seconds: float | None) -> str:
     return f"{days} 天 {hours} 小时" if hours else f"{days} 天"
 
 
+def _signed_manuscript_for_proof(root: Any, sid: str, no: int,
+                                 text: Any) -> dict[str, Any]:
+    """这一份证明的正文在盘上有没有一份盖住它的 V 签（2026-11-08，两格读数）。
+
+    只读手稿，不读台账：据此把"V 签了、B 还没收录"从"没签过"里分出来。
+    候选名与 `agent_v` / `bmanuscript` 的约定一致（`f-proof-<号>.md` /
+    `b-proof-<号>.md`，第 2 份起 `-p<N>` 后缀）。
+    """
+    from . import verifications as _VR
+    from . import vsigns as _VS
+
+    base = str(root or "")
+    if not base:
+        return {}
+    sha = _VR.proof_sha(str(text or ""))
+    cands = [f"reports/f-proof-{sid}.md"]
+    if int(no) > 1:
+        cands.insert(0, f"reports/f-proof-{sid}-p{int(no)}.md")
+    cands += [f"reports/b-proof-{sid}.md", f"reports/b-proof-{sid}-p{int(no)}.md"]
+    seen: set[str] = set()
+    for rel in cands:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        try:
+            raw = (Path(base) / rel).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        got = _VS.manuscript_sign_standing(raw, proof_sha=sha, manuscript_path=rel)
+        if str(got.get("state") or "") == "signed":
+            return {"manuscript": rel, "reading": dict(got)}
+    return {}
+
+
 def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     """I1 的收工读数：既没有 V 签、也没有被明确放弃的非概念命题（逐条点名）。
 
@@ -4999,12 +5033,17 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     | `fault_unrepaired` | 打回之后没有更新的干净「成立」（含"V 写成立、秘书判 fault"那一档） |
     | `abandoned_without_reason` | 自称 `abandoned`，而理由/时间读不出来 ⇒ 不算明确放弃 |
     | `stale` | 签过，但签的是旧版正文（正文在那之后改过，需重签） |
+    | `signed_pending_filing` | 稿上有盖住这一份正文的 V 签，而册里还没收录（等 B；不计欠签） |
     | `judgment_missing` | 判了「成立」而秘书那一问没判成（这一签不发，等判定接上之后重签） |
     | `unreadable` | 台账读不出来（这一条没查成，不是"没签过"） |
     | `never_submitted` | 一次都没送过 V |
 
     一条命题有多份证明时，按上面那张表的次序取最重的一档（`fault_unrepaired`
     排在最前：它有人被要求改，其余几档还在等一个动作）。
+
+    `signed_pending_filing` 不进 `rows` / `count`（它不是欠签、不阻塞收工门），
+    单列在 `pending_filing` / `pending_filing_count`，并在 `reason` 里点名。
+    这是 2026-11-08「V 只对手稿负责」之后的新中间态：V 签在稿上、B 还没收录。
 
     ## 每一行给的读数
 
@@ -5026,6 +5065,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
 
     out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
                            "checked_from": "statements", "rows": [], "by_class": {},
+                           "pending_filing": [], "pending_filing_count": 0,
                            "problems": [], "reason": ""}
     rows, why = _statement_rows(store)
     if rows is None:
@@ -5040,8 +5080,12 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["problems"].append(f"outbox 读不出来（{type(exc).__name__}: {exc}）"
                                "⇒ 负责人那一格没查成（记 unknown）")
     #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
+    #: 2026-11-08：`signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、
+    #: 册里还没收录"的新中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
     rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1, "stale": 2,
-            "judgment_missing": 3, "unreadable": 4, "never_submitted": 5}
+            "signed_pending_filing": 3, "judgment_missing": 4, "unreadable": 5,
+            "never_submitted": 6}
+    pending_rows: list[dict[str, Any]] = []
     for sid, row in sorted(rows.items()):
         kind = str(row.get("kind") or "")
         if kind == "concept":
@@ -5109,6 +5153,12 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
                 cls = "unreadable"
             else:
                 cls = "never_submitted"
+            #: 2026-11-08：册里没签/签的是旧版，而稿上有一份盖住这一份正文的
+            #: V 签 ⇒ 这是"已签未收录"，不是"欠签"。只读手稿，不额外读台账。
+            _ms = (_signed_manuscript_for_proof(root, sid, no, text)
+                   if state != "rejected" else {})
+            if cls in ("stale", "never_submitted") and _ms:
+                cls = "signed_pending_filing"
             rec = dict(by_vid.get(vid) or {})
             owner = str(rec.get("submitter") or rec.get("recipient") or "")
             if not owner and fault_vid:
@@ -5117,10 +5167,25 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
                 "proof_no": no, "label": label, "state": state, "class": cls,
                 "verdict": verdict, "verification_id": vid,
                 "fault_at": fault_at, "owner": owner, "owner_known": bool(owner),
-                "why": str(st.get("why") or "")[:400]})
+                "manuscript": str(_ms.get("manuscript") or ""),
+                "manuscript_signed": bool(_ms),
+                "why": ((f"稿上已签、册里还没收录（{_ms['reading'].get('why')}）⇒ 等 B 收录；"
+                         "这不是「签丢了」") if cls == "signed_pending_filing"
+                        else str(st.get("why") or "")[:400])})
         if not proofs:
             continue
-        worst = min(proofs, key=lambda p: (rank.get(str(p["class"]), 9), p["proof_no"]))
+        #: 2026-11-08：全部证明都是"已签未收录" ⇒ 这一条不算欠签，单列进
+        #: `pending_filing`（收工门不把它当 blocker；它是一条给 B 的待办）。
+        _blocking = [p for p in proofs if p["class"] != "signed_pending_filing"]
+        if not _blocking:
+            pending_rows.append({
+                "stmt_id": sid, "kind": kind, "class": "signed_pending_filing",
+                "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                "owner": "", "owner_known": False, "proofs": proofs,
+                "why": ("稿上已签、册里还没收录（等 B 收录；不是「签丢了」）")})
+            continue
+        worst = min(_blocking, key=lambda p: (rank.get(str(p["class"]), 9),
+                                              p["proof_no"]))
         cls = str(worst["class"])
         fault_at = str(worst.get("fault_at") or "")
         hung = _iso_seconds_between(fault_at, now_dt) if fault_at else \
@@ -5132,15 +5197,20 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
             "hung_seconds": hung, "hung": _human_span(hung),
             "owner": owner, "owner_known": bool(owner),
             "proofs": proofs, "why": str(worst.get("why") or "")[:400]})
-    for one in out["rows"]:
+    for one in list(out["rows"]) + pending_rows:
         key = str(one["class"])
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
+    out["pending_filing"] = pending_rows
+    out["pending_filing_count"] = len(pending_rows)
     out["checked"] = True
     out["count"] = len(out["rows"])
     out["reason"] = ("查过了：没有「既无 V 签也未放弃」的命题"
                      if not out["rows"] else
                      f"查过了：{out['count']} 条命题既无 V 签也未明确放弃"
                      f"（扫了 {out['scanned']} 条非概念命题）")
+    if pending_rows:
+        out["reason"] += (f"；另有 {len(pending_rows)} 条是「稿上已签、册里还没收录」"
+                          "（不欠签，等 B 收录）")
     return out
 
 
@@ -7419,6 +7489,18 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             "重新送 V（`verify.verify_proof`）并拿到干净的「成立」；② 明确放弃"
             "（B 侧 `table.update` 该命题 status=abandoned + 放弃标记，理由与时间"
             "缺一不可）。逐条读数见 readings.statements_unsigned.rows"))
+    #: 2026-11-08（V 只对手稿负责）：稿上已签、册里还没收录的那几条不是欠签 ——
+    #: 它们是给 B 的待办。单列一条 warning（不阻塞），点名到 stmt_id / 稿路径。
+    _pf = list(_su.get("pending_filing") or [])
+    if _pf:
+        _pf_named = "、".join(
+            f"{one.get('stmt_id')}（{str((one.get('proofs') or [{}])[0].get('manuscript') or '稿')}）"
+            for one in _pf[:6])
+        rep.findings.append(Finding(
+            "statements_unsigned", "statements_signed_pending_filing", "warning",
+            f"{len(_pf)} 条命题在稿上已经有 V 签、而 statements 里还没收录"
+            f"（{_pf_named}{'…' if len(_pf) > 6 else ''}）⇒ 这不是「没签」："
+            "签块与侧文件都在，等 B 按正文 sha 收录。收工门不把它当 blocker。"))
     # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
     #
     # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：

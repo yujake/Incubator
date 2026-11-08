@@ -805,6 +805,27 @@ def _optimized_reading(attach: Mapping) -> dict:
             "optimized_blocked": str(got.get("optimized_blocked") or "")}
 
 
+def _sign_filing_reading(store: Any, *, manuscript_path: Any,
+                         manuscript_text: Any = "", statement_id: Any = "") -> dict:
+    """收录回执的两格读数（2026-11-08）：稿上已签 / 已入台账。
+
+    判据本体只有 `vsigns.sign_filing_reading` 一处；这一层只负责"回执不许因为读数
+    失败而丢掉"（异常折成 `checked=False`，不带走这一笔登记）。
+    """
+    from .. import vsigns as _VS
+
+    rel = str(manuscript_path or "").strip()
+    try:
+        return dict(_VS.sign_filing_reading(
+            getattr(store, "root", ""), manuscript_path=rel,
+            proof_text=("" if rel else str(manuscript_text or "")),
+            statement_id=str(statement_id or ""), store=store))
+    except Exception as exc:  # noqa: BLE001 —— 读数失败不许带走这一笔登记
+        return {"checked": False, "state": "unreadable",
+                "manuscript_signed": None, "filed": None,
+                "why": f"两格读数没跑成（{type(exc).__name__}: {exc}）"}
+
+
 def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
                        stmt_id_now: Any = "", matched_by: Any = "") -> bool:
     """这一份稿是不是本行自己的（D1 的第二道：命中了也要问所有权）。
@@ -2093,8 +2114,15 @@ class _RegisterStatement:
             except (TypeError, ValueError):
                 _no_receipt = 1
             _body_now = str(_VR.proof_text_of(row, _no_receipt) or "")
-            if bits is not None and _body_now.strip() and not bool(
-                    dict(row.get("bits") or {}).get("proof")):
+            #: 2026-11-08：两种"这一笔要把位带上去"的形态 ——
+            #: ① 第 2 位还没翻（收录那一笔）；② 第 2 位已真、而这一笔刚认到第 3 位
+            #: （V 签在稿上、B 收录时读到）。改前只认 ① ⇒ 后者永远停在 reviewed=false，
+            #: 那正是"V 签了但 B 没收录"永远收不了口的原因。
+            _needs_proof = not bool(dict(row.get("bits") or {}).get("proof"))
+            _needs_review = (bool(dict(bits or {}).get("reviewed"))
+                             and not bool(dict(row.get("bits") or {}).get("reviewed")))
+            if (bits is not None and _body_now.strip()
+                    and (_needs_proof or _needs_review)):
                 _collected = _EB.bits_after_proof_recorded(
                     row.get("bits"), delivered=bits, proof_process=_body_now,
                     kind=str(row.get("kind") or ""))
@@ -4121,6 +4149,10 @@ class _RegisterStatement:
                    "evidence_kind": self._evidence_kind_on_disk(stmt_now),
                    "requested_evidence_kind": evidence_kind,
                    "matched_by": str(written.get("matched_by") or ""),
+                   #: 2026-11-08：两格读数（稿上已签 / 已入台账）。
+                   "sign_filing": _sign_filing_reading(
+                       self.store, manuscript_path=manuscript_path,
+                       manuscript_text=manuscript_text, statement_id=stmt_now),
                    #: 2026-11-08（业主）：语义查一圈的读数（查到的那一条走的是既有
                    #: "在册"分支 —— proofs 追加 / proof_no 递增 / 签按 sha 认都在里面）。
                    **({"searched": _same_search_reading(_same_search),
@@ -4251,6 +4283,26 @@ class _RegisterStatement:
             attach = pre_write or self._attach_proofs(stmt_now, attach_entries,
                                                       canonical=attach_canonical,
                                                       bits=bits)
+            # ---- 2026-11-08：已在终态档也要把"这一笔认到的签"落到行上 ----------
+            #
+            # V 只对手稿负责之后，签不再由 V 写 statements；B 的 at_tier 出口（同一条
+            # 已在册、档位已是 proof）改前只改 evidence_kind，不看 bits ⇒ "V 签在稿上、
+            # 册里位还是假"永远收不了口。这里按同一把尺（`_attach_proofs`）补写一次：
+            # 只有这一笔真的认到了签（`v_sign.applied` / `bits.reviewed`）才写。
+            _collected = {}
+            try:
+                _per = _EB.reviewed_by_proof(dict(written.get("row") or {}))
+                _already = bool(_per.get(int(proof_no_placement),
+                                         _per.get(str(int(proof_no_placement)), False)))
+            except Exception:  # noqa: BLE001 —— 读不出现有位就按"没位"继续，写口自己会拒
+                _already = False
+            if (bool(v_sign.get("applied")) and bool(dict(bits or {}).get("reviewed"))
+                    and not _already):
+                _collected = self._attach_proofs(
+                    stmt_now, [], canonical="", bits=bits,
+                    proof_no=int(proof_no_placement))
+                if _collected.get("row"):
+                    written = {**dict(written), "row": dict(_collected.get("row") or {})}
             out = {"ok": True, "stmt_id": stmt_now,
                    #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                 **({"promoted_manuscript": dict(pre_gate_promotion)}
@@ -4263,6 +4315,10 @@ class _RegisterStatement:
                    "quote_mode": str(quote_mode or ""),
                    "evidence_kind": self._evidence_kind_on_disk(stmt_now),
                    "requested_evidence_kind": evidence_kind, "upgraded": True,
+                   #: 2026-11-08：两格读数（稿上已签 / 已入台账）。
+                   "sign_filing": _sign_filing_reading(
+                       self.store, manuscript_path=manuscript_path,
+                       manuscript_text=manuscript_text, statement_id=stmt_now),
                    #: 这一笔是不是"盘上已在终态档"（`升级` 与 `本来就在` 分开读）。
                    "at_tier": at_tier,
                    #: 这一支只改在册那一行，不新建（与 duplicate 那一支同一个读数键：
@@ -4381,6 +4437,10 @@ class _RegisterStatement:
                        "quote_mode": str(quote_mode or ""),
                        "evidence_kind": self._evidence_kind_on_disk(stmt_dup),
                        "requested_evidence_kind": evidence_kind, "new_row": False,
+                       #: 2026-11-08：两格读数（稿上已签 / 已入台账）。
+                       "sign_filing": _sign_filing_reading(
+                           self.store, manuscript_path=manuscript_path,
+                           manuscript_text=manuscript_text, statement_id=stmt_dup),
                        "proof_no": int(proof_no_placement),
                        "proof_no_source": str(proof_no_source),
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
@@ -4581,6 +4641,10 @@ class _RegisterStatement:
         #: 同一件事不许在 `deps_missing` 与 `note` 里各算一遍（两个口径迟早分家）。
         deps_reading_now = _deps_reading(written)
         deps_line = str(deps_reading_now.get("deps_receipt") or "")
+        #: 2026-11-08（V 只对手稿负责）：收录回执带两格读数 —— 稿上已签 / 已入台账。
+        sign_filing = _sign_filing_reading(
+            self.store, manuscript_path=manuscript_path,
+            manuscript_text=manuscript_text, statement_id=stmt_id)
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 #: D2：这一笔的号是从稿名 / 稿头当候选来的（有才带这一格；见下候选号那一段）。
                 **({"stmt_id_candidate": candidate_stmt_id,
@@ -4604,6 +4668,8 @@ class _RegisterStatement:
                 #: 静默把一句"通过了"改成 unknown 与静默放过它同样是坏。
                 "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
+                #: 2026-11-08：收录时的两格读数（稿上已签 / 已入台账；四态在 `state`）。
+                "sign_filing": dict(sign_filing),
                 #: 2026-11-08：普通数值通道的读数（只在真走了那条通道时出现）。
                 #: 手稿路径 / 实验号 / 程序路径 / 形态闸的判定 ——
                 #: "为什么这一条没要 V 签"读的就是它。

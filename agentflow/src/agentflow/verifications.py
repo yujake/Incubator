@@ -3056,7 +3056,7 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
 
 def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any],
                               statement_id: str, proof_no: int,
-                              sha: str) -> dict[str, Any]:
+                              sha: str, skip_gap: bool = False) -> dict[str, Any]:
     """`sign_statement` 那一笔事务之外：签块落成了就给 B 开一条「必须收录」义务。
 
     为什么必须在事务之外（2026-11-05 实测）：`_vsigns_write_after_flip` 跑在
@@ -3079,11 +3079,13 @@ def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any]
     return _registration_after_sign(store=store, root=root,
                                     statement_id=str(statement_id or ""),
                                     proof_no=int(proof_no or 1), sha=str(sha or ""),
-                                    manuscript=rel, at=str(sign.get("at") or ""))
+                                    manuscript=rel, at=str(sign.get("at") or ""),
+                                    skip_gap=skip_gap)
 
 
 def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_no: int,
-                             sha: str, manuscript: str, at: str = "") -> dict[str, Any]:
+                             sha: str, manuscript: str, at: str = "",
+                             skip_gap: bool = False) -> dict[str, Any]:
     """签发（签块落成）之后：给 B 开一条「必须收录」义务（缺陷 B；永不抛）。
 
     为什么在这里（业主 2026-11-05）：87 的现场是"签了但没人收录"——
@@ -3100,6 +3102,10 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     三态：`checked` / `state`（`opened` / `existing` / `closed` / `cleared` / `expired` /
     `skipped` / `error`）/ `reason`；`skipped` 里 `code=not_a_proof_carrier` 说的是
     "这一签的稿不在这一条义务的射程内"，不是"已经收录了"。
+
+    `skip_gap=True`（2026-11-08，V 的签后义务）：不读 `statements` 去判断"是不是已经收录了"。
+    义务的存在与它是否已满足是两件事 —— V 只对手稿负责，签落成后就无条件开义务；
+    "满足了没有"由 B 收录时消账、收工时 `sweep_registrations` 按盘上事实收口。
     """
     from . import vreceipts as _VRC
 
@@ -3119,7 +3125,8 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     try:
         got = _VRC.ensure_registration(store=store, root=root, label=label,
                                        proof_sha=str(sha or ""), manuscript=rel,
-                                       called_by="V", at=str(at or ""))
+                                       called_by="V", at=str(at or ""),
+                                       skip_gap=bool(skip_gap))
     except Exception as exc:  # noqa: BLE001 —— 开义务失败不许带走这一签
         out.update(code="registration_raised",
                    reason=(f"开「必须收录」义务那一笔抛了（{type(exc).__name__}: {exc}）"
@@ -3307,7 +3314,7 @@ def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
                          f"{str(vsign.get('reason') or '没有理由')}")
     out["registration"] = _registration_after_vsign(
         store=store, root=root, vsign=dict(vsign), statement_id=sid,
-        proof_no=int(no), sha=str(row.get("proof_sha256") or ""))
+        proof_no=int(no), sha=str(row.get("proof_sha256") or ""), skip_gap=True)
     return out
 
 

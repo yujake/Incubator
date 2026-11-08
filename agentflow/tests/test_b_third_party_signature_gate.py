@@ -418,8 +418,12 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
                               experiments=store.rows("experiments"), root=store.root,
                               statements=store.rows("statements"), statement_full=BODY)
     assert gate == [], gate
-    again = _file(store, column=column)
+    again = _file(store, column=column,
+                  manuscript=f"reports/e-proof-{sid}.md")
     assert again.get("ok") is True, again
+    # 2026-11-08：收录回执带两格读数（稿上已签 / 已入台账）；这一笔之后应当是 filed。
+    assert (again.get("sign_filing") or {}).get("state") == "filed", (
+        again.get("sign_filing"))
     row = _is_proof_statement(store)
     assert row["kind"] == "theorem", row
     assert row["evidence_kind"] == "proof", row
