@@ -1862,6 +1862,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      #: ⇒ 并进在册那行）只写正文、不写 `bits`，这一格就是"补翻第 2 位"
                      #: 那一笔的读数（判据见 `evidencebits.bits_after_proof_recorded`）。
                      "proof_collected": False,
+                     #: D-37：这一笔按证据把 `kind` 升上去了没有（键存在 = 真升了；
+                     #: `{}` = 没动）。判据只有 `evidencebits.kind_following_grade` 一处。
+                     "kind_upgraded": {},
                      #: 这一笔把第 2 位补翻时合并出来的那整份位落盘了没有（第 3 位那几张
                      #: 表也跟着来）；"翻了"与"合并了"分开报：反真空把翻位那一步摘掉时，
                      #: 合并出来的那份位仍要落盘 —— 那才是现场的 `reviewed=true ∧
@@ -2015,28 +2018,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 row["bits"] = synced["bits"]
                 out["formal_synced"] = True
                 out["formal_paths"] = dict(synced.get("paths") or {})
-                # ---- D-37（2026-10-24 真机 cube）：kind 跟着证据升。
-                #
-                # 为什么落在这一格：`kind` 的判据读的是第 4 位的逐条读数，而那一格刚刚才
-                # 变（第 4 位是 L 的台账同步进来的，B 只做这一笔写字）。等下一次登记再改，
-                # "L 验过了、行上还叫猜想"就多留一个来回 —— cube 那条老行正是这么留下来的。
-                # 判据只有一处：`evidencebits.kind_following_grade`（与秘书那一支、与读侧
-                # 共用一个函数）；这里只改 `kind` 与留痕，`bits` 用的是上面刚同步好的那一份。
-                kind_read = _EB.kind_following_grade(
-                    row, root=getattr(store, "root", None))
-                if str(kind_read.get("state") or "") == "upgraded":
-                    before_kind = str(row.get("kind") or "")
-                    target = str(kind_read.get("kind") or "")
-                    if target in _EB.KIND_UPGRADE_TARGETS and target != before_kind:
-                        row["kind"] = target
-                        row["_kind_upgrade"] = {
-                            "from": before_kind, "to": target,
-                            "basis": str(kind_read.get("basis") or ""),
-                            "grade": str(kind_read.get("grade") or ""),
-                            "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
-                            "at": S.now_iso(),
-                        }
-                        out["kind_upgraded"] = dict(row["_kind_upgrade"])
+                # D-37 的 kind 升档不在这一支里单独算：它已收到下面那一步
+                # （`_kind_upgrade_from_evidence`），与"按签重算等级"同一处 —— 于是
+                # "第 4 位同步"只是证据之一，不再是 kind 唯一的触发条件。
             # ---- 收录：正文已在行上 ⇒ 第 2 位与"收录回执"同一笔落下 ---------------
             #
             # 现场（`projects/R-mk-infinite-92` 的 `statements:000000`，2026-11-06）：
@@ -2124,10 +2108,29 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 而这条回执正是"这一档凭什么"的唯一可读凭据。
                 row[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
                 out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
+            # ---- D-37：证据齐了就升 `kind`（判据只有一处，落点也收到这一处） ----------
+            #
+            # 位置：正文已落 `row`、第 2 / 3 位已按这一笔认到的签同步、等级已按现行签
+            # 重算之后，`tx.upsert` 之前。
+            #
+            # 改前这一格只挂在"第 4 位（形式化）同步出变化"那一支下面。于是 T1 的
+            # `own.ingest_manuscript(mode="apply")` 把一份已签的正文收录进来时，
+            # 第 2 位与等级都追上了，而 `kind` 仍写着 `conjecture` —— 工具回执说"收录
+            # 成功"，台账里的证据状态却没变（读的人在盘上读不到"这是定理"）。
+            #
+            # `kind` 是证据的派生格，不是调用方请求的格：apply 没请求它，也必须在
+            # 写完正文之后按证据追上。判据只有一处（`evidencebits.kind_following_grade`，
+            # 秘书那一支 / V 落签那一支 / 读侧共用同一个）；本格只负责"改了哪两格"。
+            if _body_present:
+                kind_upgrade = self._kind_upgrade_from_evidence(
+                    row, root=getattr(store, "root", None))
+                if kind_upgrade:
+                    out["kind_upgraded"] = dict(kind_upgrade)
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
             if (not out["attached"] and not canonical_changed and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
+                    and not out["kind_upgraded"]
                     and not out["bits_synced"] and not out["proof_receipt"]):
                 return {"write": False, "result": out}
             if out["attached"]:
@@ -2146,6 +2149,44 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if landed.get("written"):
             out["written"] = True
         return out
+
+    def _kind_upgrade_from_evidence(self, row: dict[str, Any], *,
+                                    root: Any = None) -> dict:
+        """证据够不够把 `kind` 升上去 —— 判据在 `evidencebits.kind_following_grade`。
+
+        ## 为什么是一个方法（而不是在调用点各写一遍）
+
+        写侧有三个落点都在做同一件事：秘书的升档那一支、V 落签那一支、B 同步证据
+        那一支。前两个各自调用同一个判据函数；B 这一支改前把那段"改 kind + 留痕"
+        内联在 `_attach_proofs` 的"第 4 位同步出变化"分支里 ⇒ `own.ingest_manuscript`
+        的 `mode=apply`（收录一份已签正文）走不到它。抽成这一格之后，B 的两条收录路
+        （register / apply）都是"正文落定 → 证据重算 → 调这里"，判据与写法各一份。
+
+        ## 边界
+
+        只写内存：判据 `kind_following_grade` 是纯读（会读 `verifications/` 台账），
+        本方法只改 `row` 的两格（`kind` / `_kind_upgrade`），不开事务、不落盘；
+        落盘仍由 `Secretary.land_statement` 按 `attach_proofs` 的白名单统一做。
+        起点只认 `conjecture`（判据函数管），目标只取 `theorem` / `lemma`；不满足就
+        返回空字典 —— "没判成"与"判成不用升"都不许折成"已经升了"。
+        """
+        read = _EB.kind_following_grade(row, root=root)
+        if str(read.get("state") or "") != "upgraded":
+            return {}
+        before = str(row.get("kind") or "")
+        target = str(read.get("kind") or "")
+        if target not in _EB.KIND_UPGRADE_TARGETS or target == before:
+            return {}
+        trace = {
+            "from": before, "to": target,
+            "basis": str(read.get("basis") or ""),
+            "grade": str(read.get("grade") or ""),
+            "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+            "at": S.now_iso(),
+        }
+        row["kind"] = target
+        row["_kind_upgrade"] = dict(trace)
+        return trace
 
     def _apply_canonical_proof(self, *, row: dict[str, Any], out: dict[str, Any],
                                raw_want: str, stmt_id: str, have_raw: str,
@@ -6331,6 +6372,90 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "already": list(attach.get("already") or [])}
         return {"written": bool(attach.get("written")), "code": "", "why": ""}
 
+    def _ingest_apply_evidence(self, stmt_id: str, *, proof_no: int) -> dict:
+        """apply 写完正文之后的证据重算（与登记路同一份实现，不另写一套）。
+
+        ## 为什么必须是单独一步（T1 真洞）
+
+        `_ingest_apply_proof` 只负责"把稿里的正文落进那一行"；它交给 `_attach_proofs`
+        的 `bits=None`，而 `_attach_proofs` 翻第 2 位的条件正是"这一笔交来的 bits 说
+        有证明"（判据唯一实现 `evidencebits.bits_after_proof_recorded`）。于是 apply
+        收录完是 `reviewed=true ∧ proof=false ∧ grade=conjecture`：工具回执说"收录
+        成功"，台账里的证据状态一个都没变。
+
+        这一步在正文落定之后，把行上那一份正文按登记路同一个 `_statement_bits`
+        现算成 bits，再交给同一个写口 `_attach_proofs`（追加清单为空、canonical 为空
+        ⇒ 只补第 2 位 / 收录回执 / 按现行签重算等级 / 按证据升 kind）。于是
+        "正文写入"与"证据重算"是同一份判据的两个阶段，apply 与 register 在三个派生格
+        （`proof` / `grade` / `kind`）上逐字同源。
+
+        ## 三态
+
+        `checked=False`（台账读不出来 / bits 算不出来）⇒ 调用方受控拒，绝不折成
+        "没有证据"；`written=False` 且 `checked=True` ⇒ 这一笔没有新东西要写（幂等）；
+        受控拒（`_attach_proofs` 的越界 / 行不在）原样带回。
+        """
+        got = SL.by_id(self.store, stmt_id=str(stmt_id or ""))
+        if not got["checked"]:
+            err = got.get("error") or {}
+            return {"checked": False,
+                    "refused": "ledger_unreadable",
+                    "reason": (f"`statements` 读不出来（{err.get('type') or '?'}: "
+                               f"{err.get('message') or got.get('reason') or '?'}）"
+                               "⇒ 证据重算没做成（读不到 ≠ 没有证明）")}
+        row = dict(got.get("row") or {})
+        if not row:
+            return {"checked": False, "refused": "statement_missing",
+                    "reason": (f"`statements` 里没有 {stmt_id} ⇒ 正文没有落点，"
+                               "证据也无处重算")}
+        body = str(_VR.proof_text_of(row, int(proof_no)) or "")
+        if not body.strip():
+            # 普通数值档（e-num）没有证明正文：证据面只有第 1 位，不在这里重算。
+            return {"checked": True, "written": False,
+                    "reason": "这一行没有证明正文 ⇒ 第 2/3 位不适用（证据面不重算）"}
+        delivered, bits_bad = self._statement_bits(
+            origin=str(row.get("origin") or "own_result"),
+            lit_id=str(row.get("source_lit_id") or ""),
+            proof_text=body,
+            quote_verified=row.get("quote_verified"),
+            kind=str(row.get("kind") or ""))
+        if bits_bad is not None:
+            return {"checked": False,
+                    "refused": str(bits_bad.get("kind") or "bits_compute_failed"),
+                    "reason": str(bits_bad.get("error") or bits_bad.get("reason") or "")}
+        # 与登记路同一处认签（`vsigns.bits_after_sign`，判据只有 `sign_reading` 一处）：
+        # 这一行已经签过（`_ingest_apply_proof` 的签闸刚核过同一份正文），把第 3 位那
+        # 几张表随 bits 交给 `_attach_proofs` —— 第 2 位翻真时第 3 位不许被"空认领"
+        # 盖掉（`bits_after_proof_recorded` 的"认不到就保留旧的"）。
+        try:
+            from .. import vsigns as _VS
+
+            delivered, _sign_claim = _VS.bits_after_sign(
+                delivered, root=getattr(self.store, "root", ""),
+                proof_text=body, statement_id=str(stmt_id),
+                proof_no=int(proof_no), kind=str(row.get("kind") or ""),
+                store=self.store)
+        except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"，也不许丢证据
+            return {"checked": False, "refused": "sign_reading_unreadable",
+                    "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
+                               "⇒ 证据重算没做成（没查成 ≠ 没签）")}
+        attach = self._attach_proofs(
+            str(stmt_id), [], canonical="", bits=delivered,
+            proof_no=int(proof_no))
+        if attach.get("refused"):
+            return {"checked": False, "refused": str(attach.get("refused") or ""),
+                    "reason": str(attach.get("reason") or "")}
+        reading = {
+            "checked": True,
+            "written": bool(attach.get("written")),
+            "proof": bool(dict(delivered or {}).get("proof")),
+            "grade_recomputed": dict(attach.get("grade_recomputed") or {}),
+            "kind_upgraded": dict(attach.get("kind_upgraded") or {}),
+            "proof_collected": bool(attach.get("proof_collected")),
+            "proof_receipt": dict(attach.get("proof_receipt") or {}),
+        }
+        return reading
+
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
                       want_no: int, target: str, path: str) -> dict:
@@ -6507,6 +6632,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "（同一性判定/合并只在那条路上跑）")
 
         out["cells"] = cells
+        # ---- 6) 证据重算（第 2 位 / 等级 / kind）—— 与登记路同一份实现 -------------
+        #
+        # 只在"这一笔真把正文写进了那一行"时跑（`proof_text` 落在 `written_cells`）：
+        # 幂等重放（正文逐字相同 ⇒ `outcome=unchanged`）不是收录，不动证据面 ——
+        # 那正是 `same["write"]["written"] is False` 要保住的读数。
+        #
+        # `kind` 是证据的派生格：调用方没请求它，这一格也照常重算（判据见
+        # `_kind_upgrade_from_evidence` / `evidencebits.kind_following_grade`）。
+        if "proof_text" in written_cells:
+            evidence = self._ingest_apply_evidence(target, proof_no=want_no)
+            out["evidence"] = dict(evidence)
+            if not evidence.get("checked"):
+                return _cell_refused(
+                    "proof_text",
+                    str(evidence.get("refused") or "evidence_recompute_failed"),
+                    str(evidence.get("reason") or ""))
         out["diff"] = self._ingest_diff(out, requested)
         problem = self._ingest_invariant_problem(out)
         if problem:

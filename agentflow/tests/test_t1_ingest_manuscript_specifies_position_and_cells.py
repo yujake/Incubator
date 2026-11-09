@@ -493,6 +493,9 @@ def test_c4_apply_still_needs_a_covering_sign(tmp_path: pathlib.Path) -> None:
     assert got["refused"] == "proof_without_v_sign", got
     assert got["cells"]["proof_text"]["outcome"] == "refused"
     assert _row(st)["proof_text"] == ""
+    # 未签 ⇒ 证据面一个字节都不许动（第 2 位 / 等级 / kind 都还是现场那一档）。
+    assert (dict(_row(st).get("bits") or {}).get("proof") is not True), _row(st)
+    assert _row(st)["kind"] == "conjecture", _row(st)
 
 
 # ===================================================== d 反真空：apply 不跑同一性判定
@@ -592,3 +595,71 @@ def test_g_both_actions_are_declared_as_tools() -> None:
     assert "label" not in cells["items"]["enum"]
     assert actions["ingest_manuscript"].params["properties"]["mode"]["enum"] == \
         list(MI.INGEST_MODES)
+
+
+# ===================================================== h 收录证据（T1 真洞）
+def _evidence_cells(st: Store) -> dict:
+    """盘上那一行的三个证据格（apply 与 register 的对照读数）。"""
+    row = _row(st)
+    bits = dict(row.get("bits") or {})
+    return {"proof": bool(bits.get("proof")),
+            "grade": str(bits.get("grade") or ""),
+            "kind": str(row.get("kind") or "")}
+
+
+def _collect_through(tmp_path: pathlib.Path, mode: str) -> tuple[dict, dict]:
+    """同一份已签稿、同一条在册猜想，分别走 apply / register 收录。"""
+    st, b = _ws(tmp_path / mode)
+    _signed_row(st)
+    _write(st, "reports/f-proof-000001.md", _manuscript())
+    if mode == "apply":
+        got = b.ingest_manuscript(
+            manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+            cells=["proof_text"], mode="apply")
+    else:
+        got = b.ingest_manuscript(
+            manuscript="reports/f-proof-000001.md", mode="register",
+            cells=["statement_full", "proof_text", "dependencies"])
+    return got, _evidence_cells(st)
+
+
+def test_h_apply_collects_the_same_evidence_as_register(
+        tmp_path: pathlib.Path) -> None:
+    """b：apply 收录已签证明 ⇒ 三格与 register 路逐字相同（proof / grade / kind）。
+
+    这是关键对照：两条路读同一份签、写同一条在册行，派生格不许有任何差别。
+    apply 这一笔只请求 `proof_text`（不请求 `kind`）—— `kind` 是证据的派生格，
+    没请求也必须按证据升上去。
+    """
+    got_apply, cells_apply = _collect_through(tmp_path, "apply")
+    got_register, cells_register = _collect_through(tmp_path, "register")
+    assert got_apply["ok"] is True, got_apply
+    assert got_register["ok"] is True, got_register
+    assert cells_apply == cells_register, (cells_apply, cells_register)
+    assert cells_apply == {"proof": True, "grade": "pre_theorem",
+                           "kind": "theorem"}, cells_apply
+    # 回执里读得到"重算了什么"（不是只有盘上对）：三个派生格各有来源。
+    evidence = dict(got_apply.get("evidence") or {})
+    assert evidence.get("checked") is True and evidence.get("written") is True, evidence
+    assert evidence.get("proof") is True, evidence
+    assert (evidence.get("grade_recomputed") or {}).get("to") == "pre_theorem", evidence
+    assert (evidence.get("kind_upgraded") or {}).get("to") == "theorem", evidence
+
+
+def test_h2_removing_the_evidence_recompute_brings_the_field_shape_back(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """d：反真空 —— 把 apply 的证据重算摘掉 ⇒ h 必须红（回到现场那个自相矛盾形状）。
+
+    摘掉的正是"正文写完之后的证据重算"这一笔：正文照旧落行、签照旧在，而
+    `proof=false ∧ grade=conjecture ∧ kind=conjecture` 回来 —— 工具说"收录成功"，
+    台账里的证据状态没变。h 的三格断言在这一形状下逐条不成立。
+    """
+    monkeypatch.setattr(
+        AgentB, "_ingest_apply_evidence",
+        lambda *a, **k: {"checked": True, "written": False,
+                         "reason": "反真空：摘掉 apply 的证据重算"})
+    got, cells = _collect_through(tmp_path, "apply")
+    assert got["ok"] is True, got
+    assert cells == {"proof": False, "grade": "conjecture",
+                     "kind": "conjecture"}, cells
+    assert cells != {"proof": True, "grade": "pre_theorem", "kind": "theorem"}, cells
