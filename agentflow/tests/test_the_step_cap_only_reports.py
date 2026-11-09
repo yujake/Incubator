@@ -140,6 +140,8 @@ def test_a_child_reports_to_its_parent(tmp_path: pathlib.Path) -> None:
             and "步数报告" in str(e.get("subject") or "")]
     assert sent, "子代理过了报告节奏却没报到父那里（`depth` 那一支判错了？）"
     assert sent[0]["from"] == "H", sent[0]
+    # D11 第③件：这条留言必须带 `progress`（时钟读它 ⇒ 只落消息、不唤醒父的等待）。
+    assert sent[0].get("progress") is True, sent[0]
     # 改名（D11）：主题要写清「不是上限」，旧词「超限」不许回来（反真空）。
     assert "不是上限" in str(sent[0].get("subject") or ""), sent[0]["subject"]
     assert "超限" not in str(sent[0].get("subject") or ""), sent[0]["subject"]

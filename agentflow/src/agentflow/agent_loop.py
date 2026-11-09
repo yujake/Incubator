@@ -8342,7 +8342,10 @@ class AgentLoop:
                         _mid, mproblem = send_message(
                             self.session_root, sender=self.role, to=parent_role,
                             subject=f"步数报告：{self.role} 已用 {step + 1} 步（不是上限）",
-                            body=step_note, sid=self.sid, from_task_id=my_task_id)
+                            body=step_note, sid=self.sid, from_task_id=my_task_id,
+                            # 进度对账，不是"我回来了"（D11 第③件）：时钟读这一格，
+                            # 只落消息、不记事件 ⇒ 父的等待计时器不被这条留言唤醒。
+                            extra={"progress": True})
                         if mproblem:
                             run.notes.append(f"步数上报未送达：{mproblem}")
             stop_reason = self._user_stop_reason(run)
