@@ -290,6 +290,11 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 #: 与 `*`（框架账本区，拒信不给去处）分开，这一档的拒信指向各自的渲染动作。
 _ARTIFACT_PATH_ROLE = "@"
 
+#: 手稿形名字那一档的规则头（2026-11-10，D5）：规则串是 `manuscript:*`，
+#: 命中判据是"名字过 `manuscriptfamily.classify_name` 且 tier ∈ {family, legacy}"，
+#: 见 :func:`_manuscript_name_matches`。表里的行与匹配器共用这一个字面量。
+MANUSCRIPT_RULE_KIND = "manuscript"
+
 #: 论文对应表三份的拒信（2026-11-04）：说清"这三份是同一份表的三个投影、唯一写口在哪"。
 RESERVED_MAPPING_MESSAGE = (
     "拒绝 {path}：论文对应表三份（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`）"
@@ -323,7 +328,9 @@ D_ATTACK_RECORD_DIR = "out/proofs/"
 #: - `prefix:`  以它开头（路径级：挡目录下面的文件；规则里带 `/`，于是 `data/` 这一条
 #:              不会把 `database.json` 一起吞掉）；
 #: - `suffix:`  末段相等（文件名级与路径级共用：`x/events.jsonl` 命中，`myevents.jsonl` 不命中）；
-#: - `contains:`子串（只用在文件名级，D 的 `RESEARCH` 那一条）。
+#: - `contains:`子串（只用在文件名级，D 的 `RESEARCH` 那一条）；
+#: - `manuscript:` 名字过 `manuscriptfamily.classify_name`（tier ∈ {family, legacy} ⇒ 命中；
+#:               2026-11-10 D5：手稿形名字对 A/B 一律拒，`notes/` 也在内）。
 #:
 #: 角色列决定按哪条判据读：
 #:
@@ -381,10 +388,20 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 同样是框架渲染的 —— 与 e-proof 一样，A / B 不许手写（否则"B 的绿色通道按族名认稿"
     # 这条判据会被一份手写稿喂假内容）。
     ("A", f"prefix:{_RESERVED_DIR}/e-num-"),
+    # 2026-11-10（D5）：同一个"手稿形名字"换个目录/换个历史后缀就能绕过上面那四行。
+    # 真机 98b：B 用 `fs.write` 直接写 `notes/b-proof-000003-v2.md` / `-000004-v2.md`
+    # ⇒ 绕过 `proofregistry.register_or_rewrite`（唯一写口），"同一命题只住一份稿"
+    # 失效，V 审的始终是 base 稿、v2 从未进台账。所以再加一档按名字判的规则：
+    # 名字过 `manuscriptfamily.classify_name` 且 tier ∈ {family, legacy} ⇒ 拒
+    # （`notes/b-proof-000001.md` 是 family、`-v2` 是 legacy，两条都拒）；号解析不出的
+    # `notes/f-proof-x.md` 是 bad_name、普通笔记是 unrecognized ⇒ 仍放行
+    # （2026-11-07 那次收窄的负控不许被这一档误伤）。
+    ("A", f"{MANUSCRIPT_RULE_KIND}:*"),
     ("B", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-num-"),
+    ("B", f"{MANUSCRIPT_RULE_KIND}:*"),
     # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——
@@ -415,6 +432,19 @@ RESERVED_ARTIFACT_MESSAGE = (
     "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
     "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
     f"；推荐落点是 {_RESERVED_DIR}/，但换到别的目录同样受这一道闸管"
+)
+
+#: `manuscript:` 那一档的拒信（2026-11-10，D5）：名字本身就是判据，所以要指两条真出路
+#: （B 的落稿动作 / F 的转正动作）与一条禁令（不许自己起 `-v2` 这类新名）。
+#: 与 `RESERVED_ARTIFACT_MESSAGE` 分开：那一句说的是"框架渲染的产物"，这一句说的是
+#: "手稿形名字" —— 后者也拦 `notes/` 下还没成为正式稿的名字，指路必须是"先落成规范名"。
+MANUSCRIPT_NAME_MESSAGE = (
+    "拒绝 {path}：这是一个手稿形名字（`manuscriptfamily.classify_name` 判成 family/legacy），"
+    "手稿不许手写 —— 写下去等于绕过 `proofregistry.register_or_rewrite` 这个唯一写口，"
+    "「同一命题只住一份稿」会失效（`-v2` 这类历史名写下去也收不进台账）。"
+    "改法：B 走 `AgentB.land_manuscript`（`own.land_manuscript`）；F 走 "
+    "`promote_manuscript`；同一命题的第二份证明用规范后缀 `-p<N>`，"
+    "不许自己起 `-v2` 这类新名。"
 )
 
 #: D 的证明稿路径拒信（2026-11-04）：指路必须具体到"派 F"，而不是"走你的渲染动作"——
@@ -555,10 +585,34 @@ def _reserved_ledger(rel: str) -> bool:
                for who, rule in RESERVED_ARTIFACT_TABLE)
 
 
+def _manuscript_name_matches(rel: str) -> bool:
+    """`manuscript:` 规则：这个名字是不是"手稿形"（设计 3.4.2，D5 的唯一判据）。
+
+    只按文件名过表（目录不参与）：`manuscriptfamily.classify_name` 的 tier 落在
+    `{family, legacy}` ⇒ 命中。为什么是这两档：
+
+    - `notes/b-proof-000001.md` ⇒ `family`（名字是规范名，只是目录不对）⇒ 命中；
+    - `notes/b-proof-000003-v2.md` ⇒ `legacy`（历史后缀）⇒ 也命中 —— `-v2` 正是
+      真机 98b 绕过写口的形态，且它写下去也收不进台账（"能写但收不进去"只会把同一个坑
+      留给下一轮）；
+    - `notes/f-proof-x.md` ⇒ `bad_name`（像手稿、号解析不出）⇒ 不命中：普通笔记
+      换个像手稿的名字不该被误伤（2026-11-07 收窄的负控，判据
+      `test_fs_reserved_ledger_paths.py::test_c_*`）；
+    - `notes/普通笔记.md` ⇒ `unrecognized` ⇒ 不命中。
+
+    延迟 import：本模块被 `tools` 包在导入期拉起，而 `manuscriptfamily` 是纯函数模块，
+    这里不制造导入期环。
+    """
+    from ..manuscriptfamily import TIER_FAMILY, TIER_LEGACY, classify_name
+
+    reading = classify_name(str(rel or ""))
+    return str(reading.get("tier") or "") in (TIER_FAMILY, TIER_LEGACY)
+
+
 def _artifact_rule_matches(rule: str, rel: str) -> bool:
     """手稿那一半的一条规则是否命中 `rel`（工作区相对路径，`/` 分隔）。
 
-    两档，只看规则串里有没有 `/`：
+    三档：`manuscript:` 那档按名字过表；其余两档只看规则串里有没有 `/`：
 
     - **带 `/`**：按整条相对路径判（`_path_rule_matches`）—— 这一档是"规范落点"
       （2026-11-07：A / B 的手稿写权限只收在 `reports/` 这一族上；`notes/` 是它们的
@@ -566,10 +620,12 @@ def _artifact_rule_matches(rule: str, rel: str) -> bool:
     - **不带 `/`**：按文件名判（`_rule_matches`）—— 2026-10-27 D6 的既有口径：
       作者/收方那一侧换个目录仍是同一个框架产物（真机 `notes/f-proof-…` 就是这么进盘的）。
 
-    两档共用同一张表：表里写的是哪种规则，这里就按哪种判，不另写第二份判断。
+    三档共用同一张表：表里写的是哪种规则，这里就按哪种判，不另写第二份判断。
     """
     text = str(rule or "")
-    _kind, _sep, needle = text.partition(":")
+    kind, _sep, needle = text.partition(":")
+    if kind == MANUSCRIPT_RULE_KIND:
+        return _manuscript_name_matches(rel)
     if "/" in needle:
         return _path_rule_matches(text, rel)
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
@@ -585,8 +641,8 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     2026-11-05 之前它外面还有一层只返回 bool 的旧壳，那个壳的调用点为 0
     （真机唯一调用点是 `_reserved_refusal` 里这一句），已删；别再长出第二个名字。
 
-    命中的判法见 :func:`_artifact_rule_matches`：规则里带 `/` 的按整条路径判
-    （规范落点），不带的按文件名判（D6）。
+    命中的判法见 :func:`_artifact_rule_matches`：`manuscript:` 那档按名字过表；
+    规则里带 `/` 的按整条路径判（规范落点），不带的按文件名判（D6）。
     """
     owner = str(role or "")
     rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
@@ -747,6 +803,11 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
         if str(role or "") == "D" and rule in D_PROOF_PATH_RULES:
             return fail(D_PROOF_LANDING_MESSAGE.format(path=rel), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role="D")
+        if rule.partition(":")[0] == MANUSCRIPT_RULE_KIND:
+            # 2026-11-10（D5）：名字本身就是判据，拒信必须给两条落稿正路（B 的 land /
+            # F 的 promote）并点名 `-v2` 这条禁令；与"框架渲染的产物"那句分开。
+            return fail(MANUSCRIPT_NAME_MESSAGE.format(path=rel), path=rel,
+                        kind=RESERVED_ARTIFACT_KIND, role=str(role or ""))
         return fail(
             RESERVED_ARTIFACT_MESSAGE,
             path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
