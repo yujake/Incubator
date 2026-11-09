@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-10T00:48:51+08:00",
+  "generated_at": "2026-11-10T00:59:39+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -491,10 +491,10 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "d337e6be5842810d7e081fb2edc0053e966718ab5faa09d5781fe82dd9419adf",
+      "sha256": "76de54fae1c36eefc2036cf020f91a0a24e6f23085f8f3c94c9b13304ff5ab3b",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-08 p262（提示词-工具面一致性审计 ①–⑦）：specs/b.py 的 policy 补四条（从手稿读命题 / 两格读数与六档 / 判不了受控拒 / 短证明照样判）且 register_statement.statement_full 说明补两个拒收码；tools/verify_tools.py 的 verify_proof.readonly_facts 说明改手稿事实、run_experiment 摘要换两类 E 手稿（同一笔把降级/崩溃一句挪进 claim 的 description）；两份 golden 随 p262 重冻。reviewers=0，登记≠批准。",
+      "change_note": "2026-11-10 p264 压缩批次：verify.evidence_for 的 summary 把「两个都不给」压成「都不给」（只压字、不删语义；同一句的判据/行为一字未动）。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这一条仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
