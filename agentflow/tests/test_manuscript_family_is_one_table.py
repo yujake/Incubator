@@ -3,7 +3,7 @@
 
 ## 这一份判据钉什么
 
-1. 四族 × 每个后缀 × 每个目录的往返：`relpath` 拼出来的名字必须被 `classify` /
+1. 四族 × 每个后缀 × 每个目录的往返：`relpath` 拼出来的名字必须被 `classify_manuscript` /
    `parse` 读回原值（改表忘改解析时当场红，设计 3.6 g）；
 2. `legacy` 档：`-v2` 与 `notes/` 手稿形名字只读成历史档（可列出、可 preview、
    不可签、不可收录、`proof_no=0`），不读成 `-p2`、不读成正式族；
@@ -136,7 +136,7 @@ def test_every_family_suffix_and_directory_round_trips(
     规范名指回 `reports/` 那一份。
     """
     rel = rel_for(family, manuscript_id, proof_no, directory)
-    reading = MF.classify(rel)
+    reading = MF.classify_manuscript(rel)
     parsed = MF.parse(rel)
     carrier = MF.sign_carrier(rel)
     if directory == MF.MANUSCRIPT_DIR:
@@ -179,11 +179,11 @@ def test_every_family_suffix_and_directory_round_trips(
 def test_classify_name_ignores_the_directory() -> None:
     """fs 保留表只拿得到文件名：目录不参与，所以 `notes/b-proof-*` 仍是手稿形名字。
 
-    为什么这与 `classify` 不矛盾：`classify` 判"这一份稿属于哪一族"（目录参与），
+    为什么这与 `classify_manuscript` 不矛盾：`classify_manuscript` 判"这一份稿属于哪一族"（目录参与），
     `classify_name` 判"这个名字该不该被拒写"（只按名字）。两处都拒写 `notes/` 的
     手稿形名字，但前者读成 legacy、后者读成 family —— 这是两件事，不许折平。
     """
-    assert MF.classify("notes/b-proof-000003.md")["tier"] == MF.TIER_LEGACY
+    assert MF.classify_manuscript("notes/b-proof-000003.md")["tier"] == MF.TIER_LEGACY
     assert MF.classify_name("notes/b-proof-000003.md")["tier"] == MF.TIER_FAMILY
     assert MF.classify_name("b-proof-000003.md")["tier"] == MF.TIER_FAMILY
     assert MF.classify_name("notes/f-proof-x.md")["tier"] == MF.TIER_BAD
@@ -202,7 +202,7 @@ def test_legacy_versions_are_a_read_not_a_family(rel: str, version: int) -> None
     `-v2` 尤其不许读成 `-p2`：那会把一份未审、且已知有缺陷的稿变成正式证明
     （设计 1.2 第 3 条）。这里的正控与反真空共用 `legacy_violations`。
     """
-    reading = MF.classify(rel)
+    reading = MF.classify_manuscript(rel)
     carrier = MF.sign_carrier(rel)
     problems = legacy_violations(reading, carrier, MF.allowed_cells("legacy"))
     assert problems == [], problems
@@ -222,7 +222,7 @@ def test_the_legacy_judge_rejects_a_formal_reading_of_v2() -> None:
     这是设计 3.6 c 要求的反真空方向。做法是把"错读数"喂给正控用的同一个判据函数；
     不做修改源码那种一次性实验（那会污染工作树）。
     """
-    reading = MF.classify("notes/b-proof-000003-v2.md")
+    reading = MF.classify_manuscript("notes/b-proof-000003-v2.md")
     mutant = {**reading, "tier": MF.TIER_FAMILY, "family": "b-proof",
               "proof_no": 2, "code": ""}
     problems = absent_violations_for_legacy_reading(mutant)
@@ -245,7 +245,7 @@ def test_the_legacy_judge_rejects_a_formal_reading_of_v2() -> None:
 ])
 def test_bad_names_are_neither_family_nor_legacy(rel: str) -> None:
     """像手稿、号解析不出 ⇒ `bad_name`（受控拒那一档），不是历史档、也不是族。"""
-    reading = MF.classify(rel)
+    reading = MF.classify_manuscript(rel)
     assert reading["tier"] == MF.TIER_BAD, reading
     assert reading["family"] == ""
     assert reading["name_family"] != ""
@@ -267,7 +267,7 @@ def test_bad_names_are_neither_family_nor_legacy(rel: str) -> None:
 ])
 def test_unrecognized_is_not_a_manuscript(rel: str) -> None:
     """不是手稿族的名字 ⇒ `unrecognized`（不列进手稿清单、也不拒写普通笔记）。"""
-    reading = MF.classify(rel)
+    reading = MF.classify_manuscript(rel)
     assert reading["tier"] == MF.TIER_UNRECOGNIZED, reading
     assert reading["family"] == ""
     assert reading["name_family"] == ""
@@ -349,7 +349,7 @@ def test_relpath_is_the_only_spelling_and_round_trips(
     assert parsed["manuscript_id"] == manuscript_id
     assert parsed["proof_no"] == proof_no
     assert parsed["canonical"] == ""
-    reading = MF.classify(rel)
+    reading = MF.classify_manuscript(rel)
     assert reading["tier"] == MF.TIER_FAMILY
     assert reading["name_family"] == family
 

@@ -199,7 +199,7 @@ def _split_rel(rel: Any) -> tuple[str, str]:
 
 
 def _shape_of_name(name: str) -> dict[str, Any]:
-    """只看文件名 ⇒ 五档读数（目录不参与；`classify_name` 与 `classify` 共用这一处）。
+    """只看文件名 ⇒ 五档读数（目录不参与；`classify_name` 与 `classify_manuscript` 共用这一处）。
 
     为什么把"名字形状"与"目录"分开：`sign_carrier` 要两者都判（`notes/b-proof-*`
     不是签的载体），而 fs 保留表只拿得到文件名（它判"这个名字是不是手稿形"）。
@@ -266,8 +266,14 @@ def _canonical_of(name_family: str, manuscript_id: str, proof_no: int) -> str:
         return ""
 
 
-def classify(rel: Any) -> dict[str, Any]:
+def classify_manuscript(rel: Any) -> dict[str, Any]:
     """工作区相对路径 ⇒ 五档读数（目录参与身份判定，设计 3.1.1 第 1 条）。
+
+    为什么名字里带 `_manuscript` 而不叫 `classify`：`projects.classify` 先存在，判的是
+    项目目录状态（workspace / archive …），与"这份稿属于哪一族"是两个语义；两个模块各有一个
+    短名 `classify` 会让 R003（公开名在多模块里有独立实现）报两条告警，而它们本来就不该合并。
+    带后缀之后短名不再撞车，读者也不会把"项目目录状态"与"手稿族"读成同一件事。
+    
 
     返回键：`tier` / `family` / `name_family` / `id` / `proof_no` / `code` / `why` /
     `checked` / `name` / `directory` / `canonical`。
@@ -327,10 +333,10 @@ def classify(rel: Any) -> dict[str, Any]:
 def classify_name(name: Any) -> dict[str, Any]:
     """只按文件名判五档（fs 保留表用）：目录不参与。
 
-    为什么与 `classify` 分开：`tools/fs_tools.py` 的保留表在 `fs.write` 那一刻只拿到
+    为什么与 `classify_manuscript` 分开：`tools/fs_tools.py` 的保留表在 `fs.write` 那一刻只拿到
     文件名（它判"这个名字该不该被拒写"），而"目录是不是 `reports/`"是收录/签的那一层
     才有的坐标。`notes/b-proof-000001.md` 在这里是 `family`（名字过表），在
-    `classify` 里是 `legacy`（目录不对）—— 两处都拒写，但读法不同，不许折平。
+    `classify_manuscript` 里是 `legacy`（目录不对）—— 两处都拒写，但读法不同，不许折平。
     """
     shape = _shape_of_name(_split_rel(name)[1])
     tier = str(shape["tier"])
@@ -371,7 +377,7 @@ def parse(rel: Any) -> dict[str, Any]:
     旧调用方要的布尔读法在 `is_family` 里（有名字形状即为真，含 `bad_name` —— 与旧
     `parse_manuscript_name` 对 `f-proof-abc` 的 `family=True, checked=False` 一致）。
     """
-    reading = classify(rel)
+    reading = classify_manuscript(rel)
     tier = str(reading["tier"])
     return {
         "checked": bool(reading["checked"]),
@@ -401,7 +407,7 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
 
     返回 `{ok, code, why, name, family, tier}`；`ok=False` 不许折成"可以签"。
     """
-    reading = classify(rel)
+    reading = classify_manuscript(rel)
     tier = str(reading["tier"])
     family = str(reading["name_family"])
     name = str(reading["name"])

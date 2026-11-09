@@ -2548,7 +2548,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 挂在任一角色包里都会让另一边再写一份；它纯函数、零 I/O、不 import 既有模块，
     # 才能在收编的每一侧被安全地当唯一真身引用。
     "manuscriptfamily.py": "手稿族/号/后缀的唯一判定表（T2）：FAMILIES（四族 + legacy 读档）/ "
-                            "classify / classify_name / parse / sign_carrier / relpath / "
+                            "classify_manuscript / classify_name / parse / sign_carrier / relpath / "
                             "allowed_cells / default_cells / derived_cells / needs_sign / "
                             "evidence_kind / kind_default / line_range_origin —— 族前缀、"
                             "允许目录、号形、-pN 后缀、签不要、格位这五列只有这一处；"

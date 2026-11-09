@@ -144,7 +144,7 @@ def _should_promote_to_formal(rel: str) -> bool:
     三种情形不转：已经是按号命名的正式稿（目标就是它自己）、B 的改写稿
     （`reports/b-proof-*` —— 那不是 F 的稿）、以及不认识的路径。
 
-    2026-11-09（T2 收编，设计 3.2 附）：族判定改读 `manuscriptfamily.classify`，
+    2026-11-09（T2 收编，设计 3.2 附）：族判定改读 `manuscriptfamily.classify_manuscript`，
     不再手写前缀比较。行为逐字不变：
 
     - `reports/f-proof-plan-<计划号>.md` ⇒ 转（立项那一轮还没有命题号）；
@@ -155,7 +155,7 @@ def _should_promote_to_formal(rel: str) -> bool:
     text = _norm_manuscript_rel(rel)
     if not text:
         return False
-    reading = _MFAM.classify(text)
+    reading = _MFAM.classify_manuscript(text)
     if reading.get("tier") == _MFAM.TIER_FAMILY:
         if reading.get("family") != "f-proof":
             return False
@@ -5165,10 +5165,10 @@ class _RegisterStatement:
                  "没有可登记的证明正文")
                 + "。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段",
                 proof_body_state=str(proof_reading.get("state") or "")), "", ""
-        # 2026-11-09（T2 收编，设计 3.2 第 2 处）：族判定只读 `manuscriptfamily.classify`。
+        # 2026-11-09（T2 收编，设计 3.2 第 2 处）：族判定只读 `manuscriptfamily.classify_manuscript`。
         # `notes/` 的手稿形名字读成 legacy（不可签、不可收录）；`reports/b-proof-*`
         # 不再落到 unrecognized，而是 b-proof 族（可签、可收录）。
-        _family_reading = _MFAM.classify(rel)
+        _family_reading = _MFAM.classify_manuscript(rel)
         _tier = str(_family_reading.get("tier") or "")
         if _tier == _MFAM.TIER_LEGACY:
             return _refuse(

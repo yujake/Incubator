@@ -945,7 +945,7 @@ def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
             continue
         # `-v2` 一类历史档：`manuscript_id_of` 仍读得出号（设计 3.3.2 的兼容读法），
         # 但它不可收录（`tier=legacy`）⇒ 不许给它开「签了但没人收录」的义务。
-        if _MFAM.classify(rel).get("tier") != _MFAM.TIER_FAMILY:
+        if _MFAM.classify_manuscript(rel).get("tier") != _MFAM.TIER_FAMILY:
             out["skipped"].append({"path": rel, "why": "历史档（legacy）⇒ 不可收录"})
             continue
         out["signed"] += 1
