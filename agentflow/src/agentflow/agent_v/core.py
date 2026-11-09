@@ -1169,8 +1169,14 @@ class AgentV:
                                detail=str(_ms.get("detail") or ""))
                     self._emit(f"verify_proof({sid})：手稿没读成 —— 不审")
                     return out
-                if not str(text or "").strip():
-                    text = str(_ms.get("body") or "")
+                # 2026-11-09（亲自跑通道时发现）：稿是正文的权威。改前只在
+                # 调用方没给 `proof_text` 时才取稿里那一节 ⇒ 给了正文（哪怕内容
+                # 一样、只差前后换行）时，台账那一行会记调用方那份的 sha，而签块 /
+                # 签文件按稿那一节算 sha ⇒ 两者对不上：签落不到稿上、B 收录也拒
+                # （实测 proof_sha256=d2e27457… 对 172e01fb…）。
+                # 现在一律以稿里 `## 证明` 那一节为准；调用方给的正文只作内容核对
+                # （`_manuscript_gate` 已经比过，内容不同在那一步就拒）。
+                text = str(_ms.get("body") or "") or str(text or "")
                 manuscript_raw = str(_ms.get("raw") or "")
                 # 2026-11-08：命题正文只从稿的 `## 命题` 读（不再读 statements）。
                 statement_full = _DS.statement_body(manuscript_raw)
@@ -2258,7 +2264,11 @@ class AgentV:
                     "reason": "dependency_section_unreadable",
                     "detail": (f"`{rel}` 的 `## 依赖` 段不合格（{section.get('refused')}）⇒ "
                                "不审、不落签：按四列表头重写那一节再来")}
-        given = str(text or "")
+        # 2026-11-09（亲自跑通道时发现）：`body` 是"稿里那一节去首尾空行"的形态，
+        # 而调用方给的 `proof_text` 往往带着自己那一份的换行习惯（照 `manuscripts.read`
+        # 原样抄下来就带前后空行）。两侧用同一把尺比内容，不拿"末尾有几个换行"
+        # 当"是不是同一份证明"：先各自去掉首尾换行再比 sha。
+        given = str(text or "").strip("\n")
         if given.strip() and VR.text_sha(given) != VR.text_sha(body):
             return {"failed": True, "kind": "proof_text_mismatch",
                     "reason": "proof_text_mismatch",
