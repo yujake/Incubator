@@ -665,6 +665,7 @@ def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
     与 :func:`read_report` 同一条三态纪律：`missing` / `unreadable` / `empty` 都带一条
     `problems` 说明 —— "读不到"与"读过了、没问题"必须分得开。
     """
+    from . import depsection as _DS
     from . import verifications as _VR
 
     out: dict[str, Any] = {
@@ -699,7 +700,11 @@ def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
         out["state"] = "unreadable"
         out["problems"] = [f"手稿不是 UTF-8 文本：{raw}（{exc}）"]
         return out
-    body = proof_body_of(text)
+    # 2026-11-09（D4）：三态读数从 `depsection` 来 —— 只有"那一节在、但正文空的"
+    # 才叫 empty；没有那一节是 absent（同一档 `state=empty`，但 `problems` 必须说
+    # 对是哪一种，否则读的人会把"缺节"当成"写了个空壳"）。
+    proof_reading = _DS.proof_body_reading(text)
+    body = str(proof_reading.get("body") or "").strip("\n")
     out.update({"text": text, "bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 "proof_body": body,
@@ -710,7 +715,11 @@ def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
         return out
     if not body.strip():
         out["state"] = "empty"
-        out["problems"] = [f"手稿里 `{MANUSCRIPT_PROOF_HEADING}` 那一节是空的：{raw}"]
+        _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
+        out["problems"] = [
+            (f"手稿里没有 `{MANUSCRIPT_PROOF_HEADING}` 那一节：{raw}"
+             "（缺节不等于「那一节是空的」）" if _absent else
+             f"手稿里 `{MANUSCRIPT_PROOF_HEADING}` 那一节是空的：{raw}")]
         return out
     out["state"] = "present"
     out["ok"] = True
