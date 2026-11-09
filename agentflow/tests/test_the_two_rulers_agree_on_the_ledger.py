@@ -13,7 +13,7 @@
 | # | 判据 | 反真空 |
 |---|---|---|
 | a | 同一个查询（含全半角 / 大小写 / 标点差异）在 `table.search` 与 `by_keywords` 上给出同一批 `stmt_id`、`total == hits_total`；8 组，含一组两边都 0 命中 | 非 0 组都断言 `total > 0`；0 命中组断言查口 `checked=True`（"查过、0 条"不是"没查成"） |
-| b | 反真空：把 statements 分支换回统一前的 `casefold` ⇒ 同一批查询里至少一组两边不一致（判据红） | 负控用统一前实测到不一致的那两问（`Ｐ 阶元` / `noether，环`） |
+| b | 反真空：把 statements 分支换回统一前的 `casefold` ⇒ 同一批查询里至少一组两边不一致（判据红） | 负控用统一前实测到不一致的那两条查询（`Ｐ 阶元` / `noether，环`） |
 | c | 非 statements 表行为不变：`literature` / `research_questions` 与"改前算法"（`casefold` + 全部标量字符串字段）逐行对拍 | 全角查询在非 statements 表上仍 0 命中（证明统一没有外溢） |
 | d | 返回形状不变：`data` / `meta` 键集、`select`、`limit` / `truncated`、`fields` 读数 | — |
 | e | 边界：`query` 归一后为空 ⇒ 受控拒绝（statements），不是"0 命中"；查口同问 `checked=False` | — |
@@ -128,7 +128,7 @@ def _casefold_fields(row, names, wanted) -> list[str]:
 def test_b_restoring_casefold_makes_the_agreement_criterion_red(env, monkeypatch) -> None:
     """b：把 statements 分支换回 `casefold` ⇒ 一致性判据必须红（本判据不是恒真的）。
 
-    负控用统一前实测到不一致的那两问：全角 `Ｐ 阶元`（工具层 0 / 查口 1）与
+    负控用统一前实测到不一致的那两条查询：全角 `Ｐ 阶元`（工具层 0 / 查口 1）与
     `noether，环`（工具层 0 / 查口 1）。若换回 casefold 之后两边仍然一致，
     说明 a 的"一致"不是因为共用判据，而是因为这条判据根本没在比东西（真空）。
     """
