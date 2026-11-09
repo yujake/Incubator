@@ -4448,6 +4448,30 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
                      f"summons_total={total} unconsumed={bad}：{why}")}
 
 
+#: 步数上报的节奏（D11，2026-11-09）：`0`（含负数）= **不上报**。
+#:
+#: 这不是"关掉闸" —— 闸本来就没有（业主 2026-10-10 裁定 12-K：不设步数硬闸，
+#: 循环的步号计数器无限）。它关掉的只是"每满 N 步向父代理报一次账"这条进度上报。
+#: 改前是 `max(1, n)`：给 0 会变成 1 ⇒ **每步都报**，方向正好相反。
+def _step_report_every(max_steps: Any) -> int:
+    """上报节奏的规范值：`<= 0` 折成 0（= 不上报），其余原样。"""
+    n = int(max_steps)
+    return n if n > 0 else 0
+
+
+def _step_report_wording(max_steps: Any) -> str:
+    """每步 user 消息里那句"步数"说明（`0` 与正数两种口径，别的写法不许出现）。
+
+    为什么单独一个函数：这句话是模型会读到的（每步 user 消息），而 `0` 的语义
+    必须与 `run` 里的上报分支逐字一致 —— 两处各写一遍就会漂成
+    "提示词说每满 0 步报一次，代码一次都不报"。
+    """
+    every = _step_report_every(max_steps)
+    if every > 0:
+        return f"每满 {every} 步会向父代理报一次账，由它决定继续放行还是刹停"
+    return "步数上报已关（0 = 不上报），不会有步数报告；步数本来没有硬上限"
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -4881,7 +4905,7 @@ class AgentLoop:
         # 再插值：行为逐字不变（同一个方法、同一个时点、同一段文本）。
         research_block = self._research_block()
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
-                f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
+                f"{_step_report_wording(self.max_steps)}）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
                 f"{ask}"
@@ -8266,9 +8290,11 @@ class AgentLoop:
         #: 循环照常继续（父代理什么都不做 ⇒ 继续跑；要停由它走 `interrupt`）。
         #: 文案是对账，不是上限（D11，2026-11-09）：正文叫「步数报告（仅上报）」、
         #: 主题写「不是上限」—— 旧词「超限」会让人以为撞了闸，而闸本来就没有。
+        #: `max_steps <= 0` = 不上报（D11 第②件）：改前 `max(1, 0)` 会变成"每步都报"。
         #: 保留的闸只有两件 —— 预算与墙钟（它们不是"轮次预算"），以及 S-D 那道判停。
+        report_every = _step_report_every(self.max_steps)
         reports_sent = 0
-        next_report_at = max(1, int(self.max_steps))
+        next_report_at = report_every        # 0 ⇒ 永远不跨过（不上报）
 
         #: 不设步数硬闸（照 DSH：它的 agent-loop 里没有 maxSteps 这类字段）。
         #: 出口只有 `break`（收工 / 叫停 / 预算 / 墙钟 / 判停 / 未接线…），每个都带自己的 stop_reason。
@@ -8279,11 +8305,11 @@ class AgentLoop:
         turn_call: Any = None
         turn_cache: dict[str, Any] = {}
         for step in self._step_counter(start_step):
-            if step + 1 >= next_report_at:
-                # 跨过阈值 ⇒ 上报（四样读数：已用步数 / 最近在做什么 / 花了多少 / 还没交 final）。
+            if next_report_at and step + 1 >= next_report_at:
+                # 跨过节奏 ⇒ 上报（四样读数：已用步数 / 最近在做什么 / 花了多少 / 还没交 final）。
                 # 它不改循环行为：父代理不动作就继续跑 —— 这正是本裁定的核心判据。
                 reports_sent += 1
-                next_report_at += max(1, int(self.max_steps))
+                next_report_at += report_every
                 step_note = (
                     f"步数报告（第 {reports_sent} 次，仅上报）：已用 {step + 1} 步"
                     f"（阈值 {self.max_steps}，不是上限）；"

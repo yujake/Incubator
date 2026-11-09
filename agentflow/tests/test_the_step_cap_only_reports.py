@@ -59,7 +59,7 @@ def test_no_leftover_step_gate_in_the_source() -> None:
     assert "max_steps" in src, "报告阈值本身被删掉了？它应当留着，只是不再判停"
 
 
-def _prepare_bait(root: pathlib.Path) -> None:
+def _prepare_bait(root: pathlib.Path, count: int = BAIT_COUNT) -> None:
     """在工作区里铺几份内容各不相同的文件（给循环读）。
 
     为什么要内容不同：S-D 那道判停（同调用 + 同读数）会在第 5 步收工，而本判据要看的是
@@ -71,26 +71,27 @@ def _prepare_bait(root: pathlib.Path) -> None:
     """
     out = root / "out"
     out.mkdir(parents=True, exist_ok=True)
-    for i in range(BAIT_COUNT):
+    for i in range(count):
         (out / f"bait{i}.txt").write_text(f"第 {i} 份材料\n", encoding="utf-8", newline="")
 
 
-def _reads() -> list[str]:
+def _reads(count: int = BAIT_COUNT) -> list[str]:
     """几条各不相同的读调用（工具同名、路径不同 ⇒ 不构成"同一个调用"）。"""
     return [_reply({"tool": "fs.read", "args": {"path": f"out/bait{i}.txt"},
-                    "why": f"读第 {i} 份材料"}) for i in range(BAIT_COUNT)]
+                    "why": f"读第 {i} 份材料"}) for i in range(count)]
 
 
-def _top_run(tmp_path: pathlib.Path, sid: str = "test-run"):
-    """跑一趟顶趟（角色 M，`depth == 1`）：5 步读料 + 一条 final。"""
+def _top_run(tmp_path: pathlib.Path, sid: str = "test-run", *,
+             max_steps: int = THRESHOLD, count: int = BAIT_COUNT):
+    """跑一趟顶趟（角色 M，`depth == 1`）：`count` 步读料 + 一条 final。"""
     st, cond, registry, gw, root = TAL._wired(
-        tmp_path, {"M": _reads() + [_reply({"final": "跑够了", "evidence": []})]},
-        max_steps=THRESHOLD)
-    _prepare_bait(root)
+        tmp_path, {"M": _reads(count) + [_reply({"final": "跑够了", "evidence": []})]},
+        max_steps=max_steps)
+    _prepare_bait(root, count)
     run = run_role("M", "把材料读一遍再收工", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
                                 sid=sid), workspace_root=str(root), sid=sid, from_env=False,
-                   max_steps=THRESHOLD)
+                   max_steps=max_steps)
     return run, root
 
 
@@ -148,3 +149,60 @@ def test_a_child_reports_to_its_parent(tmp_path: pathlib.Path) -> None:
     assert sent[0]["to"] == "M", sent[0]
     # 负控：不是广播（收件人是一个具体角色，不是 ALL / 所有人）。
     assert sent[0]["to"] not in ("ALL", "所有", ""), sent[0]
+
+
+# ---------------------------------------------------------------- ② `0 = 不上报`
+
+
+def _notes(root: pathlib.Path, sid: str) -> list[dict]:
+    events, problems = SS.read_session(root, sid)
+    assert not problems, problems
+    return [e for e in events
+            if e.get("kind") == "agent_note" and "步数报告" in str(e.get("note") or "")]
+
+
+def test_zero_max_steps_means_no_report_at_all(tmp_path: pathlib.Path) -> None:
+    """`--max-steps 0` = 不上报（D11 第②件）：走了 5 步，一条报告都不许落。
+
+    ## 反真空（改前红在哪）
+    改前 `next_report_at = max(1, 0) = 1` ⇒ 第 1 步就跨过、之后每步再跨一次 ⇒
+    同一趟 5 步会落 **5 条**「步数报告」。所以这一条用"步数真的走了 ≥5 步"做前提：
+    旧代码在这里必然给 5 条，新代码必须给 0 条 —— 把 `0` 再折回 `max(1, n)`，它立刻红。
+    """
+    run, root = _top_run(tmp_path, sid="test-zero", max_steps=0)
+    # 前提：这一趟真的走了好几步（否则"0 条"证明不了 0 的语义）。
+    assert len(run.steps) >= BAIT_COUNT, run.to_dict()
+    assert run.stop_reason == "final", (run.stop_reason, run.to_dict())
+    assert _notes(root, "test-zero") == [], "0 应当 = 不上报（改前的 max(1, 0) 会每步都报）"
+    # 也不许给父发（顶趟没有父；这一格锁的是"报告分支根本没进"）。
+    events, _problems = SS.read_session(root, "test-zero")
+    assert not [e for e in events if e.get("kind") == "agent_message"], \
+        "0 = 不上报时仍然发了步数留言？"
+
+
+def test_the_report_cadence_is_every_n_steps(tmp_path: pathlib.Path) -> None:
+    """正控：`N > 0` 时每满 N 步报一次 —— 7 步、N=3 ⇒ 恰好 2 条（第 3、6 步）。
+
+    这一条与 `0` 那一条成对：一条证明"0 关得掉"，一条证明"N 还活着"（不是把整个
+    上报删掉）。`--max-steps 30` 的真读数见报告 c（同一段 `next_report_at` 算术）。
+    """
+    run, root = _top_run(tmp_path, sid="test-cadence", max_steps=3, count=7)
+    assert len(run.steps) >= 7, run.to_dict()
+    assert run.stop_reason == "final", (run.stop_reason, run.to_dict())
+    notes = _notes(root, "test-cadence")
+    assert [n["steps_used"] for n in notes] == [3, 6], [n["steps_used"] for n in notes]
+    assert all(n["threshold"] == 3 for n in notes), [n["threshold"] for n in notes]
+
+
+def test_the_step_wording_tells_the_model_what_zero_means() -> None:
+    """每步 user 消息里的那句说明：0 与正数两档都要说对（反真空：0 不许说"每满 0 步"）。"""
+    zero = AL._step_report_wording(0)
+    assert "0 = 不上报" in zero, zero
+    assert "每满 0 步" not in zero, zero
+    assert "硬上限" in zero, zero
+    for n in (30, 1, 7):
+        text = AL._step_report_wording(n)
+        assert f"每满 {n} 步" in text, text
+        assert "不上报" not in text, text
+    # 负值同样按"不上报"处理（不是"每满 -1 步"）。
+    assert "0 = 不上报" in AL._step_report_wording(-3), AL._step_report_wording(-3)
