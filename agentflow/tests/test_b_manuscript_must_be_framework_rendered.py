@@ -35,6 +35,7 @@ from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
+from _credential_fixture import issue_credential
 
 THEOREM_A = S.format_id(0)
 KIND = "manuscript_not_washed"
@@ -168,22 +169,23 @@ def _stamp_own_manuscript(store: Store, *, sid: str, rel: str) -> None:
 
     2026-11-05（D1 严格版）之后，稿是本行自己的按号稿；已有号的那一档认签走
     "手稿签块"（`bits_after_sign` 的第 1 来源），不再是"未在册先落 pending"那一档。
+
+    2026-11-10（T1 收口）：D268 批 2 之后签只认 `vsigns.sign_reading` 的可复算凭据；
+    三行台账 + 一块签块 = `unissued`（够票、没有 `out/vsigns/<sha>.json`）。这里改用
+    批 2 自己那份夹具（`_credential_fixture.issue_credential`：三票同源 + `vsigns.issue`），
+    再把块盖上去当视图。改的是夹具，不是断言：这一步本来就是"V 签过这一版"的替身。
     """
     proof = f"1. 由在册定理直接得到（依据：stmt:{THEOREM_A}）。"
     path = pathlib.Path(store.root) / rel
     text = path.read_text(encoding="utf-8")
-    # 2026-11-05 晚（业主）：签块必须有独立台账背书（`vsigns.sign_ledger_backing`）——
-    # 块里写 `verifications/<号>.jsonl#v-000003`，那三行就得真的在台账里。
-    for _ in range(int(VR.SIGN_STREAK_NEED)):
-        VR.record_verification(str(store.root), statement_id=sid, proof_text=proof,
-                               verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V", store=store, flip=False,
-                               manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    signed = issue_credential(store.root, proof_text=proof, statement_id=sid,
+                              manuscript=rel, proof_no=1)
+    ledger = str(dict(signed.get("sign") or {}).get("ledger") or "")
     path.write_text(VS.stamp_manuscript_sign(
         text, proof_sha=VR.text_sha(proof), streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
-        ledger=f"verifications/{sid}.jsonl#v-000003",
-        statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
+        ledger=ledger, statement_id=sid,
+        manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
 
 
 def test_a_handwritten_manuscript_is_refused_by_name(tmp_path: pathlib.Path) -> None:

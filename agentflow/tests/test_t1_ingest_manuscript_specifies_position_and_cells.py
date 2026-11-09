@@ -30,10 +30,9 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import conftest  # noqa: E402
+from _credential_fixture import issue_credential  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import manuscriptintake as MI  # noqa: E402
-from agentflow import verifications as VR  # noqa: E402
-from agentflow import vsigns as VS  # noqa: E402
 from agentflow import specs as SPECS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.store import Store  # noqa: E402
@@ -101,24 +100,13 @@ def _issue_proof_sign(st: Store, sid: str, proof_text: str, proof_no: int,
                       rel: str) -> dict:
     """把 V 对第 N 份证明的签真落成 `out/vsigns/<sha>.json`。
 
-    为什么要这一格：`record_verification` 只在"这一行已有第 N 份证明"时才翻位 / 发签；
-    而 append 那一档要构造的正是「#p2 还没进台账、签已经盖在正文上」这个前提
-    （设计 §4.2 O2：签先于台账正文）。这里走签发那一侧的真函数
-    （`_vsign_payload` + `vsigns.issue`），与 `V.verify_proof` 写签文件那一步同源。
+    append 那一档要构造的正是「#p2 还没进台账、签已经盖在正文上」这个前提
+    （设计 §4.2 O2：签先于台账正文），所以这里用批 2 自己那份夹具
+    （`_credential_fixture.issue_credential`：三票同源 + `vsigns.issue`），
+    与 `V.verify_proof` 写签文件那一步同源。
     """
-    holds = VR.consecutive_holds(st.root, sid, proof_no=proof_no)
-    payload = VR._vsign_payload(
-        root=st.root, ledger=pathlib.Path(st.root) / "verifications" / f"{sid}.jsonl",
-        statement_id=sid, proof_no=proof_no, sha=VR.text_sha(proof_text),
-        need=int(holds.get("need") or VR.SIGN_STREAK_NEED), holds=holds,
-        manuscript=rel)
-    return VS.issue(st.root, artifact_sha=VR.text_sha(proof_text),
-                    streak=int(holds.get("streak") or 0),
-                    need=int(holds.get("need") or VR.SIGN_STREAK_NEED),
-                    artifact_path=str(payload.get("artifact_path") or ""),
-                    ledger=str(payload.get("ledger") or ""), statement_id=sid,
-                    proof_no=proof_no, passes=list(payload.get("passes") or []),
-                    at=str(payload.get("at") or ""))
+    return issue_credential(st.root, proof_text=proof_text, statement_id=sid,
+                            manuscript=rel, proof_no=proof_no)
 
 
 def _sha_of(path: pathlib.Path) -> str:
@@ -402,9 +390,6 @@ def test_c1_conflict_matrix_empty_same_different_append(
     # append：-p2 且 #p1 已在
     st, b = _ws(tmp_path / "append")
     _signed_row(st, proof=PROOF, proof_no=1, row_proof=PROOF)
-    conftest.sign_for_the_gate(
-        st.root, statement_id="000001", proof_text="第二份证明正文", proof_no=2,
-        store=st, manuscript="reports/f-proof-000001-p2.md")
     _issue_proof_sign(st, "000001", "第二份证明正文", 2,
                       "reports/f-proof-000001-p2.md")
     _write(st, "reports/f-proof-000001-p2.md",

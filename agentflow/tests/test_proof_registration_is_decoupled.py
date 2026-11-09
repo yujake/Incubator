@@ -30,6 +30,7 @@ import pathlib
 
 import pytest
 from conftest import seed_statement_row
+from _credential_fixture import issue_credential
 from agentflow import proofregistry as R
 from agentflow import vsigns as VS
 from agentflow.agent_f import AgentF
@@ -354,10 +355,16 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     被拒登记的副作用 —— 实测旧实现上两笔登记其实都被 `proof_without_v_sign` 拒，
     文件只是 D1 留下的。现在改成显式 `land_manuscript` + 覆盖正文的台账签，登记
     真的成功；断言强度没降：仍然量"一份稿 / 同一路径 / 正文是最后一版 / 版本记录"。
+
+    2026-11-10（T1 收口）：D268 批 2 之后签只认 `vsigns.sign_reading` 的可复算凭据；
+    原来那几行 `sign_for_the_gate` 只够 #p1 那一档，而这一笔的稿头是 #p2 / #p3 ⇒ 必须
+    把对应证明号的三票真发成 `out/vsigns/<sha>.json`。这里改用批 2 自己那份夹具
+    （`_credential_fixture.issue_credential`：三票同源 `review_call` + `vsigns.issue`）。
+    改的是夹具，不是断言：这一格原本就是"V 签过这一版"的替身；现在它签的是同一份
+    正文的一份可复算签，而"#p2 不借 #p1 的光"这条口径也因此被真正量到。
     """
     from agentflow import depsection as DS
     from agentflow.agent_b import AgentB
-    from conftest import sign_for_the_gate
 
     st = _ws(tmp_path)
     row = seed_statement_row(
@@ -370,7 +377,10 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     bodies = ["B 重写后的第二版：先取 ε>0。", "B 重写后的第三版：改用有限覆盖。"]
     seen: list[dict] = []
     for i, body in enumerate(bodies, start=2):
-        sign_for_the_gate(st.root, statement_id="000041", proof_text=body, store=st)
+        # 这一笔的稿头证明号：第一次落地是 #p1，第二次就地重写成 #p2（版本历史从 1 起）。
+        issue_credential(st.root, proof_text=body, statement_id="000041",
+                         manuscript="reports/b-proof-000041.md",
+                         proof_no=i - 1)
         landed = b.land_manuscript(
             statement_id="000041", statement_full=FULL, proof_text=body,
             label="B 优化 000041", proof_no=1)

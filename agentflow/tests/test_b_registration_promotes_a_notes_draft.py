@@ -29,6 +29,7 @@ from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
+from _credential_fixture import issue_credential
 
 NOTES_REL = "notes/F-conj000000-proof.md"
 FULL = "设 d = 1、σ 有界 Borel 可测、两端极限存在且不等；则 N_σ ∩ L^p(R) 在 L^p(R) 中稠密。"
@@ -63,29 +64,29 @@ def _draft() -> str:
     return DS.mark_washed(text, actor="secretary-F")
 
 
-def _sign(st: Store, rel: str) -> None:
-    """V 在 notes 草稿上签过：三转「成立」落 pending 台账，再把签块盖上。
+def _sign(st: Store, rel: str, *, statement_id: str, promotion_rel: str) -> None:
+    """V 在 notes 草稿上签过：三票同源 + 真发签文件 + 盖签块。
 
-    2026-11-05 晚：签块必须有一个盘上读得出来的独立台账背书（`sign_ledger_backing`），
-    手写一个 `#v-…` 的假锚点现在不算签。所以这里先走真写口 `record_pending_sign`
-    （未在册那一档的落点），再用它给出的 ledger 盖块。
+    2026-11-10（T1 收口）：D268 批 2 之后「有没有签」只认 `vsigns.sign_reading` 的
+    可复算凭据；只落 pending 台账 / 只盖块 = `unissued`（够票、没有签文件），旧夹具
+    因此会在 `proof_without_v_sign` 上红。这里改用批 2 自己那份夹具
+    （`_credential_fixture.issue_credential`：三票同源 `review_call` + `vsigns.issue`），
+    签块仍盖在 notes 草稿上（块只是视图，认签看签文件）。改的是夹具，不是断言：
+    `_sign` 本来就是"V 签过这一版"的替身；现在它签的是同一份正文的一份可复算签。
+    `promotion_rel` 是转正后的载体名（`reports/f-proof-<号>.md`）。
     """
     path = pathlib.Path(st.root) / rel
     text = path.read_text(encoding="utf-8")
     body = VS.manuscript_proof_body(text)
-    row: dict = {}
-    for _ in range(int(VR.SIGN_STREAK_NEED)):
-        row = VR.record_pending_sign(
-            st.root, proof_text=body,
-            verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", object_path=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
-    ledger = (f"verifications/pending/{row['proof_sha256']}.jsonl"
-              f"#{row['verification_id']}")
+    got = issue_credential(st.root, proof_text=body, statement_id=statement_id,
+                           manuscript=promotion_rel, proof_no=1)
+    sign = dict(got.get("sign") or {})
+    ledger = str(sign.get("ledger") or "")
     stamped = VS.stamp_manuscript_sign(
         text, proof_sha=VR.text_sha(body),
         streak=VR.SIGN_STREAK_NEED, need=VR.SIGN_STREAK_NEED,
         verdict="成立", at="2026-11-04T15:00:00+08:00",
-        ledger=ledger, statement_id="",
+        ledger=ledger, statement_id=statement_id,
         manuscript_id=VS.manuscript_id_of(rel))
     path.write_text(stamped, encoding="utf-8")
 
@@ -111,7 +112,8 @@ def test_b_b_registration_with_a_notes_path_promotes_at_the_same_time(tmp_path):
     path = pathlib.Path(st.root) / NOTES_REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_draft(), encoding="utf-8")
-    _sign(st, NOTES_REL)
+    _sign(st, NOTES_REL, statement_id=sid,
+          promotion_rel=f"reports/f-proof-{sid}.md")
 
     got = b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
