@@ -1092,11 +1092,19 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     body = _sign_sha(manuscript_proof_body(text))
     block = manuscript_sign_standing(text, proof_sha=body, manuscript_path=rel)
     out["manuscript"] = dict(block)
-    if not bool(block.get("checked")):
-        out["why"] = (f"签块读不成形（{block.get('why') or '没有读数'}）⇒ "
+    # ---- D268 批 2：稿上已签改读 `sign_reading`（块只是视图，不许当凭据）----
+    try:
+        no = int(manuscript_proof_no_of(rel) or 1)
+    except (TypeError, ValueError):
+        no = 1
+    sig = sign_reading(root, statement_id=str(statement_id or ""), proof_text=text,
+                       proof_no=no, manuscript_path=rel, store=store)
+    out["sign"] = dict(sig)
+    if not bool(sig.get("checked")):
+        out["why"] = (f"签的凭据没查成（{sig.get('why') or '没有读数'}）⇒ "
                       "稿上已签这一格没查成")
         return out
-    out["manuscript_signed"] = str(block.get("state") or "") == "signed"
+    out["manuscript_signed"] = str(sig.get("state") or "") == "signed"
     if store is None:
         out["why"] = ("没有 store ⇒ 已入台账这一格没查成（不是「还没收录」）；"
                       f"稿上已签={out['manuscript_signed']}")
@@ -3059,49 +3067,25 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
                     kind: str = "", manuscript_text: str = "",
                     manuscript_path: Any = "", store: Any = None,
                     ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """B 收录时"认签"：有一份对得上这一份正文的签 ⇒ 把第 3 位写成已签。
+    """B 收录时"认签"：唯一判据是 `sign_reading.state == "signed"`（D268 批 2）。
 
-    返回 `(bits, reading)`。`reading` 是这一步的读数（「三态」）：
-    `{checked, found, applied, artifact_sha, why}` —— `found=False` 时 `bits` 原样返回
-    （一个字节都不动：没签过不是"把审过的擦掉"）。
+    改前这一笔有两套"文件/块在就算签"的路（手稿九格块、`out/vsigns/` 侧文件各一套），
+    而两套都只核"最后一行有没有背书"，不数票：手写一块 `连续=3/3` + 台账只 1 条 clean
+    就能换到第 3 位（N1）。批 2 起这里只调 :func:`sign_reading`：
 
-    ## 为什么要 B 这一笔（而不是只靠 `sign_statement`）
-    业主 2026-11-01：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入」。
-    B 重登记（改稿 / 换证明清单）时那一行的 `bits` 是「现算」的，如果只有
-    `sign_statement` 那一侧会写位，B 这一笔就会把"签过"重新算成"没签过"。
-    这一格就是"认签"的那一步：「它只能把位从假改真，且只在这一份正文本身有签时」。
+    - 块只作诊断读数（`out["block"]`），它自称 signed 不再构成签；
+    - 侧文件必须复算通过（`passes` 在锚点那本台账上点出 need 行、每行签得住）；
+    - `unbacked` / `borrowed` / `holding` / `retry_report` / `stale` / `unsigned` 一律
+      `applied=False`，`code` = 那一档，理由串点回台账行（可点开核对）。
 
-    ## 它凭什么敢写（三道都不许少）
-    1. 签文件里的 `artifact_sha` == `proof_sha(proof_text)`（同一把尺，见 :data:`ARTIFACT_SHA_RULE`）；
-    2. 签文件里的 `streak >= need`（门槛在签文件里也留着，读侧再判一次）；
-    3. 给了 `statement_id` 时，签文件里的 `statement_id` 必须与它相同 ——
-       「同一段正文被另一条命题复用不算签过」（那是借光，`#p2` 不许借 `#p1` 的老纪律）。
+    `statement_id` 为空（正在新建命题）仍走 :func:`_claim_pending_sign`：那一档按
+    正文 sha 认 pending 行，是同一份证据的另一个入口，不是"块当签"。
 
-    ## `statement_id` 为空 = 正在新建一条命题（2026-11-02 改）
-    改前这一档直接放弃认签（"新建的那一条不可能已经签过"），于是「先有签、后登记」
-    永远认不到：V 在命题还没在册时审的那一签落在 `verifications/pending/<sha>.jsonl`
-    （D-34 的落点），而 B 一登记就把它漏掉 —— 同一份正文，先签后登记与先登记后签
-    成了两件事。同一条纪律在 `AgentB._v_signature_for` 里早就按正文 sha 去 pending
-    认领了，两处必须同一把尺。
-
-    所以空号这一档改走 pending 认领（:func:`_claim_pending_sign`）：按
-    「正文 sha + 未在册」认一签，判据与 V 那条 pending 台账同一把尺
-    （`verifications.row_signable`）。认领之后回写 `statement_id`（登记拿到号之后由
-    `register_statement` 调 :func:`bind_pending_claim`）—— 那就是"同一份正文只认领一次"
-    的锁：第二笔同文登记看到台账行已经绑了号，就不再认。
-
-    ## 返回的 `claim`（签块这一支与 pending 认领这一支都交）
-    `{ledger, verification_id, proof_sha256, object_sha256, bound_id, bound}`：
-    `bound_id` 非空 = 这一签早被别的命题认过（`bound=True`，这一笔不认；`code`
-    给 `already_claimed`）；空 = 这一笔刚认下、等登记回写。
-    2026-11-05（D3）：签块这一支认到 `pending` 背书时也交同一形状的 `claim`
-    （改前只有 `_claim_pending_sign` 交，签块那条路 return 时不带 —— 于是
-    `register_statement` 的 `bind_pending_claim` 那一笔从来没跑过，"同一份正文只认领
-    一次"的锁不落）。有号台账（`verifications/<号>.jsonl`）那一档不产生 `claim`：
-    那不是"待认领"。
+    返回 `(bits, reading)`；`reading` 至少带 `checked / found / applied / artifact_sha /
+    state / code / why`（`state` 是 `sign_reading` 的结论，判据不在这一层重写）。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "applied": False,
-                           "artifact_sha": "", "why": ""}
+                           "artifact_sha": "", "state": "", "why": ""}
     if not str(proof_text or "").strip():
         out["checked"] = True
         out["why"] = "没有正文 ⇒ 认不了签（签是盖在正文上的，签不了空串）"
@@ -3109,147 +3093,53 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
     from . import verifications as _VR
 
     sha = _sign_sha(str(proof_text))
-    # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
-    #      收录时读到」）：手稿里那一行签块是 B 收录时的第一来源 ----
-    #
-    # 判据不在 B 那一侧重写：读块、比 sha、看连续次数全在 `manuscript_sign_standing`
-    # 一处（与侧文件/pending 同一把尺：`streak >= need` 且正文 sha 相符）。
-    # 块说 signed ⇒ 认；块说 rejected / stale ⇒ 不认（理由带走，`found=True` 让读的人
-    # 分得清"没有块"与"有块但不能认"）。没有块 ⇒ 落到下面既有的两条来源。
-    if str(manuscript_text or "").strip():
-        try:
-            no = int(_VR.as_proof_no(proof_no) or 1)
-        except (TypeError, ValueError):
-            no = 1
-        block = manuscript_sign_standing(str(manuscript_text), proof_sha=sha,
-                                         manuscript_path=manuscript_path)
-        out.update(checked=bool(block.get("checked")),
-                   found=bool(block.get("found")), artifact_sha=sha,
-                   why=str(block.get("why") or ""), block=dict(block))
-        # ---- 2026-11-02：两道判据（业主：「稿号→在册命题 映射 + 正文逐字 sha」）----
-        #
-        # 位置在"块说 signed"之前：块自己说 signed（sha 与连续次数都对）也不够 ——
-        # 它还必须挂得到这一条在册命题上，而且盖的是这份稿里现在这一份正文。
-        # 不过那两道就认签（84 的"块盖 #p3、文件正文 #p2"正是这样被认过去的）。
-        gate = manuscript_sign_gate(block, statement_id=str(statement_id or ""),
-                                    registered=_registered_ids(store))
-        out["gate"] = dict(gate)
-        # ---- 2026-11-05（D1）：`manuscript_id_unresolved` 在"新建命题"这一档不硬拒 ----
-        #
-        # 改前这里按 `gate.code` 一律提前 return，于是 `vsigns.py` 末尾那段"按正文 sha
-        # 认领 pending"（`:func:`_claim_pending_sign``）根本走不到：非空册的第 4 步整笔
-        # 被拒 `proof_without_v_sign`，而 pending 三票（u-000001/2/3）就在盘上。
-        # 门那一侧已经把"空号不判在册"的理由写进 `pending_candidate`（见
-        # `_mark_pending_candidate`）：这一档继续往下走，按正文 sha 认那一签；
-        # 已登记命题（非空号）那一档仍是硬拒，一个字都不改。
-        if gate.get("code") and not gate.get("pending_candidate"):
-            out.update(applied=False, code=str(gate["code"]),
-                       reason=str(gate.get("reason") or ""),
-                       suggestion=str(gate.get("suggestion") or ""),
-                       why=(f"{gate.get('reason')} ⇒ 不认这一块"
-                            f"（{gate.get('code')}）；建议：{gate.get('suggestion')}"))
-            return dict(bits), out
-        if gate.get("pending_candidate"):
-            # 读数（不是静默放过）：签块这一道没判成"号在册"，改由下面的 pending 认领
-            # 按正文 sha 判；块自己的读数留在 `out["block"]` / `out["gate"]` 里。
-            out["gate_pending_claim"] = {
-                "code": str(gate.get("code") or ""),
-                "why": str(gate.get("pending_candidate_why") or ""),
-                "suggestion": str(gate.get("suggestion") or "")}
-            out["why"] = (str(gate.get("pending_candidate_why") or "")
-                          or "新建命题：号在不在册不在这一道判")
-        if not gate.get("pending_candidate") and str(block.get("state") or "") == "signed":
-            # ---- 2026-11-05 晚（业主）：真假只看「有没有独立台账背书」 --------------
-            #
-            # 判据在 `sign_ledger_backing` 一处（签块与签文件两条来源共用）：块的
-            # `台账` 那一格必须是 V 的台账锚点，且那一行在盘上、正文 sha 相符、那一行
-            # 自己签得住。真机 `b-proof-000016` / `f-proof-plan-000011` 的块写的是
-            # `reports/… #V签`（指向稿自己）⇒ 改前照样被认下来，现在拒。
-            backing = sign_ledger_backing(root, block.get("ledger"), proof_sha256=sha)
-            out["backing"] = dict(backing)
-            if not backing.get("ok"):
-                out.update(applied=False, code=str(backing.get("code") or ""),
-                           reason=str(backing.get("why") or ""),
-                           why=(f"{backing.get('why')} ⇒ 不认这一块"
-                                f"（{backing.get('code')}）：稿上的「已签 3/3」只是一句话，"
-                                "要有 V 的台账行记过它才算签"))
-                return dict(bits), out
-            # ---- 2026-11-05（D3，证据级）：签块这条认领路也要交 claim --------------
-            #
-            # 改前这一支认到 pending 背书之后「不带 `claim`」就 return：`register_statement`
-            # 只在 `v_sign.claim` 存在时调 `bind_pending_claim`（那里的注释写着同一句
-            # 纪律），于是 pending 行的 `statement_id` 一直是空的 —— "同一份正文只认领
-            # 一次"那把锁从来没落上。第二笔（同一正文 sha、另一条命题、另一份没有签块的稿）
-            # 于是又认了同一签，两条命题都凭同一组三票拿到 proof_review（#p2 借 #p1 的光）。
-            # 现在：签块这一支与 `_claim_pending_sign` 交同一形状的 claim（ledger /
-            # verification_id / sha / bound_id），登记拿到号之后照常回写；
-            # 已经认给别的命题 ⇒ 当场 `already_claimed`（不认、不覆盖）。
-            _claim = _pending_claim_from_backing(
-                backing=backing, ledger=str(block.get("ledger") or ""), sha=sha)
-            if _claim is not None:
-                out["claim"] = dict(_claim)
-                _bound = str(_claim.get("bound_id") or "")
-                if _bound and _bound != str(statement_id or "").strip():
-                    out.update(applied=False, code="already_claimed",
-                               reason=(f"`{block.get('ledger')}` 这一签已经认给 "
-                                       f"stmt:{_bound} ⇒ 不再认领"),
-                               why=(f"`{block.get('ledger')}` 这一签已经认给 stmt:{_bound} ⇒ "
-                                    "不再认领（同一份正文只认领一次；改稿请重签，"
-                                    "登记不产生第二份签）"))
-                    return dict(bits), out
-            new = _apply_review_to_bits(
-                bits,
-                verification_id=str(backing.get("verification_id") or ""),
-                evidence=str(block.get("ledger") or ""),
-                findings=[], verdict="成立", proof_no=no, sha=sha,
-                kind=str(kind or ""))
-            out["applied"] = True
-            out["why"] = (f"手稿里的签块：连续 {block.get('streak')}/{block.get('need')}"
-                          f" 成立且正文 sha 相符（签于 {block.get('at') or '（没有时间）'}），"
-                          f"台账 `{block.get('ledger')}` 一行对得上 ⇒ 第 3 位按手稿里的签写")
-            return new, out
-        if str(block.get("state") or "") in ("rejected", "stale"):
-            return dict(bits), out
-    if not str(statement_id or "").strip():
-        return _claim_pending_sign(bits, root=root, sha=sha, proof_no=proof_no,
-                                   kind=kind, out=out)
     try:
         no = int(_VR.as_proof_no(proof_no) or 1)
     except (TypeError, ValueError):
         no = 1
-    got = sign_of(root, sha)
-    out.update(checked=bool(got.get("checked")), found=bool(got.get("found")),
-               artifact_sha=sha, why=str(got.get("why") or ""))
-    if not got.get("found"):
+    # 手稿块只作诊断读数：它是不是"签"由凭据复算决定，不由块自称决定（N1）。
+    if str(manuscript_text or "").strip():
+        out["block"] = dict(manuscript_sign_standing(
+            str(manuscript_text), proof_sha=sha, manuscript_path=manuscript_path))
+    if not str(statement_id or "").strip():
+        return _claim_pending_sign(bits, root=root, sha=sha, proof_no=proof_no,
+                                   kind=kind, out=out)
+    got = sign_reading(root, statement_id=str(statement_id), proof_text=str(proof_text),
+                       proof_no=no, manuscript_path=manuscript_path, store=store)
+    out.update(checked=bool(got.get("checked")), artifact_sha=sha,
+               state=str(got.get("state") or ""),
+               found=(str(got.get("state") or "") == "signed"),
+               why=str(got.get("why") or ""),
+               credential=dict(got.get("credential") or {}))
+    if str(got.get("state") or "") != "signed":
+        out.update(applied=False, code=str(got.get("state") or ""),
+                   reason=str(got.get("why") or ""))
         return dict(bits), out
-    sign = dict(got.get("sign") or {})
-    if str(sign.get("statement_id") or "") != str(statement_id):
-        out["why"] = (f"这一份正文的签属于 stmt:{str(sign.get('statement_id') or '（空）')}，"
-                      f"不是 stmt:{statement_id} ⇒ 不认（同一段正文被别的命题复用不算签过）")
-        return dict(bits), out
-    if int(sign.get("streak") or 0) < int(sign.get("need") or 0):
-        out["why"] = (f"签文件里的连续读数是 {sign.get('streak')}/{sign.get('need')}"
-                      " ⇒ 未达门槛，不认")
-        return dict(bits), out
+    cred = credential_reading(root, sha)
+    sign = dict(cred.get("sign") or {})
+    ledger = str(sign.get("ledger") or "")
     passes = [dict(p) for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
     last = passes[-1] if passes else {}
-    # 签文件这一条来源同样要核背书（业主 2026-11-05 晚）：手写一份 `out/vsigns/<sha>.json`
-    # 把 `台账` 写成稿自己，改前也能换到第 3 位。
-    backing = sign_ledger_backing(root, sign.get("ledger"), proof_sha256=sha)
-    out["backing"] = dict(backing)
-    if not backing.get("ok"):
-        out.update(applied=False, code=str(backing.get("code") or ""),
-                   reason=str(backing.get("why") or ""),
-                   why=(f"{backing.get('why')} ⇒ 不认这份签文件"
-                        f"（{backing.get('code')}）"))
-        return dict(bits), out
+    # pending 台账那一签要交 claim（同一份正文只认领一次），与 `_claim_pending_sign` 同形。
+    if ledger.startswith(f"{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/"):
+        backing = sign_ledger_backing(root, ledger, proof_sha256=sha)
+        out["backing"] = dict(backing)
+        claim = _pending_claim_from_backing(backing=backing, ledger=ledger, sha=sha)
+        if claim is not None:
+            out["claim"] = dict(claim)
+            bound = str(claim.get("bound_id") or "")
+            if bound and bound != str(statement_id).strip():
+                out.update(applied=False, code="already_claimed",
+                           reason=(f"`{ledger}` 这一签已经认给 stmt:{bound} ⇒ 不再认领"),
+                           why=(f"`{ledger}` 这一签已经认给 stmt:{bound} ⇒ 不再认领"
+                                "（同一份正文只认领一次；改稿请重签，登记不产生第二份签）"))
+                return dict(bits), out
     new = _apply_review_to_bits(
         bits, verification_id=str(last.get("verification_id") or ""),
-        evidence=str(sign.get("ledger") or ""), findings=[],
-        verdict="成立", proof_no=no, sha=sha, kind=str(kind or ""))
+        evidence=ledger, findings=[], verdict="成立", proof_no=no, sha=sha,
+        kind=str(kind or ""))
     out["applied"] = True
-    out["why"] = (f"这一份正文有签（连续 {sign.get('streak')}/{sign.get('need')} 次成立，"
-                  f"签于 {str(sign.get('at') or '')}）⇒ 第 3 位按签写")
+    out["why"] = f"凭据复算通过：{got.get('why')}"
     return new, out
 
 
@@ -3895,6 +3785,59 @@ def credential_reading(root: Any, artifact_sha: Any) -> dict[str, Any]:
     return out
 
 
+def credentials_reading(root: Any) -> dict[str, Any]:
+    """一个工区的签文件汇总（纯读；网页与 `sign-audit` 共用这一处，不数"文件个数当签"）。
+
+    返回键：`checked` / `dir` / `files` / `recomputable` / `unbacked` / `rows` / `why`。
+
+    - `files`：`out/vsigns/*.json` 去掉 `issued.json` 的文件个数（它确实是文件数）；
+    - `recomputable`：其中复算通过（`credential_reading.recomputable`）的份数 ——
+      网页要报的"签数"是这一个，不是 `files`；
+    - `unbacked`：文件在、复算不上的份数；
+    - `rows`：逐份 `{artifact_sha, path, statement_id, proof_no, tier, got, need,
+      problem}`（给人核对；`problem` 是复算不过的理由码）。
+
+    三态：目录不在 ⇒ `files=0, recomputable=0, checked=True`（这个工作区还没有签，
+    是事实不是"没查成"）；目录在而有文件读不出来 ⇒ `checked=False`（不折成 0）。
+    """
+    out: dict[str, Any] = {
+        "checked": True, "dir": SIGNS_DIR, "files": 0, "recomputable": 0,
+        "unbacked": 0, "rows": [], "why": ""}
+    d = signs_dir(root)
+    if not d.is_dir():
+        out["why"] = f"`{SIGNS_DIR}/` 不在盘上 ⇒ 这个工作区还没有签（合法初态）"
+        return out
+    try:
+        paths = sorted(p for p in d.glob("*.json") if p.name != INDEX_NAME)
+    except OSError as exc:
+        out.update(checked=False, why=f"`{SIGNS_DIR}/` 列不出来（{type(exc).__name__}: {exc}）")
+        return out
+    out["files"] = len(paths)
+    for path in paths:
+        cred = credential_reading(root, path.stem)
+        row = {
+            "artifact_sha": str(cred.get("artifact_sha") or path.stem),
+            "path": str(cred.get("path") or rel(path, root)),
+            "statement_id": str((cred.get("sign") or {}).get("statement_id") or ""),
+            "proof_no": (cred.get("sign") or {}).get("proof_no"),
+            "tier": str(cred.get("tier") or ""),
+            "got": int(cred.get("got") or 0),
+            "need": int(cred.get("need") or 0),
+            "problem": str(cred.get("problem") or ("sign_file_unreadable"
+                                                   if not cred.get("found") else "")),
+        }
+        out["rows"].append(row)
+        if not cred.get("checked"):
+            out["checked"] = False
+        if cred.get("recomputable"):
+            out["recomputable"] += 1
+        else:
+            out["unbacked"] += 1
+    out["why"] = (f"签文件 {out['files']} 份；复算通过 {out['recomputable']} 份、"
+                  f"复算不上 {out['unbacked']} 份")
+    return out
+
+
 def _any_credential(root: Any, *, statement_id: str, proof_no: int) -> dict[str, Any]:
     """同一条命题、同一证明号的别版签（只读；给 `stale` 用，取 `at` 最晚那份）。
 
@@ -3960,7 +3903,8 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
     `credential`（path / artifact_sha / at / verification_id / review_call /
     recomputable / problem / found / tier / got）/ `evidence`（rows / covering /
     last_row / axis / verdict / fault_kind / kind_source / fault_at / void_rows /
-    last_call）/ `filed`（本批恒 `None`：这一批不读 `statements`，批 2 再接）/
+    last_call）/ `filed`（True/False/None，给 store 才算）/ `abandoned`
+    （True/False/None；另一根轴，与 `signed` 可以同时成立）/ `filed_why` /
     `why`。
 
     ## 这一批刻意不做的事
@@ -3983,8 +3927,8 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
         "evidence": {
             "rows": 0, "covering": 0, "last_row": {}, "axis": "", "verdict": "",
             "fault_kind": "", "kind_source": "", "fault_at": "", "void_rows": 0,
-            "last_call": ""},
-        "filed": None, "body_why": "", "why": "",
+            "last_call": "", "secretary_unjudged": False, "secretary_fault": False},
+        "filed": None, "abandoned": None, "filed_why": "", "body_why": "", "why": "",
     }
     sid = out["statement_id"]
     try:
@@ -4018,6 +3962,28 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
                 "这一格没查成（不是「没签」）"))
             return out
         rows = _rows
+    # ---- 未在册（或这一版没有在册行）：pending 台账也是 V 的台账 ----
+    # 设计 §2.3 的"该 sha 上的行"包括 pending：没号的签落在
+    # `verifications/pending/<键>.jsonl`。只按行上记的 proof_sha256 认，
+    # 不拿文件名拼（E 的穷举那一档文件名是报告的字节 sha，不是正文 sha）。
+    if not rows and sha:
+        try:
+            _prows, _pbad = _VR.pending_rows(root)
+        except Exception as exc:  # noqa: BLE001 —— 读不成 = 没查成
+            out.update(state="unreadable", why=(
+                f"`{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/` 读不出来"
+                f"（{type(exc).__name__}: {exc}）⇒ 这一格没查成（不是「没签」）"))
+            return out
+        if _pbad:
+            out.update(state="unreadable", why=(
+                "pending 台账有读不出来的行（" + "；".join(str(b) for b in _pbad[:2])
+                + "）⇒ 这一格没查成（不是「没签」）"))
+            return out
+        rows = [dict(r) for r in _prows
+                if str(r.get("proof_sha256") or "") == sha]
+        if rows:
+            ledger_rel = (f"{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/"
+                          f"<{sha[:12]}…>.jsonl")
     mine = [r for r in rows if _proof_no_of_row(r) == no]
     out["evidence"]["rows"] = len(mine)
     if not sha and mine:
@@ -4025,6 +3991,8 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
         body_why = (f"{body_why}；按台账最后一行的 sha（{sha[:12]}…）推这一版是哪一版")
         out["body_why"] = body_why
     out["sha"] = sha
+    out["filed"], out["abandoned"], out["filed_why"] = _filed_reading(
+        store=store, statement_id=sid, sha=sha)
     if not sha:
         out["checked"] = True
         out.update(why=body_why or "这一份证明一版正文都没有 ⇒ 没有可判的签")
@@ -4037,6 +4005,65 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
         return _reading_with_credential(out, cred, sid=sid, no=no)
     return _reading_from_rows(out, root, sid=sid, no=no, sha=sha, mine=mine,
                               covering=covering)
+
+
+def _filed_reading(*, store: Any, statement_id: str, sha: str,
+                   ) -> tuple[bool | None, bool | None, str]:
+    """`statements` 那一行：这一版收录了没有 / 命题是不是被明确放弃（纯读）。
+
+    两件事分开算（业主 2026-11-10 裁定 ③）：
+
+    - `filed`：册里这一条命题的这一份正文（同 sha）在 `proof_list` 里，且那一份的
+      第 3 位为真（`evidencebits.reviewed_by_proof` 的逐份表优先）⇒ True；册里没有这一版
+      ⇒ False；没给 store / 读不出来 / 没有正文 sha ⇒ None（没查成，不是"没收录"）。
+    - `abandoned`：`status=abandoned` 且 `statementabandon.parse_abandon` 可解析 ⇒ True；
+      没被放弃 ⇒ False；状态是 abandoned 但标记读不懂 / 没 store / 读不出来 ⇒ None。
+      它是另一根轴：`signed` 与 `abandoned` 可以同时为真（签是事实、放弃是决定），
+      不许把"已放弃"折进 sign 的 state。
+    """
+    if store is None:
+        return None, None, "没有 store ⇒ 入册/放弃这两格都没查成（不是「没收录」）"
+    sid = str(statement_id or "").strip()
+    if not sid:
+        return None, None, "没有命题号 ⇒ 查不到册里哪一行（不猜）"
+    from . import evidencebits as _EB
+    from . import statementabandon as _SA
+    from . import statementledger as _SL
+    from . import verifications as _VR
+
+    found = _SL.by_id(store, stmt_id=sid)
+    if not found.get("checked"):
+        err = found.get("error") or {}
+        return None, None, (f"`statements` 读不出来（{err.get('type', '?')}: "
+                            f"{err.get('message', '?')}）⇒ 这两格没查成")
+    if not found.get("found"):
+        return False, False, f"`statements` 里没有命题 {sid} 那一行 ⇒ 还没收录"
+    row = dict(found.get("row") or {})
+    abandoned: bool | None = False
+    abandoned_why = "命题没有被放弃"
+    if str(row.get("status") or "") == "abandoned":
+        parsed = _SA.parse_abandon(row.get("quote_reason"))
+        if parsed.get("checked"):
+            abandoned = True
+            abandoned_why = (f"命题 {sid} 已被明确放弃（{parsed.get('at')}："
+                             f"{parsed.get('reason')}）")
+        else:
+            abandoned = None
+            abandoned_why = (f"命题 {sid} 的状态是 abandoned，但放弃标记读不懂 ⇒ "
+                             "这一格没查成（不折成「已放弃」）")
+    if not sha:
+        return None, abandoned, "没有正文 sha ⇒ 入册这一格没查成（不是「没收录」）"
+    per = dict(_EB.reviewed_by_proof(row) or {})
+    match_no = 0
+    for no, text in _VR.proof_list(row):
+        if _sign_sha(text) == sha:
+            match_no = int(no)
+            break
+    if not match_no:
+        return False, abandoned, (f"册里没有盖住这一版（{sha[:12]}…）的证明行 ⇒ "
+                                  f"这一版还没收录（{abandoned_why}）")
+    filed = bool(per.get(match_no, per.get(str(match_no), False)))
+    return filed, abandoned, (f"{sid}#p{match_no} 在册；第 3 位={filed}（{abandoned_why}）")
 
 
 def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
@@ -4142,6 +4169,8 @@ def _reading_from_rows(out: dict[str, Any], root: Any, *, sid: str, no: int,
         "kind_source": str(reading.get("kind_source") or ""),
         "fault_at": str(last_row.get("at") or ""),
         "void_rows": _count_void(mine),
+        "secretary_unjudged": bool(last_row) and not _VR.secretary_judged(last_row),
+        "secretary_fault": bool(last_row) and _VR.ledger_axis(last_row) == "fault",
     })
     kind = str(reading.get("kind") or "")
     cause = str(reading.get("cause") or "")

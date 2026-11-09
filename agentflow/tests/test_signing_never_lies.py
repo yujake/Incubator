@@ -668,12 +668,11 @@ def test_the_third_party_gate_reads_the_pending_route_with_the_same_bar(
 #
 # D268 附录 D 的规格。这一族的前六条各管一种"签名说谎"，唯独没有一条管票数：
 # 手稿块（以及它的文件版）可以自称 `连续=3/3`，而台账上只有 1 条 clean 行。
-# 本批只加只读读口 `sign_reading`（B 的闸一个字不动），所以这一条判据判两件事：
+# 批 1 只加只读读口 `sign_reading`；批 2 起 B 的 `bits_after_sign` 也改读它，所以这一条
+# 判据判两件事：
 #
-#   a) 新的唯一读口必须看穿它（`state != signed`、`(votes, need) == (1, 3)`）；
-#   b) 老的 B 闸这一批仍然认它（`applied is True`）—— 这是批 1 的 no-flip 锁：
-#      批 2 把 `bits_after_sign` 改读 `sign_reading` 时，这一行必须翻成 `is False`
-#      （设计 §6.2 第 2 条）。现在断言 True 不是在替旧行为背书，而是在钉住"本批没翻"。
+#   a) 唯一读口看穿它（`state != signed`、`(votes, need) == (1, 3)`）；
+#   b) B 的认签也看穿它（`applied is False`，设计 §6.2 第 2 条）。
 
 def _n1_workspace(root: pathlib.Path) -> tuple[str, str, str]:
     """D268 附录 D 的夹具：一块手写 3/3 + 台账只 1 条 clean + 无签文件。"""
@@ -724,11 +723,12 @@ def test_a_block_cannot_claim_more_votes_than_the_ledger_has(
     assert VR.review_standing(tmp_path, statement_id="000001",
                               proof_text=P1, proof_no=1)["state"] == "holding"
 
-    # 批 1 的 no-flip 锁：B 的闸连一个字节都没动 ⇒ 这一块今天仍被认（批 2 的目标是 False）。
+    # 批 2 的翻面：B 的闸已改读 `sign_reading` ⇒ 这一块不再被认（N1 的阻断级断言）。
     _bits, reading = VS.bits_after_sign(
         {}, root=tmp_path, proof_text=P1, statement_id="000001", proof_no=1,
         manuscript_text=stamped, manuscript_path=rel)
-    assert reading["applied"] is True, reading
+    assert reading["applied"] is False, reading
+    assert reading["state"] == "holding"
     assert "3/3" in str(reading.get("why") or "")
 
 

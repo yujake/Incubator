@@ -44,7 +44,8 @@ PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 SID = "000000"
 REL = f"reports/f-proof-{SID}.md"
-SHA = VR.text_sha(PROOF)
+SHA = VS._sign_sha(PROOF)
+TS = "2026-11-08T00:00:00+08:00"
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -63,11 +64,34 @@ def _manuscript(st: Store, proof: str = PROOF, *, full: str = FULL) -> str:
     return text
 
 
+def _issue(st: Store, *, proof: str = PROOF) -> dict:
+    """三票同源 + `vsigns.issue` 写签（D268 批 2 的正控形状）。"""
+    sha = VS._sign_sha(proof)
+    call = "call-1"
+    rows = []
+    for n in (1, 2, 3):
+        rows.append(VR.record_verification(
+            st.root, statement_id=SID, proof_text=proof,
+            verdict={"verdict": "成立", "findings": []},
+            secretary_judge={"axis": "clean", "checked": True,
+                             "reason": "夹具：秘书判 clean"},
+            flip=False, review_call=call, review_pass=n, manuscript=REL))
+    passes = [{"verification_id": str(r["verification_id"]), "at": str(r.get("at") or ""),
+               "proof_sha256": sha, "review_call": call, "review_pass": n}
+              for n, r in zip((1, 2, 3), rows)]
+    got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
+                   ledger=f"verifications/{SID}.jsonl#{rows[-1]['verification_id']}",
+                   statement_id=SID, proof_no=1, passes=passes, at=TS,
+                   by="secretary:B")
+    assert got.get("written") is True or got.get("idempotent") is True, got
+    return got
+
+
 def _signed_text(text: str, *, sha: str = SHA) -> str:
     return VS.stamp_manuscript_sign(
         text, proof_sha=sha, streak=3, need=3, verdict="成立",
-        signer="secretary:B", at="2026-11-08T00:00:00+08:00",
-        ledger=f"verifications/{SID}.jsonl#v-000001",
+        signer="secretary:B", at=TS,
+        ledger=f"verifications/{SID}.jsonl#v-000003",
         statement_id=SID, manuscript_id=SID)
 
 
@@ -105,6 +129,7 @@ def _read(st: Store, text: str, *, store: Store | None = None) -> dict:
 def test_1_filed(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     _row(st, reviewed=True)
+    _issue(st)
     got = _read(st, _signed_text(_manuscript(st)))
     assert got["state"] == "filed", got
     assert got["filed"] is True, got
@@ -115,6 +140,7 @@ def test_2_pending_filing_when_the_ledger_has_no_proof_row(tmp_path: pathlib.Pat
     """新命题（B 收录前 `proof_text=""`）+ 稿上已签 ⇒ pending，不是 stale。"""
     st = _ws(tmp_path)
     _row(st, proof="", reviewed=False)
+    _issue(st)
     got = _read(st, _signed_text(_manuscript(st)))
     assert got["manuscript_signed"] is True, got
     assert got["state"] == "signed_pending_filing", got
@@ -126,6 +152,7 @@ def test_3_pending_filing_when_the_bit_is_not_flipped(tmp_path: pathlib.Path) ->
     """册里有这一份正文的证明行、第 3 位没翻 ⇒ 仍是 pending（等 B 收录）。"""
     st = _ws(tmp_path)
     _row(st, reviewed=False)
+    _issue(st)
     got = _read(st, _signed_text(_manuscript(st)))
     assert got["state"] == "signed_pending_filing", got
     assert int(got["statement"]["proof_no"]) == 1, got["statement"]
@@ -137,7 +164,9 @@ def test_4_stale_names_the_current_version_in_the_ledger(tmp_path: pathlib.Path)
     st = _ws(tmp_path)
     _row(st, reviewed=True)
     new_proof = PROOF + "\n3. 补上边界情形。"
-    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof)))
+    _issue(st, proof=new_proof)
+    got = _read(st, _signed_text(_manuscript(st, new_proof),
+                                 sha=VS._sign_sha(new_proof)))
     assert got["state"] == "signed_stale_in_ledger", got
     stmt = dict(got["statement"])
     assert int(stmt["proof_no"]) == 0, stmt          # 没有一条盖住新版
@@ -158,8 +187,8 @@ def test_5_unsigned(tmp_path: pathlib.Path) -> None:
 def test_6_abandoned(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     _row(st, reviewed=False, status="abandoned",
-         quote_reason=SA.abandon_marker(at="2026-11-08T00:00:00+08:00",
-                                        reason="夹具：明确放弃"))
+         quote_reason=SA.abandon_marker(at=TS, reason="夹具：明确放弃"))
+    _issue(st)
     got = _read(st, _signed_text(_manuscript(st)))
     assert got["state"] == "abandoned", got
     assert got["abandoned"] is True, got
@@ -169,6 +198,7 @@ def test_6_abandoned(tmp_path: pathlib.Path) -> None:
 def test_7_unreadable_without_store(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     _row(st, reviewed=True)
+    _issue(st)
     got = VS.sign_filing_reading(st.root, manuscript_path=REL,
                                  proof_text=_signed_text(_manuscript(st)),
                                  statement_id=SID, store=None)
@@ -186,12 +216,14 @@ def test_8_anti_vacuum_new_proposition_must_not_be_stale(tmp_path: pathlib.Path)
     """
     st = _ws(tmp_path)
     _row(st, proof="", reviewed=False)
+    _issue(st)
     text = _signed_text(_manuscript(st))
     no_rows = _read(st, text)
     assert no_rows["state"] == "signed_pending_filing", no_rows
     # 同一份稿/签，给册里补一条旧版正文 ⇒ 立刻落到 stale（证明分档真的在看册）。
     st2 = _ws(tmp_path / "old-version")
     _row(st2, proof=PROOF + "\n3. 更旧的一版。", reviewed=True)
+    _issue(st2)
     stale = _read(st2, text)
     assert stale["state"] == "signed_stale_in_ledger", stale
     assert no_rows["state"] != stale["state"], (no_rows, stale)
@@ -207,10 +239,12 @@ def test_9_anti_vacuum_current_version_is_the_latest_with_text(tmp_path: pathlib
     _row(st, proof=old1, reviewed=True,
          proofs=[{"proof_no": 2, "proof_text": old2}])
     new_proof = PROOF + "\n4. 全新的一版。"
-    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof)))
+    _issue(st, proof=new_proof)
+    got = _read(st, _signed_text(_manuscript(st, new_proof),
+                                 sha=VS._sign_sha(new_proof)))
     assert got["state"] == "signed_stale_in_ledger", got
     stmt = dict(got["statement"])
     assert int(stmt["proof_rows"]) == 2, stmt
     assert int(stmt["current_proof_no"]) == 2, stmt
-    assert stmt["current_proof_sha256"] == VR.text_sha(old2), stmt
+    assert stmt["current_proof_sha256"] == VS._sign_sha(old2), stmt
     assert "p2" in got["why"], got["why"]

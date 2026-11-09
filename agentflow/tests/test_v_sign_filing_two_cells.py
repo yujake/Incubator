@@ -47,7 +47,10 @@ PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 SID = "000000"
 REL = f"reports/f-proof-{SID}.md"
-SHA = VR.text_sha(PROOF)
+#: D268 批 2：签的尺是 `vsigns._sign_sha`（与签文件 `artifact_sha` / 台账
+#: `proof_sha256` 同一个值）；`VR.text_sha` 是原样文本的另一把尺，不许拿它当签的键。
+SHA = VS._sign_sha(PROOF)
+TS = "2026-11-08T00:00:00+08:00"
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -67,11 +70,34 @@ def _manuscript(st: Store, proof: str = PROOF, *, full: str = FULL) -> str:
     return text
 
 
+def _issue(st: Store, *, proof: str = PROOF) -> dict:
+    """三票同源 + `vsigns.issue` 写签（D268 批 2 的正控形状）。"""
+    sha = VS._sign_sha(proof)
+    call = "call-1"
+    rows = []
+    for n in (1, 2, 3):
+        rows.append(VR.record_verification(
+            st.root, statement_id=SID, proof_text=proof,
+            verdict={"verdict": "成立", "findings": []},
+            secretary_judge={"axis": "clean", "checked": True,
+                             "reason": "夹具：秘书判 clean"},
+            flip=False, review_call=call, review_pass=n, manuscript=REL))
+    passes = [{"verification_id": str(r["verification_id"]), "at": str(r.get("at") or ""),
+               "proof_sha256": sha, "review_call": call, "review_pass": n}
+              for n, r in zip((1, 2, 3), rows)]
+    got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
+                   ledger=f"verifications/{SID}.jsonl#{rows[-1]['verification_id']}",
+                   statement_id=SID, proof_no=1, passes=passes, at=TS,
+                   by="secretary:B")
+    assert got.get("written") is True or got.get("idempotent") is True, got
+    return got
+
+
 def _signed_text(text: str, *, sha: str = SHA, ledger: str = "") -> str:
     return VS.stamp_manuscript_sign(
         text, proof_sha=sha, streak=3, need=3, verdict="成立",
-        signer="secretary:B", at="2026-11-08T00:00:00+08:00",
-        ledger=(ledger or f"verifications/{SID}.jsonl#v-000001"),
+        signer="secretary:B", at=TS,
+        ledger=(ledger or f"verifications/{SID}.jsonl#v-000003"),
         statement_id=SID, manuscript_id=SID)
 
 
@@ -113,6 +139,7 @@ def test_b_signed_on_manuscript_but_not_filed_is_the_new_state(
     """b：这一条就是本次改动要救的那个态 —— 不许读成「签丢了」。"""
     st = _ws(tmp_path)
     _row(st, reviewed=False)
+    _issue(st)
     text = _signed_text(_manuscript(st))
     got = _read(st, text)
     assert got["checked"] is True, got
@@ -128,6 +155,7 @@ def test_b_signed_on_manuscript_but_not_filed_is_the_new_state(
 def test_c_filed_means_both_cells_agree(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     _row(st, reviewed=True)
+    _issue(st)
     text = _signed_text(_manuscript(st))
     got = _read(st, text)
     assert got["manuscript_signed"] is True, got
@@ -137,23 +165,27 @@ def test_c_filed_means_both_cells_agree(tmp_path: pathlib.Path) -> None:
 
 
 def test_d_signed_new_version_is_not_lost(tmp_path: pathlib.Path) -> None:
-    """d：稿上签的是新版，而册里还是旧版 ⇒ 签还在（stale），不是「没签」。"""
+    """d：签的是新版，而册里还是旧版 ⇒ 签还在（stale），不是「没签」。"""
     st = _ws(tmp_path)
     _row(st, reviewed=True)
     new_proof = PROOF + "\n3. 补上边界情形。"     # 新版正文
-    text = _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof))
+    _issue(st, proof=new_proof)
+    text = _signed_text(_manuscript(st, new_proof), sha=VS._sign_sha(new_proof))
     got = _read(st, text)
     assert got["manuscript_signed"] is True, got
     assert got["filed"] is False, got
     assert got["state"] == "signed_stale_in_ledger", got
 
 
-def test_e_moving_the_signed_sha_makes_the_manuscript_cell_red(
-        tmp_path: pathlib.Path) -> None:
-    """e 反真空：签块 sha 一改，稿上那一格必须掉（b 的判据真的在看 sha）。"""
+def test_e_a_block_alone_is_not_a_sign(tmp_path: pathlib.Path) -> None:
+    """e 反真空：把可复算的凭据删掉，只剩手稿块 ⇒ 稿上那一格必须掉（块是视图）。"""
     st = _ws(tmp_path)
     _row(st, reviewed=False)
-    text = _signed_text(_manuscript(st), sha="0" * 64)
+    _issue(st)
+    text = _signed_text(_manuscript(st))
+    assert _read(st, text)["manuscript_signed"] is True
+    # 删掉签文件（凭证），块仍写着 3/3。
+    (pathlib.Path(st.root) / "out" / "vsigns" / f"{SHA}.json").unlink()
     got = _read(st, text)
     assert got["manuscript_signed"] is False, got
     assert got["state"] == "unsigned", got
@@ -164,6 +196,7 @@ def test_f_clearing_the_per_proof_bit_makes_the_filed_cell_red(
     """f 反真空：把逐份位清成假，`filed` 必须掉回中间态（c 的判据真的在读位）。"""
     st = _ws(tmp_path)
     row = _row(st, reviewed=True)
+    _issue(st)
     bits = dict(row.get("bits") or {})
     ev = dict(bits.get("evidence") or {})
     ev[EB.REVIEWED_BY_PROOF_KEY] = {}
@@ -182,6 +215,7 @@ def test_g_without_store_the_filed_cell_is_not_guessed(tmp_path: pathlib.Path) -
     """g：没有 store 时 `filed` 是 `None`（没查成），不许折成「没收录」。"""
     st = _ws(tmp_path)
     _row(st, reviewed=True)
+    _issue(st)
     got = VS.sign_filing_reading(st.root, manuscript_path=REL,
                                  proof_text=_signed_text(_manuscript(st)),
                                  statement_id=SID, store=None)
@@ -210,7 +244,8 @@ def test_i_closing_reports_signed_pending_filing_not_unsigned(
 
     st = _ws(tmp_path)
     _row(st, reviewed=False)
-    _text = _signed_text(_manuscript(st))   # 稿上盖好签
+    _issue(st)
+    _text = _signed_text(_manuscript(st))   # 稿上盖好签（凭据可复算）
     (pathlib.Path(st.root) / REL).write_text(_text, encoding="utf-8")
     got = closing.statements_unsigned_reading(st)
     assert got["checked"] is True, got

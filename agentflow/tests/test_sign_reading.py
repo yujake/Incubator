@@ -405,6 +405,40 @@ def test_the_state_word_list_covers_every_branch() -> None:
     assert tuple(VS.BODY_STATE_WORDS) == ("present", "absent", "unreadable")
 
 
+def test_filed_and_abandoned_are_read_from_the_statement_row(
+        tmp_path: pathlib.Path) -> None:
+    """`filed` / `abandoned` 两格（批 2 接 store）：签是事实、放弃是另一根轴。"""
+    from agentflow import evidencebits as EB
+    from agentflow import statementabandon as SA
+    from agentflow.store import Store
+
+    from conftest import seed_statement_row
+
+    st = Store(tmp_path / "ws")
+    st.init()
+    rel, _text, sha = _manuscript(st.root, "000001")
+    bits = EB.bits_of(proof=True, proof_process=PROOF, kind="theorem")
+    ev = dict(bits.get("evidence") or {})
+    ev[EB.REVIEWED_BY_PROOF_KEY] = {str(1): True}
+    bits["evidence"] = ev
+    seed_statement_row(
+        st, proof_text=PROOF, statement_full="夹具命题。", statement_text="夹具命题",
+        kind="theorem", label="filed-abandoned", origin="own_result",
+        evidence_kind="heuristic", status="abandoned",
+        quote_reason=SA.abandon_marker(at=TS, reason="夹具：明确放弃"),
+        bits=bits, stmt_id="000001")
+    rows = [_row("000001", sha, pass_no=n, manuscript=rel) for n in (1, 2, 3)]
+    _write_ledger(st.root, "000001", rows)
+    _issue(st.root, "000001", sha, rows)
+    got = VS.sign_reading(st.root, statement_id="000001", manuscript_path=rel, store=st)
+    assert got["state"] == "signed", got
+    assert got["filed"] is True, got["filed_why"]
+    assert got["abandoned"] is True, got["filed_why"]
+    # 没有 store ⇒ 两格都是 None（没查成，不是「没收录 / 没放弃」）
+    bare = VS.sign_reading(st.root, statement_id="000001", manuscript_path=rel)
+    assert bare["filed"] is None and bare["abandoned"] is None, bare
+
+
 # ---------------------------------------------------------------- 只读 CLI
 
 @pytest.fixture(scope="module")
