@@ -1029,6 +1029,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "review.report 同类）、`conductor.void_items` 的「系统通知」改成 D13 之后的"
              "真实落法、`table.search` summary 点名 label/statement_full、`fs.write` "
              "summary 点名 A/B 拒写的四族。压缩批次 6473→6343（73.49%）。facts 键集仍 15 格。"},
+    # p264 → p265（2026-11-10，D3 批 2：缺陷类别四档 + 程序性/数学缺陷分开记）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改 V 的 policy 一句与两处真实入口的题面
+    # （冷启动清单 / 秘书那一问），facts 的键名与条数都没变 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p265", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p265（2026-11-10，D3 批 2）：上游 —— `specs/v.py` 的 policy 新增"
+             "「没记录反例尝试不是缺陷（只作 report_gap 读数，不挡签）；「我没逐行验证 /"
+             " 我判不了」仍是程序性」；同批的 `verifications._cold_start_review_checklist`"
+             "（V 的冷启动清单）与 `secretary._judge_system(\"v_reply_defect\")`（秘书那一问）"
+             "是真实入口、不进 system prompt ⇒ 十一格里只有 V 换值"
+             "（9dce764f…）。facts 键集仍 15 格。"},
 
 )
 

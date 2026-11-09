@@ -3708,7 +3708,20 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   `conductor.status_report.side_effect` 一条 amendment；两份 golden 按现值重冻；
 #:   `docs/ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #:   重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p264"
+#: p264 → p265（2026-11-10，D3 批 2：缺陷类别四档 + 程序性/数学缺陷分开记）：
+#: 一格换值 —— V。上游两笔：
+#:   ① `specs/v.py` 的 policy 新增「没记录反例尝试不是缺陷（只作 report_gap 读数，
+#:     不挡签）；「我没逐行验证 / 我判不了」仍是程序性」—— 这一句进 V 的 system prompt；
+#:   ② 同批的两处真实入口不进十一格：`verifications._cold_start_review_checklist`（V 的
+#:     冷启动审阅清单，不进 system prompt）与 `secretary._judge_system("v_reply_defect")`
+#:     （秘书那一问的题面；`judge` 用 system 位、不是角色 system prompt）。另同步
+#:     `agent_skills._v_skills()` 的手册正文（手册只落盘、索引未动）。
+#: 十一格不是手抄：`temp/_recompute_digests.py` 导入判据自己的 `_surface_digest` 现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p265）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
+#: `docs/ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p265"
 
 
 

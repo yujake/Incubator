@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-10T01:10:21+08:00",
+  "generated_at": "2026-11-10T02:48:50+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -400,10 +400,10 @@
       "path": "src/agentflow/specs/v.py",
       "glob": "src/agentflow/specs/v.py",
       "category": "auth-audit",
-      "sha256": "af70acbe71d97034434ad321073aa33a9b668935f3348209ee4667899410e816",
+      "sha256": "b8c3934cfe67ec676490e7f0470416f780830d20f33132ba58891b08b6da8eee",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-10 p264 提示词/声明面一致性审计 11 条收口（逐条见提交信息）：specs/b.py 的 proof_manuscript 指针支口径 + 三态/族/签块身份教法；specs/e.py 的 proof_manuscript 改成回执格；specs/v.py 的签载体只认 reports/；tools/fs_tools.py 的 fs.write 点名四族；tools/table_tools.py 的 table.search summary 点名两列；两份 golden 随 p264 重冻。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这 7 条仍需 2 名 reviewer 逐行走查/逐格看过。",
+      "change_note": "2026-11-10 p265（D3 批 2）：specs/v.py 的 policy 新增「没记录反例尝试不是缺陷（只作 report_gap 读数，不挡签）；我没逐行验证/我判不了 仍是程序性」一句（题面；动作表/边/写集/实现类零改动）；tests/golden/agent_surface_snapshot.json 随 p265 重冻（V 的提示词 sha 换值，其余十格逐字未动）。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这两条仍需 2 名 reviewer 逐行走查 / 逐格看过。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -517,10 +517,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "029c64447d5fc94816013a8017cd0d7c341150a8b1c0252245de4980890a6d02",
+      "sha256": "7b6732706b7ca6035473799846adeae8a766e93284f1af8a484ae96d9764a02a",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-10 p264 提示词/声明面一致性审计 11 条收口（逐条见提交信息）：specs/b.py 的 proof_manuscript 指针支口径 + 三态/族/签块身份教法；specs/e.py 的 proof_manuscript 改成回执格；specs/v.py 的签载体只认 reports/；tools/fs_tools.py 的 fs.write 点名四族；tools/table_tools.py 的 table.search summary 点名两列；两份 golden 随 p264 重冻。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这 7 条仍需 2 名 reviewer 逐行走查/逐格看过。",
+      "change_note": "2026-11-10 p265（D3 批 2）：specs/v.py 的 policy 新增「没记录反例尝试不是缺陷（只作 report_gap 读数，不挡签）；我没逐行验证/我判不了 仍是程序性」一句（题面；动作表/边/写集/实现类零改动）；tests/golden/agent_surface_snapshot.json 随 p265 重冻（V 的提示词 sha 换值，其余十格逐字未动）。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这两条仍需 2 名 reviewer 逐行走查 / 逐格看过。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

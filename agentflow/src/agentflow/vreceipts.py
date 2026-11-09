@@ -1891,7 +1891,7 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
             # 回执项在板上 ≠ 重送义务在板上：旧盘（本笔之前投过的判决）要走这一支
             # 把义务补开。幂等键没有收件人后缀，所以补投十趟也只多一条。
             #
-            # D3 批 2：程序性 / 文风那一档**不开**这条义务（`requires_rewrite=False`）——
+            # D3 批 2：程序性 / 文风那一档不开这条义务（`requires_rewrite=False`）——
             # 补投只补回执，不把"报告措辞"补成一条"改稿"命令。
             _detail = _detail_from_ledger(store, root, label, vid)
             if _detail is not None and _detail.get("requires_rewrite") is not False:

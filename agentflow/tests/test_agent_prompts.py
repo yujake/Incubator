@@ -2371,7 +2371,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   G 27d436f7→1994799a。
 # 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
 # （`temp/_p258_freeze_digests.py` 导入它并先 `import conftest` 钉住环境）现算。
-_FROZEN_PROMPT_VERSION = "p264"
+_FROZEN_PROMPT_VERSION = "p265"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2626,7 +2626,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
     "M": "d6b1b82f6456816b78577c9f3daf05b02643b4119f67cfcf9cbeecacde7148d4",
-    "V": "0d8852bbfa1e08b51076d599c87c1ced149d5e1a19447009fc40457f936d6aa5",
+    "V": "9dce764f2770a1606efb82c0cdfbaa3df923d5fcdd4fb65aefa11d0fc6e870c5",
 }
 
 
