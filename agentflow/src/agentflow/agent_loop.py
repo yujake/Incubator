@@ -2412,7 +2412,8 @@ def _revoked_recent_line(entry: Mapping[str, Any]) -> str:
     """一条「最近被撤销」在提示词里的那一行（收件人读得懂的句子，不是台账原文）。
 
     念全四格：被撤的编号 / 谁撤的 / 理由 / 何时；`summary` 是那一行原来的摘要
-    （与撤销通知正文里的 `<summary>` 同一个读口，见 `conductor._board_item_summary`）。
+    （D13，2026-11-09 起撤销不落新行：提醒的载体是 `revoked_recent@<收件人>`
+    这一格；摘要与 `conductor._board_item_summary` 同一个读口，不从通知行来）。
     """
     at = str(entry.get("at") or "")
     when = f"，{at}" if at else ""
@@ -2429,10 +2430,13 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
     backlog, reason, items, revoked_recent, revoked_ids}`。
 
-    ## 「最近被撤销的项」为什么在这里（业主 2026-11-06 的第二笔）
+    ## 「最近被撤销的项」为什么在这里（业主 2026-11-06 的第二笔；2026-11-09 D13 收口）
 
-    撤销通知落成的那一行是 `done` + `expired`（一份记录，不是待办），`open_items_of`
-    按定义看不见它 ⇒ 收件人的板面摘要里永远没有「我名下那条被撤了」。而
+    撤销不落新行（D13）：留痕写在被撤那一行自己的 `inputs` 里
+    （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`），
+    `void_items` 返回的 `notified` 只带 `carrier="revoked_recent@<收件人>"`
+    （`notice_id` 那一格已摘掉）。`open_items_of` 按定义看不见已撤项 ⇒
+    收件人的板面摘要里永远没有「我名下那条被撤了」。而
     `conductor.board` / `conductor.patrol` 都是 M 才拿得到的工具（收件人调不到），
     所以这一格只能挂在收件人那一侧的投递点上：这就是本函数。
     它另起一段、另开一格 `revoked_recent`（`{item_id, by, reason, at, summary}`，
