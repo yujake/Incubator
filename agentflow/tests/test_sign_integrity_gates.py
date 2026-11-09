@@ -158,7 +158,7 @@ def test_d_a_plan_manuscript_is_not_a_sign_carrier(tmp_path: pathlib.Path) -> No
     # 落稿名这一半必须照旧成立（F 的「先落计划名、拿到号再改名」工作流）。
     named = MF.name_reading("F", plan_id=SID)
     assert named["ok"] is True and named["path"] == rel, named
-    assert VS.parse_manuscript_name(rel)["family"] is True, VS.parse_manuscript_name(rel)
+    assert VS.parse_manuscript_name(rel)["family"] == "f-proof", VS.parse_manuscript_name(rel)
 
     # 一块「已签 3/3」盖在计划稿上 ⇒ 身份不许 resolved（真机 883c3097）。
     sha = VR.proof_sha(PROOF)

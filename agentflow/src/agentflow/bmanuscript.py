@@ -63,12 +63,12 @@ PROOF_NO_PREFIX = _MF.PROOF_NO_MARK
 def relpath(statement_id: Any, proof_no: Any = 1) -> str:
     """这一条命题的 B 改写手稿落点（工作区相对）；号不合法 ⇒ 空串（不猜位置）。
 
-    命名规则与解析在同一条路上：`manuscriptform.name_reading` 拼候选名，内部只走
-    `vsigns.parse_manuscript_name`。
+    2026-11-09（T2 收编）：拼名转发到 `manuscriptfamily.relpath` 的 `strict=False`
+    那一档（同一套校验，失败回空串 —— 与既有返回值契约一致；设计 3.2 第 8 处）。
     """
-    got = _MF.name_reading(_MF.FAMILY_B, statement_id=statement_id,
-                           proof_no=proof_no)
-    return str(got.get("path") or "") if got.get("ok") else ""
+    from .manuscriptfamily import relpath as _impl
+    return _impl("b-proof", str(statement_id or "").strip(), proof_no or 1,
+                 strict=False)
 
 
 def is_relpath(value: Any) -> bool:

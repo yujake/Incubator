@@ -44,22 +44,26 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import depsection as _DS
+from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import verifications as _VR
 from . import vsigns as _VS
 
-#: 手稿落点（与 `depsection.MANUSCRIPT_DIR` 同一处）。
-MANUSCRIPT_DIR = _DS.MANUSCRIPT_DIR
+#: 手稿落点（与 `manuscriptfamily.MANUSCRIPT_DIR` 同一处）。
+MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
 
 #: 两族的族名（渲染时只影响标题里的角色名，命名时只影响前缀）。
 FAMILY_F = "F"
 FAMILY_B = "B"
 FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 
+#: 本模块的角色名 ⇒ 表里的族名（命名与解析都只走表；这里只做一层翻译）。
+_FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
+
 #: 族 ⇒ 文件名前缀（命名的唯一来源；别处不许再写一遍字面量）。
-#: F 的前缀直接取 `depsection` 那一份（低层常量仍由它持有），B 只有本处一个落点。
-PREFIX = {FAMILY_F: _DS.MANUSCRIPT_STMT_PREFIX, FAMILY_B: "b-proof-"}
-#: 计划名前缀（只有 F 立项那一轮用；与 `depsection.MANUSCRIPT_PLAN_PREFIX` 同源）。
-PLAN_PREFIX = {FAMILY_F: _DS.MANUSCRIPT_PLAN_PREFIX}
+#: 2026-11-09（T2 收编）：从 `manuscriptfamily` 派生（设计 3.2 第 6 处）。
+PREFIX = {FAMILY_F: _MFAM.prefix_of("f-proof"), FAMILY_B: _MFAM.prefix_of("b-proof")}
+#: 计划名前缀（只有 F 立项那一轮用；`plan-` 是 f-proof 号形的一部分）。
+PLAN_PREFIX = {FAMILY_F: f"{PREFIX[FAMILY_F]}plan-"}
 
 #: 稿头里那几行元信息的前缀（渲染与读侧共用）。
 STATEMENT_MARK = "- 命题号："
@@ -172,14 +176,26 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         out.update(checked=False, code=BAD_MANUSCRIPT_NAME,
                    why=f"未知的手稿族 {family!r}（只认 {FAMILIES}）")
         return out
-    if sid:
-        name = f"{prefix}{sid}" + (f"-p{no}" if no >= 2 else "")
-    elif pid:
-        # 计划名只有 F 那一族有（立项那一轮还没有命题号）。
-        name = f"{PLAN_PREFIX.get(fam) or (prefix + 'plan-')}{pid}"
-    else:
-        name = prefix.removesuffix("-")
-    rel = f"{MANUSCRIPT_DIR}/{name}.md"
+    # 2026-11-09（T2 收编）：拼名只走 `manuscriptfamily.relpath`。号形不对时它按
+    # fail-closed 抛 `ValueError`；这一层仍按旧口径先把候选名拼出来再让解析器拒，
+    # 调用方读到的是同一条 `bad_manuscript_name`，不是一个异常。
+    rel = ""
+    try:
+        if sid and fam in _FAMILY_OF:
+            rel = _MFAM.relpath(_FAMILY_OF[fam], sid,
+                                no if no >= 1 else 1)
+        elif pid and fam == FAMILY_F:
+            rel = _MFAM.relpath("f-proof", f"plan-{pid}", 1)
+    except ValueError:
+        rel = ""
+    if not rel:
+        if sid:
+            name = f"{prefix}{sid}" + (f"-p{no}" if no >= 2 else "")
+        elif pid:
+            name = f"{PLAN_PREFIX.get(fam) or (prefix + 'plan-')}{pid}"
+        else:
+            name = prefix.removesuffix("-")
+        rel = f"{MANUSCRIPT_DIR}/{name}.md"
     parsed = _VS.parse_manuscript_name(rel)
     out.update(name=str(parsed.get("name") or name), path=rel,
                manuscript_id=str(parsed.get("manuscript_id") or ""),

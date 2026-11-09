@@ -77,6 +77,7 @@ from typing import Any, Iterator, Mapping, Sequence
 
 from filelock import FileLock, Timeout
 
+from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import schema as _S
 from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 
@@ -533,7 +534,10 @@ REGISTER_PREFIX = "b-register@"
 
 #: 这一条义务认的载体（业主 2026-11-05 逐字：`reports/f-proof-<号>.md` 或
 #: `b-proof-<号>.md`）。E 的穷举证据稿不在这一档（它走 `bits.proof` 那条通道）。
-REGISTRATION_CARRIERS: tuple[str, ...] = ("reports/f-proof-", "reports/b-proof-")
+#: 2026-11-09（T2 收编）：从表派生（f-proof / b-proof 两族；设计 3.2 第 9 处）。
+REGISTRATION_CARRIERS: tuple[str, ...] = tuple(
+    f"{_MFAM.MANUSCRIPT_DIR}/{_MFAM.prefix_of(name)}"
+    for name in ("f-proof", "b-proof"))
 
 #: 这一条义务的负责人角色（收口是 B 的动作）。
 REGISTER_ROLE = "B"
@@ -938,6 +942,11 @@ def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
         sid = _VS.manuscript_id_of(rel)
         if not sid:
             out["skipped"].append({"path": rel, "why": "稿名认不出裸稿号 ⇒ 不猜命题号"})
+            continue
+        # `-v2` 一类历史档：`manuscript_id_of` 仍读得出号（设计 3.3.2 的兼容读法），
+        # 但它不可收录（`tier=legacy`）⇒ 不许给它开「签了但没人收录」的义务。
+        if _MFAM.classify(rel).get("tier") != _MFAM.TIER_FAMILY:
+            out["skipped"].append({"path": rel, "why": "历史档（legacy）⇒ 不可收录"})
             continue
         out["signed"] += 1
         sha = str(block.get("proof_sha256") or "")

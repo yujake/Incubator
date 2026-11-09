@@ -2533,6 +2533,35 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "`bmanuscript.py` 只做转发",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
+    # 2026-11-09（D10 B1，另一条 lane 提交的纯模块；本批只补登记，不改它的实现）：
+    # 受控引用词表。为什么必须是顶层：`manuscripts.OBJECT_REFS` / `schema.CITATION_PREFIXES`
+    # / `depsection.CARRIED_KEYS` / 提示词四套写法在"同一个 ref 字符串合法不合法"上
+    # 各有答案（`doc:` 在 citations 合法、在 refs 非法），而盘点必须有一个共同真身；
+    # 它零 `agentflow` 依赖（只 stdlib），才能被写口与读口同时引用而不制造导入边。
+    "refvocab.py": "受控引用词表（D10 B1）：`parse_ref`（只判形状：命名空间 / 地址 / legacy）"
+                   "与 `ref_problem` / `ref_reading`（在工作区根下判存在性，三态 "
+                   "ok/legacy_ok / missing / unchecked / bad / ambiguous）—— 把 refs 的"
+                   "四套写法收成一张表；纯模块、不 import 任何 agentflow 模块",
+    # 2026-11-09（T2，设计 `_design_T123.md` §3.2）：手稿族/号/后缀的唯一判定表。
+    # 为什么必须是顶层模块：11 处收编（vsigns / manuscriptform / depsection /
+    # exhaustionreport / vreceipts / closing / agent_v / B 的登记口）都从它派生，
+    # 挂在任一角色包里都会让另一边再写一份；它纯函数、零 I/O、不 import 既有模块，
+    # 才能在收编的每一侧被安全地当唯一真身引用。
+    "manuscriptfamily.py": "手稿族/号/后缀的唯一判定表（T2）：FAMILIES（四族 + legacy 读档）/ "
+                            "classify / classify_name / parse / sign_carrier / relpath / "
+                            "allowed_cells / default_cells / derived_cells / needs_sign / "
+                            "evidence_kind / kind_default / line_range_origin —— 族前缀、"
+                            "允许目录、号形、-pN 后缀、签不要、格位这五列只有这一处；"
+                            "`-v2` 与 `notes/` 手稿形名字读成 legacy（proof_no=0，不可签、不可收录）",
+    # 2026-11-09（T2/T1，设计 §6.1）：逐格提取与冲突判定的纯函数。为什么必须是顶层：
+    # 它要能被单测直接调用（不建 store、不碰台账、不写盘），而 `tools/` 下的模块
+    # 装配期就要 store；挂在 secretary 里则会让"提取"与"写口"重新缠在一起。
+    "manuscriptintake.py": "手稿逐格提取与冲突判定（T1 的纯函数核）：INGEST_CELLS / "
+                            "extract_cells（每格 present / absent / unreadable 三态，"
+                            "缺节不许拿别的节或整份全文顶替）/ plan_cells（逐格 "
+                            "filled / unchanged / kept / refused / not_applicable + diff 的 "
+                            "I1/I2 对拍）—— 不读 store、不读台账、不写盘；"
+                            "`own.ingest_manuscript` 的提取与冲突矩阵都走它",
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
                           "step_stability / first_difference（连续两步是否逐字节相同、从第几个字符起不同）、"
                           "dynamic_sections / unregistered_dynamic_sections（动态段白名单）、"

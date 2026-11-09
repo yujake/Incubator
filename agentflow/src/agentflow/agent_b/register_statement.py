@@ -83,6 +83,7 @@ from typing import Mapping, Sequence
 from ._support import S
 from .. import depsection as _DS
 from .. import evidencebits as _EB
+from .. import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from .. import numericproof as _NP
 from .. import quoteevidence as QE
 from .. import refusals as _R
@@ -142,16 +143,23 @@ def _should_promote_to_formal(rel: str) -> bool:
 
     三种情形不转：已经是按号命名的正式稿（目标就是它自己）、B 的改写稿
     （`reports/b-proof-*` —— 那不是 F 的稿）、以及不认识的路径。
+
+    2026-11-09（T2 收编，设计 3.2 附）：族判定改读 `manuscriptfamily.classify`，
+    不再手写前缀比较。行为逐字不变：
+
+    - `reports/f-proof-plan-<计划号>.md` ⇒ 转（立项那一轮还没有命题号）；
+    - `reports/f-proof-<号>.md` ⇒ 不转（已经是正式稿）；
+    - `reports/{b,e}-proof-*` / `reports/e-num-*` ⇒ 不转（不是 F 的稿）；
+    - `notes/…` ⇒ 转（作者的攻坚稿；`notes/` 里名字不像手稿的也照旧转）。
     """
     text = _norm_manuscript_rel(rel)
     if not text:
         return False
-    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_PLAN_PREFIX}"):
-        return True
-    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}"):
-        return False
-    if text.startswith(f"{_DS.MANUSCRIPT_DIR}/b-proof-"):
-        return False
+    reading = _MFAM.classify(text)
+    if reading.get("tier") == _MFAM.TIER_FAMILY:
+        if reading.get("family") != "f-proof":
+            return False
+        return str(reading.get("id") or "").startswith("plan-")
     return text.startswith("notes/")
 
 
@@ -5157,20 +5165,39 @@ class _RegisterStatement:
                  "没有可登记的证明正文")
                 + "。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段",
                 proof_body_state=str(proof_reading.get("state") or "")), "", ""
-        base = rel.rsplit("/", 1)[-1]
-        if numeric:
+        # 2026-11-09（T2 收编，设计 3.2 第 2 处）：族判定只读 `manuscriptfamily.classify`。
+        # `notes/` 的手稿形名字读成 legacy（不可签、不可收录）；`reports/b-proof-*`
+        # 不再落到 unrecognized，而是 b-proof 族（可签、可收录）。
+        _family_reading = _MFAM.classify(rel)
+        _tier = str(_family_reading.get("tier") or "")
+        if _tier == _MFAM.TIER_LEGACY:
+            return _refuse(
+                "manuscript_legacy_name",
+                f"按手稿路径收录：`{rel}` 是历史档（{_family_reading.get('code')}）"
+                f"⇒ 不可收录、也不可签。规范名是 "
+                f"{_family_reading.get('canonical') or '（拼不出）'}；"
+                "要收录请先把它落成规范名（`reports/<族>-<号>[-p<N>].md`）"), "", ""
+        if _tier == _MFAM.TIER_BAD:
+            return _refuse(
+                _MFAM.CODE_BAD,
+                f"按手稿路径收录：手稿名 {rel!r} 认不出号（{_family_reading.get('why')}）"
+                " ⇒ 整笔不写。这一格不猜：认不出号的稿没有可签的载体"), "", ""
+        _pointer_family = str(_family_reading.get("family") or "")
+        if _pointer_family == "e-num":
             family, default_kind, evidence_kind = "e-num", "conjecture", "cross_check"
-        elif rel.startswith(f"{_ER.MANUSCRIPT_DIR}/{_ER.MANUSCRIPT_PREFIX}"):
+        elif _pointer_family == "e-proof":
             family, default_kind, evidence_kind = "e-proof", "theorem", "proof"
-        elif base.startswith((_DS.MANUSCRIPT_STMT_PREFIX, _DS.MANUSCRIPT_PLAN_PREFIX)) \
-                or rel.startswith("notes/"):
+        elif _pointer_family == "f-proof":
             family, default_kind, evidence_kind = "f-proof", "conjecture", "heuristic"
+        elif _pointer_family == "b-proof":
+            # B 的改写稿：档位按签 / 台账现值（表的行为列），登记这一笔先按文字证明取缺省。
+            family, default_kind, evidence_kind = "b-proof", "conjecture", "heuristic"
         else:
             return _refuse(
                 "pointer_manuscript_unrecognized",
                 f"按手稿路径收录：认不出 `{rel}` 是哪一族手稿（E 的 `reports/e-proof-*` / "
-                "`reports/e-num-*`，F 的 `reports/f-proof-*` / `notes/*.md`）⇒ 整笔不写。"
-                "这一格不猜：认不出族的稿没有「该从哪一节读什么」的契约"), "", ""
+                "`reports/e-num-*`，F 的 `reports/f-proof-*`，B 的 `reports/b-proof-*`）"
+                "⇒ 整笔不写。这一格不猜：认不出族的稿没有「该从哪一节读什么」的契约"), "", ""
         declared = _declared_manuscript_kind(text=text)
         prov_label = ""
         if isinstance(provenance, Mapping):
@@ -5230,7 +5257,7 @@ class _RegisterStatement:
                 doc_id = ""
             statement_text = _head_value(text, "- 命题键：")
             label = ((str(_PR.parse_entry(text).get("label") or "").strip()
-                      if family == "f-proof" else "")
+                      if family in ("f-proof", "b-proof") else "")
                      or " ".join(proposition.split())[:80])
             origin_now = "own_result"
         quote_reason = (

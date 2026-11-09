@@ -60,6 +60,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
+
 #: ②③ 的落点（唯一口径）：`out/experiments/<实验号>/exhaustion.md`。
 #:
 #: 为什么是 `out/experiments` 而不是 `code/exp`：同一趟实验的原始输出已经落在
@@ -379,13 +381,14 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
 # 于是"稿上被签的那一份"与"台账里登记的那一份"逐字相同。
 
 #: E 的证明手稿落在哪（与 F 的证明手稿同一个目录：`reports/`）。
-MANUSCRIPT_DIR = "reports"
+#: 2026-11-09（T2 收编）：目录与两个前缀都从 `manuscriptfamily` 派生（设计 3.2 第 7 处）。
+MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
 #: 文件名前缀（`reports/e-proof-<实验号>.md`）。
 #:
 #: 为什么不叫 `f-proof-`：`depsection.is_framework_manuscript` 用它认"F 那一份"，
 #: 而 E 的稿不是 F 渲染的（洗稿元信息那一格也不同）—— 两个前缀让"谁写的稿"在路径上
 #: 就分得开，读侧不必去正文里猜。
-MANUSCRIPT_PREFIX = "e-proof-"
+MANUSCRIPT_PREFIX = _MFAM.prefix_of("e-proof")
 
 # ---- 2026-11-08（业主裁定）：普通数值实验也落手稿，新族 `e-num-*` ------------
 #
@@ -398,7 +401,7 @@ MANUSCRIPT_PREFIX = "e-proof-"
 # 为什么另起一族而不是复用 `e-proof-`：两族的内容契约不同（`## 证明` vs
 # `## 数值结果`）、签不签不同（V 会审 vs 不过 V）—— 同名会让读侧按"有没有 V 签"去猜
 # 它是哪一档，而 B 的绿色通道正是按族名分流的。
-NUMERIC_PREFIX = "e-num-"
+NUMERIC_PREFIX = _MFAM.prefix_of("e-num")
 #: 普通数值手稿的正文标题（逐字；B 的绿色通道只从这一节取命题）。
 NUMERIC_STATEMENT_HEADING = "## 命题"
 #: 普通数值手稿的"数值结果"那一节（B 不录它 —— 业主：「不录入其它内容」）。

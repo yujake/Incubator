@@ -4967,6 +4967,27 @@ def _human_span(seconds: float | None) -> str:
     return f"{days} 天 {hours} 小时" if hours else f"{days} 天"
 
 
+def _manuscript_candidates(sid: str, no: int) -> list[str]:
+    """这一份证明的候选手稿名（顺序即优先级；2026-11-09 T2 收编，设计 3.2 第 10 处）。
+
+    拼名只走 `manuscriptfamily.relpath`。候选集合与改前逐字相同：F 的原稿先、
+    B 的改写稿后；`no>1` 时 `-p<no>` 那一份排最前；B 那一族的 `-p<no>` 候选在改前
+    是无条件给的（`no=1` 时也有一条 `b-proof-<号>-p1.md`）—— 那不是规范名，但候选
+    集合不许因为收编而变，所以这里把它逐字保留。
+    """
+    from . import manuscriptfamily as _MFAM
+
+    no = int(no)
+    f_one = _MFAM.relpath("f-proof", sid, 1)
+    b_one = _MFAM.relpath("b-proof", sid, 1)
+    b_suffix = _MFAM.relpath("b-proof", sid, no) if no > 1 else f"{b_one[:-3]}-p1.md"
+    cands = [f_one]
+    if no > 1:
+        cands.insert(0, _MFAM.relpath("f-proof", sid, no))
+    cands += [b_one, b_suffix]
+    return cands
+
+
 def _signed_manuscript_for_proof(root: Any, sid: str, no: int,
                                  text: Any) -> dict[str, Any]:
     """这一份证明的正文在盘上有没有一份盖住它的 V 签（2026-11-08，两格读数）。
@@ -4982,10 +5003,7 @@ def _signed_manuscript_for_proof(root: Any, sid: str, no: int,
     if not base:
         return {}
     sha = _VR.proof_sha(str(text or ""))
-    cands = [f"reports/f-proof-{sid}.md"]
-    if int(no) > 1:
-        cands.insert(0, f"reports/f-proof-{sid}-p{int(no)}.md")
-    cands += [f"reports/b-proof-{sid}.md", f"reports/b-proof-{sid}-p{int(no)}.md"]
+    cands = _manuscript_candidates(sid, no)
     seen: set[str] = set()
     for rel in cands:
         if rel in seen:
@@ -5340,6 +5358,7 @@ def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
     没有这个家族的前缀，`family` 判不出来，就不进这一格（它们本来也没有 `## 依赖`，
     把"论文分节稿缺节"算成缺节会造出一条永远红的读数）。
     """
+    from . import manuscriptfamily as _MFAM
     from .vsigns import parse_manuscript_name
 
     out: dict[str, list[dict[str, Any]]] = {}
@@ -5351,8 +5370,15 @@ def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
     except OSError:
         return out
     for path in paths:
-        got = parse_manuscript_name(path.name)
+        # 目录是身份的一部分（设计 3.1.1 第 1 条）：把 `reports/` 带上再判。
+        got = parse_manuscript_name(f"{_MFAM.MANUSCRIPT_DIR}/{path.name}")
         if not (got.get("checked") and got.get("family")):
+            continue
+        # 2026-11-09（T2）：`-v2` 历史档现在读成 `checked=True/tier=legacy`
+        # （旧读法是 `checked=False`）；它仍然不进这一格。`e-num` 进族后也不进
+        # （这一格问的是"证明手稿"，普通数值稿没有 `## 依赖`）。
+        if (got.get("tier") != _MFAM.TIER_FAMILY
+                or got.get("family") not in ("f-proof", "b-proof", "e-proof")):
             continue
         sid = str(got.get("manuscript_id") or "")
         if not sid or sid.startswith("plan-"):

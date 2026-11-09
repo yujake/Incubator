@@ -147,9 +147,15 @@ def test_a_a_written_block_is_recorded_with_its_location(tmp_path: pathlib.Path)
 
 # ====================================================================== b 失败
 def test_b_a_failed_block_write_says_why(tmp_path: pathlib.Path) -> None:
-    """发签 + 写块失败 ⇒ 签文件里 `state=failed` + 明确原因（不折成 null）。"""
+    """发签 + 写块失败 ⇒ 签文件里 `state=failed` + 明确原因（不折成 null）。
+
+    2026-11-09（T2）：`land` 的载体判据只认表里的四族，所以这里用一个"名字合法、
+    盘上不在"的正式稿名来量写失败那一档 —— 旧夹具 `reports/not-there.md` 现在会在
+    载体闸就被拒，量不到写块失败（那不是同一条判据了）。
+    """
     root = _workspace(tmp_path)
-    got = _issue(root, artifact_path="reports/not-there.md")
+    missing = "reports/f-proof-000001.md"
+    got = _issue(root, artifact_path=missing)
 
     mw = got["manuscript_write"]
     assert mw["state"] == "failed", mw
@@ -161,7 +167,7 @@ def test_b_a_failed_block_write_says_why(tmp_path: pathlib.Path) -> None:
     shown = VSP.manuscript_write_reading(doc)
     assert shown["state"] == "failed", doc.get("manuscript_write")
     assert "不在盘上" in shown["why"], shown
-    assert shown["path"] == "reports/not-there.md", shown
+    assert shown["path"] == missing, shown
     # 没写成就不许报块的位置。
     assert shown["line"] == 0, shown
 

@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import evidencebits as EB
+from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import schema as S
 from . import statementledger as SL   # 命题台账的查口（全表→索引的唯一实现）
 
@@ -51,12 +52,13 @@ from . import statementledger as SL   # 命题台账的查口（全表→索引�
 #: 依赖段的段标题（固定，逐字）。
 SECTION_HEADING = "## 依赖"
 
-#: F 的证明手稿落点（工作区相对目录，与 `agent_f/manuscript.py` 的 `MANUSCRIPT_DIR` 同一处）。
-MANUSCRIPT_DIR = "reports"
-#: 按命题号命名的那一种（登记取到号之后的名字）。
-MANUSCRIPT_STMT_PREFIX = "f-proof-"
+#: F 的证明手稿落点（工作区相对目录；唯一真身在 `manuscriptfamily.MANUSCRIPT_DIR`）。
+MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
+#: 按命题号命名的那一种（登记取到号之后的名字；前缀从表派生）。
+MANUSCRIPT_STMT_PREFIX = _MFAM.prefix_of("f-proof")
 #: 按计划号命名的那一种（立项那一轮还没有命题号时用的是它，也是兜底读盘认的第二个名）。
-MANUSCRIPT_PLAN_PREFIX = "f-proof-plan-"
+#: `plan-<数字>` 是 f-proof 号形的一部分，所以它就是"命题号前缀 + plan-"。
+MANUSCRIPT_PLAN_PREFIX = f"{MANUSCRIPT_STMT_PREFIX}plan-"
 
 #: 手稿从哪来（四态，进返回值与读数，不许折平）：
 #:
@@ -253,8 +255,11 @@ NOT_WASHED_NEXT_STEP = (
 
 #: 框架渲染的手稿族（2026-11-08 起四族都算"框架产物"）：F 的证明稿 / B 的改写稿 /
 #: E 的穷举证明稿 / E 的普通数值手稿。族名是"谁写的、要不要 V 签"在路径上的唯一区分。
-MANUSCRIPT_FAMILY_PREFIXES: tuple[str, ...] = (
-    "f-proof-", "b-proof-", "e-proof-", "e-num-")
+#:
+#: 2026-11-09（T2 收编）：前缀从 `manuscriptfamily.FAMILIES` 派生（设计 3.2 第 5 处），
+#: 本模块不再保有自己的字符串；顺序按表的 `FAMILY_ORDER`。
+MANUSCRIPT_FAMILY_PREFIXES: tuple[str, ...] = tuple(
+    _MFAM.prefix_of(name) for name in _MFAM.FAMILY_ORDER)
 
 
 def is_framework_manuscript(rel: Any) -> bool:
@@ -287,7 +292,7 @@ def needs_wash(rel: Any) -> bool:
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
     if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
         return False
-    return parts[-1].casefold().startswith("f-proof-")
+    return parts[-1].casefold().startswith(MANUSCRIPT_STMT_PREFIX)
 
 
 def citation_levels() -> frozenset[str]:

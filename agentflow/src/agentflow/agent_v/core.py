@@ -96,6 +96,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from .. import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from .. import schema as S   # 命题号形态的唯一来源（当前宽度 + 旧四位读侧兼容）
 from .. import verifications as VR
 from ..store import StoreError
@@ -416,8 +417,8 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
     for sid in wanted:
         tried: list[str] = []
         hit: tuple[str, str] | None = None
-        for rel in (f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md",
-                    f"{_DS.MANUSCRIPT_DIR}/b-proof-{sid}.md"):
+        # 2026-11-09（T2 收编）：拼名只走 `manuscriptfamily.relpath`（设计 3.2 第 11 处）。
+        for rel in (_MFAM.relpath("f-proof", sid), _MFAM.relpath("b-proof", sid)):
             tried.append(rel)
             try:
                 text = (Path(root) / rel).read_text(encoding="utf-8")
@@ -2174,14 +2175,6 @@ class AgentV:
         from .. import vsigns as _VS
         _mid = _VS.manuscript_id_of(rel)
         _carrier = _VS.sign_carrier_reading(rel)
-        if not _carrier.get("ok"):
-            # 2026-11-05（父裁定）：计划稿是合法的落稿名，但不是签的载体。
-            # 这里只判签的那一侧，`parse_manuscript_name` 一个字节都不改（F 的
-            # 「先落计划名、拿到号再改名」还要用它）。
-            return {"failed": True, "kind": "bad_manuscript_name",
-                    "reason": "bad_manuscript_name",
-                    "detail": (f"`{rel}` 不是签的载体：{_carrier.get('reason')}"
-                               " ⇒ 这一格没审、不落签")}
         if not _mid:
             # 2026-11-04（业主裁定 · 乙-2）：按号命名是硬条件。认不出号的稿会写出
             # 第 9 格为空串的签块，而 B 的 `manuscript_sign_gate` 对
@@ -2194,6 +2187,14 @@ class AgentV:
                                "转正成按号命名的那一份（`reports/f-proof-<命题号>.md`，"
                                "`notes/…` 稿走转正那一步）再来；认不出号的签块 B 不认，"
                                "签了也白签")}
+        if not _carrier.get("ok"):
+            # 2026-11-05（父裁定）：计划稿是合法的落稿名，但不是签的载体。
+            # 2026-11-09（T2）：载体判据只读表 —— `-v2` / `notes/` 手稿形名字 /
+            # `e-num` 都在这里被拒（旧读法只挡计划稿）。
+            return {"failed": True, "kind": "bad_manuscript_name",
+                    "reason": "bad_manuscript_name",
+                    "detail": (f"`{rel}` 不是签的载体：{_carrier.get('reason')}"
+                               " ⇒ 这一格没审、不落签")}
         if (str(statement_id or "").strip() and _mid != str(statement_id).strip()
                 # E 的数值证明稿按实验号寻址（`reports/e-proof-<实验号>.md`），
                 # 命题号在登记那一行上 ⇒ 这一族的稿号与命题号本来就不同名。
@@ -3359,8 +3360,7 @@ class AgentV:
         #: 2026-11-09（D4）：盘上那些稿里没有 `## 证明` 那一节（不是"没有这份稿"）。
         #: 读数必须分开写 —— 否则 `read_proof` 的 `source=none` 会把两者折成一句话。
         _no_section: list[str] = []
-        for rel in (f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md",
-                    f"{_DS.MANUSCRIPT_DIR}/b-proof-{sid}.md"):
+        for rel in (_MFAM.relpath("f-proof", sid), _MFAM.relpath("b-proof", sid)):
             _tried.append(rel)
             try:
                 raw = (Path(self.workspace_root) / rel).read_text(encoding="utf-8")
@@ -3463,7 +3463,7 @@ def selftest() -> int:
         是一条真机上不存在（也不许存在）的入口。三节 `## 命题` / `## 证明` /
         `## 依赖` 齐全；依赖段空表本身就是"这一份没有引用任何在册命题"的声明。
         """
-        rel = f"reports/f-proof-{stmt_id}.md"
+        rel = _MFAM.relpath("f-proof", stmt_id)
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(

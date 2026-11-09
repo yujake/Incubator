@@ -32,6 +32,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from agentflow import manuscriptfamily as MFAM  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow import vsigns as VS  # noqa: E402
 
@@ -40,7 +41,8 @@ def test_a_p2_manuscript_splits_id_and_proof_no() -> None:
     """a：`f-proof-000000-p2.md` ⇒ (000000, 2)；第 9 格只拿稿号。"""
     rel = "reports/f-proof-000000-p2.md"
     parsed = VS.parse_manuscript_name(rel)
-    assert parsed["checked"] is True and parsed["family"] is True, parsed
+    assert parsed["checked"] is True and parsed["family"] == "f-proof", parsed
+    assert parsed["is_family"] is True, parsed
     assert parsed["manuscript_id"] == "000000", parsed
     assert parsed["proof_no"] == 2, parsed
     assert VS.manuscript_id_of(rel) == "000000", VS.manuscript_id_of(rel)
@@ -49,10 +51,12 @@ def test_a_p2_manuscript_splits_id_and_proof_no() -> None:
 
 def test_b_a_plain_manuscript_is_proof_no_one() -> None:
     """b：没有 `-pN` 后缀 ⇒ 证明号 1（canonical），不是 0。"""
-    for rel in ("reports/f-proof-000000.md", "reports/b-proof-000000.md",
-                "reports/e-proof-000001.md", "reports/f-proof-plan-0001.md"):
+    for rel, family in (("reports/f-proof-000000.md", "f-proof"),
+                        ("reports/b-proof-000000.md", "b-proof"),
+                        ("reports/e-proof-000001.md", "e-proof"),
+                        ("reports/f-proof-plan-0001.md", "f-proof")):
         parsed = VS.parse_manuscript_name(rel)
-        assert parsed["checked"] is True and parsed["family"] is True, (rel, parsed)
+        assert parsed["checked"] is True and parsed["family"] == family, (rel, parsed)
         assert parsed["proof_no"] == 1, (rel, parsed)
 
 
@@ -61,7 +65,11 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
     rel = "reports/f-proof-abc.md"
     parsed = VS.parse_manuscript_name(rel)
     assert parsed["checked"] is False, parsed
-    assert parsed["family"] is True, parsed
+    # 四族名字形状仍在（旧读法的 `family=True` 那一档；新读法把它拆成 `is_family`），
+    # 但 `tier=bad_name`、族名不成立 —— 受控拒靠的是后面这两格。
+    assert parsed["is_family"] is True, parsed
+    assert parsed["tier"] == MFAM.TIER_BAD, parsed
+    assert parsed["family"] == "", parsed
     assert parsed["code"] == VS.MANUSCRIPT_NAME_BAD, parsed
 
     # `land` 那一层：签文件在、收方在，但稿名认不出 ⇒ 不落块。
@@ -90,12 +98,69 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
     assert not (root / rel).exists(), "稿名认不出却写了文件"
 
 
+def test_e_a_v2_manuscript_is_history_not_a_second_proof() -> None:
+    """e：`-v2` 读成 `legacy`（`proof_no=0`），不是 `-p2`、也不是受控拒。
+
+    2026-11-09（T2）：这是收编后翻过来的一格（设计 3.2 第 4 处 / §3.3）。
+    `manuscript_id_of` 仍读得出号（纯读兼容），但"它不能当第 N 份证明"由
+    `proof_no=0` 表达；签载体另判。
+    """
+    rel = "notes/b-proof-000003-v2.md"
+    parsed = VS.parse_manuscript_name(rel)
+    assert parsed["checked"] is True, parsed
+    assert parsed["tier"] == MFAM.TIER_LEGACY, parsed
+    assert parsed["family"] == MFAM.LEGACY_FAMILY, parsed
+    assert parsed["proof_no"] == 0, parsed
+    assert parsed["code"] == MFAM.CODE_LEGACY, parsed
+    assert parsed["canonical"] == "reports/b-proof-000003-p2.md", parsed
+    assert VS.manuscript_id_of(rel) == "000003", VS.manuscript_id_of(rel)
+
+    carrier = VS.sign_carrier_reading(rel)
+    assert carrier["ok"] is False, carrier
+    assert carrier["code"] == MFAM.CODE_LEGACY, carrier
+
+
+def test_f_e_num_is_a_family_but_not_a_sign_carrier() -> None:
+    """f：`e-num-*` 进族（旧 `family=False`），但绿色通道不收签。"""
+    rel = "reports/e-num-000012.md"
+    parsed = VS.parse_manuscript_name(rel)
+    assert parsed["checked"] is True and parsed["family"] == "e-num", parsed
+    assert parsed["manuscript_id"] == "000012", parsed
+    assert parsed["proof_no"] == 1, parsed
+    carrier = VS.sign_carrier_reading(rel)
+    assert carrier["ok"] is False, carrier
+    assert carrier["code"] == MFAM.CODE_NUMERIC_NOT_SIGN, carrier
+
+
+def test_g_a_handwritten_name_in_notes_is_legacy_by_directory() -> None:
+    """g：`notes/` 下的手稿形名字读成 `legacy`（目录是身份的一部分）。
+
+    同一个名字在 `reports/` 下是 b-proof 族；换到 `notes/` 就是历史档（不可签、
+    不可收录）。这是设计 3.1.1 第 1 条；旧读法只看名字，会把它认成正式族。
+    """
+    canonical = "reports/b-proof-000003.md"
+    in_notes = "notes/b-proof-000003.md"
+    formal = VS.parse_manuscript_name(canonical)
+    legacy = VS.parse_manuscript_name(in_notes)
+    assert formal["tier"] == MFAM.TIER_FAMILY and formal["family"] == "b-proof", formal
+    assert legacy["tier"] == MFAM.TIER_LEGACY, legacy
+    assert legacy["family"] == MFAM.LEGACY_FAMILY, legacy
+    assert legacy["proof_no"] == 0, legacy
+    assert legacy["canonical"] == canonical, legacy
+    assert VS.sign_carrier_reading(in_notes)["ok"] is False, in_notes
+
+
 def test_d_without_the_pn_rule_the_p2_name_is_no_longer_valid(monkeypatch) -> None:
-    """d 反真空：正则里摘掉 `-p<N>` 那一段 ⇒ a 那个名字立刻不再合法。"""
+    """d 反真空：表里摘掉 `-p<N>` 那一段 ⇒ a 那个名字立刻不再合法。
+
+    2026-11-09（T2 收编）：解析已改读 `manuscriptfamily` 那张表，所以反真空打在
+    表本体的号形正则上（f-proof 那一支是 `_PROOF_REST_RE`），不再打在 `vsigns` 的
+    旧正则上。
+    """
     import re
 
-    legacy = re.compile(r"^(?P<prefix>.*?)-proof-(?P<id>\d{4,6}|plan-\d+)$")
-    monkeypatch.setattr(VS, "_MANUSCRIPT_NAME_RE", legacy)
+    legacy = re.compile(r"^(?P<id>\d{4,6}|plan-\d+)$")
+    monkeypatch.setattr(MFAM, "_PROOF_REST_RE", legacy)
     parsed = VS.parse_manuscript_name("reports/f-proof-000000-p2.md")
     assert parsed["checked"] is False, (
         "把 `-p<N>` 那一段摘掉之后 `f-proof-000000-p2.md` 仍然解析成功 ⇒ "

@@ -94,6 +94,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 
 #: 签与归档的落点（工作区相对）。与 `out/experiments`、`out/review` 同一条约定：
@@ -604,108 +605,70 @@ MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
 #: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮，落稿名合法）；
 #: - `-p<N>`：N 是 ≥1 的十进制，缺省 1（canonical）；`-p0` / `-pabc` / 号里带别的
 #:   后缀一律不认（认不出就受控拒绝，不猜）。
-_MANUSCRIPT_NAME_RE = re.compile(
-    r"^(?P<prefix>.*?)-proof-(?P<id>\d{4,6}|plan-\d+)(?:-p(?P<no>[1-9]\d*))?$")
-
-#: 「签的载体」这一族的名字（2026-11-05）：只认 `reports/(f|b|e)-proof-<数字>[-p<N>].md`。
-#: 计划稿（`f-proof-plan-<数字>`）不在这里 —— 它是合法的落稿名，但不是签的载体。
 #:
-#: 目录那一格与 `depsection.MANUSCRIPT_DIR` 同值（`"reports"`）。这里不 import 它：
-#: 本模块的判据只认"名字长什么样"，而 `vsigns` 是产物层（`depsection` 反过来会 import
-#: 本模块的读口）；两处一旦分家，`test_noai_gate` 那条符号存在性判据也看不出来 ——
-#: 所以用一个具名常量，回落的那一条由下面 `sign_carrier_reading` 的 docstring 钉住。
-SIGN_CARRIER_DIR = "reports"
-_SIGN_CARRIER_RE = re.compile(
-    r"^(?P<prefix>f|b|e)-proof-(?P<id>\d{4,6})(?:-p(?P<no>[1-9]\d*))?$")
+#: 2026-11-09（T2 收编）：解析与签载体都只读 `manuscriptfamily` 那一张表 ——
+#: 本模块不再保有自己的正则（设计 3.2 第 3/4 处）。`_MANUSCRIPT_NAME_RE` /
+#: `_SIGN_CARRIER_RE` 两个名字已删除；旧调用方读 `parse_manuscript_name` /
+#: `sign_carrier_reading`，返回形状不变。
+
+#: 「签的载体」这一族的目录那一格（与 `manuscriptfamily.MANUSCRIPT_DIR` 同源）。
+#: 保留这个名字只为既有 import 不破；判据本体在 `manuscriptfamily.sign_carrier`。
+SIGN_CARRIER_DIR = _MFAM.MANUSCRIPT_DIR
 
 
 def sign_carrier_reading(path: Any) -> dict[str, Any]:
     """这一份稿是不是「签的载体」（2026-11-05 业主：计划稿不是）。
 
-    判据刻意只排除计划稿（`*-proof-plan-<数字>`），不把别的名字一并拒掉：
-    既有口径允许 `notes/proof.md` 这类认不出号的名字被签（第 9 格落空、B 按
-    `unmatched` 处理），而「先落计划名、拿到号再改名」是 F 的落稿流程。两件事分开：
+    2026-11-09（T2）：判据整体转发到 `manuscriptfamily.sign_carrier`。那一张表只有
+    一条判据：`tier=family` 且族 ∈ {f,b,e}-proof 且目录是 `reports/`。于是三处旧读法
+    的结论会翻（设计 3.2 第 3 处 / §1.2①）：
 
-    - 计划稿：合法的落稿名，不是签的载体 ⇒ `ok=False`、码
-      :data:`MANUSCRIPT_NAME_PLAN`；
-    - 正式手稿名（`reports/(f|b|e)-proof-<数字>.md`）：签的载体，第 9 格能认出号；
-    - 其余名字：`ok=True`（不是计划稿就不在这一条判据上拒），但第 9 格可能认不出号
-      （由 :func:`manuscript_id_of` 判，空号 ⇒ 身份 `unmatched`）。
+    - `-v2` / `notes/b-proof-*`：旧 `ok=True`（只调本函数会把历史档当合法载体）；
+      新 `ok=False`、码 `legacy_manuscript_name`；
+    - `e-num`：旧 `ok=True`（回落到"不是计划稿就能签"）；新 `ok=False`
+      （绿色通道不签，业主 2026-11-08）；
+    - `f-proof-plan-*`：计划稿是合法落稿名，但不是签的载体（既有裁定，码不变）。
 
     返回 `{ok, code, reason, name}`；`ok=False` 不许折成"可以签"。
     """
-    name = str(path or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
-    if name.lower().endswith(".md"):
-        name = name[:-3]
-    out: dict[str, Any] = {"ok": False, "code": MANUSCRIPT_NAME_BAD,
-                           "reason": "", "name": name}
-    if not name:
-        out["reason"] = "没有手稿名 ⇒ 不是签的载体（签要有对象，稿要有名字）"
-        return out
-    if _SIGN_CARRIER_RE.match(name):
-        out.update(ok=True, code="")
-        return out
-    if re.match(r"^(?:f|b|e)-proof-plan-\d+(?:-p[1-9]\d*)?$", name) \
-            or re.match(r"^.*-proof-plan-\d+$", name):
-        out.update(code=MANUSCRIPT_NAME_PLAN,
-                   reason=(f"`{name}` 是计划稿（`*-proof-plan-<数字>`）：它是合法的落稿名"
-                           "（F 先落计划名、拿到号再改名），但不是签的载体 —— "
-                           "签要盖在一条命题的证明上，计划稿写的是下一步怎么做。"
-                           "要签就把它转成 `reports/{f,b,e}-proof-<命题号>.md`"))
-        return out
-    # 既不是正式手稿名、也不是计划稿：沿用既有口径（可以签，第 9 格按号认不认得出走）。
-    out.update(ok=True, code="")
-    return out
+    got = _MFAM.sign_carrier(path)
+    return {"ok": bool(got.get("ok")), "code": str(got.get("code") or ""),
+            "reason": str(got.get("why") or ""), "name": str(got.get("name") or "")}
 
 
 def is_sign_carrier(path: Any) -> bool:
-    """`sign_carrier_reading(path)["ok"]` 的布尔读法（判据只走那一个函数）。"""
-    return bool(sign_carrier_reading(path).get("ok"))
+    """`sign_carrier_reading(path)["ok"]` 的布尔读法（判据只走那一个函数）。
+
+    2026-11-09（T2）：直接转发 `manuscriptfamily.is_sign_carrier`，本模块不再保留
+    第二份布尔读法（设计 3.2 第 3 处）。
+    """
+    return _MFAM.is_sign_carrier(path)
 
 
 def parse_manuscript_name(path: Any) -> dict[str, Any]:
     """把手稿文件名解析成 `(裸稿号, proof_no)`（显式规则，认不出不猜）。
 
-    返回 `{"checked", "family", "manuscript_id", "proof_no", "code", "reason", "name"}`：
+    2026-11-09（T2）：解析整体转发到 `manuscriptfamily.parse` —— 族/号/后缀只有
+    那一张表一个落点（设计 3.2 第 4 处）。返回键与旧版兼容并多两格：
 
-    | 名字 | 结果 |
-    |---|---|
-    | `reports/f-proof-000000.md` | `family=True, id=000000, proof_no=1` |
-    | `reports/f-proof-000000-p2.md` | `family=True, id=000000, proof_no=2` |
-    | `reports/f-proof-plan-0001.md` | `family=True, id=plan-0001, proof_no=1`（落稿名合法；签的载体另判，见 :func:`sign_carrier_reading`） |
-    | `notes/proof.md` | `family=False, id="", checked=True`（不是这个家族，不拒绝） |
-    | `reports/f-proof-abc.md` | `checked=False, code=bad_manuscript_name`（受控拒） |
+    `{"checked", "family", "is_family", "manuscript_id", "proof_no", "code",
+    "reason", "name", "tier", "canonical"}`；`family` 是族名（`f-proof` / `b-proof` /
+    `e-proof` / `e-num`），`legacy` 档的族名是 `legacy`。旧调用方要的布尔读法在
+    `is_family` 里（名字形状属于四族即为真，含 `bad_name`）。
 
-    `family=False` 与 `checked=False` 是两件事：前者是"这个文件名不在 `*-proof-<号>`
-    家族里"（V 仍可签别的文件，只是第 9 格认不出号），后者是"它明明像一份证明手稿，
-    号却认不出"（写块那一步必须拒，不能猜一个号）。
+    结论翻的三处（设计 3.2 第 4 处 / §3.3）：
 
-    2026-11-05（父裁定）：这里不改 —— 计划稿仍是合法的落稿名（F 的流程是"先落计划名、
-    拿到号再改名"）。不许拿它当签的载体是另一条判据，落在 :func:`sign_carrier_reading`。
+    | 名字 | 旧读法 | 新读法 |
+    |---|---|---|
+    | `reports/f-proof-000000-p2.md` | `family=True, id=000000, proof_no=2` | 同左（`family="f-proof"`） |
+    | `notes/b-proof-000003-v2.md` | `checked=False, family=True, code=bad_manuscript_name` | `checked=True, tier=legacy, family="legacy", proof_no=0, code=legacy_manuscript_name` |
+    | `reports/e-num-000012.md` | `family=False` | `family="e-num"`（进族） |
+    | `notes/b-proof-000003.md` | 按名字认成 `b-proof` | `tier=legacy`（目录不对） |
+
+    计划稿仍是合法的落稿名（`reports/f-proof-plan-0001.md` ⇒ `id=plan-0001`）：
+    "不许当签的载体"是另一条判据，落在 :func:`sign_carrier_reading`。
     """
-    out: dict[str, Any] = {"checked": True, "family": False, "manuscript_id": "",
-                           "proof_no": 0, "code": "", "reason": "", "name": ""}
-    name = str(path or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
-    if name.lower().endswith(".md"):
-        name = name[:-3]
-    out["name"] = name
-    if not name:
-        return out
-    matched = _MANUSCRIPT_NAME_RE.match(name)
-    if matched is None:
-        if "-proof-" not in name:
-            out["reason"] = ("不是 `*-proof-<号>` 家族的名字（没有可解析的稿号；"
-                             "例如 `notes/proof.md` 仍可签，只是第 9 格认不出号）")
-            return out
-        out.update(checked=False, family=True, code=MANUSCRIPT_NAME_BAD,
-                   reason=(f"手稿名 {name!r} 认不出号：要 "
-                           "`<prefix>-proof-<号>[-p<证明号>].md`（号是 4–6 位十进制，"
-                           "或 `plan-<数字>`；`-p<N>` 的 N 是 ≥1 的十进制）"))
-        return out
-    no = int(matched.group("no") or 1)
-    out.update(family=True, manuscript_id=str(matched.group("id")), proof_no=no,
-               reason=(f"`{name}` ⇒ 稿号 {matched.group('id')}、证明号 {no}"))
-    return out
+    return _MFAM.parse(path)
 
 
 def manuscript_id_of(path: Any) -> str:
@@ -1786,12 +1749,7 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             "ok": False, "code": MANUSCRIPT_NAME_BAD,
             "reason": "没号那一档的签必须落在正式手稿上（`reports/(f|b|e)-proof-<数字>.md`），"
                       "这一签没有给载体"}
-        _name = str(artifact_path or "").strip().replace("\\", "/")
-        _bare = _name.rsplit("/", 1)[-1]
-        if _bare.lower().endswith(".md"):
-            _bare = _bare[:-3]
-        if not str(_name).startswith(f"{SIGN_CARRIER_DIR}/") \
-                or _SIGN_CARRIER_RE.match(_bare) is None:
+        if not carrier.get("ok"):
             out.update(code=str(carrier.get("code") or MANUSCRIPT_NAME_BAD), reason=(
                 f"没号那一档的载体必须是 `reports/(f|b|e)-proof-<数字>.md`，收到 "
                 f"{str(artifact_path or '')!r} ⇒ 这一签不颁发（一个字节都不写）："
@@ -2233,11 +2191,11 @@ def land(root: Any, *, artifact_sha: Any, by: str, manuscript_path: Any = "",
     rel_manuscript = str(manuscript_path or doc.get("artifact_path") or "").strip()
     # ---- 2026-11-04（业主裁定）：像证明手稿、号却认不出 ⇒ 受控拒，不猜 ----------
     #
-    # `notes/proof.md` 这类"不在 `*-proof-<号>` 家族里"的名字仍可签（第 9 格落空、
-    # B 按 unmatched 处理）；但 `f-proof-abc.md` / `f-proof-000000-p0.md` 这种"明明
-    # 是证明手稿、号却认不出"的名字必须在这里拒：猜一个号会把签盖到别的命题头上。
+    # `f-proof-abc.md` / `f-proof-000000-p0.md` 这种"明明是证明手稿、号却认不出"的名字
+    # 必须在这里拒：猜一个号会把签盖到别的命题头上。判据读表的 `tier=bad_name`
+    # （2026-11-09 T2 收编；`-v2` 一类历史名改走 `tier=legacy`，由下面的载体判据拒）。
     _parsed_name = parse_manuscript_name(rel_manuscript)
-    if _parsed_name.get("family") and not _parsed_name.get("checked"):
+    if _parsed_name.get("tier") == _MFAM.TIER_BAD:
         out.update(code=str(_parsed_name.get("code") or MANUSCRIPT_NAME_BAD),
                    reason=(f"落签没成：{_parsed_name.get('reason') or '手稿名认不出号'}"
                            " ⇒ 一个字节都不写"))
@@ -3381,7 +3339,7 @@ def _pending_carrier_path(row: Mapping[str, Any]) -> str:
     if (len(parts) == 2 and parts[0] == SIGN_CARRIER_DIR
             and path.endswith(".md")):
         carrier = sign_carrier_reading(path)
-        if carrier.get("ok") and _SIGN_CARRIER_RE.match(parts[1][:-3]):
+        if carrier.get("ok"):
             return path
     parts = path.split("/")
     if (len(parts) == 4 and parts[0] == "out" and parts[1] == "experiments"

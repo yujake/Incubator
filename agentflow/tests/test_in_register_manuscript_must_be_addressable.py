@@ -160,10 +160,18 @@ def test_b_the_same_body_on_a_numbered_manuscript_is_signed(
 
 
 # ====================================================================== c 反真空
-def test_c_without_the_name_gate_the_notes_manuscript_is_signed(
+def test_c_without_the_two_name_gates_the_notes_manuscript_is_signed(
         tmp_path: pathlib.Path, monkeypatch) -> None:
-    """反真空：把 `manuscript_id_of` 打桩成恒有号 ⇒ a 的 notes 稿被放行并签上。"""
+    """反真空：把两道名字闸都打桩 ⇒ a 的 notes 稿被放行并签上。
+
+    2026-11-09（T2 收编）：`sign_carrier_reading` 现在只认表里的四族（`notes/` 与
+    `-v2` 都不可签），所以 a 的拒信有两条来源 —— 按号命名闸（`manuscript_id_of`）
+    与载体闸（`sign_carrier_reading`）。两道都打桩，a 才应该被放行；只打一道仍有
+    另一道在拒，那是判据变强，不是 a 量错了东西。
+    """
     monkeypatch.setattr(VS, "manuscript_id_of", lambda _path: "000000")
+    monkeypatch.setattr(VS, "sign_carrier_reading", lambda _path: {
+        "ok": True, "code": "", "reason": "夹具：把载体闸也打桩", "name": ""})
     st = _ws(tmp_path)
     _put(st)
     _write(st, NOTES)

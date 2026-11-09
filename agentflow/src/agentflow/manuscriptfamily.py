@@ -439,7 +439,8 @@ def is_sign_carrier(rel: Any) -> bool:
     return bool(sign_carrier(rel).get("ok"))
 
 
-def relpath(family: Any, id: str = "", proof_no: int = 1) -> str:
+def relpath(family: Any, id: str = "", proof_no: int = 1, *,
+            strict: bool = True) -> str:
     """族 + 号 + 证明号 ⇒ 唯一拼名（`reports/<前缀><号>[-p<N>].md`）。
 
     为什么要集中拼名：手写拼法散在 `closing` / `agent_v/core` / `manuscriptform` 三处，
@@ -449,25 +450,36 @@ def relpath(family: Any, id: str = "", proof_no: int = 1) -> str:
 
     `f-proof` 的号可以是 `plan-<数字>`；`e-num` 不设 `-pN`（proof_no 只能是 1）。
     未知族 / 号形不对 / proof_no 不是 >=1 的整数 ⇒ `ValueError`（不猜）。
+
+    `strict=False` 是给"旧调用方本来就把非法输入读成空串"的那一处（`bmanuscript.relpath`
+    的返回值契约）：同一套校验，失败时回空串而不是抛。默认永远是 fail-closed。
     """
-    spec = _spec(family)
+    def _fail(message: str) -> str:
+        if strict:
+            raise ValueError(message)
+        return ""
+
+    try:
+        spec = _spec(family)
+    except ValueError as exc:
+        return _fail(str(exc))
     if spec.tier != TIER_FAMILY:
-        raise ValueError(f"`{LEGACY_FAMILY}` 是读档，不是可写的族：拼不出规范名")
+        return _fail(f"`{LEGACY_FAMILY}` 是读档，不是可写的族：拼不出规范名")
     got_id = str(id or "").strip()
     if not _ID_RE[spec.family].match(got_id):
-        raise ValueError(
+        return _fail(
             f"族 {spec.family} 的号形不对：{got_id!r}（要 {spec.id_pattern}；"
             "`plan-<数字>` 只属于 f-proof）")
     try:
         no = int(proof_no)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"证明号要是 >=1 的整数，收到 {proof_no!r}") from exc
+    except (TypeError, ValueError):
+        return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
     if no < 1:
-        raise ValueError(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
+        return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
     suffix = f"-p{no}" if spec.proof_suffix and no >= 2 else ""
     if not spec.proof_suffix and no != 1:
-        raise ValueError(f"{spec.family} 不设证明号后缀（一份数值手稿只对应一次实验），"
-                         f"收到 proof_no={no}")
+        return _fail(f"{spec.family} 不设证明号后缀（一份数值手稿只对应一次实验），"
+                     f"收到 proof_no={no}")
     return f"{MANUSCRIPT_DIR}/{spec.prefix}{got_id}{suffix}.md"
 
 

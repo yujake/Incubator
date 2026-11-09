@@ -534,13 +534,15 @@ def test_e_there_is_no_second_implementation_to_come_back() -> None:
         "`bmanuscript.land_rewrite` 不再走唯一落盘事务")
     assert _calls_attr(af_defs["promote_manuscript"], "promote_formal"), (
         "`agent_f.manuscript.promote_manuscript` 不再转发到唯一转正")
-    # 3. 文件名规则的字面量只许出现在唯一实现 + 解析器里。
+    # 3. 文件名规则的字面量只许出现在唯一实现 + 唯一判定表 + 保留表里。
+    # `manuscriptfamily.py` 是 2026-11-09（T2）收编后的唯一真身：前缀、目录、号形、
+    # 后缀都在那一张表里；`manuscriptform` / `depsection` 从它派生，不再各写一份。
     # `tools/fs_tools.py` 那一处是防线（保留目录里 `f-proof-*` 不许模型 fs.write），
     # 不是第二份命名实现：它按文件名形态拦，不参与"这份稿叫什么"。
     prefix_hits = [str(p.relative_to(root)) for p in root.rglob("*.py")
                    if '"f-proof-' in p.read_text(encoding="utf-8")
-                   and p.name not in ("manuscriptform.py", "depsection.py",
-                                      "fs_tools.py")]
+                   and p.name not in ("manuscriptfamily.py", "manuscriptform.py",
+                                      "depsection.py", "fs_tools.py")]
     assert prefix_hits == [], prefix_hits
     assert "re.compile" not in bm.read_text(encoding="utf-8"), (
         "`bmanuscript.py` 又长出了自己的编号正则")
