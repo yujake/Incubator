@@ -3,7 +3,7 @@
 
 ## 真机病灶（`_audit_steps_and_timeouts.md` §3.3 第 5 条）
 
-M 花 1 步 `void_items` 撤 12 条（11:09:10），**撤销动作自身又落 12 条新 notice 行**
+M 花 1 步 `void_items` 撤 12 条（11:09:10），撤销动作自身又落 12 条新 notice 行
 （t-000095..t-000106）。而那 12 行同样是板项行 ⇒ `status` 恒为 `pending`（叠上 D12
 就是"12 条新待办"）⇒ 观感是「越清越多」。
 
@@ -13,10 +13,10 @@ M 花 1 步 `void_items` 撤 12 条（11:09:10），**撤销动作自身又落 1
 
 ## 改法（业主 2026-11-09 认的那一版）
 
-撤销**不落新行**：提醒的载体是被撤那一行自己的 `inputs`
+撤销不落新行：提醒的载体是被撤那一行自己的 `inputs`
 （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，append-only 六格），
 收件人那一侧的读口是 `Conductor.revoked_recent_of`（`agent_loop.mailbox_digest`
-每一拍渲染成【最近被撤销的项】）。于是**新增 notice 行 = 0**，而
+每一拍渲染成【最近被撤销的项】）。于是新增 notice 行 = 0，而
 "谁撤的 / 为什么 / 你不需要再处理它"一个字都没少。
 
 ## 这一份钉什么

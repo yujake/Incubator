@@ -3,7 +3,7 @@
 
 ## 补的是哪个缺口（真机读数）
 
-`tasks` 表里板项行（`kind` 非空）的 `status` **设计上永远是 `pending`**：
+`tasks` 表里板项行（`kind` 非空）的 `status` 设计上永远是 `pending`：
 `conductor._item_row` 建行写死（`conductor.py:4568-4577`），收口只动
 `item_state`/`item_close`（`_set_item`，`:5348-5360`），源码自己那句逐字写着
 「板项行 `status` 永远是 `pending`」（`:5663`）。于是按 `status` 打印的读口会被读成
@@ -30,7 +30,7 @@
 
 ## 硬边界（业主明令）
 
-**不许改 `schema` 的 `status` 语义**：`schema.Task.validate` 要求 `done` 必须有
+不许改 `schema` 的 `status` 语义：`schema.Task.validate` 要求 `done` 必须有
 `outcome`，而板项行的 `outcome` 恒为 `None` ⇒ 把盘上那格改成 `done` 会当场不合法。
 d 条把这条边界的机器读数钉住：盘上那一行一个字都不变，`status` 仍是 `pending`。
 
@@ -187,7 +187,7 @@ def test_d_removing_the_projection_turns_it_back_into_pending(
     """d：把投影摘掉（退回"直接打 status/outcome"）⇒ 那一又显示 pending，两处一起变。
 
     这条同时钉"同一处口径"：替换的是 `statusreport.tasks_row_reading` 这一个函数，
-    报告与网页必须**同时**回到改前的读数 —— 若网页自己另写了一份投影，它不会跟着变。
+    报告与网页必须同时回到改前的读数 —— 若网页自己另写了一份投影，它不会跟着变。
     """
     ws, box, ids = _ws(tmp_path)
     closed, _open_item = _items(box, ids)

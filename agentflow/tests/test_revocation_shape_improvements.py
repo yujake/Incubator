@@ -37,9 +37,9 @@ M 撤 12 条，`tasks` 里就多出 t-000095..t-000106 十二行。而板项行�
 「十二个新待办」⇒ 业主的观感是「越清越多」。
 
 业主 2026-11-09 的口径：撤销动作不再自己生成待 ack 通知，判据是
-**撤销 N 条之后新增 notice 行 = 0**。所以现在：
+撤销 N 条之后新增 notice 行 = 0。所以现在：
 
-- 提醒的载体是**被撤那一行自己的** `inputs`（`revoke:expired:by=…:owner=…:from=…:
+- 提醒的载体是被撤那一行自己的 `inputs`（`revoke:expired:by=…:owner=…:from=…:
   to=done:at=…:reason=…`，append-only 六格）；
 - 收件人那一侧的读口是 `Conductor.revoked_recent_of`（`agent_loop.mailbox_digest`
   每一拍渲染成【最近被撤销的项】），`void_items` 返回的 `notified` 逐条写明
@@ -227,7 +227,7 @@ def test_a2_stubbing_the_authority_check_to_always_allow_turns_the_denied_cases_
 
 
 def _b_problems(tmp_path: pathlib.Path) -> list[str]:
-    """(乙) 的判据本体：撤销之后收件人**不**多一行，而提醒仍然读得到。"""
+    """(乙) 的判据本体：撤销之后收件人不新增行，而提醒仍然读得到。"""
     problems: list[str] = []
     ws, box, ids = _hierarchy(tmp_path)
     item = _item(box, owner=ids["F1"], role="F", expects="ack",
