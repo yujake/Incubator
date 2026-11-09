@@ -256,7 +256,15 @@ def test_3_a_fabricated_theorem_needs_vs_signature(tmp_path: pathlib.Path) -> No
     assert bad.get("ok") is False, bad
     assert bad.get("kind") == "self_authored_needs_v", bad
     err = str(bad.get("error") or "")
-    assert "conjecture" in err and "verify_proof" in err, err
+    # 2026-11-10（D1，`4273a273`）：B-3 这一句拒信的口径换了 —— 登记不再顺手落稿，
+    # 所以改法不是"换个 kind 按 conjecture 再交一次"（那一版正文根本没在盘上），
+    # 而是「显式落稿 → 派 V 审 → 签块由收方秘书落回稿 → 带这份稿重交」。
+    # 两个方向一起钉：新话在（显式落稿 / verify_proof / 重交）+ 旧话不在（conjecture）。
+    assert "显式落稿" in err and "verify_proof" in err, err
+    assert "再带这份稿重交" in err, err
+    assert "conjecture" not in err, (
+        "B-3 的拒信又回到「换个 kind 按 conjecture 再交一次」的旧口径 "
+        "⇒ 那一句在 D1 之后是错的（正文没落盘，换 kind 交不上去）：" + err)
     rows = [dict(r) for r in st.rows("statements")]
     assert len(rows) == 1 and str(rows[0].get("kind")) == "conjecture", rows
 
