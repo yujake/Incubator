@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-10T00:59:39+08:00",
+  "generated_at": "2026-11-10T01:10:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -543,10 +543,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "b5b792a08e4b2b60e26cf5c60a7bcb3f60bc4f5ca4d36f0ca70aafebeaaa6a23",
+      "sha256": "d69db118c7804d51a0c996908e3fea7a15ad971617ef2cec30be7645e4a4b8b1",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-10 p264 提示词/声明面一致性审计 11 条收口（逐条见提交信息）：specs/b.py 的 proof_manuscript 指针支口径 + 三态/族/签块身份教法；specs/e.py 的 proof_manuscript 改成回执格；specs/v.py 的签载体只认 reports/；tools/fs_tools.py 的 fs.write 点名四族；tools/table_tools.py 的 table.search summary 点名两列；两份 golden 随 p264 重冻。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这 7 条仍需 2 名 reviewer 逐行走查/逐格看过。",
+      "change_note": "2026-11-10 业主裁定 ③（p264 收口后续）：doc.build_document 的 citation_coverage 把 eval_results 数进去（own 加 eval、available 加 eval_results），returns 声明的前缀清单补 eval: ⇒ tool_surface_snapshot 的 declarations.doc.build_document.returns 随现值重冻。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这一条仍需 2 名 reviewer 逐格看过。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

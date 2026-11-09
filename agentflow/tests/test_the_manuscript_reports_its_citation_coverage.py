@@ -374,3 +374,31 @@ def test_anti_vacuum_status_ok_but_the_file_is_gone_does_not_count(tmp_path: Pat
     assert cov["available"]["literature_with_fulltext"] == 0, cov["available"]
     assert any("一篇有可用全文的都没有" in g for g in cov["gaps"]), cov["gaps"]
 
+
+def test_eval_citations_are_counted_and_the_eval_table_is_a_measured_availability(
+        tmp_path: Path) -> None:
+    """`eval:` 必须被数进读数（2026-11-10 业主裁定 ③）。
+
+    `schema.CITATION_PREFIXES` 早就认 `eval:`（指向 `eval_results` 表），但
+    `citation_coverage` 的 `own` / `available` 只有五类 ⇒ 一条合法的 `eval:` 引用写进去，
+    `meta.citation_coverage` 看不见它（审计 L2-2 的取证）。这一条同时钉"引了几条"
+    （只读 claims，库读不到也给得出）与"库里有多少可引"（读不到 ⇒ -1，不编 0）。
+    """
+    from agentflow.tools import doc_tools as DT
+
+    def _rows(table: str):
+        if table == "eval_results":
+            return [{"eval_id": "0000"}]
+        return []
+
+    cov = DT.citation_coverage(_rows, [_claim(["eval:0000"])])
+    assert cov["counts"]["eval"] == 1, cov["counts"]
+    assert cov["available"]["eval_results"] == 1, cov["available"]
+
+    def _blind(table: str):
+        raise RuntimeError("表读不到")
+
+    cov_blind = DT.citation_coverage(_blind, [_claim(["eval:0000"])])
+    assert cov_blind["counts"]["eval"] == 1, cov_blind["counts"]
+    assert cov_blind["available"]["eval_results"] == -1, cov_blind["available"]
+

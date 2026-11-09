@@ -617,7 +617,10 @@ def citation_coverage(
     库读不到 ⇒ `readable=False` 且 `available` 全是 `-1`（"没查成"），不许读成"库里没有可引的东西"；`gaps` 那几句只在 `readable=True` 时才可能非空。
     返回 ``{"own", "counts", "available", "readable", "gaps", "suggest_lit","suggest_rel", "note"}``。
     """
-    own: dict[str, list[str]] = {k: [] for k in ("lit", "rel", "exp", "stmt", "doc")}
+    # 2026-11-10（业主裁定 ③）：`eval:` 也是合法 citation 前缀（`schema.CITATION_PREFIXES`
+    # 早已认它，指向 `eval_results` 表）⇒ 读数必须数它，否则一条合法的 `eval:` 引用在
+    # `meta.citation_coverage` 里是隐形的（审计 L2-2 的取证）。
+    own: dict[str, list[str]] = {k: [] for k in ("lit", "rel", "exp", "stmt", "doc", "eval")}
     for i, c in enumerate(claims, 1):
         for raw in (c or {}).get("citations") or []:
             kind, _ref = citation_ref_parts(raw)
@@ -641,7 +644,8 @@ def citation_coverage(
         return {
             "own": own, "counts": counts,
             "available": {"literature_total": -1, "literature_processed": -1,
-                          "relations": -1, "experiments": -1, "statements": -1},
+                          "relations": -1, "experiments": -1, "statements": -1,
+                          "eval_results": -1},
             "readable": False,
             "gaps": [],
             "suggest_lit": [], "suggest_rel": [],
@@ -688,6 +692,9 @@ def citation_coverage(
         "relations": len(rel_rows),
         "experiments": _count("experiments"),
         "statements": _count("statements"),
+        # `eval:` 指向的那张表（`schema.CITATION_PREFIXES` 的唯一声明）—— 与
+        # `experiments` / `statements` 并列，同样是"库里有多少可引"。
+        "eval_results": _count("eval_results"),
         "research_questions": n_questions,
     }
     # 「立了几条研究问题」与「这份稿件有几条带引文的断言」的对照（T4 第 4/5 趟的整改）。
@@ -2310,7 +2317,7 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
             "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
             "'status','review_rounds','created_at','updated_at','created_by',"
             "'content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；"
-            "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:` "
+            "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` "
             "+ 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；"
             "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
             "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
