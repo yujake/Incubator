@@ -2542,6 +2542,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                    "与 `ref_problem` / `ref_reading`（在工作区根下判存在性，三态 "
                    "ok/legacy_ok / missing / unchecked / bad / ambiguous）—— 把 refs 的"
                    "四套写法收成一张表；纯模块、不 import 任何 agentflow 模块",
+    # 2026-11-09（repo survey 的 `>800 行` 软判据，业主口径：只许降、不许抬基线）：
+    # 从 `refvocab.py`（839 行）整段拆出来的「规格那一半」。为什么仍是顶层模块：它是
+    # "一张表"的唯一落点 —— 写口（`manuscripts` / `depsection` 那一侧）与读口都按名字
+    # 从这里取词表与号形；挂在 `refvocab` 里就是那份越线的文件。拆开之后两个文件各自
+    # 只做一件事（数据 vs 读它），公开名由 `refvocab` re-export 照旧可用（不是第二份实现）。
+    "refspecs.py": "受控引用词表的规格那一半（D10 B1 的拆分，2026-11-09）：STATE_ / CODE_ / "
+                   "KIND_ 词表、RefSpec、REF_NAMESPACES / REF_SPECS、手稿族名与文件名正则、"
+                   "号形的等价写法（`_id_forms` / `_anchor_forms` / `_manuscript_from_name`）"
+                   "—— 纯数据、零读盘、不 import 任何 agentflow 模块；解析与存在性在 "
+                   "`refvocab.py`",
     # 2026-11-09（T2，设计 `_design_T123.md` §3.2）：手稿族/号/后缀的唯一判定表。
     # 为什么必须是顶层模块：11 处收编（vsigns / manuscriptform / depsection /
     # exhaustionreport / vreceipts / closing / agent_v / B 的登记口）都从它派生，

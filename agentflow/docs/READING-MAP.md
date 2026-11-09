@@ -4,10 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-09，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **278 个 `.py`、269,322 行**，**77 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
+> **279 个 `.py`、269,377 行**，**76 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-09 拆模块（D10 的 refvocab）再改一次**：269,322 → **269,377**（文件数 278 → **279**，
+> `>800 行` 77 → **76**：`refvocab.py` 839 行拆成 `refvocab.py` 680 + `refspecs.py` 214 ——
+> 词表/号形那一半整段搬走，解析与存在性留在原名下、按名字回引；`tools/repo_survey.py`
+> 的软判据（`tests/test_repo_survey_does_not_get_worse.py`）量的是"不许多"，处置是拆、
+> 不是抬基线。`agent_loop.py` 14,139 行不变）。
 > 2026-11-09 再改一次：266,332 → **266,484**（两把尺统一：`textutil.py` 抽出唯一的关键词
 > 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它（+128）；同日的声明面收口
 > （`table.search` 的 summary 与 `query` / `fields` 说明改真口径、`PROMPT_VERSION` 抬到 p263）
@@ -332,7 +337,8 @@
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。另加**位 ⇒ 台账的映射**（`BIT_LEDGERS`：哪一位去哪张表查；`bit_evidence_gaps`：位上说有、表里要查得到）——业主 2026-10-09 点名的那一条。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
 | `quoteverify.py` | 引文校验：引文级回验（禁改区） |
 | `quoteevidence.py` | 引文回验的**证据叶子**（D1 的落点）：`verify_quote_evidence` 用禁改区那一个 `quoteverify.check_quote` 判，再把 `quote_mode` / `quote_span` / `quote_reason` / `quote_call_sha256` 逐栏落到命题行上 —— 改前 8 条命题写着"逐字回验通过"而三栏全是空串（核了哪一段、在第几页、花没花模型钱一条都读不出来）。判决本身仍只有 `quoteverify` 一份，本模块补的是"调动方"那一半 |
-| `refvocab.py` | **受控引用词表的唯一真身**（D10 B1，2026-11-09，纯模块零 `agentflow` 依赖）：`parse_ref` 只判形状（命名空间 / 地址 / legacy），`ref_problem` / `ref_reading` 在工作区根下判存在性，三态 `ok` / `legacy_ok` / `missing` / `unchecked` / `bad` / `ambiguous` 不许折平。改前 refs 有四套写法（`manuscripts.OBJECT_REFS` / `schema.CITATION_PREFIXES` / `depsection.CARRIED_KEYS` / 提示词），同一个字符串在两张表里结论相反（`doc:` 在 citations 合法、在 refs 非法）—— 真机已因此丢过一整份交接。判据 `tests/test_ref_vocabulary_is_one_table.py` |
+| `refvocab.py` | **受控引用词表的唯一真身**（D10 B1，2026-11-09，纯模块零 `agentflow` 依赖）：`parse_ref` 只判形状（命名空间 / 地址 / legacy），`ref_problem` / `ref_reading` 在工作区根下判存在性，三态 `ok` / `legacy_ok` / `missing` / `unchecked` / `bad` / `ambiguous` 不许折平。改前 refs 有四套写法（`manuscripts.OBJECT_REFS` / `schema.CITATION_PREFIXES` / `depsection.CARRIED_KEYS` / 提示词），同一个字符串在两张表里结论相反（`doc:` 在 citations 合法、在 refs 非法）—— 真机已因此丢过一整份交接。判据 `tests/test_ref_vocabulary_is_one_table.py`。2026-11-09 拆成两个模块（repo survey 的 `>800 行` 软判据，不抬基线）：**本文件只留解析与存在性**（`parse_ref` / `ref_reading` / `explain`），词表与号形在下一行 |
+| `refspecs.py` | **受控引用词表的规格那一半**（2026-11-09 从 `refvocab.py` 整段搬出来，纯数据、零读盘、零 `agentflow` 依赖）：三态/受控码词表（`STATE_*` / `CODE_*`）、三类目标（`KIND_*`）、`RefSpec` 与唯一词表 `REF_NAMESPACES` / `REF_SPECS`、手稿族名与文件名正则、以及"一个号有几种写法"（`_id_forms` / `_anchor_forms` / `_manuscript_from_name`）。`refvocab` 按名字回引它，`refvocab.parse_ref` / `refvocab.REF_SPECS` 等公开名照旧可用（re-export，不是第二份实现） |
 | `dedup.py` | 判重：文献 / 概念 / 关系（禁改区） |
 | `experiment_methods.py` | E 收得下的三种计算法（`numeric` / `symbolic` / `exhaustive_search`）的唯一来源 `COMPUTATIONAL_METHODS`：动作面 `specs/e.py` 与工具面 `verify.run_experiment` 的 `method.enum` 都从它取（`formal` 不在这里 —— 形式化归 L，`schema.EXPERIMENT_METHODS` 仍含它）。中立模块、不属于任何 `agent_*` 包：常量先落地，`specs/e.py` 才不会与 `agent_e/_support.py` 成环 |
 
