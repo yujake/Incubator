@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-10T04:33:51+08:00",
+  "generated_at": "2026-11-10T05:48:19+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -129,10 +129,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "6f4e31bb5f9b65effdd4b5e84a14ac83f8b110ad48c7fde1b06b367bb680a751",
+      "sha256": "d6d3d32b66a5313031f12e88d5a31c234a075b80fbcb7aad7f3595e953e22a47",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "T1 收口（p266）：B 新增 land_manuscript / ingest_manuscript 两个动作（规格与能力面登记）+ agent 面快照重冻（66 条动作）；reviewers 留空（登记 ≠ 批准）",
+      "change_note": "2026-11-10 记账：T1 新增两个 B 动作之后 two_layer_reconciliation 的现算读数改为 66 = 25 + 41 + 0（只改 docstring 数字）；登记 ≠ 批准，reviewers 仍为空",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

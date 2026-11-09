@@ -43,6 +43,36 @@ assert QUOTE_OUT_OF_DECLARED_RANGE in Path(quoteverify.__file__).read_text(
     f"quoteverify 里找不到 {QUOTE_OUT_OF_DECLARED_RANGE!r} 这个 reason ⇒ "
     "B 的 quotes_out_of_declared_range 会静默地永远是 0（`E-11` 的那一档又变成了看不见）"
 )
+#: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
+#: 同一个口径：`notes/` 是草稿本、`reports/` 是正式落点）。别的根一律当"正文"处理，
+#: 不按路径读盘 —— 这一格不许变成"从任意路径读一个文件当证明"。
+_MANUSCRIPT_PATH_ROOTS: tuple[str, ...] = ("notes", "reports")
+
+
+def _norm_manuscript_rel(value: Any) -> str:
+    """`proof_manuscript` 的形状归一（只换分隔符；不猜、不补前缀）。"""
+    return str(value or "").strip().replace("\\", "/")
+
+
+def _is_manuscript_rel(rel: str) -> bool:
+    """这一格看起来是不是一个工作区相对路径（而不是一份正文）。
+
+    判据只认形状：单行（正文必然带换行）、带 `/`、以 `.md` 结尾、落在
+    `notes/` 或 `reports/` 下、没有盘符 / 不以 `/` 开头 / 不含 `..`。
+    """
+    text = _norm_manuscript_rel(rel)
+    if not text or "\n" in text or "\r" in text:
+        return False
+    if not text.casefold().endswith(".md") or "/" not in text:
+        return False
+    if text.startswith("/") or ":" in text:
+        return False
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if len(parts) < 2 or any(p == ".." for p in parts):
+        return False
+    return parts[0] in set(_MANUSCRIPT_PATH_ROOTS)
+
+
 _PASSAGE_RE = re.compile(r"[^.!?。！？\n]+[.!?。！？]?", re.UNICODE)
 def _passages(page_text: str) -> list[str]:
     """把一页切成候选片段，每一段都是原页文本的连续切片。

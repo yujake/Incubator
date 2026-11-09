@@ -19,8 +19,9 @@ import json
 import pathlib
 import re
 
-from conftest import TS, sign_for_the_gate, sync_counters
+from conftest import TS, sync_counters
 import paperfixture as FX
+from _credential_fixture import issue_credential
 from agentflow import reviewaccept as RX
 from agentflow import schema as S
 from agentflow import userio as U
@@ -130,7 +131,14 @@ def _good(tmp_path: pathlib.Path):
     # 拦门读数 `statements_unsigned`。这一份夹具代表"五条内容级判据全过、门也绿"的
     # 那一趟交付，所以台账里那条命题必须真有 V 签（连续 3 次干净「成立」）——
     # 断言一个字没改，只是把"绿"造全。
-    sign_for_the_gate(st.root, statement_id="0001", proof_text="Proof. 逐字摘录……")
+    #
+    # 2026-11-10（D268 批 2 之后）：签的唯一事实源是可复算凭据
+    # （`out/vsigns/<正文 sha>.json`）；只落台账三票 = `unissued`（够票、没有签文件），
+    # 门照样报 `statements_unsigned_without_v_or_abandon`。所以这里用批 2 自己那份夹具
+    # （`_credential_fixture.issue_credential`：三票同源 + `vsigns.issue`），
+    # 让"绿"按今天的判据成立 —— 夹具更强（改一个字的正文就认不上），断言一个字没改。
+    issue_credential(st.root, proof_text="Proof. 逐字摘录……", statement_id="0001",
+                     manuscript="reports/f-proof-0001.md")
     _task(st, "t-0001")
     _usage(st, "0001", 0.25)
     sync_counters(st)

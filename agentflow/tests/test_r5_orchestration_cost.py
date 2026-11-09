@@ -1310,6 +1310,11 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 形态」的史实叙述，不是"照着找能得到东西"的指针 ⇒ 按本表纪律登记，不改引用处文本
     # （改了就丢掉"改前叫什么"）。
     "_numeric_same_candidates",    # 已删：B 自建检索那条旧路（`register_statement.py` 的注释与 `test_one_retrieval_path_pages_until_hit_or_end.py` 的反真空断言都点名它）
+    # —— 2026-11-10（D268 批 2 / T1 收口之后的复核）：两条新登记，逐条写在下面 ——
+    # 两条都是「被删 / 被改名的名字」与「命名约定片段」的史实叙述，不是"照着找能得到东西"
+    # 的指针；符号面今天都是 0 次，按本表纪律登记，不改引用处文本（改了就丢掉"改前叫什么"）。
+    "_SIGN_CARRIER_RE",            # 已删的正则（改名前的签载体判定）：`vsigns.py` 原处的删除留痕在讲"那两个名字已删除、旧调用方读 `parse_manuscript_name` / …"，留痕按纪律必须点名被删的东西
+    "_STATES",                     # 命名约定片段（不是标识符）：`vsigns.py` 的注释在说"受控词表普查按 `_STATES` 后缀扫，所以这里刻意不写这个后缀"——它是后缀举例，全仓没有叫 `_STATES` 的符号
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

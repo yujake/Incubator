@@ -293,12 +293,12 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，64 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，66 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
 | A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
-| B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
+| B | 9 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 4 | `run_experiment` `evidence_for` `list_experiments` `run_script_experiment` |
@@ -309,11 +309,11 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **64**（6+7+10+15+4+4+7+5+3+3+0），与标题那个 64 同源：标题读的是
+> 十一行加起来是 **66**（6+9+10+15+4+4+7+5+3+3+0），与标题那个 66 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
-> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `64`。
+> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `66`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
-> 现读见上一句的复跑命令，Lean 关着跑同样是 `64`）。开关管的是另外两件事：**能不能派到它**
+> 现读见上一句的复跑命令，Lean 关着跑同样是 `66`）。开关管的是另外两件事：**能不能派到它**
 > （`policy` 判 `forbidden_edge`，理由串点名 `lean_off`）与**它的工具面装不装**
 > （`formal_tools` 不装配 ⇒ `for_role("L")` 是空集）。"声明面不看开关、行为面看"这两根轴
 > 不许折成一句"Lean 关时 L 不存在"。
@@ -1898,7 +1898,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 **现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（54 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（56 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
@@ -1913,7 +1913,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
 | A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
-| B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
+| B | 9 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 4 | `run_experiment` `evidence_for` `list_experiments` `run_script_experiment` |

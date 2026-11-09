@@ -445,8 +445,12 @@ def two_layer_reconciliation() -> dict:
     ## 为什么这个函数必须存在（它补的是一条真的缝）：`declaration_divergences` 答"两层在哪里不一致"，
     而"对账面有没有真的在做"有三个不同答案，必须分开数：`compared`（动作与工具唯一对上了）、
     `unmatched`（`handler_name` 在角色工具组里对应 0 个 ⇒ 没比成，unknown）、`ambiguous`（对应 ≥2 个 ⇒ 按唯一性约定拒绝猜，unknown）。
-    实测（2026-10-27 现算）：64 个动作 = 25 compared + 39 unmatched + 0 ambiguous
-    （2026-10-26 是 64 = 24 + 40 + 0；当晚把 `conjecture_tools` 接进 `tools._MODULES` 之后，
+    实测（2026-11-10 现算）：66 个动作 = 25 compared + 41 unmatched + 0 ambiguous
+    （2026-11-09 T1 收口：B 新增 `land_manuscript` / `ingest_manuscript` 两个动作 ——
+    它们对应的 `own.*` 工具只在被派那一趟现装、不进基座注册表（见 `specs/b.py` 与
+    `agent_b/_support.py` 的说明）⇒ `_TOOL_GROUPS_BY_ROLE["B"]` 里没有唯一对应的工具，
+    两条都进 `unmatched`，`compared` 与 `ambiguous` 不变）。
+    此前（2026-10-27 是 64 = 25 + 39 + 0；2026-10-26 是 64 = 24 + 40 + 0；当晚把 `conjecture_tools` 接进 `tools._MODULES` 之后，
     `D.register_conjecture` 又有了唯一对应的工具 ⇒ 从 unmatched 走回 compared，两边各 ±1）。
     （2026-10-15 是 62 个动作 = 23 compared + 39 unmatched + 0 ambiguous；`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
     2026-10-26：`D.register_conjecture` 从 compared 挪进 unmatched —— 它对应的

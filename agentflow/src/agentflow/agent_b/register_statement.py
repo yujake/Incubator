@@ -81,6 +81,9 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from ._support import S
+from ._support import _is_manuscript_rel, _norm_manuscript_rel
+from .ingest_manuscript import _IngestManuscript
+from .land_manuscript import _LandManuscript
 from .. import depsection as _DS
 from .. import evidencebits as _EB
 from .. import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
@@ -110,15 +113,6 @@ CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
 #: 这里一个字都不留 —— 留一个"B 的分批大小"等于把第二条检索路的骨架留在原处。
 
 
-#: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
-#: 同一个口径：`notes/` 是草稿本、`reports/` 是正式落点）。别的根一律当"正文"处理，
-#: 不按路径读盘 —— 这一格不许变成"从任意路径读一个文件当证明"。
-_MANUSCRIPT_PATH_ROOTS: tuple[str, ...] = ("notes", "reports")
-
-#: `own.ingest_manuscript` 的三种模式（设计 §2.3.1）：预览 / 回填 / 登记新命题。
-#: 与 `manuscriptintake.INGEST_MODES` 同一份口径（不各写各的）。
-INGEST_MODES: tuple[str, ...] = _MI.INGEST_MODES
-
 #: 派生列：调用方永远不许指定（设计 §2.5）。它们不在 `INGEST_CELLS` 里；
 #: 单独列出来是为了"请求了派生列"能给出受控拒，而不是一句泛泛的参数错。
 #: 理由：这些要么由秘书洗（`label`）、要么由签现算（`evidence_kind` / 等级）、
@@ -127,30 +121,6 @@ DERIVED_COLUMNS: tuple[str, ...] = (
     "label", "evidence_kind", "origin", "line_range", "doc_id", "bits",
     "proof_no", "proof_sha256", "proof_authors", "proof_history", "stmt_id",
 )
-
-
-def _norm_manuscript_rel(value: Any) -> str:
-    """`proof_manuscript` 的形状归一（只换分隔符；不猜、不补前缀）。"""
-    return str(value or "").strip().replace("\\", "/")
-
-
-def _is_manuscript_rel(rel: str) -> bool:
-    """这一格看起来是不是一个工作区相对路径（而不是一份正文）。
-
-    判据只认形状：单行（正文必然带换行）、带 `/`、以 `.md` 结尾、落在
-    `notes/` 或 `reports/` 下、没有盘符 / 不以 `/` 开头 / 不含 `..`。
-    """
-    text = _norm_manuscript_rel(rel)
-    if not text or "\n" in text or "\r" in text:
-        return False
-    if not text.casefold().endswith(".md") or "/" not in text:
-        return False
-    if text.startswith("/") or ":" in text:
-        return False
-    parts = [p for p in text.split("/") if p not in ("", ".")]
-    if len(parts) < 2 or any(p == ".." for p in parts):
-        return False
-    return parts[0] in set(_MANUSCRIPT_PATH_ROOTS)
 
 
 def _should_promote_to_formal(rel: str) -> bool:
@@ -251,15 +221,6 @@ def _pointer_manuscript_rel(value: Any) -> str:
     """`proof_manuscript` 是"手稿相对路径"时返回归一后的路径，否则空串。"""
     rel = _norm_manuscript_rel(value)
     return rel if _is_manuscript_rel(rel) else ""
-
-
-def _head_value(text: Any, mark: str) -> str:
-    """手稿稿头 `- <标记>：<值>` 那一行的值（没有 / 空 ⇒ 空串，不猜）。"""
-    for line in str(text or "").splitlines():
-        raw = line.strip()
-        if raw.startswith(mark):
-            return raw[len(mark):].strip()
-    return ""
 
 
 def _same_manuscript_text(left: Any, right: Any) -> bool:
@@ -1016,7 +977,7 @@ def _caller_role() -> str:
         return ""
 
 
-class _RegisterStatement:
+class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
                         other_proofs: list[str] | None = None,
@@ -6017,96 +5978,6 @@ class _RegisterStatement:
                                 + "）⇒ 下一轮会把同一命题重新登记一次"))
         return out
 
-    def land_manuscript(self, *, statement_id: str, statement_full: str = "",
-                        proof_text: str, label: str = "", proof_no: int = 1,
-                        source_manuscript: str = "",
-                        if_match_sha256: str = "") -> dict:
-        """B 的显式落稿动作（只写文件，不写台账；D1 从登记里拆出来的那一步）。
-
-        ## 为什么需要它（不是"登记顺手落"）
-
-        B 的工具面没有文件写口，而 V 只审盘上的稿。改前这件事由
-        `register_statement` 在被拒之前顺手做（D1：被拒的登记留下稿）；拆出来之后
-        顺序是 "显式落稿 → 派 V 签 → 带签 `own.register_statement`"，两步各自成立、
-        各自可解释。工具面的薄壳是 `own.land_manuscript`（T1 起已注册）。
-
-        ## 参数（T1 接线后）
-
-        - `statement_id`：这条命题的号；必须已经在册（稿名由号拼出，不接受调用方给路径）；
-        - `proof_text`：这一版证明正文（逐字；作者交内容、框架渲染落稿）；
-        - `statement_full`：可以不给 —— 不给就取在册那一行的命题正文（"命题拿已经登记的"，
-          业主 2026-11-07 裁定）；给了也只是那一行的副本，落稿用的是它；
-        - `proof_no`：想落成第几份；缺省 1；
-        - `if_match_sha256`：并发纪律（protocol §五）—— 调用方"我以为目标稿现在是这一版"；
-          不符 ⇒ 受控拒 `stale_target`，一个字节都不写。
-
-        ## 返回
-
-        `{ok, path, written, preserved, signed, sha256, sha, proof_no, text, why,
-        problem, refused}`。`sha256` / `sha` 是签尺（`proofregistry.proof_sha(proof_text)`）：
-        这份稿将来被 V 签时对拍的就是这个值，不是整份文件的字节 sha。
-
-        ## 幂等
-
-        同一份正文重放：目标稿内容没变 ⇒ `written=False, preserved=True`（不出现
-        第二个文件、不改名、不毁签）；已签的那一版不会被另一版正文盖掉
-        （`target_holds_a_signed_version`，零写入）。
-        """
-        from .. import proofregistry as _PR
-
-        sid = str(statement_id or "").strip()
-        out: dict = {"ok": False, "path": "", "written": False, "preserved": False,
-                     "signed": False, "sha256": "", "sha": "", "proof_no": 0,
-                     "text": "", "why": "", "problem": {}, "refused": ""}
-        if not sid:
-            out.update(kind="statement_missing",
-                       why="落稿要指定一条在册命题（`statement_id`）；没有号就没有稿名")
-            out["refused"] = "statement_missing"
-            return out
-        got = SL.by_id(self.store, stmt_id=sid)
-        if not got["checked"]:
-            err = got.get("error") or {}
-            out.update(kind="ledger_unreadable",
-                       why=(f"`statements` 读不出来（{err.get('type') or '?'}: "
-                            f"{err.get('message') or '?'}）⇒ 不知道这条命题的正文，不落稿"))
-            out["refused"] = "ledger_unreadable"
-            return out
-        row = dict(got["row"] or {})
-        if not row:
-            out.update(kind="statement_missing",
-                       why=(f"`statements` 里没有 stmt:{sid} ⇒ 没有可落的稿"
-                            "（先 `own.register_statement` 拿号）"))
-            out["refused"] = "statement_missing"
-            return out
-        proposition = str(statement_full or "").strip() or str(
-            row.get("statement_full") or "")
-        if not proposition.strip():
-            out.update(kind="empty_statement_text",
-                       why="这一条在册命题的正文是空的 ⇒ 落稿会写出一份没有命题的稿")
-            out["refused"] = "empty_statement_text"
-            return out
-        label_now = str(label or "").strip() or str(row.get("label") or "")
-        if str(if_match_sha256 or "").strip():
-            target = _PR.entry_relpath(family="B", statement_id=sid)
-            entry = _PR.read_entry(self.store.root, family="B", statement_id=sid)
-            current = str((entry.get("entry") or {}).get("sha256") or "")
-            if not entry.get("exists") or current != str(if_match_sha256).strip().lower():
-                out.update(path=str(target or ""), kind="stale_target",
-                           why=("`if_match_sha256` 与盘上那一版不符 ⇒ 不覆盖"
-                                f"（盘上现在 {('没有这一份稿' if not entry.get('exists') else current[:12] + '…')}）"))
-                out["refused"] = "stale_target"
-                return out
-        out = dict(self._land_b_manuscript(
-            statement_id=sid, statement_full=proposition,
-            proof_text=proof_text, label=label_now, proof_no=proof_no,
-            source_manuscript=source_manuscript))
-        out.setdefault("ok", False)
-        out["preview"] = False
-        out["sha256"] = str(out.get("sha256")
-                            or _PR.proof_sha(str(proof_text or "")))
-        out["sha"] = out["sha256"]
-        out["proof_no"] = int(out.get("proof_no") or proof_no or 0)
-        return out
 
     # ------------------------------------------------------------------ T1 收录
     #
@@ -6306,198 +6177,6 @@ class _RegisterStatement:
                 f"不可签、不可收录；规范名是 {shape.get('canonical') or '（拼不出）'}")
         return family, tier, "", ""
 
-    def ingest_manuscript(self, *, manuscript: str, target_stmt_id: str = "",
-                          cells: Sequence[str] = (), conflict: str = "refuse",
-                          mode: str = "apply", proof_no: Any = None,
-                          if_match_proof_sha256: str = "", reason: str = "",
-                          provenance: Any = None) -> dict:
-        """按「位置 + 格」从手稿里提取并回填（T1 的唯一入口）。
-
-        ## 参数（设计 §2.3.1；工具面的 ActionSpec 是这一份的广告）
-
-        - `manuscript`：工作区相对路径；只收 `reports/` 下过族表的规范名；
-        - `target_stmt_id`：位置（录到哪一条命题；`mode!="register"` 时必填）；
-        - `proof_no`：这一行的第几份证明；与稿名 `-p<N>` 不一致 ⇒ 受控拒
-          `proof_no_mismatch`（不重定向、不"就近取一个"）；
-        - `cells`：格（闭集）；派生列请求 ⇒ 受控拒 `derived_cell_not_requestable`；
-        - `conflict`：`refuse`（默认）/ `overwrite` / `append` / `keep`；
-        - `mode`：`preview`（只提取、零写）/ `apply`（按格回填）/ `register`（登记新命题，
-          继承"按手稿路径收录"那条路）；
-        - `if_match_proof_sha256`：调用方"我以为这一行现在的正文 sha 是它"；不符 ⇒
-          `stale_target`（protocol §五：写入方带 sha，不符受控拒、不静默覆盖）。
-
-        ## 三条边界（设计 §2.1，任何一条破了这一批就白做）
-
-        ```
-        · 提取只在秘书层：本方法不切节、不解析依赖表、不读稿头；
-        · 写库仍只有 record_statement / land_statement / amend_statement_meta；
-        · mode=apply 刻意不跑同一性判定（判了就可能并到调用方没点名的行 = T1 要修的缺陷）。
-        ```
-
-        ## 返回
-
-        固定键（设计 §2.4）：`ok / mode / manuscript / target / requested_cells / cells /
-        diff / derived_write / write / refused / reason`。`diff` 是"请求格 vs 实填格"的
-        逐格对拍；I1/I2 由 `_ingest_invariant_problem` 机器核（不成立 ⇒ 整笔 `ok=False`）。
-        """
-        from .. import manuscriptfamily as _MFAM
-        from .. import manuscriptintake as _MI
-
-        rel = _norm_manuscript_rel(manuscript)
-        out = self._ingest_empty_envelope(rel, mode)
-
-        # ---- 参数面（先判再读盘：拒绝要能把改法说清）
-        if str(mode or "") not in INGEST_MODES:
-            return self._ingest_fail(
-                out, "bad_ingest_mode",
-                f"`mode` 只有 {INGEST_MODES}（收到 {mode!r}）")
-        if str(conflict or "") not in _MI.CONFLICTS:
-            return self._ingest_fail(
-                out, "bad_conflict_policy",
-                f"`conflict` 只有 {_MI.CONFLICTS}（收到 {conflict!r}）")
-        requested, _code, _why = self._ingest_requested_cells(cells, str(mode))
-        if _code:
-            return self._ingest_fail(out, _code, _why)
-
-        # ---- 族 / 目录：目录是身份的一部分（legacy 只可 preview）
-        family, tier, _code, _why = self._ingest_family_reading(rel, str(mode), out)
-        if _code:
-            return self._ingest_fail(out, _code, _why)
-
-        # ---- 位置：register 不收 target；其余模式 target 是权威
-        target = str(target_stmt_id or "").strip()
-        if str(mode) == "register":
-            if target:
-                return self._ingest_fail(
-                    out, "target_not_allowed_for_register",
-                    "`mode=register` 是登记**新**命题：`target_stmt_id` 必须空"
-                    "（录到在册行请用 `mode=apply`）")
-            if family not in ("f-proof", "e-proof", "e-num"):
-                return self._ingest_fail(
-                    out, "register_not_applicable_for_family",
-                    (f"{family or '这一族'} 的稿对应的是**已登记**的命题 ⇒ 不能登记新命题；"
-                     "B 自己的改写稿走 `own.register_statement` 的正文支"))
-            defaults = list(_MFAM.default_cells(family))
-            requested = requested or list(defaults)
-            missing = [cell for cell in defaults if cell not in requested]
-            if missing:
-                return self._ingest_fail(
-                    out, "cells_incomplete_for_register",
-                    (f"登记新命题要一次交齐 {defaults}（缺 {missing}）："
-                     "register 那一笔按整行落库，不能只填半行"))
-        else:
-            if not target:
-                return self._ingest_fail(
-                    out, "target_required",
-                    "`target_stmt_id` 是「录入位置」：apply / preview 必须点名录到哪一条命题")
-
-        # ---- 族收窄：请求了族不允许的格 ⇒ 受控拒（点明这一族只能填哪几格）
-        # legacy 只走 preview：它的格集是 ∅，但 preview 要能看清稿里有什么
-        # （`_ingest_legacy_cells` 把读数原样给出，一个字节不写）。
-        allowed = _MFAM.allowed_cells(family)
-        for cell in (() if tier == _MFAM.TIER_LEGACY else requested):
-            # `statement_full` 在 apply/preview 是"只校验"（在册行只读），任何族都收；
-            # register 那一档按族表（b-proof 已在上面被拒）。
-            if cell == "statement_full" and str(mode) != "register":
-                continue
-            if cell not in allowed:
-                return self._ingest_fail(
-                    out, "cell_not_applicable_for_family",
-                    (f"{family} 只能填 {allowed}；`{cell}` 不在里面"
-                     + ("（普通数值档 `proof_text` 按业主口径留空）"
-                        if family == "e-num" and cell == "proof_text" else "")))
-
-        # ---- 提取归秘书（B 本体不读稿）
-        sec = self._statement_secretary()
-        if sec is None:
-            return self._ingest_fail(
-                out, "secretary_unavailable",
-                "这一趟没有秘书 ⇒ 读不了稿、也写不了台账"
-                + (f"（{self.secretary_problem}）"
-                   if getattr(self, "secretary_problem", "") else ""))
-        want_cells = list(requested)
-        if str(mode) == "register":
-            for cell in _MFAM.default_cells(family):
-                if cell not in want_cells:
-                    want_cells.append(cell)
-        reading = sec.extract_manuscript(rel, want_cells)
-        out["manuscript"].update({
-            "sha256": str(reading.get("sha256") or ""),
-            "proof_sha256": str(reading.get("proof_sha256") or ""),
-            "proof_state": str(reading.get("proof_state") or ""),
-            "head_statement_id": str(reading.get("head_statement_id") or ""),
-        })
-        if not reading.get("checked"):
-            return self._ingest_fail(
-                out, "manuscript_unreadable",
-                str(reading.get("why") or f"读不到 `{rel}`")
-                + "（读不到的稿不能当成没有）")
-
-        # ---- 稿头点名的号：target 是权威，稿头只作校验（不一致 ⇒ 拒，不重定向）
-        head = str(reading.get("head_statement_id") or "").strip()
-        if str(mode) != "register" and head and head != target:
-            return self._ingest_fail(
-                out, "manuscript_points_elsewhere",
-                (f"这一份稿点的是 stmt:{head}（稿头 `- 命题号：`），而 `target_stmt_id` "
-                 f"是 stmt:{target} ⇒ 整笔不写。**不重定向**：要么改稿头、要么改位置"
-                 "（位置由调用方指定，工具不许替它挑一行）"))
-        if head and str(mode) != "register":
-            out["target"]["stmt_id"] = target
-
-        # ---- proof_no：稿名与参数不一致 ⇒ 受控拒（防"稿名说 #p1、参数说 #p2"）
-        want_no, _code, _why = self._ingest_proof_no(reading, proof_no)
-        if _code:
-            return self._ingest_fail(out, _code, _why)
-        out["manuscript"]["proof_no"] = want_no
-
-        # ---- 目标行（apply / preview 必须已在册；register 没有目标行）
-        row: dict | None = None
-        if str(mode) != "register":
-            row, _code, _why = self._ingest_target_row(
-                out, target, str(if_match_proof_sha256 or ""))
-            if _code:
-                return self._ingest_fail(out, _code, _why)
-
-        # ---- legacy 只可 preview：把提取读数原样给出（每格 not_applicable + 理由）
-        if tier == _MFAM.TIER_LEGACY:
-            cells_out = self._ingest_legacy_cells(reading, requested)
-            out.update(requested_cells=list(requested), cells=cells_out,
-                       derived_write=[])
-            out["diff"] = {"requested_not_filled": [], "filled_not_requested": []}
-            out.update(ok=True, reason="历史档：只预览、不写（不可签、不可收录）")
-            return out
-
-        # ---- mode=register：登记新命题（继承"按手稿路径收录"那条路）
-        if str(mode) == "register":
-            return self._ingest_register(
-                reading=reading, requested=requested, out=out, family=family,
-                path=rel, provenance=provenance)
-
-        # ---- plan + 逐格回执（preview 与 apply 共用同一份计划）
-        got_cells = {cell: reading["cells"][cell]
-                     for cell in requested if cell in (reading.get("cells") or {})}
-        plan = _MI.plan_cells(row, got_cells, str(conflict), family=family,
-                              proof_no=want_no)
-        cells_out = self._ingest_plan_cells(plan, requested)
-        out.update(requested_cells=list(requested), cells=cells_out,
-                   derived_write=list(plan.get("derived_write") or []),
-                   refused=str(plan.get("refused") or ""),
-                   reason=str(plan.get("reason") or ""),
-                   ok=bool(plan.get("ok")))
-        out["diff"] = self._ingest_diff(out, requested)
-        problem = self._ingest_invariant_problem(out)
-        if problem:
-            return self._ingest_fail(out, "ingest_invariant_violated", problem)
-        if not out["ok"]:
-            return out
-        if str(mode) == "preview":
-            out["write"] = {"statements": False, "dependencies": False,
-                            "written": False,
-                            "sink": "preview：只提取、一个字节都不写"}
-            return out
-        return self._ingest_apply(
-            reading=reading, row=row, plan=plan, out=out, requested=requested,
-            family=family, want_no=want_no, target=target, path=rel)
 
     @staticmethod
     def _ingest_diff(out: Mapping, requested: Sequence[str]) -> dict:
