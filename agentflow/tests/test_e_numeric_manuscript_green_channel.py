@@ -237,7 +237,7 @@ def test_c2_the_plain_numeric_proposition_is_refused_when_the_form_is_bad(tmp_pa
         proof_manuscript=str(out["numeric_manuscript"]),
         quote_verified=False, quote_reason="own_result：E 的实验读数")
     assert got.get("ok") is False, got
-    assert got.get("kind") == "proposition_form_refused", got
+    assert got.get("refused") == "proposition_form_refused", got
     assert _rows(store, "statements") == [], _rows(store, "statements")
     rows = SEC.proposition_form_rows(store.root)
     assert rows and rows[-1]["role"] == "B" and rows[-1]["well_formed"] is False, rows

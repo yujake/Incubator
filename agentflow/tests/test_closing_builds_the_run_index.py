@@ -34,6 +34,24 @@ from test_release_acceptance_wiring import (  # noqa: E402
     _touch_session,
 )
 from test_run_index_has_a_producer import _get, _index_events, _server  # noqa: E402
+from _credential_fixture import issue_credential  # noqa: E402
+
+
+def _good_clean_signed(tmp_path: pathlib.Path):
+    """`_good_clean_and_sid` + 每条非概念命题的可复算签（D268 批 2 的口径）。
+
+    收工门的 `statements_unsigned` 从批 2 起只认 `vsigns.sign_reading` 的可复算凭据
+    （`out/vsigns/<正文 sha>.json`）：三票只在台账里 = `unissued` ⇒ blocker。这一组
+    判据的前提是"门真的过了"；断言一个字没改，只是按新口径把"绿"造全（同一份正文、
+    同一个号，签不上就红）。
+    """
+    st, report, sid = _good_clean_and_sid(tmp_path)
+    for row in st.rows("statements"):
+        if str(row.get("kind") or "") == "concept":
+            continue
+        issue_credential(st.root, proof_text=str(row.get("proof_text") or ""),
+                         statement_id=str(row.get("stmt_id") or ""))
+    return st, report, sid
 
 
 def _passing_run(st, report, sid) -> tuple[int, str]:
@@ -44,7 +62,7 @@ def _passing_run(st, report, sid) -> tuple[int, str]:
 
 def test_a_passing_gate_leaves_an_index_the_api_can_read(tmp_path: pathlib.Path) -> None:
     """① 门过 ⇒ 索引在盘上、`/api/run-index` 读到 computed、审计点名这是收工门建的。"""
-    st, report, sid = _good_clean_and_sid(tmp_path)
+    st, report, sid = _good_clean_signed(tmp_path)
     path = SS.run_index_path(st.root)
     assert not path.is_file(), "夹具不该一开始就有索引"
 
@@ -73,7 +91,7 @@ def test_a_passing_gate_leaves_an_index_the_api_can_read(tmp_path: pathlib.Path)
 def test_a_blocked_gate_builds_nothing_and_keeps_the_existing_bytes(
         tmp_path: pathlib.Path) -> None:
     """② 门不过 ⇒ 不建；已有索引逐字节不变。"""
-    st, report, sid = _good_clean_and_sid(tmp_path)
+    st, report, sid = _good_clean_signed(tmp_path)
     path = SS.run_index_path(st.root)
 
     code, out = _run(st, report, "--sid", _touch_session(st), "--goal-not-met")
@@ -91,7 +109,7 @@ def test_a_blocked_gate_builds_nothing_and_keeps_the_existing_bytes(
 def test_the_index_is_idempotent_across_two_passing_runs(
         tmp_path: pathlib.Path) -> None:
     """③ 幂等：连跑两次通关的收工门，索引字节相同。"""
-    st, report, sid = _good_clean_and_sid(tmp_path)
+    st, report, sid = _good_clean_signed(tmp_path)
     path = SS.run_index_path(st.root)
 
     code, out = _passing_run(st, report, sid)
@@ -107,7 +125,7 @@ def test_the_index_is_idempotent_across_two_passing_runs(
 def test_a_failed_build_keeps_exit_zero_and_lands_in_the_audit(
         tmp_path: pathlib.Path, monkeypatch) -> None:
     """⑤ 建索引失败不改退出码，但必须可见（一句话 + 盘上一行审计）。"""
-    st, report, sid = _good_clean_and_sid(tmp_path)
+    st, report, sid = _good_clean_signed(tmp_path)
 
     def _boom(_root) -> dict:
         raise OSError("磁盘满了（判据的打桩）")
@@ -126,7 +144,7 @@ def test_a_failed_build_keeps_exit_zero_and_lands_in_the_audit(
 
 def test_no_index_does_not_write(tmp_path: pathlib.Path) -> None:
     """④ `--no-index` ⇒ 不写盘（只想看门过没过的人不留下索引，也不落审计）。"""
-    st, report, sid = _good_clean_and_sid(tmp_path)
+    st, report, sid = _good_clean_signed(tmp_path)
     path = SS.run_index_path(st.root)
     assert _index_events(st.root) == []
 

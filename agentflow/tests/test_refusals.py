@@ -41,7 +41,16 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     ("agent_b/register_statement.py", ""):
         "`_numeric_manuscript_channel` 的「这一笔不是 E 的普通数值手稿 / 读不成」那格读数："
         "它是内部判读的三态返回值（调用方据此继续走普通登记路），不是一次受控拒；"
-        "真受控拒由收录口按 `refusals.refuse` 报（`numeric_manuscript_refused` 一类）",
+        "真受控拒由收录口按 `refusals.refuse` 报（`numeric_manuscript_refused` 一类）。"
+        "2026-11-10（T1/D1 收口 + 一动作一文件拆包）同一模块另有两处同形的返回骨架："
+        "`_land_rewrite_manuscript` 的 `out` 初值、`_ingest_empty_envelope`（`own.ingest_manuscript`"
+        " 的固定键信封，受控码走 `refused`/`reason`，由动作层按 `refused` 落终态）。"
+        "`land_manuscript` 的 `out` 初值随拆包搬到 `agent_b/land_manuscript.py`（见下面那条）——"
+        "三处都不是动作自己手写的终态拒绝，所以按处数登记，不走 `refusals.refuse`",
+    ("agent_b/land_manuscript.py", ""):
+        "`land_manuscript` 的返回骨架 `out` 初值（`ok=False`，受控码写在 `refused` 那一格）："
+        "与 `register_statement.py` 里那几个同形骨架是同一件事 —— 不是手写的终态拒绝，"
+        "由动作层按 `refused` 落终态（T1/D1 收口后一动作一文件拆出来的新模块）",
     ("agent_d/poll.py", ""):
         "工具 `research.poll_waiting` 自己失败了（不是参数不对、也不是前置条件不满足）"
         "⇒ 这是「执行了、没成功」，该落 `failed`，不该冒充 `refused`",
@@ -154,6 +163,12 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
 #: 正是"每一处都在册"。两个方向都照旧：盘上比表里多 ⇒ `missing` 红，表里比盘上多
 #: ⇒ `stale` 红（豁免腐烂）。
 _REPEAT_COUNTS: dict[tuple[str, str], int] = {
+    # 2026-11-10（T1/D1 收口 + 拆包）：`register_statement.py` 的 `ok=False` 返回骨架
+    # 是 3 处；`land_manuscript` 的那一处随一动作一文件拆到自己的模块
+    # （见 `_FAILURES_NOT_REFUSALS` 里那两条的登记理由：都是 `out` 初值 / 固定键信封，
+    # 受控码走 `refused`，不是手写的终态拒绝）。
+    ("agent_b/register_statement.py", ""): 3,
+    ("agent_b/land_manuscript.py", ""): 1,
     # L 的形式化入口：十一条"这一条候选不成立"的子结果（`_pick_statement` 五条、
     # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串；2026-11-09 多出第十二处
     # （按号取待形式化改走查口之后，`statements` 读不出来那一档）。

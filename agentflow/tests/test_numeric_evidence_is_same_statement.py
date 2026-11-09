@@ -49,6 +49,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from conftest import seed_proposition_form_ok, seed_statement_row, sign_before_registration  # noqa: E402
+from _credential_fixture import issue_credential  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
@@ -286,7 +287,7 @@ def test_e_a_failed_judgement_refuses_and_leaves_a_ledger_row(tmp_path):
     got = _register(store, Seam(keywords=["P(n)"], judge_bad=True),
                     second["numeric_manuscript"])
     assert got.get("ok") is False, got
-    assert got.get("kind") == "same_statement_unjudged", got
+    assert got.get("refused") == "same_statement_unjudged", got
     assert len(_rows(store)) == 1, _rows(store)
     ledger = SEC.statement_same_rows(store.root)
     assert any((not row.get("checked")) and str(row.get("stage") or "") == "judge"
@@ -302,7 +303,7 @@ def test_e2_a_failed_keyword_extraction_also_refuses(tmp_path):
     seed_proposition_form_ok(store.root, PARAPHRASE, kind="conjecture", role="B")
     got = _register(store, Seam(keyword_bad=True), second["numeric_manuscript"])
     assert got.get("ok") is False, got
-    assert got.get("kind") == "same_statement_unjudged", got
+    assert got.get("refused") == "same_statement_unjudged", got
     assert len(_rows(store)) == 1
     ledger = SEC.statement_same_rows(store.root)
     assert any((not row.get("checked"))
@@ -318,8 +319,10 @@ def test_f_no_keyword_hit_registers_with_a_zero_hit_reading(tmp_path):
     `hits_total=0` / `candidates_total=0` / `page_exhausted=True` 读出来。
     """
     store = _store(tmp_path)
+    # 先铺的那一行不能占 000000：E 的数值稿名就是 `e-num-000000.md`，候选号 000000
+    # 若已被占 ⇒ 按 D2 口径受控拒 `stmt_id_taken`（不另发号），这一笔就不是"0 命中"了。
     seed_statement_row(store, statement_full="设 m 是正整数；则 Q(m) 对 m=1..3 成立。",
-                       kind="conjecture", label="Q(m) 的界")
+                       kind="conjecture", label="Q(m) 的界", stmt_id="000001")
     out = _numeric(store, CLAIM, "k1", "code/scan.py",
                    {"range": "n<=10", "points": 10})
     seed_proposition_form_ok(store.root, CLAIM, kind="conjecture", role="B")
@@ -336,9 +339,11 @@ def test_f_no_keyword_hit_registers_with_a_zero_hit_reading(tmp_path):
 
 # ================================================================== j / k 关键词检索
 def _seed_paraphrase(store: Store) -> str:
+    # 000000 留给 E 的数值稿名（`e-num-000000.md`）：D2 口径下候选号被占 ⇒
+    # 受控拒 `stmt_id_taken`，而这条判据要的是"命中在册那一条"、不是"号撞了"。
     seeded = seed_statement_row(
         store, statement_full=PARAPHRASE, kind="conjecture",
-        label="P(n) 的界")
+        label="P(n) 的界", stmt_id="000001")
     return str(seeded["stmt_id"])
 
 
@@ -576,13 +581,11 @@ def _sign_proof_pending(store: Store, *, proof_no: int, proof_text: str) -> None
 
 
 def _sign_proof(store: Store, *, sid: str, proof_no: int, proof_text: str) -> None:
-    for _ in range(int(VR.SIGN_STREAK_NEED)):
-        VR.record_verification(
-            store.root, statement_id=sid, proof_text=proof_text,
-            verdict={"verdict": "成立", "findings": []},
-            verifier="agent-V", store=store, proof_no=proof_no,
-            secretary_judge={"checked": True, "axis": "clean",
-                             "decision": "没问题", "reason": "夹具：clean"})
+    # 2026-11-10（D268 批 2）：签只认可复算凭据 `out/vsigns/<正文 sha>.json`；只落
+    # 三行台账 = `unissued`（够票、没发签），登记会被 `proof_without_v_sign` 拒。
+    # 改用批 2 的公共夹具（三票同源 + `vsigns.issue`）—— 签的仍是同一份正文。
+    issue_credential(store.root, proof_text=proof_text, statement_id=sid,
+                     proof_no=int(proof_no))
 
 
 def _first_proof(store: Store) -> str:

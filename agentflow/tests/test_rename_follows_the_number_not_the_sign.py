@@ -20,7 +20,7 @@
 | a | 登记拿到号、没有签 ⇒ 稿已改名成 `f-proof-<号>.md`，正文逐字不变 | F 的 proof 档拿不到号（`statement_id` 空），稿仍是计划名 |
 | b | 有签 ⇒ 改名 + 签块跟着搬；sha 不符 ⇒ 搬失败并记 `publish_problem` | 搬块失败是静默的（只有 `except: pass`），也没有"搬没搬"的读数 |
 | c | 没有号 ⇒ 不许改名（名字里不许凭空造号） | 改前已绿：负控，防止"先改名再补号" |
-| d | 读侧不许把「文件名叫 `f-proof-<号>.md`」读成「已签」 | a 的改前红会先挡住；删掉签块后必须回落到待签 |
+| d | 读侧不许把「文件名叫 `f-proof-<号>.md`」读成「已签」 | a 的改前红会先挡住；删掉凭据后必须回落到待签（块只是视图） |
 
 全部 tmp 工作区，不读写 `projects/`（真机工作区只读）。
 """
@@ -40,6 +40,7 @@ if str(_SRC) not in sys.path:
 from agentflow import depsection as DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
+from _credential_fixture import issue_credential
 
 
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
@@ -327,12 +328,13 @@ def test_c_without_a_number_the_manuscript_keeps_its_plan_name(store: Store) -> 
 # ------------------------------------------------------------------ d 反向
 
 def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
-    """d：名字叫 `f-proof-<号>.md` 不等于已签；删掉签块必须回落到「待签」。
+    """d：名字叫 `f-proof-<号>.md` 不等于已签；删掉凭据必须回落到「待签」。
 
     2026-11-07（解耦 + 裁边）：改成"登记条目先落计划名、B 认领时才按号命名"之后，
     这条判据的另一半（F 没有签时拿不到号）已由 `a2` 覆盖；这里只钉读侧那一条不变式：
-    读侧认的是签块 / 台账，不是文件名。夹具直接在册一行命题 + 落一份按号命名、
-    但没有签的稿（`publish_manuscript` 的既有入口），读数必须是「待签」。
+    读侧认的是可复算凭据（D268 批 2），不是文件名、也不是手稿里那块签块（块是视图）。
+    夹具直接在册一行命题 + 落一份按号命名、但没有签的稿（`publish_manuscript` 的
+    既有入口），读数必须是「待签」。
     """
     from conftest import seed_statement_row
 
@@ -357,17 +359,26 @@ def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
     assert waiting.get("state") == "waiting", waiting
     assert waiting.get("delivered") is False, waiting
 
-    # 盖一块真的签（sha 相符）⇒ 已签。这一步证明读侧认的是块，不是名字。
+    # 真发一份可复算签（同一份正文、同一个号），再把块盖上去当视图。
+    cred = issue_credential(store.root, proof_text=body, statement_id=SID,
+                            manuscript=rel, proof_no=1)
+    assert str(dict(cred.get("sign") or {}).get("ledger") or "").strip(), cred
     _write(store, rel, _sign(final, proof_sha=sha, manuscript_id=SID,
                              statement_id=SID))
     signed = f._read_sign(statement_id=SID, proof_text=body)["reading"]
     assert signed.get("state") == "signed", signed
 
-    # 把签块删掉：名字仍然是 `f-proof-<号>.md`，读数必须回到「待签」。
+    # 删掉签块：名字仍是 `f-proof-<号>.md`，凭据还在 ⇒ 仍是已签（块只是视图）。
     stripped = "\n".join(
         line for line in _read(store, rel).replace("\r\n", "\n").split("\n")
         if not line.strip().startswith(VS.SIGN_MARK))
     _write(store, rel, stripped)
+    still = f._read_sign(statement_id=SID, proof_text=body)["reading"]
+    assert still.get("state") == "signed", still
+
+    # 删掉凭据：名字没变、块也不在了 ⇒ 必须回到「待签」。
+    # 这证明读侧认的是签文件（按正文 sha），不是文件名。
+    VS.sign_path(store.root, sha).unlink()
     back = f._read_sign(statement_id=SID, proof_text=body)["reading"]
     assert back.get("state") == "waiting", back
     assert back.get("delivered") is False, back

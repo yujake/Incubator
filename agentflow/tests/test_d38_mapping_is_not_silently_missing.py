@@ -212,21 +212,40 @@ def test_1c_putting_the_old_cell_grouping_back_turns_the_blocker_red(
 # ============================================================ ② 表在且三格齐 => 放行
 
 
+def _sign_statements_with_credentials(root: pathlib.Path) -> int:
+    """给每条非概念命题发一份可复算签（D268 批 2：签只认 `out/vsigns/<sha>.json`）。
+
+    三票只在台账里 = `unissued`（够票、没发签）⇒ 收工门的 `statements_unsigned`
+    仍算欠签。这一份夹具要的"门是绿的"必须按新口径造全：同一份正文、同一个号。
+    """
+    from _credential_fixture import issue_credential
+
+    store = Store(root)
+    signed = 0
+    for row in store.rows("statements"):
+        if str(row.get("kind") or "") == "concept":
+            continue
+        issue_credential(root, proof_text=str(row.get("proof_text") or ""),
+                         statement_id=str(row.get("stmt_id") or ""))
+        signed += 1
+    return signed
+
+
 def _numeric_workspace_with_document(tmp_path: pathlib.Path) -> pathlib.Path:
     """一个三格齐的合规论文包（数值实验定理那一行：file / numeric_evidence / exhaustion_note）。
 
     行与正文的夹具直接取 `test_numeric_theorem_writing_spec` 的那一份（同一个仓库里
     只留一份"合规数值实验定理"的形状，不在这里抄第二份）。
     """
-    from conftest import sign_all_statements_for_the_gate
     from test_numeric_theorem_writing_spec import _row as numeric_row
     from test_numeric_theorem_writing_spec import _workspace as numeric_workspace
 
     root = numeric_workspace(pathlib.Path(tmp_path) / "ws", rows=[numeric_row()])
     # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
     # 拦门读数 `statements_unsigned`。这个夹具断言"门是绿的"，所以台账里那条定理
-    # 必须真有 V 签（连续 3 次干净「成立」）—— 断言一个字没改，只是把"绿"造全。
-    sign_all_statements_for_the_gate(root)
+    # 必须真有 V 签 —— 断言一个字没改，只是把"绿"按 D268 批 2 的口径造全
+    # （可复算凭据，不只是台账里的三票）。
+    _sign_statements_with_credentials(root)
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     # 封一次：paper 那一格要的是"这份 PDF 是盘上这份 tex 编的"。

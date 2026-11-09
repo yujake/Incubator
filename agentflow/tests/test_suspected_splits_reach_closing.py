@@ -43,6 +43,7 @@ from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 from _proof_manuscript_fixture import carry_proof_manuscript
+from _credential_fixture import issue_credential
 
 #: 同一命题的两种写法：确定性键相同（"设/假设"、"是/为"、"；则/，于是" 都被规范化掉）。
 NO_PROOF_A = "设 G 是 3-正则群；则弦长函数不是常值。"
@@ -54,8 +55,6 @@ MORPH_A = "设 G 是 3-正则群；则弦长函数不是常值。"
 MORPH_B = "设 G 是 3-正则群；则弦长函数不是常数值。"
 
 PROOF = "证明：由定义直接计算每个顶点的邻域大小，弦长只依赖邻域结构。"
-
-_OK = {"verdict": "成立", "findings": []}
 
 
 def _own(full: str) -> dict:
@@ -80,11 +79,8 @@ def _closing(st: Store):
 
 
 def _sign(st: Store, stmt_id: str, text: str) -> None:
-    """把一条命题的 canonical 证明签住（第 3 位要连续 3 次「成立」）。"""
-    for _ in range(3):
-        VR.record_verification(st.root, statement_id=stmt_id, proof_text=text,
-                               verdict=dict(_OK), verifier="agent-V", store=st,
-                               proof_no=1, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    """把一条命题的 canonical 证明签住（D268 批 2：发可复算凭据，不只是三票）。"""
+    issue_credential(st.root, proof_text=text, statement_id=stmt_id, proof_no=1)
 
 
 def _split_without_proofs(base: pathlib.Path) -> Store:
@@ -185,15 +181,19 @@ def test_d_the_reading_does_not_block_the_gate(tmp_path: pathlib.Path) -> None:
     """d：疑似拆分存在时收工门仍可 pass（这条读数是读数，不是门）。"""
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
-    for full in (MORPH_A, MORPH_B):
+    # 两条命题的证明正文必须是两份不同的字节：D268 批 2 的签按正文 sha 一稿一签，
+    # 同一份正文不可能同时属于两个号（第二份会被读成 `borrowed` = 借光，不是签）。
+    proofs = (PROOF, PROOF + "\n（第二份：同一命题的另一条写法，正文不同。）")
+    for full, proof in zip((MORPH_A, MORPH_B), proofs):
         got = sec.record_statement(
-            carry_proof_manuscript(st.root, {**_own(full), "proof_text": PROOF}),
+            carry_proof_manuscript(st.root, {**_own(full), "proof_text": proof}),
             role="B")
         assert got.get("created") is True, got
     rows = _rows(st)
     assert len(rows) == 2, rows
-    for row in rows:
-        _sign(st, str(row["stmt_id"]), PROOF)
+    by_full = {str(row.get("statement_full") or ""): row for row in rows}
+    for full, proof in zip((MORPH_A, MORPH_B), proofs):
+        _sign(st, str(by_full[full]["stmt_id"]), proof)
     rep = _closing(st)
     reading = dict(rep.readings.get("suspected_splits") or {})
     assert int(reading.get("count") or 0) == 1, reading

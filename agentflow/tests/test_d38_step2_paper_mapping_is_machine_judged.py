@@ -73,8 +73,9 @@ def _numeric_paper(tmp_path: pathlib.Path, *, patch: dict | None = None) -> path
     有行 = `doc.build_document` 成功过）。封 PDF 必须在写表之后：附录那一行
     `\\input{mapping-appendix}` 会让 `main.tex` 变长，先封后写 = 回执过期。
     """
-    from conftest import sign_all_statements_for_the_gate
     from test_d38_mapping_is_not_silently_missing import _document_row
+    from test_d38_mapping_is_not_silently_missing import \
+        _sign_statements_with_credentials
     from test_numeric_theorem_writing_spec import _row as numeric_row
     from test_numeric_theorem_writing_spec import _workspace as numeric_workspace
 
@@ -82,8 +83,9 @@ def _numeric_paper(tmp_path: pathlib.Path, *, patch: dict | None = None) -> path
     root = numeric_workspace(pathlib.Path(tmp_path) / "ws", rows=[row])
     # 2026-11-01（业主裁定「拿不到V签就得一直改，或者放弃原命题」）：收工门多了一格
     # 拦门读数 `statements_unsigned`。这一份夹具断言 `machine_pass` 仍为真，所以台账里
-    # 那条定理必须真有 V 签（连续 3 次干净「成立」）—— 断言一个字没改，只是把"绿"造全。
-    sign_all_statements_for_the_gate(root)
+    # 那条定理必须真有 V 签 —— 断言一个字没改，只是把"绿"按 D268 批 2 的口径造全
+    # （可复算凭据，不只是台账里的三票）。
+    _sign_statements_with_credentials(root)
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     tex = root / "out" / "paper" / PC.TEX_NAME
@@ -96,13 +98,35 @@ def _numeric_paper(tmp_path: pathlib.Path, *, patch: dict | None = None) -> path
     return root
 
 
+def _file_the_sign(root: pathlib.Path) -> None:
+    """把已发的签收录进那一行（`signed_pending_filing` 是"稿上签了、册里没收录"）。
+
+    收工门对那一档只出 warning、不拦门；但这一条判据要的是"缺一行不许让老工作区
+    多出任何 finding"，所以前提得是"签已被 B 收录"（第 3 位为真）。
+    """
+    from agentflow import verifications as _VR
+
+    store = Store(root)
+    for row in store.rows("statements"):
+        if str(row.get("kind") or "") == "concept":
+            continue
+        sid = str(row.get("stmt_id") or "")
+        ledger, _bad = _VR.list_verifications(str(root), statement_id=sid, limit=None)
+        if not ledger:
+            continue
+        _VR.sign_statement(store, row=dict(ledger[-1]),
+                           proof_text=str(row.get("proof_text") or ""),
+                           proof_no=1, append_ledger=False)
+
+
 def _ledger_workspace(tmp_path: pathlib.Path) -> pathlib.Path:
     """只有台账的工作区（有命题、已成稿，论文包整个不存在）。
 
     形态与第一步那两趟真机一致（`cube-ws` / `r34c`）：`out/paper` 里没有 MAPPING.json。
     """
-    from conftest import sign_for_the_gate
     from test_d38_mapping_is_not_silently_missing import _document_row, _statement_row
+    from test_d38_mapping_is_not_silently_missing import \
+        _sign_statements_with_credentials
 
     root = pathlib.Path(tmp_path) / "ws"
     store = Store(root)
@@ -112,9 +136,10 @@ def _ledger_workspace(tmp_path: pathlib.Path) -> pathlib.Path:
           {"schema_version": 2, "rows": [_stmt]})
     # 2026-11-01：收工门多了一格拦门读数 `statements_unsigned`（业主：「拿不到V签就得
     # 一直改，或者放弃原命题」）。这一份夹具断言"缺那一行不许让老工作区判红"，所以台账里
-    # 那条命题必须真有 V 签 —— 断言一个字没改，只是把"不红"的前提造全。
-    sign_for_the_gate(root, statement_id=str(_stmt["stmt_id"]),
-                      proof_text=str(_stmt["proof_text"]))
+    # 那条命题必须真有 V 签 —— 断言一个字没改，只是把"不红"的前提按 D268 批 2 的口径
+    # 造全（可复算凭据，不只是台账里的三票）。
+    _sign_statements_with_credentials(root)
+    _file_the_sign(root)
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2, "rows": [_document_row()]})
     return root
