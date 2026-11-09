@@ -1536,7 +1536,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     # ---- D3 批 2：类别三格随判定一起落盘（不新增磁盘字段，仍在这一格里） --------
     #
     # 为什么只挑这三格白名单、不做整格透传：调用方给的判定里还有 `material` / `cost` /
-    # `basis` 这些运行期大块（透传会把整份材料抄进台账行）。D3 要落的是**分类结果**：
+    # `basis` 这些运行期大块（透传会把整份材料抄进台账行）。D3 要落的是分类结果：
     # `fault_kind`（可空）/ `fault_cause`（可空）/ `report_gap`（可空）。写侧（V 的
     # 写行处）每一行都给，于是新行的键一定在 —— 键在不在是 `fault_kind_of` 分
     # "新行 / 老行"的唯一依据。调用方没给时（老测试夹具 / 非 V 的写口）不写，
@@ -2391,7 +2391,7 @@ def says_only_a_report_gap(text: str) -> bool:
 
     为什么要有这一格公开的名字：业主 2026-11-09 裁定 ① 把这一档从 fault 判据里移出，
     而判据本体只有 :data:`_REPORT_GAP_MARKERS` 一处（98b 的 4 条逐字命中）。写侧
-    （`agent_v/core.py` 的写行处）要用同一条判据做归类，**不许另抄一张关键词表** ——
+    （`agent_v/core.py` 的写行处）要用同一条判据做归类，不许另抄一张关键词表 ——
     两处各写一份，下一次改判据就会只改一处。读侧仍走
     :func:`fault_kind_of` 的 `legacy_shape` 那一支，两处共用这同一个谓词。
     """
@@ -2667,6 +2667,103 @@ def is_a_vote(row: Mapping[str, Any]) -> bool:
     别处不许再写一遍 `secretary_judge.checked` / `ledger_axis` / `row_signable` 的组合。
     """
     return bool(vote_reading(row)["vote"])
+
+
+def report_fix_list(root: str | Path, *, statement_id: str,
+                    proof_no: int = 1) -> dict[str, Any]:
+    """这一条证明上「报告层面的待改项」（纯读，零模型，不写盘；D3 §4.5）。
+
+    → `{checked, items: [{kind, cause, verification_id, at, sha, addressee,
+                           quote, requires_rewrite, attempts, last_at, why}], why}`
+
+    ## 收什么、不收什么
+
+    - 收：`fault_kind ∈ {procedural, style}` 的行 —— 程序性（V 自己说没逐行验证 /
+      判不了）与文风（依据落在不归 V 判的面上）。这两类不是对证明的判断，待改的
+      是 V 的报告，不是这份正文；
+    - 不收：`math` / `contract` —— 那是"缺陷清单"，由 findings / 洗过的转达承载
+      （业主 2026-11-09 裁定 ④：「若是 math/contract 的项，不进这张表」）；
+    - 不收：`report_gap` 那一档（`kind=""`）—— 它已经是 clean 行上的质量读数，
+      不是待改项（业主裁定 ①：它不是缺陷）。
+
+    ## `attempts` 与 `last_at`（裁定 ④ 的落点）
+
+    `attempts` = 同一份 sha 上第几趟程序性/文风退回（按台账行序数，1,2,3…）。
+    不设趟数上限：反复重送是可见的（M/人据此决定要不要介入），而不是被一个阈值
+    静默熔断。`last_at` 是同一份 sha 上最后一趟的时刻（每一条都带同一个值，
+    读的人不必自己再扫一遍）。
+
+    ## 三态
+
+    台账读不成 / 命题号不合法 ⇒ `checked=False` + `why`（"没查成"不是"没有待改项"）。
+    没有任何待改项 ⇒ `checked=True, items=[]`：那是一条有内容的读数。
+
+    ## 谁读得到
+
+    1. `vreceipts.publish_row` 的回执正文（送审者读到"不用改稿、可原样再送"）；
+    2. M 的收工读数（"V 的报告连续 N 趟不合格"）；
+    3. 召唤者下一次派 V 时写进 `task` 散文 —— 框架不自动塞进 V 的审阅材料
+       （否则"3 次独立判定"会变成"看着上一轮的被点名处补作业"）。
+    """
+    sid = str(statement_id or "").strip()
+    out: dict[str, Any] = {"checked": False, "items": [], "why": ""}
+    if not sid:
+        out["why"] = "没有命题号 ⇒ 读不到台账（不是「没有待改项」）"
+        return out
+    try:
+        no = int(_read_proof_no(proof_no)) or 1
+    except (TypeError, ValueError):
+        no = 1
+    try:
+        rows, bad = list_verifications(root, statement_id=sid, limit=None)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有待改项"
+        out["why"] = f"台账读不成（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    if bad:
+        out["why"] = f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 有读不出来的行（{bad[:3]}）⇒ 没查成"
+        return out
+    out["checked"] = True
+    attempts: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        if proof_no_of(row) != no:
+            continue
+        reading = fault_kind_of(row)
+        kind = str(reading.get("kind") or "")
+        if kind not in ("procedural", "style"):
+            continue
+        sha = str(row.get("proof_sha256") or "")
+        attempts[sha] = attempts.get(sha, 0) + 1
+        got = row.get(SECRETARY_JUDGE_KEY)
+        quote = (str(got.get("reason") or "").strip()
+                 if isinstance(got, Mapping) else "")
+        items.append({
+            "kind": kind,
+            "cause": str(reading.get("cause") or ""),
+            "verification_id": str(row.get("verification_id") or ""),
+            "at": str(row.get("at") or ""),
+            "sha": sha,
+            #: 待改的是 V 的报告；板项收件人仍然是送审者（V 没有台账号）——
+            #: 这一格是"该谁看"，不是"投给谁"（红线见 `vreceipts._recipient_now`）。
+            "addressee": "V",
+            "quote": quote,
+            "requires_rewrite": False,
+            "attempts": attempts[sha],
+            "last_at": str(row.get("at") or ""),
+            "why": str(reading.get("why") or ""),
+        })
+    # `last_at`：同一 sha 上最后一趟的时刻（不是每一条各自那一刻）。
+    last: dict[str, str] = {}
+    for one in items:
+        last[str(one["sha"])] = str(one["at"] or "")
+    for one in items:
+        one["last_at"] = last.get(str(one["sha"]), str(one["at"] or ""))
+    out["items"] = items
+    out["why"] = (f"{proof_label(sid, no)} 上有 {len(items)} 条报告层面的待改项"
+                  if items else
+                  f"{proof_label(sid, no)} 上没有报告层面的待改项（查过了）")
+    return out
+
 
 
 def _hold_runs(

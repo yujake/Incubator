@@ -362,13 +362,28 @@ def merge_dependency_audit(verdict: Mapping[str, Any],
     return out
 
 
-def _rejection_stands(standing: Mapping[str, Any]) -> bool:
+def _rejection_stands(standing: Mapping[str, Any], *, fault_kind: str = "") -> bool:
     """这一份正文的台账读数是不是「已经被打回、还没改过字」（业主裁定 3 的准确含义）。
 
     业主逐字：「一次判有毛病时应该立即打回，不再起转，等下一次提交时重新从 0 转计数」。
     于是「打回」对同一份正文是终局：在 F 把正文改掉（sha 变了）之前，重送同一份
     不构成一次新的送审 —— 否则就是"再掷一次骰子"，而 `R-mk-infinite-94` 的 000034 正是
     这么签上的（v2 判 fault ⇒ 同一份正文重开一趟，v3–v5 三转 clean ⇒ 签块写 连续=3/3）。
+
+    ## 2026-11-09（D3，业主裁定 ③④）：程序性 / 文风那一档不锁 sha
+
+    打回站住的语义是"这份正文被认定有缺陷、改好再来"。程序性 fault 的认定是
+    "这份报告没写清"（V 自己说没逐行验证 / 依据落在不归 V 判的面上），不是正文有
+    缺陷。对同一份正文锁死，等于用"报告措辞"惩罚"证明"。所以：
+
+    - `fault_kind in ("procedural", "style")` ⇒ 同一 sha 可以再判（新的一趟
+      `review_call` 从 0 起算，三转 clean 照发签）；
+    - 其余（math / contract / 空 = 旧行 / 不知道）一律照旧锁。这是刻意的 fail-closed：
+      只有"改好之后新写下的行、且显式标成 procedural/style"才不锁（D3 §5.3）。
+
+    `fault_kind` 由调用方从台账上那一行读（:func:`_rejection_fault_kind`），且只认
+    `fault_kind_of(row)["source"] == "row"` —— 老行（`legacy_*`）与"缺分类的新行"
+    都读成空串 ⇒ 继续锁。
 
     两档都算打回，与 F 侧 `agent_f.vsign.delivery_reading` 同一个谓词（不许两处各判一套）：
 
@@ -380,8 +395,123 @@ def _rejection_stands(standing: Mapping[str, Any]) -> bool:
     """
     state = str(standing.get("state") or "")
     if state == "rejected":
-        return True
+        return fault_kind not in ("procedural", "style")
     return state == "holding" and bool(standing.get("secretary_fault"))
+
+
+def _rejection_fault_kind(root: str | Path, standing: Mapping[str, Any]) -> str:
+    """打回那一行的 `fault_kind`（只认 `source == "row"` 的新行）。
+
+    为什么要从台账再读一次那一行：`verifications.review_standing` 只回编号（它的
+    `verification_id` 正是打回那一行），不回类别；而 D3 批 2 明确不碰 `review_standing`
+    与 `_hold_runs`（那两处是 D268 批 2 的共享面）。所以"锁不锁 sha"的判据落在本侧：
+    按 `review_standing` 给出的定位把那一行读回来，经 `verifications.fault_kind_of` 一处
+    分类，再看 `source`。
+
+    - `source == "row"` ⇒ 这一行自己写了类别（新行），返回它；
+    - 其余（`legacy_*` / `guard:*` / ""）⇒ 空串：旧行默认不解锁（业主裁定 ⑤）、
+      被护栏折回 math 的行也不解锁。
+
+    任何读盘失败都返回空串（= 继续锁）：这是 fail-closed，不是"查过了没问题"。
+    """
+    if str(standing.get("state") or "") != "rejected":
+        return ""
+    rel = str(standing.get("ledger") or "")
+    vid = str(standing.get("verification_id") or "")
+    if not rel or not vid:
+        return ""
+    try:
+        from .. import jsonlfile as _JF
+
+        rows, _bad = _JF.read_jsonl(Path(root) / rel)
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 继续锁（不是"解锁"）
+        return ""
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("verification_id") or "") != vid:
+            continue
+        reading = VR.fault_kind_of(row)
+        if str(reading.get("source") or "") != "row":
+            return ""
+        return str(reading.get("kind") or "")
+    return ""
+
+
+def _verdict_has_math_evidence(verdict: Mapping[str, Any]) -> bool:
+    """这一转的结论上有没有数学证据：`defect_step` 非空，或任一 `level=error` 的 finding。"""
+    if verdict.get("defect_step") is not None:
+        return True
+    return any(str(one.get("level") or "") == "error"
+               for one in (verdict.get("findings") or [])
+               if isinstance(one, Mapping))
+
+
+def _write_fault_cell(judgment: Mapping[str, Any],
+                      verdict: Mapping[str, Any]) -> dict[str, Any]:
+    """写行前把 `fault_kind` / `fault_cause` / `report_gap` 归一（D3 批 2 的写侧分类）。
+
+    ## 为什么归一必须在这里（而不是只在秘书那一侧）
+
+    秘书那一问读的是 V 的回复（`secretary.judge_v_reply`）；写行处才拿得到这一转的
+    结论（`findings` / `defect_step`）与"这一行到底是不是一条 fault"。两件事只有在这里
+    能一起判：
+
+    1. 业主裁定 ① 的落点：`decision=有缺陷要指出` 而 fault 的全部内容只是
+       「没记录反例尝试」⇒ 它不是缺陷 ⇒ 这一行改成 `axis="clean"`、`cause="report_gap"`、
+       `kind=""`。为什么改轴：`is_a_vote` 只认 clean 轴；不改轴，裁定 ① 想让它算的那一票
+       会被静默吞掉（98b 的 4 条正是这一档）。写侧护栏：只有 V 的结论词是「成立」、
+       且这一转没有数学证据（没有步号、没有 error finding）时才翻 —— 一条真数学
+       缺陷哪怕秘书的措辞像报告缺口，也不许被解锁。
+    2. 缺 kind 的新行按 math 收（D3 §5.3）：模型漏答 / 拼错 / 没给类别 ⇒
+       `kind="math"`（继续锁 sha）。契约：宁可多锁一条，不许静默解锁一条数学缺陷。
+    3. 写侧护栏：`procedural` / `style` 带着数学证据 ⇒ 强制折回 `math`
+       （只往更严的方向折；反方向永远不允许）。
+    4. 每一行都写：三个键一定在（值可为空串）。键在不在是"新行 / 老行"的唯一分界
+       （`verifications.fault_kind_of` 读它）；没写这一格的行会被当成老行，
+       走 `legacy_*` 的保守读法。
+
+    没判成（`checked=False` / 空轴）也照写三个空键：那一行的"没有类别"是明确写了的，
+    不是"老行没有这一格"。`"kind_override"` 是这一格的读数（`report_gap` /
+    `default_math` / `guard:carries_math_evidence`），只在被归一时出现。
+    """
+    out = dict(judgment)
+    reason = str(out.get("reason") or "")
+    gap = str(out.get("report_gap") or "").strip()
+    kind = str(out.get("fault_kind") or "").strip()
+    cause = str(out.get("fault_cause") or "").strip()
+    axis = str(out.get("axis") or "")
+    math_evidence = _verdict_has_math_evidence(verdict)
+    if (axis == "fault"
+            and str(VR.read_verdict(verdict)) == "成立"
+            and not math_evidence
+            and kind in ("", "procedural")
+            and (cause == "report_gap" or VR.says_only_a_report_gap(reason))):
+        out.update(axis="clean", fault_kind="", fault_cause="report_gap",
+                   report_gap=(gap or reason),
+                   kind_override="report_gap")
+        out["basis"] = list(out.get("basis") or []) + [
+            "业主 2026-11-09 裁定①：「没记录反例尝试」不是缺陷 ⇒ 这一行按 clean 收、"
+            "cause=report_gap（算 clean 的那一票、不锁 sha）"]
+        return out
+    if axis == "fault":
+        if kind not in VR.FAULT_KINDS:
+            kind = "math"
+            out["kind_override"] = "default_math"
+        if kind in ("procedural", "style") and math_evidence:
+            kind = "math"
+            out["kind_override"] = "guard:carries_math_evidence"
+            out["basis"] = list(out.get("basis") or []) + [
+                "写侧护栏：这一行被标成程序性/文风，但它带着数学证据"
+                "（defect_step 或 error finding）⇒ 强制折回 math（只往更严的方向折）"]
+        out.update(fault_kind=kind,
+                   fault_cause=("self_declared" if kind == "procedural" else ""),
+                   report_gap=gap)
+        return out
+    out.update(fault_kind="", fault_cause=("report_gap" if gap else ""),
+               report_gap=gap)
+    return out
+
 
 
 def _manuscript_digest(text: str) -> str:
@@ -1285,6 +1415,10 @@ class AgentV:
                     "source": "exhaustion_report",
                     "defect_step": _n_verdict.get("defect_step"),
                 }
+                # D3 批 2：穷举这一支的轴由机械会审给（不经秘书），但它同样"每一行都写"
+                # 四个类别格 —— 机械会审判 fault 时按 math 兜底（它是证明层面的缺陷）。
+                # 不写这一格的新行会被读成老行（`legacy_*`），读数口径就分家了。
+                _n_judge = _write_fault_cell(_n_judge, _n_verdict)
                 out["secretary_judge"] = dict(_n_judge)
                 try:
                     _row = VR.record_verification(
@@ -1479,7 +1613,11 @@ class AgentV:
         # 不出来）也不触发（那是"没查成"，不许折成"打回"）。
         standing = VR.review_standing(self.workspace_root, statement_id=sid,
                                       proof_text=text, proof_no=no)
-        if _rejection_stands(standing):
+        # D3 批 2：打回站住的判据按类别分叉 —— `procedural` / `style` 不锁 sha
+        # （同一份正文可以原样再送），其余照旧。类别只从台账上那一行读，且只认
+        # `source="row"` 的新行；旧行（`legacy_*`）默认不解锁（业主裁定 ⑤）。
+        _stands_kind = _rejection_fault_kind(self.workspace_root, standing)
+        if _rejection_stands(standing, fault_kind=_stands_kind):
             _obj_id = str(standing.get("verification_id") or "")
             _obj_ref = (f"{standing.get('ledger') or VR.VERIFICATIONS_DIR}#{_obj_id}"
                         if _obj_id else str(standing.get("ledger") or ""))
@@ -1489,6 +1627,8 @@ class AgentV:
                 "basis": [f"台账读数：{_obj_ref or '（没有定位）'}"],
                 #: 这一格不是秘书这一次判的，是台账上那一次打回的读数（读侧口径）。
                 "source": "ledger:rejected",
+                #: D3 批 2：这一行自己的类别格也照写（可空）—— 读侧不分"哪一支写的"。
+                "fault_kind": _stands_kind, "fault_cause": "", "report_gap": "",
             }
             out.update({
                 "checked": True,
@@ -1623,9 +1763,15 @@ class AgentV:
             # 任何别的转（fault / 没判成 / 引用挡签）一律归零。不是台账尾部跨历史的连续数
             # （那正是"跨两次送审累计"的后门），也不是轮号（那会把"清零后接着攒"读成够了）。
             streak = (streak + 1) if (axis == "clean" and VR.row_signable(once["row"])) else 0
+            #: D3 批 2：这一转的类别读数（台账那一行是正本，返回值只回放它）。
+            #: `kind=""` 有两种含义：clean 行（含 report_gap），或没判成 —— 两者由
+            #: `axis` 分开（`axis` 为空才是没判成）。四条后果都从这两格读得出。
+            _kind_reading = VR.fault_kind_of(once["row"])
             passes.append({
                 "pass": pass_no,
                 "axis": axis,
+                "fault_kind": str(_kind_reading.get("kind") or ""),
+                "fault_cause": str(_kind_reading.get("cause") or ""),
                 "decision": str(once["issuance"].get("decision") or ""),
                 "streak": streak,
                 "need": int(need),
@@ -1668,6 +1814,26 @@ class AgentV:
             # 送审的最后一转；连续数归零（`streak` 上面已经算了），而同一次送审绝不会
             # 再起第 4、5 转。下一次送审是一条新的 `review_call`，从 0 起数。
             if axis == "fault":
+                # ---- D3 批 2（业主裁定 ③④⑥）：按类别分叉终局 ---------------------
+                #
+                # 打回站住（terminal="rejected"）的语义是"这份正文被认定有缺陷、
+                # 改好再来"。程序性（V 自己说没逐行验证）/ 文风（依据落在不归 V 判的
+                # 面上）的认定是"这份报告没写清" ⇒ 当趟仍然提前停（再跑也到不了
+                # 门槛，只烧模型调用），但终局是 `terminal="report"`：
+                #   · 不锁 sha（`_rejection_stands` 按 kind 放行同一 sha 再送）；
+                #   · 不算票（这一行不是 clean，`is_a_vote` 为假）；
+                #   · 不洗稿、不递 F（见 `_review_pass` 的 C 段与回执那一侧）。
+                # 老板裁定 ③ 的读法逐字：「不当这一份正文的终局」——当趟可以提前停，
+                # 真正的重试 = 同 sha 新的一趟 `review_call`，从 0 起算。
+                _fault_kind = str(_kind_reading.get("kind") or "")
+                if _fault_kind in ("procedural", "style"):
+                    stopped = "report"
+                    passes[-1]["terminal"] = stopped
+                    stop_why = (
+                        f"秘书判 fault 但是 {_fault_kind}（报告/依据面，不是数学缺陷）："
+                        "这一趟无有效判定，不锁 sha、不洗稿、不递 F —— 同一份正文可以"
+                        "原样再送（新的一趟从 0 起算）")
+                    break
                 stopped = "rejected"
                 passes[-1]["terminal"] = stopped
                 stop_why = "秘书判 fault（有毛病）：这一转就是终局，立刻打回 F（不再起转）"
@@ -1803,6 +1969,16 @@ class AgentV:
         elif writeback:
             self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 的签没落成 —— "
                        f"{writeback.get('reason') or ''}")
+        # ---- D3 批 2：这一行的类别读数与"程序性/文风"那一条终局的口径 ----------
+        #
+        # 四个类别格在台账那一行上是正本（`secretary_judge`），这里只把同一份读数
+        # 回放到返回值顶层 —— 读侧不必再拆 cell、也不必猜"这一趟停在哪一档"。
+        _row_kind_reading = VR.fault_kind_of(row)
+        _row_kind = str(_row_kind_reading.get("kind") or "")
+        _row_cause = str(_row_kind_reading.get("cause") or "")
+        if stopped == "report":
+            self._emit(f"verify_proof({sid})：本轮无有效判定（{_row_kind or _row_cause}）"
+                       "—— 这一份正文没有被指出数学缺陷，可原样再送同一 sha")
         out.update({
             "checked": True,
             "verification_id": row["verification_id"],
@@ -1828,6 +2004,9 @@ class AgentV:
                          if _manuscript_signed else "（不签：签没落成）")
                       + ("；秘书判定没查成（这一趟没有判断面）⇒ 这一签不发"
                          if stopped == "unjudged" else "")
+                      + (f"；本轮无有效判定（{_row_kind or _row_cause}）："
+                         "这一份正文没有被指出数学缺陷，可原样再送同一 sha"
+                         "（不锁 sha、不必改稿换 sha）" if stopped == "report" else "")
                       + (f"；引用核实挡下 {len(gate.get('blocking') or [])} 条"
                          if gate.get("blocking") else ""),
             # 引用核实那一句原话（挡签时它点名哪一条、差在哪；只有弱形式时它点名那一条）。
@@ -1924,12 +2103,23 @@ class AgentV:
             _sec_step = judgment.get("defect_step")
             if isinstance(_sec_step, int) and not isinstance(_sec_step, bool):
                 verdict = dict(verdict, defect_step=_sec_step)
+        # ---- D3 批 2：写行前的分类归一（四个类别格 + 业主裁定 ① 的落点） ----------
+        #
+        # 必须在 p247 的步号填充之后：秘书定出的那一步也是"数学证据"（护栏要看得见它）。
+        # 归一之后 `judgment["axis"]` 可能从 fault 翻成 clean（只缺反例尝试记录那一档）——
+        # 那是裁定 ① 要求的，不是"放宽"：翻的条件是 V 的结论词写「成立」且这一转没有
+        # 任何数学证据（判据见 `_write_fault_cell`）。
+        judgment = _write_fault_cell(judgment, verdict)
         # C 段：秘书判"有缺陷要指出"⇒ 立刻洗一遍，把洗过的文本随台账那一行落盘。
         # 为什么在落台账之前洗：台账是追加式文件，行写下去就不能改；洗过的转达文本
         # 必须与那一签一起落（`v_rejections_digest` 从那一格读给 F）。
         # 洗不出来 ⇒ 这一格不写（"没有这一格" = 没洗过，不许写空文本冒充洗过）。
+        #
+        # D3 批 2：只有 math / contract 洗。程序性 / 文风不是对证明的缺陷，洗成
+        # "请补哪一步"会把它冒充成一条要 F 改的意见（业主裁定 ⑥：那一类不要求作者改稿）。
         wash: dict[str, Any] = {}
-        if str(judgment.get("axis") or "") == "fault":
+        if (str(judgment.get("axis") or "") == "fault"
+                and str(judgment.get("fault_kind") or "") not in ("procedural", "style")):
             wash = self._wash_v_reply(reply, verdict, no, statement_id=sid)
         try:
             row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
@@ -2054,12 +2244,23 @@ class AgentV:
         from .. import secretary as _SEC
 
         axis = str(judgment.get("axis") or "")
-        # 这一转凭什么不发签：fault（秘书判有毛病）/ unjudged（秘书这一问没查成）。
-        # p247：不再有 `verdict` 那一档 —— V 的判词只是陈述，不发签的轴由秘书给。
-        if axis == "fault":
+        # ---- D3 批 2：不发签的第三种来路 ---------------------------------------
+        #
+        # `fault`（数学缺陷，打回）与 `unjudged`（没查成）之外，程序性 / 文风这一档
+        # 也是"这一趟不发签"，但它的语义完全不同：不是打回，正文没有被指出缺陷。
+        # 所以 `_terminal_reason` 要单独一档，`state` 也从台账的 `rejected` 改读成
+        # `retry_report`（D268 的状态枚举里那一格）—— 两个读数不许折平。
+        _kind_reading = VR.fault_kind_of(row) if row else {}
+        _fk = str(_kind_reading.get("kind") or "")
+        if axis == "fault" and _fk in ("procedural", "style"):
+            kind = "report"
+        elif axis == "fault":
             kind = "fault"
         else:
             kind = "unjudged"
+        _state = str(standing.get("state") or "")
+        if kind == "report" and _state == "rejected":
+            _state = "retry_report"
         return {
             "checked": bool(judgment.get("checked")),
             "issue": False, "issued": False, "landed": False,
@@ -2068,7 +2269,8 @@ class AgentV:
             "streak_ok": bool(streak >= need), "projected": streak,
             "same_sha": bool(str(standing.get("sha") or "")
                              and str(standing.get("sha")) == _PR.proof_sha(text)),
-            "state": str(standing.get("state") or ""),
+            "state": _state,
+            "fault_kind": _fk,
             "reason": self._terminal_reason(kind=kind, judgment=judgment, verdict=verdict),
             "basis": [f"秘书判定 checked={bool(judgment.get('checked'))} "
                       f"axis={axis or '（没有轴）'}",
@@ -2092,6 +2294,12 @@ class AgentV:
         if kind == "fault":
             return ("这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局："
                     "已按 fault 打回 F（错在第几步见洗过的转达与 findings）")
+        if kind == "report":
+            # D3 批 2（业主裁定 ③④⑥）：程序性 / 文风 —— 不是打回、不是没查成。
+            return ("这一转秘书判 fault 的是程序性/文风（报告面或依据面错位），"
+                    "不是数学缺陷 ⇒ 不发签；这一份正文没有被指出缺陷："
+                    "同一份正文可以原样再送（不锁 sha、不必改稿换 sha），"
+                    "这一趟只是没有有效判定。待改的是 V 的报告，不是这份证明。")
         return ("这一转秘书没判成（checked=False）⇒ 不发签；这是框架失败（没查成），"
                 "既不是「有毛病」，也不是「没问题」："
                 f"{str(judgment.get('reason') or '没有给理由')[:200]}")
@@ -2477,11 +2685,16 @@ class AgentV:
                 _sec_step = judgment.get("defect_step")
                 if isinstance(_sec_step, int) and not isinstance(_sec_step, bool):
                     verdict = dict(verdict, defect_step=_sec_step)
+            # D3 批 2：未在册这一支也把四个类别格写进 pending 行（"每一行都写"），
+            # 判据与在册那一支同一处（`_write_fault_cell`）。
+            judgment = _write_fault_cell(judgment, verdict)
             axis = str(judgment.get("axis") or "")
             word = VR.read_verdict(verdict)
             unresolved = int(verdict.get("unresolved_errors") or 0)
             judged.append({"pass": n, "verdict": verdict, "judgment": judgment})
             passes.append({"pass": n, "axis": axis, "verdict": word,
+                           "fault_kind": str(judgment.get("fault_kind") or ""),
+                           "fault_cause": str(judgment.get("fault_cause") or ""),
                            "unresolved_errors": unresolved,
                            "defect_step": verdict.get("defect_step"),
                            "terminal": ""})
@@ -2492,6 +2705,9 @@ class AgentV:
                 stopped = "unjudged"
                 passes[-1]["terminal"] = stopped
                 break
+            # 未在册这一支的终局仍只有 rejected：它的读者是 pending 台账 /
+            # `agent_f.vsign.delivery_reading`（D3 §8.3 批 3 的落点），本批只把类别格
+            # 写进行上；"程序性不锁 sha"的后果分叉在在册那一支落地（98b 是那一支）。
             if axis == "fault" or unresolved != 0:
                 stopped = "rejected"
                 passes[-1]["terminal"] = stopped

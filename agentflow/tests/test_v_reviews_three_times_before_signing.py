@@ -176,10 +176,20 @@ class _Seam:
         return sum(1 for note, _p, _s in self.seen if note.endswith(f":{kind}"))
 
 
-def _axis(answer: str) -> dict:
-    """秘书那一路的判定（`judge` 的返回形状：checked + decision）。"""
-    return {"checked": True, "decision": answer, "reason": "夹具：照规则判",
-            "basis": ["夹具"]}
+def _axis(answer: str, *, defect_kind: str = "", report_gap: str = "") -> dict:
+    """秘书那一路的判定（`judge` 的返回形状：checked + decision）。
+
+    D3 批 2：`judge()` 现在还会解析两格（`defect_kind` / `report_gap`）—— 夹具要用
+    "程序性"那一档就必须显式给；不给 = 分类没做 ⇒ 写行处按 `math` 兜底
+    （既有夹具因此逐字不变：它们测的是"缺 kind ⇒ 继续锁"那条保守默认）。
+    """
+    out = {"checked": True, "decision": answer, "reason": "夹具：照规则判",
+           "basis": ["夹具"]}
+    if defect_kind:
+        out["defect_kind"] = defect_kind
+    if report_gap:
+        out["report_gap"] = report_gap
+    return out
 
 
 def _secretary(st: Store, seam: _Seam) -> SEC.Secretary:
@@ -440,15 +450,16 @@ WASHED_VAGUE = "V 没有逐行验证：请把每一步的依据补齐之后再�
 
 
 def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
-    """第 2 转是含糊的一段话 ⇒ 判成 `fault`（不是 unsure、不是 clean）⇒ 立刻终止并打回。
+    """第 2 转是含糊的一段话 ⇒ 判成 `fault`（不是 unsure、不是 clean），类别是程序性。
 
     业主 2026-10-30 第三次裁定逐字：「不可能有判不了。你告诉我啥叫判不了？只要不是完全
     没毛病都叫有毛病」。三半都钉住：
 
     ① 题面与词表：只有两档，并逐字写着"判不了不是一种结论"（题面又给三档，模型迟早
        会把那一档答回来）；含糊的几种写法在题面里明文算「有缺陷要指出」；
-    ② 链路：含糊那一转秘书判 fault ⇒ 连判立刻停（2 行、不签）、"这一转就是终局：
-       已按 fault 打回 F"，洗过的那一份落进台账并经读侧交到 F（`via=secretary_fault`）；
+    ② 链路（D3 批 2 翻转，业主裁定 ③④⑥）：含糊那一转秘书判 fault、类别 `procedural`
+       ⇒ 连判立刻停（2 行、不签），但不是打回：`terminal="report"`、不洗稿、
+       不进 F 的改稿明细；这一份正文没有被指出数学缺陷 ⇒ 同一 sha 可原样再送。
     ③ 反真空：秘书若仍答历史那一格（"判不了"）⇒ 它不是一种结论：不采信、
        `checked=False`、没有轴（既不是 clean 也不是 fault）。
     """
@@ -462,12 +473,17 @@ def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
     for phrase in ("我没逐行验证", "拿不准", "只挑出一处小记号问题"):
         assert phrase in system, (phrase, system[-600:])
 
-    # ---- ② 链路：含糊那一转判成 fault ⇒ 立刻停、打回、洗过的意见到 F
+    # ---- ② 链路：含糊那一转判成 fault（procedural）⇒ 立刻停，但不是打回
+    #
+    # D3 批 2（业主裁定 ③④⑥）：`我没逐行验证` 是程序性（V 没有做出判定），不是数学缺陷。
+    # 这一转仍然停（再跑也到不了门槛），但终局是 `terminal="report"`：不锁 sha、不洗稿、
+    # 不递 F 的改稿清单；同一份正文可以原样再送（新的一趟从 0 起算）。
     st = _ws(tmp_path)
     _put(st)
     review = _ReviewSeam([CLEAN_REPLY, VAGUE_REPLY])
     sec_seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
-                                         _axis(SEC.V_REPLY_FAULT)],
+                                         _axis(SEC.V_REPLY_FAULT,
+                                               defect_kind="procedural")],
                       "wash_v_reply": [{"text": WASHED_VAGUE, "step": 2,
                                         "findings": [{"quote": "我没逐行验证",
                                                       "why": "没验证过就不是没问题"}]}]})
@@ -482,28 +498,34 @@ def test_t4_a_vague_reply_is_a_fault_not_an_unsure(tmp_path):
     assert [p["axis"] for p in passes] == ["clean", "fault"], passes
     # fault 清零：第 2 转的连续次数是 0（不是 1 —— 那会是"不清零"的旧 unsure 口径）。
     assert [p["streak"] for p in passes] == [1, 0], passes
-    assert passes[-1].get("terminal") == "rejected", passes
+    assert passes[-1].get("terminal") == "report", passes
+    assert passes[-1].get("fault_kind") == "procedural", passes
     rows = _rows(st)
     assert len(rows) == 2, f"台账应当 2 行，实得 {len(rows)}"
     assert rows[-1]["secretary_judge"]["axis"] == "fault", rows[-1]["secretary_judge"]
+    assert rows[-1]["secretary_judge"]["fault_kind"] == "procedural", rows[-1]
+    assert rows[-1]["secretary_judge"]["fault_cause"] == "self_declared", rows[-1]
     assert got["secretary_judge"]["axis"] == "fault", got["secretary_judge"]
+    assert got["secretary_judge"]["fault_kind"] == "procedural", got["secretary_judge"]
     assert got["signed_bit3"] is False and got["bits"].get("reviewed") is not True, got
     assert got["sign_issuance"]["issued"] is False, got["sign_issuance"]
-    assert "终局" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
+    assert "原样再送" in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
+    assert "终局" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
     assert "还差" not in got["sign_issuance"]["reason"], got["sign_issuance"]["reason"]
-    # fault 那一档要洗稿：洗过一次，洗过的文本随台账行落盘。
-    assert sec_seam.asked("wash_v_reply") == 1, sec_seam.seen
-    assert rows[-1]["washed_relay"]["text"] == WASHED_VAGUE, rows[-1].get("washed_relay")
+    # 程序性那一档不洗稿：洗过的文本一个字都不该出现在台账行上。
+    assert sec_seam.asked("wash_v_reply") == 0, sec_seam.seen
+    assert "washed_relay" not in rows[-1], rows[-1]
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
     # 反真空：新写的台账行里没有任何一格写着 unsure（新判定不再产生它）。
     assert all("unsure" not in json.dumps(r, ensure_ascii=False) for r in rows), rows
 
-    # 读侧：走的就是 fault 那一档（洗过的转达），不是另造一档。
+    # 读侧：程序性不进 F 的改稿明细（它不是对证明的判断）；但也不许静默消失 ——
+    # 读数里点名"另 N 条只是报告层面、可原样再送"。
     text, details, problems = AL.v_rejections_digest(st.root, [_stmt_row(st)])
     assert problems == [], problems
-    assert len(details) == 1, (text[:400], details)
-    assert details[0]["via"] == "secretary_fault", details[0]
-    assert details[0]["washed"] == WASHED_VAGUE, details[0]
+    assert details == [], (text[:400], details)
+    assert "可原样再送" in text, text
+    assert "报告层面" in text, text
 
     # ---- ③ 历史那一格不再是一种结论：秘书答它 ⇒ 不采信（没有轴、checked=False）
     st2 = _ws(tmp_path / "legacy-answer")

@@ -334,7 +334,7 @@ V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT)
 #: "拿不准"落在 `V_REPLY_FAULT` 那一格（业主逐字：只要不是完全没毛病都叫有毛病）。
 V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
 
-#: `v_reply_defect` 的第三格：**缺陷类别**（D3，业主 2026-11-09 裁定 ② 的方案 A）。
+#: `v_reply_defect` 的第三格：缺陷类别（D3，业主 2026-11-09 裁定 ② 的方案 A）。
 #:
 #: 轴仍然只有 `clean` / `fault` 两档（`V_REPLY_AXIS` 不动）；这一格回答"判 fault 时，
 #: fault 的内容是哪一类" —— 词表本体只有一处（`verifications.FAULT_KINDS`），这里不抄。
@@ -343,7 +343,7 @@ V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
 V_REPLY_DEFECT_KIND_FIELD = "defect_kind"
 
 #: 秘书这一问的"报告质量读数"那一格（D3，业主裁定 ①）：判「没问题」时可以顺带记一句
-#: "这份报告缺了什么记录"（例：没写反例尝试的位置）。它**不是**判据、不进 fault 轴，
+#: "这份报告缺了什么记录"（例：没写反例尝试的位置）。它不是判据、不进 fault 轴，
 #: 也不挡签；写侧把它原样落进 `secretary_judge.report_gap`，读侧只作质量读数。
 V_REPLY_REPORT_GAP_FIELD = "report_gap"
 
@@ -352,7 +352,7 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
                           report_gap: Any = "", reason: Any = "") -> dict[str, Any]:
     """把 `v_reply_defect` 那一问的答案读成 `(axis, fault_kind, fault_cause, report_gap)`。
 
-    这是 D3 批 2 的**写侧分类第一半**（纯函数，零 IO、不碰模型）：秘书那一问的
+    这是 D3 批 2 的写侧分类第一半（纯函数，零 IO、不碰模型）：秘书那一问的
     `decision` / `defect_kind` / `report_gap` 三格 + 它自己的 `reason`，在这里翻译成
     台账 `secretary_judge` 格里要落的那几个键。第二半（写行处的护栏与兜底）在
     `agent_v/core.py` 的 `_write_fault_cell`：那里才拿得到 findings / defect_step。
@@ -363,7 +363,7 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
        结论（p247 / 业主 2026-10-30），四个类别格全部留空，由调用方按"没查成"处置。
     2. `decision=没问题` ⇒ `axis="clean"`、`kind=""`；`report_gap` 非空时
        `cause="report_gap"`（报告质量读数，不影响投票）。模型若同时给了 `defect_kind`
-       ⇒ **不采信**（clean 行带 kind 是自相矛盾行；`is_a_vote` 会 fail-closed 把它吞掉，
+       ⇒ 不采信（clean 行带 kind 是自相矛盾行；`is_a_vote` 会 fail-closed 把它吞掉，
        所以归一必须在写侧做 —— D3 §5.3）。
     3. `decision=有缺陷要指出` ⇒ `axis="fault"`，`kind` 只认
        `verifications.FAULT_KINDS` 里的四类；不认识的写法一律留空（写行处按 `math`
@@ -375,7 +375,7 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     5. `kind="procedural"` ⇒ `cause="self_declared"`（V 自己说没逐行验证）；
        其余类别 `cause=""`。
 
-    返回键固定四个，**每一行都写**（D3 批 2 的硬要求）：`fault_kind` 可以为空串、
+    返回键固定四个，每一行都写（D3 批 2 的硬要求）：`fault_kind` 可以为空串、
     `fault_cause` 可以为空串，但键必须在 —— 键在不在是"新行 / 老行"的唯一分界
     （`verifications.fault_kind_of` 读的就是它）。
     """
@@ -3344,7 +3344,7 @@ class Secretary:
             #
             # `defect_kind`：判 fault 时 fault 的内容是哪一类；`report_gap`：判
             # 「没问题」时那份报告缺了什么记录（裁定 ①：它不是判据）。两格都只做
-            # **形状归一**（字符串、截断），语义归类在 `v_reply_fault_reading` 一处。
+            # 形状归一（字符串、截断），语义归类在 `v_reply_fault_reading` 一处。
             out["defect_kind"] = str(data.get("defect_kind") or "").strip()[:40]
             out["report_gap"] = str(data.get("report_gap") or "").strip()[:500]
         if kind == "proposition_identity":
@@ -4071,7 +4071,7 @@ class Secretary:
             "unwired": bool(self.seam is None or not self.enable_model),
             "reason": "", "basis": [], "refused": "", "cost": {},
             "verdict": str(verdict or ""), "defect_step": defect_step,
-            #: D3 批 2：这四个键**每一行都写**（值可以为空串）。键在不在是"新行 / 老行"
+            #: D3 批 2：这四个键每一行都写（值可以为空串）。键在不在是"新行 / 老行"
             #: 的唯一分界（`verifications.fault_kind_of` 读的就是它）；没判成时它们也
             #: 在，值为空 —— "没有这一格"只属于这批改动之前写下的老行。
             "fault_kind": "", "fault_cause": "", "report_gap": "",

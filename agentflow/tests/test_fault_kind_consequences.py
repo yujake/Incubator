@@ -22,8 +22,18 @@ from typing import Any
 
 import pytest
 
+from agentflow import conductor as CND
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
+from agentflow import vreceipts as VRC
+from agentflow.agent_v import AgentV
+from agentflow.agent_v import core as AG
+
+#: 与 `test_v_reviews_three_times_before_signing.py` 同一套夹具（V 的审阅缝 + 秘书缝）：
+#: 它们证明的是"每一问落在哪个分支、每一类拿到哪一套后果"，真模型一次都不调。
+#: 用模块名取 `T3.SID` / `T3.PROOF` / `T3.REL`：本文件自己那组纯函数夹具叫 `SID` / `PROOF`
+#: （两者是不同的命题号，混用会让"台账落在哪个工作区"变得看不出来）。
+import test_v_reviews_three_times_before_signing as T3  # noqa: E402
 
 SID = "000030"
 PROOF = "1. 设 x>0。\n2. 由定义直接得到结论。"
@@ -79,6 +89,18 @@ def _row(*, axis: str = "fault", kind: str | None = "procedural",
 
 def _error(step: int) -> dict[str, Any]:
     return {"detail": "第 %d 步缺依据" % step, "level": "error", "step": step}
+
+
+def _write_ledger(root: Path, rows: list[dict[str, Any]]) -> None:
+    """把夹具行按命题号落成 `<root>/verifications/<sid>.jsonl`（只用于 tmp_path）。"""
+    ledger = root / "verifications"
+    ledger.mkdir(parents=True, exist_ok=True)
+    by_statement: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_statement.setdefault(str(row["statement_id"]), []).append(row)
+    for statement_id, group in by_statement.items():
+        text = "\n".join(json.dumps(row, ensure_ascii=False) for row in group) + "\n"
+        (ledger / f"{statement_id}.jsonl").write_text(text, encoding="utf-8")
 
 
 # ============================================================ ① 写侧分类
@@ -171,3 +193,245 @@ def test_the_ledger_writer_lands_the_three_classification_cells(tmp_path: Path) 
                                                   "reason": _reason_98b_gap()})
     assert "fault_kind" not in old[VR.SECRETARY_JUDGE_KEY]
     assert VR.fault_kind_of(old)["source"] == "legacy_shape"
+
+
+# ============================================================ ② 后果分叉（16 格矩阵）
+
+#: V 的回复：逐行核对、没写反例尝试的位置（98b 那 4 条的形状）。
+GAP_CLEAN_REPLY = json.dumps(
+    {"verdict": "成立", "why": "逐行核对了假设关与定理链，未发现缺陷。", "findings": []},
+    ensure_ascii=False)
+
+WASHED = {"text": "第 2 步的记号没有定义：请补上记号说明之后再送 V 重签。", "step": 2,
+          "findings": [{"quote": "第 2 步的记号没有定义", "why": "记号没定义就没法核这一步"}]}
+
+
+def _run_fault(tmp_path: Path, kind: str, *, st: Any = None,
+               parent: str = "") -> dict[str, Any]:
+    """同一份夹具、同一条回复，只把秘书给的 `defect_kind` 换掉 —— 三套后果逐格对拍。
+
+    `parent` 给了（一条 `tasks` 里存在的送审者）⇒ 用真实送审挂点，回执有收件人；
+    不给 ⇒ 用 `T3._as_submitter()`（回执只会落 outbox 意图，不开板项）。
+    """
+    st = st or T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([T3.CLEAN_REPLY, T3.FAULT_REPLY])
+    seam = T3._Seam({
+        "v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_FAULT, defect_kind=kind)],
+        "wash_v_reply": [WASHED]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    ctx = (CND.calling_as("t-v-receipt", "V", parent_task_id=parent, parent_role="F")
+           if parent else T3._as_submitter())
+    with ctx:
+        got = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    rows, bad = VR.list_verifications(st.root, statement_id=T3.SID, limit=None)
+    assert not bad, bad
+    standing = VR.review_standing(st.root, statement_id=T3.SID,
+                                  proof_text=T3.PROOF, proof_no=1)
+    last = dict(rows[-1])
+    kind_read = VR.fault_kind_of(last)
+    return {
+        "st": st, "got": got, "rows": [dict(r) for r in rows], "row": last,
+        "standing": standing, "review": review, "seam": seam,
+        "vote": VR.is_a_vote(last), "reading": VR.vote_reading(last),
+        "kind": str(kind_read.get("kind") or ""),
+        "source": str(kind_read.get("source") or ""),
+        "lock_kind": AG._rejection_fault_kind(st.root, standing),
+        "locked": AG._rejection_stands(standing,
+                                       fault_kind=AG._rejection_fault_kind(st.root, standing)),
+        "terminal": str((got.get("review_passes") or [{}])[-1].get("terminal") or ""),
+        "issued": bool(got.get("sign_issuance", {}).get("issued")),
+    }
+
+
+def test_the_matrix_math_counts_no_vote_locks_the_sha_and_rejects(tmp_path: Path) -> None:
+    """`math` 那一条：不算票（axis=fault）· 锁 sha（同 sha 拒）· 当趟 rejected · 不发签。"""
+    got = _run_fault(tmp_path, "math")
+    assert got["kind"] == "math" and got["source"] == "row", got["row"]
+    assert got["reading"]["vote"] is False, got["reading"]
+    assert got["reading"]["why"] == "axis_fault:math", got["reading"]
+    assert got["standing"]["state"] == "rejected", got["standing"]
+    assert got["lock_kind"] == "math", got["lock_kind"]
+    assert got["locked"] is True, "math 的同一份正文没有锁住（同 sha 可以重掷）"
+    assert got["terminal"] == "rejected", got["got"].get("review_passes")
+    assert got["issued"] is False, got["got"].get("sign_issuance")
+
+
+def test_the_matrix_procedural_counts_no_vote_but_does_not_lock(tmp_path: Path) -> None:
+    """`procedural` 那一条：不算票 · 不锁 sha · 当趟 report（不是 rejected）· 不发签。"""
+    got = _run_fault(tmp_path, "procedural")
+    assert got["kind"] == "procedural" and got["source"] == "row", got["row"]
+    assert got["reading"]["vote"] is False, got["reading"]
+    assert got["reading"]["why"] == "axis_fault:procedural", got["reading"]
+    # 台账读数仍是 rejected（`_hold_runs` 本批不碰）—— 但"锁不锁"由类别分叉：
+    assert got["standing"]["state"] == "rejected", got["standing"]
+    assert got["lock_kind"] == "procedural", got["lock_kind"]
+    assert got["locked"] is False, "程序性仍然锁 sha（同一份正文不能原样再送）"
+    assert got["terminal"] == "report", got["got"].get("review_passes")
+    assert got["issued"] is False, got["got"].get("sign_issuance")
+    # 不洗稿：那一格一个字都不写（不是"洗了但没落"）。
+    assert "washed_relay" not in got["row"], got["row"]
+    assert got["seam"].asked("wash_v_reply") == 0, got["seam"].seen
+
+
+def test_the_matrix_style_counts_no_vote_but_does_not_lock(tmp_path: Path) -> None:
+    """`style` 那一条：与 procedural 同一套后果（不算票、不锁、report、不发签）。"""
+    got = _run_fault(tmp_path, "style")
+    assert got["kind"] == "style" and got["source"] == "row", got["row"]
+    assert got["reading"]["vote"] is False, got["reading"]
+    assert got["locked"] is False, "文风类仍然锁 sha"
+    assert got["terminal"] == "report", got["got"].get("review_passes")
+    assert got["issued"] is False, got["got"].get("sign_issuance")
+    assert "washed_relay" not in got["row"], got["row"]
+
+
+def test_the_matrix_report_gap_counts_as_a_clean_vote(tmp_path: Path,
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    """`report_gap` 那一条（业主裁定 ①）：算 clean 的一票 · 不锁 · 不终止 · 照常签发。"""
+    monkeypatch.setattr(VR, "SIGN_STREAK_NEED", 1)
+    st = T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([GAP_CLEAN_REPLY])
+    seam = T3._Seam({
+        "v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN,
+                                    report_gap="没有写出反例尝试的位置")],
+        "sign_issuance": [T3._axis(SEC.SIGN_ISSUE)]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    with T3._as_submitter():
+        got = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    rows, bad = VR.list_verifications(st.root, statement_id=T3.SID, limit=None)
+    assert not bad, bad
+    row = dict(rows[-1])
+    reading = VR.vote_reading(row)
+    assert reading["vote"] is True, reading
+    assert reading["why"] == "clean", reading
+    assert (reading["kind"], reading["cause"]) == ("", "report_gap"), reading
+    assert reading["report_gap"] == "没有写出反例尝试的位置", reading
+    assert "fault_kind" in row[VR.SECRETARY_JUDGE_KEY], row[VR.SECRETARY_JUDGE_KEY]
+    assert row[VR.SECRETARY_JUDGE_KEY]["fault_kind"] == "", row
+    standing = VR.review_standing(st.root, statement_id=T3.SID,
+                                  proof_text=T3.PROOF, proof_no=1)
+    assert standing["state"] == "signed", standing
+    assert AG._rejection_fault_kind(st.root, standing) == "", standing
+    assert AG._rejection_stands(standing, fault_kind="") is False, standing
+    assert str((got.get("review_passes") or [{}])[-1].get("terminal") or "") == "signed", \
+        got.get("review_passes")
+    assert got["sign_issuance"]["issued"] is True, got["sign_issuance"]
+
+
+def test_the_same_sha_can_be_resubmitted_after_a_procedural_fault(tmp_path: Path) -> None:
+    """程序性之后同一份正文（同一个 sha）再送 ⇒ 真的再判，三转 clean 照发签。"""
+    st = T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([T3.CLEAN_REPLY, T3.FAULT_REPLY,
+                             T3.CLEAN_REPLY, T3.CLEAN_REPLY, T3.CLEAN_REPLY])
+    seam = T3._Seam({
+        "v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_FAULT, defect_kind="procedural"),
+                           T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_CLEAN)],
+        "sign_issuance": [T3._axis(SEC.SIGN_ISSUE)]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    with T3._as_submitter():
+        first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert review.asked() == 2, review.asked()
+    assert str((first.get("review_passes") or [{}])[-1].get("terminal") or "") == "report", \
+        first.get("review_passes")
+    with T3._as_submitter():
+        second = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert review.asked() == 5, (
+        f"程序性之后同一份正文再送只问了 {review.asked()} 次模型 ⇒ 被当成打回站住了")
+    assert [p["streak"] for p in (second.get("review_passes") or [])] == [1, 2, 3], \
+        second.get("review_passes")
+    assert second["sign_issuance"]["issued"] is True, second["sign_issuance"]
+    assert second["review_write"].get("manuscript_signed") is True, second["review_write"]
+
+
+def test_the_same_sha_is_refused_after_a_math_fault(tmp_path: Path) -> None:
+    """math 之后同一份正文再送 ⇒ 打回站住：不问模型、不落新行、不签发。"""
+    st = T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([T3.CLEAN_REPLY, T3.FAULT_REPLY,
+                             T3.CLEAN_REPLY, T3.CLEAN_REPLY, T3.CLEAN_REPLY])
+    seam = T3._Seam({
+        "v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_FAULT, defect_kind="math")],
+        "sign_issuance": [T3._axis(SEC.SIGN_ISSUE)]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    with T3._as_submitter():
+        first = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert review.asked() == 2, review.asked()
+    with T3._as_submitter():
+        second = agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    assert review.asked() == 2, (
+        f"math 打回之后同一份正文再送又问了一次模型（累计 {review.asked()} 次）")
+    assert second["review_passes"] == [], second["review_passes"]
+    assert "打回站住" in str(second["reason"]), second["reason"]
+    assert len(VR.list_verifications(st.root, statement_id=T3.SID, limit=None)[0]) == 2
+
+
+# ============================================================ 反真空（三条）
+
+
+def test_antivacuum_report_gap_judged_back_as_math_loses_the_vote(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空 ①：把 `report_gap` 判回 math ⇒ 那条 clean 票当场不算票。
+
+    对应正控：`test_the_matrix_report_gap_counts_as_a_clean_vote`。
+    """
+    copy = _row(verdict="成立", axis="clean",
+                kind="", cause="report_gap",
+                report_gap="没有写出反例尝试的位置")
+    assert VR.is_a_vote(copy) is True
+    original = VR.fault_kind_of
+
+    def wrong(row):
+        reading = original(row)
+        if reading.get("cause") == "report_gap" or reading.get("report_gap"):
+            return {**reading, "kind": "math"}
+        return reading
+
+    monkeypatch.setattr(VR, "fault_kind_of", wrong)
+    assert VR.is_a_vote(copy) is False, (
+        "把 report_gap 判回 math 之后它仍然算票 ⇒ 正控不依赖 kind，那一条是真空")
+
+
+def test_antivacuum_procedural_judged_as_locked_breaks_the_resubmit(
+        tmp_path: Path) -> None:
+    """反真空 ②：程序性那一行按"空类别"读 ⇒ `_rejection_stands` 立刻变回锁住。
+
+    对应正控：`test_the_same_sha_can_be_resubmitted_after_a_procedural_fault`。
+    """
+    got = _run_fault(tmp_path, "procedural")
+    assert AG._rejection_stands(got["standing"], fault_kind="procedural") is False
+    # 摘掉类别（等于旧行 / 缺分类）⇒ 同一份台账读数必须变回"站住"。
+    assert AG._rejection_stands(got["standing"], fault_kind="") is True
+
+
+def test_antivacuum_a_math_defect_labelled_procedural_is_folded_back(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空 ③：护栏被摘掉时，带数学证据的行会被说成 procedural ⇒ 不锁 sha。
+
+    对应正控：`_write_fault_cell` 把"procedural + 数学证据"强制折回 math（只往更严折）。
+    """
+    judgment = {"checked": True, "axis": "fault", "fault_kind": "procedural",
+                "fault_cause": "", "report_gap": "", "reason": "V 说没有逐行验证。",
+                "basis": []}
+    verdict = {"verdict": "成立", "findings": [_error(2)], "defect_step": 2}
+    cell = AG._write_fault_cell(judgment, verdict)
+    assert cell["fault_kind"] == "math", cell
+    assert cell["kind_override"] == "guard:carries_math_evidence", cell
+
+    monkeypatch.setattr(AG, "_verdict_has_math_evidence", lambda _v: False)
+    wrong = AG._write_fault_cell(judgment, verdict)
+    assert wrong["fault_kind"] == "procedural", wrong
+    assert AG._rejection_stands({"state": "rejected"},
+                                fault_kind=wrong["fault_kind"]) is False
+
+

@@ -57,7 +57,11 @@ CORE = ROOT / "src" / "agentflow" / "agent_v" / "core.py"
 #: 陈述，不能再拿它当一条打回；打回只有秘书判 fault 这一条路。
 #: 2026-11-06（业主裁定 3）：这一格改叫 `rejected` —— 同一种结局（打回）在未在册两支里
 #: 本来就叫 `rejected`，在在册这一支叫 `fault`，读的人要按分支猜名字；现在三支同一个词。
-TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "rejected", "unjudged"})
+#: 2026-11-09（D3 批 2，业主裁定 ③④⑥）：新增 `report` —— 秘书判 fault 而类别是程序性 /
+#: 文风时，这一趟是"无有效判定"而不是"打回"（不锁 sha、不洗稿、不递 F）。冻结词表必须
+#: 与 AST 扫出来的取值集合相等（s3a），每个取值都要有活证（s3b）。
+TERMINAL_VOCAB = frozenset({"", "ledger", "gate", "signed", "rejected", "unjudged",
+                            "report"})
 
 CLEAN = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
                     "findings": []}, ensure_ascii=False)
@@ -185,6 +189,14 @@ def outcomes(tmp_path_factory) -> dict[str, dict]:
             "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
             "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]},
         patch=mock.patch.object(VR, "SIGN_STREAK_NEED", 1))
+
+    # 9) D3 批 2：秘书判 fault 而类别是 procedural ⇒ 这一趟无有效判定、不是打回
+    #    （terminal="report"、不洗稿、不签发；同一份正文可原样再送）。
+    out["report"] = _run(
+        base / "s9", replies=[CLEAN, REVIEWED_FAULT], answers={
+            "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
+                               _axis(SEC.V_REPLY_FAULT, defect_kind="procedural")],
+            "wash_v_reply": [WASHED]})
     return out
 
 

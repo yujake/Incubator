@@ -226,7 +226,10 @@ def test_d_removing_the_rejection_stop_brings_the_field_shape_back(tmp_path, mon
 
     这一条是 a 的反真空：它量的是"a 的绿真的是那一格干的"，不是"别处恰好也走不通"。
     """
-    monkeypatch.setattr(AV_CORE, "_rejection_stands", lambda _standing: False)
+    # D3 批 2：`_rejection_stands` 多了按类别分叉的那个关键字（`fault_kind`）——
+    # 这一格打桩成恒 False 仍然表达"摘掉打回站住"，关键字跟着签名走即可。
+    monkeypatch.setattr(AV_CORE, "_rejection_stands",
+                        lambda _standing, **_kw: False)
     st = _ws(tmp_path)
     _put(st)
     agent, review = _agent(st, [CLEAN_REPLY, FAULT_REPLY, CLEAN_REPLY, CLEAN_REPLY, CLEAN_REPLY],

@@ -2793,6 +2793,9 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     from . import verifications as VR      # 惰性：本模块的运行期只在这一格读台账
 
     details: list[dict[str, Any]] = []
+    #: D3 批 2：只缺"审阅证据"的那几条（程序性 / 文风）—— 不进 `details`（那不是要 F
+    #: 改的缺陷），但必须在读数里显形：静默丢掉会让"V 的报告一直不合格"看不见。
+    report_defects: list[dict[str, Any]] = []
     problems: list[str] = []
     for row in rows:
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
@@ -2850,6 +2853,22 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             sign = signed.get(str(e.get("verification_id") or "")) or {}
             via = ("verdict" if VR.read_verdict(sign) == "有毛病"
                    else "secretary_fault")
+            # ---- D3 批 2（业主裁定 ③④⑥）：程序性 / 文风不进"要 F 改"的明细 -------
+            #
+            # 这一档不是对证明的判断（V 说没逐行验证 / 依据落在不归 V 判的面上），
+            # 正文没有被指出数学缺陷 ⇒ 不该让 F 去改稿。它走另一条路：送给送审者的
+            # "本轮无有效判定、可原样再送"回执（`vreceipts.publish_row`）+ `report_fix_list`。
+            # 只认 `source="row"` 的新行：老行没有类别格，读侧推定只作显示（裁定 ⑤）。
+            _kind = VR.fault_kind_of(sign)
+            if (str(_kind.get("source") or "") == "row"
+                    and str(_kind.get("kind") or "") in ("procedural", "style")):
+                report_defects.append({
+                    "label": str(e.get("label") or f"{sid}#p1"),
+                    "kind": str(_kind.get("kind") or ""),
+                    "verification_id": str(e.get("verification_id") or ""),
+                    "stmt_id": sid,
+                })
+                continue
             if via == "secretary_fault" and not _washed_text(sign):
                 #: C 段纪律：秘书判 fault、但没洗出可转达的文本 ⇒ 这一条不进明细
                 #: （不输出 V 的原文），并留一句读数（"没送到"不许静默）。
@@ -2859,7 +2878,7 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
                 continue
             details.append(_v_rejection_detail(sid, e, sign, via))
     details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
-    if not details and not problems:
+    if not details and not problems and not report_defects:
         return ("（名下没有被 V 判「有毛病」的证明：要么每条都签过成立，"
                 "要么一次都还没送 V）"), [], []
     lines: list[str] = []
@@ -2899,6 +2918,14 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
     if problems:
         lines.append("- 没读成的：" + "；".join(problems[:4])
                      + (f"（另 {len(problems) - 4} 条）" if len(problems) > 4 else ""))
+    if report_defects:
+        # D3 批 2：程序性 / 文风那几档不是"要 F 改"的缺陷（正文没被指出数学缺陷），
+        # 但它们也不许静默消失 —— 点名几条、说清义务在谁身上。
+        lines.append(
+            f"- 另 {len(report_defects)} 条只是报告层面（程序性/文风："
+            + "、".join(sorted({str(d['kind']) for d in report_defects}))
+            + "）：这一份正文没有被指出数学缺陷 ⇒ 不进改稿清单，可原样再送同一 sha"
+              "（不必改稿换 sha）；待改的是 V 的报告，见 `verifications.report_fix_list`。")
     lines.extend(_v_delivery_lines(root, details, store=store))
     return "\n".join(lines), details, problems
 
@@ -3098,6 +3125,29 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
                     f"这一签盖的就是现在这一份（proof_text 与现文一致）："
                     f"{'True' if d.get('in_sync') else 'False'}")
             summary = f"V 的意见指出缺陷：{d['label']}（错在{step}）"
+        elif via == "report":
+            # ---- D3 批 2（业主裁定 ③④⑥）：程序性 / 文风那一档的回执 -------------
+            #
+            # 它不是"要 F 改"的意见（正文没被指出数学缺陷），所以措辞与上面两档不同：
+            # 说清"本轮无有效判定"、说清"不需要改稿"、说清"可原样再送同一 sha"。
+            # `attempts` / `last_at` 让反复重送可见（裁定 ④：不设趟数上限）。
+            _kind = str(d.get("fault_kind") or "") or "程序性"
+            _attempts = d.get("attempts")
+            _last_at = str(d.get("last_at") or "")
+            body = (f"本轮无有效判定：{d['label']}"
+                    f"（类别 {_kind}；最近一签 "
+                    f"{d.get('verification_id') or '（没读到编号）'}）\n"
+                    "这一份正文没有被指出数学缺陷 —— 不需要改稿。"
+                    "可以原样再送同一 sha（同一份正文再走一趟 `verify.verify_proof`，"
+                    "新的一趟从 0 起算）。\n"
+                    "待改的是 V 的审阅报告，不是这份证明"
+                    + (f"；这是同一份正文上第 {_attempts} 趟程序性/文风退回"
+                       + (f"（最近一次 {_last_at}）" if _last_at else "")
+                       if isinstance(_attempts, int) and _attempts >= 1 else "")
+                    + "。\n"
+                    "报告层面的待改项见 `verifications.report_fix_list`"
+                    "（M / 召唤者读；框架不把它自动塞进 V 的下一趟材料）。")
+            summary = f"本轮无有效判定：{d['label']}（可原样再送）"
         else:
             body = (f"V 判「有毛病」：{d['label']}（最近一签 "
                     f"{d.get('verification_id') or '（没读到编号）'}，"
