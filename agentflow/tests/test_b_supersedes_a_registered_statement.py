@@ -54,6 +54,7 @@ if str(_SRC) not in sys.path:
 
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
+from agentflow import proofregistry as PR  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
@@ -224,8 +225,10 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     entry = history[0]
     assert sorted(entry) == ["at", "replaced_by", "sha", "text"], entry
     assert entry["text"] == TRUNCATED, ("旧正文没有逐字留痕", entry["text"][-40:])
-    assert entry["sha"] == VR.text_sha(TRUNCATED), entry
-    assert entry["replaced_by"] == VR.text_sha(FULL), entry
+    # `sha` / `replaced_by` 是签的对拍尺（`proofregistry.proof_sha`），不是整份手稿的
+    # 字节指纹（`verifications.text_sha`）；这一段正文没有 `## 证明` 小节，两把尺同值。
+    assert entry["sha"] == PR.proof_sha(TRUNCATED), entry
+    assert entry["replaced_by"] == PR.proof_sha(FULL), entry
     assert str(entry["at"]).strip(), entry
     assert out.get("canonical_written") is True, out
     assert out.get("canonical_history"), out

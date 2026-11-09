@@ -45,6 +45,7 @@ if str(_SRC) not in sys.path:
 
 from agentflow import closing as CL
 from agentflow import evidencebits as EB
+from agentflow import proofregistry as PR
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
@@ -233,8 +234,10 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
     entry = history[0]
     assert sorted(entry) == ["at", "replaced_by", "sha", "text"], entry
     assert entry["text"] == P1, entry
-    assert entry["sha"] == VR.text_sha(P1), entry
-    assert entry["replaced_by"] == VR.text_sha(edited), entry
+    # `sha` / `replaced_by` 是签的对拍尺（`proofregistry.proof_sha`）；这一段正文没有
+    # `## 证明` 小节，所以它在这一笔上与原样尺（`verifications.text_sha`）同值。
+    assert entry["sha"] == PR.proof_sha(P1), entry
+    assert entry["replaced_by"] == PR.proof_sha(edited), entry
     assert str(entry["at"]).strip(), entry
 
     standing = VR.review_standing(st.root, statement_id=sid, proof_text=edited,

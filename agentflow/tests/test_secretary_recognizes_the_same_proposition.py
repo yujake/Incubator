@@ -54,6 +54,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import evidencebits as EB
+from agentflow import proofregistry as PR
 from agentflow import propositionkey as PK
 from agentflow import schema as S
 from agentflow import verifications as VR
@@ -524,8 +525,10 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     history = list(row.get("proof_history") or [])
     assert len(history) == 1, history
     assert history[0].get("text") == PROOF_A, history
-    assert history[0].get("sha") == VR.text_sha(PROOF_A), history
-    assert history[0].get("replaced_by") == VR.text_sha(MERGED), history
+    # `sha` / `replaced_by` 是签的对拍尺（`proofregistry.proof_sha`）；这两段正文没有
+    # `## 证明` 小节，所以在这一笔上与原样尺（`verifications.text_sha`）同值。
+    assert history[0].get("sha") == PR.proof_sha(PROOF_A), history
+    assert history[0].get("replaced_by") == PR.proof_sha(MERGED), history
     assert int(history[0].get("proof_no") or 0) == 1, "旧正文没记清是哪一份证明的旧稿"
     # 合并与"直接覆盖"的区别：盘上有合并痕迹这一笔（谁合并、合并了哪几份）。
     traces = list(row.get("_proof_merge") or [])

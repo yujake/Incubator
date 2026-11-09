@@ -18,6 +18,7 @@ B 是以智能体的形式实现了）。自然语言形式的定义是：语句
 | c | 正控：逐字相同（没改写）⇒ 签不作废、返回不喊重签 | 钉住 b 的绿不是"任何一笔都喊重签" |
 | d | 信息格：`proof_vs_source` 能读到"与来源是否逐字一致"，且它不当门（`same=false` 照写） | 改前返回值里没有这一格（全仓 `proof_vs_source` 0 命中） |
 | e | 反真空：把"改写 ⇒ 旧签不算数"那一步（`_review_after_rewrite`）打桩成"已签" ⇒ b 必红 | —— |
+| f | 反真空：`proof_history` 那条的 `sha` 问的是"签盖的是不是这一版"（签尺），把它换成原样尺（`text_sha`）⇒ 这一格的判据必红 | —— |
 
 ## 为什么"改写过 ⇒ 旧签作废"不是新造判定
 
@@ -42,6 +43,7 @@ if str(_SRC) not in sys.path:
 from agentflow import capabilities as C  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
+from agentflow import proofregistry as PR  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
@@ -290,6 +292,19 @@ def _b_must_hold(got: dict, st: Store, sid: str) -> None:
     assert standing["ok"] is False and standing["in_sync"] is False, standing
 
 
+def _history_speaks_the_signed_version(entry: dict, ledger_sha: str, replaced_by: str) -> None:
+    """判据本体（b 与 f 共用）：`proof_history` 的 `sha` / `replaced_by` 是不是「签的对拍尺」。
+
+    这一格回答的问题是"签盖的是不是这一版正文"，所以它与签名台账那一行的
+    `proof_sha256` 逐字节相同（唯一实现 `proofregistry.proof_sha`：手稿取 `## 证明`
+    那一节；`verifications.text_sha` 是另一把尺，整份手稿逐字节）。
+    """
+    assert str(entry.get("sha") or "") == str(ledger_sha or ""), (
+        "`proof_history` 的 `sha` 不是签的对拍尺："
+        f"格子里是 {str(entry.get('sha') or '')[:12]}…，签名台账是 {str(ledger_sha or '')[:12]}…")
+    assert str(entry.get("replaced_by") or "") == str(replaced_by or ""), entry
+
+
 def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path):
     """b：签过的命题被非逐字改写 ⇒ `review_standing=stale` ＋ 返回点名"派 V 重新签"。
 
@@ -317,11 +332,20 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
     history = [dict(h) for h in (row.get("proof_history") or [])]
     assert history, "旧正文没有留痕"
     last = history[-1]
-    assert last["text"] == SRC and last["sha"] == VR.text_sha(SRC), last
-    assert last["replaced_by"] == VR.text_sha(DIGEST), last
-    assert EB.bits_from_row(row)["reviewed"] is False, row.get("bits")
+    assert last["text"] == SRC, last
+    # 这一格的 `sha` 是「签的对拍尺」（2026-11-09 拆尺时这里是唯一漏判的一处）：
+    # 签盖的是 `## 证明` 那一节，所以它与签名台账那一行的 `proof_sha256` 逐字节相同
+    # （`proofregistry.proof_sha`）；整份手稿的字节指纹是另一把尺（`text_sha`），
+    # 用它来断言就等于把这一格说成"我上一次改的是不是这串字节"——不是它问的问题。
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert problems == [], problems
+    ledger_sha = str(rows[-1].get("proof_sha256") or "")
+    assert ledger_sha == PR.proof_sha(SRC), (ledger_sha, rows[-1])
+    _history_speaks_the_signed_version(last, ledger_sha, PR.proof_sha(DIGEST))
+    assert last["sha"] != VR.text_sha(SRC), (
+        "两把尺在这一笔上必须不同值（SRC 带 `## 证明` 小节）："
+        f"proof_sha={PR.proof_sha(SRC)[:12]}… · text_sha={VR.text_sha(SRC)[:12]}…")
+    assert EB.bits_from_row(row)["reviewed"] is False, row.get("bits")
     assert [r["verification_id"] for r in rows] == [r["verification_id"] for r in signed], (
         "旧签被删了 —— 作废是读数，不是删记录（三签一行都不许少）")
 
@@ -450,3 +474,53 @@ def test_e_stubbing_the_rewrite_reading_turns_b_red(tmp_path, monkeypatch):
     # 而既有链没被打桩：读侧仍然是 stale（b 的返回那一格才是这一步给的）
     assert VR.review_standing(st.root, statement_id=sid, proof_text=DIGEST,
                               proof_no=1)["state"] == "stale"
+
+
+# ==================================================== f：这一格选哪把尺（反真空）
+
+def test_f_the_history_sha_answers_which_version_was_signed(tmp_path, monkeypatch):
+    """f（反真空）：`proof_history` 那条的 `sha` 问的是"签盖的是不是这一版" ⇒ 签尺；
+    把它换成另一把尺（`text_sha`：整份手稿的字节指纹）⇒ 这一格的判据必红。
+
+    为什么这条反真空不是空话：夹具里的 `SRC` 带 `## 证明` 小节，两把尺在这一笔上
+    真的不同值（下面先把这个读数钉住）。所以"签尺 / 原样尺"是一个有后果的选择，
+    不是两个相等的数比来比去。
+
+    打桩点就是"这一格用哪把尺"：只换 B 写这一格时用的那一把（`register_statement._PR`），
+    签名台账自己那一把不动 —— 于是台账里那一签仍是签尺，而格子掉到原样尺，判据当场红。
+    """
+    from types import SimpleNamespace
+
+    from agentflow.agent_b import register_statement as RS
+
+    st = _ws(tmp_path)
+    sid = _seed_row(st)
+    _sign_enough(st, proof_text=SRC)
+    rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
+    assert problems == [], problems
+    ledger_sha = str(rows[-1].get("proof_sha256") or "")
+    # 反退化：两把尺在这份夹具上不同值（否则"换尺必红"无从谈起）
+    assert ledger_sha == PR.proof_sha(SRC), ledger_sha
+    assert ledger_sha != VR.text_sha(SRC), (ledger_sha, VR.text_sha(SRC))
+
+    _rewrite_to(st, text=DIGEST)
+    last = [dict(h) for h in (_row(st).get("proof_history") or [])][-1]
+    _history_speaks_the_signed_version(last, ledger_sha, PR.proof_sha(DIGEST))
+
+    # 打桩：B 写这一格的那把尺换成原样尺（台账那一把不动）
+    monkeypatch.setattr(RS, "_PR", SimpleNamespace(proof_sha=VR.text_sha),
+                        raising=True)
+    st2 = _ws(tmp_path / "swapped")
+    sid2 = _seed_row(st2)
+    _sign_enough(st2, proof_text=SRC)
+    rows2, problems2 = VR.list_verifications(st2.root, statement_id=sid2, limit=None)
+    assert problems2 == [], problems2
+    ledger_sha2 = str(rows2[-1].get("proof_sha256") or "")
+    # 台账仍是签尺（打桩只碰 B 的写格，不碰 V 的台账）
+    assert ledger_sha2 == PR.proof_sha(SRC), ledger_sha2
+    _rewrite_to(st2, text=DIGEST)
+    swapped = [dict(h) for h in (_row(st2).get("proof_history") or [])][-1]
+    assert str(swapped.get("sha") or "") == VR.text_sha(SRC), swapped
+    # 换成原样尺 ⇒ b/f 的判据红（这就是"这一格选哪把尺是有后果的"）
+    with pytest.raises(AssertionError):
+        _history_speaks_the_signed_version(swapped, ledger_sha2, PR.proof_sha(DIGEST))
