@@ -189,12 +189,35 @@ def test_b_three_rounds_sign_the_manuscript_with_pending_backing(tmp_path):
 
 
 # ============================================================ ③ B 收录：从稿上拿签
+def _pending_claim_problems(v_sign: dict) -> list[str]:
+    """pending 认领的读数够不够回答「这一签是哪来的、锚点在哪」。
+
+    2026-11-10（父裁）：D268 批 2 之后 pending 认领的理由改成
+    「…是命题还没在册时 V 审的那一签…」（比旧的「手稿」更准）。判据改为钉语义：
+    ① 理由里说清「还没在册」这一档；② `claim`（或顶层）给出非空的 `ledger` 与
+    `verification_id` —— 说不出锚点就不算认领。返回人话列表（空 = 合格）。
+    """
+    why = str(v_sign.get("why") or "")
+    claim = dict(v_sign.get("claim") or {})
+    ledger = str(claim.get("ledger") or v_sign.get("ledger") or "").strip()
+    vid = str(claim.get("verification_id")
+              or v_sign.get("verification_id") or "").strip()
+    problems: list[str] = []
+    if "没在册" not in why:
+        problems.append("理由没说清这一签是「命题还没在册时」V 审的")
+    if not ledger:
+        problems.append("没有 ledger（说不出这一签的锚点）")
+    if not vid:
+        problems.append("没有 verification_id（锚点指不到具体那一行）")
+    return problems
+
+
 def test_c_b_collects_the_manuscript_sign_and_records_optimized(tmp_path):
     """③ B 收录时从稿上拿签（业主 2026-11-05 晚：`B 侧录入时从稿拿签`）。
 
     改前这一条量的是"稿上没有签块、只能按 pending 台账认"；现在稿上有块，
-    `bits_after_sign` 的第一来源就是它（`why` 点名手稿），且台账必须指得回 V 的
-    pending 行（`sign_ledger_backing`）—— 第 3 位 / optimized 的写法与以前逐字相同。
+    `bits_after_sign` 只认可复算凭据，pending 那一档按正文 sha 认领；判据钉的是
+    「理由说清这一签是命题还没在册时 V 审的 + 指得出锚点」。
     """
     env = _env(tmp_path)
     rel, _before = _manuscript(env)
@@ -207,8 +230,14 @@ def test_c_b_collects_the_manuscript_sign_and_records_optimized(tmp_path):
     assert filed.get("ok") is True, filed
     v_sign = dict(filed.get("v_sign") or {})
     assert v_sign.get("applied") is True, v_sign
-    assert "手稿" in str(v_sign.get("why") or ""), v_sign
-    assert (dict(v_sign.get("backing") or {})).get("ok") is True, v_sign.get("backing")
+    problems = _pending_claim_problems(v_sign)
+    assert problems == [], (v_sign, problems)
+    # 锚点不只是"非空"：它必须真的能背书（与签发/落签同一个判据）。
+    claim = dict(v_sign.get("claim") or {})
+    backing = VS.sign_ledger_backing(
+        env["store"].root, claim.get("ledger"),
+        proof_sha256=claim.get("proof_sha256"))
+    assert backing.get("ok") is True, backing
 
     row = [dict(r) for r in env["store"].rows("statements")][-1]
     bits = dict(row.get("bits") or {})
@@ -218,6 +247,28 @@ def test_c_b_collects_the_manuscript_sign_and_records_optimized(tmp_path):
     assert ev.get("reviewed_by_proof") == {"1": True}, ev.get("reviewed_by_proof")
     assert ev.get("reviewed_sha_by_proof") == {"1": VR.text_sha(_column(env))}, (
         "登记时记下的签的正文 sha 与证明栏不是同一份")
+
+
+def test_c2_the_pending_claim_must_name_where_it_came_from():
+    """反真空：把 why 换成不含「在册」的旧措辞 / 拿掉锚点 ⇒ 同一条判据必须红。
+
+    不调生产、不改盘：只喂 `_pending_claim_problems` 三份读数，证明它钉的真是
+    「理由说清是哪来的 + 指得出锚点」，而不是"某个词出现过"。
+    """
+    good = {"why": ("verifications/pending/abc.jsonl#u-000003 是命题还没在册时 "
+                    "V 审的那一签 ⇒ 按这一份正文的 sha 认领"),
+            "claim": {"ledger": "verifications/pending/abc.jsonl#u-000003",
+                      "verification_id": "u-000003"}}
+    assert _pending_claim_problems(good) == []
+
+    old_wording = {**good, "why": "凭据复算通过：手稿九格块 signed"}
+    problems = _pending_claim_problems(old_wording)
+    assert problems and any("没在册" in one for one in problems), problems
+
+    no_anchor = {**good, "claim": {"ledger": "", "verification_id": ""}}
+    problems = _pending_claim_problems(no_anchor)
+    assert problems and any("ledger" in one for one in problems), problems
+    assert any("verification_id" in one for one in problems), problems
 
 
 # ============================================================ ④ 第二阶段：optimized=true
