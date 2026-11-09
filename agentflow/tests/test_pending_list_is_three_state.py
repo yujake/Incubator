@@ -181,7 +181,13 @@ def test_a_the_real_48_rows_are_refused_by_the_submit_gate(tmp_path: pathlib.Pat
     assert listing["counts"]["cleared"] == 0 and listing["counts"]["withdrawn"] == 0, \
         listing["counts"]
     assert listing["counts"]["rejected"] == 15, listing["counts"]
-    folded = [r for r in listing["rows"] if r["reason_code"] == "over_cap"]
+    # 行的契约是「三态折算后的盘上行」，不是「每行都补齐 schema 字段」：`fold_legacy`
+    # 只给历史档（cleared / withdrawn）补 `reason_code`，`admitted` / `pending` 行按原样
+    # 返回 —— 真机上它们带空串（写侧经 `schema.LitCandidate.to_dict`），而这份夹具是
+    # 直接 upsert 的手工行，可以没有这个键。所以按读取契约用 `.get` 选 over_cap 那一档；
+    # 强度不减：下面仍断言 14 条、每条 status=="rejected" 且 reject_reason 非空
+    # （折算漏写理由码会先让 14 变少）。
+    folded = [r for r in listing["rows"] if r.get("reason_code") == "over_cap"]
     assert len(folded) == 14, folded
     assert all(r["status"] == "rejected" and r["reject_reason"] for r in folded), folded
 
