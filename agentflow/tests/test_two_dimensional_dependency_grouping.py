@@ -452,7 +452,7 @@ def test_r10_counts_per_statement_and_proof_pair(tmp_path: pathlib.Path):
 
     # 只签第 2 条证明的 3 票（写入口就是 V 用的那一个，不经模型）。
     signed = _sign_n(st, proof_text=PROOF2, proof_no=2)
-    assert signed["proof_no"] == 2 and signed["proof_sha256"] == VR.proof_sha(PROOF2), signed
+    assert signed["proof_no"] == 2 and signed["proof_sha256"] == VR.text_sha(PROOF2), signed
 
     n, detail = _r10(st)
     assert n == 1, detail

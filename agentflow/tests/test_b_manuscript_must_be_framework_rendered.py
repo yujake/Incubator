@@ -180,7 +180,7 @@ def _stamp_own_manuscript(store: Store, *, sid: str, rel: str) -> None:
                                verifier="agent-V", store=store, flip=False,
                                manuscript=rel, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     path.write_text(VS.stamp_manuscript_sign(
-        text, proof_sha=VR.proof_sha(proof), streak=VR.SIGN_STREAK_NEED,
+        text, proof_sha=VR.text_sha(proof), streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
         ledger=f"verifications/{sid}.jsonl#v-000003",
         statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")

@@ -167,7 +167,7 @@ def test_optimized_is_three_state_and_a_missing_cell_is_not_false(tmp_path):
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": False, "2": True}
     ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True, "2": True}
-    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1), "2": VR.proof_sha(p2)}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.text_sha(P1), "2": VR.text_sha(p2)}
     bits["evidence"] = ev
     _put(st, dict(row,
                   proofs=[{"proof_no": 2, "text": p2, "created_at": TS}],
@@ -457,7 +457,7 @@ def test_the_closing_gate_splits_unoptimized_by_source(store):
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": True}
     ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True}
-    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1)}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.text_sha(P1)}
     bits["evidence"] = ev
     _put(store, dict(row, bits=EB.normalize_raw(bits, origin="own_result",
                                                kind="conjecture")))
@@ -561,7 +561,7 @@ def test_mapping_shows_the_optimized_state(store):
     ev = dict(bits.get("evidence") or {})
     ev[EB.OPTIMIZED_BY_PROOF_KEY] = {"1": False, "2": True}
     ev[EB.REVIEWED_BY_PROOF_KEY] = {"1": True, "2": True}
-    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.proof_sha(P1), "2": VR.proof_sha(p2)}
+    ev[EB.REVIEWED_SHA_BY_PROOF_KEY] = {"1": VR.text_sha(P1), "2": VR.text_sha(p2)}
     bits["evidence"] = ev
     _put(store, dict(row,
                      proofs=[{"proof_no": 2, "text": p2, "created_at": TS}],

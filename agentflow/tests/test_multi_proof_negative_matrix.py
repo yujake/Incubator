@@ -315,12 +315,12 @@ def test_an_edited_proof_is_written_and_reads_stale_not_refused(tmp_path: pathli
     assert _register_two(st)["ok"] is True
     signed1 = _sign(st, text=P1, proof_no=1)
     signed2 = _sign(st, text=P2, proof_no=2)
-    assert signed2["proof_sha256"] == VR.proof_sha(P2)
+    assert signed2["proof_sha256"] == VR.text_sha(P2)
 
     edited2 = P2 + "\n3. 补一步（签完之后改的）。"
     now = _edit(st, proof_no=2, text=edited2)          # 必须成功，不许抛
     assert VR.proof_text_of(now, 2) == edited2, "② 改稿没落盘（写入被拒了）"
-    assert VR.proof_sha(edited2) != signed2["proof_sha256"], "夹具不成立：改完 sha 居然没变"
+    assert VR.text_sha(edited2) != signed2["proof_sha256"], "夹具不成立：改完 sha 居然没变"
     # 台账那一行留在签名当时那一份上（历史不许被改写）。
     rows, problems = VR.list_verifications(st.root, statement_id=SID, limit=None)
     assert problems == [] and rows[-1]["proof_sha256"] == signed2["proof_sha256"], rows[-1]

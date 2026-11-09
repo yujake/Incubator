@@ -99,6 +99,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .. import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from .. import schema as S   # 命题号形态的唯一来源（当前宽度 + 旧四位读侧兼容）
 from .. import verifications as VR
+from .. import proofregistry as _PR
 from ..store import StoreError
 
 #: V 在台账里的默认实例名（`bit3_payload` 的 `reviewed_by.verifier` 就是它）。
@@ -441,7 +442,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
         #: 不可能有盖住它的签（sha 对不上）；这里不拿 `## 依赖` / 全文顶替。
         proof_reading = _DS.proof_body_reading(text)
         block = _VS.manuscript_sign_standing(
-            text, proof_sha=VR.proof_sha(
+            text, proof_sha=_PR.proof_sha(
                 str(proof_reading.get("body") or "").strip("\n")),
             manuscript_path=rel)
         signed = str(block.get("state") or "") == "signed"
@@ -1368,7 +1369,7 @@ class AgentV:
             from .. import vsigns as _VS
 
             _sign_block = dict(_VS.manuscript_sign_standing(
-                manuscript_raw, proof_sha=VR.proof_sha(text),
+                manuscript_raw, proof_sha=_PR.proof_sha(text),
                 manuscript_path=manuscript_rel) or {})
         if str(_sign_block.get("state") or "") == "signed":
             # 这一趟没有新判任何事，但"那一签当时读到了什么"必须照得出来：引用材料
@@ -1378,7 +1379,7 @@ class AgentV:
             # 回放不是现造：来源只有盘上那一行，找不到就照实说找不到。
             from .. import depsection as _DS
 
-            signed_row = _ledger_row_for_sha(self.workspace_root, sid, VR.proof_sha(text))
+            signed_row = _ledger_row_for_sha(self.workspace_root, sid, _PR.proof_sha(text))
             signed_id = str(signed_row.get("verification_id") or "")
             _deps = _DS.parse_dependency_section(manuscript_raw)
             _cited = _cited_manuscripts(self.workspace_root, _deps.get("rows") or [])
@@ -1419,7 +1420,7 @@ class AgentV:
                 "defect_step": signed_row.get("defect_step"),
                 "findings": list(signed_row.get("findings") or []),
                 "unresolved_errors": int(signed_row.get("unresolved_errors") or 0),
-                "proof_sha256": str(_sign_block.get("proof_sha256") or VR.proof_sha(text)),
+                "proof_sha256": str(_sign_block.get("proof_sha256") or _PR.proof_sha(text)),
                 "proof_chars": int(signed_row.get("proof_chars") or len(text)),
                 "citations": citations,
                 "citation_checks": replayed_checks,
@@ -1488,7 +1489,7 @@ class AgentV:
                 "kind": "",
                 "signed_bit3": False,
                 "verdict": str(standing.get("verdict") or ""),
-                "proof_sha256": str(standing.get("sha") or VR.proof_sha(text)),
+                "proof_sha256": str(standing.get("sha") or _PR.proof_sha(text)),
                 "proof_no": no,
                 "proof_chars": len(text),
                 # 这一趟零转：一条模型调用都没花、一行台账都没落。
@@ -2060,7 +2061,7 @@ class AgentV:
             "streak": streak, "need": need,
             "streak_ok": bool(streak >= need), "projected": streak,
             "same_sha": bool(str(standing.get("sha") or "")
-                             and str(standing.get("sha")) == VR.proof_sha(text)),
+                             and str(standing.get("sha")) == _PR.proof_sha(text)),
             "state": str(standing.get("state") or ""),
             "reason": self._terminal_reason(kind=kind, judgment=judgment, verdict=verdict),
             "basis": [f"秘书判定 checked={bool(judgment.get('checked'))} "
@@ -2258,12 +2259,12 @@ class AgentV:
                     "detail": (f"`{rel}` 的 `## 依赖` 段不合格（{section.get('refused')}）⇒ "
                                "不审、不落签：按四列表头重写那一节再来")}
         given = str(text or "")
-        if given.strip() and VR.proof_sha(given) != VR.proof_sha(body):
+        if given.strip() and VR.text_sha(given) != VR.text_sha(body):
             return {"failed": True, "kind": "proof_text_mismatch",
                     "reason": "proof_text_mismatch",
                     "detail": (f"参数给的正文与 `{rel}` 的 `## 证明` 不是同一份"
-                               f"（参数 sha {VR.proof_sha(given)[:12]}…，盘上 "
-                               f"{VR.proof_sha(body)[:12]}…）⇒ 拒绝：签会盖错一份正文；"
+                               f"（参数 sha {VR.text_sha(given)[:12]}…，盘上 "
+                               f"{VR.text_sha(body)[:12]}…）⇒ 拒绝：签会盖错一份正文；"
                                "在册这一档正文以稿为准，参数里那份只作核对 —— "
                                "要么把 `proof_text` 换成稿里那一份，要么把 `proof_no` 指对")}
         return {"manuscript": rel, "body": body, "raw": raw}
@@ -2384,11 +2385,11 @@ class AgentV:
                         "passes": [], "manuscript": rel}
             if not body.strip():
                 body = on_disk
-            elif VR.proof_sha(on_disk) != VR.proof_sha(body):
+            elif VR.text_sha(on_disk) != VR.text_sha(body):
                 return {"failed": True, "reason": "proof_text_mismatch",
                         "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
-                                   f"（参数 sha {VR.proof_sha(body)[:12]}…，盘上 "
-                                   f"{VR.proof_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文")}
+                                   f"（参数 sha {VR.text_sha(body)[:12]}…，盘上 "
+                                   f"{VR.text_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文")}
             # 2026-11-04（审计缺陷 ③）：缺 `## 依赖` 段不许签（空表合法，见
             # `_registered_manuscript_body` 同一段注释）。三处读稿口同一把尺。
             _section = _DS.parse_dependency_section(raw_manuscript)
@@ -2410,7 +2411,7 @@ class AgentV:
         _cited = _cited_manuscripts(
             self.workspace_root, (_deps.get("rows") or [])) if _deps else {}
         dependency_audit = self._dependency_audit(raw_manuscript, _cited)
-        sha = VR.proof_sha(body)
+        sha = _PR.proof_sha(body)
         if raw_manuscript:
             already = _VS.manuscript_sign_standing(raw_manuscript, proof_sha=sha)
             if str(already.get("state") or "") == "signed":
@@ -2719,11 +2720,11 @@ class AgentV:
                     "passes": [], "manuscript": rel}
         if not body.strip():
             body = on_disk
-        elif VR.proof_sha(on_disk) != VR.proof_sha(body):
+        elif VR.text_sha(on_disk) != VR.text_sha(body):
             return {"failed": True, "reason": "proof_text_mismatch",
                     "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
-                               f"（参数 sha {VR.proof_sha(body)[:12]}…，盘上 "
-                               f"{VR.proof_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
+                               f"（参数 sha {VR.text_sha(body)[:12]}…，盘上 "
+                               f"{VR.text_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
                     "passes": [], "manuscript": rel}
         if not _ER.is_exhaustion_column({"proof_text": body}, exp_rows):
             return None
@@ -2740,7 +2741,7 @@ class AgentV:
                     "detail": (f"`{rel}` 的 `## 依赖` 段不合格"
                                f"（{_section.get('refused')}）⇒ 不审、不落签"),
                     "passes": [], "manuscript": rel}
-        sha = VR.proof_sha(body)
+        sha = _PR.proof_sha(body)
         already = _VS.manuscript_sign_standing(read.get("text") or "", proof_sha=sha,
                                               manuscript_path=rel)
         if str(already.get("state") or "") == "signed":
@@ -3181,7 +3182,7 @@ class AgentV:
         self._emit(f"verify_proof(未在册)：穷举型证据会审 ⇒ {_verdict.get('verdict')}"
                    "（看过、没签：没有手稿就没有签的载体）")
         return {"reviewed": reviewed, "unsigned": True,
-                "sha": VR.proof_sha(text), "proof_chars": len(str(text or ""))}
+                "sha": _PR.proof_sha(text), "proof_chars": len(str(text or ""))}
 
     def _finish_unsigned_review(self, out: dict[str, Any], *, statement_id: str, no: int,
                                 got: Mapping[str, Any]) -> dict[str, Any]:

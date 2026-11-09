@@ -54,7 +54,7 @@ from agentflow.store import Store
 
 PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\n"
          "2. 第 1 步的 δ 只依赖 ε、不依赖点 ⇒ 按定义即一致连续。")
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 SID = "000013"
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 TS = "2026-11-03T05:07:53+08:00"
@@ -245,7 +245,7 @@ def test_c_the_frozen_86_replay_reads_000013_unsigned_and_000000_signed(
     row00["bits"] = _clean_bits(row00)
     st00 = _ws(tmp_path / "p00", row00)
     vrow00 = dict(frozen["verifications"]["000000"][0])
-    assert vrow00["proof_sha256"] == VR.proof_sha(body00), (
+    assert vrow00["proof_sha256"] == VR.text_sha(body00), (
         "定格夹具对不上：000000 的那一签盖的不是现行正文")
     _write_ledger(st00, vrow00, sid="000000")
     got00 = VR.sign_statement(

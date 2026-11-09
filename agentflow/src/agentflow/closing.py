@@ -45,6 +45,7 @@ from . import quoteevidence as QE
 # 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是唯一读口径 ——
 # "true 而说不清怎么通过的"按没查算，收工门这一格必须跟着它走（见 `quote_verified_rows`）。
 from . import evidencebits as EB
+from . import proofregistry as _PR
 
 #: 检查的名字（顺序就是报告里的顺序）。
 #:
@@ -5002,7 +5003,7 @@ def _signed_manuscript_for_proof(root: Any, sid: str, no: int,
     base = str(root or "")
     if not base:
         return {}
-    sha = _VR.proof_sha(str(text or ""))
+    sha = _PR.proof_sha(str(text or ""))
     cands = _manuscript_candidates(sid, no)
     seen: set[str] = set()
     for rel in cands:

@@ -57,11 +57,11 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     # V 签（按正文 sha，一份一签）：未在册那一支先落 pending，在册三转后落 verifications
     pending = pending_rows(st)
     assert pending, pending
-    assert all(str(r.get("proof_sha256") or "") == VR.proof_sha(env["column"])
+    assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["column"])
                for r in pending), pending
     ledger = verification_rows(st, env["sid"])
     assert len(ledger) == VR.SIGN_STREAK_NEED, ledger
-    assert all(str(r.get("proof_sha256") or "") == VR.proof_sha(env["column"])
+    assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["column"])
                for r in ledger), ledger
     # 2026-11-08（业主：「V 现在只对手稿负责」）：V 不再翻命题行的第 3 位
     # （`signed_bit3` 恒 False），签落在这一份 e-proof 稿上。原来那一句断的是

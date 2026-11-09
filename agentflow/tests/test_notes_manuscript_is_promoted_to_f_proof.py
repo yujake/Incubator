@@ -92,7 +92,7 @@ def _write(st: Store, rel: str, text: str) -> pathlib.Path:
 def _sign(st: Store, rel: str, *, sha: str = "") -> str:
     """给盘上那份稿盖一块「已签」的块（sha 相符；第 9 格按稿名现算）。"""
     text = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
-    want = sha or VR.proof_sha(VS.manuscript_proof_body(text))
+    want = sha or VR.text_sha(VS.manuscript_proof_body(text))
     stamped = VS.stamp_manuscript_sign(
         text, proof_sha=want, streak=3, need=3, verdict="成立",
         at="2026-11-04T15:00:00+08:00", ledger="verifications/pending/probe.jsonl#v-000001",

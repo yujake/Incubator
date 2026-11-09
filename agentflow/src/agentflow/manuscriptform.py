@@ -47,6 +47,7 @@ from . import depsection as _DS
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import verifications as _VR
 from . import vsigns as _VS
+from . import proofregistry as _PR
 
 #: 手稿落点（与 `manuscriptfamily.MANUSCRIPT_DIR` 同一处）。
 MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
@@ -424,7 +425,7 @@ def carry_sign_block(root: Any, titled: str, *, old_rel: str, new_rel: str,
         "problem": {},
     }
     try:
-        body_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
+        body_sha = _PR.proof_sha(_VS.manuscript_proof_body(titled))
         candidates: list[tuple[str, str]] = []
         for rel in (old_rel, new_rel):
             rel = _norm_rel(rel)
@@ -536,8 +537,8 @@ def _signed_version_reading(root: Any, target_rel: str, titled: str,
                         "⇒ 不敢覆盖它（它可能已经是签住的那一版）"))
         return out
     block_now = _VS.manuscript_sign_reading(target_text, manuscript_path=target_rel)
-    old_sha = _VR.proof_sha(_VS.manuscript_proof_body(target_text))
-    new_sha = _VR.proof_sha(_VS.manuscript_proof_body(titled))
+    old_sha = _PR.proof_sha(_VS.manuscript_proof_body(target_text))
+    new_sha = _PR.proof_sha(_VS.manuscript_proof_body(titled))
     new_block = _VS.manuscript_sign_reading(titled, manuscript_path=target_rel)
     new_signed = bool(new_block.get("found") and new_block.get("signed")
                       and new_block.get("proof_sha256") == new_sha)
@@ -663,7 +664,7 @@ def commit_manuscript(
     block = _VS.manuscript_sign_reading(body, manuscript_path=new_rel)
     out["signed"] = bool(block.get("found") and block.get("signed")
                          and block.get("proof_sha256")
-                         == _VR.proof_sha(_VS.manuscript_proof_body(body)))
+                         == _PR.proof_sha(_VS.manuscript_proof_body(body)))
     # ---- 依赖边：与写稿同一次事务（落边失败 ⇒ 稿回滚） ---------------------------
     if write_dependencies is not None and rows:
         try:

@@ -131,6 +131,8 @@ def proof_sha(proof_text: Any) -> str:
       为什么不能顺手 `.strip("\\n")`：这一段正文在 V 那一侧是按原字节算的；
       多剥一个换行就等于给"同一段正文"造出第二个 sha，跨入口对拍时会变成
       "签不上"或"签错了也能过"（这正是 T2 收口要消灭的两把尺）。
+     由此一条可查的后果：带首尾换行的一段正文，其 sha 与 strip 之后的值不同；
+      盘上已有的历史行按它落盘时的原样对拍，本函数不会替它重新归一。
 
     ## 为什么这里允许"退而取全文"（这一句是给后人的）
     `proof_sha` 的入参在登记/重写路径上就是一段没有 markdown 标题的证明正文
@@ -138,10 +140,12 @@ def proof_sha(proof_text: Any) -> str:
     而 sha 一旦变成空串的 sha，版本记录与 V 签的对拍会同时静默失真。
     所以这一处走显式回退，并且只在这一处用 `proof_body_or_whole`。
 
-    ## 不再调用 `verifications.proof_sha`（递归边界）
-    改前最后一行是 `return _VR.proof_sha(body)`；T2 之后 `verifications.proof_sha`
-    反过来转发本函数（单一实现），所以这里必须直接算 sha —— 否则两个入口互相转发，
-    无限递归。`hashlib` 在本模块已为 `section_hashes` / 命题指纹引入，不新增依赖。
+    ## 与 `verifications.text_sha` 的分工（两把尺，故意不同名）
+    `verifications.text_sha` 是"给定文本的原样 sha"（逐字节，不切小节）—— 它服务
+    "V 拿到的这一段，是不是稿里那一段"；本函数是"签的对拍尺"（手稿取小节）。
+    两个语义不许合并：合并之后 `given != body` 那道闸会把整份手稿也算成"同一份"。
+    本函数直接算 sha（`hashlib` 已为 `section_hashes` / 命题指纹引入，不新增依赖），
+    不调用 verifications 的任何一个 sha。
     """
     raw = str(proof_text or "")
     reading = _DS.proof_body_or_whole(raw)

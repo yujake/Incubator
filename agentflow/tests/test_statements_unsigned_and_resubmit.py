@@ -398,8 +398,8 @@ def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
     items = _resubmit_items(st)
     assert len(items) == 1, [(r.get("input_key"), r.get("item_state")) for r in items]
     one = items[0]
-    assert one["input_key"] == VRC.resubmit_key(f"{SID}#p1", VR.proof_sha(PROOF)), one
-    assert one["input_key"].endswith(VR.proof_sha(PROOF)), "键尾必须是 sha，不是收件人"
+    assert one["input_key"] == VRC.resubmit_key(f"{SID}#p1", VR.text_sha(PROOF)), one
+    assert one["input_key"].endswith(VR.text_sha(PROOF)), "键尾必须是 sha，不是收件人"
     assert str(one.get("parent_task_id")) == parent, "负责人 = 那一次送审的送审者"
     assert str(one.get("expects")) == "work", "重送是要交付的活，不是'知道了'"
     assert str(one.get("kind")) == "notice"

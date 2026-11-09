@@ -61,7 +61,7 @@ def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    want = sha or VR.proof_sha(body)
+    want = sha or VR.text_sha(body)
     # 2026-11-05 晚（业主）：签块必须有独立台账背书 —— 稿头自述（`reports/… #V签`）
     # 是假签。夹具在这里先落一行 pending 台账，再把它的锚点写进块里（真签的形状）。
     row = VR.record_pending_sign(
@@ -73,7 +73,7 @@ def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
     ledger = (f"verifications/pending/"
               f"{str(row.get('object_sha256') or row.get('proof_sha256'))}.jsonl"
               f"#{row.get('verification_id')}")
-    if block and want != VR.proof_sha(PROOF):
+    if block and want != VR.text_sha(PROOF):
         # ③ 号那一档要的是"盖着另一版正文的块"：`write_manuscript_sign` 自 2026-11-02
         # 起会核「这份稿的正文 == 被签的那一份」并拒掉这一笔（body_mismatch），
         # 所以夹具在这里直接拼块（纯字符串），才量得到"B 不借旧版的签"这件事。

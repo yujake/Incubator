@@ -224,8 +224,8 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     entry = history[0]
     assert sorted(entry) == ["at", "replaced_by", "sha", "text"], entry
     assert entry["text"] == TRUNCATED, ("旧正文没有逐字留痕", entry["text"][-40:])
-    assert entry["sha"] == VR.proof_sha(TRUNCATED), entry
-    assert entry["replaced_by"] == VR.proof_sha(FULL), entry
+    assert entry["sha"] == VR.text_sha(TRUNCATED), entry
+    assert entry["replaced_by"] == VR.text_sha(FULL), entry
     assert str(entry["at"]).strip(), entry
     assert out.get("canonical_written") is True, out
     assert out.get("canonical_history"), out

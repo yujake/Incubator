@@ -238,14 +238,14 @@ def test_a_rolled_back_signature_is_never_reported_as_signed(tmp_path: pathlib.P
     # 不许出现"返回说签住、盘上 0 字节"（改前正是这个读数）。
     assert not (out["checked"] and out["signed_bit3"] and size == 0), (
         "返回说签住了第 3 位，而台账是 0 字节：" + json.dumps(out, ensure_ascii=False))
-    assert out["proof_sha256"] == VR.proof_sha(P2), out
+    assert out["proof_sha256"] == VR.text_sha(P2), out
 
     # 2026-11-08（V 只对手稿负责）：V 不再翻命题位，所以"签住了"这件事只由稿上那一格
     # 回答；返回值绝不许把 `signed_bit3` 说成真，也绝不许把 statements 写一个字。
     assert out["checked"] is True, out
     rows = _ledger_rows(st)
     assert len(rows) == VR.SIGN_STREAK_NEED and rows[-1]["proof_no"] == 2, rows
-    assert rows[-1]["proof_sha256"] == VR.proof_sha(P2), rows[-1]
+    assert rows[-1]["proof_sha256"] == VR.text_sha(P2), rows[-1]
     assert out["signed_bit3"] is False, out
     assert out["review_write"].get("manuscript_signed") is True, out["review_write"]
     assert out["review_write"].get("written") is False, out["review_write"]
@@ -356,9 +356,9 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
         assert P2_MARK in prompt, "提示词里没有 #p2 的正文（给了别的证明的正文）"
         assert P1_MARK not in prompt, "提示词里混进了 #p1 的正文（号与正文解耦）"
     assert out["proof_no"] == 2, out
-    assert out["proof_sha256"] == VR.proof_sha(P2), (
-        f"sha 不是 #p2 那一份的（{out['proof_sha256'][:12]}… vs {VR.proof_sha(P2)[:12]}…）")
-    assert _ledger_rows(st)[0]["proof_sha256"] == VR.proof_sha(P2), _ledger_rows(st)[0]
+    assert out["proof_sha256"] == VR.text_sha(P2), (
+        f"sha 不是 #p2 那一份的（{out['proof_sha256'][:12]}… vs {VR.text_sha(P2)[:12]}…）")
+    assert _ledger_rows(st)[0]["proof_sha256"] == VR.text_sha(P2), _ledger_rows(st)[0]
     # 2026-11-08：载体是稿，"号与正文绑定"由稿本身保证：签只落在交给 V 的那一份稿上，
     # statements 一个字节不动（`#p1` 不会被牵连，也不会被借用）。
     assert out["signed_bit3"] is False, out
@@ -369,10 +369,10 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
 
     _p2_text = (pathlib.Path(st.root) / rel2).read_text(encoding="utf-8")
     _p2_sign = _VS.manuscript_sign_standing(
-        _p2_text, proof_sha=VR.proof_sha(_DS.proof_body(_p2_text)),
+        _p2_text, proof_sha=VR.text_sha(_DS.proof_body(_p2_text)),
         manuscript_path=rel2)
     assert _p2_sign["found"] is True and _p2_sign["signed"] is True, _p2_sign
-    assert _p2_sign["proof_sha256"] == VR.proof_sha(P2), _p2_sign
+    assert _p2_sign["proof_sha256"] == VR.text_sha(P2), _p2_sign
 
 
 def test_a_proof_number_alone_cannot_carry_a_sign(tmp_path: pathlib.Path) -> None:
@@ -397,7 +397,7 @@ def test_a_proof_number_alone_cannot_carry_a_sign(tmp_path: pathlib.Path) -> Non
                         parent_role="F"):
         got = agent.verify_proof(SID, proof_no=3, proof_manuscript=rel)
     assert got["checked"] is True, got
-    assert got["proof_sha256"] == VR.proof_sha(P2), got
+    assert got["proof_sha256"] == VR.text_sha(P2), got
     assert seam.prompts and P2_MARK in seam.prompts[-1], (
         "给了稿却按号去取别的正文 ⇒ 「只对手稿负责」没落地")
     assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
@@ -422,7 +422,7 @@ def test_text_without_proof_no_never_mismatches_the_recorded_number(
     if out["checked"]:
         # 记到 #p1 那一支：sha 必须是 #p1 的，否则就是错配。
         assert out["proof_no"] == 1, out
-        assert out["proof_sha256"] == VR.proof_sha(P1), (
+        assert out["proof_sha256"] == VR.text_sha(P1), (
             f"记到 #p1 上，sha 却是别的证明的（{out['proof_sha256'][:12]}…）")
     else:
         # 拒绝那一支：说清是哪一格不符，且台账里没有这一签。
@@ -630,7 +630,7 @@ def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
     # 引用核实没查成（依赖台账读不出来）：改前这一格也读成签住了。
     gate_problem = _pending(root, proof_text=P1, verdict=dict(_OK))
     assert gate_problem.get("verdict") == "成立"
-    path = VR.pending_ledger_path(root, VR.proof_sha(P1))
+    path = VR.pending_ledger_path(root, VR.text_sha(P1))
     rows, problems = VR.JF.read_jsonl(path)
     assert problems == [], problems
     rows[-1]["citation_gate"] = {"ok": False, "problem": "依赖台账读不出来", "why": "读不出来"}

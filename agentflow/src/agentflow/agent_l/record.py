@@ -99,6 +99,7 @@ from ..agent_e._support import (
 from .. import statementbody as SB
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR   # 正文 sha 与证明清单的口径各只有一处
+from .. import proofregistry as _PR
 from ._support import (
     RECORD_REASONS,
     STATEMENT_CLAIM_KEY_PREFIX,
@@ -222,7 +223,7 @@ class _Record:
         path_number = int(chosen["proof_no"])
         proof_text_now = str(chosen.get("proof_text") or "")
         #: 这一份正文的指纹：读侧拿它与现行正文比（不符 ⇒ 那条路径 stale）。
-        proof_sha256 = _VR.proof_sha(proof_text_now)
+        proof_sha256 = _PR.proof_sha(proof_text_now)
         # ---- 2. 产物：必须在工作区里、必须是 `.lean`
         try:
             target = self._resolve(rel)

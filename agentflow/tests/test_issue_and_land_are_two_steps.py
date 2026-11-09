@@ -44,7 +44,7 @@ from agentflow.store import Store
 
 PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\n"
          "2. 第 1 步的 δ 只依赖 ε、不依赖点 ⇒ 按定义即一致连续。")
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 REL = "reports/f-proof-000000.md"
 SID = "000000"
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"

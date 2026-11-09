@@ -90,6 +90,7 @@ V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / 
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -556,7 +557,7 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
                                         "citation_checks": list(verdict.get("citation_checks") or [])},
                                        ensure_ascii=False, default=str))
     text = str(proof_text or "")
-    sha = proof_sha(text)
+    sha = _sign_sha(text)
     obj = str(object_sha256 or "").strip().lower()
     key = obj or sha
     path = pending_ledger_path(root, key)
@@ -971,24 +972,30 @@ def cold_start_prompt(statement_full: str, proof_text: str,
     )
 
 
-def proof_sha(proof_text: str) -> str:
-    """被审证明的 sha256（钉住"审的是哪一份"；与台账 id 的指纹口径同一套）。
+def _sign_sha(proof_text: Any) -> str:
+    """签的对拍尺：转给唯一实现 `proofregistry.proof_sha`（手稿取 `## 证明` 小节）。
 
-    ## 单一实现（2026-11-09 T2 收口）
-
-    真身只有一个：:func:`proofregistry.proof_sha` —— 它认识两种入参（一份手稿 ⇒
-    `## 证明` 那一节；一段证明正文 ⇒ 逐字节）。本函数只转发，不再自带第二把尺。
-
-    为什么必须转发：改前这里是一行裸 `hashlib.sha256(str(proof_text))`，而 V 签盖的是
-    手稿 `## 证明` 那一节的 sha ⇒ 同一个"手稿"经这两个入口会得到两个不同的 sha，
-    跨入口对拍时表现为"签不上"或"签错了也能过"。转发之后两个入口对任何输入同值；
-    对"一段证明正文"这个既有调用面，结果逐字节不变（见 T2 收口报告的逐调用点清单）。
-
-    签名保持 `(proof_text: str) -> str`：既有调用点逐字不改（本批只换实现）。
+    为什么本模块内部不直接写 `proofregistry.proof_sha`：`proofregistry` 在模块顶层
+    import 本模块（`from . import verifications as _VR`），顶层再反向 import 会形成
+    循环；惰性 import 把这条边断在调用期，语义仍是同一把尺。这一段不是第二把尺：
+    本模块自己的原样 sha 在 :func:`text_sha`，两者故意分开命名。
     """
     from . import proofregistry as _PR
 
     return _PR.proof_sha(proof_text)
+
+
+def text_sha(proof_text: str) -> str:
+    """给定文本的原样 sha256（逐字节，不切小节、不去首尾空行）。
+
+    这一把尺服务的是"V 拿到的这一段，是不是稿里那一段"：整份手稿与它的
+    `## 证明` 小节在这里给不同值。签的对拍尺是 `proofregistry.proof_sha`
+    （手稿取小节）—— 两个语义故意分开命名，不许合并成一个函数（2026-11-09 T2
+    收口的教训：合并之后 `given != body` 那道闸会把整份手稿也算成"同一份"）。
+
+    一段证明正文（没有 `## 证明` 小节）两把尺同值；只有拿整份手稿来比时才分家。
+    """
+    return hashlib.sha256(str(proof_text or "").encode("utf-8")).hexdigest()
 
 
 #: 一条证明（或一条命题）相对「它现在这一份正文」的六种读数（唯一口径在
@@ -1449,7 +1456,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if problems:
         raise VerificationError(f"这个命题的验证台账有读不出来的行：{problems[:3]}")
     vid = next_verification_id(root, statement_id)
-    sha = proof_sha(proof_text)
+    sha = _sign_sha(proof_text)
     row = {
         "verification_id": vid,
         # 两个键同值：`statement_id` 是历史名（老行只有它），`stmt_id` 是"被审的命题"的
@@ -2213,7 +2220,7 @@ def bit3_already_signed(row: Mapping[str, Any], *, proof_no: Any = DEFAULT_PROOF
     bits = _EB.bits_from_row(row)
     out["bits"] = bits
     out["reviewed_by"] = dict((bits.get("evidence") or {}).get("reviewed_by") or {})
-    sha_now = proof_sha(proof_text) if str(proof_text or "").strip() else ""
+    sha_now = _sign_sha(proof_text) if str(proof_text or "").strip() else ""
     out["proof_sha256"] = sha_now
     if not bits.get("reviewed"):
         raw = row.get("bits") if isinstance(row.get("bits"), Mapping) else {}
@@ -3487,7 +3494,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                     " ⇒ 这一签没有可盖的正文：第 3 位不翻（`reviewed_by_proof` 不写这一份），"
                     "签照旧颁发，等 B 把正文写进命题行之后按正文 sha 认领")
             else:
-                body_sha = proof_sha(str(body_in_row))
+                body_sha = _sign_sha(str(body_in_row))
                 if not signed_sha or body_sha != signed_sha:
                     body_gate = "sha_mismatch"
                     out["reason"] = (
@@ -3672,7 +3679,7 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     """
     sid = str(statement_id or "").strip()
     no = _read_proof_no(proof_no)
-    sha = proof_sha(proof_text)
+    sha = _sign_sha(proof_text)
     out: dict[str, Any] = {
         "checked": False, "state": "unsigned", "ok": False, "in_sync": None,
         "ledger_present": False, "statement_id": sid, "proof_no": no, "sha": sha,
@@ -3923,7 +3930,7 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "proof_no": no, "label": proof_label(sid, no),
             "state": "unsigned", "ok": False, "in_sync": None,
             "reviewed": False, "grade": _EB.GRADE_NOT_APPLICABLE,
-            "proof_sha256": proof_sha(text), "verification_id": "",
+            "proof_sha256": _sign_sha(text), "verification_id": "",
             "superseded": [],
             "why": ("概念行不参与等级链（`evidencebits.derive_grade` 对 "
                     "kind='concept' 短路成 not_applicable）⇒ 这一格对它不适用，"
@@ -4165,7 +4172,7 @@ def _pending_signed(root: str | Path, proof_text: Any) -> dict[str, Any] | None:
     if not text.strip():
         return None
     try:
-        got = pending_sign(root, proof_shas=(proof_sha(text),))
+        got = pending_sign(root, proof_shas=(_sign_sha(text),))
     except VerificationError:
         return None
     if not got.get("found"):

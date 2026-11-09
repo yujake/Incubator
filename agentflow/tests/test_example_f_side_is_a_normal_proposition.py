@@ -49,10 +49,10 @@ def test_a_f_registers_an_example_and_its_grade_is_by_the_textual_proof(tmp_path
     # 送 V：在册那一支三转三行，签块按正文 sha 落在稿上
     rows = verification_rows(st, env["sid"])
     assert len(rows) == VR.SIGN_STREAK_NEED, rows
-    assert all(str(r.get("proof_sha256") or "") == VR.proof_sha(env["body"])
+    assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["body"])
                for r in rows), rows
     assert env["block"]["signed"] is True, env["block"]
-    assert env["block"]["proof_sha256"] == VR.proof_sha(env["body"]), env["block"]
+    assert env["block"]["proof_sha256"] == VR.text_sha(env["body"]), env["block"]
     # 等级：按文字论证算（有证明 + 有 V 签 ⇒ pre_theorem）
     row = row_of(st, env["sid"])
     assert row["kind"] == "example", row

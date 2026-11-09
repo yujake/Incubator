@@ -215,7 +215,7 @@ def _formal_ledger_row(store: Store, *, sid: str, proof_no: int = 1,
         "code_hash": "a" * 64, "recorded_by": "agent-L",
         "tri_state": "verified" if verified else "not_checked",
         "proof_no": proof_no, "path_id": "p%dg1" % proof_no,
-        "proof_sha256": VR.proof_sha(PROOF), "path_source": "L",
+        "proof_sha256": VR.text_sha(PROOF), "path_source": "L",
     }
     row = S.Experiment(
         experiment_id=experiment_id, claim=FULL, claim_key=f"stmt:{sid}",

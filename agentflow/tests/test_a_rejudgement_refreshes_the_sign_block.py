@@ -290,7 +290,7 @@ def test_f_a_resign_of_the_same_text_anchors_to_the_newest_clean_row(tmp_path, c
 def test_the_ledger_anchor_separates_unreadable_from_empty(tmp_path):
     """`ledger_anchor` 的三态：没号/没行是"查过了、没有"，读不出来是"没查成"。"""
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     no_statement = VS.ledger_anchor(st.root, statement_id="", artifact_sha=sha)
     assert no_statement["checked"] is True and no_statement["found"] is False, no_statement
     empty = VS.ledger_anchor(st.root, statement_id=SID, artifact_sha=sha)

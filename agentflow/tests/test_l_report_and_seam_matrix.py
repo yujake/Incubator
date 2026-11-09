@@ -420,7 +420,7 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     passes = signed2.get("review_passes") or []
     assert [p["pass"] for p in passes] == [1, 2, 3], passes
     block = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
-                                        proof_sha=VR.proof_sha(new_proof))
+                                        proof_sha=VR.text_sha(new_proof))
     assert block.get("state") == "signed", block
     assert (block.get("streak"), block.get("need")) == (3, 3), block
     assert block.get("proof_sha256") != signed1.get("proof_sha256"), (
@@ -441,7 +441,7 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
     assert standing.get("state") == "stale", standing
     assert standing.get("in_sync") is False, standing
     block_now = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
-                                            proof_sha=VR.proof_sha(new_proof))
+                                            proof_sha=VR.text_sha(new_proof))
     assert block_now.get("state") == "signed", block_now
     assert (block_now.get("streak"), block_now.get("need")) == (3, 3), block_now
 

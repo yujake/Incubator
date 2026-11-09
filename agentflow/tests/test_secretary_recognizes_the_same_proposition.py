@@ -469,8 +469,8 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
     # 一份的签不许顶替另一份（票也各数各的：`#p1` 的 3 票不给 `#p2` 借光）。
     signed1 = _sign_n(st, text=PROOF_A, proof_no=1)
     signed2 = _sign_n(st, text=PROOF_B, proof_no=2)
-    assert signed1.get("proof_sha256") == VR.proof_sha(PROOF_A), signed1
-    assert signed2.get("proof_sha256") == VR.proof_sha(PROOF_B), signed2
+    assert signed1.get("proof_sha256") == VR.text_sha(PROOF_A), signed1
+    assert signed2.get("proof_sha256") == VR.text_sha(PROOF_B), signed2
     ledger = [r for r in VR.list_verifications(st.root, statement_id=SID, limit=None)[0]]
     assert sorted((int(r.get("proof_no") or 0) for r in ledger)) == [1, 1, 1, 2, 2, 2], ledger
     assert EB.reviewed_by_proof(_row(st)) == {1: True, 2: True}, EB.reviewed_by_proof(_row(st))
@@ -524,8 +524,8 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     history = list(row.get("proof_history") or [])
     assert len(history) == 1, history
     assert history[0].get("text") == PROOF_A, history
-    assert history[0].get("sha") == VR.proof_sha(PROOF_A), history
-    assert history[0].get("replaced_by") == VR.proof_sha(MERGED), history
+    assert history[0].get("sha") == VR.text_sha(PROOF_A), history
+    assert history[0].get("replaced_by") == VR.text_sha(MERGED), history
     assert int(history[0].get("proof_no") or 0) == 1, "旧正文没记清是哪一份证明的旧稿"
     # 合并与"直接覆盖"的区别：盘上有合并痕迹这一笔（谁合并、合并了哪几份）。
     traces = list(row.get("_proof_merge") or [])

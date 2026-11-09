@@ -130,7 +130,7 @@ def _sign(st: Store, sid: str) -> None:
     assert path.is_file(), f"手稿没发布：{rel}"
     body = _DS.proof_body(path.read_text(encoding="utf-8")).strip("\n")
     wrote = VS.write_manuscript_sign(
-        st.root, rel, proof_sha=VR.proof_sha(body), streak=3, need=3,
+        st.root, rel, proof_sha=VR.text_sha(body), streak=3, need=3,
         verdict="成立", signer="V", at=AT, ledger=f"{rel}#V签",
         statement_id=sid, signed=True)
     assert wrote.get("written") is True, wrote

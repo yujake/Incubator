@@ -194,7 +194,7 @@ def test_b_a_signed_replacement_flips_optimized_and_keeps_the_review_tables(
     assert EB.optimized_by_proof(row) == {1: True}, row["bits"]["evidence"]
     # ② 两张表仍在，而且 sha 指的是现行正文（按现行正文重新判定后重写）。
     assert EB.reviewed_by_proof(row) == {1: True}, row["bits"]["evidence"]
-    assert EB.reviewed_sha_by_proof(row) == {1: VR.proof_sha(P_OPT)}, row["bits"]["evidence"]
+    assert EB.reviewed_sha_by_proof(row) == {1: VR.text_sha(P_OPT)}, row["bits"]["evidence"]
 
 
 # ============================================================ c：87 定格重放
@@ -229,7 +229,7 @@ def test_c_the_87_frozen_rows_read_optimized_false_with_a_reason() -> None:
     got = EB.optimized_standing(signed, 1)
     assert got["optimized"] is True, got
     assert got["optimized_blocked"] == "", got
-    assert got["recorded_sha256"] == VR.proof_sha(str(signed.get("proof_text") or "")), got
+    assert got["recorded_sha256"] == VR.text_sha(str(signed.get("proof_text") or "")), got
 
 
 # ============================================================ d：反真空
@@ -248,7 +248,7 @@ def test_d_without_the_gate_an_unsigned_replacement_goes_green(
         lambda bits, *, proof_no, proof_text: {
             "checked": True, "proof_no": int(proof_no), "optimized": True,
             "optimized_blocked": "", "signed": True,
-            "proof_sha256": VR.proof_sha(str(proof_text)), "recorded_sha256": "",
+            "proof_sha256": VR.text_sha(str(proof_text)), "recorded_sha256": "",
             "why": "打桩：把 ① 那条核摘掉（判据 d）"})
     st = _ws(tmp_path)
     sid = _seed(st, proof_text=P_MECH)

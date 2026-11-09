@@ -82,7 +82,7 @@ def _sign(st: Store, rel: str) -> None:
     ledger = (f"verifications/pending/{row['proof_sha256']}.jsonl"
               f"#{row['verification_id']}")
     stamped = VS.stamp_manuscript_sign(
-        text, proof_sha=VR.proof_sha(body),
+        text, proof_sha=VR.text_sha(body),
         streak=VR.SIGN_STREAK_NEED, need=VR.SIGN_STREAK_NEED,
         verdict="成立", at="2026-11-04T15:00:00+08:00",
         ledger=ledger, statement_id="",

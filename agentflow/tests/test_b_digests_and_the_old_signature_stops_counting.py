@@ -317,8 +317,8 @@ def test_b_rewriting_the_proof_voids_the_old_signature_and_points_at_v(tmp_path)
     history = [dict(h) for h in (row.get("proof_history") or [])]
     assert history, "旧正文没有留痕"
     last = history[-1]
-    assert last["text"] == SRC and last["sha"] == VR.proof_sha(SRC), last
-    assert last["replaced_by"] == VR.proof_sha(DIGEST), last
+    assert last["text"] == SRC and last["sha"] == VR.text_sha(SRC), last
+    assert last["replaced_by"] == VR.text_sha(DIGEST), last
     assert EB.bits_from_row(row)["reviewed"] is False, row.get("bits")
     rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
     assert problems == [], problems

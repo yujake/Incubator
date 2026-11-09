@@ -48,7 +48,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _pending_row(st: Store, proof: str = PROOF) -> dict:
-    path = VR.pending_ledger_path(st.root, VR.proof_sha(proof))
+    path = VR.pending_ledger_path(st.root, VR.text_sha(proof))
     rows, problems = VR.JF.read_jsonl(path)
     assert problems == [], problems
     assert len(rows) == 1, rows

@@ -609,8 +609,8 @@ def test_l_a_second_proof_of_the_same_proposition_appends_a_proof_path(tmp_path)
     assert len(rows) == 1, rows
     listed = VR.proof_list(rows[0])
     assert [int(no) for no, _text in listed] == [1, 2], listed
-    assert VR.proof_sha(VR.proof_text_of(rows[0], 1)) == VR.proof_sha(P1)
-    assert VR.proof_sha(VR.proof_text_of(rows[0], 2)) == VR.proof_sha(P2)
+    assert VR.text_sha(VR.proof_text_of(rows[0], 1)) == VR.text_sha(P1)
+    assert VR.text_sha(VR.proof_text_of(rows[0], 2)) == VR.text_sha(P2)
     assert got.get("merged") is True, got
     assert int(got.get("proof_no") or 0) == 2, got
 

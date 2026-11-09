@@ -47,7 +47,7 @@ PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 SID = "000000"
 REL = f"reports/f-proof-{SID}.md"
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -141,7 +141,7 @@ def test_d_signed_new_version_is_not_lost(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     _row(st, reviewed=True)
     new_proof = PROOF + "\n3. 补上边界情形。"     # 新版正文
-    text = _signed_text(_manuscript(st, new_proof), sha=VR.proof_sha(new_proof))
+    text = _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof))
     got = _read(st, text)
     assert got["manuscript_signed"] is True, got
     assert got["filed"] is False, got

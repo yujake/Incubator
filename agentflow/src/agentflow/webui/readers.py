@@ -90,6 +90,7 @@ from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
 from ..jsonlfile import read_jsonl_state
 from . import facecache
 from . import state as _state
+from .. import proofregistry as _PR
 
 __all__ = [
     "ADMISSION_BASIS_CANDIDATE",
@@ -1644,7 +1645,7 @@ def _verification_consistency(rows: list[dict],
     """验证行补 `proof_sha_consistency`：V 签的那一份证明 vs 命题现在那一份。
 
     比的两边各自只有一个出处：签的那一份是这一行的 `proof_sha256`，现在那一份是
-    `verifications.proof_sha(proof_text_of(命题行, 这个证明号))`。命题行不在读到的
+    `proofregistry.proof_sha(proof_text_of(命题行, 这个证明号))`。命题行不在读到的
     statements 里（被引用的外部命题 / 那一行还没落盘）⇒ `unknown`：没得比。
 
     为什么按 `proof_no` 取而不是按"最新一份"：多证明模型下每一条路径各签各的，
@@ -1664,7 +1665,7 @@ def _verification_consistency(rows: list[dict],
         if stmt is not None:
             try:
                 text = VR.proof_text_of(stmt, row.get("proof_no") or 1)
-                now = VR.proof_sha(text) if text else ""
+                now = _PR.proof_sha(text) if text else ""
             except Exception:  # noqa: BLE001 - 取不到现在的正文 ⇒ 没得比
                 now = ""
         got["proof_sha_consistency"] = sha_consistency(row.get("proof_sha256"), now)

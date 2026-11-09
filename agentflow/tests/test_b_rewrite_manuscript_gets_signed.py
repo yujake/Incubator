@@ -167,7 +167,7 @@ def test_a_b_rewrite_gets_a_signed_manuscript_then_lands_reviewed(
     block = VS.manuscript_sign_reading(_manuscript_text(st, rel), manuscript_path=rel)
     assert block["found"] is True and block["signed"] is True, block
     assert block["signer"] == "secretary:B", block
-    assert block["proof_sha256"] == VR.proof_sha(NEW_BODY), block
+    assert block["proof_sha256"] == VR.text_sha(NEW_BODY), block
     # 第 9 格 `手稿号` 认的是这份稿（`b-proof-<号>`），不是"未在册"。
     assert block["identity_state"] == "resolved", block
     assert block["manuscript_id"] == sid, block

@@ -136,7 +136,7 @@ def _put_formal_experiment(store: Store, *, sid: str, proof_no: int,
         # 这一格是"这次形式化验的是哪一份正文"的指纹（判据 ⑥ 就咬它）。
         "proof_no": proof_no,
         "path_id": "p%dg1" % proof_no,
-        "proof_sha256": VR.proof_sha(proof_text),
+        "proof_sha256": VR.text_sha(proof_text),
         "path_source": path_source,
     }
     row = S.Experiment(
@@ -501,16 +501,16 @@ def test_record_keeps_the_four_path_readings_and_they_are_faithful(
         assert got.get("path_id") == "p2g1", got
         assert got.get("path_source") == source, (
             f"path_source={source} 没落盘（它是受控三值，不许被抹成空）", got.get("path_source"))
-        assert got.get("proof_sha256") == VR.proof_sha(P2), (
+        assert got.get("proof_sha256") == VR.text_sha(P2), (
             "记下来的 sha 不是第 2 份证明现行正文的", got.get("proof_sha256"))
         obs = [r for r in st.rows("experiments")
                if str(r.get("experiment_id") or "") == str(got["experiment_id"])][0]
-        assert obs["observations"]["proof_sha256"] == VR.proof_sha(P2), obs["observations"]
+        assert obs["observations"]["proof_sha256"] == VR.text_sha(P2), obs["observations"]
         assert obs["observations"]["path_source"] == source, obs["observations"]
         # 谁选的（path_source）与谁验的（recorded_by）是两格，不许合成一格。
         assert obs["observations"]["recorded_by"] == "agent-L", obs["observations"]
         assert obs["params"]["proof_no"] == 2, obs["params"]
-        assert obs["params"]["proof_sha256"] == VR.proof_sha(P2), obs["params"]
+        assert obs["params"]["proof_sha256"] == VR.text_sha(P2), obs["params"]
 
     # 号与产物对不上 ⇒ 受控拒绝（登记进去的会是另一条路径的源码）。
     wrong = agent.record(sid, "code/formal/probe.lean", proof_no=2, declaration_name="probe")

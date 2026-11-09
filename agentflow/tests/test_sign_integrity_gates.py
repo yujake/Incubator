@@ -107,7 +107,7 @@ def test_a_a_sign_without_a_statement_id_is_refused(tmp_path: pathlib.Path) -> N
     `verifications/pending/<正文sha>.jsonl#u-<号>`，那才是这一档的落点。
     """
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
                    artifact_path="reports/f-proof-000013.md", ledger="",
                    statement_id="", passes=_passes(sha), by="secretary:F")
@@ -121,7 +121,7 @@ def test_a_a_sign_without_a_statement_id_is_refused(tmp_path: pathlib.Path) -> N
 def test_b_a_self_referential_ledger_is_not_a_ledger(tmp_path: pathlib.Path) -> None:
     """b：稿头自述（`reports/<稿>#V签`）不是台账 ⇒ 受控拒绝。"""
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     rel = _manuscript(st, SID)
     got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3, artifact_path=rel,
                    ledger=f"{rel}#V签", statement_id=SID, passes=_passes(sha),
@@ -136,7 +136,7 @@ def test_b_a_self_referential_ledger_is_not_a_ledger(tmp_path: pathlib.Path) -> 
 def test_c_three_empty_passes_are_not_a_streak(tmp_path: pathlib.Path) -> None:
     """c：`passes=[{},{},{}]` 不许被数成「连续 3/3」⇒ 受控拒绝。"""
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
                    artifact_path="reports/f-proof-000013.md",
                    ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
@@ -161,7 +161,7 @@ def test_d_a_plan_manuscript_is_not_a_sign_carrier(tmp_path: pathlib.Path) -> No
     assert VS.parse_manuscript_name(rel)["family"] == "f-proof", VS.parse_manuscript_name(rel)
 
     # 一块「已签 3/3」盖在计划稿上 ⇒ 身份不许 resolved（真机 883c3097）。
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     mark = VS.render_manuscript_sign(
         proof_sha=sha, streak=3, need=3, at="2026-11-05T00:00:00+08:00",
         ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
@@ -187,7 +187,7 @@ def test_e_signing_then_registering_the_body_upgrades_the_grade(tmp_path: pathli
     wb = dict(third.get("statement_writeback") or {})
     assert wb.get("written") is False, wb   # 正文还没进那一行 ⇒ 第 3 位不翻
     assert EB.bits_from_row(_row(st, sid))["grade"] == "conjecture", _row(st, sid)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     assert VS.sign_path(st.root, sha).is_file(), "三转成立却没有签文件"
 
     # B 回填正文（第一步：`register_statement:proofs`）。不再跑第二条升级命令。
@@ -227,7 +227,7 @@ def _board(tmp_path: pathlib.Path) -> tuple[Store, Conductor, str, str]:
     st = _ws(tmp_path)
     cond = Conductor(st, registry={}, backend=LocalBackend({}))
     owner = str(cond.open_top_level_run("M", "义务项收口"))
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     with calling_as(owner, "M"):
         opened = cond.open_item(kind="notice", role="B", expects="work", action="notice",
                                 summary="必须收录：签已落、statement 行还空",
@@ -279,7 +279,7 @@ def test_f_a_without_the_gate_an_empty_ledger_anchor_writes_a_sign(
     """f-a：摘掉闸 ⇒ a 当场红（连台账都没有也写出了签文件）。"""
     _unplug_sign_gate(monkeypatch)
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     wrote = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
                      artifact_path="reports/f-proof-000013.md", ledger="",
                      statement_id="", passes=_passes(sha), by="secretary:F")
@@ -292,7 +292,7 @@ def test_f_b_without_the_gate_a_self_referential_ledger_writes_a_sign(
     """f-b：摘掉闸 ⇒ b 当场红（稿头自述被当成了台账）。"""
     _unplug_sign_gate(monkeypatch)
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     rel = _manuscript(st, SID)
     wrote = VS.issue(st.root, artifact_sha=sha, streak=3, need=3, artifact_path=rel,
                      ledger=f"{rel}#V签", statement_id=SID, passes=_passes(sha),
@@ -305,7 +305,7 @@ def test_f_c_without_the_gate_three_empty_passes_write_a_sign(tmp_path, monkeypa
     """f-c：摘掉闸 ⇒ c 当场红（三个空对象被数成连续 3/3）。"""
     _unplug_sign_gate(monkeypatch)
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     wrote = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
                      artifact_path="reports/f-proof-000013.md",
                      ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
@@ -322,7 +322,7 @@ def test_f_d_without_the_carrier_gate_a_plan_block_is_resolved(tmp_path, monkeyp
     st = _ws(tmp_path)
     rel = _manuscript(st, SID, plan=True)
     mark = VS.render_manuscript_sign(
-        proof_sha=VR.proof_sha(PROOF), streak=3, need=3,
+        proof_sha=VR.text_sha(PROOF), streak=3, need=3,
         ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
         manuscript_id=f"plan-{SID}", signer="secretary:F")
     text = pathlib.Path(st.root, rel).read_text(encoding="utf-8") + "\n" + mark + "\n"

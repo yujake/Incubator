@@ -43,6 +43,7 @@ from . import refusals as R
 from . import schema as S
 from . import statementbody as _SB
 from . import statementledger as SL
+from . import proofregistry as _PR
 
 #: 台账落点：`<工作区>/out/secretary/<role>.jsonl`（追加式、脚本发号，`draft/53` §11.2）。
 SECRETARY_DIR = ("out", "secretary")
@@ -1558,7 +1559,7 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
     except (TypeError, ValueError):
         no = 1
     out["proof_no"] = no
-    sha = _VR.proof_sha(text)
+    sha = _PR.proof_sha(text)
     out["sha256"] = sha
     sid = str(statement_id or "").strip()
     row: Mapping[str, Any] | None = None
@@ -1749,7 +1750,7 @@ def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
             from . import verifications as _VR   # 惰性：正文 sha 的口径只有一处
             from . import vsigns as _VS          # 惰性：签块读数的口径只有一处
 
-            sha = _VR.proof_sha(proof) if proof.strip() else ""
+            sha = _PR.proof_sha(proof) if proof.strip() else ""
             ms = _VS.manuscript_sign_standing(
                 text, proof_sha=sha, manuscript_path=str(manuscript_path or ""))
             out["manuscript"] = {k: ms.get(k) for k in (
@@ -4142,7 +4143,7 @@ class Secretary:
         out["streak"] = out["ledger_streak"]
         out["state"] = str(reading.get("state") or "")
         sha = str(reading.get("sha") or "")
-        same_sha = bool(sha) and sha == _VR.proof_sha(str(proof_text or ""))
+        same_sha = bool(sha) and sha == _PR.proof_sha(str(proof_text or ""))
         out["same_sha"] = same_sha
         # 这一签落下去之后的连续次数：同一份正文 ⇒ 前一票 + 这一票；换了一份 ⇒ 从 1 起。
         #
@@ -10082,13 +10083,13 @@ class Secretary:
         # 记录"，而是同一条记录再交一次 —— 判据在这里分不开的代价是：B 再也不敢交
         # 带证明的那一笔（proofs=0 的绕行就是这么来的）。
         #
-        # 判据取 sha（verifications.proof_sha，与签名台账同一个哈希），不比相似度：
+        # 判据取原样 sha（verifications.text_sha，"逐字同一份"），不比相似度：
         # "逐字同一份"是确定性的事实，不需要阈值。命中 ⇒ 一个字节都不写（那一份已经在册），
         # 回执说清"就是第几份"，调用方据此收工。
-        same_sha = VR.proof_sha(proof)
+        same_sha = VR.text_sha(proof)
         same_text_no = next(
             (int(no) for no, text in existing
-             if str(text or "").strip() and VR.proof_sha(str(text)) == same_sha), 0)
+             if str(text or "").strip() and VR.text_sha(str(text)) == same_sha), 0)
         if same_text_no and not merge:
             out.update(checked=True, created=False, duplicate=False, merged=True,
                        merged_into=sid, stmt_id=sid, proof_no=int(same_text_no),
@@ -10185,7 +10186,7 @@ class Secretary:
         if requested_no >= 1 and not canonical_was_empty:
             have_now = {int(no): str(text or "") for no, text in existing}
             if (requested_no in have_now
-                    and VR.proof_sha(have_now[requested_no]) != VR.proof_sha(proof)):
+                    and VR.text_sha(have_now[requested_no]) != VR.text_sha(proof)):
                 # 号已经被另一份正文占了：不许覆盖（那是"同一份证明两个正文"），
                 # 也不许静默换号（换号就是猜）—— 整笔受控拒绝，说清在册的是哪几号。
                 out.update(checked=False, created=False, duplicate=False, merged=False,
@@ -10372,8 +10373,8 @@ class Secretary:
         from . import verifications as VR   # 惰性：签名状态与正文 sha 的唯一读口径
 
         old_text = VR.proof_text_of(row, proof_no)
-        entry = {"text": old_text, "sha": VR.proof_sha(old_text), "at": S.now_iso(),
-                 "replaced_by": VR.proof_sha(merged_text), "proof_no": int(proof_no)}
+        entry = {"text": old_text, "sha": _PR.proof_sha(old_text), "at": S.now_iso(),
+                 "replaced_by": _PR.proof_sha(merged_text), "proof_no": int(proof_no)}
         history = [dict(h) if isinstance(h, Mapping) else h
                    for h in (row.get("proof_history") or [])]
         history.append(entry)

@@ -42,7 +42,7 @@ MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               f"{PROOF}\n\n"
               "## 依赖\n\n"
               "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 REL = "reports/f-proof-000000.md"
 
 

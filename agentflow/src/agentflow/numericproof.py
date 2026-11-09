@@ -65,6 +65,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from . import proofregistry as _PR
 
 #: 能让「穷举直接证掉整个命题」成立的方法（计算类）。
 #:
@@ -1125,7 +1126,7 @@ SIGN_SHA_FIELD = "sha256"
 def object_sha256(path: Any) -> str:
     """一份对象字节的 sha256（算在字节上，不算在归一化之后的文本上）。
 
-    与 `verifications.proof_sha` 的分工：那个算的是"一段证明正文"（字符串），这个算的是
+    与 `verifications.text_sha` 的分工：那个算的是"一段证明正文"（字符串），这个算的是
     "盘上那一份文件"。索引里的 `evidence_sha256` 与 `v_signature` 的 `sha256` 都用这一份口径，
     否则"签名时那一份"与"现在盘上那一份"会因为换行形态不同而永远对不上。
     """
@@ -1401,7 +1402,7 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
 
     1. 取「最近一签」（同一份正文被签过两次时以最后一次为准：先成立、后改判有毛病的那一份
        不能被早先那一签救活）；
-    2. 那一签的 `proof_sha256` 必须与这一份证明正文「对得上」（`verifications.proof_sha`
+    2. 那一签的 `proof_sha256` 必须与这一份证明正文「对得上」（`proofregistry.proof_sha`
        的口径；sha 不符 = 签的是别的正文 / 改稿前的旧版，一律不算）。
 
     按命题号读、不按"扫全目录找同文"读：`sha 相符` 只回答"这份稿被签过"，而命题这一行的
@@ -1477,10 +1478,10 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
     # 贴的是归一化过的那一份）。两个 sha 之外的一律不算 —— 宽松会让改稿后的旧签生效。
     want: set[str] = set()
     if text.strip():
-        want = {_VR.proof_sha(text)}
+        want = {_PR.proof_sha(text)}
         relaxed = norm_text(text)
         if relaxed != text:
-            want.add(_VR.proof_sha(relaxed))
+            want.add(_PR.proof_sha(relaxed))
     # ---- 第一路：这一条命题自己的台账（原路，一个字都没改）
     sid = str(statement_id or "").strip()
     statement_why = ""

@@ -233,8 +233,8 @@ def test_a_signed_canonical_can_be_rewritten_and_the_old_text_is_kept(tmp_path):
     entry = history[0]
     assert sorted(entry) == ["at", "replaced_by", "sha", "text"], entry
     assert entry["text"] == P1, entry
-    assert entry["sha"] == VR.proof_sha(P1), entry
-    assert entry["replaced_by"] == VR.proof_sha(edited), entry
+    assert entry["sha"] == VR.text_sha(P1), entry
+    assert entry["replaced_by"] == VR.text_sha(edited), entry
     assert str(entry["at"]).strip(), entry
 
     standing = VR.review_standing(st.root, statement_id=sid, proof_text=edited,

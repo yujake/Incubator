@@ -44,7 +44,7 @@ PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 SID = "000000"
 REL = f"reports/f-proof-{SID}.md"
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -137,7 +137,7 @@ def test_4_stale_names_the_current_version_in_the_ledger(tmp_path: pathlib.Path)
     st = _ws(tmp_path)
     _row(st, reviewed=True)
     new_proof = PROOF + "\n3. 补上边界情形。"
-    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.proof_sha(new_proof)))
+    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof)))
     assert got["state"] == "signed_stale_in_ledger", got
     stmt = dict(got["statement"])
     assert int(stmt["proof_no"]) == 0, stmt          # 没有一条盖住新版
@@ -207,10 +207,10 @@ def test_9_anti_vacuum_current_version_is_the_latest_with_text(tmp_path: pathlib
     _row(st, proof=old1, reviewed=True,
          proofs=[{"proof_no": 2, "proof_text": old2}])
     new_proof = PROOF + "\n4. 全新的一版。"
-    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.proof_sha(new_proof)))
+    got = _read(st, _signed_text(_manuscript(st, new_proof), sha=VR.text_sha(new_proof)))
     assert got["state"] == "signed_stale_in_ledger", got
     stmt = dict(got["statement"])
     assert int(stmt["proof_rows"]) == 2, stmt
     assert int(stmt["current_proof_no"]) == 2, stmt
-    assert stmt["current_proof_sha256"] == VR.proof_sha(old2), stmt
+    assert stmt["current_proof_sha256"] == VR.text_sha(old2), stmt
     assert "p2" in got["why"], got["why"]

@@ -239,9 +239,9 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
         # 决定）；且 sha 必须是盘上那份正文的真实 sha、号必须等于该份的号，不是自报。
         # 它们不是 schema 字段（见上）。
         assert row.get("proof_no") == 1, sorted(row)
-        assert str(row.get("proof_sha256") or "") == VR.proof_sha(P1), (
-            row.get("proof_sha256"), VR.proof_sha(P1))
-        assert str(row.get("proof_sha256") or "") == VR.proof_sha(
+        assert str(row.get("proof_sha256") or "") == VR.text_sha(P1), (
+            row.get("proof_sha256"), VR.text_sha(P1))
+        assert str(row.get("proof_sha256") or "") == VR.text_sha(
             str(row.get("proof_text") or "")), row
         last = _ledger(store)[-1]
         assert trace.get("basis") == (
@@ -434,13 +434,13 @@ def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
     assert signed["stmt_id"] == sid, signed
     assert signed["statement_id"] == sid, signed
     assert signed["proof_no"] == 2, signed
-    assert signed["proof_sha256"] == VR.proof_sha(P2), signed
-    assert signed["proof_sha256"] != VR.proof_sha(P1), "签的是 #p1 的正文就算错了"
+    assert signed["proof_sha256"] == VR.text_sha(P2), signed
+    assert signed["proof_sha256"] != VR.text_sha(P1), "签的是 #p1 的正文就算错了"
 
     disk = _ledger(st)[-1]
     assert disk["stmt_id"] == sid and disk["statement_id"] == sid, disk
     assert disk["proof_no"] == 2, disk
-    assert disk["proof_sha256"] == VR.proof_sha(P2), disk
+    assert disk["proof_sha256"] == VR.text_sha(P2), disk
     # 写回只翻被签的那一份：#p1 的原值原样保留（它排在前面也不借光、也不被顺手改掉）。
     wb = signed["statement_writeback"]
     assert wb["written"] is True and wb["rolled_back"] is False, wb
@@ -543,7 +543,7 @@ def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
     assert out["ok"] is True, out
     signed = _sign_n(st, text=P1, proof_no=1)
     sha_at_sign = signed["proof_sha256"]
-    assert sha_at_sign == VR.proof_sha(P1)
+    assert sha_at_sign == VR.text_sha(P1)
 
     edited = P1 + "\n3. 补上一步（这一句是签完之后才加的）。"
     row = _row(st)
@@ -557,7 +557,7 @@ def test_editing_the_proof_after_signing_is_written_not_refused(tmp_path):
     assert now["evidence_kind"] == "proof_review", now
     disk = _ledger(st)[-1]
     assert disk["proof_sha256"] == sha_at_sign, "台账那一行必须留在签名当时那一份上"
-    assert disk["proof_sha256"] != VR.proof_sha(edited), disk
+    assert disk["proof_sha256"] != VR.text_sha(edited), disk
     # 写侧不回头改凭据（那是历史）；读侧据此判"签过、过期了"。
     by = now["bits"]["evidence"]["reviewed_by"]
     assert by["proof_sha256"] == sha_at_sign, by

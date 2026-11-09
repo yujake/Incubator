@@ -213,7 +213,7 @@ def test_a_real_lean_verification_reaches_the_fourth_bit_and_theorem(
         "真 Lean 没验过这一份（那这一条判据无从谈起）", recorded)
     assert recorded.get("evidence_kind") == "proof", (
         "检查器说 verified 而这一行不是 proof 档", recorded.get("evidence_kind"))
-    assert str(recorded.get("proof_sha256") or "") == VR.proof_sha(P1), (
+    assert str(recorded.get("proof_sha256") or "") == VR.text_sha(P1), (
         "记下来的 sha 不是该命题现行 `proof_text` 的", recorded.get("proof_sha256"))
 
     eid = str(recorded["experiment_id"])
@@ -224,7 +224,7 @@ def test_a_real_lean_verification_reaches_the_fourth_bit_and_theorem(
     assert obs.get("statement_id") == sid and exp.get("claim_key") == f"stmt:{sid}", obs
     assert obs.get("tri_state") == "verified", (
         "三态不是 verified（没查成与查通了不许折成一件事）", obs.get("tri_state"))
-    assert obs.get("proof_no") == 1 and obs.get("proof_sha256") == VR.proof_sha(P1), obs
+    assert obs.get("proof_no") == 1 and obs.get("proof_sha256") == VR.text_sha(P1), obs
     assert str(obs.get("checker") or "").startswith("lean"), obs.get("checker")
 
     # L 的写集只有 experiments：B 登记之前命题那一行的第 4 位还是"没验过"。
@@ -236,7 +236,7 @@ def test_a_real_lean_verification_reaches_the_fourth_bit_and_theorem(
     synced = _sync(st, agent_b)
     after = _bits(st, sid)
     _assert_chain_reaches_theorem(after, experiment_id=eid,
-                                  proof_sha256=VR.proof_sha(P1))
+                                  proof_sha256=VR.text_sha(P1))
     assert EB.derive_grade(after) == "theorem", (
         "等级不是从五元位现算的 theorem", EB.derive_grade(after))
     assert synced.get("formal_paths") == {"1": "verified"}, (
@@ -310,7 +310,7 @@ def _put_unbound_formal_experiment(store: Store, *, bound_sid: str,
         "statement_id": bound_sid, "statement_evidence_kind": "",
         "declaration_name": "LProbe.probe", "code_hash": "a" * 64,
         "recorded_by": "agent-L", "proof_no": 1, "path_id": "",
-        "proof_sha256": VR.proof_sha(proof_text), "path_source": "B",
+        "proof_sha256": VR.text_sha(proof_text), "path_source": "B",
     }
     with store.tx("experiments", actor="agent-L") as tx:
         eid = str(tx.alloc_id("experiment"))
@@ -381,14 +381,14 @@ def test_the_three_assertions_are_not_vacuous() -> None:
                       formal={"1": "verified"},
                       formal_evidence={"1": {"checker": "lean 4.7.0",
                                              "experiment_id": "000001",
-                                             "proof_sha256": VR.proof_sha(P1)}})
+                                             "proof_sha256": VR.text_sha(P1)}})
     _assert_chain_reaches_theorem(good, experiment_id="000001",
-                                  proof_sha256=VR.proof_sha(P1))
+                                  proof_sha256=VR.text_sha(P1))
     # 第 4 位停在 pending ⇒ a 的断言必须红（D28 之前就是这个形态）。
     pending = EB.bits_of(proof=True, proof_process=P1, kind="conjecture")
     with pytest.raises(AssertionError):
         _assert_chain_reaches_theorem(pending, experiment_id="000001",
-                                      proof_sha256=VR.proof_sha(P1))
+                                      proof_sha256=VR.text_sha(P1))
     # 没绑定的读数被套上 verified ⇒ c 的断言必须红。
     flipped = EB.bits_of(proof=True, proof_process=P1, kind="conjecture",
                          formal={"1": "verified"},

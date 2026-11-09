@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
+from . import proofregistry as _PR
 
 #: ②③ 的落点（唯一口径）：`out/experiments/<实验号>/exhaustion.md`。
 #:
@@ -374,7 +375,7 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
 # 写的 `signed_by="V"`，那是自报）与 V 的台账行（那是"审过"，不是"签在稿上"）。
 #
 # 这一节补的是"与 F 同形的那一份手稿"：同目录（`reports/`）、同 `## 命题` / `## 证明` /
-# `## 依赖` 三节、同一把 sha 尺（`verifications.proof_sha(## 证明 的正文)`）。
+# `## 依赖` 三节、同一把 sha 尺（`proofregistry.proof_sha(## 证明 的正文)`）。
 # 差别只有一处、而且是必须的：正文不是散文，是 `numericproof.compose_proof_column`
 # 那一段（2026-11-08 起只有 ③ 穷举论证；① 程序在 `experiments.code_path`、② 程序设计在
 # `observations["design"]`）—— 它正是 B 登记时 `proof_text` 要收的那一串，
@@ -602,7 +603,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     sha256 算在字节上，与 `read_proof_manuscript` 读回来的那一格同一个值。
 
     返回 `{"path","bytes","sha256","ok","problems","experiment_id","proof_sha256","at"}`。
-    `proof_sha256` 是 `## 证明` 那一节正文的 sha（`verifications.proof_sha` 的口径）——
+    `proof_sha256` 是 `## 证明` 那一节正文的 sha（`proofregistry.proof_sha` 的口径）——
     签块盖的就是它，B 登记时核的也是它。
     """
     from . import verifications as _VR
@@ -640,7 +641,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     body = proof_body_of(payload.decode("utf-8"))
     out.update({"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest(),
                 "proof_no": int(facts.get("proof_no") or 0),
-                "proof_sha256": _VR.proof_sha(body) if body.strip() else "",
+                "proof_sha256": _PR.proof_sha(body) if body.strip() else "",
                 "ok": bool(body.strip()), "at": _now_iso()})
     if not body.strip():
         problems.append(f"手稿写成了，但 `{MANUSCRIPT_PROOF_HEADING}` 那一节读不出正文：{rel}")
@@ -711,7 +712,7 @@ def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
     out.update({"text": text, "bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 "proof_body": body,
-                "proof_sha256": _VR.proof_sha(body) if body.strip() else ""})
+                "proof_sha256": _PR.proof_sha(body) if body.strip() else ""})
     if not text.strip():
         out["state"] = "empty"
         out["problems"] = [f"手稿是空文件：{raw}（空文件不等于「这一份写过了」）"]

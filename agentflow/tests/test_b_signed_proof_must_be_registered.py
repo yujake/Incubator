@@ -416,7 +416,7 @@ def test_g_gap_keeps_three_states(tmp_path):
     row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
     row["proofs"] = [{"proof_no": 2, "proof_text": PROOF}]
     row["bits"] = VS.bits_with_review(
-        dict(row.get("bits") or {}), proof_no=1, proof_sha256=VR.proof_sha(PROOF),
+        dict(row.get("bits") or {}), proof_no=1, proof_sha256=VR.text_sha(PROOF),
         kind=str(row.get("kind") or ""))
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)

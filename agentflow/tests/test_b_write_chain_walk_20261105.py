@@ -111,7 +111,7 @@ def _put(st: Store, rel: str, text: str) -> pathlib.Path:
 def _sign_three(st: Store, *, sid: str, text: str, rel: str, body: str) -> None:
     """签块 + 台账连续三次「成立」：签必须盖住 body 的 sha。"""
     stamped = VS.stamp_manuscript_sign(
-        text, proof_sha=VR.proof_sha(body), streak=VR.SIGN_STREAK_NEED,
+        text, proof_sha=VR.text_sha(body), streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立",
         at="2026-11-05T12:00:00+08:00",
         ledger=f"verifications/{sid}.jsonl#v-000003",

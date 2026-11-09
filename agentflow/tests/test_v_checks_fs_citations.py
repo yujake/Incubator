@@ -213,7 +213,7 @@ def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
     if evidence_kind == "proof_review":
         raw = (pathlib.Path(store.root) / rel).read_text(encoding="utf-8")
         stamped = _VS.stamp_manuscript_sign(
-            raw, proof_sha=VR.proof_sha(LEMMA_PROOF), streak=3, need=3,
+            raw, proof_sha=VR.text_sha(LEMMA_PROOF), streak=3, need=3,
             verdict="成立", signer="secretary:F", at=S.now_iso(),
             ledger=f"verifications/{sid}.jsonl#v-000001",
             statement_id=sid, manuscript_id=sid)

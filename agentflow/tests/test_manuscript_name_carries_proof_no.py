@@ -81,17 +81,17 @@ def test_c_an_unparsable_proof_manuscript_name_is_refused() -> None:
         VR.record_verification(str(root), statement_id="000000", proof_text=body,
                                verdict={"verdict": "成立", "findings": []},
                                verifier="agent-V", flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
-    issued = VS.issue(root, artifact_sha=VR.proof_sha(body), streak=3, need=3,
+    issued = VS.issue(root, artifact_sha=VR.text_sha(body), streak=3, need=3,
                       artifact_path=rel,
                       ledger="verifications/000000.jsonl#v-000003",
                       statement_id="000000",
                       # 2026-11-05：签的三道必填闸要求 `passes` 逐转带读数。
                       passes=[{"verification_id": f"v-{i:06d}", "at": "t",
-                               "proof_sha256": VR.proof_sha(body), "why": "夹具"}
+                               "proof_sha256": VR.text_sha(body), "why": "夹具"}
                               for i in (1, 2, 3)],
                       by="secretary:F")
     assert issued.get("written") is True, issued
-    landed = VS.land(root, artifact_sha=VR.proof_sha(body), by="secretary:F",
+    landed = VS.land(root, artifact_sha=VR.text_sha(body), by="secretary:F",
                      manuscript_path=rel)
     assert landed.get("landed") is False, landed
     assert landed.get("code") == VS.MANUSCRIPT_NAME_BAD, landed

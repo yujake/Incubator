@@ -190,7 +190,7 @@ def _cited_manuscript_with_a_real_sign(store: Store, stmt_id: str, *, label: str
     anchor = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl"
               f"#{row.get('verification_id')}")
     wrote = VS.write_manuscript_sign(
-        store.root, rel, proof_sha=VR.proof_sha(on_disk),
+        store.root, rel, proof_sha=VR.text_sha(on_disk),
         streak=int(VR.SIGN_STREAK_NEED), need=int(VR.SIGN_STREAK_NEED),
         verdict="成立", signer="V", at=S.now_iso(), ledger=anchor,
         statement_id=str(stmt_id), signed=True)
@@ -554,7 +554,7 @@ def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
         f"第三转应当把签落回手稿；写回读数：{got.get('review_write')}", got)
     block = VS.manuscript_sign_standing(
         pathlib.Path(agent.workspace_root, manuscript).read_text(encoding="utf-8"),
-        proof_sha=VR.proof_sha(DS.proof_body(
+        proof_sha=VR.text_sha(DS.proof_body(
             pathlib.Path(agent.workspace_root, manuscript).read_text(encoding="utf-8")
         ).strip("\n")),
         manuscript_path=manuscript)

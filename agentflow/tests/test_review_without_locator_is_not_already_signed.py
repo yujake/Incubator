@@ -118,7 +118,7 @@ def test_b_a_verification_id_locator_still_short_circuits(tmp_path: pathlib.Path
 def test_c_a_body_sha_locator_still_short_circuits(tmp_path: pathlib.Path) -> None:
     """`reviewed_by.proof_sha256` 在 ⇒ 照旧已签。"""
     st = _ws(tmp_path)
-    row = _put(st, reviewed_by={"proof_sha256": VR.proof_sha(PROOF)})
+    row = _put(st, reviewed_by={"proof_sha256": VR.text_sha(PROOF)})
     got = VR.bit3_already_signed(row, proof_no=1, proof_text=PROOF)
     assert got["signed"] is True, got
 
@@ -127,7 +127,7 @@ def test_c_a_body_sha_locator_still_short_circuits(tmp_path: pathlib.Path) -> No
 def test_d_a_per_proof_sha_is_a_locator(tmp_path: pathlib.Path) -> None:
     """`reviewed_by` 没有 locator、但逐条表「为真且有 sha」⇒ 照旧已签。"""
     st = _ws(tmp_path)
-    row = _put(st, reviewed_by={"round": 1}, per_sha=VR.proof_sha(PROOF))
+    row = _put(st, reviewed_by={"round": 1}, per_sha=VR.text_sha(PROOF))
     got = VR.bit3_already_signed(row, proof_no=1, proof_text=PROOF)
     assert got["signed"] is True, got
 
@@ -172,7 +172,7 @@ def test_g_the_short_circuit_comes_from_the_manuscript_sign(
     rel = _write_ms(st)
     raw = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
     stamped = VS.stamp_manuscript_sign(
-        raw, proof_sha=VR.proof_sha(PROOF), streak=VR.SIGN_STREAK_NEED,
+        raw, proof_sha=VR.text_sha(PROOF), streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立", signer="secretary:F",
         at="2026-11-08T00:00:00+08:00",
         ledger="verifications/000000.jsonl#v-000001",

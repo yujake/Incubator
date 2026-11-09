@@ -330,7 +330,7 @@ def _assert_sha_mismatch_cannot_be_proof(store: Store) -> None:
     # V 签的是"别的一份正文"（sha 对不上）—— 结论写成立也没用
     _ledger(store, sid, [{"verification_id": "v-000001", "proof_no": 1,
                           "verdict": "成立", "why": "看着没问题",
-                          "proof_sha256": VR.proof_sha("另一份正文（不是这一份）"),
+                          "proof_sha256": VR.text_sha("另一份正文（不是这一份）"),
                           "at": TS}])
     got = _file(store, column=env["column"])
     assert got.get("ok") is False, f"sha 对不上却拿到了 proof：{got}"
@@ -355,7 +355,7 @@ def _assert_rejected_cannot_be_proof(store: Store) -> None:
     add_literature(store, S.format_id(0))
     filed = _file_conjecture(store, column=env["column"])
     sid = str(filed["stmt_id"])
-    sha = VR.proof_sha(env["column"])
+    sha = VR.text_sha(env["column"])
     _ledger(store, sid, [
         # 先签「成立」，后来又改判「有毛病」⇒ 最近一签是有毛病（早先那一签不许救人）
         {"verification_id": "v-000001", "proof_no": 1, "verdict": "成立",
@@ -430,7 +430,7 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
     # 那一签盖的是这一条命题自己的台账（不是别人的签借光）
     got = NP.latest_third_party_sign(store.root, proof_text=column, statement_id=sid)
     assert got["checked"] and got["found"] and got["verdict"] == "成立", got
-    assert got["proof_sha256"] == VR.proof_sha(column), got
+    assert got["proof_sha256"] == VR.text_sha(column), got
     assert str(got["ledger"]).startswith(f"{VR.VERIFICATIONS_DIR}/{sid}.jsonl#"), got
 
 
@@ -447,7 +447,7 @@ def _stub_latest(monkeypatch: pytest.MonkeyPatch, *, verdict: str = "成立") ->
     """
     def _fake(root: Any, *, proof_text: Any = "", statement_id: str = "",
               object_sha256: Any = "", object_path: Any = "") -> dict[str, Any]:
-        sha = VR.proof_sha(str(proof_text or ""))
+        sha = VR.text_sha(str(proof_text or ""))
         row = {"verification_id": "v-000001", "verdict": verdict, "proof_sha256": sha,
                "object_sha256": str(object_sha256 or ""),
                "object_path": str(object_path or "")}

@@ -97,7 +97,7 @@ def test_r1_a_signed_statement_is_not_reviewed_again(tmp_path):
         f"签过的命题又被连判了 {len(again['review_passes'])} 转：{again['review_passes']}")
     assert again["reason"] == "already_signed", again["reason"]
     assert again["proof_no"] == 1, again
-    assert again["proof_sha256"] == VR.proof_sha(T3.PROOF), again
+    assert again["proof_sha256"] == VR.text_sha(T3.PROOF), again
     assert again["bits"].get("reviewed") is not True, again["bits"]
 
     # 不给正文那一趟（读盘上那一份）也必须同样短接：M 派 V 时常走这一支。
@@ -253,7 +253,7 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
         f"#p2 只问了 {review.asked()} 次模型 ⇒ 它没被真的审过")
     assert len(second["review_passes"] or []) == VR.SIGN_STREAK_NEED, second["review_passes"]
     assert second["proof_no"] == 2, second
-    assert second["proof_sha256"] == VR.proof_sha(proof_2), second
+    assert second["proof_sha256"] == VR.text_sha(proof_2), second
     assert second["review_write"].get("manuscript_signed") is True, second["review_write"]
     assert len(T3._rows(st)) == 2 * VR.SIGN_STREAK_NEED, (
         f"台账应当 6 行，实得 {len(T3._rows(st))}")

@@ -213,7 +213,7 @@ def test_an_unreadable_proof_number_is_not_folded_and_a_missing_one_still_is_p1(
         "verification_id": "v-0001", "statement_id": sid2, "verifier": "V",
         "verdict": "成立", "defect_step": None, "quote": "", "why": "",
         "findings": [], "unresolved_errors": 0,
-        "proof_sha256": VR.proof_sha(P1), "proof_chars": len(P1),
+        "proof_sha256": VR.text_sha(P1), "proof_chars": len(P1),
         "round": 1, "used_faces": [], "submission_id": "",
         "at": "2026-01-01T00:00:00+00:00",
         # 2026-11-06（裁定 2）：台账那一行的轴只能来自秘书。这一条量的是"证明号的

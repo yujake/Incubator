@@ -35,6 +35,7 @@ F 在写证明的那一趟里派 V，之后读到的就是这里给的读数。
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
+from .. import proofregistry as _PR
 
 #: 已签：现行正文有一份盖得住的签（手稿签块 / 侧文件 / pending 三处任一）。
 STATE_SIGNED = "signed"
@@ -149,7 +150,7 @@ def delivery_reading(root: Any, *, statement_id: str = "", proof_text: str = "",
         return _finish(out, STATE_UNKNOWN,
                        "没有证明正文 ⇒ 没有可签的对象，这一格没查成"
                        "（不是「待签」：待签说的是有正文、还没签）")
-    sha = VR.proof_sha(text)
+    sha = _PR.proof_sha(text)
     out["sha"] = sha
     try:
         no = int(VR.as_proof_no(proof_no) or 1)

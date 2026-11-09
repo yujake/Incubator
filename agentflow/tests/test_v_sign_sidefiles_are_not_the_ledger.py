@@ -160,7 +160,7 @@ def test_r1_a_fault_leaves_a_receipt_with_every_defect(tmp_path):
     st = _ws(tmp_path)
     _put(st)
     _fault(st)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     got = VSP.receipt_of(st.root, sha)
     assert got["checked"] and got["found"], (
         "判了「有毛病」而回执读口说没有 ⇒ 缺陷没有任何逐条落点"
@@ -183,7 +183,7 @@ def test_r2_a_receipt_changes_no_verdict_reading(tmp_path):
         "回执把第 3 位读成了真 ⇒ 一张『有毛病』的纸条被当成了签")
     assert EB.bits_from_row(_row(st)).get("reviewed") is False
     # 反真空：换一份「签过」的正文，同一个读口必须说 found=False（回执读口不是"什么都算有"）。
-    other = VSP.receipt_of(st.root, VR.proof_sha(PROOF + "\n3. 另一版。"))
+    other = VSP.receipt_of(st.root, VR.text_sha(PROOF + "\n3. 另一版。"))
     assert other["checked"] and not other["found"], other
 
 
@@ -199,7 +199,7 @@ def test_r3_below_the_bound_no_sign_file_is_written(tmp_path):
     assert _signs(st) == [], f"连续 2/3 次就出现了签文件 {_signs(st)} ⇒ 门槛被绕过"
     # 门槛那一层自己也拒（唯一写口不许只看调用方说的 written=True）。
     # 2026-11-02 起写口分成 `issue` / `land` 两步，这里量的是"颁发"那一半。
-    refused = VSP.issue(st.root, artifact_sha=VR.proof_sha(PROOF), streak=2, need=3,
+    refused = VSP.issue(st.root, artifact_sha=VR.text_sha(PROOF), streak=2, need=3,
                         by="secretary:F")
     assert not refused["written"] and "未达门槛" in refused["reason"], refused
     assert _signs(st) == []
@@ -213,7 +213,7 @@ def test_r4_the_third_hold_writes_exactly_one_sign_file(tmp_path):
     third = _clean(st)
     wb = third.get("statement_writeback") or {}
     assert wb.get("written") is True, wb
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     assert _signs(st) == [f"{sha}.json"], (
         f"连续 3/3 次成立、第 3 位已经翻了，盘上却是 {_signs(st)} ⇒ "
         "签只活在 statements 那一格里（业主：签要进手稿，随 B 收录时读到）")
@@ -236,7 +236,7 @@ def test_r4b_a_fourth_pass_does_not_rewrite_the_sign(tmp_path):
     _put(st)
     for _ in range(3):
         _clean(st)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     before = _sign_doc(st, sha)
     fourth = _clean(st)
     wb = (fourth.get("statement_writeback") or {})
@@ -295,7 +295,7 @@ def test_r4c_the_secretary_path_marks_the_sign_as_hers(tmp_path):
         got = sec.decide_sign_issuance(statement_id=SID, proof_text=PROOF, proof_no=1,
                                        verdict=_OK, row=third)
     assert got["issue"] is True and got["issued"] is True, got
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     doc = _sign_doc(st, sha)
     assert doc["written_by"] == "secretary:F", (
         f"收方秘书那条路写出来的签记成了 {doc['written_by']!r} ⇒ "
@@ -308,10 +308,10 @@ def test_r4c_the_secretary_path_marks_the_sign_as_hers(tmp_path):
 def test_r5_writing_the_sign_does_not_move_the_artifact_sha(tmp_path):
     st = _ws(tmp_path)
     _put(st)
-    want = VR.proof_sha(PROOF)
+    want = VR.text_sha(PROOF)
     for _ in range(3):
         _clean(st)
-    got = VR.proof_sha(str(_row(st).get("proof_text") or ""))
+    got = VR.text_sha(str(_row(st).get("proof_text") or ""))
     assert got == want, (
         f"签写完之后被签的那份正文的 sha 变了（{want[:12]}… → {got[:12]}…）⇒ 自指矛盾")
     sign_path = VSP.sign_path(st.root, want)
@@ -360,7 +360,7 @@ def _three_and_sign(st: Store) -> str:
     _put(st)
     for _ in range(3):
         _clean(st)
-    return VR.proof_sha(PROOF)
+    return VR.text_sha(PROOF)
 
 
 def test_r7_the_archive_equals_a_full_rebuild(tmp_path):

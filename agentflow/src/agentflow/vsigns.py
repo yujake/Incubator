@@ -32,7 +32,7 @@
 
 ## `artifact_sha` 是哪一把 sha（这一格必须钉死）
 
-`:data:`ARTIFACT_SHA_RULE`：「`verifications.proof_sha(proof_text)`」 —— 与台账行的
+`:data:`ARTIFACT_SHA_RULE`：「`proofregistry.proof_sha(proof_text)`」 —— 与台账行的
 `proof_sha256`、连续计数的清零键（`verifications._hold_run_lengths` 的
 `one = str(row.get("proof_sha256") or "")`）「逐字同一个值」。
 
@@ -96,6 +96,20 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+
+
+def _sign_sha(proof_text: Any) -> str:
+    """签的对拍尺（唯一实现 `proofregistry.proof_sha`；惰性 import 断循环）。
+
+    为什么不用顶层 import：`proofregistry` 在模块顶层 import `manuscriptform`，
+    而 `manuscriptform` 在模块顶层读本模块的 `MANUSCRIPT_NAME_BAD` 一类常量 ⇒
+    本模块再顶层反向 import 时那些常量还没定义（实测 `partially initialized`）。
+    调用期 import 把边断在函数里；语义仍是同一把尺（不是第二份实现）。
+    """
+    from . import proofregistry as _PR
+
+    return _PR.proof_sha(proof_text)
+
 
 #: 签与归档的落点（工作区相对）。与 `out/experiments`、`out/review` 同一条约定：
 #: 产物住 `out/`，表住 `data/`。
@@ -224,7 +238,7 @@ def secretary_id(role: Any) -> str:
 
 #: `artifact_sha` 的口径（一句话版，给读的人与判据看）。
 ARTIFACT_SHA_RULE = (
-    "`artifact_sha` = `verifications.proof_sha(proof_text)`，与台账行的 `proof_sha256`、"
+    "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、"
     "连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha")
 
 #: 为什么 `passes` 里没有全文（判据与后来人都要读到这一句）。
@@ -957,7 +971,7 @@ def manuscript_sign_standing(text: str, *, proof_sha: Any = "",
     try:
         from . import verifications as _VR
 
-        out["body_sha256"] = _VR.proof_sha(manuscript_proof_body(text))
+        out["body_sha256"] = _sign_sha(manuscript_proof_body(text))
     except Exception:  # noqa: BLE001 —— 算不出正文 sha 就留空，不许折成"相符"
         out["body_sha256"] = ""
     if out["found"] and got.get("proof_sha256") and out["body_sha256"]:
@@ -1075,7 +1089,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
         out["why"] = ("这一份没有手稿正文（`manuscript_path` 指的那份稿读不到 / 没给）"
                       "⇒ 稿上已签这一格没查成")
         return out
-    body = _VR.proof_sha(manuscript_proof_body(text))
+    body = _sign_sha(manuscript_proof_body(text))
     block = manuscript_sign_standing(text, proof_sha=body, manuscript_path=rel)
     out["manuscript"] = dict(block)
     if not bool(block.get("checked")):
@@ -1133,7 +1147,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     matched_text = ""
     proofs = _VR.proof_list(row)
     for no, one in proofs:
-        if _VR.proof_sha(one) == signed_now:
+        if _sign_sha(one) == signed_now:
             matched_no, matched_text = int(no), str(one)
             break
     # 册里现行那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
@@ -1143,7 +1157,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     per = dict(_EB.reviewed_by_proof(row) or {})
     reviewed = bool(per.get(matched_no, per.get(str(matched_no), False))) if matched_no else False
     stmt.update(proof_no=matched_no,
-                proof_sha256=(_VR.proof_sha(matched_text) if matched_text else ""),
+                proof_sha256=(_sign_sha(matched_text) if matched_text else ""),
                 reviewed=reviewed,
                 grade=str((_EB.bits_from_row(row) or {}).get("grade") or ""),
                 #: 册里带正文的证明行数 / 现行那一版的号与正文 sha（2026-11-08 六档收口）：
@@ -1151,7 +1165,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
                 #: （`proof_text=""` 的那条 #p1 不是一份证明 —— 它是"还没收录"）。
                 proof_rows=len(with_text),
                 current_proof_no=current_no,
-                current_proof_sha256=(_VR.proof_sha(current_text) if current_text else ""))
+                current_proof_sha256=(_sign_sha(current_text) if current_text else ""))
     out["filed"] = bool(matched_no and reviewed)
     if out["filed"]:
         out["state"] = "filed"
@@ -1209,7 +1223,7 @@ def manuscript_body_matches(text: str, *, artifact_sha: Any) -> dict[str, Any]:
         return out
     out["checked"] = True
     body = manuscript_proof_body(text)
-    out["body_sha256"] = _VR.proof_sha(body)
+    out["body_sha256"] = _sign_sha(body)
     out["matches"] = out["body_sha256"] == signed
     out["body_mismatch"] = not out["matches"]
     if out["matches"]:
@@ -2804,7 +2818,7 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
             continue
         sha = ""
         try:
-            sha = _VR.proof_sha(str(row.get("proof_text") or ""))
+            sha = _sign_sha(str(row.get("proof_text") or ""))
         except Exception:  # noqa: BLE001
             sha = ""
         if sha:
@@ -3094,7 +3108,7 @@ def bits_after_sign(bits: Mapping[str, Any], *, root: Any, proof_text: str,
         return dict(bits), out
     from . import verifications as _VR
 
-    sha = _VR.proof_sha(str(proof_text))
+    sha = _sign_sha(str(proof_text))
     # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题
     #      收录时读到」）：手稿里那一行签块是 B 收录时的第一来源 ----
     #

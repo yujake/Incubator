@@ -88,7 +88,7 @@ def test_e9_a_dirty_proof_is_refused_at_the_step_and_not_signed(tmp_path):
     # 台账落盘：一行、带证明 sha 与编号
     rows, problems = VR.list_verifications(root, statement_id="0007")
     assert not problems and len(rows) == 1, (rows, problems)
-    assert rows[0]["proof_sha256"] == VR.proof_sha(_DIRTY), rows[0]
+    assert rows[0]["proof_sha256"] == VR.text_sha(_DIRTY), rows[0]
     assert rows[0]["verification_id"] == f"v-{S.format_id(1)}", rows[0]
 
 

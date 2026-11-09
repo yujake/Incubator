@@ -195,7 +195,7 @@ def _span(heading_line: int, body: Sequence[tuple[int, str]]) -> list[int]:
 
 
 def _sha(text: Any) -> str:
-    """文本的 sha256（与 `verifications.proof_sha` 同一把尺：不 strip、不加换行）。"""
+    """文本的 sha256（与 `verifications.text_sha` 同一把尺：不 strip、不加换行）。"""
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
 
 

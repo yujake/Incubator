@@ -220,7 +220,7 @@ def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
     assert "计划稿" in str(got.get("reason") or ""), got
     text = path.read_text(encoding="utf-8")
     assert text.count(VS.SIGN_MARK) == 0, text
-    assert not VS.sign_path(st.root, VR.proof_sha(PROOF_BODY)).exists()
+    assert not VS.sign_path(st.root, VR.text_sha(PROOF_BODY)).exists()
     pending = pathlib.Path(st.root) / "verifications" / "pending"
     assert not pending.is_dir() or not list(pending.glob("*.jsonl")), (
         "计划稿却落了 pending 行（那一行会被当成可按 sha 认领的第三方签）")
@@ -230,7 +230,7 @@ def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
 def test_c_legacy_and_signed_blocks_keep_reading_as_signed(tmp_path):
     """84 的旧 8 格块仍 `signed` + `legacy`；85 形状的 9 格块仍 `signed` + `resolved`。"""
     st = _ws(tmp_path)
-    sha = VR.proof_sha(PROOF_BODY)
+    sha = VR.text_sha(PROOF_BODY)
     # 84 的块形状（2026-11-02 之前写的）：只有 8 格，没有「手稿号」。
     legacy = (f"{VS.SIGN_MARK}已签=true；判词=成立；连续=3/3；正文sha={sha}；"
               "时间=2026-11-02T16:43:01+08:00；签名者=V；"
@@ -257,7 +257,7 @@ def test_c_legacy_and_signed_blocks_keep_reading_as_signed(tmp_path):
 
 def test_c2_an_unsigned_block_is_not_read_as_signed(tmp_path):
     """86 的形状（`已签=false`）读成 `rejected`，绝不许读成 signed/legacy。"""
-    sha = VR.proof_sha(PROOF_BODY)
+    sha = VR.text_sha(PROOF_BODY)
     unsigned = VS.stamp_manuscript_sign(
         MANUSCRIPT, proof_sha=sha, streak=0, need=3, verdict="有毛病", signer="agent-V",
         at="2026-11-03T04:46:31+08:00", ledger=f"{REL}#V签", statement_id="",

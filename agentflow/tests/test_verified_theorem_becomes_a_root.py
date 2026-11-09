@@ -116,7 +116,7 @@ def _audited_statement(st: Store) -> str:
     assert signed.get("checked") is True, signed
     assert signed.get("kind") == "proof_unregistered_signed", signed
     block = VS.manuscript_sign_standing(path.read_text(encoding="utf-8"),
-                                        proof_sha=VR.proof_sha(PROOF))
+                                        proof_sha=VR.text_sha(PROOF))
     assert block.get("state") == "signed", block
 
     b = AgentB(st, extractor=None, extract_text=None)

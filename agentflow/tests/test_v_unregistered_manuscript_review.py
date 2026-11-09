@@ -155,7 +155,7 @@ def _pending_rows(st: Store) -> list[dict]:
 
 def _pending_file(st: Store) -> pathlib.Path:
     return (pathlib.Path(st.root) / "verifications" / "pending"
-            / f"{VR.proof_sha(PROOF)}.jsonl")
+            / f"{VR.text_sha(PROOF)}.jsonl")
 
 
 def _sign_files(st: Store) -> list[pathlib.Path]:
@@ -186,13 +186,13 @@ def test_a_three_clean_rounds_sign_the_manuscript_and_back_it_with_pending(tmp_p
     for row in rows:
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(row.get(key) or "").strip(), (key, row)
-        assert row["proof_sha256"] == VR.proof_sha(PROOF), row
+        assert row["proof_sha256"] == VR.text_sha(PROOF), row
         assert row["verdict"] == "成立", row
         assert row["object_path"] == REL, row
     assert _pending_file(st).is_file(), "pending 台账没按正文 sha 落文件"
     assert got.get("verification_id") == "u-000003", got
     assert str(got.get("ledger") or "").endswith(
-        f"verifications/pending/{VR.proof_sha(PROOF)}.jsonl#u-000003"), got
+        f"verifications/pending/{VR.text_sha(PROOF)}.jsonl#u-000003"), got
 
     # ---- 稿上的签块：已签、连续 3/3、命题号=未在册、台账指 pending ----
     block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
@@ -201,7 +201,7 @@ def test_a_three_clean_rounds_sign_the_manuscript_and_back_it_with_pending(tmp_p
     assert block["statement_id"] == "", block          # 命题号=未在册 是合法形态
     assert block["manuscript_id"] == "000000", block
     assert block["identity_state"] == "resolved", block
-    assert block["ledger"] == (f"verifications/pending/{VR.proof_sha(PROOF)}.jsonl"
+    assert block["ledger"] == (f"verifications/pending/{VR.text_sha(PROOF)}.jsonl"
                                "#u-000003"), block
 
     # ---- 签文件：passes 就是那三张真票 ----

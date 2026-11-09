@@ -215,7 +215,7 @@ def _legacy_row(root: pathlib.Path, *, verdict: str = "看不出来",
         "verifier": "agent-V", "verdict": verdict, "defect_step": None,
         "quote": "", "why": "（历史行：信息不足，当年写的是看不出来）",
         "findings": [], "unresolved_errors": 0, "citation_checks": [],
-        "proof_sha256": VR.proof_sha(proof_text), "proof_chars": len(proof_text),
+        "proof_sha256": VR.text_sha(proof_text), "proof_chars": len(proof_text),
         "round": 3, "used_faces": [], "submission_id": "",
         "at": "2026-10-31T00:00:00+08:00",
     }

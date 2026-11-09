@@ -977,7 +977,7 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
             statement_full=f"命题 {_sid} 的完整正文（含假设）。")
         _raw = (pathlib.Path(store.root) / _rel).read_text(encoding="utf-8")
         _stamped = _VS.stamp_manuscript_sign(
-            _raw, proof_sha=VR.proof_sha(_body), streak=3, need=3, verdict="成立",
+            _raw, proof_sha=VR.text_sha(_body), streak=3, need=3, verdict="成立",
             signer="secretary:F", at=S.now_iso(),
             ledger=f"verifications/{_sid}.jsonl#v-000001",
             statement_id=_sid, manuscript_id=_sid)

@@ -60,7 +60,7 @@ RAW = ("# F 的证明手稿：一致连续\n\n"
 
 
 def _body_sha() -> str:
-    return VR.proof_sha(VS.manuscript_proof_body(RAW))
+    return VR.text_sha(VS.manuscript_proof_body(RAW))
 
 
 def _manuscript(*, manuscript_id: str = SID, sign: bool = True,
@@ -284,7 +284,7 @@ def test_e3_another_statement_or_another_body_is_not_of_this_statement() -> None
     assert "proof_manuscript" in gate["suggestion"], gate
 
     # 正文逐字那一半：签块盖的是另一版正文（改一个字）。
-    stale = _manuscript(block_sha=VR.proof_sha(VS.manuscript_proof_body(RAW) + "改一个字"))
+    stale = _manuscript(block_sha=VR.text_sha(VS.manuscript_proof_body(RAW) + "改一个字"))
     stale_read = VS.manuscript_sign_standing(stale, proof_sha=_body_sha(),
                                              manuscript_path=REL)
     assert stale_read["body_mismatch"] is True, stale_read

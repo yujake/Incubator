@@ -81,7 +81,7 @@ def _submit():
 
 
 def _sign_doc(st) -> dict:
-    path = VS.sign_path(st.root, VR.proof_sha(PROOF))
+    path = VS.sign_path(st.root, VR.text_sha(PROOF))
     assert path.is_file(), f"没有落签：{path}"
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -345,4 +345,4 @@ def test_e_the_sign_file_is_not_a_vacuous_pass(tmp_path):
     assert len(passes) == 3, f"签里只有 {len(passes)} 票（三票不同源）"
     assert len({p.get("review_call") for p in passes}) == 1, passes
     assert [p.get("review_pass") for p in passes] == [1, 2, 3], passes
-    assert all(p.get("proof_sha256") == VR.proof_sha(PROOF) for p in passes), passes
+    assert all(p.get("proof_sha256") == VR.text_sha(PROOF) for p in passes), passes

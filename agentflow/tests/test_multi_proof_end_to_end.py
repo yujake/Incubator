@@ -358,12 +358,12 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
     assert signed1.get("proof_no") == 1, _broken("L2", "签 #p1 的签名行没记证明号", signed1)
     assert signed1.get("stmt_id") == SID and signed1.get("statement_id") == SID, _broken(
         "L2", "签名行上的 `stmt_id` 不是被审的那条命题", signed1)
-    assert signed1.get("proof_sha256") == VR.proof_sha(P1), _broken(
+    assert signed1.get("proof_sha256") == VR.text_sha(P1), _broken(
         "L2", "签名行上的 sha 不是 #p1 那一份的", signed1.get("proof_sha256"))
     disk = _ledger(st)[-1]
     assert (disk.get("stmt_id"), disk.get("proof_no")) == (SID, 1), _broken(
         "L2", "盘上那一行不是 (命题, #p1)", disk)
-    assert disk.get("proof_sha256") == VR.proof_sha(P1), _broken(
+    assert disk.get("proof_sha256") == VR.text_sha(P1), _broken(
         "L2", "盘上那一行的 sha 与签名时那一份不符", disk.get("proof_sha256"))
 
     # 借光负控（与 L3 同一处）：只签 #p1 不许把 #p2 读成审过，而 #p1 那一条自己
@@ -398,7 +398,7 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
     # ------------------------------------------------------------ L2 签 #p2 + L3 位与等级
     signed2 = _sign(st, text=P2, proof_no=2)
     assert signed2.get("proof_no") == 2, _broken("L2", "签 #p2 的签名行没记证明号", signed2)
-    assert signed2.get("proof_sha256") == VR.proof_sha(P2), _broken(
+    assert signed2.get("proof_sha256") == VR.text_sha(P2), _broken(
         "L2", "签 #p2 时记下的 sha 不是乙那一份的", signed2.get("proof_sha256"))
     wb = signed2.get("statement_writeback") or {}
     assert wb.get("written") is True and wb.get("rolled_back") is False, _broken(
@@ -539,7 +539,7 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
     assert reading2.get("proofs_unreviewed") == [], _broken(
         "L7", "签过但过期的 #p2 被记成了「还没审」", reading2.get("proofs_unreviewed"))
     # 台账那一行是历史：它仍留在签名当时那一份上。
-    assert _ledger(st)[-1].get("proof_sha256") == VR.proof_sha(P2), _broken(
+    assert _ledger(st)[-1].get("proof_sha256") == VR.text_sha(P2), _broken(
         "L2", "改稿之后台账那一行的 sha 跟着变了（历史被改写）", _ledger(st)[-1])
 
     n3, det3 = _r10(st)

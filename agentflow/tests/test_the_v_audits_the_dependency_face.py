@@ -117,7 +117,7 @@ def _lemma_manuscript(store: Store, *, full: str = LEMMA_FULL,
     if signed:
         raw = (pathlib.Path(store.root) / rel).read_text(encoding="utf-8")
         stamped = VS.stamp_manuscript_sign(
-            raw, proof_sha=VR.proof_sha("1. 引理正文（夹具）。"), streak=3, need=3,
+            raw, proof_sha=VR.text_sha("1. 引理正文（夹具）。"), streak=3, need=3,
             verdict="成立", signer="secretary:F", at=TS,
             ledger=f"verifications/{LEMMA}.jsonl#v-000001",
             statement_id=LEMMA, manuscript_id=LEMMA)

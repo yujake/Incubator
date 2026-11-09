@@ -133,7 +133,7 @@ def test_a_the_manuscript_header_number_lands_the_proof_on_that_number(
         f"#p2 的正文不是这一份（读到 {VR.proof_text_of(row, 2)[:40]!r}）")
     assert VR.proof_text_of(row, 1) == "", (
         "这一份被同时写进了 #p1 —— 证明号只有一份权威，不许复制")
-    assert VR.proof_sha(VR.proof_text_of(row, 2)) == VR.proof_sha(column)
+    assert VR.text_sha(VR.proof_text_of(row, 2)) == VR.text_sha(column)
 
 
 # ============================================================ b 携带单第四列

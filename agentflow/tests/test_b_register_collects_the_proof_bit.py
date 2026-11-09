@@ -231,11 +231,11 @@ def test_a_collecting_a_signed_proof_flips_bit2_bit3_and_the_grade(
     assert bits.get("grade") == "pre_theorem", bits
     ev = dict(bits.get("evidence") or {})
     assert ev.get("reviewed_by_proof") == {"1": True}, ev
-    assert ev.get("reviewed_sha_by_proof") == {"1": VR.proof_sha(PROOF)}, ev
+    assert ev.get("reviewed_sha_by_proof") == {"1": VR.text_sha(PROOF)}, ev
     assert len(str(ev.get("proof_process") or "")) == len(PROOF), ev
     # 顶层收录回执：号与指纹都由行上那一份正文现算，与签块钉的 sha 同一份。
     assert row.get("proof_no") == 1, row
-    assert row.get("proof_sha256") == VR.proof_sha(PROOF), row
+    assert row.get("proof_sha256") == VR.text_sha(PROOF), row
     # `_grade_recomputed`：判据是盘上那一签，不是自报。
     trace = _trace(row)
     assert trace.get("checked") is True, trace
@@ -288,7 +288,7 @@ def test_b_without_the_bit2_step_the_field_shape_comes_back(
     # （号 / sha 是"这一行现在有哪一份正文"的事实）；承重的是上面 `bits.proof=false`
     # 那条判据。改前这一行断言的是"回执也没有"，而回执缺席本身并不是第 2 位的读数。
     assert int(row.get("proof_no") or 0) == 1, row
-    assert str(row.get("proof_sha256") or "") == VR.proof_sha(PROOF), row
+    assert str(row.get("proof_sha256") or "") == VR.text_sha(PROOF), row
 
 
 # ============================================================ c 不许顺手到 theorem
@@ -345,7 +345,7 @@ def test_d_an_exhaustive_proof_collected_later_is_still_a_theorem(
     assert trace.get("to") == "theorem", trace
     assert trace.get("channel") == "exhaustion", trace
     assert row.get("proof_no") == 1, row
-    assert row.get("proof_sha256") == VR.proof_sha(column), row
+    assert row.get("proof_sha256") == VR.text_sha(column), row
 
 
 # ============================================================ e 现场那一行可追平
@@ -382,7 +382,7 @@ def test_e_a_redelivery_repairs_the_live_contradiction(tmp_path: pathlib.Path) -
     assert bits.get("proof") is True and bits.get("reviewed") is True, bits
     assert bits.get("grade") == "pre_theorem", bits
     assert repaired.get("proof_no") == 1, repaired
-    assert repaired.get("proof_sha256") == VR.proof_sha(PROOF), repaired
+    assert repaired.get("proof_sha256") == VR.text_sha(PROOF), repaired
     assert _trace(repaired).get("to") == "pre_theorem", _trace(repaired)
 
 

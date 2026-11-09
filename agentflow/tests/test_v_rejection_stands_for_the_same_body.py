@@ -386,7 +386,7 @@ def test_f_the_resubmit_obligation_is_not_cleared_by_a_void_row(tmp_path):
     st = _ws(tmp_path)
     _put(st)
     _seed_field_rows(st)
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     got = VRC.resubmit_cleared(root=st.root, label=f"{SID}#p1", proof_sha=sha)
     assert got["checked"] is True, got
     assert got["cleared"] is False, got
@@ -411,7 +411,7 @@ def test_f_the_resubmit_obligation_is_not_cleared_by_a_void_row(tmp_path):
     # 作废行；它若被当成"更干净的成立"，A 的"要你重送"义务就被清掉了（改前 True）。
     st2 = _ws(tmp_path / "mixed")
     _put(st2)
-    sha_a, sha_b = VR.proof_sha(PROOF), VR.proof_sha(PROOF_B)
+    sha_a, sha_b = VR.text_sha(PROOF), VR.text_sha(PROOF_B)
 
     def _rec(text: str, axis: str, call: str, pass_no: int) -> dict:
         return VR.record_verification(

@@ -35,7 +35,7 @@ from agentflow import vsigns as VS
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\n"
          "2. 第 1 步的 δ 只依赖 ε、不依赖点 ⇒ 按定义即一致连续。")
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
@@ -117,7 +117,7 @@ def test_d_the_84_manuscript_is_a_body_mismatch() -> None:
         return
     rel = "reports/f-proof-000000.md"
     text = (PROJ84 / rel).read_text(encoding="utf-8")
-    body_sha = VR.proof_sha(VS.manuscript_proof_body(text))
+    body_sha = VR.text_sha(VS.manuscript_proof_body(text))
     block = VS.manuscript_sign_reading(text, manuscript_path=rel)
     assert block["proof_sha256"].startswith("dcb988fa"), block["proof_sha256"]
     assert body_sha.startswith("de0d4076"), (

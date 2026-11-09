@@ -61,7 +61,7 @@ MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               "2. 第 1 步的 δ 只依赖 ε、不依赖点 ⇒ 按定义即一致连续。\n\n"
               + _DS.render_dependency_section([]))
 PROOF = _DS.proof_body(MANUSCRIPT).strip("\n")
-SHA = VR.proof_sha(PROOF)
+SHA = VR.text_sha(PROOF)
 REL = "reports/f-proof-000000.md"
 SID = "000000"
 OK = {"verdict": "成立", "findings": []}
@@ -311,18 +311,18 @@ def test_d2_a_different_body_sha_cannot_claim(tmp_path):
     _new, reading = _claim(st, proof=other)
     assert reading.get("applied") is False, reading
     assert reading.get("found") is False, reading
-    assert row["proof_sha256"] != VR.proof_sha(other)
+    assert row["proof_sha256"] != VR.text_sha(other)
 
     # 行在、但锚点写的是另一份正文 ⇒ 背书判据点名 sha 不一致（受控拒）。
     backing = VS.sign_ledger_backing(
-        st.root, f"verifications/pending/{VR.proof_sha(other)}.jsonl#u-000001",
-        proof_sha256=VR.proof_sha(other))
+        st.root, f"verifications/pending/{VR.text_sha(other)}.jsonl#u-000001",
+        proof_sha256=VR.text_sha(other))
     assert backing.get("ok") is False, backing
     assert backing.get("code") == VS.LEDGER_ROW_MISSING, backing
 
     # 同一份台账、同一行，却拿别的正文来认 ⇒ `ledger_sha_mismatch`。
     wrong = VS.sign_ledger_backing(
-        st.root, _pending_ref(row), proof_sha256=VR.proof_sha(other))
+        st.root, _pending_ref(row), proof_sha256=VR.text_sha(other))
     assert wrong.get("ok") is False, wrong
     assert wrong.get("code") == VS.LEDGER_SHA_MISMATCH, wrong
 

@@ -56,7 +56,7 @@ PROOF = ("# F 的证明手稿：夹具\n"
          "2. 夹具第二步。\n")
 #: 被签正文 = 那一份稿的「## 证明」小节（2026-11-02 起落块前要核它 == 被签 sha；
 #: 夹具用一个与正文相符的 sha，才量得到 `manuscript_write` 这一格本身）。
-SHA = _VR.proof_sha(_DS.proof_body(PROOF).strip("\n"))
+SHA = _VR.text_sha(_DS.proof_body(PROOF).strip("\n"))
 
 
 def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:

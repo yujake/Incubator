@@ -197,7 +197,7 @@ def test_citation_material_comes_from_the_manuscripts(tmp_path: pathlib.Path) ->
     raw = (pathlib.Path(st.root) / lemma_rel).read_text(encoding="utf-8")
     (pathlib.Path(st.root) / lemma_rel).write_text(
         VS.stamp_manuscript_sign(
-            raw, proof_sha=VR.proof_sha(lemma_body), streak=3, need=3,
+            raw, proof_sha=VR.text_sha(lemma_body), streak=3, need=3,
             verdict="成立", signer="secretary:F", at="2026-11-08T00:00:00+08:00",
             ledger="verifications/000001.jsonl#v-000001",
             statement_id="000001", manuscript_id="000001"),
@@ -291,7 +291,7 @@ def test_dependency_audit_admits_by_manuscript_sign_not_by_statements_bits(
     raw = (pathlib.Path(st.root) / lemma_rel).read_text(encoding="utf-8")
     (pathlib.Path(st.root) / lemma_rel).write_text(
         VS.stamp_manuscript_sign(
-            raw, proof_sha=VR.proof_sha("1. 引理的证明。"), streak=3, need=3,
+            raw, proof_sha=VR.text_sha("1. 引理的证明。"), streak=3, need=3,
             verdict="成立", signer="secretary:F", at="2026-11-08T00:00:00+08:00",
             ledger="verifications/000002.jsonl#v-000001",
             statement_id=lemma, manuscript_id=lemma),

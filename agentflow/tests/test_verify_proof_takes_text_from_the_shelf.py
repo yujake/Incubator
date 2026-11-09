@@ -191,7 +191,7 @@ def test_proof_text_with_a_manuscript_is_only_a_sha_check(tmp_path: pathlib.Path
     data = dict(res.data or {})
     assert data.get("checked") is True, data
     assert data.get("verdict") == "成立", data
-    assert data.get("proof_sha256") == VR.proof_sha(PROOF), (
-        data.get("proof_sha256"), VR.proof_sha(PROOF))
+    assert data.get("proof_sha256") == VR.text_sha(PROOF), (
+        data.get("proof_sha256"), VR.text_sha(PROOF))
     assert data.get("proof_chars") == len(PROOF), data.get("proof_chars")
     assert _ledger_names(st, with_proof), "审过了却没有台账行"

@@ -125,7 +125,7 @@ def test_a_e_writes_a_proof_manuscript_in_the_f_shape(tmp_path):
     assert DS.proof_body(text).strip("\n") == column
     assert VS.manuscript_proof_body(text) == column
     assert read["proof_body"] == column
-    assert read["proof_sha256"] == VR.proof_sha(column) == env["out"]["manuscript_proof_sha256"]
+    assert read["proof_sha256"] == VR.text_sha(column) == env["out"]["manuscript_proof_sha256"]
     # 正文就是穷举论证那一段（B 登记时 `filing_problems` 认的正是它；② 与程序各有居所）
     parsed = NP.parse_proof_column(column, code_path=SCRIPT_REL)
     assert parsed["problems"] == [], parsed
@@ -181,7 +181,7 @@ def test_b_three_rounds_sign_the_manuscript_with_pending_backing(tmp_path):
             assert str(row.get(key) or "").strip(), (key, row)
 
     # 签文件在盘上（正文 sha 命名），passes 就是那三行。
-    sign_path = VS.sign_path(env["store"].root, VR.proof_sha(_column(env)))
+    sign_path = VS.sign_path(env["store"].root, VR.text_sha(_column(env)))
     assert sign_path.is_file(), "三轮成立却没有签文件"
     doc = json.loads(sign_path.read_text(encoding="utf-8"))
     assert [p["verification_id"] for p in doc["passes"]] == [
@@ -216,7 +216,7 @@ def test_c_b_collects_the_manuscript_sign_and_records_optimized(tmp_path):
     assert bits.get("reviewed") is True, bits
     assert ev.get("optimized_by_proof") == {"1": False}, ev.get("optimized_by_proof")
     assert ev.get("reviewed_by_proof") == {"1": True}, ev.get("reviewed_by_proof")
-    assert ev.get("reviewed_sha_by_proof") == {"1": VR.proof_sha(_column(env))}, (
+    assert ev.get("reviewed_sha_by_proof") == {"1": VR.text_sha(_column(env))}, (
         "登记时记下的签的正文 sha 与证明栏不是同一份")
 
 
@@ -255,7 +255,7 @@ def test_d_the_second_stage_gets_a_fresh_sign_and_flips_optimized(tmp_path):
         for _i in range(VR.SIGN_STREAK_NEED):
             got = env["v"].verify_proof(sid, proof_manuscript=new_rel)
     assert got.get("signed_bit3") is False, got
-    assert VS.sign_path(env["store"].root, VR.proof_sha(new_column)).is_file(), (
+    assert VS.sign_path(env["store"].root, VR.text_sha(new_column)).is_file(), (
         "在册这一档带稿送审之后签没有颁发")
 
     filed = _register(env, text=new_text, column=new_column, reason="我方推导（优化版）")
@@ -264,7 +264,7 @@ def test_d_the_second_stage_gets_a_fresh_sign_and_flips_optimized(tmp_path):
     ev = dict((dict(row.get("bits") or {})).get("evidence") or {})
     assert ev.get("optimized_by_proof") == {"1": True}, ev.get("optimized_by_proof")
     # 精准替换：canonical 正文就是优化后那一版（旧正文进 proof_history）
-    assert VR.proof_sha(str(row.get("proof_text") or "")) == VR.proof_sha(new_column)
+    assert VR.text_sha(str(row.get("proof_text") or "")) == VR.text_sha(new_column)
     assert row.get("proof_history"), "旧正文没有进 proof_history ⇒ 不是精准替换"
 
 
@@ -302,7 +302,7 @@ def test_f_without_the_e_secretary_the_sign_is_issued_but_not_landed(tmp_path, m
     assert "不是收方秘书" in str(got.get("reason") or ""), got
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     assert VS.manuscript_sign_reading(now)["found"] is False, now
-    assert VS.sign_path(env["store"].root, VR.proof_sha(_column(env))).is_file(), (
+    assert VS.sign_path(env["store"].root, VR.text_sha(_column(env))).is_file(), (
         "摘掉 E 的秘书不该把签本身也摘掉（签文件是 V 那一半）")
 
     # B 的认签面按盘上的事实：没有块 ⇒ 走 pending 那一行（`why` 点名 pending）。

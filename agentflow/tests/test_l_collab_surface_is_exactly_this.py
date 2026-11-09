@@ -596,7 +596,7 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     passes = signed2.get("review_passes") or []
     assert [p.get("pass") for p in passes] == [1, 2, 3], passes
     block = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
-                                        proof_sha=VR.proof_sha(new))
+                                        proof_sha=VR.text_sha(new))
     assert block.get("state") == "signed", block
     assert (block.get("streak"), block.get("need")) == (3, 3), block
     assert block.get("proof_sha256") != str(signed1.get("proof_sha256") or ""), (
@@ -616,7 +616,7 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     assert standing.get("state") == "stale", standing
     assert standing.get("in_sync") is False, standing
     block_now = VS.manuscript_sign_standing(man_path.read_text(encoding="utf-8"),
-                                            proof_sha=VR.proof_sha(new))
+                                            proof_sha=VR.text_sha(new))
     assert block_now.get("state") == "signed", block_now
 
 

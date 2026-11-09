@@ -66,7 +66,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 def _stamp(st: Store, *, signed: bool = True, verdict: str = "成立",
            sha: str = "", rel: str = REL) -> dict:
     return VS.write_manuscript_sign(
-        st.root, rel, proof_sha=sha or VR.proof_sha(PROOF),
+        st.root, rel, proof_sha=sha or VR.text_sha(PROOF),
         streak=3 if signed else 0, need=3, verdict=verdict, signer="V",
         at="2026-11-02T10:00:00+08:00", ledger=f"{rel}#V签", statement_id="",
         signed=signed)
@@ -135,7 +135,7 @@ def test_d1_deleting_the_block_falls_back_to_waiting(tmp_path):
 def test_d2_a_block_for_another_body_does_not_count(tmp_path):
     """d2 反真空：签块盖的是另一版正文 ⇒ 不算签（改过稿就要重签）。"""
     st = _ws(tmp_path)
-    _stamp(st, sha=VR.proof_sha(PROOF + "改一个字"))
+    _stamp(st, sha=VR.text_sha(PROOF + "改一个字"))
     reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert reading["state"] != FVS.STATE_SIGNED, reading
     assert reading["delivered"] is False, reading
@@ -211,7 +211,7 @@ def test_the_step_cell_says_not_delivered_until_the_sign_is_on_disk(tmp_path):
     # V 落了签（生产的写口）⇒ 下一轮 step 读成已签（签块跟着稿走：publish 会搬它）。
     published = pathlib.Path(st.root) / f"reports/f-proof-{sid}.md"
     assert published.is_file(), published
-    body_sha = VR.proof_sha(_DS.proof_body(published.read_text(encoding="utf-8")).strip("\n"))
+    body_sha = VR.text_sha(_DS.proof_body(published.read_text(encoding="utf-8")).strip("\n"))
     VS.write_manuscript_sign(
         st.root, f"reports/f-proof-{sid}.md", proof_sha=body_sha,
         streak=3, need=3, verdict="成立", signer="V",

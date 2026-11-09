@@ -264,7 +264,7 @@ def test_b_a_matching_sign_block_moves_with_the_rename(store: Store) -> None:
     `identity_state=unmatched`；而且返回值里没有 `sign_moved` 可读。
     """
     text = _plan_text()
-    sha = VR.proof_sha(VS.manuscript_proof_body(text))
+    sha = VR.text_sha(VS.manuscript_proof_body(text))
     signed = _sign(text, proof_sha=sha, manuscript_id=f"plan-{PLAN}")
     _write(store, PLAN_REL, signed)
 
@@ -350,7 +350,7 @@ def test_d_a_numbered_filename_is_not_a_sign(store: Store) -> None:
 
     final = _read(store, rel)
     body = VS.manuscript_proof_body(final)
-    sha = VR.proof_sha(body)
+    sha = VR.text_sha(body)
     f = _f(store)
 
     waiting = f._read_sign(statement_id=SID, proof_text=body)["reading"]
@@ -384,7 +384,7 @@ def test_e_an_unsigned_draft_does_not_overwrite_a_signed_version(store: Store) -
     """
     old_body = "1. 签住的旧版证明（依据：stmt:000000）。"
     old_text = _plan_text(old_body)
-    old_sha = VR.proof_sha(VS.manuscript_proof_body(old_text))
+    old_sha = VR.text_sha(VS.manuscript_proof_body(old_text))
     signed_old = _sign(old_text, proof_sha=old_sha, manuscript_id=SID,
                        statement_id=SID)
     _write(store, f"{MANUSCRIPT_DIR}/f-proof-{SID}.md", signed_old)

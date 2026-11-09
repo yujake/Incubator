@@ -89,6 +89,7 @@ from .. import quoteevidence as QE
 from .. import refusals as _R
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR
+from .. import proofregistry as _PR
 from ..refusals import refuse as _refuse
 
 #: 一条命题一开始允许声明成的那几个 kind（业主 2026-10-22 裁定 B-2）。
@@ -681,8 +682,8 @@ def _canonical_history_entry(old_text: str, new_text: str) -> dict:
     """
     old = str(old_text)
     new = str(new_text)
-    return {"text": old, "sha": _VR.proof_sha(old), "at": S.now_iso(),
-            "replaced_by": _VR.proof_sha(new)}
+    return {"text": old, "sha": _PR.proof_sha(old), "at": S.now_iso(),
+            "replaced_by": _PR.proof_sha(new)}
 
 
 #: 第 4 位（形式化通过）从 L 的台账同步进命题那一行（D28 的写侧）。
@@ -2100,7 +2101,7 @@ class _RegisterStatement:
             # e-num 那一档 `_body_present` 为假 ⇒ 顶层不写 —— 没有证明就不许读出
             # "第 1 份证明"。
             if _body_present:
-                _want_sha = _VR.proof_sha(_body_now)
+                _want_sha = _PR.proof_sha(_body_now)
                 if (str(row.get("proof_sha256") or "") != _want_sha
                         or int(row.get("proof_no") or 0) != int(_no_receipt)):
                     row["proof_no"] = int(_no_receipt)
@@ -2222,7 +2223,7 @@ class _RegisterStatement:
         # （`verifications.review_standing`）；这里只做"按现行正文重新判定后重写"
         # 那一步（业主 2026-11-03 的第 ② 处），只认 `state="signed"`：
         # `holding`（票数没到）不落这两格 —— 有签与"审过一票"是两件事。
-        want_sha = _VR.proof_sha(raw_want)
+        want_sha = _PR.proof_sha(raw_want)
         if str(_EB.reviewed_sha_by_proof(fresh_bits).get(1) or "") != want_sha:
             _standing_now = self._review_after_rewrite(
                 getattr(store, "root", None), stmt_id=str(stmt_id),
@@ -5948,7 +5949,7 @@ class _RegisterStatement:
                           f"{error.get('message') or problem}）"
                           "⇒ 判不了这一条有没有 V 的签")
             return out
-        sha = VR.proof_sha(want)
+        sha = _PR.proof_sha(want)
         out["proof_sha256"] = sha
         # ---- 2026-11-02（业主：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或
         #      命题收录时读到」）：手稿里那一行签块是最先看的一处 ----

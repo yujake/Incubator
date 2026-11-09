@@ -77,6 +77,20 @@ from typing import Any, Iterable, Mapping
 from . import quoteevidence as _QE
 from .schema import NUMERIC_EVIDENCE_KEYS, QUOTE_MODES
 
+
+def _sign_sha(proof_text: Any) -> str:
+    """签的对拍尺（唯一实现 `proofregistry.proof_sha`；惰性 import 断循环）。
+
+    为什么不用顶层 import：`proofregistry` → `manuscriptform` → `depsection` →
+    `evidencebits`，本模块再顶层反向 import 会在 `depsection` 只初始化到一半时
+    去取 `REFUSED_SECTION_MISSING` ⇒ 循环。调用期 import 把边断在这里；语义仍是
+    同一把尺（不是第二份实现）。
+    """
+    from . import proofregistry as _PR
+
+    return _PR.proof_sha(proof_text)
+
+
 #: 引文状态的第五档（D1，2026-10-22 第二版）：说"通过"，而盘上拿不出可复核的区间。
 #:
 #: ## 为什么不折进已有的两档
@@ -482,7 +496,7 @@ def _stale_formal_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
         text = current.get(no)
         if text is None:
             continue
-        if _VR.proof_sha(text) == want:
+        if _sign_sha(text) == want:
             continue
         if cleared is None:
             cleared = {str(key): _path_state(value) for key, value in raw.items()}
@@ -538,14 +552,14 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
             text = current.get(no)
             if text is None:
                 continue
-            if _VR.proof_sha(text) == signed_sha[no]:
+            if _sign_sha(text) == signed_sha[no]:
                 return bits          # 至少这一份还盖着现在这一份正文
         return _reviewed_cleared(bits, kind)
     proof_no = _VR.as_proof_no(reviewed_by.get("proof_no")) or 1
     text = _VR.proof_text_of(row, proof_no)
     if proof_no == 1 and "proof_text" not in row:
         return bits          # 部分调用方只喂 `bits`：没有正文可判
-    got = _VR.proof_sha(text)
+    got = _sign_sha(text)
     if got == want:
         return bits
     return _reviewed_cleared(bits, kind)
@@ -814,7 +828,7 @@ def optimized_signature(row: Mapping[str, Any], proof_no: Any, *,
         text = _VR.proof_text_of(row, no) if no >= 1 else ""
     else:
         text = str(proof_text)
-    want = _VR.proof_sha(text) if no >= 1 else ""
+    want = _sign_sha(text) if no >= 1 else ""
     out: dict[str, Any] = {
         "checked": True, "proof_no": int(no), "optimized": False,
         "optimized_blocked": "", "signed": False,
@@ -887,7 +901,7 @@ def optimized_standing(row: Mapping[str, Any], proof_no: Any, *,
         text = _VR.proof_text_of(row, no) if no >= 1 else ""
     else:
         text = str(proof_text)
-    want = _VR.proof_sha(text) if no >= 1 else ""
+    want = _sign_sha(text) if no >= 1 else ""
     out: dict[str, Any] = {
         "checked": True, "proof_no": int(no), "state": "not_recorded",
         "optimized": False, "optimized_blocked": "",

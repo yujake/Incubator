@@ -96,10 +96,10 @@ def _signed_bits(*, proof_no: int = 1, verdict: str = "成立") -> dict:
             "proof_source": "own",
             "reviewed_by": {"verifier": "agent-V", "verification_id": "v-000001",
                             "verdict": verdict, "proof_no": int(proof_no),
-                            "proof_sha256": VR.proof_sha(PROOF),
+                            "proof_sha256": VR.text_sha(PROOF),
                             "evidence": "verifications/000001.jsonl#v-000001"},
             "reviewed_by_proof": {str(int(proof_no)): True},
-            "reviewed_sha_by_proof": {str(int(proof_no)): VR.proof_sha(PROOF)},
+            "reviewed_sha_by_proof": {str(int(proof_no)): VR.text_sha(PROOF)},
         },
     }
 

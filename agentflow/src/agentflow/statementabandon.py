@@ -44,6 +44,7 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+from . import proofregistry as _PR
 
 #: 标记前缀。它与 `schema.STATEMENT_STATUSES` 里的 `abandoned` 同源命名：
 #: 状态那一格说"这一行放弃了"，这一格说"为什么、什么时候"。
@@ -269,7 +270,7 @@ def _defect_refusal(store: Any, root: str, ref: str, basis: str, *,
     # ---- 陈旧判词（审计 C1）：审的是旧正文 ⇒ 不能拿来放弃现正文
     no = _VR.proof_no_of(row)
     current_text = _VR.proof_text_of(statement or {}, no)
-    current_sha = _VR.proof_sha(current_text)
+    current_sha = _PR.proof_sha(current_text)
     row_sha = str(row.get("proof_sha256") or "").strip().lower()
     step = row.get("defect_step")
     detail: dict[str, Any] = {"defect_step": step if isinstance(step, int) else None,

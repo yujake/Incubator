@@ -145,6 +145,7 @@ from typing import Any, Mapping, Sequence
 from .. import statementbody as _SB
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import verifications as _VR   # 证明号 / 证明清单 / 正文 sha 的口径各只有一处
+from .. import proofregistry as _PR
 from ..agent_e._support import ExperimentError
 from ..canonical import json_default
 from ._support import (
@@ -394,7 +395,7 @@ class _Formalize:
         proof_text = str(chosen.get("proof_text") or "")
         #: 这一份正文的指纹：`record` 把它写进 `experiments.observations.proof_sha256`，
         #: 读侧拿它与现行正文比 —— 不符就是"验过、过期了"（`evidencebits` 的 stale）。
-        proof_sha256 = _VR.proof_sha(proof_text)
+        proof_sha256 = _PR.proof_sha(proof_text)
         #: 落盘名跟着证明号走：`#p1` 逐字不变（`code/formal/<声明名>.lean`），
         #: `#p2` 起加 `__p<n>` —— 不加就等于第二条覆盖第一条（`#p1` 的产物被静默换掉）。
         suffix = "" if path_no == 1 else f"__p{path_no}"

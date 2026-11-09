@@ -261,7 +261,7 @@ def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
 
     rows = _rows(st)
     assert len(rows) == 3, f"台账应当恰好 3 行（三次真正的审阅），实得 {len(rows)}"
-    assert {r["proof_sha256"] for r in rows} == {VR.proof_sha(PROOF)}, (
+    assert {r["proof_sha256"] for r in rows} == {VR.text_sha(PROOF)}, (
         "三次判的不是同一份正文 ⇒ sha 段漂了")
     assert {VR.proof_no_of(r) for r in rows} == {1}, rows
     assert len({r["verification_id"] for r in rows}) == 3, rows
@@ -275,7 +275,7 @@ def test_t1_one_call_reviews_three_times_then_the_secretary_signs(tmp_path):
     assert got["review_write"].get("manuscript_signed") is True, got["review_write"]
     _block = VS.manuscript_sign_standing(
         (pathlib.Path(st.root) / REL).read_text(encoding="utf-8"),
-        proof_sha=VR.proof_sha(PROOF), manuscript_path=REL)
+        proof_sha=VR.text_sha(PROOF), manuscript_path=REL)
     assert _block["state"] == "signed", _block
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
 

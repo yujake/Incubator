@@ -152,7 +152,7 @@ def test_b_the_same_body_on_a_numbered_manuscript_is_signed(
     assert block["found"] is True and block["signed"] is True, block
     assert block["identity_state"] == "resolved", block
     standing = VS.manuscript_sign_standing(
-        text, proof_sha=VR.proof_sha(PROOF), manuscript_path=NUMBERED)
+        text, proof_sha=VR.text_sha(PROOF), manuscript_path=NUMBERED)
     assert standing["state"] == "signed", standing
     gate = VS.manuscript_sign_gate(standing, statement_id="000000",
                                    registered=("000000",))
@@ -182,3 +182,38 @@ def test_c_without_the_two_name_gates_the_notes_manuscript_is_signed(
     assert got.get("checked") is True, (
         "打桩之后仍然被拒 ⇒ a 的拒信不来自按号命名闸（这一条量错了东西）：" + str(got))
     assert len(seam.prompts) >= 1, "打桩放行之后一次模型都没问"
+
+
+# ====================================================================== d 两把尺
+def test_d_a_whole_manuscript_as_proof_text_is_refused_not_normalized(
+        tmp_path: pathlib.Path) -> None:
+    """反真空：`proof_text` 给整份手稿 ⇒ `given != body` 必须拒。
+
+    2026-11-09 T2 收口时曾把 `verifications.proof_sha` 合并成"手稿取小节"的签
+    对拍尺，于是这里两边都归一到同一小节，整份手稿被静默读成"与稿里正文同一份"，
+    这道闸（问的是"V 拿到的这一段，是不是稿里那一段"）就空了。现在 `given` 走
+    `verifications.text_sha`（原样 sha）、`body` 走小节正文 —— 两者必须不同。
+    """
+    st = _ws(tmp_path)
+    _put(st)
+    _write(st, NUMBERED)
+    manuscript = (pathlib.Path(st.root) / NUMBERED).read_text(encoding="utf-8")
+    seam = _CleanSeam()
+    v = _agent(st, seam)
+    with _submitted_by_f():
+        got = v.verify_proof("000000", proof_text=manuscript,
+                             proof_manuscript=NUMBERED)
+    assert got.get("checked") is False, got
+    assert got.get("reason") == "proof_text_mismatch", got
+    assert seam.prompts == [], f"被拒之后还问了 {len(seam.prompts)} 次模型"
+
+
+def test_e_text_sha_and_sign_sha_are_two_rulers() -> None:
+    """反真空：两把尺对整份手稿不同、对一段正文相同（T2 收口的定义）。"""
+    from agentflow import proofregistry as PR
+
+    manuscript = _manuscript()
+    assert VR.text_sha(manuscript) != PR.proof_sha(manuscript), (
+        "整份手稿上两把尺同值 ⇒ 它们又合并成了一把")
+    assert VR.text_sha(PROOF) == PR.proof_sha(PROOF), (
+        "一段证明正文上两把尺不同值 ⇒ 签的对拍尺把正文改写了")

@@ -24,7 +24,7 @@ REL = "reports/f-proof-000001.md"
 
 
 def _text() -> str:
-    sha = VR.proof_sha(PROOF)
+    sha = VR.text_sha(PROOF)
     block = (f"{VS.SIGN_MARK}已签=true；判词=成立；连续=3/3；正文sha={sha}；"
              "时间=2026-11-04T00:00:00+08:00；签名者=secretary:F；"
              f"台账={REL}#V签；命题号=未在册；手稿号=000000")

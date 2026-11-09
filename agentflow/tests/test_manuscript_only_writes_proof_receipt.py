@@ -78,7 +78,7 @@ def test_a_pointer_only_writes_the_proof_receipt_on_disk(tmp_path) -> None:
     rows = _rows(env)
     assert len(rows) == 1, rows
     row = rows[0]
-    want_sha = VR.proof_sha(PROOF)
+    want_sha = VR.text_sha(PROOF)
     assert int(row.get("proof_no") or 0) == 1, row.get("proof_no")
     assert str(row.get("proof_sha256") or "") == want_sha, (
         "盘上 proof_sha256 与手稿 `## 证明` 正文的现算 sha 不一致："
@@ -100,7 +100,7 @@ def test_b_manuscript_only_also_writes_the_receipt(tmp_path) -> None:
     assert got.get("ok") is True, got
     row = _rows(env)[0]
     assert int(row.get("proof_no") or 0) == 1, row.get("proof_no")
-    assert str(row.get("proof_sha256") or "") == VR.proof_sha(PROOF), row
+    assert str(row.get("proof_sha256") or "") == VR.text_sha(PROOF), row
 
 
 # ============================================================ c e-num 不谎报

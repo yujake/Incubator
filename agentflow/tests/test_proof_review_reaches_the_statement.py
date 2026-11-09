@@ -177,7 +177,7 @@ def test_signing_the_current_proof_reaches_the_statement_row(tmp_path: pathlib.P
     # 签名行必须带 (stmt_id, proof_no, proof_sha256) —— 三者合起来回答"复核过的是哪一份"。
     assert signed["stmt_id"] == SID and signed["statement_id"] == SID, signed
     assert signed["proof_no"] == 1, signed
-    assert signed["proof_sha256"] == VR.proof_sha(PROOF1), signed
+    assert signed["proof_sha256"] == VR.text_sha(PROOF1), signed
     # 同一次写把第 3 位翻上去（写回读数也要看得见）
     wb = signed["statement_writeback"]
     assert wb["written"] is True and wb["rolled_back"] is False, wb
@@ -185,7 +185,7 @@ def test_signing_the_current_proof_reaches_the_statement_row(tmp_path: pathlib.P
     assert row["bits"]["reviewed"] is True, row["bits"]
     assert row["bits"]["grade"] == "pre_theorem", row["bits"]
     by = row["bits"]["evidence"]["reviewed_by"]
-    assert by["proof_no"] == 1 and by["proof_sha256"] == VR.proof_sha(PROOF1), by
+    assert by["proof_no"] == 1 and by["proof_sha256"] == VR.text_sha(PROOF1), by
     assert by["verification_id"] == signed["verification_id"], by
 
     n, detail = _r10(st)
@@ -402,7 +402,7 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     path.parent.mkdir(parents=True, exist_ok=True)
     old_row = {"verification_id": "v-000001", "statement_id": SID, "verifier": "V",
                "verdict": "成立", "findings": [], "unresolved_errors": 0,
-               "proof_sha256": VR.proof_sha(PROOF1), "proof_chars": len(PROOF1),
+               "proof_sha256": VR.text_sha(PROOF1), "proof_chars": len(PROOF1),
                # 2026-11-06（裁定 2）：台账那一行的轴只能来自秘书。这一条量的是
                # "老行没有 proof_no 也读得出"，不是"没有轴也算一票" —— 所以补上
                # 秘书那一格（判词「成立」⇒ clean），让"连续 1/3"这条读数仍然成立。

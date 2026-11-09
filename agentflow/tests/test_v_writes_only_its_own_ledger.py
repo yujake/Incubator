@@ -358,7 +358,7 @@ def test_b_v_still_gets_the_tool_and_a_real_review_lands_the_ledger(
     row = rows[-1]
     assert row.get("stmt_id") == sid, (row.get("stmt_id"), sid)
     assert row.get("verdict") == "成立", row.get("verdict")
-    assert row.get("proof_sha256") == VR.proof_sha(PROOF), row.get("proof_sha256")
+    assert row.get("proof_sha256") == VR.text_sha(PROOF), row.get("proof_sha256")
 
 
 # ------------------------------------------------------------------ c：C / H 一个字节都写不了
