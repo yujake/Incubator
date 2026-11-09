@@ -1,0 +1,343 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "stmt_id": "000000",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "三点不等式",
+      "statement_text": "对一切实数 θ，都有 3 + 4cosθ + cos2θ = 2(1 + cosθ)^2 ≥ 0。",
+      "statement_full": "对一切实数 θ，都有 3 + 4cosθ + cos2θ = 2(1 + cosθ)^2 ≥ 0。",
+      "proof_text": "",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": null,
+      "quote_mode": "",
+      "quote_reason": "自产命题：证明出自本工作区报告 reports/000001-research.md 第 120 行（D 的 P1【已证】），不是外部文献引文，逐字 quote 面不适用；本轮先以无稿方式取号，随后按 b-proof 手稿路径送 V 签",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": false,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "",
+          "proof_source": "",
+          "reviewed_by": {},
+          "reviewed_source": "",
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 120,
+        "end": 120,
+        "label": ""
+      },
+      "created_at": "2026-11-09T10:46:38+08:00",
+      "created_by": "secretary-B",
+      "_proposition_adjudication": {
+        "checked": true,
+        "attempted": true,
+        "verdict": "different",
+        "canonical_name": "三点不等式",
+        "same_as": "",
+        "basis": "candidates 为空数组（how_to_judge：候选表为空 ⇒ different，没有可并的对象）；条件：对一切实数 θ，这一条自身条件明确、无歧义；结论：3 + 4cosθ + cos2θ = 2(1 + cosθ)^2 ≥ 0，结论也明确——但候选表为空，条件组与结论组都无从与任何候选比对，故判 different；候选表为空，没有可与该命题比对的对象，故不能判为同一定理。",
+        "reason": "候选表为空，没有可与该命题比对的对象，故不能判为同一定理。",
+        "reused": false,
+        "seam_source": "secretary（LlmSeam.for_secretary）",
+        "seam_attempted": true,
+        "at": "2026-11-09T10:46:38+08:00"
+      }
+    },
+    {
+      "stmt_id": "000001",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "对数导数的 Dirichlet 级数",
+      "statement_text": "设 σ = ℜs > 1。则 −ζ′/ζ(s) = Σ_{n≥2} Λ(n) n^{−s}（Λ 为 von Mangoldt 函数），且该 Dirichlet 级数在 σ>1 上绝对收敛；取实部得 −Re ζ′/ζ(σ+it) = Σ_{n≥2} Λ(n) n^{−σ} cos(t log n)。",
+      "statement_full": "设 σ = ℜs > 1。则 −ζ′/ζ(s) = Σ_{n≥2} Λ(n) n^{−s}（Λ 为 von Mangoldt 函数），且该 Dirichlet 级数在 σ>1 上绝对收敛；取实部得 −Re ζ′/ζ(σ+it) = Σ_{n≥2} Λ(n) n^{−σ} cos(t log n)。",
+      "proof_text": "",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": null,
+      "quote_mode": "",
+      "quote_reason": "自产命题：证明出自本工作区报告 reports/000001-research.md 第 122 行（D 报告 P2【已证】），不是外部文献引文，逐字 quote 面不适用；本轮先取号，proof_text（该行逐字证明正文）待 V 签覆盖后再补交",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": false,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "",
+          "proof_source": "",
+          "reviewed_by": {},
+          "reviewed_source": "",
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 122,
+        "end": 122,
+        "label": ""
+      },
+      "created_at": "2026-11-09T10:47:43+08:00",
+      "created_by": "secretary-B",
+      "_proposition_adjudication": {
+        "checked": true,
+        "attempted": true,
+        "verdict": "different",
+        "canonical_name": "对数导数的 Dirichlet 级数",
+        "same_as": "",
+        "basis": "条件：本命题条件为 σ=ℜs>1；候选表为空，无可比对的条件。；结论：本命题结论为 −ζ′/ζ(s)=Σ_{n≥2} Λ(n)n^{−s} 且该级数在 σ>1 上绝对收敛，并给出取实部的表达式；候选表为空，无可比对的结论。；候选表为空 ⇒ different（没有可并的对象）。；候选表为空，没有可与该命题比对的对象，按规则判不同。",
+        "reason": "候选表为空，没有可与该命题比对的对象，按规则判不同。",
+        "reused": false,
+        "seam_source": "secretary（LlmSeam.for_secretary）",
+        "seam_attempted": true,
+        "at": "2026-11-09T10:47:43+08:00"
+      }
+    },
+    {
+      "stmt_id": "000002",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "de la Vallée Poussin 3-4-1 不等式",
+      "statement_text": "设 σ = ℜs > 1，t 为任意实数。则 ζ(σ)³ · |ζ(σ+it)|⁴ · |ζ(σ+2it)| ≥ 1。",
+      "statement_full": "设 σ = ℜs > 1，t 为任意实数。则 ζ(σ)³ · |ζ(σ+it)|⁴ · |ζ(σ+2it)| ≥ 1。",
+      "proof_text": "",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": null,
+      "quote_mode": "",
+      "quote_reason": "自产命题：证明出自本工作区报告 reports/000001-research.md 第 124 行（D 报告 P3【已证】），不是外部文献引文，逐字 quote 面不适用；本轮先取号，proof_text（该行逐字证明正文）等 V 签覆盖后再补交",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": false,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "",
+          "proof_source": "",
+          "reviewed_by": {},
+          "reviewed_source": "",
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 124,
+        "end": 124,
+        "label": ""
+      },
+      "created_at": "2026-11-09T10:48:33+08:00",
+      "created_by": "secretary-B",
+      "_proposition_adjudication": {
+        "checked": true,
+        "attempted": true,
+        "verdict": "different",
+        "canonical_name": "de la Vallée Poussin 3-4-1 不等式",
+        "same_as": "",
+        "basis": "条件：本条要求 σ=ℜs>1 且 t 为任意实数；候选 000000 要求对一切实数 θ，候选 000001 要求 σ>1，条件组不一致。；结论：本条结论是 ζ(σ)^3·|ζ(σ+it)|^4·|ζ(σ+2it)|≥1；候选 000000 结论是三角不等式 3+4cosθ+cos2θ=2(1+cosθ)^2≥0，候选 000001 结论是 −ζ′/ζ(s)=Σ Λ(n)n^{−s} 的 Dirichlet 级数表示，结论组不一致。；本条的条件与结论均与两个候选不一致，候选只是主题相关或证明中可能用到的工具，不是同一个定理。",
+        "reason": "本条的条件与结论均与两个候选不一致，候选只是主题相关或证明中可能用到的工具，不是同一个定理。",
+        "reused": false,
+        "seam_source": "secretary（LlmSeam.for_secretary）",
+        "seam_attempted": true,
+        "at": "2026-11-09T10:48:33+08:00"
+      }
+    },
+    {
+      "stmt_id": "000003",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "σ>1 上 |ζ| 的显式下界",
+      "statement_text": "设 σ = ℜs > 1，t 为任意实数。则 |ζ(σ+it)| ≥ 1/ζ(σ) ≥ (σ−1)/σ > 0。注意这是 σ>1 上的界，不构成任何固定半平面上的零点自由结论。",
+      "statement_full": "设 σ = ℜs > 1，t 为任意实数。则 |ζ(σ+it)| ≥ 1/ζ(σ) ≥ (σ−1)/σ > 0。注意这是 σ>1 上的界，不构成任何固定半平面上的零点自由结论。",
+      "proof_text": "",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": null,
+      "quote_mode": "",
+      "quote_reason": "自产命题：证明出自本工作区报告 reports/000001-research.md 第 126 行（D 报告 P4【已证】），不是外部文献引文，逐字 quote 面不适用；本轮先取号，proof_text（该行逐字证明正文）等 V 签覆盖后再补交",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": false,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "",
+          "proof_source": "",
+          "reviewed_by": {},
+          "reviewed_source": "",
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 126,
+        "end": 126,
+        "label": ""
+      },
+      "created_at": "2026-11-09T10:49:01+08:00",
+      "created_by": "secretary-B",
+      "_proposition_adjudication": {
+        "checked": true,
+        "attempted": true,
+        "verdict": "different",
+        "canonical_name": "σ>1 上 |ζ| 的显式下界",
+        "same_as": "",
+        "basis": "候选 000002：条件：同为 σ=ℜs>1、t 为任意实数，条件一致；结论：候选为 ζ(σ)^3|ζ(σ+it)|^4|ζ(σ+2it)|≥1，本条为 |ζ(σ+it)|≥1/ζ(σ)≥(σ−1)/σ>0，结论不同。；候选 000001：条件：候选为 σ>1，本条为 σ=ℜs>1 且 t 任意实数，条件相近；结论：候选为 −ζ′/ζ(s)=ΣΛ(n)n^{−s} 及取实部表达式，本条为 |ζ(σ+it)| 的显式下界，结论不同。；候选 000000：条件：候选为一切实数 θ，本条为 σ=ℜs>1、t 任意实数，条件不同；结论：候选为三角恒等式 3+4cosθ+cos2θ≥0，本条为 zeta 函数下界，结论不同。；与候选表三条均不是同一条件推出同一结论；尤其 000002 条件相同但结论不同。",
+        "reason": "与候选表三条均不是同一条件推出同一结论；尤其 000002 条件相同但结论不同。",
+        "reused": false,
+        "seam_source": "secretary（LlmSeam.for_secretary）",
+        "seam_attempted": true,
+        "at": "2026-11-09T10:49:01+08:00"
+      }
+    },
+    {
+      "stmt_id": "000004",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "1−c/log t 型零点自由区",
+      "statement_text": "设下列输入成立：L1（对 1<σ<2、|t|≥2，ζ′/ζ(σ+it) = Σ_{ρ:|Imρ−t|≤1} 1/(σ+it−ρ) + O(log(|t|+2))）、L2（若 ρ 是 ζ 的 m 阶零点，则 ζ′/ζ(s) = m/(s−ρ) + O(1)）、L3（ζ(s) = 1/(s−1) + γ + O(s−1)，故 −ζ′/ζ(σ) = 1/(σ−1) + O(1)），以及计数输入 L4（在长度 1 的竖直窗口中 Σ_{ρ′} 1/|σ0+2iγ−ρ′| ≪ log T）。则存在绝对常数 c>0，使 ζ(s)≠0 当 σ ≥ 1 − c/log(|t|+2)（|t|≥2）。注：L4 是本报告内唯一未被完整证明的输入，故本条按条件命题登记，不登记为无条件定理。",
+      "statement_full": "设下列输入成立：L1（对 1<σ<2、|t|≥2，ζ′/ζ(σ+it) = Σ_{ρ:|Imρ−t|≤1} 1/(σ+it−ρ) + O(log(|t|+2))）、L2（若 ρ 是 ζ 的 m 阶零点，则 ζ′/ζ(s) = m/(s−ρ) + O(1)）、L3（ζ(s) = 1/(s−1) + γ + O(s−1)，故 −ζ′/ζ(σ) = 1/(σ−1) + O(1)），以及计数输入 L4（在长度 1 的竖直窗口中 Σ_{ρ′} 1/|σ0+2iγ−ρ′| ≪ log T）。则存在绝对常数 c>0，使 ζ(s)≠0 当 σ ≥ 1 − c/log(|t|+2)（|t|≥2）。注：L4 是本报告内唯一未被完整证明的输入，故本条按条件命题登记，不登记为无条件定理。",
+      "proof_text": "",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": null,
+      "quote_mode": "",
+      "quote_reason": "自产命题：证明出自本工作区报告 reports/000001-research.md 第 137–147 行（D 报告 T1，D 原文自标【已证·模 L1、L2、L3 + 计数输入 L4】），不是外部文献引文，逐字 quote 面不适用；本条按条件命题登记（假设已写进命题正文），等级留给框架按凭据现算",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": false,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "",
+          "proof_source": "",
+          "reviewed_by": {},
+          "reviewed_source": "",
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 137,
+        "end": 147,
+        "label": ""
+      },
+      "created_at": "2026-11-09T10:49:21+08:00",
+      "created_by": "secretary-B",
+      "_proof_routes": {
+        "1": "DVP 型路线，条件于计数输入 L4。"
+      },
+      "_proposition_adjudication": {
+        "checked": true,
+        "attempted": true,
+        "verdict": "different",
+        "canonical_name": "1−c/log t 型零点自由区",
+        "same_as": "",
+        "basis": "条件：本条要求 L1、L2、L3、L4 且 |t|≥2；候选 000001、000003、000002 均只假设 σ>1，条件内容与强弱不同。；结论：本条结论是存在绝对常数 c>0 使 ζ(s)≠0 当 σ ≥ 1−c/log(|t|+2)；候选 000001 是对数导数的 Dirichlet 级数，000003 是 |ζ| 的显式下界，000002 是 3-4-1 不等式，结论均不同。；本条的条件是 L1–L4 计数输入加 |t|≥2，结论是存在 c>0 的 1−c/log t 型零点自由区；三个候选分别是对数导数级数、σ>1 上 |ζ| 下界和 3-4-1 不等式，条件与结论均不一致。",
+        "reason": "本条的条件是 L1–L4 计数输入加 |t|≥2，结论是存在 c>0 的 1−c/log t 型零点自由区；三个候选分别是对数导数级数、σ>1 上 |ζ| 下界和 3-4-1 不等式，条件与结论均不一致。",
+        "reused": false,
+        "seam_source": "secretary（LlmSeam.for_secretary）",
+        "seam_attempted": true,
+        "at": "2026-11-09T10:49:21+08:00"
+      }
+    }
+  ]
+}
