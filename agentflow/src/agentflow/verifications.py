@@ -2278,6 +2278,306 @@ def _is_legacy_row(row: Mapping[str, Any]) -> bool:
     return row.get("review_pass") in (None, "")
 
 
+#: D3（2026-11-09）的四类「缺陷类别」——与轴正交的一格，不是第三档轴。
+#:
+#: 轴仍然是 :data:`SECRETARY_JUDGE_AXES` 的两档（clean / fault）；本词表回答的是
+#: 「这一行判 fault 时，fault 的内容是哪一类」：
+#:
+#: - `math`：证明链本身的错/洞（findings 里有 `level=error` 且指到某一步，或 `defect_step`）；
+#: - `procedural`：V 自己说「我没逐行验证 / 我判不了」——它没有做出判定；
+#: - `style`：依据落在排版 / 术语 / 文风 / 价值判断这类不归 V 判的面上；
+#: - `contract`：稿的形态 / 契约不合格（缺 `## 证明`、引用不可核、sha 不符、稿名解析不出）。
+#:
+#: `report_gap`（见 :data:`FAULT_KIND_VALUES`）不在这里：它是业主 2026-11-09 裁定 ①
+#: 从 `procedural` 里单列出来的读数（「没记录反例构造尝试」不算缺陷），不是 fault。
+FAULT_KINDS: tuple[str, ...] = ("math", "procedural", "style", "contract")
+
+#: :func:`fault_kind_of` 的 `kind` 全部取值（比 :data:`FAULT_KINDS` 多一格 `report_gap`）。
+#:
+#: 为什么把它放在同一张表里：读的人要能一眼看出「这一行是 fault 的哪一类」与
+#: 「这一行不是 fault、只是报告缺一格记录」是同一格上的两个读数。写侧（批 2）
+#: 仍然只把 :data:`FAULT_KINDS` 里的四类写进 `secretary_judge.fault_kind`；
+#: `report_gap` 是读侧从旧行形状推出来的，不新增磁盘字段（D3 §3.3）。
+FAULT_KIND_VALUES: tuple[str, ...] = FAULT_KINDS + ("report_gap",)
+
+#: :func:`fault_kind_of` 的 `source` 全部取值。
+#:
+#: `row` = 新行自己在 `secretary_judge.fault_kind` 上写了类别；
+#: 其余三个是读侧推定（老行没有这一格，D3 §5.3）：
+#: `legacy_math_evidence`（行上带数学证据）/ `legacy_shape`（按行形状推定）/
+#: `legacy_default`（说不清 ⇒ 按 math 兜底，继续锁）。另加一个只往更严方向折的
+#: `guard:carries_math_evidence`（写侧护栏在读侧的同一条：不许把带数学证据的行说成不锁）。
+FAULT_KIND_SOURCES: tuple[str, ...] = (
+    "row", "legacy_math_evidence", "legacy_shape", "legacy_default",
+    "guard:carries_math_evidence")
+
+#: 「没记录反例构造尝试」这一档的措辞（98b 的 4 条 fault 逐字命中其中一条）。
+#:
+#: 这些是报告质量的读数，不是缺陷（业主 2026-11-09 裁定 ①）：它们不锁 sha、不挡签，
+#: 只让「V 的报告缺了什么」第一次可见。
+_REPORT_GAP_MARKERS: tuple[str, ...] = (
+    "没有记录任何反例构造尝试",
+    "没有记录任何反例",
+    "没有记录反例",
+    "没有尝试记录",
+    "没有记录尝试",
+    "未构造出反例",
+)
+
+#: V 自己说「我没逐行验证 / 我判不了」——这一档仍然是 fault（它没有做出判定）。
+_SELF_DECLARED_MARKERS: tuple[str, ...] = (
+    "没有逐行验证", "没逐行验证", "未逐行验证", "无法逐行验证",
+    "我判不了", "判不了", "无法判断", "不能判定", "给不出判定", "拿不准",
+)
+
+#: 依据落在不归 V 判的那几样（排版 / 术语 / 文风 / 价值判断）。
+_STYLE_MARKERS: tuple[str, ...] = (
+    "排版", "术语", "文风", "措辞", "价值判断", "笔误", "标点", "版式",
+)
+
+
+def _findings_of(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """这一行的 findings 里形状可读的那几条（坏形状静默跳过 —— 读侧只做分类，不改历史）。"""
+    raw = row.get("findings")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [one for one in raw if isinstance(one, Mapping)]
+
+
+def _fault_kind_text(row: Mapping[str, Any]) -> str:
+    """分类时要读的那段话：优先秘书的 `reason`，没有再退到 V 的 `why`。
+
+    为什么先读秘书：98b 的 4 条程序性 fault 全部写在 `secretary_judge.reason` 里，
+    行上的 findings 是空的（D3 §2.1：这不是"V 找到了程序性缺陷"，是秘书从"报告里没有
+    出现某个句式"推出 fault）。读 `why` 只是兜底：老行没有 `reason` 时不要把整行读成
+    "没有依据"，那会把它按 math 兜底（保守方向可接受，但读数会失真）。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    if isinstance(got, Mapping):
+        reason = str(got.get("reason") or "").strip()
+        if reason:
+            return reason
+    return str(row.get("why") or "").strip()
+
+
+def _looks_like_report_gap(text: str) -> bool:
+    """这句话是不是只在说「没有记录反例尝试」那一档（98b 的 4 条）。"""
+    if "反例" not in text:
+        return False
+    return any(marker in text for marker in _REPORT_GAP_MARKERS)
+
+
+def _looks_like_self_declared(text: str) -> bool:
+    """这句话是不是 V 自己说「我没逐行验证 / 我判不了」。"""
+    return any(marker in text for marker in _SELF_DECLARED_MARKERS)
+
+
+def _looks_like_style(text: str) -> bool:
+    """这句话的依据是不是落在排版 / 术语 / 文风 / 价值判断上。"""
+    return any(marker in text for marker in _STYLE_MARKERS)
+
+
+def _has_math_evidence(row: Mapping[str, Any]) -> bool:
+    """行上有没有数学证据：任一 `level=error` 的 finding，或 `defect_step` 非空。"""
+    if row.get("defect_step") is not None:
+        return True
+    return any(str(one.get("level") or "") == "error" for one in _findings_of(row))
+
+
+def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
+    """这一行的缺陷类别（纯读；D3 批 1 的唯一入口）。
+
+    → `{kind, cause, source, why}`
+
+    - `kind` ∈ :data:`FAULT_KIND_VALUES`，或 `""`（这一行不是 fault 行）；
+    - `cause` 只在 `procedural` / `report_gap` 上有值：`report_gap` / `self_declared` / `""`；
+    - `source` ∈ :data:`FAULT_KIND_SOURCES`；`""` = 这一行不是 fault 行；
+    - `why`：人读的一句依据（它引哪一条判据、读了哪几个字段）。
+
+    ## 判据（按 D3 §3.1，优先级从上到下）
+
+    1. 新行显式带的类别（`secretary_judge.fault_kind`）⇒ 原样采信，`source="row"`。
+       这一支不看 axis：clean 行带着 fault_kind 是"自相矛盾行"，
+       :func:`is_a_vote` 的第 ③ 条会 fail-closed（这是护栏，不是放宽）。
+    2. 行上有数学证据（`level=error` 的 finding 或 `defect_step`）⇒ `math`，
+       `source="legacy_math_evidence"`。这一条永远优先于下面三条：任何
+       "procedural/style 带着步号"的行都被折回 math（只往更严的方向折，D3 §5.3）。
+    3. 秘书的话只在说「没有记录反例构造尝试」⇒ `report_gap`，`source="legacy_shape"`。
+       业主 2026-11-09 裁定 ①：它不算缺陷（不锁 sha、不挡签）；这里是读数。
+    4. 依据落在排版 / 术语 / 文风 / 价值判断 ⇒ `style`，`source="legacy_shape"`。
+    5. V 自己说「我没逐行验证 / 我判不了」⇒ `procedural`，`source="legacy_shape"`，
+       `cause="self_declared"`。
+    6. 上面都不命中、但形状是「verdict=成立 + findings 空 + unresolved_errors=0」⇒
+       `procedural`，`source="legacy_shape"`（D3 §5.3 的第 2 条：98b 那 4 行就是它）。
+    7. 其余 ⇒ `math`，`source="legacy_default"`（保守兜底：说不清的老行继续锁）。
+
+    ## 为什么 `contract` 只从显式 kind 来
+
+    `contract`（缺 `## 证明` / 引用不可核 / sha 不符 / 稿名解析不出）在现行架构里
+    不经秘书：它由 `citation_gate` / `row_signable` / 依赖审计这些机械闸分走
+    （D3 §3.4）。一行台账的字段里没有"稿名解析不出"这种事实，读侧硬猜只会把
+    数学行误判成契约行（那会静默解锁）。所以老行不推定 `contract`——它只来自新行
+    显式写下的那一格（`source="row"`）。这与"旧行一律 math 兜底"同一条纪律。
+
+    ## 为什么 `verdict` 只在旧行推定里读
+
+    新行有 `fault_kind` 时，`verdict` 一个字节都不读（p247：V 的判词只是陈述）。
+    旧行没有那一格，才用 `verdict=成立` 当"V 没指出缺陷"的形状证据；它不是轴。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    explicit = (str(got.get("fault_kind") or "").strip()
+                if isinstance(got, Mapping) else "")
+    if explicit in FAULT_KIND_VALUES:
+        cause = ""
+        if explicit in ("procedural", "report_gap"):
+            raw_cause = (str(got.get("fault_cause") or "").strip()
+                         if isinstance(got, Mapping) else "")
+            cause = raw_cause if raw_cause in ("report_gap", "self_declared") else ""
+            if explicit == "report_gap":
+                cause = "report_gap"
+        # 只往更严的方向折：带数学证据的行不许被说成"不锁"的那几类。
+        if explicit in ("procedural", "style", "report_gap") and _has_math_evidence(row):
+            return {
+                "kind": "math", "cause": "",
+                "source": "guard:carries_math_evidence",
+                "why": ("行上显式写着 "
+                        f"{explicit}，但它同时带着数学证据（error finding 或 defect_step）"
+                        " ⇒ 强制折回 math（护栏只许往更严的方向折）"),
+            }
+        return {
+            "kind": explicit, "cause": cause, "source": "row",
+            "why": f"行上显式写了 fault_kind={explicit!r}（source=row）",
+        }
+
+    axis = ledger_axis(row)
+    if axis != "fault":
+        return {
+            "kind": "", "cause": "", "source": "",
+            "why": (f"这一行不是 fault 行（axis={axis or '空'}）⇒ 没有缺陷类别"
+                    if axis else "这一行没有秘书轴（未判成 / 老行没有这一格）⇒ 没有缺陷类别"),
+        }
+
+    findings = _findings_of(row)
+    if _has_math_evidence(row):
+        step = row.get("defect_step")
+        return {
+            "kind": "math", "cause": "", "source": "legacy_math_evidence",
+            "why": (f"行上带数学证据（defect_step={step!r}，"
+                    f"error finding={sum(1 for f in findings if str(f.get('level') or '') == 'error')} 条）"
+                    " ⇒ math（证据在行上，不是形状推定）"),
+        }
+
+    text = _fault_kind_text(row)
+    if _looks_like_report_gap(text):
+        return {
+            "kind": "report_gap", "cause": "report_gap", "source": "legacy_shape",
+            "why": ("秘书的话只在说「没有记录反例构造尝试」，行上没有数学证据 ⇒ report_gap"
+                    "（业主 2026-11-09 裁定 ①：不算缺陷，不锁 sha、不挡签）"),
+        }
+    if _looks_like_style(text):
+        return {
+            "kind": "style", "cause": "", "source": "legacy_shape",
+            "why": "依据落在排版/术语/文风/价值判断（不归 V 判的面）⇒ style",
+        }
+    if _looks_like_self_declared(text):
+        return {
+            "kind": "procedural", "cause": "self_declared", "source": "legacy_shape",
+            "why": "V 自己说「没逐行验证 / 判不了」⇒ procedural（它没有做出判定）",
+        }
+    if (str(row.get("verdict") or "").strip() == "成立"
+            and not findings
+            and int(row.get("unresolved_errors") or 0) == 0):
+        return {
+            "kind": "procedural", "cause": "", "source": "legacy_shape",
+            "why": ("verdict=成立 + findings 空 + unresolved_errors=0 ⇒ procedural"
+                    "（legacy_shape：按 D3 §5.3 的行形状推定）"),
+        }
+    return {
+        "kind": "math", "cause": "", "source": "legacy_default",
+        "why": ("既不显式带 fault_kind、也没有可判的形状 ⇒ math"
+                "（legacy_default：保守兜底，继续锁 sha）"),
+    }
+
+
+def _mechanical_gate_of(row: Mapping[str, Any]) -> str:
+    """`row_signable` 为假时，点名是哪一道机械闸挡的（只给 :func:`vote_reading` 的 `why`）。"""
+    if int(row.get("unresolved_errors") or 0) != 0:
+        return "unresolved_errors"
+    if signing_gate_problem(row):
+        return "citation_gate"
+    if citation_blocks(row):
+        return "citation_blocks"
+    return "row_signable"
+
+
+def vote_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+    """这一行为什么算 / 不算「clean 的那一票」（人读的读数；D3 §5.2）。
+
+    → `{vote, why, axis, kind, cause, checked, legacy, kind_source,
+         review_call, review_pass, verification_id, at}`
+
+    `why` ∈ `clean` / `no_judgement` / `axis_fault:<kind>` /
+    `clean_row_carries_fault_kind` / `mechanical_gate:<哪一道>`。
+
+    判据顺序（任一条不成立即 False，fail-closed）：
+      ① `secretary_judge.checked=True`（"问过、没判成"不是一票）；
+      ② `ledger_axis(row) == "clean"`（fault / 空轴都不是一票）；
+      ③ `fault_kind_of(row)["kind"] == ""`（clean 行带 fault_kind = 矛盾行，不采信）；
+      ④ `row_signable(row)`（未解决 error / 依赖台账读不成 / 引用核实挡签 —— 机械闸）。
+
+    刻意不做的事（与 D3 §5.2 逐字一致）：不读 `verdict`、不要求 `review_call`、
+    不判"签没签"。分组（同一命题 / 证明号 / sha / review_call）与"是不是最近一趟"
+    由调用方（D268 的 `sign_reading`）负责；本函数只回答"这一行自己"。
+
+    `legacy` 是 :func:`_is_legacy_row`（没有 `review_call` / `review_pass` 的行）；
+    它不是 `kind_source`：98b 的行有 `review_call`（所以 `legacy=False`），
+    但没有 `fault_kind` 这一格（所以 `kind_source` 是 `legacy_*`）。两个"legacy"
+    在这里指两件事，读数里分开给。
+    """
+    checked = secretary_judged(row)
+    axis = ledger_axis(row)
+    reading = fault_kind_of(row)
+    kind = str(reading.get("kind") or "")
+    out: dict[str, Any] = {
+        "vote": False,
+        "why": "",
+        "axis": axis,
+        "kind": kind,
+        "cause": str(reading.get("cause") or ""),
+        "checked": checked,
+        "legacy": _is_legacy_row(row),
+        "kind_source": str(reading.get("source") or ""),
+        "review_call": str(row.get("review_call") or ""),
+        "review_pass": row.get("review_pass"),
+        "verification_id": str(row.get("verification_id") or ""),
+        "at": str(row.get("at") or ""),
+    }
+    if not checked:
+        out["why"] = "no_judgement"
+        return out
+    if axis != "clean":
+        out["why"] = f"axis_fault:{kind}" if kind else "no_judgement"
+        return out
+    if kind:
+        out["why"] = "clean_row_carries_fault_kind"
+        return out
+    if not row_signable(row):
+        out["why"] = "mechanical_gate:" + _mechanical_gate_of(row)
+        return out
+    out["vote"] = True
+    out["why"] = "clean"
+    return out
+
+
+def is_a_vote(row: Mapping[str, Any]) -> bool:
+    """这一行算不算「clean 的那一票」—— D268 的 `sign_reading.votes` 只数它。
+
+    唯一判据在 :func:`vote_reading`（本函数只是它的 `vote` 那一位），
+    别处不许再写一遍 `secretary_judge.checked` / `ledger_axis` / `row_signable` 的组合。
+    """
+    return bool(vote_reading(row)["vote"])
+
+
 def _hold_runs(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[int], list[bool]]:
