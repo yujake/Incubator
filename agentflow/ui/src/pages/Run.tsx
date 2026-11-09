@@ -415,10 +415,11 @@ export function Run(props: RunProps) {
               步数 <span class="mono">{num(digest.data.steps)}</span> · 派了多少活{" "}
               <span class="mono">{num(digest.data.dispatched)}</span> · 验了几条{" "}
               <span class="mono">{num(digest.data.verified)}</span> · 已签证明位{" "}
-              <span class="mono">{num(digest.data.signed_proofs)}</span> · 签文件{" "}
+              <span class="mono">{num(digest.data.signed_proofs)}</span> · 有效签（复算通过）{" "}
+              <span class="mono">{num(digest.data.recomputable_signs)}</span> · 签文件{" "}
               <span class="mono">{num(digest.data.sign_files)}</span>
               （<span class="mono">out/vsigns/</span> 下全部 JSON，含 issued.json；
-              与已签证明位不是同一个数）
+              有效签只数能复算的凭据，与文件个数、已签证明位都不是同一个数）
             </div>
             <div class="readings">
               花了多少（收工行自报）{" "}

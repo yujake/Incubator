@@ -857,11 +857,12 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       `total - unsigned` 合计（其中签住的证明位数），以及"收工行没带这一格"的趟数。
       这里不是"签了几个签文件"：`signed_proofs` 数的是收工读数里的已签证明位；
     - `sign_files`：签文件的个数（`out/vsigns/*.json`，含派生归档 `issued.json`）。
-      它与 `signed_proofs` 是两个数、两套口径，刻意分开命名（84 的现场：前者 3、
-      后者 31 —— 改前两件事共用 `signed` 一格，读的人会把 31 读成"签了 31 份"）。
-      目录不在 ⇒ 0（"这个工作区还没有签"）；目录在而列不出来 ⇒ `None`（没查成，不是 0）。
-      它不依赖事件流，所以事件流读不出来时它照常有值；它是工作区级读数（签文件不按趟
-      归属），给不给 `sid` 数到的都是同一批文件；
+      它确实是"文件个数"，保留原名一个批次；它与 `signed_proofs` 是两个数、两套口径
+      （84 的现场：前者 3、后者 31 —— 改前两件事共用 `signed` 一格，读的人会把 31 读成
+      "签了 31 份"）。目录不在 ⇒ 0；目录在而列不出来 ⇒ `None`（没查成，不是 0）；
+    - `recomputable_signs`：复算通过的凭据份数（D268 批 2 的"签数"唯一读数）。
+      与 `sign_files` 的区别：文件在但 `passes` 点不出 need 行（自指签 / 无轴 / 不齐）
+      不计入。目录不在 ⇒ 0；读不出来 ⇒ `None`。前端本批改读这一格；
     - `stop_reasons`：`{停止理由: 趟数}`（空字典 = 一趟都没有停止理由可数）。
 
     有坏行时 `tri=unreadable` 而读得出来的那些行照常算（少给数会让"这一趟 0 步"
@@ -870,13 +871,19 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
     root_p = Path(str(root))
     sid = str(sid or "")
     scope = DIGEST_SCOPE_SESSION if sid else DIGEST_SCOPE_WORKSPACE
+    from .. import vsigns as _VS
+
+    _creds = _VS.credentials_reading(root_p)
     face: dict[str, Any] = {
         "tri": TRI_NOT_APPLICABLE, "reason": "", "scope": scope, "sid": sid,
         "runs": None, "unfinished": None, "start_ts": "", "end_ts": "",
         "steps": None, "usd": None, "unknown_usd_calls": None,
         "spend_usd": None, "spend_missing_runs": None,
         "dispatched": None, "dispatched_missing_runs": None,
-        "verified": None, "signed_proofs": None, "sign_files": _digest_sign_files(root_p),
+        "verified": None, "signed_proofs": None,
+        "sign_files": _digest_sign_files(root_p),
+        "recomputable_signs": (_creds.get("recomputable")
+                               if _creds.get("checked") else None),
         "gaps_missing_runs": None,
         "stop_reasons": {},
     }
@@ -2662,6 +2669,8 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
     files = 0
     if sign_dir.is_dir():
         files = len([p for p in sign_dir.glob("*.json") if p.name != "issued.json"])
+    creds = VSP.credentials_reading(root_p)
+    recomputable = creds.get("recomputable") if creds.get("checked") else None
     c3 = {"id": "C3", "name": "", "got": None, "min": None, "ok": False,
           "detail": "", "source": _src("out/paper/ACCEPTANCE-CHECKS.json")}
     readings = getattr(rep, "readings", {}) or {}
@@ -2685,6 +2694,7 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
             "review_states": states, "rows": proof_rows[:PACKAGE_ROWS_MAX],
             "vsign": {"tri": str(backed.get("tri") or TRI_UNREADABLE),
                       "reason": str(backed.get("reason") or ""), "files": files,
+                      "recomputable": recomputable,
                       "signed": list(backed.get("signed") or []),
                       "backed": list(backed.get("backed") or []),
                       "without_sign": list(backed.get("without_sign") or []),
@@ -5262,7 +5272,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 两个数、两套口径（84 的现场：signed_proofs=31 而 sign_files=3）：
       # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
       # `out/vsigns/*.json` 的文件数（含 issued.json 归档）。不共用一格。
+      # 三个数、三套口径（84 的现场：signed_proofs=31、sign_files=3、recomputable_signs=2）：
+      # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
+      # `out/vsigns/*.json` 的文件数（含 issued.json 归档）；`recomputable_signs` 是
+      # 复算通过的凭据份数（D268 批 2 的"签数"唯一读数，前端本批改读它）。
       ("signed_proofs", "number | null"), ("sign_files", "number | null"),
+      ("recomputable_signs", "number | null"),
       ("gaps_missing_runs", "number | null"),
       ("stop_reasons", "Record<string, number>"))),
     ("EvidenceView",

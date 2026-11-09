@@ -292,6 +292,7 @@ export interface RunDigestView {
   verified: number | null;
   signed_proofs: number | null;
   sign_files: number | null;
+  recomputable_signs: number | null;
   gaps_missing_runs: number | null;
   stop_reasons: Record<string, number>;
 }
