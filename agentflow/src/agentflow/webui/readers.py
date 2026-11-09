@@ -80,6 +80,11 @@ from typing import Any, Mapping, Sequence
 from .. import manuscripts as _MS
 from .. import sessions as SS
 from .. import statementledger as SL   # 命题台账的查口（全表→索引，只读、零模型）
+# 板项行"状态"那一格的投影（D12 ②）：与状态报告是同一个函数，不许在网页这一侧
+# 再写一份（两份 = 同一行在报告与页面上有两种状态）。按模块取属性而不是
+# `from ..statusreport import tasks_row_reading`：判据要能整格替换它做反真空
+# （`tests/test_a_board_item_shows_its_item_state.py` 的 ③）。
+from .. import statusreport as _SRP
 from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
                          agent_states, clock_waiters, most_active_state, state_counts)
 from ..jsonlfile import read_jsonl_state
@@ -2286,6 +2291,17 @@ def artifacts_face(root: str | Path, store: Any = None, *,
         {**dict(r), "sha_consistency": consistency_by_path.get(
             str(r.get("path") or ""), SHA_UNKNOWN)}
         if isinstance(r, Mapping) else r for r in out.get("ledger") or []]
+    # ---- 板项行的"状态"按 `item_state`/`item_close` 投影（D12 ②，2026-11-09）。
+    # 与状态报告同一个函数（`statusreport.tasks_row_reading`）：`tasks` 表里板项行的
+    # `status` 恒为 `pending`（`conductor._item_row` 建行写死），于是网页「任务产物」
+    # 那一栏把 71 条 `item_state=done` 的 notice 全印成 pending —— 与 `.md` 报告是
+    # 同一个错。新增一格而不是改写 `status`：盘上那一格确实是 `pending`，把 API 里的
+    # `status` 换成投影值等于让读数与盘对不上（三态纪律的反面），而且那会动
+    # `tasks.status` 的语义 —— 那是业主明令不动的边界。
+    out["tasks"] = [
+        {**dict(r), "status_reading": _SRP.tasks_row_reading(r)}
+        if isinstance(r, Mapping) else r
+        for r in (out.get("tasks") or [])]
     # ---- 实验产物的落点（产物页补的那两处：`code/exp/` 与 `out/experiments/<号>/`）。
     spots = experiment_spots(root_p)
     out["experiment_spots"] = spots["rows"]
@@ -5668,7 +5684,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 角色这一格照业主的口径只认 `created_by`（Task 没有那一栏）⇒ 空串。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
-      ("by_task_id_tri", "string"))),
+      ("by_task_id_tri", "string"),
+      # 2026-11-09（D12）：板项行的"状态"读数（`statusreport.tasks_row_reading` 的
+      # 投影：`板项 done/acked` / `板项 queued/未收口`；代理行仍是 `<status>/<outcome>`）。
+      # 它不在 `schema.Task` 里 —— 是这一面现算的投影，与 `.md` 报告同一处口径。
+      # 盘上的 `status` 一个字都不改（板项行那一格恒为 `pending`，那是类型标记）。
+      ("status_reading", "string"))),
     ("ConjectureRow",
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
      "`schema.Conjecture` 为准）",

@@ -666,7 +666,12 @@ export function Artifacts() {
               { key: "role", title: "角色" },
               { key: "action", title: "动作" },
               { key: "called_by", title: "谁调的" },
-              { key: "status", title: "状态" },
+              // 状态列读后端现算的 `status_reading`（D12 ②，2026-11-09）：板项行
+              // （`kind` 非空）的 `status` 在台账里恒为 `pending`（那是"这一行是板项"
+              // 的类型标记），真正的收口在 `item_state`/`item_close`。改前这里印的是
+              // `status`，于是 71 条 `item_state=done` 的 notice 全显示成 pending。
+              // 投影与 `.md` 状态报告是同一个函数（`statusreport.tasks_row_reading`）。
+              { key: "status", title: "状态", render: (r) => cell(r.status_reading) },
               { key: "outcome", title: "结局", render: (r) => cell(r.outcome) },
               {
                 key: "usd",
@@ -676,6 +681,13 @@ export function Artifacts() {
               { key: "detail", title: "说明", render: (r) => clip(r.detail) },
             ]}
           />
+        )}
+        {isUnreadable(art.tasks_tri) ? null : (
+          <div class="readings">
+            板项行（kind 非空）的「状态」按 item_state/item_close 投影：它们在台账里的
+            status 恒为 pending（那是"这一行是板项"的类型标记，不是没收口）——
+            投影与状态报告是同一个函数，盘上那一格一个字都没改。
+          </div>
         )}
       </Card>
 

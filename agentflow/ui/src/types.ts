@@ -847,6 +847,7 @@ export interface TaskRow {
   by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
+  status_reading: string;
 }
 
 /** 出处：store.rows("conjectures")（真机 p9b/data/conjectures.json；无样本时以 `schema.Conjecture` 为准）。 */
