@@ -2662,6 +2662,48 @@ class AgentV:
         返回 `None` = 这一份不是穷举型证据 / 找不到 E 的手稿（交给散文与 pending 那两支）；
         否则返回与 :meth:`_review_unregistered_prose` 同形的 dict（`_finish_unregistered` 读）。
         """
+        ctx, early = self._read_unregistered_exhaustion_ctx(
+            text=text, manuscript=manuscript)
+        if ctx is None:
+            return early
+        # ---- 三轮：每一轮都重读盘上那一份报告（机械会审，不问模型） ----
+        need = review_pass_bound()
+        failure, judged, passes, stopped, reviewed = self._review_exhaustion_rounds(
+            body=ctx["body"], exp_rows=ctx["exp_rows"], row=ctx["row"],
+            rel=ctx["rel"], need=need)
+        if failure is not None:
+            # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）；
+            # 已判过的几转照旧带出去（轴读数不许丢），空表 = 一转都没判到。
+            failure = dict(failure)
+            failure["secretary_judge"] = (dict(judged[-1].get("judgment") or {})
+                                          if judged else {})
+            #: 会审七项读数不能丢（detail 里承诺了它在 `exhaustion_review` 里；缺材料
+            #: 那一档同样是"会审跑完了、只是盘上缺一块"）。
+            if reviewed:
+                failure["exhaustion_review"] = dict(reviewed)
+            return failure
+        return self._finish_unregistered_exhaustion(
+            body=ctx["body"], rel=ctx["rel"], sha=ctx["sha"], no=no, need=need,
+            passes=passes, judged=judged, reviewed=reviewed, stopped=stopped)
+
+    def _read_unregistered_exhaustion_ctx(
+        self, *, text: str, manuscript: str = "",
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """未在册穷举证明的「读稿 / 比对」那一段（2026-11-09 从同名大函数拆出）。
+
+        返回 `(ctx, early)`：
+
+        - `ctx is None` ⇒ 原样返回 `early`（它可能是 `None`：这一份不是穷举型证据 /
+          找不到稿 / 没有 `## 证明` 那一节 —— 交给散文与 pending 两支）；
+        - 否则 `ctx` 是 `{"body", "rel", "sha", "exp_rows", "row"}`，交给三轮会审那一段。
+
+        为什么单独一个方法：`_review_unregistered_exhaustion` 原来 206 行（repo survey
+        的软判据按函数量体量），而这一段与后两段没有共享状态 —— 它只把"这一份稿是
+        哪一份、正文是哪一份、属于哪条实验"钉住，后面两段只读它交出来的读数。
+        行为逐字不变：搬的是整段（缩进与注释不动），早退只是把 `return X` 写成
+        `return None, X`。
+        """
+
         from .. import depsection as _DS
         from .. import exhaustionreport as _ER
         from .. import numericproof as _NP
@@ -2685,7 +2727,7 @@ class AgentV:
         # 签核的就会是别人那份报告的 sha。所以 E 要拿到手稿签块，就在送审时点名那份稿
         # （`E.run_experiment` 的返回值里 `proof_manuscript` 就是这一格）。
         if not rel or not _ER.is_manuscript_relpath(rel):
-            return None
+            return None, None
         # 这份稿属于哪条实验：稿名里那个实验号是唯一不会歧义的键（两条实验共用
         # 同一份程序时，按 `code_path` 反查会挑到第一条 —— 那样签核的是别人那份报告）。
         eid = _ER.experiment_id_of(rel)
@@ -2697,73 +2739,74 @@ class AgentV:
                 # 稿是"按证明栏反查出来的"、而盘上没有 ⇒ 这一档不是"送审指错了稿"，
                 # 而是"这一条还没有那份手稿"（存量工作区就是这个形态）⇒ 退回 pending
                 # 那一支（老行为：结论照样落盘，只是没有稿可签）。
-                return None
-            return {"failed": True, "reason": "manuscript_missing",
-                    "detail": (f"`{rel}` 读不出来（{read.get('state')}："
-                               f"{'；'.join(str(p) for p in read.get('problems') or [])}）⇒ "
-                               "这一份没审成（未在册的穷举证明要指向盘上那一份稿）"),
-                    "passes": [], "manuscript": rel}
+                return None, None
+            return None, {"failed": True, "reason": "manuscript_missing",
+                          "detail": (f"`{rel}` 读不出来（{read.get('state')}："
+                                     f"{'；'.join(str(p) for p in read.get('problems') or [])}）⇒ "
+                                     "这一份没审成（未在册的穷举证明要指向盘上那一份稿）"),
+                          "passes": [], "manuscript": rel}
         on_disk = str(read.get("proof_body") or "").strip("\n")
         if not on_disk.strip():
             # 2026-11-09（D4）：缺节与空节分开说；"文件在、但没有 `## 证明`"不许被读成
             # "证明正文是空的"（更不许拿 `## 依赖` 或整份全文顶替）。
             _proof_state = str(read.get("proof_state") or "")
             _absent = _proof_state == _DS.PROOF_ABSENT
-            return {"failed": True,
-                    "reason": ("manuscript_has_no_proof_section" if _absent
-                               else "manuscript_empty"),
-                    "detail": (f"`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
-                               "没有可审/可签的对象（缺节不等于「证明为空」）"
-                               if _absent else
-                               f"`{rel}` 的 `{_DS.SECTION_PROOF}` 那一节没有正文 ⇒ "
-                               "没有可审/可签的对象"),
-                    "passes": [], "manuscript": rel}
+            return None, {"failed": True,
+                          "reason": ("manuscript_has_no_proof_section" if _absent
+                                     else "manuscript_empty"),
+                          "detail": (f"`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
+                                     "没有可审/可签的对象（缺节不等于「证明为空」）"
+                                     if _absent else
+                                     f"`{rel}` 的 `{_DS.SECTION_PROOF}` 那一节没有正文 ⇒ "
+                                     "没有可审/可签的对象"),
+                          "passes": [], "manuscript": rel}
         if not body.strip():
             body = on_disk
         elif VR.text_sha(on_disk) != VR.text_sha(body):
-            return {"failed": True, "reason": "proof_text_mismatch",
-                    "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
-                               f"（参数 sha {VR.text_sha(body)[:12]}…，盘上 "
-                               f"{VR.text_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
-                    "passes": [], "manuscript": rel}
+            return None, {"failed": True, "reason": "proof_text_mismatch",
+                          "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
+                                     f"（参数 sha {VR.text_sha(body)[:12]}…，盘上 "
+                                     f"{VR.text_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
+                          "passes": [], "manuscript": rel}
         if not _ER.is_exhaustion_column({"proof_text": body}, exp_rows):
-            return None
+            return None, None
         # 2026-11-04（审计缺陷 ③）：缺 `## 依赖` 段不许签（空表合法）。
         _section = _DS.parse_dependency_section(read.get("text") or "")
         if not _section.get("present"):
-            return {"failed": True, "reason": "dependency_section_missing",
-                    "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（四列表）⇒ 不审、不落签："
-                               "依赖面只能从稿的这一节读；没有引用也要写一张空表"
-                               "（表头在、0 行）"),
-                    "passes": [], "manuscript": rel}
+            return None, {"failed": True, "reason": "dependency_section_missing",
+                          "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（四列表）⇒ 不审、不落签："
+                                     "依赖面只能从稿的这一节读；没有引用也要写一张空表"
+                                     "（表头在、0 行）"),
+                          "passes": [], "manuscript": rel}
         if str(_section.get("refused") or "").strip():
-            return {"failed": True, "reason": "dependency_section_unreadable",
-                    "detail": (f"`{rel}` 的 `## 依赖` 段不合格"
-                               f"（{_section.get('refused')}）⇒ 不审、不落签"),
-                    "passes": [], "manuscript": rel}
+            return None, {"failed": True, "reason": "dependency_section_unreadable",
+                          "detail": (f"`{rel}` 的 `## 依赖` 段不合格"
+                                     f"（{_section.get('refused')}）⇒ 不审、不落签"),
+                          "passes": [], "manuscript": rel}
         sha = _PR.proof_sha(body)
         already = _VS.manuscript_sign_standing(read.get("text") or "", proof_sha=sha,
                                               manuscript_path=rel)
         if str(already.get("state") or "") == "signed":
-            return {"block": already, "passes": [], "manuscript": rel, "sha": sha,
-                    "already": True,
-                    "reason": (f"`{rel}` 里已经有盖住这一份正文的签块"
-                               f"（{already.get('why')}）⇒ 不重复审、不重复写")}
-        # ---- 三轮：每一轮都重读盘上那一份报告（机械会审，不问模型） ----
-        need = review_pass_bound()
-        failure, judged, passes, stopped, reviewed = self._review_exhaustion_rounds(
-            body=body, exp_rows=exp_rows, row=row, rel=rel, need=need)
-        if failure is not None:
-            # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）；
-            # 已判过的几转照旧带出去（轴读数不许丢），空表 = 一转都没判到。
-            failure = dict(failure)
-            failure["secretary_judge"] = (dict(judged[-1].get("judgment") or {})
-                                          if judged else {})
-            #: 会审七项读数不能丢（detail 里承诺了它在 `exhaustion_review` 里；缺材料
-            #: 那一档同样是"会审跑完了、只是盘上缺一块"）。
-            if reviewed:
-                failure["exhaustion_review"] = dict(reviewed)
-            return failure
+            return None, {"block": already, "passes": [], "manuscript": rel, "sha": sha,
+                          "already": True,
+                          "reason": (f"`{rel}` 里已经有盖住这一份正文的签块"
+                                     f"（{already.get('why')}）⇒ 不重复审、不重复写")}
+        return {"body": body, "rel": rel, "sha": sha, "exp_rows": exp_rows,
+                "row": row}, None
+
+    def _finish_unregistered_exhaustion(
+        self, *, body: str, rel: str, sha: str, no: int, need: int,
+        passes: list[dict[str, Any]], judged: list[dict[str, Any]],
+        reviewed: dict[str, Any], stopped: str,
+    ) -> dict[str, Any]:
+        """未在册穷举证明的「判定分支」：落 pending 台账 + 颁发/落签 + 返回值。
+
+        2026-11-09 从 `_review_unregistered_exhaustion` 拆出（同一笔拆函数）。搬的是
+        整段（缩进与注释不动）：`stopped == "signed"` 时三转各落一行 pending、再把
+        整份读数交给 `_issue_and_land_unregistered`（V 只颁发，块由收方秘书落）；
+        负判只落判词那一行。返回值的形状与拆之前逐字相同。
+        """
+
         at = _now_iso()
         last = judged[-1]["verdict"] if judged else {}
         verdict_word = "成立" if stopped == "signed" else VR.read_verdict(last)

@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-09，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **280 个 `.py`、269,417 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
+> **280 个 `.py`、269,460 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -17,6 +17,10 @@
 > `>800 行` 76 → **75**：`statusreport.py` 808 行拆出 `boardrows.py`（板项行的状态投影
 > `tasks_row_reading` 与它的三个常量）—— 同一笔处置、同一条软判据；`statusreport.tasks_row_reading`
 > 仍可用（按名字回引），`agent_loop.py` 行数不变）。
+> **2026-11-09 拆函数（未在册穷举那一支）再改一次**：269,417 → **269,460**（文件数 280 与
+> `>800 行` 75 都不变：`agent_v/core.py::_review_unregistered_exhaustion` 206 行拆成
+> 编排层 + `_read_unregistered_exhaustion_ctx`（107）+ `_finish_unregistered_exhaustion`（80），
+> 三段都 ≤200 —— 同一条软判据的函数那一格；行为逐字不变，读数见 `temp/_probe_v_exhaustion.py`）。
 > 2026-11-09 再改一次：266,332 → **266,484**（两把尺统一：`textutil.py` 抽出唯一的关键词
 > 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它（+128）；同日的声明面收口
 > （`table.search` 的 summary 与 `query` / `fields` 说明改真口径、`PROMPT_VERSION` 抬到 p263）
@@ -321,7 +325,7 @@
 | `agent_f/`（包） | F：多轮难题攻坚 |
 | `agent_g/`（包） | G：论文撰写 |
 | `agent_h/`（包） | H：审校（只读） |
-| `agent_v/`（包） | V：**证明级验证**（只读，`draft/39` §3.21 一/五/六）：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位；`agent_v/core.py` 的 `AgentV`（三个动作：`verify_proof`/`list_verifications`/`read_proof`）+ `agent_v/__main__.py` 的自检入口（`python -m agentflow.agent_v`，17 条 `[PASS]`）。声明真身在 `specs/v.py`，读写在 `verifications.py` |
+| `agent_v/`（包） | V：**证明级验证**（只读，`draft/39` §3.21 一/五/六）：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位；`agent_v/core.py` 的 `AgentV`（三个动作：`verify_proof`/`list_verifications`/`read_proof`）+ `agent_v/__main__.py` 的自检入口（`python -m agentflow.agent_v`，17 条 `[PASS]`）。声明真身在 `specs/v.py`，读写在 `verifications.py`。未在册穷举那一支（2026-11-09 拆函数）：`_review_unregistered_exhaustion` 只做编排，读稿/比对在 `_read_unregistered_exhaustion_ctx`、判定分支（pending + 颁发/落签 + 返回值）在 `_finish_unregistered_exhaustion`，三轮机械会审在 `_review_exhaustion_rounds` |
 | `agent_l/`（包） | L：**Lean 形式化者**（2026-10-22 新设，照 E 的 Lean 面复制出来的可运行角色）：三个动作 `formalize` / `check_formal` / `record` 各一个文件 + `agent_l/report.py`（L→B 的受控汇报）+ core + _support + `__main__`。E 的代码一行没删、行为没改（复用它的 `_CheckFormal` 与 `verify.check_formal` 桥接层），L 只在前者前面加一道 Lean 自检闸；协作面只有 `B → L` 入边与 `L → C` 出边，声明真身在 `specs/l.py`。开关关着时它整条不存在（见 `leanscope.py`）。判据 `tests/test_l_formalizes_what_b_says.py`、`tests/test_l_collab_and_secretary.py` |
 
 > 十个角色（除主控 M；2026-10-22 起的 L 与它们同形）的包形状是一样的（`goal-7f5116c1` M6/M7 + F-02 的 V）：入口 `__init__.py`、
