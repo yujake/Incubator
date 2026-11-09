@@ -15,9 +15,12 @@ B 的工具面没有文件写口 ⇒ 它拿不出"要被签的那一份稿"；V 
 可走的一步。
 
 改后（本文件钉住的那条链）：
-1. B 调 `own.register_statement` 交改写后的正文 ⇒ 框架把它落成
-   `reports/b-proof-<命题号>.md`（`## 命题` / `## 证明` / `## 依赖` 三节，与 F/E 同形），
-   拒信里点名这条稿的路径与下一步；
+1. B 调显式落稿 `AgentB.land_manuscript`（工具壳 `own.land_manuscript` 由 T1
+   那批接线）把改写后的正文落成 `reports/b-proof-<命题号>.md`
+   （`## 命题` / `## 证明` / `## 依赖` 三节，与 F/E 同形）。
+   2026-11-10（D1）之后登记不再顺手落稿：被闸拒的登记盘上零新增，想要载体就
+   走这一步显式动作（旧写法是"登记被拒时顺手落一份"，本文件旧 a/c 钉的正是那个
+   副作用 —— 已按 D1 改成钉显式动作，强度没降：仍然验三节 / 正文 sha / 签块 / 入库）；
 2. B 派 V 审这一份稿（`verify.verify_proof` 带 `proof_manuscript` + `statement_id`）⇒
    三轮「成立」⇒ `vsigns.issue` ⇒ 收方秘书 `secretary:B` 把签块落回稿里；
 3. B 再交一次 `own.register_statement`（带 `proof_manuscript`）⇒ 第 3 位翻真
@@ -27,7 +30,7 @@ B 的工具面没有文件写口 ⇒ 它拿不出"要被签的那一份稿"；V 
 
 | # | 判据 | 改前为什么红 |
 |---|---|---|
-| a | 改写 → 手稿 → V 三转 → 签块在稿（签名者=secretary:B）→ 入库成功且 reviewed=true | 没有 B 手稿这一层：拒信不给载体，V 的入口也不收这个命名 |
+| a | 显式落稿 → V 三转 → 签块在稿（签名者=secretary:B）→ 入库成功且 reviewed=true | 改前没有显式落稿动作；旧断言钉的是"被拒登记顺手落的稿"（D1 副作用） |
 | b | 没有签的手稿 ⇒ 入库仍被 `proof_without_v_sign` 拒（闸不许被绕） | 闸在改前就在；这一条是改后的负控（防止"给 B 开一条免签路"） |
 | c | 反真空：把「B 手稿落签」那条摘掉（`SECRETARY_OF` 去掉 secretary:B）⇒ a 回到被拒 | 证明 a 的绿来自"收方秘书真的把块落进了稿"，不是来自别处认到一签 |
 
@@ -93,19 +96,6 @@ def _register(st: Store, *, kind: str, full: str, proof_text: str = "",
         quote_reason="own_result：我方推导")
 
 
-def _f_manuscript(*, statement_id: str = "", proof_no: int = 1) -> str:
-    """一份来源手稿（F 形）—— B 的改写稿从这里抄依赖段。"""
-    head = "# F 的证明手稿：R(3,4)=9\n\n"
-    if statement_id:
-        head += f"- 命题号：stmt:{statement_id}\n"
-    head += f"- 证明号：{proof_no}\n\n"
-    return (head + "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + OLD_BODY + "\n\n"
-            + "## 依赖\n\n"
-            + "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-            + "|---|---|---|---|\n"
-            + "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
-
-
 def _seed(st: Store) -> tuple[dict, str]:
     """先落一条在册命题（猜想、无证明正文）—— B 要改写的就是它。"""
     first = _register(st, kind="conjecture", full=FULL, proof_text="",
@@ -119,11 +109,6 @@ def _seed(st: Store) -> tuple[dict, str]:
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
     return first, sid
-
-
-def _rewrite(st: Store, sid: str) -> dict:
-    return _register(st, kind="theorem", full=FULL, proof_text=NEW_BODY,
-                     manuscript=_f_manuscript(statement_id=sid, proof_no=1))
 
 
 def _review(st: Store, rel: str, sid: str) -> dict:
@@ -142,16 +127,20 @@ def _manuscript_text(st: Store, rel: str) -> str:
 # ============================================================ a 正控
 def test_a_b_rewrite_gets_a_signed_manuscript_then_lands_reviewed(
         tmp_path: pathlib.Path) -> None:
-    """a：改写 → 手稿 → V 三转 → 签块在稿（secretary:B）→ 入库 reviewed=true。"""
+    """a：显式落稿 → V 三转 → 签块在稿（secretary:B）→ 入库 reviewed=true。"""
     st = _ws(tmp_path)
     _first, sid = _seed(st)
 
-    refused = _rewrite(st, sid)
-    assert refused.get("ok") is False, refused
-    rel = str(refused.get("manuscript_path") or "")
-    assert rel == f"reports/b-proof-{sid}.md", refused
+    landed = _b(st).land_manuscript(
+        statement_id=sid, statement_full=FULL, proof_text=NEW_BODY,
+        label="R(3,4)=9", proof_no=1)
+    assert landed.get("ok") is True, landed
+    assert landed.get("written") is True, landed
+    rel = str(landed.get("path") or "")
+    assert rel == f"reports/b-proof-{sid}.md", landed
+    assert landed.get("sha256") == VR.text_sha(NEW_BODY), landed
     assert pathlib.Path(st.root, rel).is_file(), (
-        "B 的改写正文没有落成可签的载体（拒信点名的路径上什么都没有）", refused)
+        "显式落稿没有写出可签的载体", landed)
     text = _manuscript_text(st, rel)
     for heading in ("## 命题", "## 证明", "## 依赖"):
         assert heading in text, heading
@@ -209,10 +198,13 @@ def test_c_without_the_b_secretary_the_rewrite_goes_back_to_refused(
     _first, sid = _seed(st)
     monkeypatch.setattr(VS, "SECRETARY_OF", ("secretary:F", "secretary:E"))
 
-    refused = _rewrite(st, sid)
-    rel = str(refused.get("manuscript_path") or "")
-    assert rel == f"reports/b-proof-{sid}.md", refused
-    assert pathlib.Path(st.root, rel).is_file(), refused
+    landed = _b(st).land_manuscript(
+        statement_id=sid, statement_full=FULL, proof_text=NEW_BODY,
+        label="R(3,4)=9", proof_no=1)
+    assert landed.get("ok") is True, landed
+    rel = str(landed.get("path") or "")
+    assert rel == f"reports/b-proof-{sid}.md", landed
+    assert pathlib.Path(st.root, rel).is_file(), landed
 
     # 收方秘书不在表里 ⇒ 签颁发了也落不了块（`not_a_secretary`）；V 的读数照实。
     seam = _ReviewSeam([CLEAN_REPLY])

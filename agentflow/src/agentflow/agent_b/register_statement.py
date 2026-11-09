@@ -435,8 +435,9 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     #: D1（2026-11-10）：登记不再顺手落稿（被拒的登记盘上零新增）⇒ "先落稿"这一步
     #: 必须自己说清，不能假设盘上已经有这一版。落点是 B 改写稿的规范名。
     _land_step = (
-        "① 先 own.land_manuscript 把这一版落成可签的稿"
-        f"（落点 reports/b-proof-{sid_txt}.md；登记不再顺手落稿，"
+        "① 先让 B 显式落稿（`AgentB.land_manuscript`；工具名 "
+        "`own.land_manuscript` 的薄壳待 T1 那批接线，现在还没注册）"
+        f"：把这一版落成 reports/b-proof-{sid_txt}.md（登记不再顺手落稿，"
         "被拒的登记盘上零新增）；")
     if state == "stale":
         return (
@@ -475,7 +476,8 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     if state == "holding":
         return (
             f"{head}的签还没到位（V 判过「成立」，但这一版正文上还没有签块）⇒ 整笔不写。"
-            "建议：先 own.land_manuscript 把这一版落成可签的稿（盘上还没有的话），"
+            "建议：先让 B 显式落稿（`AgentB.land_manuscript`；`own.land_manuscript` "
+            "工具面待 T1 接线）把这一版落成可签的稿（盘上还没有的话），"
             f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
             f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
             "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿），"
@@ -3787,8 +3789,9 @@ class _RegisterStatement:
                 str(self_authored.get("reason") or "")
                 + ("；这一笔的稿没有落盘（`reports/b-proof-"
                    f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
-                   "盘上零新增。改法：先用 B 的 `own.land_manuscript` 把这一版落成"
-                   "可签的稿，派 V 审这一份（`verify.verify_proof` 带 "
+                   "盘上零新增。改法：先走 B 的显式落稿（`AgentB.land_manuscript`；"
+                   "`own.land_manuscript` 工具面待 T1 接线，现在还没注册），"
+                   "派 V 审这一份（`verify.verify_proof` 带 "
                    "`proof_manuscript`），签块由收方秘书 `secretary:B` 落回稿，"
                    "再带这份稿重交 `own.register_statement`。"),
                 manuscript_landed=False,
@@ -4094,7 +4097,8 @@ class _RegisterStatement:
                     str(_pg.get("reason") or "")
                     + ("；这一笔的稿没有落盘（`reports/b-proof-"
                        f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
-                       "盘上零新增。改法：先用 B 的 `own.land_manuscript` 落稿 → "
+                       "盘上零新增。改法：先走 B 的显式落稿（`AgentB.land_manuscript`；"
+                       "`own.land_manuscript` 工具面待 T1 接线）→ "
                        "派 V 审这份稿 → 签到位后带这份稿重交登记。"),
                     proof_gate=dict(_pg.get("reading") or {}),
                     v_sign=_v_sign_reading,
@@ -5987,8 +5991,9 @@ class _RegisterStatement:
 
         B 的工具面没有文件写口，而 V 只审盘上的稿。改前这件事由
         `register_statement` 在被拒之前顺手做（D1：被拒的登记留下稿）；拆出来之后
-        顺序是 "`own.land_manuscript` 落稿 → 派 V 签 → 带签 `own.register_statement`"，
-        两步各自成立、各自可解释。
+        顺序是 "显式落稿 → 派 V 签 → 带签 `own.register_statement`"，两步各自成立、
+        各自可解释。工具面的薄壳 `own.land_manuscript` 由 T1 那批接线；本方法已是
+        它的实现本体，接线前不能从工具面调用。
 
         ## 返回
 

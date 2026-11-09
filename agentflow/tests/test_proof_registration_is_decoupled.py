@@ -348,10 +348,16 @@ def test_a_gate_that_raises_is_a_controlled_refusal_and_is_recorded(tmp_path):
 # ---------------------------------------------------------------- B 的重写
 
 def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
-    """c：B 重写同一命题 ⇒ 重写 `b-proof-<号>.md`，`statements` 行数不变。"""
+    """c：B 显式落稿重写同一命题 ⇒ 同一份 b-proof 就地改，statements 行数不变。
+
+    2026-11-10（D1）：登记不再顺手落稿；旧断言（"两次提交后盘上有 b-proof"）钉的是
+    被拒登记的副作用 —— 实测旧实现上两笔登记其实都被 `proof_without_v_sign` 拒，
+    文件只是 D1 留下的。现在改成显式 `land_manuscript` + 覆盖正文的台账签，登记
+    真的成功；断言强度没降：仍然量"一份稿 / 同一路径 / 正文是最后一版 / 版本记录"。
+    """
     from agentflow import depsection as DS
     from agentflow.agent_b import AgentB
-    from conftest import sign_before_registration
+    from conftest import sign_for_the_gate
 
     st = _ws(tmp_path)
     row = seed_statement_row(
@@ -364,12 +370,20 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     bodies = ["B 重写后的第二版：先取 ε>0。", "B 重写后的第三版：改用有限覆盖。"]
     seen: list[dict] = []
     for i, body in enumerate(bodies, start=2):
-        sign_before_registration(st.root, proof_text=body)
+        sign_for_the_gate(st.root, statement_id="000041", proof_text=body, store=st)
+        landed = b.land_manuscript(
+            statement_id="000041", statement_full=FULL, proof_text=body,
+            label="B 优化 000041", proof_no=1)
+        assert landed.get("ok") is True, landed
+        manuscript = (pathlib.Path(st.root)
+                      / "reports/b-proof-000041.md").read_text(encoding="utf-8")
         got = b.register_statement(
             statement_full=FULL, statement_text=TEXT, origin="own_result",
             kind="conjecture", label="B 优化 000041", proof_text=body,
+            proof_manuscript=manuscript,
             evidence_kind="heuristic", line_range={"label": "reports/attack-0000.md"},
             quote_reason="夹具：B 在 V 签之后重写证明")
+        assert got.get("ok") is True, got
         seen.append(dict(got))
         assert len(list(st.rows("statements"))) == before == 1, (
             f"第 {i} 版证明让 statements 多出了行：{list(st.rows('statements'))}")
