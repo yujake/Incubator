@@ -607,7 +607,7 @@ def _evidence_cells(st: Store) -> dict:
             "kind": str(row.get("kind") or "")}
 
 
-def _collect_through(tmp_path: pathlib.Path, mode: str) -> tuple[dict, dict]:
+def _collect_through(tmp_path: pathlib.Path, mode: str) -> tuple[dict, dict, Store]:
     """同一份已签稿、同一条在册猜想，分别走 apply / register 收录。"""
     st, b = _ws(tmp_path / mode)
     _signed_row(st)
@@ -620,7 +620,7 @@ def _collect_through(tmp_path: pathlib.Path, mode: str) -> tuple[dict, dict]:
         got = b.ingest_manuscript(
             manuscript="reports/f-proof-000001.md", mode="register",
             cells=["statement_full", "proof_text", "dependencies"])
-    return got, _evidence_cells(st)
+    return got, _evidence_cells(st), st
 
 
 def test_h_apply_collects_the_same_evidence_as_register(
@@ -631,8 +631,8 @@ def test_h_apply_collects_the_same_evidence_as_register(
     apply 这一笔只请求 `proof_text`（不请求 `kind`）—— `kind` 是证据的派生格，
     没请求也必须按证据升上去。
     """
-    got_apply, cells_apply = _collect_through(tmp_path, "apply")
-    got_register, cells_register = _collect_through(tmp_path, "register")
+    got_apply, cells_apply, _ = _collect_through(tmp_path, "apply")
+    got_register, cells_register, _ = _collect_through(tmp_path, "register")
     assert got_apply["ok"] is True, got_apply
     assert got_register["ok"] is True, got_register
     assert cells_apply == cells_register, (cells_apply, cells_register)
@@ -658,8 +658,118 @@ def test_h2_removing_the_evidence_recompute_brings_the_field_shape_back(
         AgentB, "_ingest_apply_evidence",
         lambda *a, **k: {"checked": True, "written": False,
                          "reason": "反真空：摘掉 apply 的证据重算"})
-    got, cells = _collect_through(tmp_path, "apply")
+    got, cells, _ = _collect_through(tmp_path, "apply")
     assert got["ok"] is True, got
     assert cells == {"proof": False, "grade": "conjecture",
                      "kind": "conjecture"}, cells
     assert cells != {"proof": True, "grade": "pre_theorem", "kind": "theorem"}, cells
+
+
+def test_h3_kind_trace_names_the_same_credential_on_both_routes(
+        tmp_path: pathlib.Path) -> None:
+    """裁量 ②：两条路的 `_kind_upgrade.basis` 都点名"签文件 + 台账那一行"，逐字相同。"""
+    _, _, st_apply = _collect_through(tmp_path, "apply")
+    _, _, st_register = _collect_through(tmp_path, "register")
+    trace_apply = dict(_row(st_apply).get("_kind_upgrade") or {})
+    trace_register = dict(_row(st_register).get("_kind_upgrade") or {})
+    assert trace_apply.get("to") == trace_register.get("to") == "theorem"
+    assert trace_apply.get("basis") == trace_register.get("basis"), (
+        trace_apply, trace_register)
+    basis = str(trace_apply.get("basis") or "")
+    assert "out/vsigns/" in basis, basis
+    assert "verifications/000001.jsonl#" in basis, basis
+    assert trace_apply.get("grade") == trace_register.get("grade") == "pre_theorem"
+
+
+def _drop_the_sign(st: Store) -> None:
+    """把签从盘上删掉（台账 + `out/vsigns/`；`issued.json` 是索引，留着）。"""
+    for pattern in ("verifications/000001.jsonl", "out/vsigns/*.json"):
+        for path in pathlib.Path(st.root).glob(pattern):
+            if path.name != "issued.json":
+                path.unlink()
+
+
+def test_h4_replay_recomputes_derived_evidence_after_the_sign_is_gone(
+        tmp_path: pathlib.Path) -> None:
+    """裁量 ①：幂等重放（正文 unchanged）也按现行事实重算派生证据。
+
+    先 apply 一次（有签）⇒ theorem；删签；再 apply 同一份正文（outcome=unchanged）
+    ⇒ 证据位跟着现行事实落回：`reviewed=false`、`grade=conjecture`、`kind=conjecture`，
+    而 `write.written` 仍是 False（正文没被重写）。
+
+    `proof` 仍是 True：第 2 位是"这一行有没有证明正文"，正文还在；它是正文的读数，
+    不是签的读数（签的有无由 `reviewed` 回答）。
+    """
+    st, b = _ws(tmp_path)
+    _signed_row(st)
+    _write(st, "reports/f-proof-000001.md", _manuscript())
+    first = b.ingest_manuscript(
+        manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+        cells=["proof_text"], mode="apply")
+    assert first["ok"] is True, first
+    assert _evidence_cells(st) == {"proof": True, "grade": "pre_theorem",
+                                   "kind": "theorem"}, _evidence_cells(st)
+
+    _drop_the_sign(st)
+    replay = b.ingest_manuscript(
+        manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+        cells=["proof_text"], mode="apply")
+    assert replay["ok"] is True, replay
+    assert replay["cells"]["proof_text"]["outcome"] == "unchanged", replay["cells"]
+    assert replay["write"]["written"] is False, replay["write"]
+    assert replay["write"]["evidence"] is True, replay["write"]
+    row = _row(st)
+    bits = dict(row.get("bits") or {})
+    assert bits.get("proof") is True, bits
+    assert bits.get("reviewed") is False, bits
+    assert bits.get("grade") == "conjecture", bits
+    assert row.get("kind") == "conjecture", row
+    trace = dict(row.get("_kind_upgrade") or {})
+    assert trace.get("downgraded") is True, trace
+    assert trace.get("to") == "conjecture", trace
+
+
+def test_h5_replay_anti_vacuum_without_recompute_the_old_theorem_stays(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """裁量 ① 的反真空：把重放的证据重算摘掉 ⇒ 签删了、旧 theorem 仍留在盘上。"""
+    st, b = _ws(tmp_path)
+    _signed_row(st)
+    _write(st, "reports/f-proof-000001.md", _manuscript())
+    assert b.ingest_manuscript(
+        manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+        cells=["proof_text"], mode="apply")["ok"] is True
+    _drop_the_sign(st)
+    monkeypatch.setattr(
+        AgentB, "_ingest_apply_evidence",
+        lambda *a, **k: {"checked": True, "written": False,
+                         "reason": "反真空：摘掉重放的证据重算"})
+    replay = b.ingest_manuscript(
+        manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+        cells=["proof_text"], mode="apply")
+    assert replay["ok"] is True, replay
+    assert replay["write"]["written"] is False, replay["write"]
+    # 旧读数留住了 ⇒ h4 的"跟着降"逐条不成立。
+    assert _evidence_cells(st) == {"proof": True, "grade": "pre_theorem",
+                                   "kind": "theorem"}, _evidence_cells(st)
+
+
+def test_h6_kind_cell_receipt_reports_the_derived_upgrade(
+        tmp_path: pathlib.Path) -> None:
+    """裁量 ③：稿头没有 `- 证据种类：` ⇒ kind 格 outcome 仍 not_applicable，
+    但同一格带 `kind_upgraded={from,to,basis}`（派生升档不是"什么都没发生"）。"""
+    st, b = _ws(tmp_path)
+    _signed_row(st)
+    _write(st, "reports/f-proof-000001.md",
+           _manuscript().replace("- 证据种类：conjecture\n", ""))
+    got = b.ingest_manuscript(
+        manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+        cells=["proof_text", "kind"], mode="apply")
+    assert got["ok"] is True, got
+    kind_cell = dict(got["cells"]["kind"])
+    assert kind_cell["outcome"] == "not_applicable", kind_cell
+    upgraded = dict(kind_cell.get("kind_upgraded") or {})
+    assert upgraded.get("from") == "conjecture", kind_cell
+    assert upgraded.get("to") == "theorem", kind_cell
+    assert "out/vsigns/" in str(upgraded.get("basis") or ""), upgraded
+    assert "verifications/000001.jsonl#" in str(upgraded.get("basis") or ""), upgraded
+    assert "kind" in got["diff"]["requested_not_filled"], got["diff"]

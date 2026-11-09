@@ -1865,6 +1865,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      #: D-37：这一笔按证据把 `kind` 升上去了没有（键存在 = 真升了；
                      #: `{}` = 没动）。判据只有 `evidencebits.kind_following_grade` 一处。
                      "kind_upgraded": {},
+                     #: 已有 kind 升档留痕被这一笔按“同一句凭据 + 现算等级”刷新过没有。
+                     #: 两条路（秘书先写 / B 后写）的 `_kind_upgrade.basis` 必须是同一句
+                     #: （业主 2026-11-10 裁量 ②）；刷新本身也是一次落盘。
+                     "kind_trace_refreshed": False,
                      #: 这一笔把第 2 位补翻时合并出来的那整份位落盘了没有（第 3 位那几张
                      #: 表也跟着来）；"翻了"与"合并了"分开报：反真空把翻位那一步摘掉时，
                      #: 合并出来的那份位仍要落盘 —— 那才是现场的 `reviewed=true ∧
@@ -2108,6 +2112,33 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 而这条回执正是"这一档凭什么"的唯一可读凭据。
                 row[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
                 out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
+            # ---- 已有 kind 留痕 ⇒ 用这一笔的凭据 + 现算等级刷新（裁量 ②） -----------
+            #
+            # 秘书那一支先写 `_kind_upgrade` 时还看不到 `_grade_recomputed`：它只能拿
+            # 交付里那份 bits 判等级（常常是 conjecture），措辞也是它自己那句
+            # 「手稿签块 / bits.reviewed」。B 这一笔在正文落定、等级重算之后看得到
+            # 现行签的可复算凭据（`out/vsigns/<sha>.json` + 台账行），于是把留痕
+            # 刷成与 apply 同的一句 —— 两条路读同一个 `_kind_upgrade.basis`。
+            # 只在"留痕的 to 就是现行 kind"时刷新：作者自己写下的 theorem 不动。
+            _trace_before = row.get("_kind_upgrade")
+            if (isinstance(_trace_before, Mapping)
+                    and str(_trace_before.get("to") or "") == str(row.get("kind") or "")):
+                _trace_probe = dict(row, kind=str(_trace_before.get("from") or "conjecture"))
+                try:
+                    _trace_read = _EB.kind_following_grade(
+                        _trace_probe, root=getattr(store, "root", None))
+                except Exception:  # noqa: BLE001 —— 刷新不了就保留原留痕（不编凭据）
+                    _trace_read = {}
+                _trace_new = dict(_trace_before)
+                _basis_now = str(_trace_read.get("basis") or "")
+                _grade_now = str((row.get("bits") or {}).get("grade") or "")
+                if _basis_now and _basis_now != str(_trace_before.get("basis") or ""):
+                    _trace_new["basis"] = _basis_now
+                if _grade_now and _grade_now != str(_trace_before.get("grade") or ""):
+                    _trace_new["grade"] = _grade_now
+                if _trace_new != dict(_trace_before):
+                    row["_kind_upgrade"] = _trace_new
+                    out["kind_trace_refreshed"] = True
             # ---- D-37：证据齐了就升 `kind`（判据只有一处，落点也收到这一处） ----------
             #
             # 位置：正文已落 `row`、第 2 / 3 位已按这一笔认到的签同步、等级已按现行签
@@ -2130,7 +2161,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
             if (not out["attached"] and not canonical_changed and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
-                    and not out["kind_upgraded"]
+                    and not out["kind_upgraded"] and not out["kind_trace_refreshed"]
                     and not out["bits_synced"] and not out["proof_receipt"]):
                 return {"write": False, "result": out}
             if out["attached"]:
@@ -6373,88 +6404,231 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return {"written": bool(attach.get("written")), "code": "", "why": ""}
 
     def _ingest_apply_evidence(self, stmt_id: str, *, proof_no: int) -> dict:
-        """apply 写完正文之后的证据重算（与登记路同一份实现，不另写一套）。
+        """apply 写完正文之后的派生证据重算（每次 apply 都跑，按现行事实读）。
 
-        ## 为什么必须是单独一步（T1 真洞）
+        ## 两件事分开说（业主 2026-11-10 裁量 ①）
 
-        `_ingest_apply_proof` 只负责"把稿里的正文落进那一行"；它交给 `_attach_proofs`
-        的 `bits=None`，而 `_attach_proofs` 翻第 2 位的条件正是"这一笔交来的 bits 说
-        有证明"（判据唯一实现 `evidencebits.bits_after_proof_recorded`）。于是 apply
-        收录完是 `reviewed=true ∧ proof=false ∧ grade=conjecture`：工具回执说"收录
-        成功"，台账里的证据状态一个都没变。
+        - 本方法的 `written`：这一次有没有把派生格写回盘（proof / reviewed / grade /
+          kind 任一变化）；
+        - 调用方的 `write.written`：只代表正文有没有被重写 —— 幂等重放时它是
+          False，即使派生格被追平。派生读数不是"正文被重写"的附属品。
 
-        这一步在正文落定之后，把行上那一份正文按登记路同一个 `_statement_bits`
-        现算成 bits，再交给同一个写口 `_attach_proofs`（追加清单为空、canonical 为空
-        ⇒ 只补第 2 位 / 收录回执 / 按现行签重算等级 / 按证据升 kind）。于是
-        "正文写入"与"证据重算"是同一份判据的两个阶段，apply 与 register 在三个派生格
-        （`proof` / `grade` / `kind`）上逐字同源。
+        ## 为什么重放也要跑、而且要能双向
+
+        收录（新正文）只往上走（`_attach_proofs`）；重放必须按现在的事实读：
+        签被撤掉 ⇒ `reviewed` 落回 False、等级落回 conjecture、由本流程派生上去的
+        `kind` 落回原档（`_kind_upgrade["from"]`）。否则"正文早在、签早在、证据位
+        还是旧的"会以重放路径回来 —— 那正是这次这个洞的形态换了个入口。
+
+        `proof` 仍是"这一行有没有证明正文"的读数：正文还在 ⇒ True。它是正文的读数，
+        不是签的读数；签的有无由 `reviewed` 回答（与 `evidencebits.derive_grade` 的
+        五元位口径一致）。
+
+        判据复用：`_statement_bits`（登记路的五元位现算）、`vsigns.bits_after_sign`
+        （唯一的认签口）、`evidencebits.normalize_raw` / `derive_grade`（唯一的等级
+        现算）、`evidencebits.kind_following_grade`（唯一的 kind 判据）。
 
         ## 三态
 
-        `checked=False`（台账读不出来 / bits 算不出来）⇒ 调用方受控拒，绝不折成
-        "没有证据"；`written=False` 且 `checked=True` ⇒ 这一笔没有新东西要写（幂等）；
-        受控拒（`_attach_proofs` 的越界 / 行不在）原样带回。
+        `checked=False`（台账读不出来 / bits 算不出来 / 认签读不出来）⇒ 调用方受控拒，
+        绝不折成"没有证据"；`written=False` 且 `checked=True` ⇒ 这一笔没有新东西
+        要写（幂等）；受控拒（`land_statement` 的越界 / 行不在）原样带回。
         """
-        got = SL.by_id(self.store, stmt_id=str(stmt_id or ""))
-        if not got["checked"]:
-            err = got.get("error") or {}
-            return {"checked": False,
-                    "refused": "ledger_unreadable",
-                    "reason": (f"`statements` 读不出来（{err.get('type') or '?'}: "
-                               f"{err.get('message') or got.get('reason') or '?'}）"
-                               "⇒ 证据重算没做成（读不到 ≠ 没有证明）")}
-        row = dict(got.get("row") or {})
-        if not row:
-            return {"checked": False, "refused": "statement_missing",
-                    "reason": (f"`statements` 里没有 {stmt_id} ⇒ 正文没有落点，"
-                               "证据也无处重算")}
-        body = str(_VR.proof_text_of(row, int(proof_no)) or "")
-        if not body.strip():
-            # 普通数值档（e-num）没有证明正文：证据面只有第 1 位，不在这里重算。
-            return {"checked": True, "written": False,
-                    "reason": "这一行没有证明正文 ⇒ 第 2/3 位不适用（证据面不重算）"}
-        delivered, bits_bad = self._statement_bits(
-            origin=str(row.get("origin") or "own_result"),
-            lit_id=str(row.get("source_lit_id") or ""),
-            proof_text=body,
-            quote_verified=row.get("quote_verified"),
-            kind=str(row.get("kind") or ""))
-        if bits_bad is not None:
-            return {"checked": False,
-                    "refused": str(bits_bad.get("kind") or "bits_compute_failed"),
-                    "reason": str(bits_bad.get("error") or bits_bad.get("reason") or "")}
-        # 与登记路同一处认签（`vsigns.bits_after_sign`，判据只有 `sign_reading` 一处）：
-        # 这一行已经签过（`_ingest_apply_proof` 的签闸刚核过同一份正文），把第 3 位那
-        # 几张表随 bits 交给 `_attach_proofs` —— 第 2 位翻真时第 3 位不许被"空认领"
-        # 盖掉（`bits_after_proof_recorded` 的"认不到就保留旧的"）。
-        try:
-            from .. import vsigns as _VS
+        from .. import vsigns as _VS
 
-            delivered, _sign_claim = _VS.bits_after_sign(
-                delivered, root=getattr(self.store, "root", ""),
-                proof_text=body, statement_id=str(stmt_id),
-                proof_no=int(proof_no), kind=str(row.get("kind") or ""),
-                store=self.store)
-        except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"，也不许丢证据
-            return {"checked": False, "refused": "sign_reading_unreadable",
+        def _transition(found: Any) -> dict:
+            if found is None:
+                return {"write": False, "result": {
+                    "checked": False, "written": False,
+                    "refused": "statement_missing",
+                    "reason": (f"`statements` 里没有 {stmt_id} ⇒ 正文没有落点，"
+                               "证据也无处重算")}}
+            row = dict(found)
+            if str(row.get("kind") or "") == "concept":
+                return {"write": False, "result": {
+                    "checked": True, "written": False,
+                    "reason": "概念行不参与等级链 ⇒ 证据面不重算"}}
+            body = str(_VR.proof_text_of(row, int(proof_no)) or "")
+            if not body.strip():
+                # 普通数值档（e-num）没有证明正文：证据面只有第 1 位，不在这里重算。
+                return {"write": False, "result": {
+                    "checked": True, "written": False,
+                    "reason": "这一行没有证明正文 ⇒ 第 2/3 位不适用（证据面不重算）"}}
+            delivered, bits_bad = self._statement_bits(
+                origin=str(row.get("origin") or "own_result"),
+                lit_id=str(row.get("source_lit_id") or ""),
+                proof_text=body,
+                quote_verified=row.get("quote_verified"),
+                kind=str(row.get("kind") or ""))
+            if bits_bad is not None:
+                return {"write": False, "result": {
+                    "checked": False, "written": False,
+                    "refused": str(bits_bad.get("kind") or "bits_compute_failed"),
+                    "reason": str(bits_bad.get("error")
+                                  or bits_bad.get("reason") or "")}}
+            try:
+                delivered, sign_claim = _VS.bits_after_sign(
+                    delivered, root=getattr(self.store, "root", ""),
+                    proof_text=body, statement_id=str(stmt_id),
+                    proof_no=int(proof_no), kind=str(row.get("kind") or ""),
+                    store=self.store)
+            except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"
+                return {"write": False, "result": {
+                    "checked": False, "written": False,
+                    "refused": "sign_reading_unreadable",
                     "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
-                               "⇒ 证据重算没做成（没查成 ≠ 没签）")}
-        attach = self._attach_proofs(
-            str(stmt_id), [], canonical="", bits=delivered,
-            proof_no=int(proof_no))
-        if attach.get("refused"):
-            return {"checked": False, "refused": str(attach.get("refused") or ""),
-                    "reason": str(attach.get("reason") or "")}
-        reading = {
-            "checked": True,
-            "written": bool(attach.get("written")),
-            "proof": bool(dict(delivered or {}).get("proof")),
-            "grade_recomputed": dict(attach.get("grade_recomputed") or {}),
-            "kind_upgraded": dict(attach.get("kind_upgraded") or {}),
-            "proof_collected": bool(attach.get("proof_collected")),
-            "proof_receipt": dict(attach.get("proof_receipt") or {}),
-        }
-        return reading
+                               "⇒ 证据重算没做成（没查成 ≠ 没签）")}}
+            signed = bool(dict(delivered or {}).get("reviewed"))
+            # 三态：认签"没查成"不是"没签" —— 不许把读不出来当成一次降档。
+            if not signed and not bool(dict(sign_claim or {}).get("checked")):
+                return {"write": False, "result": {
+                    "checked": False, "written": False,
+                    "refused": "sign_reading_unreadable",
+                    "reason": (str(dict(sign_claim or {}).get("why") or "")
+                               or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
+            # ---- 按现行事实重建"证据面"（可升可降） ------------------------------
+            #
+            # 从行上原有的 bits 出发只为保住不是这一格写的东西（第 1/4 位、优化态、
+            # `proof_history` 之外的凭据口袋）；第 2/3 位按这一趟读到的事实重写。
+            bits = dict(row.get("bits") or {})
+            ev = dict(bits.get("evidence") or {})
+            ev["proof_process"] = body
+            ev["proof_source"] = str(ev.get("proof_source") or "own")
+            if signed:
+                fresh_ev = dict(dict(delivered or {}).get("evidence") or {})
+                for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
+                            "reviewed_by", "reviewed_source"):
+                    if key in fresh_ev:
+                        ev[key] = fresh_ev[key]
+                bits["reviewed"] = True
+            else:
+                bits["reviewed"] = False
+                for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
+                            "reviewed_by", "reviewed_source"):
+                    ev.pop(key, None)
+            bits["proof"] = True
+            bits["evidence"] = ev
+            try:
+                bits = _EB.normalize_raw(
+                    bits, origin=str(row.get("origin") or "own_result"),
+                    kind=str(row.get("kind") or ""))
+            except Exception as exc:  # noqa: BLE001 —— 算不出来就是没查成
+                return {"write": False, "result": {
+                    "checked": False, "written": False,
+                    "refused": "bits_compute_failed",
+                    "reason": (f"五元位算不出来（{type(exc).__name__}: {exc}）"
+                               "⇒ 证据重算没做成")}}
+            new = dict(row)
+            new["bits"] = bits
+            # ---- 等级：有签 ⇒ 登记路同一个函数；无签 ⇒ 删掉旧回执 ----------------
+            #
+            # 位置在 kind 之前：穷举通道会在这一步把第 1 位落成 verified，kind 要看
+            # 最终那一份 bits（与 `_attach_proofs` 里"等级重算 → kind"同序）。
+            grade_recomputed: dict = {}
+            if signed:
+                try:
+                    _recomputed = _VR._grade_recomputed_from_signature(
+                        new, root=getattr(self.store, "root", ""),
+                        proof_no=int(proof_no))
+                except Exception:  # noqa: BLE001 —— 没查成就不动（不折成"不够格"）
+                    _recomputed = {}
+                if _recomputed.get("reading"):
+                    new = dict(_recomputed.get("row") or new)
+                    new[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
+                    grade_recomputed = dict(_recomputed["reading"])
+            else:
+                # 旧回执说"签刚落位 ⇒ 等级升到 pre_theorem"；签撤掉之后它就不成立了。
+                new.pop(_VR.GRADE_RECOMPUTED_KEY, None)
+            new_bits = dict(new.get("bits") or {})
+            # ---- kind：双向，只碰"本框架派生上去的"那一格 -------------------------
+            trace = dict(row.get("_kind_upgrade") or {})
+            derived = (bool(trace.get("to"))
+                       and str(trace.get("to")) == str(row.get("kind") or "")
+                       and str(trace.get("from") or "") in _EB.KIND_UPGRADABLE_FROM
+                       and not bool(trace.get("downgraded")))
+            probe_kind = (str(trace.get("from") or "") if derived
+                          else str(row.get("kind") or ""))
+            probe = dict(new, bits=new_bits, kind=probe_kind)
+            try:
+                kind_read = _EB.kind_following_grade(
+                    probe, root=getattr(self.store, "root", None))
+            except Exception as exc:  # noqa: BLE001 —— 判不了就不动（不折成"不够格"）
+                kind_read = {"checked": False, "state": "unreadable",
+                             "why": f"{type(exc).__name__}: {exc}"}
+            kind_upgraded: dict = {}
+            kind_downgraded: dict = {}
+            if str(kind_read.get("state") or "") == "upgraded":
+                target = str(kind_read.get("kind") or "")
+                before = str(row.get("kind") or "")
+                if target in _EB.KIND_UPGRADE_TARGETS and target != before:
+                    new["kind"] = target
+                    new["_kind_upgrade"] = {
+                        "from": before, "to": target,
+                        "basis": str(kind_read.get("basis") or ""),
+                        "grade": str(kind_read.get("grade") or ""),
+                        "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+                        "at": S.now_iso(),
+                    }
+                    kind_upgraded = dict(new["_kind_upgrade"])
+            elif (derived and bool(kind_read.get("checked"))
+                    and str(kind_read.get("state") or "") == "held"):
+                restore = str(trace.get("from") or "")
+                if restore and str(new.get("kind") or "") != restore:
+                    new["kind"] = restore
+                    new["_kind_upgrade"] = {
+                        **trace,
+                        "from": str(row.get("kind") or ""), "to": restore,
+                        "downgraded": True,
+                        "basis": ("证据不再支持定理级："
+                                  + str(kind_read.get("shortfall")
+                                        or kind_read.get("why")
+                                        or "现行签不覆盖这一份正文")),
+                        "grade": str(new_bits.get("grade") or ""),
+                        "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+                        "at": S.now_iso(),
+                    }
+                    kind_downgraded = dict(new["_kind_upgrade"])
+            changed = sorted(k for k in (set(row) | set(new))
+                             if row.get(k) != new.get(k))
+            reading = {
+                "checked": True,
+                "written": bool(changed),
+                "changed": changed,
+                "proof": bool(new_bits.get("proof")),
+                "reviewed": bool(new_bits.get("reviewed")),
+                "grade": str(new_bits.get("grade") or ""),
+                "kind": str(new.get("kind") or ""),
+                "kind_upgraded": kind_upgraded,
+                "kind_downgraded": kind_downgraded,
+                #: 这一行现在那份 kind 留痕（幂等重放时 `kind_upgraded` 是空的，但
+                #: 派生升档仍在盘上 —— receipt 要读得到它，不能"这次没改就不报"）。
+                "kind_trace": dict(new.get("_kind_upgrade") or {}),
+                "grade_recomputed": grade_recomputed,
+                "sign_claim": dict(sign_claim or {}),
+                "reason": ("" if changed else
+                           "按现行事实重算：派生格与盘上逐字相同 ⇒ 一个字节都没写"),
+            }
+            if not changed:
+                return {"write": False, "result": reading}
+            return {"write": True, "row": new, "result": reading}
+
+        sec = self._statement_secretary()
+        if sec is None:
+            return {"checked": False, "written": False,
+                    "refused": "secretary_unavailable",
+                    "reason": ("这一趟没有秘书 ⇒ 证据重算写不回盘"
+                               "（写库仍只走既有写口）")}
+        landed = sec.land_statement(
+            str(stmt_id), _transition, op="attach_proofs",
+            note=f"agent_b.ingest_manuscript:evidence:{stmt_id}")
+        if not landed.get("checked"):
+            return {"checked": False, "written": False,
+                    "refused": str(landed.get("refused") or "evidence_write_failed"),
+                    "reason": str(landed.get("reason") or "")}
+        result = dict(landed.get("result") or {})
+        result.setdefault("checked", True)
+        result["written"] = bool(landed.get("written"))
+        return result
 
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
@@ -6484,6 +6658,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "这一趟没有秘书 ⇒ 台账写不了（写库仍只走既有写口）")
         statements_written = False
         deps_written = False
+        evidence_written = False
         written_cells: list[str] = []
 
         def _cell_refused(cell: str, code: str, why: str) -> dict:
@@ -6632,22 +6807,49 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "（同一性判定/合并只在那条路上跑）")
 
         out["cells"] = cells
-        # ---- 6) 证据重算（第 2 位 / 等级 / kind）—— 与登记路同一份实现 -------------
+        # ---- 6) 派生证据重算（第 2 位 / 等级 / kind）—— 每次 apply 都跑 -------------
         #
-        # 只在"这一笔真把正文写进了那一行"时跑（`proof_text` 落在 `written_cells`）：
-        # 幂等重放（正文逐字相同 ⇒ `outcome=unchanged`）不是收录，不动证据面 ——
-        # 那正是 `same["write"]["written"] is False` 要保住的读数。
+        # 业主 2026-11-10 裁量 ①：`write.written=False` 只代表正文没被重写；
+        # `proof / grade / kind` 是派生读数，每次 apply 都要按现行事实重算（正文
+        # 逐字相同 ⇒ outcome=unchanged 也要跑）。签被撤掉时它们必须跟着落回去，
+        # 否则"正文早在、签早在、证据位还是旧的"会从重放路径回来。
         #
         # `kind` 是证据的派生格：调用方没请求它，这一格也照常重算（判据见
         # `_kind_upgrade_from_evidence` / `evidencebits.kind_following_grade`）。
-        if "proof_text" in written_cells:
+        proof_outcome = str((cells.get("proof_text") or {}).get("outcome") or "")
+        if "proof_text" in requested and proof_outcome in ("filled", "unchanged"):
             evidence = self._ingest_apply_evidence(target, proof_no=want_no)
             out["evidence"] = dict(evidence)
+            evidence_written = bool(evidence.get("written"))
             if not evidence.get("checked"):
                 return _cell_refused(
                     "proof_text",
                     str(evidence.get("refused") or "evidence_recompute_failed"),
                     str(evidence.get("reason") or ""))
+            # ---- 7) `kind` 格的 receipt 反映派生升档（业主裁量 ③） -----------------
+            #
+            # `outcome` 保持原样（稿头没有 `- 证据种类：` ⇒ 这一格确实没被"从稿里写"，
+            # 仍是 not_applicable）；但派生升档在同一格留 `kind_upgraded={from,to,basis}`，
+            # 免得 `diff.requested_not_filled=["kind"]` 被读成"什么都没发生"。
+            _kind_cell = cells.get("kind")
+            if isinstance(_kind_cell, Mapping):
+                _up = dict(evidence.get("kind_upgraded") or {})
+                if not _up:
+                    _trace = dict(evidence.get("kind_trace") or {})
+                    if (str(_trace.get("to") or "") == str(evidence.get("kind") or "")
+                            and str(_trace.get("to") or "") in _EB.KIND_UPGRADE_TARGETS
+                            and not bool(_trace.get("downgraded"))):
+                        _up = dict(_trace)
+                if str(_up.get("to") or "") in _EB.KIND_UPGRADE_TARGETS:
+                    cells["kind"] = {
+                        **dict(_kind_cell),
+                        "kind_upgraded": {
+                            "from": str(_up.get("from") or ""),
+                            "to": str(_up.get("to") or ""),
+                            "basis": str(_up.get("basis") or ""),
+                        },
+                    }
+                    out["cells"] = cells
         out["diff"] = self._ingest_diff(out, requested)
         problem = self._ingest_invariant_problem(out)
         if problem:
@@ -6656,9 +6858,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             "dependencies": deps_written,
                                             "written": bool(statements_written or deps_written)})
         out["ok"] = True
-        out["write"] = {"statements": statements_written,
+        out["write"] = {"statements": bool(statements_written or evidence_written),
                         "dependencies": deps_written,
+                        # 只代表正文有没有被重写：幂等重放时派生格可能写了，
+                        # 但这一格仍是 False（业主 2026-11-10 裁量 ①）。
                         "written": bool(statements_written or deps_written),
+                        "evidence": evidence_written,
                         "cells": written_cells,
                         "sink": "land_statement:attach_proofs / amend_statement_meta / "
                                 "record_manuscript_dependency_face"}

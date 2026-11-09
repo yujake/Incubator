@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、272,583 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **282 个 `.py`、272,859 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -14,10 +14,11 @@
 > `agent_b/ingest_manuscript.py`（213 行），`agent_b/_support.py` 收两个路径 helper（243 → 273 行），
 > `agent_b/register_statement.py` 7,200 → 6,879 行；`capabilities.py` 的对账读数跟着 T1 改成 66 = 25 + 41 + 0）。
 > 文件数 282（+2）、`>800 行` 的 75、`agent_loop.py` 14,189 都不变）。
-> **2026-11-10 T1 收录证据补口**：272,442 → **272,583**（净 +141：`agent_b/register_statement.py`
+> **2026-11-10 T1 收录证据补口**：272,442 → **272,859**（净 +417：`agent_b/register_statement.py`
 > 把 D-37 的 `kind` 升档收进 `_attach_proofs`（判据仍是 `evidencebits.kind_following_grade`），
 > 并让 `mode=apply` 写完正文之后走 `_ingest_apply_evidence` 与登记路同一份证据重算；
-> 文件数 282、`>800 行` 的 75、`agent_loop.py` 14,189 都不变）。
+> 追加裁量 ①②③：重放双向重算、`_kind_upgrade` 统一措辞、kind 格 receipt。文件数 282、
+> `>800 行` 的 75、`agent_loop.py` 14,189 都不变）。
 > **2026-11-10 T1 收口再改一次**：271,341 → **272,414**（净 +1,073：`agent_b/register_statement.py`
 > 新增 `land_manuscript` 的显式落稿参数与 `ingest_manuscript`（位置 + 格 + 逐格回执 + I1/I2）、
 > `secretary.py` 新增提取口 `extract_manuscript`、`manuscriptintake.py` 新增 `INGEST_MODES`、

@@ -5019,6 +5019,63 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     return out
 
 
+def kind_upgrade_witness(root: str | Path, row: Mapping[str, Any], *,
+                         gap: Mapping[str, Any] | None = None,
+                         proof_no: Any = None) -> str:
+    """D-37 `_kind_upgrade` 留痕的唯一措辞：“签凭据（`out/vsigns/<sha>.json`）
+    + 台账那一行（`verifications/<号>.jsonl#v-…`）”。
+
+    ## 为什么必须有这一格（业主 2026-11-10 的裁量 ②）
+
+    改前两条路各写各的：秘书那一支写「手稿签块（连续 3/3 成立…）」或
+    「bits.reviewed（第 3 位…）」，B 那一支写「verifications/…jsonl#v-… 判成立」。
+    读的人从 `_kind_upgrade.basis` 回不到"哪一签让它升的"：前者没有号、后者没有
+    签文件。这一格把两边收成同一句 —— 先点名按正文 sha 命名的签文件（可点开复算），
+    再点名台账那一行（可点开看三票）。没有签文件（只有台账 / pending）时就只留
+    台账那一行；只有 `verification_id` 而没有台账路径时留 id。
+
+    ## 纯读
+    不写任何东西：`gap` 可由调用方传入（省一次台账读），不给就现读
+    `proof_review_gap`。读不出来 / 没有正文 ⇒ 返回空串，由调用方退回它自己那句
+    人话（不许把"没查成"编成一条凭据）。
+    """
+    if root is None:
+        return ""
+    try:
+        no = as_proof_no(proof_no if proof_no is not None
+                         else row.get("proof_no")) or 1
+    except (TypeError, ValueError):
+        no = 1
+    body = proof_text_of(row, no)
+    if not body.strip():
+        return ""
+    sha = text_sha(body)
+    got = dict(gap or {})
+    if not got:
+        try:
+            got = proof_review_gap(root, row, proof_no=no)
+        except Exception:  # noqa: BLE001 —— 凭据读不出来就不编一条
+            got = {}
+    ledger = str(got.get("ledger") or "")
+    vid = str(got.get("verification_id") or "")
+    parts: list[str] = []
+    try:
+        from . import vsigns as _VS   # 惰性：签文件目录只有一处口径
+
+        sign_rel = f"{_VS.SIGNS_DIR}/{sha}.json"
+        if (Path(root) / sign_rel).is_file():
+            parts.append(f"{sign_rel}#{vid}" if vid else sign_rel)
+    except Exception:  # noqa: BLE001 —— 签文件读不到不算"没有"，只是这一句少一格
+        pass
+    if ledger:
+        anchor = (ledger if (not vid or ledger.endswith(f"#{vid}"))
+                  else f"{ledger}#{vid}")
+        parts.append(f"台账 {anchor}")
+    if not parts and vid:
+        parts.append(f"verification_id {vid}")
+    return " · ".join(parts)
+
+
 #: 比 `pre_theorem` 更弱的等级（降档告警用；2026-11-05 起读等级，不读档位）。
 WEAKER_THAN_PRE_THEOREM_GRADES: tuple[str, ...] = ("conjecture", "strong_conjecture")
 

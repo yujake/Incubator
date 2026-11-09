@@ -1364,21 +1364,26 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     # 手稿签块 / `bits.reviewed`（E 那一签不在 `verifications/<命题号>.jsonl` 里，
     # `_signature_basis` 读不到）；② B 的那一支仍走默认（空串 ⇒ 读台账）。
     # 判据不在这里另写一份：给 `signed_via` 的调用方必须自己已经核过签（三态由它负责）。
+    #
+    # 2026-11-10（业主裁量 ②）：留痕措辞不再由调用方各写一句。只要 `_signature_basis`
+    # 能点名"签文件 + 台账那一行"（`witness`），就优先用它 —— 于是秘书那一支即使传了
+    # `signed_via`，`_kind_upgrade.basis` 与 B 那一支也是同一句；只有凭据指名不到
+    # （例如 E 的签只在手稿块里、pending 也读不到）时才退回调用方那句人话。
+    sig = _signature_basis(outer, root)
+    witness = str(sig.get("witness") or "")
     if str(signed_via or "").strip():
-        basis.append(str(signed_via).strip())
-        sig = {"signed": True, "checked": True, "ledger": "", "verification_id": ""}
-    else:
-        sig = _signature_basis(outer, root)
-    if sig.get("signed") and not basis:
-        witness = str(sig.get("ledger") or "")
+        basis.append(witness or str(signed_via).strip())
+    elif sig.get("signed"):
+        ledger = str(sig.get("ledger") or "")
         vid = str(sig.get("verification_id") or "")
-        if vid:
-            witness = f"{witness}#{vid}"
-        basis.append(f"{witness or 'verifications/（台账）'} 判成立")
-    elif not sig.get("signed") and not sig.get("checked"):
+        anchor = (ledger if (not vid or ledger.endswith(f"#{vid}"))
+                  else f"{ledger}#{vid}")
+        basis.append(witness or (f"{anchor} 判成立" if anchor
+                                 else "verifications/（台账） 判成立"))
+    elif not sig.get("checked"):
         missing.append("V 的那一签这一格没查成（没给 root / 台账读不出来）—— "
                        "没查成不是「没签」，补齐 root 再判")
-    elif not sig.get("signed"):
+    else:
         missing.append("V 的一签（`verifications/<命题号>.jsonl` 里没有盖住现行正文、"
                        "判「成立」的签）")
     formal_no = _first_verified_path(bits)
@@ -1423,18 +1428,27 @@ def _signature_basis(row: Mapping[str, Any], root: Any) -> dict[str, Any]:
     """
     if root is None:
         return {"checked": False, "signed": False, "ledger": "",
-                "verification_id": "", "why": "这一趟没有工作区根 ⇒ 台账读不了"}
+                "verification_id": "", "witness": "",
+                "why": "这一趟没有工作区根 ⇒ 台账读不了"}
     try:
         from . import verifications as _VR   # 惰性：签名台账的口径只有一处
         gap = _VR.proof_review_gap(root, row)
     except Exception as exc:  # noqa: BLE001 - 台账读不了 ⇒ 没查成（不许当成没签）
         return {"checked": False, "signed": False, "ledger": "",
-                "verification_id": "",
+                "verification_id": "", "witness": "",
                 "why": f"`verifications` 台账读不出来（{type(exc).__name__}: {exc}）"}
+    #: `_kind_upgrade` 留痕的唯一措辞（业主 2026-11-10 裁量 ②）：签文件 + 台账行。
+    #: 这一格与 `kind_following_grade` 的 `basis` 同一处来源；读不出来就是空串，
+    #: 调用方退回 ledger#vid 那句（不编一条凭据）。
+    try:
+        witness = _VR.kind_upgrade_witness(root, row, gap=gap)
+    except Exception:  # noqa: BLE001 —— 留痕措辞读不出来不许带走"签没签"的结论
+        witness = ""
     return {"checked": bool(gap.get("checked")),
             "signed": bool(gap.get("ok")),
             "ledger": str(gap.get("ledger") or ""),
             "verification_id": str(gap.get("verification_id") or ""),
+            "witness": str(witness or ""),
             "state": str(gap.get("state") or ""),
             "why": str(gap.get("why") or "")}
 
