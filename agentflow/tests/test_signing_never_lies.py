@@ -41,6 +41,7 @@ from agentflow import conductor as CND
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_v import AgentV
 
 from _proof_manuscript_fixture import write_proof_manuscript
@@ -661,3 +662,117 @@ def test_the_third_party_gate_reads_the_pending_route_with_the_same_bar(
     problems = NP.third_party_problems(P1, root=root)
     assert problems, "一条成立 + 未解决 error 的 pending 签被当成第三方签字了"
     assert "签不住" in problems[0] or "未解决的 error" in problems[0], problems[0]
+
+
+# ============================================================ 判据 ⑦（N1）：块不许比台账多票
+#
+# D268 附录 D 的规格。这一族的前六条各管一种"签名说谎"，唯独没有一条管票数：
+# 手稿块（以及它的文件版）可以自称 `连续=3/3`，而台账上只有 1 条 clean 行。
+# 本批只加只读读口 `sign_reading`（B 的闸一个字不动），所以这一条判据判两件事：
+#
+#   a) 新的唯一读口必须看穿它（`state != signed`、`(votes, need) == (1, 3)`）；
+#   b) 老的 B 闸这一批仍然认它（`applied is True`）—— 这是批 1 的 no-flip 锁：
+#      批 2 把 `bits_after_sign` 改读 `sign_reading` 时，这一行必须翻成 `is False`
+#      （设计 §6.2 第 2 条）。现在断言 True 不是在替旧行为背书，而是在钉住"本批没翻"。
+
+def _n1_workspace(root: pathlib.Path) -> tuple[str, str, str]:
+    """D268 附录 D 的夹具：一块手写 3/3 + 台账只 1 条 clean + 无签文件。"""
+    rel = "reports/b-proof-000001.md"
+    text = ("# 证明手稿（夹具）\n\n"
+            "- 命题号：stmt:000001\n- 证明号：1\n\n"
+            f"## 命题\n\n设 G 是 3-正则群；则弦长函数不是常值。\n\n"
+            f"## 证明\n\n{P1}\n\n"
+            "## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n|---|---|---|---|\n")
+    (root / "reports").mkdir(parents=True)
+    (root / "verifications").mkdir(parents=True)
+    (root / rel).write_text(text, encoding="utf-8")
+    sha = VS._sign_sha(VS.manuscript_proof_body(text))
+    row = {"verification_id": "v-000001", "statement_id": "000001",
+           "stmt_id": "000001", "proof_no": 1, "proof_sha256": sha,
+           "verdict": "成立",
+           "secretary_judge": {"axis": "clean", "checked": True},
+           "unresolved_errors": 0, "findings": [],
+           "manuscript": rel, "at": TS,
+           "review_call": "call-1", "review_pass": 1}
+    (root / "verifications" / "000001.jsonl").write_text(
+        json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+    stamped = VS.stamp_manuscript_sign(
+        text, proof_sha=sha, streak=3, need=3, verdict="成立",
+        signer="secretary:B", at=TS,
+        ledger="verifications/000001.jsonl#v-000001",
+        statement_id="000001", manuscript_id="000001")
+    (root / rel).write_text(stamped, encoding="utf-8")
+    return rel, stamped, sha
+
+
+def test_a_block_cannot_claim_more_votes_than_the_ledger_has(
+        tmp_path: pathlib.Path) -> None:
+    """N1 判据：块自称 3/3、台账只 1 票 ⇒ 唯一读口 `state != signed`、votes 1/3。"""
+    rel, stamped, sha = _n1_workspace(tmp_path)
+    assert VS.sign_of(tmp_path, sha)["found"] is False
+    assert VS.manuscript_sign_standing(
+        stamped, proof_sha=sha, manuscript_path=rel)["state"] == "signed"
+
+    got = VS.sign_reading(tmp_path, statement_id="000001", proof_text=P1, proof_no=1)
+    assert got["state"] != "signed", got
+    assert got["state"] == "holding", got
+    assert (got["votes"], got["need"]) == (1, 3), got
+    assert "3/3" in got["why"], got["why"]
+    assert got["body_state"] == "present"
+
+    # 对照：今天已经读成 holding 的那一格（不是本批新翻的）。
+    assert VR.review_standing(tmp_path, statement_id="000001",
+                              proof_text=P1, proof_no=1)["state"] == "holding"
+
+    # 批 1 的 no-flip 锁：B 的闸连一个字节都没动 ⇒ 这一块今天仍被认（批 2 的目标是 False）。
+    _bits, reading = VS.bits_after_sign(
+        {}, root=tmp_path, proof_text=P1, statement_id="000001", proof_no=1,
+        manuscript_text=stamped, manuscript_path=rel)
+    assert reading["applied"] is True, reading
+    assert "3/3" in str(reading.get("why") or "")
+
+
+def test_three_votes_from_one_call_are_a_sign(tmp_path: pathlib.Path) -> None:
+    """N1 正控：三票同源 + `issue` 写签 ⇒ `signed`、`applied=True`（判据不许退化成"一律不签"）。"""
+    rel = "reports/b-proof-000001.md"
+    text = ("# 证明手稿（夹具）\n\n"
+            "- 命题号：stmt:000001\n- 证明号：1\n\n"
+            f"## 命题\n\n夹具命题。\n\n## 证明\n\n{P1}\n\n"
+            "## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n|---|---|---|---|\n")
+    (tmp_path / "reports").mkdir(parents=True)
+    (tmp_path / "verifications").mkdir(parents=True)
+    (tmp_path / rel).write_text(text, encoding="utf-8")
+    sha = VS._sign_sha(VS.manuscript_proof_body(text))
+    rows = [{"verification_id": f"v-{n:06d}", "statement_id": "000001",
+             "stmt_id": "000001", "proof_no": 1, "proof_sha256": sha,
+             "verdict": "成立",
+             "secretary_judge": {"axis": "clean", "checked": True},
+             "unresolved_errors": 0, "findings": [], "manuscript": rel,
+             "at": TS, "review_call": "call-1", "review_pass": n}
+            for n in (1, 2, 3)]
+    (tmp_path / "verifications" / "000001.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+        encoding="utf-8")
+    passes = [{"verification_id": r["verification_id"], "at": r["at"],
+               "proof_sha256": sha, "review_call": "call-1",
+               "review_pass": r["review_pass"]} for r in rows]
+    issued = VS.issue(tmp_path, artifact_sha=sha, streak=3, need=3,
+                      ledger="verifications/000001.jsonl#v-000003",
+                      statement_id="000001", proof_no=1, passes=passes,
+                      at=TS, by="secretary:B")
+    assert issued["written"] is True, issued
+    got = VS.sign_reading(tmp_path, statement_id="000001", proof_text=P1, proof_no=1)
+    assert got["state"] == "signed", got
+    assert (got["votes"], got["need"]) == (3, 3)
+    stamped = VS.stamp_manuscript_sign(
+        text, proof_sha=sha, streak=3, need=3, verdict="成立",
+        signer="secretary:B", at=TS,
+        ledger="verifications/000001.jsonl#v-000003",
+        statement_id="000001", manuscript_id="000001")
+    (tmp_path / rel).write_text(stamped, encoding="utf-8")
+    assert VS.manuscript_sign_standing(
+        stamped, proof_sha=sha, manuscript_path=rel)["state"] == "signed"
+    _bits, reading = VS.bits_after_sign(
+        {}, root=tmp_path, proof_text=P1, statement_id="000001", proof_no=1,
+        manuscript_text=stamped, manuscript_path=rel)
+    assert reading["applied"] is True, reading

@@ -4,10 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **280 个 `.py`、269,889 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
+> **280 个 `.py`、270,572 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 D268 批 1 再改一次**：269,889 → **270,572**（本批净 +683，且是纯新增：
+> `vsigns.py` 只在文件末尾追加了签的唯一读口 `sign_reading` / `credential_reading` /
+> `_recomputable`（只读、本批不接线），既有函数一个字节都没动；另加配套只读 CLI
+> `scripts/sign_audit.py` 与 `tests/test_sign_reading.py`（都不在 `src/` 里，不影响文件数）。
+> 文件数 280、`>800 行` 的 75、`agent_loop.py` 14,139 都不变）。
 > **2026-11-10 D3 批 1 再改一次**：269,521 → **269,828**（本批净 +300：`verifications.py` 新增
 > 只读的 `fault_kind_of` / `is_a_vote` / `vote_reading` 与 `FAULT_KINDS` / `FAULT_KIND_VALUES` /
 > `FAULT_KIND_SOURCES`，另加配套只读 CLI `scripts/verify_audit.py`（不在 `src/` 里，不影响文件数）；
@@ -265,7 +270,7 @@
 | `sessions.py` | 按项目存放的会话记录 |
 | `fulltextstore.py` | 抽取正文的内容寻址库：整本书的正文只存一份 |
 | `signatures.py` | 稿件内容的规范哈希 |
-| `vsigns.py` | V 签的侧文件（一稿一签）：`out/vsigns/<artifact_sha>.json` 按被签正文的 sha 命名，未达门槛一个字节都不写、已有就不覆盖；`issued.json` 是派生归档（原子 tmp+replace、`sort_keys`、按 `at` 排序 —— 只给人看，谁都不许拿它下结论）；回执与送达不落文件（读台账那一行）。判据 `tests/test_v_sign_sidefiles_are_not_the_ledger.py` |
+| `vsigns.py` | V 签的侧文件（一稿一签）：`out/vsigns/<artifact_sha>.json` 按被签正文的 sha 命名，未达门槛一个字节都不写、已有就不覆盖；`issued.json` 是派生归档（原子 tmp+replace、`sort_keys`、按 `at` 排序 —— 只给人看，谁都不许拿它下结论）；回执与送达不落文件（读台账那一行）。D268 批 1（2026-11-10，只读、零行为翻转）在文件末尾追加了签的唯一读口：`sign_reading()`（八档 + `retry_report` + `body_state ∈ present|absent|unreadable`；正文取 `proof_text` / 手稿，**不**取 `statements.proof_text`）、`credential_reading()` / `_recomputable()`（文件在不算签：`passes` 必须在锚点那本台账上点出 `need` 行、同 `review_call`、`review_pass` 1..need、sha 相符、`row_signable`；老形态按锚点往前数）、票只数 `verifications.is_a_vote`；配套只读 CLI `scripts/sign_audit.py`（signed / unissued / unbacked / borrowed / view_conflict / legacy_clean_only / 不可复算签文件七张表，不写盘）。本批不接线：`review_standing` / `bits_after_sign` / 三个门仍按各自老口径读（批 2 才改读它）。判据 `tests/test_sign_reading.py` 与 `tests/test_signing_never_lies.py` 的第 7 条（N1） |
 | `proofauthors.py` | **「谁写的这份证明」的唯一读数**（业主 2026-11-01 裁定）：`author_reading` 三态（`checked` / `author` / `source` / `reason`）—— 先认调用方显式交的 `proof_authors`，再按登记时读到的来源路径推（`reports/` ⇒ F、`out/paper/` ⇒ G、`documents/` ⇒ B）；读不出来就记「作者未记录」，不许默认成 B、也不许默认成送审者。`recorded` 把读数变成写进 `statements` 行的 `proof_authors`（只加数据：不改 `bits`、不改收录行为、不改 `created_by`）。**谁用**：登记口 `secretary.record_statement`（B 的写入代理）写它，V 回执的投递口 `vreceipts._author_of` 读它判「送审者该不该是这个人」（"F 写的证明 F 送审、B 侧收录"）。判据 `tests/test_b_records_the_proof_author.py` |
 | `vreceipts.py` | **V 回执的投递**（167 的丙案，业主 2026-11-01）：先落意图再开板项 —— ① 追加 `out/vreceipts/outbox.jsonl`（append-only，pending）→ ② 开板项（幂等键 = `v-verdict@<label>@<vid>@<recipient>`）→ ③ 记 `dispatched` / `undelivered`，整段在**同一把跨进程锁**里（`tasks.input_key` 没有唯一约束，锁是唯一的并发保证）。收件人只有一个来源：`conductor.current_parent()`（这一趟召唤的父 = 送审者），读不到就记 `undelivered`，不拿"谁醒着"当收件人。`backfill` 是收工前的补投（81 的老 8 条按「台账号时间窗唯一」重解析），`outbox_index` / `outbox_digest` 是读口；`dispatched`（有板项）与 `delivered`（收件人真读过）分成两个数。**谁用**：`agent_v/core.py` 的 `_publish_receipt`（判完就投）与 `conductor.closing`（收工前补投）。判据 `tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py` |
 | `proofloc.py` | `dependencies.used_by` 里那个 `#pN` 尾巴的**唯一解析点**（业主 2026-10-22 多证明模型）：`used_by_of` 造尾巴、`parse_used_by` / `parse_used_by_checked` 拆尾巴、`proof_nos_of` 取一组。全仓别的模块要拆这个尾巴就调它 —— 两份解析意味着"台账上是第 2 条、读出来是第 1 条"这种错没有任何东西会报（口径由 `tests/test_proofloc_parses_proof_positions.py` 逐条钉住） |
