@@ -1187,9 +1187,11 @@ def _label_of(row: Mapping[str, Any]) -> tuple[str, str]:
     return f"{sid}#p{no_int}", vid
 
 
-def _detail_of_row(row: Mapping[str, Any]) -> dict[str, Any]:
+def _detail_of_row(row: Mapping[str, Any],
+                   *, root: str | Path = "") -> dict[str, Any]:
     """一条台账行 ⇒ `deliver_v_verdicts` 要的明细（用生产那一支，不另拼一份）。"""
     from . import agent_loop as AL
+    from . import verifications as VR
     from . import vsigns as VSP
 
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
@@ -1204,7 +1206,32 @@ def _detail_of_row(row: Mapping[str, Any]) -> dict[str, Any]:
              "unresolved_errors": int(row.get("unresolved_errors") or 0),
              "in_sync": bool(row.get("in_sync")) if "in_sync" in row else None,
              "proof_sha256": str(row.get("proof_sha256") or "")}
-    detail = AL._v_rejection_detail(sid, entry, row, VSP.verdict_axis(row) or "verdict")
+    # ---- D3 批 2：程序性 / 文风那一档的明细（`via="report"`） -------------------
+    #
+    # 它不是"要 F 改"的意见（正文没有被指出缺陷），而是"本轮无有效判定、可原样再送"
+    # 的回执。只认 `source="row"` 的新行：老行没有类别格，读侧推定只作显示（裁定 ⑤），
+    # 走的仍是旧措辞（继续按缺陷处理）。
+    _kind = VR.fault_kind_of(row)
+    kind = (str(_kind.get("kind") or "")
+            if str(_kind.get("source") or "") == "row" else "")
+    via = ("report" if kind in ("procedural", "style")
+           else (VSP.verdict_axis(row) or "verdict"))
+    detail = AL._v_rejection_detail(sid, entry, row, via)
+    detail["fault_kind"] = kind
+    detail["requires_rewrite"] = via != "report"
+    if via == "report" and str(root or ""):
+        # `attempts` / `last_at`：这一份 sha 上第几趟程序性/文风退回（裁定 ④：
+        # 不设上限，让反复重送可见）。读不成 ⇒ 两格 None（不是 0 —— "没读到"与
+        # "第 0 趟"必须分开），回执正文会写"没读到"。
+        item: dict[str, Any] = {}
+        try:
+            fix = VR.report_fix_list(root, statement_id=sid, proof_no=no)
+            item = next((one for one in (fix.get("items") or [])
+                         if str(one.get("verification_id") or "") == vid), {})
+        except Exception:  # noqa: BLE001 —— 这一格是读数，读不成不带走回执
+            item = {}
+        detail["attempts"] = item.get("attempts")
+        detail["last_at"] = item.get("last_at")
     if entry["in_sync"] is None and detail.get("in_sync") is None:
         detail["in_sync"] = False
     return detail
@@ -1427,12 +1454,44 @@ def statement_author_of(store: Any, label: str) -> dict[str, Any]:
     return _author_of(store, label)
 
 
+def _resubmit_or_skip(*, requires_rewrite: bool, store: Any, root: str,
+                      label: str, verification_id: str,
+                      detail: Mapping[str, Any], recipient: str, role: str,
+                      depth: int, at: str) -> dict[str, Any]:
+    """按这一条判定的类别开不开"改稿"义务（D3 批 2 的唯一分叉点）。
+
+    - `requires_rewrite=True`（math / contract / 历史行）⇒ 照旧 `ensure_resubmit`；
+    - `False`（程序性 / 文风）⇒ 不开义务，回一个 `state="skipped"` 的读数：
+      待改的是 V 的报告，不是这份正文；同一份正文可以原样再送（业主裁定 ③④⑥）。
+
+    为什么不返回空 dict：`_publish` 的调用方/判据读 `resubmit.state`；"没开义务"必须是
+    一条有内容的读数（reason 说明为什么），不能与"没读到"折平。
+    """
+    if requires_rewrite:
+        return ensure_resubmit(
+            store=store, root=root, label=label, verification_id=verification_id,
+            detail=detail, recipient=recipient, role=role, depth=depth, at=at)
+    sha = str(detail.get("proof_sha256") or "")
+    return {"checked": True, "state": "skipped",
+            "key": (resubmit_key(label, sha) if sha else ""),
+            "item_id": "", "owner": str(recipient or ""),
+            "reason": ("程序性/文风：这一份正文没有被指出数学缺陷 ⇒ 不开改稿义务"
+                       "（同一份正文可以原样再送，不必改稿换 sha）"),
+            "problems": []}
+
+
 def _publish(*, store: Any, root: str, label: str, verification_id: str,
              recipient: str, role: str, depth: int, detail: Mapping[str, Any],
              at: str, by_task: str = "", called_by: str = "V",
              source: str = "verify_proof", unknown_reason: str = "",
-             author: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """① 意图 → ② 板项 → ③ dispatched/undelivered。整段在锁里（并发只开一项）。"""
+             author: Mapping[str, Any] | None = None,
+             requires_rewrite: bool = True) -> dict[str, Any]:
+    """① 意图 → ② 板项 → ③ dispatched/undelivered。整段在锁里（并发只开一项）。
+
+    `requires_rewrite`（D3 批 2）：这一条判定开不开 `v-resubmit@…` 那条"改稿"义务。
+    `math` / 历史行是 True（照旧）；程序性 / 文风是 False —— 那一档待改的是 V 的
+    报告，不是这份正文；同一份正文可以原样再送（业主裁定 ③④⑥）。
+    """
     from . import agent_loop as AL
 
     who = dict(author or {})
@@ -1495,10 +1554,10 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
                                reason="outbox 已记：这一条投给这个收件人过了（不重开）")
                     # 回执那一条已经在板上，但"必须重送"的义务是另一条板项：
                     # 旧盘（本笔之前投过的判决）在这里补开，幂等键没有收件人后缀，
-                    # 于是同一个收件人跑十趟也只有一条。
-                    out["resubmit"] = ensure_resubmit(
-                        store=store, root=root, label=label,
-                        verification_id=verification_id, detail=detail,
+                    # 于是同一个收件人跑十趟也只有一条。程序性 / 文风不开（D3 批 2）。
+                    out["resubmit"] = _resubmit_or_skip(
+                        requires_rewrite=requires_rewrite, store=store, root=root,
+                        label=label, verification_id=verification_id, detail=detail,
                         recipient=recipient, role=role, depth=depth, at=at)
                     return out
             if not cur:
@@ -1539,9 +1598,11 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
             # ---- I2（业主 2026-11-01）：「打回」不只是一条回执，还是一条必须重送的
             # 义务。义务单独一条板项（`v-resubmit@<命题>@<sha>`，无收件人后缀），
             # 关闭条件是"同一份证明出现更新的干净成立行"，不是 ack。
-            out["resubmit"] = ensure_resubmit(
-                store=store, root=root, label=label, verification_id=verification_id,
-                detail=detail, recipient=recipient, role=role, depth=depth, at=at)
+            # D3 批 2：程序性 / 文风不是打回 —— 只发回执，不开这条义务。
+            out["resubmit"] = _resubmit_or_skip(
+                requires_rewrite=requires_rewrite, store=store, root=root,
+                label=label, verification_id=verification_id, detail=detail,
+                recipient=recipient, role=role, depth=depth, at=at)
             _append(root, {"key": key, "label": label,
                            "verification_id": verification_id, "recipient": recipient,
                            "role": role, "at": at, "by_task": by_task,
@@ -1593,7 +1654,7 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
                            reason="这一签不是「有毛病」那一档 ⇒ 不投回执"
                                   "（回执只给要改的人）；也没有要收口的重送项")
             return out
-        detail = _detail_of_row(row)
+        detail = _detail_of_row(row, root=_root_of(store))
     except Exception as exc:  # noqa: BLE001
         out["reason"] = f"明细造不出来（{type(exc).__name__}: {exc}）"
         return out
@@ -1605,6 +1666,7 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
                     at=str(at or row.get("at") or ""),
                     by_task=_current_task(), source=source,
                     unknown_reason=str(who.get("reason") or ""),
+                    requires_rewrite=bool(detail.get("requires_rewrite", True)),
                     author=_author_of(store, label))
 
 
@@ -1740,7 +1802,7 @@ def _detail_from_ledger(store: Any, root: str, label: str,
     except Exception:  # noqa: BLE001
         sign["in_sync"] = False
     try:
-        return _detail_of_row(sign)
+        return _detail_of_row(sign, root=root)
     except Exception:  # noqa: BLE001
         return None
 
@@ -1828,8 +1890,11 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
                                        f"（{type(exc).__name__}: {exc}）")
             # 回执项在板上 ≠ 重送义务在板上：旧盘（本笔之前投过的判决）要走这一支
             # 把义务补开。幂等键没有收件人后缀，所以补投十趟也只多一条。
+            #
+            # D3 批 2：程序性 / 文风那一档**不开**这条义务（`requires_rewrite=False`）——
+            # 补投只补回执，不把"报告措辞"补成一条"改稿"命令。
             _detail = _detail_from_ledger(store, root, label, vid)
-            if _detail is not None:
+            if _detail is not None and _detail.get("requires_rewrite") is not False:
                 _holder = str(item.get("parent_task_id") or "")
                 _rs = ensure_resubmit(
                     store=store, root=root, label=label, verification_id=vid,

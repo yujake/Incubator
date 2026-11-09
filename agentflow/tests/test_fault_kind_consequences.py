@@ -435,3 +435,98 @@ def test_antivacuum_a_math_defect_labelled_procedural_is_folded_back(
                                 fault_kind=wrong["fault_kind"]) is False
 
 
+# ============================================================ ③ 回执与义务
+
+
+def _task_keys(st: Any, prefix: str) -> list[dict[str, Any]]:
+    return [dict(r) for r in st.rows("tasks")
+            if str(r.get("input_key") or "").startswith(prefix)]
+
+
+def test_a_procedural_fault_publishes_a_resubmit_as_is_receipt(tmp_path: Path) -> None:
+    """程序性：不开 `v-resubmit@…`（改稿义务），改发"本轮无有效判定、可原样再送"回执。"""
+    from test_v_receipt_delivery_does_not_wait_for_the_recipient import (
+        _agent_row, _conductor)
+
+    st = T3._ws(tmp_path)
+    _conductor(st)
+    recipient = _agent_row(st, role="F")
+    got = _run_fault(tmp_path, "procedural", st=st, parent=recipient)
+    # 义务：一条都不开（那一档不是打回）。
+    assert _task_keys(st, VRC.RESUBMIT_PREFIX) == [], [
+        r.get("input_key") for r in st.rows("tasks")]
+    # 回执：开了一条，措辞是"无有效判定 / 不需要改稿 / 可原样再送"。
+    receipts = _task_keys(st, "v-verdict@")
+    assert len(receipts) == 1, [r.get("input_key") for r in st.rows("tasks")]
+    body = str(receipts[0].get("detail") or "")
+    for phrase in ("本轮无有效判定", "不需要改稿", "原样再送", "程序性"):
+        assert phrase in body, (phrase, body)
+    assert "下一步该补的就是" not in body, (
+        "程序性回执用了「要 F 改」的措辞（正文没有被指出缺陷）：" + body)
+
+
+def test_report_fix_list_counts_attempts_without_a_cap(tmp_path: Path) -> None:
+    """`report_fix_list`：同一 sha 上两趟程序性 ⇒ attempts 1、2；最后一条 `last_at` 同值。"""
+    st = T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([T3.CLEAN_REPLY, T3.FAULT_REPLY,
+                             T3.CLEAN_REPLY, T3.FAULT_REPLY])
+    seam = T3._Seam({
+        "v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_FAULT, defect_kind="procedural"),
+                           T3._axis(SEC.V_REPLY_CLEAN),
+                           T3._axis(SEC.V_REPLY_FAULT, defect_kind="procedural")]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    with T3._as_submitter():
+        agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    with T3._as_submitter():
+        agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    fix = VR.report_fix_list(st.root, statement_id=T3.SID)
+    assert fix["checked"] is True, fix
+    assert len(fix["items"]) == 2, fix
+    assert [one["attempts"] for one in fix["items"]] == [1, 2], fix
+    assert len({one["sha"] for one in fix["items"]}) == 1, fix
+    assert fix["items"][0]["last_at"] == fix["items"][1]["last_at"], fix
+    for one in fix["items"]:
+        assert one["kind"] == "procedural", one
+        assert one["requires_rewrite"] is False, one
+        assert one["addressee"] == "V", one
+        assert one["quote"], one
+
+
+def test_report_fix_list_excludes_math_and_report_gap(tmp_path: Path) -> None:
+    """math / contract 不进这张表（那是缺陷清单）；report_gap 是 clean 的质量读数，也不进。"""
+    st = T3._ws(tmp_path)
+    T3._put(st)
+    review = T3._ReviewSeam([T3.CLEAN_REPLY, T3.FAULT_REPLY])
+    seam = T3._Seam({"v_reply_defect": [T3._axis(SEC.V_REPLY_CLEAN),
+                                        T3._axis(SEC.V_REPLY_FAULT,
+                                                 defect_kind="math")]})
+    agent = AgentV(st, workspace_root=st.root, llm=review,
+                   secretary=T3._secretary(st, seam))
+    with T3._as_submitter():
+        agent.verify_proof(T3.SID, proof_text=T3.PROOF, proof_manuscript=T3.REL)
+    fix = VR.report_fix_list(st.root, statement_id=T3.SID)
+    assert fix["checked"] is True and fix["items"] == [], fix
+
+    # report_gap 那一档（clean 行）同样不进：它不是缺陷，只是报告质量读数。
+    gap = _row(verdict="成立", axis="clean", kind="", cause="report_gap",
+               report_gap="没有写出反例尝试的位置")
+    gap_path = tmp_path / "gap-ws"
+    _write_ledger(gap_path, [gap])
+    fix2 = VR.report_fix_list(gap_path, statement_id=SID)
+    assert fix2["checked"] is True and fix2["items"] == [], fix2
+
+
+def test_report_fix_list_says_not_checked_when_the_ledger_is_unreadable(
+        tmp_path: Path) -> None:
+    """读不成是"没查成"（checked=False + why），不是"没有待改项"。"""
+    ledger = tmp_path / "verifications"
+    ledger.mkdir(parents=True)
+    (ledger / f"{SID}.jsonl").write_text("{not json}\n", encoding="utf-8")
+    fix = VR.report_fix_list(tmp_path, statement_id=SID)
+    assert fix["checked"] is False, fix
+    assert "没查成" in fix["why"], fix
+
+
