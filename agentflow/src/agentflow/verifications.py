@@ -1533,6 +1533,17 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "decision": str(_judge.get("decision") or ""),
         "reason": str(_judge.get("reason") or "")[:300],
     }
+    # ---- D3 批 2：类别三格随判定一起落盘（不新增磁盘字段，仍在这一格里） --------
+    #
+    # 为什么只挑这三格白名单、不做整格透传：调用方给的判定里还有 `material` / `cost` /
+    # `basis` 这些运行期大块（透传会把整份材料抄进台账行）。D3 要落的是**分类结果**：
+    # `fault_kind`（可空）/ `fault_cause`（可空）/ `report_gap`（可空）。写侧（V 的
+    # 写行处）每一行都给，于是新行的键一定在 —— 键在不在是 `fault_kind_of` 分
+    # "新行 / 老行"的唯一依据。调用方没给时（老测试夹具 / 非 V 的写口）不写，
+    # 那一行的读法回到 `legacy_*` 的保守推定（不会静默解锁）。
+    for _key in ("fault_kind", "fault_cause", "report_gap"):
+        if _key in _judge:
+            row[SECRETARY_JUDGE_KEY][_key] = str(_judge.get(_key) or "")[:500]
     #: 洗过的那一份转达文本（业主 2026-10-29 的 C 段）：`{text, findings, dropped, refused}`。
     #: 只在秘书真的洗出来时写（`washed=True`）—— 洗不出来的那一档不写这一格：
     #: 台账上"没有这一格"必须是"没洗过/洗不出来"，而不许写一份空文本冒充洗过。
@@ -2375,6 +2386,18 @@ def _looks_like_report_gap(text: str) -> bool:
     return any(marker in text for marker in _REPORT_GAP_MARKERS)
 
 
+def says_only_a_report_gap(text: str) -> bool:
+    """写侧入口（D3 批 2）：这句话是不是只在说「没记录反例尝试」。
+
+    为什么要有这一格公开的名字：业主 2026-11-09 裁定 ① 把这一档从 fault 判据里移出，
+    而判据本体只有 :data:`_REPORT_GAP_MARKERS` 一处（98b 的 4 条逐字命中）。写侧
+    （`agent_v/core.py` 的写行处）要用同一条判据做归类，**不许另抄一张关键词表** ——
+    两处各写一份，下一次改判据就会只改一处。读侧仍走
+    :func:`fault_kind_of` 的 `legacy_shape` 那一支，两处共用这同一个谓词。
+    """
+    return _looks_like_report_gap(str(text or ""))
+
+
 def _looks_like_self_declared(text: str) -> bool:
     """这句话是不是 V 自己说「我没逐行验证 / 我判不了」。"""
     return any(marker in text for marker in _SELF_DECLARED_MARKERS)
@@ -2448,10 +2471,17 @@ def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
     if has_key:
         explicit = str(got.get("fault_kind") or "").strip()
         if not explicit:
+            # D3 批 2：clean 行也会带一格 `cause`（唯一取值 `report_gap`）—— 它回答
+            # 「这条 clean 判决为什么报告写得薄」。它不参与投票（`is_a_vote` 只读
+            # axis / kind / checked / row_signable），只让裁定 ① 的那一档在读数里可查。
+            clean_cause = str(got.get("fault_cause") or "").strip()
+            clean_cause = clean_cause if clean_cause in FAULT_CAUSES else ""
             return {
-                "kind": "", "cause": "", "source": "row", "report_gap": report_gap,
+                "kind": "", "cause": clean_cause, "source": "row",
+                "report_gap": report_gap,
                 "why": ("行上显式写了 fault_kind='' ⇒ 明确的 clean（键在 = 新行；"
                         "不套用老行的形状规则）"
+                        + (f"；cause={clean_cause}" if clean_cause else "")
                         + (f"；报告质量读数 report_gap={report_gap!r}" if report_gap else "")),
             }
         if explicit == "report_gap":
