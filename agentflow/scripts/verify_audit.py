@@ -93,11 +93,12 @@ def _state_of(votes: int, need: int, stop: Mapping[str, Any] | None) -> str:
     """D3 §5.4 的 `state` 投影（只作读数；本脚本不据此改任何行为）。"""
     if stop is not None:
         kind = str(stop.get("kind") or "")
+        cause = str(stop.get("cause") or "")
         if kind == "math":
             return "rejected"
         if kind == "contract":
             return "gate"
-        if kind in ("procedural", "style", "report_gap"):
+        if kind in ("procedural", "style") or cause in ("report_gap", "self_declared"):
             return "retry_report"
         return "unsigned"
     if votes >= need:
@@ -153,6 +154,7 @@ def audit(root: str | Path) -> dict[str, Any]:
             "votes": votes,
             "need": need,
             "stop_kind": str(stop.get("kind") or "") if stop else "",
+            "stop_cause": str(stop.get("cause") or "") if stop else "",
             "stop_why": str(stop.get("why") or "") if stop else "",
             "stop_verification_id": (str(stop.get("verification_id") or "")
                                      if stop else ""),
@@ -164,7 +166,8 @@ def audit(root: str | Path) -> dict[str, Any]:
         source = str(reading.get("source") or "")
         if source in out["legacy_counts"]:
             out["legacy_counts"][source] += 1
-        if str(reading.get("kind") or "") == "report_gap":
+        if (str(reading.get("cause") or "") == "report_gap"
+                or str(reading.get("report_gap") or "")):
             out["report_gaps"].append({
                 "statement_id": _statement_of(row),
                 "proof_no": VR.proof_no_of(row),
@@ -174,6 +177,8 @@ def audit(root: str | Path) -> dict[str, Any]:
                 "review_call": str(row.get("review_call") or ""),
                 "review_pass": row.get("review_pass"),
                 "source": source,
+                "cause": str(reading.get("cause") or ""),
+                "report_gap": str(reading.get("report_gap") or ""),
                 "reason": str((row.get("secretary_judge") or {}).get("reason") or ""),
             })
         axis = VR.ledger_axis(row)
@@ -213,6 +218,7 @@ def audit(root: str | Path) -> dict[str, Any]:
                     "fault_verification_id": str(later.get("verification_id") or ""),
                     "fault_review_pass": later.get("review_pass"),
                     "fault_kind": str(reading.get("kind") or ""),
+                    "fault_cause": str(reading.get("cause") or ""),
                     "fault_reason": str(
                         (later.get("secretary_judge") or {}).get("reason") or ""),
                 })
@@ -235,14 +241,17 @@ def render(reading: Mapping[str, Any]) -> list[str]:
         for problem in reading["problems"]:
             lines.append(f"    - {problem}")
     lines.append("")
-    lines.append("== 1. per-statement：votes / need / 停因 kind ==")
+    lines.append("== 1. per-statement：votes / need / 停因 kind（cause 在括号里）==")
     if not reading.get("statements"):
         lines.append("  （没有台账行）")
     for one in reading.get("statements") or ():
+        stop = (one.get("stop_cause") or one.get("stop_kind") or "-")
+        if one.get("stop_cause") and one.get("stop_kind"):
+            stop = f"{one['stop_kind']}({one['stop_cause']})"
         lines.append(
             f"  {one['statement_id']}#p{one['proof_no']}  "
             f"votes={one['votes']}/{one['need']}  "
-            f"stop={one['stop_kind'] or '-'}  state={one['state']}  "
+            f"stop={stop}  state={one['state']}  "
             f"call={one['review_call'] or '(legacy)'}  "
             f"sha={str(one['proof_sha256'])[:12]}…"
             + (f"  stop_why={one['stop_why']}" if one["stop_why"] else ""))
@@ -254,7 +263,10 @@ def render(reading: Mapping[str, Any]) -> list[str]:
     for one in gaps:
         lines.append(
             f"  {one['statement_id']}#p{one['proof_no']} {one['verification_id']} "
-            f"({one['at']}) source={one['source']} pass={one['review_pass']}")
+            f"({one['at']}) source={one['source']} cause={one['cause'] or '-'} "
+            f"pass={one['review_pass']}")
+        if one.get("report_gap"):
+            lines.append(f"    report_gap: {one['report_gap']}")
         lines.append(f"    reason: {one['reason']}")
     lines.append("")
     lines.append("== 3. legacy_* 三类计数 ==")
@@ -263,8 +275,8 @@ def render(reading: Mapping[str, Any]) -> list[str]:
                                  for source in (
                                      "legacy_math_evidence", "legacy_shape",
                                      "legacy_default", "row")))
-    lines.append("  （legacy_* 是读侧推定：老行没有 `secretary_judge.fault_kind` 这一格；"
-                 "`row` 是新行显式带的）")
+    lines.append("  （legacy_* 是读侧推定：老行没有 `secretary_judge.fault_kind` 这个键；"
+                 "`row` 是新行显式带了这个键 —— 值可以是空串）")
     lines.append("")
     lines.append("== 4. 同一 sha 同一 review_call：clean → fault 逐条点名 ==")
     flips = reading.get("flips") or []
@@ -274,10 +286,11 @@ def render(reading: Mapping[str, Any]) -> list[str]:
         lines.append(
             f"  {one['statement_id']}#p{one['proof_no']} call={one['review_call']} "
             f"sha={str(one['proof_sha256'])[:12]}…")
+        fault_reading = one["fault_kind"] or one["fault_cause"] or "?"
         lines.append(
             f"    {one['clean_verification_id']} (pass {one['clean_review_pass']}) clean "
             f"→ {one['fault_verification_id']} (pass {one['fault_review_pass']}) "
-            f"fault kind={one['fault_kind']}")
+            f"fault kind/cause={fault_reading}")
         lines.append(f"    fault reason: {one['fault_reason']}")
     return lines
 

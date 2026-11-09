@@ -2292,24 +2292,32 @@ def _is_legacy_row(row: Mapping[str, Any]) -> bool:
 #: 从 `procedural` 里单列出来的读数（「没记录反例构造尝试」不算缺陷），不是 fault。
 FAULT_KINDS: tuple[str, ...] = ("math", "procedural", "style", "contract")
 
-#: :func:`fault_kind_of` 的 `kind` 全部取值（比 :data:`FAULT_KINDS` 多一格 `report_gap`）。
+#: :func:`fault_kind_of` 的 `kind` 全部取值（与 :data:`FAULT_KINDS` 逐字相同）。
 #:
-#: 为什么把它放在同一张表里：读的人要能一眼看出「这一行是 fault 的哪一类」与
-#: 「这一行不是 fault、只是报告缺一格记录」是同一格上的两个读数。写侧（批 2）
-#: 仍然只把 :data:`FAULT_KINDS` 里的四类写进 `secretary_judge.fault_kind`；
-#: `report_gap` 是读侧从旧行形状推出来的，不新增磁盘字段（D3 §3.3）。
-FAULT_KIND_VALUES: tuple[str, ...] = FAULT_KINDS + ("report_gap",)
+#: 业主 2026-11-09 裁定 ① 之后 `report_gap` 不是 kind：它是
+#: :data:`FAULT_CAUSES` 里的一档（「没记录反例构造尝试」不是缺陷，不锁 sha、不挡签）。
+#: 把它留在 kind 里会让 `is_a_vote` 的第 ③ 条把一条 clean 行判成"矛盾行"，
+#: 于是裁定 ① 想让它算的那一票又被静默吞掉。
+FAULT_KIND_VALUES: tuple[str, ...] = FAULT_KINDS
+
+#: `fault_kind_of` 的 `cause` 全部取值（只对 `procedural` 有意义；`""` = 没有细分原因）。
+#:
+#: - `report_gap`：缺"反例尝试 / 逐关核对"的记录 —— 不是缺陷（裁定 ①）；
+#: - `self_declared`：V 自己说"我没逐行验证 / 判不了" —— 仍然是 fault。
+FAULT_CAUSES: tuple[str, ...] = ("report_gap", "self_declared")
 
 #: :func:`fault_kind_of` 的 `source` 全部取值。
 #:
-#: `row` = 新行自己在 `secretary_judge.fault_kind` 上写了类别；
-#: 其余三个是读侧推定（老行没有这一格，D3 §5.3）：
-#: `legacy_math_evidence`（行上带数学证据）/ `legacy_shape`（按行形状推定）/
-#: `legacy_default`（说不清 ⇒ 按 math 兜底，继续锁）。另加一个只往更严方向折的
-#: `guard:carries_math_evidence`（写侧护栏在读侧的同一条：不许把带数学证据的行说成不锁）。
+#: `row` = 新行自己在 `secretary_judge` 里带了 `fault_kind` 这一格（键在；值为空 =
+#: 明确的 clean，值为四类之一 = 那类缺陷）。键在不在是"新行 / 老行"的唯一分界：
+#: D3 之后每一行都必须写这一格（可空），老行没有这一格，才走下面三档读侧推定。
+#: 其余三个是读侧推定：`legacy_math_evidence`（行上带数学证据）/ `legacy_shape`
+#: （按行形状推定）/ `legacy_default`（说不清 ⇒ 按 math 兜底，继续锁）。另加一个只往
+#: 更严方向折的 `guard:carries_math_evidence`（写侧护栏在读侧的同一条）。
 FAULT_KIND_SOURCES: tuple[str, ...] = (
     "row", "legacy_math_evidence", "legacy_shape", "legacy_default",
     "guard:carries_math_evidence")
+
 
 #: 「没记录反例构造尝试」这一档的措辞（98b 的 4 条 fault 逐字命中其中一条）。
 #:
@@ -2387,23 +2395,31 @@ def _has_math_evidence(row: Mapping[str, Any]) -> bool:
 def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
     """这一行的缺陷类别（纯读；D3 批 1 的唯一入口）。
 
-    → `{kind, cause, source, why}`
+    → `{kind, cause, source, why, report_gap}`
 
-    - `kind` ∈ :data:`FAULT_KIND_VALUES`，或 `""`（这一行不是 fault 行）；
-    - `cause` 只在 `procedural` / `report_gap` 上有值：`report_gap` / `self_declared` / `""`；
-    - `source` ∈ :data:`FAULT_KIND_SOURCES`；`""` = 这一行不是 fault 行；
+    - `kind` ∈ :data:`FAULT_KIND_VALUES`，或 `""`（不是缺陷 / 明确的 clean）；
+    - `cause` ∈ :data:`FAULT_CAUSES` 或 `""`；`report_gap` 只在这里出现，不在 kind 里；
+    - `source` ∈ :data:`FAULT_KIND_SOURCES`；`""` = 老行且不是 fault 行；
+    - `report_gap`：`secretary_judge.report_gap` 的原话（干净行上的报告质量读数；
+      老行没有这一格 ⇒ 空串）；
     - `why`：人读的一句依据（它引哪一条判据、读了哪几个字段）。
 
-    ## 判据（按 D3 §3.1，优先级从上到下）
+    ## 判据（按 D3 §3.1；业主 2026-11-09 裁定 ① 的收口版）
 
-    1. 新行显式带的类别（`secretary_judge.fault_kind`）⇒ 原样采信，`source="row"`。
-       这一支不看 axis：clean 行带着 fault_kind 是"自相矛盾行"，
-       :func:`is_a_vote` 的第 ③ 条会 fail-closed（这是护栏，不是放宽）。
+    0. 先看 `secretary_judge` 里有没有 `fault_kind` 这个键（键在不在 = 新行 / 老行，
+       不新增字段）：
+       - 键在 + 值为空 ⇒ `kind=""`，`source="row"`：明确的 clean（可投票）；
+       - 键在 + 值为四类之一 ⇒ 那一类，`source="row"`；
+       - 键在 + 值是 `report_gap`（批 1 的旧写法）或 `procedural` 且
+         `fault_cause="report_gap"` ⇒ 归到 `kind=""`、`cause="report_gap"`（它不是缺陷）；
+       - 键在 + 值不认识 ⇒ 按 `math` 收（fail-closed：一个拼错的 kind 不许静默解锁）。
+    1. 键不在 ⇒ 老行，走下面三档读侧推定（不写盘、不改历史）。
     2. 行上有数学证据（`level=error` 的 finding 或 `defect_step`）⇒ `math`，
-       `source="legacy_math_evidence"`。这一条永远优先于下面三条：任何
+       `source="legacy_math_evidence"`。这一条永远优先于下面几条：任何
        "procedural/style 带着步号"的行都被折回 math（只往更严的方向折，D3 §5.3）。
-    3. 秘书的话只在说「没有记录反例构造尝试」⇒ `report_gap`，`source="legacy_shape"`。
-       业主 2026-11-09 裁定 ①：它不算缺陷（不锁 sha、不挡签）；这里是读数。
+    3. 秘书的话只在说「没有记录反例构造尝试」⇒ `kind=""`、`cause="report_gap"`、
+       `source="legacy_shape"`。业主 2026-11-09 裁定 ①：它不是缺陷（不锁 sha、不挡签）；
+       `kind` 留空是刻意的——这样 `is_a_vote` 不会把它当"矛盾行"吞掉。
     4. 依据落在排版 / 术语 / 文风 / 价值判断 ⇒ `style`，`source="legacy_shape"`。
     5. V 自己说「我没逐行验证 / 我判不了」⇒ `procedural`，`source="legacy_shape"`，
        `cause="self_declared"`。
@@ -2421,38 +2437,68 @@ def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
 
     ## 为什么 `verdict` 只在旧行推定里读
 
-    新行有 `fault_kind` 时，`verdict` 一个字节都不读（p247：V 的判词只是陈述）。
-    旧行没有那一格，才用 `verdict=成立` 当"V 没指出缺陷"的形状证据；它不是轴。
+    新行有 `fault_kind` 这一格（哪怕值为空）时，`verdict` 一个字节都不读
+    （p247：V 的判词只是陈述）。旧行没有那一格，才用 `verdict=成立` 当
+    "V 没指出缺陷"的形状证据；它不是轴。
     """
     got = row.get(SECRETARY_JUDGE_KEY)
-    explicit = (str(got.get("fault_kind") or "").strip()
-                if isinstance(got, Mapping) else "")
-    if explicit in FAULT_KIND_VALUES:
-        cause = ""
-        if explicit in ("procedural", "report_gap"):
-            raw_cause = (str(got.get("fault_cause") or "").strip()
-                         if isinstance(got, Mapping) else "")
-            cause = raw_cause if raw_cause in ("report_gap", "self_declared") else ""
-            if explicit == "report_gap":
-                cause = "report_gap"
-        # 只往更严的方向折：带数学证据的行不许被说成"不锁"的那几类。
-        if explicit in ("procedural", "style", "report_gap") and _has_math_evidence(row):
+    has_key = isinstance(got, Mapping) and "fault_kind" in got
+    report_gap = (str(got.get("report_gap") or "").strip()
+                  if isinstance(got, Mapping) else "")
+    if has_key:
+        explicit = str(got.get("fault_kind") or "").strip()
+        if not explicit:
             return {
-                "kind": "math", "cause": "",
-                "source": "guard:carries_math_evidence",
-                "why": ("行上显式写着 "
-                        f"{explicit}，但它同时带着数学证据（error finding 或 defect_step）"
-                        " ⇒ 强制折回 math（护栏只许往更严的方向折）"),
+                "kind": "", "cause": "", "source": "row", "report_gap": report_gap,
+                "why": ("行上显式写了 fault_kind='' ⇒ 明确的 clean（键在 = 新行；"
+                        "不套用老行的形状规则）"
+                        + (f"；报告质量读数 report_gap={report_gap!r}" if report_gap else "")),
+            }
+        if explicit == "report_gap":
+            # 批 1 的旧写法：report_gap 曾放在 kind 里。读到它按新口径归到 cause，
+            # 不按"不认识的 kind"折成 math（那会把一条报告缺口锁成数学缺陷）。
+            return {
+                "kind": "", "cause": "report_gap", "source": "row",
+                "report_gap": report_gap,
+                "why": ("行上显式写着 fault_kind='report_gap'（批 1 旧写法）⇒ 按新口径"
+                        "归到 cause=report_gap、kind 留空（它不是缺陷，可算票）"),
+            }
+        if explicit in FAULT_KIND_VALUES:
+            cause = ""
+            if explicit == "procedural":
+                raw_cause = str(got.get("fault_cause") or "").strip()
+                cause = raw_cause if raw_cause in FAULT_CAUSES else ""
+                if cause == "report_gap":
+                    return {
+                        "kind": "", "cause": "report_gap", "source": "row",
+                        "report_gap": report_gap,
+                        "why": ("行上显式写着 procedural + cause=report_gap ⇒ 按新口径"
+                                "归到 kind=''、cause=report_gap（它不是缺陷，可算票）"),
+                    }
+            # 只往更严的方向折：带数学证据的行不许被说成"不锁"的那几类。
+            if explicit in ("procedural", "style") and _has_math_evidence(row):
+                return {
+                    "kind": "math", "cause": "", "source": "guard:carries_math_evidence",
+                    "report_gap": report_gap,
+                    "why": ("行上显式写着 "
+                            f"{explicit}，但它同时带着数学证据（error finding 或 defect_step）"
+                            " ⇒ 强制折回 math（护栏只许往更严的方向折）"),
+                }
+            return {
+                "kind": explicit, "cause": cause, "source": "row",
+                "report_gap": report_gap,
+                "why": f"行上显式写了 fault_kind={explicit!r}（source=row）",
             }
         return {
-            "kind": explicit, "cause": cause, "source": "row",
-            "why": f"行上显式写了 fault_kind={explicit!r}（source=row）",
+            "kind": "math", "cause": "", "source": "row", "report_gap": report_gap,
+            "why": (f"行上显式写了不认识的 fault_kind={explicit!r} ⇒ 按 math 收"
+                    "（fail-closed：一个拼错的类别不许静默解锁）"),
         }
 
     axis = ledger_axis(row)
     if axis != "fault":
         return {
-            "kind": "", "cause": "", "source": "",
+            "kind": "", "cause": "", "source": "", "report_gap": report_gap,
             "why": (f"这一行不是 fault 行（axis={axis or '空'}）⇒ 没有缺陷类别"
                     if axis else "这一行没有秘书轴（未判成 / 老行没有这一格）⇒ 没有缺陷类别"),
         }
@@ -2462,6 +2508,7 @@ def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
         step = row.get("defect_step")
         return {
             "kind": "math", "cause": "", "source": "legacy_math_evidence",
+            "report_gap": report_gap,
             "why": (f"行上带数学证据（defect_step={step!r}，"
                     f"error finding={sum(1 for f in findings if str(f.get('level') or '') == 'error')} 条）"
                     " ⇒ math（证据在行上，不是形状推定）"),
@@ -2470,18 +2517,22 @@ def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
     text = _fault_kind_text(row)
     if _looks_like_report_gap(text):
         return {
-            "kind": "report_gap", "cause": "report_gap", "source": "legacy_shape",
-            "why": ("秘书的话只在说「没有记录反例构造尝试」，行上没有数学证据 ⇒ report_gap"
-                    "（业主 2026-11-09 裁定 ①：不算缺陷，不锁 sha、不挡签）"),
+            "kind": "", "cause": "report_gap", "source": "legacy_shape",
+            "report_gap": report_gap,
+            "why": ("秘书的话只在说「没有记录反例构造尝试」，行上没有数学证据 ⇒ "
+                    "cause=report_gap、kind 留空（业主 2026-11-09 裁定 ①：不算缺陷，"
+                    "不锁 sha、不挡签；kind 留空是为了让 clean 行照常算票）"),
         }
     if _looks_like_style(text):
         return {
             "kind": "style", "cause": "", "source": "legacy_shape",
+            "report_gap": report_gap,
             "why": "依据落在排版/术语/文风/价值判断（不归 V 判的面）⇒ style",
         }
     if _looks_like_self_declared(text):
         return {
             "kind": "procedural", "cause": "self_declared", "source": "legacy_shape",
+            "report_gap": report_gap,
             "why": "V 自己说「没逐行验证 / 判不了」⇒ procedural（它没有做出判定）",
         }
     if (str(row.get("verdict") or "").strip() == "成立"
@@ -2489,14 +2540,17 @@ def fault_kind_of(row: Mapping[str, Any]) -> dict[str, Any]:
             and int(row.get("unresolved_errors") or 0) == 0):
         return {
             "kind": "procedural", "cause": "", "source": "legacy_shape",
+            "report_gap": report_gap,
             "why": ("verdict=成立 + findings 空 + unresolved_errors=0 ⇒ procedural"
                     "（legacy_shape：按 D3 §5.3 的行形状推定）"),
         }
     return {
         "kind": "math", "cause": "", "source": "legacy_default",
+        "report_gap": report_gap,
         "why": ("既不显式带 fault_kind、也没有可判的形状 ⇒ math"
                 "（legacy_default：保守兜底，继续锁 sha）"),
     }
+
 
 
 def _mechanical_gate_of(row: Mapping[str, Any]) -> str:
@@ -2513,16 +2567,17 @@ def _mechanical_gate_of(row: Mapping[str, Any]) -> str:
 def vote_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     """这一行为什么算 / 不算「clean 的那一票」（人读的读数；D3 §5.2）。
 
-    → `{vote, why, axis, kind, cause, checked, legacy, kind_source,
+    → `{vote, why, axis, kind, cause, report_gap, checked, legacy, kind_source,
          review_call, review_pass, verification_id, at}`
 
-    `why` ∈ `clean` / `no_judgement` / `axis_fault:<kind>` /
+    `why` ∈ `clean` / `no_judgement` / `axis_fault:<kind 或 cause>` /
     `clean_row_carries_fault_kind` / `mechanical_gate:<哪一道>`。
 
     判据顺序（任一条不成立即 False，fail-closed）：
       ① `secretary_judge.checked=True`（"问过、没判成"不是一票）；
       ② `ledger_axis(row) == "clean"`（fault / 空轴都不是一票）；
-      ③ `fault_kind_of(row)["kind"] == ""`（clean 行带 fault_kind = 矛盾行，不采信）；
+      ③ `fault_kind_of(row)["kind"] == ""`（clean 行带 fault_kind = 矛盾行，不采信；
+         `cause="report_gap"` 不挡票：它不是缺陷，这正是业主裁定 ① 的落点）；
       ④ `row_signable(row)`（未解决 error / 依赖台账读不成 / 引用核实挡签 —— 机械闸）。
 
     刻意不做的事（与 D3 §5.2 逐字一致）：不读 `verdict`、不要求 `review_call`、
@@ -2538,12 +2593,14 @@ def vote_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     axis = ledger_axis(row)
     reading = fault_kind_of(row)
     kind = str(reading.get("kind") or "")
+    cause = str(reading.get("cause") or "")
     out: dict[str, Any] = {
         "vote": False,
         "why": "",
         "axis": axis,
         "kind": kind,
-        "cause": str(reading.get("cause") or ""),
+        "cause": cause,
+        "report_gap": str(reading.get("report_gap") or ""),
         "checked": checked,
         "legacy": _is_legacy_row(row),
         "kind_source": str(reading.get("source") or ""),
@@ -2556,7 +2613,10 @@ def vote_reading(row: Mapping[str, Any]) -> dict[str, Any]:
         out["why"] = "no_judgement"
         return out
     if axis != "clean":
-        out["why"] = f"axis_fault:{kind}" if kind else "no_judgement"
+        if not axis:
+            out["why"] = "no_judgement"
+        else:
+            out["why"] = f"axis_fault:{kind or cause or 'unknown'}"
         return out
     if kind:
         out["why"] = "clean_row_carries_fault_kind"
@@ -2567,6 +2627,7 @@ def vote_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     out["vote"] = True
     out["why"] = "clean"
     return out
+
 
 
 def is_a_vote(row: Mapping[str, Any]) -> bool:

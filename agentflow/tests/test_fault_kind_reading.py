@@ -49,6 +49,7 @@ def _row(
     checked: bool = True,
     fault_kind: str | None = None,
     fault_cause: str | None = None,
+    report_gap: str | None = None,
 ) -> dict[str, Any]:
     """造一行台账（形状与 `verifications/<sid>.jsonl` 的落盘行同一套键）。"""
     judge: dict[str, Any] = {
@@ -61,6 +62,8 @@ def _row(
         judge["fault_kind"] = fault_kind
     if fault_cause is not None:
         judge["fault_cause"] = fault_cause
+    if report_gap is not None:
+        judge["report_gap"] = report_gap
     row: dict[str, Any] = {
         "at": "2026-11-09T10:54:45+08:00",
         "citation_checks": [],
@@ -190,42 +193,65 @@ def _fault_rows() -> list[dict[str, Any]]:
     return [row for row in rows_98b() if VR.ledger_axis(row) == "fault"]
 
 
+def _clean_report_gap_copies() -> list[dict[str, Any]]:
+    """把 98b 的 4 条 report_gap 改写成「D3 新口径下的 clean 行」。
+
+    这是反真空的对象：老行本身 axis=fault（批 1 不改既有轴，所以它们本身不算票）；
+    新口径下同样这 4 条会写成 clean 行 + `fault_kind=""` + `report_gap` 读数。
+    """
+    copies: list[dict[str, Any]] = []
+    for row in _fault_rows():
+        if VR.fault_kind_of(row)["cause"] != "report_gap":
+            continue
+        copy = json.loads(json.dumps(row, ensure_ascii=False))
+        copy["secretary_judge"]["axis"] = "clean"
+        copy["secretary_judge"]["fault_kind"] = ""
+        copy["secretary_judge"]["report_gap"] = "没有写出反例尝试的位置"
+        copy["verdict"] = "成立"
+        copy["unresolved_errors"] = 0
+        copies.append(copy)
+    return copies
+
+
 # ---------------------------------------------------------------- ① 98b 逐条归类
 
 
 def test_98b_six_faults_are_two_math_four_report_gap() -> None:
-    """98b 的 6 条 fault：2 条 math + 4 条 report_gap（逐条对号）。"""
+    """98b 的 6 条 fault：2 条 math + 4 条 report_gap（report_gap 在 cause 上）。"""
     faults = _fault_rows()
     assert len(faults) == 6, "98b 的 fault 行应有 6 条（夹具与附录 B 对不上）"
 
     got = {(str(r["statement_id"]), str(r["verification_id"])): VR.fault_kind_of(r)
            for r in faults}
     expected = {
-        ("000000", "v-000001"): ("report_gap", "legacy_shape"),
-        ("000001", "v-000001"): ("math", "legacy_math_evidence"),
-        ("000001", "v-000003"): ("report_gap", "legacy_shape"),
-        ("000002", "v-000001"): ("report_gap", "legacy_shape"),
-        ("000003", "v-000001"): ("report_gap", "legacy_shape"),
-        ("000004", "v-000001"): ("math", "legacy_math_evidence"),
+        ("000000", "v-000001"): ("", "report_gap", "legacy_shape"),
+        ("000001", "v-000001"): ("math", "", "legacy_math_evidence"),
+        ("000001", "v-000003"): ("", "report_gap", "legacy_shape"),
+        ("000002", "v-000001"): ("", "report_gap", "legacy_shape"),
+        ("000003", "v-000001"): ("", "report_gap", "legacy_shape"),
+        ("000004", "v-000001"): ("math", "", "legacy_math_evidence"),
     }
     assert set(got) == set(expected)
-    for key, (kind, source) in expected.items():
+    for key, (kind, cause, source) in expected.items():
         reading = got[key]
         assert reading["kind"] == kind, (key, reading)
+        assert reading["cause"] == cause, (key, reading)
         assert reading["source"] == source, (key, reading)
     counts = {kind: sum(1 for one in got.values() if one["kind"] == kind)
-              for kind in ("math", "report_gap")}
-    assert counts == {"math": 2, "report_gap": 4}, counts
+              for kind in ("math", "")}
+    assert counts == {"math": 2, "": 4}, counts
+    # 反过来数 cause：4 条 report_gap（这正是业主裁定 ① 的那一档）。
+    assert sum(1 for one in got.values() if one["cause"] == "report_gap") == 4
 
 
 def test_98b_report_gap_rows_only_say_they_did_not_record_a_counterexample() -> None:
-    """4 条 report_gap 的 `kind` 依据：行上没有数学证据，fault 的全内容在秘书的 reason 里。"""
+    """4 条 report_gap 的 `cause` 依据：行上没有数学证据，fault 的全内容在秘书的 reason 里。"""
     gaps = [VR.fault_kind_of(r) for r in _fault_rows()
-            if VR.fault_kind_of(r)["kind"] == "report_gap"]
+            if VR.fault_kind_of(r)["cause"] == "report_gap"]
     assert len(gaps) == 4
     for reading in gaps:
+        assert reading["kind"] == ""
         assert reading["source"] == "legacy_shape"
-        assert reading["cause"] == "report_gap"
         assert "反例" in reading["why"]
     # 反方向：两条 math 的 kind 依据是行上的数学证据，不是措辞。
     maths = [r for r in _fault_rows() if VR.fault_kind_of(r)["kind"] == "math"]
@@ -236,19 +262,23 @@ def test_98b_report_gap_rows_only_say_they_did_not_record_a_counterexample() -> 
 
 
 def test_the_four_report_gap_rows_are_the_four_measured_in_98b() -> None:
-    """反真空（判据本体）：这 4 条的 kind 必须逐个是 report_gap。
+    """反真空（判据本体）：这 4 条的 `cause` 必须逐个是 report_gap，且 `kind` 必须为空。
 
-    如果判据退回 math（`legacy_default` / `legacy_math_evidence`），这一条当场红 ——
-    它不是"kind 在若干允许值里"的同义反复，而是钉住"没记录反例尝试"这一档的读数。
+    如果判据把 report_gap 塞回 kind（哪怕值是 `procedural`），这 4 条就不再是
+    "不是缺陷"那一档：这一条当场红。
     """
     gaps = [(str(r["statement_id"]), str(r["verification_id"]))
-            for r in _fault_rows() if VR.fault_kind_of(r)["kind"] == "report_gap"]
+            for r in _fault_rows() if VR.fault_kind_of(r)["cause"] == "report_gap"]
     assert gaps == [
         ("000000", "v-000001"),
         ("000001", "v-000003"),
         ("000002", "v-000001"),
         ("000003", "v-000001"),
     ], gaps
+    for row in _fault_rows():
+        reading = VR.fault_kind_of(row)
+        if reading["cause"] == "report_gap":
+            assert reading["kind"] == "", reading
 
 
 def test_explicit_fault_kind_wins_and_math_evidence_guards_it() -> None:
@@ -277,6 +307,59 @@ def test_explicit_contract_is_read_from_the_row() -> None:
         reason="稿名解析不出。", fault_kind="contract")
     reading = VR.fault_kind_of(row)
     assert (reading["kind"], reading["source"]) == ("contract", "row")
+
+
+def test_report_gap_is_a_cause_not_a_kind() -> None:
+    """业主裁定 ① 的编码：`report_gap` 不在 kind 里，只在 cause 里。"""
+    assert "report_gap" not in VR.FAULT_KINDS
+    assert "report_gap" not in VR.FAULT_KIND_VALUES
+    assert "report_gap" in VR.FAULT_CAUSES
+
+
+def test_the_key_presence_distinguishes_new_rows_from_legacy_rows() -> None:
+    """键在 + 值为空 = 明确的 clean（source=row）；键不在 = 老行（source 为空）。"""
+    new_row = _row("000012", "v-000001", verdict="成立", axis="clean",
+                   findings=[], defect_step=None, unresolved_errors=0,
+                   reason="", fault_kind="", report_gap="没有写出反例尝试的位置")
+    reading = VR.fault_kind_of(new_row)
+    assert (reading["kind"], reading["cause"], reading["source"]) == ("", "", "row")
+    assert reading["report_gap"] == "没有写出反例尝试的位置"
+    assert VR.vote_reading(new_row)["vote"] is True
+
+    old_row = _row("000013", "v-000001", verdict="成立", axis="clean",
+                   findings=[], defect_step=None, unresolved_errors=0, reason="")
+    assert "fault_kind" not in old_row["secretary_judge"]
+    reading = VR.fault_kind_of(old_row)
+    assert (reading["kind"], reading["cause"], reading["source"]) == ("", "", "")
+    assert VR.vote_reading(old_row)["vote"] is True
+
+
+def test_report_gap_clean_rows_still_vote() -> None:
+    """4 条 report_gap 在 clean 形态下都必须算票（`kind=""`，cause 不参与投票）。"""
+    copies = _clean_report_gap_copies()
+    assert len(copies) == 4
+    for row in copies:
+        reading = VR.vote_reading(row)
+        assert reading["vote"] is True, reading
+        assert reading["kind"] == ""
+        assert reading["report_gap"] == "没有写出反例尝试的位置"
+
+
+def test_misclassifying_report_gap_as_a_kind_stops_the_four_votes(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：把 report_gap 打桩成 kind=procedural，4 条算票的 clean 行当场全变不算票。"""
+    copies = _clean_report_gap_copies()
+    assert [VR.is_a_vote(row) for row in copies] == [True] * 4
+    original = VR.fault_kind_of
+
+    def wrong(row):
+        reading = original(row)
+        if reading.get("report_gap") or reading.get("cause") == "report_gap":
+            return {**reading, "kind": "procedural", "cause": "report_gap"}
+        return reading
+
+    monkeypatch.setattr(VR, "fault_kind_of", wrong)
+    assert [VR.is_a_vote(row) for row in copies] == [False] * 4
 
 
 # ---------------------------------------------------------------- ② is_a_vote 四条反例
@@ -370,11 +453,14 @@ def test_verify_audit_reads_the_four_tables(tmp_path: Path, audit_cli) -> None:
     statements = {(one["statement_id"], one["proof_no"]): one
                   for one in reading["statements"]}
     assert statements[("000000", 1)]["votes"] == 0
-    assert statements[("000000", 1)]["stop_kind"] == "report_gap"
+    assert statements[("000000", 1)]["stop_kind"] == ""
+    assert statements[("000000", 1)]["stop_cause"] == "report_gap"
     assert statements[("000001", 1)]["votes"] == 1
-    assert statements[("000001", 1)]["stop_kind"] == "report_gap"
+    assert statements[("000001", 1)]["stop_kind"] == ""
+    assert statements[("000001", 1)]["stop_cause"] == "report_gap"
     assert statements[("000001", 1)]["need"] == VR.SIGN_STREAK_NEED
     assert statements[("000004", 1)]["stop_kind"] == "math"
+    assert statements[("000004", 1)]["stop_cause"] == ""
 
     assert len(reading["report_gaps"]) == 4
     assert reading["legacy_counts"]["legacy_math_evidence"] == 2
@@ -386,7 +472,8 @@ def test_verify_audit_reads_the_four_tables(tmp_path: Path, audit_cli) -> None:
     flip = reading["flips"][0]
     assert (flip["clean_verification_id"], flip["clean_review_pass"]) == ("v-000002", 1)
     assert (flip["fault_verification_id"], flip["fault_review_pass"]) == ("v-000003", 2)
-    assert flip["fault_kind"] == "report_gap"
+    assert flip["fault_kind"] == ""
+    assert flip["fault_cause"] == "report_gap"
 
 
 def test_verify_audit_writes_nothing(tmp_path: Path, audit_cli) -> None:
