@@ -2684,6 +2684,30 @@ def dispatch_targets(text: Any,
     return found
 
 
+#: 稿头元信息行：`- <键>：<值>`（与 `manuscriptintake._HEAD_FIELD_RE` 同一形状）。
+_MANUSCRIPT_HEAD_FIELD_RE = re.compile(r"^\s*-\s*(?P<key>[^：:]+?)\s*[：:]\s*(?P<value>.*?)\s*$")
+
+
+def _manuscript_head_fields(text: Any) -> dict[str, str]:
+    """稿头（第一个 `##` 之前）的 `- 键：值` ⇒ `{键: 值}`（只读；不猜、不去重语义）。
+
+    为什么放在秘书层：`extract_manuscript` 要把稿头那几格（实验号 / 命题键 / 证据种类）
+    一并带给调用方，而"B 本体不自己读稿"这条边界不许在这里破例 —— 所以切稿头的实现
+    只有这一处，键名的解释由调用方按用途读。
+    """
+    out: dict[str, str] = {}
+    for line in str(text or "").split("\n"):
+        if line.strip().startswith("##"):
+            break
+        matched = _MANUSCRIPT_HEAD_FIELD_RE.match(line)
+        if not matched:
+            continue
+        key = matched.group("key").strip()
+        if key and key not in out:
+            out[key] = matched.group("value").strip()
+    return out
+
+
 class Secretary:
     """一名智能体的秘书（`draft/53` v3 §4：一个共享类 + 每角色一个实例）。
 
@@ -7615,6 +7639,96 @@ class Secretary:
         out.update(dict(got or {}))
         out["checked"] = True
         out["actor"] = f"secretary-{self.role}"
+        return out
+
+    def extract_manuscript(self, rel: Any, cells: Iterable[str]) -> dict[str, Any]:
+        """从一份稿里按调用方指定的格读出来（纯读；不写盘、不写台账、不判签）。
+
+        ## 为什么在秘书层（T1，设计 `_design_T123.md` §2.1 / §2.8）
+
+        业主的形态是「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置和录入格后，
+        从稿中提取内容录入」。于是"从稿里取内容"归秘书：B 本体只把位置 + 格传下来，
+        不自己切节、不自己解析表格、不自己读稿头。真正的逐格解析在
+        `manuscriptintake.extract_cells`（纯函数、零 I/O），本方法只做三件这一层才有的事：
+        读盘、判族/目录、把稿头那几格一并读出来。
+
+        ## 返回（键固定）
+
+        `{checked, path, family, tier, manuscript_id, proof_no, name_proof_no,
+        canonical, head_statement_id, head_proof_no, head_experiment_id,
+        head_statement_text, head_label, declared_kind, sha256, proof_sha256,
+        proof_state, cells, why, error}`。
+
+        - `cells` 是 `extract_cells` 的原样读数（每格 `present / absent / unreadable`）；
+        - `proof_state` 是 `## 证明` 那一节的三态（缺节 ≠ 空节）；
+        - `sha256` 是整份稿的字节 sha，`proof_sha256` 是 `## 证明` 正文的 sha
+          （与签的对拍尺同一把：`proofregistry.proof_sha`）。
+
+        ## 三态（不折平）
+
+        读不到盘 / 不是文本 ⇒ `checked=False` + `why`（这是"没读到"，不是"稿里没有"）；
+        路径不在手稿族（`legacy` / `bad_name` / `unrecognized`）照样给出 `cells`
+        —— `preview` 要能看清历史档里有什么；能不能收录由调用方按 `tier` 拒，
+        本方法不替它做那个决定。
+        """
+        from . import depsection as _DS
+        from . import manuscriptfamily as _MFAM
+        from . import manuscriptintake as _MI
+        from . import proofregistry as _PR
+
+        path = str(rel or "").strip().replace("\\", "/")
+        shape = _MFAM.classify_manuscript(path)
+        out: dict[str, Any] = {
+            "checked": False, "path": path,
+            "family": str(shape.get("family") or ""),
+            "tier": str(shape.get("tier") or ""),
+            "manuscript_id": str(shape.get("manuscript_id") or ""),
+            "proof_no": int(shape.get("proof_no") or 0),
+            "name_proof_no": int(shape.get("proof_no") or 0),
+            "canonical": str(shape.get("canonical") or ""),
+            "head_statement_id": "", "head_proof_no": 0,
+            "head_experiment_id": "", "head_statement_text": "",
+            "head_label": "", "declared_kind": "",
+            "sha256": "", "proof_sha256": "",
+            "proof_state": _MI.EXTRACT_UNREADABLE,
+            "cells": {}, "why": "", "error": {},
+        }
+        if not path:
+            out.update(why="没有给手稿路径 ⇒ 没有可读的稿（不是「稿里没有这一节」）")
+            return out
+        try:
+            text = (self.root / path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            out.update(why=f"读不到 `{path}`（{type(exc).__name__}: {exc}）",
+                       error={"type": type(exc).__name__, "message": str(exc)})
+            return out
+        out["sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        family = str(shape.get("family") or _MFAM.LEGACY_FAMILY)
+        try:
+            readings = _MI.extract_cells(text, family, list(cells))
+        except ValueError as exc:
+            out.update(why=f"这一笔要读的格不合法（{exc}）⇒ 一格都没读")
+            return out
+        out["cells"] = readings
+        proof = readings.get("proof_text") or {}
+        out["proof_state"] = str(proof.get("outcome") or _MI.EXTRACT_ABSENT)
+        out["proof_sha256"] = str((proof.get("source") or {}).get("sha") or "")
+        out["head_statement_id"] = str(_DS.manuscript_statement_id(text) or "").strip()
+        try:
+            out["head_proof_no"] = int(_DS.manuscript_proof_no(text) or 0)
+        except (TypeError, ValueError):
+            out["head_proof_no"] = 0
+        head = _manuscript_head_fields(text)
+        out["head_experiment_id"] = str(head.get("实验号") or "").strip()
+        out["head_statement_text"] = str(head.get("命题键") or "").strip()
+        try:
+            entry = dict(_PR.parse_entry(text) or {})
+        except Exception:  # noqa: BLE001 —— 稿头读不出来就是没有登记元信息（不猜）
+            entry = {}
+        out["head_label"] = str(entry.get("label") or "").strip()
+        declared = str(entry.get("kind") or head.get("证据种类") or "").strip().lower()
+        out["declared_kind"] = declared if declared in PROPOSITION_KINDS else ""
+        out["checked"] = True
         return out
 
     def record_manuscript_dependency_face(self, stmt_id: str, groups: Any, *,

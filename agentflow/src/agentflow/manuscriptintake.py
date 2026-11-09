@@ -54,6 +54,10 @@ EXTRACT_UNREADABLE = "unreadable"
 #: 冲突策略（默认 fail-closed：`refuse`）。
 CONFLICTS: tuple[str, ...] = ("refuse", "overwrite", "append", "keep")
 
+#: 收录的三种模式（设计 §2.3.1）：预览 / 按格回填 / 登记新命题。
+#: 与 `own.ingest_manuscript` 的 `mode` 枚举同一份口径（判据钉住两处相等）。
+INGEST_MODES: tuple[str, ...] = ("apply", "preview", "register")
+
 #: 计划结果的五种 outcome（设计 2.4 / 2.6）。
 PLAN_FILLED = "filled"
 PLAN_UNCHANGED = "unchanged"

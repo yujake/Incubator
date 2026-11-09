@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from .. import manuscriptintake as _MI
 from .. import schema as S
 from ..agentspec import (
     _ARR_I,
@@ -265,6 +266,61 @@ ACTIONS: tuple[ActionSpec, ...] = (
         side_effect="write_local", handler_name="register_statement",
         external="none",
     ),
+
+    # ---- 2026-11-10（T1 收口，设计 `_design_T123.md` §2.2）：B 的「稿 → 签 → 录入」拆成
+    # 两个**显式**动作。写文件与写台账是两件事（一个名字两件事在本仓反复踩过）；而"位置 +
+    # 格"是调用方（B）指定的坐标，不是工具替它挑的 —— 这正是 T1 要修的缺陷。
+    # 两件效果轴都是 `write_local`（land 只写盘上那份稿；ingest 只写既有三个写口），外部轴 none。
+    ActionSpec(
+        "B", "land_manuscript",
+        "把一条**已登记**命题的某一版证明落成 / 就地重写成 `reports/b-proof-<命题号>[-p<N>].md`"
+        "（只写文件，不写台账；同一份正文重放 ⇒ `preserved=true`、一个字节不动）。这是「先拿签」"
+        "那条正路的第一步：落稿 → 派 V 审这一份稿（`V.verify_proof` 带 `proof_manuscript`）→ 再用 "
+        "`own.ingest_manuscript` 按位置收录。**命题拿已经登记的**（`statement_full` 可以不给，"
+        "框架从台账那一行取）；稿名由号拼出，不接受调用方给路径。",
+        _obj({
+            "statement_id": {**_S, "description": "这条命题的号（必须已经在册；没有号 ⇒ 先登记）"},
+            "proof_text": {**_S, "description": "这一版证明正文（逐字）。作者交内容、框架渲染落稿；与在册那一版不同时旧正文进 `proof_history`、旧签按 sha 现算成 stale"},
+            "statement_full": {**_S, "description": "可以不传：不传就取在册那一行的命题正文（业主 2026-11-07：「命题拿已经登记的待优化的」）"},
+            "label": {**_S, "description": "可选：只在台账那一行没有 label 时用；传了也不洗名（洗名仍归登记那一笔）"},
+            "proof_no": {**_I, "minimum": 1, "description": "想落成第几份证明；缺省 1（与既有 `-p<N>` 同名口径）"},
+            "source_manuscript": {**_S, "description": "可选：来源稿路径（页头元信息从它读；没有就按台账与入参渲染）"},
+            "if_match_sha256": {**_S, "description": "可选（并发纪律）：我以为目标稿现在的正文 sha 是它；不符 ⇒ 受控拒 `stale_target`、一个字节都不写"},
+        }, ("statement_id", "proof_text")),
+        "dict（ok / path / written / preserved / signed / sha256 / sha / proof_no / why）",
+        side_effect="write_local", handler_name="land_manuscript", external="none",
+    ),
+
+    # T1 的核心：业主 2026-11-09 逐字「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置和
+    # 录入格后，从稿中提取内容录入」。位置 = target_stmt_id（+ proof_no），格 = cells（闭集），
+    # 提取归秘书（`Secretary.extract_manuscript`，B 本体不读稿）；I1/I2 在返回里机器可核。
+    ActionSpec(
+        "B", "ingest_manuscript",
+        "**位置与格由你指定，工具按块回填**：给 `manuscript`（稿）、`target_stmt_id`（录到哪一条命题）"
+        "与 `cells`（要填哪几格：statement_full / proof_text / dependencies / kind / numeric_evidence），"
+        "框架从稿里按块提取、只回填你点名的格。`target_stmt_id` 是权威：稿头 `- 命题号：` 与它不一致 ⇒ "
+        "受控拒 `manuscript_points_elsewhere`（**不重定向**）；`proof_no` 与稿名 `-p<N>` 不一致 ⇒ "
+        "`proof_no_mismatch`。要先用 `mode=preview` 看「会写哪几格 / 有没有冲突」，再 `mode=apply` 真正"
+        "回填；`mode=register` 登记新命题（继承「按手稿路径收录」那条路，`target_stmt_id` 必须空）。"
+        "**派生列永远不许指定**（label / evidence_kind / origin / line_range / bits / proof_no / "
+        "proof_sha256 / proof_authors / stmt_id）：它们由框架洗、由签现算、或是写口回执。`mode=apply` "
+        "刻意不跑同一性判定 —— 录到哪一条由你点名的 `target_stmt_id` 决定，工具不会把这一笔并到别的行。",
+        _obj({
+            "manuscript": {**_S, "description": "工作区相对路径；只收 `reports/` 下过族表的规范名（`f-proof-*` / `b-proof-*` / `e-proof-*` / `e-num-*`）；`notes/` 与 `-v2` 是 legacy（可 preview、不可收录）"},
+            "target_stmt_id": {**_S, "description": "录入位置：录到**哪一条**命题（`statements.stmt_id`）。`mode=apply` / `preview` 必填；`mode=register` 必须空"},
+            "cells": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": list(_MI.INGEST_CELLS)},
+                      "description": "录入格（闭集）。`mode=register` 缺省按族给全（f/e-proof: statement_full+proof_text+dependencies；e-num: statement_full+numeric_evidence）；每族只收它允许的格（e-num 不收 proof_text）"},
+            "conflict": {"type": "string", "enum": list(_MI.CONFLICTS),
+                         "description": "目标格已有不同值时怎么办：`refuse`（默认，fail-closed）/ `overwrite`（只对 proof_text 有意义，且**仍要过签闸**）/ `append`（-pN 追加到证明清单）/ `keep`（跳过这一格，其余照做）"},
+            "mode": {"type": "string", "enum": list(_MI.INGEST_MODES),
+                     "description": "`preview`=只提取+预检、零写入；`apply`=按格回填在册行；`register`=登记新命题（继承按手稿路径收录那条路）"},
+            "proof_no": {**_I, "minimum": 1, "description": "这一行的第几份证明；缺省从稿名 `-p<N>` 读、再缺省 1。与稿名不一致 ⇒ 受控拒 `proof_no_mismatch`（不重定向）"},
+            "if_match_proof_sha256": {**_S, "description": "可选（并发纪律）：我以为这一行现在的正文 sha；不符 ⇒ 受控拒 `stale_target`"},
+            "reason": {**_S, "description": "可选：一句话说明这一笔为什么录（只进读数与台账 note，不参与判据）"},
+        }, ("manuscript",)),
+        "dict（ok / mode / manuscript / target / requested_cells / cells / diff / derived_write / write / refused / reason）—— `diff` 逐格拉平「请求格 vs 实填格」；`mode=register` 另带 `register` 与 `pointer` 读数",
+        side_effect="write_local", handler_name="ingest_manuscript", external="none",
+    ),
 )
 
 
@@ -417,12 +473,32 @@ SPEC = AgentSpec(
             # 2026-11-04（业主裁定 A 甲，逐字）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
             # 只教可观察的走法（交正文 → 框架落下 b-proof 稿 → 派 V → 签到位 → 再入库），
             # 不写 V 内部怎么连判（那是框架的事，不该由你推断）。
-            "**改写之后先拿签，再入库**：把改写后的正文交一次 `own.register_statement` —— 框架会把它落成"
-            "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节），"
-            "拒信里点名这条稿的路径与下一步；然后派 V 审这一份手稿（`framework_summon` 的 "
-            "`V.verify_proof`，带 `statement_id` + `proof_manuscript`），签到位后签块由收方秘书 "
-            "`secretary:B` 落回稿里；再把这一份稿用 `proof_manuscript` 交回 `own.register_statement` 入库"
-            "（第 3 位翻真、旧正文进 `proof_history`）。",
+            # 2026-11-10（T1 收口）：落稿不再是登记的副作用 —— 显式一步 `own.land_manuscript`。
+            # 这一段此前教的是「把正文交一次 register_statement，框架会把它落成 b-proof」，
+            # D1 之后那句话已经不成立（被拒的登记不再留下稿）。
+            "**改写之后先拿签，再入库**：用 `own.land_manuscript` 把这一版正文落成"
+            "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节；"
+            "只写文件、幂等 —— 同一份正文重放一个字节不动），然后派 V 审这一份手稿"
+            "（`framework_summon` 的 `V.verify_proof`，带 `statement_id` + `proof_manuscript`），"
+            "签到位后签块由收方秘书 `secretary:B` 落回稿里；最后用 `own.ingest_manuscript`"
+            "按 `target_stmt_id` + `cells=[\"proof_text\"]` 收录（第 3 位翻真、旧正文进 "
+            "`proof_history`）。",
+            # 2026-11-09（业主逐字）：「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置和录入格后，
+            # 从稿中提取内容录入」。这是 T1 的唯一验收句 ⇒ 教法必须写清"谁指定什么、工具做什么"。
+            "**收录是「你指定位置和格、工具按块回填」，不是工具替你决定录到哪一条**："
+            "`own.ingest_manuscript` 的两个坐标都由你给 —— `target_stmt_id` 是**位置**"
+            "（录到哪一条命题；稿头 `- 命题号：` 与它不一致 ⇒ 受控拒 "
+            "`manuscript_points_elsewhere`，**工具不会把这一笔挪到别的行**），"
+            "`proof_no` 是这一行的**第几份证明**（与稿名 `-p<N>` 不一致 ⇒ `proof_no_mismatch`）；"
+            "`cells` 是**格**（闭集：`statement_full` / `proof_text` / `dependencies` / "
+            "`kind` / `numeric_evidence`。`label` / `evidence_kind` / `origin` / `line_range` / "
+            "`bits` / `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是派生列，"
+            "**永远不许指定** —— 指定了会被受控拒）。先 `mode=preview` 看要写哪几格、有没有冲突，"
+            "再 `mode=apply` 真正回填（`conflict` 默认 `refuse`：目标格已有不同值时整笔拒，"
+            "想覆盖必须显式给 `overwrite`，而且**仍要过签闸**）。`mode=apply` **不重新判"
+            "「这是不是同一条」**：录到哪一条只由你点名的 `target_stmt_id` 决定 —— 跑同一性判定"
+            "就可能把这一笔并进你没点名的行。`mode=register` 是登记新命题（只递指针那条路，"
+            "`target_stmt_id` 必须空）。",
             # 2026-11-05（D1 严格版 1912d3ed，审计② 第 ⑯ 条）：稿所有权此前只拦不教。
             "**这一笔的稿必须是「这一行自己的」**：本行还没在册（还没有号）⇒ 没有「自己的稿」，"
             "拿别人号的稿来读正文 / 签 / 依赖面都不行；本行在册 ⇒ 稿头 `- 命题号：stmt:<号>`"

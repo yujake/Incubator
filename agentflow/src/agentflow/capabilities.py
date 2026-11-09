@@ -3232,6 +3232,14 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # `table`/`row` 与本动作的 `statement_full`），那种"比上了"比诚实的"没比对"更坏。
     # 与 `A.search_literature` / `H.review_report` 两条同族。
     "B.register_statement",
+    # 2026-11-10（T1，设计 `_design_T123.md` §2.2）：`own.land_manuscript` /
+    # `own.ingest_manuscript` 与 `B.register_statement` 同族 —— 它们是 B 的角色级
+    # 动作（只由 `agent_loop._registry_with_own_action` 包成 `own.*` 工具、只活在
+    # 被派那一趟的循环注册表里），基座 `build_registry()` 里没有同名工具
+    # ⇒ 两层本来就没有可比的那一对。为什么不给它们凑一对同名工具：`land` 写盘、
+    # `ingest` 写台账，都是"B 自己的动作"；塞进 `table.*` / `fs.*` 会把
+    # "位置与格由 B 指定"这条口径重新交回通用写工具（正是 T1 要堵的路）。
+    "B.land_manuscript", "B.ingest_manuscript",
     # 2026-10-13：`G.paper_package` 已从这里拿掉（业主裁定「paper_package 里那些东西都是
     # 古早废案了，我们要智能体写文章」）—— 动作本身、它的三个工具与渲染锚那一格一起退场，
     # 所以"这一格没比对上"的登记也不再需要它。退场面与理由见 `draft/117`。

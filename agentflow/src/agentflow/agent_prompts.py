@@ -3721,7 +3721,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格）；两份 golden 按现值重冻；
 #: `docs/ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
 #: 重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p265"
+#: p265 → p266（2026-11-10，T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作）：
+#: 一格换值 —— B。上游两笔：
+#:   ① `specs/b.py` 的 policy 把「改写之后先拿签，再入库」从 `own.register_statement`
+#:      （D1 之后它不再落稿）改成 `own.land_manuscript` → 派 V → `own.ingest_manuscript`
+#:      按位置与格收录；并新增一整条教法：「位置与格由你指定、工具按块回填」
+#:      （`target_stmt_id` 权威 / 稿头不一致拒 `manuscript_points_elsewhere` /
+#:      `proof_no` 不一致拒 / `cells` 闭集 / 派生列不许指定 / preview→apply / register）；
+#:   ② 同批的两个 ActionSpec（`land_manuscript` / `ingest_manuscript`）只在被派那一趟
+#:      的循环注册表里包成 `own.*`（`tools_lines` 由基座注册表渲染）⇒ 不进十一格；
+#:      动作 summary 只进 function-calling 的 description 与声明快照。
+#: 十一格不是手抄：`temp/_p266_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （B d091cd6f… → 0a45243e…，其余十格逐字未动）。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p266）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p265 同值）；
+#: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+PROMPT_VERSION = "p266"
 
 
 

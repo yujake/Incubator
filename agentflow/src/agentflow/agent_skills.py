@@ -957,11 +957,41 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 不设机械闸：没有人会数你的箭头、也没有人判你写的是不是散文 —— 这三条是口径，
 不是判据。但有一件事是硬的：改写过就是换了一份正文。**改后的正文先落成一份手稿**
-（`reports/b-proof-<命题号>.md`，由 `own.register_statement` 那一笔替你把正文落稿），
+（`reports/b-proof-<命题号>.md`，用 `own.land_manuscript` 显式落稿：只写文件、幂等、
+`statement_full` 可以不给 —— 命题取台账那一行），
 盖在旧正文上的那一签就不再算数（读侧现算 `proof_standing=stale`），
 你必须派 V 审这一份稿（`V.verify_proof`：`statement_id` 给号、`proof_manuscript` 给这份稿的路径
 —— **在册也给稿**；要审第几条证明就带 `proof_no`）；工具结果里带 `proof_standing` 与
 `resign_required`，它点名「派 V 重新签」时照做。
+
+## 收录：位置与格由你指定，工具按块回填
+
+业主 2026-11-09 的形态（逐字）：「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置
+和录入格后，从稿中提取内容录入」。落成两个动作：
+
+| 动作 | 干什么 | 关键读数 |
+|---|---|---|
+| `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `reports/b-proof-<号>[-p<N>].md`（只写文件、不写台账） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
+| `own.ingest_manuscript` | 按你给的**位置 + 格**从稿里提取并回填 | `cells`（逐格 outcome + 来源行号 + sha）/ `diff`（请求格 vs 实填格）/ `write`（写了哪几张表） |
+
+`own.ingest_manuscript` 的四个坐标：
+
+- `manuscript`：稿的路径（只收 `reports/` 下 `f-proof-*` / `b-proof-*` / `e-proof-*` /
+  `e-num-*`；`notes/` 与 `-v2` 是 legacy —— 可 preview、不可收录）；
+- `target_stmt_id`：**位置**（录到哪一条命题）。它是权威：稿头 `- 命题号：` 与它不一致
+  ⇒ 受控拒 `manuscript_points_elsewhere`，**工具不会替你换一行**；
+- `proof_no`：这一行的**第几份证明**；与稿名 `-p<N>` 不一致 ⇒ `proof_no_mismatch`；
+- `cells`：**格**，闭集 `statement_full` / `proof_text` / `dependencies` / `kind` /
+  `numeric_evidence`。`label` / `evidence_kind` / `origin` / `line_range` / `bits` /
+  `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是**派生列**，不许指定。
+
+三种模式：`preview`（只提取 + 预检，**零写入** —— 先看会写哪几格、有没有冲突）、
+`apply`（按格回填在册行；`conflict` 默认 `refuse`，想覆盖 `proof_text` 要显式
+`overwrite` 且**仍要过签闸**）、`register`（登记新命题，`target_stmt_id` 必须空）。
+
+三条硬口径：① `statement_full` 在册行只读（要改命题只能重新登记）；② `mode=apply`
+**不重新判「这是不是同一条」** —— 录到哪一条只由 `target_stmt_id` 决定；③ 每格都有
+outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写）。
 
 逐字只对文献引文要求，不对我们自己的证明要求：`external_lit` 的 `proof_text` 是
 原文那一段逐字摘录（`quote_verified` 的比对对象）；要消化外部证明时，逐字那一格留给

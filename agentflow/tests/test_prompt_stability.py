@@ -1040,6 +1040,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "（V 的冷启动清单）与 `secretary._judge_system(\"v_reply_defect\")`（秘书那一问）"
              "是真实入口、不进 system prompt ⇒ 十一格里只有 V 换值"
              "（9dce764f…）。facts 键集仍 15 格。"},
+    # p265 → p266（2026-11-10，T1：B 的「稿 → 签 → 录入」拆成两个显式动作）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改 `specs/b.py` 的 policy 一段
+    # （显式落稿 → 派 V → 按位置与格收录）与两个只在被派那一趟现装的 `own.*` 动作。
+    {"version": "p266", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p266（2026-11-10，T1）：上游 —— `specs/b.py` 的 policy 把"
+             "「改写之后先拿签」从 `own.register_statement`（D1 之后不再落稿）改成"
+             "`own.land_manuscript` → 派 V → `own.ingest_manuscript`，并新增"
+             "「位置与格由你指定、工具按块回填」（`target_stmt_id` 权威、`cells` 闭集、"
+             "派生列不许指定）。`own.*` 只在被派那一趟的循环注册表里现装，不进"
+             "`tools_lines` ⇒ 十一格里只有 B 换值（0a45243e…）。facts 键集仍 15 格。"},
 
 )
 
