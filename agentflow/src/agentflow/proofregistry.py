@@ -116,23 +116,40 @@ def proposition_fingerprint(proposition: Any) -> str:
 
 
 def proof_sha(proof_text: Any) -> str:
-    """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺）。
+    """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺；全仓库唯一实现）。
 
     2026-11-09（D4）：入参有两种形态 —— 一份手稿（有 `## 证明` 那一节）或
     一段证明正文（登记/重写那一笔直接把正文交进来，没有小节标题）。后者按
     `depsection.proof_body_or_whole` 的显式回退取整份正文（`fell_back=True`
-    在那一格内部），否则 `proof_body` 严格化之后这里会把"一段正文"算成空串的 sha
-    （`e3b0c44…`），版本号与正文 sha 会一起失真。
+    在那一格内部）。
+
+    ## 两种形态各按什么字节算（2026-11-09 T2 收口，这是"一把尺"的定义）
+
+    - 一份手稿：取 `## 证明` 那一节的正文，去掉小节自带的首尾空行后算 sha。
+      这与 V 签盖的是同一段字节（`vsigns.manuscript_proof_body` 同一处归一）。
+    - 一段正文（`fell_back=True`）：逐字节就是它，不再做首尾空行归一。
+      为什么不能顺手 `.strip("\\n")`：这一段正文在 V 那一侧是按原字节算的；
+      多剥一个换行就等于给"同一段正文"造出第二个 sha，跨入口对拍时会变成
+      "签不上"或"签错了也能过"（这正是 T2 收口要消灭的两把尺）。
 
     ## 为什么这里允许"退而取全文"（这一句是给后人的）
     `proof_sha` 的入参在登记/重写路径上就是一段没有 markdown 标题的证明正文
     （`register_or_rewrite` 的 `proof_text`），把它当手稿切小节只会得到空串；
     而 sha 一旦变成空串的 sha，版本记录与 V 签的对拍会同时静默失真。
     所以这一处走显式回退，并且只在这一处用 `proof_body_or_whole`。
+
+    ## 不再调用 `verifications.proof_sha`（递归边界）
+    改前最后一行是 `return _VR.proof_sha(body)`；T2 之后 `verifications.proof_sha`
+    反过来转发本函数（单一实现），所以这里必须直接算 sha —— 否则两个入口互相转发，
+    无限递归。`hashlib` 在本模块已为 `section_hashes` / 命题指纹引入，不新增依赖。
     """
-    reading = _DS.proof_body_or_whole(str(proof_text or ""))
-    body = str(reading.get("body") or "").strip("\n")
-    return _VR.proof_sha(body)
+    raw = str(proof_text or "")
+    reading = _DS.proof_body_or_whole(raw)
+    if bool(reading.get("fell_back")):
+        body = raw
+    else:
+        body = str(reading.get("body") or "").strip("\n")
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------- 分节（切 / 换 / 哈希）

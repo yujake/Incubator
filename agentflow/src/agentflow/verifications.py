@@ -90,7 +90,6 @@ V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / 
 from __future__ import annotations
 
 import datetime as _dt
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -973,8 +972,23 @@ def cold_start_prompt(statement_full: str, proof_text: str,
 
 
 def proof_sha(proof_text: str) -> str:
-    """被审证明的 sha256（钉住"审的是哪一份"；与台账 id 的指纹口径同一套）。"""
-    return hashlib.sha256(str(proof_text or "").encode("utf-8")).hexdigest()
+    """被审证明的 sha256（钉住"审的是哪一份"；与台账 id 的指纹口径同一套）。
+
+    ## 单一实现（2026-11-09 T2 收口）
+
+    真身只有一个：:func:`proofregistry.proof_sha` —— 它认识两种入参（一份手稿 ⇒
+    `## 证明` 那一节；一段证明正文 ⇒ 逐字节）。本函数只转发，不再自带第二把尺。
+
+    为什么必须转发：改前这里是一行裸 `hashlib.sha256(str(proof_text))`，而 V 签盖的是
+    手稿 `## 证明` 那一节的 sha ⇒ 同一个"手稿"经这两个入口会得到两个不同的 sha，
+    跨入口对拍时表现为"签不上"或"签错了也能过"。转发之后两个入口对任何输入同值；
+    对"一段证明正文"这个既有调用面，结果逐字节不变（见 T2 收口报告的逐调用点清单）。
+
+    签名保持 `(proof_text: str) -> str`：既有调用点逐字不改（本批只换实现）。
+    """
+    from . import proofregistry as _PR
+
+    return _PR.proof_sha(proof_text)
 
 
 #: 一条证明（或一条命题）相对「它现在这一份正文」的六种读数（唯一口径在
