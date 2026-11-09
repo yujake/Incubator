@@ -3,19 +3,19 @@
 
 ## 这一条钉的是什么
 
-审计（`temp/_audit_steps_and_timeouts.md` §2.1）确认：`observe_message` 把**任何**
+审计（`temp/_audit_steps_and_timeouts.md` §2.1）确认：`observe_message` 把「任何」
 `agent_message` 记成时钟事件，而 `_event_hits` 按 `task_id / from_task_id` 命中 ⇒
 子的「步数报告」被父的等待计时器当成「它说了话」，生成「时间到」notice（真机 33 条
 「时间到」里有 8 条就是这么来的）。
 
-改法：发送侧给进度留言带 `extra={"progress": True}`；观测侧读到这一格就**只落消息、
-不 `observe_event`**（消息本身已由 `send_message` 落进会话，父下一步照常读到）。
+改法：发送侧给进度留言带 `extra={"progress": True}`；观测侧读到这一格就「只落消息、
+不 `observe_event`」（消息本身已由 `send_message` 落进会话，父下一步照常读到）。
 
 ## 三条判据（两条正控 + 一条反真空）
 
 1. 带 `progress` 的留言：`observe_message` 返回 `None`，事件窗里 `message` / `delivery`
    都是 0，那条等它的计时器仍是 `pending`，下一拍 `fire_due` 一条都不投；
-2. 同一条留言**摘掉** `progress`：它立刻被记成事件、消账命中那条计时器，下一拍以
+2. 同一条留言「摘掉」`progress`：它立刻被记成事件、消账命中那条计时器，下一拍以
    `target_event` 投出去 —— 这就是「把标记摘掉 ⇒ 不该唤醒的唤醒又出现」的反真空；
 3. 留言本身仍送达：`send_message(..., extra={"progress": True})` 落盘带 `progress=True`，
    `read_messages` 从父的收件箱读得到（"不唤醒"不等于"没送到"）。

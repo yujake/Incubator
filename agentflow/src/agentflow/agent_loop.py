@@ -4448,11 +4448,11 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
                      f"summons_total={total} unconsumed={bad}：{why}")}
 
 
-#: 步数上报的节奏（D11，2026-11-09）：`0`（含负数）= **不上报**。
+#: 步数上报的节奏（D11，2026-11-09）：`0`（含负数）=「不上报」。
 #:
 #: 这不是"关掉闸" —— 闸本来就没有（业主 2026-10-10 裁定 12-K：不设步数硬闸，
 #: 循环的步号计数器无限）。它关掉的只是"每满 N 步向父代理报一次账"这条进度上报。
-#: 改前是 `max(1, n)`：给 0 会变成 1 ⇒ **每步都报**，方向正好相反。
+#: 改前是 `max(1, n)`：给 0 会变成 1 ⇒「每步都报」，方向正好相反。
 def _step_report_every(max_steps: Any) -> int:
     """上报节奏的规范值：`<= 0` 折成 0（= 不上报），其余原样。"""
     n = int(max_steps)

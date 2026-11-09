@@ -4682,7 +4682,7 @@ def observe_message(rec: Mapping[str, Any]) -> ObservedEvent | None:
     认法（三态归到三类里，不许漏）：
 
     - `kind != "agent_message"` => 不是消息，返回 `None`；
-    - `progress` 为真 => **只落消息、不记事件**，返回 `None`（D11 第③件：进度对账
+    - `progress` 为真 => 「只落消息、不记事件」，返回 `None`（D11 第③件：进度对账
       不许唤醒"等它"的计时器；消息本身已由 `send_message` 落在会话里，父照常读得到）；
     - 有 `reply_to` => `reply`（对某条消息的答复）；
     - 其余 => `message`。
@@ -4696,7 +4696,7 @@ def observe_message(rec: Mapping[str, Any]) -> ObservedEvent | None:
         #: 进度上报（D11 第③件，2026-11-09）：`send_message(..., extra={"progress": True})`
         #: 标记的是"还在跑"的对账（每满 N 步的步数报告），不是"被等对象说了话"。
         #: 消息本身已经落进会话（`send_message` 先 append，本钩子只是旁路）⇒ 父下一步
-        #: 照常从收件箱读到；这里只是**不**把它记成时钟事件 ⇒ 不参与 `_event_hits`、
+        #: 照常从收件箱读到；这里只是「不」把它记成时钟事件 ⇒ 不参与 `_event_hits`、
         #: 也不触发 `target_event` 唤醒（否则父的等待计时器会被一条进度留言叫醒，
         #: 真机 33 条「时间到」里有 8 条就是这么来的）。
         return None

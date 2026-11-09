@@ -168,7 +168,7 @@ def test_zero_max_steps_means_no_report_at_all(tmp_path: pathlib.Path) -> None:
 
     ## 反真空（改前红在哪）
     改前 `next_report_at = max(1, 0) = 1` ⇒ 第 1 步就跨过、之后每步再跨一次 ⇒
-    同一趟 5 步会落 **5 条**「步数报告」。所以这一条用"步数真的走了 ≥5 步"做前提：
+    同一趟 5 步会落「5 条」步数报告。所以这一条用"步数真的走了 ≥5 步"做前提：
     旧代码在这里必然给 5 条，新代码必须给 0 条 —— 把 `0` 再折回 `max(1, n)`，它立刻红。
     """
     run, root = _top_run(tmp_path, sid="test-zero", max_steps=0)
