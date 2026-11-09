@@ -35,6 +35,7 @@ from agentflow import conductor as CND
 from agentflow import secretary as SEC
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow import vreceipts as VRC
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
@@ -107,6 +108,30 @@ def _reproof(st: Store, sid: str = SID, *, proof: str = PROOF2) -> None:
         row = next(r for r in tx.rows("statements") if str(r.get("stmt_id")) == sid)
         row["proof_text"] = proof
         tx.upsert("statements", row)
+
+
+def _fully_sign(st: Store, sid: str = SID, *, proof: str = PROOF) -> dict:
+    """三票同源 + `vsigns.issue` 写签（D268 批 2 的正控形状）。"""
+    call = "call-1"
+    rows = []
+    for n in (1, 2, 3):
+        rows.append(VR.record_verification(
+            st.root, statement_id=sid, proof_text=proof,
+            verdict={"verdict": "成立", "findings": []},
+            secretary_judge={"axis": "clean", "checked": True,
+                             "reason": "夹具：秘书的语义判定"},
+            flip=False, review_call=call, review_pass=n))
+    sha = VS._sign_sha(proof)
+    passes = [{"verification_id": str(r["verification_id"]),
+               "at": str(r.get("at") or ""), "proof_sha256": sha,
+               "review_call": call, "review_pass": n}
+              for n, r in zip((1, 2, 3), rows)]
+    got = VS.issue(st.root, artifact_sha=sha, streak=3, need=3,
+                   ledger=f"verifications/{sid}.jsonl#{rows[-1]['verification_id']}",
+                   statement_id=sid, proof_no=1, passes=passes,
+                   at=str(rows[-1].get("at") or ""), by="secretary:B")
+    assert got.get("written") is True or got.get("idempotent") is True, got
+    return got
 
 
 def _verify(st: Store, sid: str = SID, *, proof: str = PROOF,
@@ -197,8 +222,11 @@ def test_the_count_is_red_before_any_sign_exists(tmp_path):
 
 # ------------------------------------------------------------------ ② 重送并成立 ⇒ 归 0
 
-def test_resubmitted_and_held_returns_to_zero(tmp_path):
-    """② 打回 → 改稿 → 重送拿到干净「成立」⇒ 归 0（连续 3 次是发签门槛，不是"没签过"）。"""
+def test_resubmitted_and_held_is_awaiting_streak_not_zero(tmp_path):
+    """② 打回 → 改稿 → 重送拿到 1 条干净「成立」⇒ 欠签（`awaiting_streak`），不是归 0。
+
+    D268 批 2 的翻转（业主 2026-11-09 裁定 ①）：一条 clean 行 = 1/3，是过程不是结论。
+    """
     st = _ws(tmp_path)
     _put(st)
     _verify(st)
@@ -208,8 +236,13 @@ def test_resubmitted_and_held_returns_to_zero(tmp_path):
     row = _verify(st, proof=PROOF2, verdict="成立", fault=False, step=None)
     assert row.get("verification_id") == "v-000002", row
     got = _unsigned(st)
-    assert got["count"] == 0, got
-    assert got["rows"] == [], got["rows"]
+    assert got["count"] == 1, got
+    assert got["rows"][0]["class"] == "awaiting_streak", got["rows"][0]
+    assert "1/3" in str(got["rows"][0]["why"]), got["rows"][0]
+
+    # 再送满三票 + 发签 ⇒ 这一条才真的归 0。
+    _fully_sign(st, proof=PROOF2)
+    assert _unsigned(st)["count"] == 0, _unsigned(st)
 
 
 def test_a_clean_sign_on_one_proof_does_not_cover_another(tmp_path):
@@ -227,7 +260,10 @@ def test_a_clean_sign_on_one_proof_does_not_cover_another(tmp_path):
     _verify(st, proof=PROOF, verdict="成立", fault=False, step=None)
     got = _unsigned(st)
     assert got["count"] == 1, got
-    assert got["rows"][0]["proofs"][0]["proof_no"] == 2, got["rows"][0]["proofs"]
+    proofs = {p["proof_no"]: p for p in got["rows"][0]["proofs"]}
+    assert set(proofs) == {1, 2}, proofs
+    assert proofs[1]["class"] == "awaiting_streak", proofs
+    assert proofs[2]["class"] == "never_submitted", proofs
 
 
 # ------------------------------------------------------------------ ③ 明确放弃
@@ -521,14 +557,14 @@ def test_the_gate_names_at_most_six_and_counts_the_rest(tmp_path):
 
 
 def test_the_gate_is_green_when_every_statement_is_signed_or_abandoned(tmp_path):
-    """⑤ 的正控：重送并成立 ⇒ 门绿（0 条未签）；没有 statements ⇒ 也绿。"""
+    """⑤ 的正控：重送并拿到签 ⇒ 门绿（0 条未签）；没有 statements ⇒ 也绿。"""
     st = _ws(tmp_path)
     empty = _closing(st)
     assert empty.blockers == [] and empty.machine_pass is True, empty.to_dict()
     _put(st)
     _verify(st)
     _reproof(st)
-    _verify(st, proof=PROOF2, verdict="成立", fault=False, step=None)
+    _fully_sign(st, proof=PROOF2)
     rep = _closing(st)
     assert rep.blockers == [], [f.to_dict() for f in rep.findings]
     assert rep.machine_pass is True, rep.to_dict()

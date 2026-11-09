@@ -60,7 +60,7 @@ RAW = ("# F 的证明手稿：一致连续\n\n"
 
 
 def _body_sha() -> str:
-    return VR.text_sha(VS.manuscript_proof_body(RAW))
+    return VS._sign_sha(VS.manuscript_proof_body(RAW))
 
 
 def _manuscript(*, manuscript_id: str = SID, sign: bool = True,
@@ -82,11 +82,23 @@ def _ws(tmp_path: pathlib.Path, *, manuscript: str, carried_path: str | None = N
     st = Store(tmp_path / "ws")
     st.init()
     root = pathlib.Path(st.root)
-    # 签的背书：三行真台账（`flip=False`：这一组量的是寻址与签闸，不是第 3 位）。
+    # 签的背书：三行真台账 + 一份可复算的签（D268 批 2：块不是签）。
+    rows = []
     for _ in range(int(VR.SIGN_STREAK_NEED)):
-        VR.record_verification(str(root), statement_id=SID, proof_text=PROOF,
-                               verdict={"verdict": "成立", "findings": []},
-                               verifier="agent-V", flip=False, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+        rows.append(VR.record_verification(
+            str(root), statement_id=SID, proof_text=PROOF,
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", flip=False,
+            secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                             "reason": "夹具：秘书判 clean"}))
+    sha = VS._sign_sha(PROOF)
+    passes = [{"verification_id": str(r["verification_id"]),
+               "at": str(r.get("at") or ""), "proof_sha256": sha}
+              for r in rows]
+    got = VS.issue(str(root), artifact_sha=sha, streak=3, need=3,
+                   ledger=f"verifications/{SID}.jsonl#{rows[-1]['verification_id']}",
+                   statement_id=SID, proof_no=1, passes=passes, by="secretary:B")
+    assert got.get("written") is True or got.get("idempotent") is True, got
     (root / "reports").mkdir(parents=True, exist_ok=True)
     if manuscript:
         (root / REL).write_text(manuscript, encoding="utf-8")
@@ -173,8 +185,11 @@ def test_a_addressing_reads_ds_list_with_zero_model_calls(tmp_path: pathlib.Path
     got = _register(st, seam)
 
     assert got.get("ok") is True, got
-    v_sign = dict(got.get("v_sign") or {})
-    assert v_sign.get("applied") is True, v_sign
+    # D268 批 2：这一条路径把签的读数放在 `sign_filing` 里（可复算凭据），
+    # 不再依赖 `v_sign.applied` 这个"块认签"的旧格。
+    filing = dict(got.get("sign_filing") or {})
+    assert filing.get("manuscript_signed") is True, filing
+    assert filing.get("state") in ("signed", "signed_pending_filing"), filing
     addr = dict(got.get("addressing") or {})
     assert addr.get("mode") == "auto", addr
     assert addr.get("source") == _DS.SOURCE_CARRIED, addr

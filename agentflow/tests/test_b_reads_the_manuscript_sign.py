@@ -46,7 +46,7 @@ MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               "|---|---|---|---|\n"
               "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
 PROOF = _DS.proof_body(MANUSCRIPT).strip("\n")
-REL = "reports/f-proof-plan-0000.md"
+REL = "reports/f-proof-0000.md"
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -61,19 +61,32 @@ def _manuscript(st: Store, *, block: bool = True, signed: bool = True,
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    want = sha or VR.text_sha(body)
+    want = sha or VS._sign_sha(body)
     # 2026-11-05 晚（业主）：签块必须有独立台账背书 —— 稿头自述（`reports/… #V签`）
-    # 是假签。夹具在这里先落一行 pending 台账，再把它的锚点写进块里（真签的形状）。
-    row = VR.record_pending_sign(
+    # 是假签。D268 批 2 起"有签"还要求凭据可复算：夹具落三行 pending + `vsigns.issue`
+    # 写签（块只是视图，不再是签的来源）。
+    rows = [VR.record_pending_sign(
         st.root, proof_text=body,
         verdict=({"verdict": verdict} if verdict == "成立" else {
             "verdict": verdict, "defect_step": 2,
             "quote": "夹具：第 1 步直接取 δ=ε", "why": "夹具：对一般连续函数不成立"}),
-        verifier="agent-V", object_path=REL, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+        verifier="agent-V", object_path=REL,
+        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                         "reason": "夹具：秘书判 clean"})
+        for _ in range(3)]
     ledger = (f"verifications/pending/"
-              f"{str(row.get('object_sha256') or row.get('proof_sha256'))}.jsonl"
-              f"#{row.get('verification_id')}")
-    if block and want != VR.text_sha(PROOF):
+              f"{str(rows[-1].get('object_sha256') or rows[-1].get('proof_sha256'))}.jsonl"
+              f"#{rows[-1].get('verification_id')}")
+    if block and verdict == "成立" and want == VS._sign_sha(PROOF):
+        passes = [{"verification_id": str(r.get("verification_id") or ""),
+                   "at": str(r.get("at") or ""), "proof_sha256": want}
+                  for r in rows]
+        got = VS.issue(st.root, artifact_sha=want, streak=3, need=3,
+                       ledger=ledger, statement_id="", proof_no=1,
+                       passes=passes, artifact_path=REL,
+                       at="2026-11-02T10:00:00+08:00")
+        assert got.get("written") is True, got
+    if block and want != VS._sign_sha(PROOF):
         # ③ 号那一档要的是"盖着另一版正文的块"：`write_manuscript_sign` 自 2026-11-02
         # 起会核「这份稿的正文 == 被签的那一份」并拒掉这一笔（body_mismatch），
         # 所以夹具在这里直接拼块（纯字符串），才量得到"B 不借旧版的签"这件事。
@@ -108,8 +121,8 @@ def _row(st: Store) -> dict:
 
 
 # ============================================================ ① 读到签
-def test_a_the_manuscript_block_is_read_at_registration(tmp_path):
-    """① 手稿带签块 ⇒ B 收下，第 3 位按签写。"""
+def test_a_a_manuscript_with_a_recomputable_sign_is_read_at_registration(tmp_path):
+    """① 手稿带可复算的 V 签 ⇒ B 收下，第 3 位按签写（块只是视图）。"""
     st = _ws(tmp_path)
     text = _manuscript(st)
     got = _register(st, text)
@@ -117,7 +130,8 @@ def test_a_the_manuscript_block_is_read_at_registration(tmp_path):
     assert got.get("ok") is True, got
     v_sign = dict(got.get("v_sign") or {})
     assert v_sign.get("applied") is True, v_sign
-    assert "手稿" in str(v_sign.get("why") or ""), v_sign
+    why = str(v_sign.get("why") or "")
+    assert ("凭据" in why or "复算" in why or "认领" in why), v_sign
     bits = dict(_row(st).get("bits") or {})
     assert bits.get("reviewed") is True, bits
 

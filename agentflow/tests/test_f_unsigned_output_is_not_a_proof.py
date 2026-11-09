@@ -28,6 +28,8 @@ from agentflow.agent_f import AgentF
 from agentflow.agent_f import delivery as FD
 from agentflow.store import Store
 
+from _credential_fixture import issue_credential
+
 AT = "2026-11-02T10:00:00+08:00"
 
 
@@ -121,9 +123,11 @@ def _sign(st: Store, sid: str) -> None:
     rel = f"reports/f-proof-{sid}.md"
     path = pathlib.Path(st.root) / rel
     body = _DS.proof_body(path.read_text(encoding="utf-8")).strip("\n")
+    issue_credential(st.root, proof_text=body, statement_id=sid, manuscript=rel)
     wrote = VS.write_manuscript_sign(
-        st.root, rel, proof_sha=VR.text_sha(body), streak=3, need=3,
-        verdict="成立", signer="V", at=AT, ledger=f"{rel}#V签",
+        st.root, rel, proof_sha=VS._sign_sha(body), streak=3, need=3,
+        verdict="成立", signer="V", at=AT,
+        ledger=f"verifications/{sid}.jsonl#v-000003",
         statement_id=sid, signed=True)
     assert wrote.get("written") is True, wrote
 

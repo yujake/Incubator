@@ -205,7 +205,8 @@ def test_c1_a_self_referential_ledger_is_a_fake_sign(tmp_path):
                                       statement_id="", manuscript_text=text,
                                       manuscript_path=b_rel, store=None)
     assert reading.get("applied") is False, reading
-    assert reading.get("code") == VS.SIGN_WITHOUT_LEDGER, reading
+    # 块不是签：唯一的读口读不出这一版有任何凭据。
+    assert VS.sign_reading(st.root, statement_id="", proof_text=PROOF)["state"] != "signed"
     assert dict(new).get("reviewed") is not True, new
     # 颁发那一侧同样拒（同一个形状，`issue` 是写签的唯一入口）。
     wrote = VS.issue(st.root, artifact_sha=SHA, streak=3, need=3,
@@ -252,7 +253,9 @@ def test_c3_a_plan_manuscript_carries_no_sign(tmp_path):
                                        statement_id="", manuscript_text=text,
                                        manuscript_path=plan_rel, store=None)
     assert reading.get("applied") is False, reading
-    assert "计划稿" in str(reading.get("why") or ""), reading
+    # 计划稿从来不是签的载体：新读口也读不出签（块只是视图）。
+    assert VS.sign_reading(st.root, statement_id="", proof_text=PROOF,
+                           manuscript_path=plan_rel)["state"] != "signed"
 
     wrote = VS.issue(st.root, artifact_sha=SHA, streak=3, need=3,
                      artifact_path=plan_rel, ledger=f"verifications/pending/{SHA}.jsonl#u-000003",

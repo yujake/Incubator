@@ -2345,8 +2345,9 @@ class _RegisterStatement:
           它交的是在册那一行的正文，干的是读稿登记依赖面（那条路不能因此被堵死）。
         - 文献侧（`origin="external_lit"` 且有 `source_lit_id`）⇒ 免签：占位签就是
           文献编号（`draft/179` 二之二「假V签，但要允许进台账」）。
-        - 其余 ⇒ 每一份要写的正文都要有覆盖它的签：在册台账（`_signature_covers`）或
-          手稿签块（`v_sign.applied`，sha 相符才算）。缺一份就整笔拒。
+        - 其余 ⇒ 每一份要写的正文都要有覆盖它的签：唯一判据是
+          `vsigns.sign_reading.state == "signed"`（`_signature_covers`）。D268 批 2
+          起手稿块不再是旁路：块只是渲染视图，认签必须有可复算的凭据。缺一份就整笔拒。
 
         ## 为什么拒而不是"降档收下"
 
@@ -2474,42 +2475,39 @@ class _RegisterStatement:
 
     @staticmethod
     def _signature_covers(store: Any, *, stmt_id: str, proof_no: Any, text: str) -> dict:
-        """这一份正文有没有一份覆盖它的 V 签（判据只有一处：`review_standing`）。
+        """这一份正文有没有一份覆盖它的 V 签（D268 批 2 起判据只有 `sign_reading`）。
 
         业主 2026-11-02 的两阶段录入把"洗过"与"有签"绑成一句话：「洗过的肯定能保证V签」。
-        于是 `optimized=true` 这一格背后必须真有一签 —— 而"这一签算不算数"的判定口
-        全仓只有 `verifications.review_standing`（现行正文的 sha、连续次数、秘书判定
-        都在它里面）。这里只把结论翻成布尔 + 三态读数，不另写第二份判据。
+        于是 `optimized=true` 这一格背后必须真有一签 —— 判据只认
+        `vsigns.sign_reading.state == "signed"`（签文件必须可复算；手稿块只是视图）。
+        这里只把结论翻成布尔 + 三态读数，不另写第二份判据。
 
-        三态（不折平）：`signed` ⇒ true；`holding` 且秘书没判 fault ⇒ true
-        （业主 2026-11-01 验收口径：重送之后拿到一次干净的「成立」就归 0，`holding`
-        只是发签门槛没到，不是"没签过"）；其余（`unsigned` / `stale` / `rejected` /
-        `unreadable`）⇒ false，并给 `why`（拒收理由由调用方原话带回）。
+        三态（不折平）：`signed` ⇒ true；其余（`holding` / `retry_report` /
+        `unissued` / `stale` / `unbacked` / `borrowed` / `unsigned` / `unreadable`）
+        ⇒ false，并给 `why`（拒收理由由调用方原话带回）。
         """
-        out: dict = {"checked": False, "signed": False, "state": "unreadable", "why": ""}
+        out: dict = {"checked": False, "signed": False, "state": "unreadable",
+                     "votes": 0, "need": 0, "why": ""}
         root = getattr(store, "root", None) if store is not None else None
         sid = str(stmt_id or "").strip()
-        if root is None or not sid:
-            out["why"] = "没有工作区根 / 没有命题号 ⇒ 这一格没查成（不当作签过）"
+        if root is None:
+            out["why"] = "没有工作区根 ⇒ 这一格没查成（不当作签过）"
             return out
+        from .. import vsigns as _VS
+
         try:
-            got = dict(_VR.review_standing(root, statement_id=sid, proof_text=text,
-                                           proof_no=proof_no))
+            # `sid` 可以为空（未在册）：那一档按正文 sha 找 pending 凭据
+            # （`sign_reading` 的 `statement_id=""` 支），不要求先有号。
+            got = dict(_VS.sign_reading(root, statement_id=sid, proof_text=text,
+                                        proof_no=proof_no))
         except Exception as exc:  # noqa: BLE001 —— 读不出来要如实说，不许折成"没签过"
-            out["why"] = f"审校台账读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+            out["why"] = f"签的读数没读成（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
             return out
         state = str(got.get("state") or "unsigned")
         out.update(checked=bool(got.get("checked")), state=state,
+                   votes=int(got.get("votes") or 0), need=int(got.get("need") or 0),
                    why=str(got.get("why") or ""))
-        if state == "signed":
-            out["signed"] = True
-            return out
-        if state == "holding" and not bool(got.get("secretary_fault")):
-            out.update(signed=True,
-                       why=("连续读数 {}/{} 签「成立」（还没到发签门槛，但这一份真审过）"
-                            .format(int(got.get("streak") or 0), int(got.get("need") or 0))
-                            + (f"；{got.get('why')}" if got.get("why") else "")))
-            return out
+        out["signed"] = state == "signed"
         return out
 
     @staticmethod

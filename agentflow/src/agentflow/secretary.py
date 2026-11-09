@@ -1672,6 +1672,35 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
                            "（`kind=\"conjecture\"`）→ 让 V 审那一份手稿（带 `proof_manuscript`）"
                            "→ 再把这一份正文交回同一 `statement_full`。"))
         return out
+    # ---- D268 批 2：签这一格只认 `sign_reading.state=="signed"`（可复算的凭据）----
+    # 手稿载体那一道还留在下面（这一道只判"签有没有手稿载体"）：两条合起来才是这一格
+    # 的原意 —— 签是真的（凭据可复算），而且它在手稿上（不是内联签）。
+    from . import vsigns as _VS
+
+    sign = _VS.sign_reading(store.root, statement_id=out["statement_id"],
+                            proof_text=text, proof_no=no, store=store)
+    out["sign"] = dict(sign)
+    if not bool(sign.get("checked")):
+        out.update(checked=False, ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=(f"签的读数没查成（{sign.get('why') or '没有读数'}）⇒ "
+                           "判不了这一份正文有没有手稿签（没查成不是通过）"))
+        return out
+    if str(sign.get("state") or "") != "signed":
+        votes = int(sign.get("votes") or 0)
+        need = int(sign.get("need") or _VR.SIGN_STREAK_NEED)
+        state = str(sign.get("state") or "")
+        if defer_without_sign:
+            out["reason"] = (f"这一份正文的签读数是 {votes}/{need}（state={state}）⇒ "
+                             "有没有签由 B 的 `_unsigned_proof_gate` 判"
+                             "（这一道只判'签有没有手稿载体'）")
+            return out
+        out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
+                   reason=(f"这一份正文（sha {sha[:12]}…）的签读数是 {votes}/{need}"
+                           f"（state={state}）⇒ 不能进台账。"
+                           f"{sign.get('why') or ''}。正路：让 V 把这一份正文审到连续 "
+                           f"{need} 次「成立」并由收方秘书发签（`vsigns.issue` 写 "
+                           f"`out/vsigns/<正文sha>.json`），再入库。"))
+        return out
     try:
         ledger, bad = _VR.list_verifications(store.root, statement_id=out["statement_id"],
                                              limit=None)

@@ -38,6 +38,8 @@ from agentflow.agent_f import AgentF
 from agentflow.agent_f import vsign as FVS
 from agentflow.store import Store
 
+from _credential_fixture import issue_credential
+
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               "- 命题号：stmt:（还没落号）\n"
@@ -64,11 +66,15 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _stamp(st: Store, *, signed: bool = True, verdict: str = "成立",
-           sha: str = "", rel: str = REL) -> dict:
+           sha: str = "", rel: str = REL, credential: bool = True) -> dict:
+    """D268 批 2：先发一份可复算的签，再把块盖上去当视图。"""
+    if signed and credential:
+        issue_credential(st.root, proof_text=PROOF, manuscript=rel)
     return VS.write_manuscript_sign(
-        st.root, rel, proof_sha=sha or VR.text_sha(PROOF),
+        st.root, rel, proof_sha=sha or VS._sign_sha(PROOF),
         streak=3 if signed else 0, need=3, verdict=verdict, signer="V",
-        at="2026-11-02T10:00:00+08:00", ledger=f"{rel}#V签", statement_id="",
+        at="2026-11-02T10:00:00+08:00",
+        ledger="verifications/000000.jsonl#v-000003", statement_id="",
         signed=signed)
 
 
@@ -87,7 +93,8 @@ def test_a_a_sign_block_in_the_manuscript_reads_as_signed(tmp_path):
     assert reading["state"] == FVS.STATE_SIGNED, reading
     assert reading["label"] == "已签", reading
     assert reading["delivered"] is True, reading
-    assert reading["channel"] == FVS.CHANNEL_MANUSCRIPT, reading
+    # 没号那一档按正文 sha 认 pending 凭据（批 2 起块只是视图）。
+    assert reading["channel"] == FVS.CHANNEL_PENDING, reading
 
 
 # ============================================================ b：待签
@@ -106,8 +113,17 @@ def test_b_a_proof_without_a_sign_reads_as_waiting(tmp_path):
 def test_c_a_rejected_block_reads_as_not_passed(tmp_path):
     """c 造「V 判过、没过」⇒ 未通过（不是待签、不是已签）。"""
     st = _ws(tmp_path)
-    _stamp(st, signed=False, verdict="有毛病")
-    reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
+    _stamp(st, signed=False, verdict="有毛病", credential=False)
+    # 打回是台账行的事实（批 2 起块只是视图）：落一行 math 打回。
+    VR.record_verification(
+        st.root, statement_id="000000", proof_text=PROOF,
+        verdict={"verdict": "有毛病", "defect_step": 2,
+                 "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
+                               "detail": "夹具：第 2 步直接用了结论"}]},
+        secretary_judge={"axis": "fault", "checked": True, "reason": "夹具：判 fault"},
+        flip=False)
+    reading = FVS.delivery_reading(st.root, proof_text=PROOF, statement_id="000000",
+                                   manuscript_paths=(REL,))
     assert reading["state"] == FVS.STATE_REJECTED, reading
     assert reading["label"] == "未通过", reading
     assert reading["delivered"] is False, reading
@@ -116,26 +132,23 @@ def test_c_a_rejected_block_reads_as_not_passed(tmp_path):
 
 
 # ============================================================ d：反真空
-def test_d1_deleting_the_block_falls_back_to_waiting(tmp_path):
-    """d1 反真空：删掉手稿签块 ⇒ 回落成待签（读数真的在读盘，不是恒绿）。"""
+def test_d1_deleting_the_credential_falls_back_to_waiting(tmp_path):
+    """d1 反真空：删掉签文件（凭据）⇒ 回落成待签（块还在也不算签）。"""
     st = _ws(tmp_path)
     _stamp(st)
     assert FVS.delivery_reading(st.root, proof_text=PROOF,
                                 manuscript_paths=(REL,))["state"] == FVS.STATE_SIGNED
-    path = pathlib.Path(st.root) / REL
-    text = path.read_text(encoding="utf-8")
-    path.write_text("\n".join(ln for ln in text.split("\n")
-                              if not ln.strip().startswith(VS.SIGN_MARK)),
-                    encoding="utf-8")
+    sha = VS._sign_sha(PROOF)
+    (pathlib.Path(st.root) / "out" / "vsigns" / f"{sha}.json").unlink()
     after = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert after["state"] == FVS.STATE_WAITING, after
     assert after["delivered"] is False, after
 
 
 def test_d2_a_block_for_another_body_does_not_count(tmp_path):
-    """d2 反真空：签块盖的是另一版正文 ⇒ 不算签（改过稿就要重签）。"""
+    """d2 反真空：只有一块盖另一版的字、没有凭据 ⇒ 不算签（块不是签）。"""
     st = _ws(tmp_path)
-    _stamp(st, sha=VR.text_sha(PROOF + "改一个字"))
+    _stamp(st, sha=VS._sign_sha(PROOF + "改一个字"), credential=False)
     reading = FVS.delivery_reading(st.root, proof_text=PROOF, manuscript_paths=(REL,))
     assert reading["state"] != FVS.STATE_SIGNED, reading
     assert reading["delivered"] is False, reading
@@ -208,15 +221,17 @@ def test_the_step_cell_says_not_delivered_until_the_sign_is_on_disk(tmp_path):
     sid = str(first.get("statement_id") or "")
     assert sid, first
 
-    # V 落了签（生产的写口）⇒ 下一轮 step 读成已签（签块跟着稿走：publish 会搬它）。
+    # V 落了签（生产的写口）⇒ 下一轮 step 读成已签（签文件跟着正文 sha 走）。
     published = pathlib.Path(st.root) / f"reports/f-proof-{sid}.md"
     assert published.is_file(), published
-    body_sha = VR.text_sha(_DS.proof_body(published.read_text(encoding="utf-8")).strip("\n"))
+    body = _DS.proof_body(published.read_text(encoding="utf-8")).strip("\n")
+    issue_credential(st.root, proof_text=body, statement_id=sid,
+                     manuscript=f"reports/f-proof-{sid}.md")
     VS.write_manuscript_sign(
-        st.root, f"reports/f-proof-{sid}.md", proof_sha=body_sha,
+        st.root, f"reports/f-proof-{sid}.md", proof_sha=VS._sign_sha(body),
         streak=3, need=3, verdict="成立", signer="V",
         at="2026-11-02T10:00:00+08:00",
-        ledger=f"reports/f-proof-{sid}.md#V签", statement_id=sid, signed=True)
+        ledger=f"verifications/{sid}.jsonl#v-000003", statement_id=sid, signed=True)
     second = _apply_one_proof_round(st)
     assert second.get("delivered") is True, second
     assert second.get("delivery_state") == FVS.STATE_SIGNED, second

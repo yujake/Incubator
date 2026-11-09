@@ -42,7 +42,7 @@ MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
               f"{PROOF}\n\n"
               "## 依赖\n\n"
               "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
-SHA = VR.text_sha(PROOF)
+SHA = VS._sign_sha(PROOF)
 REL = "reports/f-proof-000000.md"
 OTHER = "reports/f-proof-000001.md"
 
@@ -124,6 +124,9 @@ def test_f_f_delivery_reading_passes_the_path_and_refuses_a_moved_block(tmp_path
     assert moved["delivered"] is False, moved
 
     _write(tmp_path, REL, _text())
+    from _credential_fixture import issue_credential
+
+    issue_credential(tmp_path, proof_text=PROOF)
     ok = FVS.delivery_reading(tmp_path, proof_text=PROOF, manuscript_paths=(REL,))
     assert ok["state"] == FVS.STATE_SIGNED, ok
-    assert ok["channel"] == FVS.CHANNEL_MANUSCRIPT, ok
+    assert ok["channel"] == FVS.CHANNEL_PENDING, ok
