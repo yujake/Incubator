@@ -115,9 +115,14 @@ INFORMATIONAL_ITEM_KINDS: tuple[str, ...] = ("notice", "message")
 #:   指导有时就是要办的事，所以今天不动它的旧行为（仍要 ack）。裁定之后只改这一格。
 ACK_REQUIRED_ITEM_PREFIXES: tuple[str, ...] = ("v-verdict@", "stop-notice@", "relay@")
 
-#: 撤销通知的 `input_key` 前缀（业主 2026-11-06 裁定 ① 的乙件）。
+#: 撤销通知行的 `input_key` 前缀（业主 2026-11-06 裁定 ① 的乙件）。
 #:
-#: 为什么要一个前缀而不是"每撤一次随便写一条"：
+#: 2026-11-09（D13）起默认不再落这一种行（`REVOKE_POSTS_NOTICE_ROW=False`），这个前缀
+#: 只剩两个用途：① 旧工作区里那些历史 `revoke-notice@…` 行仍然认得出（它们是
+#: `expects=""` 的已收口行，`_void_item_gate` 的 `no_obligation` 那一档会拒撤它们）；
+#: ② 反真空判据把旧行为整格打开时，防环那一句仍然读它。
+#:
+#: 改前的两个理由（逐字保留）：
 #: 1. 幂等 —— 同一条项只该有一份撤销通知（撤销本身也只能落一次）；
 #: 2. 防环 —— 通知自己也是一条 `tasks` 行；没有这个前缀，撤一条通知会再生成一条
 #:    通知，撤通知的通知又会生成一条……`.void_items` 用它认出"这一条是通知，不再
@@ -4585,6 +4590,24 @@ class Conductor:
     ITEM_AUTHORITY_PARENT = "parent"
     ITEM_AUTHORITY_CONDUCTOR = "conductor"
 
+    #: 撤销时要不要另落一条通知行（改前行为；2026-11-09 D13 起关掉）。
+    #:
+    #: 真机病灶（`projects/**` 11:09:10 那一笔）：M 花 1 步撤 12 条，撤销动作自身又落
+    #: 12 条新 `notice` 行（t-000095..t-000106）⇒ 清理动作让 `tasks` 行数变多，而板项行
+    #: 的 `status` 恒为 `pending`（`_item_row` 写死）⇒ 那 12 行在状态报告/网页上又变成
+    #: "12 条待办"（叠上 D12 的观感就是"越清越多"）。
+    #:
+    #: 关掉之后提醒并没有消失：被撤那一行自己的 `inputs` 落了六格留痕
+    #: （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，append-only），
+    #: 收件人那一侧的读口 :meth:`revoked_recent_of` 读的就是它，`agent_loop.mailbox_digest`
+    #: 每一拍把最近 N 条渲染成【最近被撤销的项】。于是「谁撤的 / 为什么 / 你不需要再处理它」
+    #: 一个字都没少，而新增 notice 行 = 0。
+    #:
+    #: 为什么留这一格而不是把旧分支删干净：反真空判据要能整格打开它
+    #: （`tests/test_revocation_posts_no_new_notice_rows.py` 的 ③），证明"新增行数 = 0"
+    #: 这条判据真的在数行、不是在读一个恒空的表。默认 `False`（改后的口径）。
+    REVOKE_POSTS_NOTICE_ROW: bool = False
+
     def _item_authority(self, rows: Mapping[str, Mapping[str, Any]], *,
                         by_task_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
         """谁有权改「这一条板项」的状态（业主 2026-11-06 裁定 ① 的唯一判据）。
@@ -4724,6 +4747,16 @@ class Conductor:
                                depth: int) -> dict | None:
         """撤销通知那一条行的形状（乙件；唯一一处，判据可整格替换它做反真空）。
 
+        ## 2026-11-09（D13）起它只在 `REVOKE_POSTS_NOTICE_ROW=True` 时才被调用
+
+        业主 2026-11-09 的口径是「撤销动作不再自己生成待 ack 通知」，判据是
+        撤销 N 条之后新增 notice 行 = 0。所以默认路径不经这里：提醒改由被撤行
+        自己的 `revoke:expired:…` 留痕承担（`revoked_recent_of` 读它）。本函数连同下面
+        「为什么它必须落成 done + expired」那段论证留着的唯一用途是反真空：判据把
+        `REVOKE_POSTS_NOTICE_ROW` 打开，证明"新增行数 = 0"真的在数行。
+
+        ## 下面这段是改前（业主 2026-11-06 乙件）的原始口径，逐字保留
+
         业主逐字（2026-11-06）：
 
             撤销时自动投一条通知给收件人（系统发出、不要 ack）：
@@ -4815,15 +4848,19 @@ class Conductor:
 
         ## 业主 2026-11-06 裁定 ① 的乙件 / 丙件（同一笔撤销要一起做完）
 
-        乙件：撤销成功后自动投一条通知给收件人（`_revocation_notice_row` 是唯一一处，
-        正文与"为什么它必须落成 done + expired"见那里）。返回的 `notified` 逐条给
-        `{item_id, notice_id, owner, kind, expects, text}`；通知没开成（写失败）进
-        `notification_problems`，撤销本身不回滚（撤销是正文，通知是回执，两者分开报）。
+        乙件：撤销成功后要提醒收件人，且那条提醒不欠任何动作。改前它落成一条新的
+        `notice` 行（`_revocation_notice_row`）；2026-11-09（D13）起不再落行 ——
+        见 `REVOKE_POSTS_NOTICE_ROW` 的说明：撤 N 条就多 N 行，而板项行的 `status`
+        恒为 `pending`，于是清理动作在读数上让"待办"变多。现在的落法：
 
-        通知的读口（2026-11-06 第二笔）：那条通知是 `done` 行，`open_items_of`
-        看不见它 ⇒ 光落账不等于"提醒到"。收件人那一侧的读法是
-        :meth:`revoked_recent_of`（`agent_loop.mailbox_digest` 每拍投一次），
-        它只读本方法写下的 `revoke:expired:` 留痕，不进任何 open 计数。
+        - 提醒的正文仍在，但载体是被撤那一行自己的 `inputs`
+          （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，上一节那六格）；
+        - 收件人那一侧的读法是 :meth:`revoked_recent_of`（`agent_loop.mailbox_digest`
+          每拍投一次，渲染成【最近被撤销的项】）——它只读那条留痕，不进任何 open 计数；
+        - 返回的 `notified` 逐条给 `{item_id, notice_id, owner, kind, expects,
+          carrier, text}`：`notice_id` 现在是空串（没有那一行了），`carrier` 写明
+          提醒从哪儿读得到（`revoked_recent@<收件人>`），`text` 是那句逐字正文。
+          没有收件人的项（顶层项）进 `notification_problems`，撤销本身不回滚。
 
         丙件：撤销后 `expects` 清空、原值写进 `expects_was`（`schema.Task` 末尾那一格；
         `validate` 只允许 `done` + `expired` 的行为空）。留着 `expects="ack"` 会让读侧
@@ -4911,7 +4948,9 @@ class Conductor:
         if str(row.get("expects") or "") == "":
             # 撤销后的行（`done` + `expired`）已经在上面被终态那一档拦下；走到
             # 这里的空 expects 只可能是"通知"那种本来就不要求任何动作的行 ——
-            # 没有义务可撤，撤了还会再生成一条通知（`REVOKE_NOTICE_PREFIX` 防环）。
+            # 没有义务可撤。旧工作区里那些 `revoke-notice@…` 行（D13 之前落的）
+            # 也正是这一档：它们出生就是 done+expired、expects 为空 ⇒ 撤不动，
+            # 于是"撤通知又生成通知"的环在结构上已经不成立。
             return {
                 "id": iid, "code": "no_obligation",
                 "why": ("它不要求任何动作（expects 为空）⇒ 没有可撤的义务"
@@ -5011,33 +5050,61 @@ class Conductor:
             "notice_id": "",
         }
         out["traces"].append(trace)
-        if revoke:
-            # 乙件（业主 2026-11-06）：撤销成功 ⇒ 同一笔事务里给收件人投一条
-            # 通知。通知是已收口的一行（见 `_revocation_notice_row` 的
-            # docstring：开着的通知只能是欠 ack 或新造一档 expects，两者都不许）。
-            # 写失败不回滚撤销（撤销是正文，通知是回执），但必须逐条报出来。
-            owner_depth = int((rows.get(owner) or {}).get("depth") or 0) + 1
-            notice = self._revocation_notice_row(
-                row=row, item_id=iid, owner=owner, by_task_id=str(by_task_id),
-                reason=reason_text, depth=owner_depth)
-            if notice is None:
+        if not revoke:
+            return
+        # ---- 乙件（业主 2026-11-06）在 2026-11-09（D13）之后换了落法 --------------
+        #
+        # 业主要的是「撤销时自动提醒收件人，且不要 ack」。改前那条提醒另落一条新
+        # `tasks` 行（`kind="notice"`、`done`/`expired`）⇒ 撤 N 条就多 N 行
+        # （真机 t-000095..t-000106 共 12 条）：清理动作让 `tasks` 行数变多，而板项行的
+        # `status` 恒为 `pending`，于是那 N 行在状态报告/网页上又变成"N 条待办"。
+        #
+        # 现在提醒不走新行：被撤那一行自己的 `inputs` 已经落了六格留痕
+        # （`revoke:expired:…`，上面那一笔 append-only 的 `mark`），收件人那一侧的
+        # 读口 `revoked_recent_of` 读的就是它，`agent_loop.mailbox_digest` 每一拍把最近
+        # N 条渲染成【最近被撤销的项】。于是新增 notice 行 = 0，而"谁撤的 / 为什么 /
+        # 你不需要再处理它"一个字都没少（判据 c 的那条可查性读数）。
+        if not self.REVOKE_POSTS_NOTICE_ROW:
+            if not owner:
+                # 顶层项没有收件人 ⇒ 没有要提醒的人。如实记读数，不编一个收件人。
                 out["notification_problems"].append(
-                    f"{iid}：没有投撤销通知（没有收件人，或它本身是一条撤销通知）")
+                    f"{iid}：这一条没有收件人（顶层项）⇒ 没有要提醒的人（撤销本身照旧）")
+                return
+            out["notified"].append({
+                "item_id": iid, "notice_id": "", "owner": owner,
+                "kind": "", "expects": "",
+                # 载体：不是一行新台账，而是被撤行自己的留痕 + 收件人那一侧的读口。
+                "carrier": f"revoked_recent@{owner}",
+                "text": (f"你名下 {iid}（{_board_item_summary(row)}）已被 {by_task_id} 撤销"
+                         f"（理由：{reason_text}），你不需要再处理它"),
+            })
+            return
+        # ---- 旧行为（改前口径）：另落一条 done+expired 的通知行 ------------------
+        # 保留的唯一理由是反真空（判据把 `REVOKE_POSTS_NOTICE_ROW` 打开，证明"新增行数
+        # = 0"真的在数行）；正文与"为什么它必须落成 done + expired"见
+        # `_revocation_notice_row` 的 docstring。
+        owner_depth = int((rows.get(owner) or {}).get("depth") or 0) + 1
+        notice = self._revocation_notice_row(
+            row=row, item_id=iid, owner=owner, by_task_id=str(by_task_id),
+            reason=reason_text, depth=owner_depth)
+        if notice is None:
+            out["notification_problems"].append(
+                f"{iid}：没有投撤销通知（没有收件人，或它本身是一条撤销通知）")
+        else:
+            try:
+                notice_id = self._row_with_id(tx, notice,
+                                              note="item:notice:revoked")
+            except Exception as exc:  # noqa: BLE001 —— 通知没开成要如实报
+                out["notification_problems"].append(
+                    f"{iid}：撤销通知没开成（{type(exc).__name__}: {exc}）"
+                    "⇒ 撤销照旧（它是正文），但收件人不会收到这条通知")
             else:
-                try:
-                    notice_id = self._row_with_id(tx, notice,
-                                                  note="item:notice:revoked")
-                except Exception as exc:  # noqa: BLE001 —— 通知没开成要如实报
-                    out["notification_problems"].append(
-                        f"{iid}：撤销通知没开成（{type(exc).__name__}: {exc}）"
-                        "⇒ 撤销照旧（它是正文），但收件人不会收到这条通知")
-                else:
-                    trace["notice_id"] = notice_id
-                    out["notified"].append({
-                        "item_id": iid, "notice_id": notice_id,
-                        "owner": owner, "kind": "notice", "expects": "",
-                        "text": str(notice.get("detail") or ""),
-                    })
+                trace["notice_id"] = notice_id
+                out["notified"].append({
+                    "item_id": iid, "notice_id": notice_id,
+                    "owner": owner, "kind": "notice", "expects": "",
+                    "text": str(notice.get("detail") or ""),
+                })
 
     def open_items_many(self, items: Sequence[Mapping[str, Any]], *,
                         details: Sequence[str] | None = None) -> list[str]:
@@ -5698,9 +5765,11 @@ class Conductor:
 
         ## 它补的是什么（读口，不是第二份账）
 
-        通知那一行是 `done`（见 :meth:`_revocation_notice_row`），`open_items_of` 看不见
-        它 ⇒ 光落账不等于"提醒到"。本方法只读 `void_items(revoke=True)` 写下的
+        撤销的提醒没有第二个落点了（2026-11-09 D13：改前那条 `notice` 行已不再写，
+        见 `REVOKE_POSTS_NOTICE_ROW`）。本方法只读 `void_items(revoke=True)` 写下的
         `revoke:expired:` 留痕，由 `agent_loop.mailbox_digest` 的增量段渲染。
+        也就是说：这里读得到的东西，与被撤那一行自己的 `inputs` 是同一份，
+        没有"通知行"这一层中间物。
 
         ## 它不进任何 open 计数（业主 2026-11-06 的第二笔，硬约束）
 

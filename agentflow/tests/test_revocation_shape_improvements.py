@@ -20,12 +20,36 @@
 |---|---|
 | 甲 | `test_a_board_and_patrol_items_carry_the_revocability_reading` |
 | 甲 · 反真空 | `test_a2_stubbing_the_authority_check_to_always_allow_turns_the_denied_cases_red` |
-| 乙 | `test_b_revocation_posts_a_no_ack_notice_to_the_recipient` |
-| 乙 · 反真空 | `test_b2_removing_the_notice_turns_the_notice_check_red` |
+| 乙 | `test_b_revocation_reaches_the_recipient_without_posting_a_row` |
+| 乙 · 反真空 | `test_b2_opening_the_old_notice_row_turns_the_new_criterion_red` |
 | 丙 | `test_c_the_revoked_row_no_longer_owes_an_ack` |
 | 丙 · schema | `test_c2_expects_was_is_the_only_door_to_an_empty_expects` |
 
-## 为什么通知是"已收口"的一行（不是一条开着的新待办）
+## 乙在 2026-11-09（D13）之后换了落法（这一节改过，理由逐字留在这里）
+
+改前：撤销成功 ⇒ 另落一条 `kind="notice"` 的新行（`done` + `expired`、`expects=""`、
+`called_by="system"`、`input_key="revoke-notice@<被撤项>"`）。当时的论证是
+「通知不能是一条开着的待办（`ITEM_EXPECTS` 只有 ack/work 两档），所以落成已收口的一行」。
+
+那一条把「不欠 ack」办对了，但留下另一个病灶：撤 N 条就多 N 行 —— 真机 11:09:10
+M 撤 12 条，`tasks` 里就多出 t-000095..t-000106 十二行。而板项行的 `status` 恒为
+`pending`（`conductor._item_row` 写死），叠上 D12 的投影，那十二行在页面上就是
+「十二个新待办」⇒ 业主的观感是「越清越多」。
+
+业主 2026-11-09 的口径：撤销动作不再自己生成待 ack 通知，判据是
+**撤销 N 条之后新增 notice 行 = 0**。所以现在：
+
+- 提醒的载体是**被撤那一行自己的** `inputs`（`revoke:expired:by=…:owner=…:from=…:
+  to=done:at=…:reason=…`，append-only 六格）；
+- 收件人那一侧的读口是 `Conductor.revoked_recent_of`（`agent_loop.mailbox_digest`
+  每一拍渲染成【最近被撤销的项】），`void_items` 返回的 `notified` 逐条写明
+  `carrier="revoked_recent@<收件人>"`；
+- 旧行为留在 `Conductor.REVOKE_POSTS_NOTICE_ROW`（默认 `False`），只给 b2 的反真空用。
+  详细判据在新文件 `tests/test_revocation_posts_no_new_notice_rows.py`。
+
+下面这段是改前那套论证，逐字保留（读的人要知道「为什么曾经那样做」）：
+
+## 为什么改前那条通知是"已收口"的一行（不是一条开着的新待办）
 
 通知的语义是「你不需要再处理它」：它不能产生任何一种动作义务。
 本仓 `ITEM_EXPECTS` 只有 `ack` / `work` 两档（冻结面，`agent_loop.deliver_v_verdicts`
@@ -33,7 +57,7 @@
 ① `expects=ack` ⇒ 收件人欠一个回执（与「不需要 ack」正相反），而且它会在销号闸里
    冒充"名下还有未消的板项"（`conductor.retire_child` 读的就是"kind 非空且 done 之前"）；
 ② 造一个新的 `expects` 取值 ⇒ 冻结面被新增一档。
-两条都不是这份裁定要的。所以通知以「已收口（`expired`）」落行：它是一份记录，
+两条都不是这份裁定要的。所以改前那条通知以「已收口（`expired`）」落行：它是一份记录，
 不是一条待办 —— `open_items_of` 看不见它，`ack_items` 收不掉它（也不是它该收的），
 板的两个计数一个都不动（既有判据 `test_the_board_readings_drop_the_revoked_item_at_once`
 要求撤销后计数恰好少 1，这一条同时守着通知不许冒充待办）。
@@ -199,63 +223,64 @@ def test_a2_stubbing_the_authority_check_to_always_allow_turns_the_denied_cases_
     assert any("兄弟" in p or "无关者" in p for p in problems), problems
 
 
-# ---------------------------------------------------------------- 乙 —— 自动通知
+# ---------------------------------------------------------------- 乙 —— 自动提醒
 
 
 def _b_problems(tmp_path: pathlib.Path) -> list[str]:
-    """(乙) 的判据本体：撤销之后收件人名下多一条不欠 ack 的通知。"""
+    """(乙) 的判据本体：撤销之后收件人**不**多一行，而提醒仍然读得到。"""
     problems: list[str] = []
     ws, box, ids = _hierarchy(tmp_path)
     item = _item(box, owner=ids["F1"], role="F", expects="ack",
                  kind="notice", summary="到点通知：不再需要做")
+    before = len(box._tasks())
     got = box.void_items([item], by_task_id=ids["D1"],
                          why="方向已砍", revoke=True)
     if got.get("voided") != [item]:
         problems.append(f"撤销本身没成：{got!r}")
         return problems
-    notices = _notices_of(box, ids["F1"])
-    if len(notices) != 1:
-        problems.append(f"收件人名下应当恰好多一条撤销通知，实测 {len(notices)} 条：{notices!r}")
+    after = len(box._tasks())
+    if after != before:
+        problems.append(
+            f"撤销多落了 {after - before} 行 tasks（2026-11-09 D13：清理不该让台账变长）")
+    if _notices_of(box, ids["F1"]):
+        problems.append(f"收件人名下多出了撤销通知行：{_notices_of(box, ids['F1'])!r}")
+    # 提醒没丢：收件人那一侧的读口读得到那一条（编号 / 谁撤的 / 理由 / 摘要）
+    cell = list(box.revoked_recent_of(ids["F1"], limit=5))
+    if len(cell) != 1:
+        problems.append(f"收件人那一侧的「最近被撤销」应当恰好多一条，实测 {cell!r}")
         return problems
-    notice = notices[0]
-    want = (f"你名下 {item}（到点通知：不再需要做）已被 {ids['D1']} 撤销"
-            "（理由：方向已砍），你不需要再处理它")
-    if str(notice.get("detail") or "") != want:
-        problems.append(f"通知正文不是逐字那一句：{notice.get('detail')!r} ≠ {want!r}")
-    if str(notice.get("kind") or "") != "notice":
-        problems.append(f"通知的 kind 不是 notice：{notice.get('kind')!r}")
-    if str(notice.get("expects") or "") != "":
-        problems.append(f"通知不该要求任何动作（expects 应当为空）：{notice.get('expects')!r}")
-    if str(notice.get("called_by") or "") != "system":
-        problems.append(f"通知不是系统发出的（called_by）：{notice.get('called_by')!r}")
-    # 不产生 ack 义务：它不在"未消项"里；`ack_items` 也收不到它（不是 ack 项）
-    if str(notice.get("task_id")) in {str(r.get("task_id"))
-                                      for r in box.open_items_of(ids["F1"])}:
-        problems.append("通知挂在收件人的未消项里 ⇒ 它会被当成欠一个 ack")
-    acked = box.ack_items([str(notice.get("task_id"))], by_task_id=ids["F1"],
-                          close="acked")
-    if acked.get("ok") or str(acked.get("state")) == "acked":
-        problems.append(f"`ack_items` 把这条通知当 ack 项收掉了：{acked!r}")
-    if str(notice.get("item_state") or "") != "done":
-        problems.append(f"通知应当是已收口的一行（记录，不是待办）：{notice.get('item_state')!r}")
+    entry = dict(cell[0])
+    if (entry.get("item_id"), entry.get("by"), entry.get("reason"), entry.get("summary")) != (
+            item, ids["D1"], "方向已砍", "到点通知：不再需要做"):
+        problems.append(f"提醒的五格不对：{entry!r}")
+    # 返回读数逐条写明载体：不是一行新台账
+    notified = list(got.get("notified") or ())
+    if len(notified) != 1 or str(notified[0].get("item_id")) != str(item):
+        problems.append(f"`notified` 没有把这一条算进去：{notified!r}")
+    elif str(notified[0].get("carrier")) != f"revoked_recent@{ids['F1']}":
+        problems.append(f"`notified` 没有写明提醒的载体：{notified[0]!r}")
+    if notified and "你不需要再处理它" not in str(notified[0].get("text") or ""):
+        problems.append(f"提醒正文不是那一句：{notified[0]!r}")
+    # 它不产生 ack 义务：既不在未消项里，也没留下一条可 ack 的项
+    if str(item) in {str(r.get("task_id")) for r in box.open_items_of(ids["F1"])}:
+        problems.append("被撤项还挂在收件人的未消项里 ⇒ 它会冒充欠一个 ack")
     return problems
 
 
-def test_b_revocation_posts_a_no_ack_notice_to_the_recipient(
+def test_b_revocation_reaches_the_recipient_without_posting_a_row(
         tmp_path: pathlib.Path) -> None:
-    """乙：撤销 ⇒ 收件人名下多一条系统通知（正文逐字），且它不产生 ack 义务。"""
+    """乙（改后）：撤销 ⇒ 收件人名下不多一行，提醒仍读得到（载体是被撤行自己的留痕）。"""
     assert _b_problems(tmp_path) == [], _b_problems(tmp_path)
 
 
-def test_b2_removing_the_notice_turns_the_notice_check_red(
+def test_b2_opening_the_old_notice_row_turns_the_new_criterion_red(
         tmp_path: pathlib.Path, monkeypatch: Any) -> None:
-    """乙 · 反真空：把自动通知摘掉 ⇒ (乙) 的那条判据当场红。"""
+    """乙 · 反真空：把旧行为（另落一条通知行）打开 ⇒ (乙) 那条判据当场红。"""
     assert _b_problems(tmp_path / "b0") == []
-    monkeypatch.setattr(Conductor, "_revocation_notice_row",
-                        lambda self, **kw: None)
+    monkeypatch.setattr(Conductor, "REVOKE_POSTS_NOTICE_ROW", True)
     problems = _b_problems(tmp_path / "b1")
-    assert problems, "自动通知被摘掉了，(乙) 却仍然绿 ⇒ 那条判据没在看通知"
-    assert any("通知" in p for p in problems), problems
+    assert problems, "旧行为打开了，(乙) 却仍然绿 ⇒ 那条判据没在数行"
+    assert any("多落了" in p or "通知行" in p for p in problems), problems
 
 
 # ---------------------------------------------------------------- 丙 —— expects 处理
