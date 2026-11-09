@@ -73,9 +73,15 @@ TRUNCATED = ("P1（PBW 与长度滤过）：取 g 的一组 k-基并排序，由
              "N2（ω^n/ω^{n+1} 的维数上界）：在 P4 下，dim_k(ω^n/ω^{n+1}) ≤ k^n。"
              "证明：ω^n 是左理想、ω^{n+1} ⊆ ω^n 是其子左理想，故 ω^n/")
 #: 完整证明（B 要写进去的那一份）：结尾有结论步，正文里点了在册的 stmt:000000。
+#:
+#: 2026-11-10（D268 批 2 夹具跟进）：结尾不带换行。签的读口（`vsigns.sign_reading`）
+#: 对"一段正文"按 `manuscript_proof_body` 归一（首尾空行不算正文差异），而
+#: `verifications.review_standing` 按原样字节算 —— 正文带尾换行时两把尺会差一个字节，
+#: 同一份正文被判成"签的是旧版"。B 的正路正文本来就来自 `depsection.proof_body`
+#: （已去尾空行），所以夹具按那个形状写：内容一个字不改，只是不留尾换行。
 FULL = (TRUNCATED.replace("故 ω^n/", "") + "ω^{n+1} 是商，维数上界由生成元个数给出。∎\n\n"
         "右诺特：把左作用换成右作用、c_i a_i 换成 a_i c_i，同一论证逐字成立。\n\n"
-        "结论：A = U(g) 左诺特且右诺特；该论证与在册 stmt:000000 合起来给出充要条件。\n")
+        "结论：A = U(g) 左诺特且右诺特；该论证与在册 stmt:000000 合起来给出充要条件。")
 #: 别条命题的稿（真机 `reports/f-proof-000000.md` 的形状）：头一行写明它是 stmt:000000 的，
 #: 带洗稿元信息与一张空的依赖表。
 FOREIGN_MANUSCRIPT = (
@@ -146,9 +152,18 @@ def _sign(st: Store, *, proof_text: str = TRUNCATED, stmt_id: str = "") -> dict:
 
     业主 2026-10-29 的口径：一票不翻位。同一份正文连续 3 次「成立」才轮到
     秘书发签（`SIGN_STREAK_NEED`），第 1、2 次只落台账、`bits.evidence` 不翻位。
+
+    2026-11-10（D268 批 2）：签只认 `out/vsigns/<正文 sha>.json` 的可复算凭据，而
+    `vsigns.sign_reading` 对"一段正文"按 `manuscript_proof_body` 归一（首尾空行不算
+    正文差异）。这一份 `FULL` 结尾带一个换行 ⇒ 若不归一，台账行 / 签文件的 sha
+    会与"这一版"的 sha 差一个字节，读数变成 `stale`（签的是旧版）。所以夹具在签之前
+    把正文归一到 sign_reading 用的那一把尺上 —— 签的仍是同一段正文，只是去掉不算
+    内容的尾空行（改的是夹具，不是断言；a2 的 `superseded_total` / `verification_id`
+    逐条断言一个字不动）。
     """
+    body = str(proof_text).strip("\n")
     return VR.record_verification(
-        st.root, statement_id=stmt_id or SID, proof_text=proof_text,
+        st.root, statement_id=stmt_id or SID, proof_text=body,
         verdict={"verdict": "成立", "findings": []}, verifier="agent-V", store=st,
         proof_no=1, manuscript=f"reports/f-proof-{stmt_id or SID}.md", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 

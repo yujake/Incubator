@@ -186,7 +186,22 @@ def test_d1_a_a_cited_manuscript_is_never_the_new_rows_body(
 
 def test_d1_a_reverse_vacuum_putting_the_ownership_check_back_makes_it_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D1 a-：把"只认本行稿"那一步摘掉（恒真）⇒ 改前的形态回来（a 变红）。"""
+    """D1 a-：把"只认本行稿"那一步摘掉（恒真）⇒ 改前的形态回来（a 变红）。
+
+    2026-11-10（D268 批 2）：这条反真空钉的"借来"有两个半边，两半边的结论不一样：
+
+    - 正文那一半仍然被借来（`proof_text == BODY_A`）—— 摘掉归属检查，D1 的漏洞
+      就回来了，这是这条判据要量的东西，一个字没改；
+    - 签那一半不再借得动：批 2 起签是 `out/vsigns/<正文 sha>.json` 里一份按
+      （命题号, 证明号）绑定的可复算凭据，A 的那一签读到 B 头上是 `borrowed`
+      ⇒ 第 3 位不翻。旧断言钉的是"块时代"的形态（稿上的九格块与号无关，借了正文
+      就顺带借到签），批 2 之后那不是等价读数：`reviewed=True` 会等于说"签可以被
+      借"，与「借光不算签」正相反。新断言比旧的更严：它把"正文借到了"与"签借不到"
+      分开钉住 —— 前者仍然红（漏洞可量），后者是一条新的护栏。
+
+    所以下面同时断 `reviewed is not True` 与"那一签的读数就是 borrowed（不是没查
+    成、也不是查无此签）"，后者保证前者的绿来自凭据的号绑定这一根线。
+    """
     monkeypatch.setattr(RS, "_manuscript_is_own", lambda **kw: True)
     st = _ws(tmp_path)
     a = _register_conjecture(st, FULL_A)
@@ -197,7 +212,11 @@ def test_d1_a_reverse_vacuum_putting_the_ownership_check_back_makes_it_red(
     row = _row(st, str(got["stmt_id"]))
     assert str(row.get("proof_text") or "") == BODY_A, (
         "打桩之后 B 的 proof_text 没有变成 A 的正文 ⇒ 这条反真空没接到 D1 那根线上")
-    assert (row.get("bits") or {}).get("reviewed") is True, row.get("bits")
+    # 批 2：正文被借到了，而 A 的签按 (命题号, 证明号) 绑定 ⇒ 借不到。
+    assert (row.get("bits") or {}).get("reviewed") is not True, row.get("bits")
+    reading = VS.sign_reading(
+        st.root, statement_id=str(got["stmt_id"]), proof_text=BODY_A, proof_no=1)
+    assert reading.get("state") == "borrowed", reading
 
 
 def test_d1_c_the_dependency_face_comes_from_the_manuscripts_table(

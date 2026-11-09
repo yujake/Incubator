@@ -110,6 +110,14 @@ class _IdentitySeam:
             # （它的 label / 正文里都有「一致连续」）。
             return ({"keywords": ["一致连续"],
                      "why": "打桩：这个数学词能把在册那一条捞出来"}, _Call())
+        if str(note or "").endswith("statement_same"):
+            # 2026-11-10（T1 后）：按手稿路径收录时，B 先问秘书「这一条是不是在册的
+            # 同一条」。这一问的产物是 `decision=same` + `same_as=<号>`（与
+            # `Secretary.adjudicate_proposition` 读的两个键一致）；这里点回在册那一行，
+            # 于是这一笔走"在册"分支、按该行的号读签。
+            return ({"decision": "same", "same_as": SID, "checked": True,
+                     "canonical_name": "", "route": "",
+                     "why": "打桩：判同一条", "basis": ["打桩：判同一条"]}, _Call())
         if not str(note or "").endswith("proposition_identity"):
             return {}, _Call()
         text = str(prompt or "")
@@ -177,12 +185,18 @@ def _row(env: dict) -> dict:
 
 
 def _register(env: dict) -> dict:
-    """B 的收录那一笔（`evidence_kind` 不比在册强 ⇒ 秘书走"并进在册命题"那一支）。"""
-    text = (pathlib.Path(env["store"].root) / env["rel"]).read_text(encoding="utf-8")
+    """B 的收录那一笔（`evidence_kind` 不比在册强 ⇒ 秘书走"并进在册命题"那一支）。
+
+    2026-11-10（T1 之后）：稿以路径寻址，不再把正文抄进参数。这不是换被测对象：
+    这一条量的仍然是"并进在册那一行之后五元位写了什么"；改的只是稿的递法（D 只递
+    指针、B 从稿里读，是 T1 的入口形状）。路径那一格还让 B 先问一句"这是不是在册的
+    同一条命题"——`_IdentitySeam` 现在把那一问也答成 `same`，于是这一笔按在册行的号
+    读签（签是 D268 批 2 的可复算凭据，见 `_sign`）。
+    """
     return env["b"].register_statement(
         origin="own_result", kind="theorem", label="一致连续",
         statement_full=FULL, statement_text="一致连续", proof_text=PROOF,
-        proof_manuscript=text, evidence_kind="cross_check",
+        proof_manuscript=env["rel"], evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导")
 

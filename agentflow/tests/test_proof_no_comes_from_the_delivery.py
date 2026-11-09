@@ -88,6 +88,36 @@ def _register_conjecture(env: dict) -> str:
     return str(first.get("stmt_id") or "")
 
 
+def _sign_as(env: dict, sid: str, *, proof_no: int) -> None:
+    """让 V 把这一份 e-proof 签成 `stmt:<sid>#p<proof_no>`（D268 批 2 的可复算凭据）。
+
+    为什么夹具要自己造这一签（而不是让 `_env(sign=True)` 的 V 去签）：批 2 起签是
+    `out/vsigns/<正文 sha>.json` 里一份按 (命题号, 证明号) 绑定的凭据 —— 而
+    `_env` 的 V 是在命题还没在册时签的（`statement_id` 空、证明号缺省 #1）。本文件
+    要量的正是"交付说第 N 份 ⇒ 这一份就是第 N 份"，所以签必须盖在第 N 份上：E 的稿
+    头已经写了 `- 证明号：N`（V 真机也从稿头读号），这里按同一个号发签。
+    签块仍盖在稿上（块只是视图，D 的携带单认它；认签看签文件）。
+
+    `_credential_fixture.issue_credential` 是批 2 自己那份公共夹具（三票同源 +
+    `vsigns.issue`），不新造第二套。改的是夹具，不是断言。
+    """
+    from agentflow import vsigns as VS
+    from _credential_fixture import issue_credential
+
+    column = str(env["column"])
+    rel = str(env["out"]["proof_manuscript"])
+    got = issue_credential(env["store"].root, proof_text=column, statement_id=sid,
+                           manuscript=rel, proof_no=int(proof_no))
+    ledger = str(dict(got.get("sign") or {}).get("ledger") or "")
+    path = pathlib.Path(env["store"].root) / rel
+    text = path.read_text(encoding="utf-8")
+    path.write_text(VS.stamp_manuscript_sign(
+        text, proof_sha=VR.text_sha(column), streak=VR.SIGN_STREAK_NEED,
+        need=VR.SIGN_STREAK_NEED, verdict="成立",
+        at="2026-11-05T12:00:00+08:00", ledger=ledger, statement_id=sid,
+        manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
+
+
 def _stub_model_says_same(monkeypatch: pytest.MonkeyPatch, *, target: str) -> None:
     """把"秘书判同一对正文"填成 `verdict=same / same_as=<target>`（判据入口那一处）。
 
@@ -113,11 +143,19 @@ def _stub_model_says_same(monkeypatch: pytest.MonkeyPatch, *, target: str) -> No
 # ============================================================ a 稿头那一行
 def test_a_the_manuscript_header_number_lands_the_proof_on_that_number(
         tmp_path: pathlib.Path) -> None:
-    """a：稿头写 `- 证明号：2` ⇒ 那一份落在 `#p2`，`proof_no_source=crafted`。"""
-    env = _env(tmp_path)
+    """a：稿头写 `- 证明号：2` ⇒ 那一份落在 `#p2`，`proof_no_source=crafted`。
+
+    2026-11-10（D268 批 2）：签改成"按号绑定"的可复算凭据 —— 这一份由 V 签成
+    `stmt:<号>#p2`（见 `_sign_as`）。改的是夹具：`_env(sign=False)` 不再让 V 用
+    "未在册 #1"的形态签，因为批 2 起那一签在册之后读到别的号上是 `borrowed`
+    （借光不算签），这一笔会在准入闸上被拒 —— 而那与本文件要量的"B 读交付里的号"
+    无关。被量对象一个字没变：`proof_no_source` / 落点 / 盘上那一份正文。
+    """
+    env = _env(tmp_path, sign=False)
     column = str(env["column"])
     _add_proof_no_line(env, 2)
-    _register_conjecture(env)
+    sid = _register_conjecture(env)
+    _sign_as(env, sid, proof_no=2)
 
     rows, _note = AgentD(env["store"])._carried_manuscripts()
     _write_note(env, rows)
@@ -139,10 +177,14 @@ def test_a_the_manuscript_header_number_lands_the_proof_on_that_number(
 # ============================================================ b 携带单第四列
 def test_b_the_carried_sheet_column_lands_the_proof_on_that_number(
         tmp_path: pathlib.Path) -> None:
-    """b：稿头没写、携带单第四列写 2 ⇒ 同样落在 `#p2`，`proof_no_source=carried`。"""
-    env = _env(tmp_path)
+    """b：稿头没写、携带单第四列写 2 ⇒ 同样落在 `#p2`，`proof_no_source=carried`。
+
+    2026-11-10（D268 批 2）：同 a —— 签是 `stmt:<号>#p2` 的可复算凭据（`_sign_as`）。
+    """
+    env = _env(tmp_path, sign=False)
     column = str(env["column"])
-    _register_conjecture(env)
+    sid = _register_conjecture(env)
+    _sign_as(env, sid, proof_no=2)
 
     rows, _note = AgentD(env["store"])._carried_manuscripts()
     assert len(rows) == 1, rows
@@ -249,29 +291,39 @@ def test_c2_without_a_model_the_second_proof_lands_a_new_row(
 # ============================================================ d 反真空
 def test_d_stubbing_the_delivery_reading_falls_back_to_p1(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """d：把"读交付里的号"那一支摘掉 ⇒ a 必须回落到 `#p1`（判据红）。
+    """d：把"读交付里的号"那一支摘掉 ⇒ a 的那一笔不再成立（判据红）。
 
     打桩点就是那一支本身（`AgentB._proof_no_from_delivery`）：它同时管稿头与携带单
-    —— 摘掉它之后，同一份夹具（稿头写着 2）只能走回退，落在 `#p1`。于是 a 的绿
-    真的来自"读了交付里的号"，不是"恰好盘上只有一份证明"。
+    —— 摘掉它之后，同一份夹具（稿头写着 2）只能走回退，落在 `#p1`。
+
+    2026-11-10（D268 批 2，期望按新契约改写）：a 的签是 `stmt:<号>#p2` 的可复算
+    凭据，而这一趟回退要写的 `#p1` 没有签 ⇒ 准入闸 `proof_without_v_sign` 整笔拒，
+    盘上零新增。旧期望（"摘掉读数支之后照样落 #1、ok=True"）钉的是块时代那条
+    与号无关的签（块在就算签，落哪一号都成立）；批 2 起签按 (命题号, 证明号) 绑定，
+    那条期望不再等价 —— 新版更严：它同时要求"交付号读对了"与"那一份真的有
+    覆盖它的签"，两者缺一整笔不写。反真空的强度没降：摘掉读数支之后 a 的结论
+    （`ok=True` + 落在 #p2）当场不成立，而且拒信点名缺的是 `#1` 那一份的签。
     """
-    env = _env(tmp_path)
+    env = _env(tmp_path, sign=False)
     column = str(env["column"])
     _add_proof_no_line(env, 2)
-    _register_conjecture(env)
+    sid = _register_conjecture(env)
+    _sign_as(env, sid, proof_no=2)
     rows, _note = AgentD(env["store"])._carried_manuscripts()
     _write_note(env, rows)
 
     monkeypatch.setattr(AgentB, "_proof_no_from_delivery",
                         staticmethod(lambda **kw: (0, "fallback")))
     filed = _file(env)
-    assert filed.get("ok") is True, filed
-    assert int(filed.get("proof_no") or 0) == 1, filed
-    assert filed.get("proof_no_source") == "fallback", filed
+    assert filed.get("ok") is False, filed
+    assert filed.get("kind") == "proof_without_v_sign", filed
+    gate = dict(filed.get("proof_gate") or {})
+    assert gate.get("missing") == [1], gate
+    assert "#1" in str(gate.get("why") or ""), gate
     row = _rows(env)[0]
-    assert VR.proof_text_of(row, 1) == column, row
-    assert VR.proof_text_of(row, 2) == "", (
-        "摘掉读数支之后仍然落在 #p2 —— a 的绿不是那一支给的")
+    assert VR.proof_text_of(row, 1) == "", (
+        "摘掉读数支之后仍然把这一份写进了 #p1 —— 那一份没有签，闸没挡住")
+    assert VR.proof_text_of(row, 2) == "", row
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用

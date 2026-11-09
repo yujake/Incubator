@@ -349,6 +349,26 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
     而"换正文要打 `optimized=true`"这条判据要的是真签（`reviewed_by_proof` /
     `reviewed_sha_by_proof` 都落），所以需要那两格的夹具必须把 `store` 传进来 ——
     否则造出来的是"审过几次、没有签"，而用例说的却是「这一份签过了」。
+
+    ## 2026-11-10（D268 批 2）："够票"不再等于"已签"
+    批 2 起「签」只认可复算的凭据（`out/vsigns/<正文 sha>.json`，`vsigns.sign_reading`
+    的 `state` 才是判据）；`record_verification` 落的三行只是台账票数。而票数这一格在
+    两种真实形态上不会顺手发签：
+
+    - 行上还没有这一份正文（`body_gate=missing_body`，例如"先落一行空命题、再按份签"），
+    - 签的是新正文而盘上还是旧正文（`body_gate=sha_mismatch`，改稿那一档）。
+
+    这两档的签本来就该"先颁发、等 B 把正文写进命题行之后按 sha 认领"（实现里
+    `_vsigns_write_after_flip` 的注释是这么写的），但 `signs_bit3` 在缺正文时会提前
+    return ⇒ 签文件根本没写。于是旧夹具造出来的是 `unissued`（够票、没有签文件），
+    而用例说的是「这一份签过了」—— 调用方的 `_unsigned_proof_gate` 会照新口径拒。
+
+    所以"签满"这一档在台账票数之外再补一份真凭据：三票同源 + `vsigns.issue`
+    （`tests/_credential_fixture.issue_credential`，批 2 那一份公共夹具，不新造第二套）。
+    签的正文取 `strip("\n")` 之后的那一段：`vsigns.sign_reading` 对"一段正文"按
+    `manuscript_proof_body` 归一（首尾空行不算正文差异），签只认那一把尺。
+    这不是放宽：凭据是改前就"应该"有的那一份（注释里承诺的"签照旧颁发"），现在让夹具
+    真的把它造出来；`times < need`（一票 / 两票）这一档一个字不变 —— 那正是"还没签"。
     """
     from agentflow import verifications as VR
 
@@ -363,6 +383,18 @@ def sign_for_the_gate(root, *, statement_id: str, proof_text: str,
             secretary_judge={"axis": "clean", "checked": True,
                              "reason": "夹具：把第 3 位签住"},
             proof_no=int(proof_no), store=store, manuscript=rel)
+    if store is not None and need >= int(VR.SIGN_STREAK_NEED):
+        from agentflow import vsigns as VS
+
+        body = str(proof_text).strip("\n")
+        reading = VS.sign_reading(str(root), statement_id=str(statement_id),
+                                  proof_text=body, proof_no=int(proof_no))
+        if str(reading.get("state") or "") != "signed":
+            from _credential_fixture import issue_credential
+
+            issue_credential(root, proof_text=body,
+                             statement_id=str(statement_id),
+                             manuscript=rel, proof_no=int(proof_no))
     return need
 
 

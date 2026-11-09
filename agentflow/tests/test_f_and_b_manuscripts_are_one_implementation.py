@@ -569,25 +569,34 @@ def _no_cite_product() -> dict:
 
 
 def _stamp(st: Store, rel: str, *, sid: str, body: str) -> None:
-    """把一张盖住 body 的 V 签块写进稿里，并落下它的独立台账行。
+    """把一张盖住 body 的 V 签块写进稿里，并落下它的独立台账行 + 可复算签。
 
     2026-11-05 晚（业主裁定「签必须有独立台账背书」）：B 的收录认签（`vsigns.
     bits_after_sign`）现在会按签块上 `台账=` 那格去读 `verifications/<号>.jsonl`，
     `ledger_row_missing` ⇒ 不认这一块。所以夹具不能再只盖块（那只是稿上的一句话）：
     同一份正文先由 V 连判三转「成立」，签块锚到第 3 行。
+
+    2026-11-10（D268 批 2 跟进）：批 2 起「签」只认 `out/vsigns/<正文 sha>.json` 的
+    可复算凭据（块降为渲染视图、`record_verification` 的三行只是票数）。旧夹具在这里
+    写三行台账 + 盖块 = `unissued`（够票、没有签文件），于是 `_unsigned_proof_gate`
+    按新口径拒。改用批 2 自己那份公共夹具
+    （`_credential_fixture.issue_credential`：三票同源 + `vsigns.issue` 写签），
+    再按它给出的 ledger 把块盖上去 —— 块仍是视图，认签看签文件。改的是夹具，不是
+    断言：`_stamp` 本来就是"V 签过这一版"的替身。
     """
+    from _credential_fixture import issue_credential
+
     path = pathlib.Path(st.root) / rel
     text = path.read_text(encoding="utf-8")
+    signed = issue_credential(st.root, proof_text=str(body).strip("\n"),
+                              statement_id=str(sid), manuscript=str(rel), proof_no=1)
+    ledger = str(dict(signed.get("sign") or {}).get("ledger") or "")
     path.write_text(VS.stamp_manuscript_sign(
-        text, proof_sha=VR.text_sha(body), streak=VR.SIGN_STREAK_NEED,
+        text, proof_sha=VR.text_sha(str(body).strip("\n")),
+        streak=VR.SIGN_STREAK_NEED,
         need=VR.SIGN_STREAK_NEED, verdict="成立", at="2026-11-05T12:00:00+08:00",
-        ledger=f"verifications/{sid}.jsonl#v-000003",
+        ledger=ledger,
         statement_id=sid, manuscript_id=VS.manuscript_id_of(rel)), encoding="utf-8")
-    for _i in range(int(VR.SIGN_STREAK_NEED)):
-        VR.record_verification(
-            str(st.root), statement_id=str(sid), proof_text=str(body),
-            verdict={"verdict": "成立", "findings": []}, verifier="agent-V",
-            proof_no=1, manuscript=str(rel), secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
 
 
 def _real_entries_run(st: Store) -> tuple[str, str, str]:
