@@ -409,9 +409,10 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     下一步不是同一件事，写成一句通用文案会把处置说错：
 
     - `stale`（签过旧版、正文改过）⇒「请重新拿 V 签」。改稿是正确动作，别把它读成
-      "你错了"；路径必须写全（先按 `kind="conjecture"` 再交一次让新正文上盘，再送 V），
-      因为改后的正文此刻还没上盘 —— 只说"送 V"的那一版照做会撞 `proof_text_mismatch`
-      （`agent_v/core.py` 的 `verify_proof`：参数给的正文必须与盘上那一份同 sha）。
+      "你错了"；路径必须写全（先用 `own.land_manuscript` 把这一版落成可签的稿，
+      再送 V），因为改后的正文此刻还没上盘 —— 只说"送 V"的那一版照做会撞
+      `proof_text_mismatch`（`agent_v/core.py` 的 `verify_proof`：参数给的正文必须与
+      盘上那一份同 sha）。D1 之后登记不再顺手落稿，所以这一步要自己说。
     - `unsigned`（一次都没签过）⇒「请拿 V 签」，不说「重新」（还没有旧签可"重新"）。
     - `rejected`（同一份正文被判过「有毛病」）⇒「按 findings 改完再送」，不说「重签」：
       签的还是这份正文，重送一次结论不会变，说「重签」等于教人原样重送。
@@ -420,8 +421,10 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     ## 可达性
 
     四句里点名的每一步都在今天的面上（判据
-    `tests/test_b_rewrite_without_v_sign_says_resign.py` 的 b 条真的走了一遍）：
-    `kind="conjecture"` / `statement_full` / `proof_text` 是 `own.register_statement` 的
+    `tests/test_b_rewrite_without_v_sign_says_resign.py` 的 b 条走的是 f-稿那条等价路，
+    D1 的落稿那一步由 `tests/test_b_refused_registration_writes_nothing.py` 的 f 条走）：
+    落稿是 `AgentB.land_manuscript`（`own.land_manuscript` 的工具壳由 T1 那一批接线；
+    本笔只交 B 本体动作）；`statement_full` / `proof_text` 是 `own.register_statement` 的
     真参数；`verify.verify_proof` 的 `statement_id` / `proof_no` 是 V 的真参数
     （`B → V` 边在 `capabilities.ALLOWED_EDGES` 里）；"连续 3 次"是
     `verifications.SIGN_STREAK_NEED`；签落 `out/vsigns/<被审正文的 sha>.json`
@@ -429,45 +432,52 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     """
     sid_txt = sid or "（无号）"
     head = f"这一版正文（proof_sha256={sha12}…）"
+    #: D1（2026-11-10）：登记不再顺手落稿（被拒的登记盘上零新增）⇒ "先落稿"这一步
+    #: 必须自己说清，不能假设盘上已经有这一版。落点是 B 改写稿的规范名。
+    _land_step = (
+        "① 先 own.land_manuscript 把这一版落成可签的稿"
+        f"（落点 reports/b-proof-{sid_txt}.md；登记不再顺手落稿，"
+        "被拒的登记盘上零新增）；")
     if state == "stale":
         return (
             f"{head}在 V 的台账里没有盖住它的「成立」签（在册 {sid_txt} 只签过另一版）"
             "⇒ 整笔不写。改稿是正确动作，建议：请重新拿 V 签 —— "
-            "① 把这一版按 kind=\"conjecture\" 再交一次（同一 statement_full + 新 proof_text）："
-            "正文上盘、旧正文进 proof_history；"
-            f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
-            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿；"
-            "B 的改写稿则是 reports/b-proof-<号>.md）⇒ 签到位后签文件落在 "
-            "out/vsigns/<新正文sha>.json，kind 会自动抬成 theorem；不必再交一次登记。"
-            "禁令：不给 proof_manuscript 的内联正文现在过不了 V（`proof_text_needs_a_manuscript`），"
-            "不许拿别的命题的签来顶，也不许绕开 V 当定理用。")
+            + _land_step
+            + f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
+            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿）；"
+            "③ 签到位后带这份稿重交 own.register_statement（正文换进去，旧正文进 "
+            "proof_history；签文件落在 out/vsigns/<新正文sha>.json，kind 自动抬成 theorem）。"
+            "禁令：不给 proof_manuscript 的内联正文现在过不了 V"
+            "（`proof_text_needs_a_manuscript`），不许拿别的命题的签来顶，"
+            "也不许绕开 V 当定理用。")
     if state == "unsigned":
         return (
             f"{head}在 V 的台账里一次都没签过 ⇒ 整笔不写。"
-            f"建议：请拿 V 签 —— 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", "
-            f"proof_no=1, proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
-            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿；"
-            "B 的改写稿则是 reports/b-proof-<号>.md）⇒ 签到位后"
-            "签文件落在 out/vsigns/<正文sha>.json，kind 会自动抬成 theorem。"
-            "这一版已经在盘上，不必再按 kind=\"conjecture\" 交一次。"
-            "禁令：不给 proof_manuscript 的内联正文现在过不了 V（`proof_text_needs_a_manuscript`），"
-            "不许绕开 V 直接当定理用。")
+            "建议：请拿 V 签 —— "
+            + _land_step
+            + f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
+            "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿）；"
+            "③ 签到位后把这份稿随 own.register_statement 交上来（带 proof_manuscript）。"
+            "禁令：不给 proof_manuscript 的内联正文现在过不了 V"
+            "（`proof_text_needs_a_manuscript`），不许绕开 V 直接当定理用。")
     if state == "rejected":
         return (
             f"{head}最近那一签的结论不是「成立」（{verification_id or '（没有号）'}）"
             "⇒ 整笔不写。建议：按 findings 改完再送，不要原样重送 —— 先把证明改好，"
-            "把改稿按 kind=\"conjecture\" 再交一次（旧正文进 proof_history），"
-            f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 重审 "
+            + _land_step
+            + f"② 再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 重审 "
             "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿）。"
             "禁令：原样重送不会改变结论；不给稿的内联正文现在过不了 V"
             "（`proof_text_needs_a_manuscript`）。")
     if state == "holding":
         return (
             f"{head}的签还没到位（V 判过「成立」，但这一版正文上还没有签块）⇒ 整笔不写。"
-            f"建议：再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/f-proof-{sid_txt}.md\") 审这一份 "
+            "建议：先 own.land_manuscript 把这一版落成可签的稿（盘上还没有的话），"
+            f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
+            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
             "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿），"
             "签到位后签块由收方秘书落回稿 —— 不必改稿、不必再交登记。")
     return (
@@ -3162,21 +3172,36 @@ class _RegisterStatement:
         # B 改写在册正文时，正文与在册那一版不同 ⇒ 旧签 stale、台账也盖不住新正文；
         # 它需要一份自己的手稿（`reports/b-proof-<命题号>.md`，三节与 F/E 同形），
         # 由 B 派 V 审、收方秘书（`secretary:B`）落签块，B 再带这份稿入库。
-        # B 没有文件写口 ⇒ 稿由框架在 B 的登记入口按 B 交上来的正文渲染（作者交内容、
-        # 框架落盘、收方落签）。三态都在 `bmanuscript.land_rewrite` 的返回值里，
-        # 一个字节都不猜。
+        #
+        # ---- D1（2026-11-10）：落稿不能在闸前 -------------------------------------
+        #
+        # 改前这里先调 `_land_b_manuscript` 把稿写下来，再往下过依赖面 / 自产签 /
+        # 无签三道闸。后果是真机 98b 10:46:46 那笔：稿在（`reports/b-proof-000000.md`）、
+        # 台账 `proof_text` 仍是空、`statements` 五行全 `conjecture` —— 被拒的登记在
+        # 盘上留下了一份"看似正式的稿"。
+        #
+        # 为什么不能"拒了再删"：这条链在落稿点之前有二十来处受控拒绝（依赖段、档位、
+        # 出处、自产签、无签……），每一处都要记得删；删除本身也会失败（占用 / 只读 /
+        # 并发），删与写之间还有一个被收工门读到的窗口。而文件写不是事务资源：
+        # `store.tx` 回滚不会删文件，塞进事务只会得到"回滚了但文件还在"的假一致。
+        # ⇒ 顺序只能是"先把所有闸判完，再落稿"：被拒的登记一个字节都不写。
+        #
+        # 闸要看见"这一笔将要落的稿"（依赖段 / 证明段 / 页头），所以这里只算一份
+        # 内存预览（`_preview_b_manuscript`：纯渲染、零写盘），真落稿在无签闸
+        # 之后（见下面"闸全过了才落稿"那一段）。B 想要签载体就显式调
+        # `own.land_manuscript`（`AgentB.land_manuscript`），不再由登记顺手造。
         b_manuscript: dict = {}
+        _b_source_text = str(manuscript_text or "")
         _rewrite_body = bool(
             stmt_id_now and proof_no_placement == 1
             and str(proof_text or "").strip()
             and str(proof_text) != str((redelivery or {}).get("proof_text") or ""))
         if _rewrite_body:
-            b_manuscript = self._land_b_manuscript(
+            b_manuscript = self._preview_b_manuscript(
                 statement_id=stmt_id_now, statement_full=full,
                 proof_text=str(proof_text or ""), label=label,
-                proof_no=proof_no_placement, source_manuscript=manuscript_text)
-            # 稿已经是签住的那一版 ⇒ 这一笔的"手稿正文"就是它（不必让 B 再传一遍）；
-            # 刚写下的那一版没有签，交给下面的闸去说「先拿签」（签块由 V 审后落）。
+                proof_no=proof_no_placement, source_manuscript=_b_source_text)
+            # 预览是"将要落的稿"：闸看得见它；盘上没有这份文件（`preview=True`）。
             if not manuscript_text.strip() and b_manuscript.get("text"):
                 manuscript_text = str(b_manuscript.get("text") or "")
                 manuscript_source = _DS.SOURCE_DISK
@@ -3760,15 +3785,16 @@ class _RegisterStatement:
             return _refuse(
                 str(self_authored["refused"]),
                 str(self_authored.get("reason") or "")
-                + (
-                    f"；这一笔的改写正文已经落成可签的载体 `{b_manuscript.get('path')}` —— "
-                    "派 V 审这一份手稿（`framework_summon` 的 `verify.verify_proof`，"
-                    "只给 `proof_manuscript` 这一格），签到位后签块由收方秘书 "
-                    "`secretary:B` 落回稿里，再带这份稿重交 `own.register_statement`"
-                    if b_manuscript.get("path") else ""),
-                **({"b_manuscript": b_manuscript,
-                    "manuscript_path": str(b_manuscript.get("path") or "")}
-                   if b_manuscript else {}))
+                + ("；这一笔的稿没有落盘（`reports/b-proof-"
+                   f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
+                   "盘上零新增。改法：先用 B 的 `own.land_manuscript` 把这一版落成"
+                   "可签的稿，派 V 审这一份（`verify.verify_proof` 带 "
+                   "`proof_manuscript`），签块由收方秘书 `secretary:B` 落回稿，"
+                   "再带这份稿重交 `own.register_statement`。"),
+                manuscript_landed=False,
+                b_manuscript={"preview": True, "written": False,
+                              "path": str(b_manuscript.get("path") or ""),
+                              "sha256": str(b_manuscript.get("sha256") or "")})
 
         # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
         # 定义（当前宽度六位；旧四位读侧兼容），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
@@ -4063,18 +4089,68 @@ class _RegisterStatement:
                 # 这里把认签读数（去掉逐字签块，留三态 + claim）随拒信带回去。
                 _v_sign_reading = {k: v for k, v in dict(v_sign or {}).items()
                                    if k != "block"}
-                return _refuse(str(_pg["refused"]), str(_pg.get("reason") or ""),
-                               proof_gate=dict(_pg.get("reading") or {}),
-                               v_sign=_v_sign_reading,
-                               **({"b_manuscript": b_manuscript,
-                                   "manuscript_path": str(b_manuscript.get("path") or "")}
-                                  if b_manuscript else {}))
+                return _refuse(
+                    str(_pg["refused"]),
+                    str(_pg.get("reason") or "")
+                    + ("；这一笔的稿没有落盘（`reports/b-proof-"
+                       f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
+                       "盘上零新增。改法：先用 B 的 `own.land_manuscript` 落稿 → "
+                       "派 V 审这份稿 → 签到位后带这份稿重交登记。"),
+                    proof_gate=dict(_pg.get("reading") or {}),
+                    v_sign=_v_sign_reading,
+                    manuscript_landed=False,
+                    b_manuscript={"preview": True, "written": False,
+                                  "path": str(b_manuscript.get("path") or ""),
+                                  "sha256": str(b_manuscript.get("sha256") or "")})
+        # ---- D1（2026-11-10）：闸全过了才落稿 -------------------------------------
+        #
+        # 顺序理由就是上面预览块那一段：文件写不是事务资源，而这条链在落稿点之前
+        # 有二十来处受控拒绝。落在这里 ⇒ 依赖面闸 / 自产签闸 / 无签闸任一拒，盘上
+        # 一个字节都不写；而过了全部内容/签闸的那一笔，正好在台账那一笔之前落稿。
+        #
+        # 边界：这里之后只剩"环境 / 写库"失败（没有秘书 / 写入期闸 / 秘书写失败）。
+        # 那些不是"被拒的登记"——内容是闸接下来了的；它们的拒信带
+        # `manuscript_landed=True`，不谎报"稿没落盘"。
+        _manuscript_landed = False
+        if _rewrite_body:
+            b_manuscript = self._land_b_manuscript(
+                statement_id=stmt_id_now, statement_full=full,
+                proof_text=str(proof_text or ""), label=label,
+                proof_no=proof_no_placement, source_manuscript=_b_source_text)
+            _manuscript_landed = bool(
+                b_manuscript.get("written") or b_manuscript.get("preserved"))
+            if not _manuscript_landed and not _b_source_text.strip():
+                # 只有"这一笔的手稿本来就靠落稿产生"（内联正文 / 无来源稿）时才把
+                # 落稿失败读成整笔拒：调用方已经递了一份（盘上 / 参数）稿的那一档，
+                # 登记能不能落不取决于 b-稿这一份改写载体（改前也是这个口径）。
+                _land_problem = dict(b_manuscript.get("problem") or {})
+                return _refuse(
+                    str(_land_problem.get("kind") or "b_manuscript_not_landed"),
+                    "这一笔过了全部内容/签闸，而 B 的改写稿没有落成"
+                    f"（{str(b_manuscript.get('why') or '未说明原因')}）⇒ "
+                    "台账整笔不写、稿也没有落盘。改法：确认 "
+                    f"`reports/b-proof-{stmt_id_now}.md` 可写、且没有被另一版已签"
+                    "正文占住；再重交这一笔（同一份正文重放是幂等的）",
+                    b_manuscript=dict(b_manuscript),
+                    manuscript_landed=False)
+            if not _b_source_text.strip():
+                # 本次手稿来自预览 ⇒ 用落盘后的最终字节（登记元信息已补上）替换。
+                manuscript_text = str(b_manuscript.get("text") or "")
+                manuscript_source = _DS.SOURCE_DISK
+                manuscript_path = str(b_manuscript.get("path") or "")
+                manuscript_probe = {"checked": True, "source": _DS.SOURCE_DISK,
+                                    "path": manuscript_path,
+                                    "matched_by": "b_manuscript"}
+                manuscript_proof = _DS.proof_body_reading(manuscript_text)
+                manuscript_wash = _DS.manuscript_wash_reading(manuscript_text)
+                manuscript_washed = bool(manuscript_wash.get("washed"))
         sec = self._statement_secretary()
         if sec is None:
             return _refuse("secretary_unavailable",
                            "这一趟没有秘书 ⇒ 命题写不了（写入侧是 B 的活，但落盘归秘书："
                            "`Secretary.record_statement`。不许退回'B 自己写'那条后备路）"
-                           + (f"；{self.secretary_problem}" if self.secretary_problem else ""))
+                           + (f"；{self.secretary_problem}" if self.secretary_problem else ""),
+                           manuscript_landed=_manuscript_landed)
         payload = {
             "origin": origin, "kind": kind_now, "label": str(label or ""),
             "statement_text": str(statement_text or ""), "statement_full": full,
@@ -4202,6 +4278,7 @@ class _RegisterStatement:
                 return _refuse(str(pre_write.get("refused") or "proof_text_not_written"),
                                str(pre_write.get("reason") or ""),
                                stmt_id=stmt_id_now, upgraded=False,
+                               manuscript_landed=_manuscript_landed,
                                requested_evidence_kind=str(evidence_kind or ""),
                                canonical_written=False,
                                **trunc_reading)
@@ -4267,6 +4344,7 @@ class _RegisterStatement:
                            str(written.get("reason") or "秘书没写这一笔"),
                            # D2：候选号被占（`stmt_id_taken`）时，拒信要点名是哪个号被占。
                            stmt_id=str(written.get("stmt_id") or stmt_id_now or ""),
+                           manuscript_landed=_manuscript_landed,
                            upgraded=False,
                            requested_evidence_kind=str(evidence_kind or ""),
                            canonical_written=bool(pre_write.get("canonical_written")),
@@ -5783,8 +5861,9 @@ class _RegisterStatement:
         """
         from .. import bmanuscript as _BM
 
-        out: dict = {"checked": True, "path": "", "written": False,
+        out: dict = {"ok": False, "checked": True, "path": "", "written": False,
                      "preserved": False, "signed": False, "text": "",
+                     "sha256": "", "proof_no": 0, "preview": False,
                      "why": "", "problem": {}}
         root = getattr(getattr(self, "store", None), "root", "") or ""
         if not root:
@@ -5819,19 +5898,21 @@ class _RegisterStatement:
                     except (OSError, UnicodeDecodeError):
                         _text = ""
                 _block = _VS_READ.manuscript_sign_reading(_text, manuscript_path=_rel)
-                out.update(path=_rel,
+                out.update(ok=True, path=_rel,
                            written=bool(landed.get("written")),
                            preserved=bool(landed.get("preserved")
                                           or not bool(landed.get("written"))),
                            signed=bool(_block.get("found") and _block.get("signed")),
                            text=_text, why="", problem={},
                            proof_no=int(landed.get("proof_no") or 0),
-                           sha256=str(landed.get("sha256") or ""))
+                           sha256=str(landed.get("sha256")
+                                      or _PR.proof_sha(str(proof_text or ""))))
                 return out
-            out.update(checked=bool(landed.get("checked", True)), written=False,
-                       preserved=False, signed=False,
+            out.update(ok=False, checked=bool(landed.get("checked", True)),
+                       written=False, preserved=False, signed=False,
                        path=str(landed.get("manuscript_path") or _target),
                        why=str(landed.get("why") or ""),
+                       sha256=_PR.proof_sha(str(proof_text or "")),
                        problem={"kind": str(landed.get("refused") or ""),
                                 "why": str(landed.get("why") or "")})
             return out
@@ -5858,6 +5939,9 @@ class _RegisterStatement:
                                             "signed", "text", "why")})
         out["problem"] = dict(got.get("problem") or {})
         out["ok"] = bool(got.get("ok"))
+        # 签尺（`proofregistry.proof_sha`）：这一版将来被 V 签时对拍的就是它。
+        out["sha256"] = _PR.proof_sha(str(proof_text or ""))
+        out["proof_no"] = int(got.get("proof_no") or proof_no or 0)
         # ---- 2026-11-07（A1）：第一份 b-稿也要成为「登记条目」 ---------------------
         #
         # `ack`：`bmanuscript.land_rewrite` 只落骨架（三节 + `- 证明号：`），没有
@@ -5884,14 +5968,98 @@ class _RegisterStatement:
                 out.update(path=_rel, text=_text,
                            preserved=bool(stamped.get("preserved")),
                            signed=bool(_block.get("found") and _block.get("signed")),
-                           proof_no=int(stamped.get("proof_no") or 0),
-                           sha256=str(stamped.get("sha256") or ""))
+                           proof_no=int(stamped.get("proof_no") or proof_no or 0),
+                           sha256=str(stamped.get("sha256")
+                                      or _PR.proof_sha(str(proof_text or ""))))
             else:
                 out.update(ok=False,
                            why=("b-稿骨架写成了，而登记元信息没补上（"
                                 + str(stamped.get("why") or "未知原因")
                                 + "）⇒ 下一轮会把同一命题重新登记一次"))
         return out
+
+    def land_manuscript(self, *, statement_id: str, statement_full: str,
+                        proof_text: str, label: str = "", proof_no: int = 1,
+                        source_manuscript: str = "") -> dict:
+        """B 的显式落稿动作（只写文件，不写台账；D1 从登记里拆出来的那一步）。
+
+        ## 为什么需要它（不是"登记顺手落"）
+
+        B 的工具面没有文件写口，而 V 只审盘上的稿。改前这件事由
+        `register_statement` 在被拒之前顺手做（D1：被拒的登记留下稿）；拆出来之后
+        顺序是 "`own.land_manuscript` 落稿 → 派 V 签 → 带签 `own.register_statement`"，
+        两步各自成立、各自可解释。
+
+        ## 返回
+
+        `{ok, path, written, preserved, signed, sha256, sha, proof_no, text, why,
+        problem}`。`sha256` / `sha` 是签尺（`proofregistry.proof_sha(proof_text)`）：
+        这份稿将来被 V 签时对拍的就是这个值，不是整份文件的字节 sha。
+
+        ## 幂等
+
+        同一份正文重放：目标稿内容没变 ⇒ `written=False, preserved=True`（不出现
+        第二个文件、不改名、不毁签）；已签的那一版不会被另一版正文盖掉
+        （`target_holds_a_signed_version`，零写入）。
+        """
+        from .. import proofregistry as _PR
+
+        out = dict(self._land_b_manuscript(
+            statement_id=statement_id, statement_full=statement_full,
+            proof_text=proof_text, label=label, proof_no=proof_no,
+            source_manuscript=source_manuscript))
+        out.setdefault("ok", False)
+        out["preview"] = False
+        out["sha256"] = str(out.get("sha256")
+                            or _PR.proof_sha(str(proof_text or "")))
+        out["sha"] = out["sha256"]
+        out["proof_no"] = int(out.get("proof_no") or proof_no or 0)
+        return out
+
+    def _preview_b_manuscript(self, *, statement_id: str, statement_full: str,
+                              proof_text: str, label: str = "",
+                              proof_no: int = 1,
+                              source_manuscript: str = "") -> dict:
+        """这一笔将要落的 B 手稿（纯渲染；一个字节都不写）。
+
+        为什么需要它：D1 把落稿挪到闸后，而依赖面闸 / 自产签闸仍要看见"这一笔将要
+        落的稿"（`## 依赖` 表 / `## 证明` 正文 / 页头）。拿"没有稿"去判会让依赖面闸
+        静默跳过（= 放宽）。所以先算一份内存预览喂给闸；真落稿在无签闸之后。
+
+        与 `_land_b_manuscript` 用同一套渲染（`bmanuscript.render`），差别只在：
+        不 `commit`、不搬签、不补登记元信息；`path` 只是落点（`preview=True`）。
+        """
+        from .. import bmanuscript as _BM
+        from .. import proofregistry as _PR
+
+        head = _BM.header_reading(source_manuscript)
+        from_source = bool(head.get("checked"))
+        rows: list[dict] = []
+        source = str(source_manuscript or "")
+        if source.strip():
+            section = _DS.parse_dependency_section(source)
+            if section.get("present") and not section.get("refused"):
+                rows = [dict(x) for x in (section.get("rows") or [])]
+        text = _BM.render(
+            statement_full=statement_full, proof_text=str(proof_text or ""),
+            statement_id=statement_id,
+            label=(str(head.get("label") or "") if from_source
+                   else str(label or "")),
+            title=(str(head.get("title") or "") if from_source
+                   else str(label or "")),
+            proof_no=proof_no,
+            dependency_section=_DS.render_dependency_section(rows),
+            plan_id=str(head.get("plan_id") or ""),
+            sid=str(head.get("sid") or ""),
+            wash_actor=str(head.get("wash_actor") or ""),
+            wash_filled=str(head.get("wash_filled") or ""))
+        return {"preview": True, "checked": True, "written": False,
+                "preserved": False, "signed": False,
+                "path": _PR.entry_relpath(family="B", statement_id=statement_id),
+                "text": text,
+                "sha256": _PR.proof_sha(str(proof_text or "")),
+                "proof_no": int(proof_no or 0),
+                "why": "内存预览：闸判完、过了才落盘", "problem": {}}
 
     def _v_signature_for(self, *, statement_full: str, proof_text: str,
                          manuscript_text: str = "",
