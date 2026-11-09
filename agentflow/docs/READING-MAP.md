@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **280 个 `.py`、271,339 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **280 个 `.py`、271,400 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -13,6 +13,9 @@
 > `_recomputable`（只读、本批不接线），既有函数一个字节都没动；另加配套只读 CLI
 > `scripts/sign_audit.py` 与 `tests/test_sign_reading.py`（都不在 `src/` 里，不影响文件数）。
 > 文件数 280、`>800 行` 的 75、`agent_loop.py` 14,139 都不变）。
+> **2026-11-10 D5 收口（`c2472c1a`）再改一次**：271,339 → **271,400**（`tools/fs_tools.py` 的
+> A/B 写手稿形名字受控拒（notes/ 与 -v2 不再绕过唯一写口）+ 配套判据；文件数 280 与
+> `>800 行` 的 75 都不变，`agent_loop.py` 14,189 不变）。
 > **2026-11-10 D3 批 2 再改一次（与同期的 D1 收口两笔合并计入）**：270,572 → **271,339**
 > （D3 批 2 净 +594：写侧分类三格 + 后果分叉的 `terminal="report"` / 类别读侧 +
 > `report_fix_list` + 回执与义务；同期 D1 两笔净 +173。文件数 280 与 `>800 行` 的 75 都不变，
