@@ -126,7 +126,8 @@ def test_a_revoking_n_items_adds_zero_task_rows(tmp_path: pathlib.Path) -> None:
     assert len(notified) == N, notified[:2]
     assert {str(x["item_id"]) for x in notified} == set(items), notified[:2]
     for one in notified:
-        assert str(one["notice_id"]) == "", one
+        # 业主 2026-11-09 裁定 ③：恒空的 `notice_id` 是一句谎（暗示"曾经有过一条通知行"）
+        assert "notice_id" not in one, one
         assert str(one["carrier"]) == f"revoked_recent@{ids['F1']}", one
 
 

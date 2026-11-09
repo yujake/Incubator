@@ -4749,11 +4749,19 @@ class Conductor:
 
         ## 2026-11-09（D13）起它只在 `REVOKE_POSTS_NOTICE_ROW=True` 时才被调用
 
+        本函数默认是死代码（业主 2026-11-09 裁定 ②：暂留，不删）。三句话写死它的身份：
+
+        1. 生产路径永不许调它 —— `void_items(revoke=True)` 的默认分支在
+           `REVOKE_POSTS_NOTICE_ROW=False` 时根本走不到这里；
+        2. 它留着的唯一用途是反真空：判据把那个开关整格打开，证明"新增行数 = 0"这条
+           结论真的在数行、不是在一张恒空的表上读出来的；
+        3. 彻底删它排在 T3（`tasks` 拆表 / `row_kind` 列）那一批：届时反真空换成
+          直接数「被撤行的 `inputs` 里有没有那条 `revoke:expired:` 留痕」，
+           不再需要一条"旧行为"当对照。
+
         业主 2026-11-09 的口径是「撤销动作不再自己生成待 ack 通知」，判据是
         撤销 N 条之后新增 notice 行 = 0。所以默认路径不经这里：提醒改由被撤行
-        自己的 `revoke:expired:…` 留痕承担（`revoked_recent_of` 读它）。本函数连同下面
-        「为什么它必须落成 done + expired」那段论证留着的唯一用途是反真空：判据把
-        `REVOKE_POSTS_NOTICE_ROW` 打开，证明"新增行数 = 0"真的在数行。
+        自己的 `revoke:expired:…` 留痕承担（`revoked_recent_of` 读它）。
 
         ## 下面这段是改前（业主 2026-11-06 乙件）的原始口径，逐字保留
 
@@ -4857,10 +4865,13 @@ class Conductor:
           （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，上一节那六格）；
         - 收件人那一侧的读法是 :meth:`revoked_recent_of`（`agent_loop.mailbox_digest`
           每拍投一次，渲染成【最近被撤销的项】）——它只读那条留痕，不进任何 open 计数；
-        - 返回的 `notified` 逐条给 `{item_id, notice_id, owner, kind, expects,
-          carrier, text}`：`notice_id` 现在是空串（没有那一行了），`carrier` 写明
-          提醒从哪儿读得到（`revoked_recent@<收件人>`），`text` 是那句逐字正文。
-          没有收件人的项（顶层项）进 `notification_problems`，撤销本身不回滚。
+        - 返回的 `notified` 逐条给 `{item_id, owner, kind, expects, carrier, text}`：
+          没有 `notice_id` 这一格（撤销不落通知行 ⇒ 那一格只能是空串，而空串是
+          一句谎：它暗示"曾经有过一条通知行"，业主 2026-11-09 裁定 ③ 摘掉它），
+          `carrier` 写明提醒从哪儿读得到（`revoked_recent@<收件人>`），`text` 是那句
+          逐字正文。没有收件人的项（顶层项）进 `notification_problems`，撤销本身不回滚。
+          旧行为那一档（`REVOKE_POSTS_NOTICE_ROW=True`，默认死代码）落的是真通知行，
+          所以它那一档才带 `notice_id`（那时它指得出是哪一行）。
 
         丙件：撤销后 `expects` 清空、原值写进 `expects_was`（`schema.Task` 末尾那一格；
         `validate` 只允许 `done` + `expired` 的行为空）。留着 `expects="ack"` 会让读侧
@@ -5047,7 +5058,9 @@ class Conductor:
             "reason": reason_text, "from": cur, "to": "done", "at": at,
             "close": "expired", "mode": ("revoke" if revoke else "void"),
             "authority": str(authority.get("mode") or ""),
-            "notice_id": "",
+            # 刻意没有 `notice_id` 这一格：改后不再落通知行，留一个恒空的键等于
+            # 说"曾经有过一条通知行"（业主 2026-11-09 裁定 ③）。旧行为那一档在下面
+            # 真落了行，它才补上这一格。
         }
         out["traces"].append(trace)
         if not revoke:
@@ -5071,7 +5084,7 @@ class Conductor:
                     f"{iid}：这一条没有收件人（顶层项）⇒ 没有要提醒的人（撤销本身照旧）")
                 return
             out["notified"].append({
-                "item_id": iid, "notice_id": "", "owner": owner,
+                "item_id": iid, "owner": owner,
                 "kind": "", "expects": "",
                 # 载体：不是一行新台账，而是被撤行自己的留痕 + 收件人那一侧的读口。
                 "carrier": f"revoked_recent@{owner}",

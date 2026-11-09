@@ -2702,10 +2702,13 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
     # `returns=` 声明的是 data 的键集，而工具面是冻结快照（`tests/golden/`，FC-27）；
     # 在没得到人重冻之前，多一个 data 键会让 `test_no_tool_returns_a_top_level_key_it_does_not_declare`
     # 当场红。`meta` 整格都渲染进模型看到的那条结果 ⇒ 读数一个字都不少。
-    # 乙件的 `notified`（撤销提醒逐条：item_id / notice_id / owner / kind / expects /
-    # carrier / text）与 `notification_problems` 同一条理由走 `meta`。
-    # 2026-11-09（D13）：撤销不再落通知行 ⇒ `notice_id` 是空串、`carrier` 写明提醒
-    # 从哪儿读得到（`revoked_recent@<收件人>`，即被撤行自己的 `revoke:expired:` 留痕）。
+    # 乙件的 `notified`（撤销提醒逐条：item_id / owner / kind / expects / carrier / text）
+    # 与 `notification_problems` 同一条理由走 `meta`。
+    # 2026-11-09（D13 + 业主裁定 ③）：撤销不再落通知行 ⇒ 这一档没有 `notice_id`
+    # 这一格（恒空 = 暗示"曾经有过一条通知行"），`carrier` 写明提醒从哪儿读得到
+    # （`revoked_recent@<收件人>`，即被撤行自己的 `revoke:expired:` 留痕）。
+    # 旧行为那一档（`REVOKE_POSTS_NOTICE_ROW=True`，默认死代码）真落了行，它才带
+    # `notice_id`（那时它指得出是哪一行）—— 那一档不经工具面，是判据的反真空用的。
     return ok(data, **data, traces=traces, notified=notified,
               notification_problems=notification_problems)
 
