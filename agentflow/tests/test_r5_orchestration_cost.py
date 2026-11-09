@@ -1207,6 +1207,9 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_searchable_statement_rows",  # 2026-11-09 搬进查口后从 `Secretary` 删掉的旧私有方法名（真符号 0 次）：
                                   # `secretary.py` 与 `statementledger.py` 的搬迁留痕必须点名它，否则读者按图找不到东西
     "_statements_matching_keywords",  # 同上：旧的关键词检索私有方法，改成查口的 `by_keywords` 后只剩文本提及
+    "_meta",                      # 2026-11-09 冻进 fixture 的那个数据文件头键（内容是"这是什么 / 为什么冻 /
+                                  # 原文件在哪 / 形状 / 冻结时间 / 怎么重生成"这几格）：
+                                  # 它是 JSON 里的键、不是 Python 符号，测试注释按纪律必须点名它
     "_BASE_",                     # 别名前缀（不是完整标识符）
     "_private",                   # 判据片段（不是标识符）
     "_accepts_",                  # 测试名约定片段（不是标识符）
